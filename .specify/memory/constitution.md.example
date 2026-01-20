@@ -1,0 +1,80 @@
+# Project Constitution
+
+> 此檔案定義專案的核心原則與約束。使用 `/speckit.constitution` 命令建立或更新。
+
+## Core Principles
+
+<!-- 定義專案的核心開發原則 -->
+
+1. **測試優先**：所有功能必須有測試覆蓋
+2. **型別安全**：使用 TypeScript 並啟用嚴格模式
+3. **簡單優先**：選擇最簡單的解決方案，避免過度工程
+
+## Technology Constraints
+
+<!-- 技術棧約束 -->
+
+- **框架**：Nuxt 4 + Vue 3 + TypeScript
+- **UI**：Nuxt UI + TailwindCSS（禁止自定義 CSS）
+- **資料庫**：Supabase (PostgreSQL)
+- **認證**：@onmax/nuxt-better-auth（禁止使用 Supabase Auth）
+- **狀態管理**：Pinia + Pinia Colada
+- **部署**：Cloudflare Workers
+
+## Complexity Limits
+
+<!-- 複雜度限制 -->
+
+| 項目 | 限制 |
+|------|------|
+| 單一函式行數 | ≤ 50 行 |
+| 單一檔案行數 | ≤ 300 行 |
+| 巢狀層級 | ≤ 3 層 |
+| 函式參數數量 | ≤ 4 個 |
+
+## Architecture Rules
+
+<!-- 架構規則 -->
+
+1. **Client 讀、Server 寫**：Client 端僅執行 SELECT 查詢，所有 CUD 操作走 Server API
+2. **Local-First Migration**：所有 migration 必須先在本地測試通過
+3. **search_path 安全**：所有 database function 必須使用 `SET search_path = ''`
+
+## Code Style
+
+<!-- 程式碼風格 -->
+
+- 使用 Composition API + `<script setup>`
+- 使用 named exports（禁止 default exports）
+- 使用 interface 而非 type（除非需要 union type）
+- 元件命名從一般到特定：`SearchButtonClear.vue`
+
+## Forbidden Patterns
+
+<!-- 禁止的模式 -->
+
+- ❌ Options API
+- ❌ 硬編碼顏色值
+- ❌ 直接修改已套用的 migration
+- ❌ 在 Client 端執行資料庫寫入
+- ❌ 使用 `SET search_path = public`
+- ❌ 跳過測試（`it.skip`、`describe.skip`）
+
+## Quality Gates
+
+<!-- 品質關卡 -->
+
+提交前必須通過：
+
+1. `pnpm format` - 格式化
+2. `pnpm lint` - 程式碼檢查
+3. `pnpm typecheck` - 型別檢查
+4. `pnpm test` - 測試
+
+## Documentation Requirements
+
+<!-- 文件要求 -->
+
+- `docs/verify/` 記錄系統當前狀態（非歷史）
+- API 端點需有 Zod schema 定義
+- 複雜邏輯需有註解說明「為什麼」

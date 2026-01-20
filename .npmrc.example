@@ -1,0 +1,11 @@
+# pnpm 配置
+# 複製此檔案為 .npmrc
+
+# nuxt-charts 需要此設定以避免 "to-px" 錯誤
+shamefully-hoist=true
+
+# 可選：指定 registry
+# registry=https://registry.npmjs.org/
+
+# 可選：啟用 strict peer dependencies
+# strict-peer-dependencies=false

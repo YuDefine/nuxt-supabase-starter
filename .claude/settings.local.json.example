@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__local-supabase__list_tables",
+      "mcp__local-supabase__list_migrations",
+      "mcp__local-supabase__execute_sql",
+      "mcp__local-supabase__search_docs",
+      "mcp__local-supabase__get_advisors",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(head:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(cat:*)",
+      "Bash(tree:*)",
+      "Bash(supabase migration:*)",
+      "Bash(supabase db reset:*)",
+      "Bash(supabase db lint:*)",
+      "Bash(supabase db push:*)",
+      "Bash(supabase gen types:*)",
+      "Bash(supabase status:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm test:unit:*)",
+      "Bash(pnpm lint:*)",
+      "Bash(pnpm format:*)",
+      "Bash(pnpm check:*)",
+      "Bash(pnpm vitest run:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git diff:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git push:*)",
+      "WebSearch"
+    ]
+  },
+  "enabledMcpjsonServers": ["local-supabase"],
+  "outputStyle": "default"
+}
