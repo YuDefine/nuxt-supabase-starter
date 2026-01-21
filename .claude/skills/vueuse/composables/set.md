@@ -8,13 +8,13 @@ Shorthand for
 ## Usage
 
 ```ts
-import { set } from '@vueuse/core'
+import { set } from "@vueuse/core";
 
-const a = ref(0)
+const a = ref(0);
 
-set(a, 1)
+set(a, 1);
 
-console.log(a.value) // 1
+console.log(a.value); // 1
 ```
 
 ## Reference

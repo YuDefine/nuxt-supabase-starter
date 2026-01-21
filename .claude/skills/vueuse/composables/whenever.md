@@ -8,14 +8,14 @@ Shorthand for watching value to be truthy.
 ## Usage
 
 ```ts
-import { useAsyncState, whenever } from '@vueuse/core'
+import { useAsyncState, whenever } from "@vueuse/core";
 
 const { state, isReady } = useAsyncState(
-  fetch('https://jsonplaceholder.typicode.com/todos/1').then(t => t.json()),
+  fetch("https://jsonplaceholder.typicode.com/todos/1").then((t) => t.json()),
   {},
-)
+);
 
-whenever(isReady, () => console.log(state))
+whenever(isReady, () => console.log(state));
 ```
 
 ## Options

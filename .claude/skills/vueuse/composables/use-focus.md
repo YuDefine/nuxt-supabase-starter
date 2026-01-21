@@ -8,16 +8,15 @@ Reactive utility to track or set the focus state of a DOM element. State changes
 ## Usage
 
 ```ts
-import { useFocus } from '@vueuse/core'
+import { useFocus } from "@vueuse/core";
 
-const target = shallowRef()
-const { focused } = useFocus(target)
+const target = shallowRef();
+const { focused } = useFocus(target);
 
 watch(focused, (focused) => {
-  if (focused)
-    console.log('input element has been focused')
-  else console.log('input element has lost focus')
-})
+  if (focused) console.log("input element has been focused");
+  else console.log("input element has lost focus");
+});
 ```
 
 ## Options

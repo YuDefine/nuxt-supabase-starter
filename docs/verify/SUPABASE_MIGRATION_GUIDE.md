@@ -122,12 +122,12 @@ supabase db reset --linked
 
 ## 6. GUI 使用準則
 
-| 功能                  | 可否使用 | 備註                                                          |
-| --------------------- | -------- | ------------------------------------------------------------- |
-| 查看資料 / RLS        | ✅       | 無需額外動作                                                  |
-| 快速修改欄位或 policy | ⚠️       | 僅限 PoC，用完記得 `supabase db diff` 產出 migration          |
-| 直接在 GUI 建立函式   | ❌       | 無法控制 `search_path`，請改在 repository 編寫                |
-| 匯入 SQL              | ❌       | 可能與 Repo diff，不允許                                      |
+| 功能                  | 可否使用 | 備註                                                 |
+| --------------------- | -------- | ---------------------------------------------------- |
+| 查看資料 / RLS        | ✅       | 無需額外動作                                         |
+| 快速修改欄位或 policy | ⚠️       | 僅限 PoC，用完記得 `supabase db diff` 產出 migration |
+| 直接在 GUI 建立函式   | ❌       | 無法控制 `search_path`，請改在 repository 編寫       |
+| 匯入 SQL              | ❌       | 可能與 Repo diff，不允許                             |
 
 ---
 
@@ -167,12 +167,12 @@ SELECT setval(
 
 ## 9. 疑難排解
 
-| 問題                                                  | 可能原因                        | 解法                                                     |
-| ----------------------------------------------------- | ------------------------------- | -------------------------------------------------------- |
-| `duplicate key violates unique constraint "xxx_pkey"` | 資料匯入後 sequence 未同步      | 重設 sequence 為 `max(id) + 1`                           |
-| `type "xxx" already exists`                           | 遠端尚有舊 schema               | 使用 `IF NOT EXISTS` 或 `repair`                         |
-| `schema_migrations` 不一致                            | 有人手動改遠端                  | `migration list --linked` → `repair`                     |
-| `function_search_path_mutable`                        | 函式缺少 `SET search_path = ''` | 重寫函式                                                 |
+| 問題                                                  | 可能原因                        | 解法                                 |
+| ----------------------------------------------------- | ------------------------------- | ------------------------------------ |
+| `duplicate key violates unique constraint "xxx_pkey"` | 資料匯入後 sequence 未同步      | 重設 sequence 為 `max(id) + 1`       |
+| `type "xxx" already exists`                           | 遠端尚有舊 schema               | 使用 `IF NOT EXISTS` 或 `repair`     |
+| `schema_migrations` 不一致                            | 有人手動改遠端                  | `migration list --linked` → `repair` |
+| `function_search_path_mutable`                        | 函式缺少 `SET search_path = ''` | 重寫函式                             |
 
 ---
 

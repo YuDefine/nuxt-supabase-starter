@@ -7,22 +7,24 @@
 簡單說，Supabase 是一個「後端即服務」平台，但它不像 Firebase 那樣鎖定你在 NoSQL 的世界裡。它的核心是 **PostgreSQL**——一個業界標準的關聯式資料庫。
 
 這意味著：
+
 - 你學到的 SQL 技能可以帶著走
 - 資料結構是有 schema 的，不是自由格式的 JSON
 - 可以用 JOIN、transaction、constraint 等關聯式資料庫的強大功能
 
 ## 與 Firebase 的比較
 
-| 特性 | Firebase | Supabase |
-|------|----------|----------|
-| 資料庫 | NoSQL (Firestore) | PostgreSQL |
-| 查詢語言 | SDK 方法 | SQL + SDK |
-| Schema | 無，動態 | 有，需定義 |
-| 權限控制 | Security Rules | Row Level Security |
-| 本地開發 | 模擬器 | Docker 容器 |
-| 開源 | 否 | 是 |
+| 特性     | Firebase          | Supabase           |
+| -------- | ----------------- | ------------------ |
+| 資料庫   | NoSQL (Firestore) | PostgreSQL         |
+| 查詢語言 | SDK 方法          | SQL + SDK          |
+| Schema   | 無，動態          | 有，需定義         |
+| 權限控制 | Security Rules    | Row Level Security |
+| 本地開發 | 模擬器            | Docker 容器        |
+| 開源     | 否                | 是                 |
 
 **什麼時候選 Supabase？**
+
 - 資料有明確結構
 - 需要複雜查詢（JOIN、聚合等）
 - 想要資料庫級別的權限控制
@@ -45,6 +47,7 @@ CREATE SCHEMA IF NOT EXISTS core;
 ```
 
 **為什麼不用 public？**
+
 - `public` 有一些預設權限可能造成安全隱憂
 - 自訂 schema 讓結構更清晰
 - 可以用不同 schema 區分不同模組
@@ -53,11 +56,11 @@ CREATE SCHEMA IF NOT EXISTS core;
 
 Supabase 有幾個預定義的角色：
 
-| 角色 | 說明 | 使用場景 |
-|------|------|----------|
-| `anon` | 匿名訪客 | 未登入的使用者 |
-| `authenticated` | 已登入使用者 | 一般操作 |
-| `service_role` | 服務角色 | Server 端，可繞過 RLS |
+| 角色            | 說明         | 使用場景              |
+| --------------- | ------------ | --------------------- |
+| `anon`          | 匿名訪客     | 未登入的使用者        |
+| `authenticated` | 已登入使用者 | 一般操作              |
+| `service_role`  | 服務角色     | Server 端，可繞過 RLS |
 
 當你在 Client 端查詢，Supabase 會根據登入狀態自動使用 `anon` 或 `authenticated`。當你在 Server 端用 `service_role` key，可以繞過 RLS 做管理操作。
 
@@ -66,21 +69,23 @@ Supabase 有幾個預定義的角色：
 這是 Supabase 最強大的功能，也是最需要理解的概念。
 
 **傳統做法**：權限檢查寫在 API 裡
+
 ```typescript
 // 每個 API 都要寫權限檢查
-app.get('/posts/:id', async (req, res) => {
-  const post = await db.posts.findById(req.params.id)
+app.get("/posts/:id", async (req, res) => {
+  const post = await db.posts.findById(req.params.id);
 
   // 手動檢查：這個使用者能看這篇文章嗎？
   if (post.userId !== req.user.id && !post.isPublic) {
-    return res.status(403).send('Forbidden')
+    return res.status(403).send("Forbidden");
   }
 
-  return res.json(post)
-})
+  return res.json(post);
+});
 ```
 
 **RLS 做法**：權限規則定義在資料庫層
+
 ```sql
 -- 定義一次：使用者只能看自己的文章，或公開的文章
 CREATE POLICY "Users can view own or public posts"
@@ -199,6 +204,7 @@ USING ((SELECT auth.uid()) = user_id)
 Migration 是「資料庫結構的版本控制」。每次你要改資料庫結構（新增表格、修改欄位、加索引等），就建立一個 migration 檔案。
 
 這樣做的好處：
+
 - 可以追蹤資料庫結構的變更歷史
 - 團隊成員可以同步資料庫結構
 - 可以在不同環境（開發、測試、正式）套用相同的結構
@@ -313,6 +319,7 @@ supabase migration new fix_todos_add_priority_column
 ```
 
 新 migration 的內容：
+
 ```sql
 -- 修正：補上遺漏的 priority 欄位
 ALTER TABLE app.todos ADD COLUMN priority INTEGER DEFAULT 0;
@@ -414,45 +421,45 @@ onUnmounted(() => {
 
 ```typescript
 // server/api/v1/todos/index.post.ts
-import { z } from 'zod'
-import { getSupabaseWithContext, requireAuth } from '~~/server/utils/supabase'
+import { z } from "zod";
+import { getSupabaseWithContext, requireAuth } from "~~/server/utils/supabase";
 
 const createTodoSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().optional(),
-})
+});
 
 export default defineEventHandler(async (event) => {
   // 確認使用者已登入
-  const user = await requireAuth(event)
+  const user = await requireAuth(event);
 
   // 驗證請求資料
-  const body = await readValidatedBody(event, createTodoSchema.parse)
+  const body = await readValidatedBody(event, createTodoSchema.parse);
 
   // 取得有 service_role 權限的 client
-  const supabase = await getSupabaseWithContext(event)
+  const supabase = await getSupabaseWithContext(event);
 
   // 新增資料
   const { data, error } = await supabase
-    .schema('app')
-    .from('todos')
+    .schema("app")
+    .from("todos")
     .insert({
       ...body,
       user_id: user.id,
     })
     .select()
-    .single()
+    .single();
 
   if (error) {
     throw createError({
       statusCode: 500,
-      message: '新增失敗',
-    })
+      message: "新增失敗",
+    });
   }
 
-  setResponseStatus(event, 201)
-  return { data }
-})
+  setResponseStatus(event, 201);
+  return { data };
+});
 ```
 
 ---
@@ -462,11 +469,13 @@ export default defineEventHandler(async (event) => {
 ### Q: 資料新增成功但查不到？
 
 很可能是 RLS 問題。檢查：
+
 1. 是否有啟用 RLS？（`ALTER TABLE ... ENABLE ROW LEVEL SECURITY`）
 2. 是否有 SELECT policy？
 3. Policy 的條件是否正確？
 
 可以用 Supabase Dashboard 的 SQL Editor 測試：
+
 ```sql
 -- 暫時以 service_role 查詢，繞過 RLS
 SELECT * FROM app.todos;
@@ -475,6 +484,7 @@ SELECT * FROM app.todos;
 ### Q: Server API 寫入失敗？
 
 確認你的 RLS policy 有包含 service_role 繞過：
+
 ```sql
 CREATE POLICY "Service role has full access"
   ON app.todos FOR ALL
@@ -484,6 +494,7 @@ CREATE POLICY "Service role has full access"
 ### Q: TypeScript 類型不對？
 
 重新產生類型：
+
 ```bash
 supabase gen types typescript --local | tee app/types/database.types.ts > /dev/null
 ```

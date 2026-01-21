@@ -6,18 +6,18 @@ Create a motion value for performant animations that bypass Vue's reactivity:
 
 ```vue
 <script setup>
-import { Motion, useMotionValue } from 'motion-v'
+import { Motion, useMotionValue } from "motion-v";
 
-const x = useMotionValue(0)
+const x = useMotionValue(0);
 
 // Read/write value
-console.log(x.get())
-x.set(100)
+console.log(x.get());
+x.set(100);
 
 // Subscribe to changes
-const unsubscribe = x.on('change', (latest) => {
-  console.log('x changed to', latest)
-})
+const unsubscribe = x.on("change", (latest) => {
+  console.log("x changed to", latest);
+});
 </script>
 
 <template>
@@ -31,17 +31,17 @@ Create spring-animated motion value:
 
 ```vue
 <script setup>
-import { useMotionValue, useSpring } from 'motion-v'
+import { useMotionValue, useSpring } from "motion-v";
 
-const x = useMotionValue(0)
+const x = useMotionValue(0);
 const springX = useSpring(x, {
   stiffness: 100,
   damping: 10,
   mass: 1,
-})
+});
 
 // springX follows x with spring physics
-x.set(100)
+x.set(100);
 </script>
 
 <template>
@@ -55,23 +55,23 @@ Derive motion values from other motion values:
 
 ```vue
 <script setup>
-import { useMotionValue, useTransform } from 'motion-v'
+import { useMotionValue, useTransform } from "motion-v";
 
-const x = useMotionValue(0)
+const x = useMotionValue(0);
 
 // Map x: 0-100 to opacity: 1-0
-const opacity = useTransform(x, [0, 100], [1, 0])
+const opacity = useTransform(x, [0, 100], [1, 0]);
 
 // Map x: 0-100 to scale: 1-2
-const scale = useTransform(x, [0, 100], [1, 2])
+const scale = useTransform(x, [0, 100], [1, 2]);
 
 // Custom transform function
-const rotate = useTransform(x, (value) => `${value}deg`)
+const rotate = useTransform(x, (value) => `${value}deg`);
 
 // Combine multiple values
 const combined = useTransform([x, opacity], ([x, opacity]) => {
-  return x * opacity
-})
+  return x * opacity;
+});
 </script>
 
 <template>
@@ -82,9 +82,9 @@ const combined = useTransform([x, opacity], ([x, opacity]) => {
 ### Easing in useTransform
 
 ```ts
-import { easeInOut } from 'motion-v'
+import { easeInOut } from "motion-v";
 
-const opacity = useTransform(x, [0, 100], [0, 1], { ease: easeInOut })
+const opacity = useTransform(x, [0, 100], [0, 1], { ease: easeInOut });
 ```
 
 ## useMotionTemplate
@@ -93,17 +93,17 @@ Create template strings from motion values:
 
 ```vue
 <script setup>
-import { useMotionValue, useMotionTemplate } from 'motion-v'
+import { useMotionValue, useMotionTemplate } from "motion-v";
 
-const x = useMotionValue(0)
-const y = useMotionValue(0)
+const x = useMotionValue(0);
+const y = useMotionValue(0);
 
 // Creates "translateX(0px) translateY(0px)"
-const transform = useMotionTemplate`translateX(${x}px) translateY(${y}px)`
+const transform = useMotionTemplate`translateX(${x}px) translateY(${y}px)`;
 
 // For gradients, shadows, etc.
-const blur = useMotionValue(5)
-const filter = useMotionTemplate`blur(${blur}px)`
+const blur = useMotionValue(5);
+const filter = useMotionTemplate`blur(${blur}px)`;
 </script>
 ```
 
@@ -144,14 +144,13 @@ const scale = useTransform(scrollYProgress, [0, 1], [0.8, 1])
 ### Scroll Offset Options
 
 ```ts
-offset: ['start end', 'end start']
-// First: target position relative to container
-// Second: container position relative to viewport
+offset: ["start end", "end start"][
+  // First: target position relative to container
+  // Second: container position relative to viewport
 
-// Common patterns:
-['start end', 'end start']     // Element enters bottom, exits top
-['start start', 'end start']   // Pin at top while scrolling
-['center center', 'end start'] // Centered animation
+  // Common patterns:
+  ("start end", "end start")
+][("start start", "end start")][("center center", "end start")]; // Element enters bottom, exits top // Pin at top while scrolling // Centered animation
 ```
 
 ## useInView
@@ -185,15 +184,15 @@ Run callback every frame with delta time:
 
 ```vue
 <script setup>
-import { useMotionValue, useAnimationFrame } from 'motion-v'
+import { useMotionValue, useAnimationFrame } from "motion-v";
 
-const rotation = useMotionValue(0)
+const rotation = useMotionValue(0);
 
 useAnimationFrame((time, delta) => {
   // time: total elapsed ms
   // delta: ms since last frame
-  rotation.set(rotation.get() + delta * 0.1)
-})
+  rotation.set(rotation.get() + delta * 0.1);
+});
 </script>
 
 <template>
@@ -206,22 +205,22 @@ useAnimationFrame((time, delta) => {
 Imperative animation function:
 
 ```ts
-import { animate } from 'motion-v'
+import { animate } from "motion-v";
 
 // Animate value
 const controls = animate(0, 100, {
   duration: 0.5,
   onUpdate: (latest) => console.log(latest),
-  onComplete: () => console.log('done'),
-})
+  onComplete: () => console.log("done"),
+});
 
 // Control animation
-controls.stop()
-controls.time = 0.25  // Seek to 25%
+controls.stop();
+controls.time = 0.25; // Seek to 25%
 
 // Animate motion value
-const x = useMotionValue(0)
-animate(x, 100, { type: 'spring' })
+const x = useMotionValue(0);
+animate(x, 100, { type: "spring" });
 
 // Animate object
 animate(
@@ -230,31 +229,39 @@ animate(
   {
     duration: 1,
     onUpdate: ({ x, y }) => console.log(x, y),
-  }
-)
+  },
+);
 ```
 
 ### Sequence Animations
 
 ```ts
-import { animate, stagger } from 'motion-v'
+import { animate, stagger } from "motion-v";
 
 // Animate elements in sequence
-const elements = document.querySelectorAll('.item')
+const elements = document.querySelectorAll(".item");
 
-animate(elements, { opacity: 1, y: 0 }, {
-  delay: stagger(0.1),  // 0.1s between each
-  duration: 0.5,
-})
+animate(
+  elements,
+  { opacity: 1, y: 0 },
+  {
+    delay: stagger(0.1), // 0.1s between each
+    duration: 0.5,
+  },
+);
 
 // Custom stagger
-animate(elements, { opacity: 1 }, {
-  delay: stagger(0.1, {
-    start: 0.5,           // Start delay
-    from: 'center',       // 'first' | 'last' | 'center' | number
-    ease: 'easeOut',
-  }),
-})
+animate(
+  elements,
+  { opacity: 1 },
+  {
+    delay: stagger(0.1, {
+      start: 0.5, // Start delay
+      from: "center", // 'first' | 'last' | 'center' | number
+      ease: "easeOut",
+    }),
+  },
+);
 ```
 
 ## useVelocity
@@ -263,13 +270,13 @@ Track velocity of motion value:
 
 ```vue
 <script setup>
-import { useMotionValue, useVelocity, useTransform } from 'motion-v'
+import { useMotionValue, useVelocity, useTransform } from "motion-v";
 
-const x = useMotionValue(0)
-const xVelocity = useVelocity(x)
+const x = useMotionValue(0);
+const xVelocity = useVelocity(x);
 
 // Skew based on velocity
-const skewX = useTransform(xVelocity, [-1000, 0, 1000], [-25, 0, 25])
+const skewX = useTransform(xVelocity, [-1000, 0, 1000], [-25, 0, 25]);
 </script>
 ```
 
@@ -279,9 +286,9 @@ Respect user's motion preferences:
 
 ```vue
 <script setup>
-import { useReducedMotion } from 'motion-v'
+import { useReducedMotion } from "motion-v";
 
-const prefersReduced = useReducedMotion()
+const prefersReduced = useReducedMotion();
 </script>
 
 <template>

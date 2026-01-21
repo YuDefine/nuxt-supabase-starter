@@ -8,14 +8,14 @@ Reactive URLSearchParams
 ## Usage
 
 ```ts
-import { useUrlSearchParams } from '@vueuse/core'
+import { useUrlSearchParams } from "@vueuse/core";
 
-const params = useUrlSearchParams('history')
+const params = useUrlSearchParams("history");
 
-console.log(params.foo) // 'bar'
+console.log(params.foo); // 'bar'
 
-params.foo = 'bar'
-params.vueuse = 'awesome'
+params.foo = "bar";
+params.vueuse = "awesome";
 // url updated to `?foo=bar&vueuse=awesome`
 ```
 

@@ -121,9 +121,9 @@ Order matters! Put most specific first:
 ```json
 {
   ".": {
-    "types": "...",      // Always first
-    "import": "...",     // ESM
-    "require": "..."     // CJS fallback
+    "types": "...", // Always first
+    "import": "...", // ESM
+    "require": "..." // CJS fallback
   }
 }
 ```

@@ -8,9 +8,9 @@ Reactive color mode (dark / light / customs) with auto data persistence.
 ## Usage
 
 ```ts
-import { useColorMode } from '@vueuse/core'
+import { useColorMode } from "@vueuse/core";
 
-const mode = useColorMode() // Ref<'dark' | 'light'>
+const mode = useColorMode(); // Ref<'dark' | 'light'>
 ```
 
 ## Options

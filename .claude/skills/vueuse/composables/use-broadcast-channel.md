@@ -8,27 +8,22 @@ Reactive BroadcastChannel API.
 ## Usage
 
 ```ts
-import { useBroadcastChannel } from '@vueuse/core'
-import { shallowRef } from 'vue'
+import { useBroadcastChannel } from "@vueuse/core";
+import { shallowRef } from "vue";
 
-const {
-  isSupported,
-  channel,
-  post,
-  close,
-  error,
-  isClosed,
-} = useBroadcastChannel({ name: 'vueuse-demo-channel' })
+const { isSupported, channel, post, close, error, isClosed } = useBroadcastChannel({
+  name: "vueuse-demo-channel",
+});
 
-const message = shallowRef('')
+const message = shallowRef("");
 
-message.value = 'Hello, VueUse World!'
+message.value = "Hello, VueUse World!";
 
 // Post the message to the broadcast channel:
-post(message.value)
+post(message.value);
 
 // Option to close the channel if you wish:
-close()
+close();
 ```
 
 ## Options

@@ -8,9 +8,9 @@ Get the DOM element of current component as a ref.
 ## Usage
 
 ```ts
-import { useCurrentElement } from '@vueuse/core'
+import { useCurrentElement } from "@vueuse/core";
 
-const el = useCurrentElement() // ComputedRef<Element>
+const el = useCurrentElement(); // ComputedRef<Element>
 ```
 
 ## Reference

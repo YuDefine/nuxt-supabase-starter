@@ -8,10 +8,10 @@ Wrapper for .
 ## Usage
 
 ```ts
-import { useQRCode } from '@vueuse/integrations/useQRCode'
+import { useQRCode } from "@vueuse/integrations/useQRCode";
 
 // `qrcode` will be a ref of data URL
-const qrcode = useQRCode('text-to-encode')
+const qrcode = useQRCode("text-to-encode");
 ```
 
 ## Reference

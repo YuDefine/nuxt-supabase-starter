@@ -15,12 +15,12 @@ Runs on every route change. **REQUIRED: Use `.global.ts` suffix:**
 ```ts
 // middleware/auth.global.ts
 export default defineNuxtRouteMiddleware((to, from) => {
-  const auth = useAuthStore()
+  const auth = useAuthStore();
 
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
-    return navigateTo('/login')
+    return navigateTo("/login");
   }
-})
+});
 ```
 
 **Without `.global.ts` suffix, middleware is named (not global).**
@@ -43,12 +43,12 @@ Runs only when explicitly applied. No `.global` suffix:
 ```ts
 // middleware/admin.ts
 export default defineNuxtRouteMiddleware((to, from) => {
-  const auth = useAuthStore()
+  const auth = useAuthStore();
 
   if (!auth.isAdmin) {
-    return navigateTo('/')
+    return navigateTo("/");
   }
-})
+});
 ```
 
 Apply in page:
@@ -56,8 +56,8 @@ Apply in page:
 ```vue
 <script setup lang="ts">
 definePageMeta({
-  middleware: ['admin']
-})
+  middleware: ["admin"],
+});
 </script>
 ```
 
@@ -66,17 +66,17 @@ definePageMeta({
 ```ts
 export default defineNuxtRouteMiddleware((to, from) => {
   // Allow navigation
-  return
+  return;
 
   // Redirect
-  return navigateTo('/login')
+  return navigateTo("/login");
 
   // Abort navigation
-  return abortNavigation()
+  return abortNavigation();
 
   // Abort with error
-  return abortNavigation('Not authorized')
-})
+  return abortNavigation("Not authorized");
+});
 ```
 
 ### Middleware Order
@@ -96,35 +96,35 @@ Plugins extend Vue app with global functionality. Run during app initialization.
 export default defineNuxtPlugin((nuxtApp) => {
   return {
     provide: {
-      hello: (name: string) => `Hello ${name}!`
-    }
-  }
-})
+      hello: (name: string) => `Hello ${name}!`,
+    },
+  };
+});
 ```
 
 Use in components:
 
 ```vue
 <script setup lang="ts">
-const { $hello } = useNuxtApp()
-console.log($hello('World')) // "Hello World!"
+const { $hello } = useNuxtApp();
+console.log($hello("World")); // "Hello World!"
 </script>
 ```
 
 ### Plugin with Vue Plugin
 
 ```ts
-import type { PluginOptions } from 'vue-toastification'
+import type { PluginOptions } from "vue-toastification";
 // plugins/toast.client.ts
-import Toast from 'vue-toastification'
-import 'vue-toastification/dist/index.css'
+import Toast from "vue-toastification";
+import "vue-toastification/dist/index.css";
 
 export default defineNuxtPlugin((nuxtApp) => {
   nuxtApp.vueApp.use(Toast, {
-    position: 'top-right',
-    timeout: 3000
-  } as PluginOptions)
-})
+    position: "top-right",
+    timeout: 3000,
+  } as PluginOptions);
+});
 ```
 
 ### Plugin with Hooks
@@ -132,14 +132,14 @@ export default defineNuxtPlugin((nuxtApp) => {
 ```ts
 // plugins/init.ts
 export default defineNuxtPlugin((nuxtApp) => {
-  nuxtApp.hook('app:created', () => {
-    console.log('App created')
-  })
+  nuxtApp.hook("app:created", () => {
+    console.log("App created");
+  });
 
-  nuxtApp.hook('page:finish', () => {
-    console.log('Page finished loading')
-  })
-})
+  nuxtApp.hook("page:finish", () => {
+    console.log("Page finished loading");
+  });
+});
 ```
 
 ### Client-Only or Server-Only
@@ -154,9 +154,9 @@ Use file suffix:
 export default defineNuxtPlugin(() => {
   // Only runs in browser
   if (window.analytics) {
-    window.analytics.init()
+    window.analytics.init();
   }
-})
+});
 ```
 
 ### Plugin Order
@@ -175,14 +175,14 @@ plugins/
 ```ts
 // plugins/api.ts
 export default defineNuxtPlugin(async (nuxtApp) => {
-  const config = await fetch('/api/config').then(r => r.json())
+  const config = await fetch("/api/config").then((r) => r.json());
 
   return {
     provide: {
-      config
-    }
-  }
-})
+      config,
+    },
+  };
+});
 ```
 
 ## Best Practices
@@ -218,24 +218,24 @@ export default defineNuxtPlugin(async (nuxtApp) => {
 ```ts
 // middleware/auth.global.ts
 export default defineNuxtRouteMiddleware((to, from) => {
-  const auth = useAuthStore()
+  const auth = useAuthStore();
 
   // Public routes
-  const publicRoutes = ['/', '/login', '/register']
+  const publicRoutes = ["/", "/login", "/register"];
   if (publicRoutes.includes(to.path)) {
-    return
+    return;
   }
 
   // Check auth
   if (!auth.isAuthenticated) {
-    return navigateTo('/login')
+    return navigateTo("/login");
   }
 
   // Check role
   if (to.meta.requiresAdmin && !auth.isAdmin) {
-    return abortNavigation('Access denied')
+    return abortNavigation("Access denied");
   }
-})
+});
 ```
 
 ## Plugin Example: API Client
@@ -243,32 +243,32 @@ export default defineNuxtRouteMiddleware((to, from) => {
 ```ts
 // plugins/api.ts
 export default defineNuxtPlugin((nuxtApp) => {
-  const config = useRuntimeConfig()
+  const config = useRuntimeConfig();
 
   const api = $fetch.create({
     baseURL: config.public.apiBase,
     onRequest({ request, options }) {
-      const auth = useAuthStore()
+      const auth = useAuthStore();
       if (auth.token) {
         options.headers = {
           ...options.headers,
-          Authorization: `Bearer ${auth.token}`
-        }
+          Authorization: `Bearer ${auth.token}`,
+        };
       }
     },
     onResponseError({ response }) {
       if (response.status === 401) {
-        navigateTo('/login')
+        navigateTo("/login");
       }
-    }
-  })
+    },
+  });
 
   return {
     provide: {
-      api
-    }
-  }
-})
+      api,
+    },
+  };
+});
 ```
 
 ## Resources

@@ -8,27 +8,27 @@ A basic event bus.
 ## Usage
 
 ```ts
-import { useEventBus } from '@vueuse/core'
+import { useEventBus } from "@vueuse/core";
 
-const bus = useEventBus<string>('news')
+const bus = useEventBus<string>("news");
 
 function listener(event: string) {
-  console.log(`news: ${event}`)
+  console.log(`news: ${event}`);
 }
 
 // listen to an event
-const unsubscribe = bus.on(listener)
+const unsubscribe = bus.on(listener);
 
 // fire an event
-bus.emit('The Tokyo Olympics has begun')
+bus.emit("The Tokyo Olympics has begun");
 
 // unregister the listener
-unsubscribe()
+unsubscribe();
 // or
-bus.off(listener)
+bus.off(listener);
 
 // clearing all listeners
-bus.reset()
+bus.reset();
 ```
 
 ## Returns

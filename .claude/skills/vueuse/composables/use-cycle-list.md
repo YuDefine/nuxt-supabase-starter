@@ -8,28 +8,28 @@ Cycle through a list of items.
 ## Usage
 
 ```ts
-import { useCycleList } from '@vueuse/core'
+import { useCycleList } from "@vueuse/core";
 
 const { state, next, prev, go } = useCycleList([
-  'Dog',
-  'Cat',
-  'Lizard',
-  'Shark',
-  'Whale',
-  'Dolphin',
-  'Octopus',
-  'Seal',
-])
+  "Dog",
+  "Cat",
+  "Lizard",
+  "Shark",
+  "Whale",
+  "Dolphin",
+  "Octopus",
+  "Seal",
+]);
 
-console.log(state.value) // 'Dog'
+console.log(state.value); // 'Dog'
 
-prev()
+prev();
 
-console.log(state.value) // 'Seal'
+console.log(state.value); // 'Seal'
 
-go(3)
+go(3);
 
-console.log(state.value) // 'Shark'
+console.log(state.value); // 'Shark'
 ```
 
 ## Options

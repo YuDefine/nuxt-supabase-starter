@@ -8,9 +8,9 @@ Reactive .
 ## Usage
 
 ```ts
-import { useArrayReduce } from '@vueuse/core'
+import { useArrayReduce } from "@vueuse/core";
 
-const sum = useArrayReduce([ref(1), ref(2), ref(3)], (sum, val) => sum + val)
+const sum = useArrayReduce([ref(1), ref(2), ref(3)], (sum, val) => sum + val);
 // sum.value: 6
 ```
 

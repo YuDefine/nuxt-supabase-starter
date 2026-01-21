@@ -8,17 +8,17 @@ Shorthand for watching value with
 ## Usage
 
 ```ts
-import { watchDeep } from '@vueuse/core'
+import { watchDeep } from "@vueuse/core";
 
-const nestedObject = ref({ foo: { bar: { deep: 5 } } })
+const nestedObject = ref({ foo: { bar: { deep: 5 } } });
 
 watchDeep(nestedObject, (updated) => {
-  console.log(updated)
-})
+  console.log(updated);
+});
 
 onMounted(() => {
-  nestedObject.value.foo.bar.deep = 10
-})
+  nestedObject.value.foo.bar.deep = 10;
+});
 ```
 
 ## Reference

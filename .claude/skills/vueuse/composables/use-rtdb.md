@@ -8,15 +8,17 @@ Reactive Firebase Realtime Database binding. Making it straightforward to **alwa
 ## Usage
 
 ```ts
-import { useRTDB } from '@vueuse/firebase/useRTDB'
-import { initializeApp } from 'firebase/app'
-import { getDatabase } from 'firebase/database'
+import { useRTDB } from "@vueuse/firebase/useRTDB";
+import { initializeApp } from "firebase/app";
+import { getDatabase } from "firebase/database";
 
-const app = initializeApp({ /* config */ })
-const db = getDatabase(app)
+const app = initializeApp({
+  /* config */
+});
+const db = getDatabase(app);
 
 // in setup()
-const todos = useRTDB(db.ref('todos'))
+const todos = useRTDB(db.ref("todos"));
 ```
 
 ## Reference

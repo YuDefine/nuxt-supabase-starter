@@ -8,9 +8,9 @@ Reactive dir of the element's text.
 ## Usage
 
 ```ts
-import { useTextDirection } from '@vueuse/core'
+import { useTextDirection } from "@vueuse/core";
 
-const dir = useTextDirection() // Ref<'ltr' | 'rtl' | 'auto'>
+const dir = useTextDirection(); // Ref<'ltr' | 'rtl' | 'auto'>
 ```
 
 ## Options

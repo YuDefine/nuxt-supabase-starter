@@ -8,9 +8,9 @@ Reactive Navigator Languages. It provides web developers with information about 
 ## Usage
 
 ```ts
-import { usePreferredLanguages } from '@vueuse/core'
+import { usePreferredLanguages } from "@vueuse/core";
 
-const languages = usePreferredLanguages()
+const languages = usePreferredLanguages();
 ```
 
 ## Reference

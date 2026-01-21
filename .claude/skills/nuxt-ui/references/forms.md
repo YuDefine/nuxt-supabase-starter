@@ -26,9 +26,9 @@
 
 ```vue
 <script setup>
-const email = ref('')
-const bio = ref('')
-const country = ref('')
+const email = ref("");
+const bio = ref("");
+const country = ref("");
 </script>
 
 <template>
@@ -50,11 +50,11 @@ const country = ref('')
 
 ```vue
 <script setup>
-const selected = ref()
+const selected = ref();
 const options = [
-  { label: 'John', value: 'john', avatar: { src: '/john.png' } },
-  { label: 'Jane', value: 'jane', avatar: { src: '/jane.png' } }
-]
+  { label: "John", value: "john", avatar: { src: "/john.png" } },
+  { label: "Jane", value: "jane", avatar: { src: "/jane.png" } },
+];
 </script>
 
 <template>
@@ -71,9 +71,9 @@ const options = [
 
 ```vue
 <script setup>
-const agreed = ref(false)
-const plan = ref('free')
-const features = ref([])
+const agreed = ref(false);
+const plan = ref("free");
+const features = ref([]);
 </script>
 
 <template>
@@ -85,7 +85,7 @@ const features = ref([])
     v-model="plan"
     :items="[
       { label: 'Free', value: 'free', description: '$0/mo' },
-      { label: 'Pro', value: 'pro', description: '$10/mo' }
+      { label: 'Pro', value: 'pro', description: '$10/mo' },
     ]"
   />
 
@@ -94,7 +94,7 @@ const features = ref([])
     v-model="features"
     :items="[
       { label: 'Dark mode', value: 'dark' },
-      { label: 'Notifications', value: 'notifications' }
+      { label: 'Notifications', value: 'notifications' },
     ]"
   />
 </template>
@@ -108,24 +108,24 @@ Uses Standard Schema (Zod, Valibot, Yup, Joi, etc.)
 
 ```vue
 <script setup lang="ts">
-import { z } from 'zod'
+import { z } from "zod";
 
 const schema = z.object({
-  email: z.string().email('Invalid email'),
-  password: z.string().min(8, 'Min 8 characters')
-})
+  email: z.string().email("Invalid email"),
+  password: z.string().min(8, "Min 8 characters"),
+});
 
-type Schema = z.output<typeof schema>
+type Schema = z.output<typeof schema>;
 
 const state = reactive<Partial<Schema>>({
-  email: '',
-  password: ''
-})
+  email: "",
+  password: "",
+});
 
-const form = ref()
+const form = ref();
 
 async function onSubmit() {
-  await form.value.validate()
+  await form.value.validate();
   // Submit logic
 }
 </script>
@@ -149,19 +149,19 @@ async function onSubmit() {
 
 ```vue
 <script setup lang="ts">
-import * as v from 'valibot'
+import * as v from "valibot";
 
 const schema = v.object({
-  email: v.pipe(v.string(), v.email('Invalid email')),
-  password: v.pipe(v.string(), v.minLength(8, 'Min 8 characters'))
-})
+  email: v.pipe(v.string(), v.email("Invalid email")),
+  password: v.pipe(v.string(), v.minLength(8, "Min 8 characters")),
+});
 
-type Schema = v.InferOutput<typeof schema>
+type Schema = v.InferOutput<typeof schema>;
 
 const state = reactive<Partial<Schema>>({
-  email: '',
-  password: ''
-})
+  email: "",
+  password: "",
+});
 </script>
 
 <template>
@@ -215,7 +215,7 @@ const state = reactive<Partial<Schema>>({
 
 ```vue
 <script setup>
-const { files, open, reset } = useFileUpload()
+const { files, open, reset } = useFileUpload();
 </script>
 
 <template>
@@ -231,8 +231,8 @@ const { files, open, reset } = useFileUpload()
 
 ```vue
 <script setup>
-const date = ref(new Date())
-const range = ref({ start: new Date(), end: new Date() })
+const date = ref(new Date());
+const range = ref({ start: new Date(), end: new Date() });
 </script>
 
 <template>
@@ -251,9 +251,9 @@ const range = ref({ start: new Date(), end: new Date() })
 
 ```vue
 <script setup>
-import { Time } from '@internationalized/date'
+import { Time } from "@internationalized/date";
 
-const time = ref(new Time(12, 0))
+const time = ref(new Time(12, 0));
 </script>
 
 <template>

@@ -8,9 +8,9 @@ Reactive prefers-contrast media query.
 ## Usage
 
 ```ts
-import { usePreferredContrast } from '@vueuse/core'
+import { usePreferredContrast } from "@vueuse/core";
 
-const preferredContrast = usePreferredContrast()
+const preferredContrast = usePreferredContrast();
 ```
 
 ## Reference

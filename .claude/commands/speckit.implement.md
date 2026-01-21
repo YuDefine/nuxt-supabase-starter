@@ -149,6 +149,7 @@ You **MUST** consider the user input before proceeding (if not empty).
     - If user declines → End workflow
 
     **Flow diagram**:
+
     ```
     Tasks complete → check-runner → All passed?
                                         ↓ Yes
@@ -158,6 +159,7 @@ You **MUST** consider the user input before proceeding (if not empty).
     ```
 
     **Output format**:
+
     ```text
     ✅ Implementation complete!
 

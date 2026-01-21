@@ -8,14 +8,14 @@ Shorthand for v-model binding, props + emit -> ref
 ## Usage
 
 ```ts
-import { useVModel } from '@vueuse/core'
+import { useVModel } from "@vueuse/core";
 
 const props = defineProps<{
-  modelValue: string
-}>()
-const emit = defineEmits(['update:modelValue'])
+  modelValue: string;
+}>();
+const emit = defineEmits(["update:modelValue"]);
 
-const data = useVModel(props, 'modelValue', emit)
+const data = useVModel(props, "modelValue", emit);
 ```
 
 ## Options

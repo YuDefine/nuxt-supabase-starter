@@ -8,11 +8,11 @@ Used to set a global viewport width which will be used when rendering SSR compon
 ## Usage
 
 ```ts
-import { provideSSRWidth } from '@vueuse/core'
+import { provideSSRWidth } from "@vueuse/core";
 
-const app = createApp(App)
+const app = createApp(App);
 
-provideSSRWidth(500, app)
+provideSSRWidth(500, app);
 ```
 
 ## Reference

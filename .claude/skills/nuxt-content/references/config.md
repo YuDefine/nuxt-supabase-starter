@@ -14,16 +14,13 @@ Content uses SQL for queries. Configure in `nuxt.config.ts`:
 export default defineNuxtConfig({
   content: {
     database: {
-      type: 'sqlite',
-      filename: '.data/content.db',
+      type: "sqlite",
+      filename: ".data/content.db",
       // Optional: add database indexes for better query performance (v3.10+)
-      indexes: [
-        { fields: ['path'] },
-        { fields: ['date', 'draft'] },
-      ],
+      indexes: [{ fields: ["path"] }, { fields: ["date", "draft"] }],
     },
   },
-})
+});
 ```
 
 ### PostgreSQL
@@ -32,11 +29,11 @@ export default defineNuxtConfig({
 export default defineNuxtConfig({
   content: {
     database: {
-      type: 'postgresql',
+      type: "postgresql",
       url: process.env.DATABASE_URL,
     },
   },
-})
+});
 ```
 
 ### Cloudflare D1
@@ -45,11 +42,11 @@ export default defineNuxtConfig({
 export default defineNuxtConfig({
   content: {
     database: {
-      type: 'd1',
-      bindingName: 'DB', // Matches wrangler.toml binding
+      type: "d1",
+      bindingName: "DB", // Matches wrangler.toml binding
     },
   },
-})
+});
 ```
 
 ### LibSQL / Turso
@@ -58,12 +55,12 @@ export default defineNuxtConfig({
 export default defineNuxtConfig({
   content: {
     database: {
-      type: 'libsql',
+      type: "libsql",
       url: process.env.TURSO_URL,
       authToken: process.env.TURSO_AUTH_TOKEN,
     },
   },
-})
+});
 ```
 
 ### PGlite (In-memory)
@@ -72,10 +69,10 @@ export default defineNuxtConfig({
 export default defineNuxtConfig({
   content: {
     database: {
-      type: 'pglite',
+      type: "pglite",
     },
   },
-})
+});
 ```
 
 ## Local Development Database
@@ -86,16 +83,16 @@ Use different database for dev vs production:
 export default defineNuxtConfig({
   content: {
     database: {
-      type: 'd1',
-      bindingName: 'DB',
+      type: "d1",
+      bindingName: "DB",
     },
     // Dev-only SQLite
     _localDatabase: {
-      type: 'sqlite',
-      filename: '.data/content-dev.db',
+      type: "sqlite",
+      filename: ".data/content-dev.db",
     },
   },
-})
+});
 ```
 
 ## Markdown Configuration
@@ -116,27 +113,27 @@ export default defineNuxtConfig({
 
         // Remark plugins (markdown → mdast)
         remarkPlugins: {
-          'remark-emoji': {},
-          'remark-gfm': { singleTilde: false },
+          "remark-emoji": {},
+          "remark-gfm": { singleTilde: false },
         },
 
         // Rehype plugins (mdast → hast)
         rehypePlugins: {
-          'rehype-external-links': {
-            target: '_blank',
-            rel: ['noopener', 'noreferrer'],
+          "rehype-external-links": {
+            target: "_blank",
+            rel: ["noopener", "noreferrer"],
           },
         },
 
         // Code highlighting
         highlight: {
-          theme: 'github-dark',
-          langs: ['js', 'ts', 'vue', 'css', 'html', 'bash', 'yaml', 'json'],
+          theme: "github-dark",
+          langs: ["js", "ts", "vue", "css", "html", "bash", "yaml", "json"],
         },
       },
     },
   },
-})
+});
 ```
 
 ## Highlight Themes
@@ -170,9 +167,9 @@ export default defineNuxtConfig({
     renderer: {
       // Component aliases for prose
       alias: {
-        p: 'MyParagraph',
-        h2: 'MyHeading2',
-        code: 'MyCodeBlock',
+        p: "MyParagraph",
+        h2: "MyHeading2",
+        code: "MyCodeBlock",
       },
 
       // Anchor links per heading level
@@ -186,7 +183,7 @@ export default defineNuxtConfig({
       },
     },
   },
-})
+});
 ```
 
 ## File Type Configuration
@@ -204,7 +201,7 @@ export default defineNuxtConfig({
       yaml: false,
     },
   },
-})
+});
 ```
 
 ### CSV
@@ -215,11 +212,11 @@ export default defineNuxtConfig({
     build: {
       csv: {
         json: true, // Parse as JSON objects
-        delimiter: ',', // Column delimiter
+        delimiter: ",", // Column delimiter
       },
     },
   },
-})
+});
 ```
 
 ## Experimental Options
@@ -233,10 +230,10 @@ export default defineNuxtConfig({
 
       // Specify SQLite connector (v3.6+)
       // 'better-sqlite3' moved to peer dependency in v3.6.0
-      sqliteConnector: 'better-sqlite3', // or 'native' (Node 22+), 'sqlite3'
+      sqliteConnector: "better-sqlite3", // or 'native' (Node 22+), 'sqlite3'
     },
   },
-})
+});
 ```
 
 **Note:** Starting v3.6.0, `better-sqlite3` is a peer dependency. The module will prompt you to install your preferred SQLite connector on first run.
@@ -247,18 +244,18 @@ export default defineNuxtConfig({
 export default defineNuxtConfig({
   content: {
     database: {
-      type: 'sqlite',
-      filename: '.data/content.db',
+      type: "sqlite",
+      filename: ".data/content.db",
     },
     build: {
       markdown: {
         toc: { depth: 3, searchDepth: 2 },
         remarkPlugins: {
-          'remark-gfm': {},
+          "remark-gfm": {},
         },
         highlight: {
-          themes: { default: 'github-light', dark: 'github-dark' },
-          langs: ['vue', 'ts', 'bash', 'yaml', 'json'],
+          themes: { default: "github-light", dark: "github-dark" },
+          langs: ["vue", "ts", "bash", "yaml", "json"],
         },
       },
     },
@@ -266,7 +263,7 @@ export default defineNuxtConfig({
       anchorLinks: { h2: true, h3: true },
     },
   },
-})
+});
 ```
 
 ## Environment Variables
@@ -293,25 +290,25 @@ Modify content during build:
 // nuxt.config.ts
 export default defineNuxtConfig({
   hooks: {
-    'content:file:beforeParse': function (ctx) {
+    "content:file:beforeParse": function (ctx) {
       // Modify raw content before parsing
-      if (ctx.file.id.endsWith('.md')) {
-        ctx.file.body = ctx.file.body.replace(/oldTerm/gi, 'newTerm')
+      if (ctx.file.id.endsWith(".md")) {
+        ctx.file.body = ctx.file.body.replace(/oldTerm/gi, "newTerm");
       }
     },
-    'content:file:afterParse': function (ctx) {
+    "content:file:afterParse": function (ctx) {
       // Add computed fields after parsing
-      const wordCount = ctx.file.body?.split(/\s+/).length || 0
-      ctx.content.readingTime = Math.ceil(wordCount / 180)
+      const wordCount = ctx.file.body?.split(/\s+/).length || 0;
+      ctx.content.readingTime = Math.ceil(wordCount / 180);
     },
   },
-})
+});
 ```
 
 **Note:** Fields added in `afterParse` must be defined in your collection schema:
 
 ```ts
-schema: z.object({ readingTime: z.number().optional() })
+schema: z.object({ readingTime: z.number().optional() });
 ```
 
 ## LLMs Integration
@@ -320,19 +317,19 @@ Generate AI-ready content with `nuxt-llms`:
 
 ```ts
 export default defineNuxtConfig({
-  modules: ['@nuxt/content', 'nuxt-llms'],
+  modules: ["@nuxt/content", "nuxt-llms"],
   llms: {
-    domain: 'https://your-site.com',
-    title: 'Your Site',
+    domain: "https://your-site.com",
+    title: "Your Site",
     sections: [
       {
-        title: 'Docs',
-        contentCollection: 'docs',
-        contentFilters: [{ field: 'draft', operator: '<>', value: true }],
+        title: "Docs",
+        contentCollection: "docs",
+        contentFilters: [{ field: "draft", operator: "<>", value: true }],
       },
     ],
   },
-})
+});
 ```
 
 Auto-generates `/llms.txt` for LLM consumption.

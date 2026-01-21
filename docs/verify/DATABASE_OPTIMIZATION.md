@@ -51,33 +51,33 @@ ORDER BY idx_scan DESC;
 EXPLAIN ANALYZE SELECT * FROM your_schema.resources WHERE status = 'active';
 ```
 
-### 2.2 避免 SELECT *
+### 2.2 避免 SELECT \*
 
 ```typescript
 // ❌ 避免
-const { data } = await supabase.from('resources').select('*')
+const { data } = await supabase.from("resources").select("*");
 
 // ✅ 只選擇需要的欄位
-const { data } = await supabase.from('resources').select('id, name, status')
+const { data } = await supabase.from("resources").select("id, name, status");
 ```
 
 ### 2.3 使用 count 時指定模式
 
 ```typescript
 // ❌ 效能差：會計算精確數量
-const { count } = await supabase.from('resources').select('*', { count: 'exact' })
+const { count } = await supabase.from("resources").select("*", { count: "exact" });
 
 // ✅ 如果只需要知道是否有資料
-const { count } = await supabase.from('resources').select('*', { count: 'planned' }).limit(1)
+const { count } = await supabase.from("resources").select("*", { count: "planned" }).limit(1);
 ```
 
 ### 2.4 分頁查詢
 
 ```typescript
 // 使用 range 進行分頁（效能較好）
-const from = (page - 1) * pageSize
-const to = from + pageSize - 1
-const { data } = await supabase.from('resources').select('*').range(from, to)
+const from = (page - 1) * pageSize;
+const to = from + pageSize - 1;
+const { data } = await supabase.from("resources").select("*").range(from, to);
 ```
 
 ---
@@ -128,14 +128,14 @@ Supabase 使用 PgBouncer 作為連線池，預設設定通常足夠。
 
 ```typescript
 // ❌ 避免：長時間持有連線
-const { data } = await supabase.from('resources').select('*')
+const { data } = await supabase.from("resources").select("*");
 // ... 做很多事情 ...
-await supabase.from('logs').insert({ action: 'done' })
+await supabase.from("logs").insert({ action: "done" });
 
 // ✅ 快速完成查詢，釋放連線
-const { data } = await supabase.from('resources').select('*')
+const { data } = await supabase.from("resources").select("*");
 // 處理資料...
-await supabase.from('logs').insert({ action: 'done' })
+await supabase.from("logs").insert({ action: "done" });
 ```
 
 ---
@@ -178,11 +178,11 @@ SELECT cron.schedule(
 ```typescript
 // ❌ 避免：逐筆插入
 for (const item of items) {
-  await supabase.from('resources').insert(item)
+  await supabase.from("resources").insert(item);
 }
 
 // ✅ 批次插入
-await supabase.from('resources').insert(items)
+await supabase.from("resources").insert(items);
 ```
 
 ### 6.2 批次更新（使用 RPC）

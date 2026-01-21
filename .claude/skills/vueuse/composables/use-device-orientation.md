@@ -8,14 +8,9 @@ Reactive DeviceOrientationEvent. Provide web developers with information from th
 ## Usage
 
 ```ts
-import { useDeviceOrientation } from '@vueuse/core'
+import { useDeviceOrientation } from "@vueuse/core";
 
-const {
-  isAbsolute,
-  alpha,
-  beta,
-  gamma,
-} = useDeviceOrientation()
+const { isAbsolute, alpha, beta, gamma } = useDeviceOrientation();
 ```
 
 ## Returns

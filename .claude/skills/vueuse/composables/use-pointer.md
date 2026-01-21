@@ -8,9 +8,9 @@ Reactive pointer state.
 ## Usage
 
 ```ts
-import { usePointer } from '@vueuse/core'
+import { usePointer } from "@vueuse/core";
 
-const { x, y, pressure, pointerType } = usePointer()
+const { x, y, pressure, pointerType } = usePointer();
 ```
 
 ## Options

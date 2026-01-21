@@ -10,15 +10,15 @@ pnpm add -D vitest
 
 ```typescript
 // vitest.config.ts
-import { defineConfig } from 'vitest/config'
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    include: ['test/**/*.test.ts'],
+    include: ["test/**/*.test.ts"],
     testTimeout: 30_000,
-    reporters: 'dot',
+    reporters: "dot",
   },
-})
+});
 ```
 
 ### With Coverage
@@ -27,13 +27,13 @@ export default defineConfig({
 export default defineConfig({
   test: {
     coverage: {
-      provider: 'v8',
-      include: ['src/**/*.ts'],
-      exclude: ['src/types.ts'],
-      reporter: ['text', 'lcovonly', 'html'],
+      provider: "v8",
+      include: ["src/**/*.ts"],
+      exclude: ["src/types.ts"],
+      reporter: ["text", "lcovonly", "html"],
     },
   },
-})
+});
 ```
 
 ## Workspace Projects
@@ -44,18 +44,18 @@ For monorepos, test packages separately:
 export default defineConfig({
   test: {
     projects: [
-      'packages/*/vitest.config.ts',
+      "packages/*/vitest.config.ts",
       {
-        extends: './vitest.config.ts',
-        test: { name: 'unit', environment: 'node' },
+        extends: "./vitest.config.ts",
+        test: { name: "unit", environment: "node" },
       },
       {
-        extends: './vitest.config.ts',
-        test: { name: 'browser', browser: { enabled: true } },
+        extends: "./vitest.config.ts",
+        test: { name: "browser", browser: { enabled: true } },
       },
     ],
   },
-})
+});
 ```
 
 ## Fixture-Based Testing
@@ -63,20 +63,20 @@ export default defineConfig({
 Test transforms with file fixtures:
 
 ```typescript
-import { describe, expect, it } from 'vitest'
-import { transform } from '../src'
+import { describe, expect, it } from "vitest";
+import { transform } from "../src";
 
-const fixtures = import.meta.glob('./fixtures/*.ts', { as: 'raw' })
+const fixtures = import.meta.glob("./fixtures/*.ts", { as: "raw" });
 
-describe('transform', () => {
+describe("transform", () => {
   for (const [path, getContent] of Object.entries(fixtures)) {
     it(path, async () => {
-      const content = await getContent()
-      const result = await transform(content)
-      expect(result).toMatchSnapshot()
-    })
+      const content = await getContent();
+      const result = await transform(content);
+      expect(result).toMatchSnapshot();
+    });
   }
-})
+});
 ```
 
 ## Idempotency Testing
@@ -84,13 +84,13 @@ describe('transform', () => {
 Ensure transforms are stable:
 
 ```typescript
-it('transform is idempotent', async () => {
-  const pass1 = (await transform(fixture))?.code ?? fixture
-  expect(pass1).toMatchSnapshot()
+it("transform is idempotent", async () => {
+  const pass1 = (await transform(fixture))?.code ?? fixture;
+  expect(pass1).toMatchSnapshot();
 
-  const pass2 = (await transform(pass1))?.code ?? pass1
-  expect(pass2).toBe(pass1)  // Should not change
-})
+  const pass2 = (await transform(pass1))?.code ?? pass1;
+  expect(pass2).toBe(pass1); // Should not change
+});
 ```
 
 ## Type-Level Testing
@@ -103,19 +103,19 @@ export default defineConfig({
   test: {
     typecheck: { enabled: true },
   },
-})
+});
 ```
 
 ```typescript
 // test/types.test-d.ts
-import { describe, expectTypeOf, it } from 'vitest'
-import type { Input, Output } from '../src'
+import { describe, expectTypeOf, it } from "vitest";
+import type { Input, Output } from "../src";
 
-describe('types', () => {
-  it('infers input correctly', () => {
-    expectTypeOf<Input<typeof schema>>().toEqualTypeOf<{ id: string }>()
-  })
-})
+describe("types", () => {
+  it("infers input correctly", () => {
+    expectTypeOf<Input<typeof schema>>().toEqualTypeOf<{ id: string }>();
+  });
+});
 ```
 
 ## Multi-TS Version Testing
@@ -128,7 +128,7 @@ jobs:
   test-types:
     strategy:
       matrix:
-        ts: ['5.0', '5.2', '5.4', '5.6', '5.8']
+        ts: ["5.0", "5.2", "5.4", "5.6", "5.8"]
     steps:
       - run: pnpm add -D typescript@${{ matrix.ts }}
       - run: pnpm typecheck
@@ -150,8 +150,8 @@ Add to tsdown config:
 
 ```typescript
 export default defineConfig({
-  attw: { profile: 'esm-only' },  // or 'node16'
-})
+  attw: { profile: "esm-only" }, // or 'node16'
+});
 ```
 
 ## Test Scripts
@@ -170,15 +170,15 @@ export default defineConfig({
 ## Mocking
 
 ```typescript
-import { vi } from 'vitest'
+import { vi } from "vitest";
 
-vi.mock('fs', () => ({
-  readFileSync: vi.fn(() => 'mocked content'),
-}))
+vi.mock("fs", () => ({
+  readFileSync: vi.fn(() => "mocked content"),
+}));
 
 // Spy on method
-const spy = vi.spyOn(console, 'log')
-expect(spy).toHaveBeenCalledWith('expected')
+const spy = vi.spyOn(console, "log");
+expect(spy).toHaveBeenCalledWith("expected");
 ```
 
 ## Testing Plugins
@@ -187,15 +187,17 @@ Dogfood your own plugin in tests:
 
 ```typescript
 // vitest.config.ts
-import { defineConfig } from 'vitest/config'
-import MyPlugin from './src/vite'
+import { defineConfig } from "vitest/config";
+import MyPlugin from "./src/vite";
 
 export default defineConfig({
   plugins: [
-    MyPlugin({ /* options */ }),
+    MyPlugin({
+      /* options */
+    }),
   ],
   test: {
-    include: ['test/**/*.test.ts'],
+    include: ["test/**/*.test.ts"],
   },
-})
+});
 ```

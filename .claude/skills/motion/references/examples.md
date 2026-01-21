@@ -30,8 +30,8 @@ These React/CSS libraries provide patterns easily ported to Motion Vue:
 ```vue
 <!-- Parallax -->
 <script setup>
-const { scrollYProgress } = useScroll()
-const y = useTransform(scrollYProgress, [0, 1], [0, -200])
+const { scrollYProgress } = useScroll();
+const y = useTransform(scrollYProgress, [0, 1], [0, -200]);
 </script>
 
 <Motion.div :style="{ y }">Parallax content</Motion.div>
@@ -111,7 +111,7 @@ function reset() {
 ```vue
 <!-- Staggered text reveal -->
 <script setup>
-const words = text.split(' ')
+const words = text.split(" ");
 </script>
 
 <template>
@@ -123,7 +123,7 @@ const words = text.split(' ')
     >
       {{ word }}
     </Motion.span>
-    {{ ' ' }}
+    {{ " " }}
   </span>
 </template>
 ```
@@ -155,10 +155,7 @@ const words = text.split(' ')
 
 ```vue
 <!-- Morphing shapes -->
-<Motion.path
-  :animate="{ d: isCircle ? circlePath : squarePath }"
-  :transition="{ duration: 0.5 }"
-/>
+<Motion.path :animate="{ d: isCircle ? circlePath : squarePath }" :transition="{ duration: 0.5 }" />
 ```
 
 ### Background Effects
@@ -176,11 +173,7 @@ function handleMouse(e: MouseEvent) {
 }
 </script>
 
-<Motion.div
-  :style="{ background }"
-  @mousemove="handleMouse"
-  class="fixed inset-0"
-/>
+<Motion.div :style="{ background }" @mousemove="handleMouse" class="fixed inset-0" />
 ```
 
 ### Page Transitions

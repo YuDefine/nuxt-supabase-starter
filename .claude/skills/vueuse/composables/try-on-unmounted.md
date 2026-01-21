@@ -8,11 +8,9 @@ Safe . Call if it's inside a component lifecycle, if not, do nothing
 ## Usage
 
 ```ts
-import { tryOnUnmounted } from '@vueuse/core'
+import { tryOnUnmounted } from "@vueuse/core";
 
-tryOnUnmounted(() => {
-
-})
+tryOnUnmounted(() => {});
 ```
 
 ## Reference

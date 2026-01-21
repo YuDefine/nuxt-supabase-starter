@@ -8,9 +8,9 @@ Simple Web Workers registration and communication.
 ## Usage
 
 ```ts
-import { useWebWorker } from '@vueuse/core'
+import { useWebWorker } from "@vueuse/core";
 
-const { data, post, terminate, worker } = useWebWorker('/path/to/worker.js')
+const { data, post, terminate, worker } = useWebWorker("/path/to/worker.js");
 ```
 
 ## Returns

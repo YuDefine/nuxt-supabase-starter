@@ -8,13 +8,13 @@ Normalize value/ref/getter to or .
 ## Usage
 
 ```ts
-import { toRef } from '@vueuse/core'
+import { toRef } from "@vueuse/core";
 
-const foo = ref('hi')
+const foo = ref("hi");
 
-const a = toRef(0) // Ref<number>
-const b = toRef(foo) // Ref<string>
-const c = toRef(() => 'hi') // ComputedRef<string>
+const a = toRef(0); // Ref<number>
+const b = toRef(foo); // Ref<string>
+const c = toRef(() => "hi"); // ComputedRef<string>
 ```
 
 ## Reference

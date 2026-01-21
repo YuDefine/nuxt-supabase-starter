@@ -8,14 +8,9 @@ Reactive DeviceMotionEvent. Provide web developers with information about the sp
 ## Usage
 
 ```ts
-import { useDeviceMotion } from '@vueuse/core'
+import { useDeviceMotion } from "@vueuse/core";
 
-const {
-  acceleration,
-  accelerationIncludingGravity,
-  rotationRate,
-  interval,
-} = useDeviceMotion()
+const { acceleration, accelerationIncludingGravity, rotationRate, interval } = useDeviceMotion();
 ```
 
 ## Returns

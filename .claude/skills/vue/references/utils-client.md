@@ -31,18 +31,18 @@ Pure functions for formatting, validation, transformation, and parsing.
 
 ```ts
 // utils/formatters.ts
-export function formatCurrency(amount: number, currency = 'USD'): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
+export function formatCurrency(amount: number, currency = "USD"): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
     currency,
-  }).format(amount)
+  }).format(amount);
 }
 
 export function formatRelativeTime(date: Date): string {
-  const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
-  const diff = date.getTime() - Date.now()
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-  return rtf.format(days, 'day')
+  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+  const diff = date.getTime() - Date.now();
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  return rtf.format(days, "day");
 }
 ```
 
@@ -65,12 +65,16 @@ export function formatPhone(phone: string): string { ... }
 ```ts
 // utils/validators.ts
 export function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@][^\s.@]*\.[^\s@]+$/.test(email)
+  return /^[^\s@]+@[^\s@][^\s.@]*\.[^\s@]+$/.test(email);
 }
 
 export function isValidUrl(url: string): boolean {
-  try { new URL(url); return true }
-  catch { return false }
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
 }
 ```
 
@@ -79,13 +83,14 @@ export function isValidUrl(url: string): boolean {
 ```ts
 // utils/transformers.ts
 export function slugify(text: string): string {
-  return text.toLowerCase()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/\s+/g, '-')
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "-");
 }
 
 export function truncate(text: string, length: number): string {
-  return text.length > length ? `${text.slice(0, length)}...` : text
+  return text.length > length ? `${text.slice(0, length)}...` : text;
 }
 ```
 
@@ -94,12 +99,15 @@ export function truncate(text: string, length: number): string {
 ```ts
 // utils/parsers.ts
 export function parseQuery(search: string): Record<string, string> {
-  return Object.fromEntries(new URLSearchParams(search))
+  return Object.fromEntries(new URLSearchParams(search));
 }
 
 export function parseJSON<T>(json: string, fallback: T): T {
-  try { return JSON.parse(json) }
-  catch { return fallback }
+  try {
+    return JSON.parse(json);
+  } catch {
+    return fallback;
+  }
 }
 ```
 
@@ -109,15 +117,15 @@ export function parseJSON<T>(json: string, fallback: T): T {
 
 ```ts
 // ❌ Wrong - mutates external state
-let count = 0
+let count = 0;
 export function increment() {
-  count++
-  return count
+  count++;
+  return count;
 }
 
 // ✅ Correct - pure
 export function add(a: number, b: number): number {
-  return a + b
+  return a + b;
 }
 ```
 

@@ -8,9 +8,9 @@ Reactive time ago with i18n supported. Automatically update the time ago string 
 ## Usage
 
 ```ts
-import { useTimeAgoIntl } from '@vueuse/core'
+import { useTimeAgoIntl } from "@vueuse/core";
 
-const timeAgoIntl = useTimeAgoIntl(new Date(2021, 0, 1))
+const timeAgoIntl = useTimeAgoIntl(new Date(2021, 0, 1));
 ```
 
 ## Options

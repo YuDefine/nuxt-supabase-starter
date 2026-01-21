@@ -51,8 +51,8 @@ pnpm add -D nuxt-content-twoslash
 
 ```ts [nuxt.config.ts]
 export default defineNuxtConfig({
-  modules: ['nuxt-content-twoslash', '@nuxt/content'] // twoslash before content
-})
+  modules: ["nuxt-content-twoslash", "@nuxt/content"], // twoslash before content
+});
 ```
 
 ## Component Patterns
@@ -80,17 +80,27 @@ The `::steps` component auto-renders step numbers. **Do NOT include numbers in s
 
 ```md
 <!-- ✅ Correct -->
+
 ::steps
+
 ### Install the module
+
 ### Configure nuxt.config.ts
+
 ### Restart dev server
+
 ::
 
 <!-- ❌ Wrong (numbers will duplicate) -->
+
 ::steps
+
 ### 1. Install the module
+
 ### 2) Configure nuxt.config.ts
+
 ### Step 3: Restart dev server
+
 ::
 ```
 
@@ -101,8 +111,8 @@ Always include file path:
 ````md
 ```ts [nuxt.config.ts]
 export default defineNuxtConfig({
-  modules: ['@nuxt/content']
-})
+  modules: ["@nuxt/content"],
+});
 ```
 
 ```vue [app/pages/index.vue]
@@ -121,23 +131,28 @@ pnpm add @nuxt/content
 For components with multiple props, use YAML frontmatter:
 
 ```md
-::read-more
----
+## ::read-more
+
 icon: i-simple-icons-github
-target: _blank
+target: \_blank
 to: https://github.com/nuxt/nuxt/releases/tag/v4.0.0
+
 ---
+
 Read the full release notes.
 ::
 ```
 
 ```md
-::carousel
----
+## ::carousel
+
 items:
-  - /assets/blog/image-1.png
-  - /assets/blog/image-2.png
+
+- /assets/blog/image-1.png
+- /assets/blog/image-2.png
+
 ---
+
 ::
 ```
 
@@ -147,19 +162,24 @@ Link to related content:
 
 ```md
 <!-- Inline link -->
+
 See the [configuration guide](/docs/getting-started/configuration).
 
 <!-- Read-more block -->
+
 ::read-more{to="/docs/api/composables/use-fetch"}
 ::
 
 <!-- With custom text and icon -->
-::read-more
----
+
+## ::read-more
+
 icon: i-simple-icons-github
 to: https://github.com/nuxt/nuxt
-target: _blank
+target: \_blank
+
 ---
+
 View the source code.
 ::
 ```

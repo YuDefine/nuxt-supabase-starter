@@ -8,9 +8,9 @@ Reactive mouse pressing state. Triggered by on target element and released by on
 ## Usage
 
 ```ts
-import { useMousePressed } from '@vueuse/core'
+import { useMousePressed } from "@vueuse/core";
 
-const { pressed } = useMousePressed()
+const { pressed } = useMousePressed();
 ```
 
 ## Returns

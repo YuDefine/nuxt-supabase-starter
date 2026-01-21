@@ -8,15 +8,17 @@ with additional EventFilter control.
 ## Usage
 
 ```ts
-import { debounceFilter, watchWithFilter } from '@vueuse/core'
+import { debounceFilter, watchWithFilter } from "@vueuse/core";
 
 watchWithFilter(
   source,
-  () => { console.log('changed!') }, // callback will be called in 500ms debounced manner
+  () => {
+    console.log("changed!");
+  }, // callback will be called in 500ms debounced manner
   {
     eventFilter: debounceFilter(500), // throttledFilter, pausableFilter or custom filters
   },
-)
+);
 ```
 
 ## Reference

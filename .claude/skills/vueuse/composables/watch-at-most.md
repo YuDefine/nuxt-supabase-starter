@@ -8,15 +8,17 @@ with the number of times triggered.
 ## Usage
 
 ```ts
-import { watchAtMost } from '@vueuse/core'
+import { watchAtMost } from "@vueuse/core";
 
 watchAtMost(
   source,
-  () => { console.log('trigger!') }, // triggered it at most 3 times
+  () => {
+    console.log("trigger!");
+  }, // triggered it at most 3 times
   {
     count: 3, // the number of times triggered
   },
-)
+);
 ```
 
 ## Returns

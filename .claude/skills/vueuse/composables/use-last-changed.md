@@ -8,17 +8,17 @@ Records the timestamp of the last change
 ## Usage
 
 ```ts
-import { useLastChanged } from '@vueuse/core'
-import { nextTick } from 'vue'
+import { useLastChanged } from "@vueuse/core";
+import { nextTick } from "vue";
 
-const a = ref(0)
-const lastChanged = useLastChanged(a)
+const a = ref(0);
+const lastChanged = useLastChanged(a);
 
-a.value = 1
+a.value = 1;
 
-await nextTick()
+await nextTick();
 
-console.log(lastChanged.value) // 1704709379457
+console.log(lastChanged.value); // 1704709379457
 ```
 
 ## Reference

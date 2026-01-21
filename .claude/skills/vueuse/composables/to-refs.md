@@ -8,20 +8,20 @@ Extended that also accepts refs of an object.
 ## Usage
 
 ```ts
-import { toRefs } from '@vueuse/core'
-import { reactive, ref } from 'vue'
+import { toRefs } from "@vueuse/core";
+import { reactive, ref } from "vue";
 
-const objRef = ref({ a: 'a', b: 0 })
-const arrRef = ref(['a', 0])
+const objRef = ref({ a: "a", b: 0 });
+const arrRef = ref(["a", 0]);
 
-const { a, b } = toRefs(objRef)
-const [a, b] = toRefs(arrRef)
+const { a, b } = toRefs(objRef);
+const [a, b] = toRefs(arrRef);
 
-const obj = reactive({ a: 'a', b: 0 })
-const arr = reactive(['a', 0])
+const obj = reactive({ a: "a", b: 0 });
+const arr = reactive(["a", 0]);
 
-const { a, b } = toRefs(obj)
-const [a, b] = toRefs(arr)
+const { a, b } = toRefs(obj);
+const [a, b] = toRefs(arr);
 ```
 
 ## Options

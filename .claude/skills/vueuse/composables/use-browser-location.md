@@ -8,9 +8,9 @@ Reactive browser location
 ## Usage
 
 ```ts
-import { useBrowserLocation } from '@vueuse/core'
+import { useBrowserLocation } from "@vueuse/core";
 
-const location = useBrowserLocation()
+const location = useBrowserLocation();
 ```
 
 ## Reference

@@ -8,14 +8,9 @@ Reactive
 ## Usage
 
 ```ts
-import { useScreenSafeArea } from '@vueuse/core'
+import { useScreenSafeArea } from "@vueuse/core";
 
-const {
-  top,
-  right,
-  bottom,
-  left,
-} = useScreenSafeArea()
+const { top, right, bottom, left } = useScreenSafeArea();
 ```
 
 ## Returns

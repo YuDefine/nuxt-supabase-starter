@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: {node-version: 22, cache: pnpm}
+        with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm prepare
       - run: pnpm lint
@@ -36,23 +36,23 @@ env:
 
 ```js
 // eslint.config.mjs
-import antfu from '@antfu/eslint-config'
-import withNuxt from './.nuxt/eslint.config.mjs'
+import antfu from "@antfu/eslint-config";
+import withNuxt from "./.nuxt/eslint.config.mjs";
 
 export default withNuxt(
   antfu({
     formatters: true,
     vue: true,
     pnpm: true,
-    ignores: ['.eslintcache', 'cache/**', '.claude/**', 'README.md', 'docs/**'],
+    ignores: [".eslintcache", "cache/**", ".claude/**", "README.md", "docs/**"],
   }),
-)
+);
 ```
 
 **For monorepos, add:**
 
 ```js
-ignores: ['apps/web/.nuxt/**', 'packages/**/dist/**']
+ignores: ["apps/web/.nuxt/**", "packages/**/dist/**"];
 ```
 
 ## Package Scripts
@@ -92,12 +92,12 @@ on: push
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    permissions: {contents: read, id-token: write}
+    permissions: { contents: read, id-token: write }
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: {node-version: 22, cache: pnpm}
+        with: { node-version: 22, cache: pnpm }
       - run: pnpm install
       - uses: nuxt-hub/action@v2
         with:

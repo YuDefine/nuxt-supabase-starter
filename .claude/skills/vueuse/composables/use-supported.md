@@ -8,13 +8,13 @@ SSR compatibility
 ## Usage
 
 ```ts
-import { useSupported } from '@vueuse/core'
+import { useSupported } from "@vueuse/core";
 
-const isSupported = useSupported(() => navigator && 'getBattery' in navigator)
+const isSupported = useSupported(() => navigator && "getBattery" in navigator);
 
 if (isSupported.value) {
   // do something
-  navigator.getBattery
+  navigator.getBattery;
 }
 ```
 

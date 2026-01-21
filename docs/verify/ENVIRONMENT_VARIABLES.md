@@ -18,13 +18,13 @@ Nuxt 讀取順序：`.env.local` → `.env.{mode}` → `.env`。若同名，後�
 
 ## 2. 命名規則
 
-| 用途        | 命名                   | 備註                                                                                       |
-| ----------- | ---------------------- | ------------------------------------------------------------------------------------------ |
-| 前端可存取  | `NUXT_PUBLIC_*`        | 在瀏覽器端可直接讀到，僅能放非敏感資訊                                                     |
-| Server 專用 | 無 `NUXT_PUBLIC_`      | 僅 `server/api`、`runtimeConfig`、腳本可讀                                                 |
-| OAuth       | `NUXT_OAUTH_*`         | OAuth 設定（Google、GitHub 等）                                                            |
-| Supabase    | `SUPABASE_*`           | `SUPABASE_URL`、`SUPABASE_KEY`、`SUPABASE_SERVICE_ROLE_KEY` 等                             |
-| Sentry      | `NUXT_PUBLIC_SENTRY_*` | 必須使用 `NUXT_PUBLIC_` 前綴，因為 Sentry config 在 build time 執行                        |
+| 用途        | 命名                   | 備註                                                                |
+| ----------- | ---------------------- | ------------------------------------------------------------------- |
+| 前端可存取  | `NUXT_PUBLIC_*`        | 在瀏覽器端可直接讀到，僅能放非敏感資訊                              |
+| Server 專用 | 無 `NUXT_PUBLIC_`      | 僅 `server/api`、`runtimeConfig`、腳本可讀                          |
+| OAuth       | `NUXT_OAUTH_*`         | OAuth 設定（Google、GitHub 等）                                     |
+| Supabase    | `SUPABASE_*`           | `SUPABASE_URL`、`SUPABASE_KEY`、`SUPABASE_SERVICE_ROLE_KEY` 等      |
+| Sentry      | `NUXT_PUBLIC_SENTRY_*` | 必須使用 `NUXT_PUBLIC_` 前綴，因為 Sentry config 在 build time 執行 |
 
 禁止在程式內直接引用 `process.env.SOMETHING` 而無 fallback，請統一經 `runtimeConfig` 或 `useRuntimeConfig()` 取得。
 
@@ -76,22 +76,22 @@ NUXT_PUBLIC_SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
 
 ```ts
 // 要求登入
-const { user } = await requireUserSession(event)
+const { user } = await requireUserSession(event);
 
 // 取得 Supabase Client
-const client = await getSupabaseWithContext(event)
+const client = await getSupabaseWithContext(event);
 ```
 
 ### 4.3. Client 端使用
 
 ```ts
-const { user, loggedIn, signIn, signOut } = useUserSession()
+const { user, loggedIn, signIn, signOut } = useUserSession();
 
 // OAuth 登入
-await signIn.social({ provider: 'google' })
+await signIn.social({ provider: "google" });
 
 // 登出
-await signOut()
+await signOut();
 ```
 
 ---
@@ -109,12 +109,12 @@ await signOut()
 
 ## 6. 常見錯誤
 
-| 症狀                         | 可能原因                                         | 解法                                     |
-| ---------------------------- | ------------------------------------------------ | ---------------------------------------- |
-| OAuth 登入失敗               | `NUXT_OAUTH_*_CLIENT_ID` 或 `SECRET` 不正確      | 檢查 OAuth Provider Console 設定         |
-| API 回傳 401 Unauthorized    | Session 過期或未登入                             | 重新登入，檢查 Cookie 是否正確設定       |
-| RLS 無法讀取資料             | Service Role Key 未設定                          | 確認 `SUPABASE_SERVICE_ROLE_KEY` 已設定  |
-| `NUXT_PUBLIC_*` 泄漏祕密     | 將 Service Role、私有 API key 放在 public 變數   | 立即旋轉金鑰並改為 server-only 變數      |
+| 症狀                      | 可能原因                                       | 解法                                    |
+| ------------------------- | ---------------------------------------------- | --------------------------------------- |
+| OAuth 登入失敗            | `NUXT_OAUTH_*_CLIENT_ID` 或 `SECRET` 不正確    | 檢查 OAuth Provider Console 設定        |
+| API 回傳 401 Unauthorized | Session 過期或未登入                           | 重新登入，檢查 Cookie 是否正確設定      |
+| RLS 無法讀取資料          | Service Role Key 未設定                        | 確認 `SUPABASE_SERVICE_ROLE_KEY` 已設定 |
+| `NUXT_PUBLIC_*` 泄漏祕密  | 將 Service Role、私有 API key 放在 public 變數 | 立即旋轉金鑰並改為 server-only 變數     |
 
 ---
 

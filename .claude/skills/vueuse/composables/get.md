@@ -8,11 +8,11 @@ Shorthand for accessing
 ## Usage
 
 ```ts
-import { get } from '@vueuse/core'
+import { get } from "@vueuse/core";
 
-const a = ref(42)
+const a = ref(42);
 
-console.log(get(a)) // 42
+console.log(get(a)); // 42
 ```
 
 ## Reference

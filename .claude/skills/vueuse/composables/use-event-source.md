@@ -8,9 +8,9 @@ An EventSource or Server-Sent-Events instance opens a persistent connection to a
 ## Usage
 
 ```ts
-import { useEventSource } from '@vueuse/core'
+import { useEventSource } from "@vueuse/core";
 
-const { status, data, error, close } = useEventSource('https://event-source-url')
+const { status, data, error, close } = useEventSource("https://event-source-url");
 ```
 
 ## Options

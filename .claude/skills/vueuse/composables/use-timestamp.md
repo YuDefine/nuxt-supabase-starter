@@ -8,9 +8,9 @@ Reactive current timestamp
 ## Usage
 
 ```ts
-import { useTimestamp } from '@vueuse/core'
+import { useTimestamp } from "@vueuse/core";
 
-const timestamp = useTimestamp({ offset: 0 })
+const timestamp = useTimestamp({ offset: 0 });
 ```
 
 ## Options

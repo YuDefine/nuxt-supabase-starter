@@ -8,14 +8,14 @@ Reactive
 ## Usage
 
 ```ts
-import { useArrayIncludes } from '@vueuse/core'
+import { useArrayIncludes } from "@vueuse/core";
 
-const list = ref([0, 2, 4, 6, 8])
-const result = useArrayIncludes(list, 10)
+const list = ref([0, 2, 4, 6, 8]);
+const result = useArrayIncludes(list, 10);
 // result.value: false
-list.value.push(10)
+list.value.push(10);
 // result.value: true
-list.value.pop()
+list.value.pop();
 // result.value: false
 ```
 

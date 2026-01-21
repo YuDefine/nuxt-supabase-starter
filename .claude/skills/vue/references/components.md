@@ -42,7 +42,7 @@ watch(count, (newVal) => { ... })        // ❌ Won't work
 **Non-destructured** only if props ONLY used in template:
 
 ```ts
-defineProps<{ count: number }>()
+defineProps<{ count: number }>();
 // Template: {{ count }}
 ```
 
@@ -61,13 +61,13 @@ Type-safe event definitions:
 
 ```ts
 const emit = defineEmits<{
-  update: [id: number, value: string] // multiple args
-  close: [] // no args
-}>()
+  update: [id: number, value: string]; // multiple args
+  close: []; // no args
+}>();
 
 // Usage
-emit('update', 123, 'new value')
-emit('close')
+emit("update", 123, "new value");
+emit("close");
 ```
 
 **Template syntax:** kebab-case (`@update-item`) vs camelCase in script (`updateItem`)
@@ -84,9 +84,7 @@ emit('close')
     <template #header>
       <h2>Title</h2>
     </template>
-    <template #default>
-      Content
-    </template>
+    <template #default> Content </template>
   </Card>
 </template>
 ```
@@ -99,11 +97,11 @@ Replaces manual `modelValue` prop + `update:modelValue` emit.
 
 ```vue
 <script setup lang="ts">
-const title = defineModel<string>()
+const title = defineModel<string>();
 </script>
 
 <template>
-  <input v-model="title">
+  <input v-model="title" />
 </template>
 ```
 
@@ -112,16 +110,16 @@ const title = defineModel<string>()
 ```vue
 <script setup lang="ts">
 const [title, modifiers] = defineModel<string>({
-  default: 'default value',
+  default: "default value",
   required: true,
   get: (value) => value.trim(),
   set: (value) => {
     if (modifiers.capitalize) {
-      return value.charAt(0).toUpperCase() + value.slice(1)
+      return value.charAt(0).toUpperCase() + value.slice(1);
     }
-    return value
+    return value;
   },
-})
+});
 </script>
 ```
 
@@ -133,8 +131,8 @@ Default assumes `modelValue` prop. For multiple bindings, use explicit names:
 
 ```vue
 <script setup lang="ts">
-const firstName = defineModel<string>('firstName')
-const age = defineModel<number>('age')
+const firstName = defineModel<string>("firstName");
+const age = defineModel<number>("age");
 </script>
 
 <!-- Usage -->
@@ -149,13 +147,13 @@ For typed, scoped template snippets within a component:
 
 ```vue
 <script setup lang="ts">
-import { createReusableTemplate } from '@vueuse/core'
+import { createReusableTemplate } from "@vueuse/core";
 
 const [DefineItem, UseItem] = createReusableTemplate<{
-  item: SearchItem
-  icon: string
-  color?: 'red' | 'green' | 'blue'
-}>()
+  item: SearchItem;
+  icon: string;
+  color?: "red" | "green" | "blue";
+}>();
 </script>
 
 <template>
@@ -177,17 +175,17 @@ Use `useTemplateRef()` for type-safe template references with IDE support:
 
 ```vue
 <script setup lang="ts">
-import { useTemplateRef, onMounted } from 'vue'
+import { useTemplateRef, onMounted } from "vue";
 
-const input = useTemplateRef<HTMLInputElement>('my-input')
+const input = useTemplateRef<HTMLInputElement>("my-input");
 
 onMounted(() => {
-  input.value?.focus()
-})
+  input.value?.focus();
+});
 </script>
 
 <template>
-  <input ref="my-input">
+  <input ref="my-input" />
 </template>
 ```
 
@@ -201,13 +199,13 @@ onMounted(() => {
 
 ```vue
 <script setup lang="ts">
-const items = ref(['a', 'b', 'c'])
-const itemRefs = useTemplateRef<HTMLElement>('item')
+const items = ref(["a", "b", "c"]);
+const itemRefs = useTemplateRef<HTMLElement>("item");
 
 // Access refs after mount
 onMounted(() => {
-  console.log(itemRefs.value) // Array of elements
-})
+  console.log(itemRefs.value); // Array of elements
+});
 </script>
 
 <template>
@@ -241,14 +239,14 @@ onMounted(() => {
 
 ```vue
 <script setup lang="ts">
-import { useId } from 'vue'
+import { useId } from "vue";
 
-const id = useId() // Stable across server/client renders
+const id = useId(); // Stable across server/client renders
 </script>
 
 <template>
   <label :for="id">Name</label>
-  <input :id="id">
+  <input :id="id" />
 </template>
 ```
 
@@ -276,18 +274,18 @@ Without `defer`, teleport to `#late-div` would fail since it doesn't exist yet.
 
 ```ts
 // ❌ Wrong
-const props = defineProps<{ count: number }>()
-const { count } = props // Loses reactivity
+const props = defineProps<{ count: number }>();
+const { count } = props; // Loses reactivity
 ```
 
 **Forgetting TypeScript types:**
 
 ```ts
 // ❌ Wrong
-const emit = defineEmits(['update'])
+const emit = defineEmits(["update"]);
 
 // ✅ Correct
-const emit = defineEmits<{ update: [id: number] }>()
+const emit = defineEmits<{ update: [id: number] }>();
 ```
 
 **Components >300 lines:** Split into smaller components or extract logic to composables

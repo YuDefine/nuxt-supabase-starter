@@ -8,9 +8,9 @@ Reactive Fullscreen API. It adds methods to present a specific Element (and its 
 ## Usage
 
 ```ts
-import { useFullscreen } from '@vueuse/core'
+import { useFullscreen } from "@vueuse/core";
 
-const { isFullscreen, enter, exit, toggle } = useFullscreen()
+const { isFullscreen, enter, exit, toggle } = useFullscreen();
 ```
 
 ## Options

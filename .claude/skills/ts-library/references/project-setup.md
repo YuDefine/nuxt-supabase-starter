@@ -74,7 +74,7 @@ catalogs:
     unbuild: ^3.0.0
   lint:
     eslint: ^9.0.0
-    '@antfu/eslint-config': ^4.0.0
+    "@antfu/eslint-config": ^4.0.0
   test:
     vitest: ^3.0.0
   types:
@@ -114,13 +114,13 @@ pnpm add -D eslint @antfu/eslint-config
 
 ```typescript
 // eslint.config.ts
-import antfu from '@antfu/eslint-config'
+import antfu from "@antfu/eslint-config";
 
 export default antfu({
-  type: 'lib',
+  type: "lib",
   pnpm: true,
   formatters: true,
-})
+});
 ```
 
 ## Git Hooks

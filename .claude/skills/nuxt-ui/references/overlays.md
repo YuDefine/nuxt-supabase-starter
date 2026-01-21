@@ -8,15 +8,15 @@
 
 ```vue
 <script setup>
-const toast = useToast()
+const toast = useToast();
 
 function showToast() {
   toast.add({
-    title: 'Success!',
-    description: 'Your changes have been saved.',
-    color: 'success',
-    icon: 'i-heroicons-check-circle'
-  })
+    title: "Success!",
+    description: "Your changes have been saved.",
+    color: "success",
+    icon: "i-heroicons-check-circle",
+  });
 }
 </script>
 
@@ -29,41 +29,44 @@ function showToast() {
 
 ```ts
 toast.add({
-  id: 'unique-id', // Custom ID (auto-generated if omitted)
-  title: 'Title', // Toast title
-  description: 'Details', // Toast body
-  color: 'success', // primary, success, error, warning, info
-  icon: 'i-heroicons-check', // Left icon
-  avatar: { src: '...' }, // Avatar instead of icon
+  id: "unique-id", // Custom ID (auto-generated if omitted)
+  title: "Title", // Toast title
+  description: "Details", // Toast body
+  color: "success", // primary, success, error, warning, info
+  icon: "i-heroicons-check", // Left icon
+  avatar: { src: "..." }, // Avatar instead of icon
   timeout: 5000, // Auto-dismiss (0 = never)
-  actions: [{ // Action buttons
-    label: 'Undo',
-    click: () => {}
-  }],
-  callback: () => {} // Called on dismiss
-})
+  actions: [
+    {
+      // Action buttons
+      label: "Undo",
+      click: () => {},
+    },
+  ],
+  callback: () => {}, // Called on dismiss
+});
 ```
 
 ### Toast Types
 
 ```ts
 // Success
-toast.add({ title: 'Saved', color: 'success', icon: 'i-heroicons-check-circle' })
+toast.add({ title: "Saved", color: "success", icon: "i-heroicons-check-circle" });
 
 // Error
-toast.add({ title: 'Error', color: 'error', icon: 'i-heroicons-x-circle' })
+toast.add({ title: "Error", color: "error", icon: "i-heroicons-x-circle" });
 
 // Warning
-toast.add({ title: 'Warning', color: 'warning', icon: 'i-heroicons-exclamation-triangle' })
+toast.add({ title: "Warning", color: "warning", icon: "i-heroicons-exclamation-triangle" });
 
 // Info
-toast.add({ title: 'Info', color: 'info', icon: 'i-heroicons-information-circle' })
+toast.add({ title: "Info", color: "info", icon: "i-heroicons-information-circle" });
 
 // Remove toast
-toast.remove('toast-id')
+toast.remove("toast-id");
 
 // Clear all
-toast.clear()
+toast.clear();
 ```
 
 ## Modal
@@ -72,7 +75,7 @@ toast.clear()
 
 ```vue
 <script setup>
-const isOpen = ref(false)
+const isOpen = ref(false);
 </script>
 
 <template>
@@ -113,18 +116,18 @@ const isOpen = ref(false)
 
 ```vue
 <script setup>
-const overlay = useOverlay()
+const overlay = useOverlay();
 
 async function openConfirm() {
   const modal = overlay.create(ConfirmModal, {
-    props: { title: 'Confirm action?' },
+    props: { title: "Confirm action?" },
     events: {
       confirm: () => modal.close(true),
-      cancel: () => modal.close(false)
-    }
-  })
+      cancel: () => modal.close(false),
+    },
+  });
 
-  const result = await modal.result
+  const result = await modal.result;
   if (result) {
     // User confirmed
   }
@@ -138,16 +141,14 @@ Side panel overlay (from edge of screen).
 
 ```vue
 <script setup>
-const isOpen = ref(false)
+const isOpen = ref(false);
 </script>
 
 <template>
   <UButton @click="isOpen = true">Open Slideover</UButton>
 
   <USlideover v-model:open="isOpen" title="Settings" side="right">
-    <div class="p-4">
-      Settings content...
-    </div>
+    <div class="p-4">Settings content...</div>
   </USlideover>
 </template>
 ```
@@ -172,16 +173,14 @@ Bottom sheet overlay (vaul-vue).
 
 ```vue
 <script setup>
-const isOpen = ref(false)
+const isOpen = ref(false);
 </script>
 
 <template>
   <UButton @click="isOpen = true">Open Drawer</UButton>
 
   <UDrawer v-model:open="isOpen">
-    <div class="p-4">
-      Drawer content...
-    </div>
+    <div class="p-4">Drawer content...</div>
   </UDrawer>
 </template>
 ```
@@ -246,11 +245,11 @@ const isOpen = ref(false)
 ```vue
 <script setup>
 const items = [
-  { label: 'Edit', icon: 'i-heroicons-pencil', click: () => {} },
-  { label: 'Duplicate', icon: 'i-heroicons-document-duplicate' },
-  { type: 'separator' },
-  { label: 'Delete', icon: 'i-heroicons-trash', color: 'error' }
-]
+  { label: "Edit", icon: "i-heroicons-pencil", click: () => {} },
+  { label: "Duplicate", icon: "i-heroicons-document-duplicate" },
+  { type: "separator" },
+  { label: "Delete", icon: "i-heroicons-trash", color: "error" },
+];
 </script>
 
 <template>
@@ -265,12 +264,15 @@ const items = [
 ```vue
 <script setup>
 const items = [
-  { label: 'New', children: [
-    { label: 'File', click: () => {} },
-    { label: 'Folder', click: () => {} }
-  ]},
-  { label: 'Delete' }
-]
+  {
+    label: "New",
+    children: [
+      { label: "File", click: () => {} },
+      { label: "Folder", click: () => {} },
+    ],
+  },
+  { label: "Delete" },
+];
 </script>
 ```
 
@@ -292,23 +294,26 @@ Search-driven command menu (Fuse.js powered).
 
 ```vue
 <script setup>
-const isOpen = ref(false)
+const isOpen = ref(false);
 
-const groups = [{
-  key: 'actions',
-  label: 'Actions',
-  items: [
-    { label: 'New file', icon: 'i-heroicons-document-plus', click: () => {} },
-    { label: 'New folder', icon: 'i-heroicons-folder-plus', click: () => {} }
-  ]
-}, {
-  key: 'navigation',
-  label: 'Navigation',
-  items: [
-    { label: 'Home', to: '/' },
-    { label: 'Settings', to: '/settings' }
-  ]
-}]
+const groups = [
+  {
+    key: "actions",
+    label: "Actions",
+    items: [
+      { label: "New file", icon: "i-heroicons-document-plus", click: () => {} },
+      { label: "New folder", icon: "i-heroicons-folder-plus", click: () => {} },
+    ],
+  },
+  {
+    key: "navigation",
+    label: "Navigation",
+    items: [
+      { label: "Home", to: "/" },
+      { label: "Settings", to: "/settings" },
+    ],
+  },
+];
 </script>
 
 <template>
@@ -321,8 +326,10 @@ const groups = [{
 ```vue
 <script setup>
 defineShortcuts({
-  meta_k: () => { isOpen.value = true }
-})
+  meta_k: () => {
+    isOpen.value = true;
+  },
+});
 </script>
 ```
 

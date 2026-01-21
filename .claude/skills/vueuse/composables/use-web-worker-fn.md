@@ -8,11 +8,11 @@ Run expensive functions without blocking the UI, using a simple syntax that make
 ## Usage
 
 ```ts
-import { useWebWorkerFn } from '@vueuse/core'
+import { useWebWorkerFn } from "@vueuse/core";
 
 const { workerFn } = useWebWorkerFn(() => {
   // some heavy works to do in web worker
-})
+});
 ```
 
 ## Returns

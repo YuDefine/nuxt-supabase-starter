@@ -104,7 +104,7 @@ jobs:
 - uses: stefanzweifel/git-auto-commit-action@v5
   if: github.event_name == 'push'
   with:
-    commit_message: 'chore: lint fix'
+    commit_message: "chore: lint fix"
 ```
 
 ## Release on Tag (Token-based)
@@ -114,7 +114,7 @@ jobs:
 name: Release
 on:
   push:
-    tags: ['v*']
+    tags: ["v*"]
 
 jobs:
   release:
@@ -146,7 +146,7 @@ permissions:
   actions: read
 on:
   push:
-    tags: ['v*']
+    tags: ["v*"]
 
 jobs:
   wait-for-ci:
@@ -169,7 +169,7 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 24  # Required: npm 11.5.1+
+          node-version: 24 # Required: npm 11.5.1+
           cache: pnpm
           registry-url: https://registry.npmjs.org
       - run: pnpm install

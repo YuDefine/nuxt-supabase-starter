@@ -8,19 +8,19 @@
 
 `docs/verify/` 是**系統狀態的單一事實來源**。
 
-| 特性 | 說明 |
-|------|------|
-| ✅ 使用現在式 | 描述「系統目前是什麼」 |
-| ❌ 不保留歷史 | 狀態改變時直接覆寫（Git 保留歷史） |
-| ❌ 不用時間標記 | 不寫「2025-01-21 更新」 |
+| 特性            | 說明                               |
+| --------------- | ---------------------------------- |
+| ✅ 使用現在式   | 描述「系統目前是什麼」             |
+| ❌ 不保留歷史   | 狀態改變時直接覆寫（Git 保留歷史） |
+| ❌ 不用時間標記 | 不寫「2025-01-21 更新」            |
 
 ### 與其他文件的關係
 
-| 文件類型 | 告訴你 | 範例 |
-|----------|--------|------|
-| `docs/QUICK_START.md` | **怎麼做** | 安裝步驟、設定流程 |
-| `docs/verify/*` | **現在是什麼** | 系統配置、架構狀態 |
-| `CLAUDE.md` | **規則是什麼** | 開發規範、AI 行為準則 |
+| 文件類型              | 告訴你         | 範例                  |
+| --------------------- | -------------- | --------------------- |
+| `docs/QUICK_START.md` | **怎麼做**     | 安裝步驟、設定流程    |
+| `docs/verify/*`       | **現在是什麼** | 系統配置、架構狀態    |
+| `CLAUDE.md`           | **規則是什麼** | 開發規範、AI 行為準則 |
 
 > **迷路了？** 參考 [文件導讀指南](../READING_GUIDE.md) 或 [常見疑問集](../FAQ.md)。
 
@@ -48,15 +48,15 @@ docs/verify/    穩定文件（本手冊、Quick Start、DB 操作、Auth、Stat
 
 **必讀文件**
 
-| 類別       | 文件                                                                                                                |
-| ---------- | ------------------------------------------------------------------------------------------------------------------- |
-| Onboarding | [QUICK_START](../QUICK_START.md)                                                                                    |
-| Supabase   | [SUPABASE_MIGRATION_GUIDE](./SUPABASE_MIGRATION_GUIDE.md), [DATABASE_OPTIMIZATION](./DATABASE_OPTIMIZATION.md)     |
-| 認證/授權  | [AUTH_INTEGRATION](./AUTH_INTEGRATION.md)                                                                           |
-| 環境變數   | [ENVIRONMENT_VARIABLES](./ENVIRONMENT_VARIABLES.md)                                                                 |
-| API 設計   | [API_DESIGN_GUIDE](./API_DESIGN_GUIDE.md)                                                                           |
-| 前端狀態   | [PINIA_ARCHITECTURE](./PINIA_ARCHITECTURE.md)                                                                       |
-| RLS 規範   | [RLS_BEST_PRACTICES](./RLS_BEST_PRACTICES.md)                                                                       |
+| 類別       | 文件                                                                                                           |
+| ---------- | -------------------------------------------------------------------------------------------------------------- |
+| Onboarding | [QUICK_START](../QUICK_START.md)                                                                               |
+| Supabase   | [SUPABASE_MIGRATION_GUIDE](./SUPABASE_MIGRATION_GUIDE.md), [DATABASE_OPTIMIZATION](./DATABASE_OPTIMIZATION.md) |
+| 認證/授權  | [AUTH_INTEGRATION](./AUTH_INTEGRATION.md)                                                                      |
+| 環境變數   | [ENVIRONMENT_VARIABLES](./ENVIRONMENT_VARIABLES.md)                                                            |
+| API 設計   | [API_DESIGN_GUIDE](./API_DESIGN_GUIDE.md)                                                                      |
+| 前端狀態   | [PINIA_ARCHITECTURE](./PINIA_ARCHITECTURE.md)                                                                  |
+| RLS 規範   | [RLS_BEST_PRACTICES](./RLS_BEST_PRACTICES.md)                                                                  |
 
 ---
 
@@ -89,12 +89,12 @@ docs/verify/    穩定文件（本手冊、Quick Start、DB 操作、Auth、Stat
 
 **開發環境指令**
 
-| 指令             | 用途                               |
-| ---------------- | ---------------------------------- |
-| `pnpm dev`       | 啟動 Nuxt（.env.local 會自動載入） |
-| `pnpm check`     | 執行 format → lint → typecheck → test |
-| `supabase db reset` | 重建本機 Supabase              |
-| `supabase db lint` | 檢查 search_path、RLS 等安全規範 |
+| 指令                | 用途                                  |
+| ------------------- | ------------------------------------- |
+| `pnpm dev`          | 啟動 Nuxt（.env.local 會自動載入）    |
+| `pnpm check`        | 執行 format → lint → typecheck → test |
+| `supabase db reset` | 重建本機 Supabase                     |
+| `supabase db lint`  | 檢查 search_path、RLS 等安全規範      |
 
 ---
 
@@ -120,11 +120,11 @@ docs/verify/    穩定文件（本手冊、Quick Start、DB 操作、Auth、Stat
 
 ## 6. 常見情境速查
 
-| 情境                       | 解法                                                                                                                     |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| 本機資料庫跑壞             | `supabase db reset`                                                                                                      |
-| 遠端 schema 與本機不一致   | `supabase migration repair --status reverted <遠端多出版本>` → `supabase db push`                                        |
-| OAuth 無法登入             | 檢查 `.env.local` 的 OAuth 設定、Provider Redirect URL 設定                                                              |
+| 情境                     | 解法                                                                              |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| 本機資料庫跑壞           | `supabase db reset`                                                               |
+| 遠端 schema 與本機不一致 | `supabase migration repair --status reverted <遠端多出版本>` → `supabase db push` |
+| OAuth 無法登入           | 檢查 `.env.local` 的 OAuth 設定、Provider Redirect URL 設定                       |
 
 ---
 

@@ -82,6 +82,7 @@ pnpm typecheck
 **自動產生類型**：Step 3 會自動更新 `app/types/database.types.ts`，確保型別定義與資料庫 schema 同步。
 
 **錯誤處理**：
+
 - `db reset` 失敗 → 檢查 SQL 語法
 - `db lint` 有警告 → 檢查 search_path 和 RLS
 - `typecheck` 失敗 → 更新使用到舊型別的程式碼

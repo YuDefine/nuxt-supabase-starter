@@ -7,6 +7,7 @@
 如果你已經熟悉 Nuxt，想要快速建立**有後端、有資料庫、有認證、可部署**的完整專案，這個範本能幫你在幾天內完成通常需要幾週的工作。
 
 這不只是一個 boilerplate——它包含了我在 2.5 個月內開發一個中型企業系統的所有經驗：
+
 - 426 次 commit、80 個 API 端點、100 個資料庫 migration
 - 與 Claude Opus 4.5 協作的 2,500+ 次對話
 - 踩過的坑、驗證過的模式、避免的反模式
@@ -19,61 +20,61 @@
 
 ### 核心框架
 
-| 技術 | 版本 | 說明 |
-|------|------|------|
-| [Nuxt](https://nuxt.com/) | 4.x | Vue 全端框架 |
-| [Vue](https://vuejs.org/) | 3.x | 前端框架（Composition API） |
-| [TypeScript](https://www.typescriptlang.org/) | 5.x | 型別安全 |
-| [Supabase](https://supabase.com/) | - | PostgreSQL + Auth + Realtime |
+| 技術                                          | 版本 | 說明                         |
+| --------------------------------------------- | ---- | ---------------------------- |
+| [Nuxt](https://nuxt.com/)                     | 4.x  | Vue 全端框架                 |
+| [Vue](https://vuejs.org/)                     | 3.x  | 前端框架（Composition API）  |
+| [TypeScript](https://www.typescriptlang.org/) | 5.x  | 型別安全                     |
+| [Supabase](https://supabase.com/)             | -    | PostgreSQL + Auth + Realtime |
 
 ### UI 與樣式
 
-| 技術 | 說明 |
-|------|------|
-| [Nuxt UI](https://ui.nuxt.com/) | 官方 UI 元件庫（基於 Tailwind） |
-| [Nuxt Charts](https://nuxtcharts.com/) | 圖表元件（基於 Unovis） |
-| [Tailwind CSS](https://tailwindcss.com/) | Utility-first CSS |
-| [Nuxt Image](https://image.nuxt.com/) | 圖片最佳化 |
-| [Lucide Icons](https://lucide.dev/) | 圖示庫 |
+| 技術                                     | 說明                            |
+| ---------------------------------------- | ------------------------------- |
+| [Nuxt UI](https://ui.nuxt.com/)          | 官方 UI 元件庫（基於 Tailwind） |
+| [Nuxt Charts](https://nuxtcharts.com/)   | 圖表元件（基於 Unovis）         |
+| [Tailwind CSS](https://tailwindcss.com/) | Utility-first CSS               |
+| [Nuxt Image](https://image.nuxt.com/)    | 圖片最佳化                      |
+| [Lucide Icons](https://lucide.dev/)      | 圖示庫                          |
 
 ### 認證與狀態
 
-| 技術 | 說明 |
-|------|------|
-| [nuxt-better-auth](https://github.com/onmax/nuxt-better-auth) | OAuth 認證（33+ providers） |
-| [Pinia](https://pinia.vuejs.org/) | 狀態管理 |
-| [Pinia Colada](https://pinia-colada.esm.dev/) | 非同步資料管理（類似 TanStack Query） |
-| [VueUse](https://vueuse.org/) | Vue Composition Utilities |
+| 技術                                                          | 說明                                  |
+| ------------------------------------------------------------- | ------------------------------------- |
+| [nuxt-better-auth](https://github.com/onmax/nuxt-better-auth) | OAuth 認證（33+ providers）           |
+| [Pinia](https://pinia.vuejs.org/)                             | 狀態管理                              |
+| [Pinia Colada](https://pinia-colada.esm.dev/)                 | 非同步資料管理（類似 TanStack Query） |
+| [VueUse](https://vueuse.org/)                                 | Vue Composition Utilities             |
 
 ### 開發工具
 
-| 技術 | 說明 |
-|------|------|
-| [Vitest](https://vitest.dev/) + [@nuxt/test-utils](https://nuxt.com/docs/getting-started/testing) | 單元與整合測試 |
+| 技術                                                                                                  | 說明                          |
+| ----------------------------------------------------------------------------------------------------- | ----------------------------- |
+| [Vitest](https://vitest.dev/) + [@nuxt/test-utils](https://nuxt.com/docs/getting-started/testing)     | 單元與整合測試                |
 | [OXLint](https://oxc.rs/docs/guide/usage/linter) + [OXFmt](https://oxc.rs/docs/guide/usage/formatter) | 程式碼品質（Rust 實作，極快） |
-| [Supabase CLI](https://supabase.com/docs/guides/cli) | 本地開發、Migration |
-| [Zod](https://zod.dev/) | Schema 驗證 |
-| [Commitlint](https://commitlint.js.org/) + [Husky](https://typicode.github.io/husky/) | Git hooks 與 commit 規範 |
-| [VitePress](https://vitepress.dev/) | 文件網站產生器 |
+| [Supabase CLI](https://supabase.com/docs/guides/cli)                                                  | 本地開發、Migration           |
+| [Zod](https://zod.dev/)                                                                               | Schema 驗證                   |
+| [Commitlint](https://commitlint.js.org/) + [Husky](https://typicode.github.io/husky/)                 | Git hooks 與 commit 規範      |
+| [VitePress](https://vitepress.dev/)                                                                   | 文件網站產生器                |
 
 ### 部署與監控
 
-| 平台 | 說明 |
-|------|------|
-| [Cloudflare Workers](https://workers.cloudflare.com/) | Edge 部署 |
-| [NuxtHub](https://hub.nuxt.com/) | SQL、KV、Blob 存儲與快取（Cloudflare 整合） |
-| [Sentry](https://sentry.io/) | 錯誤追蹤與效能監控 |
+| 平台                                                  | 說明                                        |
+| ----------------------------------------------------- | ------------------------------------------- |
+| [Cloudflare Workers](https://workers.cloudflare.com/) | Edge 部署                                   |
+| [NuxtHub](https://hub.nuxt.com/)                      | SQL、KV、Blob 存儲與快取（Cloudflare 整合） |
+| [Sentry](https://sentry.io/)                          | 錯誤追蹤與效能監控                          |
 
 ### AI 輔助開發
 
-| 工具 | 說明 |
-|------|------|
-| [Claude Code](https://claude.ai/code) | AI 編程助手 |
-| [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | 讓 AI 直接操作資料庫 |
-| Commands（13 個） | `/tdd`、`/commit`、`/db-migration`、`/speckit.*` 等 |
-| SubAgents（3 個） | `check-runner`、`post-implement`、`db-backup` |
-| [nuxt-skills](https://github.com/onmax/nuxt-skills)（12 個） | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等 AI Skills |
-| 情境 Skills（5 個） | `supabase-rls`、`supabase-migration`、`server-api` 等 |
+| 工具                                                                 | 說明                                                  |
+| -------------------------------------------------------------------- | ----------------------------------------------------- |
+| [Claude Code](https://claude.ai/code)                                | AI 編程助手                                           |
+| [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | 讓 AI 直接操作資料庫                                  |
+| Commands（13 個）                                                    | `/tdd`、`/commit`、`/db-migration`、`/speckit.*` 等   |
+| SubAgents（3 個）                                                    | `check-runner`、`post-implement`、`db-backup`         |
+| [nuxt-skills](https://github.com/onmax/nuxt-skills)（12 個）         | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等 AI Skills       |
+| 情境 Skills（5 個）                                                  | `supabase-rls`、`supabase-migration`、`server-api` 等 |
 
 ---
 
@@ -83,24 +84,24 @@
 
 ### 實際專案數據
 
-| 指標 | 數值 |
-|------|------|
-| 開發時長 | 2.5 個月 |
-| API 端點 | 80 個 |
-| Migration 檔案 | 100 個 |
-| RLS 政策 | 114 個 |
+| 指標             | 數值      |
+| ---------------- | --------- |
+| 開發時長         | 2.5 個月  |
+| API 端點         | 80 個     |
+| Migration 檔案   | 100 個    |
+| RLS 政策         | 114 個    |
 | Claude Code 對話 | 2,500+ 次 |
 
 ### 配置與效果對應
 
-| 配置 | 帶來的效果 |
-|------|-----------|
-| **CLAUDE.md** | AI 遵循專案規範，減少修正成本 |
-| **TDD 工作流程** | AI 生成的程式碼有測試保護 |
-| **自動化檢查** | 每次提交都通過品質門檻 |
-| **nuxt-skills** | AI 能正確使用框架 API |
-| **spec-kit** | 複雜功能有結構化開發流程 |
-| **情境 Skills** | AI 遵循 Supabase 安全規範 |
+| 配置             | 帶來的效果                    |
+| ---------------- | ----------------------------- |
+| **CLAUDE.md**    | AI 遵循專案規範，減少修正成本 |
+| **TDD 工作流程** | AI 生成的程式碼有測試保護     |
+| **自動化檢查**   | 每次提交都通過品質門檻        |
+| **nuxt-skills**  | AI 能正確使用框架 API         |
+| **spec-kit**     | 複雜功能有結構化開發流程      |
+| **情境 Skills**  | AI 遵循 Supabase 安全規範     |
 
 ### 照做你也能得到
 
@@ -115,14 +116,15 @@
 
 ### 兩種 Skill 類型
 
-| 類型 | 來源 | 更新方式 |
-|------|------|----------|
+| 類型     | 來源                                                | 更新方式        |
+| -------- | --------------------------------------------------- | --------------- |
 | 通用技術 | [nuxt-skills](https://github.com/onmax/nuxt-skills) | Plugin 自動更新 |
-| 情境觸發 | 本地 `.claude/skills/` | 手動維護 |
+| 情境觸發 | 本地 `.claude/skills/`                              | 手動維護        |
 
 ### 通用技術 Skills（12 個，自動更新）
 
 由 [nuxt-skills](https://github.com/onmax/nuxt-skills) plugin 維護，包含：
+
 - `nuxt`、`nuxt-ui`、`nuxt-better-auth`
 - `vue`、`vueuse`、`reka-ui`、`motion`
 - `nuxthub`、`nuxt-content`、`nuxt-modules`
@@ -133,6 +135,7 @@
 ### 情境觸發 Skills（5 個，本地維護）
 
 當特定情境發生時自動載入：
+
 - `supabase-rls`：建立 RLS Policy 時
 - `supabase-migration`：建立 migration 時
 - `server-api`：建立 Server API 時
@@ -147,31 +150,31 @@
 
 **不知道從哪開始？** 參考 [文件導讀指南](./docs/READING_GUIDE.md)。
 
-| 我想要... | 閱讀這份 |
-|-----------|----------|
-| 快速開始 | [QUICK_START.md](./docs/QUICK_START.md) |
-| 了解開發流程 | [WORKFLOW.md](./docs/WORKFLOW.md) |
-| 查詢常見問題 | [FAQ.md](./docs/FAQ.md) |
+| 我想要...    | 閱讀這份                                            |
+| ------------ | --------------------------------------------------- |
+| 快速開始     | [QUICK_START.md](./docs/QUICK_START.md)             |
+| 了解開發流程 | [WORKFLOW.md](./docs/WORKFLOW.md)                   |
+| 查詢常見問題 | [FAQ.md](./docs/FAQ.md)                             |
 | 了解 AI 配置 | [CLAUDE_CODE_GUIDE.md](./docs/CLAUDE_CODE_GUIDE.md) |
-| 查閱系統狀態 | [docs/verify/](./docs/verify/) |
+| 查閱系統狀態 | [docs/verify/](./docs/verify/)                      |
 
 <details>
 <summary>完整文件清單</summary>
 
-| 文件 | 說明 | 適合閱讀時機 |
-|------|------|-------------|
-| **[README.md](./README.md)** | Tech Stack、核心概念 | 剛接觸這個範本 |
-| **[docs/READING_GUIDE.md](./docs/READING_GUIDE.md)** | 文件分類與閱讀順序 | 不知道從哪開始 |
-| **[docs/FAQ.md](./docs/FAQ.md)** | 常見疑問集 | 有具體問題 |
-| **[docs/QUICK_START.md](./docs/QUICK_START.md)** | 安裝與設定步驟 | 要開始使用 |
-| **[docs/SUPABASE_GUIDE.md](./docs/SUPABASE_GUIDE.md)** | Supabase 入門、RLS 詳解、Migration | 第一次用 Supabase |
-| **[docs/WORKFLOW.md](./docs/WORKFLOW.md)** | TDD、自動化檢查、Git 規範 | 想了解開發流程 |
-| **[docs/SPEC_KIT.md](./docs/SPEC_KIT.md)** | spec-kit 命令詳解 | 要用 AI 輔助開發 |
-| **[docs/CLAUDE_CODE_GUIDE.md](./docs/CLAUDE_CODE_GUIDE.md)** | Claude Code 配置指南 | 要了解 AI 工具 |
-| **[docs/SUPABASE_MCP.md](./docs/SUPABASE_MCP.md)** | Supabase MCP 整合 | 要讓 AI 操作資料庫 |
-| **[docs/API_PATTERNS.md](./docs/API_PATTERNS.md)** | Server API 設計模式 | 要寫後端 API |
-| **[CLAUDE.md](./CLAUDE.md)** | AI 開發規範（給 Claude Code） | 要客製化 AI 行為 |
-| **[docs/verify/](./docs/verify/)** | 系統狀態文件（Auth、API、DB） | 要了解架構細節 |
+| 文件                                                         | 說明                               | 適合閱讀時機       |
+| ------------------------------------------------------------ | ---------------------------------- | ------------------ |
+| **[README.md](./README.md)**                                 | Tech Stack、核心概念               | 剛接觸這個範本     |
+| **[docs/READING_GUIDE.md](./docs/READING_GUIDE.md)**         | 文件分類與閱讀順序                 | 不知道從哪開始     |
+| **[docs/FAQ.md](./docs/FAQ.md)**                             | 常見疑問集                         | 有具體問題         |
+| **[docs/QUICK_START.md](./docs/QUICK_START.md)**             | 安裝與設定步驟                     | 要開始使用         |
+| **[docs/SUPABASE_GUIDE.md](./docs/SUPABASE_GUIDE.md)**       | Supabase 入門、RLS 詳解、Migration | 第一次用 Supabase  |
+| **[docs/WORKFLOW.md](./docs/WORKFLOW.md)**                   | TDD、自動化檢查、Git 規範          | 想了解開發流程     |
+| **[docs/SPEC_KIT.md](./docs/SPEC_KIT.md)**                   | spec-kit 命令詳解                  | 要用 AI 輔助開發   |
+| **[docs/CLAUDE_CODE_GUIDE.md](./docs/CLAUDE_CODE_GUIDE.md)** | Claude Code 配置指南               | 要了解 AI 工具     |
+| **[docs/SUPABASE_MCP.md](./docs/SUPABASE_MCP.md)**           | Supabase MCP 整合                  | 要讓 AI 操作資料庫 |
+| **[docs/API_PATTERNS.md](./docs/API_PATTERNS.md)**           | Server API 設計模式                | 要寫後端 API       |
+| **[CLAUDE.md](./CLAUDE.md)**                                 | AI 開發規範（給 Claude Code）      | 要客製化 AI 行為   |
+| **[docs/verify/](./docs/verify/)**                           | 系統狀態文件（Auth、API、DB）      | 要了解架構細節     |
 
 </details>
 
@@ -181,27 +184,29 @@
 
 ### Supabase：不只是「Firebase 替代品」
 
-| 你需要 | Supabase 提供 | 傳統做法 |
-|--------|--------------|----------|
-| 資料庫 | PostgreSQL（業界標準） | 自己架、管理、備份 |
+| 你需要   | Supabase 提供            | 傳統做法                |
+| -------- | ------------------------ | ----------------------- |
+| 資料庫   | PostgreSQL（業界標準）   | 自己架、管理、備份      |
 | 權限控制 | Row Level Security (RLS) | 每個 API 都要寫權限檢查 |
-| 即時更新 | Realtime subscriptions | 自己架 WebSocket |
-| 本地開發 | Docker 容器，一鍵啟動 | 設定開發環境 |
+| 即時更新 | Realtime subscriptions   | 自己架 WebSocket        |
+| 本地開發 | Docker 容器，一鍵啟動    | 設定開發環境            |
 
 ### RLS：權限控制的革命
 
 **傳統做法**：每個 API 都要寫權限檢查
+
 ```typescript
-app.get('/posts/:id', async (req, res) => {
-  const post = await db.posts.findById(req.params.id)
+app.get("/posts/:id", async (req, res) => {
+  const post = await db.posts.findById(req.params.id);
   if (post.userId !== req.user.id) {
-    return res.status(403).send('Forbidden')
+    return res.status(403).send("Forbidden");
   }
   // ...
-})
+});
 ```
 
 **RLS 做法**：在資料庫層定義一次，所有查詢自動套用
+
 ```sql
 CREATE POLICY "Users can view own posts"
   ON posts FOR SELECT
@@ -220,14 +225,14 @@ CREATE POLICY "Users can view own posts"
 
 ```typescript
 // ✅ Client 端直接查詢（RLS 保護）
-const client = useSupabaseClient<Database>()
-const { data } = await client.schema('app').from('todos').select('*')
+const client = useSupabaseClient<Database>();
+const { data } = await client.schema("app").from("todos").select("*");
 
 // ✅ 寫入走 Server API
-await $fetch('/api/v1/todos', {
-  method: 'POST',
-  body: { title: 'Buy milk' }
-})
+await $fetch("/api/v1/todos", {
+  method: "POST",
+  body: { title: "Buy milk" },
+});
 ```
 
 > 📖 API 設計模式見 [docs/API_PATTERNS.md](./docs/API_PATTERNS.md)
@@ -239,15 +244,15 @@ await $fetch('/api/v1/todos', {
 ```typescript
 // nuxt.config.ts
 export default defineNuxtConfig({
-  modules: ['@onmax/nuxt-better-auth'],
+  modules: ["@onmax/nuxt-better-auth"],
   routeRules: {
-    '/dashboard/**': { auth: 'user' },
+    "/dashboard/**": { auth: "user" },
   },
-})
+});
 
 // 在元件中使用
-const { user, loggedIn, signIn, signOut } = useUserSession()
-await signIn('google')
+const { user, loggedIn, signIn, signOut } = useUserSession();
+await signIn("google");
 ```
 
 ---
@@ -287,11 +292,11 @@ pnpm check  # format → lint → typecheck → test
 
 Skills 會自動串接，減少手動操作：
 
-| 完成 | 自動觸發 |
-|------|---------|
-| `/tdd` | check-runner → 詢問 commit |
-| `/commit` | **先**執行 check-runner |
-| `/db-migration` | 產生 TypeScript 類型 |
+| 完成                 | 自動觸發                   |
+| -------------------- | -------------------------- |
+| `/tdd`               | check-runner → 詢問 commit |
+| `/commit`            | **先**執行 check-runner    |
+| `/db-migration`      | 產生 TypeScript 類型       |
 | `/speckit.implement` | check-runner → 詢問 commit |
 
 > 📖 完整工作流程見 [docs/WORKFLOW.md](./docs/WORKFLOW.md)
@@ -355,12 +360,12 @@ Skills 會自動串接，減少手動操作：
 
 ## AI 輔助效率
 
-| 任務類型 | AI 幫助程度 |
-|----------|------------|
-| CRUD API | ⭐⭐⭐⭐⭐ 幾乎全自動 |
+| 任務類型  | AI 幫助程度               |
+| --------- | ------------------------- |
+| CRUD API  | ⭐⭐⭐⭐⭐ 幾乎全自動     |
 | Migration | ⭐⭐⭐⭐ 需人工審查安全性 |
-| 測試撰寫 | ⭐⭐⭐⭐ 案例需人工設計 |
-| 架構決策 | ⭐⭐⭐ 需人工主導 |
+| 測試撰寫  | ⭐⭐⭐⭐ 案例需人工設計   |
+| 架構決策  | ⭐⭐⭐ 需人工主導         |
 
 ---
 

@@ -10,9 +10,9 @@ Manually track the change history of a ref when the using calls , also provides 
 ```ts
 // @include: usage
 // ---cut---
-console.log(counter.value) // 1
-undo()
-console.log(counter.value) // 0
+console.log(counter.value); // 1
+undo();
+console.log(counter.value); // 0
 ```
 
 ## Options

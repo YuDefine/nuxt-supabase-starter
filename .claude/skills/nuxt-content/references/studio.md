@@ -18,13 +18,13 @@ NuxtStudio is a visual editor for Nuxt Content sites. It provides:
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
-  modules: ['@nuxt/content'],
+  modules: ["@nuxt/content"],
   content: {
     studio: {
       enabled: true,
     },
   },
-})
+});
 ```
 
 ## Preview Mode
@@ -46,10 +46,10 @@ export default defineNuxtConfig({
     preview: {
       enabled: true,
       // Optional: custom API route
-      api: '/__preview',
+      api: "/__preview",
     },
   },
-})
+});
 ```
 
 ### Preview Token
@@ -65,7 +65,7 @@ export default defineNuxtConfig({
       token: process.env.PREVIEW_TOKEN,
     },
   },
-})
+});
 ```
 
 Access preview: `https://your-site.com?preview=your-token`
@@ -74,13 +74,11 @@ Access preview: `https://your-site.com?preview=your-token`
 
 ```vue
 <script setup lang="ts">
-const { enabled: previewEnabled } = useContentPreview()
+const { enabled: previewEnabled } = useContentPreview();
 </script>
 
 <template>
-  <div v-if="previewEnabled" class="preview-banner">
-    Preview Mode Active
-  </div>
+  <div v-if="previewEnabled" class="preview-banner">Preview Mode Active</div>
 </template>
 ```
 
@@ -106,11 +104,11 @@ export default defineNuxtConfig({
       enabled: true,
       git: {
         // Branch for preview changes
-        branch: 'content-preview',
+        branch: "content-preview",
       },
     },
   },
-})
+});
 ```
 
 ## Schema for Studio Editor
@@ -119,24 +117,24 @@ Add editor hints to your schema:
 
 ```ts
 // content.config.ts
-import { defineCollection, defineContentConfig } from '@nuxt/content'
-import { z } from 'zod'
+import { defineCollection, defineContentConfig } from "@nuxt/content";
+import { z } from "zod";
 
 export default defineContentConfig({
   collections: {
     blog: defineCollection({
-      type: 'page',
-      source: 'blog/**/*.md',
+      type: "page",
+      source: "blog/**/*.md",
       schema: z.object({
-        title: z.string().describe('The post title'),
-        description: z.string().describe('SEO description'),
-        image: z.string().describe('Cover image URL'),
-        date: z.date().describe('Publication date'),
-        tags: z.array(z.string()).describe('Post tags'),
+        title: z.string().describe("The post title"),
+        description: z.string().describe("SEO description"),
+        image: z.string().describe("Cover image URL"),
+        date: z.date().describe("Publication date"),
+        tags: z.array(z.string()).describe("Post tags"),
       }),
     }),
   },
-})
+});
 ```
 
 The `.describe()` method adds labels in Studio's editor UI.
@@ -150,10 +148,10 @@ export default defineNuxtConfig({
     studio: {
       enabled: true,
       // Custom Studio URL (for self-hosted)
-      url: 'https://studio.nuxt.com',
+      url: "https://studio.nuxt.com",
     },
   },
-})
+});
 ```
 
 ## Live Editing Components
@@ -171,9 +169,9 @@ Mark components as editable in Studio:
 
 <script setup lang="ts">
 defineProps<{
-  title: string
-  description: string
-}>()
+  title: string;
+  description: string;
+}>();
 </script>
 ```
 
@@ -201,7 +199,7 @@ export default defineNuxtConfig({
       debounce: 500,
     },
   },
-})
+});
 ```
 
 ## Deployment Considerations
@@ -213,10 +211,10 @@ export default defineNuxtConfig({
 export default defineNuxtConfig({
   content: {
     studio: {
-      enabled: process.env.VERCEL_ENV === 'preview',
+      enabled: process.env.VERCEL_ENV === "preview",
     },
   },
-})
+});
 ```
 
 ### Cloudflare Pages
@@ -226,10 +224,10 @@ export default defineNuxtConfig({
 export default defineNuxtConfig({
   content: {
     studio: {
-      enabled: process.env.CF_PAGES_BRANCH !== 'main',
+      enabled: process.env.CF_PAGES_BRANCH !== "main",
     },
   },
-})
+});
 ```
 
 ## Common Patterns
@@ -239,12 +237,13 @@ export default defineNuxtConfig({
 ```vue
 <!-- components/PreviewBanner.vue -->
 <script setup lang="ts">
-const { enabled } = useContentPreview()
+const { enabled } = useContentPreview();
 </script>
 
 <template>
   <div v-if="enabled" class="fixed top-0 left-0 right-0 bg-yellow-500 text-center py-1 z-50">
-    Preview Mode - <button @click="navigateTo(useRoute().fullPath.replace('?preview', ''))">Exit</button>
+    Preview Mode -
+    <button @click="navigateTo(useRoute().fullPath.replace('?preview', ''))">Exit</button>
   </div>
 </template>
 ```
@@ -252,11 +251,11 @@ const { enabled } = useContentPreview()
 **Conditional preview logic:**
 
 ```ts
-const { enabled } = useContentPreview()
+const { enabled } = useContentPreview();
 
-const posts = await queryCollection('blog')
-  .where('draft', '=', enabled ? undefined : false) // Show drafts in preview
-  .all()
+const posts = await queryCollection("blog")
+  .where("draft", "=", enabled ? undefined : false) // Show drafts in preview
+  .all();
 ```
 
 ## Best Practices

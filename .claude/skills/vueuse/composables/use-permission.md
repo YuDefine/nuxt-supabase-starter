@@ -8,9 +8,9 @@ Reactive Permissions API. The Permissions API provides the tools to allow develo
 ## Usage
 
 ```ts
-import { usePermission } from '@vueuse/core'
+import { usePermission } from "@vueuse/core";
 
-const microphoneAccess = usePermission('microphone')
+const microphoneAccess = usePermission("microphone");
 ```
 
 ## Options

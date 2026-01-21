@@ -12,9 +12,7 @@ Render parsed markdown body:
 
 ```vue
 <script setup lang="ts">
-const post = await queryCollection('blog')
-  .where('path', '=', '/blog/my-post')
-  .first()
+const post = await queryCollection("blog").where("path", "=", "/blog/my-post").first();
 </script>
 
 <template>
@@ -140,7 +138,7 @@ Override default HTML elements with custom components:
 </template>
 
 <script setup lang="ts">
-defineProps<{ id?: string }>()
+defineProps<{ id?: string }>();
 </script>
 ```
 
@@ -154,26 +152,26 @@ export default defineNuxtConfig({
     build: {
       markdown: {
         highlight: {
-          theme: 'github-dark',
+          theme: "github-dark",
           // Or multi-theme
           themes: {
-            default: 'github-light',
-            dark: 'github-dark',
+            default: "github-light",
+            dark: "github-dark",
           },
           // Additional languages
-          langs: ['vue', 'typescript', 'bash', 'yaml'],
+          langs: ["vue", "typescript", "bash", "yaml"],
         },
       },
     },
   },
-})
+});
 ```
 
 **In markdown:**
 
 ````md
 ```ts
-const foo = 'bar'
+const foo = "bar";
 ```
 
 ```vue
@@ -187,12 +185,12 @@ const foo = 'bar'
 
 ````md
 ```ts {2,4-6}
-const a = 1
-const b = 2  // highlighted
-const c = 3
-const d = 4  // highlighted
-const e = 5  // highlighted
-const f = 6  // highlighted
+const a = 1;
+const b = 2; // highlighted
+const c = 3;
+const d = 4; // highlighted
+const e = 5; // highlighted
+const f = 6; // highlighted
 ```
 ````
 
@@ -200,7 +198,7 @@ const f = 6  // highlighted
 
 ````md
 ```ts [nuxt.config.ts]
-export default defineNuxtConfig({})
+export default defineNuxtConfig({});
 ```
 ````
 
@@ -217,9 +215,9 @@ export default defineNuxtConfig({})
 </template>
 
 <script setup lang="ts">
-withDefaults(defineProps<{ type?: 'info' | 'warning' | 'error' }>(), {
-  type: 'info',
-})
+withDefaults(defineProps<{ type?: "info" | "warning" | "error" }>(), {
+  type: "info",
+});
 </script>
 ```
 
@@ -237,8 +235,8 @@ Access TOC from parsed content:
 
 ```vue
 <script setup lang="ts">
-const post = await queryCollection('blog').where('path', '=', route.path).first()
-const toc = post?.body?.toc?.links || []
+const post = await queryCollection("blog").where("path", "=", route.path).first();
+const toc = post?.body?.toc?.links || [];
 </script>
 
 <template>

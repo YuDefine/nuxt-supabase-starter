@@ -8,16 +8,16 @@ Computed reactive object. Instead of returning a ref that does, returns a reacti
 ## Usage
 
 ```ts
-import { reactiveComputed } from '@vueuse/core'
+import { reactiveComputed } from "@vueuse/core";
 
 const state = reactiveComputed(() => {
   return {
-    foo: 'bar',
-    bar: 'baz',
-  }
-})
+    foo: "bar",
+    bar: "baz",
+  };
+});
 
-state.bar // 'baz'
+state.bar; // 'baz'
 ```
 
 ## Reference

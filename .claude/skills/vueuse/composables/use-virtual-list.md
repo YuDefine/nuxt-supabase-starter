@@ -6,7 +6,7 @@
 ## Usage
 
 ```ts
-import { useVirtualList } from '@vueuse/core'
+import { useVirtualList } from "@vueuse/core";
 
 const { list, containerProps, wrapperProps } = useVirtualList(
   Array.from(Array.from({ length: 99999 }).keys()),
@@ -14,7 +14,7 @@ const { list, containerProps, wrapperProps } = useVirtualList(
     // Keep `itemHeight` in sync with the item's row.
     itemHeight: 22,
   },
-)
+);
 ```
 
 ## Options

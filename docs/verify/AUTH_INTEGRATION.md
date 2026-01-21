@@ -34,11 +34,11 @@
 
 ### 主要檔案
 
-| 位置                            | 功能                 |
-| ------------------------------- | -------------------- |
-| `server/routes/auth/[...]`      | OAuth 處理           |
-| `server/utils/supabase.ts`      | Supabase 工具函式    |
-| `app/middleware/auth.global.ts` | Client 端路由守衛    |
+| 位置                            | 功能              |
+| ------------------------------- | ----------------- |
+| `server/routes/auth/[...]`      | OAuth 處理        |
+| `server/utils/supabase.ts`      | Supabase 工具函式 |
+| `app/middleware/auth.global.ts` | Client 端路由守衛 |
 
 ---
 
@@ -48,31 +48,31 @@
 
 ```vue
 <script setup lang="ts">
-  const { user, loggedIn, signIn, signOut } = useUserSession()
+const { user, loggedIn, signIn, signOut } = useUserSession();
 
-  // 檢查登入狀態
-  if (loggedIn.value) {
-    console.log('使用者已登入:', user.value)
-  }
+// 檢查登入狀態
+if (loggedIn.value) {
+  console.log("使用者已登入:", user.value);
+}
 
-  // OAuth 登入
-  async function loginWithGoogle() {
-    await signIn.social({ provider: 'google' })
-  }
+// OAuth 登入
+async function loginWithGoogle() {
+  await signIn.social({ provider: "google" });
+}
 
-  // Email 登入
-  async function loginWithEmail() {
-    await signIn.email(
-      { email: 'user@example.com', password: 'password' },
-      { onSuccess: () => navigateTo('/') }
-    )
-  }
+// Email 登入
+async function loginWithEmail() {
+  await signIn.email(
+    { email: "user@example.com", password: "password" },
+    { onSuccess: () => navigateTo("/") },
+  );
+}
 
-  // 登出
-  async function logout() {
-    await signOut()
-    navigateTo('/login')
-  }
+// 登出
+async function logout() {
+  await signOut();
+  navigateTo("/login");
+}
 </script>
 ```
 
@@ -84,11 +84,11 @@
 </template>
 
 <script setup lang="ts">
-  const { signIn } = useUserSession()
+const { signIn } = useUserSession();
 
-  async function loginWithGoogle() {
-    await signIn.social({ provider: 'google' })
-  }
+async function loginWithGoogle() {
+  await signIn.social({ provider: "google" });
+}
 </script>
 ```
 
@@ -100,10 +100,10 @@
 
 ```typescript
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user } = await requireUserSession(event);
   // user 保證存在
-  return { message: `Hello, ${user.name}` }
-})
+  return { message: `Hello, ${user.name}` };
+});
 ```
 
 ### 3.2. 要求特定角色
@@ -111,27 +111,27 @@ export default defineEventHandler(async (event) => {
 ```typescript
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event, {
-    user: { role: ['admin', 'manager'] },
-  })
+    user: { role: ["admin", "manager"] },
+  });
   // 只有 admin 或 manager 可存取
-})
+});
 ```
 
 ### 3.3. 結合 Supabase
 
 ```typescript
-import { getSupabaseWithContext } from '~~/server/utils/supabase'
+import { getSupabaseWithContext } from "~~/server/utils/supabase";
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+  const { user } = await requireUserSession(event);
 
   // 取得 Supabase Client
-  const supabase = await getSupabaseWithContext(event)
+  const supabase = await getSupabaseWithContext(event);
 
-  const { data } = await supabase.from('resources').select('*')
+  const { data } = await supabase.from("resources").select("*");
 
-  return { data }
-})
+  return { data };
+});
 ```
 
 ---
@@ -143,11 +143,11 @@ export default defineEventHandler(async (event) => {
 ```typescript
 export default defineNuxtConfig({
   routeRules: {
-    '/admin/**': { auth: { user: { role: 'admin' } } },
-    '/login': { auth: 'guest' },
-    '/dashboard/**': { auth: 'user' },
+    "/admin/**": { auth: { user: { role: "admin" } } },
+    "/login": { auth: "guest" },
+    "/dashboard/**": { auth: "user" },
   },
-})
+});
 ```
 
 ### 4.2. Middleware 守衛
@@ -155,22 +155,22 @@ export default defineNuxtConfig({
 ```typescript
 // app/middleware/auth.global.ts
 export default defineNuxtRouteMiddleware(async (to) => {
-  const { loggedIn, user } = useUserSession()
+  const { loggedIn, user } = useUserSession();
 
   // 公開頁面不需驗證
-  const publicPages = ['/login', '/forbidden']
-  if (publicPages.includes(to.path)) return
+  const publicPages = ["/login", "/forbidden"];
+  if (publicPages.includes(to.path)) return;
 
   // 未登入導向登入頁
   if (!loggedIn.value) {
-    return navigateTo('/login')
+    return navigateTo("/login");
   }
 
   // 未授權角色導向 forbidden
-  if (user.value?.role === 'unauthorized') {
-    return navigateTo('/forbidden')
+  if (user.value?.role === "unauthorized") {
+    return navigateTo("/forbidden");
   }
-})
+});
 ```
 
 ---
@@ -179,13 +179,13 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
 ```typescript
 // server/types/auth.d.ts
-declare module '@onmax/nuxt-better-auth' {
+declare module "@onmax/nuxt-better-auth" {
   interface User {
-    id: string
-    email: string
-    name?: string
-    picture?: string
-    role: 'admin' | 'manager' | 'staff' | 'unauthorized'
+    id: string;
+    email: string;
+    name?: string;
+    picture?: string;
+    role: "admin" | "manager" | "staff" | "unauthorized";
   }
 }
 ```
@@ -194,12 +194,12 @@ declare module '@onmax/nuxt-better-auth' {
 
 ## 6. 錯誤處理
 
-| 情境             | 錯誤碼 | 建議處理                                 |
-| ---------------- | ------ | ---------------------------------------- |
-| 未登入           | 401    | 導向 `/login`                            |
-| 無權限           | 403    | 顯示錯誤訊息或導向 `/forbidden`          |
-| OAuth 取消       | -      | 提示「登入取消」，留在登入頁             |
-| Session 過期     | 401    | 重新導向登入                             |
+| 情境         | 錯誤碼 | 建議處理                        |
+| ------------ | ------ | ------------------------------- |
+| 未登入       | 401    | 導向 `/login`                   |
+| 無權限       | 403    | 顯示錯誤訊息或導向 `/forbidden` |
+| OAuth 取消   | -      | 提示「登入取消」，留在登入頁    |
+| Session 過期 | 401    | 重新導向登入                    |
 
 ---
 
@@ -214,22 +214,22 @@ const {
   signIn, // { social, email, ... }
   signOut, // () => Promise<void>
   fetch, // () => Promise<void> - 重新取得 session
-} = useUserSession()
+} = useUserSession();
 ```
 
 ### Server 端
 
 ```typescript
 // 要求登入
-const { user } = await requireUserSession(event)
+const { user } = await requireUserSession(event);
 
 // 要求特定角色
 const { user } = await requireUserSession(event, {
-  user: { role: 'admin' },
-})
+  user: { role: "admin" },
+});
 
 // 取得 session（可能為 null）
-const session = await getUserSession(event)
+const session = await getUserSession(event);
 ```
 
 ---

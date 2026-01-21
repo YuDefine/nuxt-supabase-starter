@@ -8,9 +8,9 @@ Reactive current Date instance.
 ## Usage
 
 ```ts
-import { useNow } from '@vueuse/core'
+import { useNow } from "@vueuse/core";
 
-const now = useNow()
+const now = useNow();
 ```
 
 ## Options

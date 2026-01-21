@@ -24,21 +24,27 @@ Reusable functions encapsulating stateful logic using Composition API.
 
 ```ts
 // composables/useCounter.ts
-import { readonly, ref } from 'vue'
+import { readonly, ref } from "vue";
 
 export function useCounter(initialValue = 0) {
-  const count = ref(initialValue)
+  const count = ref(initialValue);
 
-  function increment() { count.value++ }
-  function decrement() { count.value-- }
-  function reset() { count.value = initialValue }
+  function increment() {
+    count.value++;
+  }
+  function decrement() {
+    count.value--;
+  }
+  function reset() {
+    count.value = initialValue;
+  }
 
   return {
     count: readonly(count), // readonly if shouldn't be mutated
     increment,
     decrement,
     reset,
-  }
+  };
 }
 ```
 
@@ -64,27 +70,27 @@ Hooks execute in component context:
 
 ```ts
 export function useEventListener(target: EventTarget, event: string, handler: Function) {
-  onMounted(() => target.addEventListener(event, handler))
-  onUnmounted(() => target.removeEventListener(event, handler))
+  onMounted(() => target.addEventListener(event, handler));
+  onUnmounted(() => target.removeEventListener(event, handler));
 }
 ```
 
 **Watcher cleanup (Vue 3.5+):**
 
 ```ts
-import { watch, onWatcherCleanup } from 'vue'
+import { watch, onWatcherCleanup } from "vue";
 
 export function usePolling(url: Ref<string>) {
   watch(url, (newUrl) => {
     const interval = setInterval(() => {
-      fetch(newUrl).then(/* ... */)
-    }, 1000)
+      fetch(newUrl).then(/* ... */);
+    }, 1000);
 
     // Cleanup when watcher re-runs or stops
     onWatcherCleanup(() => {
-      clearInterval(interval)
-    })
-  })
+      clearInterval(interval);
+    });
+  });
 }
 ```
 
@@ -98,26 +104,24 @@ export function usePolling(url: Ref<string>) {
 
 ```ts
 export function useAsyncData<T>(fetcher: () => Promise<T>) {
-  const data = ref<T | null>(null)
-  const error = ref<Error | null>(null)
-  const loading = ref(false)
+  const data = ref<T | null>(null);
+  const error = ref<Error | null>(null);
+  const loading = ref(false);
 
   async function execute() {
-    loading.value = true
-    error.value = null
+    loading.value = true;
+    error.value = null;
     try {
-      data.value = await fetcher()
-    }
-    catch (e) {
-      error.value = e as Error
-    }
-    finally {
-      loading.value = false
+      data.value = await fetcher();
+    } catch (e) {
+      error.value = e as Error;
+    } finally {
+      loading.value = false;
     }
   }
 
-  execute()
-  return { data, error, loading, refetch: execute }
+  execute();
+  return { data, error, loading, refetch: execute };
 }
 ```
 
@@ -138,38 +142,36 @@ Check VueUse before writing custom composables - most patterns already implement
 Share state across all components using the same composable:
 
 ```ts
-import { createSharedComposable } from '@vueuse/core'
+import { createSharedComposable } from "@vueuse/core";
 
 function useMapControlsBase() {
-  const mapInstance = ref<Map | null>(null)
-  const flyTo = (coords: [number, number]) => mapInstance.value?.flyTo(coords)
-  return { mapInstance, flyTo }
+  const mapInstance = ref<Map | null>(null);
+  const flyTo = (coords: [number, number]) => mapInstance.value?.flyTo(coords);
+  return { mapInstance, flyTo };
 }
 
-export const useMapControls = createSharedComposable(useMapControlsBase)
+export const useMapControls = createSharedComposable(useMapControlsBase);
 ```
 
 ### Cancellable Fetch with AbortController
 
 ```ts
 export function useSearch() {
-  let abortController: AbortController | null = null
+  let abortController: AbortController | null = null;
 
   watch(query, async (newQuery) => {
-    abortController?.abort()
-    abortController = new AbortController()
+    abortController?.abort();
+    abortController = new AbortController();
 
     try {
-      const data = await $fetch('/api/search', {
+      const data = await $fetch("/api/search", {
         query: { q: newQuery },
         signal: abortController.signal,
-      })
+      });
+    } catch (e) {
+      if (e.name !== "AbortError") throw e;
     }
-    catch (e) {
-      if (e.name !== 'AbortError')
-        throw e
-    }
-  })
+  });
 }
 ```
 
@@ -177,17 +179,15 @@ export function useSearch() {
 
 ```ts
 export function useSendFlow() {
-  const step = ref<'input' | 'confirm' | 'success'>('input')
-  const amount = ref('')
+  const step = ref<"input" | "confirm" | "success">("input");
+  const amount = ref("");
 
   const next = () => {
-    if (step.value === 'input')
-      step.value = 'confirm'
-    else if (step.value === 'confirm')
-      step.value = 'success'
-  }
+    if (step.value === "input") step.value = "confirm";
+    else if (step.value === "confirm") step.value = "success";
+  };
 
-  return { step, amount, next }
+  return { step, amount, next };
 }
 ```
 
@@ -195,13 +195,13 @@ export function useSendFlow() {
 
 ```ts
 export function useUserLocation() {
-  const location = ref<GeolocationPosition | null>(null)
+  const location = ref<GeolocationPosition | null>(null);
 
   if (import.meta.client) {
-    navigator.geolocation.getCurrentPosition(pos => location.value = pos)
+    navigator.geolocation.getCurrentPosition((pos) => (location.value = pos));
   }
 
-  return { location }
+  return { location };
 }
 ```
 
@@ -210,18 +210,18 @@ export function useUserLocation() {
 For custom element components, use built-in helpers:
 
 ```ts
-import { useHost, useShadowRoot } from 'vue'
+import { useHost, useShadowRoot } from "vue";
 
 export function useCustomElement() {
-  const host = useHost() // Host element reference
-  const shadowRoot = useShadowRoot() // Shadow DOM root
+  const host = useHost(); // Host element reference
+  const shadowRoot = useShadowRoot(); // Shadow DOM root
 
   onMounted(() => {
-    console.log('Host:', host)
-    console.log('Shadow:', shadowRoot)
-  })
+    console.log("Host:", host);
+    console.log("Shadow:", shadowRoot);
+  });
 
-  return { host, shadowRoot }
+  return { host, shadowRoot };
 }
 ```
 
@@ -234,35 +234,34 @@ export function useCustomElement() {
 
 ```ts
 export function useAutoSave(content: Ref<string>) {
-  const hasChanges = ref(false)
+  const hasChanges = ref(false);
 
   const save = useDebounceFn(async () => {
-    if (!hasChanges.value)
-      return
-    await $fetch('/api/save', { method: 'POST', body: { content: content.value } })
-    hasChanges.value = false
-  }, 1000)
+    if (!hasChanges.value) return;
+    await $fetch("/api/save", { method: "POST", body: { content: content.value } });
+    hasChanges.value = false;
+  }, 1000);
 
   watch(content, () => {
-    hasChanges.value = true
-    save()
-  })
+    hasChanges.value = true;
+    save();
+  });
 
-  return { hasChanges }
+  return { hasChanges };
 }
 ```
 
 ### Tagged Logger
 
 ```ts
-import { consola } from 'consola'
+import { consola } from "consola";
 
 export function useSearch() {
-  const logger = consola.withTag('search')
+  const logger = consola.withTag("search");
 
   watch(query, (q) => {
-    logger.info('Query changed:', q)
-  })
+    logger.info("Query changed:", q);
+  });
 }
 ```
 
@@ -272,19 +271,19 @@ export function useSearch() {
 
 ```ts
 // ❌ Wrong - exposes mutable ref
-return { count }
+return { count };
 
 // ✅ Correct - prevents external mutation
-return { count: readonly(count) }
+return { count: readonly(count) };
 ```
 
 **Missing cleanup:**
 
 ```ts
 // ❌ Wrong - listener never removed
-onMounted(() => target.addEventListener('click', handler))
+onMounted(() => target.addEventListener("click", handler));
 
 // ✅ Correct - cleanup on unmount
-onMounted(() => target.addEventListener('click', handler))
-onUnmounted(() => target.removeEventListener('click', handler))
+onMounted(() => target.addEventListener("click", handler));
+onUnmounted(() => target.removeEventListener("click", handler));
 ```

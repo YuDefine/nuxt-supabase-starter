@@ -27,8 +27,8 @@ pnpm add @vueuse/nuxt @vueuse/core
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
-  modules: ['@vueuse/nuxt'],
-})
+  modules: ["@vueuse/nuxt"],
+});
 ```
 
 Nuxt module auto-imports composables - no import needed.
@@ -72,24 +72,24 @@ Then load the specific composable file for detailed usage: `composables/use-mous
 **State persistence:**
 
 ```ts
-const state = useLocalStorage('my-key', { count: 0 })
+const state = useLocalStorage("my-key", { count: 0 });
 ```
 
 **Mouse tracking:**
 
 ```ts
-const { x, y } = useMouse()
+const { x, y } = useMouse();
 ```
 
 **Debounced ref:**
 
 ```ts
-const search = ref('')
-const debouncedSearch = refDebounced(search, 300)
+const search = ref("");
+const debouncedSearch = refDebounced(search, 300);
 ```
 
 **Shared composable (singleton):**
 
 ```ts
-const useSharedMouse = createSharedComposable(useMouse)
+const useSharedMouse = createSharedComposable(useMouse);
 ```

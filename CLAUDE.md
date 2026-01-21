@@ -195,6 +195,7 @@ Use `NavigationMenuItem` type from `@nuxt/ui` for menu items with proper structu
 ### Theming
 
 <!-- TODO: 設定你的主題顏色 -->
+
 Primary color is [color], neutral color is [color] (set in app.config.ts)
 
 ### Responsive Design
@@ -318,20 +319,20 @@ pnpm typecheck
 
 由 [nuxt-skills](https://github.com/onmax/nuxt-skills) plugin 自動維護，透過 GitHub Actions 定期同步最新版本。
 
-| Skill | 用途 |
-|-------|------|
-| `nuxt` | Nuxt 4 框架開發 |
-| `nuxt-ui` | Nuxt UI 4 元件使用 |
-| `nuxt-better-auth` | 認證整合 |
-| `nuxt-content` | 內容管理 |
-| `nuxt-modules` | 模組開發 |
-| `nuxthub` | NuxtHub 部署 |
-| `vue` | Vue 3 Composition API |
-| `vueuse` | VueUse composables |
-| `reka-ui` | Headless UI 元件 |
-| `motion` | Motion 動畫 |
-| `ts-library` | TypeScript 函式庫開發 |
-| `document-writer` | 文件撰寫 |
+| Skill              | 用途                  |
+| ------------------ | --------------------- |
+| `nuxt`             | Nuxt 4 框架開發       |
+| `nuxt-ui`          | Nuxt UI 4 元件使用    |
+| `nuxt-better-auth` | 認證整合              |
+| `nuxt-content`     | 內容管理              |
+| `nuxt-modules`     | 模組開發              |
+| `nuxthub`          | NuxtHub 部署          |
+| `vue`              | Vue 3 Composition API |
+| `vueuse`           | VueUse composables    |
+| `reka-ui`          | Headless UI 元件      |
+| `motion`           | Motion 動畫           |
+| `ts-library`       | TypeScript 函式庫開發 |
+| `document-writer`  | 文件撰寫              |
 
 > **更新機制**：這些 skills 存放在 `.claude/skills/` 目錄，由 CI 定期從 nuxt-skills repo 拉取更新。
 
@@ -339,13 +340,13 @@ pnpm typecheck
 
 當特定開發情境發生時自動載入，提供專案特定的最佳實踐。
 
-| Skill | 觸發時機 | 說明 |
-|-------|----------|------|
-| `supabase-rls` | 建立 RLS Policy 時 | RLS 設計規範，包含 service_role 繞過 |
-| `supabase-migration` | 建立 migration 時 | Local-First 流程、search_path 規範 |
-| `server-api` | 建立 Server API 時 | Zod 驗證、權限檢查、錯誤處理 |
-| `pinia-store` | 建立 Pinia Store 時 | Composition API、readonly 保護 |
-| `supabase-arch` | 架構決策時 | RPC vs Edge Function 決策樹 |
+| Skill                | 觸發時機            | 說明                                 |
+| -------------------- | ------------------- | ------------------------------------ |
+| `supabase-rls`       | 建立 RLS Policy 時  | RLS 設計規範，包含 service_role 繞過 |
+| `supabase-migration` | 建立 migration 時   | Local-First 流程、search_path 規範   |
+| `server-api`         | 建立 Server API 時  | Zod 驗證、權限檢查、錯誤處理         |
+| `pinia-store`        | 建立 Pinia Store 時 | Composition API、readonly 保護       |
+| `supabase-arch`      | 架構決策時          | RPC vs Edge Function 決策樹          |
 
 > **維護方式**：這些 skills 在 `.claude/skills/` 目錄下獨立管理，需手動更新以符合專案需求。
 
@@ -382,36 +383,36 @@ pnpm typecheck
 
 #### ✅ Client 端可以直接存取（`useSupabaseClient`）
 
-| 使用場景               | 說明                     |
-| ---------------------- | ------------------------ |
-| 下拉選單選項查詢       | `app/queries/` 目錄      |
-| Dashboard 統計資料     | 唯讀查詢                 |
-| 列表資料查詢（帶分頁） | 帶 RLS 保護              |
-| 表單載入現有資料       | 編輯前的資料載入         |
+| 使用場景               | 說明                |
+| ---------------------- | ------------------- |
+| 下拉選單選項查詢       | `app/queries/` 目錄 |
+| Dashboard 統計資料     | 唯讀查詢            |
+| 列表資料查詢（帶分頁） | 帶 RLS 保護         |
+| 表單載入現有資料       | 編輯前的資料載入    |
 
 ```typescript
 // ✅ CORRECT - Client 端唯讀查詢
-const client = useSupabaseClient<Database>()
-const { data } = await client.schema('your_schema').from('table').select('id, name').order('name')
+const client = useSupabaseClient<Database>();
+const { data } = await client.schema("your_schema").from("table").select("id, name").order("name");
 ```
 
 #### ❌ Client 端禁止執行寫入操作
 
 ```typescript
 // ❌ FORBIDDEN - 禁止在 Client 端直接寫入
-const client = useSupabaseClient<Database>()
-await client.schema('your_schema').from('table').insert({ name: 'New' }) // 禁止！
-await client.schema('your_schema').from('table').update({ name: 'Updated' }) // 禁止！
-await client.schema('your_schema').from('table').delete() // 禁止！
+const client = useSupabaseClient<Database>();
+await client.schema("your_schema").from("table").insert({ name: "New" }); // 禁止！
+await client.schema("your_schema").from("table").update({ name: "Updated" }); // 禁止！
+await client.schema("your_schema").from("table").delete(); // 禁止！
 ```
 
 #### ✅ 所有寫入操作必須走 Server API
 
 ```typescript
 // ✅ CORRECT - 透過 Server API 執行寫入
-await $fetch('/api/v1/resources', { method: 'POST', body: { name: 'New' } })
-await $fetch(`/api/v1/resources/${id}`, { method: 'PATCH', body: { name: 'Updated' } })
-await $fetch(`/api/v1/resources/${id}`, { method: 'DELETE' })
+await $fetch("/api/v1/resources", { method: "POST", body: { name: "New" } });
+await $fetch(`/api/v1/resources/${id}`, { method: "PATCH", body: { name: "Updated" } });
+await $fetch(`/api/v1/resources/${id}`, { method: "DELETE" });
 ```
 
 #### 為什麼採用此策略？
@@ -440,11 +441,11 @@ await $fetch(`/api/v1/resources/${id}`, { method: 'DELETE' })
 
 ```typescript
 // ❌ FORBIDDEN - 舊的 Supabase Auth（絕對禁止）
-const user = useSupabaseUser()
-const user = await serverSupabaseUser(event)
+const user = useSupabaseUser();
+const user = await serverSupabaseUser(event);
 
 // ✅ CORRECT - nuxt-better-auth
-const { user, loggedIn, signIn, signOut } = useUserSession() // Client 端
+const { user, loggedIn, signIn, signOut } = useUserSession(); // Client 端
 // Server 端使用 better-auth 提供的方式取得 session
 ```
 
@@ -534,18 +535,18 @@ USING (
 // Server API 錯誤
 throw createError({
   statusCode: 400, // 400, 401, 403, 404, 500
-  statusMessage: 'Bad Request',
-  message: '具體錯誤訊息（給開發者看）',
-})
+  statusMessage: "Bad Request",
+  message: "具體錯誤訊息（給開發者看）",
+});
 
 // Client 端處理
 try {
-  await $fetch('/api/v1/...')
+  await $fetch("/api/v1/...");
 } catch (error) {
   if (error.statusCode === 401) {
-    navigateTo('/login')
+    navigateTo("/login");
   } else {
-    toast.add({ title: '操作失敗', description: error.message, color: 'red' })
+    toast.add({ title: "操作失敗", description: error.message, color: "red" });
   }
 }
 ```
@@ -588,7 +589,7 @@ NUXT_SESSION_PASSWORD=<至少32字元的隨機字串>
 
 - `NUXT_PUBLIC_*`：會暴露給 Client 端
 - `NUXT_*`：僅 Server 端可用
-- 敏感資訊（SECRET、SERVICE_ROLE）絕不加 `PUBLIC_`
+- 敏感資訊（SECRET、SERVICE*ROLE）絕不加 `PUBLIC*`
 
 ---
 
@@ -644,8 +645,8 @@ NUXT_SESSION_PASSWORD=<至少32字元的隨機字串>
 
 ```vue
 <script setup lang="ts">
-  const title = defineModel<string>() // 基本用法
-  const firstName = defineModel<string>('firstName') // 具名 v-model
+const title = defineModel<string>(); // 基本用法
+const firstName = defineModel<string>("firstName"); // 具名 v-model
 </script>
 
 <UserForm v-model:first-name="user.firstName" />
@@ -697,13 +698,13 @@ app/pages/
 
 ```typescript
 // ❌ Bad - Direct window usage
-if (typeof window !== 'undefined') {
-  window.addEventListener('resize', handleResize)
+if (typeof window !== "undefined") {
+  window.addEventListener("resize", handleResize);
 }
 
 // ✅ Good - Use VueUse (if available)
-import { useWindowSize } from '@vueuse/core'
-const { width, height } = useWindowSize()
+import { useWindowSize } from "@vueuse/core";
+const { width, height } = useWindowSize();
 ```
 
 ---

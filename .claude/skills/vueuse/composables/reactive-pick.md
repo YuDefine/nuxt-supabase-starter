@@ -8,16 +8,16 @@ Reactively pick fields from a reactive object.
 ## Usage
 
 ```ts
-import { reactivePick } from '@vueuse/core'
+import { reactivePick } from "@vueuse/core";
 
 const obj = reactive({
   x: 0,
   y: 0,
   elementX: 0,
   elementY: 0,
-})
+});
 
-const picked = reactivePick(obj, 'x', 'elementX') // { x: number, elementX: number }
+const picked = reactivePick(obj, "x", "elementX"); // { x: number, elementX: number }
 ```
 
 ## Reference

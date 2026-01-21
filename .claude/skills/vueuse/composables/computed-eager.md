@@ -8,14 +8,14 @@ Eager computed without lazy evaluation.
 ## Usage
 
 ```ts
-import { computedEager } from '@vueuse/core'
+import { computedEager } from "@vueuse/core";
 
-const todos = ref([])
-const hasOpenTodos = computedEager(() => !!todos.length)
+const todos = ref([]);
+const hasOpenTodos = computedEager(() => !!todos.length);
 
-console.log(hasOpenTodos.value) // false
-toTodos.value.push({ title: 'Learn Vue' })
-console.log(hasOpenTodos.value) // true
+console.log(hasOpenTodos.value); // false
+toTodos.value.push({ title: "Learn Vue" });
+console.log(hasOpenTodos.value); // true
 ```
 
 ## Reference

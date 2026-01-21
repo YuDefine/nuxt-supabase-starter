@@ -75,6 +75,7 @@
 ```
 
 **用途**：
+
 - 日常開發
 - 測試 migration
 - 探索資料庫結構
@@ -93,11 +94,13 @@
 ```
 
 **用途**：
+
 - 查看生產資料庫結構
 - 比對本地與遠端差異
 - 除錯生產問題
 
 **設定方式**：
+
 1. 在 [Supabase Dashboard](https://supabase.com/dashboard) 取得 Project Ref
 2. 替換 `<your-project-ref>`
 
@@ -170,6 +173,7 @@ Claude：讓我檢查資料庫有沒有問題...
 ```
 
 **原因**：
+
 - 所有 migration 必須在本地建立、測試
 - 使用 `supabase migration new` 建立
 - 使用 `supabase db push` 推送到遠端
@@ -303,9 +307,9 @@ supabase login
 
 ## 相關文件
 
-| 文件 | 說明 |
-|------|------|
-| [CLAUDE_CODE_GUIDE.md](./CLAUDE_CODE_GUIDE.md) | Claude Code 配置指南 |
-| [SUPABASE_GUIDE.md](./SUPABASE_GUIDE.md) | Supabase 入門與 Migration |
-| [MCP 官方文件](https://modelcontextprotocol.io/) | Model Context Protocol |
-| [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | Supabase MCP 文件 |
+| 文件                                                                 | 說明                      |
+| -------------------------------------------------------------------- | ------------------------- |
+| [CLAUDE_CODE_GUIDE.md](./CLAUDE_CODE_GUIDE.md)                       | Claude Code 配置指南      |
+| [SUPABASE_GUIDE.md](./SUPABASE_GUIDE.md)                             | Supabase 入門與 Migration |
+| [MCP 官方文件](https://modelcontextprotocol.io/)                     | Model Context Protocol    |
+| [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | Supabase MCP 文件         |

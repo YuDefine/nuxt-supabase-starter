@@ -29,7 +29,6 @@
   "dependencies": {
     "@nuxt/image": "^2.0.0",
     "@nuxt/ui": "^4.3.0",
-    "tailwindcss": "^4.0.0",
     "@nuxthub/core": "^0.10.4",
     "@nuxtjs/supabase": "^2.0.3",
     "@onmax/nuxt-better-auth": "^0.0.2-alpha.14",
@@ -40,6 +39,7 @@
     "consola": "^3.4.2",
     "nuxt": "^4.2.2",
     "nuxt-charts": "^2.0.0",
+    "tailwindcss": "^4.0.0",
     "wrangler": "^4.58.0",
     "zod": "^4.3.5"
   },
@@ -63,11 +63,11 @@
     "vitest": "^3.2.4",
     "vue-tsc": "^3.2.2"
   },
-  "packageManager": "pnpm@10.28.1",
   "lint-staged": {
     "*.{js,ts,vue}": [
       "oxlint --fix",
       "oxfmt"
     ]
-  }
+  },
+  "packageManager": "pnpm@10.28.1"
 }

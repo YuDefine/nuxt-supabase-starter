@@ -8,14 +8,14 @@ Use ipcRenderer.on with ease and ipcRenderer.removeListener automatically on unm
 ## Usage
 
 ```ts
-import { useIpcRendererOn } from '@vueuse/electron'
+import { useIpcRendererOn } from "@vueuse/electron";
 
 // enable nodeIntegration if you don't provide ipcRenderer explicitly
 // see: https://www.electronjs.org/docs/api/webview-tag#nodeintegration
 // remove listener automatically on unmounted
-useIpcRendererOn('custom-event', (event, ...args) => {
-  console.log(args)
-})
+useIpcRendererOn("custom-event", (event, ...args) => {
+  console.log(args);
+});
 ```
 
 ## Reference

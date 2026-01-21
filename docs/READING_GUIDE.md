@@ -8,20 +8,20 @@
 
 ### 給人類開發者
 
-| 層級 | 目的 | 文件 | 何時閱讀 |
-|------|------|------|----------|
-| **L1 入門** | 快速開始 | [README.md](../README.md), [QUICK_START.md](QUICK_START.md) | 第一次使用 |
-| **L2 指南** | 深入學習 | [WORKFLOW.md](WORKFLOW.md), [SUPABASE_GUIDE.md](SUPABASE_GUIDE.md), [API_PATTERNS.md](API_PATTERNS.md) | 開始開發時 |
-| **L3 狀態** | 查閱參考 | [docs/verify/*](verify/README.md) | 需要確認系統狀態時 |
+| 層級        | 目的     | 文件                                                                                                   | 何時閱讀           |
+| ----------- | -------- | ------------------------------------------------------------------------------------------------------ | ------------------ |
+| **L1 入門** | 快速開始 | [README.md](../README.md), [QUICK_START.md](QUICK_START.md)                                            | 第一次使用         |
+| **L2 指南** | 深入學習 | [WORKFLOW.md](WORKFLOW.md), [SUPABASE_GUIDE.md](SUPABASE_GUIDE.md), [API_PATTERNS.md](API_PATTERNS.md) | 開始開發時         |
+| **L3 狀態** | 查閱參考 | [docs/verify/\*](verify/README.md)                                                                     | 需要確認系統狀態時 |
 
 ### 給 Claude/AI
 
-| 類型 | 用途 | 位置 |
-|------|------|------|
-| 總規範 | 開發規則 | [CLAUDE.md](../CLAUDE.md) |
-| Commands | 可執行命令（`/commit`, `/tdd` 等） | `.claude/commands/*.md` |
-| Agents | 自動化流程（check-runner 等） | `.claude/agents/*.md` |
-| Skills | 專業知識（17 個） | `.claude/skills/*/SKILL.md` |
+| 類型     | 用途                               | 位置                        |
+| -------- | ---------------------------------- | --------------------------- |
+| 總規範   | 開發規則                           | [CLAUDE.md](../CLAUDE.md)   |
+| Commands | 可執行命令（`/commit`, `/tdd` 等） | `.claude/commands/*.md`     |
+| Agents   | 自動化流程（check-runner 等）      | `.claude/agents/*.md`       |
+| Skills   | 專業知識（17 個）                  | `.claude/skills/*/SKILL.md` |
 
 ---
 
@@ -55,13 +55,13 @@ API_PATTERNS.md（10 分鐘）
 
 ### 進階主題（按需閱讀）
 
-| 主題 | 文件 |
-|------|------|
-| 認證系統 | [docs/verify/AUTH_INTEGRATION.md](verify/AUTH_INTEGRATION.md) |
+| 主題           | 文件                                                                          |
+| -------------- | ----------------------------------------------------------------------------- |
+| 認證系統       | [docs/verify/AUTH_INTEGRATION.md](verify/AUTH_INTEGRATION.md)                 |
 | Migration 操作 | [docs/verify/SUPABASE_MIGRATION_GUIDE.md](verify/SUPABASE_MIGRATION_GUIDE.md) |
-| RLS 設計 | [docs/verify/RLS_BEST_PRACTICES.md](verify/RLS_BEST_PRACTICES.md) |
-| Pinia 架構 | [docs/verify/PINIA_ARCHITECTURE.md](verify/PINIA_ARCHITECTURE.md) |
-| 資料庫效能 | [docs/verify/DATABASE_OPTIMIZATION.md](verify/DATABASE_OPTIMIZATION.md) |
+| RLS 設計       | [docs/verify/RLS_BEST_PRACTICES.md](verify/RLS_BEST_PRACTICES.md)             |
+| Pinia 架構     | [docs/verify/PINIA_ARCHITECTURE.md](verify/PINIA_ARCHITECTURE.md)             |
+| 資料庫效能     | [docs/verify/DATABASE_OPTIMIZATION.md](verify/DATABASE_OPTIMIZATION.md)       |
 
 ### AI 協作（給想深入了解 Claude 配置的人）
 
@@ -141,16 +141,16 @@ SPEC_KIT.md
 
 ### 我想知道...
 
-| 問題 | 答案在 |
-|------|--------|
-| 專案用了哪些技術？ | [README.md](../README.md) |
-| 怎麼開始開發？ | [QUICK_START.md](QUICK_START.md) |
-| TDD 流程是什麼？ | [WORKFLOW.md](WORKFLOW.md) |
-| 認證怎麼做？ | [docs/verify/AUTH_INTEGRATION.md](verify/AUTH_INTEGRATION.md) |
-| Migration 怎麼建立？ | [docs/verify/SUPABASE_MIGRATION_GUIDE.md](verify/SUPABASE_MIGRATION_GUIDE.md) |
-| Client/Server 怎麼分工？ | [CLAUDE.md](../CLAUDE.md#-supabase-資料存取策略) |
-| Spec-Kit 怎麼用？ | [SPEC_KIT.md](SPEC_KIT.md) |
-| 常見問題？ | [FAQ.md](FAQ.md) |
+| 問題                     | 答案在                                                                        |
+| ------------------------ | ----------------------------------------------------------------------------- |
+| 專案用了哪些技術？       | [README.md](../README.md)                                                     |
+| 怎麼開始開發？           | [QUICK_START.md](QUICK_START.md)                                              |
+| TDD 流程是什麼？         | [WORKFLOW.md](WORKFLOW.md)                                                    |
+| 認證怎麼做？             | [docs/verify/AUTH_INTEGRATION.md](verify/AUTH_INTEGRATION.md)                 |
+| Migration 怎麼建立？     | [docs/verify/SUPABASE_MIGRATION_GUIDE.md](verify/SUPABASE_MIGRATION_GUIDE.md) |
+| Client/Server 怎麼分工？ | [CLAUDE.md](../CLAUDE.md#-supabase-資料存取策略)                              |
+| Spec-Kit 怎麼用？        | [SPEC_KIT.md](SPEC_KIT.md)                                                    |
+| 常見問題？               | [FAQ.md](FAQ.md)                                                              |
 
 ---
 
