@@ -11,10 +11,10 @@
 | 工具 | 版本 | 安裝方式 |
 |------|------|----------|
 | Node.js | 20+ | [nodejs.org](https://nodejs.org/) |
-| pnpm | 9+ | `corepack enable` |
+| pnpm | 9+ | `curl -fsSL https://get.pnpm.io/install.sh \| sh -` |
 | Docker | - | [docker.com](https://www.docker.com/) |
 | Supabase CLI | - | `brew install supabase/tap/supabase` |
-| Claude Code | - | `npm install -g @anthropic-ai/claude-code` |
+| Claude Code | - | `curl -fsSL https://claude.ai/install.sh \| sh` |
 
 ---
 
