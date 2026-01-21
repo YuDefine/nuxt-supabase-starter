@@ -15,11 +15,71 @@
 
 ---
 
+## Tech Stack
+
+### 核心框架
+
+| 技術 | 版本 | 說明 |
+|------|------|------|
+| [Nuxt](https://nuxt.com/) | 4.x | Vue 全端框架 |
+| [Vue](https://vuejs.org/) | 3.x | 前端框架（Composition API） |
+| [TypeScript](https://www.typescriptlang.org/) | 5.x | 型別安全 |
+| [Supabase](https://supabase.com/) | - | PostgreSQL + Auth + Realtime |
+
+### UI 與樣式
+
+| 技術 | 說明 |
+|------|------|
+| [Nuxt UI](https://ui.nuxt.com/) | 官方 UI 元件庫（基於 Tailwind） |
+| [Nuxt UI Charts](https://ui.nuxt.com/charts) | 圖表元件（基於 Reka UI） |
+| [Tailwind CSS](https://tailwindcss.com/) | Utility-first CSS |
+| [Nuxt Image](https://image.nuxt.com/) | 圖片最佳化 |
+| [Lucide Icons](https://lucide.dev/) | 圖示庫 |
+
+### 認證與狀態
+
+| 技術 | 說明 |
+|------|------|
+| [nuxt-better-auth](https://github.com/onmax/nuxt-better-auth) | OAuth 認證（33+ providers） |
+| [Pinia](https://pinia.vuejs.org/) | 狀態管理 |
+| [Pinia Colada](https://pinia-colada.esm.dev/) | 非同步資料管理（類似 TanStack Query） |
+| [VueUse](https://vueuse.org/) | Vue Composition Utilities |
+
+### 開發工具
+
+| 技術 | 說明 |
+|------|------|
+| [Vitest](https://vitest.dev/) | 單元測試 |
+| [OXLint](https://oxc.rs/docs/guide/usage/linter) + [OXFmt](https://oxc.rs/docs/guide/usage/formatter) | 程式碼品質（Rust 實作，極快） |
+| [Supabase CLI](https://supabase.com/docs/guides/cli) | 本地開發、Migration |
+| [Zod](https://zod.dev/) | Schema 驗證 |
+| [Commitlint](https://commitlint.js.org/) + [Husky](https://typicode.github.io/husky/) | Git hooks 與 commit 規範 |
+| [VitePress](https://vitepress.dev/) | 文件網站產生器 |
+
+### 部署與監控
+
+| 平台 | 說明 |
+|------|------|
+| [Cloudflare Workers](https://workers.cloudflare.com/) | Edge 部署 |
+| [NuxtHub](https://hub.nuxt.com/) | SQL、KV、Blob 存儲與快取（Cloudflare 整合） |
+| [Sentry](https://sentry.io/) | 錯誤追蹤與效能監控 |
+
+### AI 輔助開發
+
+| 工具 | 說明 |
+|------|------|
+| [Claude Code](https://claude.ai/code) | AI 編程助手 |
+| Commands（13 個） | `/tdd`、`/commit`、`/db-migration`、`/speckit.*` 等 |
+| SubAgents（3 個） | `check-runner`、`post-implement`、`db-backup` |
+| [nuxt-skills](https://github.com/onmax/nuxt-skills)（12 個） | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等 AI Skills |
+
+---
+
 ## 文件導覽
 
 | 文件 | 說明 | 適合閱讀時機 |
 |------|------|-------------|
-| **[README.md](./README.md)** | 快速開始、核心概念 | 剛接觸這個範本 |
+| **[README.md](./README.md)** | 快速開始、Tech Stack | 剛接觸這個範本 |
 | **[docs/SUPABASE_GUIDE.md](./docs/SUPABASE_GUIDE.md)** | Supabase 入門、RLS 詳解、Migration | 第一次用 Supabase |
 | **[docs/WORKFLOW.md](./docs/WORKFLOW.md)** | TDD、自動化檢查、Git 規範 | 想了解開發流程 |
 | **[docs/SPEC_KIT.md](./docs/SPEC_KIT.md)** | spec-kit 命令詳解 | 要用 AI 輔助開發 |
@@ -72,29 +132,64 @@ CREATE POLICY "Users can view own posts"
 - Docker（給 Supabase 本地開發用）
 - [Supabase CLI](https://supabase.com/docs/guides/cli)
 
-### 1. 建立專案
+### 方法一：使用此範本建立新專案
 
 ```bash
-git clone https://github.com/anthropics/nuxt-supabase-starter my-project
+# 1. 從 GitHub 複製範本
+git clone https://github.com/Charles5277/nuxt-supabase-starter my-project
 cd my-project
+
+# 2. 移除原始 git 歷史，建立自己的
+rm -rf .git
+git init
+
+# 3. 安裝依賴
 pnpm install
+
+# 4. 設定環境變數
 cp .env.example .env
-```
+# 編輯 .env，填入必要的值
 
-### 2. 啟動 Supabase
-
-```bash
+# 5. 啟動 Supabase 本地開發環境
 supabase start
 # 會輸出 API URL 和 keys，填入 .env
-```
 
-### 3. 開始開發
-
-```bash
+# 6. 啟動開發伺服器
 pnpm dev
 ```
 
-### 4. 建立第一個資料表
+### 方法二：整合到現有專案
+
+如果你已有 Nuxt 專案，可以只複製需要的部分：
+
+```bash
+# 複製 AI 開發配置
+cp -r nuxt-supabase-starter/.claude your-project/
+cp -r nuxt-supabase-starter/.specify your-project/
+cp nuxt-supabase-starter/CLAUDE.md your-project/
+
+# 複製文件（可選）
+cp -r nuxt-supabase-starter/docs your-project/
+```
+
+### 環境變數設定
+
+`.env.example` 已包含所有需要的變數：
+
+```bash
+# 必要
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_KEY=<anon_key>              # supabase start 會輸出
+SUPABASE_SECRET_KEY=<service_role>   # supabase start 會輸出
+NUXT_SESSION_PASSWORD=<32字元隨機字串>  # openssl rand -base64 32
+
+# OAuth（選擇需要的）
+NUXT_OAUTH_GOOGLE_CLIENT_ID=
+NUXT_OAUTH_GOOGLE_CLIENT_SECRET=
+# ... 其他 providers
+```
+
+### 建立第一個資料表
 
 ```bash
 supabase migration new create_todos_table
@@ -213,7 +308,7 @@ Skills 會自動串接，減少手動操作：
 │   ├── templates/           # 文件範本
 │   └── scripts/             # 自動化腳本
 │
-├── .github/                  # GitHub Agent/Prompts
+├── .github/                  # GitHub prompts
 │
 └── server/utils/
     └── supabase.ts.example  # Server 端工具函式
@@ -234,6 +329,17 @@ Skills 會自動串接，減少手動操作：
 ### Q: 這套流程適合團隊嗎？
 
 適合。CLAUDE.md 是共享規範，Migration 有版本控制。
+
+### Q: 我可以不用 Claude Code 嗎？
+
+可以。`.claude/` 配置是可選的，核心的 Nuxt + Supabase 結構不依賴任何 AI 工具。
+
+### Q: 如何部署到 Production？
+
+1. 在 [Supabase Dashboard](https://supabase.com/dashboard) 建立專案
+2. `supabase link --project-ref <your-project-ref>`
+3. `supabase db push`
+4. 部署到 Cloudflare Workers（使用 `wrangler deploy` 或 CI/CD）
 
 ---
 

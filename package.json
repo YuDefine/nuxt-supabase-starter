@@ -1,0 +1,71 @@
+{
+  "name": "nuxt-supabase-starter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "check": "pnpm format && pnpm lint && pnpm typecheck && pnpm test",
+    "db:backup": "./scripts/backup-supabase.sh",
+    "db:diff": "supabase db diff",
+    "db:lint": "supabase db lint --level warning",
+    "db:reset": "supabase db reset",
+    "db:types": "supabase gen types --lang=typescript --local | tee app/types/database.types.ts > /dev/null",
+    "dev": "nuxt dev --dotenv .env -o",
+    "docs:build": "vitepress build docs",
+    "docs:dev": "vitepress dev docs --open",
+    "docs:preview": "vitepress preview docs",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "lint": "oxlint --deny-warnings .",
+    "prepare": "husky && nuxt prepare",
+    "preview": "nuxt preview",
+    "test": "vitest run --coverage",
+    "test:unit": "vitest run test/unit",
+    "test:watch": "vitest watch",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@nuxt/image": "^2.0.0",
+    "@nuxt/ui": "^4.3.0",
+    "@nuxthub/core": "^0.10.4",
+    "@nuxtjs/supabase": "^2.0.3",
+    "@onmax/nuxt-better-auth": "^0.8.0",
+    "@pinia/colada": "^0.21.1",
+    "@pinia/colada-nuxt": "^0.3.0",
+    "@pinia/nuxt": "^0.11.3",
+    "@sentry/nuxt": "^10.33.0",
+    "consola": "^3.4.2",
+    "nuxt": "^4.2.2",
+    "nuxt-charts": "^0.3.0",
+    "wrangler": "^4.58.0",
+    "zod": "^4.3.5"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^20.3.1",
+    "@commitlint/config-conventional": "^20.3.1",
+    "@iconify-json/lucide": "^1.2.84",
+    "@nuxt/test-utils": "^3.23.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "@vue/compiler-dom": "^3.5.26",
+    "@vue/server-renderer": "^3.5.26",
+    "@vue/test-utils": "^2.4.6",
+    "@vueuse/nuxt": "^14.1.0",
+    "happy-dom": "^20.1.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "oxfmt": "^0.24.0",
+    "oxlint": "^1.39.0",
+    "typescript": "^5.9.3",
+    "vitepress": "^1.6.4",
+    "vitest": "^3.2.4",
+    "vue-tsc": "^3.2.2"
+  },
+  "packageManager": "pnpm@10.28.1",
+  "lint-staged": {
+    "*.{js,ts,vue}": [
+      "oxlint --fix",
+      "oxfmt"
+    ]
+  }
+}

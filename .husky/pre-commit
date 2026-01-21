@@ -1,0 +1,53 @@
+#!/usr/bin/env sh
+# 檢查是否有 Supabase migration 檔案被修改
+MIGRATION_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep "^supabase/migrations/.*\.sql$" || true)
+
+if [ -n "$MIGRATION_FILES" ]; then
+  echo "🔍 檢測到 Supabase migration 檔案變更，執行安全檢查..."
+
+  # 檢查是否有禁止的 search_path 模式
+  FORBIDDEN_PATTERNS=$(echo "$MIGRATION_FILES" | xargs grep -n "SET search_path = public" 2>/dev/null || true)
+
+  if [ -n "$FORBIDDEN_PATTERNS" ]; then
+    echo ""
+    echo "❌ 錯誤：發現禁止的 search_path 設定！"
+    echo ""
+    echo "$FORBIDDEN_PATTERNS"
+    echo ""
+    echo "⚠️  所有函數必須使用 SET search_path = '' (空字串)"
+    echo "請修正後再次提交。"
+    echo ""
+    echo "正確範例："
+    echo "  SET search_path = ''  -- ✅ 正確"
+    echo ""
+    echo "錯誤範例："
+    echo "  SET search_path = public, pg_temp  -- ❌ 錯誤"
+    echo "  SET search_path = public           -- ❌ 錯誤"
+    echo ""
+    exit 1
+  fi
+
+  # 執行 Supabase linter
+  echo "🔍 執行 Supabase 資料庫 linter..."
+  if ! supabase db lint --level warning 2>/dev/null; then
+    echo ""
+    echo "⚠️  警告：Supabase linter 發現問題"
+    echo "請執行以下命令查看詳細資訊："
+    echo "  supabase db lint --level warning"
+    echo ""
+    echo "建議在修正警告後再提交，但不強制中斷提交流程。"
+    echo "按 Ctrl+C 取消提交，或等待 5 秒後繼續..."
+    sleep 5
+  else
+    echo "✅ Supabase linter 檢查通過"
+  fi
+
+  echo ""
+  echo "✅ Migration 檔案安全檢查完成"
+  echo ""
+fi
+
+# 執行標準的 lint-staged（包含 oxlint + typecheck）
+pnpm lint-staged
+
+oxfmt --no-error-on-unmatched-pattern
