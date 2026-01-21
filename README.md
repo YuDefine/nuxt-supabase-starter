@@ -145,9 +145,24 @@
 
 ## 文件導覽
 
+**不知道從哪開始？** 參考 [文件導讀指南](./docs/READING_GUIDE.md)。
+
+| 我想要... | 閱讀這份 |
+|-----------|----------|
+| 快速開始 | [QUICK_START.md](./docs/QUICK_START.md) |
+| 了解開發流程 | [WORKFLOW.md](./docs/WORKFLOW.md) |
+| 查詢常見問題 | [FAQ.md](./docs/FAQ.md) |
+| 了解 AI 配置 | [CLAUDE_CODE_GUIDE.md](./docs/CLAUDE_CODE_GUIDE.md) |
+| 查閱系統狀態 | [docs/verify/](./docs/verify/) |
+
+<details>
+<summary>完整文件清單</summary>
+
 | 文件 | 說明 | 適合閱讀時機 |
 |------|------|-------------|
 | **[README.md](./README.md)** | Tech Stack、核心概念 | 剛接觸這個範本 |
+| **[docs/READING_GUIDE.md](./docs/READING_GUIDE.md)** | 文件分類與閱讀順序 | 不知道從哪開始 |
+| **[docs/FAQ.md](./docs/FAQ.md)** | 常見疑問集 | 有具體問題 |
 | **[docs/QUICK_START.md](./docs/QUICK_START.md)** | 安裝與設定步驟 | 要開始使用 |
 | **[docs/SUPABASE_GUIDE.md](./docs/SUPABASE_GUIDE.md)** | Supabase 入門、RLS 詳解、Migration | 第一次用 Supabase |
 | **[docs/WORKFLOW.md](./docs/WORKFLOW.md)** | TDD、自動化檢查、Git 規範 | 想了解開發流程 |
@@ -157,6 +172,8 @@
 | **[docs/API_PATTERNS.md](./docs/API_PATTERNS.md)** | Server API 設計模式 | 要寫後端 API |
 | **[CLAUDE.md](./CLAUDE.md)** | AI 開發規範（給 Claude Code） | 要客製化 AI 行為 |
 | **[docs/verify/](./docs/verify/)** | 系統狀態文件（Auth、API、DB） | 要了解架構細節 |
+
+</details>
 
 ---
 
