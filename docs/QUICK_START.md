@@ -2,19 +2,19 @@
 
 從零開始建立一個包含完整 Tech Stack 和 AI 開發工具的專案。
 
-**照著這份指南做，你會得到與 <consumer-b> 專案相同的開發環境——在 2.5 個月內產出 80 個 API、100 個 migration、2,500+ 次 Claude Code 協作。**
+**照著這份指南做，你會得到完整的開發環境——包含 Nuxt 4 + Supabase + AI 開發工具的最佳實踐配置。**
 
 ## 前置條件
 
 在開始之前，請確認已安裝：
 
-| 工具 | 版本 | 安裝方式 |
-|------|------|----------|
-| Node.js | 20+ | [nodejs.org](https://nodejs.org/) |
-| pnpm | 9+ | `curl -fsSL https://get.pnpm.io/install.sh \| sh -` |
-| Docker | - | [docker.com](https://www.docker.com/) |
-| Supabase CLI | - | `brew install supabase/tap/supabase` |
-| Claude Code | - | `curl -fsSL https://claude.ai/install.sh \| sh` |
+| 工具         | 版本 | 安裝方式                                            |
+| ------------ | ---- | --------------------------------------------------- |
+| Node.js      | 20+  | [nodejs.org](https://nodejs.org/)                   |
+| pnpm         | 9+   | `curl -fsSL https://get.pnpm.io/install.sh \| sh -` |
+| Docker       | -    | [docker.com](https://www.docker.com/)               |
+| Supabase CLI | -    | `brew install supabase/tap/supabase`                |
+| Claude Code  | -    | `curl -fsSL https://claude.ai/install.sh \| sh`     |
 
 ---
 
@@ -60,24 +60,29 @@ pnpm install
 這會安裝完整的 Tech Stack：
 
 **核心框架**
+
 - **Nuxt 4** + Vue 3 + TypeScript
 - **Nuxt UI 4** + Tailwind CSS
 - **Nuxt Charts**（基於 Unovis）
 
 **狀態與資料**
+
 - **Pinia** + **Pinia Colada**（非同步資料管理）
 - **VueUse**（Vue Composition Utilities）
 - **Supabase**（PostgreSQL + Auth + Realtime）
 
 **認證**
+
 - **nuxt-better-auth**（33+ OAuth providers）
 
 **測試與品質**
+
 - **Vitest** + **@nuxt/test-utils**
 - **OXLint** + **OXFmt**（Rust 實作，極快）
 - **Commitlint** + **Husky**（Git hooks）
 
 **部署**
+
 - **Cloudflare Workers**（via NuxtHub）
 - **Sentry**（錯誤追蹤）
 
@@ -98,16 +103,30 @@ SUPABASE_URL=http://127.0.0.1:54321
 SUPABASE_KEY=<anon_key>
 SUPABASE_SECRET_KEY=<service_role_key>
 
+# 給 Nuxt 使用（與上方相同）
+NUXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+NUXT_PUBLIC_SUPABASE_KEY=<anon_key>
+
+# Better Auth（必填）
+# 使用 openssl rand -base64 32 產生
+BETTER_AUTH_SECRET=<32字元隨機字串>
+
 # Session（必填）
 # 使用 openssl rand -base64 32 產生
 NUXT_SESSION_PASSWORD=<32字元隨機字串>
+
+# 站點配置
+NUXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
 ---
 
-## Step 4：啟動 Supabase
+## Step 4：初始化並啟動 Supabase
 
 ```bash
+# 初始化 Supabase（建立 supabase/ 目錄和 config.toml）
+supabase init
+
 # 啟動本地 Supabase（需要 Docker）
 supabase start
 ```
@@ -131,6 +150,17 @@ service_role key: eyJhbGciOiJIUzI1NiIsInR5cCI6...
 ```bash
 SUPABASE_KEY=<上面的 anon key>
 SUPABASE_SECRET_KEY=<上面的 service_role key>
+NUXT_PUBLIC_SUPABASE_KEY=<上面的 anon key>
+```
+
+**產生 TypeScript 類型**：
+
+```bash
+# 建立類型檔案目錄
+mkdir -p app/types
+
+# 產生資料庫類型
+supabase gen types typescript --local | tee app/types/database.types.ts > /dev/null
 ```
 
 ---
@@ -143,6 +173,7 @@ cp .claude/settings.local.json.example .claude/settings.local.json
 ```
 
 這個設定檔定義了：
+
 - Claude 可以執行的命令權限
 - 啟用的 MCP Servers（包含 `local-supabase`）
 
@@ -190,34 +221,34 @@ claude
 
 ### Tech Stack（已配置）
 
-| 類別 | 技術 |
-|------|------|
-| 前端框架 | Nuxt 4 + Vue 3 + TypeScript |
-| UI 元件 | Nuxt UI 4 + Tailwind CSS |
-| 狀態管理 | Pinia + Pinia Colada |
-| 資料庫 | Supabase（PostgreSQL + Realtime） |
-| 認證 | @onmax/nuxt-better-auth（OAuth） |
-| 測試 | Vitest + @nuxt/test-utils |
-| 部署 | Cloudflare Workers |
+| 類別     | 技術                              |
+| -------- | --------------------------------- |
+| 前端框架 | Nuxt 4 + Vue 3 + TypeScript       |
+| UI 元件  | Nuxt UI 4 + Tailwind CSS          |
+| 狀態管理 | Pinia + Pinia Colada              |
+| 資料庫   | Supabase（PostgreSQL + Realtime） |
+| 認證     | @onmax/nuxt-better-auth（OAuth）  |
+| 測試     | Vitest + @nuxt/test-utils         |
+| 部署     | Cloudflare Workers                |
 
 ### AI 開發工具（已配置）
 
-| 類型 | 數量 | 說明 |
-|------|------|------|
-| Commands | 13 個 | `/tdd`、`/commit`、`/speckit.*` 等 |
-| SubAgents | 3 個 | `check-runner`、`post-implement`、`db-backup` |
+| 類型        | 數量  | 說明                                              |
+| ----------- | ----- | ------------------------------------------------- |
+| Commands    | 13 個 | `/tdd`、`/commit`、`/speckit.*` 等                |
+| SubAgents   | 3 個  | `check-runner`、`post-implement`、`db-backup`     |
 | 通用 Skills | 12 個 | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等（自動更新） |
-| 情境 Skills | 5 個 | `supabase-rls`、`server-api`、`pinia-store` 等 |
+| 情境 Skills | 5 個  | `supabase-rls`、`server-api`、`pinia-store` 等    |
 
 ### 開發規範（已定義）
 
-| 規範 | 功能 |
-|------|------|
-| CLAUDE.md | AI 開發規範，確保 AI 遵循專案標準 |
-| TDD 工作流程 | Red → Green → Refactor |
-| 自動化檢查 | `pnpm check`：format → lint → typecheck → test |
-| Git 規範 | emoji type + commitlint |
-| docs/verify/ | 系統狀態文件，確保文件與程式碼同步 |
+| 規範         | 功能                                           |
+| ------------ | ---------------------------------------------- |
+| CLAUDE.md    | AI 開發規範，確保 AI 遵循專案標準              |
+| TDD 工作流程 | Red → Green → Refactor                         |
+| 自動化檢查   | `pnpm check`：format → lint → typecheck → test |
+| Git 規範     | emoji type + commitlint                        |
+| docs/verify/ | 系統狀態文件，確保文件與程式碼同步             |
 
 ---
 
@@ -288,11 +319,11 @@ supabase migration new <name>  # 建立新 migration
 
 ## 相關文件
 
-| 文件 | 說明 |
-|------|------|
+| 文件                                           | 說明                 |
+| ---------------------------------------------- | -------------------- |
 | [CLAUDE_CODE_GUIDE.md](./CLAUDE_CODE_GUIDE.md) | Claude Code 配置指南 |
-| [SUPABASE_MCP.md](./SUPABASE_MCP.md) | Supabase MCP 整合 |
-| [SUPABASE_GUIDE.md](./SUPABASE_GUIDE.md) | Supabase 入門與 RLS |
-| [WORKFLOW.md](./WORKFLOW.md) | TDD 開發流程 |
-| [SPEC_KIT.md](./SPEC_KIT.md) | spec-kit 工作流程 |
-| [API_PATTERNS.md](./API_PATTERNS.md) | Server API 設計模式 |
+| [SUPABASE_MCP.md](./SUPABASE_MCP.md)           | Supabase MCP 整合    |
+| [SUPABASE_GUIDE.md](./SUPABASE_GUIDE.md)       | Supabase 入門與 RLS  |
+| [WORKFLOW.md](./WORKFLOW.md)                   | TDD 開發流程         |
+| [SPEC_KIT.md](./SPEC_KIT.md)                   | spec-kit 工作流程    |
+| [API_PATTERNS.md](./API_PATTERNS.md)           | Server API 設計模式  |
