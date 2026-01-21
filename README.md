@@ -31,7 +31,7 @@
 | 技術 | 說明 |
 |------|------|
 | [Nuxt UI](https://ui.nuxt.com/) | 官方 UI 元件庫（基於 Tailwind） |
-| [Nuxt UI Charts](https://ui.nuxt.com/charts) | 圖表元件（基於 Reka UI） |
+| [Nuxt Charts](https://nuxtcharts.com/) | 圖表元件（基於 Unovis） |
 | [Tailwind CSS](https://tailwindcss.com/) | Utility-first CSS |
 | [Nuxt Image](https://image.nuxt.com/) | 圖片最佳化 |
 | [Lucide Icons](https://lucide.dev/) | 圖示庫 |
@@ -49,7 +49,7 @@
 
 | 技術 | 說明 |
 |------|------|
-| [Vitest](https://vitest.dev/) | 單元測試 |
+| [Vitest](https://vitest.dev/) + [@nuxt/test-utils](https://nuxt.com/docs/getting-started/testing) | 單元與整合測試 |
 | [OXLint](https://oxc.rs/docs/guide/usage/linter) + [OXFmt](https://oxc.rs/docs/guide/usage/formatter) | 程式碼品質（Rust 實作，極快） |
 | [Supabase CLI](https://supabase.com/docs/guides/cli) | 本地開發、Migration |
 | [Zod](https://zod.dev/) | Schema 驗證 |
@@ -69,6 +69,7 @@
 | 工具 | 說明 |
 |------|------|
 | [Claude Code](https://claude.ai/code) | AI 編程助手 |
+| [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | 讓 AI 直接操作資料庫 |
 | Commands（13 個） | `/tdd`、`/commit`、`/db-migration`、`/speckit.*` 等 |
 | SubAgents（3 個） | `check-runner`、`post-implement`、`db-backup` |
 | [nuxt-skills](https://github.com/onmax/nuxt-skills)（12 個） | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等 AI Skills |
@@ -79,10 +80,13 @@
 
 | 文件 | 說明 | 適合閱讀時機 |
 |------|------|-------------|
-| **[README.md](./README.md)** | 快速開始、Tech Stack | 剛接觸這個範本 |
+| **[README.md](./README.md)** | Tech Stack、核心概念 | 剛接觸這個範本 |
+| **[docs/QUICK_START.md](./docs/QUICK_START.md)** | 安裝與設定步驟 | 要開始使用 |
 | **[docs/SUPABASE_GUIDE.md](./docs/SUPABASE_GUIDE.md)** | Supabase 入門、RLS 詳解、Migration | 第一次用 Supabase |
 | **[docs/WORKFLOW.md](./docs/WORKFLOW.md)** | TDD、自動化檢查、Git 規範 | 想了解開發流程 |
 | **[docs/SPEC_KIT.md](./docs/SPEC_KIT.md)** | spec-kit 命令詳解 | 要用 AI 輔助開發 |
+| **[docs/CLAUDE_CODE_GUIDE.md](./docs/CLAUDE_CODE_GUIDE.md)** | Claude Code 配置指南 | 要了解 AI 工具 |
+| **[docs/SUPABASE_MCP.md](./docs/SUPABASE_MCP.md)** | Supabase MCP 整合 | 要讓 AI 操作資料庫 |
 | **[docs/API_PATTERNS.md](./docs/API_PATTERNS.md)** | Server API 設計模式 | 要寫後端 API |
 | **[CLAUDE.md](./CLAUDE.md)** | AI 開發規範（給 Claude Code） | 要客製化 AI 行為 |
 
@@ -120,85 +124,6 @@ CREATE POLICY "Users can view own posts"
 ```
 
 > 📖 詳細說明見 [docs/SUPABASE_GUIDE.md](./docs/SUPABASE_GUIDE.md)
-
----
-
-## 快速開始
-
-### 前置條件
-
-- Node.js 20+
-- pnpm（`corepack enable`）
-- Docker（給 Supabase 本地開發用）
-- [Supabase CLI](https://supabase.com/docs/guides/cli)
-
-### 方法一：使用此範本建立新專案
-
-```bash
-# 1. 從 GitHub 複製範本
-git clone https://github.com/Charles5277/nuxt-supabase-starter my-project
-cd my-project
-
-# 2. 移除原始 git 歷史，建立自己的
-rm -rf .git
-git init
-
-# 3. 安裝依賴
-pnpm install
-
-# 4. 設定環境變數
-cp .env.example .env
-# 編輯 .env，填入必要的值
-
-# 5. 啟動 Supabase 本地開發環境
-supabase start
-# 會輸出 API URL 和 keys，填入 .env
-
-# 6. 啟動開發伺服器
-pnpm dev
-```
-
-### 方法二：整合到現有專案
-
-如果你已有 Nuxt 專案，可以只複製需要的部分：
-
-```bash
-# 複製 AI 開發配置
-cp -r nuxt-supabase-starter/.claude your-project/
-cp -r nuxt-supabase-starter/.specify your-project/
-cp nuxt-supabase-starter/CLAUDE.md your-project/
-
-# 複製文件（可選）
-cp -r nuxt-supabase-starter/docs your-project/
-```
-
-### 環境變數設定
-
-`.env.example` 已包含所有需要的變數：
-
-```bash
-# 必要
-SUPABASE_URL=http://127.0.0.1:54321
-SUPABASE_KEY=<anon_key>              # supabase start 會輸出
-SUPABASE_SECRET_KEY=<service_role>   # supabase start 會輸出
-NUXT_SESSION_PASSWORD=<32字元隨機字串>  # openssl rand -base64 32
-
-# OAuth（選擇需要的）
-NUXT_OAUTH_GOOGLE_CLIENT_ID=
-NUXT_OAUTH_GOOGLE_CLIENT_SECRET=
-# ... 其他 providers
-```
-
-### 建立第一個資料表
-
-```bash
-supabase migration new create_todos_table
-# 編輯產生的 SQL 檔案
-supabase db reset
-supabase gen types typescript --local | tee app/types/database.types.ts > /dev/null
-```
-
-> 📖 完整步驟見 [docs/SUPABASE_GUIDE.md](./docs/SUPABASE_GUIDE.md)
 
 ---
 
@@ -368,7 +293,7 @@ Skills 會自動串接，減少手動操作：
 
 ## 下一步
 
-1. **[快速開始](#快速開始)**：clone、跑起來
+1. **[快速開始](./docs/QUICK_START.md)**：clone、跑起來
 2. **[Supabase 入門](./docs/SUPABASE_GUIDE.md)**：建立第一個資料表
 3. **[API 設計](./docs/API_PATTERNS.md)**：寫你的第一個 CRUD API
 4. **[spec-kit](./docs/SPEC_KIT.md)**：用 AI 輔助開發一個功能
