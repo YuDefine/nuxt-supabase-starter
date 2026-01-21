@@ -89,12 +89,19 @@ Context available in `defineServerAuth`:
 
 ```ts
 // app/auth.config.ts
-import { defineClientAuth } from "@onmax/nuxt-better-auth/config";
+import { createAuthClient } from 'better-auth/client'
+// import { twoFactorClient } from 'better-auth/client/plugins' // optional
 
-export default defineClientAuth(() => ({
-  // Client-side plugin options (e.g., passkey, twoFactor)
-}));
+// 建立並導出 auth client - 函式名稱必須是 createAppAuthClient
+export function createAppAuthClient(baseURL?: string) {
+  return createAuthClient({
+    baseURL: baseURL || '',
+    // plugins: [twoFactorClient()], // optional
+  })
+}
 ```
+
+**重要**: 函式名稱必須是 `createAppAuthClient`，這是模組期望的導出名稱。
 
 ## NuxtHub Integration
 

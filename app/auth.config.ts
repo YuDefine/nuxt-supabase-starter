@@ -1,5 +1,14 @@
-import { defineClientAuth } from "@onmax/nuxt-better-auth/config";
+import { createAuthClient } from "better-auth/client";
 
-export default defineClientAuth(() => ({
-  // Client-side auth 設定
-}));
+// 建立並導出 auth client
+// 這個函式會被 nuxt-better-auth 模組使用
+export function createAppAuthClient(baseURL?: string) {
+  return createAuthClient({
+    baseURL: baseURL || "",
+    // 可在此加入 plugins，例如：
+    // plugins: [
+    //   twoFactorClient(),
+    //   passkeyClient(),
+    // ]
+  });
+}
