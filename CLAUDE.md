@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | [語言偏好](#-語言偏好-language-preference)               | 繁體中文規範                            | 🔴 必讀 |
 | [Standards](#-standards)                                 | 核心技術規範                            | 🔴 必讀 |
 | [Development Workflow](#-development-workflow)           | TDD 開發流程                            | 🔴 必讀 |
+| [AI Skills](#-ai-skills)                                 | 技術 Skills 與情境 Skills               | 🔴 必讀 |
 | [Database Guidelines](#-database--supabase-guidelines)   | Supabase 存取策略、認證、Migration、RLS | 🔴 必讀 |
 | [Vue Component Conventions](#-vue-component-conventions) | 元件撰寫規範                            | 🟡 參考 |
 | [Git Commit Conventions](#-git-commit-conventions)       | Commit 格式                             | 🟡 參考 |
@@ -235,6 +236,7 @@ Dashboard components handle both desktop and mobile with sidebar collapse state 
 | 完成任何程式碼實作後    | `pnpm check`                    | 執行 format → lint → typecheck → test              |
 | `pnpm check` 全部通過後 | 詢問是否 commit                 | 分析變更並建議 commit 分組                         |
 | 使用者同意 commit 後    | 依功能分組 commit               | 遵循 commitlint 規範，逐一建立 commit              |
+| 所有 commit 完成後      | 版本升級 + deploy commit + tag  | 詢問升級類型（minor/patch）→ `pnpm tag`            |
 | 建立/修改 migration 後  | `supabase db reset` + `db lint` | 驗證 migration 正確性                              |
 | migration 驗證通過後    | 重新產生 TypeScript 類型        | `supabase gen types typescript --local \| tee ...` |
 | 修改資料庫 schema 後    | 更新 `docs/verify/` 相關文件    | 同步相關文件                                       |
@@ -273,6 +275,11 @@ Dashboard components handle both desktop and mobile with sidebar collapse state 
    - 每組使用適當的 emoji type（✨ feat / 🐛 fix / 🔨 refactor 等）
    - Commit message 使用繁體中文
    - 加上 `Co-Authored-By: Claude <noreply@anthropic.com>`
+5. **版本升級**（所有 commit 完成後）：
+   - 詢問：「是否要升級版本？（minor / patch / 否）」
+   - 執行 `pnpm version <type> --no-git-tag-version`
+   - 建立 deploy commit：`🚀 deploy: v<version>`
+   - 執行 `pnpm tag` 建立並推送 Git tag
 
 ### 自動 Migration 驗證
 
@@ -300,6 +307,47 @@ pnpm typecheck
 2. **Green**：寫最小實作，執行確認通過
 3. **Refactor**：重構程式碼，確保測試仍通過
 4. **Check**：執行 `pnpm check` 確認所有檢查通過
+
+---
+
+## 🧠 AI Skills
+
+本專案使用兩種類型的 AI Skills 來輔助開發。
+
+### 技術 Skills（自動更新）
+
+由 [nuxt-skills](https://github.com/onmax/nuxt-skills) plugin 自動維護，透過 GitHub Actions 定期同步最新版本。
+
+| Skill | 用途 |
+|-------|------|
+| `nuxt` | Nuxt 4 框架開發 |
+| `nuxt-ui` | Nuxt UI 4 元件使用 |
+| `nuxt-better-auth` | 認證整合 |
+| `nuxt-content` | 內容管理 |
+| `nuxt-modules` | 模組開發 |
+| `nuxthub` | NuxtHub 部署 |
+| `vue` | Vue 3 Composition API |
+| `vueuse` | VueUse composables |
+| `reka-ui` | Headless UI 元件 |
+| `motion` | Motion 動畫 |
+| `ts-library` | TypeScript 函式庫開發 |
+| `document-writer` | 文件撰寫 |
+
+> **更新機制**：這些 skills 存放在 `.claude/skills/` 目錄，由 CI 定期從 nuxt-skills repo 拉取更新。
+
+### 情境 Skills（本地維護）
+
+當特定開發情境發生時自動載入，提供專案特定的最佳實踐。
+
+| Skill | 觸發時機 | 說明 |
+|-------|----------|------|
+| `supabase-rls` | 建立 RLS Policy 時 | RLS 設計規範，包含 service_role 繞過 |
+| `supabase-migration` | 建立 migration 時 | Local-First 流程、search_path 規範 |
+| `server-api` | 建立 Server API 時 | Zod 驗證、權限檢查、錯誤處理 |
+| `pinia-store` | 建立 Pinia Store 時 | Composition API、readonly 保護 |
+| `supabase-arch` | 架構決策時 | RPC vs Edge Function 決策樹 |
+
+> **維護方式**：這些 skills 在 `.claude/skills/` 目錄下獨立管理，需手動更新以符合專案需求。
 
 ---
 

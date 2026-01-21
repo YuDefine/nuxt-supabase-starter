@@ -2,6 +2,8 @@
 
 從零開始建立一個包含完整 Tech Stack 和 AI 開發工具的專案。
 
+**照著這份指南做，你會得到與 <consumer-b> 專案相同的開發環境——在 2.5 個月內產出 80 個 API、100 個 migration、2,500+ 次 Claude Code 協作。**
+
 ## 前置條件
 
 在開始之前，請確認已安裝：
@@ -38,12 +40,13 @@ my-project/
 ├── .claude/               # Claude Code 配置
 │   ├── commands/          # 13 個自定義指令
 │   ├── agents/            # 3 個 SubAgents
-│   └── skills/            # 12 個技術 Skills
+│   └── skills/            # 17 個 AI Skills（12 通用 + 5 情境）
 ├── .specify/              # spec-kit 工作流程
 ├── app/                   # Nuxt 應用程式
 ├── server/                # API 端點
 ├── supabase/              # Migration 檔案
-└── docs/                  # 專案文件
+├── docs/                  # 專案文件
+└── docs/verify/           # 系統狀態文件（Auth、API、DB）
 ```
 
 ---
@@ -181,20 +184,40 @@ claude
 
 ---
 
-## 完成！
+## 完成！你得到了什麼？
 
-你現在有一個完整配置的專案：
+**照著上述步驟，你已經得到與原始專案相同的開發環境。**
 
-| 功能 | 狀態 |
+### Tech Stack（已配置）
+
+| 類別 | 技術 |
 |------|------|
-| Nuxt 4 + Vue 3 + TypeScript | ✅ |
-| Nuxt UI 4 + Tailwind CSS | ✅ |
-| Supabase 本地開發環境 | ✅ |
-| Pinia + Pinia Colada | ✅ |
-| Vitest 測試框架 | ✅ |
-| Claude Code + Skills | ✅ |
-| TDD 工作流程 | ✅ |
-| spec-kit 工作流程 | ✅ |
+| 前端框架 | Nuxt 4 + Vue 3 + TypeScript |
+| UI 元件 | Nuxt UI 4 + Tailwind CSS |
+| 狀態管理 | Pinia + Pinia Colada |
+| 資料庫 | Supabase（PostgreSQL + Realtime） |
+| 認證 | @onmax/nuxt-better-auth（OAuth） |
+| 測試 | Vitest + @nuxt/test-utils |
+| 部署 | Cloudflare Workers |
+
+### AI 開發工具（已配置）
+
+| 類型 | 數量 | 說明 |
+|------|------|------|
+| Commands | 13 個 | `/tdd`、`/commit`、`/speckit.*` 等 |
+| SubAgents | 3 個 | `check-runner`、`post-implement`、`db-backup` |
+| 通用 Skills | 12 個 | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等（自動更新） |
+| 情境 Skills | 5 個 | `supabase-rls`、`server-api`、`pinia-store` 等 |
+
+### 開發規範（已定義）
+
+| 規範 | 功能 |
+|------|------|
+| CLAUDE.md | AI 開發規範，確保 AI 遵循專案標準 |
+| TDD 工作流程 | Red → Green → Refactor |
+| 自動化檢查 | `pnpm check`：format → lint → typecheck → test |
+| Git 規範 | emoji type + commitlint |
+| docs/verify/ | 系統狀態文件，確保文件與程式碼同步 |
 
 ---
 

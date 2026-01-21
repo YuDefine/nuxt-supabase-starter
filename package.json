@@ -23,7 +23,8 @@
     "test": "vitest run --coverage",
     "test:unit": "vitest run test/unit",
     "test:watch": "vitest watch",
-    "typecheck": "nuxt typecheck"
+    "typecheck": "nuxt typecheck",
+    "tag": "git tag v$(node -p \"require('./package.json').version\") && git push origin --tags"
   },
   "dependencies": {
     "@nuxt/image": "^2.0.0",

@@ -73,6 +73,73 @@
 | Commands（13 個） | `/tdd`、`/commit`、`/db-migration`、`/speckit.*` 等 |
 | SubAgents（3 個） | `check-runner`、`post-implement`、`db-backup` |
 | [nuxt-skills](https://github.com/onmax/nuxt-skills)（12 個） | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等 AI Skills |
+| 情境 Skills（5 個） | `supabase-rls`、`supabase-migration`、`server-api` 等 |
+
+---
+
+## 這套配置帶來什麼成功？
+
+這不只是 boilerplate——而是經過驗證的開發環境。照做，你也能得到相同的成效。
+
+### 實際專案數據
+
+| 指標 | 數值 |
+|------|------|
+| 開發時長 | 2.5 個月 |
+| API 端點 | 80 個 |
+| Migration 檔案 | 100 個 |
+| RLS 政策 | 114 個 |
+| Claude Code 對話 | 2,500+ 次 |
+
+### 配置與效果對應
+
+| 配置 | 帶來的效果 |
+|------|-----------|
+| **CLAUDE.md** | AI 遵循專案規範，減少修正成本 |
+| **TDD 工作流程** | AI 生成的程式碼有測試保護 |
+| **自動化檢查** | 每次提交都通過品質門檻 |
+| **nuxt-skills** | AI 能正確使用框架 API |
+| **spec-kit** | 複雜功能有結構化開發流程 |
+| **情境 Skills** | AI 遵循 Supabase 安全規範 |
+
+### 照做你也能得到
+
+1. 相同的 Tech Stack 配置
+2. 相同的 AI 開發工作流程
+3. 相同的程式碼品質保證
+4. 相同的開發效率提升
+
+---
+
+## Skills 更新機制
+
+### 兩種 Skill 類型
+
+| 類型 | 來源 | 更新方式 |
+|------|------|----------|
+| 通用技術 | [nuxt-skills](https://github.com/onmax/nuxt-skills) | Plugin 自動更新 |
+| 情境觸發 | 本地 `.claude/skills/` | 手動維護 |
+
+### 通用技術 Skills（12 個，自動更新）
+
+由 [nuxt-skills](https://github.com/onmax/nuxt-skills) plugin 維護，包含：
+- `nuxt`、`nuxt-ui`、`nuxt-better-auth`
+- `vue`、`vueuse`、`reka-ui`、`motion`
+- `nuxthub`、`nuxt-content`、`nuxt-modules`
+- `ts-library`、`document-writer`
+
+這些 skills 會透過 GitHub Actions 自動更新，確保與官方文件同步。
+
+### 情境觸發 Skills（5 個，本地維護）
+
+當特定情境發生時自動載入：
+- `supabase-rls`：建立 RLS Policy 時
+- `supabase-migration`：建立 migration 時
+- `server-api`：建立 Server API 時
+- `pinia-store`：建立 Pinia Store 時
+- `supabase-arch`：架構決策時
+
+這些 skills 是本範本的在地化規範，確保 AI 遵循專案的安全與架構決策。
 
 ---
 
@@ -89,6 +156,7 @@
 | **[docs/SUPABASE_MCP.md](./docs/SUPABASE_MCP.md)** | Supabase MCP 整合 | 要讓 AI 操作資料庫 |
 | **[docs/API_PATTERNS.md](./docs/API_PATTERNS.md)** | Server API 設計模式 | 要寫後端 API |
 | **[CLAUDE.md](./CLAUDE.md)** | AI 開發規範（給 Claude Code） | 要客製化 AI 行為 |
+| **[docs/verify/](./docs/verify/)** | 系統狀態文件（Auth、API、DB） | 要了解架構細節 |
 
 ---
 
@@ -268,19 +336,7 @@ Skills 會自動串接，減少手動操作：
 
 ---
 
-## 參考專案數據
-
-這套工作流程在 <consumer-b> 專案中的實際表現：
-
-| 指標 | 數值 |
-|------|------|
-| 開發時長 | 2.5 個月 |
-| API 端點 | 80 個 |
-| Migration 檔案 | 100 個 |
-| RLS 政策 | 114 個 |
-| Claude Code 對話 | 2,514 次 |
-
-**AI 輔助效率**：
+## AI 輔助效率
 
 | 任務類型 | AI 幫助程度 |
 |----------|------------|
