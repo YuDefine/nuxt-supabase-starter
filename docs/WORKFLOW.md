@@ -23,6 +23,7 @@ spec.md    plan.md     tasks.md    Red/Green   pnpm check
 傳統開發中，TDD 被認為是「好習慣但很花時間」。但在 AI 輔助開發中，TDD 變成了**必要的驗收機制**。
 
 想像這個場景：
+
 - 你讓 AI 幫你寫一個排序函式
 - AI 給你一段程式碼
 - 你怎麼知道這段程式碼是對的？
@@ -43,31 +44,31 @@ spec.md    plan.md     tasks.md    Red/Green   pnpm check
 
 ```typescript
 // test/unit/utils/sort.test.ts
-import { describe, it, expect } from 'vitest'
-import { sortByDate } from '~/utils/sort'
+import { describe, it, expect } from "vitest";
+import { sortByDate } from "~/utils/sort";
 
-describe('sortByDate', () => {
-  it('should sort items by date in descending order', () => {
+describe("sortByDate", () => {
+  it("should sort items by date in descending order", () => {
     const items = [
-      { id: 1, date: new Date('2024-01-01') },
-      { id: 2, date: new Date('2024-03-01') },
-      { id: 3, date: new Date('2024-02-01') },
-    ]
+      { id: 1, date: new Date("2024-01-01") },
+      { id: 2, date: new Date("2024-03-01") },
+      { id: 3, date: new Date("2024-02-01") },
+    ];
 
-    const result = sortByDate(items)
+    const result = sortByDate(items);
 
-    expect(result.map(i => i.id)).toEqual([2, 3, 1])
-  })
+    expect(result.map((i) => i.id)).toEqual([2, 3, 1]);
+  });
 
-  it('should handle empty array', () => {
-    expect(sortByDate([])).toEqual([])
-  })
+  it("should handle empty array", () => {
+    expect(sortByDate([])).toEqual([]);
+  });
 
-  it('should handle single item', () => {
-    const items = [{ id: 1, date: new Date('2024-01-01') }]
-    expect(sortByDate(items)).toEqual(items)
-  })
-})
+  it("should handle single item", () => {
+    const items = [{ id: 1, date: new Date("2024-01-01") }];
+    expect(sortByDate(items)).toEqual(items);
+  });
+});
 ```
 
 這時候測試會失敗，因為 `sortByDate` 還不存在。這就是「Red」。
@@ -77,11 +78,11 @@ describe('sortByDate', () => {
 ```typescript
 // app/utils/sort.ts
 interface Dateable {
-  date: Date
+  date: Date;
 }
 
 export function sortByDate<T extends Dateable>(items: T[]): T[] {
-  return [...items].sort((a, b) => b.date.getTime() - a.date.getTime())
+  return [...items].sort((a, b) => b.date.getTime() - a.date.getTime());
 }
 ```
 
@@ -94,17 +95,15 @@ export function sortByDate<T extends Dateable>(items: T[]): T[] {
 ```typescript
 // app/utils/sort.ts
 interface Dateable {
-  date: Date
+  date: Date;
 }
 
 export function sortByDate<T extends Dateable>(
   items: readonly T[],
-  order: 'asc' | 'desc' = 'desc'
+  order: "asc" | "desc" = "desc",
 ): T[] {
-  const multiplier = order === 'desc' ? -1 : 1
-  return [...items].sort((a, b) =>
-    multiplier * (a.date.getTime() - b.date.getTime())
-  )
+  const multiplier = order === "desc" ? -1 : 1;
+  return [...items].sort((a, b) => multiplier * (a.date.getTime() - b.date.getTime()));
 }
 ```
 
@@ -143,12 +142,12 @@ pnpm check
 pnpm format && pnpm lint && pnpm typecheck && pnpm test
 ```
 
-| 步驟 | 說明 | 失敗時 |
-|------|------|--------|
-| `format` | 程式碼格式化 | 自動修復 |
-| `lint` | 程式碼品質檢查 | 需手動修復 |
+| 步驟        | 說明                | 失敗時     |
+| ----------- | ------------------- | ---------- |
+| `format`    | 程式碼格式化        | 自動修復   |
+| `lint`      | 程式碼品質檢查      | 需手動修復 |
 | `typecheck` | TypeScript 類型檢查 | 需手動修復 |
-| `test` | 執行測試 | 需手動修復 |
+| `test`      | 執行測試            | 需手動修復 |
 
 ### 在 Claude Code 中的自動執行
 
@@ -182,20 +181,20 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 ### Emoji Types
 
-| Emoji | Type | 說明 | 範例 |
-|-------|------|------|------|
-| ✨ | feat | 新功能 | `✨ feat: 加入使用者登入功能` |
-| 🐛 | fix | 錯誤修正 | `🐛 fix: 修正日期排序問題` |
-| 🔨 | refactor | 重構 | `🔨 refactor: 簡化排序邏輯` |
-| 🧪 | test | 測試 | `🧪 test: 加入排序函式測試` |
-| 📝 | docs | 文件 | `📝 docs: 更新 API 文件` |
-| 🧹 | chore | 維護 | `🧹 chore: 更新依賴` |
-| 🎨 | style | 樣式 | `🎨 style: 調整按鈕顏色` |
-| 📦 | build | 建置 | `📦 build: 修改 Cloudflare 配置` |
-| 👷 | ci | CI/CD | `👷 ci: 加入 GitHub Actions` |
-| ⏪ | revert | 還原 | `⏪ revert: 還原上次修改` |
-| 🚀 | deploy | 部署 | `🚀 deploy: 發布 v1.0.0` |
-| 🎉 | init | 初始化 | `🎉 init: 專案初始化` |
+| Emoji | Type     | 說明     | 範例                             |
+| ----- | -------- | -------- | -------------------------------- |
+| ✨    | feat     | 新功能   | `✨ feat: 加入使用者登入功能`    |
+| 🐛    | fix      | 錯誤修正 | `🐛 fix: 修正日期排序問題`       |
+| 🔨    | refactor | 重構     | `🔨 refactor: 簡化排序邏輯`      |
+| 🧪    | test     | 測試     | `🧪 test: 加入排序函式測試`      |
+| 📝    | docs     | 文件     | `📝 docs: 更新 API 文件`         |
+| 🧹    | chore    | 維護     | `🧹 chore: 更新依賴`             |
+| 🎨    | style    | 樣式     | `🎨 style: 調整按鈕顏色`         |
+| 📦    | build    | 建置     | `📦 build: 修改 Cloudflare 配置` |
+| 👷    | ci       | CI/CD    | `👷 ci: 加入 GitHub Actions`     |
+| ⏪    | revert   | 還原     | `⏪ revert: 還原上次修改`        |
+| 🚀    | deploy   | 部署     | `🚀 deploy: 發布 v1.0.0`         |
+| 🎉    | init     | 初始化   | `🎉 init: 專案初始化`            |
 
 ### 功能分組 Commit
 
@@ -222,6 +221,7 @@ git commit -m "🧪 test: 加入 todos 相關測試"
 ### 使用 /commit 命令
 
 Claude Code 的 `/commit` 命令會自動：
+
 1. 分析變更內容
 2. 建議分組方式
 3. 產生符合規範的 commit message
@@ -240,6 +240,7 @@ Claude Code 的 `/commit` 命令會自動：
 #### 1. 設計
 
 先想清楚：
+
 - 需要什麼表格？
 - 欄位有哪些？類型是什麼？
 - 需要什麼索引？
@@ -300,6 +301,7 @@ supabase db push
 ### 使用 /db-migration 命令
 
 Claude Code 的 `/db-migration` 命令會引導你完成整個流程，包括：
+
 - 建立符合安全規範的 migration
 - 自動設定 `search_path = ''`
 - 產生標準的 RLS 政策
@@ -314,6 +316,7 @@ Claude Code 的 `/db-migration` 命令會引導你完成整個流程，包括：
 這個目錄用來記錄「專案當前的狀態」，而非變更歷史。
 
 **撰寫原則**：
+
 - 使用現在式
 - 不要加時間標記
 - 直接覆寫舊內容（Git 已記錄歷史）
@@ -353,6 +356,7 @@ Claude 會產生 `spec.md`。
 ```
 
 Claude 會根據規格產生 `plan.md`，列出需要的：
+
 - 資料庫表格
 - API 端點
 - 前端頁面
@@ -377,6 +381,7 @@ Claude 會逐一執行任務，使用 TDD 流程。
 ### 5. 自動檢查與提交
 
 完成後，Claude 會：
+
 1. 執行 `pnpm check`
 2. 詢問是否 commit
 3. 依功能分組 commit
@@ -389,21 +394,21 @@ Claude 會逐一執行任務，使用 TDD 流程。
 
 ### Skills 之間的自動串接
 
-| Skill | 完成後自動 | 條件 |
-|-------|-----------|------|
-| `/tdd` | 調用 check-runner | 測試通過後 |
-| `/tdd` | 詢問是否 commit | check 通過後 |
-| `/commit` | **先**調用 check-runner | 開始前強制 |
-| `/db-migration` | 產生 TypeScript 類型 | 測試通過後 |
+| Skill                | 完成後自動                      | 條件           |
+| -------------------- | ------------------------------- | -------------- |
+| `/tdd`               | 調用 check-runner               | 測試通過後     |
+| `/tdd`               | 詢問是否 commit                 | check 通過後   |
+| `/commit`            | **先**調用 check-runner         | 開始前強制     |
+| `/db-migration`      | 產生 TypeScript 類型            | 測試通過後     |
 | `/speckit.implement` | 調用 check-runner + 詢問 commit | 所有任務完成後 |
 
 ### SubAgents
 
-| Agent | 用途 | 觸發時機 |
-|-------|------|---------|
-| `check-runner` | 執行 pnpm check | 被多個 Skills 自動調用 |
-| `post-implement` | 標準化檢查+commit 流程 | 實作完成後 |
-| `db-backup` | 備份資料庫並更新 seed.sql | 手動 |
+| Agent            | 用途                      | 觸發時機               |
+| ---------------- | ------------------------- | ---------------------- |
+| `check-runner`   | 執行 pnpm check           | 被多個 Skills 自動調用 |
+| `post-implement` | 標準化檢查+commit 流程    | 實作完成後             |
+| `db-backup`      | 備份資料庫並更新 seed.sql | 手動                   |
 
 ### 自動流程示意
 
@@ -434,15 +439,15 @@ Claude 會逐一執行任務，使用 TDD 流程。
 
 ## 效率指標參考
 
-在 <consumer-b> 專案中使用這套工作流程的實際效率：
+使用這套工作流程的實際效率參考：
 
-| 任務類型 | 傳統做法 | AI 輔助 | 加速比 |
-|----------|----------|---------|--------|
-| CRUD API（一組） | 2-3 小時 | 30-60 分鐘 | 3-5x |
-| 資料庫 Migration | 1-2 小時 | 20-40 分鐘 | 3x |
-| 前端頁面 | 3-4 小時 | 1-2 小時 | 2-3x |
-| 測試撰寫 | 1-2 小時 | 30-60 分鐘 | 2-3x |
-| 文件撰寫 | 1 小時 | 10-20 分鐘 | 4-6x |
+| 任務類型         | 傳統做法 | AI 輔助    | 加速比 |
+| ---------------- | -------- | ---------- | ------ |
+| CRUD API（一組） | 2-3 小時 | 30-60 分鐘 | 3-5x   |
+| 資料庫 Migration | 1-2 小時 | 20-40 分鐘 | 3x     |
+| 前端頁面         | 3-4 小時 | 1-2 小時   | 2-3x   |
+| 測試撰寫         | 1-2 小時 | 30-60 分鐘 | 2-3x   |
+| 文件撰寫         | 1 小時   | 10-20 分鐘 | 4-6x   |
 
 **注意**：這些數字假設你已經熟悉這套工作流程。剛開始使用時會有學習曲線。
 
