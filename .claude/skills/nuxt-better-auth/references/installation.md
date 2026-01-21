@@ -89,15 +89,15 @@ Context available in `defineServerAuth`:
 
 ```ts
 // app/auth.config.ts
-import { createAuthClient } from 'better-auth/client'
+import { createAuthClient } from "better-auth/client";
 // import { twoFactorClient } from 'better-auth/client/plugins' // optional
 
 // 建立並導出 auth client - 函式名稱必須是 createAppAuthClient
 export function createAppAuthClient(baseURL?: string) {
   return createAuthClient({
-    baseURL: baseURL || '',
+    baseURL: baseURL || "",
     // plugins: [twoFactorClient()], // optional
-  })
+  });
 }
 ```
 
