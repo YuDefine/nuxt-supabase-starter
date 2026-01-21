@@ -38,11 +38,11 @@
 ### 1. 安裝 Claude Code
 
 ```bash
-# 使用 npm
-npm install -g @anthropic-ai/claude-code
+# 官方推薦（使用 curl）
+curl -fsSL https://claude.ai/install.sh | sh
 
-# 或使用 Homebrew
-brew install claude-code
+# 或使用 npm
+npm install -g @anthropic-ai/claude-code
 ```
 
 ### 2. 複製設定檔
