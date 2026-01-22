@@ -65,44 +65,11 @@ my-project/
 └── docs/verify/           # 系統狀態文件
 ```
 
-> **注意**：`supabase/` 目錄會在 Step 3 執行 `supabase init` 時自動建立。
+> **注意**：`supabase/` 目錄會在 Step 2 執行 `supabase init` 時自動建立。
 
 ---
 
-## Step 2：設定環境變數
-
-```bash
-# 先複製環境變數範本
-cp .env.example .env
-```
-
-編輯 `.env`，填入必要的值：
-
-```bash
-# Supabase（Step 3 會取得這些值）
-SUPABASE_URL=http://127.0.0.1:54321
-SUPABASE_KEY=<anon_key>
-SUPABASE_SECRET_KEY=<service_role_key>
-
-# 給 Nuxt 使用（與上方相同）
-NUXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
-NUXT_PUBLIC_SUPABASE_KEY=<anon_key>
-
-# Better Auth（必填）
-# 使用 openssl rand -base64 32 產生
-BETTER_AUTH_SECRET=<32字元隨機字串>
-
-# Session（必填）
-# 使用 openssl rand -base64 32 產生
-NUXT_SESSION_PASSWORD=<32字元隨機字串>
-
-# 站點配置
-NUXT_PUBLIC_SITE_URL=http://localhost:3000
-```
-
----
-
-## Step 3：初始化並啟動 Supabase
+## Step 2：初始化並啟動 Supabase
 
 ```bash
 # 初始化 Supabase（建立 supabase/ 目錄和 config.toml）
@@ -126,14 +93,6 @@ supabase start
 service_role key: eyJhbGciOiJIUzI1NiIsInR5cCI6...
 ```
 
-**更新 `.env`**：
-
-```bash
-SUPABASE_KEY=<上面的 anon key>
-SUPABASE_SECRET_KEY=<上面的 service_role key>
-NUXT_PUBLIC_SUPABASE_KEY=<上面的 anon key>
-```
-
 **產生 TypeScript 類型**：
 
 ```bash
@@ -146,13 +105,46 @@ supabase gen types typescript --local | tee app/types/database.types.ts > /dev/n
 
 ---
 
+## Step 3：設定環境變數
+
+```bash
+# 複製環境變數範本
+cp .env.example .env
+```
+
+編輯 `.env`，填入 Step 2 取得的值：
+
+```bash
+# Supabase（使用 Step 2 的 anon key 和 service_role key）
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_KEY=<Step 2 的 anon key>
+SUPABASE_SECRET_KEY=<Step 2 的 service_role key>
+
+# 給 Nuxt 使用（與上方相同）
+NUXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+NUXT_PUBLIC_SUPABASE_KEY=<Step 2 的 anon key>
+
+# Better Auth（必填）
+# 使用 openssl rand -base64 32 產生
+BETTER_AUTH_SECRET=<32字元隨機字串>
+
+# Session（必填）
+# 使用 openssl rand -base64 32 產生
+NUXT_SESSION_PASSWORD=<32字元隨機字串>
+
+# 站點配置
+NUXT_PUBLIC_SITE_URL=http://localhost:3000
+```
+
+---
+
 ## Step 4：安裝依賴
 
 ```bash
 pnpm install
 ```
 
-> **注意**：`nuxt-better-auth` 會自動產生 `BETTER_AUTH_SECRET` 並寫入 `.env`。如果你在 Step 2 已經設定過，它會保留你的值。
+> **注意**：`nuxt-better-auth` 會自動產生 `BETTER_AUTH_SECRET` 並寫入 `.env`。如果你在 Step 3 已經設定過，它會保留你的值。
 
 這會安裝完整的 Tech Stack：
 
