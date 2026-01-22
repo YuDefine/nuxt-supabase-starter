@@ -24,11 +24,12 @@ const barChartData = ref([
   { name: "Product D", value: 95 },
 ]);
 
-const donutChartData = ref([
-  { name: "Desktop", value: 45 },
-  { name: "Mobile", value: 35 },
-  { name: "Tablet", value: 20 },
-]);
+const donutChartData = ref([45, 35, 20]);
+const donutCategories = {
+  Desktop: { name: "Desktop", color: "#3b82f6" },
+  Mobile: { name: "Mobile", color: "#ef4444" },
+  Tablet: { name: "Tablet", color: "#10b981" },
+};
 
 // Form state
 const formState = reactive({
@@ -187,7 +188,12 @@ function showToast() {
             <h3 class="font-medium">Donut Chart</h3>
           </template>
           <div class="h-48">
-            <DonutChart :data="donutChartData" :value="(d: { value: number }) => d.value" />
+            <DonutChart
+              :data="donutChartData"
+              :categories="donutCategories"
+              :height="180"
+              :radius="70"
+            />
           </div>
         </UCard>
       </div>
