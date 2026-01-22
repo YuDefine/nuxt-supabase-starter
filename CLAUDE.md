@@ -574,8 +574,8 @@ try {
 ```bash
 # Supabase
 SUPABASE_URL=http://127.0.0.1:54321
-SUPABASE_KEY=<anon_key>
-SUPABASE_SERVICE_ROLE_KEY=<service_role_key>  # 僅 server 端
+SUPABASE_KEY=<Publishable_key>
+SUPABASE_SECRET_KEY=<Secret_key>  # 僅 server 端
 
 # OAuth（根據需要選擇）
 NUXT_OAUTH_GOOGLE_CLIENT_ID=<client_id>

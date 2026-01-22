@@ -243,12 +243,12 @@ export function getServerSupabaseClient(): SupabaseClient<Database> {
 
 ```bash
 SUPABASE_URL=http://127.0.0.1:54321
-SUPABASE_KEY=<anon_key>
-SUPABASE_SECRET_KEY=<service_role_key>
+SUPABASE_KEY=<Publishable_key>
+SUPABASE_SECRET_KEY=<Secret_key>
 
 # 給 Nuxt 使用
 NUXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
-NUXT_PUBLIC_SUPABASE_KEY=<anon_key>
+NUXT_PUBLIC_SUPABASE_KEY=<Publishable_key>
 ```
 
 ### 3.5 加入 Supabase MCP（選用）

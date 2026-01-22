@@ -71,7 +71,7 @@ docs/verify/    穩定文件（本手冊、Quick Start、DB 操作、Auth、Stat
    - Client 端僅執行讀取查詢
 3. **環境變數命名**（詳見 [ENVIRONMENT_VARIABLES](./ENVIRONMENT_VARIABLES.md)）
    - OAuth：`NUXT_OAUTH_*_CLIENT_ID`、`NUXT_OAUTH_*_CLIENT_SECRET`
-   - Supabase：`SUPABASE_URL`、`SUPABASE_KEY`、`SUPABASE_SERVICE_ROLE_KEY`
+   - Supabase：`SUPABASE_URL`、`SUPABASE_KEY`、`SUPABASE_SECRET_KEY`
 4. **資料庫同步**
    - 本機：`supabase db reset` → 重建資料庫 + 套用 migrations
    - 遠端：`supabase db push`（由 CI/CD 處理）

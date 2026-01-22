@@ -35,8 +35,8 @@ Nuxt 讀取順序：`.env.local` → `.env.{mode}` → `.env`。若同名，後�
 ```bash
 # Supabase：資料庫連線
 SUPABASE_URL=https://<project>.supabase.co
-SUPABASE_KEY=<publishable_anon_key>
-SUPABASE_SERVICE_ROLE_KEY=<service_role_key>      # Server 端專用，繞過 RLS
+SUPABASE_KEY=<Publishable_key>
+SUPABASE_SECRET_KEY=<Secret_key>      # Server 端專用，繞過 RLS
 
 # OAuth（根據需要選擇 Provider）
 NUXT_OAUTH_GOOGLE_CLIENT_ID=<client>.apps.googleusercontent.com
@@ -113,7 +113,7 @@ await signOut();
 | ------------------------- | ---------------------------------------------- | --------------------------------------- |
 | OAuth 登入失敗            | `NUXT_OAUTH_*_CLIENT_ID` 或 `SECRET` 不正確    | 檢查 OAuth Provider Console 設定        |
 | API 回傳 401 Unauthorized | Session 過期或未登入                           | 重新登入，檢查 Cookie 是否正確設定      |
-| RLS 無法讀取資料          | Service Role Key 未設定                        | 確認 `SUPABASE_SERVICE_ROLE_KEY` 已設定 |
+| RLS 無法讀取資料          | Secret Key 未設定                              | 確認 `SUPABASE_SECRET_KEY` 已設定       |
 | `NUXT_PUBLIC_*` 泄漏祕密  | 將 Service Role、私有 API key 放在 public 變數 | 立即旋轉金鑰並改為 server-only 變數     |
 
 ---
@@ -123,8 +123,8 @@ await signOut();
 ```bash
 # Supabase（資料庫）
 SUPABASE_URL=http://127.0.0.1:54321
-SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+SUPABASE_KEY=sb_publishable_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+SUPABASE_SECRET_KEY=sb_secret_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # OAuth
 NUXT_OAUTH_GOOGLE_CLIENT_ID=12345.apps.googleusercontent.com
