@@ -7,28 +7,48 @@ function toggleColorMode() {
   colorMode.preference = colorMode.value === "dark" ? "light" : "dark";
 }
 
-// Demo data for charts
-const lineChartData = ref([
-  { x: "Jan", y: 40 },
-  { x: "Feb", y: 55 },
-  { x: "Mar", y: 45 },
-  { x: "Apr", y: 70 },
-  { x: "May", y: 65 },
-  { x: "Jun", y: 80 },
-]);
+// Demo data for charts - 使用 nuxt-charts 正確格式
 
-const barChartData = ref([
-  { name: "Product A", value: 120 },
-  { name: "Product B", value: 85 },
-  { name: "Product C", value: 150 },
-  { name: "Product D", value: 95 },
-]);
+// LineChart 資料
+const lineChartData = [
+  { month: "Jan", revenue: 40 },
+  { month: "Feb", revenue: 55 },
+  { month: "Mar", revenue: 45 },
+  { month: "Apr", revenue: 70 },
+  { month: "May", revenue: 65 },
+  { month: "Jun", revenue: 80 },
+];
+const lineCategories = {
+  revenue: { name: "Revenue", color: "#3b82f6" },
+};
+function lineXFormatter(tick: number): string {
+  return lineChartData[tick]?.month ?? "";
+}
 
-const donutChartData = ref([45, 35, 20]);
+// BarChart 資料
+const barChartData = [
+  { name: "Product A", sales: 120, returns: 20 },
+  { name: "Product B", sales: 85, returns: 15 },
+  { name: "Product C", sales: 150, returns: 30 },
+  { name: "Product D", sales: 95, returns: 10 },
+];
+const barCategories = {
+  sales: { name: "Sales", color: "#22c55e" },
+};
+function barXFormatter(tick: number): string {
+  return barChartData[tick]?.name ?? "";
+}
+
+// DonutChart 資料
+const donutData = [
+  { name: "Desktop", percentage: 45 },
+  { name: "Mobile", percentage: 35 },
+  { name: "Tablet", percentage: 20 },
+];
 const donutCategories = {
-  Desktop: { name: "Desktop", color: "#3b82f6" },
-  Mobile: { name: "Mobile", color: "#ef4444" },
-  Tablet: { name: "Tablet", color: "#10b981" },
+  desktop: { name: "Desktop", color: "#3b82f6" },
+  mobile: { name: "Mobile", color: "#ef4444" },
+  tablet: { name: "Tablet", color: "#10b981" },
 };
 
 // Form state
@@ -162,8 +182,9 @@ function showToast() {
           <div class="h-48">
             <LineChart
               :data="lineChartData"
-              :x="(d: { x: string }) => d.x"
-              :y="(d: { y: number }) => d.y"
+              :height="180"
+              :categories="lineCategories"
+              :x-formatter="lineXFormatter"
             />
           </div>
         </UCard>
@@ -176,8 +197,10 @@ function showToast() {
           <div class="h-48">
             <BarChart
               :data="barChartData"
-              :x="(_d: unknown, i: number) => i"
-              :y="(d: { value: number }) => d.value"
+              :height="180"
+              :categories="barCategories"
+              :y-axis="['sales']"
+              :x-formatter="barXFormatter"
             />
           </div>
         </UCard>
@@ -189,10 +212,11 @@ function showToast() {
           </template>
           <div class="h-48">
             <DonutChart
-              :data="donutChartData"
-              :categories="donutCategories"
+              :data="donutData.map((i) => i.percentage)"
               :height="180"
-              :radius="70"
+              :categories="donutCategories"
+              :radius="4"
+              :arc-width="40"
             />
           </div>
         </UCard>
