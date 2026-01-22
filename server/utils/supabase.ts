@@ -7,6 +7,7 @@
  * @module server/utils/supabase
  */
 
+// @ts-expect-error - @supabase/supabase-js 類型檔案暫時缺失
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "~~/app/types/database.types";
 

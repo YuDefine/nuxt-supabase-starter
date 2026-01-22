@@ -1,3 +1,4 @@
+// @ts-expect-error - better-auth client 尚未安裝（模組暫時停用）
 import { createAuthClient } from "better-auth/client";
 
 // 建立並導出 auth client
