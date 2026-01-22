@@ -1,9 +1,7 @@
 <script setup lang="ts">
+  // colorMode 預留給未來主題切換功能
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const colorMode = useColorMode()
-
-  function toggleColorMode() {
-    colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
-  }
 </script>
 
 <template>
