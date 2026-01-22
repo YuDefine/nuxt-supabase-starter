@@ -54,6 +54,10 @@ my-project/
 ## Step 2：安裝依賴
 
 ```bash
+# 複製 pnpm 設定檔（nuxt-charts 需要 shamefully-hoist）
+cp .npmrc.example .npmrc
+
+# 安裝依賴
 pnpm install
 ```
 

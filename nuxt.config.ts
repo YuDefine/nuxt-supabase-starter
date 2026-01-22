@@ -94,10 +94,6 @@ export default defineNuxtConfig({
     esbuild: {
       drop: process.env.NODE_ENV === "production" ? ["console", "debugger"] : [],
     },
-    // 處理 nuxt-charts 依賴的 CJS 模組
-    optimizeDeps: {
-      include: ["to-px"],
-    },
   },
 
   app: {
