@@ -8,12 +8,12 @@ Inject reactive element in head.
 ## Usage
 
 ```ts
-import { useStyleTag } from "@vueuse/core";
+import { useStyleTag } from '@vueuse/core'
 
-const { id, css, load, unload, isLoaded } = useStyleTag(".foo { margin-top: 32px; }");
+const { id, css, load, unload, isLoaded } = useStyleTag('.foo { margin-top: 32px; }')
 
 // Later you can modify styles
-css.value = ".foo { margin-top: 64px; }";
+css.value = '.foo { margin-top: 64px; }'
 ```
 
 ## Options

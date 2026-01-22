@@ -10,11 +10,11 @@ npm install -D @nuxt/test-utils vitest
 
 ```ts
 // vitest.config.ts
-import { defineVitestConfig } from "@nuxt/test-utils/config";
+import { defineVitestConfig } from '@nuxt/test-utils/config'
 
 export default defineVitestConfig({
-  test: { environment: "nuxt" },
-});
+  test: { environment: 'nuxt' },
+})
 ```
 
 ## Test Fixtures
@@ -23,12 +23,12 @@ Create a minimal Nuxt app that uses your module:
 
 ```ts
 // test/fixtures/basic/nuxt.config.ts
-import MyModule from "../../../src/module";
+import MyModule from '../../../src/module'
 
 export default defineNuxtConfig({
   modules: [MyModule],
   myModule: { enabled: true },
-});
+})
 ```
 
 ```vue
@@ -41,26 +41,26 @@ export default defineNuxtConfig({
 ## Writing Tests
 
 ```ts
-import { fileURLToPath } from "node:url";
-import { $fetch, setup } from "@nuxt/test-utils/e2e";
+import { fileURLToPath } from 'node:url'
+import { $fetch, setup } from '@nuxt/test-utils/e2e'
 // test/basic.test.ts
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from 'vitest'
 
-describe("basic", async () => {
+describe('basic', async () => {
   await setup({
-    rootDir: fileURLToPath(new URL("./fixtures/basic", import.meta.url)),
-  });
+    rootDir: fileURLToPath(new URL('./fixtures/basic', import.meta.url)),
+  })
 
-  it("renders component", async () => {
-    const html = await $fetch("/");
-    expect(html).toContain("Click me");
-  });
+  it('renders component', async () => {
+    const html = await $fetch('/')
+    expect(html).toContain('Click me')
+  })
 
-  it("api works", async () => {
-    const data = await $fetch("/api/_my-module/status");
-    expect(data).toEqual({ status: "ok" });
-  });
-});
+  it('api works', async () => {
+    const data = await $fetch('/api/_my-module/status')
+    expect(data).toEqual({ status: 'ok' })
+  })
+})
 ```
 
 ## Manual Testing
@@ -112,18 +112,18 @@ For one-time setup tasks:
 
 ```ts
 export default defineNuxtModule({
-  meta: { name: "my-module", version: "2.0.0" },
+  meta: { name: 'my-module', version: '2.0.0' },
 
   async onInstall(nuxt) {
-    await generateInitialConfig(nuxt.options.rootDir);
+    await generateInitialConfig(nuxt.options.rootDir)
   },
 
   async onUpgrade(options, nuxt, previousVersion) {
-    if (semver.lt(previousVersion, "2.0.0")) {
-      await migrateFromV1();
+    if (semver.lt(previousVersion, '2.0.0')) {
+      await migrateFromV1()
     }
   },
-});
+})
 ```
 
 ### TypeScript + ESM Only
@@ -131,13 +131,13 @@ export default defineNuxtModule({
 ```ts
 // Always export typed options
 // ESM only - no CommonJS
-import { something } from "package";
+import { something } from 'package'
 
 export interface ModuleOptions {
-  apiKey: string;
-  debug?: boolean;
+  apiKey: string
+  debug?: boolean
 } // Right
-const { something } = require("package"); // Wrong
+const { something } = require('package') // Wrong
 ```
 
 ### Error Messages
@@ -222,7 +222,7 @@ Three workflows for complete CI/CD:
 ```ts
 meta: {
   compatibility: {
-    nuxt: ">=3.0.0";
+    nuxt: '>=3.0.0'
   }
 }
 ```

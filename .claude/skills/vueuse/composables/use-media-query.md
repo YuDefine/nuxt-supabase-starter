@@ -8,10 +8,10 @@ Reactive Media Query. Once you've created a MediaQueryList object, you can check
 ## Usage
 
 ```ts
-import { useMediaQuery } from "@vueuse/core";
+import { useMediaQuery } from '@vueuse/core'
 
-const isLargeScreen = useMediaQuery("(min-width: 1024px)");
-const isPreferredDark = useMediaQuery("(prefers-color-scheme: dark)");
+const isLargeScreen = useMediaQuery('(min-width: 1024px)')
+const isPreferredDark = useMediaQuery('(prefers-color-scheme: dark)')
 ```
 
 ## Reference

@@ -8,19 +8,19 @@ Keep target refs in sync with a source ref
 ## Usage
 
 ```ts
-import { syncRefs } from "@vueuse/core";
-import { shallowRef } from "vue";
+import { syncRefs } from '@vueuse/core'
+import { shallowRef } from 'vue'
 
-const source = shallowRef("hello");
-const target = shallowRef("target");
+const source = shallowRef('hello')
+const target = shallowRef('target')
 
-const stop = syncRefs(source, target);
+const stop = syncRefs(source, target)
 
-console.log(target.value); // hello
+console.log(target.value) // hello
 
-source.value = "foo";
+source.value = 'foo'
 
-console.log(target.value); // foo
+console.log(target.value) // foo
 ```
 
 ## Options

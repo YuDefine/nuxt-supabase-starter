@@ -94,16 +94,16 @@ pages/
 
 ```vue
 <script setup lang="ts">
-definePage({
-  name: "user-profile",
-  path: "/profile/:userId", // Override default path
-  alias: ["/me", "/profile"],
-  meta: {
-    requiresAuth: true,
-    title: "User Profile",
-    roles: ["user", "admin"],
-  },
-});
+  definePage({
+    name: 'user-profile',
+    path: '/profile/:userId', // Override default path
+    alias: ['/me', '/profile'],
+    meta: {
+      requiresAuth: true,
+      title: 'User Profile',
+      roles: ['user', 'admin'],
+    },
+  })
 </script>
 
 <template>
@@ -117,10 +117,10 @@ definePage({
 
 ```ts
 // ✅ Type-safe with route name
-await navigateTo({ name: "/users/[userId]", params: { userId: "123" } });
+await navigateTo({ name: '/users/[userId]', params: { userId: '123' } })
 
 // ❌ String-based (not type-safe, avoid)
-await navigateTo("/users/123");
+await navigateTo('/users/123')
 ```
 
 **REQUIRED: Check `typed-router.d.ts` for available route names and params before navigating.**
@@ -131,10 +131,10 @@ Pass route name for stricter typing:
 
 ```ts
 // Generic route
-const route = useRoute();
+const route = useRoute()
 
 // Typed route (preferred)
-const route = useRoute("/users/[userId]");
+const route = useRoute('/users/[userId]')
 // route.params.userId is now typed correctly
 ```
 
@@ -142,33 +142,33 @@ const route = useRoute("/users/[userId]");
 
 ```ts
 // Navigate to route
-await navigateTo("/about");
-await navigateTo({ name: "/users/[userId]", params: { userId: "123" } });
+await navigateTo('/about')
+await navigateTo({ name: '/users/[userId]', params: { userId: '123' } })
 
 // Navigate with query
-await navigateTo({ path: "/search", query: { q: "nuxt" } });
+await navigateTo({ path: '/search', query: { q: 'nuxt' } })
 
 // External redirect
-await navigateTo("https://nuxt.com", { external: true });
+await navigateTo('https://nuxt.com', { external: true })
 
 // Replace history
-await navigateTo("/login", { replace: true });
+await navigateTo('/login', { replace: true })
 
 // Open in new tab
-await navigateTo("/docs", { open: { target: "_blank" } });
+await navigateTo('/docs', { open: { target: '_blank' } })
 ```
 
 ## Route Meta & Middleware
 
 ```vue
 <script setup lang="ts">
-definePageMeta({
-  middleware: ["auth", "admin"],
-  layout: "dashboard",
-  meta: {
-    requiresAuth: true,
-  },
-});
+  definePageMeta({
+    middleware: ['auth', 'admin'],
+    layout: 'dashboard',
+    meta: {
+      requiresAuth: true,
+    },
+  })
 </script>
 ```
 

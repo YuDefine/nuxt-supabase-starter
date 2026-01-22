@@ -8,7 +8,7 @@ Wrapper for .
 ## Usage
 
 ```ts
-import { useAsyncValidator } from "@vueuse/integrations/useAsyncValidator";
+import { useAsyncValidator } from '@vueuse/integrations/useAsyncValidator'
 ```
 
 ## Options

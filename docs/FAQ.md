@@ -146,7 +146,7 @@ pnpm docs:build  # 建置靜態網站
 
 ```typescript
 // Client 端
-const { user, loggedIn, signIn, signOut } = useUserSession();
+const { user, loggedIn, signIn, signOut } = useUserSession()
 
 // Server 端
 // 使用 better-auth 提供的方式取得 session
@@ -156,8 +156,8 @@ const { user, loggedIn, signIn, signOut } = useUserSession();
 
 ```typescript
 // ❌ 這是舊的 Supabase Auth，本專案不使用
-const user = useSupabaseUser();
-const user = await serverSupabaseUser(event);
+const user = useSupabaseUser()
+const user = await serverSupabaseUser(event)
 ```
 
 **詳細說明**：見 [AUTH_INTEGRATION.md](verify/AUTH_INTEGRATION.md)

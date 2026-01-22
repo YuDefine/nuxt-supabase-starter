@@ -5,16 +5,16 @@
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
-  modules: ["@nuxthub/core", "@onmax/nuxt-better-auth"],
+  modules: ['@nuxthub/core', '@onmax/nuxt-better-auth'],
   hub: { database: true },
   auth: {
     secondaryStorage: true, // Optional: KV for session caching
     schema: {
       usePlural: false, // user vs users
-      casing: "camelCase", // camelCase or snake_case
+      casing: 'camelCase', // camelCase or snake_case
     },
   },
-});
+})
 ```
 
 ## Schema Generation
@@ -22,7 +22,7 @@ export default defineNuxtConfig({
 The module auto-generates Drizzle schema from Better Auth tables using Better Auth's schema generation API. Schema available via:
 
 ```ts
-import { user, session, account, verification } from "#auth/database";
+import { user, session, account, verification } from '#auth/database'
 ```
 
 ## Creating Custom Tables with Foreign Keys
@@ -31,17 +31,17 @@ Create app tables that reference auth tables by importing `schema` from `hub:db`
 
 ```ts
 // server/db/schema.ts
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
-import { schema } from "hub:db";
+import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
+import { schema } from 'hub:db'
 
-export const posts = sqliteTable("posts", {
-  id: text("id").primaryKey(),
-  title: text("title").notNull(),
-  authorId: text("author_id")
+export const posts = sqliteTable('posts', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  authorId: text('author_id')
     .notNull()
     .references(() => schema.user.id),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
-});
+  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+})
 ```
 
 **Available Auth Tables:**
@@ -98,10 +98,10 @@ Add custom columns via NuxtHub's schema hooks:
 ```ts
 // server/plugins/extend-schema.ts
 export default defineNitroPlugin(() => {
-  useNitroApp().hooks.hook("hub:db:schema:extend", (schema) => {
+  useNitroApp().hooks.hook('hub:db:schema:extend', (schema) => {
     // Add custom tables or extend existing
-  });
-});
+  })
+})
 ```
 
 ## Secondary Storage (KV)
@@ -110,7 +110,7 @@ Enable session caching with KV:
 
 ```ts
 auth: {
-  secondaryStorage: true;
+  secondaryStorage: true
 }
 ```
 
@@ -122,12 +122,12 @@ Database adapter injected via context:
 
 ```ts
 // server/auth.config.ts
-import { defineServerAuth } from "#auth/server";
+import { defineServerAuth } from '#auth/server'
 
 export default defineServerAuth(({ db }) => ({
   database: db, // Already configured when hub.database: true
   emailAndPassword: { enabled: true },
-}));
+}))
 ```
 
 ## Manual Database Setup

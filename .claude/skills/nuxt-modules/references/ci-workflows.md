@@ -21,7 +21,7 @@ name: ci
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+    tags: ['v*']
   pull_request:
     branches: [main]
 
@@ -88,7 +88,7 @@ permissions:
 on:
   push:
     tags:
-      - "v*"
+      - 'v*'
 
 jobs:
   wait-for-ci:
@@ -114,7 +114,7 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-          registry-url: "https://registry.npmjs.org"
+          registry-url: 'https://registry.npmjs.org'
 
       - run: pnpm install
       - run: pnpm dev:prepare

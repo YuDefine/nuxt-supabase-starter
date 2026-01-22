@@ -8,14 +8,14 @@ Reactive WebFrame zoom factor.
 ## Usage
 
 ```ts
-import { useZoomFactor } from "@vueuse/electron";
+import { useZoomFactor } from '@vueuse/electron'
 
 // enable nodeIntegration if you don't provide webFrame explicitly
 // see: https://www.electronjs.org/docs/api/webview-tag#nodeintegration
 // Ref result will return
-const factor = useZoomFactor();
-console.log(factor.value); // print current zoom factor
-factor.value = 2; // change current zoom factor
+const factor = useZoomFactor()
+console.log(factor.value) // print current zoom factor
+factor.value = 2 // change current zoom factor
 ```
 
 ## Reference

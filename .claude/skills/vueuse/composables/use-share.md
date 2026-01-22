@@ -8,16 +8,16 @@ Reactive Web Share API. The Browser provides features that can share content in 
 ## Usage
 
 ```ts
-import { useShare } from "@vueuse/core";
+import { useShare } from '@vueuse/core'
 
-const { share, isSupported } = useShare();
+const { share, isSupported } = useShare()
 
 function startShare() {
   share({
-    title: "Hello",
-    text: "Hello my friend!",
+    title: 'Hello',
+    text: 'Hello my friend!',
     url: location.href,
-  });
+  })
 }
 ```
 

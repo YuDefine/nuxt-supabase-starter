@@ -21,34 +21,34 @@ app/stores/
 
 ```typescript
 // app/stores/myStore.ts
-import { defineStore } from "pinia";
+import { defineStore } from 'pinia'
 
-export const useMyStore = defineStore("my-store", () => {
+export const useMyStore = defineStore('my-store', () => {
   // 狀態 (ref)
-  const items = ref<Item[]>([]);
-  const isLoading = ref(false);
-  const error = ref<Error | null>(null);
+  const items = ref<Item[]>([])
+  const isLoading = ref(false)
+  const error = ref<Error | null>(null)
 
   // Getters (computed)
-  const itemCount = computed(() => items.value.length);
-  const hasItems = computed(() => items.value.length > 0);
+  const itemCount = computed(() => items.value.length)
+  const hasItems = computed(() => items.value.length > 0)
 
   // Actions (function)
   async function loadItems() {
-    isLoading.value = true;
-    error.value = null;
+    isLoading.value = true
+    error.value = null
     try {
-      const data = await $fetch("/api/v1/items");
-      items.value = data;
+      const data = await $fetch('/api/v1/items')
+      items.value = data
     } catch (e) {
-      error.value = e as Error;
+      error.value = e as Error
     } finally {
-      isLoading.value = false;
+      isLoading.value = false
     }
   }
 
   function clearItems() {
-    items.value = [];
+    items.value = []
   }
 
   // 使用 readonly 保護狀態
@@ -60,8 +60,8 @@ export const useMyStore = defineStore("my-store", () => {
     hasItems,
     loadItems,
     clearItems,
-  };
-});
+  }
+})
 ```
 
 ---
@@ -87,18 +87,18 @@ export const Auth = defineStore('auth', ...)
 
 ```vue
 <script setup lang="ts">
-const preferencesStore = useUserPreferencesStore();
+  const preferencesStore = useUserPreferencesStore()
 
-// 讀取狀態
-console.log(preferencesStore.preferences);
-console.log(preferencesStore.isLoading);
+  // 讀取狀態
+  console.log(preferencesStore.preferences)
+  console.log(preferencesStore.isLoading)
 
-// 呼叫 Action
-await preferencesStore.updatePrimaryColor("blue");
+  // 呼叫 Action
+  await preferencesStore.updatePrimaryColor('blue')
 
-// 解構使用（保持響應性）
-const { preferences, isLoading } = storeToRefs(preferencesStore);
-const { updatePrimaryColor } = preferencesStore;
+  // 解構使用（保持響應性）
+  const { preferences, isLoading } = storeToRefs(preferencesStore)
+  const { updatePrimaryColor } = preferencesStore
 </script>
 ```
 
@@ -111,23 +111,23 @@ const { updatePrimaryColor } = preferencesStore;
 ```typescript
 // app/plugins/my-store-init.client.ts
 export default defineNuxtPlugin(() => {
-  const { user, loggedIn } = useUserSession();
-  const myStore = useMyStore();
+  const { user, loggedIn } = useUserSession()
+  const myStore = useMyStore()
 
   watch(
     loggedIn,
     (isLoggedIn) => {
       if (isLoggedIn && user.value?.id) {
         // 使用者登入 → 載入資料
-        myStore.loadData();
+        myStore.loadData()
       } else {
         // 使用者登出 → 清空資料
-        myStore.clearData();
+        myStore.clearData()
       }
     },
-    { immediate: true },
-  );
-});
+    { immediate: true }
+  )
+})
 ```
 
 **優點**：
@@ -145,18 +145,18 @@ export default defineNuxtPlugin(() => {
 ```typescript
 // app/composables/useMyFeature.ts
 export function useMyFeature(config: MyConfig) {
-  const store = useMyStore();
+  const store = useMyStore()
 
   // 初始化（如果尚未初始化）
   if (!store.isInitialized) {
-    store.initialize(config);
+    store.initialize(config)
   }
 
   return {
     data: store.data,
     isLoading: store.isLoading,
     refresh: store.refresh,
-  };
+  }
 }
 ```
 
@@ -170,39 +170,39 @@ export function useMyFeature(config: MyConfig) {
 return {
   preferences: readonly(preferences), // ✅ 防止外部直接修改
   updatePreferences, // 通過 action 修改
-};
+}
 ```
 
 ### 2. 避免在 Store 中使用 `useState`
 
 ```typescript
 // ❌ 不要這樣
-export const useMyStore = defineStore("my-store", () => {
-  const data = useState("my-data", () => null); // 錯誤！
-  return { data };
-});
+export const useMyStore = defineStore('my-store', () => {
+  const data = useState('my-data', () => null) // 錯誤！
+  return { data }
+})
 
 // ✅ 使用 ref
-export const useMyStore = defineStore("my-store", () => {
-  const data = ref(null); // 正確
-  return { data };
-});
+export const useMyStore = defineStore('my-store', () => {
+  const data = ref(null) // 正確
+  return { data }
+})
 ```
 
 ### 3. 錯誤處理
 
 ```typescript
 async function loadData() {
-  isLoading.value = true;
-  error.value = null;
+  isLoading.value = true
+  error.value = null
   try {
-    const result = await $fetch("/api/data");
-    data.value = result;
+    const result = await $fetch('/api/data')
+    data.value = result
   } catch (e) {
-    error.value = e as Error;
-    console.error("Failed to load data:", e);
+    error.value = e as Error
+    console.error('Failed to load data:', e)
   } finally {
-    isLoading.value = false;
+    isLoading.value = false
   }
 }
 ```
@@ -221,8 +221,8 @@ async function loadData() {
 
 ```typescript
 // 在瀏覽器 console 中
-const { $pinia } = useNuxtApp();
-console.log($pinia.state.value); // 查看所有 store 狀態
+const { $pinia } = useNuxtApp()
+console.log($pinia.state.value) // 查看所有 store 狀態
 ```
 
 ---

@@ -8,9 +8,9 @@ Reactive pointer lock.
 ## Usage
 
 ```ts
-import { usePointerLock } from "@vueuse/core";
+import { usePointerLock } from '@vueuse/core'
 
-const { isSupported, lock, unlock, element, triggerElement } = usePointerLock();
+const { isSupported, lock, unlock, element, triggerElement } = usePointerLock()
 ```
 
 ## Returns

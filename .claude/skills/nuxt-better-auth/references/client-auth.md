@@ -16,7 +16,7 @@ const {
   signOut, // Sign out and clear session
   fetchSession, // Manually refresh session
   updateUser, // Optimistic local user update
-} = useUserSession();
+} = useUserSession()
 ```
 
 ## Sign In
@@ -25,16 +25,16 @@ const {
 // Email/password
 await signIn.email(
   {
-    email: "user@example.com",
-    password: "password123",
+    email: 'user@example.com',
+    password: 'password123',
   },
   {
-    onSuccess: () => navigateTo("/dashboard"),
-  },
-);
+    onSuccess: () => navigateTo('/dashboard'),
+  }
+)
 
 // OAuth
-await signIn.social({ provider: "github" });
+await signIn.social({ provider: 'github' })
 ```
 
 ## Sign Up
@@ -42,29 +42,29 @@ await signIn.social({ provider: "github" });
 ```ts
 await signUp.email(
   {
-    email: "user@example.com",
-    password: "password123",
-    name: "John Doe",
+    email: 'user@example.com',
+    password: 'password123',
+    name: 'John Doe',
   },
   {
-    onSuccess: () => navigateTo("/welcome"),
-  },
-);
+    onSuccess: () => navigateTo('/welcome'),
+  }
+)
 ```
 
 ## Sign Out
 
 ```ts
-await signOut();
+await signOut()
 // or with redirect
-await signOut({ redirect: "/login" });
+await signOut({ redirect: '/login' })
 ```
 
 ## Check Auth State
 
 ```vue
 <script setup>
-const { user, loggedIn, ready } = useUserSession();
+  const { user, loggedIn, ready } = useUserSession()
 </script>
 
 <template>
@@ -80,12 +80,12 @@ Always validate redirect URLs from query params to prevent open redirects:
 
 ```ts
 function getSafeRedirect() {
-  const redirect = route.query.redirect as string;
+  const redirect = route.query.redirect as string
   // Must start with / and not // (prevents protocol-relative URLs)
-  if (!redirect?.startsWith("/") || redirect.startsWith("//")) {
-    return "/";
+  if (!redirect?.startsWith('/') || redirect.startsWith('//')) {
+    return '/'
   }
-  return redirect;
+  return redirect
 }
 
 await signIn.email(
@@ -95,8 +95,8 @@ await signIn.email(
   },
   {
     onSuccess: () => navigateTo(getSafeRedirect()),
-  },
-);
+  }
+)
 ```
 
 ## Wait for Session
@@ -104,7 +104,7 @@ await signIn.email(
 Useful when needing session before rendering:
 
 ```ts
-await waitForSession(); // 5s timeout
+await waitForSession() // 5s timeout
 if (loggedIn.value) {
   // Session is ready
 }
@@ -114,7 +114,7 @@ if (loggedIn.value) {
 
 ```ts
 // Refetch from server
-await fetchSession({ force: true });
+await fetchSession({ force: true })
 ```
 
 ## Session Management
@@ -122,19 +122,19 @@ await fetchSession({ force: true });
 Additional session management via Better Auth client:
 
 ```ts
-const { client } = useUserSession();
+const { client } = useUserSession()
 
 // List all active sessions for current user
-const sessions = await client.listSessions();
+const sessions = await client.listSessions()
 
 // Revoke a specific session
-await client.revokeSession({ sessionId: "xxx" });
+await client.revokeSession({ sessionId: 'xxx' })
 
 // Revoke all sessions except current
-await client.revokeOtherSessions();
+await client.revokeOtherSessions()
 
 // Revoke all sessions (logs out everywhere)
-await client.revokeSessions();
+await client.revokeSessions()
 ```
 
 These methods require the user to be authenticated.

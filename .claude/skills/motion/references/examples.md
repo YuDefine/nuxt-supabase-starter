@@ -30,8 +30,8 @@ These React/CSS libraries provide patterns easily ported to Motion Vue:
 ```vue
 <!-- Parallax -->
 <script setup>
-const { scrollYProgress } = useScroll();
-const y = useTransform(scrollYProgress, [0, 1], [0, -200]);
+  const { scrollYProgress } = useScroll()
+  const y = useTransform(scrollYProgress, [0, 1], [0, -200])
 </script>
 
 <Motion.div :style="{ y }">Parallax content</Motion.div>
@@ -40,7 +40,7 @@ const y = useTransform(scrollYProgress, [0, 1], [0, -200]);
 ```vue
 <!-- Progress bar -->
 <Motion.div
-  class="fixed top-0 left-0 right-0 h-1 bg-blue-500 origin-left"
+  class="fixed top-0 right-0 left-0 h-1 origin-left bg-blue-500"
   :style="{ scaleX: scrollYProgress }"
 />
 ```
@@ -52,7 +52,7 @@ const y = useTransform(scrollYProgress, [0, 1], [0, -200]);
 <Motion.div
   :layoutId="`card-${id}`"
   @click="expanded = !expanded"
-  :class="expanded ? 'w-full h-64' : 'w-32 h-32'"
+  :class="expanded ? 'h-64 w-full' : 'h-32 w-32'"
 />
 ```
 
@@ -73,19 +73,19 @@ const y = useTransform(scrollYProgress, [0, 1], [0, -200]);
 ```vue
 <!-- Magnetic button -->
 <script setup>
-const x = useMotionValue(0)
-const y = useMotionValue(0)
+  const x = useMotionValue(0)
+  const y = useMotionValue(0)
 
-function handleMouse(e: MouseEvent) {
-  const rect = (e.target as HTMLElement).getBoundingClientRect()
-  x.set(e.clientX - rect.left - rect.width / 2)
-  y.set(e.clientY - rect.top - rect.height / 2)
-}
+  function handleMouse(e: MouseEvent) {
+    const rect = (e.target as HTMLElement).getBoundingClientRect()
+    x.set(e.clientX - rect.left - rect.width / 2)
+    y.set(e.clientY - rect.top - rect.height / 2)
+  }
 
-function reset() {
-  x.set(0)
-  y.set(0)
-}
+  function reset() {
+    x.set(0)
+    y.set(0)
+  }
 </script>
 
 <Motion.button
@@ -111,7 +111,7 @@ function reset() {
 ```vue
 <!-- Staggered text reveal -->
 <script setup>
-const words = text.split(" ");
+  const words = text.split(' ')
 </script>
 
 <template>
@@ -123,7 +123,7 @@ const words = text.split(" ");
     >
       {{ word }}
     </Motion.span>
-    {{ " " }}
+    {{ ' ' }}
   </span>
 </template>
 ```
@@ -163,14 +163,14 @@ const words = text.split(" ");
 ```vue
 <!-- Gradient follow cursor -->
 <script setup>
-const x = useMotionValue(0)
-const y = useMotionValue(0)
-const background = useMotionTemplate`radial-gradient(circle at ${x}px ${y}px, #3b82f6, transparent 80%)`
+  const x = useMotionValue(0)
+  const y = useMotionValue(0)
+  const background = useMotionTemplate`radial-gradient(circle at ${x}px ${y}px, #3b82f6, transparent 80%)`
 
-function handleMouse(e: MouseEvent) {
-  x.set(e.clientX)
-  y.set(e.clientY)
-}
+  function handleMouse(e: MouseEvent) {
+    x.set(e.clientX)
+    y.set(e.clientY)
+  }
 </script>
 
 <Motion.div :style="{ background }" @mousemove="handleMouse" class="fixed inset-0" />

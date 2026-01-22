@@ -8,22 +8,22 @@ When Better Auth runs on a separate backend (microservices, standalone server), 
 
 ```ts
 export default defineNuxtConfig({
-  modules: ["@onmax/nuxt-better-auth"],
+  modules: ['@onmax/nuxt-better-auth'],
   auth: {
     clientOnly: true,
   },
-});
+})
 ```
 
 ### 2. Point client to external server
 
 ```ts [app/auth.config.ts]
-import { createAuthClient } from "better-auth/vue";
+import { createAuthClient } from 'better-auth/vue'
 
 export function createAppAuthClient(_baseURL: string) {
   return createAuthClient({
-    baseURL: "https://auth.example.com", // External auth server
-  });
+    baseURL: 'https://auth.example.com', // External auth server
+  })
 }
 ```
 

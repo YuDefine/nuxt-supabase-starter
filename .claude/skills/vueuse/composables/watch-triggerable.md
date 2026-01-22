@@ -8,18 +8,18 @@ Watch that can be triggered manually
 ## Usage
 
 ```ts
-import { watchTriggerable } from "@vueuse/core";
-import { nextTick, shallowRef } from "vue";
+import { watchTriggerable } from '@vueuse/core'
+import { nextTick, shallowRef } from 'vue'
 
-const source = shallowRef(0);
+const source = shallowRef(0)
 
-const { trigger, ignoreUpdates } = watchTriggerable(source, (v) => console.log(`Changed to ${v}!`));
+const { trigger, ignoreUpdates } = watchTriggerable(source, (v) => console.log(`Changed to ${v}!`))
 
-source.value = "bar";
-await nextTick(); // logs: Changed to bar!
+source.value = 'bar'
+await nextTick() // logs: Changed to bar!
 
 // Execution of WatchCallback via `trigger` does not require waiting
-trigger(); // logs: Changed to bar!
+trigger() // logs: Changed to bar!
 ```
 
 ## Returns

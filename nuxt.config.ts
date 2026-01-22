@@ -1,36 +1,36 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
-import pkg from "./package.json";
+import pkg from './package.json'
 
 export default defineNuxtConfig({
-  compatibilityDate: "2025-05-15",
+  compatibilityDate: '2025-05-15',
   ssr: false,
 
   modules: [
-    "@nuxt/ui",
-    "@nuxt/test-utils/module",
-    "@nuxt/image",
-    "@nuxtjs/supabase",
-    "@pinia/nuxt",
-    "@vueuse/nuxt",
-    "@sentry/nuxt/module",
-    "@onmax/nuxt-better-auth",
-    "@pinia/colada-nuxt",
-    "nuxt-charts",
+    '@nuxt/ui',
+    '@nuxt/test-utils/module',
+    '@nuxt/image',
+    '@nuxtjs/supabase',
+    '@pinia/nuxt',
+    '@vueuse/nuxt',
+    '@sentry/nuxt/module',
+    '@onmax/nuxt-better-auth',
+    '@pinia/colada-nuxt',
+    'nuxt-charts',
   ],
 
   // @nuxt/image 配置：影像優化
   image: {
     quality: 80,
-    format: ["webp", "jpg", "png"],
+    format: ['webp', 'jpg', 'png'],
   },
 
-  css: ["~/assets/css/main.css"],
+  css: ['~/assets/css/main.css'],
 
   // 元件目錄配置：移除路徑前綴，讓元件名稱更簡潔
   // 例如 components/machines/MachineTable.vue 可直接使用 <MachineTable />
   components: [
     {
-      path: "~/components",
+      path: '~/components',
       pathPrefix: false,
     },
   ],
@@ -38,8 +38,8 @@ export default defineNuxtConfig({
   icon: {
     customCollections: [
       {
-        prefix: "custom",
-        dir: "./app/assets/icons",
+        prefix: 'custom',
+        dir: './app/assets/icons',
       },
     ],
   },
@@ -73,7 +73,7 @@ export default defineNuxtConfig({
     // Session 設定（password 由環境變數 NUXT_SESSION_PASSWORD 提供）
     session: {
       maxAge: 60 * 60 * 24 * 7, // 7 天
-      password: process.env.NUXT_SESSION_PASSWORD || "",
+      password: process.env.NUXT_SESSION_PASSWORD || '',
     },
     public: {
       supabase: {
@@ -92,7 +92,7 @@ export default defineNuxtConfig({
       __APP_VERSION__: JSON.stringify(pkg.version),
     },
     esbuild: {
-      drop: process.env.NODE_ENV === "production" ? ["console", "debugger"] : [],
+      drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : [],
     },
   },
 
@@ -100,25 +100,25 @@ export default defineNuxtConfig({
     head: {
       link: [
         // favicon (多種尺寸)
-        { rel: "icon", type: "image/x-icon", href: "/favicon.ico" },
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
         {
-          rel: "icon",
-          type: "image/png",
-          sizes: "16x16",
-          href: "/favicon-16x16.png",
+          rel: 'icon',
+          type: 'image/png',
+          sizes: '16x16',
+          href: '/favicon-16x16.png',
         },
         {
-          rel: "icon",
-          type: "image/png",
-          sizes: "32x32",
-          href: "/favicon-32x32.png",
+          rel: 'icon',
+          type: 'image/png',
+          sizes: '32x32',
+          href: '/favicon-32x32.png',
         },
 
         // iOS / Android
         {
-          rel: "apple-touch-icon",
-          sizes: "180x180",
-          href: "/apple-touch-icon.png",
+          rel: 'apple-touch-icon',
+          sizes: '180x180',
+          href: '/apple-touch-icon.png',
         },
       ],
     },
@@ -145,17 +145,17 @@ export default defineNuxtConfig({
 
   // 啟用 hidden source maps（上傳到 Sentry 但不公開）
   sourcemap: {
-    client: "hidden",
+    client: 'hidden',
   },
 
   nitro: {
     experimental: {
       openAPI: true,
     },
-    preset: "cloudflare_module",
+    preset: 'cloudflare_module',
     cloudflare: {
       deployConfig: true,
       nodeCompat: true,
     },
   },
-});
+})

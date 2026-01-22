@@ -8,22 +8,22 @@ Create a reactive ref that can be used to access & modify LocalStorage or Sessio
 ## Usage
 
 ```ts
-import { useStorage } from "@vueuse/core";
+import { useStorage } from '@vueuse/core'
 
 // bind object
-const state = useStorage("my-store", { hello: "hi", greeting: "Hello" });
+const state = useStorage('my-store', { hello: 'hi', greeting: 'Hello' })
 
 // bind boolean
-const flag = useStorage("my-flag", true); // returns Ref<boolean>
+const flag = useStorage('my-flag', true) // returns Ref<boolean>
 
 // bind number
-const count = useStorage("my-count", 0); // returns Ref<number>
+const count = useStorage('my-count', 0) // returns Ref<number>
 
 // bind string with SessionStorage
-const id = useStorage("my-id", "some-string-id", sessionStorage); // returns Ref<string>
+const id = useStorage('my-id', 'some-string-id', sessionStorage) // returns Ref<string>
 
 // delete data from storage
-state.value = null;
+state.value = null
 ```
 
 ## Options

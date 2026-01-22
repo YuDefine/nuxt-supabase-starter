@@ -34,56 +34,56 @@ formatters.ts → formatters.spec.ts
 ### Basic
 
 ```ts
-import { mount } from "@vue/test-utils";
-import Button from "./Button.vue";
+import { mount } from '@vue/test-utils'
+import Button from './Button.vue'
 
-it("renders slot", () => {
+it('renders slot', () => {
   const wrapper = mount(Button, {
-    slots: { default: "Click me" },
-  });
-  expect(wrapper.text()).toBe("Click me");
-});
+    slots: { default: 'Click me' },
+  })
+  expect(wrapper.text()).toBe('Click me')
+})
 
-it("emits on click", async () => {
-  const wrapper = mount(Button);
-  await wrapper.trigger("click");
-  expect(wrapper.emitted("click")).toHaveLength(1);
-});
+it('emits on click', async () => {
+  const wrapper = mount(Button)
+  await wrapper.trigger('click')
+  expect(wrapper.emitted('click')).toHaveLength(1)
+})
 ```
 
 ### Props
 
 ```ts
-it("applies variant class", () => {
+it('applies variant class', () => {
   const wrapper = mount(Button, {
-    props: { variant: "primary" },
-  });
-  expect(wrapper.classes()).toContain("btn-primary");
-});
+    props: { variant: 'primary' },
+  })
+  expect(wrapper.classes()).toContain('btn-primary')
+})
 ```
 
 ### Emits
 
 ```ts
-it("emits update with payload", async () => {
-  const wrapper = mount(Input);
-  await wrapper.find("input").setValue("new value");
-  expect(wrapper.emitted("update:modelValue")?.[0]).toEqual(["new value"]);
-});
+it('emits update with payload', async () => {
+  const wrapper = mount(Input)
+  await wrapper.find('input').setValue('new value')
+  expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['new value'])
+})
 ```
 
 ### Slots
 
 ```ts
-it("renders named slots", () => {
+it('renders named slots', () => {
   const wrapper = mount(Card, {
     slots: {
-      header: "<h1>Title</h1>",
-      default: "<p>Content</p>",
+      header: '<h1>Title</h1>',
+      default: '<p>Content</p>',
     },
-  });
-  expect(wrapper.html()).toContain("<h1>Title</h1>");
-});
+  })
+  expect(wrapper.html()).toContain('<h1>Title</h1>')
+})
 ```
 
 ## Composable Tests
@@ -91,23 +91,23 @@ it("renders named slots", () => {
 Call directly, no mounting needed:
 
 ```ts
-import { useCounter } from "./useCounter";
+import { useCounter } from './useCounter'
 
-it("increments count", () => {
-  const { count, increment } = useCounter(0);
-  expect(count.value).toBe(0);
-  increment();
-  expect(count.value).toBe(1);
-});
+it('increments count', () => {
+  const { count, increment } = useCounter(0)
+  expect(count.value).toBe(0)
+  increment()
+  expect(count.value).toBe(1)
+})
 
-it("resets to initial", () => {
-  const { count, increment, reset } = useCounter(5);
-  increment();
-  increment();
-  expect(count.value).toBe(7);
-  reset();
-  expect(count.value).toBe(5);
-});
+it('resets to initial', () => {
+  const { count, increment, reset } = useCounter(5)
+  increment()
+  increment()
+  expect(count.value).toBe(7)
+  reset()
+  expect(count.value).toBe(5)
+})
 ```
 
 ## Utils Tests
@@ -115,23 +115,23 @@ it("resets to initial", () => {
 Easiest - pure functions:
 
 ```ts
-import { formatCurrency, slugify } from "./formatters";
+import { formatCurrency, slugify } from './formatters'
 
-describe("formatCurrency", () => {
-  it("formats USD", () => {
-    expect(formatCurrency(10.5)).toBe("$10.50");
-  });
-});
+describe('formatCurrency', () => {
+  it('formats USD', () => {
+    expect(formatCurrency(10.5)).toBe('$10.50')
+  })
+})
 
-describe("slugify", () => {
-  it("converts to lowercase", () => {
-    expect(slugify("Hello World")).toBe("hello-world");
-  });
+describe('slugify', () => {
+  it('converts to lowercase', () => {
+    expect(slugify('Hello World')).toBe('hello-world')
+  })
 
-  it("removes special chars", () => {
-    expect(slugify("Hello! World?")).toBe("hello-world");
-  });
-});
+  it('removes special chars', () => {
+    expect(slugify('Hello! World?')).toBe('hello-world')
+  })
+})
 ```
 
 ## Mocking
@@ -139,14 +139,14 @@ describe("slugify", () => {
 **Composables:**
 
 ```ts
-import { vi } from "vitest";
+import { vi } from 'vitest'
 
-vi.mock("./useAuth", () => ({
+vi.mock('./useAuth', () => ({
   useAuth: vi.fn(() => ({
-    user: { id: 1, name: "Test" },
+    user: { id: 1, name: 'Test' },
     isAuthenticated: true,
   })),
-}));
+}))
 ```
 
 **API calls:**
@@ -155,8 +155,8 @@ vi.mock("./useAuth", () => ({
 global.fetch = vi.fn(() =>
   Promise.resolve({
     json: () => Promise.resolve({ data: [] }),
-  }),
-);
+  })
+)
 ```
 
 ## Best Practices

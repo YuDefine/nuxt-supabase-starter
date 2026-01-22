@@ -1,81 +1,81 @@
 <script setup lang="ts">
-const colorMode = useColorMode();
-const toast = useToast();
+  const colorMode = useColorMode()
+  const toast = useToast()
 
-// Toggle color mode
-function toggleColorMode() {
-  colorMode.preference = colorMode.value === "dark" ? "light" : "dark";
-}
+  // Toggle color mode
+  function toggleColorMode() {
+    colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
+  }
 
-// Demo data for charts - 使用 nuxt-charts 正確格式
+  // Demo data for charts - 使用 nuxt-charts 正確格式
 
-// LineChart 資料
-const lineChartData = [
-  { month: "Jan", revenue: 40 },
-  { month: "Feb", revenue: 55 },
-  { month: "Mar", revenue: 45 },
-  { month: "Apr", revenue: 70 },
-  { month: "May", revenue: 65 },
-  { month: "Jun", revenue: 80 },
-];
-const lineCategories = {
-  revenue: { name: "Revenue", color: "#3b82f6" },
-};
-function lineXFormatter(tick: number): string {
-  return lineChartData[tick]?.month ?? "";
-}
+  // LineChart 資料
+  const lineChartData = [
+    { month: 'Jan', revenue: 40 },
+    { month: 'Feb', revenue: 55 },
+    { month: 'Mar', revenue: 45 },
+    { month: 'Apr', revenue: 70 },
+    { month: 'May', revenue: 65 },
+    { month: 'Jun', revenue: 80 },
+  ]
+  const lineCategories = {
+    revenue: { name: 'Revenue', color: '#3b82f6' },
+  }
+  function lineXFormatter(tick: number): string {
+    return lineChartData[tick]?.month ?? ''
+  }
 
-// BarChart 資料
-const barChartData = [
-  { name: "Product A", sales: 120, returns: 20 },
-  { name: "Product B", sales: 85, returns: 15 },
-  { name: "Product C", sales: 150, returns: 30 },
-  { name: "Product D", sales: 95, returns: 10 },
-];
-const barCategories = {
-  sales: { name: "Sales", color: "#22c55e" },
-};
-function barXFormatter(tick: number): string {
-  return barChartData[tick]?.name ?? "";
-}
+  // BarChart 資料
+  const barChartData = [
+    { name: 'Product A', sales: 120, returns: 20 },
+    { name: 'Product B', sales: 85, returns: 15 },
+    { name: 'Product C', sales: 150, returns: 30 },
+    { name: 'Product D', sales: 95, returns: 10 },
+  ]
+  const barCategories = {
+    sales: { name: 'Sales', color: '#22c55e' },
+  }
+  function barXFormatter(tick: number): string {
+    return barChartData[tick]?.name ?? ''
+  }
 
-// DonutChart 資料
-const donutData = [
-  { name: "Desktop", percentage: 45 },
-  { name: "Mobile", percentage: 35 },
-  { name: "Tablet", percentage: 20 },
-];
-const donutCategories = {
-  desktop: { name: "Desktop", color: "#3b82f6" },
-  mobile: { name: "Mobile", color: "#ef4444" },
-  tablet: { name: "Tablet", color: "#10b981" },
-};
+  // DonutChart 資料
+  const donutData = [
+    { name: 'Desktop', percentage: 45 },
+    { name: 'Mobile', percentage: 35 },
+    { name: 'Tablet', percentage: 20 },
+  ]
+  const donutCategories = {
+    desktop: { name: 'Desktop', color: '#3b82f6' },
+    mobile: { name: 'Mobile', color: '#ef4444' },
+    tablet: { name: 'Tablet', color: '#10b981' },
+  }
 
-// Form state
-const formState = reactive({
-  email: "",
-  name: "",
-  notifications: true,
-});
+  // Form state
+  const formState = reactive({
+    email: '',
+    name: '',
+    notifications: true,
+  })
 
-// Modal state
-const isModalOpen = ref(false);
+  // Modal state
+  const isModalOpen = ref(false)
 
-// Dropdown items
-const dropdownItems = [
-  { label: "Profile", icon: "i-lucide-user" },
-  { label: "Settings", icon: "i-lucide-settings" },
-  { label: "Logout", icon: "i-lucide-log-out" },
-];
+  // Dropdown items
+  const dropdownItems = [
+    { label: 'Profile', icon: 'i-lucide-user' },
+    { label: 'Settings', icon: 'i-lucide-settings' },
+    { label: 'Logout', icon: 'i-lucide-log-out' },
+  ]
 
-// Show toast
-function showToast() {
-  toast.add({
-    title: "Success!",
-    description: "This is a demo toast notification.",
-    color: "success",
-  });
-}
+  // Show toast
+  function showToast() {
+    toast.add({
+      title: 'Success!',
+      description: 'This is a demo toast notification.',
+      color: 'success',
+    })
+  }
 </script>
 
 <template>

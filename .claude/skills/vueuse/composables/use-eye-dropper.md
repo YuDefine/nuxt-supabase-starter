@@ -8,9 +8,9 @@ Reactive EyeDropper API
 ## Usage
 
 ```ts
-import { useEyeDropper } from "@vueuse/core";
+import { useEyeDropper } from '@vueuse/core'
 
-const { isSupported, open, sRGBHex } = useEyeDropper();
+const { isSupported, open, sRGBHex } = useEyeDropper()
 ```
 
 ## Options

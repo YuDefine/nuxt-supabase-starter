@@ -10,15 +10,15 @@ Explicitly define the dependencies of computed.
 ```ts
 // @include: main
 // ---cut---
-console.log(computedRef.value); // 0
+console.log(computedRef.value) // 0
 
-counter.value += 1;
+counter.value += 1
 
-console.log(computedRef.value); // 0
+console.log(computedRef.value) // 0
 
-source.value = "bar";
+source.value = 'bar'
 
-console.log(computedRef.value); // 1
+console.log(computedRef.value) // 1
 ```
 
 ## Reference

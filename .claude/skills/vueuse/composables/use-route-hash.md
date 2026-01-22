@@ -8,12 +8,12 @@ Shorthand for a reactive .
 ## Usage
 
 ```ts
-import { useRouteHash } from "@vueuse/router";
+import { useRouteHash } from '@vueuse/router'
 
-const search = useRouteHash();
+const search = useRouteHash()
 
-console.log(search.value); // route.hash
-search.value = "foobar"; // router.replace({ hash: 'foobar' })
+console.log(search.value) // route.hash
+search.value = 'foobar' // router.replace({ hash: 'foobar' })
 ```
 
 ## Reference

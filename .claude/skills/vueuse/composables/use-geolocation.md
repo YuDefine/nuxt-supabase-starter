@@ -8,9 +8,9 @@ Reactive Geolocation API. It allows the user to provide their location to web ap
 ## Usage
 
 ```ts
-import { useGeolocation } from "@vueuse/core";
+import { useGeolocation } from '@vueuse/core'
 
-const { coords, locatedAt, error, resume, pause } = useGeolocation();
+const { coords, locatedAt, error, resume, pause } = useGeolocation()
 ```
 
 ## Returns

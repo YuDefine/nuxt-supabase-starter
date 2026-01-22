@@ -8,15 +8,15 @@ Call function on every . With controls of pausing and resuming.
 ## Usage
 
 ```ts
-import { useRafFn } from "@vueuse/core";
-import { shallowRef } from "vue";
+import { useRafFn } from '@vueuse/core'
+import { shallowRef } from 'vue'
 
-const count = shallowRef(0);
+const count = shallowRef(0)
 
 const { pause, resume } = useRafFn(() => {
-  count.value++;
-  console.log(count.value);
-});
+  count.value++
+  console.log(count.value)
+})
 ```
 
 ## Options

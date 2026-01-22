@@ -43,8 +43,8 @@ pnpm add motion-v @vueuse/nuxt
 ```ts
 // nuxt.config.ts - Nuxt 3 setup
 export default defineNuxtConfig({
-  modules: ["motion-v/nuxt"],
-});
+  modules: ['motion-v/nuxt'],
+})
 ```
 
 ## Quick Reference
@@ -71,7 +71,7 @@ Render any HTML/SVG element with animation capabilities:
 
 ```vue
 <script setup lang="ts">
-import { Motion } from "motion-v";
+  import { Motion } from 'motion-v'
 </script>
 
 <template>

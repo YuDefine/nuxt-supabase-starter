@@ -8,11 +8,11 @@ Listen for keyboard keystrokes.
 ## Usage
 
 ```ts
-import { onKeyStroke } from "@vueuse/core";
+import { onKeyStroke } from '@vueuse/core'
 
-onKeyStroke("ArrowDown", (e) => {
-  e.preventDefault();
-});
+onKeyStroke('ArrowDown', (e) => {
+  e.preventDefault()
+})
 ```
 
 ## Options

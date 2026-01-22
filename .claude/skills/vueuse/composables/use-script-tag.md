@@ -8,15 +8,15 @@ Creates a script tag, with support for automatically unloading (deleting) the sc
 ## Usage
 
 ```ts
-import { useScriptTag } from "@vueuse/core";
+import { useScriptTag } from '@vueuse/core'
 
 useScriptTag(
-  "https://player.twitch.tv/js/embed/v1.js",
+  'https://player.twitch.tv/js/embed/v1.js',
   // on script tag loaded.
   (el: HTMLScriptElement) => {
     // do something
-  },
-);
+  }
+)
 ```
 
 ## Options

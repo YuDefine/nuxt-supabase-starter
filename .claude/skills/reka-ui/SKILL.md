@@ -52,18 +52,18 @@ Unstyled, accessible Vue 3 component primitives. WAI-ARIA compliant. Previously 
 ```ts
 // nuxt.config.ts (auto-imports all components)
 export default defineNuxtConfig({
-  modules: ["reka-ui/nuxt"],
-});
+  modules: ['reka-ui/nuxt'],
+})
 ```
 
 ```ts
-import { RekaResolver } from "reka-ui/resolver";
+import { RekaResolver } from 'reka-ui/resolver'
 // vite.config.ts (with auto-import resolver)
-import Components from "unplugin-vue-components/vite";
+import Components from 'unplugin-vue-components/vite'
 
 export default defineConfig({
   plugins: [vue(), Components({ resolvers: [RekaResolver()] })],
-});
+})
 ```
 
 ## Basic Patterns
@@ -71,17 +71,17 @@ export default defineConfig({
 ```vue
 <!-- Dialog with controlled state -->
 <script setup>
-import {
-  DialogRoot,
-  DialogTrigger,
-  DialogPortal,
-  DialogOverlay,
-  DialogContent,
-  DialogTitle,
-  DialogDescription,
-  DialogClose,
-} from "reka-ui";
-const open = ref(false);
+  import {
+    DialogRoot,
+    DialogTrigger,
+    DialogPortal,
+    DialogOverlay,
+    DialogContent,
+    DialogTitle,
+    DialogDescription,
+    DialogClose,
+  } from 'reka-ui'
+  const open = ref(false)
 </script>
 
 <template>
@@ -90,7 +90,7 @@ const open = ref(false);
     <DialogPortal>
       <DialogOverlay class="fixed inset-0 bg-black/50" />
       <DialogContent
-        class="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded"
+        class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded bg-white p-6"
       >
         <DialogTitle>Title</DialogTitle>
         <DialogDescription>Description</DialogDescription>

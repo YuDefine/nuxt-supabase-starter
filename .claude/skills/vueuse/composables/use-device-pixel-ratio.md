@@ -8,9 +8,9 @@ Reactively track
 ## Usage
 
 ```ts
-import { useDevicePixelRatio } from "@vueuse/core";
+import { useDevicePixelRatio } from '@vueuse/core'
 
-const { pixelRatio } = useDevicePixelRatio();
+const { pixelRatio } = useDevicePixelRatio()
 ```
 
 ## Returns

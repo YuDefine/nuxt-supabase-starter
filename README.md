@@ -198,13 +198,13 @@
 **傳統做法**：每個 API 都要寫權限檢查
 
 ```typescript
-app.get("/posts/:id", async (req, res) => {
-  const post = await db.posts.findById(req.params.id);
+app.get('/posts/:id', async (req, res) => {
+  const post = await db.posts.findById(req.params.id)
   if (post.userId !== req.user.id) {
-    return res.status(403).send("Forbidden");
+    return res.status(403).send('Forbidden')
   }
   // ...
-});
+})
 ```
 
 **RLS 做法**：在資料庫層定義一次，所有查詢自動套用
@@ -227,14 +227,14 @@ CREATE POLICY "Users can view own posts"
 
 ```typescript
 // ✅ Client 端直接查詢（RLS 保護）
-const client = useSupabaseClient<Database>();
-const { data } = await client.schema("app").from("todos").select("*");
+const client = useSupabaseClient<Database>()
+const { data } = await client.schema('app').from('todos').select('*')
 
 // ✅ 寫入走 Server API
-await $fetch("/api/v1/todos", {
-  method: "POST",
-  body: { title: "Buy milk" },
-});
+await $fetch('/api/v1/todos', {
+  method: 'POST',
+  body: { title: 'Buy milk' },
+})
 ```
 
 > 📖 API 設計模式見 [docs/API_PATTERNS.md](./docs/API_PATTERNS.md)
@@ -246,15 +246,15 @@ await $fetch("/api/v1/todos", {
 ```typescript
 // nuxt.config.ts
 export default defineNuxtConfig({
-  modules: ["@onmax/nuxt-better-auth"],
+  modules: ['@onmax/nuxt-better-auth'],
   routeRules: {
-    "/dashboard/**": { auth: "user" },
+    '/dashboard/**': { auth: 'user' },
   },
-});
+})
 
 // 在元件中使用
-const { user, loggedIn, signIn, signOut } = useUserSession();
-await signIn("google");
+const { user, loggedIn, signIn, signOut } = useUserSession()
+await signIn('google')
 ```
 
 ---

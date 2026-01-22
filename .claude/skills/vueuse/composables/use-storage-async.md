@@ -8,17 +8,17 @@ Reactive Storage in with async support.
 ## Usage
 
 ```ts
-import { useStorageAsync } from "@vueuse/core";
+import { useStorageAsync } from '@vueuse/core'
 
-const accessToken = useStorageAsync("access.token", "", SomeAsyncStorage);
+const accessToken = useStorageAsync('access.token', '', SomeAsyncStorage)
 
 // accessToken.value may be empty before the async storage is ready
-console.log(accessToken.value); // ""
+console.log(accessToken.value) // ""
 
 setTimeout(() => {
   // After some time, the async storage is ready
-  console.log(accessToken.value); // "the real value stored in storage"
-}, 500);
+  console.log(accessToken.value) // "the real value stored in storage"
+}, 500)
 ```
 
 ## Options

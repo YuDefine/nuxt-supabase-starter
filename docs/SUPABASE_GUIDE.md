@@ -72,16 +72,16 @@ Supabase 有幾個預定義的角色：
 
 ```typescript
 // 每個 API 都要寫權限檢查
-app.get("/posts/:id", async (req, res) => {
-  const post = await db.posts.findById(req.params.id);
+app.get('/posts/:id', async (req, res) => {
+  const post = await db.posts.findById(req.params.id)
 
   // 手動檢查：這個使用者能看這篇文章嗎？
   if (post.userId !== req.user.id && !post.isPublic) {
-    return res.status(403).send("Forbidden");
+    return res.status(403).send('Forbidden')
   }
 
-  return res.json(post);
-});
+  return res.json(post)
+})
 ```
 
 **RLS 做法**：權限規則定義在資料庫層
@@ -421,45 +421,45 @@ onUnmounted(() => {
 
 ```typescript
 // server/api/v1/todos/index.post.ts
-import { z } from "zod";
-import { getSupabaseWithContext, requireAuth } from "~~/server/utils/supabase";
+import { z } from 'zod'
+import { getSupabaseWithContext, requireAuth } from '~~/server/utils/supabase'
 
 const createTodoSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().optional(),
-});
+})
 
 export default defineEventHandler(async (event) => {
   // 確認使用者已登入
-  const user = await requireAuth(event);
+  const user = await requireAuth(event)
 
   // 驗證請求資料
-  const body = await readValidatedBody(event, createTodoSchema.parse);
+  const body = await readValidatedBody(event, createTodoSchema.parse)
 
   // 取得有 service_role 權限的 client
-  const supabase = await getSupabaseWithContext(event);
+  const supabase = await getSupabaseWithContext(event)
 
   // 新增資料
   const { data, error } = await supabase
-    .schema("app")
-    .from("todos")
+    .schema('app')
+    .from('todos')
     .insert({
       ...body,
       user_id: user.id,
     })
     .select()
-    .single();
+    .single()
 
   if (error) {
     throw createError({
       statusCode: 500,
-      message: "新增失敗",
-    });
+      message: '新增失敗',
+    })
   }
 
-  setResponseStatus(event, 201);
-  return { data };
-});
+  setResponseStatus(event, 201)
+  return { data }
+})
 ```
 
 ---

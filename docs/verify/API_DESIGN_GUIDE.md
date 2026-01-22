@@ -40,7 +40,7 @@ server/
 
 ```typescript
 // shared/types/resources.ts
-import { z } from "zod";
+import { z } from 'zod'
 
 // 共用分頁查詢 Schema（可複用）
 export const paginationQuerySchema = z.object({
@@ -48,35 +48,35 @@ export const paginationQuerySchema = z.object({
   pageSize: z.coerce.number().int().positive().max(1000).default(10),
   search: z.string().optional(),
   sortBy: z.string().optional(),
-  sortDir: z.enum(["asc", "desc"]).default("desc"),
-});
+  sortDir: z.enum(['asc', 'desc']).default('desc'),
+})
 
 // 新增資源 Schema
 export const createResourceSchema = z.object({
-  name: z.string().min(1, "名稱必填").max(200),
+  name: z.string().min(1, '名稱必填').max(200),
   description: z.string().max(500).nullable().optional(),
-});
+})
 
 // 更新資源 Schema（所有欄位變成可選）
-export const updateResourceSchema = createResourceSchema.partial();
+export const updateResourceSchema = createResourceSchema.partial()
 ```
 
 ### 在 API 中使用驗證
 
 ```typescript
 // GET 請求：驗證 Query Parameters
-const query = await getValidatedQuery(event, resourceListQuerySchema.parse);
+const query = await getValidatedQuery(event, resourceListQuerySchema.parse)
 
 // POST/PATCH 請求：驗證 Request Body
-const body = await readValidatedBody(event, createResourceSchema.parse);
+const body = await readValidatedBody(event, createResourceSchema.parse)
 
 // 路徑參數驗證
 const params = await getValidatedRouterParams(
   event,
   z.object({
     id: z.coerce.number().int().positive(),
-  }).parse,
-);
+  }).parse
+)
 ```
 
 ---
@@ -91,13 +91,13 @@ const params = await getValidatedRouterParams(
 export default defineEventHandler(async (event) => {
   // 1. 權限檢查放在最前面
   const { user } = await requireUserSession(event, {
-    user: { role: ["admin", "manager", "staff"] },
-  });
+    user: { role: ['admin', 'manager', 'staff'] },
+  })
 
   // 2. 驗證請求資料
   // 3. 執行業務邏輯
   // ...
-});
+})
 ```
 
 ### 角色階層
@@ -116,18 +116,18 @@ export default defineEventHandler(async (event) => {
 ### 取得 Supabase Client
 
 ```typescript
-import { getSupabaseWithContext } from "~~/server/utils/supabase";
+import { getSupabaseWithContext } from '~~/server/utils/supabase'
 
 export default defineEventHandler(async (event) => {
   // 取得 Supabase Client
-  const supabase = await getSupabaseWithContext(event);
+  const supabase = await getSupabaseWithContext(event)
 
   // 使用特定 schema
-  const db = supabase.schema("your_schema");
+  const db = supabase.schema('your_schema')
 
   // 執行查詢
-  const { data, error } = await db.from("resources").select("*").is("deleted_at", null);
-});
+  const { data, error } = await db.from('resources').select('*').is('deleted_at', null)
+})
 ```
 
 ### 查詢模式
@@ -135,17 +135,17 @@ export default defineEventHandler(async (event) => {
 ```typescript
 // 列表查詢（含分頁）
 const { data, count, error } = await db
-  .from("resources")
-  .select("*", { count: "exact" }) // count: 'exact' 取得總筆數
-  .is("deleted_at", null) // 軟刪除過濾
-  .order("id", { ascending: false })
-  .range(from, to); // 分頁
+  .from('resources')
+  .select('*', { count: 'exact' }) // count: 'exact' 取得總筆數
+  .is('deleted_at', null) // 軟刪除過濾
+  .order('id', { ascending: false })
+  .range(from, to) // 分頁
 
 // 單筆查詢
-const { data, error } = await db.from("resources").select("*").eq("id", params.id).single();
+const { data, error } = await db.from('resources').select('*').eq('id', params.id).single()
 
 // 單筆查詢（可能不存在）
-const { data, error } = await db.from("resources").select("*").eq("id", params.id).maybeSingle();
+const { data, error } = await db.from('resources').select('*').eq('id', params.id).maybeSingle()
 ```
 
 ---
@@ -157,27 +157,27 @@ const { data, error } = await db.from("resources").select("*").eq("id", params.i
 ```typescript
 // 列表回應
 interface ListResponse<T> {
-  data: T[];
+  data: T[]
   pagination: {
-    page: number;
-    pageSize: number;
-    total: number;
-    totalPages: number;
-  };
+    page: number
+    pageSize: number
+    total: number
+    totalPages: number
+  }
 }
 
 // 單筆回應
 interface SingleResponse<T> {
-  data: T;
+  data: T
 }
 
 // 刪除回應
 interface DeleteResponse {
   data: {
-    id: number;
-    deleted_at: string | null;
-    hard_deleted: boolean;
-  };
+    id: number
+    deleted_at: string | null
+    hard_deleted: boolean
+  }
 }
 ```
 
@@ -193,11 +193,11 @@ return {
     total: count || 0,
     totalPages: Math.ceil((count || 0) / query.pageSize),
   },
-};
+}
 
 // 新增 API 回應（設定 201 狀態碼）
-setResponseStatus(event, 201);
-return { data: newResource };
+setResponseStatus(event, 201)
+return { data: newResource }
 ```
 
 ---
@@ -220,28 +220,28 @@ return { data: newResource };
 
 ```typescript
 // 處理資料庫唯一約束違反（PostgreSQL error code 23505）
-if (error?.code === "23505") {
+if (error?.code === '23505') {
   throw createError({
     statusCode: 409,
-    message: "資料重複，請檢查輸入",
-  });
+    message: '資料重複，請檢查輸入',
+  })
 }
 
 // 資源不存在
 if (!data) {
   throw createError({
     statusCode: 404,
-    message: "找不到指定的資源",
-  });
+    message: '找不到指定的資源',
+  })
 }
 
 // 一般資料庫錯誤
 if (error) {
-  console.error("Database error:", error);
+  console.error('Database error:', error)
   throw createError({
     statusCode: 500,
-    message: "操作失敗，請稍後再試",
-  });
+    message: '操作失敗，請稍後再試',
+  })
 }
 ```
 
@@ -254,13 +254,13 @@ if (error) {
 異動操作應記錄操作日誌：
 
 ```typescript
-await db.from("operation_logs").insert({
+await db.from('operation_logs').insert({
   user_id: user.id,
-  action: "create", // create | update | delete
-  target_type: "resource",
+  action: 'create', // create | update | delete
+  target_type: 'resource',
   target_id: newResource.id.toString(),
   details: body,
-});
+})
 ```
 
 ---
@@ -272,8 +272,8 @@ await db.from("operation_logs").insert({
 ```typescript
 // 多欄位搜尋（使用 OR 條件）
 if (query.search) {
-  const searchStr = `%${query.search}%`;
-  dbQuery = dbQuery.or(`name.ilike.${searchStr},description.ilike.${searchStr}`);
+  const searchStr = `%${query.search}%`
+  dbQuery = dbQuery.or(`name.ilike.${searchStr},description.ilike.${searchStr}`)
 }
 ```
 
@@ -281,19 +281,19 @@ if (query.search) {
 
 ```typescript
 // 動態排序
-const sortDirAsc = query.sortDir === "asc";
-dbQuery = dbQuery.order(query.sortBy || "id", { ascending: sortDirAsc });
+const sortDirAsc = query.sortDir === 'asc'
+dbQuery = dbQuery.order(query.sortBy || 'id', { ascending: sortDirAsc })
 ```
 
 ### 分頁實作
 
 ```typescript
 // 計算 range
-const from = (query.page - 1) * query.pageSize;
-const to = from + query.pageSize - 1;
+const from = (query.page - 1) * query.pageSize
+const to = from + query.pageSize - 1
 
 // 執行分頁查詢
-const { data, count, error } = await dbQuery.range(from, to);
+const { data, count, error } = await dbQuery.range(from, to)
 ```
 
 ---
@@ -304,39 +304,39 @@ const { data, count, error } = await dbQuery.range(from, to);
 
 ```typescript
 // server/api/v1/resources/index.get.ts
-import { getSupabaseWithContext } from "~~/server/utils/supabase";
-import { resourceListQuerySchema } from "~~/shared/types/resources";
+import { getSupabaseWithContext } from '~~/server/utils/supabase'
+import { resourceListQuerySchema } from '~~/shared/types/resources'
 
 export default defineEventHandler(async (event) => {
   // 1. 權限檢查
-  await requireUserSession(event);
+  await requireUserSession(event)
 
   // 2. 驗證查詢參數
-  const query = await getValidatedQuery(event, resourceListQuerySchema.parse);
+  const query = await getValidatedQuery(event, resourceListQuerySchema.parse)
 
   // 3. 取得 Supabase Client
-  const supabase = await getSupabaseWithContext(event);
-  const db = supabase.schema("your_schema");
+  const supabase = await getSupabaseWithContext(event)
+  const db = supabase.schema('your_schema')
 
   // 4. 建立查詢
-  let dbQuery = db.from("resources").select("*", { count: "exact" }).is("deleted_at", null);
+  let dbQuery = db.from('resources').select('*', { count: 'exact' }).is('deleted_at', null)
 
   // 5. 搜尋條件
   if (query.search) {
-    const searchStr = `%${query.search}%`;
-    dbQuery = dbQuery.or(`name.ilike.${searchStr}`);
+    const searchStr = `%${query.search}%`
+    dbQuery = dbQuery.or(`name.ilike.${searchStr}`)
   }
 
   // 6. 排序
-  dbQuery = dbQuery.order(query.sortBy || "id", { ascending: query.sortDir === "asc" });
+  dbQuery = dbQuery.order(query.sortBy || 'id', { ascending: query.sortDir === 'asc' })
 
   // 7. 分頁
-  const from = (query.page - 1) * query.pageSize;
-  const to = from + query.pageSize - 1;
-  const { data, count, error } = await dbQuery.range(from, to);
+  const from = (query.page - 1) * query.pageSize
+  const to = from + query.pageSize - 1
+  const { data, count, error } = await dbQuery.range(from, to)
 
   if (error) {
-    throw createError({ statusCode: 500, message: "載入資料失敗" });
+    throw createError({ statusCode: 500, message: '載入資料失敗' })
   }
 
   // 8. 回應
@@ -348,8 +348,8 @@ export default defineEventHandler(async (event) => {
       total: count || 0,
       totalPages: Math.ceil((count || 0) / query.pageSize),
     },
-  };
-});
+  }
+})
 ```
 
 ---

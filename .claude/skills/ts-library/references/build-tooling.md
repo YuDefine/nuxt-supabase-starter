@@ -18,58 +18,58 @@ pnpm add -D tsdown
 
 ```typescript
 // tsdown.config.ts
-import { defineConfig } from "tsdown";
+import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-  entry: ["src/index.ts"],
-  format: ["esm", "cjs"],
+  entry: ['src/index.ts'],
+  format: ['esm', 'cjs'],
   dts: true,
   clean: true,
-});
+})
 ```
 
 ### Multiple Entries
 
 ```typescript
 export default defineConfig({
-  entry: ["src/index.ts", "src/cli.ts", "src/utils.ts"],
-  format: ["esm", "cjs"],
+  entry: ['src/index.ts', 'src/cli.ts', 'src/utils.ts'],
+  format: ['esm', 'cjs'],
   dts: true,
-  external: ["vue", "vite"],
-});
+  external: ['vue', 'vite'],
+})
 ```
 
 ### Plugin Pattern (unplugin-\*)
 
 ```typescript
 export default defineConfig({
-  entry: ["src/*.ts"], // Glob all entries
-  format: ["esm", "cjs"],
+  entry: ['src/*.ts'], // Glob all entries
+  format: ['esm', 'cjs'],
   dts: true,
   exports: true, // Auto-generate package.json exports
-  attw: { profile: "esm-only" }, // Type checking profile
-});
+  attw: { profile: 'esm-only' }, // Type checking profile
+})
 ```
 
 ### Advanced Options
 
 ```typescript
 export default defineConfig({
-  entry: ["src/index.ts"],
-  format: ["esm", "cjs"],
+  entry: ['src/index.ts'],
+  format: ['esm', 'cjs'],
   dts: {
-    resolve: ["@antfu/utils"], // Inline specific deps in declarations
+    resolve: ['@antfu/utils'], // Inline specific deps in declarations
   },
-  external: ["vue"],
+  external: ['vue'],
   define: {
-    __DEV__: "false",
+    __DEV__: 'false',
   },
   hooks: {
-    "build:done": async () => {
+    'build:done': async () => {
       // Post-build tasks
     },
   },
-});
+})
 ```
 
 ## unbuild
@@ -82,30 +82,30 @@ pnpm add -D unbuild
 
 ```typescript
 // build.config.ts
-import { defineBuildConfig } from "unbuild";
+import { defineBuildConfig } from 'unbuild'
 
 export default defineBuildConfig({
-  entries: ["src/index"],
+  entries: ['src/index'],
   declaration: true,
   rollup: {
     emitCJS: true,
   },
-});
+})
 ```
 
 ### With Externals
 
 ```typescript
 export default defineBuildConfig({
-  entries: ["src/index", "src/cli"],
+  entries: ['src/index', 'src/cli'],
   declaration: true,
-  externals: ["vue", "vite"],
+  externals: ['vue', 'vite'],
   rollup: {
     emitCJS: true,
     inlineDependencies: true,
     dts: { respectExternal: true },
   },
-});
+})
 ```
 
 ## Output Formats
@@ -114,25 +114,25 @@ export default defineBuildConfig({
 
 ```typescript
 export default defineConfig({
-  format: ["esm"],
-});
+  format: ['esm'],
+})
 ```
 
 ### Dual CJS/ESM (recommended)
 
 ```typescript
 export default defineConfig({
-  format: ["esm", "cjs"],
-});
+  format: ['esm', 'cjs'],
+})
 ```
 
 ### With IIFE for CDN
 
 ```typescript
 export default defineConfig([
-  { format: ["esm", "cjs"], dts: true },
-  { format: "iife", globalName: "MyLib", minify: true },
-]);
+  { format: ['esm', 'cjs'], dts: true },
+  { format: 'iife', globalName: 'MyLib', minify: true },
+])
 ```
 
 ## Define Flags
@@ -143,11 +143,11 @@ Common compile-time flags:
 export default defineConfig({
   define: {
     __DEV__: `(process.env.NODE_ENV !== 'production')`,
-    __TEST__: "false",
-    __BROWSER__: "true",
+    __TEST__: 'false',
+    __BROWSER__: 'true',
     __VERSION__: JSON.stringify(pkg.version),
   },
-});
+})
 ```
 
 ## Build Scripts
@@ -171,11 +171,11 @@ Some bundlers need explicit default:
 ```typescript
 export default defineConfig({
   hooks: {
-    "build:done": async () => {
+    'build:done': async () => {
       // Patch CJS files if needed
     },
   },
-});
+})
 ```
 
 ### Missing types in output

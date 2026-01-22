@@ -8,25 +8,25 @@ Pausable watch
 ## Usage
 
 ```ts
-import { watchPausable } from "@vueuse/core";
-import { nextTick, shallowRef } from "vue";
+import { watchPausable } from '@vueuse/core'
+import { nextTick, shallowRef } from 'vue'
 
-const source = shallowRef("foo");
+const source = shallowRef('foo')
 
-const { stop, pause, resume } = watchPausable(source, (v) => console.log(`Changed to ${v}!`));
+const { stop, pause, resume } = watchPausable(source, (v) => console.log(`Changed to ${v}!`))
 
-source.value = "bar";
-await nextTick(); // Changed to bar!
+source.value = 'bar'
+await nextTick() // Changed to bar!
 
-pause();
+pause()
 
-source.value = "foobar";
-await nextTick(); // (nothing happend)
+source.value = 'foobar'
+await nextTick() // (nothing happend)
 
-resume();
+resume()
 
-source.value = "hello";
-await nextTick(); // Changed to hello!
+source.value = 'hello'
+await nextTick() // Changed to hello!
 ```
 
 ## Returns

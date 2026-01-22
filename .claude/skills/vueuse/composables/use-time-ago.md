@@ -8,9 +8,9 @@ Reactive time ago. Automatically update the time ago string when the time change
 ## Usage
 
 ```ts
-import { useTimeAgo } from "@vueuse/core";
+import { useTimeAgo } from '@vueuse/core'
 
-const timeAgo = useTimeAgo(new Date(2021, 0, 1));
+const timeAgo = useTimeAgo(new Date(2021, 0, 1))
 ```
 
 ## Options

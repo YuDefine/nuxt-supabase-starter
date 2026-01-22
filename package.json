@@ -20,11 +20,11 @@
     "lint": "oxlint --deny-warnings .",
     "prepare": "husky && nuxt prepare",
     "preview": "nuxt preview",
+    "tag": "git tag v$(node -p \"require('./package.json').version\") && git push origin --tags",
     "test": "vitest run --coverage",
     "test:unit": "vitest run test/unit",
     "test:watch": "vitest watch",
-    "typecheck": "nuxt typecheck",
-    "tag": "git tag v$(node -p \"require('./package.json').version\") && git push origin --tags"
+    "typecheck": "nuxt typecheck"
   },
   "dependencies": {
     "@nuxt/image": "^2.0.0",

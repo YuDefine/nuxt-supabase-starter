@@ -8,11 +8,11 @@ Wrapper for with controls.
 ## Usage
 
 ```ts
-import { useTimeoutFn } from "@vueuse/core";
+import { useTimeoutFn } from '@vueuse/core'
 
 const { isPending, start, stop } = useTimeoutFn(() => {
   /* ... */
-}, 3000);
+}, 3000)
 ```
 
 ## Options

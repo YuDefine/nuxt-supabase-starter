@@ -104,7 +104,7 @@ jobs:
 - uses: stefanzweifel/git-auto-commit-action@v5
   if: github.event_name == 'push'
   with:
-    commit_message: "chore: lint fix"
+    commit_message: 'chore: lint fix'
 ```
 
 ## Release on Tag (Token-based)
@@ -114,7 +114,7 @@ jobs:
 name: Release
 on:
   push:
-    tags: ["v*"]
+    tags: ['v*']
 
 jobs:
   release:
@@ -146,7 +146,7 @@ permissions:
   actions: read
 on:
   push:
-    tags: ["v*"]
+    tags: ['v*']
 
 jobs:
   wait-for-ci:

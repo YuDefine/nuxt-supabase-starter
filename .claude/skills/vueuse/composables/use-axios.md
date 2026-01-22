@@ -8,9 +8,9 @@ Wrapper for .
 ## Usage
 
 ```ts
-import { useAxios } from "@vueuse/integrations/useAxios";
+import { useAxios } from '@vueuse/integrations/useAxios'
 
-const { data, isFinished } = useAxios("/api/posts");
+const { data, isFinished } = useAxios('/api/posts')
 ```
 
 ## Options

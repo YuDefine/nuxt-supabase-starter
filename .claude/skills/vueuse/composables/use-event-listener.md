@@ -8,11 +8,11 @@ Use EventListener with ease. Register using addEventListener on mounted, and rem
 ## Usage
 
 ```ts
-import { useEventListener } from "@vueuse/core";
+import { useEventListener } from '@vueuse/core'
 
-useEventListener(document, "visibilitychange", (evt) => {
-  console.log(evt);
-});
+useEventListener(document, 'visibilitychange', (evt) => {
+  console.log(evt)
+})
 ```
 
 ## Reference

@@ -36,23 +36,23 @@ env:
 
 ```js
 // eslint.config.mjs
-import antfu from "@antfu/eslint-config";
-import withNuxt from "./.nuxt/eslint.config.mjs";
+import antfu from '@antfu/eslint-config'
+import withNuxt from './.nuxt/eslint.config.mjs'
 
 export default withNuxt(
   antfu({
     formatters: true,
     vue: true,
     pnpm: true,
-    ignores: [".eslintcache", "cache/**", ".claude/**", "README.md", "docs/**"],
-  }),
-);
+    ignores: ['.eslintcache', 'cache/**', '.claude/**', 'README.md', 'docs/**'],
+  })
+)
 ```
 
 **For monorepos, add:**
 
 ```js
-ignores: ["apps/web/.nuxt/**", "packages/**/dist/**"];
+ignores: ['apps/web/.nuxt/**', 'packages/**/dist/**']
 ```
 
 ## Package Scripts

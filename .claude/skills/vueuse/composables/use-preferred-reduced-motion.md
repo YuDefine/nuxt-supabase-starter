@@ -8,9 +8,9 @@ Reactive prefers-reduced-motion media query.
 ## Usage
 
 ```ts
-import { usePreferredReducedMotion } from "@vueuse/core";
+import { usePreferredReducedMotion } from '@vueuse/core'
 
-const preferredMotion = usePreferredReducedMotion();
+const preferredMotion = usePreferredReducedMotion()
 ```
 
 ## Reference

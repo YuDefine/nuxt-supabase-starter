@@ -8,12 +8,12 @@ Shorthand for watching value with . Once the callback fires once, the watcher wi
 ## Usage
 
 ```ts
-import { watchOnce } from "@vueuse/core";
+import { watchOnce } from '@vueuse/core'
 
 watchOnce(source, () => {
   // triggers only once
-  console.log("source changed!");
-});
+  console.log('source changed!')
+})
 ```
 
 ## Reference

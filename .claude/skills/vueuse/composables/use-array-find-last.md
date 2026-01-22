@@ -8,10 +8,10 @@ Reactive .
 ## Usage
 
 ```ts
-import { useArrayFindLast } from "@vueuse/core";
+import { useArrayFindLast } from '@vueuse/core'
 
-const list = [ref(1), ref(-1), ref(2)];
-const positive = useArrayFindLast(list, (val) => val > 0);
+const list = [ref(1), ref(-1), ref(2)]
+const positive = useArrayFindLast(list, (val) => val > 0)
 // positive.value: 2
 ```
 

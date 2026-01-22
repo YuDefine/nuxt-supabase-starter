@@ -392,27 +392,27 @@ pnpm typecheck
 
 ```typescript
 // ✅ CORRECT - Client 端唯讀查詢
-const client = useSupabaseClient<Database>();
-const { data } = await client.schema("your_schema").from("table").select("id, name").order("name");
+const client = useSupabaseClient<Database>()
+const { data } = await client.schema('your_schema').from('table').select('id, name').order('name')
 ```
 
 #### ❌ Client 端禁止執行寫入操作
 
 ```typescript
 // ❌ FORBIDDEN - 禁止在 Client 端直接寫入
-const client = useSupabaseClient<Database>();
-await client.schema("your_schema").from("table").insert({ name: "New" }); // 禁止！
-await client.schema("your_schema").from("table").update({ name: "Updated" }); // 禁止！
-await client.schema("your_schema").from("table").delete(); // 禁止！
+const client = useSupabaseClient<Database>()
+await client.schema('your_schema').from('table').insert({ name: 'New' }) // 禁止！
+await client.schema('your_schema').from('table').update({ name: 'Updated' }) // 禁止！
+await client.schema('your_schema').from('table').delete() // 禁止！
 ```
 
 #### ✅ 所有寫入操作必須走 Server API
 
 ```typescript
 // ✅ CORRECT - 透過 Server API 執行寫入
-await $fetch("/api/v1/resources", { method: "POST", body: { name: "New" } });
-await $fetch(`/api/v1/resources/${id}`, { method: "PATCH", body: { name: "Updated" } });
-await $fetch(`/api/v1/resources/${id}`, { method: "DELETE" });
+await $fetch('/api/v1/resources', { method: 'POST', body: { name: 'New' } })
+await $fetch(`/api/v1/resources/${id}`, { method: 'PATCH', body: { name: 'Updated' } })
+await $fetch(`/api/v1/resources/${id}`, { method: 'DELETE' })
 ```
 
 #### 為什麼採用此策略？
@@ -441,11 +441,11 @@ await $fetch(`/api/v1/resources/${id}`, { method: "DELETE" });
 
 ```typescript
 // ❌ FORBIDDEN - 舊的 Supabase Auth（絕對禁止）
-const user = useSupabaseUser();
-const user = await serverSupabaseUser(event);
+const user = useSupabaseUser()
+const user = await serverSupabaseUser(event)
 
 // ✅ CORRECT - nuxt-better-auth
-const { user, loggedIn, signIn, signOut } = useUserSession(); // Client 端
+const { user, loggedIn, signIn, signOut } = useUserSession() // Client 端
 // Server 端使用 better-auth 提供的方式取得 session
 ```
 
@@ -535,18 +535,18 @@ USING (
 // Server API 錯誤
 throw createError({
   statusCode: 400, // 400, 401, 403, 404, 500
-  statusMessage: "Bad Request",
-  message: "具體錯誤訊息（給開發者看）",
-});
+  statusMessage: 'Bad Request',
+  message: '具體錯誤訊息（給開發者看）',
+})
 
 // Client 端處理
 try {
-  await $fetch("/api/v1/...");
+  await $fetch('/api/v1/...')
 } catch (error) {
   if (error.statusCode === 401) {
-    navigateTo("/login");
+    navigateTo('/login')
   } else {
-    toast.add({ title: "操作失敗", description: error.message, color: "red" });
+    toast.add({ title: '操作失敗', description: error.message, color: 'red' })
   }
 }
 ```
@@ -645,8 +645,8 @@ NUXT_SESSION_PASSWORD=<至少32字元的隨機字串>
 
 ```vue
 <script setup lang="ts">
-const title = defineModel<string>(); // 基本用法
-const firstName = defineModel<string>("firstName"); // 具名 v-model
+  const title = defineModel<string>() // 基本用法
+  const firstName = defineModel<string>('firstName') // 具名 v-model
 </script>
 
 <UserForm v-model:first-name="user.firstName" />
@@ -698,13 +698,13 @@ app/pages/
 
 ```typescript
 // ❌ Bad - Direct window usage
-if (typeof window !== "undefined") {
-  window.addEventListener("resize", handleResize);
+if (typeof window !== 'undefined') {
+  window.addEventListener('resize', handleResize)
 }
 
 // ✅ Good - Use VueUse (if available)
-import { useWindowSize } from "@vueuse/core";
-const { width, height } = useWindowSize();
+import { useWindowSize } from '@vueuse/core'
+const { width, height } = useWindowSize()
 ```
 
 ---

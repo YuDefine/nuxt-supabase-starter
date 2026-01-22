@@ -8,13 +8,13 @@ Debounce execution of a function.
 ## Usage
 
 ```ts
-import { useDebounceFn, useEventListener } from "@vueuse/core";
+import { useDebounceFn, useEventListener } from '@vueuse/core'
 
 const debouncedFn = useDebounceFn(() => {
   // do something
-}, 1000);
+}, 1000)
 
-useEventListener(window, "resize", debouncedFn);
+useEventListener(window, 'resize', debouncedFn)
 ```
 
 ## Reference

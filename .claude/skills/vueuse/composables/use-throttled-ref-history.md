@@ -8,11 +8,11 @@ Shorthand for with throttled filter.
 ## Usage
 
 ```ts
-import { useThrottledRefHistory } from "@vueuse/core";
-import { shallowRef } from "vue";
+import { useThrottledRefHistory } from '@vueuse/core'
+import { shallowRef } from 'vue'
 
-const counter = shallowRef(0);
-const { history, undo, redo } = useThrottledRefHistory(counter, { deep: true, throttle: 1000 });
+const counter = shallowRef(0)
+const { history, undo, redo } = useThrottledRefHistory(counter, { deep: true, throttle: 1000 })
 ```
 
 ## Reference

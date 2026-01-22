@@ -8,11 +8,11 @@ Wrapper for with controls
 ## Usage
 
 ```ts
-import { useIntervalFn } from "@vueuse/core";
+import { useIntervalFn } from '@vueuse/core'
 
 const { pause, resume, isActive } = useIntervalFn(() => {
   /* your function */
-}, 1000);
+}, 1000)
 ```
 
 ## Options

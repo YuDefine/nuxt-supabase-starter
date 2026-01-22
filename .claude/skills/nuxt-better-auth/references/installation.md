@@ -17,17 +17,17 @@ pnpm add @onmax/nuxt-better-auth better-auth
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
-  modules: ["@onmax/nuxt-better-auth"],
+  modules: ['@onmax/nuxt-better-auth'],
   auth: {
-    serverConfig: "server/auth.config", // default
-    clientConfig: "app/auth.config", // default
+    serverConfig: 'server/auth.config', // default
+    clientConfig: 'app/auth.config', // default
     clientOnly: false, // true for external auth backend
     redirects: {
-      login: "/login", // redirect when auth required
-      guest: "/", // redirect when already logged in
+      login: '/login', // redirect when auth required
+      guest: '/', // redirect when already logged in
     },
   },
-});
+})
 ```
 
 ## Environment Variables
@@ -45,7 +45,7 @@ NUXT_PUBLIC_SITE_URL=https://your-domain.com
 
 ```ts
 // server/auth.config.ts
-import { defineServerAuth } from "@onmax/nuxt-better-auth/config";
+import { defineServerAuth } from '@onmax/nuxt-better-auth/config'
 
 export default defineServerAuth(({ runtimeConfig, db }) => ({
   emailAndPassword: { enabled: true },
@@ -66,7 +66,7 @@ export default defineServerAuth(({ runtimeConfig, db }) => ({
       maxAge: 60 * 5, // 5 minutes cookie cache
     },
   },
-}));
+}))
 ```
 
 Context available in `defineServerAuth`:
@@ -89,15 +89,15 @@ Context available in `defineServerAuth`:
 
 ```ts
 // app/auth.config.ts
-import { createAuthClient } from "better-auth/client";
+import { createAuthClient } from 'better-auth/client'
 // import { twoFactorClient } from 'better-auth/client/plugins' // optional
 
 // 建立並導出 auth client - 函式名稱必須是 createAppAuthClient
 export function createAppAuthClient(baseURL?: string) {
   return createAuthClient({
-    baseURL: baseURL || "",
+    baseURL: baseURL || '',
     // plugins: [twoFactorClient()], // optional
-  });
+  })
 }
 ```
 
@@ -108,12 +108,12 @@ export function createAppAuthClient(baseURL?: string) {
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
-  modules: ["@nuxthub/core", "@onmax/nuxt-better-auth"],
+  modules: ['@nuxthub/core', '@onmax/nuxt-better-auth'],
   hub: { database: true },
   auth: {
     secondaryStorage: true, // Enable KV for session caching
   },
-});
+})
 ```
 
 See [references/database.md](database.md) for schema setup.
@@ -128,7 +128,7 @@ export default defineNuxtConfig({
   auth: {
     clientOnly: true, // No local auth server
   },
-});
+})
 ```
 
 See [references/client-only.md](client-only.md) for full setup.

@@ -8,14 +8,14 @@ Computed for async functions
 ## Usage
 
 ```ts
-import { computedAsync } from "@vueuse/core";
-import { shallowRef } from "vue";
+import { computedAsync } from '@vueuse/core'
+import { shallowRef } from 'vue'
 
-const name = shallowRef("jack");
+const name = shallowRef('jack')
 
 const userInfo = computedAsync(async () => {
-  return await mockLookUp(name.value);
-}, null /* initial state */);
+  return await mockLookUp(name.value)
+}, null /* initial state */)
 ```
 
 ## Reference

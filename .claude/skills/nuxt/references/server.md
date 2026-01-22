@@ -50,9 +50,9 @@ All of these mean: You're using outdated patterns. Use Nuxt 4 patterns instead.
 ```ts
 // server/api/users.get.ts
 export default defineEventHandler(async (event) => {
-  const users = await fetchUsers();
-  return users;
-});
+  const users = await fetchUsers()
+  return users
+})
 ```
 
 ### Route with Params
@@ -60,26 +60,26 @@ export default defineEventHandler(async (event) => {
 ```ts
 // server/api/users/[userId].get.ts
 export default defineEventHandler(async (event) => {
-  const userId = getRouterParam(event, "userId");
+  const userId = getRouterParam(event, 'userId')
 
   if (!userId) {
     throw createError({
       statusCode: 400,
-      message: "User ID is required",
-    });
+      message: 'User ID is required',
+    })
   }
 
-  const user = await fetchUserById(userId);
+  const user = await fetchUserById(userId)
 
   if (!user) {
     throw createError({
       statusCode: 404,
-      message: "User not found",
-    });
+      message: 'User not found',
+    })
   }
 
-  return user;
-});
+  return user
+})
 ```
 
 ### Route with Query Params
@@ -87,13 +87,13 @@ export default defineEventHandler(async (event) => {
 ```ts
 // server/api/users.get.ts
 export default defineEventHandler(async (event) => {
-  const query = getQuery(event);
-  const page = Number(query.page) || 1;
-  const limit = Number(query.limit) || 10;
+  const query = getQuery(event)
+  const page = Number(query.page) || 1
+  const limit = Number(query.limit) || 10
 
-  const users = await fetchUsers({ page, limit });
-  return users;
-});
+  const users = await fetchUsers({ page, limit })
+  return users
+})
 ```
 
 ### Route with Body
@@ -101,20 +101,20 @@ export default defineEventHandler(async (event) => {
 ```ts
 // server/api/users.post.ts
 export default defineEventHandler(async (event) => {
-  const body = await readBody(event);
+  const body = await readBody(event)
 
   // Validate body
   if (!body.name || !body.email) {
     throw createError({
       statusCode: 400,
-      message: "Missing required fields: name, email",
-    });
+      message: 'Missing required fields: name, email',
+    })
   }
 
-  const user = await createUser(body);
-  setResponseStatus(event, 201);
-  return user;
-});
+  const user = await createUser(body)
+  setResponseStatus(event, 201)
+  return user
+})
 ```
 
 ### Validation with Zod
@@ -123,35 +123,35 @@ Use `readValidatedBody` and `getValidatedQuery` for schema validation:
 
 ```ts
 // server/api/users.post.ts
-import { z } from "zod";
+import { z } from 'zod'
 
 const userSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
-});
+})
 
 export default defineEventHandler(async (event) => {
-  const body = await readValidatedBody(event, userSchema.parse);
+  const body = await readValidatedBody(event, userSchema.parse)
   // body is typed as { name: string, email: string }
-  const user = await createUser(body);
-  setResponseStatus(event, 201);
-  return user;
-});
+  const user = await createUser(body)
+  setResponseStatus(event, 201)
+  return user
+})
 ```
 
 ```ts
 // server/api/users.get.ts
-import { z } from "zod";
+import { z } from 'zod'
 
 const querySchema = z.object({
   page: z.coerce.number().default(1),
   limit: z.coerce.number().default(10),
-});
+})
 
 export default defineEventHandler(async (event) => {
-  const { page, limit } = await getValidatedQuery(event, querySchema.parse);
-  return fetchUsers({ page, limit });
-});
+  const { page, limit } = await getValidatedQuery(event, querySchema.parse)
+  return fetchUsers({ page, limit })
+})
 ```
 
 ## Error Handling
@@ -161,10 +161,10 @@ Use `createError` for HTTP errors:
 ```ts
 throw createError({
   statusCode: 400,
-  statusMessage: "Bad Request",
-  message: "Invalid input",
-  data: { field: "email" }, // Optional additional data
-});
+  statusMessage: 'Bad Request',
+  message: 'Invalid input',
+  data: { field: 'email' }, // Optional additional data
+})
 ```
 
 ## Server Middleware
@@ -174,8 +174,8 @@ Runs on every server request:
 ```ts
 // server/middleware/log.ts
 export default defineEventHandler((event) => {
-  console.log(`${event.method} ${event.path}`);
-});
+  console.log(`${event.method} ${event.path}`)
+})
 ```
 
 Named middleware for specific patterns:
@@ -183,18 +183,18 @@ Named middleware for specific patterns:
 ```ts
 // server/middleware/auth.ts
 export default defineEventHandler((event) => {
-  const token = getRequestHeader(event, "authorization");
+  const token = getRequestHeader(event, 'authorization')
 
   if (!token) {
     throw createError({
       statusCode: 401,
-      message: "Unauthorized",
-    });
+      message: 'Unauthorized',
+    })
   }
 
   // Attach user to event context
-  event.context.user = await verifyToken(token);
-});
+  event.context.user = await verifyToken(token)
+})
 ```
 
 ## Server Utils
@@ -203,18 +203,18 @@ Reusable server functions (auto-imported):
 
 ```ts
 // server/utils/db.ts
-import { db } from "./database";
+import { db } from './database'
 
 export async function fetchUsers(options: { page: number; limit: number }) {
   return await db
     .select()
-    .from("users")
+    .from('users')
     .limit(options.limit)
-    .offset((options.page - 1) * options.limit);
+    .offset((options.page - 1) * options.limit)
 }
 
 export async function fetchUserById(id: string) {
-  return await db.select().from("users").where({ id }).first();
+  return await db.select().from('users').where({ id }).first()
 }
 ```
 
@@ -224,53 +224,53 @@ Auto-imported in all server routes and middleware.
 
 ```ts
 // Get params
-const userId = getRouterParam(event, "userId");
+const userId = getRouterParam(event, 'userId')
 
 // Get query
-const query = getQuery(event);
+const query = getQuery(event)
 
 // Get body
-const body = await readBody(event);
+const body = await readBody(event)
 
 // Get headers
-const auth = getRequestHeader(event, "authorization");
+const auth = getRequestHeader(event, 'authorization')
 
 // Get cookies
-const token = getCookie(event, "token");
+const token = getCookie(event, 'token')
 
 // Get method
-const method = getMethod(event);
+const method = getMethod(event)
 
 // Get IP
-const ip = getRequestIP(event);
+const ip = getRequestIP(event)
 ```
 
 ## Response Helpers
 
 ```ts
 // Set status code
-setResponseStatus(event, 201);
+setResponseStatus(event, 201)
 
 // Set headers
-setResponseHeader(event, "X-Custom", "value");
-setResponseHeaders(event, { "X-Custom": "value", "X-Another": "value" });
+setResponseHeader(event, 'X-Custom', 'value')
+setResponseHeaders(event, { 'X-Custom': 'value', 'X-Another': 'value' })
 
 // Set cookies
-setCookie(event, "token", "value", {
+setCookie(event, 'token', 'value', {
   httpOnly: true,
   secure: true,
-  sameSite: "lax",
+  sameSite: 'lax',
   maxAge: 60 * 60 * 24 * 7, // 1 week
-});
+})
 
 // Redirect
-return sendRedirect(event, "/login", 302);
+return sendRedirect(event, '/login', 302)
 
 // Stream
-return sendStream(event, stream);
+return sendStream(event, stream)
 
 // No content
-return sendNoContent(event);
+return sendNoContent(event)
 ```
 
 ## Best Practices
@@ -300,16 +300,16 @@ return sendNoContent(event);
 // server/routes/_ws.ts
 export default defineWebSocketHandler({
   open(peer) {
-    console.log("Client connected:", peer.id);
+    console.log('Client connected:', peer.id)
   },
   message(peer, message) {
-    peer.send(`Echo: ${message.text()}`);
+    peer.send(`Echo: ${message.text()}`)
     // Broadcast to all: peer.publish('channel', message)
   },
   close(peer) {
-    console.log("Client disconnected:", peer.id);
+    console.log('Client disconnected:', peer.id)
   },
-});
+})
 ```
 
 Enable in config:
@@ -320,7 +320,7 @@ export default defineNuxtConfig({
   nitro: {
     experimental: { websocket: true },
   },
-});
+})
 ```
 
 ## Server-Sent Events (Experimental)
@@ -328,18 +328,18 @@ export default defineNuxtConfig({
 ```ts
 // server/api/stream.get.ts
 export default defineEventHandler(async (event) => {
-  const stream = createEventStream(event);
+  const stream = createEventStream(event)
 
   const interval = setInterval(async () => {
-    await stream.push({ data: JSON.stringify({ time: Date.now() }) });
-  }, 1000);
+    await stream.push({ data: JSON.stringify({ time: Date.now() }) })
+  }, 1000)
 
   stream.onClosed(() => {
-    clearInterval(interval);
-  });
+    clearInterval(interval)
+  })
 
-  return stream.send();
-});
+  return stream.send()
+})
 ```
 
 ## Resources

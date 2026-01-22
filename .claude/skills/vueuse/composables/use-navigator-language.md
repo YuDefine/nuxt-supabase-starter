@@ -8,13 +8,13 @@ Reactive navigator.language.
 ## Usage
 
 ```ts
-import { useNavigatorLanguage } from "@vueuse/core";
+import { useNavigatorLanguage } from '@vueuse/core'
 
-const { language } = useNavigatorLanguage();
+const { language } = useNavigatorLanguage()
 
 watch(language, () => {
   // Listen to the value changing
-});
+})
 ```
 
 ## Returns

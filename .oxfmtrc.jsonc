@@ -1,0 +1,64 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  // 不使用分號（現代 JavaScript 風格）
+  "semi": false,
+  // 使用單引號（符合 Vue/Nuxt 慣例）
+  "singleQuote": true,
+  // 行寬限制
+  "printWidth": 100,
+  // 縮排寬度（與 .editorconfig 一致）
+  "tabWidth": 2,
+  // 使用空格（與 .editorconfig 一致）
+  "useTabs": false,
+  // 尾隨逗號（ES5 相容）
+  "trailingComma": "es5",
+  // 物件屬性引號風格
+  "quoteProps": "as-needed",
+  // 箭頭函式參數括號
+  "arrowParens": "always",
+  // 行尾換行符（與 .editorconfig 一致）
+  "endOfLine": "lf",
+  "htmlWhitespaceSensitivity": "css",
+  "vueIndentScriptAndStyle": true,
+
+  // === Import 排序（按距離遠近排列）===
+  "experimentalSortImports": {
+    "groups": [
+      ["side-effect"],
+      ["builtin"],
+      ["external", "external-type"],
+      ["internal", "internal-type"],
+      ["parent", "parent-type"],
+      ["sibling", "sibling-type"],
+      ["index", "index-type"],
+    ],
+    "order": "asc",
+    "ignoreCase": true,
+    "newlinesBetween": true,
+  },
+
+  // === Tailwind CSS 類別排序 ===
+  "experimentalTailwindcss": {
+    "stylesheet": "./app/assets/css/main.css",
+    "attributes": ["class"],
+    "functions": [],
+    "preserveDuplicates": false,
+    "preserveWhitespace": false,
+  },
+
+  // === package.json 欄位排序 ===
+  "experimentalSortPackageJson": {
+    "sortScripts": true,
+  },
+
+  // 忽略的檔案模式
+  "ignorePatterns": [
+    "coverage/**",
+    ".nuxt/**",
+    ".output/**",
+    "dist/**",
+    "node_modules/**",
+    "**/database.types.ts",
+    "pnpm-lock.yaml",
+  ],
+}

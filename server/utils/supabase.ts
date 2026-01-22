@@ -7,11 +7,11 @@
  * @module server/utils/supabase
  */
 
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "~~/app/types/database.types";
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '~~/app/types/database.types'
 
 // Module-level singleton
-let serviceClient: SupabaseClient<Database> | null = null;
+let serviceClient: SupabaseClient<Database> | null = null
 
 /**
  * 取得 Supabase Service Role Client（Singleton）
@@ -22,17 +22,17 @@ let serviceClient: SupabaseClient<Database> | null = null;
  */
 export function getServerSupabaseClient(): SupabaseClient<Database> {
   if (serviceClient) {
-    return serviceClient;
+    return serviceClient
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SECRET_KEY;
+  const supabaseUrl = process.env.SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SECRET_KEY
 
   if (!supabaseUrl || !serviceKey) {
     throw createError({
       statusCode: 500,
-      message: "伺服器設定錯誤：缺少 Supabase 環境變數",
-    });
+      message: '伺服器設定錯誤：缺少 Supabase 環境變數',
+    })
   }
 
   serviceClient = createClient<Database>(supabaseUrl, serviceKey, {
@@ -40,7 +40,7 @@ export function getServerSupabaseClient(): SupabaseClient<Database> {
       autoRefreshToken: false,
       persistSession: false,
     },
-  });
+  })
 
-  return serviceClient;
+  return serviceClient
 }

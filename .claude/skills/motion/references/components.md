@@ -6,7 +6,7 @@ Motion wraps any HTML or SVG element:
 
 ```vue
 <script setup lang="ts">
-import { Motion } from "motion-v";
+  import { Motion } from 'motion-v'
 </script>
 
 <template>
@@ -58,7 +58,7 @@ Animation when component unmounts. Requires `AnimatePresence`:
 
 ```vue
 <script setup>
-import { Motion, AnimatePresence } from "motion-v";
+  import { Motion, AnimatePresence } from 'motion-v'
 </script>
 
 <template>
@@ -154,10 +154,10 @@ Animation when element enters viewport:
 
 ```ts
 interface ViewportOptions {
-  once?: boolean; // Animate only first time (default: false)
-  amount?: number | "some" | "all"; // Visibility threshold (default: 'some')
-  margin?: string; // Rootmargin (e.g., '-100px')
-  root?: Element; // Scroll container (default: window)
+  once?: boolean // Animate only first time (default: false)
+  amount?: number | 'some' | 'all' // Visibility threshold (default: 'some')
+  margin?: string // Rootmargin (e.g., '-100px')
+  root?: Element // Scroll container (default: window)
 }
 ```
 
@@ -190,7 +190,7 @@ Animate between components with matching layoutId:
 
 ```vue
 <script setup>
-const selected = (ref < string) | (null > null);
+  const selected = (ref < string) | (null > null)
 </script>
 
 <template>
@@ -215,7 +215,7 @@ Sync layout animations across components:
 
 ```vue
 <script setup>
-import { Motion, LayoutGroup } from "motion-v";
+  import { Motion, LayoutGroup } from 'motion-v'
 </script>
 
 <template>
@@ -304,7 +304,7 @@ Animate components as they mount/unmount:
 
 ```vue
 <script setup>
-import { Motion, AnimatePresence } from "motion-v";
+  import { Motion, AnimatePresence } from 'motion-v'
 </script>
 
 <template>

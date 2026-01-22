@@ -8,10 +8,10 @@ Reactive .
 ## Usage
 
 ```ts
-import { useAbs } from "@vueuse/math";
+import { useAbs } from '@vueuse/math'
 
-const value = ref(-23);
-const absValue = useAbs(value); // Ref<23>
+const value = ref(-23)
+const absValue = useAbs(value) // Ref<23>
 ```
 
 ## Reference

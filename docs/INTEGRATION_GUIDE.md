@@ -119,20 +119,20 @@ pnpm add -D oxfmt oxlint vitest @vitest/coverage-v8 @nuxt/test-utils happy-dom
 建立 `vitest.config.ts`：
 
 ```typescript
-import { defineVitestConfig } from "@nuxt/test-utils/config";
+import { defineVitestConfig } from '@nuxt/test-utils/config'
 
 export default defineVitestConfig({
   test: {
-    environment: "happy-dom",
-    include: ["test/**/*.{test,spec}.ts"],
+    environment: 'happy-dom',
+    include: ['test/**/*.{test,spec}.ts'],
     coverage: {
-      provider: "v8",
-      reporter: ["text", "json", "html"],
-      include: ["app/**/*.{ts,vue}", "server/**/*.ts"],
-      exclude: ["**/*.d.ts", "**/*.test.ts"],
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      include: ['app/**/*.{ts,vue}', 'server/**/*.ts'],
+      exclude: ['**/*.d.ts', '**/*.test.ts'],
     },
   },
-});
+})
 ```
 
 ### 2.4 加入 Commitlint（選用）
@@ -145,28 +145,28 @@ pnpm add -D @commitlint/cli @commitlint/config-conventional husky lint-staged
 
 ```javascript
 export default {
-  extends: ["@commitlint/config-conventional"],
+  extends: ['@commitlint/config-conventional'],
   rules: {
-    "type-enum": [
+    'type-enum': [
       2,
-      "always",
+      'always',
       [
-        "feat",
-        "fix",
-        "chore",
-        "refactor",
-        "test",
-        "style",
-        "docs",
-        "build",
-        "ci",
-        "revert",
-        "deploy",
-        "init",
+        'feat',
+        'fix',
+        'chore',
+        'refactor',
+        'test',
+        'style',
+        'docs',
+        'build',
+        'ci',
+        'revert',
+        'deploy',
+        'init',
       ],
     ],
   },
-};
+}
 ```
 
 初始化 Husky：
@@ -193,13 +193,13 @@ pnpm add @nuxtjs/supabase @supabase/supabase-js
 
 ```typescript
 export default defineNuxtConfig({
-  modules: ["@nuxtjs/supabase"],
+  modules: ['@nuxtjs/supabase'],
 
   supabase: {
     redirect: false,
     // 使用 Better Auth 時禁用 Supabase Auth 重導向
   },
-});
+})
 ```
 
 ### 3.3 建立 Server 工具函式
@@ -207,33 +207,33 @@ export default defineNuxtConfig({
 建立 `server/utils/supabase.ts`：
 
 ```typescript
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "~~/app/types/database.types";
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '~~/app/types/database.types'
 
-let serviceClient: SupabaseClient<Database> | null = null;
+let serviceClient: SupabaseClient<Database> | null = null
 
 /**
  * 取得 Supabase Service Role Client（Singleton）
  * ⚠️ 此 Client 無 RLS 保護，僅用於 Server 端
  */
 export function getServerSupabaseClient(): SupabaseClient<Database> {
-  if (serviceClient) return serviceClient;
+  if (serviceClient) return serviceClient
 
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SECRET_KEY;
+  const supabaseUrl = process.env.SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SECRET_KEY
 
   if (!supabaseUrl || !serviceKey) {
     throw createError({
       statusCode: 500,
-      message: "伺服器設定錯誤：缺少 Supabase 環境變數",
-    });
+      message: '伺服器設定錯誤：缺少 Supabase 環境變數',
+    })
   }
 
   serviceClient = createClient<Database>(supabaseUrl, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
-  });
+  })
 
-  return serviceClient;
+  return serviceClient
 }
 ```
 
@@ -310,8 +310,8 @@ pnpm add @onmax/nuxt-better-auth better-auth
 
 ```typescript
 export default defineNuxtConfig({
-  modules: ["@onmax/nuxt-better-auth"],
-});
+  modules: ['@onmax/nuxt-better-auth'],
+})
 ```
 
 ### 4.3 建立認證配置
@@ -319,17 +319,17 @@ export default defineNuxtConfig({
 建立 `app/auth.config.ts`：
 
 ```typescript
-import { defineClientAuth } from "@onmax/nuxt-better-auth/config";
+import { defineClientAuth } from '@onmax/nuxt-better-auth/config'
 
 export default defineClientAuth({
   // 可在此加入 client-side plugins
-});
+})
 ```
 
 建立 `server/auth.config.ts`：
 
 ```typescript
-import { defineServerAuth } from "@onmax/nuxt-better-auth/config";
+import { defineServerAuth } from '@onmax/nuxt-better-auth/config'
 
 export default defineServerAuth({
   emailAndPassword: { enabled: true },
@@ -337,7 +337,7 @@ export default defineServerAuth({
     expiresIn: 60 * 60 * 24 * 7, // 7 天
     updateAge: 60 * 60 * 24, // 每 24 小時更新
   },
-});
+})
 ```
 
 ### 4.4 設定環境變數

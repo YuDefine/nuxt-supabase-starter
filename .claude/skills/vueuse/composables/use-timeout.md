@@ -8,9 +8,9 @@ Update value after a given time with controls.
 ## Usage
 
 ```ts
-import { useTimeout } from "@vueuse/core";
+import { useTimeout } from '@vueuse/core'
 
-const ready = useTimeout(1000);
+const ready = useTimeout(1000)
 ```
 
 ## Options

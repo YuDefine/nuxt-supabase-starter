@@ -8,9 +8,9 @@ Reactive Screen Wake Lock API. Provides a way to prevent devices from dimming or
 ## Usage
 
 ```ts
-import { useWakeLock } from "@vueuse/core";
+import { useWakeLock } from '@vueuse/core'
 
-const { isSupported, isActive, forceRequest, request, release } = useWakeLock();
+const { isSupported, isActive, forceRequest, request, release } = useWakeLock()
 ```
 
 ## Returns

@@ -8,9 +8,9 @@ Safe . Call if it's inside a component lifecycle, if not, just call the function
 ## Usage
 
 ```ts
-import { tryOnBeforeMount } from "@vueuse/core";
+import { tryOnBeforeMount } from '@vueuse/core'
 
-tryOnBeforeMount(() => {});
+tryOnBeforeMount(() => {})
 ```
 
 ## Reference

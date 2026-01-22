@@ -8,11 +8,11 @@ Reactive Network status. The Network Information API provides information about 
 ## Usage
 
 ```ts
-import { useNetwork } from "@vueuse/core";
+import { useNetwork } from '@vueuse/core'
 
-const { isOnline, offlineAt, downlink, downlinkMax, effectiveType, saveData, type } = useNetwork();
+const { isOnline, offlineAt, downlink, downlinkMax, effectiveType, saveData, type } = useNetwork()
 
-console.log(isOnline.value);
+console.log(isOnline.value)
 ```
 
 ## Returns

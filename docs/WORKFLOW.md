@@ -44,31 +44,31 @@ spec.md    plan.md     tasks.md    Red/Green   pnpm check
 
 ```typescript
 // test/unit/utils/sort.test.ts
-import { describe, it, expect } from "vitest";
-import { sortByDate } from "~/utils/sort";
+import { describe, it, expect } from 'vitest'
+import { sortByDate } from '~/utils/sort'
 
-describe("sortByDate", () => {
-  it("should sort items by date in descending order", () => {
+describe('sortByDate', () => {
+  it('should sort items by date in descending order', () => {
     const items = [
-      { id: 1, date: new Date("2024-01-01") },
-      { id: 2, date: new Date("2024-03-01") },
-      { id: 3, date: new Date("2024-02-01") },
-    ];
+      { id: 1, date: new Date('2024-01-01') },
+      { id: 2, date: new Date('2024-03-01') },
+      { id: 3, date: new Date('2024-02-01') },
+    ]
 
-    const result = sortByDate(items);
+    const result = sortByDate(items)
 
-    expect(result.map((i) => i.id)).toEqual([2, 3, 1]);
-  });
+    expect(result.map((i) => i.id)).toEqual([2, 3, 1])
+  })
 
-  it("should handle empty array", () => {
-    expect(sortByDate([])).toEqual([]);
-  });
+  it('should handle empty array', () => {
+    expect(sortByDate([])).toEqual([])
+  })
 
-  it("should handle single item", () => {
-    const items = [{ id: 1, date: new Date("2024-01-01") }];
-    expect(sortByDate(items)).toEqual(items);
-  });
-});
+  it('should handle single item', () => {
+    const items = [{ id: 1, date: new Date('2024-01-01') }]
+    expect(sortByDate(items)).toEqual(items)
+  })
+})
 ```
 
 這時候測試會失敗，因為 `sortByDate` 還不存在。這就是「Red」。
@@ -78,11 +78,11 @@ describe("sortByDate", () => {
 ```typescript
 // app/utils/sort.ts
 interface Dateable {
-  date: Date;
+  date: Date
 }
 
 export function sortByDate<T extends Dateable>(items: T[]): T[] {
-  return [...items].sort((a, b) => b.date.getTime() - a.date.getTime());
+  return [...items].sort((a, b) => b.date.getTime() - a.date.getTime())
 }
 ```
 
@@ -95,15 +95,15 @@ export function sortByDate<T extends Dateable>(items: T[]): T[] {
 ```typescript
 // app/utils/sort.ts
 interface Dateable {
-  date: Date;
+  date: Date
 }
 
 export function sortByDate<T extends Dateable>(
   items: readonly T[],
-  order: "asc" | "desc" = "desc",
+  order: 'asc' | 'desc' = 'desc'
 ): T[] {
-  const multiplier = order === "desc" ? -1 : 1;
-  return [...items].sort((a, b) => multiplier * (a.date.getTime() - b.date.getTime()));
+  const multiplier = order === 'desc' ? -1 : 1
+  return [...items].sort((a, b) => multiplier * (a.date.getTime() - b.date.getTime()))
 }
 ```
 

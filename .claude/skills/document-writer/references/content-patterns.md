@@ -51,8 +51,8 @@ pnpm add -D nuxt-content-twoslash
 
 ```ts [nuxt.config.ts]
 export default defineNuxtConfig({
-  modules: ["nuxt-content-twoslash", "@nuxt/content"], // twoslash before content
-});
+  modules: ['nuxt-content-twoslash', '@nuxt/content'], // twoslash before content
+})
 ```
 
 ## Component Patterns
@@ -111,8 +111,8 @@ Always include file path:
 ````md
 ```ts [nuxt.config.ts]
 export default defineNuxtConfig({
-  modules: ["@nuxt/content"],
-});
+  modules: ['@nuxt/content'],
+})
 ```
 
 ```vue [app/pages/index.vue]

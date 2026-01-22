@@ -1,4 +1,4 @@
-import { defineServerAuth } from "@onmax/nuxt-better-auth/config";
+import { defineServerAuth } from '@onmax/nuxt-better-auth/config'
 
 export default defineServerAuth({
   // 啟用 Email + Password 認證（開發測試用）
@@ -21,4 +21,4 @@ export default defineServerAuth({
     expiresIn: 60 * 60 * 24 * 7, // 7 天
     updateAge: 60 * 60 * 24, // 每 24 小時更新
   },
-});
+})

@@ -8,15 +8,15 @@ Throttled watch.
 ## Usage
 
 ```ts
-import { watchThrottled } from "@vueuse/core";
+import { watchThrottled } from '@vueuse/core'
 
 watchThrottled(
   source,
   () => {
-    console.log("changed!");
+    console.log('changed!')
   },
-  { throttle: 500 },
-);
+  { throttle: 500 }
+)
 ```
 
 ## Reference

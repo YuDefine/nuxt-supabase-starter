@@ -8,9 +8,9 @@ Reactive Fetch API provides the ability to abort requests, intercept requests be
 ## Usage
 
 ```ts
-import { useFetch } from "@vueuse/core";
+import { useFetch } from '@vueuse/core'
 
-const { isFetching, error, data } = useFetch(url);
+const { isFetching, error, data } = useFetch(url)
 ```
 
 ## Options

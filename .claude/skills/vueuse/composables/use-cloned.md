@@ -8,15 +8,15 @@ Reactive clone of a ref. By default, it use to do the clone.
 ## Usage
 
 ```ts
-import { useCloned } from "@vueuse/core";
+import { useCloned } from '@vueuse/core'
 
-const original = ref({ key: "value" });
+const original = ref({ key: 'value' })
 
-const { cloned } = useCloned(original);
+const { cloned } = useCloned(original)
 
-original.value.key = "some new value";
+original.value.key = 'some new value'
 
-console.log(cloned.value.key); // 'value'
+console.log(cloned.value.key) // 'value'
 ```
 
 ## Options

@@ -8,7 +8,7 @@ Create and read and write local files with FileSystemAccessAPI
 ## Usage
 
 ```ts
-import { useFileSystemAccess } from "@vueuse/core";
+import { useFileSystemAccess } from '@vueuse/core'
 
 const {
   isSupported,
@@ -23,7 +23,7 @@ const {
   save,
   saveAs,
   updateData,
-} = useFileSystemAccess();
+} = useFileSystemAccess()
 ```
 
 ## Returns

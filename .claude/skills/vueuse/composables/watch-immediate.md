@@ -8,16 +8,16 @@ Shorthand for watching value with
 ## Usage
 
 ```ts
-import { watchImmediate } from "@vueuse/core";
+import { watchImmediate } from '@vueuse/core'
 
-const obj = ref("vue-use");
+const obj = ref('vue-use')
 
 // changing the value from some external store/composables
-obj.value = "VueUse";
+obj.value = 'VueUse'
 
 watchImmediate(obj, (updated) => {
-  console.log(updated); // Console.log will be logged twice
-});
+  console.log(updated) // Console.log will be logged twice
+})
 ```
 
 ## Reference

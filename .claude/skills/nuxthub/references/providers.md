@@ -15,24 +15,24 @@ NuxtHub generates wrangler.json from hub config:
 export default defineNuxtConfig({
   hub: {
     db: {
-      dialect: "sqlite",
-      driver: "d1",
-      connection: { databaseId: "<database-id>" },
+      dialect: 'sqlite',
+      driver: 'd1',
+      connection: { databaseId: '<database-id>' },
     },
     kv: {
-      driver: "cloudflare-kv-binding",
-      namespaceId: "<kv-namespace-id>",
+      driver: 'cloudflare-kv-binding',
+      namespaceId: '<kv-namespace-id>',
     },
     cache: {
-      driver: "cloudflare-kv-binding",
-      namespaceId: "<cache-namespace-id>",
+      driver: 'cloudflare-kv-binding',
+      namespaceId: '<cache-namespace-id>',
     },
     blob: {
-      driver: "cloudflare-r2",
-      bucketName: "<bucket-name>",
+      driver: 'cloudflare-r2',
+      bucketName: '<bucket-name>',
     },
   },
-});
+})
 ```
 
 ### Observability (Recommended)
@@ -103,12 +103,12 @@ Deploy NuxtHub apps on Vercel with marketplace integrations.
 export default defineNuxtConfig({
   hub: {
     db: {
-      dialect: "postgresql",
-      driver: "postgres-js",
+      dialect: 'postgresql',
+      driver: 'postgres-js',
       // DATABASE_URL env var auto-detected
     },
   },
-});
+})
 ```
 
 **Option 2: Turso (SQLite)**
@@ -139,7 +139,7 @@ hub: {
 
 ```ts
 hub: {
-  kv: true;
+  kv: true
   // Auto-detects Vercel KV via env vars
 }
 ```
@@ -166,7 +166,7 @@ hub: {
 
 ```ts
 hub: {
-  blob: true;
+  blob: true
   // Auto-detects Vercel Blob via env var
 }
 ```
@@ -177,7 +177,7 @@ Uses Vercel Runtime Cache (built-in):
 
 ```ts
 hub: {
-  cache: true;
+  cache: true
   // Auto-uses Vercel runtime cache in production
 }
 ```
@@ -199,11 +199,11 @@ Use external providers via env vars:
 export default defineNuxtConfig({
   hub: {
     db: {
-      dialect: "sqlite",
-      driver: "libsql", // or postgres-js, mysql2
+      dialect: 'sqlite',
+      driver: 'libsql', // or postgres-js, mysql2
     },
   },
-});
+})
 ```
 
 ### KV Storage
@@ -213,7 +213,7 @@ export default defineNuxtConfig({
 
 ```ts
 hub: {
-  kv: true; // Auto-detects provider
+  kv: true // Auto-detects provider
 }
 ```
 
@@ -231,7 +231,7 @@ S3_REGION=<region>
 
 ```ts
 hub: {
-  blob: true; // Auto-detects S3 config
+  blob: true // Auto-detects S3 config
 }
 ```
 
@@ -243,7 +243,7 @@ hub: {
 
 ```ts
 hub: {
-  kv: true; // Uses Deno.openKv()
+  kv: true // Uses Deno.openKv()
 }
 ```
 
@@ -289,7 +289,7 @@ NuxtHub auto-detects hosting environment via:
 
 ```ts
 nitro: {
-  preset: "cloudflare-pages"; // or 'vercel', 'netlify', etc.
+  preset: 'cloudflare-pages' // or 'vercel', 'netlify', etc.
 }
 ```
 

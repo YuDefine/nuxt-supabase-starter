@@ -8,10 +8,10 @@ Reactive .
 ## Usage
 
 ```ts
-import { useFloor } from "@vueuse/math";
+import { useFloor } from '@vueuse/math'
 
-const value = ref(45.95);
-const result = useFloor(value); // 45
+const value = ref(45.95)
+const result = useFloor(value) // 45
 ```
 
 ## Reference
