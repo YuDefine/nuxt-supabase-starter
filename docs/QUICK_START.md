@@ -38,16 +38,23 @@ git commit -m "🎉 init: 從 nuxt-supabase-starter 建立專案"
 my-project/
 ├── CLAUDE.md              # AI 開發規範
 ├── .claude/               # Claude Code 配置
-│   ├── commands/          # 13 個自定義指令
-│   ├── agents/            # 3 個 SubAgents
-│   └── skills/            # 17 個 AI Skills（12 通用 + 5 情境）
+│   ├── commands/          # 自定義指令
+│   ├── agents/            # SubAgents
+│   └── skills/            # AI Skills
 ├── .specify/              # spec-kit 工作流程
 ├── app/                   # Nuxt 應用程式
+│   ├── assets/css/        # 樣式檔案
+│   ├── auth.config.ts     # Client 認證配置
+│   ├── pages/             # 頁面元件
+│   └── types/             # TypeScript 類型
 ├── server/                # API 端點
-├── supabase/              # Migration 檔案
+│   ├── auth.config.ts     # Server 認證配置
+│   └── utils/             # Server 工具函式
 ├── docs/                  # 專案文件
-└── docs/verify/           # 系統狀態文件（Auth、API、DB）
+└── docs/verify/           # 系統狀態文件
 ```
+
+> **注意**：`supabase/` 目錄會在 Step 4 執行 `supabase init` 時自動建立。
 
 ---
 
