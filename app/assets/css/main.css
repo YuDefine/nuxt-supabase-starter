@@ -2,3 +2,10 @@
 @import "@nuxt/ui";
 
 /* 自訂樣式 */
+
+/* nuxt-charts (Unovis) 主題設定 */
+:root {
+  /* 圖表背景透明 */
+  --vis-donut-background-color: transparent !important;
+  --vis-area-fill-opacity: 0.3;
+}
