@@ -1,11 +1,8 @@
 <script setup lang="ts">
-  // colorMode 預留給未來主題切換功能
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const colorMode = useColorMode()
+  import { zh_tw } from '@nuxt/ui/locale'
 </script>
-
 <template>
-  <UApp>
+  <UApp :locale="zh_tw">
     <UContainer class="py-8">
       <NuxtPage />
     </UContainer>
