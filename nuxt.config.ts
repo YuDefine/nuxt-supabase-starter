@@ -13,7 +13,7 @@ export default defineNuxtConfig({
     "@pinia/nuxt",
     "@vueuse/nuxt",
     "@sentry/nuxt/module",
-    "@onmax/nuxt-better-auth",
+    // "@onmax/nuxt-better-auth", // 暫時停用：alpha 版本有相容性問題
     "@pinia/colada-nuxt",
     "nuxt-charts",
   ],

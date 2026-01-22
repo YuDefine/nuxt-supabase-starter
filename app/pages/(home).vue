@@ -159,11 +159,11 @@ function showToast() {
             <h3 class="font-medium">Line Chart</h3>
           </template>
           <div class="h-48">
-            <VisXYContainer :data="lineChartData">
-              <VisLine :x="(d: { x: string }) => d.x" :y="(d: { y: number }) => d.y" />
-              <VisAxis type="x" />
-              <VisAxis type="y" />
-            </VisXYContainer>
+            <LineChart
+              :data="lineChartData"
+              :x="(d: { x: string }) => d.x"
+              :y="(d: { y: number }) => d.y"
+            />
           </div>
         </UCard>
 
@@ -173,14 +173,11 @@ function showToast() {
             <h3 class="font-medium">Bar Chart</h3>
           </template>
           <div class="h-48">
-            <VisXYContainer :data="barChartData">
-              <VisStackedBar
-                :x="(_d: unknown, i: number) => i"
-                :y="(d: { value: number }) => d.value"
-              />
-              <VisAxis type="x" :tick-format="(i: number) => barChartData[i]?.name ?? ''" />
-              <VisAxis type="y" />
-            </VisXYContainer>
+            <BarChart
+              :data="barChartData"
+              :x="(_d: unknown, i: number) => i"
+              :y="(d: { value: number }) => d.value"
+            />
           </div>
         </UCard>
 
@@ -190,9 +187,7 @@ function showToast() {
             <h3 class="font-medium">Donut Chart</h3>
           </template>
           <div class="h-48">
-            <VisSingleContainer :data="{ values: donutChartData }">
-              <VisDonut :value="(d: { value: number }) => d.value" :arcWidth="40" />
-            </VisSingleContainer>
+            <DonutChart :data="donutChartData" :value="(d: { value: number }) => d.value" />
           </div>
         </UCard>
       </div>
