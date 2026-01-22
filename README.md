@@ -150,13 +150,14 @@
 
 **不知道從哪開始？** 參考 [文件導讀指南](./docs/READING_GUIDE.md)。
 
-| 我想要...    | 閱讀這份                                            |
-| ------------ | --------------------------------------------------- |
-| 快速開始     | [QUICK_START.md](./docs/QUICK_START.md)             |
-| 了解開發流程 | [WORKFLOW.md](./docs/WORKFLOW.md)                   |
-| 查詢常見問題 | [FAQ.md](./docs/FAQ.md)                             |
-| 了解 AI 配置 | [CLAUDE_CODE_GUIDE.md](./docs/CLAUDE_CODE_GUIDE.md) |
-| 查閱系統狀態 | [docs/verify/](./docs/verify/)                      |
+| 我想要...               | 閱讀這份                                            |
+| ----------------------- | --------------------------------------------------- |
+| 🆕 **新專案**快速開始   | [QUICK_START.md](./docs/QUICK_START.md)             |
+| 🔧 **現有專案**整合配置 | [INTEGRATION_GUIDE.md](./docs/INTEGRATION_GUIDE.md) |
+| 了解開發流程            | [WORKFLOW.md](./docs/WORKFLOW.md)                   |
+| 查詢常見問題            | [FAQ.md](./docs/FAQ.md)                             |
+| 了解 AI 配置            | [CLAUDE_CODE_GUIDE.md](./docs/CLAUDE_CODE_GUIDE.md) |
+| 查閱系統狀態            | [docs/verify/](./docs/verify/)                      |
 
 <details>
 <summary>完整文件清單</summary>
@@ -166,7 +167,8 @@
 | **[README.md](./README.md)**                                 | Tech Stack、核心概念               | 剛接觸這個範本     |
 | **[docs/READING_GUIDE.md](./docs/READING_GUIDE.md)**         | 文件分類與閱讀順序                 | 不知道從哪開始     |
 | **[docs/FAQ.md](./docs/FAQ.md)**                             | 常見疑問集                         | 有具體問題         |
-| **[docs/QUICK_START.md](./docs/QUICK_START.md)**             | 安裝與設定步驟                     | 要開始使用         |
+| **[docs/QUICK_START.md](./docs/QUICK_START.md)**             | 新專案安裝與設定步驟               | 要從零開始         |
+| **[docs/INTEGRATION_GUIDE.md](./docs/INTEGRATION_GUIDE.md)** | 現有專案整合 Claude/Supabase       | 要整合到現有專案   |
 | **[docs/SUPABASE_GUIDE.md](./docs/SUPABASE_GUIDE.md)**       | Supabase 入門、RLS 詳解、Migration | 第一次用 Supabase  |
 | **[docs/WORKFLOW.md](./docs/WORKFLOW.md)**                   | TDD、自動化檢查、Git 規範          | 想了解開發流程     |
 | **[docs/SPEC_KIT.md](./docs/SPEC_KIT.md)**                   | spec-kit 命令詳解                  | 要用 AI 輔助開發   |
@@ -371,10 +373,17 @@ Skills 會自動串接，減少手動操作：
 
 ## 下一步
 
+### 新專案
+
 1. **[快速開始](./docs/QUICK_START.md)**：clone、跑起來
 2. **[Supabase 入門](./docs/SUPABASE_GUIDE.md)**：建立第一個資料表
 3. **[API 設計](./docs/API_PATTERNS.md)**：寫你的第一個 CRUD API
 4. **[spec-kit](./docs/SPEC_KIT.md)**：用 AI 輔助開發一個功能
+
+### 現有專案
+
+1. **[整合指南](./docs/INTEGRATION_GUIDE.md)**：將 Claude/Supabase 配置注入現有專案
+2. 根據需要選擇整合項目（Claude 配置、Supabase、Better Auth）
 
 有問題歡迎開 issue。
 

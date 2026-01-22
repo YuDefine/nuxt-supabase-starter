@@ -8,11 +8,11 @@
 
 ### 給人類開發者
 
-| 層級        | 目的     | 文件                                                                                                   | 何時閱讀           |
-| ----------- | -------- | ------------------------------------------------------------------------------------------------------ | ------------------ |
-| **L1 入門** | 快速開始 | [README.md](../README.md), [QUICK_START.md](QUICK_START.md)                                            | 第一次使用         |
-| **L2 指南** | 深入學習 | [WORKFLOW.md](WORKFLOW.md), [SUPABASE_GUIDE.md](SUPABASE_GUIDE.md), [API_PATTERNS.md](API_PATTERNS.md) | 開始開發時         |
-| **L3 狀態** | 查閱參考 | [docs/verify/\*](verify/README.md)                                                                     | 需要確認系統狀態時 |
+| 層級        | 目的     | 文件                                                                                                      | 何時閱讀           |
+| ----------- | -------- | --------------------------------------------------------------------------------------------------------- | ------------------ |
+| **L1 入門** | 快速開始 | [README.md](../README.md), [QUICK_START.md](QUICK_START.md), [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) | 第一次使用         |
+| **L2 指南** | 深入學習 | [WORKFLOW.md](WORKFLOW.md), [SUPABASE_GUIDE.md](SUPABASE_GUIDE.md), [API_PATTERNS.md](API_PATTERNS.md)    | 開始開發時         |
+| **L3 狀態** | 查閱參考 | [docs/verify/\*](verify/README.md)                                                                        | 需要確認系統狀態時 |
 
 ### 給 Claude/AI
 
@@ -34,8 +34,8 @@
 ```
 README.md（5 分鐘）
     ↓ 了解 Tech Stack 與專案目標
-QUICK_START.md（15 分鐘）
-    ↓ 完成環境設定
+QUICK_START.md 或 INTEGRATION_GUIDE.md（15 分鐘）
+    ↓ 完成環境設定（新專案用 QUICK_START，現有專案用 INTEGRATION_GUIDE）
 WORKFLOW.md（10 分鐘）
     ↓ 了解 TDD 開發流程
 ```
@@ -141,16 +141,16 @@ SPEC_KIT.md
 
 ### 我想知道...
 
-| 問題                     | 答案在                                                                        |
-| ------------------------ | ----------------------------------------------------------------------------- |
-| 專案用了哪些技術？       | [README.md](../README.md)                                                     |
-| 怎麼開始開發？           | [QUICK_START.md](QUICK_START.md)                                              |
-| TDD 流程是什麼？         | [WORKFLOW.md](WORKFLOW.md)                                                    |
-| 認證怎麼做？             | [docs/verify/AUTH_INTEGRATION.md](verify/AUTH_INTEGRATION.md)                 |
-| Migration 怎麼建立？     | [docs/verify/SUPABASE_MIGRATION_GUIDE.md](verify/SUPABASE_MIGRATION_GUIDE.md) |
-| Client/Server 怎麼分工？ | [CLAUDE.md](../CLAUDE.md#-supabase-資料存取策略)                              |
-| Spec-Kit 怎麼用？        | [SPEC_KIT.md](SPEC_KIT.md)                                                    |
-| 常見問題？               | [FAQ.md](FAQ.md)                                                              |
+| 問題                     | 答案在                                                                                                |
+| ------------------------ | ----------------------------------------------------------------------------------------------------- |
+| 專案用了哪些技術？       | [README.md](../README.md)                                                                             |
+| 怎麼開始開發？           | [QUICK_START.md](QUICK_START.md)（新專案）或 [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md)（現有專案） |
+| TDD 流程是什麼？         | [WORKFLOW.md](WORKFLOW.md)                                                                            |
+| 認證怎麼做？             | [docs/verify/AUTH_INTEGRATION.md](verify/AUTH_INTEGRATION.md)                                         |
+| Migration 怎麼建立？     | [docs/verify/SUPABASE_MIGRATION_GUIDE.md](verify/SUPABASE_MIGRATION_GUIDE.md)                         |
+| Client/Server 怎麼分工？ | [CLAUDE.md](../CLAUDE.md#-supabase-資料存取策略)                                                      |
+| Spec-Kit 怎麼用？        | [SPEC_KIT.md](SPEC_KIT.md)                                                                            |
+| 常見問題？               | [FAQ.md](FAQ.md)                                                                                      |
 
 ---
 
