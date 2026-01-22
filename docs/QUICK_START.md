@@ -72,12 +72,14 @@ my-project/
 ## Step 2：安裝依賴
 
 ```bash
-# 複製 pnpm 設定檔（nuxt-charts 需要 shamefully-hoist）
+# ⚠️ 重要：必須先複製 .npmrc，否則會遇到 to-px 錯誤
 cp .npmrc.example .npmrc
 
 # 安裝依賴
 pnpm install
 ```
+
+> **⚠️ 常見問題**：如果遇到 `to-px does not provide an export named 'default'` 錯誤，表示缺少 `.npmrc` 檔案。請確認已執行 `cp .npmrc.example .npmrc`，然後執行 `rm -rf node_modules && pnpm install`。
 
 這會安裝完整的 Tech Stack：
 
