@@ -65,58 +65,21 @@ my-project/
 └── docs/verify/           # 系統狀態文件
 ```
 
-> **注意**：`supabase/` 目錄會在 Step 4 執行 `supabase init` 時自動建立。
+> **注意**：`supabase/` 目錄會在 Step 3 執行 `supabase init` 時自動建立。
 
 ---
 
-## Step 2：安裝依賴
+## Step 2：設定環境變數
 
 ```bash
-pnpm install
-```
-
-這會安裝完整的 Tech Stack：
-
-**核心框架**
-
-- **Nuxt 4** + Vue 3 + TypeScript
-- **Nuxt UI 4** + Tailwind CSS
-- **Nuxt Charts**（基於 Unovis）
-
-**狀態與資料**
-
-- **Pinia** + **Pinia Colada**（非同步資料管理）
-- **VueUse**（Vue Composition Utilities）
-- **Supabase**（PostgreSQL + Auth + Realtime）
-
-**認證**
-
-- **nuxt-better-auth**（33+ OAuth providers）
-
-**測試與品質**
-
-- **Vitest** + **@nuxt/test-utils**
-- **OXLint** + **OXFmt**（Rust 實作，極快）
-- **Commitlint** + **Husky**（Git hooks）
-
-**部署**
-
-- **Cloudflare Workers**（via NuxtHub）
-- **Sentry**（錯誤追蹤）
-
----
-
-## Step 3：設定環境變數
-
-```bash
-# 複製範例檔案
+# 先複製環境變數範本
 cp .env.example .env
 ```
 
 編輯 `.env`，填入必要的值：
 
 ```bash
-# Supabase（Step 4 會取得這些值）
+# Supabase（Step 3 會取得這些值）
 SUPABASE_URL=http://127.0.0.1:54321
 SUPABASE_KEY=<anon_key>
 SUPABASE_SECRET_KEY=<service_role_key>
@@ -139,7 +102,7 @@ NUXT_PUBLIC_SITE_URL=http://localhost:3000
 
 ---
 
-## Step 4：初始化並啟動 Supabase
+## Step 3：初始化並啟動 Supabase
 
 ```bash
 # 初始化 Supabase（建立 supabase/ 目錄和 config.toml）
@@ -180,6 +143,45 @@ mkdir -p app/types
 # 產生資料庫類型
 supabase gen types typescript --local | tee app/types/database.types.ts > /dev/null
 ```
+
+---
+
+## Step 4：安裝依賴
+
+```bash
+pnpm install
+```
+
+> **注意**：`nuxt-better-auth` 會自動產生 `BETTER_AUTH_SECRET` 並寫入 `.env`。如果你在 Step 2 已經設定過，它會保留你的值。
+
+這會安裝完整的 Tech Stack：
+
+**核心框架**
+
+- **Nuxt 4** + Vue 3 + TypeScript
+- **Nuxt UI 4** + Tailwind CSS
+- **Nuxt Charts**（基於 Unovis）
+
+**狀態與資料**
+
+- **Pinia** + **Pinia Colada**（非同步資料管理）
+- **VueUse**（Vue Composition Utilities）
+- **Supabase**（PostgreSQL + Auth + Realtime）
+
+**認證**
+
+- **nuxt-better-auth**（33+ OAuth providers）
+
+**測試與品質**
+
+- **Vitest** + **@nuxt/test-utils**
+- **OXLint** + **OXFmt**（Rust 實作，極快）
+- **Commitlint** + **Husky**（Git hooks）
+
+**部署**
+
+- **Cloudflare Workers**（via NuxtHub）
+- **Sentry**（錯誤追蹤）
 
 ---
 
