@@ -116,10 +116,10 @@
 
 ### 兩種 Skill 類型
 
-| 類型     | 來源                                                                                                                | 更新方式 |
-| -------- | ------------------------------------------------------------------------------------------------------------------- | -------- |
-| 通用技術 | [nuxt-skills](https://github.com/onmax/nuxt-skills) + [agent-skills](https://github.com/supabase/agent-skills)      | 手動同步 |
-| 情境觸發 | 本地 `.claude/skills/`                                                                                              | 手動維護 |
+| 類型     | 來源                                                                                                           | 更新方式 |
+| -------- | -------------------------------------------------------------------------------------------------------------- | -------- |
+| 通用技術 | [nuxt-skills](https://github.com/onmax/nuxt-skills) + [agent-skills](https://github.com/supabase/agent-skills) | 手動同步 |
+| 情境觸發 | 本地 `.claude/skills/`                                                                                         | 手動維護 |
 
 ### 通用技術 Skills（13 個）
 
