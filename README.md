@@ -116,21 +116,22 @@
 
 ### 兩種 Skill 類型
 
-| 類型     | 來源                                                | 更新方式        |
-| -------- | --------------------------------------------------- | --------------- |
-| 通用技術 | [nuxt-skills](https://github.com/onmax/nuxt-skills) | Plugin 自動更新 |
-| 情境觸發 | 本地 `.claude/skills/`                              | 手動維護        |
+| 類型     | 來源                                                                                                                | 更新方式 |
+| -------- | ------------------------------------------------------------------------------------------------------------------- | -------- |
+| 通用技術 | [nuxt-skills](https://github.com/onmax/nuxt-skills) + [agent-skills](https://github.com/supabase/agent-skills)      | 手動同步 |
+| 情境觸發 | 本地 `.claude/skills/`                                                                                              | 手動維護 |
 
-### 通用技術 Skills（12 個，自動更新）
+### 通用技術 Skills（13 個）
 
-由 [nuxt-skills](https://github.com/onmax/nuxt-skills) plugin 維護，包含：
+來自 [nuxt-skills](https://github.com/onmax/nuxt-skills) 和 [supabase/agent-skills](https://github.com/supabase/agent-skills)，包含：
 
 - `nuxt`、`nuxt-ui`、`nuxt-better-auth`
 - `vue`、`vueuse`、`reka-ui`、`motion`
 - `nuxthub`、`nuxt-content`、`nuxt-modules`
 - `ts-library`、`document-writer`
+- `postgres-best-practices`（Supabase Postgres 效能最佳化）
 
-這些 skills 會透過 GitHub Actions 自動更新，確保與官方文件同步。
+需手動從各自的 repo 同步更新。
 
 ### 情境觸發 Skills（5 個，本地維護）
 

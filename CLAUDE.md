@@ -315,26 +315,27 @@ pnpm typecheck
 
 本專案使用兩種類型的 AI Skills 來輔助開發。
 
-### 技術 Skills（自動更新）
+### 技術 Skills（手動同步）
 
-由 [nuxt-skills](https://github.com/onmax/nuxt-skills) plugin 自動維護，透過 GitHub Actions 定期同步最新版本。
+來自 [nuxt-skills](https://github.com/onmax/nuxt-skills) 和 [supabase/agent-skills](https://github.com/supabase/agent-skills)，需手動同步更新。
 
-| Skill              | 用途                  |
-| ------------------ | --------------------- |
-| `nuxt`             | Nuxt 4 框架開發       |
-| `nuxt-ui`          | Nuxt UI 4 元件使用    |
-| `nuxt-better-auth` | 認證整合              |
-| `nuxt-content`     | 內容管理              |
-| `nuxt-modules`     | 模組開發              |
-| `nuxthub`          | NuxtHub 部署          |
-| `vue`              | Vue 3 Composition API |
-| `vueuse`           | VueUse composables    |
-| `reka-ui`          | Headless UI 元件      |
-| `motion`           | Motion 動畫           |
-| `ts-library`       | TypeScript 函式庫開發 |
-| `document-writer`  | 文件撰寫              |
+| Skill                      | 來源          | 用途                    |
+| -------------------------- | ------------- | ----------------------- |
+| `nuxt`                     | nuxt-skills   | Nuxt 4 框架開發         |
+| `nuxt-ui`                  | nuxt-skills   | Nuxt UI 4 元件使用      |
+| `nuxt-better-auth`         | nuxt-skills   | 認證整合                |
+| `nuxt-content`             | nuxt-skills   | 內容管理                |
+| `nuxt-modules`             | nuxt-skills   | 模組開發                |
+| `nuxthub`                  | nuxt-skills   | NuxtHub 部署            |
+| `vue`                      | nuxt-skills   | Vue 3 Composition API   |
+| `vueuse`                   | nuxt-skills   | VueUse composables      |
+| `reka-ui`                  | nuxt-skills   | Headless UI 元件        |
+| `motion`                   | nuxt-skills   | Motion 動畫             |
+| `ts-library`               | nuxt-skills   | TypeScript 函式庫開發   |
+| `document-writer`          | nuxt-skills   | 文件撰寫                |
+| `postgres-best-practices`  | agent-skills  | Postgres 效能最佳化     |
 
-> **更新機制**：這些 skills 存放在 `.claude/skills/` 目錄，由 CI 定期從 nuxt-skills repo 拉取更新。
+> **更新方式**：這些 skills 存放在 `.claude/skills/` 目錄，需手動從各自的 repo 同步。
 
 ### 情境 Skills（本地維護）
 
