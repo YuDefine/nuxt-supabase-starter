@@ -48,15 +48,15 @@ docs/verify/    穩定文件（本手冊、Quick Start、DB 操作、Auth、Stat
 
 **必讀文件**
 
-| 類別       | 文件                                                                                                           |
-| ---------- | -------------------------------------------------------------------------------------------------------------- |
-| Onboarding | [QUICK_START](../QUICK_START.md)                                                                               |
-| Supabase   | [SUPABASE_MIGRATION_GUIDE](./SUPABASE_MIGRATION_GUIDE.md), [DATABASE_OPTIMIZATION](./DATABASE_OPTIMIZATION.md) |
-| 認證/授權  | [AUTH_INTEGRATION](./AUTH_INTEGRATION.md)                                                                      |
-| 環境變數   | [ENVIRONMENT_VARIABLES](./ENVIRONMENT_VARIABLES.md)                                                            |
-| API 設計   | [API_DESIGN_GUIDE](./API_DESIGN_GUIDE.md)                                                                      |
-| 前端狀態   | [PINIA_ARCHITECTURE](./PINIA_ARCHITECTURE.md)                                                                  |
-| RLS 規範   | [RLS_BEST_PRACTICES](./RLS_BEST_PRACTICES.md)                                                                  |
+| 類別       | 文件                                                                                                                                                              |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Onboarding | [QUICK_START](../QUICK_START.md)                                                                                                                                  |
+| Supabase   | [SUPABASE_MIGRATION_GUIDE](./SUPABASE_MIGRATION_GUIDE.md), [DATABASE_OPTIMIZATION](./DATABASE_OPTIMIZATION.md), [SELF_HOSTED_SUPABASE](./SELF_HOSTED_SUPABASE.md) |
+| 認證/授權  | [AUTH_INTEGRATION](./AUTH_INTEGRATION.md)                                                                                                                         |
+| 環境變數   | [ENVIRONMENT_VARIABLES](./ENVIRONMENT_VARIABLES.md)                                                                                                               |
+| API 設計   | [API_DESIGN_GUIDE](./API_DESIGN_GUIDE.md)                                                                                                                         |
+| 前端狀態   | [PINIA_ARCHITECTURE](./PINIA_ARCHITECTURE.md)                                                                                                                     |
+| RLS 規範   | [RLS_BEST_PRACTICES](./RLS_BEST_PRACTICES.md)                                                                                                                     |
 
 ---
 

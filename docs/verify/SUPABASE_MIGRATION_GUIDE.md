@@ -177,3 +177,133 @@ SELECT setval(
 ---
 
 使用本指南可以確保所有環境（本機、遠端）保持一致。若流程有遺漏，請直接更新此文件。
+
+---
+
+## 10. Self-hosted Supabase 部署
+
+> Self-hosted 模式適用於需要完全控制資料與基礎設施的情境。開發流程不變，僅部署方式不同。
+
+### 10.1 架構差異
+
+| 項目           | Cloud              | Self-hosted            |
+| -------------- | ------------------ | ---------------------- |
+| Migration 同步 | `supabase db push` | `docker exec` 執行 SQL |
+| CI/CD 整合     | 自動推送           | 手動執行或腳本觸發     |
+| 資料庫存取     | API Gateway        | 直接連線或 Tunnel      |
+| 回滾機制       | `migration repair` | 手動執行回滾 SQL       |
+
+### 10.2 開發流程（不變）
+
+本地開發流程與 Cloud 完全相同：
+
+```bash
+# 1. 建立 migration
+supabase migration new <description>
+
+# 2. 編輯 SQL 檔案
+
+# 3. 本地測試
+supabase db reset
+supabase db lint --level warning
+
+# 4. 產生 TypeScript types
+pnpm db:types
+
+# 5. 執行測試
+pnpm typecheck
+```
+
+### 10.3 部署到 Self-hosted
+
+**方法一：docker exec（推薦）**
+
+```bash
+# 複製 migration 到容器
+docker cp supabase/migrations/<timestamp>_<name>.sql supabase-db:/tmp/
+
+# 執行 migration
+docker exec supabase-db psql -U postgres -d postgres -f /tmp/<timestamp>_<name>.sql
+```
+
+**方法二：批次執行**
+
+```bash
+# 複製所有 migration 檔案
+for f in supabase/migrations/*.sql; do
+  docker cp "$f" supabase-db:/tmp/
+done
+
+# 依序執行
+docker exec supabase-db bash -c \
+  'for f in /tmp/*.sql; do psql -U postgres -d postgres -f "$f"; done'
+```
+
+**方法三：psql 直連（需 VPN 或內網）**
+
+```bash
+PGPASSWORD=<password> psql \
+  -h <host> -p 5432 -U postgres -d postgres \
+  -f supabase/migrations/<timestamp>_<name>.sql
+```
+
+### 10.4 驗證部署
+
+```bash
+# 查看 migration 狀態
+docker exec supabase-db psql -U postgres -d postgres -c \
+  "SELECT * FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 5;"
+
+# 檢查表格結構
+docker exec supabase-db psql -U postgres -d postgres -c "\dt public.*"
+
+# 測試 API
+curl -s "https://supabase-api.example.com/rest/v1/<table>?select=id&limit=1" \
+  -H "apikey: <ANON_KEY>"
+```
+
+### 10.5 重啟 PostgREST
+
+如果新增了表格或函式，需要讓 PostgREST 重新載入 schema cache：
+
+```bash
+cd /opt/supabase
+docker compose restart rest
+```
+
+### 10.6 回滾方案
+
+> ⚠️ Self-hosted 沒有 `supabase migration repair` 可用，需手動處理。
+
+**正確做法**：建立修正 migration
+
+```bash
+# 1. 建立新的修正 migration
+supabase migration new fix_<issue_description>
+
+# 2. 編輯修正 SQL（DROP、ALTER 等）
+
+# 3. 本地測試
+supabase db reset
+
+# 4. 部署修正到 Self-hosted
+docker cp supabase/migrations/<fix_migration>.sql supabase-db:/tmp/
+docker exec supabase-db psql -U postgres -d postgres -f /tmp/<fix_migration>.sql
+```
+
+**緊急回滾**：執行回滾腳本
+
+```bash
+# 執行預先準備的回滾 SQL
+docker exec -i supabase-db psql -U postgres -d postgres \
+  < supabase/rollback/<timestamp>_rollback.sql
+```
+
+### 10.7 注意事項
+
+- **不要**在 CI/CD 自動推送 migrations 到 Self-hosted（除非有完整測試機制）
+- 部署前務必在 staging 環境測試
+- 建議為每個 migration 準備對應的回滾腳本
+- 部署後記得重啟 PostgREST 以載入新 schema
+
+> 📖 完整指南請參考 [SELF_HOSTED_SUPABASE.md](./SELF_HOSTED_SUPABASE.md)

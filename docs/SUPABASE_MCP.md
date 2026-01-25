@@ -82,7 +82,7 @@
 
 **前提**：需要先執行 `supabase start`
 
-### Remote Supabase（生產環境）
+### Remote Supabase Cloud（生產環境）
 
 ```json
 {
@@ -103,6 +103,37 @@
 
 1. 在 [Supabase Dashboard](https://supabase.com/dashboard) 取得 Project Ref
 2. 替換 `<your-project-ref>`
+
+### Self-hosted Supabase
+
+```json
+{
+  "remote-supabase": {
+    "type": "http",
+    "url": "https://supabase-api.example.com/mcp"
+  }
+}
+```
+
+**用途**：
+
+- 連接 Self-hosted Supabase 實例
+- 查看 Self-hosted 資料庫結構
+- 執行 SQL 查詢
+
+**設定方式**：
+
+1. 確認 Kong Gateway 有啟用 MCP 路由（Self-hosted 預設包含）
+2. 設定 Cloudflare Tunnel 或 Nginx 將 `/mcp` 路由到 Kong
+3. 替換 `example.com` 為實際 domain
+
+**注意事項**：
+
+- Self-hosted MCP 不需要 `project_ref` 參數
+- 確保 MCP 端點有適當的存取控制
+- 如需 SSH Tunnel 連接內網，可使用 `http://localhost:<port>/mcp`
+
+> 📖 完整 Self-hosted 設定請參考 [verify/SELF_HOSTED_SUPABASE.md](./verify/SELF_HOSTED_SUPABASE.md)
 
 ---
 

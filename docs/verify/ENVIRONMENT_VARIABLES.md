@@ -58,6 +58,35 @@ SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
 NUXT_PUBLIC_SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
 ```
 
+## 3.2. Self-hosted Supabase 環境變數
+
+Self-hosted 模式的環境變數與 Cloud 相同，僅 URL 不同：
+
+```bash
+# Self-hosted Supabase
+SUPABASE_URL=https://supabase-api.example.com
+SUPABASE_KEY=<anon_key>
+SUPABASE_SECRET_KEY=<service_role_key>
+
+# 資料庫直連（用於 migration 部署，可選）
+SUPABASE_DB_HOST=supabase-db.example.com
+SUPABASE_DB_PORT=5432
+SUPABASE_DB_NAME=postgres
+SUPABASE_DB_USER=postgres
+SUPABASE_DB_PASSWORD=<password>
+```
+
+### Cloud vs Self-hosted 對照
+
+| 變數                  | Cloud                       | Self-hosted                                  |
+| --------------------- | --------------------------- | -------------------------------------------- |
+| `SUPABASE_URL`        | `https://<ref>.supabase.co` | 自訂 domain（如 `supabase-api.example.com`） |
+| `SUPABASE_KEY`        | Supabase Dashboard 取得     | Docker `.env` 中的 `ANON_KEY`                |
+| `SUPABASE_SECRET_KEY` | Supabase Dashboard 取得     | Docker `.env` 中的 `SERVICE_ROLE_KEY`        |
+| 資料庫直連            | 不需要                      | 用於 migration 部署（可選）                  |
+
+> 📖 Self-hosted 部署詳情請參考 [SELF_HOSTED_SUPABASE.md](./SELF_HOSTED_SUPABASE.md)
+
 ---
 
 ## 4. 認證架構說明
@@ -120,6 +149,8 @@ await signOut()
 
 ## 7. 範例 `.env.local`
 
+### 7.1 本地開發（Supabase CLI）
+
 ```bash
 # Supabase（資料庫）
 SUPABASE_URL=http://127.0.0.1:54321
@@ -132,6 +163,29 @@ NUXT_OAUTH_GOOGLE_CLIENT_SECRET=GOCSPX-xxxx
 
 # 站點 URL
 NUXT_PUBLIC_SITE_URL=http://localhost:3000
+```
+
+### 7.2 Self-hosted Supabase
+
+```bash
+# Supabase Self-hosted
+SUPABASE_URL=https://supabase-api.example.com
+SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+SUPABASE_SECRET_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# 資料庫直連（需 VPN 或內網，用於 migration 部署）
+SUPABASE_DB_HOST=192.168.1.100
+SUPABASE_DB_PORT=5432
+SUPABASE_DB_NAME=postgres
+SUPABASE_DB_USER=postgres
+SUPABASE_DB_PASSWORD=your-secure-password
+
+# OAuth（與 Cloud 相同）
+NUXT_OAUTH_GOOGLE_CLIENT_ID=12345.apps.googleusercontent.com
+NUXT_OAUTH_GOOGLE_CLIENT_SECRET=GOCSPX-xxxx
+
+# 站點 URL
+NUXT_PUBLIC_SITE_URL=https://your-app.example.com
 ```
 
 只要 `.env.example` 與本文件保持同步，新人複製後即可立即使用 `pnpm dev`。
