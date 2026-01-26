@@ -29,40 +29,13 @@ $ARGUMENTS
 
 ## Outline
 
-### Step 0: 前置檢查（強制）
+### Step 0: 格式化程式碼
 
-在開始 commit 流程前，**強制執行完整檢查**：
-
-1. **調用 check-runner SubAgent** 執行 `pnpm check`（format → lint → typecheck → test）
-
-2. **處理檢查結果**：
-
-   **如果全部通過** → 繼續 Step 1
-
-   **如果有錯誤**：
-   - 顯示錯誤摘要
-   - 詢問使用者：
-     - 「修復」→ 協助修復錯誤後重新檢查
-     - 「強制繼續」→ 跳過檢查繼續 commit（⚠️ 不建議）
-     - 「取消」→ 結束流程
-
-```text
-❌ 檢查未通過，無法直接 commit
-
-| 步驟 | 狀態 | 錯誤數 |
-|------|------|--------|
-| format | ✓ | - |
-| lint | ✗ | 3 |
-| typecheck | ✗ | 1 |
-| test | - | (未執行) |
-
-請選擇：
-1. 修復錯誤
-2. 強制繼續（不建議）
-3. 取消
+```bash
+pnpm format
 ```
 
----
+先執行格式化，確保程式碼風格一致。
 
 ### Step 1: 檢查變更狀態
 
@@ -72,6 +45,11 @@ git diff --stat
 ```
 
 列出所有變更的檔案，並依功能分組。
+
+**重要規則：**
+
+- 若有 `.gitignore` 的變更，先執行 `git checkout .gitignore` 還原
+- **除了 `.gitignore` 之外，所有變更都必須納入 commit，禁止自行判斷跳過任何檔案**
 
 ### Step 2: 分析變更並分組
 
@@ -188,5 +166,7 @@ Tag：v1.8.0 已建立並推送
 - 每個 commit 應該是獨立且完整的變更
 - 不要把不相關的變更混在同一個 commit
 - Commit message 使用繁體中文描述
-- 如果有 .env 或敏感檔案，警告使用者不要 commit
+- `.gitignore` 檔案的變更不應該 commit，若發現有變更應先還原
+- **除了 `.gitignore` 之外，所有變更都必須 commit，不得自行跳過**
+- 如果有 .env 或敏感檔案，僅需警告使用者，但仍應詢問是否要 commit
 - 遵循 CLAUDE.md 的 Git 規範

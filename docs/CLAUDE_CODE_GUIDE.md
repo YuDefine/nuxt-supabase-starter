@@ -13,6 +13,7 @@
 | Commands  | 13 個 | 可透過 `/指令` 觸發的工作流程 |
 | SubAgents | 3 個  | 自動執行特定任務的專家        |
 | Skills    | 12 個 | 提供技術知識的參考文件        |
+| Hooks     | 2 個  | 自動化工作流程的腳本          |
 | CLAUDE.md | 1 份  | 專案開發規範                  |
 
 ---
@@ -104,8 +105,11 @@ claude
 │   └── speckit.*.md
 ├── agents/                      # SubAgents
 │   ├── check-runner.md
-│   ├── post-implement.md
+│   ├── code-review.md
 │   └── db-backup.md
+├── hooks/                       # 自動化腳本
+│   ├── post-migration-gen-types.sh
+│   └── post-edit-typecheck.sh
 └── skills/                      # 技術知識庫
     ├── nuxt/
     ├── nuxt-ui/
@@ -149,10 +153,11 @@ Commands 是可以用 `/指令` 觸發的工作流程。
 指令之間會自動串接：
 
 ```
-/tdd 完成 → check-runner → 詢問 commit
-/commit → 先執行 check-runner
-/db-migration 完成 → 產生 TypeScript 類型
-/speckit.implement 完成 → check-runner → 詢問 commit
+/tdd 完成 → 詢問 commit
+/commit → 格式化 → 分組 → 逐一 commit
+/db-migration 完成 → [Hook] 自動產生 TypeScript 類型
+/speckit.implement 完成 → 詢問 commit
+Edit/Write .ts/.vue → [Hook] 自動執行 typecheck
 ```
 
 ### 建立自己的指令
@@ -189,11 +194,11 @@ SubAgents 是專門處理特定任務的「專家」，由 Claude 自動調用�
 
 ### 內建的 SubAgents
 
-| Agent | 用途 | 模型 |
-|-------|------|------|
-| `check-runner` | 執行 format → lint → typecheck → test | Haiku（快） |
-| `post-implement` | 實作完成後的標準化檢查與 commit 流程 | - |
-| `db-backup` | 執行資料庫備份並更新 seed.sql | - |
+| Agent          | 用途                                   | 模型         |
+| -------------- | -------------------------------------- | ------------ |
+| `check-runner` | 執行 format → lint → typecheck → test  | Haiku（快）  |
+| `code-review`  | 審查 PR 或本地變更，產出審查報告       | Opus（深度） |
+| `db-backup`    | 執行資料庫備份並更新 seed.sql          | Haiku        |
 
 ### check-runner 範例
 
@@ -256,6 +261,78 @@ model: haiku
 
 ...
 ````
+
+---
+
+## Hooks（自動化腳本）
+
+Hooks 是在特定工具執行後自動觸發的腳本，用於自動化重複性工作。
+
+### 內建的 Hooks
+
+| Hook                         | 觸發條件                        | 功能                               |
+| ---------------------------- | ------------------------------- | ---------------------------------- |
+| `post-migration-gen-types`   | `apply_migration` 完成後        | 自動產生 TypeScript types          |
+| `post-edit-typecheck`        | Edit/Write `.ts`/`.vue` 檔案後  | 自動執行 typecheck                 |
+
+### post-migration-gen-types
+
+當使用 MCP 工具建立 migration 後，自動執行：
+
+```bash
+supabase gen types typescript --local > app/types/database.types.ts
+```
+
+這確保資料庫類型始終與 schema 同步。
+
+### post-edit-typecheck
+
+當編輯 TypeScript 或 Vue 檔案後，自動執行 `pnpm typecheck`：
+
+- 只對 `.ts` 和 `.vue` 檔案觸發
+- 設有 60 秒超時保護
+- 錯誤不會中斷 Claude 工作流程，但會提醒修正
+
+### 啟用 Hooks
+
+Hooks 需要在 `settings.local.json` 中配置：
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "mcp__local-supabase__apply_migration",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-migration-gen-types.sh",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-edit-typecheck.sh",
+            "timeout": 90
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### 建立自己的 Hook
+
+1. 在 `.claude/hooks/` 建立 shell 腳本
+2. 設定執行權限：`chmod +x your-hook.sh`
+3. 在 `settings.local.json` 的 `hooks.PostToolUse` 中配置觸發條件
+
+Hook 腳本可以從 stdin 讀取 JSON 輸入，包含 `tool_input` 和 `tool_response`。
 
 ---
 

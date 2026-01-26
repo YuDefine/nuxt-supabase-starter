@@ -1,4 +1,28 @@
 {
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "mcp__local-supabase__apply_migration",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-migration-gen-types.sh",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-edit-typecheck.sh",
+            "timeout": 90
+          }
+        ]
+      }
+    ]
+  },
   "permissions": {
     "allow": [
       "mcp__local-supabase__list_tables",
@@ -6,6 +30,7 @@
       "mcp__local-supabase__execute_sql",
       "mcp__local-supabase__search_docs",
       "mcp__local-supabase__get_advisors",
+      "mcp__local-supabase__apply_migration",
       "Bash(ls:*)",
       "Bash(wc:*)",
       "Bash(head:*)",
