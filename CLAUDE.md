@@ -113,6 +113,7 @@ See `commitlint.config.js` for types. Use `/commit` command.
 | UI components       | `nuxt-ui`                 |
 | VueUse              | `vueuse`                  |
 | Postgres            | `postgres-best-practices` |
+| 中大型功能規劃      | `spec-kit-workflow`       |
 
 ## docs/verify/ Purpose
 

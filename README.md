@@ -67,14 +67,14 @@
 
 ### AI 輔助開發
 
-| 工具                                                                 | 說明                                                  |
-| -------------------------------------------------------------------- | ----------------------------------------------------- |
-| [Claude Code](https://claude.ai/code)                                | AI 編程助手                                           |
-| [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | 讓 AI 直接操作資料庫                                  |
-| Commands（13 個）                                                    | `/tdd`、`/commit`、`/db-migration`、`/speckit.*` 等   |
-| SubAgents（3 個）                                                    | `check-runner`、`post-implement`、`db-backup`         |
-| [nuxt-skills](https://github.com/onmax/nuxt-skills)（12 個）         | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等 AI Skills       |
-| 情境 Skills（5 個）                                                  | `supabase-rls`、`supabase-migration`、`server-api` 等 |
+| 工具                                                                 | 說明                                                         |
+| -------------------------------------------------------------------- | ------------------------------------------------------------ |
+| [Claude Code](https://claude.ai/code)                                | AI 編程助手                                                  |
+| [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | 讓 AI 直接操作資料庫                                         |
+| Commands（13 個）                                                    | `/tdd`、`/commit`、`/db-migration`、`/speckit.*` 等          |
+| SubAgents（3 個）                                                    | `check-runner`、`post-implement`、`db-backup`                |
+| [nuxt-skills](https://github.com/onmax/nuxt-skills)（12 個）         | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等 AI Skills              |
+| 情境 Skills（6 個）                                                  | `supabase-rls`、`supabase-migration`、`spec-kit-workflow` 等 |
 
 ---
 
@@ -133,7 +133,7 @@
 
 需手動從各自的 repo 同步更新。
 
-### 情境觸發 Skills（5 個，本地維護）
+### 情境觸發 Skills（6 個，本地維護）
 
 當特定情境發生時自動載入：
 
@@ -142,6 +142,7 @@
 - `server-api`：建立 Server API 時
 - `pinia-store`：建立 Pinia Store 時
 - `supabase-arch`：架構決策時
+- `spec-kit-workflow`：規劃中大型功能時
 
 這些 skills 是本範本的在地化規範，確保 AI 遵循專案的安全與架構決策。
 
