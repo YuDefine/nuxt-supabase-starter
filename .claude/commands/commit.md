@@ -29,13 +29,11 @@ $ARGUMENTS
 
 ## Outline
 
-### Step 0: 格式化程式碼
+### Step 0: 執行完整檢查
 
-```bash
-pnpm format
-```
+使用 `check-runner` agent 執行完整的程式碼檢查（format → lint → typecheck → test）。
 
-先執行格式化，確保程式碼風格一致。
+**如果檢查未通過，停止 commit 流程，先修復錯誤。**
 
 ### Step 1: 檢查變更狀態
 

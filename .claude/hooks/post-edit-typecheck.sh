@@ -1,5 +1,5 @@
 #!/bin/bash
-# Hook: 程式碼變更後自動執行 typecheck
+# Hook: 程式碼變更後自動執行 format + typecheck
 # 觸發條件: Edit/Write 完成後 (*.ts, *.vue 檔案)
 
 set -e
@@ -10,13 +10,16 @@ INPUT=$(cat)
 # 取得被編輯的檔案路徑
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_response.filePath // ""')
 
-# 只對 .ts 和 .vue 檔案執行 typecheck
+# 只對 .ts 和 .vue 檔案執行
 if [[ "$FILE_PATH" == *.ts ]] || [[ "$FILE_PATH" == *.vue ]]; then
     cd "$CLAUDE_PROJECT_DIR"
 
-    echo "正在執行 typecheck..."
+    # 執行 format
+    echo "正在執行 format..."
+    pnpm format 2>&1 || true
 
-    # 使用 timeout 避免執行太久，最多 60 秒
+    # 執行 typecheck
+    echo "正在執行 typecheck..."
     if timeout 60 pnpm typecheck 2>&1; then
         echo "Typecheck 通過"
     else

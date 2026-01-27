@@ -154,10 +154,10 @@ Commands 是可以用 `/指令` 觸發的工作流程。
 
 ```
 /tdd 完成 → 詢問 commit
-/commit → 格式化 → 分組 → 逐一 commit
+/commit → check-runner 完整檢查 → 分組 → 逐一 commit
 /db-migration 完成 → [Hook] 自動產生 TypeScript 類型
 /speckit.implement 完成 → 詢問 commit
-Edit/Write .ts/.vue → [Hook] 自動執行 typecheck
+Edit/Write .ts/.vue → [Hook] 自動執行 format + typecheck
 ```
 
 ### 建立自己的指令
@@ -270,10 +270,10 @@ Hooks 是在特定工具執行後自動觸發的腳本，用於自動化重複�
 
 ### 內建的 Hooks
 
-| Hook                         | 觸發條件                        | 功能                               |
-| ---------------------------- | ------------------------------- | ---------------------------------- |
-| `post-migration-gen-types`   | `apply_migration` 完成後        | 自動產生 TypeScript types          |
-| `post-edit-typecheck`        | Edit/Write `.ts`/`.vue` 檔案後  | 自動執行 typecheck                 |
+| Hook                       | 觸發條件                       | 功能                              |
+| -------------------------- | ------------------------------ | --------------------------------- |
+| `post-migration-gen-types` | `apply_migration` 完成後       | 自動產生 TypeScript types         |
+| `post-edit-typecheck`      | Edit/Write `.ts`/`.vue` 檔案後 | 自動執行 format + typecheck       |
 
 ### post-migration-gen-types
 
@@ -287,10 +287,11 @@ supabase gen types typescript --local > app/types/database.types.ts
 
 ### post-edit-typecheck
 
-當編輯 TypeScript 或 Vue 檔案後，自動執行 `pnpm typecheck`：
+當編輯 TypeScript 或 Vue 檔案後，自動執行 `pnpm format` + `pnpm typecheck`：
 
 - 只對 `.ts` 和 `.vue` 檔案觸發
-- 設有 60 秒超時保護
+- 先執行 format 確保程式碼風格一致
+- 再執行 typecheck，設有 60 秒超時保護
 - 錯誤不會中斷 Claude 工作流程，但會提醒修正
 
 ### 啟用 Hooks
