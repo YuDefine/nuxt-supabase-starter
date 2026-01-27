@@ -19,6 +19,17 @@ supabase db reset    # Reset + apply all migrations
 supabase db lint --level warning  # Security check
 ```
 
+## Environment Variables
+
+統一使用 **GitHub Secrets** 管理環境變數，透過 CI/CD 部署時注入。
+
+**禁止**直接在 Cloudflare Dashboard 設定環境變數。
+
+新增環境變數時：
+
+1. 在 GitHub repo → Settings → Secrets and variables → Actions 新增
+2. 確認 `.github/workflows/` 中的部署 workflow 有正確傳遞該變數
+
 ## CRITICAL RULES
 
 ### Auth - IMPORTANT
