@@ -165,14 +165,61 @@ SELECT setval(
 
 ---
 
-## 9. 疑難排解
+## 9. 表格 Owner 權限問題
 
-| 問題                                                  | 可能原因                        | 解法                                 |
-| ----------------------------------------------------- | ------------------------------- | ------------------------------------ |
-| `duplicate key violates unique constraint "xxx_pkey"` | 資料匯入後 sequence 未同步      | 重設 sequence 為 `max(id) + 1`       |
-| `type "xxx" already exists`                           | 遠端尚有舊 schema               | 使用 `IF NOT EXISTS` 或 `repair`     |
-| `schema_migrations` 不一致                            | 有人手動改遠端                  | `migration list --linked` → `repair` |
-| `function_search_path_mutable`                        | 函式缺少 `SET search_path = ''` | 重寫函式                             |
+### 問題背景
+
+Self-hosted Supabase 環境中：
+
+- `supabase_admin` 是真正的 superuser
+- `postgres` 用戶**不是** superuser，無法修改 `supabase_admin` 擁有的物件
+- CI/CD 使用 `postgres` 連線執行 `db push`
+- MCP 工具使用 `supabase_admin` 連線
+
+若透過 MCP 執行 DDL（如建立表格），該物件的 owner 會是 `supabase_admin`，導致 CI/CD 無法對其建立索引或修改。
+
+### 預防措施
+
+1. **禁止透過 MCP 建立新表格**：所有 DDL 必須透過 migration 檔案
+
+2. **Migration 中明確指定 owner**（建議做法）：
+
+   ```sql
+   CREATE TABLE your_schema.new_table (...);
+   ALTER TABLE your_schema.new_table OWNER TO postgres;
+   ```
+
+3. **定期檢查 owner 一致性**：
+
+   ```sql
+   -- 檢查是否有非 postgres owner 的表格
+   SELECT schemaname, tablename, tableowner
+   FROM pg_tables
+   WHERE schemaname IN ('your_schema', 'core')
+     AND tableowner != 'postgres';
+   ```
+
+4. **CI/CD 加入 owner 檢查**（可選）：在 deploy 前驗證所有表格 owner 正確
+
+### 修復方式
+
+若發現 owner 不正確，透過 MCP（有 `supabase_admin` 權限）修正：
+
+```sql
+ALTER TABLE your_schema.table_name OWNER TO postgres;
+```
+
+---
+
+## 10. 疑難排解
+
+| 問題                                                  | 可能原因                        | 解法                                              |
+| ----------------------------------------------------- | ------------------------------- | ------------------------------------------------- |
+| `must be owner of table xxx`                          | 表格 owner 是 `supabase_admin`  | 參考第 9 節，透過 MCP 修正 owner 為 `postgres`    |
+| `duplicate key violates unique constraint "xxx_pkey"` | 資料匯入後 sequence 未同步      | 重設 sequence 為 `max(id) + 1`                    |
+| `type "xxx" already exists`                           | 遠端尚有舊 schema               | 使用 `IF NOT EXISTS` 或 `repair`                  |
+| `schema_migrations` 不一致                            | 有人手動改遠端                  | `migration list --linked` → `repair`              |
+| `function_search_path_mutable`                        | 函式缺少 `SET search_path = ''` | 重寫函式                                          |
 
 ---
 
@@ -180,11 +227,11 @@ SELECT setval(
 
 ---
 
-## 10. Self-hosted Supabase 部署
+## 11. Self-hosted Supabase 部署
 
 > Self-hosted 模式適用於需要完全控制資料與基礎設施的情境。開發流程不變，僅部署方式不同。
 
-### 10.1 架構差異
+### 11.1 架構差異
 
 | 項目           | Cloud              | Self-hosted            |
 | -------------- | ------------------ | ---------------------- |
@@ -193,7 +240,7 @@ SELECT setval(
 | 資料庫存取     | API Gateway        | 直接連線或 Tunnel      |
 | 回滾機制       | `migration repair` | 手動執行回滾 SQL       |
 
-### 10.2 開發流程（不變）
+### 11.2 開發流程（不變）
 
 本地開發流程與 Cloud 完全相同：
 
@@ -214,7 +261,7 @@ pnpm db:types
 pnpm typecheck
 ```
 
-### 10.3 部署到 Self-hosted
+### 11.3 部署到 Self-hosted
 
 **方法一：docker exec（推薦）**
 
@@ -247,7 +294,7 @@ PGPASSWORD=<password> psql \
   -f supabase/migrations/<timestamp>_<name>.sql
 ```
 
-### 10.4 驗證部署
+### 11.4 驗證部署
 
 ```bash
 # 查看 migration 狀態
@@ -262,7 +309,7 @@ curl -s "https://supabase-api.example.com/rest/v1/<table>?select=id&limit=1" \
   -H "apikey: <ANON_KEY>"
 ```
 
-### 10.5 重啟 PostgREST
+### 11.5 重啟 PostgREST
 
 如果新增了表格或函式，需要讓 PostgREST 重新載入 schema cache：
 
@@ -271,7 +318,7 @@ cd /opt/supabase
 docker compose restart rest
 ```
 
-### 10.6 回滾方案
+### 11.6 回滾方案
 
 > ⚠️ Self-hosted 沒有 `supabase migration repair` 可用，需手動處理。
 
@@ -299,7 +346,7 @@ docker exec -i supabase-db psql -U postgres -d postgres \
   < supabase/rollback/<timestamp>_rollback.sql
 ```
 
-### 10.7 注意事項
+### 11.7 注意事項
 
 - **不要**在 CI/CD 自動推送 migrations 到 Self-hosted（除非有完整測試機制）
 - 部署前務必在 staging 環境測試
