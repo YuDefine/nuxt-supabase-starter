@@ -102,9 +102,7 @@ supabase/migrations/ # DB migrations (CLI only)
 
 | Trigger           | Action                                             |
 | ----------------- | -------------------------------------------------- |
-| Code complete     | Run `pnpm check`                                   |
-| Check pass        | Ask: commit?                                       |
-| User confirms     | Group commits → version bump → tag                 |
+| `/commit`         | Run `pnpm check` → commit                          |
 | Migration created | `db reset` → `db lint` → `gen types` → `typecheck` |
 | New feature       | TDD: Red → Green → Refactor                        |
 
