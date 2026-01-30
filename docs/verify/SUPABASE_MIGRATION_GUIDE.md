@@ -213,13 +213,13 @@ ALTER TABLE your_schema.table_name OWNER TO postgres;
 
 ## 10. 疑難排解
 
-| 問題                                                  | 可能原因                        | 解法                                              |
-| ----------------------------------------------------- | ------------------------------- | ------------------------------------------------- |
-| `must be owner of table xxx`                          | 表格 owner 是 `supabase_admin`  | 參考第 9 節，透過 MCP 修正 owner 為 `postgres`    |
-| `duplicate key violates unique constraint "xxx_pkey"` | 資料匯入後 sequence 未同步      | 重設 sequence 為 `max(id) + 1`                    |
-| `type "xxx" already exists`                           | 遠端尚有舊 schema               | 使用 `IF NOT EXISTS` 或 `repair`                  |
-| `schema_migrations` 不一致                            | 有人手動改遠端                  | `migration list --linked` → `repair`              |
-| `function_search_path_mutable`                        | 函式缺少 `SET search_path = ''` | 重寫函式                                          |
+| 問題                                                  | 可能原因                        | 解法                                           |
+| ----------------------------------------------------- | ------------------------------- | ---------------------------------------------- |
+| `must be owner of table xxx`                          | 表格 owner 是 `supabase_admin`  | 參考第 9 節，透過 MCP 修正 owner 為 `postgres` |
+| `duplicate key violates unique constraint "xxx_pkey"` | 資料匯入後 sequence 未同步      | 重設 sequence 為 `max(id) + 1`                 |
+| `type "xxx" already exists`                           | 遠端尚有舊 schema               | 使用 `IF NOT EXISTS` 或 `repair`               |
+| `schema_migrations` 不一致                            | 有人手動改遠端                  | `migration list --linked` → `repair`           |
+| `function_search_path_mutable`                        | 函式缺少 `SET search_path = ''` | 重寫函式                                       |
 
 ---
 

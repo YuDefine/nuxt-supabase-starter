@@ -131,7 +131,7 @@
 
 - Self-hosted MCP 不需要 `project_ref` 參數
 - 確保 MCP 端點有適當的存取控制
-- 如需 SSH Tunnel 連接內網，可使用 `http://localhost:<port>/mcp`
+- 如需連接內網，建議使用 ZeroTier 或 Tailscale 等 VPN 方案直連 `http://<internal-ip>:<port>/mcp`
 
 > 📖 完整 Self-hosted 設定請參考 [verify/SELF_HOSTED_SUPABASE.md](./verify/SELF_HOSTED_SUPABASE.md)
 
