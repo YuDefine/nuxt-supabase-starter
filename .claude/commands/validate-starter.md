@@ -6,6 +6,7 @@ description: 驗證 starter template 的完整性與文件一致性
 # Validate Starter Template
 
 依照 `docs/QUICK_START.md` 指引，從建立新專案起驗證：
+
 1. 文件描述與實際結構是否一致
 2. Package 是否完善無報錯
 3. Tech Stack 是否完整安裝
@@ -26,6 +27,7 @@ git clone . "$TEST_DIR" && cd "$TEST_DIR" && rm -rf .git && git init
 對照 `docs/QUICK_START.md` 的「你得到了什麼」章節，逐一檢查：
 
 **.claude/ 結構**：
+
 - [ ] `commands/` 存在且包含 `opsx/` 子目錄
 - [ ] `agents/` 存在
 - [ ] `hooks/` 存在
@@ -33,12 +35,14 @@ git clone . "$TEST_DIR" && cd "$TEST_DIR" && rm -rf .git && git init
 - [ ] `settings.local.json.example` 存在
 
 **openspec/ 結構**：
+
 - [ ] `project.md` 存在
 - [ ] `specs/` 存在
 - [ ] `changes/` 存在
 - [ ] `changes/archive/` 存在
 
 **app/ 結構**：
+
 - [ ] `app.vue` 存在
 - [ ] `assets/css/` 存在
 - [ ] `auth.config.ts` 存在
@@ -46,6 +50,7 @@ git clone . "$TEST_DIR" && cd "$TEST_DIR" && rm -rf .git && git init
 - [ ] `types/database.types.ts` 存在
 
 **server/ 結構**：
+
 - [ ] `auth.config.ts` 存在
 - [ ] `utils/supabase.ts` 存在
 
@@ -67,38 +72,70 @@ pnpm install
 
 確認無錯誤、無嚴重警告。
 
-### Phase 5: Tech Stack 驗證
+### Phase 5: Tech Stack 驗證（動態）
 
-根據 `README.md` 和 `docs/QUICK_START.md` 檢查 `package.json`：
+從 `README.md` 的 Tech Stack 章節動態解析，與 `package.json` 比對：
 
-**Core Framework**：
-- [ ] `nuxt`
-- [ ] `vue`
-- [ ] `typescript`
+```bash
+node -e "
+const fs = require('fs');
+const readme = fs.readFileSync('README.md', 'utf8');
+const pkg = require('./package.json');
+const allDeps = {...pkg.dependencies, ...pkg.devDependencies};
 
-**UI & Styling**：
-- [ ] `@nuxt/ui`
-- [ ] `tailwindcss`
-- [ ] `@nuxt/fonts`
+// README 顯示名稱 → npm 套件名對照表
+// 注意：Vue 由 Nuxt 內建管理，不需檢查
+const knownMappings = {
+  'Nuxt': 'nuxt', 'TypeScript': 'typescript',
+  'Supabase': '@nuxtjs/supabase', 'Nuxt UI': '@nuxt/ui',
+  'Nuxt Charts': 'nuxt-charts', 'Tailwind CSS': 'tailwindcss',
+  'Nuxt Image': '@nuxt/image', 'Lucide Icons': '@iconify-json/lucide',
+  'nuxt-better-auth': '@onmax/nuxt-better-auth', 'Pinia': '@pinia/nuxt',
+  'Pinia Colada': '@pinia/colada', 'VueUse': '@vueuse/nuxt',
+  'Vitest': 'vitest', '@nuxt/test-utils': '@nuxt/test-utils',
+  'OXLint': 'oxlint', 'OXFmt': 'oxfmt', 'Zod': 'zod',
+  'Commitlint': '@commitlint/cli', 'Husky': 'husky',
+  'VitePress': 'vitepress', 'NuxtHub': '@nuxthub/core',
+  'Sentry': '@sentry/nuxt', 'Cloudflare Workers': 'wrangler'
+};
 
-**State Management**：
-- [ ] `pinia`
-- [ ] `@pinia/colada`
-- [ ] `@vueuse/nuxt`
+const techStack = readme.match(/## Tech Stack[\\s\\S]*?(?=\\n## |\$)/)?.[0] || '';
+const matches = techStack.matchAll(/\\[([^\\]]+)\\]\\(https?:\\/\\/[^)]+\\)/g);
 
-**Database & Auth**：
-- [ ] `@nuxtjs/supabase`
-- [ ] `@onmax/nuxt-better-auth`
+let pass = true, checked = 0, missing = [];
+for (const [_, name] of matches) {
+  const pkgName = knownMappings[name];
+  if (!pkgName) continue;
+  checked++;
+  if (allDeps[pkgName]) {
+    console.log('✓', pkgName);
+  } else {
+    console.log('✗', pkgName, 'MISSING');
+    missing.push(pkgName);
+    pass = false;
+  }
+}
+console.log('');
+console.log('Total:', checked, '| Pass:', checked - missing.length, '| Missing:', missing.length);
+if (!pass) process.exit(1);
+"
+```
 
-**Testing & Quality**：
-- [ ] `vitest`
-- [ ] `@nuxt/test-utils`
-- [ ] `oxlint`
+**原理**：從 README.md 的 `[Name](url)` 格式連結，透過 `knownMappings` 對照表轉換為 npm 套件名。
+**維護**：新增技術時只需更新 README.md 和 `knownMappings`。
 
-**Deployment**：
-- [ ] `@nuxthub/core`
+### Phase 6: 設定環境變數
 
-### Phase 6: Build & Test
+依照 QUICK_START.md Step 3，設定 `.env` 避免 TTY 錯誤：
+
+```bash
+cp .env.example .env
+# 產生必要的 secrets
+echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" >> .env
+echo "NUXT_SESSION_PASSWORD=$(openssl rand -base64 32)" >> .env
+```
+
+### Phase 7: Build & Test
 
 ```bash
 pnpm typecheck  # 必須成功
@@ -106,16 +143,17 @@ pnpm test       # 必須成功
 pnpm check      # 必須成功（如果 supabase 未啟動，部分測試可跳過）
 ```
 
-### Phase 7: Commands 驗證
+### Phase 8: Commands 驗證
 
 列出所有命令並確認數量：
 
 ```bash
 find .claude/commands -name "*.md" | wc -l
-# 預期：14 個以上
+# 預期：15 個以上
 ```
 
 預期命令清單：
+
 - `commit.md`, `db-migration.md`, `doc-sync.md`, `tdd.md`
 - `opsx/`: `new.md`, `apply.md`, `archive.md`, `continue.md`, `explore.md`, `ff.md`, `verify.md`, `sync.md`, `onboard.md`, `bulk-archive.md`
 
@@ -130,39 +168,44 @@ find .claude/commands -name "*.md" | wc -l
 **來源 Commit**: $(git rev-parse --short HEAD)
 
 ### 結構驗證
-| 項目 | 狀態 |
-|------|------|
-| .claude/ | ✅/❌ |
+
+| 項目      | 狀態  |
+| --------- | ----- |
+| .claude/  | ✅/❌ |
 | openspec/ | ✅/❌ |
-| app/ | ✅/❌ |
-| server/ | ✅/❌ |
+| app/      | ✅/❌ |
+| server/   | ✅/❌ |
 
 ### 文件一致性
-| 檔案 | 狀態 | 備註 |
-|------|------|------|
-| QUICK_START.md | ✅/❌ | |
-| README.md | ✅/❌ | |
-| CLAUDE_CODE_GUIDE.md | ✅/❌ | |
+
+| 檔案                 | 狀態  | 備註 |
+| -------------------- | ----- | ---- |
+| QUICK_START.md       | ✅/❌ |      |
+| README.md            | ✅/❌ |      |
+| CLAUDE_CODE_GUIDE.md | ✅/❌ |      |
 
 ### Tech Stack
-| 類別 | 狀態 | 缺少 |
-|------|------|------|
-| Core | ✅/❌ | |
-| UI | ✅/❌ | |
-| State | ✅/❌ | |
-| Database | ✅/❌ | |
-| Testing | ✅/❌ | |
-| Deploy | ✅/❌ | |
+
+| 類別     | 狀態  | 缺少 |
+| -------- | ----- | ---- |
+| Core     | ✅/❌ |      |
+| UI       | ✅/❌ |      |
+| State    | ✅/❌ |      |
+| Database | ✅/❌ |      |
+| Testing  | ✅/❌ |      |
+| Deploy   | ✅/❌ |      |
 
 ### Build & Test
-| 命令 | 狀態 |
-|------|------|
-| pnpm install | ✅/❌ |
+
+| 命令           | 狀態  |
+| -------------- | ----- |
+| pnpm install   | ✅/❌ |
 | pnpm typecheck | ✅/❌ |
-| pnpm test | ✅/❌ |
+| pnpm test      | ✅/❌ |
 
 ### Commands
-- 預期: 14+
+
+- 預期: 15+
 - 實際: X
 - 狀態: ✅/❌
 
@@ -171,6 +214,7 @@ find .claude/commands -name "*.md" | wc -l
 ## 總結: **PASS** / **FAIL**
 
 ### 發現的問題（如有）
+
 1. ...
 2. ...
 ```

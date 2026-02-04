@@ -172,34 +172,7 @@ pnpm install
 
 > **注意**：`nuxt-better-auth` 會自動產生 `BETTER_AUTH_SECRET` 並寫入 `.env`。如果你在 Step 3 已經設定過，它會保留你的值。
 
-這會安裝完整的 Tech Stack：
-
-**核心框架**
-
-- **Nuxt 4** + Vue 3 + TypeScript
-- **Nuxt UI 4** + Tailwind CSS
-- **Nuxt Charts**（基於 Unovis）
-
-**狀態與資料**
-
-- **Pinia** + **Pinia Colada**（非同步資料管理）
-- **VueUse**（Vue Composition Utilities）
-- **Supabase**（PostgreSQL + Auth + Realtime）
-
-**認證**
-
-- **nuxt-better-auth**（33+ OAuth providers）
-
-**測試與品質**
-
-- **Vitest** + **@nuxt/test-utils**
-- **OXLint** + **OXFmt**（Rust 實作，極快）
-- **Commitlint** + **Husky**（Git hooks）
-
-**部署**
-
-- **Cloudflare Workers**（via NuxtHub）
-- **Sentry**（錯誤追蹤）
+這會安裝完整的 Tech Stack，詳見 [README.md 的 Tech Stack 章節](../README.md#tech-stack)。
 
 ---
 
@@ -259,21 +232,13 @@ claude
 
 ### Tech Stack（已配置）
 
-| 類別     | 技術                              |
-| -------- | --------------------------------- |
-| 前端框架 | Nuxt 4 + Vue 3 + TypeScript       |
-| UI 元件  | Nuxt UI 4 + Tailwind CSS          |
-| 狀態管理 | Pinia + Pinia Colada              |
-| 資料庫   | Supabase（PostgreSQL + Realtime） |
-| 認證     | @onmax/nuxt-better-auth（OAuth）  |
-| 測試     | Vitest + @nuxt/test-utils         |
-| 部署     | Cloudflare Workers                |
+詳見 [README.md 的 Tech Stack 章節](../README.md#tech-stack)。
 
 ### AI 開發工具（已配置）
 
 | 類型        | 數量  | 說明                                              |
 | ----------- | ----- | ------------------------------------------------- |
-| Commands    | 7 個  | `/tdd`、`/commit`、`/opsx:*` 等                   |
+| Commands    | 15 個 | `/tdd`、`/commit`、`/opsx:*` 等                   |
 | SubAgents   | 3 個  | `check-runner`、`post-implement`、`db-backup`     |
 | 通用 Skills | 12 個 | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等（自動更新） |
 | 情境 Skills | 5 個  | `supabase-rls`、`server-api`、`pinia-store` 等    |
