@@ -6,30 +6,30 @@
 
 ## 工具選擇類
 
-### Spec-Kit vs Plan Mode：何時使用哪個？
+### OpenSpec vs Plan Mode：何時使用哪個？
 
-| 面向           | Spec-Kit                                               | Claude Code Plan Mode      |
+| 面向           | OpenSpec                                               | Claude Code Plan Mode      |
 | -------------- | ------------------------------------------------------ | -------------------------- |
-| **流程**       | 多階段（specify → clarify → plan → tasks → implement） | 單階段規劃                 |
-| **成果**       | 4+ 個檔案（spec.md, plan.md, tasks.md, checklist.md）  | 單一 plan.md               |
-| **內建驗證**   | ✅ clarify（澄清需求）+ analyze（一致性分析）          | ❌ 無                      |
-| **適用場景**   | 複雜功能、多人協作、需求不明確                         | 小修改、快速迭代、需求明確 |
-| **上下文保留** | 持久化到檔案，可跨對話                                 | 僅在當次對話               |
+| **流程**       | 三階段（proposal → apply → archive）                   | 單階段規劃                 |
+| **成果**       | proposal.md, design.md, tasks.md, delta specs          | 單一 plan.md               |
+| **規格管理**   | ✅ specs/ 作為真相來源 + delta 追蹤                    | ❌ 無                      |
+| **適用場景**   | 複雜功能、多人協作、需要追蹤規格演進                   | 小修改、快速迭代、需求明確 |
+| **歸檔機制**   | ✅ 完整歷史保留                                        | ❌ 無                      |
 
 **選擇指南**：
 
 | 情境                         | 推薦                 |
 | ---------------------------- | -------------------- |
-| 功能需要 **3+ 個檔案變更**   | Spec-Kit             |
-| 需求**可能變化**或不明確     | Spec-Kit             |
-| 需要**多人審閱**計畫         | Spec-Kit             |
+| 功能需要 **3+ 個檔案變更**   | OpenSpec             |
+| 需要**追蹤規格演進**         | OpenSpec             |
+| 需要**多人審閱**計畫         | OpenSpec             |
 | **Bug 修復**、單檔變更       | Plan Mode            |
 | **緊急部署**、時間緊迫       | 直接實作             |
 | 需求**非常明確**，已知怎麼做 | Plan Mode 或直接實作 |
 
 **範例**：
 
-- 「新增使用者管理模組」→ Spec-Kit（多檔案、需規劃）
+- 「新增使用者管理模組」→ OpenSpec（多檔案、需規劃）
 - 「修正登入按鈕顏色」→ 直接實作
 - 「重構 API 錯誤處理」→ Plan Mode（影響多處但邏輯明確）
 
@@ -91,7 +91,7 @@ pnpm docs:build  # 建置靜態網站
 - 複雜的程式碼生成與重構
 - 多檔案同時編輯
 - 資料庫 migration 設計
-- spec-kit 結構化開發
+- OpenSpec 結構化開發
 
 | 方案       | 每月費用 | Opus 用量 | 適合                 |
 | ---------- | -------- | --------- | -------------------- |
@@ -107,7 +107,7 @@ pnpm docs:build  # 建置靜態網站
 
 | 類型         | 觸發方式                  | 用途         | 範例                                  |
 | ------------ | ------------------------- | ------------ | ------------------------------------- |
-| **Commands** | 使用者輸入 `/xxx`         | 執行特定流程 | `/commit`, `/tdd`, `/speckit.specify` |
+| **Commands** | 使用者輸入 `/xxx`         | 執行特定流程 | `/commit`, `/tdd`, `/opsx:new`        |
 | **Agents**   | 自動觸發或被 Command 呼叫 | 執行子任務   | check-runner, post-implement          |
 | **Skills**   | 自動偵測情境載入          | 提供專業知識 | supabase-rls, server-api              |
 

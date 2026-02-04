@@ -71,10 +71,10 @@
 | -------------------------------------------------------------------- | ------------------------------------------------------------ |
 | [Claude Code](https://claude.ai/code)                                | AI 編程助手                                                  |
 | [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | 讓 AI 直接操作資料庫                                         |
-| Commands（13 個）                                                    | `/tdd`、`/commit`、`/db-migration`、`/speckit.*` 等          |
+| Commands（7 個）                                                     | `/tdd`、`/commit`、`/db-migration`、`/opsx:*` 等             |
 | SubAgents（3 個）                                                    | `check-runner`、`post-implement`、`db-backup`                |
 | [nuxt-skills](https://github.com/onmax/nuxt-skills)（12 個）         | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等 AI Skills              |
-| 情境 Skills（6 個）                                                  | `supabase-rls`、`supabase-migration`、`spec-kit-workflow` 等 |
+| 情境 Skills（5 個）                                                  | `supabase-rls`、`supabase-migration` 等                      |
 
 ---
 
@@ -100,7 +100,7 @@
 | **TDD 工作流程** | AI 生成的程式碼有測試保護     |
 | **自動化檢查**   | 每次提交都通過品質門檻        |
 | **nuxt-skills**  | AI 能正確使用框架 API         |
-| **spec-kit**     | 複雜功能有結構化開發流程      |
+| **OpenSpec**     | 複雜功能有結構化開發流程      |
 | **情境 Skills**  | AI 遵循 Supabase 安全規範     |
 
 ### 照做你也能得到
@@ -142,7 +142,7 @@
 - `server-api`：建立 Server API 時
 - `pinia-store`：建立 Pinia Store 時
 - `supabase-arch`：架構決策時
-- `spec-kit-workflow`：規劃中大型功能時
+- OpenSpec skills：規劃中大型功能時
 
 這些 skills 是本範本的在地化規範，確保 AI 遵循專案的安全與架構決策。
 
@@ -173,7 +173,7 @@
 | **[docs/INTEGRATION_GUIDE.md](./docs/INTEGRATION_GUIDE.md)** | 現有專案整合 Claude/Supabase       | 要整合到現有專案   |
 | **[docs/SUPABASE_GUIDE.md](./docs/SUPABASE_GUIDE.md)**       | Supabase 入門、RLS 詳解、Migration | 第一次用 Supabase  |
 | **[docs/WORKFLOW.md](./docs/WORKFLOW.md)**                   | TDD、自動化檢查、Git 規範          | 想了解開發流程     |
-| **[docs/SPEC_KIT.md](./docs/SPEC_KIT.md)**                   | spec-kit 命令詳解                  | 要用 AI 輔助開發   |
+| **[docs/OPENSPEC.md](./docs/OPENSPEC.md)**                   | OpenSpec 工作流程詳解              | 要用 AI 輔助開發   |
 | **[docs/CLAUDE_CODE_GUIDE.md](./docs/CLAUDE_CODE_GUIDE.md)** | Claude Code 配置指南               | 要了解 AI 工具     |
 | **[docs/SUPABASE_MCP.md](./docs/SUPABASE_MCP.md)**           | Supabase MCP 整合                  | 要讓 AI 操作資料庫 |
 | **[docs/API_PATTERNS.md](./docs/API_PATTERNS.md)**           | Server API 設計模式                | 要寫後端 API       |
@@ -273,18 +273,17 @@ await signIn('google')
 
 當你用 AI 輔助開發時，測試就是「驗收標準」——AI 寫的程式碼能不能用？跑一次測試就知道。
 
-### spec-kit 工作流程
+### OpenSpec 工作流程
 
 對於較複雜的功能：
 
 ```
-/speckit.specify   # 從自然語言產生規格
-/speckit.plan      # 產生實作計畫
-/speckit.tasks     # 產生任務清單
-/speckit.implement # 逐步執行
+/opsx:new          # 建立變更提案（產生 proposal, design, tasks）
+/opsx:apply        # 執行任務清單
+/opsx:archive      # 歸檔完成的變更
 ```
 
-> 📖 詳細說明見 [docs/SPEC_KIT.md](./docs/SPEC_KIT.md)
+> 📖 詳細說明見 [docs/OPENSPEC.md](./docs/OPENSPEC.md)
 
 ### 自動化檢查
 
@@ -301,7 +300,7 @@ Skills 會自動串接，減少手動操作：
 | `/tdd`               | check-runner → 詢問 commit |
 | `/commit`            | **先**執行 check-runner    |
 | `/db-migration`      | 產生 TypeScript 類型       |
-| `/speckit.implement` | check-runner → 詢問 commit |
+| `/opsx:apply`        | check-runner → 詢問 commit |
 
 > 📖 完整工作流程見 [docs/WORKFLOW.md](./docs/WORKFLOW.md)
 
@@ -318,14 +317,14 @@ Skills 會自動串接，減少手動操作：
 │   └── API_PATTERNS.md      # API 設計模式
 │
 ├── .claude/                  # Claude Code 配置
-│   ├── commands/            # 13 個命令
-│   ├── agents/              # 3 個 SubAgent
-│   └── skills/              # 12 個 AI Skills (nuxt-skills)
+│   ├── commands/            # 自定義命令
+│   ├── agents/              # SubAgents
+│   └── skills/              # AI Skills
 │
-├── .specify/                 # spec-kit 工作流程
-│   ├── memory/              # 專案原則
-│   ├── templates/           # 文件範本
-│   └── scripts/             # 自動化腳本
+├── openspec/                 # OpenSpec 工作流程
+│   ├── project.md           # 專案上下文
+│   ├── specs/               # 系統規格（真相來源）
+│   └── changes/             # 變更提案區
 │
 ├── .github/                  # GitHub prompts
 │
@@ -380,7 +379,7 @@ Skills 會自動串接，減少手動操作：
 1. **[快速開始](./docs/QUICK_START.md)**：clone、跑起來
 2. **[Supabase 入門](./docs/SUPABASE_GUIDE.md)**：建立第一個資料表
 3. **[API 設計](./docs/API_PATTERNS.md)**：寫你的第一個 CRUD API
-4. **[spec-kit](./docs/SPEC_KIT.md)**：用 AI 輔助開發一個功能
+4. **[OpenSpec](./docs/OPENSPEC.md)**：用 AI 輔助開發一個功能
 
 ### 現有專案
 
