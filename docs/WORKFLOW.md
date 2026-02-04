@@ -381,13 +381,13 @@ Claude 會將變更歸檔，並將 delta specs 合併到主 specs。
 
 ### Skills 之間的自動串接
 
-| Skill                | 完成後自動                      | 條件           |
-| -------------------- | ------------------------------- | -------------- |
-| `/tdd`               | 調用 check-runner               | 測試通過後     |
-| `/tdd`               | 詢問是否 commit                 | check 通過後   |
-| `/commit`            | **先**調用 check-runner         | 開始前強制     |
-| `/db-migration`      | 產生 TypeScript 類型            | 測試通過後     |
-| `/opsx:apply`        | 調用 check-runner + 詢問 commit | 所有任務完成後 |
+| Skill           | 完成後自動                      | 條件           |
+| --------------- | ------------------------------- | -------------- |
+| `/tdd`          | 調用 check-runner               | 測試通過後     |
+| `/tdd`          | 詢問是否 commit                 | check 通過後   |
+| `/commit`       | **先**調用 check-runner         | 開始前強制     |
+| `/db-migration` | 產生 TypeScript 類型            | 測試通過後     |
+| `/opsx:apply`   | 調用 check-runner + 詢問 commit | 所有任務完成後 |
 
 ### SubAgents
 

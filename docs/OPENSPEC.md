@@ -51,16 +51,16 @@ AI：/opsx:apply
 
 ## 命令一覽
 
-| 命令              | 說明                       | 輸入           | 輸出                              |
-| ----------------- | -------------------------- | -------------- | --------------------------------- |
-| `/opsx:new`       | 建立新的變更提案           | 功能描述       | proposal.md, design.md, tasks.md  |
-| `/opsx:ff`        | 快速建立所有 artifacts     | 功能描述       | 完整的變更目錄                    |
-| `/opsx:continue`  | 繼續建立下一個 artifact    | 變更名稱       | 下一個需要的 artifact             |
-| `/opsx:apply`     | 執行任務清單               | 變更名稱       | 程式碼                            |
-| `/opsx:verify`    | 驗證實作是否符合規格       | 變更名稱       | 驗證報告                          |
-| `/opsx:archive`   | 歸檔完成的變更             | 變更名稱       | 移動到 archive/ + 合併 specs      |
-| `/opsx:sync`      | 同步 delta specs 到主 specs| 變更名稱       | 更新後的 specs                    |
-| `/opsx:explore`   | 探索模式，釐清需求         | -              | 討論記錄                          |
+| 命令             | 說明                        | 輸入     | 輸出                             |
+| ---------------- | --------------------------- | -------- | -------------------------------- |
+| `/opsx:new`      | 建立新的變更提案            | 功能描述 | proposal.md, design.md, tasks.md |
+| `/opsx:ff`       | 快速建立所有 artifacts      | 功能描述 | 完整的變更目錄                   |
+| `/opsx:continue` | 繼續建立下一個 artifact     | 變更名稱 | 下一個需要的 artifact            |
+| `/opsx:apply`    | 執行任務清單                | 變更名稱 | 程式碼                           |
+| `/opsx:verify`   | 驗證實作是否符合規格        | 變更名稱 | 驗證報告                         |
+| `/opsx:archive`  | 歸檔完成的變更              | 變更名稱 | 移動到 archive/ + 合併 specs     |
+| `/opsx:sync`     | 同步 delta specs 到主 specs | 變更名稱 | 更新後的 specs                   |
+| `/opsx:explore`  | 探索模式，釐清需求          | -        | 討論記錄                         |
 
 ---
 
@@ -172,6 +172,7 @@ openspec/
 - **changes/**：代表「進行中的變更」，完成後會合併回 specs/
 
 這種分離設計讓你能清楚追蹤：
+
 - 系統目前有什麼功能（看 specs/）
 - 正在開發什麼功能（看 changes/）
 - 過去做過什麼變更（看 changes/archive/）
@@ -211,16 +212,19 @@ The system SHALL authenticate users via OAuth.
 ## ADDED Requirements
 
 ### Requirement: Todo Management
+
 The system SHALL allow users to create todo items.
 
 ## MODIFIED Requirements
 
 ### Requirement: User Dashboard
+
 （完整修改後的內容）
 
 ## REMOVED Requirements
 
 ### Requirement: Legacy Feature
+
 （已移除的功能）
 ```
 
@@ -278,23 +282,23 @@ add-todos-due-date   # 到期日功能
 
 ## 與 Plan Mode 的差異
 
-| 面向           | OpenSpec                        | Plan Mode                |
-| -------------- | ------------------------------- | ------------------------ |
-| **流程**       | 多 artifact（proposal → apply → archive） | 單一規劃階段   |
-| **成果**       | proposal.md, design.md, tasks.md, specs/  | 單一 plan 檔案 |
-| **規格管理**   | specs/ 作為真相來源，delta 追蹤          | 無             |
-| **歸檔機制**   | 完整歷史保留                              | 無             |
-| **適用場景**   | 複雜功能、需要規格追蹤                    | 簡單修改       |
+| 面向         | OpenSpec                                  | Plan Mode      |
+| ------------ | ----------------------------------------- | -------------- |
+| **流程**     | 多 artifact（proposal → apply → archive） | 單一規劃階段   |
+| **成果**     | proposal.md, design.md, tasks.md, specs/  | 單一 plan 檔案 |
+| **規格管理** | specs/ 作為真相來源，delta 追蹤           | 無             |
+| **歸檔機制** | 完整歷史保留                              | 無             |
+| **適用場景** | 複雜功能、需要規格追蹤                    | 簡單修改       |
 
 **選擇指南**：
 
-| 情境                         | 推薦                 |
-| ---------------------------- | -------------------- |
-| 功能需要 **3+ 個檔案變更**   | OpenSpec             |
-| 需要**追蹤規格演進**         | OpenSpec             |
-| 需要**多人審閱**計畫         | OpenSpec             |
-| **Bug 修復**、單檔變更       | Plan Mode            |
-| **緊急部署**、時間緊迫       | 直接實作             |
+| 情境                       | 推薦      |
+| -------------------------- | --------- |
+| 功能需要 **3+ 個檔案變更** | OpenSpec  |
+| 需要**追蹤規格演進**       | OpenSpec  |
+| 需要**多人審閱**計畫       | OpenSpec  |
+| **Bug 修復**、單檔變更     | Plan Mode |
+| **緊急部署**、時間緊迫     | 直接實作  |
 
 ---
 
@@ -303,6 +307,7 @@ add-todos-due-date   # 到期日功能
 ### Q: OpenSpec 和 SpecKit 的差異？
 
 OpenSpec 是 SpecKit 的進化版：
+
 - 命令從 9 個簡化為 3 個核心命令
 - 引入 specs/ 作為系統現狀的真相來源
 - 內建 delta 追蹤和歸檔機制
@@ -330,6 +335,7 @@ OpenSpec 是 SpecKit 的進化版：
 ### Q: 不需要提案的情況？
 
 以下情況可以直接實作，不需要建立提案：
+
 - Bug 修復
 - 修正錯字
 - 更新依賴（非破壞性）

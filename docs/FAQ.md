@@ -8,13 +8,13 @@
 
 ### OpenSpec vs Plan Mode：何時使用哪個？
 
-| 面向           | OpenSpec                                               | Claude Code Plan Mode      |
-| -------------- | ------------------------------------------------------ | -------------------------- |
-| **流程**       | 三階段（proposal → apply → archive）                   | 單階段規劃                 |
-| **成果**       | proposal.md, design.md, tasks.md, delta specs          | 單一 plan.md               |
-| **規格管理**   | ✅ specs/ 作為真相來源 + delta 追蹤                    | ❌ 無                      |
-| **適用場景**   | 複雜功能、多人協作、需要追蹤規格演進                   | 小修改、快速迭代、需求明確 |
-| **歸檔機制**   | ✅ 完整歷史保留                                        | ❌ 無                      |
+| 面向         | OpenSpec                                      | Claude Code Plan Mode      |
+| ------------ | --------------------------------------------- | -------------------------- |
+| **流程**     | 三階段（proposal → apply → archive）          | 單階段規劃                 |
+| **成果**     | proposal.md, design.md, tasks.md, delta specs | 單一 plan.md               |
+| **規格管理** | ✅ specs/ 作為真相來源 + delta 追蹤           | ❌ 無                      |
+| **適用場景** | 複雜功能、多人協作、需要追蹤規格演進          | 小修改、快速迭代、需求明確 |
+| **歸檔機制** | ✅ 完整歷史保留                               | ❌ 無                      |
 
 **選擇指南**：
 
@@ -105,11 +105,11 @@ pnpm docs:build  # 建置靜態網站
 
 ### Commands、Agents、Skills 的差別？
 
-| 類型         | 觸發方式                  | 用途         | 範例                                  |
-| ------------ | ------------------------- | ------------ | ------------------------------------- |
-| **Commands** | 使用者輸入 `/xxx`         | 執行特定流程 | `/commit`, `/tdd`, `/opsx:new`        |
-| **Agents**   | 自動觸發或被 Command 呼叫 | 執行子任務   | check-runner, post-implement          |
-| **Skills**   | 自動偵測情境載入          | 提供專業知識 | supabase-rls, server-api              |
+| 類型         | 觸發方式                  | 用途         | 範例                           |
+| ------------ | ------------------------- | ------------ | ------------------------------ |
+| **Commands** | 使用者輸入 `/xxx`         | 執行特定流程 | `/commit`, `/tdd`, `/opsx:new` |
+| **Agents**   | 自動觸發或被 Command 呼叫 | 執行子任務   | check-runner, post-implement   |
+| **Skills**   | 自動偵測情境載入          | 提供專業知識 | supabase-rls, server-api       |
 
 **類比**：
 
