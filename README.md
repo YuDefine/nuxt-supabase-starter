@@ -317,9 +317,11 @@ Skills 會自動串接，減少手動操作：
 │   └── API_PATTERNS.md      # API 設計模式
 │
 ├── .claude/                  # Claude Code 配置
-│   ├── commands/            # 自定義命令
+│   ├── commands/            # 自定義命令（含 opsx/）
 │   ├── agents/              # SubAgents
-│   └── skills/              # AI Skills
+│   ├── hooks/               # 自動化腳本
+│   ├── skills/              # AI Skills
+│   └── settings.local.json.example
 │
 ├── openspec/                 # OpenSpec 工作流程
 │   ├── project.md           # 專案上下文
@@ -329,7 +331,7 @@ Skills 會自動串接，減少手動操作：
 ├── .github/                  # GitHub prompts
 │
 └── server/utils/
-    └── supabase.ts.example  # Server 端工具函式
+    └── supabase.ts          # Server 端 Supabase client
 ```
 
 ---

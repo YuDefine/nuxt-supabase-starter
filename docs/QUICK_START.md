@@ -49,11 +49,17 @@ git commit -m "🎉 init: 從 nuxt-supabase-starter 建立專案"
 my-project/
 ├── CLAUDE.md              # AI 開發規範
 ├── .claude/               # Claude Code 配置
-│   ├── commands/          # 自定義指令
+│   ├── commands/          # 自定義指令（含 opsx/）
 │   ├── agents/            # SubAgents
-│   └── skills/            # AI Skills
+│   ├── hooks/             # 自動化腳本
+│   ├── skills/            # AI Skills
+│   └── settings.local.json.example
 ├── openspec/              # OpenSpec 工作流程
+│   ├── project.md         # 專案上下文
+│   ├── specs/             # 系統規格
+│   └── changes/           # 變更提案
 ├── app/                   # Nuxt 應用程式
+│   ├── app.vue            # 根元件
 │   ├── assets/css/        # 樣式檔案
 │   ├── auth.config.ts     # Client 認證配置
 │   ├── pages/             # 頁面元件
