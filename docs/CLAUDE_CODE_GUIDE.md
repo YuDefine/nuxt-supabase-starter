@@ -102,7 +102,7 @@ claude
 │   ├── tdd.md
 │   ├── commit.md
 │   ├── db-migration.md
-│   └── speckit.*.md
+│   └── opsx/
 ├── agents/                      # SubAgents
 │   ├── check-runner.md
 │   ├── code-review.md
@@ -136,16 +136,16 @@ Commands 是可以用 `/指令` 觸發的工作流程。
 
 用於結構化的功能開發，詳見 [OPENSPEC.md](./OPENSPEC.md)。
 
-| 指令              | 說明                       |
-| ----------------- | -------------------------- |
-| `/opsx:new`       | 建立新的變更提案           |
-| `/opsx:ff`        | 快速建立所有 artifacts     |
-| `/opsx:continue`  | 繼續建立下一個 artifact    |
-| `/opsx:apply`     | 執行任務清單               |
-| `/opsx:verify`    | 驗證實作是否符合規格       |
-| `/opsx:archive`   | 歸檔完成的變更             |
-| `/opsx:sync`      | 同步 delta specs 到主 specs|
-| `/opsx:explore`   | 探索模式，釐清需求         |
+| 指令             | 說明                        |
+| ---------------- | --------------------------- |
+| `/opsx:new`      | 建立新的變更提案            |
+| `/opsx:ff`       | 快速建立所有 artifacts      |
+| `/opsx:continue` | 繼續建立下一個 artifact     |
+| `/opsx:apply`    | 執行任務清單                |
+| `/opsx:verify`   | 驗證實作是否符合規格        |
+| `/opsx:archive`  | 歸檔完成的變更              |
+| `/opsx:sync`     | 同步 delta specs 到主 specs |
+| `/opsx:explore`  | 探索模式，釐清需求          |
 
 ### 指令串接
 
