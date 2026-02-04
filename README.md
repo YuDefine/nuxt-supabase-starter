@@ -67,14 +67,14 @@
 
 ### AI 輔助開發
 
-| 工具                                                                 | 說明                                                         |
-| -------------------------------------------------------------------- | ------------------------------------------------------------ |
-| [Claude Code](https://claude.ai/code)                                | AI 編程助手                                                  |
-| [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | 讓 AI 直接操作資料庫                                         |
-| Commands（7 個）                                                     | `/tdd`、`/commit`、`/db-migration`、`/opsx:*` 等             |
-| SubAgents（3 個）                                                    | `check-runner`、`post-implement`、`db-backup`                |
-| [nuxt-skills](https://github.com/onmax/nuxt-skills)（12 個）         | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等 AI Skills              |
-| 情境 Skills（5 個）                                                  | `supabase-rls`、`supabase-migration` 等                      |
+| 工具                                                                 | 說明                                             |
+| -------------------------------------------------------------------- | ------------------------------------------------ |
+| [Claude Code](https://claude.ai/code)                                | AI 編程助手                                      |
+| [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | 讓 AI 直接操作資料庫                             |
+| Commands（7 個）                                                     | `/tdd`、`/commit`、`/db-migration`、`/opsx:*` 等 |
+| SubAgents（3 個）                                                    | `check-runner`、`post-implement`、`db-backup`    |
+| [nuxt-skills](https://github.com/onmax/nuxt-skills)（12 個）         | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等 AI Skills  |
+| 情境 Skills（5 個）                                                  | `supabase-rls`、`supabase-migration` 等          |
 
 ---
 
@@ -295,12 +295,12 @@ pnpm check  # format → lint → typecheck → test
 
 Skills 會自動串接，減少手動操作：
 
-| 完成                 | 自動觸發                   |
-| -------------------- | -------------------------- |
-| `/tdd`               | check-runner → 詢問 commit |
-| `/commit`            | **先**執行 check-runner    |
-| `/db-migration`      | 產生 TypeScript 類型       |
-| `/opsx:apply`        | check-runner → 詢問 commit |
+| 完成            | 自動觸發                   |
+| --------------- | -------------------------- |
+| `/tdd`          | check-runner → 詢問 commit |
+| `/commit`       | **先**執行 check-runner    |
+| `/db-migration` | 產生 TypeScript 類型       |
+| `/opsx:apply`   | check-runner → 詢問 commit |
 
 > 📖 完整工作流程見 [docs/WORKFLOW.md](./docs/WORKFLOW.md)
 
@@ -313,7 +313,7 @@ Skills 會自動串接，減少手動操作：
 ├── docs/                     # 詳細文件
 │   ├── SUPABASE_GUIDE.md    # Supabase 入門
 │   ├── WORKFLOW.md          # 開發工作流程
-│   ├── SPEC_KIT.md          # spec-kit 使用指南
+│   ├── OPENSPEC.md          # OpenSpec 工作流程
 │   └── API_PATTERNS.md      # API 設計模式
 │
 ├── .claude/                  # Claude Code 配置
