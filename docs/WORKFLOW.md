@@ -339,44 +339,31 @@ Claude Code 的 `/db-migration` 命令會引導你完成整個流程，包括：
 
 假設你要開發一個「待辦事項」功能：
 
-### 1. 使用 spec-kit 定義規格
+### 1. 使用 OpenSpec 建立變更提案
 
 ```bash
-/speckit.specify
+/opsx:new
 ```
 
 描述：「使用者可以建立、查看、更新、刪除待辦事項。每個待辦事項有標題、描述、完成狀態。使用者只能看到自己的待辦事項。」
 
-Claude 會產生 `spec.md`。
+Claude 會產生 `proposal.md`、`design.md`、`tasks.md` 和 delta specs。
 
-### 2. 產生實作計畫
-
-```bash
-/speckit.plan
-```
-
-Claude 會根據規格產生 `plan.md`，列出需要的：
-
-- 資料庫表格
-- API 端點
-- 前端頁面
-- 測試案例
-
-### 3. 產生任務清單
+### 2. 執行任務
 
 ```bash
-/speckit.tasks
-```
-
-Claude 會產生 `tasks.md`，把計畫拆成可執行的任務。
-
-### 4. 執行任務
-
-```bash
-/speckit.implement
+/opsx:apply add-todos
 ```
 
 Claude 會逐一執行任務，使用 TDD 流程。
+
+### 3. 歸檔變更
+
+```bash
+/opsx:archive add-todos
+```
+
+Claude 會將變更歸檔，並將 delta specs 合併到主 specs。
 
 ### 5. 自動檢查與提交
 
@@ -400,7 +387,7 @@ Claude 會逐一執行任務，使用 TDD 流程。
 | `/tdd`               | 詢問是否 commit                 | check 通過後   |
 | `/commit`            | **先**調用 check-runner         | 開始前強制     |
 | `/db-migration`      | 產生 TypeScript 類型            | 測試通過後     |
-| `/speckit.implement` | 調用 check-runner + 詢問 commit | 所有任務完成後 |
+| `/opsx:apply`        | 調用 check-runner + 詢問 commit | 所有任務完成後 |
 
 ### SubAgents
 

@@ -70,8 +70,8 @@ CLAUDE.md → AI Skills 區塊
     ↓ 了解 Skills 分類與觸發機制
 CLAUDE_CODE_GUIDE.md
     ↓ 了解 Claude Code 配置
-SPEC_KIT.md
-    ↓ 了解 Spec-Kit 工作流程
+OPENSPEC.md
+    ↓ 了解 OpenSpec 工作流程
 ```
 
 ---
@@ -92,7 +92,7 @@ SPEC_KIT.md
           │                     │                     │
           ▼                     ▼                     ▼
 ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
-│ SUPABASE_GUIDE  │   │  API_PATTERNS   │   │  SPEC_KIT.md    │
+│ SUPABASE_GUIDE  │   │  API_PATTERNS   │   │  OPENSPEC.md    │
 │ SUPABASE_MCP    │   │                 │   │  CLAUDE_CODE    │
 └─────────────────┘   └─────────────────┘   └─────────────────┘
           │                     │                     │
@@ -120,7 +120,7 @@ SPEC_KIT.md
 
 深入說明、最佳實踐。
 
-- **WORKFLOW.md**：TDD 流程、Spec-Kit、自動化
+- **WORKFLOW.md**：TDD 流程、OpenSpec、自動化
 - **SUPABASE_GUIDE.md**：Supabase 入門、RLS、Migration
 - **API_PATTERNS.md**：Server API 設計模式
 
@@ -149,7 +149,7 @@ SPEC_KIT.md
 | 認證怎麼做？             | [docs/verify/AUTH_INTEGRATION.md](verify/AUTH_INTEGRATION.md)                                         |
 | Migration 怎麼建立？     | [docs/verify/SUPABASE_MIGRATION_GUIDE.md](verify/SUPABASE_MIGRATION_GUIDE.md)                         |
 | Client/Server 怎麼分工？ | [CLAUDE.md](../CLAUDE.md#-supabase-資料存取策略)                                                      |
-| Spec-Kit 怎麼用？        | [SPEC_KIT.md](SPEC_KIT.md)                                                                            |
+| OpenSpec 怎麼用？        | [OPENSPEC.md](OPENSPEC.md)                                                                            |
 | 常見問題？               | [FAQ.md](FAQ.md)                                                                                      |
 
 ---

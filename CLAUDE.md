@@ -103,6 +103,9 @@ supabase/migrations/ # DB migrations (CLI only)
 | Trigger           | Action                                             |
 | ----------------- | -------------------------------------------------- |
 | `/commit`         | Run `pnpm check` → commit                          |
+| `/opsx:new`       | 建立變更提案 (proposal.md, design.md, tasks.md)    |
+| `/opsx:apply`     | 執行 tasks.md 中的任務                             |
+| `/opsx:archive`   | 歸檔完成的變更，合併 delta specs                   |
 | Migration created | `db reset` → `db lint` → `gen types` → `typecheck` |
 | New feature       | TDD: Red → Green → Refactor                        |
 
@@ -130,7 +133,7 @@ See `commitlint.config.js` for types. Use `/commit` command.
 | UI components       | `nuxt-ui`                 |
 | VueUse              | `vueuse`                  |
 | Postgres            | `postgres-best-practices` |
-| 中大型功能規劃      | `spec-kit-workflow`       |
+| 中大型功能規劃      | `/opsx:new` (OpenSpec)    |
 
 ## docs/verify/ Purpose
 

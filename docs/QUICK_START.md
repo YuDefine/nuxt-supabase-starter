@@ -52,7 +52,7 @@ my-project/
 │   ├── commands/          # 自定義指令
 │   ├── agents/            # SubAgents
 │   └── skills/            # AI Skills
-├── .specify/              # spec-kit 工作流程
+├── openspec/              # OpenSpec 工作流程
 ├── app/                   # Nuxt 應用程式
 │   ├── assets/css/        # 樣式檔案
 │   ├── auth.config.ts     # Client 認證配置
@@ -267,7 +267,7 @@ claude
 
 | 類型        | 數量  | 說明                                              |
 | ----------- | ----- | ------------------------------------------------- |
-| Commands    | 13 個 | `/tdd`、`/commit`、`/speckit.*` 等                |
+| Commands    | 7 個  | `/tdd`、`/commit`、`/opsx:*` 等                   |
 | SubAgents   | 3 個  | `check-runner`、`post-implement`、`db-backup`     |
 | 通用 Skills | 12 個 | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等（自動更新） |
 | 情境 Skills | 5 個  | `supabase-rls`、`server-api`、`pinia-store` 等    |
@@ -319,12 +319,12 @@ NUXT_OAUTH_GOOGLE_CLIENT_SECRET=<client_secret>
 # 啟動 Claude Code
 claude
 
-# 使用 spec-kit 工作流程
-> /speckit.specify
+# 使用 OpenSpec 工作流程
+> /opsx:new
 > 我需要一個待辦事項功能，使用者可以新增、編輯、刪除待辦事項...
 ```
 
-> 📖 詳細說明：[SPEC_KIT.md](./SPEC_KIT.md)
+> 📖 詳細說明：[OPENSPEC.md](./OPENSPEC.md)
 
 ---
 
@@ -357,5 +357,5 @@ supabase migration new <name>  # 建立新 migration
 | [SUPABASE_MCP.md](./SUPABASE_MCP.md)           | Supabase MCP 整合    |
 | [SUPABASE_GUIDE.md](./SUPABASE_GUIDE.md)       | Supabase 入門與 RLS  |
 | [WORKFLOW.md](./WORKFLOW.md)                   | TDD 開發流程         |
-| [SPEC_KIT.md](./SPEC_KIT.md)                   | spec-kit 工作流程    |
+| [OPENSPEC.md](./OPENSPEC.md)                   | OpenSpec 工作流程    |
 | [API_PATTERNS.md](./API_PATTERNS.md)           | Server API 設計模式  |
