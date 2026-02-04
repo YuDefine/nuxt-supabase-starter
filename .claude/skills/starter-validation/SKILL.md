@@ -25,16 +25,17 @@ rm -rf .git && git init
 
 **檢查項目**：
 
-| 檢查 | 文件來源 | 驗證方式 |
-|------|----------|----------|
+| 檢查           | 文件來源       | 驗證方式            |
+| -------------- | -------------- | ------------------- |
 | CLAUDE.md 存在 | QUICK_START.md | `test -f CLAUDE.md` |
-| .claude/ 結構 | QUICK_START.md | 見下方 |
-| openspec/ 結構 | QUICK_START.md | 見下方 |
-| app/ 結構 | QUICK_START.md | 見下方 |
-| server/ 結構 | QUICK_START.md | 見下方 |
-| docs/ 結構 | QUICK_START.md | 見下方 |
+| .claude/ 結構  | QUICK_START.md | 見下方              |
+| openspec/ 結構 | QUICK_START.md | 見下方              |
+| app/ 結構      | QUICK_START.md | 見下方              |
+| server/ 結構   | QUICK_START.md | 見下方              |
+| docs/ 結構     | QUICK_START.md | 見下方              |
 
 **.claude/ 必須包含**：
+
 - `commands/` (含 `opsx/` 子目錄)
 - `agents/`
 - `hooks/`
@@ -42,12 +43,14 @@ rm -rf .git && git init
 - `settings.local.json.example`
 
 **openspec/ 必須包含**：
+
 - `project.md`
 - `specs/`
 - `changes/`
 - `changes/archive/`
 
 **app/ 必須包含**：
+
 - `app.vue`
 - `assets/css/`
 - `auth.config.ts`
@@ -56,6 +59,7 @@ rm -rf .git && git init
 - `types/database.types.ts`
 
 **server/ 必須包含**：
+
 - `auth.config.ts`
 - `utils/`
 - `utils/supabase.ts`
@@ -70,6 +74,7 @@ grep -r "├──\|└──" docs/*.md README.md
 ```
 
 **需驗證的文件**：
+
 - `docs/QUICK_START.md` - Step 1 目錄結構
 - `README.md` - 目錄結構章節
 - `docs/CLAUDE_CODE_GUIDE.md` - .claude/ 結構
@@ -88,47 +93,92 @@ echo $?
 
 ### Phase 4: Tech Stack Verification
 
-根據 README.md 和 QUICK_START.md 檢查 package.json：
+**動態驗證**：從 `README.md` 解析 Tech Stack 章節，自動對照 `package.json`。
 
-#### Core Framework
-| Package | 用途 | 驗證 |
-|---------|------|------|
-| `nuxt` | Framework | `jq '.dependencies.nuxt' package.json` |
-| `vue` | UI Framework | `jq '.dependencies.vue' package.json` |
-| `typescript` | Language | `jq '.devDependencies.typescript' package.json` |
+```bash
+node -e "
+const fs = require('fs');
+const readme = fs.readFileSync('README.md', 'utf8');
+const pkg = require('./package.json');
+const allDeps = {...pkg.dependencies, ...pkg.devDependencies};
 
-#### UI & Styling
-| Package | 用途 | 驗證 |
-|---------|------|------|
-| `@nuxt/ui` | UI Components | `jq '.dependencies["@nuxt/ui"]' package.json` |
-| `tailwindcss` | Styling | `jq '.devDependencies.tailwindcss' package.json` |
-| `@nuxt/fonts` | Fonts | `jq '.modules' nuxt.config.ts` |
+// 從 README.md 的 Tech Stack 章節提取套件名稱
+// 格式：[Package Name](url) 或 \`package-name\`
+const techStackSection = readme.match(/## Tech Stack[\\s\\S]*?(?=\\n## |$)/)?.[0] || '';
+const packageMatches = techStackSection.matchAll(/\\[([^\\]]+)\\]\\(https?:\\/\\/[^)]+\\)/g);
+const codeMatches = techStackSection.matchAll(/\\\`([a-z@][a-z0-9\\-\\/@.]+)\\\`/gi);
 
-#### State Management
-| Package | 用途 | 驗證 |
-|---------|------|------|
-| `pinia` | State | `jq '.dependencies.pinia' package.json` |
-| `@pinia/colada` | Async State | `jq '.dependencies["@pinia/colada"]' package.json` |
-| `@vueuse/nuxt` | Utilities | `jq '.dependencies["@vueuse/nuxt"]' package.json` |
+// 已知的套件名稱對照（README 顯示名稱 → npm 套件名）
+const knownMappings = {
+  'Nuxt': 'nuxt',
+  'Vue': 'vue',
+  'TypeScript': 'typescript',
+  'Supabase': '@nuxtjs/supabase',
+  'Nuxt UI': '@nuxt/ui',
+  'Nuxt Charts': 'nuxt-charts',
+  'Tailwind CSS': 'tailwindcss',
+  'Nuxt Image': '@nuxt/image',
+  'Lucide Icons': '@iconify-json/lucide',
+  'nuxt-better-auth': '@onmax/nuxt-better-auth',
+  'Pinia': '@pinia/nuxt',
+  'Pinia Colada': '@pinia/colada',
+  'VueUse': '@vueuse/nuxt',
+  'Vitest': 'vitest',
+  '@nuxt/test-utils': '@nuxt/test-utils',
+  'OXLint': 'oxlint',
+  'OXFmt': 'oxfmt',
+  'Zod': 'zod',
+  'Commitlint': '@commitlint/cli',
+  'Husky': 'husky',
+  'VitePress': 'vitepress',
+  'NuxtHub': '@nuxthub/core',
+  'Sentry': '@sentry/nuxt',
+  'Cloudflare Workers': 'wrangler'
+};
 
-#### Database & Auth
-| Package | 用途 | 驗證 |
-|---------|------|------|
-| `@nuxtjs/supabase` | Database | `jq '.dependencies["@nuxtjs/supabase"]' package.json` |
-| `@onmax/nuxt-better-auth` | Auth | `jq '.dependencies["@onmax/nuxt-better-auth"]' package.json` |
+const packagesToCheck = new Set();
+for (const [_, name] of packageMatches) {
+  const mapped = knownMappings[name];
+  if (mapped) packagesToCheck.add(mapped);
+}
 
-#### Testing & Quality
-| Package | 用途 | 驗證 |
-|---------|------|------|
-| `vitest` | Testing | `jq '.devDependencies.vitest' package.json` |
-| `@nuxt/test-utils` | Nuxt Testing | `jq '.devDependencies["@nuxt/test-utils"]' package.json` |
-| `oxlint` | Linting | `jq '.devDependencies.oxlint' package.json` |
+let pass = true;
+let checked = 0;
+let missing = [];
 
-#### Deployment
-| Package | 用途 | 驗證 |
-|---------|------|------|
-| `@nuxthub/core` | Cloudflare | `jq '.dependencies["@nuxthub/core"]' package.json` |
-| `@sentry/nuxt` | Error Tracking | `jq '.dependencies["@sentry/nuxt"]' package.json` |
+console.log('Tech Stack from README.md:');
+console.log('─'.repeat(50));
+
+for (const pkgName of packagesToCheck) {
+  checked++;
+  if (allDeps[pkgName]) {
+    console.log('✓', pkgName, allDeps[pkgName]);
+  } else {
+    console.log('✗', pkgName, 'NOT FOUND in package.json');
+    missing.push(pkgName);
+    pass = false;
+  }
+}
+
+console.log('─'.repeat(50));
+console.log('Total:', checked, '| Found:', checked - missing.length, '| Missing:', missing.length);
+
+if (!pass) {
+  console.log('\\nMissing packages:', missing.join(', '));
+  process.exit(1);
+}
+"
+```
+
+**原理**：
+1. 讀取 `README.md` 的 Tech Stack 章節
+2. 解析 `[Name](url)` 格式的連結
+3. 透過 `knownMappings` 對照表轉換為 npm 套件名稱
+4. 與 `package.json` 比對
+
+**維護方式**：
+- 當 README.md 新增技術時，只需更新 `knownMappings` 對照表
+- 套件名稱變更時，同步更新對照表即可
 
 ### Phase 5: Build & Type Check
 
@@ -154,11 +204,13 @@ pnpm check
 ls -1 .claude/commands/*.md .claude/commands/opsx/*.md
 ```
 
-**預期命令**：
+**預期命令（15 個）**：
+
 - `commit.md`
 - `db-migration.md`
 - `doc-sync.md`
 - `tdd.md`
+- `validate-starter.md`
 - `opsx/new.md`
 - `opsx/apply.md`
 - `opsx/archive.md`
@@ -222,30 +274,46 @@ pnpm install
 
 echo ""
 echo "=== Phase 3: Tech Stack Verification ==="
-echo "Checking dependencies..."
+echo "Parsing README.md Tech Stack section..."
 node -e "
+const fs = require('fs');
+const readme = fs.readFileSync('README.md', 'utf8');
 const pkg = require('./package.json');
-const deps = {...pkg.dependencies, ...pkg.devDependencies};
-const required = [
-  'nuxt', 'vue', 'typescript',
-  '@nuxt/ui', 'tailwindcss',
-  'pinia', '@pinia/colada', '@vueuse/nuxt',
-  '@nuxtjs/supabase', '@onmax/nuxt-better-auth',
-  'vitest', '@nuxt/test-utils', 'oxlint',
-  '@nuxthub/core'
-];
-let missing = [];
-for (const dep of required) {
-  if (deps[dep]) {
-    console.log('✓ ' + dep);
+const allDeps = {...pkg.dependencies, ...pkg.devDependencies};
+
+const knownMappings = {
+  'Nuxt': 'nuxt', 'Vue': 'vue', 'TypeScript': 'typescript',
+  'Supabase': '@nuxtjs/supabase', 'Nuxt UI': '@nuxt/ui',
+  'Nuxt Charts': 'nuxt-charts', 'Tailwind CSS': 'tailwindcss',
+  'Nuxt Image': '@nuxt/image', 'Lucide Icons': '@iconify-json/lucide',
+  'nuxt-better-auth': '@onmax/nuxt-better-auth', 'Pinia': '@pinia/nuxt',
+  'Pinia Colada': '@pinia/colada', 'VueUse': '@vueuse/nuxt',
+  'Vitest': 'vitest', '@nuxt/test-utils': '@nuxt/test-utils',
+  'OXLint': 'oxlint', 'OXFmt': 'oxfmt', 'Zod': 'zod',
+  'Commitlint': '@commitlint/cli', 'Husky': 'husky',
+  'VitePress': 'vitepress', 'NuxtHub': '@nuxthub/core',
+  'Sentry': '@sentry/nuxt', 'Cloudflare Workers': 'wrangler'
+};
+
+const techStack = readme.match(/## Tech Stack[\\s\\S]*?(?=\\n## |$)/)?.[0] || '';
+const matches = techStack.matchAll(/\\[([^\\]]+)\\]\\(https?:\\/\\/[^)]+\\)/g);
+
+let pass = true, checked = 0, missing = [];
+for (const [_, name] of matches) {
+  const pkgName = knownMappings[name];
+  if (!pkgName) continue;
+  checked++;
+  if (allDeps[pkgName]) {
+    console.log('✓', pkgName);
   } else {
-    missing.push(dep);
-    console.log('✗ ' + dep + ' MISSING');
+    console.log('✗', pkgName, 'MISSING');
+    missing.push(pkgName);
+    pass = false;
   }
 }
-if (missing.length > 0) {
-  process.exit(1);
-}
+console.log('');
+console.log('Total:', checked, '| Pass:', checked - missing.length, '| Missing:', missing.length);
+if (!pass) process.exit(1);
 "
 
 echo ""
@@ -258,7 +326,7 @@ pnpm test
 
 echo ""
 echo "=== Phase 6: Commands Check ==="
-EXPECTED_COMMANDS=14
+EXPECTED_COMMANDS=15
 ACTUAL_COMMANDS=$(find .claude/commands -name "*.md" | wc -l | tr -d ' ')
 echo "Expected: $EXPECTED_COMMANDS, Actual: $ACTUAL_COMMANDS"
 if [ "$ACTUAL_COMMANDS" -ge "$EXPECTED_COMMANDS" ]; then
@@ -284,35 +352,39 @@ echo "Test directory: $TEST_DIR"
 **Commit**: <hash>
 
 ### Structure
-| Check | Status |
-|-------|--------|
-| CLAUDE.md | ✅ |
-| .claude/ | ✅ |
-| openspec/ | ✅ |
-| app/ | ✅ |
-| server/ | ✅ |
-| docs/ | ✅ |
+
+| Check     | Status |
+| --------- | ------ |
+| CLAUDE.md | ✅     |
+| .claude/  | ✅     |
+| openspec/ | ✅     |
+| app/      | ✅     |
+| server/   | ✅     |
+| docs/     | ✅     |
 
 ### Packages
+
 | Category | Status | Missing |
-|----------|--------|---------|
-| Core | ✅ | - |
-| UI | ✅ | - |
-| State | ✅ | - |
-| Database | ✅ | - |
-| Testing | ✅ | - |
-| Deploy | ✅ | - |
+| -------- | ------ | ------- |
+| Core     | ✅     | -       |
+| UI       | ✅     | -       |
+| State    | ✅     | -       |
+| Database | ✅     | -       |
+| Testing  | ✅     | -       |
+| Deploy   | ✅     | -       |
 
 ### Commands
+
 - Total: 14
 - Status: ✅
 
 ### Build & Test
-| Check | Status |
-|-------|--------|
-| pnpm install | ✅ |
-| pnpm typecheck | ✅ |
-| pnpm test | ✅ |
+
+| Check          | Status |
+| -------------- | ------ |
+| pnpm install   | ✅     |
+| pnpm typecheck | ✅     |
+| pnpm test      | ✅     |
 
 ### Result: **PASS** / **FAIL**
 ```
@@ -320,6 +392,7 @@ echo "Test directory: $TEST_DIR"
 ## Common Issues
 
 ### Missing .gitkeep files
+
 ```bash
 # 確保空目錄被追蹤
 touch openspec/specs/.gitkeep
@@ -328,12 +401,16 @@ touch openspec/changes/archive/.gitkeep
 ```
 
 ### Documentation vs Reality Mismatch
+
 檢查以下文件的目錄結構描述：
+
 - `docs/QUICK_START.md`
 - `README.md`
 - `docs/CLAUDE_CODE_GUIDE.md`
 
 ### Package Not Found
+
 確認 package.json 中的依賴名稱正確，注意 scoped packages 的格式：
+
 - `@nuxt/ui` (不是 `nuxt-ui`)
 - `@pinia/colada` (不是 `pinia-colada`)
