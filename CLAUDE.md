@@ -1,3 +1,27 @@
+<!-- SPECTRA:START v1.0.0 -->
+
+# Spectra Instructions
+
+This project uses Spectra for Spec-Driven Development(SDD). Specs live in `openspec/specs/`, change proposals in `openspec/changes/`.
+
+## Use `/spectra:*` skills when:
+
+- A discussion needs structure before coding → `/spectra:discuss`
+- User wants to plan, propose, or design a change → `/spectra:propose`
+- Tasks are ready to implement → `/spectra:apply`
+- There's an in-progress change to continue → `/spectra:ingest`
+- User asks about specs or how something works → `/spectra:ask`
+- Implementation is done → `/spectra:verify` then `/spectra:archive`
+
+## Workflow
+
+discuss? → propose → apply ⇄ ingest → archive
+
+- `discuss` is optional — skip if requirements are clear
+- Requirements change mid-work? Plan mode → `ingest` → resume `apply`
+
+<!-- SPECTRA:END -->
+
 # CLAUDE.md
 
 ## Language
@@ -102,12 +126,15 @@ supabase/migrations/ # DB migrations (CLI only)
 
 | Trigger           | Action                                             |
 | ----------------- | -------------------------------------------------- |
-| `/commit`         | Run `pnpm check` → commit                          |
-| `/opsx:new`       | 建立變更提案 (proposal.md, design.md, tasks.md)    |
-| `/opsx:apply`     | 執行 tasks.md 中的任務                             |
-| `/opsx:archive`   | 歸檔完成的變更，合併 delta specs                   |
-| Migration created | `db reset` → `db lint` → `gen types` → `typecheck` |
-| New feature       | TDD: Red → Green → Refactor                        |
+| `/commit`          | Run `pnpm check` → commit                          |
+| `/opsx:new`        | 建立變更提案 (OpenSpec)                             |
+| `/opsx:apply`      | 執行任務 (OpenSpec)                                 |
+| `/opsx:archive`    | 歸檔變更 (OpenSpec)                                 |
+| `/spectra:propose` | 建立變更提案 (Spectra)                              |
+| `/spectra:apply`   | 執行任務 (Spectra)                                  |
+| `/spectra:archive` | 歸檔變更 (Spectra)                                  |
+| Migration created  | `db reset` → `db lint` → `gen types` → `typecheck`  |
+| New feature        | TDD: Red → Green → Refactor                         |
 
 ## Commit Format
 
@@ -133,7 +160,8 @@ See `commitlint.config.js` for types. Use `/commit` command.
 | UI components       | `nuxt-ui`                 |
 | VueUse              | `vueuse`                  |
 | Postgres            | `postgres-best-practices` |
-| 中大型功能規劃      | `/opsx:new` (OpenSpec)    |
+| 中大型功能規劃 (OpenSpec) | `/opsx:new`          |
+| 中大型功能規劃 (Spectra)  | `/spectra:propose`   |
 
 ## docs/verify/ Purpose
 
