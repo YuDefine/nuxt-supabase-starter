@@ -124,17 +124,17 @@ supabase/migrations/ # DB migrations (CLI only)
 
 ## Automation Triggers
 
-| Trigger           | Action                                             |
-| ----------------- | -------------------------------------------------- |
+| Trigger            | Action                                             |
+| ------------------ | -------------------------------------------------- |
 | `/commit`          | Run `pnpm check` → commit                          |
-| `/opsx:new`        | 建立變更提案 (OpenSpec)                             |
-| `/opsx:apply`      | 執行任務 (OpenSpec)                                 |
-| `/opsx:archive`    | 歸檔變更 (OpenSpec)                                 |
-| `/spectra:propose` | 建立變更提案 (Spectra)                              |
-| `/spectra:apply`   | 執行任務 (Spectra)                                  |
-| `/spectra:archive` | 歸檔變更 (Spectra)                                  |
-| Migration created  | `db reset` → `db lint` → `gen types` → `typecheck`  |
-| New feature        | TDD: Red → Green → Refactor                         |
+| `/opsx:new`        | 建立變更提案 (OpenSpec)                            |
+| `/opsx:apply`      | 執行任務 (OpenSpec)                                |
+| `/opsx:archive`    | 歸檔變更 (OpenSpec)                                |
+| `/spectra:propose` | 建立變更提案 (Spectra)                             |
+| `/spectra:apply`   | 執行任務 (Spectra)                                 |
+| `/spectra:archive` | 歸檔變更 (Spectra)                                 |
+| Migration created  | `db reset` → `db lint` → `gen types` → `typecheck` |
+| New feature        | TDD: Red → Green → Refactor                        |
 
 ## Commit Format
 
@@ -153,15 +153,15 @@ See `commitlint.config.js` for types. Use `/commit` command.
 
 ## AI Skills
 
-| Task                | Skill                     |
-| ------------------- | ------------------------- |
-| Vue components      | `vue`                     |
-| Nuxt routing/server | `nuxt`                    |
-| UI components       | `nuxt-ui`                 |
-| VueUse              | `vueuse`                  |
-| Postgres            | `postgres-best-practices` |
-| 中大型功能規劃 (OpenSpec) | `/opsx:new`          |
-| 中大型功能規劃 (Spectra)  | `/spectra:propose`   |
+| Task                      | Skill                     |
+| ------------------------- | ------------------------- |
+| Vue components            | `vue`                     |
+| Nuxt routing/server       | `nuxt`                    |
+| UI components             | `nuxt-ui`                 |
+| VueUse                    | `vueuse`                  |
+| Postgres                  | `postgres-best-practices` |
+| 中大型功能規劃 (OpenSpec) | `/opsx:new`               |
+| 中大型功能規劃 (Spectra)  | `/spectra:propose`        |
 
 ## docs/verify/ Purpose
 
