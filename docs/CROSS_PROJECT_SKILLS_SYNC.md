@@ -74,18 +74,18 @@ pnpm skills:install
 
 從 skills.sh 安裝，所有專案都相同：
 
-| Skill                            | 來源                     |
-| -------------------------------- | ------------------------ |
-| vue                              | antfu/skills             |
-| vueuse-functions                 | antfu/skills             |
-| nuxt                             | antfu/skills             |
-| pinia                            | antfu/skills             |
-| vitepress                        | antfu/skills             |
-| vitest                           | antfu/skills             |
-| vue-best-practices               | antfu/skills             |
-| supabase-postgres-best-practices | supabase/agent-skills    |
-| nuxt-ui                          | nuxt/ui                  |
-| find-skills                      | vercel-labs/skills       |
+| Skill                            | 來源                  |
+| -------------------------------- | --------------------- |
+| vue                              | antfu/skills          |
+| vueuse-functions                 | antfu/skills          |
+| nuxt                             | antfu/skills (GitHub) |
+| pinia                            | antfu/skills          |
+| vitepress                        | antfu/skills          |
+| vitest                           | antfu/skills          |
+| vue-best-practices               | antfu/skills          |
+| supabase-postgres-best-practices | supabase/agent-skills |
+| nuxt-ui                          | nuxt/ui               |
+| find-skills                      | vercel-labs/skills    |
 
 ### 專案特定 Skills
 

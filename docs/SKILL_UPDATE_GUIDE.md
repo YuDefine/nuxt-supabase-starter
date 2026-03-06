@@ -6,11 +6,11 @@
 
 所有 skills 統一從 [skills.sh](https://skills.sh) 安裝管理。
 
-#### Antfu Skills (`antfu/skills@*`)
+#### Antfu Skills (`antfu/skills`)
 
+- `nuxt` - Nuxt 4 開發指引（`npx skills add https://github.com/antfu/skills --skill nuxt --agent claude-code -y`）
 - `vue` - Vue 3 Composition API 最佳實踐
 - `vueuse-functions` - VueUse 組合式函式
-- `nuxt` - Nuxt 4 開發指引
 - `pinia` - Pinia 狀態管理
 - `vitepress` - VitePress 文件網站
 - `vitest` - Vitest 測試框架

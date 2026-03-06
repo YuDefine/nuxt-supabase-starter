@@ -73,7 +73,7 @@
 | [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | 讓 AI 直接操作資料庫                             |
 | Commands（7 個）                                                     | `/tdd`、`/commit`、`/db-migration`、`/opsx:*` 等 |
 | SubAgents（3 個）                                                    | `check-runner`、`post-implement`、`db-backup`    |
-| [Skills](https://skills.sh)（通用 + 專案）                           | `nuxt-ui`、`vue`、`vueuse` 等 AI Skills           |
+| [Skills](https://skills.sh)（通用 + 專案）                           | `nuxt-ui`、`vue`、`vueuse` 等 AI Skills          |
 | 情境 Skills（5 個）                                                  | `supabase-rls`、`supabase-migration` 等          |
 
 ---
@@ -116,10 +116,10 @@
 
 ### 兩種 Skill 類型
 
-| 類型     | 來源                                                                                                           | 更新方式 |
-| -------- | -------------------------------------------------------------------------------------------------------------- | -------- |
-| 通用技術 | [skills.sh](https://skills.sh)（`nuxt/ui`、`supabase/agent-skills` 等）                                         | `pnpm skills:update` |
-| 情境觸發 | 本地 `.claude/skills/`                                                                                         | 手動維護 |
+| 類型     | 來源                                                                    | 更新方式             |
+| -------- | ----------------------------------------------------------------------- | -------------------- |
+| 通用技術 | [skills.sh](https://skills.sh)（`nuxt/ui`、`supabase/agent-skills` 等） | `pnpm skills:update` |
+| 情境觸發 | 本地 `.claude/skills/`                                                  | 手動維護             |
 
 ### 通用技術 Skills（13 個）
 
