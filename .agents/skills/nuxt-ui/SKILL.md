@@ -19,14 +19,14 @@ pnpm add @nuxt/ui tailwindcss
 // nuxt.config.ts
 export default defineNuxtConfig({
   modules: ['@nuxt/ui'],
-  css: ['~/assets/css/main.css']
+  css: ['~/assets/css/main.css'],
 })
 ```
 
 ```css
 /* app/assets/css/main.css */
-@import "tailwindcss";
-@import "@nuxt/ui";
+@import 'tailwindcss';
+@import '@nuxt/ui';
 ```
 
 ```vue
@@ -51,10 +51,7 @@ import vue from '@vitejs/plugin-vue'
 import ui from '@nuxt/ui/vite'
 
 export default defineConfig({
-  plugins: [
-    vue(),
-    ui()
-  ]
+  plugins: [vue(), ui()],
 })
 ```
 
@@ -70,7 +67,7 @@ const app = createApp(App)
 
 const router = createRouter({
   routes: [],
-  history: createWebHistory()
+  history: createWebHistory(),
 })
 
 app.use(router)
@@ -80,8 +77,8 @@ app.mount('#app')
 
 ```css
 /* assets/main.css */
-@import "tailwindcss";
-@import "@nuxt/ui";
+@import 'tailwindcss';
+@import '@nuxt/ui';
 ```
 
 ```vue
@@ -130,11 +127,13 @@ pnpm i @iconify-json/simple-icons
 // nuxt.config.ts
 export default defineNuxtConfig({
   icon: {
-    customCollections: [{
-      prefix: 'custom',
-      dir: './app/assets/icons'
-    }]
-  }
+    customCollections: [
+      {
+        prefix: 'custom',
+        dir: './app/assets/icons',
+      },
+    ],
+  },
 })
 ```
 
@@ -155,7 +154,7 @@ Nuxt UI ships with a default look. The goal is to adapt it to your brand so ever
 ```ts
 // Nuxt — app.config.ts
 export default defineAppConfig({
-  ui: { colors: { primary: 'indigo', neutral: 'zinc' } }
+  ui: { colors: { primary: 'indigo', neutral: 'zinc' } },
 })
 ```
 
@@ -169,9 +168,9 @@ export default defineConfig({
   plugins: [
     vue(),
     ui({
-      ui: { colors: { primary: 'indigo', neutral: 'zinc' } }
-    })
-  ]
+      ui: { colors: { primary: 'indigo', neutral: 'zinc' } },
+    }),
+  ],
 })
 ```
 
@@ -209,7 +208,7 @@ await result
 // Keyboard shortcuts
 defineShortcuts({
   meta_k: () => openSearch(),
-  escape: () => close()
+  escape: () => close(),
 })
 ```
 
@@ -221,19 +220,19 @@ Uses Standard Schema — works with Zod, Valibot, Yup, or Joi.
 
 ```vue
 <script setup lang="ts">
-import { z } from 'zod'
+  import { z } from 'zod'
 
-const schema = z.object({
-  email: z.string().email('Invalid email'),
-  password: z.string().min(8, 'Min 8 characters')
-})
+  const schema = z.object({
+    email: z.string().email('Invalid email'),
+    password: z.string().min(8, 'Min 8 characters'),
+  })
 
-type Schema = z.output<typeof schema>
-const state = reactive<Partial<Schema>>({ email: '', password: '' })
+  type Schema = z.output<typeof schema>
+  const state = reactive<Partial<Schema>>({ email: '', password: '' })
 
-function onSubmit() {
-  // UForm validates before emitting @submit — state is valid here
-}
+  function onSubmit() {
+    // UForm validates before emitting @submit — state is valid here
+  }
 </script>
 
 <template>
@@ -271,19 +270,26 @@ function onSubmit() {
 </USlideover>
 
 <!-- Dropdown menu (flat array) -->
-<UDropdownMenu :items="[
-  { label: 'Edit', icon: 'i-lucide-pencil' },
-  { type: 'separator' },
-  { label: 'Delete', icon: 'i-lucide-trash', color: 'error' }
-]">
+<UDropdownMenu
+  :items="[
+    { label: 'Edit', icon: 'i-lucide-pencil' },
+    { type: 'separator' },
+    { label: 'Delete', icon: 'i-lucide-trash', color: 'error' },
+  ]"
+>
   <UButton icon="i-lucide-ellipsis-vertical" variant="ghost" />
 </UDropdownMenu>
 
 <!-- Dropdown menu (nested array — groups with automatic separators) -->
-<UDropdownMenu :items="[
-  [{ label: 'Edit', icon: 'i-lucide-pencil' }, { label: 'Duplicate', icon: 'i-lucide-copy' }],
-  [{ label: 'Delete', icon: 'i-lucide-trash', color: 'error' }]
-]">
+<UDropdownMenu
+  :items="[
+    [
+      { label: 'Edit', icon: 'i-lucide-pencil' },
+      { label: 'Duplicate', icon: 'i-lucide-copy' },
+    ],
+    [{ label: 'Delete', icon: 'i-lucide-trash', color: 'error' }],
+  ]"
+>
   <UButton icon="i-lucide-ellipsis-vertical" variant="ghost" />
 </UDropdownMenu>
 ```
@@ -294,33 +300,33 @@ function onSubmit() {
 
 Nuxt UI provides components to compose full page layouts. Load the reference matching your use case:
 
-| Layout | Description | Reference |
-|---|---|---|
-| Page | Landing, blog, changelog, pricing — public-facing pages | [layouts/page.md](references/layouts/page.md) |
-| Dashboard | Admin UI with resizable sidebar and panels | [layouts/dashboard.md](references/layouts/dashboard.md) |
-| Docs | Documentation with sidebar nav and TOC | [layouts/docs.md](references/layouts/docs.md) |
-| Chat | AI chat with messages and prompt | [layouts/chat.md](references/layouts/chat.md) |
-| Editor | Rich text editor with toolbars | [layouts/editor.md](references/layouts/editor.md) |
+| Layout    | Description                                             | Reference                                               |
+| --------- | ------------------------------------------------------- | ------------------------------------------------------- |
+| Page      | Landing, blog, changelog, pricing — public-facing pages | [layouts/page.md](references/layouts/page.md)           |
+| Dashboard | Admin UI with resizable sidebar and panels              | [layouts/dashboard.md](references/layouts/dashboard.md) |
+| Docs      | Documentation with sidebar nav and TOC                  | [layouts/docs.md](references/layouts/docs.md)           |
+| Chat      | AI chat with messages and prompt                        | [layouts/chat.md](references/layouts/chat.md)           |
+| Editor    | Rich text editor with toolbars                          | [layouts/editor.md](references/layouts/editor.md)       |
 
 ## Templates
 
 Official starter templates at [github.com/nuxt-ui-templates](https://github.com/nuxt-ui-templates):
 
-| Template | Framework | GitHub |
-|---|---|---|
-| Starter | Nuxt | [nuxt-ui-templates/starter](https://github.com/nuxt-ui-templates/starter) |
-| Starter | Vue | [nuxt-ui-templates/starter-vue](https://github.com/nuxt-ui-templates/starter-vue) |
-| Dashboard | Nuxt | [nuxt-ui-templates/dashboard](https://github.com/nuxt-ui-templates/dashboard) |
-| Dashboard | Vue | [nuxt-ui-templates/dashboard-vue](https://github.com/nuxt-ui-templates/dashboard-vue) |
-| SaaS | Nuxt | [nuxt-ui-templates/saas](https://github.com/nuxt-ui-templates/saas) |
-| Landing | Nuxt | [nuxt-ui-templates/landing](https://github.com/nuxt-ui-templates/landing) |
-| Docs | Nuxt | [nuxt-ui-templates/docs](https://github.com/nuxt-ui-templates/docs) |
-| Portfolio | Nuxt | [nuxt-ui-templates/portfolio](https://github.com/nuxt-ui-templates/portfolio) |
-| Chat | Nuxt | [nuxt-ui-templates/chat](https://github.com/nuxt-ui-templates/chat) |
-| Editor | Nuxt | [nuxt-ui-templates/editor](https://github.com/nuxt-ui-templates/editor) |
-| Changelog | Nuxt | [nuxt-ui-templates/changelog](https://github.com/nuxt-ui-templates/changelog) |
-| Starter | Laravel | [nuxt-ui-templates/starter-laravel](https://github.com/nuxt-ui-templates/starter-laravel) |
-| Starter | AdonisJS | [nuxt-ui-templates/starter-adonis](https://github.com/nuxt-ui-templates/starter-adonis) |
+| Template  | Framework | GitHub                                                                                    |
+| --------- | --------- | ----------------------------------------------------------------------------------------- |
+| Starter   | Nuxt      | [nuxt-ui-templates/starter](https://github.com/nuxt-ui-templates/starter)                 |
+| Starter   | Vue       | [nuxt-ui-templates/starter-vue](https://github.com/nuxt-ui-templates/starter-vue)         |
+| Dashboard | Nuxt      | [nuxt-ui-templates/dashboard](https://github.com/nuxt-ui-templates/dashboard)             |
+| Dashboard | Vue       | [nuxt-ui-templates/dashboard-vue](https://github.com/nuxt-ui-templates/dashboard-vue)     |
+| SaaS      | Nuxt      | [nuxt-ui-templates/saas](https://github.com/nuxt-ui-templates/saas)                       |
+| Landing   | Nuxt      | [nuxt-ui-templates/landing](https://github.com/nuxt-ui-templates/landing)                 |
+| Docs      | Nuxt      | [nuxt-ui-templates/docs](https://github.com/nuxt-ui-templates/docs)                       |
+| Portfolio | Nuxt      | [nuxt-ui-templates/portfolio](https://github.com/nuxt-ui-templates/portfolio)             |
+| Chat      | Nuxt      | [nuxt-ui-templates/chat](https://github.com/nuxt-ui-templates/chat)                       |
+| Editor    | Nuxt      | [nuxt-ui-templates/editor](https://github.com/nuxt-ui-templates/editor)                   |
+| Changelog | Nuxt      | [nuxt-ui-templates/changelog](https://github.com/nuxt-ui-templates/changelog)             |
+| Starter   | Laravel   | [nuxt-ui-templates/starter-laravel](https://github.com/nuxt-ui-templates/starter-laravel) |
+| Starter   | AdonisJS  | [nuxt-ui-templates/starter-adonis](https://github.com/nuxt-ui-templates/starter-adonis)   |
 
 > When starting a new project, clone the matching template instead of setting up from scratch.
 

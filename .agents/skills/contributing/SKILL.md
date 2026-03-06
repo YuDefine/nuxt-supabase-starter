@@ -43,6 +43,7 @@ nuxt-ui make component <name> [options]
 ```
 
 Options:
+
 - `--primitive` - Primitive component (uses Reka UI Primitive)
 - `--prose` - Prose/typography component
 - `--content` - Content component
@@ -50,12 +51,12 @@ Options:
 
 ## Available Guidance
 
-| File | Topics |
-|------|--------|
+| File                                                                       | Topics                                                                  |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | **[references/component-structure.md](references/component-structure.md)** | Vue component file patterns, props/slots/emits interfaces, script setup |
-| **[references/theme-structure.md](references/theme-structure.md)** | Tailwind Variants theme files, slots, variants, compoundVariants |
-| **[references/testing.md](references/testing.md)** | Vitest patterns, snapshot testing, accessibility testing |
-| **[references/documentation.md](references/documentation.md)** | Component docs structure, MDC syntax, examples |
+| **[references/theme-structure.md](references/theme-structure.md)**         | Tailwind Variants theme files, slots, variants, compoundVariants        |
+| **[references/testing.md](references/testing.md)**                         | Vitest patterns, snapshot testing, accessibility testing                |
+| **[references/documentation.md](references/documentation.md)**             | Component docs structure, MDC syntax, examples                          |
 
 ## Loading Files
 
@@ -103,16 +104,16 @@ PR Review:
 
 ## Code Conventions
 
-| Convention | Description |
-|------------|-------------|
-| Type imports | Always separate: `import type { X }` on its own line |
-| Props defaults | Use `withDefaults()` for runtime, JSDoc `@defaultValue` for docs |
-| Template slots | Add `data-slot="name"` attributes on all elements |
-| Computed ui | Always use `computed(() => tv(...))` for reactive theming |
-| Theme support | Use `useComponentUI(name, props)` to merge Theme context with component `ui` prop |
-| Semantic colors | Use `text-default`, `bg-elevated`, etc. - never Tailwind palette |
-| Reka UI props | Use `reactivePick` + `useForwardPropsEmits` to forward props |
-| Form components | Use `useFormField` and `useFieldGroup` composables |
+| Convention      | Description                                                                       |
+| --------------- | --------------------------------------------------------------------------------- |
+| Type imports    | Always separate: `import type { X }` on its own line                              |
+| Props defaults  | Use `withDefaults()` for runtime, JSDoc `@defaultValue` for docs                  |
+| Template slots  | Add `data-slot="name"` attributes on all elements                                 |
+| Computed ui     | Always use `computed(() => tv(...))` for reactive theming                         |
+| Theme support   | Use `useComponentUI(name, props)` to merge Theme context with component `ui` prop |
+| Semantic colors | Use `text-default`, `bg-elevated`, etc. - never Tailwind palette                  |
+| Reka UI props   | Use `reactivePick` + `useForwardPropsEmits` to forward props                      |
+| Form components | Use `useFormField` and `useFieldGroup` composables                                |
 
 ## Commands
 

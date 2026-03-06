@@ -23,20 +23,20 @@ UApp
 
 ```vue [pages/editor.vue]
 <script setup lang="ts">
-const content = ref({
-  type: 'doc',
-  content: [
-    {
-      type: 'heading',
-      attrs: { level: 1 },
-      content: [{ type: 'text', text: 'Hello World' }]
-    },
-    {
-      type: 'paragraph',
-      content: [{ type: 'text', text: 'Start writing...' }]
-    }
-  ]
-})
+  const content = ref({
+    type: 'doc',
+    content: [
+      {
+        type: 'heading',
+        attrs: { level: 1 },
+        content: [{ type: 'text', text: 'Hello World' }],
+      },
+      {
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'Start writing...' }],
+      },
+    ],
+  })
 </script>
 
 <template>
@@ -55,7 +55,7 @@ const content = ref({
         <UEditorMentionMenu
           :items="[
             { label: 'Benjamin', avatar: { src: 'https://github.com/benjamincanac.png' } },
-            { label: 'Sébastien', avatar: { src: 'https://github.com/atinux.png' } }
+            { label: 'Sébastien', avatar: { src: 'https://github.com/atinux.png' } },
           ]"
         />
         <UEditorEmojiMenu />
@@ -122,11 +122,13 @@ Combine with Dashboard components for a multi-document editor with a sidebar.
 
       <template #default>
         <UNavigationMenu
-          :items="documents.map(doc => ({
-            label: doc.title,
-            to: `/editor/${doc.id}`,
-            icon: 'i-lucide-file-text'
-          }))"
+          :items="
+            documents.map((doc) => ({
+              label: doc.title,
+              to: `/editor/${doc.id}`,
+              icon: 'i-lucide-file-text',
+            }))
+          "
           orientation="vertical"
         />
       </template>
@@ -139,9 +141,9 @@ Combine with Dashboard components for a multi-document editor with a sidebar.
 
 ```vue [pages/editor/[id].vue]
 <script setup lang="ts">
-definePageMeta({ layout: 'editor' })
+  definePageMeta({ layout: 'editor' })
 
-const content = ref({ type: 'doc', content: [] })
+  const content = ref({ type: 'doc', content: [] })
 </script>
 
 <template>

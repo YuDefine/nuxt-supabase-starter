@@ -12,7 +12,7 @@ echo ""
 echo "📦 安裝 Antfu Skills..."
 npx skills add antfu/skills@vue -y
 npx skills add antfu/skills@vueuse-functions -y
-npx skills add antfu/skills@nuxt -y
+npx skills add https://github.com/antfu/skills --skill nuxt --agent claude-code -y
 npx skills add antfu/skills@pinia -y
 npx skills add antfu/skills@vitepress -y
 npx skills add antfu/skills@vitest -y
