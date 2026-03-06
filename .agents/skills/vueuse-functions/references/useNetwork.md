@@ -32,10 +32,7 @@ console.log(network.isOnline)
 
 ```vue
 <template>
-  <UseNetwork v-slot="{ isOnline, type }">
-    Is Online: {{ isOnline }}
-    Type: {{ type }}
-  </UseNetwork>
+  <UseNetwork v-slot="{ isOnline, type }"> Is Online: {{ isOnline }} Type: {{ type }} </UseNetwork>
 </template>
 ```
 
@@ -43,15 +40,15 @@ console.log(network.isOnline)
 
 ```ts
 export type NetworkType =
-  | "bluetooth"
-  | "cellular"
-  | "ethernet"
-  | "none"
-  | "wifi"
-  | "wimax"
-  | "other"
-  | "unknown"
-export type NetworkEffectiveType = "slow-2g" | "2g" | "3g" | "4g" | undefined
+  | 'bluetooth'
+  | 'cellular'
+  | 'ethernet'
+  | 'none'
+  | 'wifi'
+  | 'wimax'
+  | 'other'
+  | 'unknown'
+export type NetworkEffectiveType = 'slow-2g' | '2g' | '3g' | '4g' | undefined
 export interface NetworkState {
   isSupported: ComputedRef<boolean>
   /**
@@ -99,8 +96,6 @@ export interface NetworkState {
  *
  * @__NO_SIDE_EFFECTS__
  */
-export declare function useNetwork(
-  options?: ConfigurableWindow,
-): Readonly<NetworkState>
+export declare function useNetwork(options?: ConfigurableWindow): Readonly<NetworkState>
 export type UseNetworkReturn = ReturnType<typeof useNetwork>
 ```

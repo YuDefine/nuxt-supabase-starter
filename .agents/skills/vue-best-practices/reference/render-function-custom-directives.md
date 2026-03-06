@@ -20,6 +20,7 @@ The `withDirectives` function wraps a vnode and applies directives with their va
 - [ ] Multiple directives can be applied at once
 
 **Incorrect:**
+
 ```javascript
 import { h } from 'vue'
 
@@ -30,20 +31,21 @@ export default {
     return () => {
       // WRONG: Directives don't work as props
       return h('input', {
-        'v-focus': true  // This doesn't work
+        'v-focus': true, // This doesn't work
       })
     }
-  }
+  },
 }
 ```
 
 **Correct:**
+
 ```javascript
 import { h, withDirectives } from 'vue'
 
 // Custom directive
 const vFocus = {
-  mounted: (el) => el.focus()
+  mounted: (el) => el.focus(),
 }
 
 export default {
@@ -52,10 +54,10 @@ export default {
       // CORRECT: Use withDirectives
       return withDirectives(
         h('input'),
-        [[vFocus]]  // Array of directive tuples
+        [[vFocus]] // Array of directive tuples
       )
     }
-  }
+  },
 }
 ```
 
@@ -70,25 +72,23 @@ import { h, withDirectives, resolveDirective } from 'vue'
 // Usage in template: <div v-pin:top.animate="200">
 const vPin = {
   mounted(el, binding) {
-    console.log(binding.value)    // 200
-    console.log(binding.arg)      // 'top'
+    console.log(binding.value) // 200
+    console.log(binding.arg) // 'top'
     console.log(binding.modifiers) // { animate: true }
 
     el.style.position = 'fixed'
     el.style[binding.arg] = binding.value + 'px'
-  }
+  },
 }
 
 export default {
   setup() {
-    return () => withDirectives(
-      h('div', 'Pinned content'),
-      [
+    return () =>
+      withDirectives(h('div', 'Pinned content'), [
         // [directive, value, argument, modifiers]
-        [vPin, 200, 'top', { animate: true }]
-      ]
-    )
-  }
+        [vPin, 200, 'top', { animate: true }],
+      ])
+  },
 }
 ```
 
@@ -101,19 +101,17 @@ const vFocus = { mounted: (el) => el.focus() }
 const vTooltip = {
   mounted(el, { value }) {
     el.title = value
-  }
+  },
 }
 
 export default {
   setup() {
-    return () => withDirectives(
-      h('input', { placeholder: 'Enter text' }),
-      [
+    return () =>
+      withDirectives(h('input', { placeholder: 'Enter text' }), [
         [vFocus],
-        [vTooltip, 'This is a tooltip']
-      ]
-    )
-  }
+        [vTooltip, 'This is a tooltip'],
+      ])
+  },
 }
 ```
 
@@ -131,15 +129,9 @@ export default {
       const focus = resolveDirective('focus')
       const tooltip = resolveDirective('tooltip')
 
-      return withDirectives(
-        h('input'),
-        [
-          [focus],
-          [tooltip, 'Helpful tip']
-        ]
-      )
+      return withDirectives(h('input'), [[focus], [tooltip, 'Helpful tip']])
     }
-  }
+  },
 }
 ```
 
@@ -159,21 +151,23 @@ const vClickOutside = {
   },
   unmounted(el) {
     document.removeEventListener('click', el._clickOutside)
-  }
+  },
 }
 
 export default {
   setup() {
     const isOpen = ref(true)
-    const closeDropdown = () => { isOpen.value = false }
+    const closeDropdown = () => {
+      isOpen.value = false
+    }
 
-    return () => isOpen.value
-      ? withDirectives(
-          h('div', { class: 'dropdown' }, 'Dropdown content'),
-          [[vClickOutside, closeDropdown]]
-        )
-      : null
-  }
+    return () =>
+      isOpen.value
+        ? withDirectives(h('div', { class: 'dropdown' }, 'Dropdown content'), [
+            [vClickOutside, closeDropdown],
+          ])
+        : null
+  },
 }
 ```
 
@@ -188,14 +182,12 @@ const vFocus = { mounted: (el) => el.focus() }
 
 export default {
   setup() {
-    return () => withDirectives(
-      <input placeholder="Search..." />,
-      [[vFocus]]
-    )
-  }
+    return () => withDirectives(<input placeholder="Search..." />, [[vFocus]])
+  },
 }
 ```
 
 ## Reference
+
 - [Vue.js Render Functions - Custom Directives](https://vuejs.org/guide/extras/render-function.html#custom-directives)
 - [Vue.js Custom Directives](https://vuejs.org/guide/reusability/custom-directives.html)

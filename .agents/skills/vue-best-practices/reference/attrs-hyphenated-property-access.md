@@ -15,19 +15,19 @@ Fallthrough attributes preserve their original casing in JavaScript. Hyphenated 
 
 ```vue
 <script setup>
-import { useAttrs } from 'vue'
+  import { useAttrs } from 'vue'
 
-const attrs = useAttrs()
+  const attrs = useAttrs()
 
-// WRONG: Syntax error - hyphen interpreted as minus
-console.log(attrs.data-testid)  // Error!
+  // WRONG: Syntax error - hyphen interpreted as minus
+  console.log(attrs.data - testid) // Error!
 
-// WRONG: This accesses a different property
-console.log(attrs.dataTestid)   // undefined (camelCase doesn't work for attrs)
+  // WRONG: This accesses a different property
+  console.log(attrs.dataTestid) // undefined (camelCase doesn't work for attrs)
 
-// WRONG: Expecting hyphenated event name
-console.log(attrs['on-click'])  // undefined
-console.log(attrs['@click'])    // undefined
+  // WRONG: Expecting hyphenated event name
+  console.log(attrs['on-click']) // undefined
+  console.log(attrs['@click']) // undefined
 </script>
 ```
 
@@ -35,32 +35,32 @@ console.log(attrs['@click'])    // undefined
 
 ```vue
 <script setup>
-import { useAttrs } from 'vue'
+  import { useAttrs } from 'vue'
 
-const attrs = useAttrs()
+  const attrs = useAttrs()
 
-// CORRECT: Use bracket notation for hyphenated attributes
-console.log(attrs['data-testid'])    // "my-button"
-console.log(attrs['aria-label'])     // "Submit form"
-console.log(attrs['foo-bar'])        // "baz"
+  // CORRECT: Use bracket notation for hyphenated attributes
+  console.log(attrs['data-testid']) // "my-button"
+  console.log(attrs['aria-label']) // "Submit form"
+  console.log(attrs['foo-bar']) // "baz"
 
-// CORRECT: Event listeners use camelCase with 'on' prefix
-console.log(attrs.onClick)           // function
-console.log(attrs.onCustomEvent)     // function (from @custom-event)
-console.log(attrs.onMouseEnter)      // function (from @mouseenter or @mouse-enter)
+  // CORRECT: Event listeners use camelCase with 'on' prefix
+  console.log(attrs.onClick) // function
+  console.log(attrs.onCustomEvent) // function (from @custom-event)
+  console.log(attrs.onMouseEnter) // function (from @mouseenter or @mouse-enter)
 </script>
 ```
 
 ## Attribute vs Event Naming Reference
 
-| Parent Usage | $attrs Access |
-|--------------|---------------|
-| `class="foo"` | `attrs.class` |
-| `data-id="123"` | `attrs['data-id']` |
-| `aria-label="..."` | `attrs['aria-label']` |
-| `foo-bar="baz"` | `attrs['foo-bar']` |
-| `@click="fn"` | `attrs.onClick` |
-| `@custom-event="fn"` | `attrs.onCustomEvent` |
+| Parent Usage              | $attrs Access                  |
+| ------------------------- | ------------------------------ |
+| `class="foo"`             | `attrs.class`                  |
+| `data-id="123"`           | `attrs['data-id']`             |
+| `aria-label="..."`        | `attrs['aria-label']`          |
+| `foo-bar="baz"`           | `attrs['foo-bar']`             |
+| `@click="fn"`             | `attrs.onClick`                |
+| `@custom-event="fn"`      | `attrs.onCustomEvent`          |
 | `@update:modelValue="fn"` | `attrs['onUpdate:modelValue']` |
 
 ## Common Patterns
@@ -69,15 +69,15 @@ console.log(attrs.onMouseEnter)      // function (from @mouseenter or @mouse-ent
 
 ```vue
 <script setup>
-import { useAttrs, computed } from 'vue'
+  import { useAttrs, computed } from 'vue'
 
-const attrs = useAttrs()
+  const attrs = useAttrs()
 
-// Check if data attribute exists
-const hasTestId = computed(() => 'data-testid' in attrs)
+  // Check if data attribute exists
+  const hasTestId = computed(() => 'data-testid' in attrs)
 
-// Get aria attribute with default
-const ariaLabel = computed(() => attrs['aria-label'] ?? 'Default label')
+  // Get aria attribute with default
+  const ariaLabel = computed(() => attrs['aria-label'] ?? 'Default label')
 </script>
 ```
 
@@ -85,25 +85,25 @@ const ariaLabel = computed(() => attrs['aria-label'] ?? 'Default label')
 
 ```vue
 <script setup>
-import { useAttrs, computed } from 'vue'
+  import { useAttrs, computed } from 'vue'
 
-const attrs = useAttrs()
+  const attrs = useAttrs()
 
-// Separate event listeners from other attributes
-const { listeners, otherAttrs } = computed(() => {
-  const listeners = {}
-  const otherAttrs = {}
+  // Separate event listeners from other attributes
+  const { listeners, otherAttrs } = computed(() => {
+    const listeners = {}
+    const otherAttrs = {}
 
-  for (const [key, value] of Object.entries(attrs)) {
-    if (key.startsWith('on') && typeof value === 'function') {
-      listeners[key] = value
-    } else {
-      otherAttrs[key] = value
+    for (const [key, value] of Object.entries(attrs)) {
+      if (key.startsWith('on') && typeof value === 'function') {
+        listeners[key] = value
+      } else {
+        otherAttrs[key] = value
+      }
     }
-  }
 
-  return { listeners, otherAttrs }
-}).value
+    return { listeners, otherAttrs }
+  }).value
 </script>
 ```
 
@@ -111,20 +111,20 @@ const { listeners, otherAttrs } = computed(() => {
 
 ```vue
 <script setup>
-import { useAttrs, computed } from 'vue'
+  import { useAttrs, computed } from 'vue'
 
-const attrs = useAttrs()
+  const attrs = useAttrs()
 
-// Get all data-* attributes
-const dataAttrs = computed(() => {
-  const result = {}
-  for (const [key, value] of Object.entries(attrs)) {
-    if (key.startsWith('data-')) {
-      result[key] = value
+  // Get all data-* attributes
+  const dataAttrs = computed(() => {
+    const result = {}
+    for (const [key, value] of Object.entries(attrs)) {
+      if (key.startsWith('data-')) {
+        result[key] = value
+      }
     }
-  }
-  return result
-})
+    return result
+  })
 </script>
 
 <template>
@@ -138,23 +138,23 @@ const dataAttrs = computed(() => {
 
 ```vue
 <script setup>
-import { useAttrs } from 'vue'
+  import { useAttrs } from 'vue'
 
-defineOptions({
-  inheritAttrs: false
-})
+  defineOptions({
+    inheritAttrs: false,
+  })
 
-const attrs = useAttrs()
+  const attrs = useAttrs()
 
-// Call parent's click handler with custom logic
-function handleClick(event) {
-  console.log('Internal handling first')
+  // Call parent's click handler with custom logic
+  function handleClick(event) {
+    console.log('Internal handling first')
 
-  // Then forward to parent if handler exists
-  if (attrs.onClick) {
-    attrs.onClick(event)
+    // Then forward to parent if handler exists
+    if (attrs.onClick) {
+      attrs.onClick(event)
+    }
   }
-}
 </script>
 
 <template>
@@ -168,15 +168,15 @@ function handleClick(event) {
 
 ```vue
 <script setup lang="ts">
-import { useAttrs } from 'vue'
+  import { useAttrs } from 'vue'
 
-const attrs = useAttrs()
+  const attrs = useAttrs()
 
-// attrs is typed as Record<string, unknown>
-// You may need to cast for specific usage
+  // attrs is typed as Record<string, unknown>
+  // You may need to cast for specific usage
 
-const testId = attrs['data-testid'] as string | undefined
-const onClick = attrs.onClick as ((e: MouseEvent) => void) | undefined
+  const testId = attrs['data-testid'] as string | undefined
+  const onClick = attrs.onClick as ((e: MouseEvent) => void) | undefined
 </script>
 ```
 

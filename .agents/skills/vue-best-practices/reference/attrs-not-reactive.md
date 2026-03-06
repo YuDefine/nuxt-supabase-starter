@@ -18,59 +18,61 @@ tags: [vue3, attrs, reactivity, composition-api]
 - [ ] Remember attrs ARE always current in templates and event handlers
 
 **Incorrect:**
+
 ```vue
 <script setup>
-import { watch, useAttrs } from 'vue'
+  import { watch, useAttrs } from 'vue'
 
-const attrs = useAttrs()
+  const attrs = useAttrs()
 
-// WRONG: This watcher will NEVER trigger when attrs change!
-watch(
-  () => attrs.someAttr,
-  (newValue) => {
-    console.log('Attribute changed:', newValue)
-    // This callback never runs on attr changes
-  }
-)
+  // WRONG: This watcher will NEVER trigger when attrs change!
+  watch(
+    () => attrs.someAttr,
+    (newValue) => {
+      console.log('Attribute changed:', newValue)
+      // This callback never runs on attr changes
+    }
+  )
 
-// WRONG: watchEffect also doesn't track attrs
-watchEffect(() => {
-  console.log(attrs.class) // Only runs on mount, NOT when class changes
-})
+  // WRONG: watchEffect also doesn't track attrs
+  watchEffect(() => {
+    console.log(attrs.class) // Only runs on mount, NOT when class changes
+  })
 </script>
 ```
 
 **Correct:**
+
 ```vue
 <script setup>
-import { onUpdated, useAttrs } from 'vue'
+  import { onUpdated, useAttrs } from 'vue'
 
-const attrs = useAttrs()
+  const attrs = useAttrs()
 
-// CORRECT: Use onUpdated to access latest attrs
-onUpdated(() => {
-  console.log('Current attrs:', attrs)
-  // Perform side effects with latest attrs here
-})
+  // CORRECT: Use onUpdated to access latest attrs
+  onUpdated(() => {
+    console.log('Current attrs:', attrs)
+    // Perform side effects with latest attrs here
+  })
 </script>
 ```
 
 ```vue
 <script setup>
-import { watch } from 'vue'
+  import { watch } from 'vue'
 
-// CORRECT: If you need reactivity, declare it as a prop
-const props = defineProps({
-  someAttr: String
-})
+  // CORRECT: If you need reactivity, declare it as a prop
+  const props = defineProps({
+    someAttr: String,
+  })
 
-// Now you can watch it
-watch(
-  () => props.someAttr,
-  (newValue) => {
-    console.log('Attribute changed:', newValue)
-  }
-)
+  // Now you can watch it
+  watch(
+    () => props.someAttr,
+    (newValue) => {
+      console.log('Attribute changed:', newValue)
+    }
+  )
 </script>
 ```
 
@@ -88,14 +90,14 @@ Despite not being reactive, attrs always have current values in these contexts:
 
 ```vue
 <script setup>
-import { useAttrs } from 'vue'
+  import { useAttrs } from 'vue'
 
-const attrs = useAttrs()
+  const attrs = useAttrs()
 
-// In event handlers - attrs are current when handler executes
-function handleClick() {
-  console.log(attrs.class) // Current value at click time
-}
+  // In event handlers - attrs are current when handler executes
+  function handleClick() {
+    console.log(attrs.class) // Current value at click time
+  }
 </script>
 
 <template>
@@ -115,14 +117,14 @@ Computed properties that reference attrs will update when the component re-rende
 
 ```vue
 <script setup>
-import { computed, useAttrs } from 'vue'
+  import { computed, useAttrs } from 'vue'
 
-const attrs = useAttrs()
+  const attrs = useAttrs()
 
-// This DOES update - because computed re-evaluates on render
-const hasCustomClass = computed(() => {
-  return !!attrs.class
-})
+  // This DOES update - because computed re-evaluates on render
+  const hasCustomClass = computed(() => {
+    return !!attrs.class
+  })
 </script>
 
 <template>
@@ -140,23 +142,24 @@ For advanced use cases, you can access attrs through the component instance:
 
 ```vue
 <script setup>
-import { watch, getCurrentInstance } from 'vue'
+  import { watch, getCurrentInstance } from 'vue'
 
-const instance = getCurrentInstance()
+  const instance = getCurrentInstance()
 
-// This may work in some cases, but is NOT officially supported
-// getCurrentInstance() is an internal API and may change
-watch(
-  () => instance?.attrs.someAttr,
-  (newValue) => {
-    console.log('Attribute changed:', newValue)
-  }
-)
+  // This may work in some cases, but is NOT officially supported
+  // getCurrentInstance() is an internal API and may change
+  watch(
+    () => instance?.attrs.someAttr,
+    (newValue) => {
+      console.log('Attribute changed:', newValue)
+    }
+  )
 </script>
 ```
 
 > **Warning:** `getCurrentInstance()` is an internal API. Prefer `onUpdated()` or converting to props.
 
 ## Reference
+
 - [Fallthrough Attributes - Accessing in JavaScript](https://vuejs.org/guide/components/attrs.html#accessing-fallthrough-attributes-in-javascript)
 - [Vue 3 Reactivity Fundamentals](https://vuejs.org/guide/essentials/reactivity-fundamentals.html)

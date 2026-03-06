@@ -19,6 +19,7 @@ tags: [vue3, render-function, components, resolveComponent, migration]
 - [ ] Handle the case when component is not found
 
 **Incorrect:**
+
 ```js
 import { h } from 'vue'
 
@@ -26,14 +27,15 @@ export default {
   render() {
     // WRONG: String names don't resolve to components
     return h('div', [
-      h('my-component', { value: 1 }),  // Renders <my-component> HTML element!
-      h('router-link', { to: '/' }, 'Home')  // Also fails
+      h('my-component', { value: 1 }), // Renders <my-component> HTML element!
+      h('router-link', { to: '/' }, 'Home'), // Also fails
     ])
-  }
+  },
 }
 ```
 
 **Correct (Direct Import - Preferred):**
+
 ```js
 import { h } from 'vue'
 import MyComponent from './MyComponent.vue'
@@ -41,15 +43,13 @@ import { RouterLink } from 'vue-router'
 
 export default {
   render() {
-    return h('div', [
-      h(MyComponent, { value: 1 }),
-      h(RouterLink, { to: '/' }, () => 'Home')
-    ])
-  }
+    return h('div', [h(MyComponent, { value: 1 }), h(RouterLink, { to: '/' }, () => 'Home')])
+  },
 }
 ```
 
 **Correct (resolveComponent for Registered Components):**
+
 ```js
 import { h, resolveComponent } from 'vue'
 
@@ -84,11 +84,11 @@ export default {
 
 ## When to Use Each Approach
 
-| Approach | Use When |
-|----------|----------|
-| Direct Import | Component is known at build time (most common) |
+| Approach             | Use When                                            |
+| -------------------- | --------------------------------------------------- |
+| Direct Import        | Component is known at build time (most common)      |
 | `resolveComponent()` | Component is registered globally or locally by name |
-| `resolveComponent()` | Dynamic component selection from registered set |
+| `resolveComponent()` | Dynamic component selection from registered set     |
 
 ## Handling Missing Components
 
@@ -106,7 +106,7 @@ export default {
     }
 
     return () => h(DynamicComponent, { value: 1 })
-  }
+  },
 }
 ```
 
@@ -122,9 +122,11 @@ export default {
     // For truly dynamic components, resolve in render function
     return () => {
       const Component = resolveComponent(props.componentName)
-      return h(Component, { /* props */ })
+      return h(Component, {
+        /* props */
+      })
     }
-  }
+  },
 }
 ```
 
@@ -139,9 +141,11 @@ export default {
     return () => {
       // Resolves string names, component objects, or built-in elements
       const component = resolveDynamicComponent(props.componentType)
-      return h(component, { /* props */ })
+      return h(component, {
+        /* props */
+      })
     }
-  }
+  },
 }
 ```
 
@@ -155,22 +159,29 @@ export default {
     const currentTab = ref('TabA')
     const tabs = ['TabA', 'TabB', 'TabC']
 
-    return () => h('div', [
-      // Tab buttons
-      h('div', { class: 'tabs' },
-        tabs.map(tab =>
-          h('button', {
-            key: tab,
-            class: { active: currentTab.value === tab },
-            onClick: () => currentTab.value = tab
-          }, tab)
-        )
-      ),
+    return () =>
+      h('div', [
+        // Tab buttons
+        h(
+          'div',
+          { class: 'tabs' },
+          tabs.map((tab) =>
+            h(
+              'button',
+              {
+                key: tab,
+                class: { active: currentTab.value === tab },
+                onClick: () => (currentTab.value = tab),
+              },
+              tab
+            )
+          )
+        ),
 
-      // Dynamic component based on current tab
-      h(resolveComponent(currentTab.value))
-    ])
-  }
+        // Dynamic component based on current tab
+        h(resolveComponent(currentTab.value)),
+      ])
+  },
 }
 ```
 
@@ -183,10 +194,8 @@ import { h, Transition, KeepAlive, Teleport, Suspense } from 'vue'
 
 export default {
   setup() {
-    return () => h(Transition, { name: 'fade' }, () =>
-      h('div', 'Content')
-    )
-  }
+    return () => h(Transition, { name: 'fade' }, () => h('div', 'Content'))
+  },
 }
 ```
 
@@ -201,11 +210,8 @@ export default {
   render() {
     const vFocus = resolveDirective('focus')
 
-    return withDirectives(
-      h('input', { type: 'text' }),
-      [[vFocus]]
-    )
-  }
+    return withDirectives(h('input', { type: 'text' }), [[vFocus]])
+  },
 }
 ```
 
@@ -227,5 +233,6 @@ render() {
 ```
 
 ## Reference
+
 - [Vue 3 Migration - Render Function API](https://v3-migration.vuejs.org/breaking-changes/render-function-api.html)
 - [Vue.js Render Function API - resolveComponent](https://vuejs.org/api/render-function.html#resolvecomponent)

@@ -37,7 +37,7 @@ export type RefAutoResetReturn<T = any> = Ref<T>
  */
 export declare function refAutoReset<T>(
   defaultValue: MaybeRefOrGetter<T>,
-  afterMs?: MaybeRefOrGetter<number>,
+  afterMs?: MaybeRefOrGetter<number>
 ): RefAutoResetReturn<T>
 /** @deprecated use `refAutoReset` instead */
 export declare const autoResetRef: typeof refAutoReset

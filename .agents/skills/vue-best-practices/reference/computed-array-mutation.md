@@ -18,34 +18,35 @@ tags: [vue3, computed, arrays, mutation, sort, reverse]
 - [ ] Be aware which array methods mutate vs return new arrays
 
 **Incorrect:**
+
 ```vue
 <script setup>
-import { ref, computed } from 'vue'
+  import { ref, computed } from 'vue'
 
-const items = ref([3, 1, 4, 1, 5, 9, 2, 6])
-const users = ref([
-  { name: 'Alice', age: 30 },
-  { name: 'Bob', age: 25 }
-])
+  const items = ref([3, 1, 4, 1, 5, 9, 2, 6])
+  const users = ref([
+    { name: 'Alice', age: 30 },
+    { name: 'Bob', age: 25 },
+  ])
 
-// BAD: sort() mutates the original array!
-const sortedItems = computed(() => {
-  return items.value.sort((a, b) => a - b)
-})
+  // BAD: sort() mutates the original array!
+  const sortedItems = computed(() => {
+    return items.value.sort((a, b) => a - b)
+  })
 
-// BAD: reverse() mutates the original array!
-const reversedItems = computed(() => {
-  return items.value.reverse()
-})
+  // BAD: reverse() mutates the original array!
+  const reversedItems = computed(() => {
+    return items.value.reverse()
+  })
 
-// BAD: Both arrays now point to the same mutated data
-// items.value and sortedItems.value are the SAME array
-// items.value and reversedItems.value are the SAME array
+  // BAD: Both arrays now point to the same mutated data
+  // items.value and sortedItems.value are the SAME array
+  // items.value and reversedItems.value are the SAME array
 
-// BAD: Chained mutations
-const sortedUsers = computed(() => {
-  return users.value.sort((a, b) => a.age - b.age)
-})
+  // BAD: Chained mutations
+  const sortedUsers = computed(() => {
+    return users.value.sort((a, b) => a.age - b.age)
+  })
 </script>
 
 <template>
@@ -56,40 +57,41 @@ const sortedUsers = computed(() => {
 ```
 
 **Correct:**
+
 ```vue
 <script setup>
-import { ref, computed } from 'vue'
+  import { ref, computed } from 'vue'
 
-const items = ref([3, 1, 4, 1, 5, 9, 2, 6])
-const users = ref([
-  { name: 'Alice', age: 30 },
-  { name: 'Bob', age: 25 }
-])
+  const items = ref([3, 1, 4, 1, 5, 9, 2, 6])
+  const users = ref([
+    { name: 'Alice', age: 30 },
+    { name: 'Bob', age: 25 },
+  ])
 
-// GOOD: Spread operator creates a copy first
-const sortedItems = computed(() => {
-  return [...items.value].sort((a, b) => a - b)
-})
+  // GOOD: Spread operator creates a copy first
+  const sortedItems = computed(() => {
+    return [...items.value].sort((a, b) => a - b)
+  })
 
-// GOOD: slice() also creates a copy
-const reversedItems = computed(() => {
-  return items.value.slice().reverse()
-})
+  // GOOD: slice() also creates a copy
+  const reversedItems = computed(() => {
+    return items.value.slice().reverse()
+  })
 
-// GOOD: Copy before sorting objects
-const sortedUsers = computed(() => {
-  return [...users.value].sort((a, b) => a.age - b.age)
-})
+  // GOOD: Copy before sorting objects
+  const sortedUsers = computed(() => {
+    return [...users.value].sort((a, b) => a.age - b.age)
+  })
 
-// GOOD: Use toSorted() (ES2023) - non-mutating
-const sortedItemsModern = computed(() => {
-  return items.value.toSorted((a, b) => a - b)
-})
+  // GOOD: Use toSorted() (ES2023) - non-mutating
+  const sortedItemsModern = computed(() => {
+    return items.value.toSorted((a, b) => a - b)
+  })
 
-// GOOD: Use toReversed() (ES2023) - non-mutating
-const reversedItemsModern = computed(() => {
-  return items.value.toReversed()
-})
+  // GOOD: Use toReversed() (ES2023) - non-mutating
+  const reversedItemsModern = computed(() => {
+    return items.value.toReversed()
+  })
 </script>
 
 <template>
@@ -102,16 +104,16 @@ const reversedItemsModern = computed(() => {
 
 ## Mutating vs Non-Mutating Array Methods
 
-| Mutating (Avoid in Computed) | Non-Mutating (Safe) |
-|------------------------------|---------------------|
-| `sort()` | `toSorted()` (ES2023) |
-| `reverse()` | `toReversed()` (ES2023) |
-| `splice()` | `toSpliced()` (ES2023) |
-| `push()` | `concat()` |
-| `pop()` | `slice(0, -1)` |
-| `shift()` | `slice(1)` |
-| `unshift()` | `[item, ...array]` |
-| `fill()` | `map()` with new values |
+| Mutating (Avoid in Computed) | Non-Mutating (Safe)     |
+| ---------------------------- | ----------------------- |
+| `sort()`                     | `toSorted()` (ES2023)   |
+| `reverse()`                  | `toReversed()` (ES2023) |
+| `splice()`                   | `toSpliced()` (ES2023)  |
+| `push()`                     | `concat()`              |
+| `pop()`                      | `slice(0, -1)`          |
+| `shift()`                    | `slice(1)`              |
+| `unshift()`                  | `[item, ...array]`      |
+| `fill()`                     | `map()` with new values |
 
 ## ES2023 Non-Mutating Alternatives
 
@@ -144,5 +146,6 @@ const deepCopied = computed(() => {
 ```
 
 ## Reference
+
 - [Vue.js Computed Properties - Avoid Mutating Computed Value](https://vuejs.org/guide/essentials/computed.html#avoid-mutating-computed-value)
 - [MDN Array Methods](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array)

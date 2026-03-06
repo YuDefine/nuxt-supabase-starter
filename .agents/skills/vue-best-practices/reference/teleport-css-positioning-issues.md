@@ -19,6 +19,7 @@ This is a common issue when using CSS animations on parent elements or when moda
 - [ ] Avoid relying on `z-index` alone for stacking - teleport ensures proper layering
 
 **Problem - Without Teleport:**
+
 ```vue
 <template>
   <div class="animated-container">
@@ -33,25 +34,26 @@ This is a common issue when using CSS animations on parent elements or when moda
 </template>
 
 <style>
-.animated-container {
-  /* This breaks position: fixed in descendants */
-  transform: translateX(0);
-  /* Or any of these: */
-  /* perspective: 1000px; */
-  /* filter: blur(0); */
-}
+  .animated-container {
+    /* This breaks position: fixed in descendants */
+    transform: translateX(0);
+    /* Or any of these: */
+    /* perspective: 1000px; */
+    /* filter: blur(0); */
+  }
 
-.modal {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 9999;  /* z-index constrained by parent stacking context */
-}
+  .modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 9999; /* z-index constrained by parent stacking context */
+  }
 </style>
 ```
 
 **Solution - With Teleport:**
+
 ```vue
 <template>
   <div class="animated-container">
@@ -68,17 +70,17 @@ This is a common issue when using CSS animations on parent elements or when moda
 </template>
 
 <style>
-.animated-container {
-  transform: translateX(0);  /* No longer affects modal */
-}
+  .animated-container {
+    transform: translateX(0); /* No longer affects modal */
+  }
 
-.modal {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 9999;  /* z-index now works as expected */
-}
+  .modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 9999; /* z-index now works as expected */
+  }
 </style>
 ```
 
@@ -104,6 +106,7 @@ Even without transform/filter, deeply nested elements create stacking contexts t
 ```
 
 **Solution:**
+
 ```vue
 <template>
   <div class="sidebar">
@@ -120,14 +123,15 @@ Even without transform/filter, deeply nested elements create stacking contexts t
 
 ## When to Use Teleport
 
-| UI Element | Should Teleport? | Reason |
-|------------|-----------------|--------|
-| Full-screen modals | Yes | Fixed positioning, need to escape stacking contexts |
-| Tooltips | Often | May need to escape overflow: hidden containers |
-| Dropdowns | Sometimes | Depends on container overflow/positioning |
-| Notifications/toasts | Yes | Should appear above all content |
-| Inline popups | Usually no | Position relative to trigger element |
+| UI Element           | Should Teleport? | Reason                                              |
+| -------------------- | ---------------- | --------------------------------------------------- |
+| Full-screen modals   | Yes              | Fixed positioning, need to escape stacking contexts |
+| Tooltips             | Often            | May need to escape overflow: hidden containers      |
+| Dropdowns            | Sometimes        | Depends on container overflow/positioning           |
+| Notifications/toasts | Yes              | Should appear above all content                     |
+| Inline popups        | Usually no       | Position relative to trigger element                |
 
 ## Reference
+
 - [Vue.js Teleport - Basic Usage](https://vuejs.org/guide/built-ins/teleport.html#basic-usage)
 - [MDN - Stacking Context](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_positioned_layout/Understanding_z-index/Stacking_context)

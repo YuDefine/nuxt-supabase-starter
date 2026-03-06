@@ -30,9 +30,9 @@ fn.mockImplementation(() => 'result')
 fn.mockImplementationOnce(() => 'once')
 
 // Clear/reset
-fn.mockClear()    // Clear call history
-fn.mockReset()    // Clear history + implementation
-fn.mockRestore()  // Restore original (for spies)
+fn.mockClear() // Clear call history
+fn.mockReset() // Clear history + implementation
+fn.mockRestore() // Restore original (for spies)
 ```
 
 ## Spying
@@ -107,9 +107,9 @@ setTimeout(() => console.log('done'), 1000)
 
 // Advance time
 vi.advanceTimersByTime(1000)
-vi.advanceTimersByTimeAsync(1000)  // For async callbacks
+vi.advanceTimersByTimeAsync(1000) // For async callbacks
 vi.advanceTimersToNextTimer()
-vi.advanceTimersToNextFrame()      // requestAnimationFrame
+vi.advanceTimersToNextFrame() // requestAnimationFrame
 
 // Run all timers
 vi.runAllTimers()
@@ -133,8 +133,8 @@ vi.useRealTimers()
 vi.setSystemTime(new Date('2024-01-01'))
 expect(new Date().getFullYear()).toBe(2024)
 
-vi.getMockedSystemTime()  // Get mocked date
-vi.getRealSystemTime()    // Get real time (ms)
+vi.getMockedSystemTime() // Get mocked date
+vi.getRealSystemTime() // Get real time (ms)
 ```
 
 ## Global/Env Mocking
@@ -166,16 +166,16 @@ vi.mock('./module', () => ({
 
 ```ts
 // Wait for callback to succeed
-await vi.waitFor(async () => {
-  const el = document.querySelector('.loaded')
-  expect(el).toBeTruthy()
-}, { timeout: 5000, interval: 100 })
+await vi.waitFor(
+  async () => {
+    const el = document.querySelector('.loaded')
+    expect(el).toBeTruthy()
+  },
+  { timeout: 5000, interval: 100 }
+)
 
 // Wait for truthy value
-const element = await vi.waitUntil(
-  () => document.querySelector('.loaded'),
-  { timeout: 5000 }
-)
+const element = await vi.waitUntil(() => document.querySelector('.loaded'), { timeout: 5000 })
 ```
 
 ## Mock Object
@@ -189,12 +189,12 @@ const original = {
 }
 
 const mocked = vi.mockObject(original)
-mocked.method()  // undefined (mocked)
+mocked.method() // undefined (mocked)
 mocked.method.mockReturnValue('mocked')
 
 // Spy mode
 const spied = vi.mockObject(original, { spy: true })
-spied.method()  // 'real'
+spied.method() // 'real'
 expect(spied.method).toHaveBeenCalled()
 ```
 
@@ -212,8 +212,8 @@ vi.resetConfig()
 ## Global Mock Management
 
 ```ts
-vi.clearAllMocks()   // Clear all mock call history
-vi.resetAllMocks()   // Reset + clear implementation
+vi.clearAllMocks() // Clear all mock call history
+vi.resetAllMocks() // Reset + clear implementation
 vi.restoreAllMocks() // Restore originals (spies)
 ```
 
@@ -243,7 +243,7 @@ vi.mocked(fn, { partial: true }).mockResolvedValue({ ok: true })
 - Fake timers require explicit setup and teardown
 - `vi.waitFor` retries until assertion passes
 
-<!-- 
+<!--
 Source references:
 - https://vitest.dev/api/vi.html
 -->

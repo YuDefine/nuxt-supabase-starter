@@ -22,23 +22,23 @@ Choosing the wrong abstraction leads to code that's harder to maintain, test, an
 
 ## Decision Matrix
 
-| Requirement | Use Directive | Use Component | Use Composable |
-|-------------|--------------|---------------|----------------|
-| DOM manipulation only | Yes | - | - |
-| Needs own template | - | Yes | - |
-| Encapsulated state | - | Yes | Maybe |
-| Reusable behavior | Yes | Yes | Yes |
-| Access to parent instance | Avoid | - | Yes |
-| SSR support needed | Avoid | Yes | Yes |
-| Third-party lib integration | Yes | - | Maybe |
-| Complex reactive logic | - | Yes | Yes |
+| Requirement                 | Use Directive | Use Component | Use Composable |
+| --------------------------- | ------------- | ------------- | -------------- |
+| DOM manipulation only       | Yes           | -             | -              |
+| Needs own template          | -             | Yes           | -              |
+| Encapsulated state          | -             | Yes           | Maybe          |
+| Reusable behavior           | Yes           | Yes           | Yes            |
+| Access to parent instance   | Avoid         | -             | Yes            |
+| SSR support needed          | Avoid         | Yes           | Yes            |
+| Third-party lib integration | Yes           | -             | Maybe          |
+| Complex reactive logic      | -             | Yes           | Yes            |
 
 ## Directive-Appropriate Use Cases
 
 ```javascript
 // GOOD: Simple DOM manipulation
 const vFocus = {
-  mounted: (el) => el.focus()
+  mounted: (el) => el.focus(),
 }
 
 // GOOD: Third-party library integration
@@ -51,7 +51,7 @@ const vTippy = {
   },
   unmounted(el) {
     el._tippy?.destroy()
-  }
+  },
 }
 
 // GOOD: Event handling that Vue doesn't provide
@@ -64,7 +64,7 @@ const vClickOutside = {
   },
   unmounted(el) {
     document.removeEventListener('click', el._handler)
-  }
+  },
 }
 
 // GOOD: Intersection Observer
@@ -81,7 +81,7 @@ const vLazyLoad = {
   },
   unmounted(el) {
     el._observer?.disconnect()
-  }
+  },
 }
 ```
 
@@ -102,15 +102,15 @@ const vLazyLoad = {
 </template>
 
 <script setup>
-import { ref } from 'vue'
+  import { ref } from 'vue'
 
-defineProps({
-  content: String
-})
+  defineProps({
+    content: String,
+  })
 
-const isVisible = ref(false)
-const show = () => isVisible.value = true
-const hide = () => isVisible.value = false
+  const isVisible = ref(false)
+  const show = () => (isVisible.value = true)
+  const hide = () => (isVisible.value = false)
 </script>
 ```
 
@@ -127,28 +127,30 @@ const hide = () => isVisible.value = false
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+  import { ref, onMounted, onUnmounted } from 'vue'
 
-const props = defineProps({
-  threshold: { type: Number, default: 100 }
-})
+  const props = defineProps({
+    threshold: { type: Number, default: 100 },
+  })
 
-const emit = defineEmits(['load-more'])
-const container = ref(null)
-const loading = ref(false)
+  const emit = defineEmits(['load-more'])
+  const container = ref(null)
+  const loading = ref(false)
 
-// Complex scroll logic with state management
-const handleScroll = () => {
-  if (loading.value) return
-  const { scrollHeight, scrollTop, clientHeight } = container.value
-  if (scrollHeight - scrollTop - clientHeight < props.threshold) {
-    loading.value = true
-    emit('load-more', () => { loading.value = false })
+  // Complex scroll logic with state management
+  const handleScroll = () => {
+    if (loading.value) return
+    const { scrollHeight, scrollTop, clientHeight } = container.value
+    if (scrollHeight - scrollTop - clientHeight < props.threshold) {
+      loading.value = true
+      emit('load-more', () => {
+        loading.value = false
+      })
+    }
   }
-}
 
-onMounted(() => container.value?.addEventListener('scroll', handleScroll))
-onUnmounted(() => container.value?.removeEventListener('scroll', handleScroll))
+  onMounted(() => container.value?.addEventListener('scroll', handleScroll))
+  onUnmounted(() => container.value?.removeEventListener('scroll', handleScroll))
 </script>
 ```
 
@@ -220,11 +222,12 @@ const vPermission = {
     if (!userPermissions?.includes(binding.value)) {
       el.style.display = 'none'
     }
-  }
+  },
 }
 ```
 
 ## Reference
+
 - [Vue.js Custom Directives](https://vuejs.org/guide/reusability/custom-directives)
 - [Vue.js Composables](https://vuejs.org/guide/reusability/composables.html)
 - [Vue.js Components Basics](https://vuejs.org/guide/essentials/component-basics.html)

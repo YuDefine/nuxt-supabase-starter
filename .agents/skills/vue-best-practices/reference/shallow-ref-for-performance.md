@@ -21,6 +21,7 @@ tags: [vue3, reactivity, shallowRef, performance, optimization]
 - [ ] Remember: with shallowRef, you must replace `.value` entirely to trigger updates
 
 **Incorrect:**
+
 ```javascript
 import { ref } from 'vue'
 
@@ -28,13 +29,18 @@ import { ref } from 'vue'
 const users = ref(await fetchUsers()) // 10,000 users, each deeply reactive
 
 // INEFFICIENT: External library wrapped in Proxy
-const mapInstance = ref(new mapboxgl.Map({ /* ... */ }))
+const mapInstance = ref(
+  new mapboxgl.Map({
+    /* ... */
+  })
+)
 
 // INEFFICIENT: Large immutable API response
-const apiResponse = ref(await fetch('/api/big-data').then(r => r.json()))
+const apiResponse = ref(await fetch('/api/big-data').then((r) => r.json()))
 ```
 
 **Correct:**
+
 ```javascript
 import { shallowRef, markRaw, triggerRef } from 'vue'
 
@@ -51,7 +57,9 @@ triggerRef(users) // Manually trigger watchers
 // EFFICIENT: External library object
 const mapInstance = shallowRef(null)
 onMounted(() => {
-  mapInstance.value = new mapboxgl.Map({ /* ... */ })
+  mapInstance.value = new mapboxgl.Map({
+    /* ... */
+  })
 })
 
 // BEST for objects that should NEVER be reactive
@@ -61,17 +69,17 @@ const thirdPartyLib = markRaw(new SomeLibrary())
 
 ```vue
 <script setup>
-import { shallowRef } from 'vue'
+  import { shallowRef } from 'vue'
 
-// Large paginated data - only care when page changes
-const pageData = shallowRef([])
+  // Large paginated data - only care when page changes
+  const pageData = shallowRef([])
 
-async function loadPage(page) {
-  // Replace entirely to trigger reactivity
-  pageData.value = await api.getPage(page)
-}
+  async function loadPage(page) {
+    // Replace entirely to trigger reactivity
+    pageData.value = await api.getPage(page)
+  }
 
-// Template still works - shallowRef unwraps in template
+  // Template still works - shallowRef unwraps in template
 </script>
 
 <template>
@@ -88,9 +96,9 @@ async function loadPage(page) {
 const deep = ref({
   level1: {
     level2: {
-      level3: { value: 1 }
-    }
-  }
+      level3: { value: 1 },
+    },
+  },
 })
 deep.value.level1.level2.level3.value++ // Tracked!
 
@@ -98,15 +106,18 @@ deep.value.level1.level2.level3.value++ // Tracked!
 const shallow = shallowRef({
   level1: {
     level2: {
-      level3: { value: 1 }
-    }
-  }
+      level3: { value: 1 },
+    },
+  },
 })
 shallow.value.level1.level2.level3.value++ // NOT tracked!
-shallow.value = { /* new object */ } // Tracked!
+shallow.value = {
+  /* new object */
+} // Tracked!
 ```
 
 ## Reference
+
 - [Vue.js Reactivity Fundamentals - Reducing Reactivity Overhead](https://vuejs.org/guide/best-practices/performance.html#reduce-reactivity-overhead-for-large-immutable-structures)
 - [Vue.js shallowRef API](https://vuejs.org/api/reactivity-advanced.html#shallowref)
 - [Vue.js markRaw API](https://vuejs.org/api/reactivity-advanced.html#markraw)

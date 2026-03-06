@@ -22,10 +22,11 @@ tags: [typescript, templates, type-casting, union-types, script-setup]
 When a variable has a union type, TypeScript cannot know which specific type it is at template compile time:
 
 **Template with type error:**
+
 ```vue
 <script setup lang="ts">
-// Union type: could be string OR number
-let x: string | number = 1
+  // Union type: could be string OR number
+  let x: string | number = 1
 </script>
 
 <template>
@@ -42,7 +43,7 @@ Use `(value as Type)` syntax directly in the template:
 
 ```vue
 <script setup lang="ts">
-let x: string | number = 1
+  let x: string | number = 1
 </script>
 
 <template>
@@ -57,16 +58,16 @@ Create a computed property that narrows or transforms the type:
 
 ```vue
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+  import { ref, computed } from 'vue'
 
-const value = ref<string | number>(1)
+  const value = ref<string | number>(1)
 
-const formattedValue = computed(() => {
-  if (typeof value.value === 'number') {
-    return value.value.toFixed(2)
-  }
-  return value.value
-})
+  const formattedValue = computed(() => {
+    if (typeof value.value === 'number') {
+      return value.value.toFixed(2)
+    }
+    return value.value
+  })
 </script>
 
 <template>
@@ -81,17 +82,17 @@ Define a type guard and use it in the template:
 
 ```vue
 <script setup lang="ts">
-import { ref } from 'vue'
+  import { ref } from 'vue'
 
-const data = ref<string | number | null>(null)
+  const data = ref<string | number | null>(null)
 
-function isNumber(val: unknown): val is number {
-  return typeof val === 'number'
-}
+  function isNumber(val: unknown): val is number {
+    return typeof val === 'number'
+  }
 
-function formatNumber(val: number): string {
-  return val.toFixed(2)
-}
+  function formatNumber(val: number): string {
+    return val.toFixed(2)
+  }
 </script>
 
 <template>
@@ -110,13 +111,13 @@ function formatNumber(val: number): string {
 
 ```vue
 <script setup lang="ts">
-interface ApiResponse {
-  status: 'success' | 'error'
-  data?: UserData
-  error?: string
-}
+  interface ApiResponse {
+    status: 'success' | 'error'
+    data?: UserData
+    error?: string
+  }
 
-const response = ref<ApiResponse | null>(null)
+  const response = ref<ApiResponse | null>(null)
 </script>
 
 <template>
@@ -128,14 +129,15 @@ const response = ref<ApiResponse | null>(null)
 ```
 
 **Better approach with computed:**
+
 ```vue
 <script setup lang="ts">
-const userData = computed(() => {
-  if (response.value?.status === 'success') {
-    return response.value.data
-  }
-  return null
-})
+  const userData = computed(() => {
+    if (response.value?.status === 'success') {
+      return response.value.data
+    }
+    return null
+  })
 </script>
 
 <template>
@@ -149,11 +151,11 @@ const userData = computed(() => {
 
 ```vue
 <script setup lang="ts">
-function handleInput(event: Event) {
-  // Cast to HTMLInputElement to access 'value'
-  const value = (event.target as HTMLInputElement).value
-  console.log(value)
-}
+  function handleInput(event: Event) {
+    // Cast to HTMLInputElement to access 'value'
+    const value = (event.target as HTMLInputElement).value
+    console.log(value)
+  }
 </script>
 
 <template>
@@ -165,19 +167,15 @@ function handleInput(event: Event) {
 
 ```vue
 <script setup lang="ts">
-const items = ref<(string | number)[]>([1, 'two', 3])
+  const items = ref<(string | number)[]>([1, 'two', 3])
 </script>
 
 <template>
   <ul>
     <li v-for="item in items" :key="item">
       <!-- Cast when you know the type -->
-      <span v-if="typeof item === 'number'">
-        Number: {{ (item as number).toFixed(1) }}
-      </span>
-      <span v-else>
-        String: {{ (item as string).toUpperCase() }}
-      </span>
+      <span v-if="typeof item === 'number'"> Number: {{ (item as number).toFixed(1) }} </span>
+      <span v-else> String: {{ (item as string).toUpperCase() }} </span>
     </li>
   </ul>
 </template>
@@ -185,18 +183,19 @@ const items = ref<(string | number)[]>([1, 'two', 3])
 
 ## When Type Casting is Needed
 
-| Scenario | Solution |
-|----------|----------|
-| Union types | Cast to specific type |
+| Scenario       | Solution                                       |
+| -------------- | ---------------------------------------------- |
+| Union types    | Cast to specific type                          |
 | Nullable types | Use optional chaining or cast after null check |
-| Event targets | Cast `event.target` to specific element type |
-| Array methods | Cast when TS can't narrow array item types |
+| Event targets  | Cast `event.target` to specific element type   |
+| Array methods  | Cast when TS can't narrow array item types     |
 
 ## Important Notes
 
 ### Template Type Checking Requirements
 
 Template type checking is enabled when:
+
 1. `<script lang="ts">` or `<script setup lang="ts">` is used
 2. Vue Language Server (Volar) is active in your IDE
 3. For webpack: vue-loader >= 16.8.0 is required
@@ -204,6 +203,7 @@ Template type checking is enabled when:
 ### Avoid Excessive Casting
 
 If you find yourself casting frequently in templates, consider:
+
 - Moving logic to computed properties
 - Using type guards in the script section
 - Refactoring data structures to be more specific

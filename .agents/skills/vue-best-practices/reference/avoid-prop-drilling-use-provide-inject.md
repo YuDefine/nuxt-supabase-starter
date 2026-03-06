@@ -53,6 +53,7 @@ Vue's provide/inject API allows ancestor components to share data with any desce
 ```
 
 **Problems:**
+
 1. `MainLayout` and `Sidebar` are cluttered with props they don't use
 2. Adding a new shared value requires updating every component in the chain
 3. Removing a deeply nested component requires updating all ancestors
@@ -61,24 +62,25 @@ Vue's provide/inject API allows ancestor components to share data with any desce
 ## Solution: Provide/Inject
 
 **Correct - Provider (ancestor):**
+
 ```vue
 <!-- App.vue -->
 <script setup>
-import { provide, ref, readonly } from 'vue'
+  import { provide, ref, readonly } from 'vue'
 
-const user = ref({ name: 'John', role: 'admin' })
-const theme = ref('dark')
-const locale = ref('en')
+  const user = ref({ name: 'John', role: 'admin' })
+  const theme = ref('dark')
+  const locale = ref('en')
 
-// Provide to all descendants
-provide('user', readonly(user)) // readonly prevents mutations
-provide('theme', theme)
-provide('locale', locale)
+  // Provide to all descendants
+  provide('user', readonly(user)) // readonly prevents mutations
+  provide('theme', theme)
+  provide('locale', locale)
 
-// Provide update functions if needed
-provide('updateTheme', (newTheme) => {
-  theme.value = newTheme
-})
+  // Provide update functions if needed
+  provide('updateTheme', (newTheme) => {
+    theme.value = newTheme
+  })
 </script>
 
 <template>
@@ -87,6 +89,7 @@ provide('updateTheme', (newTheme) => {
 ```
 
 **Correct - Intermediate components are now clean:**
+
 ```vue
 <!-- MainLayout.vue - No props needed -->
 <template>
@@ -104,13 +107,14 @@ provide('updateTheme', (newTheme) => {
 ```
 
 **Correct - Consumer (descendant):**
+
 ```vue
 <!-- UserMenu.vue -->
 <script setup>
-import { inject } from 'vue'
+  import { inject } from 'vue'
 
-// Inject from any ancestor
-const user = inject('user')
+  // Inject from any ancestor
+  const user = inject('user')
 </script>
 
 <template>
@@ -121,20 +125,18 @@ const user = inject('user')
 ```vue
 <!-- ThemeToggle.vue -->
 <script setup>
-import { inject } from 'vue'
+  import { inject } from 'vue'
 
-const theme = inject('theme')
-const updateTheme = inject('updateTheme')
+  const theme = inject('theme')
+  const updateTheme = inject('updateTheme')
 
-function toggleTheme() {
-  updateTheme(theme.value === 'dark' ? 'light' : 'dark')
-}
+  function toggleTheme() {
+    updateTheme(theme.value === 'dark' ? 'light' : 'dark')
+  }
 </script>
 
 <template>
-  <button @click="toggleTheme">
-    Current: {{ theme }}
-  </button>
+  <button @click="toggleTheme">Current: {{ theme }}</button>
 </template>
 ```
 
@@ -152,20 +154,20 @@ export const ThemeKey = Symbol('theme')
 
 ```vue
 <script setup>
-import { provide } from 'vue'
-import { UserKey, ThemeKey } from './keys'
+  import { provide } from 'vue'
+  import { UserKey, ThemeKey } from './keys'
 
-provide(UserKey, user)
-provide(ThemeKey, theme)
+  provide(UserKey, user)
+  provide(ThemeKey, theme)
 </script>
 ```
 
 ```vue
 <script setup>
-import { inject } from 'vue'
-import { UserKey } from './keys'
+  import { inject } from 'vue'
+  import { UserKey } from './keys'
 
-const user = inject(UserKey)
+  const user = inject(UserKey)
 </script>
 ```
 
@@ -175,13 +177,13 @@ Handle cases where no ancestor provides the value:
 
 ```vue
 <script setup>
-import { inject } from 'vue'
+  import { inject } from 'vue'
 
-// With default value
-const theme = inject('theme', 'light')
+  // With default value
+  const theme = inject('theme', 'light')
 
-// With factory function for objects (avoids shared reference)
-const config = inject('config', () => ({ debug: false }), true)
+  // With factory function for objects (avoids shared reference)
+  const config = inject('config', () => ({ debug: false }), true)
 </script>
 ```
 
@@ -191,17 +193,17 @@ Prevent descendants from mutating provided data:
 
 ```vue
 <script setup>
-import { provide, ref, readonly } from 'vue'
+  import { provide, ref, readonly } from 'vue'
 
-const user = ref({ name: 'John' })
+  const user = ref({ name: 'John' })
 
-// Descendants can read but not mutate
-provide('user', readonly(user))
+  // Descendants can read but not mutate
+  provide('user', readonly(user))
 
-// Provide separate method for updates
-provide('updateUser', (updates) => {
-  Object.assign(user.value, updates)
-})
+  // Provide separate method for updates
+  provide('updateUser', (updates) => {
+    Object.assign(user.value, updates)
+  })
 </script>
 ```
 
@@ -209,41 +211,47 @@ provide('updateUser', (updates) => {
 
 ```vue
 <script setup>
-import { provide, computed } from 'vue'
+  import { provide, computed } from 'vue'
 
-const items = ref([1, 2, 3])
+  const items = ref([1, 2, 3])
 
-// Descendants will reactively update
-provide('itemCount', computed(() => items.value.length))
+  // Descendants will reactively update
+  provide(
+    'itemCount',
+    computed(() => items.value.length)
+  )
 </script>
 ```
 
 ## When to Use What
 
-| Scenario | Solution |
-|----------|----------|
-| Direct parent-child | Props |
-| 1-2 levels deep | Props (drilling is acceptable) |
-| Deep nesting, same component tree | Provide/Inject |
-| Unrelated component trees | Pinia (state management) |
-| Cross-app global state | Pinia |
-| Plugin configuration | Provide/Inject from plugin install |
+| Scenario                          | Solution                           |
+| --------------------------------- | ---------------------------------- |
+| Direct parent-child               | Props                              |
+| 1-2 levels deep                   | Props (drilling is acceptable)     |
+| Deep nesting, same component tree | Provide/Inject                     |
+| Unrelated component trees         | Pinia (state management)           |
+| Cross-app global state            | Pinia                              |
+| Plugin configuration              | Provide/Inject from plugin install |
 
 ## Provide/Inject vs Pinia
 
 **Provide/Inject:**
+
 - Scoped to component subtree
 - Great for component library internals
 - No DevTools support
 - Ancestor-descendant relationships only
 
 **Pinia:**
+
 - Global, accessible anywhere
 - Excellent DevTools integration
 - Better for application state
 - Works across unrelated components
 
 ## Reference
+
 - [Vue.js Provide/Inject](https://vuejs.org/guide/components/provide-inject.html)
 - [Vue.js - Prop Drilling](https://vuejs.org/guide/components/provide-inject.html#prop-drilling)
 - [Pinia Documentation](https://pinia.vuejs.org/)

@@ -7,6 +7,7 @@ When nesting `<Suspense>` components, use the `suspensible` prop on the inner Su
 ## Why This Matters
 
 Without the `suspensible` prop, the inner `<Suspense>` is treated as a synchronous component by the parent. This causes:
+
 - Empty nodes appearing briefly during async resolution
 - Multiple patching cycles as the component tree updates
 - Inconsistent loading states that confuse users
@@ -21,9 +22,7 @@ Without the `suspensible` prop, the inner `<Suspense>` is treated as a synchrono
       <component :is="DynamicAsyncInner" />
     </component>
 
-    <template #fallback>
-      Loading...
-    </template>
+    <template #fallback> Loading... </template>
   </Suspense>
 </template>
 ```
@@ -39,9 +38,7 @@ Without the `suspensible` prop, the inner `<Suspense>` is treated as a synchrono
       </Suspense>
     </OuterLayout>
 
-    <template #fallback>
-      Loading layout...
-    </template>
+    <template #fallback> Loading layout... </template>
   </Suspense>
 </template>
 ```
@@ -114,19 +111,21 @@ Without the `suspensible` prop, the inner `<Suspense>` is treated as a synchrono
 
 ## How suspensible Works
 
-| Configuration | Behavior |
-|--------------|----------|
-| No `suspensible` prop | Inner Suspense treated as sync; parent doesn't wait for inner async deps |
-| `suspensible` on inner | Inner async deps bubble up to parent Suspense for coordinated loading |
+| Configuration          | Behavior                                                                 |
+| ---------------------- | ------------------------------------------------------------------------ |
+| No `suspensible` prop  | Inner Suspense treated as sync; parent doesn't wait for inner async deps |
+| `suspensible` on inner | Inner async deps bubble up to parent Suspense for coordinated loading    |
 
 ## When to Use Nested Suspense
 
 **Use nested Suspense with `suspensible`** when:
+
 - Different page sections should show their own loading states
 - You want granular control over which parts show loading indicators
 - Sections can load at different speeds and should update independently
 
 **Avoid nested Suspense** when:
+
 - A single loading state for the whole component is sufficient
 - The complexity isn't worth the UX benefit
 - You're targeting Vue versions before 3.3

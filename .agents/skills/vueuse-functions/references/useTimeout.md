@@ -33,8 +33,7 @@ console.log(ready.value) // true
 ## Type Declarations
 
 ```ts
-export interface UseTimeoutOptions<Controls extends boolean>
-  extends UseTimeoutFnOptions {
+export interface UseTimeoutOptions<Controls extends boolean> extends UseTimeoutFnOptions {
   /**
    * Expose more controls
    *
@@ -64,11 +63,11 @@ export type UseTimoutReturn = UseTimeoutReturn
  */
 export declare function useTimeout(
   interval?: MaybeRefOrGetter<number>,
-  options?: UseTimeoutOptions<false>,
+  options?: UseTimeoutOptions<false>
 ): ComputedRef<boolean>
 export declare function useTimeout(
   interval: MaybeRefOrGetter<number>,
-  options: UseTimeoutOptions<true>,
+  options: UseTimeoutOptions<true>
 ): {
   ready: ComputedRef<boolean>
 } & Stoppable

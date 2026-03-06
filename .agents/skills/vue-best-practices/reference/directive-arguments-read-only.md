@@ -20,6 +20,7 @@ If you need to share information across hooks, use the element's `dataset` attri
 - [ ] Only modify `el` (the DOM element) directly
 
 **Incorrect:**
+
 ```javascript
 // WRONG: Mutating binding object
 const vBadDirective = {
@@ -32,7 +33,7 @@ const vBadDirective = {
   updated(el, binding) {
     // These modifications may be lost or cause errors
     console.log(binding.customData) // undefined or error
-  }
+  },
 }
 
 // WRONG: Mutating vnode
@@ -41,11 +42,12 @@ const vAnotherBadDirective = {
     // DON'T DO THIS
     vnode.myData = 'stored' // WRONG!
     vnode.props.modified = true // WRONG!
-  }
+  },
 }
 ```
 
 **Correct:**
+
 ```javascript
 // CORRECT: Use el.dataset for simple data
 const vWithDataset = {
@@ -64,7 +66,7 @@ const vWithDataset = {
     // Clean up dataset if needed
     delete el.dataset.originalValue
     delete el.dataset.mountedAt
-  }
+  },
 }
 
 // CORRECT: Use WeakMap for complex data
@@ -78,7 +80,7 @@ const vWithWeakMap = {
       config: binding.arg,
       mountedAt: Date.now(),
       callbacks: [],
-      observers: []
+      observers: [],
     })
   },
   updated(el, binding) {
@@ -95,10 +97,10 @@ const vWithWeakMap = {
     // but explicit cleanup is good for observers/listeners
     const state = directiveState.get(el)
     if (state) {
-      state.observers.forEach(obs => obs.disconnect())
+      state.observers.forEach((obs) => obs.disconnect())
       directiveState.delete(el)
     }
-  }
+  },
 }
 ```
 
@@ -125,7 +127,7 @@ const vTooltip = {
       delete el._tooltipInstance
       delete el._tooltipConfig
     }
-  }
+  },
 }
 ```
 
@@ -145,13 +147,14 @@ const vHighlight = {
   updated(el, binding) {
     // CORRECT: Update el when binding changes
     el.style.backgroundColor = binding.value
-  }
+  },
 }
 ```
 
 ## Binding Object Properties (Read-Only Reference)
 
 The `binding` object contains:
+
 - `value` - Current value passed to directive (read-only)
 - `oldValue` - Previous value (only in beforeUpdate/updated) (read-only)
 - `arg` - Argument passed (e.g., `v-dir:arg`) (read-only)
@@ -163,18 +166,19 @@ The `binding` object contains:
 const vExample = {
   mounted(el, binding) {
     // READ these properties, don't modify them
-    console.log(binding.value)      // Read: OK
-    console.log(binding.arg)        // Read: OK
-    console.log(binding.modifiers)  // Read: OK
-    console.log(binding.instance)   // Read: OK
+    console.log(binding.value) // Read: OK
+    console.log(binding.arg) // Read: OK
+    console.log(binding.modifiers) // Read: OK
+    console.log(binding.instance) // Read: OK
 
     // Store what you need for later
     el.dataset.directiveArg = binding.arg || ''
     el.dataset.hasModifierFoo = binding.modifiers.foo ? 'true' : 'false'
-  }
+  },
 }
 ```
 
 ## Reference
+
 - [Vue.js Custom Directives - Hook Arguments](https://vuejs.org/guide/reusability/custom-directives#hook-arguments)
 - [MDN - HTMLElement.dataset](https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/dataset)

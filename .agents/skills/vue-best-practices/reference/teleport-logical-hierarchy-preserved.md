@@ -17,6 +17,7 @@ tags: [vue3, teleport, component-hierarchy, props, events]
 - [ ] Check Vue Devtools for component location (shows logical parent, not DOM location)
 
 **Key Concept:**
+
 ```vue
 <!-- ParentComponent.vue -->
 <template>
@@ -24,26 +25,23 @@ tags: [vue3, teleport, component-hierarchy, props, events]
     <Teleport to="body">
       <!-- ChildComponent is logically still a child of ParentComponent -->
       <!-- even though it renders in <body> -->
-      <ChildComponent
-        :message="parentMessage"
-        @update="handleUpdate"
-      />
+      <ChildComponent :message="parentMessage" @update="handleUpdate" />
     </Teleport>
   </div>
 </template>
 
 <script setup>
-import { provide, ref } from 'vue'
+  import { provide, ref } from 'vue'
 
-const parentMessage = ref('Hello from parent')
+  const parentMessage = ref('Hello from parent')
 
-// Provide still works across teleport
-provide('theme', 'dark')
+  // Provide still works across teleport
+  provide('theme', 'dark')
 
-function handleUpdate(value) {
-  // Events bubble up through logical hierarchy, not DOM
-  console.log('Received from teleported child:', value)
-}
+  function handleUpdate(value) {
+    // Events bubble up through logical hierarchy, not DOM
+    console.log('Received from teleported child:', value)
+  }
 </script>
 ```
 
@@ -58,31 +56,31 @@ function handleUpdate(value) {
 </template>
 
 <script setup>
-import { inject } from 'vue'
+  import { inject } from 'vue'
 
-// Props work normally
-defineProps(['message'])
+  // Props work normally
+  defineProps(['message'])
 
-// Inject works across teleport boundary
-const theme = inject('theme')
+  // Inject works across teleport boundary
+  const theme = inject('theme')
 
-// Emit works normally
-defineEmits(['update'])
+  // Emit works normally
+  defineEmits(['update'])
 </script>
 ```
 
 ## What Teleport Changes vs. Preserves
 
-| Aspect | Changed? | Notes |
-|--------|----------|-------|
-| DOM position | Yes | Content moves to `to` target |
-| CSS inheritance | Yes | Styles inherit from new DOM parent |
-| Props | No | Work exactly as without Teleport |
-| Events (emit) | No | Bubble through logical hierarchy |
-| Provide/Inject | No | Work across teleport boundaries |
-| Vue Devtools | No | Shows logical component tree |
-| Slots | No | Work normally |
-| Template refs | No | Parent can ref teleported content |
+| Aspect          | Changed? | Notes                              |
+| --------------- | -------- | ---------------------------------- |
+| DOM position    | Yes      | Content moves to `to` target       |
+| CSS inheritance | Yes      | Styles inherit from new DOM parent |
+| Props           | No       | Work exactly as without Teleport   |
+| Events (emit)   | No       | Bubble through logical hierarchy   |
+| Provide/Inject  | No       | Work across teleport boundaries    |
+| Vue Devtools    | No       | Shows logical component tree       |
+| Slots           | No       | Work normally                      |
+| Template refs   | No       | Parent can ref teleported content  |
 
 ## Practical Example: Modal with Form
 
@@ -103,16 +101,16 @@ defineEmits(['update'])
 </template>
 
 <script setup>
-import { reactive } from 'vue'
+  import { reactive } from 'vue'
 
-defineProps(['visible'])
-const emit = defineEmits(['close', 'submit'])
+  defineProps(['visible'])
+  const emit = defineEmits(['close', 'submit'])
 
-const formData = reactive({})
+  const formData = reactive({})
 
-function handleSubmit() {
-  emit('submit', formData)
-}
+  function handleSubmit() {
+    emit('submit', formData)
+  }
 </script>
 ```
 
@@ -122,11 +120,7 @@ function handleSubmit() {
   <button @click="showModal = true">Add User</button>
 
   <!-- Events and slots work as expected despite teleportation -->
-  <ModalForm
-    :visible="showModal"
-    @close="showModal = false"
-    @submit="handleFormSubmit"
-  >
+  <ModalForm :visible="showModal" @close="showModal = false" @submit="handleFormSubmit">
     <template #default="{ formData }">
       <input v-model="formData.name" placeholder="Name" />
       <input v-model="formData.email" placeholder="Email" />
@@ -135,14 +129,14 @@ function handleSubmit() {
 </template>
 
 <script setup>
-import { ref } from 'vue'
+  import { ref } from 'vue'
 
-const showModal = ref(false)
+  const showModal = ref(false)
 
-function handleFormSubmit(data) {
-  console.log('Form submitted:', data)
-  showModal.value = false
-}
+  function handleFormSubmit(data) {
+    console.log('Form submitted:', data)
+    showModal.value = false
+  }
 </script>
 ```
 
@@ -158,6 +152,7 @@ App
 ```
 
 Not under their DOM location:
+
 ```
 // This is NOT how it appears in Devtools
 body
@@ -165,4 +160,5 @@ body
 ```
 
 ## Reference
+
 - [Vue.js Teleport - Component Hierarchy](https://vuejs.org/guide/built-ins/teleport.html#basic-usage)

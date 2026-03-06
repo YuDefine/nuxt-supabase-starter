@@ -22,59 +22,59 @@ Use `watchEffect` for simple cases where the callback uses the same state as wha
 
 ## Comparison Table
 
-| Feature | `watch` | `watchEffect` |
-|---------|---------|---------------|
-| Dependency tracking | Explicit (you specify) | Automatic (uses accessed properties) |
-| Lazy by default | Yes (runs only on change) | No (runs immediately) |
-| Access old value | Yes | No |
-| Async dependency tracking | Full control | Only before first await |
-| Multiple sources | Array syntax | Automatic |
+| Feature                   | `watch`                   | `watchEffect`                        |
+| ------------------------- | ------------------------- | ------------------------------------ |
+| Dependency tracking       | Explicit (you specify)    | Automatic (uses accessed properties) |
+| Lazy by default           | Yes (runs only on change) | No (runs immediately)                |
+| Access old value          | Yes                       | No                                   |
+| Async dependency tracking | Full control              | Only before first await              |
+| Multiple sources          | Array syntax              | Automatic                            |
 
 **When to prefer `watchEffect`:**
+
 ```vue
 <script setup>
-import { ref, watchEffect } from 'vue'
+  import { ref, watchEffect } from 'vue'
 
-const todoId = ref(1)
-const data = ref(null)
+  const todoId = ref(1)
+  const data = ref(null)
 
-// GOOD: watchEffect is cleaner when callback uses same state
-watchEffect(async () => {
-  const response = await fetch(
-    `https://api.example.com/todos/${todoId.value}`
-  )
-  data.value = await response.json()
-})
+  // GOOD: watchEffect is cleaner when callback uses same state
+  watchEffect(async () => {
+    const response = await fetch(`https://api.example.com/todos/${todoId.value}`)
+    data.value = await response.json()
+  })
 </script>
 ```
 
 **When to prefer `watch`:**
+
 ```vue
 <script setup>
-import { ref, watch } from 'vue'
+  import { ref, watch } from 'vue'
 
-const todoId = ref(1)
-const data = ref(null)
+  const todoId = ref(1)
+  const data = ref(null)
 
-// BETTER with watch when:
+  // BETTER with watch when:
 
-// 1. You need old value
-watch(todoId, (newId, oldId) => {
-  console.log(`Changed from ${oldId} to ${newId}`)
-})
+  // 1. You need old value
+  watch(todoId, (newId, oldId) => {
+    console.log(`Changed from ${oldId} to ${newId}`)
+  })
 
-// 2. You don't want immediate execution
-watch(todoId, () => {
-  // Only runs when todoId changes, not on mount
-  fetchData()
-})
+  // 2. You don't want immediate execution
+  watch(todoId, () => {
+    // Only runs when todoId changes, not on mount
+    fetchData()
+  })
 
-// 3. You have dependencies after await
-watch(todoId, async (id) => {
-  const response = await fetch(`/api/todos/${id}`)
-  // More reactive access here still triggers correctly
-  // because we explicitly specified todoId as the source
-})
+  // 3. You have dependencies after await
+  watch(todoId, async (id) => {
+    const response = await fetch(`/api/todos/${id}`)
+    // More reactive access here still triggers correctly
+    // because we explicitly specified todoId as the source
+  })
 </script>
 ```
 
@@ -82,24 +82,21 @@ watch(todoId, async (id) => {
 
 ```vue
 <script setup>
-import { ref, watch, watchEffect } from 'vue'
+  import { ref, watch, watchEffect } from 'vue'
 
-const searchQuery = ref('')
-const category = ref('all')
-const results = ref([])
+  const searchQuery = ref('')
+  const category = ref('all')
+  const results = ref([])
 
-// BAD: Repetitive - listing same deps in source and using in callback
-watch(
-  [searchQuery, category],
-  ([query, cat]) => {
-    fetchResults(query, cat)  // Same variables repeated
-  }
-)
+  // BAD: Repetitive - listing same deps in source and using in callback
+  watch([searchQuery, category], ([query, cat]) => {
+    fetchResults(query, cat) // Same variables repeated
+  })
 
-// GOOD: watchEffect removes repetition
-watchEffect(() => {
-  fetchResults(searchQuery.value, category.value)
-})
+  // GOOD: watchEffect removes repetition
+  watchEffect(() => {
+    fetchResults(searchQuery.value, category.value)
+  })
 </script>
 ```
 
@@ -107,32 +104,32 @@ watchEffect(() => {
 
 ```vue
 <script setup>
-import { ref, watch, watchEffect } from 'vue'
+  import { ref, watch, watchEffect } from 'vue'
 
-const userId = ref(null)
+  const userId = ref(null)
 
-// BAD: Runs immediately even when userId is null
-watchEffect(() => {
-  if (userId.value) {
-    loadUserProfile(userId.value)
-  }
-})
+  // BAD: Runs immediately even when userId is null
+  watchEffect(() => {
+    if (userId.value) {
+      loadUserProfile(userId.value)
+    }
+  })
 
-// GOOD: Only runs when userId actually changes
-watch(userId, (id) => {
-  if (id) {
-    loadUserProfile(id)
-  }
-})
+  // GOOD: Only runs when userId actually changes
+  watch(userId, (id) => {
+    if (id) {
+      loadUserProfile(id)
+    }
+  })
 
-// ALSO GOOD: watch with immediate when you need both behaviors
-watch(
-  userId,
-  (id) => {
-    if (id) loadUserProfile(id)
-  },
-  { immediate: true }  // Explicit about running immediately
-)
+  // ALSO GOOD: watch with immediate when you need both behaviors
+  watch(
+    userId,
+    (id) => {
+      if (id) loadUserProfile(id)
+    },
+    { immediate: true } // Explicit about running immediately
+  )
 </script>
 ```
 
@@ -140,20 +137,20 @@ watch(
 
 ```vue
 <script setup>
-import { ref, watch } from 'vue'
+  import { ref, watch } from 'vue'
 
-const status = ref('pending')
+  const status = ref('pending')
 
-// Only watch() provides old value
-watch(status, (newStatus, oldStatus) => {
-  if (oldStatus === 'pending' && newStatus === 'approved') {
-    showApprovalNotification()
-  }
+  // Only watch() provides old value
+  watch(status, (newStatus, oldStatus) => {
+    if (oldStatus === 'pending' && newStatus === 'approved') {
+      showApprovalNotification()
+    }
 
-  if (oldStatus === 'approved' && newStatus === 'rejected') {
-    showRejectionWarning()
-  }
-})
+    if (oldStatus === 'approved' && newStatus === 'rejected') {
+      showRejectionWarning()
+    }
+  })
 </script>
 ```
 
@@ -161,26 +158,27 @@ watch(status, (newStatus, oldStatus) => {
 
 ```vue
 <script setup>
-import { ref, watch } from 'vue'
+  import { ref, watch } from 'vue'
 
-const filters = ref({ status: 'active', sort: 'date' })
-const page = ref(1)
-const results = ref([])
+  const filters = ref({ status: 'active', sort: 'date' })
+  const page = ref(1)
+  const results = ref([])
 
-// BETTER: watch with explicit sources for async
-// All dependencies tracked regardless of await placement
-watch(
-  [filters, page],
-  async ([currentFilters, currentPage]) => {
-    const data = await fetchWithFilters(currentFilters)
+  // BETTER: watch with explicit sources for async
+  // All dependencies tracked regardless of await placement
+  watch(
+    [filters, page],
+    async ([currentFilters, currentPage]) => {
+      const data = await fetchWithFilters(currentFilters)
 
-    // These are still correctly tracked:
-    results.value = paginateResults(data, currentPage)
-  },
-  { deep: true }
-)
+      // These are still correctly tracked:
+      results.value = paginateResults(data, currentPage)
+    },
+    { deep: true }
+  )
 </script>
 ```
 
 ## Reference
+
 - [Vue.js Watchers - watch vs. watchEffect](https://vuejs.org/guide/essentials/watchers.html#watch-vs-watcheffect)

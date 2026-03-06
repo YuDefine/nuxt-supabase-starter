@@ -51,7 +51,7 @@ export interface NavigatorLanguageState {
  * @__NO_SIDE_EFFECTS__
  */
 export declare function useNavigatorLanguage(
-  options?: ConfigurableWindow,
+  options?: ConfigurableWindow
 ): Readonly<NavigatorLanguageState>
 export type UseNavigatorLanguageReturn = ReturnType<typeof useNavigatorLanguage>
 ```

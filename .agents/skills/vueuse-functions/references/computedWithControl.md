@@ -17,7 +17,7 @@ const counter = ref(0)
 
 const computedRef = computedWithControl(
   () => source.value, // watch source, same as `watch`
-  () => counter.value, // computed getter, same as `computed`
+  () => counter.value // computed getter, same as `computed`
 )
 ```
 
@@ -46,7 +46,7 @@ You can also manually trigger the update of the computed by:
 // ---cut---
 const computedRef = computedWithControl(
   () => source.value,
-  () => counter.value,
+  () => counter.value
 )
 
 computedRef.trigger()
@@ -60,11 +60,7 @@ You can specify the same options as `watch` to control the behavior:
 ```ts
 const source = ref({ name: 'foo' })
 
-const computedRef = computedWithControl(
-  source,
-  () => counter.value,
-  { deep: true },
-)
+const computedRef = computedWithControl(source, () => counter.value, { deep: true })
 ```
 
 ## Type Declarations
@@ -76,24 +72,21 @@ export interface ComputedWithControlRefExtra {
    */
   trigger: () => void
 }
-export interface ComputedRefWithControl<T>
-  extends ComputedRef<T>,
-    ComputedWithControlRefExtra {}
+export interface ComputedRefWithControl<T> extends ComputedRef<T>, ComputedWithControlRefExtra {}
 export interface WritableComputedRefWithControl<T>
-  extends WritableComputedRef<T>,
-    ComputedWithControlRefExtra {}
+  extends WritableComputedRef<T>, ComputedWithControlRefExtra {}
 export type ComputedWithControlRef<T = any> =
   | ComputedRefWithControl<T>
   | WritableComputedRefWithControl<T>
 export declare function computedWithControl<T>(
   source: WatchSource | MultiWatchSources,
   fn: ComputedGetter<T>,
-  options?: WatchOptions,
+  options?: WatchOptions
 ): ComputedRefWithControl<T>
 export declare function computedWithControl<T>(
   source: WatchSource | MultiWatchSources,
   fn: WritableComputedOptions<T>,
-  options?: WatchOptions,
+  options?: WatchOptions
 ): WritableComputedRefWithControl<T>
 /** @deprecated use `computedWithControl` instead */
 export declare const controlledComputed: typeof computedWithControl

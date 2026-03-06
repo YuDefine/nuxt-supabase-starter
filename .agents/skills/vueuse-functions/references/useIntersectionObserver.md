@@ -10,18 +10,15 @@ Detects that a target element's visibility.
 
 ```vue
 <script setup lang="ts">
-import { useIntersectionObserver } from '@vueuse/core'
-import { shallowRef, useTemplateRef } from 'vue'
+  import { useIntersectionObserver } from '@vueuse/core'
+  import { shallowRef, useTemplateRef } from 'vue'
 
-const target = useTemplateRef('target')
-const targetIsVisible = shallowRef(false)
+  const target = useTemplateRef('target')
+  const targetIsVisible = shallowRef(false)
 
-const { stop } = useIntersectionObserver(
-  target,
-  ([entry], observerElement) => {
+  const { stop } = useIntersectionObserver(target, ([entry], observerElement) => {
     targetIsVisible.value = entry?.isIntersecting || false
-  },
-)
+  })
 </script>
 
 <template>
@@ -35,23 +32,21 @@ const { stop } = useIntersectionObserver(
 
 ```vue
 <script setup lang="ts">
-import { vIntersectionObserver } from '@vueuse/components'
-import { shallowRef, useTemplateRef } from 'vue'
+  import { vIntersectionObserver } from '@vueuse/components'
+  import { shallowRef, useTemplateRef } from 'vue'
 
-const root = useTemplateRef('root')
+  const root = useTemplateRef('root')
 
-const isVisible = shallowRef(false)
+  const isVisible = shallowRef(false)
 
-function onIntersectionObserver([entry]: IntersectionObserverEntry[]) {
-  isVisible.value = entry?.isIntersecting || false
-}
+  function onIntersectionObserver([entry]: IntersectionObserverEntry[]) {
+    isVisible.value = entry?.isIntersecting || false
+  }
 </script>
 
 <template>
   <div>
-    <p>
-      Scroll me down!
-    </p>
+    <p>Scroll me down!</p>
     <div v-intersection-observer="onIntersectionObserver">
       <p>Hello world!</p>
     </div>
@@ -59,9 +54,7 @@ function onIntersectionObserver([entry]: IntersectionObserverEntry[]) {
 
   <!-- with options -->
   <div ref="root">
-    <p>
-      Scroll me down!
-    </p>
+    <p>Scroll me down!</p>
     <div v-intersection-observer="[onIntersectionObserver, { root }]">
       <p>Hello world!</p>
     </div>
@@ -108,11 +101,8 @@ export interface UseIntersectionObserverReturn extends Pausable {
  * @param options
  */
 export declare function useIntersectionObserver(
-  target:
-    | MaybeComputedElementRef
-    | MaybeRefOrGetter<MaybeElement[]>
-    | MaybeComputedElementRef[],
+  target: MaybeComputedElementRef | MaybeRefOrGetter<MaybeElement[]> | MaybeComputedElementRef[],
   callback: IntersectionObserverCallback,
-  options?: UseIntersectionObserverOptions,
+  options?: UseIntersectionObserverOptions
 ): UseIntersectionObserverReturn
 ```

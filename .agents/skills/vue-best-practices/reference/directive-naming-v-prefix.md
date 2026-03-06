@@ -19,22 +19,23 @@ Following this naming pattern ensures Vue correctly recognizes and registers you
 - [ ] For multi-word directives, use camelCase in script and kebab-case in template
 
 **Incorrect:**
+
 ```vue
 <script setup>
-// WRONG: No v prefix - won't be recognized as directive
-const focus = {
-  mounted: (el) => el.focus()
-}
+  // WRONG: No v prefix - won't be recognized as directive
+  const focus = {
+    mounted: (el) => el.focus()
+  }
 
-// WRONG: Wrong casing
-const VFocus = {
-  mounted: (el) => el.focus()
-}
+  // WRONG: Wrong casing
+  const VFocus = {
+    mounted: (el) => el.focus()
+  }
 
-// WRONG: Kebab-case in script
-const 'v-focus' = {  // Syntax error
-  mounted: (el) => el.focus()
-}
+  // WRONG: Kebab-case in script
+  const 'v-focus' = {  // Syntax error
+    mounted: (el) => el.focus()
+  }
 </script>
 
 <template>
@@ -45,36 +46,37 @@ const 'v-focus' = {  // Syntax error
 ```
 
 **Correct:**
+
 ```vue
 <script setup>
-// CORRECT: v prefix with camelCase
-const vFocus = {
-  mounted: (el) => el.focus()
-}
-
-const vHighlight = {
-  mounted: (el) => {
-    el.classList.add('is-highlight')
+  // CORRECT: v prefix with camelCase
+  const vFocus = {
+    mounted: (el) => el.focus(),
   }
-}
 
-// CORRECT: Multi-word directive
-const vClickOutside = {
-  mounted(el, binding) {
-    el._handler = (e) => {
-      if (!el.contains(e.target)) binding.value(e)
-    }
-    document.addEventListener('click', el._handler)
-  },
-  unmounted(el) {
-    document.removeEventListener('click', el._handler)
+  const vHighlight = {
+    mounted: (el) => {
+      el.classList.add('is-highlight')
+    },
   }
-}
 
-// CORRECT: Function shorthand with v prefix
-const vColor = (el, binding) => {
-  el.style.color = binding.value
-}
+  // CORRECT: Multi-word directive
+  const vClickOutside = {
+    mounted(el, binding) {
+      el._handler = (e) => {
+        if (!el.contains(e.target)) binding.value(e)
+      }
+      document.addEventListener('click', el._handler)
+    },
+    unmounted(el) {
+      document.removeEventListener('click', el._handler)
+    },
+  }
+
+  // CORRECT: Function shorthand with v prefix
+  const vColor = (el, binding) => {
+    el.style.color = binding.value
+  }
 </script>
 
 <template>
@@ -92,9 +94,13 @@ In templates, directives should use kebab-case:
 
 ```vue
 <script setup>
-const vMyLongDirectiveName = (el) => { /* ... */ }
-const vAutoFocusInput = (el) => el.focus()
-const vLazyLoadImage = { /* ... */ }
+  const vMyLongDirectiveName = (el) => {
+    /* ... */
+  }
+  const vAutoFocusInput = (el) => el.focus()
+  const vLazyLoadImage = {
+    /* ... */
+  }
 </script>
 
 <template>
@@ -115,17 +121,21 @@ export default {
   directives: {
     // Key is directive name (without v- prefix)
     focus: {
-      mounted: (el) => el.focus()
+      mounted: (el) => el.focus(),
     },
     highlight: {
-      mounted: (el) => el.classList.add('is-highlight')
+      mounted: (el) => el.classList.add('is-highlight'),
     },
     // Multi-word uses camelCase key
     clickOutside: {
-      mounted(el, binding) { /* ... */ },
-      unmounted(el) { /* ... */ }
-    }
-  }
+      mounted(el, binding) {
+        /* ... */
+      },
+      unmounted(el) {
+        /* ... */
+      },
+    },
+  },
 }
 ```
 
@@ -142,13 +152,17 @@ const app = createApp(App)
 
 // Global directive - name without v- prefix
 app.directive('focus', {
-  mounted: (el) => el.focus()
+  mounted: (el) => el.focus(),
 })
 
 // Multi-word directive
 app.directive('click-outside', {
-  mounted(el, binding) { /* ... */ },
-  unmounted(el) { /* ... */ }
+  mounted(el, binding) {
+    /* ... */
+  },
+  unmounted(el) {
+    /* ... */
+  },
 })
 
 // Function shorthand
@@ -189,4 +203,5 @@ import { vFocus } from '@/directives/focus'
 ```
 
 ## Reference
+
 - [Vue.js Custom Directives - Introduction](https://vuejs.org/guide/reusability/custom-directives#introduction)
