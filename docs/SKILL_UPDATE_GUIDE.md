@@ -19,7 +19,7 @@
 #### 官方 Skills
 
 - `supabase-postgres-best-practices` (`supabase/agent-skills@*`) - Postgres 最佳實踐
-- `nuxt-ui` (`nuxt-content/nuxt-studio@*`) - Nuxt UI 組件
+- `nuxt-ui` (`nuxt/ui`) - Nuxt UI 組件
 
 #### 實用工具
 

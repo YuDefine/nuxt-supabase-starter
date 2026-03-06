@@ -28,7 +28,7 @@
 | 現有 Skill              | skills.sh 來源                                           | 安裝指令                                                                   |
 | ----------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------- |
 | postgres-best-practices | `supabase/agent-skills@supabase-postgres-best-practices` | `npx skills add supabase/agent-skills@supabase-postgres-best-practices -y` |
-| nuxt-ui                 | `nuxt-content/nuxt-studio@nuxt-ui`                       | `npx skills add nuxt-content/nuxt-studio@nuxt-ui -y`                       |
+| nuxt-ui                 | `nuxt/ui`                                                | `npx skills add nuxt/ui --agent claude-code -y`                            |
 
 ### ⚠️ 保留專案特定 Skills
 

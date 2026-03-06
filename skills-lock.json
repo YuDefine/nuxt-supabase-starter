@@ -1,6 +1,16 @@
 {
   "version": 1,
   "skills": {
+    "contributing": {
+      "source": "nuxt/ui",
+      "sourceType": "github",
+      "computedHash": "63e6efd90fa42364b589411b9d7d222558858ce34e3cbaa30caa20fcc46d7fb4"
+    },
+    "nuxt-ui": {
+      "source": "nuxt/ui",
+      "sourceType": "github",
+      "computedHash": "51e570e2bfd4b74752a40ea0a102c9d186bfe3afbb8c34a51cb83e46195243d0"
+    },
     "supabase-postgres-best-practices": {
       "source": "supabase/agent-skills",
       "sourceType": "github",

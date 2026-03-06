@@ -73,7 +73,7 @@
 | [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | 讓 AI 直接操作資料庫                             |
 | Commands（7 個）                                                     | `/tdd`、`/commit`、`/db-migration`、`/opsx:*` 等 |
 | SubAgents（3 個）                                                    | `check-runner`、`post-implement`、`db-backup`    |
-| [nuxt-skills](https://github.com/onmax/nuxt-skills)（12 個）         | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等 AI Skills  |
+| [Skills](https://skills.sh)（通用 + 專案）                           | `nuxt-ui`、`vue`、`vueuse` 等 AI Skills           |
 | 情境 Skills（5 個）                                                  | `supabase-rls`、`supabase-migration` 等          |
 
 ---
@@ -99,7 +99,7 @@
 | **CLAUDE.md**    | AI 遵循專案規範，減少修正成本 |
 | **TDD 工作流程** | AI 生成的程式碼有測試保護     |
 | **自動化檢查**   | 每次提交都通過品質門檻        |
-| **nuxt-skills**  | AI 能正確使用框架 API         |
+| **AI Skills**    | AI 能正確使用框架 API         |
 | **OpenSpec**     | 複雜功能有結構化開發流程      |
 | **情境 Skills**  | AI 遵循 Supabase 安全規範     |
 
@@ -118,20 +118,19 @@
 
 | 類型     | 來源                                                                                                           | 更新方式 |
 | -------- | -------------------------------------------------------------------------------------------------------------- | -------- |
-| 通用技術 | [nuxt-skills](https://github.com/onmax/nuxt-skills) + [agent-skills](https://github.com/supabase/agent-skills) | 手動同步 |
+| 通用技術 | [skills.sh](https://skills.sh)（`nuxt/ui`、`supabase/agent-skills` 等）                                         | `pnpm skills:update` |
 | 情境觸發 | 本地 `.claude/skills/`                                                                                         | 手動維護 |
 
 ### 通用技術 Skills（13 個）
 
-來自 [nuxt-skills](https://github.com/onmax/nuxt-skills) 和 [supabase/agent-skills](https://github.com/supabase/agent-skills)，包含：
+來自 [skills.sh](https://skills.sh) 和專案本地，包含：
 
-- `nuxt`、`nuxt-ui`、`nuxt-better-auth`
-- `vue`、`vueuse`、`reka-ui`、`motion`
+- `nuxt-ui`（官方 `nuxt/ui`）、`supabase-postgres-best-practices`、`find-skills`
+- `nuxt-better-auth`、`vue`、`vueuse`、`reka-ui`、`motion`
 - `nuxthub`、`nuxt-content`、`nuxt-modules`
 - `ts-library`、`document-writer`
-- `postgres-best-practices`（Supabase Postgres 效能最佳化）
 
-需手動從各自的 repo 同步更新。
+使用 `pnpm skills:update` 更新通用 skills。
 
 ### 情境觸發 Skills（6 個，本地維護）
 
