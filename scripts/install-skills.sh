@@ -23,7 +23,7 @@ echo ""
 # 官方 Skills
 echo "📦 安裝官方 Skills..."
 npx skills add supabase/agent-skills@supabase-postgres-best-practices -y
-npx skills add nuxt-content/nuxt-studio@nuxt-ui -y
+npx skills add nuxt/ui --agent claude-code -y
 echo "  ✓ 官方 Skills 安裝完成"
 echo ""
 

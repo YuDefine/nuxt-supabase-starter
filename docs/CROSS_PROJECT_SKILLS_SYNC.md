@@ -84,7 +84,7 @@ pnpm skills:install
 | vitest                           | antfu/skills             |
 | vue-best-practices               | antfu/skills             |
 | supabase-postgres-best-practices | supabase/agent-skills    |
-| nuxt-ui                          | nuxt-content/nuxt-studio |
+| nuxt-ui                          | nuxt/ui                  |
 | find-skills                      | vercel-labs/skills       |
 
 ### 專案特定 Skills
@@ -103,14 +103,14 @@ pnpm skills:install
 - data-table.md
 - add-table-column.md
 - openspec-\* (所有 OpenSpec skills)
-- nuxt, nuxt-modules, nuxt-ui (部分保留舊版)
+- nuxt, nuxt-modules, nuxt-ui
 
 #### eHR-2.0
 
 - document-writer, motion
 - nuxt-content, nuxt-modules, nuxthub
 - openspec-\* (所有 OpenSpec skills)
-- nuxt, nuxt-ui (部分保留舊版)
+- nuxt, nuxt-ui
 
 ## 維護建議
 

@@ -153,15 +153,15 @@ See `commitlint.config.js` for types. Use `/commit` command.
 
 ## AI Skills
 
-| Task                      | Skill                     |
-| ------------------------- | ------------------------- |
-| Vue components            | `vue`                     |
-| Nuxt routing/server       | `nuxt`                    |
-| UI components             | `nuxt-ui`                 |
-| VueUse                    | `vueuse`                  |
+| Task                      | Skill                              |
+| ------------------------- | ---------------------------------- |
+| Vue components            | `vue`                              |
+| Nuxt routing/server       | `nuxt`                             |
+| UI components             | `nuxt-ui`                          |
+| VueUse                    | `vueuse`                           |
 | Postgres                  | `supabase-postgres-best-practices` |
-| 中大型功能規劃 (OpenSpec) | `/opsx:new`               |
-| 中大型功能規劃 (Spectra)  | `/spectra:propose`        |
+| 中大型功能規劃 (OpenSpec) | `/opsx:new`                        |
+| 中大型功能規劃 (Spectra)  | `/spectra:propose`                 |
 
 ## docs/verify/ Purpose
 
