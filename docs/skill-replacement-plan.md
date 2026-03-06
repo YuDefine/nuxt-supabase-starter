@@ -8,13 +8,13 @@
 
 ### ✅ 從 Antfu Skills 替換
 
-| 現有 Skill  | skills.sh 來源                  | 安裝指令                                          |
-| ----------- | ------------------------------- | ------------------------------------------------- |
-| vue         | `antfu/skills@vue`              | `npx skills add antfu/skills@vue -y`              |
-| vueuse      | `antfu/skills@vueuse-functions` | `npx skills add antfu/skills@vueuse-functions -y` |
+| 現有 Skill  | skills.sh 來源                  | 安裝指令                                                                             |
+| ----------- | ------------------------------- | ------------------------------------------------------------------------------------ |
+| vue         | `antfu/skills@vue`              | `npx skills add antfu/skills@vue -y`                                                 |
+| vueuse      | `antfu/skills@vueuse-functions` | `npx skills add antfu/skills@vueuse-functions -y`                                    |
 | nuxt        | `antfu/skills` (nuxt)           | `npx skills add https://github.com/antfu/skills --skill nuxt --agent claude-code -y` |
-| pinia-store | `antfu/skills@pinia`            | `npx skills add antfu/skills@pinia -y`            |
-| vitepress   | `antfu/skills@vitepress`        | `npx skills add antfu/skills@vitepress -y`        |
+| pinia-store | `antfu/skills@pinia`            | `npx skills add antfu/skills@pinia -y`                                               |
+| vitepress   | `antfu/skills@vitepress`        | `npx skills add antfu/skills@vitepress -y`                                           |
 
 ### ✅ 新增 Antfu Skills
 

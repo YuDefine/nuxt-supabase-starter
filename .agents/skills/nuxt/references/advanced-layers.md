@@ -14,10 +14,7 @@ Layers allow sharing and reusing partial Nuxt applications across projects. They
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
-  extends: [
-    '@my-org/base-layer',
-    '@nuxtjs/ui-layer',
-  ],
+  extends: ['@my-org/base-layer', '@nuxtjs/ui-layer'],
 })
 ```
 
@@ -42,10 +39,7 @@ export default defineNuxtConfig({
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
-  extends: [
-    '../base-layer',
-    './layers/shared',
-  ],
+  extends: ['../base-layer', './layers/shared'],
 })
 ```
 
@@ -123,7 +117,7 @@ Use in consuming project:
 // my-layer/app/composables/useTheme.ts
 export function useTheme() {
   const isDark = useState('theme-dark', () => false)
-  const toggle = () => isDark.value = !isDark.value
+  const toggle = () => (isDark.value = !isDark.value)
   return { isDark, toggle }
 }
 ```
@@ -131,6 +125,7 @@ export function useTheme() {
 ## Layer Priority
 
 Override order (highest to lowest):
+
 1. Your project files
 2. Auto-scanned layers (alphabetically, Z > A)
 3. `extends` array (first > last)
@@ -207,9 +202,7 @@ import { dirname, join } from 'node:path'
 const currentDir = dirname(fileURLToPath(import.meta.url))
 
 export default defineNuxtConfig({
-  css: [
-    join(currentDir, './assets/main.css'),
-  ],
+  css: [join(currentDir, './assets/main.css')],
 })
 ```
 
@@ -218,9 +211,7 @@ export default defineNuxtConfig({
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
-  extends: [
-    ['github:user/layer', { install: true }],
-  ],
+  extends: [['github:user/layer', { install: true }]],
 })
 ```
 
@@ -292,7 +283,7 @@ export default defineAppConfig({
 })
 ```
 
-<!-- 
+<!--
 Source references:
 - https://nuxt.com/docs/getting-started/layers
 - https://nuxt.com/docs/guide/going-further/layers

@@ -35,9 +35,9 @@ Access route parameters:
 
 ```vue
 <script setup lang="ts">
-const route = useRoute()
-// /posts/123 → route.params.id = '123'
-console.log(route.params.id)
+  const route = useRoute()
+  // /posts/123 → route.params.id = '123'
+  console.log(route.params.id)
 </script>
 ```
 
@@ -61,13 +61,13 @@ NuxtLink automatically prefetches linked pages when they enter the viewport.
 
 ```vue
 <script setup lang="ts">
-const router = useRouter()
+  const router = useRouter()
 
-function goToPost(id: number) {
-  navigateTo(`/posts/${id}`)
-  // or
-  router.push({ name: 'posts-id', params: { id } })
-}
+  function goToPost(id: number) {
+    navigateTo(`/posts/${id}`)
+    // or
+    router.push({ name: 'posts-id', params: { id } })
+  }
 </script>
 ```
 
@@ -90,10 +90,10 @@ Apply to pages:
 
 ```vue
 <script setup lang="ts">
-definePageMeta({
-  middleware: 'auth',
-  // or multiple: middleware: ['auth', 'admin']
-})
+  definePageMeta({
+    middleware: 'auth',
+    // or multiple: middleware: ['auth', 'admin']
+  })
 </script>
 ```
 
@@ -112,13 +112,13 @@ export default defineNuxtRouteMiddleware((to, from) => {
 
 ```vue
 <script setup lang="ts">
-definePageMeta({
-  middleware: [
-    function (to, from) {
-      // Inline middleware logic
-    },
-  ],
-})
+  definePageMeta({
+    middleware: [
+      function (to, from) {
+        // Inline middleware logic
+      },
+    ],
+  })
 </script>
 ```
 
@@ -128,15 +128,15 @@ Configure page-level options:
 
 ```vue
 <script setup lang="ts">
-definePageMeta({
-  title: 'My Page',
-  layout: 'custom',
-  middleware: 'auth',
-  validate: (route) => {
-    // Return false for 404, or object with status/statusText
-    return /^\d+$/.test(route.params.id as string)
-  },
-})
+  definePageMeta({
+    title: 'My Page',
+    layout: 'custom',
+    middleware: 'auth',
+    validate: (route) => {
+      // Return false for 404, or object with status/statusText
+      return /^\d+$/.test(route.params.id as string)
+    },
+  })
 </script>
 ```
 
@@ -144,12 +144,12 @@ definePageMeta({
 
 ```vue
 <script setup lang="ts">
-definePageMeta({
-  validate: (route) => {
-    // Must return boolean or object with status
-    return typeof route.params.id === 'string' && /^\d+$/.test(route.params.id)
-  },
-})
+  definePageMeta({
+    validate: (route) => {
+      // Must return boolean or object with status
+      return typeof route.params.id === 'string' && /^\d+$/.test(route.params.id)
+    },
+  })
 </script>
 ```
 
@@ -184,9 +184,9 @@ Use in pages:
 
 ```vue
 <script setup lang="ts">
-definePageMeta({
-  layout: 'admin',
-})
+  definePageMeta({
+    layout: 'admin',
+  })
 </script>
 ```
 
@@ -194,11 +194,11 @@ Dynamic layout:
 
 ```vue
 <script setup lang="ts">
-const layout = ref('default')
+  const layout = ref('default')
 
-function enableAdmin() {
-  setPageLayout('admin')
-}
+  function enableAdmin() {
+    setPageLayout('admin')
+  }
 </script>
 ```
 
@@ -206,19 +206,19 @@ function enableAdmin() {
 
 ```vue
 <script setup lang="ts">
-onBeforeRouteLeave((to, from) => {
-  // Confirm before leaving
-  const answer = window.confirm('Leave?')
-  if (!answer) return false
-})
+  onBeforeRouteLeave((to, from) => {
+    // Confirm before leaving
+    const answer = window.confirm('Leave?')
+    if (!answer) return false
+  })
 
-onBeforeRouteUpdate((to, from) => {
-  // Called when route changes but component is reused
-})
+  onBeforeRouteUpdate((to, from) => {
+    // Called when route changes but component is reused
+  })
 </script>
 ```
 
-<!-- 
+<!--
 Source references:
 - https://nuxt.com/docs/getting-started/routing
 - https://nuxt.com/docs/directory-structure/app/pages

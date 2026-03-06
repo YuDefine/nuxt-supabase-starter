@@ -74,9 +74,9 @@ Access in components/composables:
 
 ```vue
 <script setup lang="ts">
-const config = useRuntimeConfig()
-// Server: config.apiSecret, config.public.apiBase
-// Client: config.public.apiBase only
+  const config = useRuntimeConfig()
+  // Server: config.apiSecret, config.public.apiBase
+  // Client: config.public.apiBase only
 </script>
 ```
 
@@ -101,19 +101,19 @@ Access in components:
 
 ```vue
 <script setup lang="ts">
-const appConfig = useAppConfig()
+  const appConfig = useAppConfig()
 </script>
 ```
 
 ## runtimeConfig vs app.config
 
-| Feature | runtimeConfig | app.config |
-|---------|--------------|------------|
-| Client-side | Hydrated | Bundled |
-| Environment variables | Yes | No |
-| Reactive | Yes | Yes |
-| Hot module replacement | No | Yes |
-| Non-primitive JS types | No | Yes |
+| Feature                | runtimeConfig | app.config |
+| ---------------------- | ------------- | ---------- |
+| Client-side            | Hydrated      | Bundled    |
+| Environment variables  | Yes           | No         |
+| Reactive               | Yes           | Yes        |
+| Hot module replacement | No            | Yes        |
+| Non-primitive JS types | No            | Yes        |
 
 **Use runtimeConfig** for secrets and values that change per environment.
 **Use app.config** for public tokens, theme settings, and non-sensitive config.
@@ -154,7 +154,7 @@ export default defineNuxtConfig({
 })
 ```
 
-<!-- 
+<!--
 Source references:
 - https://nuxt.com/docs/getting-started/configuration
 - https://nuxt.com/docs/guide/going-further/runtime-config

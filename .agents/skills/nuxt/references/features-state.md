@@ -13,8 +13,8 @@ SSR-safe replacement for `ref` that shares state across components:
 
 ```vue
 <script setup lang="ts">
-// State is shared by key 'counter' across all components
-const counter = useState('counter', () => 0)
+  // State is shared by key 'counter' across all components
+  const counter = useState('counter', () => 0)
 </script>
 
 <template>
@@ -43,9 +43,9 @@ export function useLocale() {
 
 ```vue
 <script setup lang="ts">
-// Same state instance everywhere
-const user = useUser()
-const locale = useLocale()
+  // Same state instance everywhere
+  const user = useUser()
+  const locale = useLocale()
 </script>
 ```
 
@@ -55,11 +55,11 @@ Use `callOnce` to initialize state with async data:
 
 ```vue
 <script setup lang="ts">
-const config = useState('site-config')
+  const config = useState('site-config')
 
-await callOnce(async () => {
-  config.value = await $fetch('/api/config')
-})
+  await callOnce(async () => {
+    config.value = await $fetch('/api/config')
+  })
 </script>
 ```
 
@@ -133,13 +133,13 @@ export const useUserStore = defineStore('user', () => {
 
 ```vue
 <script setup lang="ts">
-const counterStore = useCounterStore()
-const userStore = useUserStore()
+  const counterStore = useCounterStore()
+  const userStore = useUserStore()
 
-// Initialize store data once
-await callOnce(async () => {
-  await userStore.fetchUser()
-})
+  // Initialize store data once
+  await callOnce(async () => {
+    await userStore.fetchUser()
+  })
 </script>
 ```
 
@@ -157,8 +157,7 @@ export function useDefaultLocale(fallback = 'en-US') {
   if (import.meta.server) {
     const reqLocale = useRequestHeaders()['accept-language']?.split(',')[0]
     if (reqLocale) locale.value = reqLocale
-  }
-  else if (import.meta.client) {
+  } else if (import.meta.client) {
     const navLang = navigator.language
     if (navLang) locale.value = navLang
   }
@@ -186,7 +185,7 @@ useState('data', () => ({ name: 'John', age: 30 }))
 useState('items', () => ['a', 'b', 'c'])
 ```
 
-<!-- 
+<!--
 Source references:
 - https://nuxt.com/docs/getting-started/state-management
 - https://nuxt.com/docs/api/composables/use-state

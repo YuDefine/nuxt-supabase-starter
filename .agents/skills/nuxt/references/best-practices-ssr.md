@@ -37,6 +37,7 @@ export function useMyComposable() {
 ### Valid Contexts for Composables
 
 Nuxt composables work in:
+
 - `<script setup>` blocks
 - `setup()` function
 - `defineNuxtPlugin()` callbacks
@@ -81,6 +82,7 @@ export function useUser() {
 ### Why This Matters
 
 On the server, module-level state persists across requests, causing:
+
 - Data leaking between users
 - Security vulnerabilities
 - Memory leaks
@@ -93,8 +95,8 @@ Hydration mismatches occur when server HTML differs from client render.
 
 ```vue
 <script setup>
-// localStorage doesn't exist on server!
-const theme = localStorage.getItem('theme') || 'light'
+  // localStorage doesn't exist on server!
+  const theme = localStorage.getItem('theme') || 'light'
 </script>
 ```
 
@@ -102,8 +104,8 @@ const theme = localStorage.getItem('theme') || 'light'
 
 ```vue
 <script setup>
-// useCookie works on both server and client
-const theme = useCookie('theme', { default: () => 'light' })
+  // useCookie works on both server and client
+  const theme = useCookie('theme', { default: () => 'light' })
 </script>
 ```
 
@@ -120,8 +122,8 @@ const theme = useCookie('theme', { default: () => 'light' })
 
 ```vue
 <script setup>
-// Value is generated once on server, hydrated on client
-const randomValue = useState('random', () => Math.random())
+  // Value is generated once on server, hydrated on client
+  const randomValue = useState('random', () => Math.random())
 </script>
 
 <template>
@@ -160,10 +162,10 @@ const randomValue = useState('random', () => Math.random())
 
 ```vue
 <script setup>
-if (import.meta.client) {
-  // Only runs in browser
-  window.addEventListener('scroll', handleScroll)
-}
+  if (import.meta.client) {
+    // Only runs in browser
+    window.addEventListener('scroll', handleScroll)
+  }
 </script>
 ```
 
@@ -171,13 +173,13 @@ if (import.meta.client) {
 
 ```vue
 <script setup>
-const el = ref<HTMLElement>()
+  const el = ref<HTMLElement>()
 
-onMounted(() => {
-  // Safe - only runs on client after hydration
-  el.value?.focus()
-  initThirdPartyLib()
-})
+  onMounted(() => {
+    // Safe - only runs on client after hydration
+    el.value?.focus()
+    initThirdPartyLib()
+  })
 </script>
 ```
 
@@ -185,10 +187,10 @@ onMounted(() => {
 
 ```vue
 <script setup>
-onMounted(async () => {
-  const { Chart } = await import('chart.js')
-  new Chart(canvas.value, config)
-})
+  onMounted(async () => {
+    const { Chart } = await import('chart.js')
+    new Chart(canvas.value, config)
+  })
 </script>
 ```
 
@@ -198,10 +200,10 @@ onMounted(async () => {
 
 ```vue
 <script setup>
-if (import.meta.server) {
-  // Only runs on server
-  const secrets = useRuntimeConfig().apiSecret
-}
+  if (import.meta.server) {
+    // Only runs on server
+    const secrets = useRuntimeConfig().apiSecret
+  }
 </script>
 ```
 
@@ -210,8 +212,8 @@ if (import.meta.server) {
 ```vue
 <!-- components/ServerData.server.vue -->
 <script setup>
-// This entire component only runs on server
-const data = await fetchSensitiveData()
+  // This entire component only runs on server
+  const data = await fetchSensitiveData()
 </script>
 
 <template>
@@ -225,8 +227,8 @@ const data = await fetchSensitiveData()
 
 ```vue
 <script setup>
-await someAsyncOperation()
-const route = useRoute() // May fail - context lost after await
+  await someAsyncOperation()
+  const route = useRoute() // May fail - context lost after await
 </script>
 ```
 
@@ -234,12 +236,12 @@ const route = useRoute() // May fail - context lost after await
 
 ```vue
 <script setup>
-// Get all composables before any await
-const route = useRoute()
-const config = useRuntimeConfig()
+  // Get all composables before any await
+  const route = useRoute()
+  const config = useRuntimeConfig()
 
-await someAsyncOperation()
-// Now safe to use route and config
+  await someAsyncOperation()
+  // Now safe to use route and config
 </script>
 ```
 
@@ -282,8 +284,8 @@ export default defineNuxtPlugin(() => {
 
 ```vue
 <script setup>
-const { $api } = useNuxtApp()
-const data = await $api.get('/users')
+  const { $api } = useNuxtApp()
+  const data = await $api.get('/users')
 </script>
 ```
 
@@ -293,7 +295,7 @@ const data = await $api.get('/users')
 
 ```vue
 <script setup>
-import SomeLibrary from 'browser-only-lib' // Breaks SSR
+  import SomeLibrary from 'browser-only-lib' // Breaks SSR
 </script>
 ```
 
@@ -301,12 +303,12 @@ import SomeLibrary from 'browser-only-lib' // Breaks SSR
 
 ```vue
 <script setup>
-let library: typeof import('browser-only-lib')
+  let library: typeof import('browser-only-lib')
 
-onMounted(async () => {
-  library = await import('browser-only-lib')
-  library.init()
-})
+  onMounted(async () => {
+    library = await import('browser-only-lib')
+    library.init()
+  })
 </script>
 ```
 
@@ -329,8 +331,8 @@ onMounted(async () => {
 
 ```vue
 <script setup>
-console.log('Server:', import.meta.server)
-console.log('Client:', import.meta.client)
+  console.log('Server:', import.meta.server)
+  console.log('Client:', import.meta.client)
 </script>
 ```
 
@@ -340,14 +342,14 @@ DevTools shows payload data and hydration state.
 
 ### Common Error Messages
 
-| Error | Cause |
-|-------|-------|
+| Error                       | Cause                                   |
+| --------------------------- | --------------------------------------- |
 | "Nuxt instance unavailable" | Composable called outside setup context |
-| "Hydration mismatch" | Server/client HTML differs |
-| "window is not defined" | Browser API used during SSR |
-| "document is not defined" | DOM access during SSR |
+| "Hydration mismatch"        | Server/client HTML differs              |
+| "window is not defined"     | Browser API used during SSR             |
+| "document is not defined"   | DOM access during SSR                   |
 
-<!-- 
+<!--
 Source references:
 - https://nuxt.com/docs/guide/concepts/auto-imports#vue-and-nuxt-composables
 - https://nuxt.com/docs/guide/best-practices/hydration

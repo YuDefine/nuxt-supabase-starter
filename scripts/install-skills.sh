@@ -10,13 +10,12 @@ echo ""
 
 # Antfu Skills
 echo "📦 安裝 Antfu Skills..."
-npx skills add antfu/skills@vue -y
-npx skills add antfu/skills@vueuse-functions -y
 npx skills add https://github.com/antfu/skills --skill nuxt --agent claude-code -y
-npx skills add antfu/skills@pinia -y
-npx skills add antfu/skills@vitepress -y
-npx skills add antfu/skills@vitest -y
-npx skills add antfu/skills@vue-best-practices -y
+npx skills add https://github.com/antfu/skills --skill vue --agent claude-code -y
+npx skills add https://github.com/antfu/skills --skill vueuse-functions --agent claude-code -y
+npx skills add https://github.com/antfu/skills --skill vitest --agent claude-code -y
+npx skills add https://github.com/antfu/skills --skill vue-best-practices --agent claude-code -y
+npx skills add https://github.com/antfu/skills --skill vitepress --agent claude-code -y
 echo "  ✓ Antfu Skills 安裝完成"
 echo ""
 

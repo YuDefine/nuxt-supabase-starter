@@ -29,11 +29,7 @@ Optimized link component with prefetching:
   <NuxtLink to="/page" replace>Replace</NuxtLink>
 
   <!-- Custom active class -->
-  <NuxtLink
-    to="/dashboard"
-    active-class="text-primary"
-    exact-active-class="font-bold"
-  >
+  <NuxtLink to="/dashboard" active-class="text-primary" exact-active-class="font-bold">
     Dashboard
   </NuxtLink>
 </template>
@@ -91,7 +87,7 @@ Dynamic layout:
 </template>
 
 <script setup>
-const layout = computed(() => isAdmin ? 'admin' : 'default')
+  const layout = computed(() => (isAdmin ? 'admin' : 'default'))
 </script>
 ```
 
@@ -143,9 +139,9 @@ Catch and handle errors in child components:
 </template>
 
 <script setup>
-function handleError(error) {
-  console.error('Error caught:', error)
-}
+  function handleError(error) {
+    console.error('Error caught:', error)
+  }
 </script>
 ```
 
@@ -205,10 +201,7 @@ Optimized images (requires `@nuxt/image` module):
   />
 
   <!-- Art direction with picture -->
-  <NuxtPicture
-    src="/images/hero.jpg"
-    :img-attrs="{ alt: 'Hero image' }"
-  />
+  <NuxtPicture src="/images/hero.jpg" :img-attrs="{ alt: 'Hero image' }" />
 </template>
 ```
 
@@ -255,7 +248,7 @@ Accessibility: announces page changes to screen readers:
 </template>
 ```
 
-<!-- 
+<!--
 Source references:
 - https://nuxt.com/docs/api/components/nuxt-link
 - https://nuxt.com/docs/api/components/nuxt-page

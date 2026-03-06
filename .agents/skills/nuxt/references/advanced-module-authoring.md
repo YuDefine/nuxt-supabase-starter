@@ -466,10 +466,7 @@ export default defineNuxtModule({
     const entrypoint = await resolvePath('@some/package')
 
     // Find first existing file
-    const configPath = await findPath([
-      resolve('./config.ts'),
-      resolve('./config.js'),
-    ])
+    const configPath = await findPath([resolve('./config.ts'), resolve('./config.js')])
   },
 })
 ```
