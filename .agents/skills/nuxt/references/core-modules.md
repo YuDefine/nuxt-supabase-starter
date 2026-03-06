@@ -284,7 +284,7 @@ export default defineNuxtModule({
 })
 ```
 
-<!-- 
+<!--
 Source references:
 - https://nuxt.com/docs/guide/modules
 - https://nuxt.com/docs/guide/modules/module-anatomy

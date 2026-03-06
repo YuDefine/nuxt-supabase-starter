@@ -213,7 +213,7 @@ export default defineEventHandler((event) => {
     async start(controller) {
       for (let i = 0; i < 10; i++) {
         controller.enqueue(`data: ${JSON.stringify({ count: i })}\n\n`)
-        await new Promise(r => setTimeout(r, 1000))
+        await new Promise((r) => setTimeout(r, 1000))
       }
       controller.close()
     },
@@ -257,7 +257,7 @@ export default defineNuxtConfig({
 })
 ```
 
-<!-- 
+<!--
 Source references:
 - https://nuxt.com/docs/getting-started/server
 - https://nuxt.com/docs/directory-structure/server
