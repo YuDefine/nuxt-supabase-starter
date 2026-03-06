@@ -52,6 +52,6 @@ export declare function useThrottleFn<T extends FunctionArgs>(
   ms?: MaybeRefOrGetter<number>,
   trailing?: boolean,
   leading?: boolean,
-  rejectOnCancel?: boolean,
+  rejectOnCancel?: boolean
 ): PromisifyFn<T>
 ```

@@ -80,25 +80,28 @@ This behavior prevents UI flicker for fast async operations, but can confuse use
 
 ## Timeout Behavior Summary
 
-| Timeout Value | Behavior |
-|---------------|----------|
-| Not specified | Previous content shown until new content resolves (no fallback on revert) |
-| `timeout="0"` | Fallback shown immediately when entering pending state |
-| `timeout="200"` | Wait 200ms, then show fallback if still pending |
+| Timeout Value   | Behavior                                                                  |
+| --------------- | ------------------------------------------------------------------------- |
+| Not specified   | Previous content shown until new content resolves (no fallback on revert) |
+| `timeout="0"`   | Fallback shown immediately when entering pending state                    |
+| `timeout="200"` | Wait 200ms, then show fallback if still pending                           |
 
 ## When to Use Each Approach
 
 **No timeout (default)**:
+
 - When async operations are typically fast (<100ms)
 - When showing stale content is acceptable during loading
 - To prevent flicker on quick navigation
 
 **timeout="0"**:
+
 - When you always want to show loading feedback
 - For operations that typically take noticeable time
 - When stale content would be confusing
 
 **timeout with delay (e.g., 200ms)**:
+
 - Best of both worlds for most cases
 - Avoids flicker for fast loads
 - Still shows loading for slower operations

@@ -12,8 +12,8 @@ Relying heavily on experimental features in production code creates maintenance 
 
 ```vue
 <script setup>
-// Building critical application infrastructure on experimental API
-// without fallback strategy
+  // Building critical application infrastructure on experimental API
+  // without fallback strategy
 </script>
 
 <template>
@@ -31,13 +31,13 @@ Relying heavily on experimental features in production code creates maintenance 
 
 ```vue
 <script setup>
-import { ref } from 'vue'
+  import { ref } from 'vue'
 
-// Prepare fallback loading strategy
-const isLoading = ref(false)
+  // Prepare fallback loading strategy
+  const isLoading = ref(false)
 
-// Can toggle between Suspense and manual loading if needed
-const useSuspense = true
+  // Can toggle between Suspense and manual loading if needed
+  const useSuspense = true
 </script>
 
 <template>

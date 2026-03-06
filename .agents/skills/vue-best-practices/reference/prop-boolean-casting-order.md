@@ -20,63 +20,70 @@ Vue applies special boolean casting rules, but String appearing before Boolean d
 - [ ] Document the expected usage if both String and Boolean are intentional
 
 **Incorrect:**
+
 ```vue
 <script setup>
-// WRONG: String before Boolean disables boolean casting
-defineProps({
-  disabled: [String, Boolean]  // disabled="" is parsed as empty string ""
-})
+  // WRONG: String before Boolean disables boolean casting
+  defineProps({
+    disabled: [String, Boolean], // disabled="" is parsed as empty string ""
+  })
 </script>
 
 <!-- In parent template -->
-<MyComponent disabled />  <!-- props.disabled === "" (empty string, not true!) -->
+<MyComponent disabled />
+<!-- props.disabled === "" (empty string, not true!) -->
 ```
 
 ```vue
 <script setup>
-defineProps({
-  // PROBLEMATIC: Order matters and may cause confusion
-  loading: [String, Boolean],  // <Component loading /> gives ""
-  active: [Boolean, String]    // <Component active /> gives true
-})
+  defineProps({
+    // PROBLEMATIC: Order matters and may cause confusion
+    loading: [String, Boolean], // <Component loading /> gives ""
+    active: [Boolean, String], // <Component active /> gives true
+  })
 </script>
 ```
 
 **Correct:**
+
 ```vue
 <script setup>
-// CORRECT: Boolean before String enables boolean casting
-defineProps({
-  disabled: [Boolean, String]  // <Component disabled /> parsed as true
-})
+  // CORRECT: Boolean before String enables boolean casting
+  defineProps({
+    disabled: [Boolean, String], // <Component disabled /> parsed as true
+  })
 </script>
 
 <!-- All of these work as expected -->
-<MyComponent disabled />           <!-- props.disabled === true -->
-<MyComponent :disabled="true" />   <!-- props.disabled === true -->
-<MyComponent :disabled="false" />  <!-- props.disabled === false -->
-<MyComponent disabled="custom" />  <!-- props.disabled === "custom" -->
+<MyComponent disabled />
+<!-- props.disabled === true -->
+<MyComponent :disabled="true" />
+<!-- props.disabled === true -->
+<MyComponent :disabled="false" />
+<!-- props.disabled === false -->
+<MyComponent disabled="custom" />
+<!-- props.disabled === "custom" -->
 ```
 
 ```vue
 <script setup>
-// BEST: Use only Boolean if you don't need String values
-defineProps({
-  disabled: Boolean  // Clear intent, no ambiguity
-})
+  // BEST: Use only Boolean if you don't need String values
+  defineProps({
+    disabled: Boolean, // Clear intent, no ambiguity
+  })
 </script>
 ```
 
 ## Boolean Casting Rules
 
-| Prop Declaration | Template Usage | Resulting Value |
-|-----------------|----------------|-----------------|
-| `Boolean` | `<C disabled />` | `true` |
-| `Boolean` | `<C />` (absent) | `false` |
-| `[Boolean, String]` | `<C disabled />` | `true` |
+| Prop Declaration    | Template Usage   | Resulting Value     |
+| ------------------- | ---------------- | ------------------- |
+| `Boolean`           | `<C disabled />` | `true`              |
+| `Boolean`           | `<C />` (absent) | `false`             |
+| `[Boolean, String]` | `<C disabled />` | `true`              |
 | `[String, Boolean]` | `<C disabled />` | `""` (empty string) |
-| `[Boolean, Number]` | `<C disabled />` | `true` |
-| `[Number, Boolean]` | `<C disabled />` | `true` |
+| `[Boolean, Number]` | `<C disabled />` | `true`              |
+| `[Number, Boolean]` | `<C disabled />` | `true`              |
 
 Note: The String type is special - it's the only type that overrides Boolean casting when placed first.
 
@@ -84,21 +91,25 @@ Note: The String type is special - it's the only type that overrides Boolean cas
 
 ```vue
 <script setup>
-// Use case: Prop can be a boolean toggle OR a string configuration
-defineProps({
-  // Animation can be true/false OR a timing string like "fast", "slow"
-  animate: {
-    type: [Boolean, String],  // Boolean first for casting
-    default: false
-  }
-})
+  // Use case: Prop can be a boolean toggle OR a string configuration
+  defineProps({
+    // Animation can be true/false OR a timing string like "fast", "slow"
+    animate: {
+      type: [Boolean, String], // Boolean first for casting
+      default: false,
+    },
+  })
 </script>
 
 <!-- Usage examples -->
-<Dialog animate />                <!-- true - use default animation -->
-<Dialog :animate="false" />       <!-- false - no animation -->
-<Dialog animate="slow" />         <!-- "slow" - custom timing -->
+<Dialog animate />
+<!-- true - use default animation -->
+<Dialog :animate="false" />
+<!-- false - no animation -->
+<Dialog animate="slow" />
+<!-- "slow" - custom timing -->
 ```
 
 ## Reference
+
 - [Vue.js Props - Boolean Casting](https://vuejs.org/guide/components/props.html#boolean-casting)

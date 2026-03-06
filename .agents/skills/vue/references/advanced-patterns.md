@@ -17,25 +17,27 @@ Animate enter/leave of a single element or component.
 </template>
 
 <style>
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-.fade-enter-from, .fade-leave-to {
-  opacity: 0;
-}
+  .fade-enter-active,
+  .fade-leave-active {
+    transition: opacity 0.3s ease;
+  }
+  .fade-enter-from,
+  .fade-leave-to {
+    opacity: 0;
+  }
 </style>
 ```
 
 ### CSS Classes
 
-| Class | When |
-|-------|------|
-| `{name}-enter-from` | Start state for enter |
+| Class                 | When                                          |
+| --------------------- | --------------------------------------------- |
+| `{name}-enter-from`   | Start state for enter                         |
 | `{name}-enter-active` | Active state for enter (add transitions here) |
-| `{name}-enter-to` | End state for enter |
-| `{name}-leave-from` | Start state for leave |
-| `{name}-leave-active` | Active state for leave |
-| `{name}-leave-to` | End state for leave |
+| `{name}-enter-to`     | End state for enter                           |
+| `{name}-leave-from`   | Start state for leave                         |
+| `{name}-leave-active` | Active state for leave                        |
+| `{name}-leave-to`     | End state for leave                           |
 
 ### Transition Modes
 
@@ -60,10 +62,10 @@ Animate enter/leave of a single element or component.
 </Transition>
 
 <script setup lang="ts">
-function onEnter(el: Element, done: () => void) {
-  // Animate with JS library
-  gsap.to(el, { opacity: 1, onComplete: done })
-}
+  function onEnter(el: Element, done: () => void) {
+    // Animate with JS library
+    gsap.to(el, { opacity: 1, onComplete: done })
+  }
 </script>
 ```
 
@@ -89,17 +91,19 @@ Animate list items. Each child must have a unique `key`.
 </template>
 
 <style>
-.list-enter-active, .list-leave-active {
-  transition: all 0.3s ease;
-}
-.list-enter-from, .list-leave-to {
-  opacity: 0;
-  transform: translateX(30px);
-}
-/* Move animation for reordering */
-.list-move {
-  transition: transform 0.3s ease;
-}
+  .list-enter-active,
+  .list-leave-active {
+    transition: all 0.3s ease;
+  }
+  .list-enter-from,
+  .list-leave-to {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  /* Move animation for reordering */
+  .list-move {
+    transition: transform 0.3s ease;
+  }
 </style>
 ```
 
@@ -110,11 +114,9 @@ Render content to a different DOM location.
 ```vue
 <template>
   <button @click="open = true">Open Modal</button>
-  
+
   <Teleport to="body">
-    <div v-if="open" class="modal">
-      Modal content rendered at body
-    </div>
+    <div v-if="open" class="modal">Modal content rendered at body</div>
   </Teleport>
 </template>
 ```
@@ -155,6 +157,7 @@ Handle async dependencies with loading states. **Experimental feature.**
 ### Async Dependencies
 
 Suspense waits for:
+
 - Components with `async setup()`
 - Components using top-level `await` in `<script setup>`
 - Async components created with `defineAsyncComponent`
@@ -162,18 +165,14 @@ Suspense waits for:
 ```vue
 <!-- AsyncComponent.vue -->
 <script setup lang="ts">
-const data = await fetch('/api/data').then(r => r.json())
+  const data = await fetch('/api/data').then((r) => r.json())
 </script>
 ```
 
 ### Events
 
 ```vue
-<Suspense
-  @pending="onPending"
-  @resolve="onResolve"
-  @fallback="onFallback"
->
+<Suspense @pending="onPending" @resolve="onResolve" @fallback="onFallback">
   ...
 </Suspense>
 ```
@@ -235,6 +234,7 @@ Skip re-renders when dependencies unchanged. Use for performance optimization.
 ```
 
 Equivalent to `v-once` when empty:
+
 ```vue
 <div v-memo="[]">Never updates</div>
 ```
@@ -254,7 +254,7 @@ Create reusable DOM manipulations.
 ```ts
 // Directive definition
 const vFocus: Directive<HTMLElement> = {
-  mounted: (el) => el.focus()
+  mounted: (el) => el.focus(),
 }
 
 // Full hooks
@@ -269,7 +269,7 @@ const vColor: Directive<HTMLElement, string> = {
     el.style.color = binding.value
   },
   beforeUnmount(el, binding) {},
-  unmounted(el, binding) {}
+  unmounted(el, binding) {},
 }
 ```
 
@@ -298,7 +298,7 @@ const vColor: Directive<HTMLElement, string> = {
 ```ts
 // main.ts
 app.directive('focus', {
-  mounted: (el) => el.focus()
+  mounted: (el) => el.focus(),
 })
 ```
 

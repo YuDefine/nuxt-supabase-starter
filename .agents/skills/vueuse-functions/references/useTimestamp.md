@@ -26,12 +26,8 @@ const { timestamp, pause, resume } = useTimestamp({ controls: true })
 <template>
   <UseTimestamp v-slot="{ timestamp, pause, resume }">
     Current Time: {{ timestamp }}
-    <button @click="pause()">
-      Pause
-    </button>
-    <button @click="resume()">
-      Resume
-    </button>
+    <button @click="pause()">Pause</button>
+    <button @click="resume()">Resume</button>
   </UseTimestamp>
 </template>
 ```
@@ -63,7 +59,7 @@ export interface UseTimestampOptions<Controls extends boolean> {
    *
    * @default requestAnimationFrame
    */
-  interval?: "requestAnimationFrame" | number
+  interval?: 'requestAnimationFrame' | number
   /**
    * Callback on each update
    */
@@ -75,9 +71,7 @@ export interface UseTimestampOptions<Controls extends boolean> {
  * @see https://vueuse.org/useTimestamp
  * @param options
  */
-export declare function useTimestamp(
-  options?: UseTimestampOptions<false>,
-): ShallowRef<number>
+export declare function useTimestamp(options?: UseTimestampOptions<false>): ShallowRef<number>
 export declare function useTimestamp(options: UseTimestampOptions<true>): {
   timestamp: ShallowRef<number>
 } & Pausable

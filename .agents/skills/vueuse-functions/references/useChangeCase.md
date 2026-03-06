@@ -69,11 +69,11 @@ export type ChangeCaseType = ChangeCaseKeys[keyof ChangeCaseKeys]
 export declare function useChangeCase(
   input: MaybeRef<string>,
   type: MaybeRefOrGetter<ChangeCaseType>,
-  options?: MaybeRefOrGetter<Options> | undefined,
+  options?: MaybeRefOrGetter<Options> | undefined
 ): WritableComputedRef<string>
 export declare function useChangeCase(
   input: MaybeRefOrGetter<string>,
   type: MaybeRefOrGetter<ChangeCaseType>,
-  options?: MaybeRefOrGetter<Options> | undefined,
+  options?: MaybeRefOrGetter<Options> | undefined
 ): ComputedRef<string>
 ```

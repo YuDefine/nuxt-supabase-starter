@@ -20,8 +20,8 @@ const count = useObservable(
   interval(1000).pipe(
     mapTo(1),
     startWith(0),
-    scan((total, next) => next + total),
-  ),
+    scan((total, next) => next + total)
+  )
 )
 ```
 
@@ -36,17 +36,16 @@ import { map } from 'rxjs/operators'
 const count = useObservable(
   interval(1000).pipe(
     map((n) => {
-      if (n === 10)
-        throw new Error('oops')
+      if (n === 10) throw new Error('oops')
 
       return n + n
-    }),
+    })
   ),
   {
     onError: (err) => {
       console.log(err.message) // "oops"
     },
-  },
+  }
 )
 ```
 
@@ -62,6 +61,6 @@ export interface UseObservableOptions<I> {
 }
 export declare function useObservable<H, I = undefined>(
   observable: Observable<H>,
-  options?: UseObservableOptions<I | undefined>,
+  options?: UseObservableOptions<I | undefined>
 ): Readonly<Ref<H | I>>
 ```

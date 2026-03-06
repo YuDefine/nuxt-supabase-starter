@@ -30,6 +30,7 @@ tags: [vue3, keepalive, memory-leak, performance, cache, max-prop]
 ```
 
 When users navigate through many different components, each instance stays in memory:
+
 - Chrome memory grows continuously
 - VueComponent count keeps increasing
 - App becomes sluggish or crashes
@@ -46,6 +47,7 @@ When users navigate through many different components, each instance stays in me
 ```
 
 **How `max` works:**
+
 - KeepAlive uses an LRU (Least Recently Used) cache algorithm
 - When cache exceeds `max`, the oldest unused component is destroyed
 - This caps memory usage to a predictable maximum
@@ -74,37 +76,37 @@ Even with `max`, cached components hold resources. Clean up when deactivated:
 
 ```vue
 <script setup>
-import { ref, onActivated, onDeactivated, onUnmounted } from 'vue'
+  import { ref, onActivated, onDeactivated, onUnmounted } from 'vue'
 
-const chartInstance = ref(null)
-const websocket = ref(null)
-const intervalId = ref(null)
+  const chartInstance = ref(null)
+  const websocket = ref(null)
+  const intervalId = ref(null)
 
-onActivated(() => {
-  // Resume or recreate resources
-  websocket.value = new WebSocket('...')
-  intervalId.value = setInterval(fetchData, 5000)
-})
+  onActivated(() => {
+    // Resume or recreate resources
+    websocket.value = new WebSocket('...')
+    intervalId.value = setInterval(fetchData, 5000)
+  })
 
-onDeactivated(() => {
-  // IMPORTANT: Clean up to reduce memory footprint while cached
-  chartInstance.value?.destroy()
-  chartInstance.value = null
+  onDeactivated(() => {
+    // IMPORTANT: Clean up to reduce memory footprint while cached
+    chartInstance.value?.destroy()
+    chartInstance.value = null
 
-  websocket.value?.close()
-  websocket.value = null
+    websocket.value?.close()
+    websocket.value = null
 
-  clearInterval(intervalId.value)
-  intervalId.value = null
-})
+    clearInterval(intervalId.value)
+    intervalId.value = null
+  })
 
-// Final cleanup when truly destroyed
-onUnmounted(() => {
-  // Same cleanup for when component is evicted from cache
-  chartInstance.value?.destroy()
-  websocket.value?.close()
-  clearInterval(intervalId.value)
-})
+  // Final cleanup when truly destroyed
+  onUnmounted(() => {
+    // Same cleanup for when component is evicted from cache
+    chartInstance.value?.destroy()
+    websocket.value?.close()
+    clearInterval(intervalId.value)
+  })
 </script>
 ```
 
@@ -114,26 +116,26 @@ Libraries that manipulate the DOM outside Vue need explicit cleanup:
 
 ```vue
 <script setup>
-import { ref, onMounted, onDeactivated, onUnmounted } from 'vue'
+  import { ref, onMounted, onDeactivated, onUnmounted } from 'vue'
 
-const mapContainer = ref(null)
-let mapInstance = null
+  const mapContainer = ref(null)
+  let mapInstance = null
 
-onMounted(() => {
-  mapInstance = new MapLibrary(mapContainer.value)
-})
+  onMounted(() => {
+    mapInstance = new MapLibrary(mapContainer.value)
+  })
 
-onDeactivated(() => {
-  // Some map libraries hold significant memory
-  // Destroy and recreate on reactivation if needed
-  mapInstance?.remove()
-  mapInstance = null
-})
+  onDeactivated(() => {
+    // Some map libraries hold significant memory
+    // Destroy and recreate on reactivation if needed
+    mapInstance?.remove()
+    mapInstance = null
+  })
 
-onUnmounted(() => {
-  mapInstance?.remove()
-  mapInstance = null
-})
+  onUnmounted(() => {
+    mapInstance?.remove()
+    mapInstance = null
+  })
 </script>
 ```
 
@@ -143,7 +145,7 @@ Some components should NOT be cached:
 
 ```vue
 <script setup>
-const heavyComponents = ['VideoPlayer', 'LargeDataGrid', 'MapView']
+  const heavyComponents = ['VideoPlayer', 'LargeDataGrid', 'MapView']
 </script>
 
 <template>
@@ -158,17 +160,17 @@ const heavyComponents = ['VideoPlayer', 'LargeDataGrid', 'MapView']
 
 ```vue
 <script setup>
-import { onActivated, onDeactivated } from 'vue'
+  import { onActivated, onDeactivated } from 'vue'
 
-if (import.meta.env.DEV) {
-  onActivated(() => {
-    console.log('Activated - Memory:', performance.memory?.usedJSHeapSize)
-  })
+  if (import.meta.env.DEV) {
+    onActivated(() => {
+      console.log('Activated - Memory:', performance.memory?.usedJSHeapSize)
+    })
 
-  onDeactivated(() => {
-    console.log('Deactivated - Memory:', performance.memory?.usedJSHeapSize)
-  })
-}
+    onDeactivated(() => {
+      console.log('Deactivated - Memory:', performance.memory?.usedJSHeapSize)
+    })
+  }
 </script>
 ```
 
@@ -181,6 +183,7 @@ if (import.meta.env.DEV) {
 5. **Monitor in development** - Watch for growing memory usage
 
 ## Reference
+
 - [Vue.js KeepAlive - Max Cached Instances](https://vuejs.org/guide/built-ins/keep-alive.html#max-cached-instances)
 - [Vue.js Avoiding Memory Leaks](https://v2.vuejs.org/v2/cookbook/avoiding-memory-leaks.html)
 - [GitHub Issue: Memory leak with keep-alive](https://github.com/vuejs/vue/issues/6759)

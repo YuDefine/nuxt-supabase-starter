@@ -12,9 +12,9 @@ This is a common source of confusion. Developers expect Suspense to show the fal
 
 ```vue
 <script setup>
-import { ref } from 'vue'
+  import { ref } from 'vue'
 
-const activeTab = ref('dashboard')
+  const activeTab = ref('dashboard')
 </script>
 
 <template>
@@ -28,7 +28,8 @@ const activeTab = ref('dashboard')
     </TabContainer>
 
     <template #fallback>
-      Loading... <!-- Only shows on initial load -->
+      Loading...
+      <!-- Only shows on initial load -->
     </template>
   </Suspense>
 </template>
@@ -40,15 +41,15 @@ const activeTab = ref('dashboard')
 
 ```vue
 <script setup>
-import { ref, defineAsyncComponent } from 'vue'
+  import { ref, defineAsyncComponent } from 'vue'
 
-const activeTab = ref('dashboard')
+  const activeTab = ref('dashboard')
 
-const tabs = {
-  dashboard: defineAsyncComponent(() => import('./Dashboard.vue')),
-  settings: defineAsyncComponent(() => import('./Settings.vue')),
-  profile: defineAsyncComponent(() => import('./Profile.vue'))
-}
+  const tabs = {
+    dashboard: defineAsyncComponent(() => import('./Dashboard.vue')),
+    settings: defineAsyncComponent(() => import('./Settings.vue')),
+    profile: defineAsyncComponent(() => import('./Profile.vue')),
+  }
 </script>
 
 <template>
@@ -56,9 +57,7 @@ const tabs = {
     <!-- Key change forces root replacement, triggering Suspense -->
     <component :is="tabs[activeTab]" :key="activeTab" />
 
-    <template #fallback>
-      Loading...
-    </template>
+    <template #fallback> Loading... </template>
   </Suspense>
 </template>
 ```
@@ -92,36 +91,28 @@ const tabs = {
 
 ```vue
 <script setup>
-import { ref, watch } from 'vue'
+  import { ref, watch } from 'vue'
 
-const activeTab = ref('dashboard')
-const isTabLoading = ref(false)
+  const activeTab = ref('dashboard')
+  const isTabLoading = ref(false)
 
-watch(activeTab, () => {
-  isTabLoading.value = true
-})
+  watch(activeTab, () => {
+    isTabLoading.value = true
+  })
 
-const onTabLoaded = () => {
-  isTabLoading.value = false
-}
+  const onTabLoaded = () => {
+    isTabLoading.value = false
+  }
 </script>
 
 <template>
   <Suspense>
     <TabContainer>
-      <div v-if="isTabLoading" class="tab-loading">
-        Loading tab...
-      </div>
-      <AsyncTab
-        v-else
-        :tab="activeTab"
-        @vue:mounted="onTabLoaded"
-      />
+      <div v-if="isTabLoading" class="tab-loading">Loading tab...</div>
+      <AsyncTab v-else :tab="activeTab" @vue:mounted="onTabLoaded" />
     </TabContainer>
 
-    <template #fallback>
-      Initial loading...
-    </template>
+    <template #fallback> Initial loading... </template>
   </Suspense>
 </template>
 ```

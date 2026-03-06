@@ -10,11 +10,11 @@ Reactive [bounding box](https://developer.mozilla.org/en-US/docs/Web/API/Element
 
 ```vue
 <script setup lang="ts">
-import { useElementBounding } from '@vueuse/core'
-import { useTemplateRef } from 'vue'
+  import { useElementBounding } from '@vueuse/core'
+  import { useTemplateRef } from 'vue'
 
-const el = useTemplateRef('el')
-const { x, y, top, right, bottom, left, width, height } = useElementBounding(el)
+  const el = useTemplateRef('el')
+  const { x, y, top, right, bottom, left, width, height } = useElementBounding(el)
 </script>
 
 <template>
@@ -36,30 +36,30 @@ const { x, y, top, right, bottom, left, width, height } = useElementBounding(el)
 
 ```vue
 <script setup lang="ts">
-import { vElementBounding } from '@vueuse/components'
+  import { vElementBounding } from '@vueuse/components'
 
-interface BoundingType {
-  height: number
-  bottom: number
-  left: number
-  right: number
-  top: number
-  width: number
-  x: number
-  y: number
-}
+  interface BoundingType {
+    height: number
+    bottom: number
+    left: number
+    right: number
+    top: number
+    width: number
+    x: number
+    y: number
+  }
 
-function onBounding({ height, bottom, left, right, top, width, x, y }: BoundingType) {
-  console.log(height, bottom, left, right, top, width, x, y)
-}
+  function onBounding({ height, bottom, left, right, top, width, x, y }: BoundingType) {
+    console.log(height, bottom, left, right, top, width, x, y)
+  }
 
-const options = {
-  reset: true,
-  windowResize: true,
-  windowScroll: true,
-  immediate: true,
-  updateTiming: 'sync',
-}
+  const options = {
+    reset: true,
+    windowResize: true,
+    windowScroll: true,
+    immediate: true,
+    updateTiming: 'sync',
+  }
 </script>
 
 <template>
@@ -105,7 +105,7 @@ export interface UseElementBoundingOptions {
    *
    * @default 'sync'
    */
-  updateTiming?: "sync" | "next-frame"
+  updateTiming?: 'sync' | 'next-frame'
 }
 /**
  * Reactive bounding box of an HTML element.
@@ -115,7 +115,7 @@ export interface UseElementBoundingOptions {
  */
 export declare function useElementBounding(
   target: MaybeComputedElementRef,
-  options?: UseElementBoundingOptions,
+  options?: UseElementBoundingOptions
 ): {
   height: ShallowRef<number, number>
   bottom: ShallowRef<number, number>

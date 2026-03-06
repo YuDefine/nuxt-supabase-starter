@@ -18,7 +18,7 @@ useScriptTag(
   // on script tag loaded.
   (el: HTMLScriptElement) => {
     // do something
-  },
+  }
 )
 ```
 
@@ -36,7 +36,7 @@ const { scriptTag, load, unload } = useScriptTag(
   () => {
     // do something
   },
-  { manual: true },
+  { manual: true }
 )
 
 // manual controls
@@ -72,16 +72,16 @@ export interface UseScriptTagOptions extends ConfigurableDocument {
    * @default false
    */
   manual?: boolean
-  crossOrigin?: "anonymous" | "use-credentials"
+  crossOrigin?: 'anonymous' | 'use-credentials'
   referrerPolicy?:
-    | "no-referrer"
-    | "no-referrer-when-downgrade"
-    | "origin"
-    | "origin-when-cross-origin"
-    | "same-origin"
-    | "strict-origin"
-    | "strict-origin-when-cross-origin"
-    | "unsafe-url"
+    | 'no-referrer'
+    | 'no-referrer-when-downgrade'
+    | 'origin'
+    | 'origin-when-cross-origin'
+    | 'same-origin'
+    | 'strict-origin'
+    | 'strict-origin-when-cross-origin'
+    | 'unsafe-url'
   noModule?: boolean
   defer?: boolean
   /**
@@ -106,7 +106,7 @@ export interface UseScriptTagOptions extends ConfigurableDocument {
 export declare function useScriptTag(
   src: MaybeRefOrGetter<string>,
   onLoaded?: (el: HTMLScriptElement) => void,
-  options?: UseScriptTagOptions,
+  options?: UseScriptTagOptions
 ): {
   scriptTag: ShallowRef<HTMLScriptElement | null, HTMLScriptElement | null>
   load: (waitForScriptLoad?: boolean) => Promise<HTMLScriptElement | boolean>

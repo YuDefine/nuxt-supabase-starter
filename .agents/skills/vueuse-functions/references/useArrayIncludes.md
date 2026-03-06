@@ -29,7 +29,7 @@ export type UseArrayIncludesComparatorFn<T, V> = (
   element: T,
   value: V,
   index: number,
-  array: MaybeRefOrGetter<T>[],
+  array: MaybeRefOrGetter<T>[]
 ) => boolean
 export interface UseArrayIncludesOptions<T, V> {
   fromIndex?: number
@@ -48,16 +48,16 @@ export type UseArrayIncludesReturn = ComputedRef<boolean>
 export declare function useArrayIncludes<T, V = any>(
   list: MaybeRefOrGetter<MaybeRefOrGetter<T>[]>,
   value: MaybeRefOrGetter<V>,
-  comparator?: UseArrayIncludesComparatorFn<T, V>,
+  comparator?: UseArrayIncludesComparatorFn<T, V>
 ): UseArrayIncludesReturn
 export declare function useArrayIncludes<T, V = any>(
   list: MaybeRefOrGetter<MaybeRefOrGetter<T>[]>,
   value: MaybeRefOrGetter<V>,
-  comparator?: keyof T,
+  comparator?: keyof T
 ): UseArrayIncludesReturn
 export declare function useArrayIncludes<T, V = any>(
   list: MaybeRefOrGetter<MaybeRefOrGetter<T>[]>,
   value: MaybeRefOrGetter<V>,
-  options?: UseArrayIncludesOptions<T, V>,
+  options?: UseArrayIncludesOptions<T, V>
 ): UseArrayIncludesReturn
 ```

@@ -34,7 +34,7 @@ useIpcRendererOn('custom-event', (event, ...args) => {
 export declare function useIpcRendererOn(
   ipcRenderer: IpcRenderer,
   channel: string,
-  listener: IpcRendererListener,
+  listener: IpcRendererListener
 ): IpcRenderer
 /**
  * Listens to channel, when a new message arrives listener would be called with listener(event, args...).
@@ -47,6 +47,6 @@ export declare function useIpcRendererOn(
  */
 export declare function useIpcRendererOn(
   channel: string,
-  listener: IpcRendererListener,
+  listener: IpcRendererListener
 ): IpcRenderer
 ```

@@ -18,6 +18,7 @@ tags: [vue3, slots, fallback-content, component-design, reusability]
 - [ ] Document which slots have fallbacks and what they display
 
 **Without Fallback (fragile):**
+
 ```vue
 <!-- SubmitButton.vue -->
 <template>
@@ -35,6 +36,7 @@ tags: [vue3, slots, fallback-content, component-design, reusability]
 ```
 
 **With Fallback (resilient):**
+
 ```vue
 <!-- SubmitButton.vue -->
 <template>
@@ -91,11 +93,7 @@ Fallback content can include multiple elements and logic:
   <div class="avatar-container">
     <slot name="image">
       <!-- Complex fallback with conditional logic -->
-      <img
-        v-if="user?.avatar"
-        :src="user.avatar"
-        :alt="user.name"
-      />
+      <img v-if="user?.avatar" :src="user.avatar" :alt="user.name" />
       <div v-else class="avatar-placeholder">
         {{ initials }}
       </div>
@@ -104,32 +102,33 @@ Fallback content can include multiple elements and logic:
 </template>
 
 <script setup>
-import { computed } from 'vue'
+  import { computed } from 'vue'
 
-const props = defineProps({
-  user: Object
-})
+  const props = defineProps({
+    user: Object,
+  })
 
-const initials = computed(() => {
-  if (!props.user?.name) return '?'
-  return props.user.name
-    .split(' ')
-    .map(n => n[0])
-    .join('')
-    .toUpperCase()
-})
+  const initials = computed(() => {
+    if (!props.user?.name) return '?'
+    return props.user.name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+  })
 </script>
 ```
 
 ## When to Use Fallbacks
 
-| Slot Purpose | Fallback Recommended? | Example |
-|--------------|----------------------|---------|
-| Button text | Yes | "Submit", "Click here" |
-| Icon slot | Yes | Default icon component |
-| Modal title | Yes | "Dialog" |
-| Required content area | No | Main content slot |
-| Customization only | Optional | Action buttons slot |
+| Slot Purpose          | Fallback Recommended? | Example                |
+| --------------------- | --------------------- | ---------------------- |
+| Button text           | Yes                   | "Submit", "Click here" |
+| Icon slot             | Yes                   | Default icon component |
+| Modal title           | Yes                   | "Dialog"               |
+| Required content area | No                    | Main content slot      |
+| Customization only    | Optional              | Action buttons slot    |
 
 ## Reference
+
 - [Vue.js Slots - Fallback Content](https://vuejs.org/guide/components/slots.html#fallback-content)

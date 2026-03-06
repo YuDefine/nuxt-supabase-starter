@@ -16,7 +16,7 @@ defineConfig({
     projects: [
       // Glob patterns for config files
       'packages/*',
-      
+
       // Inline config
       {
         test: {
@@ -294,7 +294,7 @@ defineConfig({
 - Use `provide` to inject config values into tests
 - Projects inherit from root config unless overridden
 
-<!-- 
+<!--
 Source references:
 - https://vitest.dev/guide/projects.html
 -->

@@ -24,7 +24,9 @@ const user = useFirestore(doc(db, 'users', 'my-user-id'))
 
 // you can also use ref value for reactive query
 const postsLimit = shallowRef(10)
-const postsQuery = computed(() => query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(postsLimit.value)))
+const postsQuery = computed(() =>
+  query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(postsLimit.value))
+)
 const posts = useFirestore(postsQuery)
 
 // you can use the boolean value to tell a query when it is ready to run
@@ -56,19 +58,17 @@ or use `createGlobalState` from the core package
 import { createGlobalState } from '@vueuse/core'
 import { useFirestore } from '@vueuse/firebase/useFirestore'
 
-export const useTodos = createGlobalState(
-  () => useFirestore(collection(db, 'todos')),
-)
+export const useTodos = createGlobalState(() => useFirestore(collection(db, 'todos')))
 ```
 
 ```vue
 <!-- app.vue -->
 <script setup lang="ts">
-// @include: store
-// ---cut---
-import { useTodos } from './store'
+  // @include: store
+  // ---cut---
+  import { useTodos } from './store'
 
-const todos = useTodos()
+  const todos = useTodos()
 </script>
 ```
 
@@ -80,25 +80,25 @@ export interface UseFirestoreOptions {
   autoDispose?: boolean | number
 }
 export type FirebaseDocRef<T> = Query<T> | DocumentReference<T>
-type Falsy = false | 0 | "" | null | undefined
+type Falsy = false | 0 | '' | null | undefined
 export declare function useFirestore<T extends DocumentData>(
   maybeDocRef: MaybeRef<DocumentReference<T> | Falsy>,
   initialValue: T,
-  options?: UseFirestoreOptions,
+  options?: UseFirestoreOptions
 ): Ref<T | null>
 export declare function useFirestore<T extends DocumentData>(
   maybeDocRef: MaybeRef<Query<T> | Falsy>,
   initialValue: T[],
-  options?: UseFirestoreOptions,
+  options?: UseFirestoreOptions
 ): Ref<T[]>
 export declare function useFirestore<T extends DocumentData>(
   maybeDocRef: MaybeRef<DocumentReference<T> | Falsy>,
   initialValue?: T | undefined | null,
-  options?: UseFirestoreOptions,
+  options?: UseFirestoreOptions
 ): Ref<T | undefined | null>
 export declare function useFirestore<T extends DocumentData>(
   maybeDocRef: MaybeRef<Query<T> | Falsy>,
   initialValue?: T[],
-  options?: UseFirestoreOptions,
+  options?: UseFirestoreOptions
 ): Ref<T[] | undefined>
 ```

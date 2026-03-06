@@ -18,6 +18,7 @@ tags: [vue3, events, keyboard, modifiers, shortcuts, accessibility]
 - [ ] Use `@click.exact` for plain clicks with no modifiers
 
 **Incorrect:**
+
 ```html
 <!-- WRONG: Fires even with additional modifiers -->
 <template>
@@ -41,6 +42,7 @@ tags: [vue3, events, keyboard, modifiers, shortcuts, accessibility]
 ```
 
 **Correct:**
+
 ```html
 <!-- CORRECT: Precise modifier matching with .exact -->
 <template>
@@ -116,22 +118,22 @@ tags: [vue3, events, keyboard, modifiers, shortcuts, accessibility]
 </template>
 
 <script setup>
-// Each click type has distinct, non-overlapping behavior
-function selectSingle(file) {
-  // Clear selection and select only this file
-}
+  // Each click type has distinct, non-overlapping behavior
+  function selectSingle(file) {
+    // Clear selection and select only this file
+  }
 
-function toggleSelection(file) {
-  // Add or remove this file from current selection
-}
+  function toggleSelection(file) {
+    // Add or remove this file from current selection
+  }
 
-function selectRange(file) {
-  // Select all files from last selected to this one
-}
+  function selectRange(file) {
+    // Select all files from last selected to this one
+  }
 
-function addRangeToSelection(file) {
-  // Add range to existing selection
-}
+  function addRangeToSelection(file) {
+    // Add range to existing selection
+  }
 </script>
 ```
 
@@ -152,4 +154,5 @@ function addRangeToSelection(file) {
 ```
 
 ## Reference
+
 - [Vue.js Event Handling - .exact Modifier](https://vuejs.org/guide/essentials/event-handling.html#exact-modifier)

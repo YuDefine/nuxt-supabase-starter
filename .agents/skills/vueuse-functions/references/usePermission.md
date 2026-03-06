@@ -18,29 +18,28 @@ const microphoneAccess = usePermission('microphone')
 
 ```ts
 type DescriptorNamePolyfill =
-  | "accelerometer"
-  | "accessibility-events"
-  | "ambient-light-sensor"
-  | "background-sync"
-  | "camera"
-  | "clipboard-read"
-  | "clipboard-write"
-  | "gyroscope"
-  | "magnetometer"
-  | "microphone"
-  | "notifications"
-  | "payment-handler"
-  | "persistent-storage"
-  | "push"
-  | "speaker"
-  | "local-fonts"
+  | 'accelerometer'
+  | 'accessibility-events'
+  | 'ambient-light-sensor'
+  | 'background-sync'
+  | 'camera'
+  | 'clipboard-read'
+  | 'clipboard-write'
+  | 'gyroscope'
+  | 'magnetometer'
+  | 'microphone'
+  | 'notifications'
+  | 'payment-handler'
+  | 'persistent-storage'
+  | 'push'
+  | 'speaker'
+  | 'local-fonts'
 export type GeneralPermissionDescriptor =
   | PermissionDescriptor
   | {
       name: DescriptorNamePolyfill
     }
-export interface UsePermissionOptions<Controls extends boolean>
-  extends ConfigurableNavigator {
+export interface UsePermissionOptions<Controls extends boolean> extends ConfigurableNavigator {
   /**
    * Expose more controls
    *
@@ -48,9 +47,7 @@ export interface UsePermissionOptions<Controls extends boolean>
    */
   controls?: Controls
 }
-export type UsePermissionReturn = Readonly<
-  ShallowRef<PermissionState | undefined>
->
+export type UsePermissionReturn = Readonly<ShallowRef<PermissionState | undefined>>
 export interface UsePermissionReturnWithControls {
   state: UsePermissionReturn
   isSupported: ComputedRef<boolean>
@@ -64,15 +61,11 @@ export interface UsePermissionReturnWithControls {
  * @__NO_SIDE_EFFECTS__
  */
 export declare function usePermission(
-  permissionDesc:
-    | GeneralPermissionDescriptor
-    | GeneralPermissionDescriptor["name"],
-  options?: UsePermissionOptions<false>,
+  permissionDesc: GeneralPermissionDescriptor | GeneralPermissionDescriptor['name'],
+  options?: UsePermissionOptions<false>
 ): UsePermissionReturn
 export declare function usePermission(
-  permissionDesc:
-    | GeneralPermissionDescriptor
-    | GeneralPermissionDescriptor["name"],
-  options: UsePermissionOptions<true>,
+  permissionDesc: GeneralPermissionDescriptor | GeneralPermissionDescriptor['name'],
+  options: UsePermissionOptions<true>
 ): UsePermissionReturnWithControls
 ```

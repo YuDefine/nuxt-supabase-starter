@@ -55,7 +55,7 @@ export type ComputedEagerReturn<T = any> = Readonly<ShallowRef<T>>
  */
 export declare function computedEager<T>(
   fn: () => T,
-  options?: ComputedEagerOptions,
+  options?: ComputedEagerOptions
 ): ComputedEagerReturn<T>
 /** @deprecated use `computedEager` instead */
 export declare const eagerComputed: typeof computedEager

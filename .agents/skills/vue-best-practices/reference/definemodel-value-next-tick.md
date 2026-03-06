@@ -20,78 +20,81 @@ This can cause bugs when you need to perform operations with the updated value i
 - [ ] Consider batching related updates together
 
 **Incorrect - Expecting immediate value update:**
+
 ```vue
 <script setup>
-const model = defineModel<string>()
+  const model = defineModel<string>()
 
-function updateAndLog() {
-  model.value = 'new value'
+  function updateAndLog() {
+    model.value = 'new value'
 
-  // WRONG: This still logs the OLD value!
-  console.log(model.value)  // Logs previous value, not 'new value'
+    // WRONG: This still logs the OLD value!
+    console.log(model.value)  // Logs previous value, not 'new value'
 
-  // WRONG: Computation uses stale value
-  const length = model.value.length  // Length of OLD value
+    // WRONG: Computation uses stale value
+    const length = model.value.length  // Length of OLD value
 
-  // WRONG: Conditional check on stale value
-  if (model.value === 'new value') {
-    // This block may not execute!
-    doSomething()
+    // WRONG: Conditional check on stale value
+    if (model.value === 'new value') {
+      // This block may not execute!
+      doSomething()
+    }
   }
-}
 </script>
 ```
 
 **Correct - Use the value directly:**
+
 ```vue
 <script setup>
-const model = defineModel<string>()
+  const model = defineModel<string>()
 
-function updateAndLog() {
-  const newValue = 'new value'
-  model.value = newValue
+  function updateAndLog() {
+    const newValue = 'new value'
+    model.value = newValue
 
-  // CORRECT: Use the value you just assigned
-  console.log(newValue)  // Logs 'new value'
+    // CORRECT: Use the value you just assigned
+    console.log(newValue)  // Logs 'new value'
 
-  // CORRECT: Compute from the known value
-  const length = newValue.length
+    // CORRECT: Compute from the known value
+    const length = newValue.length
 
-  // CORRECT: Check the known value
-  if (newValue === 'new value') {
-    doSomething()
+    // CORRECT: Check the known value
+    if (newValue === 'new value') {
+      doSomething()
+    }
   }
-}
 </script>
 ```
 
 **Alternative - Use nextTick for deferred operations:**
+
 ```vue
 <script setup>
-import { nextTick } from 'vue'
+  import { nextTick } from 'vue'
 
-const model = defineModel<string>()
+  const model = defineModel<string>()
 
-async function updateAndProcess() {
-  model.value = 'new value'
+  async function updateAndProcess() {
+    model.value = 'new value'
 
-  // Wait for Vue to apply the update
-  await nextTick()
+    // Wait for Vue to apply the update
+    await nextTick()
 
-  // NOW model.value reflects the new value
-  console.log(model.value)  // 'new value'
-  processUpdatedValue(model.value)
-}
-
-// Or using callback style
-function updateWithCallback() {
-  model.value = 'new value'
-
-  nextTick(() => {
-    // Safe to read updated value here
+    // NOW model.value reflects the new value
     console.log(model.value)  // 'new value'
-  })
-}
+    processUpdatedValue(model.value)
+  }
+
+  // Or using callback style
+  function updateWithCallback() {
+    model.value = 'new value'
+
+    nextTick(() => {
+      // Safe to read updated value here
+      console.log(model.value)  // 'new value'
+    })
+  }
 </script>
 ```
 
@@ -110,28 +113,28 @@ During this cycle, the child's local value briefly differs from what's been comm
 
 ```vue
 <script setup>
-import { nextTick } from 'vue'
+  import { nextTick } from 'vue'
 
-const model = defineModel<{ name: string; validated: boolean }>()
+  const model = defineModel<{ name: string; validated: boolean }>()
 
-async function validateAndUpdate(newName: string) {
-  // Build the new object
-  const updated = {
-    ...model.value,
-    name: newName,
-    validated: true
+  async function validateAndUpdate(newName: string) {
+    // Build the new object
+    const updated = {
+      ...model.value,
+      name: newName,
+      validated: true
+    }
+
+    // Assign to model
+    model.value = updated
+
+    // Use 'updated' for immediate operations, not model.value
+    saveToServer(updated)  // CORRECT: Use local reference
+
+    // If you need model.value specifically (e.g., for DOM sync):
+    await nextTick()
+    focusValidatedField()  // Now safe to assume DOM updated
   }
-
-  // Assign to model
-  model.value = updated
-
-  // Use 'updated' for immediate operations, not model.value
-  saveToServer(updated)  // CORRECT: Use local reference
-
-  // If you need model.value specifically (e.g., for DOM sync):
-  await nextTick()
-  focusValidatedField()  // Now safe to assume DOM updated
-}
 </script>
 ```
 
@@ -139,24 +142,25 @@ async function validateAndUpdate(newName: string) {
 
 ```vue
 <script setup>
-import { watch } from 'vue'
+  import { watch } from 'vue'
 
-const model = defineModel<string>()
+  const model = defineModel<string>()
 
-// Watch callback receives the new value
-watch(model, (newValue, oldValue) => {
-  // 'newValue' is reliable here
-  console.log('Changed from', oldValue, 'to', newValue)
-})
+  // Watch callback receives the new value
+  watch(model, (newValue, oldValue) => {
+    // 'newValue' is reliable here
+    console.log('Changed from', oldValue, 'to', newValue)
+  })
 
-function update() {
-  model.value = 'new value'
-  // watch callback will fire with correct 'new value'
-}
+  function update() {
+    model.value = 'new value'
+    // watch callback will fire with correct 'new value'
+  }
 </script>
 ```
 
 ## Reference
+
 - [Vue.js Reactivity - nextTick](https://vuejs.org/api/general.html#nexttick)
 - [Vue.js Component v-model](https://vuejs.org/guide/components/v-model.html)
 - [SIMPL Engineering: Vue defineModel Pitfalls](https://engineering.simpl.de/post/vue_definemodel/)

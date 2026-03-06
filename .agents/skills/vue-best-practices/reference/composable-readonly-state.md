@@ -20,6 +20,7 @@ Exposing raw refs allows any consumer to modify state directly, leading to bugs 
 - [ ] Consider returning `shallowReadonly()` for performance with large objects
 
 **Incorrect:**
+
 ```javascript
 // WRONG: State is fully mutable by any consumer
 export function useCart() {
@@ -28,7 +29,7 @@ export function useCart() {
     items.value.reduce((sum, item) => sum + item.price * item.quantity, 0)
   )
 
-  return { items, total }  // Anyone can mutate items directly!
+  return { items, total } // Anyone can mutate items directly!
 }
 
 // Consumer code - mutations scattered everywhere
@@ -38,7 +39,7 @@ const { items, total } = useCart()
 items.value.push({ id: 1, name: 'Widget', price: 10, quantity: 1 })
 
 // In component B - different mutation pattern
-items.value = items.value.filter(item => item.id !== 1)
+items.value = items.value.filter((item) => item.id !== 1)
 
 // In component C - direct modification
 items.value[0].quantity = 5
@@ -47,6 +48,7 @@ items.value[0].quantity = 5
 ```
 
 **Correct:**
+
 ```javascript
 import { ref, computed, readonly } from 'vue'
 
@@ -57,13 +59,11 @@ export function useCart() {
     items.value.reduce((sum, item) => sum + item.price * item.quantity, 0)
   )
 
-  const itemCount = computed(() =>
-    items.value.reduce((sum, item) => sum + item.quantity, 0)
-  )
+  const itemCount = computed(() => items.value.reduce((sum, item) => sum + item.quantity, 0))
 
   // Explicit, controlled mutations
   function addItem(product, quantity = 1) {
-    const existing = items.value.find(item => item.id === product.id)
+    const existing = items.value.find((item) => item.id === product.id)
     if (existing) {
       existing.quantity += quantity
     } else {
@@ -72,14 +72,14 @@ export function useCart() {
   }
 
   function removeItem(productId) {
-    const index = items.value.findIndex(item => item.id === productId)
+    const index = items.value.findIndex((item) => item.id === productId)
     if (index > -1) {
       items.value.splice(index, 1)
     }
   }
 
   function updateQuantity(productId, quantity) {
-    const item = items.value.find(item => item.id === productId)
+    const item = items.value.find((item) => item.id === productId)
     if (item) {
       item.quantity = Math.max(0, quantity)
       if (item.quantity === 0) {
@@ -101,7 +101,7 @@ export function useCart() {
     addItem,
     removeItem,
     updateQuantity,
-    clearCart
+    clearCart,
   }
 }
 
@@ -158,25 +158,25 @@ export function useAuth() {
     error: readonly(_error),
     // Methods for state changes
     login,
-    logout
+    logout,
   }
 }
 ```
 
 ## When to Use readonly vs Not
 
-| Use `readonly` | Don't Use `readonly` |
-|----------------|----------------------|
-| State with specific update rules | Simple two-way binding state |
-| Shared state between components | Form input values |
-| State that needs validation on change | Local component state |
+| Use `readonly`                          | Don't Use `readonly`             |
+| --------------------------------------- | -------------------------------- |
+| State with specific update rules        | Simple two-way binding state     |
+| Shared state between components         | Form input values                |
+| State that needs validation on change   | Local component state            |
 | When debugging mutation sources matters | When consumers need full control |
 
 ```javascript
 // Form input - consumers SHOULD mutate directly
 export function useForm(initial) {
   const values = ref({ ...initial })
-  return { values }  // No readonly - it's meant to be mutated
+  return { values } // No readonly - it's meant to be mutated
 }
 
 // Counter with min/max - needs controlled mutations
@@ -194,7 +194,7 @@ export function useCounter(min = 0, max = 100) {
   return {
     count: readonly(_count),
     increment,
-    decrement
+    decrement,
   }
 }
 ```
@@ -205,17 +205,20 @@ For large objects, use `shallowReadonly` to avoid deep readonly conversion:
 
 ```javascript
 export function useLargeDataset() {
-  const data = ref([/* thousands of items */])
+  const data = ref([
+    /* thousands of items */
+  ])
 
   return {
     // shallowReadonly - only top level is readonly
     // Nested properties are still technically mutable
     // but the ref itself can't be reassigned
-    data: shallowReadonly(data)
+    data: shallowReadonly(data),
   }
 }
 ```
 
 ## Reference
+
 - [Vue.js Reactivity API - readonly](https://vuejs.org/api/reactivity-core.html#readonly)
 - [13 Vue Composables Tips](https://michaelnthiessen.com/13-vue-composables-tips/)

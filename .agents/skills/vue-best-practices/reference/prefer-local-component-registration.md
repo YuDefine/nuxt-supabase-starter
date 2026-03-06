@@ -20,6 +20,7 @@ Use local registration for better maintainability, smaller bundles, and explicit
 - [ ] Review existing global components and migrate to local registration where possible
 
 **Incorrect:**
+
 ```javascript
 // main.js - registering many components globally
 import { createApp } from 'vue'
@@ -53,12 +54,13 @@ app.mount('#app')
 </template>
 
 <script setup>
-// No imports - relying on global registration
-// This makes dependencies invisible and hurts tree-shaking
+  // No imports - relying on global registration
+  // This makes dependencies invisible and hurts tree-shaking
 </script>
 ```
 
 **Correct:**
+
 ```javascript
 // main.js - only register truly universal components globally
 import { createApp } from 'vue'
@@ -78,10 +80,10 @@ app.mount('#app')
 ```vue
 <!-- SomePage.vue - explicit local imports -->
 <script setup>
-// CORRECT: Explicit imports enable tree-shaking
-// Only Card is included in the bundle for this component
-import Card from '@/components/Card.vue'
-import UserAvatar from '@/components/UserAvatar.vue'
+  // CORRECT: Explicit imports enable tree-shaking
+  // Only Card is included in the bundle for this component
+  import Card from '@/components/Card.vue'
+  import UserAvatar from '@/components/UserAvatar.vue'
 </script>
 
 <template>
@@ -95,15 +97,15 @@ import UserAvatar from '@/components/UserAvatar.vue'
 ```vue
 <!-- Options API local registration -->
 <script>
-import Card from '@/components/Card.vue'
-import UserAvatar from '@/components/UserAvatar.vue'
+  import Card from '@/components/Card.vue'
+  import UserAvatar from '@/components/UserAvatar.vue'
 
-export default {
-  components: {
-    Card,
-    UserAvatar
+  export default {
+    components: {
+      Card,
+      UserAvatar,
+    },
   }
-}
 </script>
 ```
 
@@ -125,13 +127,14 @@ app.component('BaseInput', BaseInput)
 
 ## Benefits of Local Registration
 
-| Aspect | Global | Local |
-|--------|--------|-------|
-| Tree-shaking | Not possible | Full support |
-| Dependency tracking | Implicit/hidden | Explicit imports |
-| Component location | Hard to find | Follow import path |
-| Bundle size | All registered components | Only used components |
-| Refactoring | Risk of breaking unknown usages | Clear dependency graph |
+| Aspect              | Global                          | Local                  |
+| ------------------- | ------------------------------- | ---------------------- |
+| Tree-shaking        | Not possible                    | Full support           |
+| Dependency tracking | Implicit/hidden                 | Explicit imports       |
+| Component location  | Hard to find                    | Follow import path     |
+| Bundle size         | All registered components       | Only used components   |
+| Refactoring         | Risk of breaking unknown usages | Clear dependency graph |
 
 ## Reference
+
 - [Vue.js Component Registration](https://vuejs.org/guide/components/registration.html)

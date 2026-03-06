@@ -63,6 +63,6 @@ export interface UseRafFnOptions extends ConfigurableWindow {
  */
 export declare function useRafFn(
   fn: (args: UseRafFnCallbackArguments) => void,
-  options?: UseRafFnOptions,
+  options?: UseRafFnOptions
 ): Pausable
 ```

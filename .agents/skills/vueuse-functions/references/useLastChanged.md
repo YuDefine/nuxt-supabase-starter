@@ -54,10 +54,10 @@ export type UseLastChangedReturn =
  */
 export declare function useLastChanged(
   source: WatchSource,
-  options?: UseLastChangedOptions<false>,
+  options?: UseLastChangedOptions<false>
 ): Readonly<ShallowRef<number | null>>
 export declare function useLastChanged(
   source: WatchSource,
-  options: UseLastChangedOptions<true> | UseLastChangedOptions<boolean, number>,
+  options: UseLastChangedOptions<true> | UseLastChangedOptions<boolean, number>
 ): Readonly<ShallowRef<number>>
 ```

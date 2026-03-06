@@ -20,10 +20,7 @@ By default, the component will track the pointer on `window`
 
 ```vue
 <template>
-  <UsePointer v-slot="{ x, y }">
-    x: {{ x }}
-    y: {{ y }}
-  </UsePointer>
+  <UsePointer v-slot="{ x, y }"> x: {{ x }} y: {{ y }} </UsePointer>
 </template>
 ```
 
@@ -31,9 +28,7 @@ To track local position in the element, set `target="self"`:
 
 ```vue
 <template>
-  <UsePointer v-slot="{ x, y }" target="self">
-    x: {{ x }} y: {{ y }}
-  </UsePointer>
+  <UsePointer v-slot="{ x, y }" target="self"> x: {{ x }} y: {{ y }} </UsePointer>
 </template>
 ```
 
