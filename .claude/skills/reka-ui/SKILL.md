@@ -8,8 +8,6 @@ license: MIT
 
 Unstyled, accessible Vue 3 component primitives. WAI-ARIA compliant. Previously Radix Vue.
 
-**Current version:** v2.7.0 (December 2025)
-
 ## When to Use
 
 - Building headless/unstyled components from scratch
@@ -124,15 +122,6 @@ export default defineConfig({
   <button class="my-custom-button">Open</button>
 </DialogTrigger>
 ```
-
-## Recent Updates (v2.5.0-v2.7.0)
-
-- **New composables exposed**: `useLocale`, `useDirection` (v2.6.0)
-- **Select**: Added `disableOutsidePointerEvents` prop to Content
-- **Toast**: Added `disableSwipe` prop for swipe control
-- **DatePicker**: Added `closeOnSelect` property
-- **ContextMenu**: Added `pressOpenDelay` for long-press configuration
-- **Virtualization**: `estimateSize` now accepts function for Listbox/Tree (v2.7.0); supported in Combobox, Listbox, Tree
 
 ## Resources
 
