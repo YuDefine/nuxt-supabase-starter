@@ -25,7 +25,7 @@
 
 ```bash
 # 從 Starter 複製 CLAUDE.md 到你的專案根目錄
-curl -o CLAUDE.md https://raw.githubusercontent.com/Charles5277/nuxt-supabase-starter/main/CLAUDE.md
+curl -o CLAUDE.md https://raw.githubusercontent.com/YuDefine/nuxt-supabase-starter/main/CLAUDE.md
 ```
 
 **重要**：修改 CLAUDE.md 中的以下區塊以符合你的專案：
@@ -48,7 +48,7 @@ curl -o CLAUDE.md https://raw.githubusercontent.com/Charles5277/nuxt-supabase-st
 
 ```bash
 # 複製整個 .claude 目錄
-git clone --depth 1 https://github.com/Charles5277/nuxt-supabase-starter.git /tmp/starter
+git clone --depth 1 https://github.com/YuDefine/nuxt-supabase-starter.git /tmp/starter
 cp -r /tmp/starter/.claude .
 rm -rf /tmp/starter
 

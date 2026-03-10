@@ -2,6 +2,11 @@
   "name": "nuxt-supabase-starter",
   "version": "0.8.0",
   "private": true,
+  "author": "YuDefine - 域定資訊工作室 (https://github.com/YuDefine)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YuDefine/nuxt-supabase-starter.git"
+  },
   "type": "module",
   "scripts": {
     "build": "nuxt build",
