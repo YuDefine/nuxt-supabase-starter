@@ -393,4 +393,4 @@ Skills 會自動串接，減少手動操作：
 
 ## License
 
-MIT
+[MIT](./LICENSE) © [YuDefine - 域定資訊工作室](https://github.com/YuDefine)

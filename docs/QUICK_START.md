@@ -33,7 +33,7 @@
 
 ```bash
 # 從 GitHub 複製範本
-git clone https://github.com/Charles5277/nuxt-supabase-starter my-project
+git clone https://github.com/YuDefine/nuxt-supabase-starter my-project
 cd my-project
 
 # 移除原始 git 歷史，建立自己的
