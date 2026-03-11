@@ -29,11 +29,15 @@ $ARGUMENTS
 
 ## Outline
 
-### Step 0: 執行完整檢查
+### Step 0: 品質檢查
 
-使用 `check-runner` agent 執行完整的程式碼檢查（format → lint → typecheck → test）。
+依序執行以下三步驟：
 
-**如果檢查未通過，停止 commit 流程，先修復錯誤。**
+1. 使用 `/simplify` skill 審查變更程式碼的重用性、品質與效率，發現問題立即修正
+2. 使用 `/code-review:code-review` skill 審查邏輯與安全性，發現問題立即修正
+3. 使用 `check-runner` agent 執行完整的程式碼檢查（format → lint → typecheck → test）
+
+**任一步驟未通過，停止 commit 流程，先修復錯誤。**
 
 ### Step 1: 檢查變更狀態
 
