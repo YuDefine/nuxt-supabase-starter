@@ -15,9 +15,12 @@ import { shallowRef } from 'vue'
 
 const name = shallowRef('jack')
 
-const userInfo = computedAsync(async () => {
-  return await mockLookUp(name.value)
-}, null /* initial state */)
+const userInfo = computedAsync(
+  async () => {
+    return await mockLookUp(name.value)
+  },
+  null, /* initial state */
+)
 ```
 
 ### Evaluation State
@@ -31,11 +34,9 @@ import { shallowRef } from 'vue'
 const evaluating = shallowRef(false)
 
 const userInfo = computedAsync(
-  async () => {
-    /* your logic */
-  },
+  async () => { /* your logic */ },
   null,
-  evaluating
+  evaluating,
 )
 ```
 
@@ -53,11 +54,12 @@ const downloads = computedAsync(async (onCancel) => {
 
   onCancel(() => abortController.abort())
 
-  return await fetch(`https://api.npmjs.org/downloads/point/last-week/${packageName.value}`, {
-    signal: abortController.signal,
-  })
-    .then((response) => (response.ok ? response.json() : { downloads: '—' }))
-    .then((result) => result.downloads)
+  return await fetch(
+    `https://api.npmjs.org/downloads/point/last-week/${packageName.value}`,
+    { signal: abortController.signal },
+  )
+    .then(response => response.ok ? response.json() : { downloads: '—' })
+    .then(result => result.downloads)
 }, 0)
 ```
 
@@ -72,11 +74,9 @@ import { shallowRef } from 'vue'
 const evaluating = shallowRef(false)
 
 const userInfo = computedAsync(
-  async () => {
-    /* your logic */
-  },
+  async () => { /* your logic */ },
   null,
-  { lazy: true, evaluating }
+  { lazy: true, evaluating },
 )
 ```
 
@@ -137,22 +137,22 @@ export interface AsyncComputedOptions<Lazy = boolean> {
 export declare function computedAsync<T>(
   evaluationCallback: (onCancel: AsyncComputedOnCancel) => T | Promise<T>,
   initialState: T,
-  optionsOrRef: AsyncComputedOptions<true>
+  optionsOrRef: AsyncComputedOptions<true>,
 ): ComputedRef<T>
 export declare function computedAsync<T>(
   evaluationCallback: (onCancel: AsyncComputedOnCancel) => T | Promise<T>,
   initialState: undefined,
-  optionsOrRef: AsyncComputedOptions<true>
+  optionsOrRef: AsyncComputedOptions<true>,
 ): ComputedRef<T | undefined>
 export declare function computedAsync<T>(
   evaluationCallback: (onCancel: AsyncComputedOnCancel) => T | Promise<T>,
   initialState: T,
-  optionsOrRef?: Ref<boolean> | AsyncComputedOptions
+  optionsOrRef?: Ref<boolean> | AsyncComputedOptions,
 ): Ref<T>
 export declare function computedAsync<T>(
   evaluationCallback: (onCancel: AsyncComputedOnCancel) => T | Promise<T>,
   initialState?: undefined,
-  optionsOrRef?: Ref<boolean> | AsyncComputedOptions
+  optionsOrRef?: Ref<boolean> | AsyncComputedOptions,
 ): Ref<T | undefined>
 /** @deprecated use `computedAsync` instead */
 export declare const asyncComputed: typeof computedAsync

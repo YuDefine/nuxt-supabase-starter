@@ -10,10 +10,10 @@ Create parallax effect easily. It uses `useDeviceOrientation` and fallback to `u
 
 ```vue
 <script setup lang="ts">
-  import { useParallax } from '@vueuse/core'
+import { useParallax } from '@vueuse/core'
 
-  const container = ref(null)
-  const { tilt, roll, source } = useParallax(container)
+const container = ref(null)
+const { tilt, roll, source } = useParallax(container)
 </script>
 
 <template>
@@ -42,7 +42,7 @@ export interface UseParallaxReturn {
   /**
    * Sensor source, can be `mouse` or `deviceOrientation`
    */
-  source: ComputedRef<'deviceOrientation' | 'mouse'>
+  source: ComputedRef<"deviceOrientation" | "mouse">
 }
 /**
  * Create parallax effect easily. It uses `useDeviceOrientation` and fallback to `useMouse`
@@ -53,6 +53,6 @@ export interface UseParallaxReturn {
  */
 export declare function useParallax(
   target: MaybeElementRef,
-  options?: UseParallaxOptions
+  options?: UseParallaxOptions,
 ): UseParallaxReturn
 ```

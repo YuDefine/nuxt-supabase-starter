@@ -27,7 +27,7 @@ declare module 'vue' {
 
 // GOOD - The export {} makes this a module, so it AUGMENTS types
 // types/vue.d.ts
-export {} // This line is CRITICAL!
+export {}  // This line is CRITICAL!
 
 declare module 'vue' {
   interface ComponentCustomProperties {
@@ -59,7 +59,7 @@ export function createI18n(options: I18nOptions) {
     translate(key: string) {
       return options.messages[options.locale]?.[key] ?? key
     },
-    locale: options.locale,
+    locale: options.locale
   }
 
   return {
@@ -70,7 +70,7 @@ export function createI18n(options: I18nOptions) {
       // For Options API / templates
       app.config.globalProperties.$t = i18n.translate
       app.config.globalProperties.$i18n = i18n
-    },
+    }
   }
 }
 
@@ -112,7 +112,7 @@ Both approaches work, but `'vue'` is more common in application code.
   "include": [
     "src/**/*.ts",
     "src/**/*.vue",
-    "types/**/*.d.ts" // Include your declaration files
+    "types/**/*.d.ts"  // Include your declaration files
   ]
 }
 ```

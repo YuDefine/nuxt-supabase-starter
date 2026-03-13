@@ -23,5 +23,8 @@ console.log(get(a)) // 42
  * Shorthand for accessing `ref.value`
  */
 export declare function get<T>(ref: MaybeRef<T>): T
-export declare function get<T, K extends keyof T>(ref: MaybeRef<T>, key: K): T[K]
+export declare function get<T, K extends keyof T>(
+  ref: MaybeRef<T>,
+  key: K,
+): T[K]
 ```

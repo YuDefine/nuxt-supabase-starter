@@ -32,7 +32,8 @@ const qrcode = useQRCode(text)
 ```
 
 ```html
-<input v-model="text" type="text" /> <img :src="qrcode" alt="QR Code" />
+<input v-model="text" type="text" />
+<img :src="qrcode" alt="QR Code" />
 ```
 
 ## Type Declarations
@@ -47,6 +48,6 @@ const qrcode = useQRCode(text)
  */
 export declare function useQRCode(
   text: MaybeRefOrGetter<string>,
-  options?: QRCode.QRCodeToDataURLOptions
+  options?: QRCode.QRCodeToDataURLOptions,
 ): ShallowRef<string, string>
 ```

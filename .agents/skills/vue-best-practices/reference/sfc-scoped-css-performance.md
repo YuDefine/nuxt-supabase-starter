@@ -18,7 +18,6 @@ tags: [vue3, sfc, scoped-css, performance, css-selectors]
 - [ ] For heavy styling, consider CSS modules or utility-first approaches
 
 **Problematic Code:**
-
 ```vue
 <template>
   <article>
@@ -36,35 +35,34 @@ tags: [vue3, sfc, scoped-css, performance, css-selectors]
 </template>
 
 <style scoped>
-  /* BAD: Element selectors are slower when scoped */
-  article {
-    max-width: 800px;
-  }
+/* BAD: Element selectors are slower when scoped */
+article {
+  max-width: 800px;
+}
 
-  header {
-    margin-bottom: 2rem;
-  }
+header {
+  margin-bottom: 2rem;
+}
 
-  h1 {
-    font-size: 2rem;
-  }
+h1 {
+  font-size: 2rem;
+}
 
-  p {
-    line-height: 1.6;
-  }
+p {
+  line-height: 1.6;
+}
 
-  ul {
-    padding-left: 1.5rem;
-  }
+ul {
+  padding-left: 1.5rem;
+}
 
-  li {
-    margin-bottom: 0.5rem;
-  }
+li {
+  margin-bottom: 0.5rem;
+}
 </style>
 ```
 
 **Correct Code:**
-
 ```vue
 <template>
   <article class="article">
@@ -84,31 +82,31 @@ tags: [vue3, sfc, scoped-css, performance, css-selectors]
 </template>
 
 <style scoped>
-  /* GOOD: Class selectors are faster */
-  .article {
-    max-width: 800px;
-  }
+/* GOOD: Class selectors are faster */
+.article {
+  max-width: 800px;
+}
 
-  .article-header {
-    margin-bottom: 2rem;
-  }
+.article-header {
+  margin-bottom: 2rem;
+}
 
-  .article-title {
-    font-size: 2rem;
-  }
+.article-title {
+  font-size: 2rem;
+}
 
-  .article-subtitle,
-  .article-text {
-    line-height: 1.6;
-  }
+.article-subtitle,
+.article-text {
+  line-height: 1.6;
+}
 
-  .article-list {
-    padding-left: 1.5rem;
-  }
+.article-list {
+  padding-left: 1.5rem;
+}
 
-  .article-list-item {
-    margin-bottom: 0.5rem;
-  }
+.article-list-item {
+  margin-bottom: 0.5rem;
+}
 </style>
 ```
 
@@ -118,29 +116,19 @@ Vue transforms scoped CSS by adding data attributes:
 
 ```css
 /* What you write */
-p {
-  color: red;
-}
-.text {
-  color: blue;
-}
+p { color: red; }
+.text { color: blue; }
 
 /* What Vue generates */
-p[data-v-7ba5bd90] {
-  color: red;
-}
-.text[data-v-7ba5bd90] {
-  color: blue;
-}
+p[data-v-7ba5bd90] { color: red; }
+.text[data-v-7ba5bd90] { color: blue; }
 ```
 
 Browser CSS matching for `p[data-v-xxx]`:
-
 1. Find all `<p>` elements (element lookup)
 2. Check each for the `data-v-xxx` attribute (attribute check)
 
 Browser CSS matching for `.text[data-v-xxx]`:
-
 1. Find all elements with class `text` (class lookup - optimized)
 2. Check each for the `data-v-xxx` attribute
 
@@ -149,7 +137,6 @@ Class lookups are highly optimized in modern browsers, making option 2 faster.
 ## When Performance Matters
 
 This optimization matters most when:
-
 - Rendering large lists (100+ items)
 - Complex component trees
 - Animation-heavy interfaces
@@ -167,11 +154,11 @@ This optimization matters most when:
 </template>
 
 <style scoped>
-  /* Fast selectors for large lists */
-  .list { ... }
-  .list-item { ... }
-  .item-name { ... }
-  .item-price { ... }
+/* Fast selectors for large lists */
+.list { ... }
+.list-item { ... }
+.item-name { ... }
+.item-price { ... }
 </style>
 ```
 
@@ -187,14 +174,14 @@ For small components with few elements, element selectors are fine:
 </template>
 
 <style scoped>
-  /* OK for small, simple components */
-  .btn {
-    padding: 0.5rem 1rem;
-  }
+/* OK for small, simple components */
+.btn {
+  padding: 0.5rem 1rem;
+}
 
-  span {
-    font-weight: bold;
-  }
+span {
+  font-weight: bold;
+}
 </style>
 ```
 
@@ -208,15 +195,14 @@ For performance-critical components, CSS modules avoid the attribute selector en
 </template>
 
 <style module>
-  /* Generates unique class names without attribute selectors */
-  .text {
-    color: red;
-  }
-  /* Compiles to something like: .text_abc123 { color: red; } */
+/* Generates unique class names without attribute selectors */
+.text {
+  color: red;
+}
+/* Compiles to something like: .text_abc123 { color: red; } */
 </style>
 ```
 
 ## Reference
-
 - [Vue Loader Scoped CSS](https://vue-loader.vuejs.org/guide/scoped-css.html#child-component-root-elements)
 - [CSS Selector Performance](https://csswizardry.com/2011/09/writing-efficient-css-selectors/)

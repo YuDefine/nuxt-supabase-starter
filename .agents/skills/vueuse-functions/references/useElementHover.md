@@ -10,11 +10,11 @@ Reactive element's hover state.
 
 ```vue
 <script setup lang="ts">
-  import { useElementHover } from '@vueuse/core'
-  import { useTemplateRef } from 'vue'
+import { useElementHover } from '@vueuse/core'
+import { useTemplateRef } from 'vue'
 
-  const myHoverableElement = useTemplateRef('myHoverableElement')
-  const isHovered = useElementHover(myHoverableElement)
+const myHoverableElement = useTemplateRef('myHoverableElement')
+const isHovered = useElementHover(myHoverableElement)
 </script>
 
 <template>
@@ -28,13 +28,13 @@ Reactive element's hover state.
 
 ```vue
 <script setup lang="ts">
-  import { vElementHover } from '@vueuse/components'
-  import { shallowRef } from 'vue'
+import { vElementHover } from '@vueuse/components'
+import { shallowRef } from 'vue'
 
-  const isHovered = shallowRef(false)
-  function onHover(state: boolean) {
-    isHovered.value = state
-  }
+const isHovered = shallowRef(false)
+function onHover(state: boolean) {
+  isHovered.value = state
+}
 </script>
 
 <template>
@@ -48,13 +48,13 @@ You can also provide hover options:
 
 ```vue
 <script setup lang="ts">
-  import { vElementHover } from '@vueuse/components'
-  import { shallowRef } from 'vue'
+import { vElementHover } from '@vueuse/components'
+import { shallowRef } from 'vue'
 
-  const isHovered = shallowRef(false)
-  function onHover(hovered: boolean) {
-    isHovered.value = hovered
-  }
+const isHovered = shallowRef(false)
+function onHover(hovered: boolean) {
+  isHovered.value = hovered
+}
 </script>
 
 <template>
@@ -74,6 +74,6 @@ export interface UseElementHoverOptions extends ConfigurableWindow {
 }
 export declare function useElementHover(
   el: MaybeRefOrGetter<EventTarget | null | undefined>,
-  options?: UseElementHoverOptions
+  options?: UseElementHoverOptions,
 ): ShallowRef<boolean>
 ```

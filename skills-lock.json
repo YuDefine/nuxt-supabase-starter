@@ -6,6 +6,21 @@
       "sourceType": "github",
       "computedHash": "63e6efd90fa42364b589411b9d7d222558858ce34e3cbaa30caa20fcc46d7fb4"
     },
+    "create-evlog-adapter": {
+      "source": "hugorcd/evlog",
+      "sourceType": "github",
+      "computedHash": "e70221ca259e171ae5234c0748a4bf86967f63eb1eb846d7ead9357b5ebc62b5"
+    },
+    "create-evlog-enricher": {
+      "source": "hugorcd/evlog",
+      "sourceType": "github",
+      "computedHash": "3d7fb7e77bf43a0a621417685850f6ceb39b30d81b9b17a86697f8dd5ad39931"
+    },
+    "create-evlog-framework-integration": {
+      "source": "hugorcd/evlog",
+      "sourceType": "github",
+      "computedHash": "06b274d3a0839f2eb2ab56f7dcb299b808101b5269a3dd9a3ffa3b7704c5fa8f"
+    },
     "nuxt": {
       "source": "antfu/skills",
       "sourceType": "github",
@@ -16,10 +31,20 @@
       "sourceType": "github",
       "computedHash": "51e570e2bfd4b74752a40ea0a102c9d186bfe3afbb8c34a51cb83e46195243d0"
     },
+    "review-logging-patterns": {
+      "source": "hugorcd/evlog",
+      "sourceType": "github",
+      "computedHash": "e54202c2b68f48eb6b2e9a80e40e28f6110c5fd75fbed95f00aaf1efb758537a"
+    },
     "supabase-postgres-best-practices": {
       "source": "supabase/agent-skills",
       "sourceType": "github",
       "computedHash": "9c87c315aed143ee3b34bec8117100f5035e0df09e6b23e1ecc772cff434c9ad"
+    },
+    "test-driven-development": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "computedHash": "126f1ebf6ccd414f42544f6e83d8cc5adb089e1108eaffb7c400701e37eecd9f"
     },
     "vitest": {
       "source": "antfu/skills",

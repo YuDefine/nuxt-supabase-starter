@@ -20,7 +20,6 @@ This is one of the most common causes of "my transition isn't working" issues.
 - [ ] Remember: without `key`, only text content updates, no animation
 
 **Problematic Code:**
-
 ```vue
 <template>
   <!-- BAD: Same element type, no key - no transition occurs! -->
@@ -32,8 +31,8 @@ This is one of the most common causes of "my transition isn't working" issues.
 </template>
 
 <script setup>
-  import { ref } from 'vue'
-  const count = ref(0)
+import { ref } from 'vue'
+const count = ref(0)
 </script>
 
 <!-- The span just updates its text content, never triggers enter/leave -->
@@ -52,7 +51,6 @@ This is one of the most common causes of "my transition isn't working" issues.
 ```
 
 **Correct Code:**
-
 ```vue
 <template>
   <!-- GOOD: Key bound to changing value forces re-render -->
@@ -64,8 +62,8 @@ This is one of the most common causes of "my transition isn't working" issues.
 </template>
 
 <script setup>
-  import { ref } from 'vue'
-  const count = ref(0)
+import { ref } from 'vue'
+const count = ref(0)
 </script>
 
 <!-- Now each number change triggers a full enter/leave transition -->
@@ -106,31 +104,31 @@ This is one of the most common causes of "my transition isn't working" issues.
 </template>
 
 <script setup>
-  import { ref } from 'vue'
-  const count = ref(0)
+import { ref } from 'vue'
+const count = ref(0)
 </script>
 
 <style>
-  .slide-up-enter-active,
-  .slide-up-leave-active {
-    transition: all 0.2s ease;
-  }
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all 0.2s ease;
+}
 
-  .slide-up-enter-from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
+.slide-up-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
 
-  .slide-up-leave-to {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
 
-  .count-display {
-    display: inline-block;
-    min-width: 2em;
-    text-align: center;
-  }
+.count-display {
+  display: inline-block;
+  min-width: 2em;
+  text-align: center;
+}
 </style>
 ```
 
@@ -156,15 +154,15 @@ This is one of the most common causes of "my transition isn't working" issues.
 </template>
 
 <script setup>
-  import { ref } from 'vue'
-  import TabContent from './TabContent.vue'
+import { ref } from 'vue'
+import TabContent from './TabContent.vue'
 
-  const tabs = [
-    { id: 'home', label: 'Home' },
-    { id: 'profile', label: 'Profile' },
-    { id: 'settings', label: 'Settings' },
-  ]
-  const currentTab = ref('home')
+const tabs = [
+  { id: 'home', label: 'Home' },
+  { id: 'profile', label: 'Profile' },
+  { id: 'settings', label: 'Settings' }
+]
+const currentTab = ref('home')
 </script>
 ```
 
@@ -190,5 +188,4 @@ Keys are not necessary when transitioning between **different** element types:
 4. DevTools shows element content changing but no transition state
 
 ## Reference
-
 - [Vue.js Transition - Between Elements](https://vuejs.org/guide/built-ins/transition.html#transition-between-elements)

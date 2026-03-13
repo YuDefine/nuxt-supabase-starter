@@ -69,6 +69,6 @@ export type UseArrayJoinReturn = ComputedRef<string>
  */
 export declare function useArrayJoin(
   list: MaybeRefOrGetter<MaybeRefOrGetter<any>[]>,
-  separator?: MaybeRefOrGetter<string>
+  separator?: MaybeRefOrGetter<string>,
 ): UseArrayJoinReturn
 ```

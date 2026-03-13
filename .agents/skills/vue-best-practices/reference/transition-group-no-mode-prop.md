@@ -20,7 +20,6 @@ If you need sequenced enter/leave behavior, you must implement it manually with 
 - [ ] Consider staggered animations as an alternative to mode-based sequencing
 
 **Incorrect - mode prop is ignored:**
-
 ```vue
 <template>
   <!-- mode="out-in" has NO EFFECT on TransitionGroup -->
@@ -32,15 +31,14 @@ If you need sequenced enter/leave behavior, you must implement it manually with 
 
 ## When to Use Transition vs TransitionGroup
 
-| Scenario                           | Component                  |
-| ---------------------------------- | -------------------------- |
-| Single element toggling (v-if)     | `<Transition>`             |
+| Scenario | Component |
+|----------|-----------|
+| Single element toggling (v-if) | `<Transition>` |
 | Alternating between two components | `<Transition>` with `mode` |
-| List of items (v-for)              | `<TransitionGroup>`        |
-| Multiple simultaneous animations   | `<TransitionGroup>`        |
+| List of items (v-for) | `<TransitionGroup>` |
+| Multiple simultaneous animations | `<TransitionGroup>` |
 
 **Single element - use Transition with mode:**
-
 ```vue
 <template>
   <!-- Transition supports mode for single/alternating elements -->
@@ -51,7 +49,6 @@ If you need sequenced enter/leave behavior, you must implement it manually with 
 ```
 
 **List of elements - use TransitionGroup:**
-
 ```vue
 <template>
   <!-- TransitionGroup for lists, no mode support -->
@@ -80,51 +77,51 @@ If you need items to leave before new items enter, use JavaScript hooks:
 </template>
 
 <script setup>
-  import { ref } from 'vue'
+import { ref } from 'vue'
 
-  const isLeaving = ref(false)
-  const enterQueue = []
+const isLeaving = ref(false)
+const enterQueue = []
 
-  function onBeforeEnter(el) {
-    el.style.opacity = 0
-    if (isLeaving.value) {
-      // Queue enters while leaves are happening
-      enterQueue.push(el)
-    }
+function onBeforeEnter(el) {
+  el.style.opacity = 0
+  if (isLeaving.value) {
+    // Queue enters while leaves are happening
+    enterQueue.push(el)
+  }
+}
+
+function onEnter(el, done) {
+  if (isLeaving.value) {
+    // Wait for leaves to complete
+    return
   }
 
-  function onEnter(el, done) {
-    if (isLeaving.value) {
-      // Wait for leaves to complete
-      return
-    }
+  // Animate enter
+  el.offsetHeight // Force reflow
+  el.style.transition = 'opacity 0.3s'
+  el.style.opacity = 1
 
-    // Animate enter
-    el.offsetHeight // Force reflow
-    el.style.transition = 'opacity 0.3s'
-    el.style.opacity = 1
+  setTimeout(done, 300)
+}
 
-    setTimeout(done, 300)
-  }
+function onLeave(el, done) {
+  isLeaving.value = true
 
-  function onLeave(el, done) {
-    isLeaving.value = true
+  el.style.transition = 'opacity 0.3s'
+  el.style.opacity = 0
 
-    el.style.transition = 'opacity 0.3s'
-    el.style.opacity = 0
+  setTimeout(() => {
+    done()
+    isLeaving.value = false
 
-    setTimeout(() => {
-      done()
-      isLeaving.value = false
-
-      // Process queued enters
-      enterQueue.forEach((queuedEl) => {
-        queuedEl.style.transition = 'opacity 0.3s'
-        queuedEl.style.opacity = 1
-      })
-      enterQueue.length = 0
-    }, 300)
-  }
+    // Process queued enters
+    enterQueue.forEach(queuedEl => {
+      queuedEl.style.transition = 'opacity 0.3s'
+      queuedEl.style.opacity = 1
+    })
+    enterQueue.length = 0
+  }, 300)
+}
 </script>
 ```
 
@@ -134,34 +131,42 @@ Instead of sequential mode behavior, consider staggered animations for a polishe
 
 ```vue
 <template>
-  <TransitionGroup name="list" tag="ul" @before-enter="onBeforeEnter" @enter="onEnter">
-    <li v-for="(item, index) in items" :key="item.id" :data-index="index">
+  <TransitionGroup
+    name="list"
+    tag="ul"
+    @before-enter="onBeforeEnter"
+    @enter="onEnter"
+  >
+    <li
+      v-for="(item, index) in items"
+      :key="item.id"
+      :data-index="index"
+    >
       {{ item }}
     </li>
   </TransitionGroup>
 </template>
 
 <script setup>
-  function onBeforeEnter(el) {
-    el.style.opacity = 0
-    el.style.transform = 'translateY(20px)'
-  }
+function onBeforeEnter(el) {
+  el.style.opacity = 0
+  el.style.transform = 'translateY(20px)'
+}
 
-  function onEnter(el, done) {
-    const delay = el.dataset.index * 100
+function onEnter(el, done) {
+  const delay = el.dataset.index * 100
 
-    setTimeout(() => {
-      el.style.transition = 'all 0.3s ease'
-      el.style.opacity = 1
-      el.style.transform = 'translateY(0)'
+  setTimeout(() => {
+    el.style.transition = 'all 0.3s ease'
+    el.style.opacity = 1
+    el.style.transform = 'translateY(0)'
 
-      setTimeout(done, 300)
-    }, delay)
-  }
+    setTimeout(done, 300)
+  }, delay)
+}
 </script>
 ```
 
 ## Reference
-
 - [Vue.js TransitionGroup](https://vuejs.org/guide/built-ins/transition-group.html)
 - [Vue.js Transition Modes](https://vuejs.org/guide/built-ins/transition.html#transition-modes)

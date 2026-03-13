@@ -39,6 +39,6 @@ export interface ManualResetRefReturn<T> extends Ref<T> {
  * @param defaultValue The value which will be set.
  */
 export declare function refManualReset<T>(
-  defaultValue: MaybeRefOrGetter<T>
+  defaultValue: MaybeRefOrGetter<T>,
 ): ManualResetRefReturn<T>
 ```

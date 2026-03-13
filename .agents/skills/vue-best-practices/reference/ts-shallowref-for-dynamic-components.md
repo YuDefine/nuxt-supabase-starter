@@ -27,7 +27,6 @@ Vue components are objects with internal properties that should not be made reac
 4. Impacts performance
 
 **Incorrect - Using ref() for components:**
-
 ```typescript
 import { ref } from 'vue'
 import ComponentA from './ComponentA.vue'
@@ -42,7 +41,6 @@ function switchComponent() {
 ```
 
 **Console warning:**
-
 ```
 [Vue warn]: Vue received a Component that was made a reactive object.
 This can lead to unnecessary performance overhead and should be avoided
@@ -91,7 +89,7 @@ interface Tab {
 const tabs = reactive<Tab[]>([
   { name: 'Home', component: markRaw(TabHome) },
   { name: 'Profile', component: markRaw(TabProfile) },
-  { name: 'Settings', component: markRaw(TabSettings) },
+  { name: 'Settings', component: markRaw(TabSettings) }
 ])
 
 const activeTab = shallowRef<Tab>(tabs[0])
@@ -100,7 +98,11 @@ const activeTab = shallowRef<Tab>(tabs[0])
 ```vue
 <template>
   <div class="tabs">
-    <button v-for="tab in tabs" :key="tab.name" @click="activeTab = tab">
+    <button
+      v-for="tab in tabs"
+      :key="tab.name"
+      @click="activeTab = tab"
+    >
       {{ tab.name }}
     </button>
   </div>
@@ -136,7 +138,9 @@ import { shallowRef, defineAsyncComponent, type Component } from 'vue'
 const currentComponent = shallowRef<Component | null>(null)
 
 async function loadComponent(name: string) {
-  const component = defineAsyncComponent(() => import(`./components/${name}.vue`))
+  const component = defineAsyncComponent(
+    () => import(`./components/${name}.vue`)
+  )
   currentComponent.value = component
 }
 ```
@@ -152,7 +156,7 @@ import { shallowRef, markRaw, type Component } from 'vue'
 const componentRegistry = {
   home: markRaw(defineAsyncComponent(() => import('./Home.vue'))),
   about: markRaw(defineAsyncComponent(() => import('./About.vue'))),
-  contact: markRaw(defineAsyncComponent(() => import('./Contact.vue'))),
+  contact: markRaw(defineAsyncComponent(() => import('./Contact.vue')))
 } as const
 
 type ComponentKey = keyof typeof componentRegistry
@@ -171,12 +175,12 @@ const currentComponent = computed(() => componentRegistry[currentView.value])
 
 ## When to Use Each Approach
 
-| Scenario                           | Solution                              |
-| ---------------------------------- | ------------------------------------- |
-| Single dynamic component reference | `shallowRef`                          |
-| Component in reactive array/object | `markRaw` on component                |
-| Component map/registry             | `markRaw` each component              |
-| Async components                   | `defineAsyncComponent` + `shallowRef` |
+| Scenario | Solution |
+|----------|----------|
+| Single dynamic component reference | `shallowRef` |
+| Component in reactive array/object | `markRaw` on component |
+| Component map/registry | `markRaw` each component |
+| Async components | `defineAsyncComponent` + `shallowRef` |
 
 ## Common Mistakes
 
@@ -195,20 +199,16 @@ const components = shallowRef([ComponentA, ComponentB])
 
 ```typescript
 // BAD: Components in map become reactive
-const routes = reactive(
-  new Map([
-    ['home', HomeComponent],
-    ['about', AboutComponent],
-  ])
-)
+const routes = reactive(new Map([
+  ['home', HomeComponent],
+  ['about', AboutComponent]
+]))
 
 // GOOD: Mark each component as raw
-const routes = reactive(
-  new Map([
-    ['home', markRaw(HomeComponent)],
-    ['about', markRaw(AboutComponent)],
-  ])
-)
+const routes = reactive(new Map([
+  ['home', markRaw(HomeComponent)],
+  ['about', markRaw(AboutComponent)]
+]))
 ```
 
 ## Reference

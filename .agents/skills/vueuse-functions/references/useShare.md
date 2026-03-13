@@ -59,7 +59,7 @@ export interface UseShareOptions {
  */
 export declare function useShare(
   shareOptions?: MaybeRefOrGetter<UseShareOptions>,
-  options?: ConfigurableNavigator
+  options?: ConfigurableNavigator,
 ): {
   isSupported: ComputedRef<boolean>
   share: (overrideOptions?: MaybeRefOrGetter<UseShareOptions>) => Promise<void>

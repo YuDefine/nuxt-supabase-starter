@@ -27,7 +27,7 @@ const preferredTransparency = usePreferredReducedTransparency()
 ## Type Declarations
 
 ```ts
-export type ReducedTransparencyType = 'reduce' | 'no-preference'
+export type ReducedTransparencyType = "reduce" | "no-preference"
 /**
  * Reactive prefers-reduced-transparency media query.
  *
@@ -37,6 +37,6 @@ export type ReducedTransparencyType = 'reduce' | 'no-preference'
  * @__NO_SIDE_EFFECTS__
  */
 export declare function usePreferredReducedTransparency(
-  options?: ConfigurableWindow
+  options?: ConfigurableWindow,
 ): ComputedRef<ReducedTransparencyType>
 ```

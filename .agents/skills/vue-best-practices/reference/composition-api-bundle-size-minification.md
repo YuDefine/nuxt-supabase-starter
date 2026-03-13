@@ -20,7 +20,6 @@ In `<script setup>`, variables and functions can have their names safely shorten
 - [ ] Be aware that libraries using Options API will include that code regardless
 
 **Bundle Size Difference:**
-
 ```javascript
 // OPTIONS API - Before minification
 export default {
@@ -136,8 +135,8 @@ export default defineConfig({
   plugins: [vue()],
   define: {
     // This drops Options API support from the bundle
-    __VUE_OPTIONS_API__: false,
-  },
+    __VUE_OPTIONS_API__: false
+  }
 })
 
 // WARNING: This will break any component (including from libraries)
@@ -148,7 +147,6 @@ export default defineConfig({
 ## When This Matters
 
 The bundle size difference is typically:
-
 - **Small components**: Negligible difference
 - **Large applications**: 10-15% smaller with Composition API
 - **With Options API flag disabled**: Additional 5-10% savings
@@ -156,6 +154,5 @@ The bundle size difference is typically:
 Choose Composition API primarily for its code organization and logic reuse benefits. The bundle size improvement is a nice bonus, not the main reason to switch.
 
 ## Reference
-
 - [Composition API FAQ - Smaller Production Bundle](https://vuejs.org/guide/extras/composition-api-faq.html#smaller-production-bundle-and-less-overhead)
 - [Vue 3 Build Feature Flags](https://github.com/vuejs/core/tree/main/packages/vue#bundler-build-feature-flags)

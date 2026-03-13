@@ -20,7 +20,9 @@ const { pixelRatio } = useDevicePixelRatio()
 
 ```vue
 <template>
-  <UseDevicePixelRatio v-slot="{ pixelRatio }"> Pixel Ratio: {{ pixelRatio }} </UseDevicePixelRatio>
+  <UseDevicePixelRatio v-slot="{ pixelRatio }">
+    Pixel Ratio: {{ pixelRatio }}
+  </UseDevicePixelRatio>
 </template>
 ```
 

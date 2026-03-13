@@ -26,8 +26,12 @@ const { now, pause, resume } = useNow({ controls: true })
 <template>
   <UseNow v-slot="{ now, pause, resume }">
     Now: {{ now }}
-    <button @click="pause()">Pause</button>
-    <button @click="resume()">Resume</button>
+    <button @click="pause()">
+      Pause
+    </button>
+    <button @click="resume()">
+      Resume
+    </button>
   </UseNow>
 </template>
 ```
@@ -53,7 +57,7 @@ export interface UseNowOptions<Controls extends boolean> {
    *
    * @default requestAnimationFrame
    */
-  interval?: 'requestAnimationFrame' | number
+  interval?: "requestAnimationFrame" | number
 }
 /**
  * Reactive current Date instance.

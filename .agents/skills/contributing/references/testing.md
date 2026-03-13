@@ -25,10 +25,7 @@ describe('ComponentName', () => {
     // Props
     ['with label', { props: { label: 'Label' } }],
     ...sizes.map((size: string) => [`with size ${size}`, { props: { label: 'Label', size } }]),
-    ...variants.map((variant: string) => [
-      `with variant ${variant}`,
-      { props: { label: 'Label', variant } },
-    ]),
+    ...variants.map((variant: string) => [`with variant ${variant}`, { props: { label: 'Label', variant } }]),
     ['with icon', { props: { icon: 'i-lucide-rocket' } }],
     ['with disabled', { props: { label: 'Label', disabled: true } }],
     ['with class', { props: { label: 'Label', class: 'custom-class' } }],
@@ -37,15 +34,15 @@ describe('ComponentName', () => {
     // Slots
     ['with default slot', { slots: { default: () => 'Default slot' } }],
     ['with leading slot', { slots: { leading: () => 'Leading slot' } }],
-    ['with trailing slot', { slots: { trailing: () => 'Trailing slot' } }],
+    ['with trailing slot', { slots: { trailing: () => 'Trailing slot' } }]
   ])
 
   // Accessibility test
   it('passes accessibility tests', async () => {
     const wrapper = await mountSuspended(ComponentName, {
       props: {
-        label: 'Accessible Label',
-      },
+        label: 'Accessible Label'
+      }
     })
 
     expect(await axe(wrapper.element)).toHaveNoViolations()
@@ -68,16 +65,10 @@ renderEach(Button, [
   ...sizes.map((size: string) => [`with size ${size}`, { props: { label: 'Button', size } }]),
 
   // All variants with primary color
-  ...variants.map((variant: string) => [
-    `with primary variant ${variant}`,
-    { props: { label: 'Button', variant } },
-  ]),
+  ...variants.map((variant: string) => [`with primary variant ${variant}`, { props: { label: 'Button', variant } }]),
 
   // All variants with neutral color
-  ...variants.map((variant: string) => [
-    `with neutral variant ${variant}`,
-    { props: { label: 'Button', variant, color: 'neutral' } },
-  ]),
+  ...variants.map((variant: string) => [`with neutral variant ${variant}`, { props: { label: 'Button', variant, color: 'neutral' } }]),
 
   // Icon variations
   ['with icon', { props: { icon: 'i-lucide-rocket' } }],
@@ -92,7 +83,7 @@ renderEach(Button, [
 
   // Customization
   ['with class', { props: { label: 'Button', class: 'rounded-full font-bold' } }],
-  ['with ui', { props: { label: 'Button', ui: { label: 'font-bold' } } }],
+  ['with ui', { props: { label: 'Button', ui: { label: 'font-bold' } } }]
 ])
 ```
 
@@ -100,27 +91,23 @@ renderEach(Button, [
 
 ```ts
 // Simple slot
-;(['with default slot', { slots: { default: () => 'Default slot' } }],
-  // Slot with props access
-  [
-    'with default slot using props',
-    {
-      slots: {
-        default: (props: any) => `UI: ${JSON.stringify(props.ui)}`,
-      },
-    },
-  ],
-  // Multiple slots
-  [
-    'with all slots',
-    {
-      slots: {
-        leading: () => 'Leading',
-        default: () => 'Default',
-        trailing: () => 'Trailing',
-      },
-    },
-  ])
+['with default slot', { slots: { default: () => 'Default slot' } }],
+
+// Slot with props access
+['with default slot using props', {
+  slots: {
+    default: (props: any) => `UI: ${JSON.stringify(props.ui)}`
+  }
+}],
+
+// Multiple slots
+['with all slots', {
+  slots: {
+    leading: () => 'Leading',
+    default: () => 'Default',
+    trailing: () => 'Trailing'
+  }
+}]
 ```
 
 ### Interactive Behavior Tests
@@ -132,11 +119,11 @@ test('with loading-auto works', async () => {
     components: { Button },
     setup() {
       function onClick() {
-        return new Promise((res) => (resolve = res))
+        return new Promise(res => resolve = res)
       }
       return { onClick }
     },
-    template: `<Button loading-auto @click="onClick">Click</Button>`,
+    template: `<Button loading-auto @click="onClick">Click</Button>`
   })
 
   const button = wrapper.find('button')
@@ -164,7 +151,7 @@ test('works with UForm', async () => {
       <UForm :state="{}" ref="form">
         <Input name="test" />
       </UForm>
-    `,
+    `
   })
 
   // Test form integration
@@ -184,9 +171,9 @@ it('passes accessibility tests', async () => {
       // For images
       avatar: {
         src: 'https://example.com/image.png',
-        alt: 'Description',
-      },
-    },
+        alt: 'Description'
+      }
+    }
   })
 
   expect(await axe(wrapper.element)).toHaveNoViolations()

@@ -11,7 +11,9 @@ Safe `onUnmounted`. Call `onUnmounted()` if it's inside a component lifecycle, i
 ```ts
 import { tryOnUnmounted } from '@vueuse/core'
 
-tryOnUnmounted(() => {})
+tryOnUnmounted(() => {
+
+})
 ```
 
 ## Type Declarations
@@ -23,5 +25,8 @@ tryOnUnmounted(() => {})
  * @param fn
  * @param target
  */
-export declare function tryOnUnmounted(fn: Fn, target?: ComponentInternalInstance | null): void
+export declare function tryOnUnmounted(
+  fn: Fn,
+  target?: ComponentInternalInstance | null,
+): void
 ```

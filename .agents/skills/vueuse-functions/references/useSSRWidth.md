@@ -20,9 +20,9 @@ Or in the root component
 
 ```vue
 <script setup lang="ts">
-  import { provideSSRWidth } from '@vueuse/core'
+import { provideSSRWidth } from '@vueuse/core'
 
-  provideSSRWidth(500)
+provideSSRWidth(500)
 </script>
 ```
 
@@ -30,9 +30,9 @@ To retrieve the provided value if you need it in a subcomponent
 
 ```vue
 <script setup lang="ts">
-  import { useSSRWidth } from '@vueuse/core'
+import { useSSRWidth } from '@vueuse/core'
 
-  const width = useSSRWidth()
+const width = useSSRWidth()
 </script>
 ```
 
@@ -40,5 +40,8 @@ To retrieve the provided value if you need it in a subcomponent
 
 ```ts
 export declare function useSSRWidth(): number | undefined
-export declare function provideSSRWidth(width: number | null, app?: App<unknown>): void
+export declare function provideSSRWidth(
+  width: number | null,
+  app?: App<unknown>,
+): void
 ```

@@ -20,7 +20,6 @@ Without `getSSRProps`, the server-rendered HTML won't include the directive's ef
 - [ ] Consider using components instead of directives for complex SSR cases
 
 **Incorrect - Client-Only Directive:**
-
 ```javascript
 // WRONG: No SSR handling - directive effects missing on server
 const vTooltip = {
@@ -28,26 +27,25 @@ const vTooltip = {
     el.setAttribute('data-tooltip', binding.value)
     el.setAttribute('aria-label', binding.value)
     el.classList.add('has-tooltip')
-  },
+  }
 }
 ```
 
 Server renders:
-
 ```html
 <!-- Missing data-tooltip, aria-label, and has-tooltip class -->
 <button>Hover me</button>
 ```
 
 Client after hydration:
-
 ```html
 <!-- Directive applies, but causes mismatch -->
-<button data-tooltip="Help text" aria-label="Help text" class="has-tooltip">Hover me</button>
+<button data-tooltip="Help text" aria-label="Help text" class="has-tooltip">
+  Hover me
+</button>
 ```
 
 **Correct - With getSSRProps:**
-
 ```javascript
 // CORRECT: SSR-compatible directive
 const vTooltip = {
@@ -63,16 +61,17 @@ const vTooltip = {
     return {
       'data-tooltip': binding.value,
       'aria-label': binding.value,
-      class: 'has-tooltip',
+      class: 'has-tooltip'
     }
-  },
+  }
 }
 ```
 
 Server now renders:
-
 ```html
-<button data-tooltip="Help text" aria-label="Help text" class="has-tooltip">Hover me</button>
+<button data-tooltip="Help text" aria-label="Help text" class="has-tooltip">
+  Hover me
+</button>
 ```
 
 ## Complete SSR Directive Example
@@ -93,7 +92,7 @@ export const vFocus = {
       return { autofocus: true }
     }
     return {}
-  },
+  }
 }
 ```
 
@@ -103,7 +102,7 @@ export const vFocus = {
 </template>
 
 <script setup>
-  import { vFocus } from '@/directives/vFocus'
+import { vFocus } from '@/directives/vFocus'
 </script>
 ```
 
@@ -119,9 +118,9 @@ const vId = {
   getSSRProps(binding, vnode) {
     // Use the same ID generation logic
     return {
-      id: binding.value || `el-${vnode.component?.uid || 'ssr'}`,
+      id: binding.value || `el-${vnode.component?.uid || 'ssr'}`
     }
-  },
+  }
 }
 ```
 
@@ -146,9 +145,9 @@ const vDraggable = {
     return {
       draggable: 'true',
       'data-draggable': '',
-      role: 'listitem',
+      role: 'listitem'
     }
-  },
+  }
 }
 ```
 
@@ -168,7 +167,7 @@ const vMousePosition = {
   // Nothing meaningful to render on server
   getSSRProps() {
     return {} // Empty object - no attributes
-  },
+  }
 }
 ```
 
@@ -183,7 +182,7 @@ export default defineNuxtPlugin((nuxtApp) => {
     },
     getSSRProps(binding) {
       return { 'data-tooltip': binding.value }
-    },
+    }
   })
 })
 ```
@@ -198,7 +197,7 @@ import { vTooltip } from './directives/vTooltip'
 test('vTooltip renders attributes during SSR', async () => {
   const app = createSSRApp({
     directives: { tooltip: vTooltip },
-    template: '<button v-tooltip="\'Help text\'">Click</button>',
+    template: '<button v-tooltip="\'Help text\'">Click</button>'
   })
 
   const html = await renderToString(app)
@@ -209,6 +208,5 @@ test('vTooltip renders attributes during SSR', async () => {
 ```
 
 ## Reference
-
 - [Vue.js Custom Directives - SSR](https://vuejs.org/guide/reusability/custom-directives.html#custom-directive-api)
 - [Vue.js SSR - Custom Directives](https://vuejs.org/guide/scaling-up/ssr.html#custom-directives)

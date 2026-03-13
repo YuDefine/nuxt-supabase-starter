@@ -19,7 +19,6 @@ tags: [vue3, composables, composition-api, api-design, typescript, patterns]
 - [ ] Required parameters can be positional; optional ones in options
 
 **Incorrect:**
-
 ```javascript
 // WRONG: Many positional parameters - unclear and error-prone
 export function useFetch(url, method, headers, timeout, retries, onError) {
@@ -39,7 +38,6 @@ const debounced = useDebounce(searchQuery, 500, true, 1000)
 ```
 
 **Correct:**
-
 ```javascript
 // CORRECT: Options object pattern
 export function useFetch(url, options = {}) {
@@ -114,8 +112,8 @@ Options can also be reactive for dynamic behavior:
 ```javascript
 export function useFetch(url, options = {}) {
   const {
-    refetch = ref(true), // Can be a ref!
-    interval = null,
+    refetch = ref(true),  // Can be a ref!
+    interval = null
   } = options
 
   watchEffect(() => {
@@ -163,7 +161,7 @@ const { count, increment, decrement } = useCounter({
   initial: 10,
   min: 0,
   max: 100,
-  step: 5,
+  step: 5
 })
 ```
 
@@ -184,8 +182,8 @@ const state = useLocalStorage('key', defaultValue, {
   listenToStorageChanges: true,
   serializer: {
     read: JSON.parse,
-    write: JSON.stringify,
-  },
+    write: JSON.stringify
+  }
 })
 ```
 
@@ -201,12 +199,11 @@ useModal(true, false, true)
 useModal({
   closable: true,
   backdrop: false,
-  keyboard: true,
+  keyboard: true
 })
 ```
 
 ## Reference
-
 - [Vue.js Composables](https://vuejs.org/guide/reusability/composables.html)
 - [VueUse Composables](https://vueuse.org/) - Examples of options pattern
 - [Good Practices for Vue Composables](https://dev.to/jacobandrewsky/good-practices-and-design-patterns-for-vue-composables-24lk)

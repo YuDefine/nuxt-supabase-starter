@@ -20,7 +20,6 @@ The key to avoiding such bugs is always implementing the `unmounted` hook to cle
 - [ ] Test that directives properly clean up when elements are removed (v-if toggling)
 
 **Incorrect:**
-
 ```javascript
 // WRONG: No cleanup - memory leak!
 const vPoll = {
@@ -30,7 +29,7 @@ const vPoll = {
       console.log('polling...')
       binding.value?.()
     }, 1000)
-  },
+  }
 }
 
 // WRONG: Event listener persists after unmount
@@ -42,12 +41,11 @@ const vClickOutside = {
       }
     })
     // No cleanup - listener stays attached to document!
-  },
+  }
 }
 ```
 
 **Correct:**
-
 ```javascript
 // CORRECT: Store reference and clean up
 const vPoll = {
@@ -64,7 +62,7 @@ const vPoll = {
       clearInterval(el._pollInterval)
       delete el._pollInterval
     }
-  },
+  }
 }
 
 // CORRECT: Named function for proper removal
@@ -82,7 +80,7 @@ const vClickOutside = {
       document.removeEventListener('click', el._clickOutsideHandler)
       delete el._clickOutsideHandler
     }
-  },
+  }
 }
 ```
 
@@ -106,7 +104,7 @@ const vPoll = {
       clearInterval(intervalId)
       pollIntervals.delete(el)
     }
-  },
+  }
 }
 
 const vClickOutside = {
@@ -125,7 +123,7 @@ const vClickOutside = {
       document.removeEventListener('click', handler)
       clickHandlers.delete(el)
     }
-  },
+  }
 }
 ```
 
@@ -137,7 +135,7 @@ const vAutoScroll = {
     const state = {
       intervalId: null,
       resizeObserver: null,
-      scrollHandler: null,
+      scrollHandler: null
     }
 
     // Set up polling
@@ -177,7 +175,7 @@ const vAutoScroll = {
     }
 
     delete el._autoScrollState
-  },
+  }
 }
 ```
 
@@ -196,7 +194,7 @@ const vTrackInterval = {
   unmounted(el) {
     clearInterval(el._interval)
     window.__activeIntervals--
-  },
+  }
 }
 
 test('directive cleans up interval on unmount', async () => {
@@ -204,7 +202,7 @@ test('directive cleans up interval on unmount', async () => {
   const wrapper = mount({
     template: `<div v-if="show" v-track-interval></div>`,
     directives: { 'track-interval': vTrackInterval },
-    setup: () => ({ show }),
+    setup: () => ({ show })
   })
 
   expect(window.__activeIntervals).toBe(1)
@@ -217,6 +215,5 @@ test('directive cleans up interval on unmount', async () => {
 ```
 
 ## Reference
-
 - [Vue.js Custom Directives - Directive Hooks](https://vuejs.org/guide/reusability/custom-directives#directive-hooks)
 - [Vue School - The Directive's unmounted Hook](https://vueschool.io/lessons/vue-3-the-directive-s-unmounted-hook)

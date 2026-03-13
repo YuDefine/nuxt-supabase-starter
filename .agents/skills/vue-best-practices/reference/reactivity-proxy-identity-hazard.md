@@ -20,7 +20,6 @@ When you wrap an object with `reactive()`, the returned proxy is NOT equal to th
 - [ ] Consider using primitive identifiers from database records for comparison
 
 **Incorrect:**
-
 ```javascript
 import { reactive } from 'vue'
 
@@ -50,7 +49,6 @@ if (listA[0] === listB[0]) {
 ```
 
 **Correct:**
-
 ```javascript
 import { reactive, toRaw } from 'vue'
 
@@ -65,11 +63,11 @@ if (toRaw(state) === original) {
 // BEST: Use unique identifiers instead
 const items = reactive([
   { id: 'uuid-1', name: 'Item 1' },
-  { id: 'uuid-2', name: 'Item 2' },
+  { id: 'uuid-2', name: 'Item 2' }
 ])
 
 function findItem(targetId) {
-  return items.find((item) => item.id === targetId)
+  return items.find(item => item.id === targetId)
 }
 
 function isSelected(item) {
@@ -78,8 +76,8 @@ function isSelected(item) {
 
 // CORRECT: For Set/Map operations, use primitive keys
 const selectedIds = reactive(new Set())
-selectedIds.add(item.id) // Use ID, not object
-selectedIds.has(item.id) // Check by ID
+selectedIds.add(item.id)  // Use ID, not object
+selectedIds.has(item.id)  // Check by ID
 ```
 
 ```javascript
@@ -94,6 +92,5 @@ function areEqual(a, b) {
 ```
 
 ## Reference
-
 - [Vue.js Reactivity in Depth](https://vuejs.org/guide/extras/reactivity-in-depth.html)
 - [Vue.js toRaw() API](https://vuejs.org/api/reactivity-advanced.html#toraw)

@@ -20,7 +20,6 @@ Wrapping utility functions as composables adds unnecessary abstraction, makes co
 - [ ] Reserve the "use" prefix for actual composables
 
 **Incorrect:**
-
 ```javascript
 // WRONG: These are just utility functions wrapped unnecessarily
 
@@ -33,7 +32,7 @@ export function useFormatters() {
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'USD'
     }).format(amount)
   }
 
@@ -59,7 +58,6 @@ const { clamp } = useMath()
 ```
 
 **Correct:**
-
 ```javascript
 // CORRECT: Export as regular utility functions
 
@@ -71,7 +69,7 @@ export function formatDate(date) {
 export function formatCurrency(amount) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: 'USD',
+    currency: 'USD'
   }).format(amount)
 }
 
@@ -91,14 +89,14 @@ import { clamp } from '@/utils/math'
 
 ## When to Use Composables vs Utilities
 
-| Use Composable When...                             | Use Utility When...       |
-| -------------------------------------------------- | ------------------------- |
-| Managing reactive state (`ref`, `reactive`)        | Pure data transformation  |
-| Using lifecycle hooks (`onMounted`, `onUnmounted`) | Stateless calculations    |
-| Setting up watchers (`watch`, `watchEffect`)       | String/array manipulation |
-| Creating computed properties                       | Formatting functions      |
-| Needs cleanup on component unmount                 | Validation functions      |
-| State changes over time                            | Mathematical operations   |
+| Use Composable When... | Use Utility When... |
+|------------------------|---------------------|
+| Managing reactive state (`ref`, `reactive`) | Pure data transformation |
+| Using lifecycle hooks (`onMounted`, `onUnmounted`) | Stateless calculations |
+| Setting up watchers (`watch`, `watchEffect`) | String/array manipulation |
+| Creating computed properties | Formatting functions |
+| Needs cleanup on component unmount | Validation functions |
+| State changes over time | Mathematical operations |
 
 ## Examples: Composables vs Utilities
 
@@ -128,7 +126,9 @@ export function parseQueryString(queryString) {
 export function useForm(initialValues) {
   const values = ref({ ...initialValues })
   const errors = ref({})
-  const isDirty = computed(() => JSON.stringify(values.value) !== JSON.stringify(initialValues))
+  const isDirty = computed(() =>
+    JSON.stringify(values.value) !== JSON.stringify(initialValues)
+  )
 
   function reset() {
     values.value = { ...initialValues }
@@ -165,7 +165,9 @@ import { validateEmail } from '@/utils/validators'
 export function useEmailInput(initialValue = '') {
   const email = ref(initialValue)
   const isValid = computed(() => validateEmail(email.value))
-  const error = computed(() => (email.value && !isValid.value ? 'Invalid email format' : null))
+  const error = computed(() =>
+    email.value && !isValid.value ? 'Invalid email format' : null
+  )
 
   return { email, isValid, error }
 }
@@ -187,6 +189,5 @@ src/
 ```
 
 ## Reference
-
 - [Vue.js Composables - What is a Composable](https://vuejs.org/guide/reusability/composables.html#what-is-a-composable)
 - [Common Mistakes Creating Composition Functions](https://www.telerik.com/blogs/common-mistakes-creating-composition-functions-vue)

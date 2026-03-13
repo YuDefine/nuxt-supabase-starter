@@ -20,7 +20,6 @@ The pattern: hold external state in a `shallowRef`, and replace `.value` entirel
 - [ ] Consider this pattern for immutable data structures
 
 **Integrating with Immer:**
-
 ```javascript
 import { produce } from 'immer'
 import { shallowRef } from 'vue'
@@ -38,17 +37,18 @@ export function useImmer(baseState) {
 }
 
 // Usage
-const [todos, updateTodos] = useImmer([{ id: 1, text: 'Learn Vue', done: false }])
+const [todos, updateTodos] = useImmer([
+  { id: 1, text: 'Learn Vue', done: false }
+])
 
 // Update with Immer's mutable API (produces immutable result)
-updateTodos((draft) => {
+updateTodos(draft => {
   draft[0].done = true
   draft.push({ id: 2, text: 'Use Immer', done: false })
 })
 ```
 
 **Integrating with XState:**
-
 ```javascript
 import { createMachine, interpret } from 'xstate'
 import { shallowRef, onUnmounted } from 'vue'
@@ -77,8 +77,8 @@ const { state, send } = useMachine({
   initial: 'inactive',
   states: {
     inactive: { on: { TOGGLE: 'active' } },
-    active: { on: { TOGGLE: 'inactive' } },
-  },
+    active: { on: { TOGGLE: 'inactive' } }
+  }
 })
 
 // In template: state.value.matches('active')
@@ -86,7 +86,6 @@ send('TOGGLE')
 ```
 
 **Integrating with Redux-style stores:**
-
 ```javascript
 import { shallowRef, readonly } from 'vue'
 
@@ -102,9 +101,9 @@ export function createStore(reducer, initialState) {
   }
 
   return {
-    state: readonly(state), // Prevent direct mutations
+    state: readonly(state),  // Prevent direct mutations
     dispatch,
-    getState,
+    getState
   }
 }
 
@@ -126,7 +125,6 @@ console.log(store.state.value.count) // 1
 ```
 
 **Why NOT use ref() for external state:**
-
 ```javascript
 import { ref } from 'vue'
 import { produce } from 'immer'
@@ -140,14 +138,13 @@ const state = ref({ nested: { value: 1 } })
 // 3. Causes identity issues and potential conflicts
 
 // WRONG: Mutating ref with Immer
-state.value = produce(state.value, (draft) => {
+state.value = produce(state.value, draft => {
   draft.nested.value = 2
 })
 // Vue's deep proxy on state.value may interfere with Immer's proxies
 ```
 
 **Correct pattern with shallowRef:**
-
 ```javascript
 import { shallowRef } from 'vue'
 
@@ -155,14 +152,13 @@ import { shallowRef } from 'vue'
 const state = shallowRef({ nested: { value: 1 } })
 
 // External library works with raw objects inside
-state.value = produce(state.value, (draft) => {
+state.value = produce(state.value, draft => {
   draft.nested.value = 2
 })
 // Clean separation: Vue tracks outer ref, library manages inner state
 ```
 
 ## Reference
-
 - [Vue.js Reactivity in Depth - Integration with External State](https://vuejs.org/guide/extras/reactivity-in-depth.html#integration-with-external-state-systems)
 - [Vue.js shallowRef API](https://vuejs.org/api/reactivity-advanced.html#shallowref)
 - [Immer Documentation](https://immerjs.github.io/immer/)

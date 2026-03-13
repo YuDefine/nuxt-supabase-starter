@@ -34,14 +34,14 @@ By default, it returns `rtl` direction when dir `rtl` is applied to the `html` t
 import { useTextDirection } from '@vueuse/core'
 
 const mode = useTextDirection({
-  selector: 'body',
+  selector: 'body'
 }) // Ref<'ltr' | 'rtl' | 'auto'>
 ```
 
 ## Type Declarations
 
 ```ts
-export type UseTextDirectionValue = 'ltr' | 'rtl' | 'auto'
+export type UseTextDirectionValue = "ltr" | "rtl" | "auto"
 export interface UseTextDirectionOptions extends ConfigurableDocument {
   /**
    * CSS Selector for the target element applying to
@@ -70,6 +70,6 @@ export interface UseTextDirectionOptions extends ConfigurableDocument {
  * @__NO_SIDE_EFFECTS__
  */
 export declare function useTextDirection(
-  options?: UseTextDirectionOptions
+  options?: UseTextDirectionOptions,
 ): WritableComputedRef<UseTextDirectionValue, UseTextDirectionValue>
 ```

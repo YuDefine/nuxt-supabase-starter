@@ -22,7 +22,7 @@ const { list, containerProps, wrapperProps } = useVirtualList(
   {
     // Keep `itemHeight` in sync with the item's row.
     itemHeight: 22,
-  }
+  },
 )
 ```
 
@@ -44,22 +44,27 @@ import { computed } from 'vue'
 
 const [isEven, toggle] = useToggle()
 const allItems = Array.from(Array.from({ length: 99999 }).keys())
-const filteredList = computed(() =>
-  allItems.filter((i) => (isEven.value ? i % 2 === 0 : i % 2 === 1))
-)
+const filteredList = computed(() => allItems.filter(i => isEven.value ? i % 2 === 0 : i % 2 === 1))
 
-const { list, containerProps, wrapperProps } = useVirtualList(filteredList, {
-  itemHeight: 22,
-})
+const { list, containerProps, wrapperProps } = useVirtualList(
+  filteredList,
+  {
+    itemHeight: 22,
+  },
+)
 ```
 
 ```vue
 <template>
   <p>Showing {{ isEven ? 'even' : 'odd' }} items</p>
-  <button @click="toggle">Toggle Even/Odd</button>
+  <button @click="toggle">
+    Toggle Even/Odd
+  </button>
   <div v-bind="containerProps" style="height: 300px">
     <div v-bind="wrapperProps">
-      <div v-for="item in list" :key="item.index" style="height: 22px">Row: {{ item.data }}</div>
+      <div v-for="item in list" :key="item.index" style="height: 22px">
+        Row: {{ item.data }}
+      </div>
     </div>
   </div>
 </template>
@@ -72,16 +77,21 @@ import { useVirtualList } from '@vueuse/core'
 
 const allItems = Array.from(Array.from({ length: 99999 }).keys())
 
-const { list, containerProps, wrapperProps } = useVirtualList(allItems, {
-  itemWidth: 200,
-})
+const { list, containerProps, wrapperProps } = useVirtualList(
+  allItems,
+  {
+    itemWidth: 200,
+  },
+)
 ```
 
 ```vue
 <template>
   <div v-bind="containerProps" style="height: 300px">
     <div v-bind="wrapperProps">
-      <div v-for="item in list" :key="item.index" style="width: 200px">Row: {{ item.data }}</div>
+      <div v-for="item in list" :key="item.index" style="width: 200px">
+        Row: {{ item.data }}
+      </div>
     </div>
   </div>
 </template>
@@ -94,7 +104,9 @@ const { list, containerProps, wrapperProps } = useVirtualList(allItems, {
   <UseVirtualList :list="list" :options="options" height="300px">
     <template #default="props">
       <!-- you can get current item of list here -->
-      <div style="height: 22px">Row {{ props.index }} {{ props.data }}</div>
+      <div style="height: 22px">
+        Row {{ props.index }} {{ props.data }}
+      </div>
     </template>
   </UseVirtualList>
 </template>
@@ -106,7 +118,8 @@ To scroll to a specific element, the component exposes `scrollTo(index: number) 
 
 ```ts
 type UseVirtualListItemSize = number | ((index: number) => number)
-export interface UseHorizontalVirtualListOptions extends UseVirtualListOptionsBase {
+export interface UseHorizontalVirtualListOptions
+  extends UseVirtualListOptionsBase {
   /**
    * item width, accept a pixel value or a function that returns the width
    *
@@ -114,7 +127,8 @@ export interface UseHorizontalVirtualListOptions extends UseVirtualListOptionsBa
    */
   itemWidth: UseVirtualListItemSize
 }
-export interface UseVerticalVirtualListOptions extends UseVirtualListOptionsBase {
+export interface UseVerticalVirtualListOptions
+  extends UseVirtualListOptionsBase {
   /**
    * item height, accept a pixel value or a function that returns the height
    *
@@ -130,7 +144,9 @@ export interface UseVirtualListOptionsBase {
    */
   overscan?: number
 }
-export type UseVirtualListOptions = UseHorizontalVirtualListOptions | UseVerticalVirtualListOptions
+export type UseVirtualListOptions =
+  | UseHorizontalVirtualListOptions
+  | UseVerticalVirtualListOptions
 export interface UseVirtualListItem<T> {
   data: T
   index: number
@@ -163,6 +179,6 @@ export interface UseVirtualListReturn<T> {
  */
 export declare function useVirtualList<T = any>(
   list: MaybeRef<readonly T[]>,
-  options: UseVirtualListOptions
+  options: UseVirtualListOptions,
 ): UseVirtualListReturn<T>
 ```

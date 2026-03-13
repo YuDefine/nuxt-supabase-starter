@@ -34,7 +34,9 @@ Our applications normally are not empathetic to battery level, we can make a few
 
 ```vue
 <template>
-  <UseBattery v-slot="{ charging }"> Is Charging: {{ charging }} </UseBattery>
+  <UseBattery v-slot="{ charging }">
+    Is Charging: {{ charging }}
+  </UseBattery>
 </template>
 ```
 

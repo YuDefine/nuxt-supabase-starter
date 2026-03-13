@@ -25,42 +25,39 @@ This is especially dangerous with object/array props because JavaScript passes t
 ## The Problem
 
 **Incorrect - Direct primitive prop mutation:**
-
 ```vue
 <script setup>
-  const props = defineProps({
-    count: Number,
-  })
+const props = defineProps({
+  count: Number
+})
 
-  // WRONG: Vue will warn about mutating props
-  function increment() {
-    props.count++ // Mutation attempt - this WILL fail
-  }
+// WRONG: Vue will warn about mutating props
+function increment() {
+  props.count++ // Mutation attempt - this WILL fail
+}
 </script>
 ```
 
 **Incorrect - Object/array prop mutation (silent but dangerous):**
-
 ```vue
 <script setup>
-  const props = defineProps({
-    user: Object,
-    items: Array,
-  })
+const props = defineProps({
+  user: Object,
+  items: Array
+})
 
-  // WRONG: No warning, but breaks data flow!
-  function updateUser() {
-    props.user.name = 'New Name' // Mutates parent's object
-  }
+// WRONG: No warning, but breaks data flow!
+function updateUser() {
+  props.user.name = 'New Name' // Mutates parent's object
+}
 
-  function addItem() {
-    props.items.push({ id: 1 }) // Mutates parent's array
-  }
+function addItem() {
+  props.items.push({ id: 1 }) // Mutates parent's array
+}
 </script>
 ```
 
 This pattern is dangerous because:
-
 1. Parent component doesn't know about the change
 2. Data can become out of sync
 3. Makes debugging difficult - where did the change come from?
@@ -71,24 +68,23 @@ This pattern is dangerous because:
 Let the parent handle all data changes.
 
 **Correct:**
-
 ```vue
 <!-- ChildComponent.vue -->
 <script setup>
-  const props = defineProps({
-    count: Number,
-    user: Object,
-  })
+const props = defineProps({
+  count: Number,
+  user: Object
+})
 
-  const emit = defineEmits(['update:count', 'update-user'])
+const emit = defineEmits(['update:count', 'update-user'])
 
-  function increment() {
-    emit('update:count', props.count + 1)
-  }
+function increment() {
+  emit('update:count', props.count + 1)
+}
 
-  function updateName(newName) {
-    emit('update-user', { ...props.user, name: newName })
-  }
+function updateName(newName) {
+  emit('update-user', { ...props.user, name: newName })
+}
 </script>
 ```
 
@@ -109,37 +105,29 @@ Let the parent handle all data changes.
 When the component needs to work with a modified version of prop data.
 
 **Correct:**
-
 ```vue
 <script setup>
-  import { ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 
-  const props = defineProps({
-    initialValue: String,
-    user: Object,
-  })
+const props = defineProps({
+  initialValue: String,
+  user: Object
+})
 
-  // Local copy for editing
-  const localValue = ref(props.initialValue)
+// Local copy for editing
+const localValue = ref(props.initialValue)
 
-  // Deep copy for objects
-  const localUser = ref({ ...props.user })
+// Deep copy for objects
+const localUser = ref({ ...props.user })
 
-  // Sync when parent changes the prop
-  watch(
-    () => props.initialValue,
-    (newVal) => {
-      localValue.value = newVal
-    }
-  )
+// Sync when parent changes the prop
+watch(() => props.initialValue, (newVal) => {
+  localValue.value = newVal
+})
 
-  watch(
-    () => props.user,
-    (newUser) => {
-      localUser.value = { ...newUser }
-    },
-    { deep: true }
-  )
+watch(() => props.user, (newUser) => {
+  localUser.value = { ...newUser }
+}, { deep: true })
 </script>
 
 <template>
@@ -153,21 +141,22 @@ When the component needs to work with a modified version of prop data.
 When you need a derived/transformed version of the prop.
 
 **Correct:**
-
 ```vue
 <script setup>
-  import { computed } from 'vue'
+import { computed } from 'vue'
 
-  const props = defineProps({
-    text: String,
-    items: Array,
-  })
+const props = defineProps({
+  text: String,
+  items: Array
+})
 
-  // Derived value - doesn't mutate prop
-  const uppercaseText = computed(() => props.text.toUpperCase())
+// Derived value - doesn't mutate prop
+const uppercaseText = computed(() => props.text.toUpperCase())
 
-  // Filtered view - doesn't mutate prop
-  const activeItems = computed(() => props.items.filter((item) => item.active))
+// Filtered view - doesn't mutate prop
+const activeItems = computed(() =>
+  props.items.filter(item => item.active)
+)
 </script>
 ```
 
@@ -176,19 +165,21 @@ When you need a derived/transformed version of the prop.
 For form-like components that need two-way binding.
 
 **Correct:**
-
 ```vue
 <!-- CustomInput.vue -->
 <script setup>
-  const props = defineProps({
-    modelValue: String,
-  })
+const props = defineProps({
+  modelValue: String
+})
 
-  const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue'])
 </script>
 
 <template>
-  <input :value="modelValue" @input="emit('update:modelValue', $event.target.value)" />
+  <input
+    :value="modelValue"
+    @input="emit('update:modelValue', $event.target.value)"
+  />
 </template>
 ```
 
@@ -204,15 +195,14 @@ For form-like components that need two-way binding.
 
 ```vue
 <script setup>
-  const props = defineProps({ config: Object })
+const props = defineProps({ config: Object })
 
-  // This "works" but is an anti-pattern!
-  props.config.theme = 'dark' // No Vue warning, but still wrong
+// This "works" but is an anti-pattern!
+props.config.theme = 'dark' // No Vue warning, but still wrong
 </script>
 ```
 
 Vue doesn't warn because it can't efficiently detect deep mutations. But this still:
-
 - Breaks one-way data flow
 - Makes the component unpredictable
 - Causes maintenance nightmares
@@ -220,6 +210,5 @@ Vue doesn't warn because it can't efficiently detect deep mutations. But this st
 **Always treat props as if they were deeply frozen.**
 
 ## Reference
-
 - [Vue.js Props - One-Way Data Flow](https://vuejs.org/guide/components/props.html#one-way-data-flow)
 - [Vue.js Props - Mutating Object/Array Props](https://vuejs.org/guide/components/props.html#mutating-object-array-props)

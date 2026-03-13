@@ -19,7 +19,7 @@ const counter = useInterval(200)
 import { useInterval } from '@vueuse/core'
 // ---cut---
 const { counter, reset, pause, resume } = useInterval(200, {
-  controls: true,
+  controls: true
 })
 ```
 
@@ -60,10 +60,10 @@ export type UseIntervalReturn =
  */
 export declare function useInterval(
   interval?: MaybeRefOrGetter<number>,
-  options?: UseIntervalOptions<false>
+  options?: UseIntervalOptions<false>,
 ): Readonly<ShallowRef<number>>
 export declare function useInterval(
   interval: MaybeRefOrGetter<number>,
-  options: UseIntervalOptions<true>
+  options: UseIntervalOptions<true>,
 ): Readonly<UseIntervalControls & Pausable>
 ```

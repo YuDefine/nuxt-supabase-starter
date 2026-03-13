@@ -53,9 +53,9 @@ Vue's Suspense needs to track a single root node to manage the pending/resolved 
 ```vue
 <!-- PageLayout.vue - Contains all async components -->
 <script setup>
-  import AsyncHeader from './AsyncHeader.vue'
-  import AsyncContent from './AsyncContent.vue'
-  import AsyncFooter from './AsyncFooter.vue'
+import AsyncHeader from './AsyncHeader.vue'
+import AsyncContent from './AsyncContent.vue'
+import AsyncFooter from './AsyncFooter.vue'
 </script>
 
 <template>

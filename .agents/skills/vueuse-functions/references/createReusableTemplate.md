@@ -32,9 +32,9 @@ In the previous example, we could refactor it to:
 
 ```vue
 <script setup lang="ts">
-  import { createReusableTemplate } from '@vueuse/core'
+import { createReusableTemplate } from '@vueuse/core'
 
-  const [DefineTemplate, ReuseTemplate] = createReusableTemplate()
+const [DefineTemplate, ReuseTemplate] = createReusableTemplate()
 </script>
 
 <template>
@@ -63,20 +63,20 @@ When using with [Options API](https://vuejs.org/guide/introduction.html#api-styl
 
 ```vue
 <script>
-  import { createReusableTemplate } from '@vueuse/core'
-  import { defineComponent } from 'vue'
+import { createReusableTemplate } from '@vueuse/core'
+import { defineComponent } from 'vue'
 
-  const [DefineTemplate, ReuseTemplate] = createReusableTemplate()
+const [DefineTemplate, ReuseTemplate] = createReusableTemplate()
 
-  export default defineComponent({
-    components: {
-      DefineTemplate,
-      ReuseTemplate,
-    },
-    setup() {
-      // ...
-    },
-  })
+export default defineComponent({
+  components: {
+    DefineTemplate,
+    ReuseTemplate,
+  },
+  setup() {
+    // ...
+  },
+})
 </script>
 
 <template>
@@ -97,9 +97,9 @@ You can also pass data to the template using slots:
 
 ```vue
 <script setup lang="ts">
-  import { createReusableTemplate } from '@vueuse/core'
+import { createReusableTemplate } from '@vueuse/core'
 
-  const [DefineTemplate, ReuseTemplate] = createReusableTemplate()
+const [DefineTemplate, ReuseTemplate] = createReusableTemplate()
 </script>
 
 <template>
@@ -119,13 +119,13 @@ You can also pass data to the template using slots:
 
 ```vue
 <script setup lang="ts">
-  import { createReusableTemplate } from '@vueuse/core'
+import { createReusableTemplate } from '@vueuse/core'
 
-  // Comes with pair of `DefineTemplate` and `ReuseTemplate`
-  const [DefineFoo, ReuseFoo] = createReusableTemplate<{ msg: string }>()
+// Comes with pair of `DefineTemplate` and `ReuseTemplate`
+const [DefineFoo, ReuseFoo] = createReusableTemplate<{ msg: string }>()
 
-  // You can create multiple reusable templates
-  const [DefineBar, ReuseBar] = createReusableTemplate<{ items: string[] }>()
+// You can create multiple reusable templates
+const [DefineBar, ReuseBar] = createReusableTemplate<{ items: string[] }>()
 </script>
 
 <template>
@@ -145,11 +145,11 @@ Optionally, if you are not a fan of array destructuring, the following usages ar
 
 ```vue
 <script setup lang="ts">
-  import { createReusableTemplate } from '@vueuse/core'
+import { createReusableTemplate } from '@vueuse/core'
 
-  const { define: DefineFoo, reuse: ReuseFoo } = createReusableTemplate<{
-    msg: string
-  }>()
+const { define: DefineFoo, reuse: ReuseFoo } = createReusableTemplate<{
+  msg: string
+}>()
 </script>
 
 <template>
@@ -163,9 +163,9 @@ Optionally, if you are not a fan of array destructuring, the following usages ar
 
 ```vue
 <script setup lang="ts">
-  import { createReusableTemplate } from '@vueuse/core'
+import { createReusableTemplate } from '@vueuse/core'
 
-  const TemplateFoo = createReusableTemplate<{ msg: string }>()
+const TemplateFoo = createReusableTemplate<{ msg: string }>()
 </script>
 
 <template>
@@ -192,7 +192,7 @@ const [DefineTemplate, ReuseTemplate] = createReusableTemplate({
   props: {
     msg: String,
     enable: Boolean,
-  },
+  }
 })
 ```
 
@@ -212,9 +212,9 @@ It's also possible to pass slots back from `<ReuseTemplate>`. You can access the
 
 ```vue
 <script setup lang="ts">
-  import { createReusableTemplate } from '@vueuse/core'
+import { createReusableTemplate } from '@vueuse/core'
 
-  const [DefineTemplate, ReuseTemplate] = createReusableTemplate()
+const [DefineTemplate, ReuseTemplate] = createReusableTemplate()
 </script>
 
 <template>
@@ -242,15 +242,17 @@ As opposed to Vue's behavior, props defined as `boolean` that were passed withou
 
 ```vue
 <script setup lang="ts">
-  import { createReusableTemplate } from '@vueuse/core'
+import { createReusableTemplate } from '@vueuse/core'
 
-  const [DefineTemplate, ReuseTemplate] = createReusableTemplate<{
-    value?: boolean
-  }>()
+const [DefineTemplate, ReuseTemplate] = createReusableTemplate<{
+  value?: boolean
+}>()
 </script>
 
 <template>
-  <DefineTemplate v-slot="{ value }"> {{ typeof value }}: {{ value }} </DefineTemplate>
+  <DefineTemplate v-slot="{ value }">
+    {{ typeof value }}: {{ value }}
+  </DefineTemplate>
 
   <ReuseTemplate :value="true" />
   <!-- boolean: true -->
@@ -282,8 +284,13 @@ Alternative Approaches:
 ## Type Declarations
 
 ```ts
-type ObjectLiteralWithPotentialObjectLiterals = Record<string, Record<string, any> | undefined>
-type GenerateSlotsFromSlotMap<T extends ObjectLiteralWithPotentialObjectLiterals> = {
+type ObjectLiteralWithPotentialObjectLiterals = Record<
+  string,
+  Record<string, any> | undefined
+>
+type GenerateSlotsFromSlotMap<
+  T extends ObjectLiteralWithPotentialObjectLiterals,
+> = {
   [K in keyof T]: Slot<T[K]>
 }
 export type DefineTemplateComponent<
@@ -295,7 +302,7 @@ export type DefineTemplateComponent<
       default: (
         _: Bindings & {
           $slots: GenerateSlotsFromSlotMap<MapSlotNameToSlotProps>
-        }
+        },
       ) => any
     }
   }
@@ -318,7 +325,9 @@ export type ReusableTemplatePair<
   define: DefineTemplateComponent<Bindings, MapSlotNameToSlotProps>
   reuse: ReuseTemplateComponent<Bindings, MapSlotNameToSlotProps>
 }
-export interface CreateReusableTemplateOptions<Props extends Record<string, any>> {
+export interface CreateReusableTemplateOptions<
+  Props extends Record<string, any>,
+> {
   /**
    * Inherit attrs from reuse component.
    *
@@ -340,11 +349,9 @@ export interface CreateReusableTemplateOptions<Props extends Record<string, any>
  */
 export declare function createReusableTemplate<
   Bindings extends Record<string, any>,
-  MapSlotNameToSlotProps extends ObjectLiteralWithPotentialObjectLiterals = Record<
-    'default',
-    undefined
-  >,
+  MapSlotNameToSlotProps extends
+    ObjectLiteralWithPotentialObjectLiterals = Record<"default", undefined>,
 >(
-  options?: CreateReusableTemplateOptions<Bindings>
+  options?: CreateReusableTemplateOptions<Bindings>,
 ): ReusableTemplatePair<Bindings, MapSlotNameToSlotProps>
 ```

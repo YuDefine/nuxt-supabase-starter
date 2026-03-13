@@ -21,7 +21,6 @@ This is a known edge case that occurs when the timing is specific - if a parent 
 - [ ] Test component replacement scenarios during development
 
 **Problematic Scenario:**
-
 ```vue
 <!-- Parent component with lazy-loaded child in transition -->
 <template>
@@ -50,12 +49,11 @@ export default {
       console.log('Unmounted - might not run')
       socket.close()
     })
-  },
+  }
 }
 ```
 
 **Safer Patterns:**
-
 ```vue
 <!-- SAFER: Use out-in mode to ensure proper sequencing -->
 <template>
@@ -113,7 +111,7 @@ export default {
     onMounted(() => {
       fetch('/api/data', { signal: abortController.signal })
         .then(handleData)
-        .catch((err) => {
+        .catch(err => {
           if (err.name !== 'AbortError') {
             handleError(err)
           }
@@ -125,7 +123,7 @@ export default {
       // Not a memory leak - just potentially wasted network call
       abortController.abort()
     })
-  },
+  }
 }
 ```
 
@@ -146,7 +144,6 @@ async function testUnmountHooks() {
 ```
 
 ## Reference
-
 - [Vue.js GitHub Issue #6260](https://github.com/vuejs/core/issues/6260)
 - [Vue.js Transition](https://vuejs.org/guide/built-ins/transition.html)
 - [Vue.js Lifecycle Hooks](https://vuejs.org/guide/essentials/lifecycle.html)

@@ -16,10 +16,12 @@ Keep states in the global scope to be reusable across Vue instances.
 import { createGlobalState } from '@vueuse/core'
 import { shallowRef } from 'vue'
 
-export const useGlobalState = createGlobalState(() => {
-  const count = shallowRef(0)
-  return { count }
-})
+export const useGlobalState = createGlobalState(
+  () => {
+    const count = shallowRef(0)
+    return { count }
+  }
+)
 ```
 
 A bigger example:
@@ -29,20 +31,22 @@ A bigger example:
 import { createGlobalState } from '@vueuse/core'
 import { computed, shallowRef } from 'vue'
 
-export const useGlobalState = createGlobalState(() => {
-  // state
-  const count = shallowRef(0)
+export const useGlobalState = createGlobalState(
+  () => {
+    // state
+    const count = shallowRef(0)
 
-  // getters
-  const doubleCount = computed(() => count.value * 2)
+    // getters
+    const doubleCount = computed(() => count.value * 2)
 
-  // actions
-  function increment() {
-    count.value++
+    // actions
+    function increment() {
+      count.value++
+    }
+
+    return { count, doubleCount, increment }
   }
-
-  return { count, doubleCount, increment }
-})
+)
 ```
 
 ### With Persistence
@@ -53,8 +57,8 @@ Store in `localStorage` with `useStorage`:
 // store.ts
 import { createGlobalState, useStorage } from '@vueuse/core'
 
-export const useGlobalState = createGlobalState(() =>
-  useStorage('vueuse-local-storage', 'initialValue')
+export const useGlobalState = createGlobalState(
+  () => useStorage('vueuse-local-storage', 'initialValue'),
 )
 ```
 
@@ -86,6 +90,6 @@ export type CreateGlobalStateReturn<Fn extends AnyFn = AnyFn> = Fn
  * @__NO_SIDE_EFFECTS__
  */
 export declare function createGlobalState<Fn extends AnyFn>(
-  stateFactory: Fn
+  stateFactory: Fn,
 ): CreateGlobalStateReturn<Fn>
 ```

@@ -21,7 +21,6 @@ However, this should be a transitional pattern. For new code, pick one API style
 - [ ] Understand that Options API `this` is NOT available in `setup()`
 
 **Using Composition API in Options API Component:**
-
 ```javascript
 import { ref, computed, onMounted } from 'vue'
 import { useExternalLibrary } from 'some-composition-library'
@@ -30,7 +29,7 @@ export default {
   // Options API parts
   data() {
     return {
-      legacyData: 'from options api',
+      legacyData: 'from options api'
     }
   },
 
@@ -38,14 +37,14 @@ export default {
     legacyComputed() {
       // Can access both Options API data AND setup() returned values
       return this.legacyData + ' - ' + this.newFeatureData
-    },
+    }
   },
 
   methods: {
     legacyMethod() {
       // Can call methods from both APIs
       this.composableMethod()
-    },
+    }
   },
 
   // Composition API via setup()
@@ -56,7 +55,9 @@ export default {
     // Create new reactive state with Composition API
     const newFeatureData = ref('from composition api')
 
-    const newComputed = computed(() => newFeatureData.value.toUpperCase())
+    const newComputed = computed(() =>
+      newFeatureData.value.toUpperCase()
+    )
 
     function composableMethod() {
       newFeatureData.value = 'updated'
@@ -68,14 +69,13 @@ export default {
       doSomething,
       newFeatureData,
       newComputed,
-      composableMethod,
+      composableMethod
     }
-  },
+  }
 }
 ```
 
 **Common Migration Pattern:**
-
 ```javascript
 // Step 1: Original Options API component
 export default {
@@ -143,7 +143,6 @@ onMounted(() => fetchUsers())
 ```
 
 **Important Limitations:**
-
 ```javascript
 export default {
   data() {
@@ -152,7 +151,7 @@ export default {
 
   setup(props, context) {
     // WRONG: 'this' is NOT available in setup()
-    console.log(this.optionsData) // undefined!
+    console.log(this.optionsData)  // undefined!
 
     // CORRECT: Access props and context via parameters
     console.log(props.someProp)
@@ -163,10 +162,8 @@ export default {
     // you generally can't - they're in separate scopes
     // The Options API CAN access setup's returned values though
 
-    return {
-      /* ... */
-    }
-  },
+    return { /* ... */ }
+  }
 }
 ```
 
@@ -184,6 +181,5 @@ export default {
 - **Long-term**: Plan to fully migrate; mixing adds complexity
 
 ## Reference
-
 - [Composition API FAQ - Using Both APIs](https://vuejs.org/guide/extras/composition-api-faq.html#can-i-use-both-apis-in-the-same-component)
 - [setup() option](https://vuejs.org/api/composition-api-setup.html)

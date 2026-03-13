@@ -33,6 +33,6 @@ export declare function useProjection(
   input: MaybeRefOrGetter<number>,
   fromDomain: MaybeRefOrGetter<readonly [number, number]>,
   toDomain: MaybeRefOrGetter<readonly [number, number]>,
-  projector?: ProjectorFunction<number, number>
+  projector?: ProjectorFunction<number, number>,
 ): ComputedRef<number>
 ```

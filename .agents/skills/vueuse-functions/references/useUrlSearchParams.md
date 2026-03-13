@@ -59,7 +59,7 @@ import { useUrlSearchParams } from '@vueuse/core'
 const params = useUrlSearchParams('history', {
   stringify: (params) => {
     return params.toString().replace(/=(&|$)/g, '$1')
-  },
+  }
 })
 
 params.foo = ''
@@ -96,7 +96,7 @@ export interface UseUrlSearchParamsOptions<T> extends ConfigurableWindow {
    * - `push`: push a new history entry
    * @default 'replace'
    */
-  writeMode?: 'replace' | 'push'
+  writeMode?: "replace" | "push"
   /**
    * Custom function to serialize URL parameters
    * When provided, this function will be used instead of the default URLSearchParams.toString()
@@ -112,8 +112,10 @@ export interface UseUrlSearchParamsOptions<T> extends ConfigurableWindow {
  * @param mode
  * @param options
  */
-export declare function useUrlSearchParams<T extends Record<string, any> = UrlParams>(
-  mode?: 'history' | 'hash' | 'hash-params',
-  options?: UseUrlSearchParamsOptions<T>
+export declare function useUrlSearchParams<
+  T extends Record<string, any> = UrlParams,
+>(
+  mode?: "history" | "hash" | "hash-params",
+  options?: UseUrlSearchParamsOptions<T>,
 ): T
 ```

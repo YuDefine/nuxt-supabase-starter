@@ -66,7 +66,7 @@ export type UseNProgressOptions = Partial<NProgressOptions>
  */
 export declare function useNProgress(
   currentProgress?: MaybeRefOrGetter<number | null | undefined>,
-  options?: UseNProgressOptions
+  options?: UseNProgressOptions,
 ): {
   isLoading: WritableComputedRef<boolean, boolean>
   progress: Ref<number | null | undefined, number | null | undefined>

@@ -18,22 +18,21 @@ tags: [vue3, slots, renderless-components, composables, performance, composition
 - [ ] Consider component overhead vs function overhead
 
 **Renderless Component Pattern:**
-
 ```vue
 <!-- MouseTracker.vue - Renderless component -->
 <script setup>
-  import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 
-  const x = ref(0)
-  const y = ref(0)
+const x = ref(0)
+const y = ref(0)
 
-  function update(event) {
-    x.value = event.pageX
-    y.value = event.pageY
-  }
+function update(event) {
+  x.value = event.pageX
+  y.value = event.pageY
+}
 
-  onMounted(() => window.addEventListener('mousemove', update))
-  onUnmounted(() => window.removeEventListener('mousemove', update))
+onMounted(() => window.addEventListener('mousemove', update))
+onUnmounted(() => window.removeEventListener('mousemove', update))
 </script>
 
 <template>
@@ -50,7 +49,6 @@ tags: [vue3, slots, renderless-components, composables, performance, composition
 ```
 
 **Composable Alternative (Recommended):**
-
 ```typescript
 // composables/useMouse.ts
 import { ref, onMounted, onUnmounted } from 'vue'
@@ -74,9 +72,9 @@ export function useMouse() {
 ```vue
 <!-- Usage - simpler, no extra component -->
 <script setup>
-  import { useMouse } from '@/composables/useMouse'
+import { useMouse } from '@/composables/useMouse'
 
-  const { x, y } = useMouse()
+const { x, y } = useMouse()
 </script>
 
 <template>
@@ -86,20 +84,18 @@ export function useMouse() {
 
 ## When to Use Each Pattern
 
-| Pattern                   | Best For                                                              |
-| ------------------------- | --------------------------------------------------------------------- |
-| **Composables**           | Pure logic reuse, state management, side effects                      |
+| Pattern | Best For |
+|---------|----------|
+| **Composables** | Pure logic reuse, state management, side effects |
 | **Renderless Components** | When slot composition is needed, wrapper logic with flexible children |
 
 ### Use Composables When:
-
 - Sharing reactive state and methods
 - Encapsulating side effects (event listeners, timers)
 - No need for template slot composition
 - Maximum performance is needed
 
 ### Use Renderless Components When:
-
 - Need to provide context/data to arbitrary slot content
 - Building provider components (like context providers)
 - The slot composition pattern is genuinely useful
@@ -108,7 +104,6 @@ export function useMouse() {
 ## Real-World Examples
 
 **Composable is Better:**
-
 ```typescript
 // Data fetching
 export function useFetch<T>(url: string) {
@@ -123,15 +118,12 @@ export function useFetch<T>(url: string) {
 export function useForm(initialValues) {
   const values = ref(initialValues)
   const errors = ref({})
-  const validate = () => {
-    /* ... */
-  }
+  const validate = () => { /* ... */ }
   return { values, errors, validate }
 }
 ```
 
 **Renderless Component is Better:**
-
 ```vue
 <!-- Virtualized list that needs to wrap arbitrary item rendering -->
 <VirtualScroller :items="items" :item-height="50">
@@ -147,18 +139,15 @@ export function useForm(initialValues) {
 ## Performance Consideration
 
 Renderless components still:
-
 - Create a component instance
 - Go through the Vue component lifecycle
 - Have reactive overhead
 
 Composables are just functions:
-
 - No component instance overhead
 - Direct reactive primitives
 - Smaller bundle size
 
 ## Reference
-
 - [Vue.js Slots - Renderless Components](https://vuejs.org/guide/components/slots.html#renderless-components)
 - [Vue.js Composables](https://vuejs.org/guide/reusability/composables.html)

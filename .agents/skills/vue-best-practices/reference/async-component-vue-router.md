@@ -20,17 +20,19 @@ const router = createRouter({
     {
       path: '/dashboard',
       // WRONG: Don't use defineAsyncComponent here
-      component: defineAsyncComponent(() => import('./views/Dashboard.vue')),
+      component: defineAsyncComponent(() =>
+        import('./views/Dashboard.vue')
+      )
     },
     {
       path: '/profile',
       // WRONG: This also won't work as expected
       component: defineAsyncComponent({
         loader: () => import('./views/Profile.vue'),
-        loadingComponent: LoadingSpinner,
-      }),
-    },
-  ],
+        loadingComponent: LoadingSpinner
+      })
+    }
+  ]
 })
 ```
 
@@ -45,14 +47,14 @@ const router = createRouter({
     {
       path: '/dashboard',
       // CORRECT: Use dynamic import directly
-      component: () => import('./views/Dashboard.vue'),
+      component: () => import('./views/Dashboard.vue')
     },
     {
       path: '/profile',
       // CORRECT: Simple arrow function with import
-      component: () => import('./views/Profile.vue'),
-    },
-  ],
+      component: () => import('./views/Profile.vue')
+    }
+  ]
 })
 ```
 
@@ -62,19 +64,19 @@ For route-level loading states, use Vue Router's navigation guards or a global l
 
 ```vue
 <script setup>
-  import { ref } from 'vue'
-  import { useRouter } from 'vue-router'
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 
-  const router = useRouter()
-  const isLoading = ref(false)
+const router = useRouter()
+const isLoading = ref(false)
 
-  router.beforeEach(() => {
-    isLoading.value = true
-  })
+router.beforeEach(() => {
+  isLoading.value = true
+})
 
-  router.afterEach(() => {
-    isLoading.value = false
-  })
+router.afterEach(() => {
+  isLoading.value = false
+})
 </script>
 
 <template>
@@ -86,13 +88,11 @@ For route-level loading states, use Vue Router's navigation guards or a global l
 ## When to Use defineAsyncComponent
 
 Use `defineAsyncComponent` for:
-
 - Components loaded conditionally within a page
 - Heavy components that aren't always needed
 - Modal dialogs or panels that load on demand
 
 Use Vue Router's lazy loading for:
-
 - Route-level components (views/pages)
 - Any component configured in route definitions
 

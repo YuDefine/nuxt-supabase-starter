@@ -10,11 +10,11 @@ Reactive scroll position and state.
 
 ```vue
 <script setup lang="ts">
-  import { useScroll } from '@vueuse/core'
-  import { useTemplateRef } from 'vue'
+import { useScroll } from '@vueuse/core'
+import { useTemplateRef } from 'vue'
 
-  const el = useTemplateRef('el')
-  const { x, y, isScrolling, arrivedState, directions } = useScroll(el)
+const el = useTemplateRef('el')
+const { x, y, isScrolling, arrivedState, directions } = useScroll(el)
 </script>
 
 <template>
@@ -38,17 +38,21 @@ Set the `x` and `y` values to make the element scroll to that position.
 
 ```vue
 <script setup lang="ts">
-  import { useScroll } from '@vueuse/core'
-  import { useTemplateRef } from 'vue'
+import { useScroll } from '@vueuse/core'
+import { useTemplateRef } from 'vue'
 
-  const el = useTemplateRef('el')
-  const { x, y } = useScroll(el)
+const el = useTemplateRef('el')
+const { x, y } = useScroll(el)
 </script>
 
 <template>
   <div ref="el" />
-  <button @click="x += 10">Scroll right 10px</button>
-  <button @click="y += 10">Scroll down 10px</button>
+  <button @click="x += 10">
+    Scroll right 10px
+  </button>
+  <button @click="y += 10">
+    Scroll down 10px
+  </button>
 </template>
 ```
 
@@ -65,7 +69,7 @@ const { x, y } = useScroll(el, { behavior: 'smooth' })
 
 // Or as a `ref`:
 const smooth = ref(false)
-const behavior = computed(() => (smooth.value ? 'smooth' : 'auto'))
+const behavior = computed(() => smooth.value ? 'smooth' : 'auto')
 const { x, y } = useScroll(el, { behavior })
 ```
 
@@ -107,14 +111,14 @@ function updateScrollState() {
 
 ```vue
 <script setup lang="ts">
-  import type { UseScrollReturn } from '@vueuse/core'
-  import { vScroll } from '@vueuse/components'
+import type { UseScrollReturn } from '@vueuse/core'
+import { vScroll } from '@vueuse/components'
 
-  const data = ref([1, 2, 3, 4, 5, 6])
+const data = ref([1, 2, 3, 4, 5, 6])
 
-  function onScroll(state: UseScrollReturn) {
-    console.log(state) // {x, y, isScrolling, arrivedState, directions}
-  }
+function onScroll(state: UseScrollReturn) {
+  console.log(state) // {x, y, isScrolling, arrivedState, directions}
+}
 </script>
 
 <template>
@@ -208,8 +212,10 @@ export interface UseScrollOptions extends ConfigurableWindow {
  * @param options
  */
 export declare function useScroll(
-  element: MaybeRefOrGetter<HTMLElement | SVGElement | Window | Document | null | undefined>,
-  options?: UseScrollOptions
+  element: MaybeRefOrGetter<
+    HTMLElement | SVGElement | Window | Document | null | undefined
+  >,
+  options?: UseScrollOptions,
 ): {
   x: WritableComputedRef<number, number>
   y: WritableComputedRef<number, number>

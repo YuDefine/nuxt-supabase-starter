@@ -18,10 +18,9 @@ tags: [vue3, component-registration, naming-conventions, pascalcase, ide-support
 - [ ] Be consistent across the entire codebase
 
 **Less Ideal:**
-
 ```vue
 <script setup>
-  import userProfile from './user-profile.vue'
+import userProfile from './user-profile.vue'
 </script>
 
 <template>
@@ -33,10 +32,9 @@ tags: [vue3, component-registration, naming-conventions, pascalcase, ide-support
 ```
 
 **Recommended:**
-
 ```vue
 <script setup>
-  import UserProfile from './UserProfile.vue'
+import UserProfile from './UserProfile.vue'
 </script>
 
 <template>
@@ -50,39 +48,28 @@ tags: [vue3, component-registration, naming-conventions, pascalcase, ide-support
 ## Why PascalCase?
 
 ### 1. Visual Distinction
-
 ```vue
 <template>
   <!-- Immediately clear what's a component vs native HTML -->
-  <PageHeader />
-  <!-- Component -->
-  <header>...</header>
-  <!-- Native HTML -->
+  <PageHeader />           <!-- Component -->
+  <header>...</header>     <!-- Native HTML -->
 
-  <NavigationMenu />
-  <!-- Component -->
-  <nav>...</nav>
-  <!-- Native HTML -->
+  <NavigationMenu />       <!-- Component -->
+  <nav>...</nav>           <!-- Native HTML -->
 
-  <UserAvatar />
-  <!-- Component -->
-  <img src="..." />
-  <!-- Native HTML -->
+  <UserAvatar />           <!-- Component -->
+  <img src="..." />        <!-- Native HTML -->
 </template>
 ```
 
 ### 2. IDE Auto-completion
-
 PascalCase names are valid JavaScript identifiers, enabling better IDE support:
-
 - Auto-import suggestions
 - Go-to-definition
 - Refactoring tools
 
 ### 3. Avoids Web Component Confusion
-
 Web Components (custom elements) require kebab-case with a hyphen. Using PascalCase for Vue components avoids any confusion:
-
 ```vue
 <template>
   <!-- Vue component -->
@@ -101,8 +88,7 @@ When using in-DOM templates (HTML files without build step), you MUST use kebab-
 <!-- index.html - in-DOM template -->
 <div id="app">
   <!-- PascalCase won't work in HTML files -->
-  <!-- <UserProfile></UserProfile> -->
-  <!-- WRONG -->
+  <!-- <UserProfile></UserProfile> --> <!-- WRONG -->
 
   <!-- Must use kebab-case -->
   <user-profile :user="currentUser"></user-profile>
@@ -112,10 +98,9 @@ When using in-DOM templates (HTML files without build step), you MUST use kebab-
 ## Vue's Automatic Resolution
 
 Vue automatically resolves PascalCase components to both casings:
-
 ```vue
 <script setup>
-  import MyComponent from './MyComponent.vue'
+import MyComponent from './MyComponent.vue'
 </script>
 
 <template>
@@ -126,5 +111,4 @@ Vue automatically resolves PascalCase components to both casings:
 ```
 
 ## Reference
-
 - [Vue.js Component Registration - Component Name Casing](https://vuejs.org/guide/components/registration.html#component-name-casing)

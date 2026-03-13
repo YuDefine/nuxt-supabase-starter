@@ -20,89 +20,87 @@ This is a subtle but common source of bugs, especially with short-circuit evalua
 - [ ] Test computed properties with different initial states
 
 **Incorrect:**
-
 ```vue
 <script setup>
-  import { ref, computed } from 'vue'
+import { ref, computed } from 'vue'
 
-  const isEnabled = ref(false)
-  const data = ref('important data')
+const isEnabled = ref(false)
+const data = ref('important data')
 
-  // BAD: If isEnabled is false initially, data.value is never accessed
-  // Vue won't track 'data' as a dependency!
-  const result = computed(() => {
-    if (!isEnabled.value) {
-      return 'disabled'
-    }
-    return data.value // This dependency may not be tracked
-  })
+// BAD: If isEnabled is false initially, data.value is never accessed
+// Vue won't track 'data' as a dependency!
+const result = computed(() => {
+  if (!isEnabled.value) {
+    return 'disabled'
+  }
+  return data.value  // This dependency may not be tracked
+})
 
-  // BAD: Short-circuit prevents second access
-  const password = ref('')
-  const confirmPassword = ref('')
+// BAD: Short-circuit prevents second access
+const password = ref('')
+const confirmPassword = ref('')
 
-  const isValid = computed(() => {
-    // If password is empty, confirmPassword is never accessed
-    return password.value && password.value === confirmPassword.value
-  })
+const isValid = computed(() => {
+  // If password is empty, confirmPassword is never accessed
+  return password.value && password.value === confirmPassword.value
+})
 
-  // BAD: Early return prevents dependency access
-  const user = ref(null)
-  const permissions = ref(['read', 'write'])
+// BAD: Early return prevents dependency access
+const user = ref(null)
+const permissions = ref(['read', 'write'])
 
-  const canEdit = computed(() => {
-    if (!user.value) {
-      return false // permissions.value never accessed when user is null
-    }
-    return permissions.value.includes('write')
-  })
+const canEdit = computed(() => {
+  if (!user.value) {
+    return false  // permissions.value never accessed when user is null
+  }
+  return permissions.value.includes('write')
+})
 </script>
 ```
 
 **Correct:**
-
 ```vue
 <script setup>
-  import { ref, computed } from 'vue'
+import { ref, computed } from 'vue'
 
-  const isEnabled = ref(false)
-  const data = ref('important data')
+const isEnabled = ref(false)
+const data = ref('important data')
 
-  // GOOD: Access all dependencies first
-  const result = computed(() => {
-    const enabled = isEnabled.value
-    const currentData = data.value // Always accessed
+// GOOD: Access all dependencies first
+const result = computed(() => {
+  const enabled = isEnabled.value
+  const currentData = data.value  // Always accessed
 
-    if (!enabled) {
-      return 'disabled'
-    }
-    return currentData
-  })
+  if (!enabled) {
+    return 'disabled'
+  }
+  return currentData
+})
 
-  // GOOD: Access both values before comparison
-  const password = ref('')
-  const confirmPassword = ref('')
+// GOOD: Access both values before comparison
+const password = ref('')
+const confirmPassword = ref('')
 
-  const isValid = computed(() => {
-    const pwd = password.value
-    const confirm = confirmPassword.value // Always accessed
+const isValid = computed(() => {
+  const pwd = password.value
+  const confirm = confirmPassword.value  // Always accessed
 
-    return pwd && pwd === confirm
-  })
+  return pwd && pwd === confirm
+})
 
-  // GOOD: Access all reactive sources upfront
-  const user = ref(null)
-  const permissions = ref(['read', 'write'])
+// GOOD: Access all reactive sources upfront
+const user = ref(null)
+const permissions = ref(['read', 'write'])
 
-  const canEdit = computed(() => {
-    const currentUser = user.value
-    const currentPermissions = permissions.value // Always accessed
+const canEdit = computed(() => {
+  const currentUser = user.value
+  const currentPermissions = permissions.value  // Always accessed
 
-    if (!currentUser) {
-      return false
-    }
-    return currentPermissions.includes('write')
-  })
+  if (!currentUser) {
+    return false
+  }
+  return currentPermissions.includes('write')
+})
 </script>
 ```
 
@@ -119,11 +117,10 @@ Vue's reactivity system works by tracking which reactive properties are accessed
 
 const computed = computed(() => {
   // Vue starts tracking here
-  if (conditionA.value) {
-    // conditionA is tracked
-    return valueB.value // valueB is ONLY tracked if conditionA is true
+  if (conditionA.value) {      // conditionA is tracked
+    return valueB.value        // valueB is ONLY tracked if conditionA is true
   }
-  return 'default' // If conditionA is false, valueB is NOT tracked!
+  return 'default'             // If conditionA is false, valueB is NOT tracked!
 })
 ```
 
@@ -141,11 +138,10 @@ const result = computed(() => {
   // Now use conditional logic safely
   if (!userVal) return []
   if (!settingsVal.enabled) return []
-  return itemsVal.filter((i) => i.active)
+  return itemsVal.filter(i => i.active)
 })
 ```
 
 ## Reference
-
 - [Vue.js Reactivity in Depth](https://vuejs.org/guide/extras/reactivity-in-depth.html)
 - [GitHub Discussion: Dependency collection gotcha with conditionals](https://github.com/vuejs/Discussion/issues/15)

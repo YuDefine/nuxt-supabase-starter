@@ -20,7 +20,6 @@ Understanding this behavior is essential for debugging scenarios where you expec
 - [ ] For intermediate value tracking, consider logging or explicit state snapshots
 
 **Example of batching behavior:**
-
 ```javascript
 import { ref, watch } from 'vue'
 
@@ -44,7 +43,6 @@ multipleUpdates()
 ```
 
 **The console logs you WON'T see:**
-
 ```javascript
 const items = reactive([])
 
@@ -53,40 +51,34 @@ watch(items, (newItems) => {
 })
 
 // Batch of changes
-items.push('a') // length: 1
-items.push('b') // length: 2
-items.push('c') // length: 3
+items.push('a')  // length: 1
+items.push('b')  // length: 2
+items.push('c')  // length: 3
 
 // Output: "Items count: 3"
 // You won't see 1, 2, 3 logged separately
 ```
 
 **Using flush: 'sync' for immediate watching (use with caution):**
-
 ```javascript
 import { ref, watch } from 'vue'
 
 const count = ref(0)
 
 // Sync watcher fires immediately on each change
-watch(
-  count,
-  (newValue) => {
-    console.log('Immediate:', newValue)
-  },
-  { flush: 'sync' }
-)
+watch(count, (newValue) => {
+  console.log('Immediate:', newValue)
+}, { flush: 'sync' })
 
-count.value = 1 // Logs: "Immediate: 1"
-count.value = 2 // Logs: "Immediate: 2"
-count.value = 3 // Logs: "Immediate: 3"
+count.value = 1  // Logs: "Immediate: 1"
+count.value = 2  // Logs: "Immediate: 2"
+count.value = 3  // Logs: "Immediate: 3"
 
 // WARNING: flush: 'sync' can cause performance issues
 // and creates less predictable behavior. Avoid if possible.
 ```
 
 **Using nextTick to separate batches:**
-
 ```javascript
 import { ref, watch, nextTick } from 'vue'
 
@@ -98,7 +90,7 @@ watch(count, (newValue) => {
 
 async function separatedUpdates() {
   count.value = 1
-  await nextTick() // Force flush
+  await nextTick()  // Force flush
   // Output: "Count: 1"
 
   count.value = 2
@@ -111,24 +103,19 @@ async function separatedUpdates() {
 ```
 
 **Practical example - form validation:**
-
 ```javascript
 const formData = reactive({
   email: '',
-  password: '',
+  password: ''
 })
 
 const validationErrors = ref([])
 
 // This watcher only fires once, with final form state
-watch(
-  formData,
-  (data) => {
-    // Runs once after all fields are updated
-    validateForm(data)
-  },
-  { deep: true }
-)
+watch(formData, (data) => {
+  // Runs once after all fields are updated
+  validateForm(data)
+}, { deep: true })
 
 // When user submits, you might update multiple fields
 function populateFromSavedData(saved) {
@@ -139,7 +126,6 @@ function populateFromSavedData(saved) {
 ```
 
 **When batching helps performance:**
-
 ```javascript
 // Without batching, this would trigger 1000 watcher/render cycles
 const list = reactive([])
@@ -154,7 +140,6 @@ function addManyItems() {
 ```
 
 **Debugging intermediate states:**
-
 ```javascript
 // If you need to observe every change for debugging:
 import { ref, watch } from 'vue'
@@ -171,12 +156,11 @@ Object.defineProperty(count, 'value', {
   set(val) {
     history.push(val)
     originalSet.call(this, val)
-  },
+  }
 })
 ```
 
 ## Reference
-
 - [Vue.js Reactivity in Depth](https://vuejs.org/guide/extras/reactivity-in-depth.html)
 - [Vue.js Watchers - Callback Flush Timing](https://vuejs.org/guide/essentials/watchers.html#callback-flush-timing)
 - [Vue.js nextTick()](https://vuejs.org/api/general.html#nexttick)

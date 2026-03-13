@@ -20,7 +20,6 @@ This is especially important when using animation libraries like GSAP, Anime.js,
 - [ ] Use `:css="false"` to prevent CSS rules from interfering with JS animations
 
 **Problematic Code:**
-
 ```vue
 <template>
   <!-- BAD: No done() callback - animation is skipped! -->
@@ -30,31 +29,30 @@ This is especially important when using animation libraries like GSAP, Anime.js,
 </template>
 
 <script setup>
-  import gsap from 'gsap'
+import gsap from 'gsap'
 
-  function onEnter(el) {
-    // Animation starts but Vue doesn't wait for it!
-    gsap.from(el, {
-      opacity: 0,
-      y: 50,
-      duration: 0.5,
-    })
-    // Missing done() call - element appears with no animation
-  }
+function onEnter(el) {
+  // Animation starts but Vue doesn't wait for it!
+  gsap.from(el, {
+    opacity: 0,
+    y: 50,
+    duration: 0.5
+  })
+  // Missing done() call - element appears with no animation
+}
 
-  function onLeave(el) {
-    gsap.to(el, {
-      opacity: 0,
-      y: -50,
-      duration: 0.5,
-    })
-    // Missing done() call - element removed immediately!
-  }
+function onLeave(el) {
+  gsap.to(el, {
+    opacity: 0,
+    y: -50,
+    duration: 0.5
+  })
+  // Missing done() call - element removed immediately!
+}
 </script>
 ```
 
 **Correct Code:**
-
 ```vue
 <template>
   <!-- GOOD: done() callback signals animation completion -->
@@ -64,25 +62,25 @@ This is especially important when using animation libraries like GSAP, Anime.js,
 </template>
 
 <script setup>
-  import gsap from 'gsap'
+import gsap from 'gsap'
 
-  function onEnter(el, done) {
-    gsap.from(el, {
-      opacity: 0,
-      y: 50,
-      duration: 0.5,
-      onComplete: done, // Tell Vue animation is complete
-    })
-  }
+function onEnter(el, done) {
+  gsap.from(el, {
+    opacity: 0,
+    y: 50,
+    duration: 0.5,
+    onComplete: done  // Tell Vue animation is complete
+  })
+}
 
-  function onLeave(el, done) {
-    gsap.to(el, {
-      opacity: 0,
-      y: -50,
-      duration: 0.5,
-      onComplete: done, // Element removed after animation
-    })
-  }
+function onLeave(el, done) {
+  gsap.to(el, {
+    opacity: 0,
+    y: -50,
+    duration: 0.5,
+    onComplete: done  // Element removed after animation
+  })
+}
 </script>
 ```
 
@@ -127,67 +125,67 @@ This is especially important when using animation libraries like GSAP, Anime.js,
 </template>
 
 <script setup>
-  import gsap from 'gsap'
-  import { ref } from 'vue'
+import gsap from 'gsap'
+import { ref } from 'vue'
 
-  const show = ref(false)
-  let enterAnimation = null
-  let leaveAnimation = null
+const show = ref(false)
+let enterAnimation = null
+let leaveAnimation = null
 
-  function onBeforeEnter(el) {
-    // Set initial state before animation
-    el.style.opacity = 0
-    el.style.transform = 'translateY(50px)'
-  }
+function onBeforeEnter(el) {
+  // Set initial state before animation
+  el.style.opacity = 0
+  el.style.transform = 'translateY(50px)'
+}
 
-  function onEnter(el, done) {
-    // Store animation reference for potential cancellation
-    enterAnimation = gsap.to(el, {
-      opacity: 1,
-      y: 0,
-      duration: 0.5,
-      ease: 'power2.out',
-      onComplete: done, // REQUIRED with :css="false"
-    })
-  }
+function onEnter(el, done) {
+  // Store animation reference for potential cancellation
+  enterAnimation = gsap.to(el, {
+    opacity: 1,
+    y: 0,
+    duration: 0.5,
+    ease: 'power2.out',
+    onComplete: done  // REQUIRED with :css="false"
+  })
+}
 
-  function onAfterEnter(el) {
-    // Cleanup after enter completes
+function onAfterEnter(el) {
+  // Cleanup after enter completes
+  enterAnimation = null
+}
+
+function onEnterCancelled() {
+  // Handle interruption (e.g., user toggles quickly)
+  if (enterAnimation) {
+    enterAnimation.kill()
     enterAnimation = null
   }
+}
 
-  function onEnterCancelled() {
-    // Handle interruption (e.g., user toggles quickly)
-    if (enterAnimation) {
-      enterAnimation.kill()
-      enterAnimation = null
-    }
-  }
+function onBeforeLeave(el) {
+  // Set state before leaving
+}
 
-  function onBeforeLeave(el) {
-    // Set state before leaving
-  }
+function onLeave(el, done) {
+  leaveAnimation = gsap.to(el, {
+    opacity: 0,
+    y: -50,
+    duration: 0.5,
+    ease: 'power2.in',
+    onComplete: done  // REQUIRED with :css="false"
+  })
+}
 
-  function onLeave(el, done) {
-    leaveAnimation = gsap.to(el, {
-      opacity: 0,
-      y: -50,
-      duration: 0.5,
-      ease: 'power2.in',
-      onComplete: done, // REQUIRED with :css="false"
-    })
-  }
+function onAfterLeave(el) {
+  leaveAnimation = null
+}
 
-  function onAfterLeave(el) {
+function onLeaveCancelled() {
+  if (leaveAnimation) {
+    leaveAnimation.kill()
     leaveAnimation = null
   }
-
-  function onLeaveCancelled() {
-    if (leaveAnimation) {
-      leaveAnimation.kill()
-      leaveAnimation = null
-    }
-  }
+}
 </script>
 ```
 
@@ -195,35 +193,29 @@ This is especially important when using animation libraries like GSAP, Anime.js,
 
 ```vue
 <script setup>
-  function onEnter(el, done) {
-    const animation = el.animate(
-      [
-        { opacity: 0, transform: 'scale(0.9)' },
-        { opacity: 1, transform: 'scale(1)' },
-      ],
-      {
-        duration: 300,
-        easing: 'ease-out',
-      }
-    )
+function onEnter(el, done) {
+  const animation = el.animate([
+    { opacity: 0, transform: 'scale(0.9)' },
+    { opacity: 1, transform: 'scale(1)' }
+  ], {
+    duration: 300,
+    easing: 'ease-out'
+  })
 
-    animation.onfinish = done // Call done when animation ends
-  }
+  animation.onfinish = done  // Call done when animation ends
+}
 
-  function onLeave(el, done) {
-    const animation = el.animate(
-      [
-        { opacity: 1, transform: 'scale(1)' },
-        { opacity: 0, transform: 'scale(0.9)' },
-      ],
-      {
-        duration: 300,
-        easing: 'ease-in',
-      }
-    )
+function onLeave(el, done) {
+  const animation = el.animate([
+    { opacity: 1, transform: 'scale(1)' },
+    { opacity: 0, transform: 'scale(0.9)' }
+  ], {
+    duration: 300,
+    easing: 'ease-in'
+  })
 
-    animation.onfinish = done
-  }
+  animation.onfinish = done
+}
 </script>
 ```
 
@@ -237,11 +229,10 @@ function onEnter(el, done) {
 }
 
 // WRONG: Forgetting done() parameter
-function onEnter(el) {
-  // No 'done' parameter
+function onEnter(el) {  // No 'done' parameter
   gsap.from(el, {
     opacity: 0,
-    onComplete: done, // Error: done is not defined!
+    onComplete: done  // Error: done is not defined!
   })
 }
 
@@ -250,12 +241,11 @@ function onEnter(el, done) {
   gsap.from(el, {
     opacity: 0,
     duration: 0.5,
-    onComplete: done, // Called after 0.5s
+    onComplete: done  // Called after 0.5s
   })
 }
 ```
 
 ## Reference
-
 - [Vue.js Transition - JavaScript Hooks](https://vuejs.org/guide/built-ins/transition.html#javascript-hooks)
 - [GSAP with Vue](https://gsap.com/resources/vue/)

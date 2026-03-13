@@ -19,7 +19,6 @@ The function will be called for both `mounted` and `updated` lifecycle hooks.
 - [ ] Use object syntax when mounted and updated have different logic
 
 **Verbose (when not needed):**
-
 ```javascript
 // VERBOSE: Full object when behavior is identical
 const vColor = {
@@ -27,8 +26,8 @@ const vColor = {
     el.style.color = binding.value
   },
   updated(el, binding) {
-    el.style.color = binding.value // Same as mounted
-  },
+    el.style.color = binding.value  // Same as mounted
+  }
 }
 
 const vHighlight = {
@@ -36,8 +35,8 @@ const vHighlight = {
     el.style.backgroundColor = binding.value || 'yellow'
   },
   updated(el, binding) {
-    el.style.backgroundColor = binding.value || 'yellow' // Duplicated
-  },
+    el.style.backgroundColor = binding.value || 'yellow'  // Duplicated
+  }
 }
 
 // Global registration - verbose
@@ -49,12 +48,11 @@ app.directive('pin', {
   updated(el, binding) {
     el.style.position = 'fixed'
     el.style.top = binding.value + 'px'
-  },
+  }
 })
 ```
 
 **Concise (function shorthand):**
-
 ```javascript
 // CONCISE: Function shorthand
 const vColor = (el, binding) => {
@@ -76,20 +74,20 @@ app.directive('pin', (el, binding) => {
 
 ```vue
 <script setup>
-  // Function shorthand for local directives
-  const vFocus = (el) => {
-    el.focus()
-  }
+// Function shorthand for local directives
+const vFocus = (el) => {
+  el.focus()
+}
 
-  const vColor = (el, binding) => {
-    el.style.color = binding.value
-  }
+const vColor = (el, binding) => {
+  el.style.color = binding.value
+}
 
-  const vPin = (el, binding) => {
-    el.style.position = binding.modifiers.absolute ? 'absolute' : 'fixed'
-    const position = binding.arg || 'top'
-    el.style[position] = binding.value + 'px'
-  }
+const vPin = (el, binding) => {
+  el.style.position = binding.modifiers.absolute ? 'absolute' : 'fixed'
+  const position = binding.arg || 'top'
+  el.style[position] = binding.value + 'px'
+}
 </script>
 
 <template>
@@ -104,7 +102,6 @@ app.directive('pin', (el, binding) => {
 Use the full object syntax when:
 
 ### 1. You Need Cleanup (unmounted hook)
-
 ```javascript
 // Need object syntax for cleanup
 const vClickOutside = {
@@ -116,18 +113,17 @@ const vClickOutside = {
   },
   unmounted(el) {
     document.removeEventListener('click', el._handler)
-  },
+  }
 }
 ```
 
 ### 2. Different Logic for mounted vs updated
-
 ```javascript
 // Need object syntax for different behavior
 const vLazyLoad = {
   mounted(el, binding) {
     // Initial setup - create observer
-    el._observer = new IntersectionObserver((entries) => {
+    el._observer = new IntersectionObserver(entries => {
       if (entries[0].isIntersecting) {
         el.src = binding.value
         el._observer.disconnect()
@@ -143,12 +139,11 @@ const vLazyLoad = {
   },
   unmounted(el) {
     el._observer?.disconnect()
-  },
+  }
 }
 ```
 
 ### 3. You Need beforeMount or beforeUpdate
-
 ```javascript
 // Need object syntax for early lifecycle hooks
 const vAnimate = {
@@ -166,7 +161,7 @@ const vAnimate = {
   },
   updated(el) {
     el.style.opacity = '1'
-  },
+  }
 }
 ```
 
@@ -176,8 +171,8 @@ Function shorthand works well with object literal values:
 
 ```javascript
 const vDemo = (el, binding) => {
-  console.log(binding.value.color) // => "white"
-  console.log(binding.value.text) // => "hello!"
+  console.log(binding.value.color)  // => "white"
+  console.log(binding.value.text)   // => "hello!"
 
   el.style.color = binding.value.color
   el.textContent = binding.value.text
@@ -191,5 +186,4 @@ const vDemo = (el, binding) => {
 ```
 
 ## Reference
-
 - [Vue.js Custom Directives - Function Shorthand](https://vuejs.org/guide/reusability/custom-directives#function-shorthand)

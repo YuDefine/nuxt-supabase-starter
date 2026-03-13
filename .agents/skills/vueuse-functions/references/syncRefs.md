@@ -123,6 +123,6 @@ export interface SyncRefsOptions extends ConfigurableFlushSync {
 export declare function syncRefs<T>(
   source: WatchSource<T>,
   targets: Ref<T> | Ref<T>[],
-  options?: SyncRefsOptions
+  options?: SyncRefsOptions,
 ): WatchHandle
 ```
