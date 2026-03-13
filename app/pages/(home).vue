@@ -1,11 +1,5 @@
 <script setup lang="ts">
-  const colorMode = useColorMode()
   const toast = useToast()
-
-  // Toggle color mode
-  function toggleColorMode() {
-    colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
-  }
 
   // Demo data for charts - 使用 nuxt-charts 正確格式
 
@@ -80,20 +74,10 @@
 
 <template>
   <div class="space-y-12">
-    <!-- Header -->
-    <header class="flex items-center justify-between">
-      <div>
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Nuxt Supabase Starter</h1>
-        <p class="mt-2 text-gray-600 dark:text-gray-400">
-          A modern starter template with Nuxt UI and Charts
-        </p>
-      </div>
-      <UButton
-        :icon="colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon'"
-        variant="ghost"
-        size="lg"
-        @click="toggleColorMode"
-      />
+    <!-- Page Header -->
+    <header>
+      <h1 class="text-3xl font-bold text-(--ui-text-highlighted)">Nuxt Supabase Starter</h1>
+      <p class="mt-2 text-(--ui-text-muted)">A modern starter template with Nuxt UI and Charts</p>
     </header>
 
     <!-- Nuxt UI Components Section -->
