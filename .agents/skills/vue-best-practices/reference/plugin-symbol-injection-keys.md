@@ -23,16 +23,16 @@ export default {
     // String key - can collide with other plugins!
     app.provide('http', axios)
     app.provide('config', appConfig)
-  }
+  },
 }
 
 // component.vue
-const http = inject('http')  // Type is unknown
-const config = inject('config')  // Type is unknown
+const http = inject('http') // Type is unknown
+const config = inject('config') // Type is unknown
 
 // Another plugin accidentally uses the same key
 otherPlugin.install = (app) => {
-  app.provide('http', differentHttpClient)  // COLLISION! Overwrites first
+  app.provide('http', differentHttpClient) // COLLISION! Overwrites first
 }
 ```
 
@@ -79,13 +79,13 @@ const config = inject(configKey)  // Type: AppConfig | undefined
 // With InjectionKey, default values are type-checked
 const config = inject(configKey, {
   apiUrl: '/default-api',
-  timeout: 3000
+  timeout: 3000,
 })
 // Type: AppConfig (not undefined because default provided)
 
 // Type error if default doesn't match!
 const config = inject(configKey, {
-  apiUrl: '/api'
+  apiUrl: '/api',
   // Missing 'timeout' - TypeScript error!
 })
 ```

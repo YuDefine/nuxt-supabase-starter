@@ -20,6 +20,7 @@ This is a subtle API detail that catches developers who assume mount() returns t
 - [ ] Use the app instance for configuration, plugins, and global registration
 
 **Incorrect:**
+
 ```javascript
 import { createApp } from 'vue'
 import App from './App.vue'
@@ -28,16 +29,17 @@ import App from './App.vue'
 const app = createApp(App).mount('#app')
 
 // This fails! app is actually the root component instance
-app.use(router)  // TypeError: app.use is not a function
-app.config.errorHandler = fn  // app.config is undefined
+app.use(router) // TypeError: app.use is not a function
+app.config.errorHandler = fn // app.config is undefined
 ```
 
 ```javascript
 // WRONG: Trying to save both in one line
-const { app, component } = createApp(App).mount('#app')  // Doesn't work this way
+const { app, component } = createApp(App).mount('#app') // Doesn't work this way
 ```
 
 **Correct:**
+
 ```javascript
 import { createApp } from 'vue'
 import App from './App.vue'
@@ -59,10 +61,7 @@ const rootComponent = app.mount('#app')
 
 ```javascript
 // If you only need the app configured and mounted (most common case):
-createApp(App)
-  .use(router)
-  .use(pinia)
-  .mount('#app')  // Return value (component instance) discarded - that's fine
+createApp(App).use(router).use(pinia).mount('#app') // Return value (component instance) discarded - that's fine
 ```
 
 ## When You Need the Root Component Instance
@@ -84,5 +83,6 @@ vm.someExposedMethod()
 ```
 
 ## Reference
+
 - [Vue.js - Mounting the App](https://vuejs.org/guide/essentials/application.html#mounting-the-app)
 - [Vue.js Application API - mount()](https://vuejs.org/api/application.html#app-mount)

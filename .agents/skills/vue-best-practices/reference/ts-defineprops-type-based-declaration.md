@@ -21,26 +21,28 @@ tags: [vue3, typescript, props, defineProps, composition-api]
 ## The Two Declaration Styles
 
 **Runtime Declaration (traditional):**
+
 ```vue
 <script setup lang="ts">
-const props = defineProps({
-  foo: { type: String, required: true },
-  bar: Number,
-  items: { type: Array as PropType<string[]>, default: () => [] }
-})
+  const props = defineProps({
+    foo: { type: String, required: true },
+    bar: Number,
+    items: { type: Array as PropType<string[]>, default: () => [] },
+  })
 </script>
 ```
 
 **Type-Based Declaration (recommended):**
+
 ```vue
 <script setup lang="ts">
-interface Props {
-  foo: string
-  bar?: number
-  items?: string[]
-}
+  interface Props {
+    foo: string
+    bar?: number
+    items?: string[]
+  }
 
-const props = defineProps<Props>()
+  const props = defineProps<Props>()
 </script>
 ```
 
@@ -49,14 +51,15 @@ const props = defineProps<Props>()
 ```typescript
 // WRONG: Cannot use both runtime and type-based declaration
 const props = defineProps<{ foo: string }>({
-  foo: { type: String, required: true }  // Error!
+  foo: { type: String, required: true }, // Error!
 })
 
 // CORRECT: Choose one style
-const props = defineProps<{ foo: string }>()  // Type-based only
+const props = defineProps<{ foo: string }>() // Type-based only
 // OR
-const props = defineProps({                    // Runtime only
-  foo: { type: String, required: true }
+const props = defineProps({
+  // Runtime only
+  foo: { type: String, required: true },
 })
 ```
 
@@ -66,18 +69,18 @@ Type-based declaration requires `withDefaults()` macro for default values (prior
 
 ```vue
 <script setup lang="ts">
-interface Props {
-  msg?: string
-  labels?: string[]
-  config?: { theme: string }
-}
+  interface Props {
+    msg?: string
+    labels?: string[]
+    config?: { theme: string }
+  }
 
-// CRITICAL: Mutable types (arrays, objects) MUST use factory functions
-const props = withDefaults(defineProps<Props>(), {
-  msg: 'hello',
-  labels: () => ['one', 'two'],      // Factory function required!
-  config: () => ({ theme: 'light' }) // Factory function required!
-})
+  // CRITICAL: Mutable types (arrays, objects) MUST use factory functions
+  const props = withDefaults(defineProps<Props>(), {
+    msg: 'hello',
+    labels: () => ['one', 'two'], // Factory function required!
+    config: () => ({ theme: 'light' }), // Factory function required!
+  })
 </script>
 ```
 
@@ -87,13 +90,13 @@ In Vue 3.5+, use destructuring with default values directly:
 
 ```vue
 <script setup lang="ts">
-interface Props {
-  msg?: string
-  labels?: string[]
-}
+  interface Props {
+    msg?: string
+    labels?: string[]
+  }
 
-// Vue 3.5+ - defaults in destructuring
-const { msg = 'hello', labels = ['one', 'two'] } = defineProps<Props>()
+  // Vue 3.5+ - defaults in destructuring
+  const { msg = 'hello', labels = ['one', 'two'] } = defineProps<Props>()
 </script>
 ```
 
@@ -110,10 +113,10 @@ export interface UserProps {
 
 ```vue
 <script setup lang="ts">
-import type { UserProps } from '@/types/user'
+  import type { UserProps } from '@/types/user'
 
-// Imported types work with defineProps (Vue 3.3+)
-const props = defineProps<UserProps>()
+  // Imported types work with defineProps (Vue 3.3+)
+  const props = defineProps<UserProps>()
 </script>
 ```
 
@@ -127,26 +130,28 @@ Runtime declaration is still useful when you need:
 
 ```vue
 <script setup lang="ts">
-import type { PropType } from 'vue'
+  import type { PropType } from 'vue'
 
-// Runtime declaration for complex validation
-const props = defineProps({
-  status: {
-    type: String as PropType<'active' | 'inactive'>,
-    required: true,
-    validator: (value: string) => ['active', 'inactive'].includes(value)
-  }
-})
+  // Runtime declaration for complex validation
+  const props = defineProps({
+    status: {
+      type: String as PropType<'active' | 'inactive'>,
+      required: true,
+      validator: (value: string) => ['active', 'inactive'].includes(value),
+    },
+  })
 </script>
 ```
 
 ## TypeScript Limitations (Prior to Vue 3.3)
 
 In Vue 3.2 and below, type-based declaration only supported:
+
 - Type literals defined inline
 - References to local interfaces
 
 Vue 3.3+ supports:
+
 - Imported types
 - Limited complex types
 - BUT NOT conditional types for the entire props object
@@ -158,14 +163,15 @@ defineProps<UserProps>()
 
 // Still NOT supported: conditional types for entire props
 type ConditionalProps<T> = T extends string ? { foo: string } : { bar: number }
-defineProps<ConditionalProps<SomeType>>()  // Error!
+defineProps<ConditionalProps<SomeType>>() // Error!
 
 // Conditional types ARE supported for individual props
 interface Props {
-  value: SomeType extends string ? string : number  // OK
+  value: SomeType extends string ? string : number // OK
 }
 ```
 
 ## Reference
+
 - [Vue.js TypeScript with Composition API - Props](https://vuejs.org/guide/typescript/composition-api.html#typing-component-props)
 - [Vue.js SFC Script Setup](https://vuejs.org/api/sfc-script-setup.html#defineprops-defineemits)

@@ -20,6 +20,7 @@ In Vue 3's Composition API, lifecycle hooks like `onMounted`, `onUnmounted`, `on
 - [ ] Hooks CAN be in external functions if called synchronously from setup
 
 **Incorrect:**
+
 ```javascript
 // WRONG: Hook registered asynchronously - will NEVER execute
 import { onMounted } from 'vue'
@@ -33,7 +34,7 @@ export default {
     onMounted(() => {
       console.log('This will never run')
     })
-  }
+  },
 }
 ```
 
@@ -49,7 +50,7 @@ export default {
         initializeChart()
       })
     }, 100)
-  }
+  },
 }
 ```
 
@@ -65,11 +66,12 @@ export default {
         applyConfig()
       })
     })
-  }
+  },
 }
 ```
 
 **Correct:**
+
 ```javascript
 // CORRECT: Hook registered synchronously at top level
 import { onMounted, ref } from 'vue'
@@ -86,25 +88,25 @@ export default {
     })
 
     return { data }
-  }
+  },
 }
 ```
 
 ```vue
 <!-- CORRECT: <script setup> - hooks at top level -->
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+  import { onMounted, onUnmounted, ref } from 'vue'
 
-const isReady = ref(false)
+  const isReady = ref(false)
 
-// These are synchronous during script setup execution
-onMounted(() => {
-  isReady.value = true
-})
+  // These are synchronous during script setup execution
+  onMounted(() => {
+    isReady.value = true
+  })
 
-onUnmounted(() => {
-  cleanup()
-})
+  onUnmounted(() => {
+    cleanup()
+  })
 </script>
 ```
 
@@ -127,7 +129,7 @@ export default {
   setup() {
     // Composable called synchronously - hooks will be registered
     useWindowResize(handleResize)
-  }
+  },
 }
 ```
 
@@ -147,10 +149,11 @@ export default {
     onMounted(() => {
       initializeB()
     })
-  }
+  },
 }
 ```
 
 ## Reference
+
 - [Vue.js Lifecycle Hooks](https://vuejs.org/guide/essentials/lifecycle.html)
 - [Composition API Lifecycle Hooks](https://vuejs.org/api/composition-api-lifecycle.html)

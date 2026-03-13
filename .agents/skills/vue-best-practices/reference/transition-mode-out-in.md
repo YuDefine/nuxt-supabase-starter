@@ -18,6 +18,7 @@ tags: [vue3, transition, animation, mode, out-in, in-out]
 - [ ] Without a mode, both animations run in parallel (default behavior)
 
 **Problematic Code:**
+
 ```vue
 <template>
   <!-- BAD: No mode - buttons overlap during transition! -->
@@ -28,12 +29,14 @@ tags: [vue3, transition, animation, mode, out-in, in-out]
 </template>
 
 <style>
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s;
-}
-.fade-enter-from, .fade-leave-to {
-  opacity: 0;
-}
+  .fade-enter-active,
+  .fade-leave-active {
+    transition: opacity 0.3s;
+  }
+  .fade-enter-from,
+  .fade-leave-to {
+    opacity: 0;
+  }
 </style>
 
 <!--
@@ -45,6 +48,7 @@ Result: Both buttons visible during transition
 ```
 
 **Correct Code:**
+
 ```vue
 <template>
   <!-- GOOD: out-in mode ensures sequential animation -->
@@ -55,12 +59,14 @@ Result: Both buttons visible during transition
 </template>
 
 <style>
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s;
-}
-.fade-enter-from, .fade-leave-to {
-  opacity: 0;
-}
+  .fade-enter-active,
+  .fade-leave-active {
+    transition: opacity 0.3s;
+  }
+  .fade-enter-from,
+  .fade-leave-to {
+    opacity: 0;
+  }
 </style>
 
 <!--
@@ -74,6 +80,7 @@ No overlap, no layout issues
 ## Transition Modes Explained
 
 ### No Mode (Default)
+
 ```
 Time:     |----- leave animation -----|
           |----- enter animation -----|
@@ -82,6 +89,7 @@ Elements are animated simultaneously (parallel)
 ```
 
 ### mode="out-in" (Recommended for most cases)
+
 ```
 Time:     |----- leave animation -----|
                                       |----- enter animation -----|
@@ -90,6 +98,7 @@ Old element leaves first, then new element enters (sequential)
 ```
 
 ### mode="in-out" (Rare use case)
+
 ```
 Time:                                 |----- leave animation -----|
           |----- enter animation -----|
@@ -100,6 +109,7 @@ New element enters first, then old element leaves
 ## When to Use Each Mode
 
 ### Use `mode="out-in"` for:
+
 - Toggle buttons (Edit/Save, Play/Pause)
 - Tab content switching
 - Multi-step forms
@@ -123,6 +133,7 @@ New element enters first, then old element leaves
 ```
 
 ### Use `mode="in-out"` for:
+
 - Card flip effects where new content appears behind old
 - Specific design requirements where overlap is intentional
 - Rarely used in practice
@@ -137,6 +148,7 @@ New element enters first, then old element leaves
 ```
 
 ### Use No Mode for:
+
 - Cross-fade effects where overlap is desired
 - Image galleries with smooth blending
 - Background transitions
@@ -150,19 +162,19 @@ New element enters first, then old element leaves
 </template>
 
 <style>
-.gallery-image {
-  position: absolute; /* Stack images on top of each other */
-}
+  .gallery-image {
+    position: absolute; /* Stack images on top of each other */
+  }
 
-.crossfade-enter-active,
-.crossfade-leave-active {
-  transition: opacity 0.5s;
-}
+  .crossfade-enter-active,
+  .crossfade-leave-active {
+    transition: opacity 0.5s;
+  }
 
-.crossfade-enter-from,
-.crossfade-leave-to {
-  opacity: 0;
-}
+  .crossfade-enter-from,
+  .crossfade-leave-to {
+    opacity: 0;
+  }
 </style>
 ```
 
@@ -181,32 +193,35 @@ If you must use the default mode (no mode) for non-overlapping elements, use abs
 </template>
 
 <style>
-.container {
-  position: relative;
-  height: 200px; /* Fixed height needed */
-}
+  .container {
+    position: relative;
+    height: 200px; /* Fixed height needed */
+  }
 
-.panel {
-  position: absolute;
-  width: 100%;
-}
+  .panel {
+    position: absolute;
+    width: 100%;
+  }
 
-.slide-enter-active,
-.slide-leave-active {
-  transition: transform 0.3s, opacity 0.3s;
-}
+  .slide-enter-active,
+  .slide-leave-active {
+    transition:
+      transform 0.3s,
+      opacity 0.3s;
+  }
 
-.slide-enter-from {
-  transform: translateX(100%);
-  opacity: 0;
-}
+  .slide-enter-from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
 
-.slide-leave-to {
-  transform: translateX(-100%);
-  opacity: 0;
-}
+  .slide-leave-to {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
 </style>
 ```
 
 ## Reference
+
 - [Vue.js Transition Modes](https://vuejs.org/guide/built-ins/transition.html#transition-modes)

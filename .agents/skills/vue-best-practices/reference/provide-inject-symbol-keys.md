@@ -20,24 +20,25 @@ tags: [vue3, provide-inject, typescript, architecture, component-library]
 ## The Problem: String Key Collisions
 
 **Risky - String keys can collide:**
+
 ```vue
 <!-- ThemeProvider.vue (your code) -->
 <script setup>
-import { provide, ref } from 'vue'
-provide('theme', ref('dark'))
+  import { provide, ref } from 'vue'
+  provide('theme', ref('dark'))
 </script>
 
 <!-- SomeThirdPartyComponent.vue (library) -->
 <script setup>
-import { provide, ref } from 'vue'
-// Oops! Same key, different value
-provide('theme', ref({ primary: 'blue', secondary: 'gray' }))
+  import { provide, ref } from 'vue'
+  // Oops! Same key, different value
+  provide('theme', ref({ primary: 'blue', secondary: 'gray' }))
 </script>
 
 <!-- DeepChild.vue -->
 <script setup>
-import { inject } from 'vue'
-const theme = inject('theme') // Which one? Closest ancestor wins
+  import { inject } from 'vue'
+  const theme = inject('theme') // Which one? Closest ancestor wins
 </script>
 ```
 
@@ -55,21 +56,21 @@ export const ConfigKey = Symbol('config')
 ```vue
 <!-- ThemeProvider.vue -->
 <script setup>
-import { provide, ref } from 'vue'
-import { ThemeKey } from '@/injection-keys'
+  import { provide, ref } from 'vue'
+  import { ThemeKey } from '@/injection-keys'
 
-const theme = ref('dark')
-provide(ThemeKey, theme)
+  const theme = ref('dark')
+  provide(ThemeKey, theme)
 </script>
 ```
 
 ```vue
 <!-- ThemeConsumer.vue -->
 <script setup>
-import { inject } from 'vue'
-import { ThemeKey } from '@/injection-keys'
+  import { inject } from 'vue'
+  import { ThemeKey } from '@/injection-keys'
 
-const theme = inject(ThemeKey)
+  const theme = inject(ThemeKey)
 </script>
 ```
 
@@ -102,41 +103,41 @@ export const LoggerKey: InjectionKey<(msg: string) => void> = Symbol('logger')
 ```vue
 <!-- Provider.vue -->
 <script setup lang="ts">
-import { provide, ref } from 'vue'
-import { UserKey, ThemeKey } from '@/injection-keys'
+  import { provide, ref } from 'vue'
+  import { UserKey, ThemeKey } from '@/injection-keys'
 
-const user = ref({
-  id: '123',
-  name: 'John',
-  email: 'john@example.com'
-})
+  const user = ref({
+    id: '123',
+    name: 'John',
+    email: 'john@example.com',
+  })
 
-const theme = ref({
-  mode: 'dark' as const,
-  primaryColor: '#007bff'
-})
+  const theme = ref({
+    mode: 'dark' as const,
+    primaryColor: '#007bff',
+  })
 
-// TypeScript validates the provided value matches the key's type
-provide(UserKey, user)
-provide(ThemeKey, theme)
+  // TypeScript validates the provided value matches the key's type
+  provide(UserKey, user)
+  provide(ThemeKey, theme)
 </script>
 ```
 
 ```vue
 <!-- Consumer.vue -->
 <script setup lang="ts">
-import { inject } from 'vue'
-import { UserKey, ThemeKey } from '@/injection-keys'
+  import { inject } from 'vue'
+  import { UserKey, ThemeKey } from '@/injection-keys'
 
-// TypeScript knows user is Ref<User> | undefined
-const user = inject(UserKey)
+  // TypeScript knows user is Ref<User> | undefined
+  const user = inject(UserKey)
 
-// With default value, TypeScript knows it's not undefined
-const theme = inject(ThemeKey, ref({ mode: 'light', primaryColor: '#000' }))
+  // With default value, TypeScript knows it's not undefined
+  const theme = inject(ThemeKey, ref({ mode: 'light', primaryColor: '#000' }))
 
-// Type-safe access
-console.log(user?.value.name) // TypeScript knows the shape
-console.log(theme.value.mode) // 'light' | 'dark'
+  // Type-safe access
+  console.log(user?.value.name) // TypeScript knows the shape
+  console.log(theme.value.mode) // 'light' | 'dark'
 </script>
 ```
 
@@ -186,24 +187,27 @@ TypeScript helps catch missing providers:
 
 ```vue
 <script setup lang="ts">
-import { inject } from 'vue'
-import { UserKey } from '@/injection-keys'
+  import { inject } from 'vue'
+  import { UserKey } from '@/injection-keys'
 
-// Option 1: Handle undefined explicitly
-const user = inject(UserKey)
-if (!user) {
-  throw new Error('UserKey must be provided by an ancestor component')
-}
+  // Option 1: Handle undefined explicitly
+  const user = inject(UserKey)
+  if (!user) {
+    throw new Error('UserKey must be provided by an ancestor component')
+  }
 
-// Option 2: Provide a default
-const userWithDefault = inject(UserKey, ref({
-  id: 'guest',
-  name: 'Guest User',
-  email: ''
-}))
+  // Option 2: Provide a default
+  const userWithDefault = inject(
+    UserKey,
+    ref({
+      id: 'guest',
+      name: 'Guest User',
+      email: '',
+    })
+  )
 
-// Option 3: Use non-null assertion (only if you're certain)
-const userRequired = inject(UserKey)!
+  // Option 3: Use non-null assertion (only if you're certain)
+  const userRequired = inject(UserKey)!
 </script>
 ```
 
@@ -219,14 +223,15 @@ String keys are acceptable for:
 ```vue
 <!-- App-level provides with namespaced strings -->
 <script setup>
-import { provide } from 'vue'
+  import { provide } from 'vue'
 
-// Namespaced strings reduce collision risk
-provide('myapp:config', config)
-provide('myapp:analytics', analytics)
+  // Namespaced strings reduce collision risk
+  provide('myapp:config', config)
+  provide('myapp:analytics', analytics)
 </script>
 ```
 
 ## Reference
+
 - [Vue.js Provide/Inject - Working with Symbol Keys](https://vuejs.org/guide/components/provide-inject.html#working-with-symbol-keys)
 - [Vue.js TypeScript - Typing Provide/Inject](https://vuejs.org/guide/typescript/composition-api.html#typing-provide-inject)

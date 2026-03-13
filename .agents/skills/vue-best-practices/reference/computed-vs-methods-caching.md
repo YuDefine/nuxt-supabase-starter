@@ -20,6 +20,7 @@ When you need to derive a value from reactive state, prefer computed properties 
 - [ ] Consider performance impact of expensive operations in methods vs computed
 
 **Incorrect:**
+
 ```vue
 <template>
   <!-- BAD: Method runs on every re-render -->
@@ -29,31 +30,32 @@ When you need to derive a value from reactive state, prefer computed properties 
 </template>
 
 <script setup>
-import { ref } from 'vue'
+  import { ref } from 'vue'
 
-const items = ref([/* large array */])
-const prices = ref([100, 200, 300])
+  const items = ref([
+    /* large array */
+  ])
+  const prices = ref([100, 200, 300])
 
-// BAD: Expensive operation runs every render
-function getFilteredItems() {
-  return items.value
-    .filter(item => item.active)
-    .sort((a, b) => a.name.localeCompare(b.name))
-}
+  // BAD: Expensive operation runs every render
+  function getFilteredItems() {
+    return items.value.filter((item) => item.active).sort((a, b) => a.name.localeCompare(b.name))
+  }
 
-// BAD: Calculation runs every render even if prices unchanged
-function calculateTotal() {
-  return prices.value.reduce((sum, price) => sum + price, 0)
-}
+  // BAD: Calculation runs every render even if prices unchanged
+  function calculateTotal() {
+    return prices.value.reduce((sum, price) => sum + price, 0)
+  }
 
-// This looks like a computed use case, but Date.now() is non-reactive
-function getCurrentTime() {
-  return Date.now()  // Will appear to work but won't update reactively
-}
+  // This looks like a computed use case, but Date.now() is non-reactive
+  function getCurrentTime() {
+    return Date.now() // Will appear to work but won't update reactively
+  }
 </script>
 ```
 
 **Correct:**
+
 ```vue
 <template>
   <!-- GOOD: Computed only recalculates when items change -->
@@ -64,41 +66,41 @@ function getCurrentTime() {
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+  import { ref, computed } from 'vue'
 
-const items = ref([/* large array */])
-const prices = ref([100, 200, 300])
+  const items = ref([
+    /* large array */
+  ])
+  const prices = ref([100, 200, 300])
 
-// GOOD: Cached - only recalculates when items.value changes
-const filteredItems = computed(() => {
-  return items.value
-    .filter(item => item.active)
-    .sort((a, b) => a.name.localeCompare(b.name))
-})
+  // GOOD: Cached - only recalculates when items.value changes
+  const filteredItems = computed(() => {
+    return items.value.filter((item) => item.active).sort((a, b) => a.name.localeCompare(b.name))
+  })
 
-// GOOD: Cached - only recalculates when prices change
-const total = computed(() => {
-  return prices.value.reduce((sum, price) => sum + price, 0)
-})
+  // GOOD: Cached - only recalculates when prices change
+  const total = computed(() => {
+    return prices.value.reduce((sum, price) => sum + price, 0)
+  })
 
-// GOOD: Use method for non-reactive values
-// (or use setInterval to update a ref)
-function getCurrentTime() {
-  return Date.now()
-}
+  // GOOD: Use method for non-reactive values
+  // (or use setInterval to update a ref)
+  function getCurrentTime() {
+    return Date.now()
+  }
 </script>
 ```
 
 ## When to Use Each
 
-| Scenario | Use Computed | Use Method |
-|----------|--------------|------------|
-| Derived from reactive state | Yes | No |
-| Expensive calculation | Yes | No |
-| Need to pass parameters | No | Yes |
-| Non-reactive value (Date.now()) | No | Yes |
-| Don't want caching | No | Yes |
-| Triggered by user action | No | Yes |
+| Scenario                        | Use Computed | Use Method |
+| ------------------------------- | ------------ | ---------- |
+| Derived from reactive state     | Yes          | No         |
+| Expensive calculation           | Yes          | No         |
+| Need to pass parameters         | No           | Yes        |
+| Non-reactive value (Date.now()) | No           | Yes        |
+| Don't want caching              | No           | Yes        |
+| Triggered by user action        | No           | Yes        |
 
 ## Non-Reactive Values Warning
 
@@ -116,4 +118,5 @@ setInterval(() => {
 ```
 
 ## Reference
+
 - [Vue.js Computed Properties - Computed Caching vs Methods](https://vuejs.org/guide/essentials/computed.html#computed-caching-vs-methods)

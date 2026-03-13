@@ -25,9 +25,9 @@ useSubscription(
       mapTo(1),
       takeUntil(fromEvent(button, 'click')),
       withLatestFrom(from(count).pipe(startWith(0))),
-      map(([curr, total]) => curr + total),
+      map(([curr, total]) => curr + total)
     )
-    .subscribe(toObserver(count)), // same as ).subscribe(val => (count.value = val))
+    .subscribe(toObserver(count)) // same as ).subscribe(val => (count.value = val))
 )
 ```
 

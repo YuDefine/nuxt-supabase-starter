@@ -17,6 +17,7 @@ Vue's compiler creates "blocks" - template sections with stable structure. Block
 ### What is a Block?
 
 A block is a template section that:
+
 1. Has a stable internal structure (same element types, same nesting)
 2. Tracks only its dynamic descendant nodes (not all descendants)
 3. Creates a flattened array for efficient reconciliation
@@ -24,6 +25,7 @@ A block is a template section that:
 ### Block Boundaries
 
 New blocks are created at:
+
 - **Root of each component template**
 - **`v-if` / `v-else` / `v-else-if`** - different branches may have different structures
 - **`v-for`** - each iteration may differ
@@ -32,14 +34,18 @@ New blocks are created at:
 <template>
   <!-- Root block starts here -->
   <div>
-    <header>Static Header</header>  <!-- Hoisted, not tracked -->
+    <header>Static Header</header>
+    <!-- Hoisted, not tracked -->
 
-    <p>{{ message }}</p>  <!-- Dynamic, tracked in root block -->
+    <p>{{ message }}</p>
+    <!-- Dynamic, tracked in root block -->
 
     <!-- v-if creates a nested block -->
     <section v-if="showDetails">
-      <span>{{ detail1 }}</span>  <!-- Tracked in v-if block -->
-      <span>{{ detail2 }}</span>  <!-- Tracked in v-if block -->
+      <span>{{ detail1 }}</span>
+      <!-- Tracked in v-if block -->
+      <span>{{ detail2 }}</span>
+      <!-- Tracked in v-if block -->
     </section>
 
     <!-- v-for creates blocks for each item -->
@@ -47,7 +53,8 @@ New blocks are created at:
       <span :class="item.type">{{ item.name }}</span>
     </div>
 
-    <footer>Static Footer</footer>  <!-- Hoisted, not tracked -->
+    <footer>Static Footer</footer>
+    <!-- Hoisted, not tracked -->
   </div>
 </template>
 ```
@@ -55,6 +62,7 @@ New blocks are created at:
 ### How Blocks Optimize Rendering
 
 Without blocks (pure runtime diffing):
+
 ```
 Re-render walks ENTIRE tree:
 div
@@ -72,6 +80,7 @@ div
 ```
 
 With blocks (Vue's approach):
+
 ```
 Re-render only walks dynamic nodes:
 Root block:
@@ -108,8 +117,10 @@ Each v-for block:
 
     <!-- v-for: each item is its own block -->
     <article v-for="post in posts" :key="post.id">
-      <h2>{{ post.title }}</h2>  <!-- Tracked in item's block -->
-      <p>{{ post.excerpt }}</p>   <!-- Tracked in item's block -->
+      <h2>{{ post.title }}</h2>
+      <!-- Tracked in item's block -->
+      <p>{{ post.excerpt }}</p>
+      <!-- Tracked in item's block -->
     </article>
 
     <!-- v-if: separate block, only tracked when visible -->
@@ -121,6 +132,7 @@ Each v-for block:
 ```
 
 When `posts[2].title` changes:
+
 - Vue finds the 3rd v-for block
 - Diffs only that block's tracked dynamic nodes
 - Skips all other posts, the nav, the aside
@@ -128,10 +140,12 @@ When `posts[2].title` changes:
 ## You Don't Need to Do Anything
 
 This optimization is automatic when using templates. Understanding blocks helps you:
+
 - Reason about why updates are fast
 - Understand Vue DevTools performance panel output
 - Appreciate why templates are recommended over render functions
 
 ## Reference
+
 - [Vue.js Rendering Mechanism - Tree Flattening](https://vuejs.org/guide/extras/rendering-mechanism.html#tree-flattening)
 - [Vue.js Rendering Mechanism - Compiler-Informed Virtual DOM](https://vuejs.org/guide/extras/rendering-mechanism.html#compiler-informed-virtual-dom)

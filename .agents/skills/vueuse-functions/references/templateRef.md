@@ -18,15 +18,15 @@ Shorthand for binding ref to template element.
 
 ```vue
 <script lang="ts">
-import { templateRef } from '@vueuse/core'
+  import { templateRef } from '@vueuse/core'
 
-export default {
-  setup() {
-    const target = templateRef('target')
+  export default {
+    setup() {
+      const target = templateRef('target')
 
-    // no need to return the `target`, it will bind to the ref magically
-  },
-}
+      // no need to return the `target`, it will bind to the ref magically
+    },
+  }
 </script>
 
 <template>
@@ -55,9 +55,9 @@ There is no need for this when using with `<script setup>` since all the variabl
 
 ```vue
 <script setup lang="ts">
-import { ref } from 'vue'
+  import { ref } from 'vue'
 
-const target = ref<HTMLElement | null>(null)
+  const target = ref<HTMLElement | null>(null)
 </script>
 
 <template>

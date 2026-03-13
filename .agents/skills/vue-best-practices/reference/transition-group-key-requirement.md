@@ -20,6 +20,7 @@ This is a fundamental difference from `<Transition>` which works on single eleme
 - [ ] When using `v-for`, always include `:key` binding
 
 **Incorrect - Missing keys:**
+
 ```vue
 <template>
   <!-- WRONG: Missing keys causes broken animations -->
@@ -32,6 +33,7 @@ This is a fundamental difference from `<Transition>` which works on single eleme
 ```
 
 **Incorrect - Using index as key:**
+
 ```vue
 <template>
   <!-- PROBLEMATIC: Index keys cause incorrect animations when list changes -->
@@ -44,11 +46,13 @@ This is a fundamental difference from `<Transition>` which works on single eleme
 ```
 
 When using index as key:
+
 - If you remove item at index 2, what was index 3 becomes index 2
 - Vue thinks index 2 changed content rather than being removed
 - Animations fire on wrong elements
 
 **Correct - Unique stable keys:**
+
 ```vue
 <template>
   <!-- CORRECT: Unique ID keys for proper tracking -->
@@ -61,6 +65,7 @@ When using index as key:
 ```
 
 **Correct - Keys on static children:**
+
 ```vue
 <template>
   <!-- CORRECT: Even static children need keys in TransitionGroup -->
@@ -75,6 +80,7 @@ When using index as key:
 ## Common Error Messages
 
 Without keys, you'll see warnings like:
+
 ```
 [Vue warn]: <TransitionGroup> children must be keyed.
 ```
@@ -103,5 +109,6 @@ Ensure all draggable items have unique keys:
 ```
 
 ## Reference
+
 - [Vue.js TransitionGroup](https://vuejs.org/guide/built-ins/transition-group.html)
 - [Vue.js List Rendering Keys](https://vuejs.org/guide/essentials/list.html#maintaining-state-with-key)

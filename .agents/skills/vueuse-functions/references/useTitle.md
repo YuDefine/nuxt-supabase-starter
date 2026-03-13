@@ -49,7 +49,7 @@ Pass an optional template tag [Vue Meta Title Template](https://vue-meta.nuxtjs.
 import { useTitle } from '@vueuse/core'
 // ---cut---
 const title = useTitle('New Title', {
-  titleTemplate: '%s | My Awesome Website'
+  titleTemplate: '%s | My Awesome Website',
 })
 ```
 
@@ -68,10 +68,7 @@ export type UseTitleOptionsBase = {
    */
   restoreOnUnmount?:
     | false
-    | ((
-        originalTitle: string,
-        currentTitle: string,
-      ) => string | null | undefined)
+    | ((originalTitle: string, currentTitle: string) => string | null | undefined)
 } & (
   | {
       /**
@@ -103,11 +100,11 @@ export type UseTitleOptions = ConfigurableDocument & UseTitleOptionsBase
  */
 export declare function useTitle(
   newTitle: ReadonlyRefOrGetter<string | null | undefined>,
-  options?: UseTitleOptions,
+  options?: UseTitleOptions
 ): ComputedRef<string | null | undefined>
 export declare function useTitle(
   newTitle?: MaybeRef<string | null | undefined>,
-  options?: UseTitleOptions,
+  options?: UseTitleOptions
 ): Ref<string | null | undefined>
 export type UseTitleReturn = ReturnType<typeof useTitle>
 ```

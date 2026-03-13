@@ -199,6 +199,6 @@ export interface UseManualRefHistoryReturn<Raw, Serialized> {
  */
 export declare function useManualRefHistory<Raw, Serialized = Raw>(
   source: Ref<Raw>,
-  options?: UseManualRefHistoryOptions<Raw, Serialized>,
+  options?: UseManualRefHistoryOptions<Raw, Serialized>
 ): UseManualRefHistoryReturn<Raw, Serialized>
 ```

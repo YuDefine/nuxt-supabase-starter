@@ -33,20 +33,22 @@ const subjectRef = useSubject(subject, {
   onError: (err) => {
     console.log(err.message) // "oops"
   },
-},)
+})
 ```
 
 ## Type Declarations
 
 ```ts
-export interface UseSubjectOptions<I = undefined>
-  extends Omit<UseObservableOptions<I>, "initialValue"> {}
+export interface UseSubjectOptions<I = undefined> extends Omit<
+  UseObservableOptions<I>,
+  'initialValue'
+> {}
 export declare function useSubject<H>(
   subject: BehaviorSubject<H>,
-  options?: UseSubjectOptions,
+  options?: UseSubjectOptions
 ): Ref<H>
 export declare function useSubject<H>(
   subject: Subject<H>,
-  options?: UseSubjectOptions,
+  options?: UseSubjectOptions
 ): Ref<H | undefined>
 ```

@@ -10,26 +10,24 @@ Open file dialog with ease.
 
 ```vue
 <script setup lang="ts">
-import { useFileDialog } from '@vueuse/core'
+  import { useFileDialog } from '@vueuse/core'
 
-const { files, open, reset, onCancel, onChange } = useFileDialog({
-  accept: 'image/*', // Set to accept only image files
-  directory: true, // Select directories instead of files if set true
-})
+  const { files, open, reset, onCancel, onChange } = useFileDialog({
+    accept: 'image/*', // Set to accept only image files
+    directory: true, // Select directories instead of files if set true
+  })
 
-onChange((files) => {
-  /** do something with files */
-})
+  onChange((files) => {
+    /** do something with files */
+  })
 
-onCancel(() => {
-  /** do something on cancel */
-})
+  onCancel(() => {
+    /** do something on cancel */
+  })
 </script>
 
 <template>
-  <button type="button" @click="open">
-    Choose file
-  </button>
+  <button type="button" @click="open">Choose file</button>
 </template>
 ```
 
@@ -85,7 +83,5 @@ export interface UseFileDialogReturn {
  * @see https://vueuse.org/useFileDialog
  * @param options
  */
-export declare function useFileDialog(
-  options?: UseFileDialogOptions,
-): UseFileDialogReturn
+export declare function useFileDialog(options?: UseFileDialogOptions): UseFileDialogReturn
 ```

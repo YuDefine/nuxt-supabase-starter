@@ -34,7 +34,7 @@ const myPlugin = {
     }
 
     app.provide('myPlugin', { prefix })
-  }
+  },
 }
 
 export default myPlugin
@@ -80,13 +80,11 @@ export function createI18n(options: I18nOptions): Plugin {
       const { locale, messages, fallbackLocale = 'en' } = options
 
       const translate = (key: string): string => {
-        return messages[locale]?.[key]
-          ?? messages[fallbackLocale]?.[key]
-          ?? key
+        return messages[locale]?.[key] ?? messages[fallbackLocale]?.[key] ?? key
       }
 
       app.provide('i18n', { translate, locale })
-    }
+    },
   }
 }
 
@@ -95,11 +93,11 @@ const i18n = createI18n({
   locale: 'fr',
   messages: {
     en: { hello: 'Hello' },
-    fr: { hello: 'Bonjour' }
-  }
+    fr: { hello: 'Bonjour' },
+  },
 })
 
-app.use(i18n)  // No second argument needed
+app.use(i18n) // No second argument needed
 ```
 
 ## Common Plugin Capabilities
@@ -124,14 +122,14 @@ const fullFeaturedPlugin = {
     app.mixin({
       created() {
         // Runs for every component
-      }
+      },
     })
 
     // 6. Custom error handling
     app.config.errorHandler = (err, vm, info) => {
       // Handle errors
     }
-  }
+  },
 }
 ```
 
@@ -150,14 +148,14 @@ interface MyOptions {
 const myPlugin: Plugin<[MyOptions]> = {
   install(app: App, options: MyOptions) {
     // options is typed as MyOptions
-  }
+  },
 }
 
 // Without options
 const simplePlugin: Plugin = {
   install(app: App) {
     // No options expected
-  }
+  },
 }
 ```
 
@@ -168,15 +166,21 @@ const simplePlugin: Plugin = {
 ```typescript
 // BAD - This is just an object, not a plugin
 const notAPlugin = {
-  doSomething() { /* ... */ }
+  doSomething() {
+    /* ... */
+  },
 }
-app.use(notAPlugin)  // Error or silent failure
+app.use(notAPlugin) // Error or silent failure
 
 // GOOD
 const actualPlugin = {
   install(app) {
-    app.provide('service', { doSomething() { /* ... */ } })
-  }
+    app.provide('service', {
+      doSomething() {
+        /* ... */
+      },
+    })
+  },
 }
 ```
 
@@ -188,15 +192,15 @@ const uselessPlugin = {
   install(app, options) {
     const service = createService(options)
     // Forgot to register anything with app!
-  }
+  },
 }
 
 // GOOD
 const usefulPlugin = {
   install(app, options) {
     const service = createService(options)
-    app.provide('service', service)  // Actually makes it available
-  }
+    app.provide('service', service) // Actually makes it available
+  },
 }
 ```
 

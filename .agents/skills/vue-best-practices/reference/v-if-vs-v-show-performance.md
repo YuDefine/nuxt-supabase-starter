@@ -21,6 +21,7 @@ tags: [vue3, conditional-rendering, v-if, v-show, performance]
 - [ ] Consider the memory cost of keeping hidden elements in DOM with v-show
 
 **Incorrect:**
+
 ```html
 <!-- WRONG: Frequent toggle with v-if causes expensive DOM operations -->
 <template>
@@ -42,6 +43,7 @@ tags: [vue3, conditional-rendering, v-if, v-show, performance]
 ```
 
 **Correct:**
+
 ```html
 <!-- CORRECT: Frequent toggle with v-show - cheap CSS toggle -->
 <template>
@@ -77,13 +79,13 @@ tags: [vue3, conditional-rendering, v-if, v-show, performance]
 
 ## Decision Guide
 
-| Scenario | Recommendation | Reason |
-|----------|----------------|--------|
-| Toggle frequently (tabs, accordions, dropdowns) | `v-show` | Cheap CSS toggle |
-| Toggle rarely (auth, feature flags) | `v-if` | Lazy render, clean DOM |
-| Initially false, may never be true | `v-if` | Never pays render cost |
-| Complex child components with state | `v-if` | Properly resets state on toggle |
-| Need to preserve component state across toggles | `v-show` | Component stays alive |
+| Scenario                                        | Recommendation | Reason                          |
+| ----------------------------------------------- | -------------- | ------------------------------- |
+| Toggle frequently (tabs, accordions, dropdowns) | `v-show`       | Cheap CSS toggle                |
+| Toggle rarely (auth, feature flags)             | `v-if`         | Lazy render, clean DOM          |
+| Initially false, may never be true              | `v-if`         | Never pays render cost          |
+| Complex child components with state             | `v-if`         | Properly resets state on toggle |
+| Need to preserve component state across toggles | `v-show`       | Component stays alive           |
 
 ## Key Differences
 
@@ -100,4 +102,5 @@ tags: [vue3, conditional-rendering, v-if, v-show, performance]
 ```
 
 ## Reference
+
 - [Vue.js Conditional Rendering - v-if vs v-show](https://vuejs.org/guide/essentials/conditional.html#v-if-vs-v-show)

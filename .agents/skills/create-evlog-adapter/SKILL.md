@@ -19,16 +19,16 @@ The exact wording may vary depending on the adapter (e.g., `feat: add OTLP adapt
 
 ## Touchpoints Checklist
 
-| # | File | Action |
-|---|------|--------|
-| 1 | `packages/evlog/src/adapters/{name}.ts` | Create adapter source |
-| 2 | `packages/evlog/tsdown.config.ts` | Add build entry |
-| 3 | `packages/evlog/package.json` | Add `exports` + `typesVersions` entries |
-| 4 | `packages/evlog/test/adapters/{name}.test.ts` | Create tests |
-| 5 | `apps/docs/content/4.adapters/{n}.{name}.md` | Create adapter doc page (before `custom.md`) |
-| 6 | `apps/docs/content/4.adapters/1.overview.md` | Add adapter to overview (links, card, env vars) |
-| 7 | `skills/evlog/SKILL.md` | Add adapter row in the Drain Adapters table |
-| 8 | Renumber `custom.md` | Ensure `custom.md` stays last after the new adapter |
+| #   | File                                          | Action                                              |
+| --- | --------------------------------------------- | --------------------------------------------------- |
+| 1   | `packages/evlog/src/adapters/{name}.ts`       | Create adapter source                               |
+| 2   | `packages/evlog/tsdown.config.ts`             | Add build entry                                     |
+| 3   | `packages/evlog/package.json`                 | Add `exports` + `typesVersions` entries             |
+| 4   | `packages/evlog/test/adapters/{name}.test.ts` | Create tests                                        |
+| 5   | `apps/docs/content/4.adapters/{n}.{name}.md`  | Create adapter doc page (before `custom.md`)        |
+| 6   | `apps/docs/content/4.adapters/1.overview.md`  | Add adapter to overview (links, card, env vars)     |
+| 7   | `skills/evlog/SKILL.md`                       | Add adapter row in the Drain Adapters table         |
+| 8   | Renumber `custom.md`                          | Ensure `custom.md` stays last after the new adapter |
 
 **Important**: Do NOT consider the task complete until all 8 touchpoints have been addressed.
 
@@ -36,11 +36,11 @@ The exact wording may vary depending on the adapter (e.g., `feat: add OTLP adapt
 
 Use these placeholders consistently:
 
-| Placeholder | Example (Datadog) | Usage |
-|-------------|-------------------|-------|
-| `{name}` | `datadog` | File names, import paths, env var suffix |
-| `{Name}` | `Datadog` | PascalCase in function/interface names |
-| `{NAME}` | `DATADOG` | SCREAMING_CASE in env var prefixes |
+| Placeholder | Example (Datadog) | Usage                                    |
+| ----------- | ----------------- | ---------------------------------------- |
+| `{name}`    | `datadog`         | File names, import paths, env var suffix |
+| `{Name}`    | `Datadog`         | PascalCase in function/interface names   |
+| `{NAME}`    | `DATADOG`         | SCREAMING_CASE in env var prefixes       |
 
 ## Step 1: Adapter Source
 

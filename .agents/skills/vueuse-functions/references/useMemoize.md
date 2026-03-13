@@ -16,8 +16,7 @@ The results are not cleared automatically. Call `clear()` in case you no longer 
 import { useMemoize } from '@vueuse/core'
 
 const getUser = useMemoize(
-  async (userId: number): Promise<UserData> =>
-    axios.get(`users/${userId}`).then(({ data }) => data),
+  async (userId: number): Promise<UserData> => axios.get(`users/${userId}`).then(({ data }) => data)
 )
 
 const user1 = await getUser(1) // Request users/1
@@ -39,8 +38,7 @@ Combine with `computed` or `computedAsync` to achieve reactivity:
 import { computedAsync, useMemoize } from '@vueuse/core'
 
 const getUser = useMemoize(
-  async (userId: number): Promise<UserData> =>
-    axios.get(`users/${userId}`).then(({ data }) => data),
+  async (userId: number): Promise<UserData> => axios.get(`users/${userId}`).then(({ data }) => data)
 )
 // ---cut---
 const user1 = computedAsync(() => getUser(1))
@@ -68,7 +66,7 @@ const getUser = useMemoize(
   {
     // Use only userId to get/set cache and ignore headers
     getKey: (userId, headers) => userId,
-  },
+  }
 )
 ```
 
@@ -170,6 +168,6 @@ export interface UseMemoizeOptions<Result, Args extends unknown[]> {
  */
 export declare function useMemoize<Result, Args extends unknown[]>(
   resolver: (...args: Args) => Result,
-  options?: UseMemoizeOptions<Result, Args>,
+  options?: UseMemoizeOptions<Result, Args>
 ): UseMemoizeReturn<Result, Args>
 ```

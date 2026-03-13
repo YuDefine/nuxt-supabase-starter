@@ -4,7 +4,7 @@ Complete TypeScript template for `packages/evlog/src/adapters/{name}.ts`.
 
 Replace `{Name}`, `{name}`, and `{NAME}` with the actual service name.
 
-```typescript
+````typescript
 import type { DrainContext, WideEvent } from '../types'
 import { getRuntimeConfig } from './_utils'
 
@@ -151,7 +151,7 @@ export async function sendBatchTo{Name}(events: WideEvent[], config: {Name}Confi
     clearTimeout(timeoutId)
   }
 }
-```
+````
 
 ## Customization Notes
 

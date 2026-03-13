@@ -46,15 +46,15 @@ source.qux = false
 
 ```vue
 <script setup lang="ts">
-import { reactivePick } from '@vueuse/core'
+  import { reactivePick } from '@vueuse/core'
 
-const props = defineProps<{
-  value: string
-  color?: string
-  font?: string
-}>()
+  const props = defineProps<{
+    value: string
+    color?: string
+    font?: string
+  }>()
 
-const childProps = reactivePick(props, 'color', 'font')
+  const childProps = reactivePick(props, 'color', 'font')
 </script>
 
 <template>
@@ -91,16 +91,13 @@ const size = reactivePick(useElementBounding(), 'height', 'width')
 export type ReactivePickReturn<T extends object, K extends keyof T> = {
   [S in K]: UnwrapRef<T[S]>
 }
-export type ReactivePickPredicate<T> = (
-  value: T[keyof T],
-  key: keyof T,
-) => boolean
+export type ReactivePickPredicate<T> = (value: T[keyof T], key: keyof T) => boolean
 export declare function reactivePick<T extends object, K extends keyof T>(
   obj: T,
   ...keys: (K | K[])[]
 ): ReactivePickReturn<T, K>
 export declare function reactivePick<T extends object>(
   obj: T,
-  predicate: ReactivePickPredicate<T>,
+  predicate: ReactivePickPredicate<T>
 ): ReactivePickReturn<T, keyof T>
 ```

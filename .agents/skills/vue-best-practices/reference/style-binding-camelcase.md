@@ -17,12 +17,14 @@ When using `:style` bindings in Vue, prefer camelCase property names over kebab-
 ```vue
 <template>
   <!-- Requires quotes, harder to read -->
-  <div :style="{
-    'font-size': fontSize + 'px',
-    'background-color': bgColor,
-    'margin-top': marginTop + 'px',
-    'z-index': zIndex
-  }">
+  <div
+    :style="{
+      'font-size': fontSize + 'px',
+      'background-color': bgColor,
+      'margin-top': marginTop + 'px',
+      'z-index': zIndex,
+    }"
+  >
     Content
   </div>
 </template>
@@ -33,12 +35,14 @@ When using `:style` bindings in Vue, prefer camelCase property names over kebab-
 ```vue
 <template>
   <!-- Clean camelCase syntax -->
-  <div :style="{
-    fontSize: fontSize + 'px',
-    backgroundColor: bgColor,
-    marginTop: marginTop + 'px',
-    zIndex: zIndex
-  }">
+  <div
+    :style="{
+      fontSize: fontSize + 'px',
+      backgroundColor: bgColor,
+      marginTop: marginTop + 'px',
+      zIndex: zIndex,
+    }"
+  >
     Content
   </div>
 </template>
@@ -48,27 +52,25 @@ When using `:style` bindings in Vue, prefer camelCase property names over kebab-
 
 ```vue
 <script setup>
-import { computed } from 'vue'
+  import { computed } from 'vue'
 
-const props = defineProps({
-  width: Number,
-  height: Number,
-  isVisible: Boolean
-})
+  const props = defineProps({
+    width: Number,
+    height: Number,
+    isVisible: Boolean,
+  })
 
-// camelCase throughout
-const containerStyle = computed(() => ({
-  width: `${props.width}px`,
-  height: `${props.height}px`,
-  opacity: props.isVisible ? 1 : 0,
-  transition: 'opacity 0.3s ease'
-}))
+  // camelCase throughout
+  const containerStyle = computed(() => ({
+    width: `${props.width}px`,
+    height: `${props.height}px`,
+    opacity: props.isVisible ? 1 : 0,
+    transition: 'opacity 0.3s ease',
+  }))
 </script>
 
 <template>
-  <div :style="containerStyle">
-    Content
-  </div>
+  <div :style="containerStyle">Content</div>
 </template>
 ```
 
@@ -79,9 +81,7 @@ Vue automatically detects and applies vendor prefixes. For properties that need 
 ```vue
 <template>
   <!-- Vue will use the last value supported by the browser -->
-  <div :style="{ display: ['-webkit-box', '-ms-flexbox', 'flex'] }">
-    Flexbox content
-  </div>
+  <div :style="{ display: ['-webkit-box', '-ms-flexbox', 'flex'] }">Flexbox content</div>
 </template>
 ```
 
@@ -92,12 +92,7 @@ The `:style` directive can coexist with the regular `style` attribute:
 ```vue
 <template>
   <!-- Static styles + dynamic styles are merged -->
-  <div
-    style="border: 1px solid gray"
-    :style="{ backgroundColor: dynamicColor }"
-  >
-    Content
-  </div>
+  <div style="border: 1px solid gray" :style="{ backgroundColor: dynamicColor }">Content</div>
 </template>
 ```
 
@@ -107,22 +102,20 @@ Use array syntax to merge multiple style objects:
 
 ```vue
 <script setup>
-const baseStyles = {
-  padding: '10px',
-  borderRadius: '4px'
-}
+  const baseStyles = {
+    padding: '10px',
+    borderRadius: '4px',
+  }
 
-const themeStyles = computed(() => ({
-  backgroundColor: isDark.value ? '#333' : '#fff',
-  color: isDark.value ? '#fff' : '#333'
-}))
+  const themeStyles = computed(() => ({
+    backgroundColor: isDark.value ? '#333' : '#fff',
+    color: isDark.value ? '#fff' : '#333',
+  }))
 </script>
 
 <template>
   <!-- Later objects override earlier ones for conflicting properties -->
-  <div :style="[baseStyles, themeStyles]">
-    Content
-  </div>
+  <div :style="[baseStyles, themeStyles]">Content</div>
 </template>
 ```
 

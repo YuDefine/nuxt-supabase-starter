@@ -18,6 +18,7 @@ tags: [vue3, sfc, architecture, separation-of-concerns, maintainability]
 - [ ] Use component composition to manage complexity instead of file splitting
 
 **Not Recommended:**
+
 ```
 components/
 ├── UserCard.vue          # Just template
@@ -26,20 +27,19 @@ components/
 ```
 
 **Recommended:**
+
 ```vue
 <!-- components/UserCard.vue - Everything in one file -->
 <script setup>
-import { computed } from 'vue'
-import { useUserStatus } from '@/composables/useUserStatus'
+  import { computed } from 'vue'
+  import { useUserStatus } from '@/composables/useUserStatus'
 
-const props = defineProps({
-  user: { type: Object, required: true }
-})
+  const props = defineProps({
+    user: { type: Object, required: true },
+  })
 
-const { isOnline } = useUserStatus(props.user.id)
-const displayName = computed(() =>
-  `${props.user.firstName} ${props.user.lastName}`
-)
+  const { isOnline } = useUserStatus(props.user.id)
+  const displayName = computed(() => `${props.user.firstName} ${props.user.lastName}`)
 </script>
 
 <template>
@@ -55,35 +55,35 @@ const displayName = computed(() =>
 </template>
 
 <style scoped>
-.user-card {
-  display: flex;
-  padding: 1rem;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-}
+  .user-card {
+    display: flex;
+    padding: 1rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+  }
 
-.avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-}
+  .avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+  }
 
-.info {
-  margin-left: 1rem;
-}
+  .info {
+    margin-left: 1rem;
+  }
 
-.name {
-  margin: 0 0 0.25rem;
-}
+  .name {
+    margin: 0 0 0.25rem;
+  }
 
-.status {
-  font-size: 0.875rem;
-  color: #666;
-}
+  .status {
+    font-size: 0.875rem;
+    color: #666;
+  }
 
-.status.online {
-  color: #22c55e;
-}
+  .status.online {
+    color: #22c55e;
+  }
 </style>
 ```
 
@@ -92,6 +92,7 @@ const displayName = computed(() =>
 ### 1. Coupled Concerns Should Stay Together
 
 Template, logic, and styles within a component are inherently coupled:
+
 - Template references reactive data from the script
 - Styles target classes used in the template
 - Changes in one often require changes in others
@@ -99,7 +100,7 @@ Template, logic, and styles within a component are inherently coupled:
 ```vue
 <!-- Everything references each other -->
 <script setup>
-const isExpanded = ref(false)  // Used by template and affects styling
+  const isExpanded = ref(false) // Used by template and affects styling
 </script>
 
 <template>
@@ -108,8 +109,10 @@ const isExpanded = ref(false)  // Used by template and affects styling
 </template>
 
 <style scoped>
-/* Targets class from template, shows visual state from script */
-.expanded { max-height: 500px; }
+  /* Targets class from template, shows visual state from script */
+  .expanded {
+    max-height: 500px;
+  }
 </style>
 ```
 
@@ -120,7 +123,7 @@ Single file = single place to look:
 ```vue
 <!-- Open one file, understand the whole component -->
 <script setup>
-// All logic here
+  // All logic here
 </script>
 
 <template>
@@ -128,7 +131,7 @@ Single file = single place to look:
 </template>
 
 <style scoped>
-/* All styles here */
+  /* All styles here */
 </style>
 ```
 
@@ -186,10 +189,10 @@ export function useDataTable(initialData: Ref<Item[]>) {
 ```vue
 <!-- DataTable.vue - Component stays focused -->
 <script setup>
-import { useDataTable } from '@/composables/useDataTable'
+  import { useDataTable } from '@/composables/useDataTable'
 
-const props = defineProps(['items'])
-const { sortedData, sort, goToPage } = useDataTable(toRef(props, 'items'))
+  const props = defineProps(['items'])
+  const { sortedData, sort, goToPage } = useDataTable(toRef(props, 'items'))
 </script>
 ```
 
@@ -201,11 +204,7 @@ const { sortedData, sort, goToPage } = useDataTable(toRef(props, 'items'))
   <div class="data-table">
     <DataTableHeader @sort="handleSort" />
     <DataTableBody :rows="visibleRows" />
-    <DataTablePagination
-      :total="total"
-      :current="currentPage"
-      @change="handlePageChange"
-    />
+    <DataTablePagination :total="total" :current="currentPage" @change="handlePageChange" />
   </div>
 </template>
 ```
@@ -213,6 +212,7 @@ const { sortedData, sort, goToPage } = useDataTable(toRef(props, 'items'))
 ## The Real Separation of Concerns
 
 True separation of concerns in Vue means:
+
 - **Components** handle their own template/logic/style (coupled by nature)
 - **Composables** handle reusable stateful logic
 - **Utilities** handle pure functions
@@ -221,5 +221,6 @@ True separation of concerns in Vue means:
 This is more maintainable than separating HTML/CSS/JS into different files.
 
 ## Reference
+
 - [Vue.js SFC Introduction](https://vuejs.org/guide/scaling-up/sfc.html#what-about-separation-of-concerns)
 - [Vue.js SFC Src Imports](https://vuejs.org/api/sfc-spec.html#src-imports)

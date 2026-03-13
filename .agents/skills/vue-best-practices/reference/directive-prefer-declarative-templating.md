@@ -20,6 +20,7 @@ Before creating a custom directive, consider if the same result can be achieved 
 - [ ] Only use custom directives for low-level DOM manipulation that can't be done declaratively
 
 **Incorrect:**
+
 ```vue
 <template>
   <!-- WRONG: Custom directive for something v-show does -->
@@ -33,42 +34,43 @@ Before creating a custom directive, consider if the same result can be achieved 
 </template>
 
 <script setup>
-import { ref } from 'vue'
+  import { ref } from 'vue'
 
-const isVisible = ref(true)
-const isActive = ref(false)
-const textColor = ref('blue')
+  const isVisible = ref(true)
+  const isActive = ref(false)
+  const textColor = ref('blue')
 
-// Unnecessary custom directives
-const vVisibility = {
-  mounted(el, binding) {
-    el.style.display = binding.value ? '' : 'none'
-  },
-  updated(el, binding) {
-    el.style.display = binding.value ? '' : 'none'
+  // Unnecessary custom directives
+  const vVisibility = {
+    mounted(el, binding) {
+      el.style.display = binding.value ? '' : 'none'
+    },
+    updated(el, binding) {
+      el.style.display = binding.value ? '' : 'none'
+    },
   }
-}
 
-const vAddClass = {
-  mounted(el, binding) {
-    Object.entries(binding.value).forEach(([cls, active]) => {
-      el.classList.toggle(cls, active)
-    })
-  },
-  updated(el, binding) {
-    Object.entries(binding.value).forEach(([cls, active]) => {
-      el.classList.toggle(cls, active)
-    })
+  const vAddClass = {
+    mounted(el, binding) {
+      Object.entries(binding.value).forEach(([cls, active]) => {
+        el.classList.toggle(cls, active)
+      })
+    },
+    updated(el, binding) {
+      Object.entries(binding.value).forEach(([cls, active]) => {
+        el.classList.toggle(cls, active)
+      })
+    },
   }
-}
 
-const vSetColor = (el, binding) => {
-  el.style.color = binding.value
-}
+  const vSetColor = (el, binding) => {
+    el.style.color = binding.value
+  }
 </script>
 ```
 
 **Correct:**
+
 ```vue
 <template>
   <!-- CORRECT: Use built-in v-show -->
@@ -82,12 +84,12 @@ const vSetColor = (el, binding) => {
 </template>
 
 <script setup>
-import { ref } from 'vue'
+  import { ref } from 'vue'
 
-const isVisible = ref(true)
-const isActive = ref(false)
-const textColor = ref('blue')
-// No custom directives needed!
+  const isVisible = ref(true)
+  const isActive = ref(false)
+  const textColor = ref('blue')
+  // No custom directives needed!
 </script>
 ```
 
@@ -96,12 +98,13 @@ const textColor = ref('blue')
 Custom directives are appropriate when you need:
 
 ### 1. Direct DOM API Access
+
 ```javascript
 // GOOD: Focus management requires DOM API
 const vFocus = {
   mounted(el) {
     el.focus()
-  }
+  },
 }
 
 // Usage: Works on dynamic insertion, not just page load
@@ -109,13 +112,14 @@ const vFocus = {
 ```
 
 ### 2. Third-Party Library Integration
+
 ```javascript
 // GOOD: Integrating with external libraries
 const vTippy = {
   mounted(el, binding) {
     el._tippy = tippy(el, {
       content: binding.value,
-      ...binding.modifiers
+      ...binding.modifiers,
     })
   },
   updated(el, binding) {
@@ -123,11 +127,12 @@ const vTippy = {
   },
   unmounted(el) {
     el._tippy?.destroy()
-  }
+  },
 }
 ```
 
 ### 3. Event Handling Outside Vue's Scope
+
 ```javascript
 // GOOD: Global event that Vue doesn't provide
 const vClickOutside = {
@@ -141,11 +146,12 @@ const vClickOutside = {
   },
   unmounted(el) {
     document.removeEventListener('click', el._clickOutside)
-  }
+  },
 }
 ```
 
 ### 4. Intersection/Mutation/Resize Observers
+
 ```javascript
 // GOOD: IntersectionObserver requires DOM API
 const vLazyLoad = {
@@ -160,7 +166,7 @@ const vLazyLoad = {
   },
   unmounted(el) {
     el._observer?.disconnect()
-  }
+  },
 }
 ```
 
@@ -199,7 +205,7 @@ Custom directives don't run on the server, which can cause hydration issues:
 const vHydrationProblem = {
   mounted(el) {
     el.textContent = 'Client-side only text'
-  }
+  },
 }
 
 // SOLUTION: Use built-in directives or ensure server/client match
@@ -211,10 +217,11 @@ const vSafeForSSR = {
   },
   unmounted(el, binding) {
     el.removeEventListener('click', binding.value)
-  }
+  },
 }
 ```
 
 ## Reference
+
 - [Vue.js Custom Directives - Introduction](https://vuejs.org/guide/reusability/custom-directives#introduction)
 - [Vue.js Composables](https://vuejs.org/guide/reusability/composables.html)
