@@ -48,19 +48,19 @@ export default defineConfig({
   locales: {
     root: {
       label: 'English',
-      lang: 'en'
+      lang: 'en',
     },
     zh: {
       label: '简体中文',
       lang: 'zh-CN',
-      link: '/zh/'
+      link: '/zh/',
     },
     fr: {
       label: 'Français',
       lang: 'fr',
-      link: '/fr/'
-    }
-  }
+      link: '/fr/',
+    },
+  },
 })
 ```
 
@@ -113,11 +113,11 @@ Each locale can override:
 ```ts
 interface LocaleSpecificConfig {
   lang?: string
-  dir?: string              // 'ltr' or 'rtl'
+  dir?: string // 'ltr' or 'rtl'
   title?: string
   titleTemplate?: string | boolean
   description?: string
-  head?: HeadConfig[]       // Merged with existing
+  head?: HeadConfig[] // Merged with existing
   themeConfig?: ThemeConfig // Shallow merged
 }
 ```
@@ -207,17 +207,17 @@ Set cookie on language change:
 ```vue
 <!-- .vitepress/theme/Layout.vue -->
 <script setup>
-import DefaultTheme from 'vitepress/theme'
-import { useData, inBrowser } from 'vitepress'
-import { watchEffect } from 'vue'
+  import DefaultTheme from 'vitepress/theme'
+  import { useData, inBrowser } from 'vitepress'
+  import { watchEffect } from 'vue'
 
-const { lang } = useData()
+  const { lang } = useData()
 
-watchEffect(() => {
-  if (inBrowser) {
-    document.cookie = `nf_lang=${lang.value}; expires=Mon, 1 Jan 2030 00:00:00 UTC; path=/`
-  }
-})
+  watchEffect(() => {
+    if (inBrowser) {
+      document.cookie = `nf_lang=${lang.value}; expires=Mon, 1 Jan 2030 00:00:00 UTC; path=/`
+    }
+  })
 </script>
 
 <template>
@@ -249,9 +249,9 @@ export default {
   plugins: [
     rtlcss({
       ltrPrefix: ':where([dir="ltr"])',
-      rtlPrefix: ':where([dir="rtl"])'
-    })
-  ]
+      rtlPrefix: ':where([dir="rtl"])',
+    }),
+  ],
 }
 ```
 
@@ -279,8 +279,8 @@ export default defineConfig({
   ...shared,
   locales: {
     root: { label: 'English', ...en },
-    zh: { label: '简体中文', ...zh }
-  }
+    zh: { label: '简体中文', ...zh },
+  },
 })
 ```
 
