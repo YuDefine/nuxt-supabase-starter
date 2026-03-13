@@ -17,9 +17,9 @@ export default {
   load() {
     return {
       hello: 'world',
-      timestamp: Date.now()
+      timestamp: Date.now(),
     }
-  }
+  },
 }
 ```
 
@@ -27,7 +27,7 @@ Import the `data` named export:
 
 ```vue
 <script setup>
-import { data } from './example.data.ts'
+  import { data } from './example.data.ts'
 </script>
 
 <template>
@@ -45,7 +45,7 @@ export default {
   async load() {
     const response = await fetch('https://api.example.com/data')
     return response.json()
-  }
+  },
 }
 ```
 
@@ -62,13 +62,13 @@ export default {
   watch: ['./data/*.csv'],
   load(watchedFiles) {
     // watchedFiles = array of absolute paths
-    return watchedFiles.map(file => {
+    return watchedFiles.map((file) => {
       return parse(fs.readFileSync(file, 'utf-8'), {
         columns: true,
-        skip_empty_lines: true
+        skip_empty_lines: true,
       })
     })
-  }
+  },
 }
 ```
 
@@ -87,11 +87,11 @@ Returns array of `ContentData`:
 
 ```ts
 interface ContentData {
-  url: string                    // e.g. /posts/hello.html
+  url: string // e.g. /posts/hello.html
   frontmatter: Record<string, any>
-  src?: string                   // raw markdown (opt-in)
-  html?: string                  // rendered HTML (opt-in)
-  excerpt?: string               // excerpt HTML (opt-in)
+  src?: string // raw markdown (opt-in)
+  html?: string // rendered HTML (opt-in)
+  excerpt?: string // excerpt HTML (opt-in)
 }
 ```
 
@@ -102,21 +102,21 @@ With options:
 import { createContentLoader } from 'vitepress'
 
 export default createContentLoader('posts/*.md', {
-  includeSrc: true,     // Include raw markdown
-  render: true,         // Include rendered HTML
-  excerpt: true,        // Include excerpt (content before first ---)
-  
+  includeSrc: true, // Include raw markdown
+  render: true, // Include rendered HTML
+  excerpt: true, // Include excerpt (content before first ---)
+
   transform(rawData) {
     // Sort by date, newest first
     return rawData
       .sort((a, b) => +new Date(b.frontmatter.date) - +new Date(a.frontmatter.date))
-      .map(page => ({
+      .map((page) => ({
         title: page.frontmatter.title,
         url: page.url,
         date: page.frontmatter.date,
-        excerpt: page.excerpt
+        excerpt: page.excerpt,
       }))
-  }
+  },
 })
 ```
 
@@ -130,16 +130,16 @@ export default createContentLoader('posts/*.md', {
   excerpt: true,
   transform(data) {
     return data
-      .filter(post => !post.frontmatter.draft)
+      .filter((post) => !post.frontmatter.draft)
       .sort((a, b) => +new Date(b.frontmatter.date) - +new Date(a.frontmatter.date))
-  }
+  },
 })
 ```
 
 ```vue
 <!-- posts/index.md -->
 <script setup>
-import { data as posts } from './posts.data.ts'
+  import { data as posts } from './posts.data.ts'
 </script>
 
 <template>
@@ -170,7 +170,7 @@ export default defineLoader({
   async load(): Promise<Data> {
     // ...
     return { posts: [] }
-  }
+  },
 })
 ```
 
@@ -186,7 +186,7 @@ export default {
   async buildEnd() {
     const posts = await createContentLoader('posts/*.md').load()
     // Generate RSS feed, sitemap, etc.
-  }
+  },
 }
 ```
 
@@ -200,7 +200,7 @@ export default {
   load() {
     const config: SiteConfig = (globalThis as any).VITEPRESS_CONFIG
     return { base: config.site.base }
-  }
+  },
 }
 ```
 
