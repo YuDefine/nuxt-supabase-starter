@@ -67,14 +67,14 @@
 
 ### AI 輔助開發
 
-| 工具                                                                 | 說明                                             |
-| -------------------------------------------------------------------- | ------------------------------------------------ |
-| [Claude Code](https://claude.ai/code)                                | AI 編程助手                                      |
-| [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | 讓 AI 直接操作資料庫                             |
-| Commands（7 個）                                                     | `/tdd`、`/commit`、`/db-migration`、`/opsx:*` 等 |
-| SubAgents（3 個）                                                    | `check-runner`、`post-implement`、`db-backup`    |
-| [Skills](https://skills.sh)（通用 + 專案）                           | `nuxt-ui`、`vue`、`vueuse` 等 AI Skills          |
-| 情境 Skills（5 個）                                                  | `supabase-rls`、`supabase-migration` 等          |
+| 工具                                                                 | 說明                                          |
+| -------------------------------------------------------------------- | --------------------------------------------- |
+| [Claude Code](https://claude.ai/code)                                | AI 編程助手                                   |
+| [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | 讓 AI 直接操作資料庫                          |
+| Commands（6 個）                                                     | `/commit`、`/db-migration`、`/opsx:*` 等      |
+| SubAgents（3 個）                                                    | `check-runner`、`post-implement`、`db-backup` |
+| [Skills](https://skills.sh)（通用 + 專案）                           | `nuxt-ui`、`vue`、`vueuse` 等 AI Skills       |
+| 情境 Skills（5 個）                                                  | `supabase-rls`、`supabase-migration` 等       |
 
 ---
 
@@ -121,11 +121,12 @@
 | 通用技術 | [skills.sh](https://skills.sh)（`nuxt/ui`、`supabase/agent-skills` 等） | `pnpm skills:update` |
 | 情境觸發 | 本地 `.claude/skills/`                                                  | 手動維護             |
 
-### 通用技術 Skills（13 個）
+### 通用技術 Skills（14 個）
 
 來自 [skills.sh](https://skills.sh) 和專案本地，包含：
 
 - `nuxt-ui`（官方 `nuxt/ui`）、`supabase-postgres-best-practices`、`find-skills`
+- `test-driven-development`（`obra/superpowers`）
 - `nuxt-better-auth`、`vue`、`vueuse`、`reka-ui`、`motion`
 - `nuxthub`、`nuxt-content`、`nuxt-modules`
 - `ts-library`、`document-writer`
@@ -296,7 +297,7 @@ Skills 會自動串接，減少手動操作：
 
 | 完成            | 自動觸發                   |
 | --------------- | -------------------------- |
-| `/tdd`          | check-runner → 詢問 commit |
+| TDD 流程完成    | check-runner → 詢問 commit |
 | `/commit`       | **先**執行 check-runner    |
 | `/db-migration` | 產生 TypeScript 類型       |
 | `/opsx:apply`   | check-runner → 詢問 commit |

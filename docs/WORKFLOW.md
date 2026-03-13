@@ -111,7 +111,7 @@ export function sortByDate<T extends Dateable>(
 
 ### 在 Claude Code 中使用 TDD
 
-使用 `/tdd` 命令，Claude 會自動遵循這個流程：
+Claude 會透過 `test-driven-development` skill 自動遵循這個流程：
 
 ```
 使用者：幫我寫一個計算訂單總價的函式
@@ -383,8 +383,8 @@ Claude 會將變更歸檔，並將 delta specs 合併到主 specs。
 
 | Skill           | 完成後自動                      | 條件           |
 | --------------- | ------------------------------- | -------------- |
-| `/tdd`          | 調用 check-runner               | 測試通過後     |
-| `/tdd`          | 詢問是否 commit                 | check 通過後   |
+| TDD 流程        | 調用 check-runner               | 測試通過後     |
+| TDD 流程        | 詢問是否 commit                 | check 通過後   |
 | `/commit`       | **先**調用 check-runner         | 開始前強制     |
 | `/db-migration` | 產生 TypeScript 類型            | 測試通過後     |
 | `/opsx:apply`   | 調用 check-runner + 詢問 commit | 所有任務完成後 |
@@ -402,7 +402,7 @@ Claude 會將變更歸檔，並將 delta specs 合併到主 specs。
 ```
 開發功能
     ↓
-/tdd（或直接實作）
+TDD 實作（test-driven-development skill 自動觸發）
     ↓
 完成 → check-runner 自動執行
     ↓

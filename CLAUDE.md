@@ -160,6 +160,7 @@ See `commitlint.config.js` for types. Use `/commit` command.
 | UI components             | `nuxt-ui`                          |
 | VueUse                    | `vueuse`                           |
 | Postgres                  | `supabase-postgres-best-practices` |
+| TDD                       | `test-driven-development`          |
 | 中大型功能規劃 (OpenSpec) | `/opsx:new`                        |
 | 中大型功能規劃 (Spectra)  | `/spectra:propose`                 |
 

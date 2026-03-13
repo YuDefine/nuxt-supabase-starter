@@ -10,7 +10,7 @@
 
 | 類型      | 數量  | 說明                          |
 | --------- | ----- | ----------------------------- |
-| Commands  | 13 個 | 可透過 `/指令` 觸發的工作流程 |
+| Commands  | 12 個 | 可透過 `/指令` 觸發的工作流程 |
 | SubAgents | 3 個  | 自動執行特定任務的專家        |
 | Skills    | 12 個 | 提供技術知識的參考文件        |
 | Hooks     | 2 個  | 自動化工作流程的腳本          |
@@ -59,8 +59,8 @@ claude
 ### 4. 開始使用
 
 ```bash
-# 試試看這些指令
-/tdd 幫我寫一個計算稅金的函式
+# 試試看（test-driven-development skill 會自動觸發 TDD 流程）
+幫我寫一個計算稅金的函式
 /commit
 ```
 
@@ -99,7 +99,6 @@ claude
 .claude/
 ├── settings.local.json.example  # 設定檔範例
 ├── commands/                    # 自定義指令
-│   ├── tdd.md
 │   ├── commit.md
 │   ├── db-migration.md
 │   └── opsx/
@@ -124,12 +123,11 @@ Commands 是可以用 `/指令` 觸發的工作流程。
 
 ### 日常開發指令
 
-| 指令            | 說明                                                      |
-| --------------- | --------------------------------------------------------- |
-| `/tdd`          | 執行 TDD 流程：寫測試 → 確認紅燈 → 實作 → 確認綠燈 → 重構 |
-| `/commit`       | 分析變更、依功能分組、逐一 commit                         |
-| `/db-migration` | 建立 Supabase migration，確保符合安全規範                 |
-| `/doc-sync`     | 同步更新 docs/verify/ 文件                                |
+| 指令            | 說明                                      |
+| --------------- | ----------------------------------------- |
+| `/commit`       | 分析變更、依功能分組、逐一 commit         |
+| `/db-migration` | 建立 Supabase migration，確保符合安全規範 |
+| `/doc-sync`     | 同步更新 docs/verify/ 文件                |
 
 ### OpenSpec 指令
 
@@ -151,7 +149,7 @@ Commands 是可以用 `/指令` 觸發的工作流程。
 指令之間會自動串接：
 
 ```
-/tdd 完成 → 詢問 commit
+TDD 完成（test-driven-development skill）→ 詢問 commit
 /commit → check-runner 完整檢查 → 分組 → 逐一 commit
 /db-migration 完成 → [Hook] 自動產生 TypeScript 類型
 /opsx:apply 完成 → 詢問 commit

@@ -105,11 +105,11 @@ pnpm docs:build  # 建置靜態網站
 
 ### Commands、Agents、Skills 的差別？
 
-| 類型         | 觸發方式                  | 用途         | 範例                           |
-| ------------ | ------------------------- | ------------ | ------------------------------ |
-| **Commands** | 使用者輸入 `/xxx`         | 執行特定流程 | `/commit`, `/tdd`, `/opsx:new` |
-| **Agents**   | 自動觸發或被 Command 呼叫 | 執行子任務   | check-runner, post-implement   |
-| **Skills**   | 自動偵測情境載入          | 提供專業知識 | supabase-rls, server-api       |
+| 類型         | 觸發方式                  | 用途         | 範例                                    |
+| ------------ | ------------------------- | ------------ | --------------------------------------- |
+| **Commands** | 使用者輸入 `/xxx`         | 執行特定流程 | `/commit`, `/db-migration`, `/opsx:new` |
+| **Agents**   | 自動觸發或被 Command 呼叫 | 執行子任務   | check-runner, post-implement            |
+| **Skills**   | 自動偵測情境載入          | 提供專業知識 | supabase-rls, server-api                |
 
 **類比**：
 

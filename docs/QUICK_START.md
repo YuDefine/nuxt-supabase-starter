@@ -217,8 +217,8 @@ claude
 # 檢查專案狀態
 > 專案有哪些測試？
 
-# 執行 TDD 流程
-> /tdd 幫我寫一個計算稅金的函式
+# 執行 TDD 流程（test-driven-development skill 會自動觸發）
+> 幫我寫一個計算稅金的函式
 
 # 執行檢查
 > 執行 pnpm check
@@ -238,7 +238,7 @@ claude
 
 | 類型        | 數量  | 說明                                              |
 | ----------- | ----- | ------------------------------------------------- |
-| Commands    | 15 個 | `/tdd`、`/commit`、`/opsx:*` 等                   |
+| Commands    | 14 個 | `/commit`、`/db-migration`、`/opsx:*` 等          |
 | SubAgents   | 3 個  | `check-runner`、`post-implement`、`db-backup`     |
 | 通用 Skills | 12 個 | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等（自動更新） |
 | 情境 Skills | 5 個  | `supabase-rls`、`server-api`、`pinia-store` 等    |
