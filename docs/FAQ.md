@@ -60,17 +60,18 @@ pnpm docs:build  # 建置靜態網站
 
 **兩種 Skill 類型**：
 
-| 類型        | 數量  | 更新方式                                                            |
-| ----------- | ----- | ------------------------------------------------------------------- |
-| 技術 Skills | 12 個 | [nuxt-skills](https://github.com/onmax/nuxt-skills) plugin 自動同步 |
-| 情境 Skills | 5 個  | 本地維護，手動更新                                                  |
+| 類型        | 數量  | 更新方式                                                             |
+| ----------- | ----- | -------------------------------------------------------------------- |
+| 通用 Skills | 23 個 | 第三方（15 個）：`pnpm skills:update`；本地（8 個）：手動維護        |
+| 情境 Skills | 5 個  | 本地維護，手動更新                                                   |
+| SDD Skills  | 11–12 | 依選擇的 SDD 路線（OpenSpec/Spectra）而定                            |
 
-**技術 Skills 更新流程**：
+**第三方 Skills 更新流程**：
 
-1. GitHub Actions 定期執行（或手動觸發）
-2. 從 nuxt-skills repo 拉取最新版本
-3. 更新到 `.claude/skills/` 目錄
-4. 提交 PR 或自動合併
+1. 執行 `pnpm skills:update`（使用 [skills.sh](https://skills.sh) CLI）
+2. 從各 GitHub repo 拉取最新版本
+3. 更新到 `.agents/skills/` 目錄（symlink 到 `.claude/skills/`）
+4. 重啟 Claude Code CLI
 
 **情境 Skills 何時需要更新？**
 
@@ -108,7 +109,7 @@ pnpm docs:build  # 建置靜態網站
 | 類型         | 觸發方式                  | 用途         | 範例                                    |
 | ------------ | ------------------------- | ------------ | --------------------------------------- |
 | **Commands** | 使用者輸入 `/xxx`         | 執行特定流程 | `/commit`, `/db-migration`, `/opsx:new` |
-| **Agents**   | 自動觸發或被 Command 呼叫 | 執行子任務   | check-runner, post-implement            |
+| **Agents**   | 自動觸發或被 Command 呼叫 | 執行子任務   | check-runner, code-review, db-backup    |
 | **Skills**   | 自動偵測情境載入          | 提供專業知識 | supabase-rls, server-api                |
 
 **類比**：

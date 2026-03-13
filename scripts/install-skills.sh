@@ -32,6 +32,15 @@ npx skills add https://github.com/obra/superpowers --skill test-driven-developme
 echo "  ✓ TDD Skill 安裝完成"
 echo ""
 
+# Evlog（Observability）
+echo "📦 安裝 Evlog Skills..."
+npx skills add https://github.com/hugorcd/evlog --skill create-evlog-adapter -y
+npx skills add https://github.com/hugorcd/evlog --skill create-evlog-enricher -y
+npx skills add https://github.com/hugorcd/evlog --skill create-evlog-framework-integration -y
+npx skills add https://github.com/hugorcd/evlog --skill review-logging-patterns -y
+echo "  ✓ Evlog Skills 安裝完成"
+echo ""
+
 # 實用工具
 echo "📦 安裝實用工具 Skills..."
 npx skills add vercel-labs/skills@find-skills -y
