@@ -21,22 +21,6 @@
   "htmlWhitespaceSensitivity": "css",
   "vueIndentScriptAndStyle": true,
 
-  // === Import 排序（按距離遠近排列）===
-  "experimentalSortImports": {
-    "groups": [
-      ["side-effect"],
-      ["builtin"],
-      ["external", "external-type"],
-      ["internal", "internal-type"],
-      ["parent", "parent-type"],
-      ["sibling", "sibling-type"],
-      ["index", "index-type"],
-    ],
-    "order": "asc",
-    "ignoreCase": true,
-    "newlinesBetween": true,
-  },
-
   // === Tailwind CSS 類別排序 ===
   "experimentalTailwindcss": {
     "stylesheet": "./app/assets/css/main.css",
