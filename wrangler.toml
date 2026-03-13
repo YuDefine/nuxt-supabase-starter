@@ -1,0 +1,28 @@
+#:schema node_modules/wrangler/config-schema.json
+
+name = "nuxt-supabase-starter"
+main = ".output/server/index.mjs"
+compatibility_date = "2025-05-15"
+compatibility_flags = ["nodejs_compat"]
+
+# Assets（Nuxt build 產出的靜態資源）
+[assets]
+directory = ".output/public"
+
+# ─── 環境變數 ───────────────────────────────────────────
+# 所有機密環境變數統一透過 GitHub Secrets 管理，
+# 部署時由 CI/CD workflow 注入，禁止直接在 Cloudflare Dashboard 設定。
+#
+# 需要在 GitHub Secrets 設定的變數：
+#   CLOUDFLARE_API_TOKEN     - Cloudflare API Token（用於部署）
+#   CLOUDFLARE_ACCOUNT_ID    - Cloudflare Account ID
+#   SUPABASE_URL             - Supabase 專案 URL
+#   SUPABASE_KEY             - Supabase anon key
+#   SUPABASE_SECRET_KEY      - Supabase service role key
+#   NUXT_SESSION_PASSWORD    - Session 加密金鑰（至少 32 字元）
+#   NUXT_OAUTH_*             - OAuth provider credentials
+#   NUXT_PUBLIC_SENTRY_DSN   - Sentry DSN（可選）
+#   SENTRY_AUTH_TOKEN        - Sentry Auth Token（可選，用於 source map 上傳）
+
+[observability]
+enabled = true
