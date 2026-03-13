@@ -67,14 +67,14 @@
 
 ### AI 輔助開發
 
-| 工具                                                                 | 說明                                          |
-| -------------------------------------------------------------------- | --------------------------------------------- |
-| [Claude Code](https://claude.ai/code)                                | AI 編程助手                                   |
-| [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | 讓 AI 直接操作資料庫                          |
-| Commands（15–16 個）                                                 | 依 SDD 路線不同（見下方）                     |
-| SubAgents（3 個）                                                    | `check-runner`、`code-review`、`db-backup`    |
-| [Skills](https://skills.sh)（通用 23 + 情境 5）                      | `nuxt-ui`、`vue`、`vueuse` 等 AI Skills       |
-| SDD Skills（11–12 個）                                               | OpenSpec 或 Spectra（擇一）                   |
+| 工具                                                                 | 說明                                       |
+| -------------------------------------------------------------------- | ------------------------------------------ |
+| [Claude Code](https://claude.ai/code)                                | AI 編程助手                                |
+| [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | 讓 AI 直接操作資料庫                       |
+| Commands（15–16 個）                                                 | 依 SDD 路線不同（見下方）                  |
+| SubAgents（3 個）                                                    | `check-runner`、`code-review`、`db-backup` |
+| [Skills](https://skills.sh)（通用 23 + 情境 5）                      | `nuxt-ui`、`vue`、`vueuse` 等 AI Skills    |
+| SDD Skills（11–12 個）                                               | OpenSpec 或 Spectra（擇一）                |
 
 ---
 
@@ -151,13 +151,15 @@
 
 使用 `pnpm sdd:select` 選擇 Spec-Driven Development 工具：
 
-| 項目       | OpenSpec             | Spectra              |
-| ---------- | -------------------- | -------------------- |
-| Commands   | 11 個（`/opsx:*`）   | 12 個（`/spectra:*`）|
-| Skills     | 11 個                | 12 個                |
-| **總計**   | **共 15 Commands、39 Skills** | **共 16 Commands、40 Skills** |
+| 項目     | OpenSpec                      | Spectra                       |
+| -------- | ----------------------------- | ----------------------------- |
+| Commands | 11 個（`/opsx:*`）            | 12 個（`/spectra:*`）         |
+| Skills   | 11 個                         | 12 個                         |
+| **總計** | **共 15 Commands、39 Skills** | **共 16 Commands、40 Skills** |
 
-> 不含共用的 4 個 Commands 和 28 個通用/情境 Skills（兩條路線皆相同）。
+> `pnpm skills:install` 後，若尚未執行 `pnpm sdd:select`，通常會看到約 51 個 skills（OpenSpec + Spectra 同時存在）。
+>
+> 執行 `pnpm sdd:select` 後，會移除未選路線，收斂為上表的 39（OpenSpec）或 40（Spectra）個 skills。
 
 這些 skills 是本範本的在地化規範，確保 AI 遵循專案的安全與架構決策。
 

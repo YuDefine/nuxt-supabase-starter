@@ -67,11 +67,15 @@ my-project/
 ├── server/                # API 端點
 │   ├── auth.config.ts     # Server 認證配置
 │   └── utils/             # Server 工具函式
+├── supabase/              # 本地 Supabase 基礎結構
+│   ├── migrations/        # Migration 檔案目錄
+│   ├── backups/           # 備份輸出目錄
+│   └── README.md          # Supabase 使用說明
 ├── docs/                  # 專案文件
 └── docs/verify/           # 系統狀態文件
 ```
 
-> **注意**：`supabase/` 目錄會在 Step 2 執行 `supabase init` 時自動建立。
+> **注意**：範本已內建 `supabase/` 目錄。Step 2 的 `supabase init` 會建立或更新 `supabase/config.toml`。
 
 ---
 
@@ -192,6 +196,16 @@ cp .claude/settings.local.json.example .claude/settings.local.json
 
 ---
 
+## Step 5.5：選擇 SDD 工具路線
+
+```bash
+pnpm sdd:select
+```
+
+請選擇 OpenSpec 或 Spectra 其中一條路線。這個步驟會移除另一條路線的指令與 skills，讓最終技能數量與文件宣稱一致。
+
+---
+
 ## Step 6：啟動開發伺服器
 
 ```bash
@@ -238,11 +252,16 @@ claude
 
 | 類型        | 數量     | 說明                                              |
 | ----------- | -------- | ------------------------------------------------- |
-| Commands    | 15–16 個 | 4 共用 + 11–12 SDD（依 `pnpm sdd:select` 選擇）  |
+| Commands    | 15–16 個 | 4 共用 + 11–12 SDD（依 `pnpm sdd:select` 選擇）   |
 | SubAgents   | 3 個     | `check-runner`、`code-review`、`db-backup`        |
 | 通用 Skills | 23 個    | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等（自動更新） |
 | 情境 Skills | 5 個     | `supabase-rls`、`server-api`、`pinia-store` 等    |
 | SDD Skills  | 11–12 個 | OpenSpec 或 Spectra（依選擇而定）                 |
+
+> 技能數量說明：
+>
+> - `pnpm skills:install` 後，若尚未執行 `pnpm sdd:select`，通常會看到約 51 個 skills（兩條 SDD 路線都存在）。
+> - 執行 `pnpm sdd:select` 後，會收斂為 39（OpenSpec）或 40（Spectra）個 skills。
 
 ### 開發規範（已定義）
 

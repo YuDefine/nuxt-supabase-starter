@@ -20,7 +20,8 @@
 
 - [ ] 已執行 `pnpm install` 安裝 npm 套件
 - [ ] **已執行 `pnpm skills:install` 安裝 AI Skills**
-- [ ] 執行 `pnpm skills:list` 確認已安裝約 20+ 個 skills
+- [ ] 已執行 `pnpm sdd:select` 選擇 OpenSpec 或 Spectra 路線
+- [ ] 執行 `pnpm skills:list` 確認：未選路線前約 51 個；選擇後為 39（OpenSpec）或 40（Spectra）
 
 ### Skills 檢查
 
@@ -86,7 +87,8 @@ pnpm skills:install
 # 檢查列表
 pnpm skills:list
 
-# 應該看到約 20+ 個 skills
+# 若尚未執行 pnpm sdd:select：通常約 51 個
+# 執行 pnpm sdd:select 後：39（OpenSpec）或 40（Spectra）
 ```
 
 ### Claude Code 無法使用指令？

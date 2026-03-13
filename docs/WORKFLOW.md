@@ -391,11 +391,11 @@ Claude 會將變更歸檔，並將 delta specs 合併到主 specs。
 
 ### SubAgents
 
-| Agent            | 用途                      | 觸發時機               |
-| ---------------- | ------------------------- | ---------------------- |
-| `check-runner`   | 執行 pnpm check           | 被多個 Skills 自動調用 |
-| `code-review`    | 審查 PR 或本地變更        | 手動或 PR 時           |
-| `db-backup`      | 備份資料庫並更新 seed.sql | 手動                   |
+| Agent          | 用途                      | 觸發時機               |
+| -------------- | ------------------------- | ---------------------- |
+| `check-runner` | 執行 pnpm check           | 被多個 Skills 自動調用 |
+| `code-review`  | 審查 PR 或本地變更        | 手動或 PR 時           |
+| `db-backup`    | 備份資料庫並更新 seed.sql | 手動                   |
 
 ### 自動流程示意
 
