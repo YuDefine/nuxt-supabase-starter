@@ -154,7 +154,7 @@ find .claude/commands -name "*.md" | wc -l
 
 預期命令清單：
 
-- `commit.md`, `db-migration.md`, `doc-sync.md`, `tdd.md`
+- `commit.md`, `db-migration.md`, `doc-sync.md`, `validate-starter.md`
 - `opsx/`: `new.md`, `apply.md`, `archive.md`, `continue.md`, `explore.md`, `ff.md`, `verify.md`, `sync.md`, `onboard.md`, `bulk-archive.md`
 
 ## Output

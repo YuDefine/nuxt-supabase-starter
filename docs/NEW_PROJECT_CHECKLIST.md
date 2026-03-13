@@ -52,7 +52,7 @@
 
 - [ ] 已複製 `.claude/settings.local.json.example` 到 `.claude/settings.local.json`
 - [ ] 執行 `claude` 成功啟動 Claude Code
-- [ ] 測試 `/tdd` 指令正常運作
+- [ ] 測試 TDD 流程正常運作（`test-driven-development` skill 會自動觸發）
 - [ ] 測試執行 `pnpm check` 成功
 
 ## ✅ 開發環境驗證

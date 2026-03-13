@@ -376,7 +376,7 @@ your-project/
 ├── CLAUDE.md              # AI 開發規範
 ├── .claude/
 │   ├── settings.local.json
-│   ├── commands/          # 自定義指令（/tdd、/commit 等）
+│   ├── commands/          # 自定義指令（/commit、/db-migration 等）
 │   ├── agents/            # SubAgents（check-runner 等）
 │   └── skills/            # AI Skills
 ├── app/
@@ -406,7 +406,7 @@ claude
 
 # 測試指令
 > 執行 pnpm check
-> /tdd 幫我寫一個簡單函式
+> 幫我寫一個簡單函式
 ```
 
 ### 6.2 驗證開發工具
@@ -442,7 +442,7 @@ supabase status
 
 ### Q: 可以只用部分 Commands 嗎？
 
-可以。刪除不需要的 `.claude/commands/*.md` 檔案即可。常用的 `/tdd` 和 `/commit` 建議保留。
+可以。刪除不需要的 `.claude/commands/*.md` 檔案即可。常用的 `/commit` 建議保留。TDD 流程已改為 `test-driven-development` skill，會自動觸發。
 
 ---
 
