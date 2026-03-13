@@ -49,7 +49,7 @@ git commit -m "🎉 init: 從 nuxt-supabase-starter 建立專案"
 my-project/
 ├── CLAUDE.md              # AI 開發規範
 ├── .claude/               # Claude Code 配置
-│   ├── commands/          # 自定義指令（含 opsx/）
+│   ├── commands/          # 自定義指令（含 opsx/ 或 spectra/）
 │   ├── agents/            # SubAgents
 │   ├── hooks/             # 自動化腳本
 │   ├── skills/            # AI Skills
@@ -236,12 +236,13 @@ claude
 
 ### AI 開發工具（已配置）
 
-| 類型        | 數量  | 說明                                              |
-| ----------- | ----- | ------------------------------------------------- |
-| Commands    | 14 個 | `/commit`、`/db-migration`、`/opsx:*` 等          |
-| SubAgents   | 3 個  | `check-runner`、`post-implement`、`db-backup`     |
-| 通用 Skills | 12 個 | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等（自動更新） |
-| 情境 Skills | 5 個  | `supabase-rls`、`server-api`、`pinia-store` 等    |
+| 類型        | 數量     | 說明                                              |
+| ----------- | -------- | ------------------------------------------------- |
+| Commands    | 15–16 個 | 4 共用 + 11–12 SDD（依 `pnpm sdd:select` 選擇）  |
+| SubAgents   | 3 個     | `check-runner`、`code-review`、`db-backup`        |
+| 通用 Skills | 23 個    | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等（自動更新） |
+| 情境 Skills | 5 個     | `supabase-rls`、`server-api`、`pinia-store` 等    |
+| SDD Skills  | 11–12 個 | OpenSpec 或 Spectra（依選擇而定）                 |
 
 ### 開發規範（已定義）
 

@@ -71,10 +71,10 @@
 | -------------------------------------------------------------------- | --------------------------------------------- |
 | [Claude Code](https://claude.ai/code)                                | AI 編程助手                                   |
 | [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | 讓 AI 直接操作資料庫                          |
-| Commands（6 個）                                                     | `/commit`、`/db-migration`、`/opsx:*` 等      |
-| SubAgents（3 個）                                                    | `check-runner`、`post-implement`、`db-backup` |
-| [Skills](https://skills.sh)（通用 + 專案）                           | `nuxt-ui`、`vue`、`vueuse` 等 AI Skills       |
-| 情境 Skills（5 個）                                                  | `supabase-rls`、`supabase-migration` 等       |
+| Commands（15–16 個）                                                 | 依 SDD 路線不同（見下方）                     |
+| SubAgents（3 個）                                                    | `check-runner`、`code-review`、`db-backup`    |
+| [Skills](https://skills.sh)（通用 23 + 情境 5）                      | `nuxt-ui`、`vue`、`vueuse` 等 AI Skills       |
+| SDD Skills（11–12 個）                                               | OpenSpec 或 Spectra（擇一）                   |
 
 ---
 
@@ -100,7 +100,7 @@
 | **TDD 工作流程** | AI 生成的程式碼有測試保護     |
 | **自動化檢查**   | 每次提交都通過品質門檻        |
 | **AI Skills**    | AI 能正確使用框架 API         |
-| **OpenSpec**     | 複雜功能有結構化開發流程      |
+| **SDD**          | 複雜功能有結構化開發流程      |
 | **情境 Skills**  | AI 遵循 Supabase 安全規範     |
 
 ### 照做你也能得到
@@ -121,19 +121,23 @@
 | 通用技術 | [skills.sh](https://skills.sh)（`nuxt/ui`、`supabase/agent-skills` 等） | `pnpm skills:update` |
 | 情境觸發 | 本地 `.claude/skills/`                                                  | 手動維護             |
 
-### 通用技術 Skills（14 個）
+### 通用技術 Skills（23 個）
 
-來自 [skills.sh](https://skills.sh) 和專案本地，包含：
+**第三方 Skills**（15 個，透過 `pnpm skills:update` 更新）：
 
-- `nuxt-ui`（官方 `nuxt/ui`）、`supabase-postgres-best-practices`、`find-skills`
-- `test-driven-development`（`obra/superpowers`）
-- `nuxt-better-auth`、`vue`、`vueuse`、`reka-ui`、`motion`
-- `nuxthub`、`nuxt-content`、`nuxt-modules`
-- `ts-library`、`document-writer`
+- `nuxt`、`vue`、`vueuse-functions`、`vitest`、`vue-best-practices`、`vitepress`（antfu/skills）
+- `nuxt-ui`、`contributing`（nuxt/ui）
+- `supabase-postgres-best-practices`（supabase/agent-skills）
+- `test-driven-development`（obra/superpowers）
+- `find-skills`（vercel-labs/skills）
+- `create-evlog-adapter`、`create-evlog-enricher`、`create-evlog-framework-integration`、`review-logging-patterns`（hugorcd/evlog）
 
-使用 `pnpm skills:update` 更新通用 skills。
+**本地 Skills**（8 個，手動維護）：
 
-### 情境觸發 Skills（6 個，本地維護）
+- `nuxt-better-auth`、`nuxt-content`、`nuxt-modules`、`nuxthub`
+- `reka-ui`、`motion`、`ts-library`、`document-writer`
+
+### 情境觸發 Skills（5 個，本地維護）
 
 當特定情境發生時自動載入：
 
@@ -142,7 +146,18 @@
 - `server-api`：建立 Server API 時
 - `pinia-store`：建立 Pinia Store 時
 - `supabase-arch`：架構決策時
-- OpenSpec skills：規劃中大型功能時
+
+### SDD Skills（依路線不同）
+
+使用 `pnpm sdd:select` 選擇 Spec-Driven Development 工具：
+
+| 項目       | OpenSpec             | Spectra              |
+| ---------- | -------------------- | -------------------- |
+| Commands   | 11 個（`/opsx:*`）   | 12 個（`/spectra:*`）|
+| Skills     | 11 個                | 12 個                |
+| **總計**   | **共 15 Commands、39 Skills** | **共 16 Commands、40 Skills** |
+
+> 不含共用的 4 個 Commands 和 28 個通用/情境 Skills（兩條路線皆相同）。
 
 這些 skills 是本範本的在地化規範，確保 AI 遵循專案的安全與架構決策。
 
