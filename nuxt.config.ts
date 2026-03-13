@@ -10,13 +10,26 @@ export default defineNuxtConfig({
     '@nuxt/test-utils/module',
     '@nuxt/image',
     '@nuxtjs/supabase',
+    '@nuxtjs/seo',
     '@pinia/nuxt',
     '@vueuse/nuxt',
     '@sentry/nuxt/module',
     '@onmax/nuxt-better-auth',
     '@pinia/colada-nuxt',
     'nuxt-charts',
+    'nuxt-security',
+    'evlog/nuxt',
   ],
+
+  // evlog: wide event logging
+  evlog: {
+    env: { service: 'nuxt-supabase-starter' },
+    include: ['/api/**'],
+    sampling: {
+      rates: { info: 10 },
+      keep: [{ status: 400 }, { duration: 1000 }],
+    },
+  },
 
   // @nuxt/image 配置：影像優化
   image: {
@@ -82,14 +95,24 @@ export default defineNuxtConfig({
         url: process.env.SUPABASE_URL,
         key: process.env.SUPABASE_KEY,
       },
+      // Sentry DSN（用於 sentry.client.config.ts）
+      sentry: {
+        dsn: process.env.NUXT_PUBLIC_SENTRY_DSN || '',
+      },
     },
   },
 
   // Vite 配置：移除 production 所有 console
   vite: {
-    // 注入 package.json 版本號到 client-side
+    // 注入全域常數到 client-side
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version),
+      // 手動注入 NUXT_PUBLIC_SENTRY_DSN 到 import.meta.env
+      // 因為 sentry.client.config.ts 在 Nuxt 初始化前執行，需要使用 import.meta.env
+      // Vite 只會自動注入 VITE_* 前綴的環境變數，所以需要手動處理
+      'import.meta.env.NUXT_PUBLIC_SENTRY_DSN': JSON.stringify(
+        process.env.NUXT_PUBLIC_SENTRY_DSN || ''
+      ),
     },
     esbuild: {
       drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : [],
@@ -122,6 +145,43 @@ export default defineNuxtConfig({
         },
       ],
     },
+  },
+
+  // @nuxtjs/seo: 網站基礎 SEO 設定
+  site: {
+    url: process.env.NUXT_PUBLIC_SITE_URL || 'http://localhost:3000',
+    name: 'Nuxt Supabase Starter',
+    description: 'Production-ready Nuxt + Supabase starter template',
+    defaultLocale: 'zh-TW',
+  },
+
+  // Robots: 阻擋搜尋引擎爬取敏感路徑
+  robots: {
+    disallow: ['/auth/', '/api/'],
+  },
+
+  // nuxt-security: OWASP 安全性 headers + rate limiting + CSRF
+  security: {
+    // Cloudflare Workers 相容：停用不支援的功能
+    rateLimiter: false,
+    // 安全性 headers
+    headers: {
+      crossOriginEmbedderPolicy: false,
+      contentSecurityPolicy: {
+        'base-uri': ["'none'"],
+        'font-src': ["'self'", 'https:', 'data:'],
+        'form-action': ["'self'"],
+        'frame-ancestors': ["'none'"],
+        'img-src': ["'self'", 'data:', 'https:'],
+        'object-src': ["'none'"],
+        'script-src-attr': ["'none'"],
+        'style-src': ["'self'", "'unsafe-inline'"],
+        'upgrade-insecure-requests': true,
+      },
+      xFrameOptions: 'DENY',
+    },
+    // CSRF 保護
+    csrf: true,
   },
 
   supabase: {
