@@ -39,14 +39,15 @@ const routes = [
     children: [
       {
         path: 'child',
-        component: Child  // This may mount TWICE!
-      }
-    ]
-  }
+        component: Child, // This may mount TWICE!
+      },
+    ],
+  },
 ]
 ```
 
 **Symptoms:**
+
 - `onMounted` called twice in child component
 - Duplicate API requests
 - State initialization runs twice
@@ -59,19 +60,19 @@ Add logging to confirm the issue:
 ```vue
 <!-- Child.vue -->
 <script setup>
-import { onMounted, onActivated } from 'vue'
+  import { onMounted, onActivated } from 'vue'
 
-let mountCount = 0
+  let mountCount = 0
 
-onMounted(() => {
-  mountCount++
-  console.log('Child mounted - count:', mountCount)
-  // If you see "count: 2", you have the double mount issue
-})
+  onMounted(() => {
+    mountCount++
+    console.log('Child mounted - count:', mountCount)
+    // If you see "count: 2", you have the double mount issue
+  })
 
-onActivated(() => {
-  console.log('Child activated')
-})
+  onActivated(() => {
+    console.log('Child activated')
+  })
 </script>
 ```
 
@@ -83,19 +84,19 @@ Don't use `useRoute()` directly with KeepAlive:
 
 ```vue
 <script setup>
-import { ref, onActivated } from 'vue'
-import { useRoute } from 'vue-router'
+  import { ref, onActivated } from 'vue'
+  import { useRoute } from 'vue-router'
 
-// Problem: useRoute() can cause issues with KeepAlive
-// const route = useRoute()
+  // Problem: useRoute() can cause issues with KeepAlive
+  // const route = useRoute()
 
-// Solution: Get route info in onActivated
-const routeParams = ref({})
+  // Solution: Get route info in onActivated
+  const routeParams = ref({})
 
-onActivated(() => {
-  const route = useRoute()
-  routeParams.value = { ...route.params }
-})
+  onActivated(() => {
+    const route = useRoute()
+    routeParams.value = { ...route.params }
+  })
 </script>
 ```
 
@@ -105,16 +106,16 @@ Only cache leaf routes, not parent layouts:
 
 ```vue
 <script setup>
-import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+  import { computed } from 'vue'
+  import { useRoute } from 'vue-router'
 
-const route = useRoute()
+  const route = useRoute()
 
-// Only cache specific leaf routes
-const cachedRoutes = computed(() => {
-  // Don't cache parent routes that have children
-  return ['UserProfile', 'UserSettings'] // Only leaf components
-})
+  // Only cache specific leaf routes
+  const cachedRoutes = computed(() => {
+    // Don't cache parent routes that have children
+    return ['UserProfile', 'UserSettings'] // Only leaf components
+  })
 </script>
 
 <template>
@@ -132,21 +133,21 @@ Protect your component from double mount effects:
 
 ```vue
 <script setup>
-import { ref, onMounted } from 'vue'
+  import { ref, onMounted } from 'vue'
 
-const isInitialized = ref(false)
+  const isInitialized = ref(false)
 
-onMounted(() => {
-  if (isInitialized.value) {
-    console.warn('Double mount detected, skipping initialization')
-    return
-  }
-  isInitialized.value = true
+  onMounted(() => {
+    if (isInitialized.value) {
+      console.warn('Double mount detected, skipping initialization')
+      return
+    }
+    isInitialized.value = true
 
-  // Safe to initialize
-  fetchData()
-  setupEventListeners()
-})
+    // Safe to initialize
+    fetchData()
+    setupEventListeners()
+  })
 </script>
 ```
 
@@ -155,15 +156,15 @@ onMounted(() => {
 ```vue
 <!-- App.vue -->
 <script setup>
-import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+  import { computed } from 'vue'
+  import { useRoute } from 'vue-router'
 
-const route = useRoute()
+  const route = useRoute()
 
-// Define which routes should be cached in route meta
-const shouldCache = computed(() => {
-  return route.meta.keepAlive !== false
-})
+  // Define which routes should be cached in route meta
+  const shouldCache = computed(() => {
+    return route.meta.keepAlive !== false
+  })
 </script>
 
 <template>
@@ -187,10 +188,10 @@ const routes = [
       {
         path: 'child',
         component: Child,
-        meta: { keepAlive: true } // Cache leaf routes
-      }
-    ]
-  }
+        meta: { keepAlive: true }, // Cache leaf routes
+      },
+    ],
+  },
 ]
 ```
 
@@ -204,7 +205,7 @@ const routes = [
   // Flat structure avoids the issue
   { path: '/users', component: UserList },
   { path: '/users/:id', component: UserDetail },
-  { path: '/users/:id/settings', component: UserSettings }
+  { path: '/users/:id/settings', component: UserSettings },
 ]
 ```
 
@@ -217,6 +218,7 @@ const routes = [
 5. **Test thoroughly** - This issue may not appear immediately
 
 ## Reference
+
 - [Vue Router Issue #626: keep-alive in nested route mounted twice](https://github.com/vuejs/router/issues/626)
 - [GitHub: vue3-keep-alive-component workaround](https://github.com/emiyalee1005/vue3-keep-alive-component)
 - [Vue.js KeepAlive Documentation](https://vuejs.org/guide/built-ins/keep-alive.html)

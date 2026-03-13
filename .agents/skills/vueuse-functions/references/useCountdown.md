@@ -13,12 +13,8 @@ import { useCountdown } from '@vueuse/core'
 
 const countdownSeconds = 5
 const { remaining, start, stop, pause, resume } = useCountdown(countdownSeconds, {
-  onComplete() {
-
-  },
-  onTick() {
-
-  }
+  onComplete() {},
+  onTick() {},
 })
 ```
 
@@ -30,8 +26,7 @@ import { useCountdown } from '@vueuse/core'
 import { shallowRef } from 'vue'
 
 const countdown = shallowRef(5)
-const { start, reset } = useCountdown(countdown, {
-})
+const { start, reset } = useCountdown(countdown, {})
 
 // change the countdown value
 countdown.value = 10
@@ -97,6 +92,6 @@ export interface UseCountdownReturn extends Pausable {
  */
 export declare function useCountdown(
   initialCountdown: MaybeRefOrGetter<number>,
-  options?: UseCountdownOptions,
+  options?: UseCountdownOptions
 ): UseCountdownReturn
 ```

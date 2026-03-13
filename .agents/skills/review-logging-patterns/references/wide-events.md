@@ -20,6 +20,7 @@ During an incident, you're grep-ing through thousands of these trying to reconst
 **Wide events emit once with everything:**
 
 Development (pretty format):
+
 ```
 10:23:45.235 ERROR [api] POST /checkout 500 in 234ms
   ├─ user: id=user_123 plan=premium accountAge=847
@@ -29,6 +30,7 @@ Development (pretty format):
 ```
 
 Production (JSON format):
+
 ```json
 {
   "timestamp": "2025-01-24T10:23:45.235Z",
@@ -46,14 +48,14 @@ Production (JSON format):
 
 ## When to Use Wide Events
 
-| Scenario | Use Wide Event? |
-|----------|----------------|
-| HTTP request handling | Yes - one event per request |
-| Background job execution | Yes - one event per job |
-| Database query | No - use simple log |
-| Cache hit/miss | No - include in parent wide event |
-| User action (login, checkout) | Yes - one event per action |
-| Debug statements | No - remove in production |
+| Scenario                      | Use Wide Event?                   |
+| ----------------------------- | --------------------------------- |
+| HTTP request handling         | Yes - one event per request       |
+| Background job execution      | Yes - one event per job           |
+| Database query                | No - use simple log               |
+| Cache hit/miss                | No - include in parent wide event |
+| User action (login, checkout) | Yes - one event per action        |
+| Debug statements              | No - remove in production         |
 
 ## Required Fields
 
@@ -65,8 +67,8 @@ Every wide event should include:
 log.set({
   method: 'POST',
   path: '/api/checkout',
-  requestId: 'req_abc123',      // For tracing
-  traceId: 'trace_xyz',         // Distributed tracing
+  requestId: 'req_abc123', // For tracing
+  traceId: 'trace_xyz', // Distributed tracing
 })
 ```
 
@@ -76,10 +78,10 @@ log.set({
 log.set({
   user: {
     id: 'user_123',
-    plan: 'premium',            // Business-relevant
-    accountAge: 847,            // Days since signup
+    plan: 'premium', // Business-relevant
+    accountAge: 847, // Days since signup
     subscription: 'annual',
-  }
+  },
 })
 ```
 
@@ -101,7 +103,7 @@ log.set({
     limit: 1000,
     remaining: 42,
     resetAt: '2025-01-24T11:00:00Z',
-  }
+  },
 })
 
 // File upload
@@ -110,7 +112,7 @@ log.set({
     filename: 'document.pdf',
     size: 1024000,
     mimeType: 'application/pdf',
-  }
+  },
 })
 ```
 
@@ -144,7 +146,7 @@ With the evlog module, use `useLogger(event)` - it's auto-created and auto-emitt
 import { createError } from 'evlog'
 
 export default defineEventHandler(async (event) => {
-  const log = useLogger(event)  // Auto-created by evlog
+  const log = useLogger(event) // Auto-created by evlog
 
   const user = await requireAuth(event)
   log.set({ user: { id: user.id, plan: user.plan } })
@@ -196,7 +198,7 @@ async function processJob(job: Job) {
     log.error(error, { step: 'sync' })
     throw error
   } finally {
-    log.emit()  // Manual emit required
+    log.emit() // Manual emit required
   }
 }
 ```

@@ -31,11 +31,7 @@ const {
   isCurrent,
   isBefore,
   isAfter,
-} = useStepper([
-  'billing-address',
-  'terms',
-  'payment',
-])
+} = useStepper(['billing-address', 'terms', 'payment'])
 
 // Access the step through `current`
 console.log(current.value) // 'billing-address'
@@ -71,10 +67,10 @@ const {
   'billing-address': {
     title: 'Billing address',
   },
-  'terms': {
+  terms: {
     title: 'Terms',
   },
-  'payment': {
+  payment: {
     title: 'Payment',
   },
 })
@@ -128,10 +124,10 @@ export interface UseStepperReturn<StepName, Steps, Step> {
 }
 export declare function useStepper<T extends string | number>(
   steps: MaybeRef<T[]>,
-  initialStep?: T,
+  initialStep?: T
 ): UseStepperReturn<T, T[], T>
 export declare function useStepper<T extends Record<string, any>>(
   steps: MaybeRef<T>,
-  initialStep?: keyof T,
+  initialStep?: keyof T
 ): UseStepperReturn<Exclude<keyof T, symbol>, T, T[keyof T]>
 ```

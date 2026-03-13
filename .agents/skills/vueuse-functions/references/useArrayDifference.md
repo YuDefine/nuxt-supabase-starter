@@ -47,12 +47,9 @@ import { useArrayDifference } from '@vueuse/core'
 const list1 = ref([{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }])
 const list2 = ref([{ id: 4 }, { id: 5 }, { id: 6 }])
 
-const result = useArrayDifference(
-  list1,
-  list2,
-  (value, othVal) => value.id === othVal.id,
-  { symmetric: true }
-)
+const result = useArrayDifference(list1, list2, (value, othVal) => value.id === othVal.id, {
+  symmetric: true,
+})
 // result.value: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 6 }]
 ```
 
@@ -73,12 +70,12 @@ export declare function useArrayDifference<T>(
   list: MaybeRefOrGetter<T[]>,
   values: MaybeRefOrGetter<T[]>,
   key?: keyof T,
-  options?: UseArrayDifferenceOptions,
+  options?: UseArrayDifferenceOptions
 ): UseArrayDifferenceReturn<T>
 export declare function useArrayDifference<T>(
   list: MaybeRefOrGetter<T[]>,
   values: MaybeRefOrGetter<T[]>,
   compareFn?: (value: T, othVal: T) => boolean,
-  options?: UseArrayDifferenceOptions,
+  options?: UseArrayDifferenceOptions
 ): UseArrayDifferenceReturn<T>
 ```

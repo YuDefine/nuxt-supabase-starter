@@ -22,8 +22,6 @@ if (isSupported.value) {
 ## Type Declarations
 
 ```ts
-export declare function useSupported(
-  callback: () => unknown,
-): ComputedRef<boolean>
+export declare function useSupported(callback: () => unknown): ComputedRef<boolean>
 export type UseSupportedReturn = ReturnType<typeof useSupported>
 ```

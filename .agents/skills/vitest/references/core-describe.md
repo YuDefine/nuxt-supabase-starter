@@ -95,7 +95,7 @@ describe.concurrent('parallel tests', () => {
 ```ts
 describe.concurrent('parallel', () => {
   test('concurrent 1', async () => {})
-  
+
   describe.sequential('must be sequential', () => {
     test('step 1', async () => {})
     test('step 2', async () => {})
@@ -187,7 +187,7 @@ describe.concurrent.skip('equivalent', () => {})
 - Use `describe.concurrent` with context's `expect` for snapshots
 - Shuffle order depends on `sequence.seed` config
 
-<!-- 
+<!--
 Source references:
 - https://vitest.dev/api/describe.html
 -->

@@ -88,17 +88,12 @@ You can also provide your own serialization function to `useStorage`:
 ```ts
 import { useStorage } from '@vueuse/core'
 
-useStorage(
-  'key',
-  {},
-  undefined,
-  {
-    serializer: {
-      read: (v: any) => v ? JSON.parse(v) : null,
-      write: (v: any) => JSON.stringify(v),
-    },
+useStorage('key', {}, undefined, {
+  serializer: {
+    read: (v: any) => (v ? JSON.parse(v) : null),
+    write: (v: any) => JSON.stringify(v),
   },
-)
+})
 ```
 
 Please note when you provide `null` as the default value, `useStorage` can't assume the data type from it. In this case, you can provide a custom serializer or reuse the built-in ones explicitly.
@@ -122,20 +117,18 @@ export interface SerializerAsync<T> {
   write: (value: T) => Awaitable<string>
 }
 export declare const StorageSerializers: Record<
-  "boolean" | "object" | "number" | "any" | "string" | "map" | "set" | "date",
+  'boolean' | 'object' | 'number' | 'any' | 'string' | 'map' | 'set' | 'date',
   Serializer<any>
 >
-export declare const customStorageEventName = "vueuse-storage"
+export declare const customStorageEventName = 'vueuse-storage'
 export interface StorageEventLike {
   storageArea: StorageLike | null
-  key: StorageEvent["key"]
-  oldValue: StorageEvent["oldValue"]
-  newValue: StorageEvent["newValue"]
+  key: StorageEvent['key']
+  oldValue: StorageEvent['oldValue']
+  newValue: StorageEvent['newValue']
 }
 export interface UseStorageOptions<T>
-  extends ConfigurableEventFilter,
-    ConfigurableWindow,
-    ConfigurableFlush {
+  extends ConfigurableEventFilter, ConfigurableWindow, ConfigurableFlush {
   /**
    * Watch for deep changes
    *
@@ -190,30 +183,30 @@ export declare function useStorage(
   key: MaybeRefOrGetter<string>,
   defaults: MaybeRefOrGetter<string>,
   storage?: StorageLike,
-  options?: UseStorageOptions<string>,
+  options?: UseStorageOptions<string>
 ): RemovableRef<string>
 export declare function useStorage(
   key: MaybeRefOrGetter<string>,
   defaults: MaybeRefOrGetter<boolean>,
   storage?: StorageLike,
-  options?: UseStorageOptions<boolean>,
+  options?: UseStorageOptions<boolean>
 ): RemovableRef<boolean>
 export declare function useStorage(
   key: MaybeRefOrGetter<string>,
   defaults: MaybeRefOrGetter<number>,
   storage?: StorageLike,
-  options?: UseStorageOptions<number>,
+  options?: UseStorageOptions<number>
 ): RemovableRef<number>
 export declare function useStorage<T>(
   key: MaybeRefOrGetter<string>,
   defaults: MaybeRefOrGetter<T>,
   storage?: StorageLike,
-  options?: UseStorageOptions<T>,
+  options?: UseStorageOptions<T>
 ): RemovableRef<T>
 export declare function useStorage<T = unknown>(
   key: MaybeRefOrGetter<string>,
   defaults: MaybeRefOrGetter<null>,
   storage?: StorageLike,
-  options?: UseStorageOptions<T>,
+  options?: UseStorageOptions<T>
 ): RemovableRef<T>
 ```

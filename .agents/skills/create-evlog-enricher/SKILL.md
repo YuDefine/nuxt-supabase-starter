@@ -19,14 +19,14 @@ The exact wording may vary depending on the enricher (e.g., `feat: add user agen
 
 ## Touchpoints Checklist
 
-| # | File | Action |
-|---|------|--------|
-| 1 | `packages/evlog/src/enrichers/index.ts` | Add enricher source |
-| 2 | `packages/evlog/test/enrichers.test.ts` | Add tests |
-| 3 | `apps/docs/content/4.enrichers/2.built-in.md` | Add enricher to built-in docs |
-| 4 | `apps/docs/content/4.enrichers/1.overview.md` | Add enricher to overview cards |
-| 5 | `skills/evlog/SKILL.md` | Add enricher to the Built-in line in the Enrichers section |
-| 6 | `README.md` + `packages/evlog/README.md` | Add enricher to README enrichers section |
+| #   | File                                          | Action                                                     |
+| --- | --------------------------------------------- | ---------------------------------------------------------- |
+| 1   | `packages/evlog/src/enrichers/index.ts`       | Add enricher source                                        |
+| 2   | `packages/evlog/test/enrichers.test.ts`       | Add tests                                                  |
+| 3   | `apps/docs/content/4.enrichers/2.built-in.md` | Add enricher to built-in docs                              |
+| 4   | `apps/docs/content/4.enrichers/1.overview.md` | Add enricher to overview cards                             |
+| 5   | `skills/evlog/SKILL.md`                       | Add enricher to the Built-in line in the Enrichers section |
+| 6   | `README.md` + `packages/evlog/README.md`      | Add enricher to README enrichers section                   |
 
 **Important**: Do NOT consider the task complete until all 6 touchpoints have been addressed.
 
@@ -34,11 +34,11 @@ The exact wording may vary depending on the enricher (e.g., `feat: add user agen
 
 Use these placeholders consistently:
 
-| Placeholder | Example (UserAgent) | Usage |
-|-------------|---------------------|-------|
-| `{name}` | `userAgent` | camelCase for event field key |
-| `{Name}` | `UserAgent` | PascalCase in function/interface names |
-| `{DISPLAY}` | `User Agent` | Human-readable display name |
+| Placeholder | Example (UserAgent) | Usage                                  |
+| ----------- | ------------------- | -------------------------------------- |
+| `{name}`    | `userAgent`         | camelCase for event field key          |
+| `{Name}`    | `UserAgent`         | PascalCase in function/interface names |
+| `{DISPLAY}` | `User Agent`        | Human-readable display name            |
 
 ## Step 1: Enricher Source
 
@@ -92,7 +92,7 @@ const enrich = create{Name}Enricher()
 
 \`\`\`typescript
 interface {Name}Info {
-  // fields
+// fields
 }
 \`\`\`
 
@@ -100,9 +100,9 @@ interface {Name}Info {
 
 \`\`\`json
 {
-  "{name}": {
-    // example values
-  }
+"{name}": {
+// example values
+}
 }
 \`\`\`
 ```
@@ -114,14 +114,18 @@ Add any relevant callouts for platform-specific notes or limitations.
 Edit `apps/docs/content/4.enrichers/1.overview.md` to add a card for the new enricher in the `::card-group` section (before the Custom card):
 
 ```markdown
-  :::card
-  ---
-  icon: i-lucide-{icon}
-  title: {DISPLAY}
-  to: /enrichers/built-in#{anchor}
-  ---
-  [Short description.]
-  :::
+:::card
+
+---
+
+icon: i-lucide-{icon}
+title: {DISPLAY}
+to: /enrichers/built-in#{anchor}
+
+---
+
+[Short description.]
+:::
 ```
 
 ## Step 5: Update `skills/evlog/SKILL.md`

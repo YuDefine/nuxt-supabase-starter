@@ -15,8 +15,7 @@ const target = shallowRef()
 const { focused } = useFocus(target)
 
 watch(focused, (focused) => {
-  if (focused)
-    console.log('input element has been focused')
+  if (focused) console.log('input element has been focused')
   else console.log('input element has lost focus')
 })
 ```
@@ -38,19 +37,17 @@ Changes of the `focused` reactive ref will automatically trigger `focus` and `bl
 
 ```vue
 <script setup lang="ts">
-import { useFocus } from '@vueuse/core'
-import { shallowRef } from 'vue'
+  import { useFocus } from '@vueuse/core'
+  import { shallowRef } from 'vue'
 
-const input = shallowRef()
-const { focused } = useFocus(input)
+  const input = shallowRef()
+  const { focused } = useFocus(input)
 </script>
 
 <template>
   <div>
-    <button type="button" @click="focused = true">
-      Click me to focus input below
-    </button>
-    <input ref="input" type="text">
+    <button type="button" @click="focused = true">Click me to focus input below</button>
+    <input ref="input" type="text" />
   </div>
 </template>
 ```
@@ -92,8 +89,5 @@ export interface UseFocusReturn {
  * @param target The target element for the focus and blur events.
  * @param options
  */
-export declare function useFocus(
-  target: MaybeElementRef,
-  options?: UseFocusOptions,
-): UseFocusReturn
+export declare function useFocus(target: MaybeElementRef, options?: UseFocusOptions): UseFocusReturn
 ```

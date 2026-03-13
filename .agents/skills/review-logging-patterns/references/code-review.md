@@ -278,14 +278,14 @@ export default defineEventHandler(async (event) => {
 
 ## Anti-Pattern Summary
 
-| Anti-Pattern | Fix |
-|--------------|-----|
-| Multiple `console.log` in one function | Single wide event with `useLogger(event).set()` |
-| `throw new Error('...')` | `throw createError({ message, status, why, fix })` |
-| `console.error(e); throw e` | `log.error(e); throw createError(...)` |
-| No logging in request handlers | Add `useLogger(event)` (Nuxt/Nitro) or `createRequestLogger()` (standalone) |
-| Flat log data | Grouped objects: `{ user: {...}, cart: {...} }` |
-| Abbreviated field names | Descriptive names: `userId` not `uid` |
+| Anti-Pattern                           | Fix                                                                         |
+| -------------------------------------- | --------------------------------------------------------------------------- |
+| Multiple `console.log` in one function | Single wide event with `useLogger(event).set()`                             |
+| `throw new Error('...')`               | `throw createError({ message, status, why, fix })`                          |
+| `console.error(e); throw e`            | `log.error(e); throw createError(...)`                                      |
+| No logging in request handlers         | Add `useLogger(event)` (Nuxt/Nitro) or `createRequestLogger()` (standalone) |
+| Flat log data                          | Grouped objects: `{ user: {...}, cart: {...} }`                             |
+| Abbreviated field names                | Descriptive names: `userId` not `uid`                                       |
 
 ## Suggested Review Comments
 

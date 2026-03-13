@@ -27,7 +27,7 @@ const preferredMotion = usePreferredReducedMotion()
 ## Type Declarations
 
 ```ts
-export type ReducedMotionType = "reduce" | "no-preference"
+export type ReducedMotionType = 'reduce' | 'no-preference'
 /**
  * Reactive prefers-reduced-motion media query.
  *
@@ -37,6 +37,6 @@ export type ReducedMotionType = "reduce" | "no-preference"
  * @__NO_SIDE_EFFECTS__
  */
 export declare function usePreferredReducedMotion(
-  options?: ConfigurableWindow,
+  options?: ConfigurableWindow
 ): ComputedRef<ReducedMotionType>
 ```

@@ -17,24 +17,24 @@ feat({framework}): add {Framework} middleware integration
 
 ## Touchpoints Checklist
 
-| # | File | Action |
-|---|------|--------|
-| 1 | `packages/evlog/src/{framework}/index.ts` | Create integration source |
-| 2 | `packages/evlog/tsdown.config.ts` | Add build entry + external |
-| 3 | `packages/evlog/package.json` | Add `exports` + `typesVersions` + peer dep + keyword |
-| 4 | `packages/evlog/test/{framework}.test.ts` | Create tests |
-| 5 | `apps/docs/content/2.frameworks/{NN}.{framework}.md` | Create framework docs page |
-| 6 | `apps/docs/content/2.frameworks/00.overview.md` | Add card + table row |
-| 7 | `apps/docs/content/1.getting-started/2.installation.md` | Add card in "Choose Your Framework" |
-| 8 | `apps/docs/content/0.landing.md` | Add framework code snippet |
-| 9 | `apps/docs/app/components/features/FeatureFrameworks.vue` | Add framework tab |
-| 10 | `skills/evlog/SKILL.md` | Add framework setup section + update frontmatter description |
-| 11 | `packages/evlog/README.md` | Add framework section + add row to Framework Support table |
-| 12 | `examples/{framework}/` | Create example app with test UI |
-| 13 | `package.json` (root) | Add `example:{framework}` script |
-| 14 | `.changeset/{framework}-integration.md` | Create changeset (`minor`) |
-| 15 | `.github/workflows/semantic-pull-request.yml` | Add `{framework}` scope |
-| 16 | `.github/pull_request_template.md` | Add `{framework}` scope |
+| #   | File                                                      | Action                                                       |
+| --- | --------------------------------------------------------- | ------------------------------------------------------------ |
+| 1   | `packages/evlog/src/{framework}/index.ts`                 | Create integration source                                    |
+| 2   | `packages/evlog/tsdown.config.ts`                         | Add build entry + external                                   |
+| 3   | `packages/evlog/package.json`                             | Add `exports` + `typesVersions` + peer dep + keyword         |
+| 4   | `packages/evlog/test/{framework}.test.ts`                 | Create tests                                                 |
+| 5   | `apps/docs/content/2.frameworks/{NN}.{framework}.md`      | Create framework docs page                                   |
+| 6   | `apps/docs/content/2.frameworks/00.overview.md`           | Add card + table row                                         |
+| 7   | `apps/docs/content/1.getting-started/2.installation.md`   | Add card in "Choose Your Framework"                          |
+| 8   | `apps/docs/content/0.landing.md`                          | Add framework code snippet                                   |
+| 9   | `apps/docs/app/components/features/FeatureFrameworks.vue` | Add framework tab                                            |
+| 10  | `skills/evlog/SKILL.md`                                   | Add framework setup section + update frontmatter description |
+| 11  | `packages/evlog/README.md`                                | Add framework section + add row to Framework Support table   |
+| 12  | `examples/{framework}/`                                   | Create example app with test UI                              |
+| 13  | `package.json` (root)                                     | Add `example:{framework}` script                             |
+| 14  | `.changeset/{framework}-integration.md`                   | Create changeset (`minor`)                                   |
+| 15  | `.github/workflows/semantic-pull-request.yml`             | Add `{framework}` scope                                      |
+| 16  | `.github/pull_request_template.md`                        | Add `{framework}` scope                                      |
 
 **Important**: Do NOT consider the task complete until all 16 touchpoints have been addressed.
 
@@ -42,33 +42,33 @@ feat({framework}): add {Framework} middleware integration
 
 Use these placeholders consistently:
 
-| Placeholder | Example (Hono) | Usage |
-|-------------|----------------|-------|
-| `{framework}` | `hono` | Directory names, import paths, file names |
-| `{Framework}` | `Hono` | PascalCase in type/interface names |
+| Placeholder   | Example (Hono) | Usage                                     |
+| ------------- | -------------- | ----------------------------------------- |
+| `{framework}` | `hono`         | Directory names, import paths, file names |
+| `{Framework}` | `Hono`         | PascalCase in type/interface names        |
 
 ## Shared Utilities
 
 All integrations share the same core utilities. **Never reimplement logic that exists in shared/**.
 
-| Utility | Location | Purpose |
-|---------|----------|---------|
-| `createMiddlewareLogger` | `../shared/middleware` | Full lifecycle: logger creation, route filtering, tail sampling, emit, enrich, drain |
-| `extractSafeHeaders` | `../shared/headers` | Convert Web API `Headers` → filtered `Record<string, string>` (Hono, Elysia, etc.) |
-| `extractSafeNodeHeaders` | `../shared/headers` | Convert Node.js `IncomingHttpHeaders` → filtered `Record<string, string>` (Express, Fastify, NestJS) |
-| `BaseEvlogOptions` | `../shared/middleware` | Base user-facing options type with `drain`, `enrich`, `keep`, `include`, `exclude`, `routes` |
-| `MiddlewareLoggerOptions` | `../shared/middleware` | Internal options type extending `BaseEvlogOptions` with `method`, `path`, `requestId`, `headers` |
-| `createLoggerStorage` | `../shared/storage` | Factory returning `{ storage, useLogger }` for `AsyncLocalStorage`-backed `useLogger()` |
+| Utility                   | Location               | Purpose                                                                                              |
+| ------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------- |
+| `createMiddlewareLogger`  | `../shared/middleware` | Full lifecycle: logger creation, route filtering, tail sampling, emit, enrich, drain                 |
+| `extractSafeHeaders`      | `../shared/headers`    | Convert Web API `Headers` → filtered `Record<string, string>` (Hono, Elysia, etc.)                   |
+| `extractSafeNodeHeaders`  | `../shared/headers`    | Convert Node.js `IncomingHttpHeaders` → filtered `Record<string, string>` (Express, Fastify, NestJS) |
+| `BaseEvlogOptions`        | `../shared/middleware` | Base user-facing options type with `drain`, `enrich`, `keep`, `include`, `exclude`, `routes`         |
+| `MiddlewareLoggerOptions` | `../shared/middleware` | Internal options type extending `BaseEvlogOptions` with `method`, `path`, `requestId`, `headers`     |
+| `createLoggerStorage`     | `../shared/storage`    | Factory returning `{ storage, useLogger }` for `AsyncLocalStorage`-backed `useLogger()`              |
 
 ### Test Helpers
 
-| Utility | Location | Purpose |
-|---------|----------|---------|
-| `createPipelineSpies()` | `test/helpers/framework` | Creates mock drain/enrich/keep callbacks |
-| `assertDrainCalledWith()` | `test/helpers/framework` | Validates drain was called with expected event shape |
-| `assertEnrichBeforeDrain()` | `test/helpers/framework` | Validates enrich runs before drain |
-| `assertSensitiveHeadersFiltered()` | `test/helpers/framework` | Validates sensitive headers are excluded |
-| `assertWideEventShape()` | `test/helpers/framework` | Validates standard wide event fields |
+| Utility                            | Location                 | Purpose                                              |
+| ---------------------------------- | ------------------------ | ---------------------------------------------------- |
+| `createPipelineSpies()`            | `test/helpers/framework` | Creates mock drain/enrich/keep callbacks             |
+| `assertDrainCalledWith()`          | `test/helpers/framework` | Validates drain was called with expected event shape |
+| `assertEnrichBeforeDrain()`        | `test/helpers/framework` | Validates enrich runs before drain                   |
+| `assertSensitiveHeadersFiltered()` | `test/helpers/framework` | Validates sensitive headers are excluded             |
+| `assertWideEventShape()`           | `test/helpers/framework` | Validates standard wide event fields                 |
 
 ## Step 1: Integration Source
 
@@ -257,10 +257,10 @@ Use zero-padded numbering (`{NN}`) to maintain correct sidebar ordering. Check e
 
 ```yaml
 ---
-title: {Framework}
+title: { Framework }
 description: Using evlog with {Framework} — automatic wide events, structured errors, drain adapters, enrichers, and tail sampling in {Framework} applications.
 navigation:
-  title: {Framework}
+  title: { Framework }
   icon: i-simple-icons-{framework}
 links:
   - label: Source Code
@@ -303,12 +303,15 @@ Add a code snippet in `apps/docs/content/0.landing.md` for the framework.
 
 Find the `FeatureFrameworks` MDC component usage (the section with `#nuxt`, `#nextjs`, `#hono`, `#express`, etc.) and add a new slot:
 
-```markdown
-  #{framework}
-  ```ts [src/index.ts]
-  // Framework-specific code example showing evlog usage
-  ```
+````markdown
+#{framework}
+
+```ts [src/index.ts]
+// Framework-specific code example showing evlog usage
 ```
+````
+
+````
 
 Place the snippet in the correct order relative to existing frameworks.
 
@@ -343,7 +346,7 @@ In the root `packages/evlog/README.md`:
 
 ```markdown
 | **{Framework}** | `{registration pattern}` with `import { evlog } from 'evlog/{framework}'` ([example](./examples/{framework})) |
-```
+````
 
 Keep the snippet short — just init, register/use middleware, and one route handler showing logger access. No need to repeat drain/enrich/keep here.
 
@@ -369,11 +372,13 @@ Pretty printing should be enabled so the output is readable when testing locally
 ```typescript
 import { type EnrichContext } from 'evlog'
 
-app.use(evlog({
-  enrich: (ctx: EnrichContext) => {
-    ctx.event.runtime = 'node'
-  },
-}))
+app.use(
+  evlog({
+    enrich: (ctx: EnrichContext) => {
+      ctx.event.runtime = 'node'
+    },
+  })
+)
 ```
 
 ### Test UI
@@ -381,6 +386,7 @@ app.use(evlog({
 Every example must serve a test UI at `GET /` — a self-contained HTML page (no external deps) that lets the user click routes and see responses without curl.
 
 The UI must:
+
 - List all available routes with method badge + path + description
 - Send the request on click and display the JSON response with syntax highlighting
 - Show status code (color-coded 2xx/4xx/5xx) and response time
@@ -392,13 +398,13 @@ Reference: `examples/hono/src/ui.ts` for the canonical pattern. Copy and adapt f
 
 ### Required files
 
-| File | Purpose |
-|------|---------|
-| `src/index.ts` | App with all features demonstrated |
-| `src/ui.ts` | Test UI — `testUI()` returning self-contained HTML |
-| `package.json` | `dev` and `start` scripts |
-| `tsconfig.json` | TypeScript config (if needed) |
-| `README.md` | How to run + link to the UI |
+| File            | Purpose                                            |
+| --------------- | -------------------------------------------------- |
+| `src/index.ts`  | App with all features demonstrated                 |
+| `src/ui.ts`     | Test UI — `testUI()` returning self-contained HTML |
+| `package.json`  | `dev` and `start` scripts                          |
+| `tsconfig.json` | TypeScript config (if needed)                      |
+| `README.md`     | How to run + link to the UI                        |
 
 ### Package scripts
 
@@ -427,7 +433,7 @@ Create `.changeset/{framework}-integration.md`:
 
 ```markdown
 ---
-"evlog": minor
+'evlog': minor
 ---
 
 Add {Framework} middleware integration (`evlog/{framework}`) with automatic wide-event logging, drain, enrich, and tail sampling support

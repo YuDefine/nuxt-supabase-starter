@@ -114,9 +114,7 @@ export interface UseAxiosReturn<
   /**
    * Axios response data
    */
-  data: O extends UseAxiosOptionsWithInitialData<T>
-    ? Ref<T>
-    : Ref<T | undefined>
+  data: O extends UseAxiosOptionsWithInitialData<T> ? Ref<T> : Ref<T | undefined>
   /**
    * Indicates if the request has finished
    */
@@ -157,17 +155,14 @@ export interface StrictUseAxiosReturn<
    */
   execute: (
     url?: string | AxiosRequestConfig<D>,
-    config?: AxiosRequestConfig<D>,
+    config?: AxiosRequestConfig<D>
   ) => Promise<StrictUseAxiosReturn<T, R, D, O>>
 }
 export interface EasyUseAxiosReturn<T, R, D> extends UseAxiosReturn<T, R, D> {
   /**
    * Manually call the axios request
    */
-  execute: (
-    url: string,
-    config?: AxiosRequestConfig<D>,
-  ) => Promise<EasyUseAxiosReturn<T, R, D>>
+  execute: (url: string, config?: AxiosRequestConfig<D>) => Promise<EasyUseAxiosReturn<T, R, D>>
 }
 export interface UseAxiosOptionsBase<T = any> {
   /**
@@ -204,49 +199,43 @@ export interface UseAxiosOptionsBase<T = any> {
    */
   onFinish?: () => void
 }
-export interface UseAxiosOptionsWithInitialData<T>
-  extends UseAxiosOptionsBase<T> {
+export interface UseAxiosOptionsWithInitialData<T> extends UseAxiosOptionsBase<T> {
   /**
    * Initial data
    */
   initialData: T
 }
-export type UseAxiosOptions<T = any> =
-  | UseAxiosOptionsBase<T>
-  | UseAxiosOptionsWithInitialData<T>
+export type UseAxiosOptions<T = any> = UseAxiosOptionsBase<T> | UseAxiosOptionsWithInitialData<T>
 export declare function useAxios<
   T = any,
   R = AxiosResponse<T>,
   D = any,
-  O extends
-    UseAxiosOptionsWithInitialData<T> = UseAxiosOptionsWithInitialData<T>,
+  O extends UseAxiosOptionsWithInitialData<T> = UseAxiosOptionsWithInitialData<T>,
 >(
   url: string,
   config?: AxiosRequestConfig<D>,
-  options?: O,
+  options?: O
 ): StrictUseAxiosReturn<T, R, D, O> & Promise<StrictUseAxiosReturn<T, R, D, O>>
 export declare function useAxios<
   T = any,
   R = AxiosResponse<T>,
   D = any,
-  O extends
-    UseAxiosOptionsWithInitialData<T> = UseAxiosOptionsWithInitialData<T>,
+  O extends UseAxiosOptionsWithInitialData<T> = UseAxiosOptionsWithInitialData<T>,
 >(
   url: string,
   instance?: AxiosInstance,
-  options?: O,
+  options?: O
 ): StrictUseAxiosReturn<T, R, D, O> & Promise<StrictUseAxiosReturn<T, R, D, O>>
 export declare function useAxios<
   T = any,
   R = AxiosResponse<T>,
   D = any,
-  O extends
-    UseAxiosOptionsWithInitialData<T> = UseAxiosOptionsWithInitialData<T>,
+  O extends UseAxiosOptionsWithInitialData<T> = UseAxiosOptionsWithInitialData<T>,
 >(
   url: string,
   config: AxiosRequestConfig<D>,
   instance: AxiosInstance,
-  options?: O,
+  options?: O
 ): StrictUseAxiosReturn<T, R, D, O> & Promise<StrictUseAxiosReturn<T, R, D, O>>
 export declare function useAxios<
   T = any,
@@ -256,7 +245,7 @@ export declare function useAxios<
 >(
   url: string,
   config?: AxiosRequestConfig<D>,
-  options?: O,
+  options?: O
 ): StrictUseAxiosReturn<T, R, D, O> & Promise<StrictUseAxiosReturn<T, R, D, O>>
 export declare function useAxios<
   T = any,
@@ -266,7 +255,7 @@ export declare function useAxios<
 >(
   url: string,
   instance?: AxiosInstance,
-  options?: O,
+  options?: O
 ): StrictUseAxiosReturn<T, R, D, O> & Promise<StrictUseAxiosReturn<T, R, D, O>>
 export declare function useAxios<
   T = any,
@@ -277,16 +266,16 @@ export declare function useAxios<
   url: string,
   config: AxiosRequestConfig<D>,
   instance: AxiosInstance,
-  options?: O,
+  options?: O
 ): StrictUseAxiosReturn<T, R, D, O> & Promise<StrictUseAxiosReturn<T, R, D, O>>
 export declare function useAxios<T = any, R = AxiosResponse<T>, D = any>(
-  config?: AxiosRequestConfig<D>,
+  config?: AxiosRequestConfig<D>
 ): EasyUseAxiosReturn<T, R, D> & Promise<EasyUseAxiosReturn<T, R, D>>
 export declare function useAxios<T = any, R = AxiosResponse<T>, D = any>(
-  instance?: AxiosInstance,
+  instance?: AxiosInstance
 ): EasyUseAxiosReturn<T, R, D> & Promise<EasyUseAxiosReturn<T, R, D>>
 export declare function useAxios<T = any, R = AxiosResponse<T>, D = any>(
   config?: AxiosRequestConfig<D>,
-  instance?: AxiosInstance,
+  instance?: AxiosInstance
 ): EasyUseAxiosReturn<T, R, D> & Promise<EasyUseAxiosReturn<T, R, D>>
 ```

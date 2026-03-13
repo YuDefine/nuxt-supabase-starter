@@ -30,7 +30,7 @@ import { reactive } from 'vue'
 export const store = reactive({
   user: null,
   cart: [],
-  preferences: {}
+  preferences: {},
 })
 ```
 
@@ -56,13 +56,13 @@ import { defineStore } from 'pinia'
 export const useUserStore = defineStore('user', {
   state: () => ({
     user: null,
-    preferences: {}
+    preferences: {},
   }),
   actions: {
     setUser(user) {
       this.user = user
-    }
-  }
+    },
+  },
 })
 ```
 
@@ -130,7 +130,7 @@ export function createStore() {
   const state = reactive({
     user: null,
     cart: [],
-    preferences: {}
+    preferences: {},
   })
 
   return {
@@ -140,7 +140,7 @@ export function createStore() {
     },
     addToCart(item) {
       state.cart.push(item)
-    }
+    },
   }
 }
 ```
@@ -212,7 +212,7 @@ describe('SSR State Isolation', () => {
     // Simulate concurrent requests
     const [result1, result2] = await Promise.all([
       render('/user/1', { userId: '1' }),
-      render('/user/2', { userId: '2' })
+      render('/user/2', { userId: '2' }),
     ])
 
     // Each should have their own user data
@@ -259,7 +259,7 @@ export const appState = reactive({})
 export const cache = new Map()
 
 // BAD: Even plain objects can be problematic
-let requestCount = 0  // Shared across requests
+let requestCount = 0 // Shared across requests
 ```
 
 ## Why Pinia is Recommended for SSR
@@ -271,6 +271,7 @@ let requestCount = 0  // Shared across requests
 5. **Tested patterns** - Battle-tested SSR handling
 
 ## Reference
+
 - [Vue.js State Management - SSR Considerations](https://vuejs.org/guide/scaling-up/state-management.html#ssr-considerations)
 - [Pinia SSR Guide](https://pinia.vuejs.org/ssr/)
 - [Vue SSR Guide](https://vuejs.org/guide/scaling-up/ssr.html)

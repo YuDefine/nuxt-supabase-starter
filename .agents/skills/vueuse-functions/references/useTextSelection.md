@@ -10,9 +10,9 @@ Reactively track user text selection based on [`Window.getSelection`](https://de
 
 ```vue
 <script setup lang="ts">
-import { useTextSelection } from '@vueuse/core'
+  import { useTextSelection } from '@vueuse/core'
 
-const state = useTextSelection()
+  const state = useTextSelection()
 </script>
 
 <template>

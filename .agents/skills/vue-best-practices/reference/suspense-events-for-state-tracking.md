@@ -7,6 +7,7 @@
 ## Why This Matters
 
 Relying solely on the fallback slot for loading indication limits your options. The events provide programmatic access to Suspense state changes, enabling:
+
 - Loading progress tracking
 - Analytics for perceived performance
 - Coordinated animations
@@ -17,38 +18,34 @@ Relying solely on the fallback slot for loading indication limits your options. 
 
 ```vue
 <script setup>
-import { ref } from 'vue'
+  import { ref } from 'vue'
 
-const loadingState = ref('idle')
-const loadStartTime = ref(null)
+  const loadingState = ref('idle')
+  const loadStartTime = ref(null)
 
-const onPending = () => {
-  loadingState.value = 'pending'
-  loadStartTime.value = Date.now()
-  console.log('Suspense entered pending state')
-}
+  const onPending = () => {
+    loadingState.value = 'pending'
+    loadStartTime.value = Date.now()
+    console.log('Suspense entered pending state')
+  }
 
-const onResolve = () => {
-  loadingState.value = 'resolved'
-  const loadTime = Date.now() - loadStartTime.value
-  console.log(`Content resolved in ${loadTime}ms`)
+  const onResolve = () => {
+    loadingState.value = 'resolved'
+    const loadTime = Date.now() - loadStartTime.value
+    console.log(`Content resolved in ${loadTime}ms`)
 
-  // Track performance
-  analytics.track('page_load_time', { duration: loadTime })
-}
+    // Track performance
+    analytics.track('page_load_time', { duration: loadTime })
+  }
 
-const onFallback = () => {
-  loadingState.value = 'fallback'
-  console.log('Fallback content is now visible')
-}
+  const onFallback = () => {
+    loadingState.value = 'fallback'
+    console.log('Fallback content is now visible')
+  }
 </script>
 
 <template>
-  <Suspense
-    @pending="onPending"
-    @resolve="onResolve"
-    @fallback="onFallback"
-  >
+  <Suspense @pending="onPending" @resolve="onResolve" @fallback="onFallback">
     <AsyncPage />
     <template #fallback>
       <LoadingSkeleton />
@@ -62,24 +59,24 @@ const onFallback = () => {
 ```vue
 <!-- App.vue -->
 <script setup>
-import { ref, provide } from 'vue'
+  import { ref, provide } from 'vue'
 
-const globalLoading = ref(false)
-const pendingCount = ref(0)
+  const globalLoading = ref(false)
+  const pendingCount = ref(0)
 
-provide('globalLoading', globalLoading)
+  provide('globalLoading', globalLoading)
 
-const onSuspensePending = () => {
-  pendingCount.value++
-  globalLoading.value = true
-}
-
-const onSuspenseResolve = () => {
-  pendingCount.value--
-  if (pendingCount.value === 0) {
-    globalLoading.value = false
+  const onSuspensePending = () => {
+    pendingCount.value++
+    globalLoading.value = true
   }
-}
+
+  const onSuspenseResolve = () => {
+    pendingCount.value--
+    if (pendingCount.value === 0) {
+      globalLoading.value = false
+    }
+  }
 </script>
 
 <template>
@@ -89,10 +86,7 @@ const onSuspenseResolve = () => {
   </Transition>
 
   <RouterView v-slot="{ Component }">
-    <Suspense
-      @pending="onSuspensePending"
-      @resolve="onSuspenseResolve"
-    >
+    <Suspense @pending="onSuspensePending" @resolve="onSuspenseResolve">
       <component :is="Component" />
       <template #fallback>
         <PageSkeleton />
@@ -125,20 +119,20 @@ On Content Change (fast):
 
 ```vue
 <script setup>
-import { ref } from 'vue'
+  import { ref } from 'vue'
 
-const isTransitioning = ref(false)
+  const isTransitioning = ref(false)
 
-const onPending = () => {
-  isTransitioning.value = true
-}
+  const onPending = () => {
+    isTransitioning.value = true
+  }
 
-const onResolve = () => {
-  // Delay to allow enter transition to complete
-  setTimeout(() => {
-    isTransitioning.value = false
-  }, 300)
-}
+  const onResolve = () => {
+    // Delay to allow enter transition to complete
+    setTimeout(() => {
+      isTransitioning.value = false
+    }, 300)
+  }
 </script>
 
 <template>

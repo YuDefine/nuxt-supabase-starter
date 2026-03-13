@@ -93,9 +93,7 @@ const isDark = useDark({
 ```vue
 <template>
   <UseDark v-slot="{ isDark, toggleDark }">
-    <button @click="toggleDark()">
-      Is Dark: {{ isDark }}
-    </button>
+    <button @click="toggleDark()">Is Dark: {{ isDark }}</button>
   </UseDark>
 </template>
 ```
@@ -103,8 +101,10 @@ const isDark = useDark({
 ## Type Declarations
 
 ```ts
-export interface UseDarkOptions
-  extends Omit<UseColorModeOptions<BasicColorSchema>, "modes" | "onChanged"> {
+export interface UseDarkOptions extends Omit<
+  UseColorModeOptions<BasicColorSchema>,
+  'modes' | 'onChanged'
+> {
   /**
    * Value applying to the target element when isDark=true
    *
@@ -126,7 +126,7 @@ export interface UseDarkOptions
   onChanged?: (
     isDark: boolean,
     defaultHandler: (mode: BasicColorSchema) => void,
-    mode: BasicColorSchema,
+    mode: BasicColorSchema
   ) => void
 }
 /**
@@ -135,8 +135,6 @@ export interface UseDarkOptions
  * @see https://vueuse.org/useDark
  * @param options
  */
-export declare function useDark(
-  options?: UseDarkOptions,
-): WritableComputedRef<boolean, boolean>
+export declare function useDark(options?: UseDarkOptions): WritableComputedRef<boolean, boolean>
 export type UseDarkReturn = ReturnType<typeof useDark>
 ```

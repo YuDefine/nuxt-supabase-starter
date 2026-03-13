@@ -4,7 +4,7 @@ description: Review code for logging patterns and suggest evlog adoption. Guides
 license: MIT
 metadata:
   author: HugoRCD
-  version: "0.5"
+  version: '0.5'
 ---
 
 # Review logging patterns
@@ -21,12 +21,12 @@ Review and improve logging patterns in TypeScript/JavaScript codebases. Transfor
 
 ## Quick Reference
 
-| Working on...           | Resource                                                           |
-| ----------------------- | ------------------------------------------------------------------ |
-| Wide events patterns    | [references/wide-events.md](references/wide-events.md)             |
-| Error handling          | [references/structured-errors.md](references/structured-errors.md) |
-| Code review checklist   | [references/code-review.md](references/code-review.md)             |
-| Drain pipeline          | [references/drain-pipeline.md](references/drain-pipeline.md)       |
+| Working on...         | Resource                                                           |
+| --------------------- | ------------------------------------------------------------------ |
+| Wide events patterns  | [references/wide-events.md](references/wide-events.md)             |
+| Error handling        | [references/structured-errors.md](references/structured-errors.md) |
+| Code review checklist | [references/code-review.md](references/code-review.md)             |
+| Drain pipeline        | [references/drain-pipeline.md](references/drain-pipeline.md)       |
 
 ## Installation
 
@@ -127,7 +127,7 @@ export const { withEvlog, useLogger, log, createError } = createEvlog({
 import { withEvlog, useLogger } from '@/lib/evlog'
 
 export const POST = withEvlog(async (request: Request) => {
-  const log = useLogger()  // Zero arguments — uses AsyncLocalStorage
+  const log = useLogger() // Zero arguments — uses AsyncLocalStorage
   log.set({ user: { id: 'user_123', plan: 'enterprise' } })
   log.set({ cart: { items: 3, total: 14999 } })
   return Response.json({ success: true })
@@ -167,7 +167,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body>
-        <EvlogProvider service="my-app" transport={{ enabled: true, endpoint: '/api/evlog/ingest' }}>
+        <EvlogProvider
+          service="my-app"
+          transport={{ enabled: true, endpoint: '/api/evlog/ingest' }}
+        >
           {children}
         </EvlogProvider>
       </body>
@@ -252,7 +255,9 @@ import { createAxiomDrain } from 'evlog/axiom'
 export const { handle, handleError } = createEvlogHooks({
   include: ['/api/**'],
   drain: createAxiomDrain(),
-  enrich: (ctx) => { ctx.event.region = process.env.FLY_REGION },
+  enrich: (ctx) => {
+    ctx.event.region = process.env.FLY_REGION
+  },
   keep: (ctx) => {
     if (ctx.duration && ctx.duration > 2000) ctx.shouldKeep = true
   },
@@ -369,7 +374,9 @@ import { createAxiomDrain } from 'evlog/axiom'
 EvlogModule.forRoot({
   include: ['/api/**'],
   drain: createAxiomDrain(),
-  enrich: (ctx) => { ctx.event.region = process.env.FLY_REGION },
+  enrich: (ctx) => {
+    ctx.event.region = process.env.FLY_REGION
+  },
   keep: (ctx) => {
     if (ctx.duration && ctx.duration > 2000) ctx.shouldKeep = true
   },
@@ -422,14 +429,18 @@ Full pipeline with drain, enrich, and tail sampling:
 ```typescript
 import { createAxiomDrain } from 'evlog/axiom'
 
-app.use(evlog({
-  include: ['/api/**'],
-  drain: createAxiomDrain(),
-  enrich: (ctx) => { ctx.event.region = process.env.FLY_REGION },
-  keep: (ctx) => {
-    if (ctx.duration && ctx.duration > 2000) ctx.shouldKeep = true
-  },
-}))
+app.use(
+  evlog({
+    include: ['/api/**'],
+    drain: createAxiomDrain(),
+    enrich: (ctx) => {
+      ctx.event.region = process.env.FLY_REGION
+    },
+    keep: (ctx) => {
+      if (ctx.duration && ctx.duration > 2000) ctx.shouldKeep = true
+    },
+  })
+)
 ```
 
 ### Hono
@@ -458,14 +469,18 @@ Full pipeline with drain, enrich, and tail sampling:
 ```typescript
 import { createAxiomDrain } from 'evlog/axiom'
 
-app.use(evlog({
-  include: ['/api/**'],
-  drain: createAxiomDrain(),
-  enrich: (ctx) => { ctx.event.region = process.env.FLY_REGION },
-  keep: (ctx) => {
-    if (ctx.duration && ctx.duration > 2000) ctx.shouldKeep = true
-  },
-}))
+app.use(
+  evlog({
+    include: ['/api/**'],
+    drain: createAxiomDrain(),
+    enrich: (ctx) => {
+      ctx.event.region = process.env.FLY_REGION
+    },
+    keep: (ctx) => {
+      if (ctx.duration && ctx.duration > 2000) ctx.shouldKeep = true
+    },
+  })
+)
 ```
 
 ### Fastify
@@ -507,7 +522,9 @@ import { createAxiomDrain } from 'evlog/axiom'
 await app.register(evlog, {
   include: ['/api/**'],
   drain: createAxiomDrain(),
-  enrich: (ctx) => { ctx.event.region = process.env.FLY_REGION },
+  enrich: (ctx) => {
+    ctx.event.region = process.env.FLY_REGION
+  },
   keep: (ctx) => {
     if (ctx.duration && ctx.duration > 2000) ctx.shouldKeep = true
   },
@@ -548,14 +565,18 @@ Full pipeline with drain, enrich, and tail sampling:
 ```typescript
 import { createAxiomDrain } from 'evlog/axiom'
 
-app.use(evlog({
-  include: ['/api/**'],
-  drain: createAxiomDrain(),
-  enrich: (ctx) => { ctx.event.region = process.env.FLY_REGION },
-  keep: (ctx) => {
-    if (ctx.duration && ctx.duration > 2000) ctx.shouldKeep = true
-  },
-}))
+app.use(
+  evlog({
+    include: ['/api/**'],
+    drain: createAxiomDrain(),
+    enrich: (ctx) => {
+      ctx.event.region = process.env.FLY_REGION
+    },
+    keep: (ctx) => {
+      if (ctx.duration && ctx.duration > 2000) ctx.shouldKeep = true
+    },
+  })
+)
 ```
 
 ### Cloudflare Workers
@@ -591,7 +612,7 @@ initLogger({ env: { service: 'my-worker', environment: 'production' } })
 
 const log = createRequestLogger({ jobId: job.id })
 log.set({ source: job.source, recordsSynced: 150 })
-log.emit()  // Manual emit required in standalone
+log.emit() // Manual emit required in standalone
 ```
 
 ---
@@ -600,40 +621,40 @@ log.emit()  // Manual emit required in standalone
 
 All options work in Nuxt (`evlog` key), Nitro (passed to `evlog()`), Next.js (`createEvlog()`), and standalone (`initLogger()`).
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `env.service` / `service` | `string` | `'app'` | Service name in logs |
-| `enabled` | `boolean` | `true` | Global toggle (no-ops when false) |
-| `pretty` | `boolean` | `true` in dev | Pretty tree format vs JSON |
-| `include` | `string[]` | All routes | Route glob patterns to log |
-| `exclude` | `string[]` | None | Route patterns to exclude (takes precedence) |
-| `routes` | `Record<string, { service }>` | -- | Route-specific service names |
-| `sampling.rates` | `object` | -- | Head sampling: `{ info: 10, warn: 50 }` (0-100%) |
-| `sampling.keep` | `array` | -- | Tail sampling: `[{ status: 400 }, { duration: 1000 }]` |
-| `drain` | `(ctx) => void` | -- | Drain callback (Next.js, standalone) |
-| `enrich` | `(ctx) => void` | -- | Enrich callback (Next.js) |
-| `keep` | `(ctx) => void` | -- | Custom tail sampling callback (Next.js) |
+| Option                    | Type                          | Default       | Description                                            |
+| ------------------------- | ----------------------------- | ------------- | ------------------------------------------------------ |
+| `env.service` / `service` | `string`                      | `'app'`       | Service name in logs                                   |
+| `enabled`                 | `boolean`                     | `true`        | Global toggle (no-ops when false)                      |
+| `pretty`                  | `boolean`                     | `true` in dev | Pretty tree format vs JSON                             |
+| `include`                 | `string[]`                    | All routes    | Route glob patterns to log                             |
+| `exclude`                 | `string[]`                    | None          | Route patterns to exclude (takes precedence)           |
+| `routes`                  | `Record<string, { service }>` | --            | Route-specific service names                           |
+| `sampling.rates`          | `object`                      | --            | Head sampling: `{ info: 10, warn: 50 }` (0-100%)       |
+| `sampling.keep`           | `array`                       | --            | Tail sampling: `[{ status: 400 }, { duration: 1000 }]` |
+| `drain`                   | `(ctx) => void`               | --            | Drain callback (Next.js, standalone)                   |
+| `enrich`                  | `(ctx) => void`               | --            | Enrich callback (Next.js)                              |
+| `keep`                    | `(ctx) => void`               | --            | Custom tail sampling callback (Next.js)                |
 
 ### Nitro Hooks (Nuxt, Nitro v2/v3)
 
-| Hook | When | Use |
-|------|------|-----|
-| `evlog:drain` | After enrichment | Send events to external services |
-| `evlog:enrich` | After emit, before drain | Add derived context |
-| `evlog:emit:keep` | During emit | Custom tail sampling logic |
-| `close` | Server shutdown | Flush drain pipeline buffers |
+| Hook              | When                     | Use                              |
+| ----------------- | ------------------------ | -------------------------------- |
+| `evlog:drain`     | After enrichment         | Send events to external services |
+| `evlog:enrich`    | After emit, before drain | Add derived context              |
+| `evlog:emit:keep` | During emit              | Custom tail sampling logic       |
+| `close`           | Server shutdown          | Flush drain pipeline buffers     |
 
 ---
 
 ## Drain Adapters
 
-| Adapter | Import | Env Vars |
-|---------|--------|----------|
-| Axiom | `evlog/axiom` | `AXIOM_TOKEN`, `AXIOM_DATASET` |
-| OTLP | `evlog/otlp` | `OTLP_ENDPOINT` (or `OTEL_EXPORTER_OTLP_ENDPOINT`) |
-| PostHog | `evlog/posthog` | `POSTHOG_API_KEY`, `POSTHOG_HOST` |
-| Sentry | `evlog/sentry` | `SENTRY_DSN` |
-| Better Stack | `evlog/better-stack` | `BETTER_STACK_SOURCE_TOKEN` |
+| Adapter      | Import               | Env Vars                                           |
+| ------------ | -------------------- | -------------------------------------------------- |
+| Axiom        | `evlog/axiom`        | `AXIOM_TOKEN`, `AXIOM_DATASET`                     |
+| OTLP         | `evlog/otlp`         | `OTLP_ENDPOINT` (or `OTEL_EXPORTER_OTLP_ENDPOINT`) |
+| PostHog      | `evlog/posthog`      | `POSTHOG_API_KEY`, `POSTHOG_HOST`                  |
+| Sentry       | `evlog/sentry`       | `SENTRY_DSN`                                       |
+| Better Stack | `evlog/better-stack` | `BETTER_STACK_SOURCE_TOKEN`                        |
 
 In Nuxt/Nitro, use the `NUXT_` prefix (e.g., `NUXT_AXIOM_TOKEN`) so values are available via `useRuntimeConfig()`. All adapters also read unprefixed variables as fallback.
 
@@ -701,7 +722,7 @@ createEvlog({
 ## Structured Errors
 
 ```typescript
-import { createError } from 'evlog'  // or auto-imported in Nuxt
+import { createError } from 'evlog' // or auto-imported in Nuxt
 
 // Minimal
 throw createError({ message: 'Database connection failed', status: 500 })
@@ -735,14 +756,14 @@ See [references/structured-errors.md](references/structured-errors.md) for commo
 
 ## Anti-Patterns to Detect
 
-| Anti-Pattern | Fix |
-|--------------|-----|
-| Multiple `console.log` in one function | Single wide event with `log.set()` |
-| `throw new Error('...')` | `throw createError({ message, status, why, fix })` |
-| `console.error(e); throw e` | `log.error(e); throw createError(...)` |
-| No logging in request handlers | Add `useLogger(event)` / `useLogger()` / `createRequestLogger()` |
-| Flat log data `{ uid, n, t }` | Grouped objects: `{ user: {...}, cart: {...} }` |
-| Logging sensitive data `log.set({ user: body })` | Explicit fields: `{ user: { id: body.id, plan: body.plan } }` |
+| Anti-Pattern                                     | Fix                                                              |
+| ------------------------------------------------ | ---------------------------------------------------------------- |
+| Multiple `console.log` in one function           | Single wide event with `log.set()`                               |
+| `throw new Error('...')`                         | `throw createError({ message, status, why, fix })`               |
+| `console.error(e); throw e`                      | `log.error(e); throw createError(...)`                           |
+| No logging in request handlers                   | Add `useLogger(event)` / `useLogger()` / `createRequestLogger()` |
+| Flat log data `{ uid, n, t }`                    | Grouped objects: `{ user: {...}, cart: {...} }`                  |
+| Logging sensitive data `log.set({ user: body })` | Explicit fields: `{ user: { id: body.id, plan: body.plan } }`    |
 
 See [references/code-review.md](references/code-review.md) for the full checklist.
 

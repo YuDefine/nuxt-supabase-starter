@@ -33,16 +33,16 @@ export default defineNitroPlugin((nitroApp) => {
 ```typescript
 const pipeline = createDrainPipeline<DrainContext>({
   batch: {
-    size: 50,          // Max events per batch (default: 50)
-    intervalMs: 5000,  // Max wait before flushing partial batch (default: 5000)
+    size: 50, // Max events per batch (default: 50)
+    intervalMs: 5000, // Max wait before flushing partial batch (default: 5000)
   },
   retry: {
-    maxAttempts: 3,           // Total attempts including first (default: 3)
-    backoff: 'exponential',   // 'exponential' | 'linear' | 'fixed' (default: 'exponential')
-    initialDelayMs: 1000,     // Base delay for first retry (default: 1000)
-    maxDelayMs: 30000,        // Upper bound for any retry delay (default: 30000)
+    maxAttempts: 3, // Total attempts including first (default: 3)
+    backoff: 'exponential', // 'exponential' | 'linear' | 'fixed' (default: 'exponential')
+    initialDelayMs: 1000, // Base delay for first retry (default: 1000)
+    maxDelayMs: 30000, // Upper bound for any retry delay (default: 30000)
   },
-  maxBufferSize: 1000,  // Max buffered events; oldest dropped on overflow (default: 1000)
+  maxBufferSize: 1000, // Max buffered events; oldest dropped on overflow (default: 1000)
   onDropped: (events, error) => {
     // Called when events are dropped (overflow or retry exhaustion)
     console.error(`[evlog] Dropped ${events.length} events:`, error?.message)
@@ -62,20 +62,20 @@ const pipeline = createDrainPipeline<DrainContext>({
 
 ## Backoff Strategies
 
-| Strategy | Delay Pattern | Best For |
-|----------|--------------|----------|
+| Strategy      | Delay Pattern     | Best For                                          |
+| ------------- | ----------------- | ------------------------------------------------- |
 | `exponential` | 1s, 2s, 4s, 8s... | Default. Transient failures needing recovery time |
-| `linear` | 1s, 2s, 3s, 4s... | Predictable delay growth |
-| `fixed` | 1s, 1s, 1s, 1s... | Rate-limited APIs with known cooldown |
+| `linear`      | 1s, 2s, 3s, 4s... | Predictable delay growth                          |
+| `fixed`       | 1s, 1s, 1s, 1s... | Rate-limited APIs with known cooldown             |
 
 ## Returned Drain Function API
 
 ```typescript
 const drain = pipeline(myDrainFn)
 
-drain(ctx)          // Push a single event (synchronous, non-blocking)
+drain(ctx) // Push a single event (synchronous, non-blocking)
 await drain.flush() // Force-flush all buffered events
-drain.pending       // Number of events currently buffered (readonly)
+drain.pending // Number of events currently buffered (readonly)
 ```
 
 ## Common Patterns
@@ -100,7 +100,7 @@ const drain = pipeline(async (batch) => {
   await fetch('https://your-service.com/logs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(batch.map(ctx => ctx.event)),
+    body: JSON.stringify(batch.map((ctx) => ctx.event)),
   })
 })
 ```
@@ -109,7 +109,7 @@ const drain = pipeline(async (batch) => {
 
 ```typescript
 const pipeline = createDrainPipeline<DrainContext>({
-  batch: { size: 10, intervalMs: 30000 },  // Flush every 30s or 10 events
+  batch: { size: 10, intervalMs: 30000 }, // Flush every 30s or 10 events
 })
 ```
 

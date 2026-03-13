@@ -45,6 +45,6 @@ export interface UseCssVarOptions extends ConfigurableWindow {
 export declare function useCssVar(
   prop: MaybeRefOrGetter<string | null | undefined>,
   target?: MaybeElementRef,
-  options?: UseCssVarOptions,
+  options?: UseCssVarOptions
 ): ShallowRef<string | undefined, string | undefined>
 ```

@@ -41,19 +41,19 @@ Control cache membership via reactive props:
 
 ```vue
 <script setup>
-import { ref, computed } from 'vue'
+  import { ref, computed } from 'vue'
 
-const cachedViews = ref(['Dashboard', 'Settings', 'Profile'])
+  const cachedViews = ref(['Dashboard', 'Settings', 'Profile'])
 
-function removeFromCache(viewName) {
-  cachedViews.value = cachedViews.value.filter(v => v !== viewName)
-}
-
-function addToCache(viewName) {
-  if (!cachedViews.value.includes(viewName)) {
-    cachedViews.value.push(viewName)
+  function removeFromCache(viewName) {
+    cachedViews.value = cachedViews.value.filter((v) => v !== viewName)
   }
-}
+
+  function addToCache(viewName) {
+    if (!cachedViews.value.includes(viewName)) {
+      cachedViews.value.push(viewName)
+    }
+  }
 </script>
 
 <template>
@@ -71,35 +71,32 @@ Change the key to force a fresh instance:
 
 ```vue
 <script setup>
-import { ref, reactive } from 'vue'
+  import { ref, reactive } from 'vue'
 
-const currentView = ref('Dashboard')
-const viewKeys = reactive({
-  Dashboard: 0,
-  Settings: 0,
-  Profile: 0
-})
+  const currentView = ref('Dashboard')
+  const viewKeys = reactive({
+    Dashboard: 0,
+    Settings: 0,
+    Profile: 0,
+  })
 
-function invalidateCache(viewName) {
-  viewKeys[viewName]++
-}
+  function invalidateCache(viewName) {
+    viewKeys[viewName]++
+  }
 
-function switchView(viewName) {
-  currentView.value = viewName
-}
+  function switchView(viewName) {
+    currentView.value = viewName
+  }
 
-// Force fresh Dashboard on next visit
-function refreshDashboard() {
-  invalidateCache('Dashboard')
-}
+  // Force fresh Dashboard on next visit
+  function refreshDashboard() {
+    invalidateCache('Dashboard')
+  }
 </script>
 
 <template>
   <KeepAlive>
-    <component
-      :is="currentView"
-      :key="`${currentView}-${viewKeys[currentView]}`"
-    />
+    <component :is="currentView" :key="`${currentView}-${viewKeys[currentView]}`" />
   </KeepAlive>
 </template>
 ```
@@ -110,19 +107,19 @@ Wrap or unwrap based on cache need:
 
 ```vue
 <script setup>
-import { ref } from 'vue'
+  import { ref } from 'vue'
 
-const currentView = ref('Dashboard')
-const shouldCache = ref(true)
+  const currentView = ref('Dashboard')
+  const shouldCache = ref(true)
 
-function clearCacheAndSwitch(viewName) {
-  shouldCache.value = false
-  currentView.value = viewName
-  // Re-enable caching after the switch
-  nextTick(() => {
-    shouldCache.value = true
-  })
-}
+  function clearCacheAndSwitch(viewName) {
+    shouldCache.value = false
+    currentView.value = viewName
+    // Re-enable caching after the switch
+    nextTick(() => {
+      shouldCache.value = true
+    })
+  }
 </script>
 
 <template>
@@ -150,22 +147,25 @@ Let LRU cache handle cleanup:
 
 ```vue
 <script setup>
-import { ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+  import { ref, watch } from 'vue'
+  import { useRoute } from 'vue-router'
 
-const route = useRoute()
-const cachedRoutes = ref(['Dashboard', 'Settings'])
+  const route = useRoute()
+  const cachedRoutes = ref(['Dashboard', 'Settings'])
 
-// Clear specific route from cache when navigating from certain paths
-watch(() => route.name, (newRoute, oldRoute) => {
-  if (oldRoute === 'Login') {
-    // User just logged in - clear and refresh Dashboard
-    cachedRoutes.value = cachedRoutes.value.filter(r => r !== 'Dashboard')
-    nextTick(() => {
-      cachedRoutes.value.push('Dashboard')
-    })
-  }
-})
+  // Clear specific route from cache when navigating from certain paths
+  watch(
+    () => route.name,
+    (newRoute, oldRoute) => {
+      if (oldRoute === 'Login') {
+        // User just logged in - clear and refresh Dashboard
+        cachedRoutes.value = cachedRoutes.value.filter((r) => r !== 'Dashboard')
+        nextTick(() => {
+          cachedRoutes.value.push('Dashboard')
+        })
+      }
+    }
+  )
 </script>
 
 <template>
@@ -186,6 +186,7 @@ watch(() => route.name, (newRoute, oldRoute) => {
 5. **Plan cache strategy** - Design around these constraints upfront
 
 ## Reference
+
 - [Vue.js KeepAlive Documentation](https://vuejs.org/guide/built-ins/keep-alive.html)
 - [Vue 3 Migration Guide](https://v3-migration.vuejs.org/)
 - [Vue RFC Discussion #283: Custom cache strategy for KeepAlive](https://github.com/vuejs/rfcs/discussions/283)

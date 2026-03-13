@@ -24,15 +24,10 @@ search.value = 'foobar' // router.replace({ query: { search: 'foobar' } })
 ## Type Declarations
 
 ```ts
-export declare function useRouteQuery(
-  name: string,
-): Ref<undefined | null | string | string[]>
-export declare function useRouteQuery<
-  T extends RouteQueryValueRaw = RouteQueryValueRaw,
-  K = T,
->(
+export declare function useRouteQuery(name: string): Ref<undefined | null | string | string[]>
+export declare function useRouteQuery<T extends RouteQueryValueRaw = RouteQueryValueRaw, K = T>(
   name: string,
   defaultValue?: MaybeRefOrGetter<T>,
-  options?: ReactiveRouteOptionsWithTransform<T, K>,
+  options?: ReactiveRouteOptionsWithTransform<T, K>
 ): Ref<K>
 ```

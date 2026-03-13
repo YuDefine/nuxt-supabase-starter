@@ -20,12 +20,13 @@ Using `watchEffect()` to mutate a ref works but creates unnecessary indirection:
 - [ ] Remember computed values are cached and only re-compute when dependencies change
 
 **Incorrect:**
+
 ```javascript
 import { ref, watchEffect } from 'vue'
 
 const A0 = ref(1)
 const A1 = ref(2)
-const A2 = ref()  // Unnecessary ref
+const A2 = ref() // Unnecessary ref
 
 // WRONG: Using watchEffect to derive state
 watchEffect(() => {
@@ -50,6 +51,7 @@ watchEffect(() => {
 ```
 
 **Correct:**
+
 ```javascript
 import { ref, computed } from 'vue'
 
@@ -76,12 +78,11 @@ const total = computed(() => {
 
 // Multiple derived values
 const itemCount = computed(() => items.value.length)
-const averagePrice = computed(() =>
-  items.value.length ? total.value / itemCount.value : 0
-)
+const averagePrice = computed(() => (items.value.length ? total.value / itemCount.value : 0))
 ```
 
 **When watchEffect IS appropriate:**
+
 ```javascript
 import { ref, watchEffect } from 'vue'
 
@@ -106,6 +107,7 @@ watchEffect(async () => {
 ```
 
 **Summary of when to use each:**
+
 ```javascript
 // Use computed() when:
 // - You're deriving a value from reactive state
@@ -118,11 +120,12 @@ const fullName = computed(() => `${firstName.value} ${lastName.value}`)
 // - You're interacting with external systems
 // - You need to run async operations
 watchEffect(() => {
-  document.title = fullName.value  // Side effect
+  document.title = fullName.value // Side effect
 })
 ```
 
 ## Reference
+
 - [Vue.js Reactivity in Depth](https://vuejs.org/guide/extras/reactivity-in-depth.html)
 - [Vue.js Computed Properties](https://vuejs.org/guide/essentials/computed.html)
 - [Vue.js Watchers](https://vuejs.org/guide/essentials/watchers.html)

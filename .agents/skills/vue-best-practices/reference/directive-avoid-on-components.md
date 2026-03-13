@@ -20,6 +20,7 @@ Custom directives are designed for direct DOM manipulation on native HTML elemen
 - [ ] If you must use a directive on a component, ensure it has a single root element
 
 **Incorrect:**
+
 ```vue
 <template>
   <!-- WRONG: Directive on a component - may be ignored -->
@@ -30,18 +31,19 @@ Custom directives are designed for direct DOM manipulation on native HTML elemen
 </template>
 
 <script setup>
-import MyComponent from './MyComponent.vue'
-import MultiRootComponent from './MultiRootComponent.vue'
+  import MyComponent from './MyComponent.vue'
+  import MultiRootComponent from './MultiRootComponent.vue'
 
-// MultiRootComponent.vue has:
-// <template>
-//   <div>First root</div>
-//   <div>Second root</div>
-// </template>
+  // MultiRootComponent.vue has:
+  // <template>
+  //   <div>First root</div>
+  //   <div>Second root</div>
+  // </template>
 </script>
 ```
 
 **Correct:**
+
 ```vue
 <template>
   <!-- CORRECT: Directive on native HTML element -->
@@ -57,7 +59,7 @@ import MultiRootComponent from './MultiRootComponent.vue'
 </template>
 
 <script setup>
-import MyComponent from './MyComponent.vue'
+  import MyComponent from './MyComponent.vue'
 </script>
 ```
 
@@ -79,6 +81,7 @@ Directives only work reliably on components with a **single root element**. The 
 ```
 
 However, this is still not recommended because:
+
 1. It's fragile - refactoring to multi-root breaks the directive silently
 2. It's unclear which element receives the directive
 3. The component author may not expect external DOM manipulation
@@ -86,6 +89,7 @@ However, this is still not recommended because:
 ## Better Patterns
 
 ### Option 1: Component Prop
+
 ```vue
 <!-- FocusableInput.vue -->
 <template>
@@ -93,19 +97,19 @@ However, this is still not recommended because:
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+  import { ref, onMounted, watch } from 'vue'
 
-const props = defineProps({
-  autofocus: Boolean
-})
+  const props = defineProps({
+    autofocus: Boolean,
+  })
 
-const inputRef = ref(null)
+  const inputRef = ref(null)
 
-onMounted(() => {
-  if (props.autofocus) {
-    inputRef.value?.focus()
-  }
-})
+  onMounted(() => {
+    if (props.autofocus) {
+      inputRef.value?.focus()
+    }
+  })
 </script>
 
 <!-- Usage -->
@@ -113,6 +117,7 @@ onMounted(() => {
 ```
 
 ### Option 2: Exposed Method
+
 ```vue
 <!-- FocusableInput.vue -->
 <template>
@@ -120,13 +125,13 @@ onMounted(() => {
 </template>
 
 <script setup>
-import { ref } from 'vue'
+  import { ref } from 'vue'
 
-const inputRef = ref(null)
+  const inputRef = ref(null)
 
-const focus = () => inputRef.value?.focus()
+  const focus = () => inputRef.value?.focus()
 
-defineExpose({ focus })
+  defineExpose({ focus })
 </script>
 
 <!-- Parent.vue -->
@@ -135,15 +140,16 @@ defineExpose({ focus })
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+  import { ref, onMounted } from 'vue'
 
-const myInput = ref(null)
+  const myInput = ref(null)
 
-onMounted(() => {
-  myInput.value?.focus()
-})
+  onMounted(() => {
+    myInput.value?.focus()
+  })
 </script>
 ```
 
 ## Reference
+
 - [Vue.js Custom Directives - Usage on Components](https://vuejs.org/guide/reusability/custom-directives#usage-on-components)

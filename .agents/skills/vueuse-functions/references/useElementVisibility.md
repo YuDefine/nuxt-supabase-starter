@@ -10,11 +10,11 @@ Tracks the visibility of an element within the viewport.
 
 ```vue
 <script setup lang="ts">
-import { useElementVisibility } from '@vueuse/core'
-import { useTemplateRef } from 'vue'
+  import { useElementVisibility } from '@vueuse/core'
+  import { useTemplateRef } from 'vue'
 
-const target = useTemplateRef('target')
-const targetIsVisible = useElementVisibility(target)
+  const target = useTemplateRef('target')
+  const targetIsVisible = useElementVisibility(target)
 </script>
 
 <template>
@@ -51,9 +51,7 @@ const targetIsVisible = useElementVisibility(target, {
 
 ```vue
 <template>
-  <UseElementVisibility v-slot="{ isVisible }">
-    Is Visible: {{ isVisible }}
-  </UseElementVisibility>
+  <UseElementVisibility v-slot="{ isVisible }"> Is Visible: {{ isVisible }} </UseElementVisibility>
 </template>
 ```
 
@@ -61,15 +59,15 @@ const targetIsVisible = useElementVisibility(target, {
 
 ```vue
 <script setup lang="ts">
-import { vElementVisibility } from '@vueuse/components'
-import { shallowRef, useTemplateRef } from 'vue'
+  import { vElementVisibility } from '@vueuse/components'
+  import { shallowRef, useTemplateRef } from 'vue'
 
-const target = useTemplateRef('target')
-const isVisible = shallowRef(false)
+  const target = useTemplateRef('target')
+  const isVisible = shallowRef(false)
 
-function onElementVisibility(state) {
-  isVisible.value = state
-}
+  function onElementVisibility(state) {
+    isVisible.value = state
+  }
 </script>
 
 <template>
@@ -90,8 +88,7 @@ function onElementVisibility(state) {
 
 ```ts
 export interface UseElementVisibilityOptions
-  extends ConfigurableWindow,
-    Pick<UseIntersectionObserverOptions, "threshold"> {
+  extends ConfigurableWindow, Pick<UseIntersectionObserverOptions, 'threshold'> {
   /**
    * Initial value.
    *
@@ -120,7 +117,7 @@ export interface UseElementVisibilityOptions
  */
 export declare function useElementVisibility(
   element: MaybeComputedElementRef,
-  options?: UseElementVisibilityOptions,
+  options?: UseElementVisibilityOptions
 ): ShallowRef<boolean, boolean>
 export type UseElementVisibilityReturn = ReturnType<typeof useElementVisibility>
 ```
