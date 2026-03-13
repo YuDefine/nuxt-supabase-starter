@@ -18,7 +18,6 @@ tags: [vue3, transition, vue-router, appear, initial-load, navigation]
 - [ ] Consider whether initial animation is desired for your UX
 
 **Expected Behavior (Normal Transition):**
-
 ```vue
 <template>
   <!-- Without appear: No animation on initial render -->
@@ -34,7 +33,6 @@ tags: [vue3, transition, vue-router, appear, initial-load, navigation]
 ```
 
 **RouterView Behavior (Different!):**
-
 ```vue
 <template>
   <!-- RouterView transitions ALWAYS animate on initial load -->
@@ -78,19 +76,19 @@ Since the component wasn't present in the initial render and is "inserted" after
 </template>
 
 <script setup>
-  import { ref, onMounted } from 'vue'
-  import { useRouter } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 
-  const isInitialLoad = ref(true)
-  const router = useRouter()
+const isInitialLoad = ref(true)
+const router = useRouter()
 
-  // After first navigation completes, enable transitions
-  router.isReady().then(() => {
-    // Small delay to ensure initial render is complete
-    setTimeout(() => {
-      isInitialLoad.value = false
-    }, 0)
-  })
+// After first navigation completes, enable transitions
+router.isReady().then(() => {
+  // Small delay to ensure initial render is complete
+  setTimeout(() => {
+    isInitialLoad.value = false
+  }, 0)
+})
 </script>
 ```
 
@@ -106,32 +104,32 @@ Since the component wasn't present in the initial render and is "inserted" after
 </template>
 
 <script setup>
-  import { ref } from 'vue'
-  import { useRouter } from 'vue-router'
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 
-  const isInitialLoad = ref(true)
-  const router = useRouter()
+const isInitialLoad = ref(true)
+const router = useRouter()
 
-  router.isReady().then(() => {
-    isInitialLoad.value = false
-  })
+router.isReady().then(() => {
+  isInitialLoad.value = false
+})
 </script>
 
 <style>
-  .fade-enter-active,
-  .fade-leave-active {
-    transition: opacity 0.3s ease;
-  }
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
 
-  .fade-enter-from,
-  .fade-leave-to {
-    opacity: 0;
-  }
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 
-  /* Skip animation on initial load */
-  .skip-initial.fade-enter-active {
-    transition: none;
-  }
+/* Skip animation on initial load */
+.skip-initial.fade-enter-active {
+  transition: none;
+}
 </style>
 ```
 
@@ -149,29 +147,29 @@ If you're fine with initial animation (often desired), use the standard pattern:
 </template>
 
 <style>
-  .fade-enter-active,
-  .fade-leave-active {
-    transition: opacity 0.3s ease;
-  }
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
 
-  .fade-enter-from,
-  .fade-leave-to {
-    opacity: 0;
-  }
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 
-  /* Route-specific transitions via meta */
-  .slide-enter-active,
-  .slide-leave-active {
-    transition: transform 0.3s ease;
-  }
+/* Route-specific transitions via meta */
+.slide-enter-active,
+.slide-leave-active {
+  transition: transform 0.3s ease;
+}
 
-  .slide-enter-from {
-    transform: translateX(100%);
-  }
+.slide-enter-from {
+  transform: translateX(100%);
+}
 
-  .slide-leave-to {
-    transform: translateX(-100%);
-  }
+.slide-leave-to {
+  transform: translateX(-100%);
+}
 </style>
 ```
 
@@ -180,17 +178,16 @@ If you're fine with initial animation (often desired), use the standard pattern:
 const routes = [
   {
     path: '/',
-    component: Home,
+    component: Home
   },
   {
     path: '/about',
     component: About,
-    meta: { transition: 'slide' }, // Custom transition for this route
-  },
+    meta: { transition: 'slide' }  // Custom transition for this route
+  }
 ]
 ```
 
 ## Reference
-
 - [Vue Router Transitions](https://router.vuejs.org/guide/advanced/transitions.html)
 - [Vue.js Transition appear](https://vuejs.org/guide/built-ins/transition.html#transition-on-appear)

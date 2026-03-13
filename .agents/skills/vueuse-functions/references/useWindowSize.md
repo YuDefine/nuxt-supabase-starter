@@ -10,13 +10,16 @@ Reactive window size
 
 ```vue
 <script setup lang="ts">
-  import { useWindowSize } from '@vueuse/core'
+import { useWindowSize } from '@vueuse/core'
 
-  const { width, height } = useWindowSize()
+const { width, height } = useWindowSize()
 </script>
 
 <template>
-  <div>Width: {{ width }} Height: {{ height }}</div>
+  <div>
+    Width: {{ width }}
+    Height: {{ height }}
+  </div>
 </template>
 ```
 
@@ -25,7 +28,8 @@ Reactive window size
 ```vue
 <template>
   <UseWindowSize v-slot="{ width, height }">
-    Width: {{ width }} Height: {{ height }}
+    Width: {{ width }}
+    Height: {{ height }}
   </UseWindowSize>
 </template>
 ```
@@ -54,7 +58,7 @@ export interface UseWindowSizeOptions extends ConfigurableWindow {
    * visualViewport documentation from MDN(https://developer.mozilla.org/zh-CN/docs/Web/API/VisualViewport)
    * @default 'inner'
    */
-  type?: 'inner' | 'outer' | 'visual'
+  type?: "inner" | "outer" | "visual"
 }
 /**
  * Reactive window size.

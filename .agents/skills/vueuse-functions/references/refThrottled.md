@@ -90,7 +90,7 @@ export declare function refThrottled<T = any>(
   value: Ref<T>,
   delay?: number,
   trailing?: boolean,
-  leading?: boolean
+  leading?: boolean,
 ): RefThrottledReturn<T>
 /** @deprecated use `refThrottled` instead */
 export declare const throttledRef: typeof refThrottled

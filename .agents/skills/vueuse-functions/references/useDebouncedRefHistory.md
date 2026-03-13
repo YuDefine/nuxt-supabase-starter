@@ -33,8 +33,8 @@ const { history, undo, redo } = useDebouncedRefHistory(counter, { deep: true, de
  */
 export declare function useDebouncedRefHistory<Raw, Serialized = Raw>(
   source: Ref<Raw>,
-  options?: Omit<UseRefHistoryOptions<Raw, Serialized>, 'eventFilter'> & {
+  options?: Omit<UseRefHistoryOptions<Raw, Serialized>, "eventFilter"> & {
     debounce?: MaybeRefOrGetter<number>
-  }
+  },
 ): UseRefHistoryReturn<Raw, Serialized>
 ```

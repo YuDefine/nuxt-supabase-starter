@@ -20,7 +20,6 @@ This is one of the most common mistakes when using Vue transitions, especially f
 - [ ] Use a wrapper `<div>` if you need to transition multiple elements together
 
 **Problematic Code:**
-
 ```vue
 <template>
   <!-- BAD: Multiple elements inside Transition -->
@@ -48,7 +47,6 @@ This is one of the most common mistakes when using Vue transitions, especially f
 ```
 
 **Correct Code:**
-
 ```vue
 <template>
   <!-- GOOD: Single wrapper element -->
@@ -100,11 +98,11 @@ This is one of the most common mistakes when using Vue transitions, especially f
 </template>
 
 <script setup>
-  import { shallowRef } from 'vue'
-  import Home from './Home.vue'
-  import About from './About.vue'
+import { shallowRef } from 'vue'
+import Home from './Home.vue'
+import About from './About.vue'
 
-  const currentView = shallowRef(Home)
+const currentView = shallowRef(Home)
 </script>
 ```
 
@@ -116,6 +114,5 @@ This is one of the most common mistakes when using Vue transitions, especially f
 4. Vue devtools shows no transition state changes
 
 ## Reference
-
 - [Vue.js Transition Documentation](https://vuejs.org/guide/built-ins/transition.html)
 - [Vue.js Dynamic Components](https://vuejs.org/guide/essentials/component-basics.html#dynamic-components)

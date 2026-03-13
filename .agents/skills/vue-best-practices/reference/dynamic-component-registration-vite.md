@@ -18,7 +18,6 @@ tags: [vue3, component-registration, vite, dynamic-import, migration, webpack]
 - [ ] Handle async components appropriately with `defineAsyncComponent`
 
 **Incorrect (Webpack pattern - doesn't work in Vite):**
-
 ```javascript
 // main.js - WRONG for Vite
 import { createApp } from 'vue'
@@ -27,9 +26,13 @@ import App from './App.vue'
 const app = createApp(App)
 
 // This Webpack-specific API doesn't exist in Vite
-const requireComponent = require.context('./components/base', false, /Base[A-Z]\w+\.vue$/)
+const requireComponent = require.context(
+  './components/base',
+  false,
+  /Base[A-Z]\w+\.vue$/
+)
 
-requireComponent.keys().forEach((fileName) => {
+requireComponent.keys().forEach(fileName => {
   const componentConfig = requireComponent(fileName)
   const componentName = fileName
     .split('/')
@@ -43,7 +46,6 @@ app.mount('#app')
 ```
 
 **Correct (Vite pattern):**
-
 ```javascript
 // main.js - Correct for Vite
 import { createApp } from 'vue'
@@ -97,12 +99,15 @@ import.meta.glob('./components/**/*.vue', { eager: true })
 import.meta.glob('./components/Base*.vue', { eager: true })
 
 // Multiple patterns
-import.meta.glob(['./components/Base*.vue', './components/App*.vue'], { eager: true })
+import.meta.glob([
+  './components/Base*.vue',
+  './components/App*.vue'
+], { eager: true })
 
 // Exclude patterns
 import.meta.glob('./components/**/*.vue', {
   eager: true,
-  ignore: ['**/*.test.vue', '**/*.spec.vue'],
+  ignore: ['**/*.test.vue', '**/*.spec.vue']
 })
 ```
 
@@ -115,9 +120,10 @@ import App from './App.vue'
 
 const app = createApp(App)
 
-const modules = import.meta.glob<{ default: Component }>('./components/base/Base*.vue', {
-  eager: true,
-})
+const modules = import.meta.glob<{ default: Component }>(
+  './components/base/Base*.vue',
+  { eager: true }
+)
 
 for (const path in modules) {
   const componentName = path.split('/').pop()!.replace('.vue', '')
@@ -129,14 +135,13 @@ app.mount('#app')
 
 ## Migration Checklist (Webpack to Vite)
 
-| Webpack                                  | Vite                                 |
-| ---------------------------------------- | ------------------------------------ |
+| Webpack | Vite |
+|---------|------|
 | `require.context(dir, recursive, regex)` | `import.meta.glob(pattern, options)` |
-| Synchronous by default                   | Use `{ eager: true }` for sync       |
-| `.keys()` returns array                  | Returns object with paths as keys    |
-| Returns module directly                  | Access via `.default` for ES modules |
+| Synchronous by default | Use `{ eager: true }` for sync |
+| `.keys()` returns array | Returns object with paths as keys |
+| Returns module directly | Access via `.default` for ES modules |
 
 ## Reference
-
 - [Vite - Glob Import](https://vitejs.dev/guide/features.html#glob-import)
 - [Vue.js Component Registration](https://vuejs.org/guide/components/registration.html)

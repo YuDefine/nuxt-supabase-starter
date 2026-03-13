@@ -39,13 +39,13 @@ export const vHighlight: Directive<HTMLElement, HighlightValue> = {
   },
   updated(el, binding) {
     // Same logic for updates
-  },
+  }
 }
 
 // Type augmentation for template usage
 declare module 'vue' {
   interface ComponentCustomProperties {
-    vHighlight: typeof vHighlight // Use 'v' prefix!
+    vHighlight: typeof vHighlight  // Use 'v' prefix!
   }
 }
 ```
@@ -69,7 +69,7 @@ export const vFocus = {
     if (binding.value && !binding.oldValue) {
       el.focus()
     }
-  },
+  }
 } satisfies Directive<HTMLInputElement, FocusValue>
 
 declare module 'vue' {
@@ -121,7 +121,7 @@ export const vTooltip: Directive<HTMLElement, TooltipValue> = {
   unmounted(el) {
     // Cleanup
     el.removeAttribute('data-tooltip')
-  },
+  }
 }
 
 declare module 'vue' {
@@ -160,7 +160,9 @@ app.mount('#app')
 
   <input v-focus="shouldFocus" />
 
-  <button v-tooltip="{ text: 'Click me', delay: 500 }">Hover for tooltip</button>
+  <button v-tooltip="{ text: 'Click me', delay: 500 }">
+    Hover for tooltip
+  </button>
 
   <!-- With modifiers -->
   <span v-tooltip.top="{ text: 'Above' }">Top tooltip</span>
@@ -205,7 +207,11 @@ declare module 'vue' {
   "compilerOptions": {
     // ...
   },
-  "include": ["src/**/*.ts", "src/**/*.vue", "src/types/**/*.d.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "src/types/**/*.d.ts"
+  ]
 }
 ```
 
@@ -235,14 +241,14 @@ For directives registered only in specific components:
 
 ```vue
 <script setup lang="ts">
-  import type { Directive } from 'vue'
+import type { Directive } from 'vue'
 
-  // Local directive with inline type
-  const vLocalHighlight: Directive<HTMLElement, string> = {
-    mounted(el, binding) {
-      el.style.backgroundColor = binding.value
-    },
+// Local directive with inline type
+const vLocalHighlight: Directive<HTMLElement, string> = {
+  mounted(el, binding) {
+    el.style.backgroundColor = binding.value
   }
+}
 </script>
 
 <template>
@@ -254,6 +260,5 @@ For directives registered only in specific components:
 Note: Local directives don't need module augmentation since TypeScript can infer the type from the local variable.
 
 ## Reference
-
 - [Vue.js Custom Directives](https://vuejs.org/guide/reusability/custom-directives.html)
 - [Vue.js TypeScript - Augmenting Global Properties](https://vuejs.org/guide/typescript/options-api.html#augmenting-global-properties)

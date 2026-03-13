@@ -23,48 +23,48 @@ tags: [vue3, typescript, template-refs, component-refs, InstanceType]
 ```vue
 <!-- ChildComponent.vue -->
 <script setup lang="ts">
-  import { ref } from 'vue'
+import { ref } from 'vue'
 
-  const internalCount = ref(0)
+const internalCount = ref(0)
 
-  function increment() {
-    internalCount.value++
-  }
+function increment() {
+  internalCount.value++
+}
 
-  function reset() {
-    internalCount.value = 0
-  }
+function reset() {
+  internalCount.value = 0
+}
 
-  // Expose methods/properties to parent
-  defineExpose({
-    increment,
-    reset,
-    count: internalCount, // Expose ref for reading
-  })
+// Expose methods/properties to parent
+defineExpose({
+  increment,
+  reset,
+  count: internalCount  // Expose ref for reading
+})
 </script>
 ```
 
 ```vue
 <!-- ParentComponent.vue -->
 <script setup lang="ts">
-  import { ref, onMounted } from 'vue'
-  import ChildComponent from './ChildComponent.vue'
+import { ref, onMounted } from 'vue'
+import ChildComponent from './ChildComponent.vue'
 
-  // Type the ref using InstanceType
-  const childRef = ref<InstanceType<typeof ChildComponent> | null>(null)
+// Type the ref using InstanceType
+const childRef = ref<InstanceType<typeof ChildComponent> | null>(null)
 
-  onMounted(() => {
-    // TypeScript knows about exposed methods
-    childRef.value?.increment() // OK
-    childRef.value?.reset() // OK
+onMounted(() => {
+  // TypeScript knows about exposed methods
+  childRef.value?.increment()  // OK
+  childRef.value?.reset()      // OK
 
-    // Access exposed ref
-    console.log(childRef.value?.count) // Ref<number>
-  })
+  // Access exposed ref
+  console.log(childRef.value?.count)  // Ref<number>
+})
 
-  function handleClick() {
-    childRef.value?.increment()
-  }
+function handleClick() {
+  childRef.value?.increment()
+}
 </script>
 
 <template>
@@ -77,15 +77,15 @@ tags: [vue3, typescript, template-refs, component-refs, InstanceType]
 
 ```vue
 <script setup lang="ts">
-  import { useTemplateRef, onMounted } from 'vue'
-  import ChildComponent from './ChildComponent.vue'
+import { useTemplateRef, onMounted } from 'vue'
+import ChildComponent from './ChildComponent.vue'
 
-  // useTemplateRef with component type
-  const childRef = useTemplateRef<InstanceType<typeof ChildComponent>>('child')
+// useTemplateRef with component type
+const childRef = useTemplateRef<InstanceType<typeof ChildComponent>>('child')
 
-  onMounted(() => {
-    childRef.value?.increment()
-  })
+onMounted(() => {
+  childRef.value?.increment()
+})
 </script>
 
 <template>
@@ -100,42 +100,42 @@ For generic components, `InstanceType` alone doesn't capture generic parameters.
 ```vue
 <!-- GenericList.vue -->
 <script setup lang="ts" generic="T">
-  defineProps<{
-    items: T[]
-  }>()
+defineProps<{
+  items: T[]
+}>()
 
-  const selectedItem = ref<T | null>(null)
+const selectedItem = ref<T | null>(null)
 
-  function selectItem(item: T) {
-    selectedItem.value = item
-  }
+function selectItem(item: T) {
+  selectedItem.value = item
+}
 
-  defineExpose({
-    selectedItem,
-    selectItem,
-  })
+defineExpose({
+  selectedItem,
+  selectItem
+})
 </script>
 ```
 
 ```vue
 <!-- Parent.vue -->
 <script setup lang="ts">
-  import { useTemplateRef } from 'vue'
-  import type { ComponentExposed } from 'vue-component-type-helpers'
-  import GenericList from './GenericList.vue'
+import { useTemplateRef } from 'vue'
+import type { ComponentExposed } from 'vue-component-type-helpers'
+import GenericList from './GenericList.vue'
 
-  interface User {
-    id: string
-    name: string
-  }
+interface User {
+  id: string
+  name: string
+}
 
-  // ComponentExposed preserves generic type
-  const listRef = useTemplateRef<ComponentExposed<typeof GenericList<User>>>('list')
+// ComponentExposed preserves generic type
+const listRef = useTemplateRef<ComponentExposed<typeof GenericList<User>>>('list')
 
-  function selectFirstUser() {
-    const users: User[] = [{ id: '1', name: 'John' }]
-    listRef.value?.selectItem(users[0]) // Properly typed as User
-  }
+function selectFirstUser() {
+  const users: User[] = [{ id: '1', name: 'John' }]
+  listRef.value?.selectItem(users[0])  // Properly typed as User
+}
 </script>
 
 <template>
@@ -149,17 +149,17 @@ When you don't have access to the component's exposed types, use `ComponentPubli
 
 ```vue
 <script setup lang="ts">
-  import { ref } from 'vue'
-  import type { ComponentPublicInstance } from 'vue'
-  import SomeThirdPartyComponent from 'third-party-lib'
+import { ref } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
+import SomeThirdPartyComponent from 'third-party-lib'
 
-  // Fallback: ComponentPublicInstance gives access to $el, $refs, etc.
-  const thirdPartyRef = ref<ComponentPublicInstance | null>(null)
+// Fallback: ComponentPublicInstance gives access to $el, $refs, etc.
+const thirdPartyRef = ref<ComponentPublicInstance | null>(null)
 
-  function getElement() {
-    // Can access standard Vue instance properties
-    return thirdPartyRef.value?.$el
-  }
+function getElement() {
+  // Can access standard Vue instance properties
+  return thirdPartyRef.value?.$el
+}
 </script>
 
 <template>
@@ -171,26 +171,26 @@ When you don't have access to the component's exposed types, use `ComponentPubli
 
 ```vue
 <script setup lang="ts">
-  import { ref, onMounted } from 'vue'
-  import ListItem from './ListItem.vue'
+import { ref, onMounted } from 'vue'
+import ListItem from './ListItem.vue'
 
-  type ListItemInstance = InstanceType<typeof ListItem>
+type ListItemInstance = InstanceType<typeof ListItem>
 
-  const items = ref([
-    { id: 1, name: 'Item 1' },
-    { id: 2, name: 'Item 2' },
-  ])
+const items = ref([
+  { id: 1, name: 'Item 1' },
+  { id: 2, name: 'Item 2' }
+])
 
-  // Array of component refs
-  const itemRefs = ref<(ListItemInstance | null)[]>([])
+// Array of component refs
+const itemRefs = ref<(ListItemInstance | null)[]>([])
 
-  function setItemRef(el: ListItemInstance | null, index: number) {
-    itemRefs.value[index] = el
-  }
+function setItemRef(el: ListItemInstance | null, index: number) {
+  itemRefs.value[index] = el
+}
 
-  function focusItem(index: number) {
-    itemRefs.value[index]?.focus()
-  }
+function focusItem(index: number) {
+  itemRefs.value[index]?.focus()
+}
 </script>
 
 <template>
@@ -218,11 +218,11 @@ export type ChildComponentRef = Ref<ChildComponentInstance | null>
 
 ```vue
 <script setup lang="ts">
-  import { ref } from 'vue'
-  import type { ChildComponentRef } from '@/types/components'
-  import ChildComponent from '@/components/ChildComponent.vue'
+import { ref } from 'vue'
+import type { ChildComponentRef } from '@/types/components'
+import ChildComponent from '@/components/ChildComponent.vue'
 
-  const childRef: ChildComponentRef = ref(null)
+const childRef: ChildComponentRef = ref(null)
 </script>
 ```
 
@@ -231,31 +231,30 @@ export type ChildComponentRef = Ref<ChildComponentInstance | null>
 ```vue
 <!-- Child.vue - WRONG: No defineExpose -->
 <script setup lang="ts">
-  function doSomething() {
-    console.log('doing something')
-  }
+function doSomething() {
+  console.log('doing something')
+}
 
-  // Forgot defineExpose!
+// Forgot defineExpose!
 </script>
 ```
 
 ```vue
 <!-- Parent.vue -->
 <script setup lang="ts">
-  const childRef = ref<InstanceType<typeof Child> | null>(null)
+const childRef = ref<InstanceType<typeof Child> | null>(null)
 
-  onMounted(() => {
-    // childRef.value?.doSomething is undefined!
-    // Script setup components don't expose anything by default
-    childRef.value?.doSomething() // Runtime: undefined is not a function
-  })
+onMounted(() => {
+  // childRef.value?.doSomething is undefined!
+  // Script setup components don't expose anything by default
+  childRef.value?.doSomething()  // Runtime: undefined is not a function
+})
 </script>
 ```
 
 Always use `defineExpose` in `<script setup>` components to make methods/properties accessible to parent refs.
 
 ## Reference
-
 - [Vue.js TypeScript - Component Template Refs](https://vuejs.org/guide/typescript/composition-api.html#typing-component-template-refs)
 - [Vue.js Template Refs](https://vuejs.org/guide/essentials/template-refs.html#ref-on-component)
 - [vue-component-type-helpers](https://www.npmjs.com/package/vue-component-type-helpers)

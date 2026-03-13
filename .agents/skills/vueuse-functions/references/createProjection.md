@@ -26,6 +26,6 @@ input.value = 10 // projected.value === 100
 export declare function createProjection(
   fromDomain: MaybeRefOrGetter<readonly [number, number]>,
   toDomain: MaybeRefOrGetter<readonly [number, number]>,
-  projector?: ProjectorFunction<number, number>
+  projector?: ProjectorFunction<number, number>,
 ): UseProjection<number, number>
 ```

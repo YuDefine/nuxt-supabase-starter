@@ -24,7 +24,7 @@ await sleep(1100)
 console.log(debounced.value) // 'bar'
 // ---cut-after---
 function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 ```
 
@@ -72,7 +72,7 @@ export type RefDebouncedReturn<T = any> = Readonly<Ref<T>>
 export declare function refDebounced<T>(
   value: Ref<T>,
   ms?: MaybeRefOrGetter<number>,
-  options?: DebounceFilterOptions
+  options?: DebounceFilterOptions,
 ): RefDebouncedReturn<T>
 /** @deprecated use `refDebounced` instead */
 export declare const debouncedRef: typeof refDebounced

@@ -18,7 +18,9 @@ const online = useOnline()
 
 ```vue
 <template>
-  <UseOnline v-slot="{ isOnline }"> Is Online: {{ isOnline }} </UseOnline>
+  <UseOnline v-slot="{ isOnline }">
+    Is Online: {{ isOnline }}
+  </UseOnline>
 </template>
 ```
 
@@ -33,5 +35,7 @@ const online = useOnline()
  *
  * @__NO_SIDE_EFFECTS__
  */
-export declare function useOnline(options?: ConfigurableWindow): Readonly<ShallowRef<boolean>>
+export declare function useOnline(
+  options?: ConfigurableWindow,
+): Readonly<ShallowRef<boolean>>
 ```

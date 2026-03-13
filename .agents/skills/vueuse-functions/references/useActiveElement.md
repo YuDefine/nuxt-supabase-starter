@@ -10,14 +10,14 @@ Reactive `document.activeElement`
 
 ```vue
 <script setup lang="ts">
-  import { useActiveElement } from '@vueuse/core'
-  import { watch } from 'vue'
+import { useActiveElement } from '@vueuse/core'
+import { watch } from 'vue'
 
-  const activeElement = useActiveElement()
+const activeElement = useActiveElement()
 
-  watch(activeElement, (el) => {
-    console.log('focus changed to', el)
-  })
+watch(activeElement, (el) => {
+  console.log('focus changed to', el)
+})
 </script>
 ```
 
@@ -35,7 +35,8 @@ Reactive `document.activeElement`
 
 ```ts
 export interface UseActiveElementOptions
-  extends ConfigurableWindow, ConfigurableDocumentOrShadowRoot {
+  extends ConfigurableWindow,
+    ConfigurableDocumentOrShadowRoot {
   /**
    * Search active element deeply inside shadow dom
    *
@@ -58,7 +59,7 @@ export interface UseActiveElementOptions
  * @__NO_SIDE_EFFECTS__
  */
 export declare function useActiveElement<T extends HTMLElement>(
-  options?: UseActiveElementOptions
+  options?: UseActiveElementOptions,
 ): ShallowRef<T | null | undefined, T | null | undefined>
 export type UseActiveElementReturn = ReturnType<typeof useActiveElement>
 ```

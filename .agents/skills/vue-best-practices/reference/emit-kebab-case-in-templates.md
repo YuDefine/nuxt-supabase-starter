@@ -20,20 +20,19 @@ tags: [vue3, events, emit, naming-convention, templates]
 ## The Convention
 
 **Recommended pattern:**
-
 ```vue
 <!-- ChildComponent.vue -->
 <script setup>
-  const emit = defineEmits(['updateValue', 'itemSelected', 'formSubmit'])
+const emit = defineEmits(['updateValue', 'itemSelected', 'formSubmit'])
 
-  function handleChange(value) {
-    // Emit in camelCase (JavaScript convention)
-    emit('updateValue', value)
-  }
+function handleChange(value) {
+  // Emit in camelCase (JavaScript convention)
+  emit('updateValue', value)
+}
 
-  function selectItem(item) {
-    emit('itemSelected', item)
-  }
+function selectItem(item) {
+  emit('itemSelected', item)
+}
 </script>
 ```
 
@@ -53,18 +52,16 @@ tags: [vue3, events, emit, naming-convention, templates]
 
 Vue handles these automatically **in template syntax only**:
 
-| Emitted (camelCase)    | Listener (kebab-case) | Works? |
-| ---------------------- | --------------------- | ------ |
-| `emit('updateValue')`  | `@update-value`       | Yes    |
-| `emit('itemSelected')` | `@item-selected`      | Yes    |
-| `emit('formSubmit')`   | `@form-submit`        | Yes    |
+| Emitted (camelCase) | Listener (kebab-case) | Works? |
+|---------------------|----------------------|--------|
+| `emit('updateValue')` | `@update-value` | Yes |
+| `emit('itemSelected')` | `@item-selected` | Yes |
+| `emit('formSubmit')` | `@form-submit` | Yes |
 
 ```vue
 <!-- All of these work equivalently in Vue 3 templates -->
-<Child @updateValue="handler" />
-<!-- camelCase listener -->
-<Child @update-value="handler" />
-<!-- kebab-case listener (preferred) -->
+<Child @updateValue="handler" />  <!-- camelCase listener -->
+<Child @update-value="handler" /> <!-- kebab-case listener (preferred) -->
 ```
 
 ### Important: Template-Only Behavior
@@ -78,13 +75,13 @@ import { h } from 'vue'
 // CORRECT - camelCase event name with 'on' prefix
 h(ChildComponent, {
   onUpdateValue: (value) => handleUpdate(value),
-  onItemSelected: (item) => handleSelect(item),
+  onItemSelected: (item) => handleSelect(item)
 })
 
 // WRONG - kebab-case does NOT work in render functions
 h(ChildComponent, {
-  'onUpdate-value': (value) => handleUpdate(value), // Won't work!
-  'on-update-value': (value) => handleUpdate(value), // Won't work!
+  'onUpdate-value': (value) => handleUpdate(value),  // Won't work!
+  'on-update-value': (value) => handleUpdate(value)  // Won't work!
 })
 ```
 
@@ -99,12 +96,11 @@ onMounted(() => {
   childRef.value?.$on?.('updateValue', handler)
 
   // WRONG - kebab-case won't match
-  childRef.value?.$on?.('update-value', handler) // Won't work!
+  childRef.value?.$on?.('update-value', handler)  // Won't work!
 })
 ```
 
 **Summary:**
-
 - **Templates**: Auto-conversion works (`@update-value` matches `emit('updateValue')`)
 - **Render functions**: Must use `onEventName` format (camelCase with `on` prefix)
 - **Programmatic listeners**: Must use the exact emitted event name (typically camelCase)
@@ -122,11 +118,11 @@ When using TypeScript, define emits in camelCase:
 
 ```vue
 <script setup lang="ts">
-  const emit = defineEmits<{
-    updateValue: [value: string] // camelCase
-    itemSelected: [item: Item] // camelCase
-    'update:modelValue': [value: string] // Special v-model syntax (with colon)
-  }>()
+const emit = defineEmits<{
+  updateValue: [value: string]         // camelCase
+  itemSelected: [item: Item]           // camelCase
+  'update:modelValue': [value: string] // Special v-model syntax (with colon)
+}>()
 </script>
 ```
 
@@ -136,12 +132,12 @@ For v-model, the `update:` prefix uses a colon, not kebab-case:
 
 ```vue
 <script setup>
-  // Correct: colon separator for v-model updates
-  const emit = defineEmits(['update:modelValue', 'update:firstName'])
+// Correct: colon separator for v-model updates
+const emit = defineEmits(['update:modelValue', 'update:firstName'])
 
-  function updateValue(newValue) {
-    emit('update:modelValue', newValue)
-  }
+function updateValue(newValue) {
+  emit('update:modelValue', newValue)
+}
 </script>
 ```
 
@@ -166,6 +162,5 @@ this.$emit('updateValue') // Emitted as 'updateValue'
 Vue 3 fixed this with automatic camelCase-to-kebab-case conversion.
 
 ## Reference
-
 - [Vue.js Component Events](https://vuejs.org/guide/components/events.html)
 - [Vue.js Style Guide - Event Names](https://vuejs.org/style-guide/)

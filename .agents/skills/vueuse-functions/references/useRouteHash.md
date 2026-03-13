@@ -22,6 +22,6 @@ search.value = 'foobar' // router.replace({ hash: 'foobar' })
 ```ts
 export declare function useRouteHash(
   defaultValue?: MaybeRefOrGetter<RouteHashValueRaw>,
-  { mode, route, router }?: ReactiveRouteOptions
+  { mode, route, router }?: ReactiveRouteOptions,
 ): Ref<RouteHashValueRaw, RouteHashValueRaw>
 ```

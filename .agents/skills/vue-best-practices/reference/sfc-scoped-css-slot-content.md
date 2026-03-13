@@ -18,7 +18,6 @@ tags: [vue3, sfc, scoped-css, slots, deep-selector]
 - [ ] Document expected slot content structure when styling assumptions exist
 
 **Problematic Code:**
-
 ```vue
 <!-- Card.vue (child component) -->
 <template>
@@ -30,19 +29,19 @@ tags: [vue3, sfc, scoped-css, slots, deep-selector]
 </template>
 
 <style scoped>
-  .card-body {
-    padding: 1rem;
-  }
+.card-body {
+  padding: 1rem;
+}
 
-  /* BAD: Won't apply to slot content! */
-  .card-body h2 {
-    color: #333;
-    margin-bottom: 0.5rem;
-  }
+/* BAD: Won't apply to slot content! */
+.card-body h2 {
+  color: #333;
+  margin-bottom: 0.5rem;
+}
 
-  .card-body p {
-    color: #666;
-  }
+.card-body p {
+  color: #666;
+}
 </style>
 ```
 
@@ -58,7 +57,6 @@ tags: [vue3, sfc, scoped-css, slots, deep-selector]
 ```
 
 **Correct Code:**
-
 ```vue
 <!-- Card.vue - Using :slotted() -->
 <template>
@@ -70,19 +68,19 @@ tags: [vue3, sfc, scoped-css, slots, deep-selector]
 </template>
 
 <style scoped>
-  .card-body {
-    padding: 1rem;
-  }
+.card-body {
+  padding: 1rem;
+}
 
-  /* GOOD: :slotted() targets slot content */
-  :slotted(h2) {
-    color: #333;
-    margin-bottom: 0.5rem;
-  }
+/* GOOD: :slotted() targets slot content */
+:slotted(h2) {
+  color: #333;
+  margin-bottom: 0.5rem;
+}
 
-  :slotted(p) {
-    color: #666;
-  }
+:slotted(p) {
+  color: #666;
+}
 </style>
 ```
 
@@ -91,18 +89,18 @@ tags: [vue3, sfc, scoped-css, slots, deep-selector]
 ```vue
 <!-- Card.vue - Using :deep() -->
 <style scoped>
-  .card-body {
-    padding: 1rem;
-  }
+.card-body {
+  padding: 1rem;
+}
 
-  /* :deep() also works for slot content */
-  .card-body :deep(h2) {
-    color: #333;
-  }
+/* :deep() also works for slot content */
+.card-body :deep(h2) {
+  color: #333;
+}
 
-  .card-body :deep(p) {
-    color: #666;
-  }
+.card-body :deep(p) {
+  color: #666;
+}
 </style>
 ```
 
@@ -133,23 +131,21 @@ Both work, but have subtle differences:
 
 ```vue
 <style scoped>
-  /* :slotted() - Specifically for slot content */
-  /* Only targets direct slotted elements */
-  :slotted(h2) {
-    color: blue;
-  }
+/* :slotted() - Specifically for slot content */
+/* Only targets direct slotted elements */
+:slotted(h2) {
+  color: blue;
+}
 
-  /* :deep() - More general deep selector */
-  /* Can target nested elements within slot content */
-  .card-body :deep(h2) {
-    color: blue;
-  }
+/* :deep() - More general deep selector */
+/* Can target nested elements within slot content */
+.card-body :deep(h2) {
+  color: blue;
+}
 
-  /* For nested elements in slot content, must use :deep() */
-  :slotted(.wrapper h2) {
-  } /* Won't work for nested h2 */
-  .card-body :deep(.wrapper h2) {
-  } /* Works for nested */
+/* For nested elements in slot content, must use :deep() */
+:slotted(.wrapper h2) { }  /* Won't work for nested h2 */
+.card-body :deep(.wrapper h2) { }  /* Works for nested */
 </style>
 ```
 
@@ -171,20 +167,20 @@ Both work, but have subtle differences:
 </template>
 
 <style scoped>
-  /* Style specific slot content */
-  .card-header :slotted(h1),
-  .card-header :slotted(h2) {
-    margin: 0;
-    font-size: 1.25rem;
-  }
+/* Style specific slot content */
+.card-header :slotted(h1),
+.card-header :slotted(h2) {
+  margin: 0;
+  font-size: 1.25rem;
+}
 
-  .card-body :slotted(p) {
-    margin-bottom: 1rem;
-  }
+.card-body :slotted(p) {
+  margin-bottom: 1rem;
+}
 
-  .card-footer :slotted(button) {
-    margin-right: 0.5rem;
-  }
+.card-footer :slotted(button) {
+  margin-right: 0.5rem;
+}
 </style>
 ```
 
@@ -194,15 +190,15 @@ Element selectors with `:slotted()` can be slower:
 
 ```vue
 <style scoped>
-  /* SLOWER: Element selector */
-  :slotted(p) {
-    color: gray;
-  }
+/* SLOWER: Element selector */
+:slotted(p) {
+  color: gray;
+}
 
-  /* FASTER: Class selector */
-  :slotted(.card-text) {
-    color: gray;
-  }
+/* FASTER: Class selector */
+:slotted(.card-text) {
+  color: gray;
+}
 </style>
 ```
 
@@ -218,30 +214,29 @@ For complex slot styling, unscoped styles may be cleaner:
 </template>
 
 <style>
-  /* Unscoped with unique prefix for complex content styling */
-  .article-card h1,
-  .article-card h2,
-  .article-card h3 {
-    font-family: Georgia, serif;
-    line-height: 1.2;
-  }
+/* Unscoped with unique prefix for complex content styling */
+.article-card h1,
+.article-card h2,
+.article-card h3 {
+  font-family: Georgia, serif;
+  line-height: 1.2;
+}
 
-  .article-card p {
-    line-height: 1.6;
-  }
+.article-card p {
+  line-height: 1.6;
+}
 
-  .article-card img {
-    max-width: 100%;
-  }
+.article-card img {
+  max-width: 100%;
+}
 
-  .article-card blockquote {
-    border-left: 3px solid #ccc;
-    padding-left: 1rem;
-  }
+.article-card blockquote {
+  border-left: 3px solid #ccc;
+  padding-left: 1rem;
+}
 </style>
 ```
 
 ## Reference
-
 - [Vue.js Scoped CSS - Slotted Selectors](https://vuejs.org/api/sfc-css-features.html#slotted-selectors)
 - [Vue.js Deep Selectors](https://vuejs.org/api/sfc-css-features.html#deep-selectors)

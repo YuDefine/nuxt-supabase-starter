@@ -12,24 +12,26 @@ Reactive media controls for both `audio` and `video` elements
 
 ```vue
 <script setup lang="ts">
-  import { useMediaControls } from '@vueuse/core'
-  import { onMounted, useTemplateRef } from 'vue'
+import { useMediaControls } from '@vueuse/core'
+import { onMounted, useTemplateRef } from 'vue'
 
-  const video = useTemplateRef('video')
-  const { playing, currentTime, duration, volume } = useMediaControls(video, {
-    src: 'video.mp4',
-  })
+const video = useTemplateRef('video')
+const { playing, currentTime, duration, volume } = useMediaControls(video, {
+  src: 'video.mp4',
+})
 
-  // Change initial media properties
-  onMounted(() => {
-    volume.value = 0.5
-    currentTime.value = 60
-  })
+// Change initial media properties
+onMounted(() => {
+  volume.value = 0.5
+  currentTime.value = 60
+})
 </script>
 
 <template>
   <video ref="video" />
-  <button @click="playing = !playing">Play / Pause</button>
+  <button @click="playing = !playing">
+    Play / Pause
+  </button>
   <span>{{ currentTime }} / {{ duration }}</span>
 </template>
 ```
@@ -44,22 +46,25 @@ be `-1` if there is no selected track.
 
 ```vue
 <script setup lang="ts">
-  import { useMediaControls } from '@vueuse/core'
-  import { useTemplateRef } from 'vue'
+import { useMediaControls } from '@vueuse/core'
+import { useTemplateRef } from 'vue'
 
-  const video = useTemplateRef('video')
-  const { tracks, enableTrack } = useMediaControls(video, {
-    src: 'video.mp4',
-    tracks: [
-      {
-        default: true,
-        src: './subtitles.vtt',
-        kind: 'subtitles',
-        label: 'English',
-        srcLang: 'en',
-      },
-    ],
-  })
+const video = useTemplateRef('video')
+const {
+  tracks,
+  enableTrack
+} = useMediaControls(video, {
+  src: 'video.mp4',
+  tracks: [
+    {
+      default: true,
+      src: './subtitles.vtt',
+      kind: 'subtitles',
+      label: 'English',
+      srcLang: 'en',
+    },
+  ]
+})
 </script>
 
 <template>
@@ -166,7 +171,7 @@ export interface UseMediaTextTrack {
 }
 export declare function useMediaControls(
   target: MaybeRef<HTMLMediaElement | null | undefined>,
-  options?: UseMediaControlsOptions
+  options?: UseMediaControlsOptions,
 ): {
   currentTime: ShallowRef<number, number>
   duration: ShallowRef<number, number>
@@ -211,24 +216,24 @@ export declare function useMediaControls(
               <K extends keyof TextTrackEventMap>(
                 type: K,
                 listener: (this: TextTrack, ev: TextTrackEventMap[K]) => any,
-                options?: boolean | AddEventListenerOptions
+                options?: boolean | AddEventListenerOptions,
               ): void
               (
                 type: string,
                 listener: EventListenerOrEventListenerObject,
-                options?: boolean | AddEventListenerOptions
+                options?: boolean | AddEventListenerOptions,
               ): void
             }
             removeEventListener: {
               <K extends keyof TextTrackEventMap>(
                 type: K,
                 listener: (this: TextTrack, ev: TextTrackEventMap[K]) => any,
-                options?: boolean | EventListenerOptions
+                options?: boolean | EventListenerOptions,
               ): void
               (
                 type: string,
                 listener: EventListenerOrEventListenerObject,
-                options?: boolean | EventListenerOptions
+                options?: boolean | EventListenerOptions,
               ): void
             }
             dispatchEvent: {
@@ -239,25 +244,31 @@ export declare function useMediaControls(
           addEventListener: {
             <K extends keyof TextTrackCueEventMap>(
               type: K,
-              listener: (this: TextTrackCue, ev: TextTrackCueEventMap[K]) => any,
-              options?: boolean | AddEventListenerOptions
+              listener: (
+                this: TextTrackCue,
+                ev: TextTrackCueEventMap[K],
+              ) => any,
+              options?: boolean | AddEventListenerOptions,
             ): void
             (
               type: string,
               listener: EventListenerOrEventListenerObject,
-              options?: boolean | AddEventListenerOptions
+              options?: boolean | AddEventListenerOptions,
             ): void
           }
           removeEventListener: {
             <K extends keyof TextTrackCueEventMap>(
               type: K,
-              listener: (this: TextTrackCue, ev: TextTrackCueEventMap[K]) => any,
-              options?: boolean | EventListenerOptions
+              listener: (
+                this: TextTrackCue,
+                ev: TextTrackCueEventMap[K],
+              ) => any,
+              options?: boolean | EventListenerOptions,
             ): void
             (
               type: string,
               listener: EventListenerOrEventListenerObject,
-              options?: boolean | EventListenerOptions
+              options?: boolean | EventListenerOptions,
             ): void
           }
           dispatchEvent: {
@@ -293,24 +304,24 @@ export declare function useMediaControls(
               <K extends keyof TextTrackEventMap>(
                 type: K,
                 listener: (this: TextTrack, ev: TextTrackEventMap[K]) => any,
-                options?: boolean | AddEventListenerOptions
+                options?: boolean | AddEventListenerOptions,
               ): void
               (
                 type: string,
                 listener: EventListenerOrEventListenerObject,
-                options?: boolean | AddEventListenerOptions
+                options?: boolean | AddEventListenerOptions,
               ): void
             }
             removeEventListener: {
               <K extends keyof TextTrackEventMap>(
                 type: K,
                 listener: (this: TextTrack, ev: TextTrackEventMap[K]) => any,
-                options?: boolean | EventListenerOptions
+                options?: boolean | EventListenerOptions,
               ): void
               (
                 type: string,
                 listener: EventListenerOrEventListenerObject,
-                options?: boolean | EventListenerOptions
+                options?: boolean | EventListenerOptions,
               ): void
             }
             dispatchEvent: {
@@ -321,25 +332,31 @@ export declare function useMediaControls(
           addEventListener: {
             <K extends keyof TextTrackCueEventMap>(
               type: K,
-              listener: (this: TextTrackCue, ev: TextTrackCueEventMap[K]) => any,
-              options?: boolean | AddEventListenerOptions
+              listener: (
+                this: TextTrackCue,
+                ev: TextTrackCueEventMap[K],
+              ) => any,
+              options?: boolean | AddEventListenerOptions,
             ): void
             (
               type: string,
               listener: EventListenerOrEventListenerObject,
-              options?: boolean | AddEventListenerOptions
+              options?: boolean | AddEventListenerOptions,
             ): void
           }
           removeEventListener: {
             <K extends keyof TextTrackCueEventMap>(
               type: K,
-              listener: (this: TextTrackCue, ev: TextTrackCueEventMap[K]) => any,
-              options?: boolean | EventListenerOptions
+              listener: (
+                this: TextTrackCue,
+                ev: TextTrackCueEventMap[K],
+              ) => any,
+              options?: boolean | EventListenerOptions,
             ): void
             (
               type: string,
               listener: EventListenerOrEventListenerObject,
-              options?: boolean | EventListenerOptions
+              options?: boolean | EventListenerOptions,
             ): void
           }
           dispatchEvent: {
@@ -384,24 +401,24 @@ export declare function useMediaControls(
                 <K extends keyof TextTrackEventMap>(
                   type: K,
                   listener: (this: TextTrack, ev: TextTrackEventMap[K]) => any,
-                  options?: boolean | AddEventListenerOptions
+                  options?: boolean | AddEventListenerOptions,
                 ): void
                 (
                   type: string,
                   listener: EventListenerOrEventListenerObject,
-                  options?: boolean | AddEventListenerOptions
+                  options?: boolean | AddEventListenerOptions,
                 ): void
               }
               removeEventListener: {
                 <K extends keyof TextTrackEventMap>(
                   type: K,
                   listener: (this: TextTrack, ev: TextTrackEventMap[K]) => any,
-                  options?: boolean | EventListenerOptions
+                  options?: boolean | EventListenerOptions,
                 ): void
                 (
                   type: string,
                   listener: EventListenerOrEventListenerObject,
-                  options?: boolean | EventListenerOptions
+                  options?: boolean | EventListenerOptions,
                 ): void
               }
               dispatchEvent: {
@@ -412,25 +429,31 @@ export declare function useMediaControls(
             addEventListener: {
               <K extends keyof TextTrackCueEventMap>(
                 type: K,
-                listener: (this: TextTrackCue, ev: TextTrackCueEventMap[K]) => any,
-                options?: boolean | AddEventListenerOptions
+                listener: (
+                  this: TextTrackCue,
+                  ev: TextTrackCueEventMap[K],
+                ) => any,
+                options?: boolean | AddEventListenerOptions,
               ): void
               (
                 type: string,
                 listener: EventListenerOrEventListenerObject,
-                options?: boolean | AddEventListenerOptions
+                options?: boolean | AddEventListenerOptions,
               ): void
             }
             removeEventListener: {
               <K extends keyof TextTrackCueEventMap>(
                 type: K,
-                listener: (this: TextTrackCue, ev: TextTrackCueEventMap[K]) => any,
-                options?: boolean | EventListenerOptions
+                listener: (
+                  this: TextTrackCue,
+                  ev: TextTrackCueEventMap[K],
+                ) => any,
+                options?: boolean | EventListenerOptions,
               ): void
               (
                 type: string,
                 listener: EventListenerOrEventListenerObject,
-                options?: boolean | EventListenerOptions
+                options?: boolean | EventListenerOptions,
               ): void
             }
             dispatchEvent: {
@@ -466,24 +489,24 @@ export declare function useMediaControls(
                 <K extends keyof TextTrackEventMap>(
                   type: K,
                   listener: (this: TextTrack, ev: TextTrackEventMap[K]) => any,
-                  options?: boolean | AddEventListenerOptions
+                  options?: boolean | AddEventListenerOptions,
                 ): void
                 (
                   type: string,
                   listener: EventListenerOrEventListenerObject,
-                  options?: boolean | AddEventListenerOptions
+                  options?: boolean | AddEventListenerOptions,
                 ): void
               }
               removeEventListener: {
                 <K extends keyof TextTrackEventMap>(
                   type: K,
                   listener: (this: TextTrack, ev: TextTrackEventMap[K]) => any,
-                  options?: boolean | EventListenerOptions
+                  options?: boolean | EventListenerOptions,
                 ): void
                 (
                   type: string,
                   listener: EventListenerOrEventListenerObject,
-                  options?: boolean | EventListenerOptions
+                  options?: boolean | EventListenerOptions,
                 ): void
               }
               dispatchEvent: {
@@ -494,25 +517,31 @@ export declare function useMediaControls(
             addEventListener: {
               <K extends keyof TextTrackCueEventMap>(
                 type: K,
-                listener: (this: TextTrackCue, ev: TextTrackCueEventMap[K]) => any,
-                options?: boolean | AddEventListenerOptions
+                listener: (
+                  this: TextTrackCue,
+                  ev: TextTrackCueEventMap[K],
+                ) => any,
+                options?: boolean | AddEventListenerOptions,
               ): void
               (
                 type: string,
                 listener: EventListenerOrEventListenerObject,
-                options?: boolean | AddEventListenerOptions
+                options?: boolean | AddEventListenerOptions,
               ): void
             }
             removeEventListener: {
               <K extends keyof TextTrackCueEventMap>(
                 type: K,
-                listener: (this: TextTrackCue, ev: TextTrackCueEventMap[K]) => any,
-                options?: boolean | EventListenerOptions
+                listener: (
+                  this: TextTrackCue,
+                  ev: TextTrackCueEventMap[K],
+                ) => any,
+                options?: boolean | EventListenerOptions,
               ): void
               (
                 type: string,
                 listener: EventListenerOrEventListenerObject,
-                options?: boolean | EventListenerOptions
+                options?: boolean | EventListenerOptions,
               ): void
             }
             dispatchEvent: {
@@ -527,7 +556,10 @@ export declare function useMediaControls(
       }[]
   >
   selectedTrack: ShallowRef<number, number>
-  enableTrack: (track: number | UseMediaTextTrack, disableTracks?: boolean) => void
+  enableTrack: (
+    track: number | UseMediaTextTrack,
+    disableTracks?: boolean,
+  ) => void
   disableTrack: (track?: number | UseMediaTextTrack) => void
   supportsPictureInPicture: boolean | undefined
   togglePictureInPicture: () => Promise<unknown>

@@ -18,7 +18,6 @@ tags: [vue3, sfc, scoped-css, deep-selector, child-components]
 - [ ] Consider using unscoped styles or CSS modules for heavily nested styling
 
 **Problematic Code:**
-
 ```vue
 <template>
   <div class="container">
@@ -27,19 +26,18 @@ tags: [vue3, sfc, scoped-css, deep-selector, child-components]
 </template>
 
 <style scoped>
-  /* BAD: These styles won't apply to elements inside ThirdPartyDatePicker */
-  .container .date-input {
-    border-color: blue;
-  }
+/* BAD: These styles won't apply to elements inside ThirdPartyDatePicker */
+.container .date-input {
+  border-color: blue;
+}
 
-  .container .calendar-popup {
-    background: white;
-  }
+.container .calendar-popup {
+  background: white;
+}
 </style>
 ```
 
 **Correct Code:**
-
 ```vue
 <template>
   <div class="container">
@@ -48,19 +46,19 @@ tags: [vue3, sfc, scoped-css, deep-selector, child-components]
 </template>
 
 <style scoped>
-  /* GOOD: Use :deep() to style child component elements */
-  .container :deep(.date-input) {
-    border-color: blue;
-  }
+/* GOOD: Use :deep() to style child component elements */
+.container :deep(.date-input) {
+  border-color: blue;
+}
 
-  .container :deep(.calendar-popup) {
-    background: white;
-  }
+.container :deep(.calendar-popup) {
+  background: white;
+}
 
-  /* Also correct: deep selector at root level */
-  :deep(.date-picker-wrapper) {
-    padding: 1rem;
-  }
+/* Also correct: deep selector at root level */
+:deep(.date-picker-wrapper) {
+  padding: 1rem;
+}
 </style>
 ```
 
@@ -86,18 +84,15 @@ Vue scoped CSS adds a unique data attribute to all elements in the component's t
 
 ```vue
 <style scoped>
-  /* Vue 3 recommended syntax */
-  .parent :deep(.child-class) {
-    color: red;
-  }
+/* Vue 3 recommended syntax */
+.parent :deep(.child-class) {
+  color: red;
+}
 
-  /* DEPRECATED - don't use these in Vue 3 */
-  .parent >>> .child-class {
-  } /* Won't work in SCSS */
-  .parent /deep/ .child-class {
-  } /* Deprecated */
-  .parent ::v-deep .child-class {
-  } /* Old syntax */
+/* DEPRECATED - don't use these in Vue 3 */
+.parent >>> .child-class { }   /* Won't work in SCSS */
+.parent /deep/ .child-class { } /* Deprecated */
+.parent ::v-deep .child-class { } /* Old syntax */
 </style>
 ```
 
@@ -107,15 +102,15 @@ Always scope `:deep()` to a parent selector to limit its reach:
 
 ```vue
 <style scoped>
-  /* BAD: Affects ALL .btn elements in child components globally */
-  :deep(.btn) {
-    background: blue;
-  }
+/* BAD: Affects ALL .btn elements in child components globally */
+:deep(.btn) {
+  background: blue;
+}
 
-  /* GOOD: Only affects .btn inside .my-component */
-  .my-component :deep(.btn) {
-    background: blue;
-  }
+/* GOOD: Only affects .btn inside .my-component */
+.my-component :deep(.btn) {
+  background: blue;
+}
 </style>
 ```
 
@@ -130,11 +125,11 @@ Note: A child component's root element IS affected by parent scoped CSS. This is
 </template>
 
 <style scoped>
-  /* This WILL work - targets child's root element */
-  .styled-child {
-    margin: 1rem;
-    border: 1px solid gray;
-  }
+/* This WILL work - targets child's root element */
+.styled-child {
+  margin: 1rem;
+  border: 1px solid gray;
+}
 </style>
 ```
 
@@ -144,19 +139,18 @@ Using `:deep()` with element selectors can be slower:
 
 ```vue
 <style scoped>
-  /* SLOWER: Element selector with deep */
-  .container :deep(p) {
-    color: red;
-  }
+/* SLOWER: Element selector with deep */
+.container :deep(p) {
+  color: red;
+}
 
-  /* FASTER: Class selector with deep */
-  .container :deep(.paragraph) {
-    color: red;
-  }
+/* FASTER: Class selector with deep */
+.container :deep(.paragraph) {
+  color: red;
+}
 </style>
 ```
 
 ## Reference
-
 - [Vue.js Scoped CSS - Deep Selectors](https://vuejs.org/api/sfc-css-features.html#deep-selectors)
 - [Vue Loader Scoped CSS](https://vue-loader.vuejs.org/guide/scoped-css.html)

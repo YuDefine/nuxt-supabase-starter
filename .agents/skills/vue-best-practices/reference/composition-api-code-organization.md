@@ -21,76 +21,158 @@ The key insight is that Composition API gives you flexibility - which requires d
 - [ ] Consider splitting large components into smaller ones or composables
 
 **Disorganized (Bad):**
-
 ```vue
 <script setup>
-  // Scattered code - hard to understand what relates to what
-  import { ref, computed, onMounted, watch } from 'vue'
+// Scattered code - hard to understand what relates to what
+import { ref, computed, onMounted, watch } from 'vue'
 
-  const searchQuery = ref('')
-  const items = ref([])
-  const selectedItem = ref(null)
-  const isModalOpen = ref(false)
-  const sortOrder = ref('asc')
-  const filterCategory = ref('all')
-  const isLoading = ref(false)
-  const error = ref(null)
+const searchQuery = ref('')
+const items = ref([])
+const selectedItem = ref(null)
+const isModalOpen = ref(false)
+const sortOrder = ref('asc')
+const filterCategory = ref('all')
+const isLoading = ref(false)
+const error = ref(null)
 
-  const filteredItems = computed(() => {
-    return items.value.filter((i) => i.category === filterCategory.value)
-  })
+const filteredItems = computed(() => {
+  return items.value.filter(i => i.category === filterCategory.value)
+})
 
-  function openModal() {
-    isModalOpen.value = true
-  }
+function openModal() { isModalOpen.value = true }
 
-  const sortedItems = computed(() => {
-    return [...filteredItems.value].sort(/* ... */)
-  })
+const sortedItems = computed(() => {
+  return [...filteredItems.value].sort(/* ... */)
+})
 
-  function closeModal() {
-    isModalOpen.value = false
-  }
+function closeModal() { isModalOpen.value = false }
 
-  watch(searchQuery, async (query) => {
-    /* fetch */
-  })
+watch(searchQuery, async (query) => { /* fetch */ })
 
-  function selectItem(item) {
-    selectedItem.value = item
-  }
+function selectItem(item) { selectedItem.value = item }
 
-  const searchResults = computed(() => {
-    return items.value.filter((i) => i.name.includes(searchQuery.value))
-  })
+const searchResults = computed(() => {
+  return items.value.filter(i => i.name.includes(searchQuery.value))
+})
 
-  onMounted(() => {
-    fetchItems()
-  })
+onMounted(() => { fetchItems() })
 
-  async function fetchItems() {
-    /* ... */
-  }
+async function fetchItems() { /* ... */ }
 </script>
 ```
 
 **Organized by Concern (Good):**
-
 ```vue
 <script setup>
-  import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 
-  // ============================================
-  // DATA FETCHING & STATE
-  // ============================================
+// ============================================
+// DATA FETCHING & STATE
+// ============================================
+const items = ref([])
+const isLoading = ref(false)
+const error = ref(null)
+
+async function fetchItems() {
+  isLoading.value = true
+  try {
+    items.value = await api.getItems()
+  } catch (e) {
+    error.value = e
+  } finally {
+    isLoading.value = false
+  }
+}
+
+onMounted(() => fetchItems())
+
+// ============================================
+// SEARCH
+// ============================================
+const searchQuery = ref('')
+
+const searchResults = computed(() =>
+  items.value.filter(i =>
+    i.name.toLowerCase().includes(searchQuery.value.toLowerCase())
+  )
+)
+
+watch(searchQuery, async (query) => {
+  if (query.length > 2) {
+    await fetchItems({ search: query })
+  }
+})
+
+// ============================================
+// FILTERING & SORTING
+// ============================================
+const filterCategory = ref('all')
+const sortOrder = ref('asc')
+
+const filteredItems = computed(() =>
+  searchResults.value.filter(i =>
+    filterCategory.value === 'all' || i.category === filterCategory.value
+  )
+)
+
+const sortedItems = computed(() =>
+  [...filteredItems.value].sort((a, b) =>
+    sortOrder.value === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
+  )
+)
+
+// ============================================
+// SELECTION & MODAL
+// ============================================
+const selectedItem = ref(null)
+const isModalOpen = ref(false)
+
+function selectItem(item) {
+  selectedItem.value = item
+  openModal()
+}
+
+function openModal() { isModalOpen.value = true }
+function closeModal() {
+  isModalOpen.value = false
+  selectedItem.value = null
+}
+</script>
+```
+
+**Best: Extract to Composables:**
+```vue
+<script setup>
+import { useItems } from '@/composables/useItems'
+import { useSearch } from '@/composables/useSearch'
+import { useModal } from '@/composables/useModal'
+
+// Each composable encapsulates a logical concern
+const { items, isLoading, error, fetchItems } = useItems()
+const { searchQuery, searchResults } = useSearch(items)
+const {
+  selectedItem,
+  isOpen: isModalOpen,
+  open: openModal,
+  close: closeModal
+} = useModal()
+
+function selectItem(item) {
+  selectedItem.value = item
+  openModal()
+}
+</script>
+
+// composables/useItems.js
+export function useItems() {
   const items = ref([])
   const isLoading = ref(false)
   const error = ref(null)
 
-  async function fetchItems() {
+  async function fetchItems(params = {}) {
     isLoading.value = true
     try {
-      items.value = await api.getItems()
+      items.value = await api.getItems(params)
     } catch (e) {
       error.value = e
     } finally {
@@ -100,84 +182,8 @@ The key insight is that Composition API gives you flexibility - which requires d
 
   onMounted(() => fetchItems())
 
-  // ============================================
-  // SEARCH
-  // ============================================
-  const searchQuery = ref('')
-
-  const searchResults = computed(() =>
-    items.value.filter((i) => i.name.toLowerCase().includes(searchQuery.value.toLowerCase()))
-  )
-
-  watch(searchQuery, async (query) => {
-    if (query.length > 2) {
-      await fetchItems({ search: query })
-    }
-  })
-
-  // ============================================
-  // FILTERING & SORTING
-  // ============================================
-  const filterCategory = ref('all')
-  const sortOrder = ref('asc')
-
-  const filteredItems = computed(() =>
-    searchResults.value.filter(
-      (i) => filterCategory.value === 'all' || i.category === filterCategory.value
-    )
-  )
-
-  const sortedItems = computed(() =>
-    [...filteredItems.value].sort((a, b) =>
-      sortOrder.value === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
-    )
-  )
-
-  // ============================================
-  // SELECTION & MODAL
-  // ============================================
-  const selectedItem = ref(null)
-  const isModalOpen = ref(false)
-
-  function selectItem(item) {
-    selectedItem.value = item
-    openModal()
-  }
-
-  function openModal() {
-    isModalOpen.value = true
-  }
-  function closeModal() {
-    isModalOpen.value = false
-    selectedItem.value = null
-  }
-</script>
-```
-
-**Best: Extract to Composables:**
-
-```vue
-<script setup>
-  import { useItems } from '@/composables/useItems'
-  import { useSearch } from '@/composables/useSearch'
-  import { useModal } from '@/composables/useModal'
-
-  // Each composable encapsulates a logical concern
-  const { items, isLoading, error, fetchItems } = useItems()
-  const { searchQuery, searchResults } = useSearch(items)
-  const { selectedItem, isOpen: isModalOpen, open: openModal, close: closeModal } = useModal()
-
-  function selectItem(item) {
-    selectedItem.value = item
-    openModal()
-  }
-</script>
-
-// composables/useItems.js export function useItems() { const items = ref([]) const isLoading =
-ref(false) const error = ref(null) async function fetchItems(params = {}) { isLoading.value = true
-try { items.value = await api.getItems(params) } catch (e) { error.value = e } finally {
-isLoading.value = false } } onMounted(() => fetchItems()) return { items, isLoading, error,
-fetchItems } }
+  return { items, isLoading, error, fetchItems }
+}
 ```
 
 ## Signs Your Component Needs Refactoring
@@ -203,6 +209,5 @@ fetchItems } }
 ```
 
 ## Reference
-
 - [Composition API FAQ - More Flexible Code Organization](https://vuejs.org/guide/extras/composition-api-faq.html#more-flexible-code-organization)
 - [Composables](https://vuejs.org/guide/reusability/composables.html)

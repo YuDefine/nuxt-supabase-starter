@@ -57,11 +57,11 @@ export default {
 export declare function useVModels<P extends object, Name extends string>(
   props: P,
   emit?: (name: Name, ...args: any[]) => void,
-  options?: UseVModelOptions<any, true>
+  options?: UseVModelOptions<any, true>,
 ): ToRefs<P>
 export declare function useVModels<P extends object, Name extends string>(
   props: P,
   emit?: (name: Name, ...args: any[]) => void,
-  options?: UseVModelOptions<any, false>
+  options?: UseVModelOptions<any, false>,
 ): ToRefs<P>
 ```

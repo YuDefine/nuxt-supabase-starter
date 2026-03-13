@@ -20,7 +20,6 @@ Vue's `createApp` API explicitly supports multiple application instances on the 
 - [ ] Consider shared state via external stores if instances need to communicate
 
 **Incorrect:**
-
 ```javascript
 // Server-rendered page with Vue only needed for a few interactive widgets
 // WRONG: Mounting to entire page
@@ -43,7 +42,6 @@ createApp(BigApp).mount('#app')
 ```
 
 **Correct:**
-
 ```javascript
 // CORRECT: Mount separate instances to specific elements
 
@@ -62,7 +60,7 @@ searchApp.mount('.widget-search')
 
 // Widget 2: Shopping cart
 const cartApp = createApp(CartWidget)
-cartApp.use(pinia) // Same Pinia instance = shared state
+cartApp.use(pinia)  // Same Pinia instance = shared state
 cartApp.mount('.widget-cart')
 
 // Rest of page remains server-rendered static HTML
@@ -106,13 +104,12 @@ createApp(App2).use(pinia).mount('#app2')
 import { reactive } from 'vue'
 export const sharedState = reactive({
   user: null,
-  cart: [],
+  cart: []
 })
 
 // Both apps import and use sharedState directly
 ```
 
 ## Reference
-
 - [Vue.js - Multiple Application Instances](https://vuejs.org/guide/essentials/application.html#multiple-application-instances)
 - [Vue.js Application API](https://vuejs.org/api/application.html)

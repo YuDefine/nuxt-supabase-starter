@@ -12,14 +12,14 @@ Without a delay, the loading component briefly appears and immediately disappear
 
 ```vue
 <script setup>
-  import { defineAsyncComponent } from 'vue'
-  import LoadingSpinner from './LoadingSpinner.vue'
+import { defineAsyncComponent } from 'vue'
+import LoadingSpinner from './LoadingSpinner.vue'
 
-  const AsyncDashboard = defineAsyncComponent({
-    loader: () => import('./Dashboard.vue'),
-    loadingComponent: LoadingSpinner,
-    delay: 0, // Loading spinner flashes immediately, causing flicker
-  })
+const AsyncDashboard = defineAsyncComponent({
+  loader: () => import('./Dashboard.vue'),
+  loadingComponent: LoadingSpinner,
+  delay: 0  // Loading spinner flashes immediately, causing flicker
+})
 </script>
 ```
 
@@ -27,42 +27,42 @@ Without a delay, the loading component briefly appears and immediately disappear
 
 ```vue
 <script setup>
-  import { defineAsyncComponent } from 'vue'
-  import LoadingSpinner from './LoadingSpinner.vue'
+import { defineAsyncComponent } from 'vue'
+import LoadingSpinner from './LoadingSpinner.vue'
 
-  const AsyncDashboard = defineAsyncComponent({
-    loader: () => import('./Dashboard.vue'),
-    loadingComponent: LoadingSpinner,
-    // delay: 200 is the default, but you can adjust based on your UX needs
-  })
+const AsyncDashboard = defineAsyncComponent({
+  loader: () => import('./Dashboard.vue'),
+  loadingComponent: LoadingSpinner,
+  // delay: 200 is the default, but you can adjust based on your UX needs
+})
 </script>
 ```
 
 ```vue
 <script setup>
-  import { defineAsyncComponent } from 'vue'
-  import LoadingSpinner from './LoadingSpinner.vue'
-  import ErrorDisplay from './ErrorDisplay.vue'
+import { defineAsyncComponent } from 'vue'
+import LoadingSpinner from './LoadingSpinner.vue'
+import ErrorDisplay from './ErrorDisplay.vue'
 
-  // For slower expected loads, consider a shorter delay
-  const AsyncHeavyChart = defineAsyncComponent({
-    loader: () => import('./HeavyChart.vue'),
-    loadingComponent: LoadingSpinner,
-    errorComponent: ErrorDisplay,
-    delay: 100, // Show loading sooner for components known to be heavy
-    timeout: 30000, // Longer timeout for complex components
-  })
+// For slower expected loads, consider a shorter delay
+const AsyncHeavyChart = defineAsyncComponent({
+  loader: () => import('./HeavyChart.vue'),
+  loadingComponent: LoadingSpinner,
+  errorComponent: ErrorDisplay,
+  delay: 100,    // Show loading sooner for components known to be heavy
+  timeout: 30000 // Longer timeout for complex components
+})
 </script>
 ```
 
 ## Choosing the Right Delay
 
-| Scenario                                | Recommended Delay |
-| --------------------------------------- | ----------------- |
-| Fast network, small component           | 200ms (default)   |
-| Known heavy component                   | 100ms             |
-| Interactive element user is waiting for | 50-100ms          |
-| Background content load                 | 300-500ms         |
+| Scenario | Recommended Delay |
+|----------|-------------------|
+| Fast network, small component | 200ms (default) |
+| Known heavy component | 100ms |
+| Interactive element user is waiting for | 50-100ms |
+| Background content load | 300-500ms |
 
 ## Key Points
 

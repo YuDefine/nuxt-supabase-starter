@@ -22,41 +22,35 @@ links:
 
 Use the default slot to set the content.
 
-## ::component-code
-
-slots:
-default: Content
-
+::component-code
 ---
-
+slots:
+  default: Content
+---
 ::
 
 ### Label
 
 Use the `label` prop to set the label.
 
-## ::component-code
-
-props:
-label: Label
-
+::component-code
 ---
-
+props:
+  label: Label
+---
 ::
 
 ### Color
 
 Use the `color` prop to change the color.
 
-## ::component-code
-
-props:
-color: neutral
-slots:
-default: Content
-
+::component-code
 ---
-
+props:
+  color: neutral
+slots:
+  default: Content
+---
 ::
 
 ## Examples
@@ -65,35 +59,30 @@ default: Content
 
 Use the `class` prop to override base styles.
 
-## ::component-code
-
-props:
-class: 'font-bold rounded-full'
-slots:
-default: Content
-
+::component-code
 ---
-
+props:
+  class: 'font-bold rounded-full'
+slots:
+  default: Content
+---
 ::
 
 ### `ui` prop
 
 Use the `ui` prop to override slot styles.
 
-## ::component-code
-
+::component-code
+---
 prettier: true
 ignore:
-
-- ui
-  props:
+  - ui
+props:
   ui:
-  label: 'text-primary'
-  slots:
+    label: 'text-primary'
+slots:
   default: Content
-
 ---
-
 ::
 
 ## API
@@ -102,7 +91,7 @@ ignore:
 
 :component-props
 
-::callout{icon="i-simple-icons-mdnwebdocs" to="https://developer.mozilla.org/en-US/docs/Web/HTML/Element/button#attributes" target="\_blank"}
+::callout{icon="i-simple-icons-mdnwebdocs" to="https://developer.mozilla.org/en-US/docs/Web/HTML/Element/button#attributes" target="_blank"}
 This component also supports native HTML attributes.
 ::
 
@@ -130,7 +119,7 @@ Required fields:
 ```yaml
 ---
 description: Brief description of the component.
-category: element # element, form, overlay, navigation, layout, data
+category: element  # element, form, overlay, navigation, layout, data
 links:
   - label: GitHub
     icon: i-simple-icons-github
@@ -155,43 +144,37 @@ links:
 ### Basic Usage
 
 ```md
-## ::component-code
-
-props:
-label: Button
-
+::component-code
 ---
-
+props:
+  label: Button
+---
 ::
 ```
 
 ### With Slots
 
 ```md
-## ::component-code
-
-slots:
-default: Button content
-
+::component-code
 ---
-
+slots:
+  default: Button content
+---
 ::
 ```
 
 ### With Multiple Props
 
 ```md
-## ::component-code
-
-props:
-color: neutral
-variant: outline
-size: lg
-slots:
-default: Button
-
+::component-code
 ---
-
+props:
+  color: neutral
+  variant: outline
+  size: lg
+slots:
+  default: Button
+---
 ::
 ```
 
@@ -200,21 +183,19 @@ default: Button
 For complex props, use prettier:
 
 ```md
-## ::component-code
-
+::component-code
+---
 prettier: true
 props:
-avatar:
-src: 'https://github.com/nuxt.png'
-ui:
-label: 'text-primary'
+  avatar:
+    src: 'https://github.com/nuxt.png'
+  ui:
+    label: 'text-primary'
 slots:
-default: |
+  default: |
 
     Content
-
 ---
-
 ::
 ```
 
@@ -223,21 +204,18 @@ default: |
 Hide specific props from the interactive playground:
 
 ```md
-## ::component-code
-
+::component-code
+---
 ignore:
-
-- ui
-- color
-  props:
+  - ui
+  - color
+props:
   color: neutral
   ui:
-  label: 'font-bold'
-  slots:
+    label: 'font-bold'
+slots:
   default: Content
-
 ---
-
 ::
 ```
 
@@ -246,19 +224,24 @@ ignore:
 Add selectable options:
 
 ```md
-## ::component-code
-
-items:
-color: - primary - secondary - success - error
-size: - sm - md - lg
-props:
-color: primary
-size: md
-slots:
-default: Button
-
+::component-code
 ---
-
+items:
+  color:
+    - primary
+    - secondary
+    - success
+    - error
+  size:
+    - sm
+    - md
+    - lg
+props:
+  color: primary
+  size: md
+slots:
+  default: Button
+---
 ::
 ```
 
@@ -275,13 +258,15 @@ Example component in `docs/app/components/content/examples/`:
 ```vue
 <!-- ButtonLoadingAutoExample.vue -->
 <script setup lang="ts">
-  async function onClick() {
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-  }
+async function onClick() {
+  await new Promise(resolve => setTimeout(resolve, 2000))
+}
 </script>
 
 <template>
-  <UButton loading-auto @click="onClick"> Click me </UButton>
+  <UButton loading-auto @click="onClick">
+    Click me
+  </UButton>
 </template>
 ```
 
@@ -335,11 +320,11 @@ Configure icons in your Vite config.
 
 ## Categories
 
-| Category     | Components                             |
-| ------------ | -------------------------------------- |
-| `element`    | Button, Badge, Icon, Avatar, etc.      |
-| `form`       | Input, Select, Checkbox, Form, etc.    |
-| `overlay`    | Modal, Slideover, Popover, Toast, etc. |
+| Category | Components |
+|----------|------------|
+| `element` | Button, Badge, Icon, Avatar, etc. |
+| `form` | Input, Select, Checkbox, Form, etc. |
+| `overlay` | Modal, Slideover, Popover, Toast, etc. |
 | `navigation` | NavigationMenu, Breadcrumb, Tabs, etc. |
-| `layout`     | Card, Container, Separator, etc.       |
-| `data`       | Table, Tree, Calendar, etc.            |
+| `layout` | Card, Container, Separator, etc. |
+| `data` | Table, Tree, Calendar, etc. |

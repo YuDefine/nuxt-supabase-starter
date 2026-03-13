@@ -22,30 +22,30 @@ tags: [vue3, typescript, provide-inject, injection-key, composition-api]
 ```vue
 <!-- Provider.vue -->
 <script setup lang="ts">
-  import { provide } from 'vue'
+import { provide } from 'vue'
 
-  interface User {
-    id: string
-    name: string
-  }
+interface User {
+  id: string
+  name: string
+}
 
-  const user: User = { id: '1', name: 'John' }
+const user: User = { id: '1', name: 'John' }
 
-  // String key - no type information
-  provide('user', user)
+// String key - no type information
+provide('user', user)
 </script>
 ```
 
 ```vue
 <!-- Consumer.vue -->
 <script setup lang="ts">
-  import { inject } from 'vue'
+import { inject } from 'vue'
 
-  // Type is unknown!
-  const user = inject('user') // Type: unknown
+// Type is unknown!
+const user = inject('user')  // Type: unknown
 
-  // Must manually assert type - error prone
-  const user = inject('user') as User // Works but risky
+// Must manually assert type - error prone
+const user = inject('user') as User  // Works but risky
 </script>
 ```
 
@@ -74,47 +74,43 @@ export const authKey: InjectionKey<AuthContext> = Symbol('auth')
 ```vue
 <!-- Provider.vue -->
 <script setup lang="ts">
-  import { provide, ref } from 'vue'
-  import { userKey, authKey, type User, type AuthContext } from '@/keys'
+import { provide, ref } from 'vue'
+import { userKey, authKey, type User, type AuthContext } from '@/keys'
 
-  const user: User = { id: '1', name: 'John' }
+const user: User = { id: '1', name: 'John' }
 
-  // Type-checked! Must provide correct type
-  provide(userKey, user)
+// Type-checked! Must provide correct type
+provide(userKey, user)
 
-  // Error if type doesn't match
-  provide(userKey, { wrong: 'data' }) // TypeScript error!
+// Error if type doesn't match
+provide(userKey, { wrong: 'data' })  // TypeScript error!
 
-  // Complex context
-  const authContext: AuthContext = {
-    user: ref(null),
-    login: async (creds) => {
-      /* ... */
-    },
-    logout: async () => {
-      /* ... */
-    },
-  }
-  provide(authKey, authContext)
+// Complex context
+const authContext: AuthContext = {
+  user: ref(null),
+  login: async (creds) => { /* ... */ },
+  logout: async () => { /* ... */ }
+}
+provide(authKey, authContext)
 </script>
 ```
 
 ```vue
 <!-- Consumer.vue -->
 <script setup lang="ts">
-  import { inject } from 'vue'
-  import { userKey, authKey } from '@/keys'
+import { inject } from 'vue'
+import { userKey, authKey } from '@/keys'
 
-  // Automatically typed as User | undefined
-  const user = inject(userKey)
+// Automatically typed as User | undefined
+const user = inject(userKey)
 
-  // Type: AuthContext | undefined
-  const auth = inject(authKey)
+// Type: AuthContext | undefined
+const auth = inject(authKey)
 
-  // Access with proper typing
-  if (user) {
-    console.log(user.name) // TypeScript knows this is string
-  }
+// Access with proper typing
+if (user) {
+  console.log(user.name)  // TypeScript knows this is string
+}
 </script>
 ```
 
@@ -124,27 +120,27 @@ Injected values are always potentially `undefined` because the provider might no
 
 ```vue
 <script setup lang="ts">
-  import { inject } from 'vue'
-  import { userKey, type User } from '@/keys'
+import { inject } from 'vue'
+import { userKey, type User } from '@/keys'
 
-  // Option 1: Provide a default value (removes undefined)
-  const user = inject(userKey, { id: '0', name: 'Guest' })
-  // Type: User (not undefined)
+// Option 1: Provide a default value (removes undefined)
+const user = inject(userKey, { id: '0', name: 'Guest' })
+// Type: User (not undefined)
 
-  // Option 2: Use factory function for default
-  const user = inject(userKey, () => ({ id: '0', name: 'Guest' }), true)
-  // Type: User (factory is called only if no provider)
+// Option 2: Use factory function for default
+const user = inject(userKey, () => ({ id: '0', name: 'Guest' }), true)
+// Type: User (factory is called only if no provider)
 
-  // Option 3: Assert non-null when certain provider exists
-  const user = inject(userKey)!
-  // Type: User (use sparingly!)
+// Option 3: Assert non-null when certain provider exists
+const user = inject(userKey)!
+// Type: User (use sparingly!)
 
-  // Option 4: Guard with runtime check
-  const user = inject(userKey)
-  if (!user) {
-    throw new Error('User provider not found. Wrap component in UserProvider.')
-  }
-  // Type: User after check
+// Option 4: Guard with runtime check
+const user = inject(userKey)
+if (!user) {
+  throw new Error('User provider not found. Wrap component in UserProvider.')
+}
+// Type: User after check
 </script>
 ```
 
@@ -163,7 +159,7 @@ export function useAuth(): AuthContext {
   if (!auth) {
     throw new Error(
       'useAuth() requires an AuthProvider ancestor. ' +
-        'Make sure to wrap your component tree with <AuthProvider>.'
+      'Make sure to wrap your component tree with <AuthProvider>.'
     )
   }
 
@@ -174,10 +170,10 @@ export function useAuth(): AuthContext {
 ```vue
 <!-- Consumer.vue -->
 <script setup lang="ts">
-  import { useAuth } from '@/composables/useAuth'
+import { useAuth } from '@/composables/useAuth'
 
-  // Clean API, guaranteed non-null, proper error message
-  const { user, login, logout } = useAuth()
+// Clean API, guaranteed non-null, proper error message
+const { user, login, logout } = useAuth()
 </script>
 ```
 
@@ -243,10 +239,7 @@ export function createListKey<T>(name: string): InjectionKey<ListContext<T>> {
 }
 
 // Usage
-interface Product {
-  id: string
-  name: string
-}
+interface Product { id: string; name: string }
 export const productListKey = createListKey<Product>('productList')
 ```
 
@@ -260,6 +253,5 @@ export const productListKey = createListKey<Product>('productList')
 6. **Provide default values** when the provider is optional
 
 ## Reference
-
 - [Vue.js TypeScript with Composition API - Provide/Inject](https://vuejs.org/guide/typescript/composition-api.html#typing-provide-inject)
 - [Vue.js Provide/Inject](https://vuejs.org/guide/components/provide-inject.html)

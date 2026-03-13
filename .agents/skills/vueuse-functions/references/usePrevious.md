@@ -31,10 +31,10 @@ console.log(previous.value) // Hello
  * @see   {@link https://vueuse.org/usePrevious}
  */
 export declare function usePrevious<T>(
-  value: MaybeRefOrGetter<T>
+  value: MaybeRefOrGetter<T>,
 ): Readonly<ShallowRef<T | undefined>>
 export declare function usePrevious<T>(
   value: MaybeRefOrGetter<T>,
-  initialValue: T
+  initialValue: T,
 ): Readonly<ShallowRef<T>>
 ```

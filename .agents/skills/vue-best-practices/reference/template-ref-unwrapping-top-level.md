@@ -20,13 +20,12 @@ This caveat trips up developers when they store refs inside reactive objects or 
 - [ ] Consider restructuring data to avoid nested refs in templates
 
 **Incorrect:**
-
 ```vue
 <script setup>
-  import { ref } from 'vue'
+import { ref } from 'vue'
 
-  const count = ref(0)
-  const object = { id: ref(1) }
+const count = ref(0)
+const object = { id: ref(1) }
 </script>
 
 <template>
@@ -41,16 +40,15 @@ This caveat trips up developers when they store refs inside reactive objects or 
 ```
 
 **Correct:**
-
 ```vue
 <script setup>
-  import { ref } from 'vue'
+import { ref } from 'vue'
 
-  const count = ref(0)
-  const object = { id: ref(1) }
+const count = ref(0)
+const object = { id: ref(1) }
 
-  // SOLUTION 1: Destructure to top-level
-  const { id } = object
+// SOLUTION 1: Destructure to top-level
+const { id } = object
 </script>
 
 <template>
@@ -66,12 +64,12 @@ This caveat trips up developers when they store refs inside reactive objects or 
 
 ```vue
 <script setup>
-  import { ref, computed } from 'vue'
+import { ref, computed } from 'vue'
 
-  const object = { id: ref(1) }
+const object = { id: ref(1) }
 
-  // SOLUTION 2: Use computed for derived values
-  const idPlusOne = computed(() => object.id.value + 1)
+// SOLUTION 2: Use computed for derived values
+const idPlusOne = computed(() => object.id.value + 1)
 </script>
 
 <template>
@@ -82,10 +80,10 @@ This caveat trips up developers when they store refs inside reactive objects or 
 
 ```vue
 <script setup>
-  import { reactive } from 'vue'
+import { reactive } from 'vue'
 
-  // SOLUTION 3: Use reactive object instead (refs inside reactive auto-unwrap)
-  const object = reactive({ id: 1 })
+// SOLUTION 3: Use reactive object instead (refs inside reactive auto-unwrap)
+const object = reactive({ id: 1 })
 </script>
 
 <template>
@@ -103,5 +101,4 @@ This caveat trips up developers when they store refs inside reactive objects or 
 ```
 
 ## Reference
-
 - [Vue.js Reactivity Fundamentals - Caveat when Unwrapping in Templates](https://vuejs.org/guide/essentials/reactivity-fundamentals.html#caveat-when-unwrapping-in-templates)

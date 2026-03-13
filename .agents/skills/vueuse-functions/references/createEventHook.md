@@ -18,8 +18,8 @@ export function useMyFetch(url) {
   const fetchError = createEventHook<any>()
 
   fetch(url)
-    .then((result) => fetchResult.trigger(result))
-    .catch((error) => fetchError.trigger(error.message))
+    .then(result => fetchResult.trigger(result))
+    .catch(error => fetchError.trigger(error.message))
 
   return {
     onResult: fetchResult.on,
@@ -32,17 +32,17 @@ Using a function that uses `createEventHook`
 
 ```vue
 <script setup lang="ts">
-  import { useMyFetch } from './my-fetch-function'
+import { useMyFetch } from './my-fetch-function'
 
-  const { onResult, onError } = useMyFetch('my api url')
+const { onResult, onError } = useMyFetch('my api url')
 
-  onResult((result) => {
-    console.log(result)
-  })
+onResult((result) => {
+  console.log(result)
+})
 
-  onError((error) => {
-    console.error(error)
-  })
+onError((error) => {
+  console.error(error)
+})
 </script>
 ```
 
@@ -65,7 +65,9 @@ export type EventHookOn<T = any> = (fn: Callback<T>) => {
   off: () => void
 }
 export type EventHookOff<T = any> = (fn: Callback<T>) => void
-export type EventHookTrigger<T = any> = (...param: Parameters<Callback<T>>) => Promise<unknown[]>
+export type EventHookTrigger<T = any> = (
+  ...param: Parameters<Callback<T>>
+) => Promise<unknown[]>
 export interface EventHook<T = any> {
   on: EventHookOn<T>
   off: EventHookOff<T>

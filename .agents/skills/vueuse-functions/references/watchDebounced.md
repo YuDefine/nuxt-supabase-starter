@@ -16,10 +16,8 @@ import { watchDebounced } from '@vueuse/core'
 
 watchDebounced(
   source,
-  () => {
-    console.log('changed!')
-  },
-  { debounce: 500, maxWait: 1000 }
+  () => { console.log('changed!') },
+  { debounce: 500, maxWait: 1000 },
 )
 ```
 
@@ -30,12 +28,10 @@ import { debounceFilter, watchWithFilter } from '@vueuse/core'
 
 watchWithFilter(
   source,
-  () => {
-    console.log('changed!')
-  },
+  () => { console.log('changed!') },
   {
     eventFilter: debounceFilter(500, { maxWait: 1000 }),
-  }
+  },
 )
 ```
 
@@ -43,7 +39,8 @@ watchWithFilter(
 
 ```ts
 export interface WatchDebouncedOptions<Immediate>
-  extends WatchOptions<Immediate>, DebounceFilterOptions {
+  extends WatchOptions<Immediate>,
+    DebounceFilterOptions {
   debounce?: MaybeRefOrGetter<number>
 }
 export declare function watchDebounced<
@@ -52,12 +49,15 @@ export declare function watchDebounced<
 >(
   sources: [...T],
   cb: WatchCallback<MapSources<T>, MapOldSources<T, Immediate>>,
-  options?: WatchDebouncedOptions<Immediate>
+  options?: WatchDebouncedOptions<Immediate>,
 ): WatchHandle
-export declare function watchDebounced<T, Immediate extends Readonly<boolean> = false>(
+export declare function watchDebounced<
+  T,
+  Immediate extends Readonly<boolean> = false,
+>(
   source: WatchSource<T>,
   cb: WatchCallback<T, Immediate extends true ? T | undefined : T>,
-  options?: WatchDebouncedOptions<Immediate>
+  options?: WatchDebouncedOptions<Immediate>,
 ): WatchHandle
 export declare function watchDebounced<
   T extends object,
@@ -65,7 +65,7 @@ export declare function watchDebounced<
 >(
   source: T,
   cb: WatchCallback<T, Immediate extends true ? T | undefined : T>,
-  options?: WatchDebouncedOptions<Immediate>
+  options?: WatchDebouncedOptions<Immediate>,
 ): WatchHandle
 /** @deprecated use `watchDebounced` instead */
 export declare const debouncedWatch: typeof watchDebounced

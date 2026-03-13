@@ -10,12 +10,12 @@ Reactive mouse position related to an element
 
 ```vue
 <script setup lang="ts">
-  import { useMouseInElement } from '@vueuse/core'
-  import { useTemplateRef } from 'vue'
+import { useMouseInElement } from '@vueuse/core'
+import { useTemplateRef } from 'vue'
 
-  const target = useTemplateRef('target')
+const target = useTemplateRef('target')
 
-  const { x, y, isOutside } = useMouseInElement(target)
+const { x, y, isOutside } = useMouseInElement(target)
 </script>
 
 <template>
@@ -30,7 +30,9 @@ Reactive mouse position related to an element
 ```vue
 <template>
   <UseMouseInElement v-slot="{ elementX, elementY, isOutside }">
-    x: {{ elementX }} y: {{ elementY }} Is Outside: {{ isOutside }}
+    x: {{ elementX }}
+    y: {{ elementY }}
+    Is Outside: {{ isOutside }}
   </UseMouseInElement>
 </template>
 ```
@@ -39,50 +41,28 @@ Reactive mouse position related to an element
 
 ```vue
 <script setup lang="ts">
-  import { vMouseInElement } from '@vueuse/components'
-  import { UseMouseSourceType } from '@vueuse/core'
+import { vMouseInElement } from '@vueuse/components'
+import { UseMouseSourceType } from '@vueuse/core'
 
-  interface MouseInElementType {
-    x: number
-    y: number
-    sourceType: UseMouseSourceType
-    elementX: number
-    elementY: number
-    elementPositionX: number
-    elementPositionY: number
-    elementHeight: number
-    elementWidth: number
-    isOutside: boolean
-  }
+interface MouseInElementType {
+  x: number
+  y: number
+  sourceType: UseMouseSourceType
+  elementX: number
+  elementY: number
+  elementPositionX: number
+  elementPositionY: number
+  elementHeight: number
+  elementWidth: number
+  isOutside: boolean
+}
 
-  const options = {
-    handleOutside: true,
-  }
-  function onMouseInElement({
-    x,
-    y,
-    sourceType,
-    elementX,
-    elementY,
-    elementPositionX,
-    elementPositionY,
-    elementHeight,
-    elementWidth,
-    isOutside,
-  }: MouseInElementType) {
-    console.log(
-      x,
-      y,
-      sourceType,
-      elementX,
-      elementY,
-      elementPositionX,
-      elementPositionY,
-      elementHeight,
-      elementWidth,
-      isOutside
-    )
-  }
+const options = {
+  handleOutside: true
+}
+function onMouseInElement({ x, y, sourceType, elementX, elementY, elementPositionX, elementPositionY, elementHeight, elementWidth, isOutside }: MouseInElementType) {
+  console.log(x, y, sourceType, elementX, elementY, elementPositionX, elementPositionY, elementHeight, elementWidth, isOutside)
+}
 </script>
 
 <template>
@@ -125,7 +105,7 @@ export interface MouseInElementOptions extends UseMouseOptions {
  */
 export declare function useMouseInElement(
   target?: MaybeElementRef,
-  options?: MouseInElementOptions
+  options?: MouseInElementOptions,
 ): {
   x: ShallowRef<number, number>
   y: ShallowRef<number, number>

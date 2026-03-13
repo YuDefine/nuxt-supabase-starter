@@ -20,7 +20,6 @@ Functional components in Vue 3 are defined as plain functions that receive `prop
 - [ ] Use `inheritAttrs: false` when manually spreading attrs
 
 **Basic Functional Component:**
-
 ```javascript
 import { h } from 'vue'
 
@@ -36,7 +35,6 @@ export default MyButton
 ```
 
 **With TypeScript:**
-
 ```typescript
 import { h } from 'vue'
 import type { FunctionalComponent } from 'vue'
@@ -47,25 +45,23 @@ interface Props {
 }
 
 const Alert: FunctionalComponent<Props> = (props, { slots }) => {
-  return h(
-    'div',
-    {
-      class: ['alert', `alert-${props.type || 'info'}`],
-    },
-    [h('span', props.message), slots.default?.()]
-  )
+  return h('div', {
+    class: ['alert', `alert-${props.type || 'info'}`]
+  }, [
+    h('span', props.message),
+    slots.default?.()
+  ])
 }
 
 Alert.props = {
   message: { type: String, required: true },
-  type: String,
+  type: String
 }
 
 export default Alert
 ```
 
 **With Emits:**
-
 ```typescript
 import { h } from 'vue'
 import type { FunctionalComponent } from 'vue'
@@ -83,9 +79,9 @@ const SearchInput: FunctionalComponent<Props, Emits> = (props, { emit }) => {
   return h('div', { class: 'search-input' }, [
     h('input', {
       value: props.value,
-      onInput: (e: Event) => emit('update', (e.target as HTMLInputElement).value),
+      onInput: (e: Event) => emit('update', (e.target as HTMLInputElement).value)
     }),
-    h('button', { onClick: () => emit('clear') }, 'Clear'),
+    h('button', { onClick: () => emit('clear') }, 'Clear')
   ])
 }
 
@@ -96,12 +92,13 @@ export default SearchInput
 ```
 
 **Disabling Attribute Inheritance:**
-
 ```javascript
 import { h } from 'vue'
 
 function CustomInput(props, { attrs }) {
-  return h('div', { class: 'input-wrapper' }, [h('input', { ...attrs, class: 'custom-input' })])
+  return h('div', { class: 'input-wrapper' }, [
+    h('input', { ...attrs, class: 'custom-input' })
+  ])
 }
 
 CustomInput.inheritAttrs = false
@@ -112,7 +109,6 @@ export default CustomInput
 ## When to Use Functional Components
 
 **Good candidates:**
-
 - Icons and badges
 - Simple wrapper/layout components
 - Pure presentational components
@@ -121,33 +117,26 @@ export default CustomInput
 ```javascript
 // Icon component - good use case
 function Icon(props) {
-  return h(
-    'svg',
-    {
-      class: `icon icon-${props.name}`,
-      width: props.size || 24,
-      height: props.size || 24,
-    },
-    [h('use', { href: `#icon-${props.name}` })]
-  )
+  return h('svg', {
+    class: `icon icon-${props.name}`,
+    width: props.size || 24,
+    height: props.size || 24
+  }, [
+    h('use', { href: `#icon-${props.name}` })
+  ])
 }
 Icon.props = ['name', 'size']
 
 // Badge component - good use case
 function Badge(props, { slots }) {
-  return h(
-    'span',
-    {
-      class: ['badge', `badge-${props.variant || 'default'}`],
-    },
-    slots.default?.()
-  )
+  return h('span', {
+    class: ['badge', `badge-${props.variant || 'default'}`]
+  }, slots.default?.())
 }
 Badge.props = ['variant']
 ```
 
 **Not recommended for:**
-
 - Components needing reactive state (use `ref`, `reactive`)
 - Components needing lifecycle hooks
 - Components with complex logic
@@ -171,18 +160,12 @@ export default {
       console.log('Mounted!')
     })
 
-    return () =>
-      h(
-        'button',
-        {
-          onClick: () => count.value++,
-        },
-        count.value
-      )
-  },
+    return () => h('button', {
+      onClick: () => count.value++
+    }, count.value)
+  }
 }
 ```
 
 ## Reference
-
 - [Vue.js Functional Components](https://vuejs.org/guide/extras/render-function.html#functional-components)

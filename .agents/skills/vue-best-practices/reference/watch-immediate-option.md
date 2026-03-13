@@ -17,27 +17,26 @@ tags: [vue3, watch, watchers, immediate, best-practices, DRY]
 - [ ] Remember immediate callback receives `undefined` as oldValue on first run
 
 **Incorrect:**
-
 ```vue
 <script setup>
-  import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 
-  const userId = ref(1)
-  const userData = ref(null)
+const userId = ref(1)
+const userData = ref(null)
 
-  // BAD: Duplicate calls - once in onMounted, once in watch
-  async function loadUser(id) {
-    const response = await fetch(`/api/users/${id}`)
-    userData.value = await response.json()
-  }
+// BAD: Duplicate calls - once in onMounted, once in watch
+async function loadUser(id) {
+  const response = await fetch(`/api/users/${id}`)
+  userData.value = await response.json()
+}
 
-  onMounted(() => {
-    loadUser(userId.value) // Initial call
-  })
+onMounted(() => {
+  loadUser(userId.value)  // Initial call
+})
 
-  watch(userId, (newId) => {
-    loadUser(newId) // On change
-  })
+watch(userId, (newId) => {
+  loadUser(newId)  // On change
+})
 </script>
 ```
 
@@ -48,40 +47,39 @@ export default {
     return { userId: 1, userData: null }
   },
   created() {
-    this.loadUser() // Initial call
+    this.loadUser()  // Initial call
   },
   watch: {
     userId() {
-      this.loadUser() // On change - duplicate!
-    },
+      this.loadUser()  // On change - duplicate!
+    }
   },
   methods: {
     async loadUser() {
       const response = await fetch(`/api/users/${this.userId}`)
       this.userData = await response.json()
-    },
-  },
+    }
+  }
 }
 ```
 
 **Correct:**
-
 ```vue
 <script setup>
-  import { ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 
-  const userId = ref(1)
-  const userData = ref(null)
+const userId = ref(1)
+const userData = ref(null)
 
-  // GOOD: Single watch with immediate runs on mount and on change
-  watch(
-    userId,
-    async (newId) => {
-      const response = await fetch(`/api/users/${newId}`)
-      userData.value = await response.json()
-    },
-    { immediate: true }
-  )
+// GOOD: Single watch with immediate runs on mount and on change
+watch(
+  userId,
+  async (newId) => {
+    const response = await fetch(`/api/users/${newId}`)
+    userData.value = await response.json()
+  },
+  { immediate: true }
+)
 </script>
 ```
 
@@ -97,9 +95,9 @@ export default {
         const response = await fetch(`/api/users/${newId}`)
         this.userData = await response.json()
       },
-      immediate: true,
-    },
-  },
+      immediate: true
+    }
+  }
 }
 ```
 
@@ -107,16 +105,16 @@ export default {
 
 ```vue
 <script setup>
-  import { ref, watchEffect } from 'vue'
+import { ref, watchEffect } from 'vue'
 
-  const userId = ref(1)
-  const userData = ref(null)
+const userId = ref(1)
+const userData = ref(null)
 
-  // watchEffect always runs immediately - no option needed
-  watchEffect(async () => {
-    const response = await fetch(`/api/users/${userId.value}`)
-    userData.value = await response.json()
-  })
+// watchEffect always runs immediately - no option needed
+watchEffect(async () => {
+  const response = await fetch(`/api/users/${userId.value}`)
+  userData.value = await response.json()
+})
 </script>
 ```
 
@@ -124,23 +122,23 @@ export default {
 
 ```vue
 <script setup>
-  import { ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 
-  const count = ref(0)
+const count = ref(0)
 
-  watch(
-    count,
-    (newVal, oldVal) => {
-      // On first run with immediate: true
-      // oldVal is undefined
-      if (oldVal === undefined) {
-        console.log('Initial run, count is:', newVal)
-      } else {
-        console.log(`Count changed from ${oldVal} to ${newVal}`)
-      }
-    },
-    { immediate: true }
-  )
+watch(
+  count,
+  (newVal, oldVal) => {
+    // On first run with immediate: true
+    // oldVal is undefined
+    if (oldVal === undefined) {
+      console.log('Initial run, count is:', newVal)
+    } else {
+      console.log(`Count changed from ${oldVal} to ${newVal}`)
+    }
+  },
+  { immediate: true }
+)
 </script>
 ```
 
@@ -148,24 +146,23 @@ export default {
 
 ```vue
 <script setup>
-  import { ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 
-  const data = ref(null)
+const data = ref(null)
 
-  // Run only once when data becomes available
-  watch(
-    data,
-    (value) => {
-      if (value) {
-        initializeWithData(value)
-        // Watcher automatically stops after this
-      }
-    },
-    { once: true }
-  )
+// Run only once when data becomes available
+watch(
+  data,
+  (value) => {
+    if (value) {
+      initializeWithData(value)
+      // Watcher automatically stops after this
+    }
+  },
+  { once: true }
+)
 </script>
 ```
 
 ## Reference
-
 - [Vue.js Watchers - Eager Watchers](https://vuejs.org/guide/essentials/watchers.html#eager-watchers)

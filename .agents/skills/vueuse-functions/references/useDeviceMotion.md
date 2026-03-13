@@ -11,7 +11,12 @@ Reactive [DeviceMotionEvent](https://developer.mozilla.org/en-US/docs/Web/API/De
 ```ts
 import { useDeviceMotion } from '@vueuse/core'
 
-const { acceleration, accelerationIncludingGravity, rotationRate, interval } = useDeviceMotion()
+const {
+  acceleration,
+  accelerationIncludingGravity,
+  rotationRate,
+  interval,
+} = useDeviceMotion()
 ```
 
 > Note: For iOS, you need to use `trigger` and bind it with user interaction.
@@ -33,14 +38,18 @@ You can find [more information about the state on the MDN](https://developer.moz
 
 ```vue
 <template>
-  <UseDeviceMotion v-slot="{ acceleration }"> Acceleration: {{ acceleration }} </UseDeviceMotion>
+  <UseDeviceMotion v-slot="{ acceleration }">
+    Acceleration: {{ acceleration }}
+  </UseDeviceMotion>
 </template>
 ```
 
 ## Type Declarations
 
 ```ts
-export interface DeviceMotionOptions extends ConfigurableWindow, ConfigurableEventFilter {
+export interface DeviceMotionOptions
+  extends ConfigurableWindow,
+    ConfigurableEventFilter {
   /**
    * Request for permissions immediately if it's not granted,
    * otherwise label and deviceIds could be empty
@@ -56,12 +65,18 @@ export interface DeviceMotionOptions extends ConfigurableWindow, ConfigurableEve
  * @param options
  */
 export declare function useDeviceMotion(options?: DeviceMotionOptions): {
-  acceleration: Ref<DeviceMotionEventAcceleration | null, DeviceMotionEventAcceleration | null>
+  acceleration: Ref<
+    DeviceMotionEventAcceleration | null,
+    DeviceMotionEventAcceleration | null
+  >
   accelerationIncludingGravity: Ref<
     DeviceMotionEventAcceleration | null,
     DeviceMotionEventAcceleration | null
   >
-  rotationRate: Ref<DeviceMotionEventRotationRate | null, DeviceMotionEventRotationRate | null>
+  rotationRate: Ref<
+    DeviceMotionEventRotationRate | null,
+    DeviceMotionEventRotationRate | null
+  >
   interval: ShallowRef<number, number>
   isSupported: ComputedRef<boolean>
   requirePermissions: ComputedRef<boolean>

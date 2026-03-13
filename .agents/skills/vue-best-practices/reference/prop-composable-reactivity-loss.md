@@ -20,45 +20,43 @@ This is one of the most frequent sources of "my composable doesn't update" bugs 
 - [ ] Test that composable output updates when props change
 
 **Incorrect:**
-
 ```vue
 <script setup>
-  import { useFetch } from './composables/useFetch'
-  import { useDebounce } from './composables/useDebounce'
+import { useFetch } from './composables/useFetch'
+import { useDebounce } from './composables/useDebounce'
 
-  const props = defineProps({
-    userId: Number,
-    searchQuery: String,
-  })
+const props = defineProps({
+  userId: Number,
+  searchQuery: String
+})
 
-  // WRONG: Passes initial value, not reactive source
-  // useFetch will never refetch when userId changes!
-  const { data } = useFetch(`/api/users/${props.userId}`)
+// WRONG: Passes initial value, not reactive source
+// useFetch will never refetch when userId changes!
+const { data } = useFetch(`/api/users/${props.userId}`)
 
-  // WRONG: Debounced value is frozen at initial searchQuery
-  const debouncedQuery = useDebounce(props.searchQuery, 300)
+// WRONG: Debounced value is frozen at initial searchQuery
+const debouncedQuery = useDebounce(props.searchQuery, 300)
 </script>
 ```
 
 **Correct:**
-
 ```vue
 <script setup>
-  import { computed } from 'vue'
-  import { useFetch } from './composables/useFetch'
-  import { useDebounce } from './composables/useDebounce'
+import { computed } from 'vue'
+import { useFetch } from './composables/useFetch'
+import { useDebounce } from './composables/useDebounce'
 
-  const props = defineProps({
-    userId: Number,
-    searchQuery: String,
-  })
+const props = defineProps({
+  userId: Number,
+  searchQuery: String
+})
 
-  // CORRECT: Use computed to create reactive URL
-  const userUrl = computed(() => `/api/users/${props.userId}`)
-  const { data } = useFetch(userUrl)
+// CORRECT: Use computed to create reactive URL
+const userUrl = computed(() => `/api/users/${props.userId}`)
+const { data } = useFetch(userUrl)
 
-  // CORRECT: Pass getter function to preserve reactivity
-  const debouncedQuery = useDebounce(() => props.searchQuery, 300)
+// CORRECT: Pass getter function to preserve reactivity
+const debouncedQuery = useDebounce(() => props.searchQuery, 300)
 </script>
 ```
 
@@ -66,24 +64,24 @@ This is one of the most frequent sources of "my composable doesn't update" bugs 
 
 ```vue
 <script setup>
-  import { toRefs } from 'vue'
-  import { useUserForm } from './composables/useUserForm'
+import { toRefs } from 'vue'
+import { useUserForm } from './composables/useUserForm'
 
-  const props = defineProps({
-    initialName: String,
-    initialEmail: String,
-    initialAge: Number,
-  })
+const props = defineProps({
+  initialName: String,
+  initialEmail: String,
+  initialAge: Number
+})
 
-  // Convert all props to refs, preserving reactivity
-  const { initialName, initialEmail, initialAge } = toRefs(props)
+// Convert all props to refs, preserving reactivity
+const { initialName, initialEmail, initialAge } = toRefs(props)
 
-  // Now each is a ref that tracks prop changes
-  const { form, isValid } = useUserForm({
-    name: initialName,
-    email: initialEmail,
-    age: initialAge,
-  })
+// Now each is a ref that tracks prop changes
+const { form, isValid } = useUserForm({
+  name: initialName,
+  email: initialEmail,
+  age: initialAge
+})
 </script>
 ```
 
@@ -101,7 +99,7 @@ export function useDebounce(source, delay = 300) {
   let timeout
 
   watch(
-    () => toValue(source), // Normalizes any input type
+    () => toValue(source),  // Normalizes any input type
     (newValue) => {
       clearTimeout(timeout)
       timeout = setTimeout(() => {
@@ -145,17 +143,16 @@ export function useFetch(url) {
 
 ## Quick Reference: Input Types
 
-| Input to Composable   | Reactive? | Example                                              |
-| --------------------- | --------- | ---------------------------------------------------- |
-| `props.value`         | No        | `useFetch(props.userId)`                             |
-| `computed(() => ...)` | Yes       | `useFetch(computed(() => props.userId))`             |
-| `() => props.value`   | Yes\*     | `useFetch(() => props.userId)`                       |
-| `toRef(props, 'key')` | Yes       | `useFetch(toRef(props, 'userId'))`                   |
-| `toRefs(props).key`   | Yes       | `const { userId } = toRefs(props); useFetch(userId)` |
+| Input to Composable | Reactive? | Example |
+|---------------------|-----------|---------|
+| `props.value` | No | `useFetch(props.userId)` |
+| `computed(() => ...)` | Yes | `useFetch(computed(() => props.userId))` |
+| `() => props.value` | Yes* | `useFetch(() => props.userId)` |
+| `toRef(props, 'key')` | Yes | `useFetch(toRef(props, 'userId'))` |
+| `toRefs(props).key` | Yes | `const { userId } = toRefs(props); useFetch(userId)` |
 
-\*Requires composable to use `toValue()` internally
+*Requires composable to use `toValue()` internally
 
 ## Reference
-
 - [Vue.js Reactivity API - toValue](https://vuejs.org/api/reactivity-utilities.html#tovalue)
 - [Vue.js Composables - Conventions and Best Practices](https://vuejs.org/guide/reusability/composables.html#conventions-and-best-practices)

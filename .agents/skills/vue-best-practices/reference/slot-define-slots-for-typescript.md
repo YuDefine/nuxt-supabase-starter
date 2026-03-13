@@ -18,19 +18,18 @@ tags: [vue3, slots, typescript, type-safety, defineSlots, vue3.3]
 - [ ] Consumers get autocomplete and type checking for slot props
 
 **Without defineSlots (no type safety):**
-
 ```vue
 <!-- FancyList.vue -->
 <script setup lang="ts">
-  interface Item {
-    id: number
-    name: string
-    price: number
-  }
+interface Item {
+  id: number
+  name: string
+  price: number
+}
 
-  const props = defineProps<{
-    items: Item[]
-  }>()
+const props = defineProps<{
+  items: Item[]
+}>()
 </script>
 
 <template>
@@ -54,26 +53,25 @@ tags: [vue3, slots, typescript, type-safety, defineSlots, vue3.3]
 ```
 
 **With defineSlots (full type safety):**
-
 ```vue
 <!-- FancyList.vue -->
 <script setup lang="ts">
-  interface Item {
-    id: number
-    name: string
-    price: number
-  }
+interface Item {
+  id: number
+  name: string
+  price: number
+}
 
-  const props = defineProps<{
-    items: Item[]
-  }>()
+const props = defineProps<{
+  items: Item[]
+}>()
 
-  // Define slot types
-  defineSlots<{
-    default(props: { item: Item; index: number }): any
-    header(props: { count: number }): any
-    empty(): any // Slot with no props
-  }>()
+// Define slot types
+defineSlots<{
+  default(props: { item: Item; index: number }): any
+  header(props: { count: number }): any
+  empty(): any  // Slot with no props
+}>()
 </script>
 
 <template>
@@ -98,9 +96,11 @@ tags: [vue3, slots, typescript, type-safety, defineSlots, vue3.3]
 ```vue
 <!-- Consumer.vue - Full type checking! -->
 <script setup lang="ts">
-  import FancyList from './FancyList.vue'
+import FancyList from './FancyList.vue'
 
-  const products = ref([{ id: 1, name: 'Widget', price: 9.99 }])
+const products = ref([
+  { id: 1, name: 'Widget', price: 9.99 }
+])
 </script>
 
 <template>
@@ -129,13 +129,13 @@ For components with generic item types:
 
 ```vue
 <script setup lang="ts" generic="T">
-  defineProps<{
-    items: T[]
-  }>()
+defineProps<{
+  items: T[]
+}>()
 
-  defineSlots<{
-    default(props: { item: T; index: number }): any
-  }>()
+defineSlots<{
+  default(props: { item: T; index: number }): any
+}>()
 </script>
 ```
 
@@ -154,7 +154,6 @@ Avoid slot prop names that match parent component data:
 ```
 
 Consider renaming slot props to be more specific when collisions are likely:
-
 ```typescript
 defineSlots<{
   default(props: { listItem: T; itemIndex: number }): any
@@ -168,6 +167,5 @@ defineSlots<{
 - Volar extension for IDE support
 
 ## Reference
-
 - [Vue.js Slots - TypeScript](https://vuejs.org/guide/components/slots.html#slots-with-typescript)
 - [Escuela Vue - Typing slots with defineSlots](https://escuelavue.es/en/devtips/typescript-vue-scoped-slots-defineslots)

@@ -21,7 +21,6 @@ Use deep watchers sparingly and only when necessary. Prefer watching specific pr
 - [ ] Profile performance if deep watching is unavoidable
 
 **Incorrect:**
-
 ```javascript
 import { reactive, watch } from 'vue'
 
@@ -29,9 +28,7 @@ import { reactive, watch } from 'vue'
 const state = reactive({
   users: [], // Could contain thousands of user objects
   products: [], // Each with nested variants, images, etc.
-  settings: {
-    /* deeply nested config */
-  },
+  settings: { /* deeply nested config */ }
 })
 
 // BAD: Traverses entire state tree on every change
@@ -49,19 +46,18 @@ watch(
   (users) => {
     updateUserList(users)
   },
-  { deep: true } // Expensive for large arrays!
+  { deep: true }  // Expensive for large arrays!
 )
 ```
 
 **Correct:**
-
 ```javascript
 import { reactive, watch, watchEffect } from 'vue'
 
 const state = reactive({
   users: [],
   products: [],
-  selectedUserId: null,
+  selectedUserId: null
 })
 
 // GOOD: Watch specific property instead of entire object
@@ -82,7 +78,7 @@ watch(
 
 // GOOD: Watch a specific computed value
 watch(
-  () => state.users.filter((u) => u.active).length,
+  () => state.users.filter(u => u.active).length,
   (activeCount) => {
     updateActiveUserCount(activeCount)
   }
@@ -91,7 +87,7 @@ watch(
 // GOOD: Use watchEffect for specific dependencies
 watchEffect(() => {
   // Only tracks properties actually accessed
-  const user = state.users.find((u) => u.id === state.selectedUserId)
+  const user = state.users.find(u => u.id === state.selectedUserId)
   if (user) {
     displayUserName(user.name)
   }
@@ -107,7 +103,7 @@ watch(
   (newState) => {
     console.log('Shallow nested change detected')
   },
-  { deep: 2 } // Only traverse 2 levels deep
+  { deep: 2 }  // Only traverse 2 levels deep
 )
 ```
 
@@ -144,7 +140,7 @@ const state = reactive({
     theme: 'dark',
     language: 'en',
     // ... many other nested properties
-  },
+  }
 })
 
 // BAD: Deep watch tracks ALL properties
@@ -163,5 +159,4 @@ watchEffect(() => {
 ```
 
 ## Reference
-
 - [Vue.js Watchers - Deep Watchers](https://vuejs.org/guide/essentials/watchers.html#deep-watchers)

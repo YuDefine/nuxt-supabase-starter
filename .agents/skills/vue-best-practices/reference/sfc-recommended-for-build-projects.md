@@ -20,7 +20,6 @@ SFCs (`.vue` files) encapsulate template, logic, and styles in a single file. Wh
 - [ ] Configure IDE with Volar extension for Vue 3 (not Vetur)
 
 **Incorrect:**
-
 ```javascript
 // Defining components without SFC in a build project
 // Loses benefits of scoped styles, template compilation, and tooling
@@ -37,25 +36,22 @@ export default {
     return { title: 'Hello' }
   },
   methods: {
-    handleClick() {
-      /* ... */
-    },
-  },
+    handleClick() { /* ... */ }
+  }
 }
 ```
 
 **Correct:**
-
 ```vue
 <!-- Component.vue - Single-File Component -->
 <script setup>
-  import { ref } from 'vue'
+import { ref } from 'vue'
 
-  const title = ref('Hello')
+const title = ref('Hello')
 
-  function handleClick() {
-    // ...
-  }
+function handleClick() {
+  // ...
+}
 </script>
 
 <template>
@@ -66,27 +62,27 @@ export default {
 </template>
 
 <style scoped>
-  /* Styles only apply to this component */
-  .container {
-    padding: 1rem;
-  }
+/* Styles only apply to this component */
+.container {
+  padding: 1rem;
+}
 
-  h1 {
-    color: #42b883;
-  }
+h1 {
+  color: #42b883;
+}
 </style>
 ```
 
 ## SFC Benefits
 
-| Feature                      | Without SFC          | With SFC             |
-| ---------------------------- | -------------------- | -------------------- |
-| Template syntax highlighting | No                   | Yes                  |
-| Scoped CSS                   | Manual (CSS Modules) | Built-in             |
-| TypeScript support           | Basic                | Full with Volar      |
-| Hot Module Replacement       | Limited              | Full support         |
-| Build-time optimizations     | None                 | Template compilation |
-| IDE autocompletion           | Limited              | Full support         |
+| Feature | Without SFC | With SFC |
+|---------|-------------|----------|
+| Template syntax highlighting | No | Yes |
+| Scoped CSS | Manual (CSS Modules) | Built-in |
+| TypeScript support | Basic | Full with Volar |
+| Hot Module Replacement | Limited | Full support |
+| Build-time optimizations | None | Template compilation |
+| IDE autocompletion | Limited | Full support |
 
 ## When NOT to Use SFCs
 
@@ -98,17 +94,16 @@ export default {
 </div>
 
 <script type="module">
-  import { createApp, ref } from 'vue'
+import { createApp, ref } from 'vue'
 
-  createApp({
-    setup() {
-      return { count: ref(0) }
-    },
-  }).mount('#app')
+createApp({
+  setup() {
+    return { count: ref(0) }
+  }
+}).mount('#app')
 </script>
 ```
 
 ## Reference
-
 - [Vue.js Introduction - Single-File Components](https://vuejs.org/guide/introduction.html#single-file-components)
 - [SFC Syntax Specification](https://vuejs.org/api/sfc-spec.html)

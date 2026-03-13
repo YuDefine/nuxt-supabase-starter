@@ -14,30 +14,30 @@ The `useAnimate` function will return the animate and its control function.
 
 ```vue
 <script setup lang="ts">
-  import { useAnimate } from '@vueuse/core'
-  import { useTemplateRef } from 'vue'
+import { useAnimate } from '@vueuse/core'
+import { useTemplateRef } from 'vue'
 
-  const el = useTemplateRef('el')
-  const {
-    isSupported,
-    animate,
+const el = useTemplateRef('el')
+const {
+  isSupported,
+  animate,
 
-    // actions
-    play,
-    pause,
-    reverse,
-    finish,
-    cancel,
+  // actions
+  play,
+  pause,
+  reverse,
+  finish,
+  cancel,
 
-    // states
-    pending,
-    playState,
-    replaceState,
-    startTime,
-    currentTime,
-    timeline,
-    playbackRate,
-  } = useAnimate(el, { transform: 'rotate(360deg)' }, 1000)
+  // states
+  pending,
+  playState,
+  replaceState,
+  startTime,
+  currentTime,
+  timeline,
+  playbackRate,
+} = useAnimate(el, { transform: 'rotate(360deg)' }, 1000)
 </script>
 
 <template>
@@ -57,7 +57,10 @@ const el = useTemplateRef('el')
 // ---cut---
 const keyframes = { transform: 'rotate(360deg)' }
 // Or
-const keyframes = [{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }]
+const keyframes = [
+  { transform: 'rotate(0deg)' },
+  { transform: 'rotate(360deg)' },
+]
 // Or
 const keyframes = ref([
   { clipPath: 'circle(20% at 0% 30%)' },
@@ -71,7 +74,9 @@ useAnimate(el, keyframes, 1000)
 ## Type Declarations
 
 ```ts
-export interface UseAnimateOptions extends KeyframeAnimationOptions, ConfigurableWindow {
+export interface UseAnimateOptions
+  extends KeyframeAnimationOptions,
+    ConfigurableWindow {
   /**
    * Will automatically run play when `useAnimate` is used
    *
@@ -100,7 +105,9 @@ export interface UseAnimateOptions extends KeyframeAnimationOptions, Configurabl
    */
   onError?: (e: unknown) => void
 }
-export type UseAnimateKeyframes = MaybeRef<Keyframe[] | PropertyIndexedKeyframes | null>
+export type UseAnimateKeyframes = MaybeRef<
+  Keyframe[] | PropertyIndexedKeyframes | null
+>
 export interface UseAnimateReturn {
   isSupported: ComputedRef<boolean>
   animate: ShallowRef<Animation | undefined>
@@ -128,6 +135,6 @@ export interface UseAnimateReturn {
 export declare function useAnimate(
   target: MaybeComputedElementRef,
   keyframes: UseAnimateKeyframes,
-  options?: number | UseAnimateOptions
+  options?: number | UseAnimateOptions,
 ): UseAnimateReturn
 ```

@@ -26,7 +26,7 @@ export default {
     app.config.globalProperties.$translate = (key: string) => {
       return key.split('.').reduce((o, i) => o?.[i], options)
     }
-  },
+  }
 }
 
 // In component - requires type augmentation for TypeScript
@@ -34,7 +34,7 @@ export default {
 export default {
   mounted() {
     console.log(this.$translate('greeting.hello'))
-  },
+  }
 }
 ```
 

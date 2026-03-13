@@ -22,7 +22,6 @@ Use `updated`/`onUpdated` sparingly for post-DOM-update operations that cannot b
 - [ ] Reserve updated for low-level DOM synchronization tasks
 
 **Incorrect:**
-
 ```javascript
 // WRONG: API call in updated - fires on EVERY re-render
 export default {
@@ -33,9 +32,9 @@ export default {
     // This runs after every single state change!
     fetch('/api/sync', {
       method: 'POST',
-      body: JSON.stringify(this.items),
+      body: JSON.stringify(this.items)
     })
-  },
+  }
 }
 ```
 
@@ -48,7 +47,7 @@ export default {
   updated() {
     // This causes another update, which triggers updated again!
     this.renderCount++ // INFINITE LOOP!
-  },
+  }
 }
 ```
 
@@ -59,12 +58,11 @@ export default {
     // Expensive operation runs on every keystroke, every state change
     this.processedData = this.heavyComputation(this.rawData)
     this.analytics = this.calculateMetrics(this.allData)
-  },
+  }
 }
 ```
 
 **Correct:**
-
 ```javascript
 // CORRECT: Use watcher for specific data changes
 export default {
@@ -77,49 +75,45 @@ export default {
       handler(newItems) {
         this.syncToServer(newItems)
       },
-      deep: true,
-    },
+      deep: true
+    }
   },
   methods: {
-    syncToServer: debounce(function (items) {
+    syncToServer: debounce(function(items) {
       fetch('/api/sync', {
         method: 'POST',
-        body: JSON.stringify(items),
+        body: JSON.stringify(items)
       })
-    }, 500),
-  },
+    }, 500)
+  }
 }
 ```
 
 ```vue
 <!-- CORRECT: Composition API with targeted watchers -->
 <script setup>
-  import { ref, watch, onUpdated } from 'vue'
-  import { useDebounceFn } from '@vueuse/core'
+import { ref, watch, onUpdated } from 'vue'
+import { useDebounceFn } from '@vueuse/core'
 
-  const items = ref([])
-  const scrollContainer = ref(null)
+const items = ref([])
+const scrollContainer = ref(null)
 
-  // Watch specific data - not all updates
-  watch(
-    items,
-    (newItems) => {
-      syncToServer(newItems)
-    },
-    { deep: true }
-  )
+// Watch specific data - not all updates
+watch(items, (newItems) => {
+  syncToServer(newItems)
+}, { deep: true })
 
-  const syncToServer = useDebounceFn((items) => {
-    fetch('/api/sync', { method: 'POST', body: JSON.stringify(items) })
-  }, 500)
+const syncToServer = useDebounceFn((items) => {
+  fetch('/api/sync', { method: 'POST', body: JSON.stringify(items) })
+}, 500)
 
-  // Only use onUpdated for DOM synchronization
-  onUpdated(() => {
-    // Scroll to bottom only if content changed height
-    if (scrollContainer.value) {
-      scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight
-    }
-  })
+// Only use onUpdated for DOM synchronization
+onUpdated(() => {
+  // Scroll to bottom only if content changed height
+  if (scrollContainer.value) {
+    scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight
+  }
+})
 </script>
 ```
 
@@ -129,7 +123,7 @@ export default {
   data() {
     return {
       content: '',
-      lastSyncedContent: '',
+      lastSyncedContent: ''
     }
   },
   updated() {
@@ -140,10 +134,10 @@ export default {
     }
   },
   methods: {
-    syncContent: debounce(function () {
+    syncContent: debounce(function() {
       // Sync logic
-    }, 300),
-  },
+    }, 300)
+  }
 }
 ```
 
@@ -160,7 +154,7 @@ export default {
     this.$nextTick(() => {
       this.maintainScrollPosition()
     })
-  },
+  }
 }
 ```
 
@@ -191,7 +185,6 @@ export default {
 ```
 
 ## Reference
-
 - [Vue.js Lifecycle Hooks](https://vuejs.org/guide/essentials/lifecycle.html)
 - [Vue.js Watchers](https://vuejs.org/guide/essentials/watchers.html)
 - [Vue.js Computed Properties](https://vuejs.org/guide/essentials/computed.html)

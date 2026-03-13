@@ -18,7 +18,6 @@ tags: [vue3, composables, composition-api, naming, conventions, refs]
 - [ ] Document the returned refs for consumers
 
 **Incorrect:**
-
 ```javascript
 // WRONG: No "use" prefix - unclear it's a composable
 export function mousePosition() {
@@ -31,7 +30,7 @@ export function mousePosition() {
 export function useMouse() {
   const state = reactive({
     x: 0,
-    y: 0,
+    y: 0
   })
   // When consumer destructures: const { x, y } = useMouse()
   // x and y become plain values, not reactive!
@@ -41,12 +40,11 @@ export function useMouse() {
 // WRONG: Returning single ref directly - inconsistent API
 export function useCounter() {
   const count = ref(0)
-  return count // Consumer must use .value everywhere
+  return count  // Consumer must use .value everywhere
 }
 ```
 
 **Correct:**
-
 ```javascript
 // CORRECT: "use" prefix and returns plain object with refs
 export function useMouse() {
@@ -67,7 +65,7 @@ export function useMouse() {
 
 // Consumer can destructure and keep reactivity
 const { x, y } = useMouse()
-watch(x, (newX) => console.log('x changed:', newX)) // Works!
+watch(x, (newX) => console.log('x changed:', newX))  // Works!
 
 // Or use as object if preferred
 const mouse = useMouse()
@@ -86,10 +84,10 @@ import { useMouse } from './composables/useMouse'
 const mouse = reactive(useMouse())
 
 // Now access without .value
-console.log(mouse.x) // Auto-unwrapped, still reactive
+console.log(mouse.x)  // Auto-unwrapped, still reactive
 
 // But DON'T destructure from this!
-const { x } = reactive(useMouse()) // WRONG: loses reactivity again
+const { x } = reactive(useMouse())  // WRONG: loses reactivity again
 ```
 
 ## Pattern: Returning Both State and Actions
@@ -118,7 +116,7 @@ export function useCounter(initialValue = 0) {
     doubleCount,
     increment,
     decrement,
-    reset,
+    reset
   }
 }
 
@@ -128,15 +126,14 @@ const { count, doubleCount, increment, reset } = useCounter(10)
 
 ## Naming Convention Examples
 
-| Good Name           | Bad Name        | Reason                           |
-| ------------------- | --------------- | -------------------------------- |
-| `useFetch`          | `fetch`         | Conflicts with native fetch      |
-| `useAuth`           | `authStore`     | "Store" implies Pinia/Vuex       |
-| `useLocalStorage`   | `localStorage`  | Conflicts with native API        |
-| `useFormValidation` | `validateForm`  | Sounds like a one-shot function  |
-| `useWindowSize`     | `getWindowSize` | "get" implies synchronous getter |
+| Good Name | Bad Name | Reason |
+|-----------|----------|--------|
+| `useFetch` | `fetch` | Conflicts with native fetch |
+| `useAuth` | `authStore` | "Store" implies Pinia/Vuex |
+| `useLocalStorage` | `localStorage` | Conflicts with native API |
+| `useFormValidation` | `validateForm` | Sounds like a one-shot function |
+| `useWindowSize` | `getWindowSize` | "get" implies synchronous getter |
 
 ## Reference
-
 - [Vue.js Composables - Conventions and Best Practices](https://vuejs.org/guide/reusability/composables.html#conventions-and-best-practices)
 - [Vue.js Composables - Return Values](https://vuejs.org/guide/reusability/composables.html#return-values)

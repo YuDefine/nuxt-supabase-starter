@@ -26,6 +26,12 @@ npx skills add nuxt/ui --agent claude-code -y
 echo "  ✓ 官方 Skills 安裝完成"
 echo ""
 
+# TDD
+echo "📦 安裝 TDD Skill..."
+npx skills add https://github.com/obra/superpowers --skill test-driven-development -y
+echo "  ✓ TDD Skill 安裝完成"
+echo ""
+
 # 實用工具
 echo "📦 安裝實用工具 Skills..."
 npx skills add vercel-labs/skills@find-skills -y

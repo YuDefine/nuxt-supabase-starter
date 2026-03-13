@@ -11,20 +11,22 @@ Template as Promise. Useful for constructing custom Dialogs, Modals, Toasts, etc
 
 ```vue
 <script setup lang="ts">
-  import { createTemplatePromise } from '@vueuse/core'
+import { createTemplatePromise } from '@vueuse/core'
 
-  const TemplatePromise = createTemplatePromise<ReturnType>()
+const TemplatePromise = createTemplatePromise<ReturnType>()
 
-  async function open() {
-    const result = await TemplatePromise.start()
-    // button is clicked, result is 'ok'
-  }
+async function open() {
+  const result = await TemplatePromise.start()
+  // button is clicked, result is 'ok'
+}
 </script>
 
 <template>
   <TemplatePromise v-slot="{ promise, resolve, reject, args }">
     <!-- your UI -->
-    <button @click="resolve('ok')">OK</button>
+    <button @click="resolve('ok')">
+      OK
+    </button>
   </TemplatePromise>
 </template>
 ```
@@ -56,7 +58,9 @@ In template, use `v-slot` to access the promise and resolve functions.
 <template>
   <TemplatePromise v-slot="{ promise, resolve, reject, args }">
     <!-- you can have anything -->
-    <button @click="resolve('ok')">OK</button>
+    <button @click="resolve('ok')">
+      OK
+    </button>
   </TemplatePromise>
   <MyPromise v-slot="{ promise, resolve, reject, args }">
     <!-- another one -->
@@ -99,7 +103,9 @@ And in the template slot, you can access the arguments via `args` property.
     <!-- hello -->
     <div>{{ args[1] }}</div>
     <!-- 123 -->
-    <button @click="resolve(true)">OK</button>
+    <button @click="resolve(true)">
+      OK
+    </button>
   </TemplatePromise>
 </template>
 ```
@@ -110,30 +116,32 @@ You can use transition to animate the slot.
 
 ```vue
 <script setup lang="ts">
-  const TemplatePromise = createTemplatePromise<ReturnType>({
-    transition: {
-      name: 'fade',
-      appear: true,
-    },
-  })
+const TemplatePromise = createTemplatePromise<ReturnType>({
+  transition: {
+    name: 'fade',
+    appear: true,
+  },
+})
 </script>
 
 <template>
   <TemplatePromise v-slot="{ resolve }">
     <!-- your UI -->
-    <button @click="resolve('ok')">OK</button>
+    <button @click="resolve('ok')">
+      OK
+    </button>
   </TemplatePromise>
 </template>
 
 <style scoped>
-  .fade-enter-active,
-  .fade-leave-active {
-    transition: opacity 0.5s;
-  }
-  .fade-enter,
-  .fade-leave-to {
-    opacity: 0;
-  }
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.5s;
+}
+.fade-enter,
+.fade-leave-to {
+  opacity: 0;
+}
 </style>
 ```
 
@@ -226,7 +234,10 @@ export interface TemplatePromiseOptions {
    */
   transition?: TransitionGroupProps
 }
-export type TemplatePromise<Return, Args extends any[] = []> = DefineComponent<object> & {
+export type TemplatePromise<
+  Return,
+  Args extends any[] = [],
+> = DefineComponent<object> & {
   new (): {
     $slots: {
       default: (_: TemplatePromiseProps<Return, Args>) => any
@@ -243,6 +254,6 @@ export type TemplatePromise<Return, Args extends any[] = []> = DefineComponent<o
  * @__NO_SIDE_EFFECTS__
  */
 export declare function createTemplatePromise<Return, Args extends any[] = []>(
-  options?: TemplatePromiseOptions
+  options?: TemplatePromiseOptions,
 ): TemplatePromise<Return, Args>
 ```
