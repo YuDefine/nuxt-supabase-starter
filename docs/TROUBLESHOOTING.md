@@ -491,7 +491,7 @@ gh run list --limit 5 && gh run view <run-id> --log-failed
 docker info > /dev/null 2>&1 && echo "Docker: OK" || echo "Docker: 未啟動"
 supabase status > /dev/null 2>&1 && echo "Supabase: OK" || echo "Supabase: 未啟動"
 [ -f .env ] && echo ".env: OK" || echo ".env: 不存在"
-node -v | grep -q "^v2[0-9]" && echo "Node: OK" || echo "Node: 需要 v20+"
+node -v | grep -qE "^v(1[89]|[2-9][0-9])" && echo "Node: OK" || echo "Node: 需要 v18+"
 [ -d node_modules ] && echo "node_modules: OK" || echo "node_modules: 需要 pnpm install"
 grep -q "BETTER_AUTH_SECRET=." .env 2>/dev/null && echo "BETTER_AUTH_SECRET: OK" || echo "BETTER_AUTH_SECRET: 未設定"
 grep -q "SUPABASE_URL=." .env 2>/dev/null && echo "SUPABASE_URL: OK" || echo "SUPABASE_URL: 未設定"
