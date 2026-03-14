@@ -339,10 +339,10 @@ Claude Code 的 `/db-migration` 命令會引導你完成整個流程，包括：
 
 假設你要開發一個「待辦事項」功能：
 
-### 1. 使用 OpenSpec 建立變更提案
+### 1. 使用 Spectra 建立變更提案
 
 ```bash
-/opsx:new
+/spectra:propose
 ```
 
 描述：「使用者可以建立、查看、更新、刪除待辦事項。每個待辦事項有標題、描述、完成狀態。使用者只能看到自己的待辦事項。」
@@ -352,7 +352,7 @@ Claude 會產生 `proposal.md`、`design.md`、`tasks.md` 和 delta specs。
 ### 2. 執行任務
 
 ```bash
-/opsx:apply add-todos
+/spectra:apply add-todos
 ```
 
 Claude 會逐一執行任務，使用 TDD 流程。
@@ -360,7 +360,7 @@ Claude 會逐一執行任務，使用 TDD 流程。
 ### 3. 歸檔變更
 
 ```bash
-/opsx:archive add-todos
+/spectra:archive add-todos
 ```
 
 Claude 會將變更歸檔，並將 delta specs 合併到主 specs。
@@ -381,13 +381,13 @@ Claude 會將變更歸檔，並將 delta specs 合併到主 specs。
 
 ### Skills 之間的自動串接
 
-| Skill           | 完成後自動                      | 條件           |
-| --------------- | ------------------------------- | -------------- |
-| TDD 流程        | 調用 check-runner               | 測試通過後     |
-| TDD 流程        | 詢問是否 commit                 | check 通過後   |
-| `/commit`       | **先**調用 check-runner         | 開始前強制     |
-| `/db-migration` | 產生 TypeScript 類型            | 測試通過後     |
-| `/opsx:apply`   | 調用 check-runner + 詢問 commit | 所有任務完成後 |
+| Skill            | 完成後自動                      | 條件           |
+| ---------------- | ------------------------------- | -------------- |
+| TDD 流程         | 調用 check-runner               | 測試通過後     |
+| TDD 流程         | 詢問是否 commit                 | check 通過後   |
+| `/commit`        | **先**調用 check-runner         | 開始前強制     |
+| `/db-migration`  | 產生 TypeScript 類型            | 測試通過後     |
+| `/spectra:apply` | 調用 check-runner + 詢問 commit | 所有任務完成後 |
 
 ### SubAgents
 

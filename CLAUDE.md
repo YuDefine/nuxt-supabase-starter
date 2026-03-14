@@ -127,12 +127,9 @@ supabase/migrations/ # DB migrations (CLI only)
 | Trigger            | Action                                             |
 | ------------------ | -------------------------------------------------- |
 | `/commit`          | Run `pnpm check` → commit                          |
-| `/opsx:new`        | 建立變更提案 (OpenSpec)                            |
-| `/opsx:apply`      | 執行任務 (OpenSpec)                                |
-| `/opsx:archive`    | 歸檔變更 (OpenSpec)                                |
-| `/spectra:propose` | 建立變更提案 (Spectra)                             |
-| `/spectra:apply`   | 執行任務 (Spectra)                                 |
-| `/spectra:archive` | 歸檔變更 (Spectra)                                 |
+| `/spectra:propose` | 建立變更提案                                       |
+| `/spectra:apply`   | 執行任務                                           |
+| `/spectra:archive` | 歸檔變更                                           |
 | Migration created  | `db reset` → `db lint` → `gen types` → `typecheck` |
 | New feature        | TDD: Red → Green → Refactor                        |
 
@@ -153,16 +150,15 @@ See `commitlint.config.js` for types. Use `/commit` command.
 
 ## AI Skills
 
-| Task                      | Skill                              |
-| ------------------------- | ---------------------------------- |
-| Vue components            | `vue`                              |
-| Nuxt routing/server       | `nuxt`                             |
-| UI components             | `nuxt-ui`                          |
-| VueUse                    | `vueuse`                           |
-| Postgres                  | `supabase-postgres-best-practices` |
-| TDD                       | `test-driven-development`          |
-| 中大型功能規劃 (OpenSpec) | `/opsx:new`                        |
-| 中大型功能規劃 (Spectra)  | `/spectra:propose`                 |
+| Task                | Skill                              |
+| ------------------- | ---------------------------------- |
+| Vue components      | `vue`                              |
+| Nuxt routing/server | `nuxt`                             |
+| UI components       | `nuxt-ui`                          |
+| VueUse              | `vueuse`                           |
+| Postgres            | `supabase-postgres-best-practices` |
+| TDD                 | `test-driven-development`          |
+| 中大型功能規劃      | `/spectra:propose`                 |
 
 ## docs/verify/ Purpose
 

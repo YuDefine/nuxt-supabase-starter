@@ -71,10 +71,10 @@
 | -------------------------------------------------------------------- | ------------------------------------------ |
 | [Claude Code](https://claude.ai/code)                                | AI 編程助手                                |
 | [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | 讓 AI 直接操作資料庫                       |
-| Commands（15–16 個）                                                 | 依 SDD 路線不同（見下方）                  |
+| Commands（16 個）                                                    | 4 共用 + 12 Spectra                        |
 | SubAgents（3 個）                                                    | `check-runner`、`code-review`、`db-backup` |
 | [Skills](https://skills.sh)（通用 23 + 情境 5）                      | `nuxt-ui`、`vue`、`vueuse` 等 AI Skills    |
-| SDD Skills（11–12 個）                                               | OpenSpec 或 Spectra（擇一）                |
+| SDD Skills（12 個）                                                  | Spectra（`spectra-*`）                     |
 
 ---
 
@@ -147,19 +147,15 @@
 - `pinia-store`：建立 Pinia Store 時
 - `supabase-arch`：架構決策時
 
-### SDD Skills（依路線不同）
+### Spectra Skills（12 個）
 
-使用 `pnpm sdd:select` 選擇 Spec-Driven Development 工具：
+本專案使用 Spectra 進行 Spec-Driven Development：
 
-| 項目     | OpenSpec                      | Spectra                       |
-| -------- | ----------------------------- | ----------------------------- |
-| Commands | 11 個（`/opsx:*`）            | 12 個（`/spectra:*`）         |
-| Skills   | 11 個                         | 12 個                         |
-| **總計** | **共 15 Commands、39 Skills** | **共 16 Commands、40 Skills** |
-
-> `pnpm skills:install` 後，若尚未執行 `pnpm sdd:select`，通常會看到約 51 個 skills（OpenSpec + Spectra 同時存在）。
->
-> 執行 `pnpm sdd:select` 後，會移除未選路線，收斂為上表的 39（OpenSpec）或 40（Spectra）個 skills。
+| 項目     | 數量                          |
+| -------- | ----------------------------- |
+| Commands | 12 個（`/spectra:*`）         |
+| Skills   | 12 個（`spectra-*`）          |
+| **總計** | **共 16 Commands、40 Skills** |
 
 這些 skills 是本範本的在地化規範，確保 AI 遵循專案的安全與架構決策。
 
@@ -190,7 +186,7 @@
 | **[docs/INTEGRATION_GUIDE.md](./docs/INTEGRATION_GUIDE.md)** | 現有專案整合 Claude/Supabase       | 要整合到現有專案   |
 | **[docs/SUPABASE_GUIDE.md](./docs/SUPABASE_GUIDE.md)**       | Supabase 入門、RLS 詳解、Migration | 第一次用 Supabase  |
 | **[docs/WORKFLOW.md](./docs/WORKFLOW.md)**                   | TDD、自動化檢查、Git 規範          | 想了解開發流程     |
-| **[docs/OPENSPEC.md](./docs/OPENSPEC.md)**                   | OpenSpec 工作流程詳解              | 要用 AI 輔助開發   |
+| **[docs/OPENSPEC.md](./docs/OPENSPEC.md)**                   | Spectra 工作流程詳解               | 要用 AI 輔助開發   |
 | **[docs/CLAUDE_CODE_GUIDE.md](./docs/CLAUDE_CODE_GUIDE.md)** | Claude Code 配置指南               | 要了解 AI 工具     |
 | **[docs/SUPABASE_MCP.md](./docs/SUPABASE_MCP.md)**           | Supabase MCP 整合                  | 要讓 AI 操作資料庫 |
 | **[docs/API_PATTERNS.md](./docs/API_PATTERNS.md)**           | Server API 設計模式                | 要寫後端 API       |
@@ -290,14 +286,14 @@ await signIn('google')
 
 當你用 AI 輔助開發時，測試就是「驗收標準」——AI 寫的程式碼能不能用？跑一次測試就知道。
 
-### OpenSpec 工作流程
+### Spectra 工作流程
 
 對於較複雜的功能：
 
 ```
-/opsx:new          # 建立變更提案（產生 proposal, design, tasks）
-/opsx:apply        # 執行任務清單
-/opsx:archive      # 歸檔完成的變更
+/spectra:propose   # 建立變更提案（產生 proposal, design, tasks）
+/spectra:apply     # 執行任務清單
+/spectra:archive   # 歸檔完成的變更
 ```
 
 > 📖 詳細說明見 [docs/OPENSPEC.md](./docs/OPENSPEC.md)
@@ -312,12 +308,12 @@ pnpm check  # format → lint → typecheck → test
 
 Skills 會自動串接，減少手動操作：
 
-| 完成            | 自動觸發                   |
-| --------------- | -------------------------- |
-| TDD 流程完成    | check-runner → 詢問 commit |
-| `/commit`       | **先**執行 check-runner    |
-| `/db-migration` | 產生 TypeScript 類型       |
-| `/opsx:apply`   | check-runner → 詢問 commit |
+| 完成             | 自動觸發                   |
+| ---------------- | -------------------------- |
+| TDD 流程完成     | check-runner → 詢問 commit |
+| `/commit`        | **先**執行 check-runner    |
+| `/db-migration`  | 產生 TypeScript 類型       |
+| `/spectra:apply` | check-runner → 詢問 commit |
 
 > 📖 完整工作流程見 [docs/WORKFLOW.md](./docs/WORKFLOW.md)
 
@@ -330,17 +326,17 @@ Skills 會自動串接，減少手動操作：
 ├── docs/                     # 詳細文件
 │   ├── SUPABASE_GUIDE.md    # Supabase 入門
 │   ├── WORKFLOW.md          # 開發工作流程
-│   ├── OPENSPEC.md          # OpenSpec 工作流程
+│   ├── OPENSPEC.md          # Spectra 工作流程
 │   └── API_PATTERNS.md      # API 設計模式
 │
 ├── .claude/                  # Claude Code 配置
-│   ├── commands/            # 自定義命令（含 opsx/）
+│   ├── commands/            # 自定義命令（含 spectra/）
 │   ├── agents/              # SubAgents
 │   ├── hooks/               # 自動化腳本
 │   ├── skills/              # AI Skills
 │   └── settings.local.json.example
 │
-├── openspec/                 # OpenSpec 工作流程
+├── openspec/                 # Spectra 工作流程
 │   ├── project.md           # 專案上下文
 │   ├── specs/               # 系統規格（真相來源）
 │   └── changes/             # 變更提案區
@@ -398,7 +394,7 @@ Skills 會自動串接，減少手動操作：
 1. **[快速開始](./docs/QUICK_START.md)**：clone、跑起來
 2. **[Supabase 入門](./docs/SUPABASE_GUIDE.md)**：建立第一個資料表
 3. **[API 設計](./docs/API_PATTERNS.md)**：寫你的第一個 CRUD API
-4. **[OpenSpec](./docs/OPENSPEC.md)**：用 AI 輔助開發一個功能
+4. **[Spectra](./docs/OPENSPEC.md)**：用 AI 輔助開發一個功能
 
 ### 現有專案
 

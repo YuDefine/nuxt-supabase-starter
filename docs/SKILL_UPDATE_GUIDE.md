@@ -42,9 +42,9 @@
 - `supabase-migration` - Supabase Migration
 - `supabase-rls` - Supabase RLS
 
-### OpenSpec 工作流
+### Spectra 工作流
 
-所有 OpenSpec skills（來自專案倉庫）
+所有 Spectra skills（來自專案倉庫）
 
 ## 🔄 更新所有 Skills（推薦方式）
 
@@ -137,7 +137,7 @@ pnpm skills:install
 | ---------------- | --------- | -------------------- |
 | skills.sh Skills | 每月      | `pnpm skills:update` |
 | 專案 Skills      | 手動      | 視專案需求           |
-| OpenSpec         | 跟隨 repo | Git pull             |
+| Spectra          | 跟隨 repo | Git pull             |
 
 ## 🔍 查找新的 Skills
 

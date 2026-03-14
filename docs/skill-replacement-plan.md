@@ -47,9 +47,9 @@
 - `supabase-migration` - Supabase Migration
 - `supabase-rls` - Supabase RLS
 
-### 🔄 OpenSpec Skills
+### 🔄 Spectra Skills
 
-保留所有 OpenSpec 工作流 skills（來自專案倉庫）
+保留所有 Spectra 工作流 skills（來自專案倉庫）
 
 ## 🚀 執行步驟
 

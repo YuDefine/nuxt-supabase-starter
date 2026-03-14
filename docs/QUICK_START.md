@@ -49,12 +49,12 @@ git commit -m "🎉 init: 從 nuxt-supabase-starter 建立專案"
 my-project/
 ├── CLAUDE.md              # AI 開發規範
 ├── .claude/               # Claude Code 配置
-│   ├── commands/          # 自定義指令（含 opsx/ 或 spectra/）
+│   ├── commands/          # 自定義指令（含 spectra/）
 │   ├── agents/            # SubAgents
 │   ├── hooks/             # 自動化腳本
 │   ├── skills/            # AI Skills
 │   └── settings.local.json.example
-├── openspec/              # OpenSpec 工作流程
+├── openspec/              # Spectra 工作流程
 │   ├── project.md         # 專案上下文
 │   ├── specs/             # 系統規格
 │   └── changes/           # 變更提案
@@ -196,16 +196,6 @@ cp .claude/settings.local.json.example .claude/settings.local.json
 
 ---
 
-## Step 5.5：選擇 SDD 工具路線
-
-```bash
-pnpm sdd:select
-```
-
-請選擇 OpenSpec 或 Spectra 其中一條路線。這個步驟會移除另一條路線的指令與 skills，讓最終技能數量與文件宣稱一致。
-
----
-
 ## Step 6：啟動開發伺服器
 
 ```bash
@@ -250,18 +240,13 @@ claude
 
 ### AI 開發工具（已配置）
 
-| 類型        | 數量     | 說明                                              |
-| ----------- | -------- | ------------------------------------------------- |
-| Commands    | 15–16 個 | 4 共用 + 11–12 SDD（依 `pnpm sdd:select` 選擇）   |
-| SubAgents   | 3 個     | `check-runner`、`code-review`、`db-backup`        |
-| 通用 Skills | 23 個    | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等（自動更新） |
-| 情境 Skills | 5 個     | `supabase-rls`、`server-api`、`pinia-store` 等    |
-| SDD Skills  | 11–12 個 | OpenSpec 或 Spectra（依選擇而定）                 |
-
-> 技能數量說明：
->
-> - `pnpm skills:install` 後，若尚未執行 `pnpm sdd:select`，通常會看到約 51 個 skills（兩條 SDD 路線都存在）。
-> - 執行 `pnpm sdd:select` 後，會收斂為 39（OpenSpec）或 40（Spectra）個 skills。
+| 類型        | 數量  | 說明                                              |
+| ----------- | ----- | ------------------------------------------------- |
+| Commands    | 16 個 | 4 共用 + 12 Spectra                               |
+| SubAgents   | 3 個  | `check-runner`、`code-review`、`db-backup`        |
+| 通用 Skills | 23 個 | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等（自動更新） |
+| 情境 Skills | 5 個  | `supabase-rls`、`server-api`、`pinia-store` 等    |
+| SDD Skills  | 12 個 | Spectra（`spectra-*`）                            |
 
 ### 開發規範（已定義）
 
@@ -310,8 +295,8 @@ NUXT_OAUTH_GOOGLE_CLIENT_SECRET=<client_secret>
 # 啟動 Claude Code
 claude
 
-# 使用 OpenSpec 工作流程
-> /opsx:new
+# 使用 Spectra 工作流程
+> /spectra:propose
 > 我需要一個待辦事項功能，使用者可以新增、編輯、刪除待辦事項...
 ```
 
@@ -348,5 +333,5 @@ supabase migration new <name>  # 建立新 migration
 | [SUPABASE_MCP.md](./SUPABASE_MCP.md)           | Supabase MCP 整合    |
 | [SUPABASE_GUIDE.md](./SUPABASE_GUIDE.md)       | Supabase 入門與 RLS  |
 | [WORKFLOW.md](./WORKFLOW.md)                   | TDD 開發流程         |
-| [OPENSPEC.md](./OPENSPEC.md)                   | OpenSpec 工作流程    |
+| [OPENSPEC.md](./OPENSPEC.md)                   | Spectra 工作流程     |
 | [API_PATTERNS.md](./API_PATTERNS.md)           | Server API 設計模式  |

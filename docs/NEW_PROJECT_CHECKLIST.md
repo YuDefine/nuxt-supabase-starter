@@ -20,8 +20,7 @@
 
 - [ ] 已執行 `pnpm install` 安裝 npm 套件
 - [ ] **已執行 `pnpm skills:install` 安裝 AI Skills**
-- [ ] 已執行 `pnpm sdd:select` 選擇 OpenSpec 或 Spectra 路線
-- [ ] 執行 `pnpm skills:list` 確認：未選路線前約 51 個；選擇後為 39（OpenSpec）或 40（Spectra）
+- [ ] 執行 `pnpm skills:list` 確認 skills 數量正確
 
 ### Skills 檢查
 
@@ -47,7 +46,7 @@
 - [ ] supabase-migration
 - [ ] server-api
 - [ ] pinia-store
-- [ ] OpenSpec skills（openspec-\*）
+- [ ] Spectra skills（spectra-\*）
 
 ## ✅ Claude Code 設定
 
@@ -86,9 +85,6 @@ pnpm skills:install
 
 # 檢查列表
 pnpm skills:list
-
-# 若尚未執行 pnpm sdd:select：通常約 51 個
-# 執行 pnpm sdd:select 後：39（OpenSpec）或 40（Spectra）
 ```
 
 ### Claude Code 無法使用指令？
@@ -109,5 +105,5 @@ pnpm skills:list
 
 1. 📖 閱讀 [SUPABASE_GUIDE.md](./SUPABASE_GUIDE.md) 建立第一個資料表
 2. 🔐 參考 [Better Auth 文件](https://www.better-auth.com/) 設定 OAuth
-3. 🤖 使用 `/opsx:new` 建立第一個功能
+3. 🤖 使用 `/spectra:propose` 建立第一個功能
 4. 📝 定期執行 `pnpm skills:update` 更新 skills

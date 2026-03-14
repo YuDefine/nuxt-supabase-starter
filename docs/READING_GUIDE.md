@@ -21,7 +21,7 @@
 | 總規範   | 開發規則                                    | [CLAUDE.md](../CLAUDE.md)   |
 | Commands | 可執行命令（`/commit`, `/db-migration` 等） | `.claude/commands/*.md`     |
 | Agents   | 自動化流程（check-runner 等）               | `.claude/agents/*.md`       |
-| Skills   | 專業知識（39–40 個，依 SDD 路線）           | `.claude/skills/*/SKILL.md` |
+| Skills   | 專業知識（40 個）                           | `.claude/skills/*/SKILL.md` |
 
 ---
 
@@ -71,7 +71,7 @@ CLAUDE.md → AI Skills 區塊
 CLAUDE_CODE_GUIDE.md
     ↓ 了解 Claude Code 配置
 OPENSPEC.md
-    ↓ 了解 OpenSpec 工作流程
+    ↓ 了解 Spectra 工作流程
 ```
 
 ---
@@ -120,7 +120,7 @@ OPENSPEC.md
 
 深入說明、最佳實踐。
 
-- **WORKFLOW.md**：TDD 流程、OpenSpec、自動化
+- **WORKFLOW.md**：TDD 流程、Spectra、自動化
 - **SUPABASE_GUIDE.md**：Supabase 入門、RLS、Migration
 - **API_PATTERNS.md**：Server API 設計模式
 
@@ -149,7 +149,7 @@ OPENSPEC.md
 | 認證怎麼做？             | [docs/verify/AUTH_INTEGRATION.md](verify/AUTH_INTEGRATION.md)                                         |
 | Migration 怎麼建立？     | [docs/verify/SUPABASE_MIGRATION_GUIDE.md](verify/SUPABASE_MIGRATION_GUIDE.md)                         |
 | Client/Server 怎麼分工？ | [CLAUDE.md](../CLAUDE.md#-supabase-資料存取策略)                                                      |
-| OpenSpec 怎麼用？        | [OPENSPEC.md](OPENSPEC.md)                                                                            |
+| Spectra 怎麼用？         | [OPENSPEC.md](OPENSPEC.md)                                                                            |
 | 常見問題？               | [FAQ.md](FAQ.md)                                                                                      |
 
 ---
