@@ -57,6 +57,7 @@ docs/verify/    穩定文件（本手冊、Quick Start、DB 操作、Auth、Stat
 | API 設計   | [API_DESIGN_GUIDE](./API_DESIGN_GUIDE.md)                                                                                                                         |
 | 前端狀態   | [PINIA_ARCHITECTURE](./PINIA_ARCHITECTURE.md)                                                                                                                     |
 | RLS 規範   | [RLS_BEST_PRACTICES](./RLS_BEST_PRACTICES.md)                                                                                                                     |
+| CLI 工具   | [CLI_SCAFFOLD](./CLI_SCAFFOLD.md)                                                                                                                                 |
 
 ---
 

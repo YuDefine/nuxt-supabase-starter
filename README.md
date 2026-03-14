@@ -16,148 +16,70 @@
 
 ---
 
+## 60 秒快速開始
+
+**方式一：CLI 建立客製化專案**（推薦）
+
+```bash
+npx create-nuxt-starter my-app
+```
+
+互動式選單讓你選擇需要的功能（認證、資料庫、UI、測試等）。
+
+**方式二：Clone 完整範本**
+
+```bash
+git clone https://github.com/YuDefine/nuxt-supabase-starter my-project
+cd my-project
+pnpm setup    # 一鍵完成環境初始化
+```
+
+**方式三：整合至現有專案**
+
+參考 [INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md)。
+
+> 📖 完整設定步驟：[QUICK_START.md](docs/QUICK_START.md) | 📖 第一個功能：[FIRST_CRUD.md](docs/FIRST_CRUD.md)
+
+---
+
+## 費用與時間
+
+### 開發時間
+
+| 階段           | 時間     | 說明                                     |
+| -------------- | -------- | ---------------------------------------- |
+| Clone → 可運行 | ~15 分鐘 | `pnpm setup` 一鍵完成                    |
+| 第一個功能     | ~20 分鐘 | 跟著 [FIRST_CRUD.md](docs/FIRST_CRUD.md) |
+| 部署上線       | ~30 分鐘 | 跟著 [DEPLOYMENT.md](docs/DEPLOYMENT.md) |
+
+### 月費估算
+
+| 規模       | Supabase | Cloudflare | 總計          |
+| ---------- | -------- | ---------- | ------------- |
+| 開發 / MVP | 免費     | 免費       | **$0**        |
+| 小型產品   | Pro $25  | $5         | **~$30/月**   |
+| 成長期     | Pro $25+ | $5+        | **~$100+/月** |
+
+> 免費方案包含：500MB 資料庫、5GB 頻寬、10 萬次 Workers 請求/天。對大多數 MVP 足夠。
+
+---
+
 ## Tech Stack
 
-### 核心框架
+Nuxt 4 + Vue 3 + TypeScript + Supabase + Nuxt UI + Tailwind CSS + Pinia + Better Auth
 
-| 技術                                          | 版本 | 說明                         |
-| --------------------------------------------- | ---- | ---------------------------- |
-| [Nuxt](https://nuxt.com/)                     | 4.x  | Vue 全端框架                 |
-| [Vue](https://vuejs.org/)                     | 3.x  | 前端框架（Composition API）  |
-| [TypeScript](https://www.typescriptlang.org/) | 5.x  | 型別安全                     |
-| [Supabase](https://supabase.com/)             | -    | PostgreSQL + Auth + Realtime |
+| 類別   | 技術                               |
+| ------ | ---------------------------------- |
+| 框架   | Nuxt 4, Vue 3, TypeScript          |
+| 資料庫 | Supabase (PostgreSQL)              |
+| UI     | Nuxt UI, Tailwind CSS, Nuxt Charts |
+| 認證   | Better Auth (33+ OAuth providers)  |
+| 狀態   | Pinia + Pinia Colada               |
+| 測試   | Vitest + Playwright                |
+| 部署   | Cloudflare Workers                 |
+| 品質   | OXLint + OXFmt + Husky             |
 
-### UI 與樣式
-
-| 技術                                     | 說明                            |
-| ---------------------------------------- | ------------------------------- |
-| [Nuxt UI](https://ui.nuxt.com/)          | 官方 UI 元件庫（基於 Tailwind） |
-| [Nuxt Charts](https://nuxtcharts.com/)   | 圖表元件（基於 Unovis）         |
-| [Tailwind CSS](https://tailwindcss.com/) | Utility-first CSS               |
-| [Nuxt Image](https://image.nuxt.com/)    | 圖片最佳化                      |
-| [Lucide Icons](https://lucide.dev/)      | 圖示庫                          |
-
-### 認證與狀態
-
-| 技術                                                          | 說明                                  |
-| ------------------------------------------------------------- | ------------------------------------- |
-| [nuxt-better-auth](https://github.com/onmax/nuxt-better-auth) | OAuth 認證（33+ providers）           |
-| [Pinia](https://pinia.vuejs.org/)                             | 狀態管理                              |
-| [Pinia Colada](https://pinia-colada.esm.dev/)                 | 非同步資料管理（類似 TanStack Query） |
-| [VueUse](https://vueuse.org/)                                 | Vue Composition Utilities             |
-
-### 開發工具
-
-| 技術                                                                                                  | 說明                          |
-| ----------------------------------------------------------------------------------------------------- | ----------------------------- |
-| [Vitest](https://vitest.dev/) + [@nuxt/test-utils](https://nuxt.com/docs/getting-started/testing)     | 單元與整合測試                |
-| [OXLint](https://oxc.rs/docs/guide/usage/linter) + [OXFmt](https://oxc.rs/docs/guide/usage/formatter) | 程式碼品質（Rust 實作，極快） |
-| [Supabase CLI](https://supabase.com/docs/guides/cli)                                                  | 本地開發、Migration           |
-| [Zod](https://zod.dev/)                                                                               | Schema 驗證                   |
-| [Commitlint](https://commitlint.js.org/) + [Husky](https://typicode.github.io/husky/)                 | Git hooks 與 commit 規範      |
-| [VitePress](https://vitepress.dev/)                                                                   | 文件網站產生器                |
-
-### 部署與監控
-
-| 平台                                                  | 說明                                        |
-| ----------------------------------------------------- | ------------------------------------------- |
-| [Cloudflare Workers](https://workers.cloudflare.com/) | Edge 部署                                   |
-| [NuxtHub](https://hub.nuxt.com/)                      | SQL、KV、Blob 存儲與快取（Cloudflare 整合） |
-| [Sentry](https://sentry.io/)                          | 錯誤追蹤與效能監控                          |
-
-### AI 輔助開發
-
-| 工具                                                                 | 說明                                       |
-| -------------------------------------------------------------------- | ------------------------------------------ |
-| [Claude Code](https://claude.ai/code)                                | AI 編程助手                                |
-| [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | 讓 AI 直接操作資料庫                       |
-| Commands（16 個）                                                    | 4 共用 + 12 Spectra                        |
-| SubAgents（3 個）                                                    | `check-runner`、`code-review`、`db-backup` |
-| [Skills](https://skills.sh)（通用 23 + 情境 5）                      | `nuxt-ui`、`vue`、`vueuse` 等 AI Skills    |
-| SDD Skills（12 個）                                                  | Spectra（`spectra-*`）                     |
-
----
-
-## 這套配置帶來什麼成功？
-
-這不只是 boilerplate——而是經過驗證的開發環境。照做，你也能得到相同的成效。
-
-### 實際專案數據
-
-| 指標             | 數值      |
-| ---------------- | --------- |
-| 開發時長         | 2.5 個月  |
-| API 端點         | 80 個     |
-| Migration 檔案   | 100 個    |
-| RLS 政策         | 114 個    |
-| Claude Code 對話 | 2,500+ 次 |
-
-### 配置與效果對應
-
-| 配置             | 帶來的效果                    |
-| ---------------- | ----------------------------- |
-| **CLAUDE.md**    | AI 遵循專案規範，減少修正成本 |
-| **TDD 工作流程** | AI 生成的程式碼有測試保護     |
-| **自動化檢查**   | 每次提交都通過品質門檻        |
-| **AI Skills**    | AI 能正確使用框架 API         |
-| **SDD**          | 複雜功能有結構化開發流程      |
-| **情境 Skills**  | AI 遵循 Supabase 安全規範     |
-
-### 照做你也能得到
-
-1. 相同的 Tech Stack 配置
-2. 相同的 AI 開發工作流程
-3. 相同的程式碼品質保證
-4. 相同的開發效率提升
-
----
-
-## Skills 更新機制
-
-### 兩種 Skill 類型
-
-| 類型     | 來源                                                                    | 更新方式             |
-| -------- | ----------------------------------------------------------------------- | -------------------- |
-| 通用技術 | [skills.sh](https://skills.sh)（`nuxt/ui`、`supabase/agent-skills` 等） | `pnpm skills:update` |
-| 情境觸發 | 本地 `.claude/skills/`                                                  | 手動維護             |
-
-### 通用技術 Skills（23 個）
-
-**第三方 Skills**（15 個，透過 `pnpm skills:update` 更新）：
-
-- `nuxt`、`vue`、`vueuse-functions`、`vitest`、`vue-best-practices`、`vitepress`（antfu/skills）
-- `nuxt-ui`、`contributing`（nuxt/ui）
-- `supabase-postgres-best-practices`（supabase/agent-skills）
-- `test-driven-development`（obra/superpowers）
-- `find-skills`（vercel-labs/skills）
-- `create-evlog-adapter`、`create-evlog-enricher`、`create-evlog-framework-integration`、`review-logging-patterns`（hugorcd/evlog）
-
-**本地 Skills**（8 個，手動維護）：
-
-- `nuxt-better-auth`、`nuxt-content`、`nuxt-modules`、`nuxthub`
-- `reka-ui`、`motion`、`ts-library`、`document-writer`
-
-### 情境觸發 Skills（5 個，本地維護）
-
-當特定情境發生時自動載入：
-
-- `supabase-rls`：建立 RLS Policy 時
-- `supabase-migration`：建立 migration 時
-- `server-api`：建立 Server API 時
-- `pinia-store`：建立 Pinia Store 時
-- `supabase-arch`：架構決策時
-
-### Spectra Skills（12 個）
-
-本專案使用 Spectra 進行 Spec-Driven Development：
-
-| 項目     | 數量                          |
-| -------- | ----------------------------- |
-| Commands | 12 個（`/spectra:*`）         |
-| Skills   | 12 個（`spectra-*`）          |
-| **總計** | **共 16 Commands、40 Skills** |
-
-這些 skills 是本範本的在地化規範，確保 AI 遵循專案的安全與架構決策。
+> 📖 完整技術棧與選型理由：[TECH_STACK.md](docs/TECH_STACK.md)
 
 ---
 
@@ -197,125 +119,19 @@
 
 ---
 
-## 為什麼選這套 Stack？
-
-### Supabase：不只是「Firebase 替代品」
-
-| 你需要   | Supabase 提供            | 傳統做法                |
-| -------- | ------------------------ | ----------------------- |
-| 資料庫   | PostgreSQL（業界標準）   | 自己架、管理、備份      |
-| 權限控制 | Row Level Security (RLS) | 每個 API 都要寫權限檢查 |
-| 即時更新 | Realtime subscriptions   | 自己架 WebSocket        |
-| 本地開發 | Docker 容器，一鍵啟動    | 設定開發環境            |
-
-### RLS：權限控制的革命
-
-**傳統做法**：每個 API 都要寫權限檢查
-
-```typescript
-app.get('/posts/:id', async (req, res) => {
-  const post = await db.posts.findById(req.params.id)
-  if (post.userId !== req.user.id) {
-    return res.status(403).send('Forbidden')
-  }
-  // ...
-})
-```
-
-**RLS 做法**：在資料庫層定義一次，所有查詢自動套用
-
-```sql
-CREATE POLICY "Users can view own posts"
-  ON posts FOR SELECT
-  USING (user_id = auth.uid());
-```
-
-> 📖 詳細說明見 [docs/SUPABASE_GUIDE.md](./docs/SUPABASE_GUIDE.md)
-
----
-
 ## 核心概念
 
-### 資料存取：Client 讀、Server 寫
+Spec-Driven Development (SDD)、Data Access Pattern（Client 讀 / Server 寫）、TDD。
 
-這是本範本最重要的架構決策。
-
-```typescript
-// ✅ Client 端直接查詢（RLS 保護）
-const client = useSupabaseClient<Database>()
-const { data } = await client.schema('app').from('todos').select('*')
-
-// ✅ 寫入走 Server API
-await $fetch('/api/v1/todos', {
-  method: 'POST',
-  body: { title: 'Buy milk' },
-})
-```
-
-> 📖 API 設計模式見 [docs/API_PATTERNS.md](./docs/API_PATTERNS.md)
-
-### 認證：nuxt-better-auth
-
-本範本使用 `@onmax/nuxt-better-auth`，支援 33+ OAuth providers：
-
-```typescript
-// nuxt.config.ts
-export default defineNuxtConfig({
-  modules: ['@onmax/nuxt-better-auth'],
-  routeRules: {
-    '/dashboard/**': { auth: 'user' },
-  },
-})
-
-// 在元件中使用
-const { user, loggedIn, signIn, signOut } = useUserSession()
-await signIn('google')
-```
+> 📖 詳細說明：[WORKFLOW.md](docs/WORKFLOW.md)
 
 ---
 
 ## 開發工作流程
 
-### TDD + AI 輔助
+`pnpm check` 一鍵執行 format → lint → typecheck → test。
 
-```
-1. Red    → 先寫測試（會失敗）
-2. Green  → 寫最少的程式碼讓測試通過
-3. Refactor → 改善程式碼品質
-```
-
-當你用 AI 輔助開發時，測試就是「驗收標準」——AI 寫的程式碼能不能用？跑一次測試就知道。
-
-### Spectra 工作流程
-
-對於較複雜的功能：
-
-```
-/spectra:propose   # 建立變更提案（產生 proposal, design, tasks）
-/spectra:apply     # 執行任務清單
-/spectra:archive   # 歸檔完成的變更
-```
-
-> 📖 詳細說明見 [docs/OPENSPEC.md](./docs/OPENSPEC.md)
-
-### 自動化檢查
-
-```bash
-pnpm check  # format → lint → typecheck → test
-```
-
-### 自動串接
-
-Skills 會自動串接，減少手動操作：
-
-| 完成             | 自動觸發                   |
-| ---------------- | -------------------------- |
-| TDD 流程完成     | check-runner → 詢問 commit |
-| `/commit`        | **先**執行 check-runner    |
-| `/db-migration`  | 產生 TypeScript 類型       |
-| `/spectra:apply` | check-runner → 詢問 commit |
-
-> 📖 完整工作流程見 [docs/WORKFLOW.md](./docs/WORKFLOW.md)
+> 📖 完整流程：[WORKFLOW.md](docs/WORKFLOW.md)
 
 ---
 
@@ -351,39 +167,15 @@ Skills 會自動串接，減少手動操作：
 
 ## 常見問題
 
-### Q: 我需要付費嗎？
+**Q: 我需要付費嗎？** 本地開發完全免費。Supabase 免費方案：500MB 資料庫、50K 月活躍使用者。
 
-本地開發完全免費。Supabase 免費方案：500MB 資料庫、50K 月活躍使用者。
+**Q: RLS 會影響效能嗎？** 如果用 `(SELECT ...)` 包裝函式呼叫，不會。詳見 [SUPABASE_GUIDE.md](./docs/SUPABASE_GUIDE.md#效能優化)。
 
-### Q: RLS 會影響效能嗎？
+**Q: 這套流程適合團隊嗎？** 適合。CLAUDE.md 是共享規範，Migration 有版本控制。
 
-如果用 `(SELECT ...)` 包裝函式呼叫，不會。詳見 [SUPABASE_GUIDE.md](./docs/SUPABASE_GUIDE.md#效能優化)。
+**Q: 我可以不用 Claude Code 嗎？** 可以。`.claude/` 配置是可選的，核心的 Nuxt + Supabase 結構不依賴任何 AI 工具。
 
-### Q: 這套流程適合團隊嗎？
-
-適合。CLAUDE.md 是共享規範，Migration 有版本控制。
-
-### Q: 我可以不用 Claude Code 嗎？
-
-可以。`.claude/` 配置是可選的，核心的 Nuxt + Supabase 結構不依賴任何 AI 工具。
-
-### Q: 如何部署到 Production？
-
-1. 在 [Supabase Dashboard](https://supabase.com/dashboard) 建立專案
-2. `supabase link --project-ref <your-project-ref>`
-3. `supabase db push`
-4. 部署到 Cloudflare Workers（使用 `wrangler deploy` 或 CI/CD）
-
----
-
-## AI 輔助效率
-
-| 任務類型  | AI 幫助程度               |
-| --------- | ------------------------- |
-| CRUD API  | ⭐⭐⭐⭐⭐ 幾乎全自動     |
-| Migration | ⭐⭐⭐⭐ 需人工審查安全性 |
-| 測試撰寫  | ⭐⭐⭐⭐ 案例需人工設計   |
-| 架構決策  | ⭐⭐⭐ 需人工主導         |
+**Q: 如何部署到 Production？** 在 [Supabase Dashboard](https://supabase.com/dashboard) 建立專案 → `supabase link` → `supabase db push` → 部署到 Cloudflare Workers。
 
 ---
 
@@ -395,6 +187,7 @@ Skills 會自動串接，減少手動操作：
 2. **[Supabase 入門](./docs/SUPABASE_GUIDE.md)**：建立第一個資料表
 3. **[API 設計](./docs/API_PATTERNS.md)**：寫你的第一個 CRUD API
 4. **[Spectra](./docs/OPENSPEC.md)**：用 AI 輔助開發一個功能
+5. **[部署指南](./docs/DEPLOYMENT.md)**：部署到 Cloudflare Workers
 
 ### 現有專案
 

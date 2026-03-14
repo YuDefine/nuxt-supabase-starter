@@ -16,6 +16,58 @@ spec.md    plan.md     tasks.md    Red/Green   pnpm check
 
 ---
 
+## 核心概念
+
+### Spec-Driven Development (SDD)
+
+對於較複雜的功能，使用 Spectra 工作流程：
+
+```
+/spectra:propose   # 建立變更提案（產生 proposal, design, tasks）
+/spectra:apply     # 執行任務清單
+/spectra:archive   # 歸檔完成的變更
+```
+
+> 📖 詳細說明見 [OPENSPEC.md](./OPENSPEC.md)
+
+### 資料存取：Client 讀、Server 寫
+
+這是本範本最重要的架構決策。
+
+```typescript
+// ✅ Client 端直接查詢（RLS 保護）
+const client = useSupabaseClient<Database>()
+const { data } = await client.schema('app').from('todos').select('*')
+
+// ✅ 寫入走 Server API
+await $fetch('/api/v1/todos', {
+  method: 'POST',
+  body: { title: 'Buy milk' },
+})
+```
+
+> 📖 API 設計模式見 [API_PATTERNS.md](./API_PATTERNS.md)
+
+### 認證：nuxt-better-auth
+
+本範本使用 `@onmax/nuxt-better-auth`，支援 33+ OAuth providers：
+
+```typescript
+// nuxt.config.ts
+export default defineNuxtConfig({
+  modules: ['@onmax/nuxt-better-auth'],
+  routeRules: {
+    '/dashboard/**': { auth: 'user' },
+  },
+})
+
+// 在元件中使用
+const { user, loggedIn, signIn, signOut } = useUserSession()
+await signIn('google')
+```
+
+---
+
 ## TDD（測試驅動開發）
 
 ### 為什麼 TDD 在 AI 輔助開發中特別重要？
