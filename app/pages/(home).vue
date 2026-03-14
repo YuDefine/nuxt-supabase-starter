@@ -70,8 +70,12 @@
         </code>
       </div>
       <p class="mt-4 text-sm text-(--ui-text-muted)">
-        或使用 CLI：<code class="rounded bg-(--ui-bg-elevated) px-2 py-1"
-          >npx create-nuxt-starter my-app</code
+        📖
+        <a
+          href="https://github.com/YuDefine/nuxt-supabase-starter/blob/main/docs/QUICK_START.md"
+          target="_blank"
+          class="underline"
+          >完整設定步驟</a
         >
       </p>
     </section>

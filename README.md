@@ -18,15 +18,7 @@
 
 ## 60 秒快速開始
 
-**方式一：CLI 建立客製化專案**（推薦）
-
-```bash
-npx create-nuxt-starter my-app
-```
-
-互動式選單讓你選擇需要的功能（認證、資料庫、UI、測試等）。
-
-**方式二：Clone 完整範本**
+**方式一：Clone 範本**（推薦）
 
 ```bash
 git clone https://github.com/YuDefine/nuxt-supabase-starter my-project
@@ -34,7 +26,7 @@ cd my-project
 pnpm setup    # 一鍵完成環境初始化
 ```
 
-**方式三：整合至現有專案**
+**方式二：整合至現有專案**
 
 參考 [INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md)。
 

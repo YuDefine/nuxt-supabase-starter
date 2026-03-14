@@ -377,11 +377,11 @@ Supabase 的 Docker 映像已支援 ARM64 架構，但偶爾可能遇到：
 
 ### CLI 工具 `create-nuxt-starter` 是什麼？
 
-互動式 CLI，讓你選擇需要的功能來建立客製化專案。支援 17 個可選模組（認證、資料庫、UI、測試、部署等）。
+互動式 CLI，讓你選擇需要的功能來建立客製化專案。支援 17 個可選模組（認證、資料庫、UI、測試、部署等）。目前尚未發布至 npm，僅能從 repo 內使用：
 
 ```bash
-npx create-nuxt-starter my-app        # 互動模式
-npx create-nuxt-starter my-app --yes  # 使用預設配置
+# 在 repo 根目錄
+pnpm --filter create-nuxt-starter dev -- /path/to/my-app
 ```
 
 > 📖 詳細說明：[CLI_SCAFFOLD.md](verify/CLI_SCAFFOLD.md)

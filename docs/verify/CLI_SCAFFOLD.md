@@ -10,16 +10,16 @@
 
 ## 安裝與使用
 
-### 互動模式
+> **注意**：此 CLI 尚未發布至 npm，目前僅能從 repo 內使用。
+
+### 從 repo 內執行（開發模式）
 
 ```bash
-npx create-nuxt-starter my-app
-```
+# 在 repo 根目錄
+pnpm --filter create-nuxt-starter dev -- /path/to/my-app
 
-### 非互動模式
-
-```bash
-npx create-nuxt-starter my-app --yes
+# 非互動模式（使用預設配置）
+pnpm --filter create-nuxt-starter dev -- /path/to/my-app --yes
 ```
 
 ## 互動選單流程
