@@ -107,9 +107,15 @@ CI workflow 的 `database` job 會自動推送 Migration，需要額外設定：
 
 ## Step 4：CI/CD Workflow
 
-專案使用 GitHub Actions 自動化部署，包含兩個 workflow：
+專案提供 GitHub Actions workflow 範本，位於 `docs/templates/.github/workflows/`。
 
-### CI（`.github/workflows/ci.yml`）
+建立新專案後，將範本複製到 `.github/workflows/`：
+
+```bash
+cp -r docs/templates/.github .github
+```
+
+### CI（`ci.yml`）
 
 觸發條件：所有 Pull Request + push 到 `main`
 
@@ -123,7 +129,7 @@ validate → lint → typecheck → unit tests
 - **e2e**：Playwright 端對端測試（僅 `main` branch）
 - **database**：推送 Migration + 驗證 table owner + lint 資料庫
 
-### Deploy（`.github/workflows/deploy.yml`）
+### Deploy（`deploy.yml`）
 
 觸發條件：push 到 `main` + 手動觸發
 
