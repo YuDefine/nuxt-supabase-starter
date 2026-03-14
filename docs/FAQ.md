@@ -349,7 +349,7 @@ supabase gen types typescript --local | tee app/types/database.types.ts > /dev/n
 
 ## 環境設定類
 
-### `pnpm setup` 做了什麼？
+### `pnpm run setup` 做了什麼？
 
 執行 `scripts/setup.sh`，自動完成：
 

@@ -23,7 +23,7 @@
 ```bash
 git clone https://github.com/YuDefine/nuxt-supabase-starter my-project
 cd my-project
-pnpm setup    # 檢查環境 → 安裝依賴 → 啟動 Supabase → 產生型別
+pnpm run setup    # 檢查環境 → 安裝依賴 → 啟動 Supabase → 產生型別
 pnpm dev      # 開啟 http://localhost:3000
 ```
 
@@ -37,7 +37,7 @@ pnpm dev      # 開啟 http://localhost:3000
 
 | 階段           | 時間     | 說明                                     |
 | -------------- | -------- | ---------------------------------------- |
-| Clone → 可運行 | ~15 分鐘 | `pnpm setup` 一鍵完成                    |
+| Clone → 可運行 | ~15 分鐘 | `pnpm run setup` 一鍵完成                 |
 | 第一個功能     | ~20 分鐘 | 跟著 [FIRST_CRUD.md](docs/FIRST_CRUD.md) |
 | 部署上線       | ~30 分鐘 | 跟著 [DEPLOYMENT.md](docs/DEPLOYMENT.md) |
 
