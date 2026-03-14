@@ -95,21 +95,21 @@ pnpm skills:install
 - reka-ui, motion, ts-library, document-writer
 - server-api, pinia-store
 - supabase-arch, supabase-migration, supabase-rls
-- openspec-\* (所有 OpenSpec skills)
+- spectra-\* (所有 Spectra skills)
 
 #### TDMS
 
 - auth-integration.md
 - data-table.md
 - add-table-column.md
-- openspec-\* (所有 OpenSpec skills)
+- spectra-\* (所有 Spectra skills)
 - nuxt, nuxt-modules, nuxt-ui
 
 #### eHR-2.0
 
 - document-writer, motion
 - nuxt-content, nuxt-modules, nuxthub
-- openspec-\* (所有 OpenSpec skills)
+- spectra-\* (所有 Spectra skills)
 - nuxt, nuxt-ui
 
 ## 維護建議
