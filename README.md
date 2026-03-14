@@ -18,7 +18,7 @@
 
 ## 快速開始
 
-**前置條件**：[Node.js 20+](https://nodejs.org/)、[pnpm](https://pnpm.io/)、[Docker](https://www.docker.com/)、[Supabase CLI](https://supabase.com/docs/guides/cli)
+**前置條件**：[Node.js 18+](https://nodejs.org/)（建議 24 LTS）、[pnpm](https://pnpm.io/)、[Docker](https://www.docker.com/)、[Supabase CLI](https://supabase.com/docs/guides/cli)
 
 ```bash
 git clone https://github.com/YuDefine/nuxt-supabase-starter my-project

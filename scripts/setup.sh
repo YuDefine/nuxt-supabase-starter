@@ -13,16 +13,16 @@ echo ""
 # 1. 檢查前置需求
 # --------------------------------------------------
 
-# Node.js 20+
+# Node.js 18+（建議 24 LTS）
 if ! command -v node &> /dev/null; then
-  echo "❌ 找不到 Node.js，請先安裝 Node.js 20 以上版本"
+  echo "❌ 找不到 Node.js，請先安裝 Node.js 18 以上版本（建議 24 LTS）"
   echo "   https://nodejs.org/"
   exit 1
 fi
 
 NODE_VERSION=$(node -v | sed 's/v//' | cut -d. -f1)
-if [ "$NODE_VERSION" -lt 20 ]; then
-  echo "❌ Node.js 版本過低：$(node -v)（需要 v20 以上）"
+if [ "$NODE_VERSION" -lt 18 ]; then
+  echo "❌ Node.js 版本過低：$(node -v)（需要 v18 以上，建議 v24 LTS）"
   echo "   請升級 Node.js：https://nodejs.org/"
   exit 1
 fi

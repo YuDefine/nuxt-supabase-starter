@@ -21,7 +21,7 @@
 
 | 工具         | 版本 | 安裝方式                                            |
 | ------------ | ---- | --------------------------------------------------- |
-| Node.js      | 20+  | [nodejs.org](https://nodejs.org/)                   |
+| Node.js      | 18+（建議 24 LTS） | [nodejs.org](https://nodejs.org/)                   |
 | pnpm         | 9+   | `curl -fsSL https://get.pnpm.io/install.sh \| sh -` |
 | Docker       | -    | [docker.com](https://www.docker.com/)               |
 | Supabase CLI | -    | `brew install supabase/tap/supabase`                |

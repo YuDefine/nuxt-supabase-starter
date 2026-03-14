@@ -5,7 +5,7 @@
 ## ✅ 基礎設定
 
 - [ ] 已執行 `git init` 並建立初始 commit
-- [ ] 已安裝 Node.js 20+、pnpm 9+、Docker
+- [ ] 已安裝 Node.js 18+（建議 24 LTS）、pnpm 9+、Docker
 - [ ] 已安裝 Supabase CLI 和 Claude Code CLI
 - [ ] 已複製 `.env.example` 到 `.env` 並填入環境變數
 
