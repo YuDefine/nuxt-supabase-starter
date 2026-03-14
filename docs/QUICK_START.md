@@ -262,7 +262,13 @@ claude
 
 ## 下一步
 
-### 建立第一個資料表
+### 建立你的第一個功能
+
+跟著 15 分鐘教學，從資料庫到 UI 完成一個完整的 CRUD 功能：
+
+> 📖 **推薦**：[FIRST_CRUD.md](./FIRST_CRUD.md) — 書籤管理功能（Migration → RLS → API → Pinia → Vue → Test）
+
+或者自行建立第一個資料表：
 
 ```bash
 # 建立 migration
@@ -327,11 +333,12 @@ supabase migration new <name>  # 建立新 migration
 
 ## 相關文件
 
-| 文件                                           | 說明                 |
-| ---------------------------------------------- | -------------------- |
-| [CLAUDE_CODE_GUIDE.md](./CLAUDE_CODE_GUIDE.md) | Claude Code 配置指南 |
-| [SUPABASE_MCP.md](./SUPABASE_MCP.md)           | Supabase MCP 整合    |
-| [SUPABASE_GUIDE.md](./SUPABASE_GUIDE.md)       | Supabase 入門與 RLS  |
-| [WORKFLOW.md](./WORKFLOW.md)                   | TDD 開發流程         |
-| [OPENSPEC.md](./OPENSPEC.md)                   | Spectra 工作流程     |
-| [API_PATTERNS.md](./API_PATTERNS.md)           | Server API 設計模式  |
+| 文件                                           | 說明                        |
+| ---------------------------------------------- | --------------------------- |
+| [CLAUDE_CODE_GUIDE.md](./CLAUDE_CODE_GUIDE.md) | Claude Code 配置指南        |
+| [SUPABASE_MCP.md](./SUPABASE_MCP.md)           | Supabase MCP 整合           |
+| [SUPABASE_GUIDE.md](./SUPABASE_GUIDE.md)       | Supabase 入門與 RLS         |
+| [WORKFLOW.md](./WORKFLOW.md)                   | TDD 開發流程                |
+| [OPENSPEC.md](./OPENSPEC.md)                   | Spectra 工作流程            |
+| [API_PATTERNS.md](./API_PATTERNS.md)           | Server API 設計模式         |
+| [DEPLOYMENT.md](./DEPLOYMENT.md)               | Cloudflare Workers 部署指南 |

@@ -8,11 +8,11 @@
 
 ### 給人類開發者
 
-| 層級        | 目的     | 文件                                                                                                      | 何時閱讀           |
-| ----------- | -------- | --------------------------------------------------------------------------------------------------------- | ------------------ |
-| **L1 入門** | 快速開始 | [README.md](../README.md), [QUICK_START.md](QUICK_START.md), [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) | 第一次使用         |
-| **L2 指南** | 深入學習 | [WORKFLOW.md](WORKFLOW.md), [SUPABASE_GUIDE.md](SUPABASE_GUIDE.md), [API_PATTERNS.md](API_PATTERNS.md)    | 開始開發時         |
-| **L3 狀態** | 查閱參考 | [docs/verify/\*](verify/README.md)                                                                        | 需要確認系統狀態時 |
+| 層級        | 目的     | 文件                                                                                                                                                                          | 何時閱讀           |
+| ----------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| **L1 入門** | 快速開始 | [README.md](../README.md), [QUICK_START.md](QUICK_START.md), [FIRST_CRUD.md](FIRST_CRUD.md), [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md), [VISUAL_GUIDE.md](VISUAL_GUIDE.md) | 第一次使用         |
+| **L2 指南** | 深入學習 | [WORKFLOW.md](WORKFLOW.md), [SUPABASE_GUIDE.md](SUPABASE_GUIDE.md), [API_PATTERNS.md](API_PATTERNS.md), [DEBUGGING.md](DEBUGGING.md), [TEAM_WORKFLOW.md](TEAM_WORKFLOW.md)    | 開始開發時         |
+| **L3 狀態** | 查閱參考 | [docs/verify/\*](verify/README.md)                                                                                                                                            | 需要確認系統狀態時 |
 
 ### 給 Claude/AI
 
@@ -34,8 +34,12 @@
 ```
 README.md（5 分鐘）
     ↓ 了解 Tech Stack 與專案目標
+VISUAL_GUIDE.md（5 分鐘）
+    ↓ 圖解架構與流程總覽
 QUICK_START.md 或 INTEGRATION_GUIDE.md（15 分鐘）
     ↓ 完成環境設定（新專案用 QUICK_START，現有專案用 INTEGRATION_GUIDE）
+FIRST_CRUD.md（15 分鐘）⭐ 推薦
+    ↓ 動手建立第一個完整功能（DB → API → UI → Test）
 WORKFLOW.md（10 分鐘）
     ↓ 了解 TDD 開發流程
 ```
@@ -51,6 +55,10 @@ SUPABASE_GUIDE.md（15 分鐘）
     ↓ 了解資料庫操作
 API_PATTERNS.md（10 分鐘）
     ↓ 了解 Server API 設計
+DEBUGGING.md（10 分鐘）
+    ↓ 了解除錯技巧與工具
+TEAM_WORKFLOW.md（10 分鐘）
+    ↓ 了解團隊協作與 Migration 管理
 ```
 
 ### 進階主題（按需閱讀）
@@ -62,6 +70,10 @@ API_PATTERNS.md（10 分鐘）
 | RLS 設計       | [docs/verify/RLS_BEST_PRACTICES.md](verify/RLS_BEST_PRACTICES.md)             |
 | Pinia 架構     | [docs/verify/PINIA_ARCHITECTURE.md](verify/PINIA_ARCHITECTURE.md)             |
 | 資料庫效能     | [docs/verify/DATABASE_OPTIMIZATION.md](verify/DATABASE_OPTIMIZATION.md)       |
+| 除錯技巧       | [DEBUGGING.md](DEBUGGING.md)                                                  |
+| 團隊協作       | [TEAM_WORKFLOW.md](TEAM_WORKFLOW.md)                                          |
+| 部署上線       | [DEPLOYMENT.md](DEPLOYMENT.md)                                                |
+| 疑難排解       | [TROUBLESHOOTING.md](TROUBLESHOOTING.md)                                      |
 
 ### AI 協作（給想深入了解 Claude 配置的人）
 
@@ -115,6 +127,8 @@ OPENSPEC.md
 
 - **README.md**：專案概覽、Tech Stack、成效展示
 - **QUICK_START.md**：安裝、設定、第一次執行
+- **FIRST_CRUD.md**：動手做：15 分鐘建立第一個完整功能
+- **VISUAL_GUIDE.md**：圖解架構、資料流、部署流程
 
 ### L2 指南文件
 
@@ -123,6 +137,10 @@ OPENSPEC.md
 - **WORKFLOW.md**：TDD 流程、Spectra、自動化
 - **SUPABASE_GUIDE.md**：Supabase 入門、RLS、Migration
 - **API_PATTERNS.md**：Server API 設計模式
+- **DEBUGGING.md**：除錯技巧、常用工具、錯誤排查流程
+- **TEAM_WORKFLOW.md**：團隊協作、分支策略、Migration 衝突解決
+- **DEPLOYMENT.md**：Cloudflare Workers 部署、CI/CD、回滾策略
+- **TROUBLESHOOTING.md**：常見問題診斷與解決方案
 
 ### L3 狀態文件（docs/verify/）
 
@@ -156,6 +174,7 @@ OPENSPEC.md
 
 ## 下一步
 
-1. **新手**：從 [QUICK_START.md](QUICK_START.md) 開始
+1. **新手**：從 [QUICK_START.md](QUICK_START.md) 開始，接著做 [FIRST_CRUD.md](FIRST_CRUD.md) 實作練習
 2. **想了解開發流程**：閱讀 [WORKFLOW.md](WORKFLOW.md)
-3. **有具體問題**：查看 [FAQ.md](FAQ.md)
+3. **準備部署**：閱讀 [DEPLOYMENT.md](DEPLOYMENT.md)
+4. **有具體問題**：查看 [FAQ.md](FAQ.md) 或 [TROUBLESHOOTING.md](TROUBLESHOOTING.md)

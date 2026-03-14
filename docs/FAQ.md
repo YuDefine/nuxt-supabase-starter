@@ -243,6 +243,8 @@ END; $$;
 2. 確認 policy 包含 `service_role` 繞過
 3. 使用 `supabase db lint --level warning` 檢查
 
+> 📖 完整診斷：[TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+
 ---
 
 ### API 回傳 HTML 而非 JSON
@@ -252,6 +254,8 @@ END; $$;
 **常見情況**：同目錄下同時存在 `[id].ts` 和 `[id]/xxx.ts`
 
 **解決**：調整路由結構，避免衝突
+
+> 📖 完整診斷：[TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ---
 
@@ -274,6 +278,8 @@ pnpm typecheck  # 類型檢查
 pnpm test       # 測試
 ```
 
+> 📖 完整診斷：[TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+
 ---
 
 ### Supabase 本地環境連不上
@@ -291,6 +297,8 @@ supabase stop
 supabase start
 ```
 
+> 📖 完整診斷：[TROUBLESHOOTING.md](TROUBLESHOOTING.md#1-supabase-start-失敗)
+
 ---
 
 ### 類型錯誤：找不到 Database 類型
@@ -302,6 +310,8 @@ supabase start
 ```bash
 supabase gen types typescript --local | tee app/types/database.types.ts > /dev/null
 ```
+
+> 📖 完整診斷：[TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ---
 
@@ -332,6 +342,146 @@ supabase gen types typescript --local | tee app/types/database.types.ts > /dev/n
 - 透過 actions 修改 state
 
 **範例**：見 [PINIA_ARCHITECTURE.md](verify/PINIA_ARCHITECTURE.md)
+
+---
+
+---
+
+## 環境設定類
+
+### `pnpm setup` 做了什麼？
+
+執行 `scripts/setup.sh`，自動完成：
+
+1. 檢查先決條件（Node 20+、pnpm、Docker、Supabase CLI）
+2. 安裝依賴（`pnpm install`）
+3. 複製 `.env.example` → `.env`（若不存在）
+4. 啟動本地 Supabase
+5. 產生資料庫型別
+
+> 📖 故障排除：[TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+
+### Docker 在 Apple Silicon（M1/M2/M3）上有問題嗎？
+
+Supabase 的 Docker 映像已支援 ARM64 架構，但偶爾可能遇到：
+
+- **映像下載慢**：正常現象，首次下載需較長時間
+- **記憶體不足**：Docker Desktop → Settings → Resources → 至少分配 4GB RAM
+- **容器啟動失敗**：嘗試 `docker system prune` 清理後重新 `supabase start`
+
+> 📖 診斷步驟：[TROUBLESHOOTING.md](TROUBLESHOOTING.md#1-supabase-start-失敗)
+
+### 可以只用 Email 登入，不設定 OAuth 嗎？
+
+可以。只需設定 `BETTER_AUTH_SECRET` 和 `NUXT_SESSION_PASSWORD`，OAuth 相關的環境變數留空即可。登入頁面會自動隱藏未設定的 OAuth 按鈕。
+
+### CLI 工具 `create-nuxt-starter` 是什麼？
+
+互動式 CLI，讓你選擇需要的功能來建立客製化專案。支援 17 個可選模組（認證、資料庫、UI、測試、部署等）。
+
+```bash
+npx create-nuxt-starter my-app        # 互動模式
+npx create-nuxt-starter my-app --yes  # 使用預設配置
+```
+
+> 📖 詳細說明：[CLI_SCAFFOLD.md](verify/CLI_SCAFFOLD.md)
+
+---
+
+## 效能與規模
+
+### RLS 會拖慢查詢嗎？
+
+不會明顯影響。RLS 政策在 PostgreSQL 內部以 `WHERE` 子句形式執行，走索引路徑。實測 RLS 開啟/關閉的差異通常在 1-2ms 以內。
+
+**最佳化建議**：
+
+- 確保 RLS 條件欄位有索引（例如 `user_id`）
+- 避免在 RLS 政策中使用子查詢，改用 `auth.uid()` 直接比較
+- 使用 `EXPLAIN ANALYZE` 確認查詢計畫
+
+> 📖 詳細說明：[DATABASE_OPTIMIZATION.md](verify/DATABASE_OPTIMIZATION.md)
+
+### 怎麼偵測 N+1 查詢？
+
+N+1 問題通常出現在逐筆查詢關聯資料。偵測方式：
+
+```bash
+# 檢查 Supabase 慢查詢 log
+supabase db lint --level warning
+```
+
+**修復模式**：使用 `.select('*, relation(*)')` 一次取回關聯資料，避免迴圈中逐筆查詢。
+
+> 📖 診斷步驟：[TROUBLESHOOTING.md](TROUBLESHOOTING.md#14-n1-查詢問題)
+
+### Supabase 免費方案能撐多大規模？
+
+| 資源           | 免費方案限制     |
+| -------------- | ---------------- |
+| 資料庫大小     | 500 MB           |
+| 頻寬           | 5 GB / 月        |
+| 儲存空間       | 1 GB             |
+| Edge Functions | 500K 次調用 / 月 |
+| 同時連線數     | 60               |
+
+對大多數 MVP 和小型產品足夠。超過限制時升級到 Pro 方案（$25/月）即可。
+
+### 超過免費方案限制怎麼辦？
+
+- **Supabase**：升級到 Pro（$25/月），包含 8GB 資料庫、250GB 頻寬、100GB 儲存
+- **Cloudflare Workers**：免費方案包含 10 萬次請求/天，超過後 $5/月（無限請求）
+- **漸進升級**：先用免費方案開發，接近限制時再升級，無需改動程式碼
+
+### Cloudflare Workers 有費用嗎？
+
+免費方案包含：
+
+- 每天 100,000 次請求
+- 每次請求 10ms CPU 時間
+- 全球邊緣部署
+
+對大多數小型應用完全足夠。付費方案（$5/月）提供無限請求和更多 CPU 時間。
+
+---
+
+## 團隊協作
+
+### 多人開發怎麼避免 migration 衝突？
+
+**規則**：
+
+1. 每個功能在獨立 branch 開發，各自建立 migration
+2. Migration 檔名帶時間戳（`supabase migration new` 自動處理）
+3. 合併前執行 `supabase db reset` 確認所有 migration 可正常套用
+4. 若遠端已有衝突的 migration，使用 `supabase migration repair --status reverted <version>` 處理
+
+> 📖 診斷步驟：[TROUBLESHOOTING.md](TROUBLESHOOTING.md#11-migration-repair)
+
+### Code Review 要注意什麼？
+
+**檢查清單**：
+
+- [ ] Migration 檔案包含 `SET search_path = ''`（如有函式）
+- [ ] RLS 政策包含 `service_role` bypass
+- [ ] Client 端只有 `.select()` 讀取，寫入走 Server API
+- [ ] 新增環境變數同步更新 `.env.example`
+- [ ] `pnpm check` 通過（format + lint + typecheck + test）
+- [ ] docs/verify/ 相關文件已更新
+
+### 新成員如何快速上手？
+
+建議閱讀順序（約 2 小時）：
+
+1. **README.md**（5 分鐘）— 了解專案定位
+2. **QUICK_START.md**（15 分鐘）— 環境設定
+3. **FIRST_CRUD.md**（15 分鐘）— 動手做第一個功能
+4. **WORKFLOW.md**（10 分鐘）— 開發流程
+5. **FAQ.md**（10 分鐘）— 常見問題
+
+之後按需查閱 `docs/verify/` 的參考手冊。
+
+> 📖 完整路徑：[READING_GUIDE.md](READING_GUIDE.md)
 
 ---
 
