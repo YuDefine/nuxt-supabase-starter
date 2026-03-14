@@ -16,21 +16,18 @@
 
 ---
 
-## 60 秒快速開始
+## 快速開始
 
-**方式一：Clone 範本**（推薦）
+**前置條件**：[Node.js 20+](https://nodejs.org/)、[pnpm](https://pnpm.io/)、[Docker](https://www.docker.com/)、[Supabase CLI](https://supabase.com/docs/guides/cli)
 
 ```bash
 git clone https://github.com/YuDefine/nuxt-supabase-starter my-project
 cd my-project
-pnpm setup    # 一鍵完成環境初始化
+pnpm setup    # 檢查環境 → 安裝依賴 → 啟動 Supabase → 產生型別
+pnpm dev      # 開啟 http://localhost:3000
 ```
 
-**方式二：整合至現有專案**
-
-參考 [INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md)。
-
-> 📖 完整設定步驟：[QUICK_START.md](docs/QUICK_START.md) | 📖 第一個功能：[FIRST_CRUD.md](docs/FIRST_CRUD.md)
+> 📖 完整步驟：[QUICK_START.md](docs/QUICK_START.md) | 整合至現有專案：[INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md)
 
 ---
 
