@@ -26,6 +26,7 @@
     "lint": "oxlint --deny-warnings .",
     "prepare": "husky && nuxt prepare",
     "preview": "nuxt preview",
+    "setup": "bash scripts/setup.sh",
     "skills:install": "bash ./scripts/install-skills.sh",
     "skills:list": "bash ./scripts/check-skills.sh",
     "skills:update": "npx skills update",
