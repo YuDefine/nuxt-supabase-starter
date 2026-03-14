@@ -1,0 +1,30 @@
+{
+  "name": "create-nuxt-starter",
+  "version": "0.1.0",
+  "description": "Interactive CLI to scaffold a Nuxt + Supabase project with selectable features",
+  "bin": {
+    "create-nuxt-starter": "./dist/cli.mjs"
+  },
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "tsdown src/cli.ts --format esm --out-dir dist",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "citty": "^0.1.6",
+    "consola": "^3.4.2",
+    "nypm": "^0.6.0",
+    "pathe": "^2.0.3"
+  },
+  "devDependencies": {
+    "tsdown": "^0.12.5",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3"
+  }
+}
