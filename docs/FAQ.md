@@ -49,7 +49,7 @@ pnpm docs:build  # 建置靜態網站
 
 1. 執行 `pnpm skills:update`（使用 [skills.sh](https://skills.sh) CLI）
 2. 從各 GitHub repo 拉取最新版本
-3. 更新到 `.agents/skills/` 目錄（symlink 到 `.claude/skills/`）
+3. 更新到 `.claude/skills/` 目錄
 4. 重啟 Claude Code CLI
 
 **情境 Skills 何時需要更新？**

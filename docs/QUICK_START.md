@@ -189,12 +189,15 @@ pnpm install
 ```bash
 # 複製 Claude Code 設定
 cp .claude/settings.local.json.example .claude/settings.local.json
+
+# 安裝第三方 AI Skills（26 個通用 Skills）
+bash scripts/install-skills.sh
 ```
 
-這個設定檔定義了：
+這個步驟會：
 
-- Claude 可以執行的命令權限
-- 啟用的 MCP Servers（包含 `local-supabase`）
+- 設定 Claude 的命令權限和 MCP Servers
+- 安裝 26 個通用 Skills 到 `.claude/skills/`（`nuxt`、`vue`、`nuxt-ui`、`nuxt-better-auth` 等）
 
 > 📖 關於 Supabase MCP：[SUPABASE_MCP.md](./SUPABASE_MCP.md)
 
