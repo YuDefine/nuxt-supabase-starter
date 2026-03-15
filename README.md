@@ -144,9 +144,7 @@ Spec-Driven Development (SDD)、Data Access Pattern（Client 讀 / Server 寫）
 │   ├── commands/            # 自定義命令（含 spectra/）
 │   ├── agents/              # SubAgents
 │   ├── hooks/               # 自動化腳本
-│   └── skills/              # AI Skills
-│
-├── .agents/skills/           # skills.sh 安裝的第三方 Skills
+│   └── skills/              # AI Skills（通用 + 情境 + Spectra）
 │
 ├── openspec/                 # Spectra 工作流程
 │   ├── project.md           # 專案上下文
