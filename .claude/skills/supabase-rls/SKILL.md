@@ -9,7 +9,7 @@ description: >-
 
 # Supabase RLS 政策規範
 
-service_role 繞過規則已定義在 CLAUDE.md。本 skill 提供完整 RLS 實作指引。
+`service_role` 繞過規則已定義在 CLAUDE.md。本 skill 提供完整 RLS 實作指引。
 
 ## 核心原則
 
@@ -35,10 +35,10 @@ ALTER TABLE your_schema.new_table FORCE ROW LEVEL SECURITY;
 
 ## 常見問題
 
-| 症狀                 | 原因                   | 解法                                         |
-| -------------------- | ---------------------- | -------------------------------------------- |
-| Toast 成功但資料沒變 | 缺少 service_role 繞過 | 加上 `(SELECT auth.role()) = 'service_role'` |
-| 查詢回傳空陣列       | RLS 未開放讀取         | 檢查 SELECT policy                           |
+| 症狀                 | 原因                     | 解法                                         |
+| -------------------- | ------------------------ | -------------------------------------------- |
+| Toast 成功但資料沒變 | 缺少 `service_role` 繞過 | 加上 `(SELECT auth.role()) = 'service_role'` |
+| 查詢回傳空陣列       | RLS 未開放讀取           | 檢查 SELECT policy                           |
 
 ## 參考資料
 
