@@ -37,29 +37,29 @@ echo ""
 
 # 官方 Skills
 echo "📦 安裝官方 Skills..."
-npx skills add supabase/agent-skills@supabase-postgres-best-practices -y
+npx skills add supabase/agent-skills@supabase-postgres-best-practices --agent claude-code -y
 npx skills add nuxt/ui --agent claude-code -y
 echo "  ✓ 官方 Skills 安裝完成"
 echo ""
 
 # TDD
 echo "📦 安裝 TDD Skill..."
-npx skills add https://github.com/obra/superpowers --skill test-driven-development -y
+npx skills add https://github.com/obra/superpowers --skill test-driven-development --agent claude-code -y
 echo "  ✓ TDD Skill 安裝完成"
 echo ""
 
 # Evlog（Observability）
 echo "📦 安裝 Evlog Skills..."
-npx skills add https://github.com/hugorcd/evlog --skill create-evlog-adapter -y
-npx skills add https://github.com/hugorcd/evlog --skill create-evlog-enricher -y
-npx skills add https://github.com/hugorcd/evlog --skill create-evlog-framework-integration -y
-npx skills add https://github.com/hugorcd/evlog --skill review-logging-patterns -y
+npx skills add https://github.com/hugorcd/evlog --skill create-evlog-adapter --agent claude-code -y
+npx skills add https://github.com/hugorcd/evlog --skill create-evlog-enricher --agent claude-code -y
+npx skills add https://github.com/hugorcd/evlog --skill create-evlog-framework-integration --agent claude-code -y
+npx skills add https://github.com/hugorcd/evlog --skill review-logging-patterns --agent claude-code -y
 echo "  ✓ Evlog Skills 安裝完成"
 echo ""
 
 # 實用工具
 echo "📦 安裝實用工具 Skills..."
-npx skills add vercel-labs/skills@find-skills -y
+npx skills add vercel-labs/skills@find-skills --agent claude-code -y
 echo "  ✓ 實用工具 Skills 安裝完成"
 echo ""
 
