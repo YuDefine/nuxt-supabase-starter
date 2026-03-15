@@ -39,7 +39,46 @@ $ARGUMENTS
 
 **任一步驟未通過，停止 commit 流程，先修復錯誤。**
 
-### Step 1: 檢查變更狀態
+### Step 1: 資料庫 Schema 同步檢查（條件觸發）
+
+檢查 `database.types.ts` 是否有變更：
+
+```bash
+git diff --name-only | grep -q "database.types.ts" && echo "HAS_TYPES_CHANGE=true" || echo "HAS_TYPES_CHANGE=false"
+```
+
+**如果 `database.types.ts` 有變更，執行以下驗證：**
+
+1. **重置 DB 並重新產生 types**（確保 types 來自 migration）：
+
+   ```bash
+   supabase db reset
+   supabase gen types typescript --local > /tmp/types-from-migration.ts
+   ```
+
+2. **比對 types 檔案**：
+
+   ```bash
+   diff app/types/database.types.ts /tmp/types-from-migration.ts
+   ```
+
+3. **結果判斷**：
+   - ✅ **無差異** → 繼續 commit 流程
+   - ❌ **有差異** → **停止 commit！** 顯示以下訊息：
+
+   ```text
+   ⛔ Schema 不同步！
+
+   database.types.ts 的內容與 migration 檔案不一致。
+   這通常表示有人直接修改了 local DB（透過 MCP 或手動 SQL）但沒有建立 migration。
+
+   請執行以下步驟修復：
+   1. 確認需要的 schema 變更
+   2. 建立正確的 migration 檔案
+   3. 重新執行 /commit
+   ```
+
+### Step 2: 檢查變更狀態
 
 ```bash
 git status
@@ -53,7 +92,7 @@ git diff --stat
 - 若有 `.gitignore` 的變更，先執行 `git checkout .gitignore` 還原
 - **除了 `.gitignore` 之外，所有變更都必須納入 commit，禁止自行判斷跳過任何檔案**
 
-### Step 2: 分析變更並分組
+### Step 3: 分析變更並分組
 
 將變更依照功能/目的分組：
 
@@ -72,11 +111,11 @@ git diff --stat
 - ...
 ```
 
-### Step 3: 確認分組
+### Step 4: 確認分組
 
 向使用者確認分組是否合適，是否需要調整。
 
-### Step 4: 逐一執行 Commit
+### Step 5: 逐一執行 Commit
 
 對每個分組：
 
@@ -102,7 +141,7 @@ git diff --stat
    git log -1 --oneline
    ```
 
-### Step 5: 版本號更新與 Deploy Commit
+### Step 6: 版本號更新與 Deploy Commit
 
 所有功能 commit 完成後，自動更新版本號：
 
@@ -146,7 +185,7 @@ git diff --stat
 
    此命令會建立 `v{版本號}` tag 並推送到 origin。
 
-### Step 6: 完成報告
+### Step 7: 完成報告
 
 ```text
 ✅ Commit 完成！
