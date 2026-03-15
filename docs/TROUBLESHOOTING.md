@@ -236,7 +236,7 @@ grep NUXT_OAUTH_GOOGLE .env     # 以 Google 為例
 
 ## 5. RLS 拒絕存取
 
-### 5a. 缺少 service_role bypass
+### 5a. 缺少 `service_role` bypass
 
 **問題：** Server API 呼叫 Supabase 時回傳 403 或空結果。
 
@@ -278,7 +278,7 @@ CREATE POLICY "policy_name" ON public.table_name
 
 **診斷：** 瀏覽器 DevTools Network tab 顯示：`"code": "42501", "new row violates row-level security policy..."`
 
-**修復：** Client 端禁止寫入，改用 server API：`Client → /api/v1/xxx (service_role) → Supabase`
+**修復：** Client 端禁止寫入，改用 server API：`Client → /api/v1/xxx` (`service_role`) `→ Supabase`
 
 ---
 

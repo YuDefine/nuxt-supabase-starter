@@ -298,23 +298,11 @@ brew install supabase/tap/supabase
 
 ## 4. Better Auth 整合（選用）
 
-### 4.1 安裝依賴
+基本認證設定（安裝、環境變數、模組配置）請參考 [QUICK_START.md](QUICK_START.md#step-3設定環境變數)，以下僅說明現有專案整合的差異。
 
-```bash
-pnpm add @onmax/nuxt-better-auth better-auth
-```
+### 4.1 建立認證配置檔
 
-### 4.2 設定 Nuxt 模組
-
-在 `nuxt.config.ts` 加入：
-
-```typescript
-export default defineNuxtConfig({
-  modules: ['@onmax/nuxt-better-auth'],
-})
-```
-
-### 4.3 建立認證配置
+新專案使用 Starter 範本時，這些檔案已內建。現有專案需手動建立：
 
 建立 `app/auth.config.ts`：
 
@@ -338,31 +326,6 @@ export default defineServerAuth({
     updateAge: 60 * 60 * 24, // 每 24 小時更新
   },
 })
-```
-
-### 4.4 設定環境變數
-
-在 `.env` 加入：
-
-```bash
-# Better Auth（必填）
-BETTER_AUTH_SECRET=<32字元隨機字串>
-
-# Session（必填）
-NUXT_SESSION_PASSWORD=<32字元隨機字串>
-
-# 站點配置
-NUXT_PUBLIC_SITE_URL=http://localhost:3000
-
-# OAuth（選用）
-# NUXT_OAUTH_GOOGLE_CLIENT_ID=<client_id>
-# NUXT_OAUTH_GOOGLE_CLIENT_SECRET=<client_secret>
-```
-
-產生隨機字串：
-
-```bash
-openssl rand -base64 32
 ```
 
 ---

@@ -21,7 +21,7 @@
 | 總規範   | 開發規則                                    | [CLAUDE.md](../CLAUDE.md)   |
 | Commands | 可執行命令（`/commit`, `/db-migration` 等） | `.claude/commands/*.md`     |
 | Agents   | 自動化流程（check-runner 等）               | `.claude/agents/*.md`       |
-| Skills   | 專業知識（40 個）                           | `.claude/skills/*/SKILL.md` |
+| Skills   | 專業知識（43 個）                           | `.claude/skills/*/SKILL.md` |
 
 ---
 

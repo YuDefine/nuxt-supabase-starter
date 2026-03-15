@@ -6,10 +6,10 @@
 
 如果你已經熟悉 Nuxt，想要快速建立**有後端、有資料庫、有認證、可部署**的完整專案，這個範本能幫你在幾天內完成通常需要幾週的工作。
 
-這不只是一個 boilerplate——它包含了我在 2.5 個月內開發一個中型企業系統的所有經驗：
+這不只是一個 boilerplate——它包含了實際中型企業系統的開發經驗：
 
-- 426 次 commit、80 個 API 端點、100 個資料庫 migration
-- 與 Claude Opus 4.5 協作的 2,500+ 次對話
+- 預設認證、CRUD、RLS、CI/CD、部署等完整流程
+- 與 Claude Code 協作的最佳實踐與工作流程
 - 踩過的坑、驗證過的模式、避免的反模式
 
 **目標讀者**：有 Nuxt/Vue 經驗，想嘗試 Supabase 或想要一套可靠的全端開發工作流程的開發者。
@@ -37,7 +37,7 @@ pnpm dev      # 開啟 http://localhost:3000
 
 | 階段           | 時間     | 說明                                     |
 | -------------- | -------- | ---------------------------------------- |
-| Clone → 可運行 | ~15 分鐘 | `pnpm run setup` 一鍵完成                 |
+| Clone → 可運行 | ~15 分鐘 | `pnpm run setup` 一鍵完成                |
 | 第一個功能     | ~20 分鐘 | 跟著 [FIRST_CRUD.md](docs/FIRST_CRUD.md) |
 | 部署上線       | ~30 分鐘 | 跟著 [DEPLOYMENT.md](docs/DEPLOYMENT.md) |
 
@@ -50,6 +50,8 @@ pnpm dev      # 開啟 http://localhost:3000
 | 成長期     | Pro $25+ | $5+        | **~$100+/月** |
 
 > 免費方案包含：500MB 資料庫、5GB 頻寬、10 萬次 Workers 請求/天。對大多數 MVP 足夠。
+>
+> Supabase 是開源的，可以免費 [Self-host](docs/verify/SELF_HOSTED_SUPABASE.md) 在自己的伺服器上，不受 Cloud 免費方案限制。
 
 ---
 
@@ -128,35 +130,38 @@ Spec-Driven Development (SDD)、Data Access Pattern（Client 讀 / Server 寫）
 
 ```
 ├── CLAUDE.md                 # AI 開發規範
+├── app/                      # Nuxt 應用程式（pages, components, composables, stores）
+├── server/                   # Server API（api/v1/, api/auth/, utils/）
+├── shared/                   # 共用程式碼（跨 app/server）
+├── packages/                 # Monorepo 套件
 ├── docs/                     # 詳細文件
-│   ├── SUPABASE_GUIDE.md    # Supabase 入門
-│   ├── WORKFLOW.md          # 開發工作流程
-│   ├── OPENSPEC.md          # Spectra 工作流程
-│   └── API_PATTERNS.md      # API 設計模式
+├── test/                     # 測試（unit/, nuxt/）
+├── e2e/                      # Playwright 端對端測試
+├── supabase/                 # Supabase 配置與 migrations
+├── scripts/                  # 工具腳本（install-skills.sh 等）
 │
 ├── .claude/                  # Claude Code 配置
 │   ├── commands/            # 自定義命令（含 spectra/）
 │   ├── agents/              # SubAgents
 │   ├── hooks/               # 自動化腳本
-│   ├── skills/              # AI Skills
-│   └── settings.local.json.example
+│   └── skills/              # AI Skills
+│
+├── .agents/skills/           # skills.sh 安裝的第三方 Skills
 │
 ├── openspec/                 # Spectra 工作流程
 │   ├── project.md           # 專案上下文
 │   ├── specs/               # 系統規格（真相來源）
 │   └── changes/             # 變更提案區
 │
-├── .github/                  # GitHub prompts
-│
-└── server/utils/
-    └── supabase.ts          # Server 端 Supabase client
+├── .spectra/                 # Spectra 配置
+└── .github/                  # GitHub PR 模板
 ```
 
 ---
 
 ## 常見問題
 
-**Q: 我需要付費嗎？** 本地開發完全免費。Supabase 免費方案：500MB 資料庫、50K 月活躍使用者。
+**Q: 我需要付費嗎？** 本地開發完全免費。Supabase 免費方案：500MB 資料庫、50K 月活躍使用者。Supabase 也是開源的，可以免費 [Self-host](docs/verify/SELF_HOSTED_SUPABASE.md)，不受 Cloud 方案限制。
 
 **Q: RLS 會影響效能嗎？** 如果用 `(SELECT ...)` 包裝函式呼叫，不會。詳見 [SUPABASE_GUIDE.md](./docs/SUPABASE_GUIDE.md#效能優化)。
 

@@ -20,13 +20,13 @@
 
 - [ ] 已執行 `pnpm install` 安裝 npm 套件
 - [ ] **已執行 `pnpm skills:install` 安裝 AI Skills**
-- [ ] 執行 `pnpm skills:list` 確認 skills 數量正確
+- [ ] 執行 `pnpm skills:list` 確認 skills 數量正確（共 26 個通用 Skills，完整清單請參考 [CLAUDE_CODE_GUIDE.md](./CLAUDE_CODE_GUIDE.md)）
 
 ### Skills 檢查
 
 執行 `pnpm skills:list`，應該包含：
 
-**通用 Skills（從 skills.sh）：**
+**通用 Skills（從 skills.sh，共 26 個）：**
 
 - [ ] vue
 - [ ] vueuse-functions
@@ -35,6 +35,7 @@
 - [ ] vitepress
 - [ ] vitest
 - [ ] vue-best-practices
+- [ ] vue-testing-best-practices
 - [ ] supabase-postgres-best-practices
 - [ ] nuxt-ui
 - [ ] find-skills

@@ -61,7 +61,7 @@
 | [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | 讓 AI 直接操作資料庫                       |
 | Commands（16 個）                                                    | 4 共用 + 12 Spectra                        |
 | SubAgents（3 個）                                                    | `check-runner`、`code-review`、`db-backup` |
-| [Skills](https://skills.sh)（通用 23 + 情境 5）                      | `nuxt-ui`、`vue`、`vueuse` 等 AI Skills    |
+| [Skills](https://skills.sh)（通用 26 + 情境 5）                      | `nuxt-ui`、`vue`、`vueuse` 等 AI Skills    |
 | SDD Skills（12 個）                                                  | Spectra（`spectra-*`）                     |
 
 ---

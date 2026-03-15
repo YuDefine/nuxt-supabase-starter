@@ -60,22 +60,6 @@ NUXT_PUBLIC_SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
 
 ## 3.2. Self-hosted Supabase 環境變數
 
-Self-hosted 模式的環境變數與 Cloud 相同，僅 URL 不同：
-
-```bash
-# Self-hosted Supabase
-SUPABASE_URL=https://supabase-api.example.com
-SUPABASE_KEY=<anon_key>
-SUPABASE_SECRET_KEY=<service_role_key>
-
-# 資料庫直連（用於 migration 部署，可選）
-SUPABASE_DB_HOST=supabase-db.example.com
-SUPABASE_DB_PORT=5432
-SUPABASE_DB_NAME=postgres
-SUPABASE_DB_USER=postgres
-SUPABASE_DB_PASSWORD=<password>
-```
-
 ### Cloud vs Self-hosted 對照
 
 | 變數                  | Cloud                       | Self-hosted                                  |
@@ -85,7 +69,7 @@ SUPABASE_DB_PASSWORD=<password>
 | `SUPABASE_SECRET_KEY` | Supabase Dashboard 取得     | Docker `.env` 中的 `SERVICE_ROLE_KEY`        |
 | 資料庫直連            | 不需要                      | 用於 migration 部署（可選）                  |
 
-> 📖 Self-hosted 部署詳情請參考 [SELF_HOSTED_SUPABASE.md](./SELF_HOSTED_SUPABASE.md)
+> 📖 Self-hosted 環境變數詳細配置與範例請參考 [SELF_HOSTED_SUPABASE.md](./SELF_HOSTED_SUPABASE.md)
 
 ---
 

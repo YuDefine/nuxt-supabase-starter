@@ -170,7 +170,7 @@ CREATE POLICY "Users can view own orders"
   );
 ```
 
-#### 3. Server API 專用（service_role 繞過）
+#### 3. Server API 專用（`service_role` 繞過）
 
 ```sql
 -- 讓 Server API 可以做任何操作
@@ -483,7 +483,7 @@ SELECT * FROM app.todos;
 
 ### Q: Server API 寫入失敗？
 
-確認你的 RLS policy 有包含 service_role 繞過：
+確認你的 RLS policy 有包含 `service_role` 繞過：
 
 ```sql
 CREATE POLICY "Service role has full access"
