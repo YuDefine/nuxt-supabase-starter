@@ -52,7 +52,7 @@ supabase db lint --level warning  # Security check
 新增環境變數時：
 
 1. 在 GitHub repo → Settings → Secrets and variables → Actions 新增
-2. 確認 `.github/workflows/` 中的部署 workflow 有正確傳遞該變數
+2. 確認 `docs/templates/.github/workflows/` 中的部署 workflow 有正確傳遞該變數
 
 ## CRITICAL RULES
 
@@ -115,11 +115,16 @@ server/
 ├── api/auth/        # Auth API
 └── utils/           # supabase, logger
 
+shared/              # Shared code (cross app/server)
+packages/            # Monorepo packages
+
 test/
 ├── unit/            # Unit tests (*.test.ts)
 └── nuxt/            # Nuxt env tests (*.nuxt.test.ts)
 
 supabase/migrations/ # DB migrations (CLI only)
+openspec/            # Spectra specs & changes
+.spectra/            # Spectra config
 ```
 
 ## Automation Triggers

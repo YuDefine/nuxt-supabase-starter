@@ -14,12 +14,15 @@
 
 ### 1. 安裝腳本
 
-所有專案都已建立 `scripts/install-skills.sh`：
+所有專案都已建立 `scripts/install-skills.sh`，這是 skills 清單的**單一事實來源（Single Source of Truth）**。新增或移除 skill 時，請直接修改此腳本，再執行 `pnpm skills:install` 同步。
 
 ```bash
 # 內容相同，安裝以下 skills：
-- Antfu Skills (7個)
+- Antfu Skills (8個)
+- Onmax Nuxt Skills (9個)
 - 官方 Skills (2個)
+- TDD (1個)
+- Evlog (4個)
 - 工具 (1個)
 ```
 

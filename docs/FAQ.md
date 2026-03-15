@@ -8,30 +8,9 @@
 
 ### Spectra vs Plan Mode：何時使用哪個？
 
-| 面向         | Spectra                                       | Claude Code Plan Mode      |
-| ------------ | --------------------------------------------- | -------------------------- |
-| **流程**     | 三階段（proposal → apply → archive）          | 單階段規劃                 |
-| **成果**     | proposal.md, design.md, tasks.md, delta specs | 單一 plan.md               |
-| **規格管理** | specs/ 作為真相來源 + delta 追蹤              | 無                         |
-| **適用場景** | 複雜功能、多人協作、需要追蹤規格演進          | 小修改、快速迭代、需求明確 |
-| **歸檔機制** | 完整歷史保留                                  | 無                         |
+**Spectra** 適合複雜功能（3+ 個檔案變更、需追蹤規格演進、多人協作），提供三階段流程（propose → apply → archive）與完整歸檔。**Plan Mode** 適合小修改、需求明確的場景。Bug 修復或緊急部署可直接實作。
 
-**選擇指南**：
-
-| 情境                         | 推薦                 |
-| ---------------------------- | -------------------- |
-| 功能需要 **3+ 個檔案變更**   | Spectra              |
-| 需要**追蹤規格演進**         | Spectra              |
-| 需要**多人審閱**計畫         | Spectra              |
-| **Bug 修復**、單檔變更       | Plan Mode            |
-| **緊急部署**、時間緊迫       | 直接實作             |
-| 需求**非常明確**，已知怎麼做 | Plan Mode 或直接實作 |
-
-**範例**：
-
-- 「新增使用者管理模組」→ Spectra（多檔案、需規劃）
-- 「修正登入按鈕顏色」→ 直接實作
-- 「重構 API 錯誤處理」→ Plan Mode（影響多處但邏輯明確）
+詳細比較與指令說明請參考 [OPENSPEC.md](OPENSPEC.md)。
 
 ---
 
@@ -60,11 +39,11 @@ pnpm docs:build  # 建置靜態網站
 
 **兩種 Skill 類型**：
 
-| 類型        | 數量  | 更新方式                                                      |
-| ----------- | ----- | ------------------------------------------------------------- |
-| 通用 Skills | 23 個 | 第三方（15 個）：`pnpm skills:update`；本地（8 個）：手動維護 |
-| 情境 Skills | 5 個  | 本地維護，手動更新                                            |
-| SDD Skills  | 12    | Spectra（`spectra-*`）                                        |
+| 類型        | 數量  | 更新方式                                  |
+| ----------- | ----- | ----------------------------------------- |
+| 通用 Skills | 26 個 | 全部第三方，`pnpm skills:update` 自動更新 |
+| 情境 Skills | 5 個  | 本地維護，手動更新                        |
+| SDD Skills  | 12 個 | Spectra（`spectra-*`）                    |
 
 **第三方 Skills 更新流程**：
 
@@ -100,7 +79,7 @@ pnpm docs:build  # 建置靜態網站
 | **Max 5x** | **$100** | **充足**  | **日常開發**（推薦） |
 | Max 20x    | $200     | 大量      | 密集開發、團隊共用   |
 
-> **實際經驗**：2.5 個月開發中使用了 2,500+ 次 Claude 對話。若使用 Pro 方案，會頻繁遇到 Opus 配額限制，被迫切換到 Sonnet 模型。Max 5x 方案足以支撐日常開發。
+> **實際經驗**：密集開發時 Pro 方案會頻繁遇到 Opus 配額限制，被迫切換到 Sonnet 模型。Max 5x 方案足以支撐日常開發。
 
 ---
 
@@ -425,13 +404,14 @@ supabase db lint --level warning
 | Edge Functions | 500K 次調用 / 月 |
 | 同時連線數     | 60               |
 
-對大多數 MVP 和小型產品足夠。超過限制時升級到 Pro 方案（$25/月）即可。
+對大多數 MVP 和小型產品足夠。超過限制時可升級到 Pro 方案（$25/月），或 [Self-host](../docs/verify/SELF_HOSTED_SUPABASE.md) Supabase（開源免費），完全不受以上限制。
 
 ### 超過免費方案限制怎麼辦？
 
-- **Supabase**：升級到 Pro（$25/月），包含 8GB 資料庫、250GB 頻寬、100GB 儲存
+- **Supabase Cloud**：升級到 Pro（$25/月），包含 8GB 資料庫、250GB 頻寬、100GB 儲存
+- **Supabase Self-hosted**：Supabase 是開源的，可以免費自架在自己的伺服器上，不受任何方案限制。詳見 [Self-hosted 部署指南](../docs/verify/SELF_HOSTED_SUPABASE.md)
 - **Cloudflare Workers**：免費方案包含 10 萬次請求/天，超過後 $5/月（無限請求）
-- **漸進升級**：先用免費方案開發，接近限制時再升級，無需改動程式碼
+- **漸進升級**：先用免費方案開發，接近限制時再升級或改用 Self-hosted，無需改動程式碼
 
 ### Cloudflare Workers 有費用嗎？
 

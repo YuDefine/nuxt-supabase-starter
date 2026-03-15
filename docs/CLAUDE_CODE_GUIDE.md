@@ -12,7 +12,7 @@
 | --------- | ----- | ----------------------------- |
 | Commands  | 16 個 | 4 共用 + 12 Spectra           |
 | SubAgents | 3 個  | 自動執行特定任務的專家        |
-| Skills    | 40 個 | 23 通用 + 5 情境 + 12 Spectra |
+| Skills    | 43 個 | 26 通用 + 5 情境 + 12 Spectra |
 | Hooks     | 2 個  | 自動化工作流程的腳本          |
 | CLAUDE.md | 1 份  | 專案開發規範                  |
 
@@ -30,7 +30,7 @@
 | **Max 5x** | **$100** | **充足**  | **日常開發**（推薦） |
 | Max 20x    | $200     | 大量      | 密集開發、團隊共用   |
 
-> **實際經驗**：2.5 個月開發中使用了 2,500+ 次 Claude 對話。若使用 Pro 方案，會頻繁遇到 Opus 配額限制。Max 5x 方案足以支撐日常開發。
+> **實際經驗**：密集開發時 Pro 方案會頻繁遇到 Opus 配額限制。Max 5x 方案足以支撐日常開發。
 
 ---
 
@@ -132,22 +132,9 @@ Commands 是可以用 `/指令` 觸發的工作流程。
 
 ### Spectra 指令（12 個）
 
-| 指令               | 說明                 |
-| ------------------ | -------------------- |
-| `/spectra:propose` | 建立變更提案         |
-| `/spectra:apply`   | 執行任務             |
-| `/spectra:archive` | 歸檔完成的變更       |
-| `/spectra:discuss` | 聚焦討論並達成結論   |
-| `/spectra:ask`     | 查詢規格文件         |
-| `/spectra:ingest`  | 從外部上下文更新變更 |
-| `/spectra:debug`   | 系統化除錯           |
-| `/spectra:tdd`     | 依 TDD 流程實作      |
-| `/spectra:analyze` | 分析現有程式碼       |
-| `/spectra:clarify` | 釐清需求             |
-| `/spectra:sync`    | 同步規格             |
-| `/spectra:verify`  | 驗證實作             |
+包含 `propose`、`apply`、`archive`、`discuss`、`ask`、`ingest`、`debug`、`tdd`、`analyze`、`clarify`、`sync`、`verify` 共 12 個指令，涵蓋從提案到歸檔的完整 Spec-Driven Development 流程。
 
-詳見 [OPENSPEC.md](./OPENSPEC.md)。
+詳細指令說明請參考 [OPENSPEC.md](./OPENSPEC.md)。
 
 ### 指令串接
 
@@ -342,34 +329,25 @@ Hook 腳本可以從 stdin 讀取 JSON 輸入，包含 `tool_input` 和 `tool_re
 
 Skills 是預先整理好的技術知識，讓 Claude 能正確使用各種框架和工具。
 
-### 通用技術 Skills（23 個）
+### 通用 Skills（26 個）
 
-**第三方 Skills**（15 個，安裝於 `.agents/skills/`，透過 `pnpm skills:update` 更新）：
+全部為第三方 Skills，安裝於 `.agents/skills/`，透過 `pnpm skills:update` 更新：
 
-| Skill                              | 來源                    | 用途                 |
-| ---------------------------------- | ----------------------- | -------------------- |
-| `nuxt`、`vue`、`vueuse-functions`  | `antfu/skills`          | 核心框架             |
-| `vitest`、`vue-best-practices`     | `antfu/skills`          | 測試與最佳實踐       |
-| `vitepress`                        | `antfu/skills`          | 文件網站             |
-| `nuxt-ui`、`contributing`          | `nuxt/ui`               | UI 元件與貢獻指南    |
-| `supabase-postgres-best-practices` | `supabase/agent-skills` | Postgres 效能最佳化  |
-| `test-driven-development`          | `obra/superpowers`      | TDD 工作流程         |
-| `find-skills`                      | `vercel-labs/skills`    | 搜尋與發現 skills    |
-| `create-evlog-*`（3 個）           | `hugorcd/evlog`         | Observability 適配器 |
-| `review-logging-patterns`          | `hugorcd/evlog`         | 日誌模式審查         |
-
-**本地 Skills**（8 個，位於 `.claude/skills/`，手動維護）：
-
-| Skill              | 用途                  |
-| ------------------ | --------------------- |
-| `nuxt-better-auth` | 認證模組              |
-| `nuxt-content`     | 內容管理              |
-| `nuxt-modules`     | 模組開發              |
-| `reka-ui`          | 無樣式元件            |
-| `motion`           | 動畫效果              |
-| `nuxthub`          | Cloudflare 整合       |
-| `document-writer`  | 文件寫作風格          |
-| `ts-library`       | TypeScript 函式庫開發 |
+| Skill                                           | 來源                    | 用途                 |
+| ----------------------------------------------- | ----------------------- | -------------------- |
+| `nuxt`、`vue`、`vueuse-functions`               | `antfu/skills`          | 核心框架             |
+| `vitest`、`vue-best-practices`                  | `antfu/skills`          | 測試最佳實踐         |
+| `pinia`、`vue-testing-best-practices`           | `antfu/skills`          | 狀態管理與測試       |
+| `vitepress`                                     | `antfu/skills`          | 文件網站             |
+| `document-writer`、`motion`、`nuxt-better-auth` | `onmax/nuxt-skills`     | 文件、動畫、認證     |
+| `nuxt-content`、`nuxt-modules`、`nuxthub`       | `onmax/nuxt-skills`     | 內容、模組、部署     |
+| `reka-ui`、`ts-library`、`vueuse`               | `onmax/nuxt-skills`     | 元件、函式庫、工具   |
+| `nuxt-ui`、`contributing`                       | `nuxt/ui`               | UI 元件與貢獻指南    |
+| `supabase-postgres-best-practices`              | `supabase/agent-skills` | Postgres 效能最佳化  |
+| `test-driven-development`                       | `obra/superpowers`      | TDD 工作流程         |
+| `find-skills`                                   | `vercel-labs/skills`    | 搜尋與發現 skills    |
+| `create-evlog-*`（3 個）                        | `hugorcd/evlog`         | Observability 適配器 |
+| `review-logging-patterns`                       | `hugorcd/evlog`         | 日誌模式審查         |
 
 ### 情境觸發 Skills（5 個）
 

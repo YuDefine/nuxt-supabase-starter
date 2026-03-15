@@ -63,6 +63,8 @@ SELECT role FROM your_schema.user_roles WHERE id = auth.uid()
 
 ## 2. Policy 模板
 
+> 以下範例使用的角色（`admin`、`manager`、`staff`、`unauthorized`）定義詳見 [AUTH_INTEGRATION.md](./AUTH_INTEGRATION.md#session-型別定義)。
+
 ### 讀取政策（SELECT）
 
 ```sql
@@ -135,7 +137,7 @@ USING (auth.role() = 'service_role')
 USING (
   EXISTS (
     SELECT 1 FROM your_schema.permissions
-    WHERE user_id = auth.uid()
+    WHERE user_id = (SELECT auth.uid())
     AND resource_id = your_table.id
     AND permission = 'read'
   )

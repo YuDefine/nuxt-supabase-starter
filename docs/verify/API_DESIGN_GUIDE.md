@@ -102,12 +102,7 @@ export default defineEventHandler(async (event) => {
 
 ### 角色階層
 
-| 角色           | 權限範圍            |
-| -------------- | ------------------- |
-| `admin`        | 完整系統管理權限    |
-| `manager`      | 部門管理、資料 CRUD |
-| `staff`        | 基本資料讀取        |
-| `unauthorized` | 無權限（等待授權）  |
+系統定義四種角色：`admin`、`manager`、`staff`、`unauthorized`。角色定義詳見 [AUTH_INTEGRATION.md](./AUTH_INTEGRATION.md#session-型別定義)。
 
 ---
 

@@ -15,6 +15,7 @@
 - `vitepress` - VitePress 文件網站
 - `vitest` - Vitest 測試框架
 - `vue-best-practices` - Vue 程式碼品質
+- `vue-testing-best-practices` - Vue 測試最佳實踐
 
 #### 官方 Skills
 

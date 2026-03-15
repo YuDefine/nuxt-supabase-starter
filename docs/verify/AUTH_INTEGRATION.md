@@ -36,7 +36,7 @@
 
 | 位置                            | 功能              |
 | ------------------------------- | ----------------- |
-| `server/routes/auth/[...]`      | OAuth 處理        |
+| `server/api/auth/[...]`         | OAuth 處理        |
 | `server/utils/supabase.ts`      | Supabase 工具函式 |
 | `app/middleware/auth.global.ts` | Client 端路由守衛 |
 

@@ -8,17 +8,36 @@
 
 - Cloudflare 帳號（免費方案即可）
 - GitHub 帳號（用於 CI/CD）
-- Supabase Cloud 專案（或 Self-hosted）
+- Supabase Cloud 專案（或免費 [Self-host](verify/SELF_HOSTED_SUPABASE.md)，Supabase 是開源的）
 
 ---
 
-## Step 1：設定 Supabase Production
+## Supabase Cloud 或 Self-hosted？
+
+Supabase 是開源的，除了使用官方 Cloud 服務，也可以免費自架在自己的伺服器上。兩條路線的開發方式完全相同（Migration、RLS、API 都一樣），差別在部署與維運：
+
+| 比較項目      | Cloud                         | Self-hosted                         |
+| ------------- | ----------------------------- | ----------------------------------- |
+| **適合情境**  | 快速上線、不想管基礎設施      | 資料隱私要求高、長期成本控制        |
+| **費用**      | 免費方案有限額，Pro $25/月起  | 免費（僅付伺服器費用）              |
+| **維運**      | Supabase 負責升級、備份、監控 | 自行維護 Docker Compose、備份、升級 |
+| **Migration** | `supabase db push` 一鍵推送   | `docker exec` 或 psql 手動執行      |
+| **Dashboard** | `supabase.com/dashboard`      | 自架 Studio（`localhost:3000`）     |
+
+**建議**：剛開始用 Cloud 免費方案快速開發，之後可隨時遷移到 Self-hosted。程式碼不需要任何修改，只需更換環境變數。
+
+- **選 Cloud** → 繼續下方 Step 1
+- **選 Self-hosted** → 前往 [Self-hosted Supabase 部署指南](verify/SELF_HOSTED_SUPABASE.md)，完成後跳到 Step 2
+
+---
+
+## Step 1：設定 Supabase Production（Cloud）
 
 1. 前往 [Supabase Dashboard](https://supabase.com/dashboard) 建立新專案
 2. 取得連線資訊：
    - `SUPABASE_URL`：Project Settings → API → Project URL
    - `SUPABASE_KEY`：Project Settings → API → anon public key
-   - `SUPABASE_SECRET_KEY`：Project Settings → API → service_role key
+   - `SUPABASE_SECRET_KEY`：Project Settings → API → `service_role` key
 3. 連結本地專案：
 
 ```bash
@@ -145,6 +164,16 @@ checkout → install → build → wrangler deploy → smoke test
 > 注意：`DEPLOY_URL` 是 GitHub **Variable**（Settings → Secrets and variables → Actions → Variables），不是 Secret。
 
 > **重要**：所有環境變數透過 GitHub Secrets 管理，**禁止**直接在 Cloudflare Dashboard 設定。這確保環境變數有版本控制，且團隊成員可透過 GitHub 統一管理。
+
+---
+
+## 部署前檢查清單
+
+- [ ] 所有檢查通過：`pnpm check`
+- [ ] Build 成功：`pnpm build`
+- [ ] 所有 GitHub Secrets 已設定（參考 Step 3）
+- [ ] 資料庫 Migration 已推送：`supabase db push --linked`
+- [ ] DNS 已設定（如使用自訂域名）
 
 ---
 

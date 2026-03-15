@@ -102,12 +102,12 @@ supabase db reset  # 重新套用所有 migration
 
 ### 常見 API 錯誤
 
-| 狀態碼 | 常見原因              | 修復                                |
-| ------ | --------------------- | ----------------------------------- |
-| 401    | 未登入或 session 過期 | 確認 request 帶有 auth cookie       |
-| 403    | RLS 政策阻擋          | 檢查 RLS 是否有 service_role bypass |
-| 404    | 路由不存在            | 確認檔案名稱符合 Nuxt 路由規則      |
-| 500    | Server 端錯誤         | 看終端機 log 的 stack trace         |
+| 狀態碼 | 常見原因              | 修復                                  |
+| ------ | --------------------- | ------------------------------------- |
+| 401    | 未登入或 session 過期 | 確認 request 帶有 auth cookie         |
+| 403    | RLS 政策阻擋          | 檢查 RLS 是否有 `service_role` bypass |
+| 404    | 路由不存在            | 確認檔案名稱符合 Nuxt 路由規則        |
+| 500    | Server 端錯誤         | 看終端機 log 的 stack trace           |
 
 ---
 

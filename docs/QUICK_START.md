@@ -19,13 +19,17 @@
 
 在開始之前，請確認已安裝：
 
-| 工具         | 版本               | 安裝方式                                            |
-| ------------ | ------------------ | --------------------------------------------------- |
-| Node.js      | 18+（建議 24 LTS） | [nodejs.org](https://nodejs.org/)                   |
-| pnpm         | 9+                 | `curl -fsSL https://get.pnpm.io/install.sh \| sh -` |
-| Docker       | -                  | [docker.com](https://www.docker.com/)               |
-| Supabase CLI | -                  | `brew install supabase/tap/supabase`                |
-| Claude Code  | -                  | `curl -fsSL https://claude.ai/install.sh \| sh`     |
+| 工具         | 版本               | 安裝方式                                                           |
+| ------------ | ------------------ | ------------------------------------------------------------------ |
+| Node.js      | 18+（建議 24 LTS） | [nodejs.org](https://nodejs.org/)                                  |
+| pnpm         | 9+                 | `corepack enable && corepack prepare pnpm@latest --activate`       |
+| Docker       | -                  | [docker.com](https://www.docker.com/)                              |
+| Supabase CLI | -                  | macOS: `brew install supabase/tap/supabase`                        |
+|              |                    | Windows: `scoop install supabase`（[Scoop](https://scoop.sh/)）    |
+|              |                    | Linux: `brew install supabase/tap/supabase` 或 [GitHub Releases][] |
+| Claude Code  | -                  | `curl -fsSL https://claude.ai/install.sh \| sh`                    |
+
+[GitHub Releases]: https://github.com/supabase/cli/releases
 
 ---
 
@@ -244,7 +248,7 @@ claude
 | ----------- | ----- | ------------------------------------------------- |
 | Commands    | 16 個 | 4 共用 + 12 Spectra                               |
 | SubAgents   | 3 個  | `check-runner`、`code-review`、`db-backup`        |
-| 通用 Skills | 23 個 | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等（自動更新） |
+| 通用 Skills | 26 個 | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等（自動更新） |
 | 情境 Skills | 5 個  | `supabase-rls`、`server-api`、`pinia-store` 等    |
 | SDD Skills  | 12 個 | Spectra（`spectra-*`）                            |
 
@@ -342,3 +346,9 @@ supabase migration new <name>  # 建立新 migration
 | [OPENSPEC.md](./OPENSPEC.md)                   | Spectra 工作流程            |
 | [API_PATTERNS.md](./API_PATTERNS.md)           | Server API 設計模式         |
 | [DEPLOYMENT.md](./DEPLOYMENT.md)               | Cloudflare Workers 部署指南 |
+
+---
+
+## 遇到問題？
+
+設定過程中遇到問題，請參考 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 查找解決方案。

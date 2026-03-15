@@ -19,9 +19,7 @@
 
 ```
 app/stores/
-├── userPreferences.ts   # 使用者偏好設定（主題、顏色等）
-├── auth.ts              # 認證狀態（如需要）
-└── ui.ts                # UI 全域狀態（Sidebar 等）
+└── user.ts              # 使用者狀態
 ```
 
 ---
