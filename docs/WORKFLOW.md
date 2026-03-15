@@ -417,7 +417,7 @@ Claude 會逐一執行任務，使用 TDD 流程。
 
 Claude 會將變更歸檔，並將 delta specs 合併到主 specs。
 
-### 5. 自動檢查與提交
+### 4. 自動檢查與提交
 
 完成後，Claude 會：
 
