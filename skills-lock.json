@@ -9,32 +9,77 @@
     "create-evlog-adapter": {
       "source": "hugorcd/evlog",
       "sourceType": "github",
-      "computedHash": "e70221ca259e171ae5234c0748a4bf86967f63eb1eb846d7ead9357b5ebc62b5"
+      "computedHash": "06a0680134a0ef0490ebdb5d3523479fabef3d9c8a7128792ae461695c9a3807"
     },
     "create-evlog-enricher": {
       "source": "hugorcd/evlog",
       "sourceType": "github",
-      "computedHash": "3d7fb7e77bf43a0a621417685850f6ceb39b30d81b9b17a86697f8dd5ad39931"
+      "computedHash": "a37e7984f6b5c66473743c601c606f5c9965251ce9e18baf05450441c943b0c7"
     },
     "create-evlog-framework-integration": {
       "source": "hugorcd/evlog",
       "sourceType": "github",
-      "computedHash": "06b274d3a0839f2eb2ab56f7dcb299b808101b5269a3dd9a3ffa3b7704c5fa8f"
+      "computedHash": "633329f0feb0369be4e1102e51975fe9e12f51ceb75e4d186c2426044f4710fe"
+    },
+    "document-writer": {
+      "source": "onmax/nuxt-skills",
+      "sourceType": "github",
+      "computedHash": "7a2b9799ece651b94b288a6b7d799da7ed603f24384897a370c1bfc6e75d74bb"
+    },
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "computedHash": "d31e234f0c90694a670222cdd1dafa853e051d7066beda389f1097c22dadd461"
+    },
+    "motion": {
+      "source": "onmax/nuxt-skills",
+      "sourceType": "github",
+      "computedHash": "45d0803ea76f82fa40af91858472fb4528a8ce4c2a9a710b785e796cd5b3fe98"
     },
     "nuxt": {
       "source": "antfu/skills",
       "sourceType": "github",
       "computedHash": "9e8237ec92083db9a6f4c77d5e5bf4b1d9873d670671235bc75455ee1ca39c74"
     },
+    "nuxt-better-auth": {
+      "source": "onmax/nuxt-skills",
+      "sourceType": "github",
+      "computedHash": "38670ad6846049050b531ee65cb1dc653098bccc0caf7e9ebcef6ef0f3d6980b"
+    },
+    "nuxt-content": {
+      "source": "onmax/nuxt-skills",
+      "sourceType": "github",
+      "computedHash": "2e6bbe566a1d907db8ff1d8a69637319a272cf7bebcdd51dd8c94a55cf70014f"
+    },
+    "nuxt-modules": {
+      "source": "onmax/nuxt-skills",
+      "sourceType": "github",
+      "computedHash": "628065a8cf5cab196853ff5ef5538d3a7ff553293dde146380ec1b57f33def48"
+    },
     "nuxt-ui": {
       "source": "nuxt/ui",
       "sourceType": "github",
-      "computedHash": "51e570e2bfd4b74752a40ea0a102c9d186bfe3afbb8c34a51cb83e46195243d0"
+      "computedHash": "9b7ff4c14185b7205c04c7ef41969d7b5c01e59c85e6d64083a7f497bf90b8d7"
+    },
+    "nuxthub": {
+      "source": "onmax/nuxt-skills",
+      "sourceType": "github",
+      "computedHash": "09691e4e19e41f40e01fe8a5efaa9d08cf54b06cc80cf430808a9f056d20b1df"
+    },
+    "pinia": {
+      "source": "antfu/skills",
+      "sourceType": "github",
+      "computedHash": "897b6b0982956f41f5cc85128ca638b625e1b3c8bc619e303cd1e7661c95b7de"
+    },
+    "reka-ui": {
+      "source": "onmax/nuxt-skills",
+      "sourceType": "github",
+      "computedHash": "fd2b8ae0cd7f30b85def649be6f305403fa2253c31c2cfdb9961f73ae222e569"
     },
     "review-logging-patterns": {
       "source": "hugorcd/evlog",
       "sourceType": "github",
-      "computedHash": "e54202c2b68f48eb6b2e9a80e40e28f6110c5fd75fbed95f00aaf1efb758537a"
+      "computedHash": "8edb563b6e649700b8fc567cf6a7019d72eb0da1c277d2f3eb188bb829ca3e47"
     },
     "supabase-postgres-best-practices": {
       "source": "supabase/agent-skills",
@@ -45,6 +90,11 @@
       "source": "obra/superpowers",
       "sourceType": "github",
       "computedHash": "126f1ebf6ccd414f42544f6e83d8cc5adb089e1108eaffb7c400701e37eecd9f"
+    },
+    "ts-library": {
+      "source": "onmax/nuxt-skills",
+      "sourceType": "github",
+      "computedHash": "4c33b682fad3e3323e4e8c71ee019f380699802030d147469f4564afe04fb867"
     },
     "vitepress": {
       "source": "antfu/skills",
@@ -64,12 +114,22 @@
     "vue-best-practices": {
       "source": "antfu/skills",
       "sourceType": "github",
-      "computedHash": "eef7ee82688c9541f91b3f1050e79a5c978ddcc2c776a4bf31a11ba37c7901e8"
+      "computedHash": "9200aa5cdf61032bd7d870a08a269a9a8ab672da6e594e7d4318ee3f23bde31d"
+    },
+    "vue-testing-best-practices": {
+      "source": "antfu/skills",
+      "sourceType": "github",
+      "computedHash": "166fbdc71ec55b50951b351f163bb760789bb5d1088e133481e6bcee643b57c0"
+    },
+    "vueuse": {
+      "source": "onmax/nuxt-skills",
+      "sourceType": "github",
+      "computedHash": "17a528979081261da67a003f6aa66bd6a2c6ec5cbb1c2348c14cc776c3d69f10"
     },
     "vueuse-functions": {
       "source": "antfu/skills",
       "sourceType": "github",
-      "computedHash": "325e49fd2a009bc2ae6dd974cc0c4a7413a342019c9f0e207e0491d2badb2fc5"
+      "computedHash": "4073414438ae18f65782f968947e614046474d6e31d97c508b627cd80abb1975"
     }
   }
 }
