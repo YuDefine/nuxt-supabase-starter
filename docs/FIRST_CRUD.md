@@ -91,8 +91,8 @@ export const createBookmarkSchema = z.object({
 
 ```ts
 import { createError, defineEventHandler } from 'h3'
-import { requireAuth } from '../../../utils/api-response'
-import { getServerSupabaseClient } from '../../../utils/supabase'
+import { requireAuth } from '~~/server/utils/api-response'
+import { getServerSupabaseClient } from '~~/server/utils/supabase'
 
 export default defineEventHandler(async (event) => {
   const user = requireAuth(event)
@@ -116,10 +116,10 @@ export default defineEventHandler(async (event) => {
 
 ```ts
 import { createError, defineEventHandler, readBody } from 'h3'
-import { createBookmarkSchema } from '../../../../shared/schemas/bookmarks'
-import { requireAuth } from '../../../utils/api-response'
-import { validateBody } from '../../../utils/validation'
-import { getServerSupabaseClient } from '../../../utils/supabase'
+import { createBookmarkSchema } from '~~/shared/schemas/bookmarks'
+import { requireAuth } from '~~/server/utils/api-response'
+import { validateBody } from '~~/server/utils/validation'
+import { getServerSupabaseClient } from '~~/server/utils/supabase'
 
 export default defineEventHandler(async (event) => {
   const user = requireAuth(event)

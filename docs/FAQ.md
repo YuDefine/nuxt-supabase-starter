@@ -66,7 +66,7 @@ pnpm docs:build  # 建置靜態網站
 
 **為什麼？**
 
-本範本大量使用 Claude Opus 4.5 模型進行：
+本範本大量使用 Claude Opus 模型進行：
 
 - 複雜的程式碼生成與重構
 - 多檔案同時編輯
@@ -326,7 +326,121 @@ supabase gen types typescript --local | tee app/types/database.types.ts > /dev/n
 
 ---
 
+## 技術選型類
+
+### SSR 為什麼關掉了？
+
+本專案設定 `ssr: false`（SPA 模式），原因：
+
+1. **部署目標**：Cloudflare Workers 免費方案 CPU 時間僅 10ms，SSR 會消耗寶貴資源
+2. **應用類型**：定位為「登入後的管理系統」，不需要 SEO
+3. **開發簡化**：避免 hydration mismatch、SSR 相容性等問題
+
+如果你的專案需要 SEO（如部落格、電商），可將 `nuxt.config.ts` 中的 `ssr` 改為 `true`。
+
+> 📖 詳細比較：[TECH_STACK.md](TECH_STACK.md#spa-模式ssr-關閉)
+
+---
+
+### 為什麼用 OXLint 不用 ESLint？
+
+**速度**。OXLint 用 Rust 編寫，lint 速度是 ESLint 的 50-100 倍。
+
+| 面向 | ESLint + Prettier       | OXLint + OXFmt       |
+| ---- | ----------------------- | -------------------- |
+| 速度 | 基準                    | 快 50-100x           |
+| 設定 | 需維護 config + plugins | 零設定或極少設定     |
+| 生態 | 龐大                    | 成長中，涵蓋主流規則 |
+
+Vue/Nuxt 生態正在擁抱 OXC 工具鏈。如果你需要特定 ESLint plugin 的功能，兩者可以並存。
+
+> 📖 詳細比較：[TECH_STACK.md](TECH_STACK.md#oxlint--oxfmt-vs-eslint--prettier)
+
+---
+
+### Pinia Colada 和普通 Pinia 有什麼不同？
+
+**Pinia** 是狀態管理（類似 Vuex），**Pinia Colada** 是 Pinia 的非同步資料管理層（類似 TanStack Query）。
+
+- **Pinia**：管理本地狀態（使用者偏好、UI 狀態等）
+- **Pinia Colada**：管理 Server 資料（自動快取、stale 管理、mutation + invalidation）
+
+本專案兩者搭配使用：Pinia 管理 client state，Colada 管理 server state。Colada 由 Pinia 作者開發，API 風格一致，與 Vue DevTools 無縫整合。
+
+> 📖 詳細比較：[TECH_STACK.md](TECH_STACK.md#pinia-colada-vs-tanstack-query)
+
+---
+
+### Nuxt UI v3 和 v4 有什麼差？
+
+本專案使用 **Nuxt UI v3**（`@nuxt/ui` v3.x，基於 Tailwind CSS v4 + Reka UI）。
+
+| 面向     | Nuxt UI v2      | Nuxt UI v3（本專案） |
+| -------- | --------------- | -------------------- |
+| CSS 框架 | Tailwind CSS v3 | Tailwind CSS v4      |
+| 底層元件 | Headless UI     | Reka UI              |
+| 主題系統 | `app.config.ts` | CSS 變數 + Tailwind  |
+| Vue 版本 | Vue 3           | Vue 3                |
+
+**注意**：v2 和 v3 的元件 API 有差異，搜尋教學時請確認是 v3 版本的文件。Nuxt UI 官方文件：[ui.nuxt.com](https://ui.nuxt.com/)
+
+---
+
+## 客製化類
+
+### 如何移除不需要的功能？
+
+本 Starter 的功能是模組化的，可按需移除：
+
+**不需要 Supabase（純前端）**：
+
+1. 移除 `@nuxtjs/supabase` 和 `@supabase/supabase-js`
+2. 從 `nuxt.config.ts` 移除 supabase 模組
+3. 刪除 `supabase/` 目錄和 `server/utils/supabase.ts`
+4. 刪除 `app/types/database.types.ts`
+
+**不需要認證**：
+
+1. 移除 `better-auth` 和 `@onmax/nuxt-better-auth`
+2. 從 `nuxt.config.ts` 移除 betterAuth 模組
+3. 刪除 `app/auth.config.ts` 和 `server/auth.config.ts`
+
+**不需要 AI 工具**：
+
+1. 刪除 `.claude/` 目錄
+2. 刪除 `.agents/` 目錄
+3. 刪除 `openspec/` 和 `.spectra/` 目錄
+4. 核心 Nuxt + Supabase 功能不受影響
+
+**不需要 Sentry**：
+
+1. 移除 `@sentry/nuxt`
+2. 從 `nuxt.config.ts` 移除 sentry 模組配置
+
+---
+
 ## 環境設定類
+
+### Windows 上怎麼開發？
+
+**推薦方式**：使用 [WSL 2](https://learn.microsoft.com/zh-tw/windows/wsl/install)（Windows Subsystem for Linux）。
+
+**原因**：
+
+- Docker（Supabase 需要）在 WSL 2 上運行最穩定
+- Shell 腳本（`setup.sh` 等）原生支援
+- 與 Linux/macOS 開發環境一致
+
+**步驟**：
+
+1. 安裝 WSL 2：`wsl --install`
+2. 安裝 Docker Desktop 並啟用 WSL 2 整合
+3. 在 WSL 中安裝 Node.js、pnpm、Supabase CLI
+4. 按照 [QUICK_START.md](QUICK_START.md) 正常操作
+
+**不用 WSL 也可以嗎？** `scripts/setup.sh` 有偵測 Windows 環境的邏輯，但某些功能可能需要手動調整。建議優先使用 WSL 2。
+
+> 📖 故障排除：[TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ### `pnpm run setup` 做了什麼？
 

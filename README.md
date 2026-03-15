@@ -171,6 +171,14 @@ Spec-Driven Development (SDD)、Data Access Pattern（Client 讀 / Server 寫）
 
 **Q: 如何部署到 Production？** 在 [Supabase Dashboard](https://supabase.com/dashboard) 建立專案 → `supabase link` → `supabase db push` → 部署到 Cloudflare Workers。
 
+**Q: SSR 為什麼關掉了？** 部署目標是 Cloudflare Workers（CPU 限制），且本範本定位為登入後的管理系統，不需要 SEO。詳見 [TECH_STACK.md](./docs/TECH_STACK.md#spa-模式ssr-關閉)。
+
+**Q: Windows 可以用嗎？** 可以，建議使用 WSL 2。`setup.sh` 有跨平台偵測。詳見 [FAQ.md](./docs/FAQ.md#windows-上怎麼開發)。
+
+**Q: 可以移除不需要的功能嗎？** 可以，Supabase、認證、AI 工具都是模組化的，可按需移除。詳見 [FAQ.md](./docs/FAQ.md#如何移除不需要的功能)。
+
+> 📖 更多問題：[FAQ.md](./docs/FAQ.md)（20+ 常見問題完整解答）
+
 ---
 
 ## 下一步
