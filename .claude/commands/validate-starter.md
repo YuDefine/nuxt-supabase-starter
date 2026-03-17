@@ -92,9 +92,9 @@ const knownMappings = {
   'Nuxt Image': '@nuxt/image', 'Lucide Icons': '@iconify-json/lucide',
   'nuxt-better-auth': '@onmax/nuxt-better-auth', 'Pinia': '@pinia/nuxt',
   'Pinia Colada': '@pinia/colada', 'VueUse': '@vueuse/nuxt',
-  'Vitest': 'vitest', '@nuxt/test-utils': '@nuxt/test-utils',
-  'OXLint': 'oxlint', 'OXFmt': 'oxfmt', 'Zod': 'zod',
-  'Commitlint': '@commitlint/cli', 'Husky': 'husky',
+  'Vite+': 'vite-plus', '@nuxt/test-utils': '@nuxt/test-utils',
+  'Zod': 'zod',
+  'Commitlint': '@commitlint/cli',
   'VitePress': 'vitepress', 'NuxtHub': '@nuxthub/core',
   'Sentry': '@sentry/nuxt', 'Cloudflare Workers': 'wrangler'
 };

@@ -96,7 +96,7 @@ await signIn('google')
 
 ```typescript
 // test/unit/utils/sort.test.ts
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect } from 'vite-plus/test'
 import { sortByDate } from '~/utils/sort'
 
 describe('sortByDate', () => {
@@ -191,15 +191,16 @@ Claude：好的，讓我先寫測試案例...
 ```bash
 pnpm check
 # 相當於：
-pnpm format && pnpm lint && pnpm typecheck && pnpm test
+vp check && pnpm typecheck
+# vp check 包含：lint + fmt + test
 ```
 
 | 步驟        | 說明                | 失敗時     |
 | ----------- | ------------------- | ---------- |
-| `format`    | 程式碼格式化        | 自動修復   |
-| `lint`      | 程式碼品質檢查      | 需手動修復 |
+| `vp lint`   | 程式碼品質檢查      | 需手動修復 |
+| `vp fmt`    | 程式碼格式化        | 自動修復   |
+| `vp test`   | 執行測試            | 需手動修復 |
 | `typecheck` | TypeScript 類型檢查 | 需手動修復 |
-| `test`      | 執行測試            | 需手動修復 |
 
 ### 在 Claude Code 中的自動執行
 

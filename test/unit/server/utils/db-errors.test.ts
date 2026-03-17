@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect } from 'vite-plus/test'
 import { handleDbError, mapConstraintMessage } from '../../../../server/utils/db-errors'
 
 describe('db-errors', () => {
