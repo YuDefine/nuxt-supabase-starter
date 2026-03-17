@@ -342,19 +342,11 @@ supabase gen types typescript --local | tee app/types/database.types.ts > /dev/n
 
 ---
 
-### 為什麼用 OXLint 不用 ESLint？
+### 為什麼用 Vite+ 不用 ESLint？
 
-**速度**。OXLint 用 Rust 編寫，lint 速度是 ESLint 的 50-100 倍。
+[Vite+](https://viteplus.dev/) 將 test / lint / fmt / hooks 統一到 `vite.config.ts`，底層使用 OXC 工具鏈（Rust 編寫），lint 速度是 ESLint 的 50-100 倍。一個 `vp check` 指令取代多個獨立工具。
 
-| 面向 | ESLint + Prettier       | OXLint + OXFmt       |
-| ---- | ----------------------- | -------------------- |
-| 速度 | 基準                    | 快 50-100x           |
-| 設定 | 需維護 config + plugins | 零設定或極少設定     |
-| 生態 | 龐大                    | 成長中，涵蓋主流規則 |
-
-Vue/Nuxt 生態正在擁抱 OXC 工具鏈。如果你需要特定 ESLint plugin 的功能，兩者可以並存。
-
-> 📖 詳細比較：[TECH_STACK.md](TECH_STACK.md#oxlint--oxfmt-vs-eslint--prettier)
+> 📖 詳細比較：[TECH_STACK.md](TECH_STACK.md#vite-vs-獨立工具鏈)
 
 ---
 

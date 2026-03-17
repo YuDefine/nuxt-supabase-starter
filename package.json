@@ -75,7 +75,7 @@
     "typescript": "^5.9.3",
     "vite-plus": "^0.1.12",
     "vitepress": "^1.6.4",
-    "vue-tsc": "^3.2.5"
+    "vue-tsc": "^3.2.6"
   },
   "engines": {
     "node": ">=18"

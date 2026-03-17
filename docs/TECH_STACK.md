@@ -36,14 +36,14 @@
 
 ### 開發工具
 
-| 技術                                                                                                  | 說明                          |
-| ----------------------------------------------------------------------------------------------------- | ----------------------------- |
-| [Vitest](https://vitest.dev/) + [@nuxt/test-utils](https://nuxt.com/docs/getting-started/testing)     | 單元與整合測試                |
-| [OXLint](https://oxc.rs/docs/guide/usage/linter) + [OXFmt](https://oxc.rs/docs/guide/usage/formatter) | 程式碼品質（Rust 實作，極快） |
-| [Supabase CLI](https://supabase.com/docs/guides/cli)                                                  | 本地開發、Migration           |
-| [Zod](https://zod.dev/)                                                                               | Schema 驗證                   |
-| [Commitlint](https://commitlint.js.org/) + [Husky](https://typicode.github.io/husky/)                 | Git hooks 與 commit 規範      |
-| [VitePress](https://vitepress.dev/)                                                                   | 文件網站產生器                |
+| 技術                                                              | 說明                           |
+| ----------------------------------------------------------------- | ------------------------------ |
+| [Vite+](https://viteplus.dev/) (Vitest + OXLint + OXFmt)          | 統一工具鏈（測試、品質、格式） |
+| [@nuxt/test-utils](https://nuxt.com/docs/getting-started/testing) | Nuxt 整合測試                  |
+| [Supabase CLI](https://supabase.com/docs/guides/cli)              | 本地開發、Migration            |
+| [Zod](https://zod.dev/)                                           | Schema 驗證                    |
+| [Commitlint](https://commitlint.js.org/)                          | Commit 規範                    |
+| [VitePress](https://vitepress.dev/)                               | 文件網站產生器                 |
 
 ### 部署與監控
 
@@ -119,21 +119,21 @@ CREATE POLICY "Users can view own posts"
 2. **Provider 覆蓋**：Better Auth 支援更多 OAuth provider，特別是亞洲市場常用的 LINE Login
 3. **遷移自由**：未來若從 Supabase 遷移到其他資料庫，認證系統不需要重寫
 
-### OXLint + OXFmt vs ESLint + Prettier
+### Vite+ vs 獨立工具鏈
 
-| 面向     | ESLint + Prettier      | OXLint + OXFmt             |
-| -------- | ---------------------- | -------------------------- |
-| 語言     | JavaScript             | Rust                       |
-| 速度     | 基準                   | Lint 快 50-100x、Format 快 |
-| 設定檔   | 需要 eslint.config.js  | 零設定或極少設定           |
-| 生態系   | 龐大（數千 plugins）   | 成長中，涵蓋主流規則       |
-| Vue 支援 | 需要 eslint-plugin-vue | 內建                       |
+| 面向  | ESLint + Prettier + Vitest | Vite+ (統一工具鏈)             |
+| ----- | -------------------------- | ------------------------------ |
+| 安裝  | 6+ 套件分別管理            | 1 個 `vite-plus` 套件          |
+| 設定  | 多個設定檔                 | 統一在 `vite.config.ts`        |
+| 速度  | JavaScript 實作            | Rust 核心（OXLint + OXFmt）    |
+| Hooks | 需要 husky + lint-staged   | 內建 `vp config` + `vp staged` |
+| CI    | 多步驟設定                 | `voidzero-dev/setup-vp@v1`     |
 
 **選擇原因**：
 
-1. **速度**：OXC 工具鏈用 Rust 編寫，lint 速度是 ESLint 的 50-100 倍，開發體驗更流暢
-2. **簡化配置**：不需要維護複雜的 ESLint 配置和 plugin 組合
-3. **趨勢**：Vue/Nuxt 生態正在擁抱 OXC 工具鏈，Nuxt 官方已開始支援
+1. **統一**：test / lint / fmt / staged 全部在 `vite.config.ts` 管理，單一事實來源
+2. **速度**：底層使用 OXC 工具鏈（Rust 編寫），lint 速度是 ESLint 的 50-100 倍
+3. **簡化**：`vp check` 一個指令取代 format + lint + test，CI 設定大幅簡化
 
 ### Pinia Colada vs TanStack Query
 

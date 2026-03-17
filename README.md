@@ -66,9 +66,9 @@ Nuxt 4 + Vue 3 + TypeScript + Supabase + Nuxt UI + Tailwind CSS + Pinia + Better
 | UI     | Nuxt UI, Tailwind CSS, Nuxt Charts |
 | 認證   | Better Auth (33+ OAuth providers)  |
 | 狀態   | Pinia + Pinia Colada               |
-| 測試   | Vitest + Playwright                |
+| 測試   | Vite+ (Vitest) + Playwright        |
 | 部署   | Cloudflare Workers                 |
-| 品質   | OXLint + OXFmt + Husky             |
+| 品質   | Vite+ (OXLint + OXFmt + Hooks)     |
 
 > 📖 完整技術棧與選型理由：[TECH_STACK.md](docs/TECH_STACK.md)
 
@@ -120,7 +120,7 @@ Spec-Driven Development (SDD)、Data Access Pattern（Client 讀 / Server 寫）
 
 ## 開發工作流程
 
-`pnpm check` 一鍵執行 format → lint → typecheck → test。
+`pnpm check` 一鍵執行 vp check (lint + fmt + test) + typecheck。
 
 > 📖 完整流程：[WORKFLOW.md](docs/WORKFLOW.md)
 
