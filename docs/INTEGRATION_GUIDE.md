@@ -96,14 +96,15 @@ cp .claude/settings.local.json.example .claude/settings.local.json
 ```json
 {
   "scripts": {
-    "check": "pnpm format && pnpm lint && pnpm typecheck && pnpm test",
-    "format": "oxfmt .",
-    "format:check": "oxfmt --check .",
-    "lint": "oxlint --deny-warnings .",
-    "test": "vitest run --coverage",
-    "test:unit": "vitest run test/unit",
-    "test:watch": "vitest watch",
-    "typecheck": "nuxt typecheck"
+    "check": "vp check && pnpm typecheck",
+    "format": "vp fmt",
+    "format:check": "vp fmt --check",
+    "lint": "vp lint",
+    "test": "vp test --coverage",
+    "test:unit": "vp test test/unit",
+    "test:watch": "vp test --watch",
+    "typecheck": "nuxt typecheck",
+    "prepare": "vp config && nuxt prepare"
   }
 }
 ```
@@ -111,26 +112,35 @@ cp .claude/settings.local.json.example .claude/settings.local.json
 ### 2.2 安裝開發依賴
 
 ```bash
-pnpm add -D oxfmt oxlint vitest @vitest/coverage-v8 @nuxt/test-utils happy-dom
+pnpm add -D vite-plus @nuxt/test-utils happy-dom
 ```
 
-### 2.3 設定 Vitest
+### 2.3 設定 Vite+
 
-建立 `vitest.config.ts`：
+建立 `vite.config.ts`（統一管理 test / lint / fmt / staged）：
 
 ```typescript
-import { defineVitestConfig } from '@nuxt/test-utils/config'
+import { defineConfig } from 'vite-plus'
 
-export default defineVitestConfig({
+export default defineConfig({
   test: {
-    environment: 'happy-dom',
-    include: ['test/**/*.{test,spec}.ts'],
+    exclude: ['e2e/**', 'node_modules/**', '.nuxt/**', '.output/**'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'html'],
-      include: ['app/**/*.{ts,vue}', 'server/**/*.ts'],
-      exclude: ['**/*.d.ts', '**/*.test.ts'],
     },
+  },
+  lint: {
+    rules: {
+      'no-undef': 'error',
+      '@typescript-eslint/no-unused-vars': 'warn',
+    },
+  },
+  fmt: {
+    semi: false,
+    singleQuote: true,
+  },
+  staged: {
+    '*.{js,ts,vue}': ['vp lint --fix', 'vp fmt'],
   },
 })
 ```
@@ -138,7 +148,7 @@ export default defineVitestConfig({
 ### 2.4 加入 Commitlint（選用）
 
 ```bash
-pnpm add -D @commitlint/cli @commitlint/config-conventional husky lint-staged
+pnpm add -D @commitlint/cli @commitlint/config-conventional
 ```
 
 建立 `commitlint.config.js`：
@@ -169,12 +179,14 @@ export default {
 }
 ```
 
-初始化 Husky：
+設定 commit-msg hook：
 
 ```bash
-npx husky init
-echo "npx --no -- commitlint --edit \$1" > .husky/commit-msg
-echo "npx lint-staged" > .husky/pre-commit
+# vp config 會建立 .vite-hooks/ 目錄
+pnpm prepare
+echo '#!/usr/bin/env sh
+pnpm commitlint --edit $1' > .vite-hooks/commit-msg
+chmod +x .vite-hooks/commit-msg
 ```
 
 ---
@@ -352,7 +364,7 @@ your-project/
 │       └── supabase.ts    # Supabase 工具（選用）
 ├── test/
 │   └── unit/              # 單元測試
-├── vitest.config.ts
+├── vite.config.ts          # Vite+ 統一設定
 ├── commitlint.config.js   # （選用）
 └── package.json
 ```

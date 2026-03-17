@@ -44,13 +44,13 @@ AssertionError: expected 401 to be 201
 
 ```bash
 # 只跑特定測試檔案
-pnpm vitest run test/unit/bookmarks/index.post.test.ts
+vp test test/unit/bookmarks/index.post.test.ts
 
 # Watch 模式（存檔自動重跑）
-pnpm vitest watch test/unit/bookmarks/
+vp test --watch test/unit/bookmarks/
 
 # 看詳細輸出
-pnpm vitest run --reporter=verbose
+vp test --reporter=verbose
 ```
 
 ---
@@ -194,11 +194,11 @@ ON public.profiles (user_id);
 
 ## 快速參考
 
-| 問題類型  | 用什麼工具        | 指令 / 動作                          |
-| --------- | ----------------- | ------------------------------------ |
-| 測試失敗  | Vitest            | `pnpm vitest run --reporter=verbose` |
-| API 錯誤  | curl + server log | `curl -s url \| jq .`                |
-| 查詢慢    | EXPLAIN ANALYZE   | Supabase Studio SQL Editor           |
-| UI 狀態   | Vue DevTools      | 瀏覽器 F12 → Vue 分頁                |
-| 型別錯誤  | TypeScript        | `pnpm typecheck`                     |
-| 格式/lint | OXLint            | `pnpm lint`                          |
+| 問題類型  | 用什麼工具        | 指令 / 動作                  |
+| --------- | ----------------- | ---------------------------- |
+| 測試失敗  | Vite+             | `vp test --reporter=verbose` |
+| API 錯誤  | curl + server log | `curl -s url \| jq .`        |
+| 查詢慢    | EXPLAIN ANALYZE   | Supabase Studio SQL Editor   |
+| UI 狀態   | Vue DevTools      | 瀏覽器 F12 → Vue 分頁        |
+| 型別錯誤  | TypeScript        | `pnpm typecheck`             |
+| 格式/lint | OXLint            | `pnpm lint`                  |

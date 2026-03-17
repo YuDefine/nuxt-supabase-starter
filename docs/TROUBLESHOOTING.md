@@ -32,7 +32,7 @@
 | 22  | Seed data 未載入                | [→](#22-seed-data-未載入)         |
 | 23  | 環境變數 runtime 無法取得       | [→](#23-環境變數-runtime-問題)    |
 | 24  | Nuxt module 相容性錯誤          | [→](#24-nuxt-module-相容性)       |
-| 25  | Git hook (husky) 失敗           | [→](#25-git-hook-失敗)            |
+| 25  | Git hook (Vite+) 失敗           | [→](#25-git-hook-失敗)            |
 
 ---
 
@@ -1007,14 +1007,14 @@ rm -rf .nuxt node_modules/.cache && pnpm install && pnpm dev
 
 ## 25. Git hook 失敗
 
-### 25a. Husky hook 無執行權限
+### 25a. Vite+ hook 無執行權限
 
 **問題：** `git commit` 時出現 `permission denied` 或 hook 未觸發。
 
 **診斷：**
 
 ```bash
-ls -la .husky/pre-commit
+ls -la .vite-hooks/pre-commit
 ```
 
 - 問題存在：權限欄位未包含 `x`（如 `-rw-r--r--`）
@@ -1023,25 +1023,25 @@ ls -la .husky/pre-commit
 **修復：**
 
 ```bash
-chmod +x .husky/pre-commit
-chmod +x .husky/commit-msg     # 若有其他 hook 也一併修正
+chmod +x .vite-hooks/pre-commit
+chmod +x .vite-hooks/commit-msg
 ```
 
-### 25b. Husky 未正確安裝
+### 25b. Vite+ hooks 未正確安裝
 
-**問題：** Hook 完全沒有觸發，`.husky/_/husky.sh` 不存在。
+**問題：** Hook 完全沒有觸發。
 
 **診斷：**
 
 ```bash
-ls .husky/_/husky.sh 2>/dev/null && echo "OK" || echo "husky 未安裝"
+git config core.hooksPath
 ```
 
-- 問題存在：`husky 未安裝`
-- 正常：`OK`
+- 問題存在：輸出為空或指向錯誤路徑
+- 正常：`.vite-hooks/_`
 
 **修復：**
 
 ```bash
-pnpm prepare    # 重新安裝 husky hooks
+pnpm prepare    # 重新執行 vp config 安裝 hooks
 ```
