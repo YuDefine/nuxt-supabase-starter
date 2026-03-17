@@ -36,8 +36,10 @@ Nuxt 4, Vue 3 (Composition API + `<script setup>`), TypeScript, Tailwind CSS, Nu
 
 ```bash
 pnpm dev             # Already running. NEVER start
-pnpm check           # format → lint → typecheck → test
-pnpm test            # All tests + coverage
+pnpm check           # vp check (lint + fmt + test) + typecheck
+vp test              # All tests + coverage
+vp lint              # Lint only
+vp fmt               # Format only
 pnpm typecheck       # Type check only
 supabase db reset    # Reset + apply all migrations
 supabase db lint --level warning  # Security check

@@ -291,7 +291,7 @@ export const useCreateBookmarkMutation = defineMutation(() => {
 ## Step 5：撰寫單元測試 — `test/unit/server/api/v1/bookmarks/index.post.test.ts`
 
 ```ts
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vite-plus/test'
 
 vi.mock('h3', () => ({
   defineEventHandler: (handler: any) => handler,

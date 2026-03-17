@@ -670,16 +670,16 @@ curl -s http://127.0.0.1:54324 | head -5
 
 ### 16a. 辨識失敗步驟
 
-**問題：** `pnpm check` 失敗，但不確定是哪一步（format / lint / typecheck / test）。
+**問題：** `pnpm check` 失敗，但不確定是哪一步（lint / fmt / test / typecheck）。
 
 **診斷：**
 
 ```bash
 # 逐步執行，找出失敗步驟
-pnpm format:check    # Step 1: 格式檢查
-pnpm lint            # Step 2: ESLint
+vp fmt --check       # Step 1: 格式檢查
+vp lint              # Step 2: Lint
 pnpm typecheck       # Step 3: 型別檢查
-pnpm test            # Step 4: 測試
+vp test              # Step 4: 測試
 ```
 
 - 問題存在：某個步驟回傳非零 exit code
@@ -688,8 +688,8 @@ pnpm test            # Step 4: 測試
 **修復：**
 
 ```bash
-pnpm format          # 若 format:check 失敗，自動修正格式
-pnpm lint --fix      # 若 lint 失敗，自動修正可修的問題
+vp fmt               # 若 fmt --check 失敗，自動修正格式
+vp lint --fix        # 若 lint 失敗，自動修正可修的問題
 # typecheck / test 失敗則需手動修正程式碼
 ```
 

@@ -85,17 +85,17 @@ docs/verify/    穩定文件（本手冊、Quick Start、DB 操作、Auth、Stat
 | --------- | ------------------------------------------------------------------------------------ |
 | Plan      | 梳理需求、更新 `docs/verify` 如有新規範、確認無人正在修改相同模組。                  |
 | Implement | 遵守本手冊與相關專章（Auth/DB/State）。Nuxt 組件務必以 `<script setup>` + Tailwind。 |
-| Stage     | `git add` 前先跑 `pnpm lint && pnpm typecheck`（若時間緊可至少跑 lint）。            |
+| Stage     | `git add` 前先跑 `vp lint && pnpm typecheck`（若時間緊可至少跑 lint）。              |
 | Review    | 自我 review diff，確認 migrations/Docs 一起更新，再送 PR。                           |
 
 **開發環境指令**
 
-| 指令                | 用途                                  |
-| ------------------- | ------------------------------------- |
-| `pnpm dev`          | 啟動 Nuxt（.env.local 會自動載入）    |
-| `pnpm check`        | 執行 format → lint → typecheck → test |
-| `supabase db reset` | 重建本機 Supabase                     |
-| `supabase db lint`  | 檢查 search_path、RLS 等安全規範      |
+| 指令                | 用途                                          |
+| ------------------- | --------------------------------------------- |
+| `pnpm dev`          | 啟動 Nuxt（.env.local 會自動載入）            |
+| `pnpm check`        | 執行 vp check (lint + fmt + test) + typecheck |
+| `supabase db reset` | 重建本機 Supabase                             |
+| `supabase db lint`  | 檢查 search_path、RLS 等安全規範              |
 
 ---
 

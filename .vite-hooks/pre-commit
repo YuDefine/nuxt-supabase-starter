@@ -47,7 +47,5 @@ if [ -n "$MIGRATION_FILES" ]; then
   echo ""
 fi
 
-# 執行標準的 lint-staged（包含 oxlint + typecheck）
-pnpm lint-staged
-
-oxfmt --no-error-on-unmatched-pattern
+# 執行 Vite+ staged 檢查（lint + fmt）
+vp staged
