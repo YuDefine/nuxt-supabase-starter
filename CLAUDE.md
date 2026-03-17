@@ -164,6 +164,8 @@ See `commitlint.config.js` for types. Use `/commit` command.
 | Postgres            | `supabase-postgres-best-practices` |
 | TDD                 | `test-driven-development`          |
 | 中大型功能規劃      | `/spectra:propose`                 |
+| UI 設計規劃/診斷    | `/design`                          |
+| 建構前端介面        | `/frontend-design`                 |
 
 ## docs/verify/ Purpose
 

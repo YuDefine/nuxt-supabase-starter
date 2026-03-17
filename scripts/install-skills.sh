@@ -57,6 +57,16 @@ npx skills add https://github.com/hugorcd/evlog --skill review-logging-patterns 
 echo "  ✓ Evlog Skills 安裝完成"
 echo ""
 
+# Impeccable Design Skills（pbakaus/impeccable）
+echo "📦 安裝 Impeccable Design Skills..."
+for skill in adapt animate arrange audit bolder clarify colorize critique delight distill extract frontend-design harden normalize onboard optimize overdrive polish quieter teach-impeccable typeset; do
+  npx skills add pbakaus/impeccable@$skill --agent claude-code -y
+done
+echo "  ✓ Impeccable Design Skills 安裝完成"
+echo ""
+echo "📝 注意：design orchestrator 為手動管理，位於 .claude/skills/design/"
+echo ""
+
 # 實用工具
 echo "📦 安裝實用工具 Skills..."
 npx skills add vercel-labs/skills@find-skills --agent claude-code -y
