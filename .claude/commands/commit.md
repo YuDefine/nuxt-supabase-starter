@@ -31,13 +31,37 @@ $ARGUMENTS
 
 ### Step 0: 品質檢查
 
-依序執行以下三步驟：
+#### 0-A. 程式碼審查
 
 1. 使用 `/simplify` skill 審查變更程式碼的重用性、品質與效率，發現問題立即修正
 2. 使用 `/code-review:code-review` skill 審查邏輯與安全性，發現問題立即修正
-3. 使用 `check-runner` agent 執行完整的程式碼檢查（format → lint → typecheck → test）
 
-**任一步驟未通過，停止 commit 流程，先修復錯誤。**
+#### 0-B. CI 等效檢查（Fix-Verify Loop）
+
+執行與 CI 完全相同的檢查命令：
+
+```bash
+pnpm check
+```
+
+此命令依序執行 format → lint → typecheck → test，與 CI pipeline 完全一致。
+
+**如果失敗，進入 Fix-Verify Loop：**
+
+1. **修復錯誤** — 根據錯誤訊息修正程式碼
+2. **重新格式化** — 每次修改程式碼後，先執行 `vp fmt` 再重新檢查（程式碼修改會引入新的 format 問題）
+3. **重新執行 `pnpm check`** — 確認所有錯誤歸零
+4. **重複直到通過** — 0 errors + 0 warnings 才算通過
+
+```
+pnpm check → 失敗 → 修復 → vp fmt → pnpm check → ... → 通過 → 繼續
+```
+
+**重要：**
+- **禁止跳過任何錯誤**，即使認為是「來自 worktree」或「不影響」也不行
+- **禁止用個別工具替代** `pnpm check`（如 `npx vitest run`、`npx eslint`）
+- 如果 `.claude/worktrees/` 目錄干擾檢查結果，先清理 worktrees 再跑檢查
+- **未通過 `pnpm check` 之前，絕對不進入 Step 1**
 
 ### Step 1: 資料庫 Schema 同步檢查（條件觸發）
 
