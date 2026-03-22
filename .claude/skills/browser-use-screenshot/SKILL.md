@@ -1,0 +1,162 @@
+---
+name: browser-use-screenshot
+description: 使用 browser-use CLI 瀏覽器截圖的調試流程。當使用者要求截圖、查看畫面、確認 UI 實作結果、或進行視覺調試時使用。
+---
+
+# Browser-Use 截圖調試
+
+當使用者要求截圖、分析畫面、除錯 UI、調試介面、視覺檢查時，自動載入此流程。
+
+使用 `browser-use` CLI，透過背景 daemon 保持瀏覽器開啟，延遲約 50ms。
+
+---
+
+## 觸發時機
+
+- 使用者要求「截圖」「看一下畫面」「幫我看 UI」
+- UI 實作或修正後，使用者要求確認結果
+- 除錯、調試需要查看頁面狀態
+
+---
+
+## 前置條件（自動處理，不詢問使用者）
+
+### 1. 確認 dev server 正在運行
+
+```bash
+# 找到本專案的 dev server 和 port
+ps aux | grep -E 'nuxt-supabase-starter.*nuxt' | grep -v grep
+```
+
+- 有找到 → 從 process 資訊取得 port（預設 3000）
+- 沒找到 → 自動找可用 port 並啟動：
+
+```bash
+# 找可用 port
+for port in 3000 3001 3002 3003 3004; do
+  lsof -iTCP:$port -sTCP:LISTEN -P >/dev/null 2>&1 || { echo $port; break; }
+done
+
+# 背景啟動（使用 Bash run_in_background）
+cd /Users/charles/offline/nuxt-supabase-starter && pnpm dev --port <port>
+
+# 等待就緒
+for i in $(seq 1 30); do
+  curl -s -o /dev/null -w "%{http_code}" http://localhost:<port>/ 2>/dev/null | grep -q '200' && break
+  sleep 2
+done
+```
+
+### 2. 認證方式
+
+本專案使用 better-auth（支援 email/password），browser-use 可直接填表登入：
+
+```bash
+# 開啟登入頁
+browser-use open "http://localhost:<port>/auth/login"
+
+# 取得表單元素
+browser-use state
+
+# 填入測試帳號（使用 .env 中的 E2E 帳號或已知測試帳號）
+browser-use input <email-index> "test@example.com"
+browser-use input <password-index> "password"
+
+# 點擊登入按鈕
+browser-use click <submit-index>
+```
+
+若有設定 `E2E_USER_EMAIL` / `E2E_USER_PASSWORD` 環境變數，優先使用。
+
+---
+
+## 截圖流程
+
+### Step 1：登入並導向目標頁面
+
+```bash
+# 方式 A：先登入，再導航（推薦）
+browser-use open "http://localhost:<port>/auth/login"
+browser-use state
+browser-use input <email-index> "test@example.com"
+browser-use input <password-index> "password"
+browser-use click <submit-index>
+# 登入成功後會重導向首頁
+browser-use open "http://localhost:<port>/目標頁面"
+
+# 方式 B：帶 redirect 參數登入
+browser-use open "http://localhost:<port>/auth/login?redirect=/目標頁面"
+# 填表登入後自動導向目標頁面
+```
+
+### Step 2：等待頁面就緒（視需要）
+
+```bash
+browser-use wait text "目標文字"        # 等待特定文字出現
+browser-use wait selector "css選擇器"   # 等待特定元素出現
+```
+
+### Step 3：截圖
+
+```bash
+browser-use screenshot temp/<descriptive-name>.png
+```
+
+截圖存到 `temp/` 目錄（確認已在 `.gitignore`）。
+
+### Step 4：互動後截圖（可選）
+
+```bash
+browser-use state                              # 取得頁面元素與 index
+browser-use click <index>                      # 點擊目標元素
+browser-use screenshot temp/<next-state>.png   # 截圖新狀態
+```
+
+---
+
+## UI 實作/修正後截圖
+
+1. **跳過已完成的前置條件** — 若同一 conversation 已登入過，browser-use session 仍有效，直接截圖
+2. **針對修改的頁面截圖** — 根據剛才修改的檔案推斷目標頁面路徑
+3. **截圖前後對比** — 如果是修正 bug，先描述預期變化再截圖確認
+
+---
+
+## 常用命令速查
+
+| 用途         | 命令                                          |
+| ------------ | --------------------------------------------- |
+| 開啟頁面     | `browser-use open <url>`                      |
+| 頁面狀態     | `browser-use state`                           |
+| 點擊元素     | `browser-use click <index>`                   |
+| 截圖         | `browser-use screenshot <path>`               |
+| 等待文字     | `browser-use wait text "文字"`                |
+| 等待元素     | `browser-use wait selector "css"`             |
+| 輸入文字     | `browser-use input <index> "文字"`            |
+| 按鍵         | `browser-use keys "Enter"`                    |
+| 捲動         | `browser-use scroll down`                     |
+| 執行 JS      | `browser-use eval "js code"`                  |
+| 關閉瀏覽器   | `browser-use close`                           |
+
+---
+
+## 清理
+
+```bash
+browser-use close   # 關閉瀏覽器 session
+```
+
+- dev server 是 Claude Code 啟動的 → 工作結束時 `kill <pid>` 停止
+- dev server 是使用者原本在跑的 → **不要停止**
+
+---
+
+## 常見問題
+
+| 問題               | 解法                                                           |
+| ------------------ | -------------------------------------------------------------- |
+| 被導向登入頁       | Session 過期，重新執行登入流程                                 |
+| 頁面內容為空       | 確認 URL 正確、用 `browser-use state` 檢查頁面狀態             |
+| 瀏覽器無法啟動     | `browser-use close` 後重試，或 `browser-use doctor` 檢查       |
+| 元素找不到         | `browser-use scroll down` 後重新 `browser-use state`           |
+| Dev server stale   | 重啟 dev server；若仍有問題，刪除 `.nuxt/` 後重啟              |
