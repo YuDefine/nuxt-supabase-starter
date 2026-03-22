@@ -32,6 +32,9 @@ supabase/.temp/
 coverage/
 .nuxtrc
 
+# Screenshots (browser-use)
+temp/
+
 # Logs
 *.log
 npm-debug.log*

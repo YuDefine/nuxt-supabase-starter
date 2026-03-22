@@ -140,6 +140,14 @@ openspec/            # Spectra specs & changes
 | Migration created  | `db reset` → `db lint` → `gen types` → `typecheck` |
 | New feature        | TDD: Red → Green → Refactor                        |
 
+## 截圖調試（browser-use CLI）
+
+- 使用 `browser-use` CLI 截圖，詳見 `browser-use-screenshot` skill
+- 本專案用 better-auth（email/password），browser-use 可直接填表登入
+- Dev server 已經在跑，自己用 `ps aux` 找 port，不要問
+- 截圖存 `temp/` 目錄
+- 完成後 `browser-use close` 關閉瀏覽器
+
 ## Commit Format
 
 See `commitlint.config.js` for types. Use `/commit` command.
@@ -154,6 +162,7 @@ See `commitlint.config.js` for types. Use `/commit` command.
 | API         | `docs/verify/API_DESIGN_GUIDE.md`         |
 | Pinia       | `docs/verify/PINIA_ARCHITECTURE.md`       |
 | Environment | `docs/verify/ENVIRONMENT_VARIABLES.md`    |
+| Screenshot  | `docs/verify/SCREENSHOT_GUIDE.md`         |
 
 ## AI Skills
 
@@ -165,10 +174,40 @@ See `commitlint.config.js` for types. Use `/commit` command.
 | VueUse              | `vueuse`                           |
 | Postgres            | `supabase-postgres-best-practices` |
 | TDD                 | `test-driven-development`          |
+| 截圖調試            | `browser-use-screenshot`           |
 | 中大型功能規劃      | `/spectra:propose`                 |
-| UI 設計規劃/診斷    | `/design`                          |
+| UI 設計規劃/診斯    | `/design`                          |
 | 建構前端介面        | `/frontend-design`                 |
 
-## docs/verify/ Purpose
+## Skill 持續累積
+
+每次操作結束時，主動判斷是否需要建立或更新 skill：
+
+1. **本次操作沒有對應 skill** → 建立新 skill，記錄操作流程、注意事項、踩過的坑
+2. **本次操作基於某個 skill，但過程中做了修改或學到新知識** → 更新該 skill 內容
+
+原則：
+- 不必擔心新 skill 功能太少 — 小而具體優於沒有，未來可合併重構
+- 建立前先確認沒有已存在的 skill 可以更新
+- Skill 放在 `.claude/skills/`（專案內）
+
+## Documentation
+
+### docs/verify/ Purpose
 
 Record **current state**, not iteration history. Use present tense, no timestamps.
+
+### 積極更新 docs/
+
+除錯、疑難排解、架構決策時，**MUST** 主動在 `docs/` 建立或更新文件，記錄：
+
+- 問題描述
+- 嘗試過的方向
+- Root cause
+- 最終解法（或目前進度）
+
+即使問題尚未解決也要記錄當前狀態。目的：
+
+1. 使用者能隨時從文件掌握進度，不用重新問
+2. 避免日後（同專案或不同對話）重複探索繁瑣的除錯過程
+3. 讓其他專案可以學習這些經驗
