@@ -124,19 +124,19 @@ browser-use screenshot temp/<next-state>.png   # 截圖新狀態
 
 ## 常用命令速查
 
-| 用途         | 命令                                          |
-| ------------ | --------------------------------------------- |
-| 開啟頁面     | `browser-use open <url>`                      |
-| 頁面狀態     | `browser-use state`                           |
-| 點擊元素     | `browser-use click <index>`                   |
-| 截圖         | `browser-use screenshot <path>`               |
-| 等待文字     | `browser-use wait text "文字"`                |
-| 等待元素     | `browser-use wait selector "css"`             |
-| 輸入文字     | `browser-use input <index> "文字"`            |
-| 按鍵         | `browser-use keys "Enter"`                    |
-| 捲動         | `browser-use scroll down`                     |
-| 執行 JS      | `browser-use eval "js code"`                  |
-| 關閉瀏覽器   | `browser-use close`                           |
+| 用途       | 命令                               |
+| ---------- | ---------------------------------- |
+| 開啟頁面   | `browser-use open <url>`           |
+| 頁面狀態   | `browser-use state`                |
+| 點擊元素   | `browser-use click <index>`        |
+| 截圖       | `browser-use screenshot <path>`    |
+| 等待文字   | `browser-use wait text "文字"`     |
+| 等待元素   | `browser-use wait selector "css"`  |
+| 輸入文字   | `browser-use input <index> "文字"` |
+| 按鍵       | `browser-use keys "Enter"`         |
+| 捲動       | `browser-use scroll down`          |
+| 執行 JS    | `browser-use eval "js code"`       |
+| 關閉瀏覽器 | `browser-use close`                |
 
 ---
 
@@ -153,10 +153,10 @@ browser-use close   # 關閉瀏覽器 session
 
 ## 常見問題
 
-| 問題               | 解法                                                           |
-| ------------------ | -------------------------------------------------------------- |
-| 被導向登入頁       | Session 過期，重新執行登入流程                                 |
-| 頁面內容為空       | 確認 URL 正確、用 `browser-use state` 檢查頁面狀態             |
-| 瀏覽器無法啟動     | `browser-use close` 後重試，或 `browser-use doctor` 檢查       |
-| 元素找不到         | `browser-use scroll down` 後重新 `browser-use state`           |
-| Dev server stale   | 重啟 dev server；若仍有問題，刪除 `.nuxt/` 後重啟              |
+| 問題             | 解法                                                     |
+| ---------------- | -------------------------------------------------------- |
+| 被導向登入頁     | Session 過期，重新執行登入流程                           |
+| 頁面內容為空     | 確認 URL 正確、用 `browser-use state` 檢查頁面狀態       |
+| 瀏覽器無法啟動   | `browser-use close` 後重試，或 `browser-use doctor` 檢查 |
+| 元素找不到       | `browser-use scroll down` 後重新 `browser-use state`     |
+| Dev server stale | 重啟 dev server；若仍有問題，刪除 `.nuxt/` 後重啟        |

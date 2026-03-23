@@ -1,6 +1,6 @@
 ---
 name: design
-description: UI/UX design orchestrator — coordinates impeccable design skills into actionable plans. NOT for directly building or coding UI (use frontend-design for that). NOT for single-skill tasks like "add animation" or "fix colors" (use the specific skill directly). USE THIS SKILL WHEN the user needs a design PLAN or STRATEGY involving multiple skills, specifically: (1) /design new — planning a new tool's UI from scratch (「規劃新介面」「設計新工具的 UI」「從零開始做介面」), (2) /design improve — diagnosing and planning fixes for existing UI (「改善介面」「這個頁面要怎麼改」「UI 哪裡有問題」「介面診斷」), (3) /design iterate — multi-phase incremental design for large projects (「下一個 phase 的 UI」「設計迭代」「增量改善」「Phase N 設計規劃」). Also triggers when user asks 「該用哪個設計 skill」「設計流程怎麼走」「design workflow」or is unsure which design skill to pick.
+description: "UI/UX design orchestrator — coordinates impeccable design skills into actionable plans. NOT for directly building or coding UI (use frontend-design for that). NOT for single-skill tasks like 'add animation' or 'fix colors' (use the specific skill directly). USE THIS SKILL WHEN the user needs a design PLAN or STRATEGY involving multiple skills, specifically: (1) /design new — planning a new tool UI from scratch, (2) /design improve — diagnosing and planning fixes for existing UI, (3) /design iterate — multi-phase incremental design for large projects. Also triggers when user asks which design skill to pick."
 ---
 
 # Design Orchestrator

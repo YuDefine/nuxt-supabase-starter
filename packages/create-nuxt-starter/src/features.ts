@@ -1,13 +1,34 @@
 import type { FeatureModule } from './types'
 
 export const featureModules: FeatureModule[] = [
-  // Auth
+  // Auth - nuxt-auth-utils（推薦）
   {
-    id: 'auth',
-    name: 'Better Auth',
-    description: '認證系統（Email/Password + OAuth）',
+    id: 'auth-nuxt-utils',
+    name: 'nuxt-auth-utils（推薦）',
+    description: 'Cookie-based session — 適用所有部署環境（Workers/Vercel/Node）',
     default: true,
     group: 'auth',
+    incompatible: ['auth-better-auth'],
+    packages: {
+      'nuxt-auth-utils': '^0.5.29',
+    },
+    nuxtModules: ['nuxt-auth-utils'],
+    envVars: {
+      NUXT_SESSION_PASSWORD: '# 必須至少 32 字元的隨機字串（openssl rand -base64 32）',
+      NUXT_OAUTH_GOOGLE_CLIENT_ID: '# Google OAuth Client ID',
+      NUXT_OAUTH_GOOGLE_CLIENT_SECRET: '# Google OAuth Client Secret',
+    },
+    templateDir: 'features/auth-nuxt-utils',
+  },
+
+  // Auth - Better Auth
+  {
+    id: 'auth-better-auth',
+    name: 'Better Auth',
+    description: '需要 DB 連線 — ⚠️ Workers + 自架 DB 需 Hyperdrive',
+    default: false,
+    group: 'auth',
+    incompatible: ['auth-nuxt-utils'],
     dependencies: ['database'],
     packages: {
       'better-auth': '^1.5.5',

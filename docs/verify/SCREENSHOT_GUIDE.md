@@ -56,19 +56,19 @@ browser-use close
 
 ## 命令速查
 
-| 用途       | 命令                                   |
-| ---------- | -------------------------------------- |
-| 開啟頁面   | `browser-use open <url>`               |
-| 頁面狀態   | `browser-use state`                    |
-| 點擊元素   | `browser-use click <index>`            |
-| 截圖       | `browser-use screenshot <path>`        |
-| 等待文字   | `browser-use wait text "文字"`         |
-| 等待元素   | `browser-use wait selector "css"`      |
-| 輸入文字   | `browser-use input <index> "文字"`     |
-| 按鍵       | `browser-use keys "Enter"`             |
-| 捲動       | `browser-use scroll down`              |
-| 執行 JS    | `browser-use eval "js code"`           |
-| 關閉瀏覽器 | `browser-use close`                    |
+| 用途       | 命令                               |
+| ---------- | ---------------------------------- |
+| 開啟頁面   | `browser-use open <url>`           |
+| 頁面狀態   | `browser-use state`                |
+| 點擊元素   | `browser-use click <index>`        |
+| 截圖       | `browser-use screenshot <path>`    |
+| 等待文字   | `browser-use wait text "文字"`     |
+| 等待元素   | `browser-use wait selector "css"`  |
+| 輸入文字   | `browser-use input <index> "文字"` |
+| 按鍵       | `browser-use keys "Enter"`         |
+| 捲動       | `browser-use scroll down`          |
+| 執行 JS    | `browser-use eval "js code"`       |
+| 關閉瀏覽器 | `browser-use close`                |
 
 ## 常見問題
 
