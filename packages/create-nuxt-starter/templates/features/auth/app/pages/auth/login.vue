@@ -2,19 +2,20 @@
   definePageMeta({ layout: 'auth', auth: false })
 
   const { signIn } = useUserSession()
+  const { parseError } = useAuthError()
   const email = ref('')
   const password = ref('')
   const loading = ref(false)
-  const error = ref('')
+  const errorMessage = ref('')
 
   async function handleLogin() {
     loading.value = true
-    error.value = ''
+    errorMessage.value = ''
     try {
       await signIn.email({ email: email.value, password: password.value })
       await navigateTo('/')
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Login failed'
+      errorMessage.value = parseError(e)
     } finally {
       loading.value = false
     }
@@ -22,38 +23,26 @@
 </script>
 
 <template>
-  <div class="mx-auto w-full max-w-sm space-y-6">
+  <div class="flex flex-col gap-6">
     <div class="text-center">
       <h1 class="text-2xl font-bold">登入</h1>
     </div>
 
-    <form @submit.prevent="handleLogin" class="space-y-4">
-      <div v-if="error" class="text-sm text-red-500">{{ error }}</div>
-      <div>
-        <label class="mb-1 block text-sm font-medium">Email</label>
-        <input v-model="email" type="email" required class="w-full rounded border px-3 py-2" />
-      </div>
-      <div>
-        <label class="mb-1 block text-sm font-medium">密碼</label>
-        <input
-          v-model="password"
-          type="password"
-          required
-          class="w-full rounded border px-3 py-2"
-        />
-      </div>
-      <button
-        type="submit"
-        :disabled="loading"
-        class="w-full rounded bg-blue-600 py-2 text-white hover:bg-blue-700"
-      >
-        {{ loading ? '登入中...' : '登入' }}
-      </button>
+    <UAlert v-if="errorMessage" color="error" :title="errorMessage" />
+
+    <form class="flex flex-col gap-4" @submit.prevent="handleLogin">
+      <UFormField label="Email">
+        <UInput v-model="email" type="email" required placeholder="you@example.com" />
+      </UFormField>
+      <UFormField label="密碼">
+        <UInput v-model="password" type="password" required placeholder="••••••••" />
+      </UFormField>
+      <UButton block size="lg" type="submit" :loading="loading"> 登入 </UButton>
     </form>
 
-    <p class="text-center text-sm">
-      還沒有帳號？
-      <NuxtLink to="/auth/register" class="text-blue-600 hover:underline">註冊</NuxtLink>
-    </p>
+    <div class="flex items-center justify-between text-sm">
+      <NuxtLink to="/auth/register" class="text-primary hover:underline">還沒有帳號？註冊</NuxtLink>
+      <NuxtLink to="/auth/forgot-password" class="text-gray-500 hover:underline">忘記密碼</NuxtLink>
+    </div>
   </div>
 </template>
