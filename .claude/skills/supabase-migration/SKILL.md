@@ -12,6 +12,21 @@ description: >-
 Migration 核心規則已定義在 CLAUDE.md（Local-First、MCP 禁止 DDL、search_path、不可變原則）。
 本 skill 補充 CLAUDE.md 未涵蓋的實作細節。
 
+## MCP 禁止執行 DDL
+
+**禁止使用以下 MCP 工具執行 DDL（CREATE / ALTER / DROP）：**
+
+- `mcp__remote-supabase__apply_migration`
+- `mcp__remote-supabase__execute_sql`
+
+**原因：** MCP 使用 `supabase_admin` role 連線，透過它建立的 table/index/function 的 owner 是 `supabase_admin` 而非 `postgres`。當 CI/CD 用 migration 檔案部署時，`postgres` role 無法修改這些物件，導致部署失敗。
+
+**正確做法：**
+
+- 所有 DDL 透過 `supabase migration new` 建立 migration 檔案
+- 透過 CI/CD pipeline 部署（owner = `postgres`）
+- Remote MCP **只能用於**：SELECT 查詢、除錯、檢查 table owner
+
 ## View 安全設定
 
 所有 view 需設定 security_invoker：

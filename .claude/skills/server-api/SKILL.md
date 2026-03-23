@@ -9,6 +9,32 @@ description: >-
 
 # Server API 設計規範
 
+## Client 端只能 READ
+
+Client 端（`app/` 目錄）**只能**透過 `useSupabaseClient<Database>()` 執行 `.select()` 查詢。
+
+**禁止在 client 端使用：** `.insert()` / `.update()` / `.delete()` / `.upsert()`
+
+所有寫入操作必須透過 Server API（`/api/v1/*`）：
+
+```typescript
+// ❌ 錯誤 — client 端直接寫入
+const client = useSupabaseClient<Database>()
+await client.from('posts').insert({ title: 'Hello' })
+
+// ✅ 正確 — 透過 Server API
+await $fetch('/api/v1/posts', {
+  method: 'POST',
+  body: { title: 'Hello' },
+})
+```
+
+**原因：**
+
+- Server API 使用 `service_role` 可繞過 RLS 執行管理操作
+- 統一在 server 端做驗證、權限檢查、業務邏輯
+- Client 端的 Supabase client 使用 `anon` key，寫入受 RLS 限制且無法做複雜驗證
+
 ## 目錄結構
 
 ```
