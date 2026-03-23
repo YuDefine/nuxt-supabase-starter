@@ -1,0 +1,21 @@
+# Nuxt build artifacts
+.nuxt/**
+.output/**
+
+# Spectra specs (markdown)
+openspec/**
+.spectra/**
+
+# Claude skills (third-party)
+.claude/skills/**
+
+# Test artifacts
+coverage/**
+playwright-report/**
+test-results/**
+
+# Temp
+temp/**
+
+# Logs
+*.log
