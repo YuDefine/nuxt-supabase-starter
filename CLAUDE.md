@@ -30,7 +30,7 @@ discuss? → propose → apply ⇄ ingest → archive
 
 ## Stack
 
-Nuxt 4, Vue 3 (Composition API + `<script setup>`), TypeScript, Tailwind CSS, Nuxt UI, Pinia, Supabase (PostgreSQL), @onmax/nuxt-better-auth
+Nuxt 4, Vue 3 (Composition API + `<script setup>`), TypeScript, Tailwind CSS, Nuxt UI, Pinia, Supabase (PostgreSQL), nuxt-auth-utils 或 @onmax/nuxt-better-auth（二擇一）
 
 ## Commands
 
@@ -60,7 +60,7 @@ supabase db lint --level warning  # Security check
 
 ### Auth - IMPORTANT
 
-**USE** `useUserSession()` from `@onmax/nuxt-better-auth`
+**USE** `useUserSession()` — 來自 `nuxt-auth-utils` 或 `@onmax/nuxt-better-auth`（依專案選擇）
 **NEVER** use `useSupabaseUser()` or any Supabase Auth API
 
 ### Database Access Pattern
@@ -143,7 +143,8 @@ openspec/            # Spectra specs & changes
 ## 截圖調試（browser-use CLI）
 
 - 使用 `browser-use` CLI 截圖，詳見 `browser-use-screenshot` skill
-- 本專案用 better-auth（email/password），browser-use 可直接填表登入
+- 本專案的 root app 用 better-auth（email/password），browser-use 可直接填表登入
+- 產出的新專案可能用 nuxt-auth-utils（OAuth only）或 better-auth（email+OAuth）
 - Dev server 已經在跑，自己用 `ps aux` 找 port，不要問
 - 截圖存 `temp/` 目錄
 - 完成後 `browser-use close` 關閉瀏覽器
@@ -166,18 +167,20 @@ See `commitlint.config.js` for types. Use `/commit` command.
 
 ## AI Skills
 
-| Task                | Skill                              |
-| ------------------- | ---------------------------------- |
-| Vue components      | `vue`                              |
-| Nuxt routing/server | `nuxt`                             |
-| UI components       | `nuxt-ui`                          |
-| VueUse              | `vueuse`                           |
-| Postgres            | `supabase-postgres-best-practices` |
-| TDD                 | `test-driven-development`          |
-| 截圖調試            | `browser-use-screenshot`           |
-| 中大型功能規劃      | `/spectra:propose`                 |
-| UI 設計規劃/診斯    | `/design`                          |
-| 建構前端介面        | `/frontend-design`                 |
+| Task                   | Skill                              |
+| ---------------------- | ---------------------------------- |
+| Vue components         | `vue`                              |
+| Nuxt routing/server    | `nuxt`                             |
+| UI components          | `nuxt-ui`                          |
+| Auth (nuxt-auth-utils) | `nuxt-auth-utils`                  |
+| Auth (better-auth)     | `nuxt-better-auth`                 |
+| VueUse                 | `vueuse`                           |
+| Postgres               | `supabase-postgres-best-practices` |
+| TDD                    | `test-driven-development`          |
+| 截圖調試               | `browser-use-screenshot`           |
+| 中大型功能規劃         | `/spectra:propose`                 |
+| UI 設計規劃/診斯       | `/design`                          |
+| 建構前端介面           | `/frontend-design`                 |
 
 ## Skill 持續累積
 
@@ -187,6 +190,7 @@ See `commitlint.config.js` for types. Use `/commit` command.
 2. **本次操作基於某個 skill，但過程中做了修改或學到新知識** → 更新該 skill 內容
 
 原則：
+
 - 不必擔心新 skill 功能太少 — 小而具體優於沒有，未來可合併重構
 - 建立前先確認沒有已存在的 skill 可以更新
 - Skill 放在 `.claude/skills/`（專案內）
