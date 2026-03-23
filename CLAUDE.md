@@ -215,3 +215,20 @@ Record **current state**, not iteration history. Use present tense, no timestamp
 1. 使用者能隨時從文件掌握進度，不用重新問
 2. 避免日後（同專案或不同對話）重複探索繁瑣的除錯過程
 3. 讓其他專案可以學習這些經驗
+
+## Code Knowledge Graph (code-review-graph)
+
+MCP server 已註冊，提供程式碼結構知識圖譜。語意搜尋已啟用（本地向量嵌入）。
+
+| 任務 | Tool |
+|------|------|
+| 變更影響範圍 | `get_impact_radius`（自動偵測 git diff） |
+| PR review 上下文 | `get_review_context`（子圖 + 原始碼 + 建議） |
+| 找呼叫者/被呼叫者 | `query_graph(pattern="callers_of/callees_of")` |
+| 找誰 import 了某檔 | `query_graph(pattern="importers_of")` |
+| 找檔案結構 | `query_graph(pattern="file_summary/children_of")` |
+| 找測試 | `query_graph(pattern="tests_for")` |
+| 語意搜尋 | `semantic_search_nodes(query="...", kind="Function")` |
+| 找肥大 function | `find_large_functions(min_lines=80)` |
+| 增量更新圖譜 | `build_or_update_graph(full_rebuild=False)` |
+| 圖譜統計 | `list_graph_stats` |

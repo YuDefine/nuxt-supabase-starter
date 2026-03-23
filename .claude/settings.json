@@ -2,11 +2,13 @@
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "Write|Edit|Bash",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "code-review-graph update 2>/dev/null || true"
+            "command": "jq -r '.tool_input.command' | grep -q '^git commit' && code-review-graph update 2>/dev/null || true",
+            "timeout": 30,
+            "statusMessage": "Updating code knowledge graph..."
           }
         ]
       }
