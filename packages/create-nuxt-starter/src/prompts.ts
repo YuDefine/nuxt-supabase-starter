@@ -21,7 +21,14 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
   const authChoice = (await consola.prompt('認證系統？', {
     type: 'select',
     options: [
-      { label: 'Better Auth（推薦）', value: 'auth' },
+      {
+        label: 'nuxt-auth-utils（推薦）— Cookie session，適用所有部署環境',
+        value: 'auth-nuxt-utils',
+      },
+      {
+        label: 'Better Auth — 需要 DB 連線，Workers + 自架 DB 需 Hyperdrive',
+        value: 'auth-better-auth',
+      },
       { label: '不需要', value: 'none' },
     ],
   })) as string

@@ -9,6 +9,13 @@ model: opus
 
 ## 審查流程
 
+### Step 0: 載入專案風格規則（MANDATORY — 不可跳過）
+
+使用 Read 工具讀取 `.claude/agents/references/project-review-rules.md`。
+
+此檔案包含專案特定的審查規則，**MUST** 與下方 Step 3 的標準檢查項目**同時執行**，兩者缺一不可。
+違反這些規則的程式碼 **MUST** 出現在審查報告的「⚠️ 需要修正」區塊，歸類為「🎨 專案風格規則」。
+
 ### Step 1: 取得變更範圍
 
 ```bash
@@ -69,6 +76,11 @@ git diff main...HEAD
 - [ ] RLS 政策邏輯正確
 - [ ] 無 breaking changes 在已部署的 migration
 
+#### 🎨 專案風格規則 (Project Style Rules)
+
+逐條檢查 Step 0 載入的 `project-review-rules.md` 中所有規則。
+對每個變更的檔案，用 Grep 搜尋是否有違反項目。
+
 ### Step 4: 產出審查報告
 
 ## 輸出格式
@@ -125,6 +137,7 @@ git diff main...HEAD
 | 測試       | ✅/⚠️/❌ | X      |
 | TypeScript | ✅/⚠️/❌ | X      |
 | 資料庫     | ✅/⚠️/❌ | X      |
+| 專案風格   | ✅/⚠️/❌ | X      |
 
 ## 🎯 結論
 
