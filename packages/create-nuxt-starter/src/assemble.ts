@@ -3,6 +3,7 @@ import { dirname, join, resolve } from 'pathe'
 import { getModuleById } from './features'
 
 const TEMPLATES_DIR = resolve(import.meta.dirname, '..', 'templates')
+const STARTER_ROOT = resolve(import.meta.dirname, '..', '..', '..')
 
 export function assembleProject(
   targetDir: string,
@@ -32,7 +33,13 @@ export function assembleProject(
   // 5. Generate .env.example
   generateEnvExample(targetDir, selectedFeatureIds)
 
-  // 6. Replace template placeholders
+  // 6. Generate CLAUDE.md
+  generateClaudeMd(targetDir, selectedFeatureIds)
+
+  // 7. Copy skills, agents, and review rules
+  copyClaudeCodeAssets(targetDir, selectedFeatureIds)
+
+  // 8. Replace template placeholders
   replacePlaceholders(targetDir, projectName)
 }
 
@@ -49,6 +56,25 @@ function copyDirectory(src: string, dest: string): void {
     if (entry.isDirectory()) {
       mkdirSync(destPath, { recursive: true })
       copyDirectory(srcPath, destPath)
+    } else {
+      mkdirSync(dirname(destPath), { recursive: true })
+      cpSync(srcPath, destPath)
+    }
+  }
+}
+
+function copyDirectoryFiltered(src: string, dest: string, exclude: Set<string>): void {
+  if (!existsSync(src)) return
+
+  const entries = readdirSync(src, { withFileTypes: true })
+  for (const entry of entries) {
+    if (entry.name === '.gitkeep' || exclude.has(entry.name)) continue
+    const srcPath = join(src, entry.name)
+    const destPath = join(dest, entry.name)
+
+    if (entry.isDirectory()) {
+      mkdirSync(destPath, { recursive: true })
+      copyDirectoryFiltered(srcPath, destPath, exclude)
     } else {
       mkdirSync(dirname(destPath), { recursive: true })
       cpSync(srcPath, destPath)
@@ -200,7 +226,19 @@ export function generateNuxtConfig(targetDir: string, selectedFeatureIds: string
     publicLines.push(`        key: process.env.SUPABASE_KEY,`)
     publicLines.push(`      },`)
   }
-  if (selectedFeatureIds.includes('auth')) {
+  if (selectedFeatureIds.includes('auth-nuxt-utils')) {
+    runtimeLines.push(`    oauth: {`)
+    runtimeLines.push(`      google: {`)
+    runtimeLines.push(`        clientId: process.env.NUXT_OAUTH_GOOGLE_CLIENT_ID,`)
+    runtimeLines.push(`        clientSecret: process.env.NUXT_OAUTH_GOOGLE_CLIENT_SECRET,`)
+    runtimeLines.push(`      },`)
+    runtimeLines.push(`    },`)
+    runtimeLines.push(`    session: {`)
+    runtimeLines.push(`      maxAge: 60 * 60 * 24 * 7,`)
+    runtimeLines.push(`      password: process.env.NUXT_SESSION_PASSWORD || '',`)
+    runtimeLines.push(`    },`)
+  }
+  if (selectedFeatureIds.includes('auth-better-auth')) {
     runtimeLines.push(`    oauth: {`)
     runtimeLines.push(`      google: {`)
     runtimeLines.push(`        clientId: process.env.NUXT_OAUTH_GOOGLE_CLIENT_ID,`)
@@ -338,6 +376,258 @@ export function generateEnvExample(targetDir: string, selectedFeatureIds: string
   }
 
   writeFileSync(envPath, lines.join('\n'))
+}
+
+// --- Skills, agents, and review rules ---
+
+function copyClaudeCodeAssets(targetDir: string, selectedFeatureIds: string[]): void {
+  const starterSkills = join(STARTER_ROOT, '.claude', 'skills')
+  const starterAgents = join(STARTER_ROOT, '.claude', 'agents')
+  const targetSkills = join(targetDir, '.claude', 'skills')
+  const targetAgents = join(targetDir, '.claude', 'agents')
+
+  // Build skill list based on selected features
+  const skills: string[] = [
+    // Always included — core development
+    'vue',
+    'vue-best-practices',
+    'vue-testing-best-practices',
+    'nuxt',
+    'vitest',
+    'test-driven-development',
+    'review-rules',
+    'browser-use-screenshot',
+  ]
+
+  // Auth
+  if (selectedFeatureIds.includes('auth-nuxt-utils')) skills.push('nuxt-auth-utils')
+  if (selectedFeatureIds.includes('auth-better-auth')) skills.push('nuxt-better-auth')
+
+  // Database
+  if (selectedFeatureIds.includes('database')) {
+    skills.push(
+      'server-api',
+      'supabase-migration',
+      'supabase-rls',
+      'supabase-arch',
+      'supabase-postgres-best-practices'
+    )
+  }
+
+  // UI — components + design skills
+  if (selectedFeatureIds.includes('ui')) {
+    skills.push(
+      'nuxt-ui',
+      'reka-ui',
+      'motion',
+      // Design orchestration + sub-skills
+      'design',
+      'frontend-design',
+      'animate',
+      'arrange',
+      'audit',
+      'bolder',
+      'clarify',
+      'colorize',
+      'critique',
+      'delight',
+      'distill',
+      'extract',
+      'harden',
+      'normalize',
+      'onboard',
+      'optimize',
+      'overdrive',
+      'polish',
+      'quieter',
+      'teach-impeccable',
+      'typeset',
+      'adapt'
+    )
+  }
+
+  // State management
+  if (selectedFeatureIds.includes('pinia')) skills.push('pinia', 'pinia-store')
+
+  // VueUse
+  if (selectedFeatureIds.includes('vueuse')) skills.push('vueuse', 'vueuse-functions')
+
+  // Files to exclude from skill copies (prevent nested CLAUDE.md conflicts)
+  const skillExclude = new Set(['CLAUDE.md', 'AGENTS.md'])
+
+  // Copy each skill directory (skip if not found in starter)
+  for (const skill of skills) {
+    const src = join(starterSkills, skill)
+    if (existsSync(src)) {
+      const dest = join(targetSkills, skill)
+      mkdirSync(dest, { recursive: true })
+      copyDirectoryFiltered(src, dest, skillExclude)
+    }
+  }
+
+  // Copy agents: code-review + check-runner + references (skip db-backup — starter-specific)
+  for (const agent of ['code-review.md', 'check-runner.md']) {
+    const src = join(starterAgents, agent)
+    if (existsSync(src)) {
+      mkdirSync(targetAgents, { recursive: true })
+      cpSync(src, join(targetAgents, agent))
+    }
+  }
+
+  // Copy review rules
+  const reviewRulesSrc = join(starterAgents, 'references', 'project-review-rules.md')
+  if (existsSync(reviewRulesSrc)) {
+    const dest = join(targetAgents, 'references')
+    mkdirSync(dest, { recursive: true })
+    cpSync(reviewRulesSrc, join(dest, 'project-review-rules.md'))
+  }
+}
+
+// --- CLAUDE.md generation ---
+
+export function generateClaudeMd(targetDir: string, selectedFeatureIds: string[]): void {
+  const hasAuthUtils = selectedFeatureIds.includes('auth-nuxt-utils')
+  const hasBetterAuth = selectedFeatureIds.includes('auth-better-auth')
+  const hasDatabase = selectedFeatureIds.includes('database')
+
+  const authModule = hasAuthUtils
+    ? 'nuxt-auth-utils'
+    : hasBetterAuth
+      ? '@onmax/nuxt-better-auth'
+      : null
+
+  const authSkill = hasAuthUtils ? '`nuxt-auth-utils`' : hasBetterAuth ? '`nuxt-better-auth`' : ''
+
+  const sections: string[] = []
+
+  // Header
+  sections.push(`# CLAUDE.md`)
+  sections.push('')
+  sections.push('## Language')
+  sections.push('')
+  sections.push('**YOU MUST** respond in 繁體中文 (zh-TW). **NEVER** use 簡體中文 (zh-CN).')
+  sections.push('')
+
+  // Stack
+  const stack = ['Nuxt 4', 'Vue 3 (Composition API + `<script setup>`)', 'TypeScript']
+  if (selectedFeatureIds.includes('ui')) stack.push('Tailwind CSS', 'Nuxt UI')
+  if (selectedFeatureIds.includes('pinia')) stack.push('Pinia')
+  if (selectedFeatureIds.includes('vueuse')) stack.push('VueUse')
+  if (hasDatabase) stack.push('Supabase (PostgreSQL)')
+  if (authModule) stack.push(authModule)
+
+  sections.push('## Stack')
+  sections.push('')
+  sections.push(stack.join(', '))
+  sections.push('')
+
+  // Commands
+  sections.push('## Commands')
+  sections.push('')
+  sections.push('```bash')
+  sections.push('pnpm dev             # Already running. NEVER start')
+  if (selectedFeatureIds.includes('quality')) {
+    sections.push('pnpm check           # format + lint + typecheck')
+    sections.push('pnpm lint            # Lint only')
+    sections.push('pnpm format          # Format only')
+  }
+  sections.push('pnpm typecheck       # Type check only')
+  if (
+    selectedFeatureIds.includes('testing-full') ||
+    selectedFeatureIds.includes('testing-vitest')
+  ) {
+    sections.push('pnpm test            # All tests + coverage')
+  }
+  if (hasDatabase) {
+    sections.push('supabase db reset    # Reset + apply all migrations')
+    sections.push('supabase db lint --level warning  # Security check')
+  }
+  sections.push('```')
+  sections.push('')
+
+  // Critical Rules
+  sections.push('## CRITICAL RULES')
+  sections.push('')
+
+  if (authModule) {
+    sections.push('### Auth')
+    sections.push('')
+    sections.push(`**USE** \`useUserSession()\` from \`${authModule}\``)
+    if (hasDatabase) {
+      sections.push('**NEVER** use `useSupabaseUser()` or any Supabase Auth API')
+    }
+    sections.push('')
+  }
+
+  if (hasDatabase) {
+    sections.push('### Database Access Pattern')
+    sections.push('')
+    sections.push('- **Client**: READ only via `useSupabaseClient<Database>()` + `.select()`')
+    sections.push('- **Server**: ALL writes via `/api/v1/*` endpoints')
+    sections.push('- **NEVER** `.insert()/.update()/.delete()/.upsert()` from client')
+    sections.push('')
+
+    sections.push('### Migration')
+    sections.push('')
+    sections.push('- **MUST** use `supabase migration new <name>` to create')
+    sections.push('- **NEVER** create .sql files manually or via Write tool')
+    sections.push("- **MUST** `SET search_path = ''` in ALL database functions")
+    sections.push('- **NEVER** modify or delete applied migrations')
+    sections.push('- After migration: `supabase db reset` → `db lint` → `gen types` → `typecheck`')
+    sections.push('')
+
+    sections.push('### RLS Policy')
+    sections.push('')
+    sections.push('API writes **MUST** include service_role bypass:')
+    sections.push('')
+    sections.push('```sql')
+    sections.push("(SELECT auth.role()) = 'service_role' OR <user_condition>")
+    sections.push('```')
+    sections.push('')
+  }
+
+  sections.push('### Development')
+  sections.push('')
+  sections.push('- **ALWAYS** TDD: Red → Green → Refactor')
+  sections.push('- **NEVER** `.skip` or comment out tests')
+  if (selectedFeatureIds.includes('ui')) {
+    sections.push('- **ALWAYS** Tailwind classes, NEVER manual CSS')
+  }
+  sections.push('- **ALWAYS** named exports, NEVER default exports')
+  sections.push('- **ALWAYS** Composition API + `<script setup>`, NEVER Options API')
+  sections.push('')
+
+  // AI Skills — list all skills that are copied into the project
+  const skillRows: string[] = []
+  skillRows.push('| Vue components | `vue` |')
+  skillRows.push('| Nuxt routing/server | `nuxt` |')
+  if (selectedFeatureIds.includes('ui')) {
+    skillRows.push('| UI components | `nuxt-ui` |')
+    skillRows.push('| UI 設計規劃 | `/design` |')
+    skillRows.push('| 建構前端介面 | `/frontend-design` |')
+  }
+  if (authSkill) skillRows.push(`| Auth | ${authSkill} |`)
+  if (selectedFeatureIds.includes('vueuse')) skillRows.push('| VueUse | `vueuse` |')
+  if (hasDatabase) {
+    skillRows.push('| Server API | `server-api` |')
+    skillRows.push('| Migration | `supabase-migration` |')
+    skillRows.push('| RLS | `supabase-rls` |')
+    skillRows.push('| Postgres | `supabase-arch` |')
+  }
+  if (selectedFeatureIds.includes('pinia')) skillRows.push('| Pinia Store | `pinia-store` |')
+  skillRows.push('| TDD | `test-driven-development` |')
+  skillRows.push('| 截圖調試 | `browser-use-screenshot` |')
+
+  if (skillRows.length > 0) {
+    sections.push('## AI Skills')
+    sections.push('')
+    sections.push('| Task | Skill |')
+    sections.push('|------|-------|')
+    sections.push(...skillRows)
+    sections.push('')
+  }
+
+  writeFileSync(join(targetDir, 'CLAUDE.md'), sections.join('\n'))
 }
 
 // --- Placeholder replacement ---
