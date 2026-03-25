@@ -20,7 +20,8 @@
   )
 
   const canSubmit = computed(
-    () => form.name && form.email && form.password && form.confirmPassword && !passwordMismatch.value
+    () =>
+      form.name && form.email && form.password && form.confirmPassword && !passwordMismatch.value
   )
 
   async function handleRegister() {
