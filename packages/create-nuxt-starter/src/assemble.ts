@@ -39,7 +39,16 @@ export function assembleProject(
   // 7. Copy skills, agents, and review rules
   copyClaudeCodeAssets(targetDir, selectedFeatureIds)
 
-  // 8. Replace template placeholders
+  // 8. Copy rules, hooks, commands, settings, guard system
+  copyRules(targetDir, selectedFeatureIds)
+  copyHooks(targetDir, selectedFeatureIds)
+  copyCommands(targetDir, selectedFeatureIds)
+  copySettings(targetDir)
+  copyScripts(targetDir, selectedFeatureIds)
+  copyWorkflows(targetDir, selectedFeatureIds)
+  copyVerifyDocs(targetDir, selectedFeatureIds)
+
+  // 9. Replace template placeholders
   replacePlaceholders(targetDir, projectName)
 }
 
@@ -175,13 +184,19 @@ export function generatePackageJson(
       : 'nuxt prepare'
   }
   if (selectedFeatureIds.includes('database')) {
-    basePkg.scripts['db:reset'] = 'supabase db reset'
+    basePkg.scripts['db:reset'] = 'bash ./scripts/db-reset.sh && pnpm db:types'
     basePkg.scripts['db:lint'] = 'supabase db lint --level warning'
-    basePkg.scripts['db:types'] =
-      'supabase gen types --lang=typescript --local | tee app/types/database.types.ts > /dev/null'
+    basePkg.scripts['db:types'] = 'bash ./scripts/db-types.sh'
+    basePkg.scripts['db:backup'] = 'bash ./scripts/backup-supabase.sh'
+    basePkg.scripts['supabase:sync'] = 'bash ./scripts/supabase-sync.sh'
+    basePkg.scripts['supabase:check'] = 'bash ./scripts/supabase-tunnel.sh'
   }
 
+  // Always add
   basePkg.scripts.typecheck = 'nuxt typecheck'
+  basePkg.scripts.setup = 'bash scripts/setup.sh'
+  basePkg.scripts['skills:install'] = 'bash ./scripts/install-skills.sh'
+  basePkg.scripts['skills:list'] = 'bash ./scripts/check-skills.sh'
 
   // Sort dependencies
   basePkg.dependencies = sortObject(basePkg.dependencies)
@@ -483,6 +498,150 @@ function copyClaudeCodeAssets(targetDir: string, selectedFeatureIds: string[]): 
   }
 }
 
+// --- Shared copy helper ---
+
+function copyFilesList(srcDir: string, destDir: string, files: string[]): void {
+  mkdirSync(destDir, { recursive: true })
+  for (const file of files) {
+    const src = join(srcDir, file)
+    if (existsSync(src)) {
+      cpSync(src, join(destDir, file))
+    }
+  }
+}
+
+// --- Feature flag helpers ---
+
+function has(ids: string[], feature: string): boolean {
+  return ids.includes(feature)
+}
+
+function hasAny(ids: string[], ...features: string[]): boolean {
+  return features.some((f) => ids.includes(f))
+}
+
+// --- Rules ---
+
+function copyRules(targetDir: string, feats: string[]): void {
+  const files = ['testing-anti-patterns.md', 'development.md', 'error-handling.md']
+  if (hasAny(feats, 'auth-nuxt-utils', 'auth-better-auth')) files.push('auth.md')
+  if (has(feats, 'database')) files.push('database-access.md', 'migration.md', 'rls-policy.md')
+
+  copyFilesList(join(STARTER_ROOT, '.claude', 'rules'), join(targetDir, '.claude', 'rules'), files)
+}
+
+// --- Hooks ---
+
+function copyHooks(targetDir: string, feats: string[]): void {
+  const files = ['stop-accumulate.sh', 'init-code-graph.sh']
+  if (has(feats, 'quality')) files.push('post-edit-typecheck.sh')
+  if (has(feats, 'database')) files.push('post-migration-gen-types.sh')
+
+  copyFilesList(join(STARTER_ROOT, '.claude', 'hooks'), join(targetDir, '.claude', 'hooks'), files)
+}
+
+// --- Commands ---
+
+function copyCommands(targetDir: string, feats: string[]): void {
+  const files = [
+    'commit.md',
+    'ship.md',
+    'second-opinion.md',
+    'retro.md',
+    'sprint-status.md',
+    'freeze.md',
+    'unfreeze.md',
+    'guard.md',
+    'doc-sync.md',
+  ]
+  if (has(feats, 'database')) files.push('db-migration.md')
+  if (hasAny(feats, 'deploy-cloudflare', 'deploy-vercel')) files.push('canary.md')
+
+  const starterCommands = join(STARTER_ROOT, '.claude', 'commands')
+  const targetCommands = join(targetDir, '.claude', 'commands')
+  copyFilesList(starterCommands, targetCommands, files)
+
+  // Copy all spectra commands as a directory
+  const spectraDir = join(starterCommands, 'spectra')
+  if (existsSync(spectraDir)) {
+    const targetSpectra = join(targetCommands, 'spectra')
+    mkdirSync(targetSpectra, { recursive: true })
+    copyDirectory(spectraDir, targetSpectra)
+  }
+}
+
+// --- Settings ---
+
+function copySettings(targetDir: string): void {
+  const starterClaude = join(STARTER_ROOT, '.claude')
+  const targetClaude = join(targetDir, '.claude')
+
+  copyFilesList(starterClaude, targetClaude, [
+    'settings.json',
+    'settings.local.json.example',
+    'guard-state.json',
+  ])
+
+  // Guard script lives in a subdirectory
+  const guardScript = join(starterClaude, 'scripts', 'guard-check.mjs')
+  if (existsSync(guardScript)) {
+    const targetScripts = join(targetClaude, 'scripts')
+    mkdirSync(targetScripts, { recursive: true })
+    cpSync(guardScript, join(targetScripts, 'guard-check.mjs'))
+  }
+}
+
+// --- Scripts ---
+
+function copyScripts(targetDir: string, feats: string[]): void {
+  const files = ['install-skills.sh', 'check-skills.sh', 'setup.sh']
+  if (has(feats, 'database')) files.push('backup-supabase.sh')
+
+  copyFilesList(join(STARTER_ROOT, 'scripts'), join(targetDir, 'scripts'), files)
+}
+
+// --- CI/CD Workflows ---
+
+function copyWorkflows(targetDir: string, feats: string[]): void {
+  const files = ['ci.yml']
+  if (has(feats, 'deploy-cloudflare')) files.push('deploy-staging.yml', 'deploy-production.yml')
+  // Vercel uses built-in Git integration — no workflow needed
+  if (has(feats, 'testing-full')) files.push('e2e.yml')
+
+  copyFilesList(
+    join(STARTER_ROOT, 'docs', 'templates', '.github', 'workflows'),
+    join(targetDir, '.github', 'workflows'),
+    files
+  )
+}
+
+// --- docs/verify ---
+
+function copyVerifyDocs(targetDir: string, feats: string[]): void {
+  const files = [
+    'QUICK_START.md',
+    'TEST_DRIVEN_DEVELOPMENT.md',
+    'COMPOSABLE_DEVELOPMENT.md',
+    'API_DESIGN_GUIDE.md',
+    'PRODUCTION_BUG_PATTERNS.md',
+  ]
+  if (has(feats, 'database')) {
+    files.push(
+      'SUPABASE_MIGRATION_GUIDE.md',
+      'RLS_BEST_PRACTICES.md',
+      'SELF_HOSTED_SUPABASE.md',
+      'DATABASE_OPTIMIZATION.md'
+    )
+  }
+  if (hasAny(feats, 'auth-nuxt-utils', 'auth-better-auth'))
+    files.push('AUTH_INTEGRATION.md', 'OAUTH_SETUP.md')
+  if (has(feats, 'monitoring')) files.push('SENTRY_CONFIGURATION.md')
+  if (has(feats, 'deploy-cloudflare')) files.push('CLOUDFLARE_WORKERS_GOTCHAS.md')
+  if (has(feats, 'pinia')) files.push('PINIA_ARCHITECTURE.md', 'CACHE_STRATEGY.md')
+
+  copyFilesList(join(STARTER_ROOT, 'docs', 'verify'), join(targetDir, 'docs', 'verify'), files)
+}
+
 // --- CLAUDE.md generation ---
 
 export function generateClaudeMd(targetDir: string, selectedFeatureIds: string[]): void {
@@ -586,6 +745,18 @@ export function generateClaudeMd(targetDir: string, selectedFeatureIds: string[]
     sections.push('')
   }
 
+  if (hasAuthUtils) {
+    sections.push('### 截圖調試')
+    sections.push('')
+    sections.push(
+      '- **Auth**：先導航到 `/auth/_dev-login`（dev-only route，自動建立 session），可帶 `?email=` 指定使用者、`?redirect=` 指定起始頁'
+    )
+    sections.push('- Dev server 已經在跑，自己用 `ps aux | grep nuxt` 找 port，不要問')
+    sections.push('- 截圖完成後 `browser-use close` 關閉瀏覽器')
+    sections.push('- **NEVER** patch `auth.global.ts` — 一律用 dev-login route')
+    sections.push('')
+  }
+
   sections.push('### Development')
   sections.push('')
   sections.push('- **ALWAYS** TDD: Red → Green → Refactor')
@@ -595,6 +766,54 @@ export function generateClaudeMd(targetDir: string, selectedFeatureIds: string[]
   }
   sections.push('- **ALWAYS** named exports, NEVER default exports')
   sections.push('- **ALWAYS** Composition API + `<script setup>`, NEVER Options API')
+  sections.push('')
+
+  // Project Structure
+  sections.push('## Project Structure')
+  sections.push('')
+  sections.push('```')
+  sections.push('app/')
+  sections.push('├── pages/           # File-based routing')
+  sections.push('├── components/      # Vue components')
+  sections.push('├── composables/     # Vue composables')
+  if (selectedFeatureIds.includes('pinia')) {
+    sections.push('├── stores/          # Pinia stores')
+    sections.push('├── queries/         # Pinia Colada queries')
+  }
+  sections.push('└── types/           # TypeScript types')
+  sections.push('')
+  sections.push('server/')
+  if (hasDatabase) {
+    sections.push('├── api/v1/          # Business API')
+  }
+  if (authModule) {
+    sections.push('├── api/auth/        # Auth API')
+  }
+  sections.push('└── utils/           # Server utilities')
+  sections.push('')
+  if (hasDatabase) {
+    sections.push('supabase/migrations/ # DB migrations (CLI only)')
+  }
+  sections.push('openspec/            # Spectra specs & changes')
+  sections.push('test/')
+  sections.push('├── unit/            # Unit tests (*.test.ts)')
+  sections.push('└── nuxt/            # Nuxt env tests (*.nuxt.test.ts)')
+  sections.push('```')
+  sections.push('')
+
+  // Automation Triggers
+  sections.push('## Automation Triggers')
+  sections.push('')
+  sections.push('| Trigger | Action |')
+  sections.push('|---------|--------|')
+  sections.push('| `/commit` | Run `pnpm check` → commit |')
+  sections.push('| `/ship` | check → push → create PR |')
+  sections.push('| `/spectra:propose` | 建立變更提案 |')
+  sections.push('| `/spectra:apply` | 執行任務 |')
+  if (hasDatabase) {
+    sections.push('| Migration created | `db reset` → `db lint` → `gen types` → `typecheck` |')
+  }
+  sections.push('| New feature | TDD: Red → Green → Refactor |')
   sections.push('')
 
   // AI Skills — list all skills that are copied into the project

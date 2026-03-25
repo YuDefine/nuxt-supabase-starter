@@ -1,0 +1,27 @@
+schema: spec-driven
+
+context: |
+  Tech stack: Nuxt 4, Vue 3, TypeScript, Supabase (PostgreSQL)
+
+  Critical constraints:
+  - Auth uses useUserSession(), NEVER Supabase Auth APIs
+  - Client-side: SELECT only via useSupabaseClient()
+  - Server-side: All writes via /api/v1/* endpoints
+  - RLS policies MUST include service_role bypass for API writes
+  - Migrations via CLI only (supabase migration new), never manual .sql files
+
+rules:
+  proposal:
+    - Use Summary > Motivation > Scope > Impact structure
+    - Identify affected tables, APIs, and UI components
+    - Flag if migration is required
+  specs:
+    - Use "# Spec: <name>" title format
+    - Use WHEN/THEN/AND format for scenarios
+    - Include error handling and edge cases
+  design:
+    - Follow Data Access Pattern (client reads, server writes)
+    - RLS policies must include service_role bypass
+  tasks:
+    - Follow TDD: write test first, verify red, implement, verify green
+    - Each task should be independently verifiable

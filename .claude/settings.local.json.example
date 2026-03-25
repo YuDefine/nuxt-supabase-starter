@@ -1,5 +1,16 @@
 {
   "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/stop-accumulate.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "mcp__local-supabase__apply_migration",
@@ -20,6 +31,17 @@
             "timeout": 90
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.command' | grep -q '^git commit' && code-review-graph update 2>/dev/null || true",
+            "timeout": 30,
+            "statusMessage": "Updating code knowledge graph..."
+          }
+        ]
       }
     ]
   },
@@ -33,31 +55,51 @@
       "mcp__local-supabase__apply_migration",
       "Bash(ls:*)",
       "Bash(wc:*)",
+      "Bash(node:*)",
       "Bash(head:*)",
       "Bash(grep:*)",
-      "Bash(find:*)",
       "Bash(cat:*)",
+      "Bash(find:*)",
       "Bash(tree:*)",
-      "Bash(supabase migration:*)",
-      "Bash(supabase db reset:*)",
-      "Bash(supabase db lint:*)",
-      "Bash(supabase db push:*)",
-      "Bash(supabase gen types:*)",
-      "Bash(supabase status:*)",
-      "Bash(pnpm typecheck:*)",
+      "Bash(echo:*)",
+      "Bash(sort:*)",
+      "Bash(jq:*)",
+      "Bash(curl:*)",
+      "Bash(test:*)",
+      "Bash(supabase:*)",
+      "Bash(pnpm check:*)",
       "Bash(pnpm test:*)",
-      "Bash(pnpm test:unit:*)",
       "Bash(pnpm lint:*)",
       "Bash(pnpm format:*)",
-      "Bash(pnpm check:*)",
-      "Bash(pnpm vitest run:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm dev:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm db:*)",
+      "Bash(pnpm skills:*)",
+      "Bash(npx tsx:*)",
+      "Bash(npx nuxi:*)",
+      "Bash(npx skills:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git diff:*)",
       "Bash(git status:*)",
       "Bash(git log:*)",
       "Bash(git push:*)",
-      "WebSearch"
+      "Bash(git fetch:*)",
+      "Bash(git stash:*)",
+      "Bash(git checkout:*)",
+      "Bash(git restore:*)",
+      "Bash(git rebase:*)",
+      "Bash(git worktree:*)",
+      "Bash(gh run:*)",
+      "Skill(frontend-design)",
+      "WebSearch",
+      "WebFetch(domain:ui.nuxt.com)",
+      "WebFetch(domain:vueuse.org)",
+      "WebFetch(domain:supabase.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:pinia-colada.esm.dev)"
     ]
   },
   "enabledMcpjsonServers": ["local-supabase"],
