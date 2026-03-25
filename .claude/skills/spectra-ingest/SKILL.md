@@ -152,6 +152,29 @@ Update an existing OpenSpec change — from a Claude Code plan file or conversat
    - **Review artifacts** → let user inspect before proceeding
    - **Defer** → end workflow, user can run `/spectra:apply <change-name>` later
 
+**Manual Review Checklist**
+
+After creating/updating the **tasks** artifact, **MUST** append a `## 人工檢查` section at the end:
+
+1. Read `docs/manual-review-checklist.md` for the shared checklist
+2. Select items relevant to this change (don't copy all — only applicable ones)
+3. Add `#N` sequential numbering to each item (starting from #1)
+4. Format:
+
+```markdown
+## 人工檢查
+
+> 來源：`<change-name>` | Specs: `<spec-1>`, `<spec-2>`
+
+- [ ] #1 Item description
+- [ ] #2 Item description
+- [ ] #3 Item description
+```
+
+- The `來源` tag enables tracing review findings back to the originating change and specs
+- `#N` numbering enables precise communication (e.g., "#3 has issues"), screenshot naming, and archive tracking
+- If `## 人工檢查` already exists, update it (don't duplicate) — preserve existing `#N` numbers for completed items
+
 **Guardrails**
 
 - **NEVER** modify the original plan file in `~/.claude/plans/`
