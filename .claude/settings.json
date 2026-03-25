@@ -12,15 +12,24 @@
         ]
       }
     ],
-    "PostToolUse": [
+    "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Edit|Write",
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r '.tool_input.command' | grep -q '^git commit' && code-review-graph update 2>/dev/null || true",
-            "timeout": 30,
-            "statusMessage": "Updating code knowledge graph..."
+            "command": "node .claude/scripts/guard-check.mjs"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "code-review-graph update 2>/dev/null || true"
           }
         ]
       }

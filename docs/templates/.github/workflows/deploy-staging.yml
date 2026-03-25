@@ -1,0 +1,183 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Check error leaks
+        run: bash scripts/check-error-leaks.sh
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Run tests
+        run: pnpm test
+
+  migrate:
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Push database migrations
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          npx supabase db push \
+            --db-url "postgres://postgres:${SUPABASE_DB_PASSWORD}@${{ secrets.SUPABASE_DB_HOST }}:5432/postgres"
+
+      - name: Verify table owners
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          BAD_OWNERS=$(PGPASSWORD="${SUPABASE_DB_PASSWORD}" psql \
+            -h ${{ secrets.SUPABASE_DB_HOST }} -U postgres -d postgres -t -c "
+            SELECT schemaname || '.' || tablename || ' (owner: ' || tableowner || ')'
+            FROM pg_tables
+            WHERE schemaname NOT IN ('pg_catalog', 'information_schema', 'auth', 'storage', 'extensions', 'realtime', 'supabase_functions', 'supabase_migrations', '_realtime', 'pgsodium', 'vault', 'graphql_public', 'graphql')
+              AND tableowner != 'postgres';
+          " | grep -v '^\s*$' || true)
+
+          if [ -n "$BAD_OWNERS" ]; then
+            echo "::error::發現表格 owner 不正確（可能透過 MCP 建立）："
+            echo "$BAD_OWNERS"
+            exit 1
+          fi
+          echo "✅ 所有表格 owner 正確"
+
+  deploy:
+    needs: migrate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: staging-deploy
+      cancel-in-progress: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          NUXT_PUBLIC_SUPABASE_URL: ${{ secrets.NUXT_PUBLIC_SUPABASE_URL }}
+          NUXT_PUBLIC_SUPABASE_KEY: ${{ secrets.NUXT_PUBLIC_SUPABASE_KEY }}
+          NUXT_PUBLIC_SENTRY_DSN: ${{ secrets.NUXT_PUBLIC_SENTRY_DSN }}
+          NUXT_PUBLIC_SITE_URL: ${{ secrets.NUXT_PUBLIC_SITE_URL }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: .output/server
+          command: deploy
+          secrets: |
+            SUPABASE_URL
+            SUPABASE_SECRET_KEY
+            NUXT_SESSION_PASSWORD
+            NUXT_OAUTH_GOOGLE_CLIENT_ID
+            NUXT_OAUTH_GOOGLE_CLIENT_SECRET
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          NUXT_SESSION_PASSWORD: ${{ secrets.NUXT_SESSION_PASSWORD }}
+          NUXT_OAUTH_GOOGLE_CLIENT_ID: ${{ secrets.NUXT_OAUTH_GOOGLE_CLIENT_ID }}
+          NUXT_OAUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.NUXT_OAUTH_GOOGLE_CLIENT_SECRET }}
+
+  smoke-test:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Wait for propagation
+        run: sleep 30
+
+      - name: Health check
+        run: |
+          STATUS=$(curl -sf -o /dev/null -w '%{http_code}' "${{ secrets.NUXT_PUBLIC_SITE_URL }}" --max-time 10)
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Health check failed: HTTP $STATUS"
+            exit 1
+          fi
+          echo "✅ Staging is healthy (HTTP $STATUS)"
+
+  notify:
+    if: always()
+    needs: [ci, migrate, deploy, smoke-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Notify Discord
+        if: env.WEBHOOK_URL != ''
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          CI_RESULT: ${{ needs.ci.result }}
+          MIGRATE_RESULT: ${{ needs.migrate.result }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          SMOKE_RESULT: ${{ needs.smoke-test.result }}
+        run: |
+          if [ "$CI_RESULT" = "success" ] && [ "$MIGRATE_RESULT" = "success" ] && \
+             [ "$DEPLOY_RESULT" = "success" ] && [ "$SMOKE_RESULT" = "success" ]; then
+            COLOR=3066993; STATUS="✅ Staging 部署成功"
+          else
+            COLOR=15158332; STATUS="❌ Staging 部署失敗"
+          fi
+
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          PAYLOAD=$(jq -n \
+            --arg title "${STATUS}" \
+            --arg url "$RUN_URL" \
+            --argjson color "$COLOR" \
+            --arg footer "$GITHUB_REPOSITORY" \
+            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{ embeds: [{ title: $title, url: $url, color: $color, footer: { text: $footer }, timestamp: $ts }] }')
+
+          curl -sf -X POST "$WEBHOOK_URL" -H "Content-Type: application/json" -d "$PAYLOAD" || true
