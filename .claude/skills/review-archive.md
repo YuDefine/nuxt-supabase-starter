@@ -50,7 +50,7 @@ spectra list --json
 
 - 保留每個項目的 `#N` 編號
 - 如果項目有附註（如截圖報告中的觀察），一併帶入
-- 截圖檔案路徑不寫入歸檔（截圖在 temp/ 會被清除）
+- 截圖檔案路徑不寫入歸檔（截圖在 screenshots/local/ 可能被清除）
 
 ### Step 4: 更新 tasks artifact
 

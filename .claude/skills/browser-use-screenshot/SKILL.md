@@ -1,6 +1,6 @@
 ---
 name: browser-use-screenshot
-description: 使用 browser-use CLI 瀏覽器截圖的調試流程。當使用者要求截圖、查看畫面、確認 UI 實作結果、或進行視覺調試時使用。
+description: 截圖、看畫面、確認 UI、看一下頁面、幫我看 UI — nuxt-supabase-starter 的瀏覽器截圖流程（含自動登入）。處理 dev server 確認、認證登入（支援 better-auth 填表或 dev-login route）、頁面導航與截圖。優先於 generic browser-use skill，因為包含本專案必要的認證流程。
 ---
 
 # Browser-Use 截圖調試
@@ -49,26 +49,28 @@ done
 
 ### 2. 認證方式
 
-#### A. Dev-login route（nuxt-auth-utils 專案，推薦）
+#### A. Dev-login route（推薦，適用所有 auth 模組）
 
 若專案有 `server/routes/auth/_dev-login.get.ts`（dev-only route，`import.meta.dev` 保護）：
 
 ```bash
-# 用預設 dev user 登入
-browser-use open "http://localhost:<port>/auth/_dev-login"
+# 登入後直接跳轉到指定頁面（推薦用法）
+browser-use open "http://localhost:<port>/auth/_dev-login?redirect=/admin"
 
 # 指定 email
 browser-use open "http://localhost:<port>/auth/_dev-login?email=user@example.com"
 
-# 登入後直接跳轉到指定頁面
-browser-use open "http://localhost:<port>/auth/_dev-login?redirect=/admin"
+# 用預設 dev user 登入
+browser-use open "http://localhost:<port>/auth/_dev-login"
 ```
 
 **NEVER** patch auth middleware — 一律使用 dev-login route。
 
-#### B. 填表登入（better-auth 專案）
+適用場景：nuxt-auth-utils（一律需要）、better-auth OAuth-only（無 email/password 表單）。
 
-若專案使用 better-auth（支援 email/password），browser-use 直接填表登入：
+#### B. 填表登入（better-auth + emailAndPassword enabled）
+
+若專案使用 better-auth 且啟用了 email/password（`server/auth.config.ts` 中 `emailAndPassword: { enabled: true }`），可直接填表：
 
 ```bash
 browser-use open "http://localhost:<port>/auth/login"
@@ -80,23 +82,39 @@ browser-use click <submit-index>
 
 若有設定 `E2E_USER_EMAIL` / `E2E_USER_PASSWORD` 環境變數，優先使用。
 
+#### C. OAuth-only 且無 dev-login route → 需人工介入
+
+若 better-auth 關閉 emailAndPassword、且沒有 `_dev-login` route，**無法自動化登入**。
+此時必須先建立 `_dev-login` route（見下方模板）。
+
 ---
 
 ## 截圖流程
 
+**NEVER** 直接 `browser-use open` 目標頁面 URL — 必須先完成登入。直接開頁面會被 auth middleware 導向登入頁，需要人工介入。
+
 ### Step 1：登入並導向目標頁面
 
 ```bash
-# 方式 A：dev-login route（推薦，nuxt-auth-utils 專案）
+# ✅ 方式 A：dev-login route（推薦，nuxt-auth-utils 或 OAuth-only better-auth）
 browser-use open "http://localhost:<port>/auth/_dev-login?redirect=/目標頁面"
 
-# 方式 B：填表登入（better-auth 專案）
+# ✅ 方式 B：填表登入（better-auth + emailAndPassword enabled）
 browser-use open "http://localhost:<port>/auth/login?redirect=/目標頁面"
 browser-use state
 browser-use input <email-index> "test@example.com"
 browser-use input <password-index> "password"
 browser-use click <submit-index>
+
+# ❌ 錯誤：直接開目標頁面（會被導到登入頁）
+# browser-use open "http://localhost:<port>/目標頁面"
 ```
+
+**如何判斷用哪種方式：**
+
+- 有 `server/routes/auth/_dev-login.get.ts` → 方式 A
+- 有 email/password 登入表單 → 方式 B
+- OAuth-only 且無 dev-login route → 必須先建 dev-login route
 
 ### Step 2：等待頁面就緒（視需要）
 
@@ -172,12 +190,89 @@ browser-use close   # 關閉 browser-use session
 
 ---
 
+## Dev-login route 模板
+
+OAuth-only 專案（無 email/password 表單）必須建立 dev-login route 才能自動化截圖。
+
+### nuxt-auth-utils 版
+
+```typescript
+// server/routes/auth/_dev-login.get.ts
+export default defineEventHandler(async (event) => {
+  // Production 禁用
+  if (!import.meta.dev) {
+    throw createError({ statusCode: 404 })
+  }
+
+  const { email = 'dev@localhost', redirect: redirectTo = '/' } = getQuery(event)
+
+  await setUserSession(event, {
+    user: {
+      id: 'dev-user-001',
+      email: email as string,
+      name: 'Dev User',
+      provider: 'test',
+      providerId: 'dev-001',
+    },
+    loggedInAt: Date.now(),
+  })
+
+  return sendRedirect(event, redirectTo as string)
+})
+```
+
+### better-auth 版
+
+```typescript
+// server/routes/auth/_dev-login.get.ts
+import { auth } from '~~/server/utils/auth'
+
+export default defineEventHandler(async (event) => {
+  // Production 禁用
+  if (!import.meta.dev) {
+    throw createError({ statusCode: 404 })
+  }
+
+  const { email = 'dev@localhost', redirect: redirectTo = '/' } = getQuery(event)
+
+  const password = process.env.E2E_USER_PASSWORD || 'dev-password'
+
+  // 透過 better-auth internal API 建立 session
+  const ctx = await auth.api.signInEmail({
+    body: { email: email as string, password },
+    asResponse: false,
+  })
+
+  if (!ctx?.token) {
+    throw createError({
+      statusCode: 401,
+      statusMessage: 'Dev login failed - ensure test account exists',
+    })
+  }
+
+  // 設定 session cookie
+  setCookie(event, 'better-auth.session_token', ctx.token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 7,
+  })
+
+  return sendRedirect(event, redirectTo as string)
+})
+```
+
+> **注意：** better-auth 版需要預先建立測試帳號（seed 或 migration）。nuxt-auth-utils 版不需要，因為 session 是 stateless cookie。
+
+---
+
 ## 常見問題
 
-| 問題             | 解法                                                     |
-| ---------------- | -------------------------------------------------------- |
-| 被導向登入頁     | Session 過期，重新執行登入流程                           |
-| 頁面內容為空     | 確認 URL 正確、用 `browser-use state` 檢查頁面狀態       |
-| 瀏覽器無法啟動   | `browser-use close` 後重試，或 `browser-use doctor` 檢查 |
-| 元素找不到       | `browser-use scroll down` 後重新 `browser-use state`     |
-| Dev server stale | 重啟 dev server；若仍有問題，刪除 `.nuxt/` 後重啟        |
+| 問題                | 解法                                                     |
+| ------------------- | -------------------------------------------------------- |
+| 被導向登入頁        | 確認有走登入流程（dev-login 或填表），不要直接開目標頁面 |
+| OAuth-only 無法登入 | 建立 `_dev-login` route（見上方模板）                    |
+| 頁面內容為空        | 確認 URL 正確、用 `browser-use state` 檢查頁面狀態       |
+| 瀏覽器無法啟動      | `browser-use close` 後重試，或 `browser-use doctor` 檢查 |
+| 元素找不到          | `browser-use scroll down` 後重新 `browser-use state`     |
+| Dev server stale    | 重啟 dev server；若仍有問題，刪除 `.nuxt/` 後重啟        |
