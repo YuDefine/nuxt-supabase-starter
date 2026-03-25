@@ -13,15 +13,37 @@ description: '針對人工檢查清單的 todo 項目逐一截圖附註，輔助
 - Spectra workflow 完成後，使用者想要視覺驗收
 - 使用者指定特定 todo 項目要截圖（如「截圖 #3」）
 
-## 前置條件（引用 browser-use-screenshot skill）
+## 前置條件（自動處理，不詢問使用者）
 
-此 skill 的截圖能力建立在 `browser-use-screenshot` skill 之上。執行截圖前，**MUST** 先完成以下步驟（詳見 `browser-use-screenshot` skill）：
+### 1. 找到 dev server port
 
-1. **找到 dev server port** — `ps aux | grep -E 'nuxt-supabase-starter.*nuxt' | grep -v grep`，不要假設 port
-2. **登入測試帳號** — 依專案 auth 設定登入
-3. **截圖指令** — `browser-use screenshot <path>`
-4. **互動操作** — `browser-use state` → `browser-use click <index>` → `browser-use screenshot`
-5. **結束清理** — `browser-use close`
+**不要假設 port**，多個 Nuxt 專案可能同時運行。
+
+```bash
+ps aux | grep -E 'nuxt-supabase-starter.*nuxt' | grep -v grep
+```
+
+- 有找到且 port 可連線 → 直接使用
+- 有找到但 port 無回應 → process 掛掉了，kill 後重啟
+- 完全沒找到 → 自動找可用 port 並啟動
+
+### 2. 登入測試帳號
+
+依專案 auth 設定登入（better-auth email/password 或 dev-login route）。
+
+### 3. Color Mode（Light Mode 強制）
+
+Chromium headless 預設跟隨系統偏好，可能進入 dark mode。截圖前執行：
+
+```bash
+browser-use eval "localStorage.setItem('nuxt-color-mode', 'light'); document.documentElement.classList.remove('dark'); document.documentElement.classList.add('light'); document.documentElement.style.colorScheme = 'light'"
+```
+
+### 4. 截圖與互動
+
+- **截圖指令** — `browser-use screenshot <path>`
+- **互動操作** — `browser-use state` → `browser-use click <index>` → `browser-use screenshot`
+- **結束清理** — `browser-use close`
 
 若同一 conversation 已完成前置檢查，跳過直接截圖。
 
@@ -53,7 +75,7 @@ spectra list --json
 
 ```bash
 # 命名規則：<change-name>-#<N>-<brief-desc>.png
-browser-use screenshot temp/review/<change-name>-#<N>-<brief-desc>.png
+browser-use screenshot screenshots/local/review/<change-name>-#<N>-<brief-desc>.png
 ```
 
 3. **讀取截圖** — 用 Read tool 查看截圖內容
@@ -62,7 +84,7 @@ browser-use screenshot temp/review/<change-name>-#<N>-<brief-desc>.png
 
 ### Step 3: 產出截圖報告
 
-在 `temp/review/` 建立報告檔案 `<change-name>-review.md`：
+在 `screenshots/local/review/` 建立報告檔案 `<change-name>-review.md`：
 
 ```markdown
 # 人工檢查截圖報告
@@ -75,7 +97,7 @@ browser-use screenshot temp/review/<change-name>-#<N>-<brief-desc>.png
 ### #1 實際操作功能，確認 happy path 正常運作
 
 - 狀態：✅ 通過 / ⚠️ 需確認 / ❌ 有問題
-- 截圖：`temp/review/<change-name>-#1-happy-path.png`
+- 截圖：`screenshots/local/review/<change-name>-#1-happy-path.png`
 - 附註：（觀察到的畫面描述）
 
 ### #5 vp check 全部通過
@@ -97,14 +119,18 @@ browser-use screenshot temp/review/<change-name>-#<N>-<brief-desc>.png
 ## 截圖存放規則
 
 ```
-temp/review/
+screenshots/local/review/
 ├── <change-name>-#1-happy-path.png
 ├── <change-name>-#2-edge-case-empty.png
 └── <change-name>-review.md
 ```
 
-- 全部存在 `temp/review/`（`temp/` 已在 `.gitignore`）
+- 全部存在 `screenshots/local/review/`（`screenshots/local/` 已在 `.gitignore`）
 - 檔名含流水號 `#N`，方便對照
+
+## 注意事項
+
+- **Dev Server Stale Cache**：Nitro dev server 有時快取已刪除的檔案引用導致 500 error。解法：重啟 dev server。若仍有問題，刪除 `.nuxt/` 後重啟
 
 ## Guardrails
 

@@ -38,7 +38,7 @@ Spectra tasks 完成後，建議人工確認以下項目。此清單由所有 `/
 - **來源 change**: `<change-name>`
 - **來源 spec**: `<spec-name>`（若能追溯到特定 spec）
 - **問題描述**: 具體發現
-- **截圖**: `temp/review/<change-name>-#N-xxx.png`（若有）
+- **截圖**: `screenshots/local/review/<change-name>-#N-xxx.png`（若有）
 
 ---
 

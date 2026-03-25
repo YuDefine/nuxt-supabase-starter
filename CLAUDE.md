@@ -149,11 +149,11 @@ openspec/            # Spectra specs & changes
 
 ## 截圖調試（browser-use CLI）
 
-- 使用 `browser-use` CLI 截圖，詳見 `browser-use-screenshot` skill
-- 本專案的 root app 用 better-auth（email/password），browser-use 可直接填表登入
-- 產出的新專案可能用 nuxt-auth-utils（OAuth only）或 better-auth（email+OAuth）
+- **MUST** 使用 `browser-use-screenshot` skill（不是 generic `browser-use`）— 包含本專案必要的認證流程
+- **NEVER** 直接 `browser-use open` 目標頁面 — 必須先完成登入（dev-login route 或填表）
+- 本專案支援兩條 auth 路線，Better Auth 也可能是 OAuth-only（無 email/password 表單）
 - Dev server 已經在跑，自己用 `ps aux` 找 port，不要問
-- 截圖存 `temp/` 目錄
+- Ad-hoc 截圖存 `temp/` 目錄，Review 截圖存 `screenshots/local/review/`（皆已在 `.gitignore`）
 - 完成後 `browser-use close` 關閉瀏覽器
 
 ## Commit Format
