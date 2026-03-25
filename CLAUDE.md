@@ -181,19 +181,7 @@ See `commitlint.config.js` for types. Use `/commit` command.
 | 中大型功能規劃         | `/spectra:propose`                 |
 | UI 設計規劃/診斯       | `/design`                          |
 | 建構前端介面           | `/frontend-design`                 |
-
-## Skill 持續累積
-
-每次操作結束時，主動判斷是否需要建立或更新 skill：
-
-1. **本次操作沒有對應 skill** → 建立新 skill，記錄操作流程、注意事項、踩過的坑
-2. **本次操作基於某個 skill，但過程中做了修改或學到新知識** → 更新該 skill 內容
-
-原則：
-
-- 不必擔心新 skill 功能太少 — 小而具體優於沒有，未來可合併重構
-- 建立前先確認沒有已存在的 skill 可以更新
-- Skill 放在 `.claude/skills/`（專案內）
+| Subagent 驅動開發      | `subagent-dev`                     |
 
 ## Documentation
 
@@ -201,34 +189,19 @@ See `commitlint.config.js` for types. Use `/commit` command.
 
 Record **current state**, not iteration history. Use present tense, no timestamps.
 
-### 積極更新 docs/
-
-除錯、疑難排解、架構決策時，**MUST** 主動在 `docs/` 建立或更新文件，記錄：
-
-- 問題描述
-- 嘗試過的方向
-- Root cause
-- 最終解法（或目前進度）
-
-即使問題尚未解決也要記錄當前狀態。目的：
-
-1. 使用者能隨時從文件掌握進度，不用重新問
-2. 避免日後（同專案或不同對話）重複探索繁瑣的除錯過程
-3. 讓其他專案可以學習這些經驗
-
 ## Code Knowledge Graph (code-review-graph)
 
 MCP server 已註冊，提供程式碼結構知識圖譜。語意搜尋已啟用（本地向量嵌入）。
 
-| 任務 | Tool |
-|------|------|
-| 變更影響範圍 | `get_impact_radius`（自動偵測 git diff） |
-| PR review 上下文 | `get_review_context`（子圖 + 原始碼 + 建議） |
-| 找呼叫者/被呼叫者 | `query_graph(pattern="callers_of/callees_of")` |
-| 找誰 import 了某檔 | `query_graph(pattern="importers_of")` |
-| 找檔案結構 | `query_graph(pattern="file_summary/children_of")` |
-| 找測試 | `query_graph(pattern="tests_for")` |
-| 語意搜尋 | `semantic_search_nodes(query="...", kind="Function")` |
-| 找肥大 function | `find_large_functions(min_lines=80)` |
-| 增量更新圖譜 | `build_or_update_graph(full_rebuild=False)` |
-| 圖譜統計 | `list_graph_stats` |
+| 任務               | Tool                                                  |
+| ------------------ | ----------------------------------------------------- |
+| 變更影響範圍       | `get_impact_radius`（自動偵測 git diff）              |
+| PR review 上下文   | `get_review_context`（子圖 + 原始碼 + 建議）          |
+| 找呼叫者/被呼叫者  | `query_graph(pattern="callers_of/callees_of")`        |
+| 找誰 import 了某檔 | `query_graph(pattern="importers_of")`                 |
+| 找檔案結構         | `query_graph(pattern="file_summary/children_of")`     |
+| 找測試             | `query_graph(pattern="tests_for")`                    |
+| 語意搜尋           | `semantic_search_nodes(query="...", kind="Function")` |
+| 找肥大 function    | `find_large_functions(min_lines=80)`                  |
+| 增量更新圖譜       | `build_or_update_graph(full_rebuild=False)`           |
+| 圖譜統計           | `list_graph_stats`                                    |
