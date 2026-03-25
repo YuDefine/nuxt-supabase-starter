@@ -49,20 +49,32 @@ done
 
 ### 2. 認證方式
 
-本專案使用 better-auth（支援 email/password），browser-use 可直接填表登入：
+#### A. Dev-login route（nuxt-auth-utils 專案，推薦）
+
+若專案有 `server/routes/auth/_dev-login.get.ts`（dev-only route，`import.meta.dev` 保護）：
 
 ```bash
-# 開啟登入頁
+# 用預設 dev user 登入
+browser-use open "http://localhost:<port>/auth/_dev-login"
+
+# 指定 email
+browser-use open "http://localhost:<port>/auth/_dev-login?email=user@example.com"
+
+# 登入後直接跳轉到指定頁面
+browser-use open "http://localhost:<port>/auth/_dev-login?redirect=/admin"
+```
+
+**NEVER** patch auth middleware — 一律使用 dev-login route。
+
+#### B. 填表登入（better-auth 專案）
+
+若專案使用 better-auth（支援 email/password），browser-use 直接填表登入：
+
+```bash
 browser-use open "http://localhost:<port>/auth/login"
-
-# 取得表單元素
 browser-use state
-
-# 填入測試帳號（使用 .env 中的 E2E 帳號或已知測試帳號）
 browser-use input <email-index> "test@example.com"
 browser-use input <password-index> "password"
-
-# 點擊登入按鈕
 browser-use click <submit-index>
 ```
 
@@ -75,18 +87,15 @@ browser-use click <submit-index>
 ### Step 1：登入並導向目標頁面
 
 ```bash
-# 方式 A：先登入，再導航（推薦）
-browser-use open "http://localhost:<port>/auth/login"
+# 方式 A：dev-login route（推薦，nuxt-auth-utils 專案）
+browser-use open "http://localhost:<port>/auth/_dev-login?redirect=/目標頁面"
+
+# 方式 B：填表登入（better-auth 專案）
+browser-use open "http://localhost:<port>/auth/login?redirect=/目標頁面"
 browser-use state
 browser-use input <email-index> "test@example.com"
 browser-use input <password-index> "password"
 browser-use click <submit-index>
-# 登入成功後會重導向首頁
-browser-use open "http://localhost:<port>/目標頁面"
-
-# 方式 B：帶 redirect 參數登入
-browser-use open "http://localhost:<port>/auth/login?redirect=/目標頁面"
-# 填表登入後自動導向目標頁面
 ```
 
 ### Step 2：等待頁面就緒（視需要）
@@ -102,7 +111,8 @@ browser-use wait selector "css選擇器"   # 等待特定元素出現
 browser-use screenshot temp/<descriptive-name>.png
 ```
 
-截圖存到 `temp/` 目錄（確認已在 `.gitignore`）。
+截圖 **MUST** 存到 `temp/` 目錄（已在 `.gitignore`）。**NEVER** 存到其他位置。
+使用 Playwright MCP 時同樣適用：`filename` 參數 **MUST** 以 `temp/` 開頭。
 
 ### Step 4：互動後截圖（可選）
 
@@ -136,15 +146,26 @@ browser-use screenshot temp/<next-state>.png   # 截圖新狀態
 | 按鍵       | `browser-use keys "Enter"`         |
 | 捲動       | `browser-use scroll down`          |
 | 執行 JS    | `browser-use eval "js code"`       |
+| 視窗大小   | **不支援**（固定 1920x1080）       |
 | 關閉瀏覽器 | `browser-use close`                |
+
+> **響應式截圖（行動版/平板）必須用 Playwright MCP**：browser-use CLI 無法調整視窗大小，
+> `eval` 只能執行瀏覽器端 JS，無法呼叫 Playwright 的 `page.setViewportSize()`。
+> 需要不同尺寸截圖時，改用 `browser_navigate` → `browser_resize` → `browser_take_screenshot`。
 
 ---
 
-## 清理
+## 清理（MUST）
+
+截圖流程結束後（所有截圖都完成、不再需要瀏覽器），**MUST** 關閉瀏覽器：
 
 ```bash
-browser-use close   # 關閉瀏覽器 session
+browser-use close   # 關閉 browser-use session
 ```
+
+若使用 Playwright MCP，則呼叫 `browser_close`。
+
+**不關閉瀏覽器會持續佔用系統資源，這是強制要求。**
 
 - dev server 是 Claude Code 啟動的 → 工作結束時 `kill <pid>` 停止
 - dev server 是使用者原本在跑的 → **不要停止**

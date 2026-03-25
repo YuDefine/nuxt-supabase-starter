@@ -4,14 +4,20 @@
 
 This project uses Spectra for Spec-Driven Development(SDD). Specs live in `openspec/specs/`, change proposals in `openspec/changes/`.
 
-## Use `/spectra:*` skills when:
+## Entry Point
 
-- A discussion needs structure before coding → `/spectra:discuss`
-- User wants to plan, propose, or design a change → `/spectra:propose`
-- Tasks are ready to implement → `/spectra:apply`
-- There's an in-progress change to continue → `/spectra:ingest`
-- User asks about specs or how something works → `/spectra:ask`
-- Implementation is done → `/spectra:verify` then `/spectra:archive`
+**`/spectra`** — 主要入口，自動偵測專案狀態並引導到正確的 sub-skill。不確定該用哪個時，用這個。
+
+## Sub-skills（直接指定）
+
+- `/spectra:discuss` — 需求不明確，先討論再決定
+- `/spectra:propose` — 規劃新功能/改動
+- `/spectra:apply` — 開始或繼續實作
+- `/spectra:ingest` — 從對話或 plan 更新 artifacts
+- `/spectra:ask` — 查詢現有 spec 內容
+- `/spectra:archive` — 完成歸檔
+- `/spectra:audit` — 審查程式碼安全性
+- `/spectra:debug` — 系統性排查問題
 
 ## Workflow
 
@@ -19,6 +25,7 @@ discuss? → propose → apply ⇄ ingest → archive
 
 - `discuss` is optional — skip if requirements are clear
 - Requirements change mid-work? Plan mode → `ingest` → resume `apply`
+- 不知道現在該做什麼？直接 `/spectra`
 
 <!-- SPECTRA:END -->
 
@@ -178,7 +185,10 @@ See `commitlint.config.js` for types. Use `/commit` command.
 | Postgres               | `supabase-postgres-best-practices` |
 | TDD                    | `test-driven-development`          |
 | 截圖調試               | `browser-use-screenshot`           |
-| 中大型功能規劃         | `/spectra:propose`                 |
+| 中大型功能（入口）     | `/spectra`                         |
+| 中大型功能（指定）     | `/spectra:*`                       |
+| 人工檢查截圖           | `/review-screenshot`               |
+| 人工檢查歸檔           | `/review-archive`                  |
 | UI 設計規劃/診斯       | `/design`                          |
 | 建構前端介面           | `/frontend-design`                 |
 | Subagent 驅動開發      | `subagent-dev`                     |
