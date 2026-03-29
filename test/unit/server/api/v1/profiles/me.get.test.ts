@@ -4,8 +4,9 @@ import { describe, it, expect, vi, beforeEach } from 'vite-plus/test'
 vi.mock('h3', () => ({
   defineEventHandler: (handler: any) => handler,
   createError: (opts: any) => {
-    const error = new Error(opts.message) as any
+    const error = new Error(opts.statusMessage ?? opts.message) as any
     error.statusCode = opts.statusCode
+    error.statusMessage = opts.statusMessage
     return error
   },
 }))

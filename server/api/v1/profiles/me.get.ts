@@ -7,8 +7,10 @@
  */
 
 import { createError, defineEventHandler } from 'h3'
-import type { ProfileResponse } from '../../../../shared/types/profiles'
+import type { ProfileResponse } from '#shared/types/profiles'
 import { requireAuth } from '../../../utils/api-response'
+import { PGRST_NOT_FOUND } from '../../../utils/db-errors'
+import { PROFILE_SELECT_FIELDS } from '../../../utils/profile-fields'
 import { getServerSupabaseClient } from '../../../utils/supabase'
 
 export default defineEventHandler(async (event): Promise<ProfileResponse> => {
@@ -18,21 +20,14 @@ export default defineEventHandler(async (event): Promise<ProfileResponse> => {
 
   const { data, error } = await client
     .from('profiles')
-    .select('id, display_name, avatar_url, role, created_at, updated_at')
+    .select(PROFILE_SELECT_FIELDS)
     .eq('id', user.id)
     .single()
 
   if (error) {
-    if (error.code === 'PGRST116') {
-      throw createError({
-        statusCode: 404,
-        message: '找不到您的 Profile',
-      })
-    }
-
     throw createError({
-      statusCode: 500,
-      message: `查詢失敗：${error.message}`,
+      statusCode: error.code === PGRST_NOT_FOUND ? 404 : 500,
+      statusMessage: error.code === PGRST_NOT_FOUND ? '找不到您的 Profile' : '查詢失敗，請稍後再試',
     })
   }
 

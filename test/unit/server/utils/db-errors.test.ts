@@ -57,8 +57,16 @@ describe('db-errors', () => {
       expect(result.why).toBe('undefined_table')
     })
 
-    it('should map PGRST (PostgREST) errors to 400', () => {
+    it('should map PGRST116 (not found) to 404', () => {
       const error = { code: 'PGRST116', message: 'no rows returned' }
+      const result = handleDbError(error)
+
+      expect(result.statusCode).toBe(404)
+      expect(result.why).toBe('not_found')
+    })
+
+    it('should map generic PGRST errors to 400', () => {
+      const error = { code: 'PGRST200', message: 'some PostgREST error' }
       const result = handleDbError(error)
 
       expect(result.statusCode).toBe(400)

@@ -9,23 +9,7 @@
 import { createError } from 'h3'
 import type { H3Event } from 'h3'
 
-export interface PaginationInput {
-  page: number
-  perPage: number
-  total: number
-}
-
-export interface PaginationMeta {
-  page: number
-  perPage: number
-  total: number
-  totalPages: number
-}
-
-export interface PaginatedResponse<T> {
-  data: T[]
-  pagination: PaginationMeta
-}
+import type { PaginationInput, PaginatedResponse } from '../../shared/types/pagination'
 
 /**
  * 建立標準分頁回應
@@ -54,13 +38,15 @@ export function createPaginatedResponse<T>(
  * @throws 401 - 未登入
  */
 export function requireAuth(event: H3Event): { id: string; role?: string; email?: string } {
-  const session = (event.context as any)?.session
+  const session = (
+    event.context as { session?: { user?: { id: string; role?: string; email?: string } } }
+  )?.session
   const user = session?.user
 
   if (!user?.id) {
     throw createError({
       statusCode: 401,
-      message: '未登入，請先登入',
+      statusMessage: '未登入，請先登入',
     })
   }
 
@@ -79,7 +65,7 @@ export function requireRole(event: H3Event, roles: string[]): void {
   if (!roles.includes(user.role ?? '')) {
     throw createError({
       statusCode: 403,
-      message: `權限不足，需要角色：${roles.join(', ')}`,
+      statusMessage: '權限不足',
     })
   }
 }
