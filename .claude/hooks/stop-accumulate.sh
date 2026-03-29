@@ -1,17 +1,28 @@
 #!/usr/bin/env bash
-# Stop hook: 提醒 Claude 檢查是否需要累積 skill 或更新 docs
+# Stop hook: Compound Janitor — 評估 session 是否產出值得累積的知識
 
 cat <<'PROMPT'
-## 結束前檢查（Stop Hook）
+## 結束前檢查（Stop Hook — Compound Janitor）
 
-請在結束前快速評估以下兩點，如果都不適用就直接結束：
+快速評估以下三點，**只做適用的**，都不適用就直接結束：
 
-### 1. Skill 累積
-- 本次操作是否有值得記錄的流程、注意事項、或踩過的坑？
-- 是否有現有 skill 需要更新？
+### 1. 知識萃取（docs/solutions/ — 最重要）
+回顧本次 session，是否符合以下**任一**條件？
+- Debug 過程嘗試了 3+ 種方法才找到 root cause
+- 發現框架/平台/套件的隱性限制或 undocumented behavior
+- Root cause 非 typo，解法非直覺
+- 解法涉及 workaround
+
+**如果符合**：寫入 `docs/solutions/<category>/` 結構化文檔（見 README.md schema）
+**先搜索**是否已有相似記錄 → 有則更新，無則新建
+
+**不需萃取**：修 typo、調 CSS、跑 migration、更新依賴、直覺修復
+
+### 2. Skill 累積
+- 本次是否有值得記錄到 skill 的流程或注意事項？
 - 如適用：通用 → `~/.claude/skills/`；專案專用 → `.claude/skills/`
 
-### 2. docs/ 更新
-- 本次是否涉及除錯、疑難排解、或架構決策？
-- 如適用：在 `docs/` 記錄問題描述、root cause、解法（或目前進度）
+### 3. cq 共享知識
+- 本次發現的問題是否具有跨專案通用性（非本專案特有）？
+- 如適用：`cq propose` 記錄到共享知識庫
 PROMPT
