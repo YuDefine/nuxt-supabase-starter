@@ -51,7 +51,7 @@
 
 ## ✅ Claude Code 設定
 
-- [ ] 已複製 `.claude/settings.local.json.example` 到 `.claude/settings.local.json`
+- [ ] 確認 `.claude/settings.json` 已存在
 - [ ] 執行 `claude` 成功啟動 Claude Code
 - [ ] 測試 TDD 流程正常運作（`test-driven-development` skill 會自動觸發）
 - [ ] 測試執行 `pnpm check` 成功
@@ -91,7 +91,7 @@ pnpm skills:list
 ### Claude Code 無法使用指令？
 
 1. 確認 `.claude/commands/` 目錄存在
-2. 確認 `.claude/settings.local.json` 已建立
+2. 確認 `.claude/settings.json` 已存在
 3. 重新啟動 `claude`
 
 ### Supabase 無法啟動？

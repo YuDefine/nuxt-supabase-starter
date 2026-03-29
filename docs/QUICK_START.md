@@ -57,7 +57,7 @@ my-project/
 │   ├── agents/            # SubAgents
 │   ├── hooks/             # 自動化腳本
 │   ├── skills/            # AI Skills
-│   └── settings.local.json.example
+│   └── settings.json              # Claude Code 設定
 ├── openspec/              # Spectra 工作流程
 │   ├── project.md         # 專案上下文
 │   ├── specs/             # 系統規格
@@ -139,71 +139,48 @@ supabase gen types typescript --local | tee app/types/database.types.ts > /dev/n
 
 ---
 
-## Step 3：設定環境變數
+## Step 3：互動式設定
 
 ```bash
-# 複製環境變數範本
-cp .env.example .env
+pnpm setup
 ```
 
-編輯 `.env`，填入 Step 2 取得的值：
+設定腳本會引導你：
 
-```bash
-# Supabase（使用 Step 2 的 Publishable 和 Secret key）
-SUPABASE_URL=http://127.0.0.1:54321
-SUPABASE_KEY=<Step 2 的 Publishable key>
-SUPABASE_SECRET_KEY=<Step 2 的 Secret key>
+1. **選擇認證系統**：Better Auth（Email/Password + OAuth）或 nuxt-auth-utils（OAuth-first）
+2. **選擇可選功能**：OAuth providers、Sentry、NuxtHub、Charts、VitePress 等
+3. 自動安裝依賴、產生 `.env`、啟動 Supabase、產生型別
 
-# 給 Nuxt 使用（與上方相同）
-NUXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
-NUXT_PUBLIC_SUPABASE_KEY=<Step 2 的 Publishable key>
+> **提示**：如果你偏好手動設定，可以複製 `.env.example` 到 `.env` 並手動填入值。
 
-# Better Auth（必填）
-# 使用 openssl rand -base64 32 產生
-BETTER_AUTH_SECRET=<32字元隨機字串>
+### 認證系統比較
 
-# Session（必填）
-# 使用 openssl rand -base64 32 產生
-NUXT_SESSION_PASSWORD=<32字元隨機字串>
-
-# 站點配置
-NUXT_PUBLIC_SITE_URL=http://localhost:3000
-```
+| 特性           | Better Auth     | nuxt-auth-utils  |
+| -------------- | --------------- | ---------------- |
+| Email/Password | ✅              | ❌               |
+| OAuth          | ✅              | ✅               |
+| Session 機制   | Cookie + DB     | Cookie-only      |
+| 適合場景       | 需要 Email 登入 | OAuth-first 應用 |
 
 ---
 
-## Step 4：安裝依賴
+## Step 4：設定 Claude Code
 
 ```bash
-pnpm install
-```
-
-> **注意**：`nuxt-better-auth` 會自動產生 `BETTER_AUTH_SECRET` 並寫入 `.env`。如果你在 Step 3 已經設定過，它會保留你的值。
-
-這會安裝完整的 Tech Stack，詳見 [README.md 的 Tech Stack 章節](../README.md#tech-stack)。
-
----
-
-## Step 5：設定 Claude Code
-
-```bash
-# 複製 Claude Code 設定
-cp .claude/settings.local.json.example .claude/settings.local.json
-
-# 安裝第三方 AI Skills（26 個通用 Skills）
+# 安裝第三方 AI Skills（46 個通用 Skills）
 bash scripts/install-skills.sh
 ```
 
 這個步驟會：
 
-- 設定 Claude 的命令權限和 MCP Servers
-- 安裝 26 個通用 Skills 到 `.claude/skills/`（`nuxt`、`vue`、`nuxt-ui`、`nuxt-better-auth` 等）
+- 安裝 46 個通用 Skills 到 `.claude/skills/`（`nuxt`、`vue`、`nuxt-ui`、`nuxt-better-auth` 等）
+- 命令權限和 MCP Servers 已在 `.claude/settings.json` 中預先配置
 
 > 📖 關於 Supabase MCP：[SUPABASE_MCP.md](./SUPABASE_MCP.md)
 
 ---
 
-## Step 6：啟動開發伺服器
+## Step 5：啟動開發伺服器
 
 ```bash
 pnpm dev
@@ -213,7 +190,7 @@ pnpm dev
 
 ---
 
-## Step 7：驗證 Claude Code
+## Step 6：驗證 Claude Code
 
 開啟新的終端機視窗：
 
@@ -249,10 +226,10 @@ claude
 
 | 類型        | 數量  | 說明                                              |
 | ----------- | ----- | ------------------------------------------------- |
-| Commands    | 16 個 | 4 共用 + 12 Spectra                               |
+| Commands    | 24 個 | 12 共用 + 12 Spectra                              |
 | SubAgents   | 3 個  | `check-runner`、`code-review`、`db-backup`        |
-| 通用 Skills | 26 個 | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等（自動更新） |
-| 情境 Skills | 5 個  | `supabase-rls`、`server-api`、`pinia-store` 等    |
+| 通用 Skills | 46 個 | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等（自動更新） |
+| 情境 Skills | 13 個 | `supabase-rls`、`server-api`、`pinia-store` 等    |
 | SDD Skills  | 12 個 | Spectra（`spectra-*`）                            |
 
 ### 開發規範（已定義）

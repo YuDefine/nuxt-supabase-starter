@@ -42,21 +42,14 @@
 curl -fsSL https://claude.ai/install.sh | sh
 ```
 
-### 2. 複製設定檔
-
-```bash
-# 複製範例設定
-cp .claude/settings.local.json.example .claude/settings.local.json
-```
-
-### 3. 啟動 Claude Code
+### 2. 啟動 Claude Code
 
 ```bash
 # 在專案目錄下啟動
 claude
 ```
 
-### 4. 開始使用
+### 3. 開始使用
 
 ```bash
 # 試試看（test-driven-development skill 會自動觸發 TDD 流程）
@@ -97,7 +90,7 @@ claude
 
 ```
 .claude/
-├── settings.local.json.example  # 設定檔範例
+├── settings.json                # Claude Code 設定
 ├── commands/                    # 自定義指令
 │   ├── commit.md
 │   ├── db-migration.md
@@ -286,7 +279,7 @@ supabase gen types typescript --local > app/types/database.types.ts
 
 ### 啟用 Hooks
 
-Hooks 需要在 `settings.local.json` 中配置：
+Hooks 需要在 `settings.json` 中配置：
 
 ```json
 {
@@ -321,7 +314,7 @@ Hooks 需要在 `settings.local.json` 中配置：
 
 1. 在 `.claude/hooks/` 建立 shell 腳本
 2. 設定執行權限：`chmod +x your-hook.sh`
-3. 在 `settings.local.json` 的 `hooks.PostToolUse` 中配置觸發條件
+3. 在 `settings.json` 的 `hooks.PostToolUse` 中配置觸發條件
 
 Hook 腳本可以從 stdin 讀取 JSON 輸入，包含 `tool_input` 和 `tool_response`。
 
@@ -400,7 +393,7 @@ Claude：[讀取 nuxt-ui/references/components.md]
 
 ## 設定檔
 
-### settings.local.json
+### settings.json
 
 控制 Claude Code 的權限和行為：
 
@@ -462,7 +455,7 @@ Claude：[讀取 nuxt-ui/references/components.md]
 
 ### 情境 4：調整權限
 
-編輯 `.claude/settings.local.json`，新增或移除允許的指令。
+編輯 `.claude/settings.json`，新增或移除允許的指令。
 
 ---
 
