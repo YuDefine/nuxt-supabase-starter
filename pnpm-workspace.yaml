@@ -1,2 +1,15 @@
 packages:
   - 'packages/*'
+
+ignoredBuiltDependencies:
+  - '@parcel/watcher'
+  - '@prisma/client'
+  - '@prisma/engines'
+  - '@sentry/cli'
+  - better-sqlite3
+  - esbuild
+  - maplibre-gl
+  - prisma
+  - sharp
+  - vue-demi
+  - workerd

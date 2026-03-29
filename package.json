@@ -24,7 +24,7 @@
     "format": "vp fmt",
     "format:check": "vp fmt --check",
     "lint": "vp lint",
-    "prepare": "vp config && nuxt prepare",
+    "prepare": "vp config && bash scripts/restore-hooks.sh && nuxt prepare",
     "preview": "nuxt preview",
     "setup": "bash scripts/setup.sh",
     "skills:install": "bash ./scripts/install-skills.sh",

@@ -32,7 +32,7 @@ git clone . "$TEST_DIR" && cd "$TEST_DIR" && rm -rf .git && git init
 - [ ] `agents/` 存在
 - [ ] `hooks/` 存在
 - [ ] `skills/` 存在
-- [ ] `settings.local.json.example` 存在
+- [ ] `settings.json` 存在
 
 **openspec/ 結構**：
 
