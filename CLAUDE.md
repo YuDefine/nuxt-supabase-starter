@@ -42,7 +42,7 @@ Nuxt 4, Vue 3 (Composition API + `<script setup>`), TypeScript, Tailwind CSS, Nu
 ## Commands
 
 ```bash
-pnpm dev             # Already running. NEVER start
+pnpm dev             # Nuxt dev server（需要時自動啟動，見 browser-use-screenshot skill）
 pnpm check           # vp check (lint + fmt + test) + typecheck
 vp test              # All tests + coverage
 vp lint              # Lint only
@@ -63,98 +63,10 @@ supabase db lint --level warning  # Security check
 1. 在 GitHub repo → Settings → Secrets and variables → Actions 新增
 2. 確認 `docs/templates/.github/workflows/` 中的部署 workflow 有正確傳遞該變數
 
-## CRITICAL RULES
+## Proactive Behaviors (Project-Specific)
 
-### Auth - IMPORTANT
-
-**USE** `useUserSession()` — 來自 `nuxt-auth-utils` 或 `@onmax/nuxt-better-auth`（依專案選擇）
-**NEVER** use `useSupabaseUser()` or any Supabase Auth API
-
-### Database Access Pattern
-
-- **Client**: READ only via `useSupabaseClient<Database>()` + `.select()`
-- **Server**: ALL writes via `/api/v1/*` endpoints
-- **NEVER** `.insert()/.update()/.delete()/.upsert()` from client
-
-### Migration - CRITICAL
-
-- **MUST** use `supabase migration new <name>` to create
-- **NEVER** create .sql files manually or via Write tool
-- **MUST** `SET search_path = ''` in ALL database functions
-- **NEVER** modify or delete applied migrations
-- After migration: `supabase db reset` → `db lint` → `gen types`
-
-### MCP Remote Database - CRITICAL
-
-- **NEVER** use `mcp__remote-supabase__apply_migration` to create tables/indexes
-- **NEVER** use `mcp__remote-supabase__execute_sql` for DDL (CREATE/ALTER/DROP)
-- MCP uses `supabase_admin` role → creates objects with wrong owner → CI/CD fails
-- **ONLY** use remote MCP for: SELECT queries, debugging, checking table owners
-- **ALL DDL must go through migration files + CI/CD**
-
-### RLS Policy
-
-API writes **MUST** include service_role bypass:
-
-```sql
-(SELECT auth.role()) = 'service_role' OR <user_condition>
-```
-
-### Development
-
-- **ALWAYS** TDD: Red → Green → Refactor
-- **NEVER** `.skip` or comment out tests
-- **ALWAYS** Tailwind classes, NEVER manual CSS
-- **ALWAYS** named exports, NEVER default exports
-- **ALWAYS** Composition API + `<script setup>`, NEVER Options API
-
-## Project Structure
-
-```
-app/
-├── pages/           # File-based routing
-├── components/      # Vue components
-├── composables/     # Vue composables
-├── stores/          # Pinia stores
-├── queries/         # Pinia Colada queries
-└── types/           # TypeScript types (database.types.ts)
-
-server/
-├── api/v1/          # Business API
-├── api/auth/        # Auth API
-└── utils/           # supabase, logger
-
-shared/              # Shared code (cross app/server)
-packages/            # Monorepo packages
-
-test/
-├── unit/            # Unit tests (*.test.ts)
-└── nuxt/            # Nuxt env tests (*.nuxt.test.ts)
-
-supabase/migrations/ # DB migrations (CLI only)
-openspec/            # Spectra specs & changes
-.spectra/            # Spectra config
-```
-
-## Automation Triggers
-
-| Trigger            | Action                                             |
-| ------------------ | -------------------------------------------------- |
-| `/commit`          | Run `pnpm check` → commit                          |
-| `/spectra:propose` | 建立變更提案                                       |
-| `/spectra:apply`   | 執行任務                                           |
-| `/spectra:archive` | 歸檔變更                                           |
-| Migration created  | `db reset` → `db lint` → `gen types` → `typecheck` |
-| New feature        | TDD: Red → Green → Refactor                        |
-
-## 截圖調試（browser-use CLI）
-
-- **MUST** 使用 `browser-use-screenshot` skill（不是 generic `browser-use`）— 包含本專案必要的認證流程
-- **NEVER** 直接 `browser-use open` 目標頁面 — 必須先完成登入（dev-login route 或填表）
-- 本專案支援兩條 auth 路線，Better Auth 也可能是 OAuth-only（無 email/password 表單）
-- Dev server 已經在跑，自己用 `ps aux` 找 port，不要問
-- Ad-hoc 截圖存 `temp/` 目錄，Review 截圖存 `screenshots/local/review/`（皆已在 `.gitignore`）
-- 完成後 `browser-use close` 關閉瀏覽器
+- **需要 dev server 時**（截圖、瀏覽、測試 UI）：自動偵測並啟動，不詢問。詳見 `browser-use-screenshot` skill
+- **產品思維**（僅在需求模糊時）：從用戶角度提問協助釐清，需求明確時直接執行
 
 ## Commit Format
 
@@ -171,27 +83,7 @@ See `commitlint.config.js` for types. Use `/commit` command.
 | Pinia       | `docs/verify/PINIA_ARCHITECTURE.md`       |
 | Environment | `docs/verify/ENVIRONMENT_VARIABLES.md`    |
 | Screenshot  | `docs/verify/SCREENSHOT_GUIDE.md`         |
-
-## AI Skills
-
-| Task                   | Skill                              |
-| ---------------------- | ---------------------------------- |
-| Vue components         | `vue`                              |
-| Nuxt routing/server    | `nuxt`                             |
-| UI components          | `nuxt-ui`                          |
-| Auth (nuxt-auth-utils) | `nuxt-auth-utils`                  |
-| Auth (better-auth)     | `nuxt-better-auth`                 |
-| VueUse                 | `vueuse`                           |
-| Postgres               | `supabase-postgres-best-practices` |
-| TDD                    | `test-driven-development`          |
-| 截圖調試               | `browser-use-screenshot`           |
-| 中大型功能（入口）     | `/spectra`                         |
-| 中大型功能（指定）     | `/spectra:*`                       |
-| 人工檢查截圖           | `/review-screenshot`               |
-| 人工檢查歸檔           | `/review-archive`                  |
-| UI 設計規劃/診斯       | `/design`                          |
-| 建構前端介面           | `/frontend-design`                 |
-| Subagent 驅動開發      | `subagent-dev`                     |
+| 歷史經驗    | `docs/solutions/README.md`                |
 
 ## Documentation
 
@@ -199,19 +91,6 @@ See `commitlint.config.js` for types. Use `/commit` command.
 
 Record **current state**, not iteration history. Use present tense, no timestamps.
 
-## Code Knowledge Graph (code-review-graph)
+### docs/solutions/ Purpose
 
-MCP server 已註冊，提供程式碼結構知識圖譜。語意搜尋已啟用（本地向量嵌入）。
-
-| 任務               | Tool                                                  |
-| ------------------ | ----------------------------------------------------- |
-| 變更影響範圍       | `get_impact_radius`（自動偵測 git diff）              |
-| PR review 上下文   | `get_review_context`（子圖 + 原始碼 + 建議）          |
-| 找呼叫者/被呼叫者  | `query_graph(pattern="callers_of/callees_of")`        |
-| 找誰 import 了某檔 | `query_graph(pattern="importers_of")`                 |
-| 找檔案結構         | `query_graph(pattern="file_summary/children_of")`     |
-| 找測試             | `query_graph(pattern="tests_for")`                    |
-| 語意搜尋           | `semantic_search_nodes(query="...", kind="Function")` |
-| 找肥大 function    | `find_large_functions(min_lines=80)`                  |
-| 增量更新圖譜       | `build_or_update_graph(full_rebuild=False)`           |
-| 圖譜統計           | `list_graph_stats`                                    |
+Record **problem → solution** experiences accumulated during development. Auto-managed by Claude (see Auto-Harness in global CLAUDE.md). Schema defined in `docs/solutions/README.md`.

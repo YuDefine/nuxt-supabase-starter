@@ -52,13 +52,13 @@ git clone --depth 1 https://github.com/YuDefine/nuxt-supabase-starter.git /tmp/s
 cp -r /tmp/starter/.claude .
 rm -rf /tmp/starter
 
-# 建立 settings.local.json
-cp .claude/settings.local.json.example .claude/settings.local.json
 ```
+
+> 設定已包含在 `.claude/settings.json` 中，不需要額外複製。
 
 ### 1.3 設定 Claude Code 權限
 
-編輯 `.claude/settings.local.json`，根據你的需求調整權限：
+編輯 `.claude/settings.json`，根據你的需求調整權限：
 
 ```json
 {
@@ -265,7 +265,7 @@ NUXT_PUBLIC_SUPABASE_KEY=<Publishable_key>
 
 ### 3.5 加入 Supabase MCP（選用）
 
-如果要讓 Claude 直接操作 Supabase，在 `.claude/settings.local.json` 加入：
+如果要讓 Claude 直接操作 Supabase，在 `.claude/settings.json` 加入：
 
 ```json
 {
@@ -350,7 +350,7 @@ export default defineServerAuth({
 your-project/
 ├── CLAUDE.md              # AI 開發規範
 ├── .claude/
-│   ├── settings.local.json
+│   ├── settings.json
 │   ├── commands/          # 自定義指令（/commit、/db-migration 等）
 │   ├── agents/            # SubAgents（check-runner 等）
 │   └── skills/            # AI Skills
@@ -409,7 +409,7 @@ supabase status
 
 ### Q: 我只想要 Claude 配置，不要 Supabase
 
-只執行第 1 和第 2 節的步驟。在 `.claude/settings.local.json` 中移除 Supabase 相關權限。
+只執行第 1 和第 2 節的步驟。在 `.claude/settings.json` 中移除 Supabase 相關權限。
 
 ### Q: Skills 怎麼更新？
 

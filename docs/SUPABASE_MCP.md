@@ -43,7 +43,7 @@
 }
 ```
 
-### .claude/settings.local.json（Claude Code 權限）
+### .claude/settings.json（Claude Code 權限）
 
 ```json
 {
@@ -246,9 +246,7 @@ supabase start
 
 ### 2. 設定 Claude Code 權限
 
-```bash
-cp .claude/settings.local.json.example .claude/settings.local.json
-```
+設定已包含在 `.claude/settings.json` 中，不需要額外複製。
 
 ### 3. 驗證連線
 
@@ -285,7 +283,7 @@ cp .claude/settings.local.json.example .claude/settings.local.json
 
 ### 2. 更新 Claude Code 權限
 
-在 `.claude/settings.local.json` 加入：
+在 `.claude/settings.json` 加入：
 
 ```json
 {
@@ -318,7 +316,7 @@ supabase login
 
 1. 確認 Supabase 已啟動：`supabase status`
 2. 確認 `.mcp.json` 存在且格式正確
-3. 確認 `.claude/settings.local.json` 有啟用 MCP
+3. 確認 `.claude/settings.json` 有啟用 MCP
 
 ### Q: 權限錯誤？
 
