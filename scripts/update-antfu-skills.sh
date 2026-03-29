@@ -12,6 +12,8 @@ SKILLS=(
   "vitest"
   "vue-best-practices"
   "vitepress"
+  "pinia"
+  "vue-testing-best-practices"
 )
 
 REPO="https://github.com/antfu/skills"

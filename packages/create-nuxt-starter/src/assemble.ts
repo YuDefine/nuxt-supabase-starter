@@ -576,11 +576,7 @@ function copySettings(targetDir: string): void {
   const starterClaude = join(STARTER_ROOT, '.claude')
   const targetClaude = join(targetDir, '.claude')
 
-  copyFilesList(starterClaude, targetClaude, [
-    'settings.json',
-    'settings.local.json.example',
-    'guard-state.json',
-  ])
+  copyFilesList(starterClaude, targetClaude, ['settings.json', 'guard-state.json'])
 
   // Guard script lives in a subdirectory
   const guardScript = join(starterClaude, 'scripts', 'guard-check.mjs')
