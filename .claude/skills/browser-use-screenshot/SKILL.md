@@ -1,6 +1,6 @@
 ---
 name: browser-use-screenshot
-description: 截圖、看畫面、確認 UI、看一下頁面、幫我看 UI — nuxt-supabase-starter 的瀏覽器截圖流程（含自動登入）。處理 dev server 確認、認證登入（支援 better-auth 填表或 dev-login route）、頁面導航與截圖。優先於 generic browser-use skill，因為包含本專案必要的認證流程。
+description: 截圖、看畫面、確認 UI、看一下頁面、幫我看 UI — nuxt-supabase-starter 的瀏覽器截圖流程（含自動登入與 dev server 自動管理）。處理 dev server 偵測/啟動、認證登入（支援 better-auth 填表或 dev-login route）、頁面導航與截圖。
 ---
 
 # Browser-Use 截圖調試
@@ -23,16 +23,18 @@ description: 截圖、看畫面、確認 UI、看一下頁面、幫我看 UI —
 
 ### 1. 確認 dev server 正在運行
 
+**不要假設 port 3000 就是本專案**，多個 Nuxt 專案可能同時運行。
+
 ```bash
 # 找到本專案的 dev server 和 port
 ps aux | grep -E 'nuxt-supabase-starter.*nuxt' | grep -v grep
 ```
 
 - 有找到 → 從 process 資訊取得 port（預設 3000）
-- 沒找到 → 自動找可用 port 並啟動：
+- 沒找到 → **自動**找可用 port 並啟動（不詢問使用者）：
 
 ```bash
-# 找可用 port
+# 找可用 port（避開其他專案）
 for port in 3000 3001 3002 3003 3004; do
   lsof -iTCP:$port -sTCP:LISTEN -P >/dev/null 2>&1 || { echo $port; break; }
 done
@@ -40,12 +42,14 @@ done
 # 背景啟動（使用 Bash run_in_background）
 cd /Users/charles/offline/nuxt-supabase-starter && pnpm dev --port <port>
 
-# 等待就緒
+# 等待就緒（最多 60 秒，Nuxt 首次啟動較慢）
 for i in $(seq 1 30); do
-  curl -s -o /dev/null -w "%{http_code}" http://localhost:<port>/ 2>/dev/null | grep -q '200' && break
+  curl -s -o /dev/null -w "%{http_code}" http://localhost:<port>/ 2>/dev/null | grep -qE '200|302' && break
   sleep 2
 done
 ```
+
+> **重要**：這是主動行為，偵測到 dev server 沒跑就直接啟動，不需要停下來問使用者。
 
 ### 2. 認證方式
 
@@ -142,34 +146,33 @@ browser-use screenshot temp/<next-state>.png   # 截圖新狀態
 
 ---
 
+## 命令對照（Playwright MCP → browser-use）
+
+| 用途       | Playwright MCP            | browser-use CLI                    |
+| ---------- | ------------------------- | ---------------------------------- |
+| 開啟頁面   | `browser_navigate`        | `browser-use open <url>`           |
+| 頁面狀態   | `browser_snapshot`        | `browser-use state`                |
+| 點擊元素   | `browser_click ref=eXX`   | `browser-use click <index>`        |
+| 截圖       | `browser_take_screenshot` | `browser-use screenshot <path>`    |
+| 等待文字   | `browser_wait_for`        | `browser-use wait text "文字"`     |
+| 等待元素   | `browser_wait_for`        | `browser-use wait selector "css"`  |
+| 輸入文字   | `browser_type`            | `browser-use input <index> "文字"` |
+| 按鍵       | `browser_press_key`       | `browser-use keys "Enter"`         |
+| 視窗大小   | `browser_resize`          | **不支援**（固定 1920x1080）       |
+| 執行 JS    | `browser_evaluate`        | `browser-use eval "js code"`       |
+| 關閉瀏覽器 | `browser_close`           | `browser-use close`                |
+
+> **響應式截圖（行動版/平板）必須用 Playwright MCP**：browser-use CLI 無法調整視窗大小，
+> `eval` 只能執行瀏覽器端 JS，無法呼叫 Playwright 的 `page.setViewportSize()`。
+> 需要不同尺寸截圖時，改用 `browser_navigate` → `browser_resize` → `browser_take_screenshot`。
+
+---
+
 ## UI 實作/修正後截圖
 
 1. **跳過已完成的前置條件** — 若同一 conversation 已登入過，browser-use session 仍有效，直接截圖
 2. **針對修改的頁面截圖** — 根據剛才修改的檔案推斷目標頁面路徑
 3. **截圖前後對比** — 如果是修正 bug，先描述預期變化再截圖確認
-
----
-
-## 常用命令速查
-
-| 用途       | 命令                               |
-| ---------- | ---------------------------------- |
-| 開啟頁面   | `browser-use open <url>`           |
-| 頁面狀態   | `browser-use state`                |
-| 點擊元素   | `browser-use click <index>`        |
-| 截圖       | `browser-use screenshot <path>`    |
-| 等待文字   | `browser-use wait text "文字"`     |
-| 等待元素   | `browser-use wait selector "css"`  |
-| 輸入文字   | `browser-use input <index> "文字"` |
-| 按鍵       | `browser-use keys "Enter"`         |
-| 捲動       | `browser-use scroll down`          |
-| 執行 JS    | `browser-use eval "js code"`       |
-| 視窗大小   | **不支援**（固定 1920x1080）       |
-| 關閉瀏覽器 | `browser-use close`                |
-
-> **響應式截圖（行動版/平板）必須用 Playwright MCP**：browser-use CLI 無法調整視窗大小，
-> `eval` 只能執行瀏覽器端 JS，無法呼叫 Playwright 的 `page.setViewportSize()`。
-> 需要不同尺寸截圖時，改用 `browser_navigate` → `browser_resize` → `browser_take_screenshot`。
 
 ---
 
@@ -275,4 +278,5 @@ export default defineEventHandler(async (event) => {
 | 頁面內容為空        | 確認 URL 正確、用 `browser-use state` 檢查頁面狀態       |
 | 瀏覽器無法啟動      | `browser-use close` 後重試，或 `browser-use doctor` 檢查 |
 | 元素找不到          | `browser-use scroll down` 後重新 `browser-use state`     |
+| Port 被佔用         | skill 自動找下一個可用 port，不需手動處理                |
 | Dev server stale    | 重啟 dev server；若仍有問題，刪除 `.nuxt/` 後重啟        |
