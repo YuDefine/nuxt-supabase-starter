@@ -7,8 +7,8 @@
    * @module app/components/demo/UserTable
    */
 
-  import type { Profile, ProfileListQuery } from '../../../shared/types/profiles'
-  import type { PaginationMeta } from '../../../server/utils/api-response'
+  import type { Profile, ProfileListQuery } from '#shared/types/profiles'
+  import type { PaginationMeta } from '#shared/types/pagination'
   import type { TableColumn } from '#ui/types'
 
   const props = defineProps<{
@@ -72,12 +72,14 @@
     emit('update:filters', { page })
   }
 
+  const dateFormatter = new Intl.DateTimeFormat('zh-TW', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+
   function formatDate(dateStr: string): string {
-    return new Date(dateStr).toLocaleDateString('zh-TW', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    })
+    return dateFormatter.format(new Date(dateStr))
   }
 </script>
 

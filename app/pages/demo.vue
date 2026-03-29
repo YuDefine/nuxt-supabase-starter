@@ -39,6 +39,7 @@
     { name: 'Mobile', percentage: 35 },
     { name: 'Tablet', percentage: 20 },
   ]
+  const donutValues = donutData.map((i) => i.percentage)
   const donutCategories = {
     desktop: { name: 'Desktop', color: '#3b82f6' },
     mobile: { name: 'Mobile', color: '#ef4444' },
@@ -82,9 +83,7 @@
 
     <!-- Nuxt UI Components Section -->
     <section>
-      <h2 class="mb-6 text-2xl font-semibold text-gray-800 dark:text-gray-200">
-        Nuxt UI Components
-      </h2>
+      <h2 class="mb-6 text-2xl font-semibold text-(--ui-text-highlighted)">Nuxt UI Components</h2>
 
       <div class="grid gap-8 md:grid-cols-2">
         <!-- Buttons -->
@@ -153,9 +152,7 @@
 
     <!-- Nuxt Charts Section -->
     <section>
-      <h2 class="mb-6 text-2xl font-semibold text-gray-800 dark:text-gray-200">
-        Nuxt Charts (Unovis)
-      </h2>
+      <h2 class="mb-6 text-2xl font-semibold text-(--ui-text-highlighted)">Nuxt Charts (Unovis)</h2>
 
       <div class="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
         <!-- Line Chart -->
@@ -196,7 +193,7 @@
           </template>
           <div class="h-48">
             <DonutChart
-              :data="donutData.map((i) => i.percentage)"
+              :data="donutValues"
               :height="180"
               :categories="donutCategories"
               :radius="4"
@@ -209,9 +206,7 @@
 
     <!-- Features Section -->
     <section>
-      <h2 class="mb-6 text-2xl font-semibold text-gray-800 dark:text-gray-200">
-        Included Features
-      </h2>
+      <h2 class="mb-6 text-2xl font-semibold text-(--ui-text-highlighted)">Included Features</h2>
 
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <UCard>
@@ -224,7 +219,7 @@
             </div>
             <div>
               <h3 class="font-medium">Nuxt UI</h3>
-              <p class="text-sm text-gray-500">Beautiful components</p>
+              <p class="text-sm text-(--ui-text-muted)">Beautiful components</p>
             </div>
           </div>
         </UCard>
@@ -236,7 +231,7 @@
             </div>
             <div>
               <h3 class="font-medium">Supabase</h3>
-              <p class="text-sm text-gray-500">Backend & Auth</p>
+              <p class="text-sm text-(--ui-text-muted)">Backend & Auth</p>
             </div>
           </div>
         </UCard>
@@ -251,7 +246,7 @@
             </div>
             <div>
               <h3 class="font-medium">Charts</h3>
-              <p class="text-sm text-gray-500">Data visualization</p>
+              <p class="text-sm text-(--ui-text-muted)">Data visualization</p>
             </div>
           </div>
         </UCard>
@@ -266,8 +261,75 @@
             </div>
             <div>
               <h3 class="font-medium">TypeScript</h3>
-              <p class="text-sm text-gray-500">Type safety</p>
+              <p class="text-sm text-(--ui-text-muted)">Type safety</p>
             </div>
+          </div>
+        </UCard>
+      </div>
+    </section>
+
+    <!-- UI Shell Components Section -->
+    <section>
+      <h2 class="mb-6 text-2xl font-semibold text-(--ui-text-highlighted)">UI Shell Components</h2>
+
+      <div class="space-y-8">
+        <!-- AppPageShell demo -->
+        <UCard>
+          <template #header>
+            <h3 class="font-medium">AppPageShell</h3>
+          </template>
+          <div class="rounded-lg border border-dashed border-(--ui-border) p-4">
+            <AppPageShell title="Users" description="Manage team members">
+              <template #actions>
+                <UButton size="sm" icon="i-lucide-plus">Add User</UButton>
+              </template>
+              <template #toolbar>
+                <div class="flex gap-2">
+                  <UInput placeholder="Search..." size="sm" icon="i-lucide-search" />
+                </div>
+              </template>
+              <div class="rounded-lg bg-(--ui-bg-elevated) p-4 text-sm text-muted">
+                Page content goes here
+              </div>
+            </AppPageShell>
+          </div>
+        </UCard>
+
+        <!-- AppEmptyState demo -->
+        <UCard>
+          <template #header>
+            <h3 class="font-medium">AppEmptyState</h3>
+          </template>
+          <div class="rounded-lg border border-dashed border-(--ui-border) p-4">
+            <AppEmptyState
+              icon="i-lucide-users"
+              message="No users found"
+              description="Get started by adding your first team member."
+              action-label="Add User"
+              @action="showToast"
+            />
+          </div>
+        </UCard>
+
+        <!-- AppFormLayout demo -->
+        <UCard>
+          <template #header>
+            <h3 class="font-medium">AppFormLayout</h3>
+          </template>
+          <div class="rounded-lg border border-dashed border-(--ui-border) p-4">
+            <AppFormLayout
+              title="Edit Profile"
+              description="Update your personal information"
+              @submit="showToast"
+              @cancel="showToast"
+            >
+              <UFormField label="Name">
+                <UInput placeholder="Your name" />
+              </UFormField>
+              <UFormField label="Email">
+                <UInput type="email" placeholder="you@example.com" />
+              </UFormField>
+            </AppFormLayout>
           </div>
         </UCard>
       </div>
@@ -279,7 +341,7 @@
         <h3 class="text-lg font-semibold">Modal Demo</h3>
       </template>
       <template #body>
-        <p class="text-gray-600 dark:text-gray-400">
+        <p class="text-(--ui-text-muted)">
           This is a demo modal from Nuxt UI. You can use modals to display important information or
           gather user input.
         </p>
