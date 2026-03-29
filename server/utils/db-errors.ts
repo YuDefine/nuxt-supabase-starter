@@ -6,6 +6,9 @@
  * @module server/utils/db-errors
  */
 
+/** PostgREST: requested resource not found (.single() returned 0 rows) */
+export const PGRST_NOT_FOUND = 'PGRST116'
+
 export interface DbErrorResult {
   statusCode: number
   message: string
@@ -60,6 +63,15 @@ export function handleDbError(error: { code?: string; message?: string }): DbErr
   const message = error.message ?? '未知的資料庫錯誤'
 
   // Check PostgREST errors (PGRST prefix)
+  if (code === PGRST_NOT_FOUND) {
+    return {
+      statusCode: 404,
+      message,
+      why: 'not_found',
+      fix: '找不到指定的資源',
+    }
+  }
+
   if (code.startsWith('PGRST')) {
     return {
       statusCode: 400,

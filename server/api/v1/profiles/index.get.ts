@@ -7,10 +7,11 @@
  */
 
 import { createError, defineEventHandler, getQuery } from 'h3'
-import { profileListQuerySchema } from '../../../../shared/schemas/profiles'
-import type { ProfileListResponse } from '../../../../shared/types/profiles'
-import { validateQuery } from '../../../utils/validation'
+import { profileListQuerySchema } from '#shared/schemas/profiles'
+import type { ProfileListResponse } from '#shared/types/profiles'
 import { requireRole, createPaginatedResponse } from '../../../utils/api-response'
+import { PROFILE_SELECT_FIELDS } from '../../../utils/profile-fields'
+import { validateQuery } from '../../../utils/validation'
 import { getServerSupabaseClient } from '../../../utils/supabase'
 
 export default defineEventHandler(async (event): Promise<ProfileListResponse> => {
@@ -24,11 +25,9 @@ export default defineEventHandler(async (event): Promise<ProfileListResponse> =>
   const client = getServerSupabaseClient()
 
   // 建立查詢
-  let countQuery = client.from('profiles').select('*', { count: 'exact', head: true })
+  let countQuery = client.from('profiles').select('id', { count: 'exact', head: true })
 
-  let dataQuery = client
-    .from('profiles')
-    .select('id, display_name, avatar_url, role, created_at, updated_at')
+  let dataQuery = client.from('profiles').select(PROFILE_SELECT_FIELDS)
 
   // 搜尋條件
   if (search) {
@@ -48,14 +47,14 @@ export default defineEventHandler(async (event): Promise<ProfileListResponse> =>
   if (countResult.error) {
     throw createError({
       statusCode: 500,
-      message: `查詢失敗：${countResult.error.message}`,
+      statusMessage: '查詢失敗，請稍後再試',
     })
   }
 
   if (dataResult.error) {
     throw createError({
       statusCode: 500,
-      message: `查詢失敗：${dataResult.error.message}`,
+      statusMessage: '查詢失敗，請稍後再試',
     })
   }
 

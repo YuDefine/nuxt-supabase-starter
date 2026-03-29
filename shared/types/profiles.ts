@@ -6,7 +6,7 @@
  * @module shared/types/profiles
  */
 
-import type { PaginatedResponse } from '../../server/utils/api-response'
+import type { PaginatedResponse } from './pagination'
 
 /** Profile 完整資料（對應 profiles table Row） */
 export interface Profile {
