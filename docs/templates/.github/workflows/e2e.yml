@@ -1,72 +1,58 @@
+# E2E Workflow Template
+# Copy to .github/workflows/e2e.yml and customize
 name: E2E Tests
 
 on:
   workflow_run:
     workflows: ['CI']
     types: [completed]
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
   e2e:
-    if: github.event.workflow_run.conclusion == 'success'
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
         with:
           node-version: '22'
+          cache: true
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - run: vp install
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Start Supabase
-        id: supabase
-        run: |
-          npx supabase start --ignore-health-check
-          npx supabase db reset
-          echo "ANON_KEY=$(npx supabase status -o env | grep ANON_KEY | cut -d= -f2 | tr -d '\"')" >> "$GITHUB_OUTPUT"
-          echo "SERVICE_ROLE_KEY=$(npx supabase status -o env | grep SERVICE_ROLE_KEY | cut -d= -f2 | tr -d '\"')" >> "$GITHUB_OUTPUT"
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
 
-      - name: Build Nuxt
-        run: pnpm build
+      - name: Start Supabase
+        run: supabase start
+
+      - name: Build app
+        run: vp run build
         env:
-          NODE_OPTIONS: --max-old-space-size=4096
-          NITRO_PRESET: node-server
           SUPABASE_URL: http://127.0.0.1:54321
-          SUPABASE_KEY: ${{ steps.supabase.outputs.ANON_KEY }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
 
       - name: Run E2E tests
-        run: pnpm test:e2e
+        run: vp run test:e2e
         env:
-          NUXT_SESSION_PASSWORD: e2e-ci-session-password-at-least-32-chars
           SUPABASE_URL: http://127.0.0.1:54321
-          SUPABASE_KEY: ${{ steps.supabase.outputs.ANON_KEY }}
-          SUPABASE_SECRET_KEY: ${{ steps.supabase.outputs.SERVICE_ROLE_KEY }}
 
-      - name: Upload Playwright report
+      - name: Upload test report
+        if: always()
         uses: actions/upload-artifact@v4
-        if: ${{ !cancelled() }}
         with:
           name: playwright-report
-          path: |
-            playwright-report/
-            test-results/
-          retention-days: 14
-
-      - name: Cleanup Supabase
-        if: always()
-        run: npx supabase stop
+          path: playwright-report/
+          retention-days: 7

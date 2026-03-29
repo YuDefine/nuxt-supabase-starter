@@ -1,33 +1,45 @@
+# Deploy Workflow Template
+# Copy to .github/workflows/deploy.yml and customize secrets
+#
+# Required GitHub Secrets:
+#   SUPABASE_DB_PASSWORD    - Database password for migrations
+#   SUPABASE_URL            - Supabase project URL
+#   SUPABASE_SECRET_KEY     - Service role key
+#   NUXT_PUBLIC_SUPABASE_URL - Public Supabase URL (baked into client bundle)
+#   NUXT_PUBLIC_SUPABASE_KEY - Public anon key (baked into client bundle)
+#   NUXT_SESSION_PASSWORD   - Session encryption key
+#   NUXT_PUBLIC_SENTRY_DSN  - Sentry DSN (optional)
+#   SENTRY_AUTH_TOKEN       - Sentry auth token (optional)
+#   SENTRY_ORG              - Sentry organization (optional)
+#   SENTRY_PROJECT          - Sentry project (optional)
+#   CLOUDFLARE_API_TOKEN    - Cloudflare API token
+#   CLOUDFLARE_ACCOUNT_ID   - Cloudflare account ID
+#   DISCORD_WEBHOOK_URL     - Discord webhook for notifications (optional)
+#   NUXT_PUBLIC_SITE_URL    - Site URL for SEO
+#
+# Optional OAuth Secrets (add as needed):
+#   NUXT_OAUTH_GOOGLE_CLIENT_ID / NUXT_OAUTH_GOOGLE_CLIENT_SECRET
+#   NUXT_OAUTH_GITHUB_CLIENT_ID / NUXT_OAUTH_GITHUB_CLIENT_SECRET
+#   NUXT_OAUTH_LINE_CLIENT_ID   / NUXT_OAUTH_LINE_CLIENT_SECRET
 name: Deploy
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - '*'
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Deployment environment'
-        required: true
-        default: 'staging'
-        type: choice
-        options:
-          - staging
-          - production
 
-# 同時間只允許一個部署，避免競爭條件
-concurrency:
-  group: deploy-${{ github.event.inputs.environment || 'production' }}
-  cancel-in-progress: false
+permissions:
+  contents: read
 
 jobs:
-  deploy:
+  ci:
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'production' }}
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Vite+
         uses: voidzero-dev/setup-vp@v1
@@ -35,51 +47,170 @@ jobs:
           node-version: '22'
           cache: true
 
-      - name: Install dependencies
-        run: vp install
+      - run: vp install
+
+      - name: Format check
+        run: vp run format:check
+
+      - name: Lint
+        run: vp run lint
+
+      - name: Typecheck
+        run: vp run typecheck
+
+      - name: Run tests
+        run: vp run test
+
+  migrate:
+    needs: ci
+    runs-on: self-hosted # Change to ubuntu-latest if using Supabase Cloud
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Push database migrations
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          # Adjust the DB URL to match your Supabase setup
+          supabase db push \
+            --db-url "postgres://postgres:${SUPABASE_DB_PASSWORD}@<YOUR_DB_HOST>:5432/postgres"
+
+      - name: Verify table owners
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          BAD_OWNERS=$(PGPASSWORD="${SUPABASE_DB_PASSWORD}" psql -h <YOUR_DB_HOST> -U postgres -d postgres -t -c "
+            SELECT schemaname || '.' || tablename || ' (owner: ' || tableowner || ')'
+            FROM pg_tables
+            WHERE schemaname = 'public'
+              AND tableowner != 'postgres';
+          " | grep -v '^\s*$' || true)
+
+          if [ -n "$BAD_OWNERS" ]; then
+            echo "::error::Found tables with incorrect owner (possibly created via MCP):"
+            echo "$BAD_OWNERS"
+            exit 1
+          fi
+          echo "All table owners verified"
+
+  deploy:
+    needs: migrate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: '22'
+          cache: true
+
+      - run: vp install
 
       - name: Build
-        run: pnpm build
+        run: vp run build
         env:
+          NODE_OPTIONS: --max-old-space-size=4096
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          SUPABASE_KEY: ${{ secrets.NUXT_PUBLIC_SUPABASE_KEY }}
+          NUXT_PUBLIC_SUPABASE_URL: ${{ secrets.NUXT_PUBLIC_SUPABASE_URL }}
+          NUXT_PUBLIC_SUPABASE_KEY: ${{ secrets.NUXT_PUBLIC_SUPABASE_KEY }}
           NUXT_PUBLIC_SENTRY_DSN: ${{ secrets.NUXT_PUBLIC_SENTRY_DSN }}
+          NUXT_PUBLIC_SITE_URL: ${{ secrets.NUXT_PUBLIC_SITE_URL }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+
+      - name: Clean wrangler deploy config
+        run: rm -rf .wrangler
 
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: .output/server
           command: deploy
+          secrets: |
+            SUPABASE_URL
+            SUPABASE_SECRET_KEY
+            NUXT_SESSION_PASSWORD
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           NUXT_SESSION_PASSWORD: ${{ secrets.NUXT_SESSION_PASSWORD }}
-          NUXT_OAUTH_GOOGLE_CLIENT_ID: ${{ secrets.NUXT_OAUTH_GOOGLE_CLIENT_ID }}
-          NUXT_OAUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.NUXT_OAUTH_GOOGLE_CLIENT_SECRET }}
-          NUXT_OAUTH_LINE_CLIENT_ID: ${{ secrets.NUXT_OAUTH_LINE_CLIENT_ID }}
-          NUXT_OAUTH_LINE_CLIENT_SECRET: ${{ secrets.NUXT_OAUTH_LINE_CLIENT_SECRET }}
-          NUXT_OAUTH_GITHUB_CLIENT_ID: ${{ secrets.NUXT_OAUTH_GITHUB_CLIENT_ID }}
-          NUXT_OAUTH_GITHUB_CLIENT_SECRET: ${{ secrets.NUXT_OAUTH_GITHUB_CLIENT_SECRET }}
 
-      - name: Smoke test
+  notify:
+    if: always()
+    needs: [ci, migrate, deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Notify Discord
         env:
-          DEPLOY_URL: ${{ vars.DEPLOY_URL }}
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          CI_RESULT: ${{ needs.ci.result }}
+          MIGRATE_RESULT: ${{ needs.migrate.result }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
         run: |
-          if [ -z "$DEPLOY_URL" ]; then
-            echo "::warning::DEPLOY_URL not set, skipping smoke test"
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "::warning::DISCORD_WEBHOOK_URL not set, skipping"
             exit 0
           fi
-          echo "Smoke testing $DEPLOY_URL ..."
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$DEPLOY_URL" --max-time 30)
-          if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 400 ]; then
-            echo "Smoke test passed (HTTP $STATUS)"
+
+          icon() {
+            case "$1" in
+              success)   echo "✅";;
+              failure)   echo "❌";;
+              cancelled) echo "⏹️";;
+              skipped)   echo "⏭️";;
+              *)         echo "❓";;
+            esac
+          }
+
+          if [ "$CI_RESULT" = "success" ] && [ "$MIGRATE_RESULT" = "success" ] && \
+             [ "$DEPLOY_RESULT" = "success" ]; then
+            COLOR=3066993
+            STATUS="✅ Deploy succeeded"
           else
-            echo "::error::Smoke test failed (HTTP $STATUS)"
-            exit 1
+            COLOR=15158332
+            STATUS="❌ Deploy failed"
           fi
+
+          TAG="${GITHUB_REF_NAME}"
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+          PAYLOAD=$(jq -n \
+            --arg title "${STATUS} — ${TAG}" \
+            --arg url "$RUN_URL" \
+            --argjson color "$COLOR" \
+            --arg ci "$(icon "$CI_RESULT") ${CI_RESULT}" \
+            --arg migrate "$(icon "$MIGRATE_RESULT") ${MIGRATE_RESULT}" \
+            --arg deploy "$(icon "$DEPLOY_RESULT") ${DEPLOY_RESULT}" \
+            --arg footer "$GITHUB_REPOSITORY" \
+            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+              embeds: [{
+                title: $title,
+                url: $url,
+                color: $color,
+                fields: [
+                  { name: "CI", value: $ci, inline: true },
+                  { name: "Migrate", value: $migrate, inline: true },
+                  { name: "Deploy", value: $deploy, inline: true }
+                ],
+                footer: { text: $footer },
+                timestamp: $ts
+              }]
+            }')
+
+          curl -sf -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" || echo "::warning::Discord webhook failed"
