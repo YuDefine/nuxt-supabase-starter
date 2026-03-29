@@ -75,7 +75,7 @@ REQUIRED_PATHS=(
   ".claude/agents"
   ".claude/hooks"
   ".claude/skills"
-  ".claude/settings.local.json.example"
+  ".claude/settings.json"
   "openspec/project.md"
   "openspec/specs"
   "openspec/changes/archive"
@@ -97,12 +97,38 @@ REQUIRED_PATHS=(
   "supabase/migrations"
   "scripts/backup-supabase.sh"
   "scripts/create-clean.sh"
-  ".github/workflows/ci.yml"
+  "docs/templates/.github/workflows/ci.yml"
 )
 
 for path in "${REQUIRED_PATHS[@]}"; do
   check_path "$path"
 done
+
+# .vite-hooks 驗證
+if [ -f ".vite-hooks/pre-commit" ]; then
+  if grep -qi "supabase" .vite-hooks/pre-commit; then
+    ok ".vite-hooks/pre-commit has Supabase migration checks"
+  else
+    fail ".vite-hooks/pre-commit missing Supabase migration checks"
+  fi
+  if grep -q "vp staged" .vite-hooks/pre-commit; then
+    ok ".vite-hooks/pre-commit has vp staged"
+  else
+    fail ".vite-hooks/pre-commit missing vp staged"
+  fi
+else
+  fail ".vite-hooks/pre-commit missing"
+fi
+
+if [ -f ".vite-hooks/commit-msg" ]; then
+  if grep -q "commitlint" .vite-hooks/commit-msg; then
+    ok ".vite-hooks/commit-msg has commitlint"
+  else
+    fail ".vite-hooks/commit-msg missing commitlint"
+  fi
+else
+  fail ".vite-hooks/commit-msg missing"
+fi
 
 # ---------------------------------------------------------------------------
 # Phase 2: package scripts 檢查
@@ -147,16 +173,19 @@ else
   fail "docs missing pnpm skills:list"
 fi
 
-if grep -q "pnpm sdd:select" docs/NEW_PROJECT_CHECKLIST.md; then
-  ok "docs mention pnpm sdd:select in checklist"
+if grep -q "spectra" docs/NEW_PROJECT_CHECKLIST.md 2>/dev/null; then
+  ok "docs mention spectra in checklist"
 else
-  fail "docs missing pnpm sdd:select in checklist"
+  fail "docs missing spectra in checklist"
 fi
 
-if grep -q "pnpm sdd:select" docs/QUICK_START.md; then
-  ok "docs mention pnpm sdd:select in quick start"
-else
-  fail "docs missing pnpm sdd:select in quick start"
+# QUICK_START.md 只在 demo mode 存在（clean mode 會移除）
+if [ "$MODE" != "clean" ]; then
+  if grep -q "spectra" docs/QUICK_START.md 2>/dev/null; then
+    ok "docs mention spectra in quick start"
+  else
+    fail "docs missing spectra in quick start"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -207,6 +236,148 @@ if [ "$MODE" = "clean" ]; then
     ok "no demo tests remain"
   else
     fail "$demo_test_count demo test files still exist"
+  fi
+
+  # --- Starter 識別應該已更新 ---
+
+  # wrangler.toml name 不應是 starter
+  if grep -q 'name = "nuxt-supabase-starter"' wrangler.toml 2>/dev/null; then
+    fail "wrangler.toml still has starter name"
+  else
+    ok "wrangler.toml name updated"
+  fi
+
+  # supabase/config.toml project_id 不應是 starter
+  if grep -q 'project_id = "nuxt-supabase-starter"' supabase/config.toml 2>/dev/null; then
+    fail "supabase/config.toml still has starter project_id"
+  else
+    ok "supabase/config.toml project_id updated"
+  fi
+
+  # package.json name 不應是 starter
+  node -e "
+const pkg = JSON.parse(require('fs').readFileSync('package.json','utf8'));
+if (pkg.name === 'nuxt-supabase-starter') {
+  console.log('[FAIL] package.json name still nuxt-supabase-starter');
+  process.exit(10);
+} else {
+  console.log('[PASS] package.json name updated: ' + pkg.name);
+}
+" || STATUS=1
+
+  # openspec/changes/archive/ 應該是空的
+  check_path_empty "openspec/changes/archive" "openspec/changes/archive/"
+
+  # 不應有 active openspec changes
+  active_change_count=$(find openspec/changes -maxdepth 1 -mindepth 1 -type d ! -name 'archive' 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$active_change_count" -eq 0 ]; then
+    ok "no active openspec changes"
+  else
+    fail "$active_change_count active openspec change dirs remain"
+  fi
+
+  # .spectra/spectra.db 不應存在
+  if [ -f ".spectra/spectra.db" ]; then
+    fail ".spectra/spectra.db still exists"
+  else
+    ok ".spectra/spectra.db removed"
+  fi
+
+  # .env BETTER_AUTH_SECRET 應已更新
+  KNOWN_STARTER_SECRET="55b41b5bc78ebc31fa25b40ce2b93c9746bb19d07224ef19904d7dfd97f660e0"
+  if [ -f ".env" ]; then
+    CURRENT_SECRET=$(grep '^BETTER_AUTH_SECRET=' .env | cut -d= -f2)
+    if [ "$CURRENT_SECRET" = "$KNOWN_STARTER_SECRET" ] || [ -z "$CURRENT_SECRET" ]; then
+      fail ".env BETTER_AUTH_SECRET not regenerated"
+    else
+      ok ".env BETTER_AUTH_SECRET is fresh"
+    fi
+  else
+    fail ".env file missing"
+  fi
+
+  # --- 品牌替換驗證 ---
+
+  # nuxt.config.ts site name 不應是 starter
+  if grep -q "name: 'Nuxt Supabase Starter'" nuxt.config.ts 2>/dev/null; then
+    fail "nuxt.config.ts still has starter site name"
+  else
+    ok "nuxt.config.ts site name updated"
+  fi
+
+  # app/app.vue title 不應是 starter
+  if grep -q "Nuxt Supabase Starter" app/app.vue 2>/dev/null; then
+    fail "app/app.vue still has starter title"
+  else
+    ok "app/app.vue title updated"
+  fi
+
+  # app/layouts/default.vue footer 不應是 starter
+  if grep -q "Nuxt Supabase Starter" app/layouts/default.vue 2>/dev/null; then
+    fail "app/layouts/default.vue still has starter name"
+  else
+    ok "app/layouts/default.vue updated"
+  fi
+
+  # starter 專屬 docs 應已移除
+  starter_docs_remain=0
+  for doc in "docs/QUICK_START.md" "docs/INTEGRATION_GUIDE.md" "docs/VISUAL_GUIDE.md" "docs/FIRST_CRUD.md"; do
+    if [ -f "$doc" ]; then
+      fail "starter doc still exists: $doc"
+      starter_docs_remain=$((starter_docs_remain + 1))
+    fi
+  done
+  if [ "$starter_docs_remain" -eq 0 ]; then
+    ok "starter-specific docs removed"
+  fi
+
+  # 不應有壞掉的 skill symlinks
+  broken_count=$(find .claude/skills -maxdepth 1 -type l ! -exec test -e {} \; -print 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$broken_count" -eq 0 ]; then
+    ok "no broken skill symlinks"
+  else
+    fail "$broken_count broken skill symlinks found"
+  fi
+
+  # CLAUDE.md 宣稱的 skills 應該存在
+  for skill in "nuxt-ui" "supabase-postgres-best-practices"; do
+    if [ -d ".claude/skills/$skill" ] || [ -f ".claude/skills/$skill" ] || [ -L ".claude/skills/$skill" ]; then
+      ok "skill exists: $skill"
+    else
+      fail "skill missing: $skill (run pnpm skills:install)"
+    fi
+  done
+
+  # docs 不應有 starter 語境殘留
+  if grep -q "本 starter" docs/NEW_PROJECT_CHECKLIST.md 2>/dev/null; then
+    fail "docs/NEW_PROJECT_CHECKLIST.md still has '本 starter'"
+  else
+    ok "docs/NEW_PROJECT_CHECKLIST.md cleaned"
+  fi
+
+  if grep -q "starter template" docs/.vitepress/config.ts 2>/dev/null; then
+    fail "docs/.vitepress/config.ts still has 'starter template'"
+  else
+    ok "docs/.vitepress/config.ts cleaned"
+  fi
+
+  # packages/create-nuxt-starter 不應存在於衍生專案
+  if [ -d "packages/create-nuxt-starter" ]; then
+    fail "packages/create-nuxt-starter still exists (starter-only scaffolding CLI)"
+  else
+    ok "packages/create-nuxt-starter removed"
+  fi
+
+  # pnpm-workspace.yaml 驗證
+  if grep -q '^packages:' pnpm-workspace.yaml 2>/dev/null; then
+    fail "pnpm-workspace.yaml still has packages: block"
+  else
+    ok "pnpm-workspace.yaml packages: block removed"
+  fi
+  if grep -q 'ignoredBuiltDependencies:' pnpm-workspace.yaml 2>/dev/null; then
+    ok "pnpm-workspace.yaml has ignoredBuiltDependencies"
+  else
+    fail "pnpm-workspace.yaml missing ignoredBuiltDependencies"
   fi
 
 else

@@ -53,7 +53,7 @@ describe('scaffold: all features', () => {
 
     const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf-8'))
     expect(pkg.dependencies['@nuxt/ui']).toBeDefined()
-    expect(pkg.dependencies['better-auth']).toBeDefined()
+    expect(pkg.dependencies['nuxt-auth-utils']).toBeDefined()
     expect(pkg.dependencies['@supabase/supabase-js']).toBeDefined()
     expect(pkg.dependencies['@nuxtjs/seo']).toBeDefined()
     expect(pkg.dependencies['nuxt-security']).toBeDefined()
@@ -64,7 +64,7 @@ describe('scaffold: all features', () => {
 
     const config = readFileSync(join(targetDir, 'nuxt.config.ts'), 'utf-8')
     expect(config).toContain('@nuxt/ui')
-    expect(config).toContain('@onmax/nuxt-better-auth')
+    expect(config).toContain('nuxt-auth-utils')
     expect(config).toContain('@nuxtjs/supabase')
 
     // Auth pages exist
@@ -78,9 +78,9 @@ describe('scaffold: all features', () => {
 })
 
 describe('feature dependency enforcement', () => {
-  it('auth auto-enables database', () => {
-    const resolved = resolveFeatureDependencies(['auth'])
-    expect(resolved).toContain('auth')
+  it('auth-better-auth auto-enables database', () => {
+    const resolved = resolveFeatureDependencies(['auth-better-auth'])
+    expect(resolved).toContain('auth-better-auth')
     expect(resolved).toContain('database')
   })
 
@@ -95,7 +95,7 @@ describe('non-interactive mode', () => {
   it('getDefaultSelections returns valid defaults', () => {
     const selections = getDefaultSelections('my-app')
     expect(selections.projectName).toBe('my-app')
-    expect(selections.features).toContain('auth')
+    expect(selections.features).toContain('auth-nuxt-utils')
     expect(selections.features).toContain('database')
     expect(selections.features).toContain('ui')
     expect(selections.features).toContain('deploy-cloudflare')

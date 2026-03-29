@@ -134,11 +134,8 @@ echo "核心功能（自動包含）："
 echo "  ├─ Nuxt 4 + Vue 3 + TypeScript"
 echo "  ├─ Tailwind CSS + Nuxt UI"
 echo "  ├─ Supabase（PostgreSQL）"
-echo "  ├─ Better Auth（認證）"
 echo "  └─ Pinia + Pinia Colada（狀態管理）"
 echo ""
-echo "選擇要啟用的可選功能（輸入 y/n）："
-echo "────────────────────────────────────────"
 
 ask_feature() {
   local var_name="$1"
@@ -157,6 +154,28 @@ ask_feature() {
     *)      printf -v "$var_name" '%s' 'n' ;;
   esac
 }
+
+# --------------------------------------------------
+# 2a. Auth Provider 選擇
+# --------------------------------------------------
+
+echo "🔑 認證系統"
+echo "────────────────────────────────────────"
+echo "  1) Better Auth（Email/Password + OAuth）"
+echo "  2) nuxt-auth-utils（OAuth-first，cookie session）"
+echo ""
+printf "  選擇認證系統 [1/2]: "
+read -r AUTH_CHOICE </dev/tty 2>/dev/null || read -r AUTH_CHOICE
+AUTH_CHOICE="${AUTH_CHOICE:-1}"
+case "$AUTH_CHOICE" in
+  2)  AUTH_PROVIDER="nuxt-auth-utils" ;;
+  *)  AUTH_PROVIDER="better-auth" ;;
+esac
+echo "  → 使用 $AUTH_PROVIDER"
+echo ""
+
+echo "選擇要啟用的可選功能（輸入 y/n）："
+echo "────────────────────────────────────────"
 
 echo ""
 echo "🔐 OAuth 登入提供者"
@@ -182,7 +201,174 @@ ask_feature "FEAT_E2E"           "Playwright（E2E 測試）" "n"
 echo ""
 
 # --------------------------------------------------
-# 3. 安裝依賴
+# 3. 套用 Auth Provider 模板
+# --------------------------------------------------
+
+echo "🔑 套用 ${AUTH_PROVIDER} 模板..."
+
+TEMPLATE_DIR="scripts/templates/auth/${AUTH_PROVIDER}"
+
+if [ ! -d "$TEMPLATE_DIR" ]; then
+  echo "❌ 找不到模板目錄：${TEMPLATE_DIR}"
+  exit 1
+fi
+
+# Copy auth template files into the project
+copy_template() {
+  local src="$1"
+  local dest="$2"
+  mkdir -p "$(dirname "$dest")"
+  cp "$src" "$dest"
+}
+
+if [ "$AUTH_PROVIDER" = "better-auth" ]; then
+  copy_template "$TEMPLATE_DIR/server/auth.config.ts" "server/auth.config.ts"
+  copy_template "$TEMPLATE_DIR/app/auth.config.ts" "app/auth.config.ts"
+  copy_template "$TEMPLATE_DIR/app/middleware/auth.global.ts" "app/middleware/auth.global.ts"
+  copy_template "$TEMPLATE_DIR/server/utils/api-response.ts" "server/utils/api-response.ts"
+  copy_template "$TEMPLATE_DIR/app/pages/auth/login.vue" "app/pages/auth/login.vue"
+  copy_template "$TEMPLATE_DIR/app/pages/auth/register.vue" "app/pages/auth/register.vue"
+  copy_template "$TEMPLATE_DIR/app/pages/auth/callback.vue" "app/pages/auth/callback.vue"
+  copy_template "$TEMPLATE_DIR/app/pages/auth/forgot-password.vue" "app/pages/auth/forgot-password.vue"
+elif [ "$AUTH_PROVIDER" = "nuxt-auth-utils" ]; then
+  copy_template "$TEMPLATE_DIR/app/middleware/auth.global.ts" "app/middleware/auth.global.ts"
+  copy_template "$TEMPLATE_DIR/server/utils/api-response.ts" "server/utils/api-response.ts"
+  copy_template "$TEMPLATE_DIR/app/pages/auth/login.vue" "app/pages/auth/login.vue"
+  copy_template "$TEMPLATE_DIR/app/pages/auth/callback.vue" "app/pages/auth/callback.vue"
+  # Remove better-auth specific files
+  rm -f "server/auth.config.ts" "app/auth.config.ts"
+  rm -f "app/pages/auth/register.vue" "app/pages/auth/forgot-password.vue"
+fi
+
+# Update nuxt.config.ts module reference
+if [ "$AUTH_PROVIDER" = "nuxt-auth-utils" ]; then
+  # Replace @onmax/nuxt-better-auth with nuxt-auth-utils
+  sed -i.bak "s/'@onmax\/nuxt-better-auth'/'nuxt-auth-utils'/" nuxt.config.ts && rm -f nuxt.config.ts.bak
+fi
+
+echo "✅ ${AUTH_PROVIDER} 模板已套用"
+echo ""
+
+# --------------------------------------------------
+# 3a. 根據 Auth 選擇清理 Skills
+# --------------------------------------------------
+if [ "$AUTH_PROVIDER" = "nuxt-auth-utils" ]; then
+  # nuxt-auth-utils 是專案自訂 skill（tracked in git），已存在
+  # 移除第三方 nuxt-better-auth skill
+  rm -rf ".claude/skills/nuxt-better-auth/"
+  echo "  → 保留 nuxt-auth-utils skill，移除 nuxt-better-auth"
+elif [ "$AUTH_PROVIDER" = "better-auth" ]; then
+  # nuxt-better-auth 由 install-skills.sh 安裝（第三方）
+  # 移除專案自訂 nuxt-auth-utils skill
+  rm -rf ".claude/skills/nuxt-auth-utils/"
+  echo "  → 保留 nuxt-better-auth skill，移除 nuxt-auth-utils"
+fi
+echo ""
+
+# --------------------------------------------------
+# 3b. 更新 CLAUDE.md Auth 規則
+# --------------------------------------------------
+
+if [ -f "CLAUDE.md" ]; then
+  if [ "$AUTH_PROVIDER" = "nuxt-auth-utils" ]; then
+    sed -i.bak 's/\*\*USE\*\* `useUserSession()` — 來自 `nuxt-auth-utils` 或 `@onmax\/nuxt-better-auth`（依專案選擇）/\*\*USE\*\* `useUserSession()` — 來自 `nuxt-auth-utils`/' CLAUDE.md && rm -f CLAUDE.md.bak
+  else
+    sed -i.bak 's/\*\*USE\*\* `useUserSession()` — 來自 `nuxt-auth-utils` 或 `@onmax\/nuxt-better-auth`（依專案選擇）/\*\*USE\*\* `useUserSession()` — 來自 `@onmax\/nuxt-better-auth`/' CLAUDE.md && rm -f CLAUDE.md.bak
+  fi
+fi
+
+# --------------------------------------------------
+# 3c. 移除未選擇的功能
+# --------------------------------------------------
+
+echo "🧹 調整功能模組..."
+
+# Helper: remove a dependency from package.json
+remove_pkg_dep() {
+  local pkg_name="$1"
+  local section="${2:-dependencies}"
+  node -e "
+    const fs = require('fs');
+    const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    if (pkg['${section}'] && pkg['${section}']['${pkg_name}']) {
+      delete pkg['${section}']['${pkg_name}'];
+    }
+    fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+  "
+}
+
+# Helper: remove a script from package.json
+remove_pkg_script() {
+  local script_name="$1"
+  node -e "
+    const fs = require('fs');
+    const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    if (pkg.scripts && pkg.scripts['${script_name}']) {
+      delete pkg.scripts['${script_name}'];
+    }
+    fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+  "
+}
+
+# Helper: remove a module line from nuxt.config.ts
+remove_nuxt_module() {
+  local module_name="$1"
+  sed -i.bak "/'${module_name}'/d" nuxt.config.ts && rm -f nuxt.config.ts.bak
+}
+
+if [ "$FEAT_SENTRY" = "n" ]; then
+  remove_pkg_dep "@sentry/nuxt"
+  remove_nuxt_module "@sentry/nuxt/module"
+  # Remove sentry build config block
+  sed -i.bak '/\/\/ Sentry 建置時設定/,/^  },$/d' nuxt.config.ts && rm -f nuxt.config.ts.bak
+  # Remove sourcemap config block
+  sed -i.bak '/\/\/ 啟用 hidden source maps/,/^  },$/d' nuxt.config.ts && rm -f nuxt.config.ts.bak
+  # Remove sentry DSN from runtimeConfig.public
+  sed -i.bak '/\/\/ Sentry DSN/d' nuxt.config.ts && rm -f nuxt.config.ts.bak
+  sed -i.bak '/sentry: {/,/},/d' nuxt.config.ts && rm -f nuxt.config.ts.bak
+  # Remove sentry vite define
+  sed -i.bak "/import.meta.env.NUXT_PUBLIC_SENTRY_DSN/d" nuxt.config.ts && rm -f nuxt.config.ts.bak
+  sed -i.bak "/手動注入 NUXT_PUBLIC_SENTRY_DSN/d" nuxt.config.ts && rm -f nuxt.config.ts.bak
+  sed -i.bak "/因為 sentry.client.config.ts/d" nuxt.config.ts && rm -f nuxt.config.ts.bak
+  sed -i.bak "/Vite 只會自動注入/d" nuxt.config.ts && rm -f nuxt.config.ts.bak
+  echo "  ✅ 移除 Sentry"
+fi
+
+if [ "$FEAT_NUXTHUB" = "n" ]; then
+  remove_pkg_dep "@nuxthub/core"
+  echo "  ✅ 移除 NuxtHub"
+fi
+
+if [ "$FEAT_CHARTS" = "n" ]; then
+  remove_pkg_dep "nuxt-charts"
+  remove_nuxt_module "nuxt-charts"
+  echo "  ✅ 移除 Nuxt Charts"
+fi
+
+if [ "$FEAT_VITEPRESS" = "n" ]; then
+  remove_pkg_dep "vitepress" "devDependencies"
+  remove_pkg_script "docs:build"
+  remove_pkg_script "docs:dev"
+  remove_pkg_script "docs:preview"
+  echo "  ✅ 移除 VitePress"
+fi
+
+if [ "$FEAT_E2E" = "n" ]; then
+  remove_pkg_dep "@playwright/test" "devDependencies"
+  remove_pkg_script "test:e2e"
+  echo "  ✅ 移除 Playwright"
+fi
+
+if [ "$FEAT_SEO" = "n" ]; then
+  remove_pkg_dep "@nuxtjs/seo"
+  remove_nuxt_module "@nuxtjs/seo"
+  echo "  ✅ 移除 Nuxt SEO"
+fi
+
+echo ""
+
+# --------------------------------------------------
+# 4. 安裝依賴
 # --------------------------------------------------
 
 echo "📦 安裝專案依賴..."
@@ -190,7 +376,7 @@ pnpm install
 echo ""
 
 # --------------------------------------------------
-# 4. 設定環境變數
+# 5. 設定環境變數
 # --------------------------------------------------
 
 generate_env() {
@@ -223,13 +409,18 @@ ENVCORE
   [ "$FEAT_OAUTH_LINE"   = "y" ] && emit_oauth_block "LINE"   "LINE Login"   "https://developers.line.biz/console/"
   [ "$FEAT_OAUTH_GITHUB" = "y" ] && emit_oauth_block "GITHUB" "GitHub OAuth" "https://github.com/settings/developers"
 
-  cat << 'ENVAUTH'
+  if [ "$AUTH_PROVIDER" = "better-auth" ]; then
+    cat << 'ENVBETTERAUTH'
 
 # ============================================
 # Better Auth（必要）
 # 使用 openssl rand -base64 32 產生
 # ============================================
 BETTER_AUTH_SECRET=
+ENVBETTERAUTH
+  fi
+
+  cat << 'ENVSESSION'
 
 # ============================================
 # Session（必要）
@@ -241,7 +432,7 @@ NUXT_SESSION_PASSWORD=
 # 站點配置
 # ============================================
 NUXT_PUBLIC_SITE_URL=http://localhost:3000
-ENVAUTH
+ENVSESSION
 
   if [ "$FEAT_SENTRY" = "y" ]; then
     cat << 'ENVSENTRY'
@@ -267,7 +458,7 @@ fi
 echo ""
 
 # --------------------------------------------------
-# 5. 啟動 Supabase
+# 6. 啟動 Supabase
 # --------------------------------------------------
 
 if supabase status &> /dev/null; then
@@ -279,7 +470,49 @@ fi
 echo ""
 
 # --------------------------------------------------
-# 6. 產生型別
+# 6b. 自動填入 Supabase keys 到 .env
+# --------------------------------------------------
+
+if [ -f .env ]; then
+  echo "🔑 自動填入 Supabase keys..."
+
+  SB_STATUS=$(supabase status -o env 2>/dev/null || true)
+
+  if [ -n "$SB_STATUS" ]; then
+    ANON_KEY=$(echo "$SB_STATUS" | grep '^ANON_KEY=' | cut -d'=' -f2-)
+    SERVICE_KEY=$(echo "$SB_STATUS" | grep '^SERVICE_ROLE_KEY=' | cut -d'=' -f2-)
+
+    if [ -n "$ANON_KEY" ]; then
+      sed -i.bak "s|<Publishable_key>|${ANON_KEY}|g" .env && rm -f .env.bak
+      echo "  ✅ SUPABASE_KEY + NUXT_PUBLIC_SUPABASE_KEY 已填入"
+    fi
+
+    if [ -n "$SERVICE_KEY" ]; then
+      sed -i.bak "s|<Secret_key>|${SERVICE_KEY}|g" .env && rm -f .env.bak
+      echo "  ✅ SUPABASE_SECRET_KEY 已填入"
+    fi
+
+    # 自動產生 session password
+    if grep -q '^NUXT_SESSION_PASSWORD=$' .env 2>/dev/null; then
+      SESSION_PWD=$(openssl rand -base64 32)
+      sed -i.bak "s|^NUXT_SESSION_PASSWORD=$|NUXT_SESSION_PASSWORD=${SESSION_PWD}|" .env && rm -f .env.bak
+      echo "  ✅ NUXT_SESSION_PASSWORD 已自動產生"
+    fi
+
+    # 自動產生 Better Auth secret
+    if [ "$AUTH_PROVIDER" = "better-auth" ] && grep -q '^BETTER_AUTH_SECRET=$' .env 2>/dev/null; then
+      AUTH_SECRET=$(openssl rand -base64 32)
+      sed -i.bak "s|^BETTER_AUTH_SECRET=$|BETTER_AUTH_SECRET=${AUTH_SECRET}|" .env && rm -f .env.bak
+      echo "  ✅ BETTER_AUTH_SECRET 已自動產生"
+    fi
+  else
+    echo "  ⚠️  無法取得 Supabase keys，請手動填入 .env"
+  fi
+  echo ""
+fi
+
+# --------------------------------------------------
+# 7. 產生型別
 # --------------------------------------------------
 
 echo "🔧 產生資料庫型別..."
@@ -307,7 +540,9 @@ check_env() {
 check_env "SUPABASE_URL" "Supabase Project URL"
 check_env "SUPABASE_KEY" "Supabase anon/public key"
 check_env "SUPABASE_SECRET_KEY" "Supabase service role key"
-check_env "BETTER_AUTH_SECRET" "Auth 加密金鑰（openssl rand -base64 32）"
+if [ "$AUTH_PROVIDER" = "better-auth" ]; then
+  check_env "BETTER_AUTH_SECRET" "Auth 加密金鑰（openssl rand -base64 32）"
+fi
 check_env "NUXT_SESSION_PASSWORD" "Session 加密金鑰（openssl rand -base64 32）"
 
 if [ ${#ENV_WARNINGS[@]} -gt 0 ]; then
@@ -333,7 +568,7 @@ echo "已啟用的功能："
 echo "  ✅ Nuxt 4 + Vue 3 + TypeScript"
 echo "  ✅ Tailwind CSS + Nuxt UI"
 echo "  ✅ Supabase（PostgreSQL）"
-echo "  ✅ Better Auth（認證）"
+echo "  ✅ ${AUTH_PROVIDER}（認證）"
 echo "  ✅ Pinia + Pinia Colada（狀態管理）"
 
 [ "$FEAT_OAUTH_GOOGLE" = "y" ] && echo "  ✅ Google OAuth"
