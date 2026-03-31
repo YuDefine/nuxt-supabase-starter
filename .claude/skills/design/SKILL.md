@@ -21,7 +21,22 @@ Auto-detection logic:
 - No UI code for the described feature → `new`
 - Existing UI code that needs work → `improve`
 - Large project with prior design phases / design-system directory → `iterate`
+- **Active Spectra change with UI tasks** → `improve`（自動，不需問使用者）
 - When unclear → ask the user
+
+## Step 0.5: Spectra Context Detection
+
+**在任何診斷之前**，檢查是否有 active Spectra change 可提供 context。
+
+1. 執行 `spectra list --json`（若 spectra CLI 可用）
+2. 若有 active change（state: `in-progress`）：
+   a. 讀取 `openspec/changes/<name>/proposal.md` 取得 change 的目的和範圍
+   b. 讀取 `openspec/changes/<name>/tasks.md` 識別 UI 相關 tasks（含 `.vue`、`pages/`、`components/`、`layouts/`）
+   c. 將這些 UI tasks 涉及的檔案/頁面作為 **diagnosis target**，無需另外問使用者
+   d. 在診斷輸出中標示：`Spectra Change: <name>`
+3. 若無 active change 或 spectra CLI 不可用：照舊流程（問使用者或 auto-detect）
+
+**效果**：/design 在 spectra-apply 期間被呼叫時，自動知道該看哪些頁面，不會亂猜或問多餘問題。
 
 ## Step 1: Check Foundation (ALL modes)
 
@@ -315,3 +330,44 @@ When multiple skills are needed, follow this sequence (skip what's not needed):
 ```
 
 **This order is mandatory.** Rationale: fix structure before visuals, visuals before experience, everything before hardening, polish is always final. If you need to deviate, state why in the plan.
+
+## Step 6: Persist Evidence（Spectra 整合）
+
+完成診斷和計劃輸出後，若偵測到 active Spectra change（Step 0.5）：
+
+1. **寫入 `design-review.md`** 到 change 目錄（`openspec/changes/<name>/design-review.md`）：
+
+```markdown
+# Design Review: <change-name>
+
+- **Date**: YYYY-MM-DD
+- **Mode**: new / improve / iterate
+- **Spectra Change**: <change-name>
+- **Target**: [diagnosed pages/components]
+
+## Diagnosis Summary
+
+| Dimension     | Score | Finding |
+| ------------- | ----- | ------- |
+| Visual        | ★★★☆☆ | ...     |
+| Interaction   | ★★★☆☆ | ...     |
+| Structure     | ★★★☆☆ | ...     |
+| Copy          | ★★★☆☆ | ...     |
+| Resilience    | ★★★☆☆ | ...     |
+| Performance   | ★★★☆☆ | ...     |
+| Accessibility | ★★★☆☆ | ...     |
+| Consistency   | ★★★☆☆ | ...     |
+
+## Planned Skills
+
+1. /skill [target] — rationale
+2. /skill [target] — rationale
+   ...
+
+## Design Decisions
+
+- [記錄影響 spec 的設計決策，便於 spectra-ingest 回饋]
+```
+
+2. 此檔案是 `pre-archive-design-gate.sh` hook 的主要檢查依據
+3. 若 Design Decisions 中有影響 spec 的發現，提醒執行 `spectra-ingest` 更新 artifacts

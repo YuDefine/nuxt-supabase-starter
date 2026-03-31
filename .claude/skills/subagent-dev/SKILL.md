@@ -13,7 +13,7 @@ Execute plan by dispatching fresh subagent per task, with two-stage review after
 
 ## When to Use
 
-- Have an implementation plan (from Spectra `/spectra:propose` or manual planning)?
+- Have an implementation plan (from Spectra `/spectra-propose` or manual planning)?
 - Tasks mostly independent?
 - Want to stay in current session?
 
@@ -181,7 +181,7 @@ Task 2: Add UI component
 
 **Works with:**
 
-- **Spectra SDD workflow** — `/spectra:propose` creates the plan, this skill executes it
+- **Spectra SDD workflow** — `/spectra-propose` creates the plan, this skill executes it
 - **TDMS code-review agent** (`.claude/agents/code-review.md`) — used for code quality review stage
 - **test-driven-development skill** — subagents follow TDD for each task
 - **testing-anti-patterns rule** — auto-loaded when editing test files
