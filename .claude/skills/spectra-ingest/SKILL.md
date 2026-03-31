@@ -1,23 +1,25 @@
 ---
 name: spectra-ingest
-description: 'Update an existing OpenSpec change from a plan file or conversation context'
+description: 'Update an existing Spectra change from external context'
 license: MIT
-compatibility: Requires openspec CLI.
+compatibility: Requires spectra CLI.
 metadata:
   author: spectra
   version: '1.0'
   generatedBy: 'Spectra'
 ---
 
-Update an existing OpenSpec change — from a Claude Code plan file or conversation context.
+Update an existing Spectra change — from a plan file or conversation context.
 
-**Claude Code only.** This skill can read plan files from `~/.claude/plans/` or use conversation context to update artifacts.
+**Plan file support** is available when the tool has a plan directory (`~/.claude/plans/`). Otherwise, use conversation context to update artifacts.
+
+**Prerequisites**: This skill requires the `spectra` CLI. If any `spectra` command fails with "command not found" or similar, report the error and STOP.
 
 **Input**: Optionally specify a plan file path or name.
 
-- `/spectra:ingest ~/.claude/plans/agile-discovering-rocket.md`
-- `/spectra:ingest agile-discovering-rocket`
-- `/spectra:ingest` (use conversation context or auto-detect plan file)
+- `/spectra-ingest ~/.claude/plans/agile-discovering-rocket.md`
+- `/spectra-ingest agile-discovering-rocket`
+- `/spectra-ingest` (use conversation context or auto-detect plan file)
 
 **Steps**
 
@@ -64,12 +66,38 @@ Update an existing OpenSpec change — from a Claude Code plan file or conversat
 
 3. **Check for active changes** (REQUIRED — ingest only updates existing changes)
 
-   Use the **Glob tool** to list directories under `openspec/changes/` (excluding `archive/`).
-   - If one active change exists → use the **AskUserQuestion tool** to confirm updating it
-   - If multiple active changes exist → use the **AskUserQuestion tool** to let user pick which one to update
-   - If no active changes → tell the user: "No active change found. Use `/spectra:propose` first to create one." and **stop**
+   ```bash
+   spectra list --json
+   ```
+
+   Also check for parked changes:
+
+   ```bash
+   spectra list --parked --json
+   ```
+
+   Parse both JSON outputs to get the full list of changes (active + parked). Parked changes should be annotated with "(parked)" in any selection list.
+   - If one change exists (active or parked) → use the **AskUserQuestion tool** to confirm updating it
+   - If multiple changes exist → use the **AskUserQuestion tool** to let user pick which one to update
+   - If no changes at all (neither active nor parked) → tell the user: "No active change found. Use `/spectra-propose` first to create one." and **stop**
 
 4. **Select the change**
+
+   After selecting the change, check if it is parked:
+
+   ```bash
+   spectra list --parked --json
+   ```
+
+   If the selected change appears in the `parked` array:
+   - Inform the user that this change is currently parked（暫存）
+   - Use **AskUserQuestion tool** to ask: continue (unpark) or cancel
+   - If continue: run `spectra unpark "<name>"` then proceed
+   - If cancel: stop the workflow
+
+   If there is no AskUserQuestion tool available (non-Claude-Code environment):
+   Inform the user that this change is currently parked（暫存）and ask via plain text whether to unpark and continue, or cancel.
+   Wait for the user's response. If the user confirms, run `spectra unpark "<name>"` then proceed.
 
    Read existing artifacts for context before updating.
 
@@ -83,7 +111,7 @@ Update an existing OpenSpec change — from a Claude Code plan file or conversat
 
    Use the `template` from instructions as the output structure. Apply `context` and `rules` as constraints but do NOT copy them into the file.
 
-   The instructions JSON includes `locale` — the language to write artifacts in. If present, you MUST write the artifact content in that language. Exception: spec files (specs/\*_/_.md) MUST always be written in English regardless of locale, because they use normative language (SHALL/MUST).
+   The instructions JSON includes `locale` — the language to write artifacts in. If present, you MUST write the artifact content in that language. Exception: spec files (specs/\*/\*.md) MUST always be written in English regardless of locale, because they use normative language (SHALL/MUST).
 
    **Plan-to-Artifact Mapping** (when using a plan file):
 
@@ -111,7 +139,7 @@ Update an existing OpenSpec change — from a Claude Code plan file or conversat
    - **Preserve existing `[P]` markers** on tasks that still qualify
    - Do NOT remove existing content
 
-   **Parallel task markers (`[P]`)**: When creating or updating the **tasks** artifact, first read `openspec/config.yaml`. If `parallel_tasks: true` is set, add `[P]` markers to new tasks that can be executed in parallel. Format: `- [ ] [P] Task description`. A task qualifies for `[P]` if it targets different files from other pending tasks AND has no dependency on incomplete tasks in the same group. When `parallel_tasks` is not enabled, do NOT add `[P]` markers — but still preserve any existing `[P]` markers already in the file.
+   **Parallel task markers (`[P]`)**: When creating or updating the **tasks** artifact, first read `.spectra.yaml`. If `parallel_tasks: true` is set, add `[P]` markers to new tasks that can be executed in parallel. Format: `- [ ] [P] Task description`. A task qualifies for `[P]` if it targets different files from other pending tasks AND has no dependency on incomplete tasks in the same group. When `parallel_tasks` is not enabled, do NOT add `[P]` markers — but still preserve any existing `[P]` markers already in the file.
 
    After creating each artifact, re-check status:
 
@@ -121,17 +149,74 @@ Update an existing OpenSpec change — from a Claude Code plan file or conversat
 
    Continue until all `applyRequires` artifacts are complete. Show progress: "✓ Created <artifact-id>"
 
-6. **Analyze-Fix Loop** (max 2 iterations)
+6. **Inline Self-Review** (before CLI analysis)
+
+   After updating all artifacts, scan them manually. Fix issues inline, then proceed to the CLI analyzer.
+
+   **Check 1: No Placeholders**
+
+   These patterns are artifact failures — fix each one before proceeding:
+   - "TBD", "TODO", "FIXME", "implement later", "details to follow"
+   - Vague instructions: "Add appropriate error handling", "Handle edge cases", "Write tests for the above"
+   - Delegation by reference: "Similar to Task N" without repeating specifics
+   - Steps describing WHAT without HOW: "Implement the authentication flow" (what flow? what steps?)
+   - Empty template sections left unfilled
+   - Weasel quantities: "some", "various", "several" when a specific number or list is needed
+
+   **Check 2: Internal Consistency**
+   - Does every capability in the proposal have a corresponding spec?
+   - Does the design reference only capabilities from the proposal?
+   - Do tasks cover all design decisions, and nothing outside proposal scope?
+   - Are file paths consistent across proposal Impact, design, and tasks?
+
+   **Check 3: Scope Check**
+   - More than 15 pending tasks → consider decomposing into multiple changes
+   - Any single task would take more than 1 hour → split it
+   - Touches more than 3 unrelated subsystems → consider splitting
+
+   **Check 4: Ambiguity Check**
+   - Are success/failure conditions testable and specific?
+   - Are boundary conditions defined (empty input, max limits, error cases)?
+   - Could "the system" refer to multiple components? Be explicit.
+
+   **Check 5: Preservation Check** (ingest-specific)
+   - Are all completed tasks `[x]` still present and unchanged?
+   - Were existing `[P]` markers preserved on tasks that still qualify?
+   - Was existing content merged (not replaced)?
+
+---
+
+## Rationalization Table
+
+| What You're Thinking                                             | What You Should Do                                                            |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| "The existing artifacts are close enough, just adjust the tasks" | Read the new context carefully. "Close enough" means you're missing something |
+| "The proposal doesn't need updating, the change is the same"     | If new context exists, the proposal likely needs updates. At minimum, check   |
+| "I can merge these tasks, they're basically the same"            | Keep tasks granular. Merged tasks are harder to track                         |
+| "The completed tasks still apply, no need to review"             | Verify they're still relevant to updated scope. Don't blindly keep stale work |
+| "This spec change is minor, skip the scenario update"            | If the requirement changed, the scenario must change                          |
+| "The conversation didn't discuss this artifact, so skip it"      | Absence of discussion doesn't mean absence of impact. Check                   |
+
+---
+
+7. **Analyze-Fix Loop** (max 2 iterations)
 
    ```bash
    spectra analyze <name> --json
    ```
 
-   Filter to **Critical and Warning only** (ignore Suggestion).
-   If clean → "Artifacts look consistent ✓"
-   If issues → fix and re-analyze (max 2 attempts).
+   1. Filter findings to **Critical and Warning only** (ignore Suggestion)
+   2. If no Critical/Warning findings → show "Artifacts look consistent ✓" and proceed
+   3. If Critical/Warning findings exist:
+      a. Show: "Found N issue(s), fixing... (attempt M/2)"
+      b. Fix each finding in the affected artifact
+      c. Re-run `spectra analyze <name> --json`
+      d. Repeat up to 2 total iterations
+   4. After 2 attempts, if findings remain:
+      - Show remaining findings as a summary
+      - Proceed normally (do NOT block)
 
-7. **Validation**
+8. **Validation**
 
    ```bash
    spectra validate "<name>"
@@ -139,7 +224,7 @@ Update an existing OpenSpec change — from a Claude Code plan file or conversat
 
    If validation fails, fix errors and re-validate.
 
-8. **Summary and next steps**
+9. **Summary and next steps**
 
    Show:
    - Source used: plan file (`<path>`) or conversation context
@@ -147,39 +232,19 @@ Update an existing OpenSpec change — from a Claude Code plan file or conversat
    - Artifacts created/updated
    - Validation result
 
-   Use the **AskUserQuestion tool** to ask what to do next:
-   - **Start implementation** → invoke `/spectra:apply <change-name>`
-   - **Review artifacts** → let user inspect before proceeding
-   - **Defer** → end workflow, user can run `/spectra:apply <change-name>` later
+   Use **AskUserQuestion tool** to confirm the workflow is complete. This ensures the workflow stops even when auto-accept is enabled. Provide exactly these options:
+   - **First option (will be auto-selected)**: "Done" — End the ingest workflow. Inform the user they can run `/spectra-apply <change-name>` when ready.
+   - **Second option**: "Apply" — Invoke `/spectra-apply <change-name>` to start implementation.
 
-**Manual Review Checklist**
+   If **AskUserQuestion tool** is not available, display the summary and inform the user to run `/spectra-apply <change-name>` when ready. Then STOP — do not continue.
 
-After creating/updating the **tasks** artifact, **MUST** append a `## 人工檢查` section at the end:
-
-1. Read `docs/manual-review-checklist.md` for the shared checklist
-2. Select items relevant to this change (don't copy all — only applicable ones)
-3. Add `#N` sequential numbering to each item (starting from #1)
-4. Format:
-
-```markdown
-## 人工檢查
-
-> 來源：`<change-name>` | Specs: `<spec-1>`, `<spec-2>`
-
-- [ ] #1 Item description
-- [ ] #2 Item description
-- [ ] #3 Item description
-```
-
-- The `來源` tag enables tracing review findings back to the originating change and specs
-- `#N` numbering enables precise communication (e.g., "#3 has issues"), screenshot naming, and archive tracking
-- If `## 人工檢查` already exists, update it (don't duplicate) — preserve existing `#N` numbers for completed items
+   **After the user responds**, if they chose "Done", the workflow is OVER. If they chose "Apply", invoke `/spectra-apply <change-name>` to begin implementation.
 
 **Guardrails**
 
 - **NEVER** modify the original plan file in `~/.claude/plans/`
-- **NEVER** write application code — this skill only creates/updates OpenSpec artifacts
-- **NEVER** create new changes — ingest only updates existing changes. If no active change exists, direct user to `/spectra:propose`
+- **NEVER** write application code — this skill only creates/updates Spectra artifacts
+- **NEVER** create new changes — ingest only updates existing changes. If no active change exists, direct user to `/spectra-propose`
 - When updating existing changes, **preserve all completed tasks** (`[x]`) — never revert progress
 - If the source content is too brief to fill all artifact sections, use the **AskUserQuestion tool** to get more details rather than inventing content
 - If `spectra` CLI is not available, report the error and stop

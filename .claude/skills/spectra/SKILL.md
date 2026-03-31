@@ -26,10 +26,10 @@ Parse the result. Branch on the number of active changes:
 
 Ask the user what they want to do. Use **AskUserQuestion** with these options:
 
-1. **提案（Propose）** — 我有新功能/改動想規劃 → invoke `/spectra:propose`
-2. **討論（Discuss）** — 我想先釐清需求再決定做法 → invoke `/spectra:discuss`
-3. **查詢（Ask）** — 我想查詢現有 spec 的內容 → invoke `/spectra:ask`
-4. **除錯（Debug）** — 我遇到問題想系統性排查 → invoke `/spectra:debug`
+1. **提案（Propose）** — 我有新功能/改動想規劃 → invoke `/spectra-propose`
+2. **討論（Discuss）** — 我想先釐清需求再決定做法 → invoke `/spectra-discuss`
+3. **查詢（Ask）** — 我想查詢現有 spec 的內容 → invoke `/spectra-ask`
+4. **除錯（Debug）** — 我遇到問題想系統性排查 → invoke `/spectra-debug`
 
 After the user picks, invoke the corresponding skill with the Skill tool.
 
@@ -52,12 +52,12 @@ Then determine the most likely next action based on state:
 
 | State                                        | Likely Action  | Skill                  |
 | -------------------------------------------- | -------------- | ---------------------- |
-| Missing required artifacts (proposal, tasks) | 補完 artifacts | `/spectra:ingest`      |
-| All artifacts ready, tasks not started       | 開始實作       | `/spectra:apply`       |
-| Tasks partially done                         | 繼續實作       | `/spectra:apply`       |
+| Missing required artifacts (proposal, tasks) | 補完 artifacts | `/spectra-ingest`      |
+| All artifacts ready, tasks not started       | 開始實作       | `/spectra-apply`       |
+| Tasks partially done                         | 繼續實作       | `/spectra-apply`       |
 | All tasks done, 人工檢查未完成               | 人工檢查       | `/review-screenshot`   |
 | All tasks done, 人工檢查全完成               | 歸檔           | Archive Flow（見下方） |
-| Need to update from new context              | 更新 artifacts | `/spectra:ingest`      |
+| Need to update from new context              | 更新 artifacts | `/spectra-ingest`      |
 
 Present the recommendation and options to the user with **AskUserQuestion**:
 
@@ -101,7 +101,7 @@ If parked changes exist, mention them: "另外有 N 個暫存的 change：{names
 2. **歸檔人工檢查** — invoke `/review-archive all`
    - 將所有檢查項目（含 `#N` 編號、來源 change/spec 追溯）遷移到 `docs/manual-review-archive.md`
 
-3. **歸檔 Spectra change** — invoke `/spectra:archive`
+3. **歸檔 Spectra change** — invoke `/spectra-archive`
    - 歸檔 change artifacts 到 `openspec/changes/archive/`
 
 這確保每次 archive 時，人工檢查結果不會遺失，且可追溯到對應的 change 和 spec。

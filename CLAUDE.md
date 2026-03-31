@@ -1,23 +1,8 @@
-<!-- SPECTRA:START v1.0.0 -->
+<!-- SPECTRA:START v2.2.3 -->
 
 # Spectra Instructions
 
-This project uses Spectra for Spec-Driven Development(SDD). Specs live in `openspec/specs/`, change proposals in `openspec/changes/`.
-
-## Entry Point
-
-**`/spectra`** — 主要入口，自動偵測專案狀態並引導到正確的 sub-skill。不確定該用哪個時，用這個。
-
-## Sub-skills（直接指定）
-
-- `/spectra:discuss` — 需求不明確，先討論再決定
-- `/spectra:propose` — 規劃新功能/改動
-- `/spectra:apply` — 開始或繼續實作
-- `/spectra:ingest` — 從對話或 plan 更新 artifacts
-- `/spectra:ask` — 查詢現有 spec 內容
-- `/spectra:archive` — 完成歸檔
-- `/spectra:audit` — 審查程式碼安全性
-- `/spectra:debug` — 系統性排查問題
+This project uses Spectra 2.2.3 for Spec-Driven Development(SDD). Specs live in `openspec/specs/`, change proposals in `openspec/changes/`. Config: `.spectra.yaml`.
 
 ## Workflow
 
@@ -25,9 +10,29 @@ discuss? → propose → apply ⇄ ingest → archive
 
 - `discuss` is optional — skip if requirements are clear
 - Requirements change mid-work? Plan mode → `ingest` → resume `apply`
-- 不知道現在該做什麼？直接 `/spectra`
+
+## Parked Changes
+
+Changes can be parked（暫存）— temporarily moved out of `openspec/changes/`. Parked changes won't appear in `spectra list` but can be found with `spectra list --parked`. To restore: `spectra unpark <name>`. The `spectra-apply` and `spectra-ingest` skills handle parked changes automatically.
 
 <!-- SPECTRA:END -->
+
+# Proactive Skill Orchestra
+
+**所有 Spectra sub-skill 與 Design skill 依 `.claude/rules/proactive-skills.md` 自主觸發，不需使用者手動指定。**
+
+整合機制（Level 2 — 結構級）：
+
+| 層    | 機制                                 | 觸發點                                                      |
+| ----- | ------------------------------------ | ----------------------------------------------------------- |
+| Rules | Design Review Task Template          | spectra-propose 時自動注入 design tasks 到 tasks artifact   |
+| Hook  | `post-propose-design-inject.sh`      | spectra-propose 後驗證 UI scope → 提醒補 Design Review      |
+| Skill | `/design` Step 0.5 Spectra Detection | /design 自動讀取 active change 的範圍，精準診斷             |
+| Skill | `/design` Step 6 Persist Evidence    | /design 完成後寫 `design-review.md` 到 change 目錄          |
+| Hook  | `pre-archive-design-gate.sh`         | archive 前檢查 design-review.md 或 Design Review tasks 完成 |
+| Rules | Design → Spectra 回饋迴路            | design 發現影響 spec 的問題時觸發 spectra-ingest            |
+
+**Design Review 是 tasks artifact 的一等公民**——spectra-apply 會自然按順序執行到 Design Review 區塊。與規格書來源無關——Notion、文件、對話皆適用。
 
 # CLAUDE.md
 

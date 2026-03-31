@@ -1,23 +1,25 @@
 ---
 name: spectra-propose
-description: 'Create a complete change proposal with all artifacts in a single workflow'
+description: 'Create a change proposal with all required artifacts'
 license: MIT
-compatibility: Requires openspec CLI.
+compatibility: Requires spectra CLI.
 metadata:
   author: spectra
   version: '1.0'
   generatedBy: 'Spectra'
 ---
 
-Create a complete OpenSpec change proposal — from requirement to validated artifacts — in a single workflow.
+Create a complete Spectra change proposal — from requirement to validated artifacts — in a single workflow.
 
-**Input**: The argument after `/spectra:propose` is the requirement description. Examples:
+**Input**: The argument after `/spectra-propose` is the requirement description. Examples:
 
-- `/spectra:propose add dark mode`
-- `/spectra:propose fix the login page crash`
-- `/spectra:propose improve search performance`
+- `/spectra-propose add dark mode`
+- `/spectra-propose fix the login page crash`
+- `/spectra-propose improve search performance`
 
 If no argument is provided, the workflow will extract requirements from conversation context or ask.
+
+**Prerequisites**: This skill requires the `spectra` CLI. If any `spectra` command fails with "command not found" or similar, report the error and STOP.
 
 **Steps**
 
@@ -25,7 +27,7 @@ If no argument is provided, the workflow will extract requirements from conversa
 
    a. **Argument provided** (e.g., "add dark mode") → use it as the requirement description, skip to deriving the change name below.
 
-   b. **Plan file available** (Claude Code only):
+   b. **Plan file available**:
    - Check if the conversation context mentions a plan file path (plan mode system messages include the path like `~/.claude/plans/<name>.md`)
    - If found, check if the file exists at `~/.claude/plans/`
    - If a plan file is found, use the **AskUserQuestion tool** to ask:
@@ -74,7 +76,7 @@ If no argument is provided, the workflow will extract requirements from conversa
 4. **Create the change directory**
 
    ```bash
-   spectra new change "<name>"
+   spectra new change "<name>" --agent claude
    ```
 
    If a change with that name already exists, suggest continuing the existing change instead of creating a new one.
@@ -99,6 +101,10 @@ If no argument is provided, the workflow will extract requirements from conversa
    ## What Changes
 
    <!-- What will be different -->
+
+   ## Non-Goals (optional)
+
+   <!-- Scope exclusions and rejected approaches. Required when design.md is skipped. -->
 
    ## Capabilities
 
@@ -131,6 +137,10 @@ If no argument is provided, the workflow will extract requirements from conversa
 
    <!-- How to fix -->
 
+   ## Non-Goals (optional)
+
+   <!-- Scope exclusions and rejected approaches. Required when design.md is skipped. -->
+
    ## Success Criteria
 
    <!-- Expected behavior after fix, verifiable conditions -->
@@ -154,6 +164,10 @@ If no argument is provided, the workflow will extract requirements from conversa
    ## Proposed Solution
 
    <!-- How to do it -->
+
+   ## Non-Goals (optional)
+
+   <!-- Scope exclusions and rejected approaches. Required when design.md is skipped. -->
 
    ## Alternatives Considered (optional)
 
@@ -180,6 +194,7 @@ If no argument is provided, the workflow will extract requirements from conversa
    Loop through artifacts in dependency order (skip proposal since it's already done):
 
    a. **For each artifact that is `ready` (dependencies satisfied)**:
+   - **Check if the artifact is optional**: If the artifact is NOT in the dependency chain of any `applyRequires` artifact (i.e., removing it would not block reaching apply), it is optional. Get its instructions and read the `instruction` field. If the instruction contains conditional criteria (e.g., "create only if any apply"), evaluate whether any criteria apply to this change based on the proposal content. If none apply, skip the artifact and show: "⊘ Skipped <artifact-id> (not needed for this change)". Then continue to the next artifact.
    - Get instructions:
      ```bash
      spectra instructions <artifact-id> --change "<name>" --json
@@ -206,7 +221,52 @@ If no argument is provided, the workflow will extract requirements from conversa
    - Use **AskUserQuestion tool** to clarify
    - Then continue with creation
 
-8. **Analyze-Fix Loop** (max 2 iterations)
+8. **Inline Self-Review** (before CLI analysis)
+
+   After creating all artifacts, scan them manually. Fix issues inline, then proceed to the CLI analyzer.
+
+   **Check 1: No Placeholders**
+
+   These patterns are artifact failures — fix each one before proceeding:
+   - "TBD", "TODO", "FIXME", "implement later", "details to follow"
+   - Vague instructions: "Add appropriate error handling", "Handle edge cases", "Write tests for the above"
+   - Delegation by reference: "Similar to Task N" without repeating specifics
+   - Steps describing WHAT without HOW: "Implement the authentication flow" (what flow? what steps?)
+   - Empty template sections left unfilled
+   - Weasel quantities: "some", "various", "several" when a specific number or list is needed
+
+   **Check 2: Internal Consistency**
+   - Does every capability in the proposal have a corresponding spec?
+   - Does the design reference only capabilities from the proposal?
+   - Do tasks cover all design decisions, and nothing outside proposal scope?
+   - Are file paths consistent across proposal Impact, design, and tasks?
+
+   **Check 3: Scope Check**
+   - More than 15 pending tasks → consider decomposing into multiple changes
+   - Any single task would take more than 1 hour → split it
+   - Touches more than 3 unrelated subsystems → consider splitting
+
+   **Check 4: Ambiguity Check**
+   - Are success/failure conditions testable and specific?
+   - Are boundary conditions defined (empty input, max limits, error cases)?
+   - Could "the system" refer to multiple components? Be explicit.
+
+---
+
+## Rationalization Table
+
+| What You're Thinking                                          | What You Should Do                                                                    |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| "The requirements are clear enough, no need for discuss"      | Fine if true — but check you're not skipping because you're lazy                      |
+| "This artifact isn't needed for this change"                  | Check `applyRequires` — if it's in the dependency chain, create it                    |
+| "The spec doesn't need scenarios, the requirement is obvious" | Obvious to you now. Write scenarios for the implementer who doesn't have your context |
+| "I'll keep the design brief, code will be self-explanatory"   | Design exists so implementers don't reverse-engineer intent. Be specific              |
+| "This is a small change, skip the scope check"                | Small changes touching 5 subsystems aren't small. Check                               |
+| "The placeholder is fine for now, I'll fill it in later"      | There is no "later" — implementation is next. Fill it in now                          |
+
+---
+
+9. **Analyze-Fix Loop** (max 2 iterations)
    1. Run `spectra analyze <change-name> --json`
    2. Filter findings to **Critical and Warning only** (ignore Suggestion)
    3. If no Critical/Warning findings → show "Artifacts look consistent ✓" and proceed
@@ -219,24 +279,28 @@ If no argument is provided, the workflow will extract requirements from conversa
       - Show remaining findings as a summary
       - Proceed normally (do NOT block)
 
-9. **Validation**
+10. **Validation**
 
-   ```bash
-   spectra validate "<name>"
-   ```
+    ```bash
+    spectra validate "<name>"
+    ```
 
-   If validation fails, fix errors and re-validate.
+    If validation fails, fix errors and re-validate.
 
-10. **Show final status and ask about implementation**
+11. **Show final status and end workflow**
 
     Show summary:
     - Change name and location
     - List of artifacts created
     - Validation result
 
-    Use **AskUserQuestion tool** to ask whether to start implementation:
-    - **Start implementation** → invoke `/spectra:apply <change-name>`
-    - **Defer** → end workflow, inform user they can run `/spectra:apply <change-name>` later
+    Use **AskUserQuestion tool** to ask what to do next. This ensures the workflow stops even when auto-accept is enabled. Provide exactly these options:
+    - **First option (will be auto-selected)**: "Park" — Execute `spectra park "<name>"` to park the change, then inform the user they can run `/spectra-apply <change-name>` when ready (which will auto-unpark).
+    - **Second option**: "Apply" — Invoke `/spectra-apply <change-name>` to start implementation.
+
+    If **AskUserQuestion tool** is not available, execute `spectra park "<name>"` and inform the user to run `/spectra-apply <change-name>` when ready. Then STOP — do not continue.
+
+    **After the user responds**, if they chose "Park", execute `spectra park "<name>"` and the workflow is OVER. If they chose "Apply", invoke `/spectra-apply <change-name>` to begin implementation.
 
 **Artifact Creation Guidelines**
 
@@ -246,11 +310,11 @@ If no argument is provided, the workflow will extract requirements from conversa
 - **IMPORTANT**: `context` and `rules` are constraints for YOU, not content for the file
   - Do NOT copy `<context>`, `<rules>`, `<project_context>` blocks into the artifact
   - These guide what you write, but should never appear in the output
-- **Parallel task markers (`[P]`)**: When creating the **tasks** artifact, first read `openspec/config.yaml`. If `parallel_tasks: true` is set, add `[P]` markers to tasks that can be executed in parallel. Format: `- [ ] [P] Task description`. A task qualifies for `[P]` if it targets different files from other pending tasks AND has no dependency on incomplete tasks in the same group. When `parallel_tasks` is not enabled, do NOT add `[P]` markers.
+- **Parallel task markers (`[P]`)**: When creating the **tasks** artifact, first read `.spectra.yaml`. If `parallel_tasks: true` is set, add `[P]` markers to tasks that can be executed in parallel. Format: `- [ ] [P] Task description`. A task qualifies for `[P]` if it targets different files from other pending tasks AND has no dependency on incomplete tasks in the same group. When `parallel_tasks` is not enabled, do NOT add `[P]` markers.
 
 **Guardrails**
 
-- Create ALL artifacts needed for implementation
+- Create all artifacts needed for implementation. Optional artifacts (those not in the `applyRequires` dependency chain) may be skipped if their inclusion criteria don't apply.
 - Always read dependency artifacts before creating a new one
 - If context is critically unclear, ask the user - but prefer making reasonable decisions to keep momentum
 - If a change with that name already exists, suggest continuing that change instead
@@ -258,4 +322,5 @@ If no argument is provided, the workflow will extract requirements from conversa
 - **NEVER** write application code or implement features during this workflow
 - **NEVER** skip the artifact workflow to write code directly
 - **NEVER** reinterpret requirements by ignoring the proposal file
+- **NEVER** invoke `/spectra-apply` — this workflow ends after artifact creation. The user decides when to start implementation
 - If **AskUserQuestion tool** is not available, ask the same questions as plain text and wait for the user's response

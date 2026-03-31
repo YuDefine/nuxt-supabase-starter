@@ -1,0 +1,17 @@
+# Spectra application config
+# See: https://github.com/spectra-app/spectra
+
+# Language for AI-generated artifacts
+locale: tw
+
+# Workflow toggles
+tdd: true
+audit: true
+parallel_tasks: true
+
+# Claude slash commands (Skills format is default in 2.2.3, no need for old commands)
+claude_slash_commands: false
+
+# Claude Code skill effort levels (low/medium/high/max)
+claude_effort:
+  apply: high

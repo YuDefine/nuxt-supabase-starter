@@ -1,17 +1,21 @@
 ---
 name: spectra-apply
-description: 'Implement tasks from an OpenSpec change'
+description: 'Implement or resume tasks from a Spectra change'
 license: MIT
-compatibility: Requires openspec CLI.
+compatibility: Requires spectra CLI.
 metadata:
   author: spectra
   version: '1.0'
   generatedBy: 'Spectra'
 ---
 
-Implement tasks from an OpenSpec change.
+Implement tasks from a Spectra change.
 
-**Input**: Optionally specify a change name (e.g., `/spectra:apply add-auth`). If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
+**Input**: Optionally specify a change name (e.g., `/spectra-apply add-auth`). If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
+
+**Task tracking is file-based only.** The tasks file's markdown checkboxes (`- [ ]` / `- [x]`) are the single source of truth for progress. Do NOT use any external task management system, built-in task tracker, or todo tool. When a task is done, edit the checkbox in the tasks file — that is the only way to record progress.
+
+**Prerequisites**: This skill requires the `spectra` CLI. If any `spectra` command fails with "command not found" or similar, report the error and STOP.
 
 **Steps**
 
@@ -20,22 +24,14 @@ Implement tasks from an OpenSpec change.
    If a name is provided, use it. Otherwise:
    - Infer from conversation context if the user mentioned a change
    - Auto-select if only one active change exists
-   - If ambiguous, run `spectra list --json` to get available changes and use the **AskUserQuestion tool** to let the user select
+   - If ambiguous, run `spectra list --json` AND `spectra list --parked --json` to get all available changes (including parked ones). Parked changes should be annotated with "(parked)" in the selection list. Use the **AskUserQuestion tool** to let the user select
 
-   Always announce: "Using change: <name>" and how to override (e.g., `/spectra:apply <other>`).
-
-   After selecting the change, mark it as in-progress:
-
-   ```bash
-   spectra in-progress add "<name>"
-   ```
-
-   This is a silent operation — do not show the output to the user.
+   Always announce: "Using change: <name>" and how to override (e.g., `/spectra-apply <other>`).
 
 2. **Check status to understand the schema**
 
    ```bash
-   spectra status --change "<name>" --json 2>/dev/null
+   spectra status --change "<name>" --json
    ```
 
    **If the command fails**: show the error and STOP.
@@ -48,11 +44,10 @@ Implement tasks from an OpenSpec change.
 
    Look for the change name in the `parked` array of the JSON output.
    - **If the change IS in the parked list** (it's parked):
-     Inform the user that this change is currently shelved ("暫存" in the app).
+     Inform the user that this change is currently parked（暫存）.
      Use the **AskUserQuestion tool** to ask whether to continue.
-     Use the app's own terminology — in Chinese locales, park = 暫存.
      Two options:
-     - **Continue**: Un-shelve the change and proceed with apply
+     - **Continue**: Unpark the change and proceed with apply
      - **Cancel**: Stop the workflow
 
      If the user chooses to continue:
@@ -61,13 +56,27 @@ Implement tasks from an OpenSpec change.
      spectra unpark "<name>"
      ```
 
+     Then mark it as in-progress:
+
+     ```bash
+     spectra in-progress add "<name>"
+     ```
+
+     This is a silent operation — do not show the output to the user.
+
      Then re-run `spectra status --change "<name>" --json` and continue normally.
 
      If there is no AskUserQuestion tool available (non-Claude-Code environment):
-     Inform the user that the change is shelved and they need to un-shelve it in Spectra first.
-     STOP.
+     Inform the user that this change is currently parked（暫存）and ask via plain text whether to unpark and continue, or cancel.
+     Wait for the user's response. If the user confirms, run `spectra unpark "<name>"`, then set `spectra in-progress add "<name>"`, and continue normally.
 
-   - **If the change is NOT in the parked list**: proceed normally.
+   - **If the change is NOT in the parked list**: mark it as in-progress and proceed normally.
+
+     ```bash
+     spectra in-progress add "<name>"
+     ```
+
+     This is a silent operation — do not show the output to the user.
 
    Parse the JSON to understand:
    - `schemaName`: The workflow being used (e.g., "spec-driven")
@@ -86,9 +95,40 @@ Implement tasks from an OpenSpec change.
    - Dynamic instruction based on current state
 
    **Handle states:**
-   - If `state: "blocked"` (missing artifacts): show message, suggest using `/spectra:propose` to create the change artifacts first
+   - If `state: "blocked"` (missing artifacts): show message, suggest using `/spectra-propose` to create the change artifacts first
    - If `state: "all_done"`: congratulate, suggest archive
    - Otherwise: proceed to implementation
+
+3b. **Preflight check**
+
+If the apply instructions JSON includes a `preflight` field, act on its `status`:
+
+- **`"clean"`**: silently continue — no output needed.
+- **`"warnings"`**: display a brief summary, then continue automatically:
+  ```
+  ⚠ Preflight warnings:
+  - Drifted files (modified after change was created): <list paths>
+  - Change is <N> days old
+  Continuing...
+  ```
+  Only show the lines that are relevant (skip drifted if none, skip staleness if not stale).
+- **`"critical"`**: display missing files with their source artifact, then use the **AskUserQuestion tool** to ask the user:
+
+  ```
+  ⚠ Preflight: missing files detected
+  - <path> (referenced in <source artifact>)
+  - ...
+  These files are referenced in the change artifacts but no longer exist on disk.
+  ```
+
+  Options: "Continue anyway" / "Stop"
+  If the user chooses "Stop", end the workflow.
+
+  If there is no AskUserQuestion tool available:
+  Display the same information as plain text and ask whether to continue or stop.
+  Wait for the user's response.
+
+If the `preflight` field is absent (blocked or all_done states), skip this step.
 
 4. **Read context files**
 
@@ -99,11 +139,17 @@ Implement tasks from an OpenSpec change.
 
 5. **Check project preferences**
 
-   Read `openspec/config.yaml` in the project root.
+   Read `.spectra.yaml` in the project root.
    If `tdd: true` is set, apply TDD discipline throughout implementation:
    - For each task, write a failing test FIRST, then implement to make it pass
-   - Follow the Red-Green-Refactor cycle from `/spectra:tdd`
+   - Fetch TDD instructions by running `spectra instructions --skill tdd`, then follow the Red-Green-Refactor cycle
    - For bug fixes, reproduce the bug with a failing test before fixing
+
+   If `audit: true` is set, apply sharp-edges discipline throughout implementation:
+   - When designing APIs or interfaces, evaluate through 3 adversary lenses (Scoundrel, Lazy Developer, Confused Developer)
+   - When adding configuration options, verify defaults are secure and zero/empty values are safe
+   - When accepting parameters, check for type confusion and silent failures
+   - Fetch audit instructions by running `spectra instructions --skill audit`, follow the discipline checklist (not the standalone 3-agent workflow)
 
    If `parallel_tasks: true` is set, check whether consecutive pending tasks have `[P]` markers (format: `- [ ] [P] Task description`). You SHALL dispatch consecutive `[P]` tasks as parallel agents. Only fall back to sequential when tasks have a data dependency (one task's output is another's input) or when tasks modify overlapping regions of the same file. Targeting the same file alone is NOT a reason to skip parallel dispatch — if the modified regions are disjoint, dispatch in parallel. If the environment does not support parallel execution, ignore `[P]` markers and execute tasks sequentially.
 
@@ -117,20 +163,43 @@ Implement tasks from an OpenSpec change.
 
 7. **Implement tasks (loop until done or blocked)**
 
+   **Reminder: Track progress by editing checkboxes in the tasks file only. Do not use any built-in task tracker.**
+
    For each pending task:
    - Show which task is being worked on
+   - Re-read the sections of design and spec files that are relevant to this task's scope — do not rely on memory from earlier in the conversation, as context may have been compressed
+   - Before writing code, check:
+     1. **Reuse** — search adjacent modules and shared utilities for existing implementations before writing new code
+     2. **Quality** — derive values from existing state instead of duplicating; use existing types and constants over new literals
+     3. **Efficiency** — parallelize independent async operations; avoid unnecessary awaits; match operation scope to actual need
+     4. **No Placeholders in artifacts** — if the design or spec for this task contains placeholder language (TBD, TODO, "add appropriate handling"), pause and fix the artifact first or flag to the user. Do not implement against vague requirements.
    - Make the code changes required
    - Keep changes minimal and focused
    - Mark task complete in the tasks file: `- [ ]` → `- [x]`
    - Continue to next task
 
-   **Parallel task dispatch**: When `parallel_tasks: true` is configured and you encounter consecutive `[P]`-marked tasks, you SHALL dispatch them as parallel agents using the Agent tool. Group consecutive `[P]` tasks into a batch and launch all agents in a single message. Non-`[P]` tasks are always sequential. If any `[P]` task fails, pause and report — do not continue with remaining parallel tasks in that group. Do NOT fall back to sequential execution for convenience or perceived risk — the `[P]` marker is an explicit signal that these tasks are safe to parallelize.
+   **Parallel task dispatch**: When consecutive `[P]`-marked tasks are found and `parallel_tasks: true` is configured (see Step 5), dispatch them as parallel agents in a single message. If any `[P]` task fails, pause and report.
 
    **Pause if:**
    - Task is unclear → ask for clarification
    - Implementation reveals a design issue → suggest updating artifacts
    - Error or blocker encountered → report and wait for guidance
    - User interrupts
+
+---
+
+## Rationalization Table
+
+| What You're Thinking                                       | What You Should Do                                                               |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| "This task is trivial, I don't need to re-read the design" | Re-read. Context compression loses details. 30s of reading saves 30min of rework |
+| "I already know how this works, skip the code search"      | Search anyway. Someone may have added a utility since you last looked            |
+| "The test is obvious, I'll add it after implementation"    | If TDD is enabled, test first. If not, still write it before marking done        |
+| "This is just a small refactor, no test needed"            | Small refactors are how regressions sneak in. Write the test                     |
+| "The artifact says X but Y makes more sense"               | Pause and suggest updating the artifact. Don't silently deviate                  |
+| "I'll fix this other thing I noticed while I'm here"       | Finish current task first. Address the other thing separately                    |
+
+---
 
 8. **Final check**
 
@@ -178,7 +247,7 @@ Working on task 4/7: <task description>
 - [x] Task 2
 ...
 
-All tasks complete! You can archive this change with `/spectra:archive`.
+All tasks complete! You can archive this change with `/spectra-archive`.
 ```
 
 **Output On Pause (Issue Encountered)**
@@ -211,6 +280,7 @@ What would you like to do?
 - Update task checkbox immediately after completing each task
 - Pause on errors, blockers, or unclear requirements - don't guess
 - Use contextFiles from CLI output, don't assume specific file names
+- **No external task tracking** — do not use any built-in task management, todo list, or progress tracking tool; the tasks file is the only system
 - If **AskUserQuestion tool** is not available, ask the same questions as plain text and wait for the user's response
 
 **Fluid Workflow Integration**
