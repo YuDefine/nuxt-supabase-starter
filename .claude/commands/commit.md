@@ -168,7 +168,13 @@ git diff --stat
    git add <files>
    ```
 
-2. 執行 commit（使用 HEREDOC 確保格式正確）：
+2. **建立 commit 許可 marker**（pre-commit hook 會檢查此檔案，沒有會被阻擋）：
+
+   ```bash
+   openssl rand -hex 16 > .claude/.commit-approved
+   ```
+
+3. 執行 commit（使用 HEREDOC 確保格式正確）：
 
    ```bash
    git commit -m "$(cat <<'EOF'
@@ -179,7 +185,7 @@ git diff --stat
    )"
    ```
 
-3. 確認 commit 成功：
+4. 確認 commit 成功：
    ```bash
    git log -1 --oneline
    ```
@@ -208,6 +214,7 @@ git diff --stat
 
    ```bash
    git add package.json
+   openssl rand -hex 16 > .claude/.commit-approved
    git commit -m "$(cat <<'EOF'
    🚀 deploy: 發布新版本 v{新版本號}
 

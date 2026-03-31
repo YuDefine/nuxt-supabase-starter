@@ -1,57 +1,104 @@
 {
+  "enabledMcpjsonServers": ["local-supabase"],
   "hooks": {
-    "SessionStart": [
+    "PostToolUse": [
       {
         "hooks": [
           {
-            "type": "command",
-            "command": ".claude/hooks/init-code-graph.sh",
-            "timeout": 120,
-            "statusMessage": "Initializing code knowledge graph..."
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-migration-gen-types.sh",
+            "timeout": 30,
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": "mcp__local-supabase__apply_migration"
+      },
+      {
+        "hooks": [
+          {
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-edit-typecheck.sh",
+            "timeout": 90,
+            "type": "command"
+          },
+          {
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-edit-ui-qa.sh",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write"
+      },
+      {
+        "hooks": [
+          {
+            "command": "jq -r '.tool_input.command' | grep -q '^git commit' && code-review-graph update 2>/dev/null || true",
+            "statusMessage": "Updating code knowledge graph...",
+            "timeout": 30,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-propose-design-inject.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Skill"
       }
     ],
     "PreToolUse": [
       {
-        "matcher": "Edit|Write",
         "hooks": [
           {
-            "type": "command",
-            "command": "node .claude/scripts/guard-check.mjs"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/knowledge-search-reminder.sh",
+            "timeout": 5,
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": "Edit|Write"
+      },
+      {
+        "hooks": [
+          {
+            "command": "node .claude/scripts/guard-check.mjs",
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write"
+      },
+      {
+        "hooks": [
+          {
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-commit-review.sh",
+            "statusMessage": "Checking commit authorization...",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-archive-design-gate.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Skill"
       }
     ],
-    "PostToolUse": [
+    "SessionStart": [
       {
-        "matcher": "mcp__local-supabase__apply_migration",
         "hooks": [
           {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-migration-gen-types.sh",
-            "timeout": 30
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-edit-typecheck.sh",
-            "timeout": 90
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "jq -r '.tool_input.command' | grep -q '^git commit' && code-review-graph update 2>/dev/null || true",
-            "timeout": 30,
-            "statusMessage": "Updating code knowledge graph..."
+            "command": ".claude/hooks/init-code-graph.sh",
+            "statusMessage": "Initializing code knowledge graph...",
+            "timeout": 120,
+            "type": "command"
           }
         ]
       }
@@ -60,14 +107,15 @@
       {
         "hooks": [
           {
-            "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/stop-accumulate.sh",
-            "timeout": 5
+            "timeout": 5,
+            "type": "command"
           }
         ]
       }
     ]
   },
+  "includeGitInstructions": false,
   "permissions": {
     "allow": [
       "mcp__local-supabase__list_tables",
@@ -128,6 +176,5 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:pinia-colada.esm.dev)"
     ]
-  },
-  "enabledMcpjsonServers": ["local-supabase"]
+  }
 }

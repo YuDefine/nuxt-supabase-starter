@@ -22,7 +22,4 @@ cat <<'PROMPT'
 - 本次是否有值得記錄到 skill 的流程或注意事項？
 - 如適用：通用 → `~/.claude/skills/`；專案專用 → `.claude/skills/`
 
-### 3. cq 共享知識
-- 本次發現的問題是否具有跨專案通用性（非本專案特有）？
-- 如適用：`cq propose` 記錄到共享知識庫
 PROMPT
