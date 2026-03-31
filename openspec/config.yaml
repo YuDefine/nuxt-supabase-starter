@@ -23,6 +23,11 @@ rules:
   design:
     - Follow Data Access Pattern (client reads, server writes)
     - RLS policies must include service_role bypass
+    - UI changes MUST use Nuxt UI components (UButton, UCard, UTable, etc.)
+    - All color/spacing MUST use design system tokens, never hardcoded values
+    - Read .impeccable.md for design direction before making UI decisions
   tasks:
     - Follow TDD: write test first, verify red, implement, verify green
     - Each task should be independently verifiable
+    - If change involves UI (.vue files), include a "Design Review" section after functional tasks
+    - Design Review tasks: /teach-impeccable (if needed) → /design improve → targeted skills → /audit → review-screenshot
