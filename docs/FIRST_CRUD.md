@@ -447,4 +447,4 @@ describe('POST /api/v1/bookmarks', () => {
 | 3    | [verify/ENVIRONMENT_VARIABLES.md](verify/ENVIRONMENT_VARIABLES.md) | 環境變數管理、GitHub Secrets             |
 | 4    | [TROUBLESHOOTING.md](TROUBLESHOOTING.md)                           | 25 個常見問題的系統化診斷                |
 
-> 💡 **提示**：使用 `/spectra:propose` 來規劃你的下一個功能，體驗 Spec-Driven Development 工作流程。
+> 💡 **提示**：使用 `/spectra-propose` 來規劃你的下一個功能，體驗 Spec-Driven Development 工作流程。

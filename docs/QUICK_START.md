@@ -279,18 +279,30 @@ NUXT_OAUTH_GOOGLE_CLIENT_ID=<client_id>
 NUXT_OAUTH_GOOGLE_CLIENT_SECRET=<client_secret>
 ```
 
+### 建立設計脈絡
+
+在開發第一個 UI 功能之前，先建立專案的設計方向：
+
+```bash
+claude
+
+# 建立設計脈絡（產出 .impeccable.md，所有 design skills 的前提）
+> /teach-impeccable
+```
+
+這會互動式地收集你的設計偏好（風格方向、色彩、字型、間距），並存入 `.impeccable.md`。後續所有 design skills（`/design`、`/colorize`、`/typeset` 等）都會讀取這個檔案。
+
 ### 用 AI 開發第一個功能
 
 ```bash
-# 啟動 Claude Code
-claude
-
 # 使用 Spectra 工作流程
-> /spectra:propose
+> /spectra-propose
 > 我需要一個待辦事項功能，使用者可以新增、編輯、刪除待辦事項...
 ```
 
 > 📖 詳細說明：[OPENSPEC.md](./OPENSPEC.md)
+>
+> UI 功能的 tasks 會自動包含 Design Review 區塊，spectra-apply 執行時會觸發 `/design improve` + targeted design skills。
 
 ---
 

@@ -23,9 +23,9 @@ spec.md    plan.md     tasks.md    Red/Green   pnpm check
 對於較複雜的功能，使用 Spectra 工作流程：
 
 ```
-/spectra:propose   # 建立變更提案（產生 proposal, design, tasks）
-/spectra:apply     # 執行任務清單
-/spectra:archive   # 歸檔完成的變更
+/spectra-propose   # 建立變更提案（產生 proposal, design, tasks）
+/spectra-apply     # 執行任務清單
+/spectra-archive   # 歸檔完成的變更
 ```
 
 > 📖 詳細說明見 [OPENSPEC.md](./OPENSPEC.md)
@@ -395,7 +395,7 @@ Claude Code 的 `/db-migration` 命令會引導你完成整個流程，包括：
 ### 1. 使用 Spectra 建立變更提案
 
 ```bash
-/spectra:propose
+/spectra-propose
 ```
 
 描述：「使用者可以建立、查看、更新、刪除待辦事項。每個待辦事項有標題、描述、完成狀態。使用者只能看到自己的待辦事項。」
@@ -405,7 +405,7 @@ Claude 會產生 `proposal.md`、`design.md`、`tasks.md` 和 delta specs。
 ### 2. 執行任務
 
 ```bash
-/spectra:apply add-todos
+/spectra-apply add-todos
 ```
 
 Claude 會逐一執行任務，使用 TDD 流程。
@@ -413,7 +413,7 @@ Claude 會逐一執行任務，使用 TDD 流程。
 ### 3. 歸檔變更
 
 ```bash
-/spectra:archive add-todos
+/spectra-archive add-todos
 ```
 
 Claude 會將變更歸檔，並將 delta specs 合併到主 specs。
@@ -440,7 +440,7 @@ Claude 會將變更歸檔，並將 delta specs 合併到主 specs。
 | TDD 流程         | 詢問是否 commit                 | check 通過後   |
 | `/commit`        | **先**調用 check-runner         | 開始前強制     |
 | `/db-migration`  | 產生 TypeScript 類型            | 測試通過後     |
-| `/spectra:apply` | 調用 check-runner + 詢問 commit | 所有任務完成後 |
+| `/spectra-apply` | 調用 check-runner + 詢問 commit | 所有任務完成後 |
 
 ### SubAgents
 
