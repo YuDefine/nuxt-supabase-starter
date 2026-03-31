@@ -517,6 +517,59 @@ docker exec -i supabase-db psql -U postgres -d postgres < backup.sql
 | PostgREST 找不到新表格 | Schema cache 未更新   | `docker compose restart rest` |
 | 備份檔案過大           | 資料量增長            | 設定增量備份或壓縮            |
 | 連線數過多             | 連線未正確關閉        | 檢查應用程式連線池設定        |
+| REST API 間歇中斷      | PostgREST pool 重建   | 見 §10.1 MCP/Studio 觸發問題  |
+| Tunnel 斷線 error 1033 | SSH 傳輸頻寬飽和      | 見 §10.2 SSH 傳輸安全         |
+
+### 10.1 MCP/Studio 觸發 PostgREST Pool 重建
+
+**根因**：Studio（包含透過 Studio port 3001 的 MCP）每次 schema introspection 會觸發 `NOTIFY pgrst`，導致 PostgREST 丟棄並重建所有 connection pool。在密集查詢時（>5 次/分鐘），PostgREST 會反覆重建 pool，造成 REST API 間歇中斷。
+
+**預防**：
+
+- 生產環境的 MCP 查詢限制 ≤5 次/對話
+- 禁止使用 Agent/subagent 自動化批量查詢 production MCP
+- 禁止直接存取 Kong port 8001（會觸發相同 introspection）
+
+**診斷**：
+
+```bash
+docker logs supabase-rest --tail 50 | grep "schema cache"
+# 大量 "Schema cache loaded" 訊息 = pool 反覆重建
+```
+
+### 10.2 SSH 傳輸安全（共享主機）
+
+若 Supabase 主機同時承載 Cloudflare Tunnel（cloudflared），大量 SSH 傳輸（pg_dump 串流、大檔案 SCP）會飽和 Tailscale relay 頻寬，導致 cloudflared DNS timeout → 所有 tunnel edge 連線斷開 → 全站不可用（error 1033）。
+
+**預防**：
+
+- 禁止 SSH 串流 pg_dump 到本機（`ssh host 'pg_dump ...' > local.sql`）
+- 禁止平行 SSH/SCP 連線
+- Dump 資料：先在遠端產生檔案，再於非上班時間 SCP 回本機
+
+**恢復 SOP**：
+
+1. `ssh <host> 'journalctl -u cloudflared --since "5 min ago" --no-pager'`
+2. 若 Tunnel 斷線：`ssh <host> 'sudo systemctl restart cloudflared'`
+3. 檢查 PostgREST：`ssh <host> 'docker logs supabase-rest --tail 10'`
+4. 等待 pool 重建完成（通常 <1 分鐘）
+
+### 10.3 Seed 資料正確格式
+
+`supabase db reset` 的 seed.sql 不支援 pg_dump 原生的 `COPY ... FROM stdin` 格式。正確做法：
+
+```sql
+-- seed.sql 開頭
+SET session_replication_role = replica;  -- 停用 FK 檢查和 trigger
+
+TRUNCATE table1, table2, table3 CASCADE;  -- 清空目標表
+
+-- 使用 INSERT 格式（非 COPY）
+INSERT INTO table1 (...) VALUES (...);
+
+-- seed.sql 結尾
+SET session_replication_role = DEFAULT;  -- 恢復
+```
 
 ---
 
