@@ -106,5 +106,6 @@ pnpm skills:list
 
 1. 📖 閱讀 [SUPABASE_GUIDE.md](./SUPABASE_GUIDE.md) 建立第一個資料表
 2. 🔐 參考 [Better Auth 文件](https://www.better-auth.com/) 設定 OAuth
-3. 🤖 使用 `/spectra:propose` 建立第一個功能
-4. 📝 定期執行 `pnpm skills:update` 更新 skills
+3. 🎨 執行 `/teach-impeccable` 建立設計脈絡（產出 `.impeccable.md`，所有 design skills 的前提）
+4. 🤖 使用 `/spectra-propose` 建立第一個功能
+5. 📝 定期執行 `pnpm skills:update` 更新 skills

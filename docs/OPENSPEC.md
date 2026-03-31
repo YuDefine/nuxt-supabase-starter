@@ -30,7 +30,7 @@ AI：好的，這是一個待辦事項的元件...
 ### 解法：先定義清楚再動手
 
 ```
-使用者：/spectra:propose
+使用者：/spectra-propose
        我需要一個待辦事項功能...
 
 AI：[產生 proposal.md]
@@ -41,7 +41,7 @@ AI：[產生 proposal.md]
 
 使用者：（確認提案正確）
 
-AI：/spectra:apply
+AI：/spectra-apply
     [逐步執行任務]
 ```
 
@@ -53,24 +53,24 @@ AI：/spectra:apply
 
 | 命令               | 說明                 | 輸入     | 輸出                             |
 | ------------------ | -------------------- | -------- | -------------------------------- |
-| `/spectra:propose` | 建立變更提案         | 功能描述 | proposal.md, design.md, tasks.md |
-| `/spectra:apply`   | 執行任務             | 變更名稱 | 程式碼                           |
-| `/spectra:archive` | 歸檔完成的變更       | 變更名稱 | 移動到 archive/ + 合併 specs     |
-| `/spectra:discuss` | 聚焦討論並達成結論   | -        | 討論記錄                         |
-| `/spectra:ask`     | 查詢規格文件         | 問題     | 回答                             |
-| `/spectra:ingest`  | 從外部上下文更新變更 | 變更名稱 | 更新後的 artifacts               |
-| `/spectra:debug`   | 系統化除錯           | 問題描述 | 除錯報告                         |
-| `/spectra:tdd`     | 依 TDD 流程實作      | 功能描述 | 測試 + 程式碼                    |
-| `/spectra:analyze` | 分析現有程式碼       | -        | 分析報告                         |
-| `/spectra:clarify` | 釐清需求             | -        | 釐清結果                         |
-| `/spectra:sync`    | 同步規格             | 變更名稱 | 更新後的 specs                   |
-| `/spectra:verify`  | 驗證實作             | 變更名稱 | 驗證報告                         |
+| `/spectra-propose` | 建立變更提案         | 功能描述 | proposal.md, design.md, tasks.md |
+| `/spectra-apply`   | 執行任務             | 變更名稱 | 程式碼                           |
+| `/spectra-archive` | 歸檔完成的變更       | 變更名稱 | 移動到 archive/ + 合併 specs     |
+| `/spectra-discuss` | 聚焦討論並達成結論   | -        | 討論記錄                         |
+| `/spectra-ask`     | 查詢規格文件         | 問題     | 回答                             |
+| `/spectra-ingest`  | 從外部上下文更新變更 | 變更名稱 | 更新後的 artifacts               |
+| `/spectra-debug`   | 系統化除錯           | 問題描述 | 除錯報告                         |
+| `/spectra-tdd`     | 依 TDD 流程實作      | 功能描述 | 測試 + 程式碼                    |
+| `/spectra-analyze` | 分析現有程式碼       | -        | 分析報告                         |
+| `/spectra-clarify` | 釐清需求             | -        | 釐清結果                         |
+| `/spectra-sync`    | 同步規格             | 變更名稱 | 更新後的 specs                   |
+| `/spectra-verify`  | 驗證實作             | 變更名稱 | 驗證報告                         |
 
 ---
 
 ## 核心工作流程
 
-### 1. /spectra:propose - 建立變更提案
+### 1. /spectra-propose - 建立變更提案
 
 從自然語言描述建立結構化的變更提案。
 
@@ -82,7 +82,7 @@ AI：/spectra:apply
 **範例**：
 
 ```
-/spectra:propose
+/spectra-propose
 
 我需要一個待辦事項功能：
 - 使用者可以建立、查看、更新、刪除待辦事項
@@ -103,7 +103,7 @@ openspec/changes/add-todos/
         └── spec.md
 ```
 
-### 2. /spectra:apply - 執行實作
+### 2. /spectra-apply - 執行實作
 
 逐步執行任務清單中的任務。
 
@@ -115,7 +115,7 @@ openspec/changes/add-todos/
 **範例**：
 
 ```
-/spectra:apply add-todos
+/spectra-apply add-todos
 ```
 
 Claude 會：
@@ -126,7 +126,7 @@ Claude 會：
 4. 更新任務狀態
 5. 每完成一個階段詢問是否繼續
 
-### 3. /spectra:archive - 歸檔變更
+### 3. /spectra-archive - 歸檔變更
 
 將完成的變更歸檔，並將 delta specs 合併到主 specs。
 
@@ -139,7 +139,7 @@ Claude 會：
 **範例**：
 
 ```
-/spectra:archive add-todos
+/spectra-archive add-todos
 ```
 
 Claude 會：
@@ -256,20 +256,20 @@ The system SHALL allow users to create todo items.
 
 ### 2. 先討論再提案
 
-如果需求不明確，使用 `/spectra:discuss` 先釐清：
+如果需求不明確，使用 `/spectra-discuss` 先釐清：
 
 ```
-/spectra:discuss
+/spectra-discuss
 
 我想改善使用者體驗，但不確定從哪裡開始...
 ```
 
 ### 3. 善用 verify
 
-實作完成後，用 `/spectra:verify` 確認符合規格：
+實作完成後，用 `/spectra-verify` 確認符合規格：
 
 ```
-/spectra:verify add-todos
+/spectra-verify add-todos
 ```
 
 ### 4. 小步快跑
