@@ -47,8 +47,8 @@ curl -fsSL https://claude.ai/install.sh | sh
 最快捷（建議給無先備知識 agent）：
 
 ```bash
-git clone https://github.com/YuDefine/nuxt-supabase-starter
-cd nuxt-supabase-starter
+git clone https://github.com/YuDefine/nuxt-supabase-starter temp-starter
+cd temp-starter
 bash scripts/create-fast-project.sh temp/my-product
 ```
 
@@ -56,8 +56,8 @@ bash scripts/create-fast-project.sh temp/my-product
 
 ```bash
 # 1) 取得 scaffold 工具
-git clone https://github.com/YuDefine/nuxt-supabase-starter
-cd nuxt-supabase-starter
+git clone https://github.com/YuDefine/nuxt-supabase-starter temp-starter
+cd temp-starter
 pnpm --dir template/packages/create-nuxt-starter install
 
 # 2) 直接用參數建立新專案
