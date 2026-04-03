@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+/* eslint-disable no-console */
+/* oxlint-disable no-console */
 
 /**
  * PreToolUse hook: 阻擋對受保護路徑的 Edit/Write 操作
