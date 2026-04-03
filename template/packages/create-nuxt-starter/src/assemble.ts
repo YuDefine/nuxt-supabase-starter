@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "pathe";
 import { getModuleById } from "./features";
 
 const TEMPLATES_DIR = resolve(import.meta.dirname, "..", "templates");
-const STARTER_ROOT = resolve(import.meta.dirname, "..", "..");
+const STARTER_ROOT = resolve(import.meta.dirname, "..", "..", "..");
 
 export function assembleProject(
   targetDir: string,

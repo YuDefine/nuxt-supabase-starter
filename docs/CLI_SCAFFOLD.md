@@ -47,27 +47,6 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-app \
 - `--without`：逗號分隔 feature id，移除功能
 - `--minimal`：從空白功能集開始（不載入預設）
 
-### 維護者 smoke 驗收（推薦）
-
-每次調整 scaffold 或文件流程後，建議在 repo root 執行：
-
-```bash
-bash scripts/smoke-scaffold.sh
-```
-
-此腳本會自動：
-
-- 建立一個新的 scaffold 專案（non-interactive defaults）
-- 檢查 `package.json` / `wrangler.jsonc` 名稱替換
-- 掃描 placeholder 殘留
-- 依序執行 `typecheck`、`test:unit`、`test`、`check`
-
-可自訂輸出目錄：
-
-```bash
-bash scripts/smoke-scaffold.sh temp/my-smoke-project
-```
-
 ## 互動選單流程
 
 1. 專案名稱
