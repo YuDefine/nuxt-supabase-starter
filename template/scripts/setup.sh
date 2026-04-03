@@ -76,8 +76,34 @@ fi
 echo "✅ pnpm $(pnpm -v)"
 
 # Docker / OrbStack（已安裝）
-if ! command -v docker &> /dev/null; then
-  echo "❌ 找不到 Docker，請先安裝容器執行環境："
+# 優先偵測 OrbStack，若 docker CLI 不在 PATH 則自動補上
+HAS_DOCKER=false
+HAS_ORBSTACK=false
+ORBSTACK_DOCKER="/Applications/OrbStack.app/Contents/MacOS/xbin/docker"
+
+command -v orbctl &> /dev/null && HAS_ORBSTACK=true
+# macOS: 即使 orbctl 不在 PATH，也檢查 app 是否存在
+if [ "$HAS_ORBSTACK" = false ] && [ -d "/Applications/OrbStack.app" ]; then
+  HAS_ORBSTACK=true
+fi
+
+command -v docker &> /dev/null && HAS_DOCKER=true
+
+# OrbStack 存在但 docker CLI 不在 PATH → 自動補上
+if [ "$HAS_ORBSTACK" = true ] && [ "$HAS_DOCKER" = false ]; then
+  if [ -x "$ORBSTACK_DOCKER" ]; then
+    export PATH="$PATH:$(dirname "$ORBSTACK_DOCKER")"
+    HAS_DOCKER=true
+    echo "ℹ️  自動使用 OrbStack 內建的 docker CLI"
+  else
+    echo "⚠️  偵測到 OrbStack 但找不到 docker CLI"
+    echo "   請重新安裝 OrbStack 或手動安裝 Docker CLI"
+    exit 1
+  fi
+fi
+
+if [ "$HAS_DOCKER" = false ] && [ "$HAS_ORBSTACK" = false ]; then
+  echo "❌ 找不到容器執行環境，請先安裝："
   case "$OS" in
     macos)
       echo "   推薦 OrbStack（輕量快速）："
@@ -102,17 +128,29 @@ if ! command -v docker &> /dev/null; then
 fi
 
 # Docker / OrbStack（正在執行）
-if ! docker info &> /dev/null; then
-  # 偵測已安裝的容器引擎，給出對應提示
-  if command -v orbctl &> /dev/null 2>&1; then
+CONTAINER_RUNNING=false
+
+if [ "$HAS_ORBSTACK" = true ]; then
+  # OrbStack: 用 orbctl status 檢查是否啟動
+  if orbctl status &> /dev/null; then
+    CONTAINER_RUNNING=true
+  fi
+elif [ "$HAS_DOCKER" = true ]; then
+  if docker info &> /dev/null; then
+    CONTAINER_RUNNING=true
+  fi
+fi
+
+if [ "$CONTAINER_RUNNING" = false ]; then
+  if [ "$HAS_ORBSTACK" = true ]; then
     echo "❌ OrbStack 尚未啟動，請先啟動 OrbStack"
   else
     echo "❌ Docker 尚未啟動，請先啟動 Docker Desktop"
   fi
   exit 1
 fi
-# 顯示容器引擎資訊
-if command -v orbctl &> /dev/null 2>&1; then
+
+if [ "$HAS_ORBSTACK" = true ]; then
   echo "✅ OrbStack 已啟動"
 else
   echo "✅ Docker 已啟動"
