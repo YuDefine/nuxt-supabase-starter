@@ -82,13 +82,21 @@ rg -ni "nuxt[- ]supabase starter|nuxt-supabase-starter|demo" temp/my-product
 
 ---
 
-## 其他路徑
+## 想先看 Demo？
 
-| 你的情況                                | 推薦路徑                                          |
-| --------------------------------------- | ------------------------------------------------- |
-| 🆕 **新專案**：想從零開始（推薦）       | 優先使用本頁上方「直接產生乾淨新專案」             |
-| 👀 **新專案**：想先看功能展示（選配）   | 先完成 Step 1-6 體驗 Demo，再依 Step 7 切回 Clean |
-| 🔧 **現有專案**：想加入 Claude/Supabase | 前往 [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) |
+Scaffold CLI 預設產出 clean 專案。如果你想先體驗完整功能展示：
+
+```bash
+git clone https://github.com/YuDefine/nuxt-supabase-starter
+cd nuxt-supabase-starter/template
+pnpm install
+pnpm run setup
+pnpm dev          # 開啟 http://localhost:3000 看 Demo
+```
+
+看完後回到 repo root 執行 scaffold CLI 產生你的乾淨專案。
+
+> 現有專案整合：[INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md)
 
 ---
 
@@ -110,266 +118,25 @@ rg -ni "nuxt[- ]supabase starter|nuxt-supabase-starter|demo" temp/my-product
 
 ---
 
-## Step 1：建立專案
+## Scaffold 後：設定開發環境
+
+Scaffold 完成後，進入你的新專案：
 
 ```bash
-# 從 GitHub 複製範本（monorepo）
-git clone https://github.com/YuDefine/nuxt-supabase-starter my-project
-cd my-project
-
-# 推薦：先轉成 clean 開發起點
-bash scripts/create-clean.sh
-
-# 進入真正可執行的 starter 專案
-cd template
+cd <你的專案路徑>
+pnpm run setup    # 檢查環境 → 選擇 Auth → 安裝依賴 → 啟動 Supabase → 產生型別
+pnpm dev          # 開啟 http://localhost:3000
 ```
 
-> 你現在位於真正可執行的 starter 專案根目錄。後續所有命令都在 `template/` 內執行。
-
-**你得到了什麼**：
-
-```
-my-project/template/
-├── CLAUDE.md              # AI 開發規範
-├── .claude/               # Claude Code 配置
-│   ├── commands/          # 自定義指令（含 spectra/）
-│   ├── agents/            # SubAgents
-│   ├── hooks/             # 自動化腳本
-│   ├── skills/            # AI Skills
-│   └── settings.json              # Claude Code 設定
-├── openspec/              # Spectra 工作流程
-│   ├── project.md         # 專案上下文
-│   ├── specs/             # 系統規格
-│   └── changes/           # 變更提案
-├── app/                   # Nuxt 應用程式
-│   ├── app.vue            # 根元件
-│   ├── assets/css/        # 樣式檔案
-│   ├── auth.config.ts     # Client 認證配置
-│   ├── pages/             # 頁面元件
-│   └── types/             # TypeScript 類型
-├── server/                # API 端點
-│   ├── auth.config.ts     # Server 認證配置
-│   └── utils/             # Server 工具函式
-├── supabase/              # 本地 Supabase 基礎結構
-│   ├── migrations/        # Migration 檔案目錄
-│   ├── backups/           # 備份輸出目錄
-│   └── README.md          # Supabase 使用說明
-├── docs/                  # 專案文件
-└── docs/verify/           # 系統狀態文件
-```
-
-> **注意**：範本已內建 `supabase/` 目錄。Step 2 的 `supabase init` 會建立或更新 `supabase/config.toml`。
-
----
-
-## Step 2（可選）：手動初始化並啟動 Supabase
-
-> 想用最短路徑開始開發，可以直接跳到 Step 3 執行 `pnpm run setup`。它會自動完成依賴安裝、Supabase 啟動與型別產生。
+### 設定 Claude Code
 
 ```bash
-# 初始化 Supabase（建立 supabase/ 目錄和 config.toml）
-supabase init
-
-# 啟動本地 Supabase（需要 Docker）
-supabase start
-```
-
-**成功後會看到**：
-
-```
-╭──────────────────────────────────────╮
-│ 🛠️  Development Tools                │
-├─────────┬────────────────────────────┤
-│ Studio  │ http://127.0.0.1:54323     │
-│ Mailpit │ http://127.0.0.1:54324     │
-│ MCP     │ http://127.0.0.1:54321/mcp │
-╰─────────┴────────────────────────────╯
-
-╭──────────────────────────────────────────────────────╮
-│ 🌐 APIs                                              │
-├────────────────┬─────────────────────────────────────┤
-│ Project URL    │ http://127.0.0.1:54321              │
-│ REST           │ http://127.0.0.1:54321/rest/v1      │
-│ GraphQL        │ http://127.0.0.1:54321/graphql/v1   │
-│ Edge Functions │ http://127.0.0.1:54321/functions/v1 │
-╰────────────────┴─────────────────────────────────────╯
-
-╭───────────────────────────────────────────────────────────────╮
-│ 🗄️  Database                                                  │
-├─────┬─────────────────────────────────────────────────────────┤
-│ URL │ postgresql://postgres:postgres@127.0.0.1:54322/postgres │
-╰─────┴─────────────────────────────────────────────────────────╯
-
-╭──────────────────────────────────────────────────────────────╮
-│ 🔑 Authentication Keys                                       │
-├─────────────┬────────────────────────────────────────────────┤
-│ Publishable │ sb_publishable_xxxxxxxxxxxxxxxxxxxxxxxxxxxx    │
-│ Secret      │ sb_secret_xxxxxxxxxxxxxxxxxxxxxxxxxxxx         │
-╰─────────────┴────────────────────────────────────────────────╯
-```
-
-**產生 TypeScript 類型**：
-
-```bash
-# 建立類型檔案目錄
-mkdir -p app/types
-
-# 產生資料庫類型
-supabase gen types typescript --local | tee app/types/database.types.ts > /dev/null
-```
-
----
-
-## Step 3：互動式設定
-
-```bash
-pnpm run setup
-```
-
-設定腳本會引導你：
-
-1. **選擇認證系統**：Better Auth（Email/Password + OAuth）或 nuxt-auth-utils（OAuth-first）
-2. **選擇可選功能**：OAuth providers、Sentry、NuxtHub、Charts、VitePress 等
-3. 自動安裝依賴、產生 `.env`、啟動 Supabase、產生型別
-
-> **提示**：如果你偏好手動設定，可以複製 `.env.example` 到 `.env` 並手動填入值。
-
-### 認證系統比較
-
-| 特性           | Better Auth     | nuxt-auth-utils  |
-| -------------- | --------------- | ---------------- |
-| Email/Password | ✅              | ❌               |
-| OAuth          | ✅              | ✅               |
-| Session 機制   | Cookie + DB     | Cookie-only      |
-| 適合場景       | 需要 Email 登入 | OAuth-first 應用 |
-
----
-
-## Step 4：設定 Claude Code
-
-```bash
-# 安裝第三方 AI Skills（46 個通用 Skills）
 bash scripts/install-skills.sh
 ```
 
-這個步驟會：
-
-- 安裝 46 個通用 Skills 到 `.claude/skills/`（`nuxt`、`vue`、`nuxt-ui`、`nuxt-better-auth` 等）
-- 命令權限和 MCP Servers 已在 `.claude/settings.json` 中預先配置
+安裝 46 個通用 Skills 到 `.claude/skills/`，命令權限和 MCP Servers 已在 `.claude/settings.json` 中預先配置。
 
 > 📖 關於 Supabase MCP：[SUPABASE_MCP.md](../template/docs/SUPABASE_MCP.md)
-
----
-
-## Step 5：啟動開發伺服器
-
-```bash
-pnpm dev
-```
-
-打開 http://localhost:3000，你應該會看到初始頁面。
-
----
-
-## Step 6：驗證 Claude Code
-
-開啟新的終端機視窗：
-
-```bash
-# 啟動 Claude Code
-claude
-```
-
-試試看這些指令：
-
-```bash
-# 檢查專案狀態
-> 專案有哪些測試？
-
-# 執行 TDD 流程（test-driven-development skill 會自動觸發）
-> 幫我寫一個計算稅金的函式
-
-# 執行檢查
-> 執行 pnpm check
-```
-
----
-
-## Step 7（選擇性）：切換成完全乾淨的開發起點
-
-如果你在 Step 1 已經執行過 `create-clean`，這一步可以跳過。
-如果你尚未 clean，建議在正式開發前執行一次，只保留持續開發需要的骨架。
-
-在 repo root 執行：
-
-```bash
-bash scripts/create-clean.sh
-```
-
-執行後會：
-
-- 移除 demo pages/components/queries/stores/API v1
-- 清空示範 migrations 與 seed
-- 保留 layouts、middleware、server utils、auth API、核心設定
-- 重新整理專案識別資訊（如專案名稱、README、env secrets）
-
-建議接著執行一次驗證：
-
-```bash
-bash scripts/validate-starter.sh clean
-```
-
----
-
-## 首次驗證常見 Warning（分級）
-
-為了避免新手把「環境提醒」誤判為「專案壞掉」，可以用下面規則快速判斷。
-
-### A. 預期 warning（不阻塞，先繼續）
-
-- `SUPABASE_URL` / `SUPABASE_KEY` 尚未設定
-- `NUXT_PUBLIC_SITE_URL` 仍是 localhost 預設值
-- SEO/SSR 類提示（例如 og-image 或部署情境建議）
-
-這些通常是「尚未做正式環境配置」的提醒，不會讓 `pnpm typecheck`、`pnpm test`、`pnpm check` 直接失敗。
-
-### B. 非預期 warning / error（需要先修）
-
-- `pnpm check`、`pnpm test`、`pnpm typecheck` 任一指令回傳非 0 exit code
-- Lint/format/typecheck 出現實際錯誤（不只是環境提醒）
-- 測試失敗（紅字 fail）
-
-只要指令失敗，就應視為阻塞，先修正再往下。
-
----
-
-## 完成！你得到了什麼？
-
-**照著上述步驟，你已經得到與原始專案相同的開發環境。**
-
-### Tech Stack（已配置）
-
-詳見 [README.md 的 Tech Stack 章節](../README.md#tech-stack)。
-
-### AI 開發工具（已配置）
-
-| 類型        | 數量  | 說明                                              |
-| ----------- | ----- | ------------------------------------------------- |
-| Commands    | 24 個 | 12 共用 + 12 Spectra                              |
-| SubAgents   | 3 個  | `check-runner`、`code-review`、`db-backup`        |
-| 通用 Skills | 46 個 | `nuxt`、`nuxt-ui`、`vue`、`vueuse` 等（自動更新） |
-| 情境 Skills | 13 個 | `supabase-rls`、`server-api`、`pinia-store` 等    |
-| SDD Skills  | 12 個 | Spectra（`spectra-*`）                            |
-
-### 開發規範（已定義）
-
-| 規範         | 功能                                           |
-| ------------ | ---------------------------------------------- |
-| CLAUDE.md    | AI 開發規範，確保 AI 遵循專案標準              |
-| TDD 工作流程 | Red → Green → Refactor                         |
-| 自動化檢查   | `pnpm check`：format → lint → typecheck → test |
-| Git 規範     | emoji type + commitlint                        |
-| docs/verify/ | 系統狀態文件，確保文件與程式碼同步             |
 
 ---
 

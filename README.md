@@ -20,37 +20,9 @@
 
 ## 快速開始
 
-**前置條件**：[Node.js 18+](https://nodejs.org/)（建議 24 LTS）、[pnpm](https://pnpm.io/)、[Docker](https://www.docker.com/)、[Supabase CLI](https://supabase.com/docs/guides/cli)
+👉 **[QUICK_START.md](docs/QUICK_START.md)**：從 clone 到跑起來的完整步驟
 
-```bash
-git clone https://github.com/YuDefine/nuxt-supabase-starter my-project
-cd my-project
-bash scripts/create-clean.sh
-cd template
-pnpm install
-pnpm run setup    # 檢查環境 → 安裝依賴 → 啟動 Supabase → 產生型別
-pnpm dev          # 開啟 http://localhost:3000
-```
-
-> 完整步驟：[QUICK_START.md](docs/QUICK_START.md) | 整合至現有專案：[INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md)
-
----
-
-## 推薦使用方式：Clean 優先，Demo 選配
-
-預設建議是先把專案切到乾淨開發起點，再開始做自己的功能；Demo 只在你需要快速看展示流程時使用。
-
-```bash
-# 目前在 my-project
-bash scripts/create-clean.sh
-cd template
-pnpm dev
-```
-
-- Clean 路徑：直接進入可持續開發骨架（推薦）
-- Demo 路徑：先看展示頁面，再切回 Clean
-
-> 視覺路徑參考：[VISUAL_GUIDE.md](docs/VISUAL_GUIDE.md)
+> 整合至現有專案：[INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md)
 
 ---
 
