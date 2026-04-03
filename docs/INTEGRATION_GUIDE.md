@@ -31,17 +31,15 @@ curl -o CLAUDE.md https://raw.githubusercontent.com/YuDefine/nuxt-supabase-start
 **重要**：修改 CLAUDE.md 中的以下區塊以符合你的專案：
 
 ```markdown
-## 📋 Project Overview
+## Project
 
 <!-- TODO: 替換為你的專案說明 -->
-
 [專案名稱] 是一個使用 Nuxt 4 和 Nuxt UI 建構的 [專案類型] 系統。
 
-### Key Objectives
+## Stack
 
-- [目標 1]
-- [目標 2]
-- [目標 3]
+<!-- TODO: 替換為你的技術棧 -->
+Nuxt 4, Vue 3 (Composition API + <script setup>), TypeScript, Tailwind CSS, Nuxt UI, Pinia, VueUse, Supabase (PostgreSQL)
 ```
 
 ### 1.2 複製 .claude 目錄
@@ -51,10 +49,9 @@ curl -o CLAUDE.md https://raw.githubusercontent.com/YuDefine/nuxt-supabase-start
 git clone --depth 1 https://github.com/YuDefine/nuxt-supabase-starter.git /tmp/starter
 cp -r /tmp/starter/.claude .
 rm -rf /tmp/starter
-
 ```
 
-> 設定已包含在 `.claude/settings.json` 中，不需要額外複製。
+> `.claude/` 目錄包含 `settings.json`（權限設定）、`commands/`（自定義指令）、`agents/`（SubAgents）、`skills/`（AI Skills），以及 `hooks/`（Auto-Harness 自動化鉤子）和 `rules/`（開發規範規則）。
 
 ### 1.3 設定 Claude Code 權限
 
@@ -64,25 +61,53 @@ rm -rf /tmp/starter
 {
   "permissions": {
     "allow": [
-      "Bash(pnpm typecheck:*)",
+      "Bash(ls:*)",
+      "Bash(node:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "Bash(jq:*)",
+      "Bash(curl:*)",
+      "Bash(supabase:*)",
+      "Bash(pnpm check:*)",
       "Bash(pnpm test:*)",
       "Bash(pnpm lint:*)",
       "Bash(pnpm format:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm dev:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm db:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git diff:*)",
       "Bash(git status:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(git push:*)",
+      "Bash(git fetch:*)",
+      "Bash(git stash:*)",
+      "Bash(git checkout:*)",
+      "Bash(git restore:*)"
     ]
   }
 }
 ```
 
-如果不使用 Supabase，移除以下權限：
+如果不使用 Supabase，移除以下權限和設定：
 
 ```json
-"mcp__local-supabase__*",
-"Bash(supabase *:*)"
+// permissions.allow 中移除：
+"mcp__local-supabase__list_tables",
+"mcp__local-supabase__list_migrations",
+"mcp__local-supabase__execute_sql",
+"mcp__local-supabase__search_docs",
+"mcp__local-supabase__get_advisors",
+"mcp__local-supabase__apply_migration",
+"Bash(supabase:*)",
+"Bash(pnpm db:*)"
+
+// 頂層移除：
+"enabledMcpjsonServers": ["local-supabase"]
 ```
 
 ---
@@ -104,7 +129,7 @@ rm -rf /tmp/starter
     "test:unit": "vp test test/unit",
     "test:watch": "vp test --watch",
     "typecheck": "nuxt typecheck",
-    "prepare": "vp config && nuxt prepare"
+    "prepare": "vp config && bash scripts/restore-hooks.sh && nuxt prepare"
   }
 }
 ```
@@ -130,14 +155,26 @@ export default defineConfig({
     },
   },
   lint: {
+    categories: {
+      correctness: 'error',
+      suspicious: 'warn',
+      pedantic: 'off',
+      perf: 'warn',
+      style: 'off',
+    },
     rules: {
-      'no-undef': 'error',
+      'no-undef': 'off',
       '@typescript-eslint/no-unused-vars': 'warn',
     },
   },
   fmt: {
     semi: false,
     singleQuote: true,
+    printWidth: 100,
+    trailingComma: 'es5',
+    experimentalTailwindcss: {
+      stylesheet: './app/assets/css/main.css',
+    },
   },
   staged: {
     '*.{js,ts,vue}': ['vp lint --fix', 'vp fmt'],
@@ -151,30 +188,45 @@ export default defineConfig({
 pnpm add -D @commitlint/cli @commitlint/config-conventional
 ```
 
-建立 `commitlint.config.js`：
+建立 `commitlint.config.js`（使用 emoji 前綴格式）：
 
 ```javascript
 export default {
   extends: ['@commitlint/config-conventional'],
+
+  // 自定義解析器：支援 "✨ feat: message" 格式
+  parserPreset: {
+    parserOpts: {
+      headerPattern:
+        /^(✨ feat|🐛 fix|🧹 chore|🔨 refactor|🧪 test|🎨 style|📝 docs|📦 build|👷 ci|⏪ revert|🚀 deploy|🎉 init): (.+)$/,
+      headerCorrespondence: ['type', 'subject'],
+    },
+  },
+
   rules: {
     'type-enum': [
       2,
       'always',
       [
-        'feat',
-        'fix',
-        'chore',
-        'refactor',
-        'test',
-        'style',
-        'docs',
-        'build',
-        'ci',
-        'revert',
-        'deploy',
-        'init',
+        '✨ feat',
+        '🐛 fix',
+        '🧹 chore',
+        '🔨 refactor',
+        '🧪 test',
+        '🎨 style',
+        '📝 docs',
+        '📦 build',
+        '👷 ci',
+        '⏪ revert',
+        '🚀 deploy',
+        '🎉 init',
       ],
     ],
+    // 關閉 type-case 檢查（type 包含 emoji 和空格）
+    'type-case': [0],
+    // 關閉 type-empty 檢查（由 type-enum 處理）
+    'type-empty': [0],
+    'subject-case': [0],
   },
 }
 ```
@@ -188,6 +240,8 @@ echo '#!/usr/bin/env sh
 pnpm commitlint --edit $1' > .vite-hooks/commit-msg
 chmod +x .vite-hooks/commit-msg
 ```
+
+> `restore-hooks.sh` 會在每次 `pnpm prepare` 時從 `scripts/templates/vite-hooks/` 還原自訂 hooks，避免被 `vp config` 覆蓋。
 
 ---
 
@@ -208,6 +262,7 @@ export default defineNuxtConfig({
   modules: ['@nuxtjs/supabase'],
 
   supabase: {
+    useSsrCookies: true,
     redirect: false,
     // 使用 Better Auth 時禁用 Supabase Auth 重導向
   },
@@ -423,9 +478,9 @@ supabase status
 
 ## 相關文件
 
-| 文件                                         | 說明                  |
-| -------------------------------------------- | --------------------- |
-| [QUICK_START.md](QUICK_START.md)             | 從零開始建立完整專案  |
-| [CLAUDE_CODE_GUIDE.md](CLAUDE_CODE_GUIDE.md) | Claude Code 詳細配置  |
+| 文件                                                | 說明                  |
+| --------------------------------------------------- | --------------------- |
+| [QUICK_START.md](QUICK_START.md)                    | 從零開始建立完整專案  |
+| [CLAUDE_CODE_GUIDE.md](CLAUDE_CODE_GUIDE.md)        | Claude Code 詳細配置  |
 | [SUPABASE_MCP.md](../template/docs/SUPABASE_MCP.md) | Supabase MCP 整合說明 |
-| [WORKFLOW.md](../template/docs/WORKFLOW.md) | TDD 開發流程          |
+| [WORKFLOW.md](../template/docs/WORKFLOW.md)         | TDD 開發流程          |

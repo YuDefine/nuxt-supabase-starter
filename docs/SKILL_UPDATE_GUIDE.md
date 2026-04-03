@@ -52,9 +52,6 @@
 ### 快速指令
 
 ```bash
-# 檢查是否有更新
-pnpm skills:check
-
 # 更新所有 skills
 pnpm skills:update
 
@@ -64,17 +61,7 @@ pnpm skills:list
 
 ### 詳細說明
 
-#### 1. 檢查更新
-
-```bash
-pnpm skills:check
-# 或
-npx skills check
-```
-
-這會列出所有可以更新的 skills。
-
-#### 2. 更新 Skills
+#### 1. 更新 Skills
 
 ```bash
 pnpm skills:update
@@ -84,7 +71,7 @@ npx skills update
 
 這會自動更新所有從 skills.sh 安裝的 skills。
 
-#### 3. 驗證安裝
+#### 2. 驗證安裝
 
 ```bash
 pnpm skills:list
@@ -95,12 +82,6 @@ npx skills list
 查看所有已安裝的 skills 及其版本。
 
 ## 📦 初次安裝 / 重新安裝
-
-### 備份現有 skills
-
-```bash
-pnpm skills:backup
-```
 
 ### 安裝所有 skills
 
@@ -114,18 +95,15 @@ pnpm skills:install
 
 在 `package.json` 中定義：
 
-| Script           | 指令                  | 說明                        |
-| ---------------- | --------------------- | --------------------------- |
-| `skills:backup`  | `pnpm skills:backup`  | 備份當前 skills（帶時間戳） |
-| `skills:check`   | `pnpm skills:check`   | 檢查 skills 更新            |
-| `skills:install` | `pnpm skills:install` | 安裝所有 skills             |
-| `skills:list`    | `pnpm skills:list`    | 列出已安裝的 skills         |
-| `skills:update`  | `pnpm skills:update`  | 更新所有 skills             |
+| Script           | 指令                  | 說明                |
+| ---------------- | --------------------- | ------------------- |
+| `skills:install` | `pnpm skills:install` | 安裝所有 skills     |
+| `skills:list`    | `pnpm skills:list`    | 列出已安裝的 skills |
+| `skills:update`  | `pnpm skills:update`  | 更新所有 skills     |
 
 ## 📝 更新檢查清單
 
-- [ ] 執行 `pnpm skills:backup` 備份
-- [ ] 執行 `pnpm skills:check` 檢查更新
+- [ ] 手動備份：`cp -r .claude/skills .claude/skills.backup.$(date +%Y%m%d)`
 - [ ] 執行 `pnpm skills:update` 更新
 - [ ] 執行 `pnpm skills:list` 驗證
 - [ ] 重啟 Claude Code CLI
@@ -167,9 +145,9 @@ npx skills find react performance
 如果更新後出現問題：
 
 ```bash
-# 方法 1: 從備份還原
-ls .claude/skills.backup.*  # 列出所有備份
-cp -r .claude/skills.backup.20260210-123456 .claude/skills
+# 方法 1: 從手動備份還原
+ls -d .claude/skills.backup.*  # 列出所有備份
+cp -r .claude/skills.backup.20260210 .claude/skills
 
 # 方法 2: 使用 Git（如果 skills 有加入版本控制）
 git checkout .claude/skills/

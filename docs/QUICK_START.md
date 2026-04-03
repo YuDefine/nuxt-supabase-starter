@@ -21,8 +21,8 @@
 git clone https://github.com/YuDefine/nuxt-supabase-starter temp-starter
 cd temp-starter
 
-# 安裝 CLI 依賴（僅第一次）
-pnpm --dir template/packages/create-nuxt-starter install
+# 安裝 CLI 依賴（僅第一次，--ignore-scripts 避免觸發 workspace root 的 nuxt prepare）
+pnpm --dir template/packages/create-nuxt-starter install --ignore-scripts
 
 # 啟動互動式 scaffold — 第一步就會問你專案名稱
 pnpm --dir template/packages/create-nuxt-starter dev
@@ -115,6 +115,8 @@ pnpm dev          # 開啟 http://localhost:3000 看 Demo
 | Claude Code  | -                  | `curl -fsSL https://claude.ai/install.sh \| sh`                    |
 
 [GitHub Releases]: https://github.com/supabase/cli/releases
+
+> **Windows 用戶**：本專案的腳本（`setup.sh`、`db-reset.sh` 等）皆為 bash，Windows 請使用 [WSL 2](https://learn.microsoft.com/windows/wsl/install) 執行。安裝後在 WSL 終端機內操作即可，所有指令與 Linux 完全相同。
 
 ---
 
