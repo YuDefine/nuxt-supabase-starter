@@ -58,7 +58,7 @@ scan_placeholders() {
       --glob '!.git/**' \
       --glob '!.nuxt/**' \
       --glob '!coverage/**' \
-      --glob '!.claude/skills/**' \
+      --glob '!.claude/**' \
       --glob '!pnpm-lock.yaml' \
       --glob '!README.md' \
       --glob '!.scaffold-cleanup' \
@@ -69,7 +69,7 @@ scan_placeholders() {
       --exclude-dir=.git \
       --exclude-dir=.nuxt \
       --exclude-dir=coverage \
-      --exclude-dir=.claude/skills \
+      --exclude-dir=.claude \
       --exclude=pnpm-lock.yaml \
       --exclude=README.md \
       --exclude=.scaffold-cleanup \
