@@ -425,26 +425,26 @@ describe('POST /api/v1/bookmarks', () => {
 | 順序 | 文件                                   | 你將學到                                       |
 | ---- | -------------------------------------- | ---------------------------------------------- |
 | 1    | [SUPABASE_GUIDE.md](SUPABASE_GUIDE.md) | Migration 進階、RLS 深入、Local-first 開發流程 |
-| 2    | [API_PATTERNS.md](API_PATTERNS.md)     | RESTful 設計模式、分頁、搜尋、錯誤處理         |
-| 3    | [WORKFLOW.md](WORKFLOW.md)             | TDD 紅綠重構循環、自動化檢查流程               |
-| 4    | [FAQ.md](FAQ.md)                       | 常見問題速查、技術決策指南                     |
+| 2    | [API_PATTERNS.md](../template/docs/API_PATTERNS.md) | RESTful 設計模式、分頁、搜尋、錯誤處理         |
+| 3    | [WORKFLOW.md](../template/docs/WORKFLOW.md) | TDD 紅綠重構循環、自動化檢查流程               |
+| 4    | [FAQ.md](../template/docs/FAQ.md) | 常見問題速查、技術決策指南                     |
 
 ### 🟡 進階（深入掌握）
 
 | 順序 | 文件                                                         | 你將學到                              |
 | ---- | ------------------------------------------------------------ | ------------------------------------- |
-| 1    | [verify/AUTH_INTEGRATION.md](verify/AUTH_INTEGRATION.md)     | OAuth 整合、Session 管理、角色權限    |
-| 2    | [verify/RLS_BEST_PRACTICES.md](verify/RLS_BEST_PRACTICES.md) | RLS 政策模板、效能最佳化、除錯技巧    |
-| 3    | [verify/PINIA_ARCHITECTURE.md](verify/PINIA_ARCHITECTURE.md) | Store 設計模式、Pinia Colada 查詢快取 |
-| 4    | [verify/API_DESIGN_GUIDE.md](verify/API_DESIGN_GUIDE.md)     | 完整 API 設計規範、驗證、權限控制     |
+| 1    | [AUTH_INTEGRATION.md](../template/docs/verify/AUTH_INTEGRATION.md) | OAuth 整合、Session 管理、角色權限    |
+| 2    | [RLS_BEST_PRACTICES.md](../template/docs/verify/RLS_BEST_PRACTICES.md) | RLS 政策模板、效能最佳化、除錯技巧    |
+| 3    | [PINIA_ARCHITECTURE.md](../template/docs/verify/PINIA_ARCHITECTURE.md) | Store 設計模式、Pinia Colada 查詢快取 |
+| 4    | [API_DESIGN_GUIDE.md](../template/docs/verify/API_DESIGN_GUIDE.md) | 完整 API 設計規範、驗證、權限控制     |
 
 ### 🔴 生產就緒（部署上線）
 
 | 順序 | 文件                                                               | 你將學到                                 |
 | ---- | ------------------------------------------------------------------ | ---------------------------------------- |
-| 1    | [DEPLOYMENT.md](DEPLOYMENT.md)                                     | Cloudflare Workers 部署、CI/CD、回滾策略 |
-| 2    | [verify/DATABASE_OPTIMIZATION.md](verify/DATABASE_OPTIMIZATION.md) | 索引策略、查詢最佳化、效能監控           |
-| 3    | [verify/ENVIRONMENT_VARIABLES.md](verify/ENVIRONMENT_VARIABLES.md) | 環境變數管理、GitHub Secrets             |
-| 4    | [TROUBLESHOOTING.md](TROUBLESHOOTING.md)                           | 25 個常見問題的系統化診斷                |
+| 1    | [DEPLOYMENT.md](../template/docs/DEPLOYMENT.md) | Cloudflare Workers 部署、CI/CD、回滾策略 |
+| 2    | [DATABASE_OPTIMIZATION.md](../template/docs/verify/DATABASE_OPTIMIZATION.md) | 索引策略、查詢最佳化、效能監控           |
+| 3    | [ENVIRONMENT_VARIABLES.md](../template/docs/verify/ENVIRONMENT_VARIABLES.md) | 環境變數管理、GitHub Secrets             |
+| 4    | [TROUBLESHOOTING.md](../template/docs/TROUBLESHOOTING.md) | 25 個常見問題的系統化診斷                |
 
 > 💡 **提示**：使用 `/spectra-propose` 來規劃你的下一個功能，體驗 Spec-Driven Development 工作流程。

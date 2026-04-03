@@ -427,5 +427,5 @@ supabase status
 | -------------------------------------------- | --------------------- |
 | [QUICK_START.md](QUICK_START.md)             | 從零開始建立完整專案  |
 | [CLAUDE_CODE_GUIDE.md](CLAUDE_CODE_GUIDE.md) | Claude Code 詳細配置  |
-| [SUPABASE_MCP.md](SUPABASE_MCP.md)           | Supabase MCP 整合說明 |
-| [WORKFLOW.md](WORKFLOW.md)                   | TDD 開發流程          |
+| [SUPABASE_MCP.md](../template/docs/SUPABASE_MCP.md) | Supabase MCP 整合說明 |
+| [WORKFLOW.md](../template/docs/WORKFLOW.md) | TDD 開發流程          |

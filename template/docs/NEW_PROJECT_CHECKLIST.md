@@ -1,0 +1,109 @@
+# 新專案檢查清單
+
+專案建立後，請確認以下項目都已完成。
+
+## ✅ 基礎設定
+
+- [ ] 已執行 `git init` 並建立初始 commit
+- [ ] 已安裝 Node.js 18+（建議 24 LTS）、pnpm 9+、Docker
+- [ ] 已安裝 Supabase CLI 和 Claude Code CLI
+- [ ] 已複製 `.env.example` 到 `.env` 並填入環境變數
+
+## ✅ Supabase 設定
+
+- [ ] 已執行 `supabase init`
+- [ ] 已執行 `supabase start` 並成功啟動
+- [ ] 已產生 TypeScript 類型檔案 `app/types/database.types.ts`
+- [ ] 已在 `.env` 填入 Supabase URL 和 Key
+
+## ✅ 依賴安裝
+
+- [ ] 已執行 `pnpm install` 安裝 npm 套件
+- [ ] **已執行 `pnpm skills:install` 安裝 AI Skills**
+- [ ] 執行 `pnpm skills:list` 確認 skills 數量正確（共 26 個通用 Skills）
+
+### Skills 檢查
+
+執行 `pnpm skills:list`，應該包含：
+
+**通用 Skills（從 skills.sh，共 26 個）：**
+
+- [ ] vue
+- [ ] vueuse-functions
+- [ ] nuxt
+- [ ] pinia
+- [ ] vitepress
+- [ ] vitest
+- [ ] vue-best-practices
+- [ ] vue-testing-best-practices
+- [ ] supabase-postgres-best-practices
+- [ ] nuxt-ui
+- [ ] find-skills
+
+**專案 Skills（本地）：**
+
+- [ ] nuxt-better-auth
+- [ ] supabase-rls
+- [ ] supabase-migration
+- [ ] server-api
+- [ ] pinia-store
+- [ ] Spectra skills（spectra-\*）
+
+## ✅ Claude Code 設定
+
+- [ ] 確認 `.claude/settings.json` 已存在
+- [ ] 執行 `claude` 成功啟動 Claude Code
+- [ ] 測試 TDD 流程正常運作（`test-driven-development` skill 會自動觸發）
+- [ ] 測試執行 `pnpm check` 成功
+
+## ✅ 開發環境驗證
+
+- [ ] 執行 `pnpm dev` 成功啟動開發伺服器
+- [ ] 瀏覽 http://localhost:3000 看到初始頁面
+- [ ] 執行 `pnpm check` 全部通過（format → lint → typecheck → test）
+- [ ] 執行 `pnpm test` 測試通過
+
+## ✅ 文件檢查
+
+- [ ] 已瀏覽 [README.md](../README.md) 了解 Tech Stack
+- [ ] 知道如何使用 `pnpm skills:update` 更新 skills
+
+## ✅ Git 設定（選用）
+
+- [ ] 已設定 remote repository
+- [ ] 已執行 `git add .` 和 `git commit`
+- [ ] 已執行 `git push` 推送到遠端
+
+## ⚠️ 常見問題
+
+### Skills 沒有安裝完整？
+
+```bash
+# 重新安裝
+pnpm skills:install
+
+# 檢查列表
+pnpm skills:list
+```
+
+### Claude Code 無法使用指令？
+
+1. 確認 `.claude/commands/` 目錄存在
+2. 確認 `.claude/settings.json` 已存在
+3. 重新啟動 `claude`
+
+### Supabase 無法啟動？
+
+1. 確認 Docker 正在執行
+2. 執行 `supabase stop` 後再 `supabase start`
+3. 查看錯誤訊息
+
+## 🎯 下一步
+
+完成所有檢查後：
+
+1. 📖 閱讀 Supabase 官方文件建立第一個資料表
+2. 🔐 參考 [Better Auth 文件](https://www.better-auth.com/) 設定 OAuth
+3. 🎨 執行 `/teach-impeccable` 建立設計脈絡（產出 `.impeccable.md`，所有 design skills 的前提）
+4. 🤖 使用 `/spectra-propose` 建立第一個功能
+5. 📝 定期執行 `pnpm skills:update` 更新 skills

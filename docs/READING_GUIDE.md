@@ -1,20 +1,28 @@
 # 文件導讀指南
 
-本專案包含約 54 個結構化文件，本指南幫助你快速找到所需資訊。
+這份指南面向 GitHub 訪客與新加入的開發者。預設閱讀策略是 **Clean-first**：先建立乾淨開發起點，Demo 僅作選配體驗。
 
 ---
 
-## 文件分類
+## 文件分層
 
-### 給人類開發者
+### Root docs（對外入口，先讀）
 
-| 層級        | 目的     | 文件                                                                                                                                                                          | 何時閱讀           |
-| ----------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| **L1 入門** | 快速開始 | [README.md](../README.md), [QUICK_START.md](QUICK_START.md), [FIRST_CRUD.md](FIRST_CRUD.md), [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md), [VISUAL_GUIDE.md](VISUAL_GUIDE.md) | 第一次使用         |
-| **L2 指南** | 深入學習 | [WORKFLOW.md](WORKFLOW.md), [SUPABASE_GUIDE.md](SUPABASE_GUIDE.md), [API_PATTERNS.md](API_PATTERNS.md), [DEBUGGING.md](DEBUGGING.md), [TEAM_WORKFLOW.md](TEAM_WORKFLOW.md)    | 開始開發時         |
-| **L3 狀態** | 查閱參考 | [docs/verify/\*](verify/README.md)                                                                                                                                            | 需要確認系統狀態時 |
+| 層級        | 目的           | 文件                                                                                                                                                                          | 何時閱讀                 |
+| ----------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| **L1 入門** | 快速上手       | [README.md](../README.md), [QUICK_START.md](QUICK_START.md), [FIRST_CRUD.md](FIRST_CRUD.md), [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md), [VISUAL_GUIDE.md](VISUAL_GUIDE.md) | 第一次接觸此 repository |
+| **L2 補充** | 開發與工具設定 | [SUPABASE_GUIDE.md](SUPABASE_GUIDE.md), [CLAUDE_CODE_GUIDE.md](CLAUDE_CODE_GUIDE.md), [CLI_SCAFFOLD.md](CLI_SCAFFOLD.md), [TECH_STACK.md](TECH_STACK.md)                    | 已能啟動專案後           |
 
-### 給 Claude/AI
+### template/docs（實作細節，按需深入）
+
+| 類型            | 文件                                                                                                                                                                                                 | 用途                   |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| 開發流程        | [WORKFLOW.md](../template/docs/WORKFLOW.md), [DEBUGGING.md](../template/docs/DEBUGGING.md), [TEAM_WORKFLOW.md](../template/docs/TEAM_WORKFLOW.md)                                                 | TDD、除錯、團隊流程     |
+| API 與部署      | [API_PATTERNS.md](../template/docs/API_PATTERNS.md), [DEPLOYMENT.md](../template/docs/DEPLOYMENT.md), [TROUBLESHOOTING.md](../template/docs/TROUBLESHOOTING.md)                                   | API 模式、上線與疑難排解 |
+| 系統狀態（SSOT） | [template/docs/verify/README.md](../template/docs/verify/README.md)                                                                                                                                 | 查核目前狀態與規範基線 |
+| Spec 流程       | [OPENSPEC.md](../template/docs/OPENSPEC.md), [README.md](../template/docs/README.md)                                                                                                                | Spectra 與文件總覽      |
+
+### AI 配置（給會用 Claude 的開發者）
 
 | 類型     | 用途                                        | 位置                        |
 | -------- | ------------------------------------------- | --------------------------- |
@@ -25,156 +33,76 @@
 
 ---
 
-## 閱讀路徑
+## 推薦閱讀路徑
 
-### 新人入門
-
-**目標**：了解專案全貌，能夠開始開發
+### 新專案（推薦：Clean-first）
 
 ```
 README.md（5 分鐘）
-    ↓ 了解 Tech Stack 與專案目標
-VISUAL_GUIDE.md（5 分鐘）
-    ↓ 圖解架構與流程總覽
-QUICK_START.md 或 INTEGRATION_GUIDE.md（15 分鐘）
-    ↓ 完成環境設定（新專案用 QUICK_START，現有專案用 INTEGRATION_GUIDE）
-FIRST_CRUD.md（15 分鐘）⭐ 推薦
-    ↓ 動手建立第一個完整功能（DB → API → UI → Test）
+    ↓ 了解專案定位與技術棧
+QUICK_START.md（15 分鐘）
+    ↓ 完成安裝、設定、首次啟動
+執行 create-clean（5 分鐘）
+    ↓ 移除 demo，保留可持續開發骨架
+FIRST_CRUD.md（15 分鐘）
+    ↓ 建立第一個完整功能（DB → API → UI → Test）
 WORKFLOW.md（10 分鐘）
-    ↓ 了解 TDD 開發流程
+    ↓ 對齊 TDD 與開發節奏
 ```
 
-### 開始開發
-
-**目標**：熟悉開發規範與工具
+### 新專案（選配：先看 Demo）
 
 ```
-CLAUDE.md（20 分鐘）
-    ↓ 了解 Standards 與自動化規則
-SUPABASE_GUIDE.md（15 分鐘）
-    ↓ 了解資料庫操作
-API_PATTERNS.md（10 分鐘）
-    ↓ 了解 Server API 設計
-DEBUGGING.md（10 分鐘）
-    ↓ 了解除錯技巧與工具
-TEAM_WORKFLOW.md（10 分鐘）
-    ↓ 了解團隊協作與 Migration 管理
+VISUAL_GUIDE.md（5 分鐘）
+    ↓ 先看整體頁面與流程
+QUICK_START.md（15 分鐘）
+    ↓ 完成環境設定
+create-clean（建議在正式開發前執行）
 ```
 
-### 進階主題（按需閱讀）
-
-| 主題           | 文件                                                                          |
-| -------------- | ----------------------------------------------------------------------------- |
-| 認證系統       | [docs/verify/AUTH_INTEGRATION.md](verify/AUTH_INTEGRATION.md)                 |
-| Migration 操作 | [docs/verify/SUPABASE_MIGRATION_GUIDE.md](verify/SUPABASE_MIGRATION_GUIDE.md) |
-| RLS 設計       | [docs/verify/RLS_BEST_PRACTICES.md](verify/RLS_BEST_PRACTICES.md)             |
-| Pinia 架構     | [docs/verify/PINIA_ARCHITECTURE.md](verify/PINIA_ARCHITECTURE.md)             |
-| 資料庫效能     | [docs/verify/DATABASE_OPTIMIZATION.md](verify/DATABASE_OPTIMIZATION.md)       |
-| 除錯技巧       | [DEBUGGING.md](DEBUGGING.md)                                                  |
-| 團隊協作       | [TEAM_WORKFLOW.md](TEAM_WORKFLOW.md)                                          |
-| 部署上線       | [DEPLOYMENT.md](DEPLOYMENT.md)                                                |
-| 疑難排解       | [TROUBLESHOOTING.md](TROUBLESHOOTING.md)                                      |
-
-### AI 協作（給想深入了解 Claude 配置的人）
+### 現有專案整合
 
 ```
-CLAUDE.md → AI Skills 區塊
-    ↓ 了解 Skills 分類與觸發機制
-CLAUDE_CODE_GUIDE.md
-    ↓ 了解 Claude Code 配置
-OPENSPEC.md
-    ↓ 了解 Spectra 工作流程
+INTEGRATION_GUIDE.md（20 分鐘）
+    ↓ 注入 Claude / Supabase 能力
+CLAUDE_CODE_GUIDE.md（按需）
+    ↓ 微調 Commands、Hooks、Skills
 ```
 
 ---
 
-## 文件關係圖
+## 進階主題（按需閱讀）
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        README.md（入口）                         │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-          ┌─────────────────────┼─────────────────────┐
-          ▼                     ▼                     ▼
-┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
-│  QUICK_START.md │   │   WORKFLOW.md   │   │   CLAUDE.md     │
-│  （如何開始）    │   │  （開發流程）    │   │  （AI 規範）     │
-└─────────────────┘   └─────────────────┘   └─────────────────┘
-          │                     │                     │
-          ▼                     ▼                     ▼
-┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
-│ SUPABASE_GUIDE  │   │  API_PATTERNS   │   │  OPENSPEC.md    │
-│ SUPABASE_MCP    │   │                 │   │  CLAUDE_CODE    │
-└─────────────────┘   └─────────────────┘   └─────────────────┘
-          │                     │                     │
-          └─────────────────────┼─────────────────────┘
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     docs/verify/（系統狀態）                     │
-│  AUTH_INTEGRATION | API_DESIGN_GUIDE | SUPABASE_MIGRATION_GUIDE │
-│  RLS_BEST_PRACTICES | PINIA_ARCHITECTURE | DATABASE_OPTIMIZATION│
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 文件層次說明
-
-### L1 入門文件
-
-快速參考、操作步驟為主。
-
-- **README.md**：專案概覽、Tech Stack、成效展示
-- **QUICK_START.md**：安裝、設定、第一次執行
-- **FIRST_CRUD.md**：動手做：15 分鐘建立第一個完整功能
-- **VISUAL_GUIDE.md**：圖解架構、資料流、部署流程
-
-### L2 指南文件
-
-深入說明、最佳實踐。
-
-- **WORKFLOW.md**：TDD 流程、Spectra、自動化
-- **SUPABASE_GUIDE.md**：Supabase 入門、RLS、Migration
-- **API_PATTERNS.md**：Server API 設計模式
-- **DEBUGGING.md**：除錯技巧、常用工具、錯誤排查流程
-- **TEAM_WORKFLOW.md**：團隊協作、分支策略、Migration 衝突解決
-- **DEPLOYMENT.md**：Cloudflare Workers 部署、CI/CD、回滾策略
-- **TROUBLESHOOTING.md**：常見問題診斷與解決方案
-
-### L3 狀態文件（docs/verify/）
-
-系統當前狀態的**單一事實來源**。
-
-- 使用**現在式**描述
-- 直接覆寫，不保留歷史
-- 與其他文件的關係：
-  - QUICK_START → 教你「**怎麼做**」
-  - docs/verify/ → 告訴你「**現在是什麼**」
-  - CLAUDE.md → 定義「**規則是什麼**」
+| 主題           | 文件                                                                                                                    |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| 認證系統       | [AUTH_INTEGRATION.md](../template/docs/verify/AUTH_INTEGRATION.md)                                                    |
+| Migration 操作 | [SUPABASE_MIGRATION_GUIDE.md](../template/docs/verify/SUPABASE_MIGRATION_GUIDE.md)                                    |
+| RLS 設計       | [RLS_BEST_PRACTICES.md](../template/docs/verify/RLS_BEST_PRACTICES.md)                                                |
+| Pinia 架構     | [PINIA_ARCHITECTURE.md](../template/docs/verify/PINIA_ARCHITECTURE.md)                                                |
+| 資料庫效能     | [DATABASE_OPTIMIZATION.md](../template/docs/verify/DATABASE_OPTIMIZATION.md)                                          |
+| 部署上線       | [DEPLOYMENT.md](../template/docs/DEPLOYMENT.md)                                                                        |
+| 疑難排解       | [TROUBLESHOOTING.md](../template/docs/TROUBLESHOOTING.md)                                                              |
 
 ---
 
 ## 快速查詢
 
-### 我想知道...
-
-| 問題                     | 答案在                                                                                                |
-| ------------------------ | ----------------------------------------------------------------------------------------------------- |
-| 專案用了哪些技術？       | [README.md](../README.md)                                                                             |
-| 怎麼開始開發？           | [QUICK_START.md](QUICK_START.md)（新專案）或 [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md)（現有專案） |
-| TDD 流程是什麼？         | [WORKFLOW.md](WORKFLOW.md)                                                                            |
-| 認證怎麼做？             | [docs/verify/AUTH_INTEGRATION.md](verify/AUTH_INTEGRATION.md)                                         |
-| Migration 怎麼建立？     | [docs/verify/SUPABASE_MIGRATION_GUIDE.md](verify/SUPABASE_MIGRATION_GUIDE.md)                         |
-| Client/Server 怎麼分工？ | [CLAUDE.md](../CLAUDE.md#-supabase-資料存取策略)                                                      |
-| Spectra 怎麼用？         | [OPENSPEC.md](OPENSPEC.md)                                                                            |
-| 常見問題？               | [FAQ.md](FAQ.md)                                                                                      |
+| 問題                     | 答案在                                                                                                             |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| 專案用了哪些技術？       | [README.md](../README.md)                                                                                          |
+| 怎麼開始開發？           | [QUICK_START.md](QUICK_START.md)（新專案）或 [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md)（現有專案）            |
+| TDD 流程是什麼？         | [WORKFLOW.md](../template/docs/WORKFLOW.md)                                                                        |
+| 認證怎麼做？             | [AUTH_INTEGRATION.md](../template/docs/verify/AUTH_INTEGRATION.md)                                                |
+| Migration 怎麼建立？     | [SUPABASE_MIGRATION_GUIDE.md](../template/docs/verify/SUPABASE_MIGRATION_GUIDE.md)                                |
+| Client/Server 怎麼分工？ | [CLAUDE.md](../CLAUDE.md)                                                                                          |
+| Spectra 怎麼用？         | [OPENSPEC.md](../template/docs/OPENSPEC.md)                                                                        |
+| 常見問題？               | [FAQ.md](../template/docs/FAQ.md)                                                                                  |
 
 ---
 
 ## 下一步
 
-1. **新手**：從 [QUICK_START.md](QUICK_START.md) 開始，接著做 [FIRST_CRUD.md](FIRST_CRUD.md) 實作練習
-2. **想了解開發流程**：閱讀 [WORKFLOW.md](WORKFLOW.md)
-3. **準備部署**：閱讀 [DEPLOYMENT.md](DEPLOYMENT.md)
-4. **有具體問題**：查看 [FAQ.md](FAQ.md) 或 [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+1. **新手**：先讀 [QUICK_START.md](QUICK_START.md)，再做 [FIRST_CRUD.md](FIRST_CRUD.md)。
+2. **要對齊開發流程**：讀 [WORKFLOW.md](../template/docs/WORKFLOW.md)。
+3. **準備部署**：讀 [DEPLOYMENT.md](../template/docs/DEPLOYMENT.md)。
+4. **遇到問題**：看 [FAQ.md](../template/docs/FAQ.md) 或 [TROUBLESHOOTING.md](../template/docs/TROUBLESHOOTING.md)。

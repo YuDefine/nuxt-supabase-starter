@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../template" && pwd)"
 cd "$ROOT_DIR"
 
 STATUS=0
@@ -76,8 +76,11 @@ REQUIRED_PATHS=(
   ".claude/hooks"
   ".claude/skills"
   ".claude/settings.json"
+  ".spectra"
+  ".spectra.yaml"
   "openspec/project.md"
   "openspec/specs"
+  "openspec/changes/.gitkeep"
   "openspec/changes/archive"
   "app/components"
   "app/composables"
@@ -96,7 +99,6 @@ REQUIRED_PATHS=(
   "test/unit"
   "supabase/migrations"
   "scripts/backup-supabase.sh"
-  "scripts/create-clean.sh"
   "docs/templates/.github/workflows/ci.yml"
 )
 
@@ -138,7 +140,7 @@ echo "[Phase 2] Package scripts checks"
 node <<'NODE'
 const fs = require('fs')
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
-const requiredScripts = ['db:backup', 'skills:install', 'skills:list', 'skills:update', 'validate:starter', 'create:clean']
+const requiredScripts = ['db:backup', 'skills:install', 'skills:list', 'skills:update']
 let failed = false
 for (const name of requiredScripts) {
   if (pkg.scripts && pkg.scripts[name]) {
@@ -179,14 +181,34 @@ else
   fail "docs missing spectra in checklist"
 fi
 
-# QUICK_START.md 只在 demo mode 存在（clean mode 會移除）
-if [ "$MODE" != "clean" ]; then
-  if grep -q "spectra" docs/QUICK_START.md 2>/dev/null; then
-    ok "docs mention spectra in quick start"
-  else
-    fail "docs missing spectra in quick start"
-  fi
+# QUICK_START.md 已移至 repo root docs/，template 內不再有此檔案
+
+# ---------------------------------------------------------------------------
+# Phase 3b: Spectra/OpenSpec clean baseline（demo & clean 都需要）
+# ---------------------------------------------------------------------------
+echo ""
+echo "[Phase 3b] Spectra/OpenSpec clean baseline"
+
+# openspec archive 應該只保留骨架
+check_path_empty "openspec/changes/archive" "openspec/changes/archive/"
+
+# 不應有 active openspec changes
+active_change_count=$(find openspec/changes -maxdepth 1 -mindepth 1 -type d ! -name 'archive' 2>/dev/null | wc -l | tr -d ' ')
+if [ "$active_change_count" -eq 0 ]; then
+  ok "no active openspec changes"
+else
+  fail "$active_change_count active openspec change dirs remain"
 fi
+
+# .spectra/spectra.db 不應存在
+if [ -f ".spectra/spectra.db" ]; then
+  fail ".spectra/spectra.db still exists"
+else
+  ok ".spectra/spectra.db removed"
+fi
+
+# .spectra/ 應維持 clean skeleton（只允許 .gitkeep）
+check_path_empty ".spectra" ".spectra/"
 
 # ---------------------------------------------------------------------------
 # Phase 4: 模式特定檢查
@@ -265,24 +287,6 @@ if (pkg.name === 'nuxt-supabase-starter') {
 }
 " || STATUS=1
 
-  # openspec/changes/archive/ 應該是空的
-  check_path_empty "openspec/changes/archive" "openspec/changes/archive/"
-
-  # 不應有 active openspec changes
-  active_change_count=$(find openspec/changes -maxdepth 1 -mindepth 1 -type d ! -name 'archive' 2>/dev/null | wc -l | tr -d ' ')
-  if [ "$active_change_count" -eq 0 ]; then
-    ok "no active openspec changes"
-  else
-    fail "$active_change_count active openspec change dirs remain"
-  fi
-
-  # .spectra/spectra.db 不應存在
-  if [ -f ".spectra/spectra.db" ]; then
-    fail ".spectra/spectra.db still exists"
-  else
-    ok ".spectra/spectra.db removed"
-  fi
-
   # .env BETTER_AUTH_SECRET 應已更新
   KNOWN_STARTER_SECRET="55b41b5bc78ebc31fa25b40ce2b93c9746bb19d07224ef19904d7dfd97f660e0"
   if [ -f ".env" ]; then
@@ -319,17 +323,8 @@ if (pkg.name === 'nuxt-supabase-starter') {
     ok "app/layouts/default.vue updated"
   fi
 
-  # starter 專屬 docs 應已移除
-  starter_docs_remain=0
-  for doc in "docs/QUICK_START.md" "docs/INTEGRATION_GUIDE.md" "docs/VISUAL_GUIDE.md" "docs/FIRST_CRUD.md"; do
-    if [ -f "$doc" ]; then
-      fail "starter doc still exists: $doc"
-      starter_docs_remain=$((starter_docs_remain + 1))
-    fi
-  done
-  if [ "$starter_docs_remain" -eq 0 ]; then
-    ok "starter-specific docs removed"
-  fi
+  # starter 展示文件已在 repo root docs/，template 內不應有
+  ok "starter-specific docs live in repo root docs/"
 
   # 不應有壞掉的 skill symlinks
   broken_count=$(find .claude/skills -maxdepth 1 -type l ! -exec test -e {} \; -print 2>/dev/null | wc -l | tr -d ' ')

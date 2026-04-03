@@ -175,16 +175,52 @@
 
 ---
 
+## 兩種使用方式（Clean / Demo）
+
+建議先走 Clean 起點直接開發你的產品；Demo 僅在你需要快速看展示流程時使用。
+
+### A. Clean 模式（推薦，持續開發）
+
+- 目的：移除 demo 頁面與示範資料，只留下持續開發需要的骨架
+- 適合：準備正式開始做自己的產品
+- 執行方式（在 repo root）：
+
+```bash
+bash scripts/create-clean.sh
+```
+
+> 此操作會移除 demo 內容，建議先 commit 或備份。
+
+Clean 後你仍會保留：layouts、middleware、server utilities、auth API、型別與設定檔等可直接延伸的基礎結構。
+
+### B. Demo 模式（選配）
+
+- 目的：快速看完整功能與頁面流
+- 適合：第一次接觸 starter、要先評估功能範圍
+- 主要入口：`/walkthrough`、`/demo`、`/auth/login`、`/profile`、`/admin/users`
+
+---
+
 ## 線上體驗
 
-啟動開發伺服器後，前往 `/walkthrough` 查看應用程式導覽：
+啟動開發伺服器後，建議先看 `/` 確認目前起點；若要看展示，再前往 `/walkthrough`：
 
 ```bash
 pnpm dev
-# 開啟 http://localhost:3000/walkthrough
+# 開啟 http://localhost:3000/
+# 選配展示：http://localhost:3000/walkthrough
 ```
 
-## 應用程式旅程
+## Clean 起點旅程（執行 create-clean 之後）
+
+| 步驟 | 頁面 | 你會看到 |
+| ---- | ---- | -------- |
+| 1    | `/`  | 乾淨首頁 — 提示你從自己的功能開始建立 |
+| 2    | —    | 其餘頁面由你依需求建立（建議先做第一個 CRUD 流程） |
+
+---
+
+## Demo 應用程式旅程（選配）
 
 | 步驟 | 頁面           | 你會看到                                   |
 | ---- | -------------- | ------------------------------------------ |

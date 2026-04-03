@@ -22,8 +22,7 @@
 #   - README.md（替換為新專案模板）
 #   - openspec/changes/（清空 active + archive）
 #   - openspec/project.md（替換為模板）
-#   - .spectra/（重置）
-#   - .gitignore（補缺項目）
+#   - .spectra/（重置為乾淨骨架）
 #
 # Infrastructure（會被保留）：
 #   - app/layouts/          — 佈局
@@ -44,7 +43,7 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../template" && pwd)"
 cd "$ROOT_DIR"
 PROJECT_NAME="$(basename "$ROOT_DIR")"
 
@@ -359,29 +358,16 @@ fi
 apply_template "openspec/project.md" "openspec/project.md"
 
 # ---------------------------------------------------------------------------
-# 18. 重置 .spectra/
+# 18. 重置 .spectra/（保留必要骨架，移除 runtime 狀態）
 # ---------------------------------------------------------------------------
 if [ -d ".spectra" ]; then
-  rm -f .spectra/spectra.db
-  rm -rf .spectra/snapshots
-  mkdir -p .spectra/snapshots
-  success "重置 .spectra/（清除 spectra.db 和 snapshots）"
+  find .spectra -mindepth 1 ! -name '.gitkeep' -exec rm -rf {} +
+  touch .spectra/.gitkeep
+  success "重置 .spectra/（保留 .gitkeep，移除 runtime 狀態）"
 else
-  info ".spectra/ 不存在，跳過"
-fi
-
-# ---------------------------------------------------------------------------
-# 19. 補充 .gitignore 缺少的項目
-# ---------------------------------------------------------------------------
-if [ -f ".gitignore" ]; then
-  if ! grep -q '\.code-review-graph/' .gitignore 2>/dev/null; then
-    echo "" >> .gitignore
-    echo "# Code Review Graph" >> .gitignore
-    echo ".code-review-graph/" >> .gitignore
-    success "新增 .code-review-graph/ 到 .gitignore"
-  else
-    info ".gitignore 已包含 .code-review-graph/"
-  fi
+  mkdir -p .spectra
+  touch .spectra/.gitkeep
+  success "建立 .spectra/ 骨架（.gitkeep）"
 fi
 
 # ---------------------------------------------------------------------------
@@ -420,11 +406,6 @@ if [ -f "docs/NEW_PROJECT_CHECKLIST.md" ]; then
   sed -i '' 's/使用本 starter 建立新專案後，請確認以下項目都已完成。/新專案建立後，請確認以下項目都已完成。/' docs/NEW_PROJECT_CHECKLIST.md
   success "更新 docs/NEW_PROJECT_CHECKLIST.md"
 fi
-# CLI_SCAFFOLD
-if [ -f "docs/verify/CLI_SCAFFOLD.md" ]; then
-  sed -i '' 's/從 starter template 建立客製化的 Nuxt 專案/建立客製化的 Nuxt 專案/' docs/verify/CLI_SCAFFOLD.md
-  success "更新 docs/verify/CLI_SCAFFOLD.md"
-fi
 # FAQ
 if [ -f "docs/FAQ.md" ]; then
   sed -i '' 's/本 [Ss]tarter 的功能/本專案的功能/g' docs/FAQ.md
@@ -432,31 +413,9 @@ if [ -f "docs/FAQ.md" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 21. 移除 starter 專屬文件
+# 21. Starter 專屬文件（已移至 repo root docs/，無需移除）
 # ---------------------------------------------------------------------------
-info "移除 starter 專屬文件..."
-starter_docs_removed=0
-STARTER_DOCS=(
-  "docs/QUICK_START.md"
-  "docs/INTEGRATION_GUIDE.md"
-  "docs/VISUAL_GUIDE.md"
-  "docs/FIRST_CRUD.md"
-  "docs/READING_GUIDE.md"
-  "docs/SKILL_UPDATE_GUIDE.md"
-  "docs/CLAUDE_CODE_GUIDE.md"
-  "docs/manual-review-archive.md"
-)
-for doc in "${STARTER_DOCS[@]}"; do
-  if [ -f "$doc" ]; then
-    rm "$doc"
-    starter_docs_removed=$((starter_docs_removed + 1))
-  fi
-done
-if [ "$starter_docs_removed" -gt 0 ]; then
-  success "移除 ${starter_docs_removed} 個 starter 專屬文件"
-else
-  info "沒有 starter 專屬文件需要移除"
-fi
+info "Starter 展示文件已在 repo root docs/，跳過"
 
 # ---------------------------------------------------------------------------
 # 21b. 移除 starter scaffolding CLI（packages/create-nuxt-starter）
