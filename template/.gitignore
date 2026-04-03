@@ -26,6 +26,9 @@ Thumbs.db
 supabase/.branches/
 supabase/.temp/
 
+# Scaffold
+.scaffold-cleanup
+
 # Testing
 coverage/
 .nuxtrc

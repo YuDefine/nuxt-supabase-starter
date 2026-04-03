@@ -10,6 +10,21 @@ echo "========================================"
 echo ""
 
 # --------------------------------------------------
+# 清除 scaffold 暫存的 starter repo（若有）
+# --------------------------------------------------
+
+if [ -f .scaffold-cleanup ]; then
+  CLEANUP_PATH=$(cat .scaffold-cleanup)
+  if [ -n "$CLEANUP_PATH" ] && [ -d "$CLEANUP_PATH" ]; then
+    echo "🧹 清除暫存的 starter repo..."
+    rm -rf "$CLEANUP_PATH"
+    echo "✅ 暫存 repo 已刪除：$CLEANUP_PATH"
+    echo ""
+  fi
+  rm -f .scaffold-cleanup
+fi
+
+# --------------------------------------------------
 # 偵測作業系統
 # --------------------------------------------------
 
