@@ -310,7 +310,7 @@ brew install supabase/tap/supabase
 
 ## 4. Better Auth 整合（選用）
 
-基本認證設定（安裝、環境變數、模組配置）請參考 [QUICK_START.md](QUICK_START.md#step-3設定環境變數)，以下僅說明現有專案整合的差異。
+基本認證設定（安裝、環境變數、模組配置）請參考 [QUICK_START.md](QUICK_START.md)，以下僅說明現有專案整合的差異。
 
 ### 4.1 建立認證配置檔
 

@@ -36,81 +36,15 @@
 
 ## 快速開始
 
-### 1. 安裝 Claude Code
+專案建立與安裝步驟請參考 **[QUICK_START.md](./QUICK_START.md)**。
+
+以下說明 Claude Code 的安裝與本範本的 AI 配置。
+
+### 安裝 Claude Code
 
 ```bash
 curl -fsSL https://claude.ai/install.sh | sh
 ```
-
-### 2. 先建立乾淨新專案（給 Claude Code 的推薦流程）
-
-最快捷（建議給無先備知識 agent）：
-
-```bash
-git clone https://github.com/YuDefine/nuxt-supabase-starter temp-starter
-cd temp-starter
-bash scripts/create-fast-project.sh temp/my-product
-```
-
-進階（自行控制 auth/with/without）：
-
-```bash
-# 1) 取得 scaffold 工具
-git clone https://github.com/YuDefine/nuxt-supabase-starter temp-starter
-cd temp-starter
-pnpm --dir template/packages/create-nuxt-starter install
-
-# 2) 直接用參數建立新專案
-pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
-  --yes \
-  --fast \
-  --auth nuxt-auth-utils \
-  --with monitoring,charts \
-  --without testing-full
-```
-
-參數規則：
-
-- 專案名稱：目標路徑最後一段（例如 temp/my-product）
-- Auth：`--auth nuxt-auth-utils`、`--auth better-auth`、`--auth none`
-- 快速預設：`--fast`（等同 `--preset fast`，會移除 testing）
-- 功能新增：`--with <feature1,feature2>`
-- 功能移除：`--without <feature1,feature2>`
-- 空白起始：`--minimal`
-
-### 3. 進入新專案並啟動 Claude Code
-
-```bash
-cd temp/my-product
-pnpm install
-claude
-```
-
-### 4. 直接貼給 Claude 的任務模板
-
-把下面內容貼進 Claude Code，可讓它自動建立你要的專案：
-
-```text
-請在目前 repo 使用 create-nuxt-starter 幫我建立新專案：
-
-- 目標路徑：temp/my-product
-- auth：better-auth
-- with：charts,monitoring,image
-- without：testing-full
-
-要求：
-1. 使用非互動命令（--yes + 參數）
-2. 建完後跑一次關鍵字掃描，確認沒有 nuxt-supabase-starter 或 demo 殘留
-3. 回報實際執行的命令與掃描結果
-```
-
-### 5. 關鍵字殘留檢查
-
-```bash
-rg -ni "nuxt[- ]supabase starter|nuxt-supabase-starter|demo" temp/my-product
-```
-
-沒有輸出代表乾淨。
 
 ---
 

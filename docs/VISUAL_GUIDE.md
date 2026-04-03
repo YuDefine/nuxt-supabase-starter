@@ -236,4 +236,3 @@ pnpm dev
 
 - [FIRST_CRUD.md](FIRST_CRUD.md) — 動手建立你的第一個功能
 - [QUICK_START.md](QUICK_START.md) — 完整環境設定
-- [READING_GUIDE.md](READING_GUIDE.md) — 文件導覽地圖
