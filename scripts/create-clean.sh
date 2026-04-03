@@ -165,7 +165,7 @@ apply_template() {
     return
   fi
   mkdir -p "$(dirname "$dest")"
-  sed "s/{{PROJECT_NAME}}/${PROJECT_NAME}/g" "$src" > "$dest"
+  sed "s/{{ *PROJECT_NAME *}}/${PROJECT_NAME}/g" "$src" > "$dest"
   success "套用模板: $2"
 }
 

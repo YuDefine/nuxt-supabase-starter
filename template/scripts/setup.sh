@@ -60,13 +60,16 @@ if ! command -v pnpm &> /dev/null; then
 fi
 echo "✅ pnpm $(pnpm -v)"
 
-# Docker（已安裝）
+# Docker / OrbStack（已安裝）
 if ! command -v docker &> /dev/null; then
-  echo "❌ 找不到 Docker，請先安裝 Docker Desktop："
+  echo "❌ 找不到 Docker，請先安裝容器執行環境："
   case "$OS" in
     macos)
+      echo "   推薦 OrbStack（輕量快速）："
+      echo "   brew install --cask orbstack"
+      echo ""
+      echo "   或 Docker Desktop："
       echo "   brew install --cask docker"
-      echo "   或前往 https://www.docker.com/products/docker-desktop/"
       ;;
     windows|wsl)
       echo "   https://www.docker.com/products/docker-desktop/"
@@ -83,12 +86,22 @@ if ! command -v docker &> /dev/null; then
   exit 1
 fi
 
-# Docker（正在執行）
+# Docker / OrbStack（正在執行）
 if ! docker info &> /dev/null; then
-  echo "❌ Docker 尚未啟動，請先啟動 Docker Desktop"
+  # 偵測已安裝的容器引擎，給出對應提示
+  if command -v orbctl &> /dev/null 2>&1; then
+    echo "❌ OrbStack 尚未啟動，請先啟動 OrbStack"
+  else
+    echo "❌ Docker 尚未啟動，請先啟動 Docker Desktop"
+  fi
   exit 1
 fi
-echo "✅ Docker 已啟動"
+# 顯示容器引擎資訊
+if command -v orbctl &> /dev/null 2>&1; then
+  echo "✅ OrbStack 已啟動"
+else
+  echo "✅ Docker 已啟動"
+fi
 
 # Supabase CLI
 if ! command -v supabase &> /dev/null; then

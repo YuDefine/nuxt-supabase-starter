@@ -58,19 +58,19 @@ pnpm dev
 
 ### 開發時間
 
-| 階段           | 時間     | 說明                                        |
-| -------------- | -------- | ------------------------------------------- |
-| Clone → 可運行 | ~15 分鐘 | `pnpm run setup` 一鍵完成                   |
-| 第一個功能     | ~20 分鐘 | 跟著 [FIRST_CRUD.md](docs/FIRST_CRUD.md)    |
+| 階段           | 時間     | 說明                                              |
+| -------------- | -------- | ------------------------------------------------- |
+| Clone → 可運行 | ~15 分鐘 | `pnpm run setup` 一鍵完成                         |
+| 第一個功能     | ~20 分鐘 | 跟著 [FIRST_CRUD.md](docs/FIRST_CRUD.md)          |
 | 部署上線       | ~30 分鐘 | 跟著 [DEPLOYMENT.md](template/docs/DEPLOYMENT.md) |
 
 ### 月費估算
 
-| 規模       | Supabase | Cloudflare | Claude Code（主力）                 | 總計 |
-| ---------- | -------- | ---------- | ----------------------------------- | ---- |
+| 規模       | Supabase | Cloudflare | Claude Code（主力）                   | 總計                 |
+| ---------- | -------- | ---------- | ------------------------------------- | -------------------- |
 | 開發 / MVP | 免費     | 免費       | Max 5x（$100 級）/ Max 20x（$200 級） | **~$100~$200 級/月** |
 | 小型產品   | Pro $25  | $5         | Max 5x（$100 級）/ Max 20x（$200 級） | **~$150~$300 級/月** |
-| 成長期     | Pro $25+ | $5+        | Max 5x（$100 級）/ Max 20x（$200 級） | **~$250+ 級/月** |
+| 成長期     | Pro $25+ | $5+        | Max 5x（$100 級）/ Max 20x（$200 級） | **~$250+ 級/月**     |
 
 > 以上為去敏感化後的量級估算，實際費用會依地區、實際流量、用量尖峰與方案調整而變動。
 
@@ -135,41 +135,41 @@ Nuxt 4 + Vue 3 + TypeScript + Supabase + Nuxt UI + Tailwind CSS + Pinia + Better
 
 **不知道從哪開始？** 參考 [文件導讀指南](docs/READING_GUIDE.md)。
 
-| 我想要...               | 閱讀這份                                                    |
-| ----------------------- | ----------------------------------------------------------- |
-| 新專案快速開始           | [QUICK_START.md](docs/QUICK_START.md)                       |
-| 現有專案整合配置         | [INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md)           |
-| 了解開發流程             | [WORKFLOW.md](template/docs/WORKFLOW.md)                    |
-| 查詢常見問題             | [FAQ.md](template/docs/FAQ.md)                              |
-| 了解 AI 配置             | [CLAUDE_CODE_GUIDE.md](docs/CLAUDE_CODE_GUIDE.md)           |
-| 查閱系統狀態             | [docs/verify/](template/docs/verify/)                       |
+| 我想要...        | 閱讀這份                                          |
+| ---------------- | ------------------------------------------------- |
+| 新專案快速開始   | [QUICK_START.md](docs/QUICK_START.md)             |
+| 現有專案整合配置 | [INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md) |
+| 了解開發流程     | [WORKFLOW.md](template/docs/WORKFLOW.md)          |
+| 查詢常見問題     | [FAQ.md](template/docs/FAQ.md)                    |
+| 了解 AI 配置     | [CLAUDE_CODE_GUIDE.md](docs/CLAUDE_CODE_GUIDE.md) |
+| 查閱系統狀態     | [docs/verify/](template/docs/verify/)             |
 
 <details>
 <summary>完整文件清單</summary>
 
 **Starter 展示文件**（`docs/`）
 
-| 文件 | 說明 |
-| ---- | ---- |
-| [QUICK_START.md](docs/QUICK_START.md) | 新專案安裝與設定步驟 |
-| [INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md) | 現有專案整合 Claude/Supabase |
-| [FIRST_CRUD.md](docs/FIRST_CRUD.md) | 第一個 CRUD 功能教學 |
-| [VISUAL_GUIDE.md](docs/VISUAL_GUIDE.md) | 視覺化系統導覽 |
-| [READING_GUIDE.md](docs/READING_GUIDE.md) | 文件分類與閱讀順序 |
-| [SKILL_UPDATE_GUIDE.md](docs/SKILL_UPDATE_GUIDE.md) | Skills 更新指南 |
-| [CLAUDE_CODE_GUIDE.md](docs/CLAUDE_CODE_GUIDE.md) | Claude Code 配置指南 |
+| 文件                                                | 說明                         |
+| --------------------------------------------------- | ---------------------------- |
+| [QUICK_START.md](docs/QUICK_START.md)               | 新專案安裝與設定步驟         |
+| [INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md)   | 現有專案整合 Claude/Supabase |
+| [FIRST_CRUD.md](docs/FIRST_CRUD.md)                 | 第一個 CRUD 功能教學         |
+| [VISUAL_GUIDE.md](docs/VISUAL_GUIDE.md)             | 視覺化系統導覽               |
+| [READING_GUIDE.md](docs/READING_GUIDE.md)           | 文件分類與閱讀順序           |
+| [SKILL_UPDATE_GUIDE.md](docs/SKILL_UPDATE_GUIDE.md) | Skills 更新指南              |
+| [CLAUDE_CODE_GUIDE.md](docs/CLAUDE_CODE_GUIDE.md)   | Claude Code 配置指南         |
 
 **開發知識文件**（`template/docs/`）
 
-| 文件 | 說明 |
-| ---- | ---- |
-| [WORKFLOW.md](template/docs/WORKFLOW.md) | TDD、自動化檢查、Git 規範 |
-| [FAQ.md](template/docs/FAQ.md) | 常見疑問集 |
-| [DEPLOYMENT.md](template/docs/DEPLOYMENT.md) | 部署指南 |
-| [TECH_STACK.md](docs/TECH_STACK.md) | 技術棧與選型理由 |
-| [SUPABASE_GUIDE.md](docs/SUPABASE_GUIDE.md) | Supabase 入門與 RLS 詳解 |
-| [API_PATTERNS.md](template/docs/API_PATTERNS.md) | Server API 設計模式 |
-| [OPENSPEC.md](template/docs/OPENSPEC.md) | Spectra 工作流程詳解 |
+| 文件                                             | 說明                      |
+| ------------------------------------------------ | ------------------------- |
+| [WORKFLOW.md](template/docs/WORKFLOW.md)         | TDD、自動化檢查、Git 規範 |
+| [FAQ.md](template/docs/FAQ.md)                   | 常見疑問集                |
+| [DEPLOYMENT.md](template/docs/DEPLOYMENT.md)     | 部署指南                  |
+| [TECH_STACK.md](docs/TECH_STACK.md)              | 技術棧與選型理由          |
+| [SUPABASE_GUIDE.md](docs/SUPABASE_GUIDE.md)      | Supabase 入門與 RLS 詳解  |
+| [API_PATTERNS.md](template/docs/API_PATTERNS.md) | Server API 設計模式       |
+| [OPENSPEC.md](template/docs/OPENSPEC.md)         | Spectra 工作流程詳解      |
 
 </details>
 

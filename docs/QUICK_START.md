@@ -10,12 +10,27 @@
 
 這條流程會直接輸出可開發的乾淨專案，支援：
 
-- 指定專案名稱
+- 互動式決定專案名稱
 - Auth 二選一（Better Auth / nuxt-auth-utils）
 - 其他功能模組選配
 - 不殘留 demo 或 Nuxt Supabase Starter 關鍵字
 
-### 最短路徑（給無先備知識的 agent）
+### 互動式（推薦）
+
+```bash
+git clone https://github.com/YuDefine/nuxt-supabase-starter
+cd nuxt-supabase-starter
+
+# 安裝 CLI 依賴（僅第一次）
+pnpm --dir template/packages/create-nuxt-starter install
+
+# 啟動互動式 scaffold — 第一步就會問你專案名稱
+pnpm --dir template/packages/create-nuxt-starter dev
+```
+
+CLI 會依序引導你填寫：專案名稱 → Auth → 資料庫 → UI → 渲染模式 → 額外功能 → 測試 → 部署目標等。
+
+### 最短路徑（給 agent 或腳本）
 
 ```bash
 git clone https://github.com/YuDefine/nuxt-supabase-starter
@@ -30,19 +45,6 @@ bash scripts/create-fast-project.sh temp/my-product
 - 自動移除 `testing-full` 以縮短建立時間
 - 建完後會自動跑一次關鍵字掃描
 
-### 互動式（給人）
-
-```bash
-git clone https://github.com/YuDefine/nuxt-supabase-starter
-cd nuxt-supabase-starter
-
-# 安裝 CLI 依賴（僅第一次）
-pnpm --dir template/packages/create-nuxt-starter install
-
-# 啟動互動式 scaffold，依選單填寫專案名稱/Auth/功能
-pnpm --dir template/packages/create-nuxt-starter dev temp/my-product
-```
-
 ### 非互動（可腳本化）
 
 ```bash
@@ -56,7 +58,7 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 
 參數說明：
 
-- 專案名稱：最後一段路徑就是專案名稱（例如 temp/my-product）
+- 專案名稱：最後一段路徑就是專案名稱（例如 `temp/my-product`）
 - Auth：`--auth nuxt-auth-utils`、`--auth better-auth`、`--auth none`
 - 快速預設：`--fast`（等同 `--preset fast`，會移除 testing）
 - 功能新增：`--with <feature1,feature2>`
