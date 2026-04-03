@@ -44,7 +44,8 @@ export function assembleProject(
   copyRules(targetDir, selectedFeatureIds)
   copyHooks(targetDir, selectedFeatureIds)
   copyCommands(targetDir, selectedFeatureIds)
-  copySettings(targetDir)
+  generateSettings(targetDir, selectedFeatureIds)
+  copyGuardSystem(targetDir)
   copyScripts(targetDir, selectedFeatureIds)
   copyWorkflows(targetDir, selectedFeatureIds)
   copyVerifyDocs(targetDir, selectedFeatureIds)
@@ -659,15 +660,189 @@ function copyCommands(targetDir: string, feats: string[]): void {
   }
 }
 
-// --- Settings ---
+// --- Settings (dynamically generated) ---
 
-function copySettings(targetDir: string): void {
+function hookEntry(filename: string, timeout: number) {
+  return {
+    command: `"$CLAUDE_PROJECT_DIR"/.claude/hooks/${filename}`,
+    timeout,
+    type: 'command' as const,
+  }
+}
+
+function generateSettings(targetDir: string, feats: string[]): void {
+  // --- hooks ---
+  const postToolUse: object[] = []
+  const preToolUse: object[] = []
+
+  // PostToolUse: database — migration gen types
+  if (has(feats, 'database')) {
+    postToolUse.push({
+      matcher: 'mcp__local-supabase__apply_migration',
+      hooks: [hookEntry('post-migration-gen-types.sh', 30)],
+    })
+  }
+
+  // PostToolUse: Edit|Write — typecheck(quality) + ui-qa(always)
+  const editWritePostHooks: object[] = []
+  if (has(feats, 'quality')) editWritePostHooks.push(hookEntry('post-edit-typecheck.sh', 90))
+  editWritePostHooks.push(hookEntry('post-edit-ui-qa.sh', 5))
+  postToolUse.push({ matcher: 'Edit|Write', hooks: editWritePostHooks })
+
+  // PostToolUse: Bash — code-review-graph (always)
+  postToolUse.push({
+    matcher: 'Bash',
+    hooks: [
+      {
+        command:
+          "jq -r '.tool_input.command' | grep -q '^git commit' && code-review-graph update 2>/dev/null || true",
+        statusMessage: 'Updating code knowledge graph...',
+        timeout: 30,
+        type: 'command',
+      },
+    ],
+  })
+
+  // PostToolUse: Skill — design inject (always)
+  postToolUse.push({
+    matcher: 'Skill',
+    hooks: [hookEntry('post-propose-design-inject.sh', 10)],
+  })
+
+  // PreToolUse: Edit|Write — knowledge search + guard
+  preToolUse.push({ matcher: 'Edit|Write', hooks: [hookEntry('knowledge-search-reminder.sh', 5)] })
+  preToolUse.push({
+    matcher: 'Edit|Write',
+    hooks: [
+      { command: 'node "$CLAUDE_PROJECT_DIR"/.claude/scripts/guard-check.mjs', type: 'command' },
+    ],
+  })
+
+  // PreToolUse: Bash — commit review (always)
+  preToolUse.push({
+    matcher: 'Bash',
+    hooks: [
+      {
+        ...hookEntry('pre-commit-review.sh', 10),
+        statusMessage: 'Checking commit authorization...',
+      },
+    ],
+  })
+
+  // PreToolUse: Skill — archive design gate (always)
+  preToolUse.push({ matcher: 'Skill', hooks: [hookEntry('pre-archive-design-gate.sh', 10)] })
+
+  // --- MCP ---
+  const enabledMcp: string[] = []
+  if (has(feats, 'database')) enabledMcp.push('local-supabase')
+
+  // --- Permissions ---
+  const allow: string[] = [
+    // Bash basics — always
+    'Bash(ls:*)',
+    'Bash(wc:*)',
+    'Bash(node:*)',
+    'Bash(head:*)',
+    'Bash(grep:*)',
+    'Bash(cat:*)',
+    'Bash(find:*)',
+    'Bash(tree:*)',
+    'Bash(echo:*)',
+    'Bash(sort:*)',
+    'Bash(jq:*)',
+    'Bash(curl:*)',
+    'Bash(test:*)',
+    'Bash(fi)',
+    'Bash(done)',
+    // pnpm — always
+    'Bash(pnpm check:*)',
+    'Bash(pnpm test:*)',
+    'Bash(pnpm lint:*)',
+    'Bash(pnpm format:*)',
+    'Bash(pnpm typecheck:*)',
+    'Bash(pnpm build:*)',
+    'Bash(pnpm dev:*)',
+    'Bash(pnpm add:*)',
+    'Bash(pnpm skills:*)',
+    // npx — always
+    'Bash(npx tsx:*)',
+    'Bash(npx nuxi:*)',
+    'Bash(npx skills:*)',
+    'Bash(npx skills add:*)',
+    'Bash(claude skills:*)',
+    // git — always
+    'Bash(git add:*)',
+    'Bash(git commit:*)',
+    'Bash(git diff:*)',
+    'Bash(git status:*)',
+    'Bash(git log:*)',
+    'Bash(git push:*)',
+    'Bash(git fetch:*)',
+    'Bash(git stash:*)',
+    'Bash(git checkout:*)',
+    'Bash(git restore:*)',
+    'Bash(git rebase:*)',
+    'Bash(git worktree:*)',
+    'Bash(gh run:*)',
+    // Web — always
+    'WebSearch',
+    'WebFetch(domain:github.com)',
+  ]
+
+  if (has(feats, 'database')) {
+    allow.push(
+      'Bash(supabase:*)',
+      'Bash(pnpm db:*)',
+      'mcp__local-supabase__list_tables',
+      'mcp__local-supabase__list_migrations',
+      'mcp__local-supabase__execute_sql',
+      'mcp__local-supabase__search_docs',
+      'mcp__local-supabase__get_advisors',
+      'mcp__local-supabase__apply_migration',
+      'WebFetch(domain:supabase.com)'
+    )
+  }
+  if (has(feats, 'ui')) {
+    allow.push('Skill(frontend-design)', 'WebFetch(domain:ui.nuxt.com)')
+  }
+  if (has(feats, 'vueuse')) allow.push('WebFetch(domain:vueuse.org)')
+  if (has(feats, 'pinia')) allow.push('WebFetch(domain:pinia-colada.esm.dev)')
+
+  // --- Assemble ---
+  const settings: Record<string, unknown> = {
+    hooks: {
+      PostToolUse: postToolUse,
+      PreToolUse: preToolUse,
+      SessionStart: [
+        {
+          hooks: [
+            {
+              ...hookEntry('init-code-graph.sh', 120),
+              statusMessage: 'Initializing code knowledge graph...',
+            },
+          ],
+        },
+      ],
+      Stop: [{ hooks: [hookEntry('stop-accumulate.sh', 5)] }],
+    },
+    includeGitInstructions: false,
+    permissions: { allow },
+  }
+  if (enabledMcp.length > 0) settings.enabledMcpjsonServers = enabledMcp
+
+  const dest = join(targetDir, '.claude')
+  mkdirSync(dest, { recursive: true })
+  writeFileSync(join(dest, 'settings.json'), JSON.stringify(settings, null, 2) + '\n')
+}
+
+// --- Guard system (always copied) ---
+
+function copyGuardSystem(targetDir: string): void {
   const starterClaude = join(STARTER_ROOT, '.claude')
   const targetClaude = join(targetDir, '.claude')
 
-  copyFilesList(starterClaude, targetClaude, ['settings.json', 'guard-state.json'])
+  copyFilesList(starterClaude, targetClaude, ['guard-state.json'])
 
-  // Guard script lives in a subdirectory
   const guardScript = join(starterClaude, 'scripts', 'guard-check.mjs')
   if (existsSync(guardScript)) {
     const targetScripts = join(targetClaude, 'scripts')
@@ -709,6 +884,9 @@ function copyVerifyDocs(targetDir: string, feats: string[]): void {
     'COMPOSABLE_DEVELOPMENT.md',
     'API_DESIGN_GUIDE.md',
     'PRODUCTION_BUG_PATTERNS.md',
+    'ENVIRONMENT_VARIABLES.md',
+    'README.md',
+    'SCREENSHOT_GUIDE.md',
   ]
   if (has(feats, 'database')) {
     files.push(
