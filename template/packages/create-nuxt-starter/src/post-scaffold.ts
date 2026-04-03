@@ -9,7 +9,10 @@ export async function postScaffold(
   invocationCwd: string,
   monorepoRoot?: string,
 ): Promise<void> {
-  const relativeTargetDir = relative(invocationCwd, targetDir) || '.'
+  // Use the user's actual cwd for the cd hint, not invocationCwd
+  // (which may differ when running inside the monorepo)
+  const userCwd = process.env.INIT_CWD?.trim() || process.env.PWD?.trim() || process.cwd()
+  const relativeTargetDir = relative(userCwd, targetDir) || '.'
 
   // 1. Install dependencies
   consola.start('正在安裝依賴套件...')
