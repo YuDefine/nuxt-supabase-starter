@@ -5,7 +5,6 @@
 ## 先看這裡（單一入口）
 
 - 快速開始：[../docs/QUICK_START.md](../docs/QUICK_START.md)
-- 文件導讀：[../docs/READING_GUIDE.md](../docs/READING_GUIDE.md)
 - 現有專案整合：[../docs/INTEGRATION_GUIDE.md](../docs/INTEGRATION_GUIDE.md)
 
 ## 推薦流程（Clean-first）

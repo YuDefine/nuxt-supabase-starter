@@ -105,8 +105,6 @@ Nuxt 4 + Vue 3 + TypeScript + Supabase + Nuxt UI + Tailwind CSS + Pinia + Better
 
 ## 文件導覽
 
-**不知道從哪開始？** 參考 [文件導讀指南](docs/READING_GUIDE.md)。
-
 | 我想要...        | 閱讀這份                                          |
 | ---------------- | ------------------------------------------------- |
 | 新專案快速開始   | [QUICK_START.md](docs/QUICK_START.md)             |
@@ -127,7 +125,6 @@ Nuxt 4 + Vue 3 + TypeScript + Supabase + Nuxt UI + Tailwind CSS + Pinia + Better
 | [INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md)   | 現有專案整合 Claude/Supabase |
 | [FIRST_CRUD.md](docs/FIRST_CRUD.md)                 | 第一個 CRUD 功能教學         |
 | [VISUAL_GUIDE.md](docs/VISUAL_GUIDE.md)             | 視覺化系統導覽               |
-| [READING_GUIDE.md](docs/READING_GUIDE.md)           | 文件分類與閱讀順序           |
 | [SKILL_UPDATE_GUIDE.md](docs/SKILL_UPDATE_GUIDE.md) | Skills 更新指南              |
 | [CLAUDE_CODE_GUIDE.md](docs/CLAUDE_CODE_GUIDE.md)   | Claude Code 配置指南         |
 
