@@ -78,7 +78,7 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
     { label: '影像最佳化 (@nuxt/image)', value: 'image' },
     { label: 'VueUse 工具庫', value: 'vueuse' },
   ]
-  const defaultExtras = ['security', 'vueuse']
+  const defaultExtras = ['charts', 'security', 'image', 'vueuse']
   const extrasRaw = await consola.prompt('額外功能？（空白鍵選擇）', {
     type: 'multiselect',
     options: extrasOptions,

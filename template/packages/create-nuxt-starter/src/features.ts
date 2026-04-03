@@ -89,7 +89,7 @@ export const featureModules: FeatureModule[] = [
     id: 'charts',
     name: '圖表',
     description: 'Nuxt Charts（Unovis）圖表元件',
-    default: false,
+    default: true,
     group: 'extras',
     packages: {
       'nuxt-charts': '^2.1.3',
@@ -146,7 +146,7 @@ export const featureModules: FeatureModule[] = [
     id: 'image',
     name: '影像最佳化',
     description: '@nuxt/image 自動圖片壓縮',
-    default: false,
+    default: true,
     group: 'extras',
     packages: {
       '@nuxt/image': '^2.0.0',
