@@ -43,7 +43,14 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/../template" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -d "$SCRIPT_DIR/../template" ]; then
+  # 在 monorepo 中執行（scripts/ 與 template/ 同層）
+  ROOT_DIR="$(cd "$SCRIPT_DIR/../template" && pwd)"
+else
+  # 在獨立專案中執行（scripts/ 已被複製進專案）
+  ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
 cd "$ROOT_DIR"
 PROJECT_NAME="$(basename "$ROOT_DIR")"
 
