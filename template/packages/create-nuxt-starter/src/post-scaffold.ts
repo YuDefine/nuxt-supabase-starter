@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { rmSync } from 'node:fs'
 import { relative } from 'node:path'
 import { consola } from 'consola'
 
@@ -6,6 +7,7 @@ export async function postScaffold(
   targetDir: string,
   projectName: string,
   invocationCwd: string,
+  monorepoRoot?: string,
 ): Promise<void> {
   const relativeTargetDir = relative(invocationCwd, targetDir) || '.'
 
@@ -33,7 +35,18 @@ export async function postScaffold(
     consola.warn('Git 初始化失敗，請手動執行。')
   }
 
-  // 3. Display next steps
+  // 3. Clean up monorepo clone (temp-starter)
+  if (monorepoRoot) {
+    consola.start('正在清除暫存的 starter repo...')
+    try {
+      rmSync(monorepoRoot, { recursive: true, force: true })
+      consola.success('暫存 repo 已刪除')
+    } catch {
+      consola.warn(`無法自動刪除 ${monorepoRoot}，請手動刪除。`)
+    }
+  }
+
+  // 4. Display next steps
   consola.log('')
   consola.box(
     [
@@ -42,8 +55,8 @@ export async function postScaffold(
       '',
       '接下來：',
       `  cd ${relativeTargetDir}`,
-      '  編輯 .env               # 補齊必要環境變數',
-      '  pnpm dev                # 啟動開發伺服器',
+      '  pnpm run setup           # 檢查環境 → 啟動 Supabase → 產生型別',
+      '  pnpm dev                 # 啟動開發伺服器',
     ].join('\n')
   )
 }

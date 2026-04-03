@@ -17,32 +17,40 @@ function isMonorepoRoot(dir: string): boolean {
   )
 }
 
-function getInvocationCwd(): string {
+function detectMonorepoRoot(): string | undefined {
   const initCwd = process.env.INIT_CWD?.trim()
-  if (initCwd && initCwd.length > 0) {
-    // When running inside the starter monorepo, resolve to the parent directory
-    // so projects are created as siblings (e.g. ../test-project), not inside the repo.
-    if (isMonorepoRoot(initCwd)) {
-      return resolve(initCwd, '..')
-    }
+  if (initCwd && isMonorepoRoot(initCwd)) {
     return initCwd
   }
 
   const shellPwd = process.env.PWD?.trim() || process.cwd()
   const normalized = shellPwd.replaceAll('\\', '/')
 
-  // When invoked via `pnpm --dir ...` or `pnpm --filter ...` in this monorepo,
-  // shell cwd points to `template/packages/create-nuxt-starter`.
-  // Shift to the parent of repo root so output lands beside the repo.
   if (normalized.endsWith('/template/packages/create-nuxt-starter')) {
-    return resolve(shellPwd, '..', '..', '..', '..')
+    const root = resolve(shellPwd, '..', '..', '..')
+    if (isMonorepoRoot(root)) return root
   }
 
   if (isMonorepoRoot(shellPwd)) {
-    return resolve(shellPwd, '..')
+    return shellPwd
   }
 
-  return shellPwd
+  return undefined
+}
+
+function getInvocationCwd(monorepoRoot: string | undefined): string {
+  // When running inside the starter monorepo, resolve to the parent directory
+  // so projects are created as siblings (e.g. ../test-project), not inside the repo.
+  if (monorepoRoot) {
+    return resolve(monorepoRoot, '..')
+  }
+
+  const initCwd = process.env.INIT_CWD?.trim()
+  if (initCwd && initCwd.length > 0) {
+    return initCwd
+  }
+
+  return process.env.PWD?.trim() || process.cwd()
 }
 
 function parseCsv(value: string | undefined): string[] {
@@ -200,7 +208,8 @@ const main = defineCommand({
     },
   },
   async run({ args }) {
-    const invocationCwd = getInvocationCwd()
+    const monorepoRoot = detectMonorepoRoot()
+    const invocationCwd = getInvocationCwd(monorepoRoot)
     const projectName = args.dir as string | undefined
     const hasCustomFlags = Boolean(
       args.auth || args.with || args.without || args.minimal || args.preset || args.fast,
@@ -268,7 +277,7 @@ const main = defineCommand({
     }
 
     // Post-scaffold
-    await postScaffold(targetDir, pkgName, invocationCwd)
+    await postScaffold(targetDir, pkgName, invocationCwd, monorepoRoot)
   },
 })
 
