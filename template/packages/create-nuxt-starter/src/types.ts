@@ -14,6 +14,7 @@ export interface FeatureModule {
     | 'deployment'
     | 'quality'
     | 'git'
+    | 'rendering'
   dependencies?: string[]
   incompatible?: string[]
   packages: Record<string, string>
@@ -26,6 +27,7 @@ export interface FeatureModule {
 export interface UserSelections {
   projectName: string
   features: string[]
+  ssr: boolean
   deploymentTarget: 'cloudflare' | 'vercel' | 'node'
   testingLevel: 'full' | 'vitest-only' | 'none'
 }

@@ -98,13 +98,25 @@ export const featureModules: FeatureModule[] = [
     templateDir: 'features/charts',
   },
 
+  // SSR
+  {
+    id: 'ssr',
+    name: 'SSR',
+    description: 'Server-Side Rendering（SEO 需要）',
+    default: false,
+    group: 'rendering',
+    packages: {},
+    templateDir: 'features/ssr',
+  },
+
   // SEO
   {
     id: 'seo',
     name: 'SEO',
     description: 'SEO 最佳化（Meta、Robots、Sitemap）',
-    default: true,
+    default: false,
     group: 'extras',
+    dependencies: ['ssr'],
     packages: {
       '@nuxtjs/seo': '^3.4.0',
     },

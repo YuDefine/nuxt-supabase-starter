@@ -128,6 +128,7 @@ function buildSelectionsFromArgs(args: {
   return {
     projectName: args.projectName,
     features,
+    ssr: features.includes('ssr'),
     deploymentTarget: inferDeploymentTarget(features),
     testingLevel: inferTestingLevel(features),
   }

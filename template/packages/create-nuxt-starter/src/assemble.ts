@@ -231,6 +231,10 @@ export function generateNuxtConfig(targetDir: string, selectedFeatureIds: string
   const modulesStr = modules.map((m) => `    '${m}',`).join("\n");
   config = config.replace("    // __MODULES__", modulesStr);
 
+  // SSR mode
+  const ssrEnabled = selectedFeatureIds.includes('ssr');
+  config = config.replace('ssr: false', `ssr: ${ssrEnabled}`);
+
   // Runtime config
   const runtimeLines: string[] = [];
   const publicLines: string[] = [];
@@ -389,6 +393,15 @@ export function generateEnvExample(targetDir: string, selectedFeatureIds: string
   const generatedValues: Record<string, string> = {};
   const shouldGenerateSessionPassword =
     selectedFeatureIds.includes("auth-nuxt-utils") || selectedFeatureIds.includes("auth-better-auth");
+
+  // Supabase CLI 標準 local dev 預設值（公開 demo JWT，非 secret）
+  if (selectedFeatureIds.includes("database")) {
+    generatedValues.SUPABASE_URL = "http://127.0.0.1:54321";
+    generatedValues.SUPABASE_KEY =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
+    generatedValues.SUPABASE_SECRET_KEY =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
+  }
 
   if (selectedFeatureIds.includes("auth-better-auth")) {
     generatedValues.BETTER_AUTH_SECRET = randomBytes(32).toString("base64url");

@@ -10,7 +10,7 @@ export default defineNuxtConfig({
     '@nuxt/test-utils/module',
     '@nuxt/image',
     '@nuxtjs/supabase',
-    '@nuxtjs/seo',
+
     '@pinia/nuxt',
     '@vueuse/nuxt',
     '@sentry/nuxt/module',
@@ -145,19 +145,6 @@ export default defineNuxtConfig({
         },
       ],
     },
-  },
-
-  // @nuxtjs/seo: 網站基礎 SEO 設定
-  site: {
-    url: process.env.NUXT_PUBLIC_SITE_URL || 'http://localhost:3000',
-    name: 'Nuxt Supabase Starter',
-    description: 'Production-ready Nuxt + Supabase starter template',
-    defaultLocale: 'zh-TW',
-  },
-
-  // Robots: 阻擋搜尋引擎爬取敏感路徑
-  robots: {
-    disallow: ['/auth/', '/api/'],
   },
 
   // nuxt-security: OWASP 安全性 headers + rate limiting + CSRF

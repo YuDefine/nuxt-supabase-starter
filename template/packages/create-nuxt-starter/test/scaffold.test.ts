@@ -47,9 +47,11 @@ describe('scaffold: base-only (no features)', () => {
 
 describe('scaffold: all features', () => {
   it('produces project with all modules', () => {
-    const selections = getDefaultSelections('full-project')
+    const defaults = getDefaultSelections('full-project')
+    // Add SSR + SEO (not in defaults since SSR is off by default)
+    const features = resolveFeatureDependencies([...defaults.features, 'ssr', 'seo'])
     const targetDir = join(TEST_DIR, 'full-project')
-    assembleProject(targetDir, selections.features, 'full-project')
+    assembleProject(targetDir, features, 'full-project')
 
     const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf-8'))
     expect(pkg.dependencies['@nuxt/ui']).toBeDefined()
@@ -66,6 +68,7 @@ describe('scaffold: all features', () => {
     expect(config).toContain('@nuxt/ui')
     expect(config).toContain('nuxt-auth-utils')
     expect(config).toContain('@nuxtjs/supabase')
+    expect(config).toContain('ssr: true')
 
     // Auth pages exist
     expect(existsSync(join(targetDir, 'app', 'pages', 'auth', 'login.vue'))).toBe(true)
@@ -100,6 +103,42 @@ describe('non-interactive mode', () => {
     expect(selections.features).toContain('ui')
     expect(selections.features).toContain('deploy-cloudflare')
     expect(selections.deploymentTarget).toBe('cloudflare')
+    expect(selections.ssr).toBe(false)
+    // SEO not in defaults because SSR is off by default
+    expect(selections.features).not.toContain('seo')
+  })
+})
+
+describe('SSR and SEO coupling', () => {
+  it('ssr: false 時不應包含 @nuxtjs/seo', () => {
+    const targetDir = join(TEST_DIR, 'spa-no-seo')
+    assembleProject(targetDir, ['ui'], 'spa-no-seo')
+
+    const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf-8'))
+    expect(pkg.dependencies?.['@nuxtjs/seo']).toBeUndefined()
+
+    const config = readFileSync(join(targetDir, 'nuxt.config.ts'), 'utf-8')
+    expect(config).toContain('ssr: false')
+    expect(config).not.toContain('@nuxtjs/seo')
+  })
+
+  it('ssr: true 時 nuxt.config 包含 ssr: true 和 @nuxtjs/seo', () => {
+    const features = resolveFeatureDependencies(['ssr', 'seo'])
+    const targetDir = join(TEST_DIR, 'ssr-with-seo')
+    assembleProject(targetDir, features, 'ssr-with-seo')
+
+    const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf-8'))
+    expect(pkg.dependencies['@nuxtjs/seo']).toBeDefined()
+
+    const config = readFileSync(join(targetDir, 'nuxt.config.ts'), 'utf-8')
+    expect(config).toContain('ssr: true')
+    expect(config).toContain('@nuxtjs/seo')
+  })
+
+  it('seo 自動拉入 ssr dependency', () => {
+    const resolved = resolveFeatureDependencies(['seo'])
+    expect(resolved).toContain('seo')
+    expect(resolved).toContain('ssr')
   })
 })
 

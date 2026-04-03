@@ -57,15 +57,28 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
 
   if (typeof uiChoice === 'symbol') process.exit(0)
 
-  // 5. Extras (multiselect)
+  // 5. Rendering mode
+  const renderingChoice = (await consola.prompt('渲染模式？', {
+    type: 'select',
+    options: [
+      { label: 'SPA（ssr: false）— 預設', value: 'spa' },
+      { label: 'SSR（ssr: true）— 需要 Node.js 或 Workers 環境', value: 'ssr' },
+    ],
+  })) as string
+
+  if (typeof renderingChoice === 'symbol') process.exit(0)
+
+  const ssrEnabled = renderingChoice === 'ssr'
+
+  // 6. Extras (multiselect)
   const extrasOptions = [
     { label: '圖表 (nuxt-charts)', value: 'charts' },
-    { label: 'SEO (@nuxtjs/seo)', value: 'seo' },
+    { label: 'SEO (@nuxtjs/seo)（需要 SSR）', value: 'seo' },
     { label: '安全性 Headers (nuxt-security)', value: 'security' },
     { label: '影像最佳化 (@nuxt/image)', value: 'image' },
     { label: 'VueUse 工具庫', value: 'vueuse' },
   ]
-  const defaultExtras = ['seo', 'security', 'vueuse']
+  const defaultExtras = ['security', 'vueuse']
   const extrasRaw = await consola.prompt('額外功能？（空白鍵選擇）', {
     type: 'multiselect',
     options: extrasOptions,
@@ -156,6 +169,7 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
 
   // Collect features
   const features: string[] = []
+  if (ssrEnabled) features.push('ssr')
   if (authChoice !== 'none') features.push(authChoice)
   if (dbChoice !== 'none') features.push(dbChoice)
   if (uiChoice !== 'none') features.push(uiChoice)
@@ -181,6 +195,7 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
   return {
     projectName,
     features: resolved,
+    ssr: ssrEnabled,
     deploymentTarget: deployChoice,
     testingLevel: testingChoice,
   }
@@ -215,9 +230,11 @@ export function getDefaultSelections(projectName: string): UserSelections {
   if (!defaults.some((id) => id.startsWith('deploy-'))) {
     defaults.push('deploy-cloudflare')
   }
+  const features = resolveFeatureDependencies(defaults)
   return {
     projectName,
-    features: resolveFeatureDependencies(defaults),
+    features,
+    ssr: features.includes('ssr'),
     deploymentTarget: 'cloudflare',
     testingLevel: 'full',
   }
