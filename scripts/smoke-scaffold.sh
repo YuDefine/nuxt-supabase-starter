@@ -58,8 +58,10 @@ scan_placeholders() {
       --glob '!.git/**' \
       --glob '!.nuxt/**' \
       --glob '!coverage/**' \
+      --glob '!.claude/skills/**' \
       --glob '!pnpm-lock.yaml' \
       --glob '!README.md' \
+      --glob '!.scaffold-cleanup' \
       || true
   else
     grep -RInE "$pattern" "$target" \
@@ -67,8 +69,10 @@ scan_placeholders() {
       --exclude-dir=.git \
       --exclude-dir=.nuxt \
       --exclude-dir=coverage \
+      --exclude-dir=.claude/skills \
       --exclude=pnpm-lock.yaml \
       --exclude=README.md \
+      --exclude=.scaffold-cleanup \
       || true
   fi
 }
