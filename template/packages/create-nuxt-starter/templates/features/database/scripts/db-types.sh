@@ -8,6 +8,8 @@ OUTPUT_FILE="$(dirname "$0")/../app/types/database.types.ts"
 TMP_FILE="$(mktemp)"
 trap 'rm -f "$TMP_FILE"' EXIT
 
+mkdir -p "$(dirname "$OUTPUT_FILE")"
+
 if is_remote; then
   require_ssh
   echo "Generating types from $DEV_SSH_HOST..."
