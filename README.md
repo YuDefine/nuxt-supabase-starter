@@ -2,8 +2,6 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Production-ready Nuxt 4 + Supabase starter template with Cookie-based auth, RLS, and spec-driven development.
-
 ---
 
 ## 這是什麼？
@@ -68,15 +66,30 @@ pnpm dev
 
 ### 月費估算
 
-| 規模       | Supabase | Cloudflare | 總計          |
-| ---------- | -------- | ---------- | ------------- |
-| 開發 / MVP | 免費     | 免費       | **$0**        |
-| 小型產品   | Pro $25  | $5         | **~$30/月**   |
-| 成長期     | Pro $25+ | $5+        | **~$100+/月** |
+| 規模       | Supabase | Cloudflare | Claude Code（主力）                 | 總計 |
+| ---------- | -------- | ---------- | ----------------------------------- | ---- |
+| 開發 / MVP | 免費     | 免費       | Max 5x（$100 級）/ Max 20x（$200 級） | **~$100~$200 級/月** |
+| 小型產品   | Pro $25  | $5         | Max 5x（$100 級）/ Max 20x（$200 級） | **~$150~$300 級/月** |
+| 成長期     | Pro $25+ | $5+        | Max 5x（$100 級）/ Max 20x（$200 級） | **~$250+ 級/月** |
+
+> 以上為去敏感化後的量級估算，實際費用會依地區、實際流量、用量尖峰與方案調整而變動。
 
 > 免費方案包含：500MB 資料庫、5GB 頻寬、10 萬次 Workers 請求/天。對大多數 MVP 足夠。
 >
 > Supabase 是開源的，可以免費 [Self-host](template/docs/verify/SELF_HOSTED_SUPABASE.md) 在自己的伺服器上，不受 Cloud 免費方案限制。
+>
+> 本專案以 Claude Code 作為主力開發模式，最低建議 Max 5x 等級，推薦 Max 20x 等級。方案細節可參考 [CLAUDE_CODE_GUIDE.md](docs/CLAUDE_CODE_GUIDE.md)。
+
+### 效率實證（去敏感化）
+
+以同技術棧的實戰專案為例，在約 5 個月的開發週期中，達到：
+
+- 提交頻率：千筆級提交、接近每日高頻更新
+- 版本節奏：百次級發布，維持持續交付
+- 系統規模：API/資料庫 migration 為數百檔級，頁面為數十檔級
+- 品質覆蓋：測試與文件皆達百份級，非一次性 Demo 產物
+
+這代表這套「Claude Code 主導 + Nuxt + Supabase」流程，在真實專案中能同時維持開發速度與可維護性。
 
 ---
 
@@ -176,9 +189,9 @@ pnpm --filter create-nuxt-starter dev -- /path/to/my-app --yes
 
 ## 常見問題
 
-**Q: 我需要付費嗎？** 本地開發完全免費。Supabase 免費方案：500MB 資料庫、50K 月活躍使用者。
+**Q: 我需要付費嗎？** 若依本專案推薦流程（Claude Code 主力開發），建議至少預算 Claude Code Max 5x（$100/月）；基礎雲端成本可從 Supabase/Cloudflare 免費方案起步。
 
-**Q: 我可以不用 Claude Code 嗎？** 可以。`.claude/` 配置是可選的，核心的 Nuxt + Supabase 結構不依賴任何 AI 工具。
+**Q: 我可以不用 Claude Code 嗎？** 技術上可以，但不建議。本專案的流程與效率設計是以 Claude Code 為主力前提。
 
 **Q: 如何部署到 Production？** 在 [Supabase Dashboard](https://supabase.com/dashboard) 建立專案 → `supabase link` → `supabase db push` → 部署到 Cloudflare Workers。
 
