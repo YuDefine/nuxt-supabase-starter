@@ -32,10 +32,8 @@ esac
 
 if [[ "$TARGET_PATH" = /* ]]; then
   TARGET_DIR="$TARGET_PATH"
-  TARGET_ARG="$TARGET_PATH"
 else
   TARGET_DIR="$ROOT_DIR/$TARGET_PATH"
-  TARGET_ARG="$TARGET_PATH"
 fi
 
 if [[ -e "$TARGET_DIR" ]]; then
@@ -53,7 +51,7 @@ fi
 
 echo "[2/3] scaffold project (fast profile)"
 node "$CLI_DIST" \
-  "$TARGET_ARG" \
+  "$TARGET_DIR" \
   --yes \
   --fast \
   --auth "$AUTH_MODE"

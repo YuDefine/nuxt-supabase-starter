@@ -10,9 +10,21 @@ import { postScaffold } from './post-scaffold'
 
 type CliAuth = 'nuxt-auth-utils' | 'better-auth' | 'none'
 
+function isMonorepoRoot(dir: string): boolean {
+  return (
+    existsSync(resolve(dir, 'template/packages/create-nuxt-starter'))
+    && existsSync(resolve(dir, 'scripts/create-clean.sh'))
+  )
+}
+
 function getInvocationCwd(): string {
   const initCwd = process.env.INIT_CWD?.trim()
   if (initCwd && initCwd.length > 0) {
+    // When running inside the starter monorepo, resolve to the parent directory
+    // so projects are created as siblings (e.g. ../test-project), not inside the repo.
+    if (isMonorepoRoot(initCwd)) {
+      return resolve(initCwd, '..')
+    }
     return initCwd
   }
 
@@ -21,9 +33,13 @@ function getInvocationCwd(): string {
 
   // When invoked via `pnpm --dir ...` or `pnpm --filter ...` in this monorepo,
   // shell cwd points to `template/packages/create-nuxt-starter`.
-  // Shift back to repo root so relative output paths (e.g. temp/my-app) match docs.
+  // Shift to the parent of repo root so output lands beside the repo.
   if (normalized.endsWith('/template/packages/create-nuxt-starter')) {
-    return resolve(shellPwd, '..', '..', '..')
+    return resolve(shellPwd, '..', '..', '..', '..')
+  }
+
+  if (isMonorepoRoot(shellPwd)) {
+    return resolve(shellPwd, '..')
   }
 
   return shellPwd
