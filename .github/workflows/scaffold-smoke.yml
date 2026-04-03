@@ -1,0 +1,38 @@
+name: scaffold-smoke
+
+on:
+  pull_request:
+    paths:
+      - scripts/smoke-scaffold.sh
+      - docs/QUICK_START.md
+      - docs/CLAUDE_CODE_GUIDE.md
+      - docs/CLI_SCAFFOLD.md
+      - template/packages/create-nuxt-starter/**
+      - template/scripts/templates/github/.github/workflows/**
+  push:
+    branches:
+      - main
+    paths:
+      - scripts/smoke-scaffold.sh
+      - template/packages/create-nuxt-starter/**
+      - template/scripts/templates/github/.github/workflows/**
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Run scaffold smoke test
+        run: bash scripts/smoke-scaffold.sh temp/ci-scaffold-smoke

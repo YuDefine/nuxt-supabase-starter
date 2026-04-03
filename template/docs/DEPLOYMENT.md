@@ -275,12 +275,12 @@ CI workflow 的 `database` job 會自動推送 Migration，需要額外設定：
 
 ## Step 4：CI/CD Workflow
 
-專案提供 GitHub Actions workflow 範本，位於 `docs/templates/.github/workflows/`。
+專案提供 GitHub Actions workflow 範本，位於 `scripts/templates/github/.github/workflows/`。
 
 建立新專案後，將範本複製到 `.github/workflows/`：
 
 ```bash
-cp -r docs/templates/.github .github
+cp -r scripts/templates/github/.github .github
 ```
 
 ### CI（`ci.yml`）

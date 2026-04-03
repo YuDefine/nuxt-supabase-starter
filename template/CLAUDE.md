@@ -86,7 +86,7 @@ supabase gen types typescript --local > app/types/database.types.ts  # Generate 
 新增環境變數時：
 
 1. 在 GitHub repo → Settings → Secrets and variables → Actions 新增
-2. 確認 `docs/templates/.github/workflows/` 中的部署 workflow 有正確傳遞該變數
+2. 確認 `scripts/templates/github/.github/workflows/` 中的部署 workflow 有正確傳遞該變數
 
 ## Automation Triggers
 

@@ -2,7 +2,7 @@
   definePageMeta({ layout: 'auth', auth: false })
 
   const { signIn } = useUserSession()
-  const { parseError } = useAuthError()
+  const { parseAuthError } = useAuthError()
   const email = ref('')
   const password = ref('')
   const loading = ref(false)
@@ -15,7 +15,7 @@
       await signIn.email({ email: email.value, password: password.value })
       await navigateTo('/')
     } catch (e: unknown) {
-      errorMessage.value = parseError(e)
+      errorMessage.value = parseAuthError(e)
     } finally {
       loading.value = false
     }
