@@ -1,0 +1,81 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build
+.nuxt/
+.output/
+dist/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Supabase
+supabase/.branches/
+supabase/.temp/
+
+# Testing
+coverage/
+.nuxtrc
+
+# Screenshots (browser-use)
+temp/
+
+# Spectra runtime state (keep .spectra.yaml and folder skeleton)
+.spectra/spectra.db
+.spectra/snapshots/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Claude Code (local settings)
+.claude/settings.local.json
+
+# Legacy skills directory (replaced by .claude/skills/)
+.agents/
+
+# Third-party skills (installed via scripts/install-skills.sh)
+# Only project-specific skills (pinia-store, server-api, supabase-*, spectra-*) are tracked
+.claude/skills/contributing/
+.claude/skills/create-evlog-*/
+.claude/skills/document-writer/
+.claude/skills/find-skills/
+.claude/skills/motion/
+.claude/skills/nuxt/
+.claude/skills/nuxt-better-auth/
+.claude/skills/nuxt-content/
+.claude/skills/nuxt-modules/
+.claude/skills/nuxt-ui/
+.claude/skills/nuxthub/
+.claude/skills/pinia/
+.claude/skills/reka-ui/
+.claude/skills/review-logging-patterns/
+.claude/skills/supabase-postgres-best-practices/
+.claude/skills/test-driven-development/
+.claude/skills/ts-library/
+.claude/skills/vitest/
+.claude/skills/vitepress/
+.claude/skills/vue/
+.claude/skills/vue-best-practices/
+.claude/skills/vue-testing-best-practices/
+.claude/skills/vueuse/
+.claude/skills/vueuse-functions/
+.claude/skills/versions.json
+
+# TypeScript
+*.tsbuildinfo

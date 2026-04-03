@@ -1,6 +1,10 @@
-# Nuxt + Supabase 快速開發範本
+# Nuxt + Supabase Starter
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+Production-ready Nuxt 4 + Supabase starter template with Cookie-based auth, RLS, and spec-driven development.
+
+---
 
 ## 這是什麼？
 
@@ -23,11 +27,32 @@
 ```bash
 git clone https://github.com/YuDefine/nuxt-supabase-starter my-project
 cd my-project
+bash scripts/create-clean.sh
+cd template
+pnpm install
 pnpm run setup    # 檢查環境 → 安裝依賴 → 啟動 Supabase → 產生型別
-pnpm dev      # 開啟 http://localhost:3000
+pnpm dev          # 開啟 http://localhost:3000
 ```
 
-> 📖 完整步驟：[QUICK_START.md](docs/QUICK_START.md) | 整合至現有專案：[INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md)
+> 完整步驟：[QUICK_START.md](docs/QUICK_START.md) | 整合至現有專案：[INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md)
+
+---
+
+## 推薦使用方式：Clean 優先，Demo 選配
+
+預設建議是先把專案切到乾淨開發起點，再開始做自己的功能；Demo 只在你需要快速看展示流程時使用。
+
+```bash
+# 目前在 my-project
+bash scripts/create-clean.sh
+cd template
+pnpm dev
+```
+
+- Clean 路徑：直接進入可持續開發骨架（推薦）
+- Demo 路徑：先看展示頁面，再切回 Clean
+
+> 視覺路徑參考：[VISUAL_GUIDE.md](docs/VISUAL_GUIDE.md)
 
 ---
 
@@ -35,11 +60,11 @@ pnpm dev      # 開啟 http://localhost:3000
 
 ### 開發時間
 
-| 階段           | 時間     | 說明                                     |
-| -------------- | -------- | ---------------------------------------- |
-| Clone → 可運行 | ~15 分鐘 | `pnpm run setup` 一鍵完成                |
-| 第一個功能     | ~20 分鐘 | 跟著 [FIRST_CRUD.md](docs/FIRST_CRUD.md) |
-| 部署上線       | ~30 分鐘 | 跟著 [DEPLOYMENT.md](docs/DEPLOYMENT.md) |
+| 階段           | 時間     | 說明                                        |
+| -------------- | -------- | ------------------------------------------- |
+| Clone → 可運行 | ~15 分鐘 | `pnpm run setup` 一鍵完成                   |
+| 第一個功能     | ~20 分鐘 | 跟著 [FIRST_CRUD.md](docs/FIRST_CRUD.md)    |
+| 部署上線       | ~30 分鐘 | 跟著 [DEPLOYMENT.md](template/docs/DEPLOYMENT.md) |
 
 ### 月費估算
 
@@ -51,7 +76,7 @@ pnpm dev      # 開啟 http://localhost:3000
 
 > 免費方案包含：500MB 資料庫、5GB 頻寬、10 萬次 Workers 請求/天。對大多數 MVP 足夠。
 >
-> Supabase 是開源的，可以免費 [Self-host](docs/verify/SELF_HOSTED_SUPABASE.md) 在自己的伺服器上，不受 Cloud 免費方案限制。
+> Supabase 是開源的，可以免費 [Self-host](template/docs/verify/SELF_HOSTED_SUPABASE.md) 在自己的伺服器上，不受 Cloud 免費方案限制。
 
 ---
 
@@ -70,112 +95,94 @@ Nuxt 4 + Vue 3 + TypeScript + Supabase + Nuxt UI + Tailwind CSS + Pinia + Better
 | 部署   | Cloudflare Workers                 |
 | 品質   | Vite+ (OXLint + OXFmt + Hooks)     |
 
-> 📖 完整技術棧與選型理由：[TECH_STACK.md](docs/TECH_STACK.md)
+> 完整技術棧與選型理由：[TECH_STACK.md](docs/TECH_STACK.md)
+
+---
+
+## 專案結構
+
+```
+├── template/                         # Nuxt + Supabase starter template
+│   ├── app/                          # Frontend (pages, components, composables)
+│   ├── server/                       # Backend (API, utils, plugins)
+│   ├── supabase/                     # Database (migrations, seed, config)
+│   ├── packages/create-nuxt-starter/ # CLI scaffolding tool
+│   ├── docs/                         # 開發知識文件
+│   └── .claude/                      # Claude Code 配置
+├── docs/                             # Starter 展示文件
+├── scripts/                          # Meta 維護腳本
+├── README.md
+├── CLAUDE.md
+└── LICENSE
+```
 
 ---
 
 ## 文件導覽
 
-**不知道從哪開始？** 參考 [文件導讀指南](./docs/READING_GUIDE.md)。
+**不知道從哪開始？** 參考 [文件導讀指南](docs/READING_GUIDE.md)。
 
-| 我想要...               | 閱讀這份                                            |
-| ----------------------- | --------------------------------------------------- |
-| 🆕 **新專案**快速開始   | [QUICK_START.md](./docs/QUICK_START.md)             |
-| 🔧 **現有專案**整合配置 | [INTEGRATION_GUIDE.md](./docs/INTEGRATION_GUIDE.md) |
-| 了解開發流程            | [WORKFLOW.md](./docs/WORKFLOW.md)                   |
-| 查詢常見問題            | [FAQ.md](./docs/FAQ.md)                             |
-| 了解 AI 配置            | [CLAUDE_CODE_GUIDE.md](./docs/CLAUDE_CODE_GUIDE.md) |
-| 查閱系統狀態            | [docs/verify/](./docs/verify/)                      |
+| 我想要...               | 閱讀這份                                                    |
+| ----------------------- | ----------------------------------------------------------- |
+| 新專案快速開始           | [QUICK_START.md](docs/QUICK_START.md)                       |
+| 現有專案整合配置         | [INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md)           |
+| 了解開發流程             | [WORKFLOW.md](template/docs/WORKFLOW.md)                    |
+| 查詢常見問題             | [FAQ.md](template/docs/FAQ.md)                              |
+| 了解 AI 配置             | [CLAUDE_CODE_GUIDE.md](docs/CLAUDE_CODE_GUIDE.md)           |
+| 查閱系統狀態             | [docs/verify/](template/docs/verify/)                       |
 
 <details>
 <summary>完整文件清單</summary>
 
-| 文件                                                         | 說明                               | 適合閱讀時機       |
-| ------------------------------------------------------------ | ---------------------------------- | ------------------ |
-| **[README.md](./README.md)**                                 | Tech Stack、核心概念               | 剛接觸這個範本     |
-| **[docs/READING_GUIDE.md](./docs/READING_GUIDE.md)**         | 文件分類與閱讀順序                 | 不知道從哪開始     |
-| **[docs/FAQ.md](./docs/FAQ.md)**                             | 常見疑問集                         | 有具體問題         |
-| **[docs/QUICK_START.md](./docs/QUICK_START.md)**             | 新專案安裝與設定步驟               | 要從零開始         |
-| **[docs/INTEGRATION_GUIDE.md](./docs/INTEGRATION_GUIDE.md)** | 現有專案整合 Claude/Supabase       | 要整合到現有專案   |
-| **[docs/SUPABASE_GUIDE.md](./docs/SUPABASE_GUIDE.md)**       | Supabase 入門、RLS 詳解、Migration | 第一次用 Supabase  |
-| **[docs/WORKFLOW.md](./docs/WORKFLOW.md)**                   | TDD、自動化檢查、Git 規範          | 想了解開發流程     |
-| **[docs/OPENSPEC.md](./docs/OPENSPEC.md)**                   | Spectra 工作流程詳解               | 要用 AI 輔助開發   |
-| **[docs/CLAUDE_CODE_GUIDE.md](./docs/CLAUDE_CODE_GUIDE.md)** | Claude Code 配置指南               | 要了解 AI 工具     |
-| **[docs/SUPABASE_MCP.md](./docs/SUPABASE_MCP.md)**           | Supabase MCP 整合                  | 要讓 AI 操作資料庫 |
-| **[docs/API_PATTERNS.md](./docs/API_PATTERNS.md)**           | Server API 設計模式                | 要寫後端 API       |
-| **[CLAUDE.md](./CLAUDE.md)**                                 | AI 開發規範（給 Claude Code）      | 要客製化 AI 行為   |
-| **[docs/verify/](./docs/verify/)**                           | 系統狀態文件（Auth、API、DB）      | 要了解架構細節     |
+**Starter 展示文件**（`docs/`）
+
+| 文件 | 說明 |
+| ---- | ---- |
+| [QUICK_START.md](docs/QUICK_START.md) | 新專案安裝與設定步驟 |
+| [INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md) | 現有專案整合 Claude/Supabase |
+| [FIRST_CRUD.md](docs/FIRST_CRUD.md) | 第一個 CRUD 功能教學 |
+| [VISUAL_GUIDE.md](docs/VISUAL_GUIDE.md) | 視覺化系統導覽 |
+| [READING_GUIDE.md](docs/READING_GUIDE.md) | 文件分類與閱讀順序 |
+| [SKILL_UPDATE_GUIDE.md](docs/SKILL_UPDATE_GUIDE.md) | Skills 更新指南 |
+| [CLAUDE_CODE_GUIDE.md](docs/CLAUDE_CODE_GUIDE.md) | Claude Code 配置指南 |
+
+**開發知識文件**（`template/docs/`）
+
+| 文件 | 說明 |
+| ---- | ---- |
+| [WORKFLOW.md](template/docs/WORKFLOW.md) | TDD、自動化檢查、Git 規範 |
+| [FAQ.md](template/docs/FAQ.md) | 常見疑問集 |
+| [DEPLOYMENT.md](template/docs/DEPLOYMENT.md) | 部署指南 |
+| [TECH_STACK.md](docs/TECH_STACK.md) | 技術棧與選型理由 |
+| [SUPABASE_GUIDE.md](docs/SUPABASE_GUIDE.md) | Supabase 入門與 RLS 詳解 |
+| [API_PATTERNS.md](template/docs/API_PATTERNS.md) | Server API 設計模式 |
+| [OPENSPEC.md](template/docs/OPENSPEC.md) | Spectra 工作流程詳解 |
 
 </details>
 
 ---
 
-## 核心概念
+## CLI Tool
 
-Spec-Driven Development (SDD)、Data Access Pattern（Client 讀 / Server 寫）、TDD。
+`create-nuxt-starter` 目前以 repo 內執行為主：
 
-> 📖 詳細說明：[WORKFLOW.md](docs/WORKFLOW.md)
-
----
-
-## 開發工作流程
-
-`pnpm check` 一鍵執行 vp check (lint + fmt + test) + typecheck。
-
-> 📖 完整流程：[WORKFLOW.md](docs/WORKFLOW.md)
-
----
-
-## 目錄結構
-
+```bash
+pnpm --filter create-nuxt-starter dev -- /path/to/my-app --yes
 ```
-├── CLAUDE.md                 # AI 開發規範
-├── app/                      # Nuxt 應用程式（pages, components, composables, stores）
-├── server/                   # Server API（api/v1/, api/auth/, utils/）
-├── shared/                   # 共用程式碼（跨 app/server）
-├── packages/                 # Monorepo 套件
-├── docs/                     # 詳細文件
-├── test/                     # 測試（unit/, nuxt/）
-├── e2e/                      # Playwright 端對端測試
-├── supabase/                 # Supabase 配置與 migrations
-├── scripts/                  # 工具腳本（install-skills.sh 等）
-│
-├── .claude/                  # Claude Code 配置
-│   ├── commands/            # 自定義命令（含 spectra/）
-│   ├── agents/              # SubAgents
-│   ├── hooks/               # 自動化腳本
-│   └── skills/              # AI Skills（通用 + 情境 + Spectra）
-│
-├── openspec/                 # Spectra 工作流程
-│   ├── project.md           # 專案上下文
-│   ├── specs/               # 系統規格（真相來源）
-│   └── changes/             # 變更提案區
-│
-├── .spectra/                 # Spectra 配置
-└── .github/                  # GitHub PR 模板
-```
+
+> 詳細說明請看 [CLI_SCAFFOLD.md](docs/CLI_SCAFFOLD.md)
 
 ---
 
 ## 常見問題
 
-**Q: 我需要付費嗎？** 本地開發完全免費。Supabase 免費方案：500MB 資料庫、50K 月活躍使用者。Supabase 也是開源的，可以免費 [Self-host](docs/verify/SELF_HOSTED_SUPABASE.md)，不受 Cloud 方案限制。
-
-**Q: RLS 會影響效能嗎？** 如果用 `(SELECT ...)` 包裝函式呼叫，不會。詳見 [SUPABASE_GUIDE.md](./docs/SUPABASE_GUIDE.md#效能優化)。
-
-**Q: 這套流程適合團隊嗎？** 適合。CLAUDE.md 是共享規範，Migration 有版本控制。
+**Q: 我需要付費嗎？** 本地開發完全免費。Supabase 免費方案：500MB 資料庫、50K 月活躍使用者。
 
 **Q: 我可以不用 Claude Code 嗎？** 可以。`.claude/` 配置是可選的，核心的 Nuxt + Supabase 結構不依賴任何 AI 工具。
 
 **Q: 如何部署到 Production？** 在 [Supabase Dashboard](https://supabase.com/dashboard) 建立專案 → `supabase link` → `supabase db push` → 部署到 Cloudflare Workers。
 
-**Q: SSR 為什麼關掉了？** 部署目標是 Cloudflare Workers（CPU 限制），且本範本定位為登入後的管理系統，不需要 SEO。詳見 [TECH_STACK.md](./docs/TECH_STACK.md#spa-模式ssr-關閉)。
-
-**Q: Windows 可以用嗎？** 可以，建議使用 WSL 2。`setup.sh` 有跨平台偵測。詳見 [FAQ.md](./docs/FAQ.md#windows-上怎麼開發)。
-
-**Q: 可以移除不需要的功能嗎？** 可以，Supabase、認證、AI 工具都是模組化的，可按需移除。詳見 [FAQ.md](./docs/FAQ.md#如何移除不需要的功能)。
-
-> 📖 更多問題：[FAQ.md](./docs/FAQ.md)（20+ 常見問題完整解答）
+> 更多問題：[FAQ.md](template/docs/FAQ.md)
 
 ---
 
@@ -183,15 +190,15 @@ Spec-Driven Development (SDD)、Data Access Pattern（Client 讀 / Server 寫）
 
 ### 新專案
 
-1. **[快速開始](./docs/QUICK_START.md)**：clone、跑起來
-2. **[Supabase 入門](./docs/SUPABASE_GUIDE.md)**：建立第一個資料表
-3. **[API 設計](./docs/API_PATTERNS.md)**：寫你的第一個 CRUD API
-4. **[Spectra](./docs/OPENSPEC.md)**：用 AI 輔助開發一個功能
-5. **[部署指南](./docs/DEPLOYMENT.md)**：部署到 Cloudflare Workers
+1. **[快速開始](docs/QUICK_START.md)**：clone、跑起來
+2. **[Supabase 入門](docs/SUPABASE_GUIDE.md)**：建立第一個資料表
+3. **[API 設計](template/docs/API_PATTERNS.md)**：寫你的第一個 CRUD API
+4. **[Spectra](template/docs/OPENSPEC.md)**：用 AI 輔助開發一個功能
+5. **[部署指南](template/docs/DEPLOYMENT.md)**：部署到 Cloudflare Workers
 
 ### 現有專案
 
-1. **[整合指南](./docs/INTEGRATION_GUIDE.md)**：將 Claude/Supabase 配置注入現有專案
+1. **[整合指南](docs/INTEGRATION_GUIDE.md)**：將 Claude/Supabase 配置注入現有專案
 2. 根據需要選擇整合項目（Claude 配置、Supabase、Better Auth）
 
 有問題歡迎開 issue。
@@ -200,4 +207,4 @@ Spec-Driven Development (SDD)、Data Access Pattern（Client 讀 / Server 寫）
 
 ## License
 
-[MIT](./LICENSE) © [YuDefine - 域定資訊工作室](https://github.com/YuDefine)
+[MIT](LICENSE) © [YuDefine - 域定資訊工作室](https://github.com/YuDefine)

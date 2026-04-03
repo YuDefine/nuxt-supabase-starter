@@ -6,11 +6,69 @@
 
 ---
 
-## 選擇你的路徑
+## 先用這條路徑：直接產生乾淨新專案（推薦）
+
+這條流程會直接輸出可開發的乾淨專案，支援：
+
+- 指定專案名稱
+- Auth 二選一（Better Auth / nuxt-auth-utils）
+- 其他功能模組選配
+- 不殘留 demo 或 Nuxt Supabase Starter 關鍵字
+
+### 互動式（給人）
+
+```bash
+git clone https://github.com/YuDefine/nuxt-supabase-starter
+cd nuxt-supabase-starter
+
+# 安裝 CLI 依賴（僅第一次）
+pnpm --dir template/packages/create-nuxt-starter install
+
+# 啟動互動式 scaffold，依選單填寫專案名稱/Auth/功能
+pnpm --dir template/packages/create-nuxt-starter dev temp/my-product
+```
+
+### 非互動（可腳本化）
+
+```bash
+pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
+	--yes \
+	--auth better-auth \
+	--with charts,monitoring,image \
+	--without testing-full
+```
+
+參數說明：
+
+- 專案名稱：最後一段路徑就是專案名稱（例如 temp/my-product）
+- Auth：`--auth nuxt-auth-utils`、`--auth better-auth`、`--auth none`
+- 功能新增：`--with <feature1,feature2>`
+- 功能移除：`--without <feature1,feature2>`
+- 最小起始：`--minimal`（從空白功能集開始）
+
+常用 feature id：
+
+- `database`, `ui`, `pinia`, `charts`, `seo`, `security`, `image`, `vueuse`
+- `testing-full`, `testing-vitest`, `monitoring`
+- `deploy-cloudflare`, `deploy-vercel`, `deploy-node`
+- `quality`, `git-hooks`
+
+### 驗證沒有預設關鍵字殘留
+
+```bash
+rg -ni "nuxt[- ]supabase starter|nuxt-supabase-starter|demo" temp/my-product
+```
+
+若沒有輸出，代表沒有殘留關鍵字。
+
+---
+
+## 其他路徑
 
 | 你的情況                                | 推薦路徑                                          |
 | --------------------------------------- | ------------------------------------------------- |
-| 🆕 **新專案**：想從零開始               | 繼續閱讀本文件，完整建立專案                      |
+| 🆕 **新專案**：想從零開始（推薦）       | 優先使用本頁上方「直接產生乾淨新專案」             |
+| 👀 **新專案**：想先看功能展示（選配）   | 先完成 Step 1-6 體驗 Demo，再依 Step 7 切回 Clean |
 | 🔧 **現有專案**：想加入 Claude/Supabase | 前往 [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) |
 
 ---
@@ -36,21 +94,23 @@
 ## Step 1：建立專案
 
 ```bash
-# 從 GitHub 複製範本
+# 從 GitHub 複製範本（monorepo）
 git clone https://github.com/YuDefine/nuxt-supabase-starter my-project
 cd my-project
 
-# 移除原始 git 歷史，建立自己的
-rm -rf .git
-git init
-git add .
-git commit -m "🎉 init: 從 nuxt-supabase-starter 建立專案"
+# 推薦：先轉成 clean 開發起點
+bash scripts/create-clean.sh
+
+# 進入真正可執行的 starter 專案
+cd template
 ```
+
+> 你現在位於真正可執行的 starter 專案根目錄。後續所有命令都在 `template/` 內執行。
 
 **你得到了什麼**：
 
 ```
-my-project/
+my-project/template/
 ├── CLAUDE.md              # AI 開發規範
 ├── .claude/               # Claude Code 配置
 │   ├── commands/          # 自定義指令（含 spectra/）
@@ -83,7 +143,9 @@ my-project/
 
 ---
 
-## Step 2：初始化並啟動 Supabase
+## Step 2（可選）：手動初始化並啟動 Supabase
+
+> 想用最短路徑開始開發，可以直接跳到 Step 3 執行 `pnpm run setup`。它會自動完成依賴安裝、Supabase 啟動與型別產生。
 
 ```bash
 # 初始化 Supabase（建立 supabase/ 目錄和 config.toml）
@@ -142,7 +204,7 @@ supabase gen types typescript --local | tee app/types/database.types.ts > /dev/n
 ## Step 3：互動式設定
 
 ```bash
-pnpm setup
+pnpm run setup
 ```
 
 設定腳本會引導你：
@@ -176,7 +238,7 @@ bash scripts/install-skills.sh
 - 安裝 46 個通用 Skills 到 `.claude/skills/`（`nuxt`、`vue`、`nuxt-ui`、`nuxt-better-auth` 等）
 - 命令權限和 MCP Servers 已在 `.claude/settings.json` 中預先配置
 
-> 📖 關於 Supabase MCP：[SUPABASE_MCP.md](./SUPABASE_MCP.md)
+> 📖 關於 Supabase MCP：[SUPABASE_MCP.md](../template/docs/SUPABASE_MCP.md)
 
 ---
 
@@ -211,6 +273,54 @@ claude
 # 執行檢查
 > 執行 pnpm check
 ```
+
+---
+
+## Step 7（選擇性）：切換成完全乾淨的開發起點
+
+如果你在 Step 1 已經執行過 `create-clean`，這一步可以跳過。
+如果你尚未 clean，建議在正式開發前執行一次，只保留持續開發需要的骨架。
+
+在 repo root 執行：
+
+```bash
+bash scripts/create-clean.sh
+```
+
+執行後會：
+
+- 移除 demo pages/components/queries/stores/API v1
+- 清空示範 migrations 與 seed
+- 保留 layouts、middleware、server utils、auth API、核心設定
+- 重新整理專案識別資訊（如專案名稱、README、env secrets）
+
+建議接著執行一次驗證：
+
+```bash
+bash scripts/validate-starter.sh clean
+```
+
+---
+
+## 首次驗證常見 Warning（分級）
+
+為了避免新手把「環境提醒」誤判為「專案壞掉」，可以用下面規則快速判斷。
+
+### A. 預期 warning（不阻塞，先繼續）
+
+- `SUPABASE_URL` / `SUPABASE_KEY` 尚未設定
+- `NUXT_PUBLIC_SITE_URL` 仍是 localhost 預設值
+- SEO/SSR 類提示（例如 og-image 或部署情境建議）
+
+這些通常是「尚未做正式環境配置」的提醒，不會讓 `pnpm typecheck`、`pnpm test`、`pnpm check` 直接失敗。
+
+### B. 非預期 warning / error（需要先修）
+
+- `pnpm check`、`pnpm test`、`pnpm typecheck` 任一指令回傳非 0 exit code
+- Lint/format/typecheck 出現實際錯誤（不只是環境提醒）
+- 測試失敗（紅字 fail）
+
+只要指令失敗，就應視為阻塞，先修正再往下。
 
 ---
 
@@ -300,7 +410,7 @@ claude
 > 我需要一個待辦事項功能，使用者可以新增、編輯、刪除待辦事項...
 ```
 
-> 📖 詳細說明：[OPENSPEC.md](./OPENSPEC.md)
+> 📖 詳細說明：[OPENSPEC.md](../template/docs/OPENSPEC.md)
 >
 > UI 功能的 tasks 會自動包含 Design Review 區塊，spectra-apply 執行時會觸發 `/design improve` + targeted design skills。
 
@@ -332,15 +442,15 @@ supabase migration new <name>  # 建立新 migration
 | 文件                                           | 說明                        |
 | ---------------------------------------------- | --------------------------- |
 | [CLAUDE_CODE_GUIDE.md](./CLAUDE_CODE_GUIDE.md) | Claude Code 配置指南        |
-| [SUPABASE_MCP.md](./SUPABASE_MCP.md)           | Supabase MCP 整合           |
+| [SUPABASE_MCP.md](../template/docs/SUPABASE_MCP.md) | Supabase MCP 整合      |
 | [SUPABASE_GUIDE.md](./SUPABASE_GUIDE.md)       | Supabase 入門與 RLS         |
-| [WORKFLOW.md](./WORKFLOW.md)                   | TDD 開發流程                |
-| [OPENSPEC.md](./OPENSPEC.md)                   | Spectra 工作流程            |
-| [API_PATTERNS.md](./API_PATTERNS.md)           | Server API 設計模式         |
-| [DEPLOYMENT.md](./DEPLOYMENT.md)               | Cloudflare Workers 部署指南 |
+| [WORKFLOW.md](../template/docs/WORKFLOW.md)    | TDD 開發流程                |
+| [OPENSPEC.md](../template/docs/OPENSPEC.md)    | Spectra 工作流程            |
+| [API_PATTERNS.md](../template/docs/API_PATTERNS.md) | Server API 設計模式    |
+| [DEPLOYMENT.md](../template/docs/DEPLOYMENT.md) | Cloudflare Workers 部署指南 |
 
 ---
 
 ## 遇到問題？
 
-設定過程中遇到問題，請參考 [TROUBLESHOOTING.md](TROUBLESHOOTING.md) 查找解決方案。
+設定過程中遇到問題，請參考 [TROUBLESHOOTING.md](../template/docs/TROUBLESHOOTING.md) 查找解決方案。
