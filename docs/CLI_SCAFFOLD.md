@@ -12,18 +12,27 @@
 
 > **注意**：此 CLI 尚未發布至 npm，目前僅能從 repo 內使用。
 
+### 最快入口（零先備知識）
+
+```bash
+bash scripts/create-fast-project.sh temp/my-app
+```
+
+這個腳本會自動安裝依賴、使用非互動建立、略過 `testing-full`，並在結束後做關鍵字掃描。
+
 ### 從 repo 內執行（開發模式）
 
 ```bash
 # 在 repo 根目錄
-pnpm --filter create-nuxt-starter dev /path/to/my-app
+pnpm --dir template/packages/create-nuxt-starter dev temp/my-app
 
 # 非互動模式（使用預設配置）
-pnpm --filter create-nuxt-starter dev /path/to/my-app --yes
+pnpm --dir template/packages/create-nuxt-starter dev temp/my-app --yes
 
 # 非互動模式（自訂配置）
-pnpm --filter create-nuxt-starter dev /path/to/my-app \
+pnpm --dir template/packages/create-nuxt-starter dev temp/my-app \
     --yes \
+    --fast \
     --auth better-auth \
     --with charts,monitoring \
     --without testing-full
@@ -32,6 +41,8 @@ pnpm --filter create-nuxt-starter dev /path/to/my-app \
 ### 非互動參數
 
 - `--auth`：`nuxt-auth-utils` | `better-auth` | `none`
+- `--fast`：最快預設（等同 `--preset fast`，移除 testing）
+- `--preset`：`default` | `fast`
 - `--with`：逗號分隔 feature id，加入功能
 - `--without`：逗號分隔 feature id，移除功能
 - `--minimal`：從空白功能集開始（不載入預設）
@@ -75,7 +86,8 @@ bash scripts/smoke-scaffold.sh temp/my-smoke-project
 
 | 模組 ID           | 名稱                | 說明                                | 預設 | 依賴     |
 | ----------------- | ------------------- | ----------------------------------- | ---- | -------- |
-| auth              | Better Auth         | 認證系統（Email/Password + OAuth）  | ✓    | database |
+| auth-nuxt-utils   | nuxt-auth-utils     | Cookie session 認證                 | ✓    | —        |
+| auth-better-auth  | Better Auth         | 認證系統（Email/Password + OAuth）  | —    | database |
 | database          | Supabase            | Supabase PostgreSQL 資料庫整合      | ✓    | —        |
 | ui                | Nuxt UI             | Nuxt UI 元件庫 + Tailwind CSS       | ✓    | —        |
 | charts            | 圖表                | Nuxt Charts（Unovis）圖表元件       | —    | —        |
@@ -123,7 +135,7 @@ packages/create-nuxt-starter/
 2. 依序套用選定功能的 overlay 檔案
 3. 合併 package.json（依賴 + scripts）
 4. 生成 nuxt.config.ts（注入選定的 modules 和配置）
-5. 生成 .env.example（附加功能所需的環境變數）
+5. 生成 .env.example 與 .env（附加功能所需的環境變數）
 6. 替換模板佔位符（{{projectName}}）
 7. 安裝依賴 + Git 初始化
 

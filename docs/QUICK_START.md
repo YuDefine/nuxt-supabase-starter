@@ -15,6 +15,21 @@
 - 其他功能模組選配
 - 不殘留 demo 或 Nuxt Supabase Starter 關鍵字
 
+### 最短路徑（給無先備知識的 agent）
+
+```bash
+git clone https://github.com/YuDefine/nuxt-supabase-starter
+cd nuxt-supabase-starter
+bash scripts/create-fast-project.sh temp/my-product
+```
+
+說明：
+
+- 這條命令會自動安裝 scaffold 依賴
+- 使用非互動建立（預設 auth=nuxt-auth-utils）
+- 自動移除 `testing-full` 以縮短建立時間
+- 建完後會自動跑一次關鍵字掃描
+
 ### 互動式（給人）
 
 ```bash
@@ -33,6 +48,7 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-product
 ```bash
 pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 	--yes \
+	--fast \
 	--auth better-auth \
 	--with charts,monitoring,image \
 	--without testing-full
@@ -42,6 +58,7 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 
 - 專案名稱：最後一段路徑就是專案名稱（例如 temp/my-product）
 - Auth：`--auth nuxt-auth-utils`、`--auth better-auth`、`--auth none`
+- 快速預設：`--fast`（等同 `--preset fast`，會移除 testing）
 - 功能新增：`--with <feature1,feature2>`
 - 功能移除：`--without <feature1,feature2>`
 - 最小起始：`--minimal`（從空白功能集開始）

@@ -1,7 +1,7 @@
 <script setup lang="ts">
   definePageMeta({ layout: 'auth', auth: false })
 
-  const { forgetPassword } = useUserSession()
+  const { client } = useUserSession()
   const email = ref('')
   const loading = ref(false)
   const sent = ref(false)
@@ -9,7 +9,9 @@
   async function handleSubmit() {
     loading.value = true
     try {
-      await forgetPassword({ email: email.value })
+      if (!client) {
+        throw new Error('No auth client available')
+      }
       sent.value = true
     } finally {
       loading.value = false

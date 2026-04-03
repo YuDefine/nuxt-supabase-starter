@@ -1,11 +1,16 @@
 export function useUserRole() {
   const { user } = useUserSession()
 
-  const isAdmin = computed(() => user.value?.role === 'admin')
+  const role = computed(() => {
+    const currentUser = user.value as { role?: string } | null
+    return currentUser?.role ?? 'user'
+  })
 
-  function hasRole(role: string): boolean {
-    return user.value?.role === role
+  const isAdmin = computed(() => role.value === 'admin')
+
+  function hasRole(targetRole: string): boolean {
+    return role.value === targetRole
   }
 
-  return { isAdmin, hasRole }
+  return { role, isAdmin, hasRole }
 }

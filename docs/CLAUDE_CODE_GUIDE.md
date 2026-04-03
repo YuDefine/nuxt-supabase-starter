@@ -44,6 +44,16 @@ curl -fsSL https://claude.ai/install.sh | sh
 
 ### 2. 先建立乾淨新專案（給 Claude Code 的推薦流程）
 
+最快捷（建議給無先備知識 agent）：
+
+```bash
+git clone https://github.com/YuDefine/nuxt-supabase-starter
+cd nuxt-supabase-starter
+bash scripts/create-fast-project.sh temp/my-product
+```
+
+進階（自行控制 auth/with/without）：
+
 ```bash
 # 1) 取得 scaffold 工具
 git clone https://github.com/YuDefine/nuxt-supabase-starter
@@ -53,6 +63,7 @@ pnpm --dir template/packages/create-nuxt-starter install
 # 2) 直接用參數建立新專案
 pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
   --yes \
+  --fast \
   --auth nuxt-auth-utils \
   --with monitoring,charts \
   --without testing-full
@@ -62,6 +73,7 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 
 - 專案名稱：目標路徑最後一段（例如 temp/my-product）
 - Auth：`--auth nuxt-auth-utils`、`--auth better-auth`、`--auth none`
+- 快速預設：`--fast`（等同 `--preset fast`，會移除 testing）
 - 功能新增：`--with <feature1,feature2>`
 - 功能移除：`--without <feature1,feature2>`
 - 空白起始：`--minimal`

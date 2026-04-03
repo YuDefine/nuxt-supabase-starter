@@ -66,13 +66,25 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
     { label: 'VueUse 工具庫', value: 'vueuse' },
   ]
   const defaultExtras = ['seo', 'security', 'vueuse']
-  const extras = (await consola.prompt('額外功能？（空白鍵選擇）', {
+  const extrasRaw = await consola.prompt('額外功能？（空白鍵選擇）', {
     type: 'multiselect',
     options: extrasOptions,
     initial: defaultExtras,
-  })) as string[]
+  })
 
-  if (typeof extras === 'symbol') process.exit(0)
+  if (typeof extrasRaw === 'symbol') process.exit(0)
+
+  const extras = Array.isArray(extrasRaw)
+    ? extrasRaw
+        .map((item) => {
+          if (typeof item === 'string') return item
+          if (item && typeof item === 'object' && 'value' in item) {
+            return String((item as { value: unknown }).value)
+          }
+          return ''
+        })
+        .filter(Boolean)
+    : []
 
   // 6. State management
   const stateChoice = (await consola.prompt('狀態管理？', {

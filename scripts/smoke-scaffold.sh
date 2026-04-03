@@ -10,6 +10,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+CLI_DIR="$ROOT_DIR/template/packages/create-nuxt-starter"
+CLI_DIST="$CLI_DIR/dist/cli.js"
+CLI_SRC="$CLI_DIR/src/cli.ts"
 
 TARGET_INPUT="${1:-}"
 if [[ -n "$TARGET_INPUT" ]]; then
@@ -47,7 +50,7 @@ run_step() {
 
 scan_placeholders() {
   local target="$1"
-  local pattern='nuxt-supabase-starter|\{\{projectName\}\}|TODO: 替換|my-project'
+  local pattern='nuxt[- ]supabase starter|nuxt-supabase-starter|demo|\{\{projectName\}\}|TODO: 替換|my-project'
 
   if command -v rg >/dev/null 2>&1; then
     rg -n "$pattern" "$target" \
@@ -77,8 +80,18 @@ fi
 cd "$ROOT_DIR"
 
 run_step \
+  "install scaffold deps" \
+  pnpm --dir "$ROOT_DIR" install --filter create-nuxt-starter --ignore-scripts
+
+if [[ ! -f "$CLI_DIST" || "$CLI_SRC" -nt "$CLI_DIST" ]]; then
+  run_step \
+    "build scaffold cli" \
+    pnpm --dir "$CLI_DIR" run build
+fi
+
+run_step \
   "scaffold project (non-interactive defaults)" \
-  pnpm --dir "$ROOT_DIR/template/packages/create-nuxt-starter" exec tsx src/cli.ts "$TARGET_DIR" --yes
+  node "$CLI_DIST" "$TARGET_DIR" --yes
 
 if [[ ! -f "$TARGET_DIR/package.json" ]]; then
   fail "missing package.json in scaffolded project"

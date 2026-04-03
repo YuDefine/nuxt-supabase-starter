@@ -10,6 +10,25 @@ import { postScaffold } from './post-scaffold'
 
 type CliAuth = 'nuxt-auth-utils' | 'better-auth' | 'none'
 
+function getInvocationCwd(): string {
+  const initCwd = process.env.INIT_CWD?.trim()
+  if (initCwd && initCwd.length > 0) {
+    return initCwd
+  }
+
+  const shellPwd = process.env.PWD?.trim() || process.cwd()
+  const normalized = shellPwd.replaceAll('\\', '/')
+
+  // When invoked via `pnpm --dir ...` or `pnpm --filter ...` in this monorepo,
+  // shell cwd points to `template/packages/create-nuxt-starter`.
+  // Shift back to repo root so relative output paths (e.g. temp/my-app) match docs.
+  if (normalized.endsWith('/template/packages/create-nuxt-starter')) {
+    return resolve(shellPwd, '..', '..', '..')
+  }
+
+  return shellPwd
+}
+
 function parseCsv(value: string | undefined): string[] {
   if (!value) return []
   return value
@@ -36,6 +55,8 @@ function buildSelectionsFromArgs(args: {
   with?: string
   without?: string
   minimal?: boolean
+  preset?: string
+  fast?: boolean
 }) {
   const availableFeatureIds = new Set(featureModules.map((mod) => mod.id))
   const fromWith = parseCsv(args.with)
@@ -56,9 +77,23 @@ function buildSelectionsFromArgs(args: {
     process.exit(1)
   }
 
+  const validPresetValues = ['default', 'fast'] as const
+  const presetArg = args.preset as (typeof validPresetValues)[number] | undefined
+  if (presetArg && !validPresetValues.includes(presetArg)) {
+    consola.error(`--preset 只接受：${validPresetValues.join(' | ')}`)
+    process.exit(1)
+  }
+
+  const useFastPreset = args.fast === true || presetArg === 'fast'
+
   const selected = new Set(
     args.minimal ? [] : getDefaultSelections(args.projectName).features,
   )
+
+  if (useFastPreset) {
+    selected.delete('testing-full')
+    selected.delete('testing-vitest')
+  }
 
   const addFeature = (featureId: string) => {
     const mod = getModuleById(featureId)
@@ -121,6 +156,16 @@ const main = defineCommand({
       description: 'Auth provider: nuxt-auth-utils | better-auth | none',
       required: false,
     },
+    preset: {
+      type: 'string',
+      description: 'Profile preset: default | fast',
+      required: false,
+    },
+    fast: {
+      type: 'boolean',
+      description: 'Alias of --preset fast',
+      default: false,
+    },
     with: {
       type: 'string',
       description: 'Comma-separated feature ids to add (e.g. charts,monitoring)',
@@ -138,12 +183,15 @@ const main = defineCommand({
     },
   },
   async run({ args }) {
+    const invocationCwd = getInvocationCwd()
     const projectName = args.dir as string | undefined
-    const hasCustomFlags = Boolean(args.auth || args.with || args.without || args.minimal)
+    const hasCustomFlags = Boolean(
+      args.auth || args.with || args.without || args.minimal || args.preset || args.fast,
+    )
 
     // Validate directory
     if (projectName) {
-      const targetDir = resolve(process.cwd(), projectName)
+      const targetDir = resolve(invocationCwd, projectName)
       if (existsSync(targetDir)) {
         const entries = readdirSync(targetDir)
         if (entries.length > 0) {
@@ -164,6 +212,8 @@ const main = defineCommand({
         with: args.with as string | undefined,
         without: args.without as string | undefined,
         minimal: args.minimal as boolean | undefined,
+        preset: args.preset as string | undefined,
+        fast: args.fast as boolean | undefined,
       })
 
       if (hasCustomFlags) {
@@ -188,7 +238,7 @@ const main = defineCommand({
     }
 
     // Resolve target directory and use basename as project name for package.json
-    const targetDir = resolve(process.cwd(), selections.projectName)
+    const targetDir = resolve(invocationCwd, selections.projectName)
     const pkgName = basename(targetDir)
     consola.start(`正在建立專案 ${pkgName}...`)
 
@@ -201,7 +251,7 @@ const main = defineCommand({
     }
 
     // Post-scaffold
-    await postScaffold(targetDir, pkgName)
+    await postScaffold(targetDir, pkgName, invocationCwd)
   },
 })
 

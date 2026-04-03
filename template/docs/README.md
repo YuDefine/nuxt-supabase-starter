@@ -83,6 +83,6 @@
 
 > 注意：部分 verify/ 檔案已遷移至上方分類目錄，此處保留尚未遷移的檔案。
 
-## 範本（docs/templates/）
+## 範本（scripts/templates/）
 
 專案範本檔案（GitHub workflows 等）。

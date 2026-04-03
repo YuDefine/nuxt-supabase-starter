@@ -1,4 +1,5 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { dirname, join, resolve } from "pathe";
 import { getModuleById } from "./features";
 
@@ -207,7 +208,9 @@ export function generatePackageJson(
 
 function sortObject(obj: Record<string, string> | undefined): Record<string, string> {
   if (!obj) return {};
-  return Object.fromEntries(Object.entries(obj).toSorted(([a], [b]) => a.localeCompare(b)));
+  const entries = Object.entries(obj) as Array<[string, string]>;
+  entries.sort(([a], [b]) => a.localeCompare(b));
+  return Object.fromEntries(entries);
 }
 
 // --- nuxt.config.ts generation ---
@@ -367,30 +370,61 @@ export function generateNuxtConfig(targetDir: string, selectedFeatureIds: string
 // --- .env.example generation ---
 
 export function generateEnvExample(targetDir: string, selectedFeatureIds: string[]): void {
-  const envPath = join(targetDir, ".env.example");
-  const lines = [
+  const envExamplePath = join(targetDir, ".env.example");
+  const envPath = join(targetDir, ".env");
+  const exampleLines = [
     "# ============================================",
     "# 環境變數範本",
     "# 複製此檔案為 .env 並填入實際值",
     "# ============================================",
     "",
   ];
+  const envLines = [
+    "# ============================================",
+    "# 環境變數（scaffold 自動產生）",
+    "# ============================================",
+    "",
+  ];
+
+  const generatedValues: Record<string, string> = {};
+  const shouldGenerateSessionPassword =
+    selectedFeatureIds.includes("auth-nuxt-utils") || selectedFeatureIds.includes("auth-better-auth");
+
+  if (selectedFeatureIds.includes("auth-better-auth")) {
+    generatedValues.BETTER_AUTH_SECRET = randomBytes(32).toString("base64url");
+  }
+
+  if (shouldGenerateSessionPassword) {
+    generatedValues.NUXT_SESSION_PASSWORD = randomBytes(32).toString("base64url");
+  }
+
+  const seenKeys = new Set<string>();
 
   for (const featureId of selectedFeatureIds) {
     const mod = getModuleById(featureId);
     if (!mod?.envVars || Object.keys(mod.envVars).length === 0) continue;
 
-    lines.push(`# --- ${mod.name} ---`);
+    exampleLines.push(`# --- ${mod.name} ---`);
+    envLines.push(`# --- ${mod.name} ---`);
+
     for (const [key, comment] of Object.entries(mod.envVars)) {
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+
       if (comment.startsWith("#")) {
-        lines.push(comment);
+        exampleLines.push(comment);
       }
-      lines.push(`${key}=${comment.startsWith("#") ? "" : comment}`);
+
+      exampleLines.push(`${key}=${comment.startsWith("#") ? "" : comment}`);
+      envLines.push(`${key}=${generatedValues[key] ?? ""}`);
     }
-    lines.push("");
+
+    exampleLines.push("");
+    envLines.push("");
   }
 
-  writeFileSync(envPath, lines.join("\n"));
+  writeFileSync(envExamplePath, exampleLines.join("\n"));
+  writeFileSync(envPath, envLines.join("\n"));
 }
 
 // --- Skills, agents, and review rules ---
@@ -605,7 +639,7 @@ function copyWorkflows(targetDir: string, feats: string[]): void {
   if (has(feats, "testing-full")) files.push("e2e.yml");
 
   copyFilesList(
-    join(STARTER_ROOT, "docs", "templates", ".github", "workflows"),
+    join(STARTER_ROOT, "scripts", "templates", "github", ".github", "workflows"),
     join(targetDir, ".github", "workflows"),
     files,
   );

@@ -1,7 +1,14 @@
 import { execFileSync } from 'node:child_process'
+import { relative } from 'node:path'
 import { consola } from 'consola'
 
-export async function postScaffold(targetDir: string, projectName: string): Promise<void> {
+export async function postScaffold(
+  targetDir: string,
+  projectName: string,
+  invocationCwd: string,
+): Promise<void> {
+  const relativeTargetDir = relative(invocationCwd, targetDir) || '.'
+
   // 1. Install dependencies
   consola.start('正在安裝依賴套件...')
   try {
@@ -9,7 +16,7 @@ export async function postScaffold(targetDir: string, projectName: string): Prom
     consola.success('依賴套件安裝完成！')
   } catch {
     consola.warn('依賴套件安裝失敗，請手動執行：')
-    consola.log(`  cd ${projectName} && pnpm install`)
+    consola.log(`  cd ${relativeTargetDir} && pnpm install`)
   }
 
   // 2. Initialize git
@@ -31,10 +38,11 @@ export async function postScaffold(targetDir: string, projectName: string): Prom
   consola.box(
     [
       `專案 ${projectName} 建立完成！`,
+      `路徑：${targetDir}`,
       '',
       '接下來：',
-      `  cd ${projectName}`,
-      '  cp .env.example .env    # 設定環境變數',
+      `  cd ${relativeTargetDir}`,
+      '  編輯 .env               # 補齊必要環境變數',
       '  pnpm dev                # 啟動開發伺服器',
     ].join('\n')
   )
