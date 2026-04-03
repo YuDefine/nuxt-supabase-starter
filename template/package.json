@@ -1,6 +1,6 @@
 {
   "name": "nuxt-supabase-starter",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "private": true,
   "author": "YuDefine - 域定資訊工作室 (https://github.com/YuDefine)",
   "repository": {
@@ -41,7 +41,6 @@
     "@nuxt/image": "^2.0.0",
     "@nuxt/ui": "^4.6.0",
     "@nuxthub/core": "^0.10.7",
-    "@nuxtjs/seo": "^3.4.0",
     "@nuxtjs/supabase": "^2.0.4",
     "@onmax/nuxt-better-auth": "0.0.2-alpha.15",
     "@pinia/colada": "^1.0.0",

@@ -192,8 +192,12 @@ echo "🚀 部署與託管"
 ask_feature "FEAT_NUXTHUB"       "NuxtHub（Cloudflare Workers）"  "y"
 
 echo ""
+echo "🖥️ 渲染模式"
+ask_feature "FEAT_SSR" "SSR（Server-Side Rendering）" "n"
+
+echo ""
 echo "🔧 開發工具"
-ask_feature "FEAT_SEO"           "Nuxt SEO"             "y"
+ask_feature "FEAT_SEO"           "Nuxt SEO（需要 SSR）"  "n"
 ask_feature "FEAT_CHARTS"        "Nuxt Charts"          "n"
 ask_feature "FEAT_VITEPRESS"     "VitePress（文件站）"  "n"
 ask_feature "FEAT_E2E"           "Playwright（E2E 測試）" "n"
@@ -357,6 +361,17 @@ if [ "$FEAT_E2E" = "n" ]; then
   remove_pkg_dep "@playwright/test" "devDependencies"
   remove_pkg_script "test:e2e"
   echo "  ✅ 移除 Playwright"
+fi
+
+# SSR 啟用時修改 nuxt.config.ts
+if [ "$FEAT_SSR" = "y" ]; then
+  sed -i.bak 's/ssr: false/ssr: true/' nuxt.config.ts && rm -f nuxt.config.ts.bak
+  echo "  ✅ 啟用 SSR"
+fi
+
+# SSR 關閉時強制移除 SEO
+if [ "$FEAT_SSR" = "n" ]; then
+  FEAT_SEO="n"
 fi
 
 if [ "$FEAT_SEO" = "n" ]; then
@@ -571,6 +586,7 @@ echo "  ✅ Supabase（PostgreSQL）"
 echo "  ✅ ${AUTH_PROVIDER}（認證）"
 echo "  ✅ Pinia + Pinia Colada（狀態管理）"
 
+[ "$FEAT_SSR" = "y" ]          && echo "  ✅ SSR（Server-Side Rendering）"
 [ "$FEAT_OAUTH_GOOGLE" = "y" ] && echo "  ✅ Google OAuth"
 [ "$FEAT_OAUTH_LINE" = "y" ]   && echo "  ✅ LINE Login"
 [ "$FEAT_OAUTH_GITHUB" = "y" ] && echo "  ✅ GitHub OAuth"
