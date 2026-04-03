@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
-import { rmSync } from 'node:fs'
-import { relative } from 'node:path'
+import { writeFileSync } from 'node:fs'
+import { join, relative } from 'node:path'
 import { consola } from 'consola'
 
 export async function postScaffold(
@@ -38,14 +38,12 @@ export async function postScaffold(
     consola.warn('Git 初始化失敗，請手動執行。')
   }
 
-  // 3. Clean up monorepo clone (temp-starter)
+  // 3. Save monorepo clone path for deferred cleanup during `pnpm run setup`
   if (monorepoRoot) {
-    consola.start('正在清除暫存的 starter repo...')
     try {
-      rmSync(monorepoRoot, { recursive: true, force: true })
-      consola.success('暫存 repo 已刪除')
+      writeFileSync(join(targetDir, '.scaffold-cleanup'), monorepoRoot, 'utf8')
     } catch {
-      consola.warn(`無法自動刪除 ${monorepoRoot}，請手動刪除。`)
+      // Non-critical — setup.sh will skip cleanup if marker is missing
     }
   }
 
