@@ -38,12 +38,25 @@ cd temp-starter
 bash scripts/create-fast-project.sh temp/my-product
 ```
 
+可帶參數自選 Tech Stack（參考下方 [Tech Stack 選擇指引](#tech-stack-選擇指引)）：
+
+```bash
+# 例：面向用戶的 SSR 產品，使用 Better Auth + 監控
+bash scripts/create-fast-project.sh temp/my-product \
+  --auth better-auth \
+  --with ssr,seo,monitoring
+
+# 例：最小化內部工具
+bash scripts/create-fast-project.sh temp/my-product \
+  --without charts,security
+```
+
 說明：
 
-- 這條命令會自動安裝 scaffold 依賴
-- 使用非互動建立（預設 auth=nuxt-auth-utils）
-- 自動移除 `testing-full` 以縮短建立時間
-- 建完後會自動跑一次關鍵字掃描
+- 自動安裝 scaffold 依賴 + 建立 + 關鍵字掃描
+- 不帶參數時使用預設值（auth=nuxt-auth-utils、SPA、Cloudflare）
+- 支援 `--auth`、`--with`、`--without`、`--minimal` 等所有 CLI 參數
+- `--fast` 已內建（自動移除 `testing-full`）
 
 ### 非互動（可腳本化）
 
