@@ -854,10 +854,162 @@ function copyGuardSystem(targetDir: string): void {
 // --- Scripts ---
 
 function copyScripts(targetDir: string, feats: string[]): void {
-  const files = ['install-skills.sh', 'check-skills.sh', 'setup.sh']
+  const files = ['check-skills.sh', 'setup.sh']
   if (has(feats, 'database')) files.push('backup-supabase.sh')
 
   copyFilesList(join(STARTER_ROOT, 'scripts'), join(targetDir, 'scripts'), files)
+
+  // Generate install-skills.sh dynamically based on selected features
+  generateInstallSkillsScript(targetDir, feats)
+}
+
+function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
+  const lines: string[] = [
+    '#!/bin/bash',
+    '',
+    '# Skills 安裝／更新腳本（由 scaffold 依選擇的功能自動產生）',
+    '# 統一使用 --agent claude-code --copy：直接寫入 .claude/skills/，不建立 symlink',
+    '# 重複執行會覆寫為最新版（等同 update）',
+    `# 產生日期：${new Date().toISOString().slice(0, 10)}`,
+    '',
+    'set -e',
+    '',
+    'cd "$(dirname "$0")/.."',
+    '',
+    'COPY_FLAGS="--agent claude-code --copy -y"',
+    '',
+    'echo "🚀 開始安裝 skills（--copy 模式，直接寫入 .claude/skills/）..."',
+    'echo ""',
+    '',
+  ]
+
+  // Antfu Skills — always: nuxt, vue, vitest, vue-best-practices, vue-testing-best-practices
+  const antfuSkills = ['nuxt', 'vue', 'vitest', 'vue-best-practices', 'vue-testing-best-practices']
+  // vueuse-functions is useful even without vueuse feature (it's a reference)
+  antfuSkills.push('vueuse-functions')
+  if (has(feats, 'pinia')) antfuSkills.push('pinia')
+  // vitepress for docs (always useful)
+  antfuSkills.push('vitepress')
+
+  lines.push('# Antfu Skills')
+  lines.push('echo "📦 Antfu Skills..."')
+  lines.push(`for skill in ${antfuSkills.join(' ')}; do`)
+  lines.push('  npx skills add antfu/skills@$skill $COPY_FLAGS')
+  lines.push('done')
+  lines.push('echo "  ✓ Antfu Skills 完成"')
+  lines.push('echo ""')
+  lines.push('')
+
+  // Onmax Nuxt Skills — conditional
+  const onmaxSkills: string[] = []
+  if (has(feats, 'deploy-cloudflare')) onmaxSkills.push('nuxthub')
+  if (has(feats, 'vueuse')) onmaxSkills.push('vueuse')
+  if (has(feats, 'ui')) onmaxSkills.push('reka-ui', 'motion')
+  if (hasAny(feats, 'auth-better-auth')) onmaxSkills.push('nuxt-better-auth')
+
+  if (onmaxSkills.length > 0) {
+    lines.push('# Onmax Nuxt Skills')
+    lines.push('echo "📦 Onmax Nuxt Skills..."')
+    lines.push(`for skill in ${onmaxSkills.join(' ')}; do`)
+    lines.push('  npx skills add onmax/nuxt-skills@$skill $COPY_FLAGS')
+    lines.push('done')
+    lines.push('echo "  ✓ Onmax Nuxt Skills 完成"')
+    lines.push('echo ""')
+    lines.push('')
+  }
+
+  // 官方 Skills — only if there's something to install
+  if (has(feats, 'database') || has(feats, 'ui')) {
+    lines.push('# 官方 Skills')
+    lines.push('echo "📦 官方 Skills..."')
+    if (has(feats, 'database')) {
+      lines.push(
+        'npx skills add supabase/agent-skills@supabase-postgres-best-practices $COPY_FLAGS'
+      )
+    }
+    if (has(feats, 'ui')) {
+      lines.push('npx skills add nuxt/ui $COPY_FLAGS')
+    }
+    lines.push('echo "  ✓ 官方 Skills 完成"')
+    lines.push('echo ""')
+    lines.push('')
+  }
+
+  // TDD — always
+  lines.push('# TDD')
+  lines.push('echo "📦 TDD Skill..."')
+  lines.push('npx skills add obra/superpowers@test-driven-development $COPY_FLAGS')
+  lines.push('echo "  ✓ TDD Skill 完成"')
+  lines.push('echo ""')
+  lines.push('')
+
+  // Evlog — only review-logging-patterns if monitoring
+  if (has(feats, 'monitoring')) {
+    lines.push('# Evlog')
+    lines.push('echo "📦 Evlog Skills..."')
+    lines.push('npx skills add hugorcd/evlog@review-logging-patterns $COPY_FLAGS')
+    lines.push('echo "  ✓ Evlog Skills 完成"')
+    lines.push('echo ""')
+    lines.push('')
+  }
+
+  // Impeccable Design Skills — only if ui
+  if (has(feats, 'ui')) {
+    const impeccableSkills = [
+      'adapt',
+      'animate',
+      'arrange',
+      'audit',
+      'bolder',
+      'clarify',
+      'colorize',
+      'critique',
+      'delight',
+      'distill',
+      'extract',
+      'frontend-design',
+      'harden',
+      'normalize',
+      'onboard',
+      'optimize',
+      'overdrive',
+      'polish',
+      'quieter',
+      'teach-impeccable',
+      'typeset',
+    ]
+    lines.push('# Impeccable Design Skills（pbakaus/impeccable）')
+    lines.push('echo "📦 Impeccable Design Skills..."')
+    lines.push(`for skill in ${impeccableSkills.join(' ')}; do`)
+    lines.push('  npx skills add pbakaus/impeccable@$skill $COPY_FLAGS')
+    lines.push('done')
+    lines.push('echo "  ✓ Impeccable Design Skills 完成"')
+    lines.push('echo ""')
+    lines.push('echo "📝 注意：design orchestrator 為手動管理，位於 .claude/skills/design/"')
+    lines.push('echo ""')
+    lines.push('')
+  }
+
+  // 實用工具 — always
+  lines.push('# 實用工具')
+  lines.push('echo "📦 實用工具 Skills..."')
+  lines.push('npx skills add vercel-labs/skills@find-skills $COPY_FLAGS')
+  lines.push('echo "  ✓ 實用工具 Skills 完成"')
+  lines.push('echo ""')
+  lines.push('')
+
+  // Footer
+  lines.push('echo "✅ 所有 skills 安裝完成！"')
+  lines.push('echo ""')
+  lines.push('echo "💡 提示："')
+  lines.push('echo "  - 查看已安裝：pnpm skills:list"')
+  lines.push('echo "  - 重新安裝/更新：pnpm skills:install（本腳本）"')
+  lines.push('echo "  - 重啟 Claude Code CLI 以載入變更"')
+  lines.push('')
+
+  const scriptsDir = join(targetDir, 'scripts')
+  mkdirSync(scriptsDir, { recursive: true })
+  writeFileSync(join(scriptsDir, 'install-skills.sh'), lines.join('\n'))
 }
 
 // --- CI/CD Workflows ---

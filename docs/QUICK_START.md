@@ -136,7 +136,7 @@ pnpm dev          # 開啟 http://localhost:3000
 bash scripts/install-skills.sh
 ```
 
-安裝 46 個通用 Skills 到 `.claude/skills/`，命令權限和 MCP Servers 已在 `.claude/settings.json` 中預先配置。
+安裝與你選擇的功能對應的 Skills 到 `.claude/skills/`（腳本由 scaffold 依選配自動產生，只安裝需要的 skills）。命令權限和 MCP Servers 已在 `.claude/settings.json` 中預先配置。
 
 > 📖 關於 Supabase MCP：[SUPABASE_MCP.md](../template/docs/SUPABASE_MCP.md)
 
