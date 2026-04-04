@@ -5,7 +5,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 echo ""
-echo "🚀 Nuxt Supabase Starter — 環境初始化"
+echo "🚀 {{projectName}} — 環境初始化"
 echo "========================================"
 echo ""
 

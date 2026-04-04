@@ -1332,9 +1332,20 @@ function replacePlaceholders(dir: string, projectName: string): void {
     } else {
       const ext = entry.name.split('.').pop()
       if (
-        ['ts', 'js', 'json', 'jsonc', 'vue', 'md', 'toml', 'yaml', 'yml', 'css', 'html'].includes(
-          ext || ''
-        )
+        [
+          'ts',
+          'js',
+          'json',
+          'jsonc',
+          'vue',
+          'md',
+          'toml',
+          'yaml',
+          'yml',
+          'css',
+          'html',
+          'sh',
+        ].includes(ext || '')
       ) {
         let content = readFileSync(fullPath, 'utf-8')
         if (content.includes('{{projectName}}')) {

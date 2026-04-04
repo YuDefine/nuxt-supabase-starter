@@ -6,17 +6,58 @@ CLI_DIR="$ROOT_DIR/template/packages/create-nuxt-starter"
 CLI_DIST="$CLI_DIR/dist/cli.js"
 CLI_SRC="$CLI_DIR/src/cli.ts"
 
-TARGET_PATH="${1:-}"
-AUTH_MODE="${2:-nuxt-auth-utils}"
+TARGET_PATH=""
+AUTH_MODE="nuxt-auth-utils"
+EXTRA_ARGS=()
+
+# Parse arguments: first positional = target path, rest are passed through to CLI
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --auth)
+      AUTH_MODE="${2:-nuxt-auth-utils}"
+      shift 2
+      ;;
+    --with|--without|--minimal|--preset)
+      EXTRA_ARGS+=("$1")
+      if [[ "$1" != "--minimal" ]]; then
+        EXTRA_ARGS+=("${2:-}")
+        shift
+      fi
+      shift
+      ;;
+    --fast)
+      # already included by default, accept silently
+      shift
+      ;;
+    -*)
+      EXTRA_ARGS+=("$1")
+      shift
+      ;;
+    *)
+      if [[ -z "$TARGET_PATH" ]]; then
+        TARGET_PATH="$1"
+      else
+        EXTRA_ARGS+=("$1")
+      fi
+      shift
+      ;;
+  esac
+done
 
 if [[ -z "$TARGET_PATH" ]]; then
-  echo "Usage: bash scripts/create-fast-project.sh <target-path> [auth]"
+  echo "Usage: bash scripts/create-fast-project.sh <target-path> [options]"
+  echo ""
+  echo "Options:"
+  echo "  --auth <mode>           nuxt-auth-utils (default) | better-auth | none"
+  echo "  --with <features>       Add features (comma-separated)"
+  echo "  --without <features>    Remove features (comma-separated)"
+  echo "  --minimal               Start with empty feature set"
   echo ""
   echo "Examples:"
   echo "  bash scripts/create-fast-project.sh temp/my-app"
-  echo "  bash scripts/create-fast-project.sh temp/my-app better-auth"
-  echo ""
-  echo "auth: nuxt-auth-utils | better-auth | none"
+  echo "  bash scripts/create-fast-project.sh temp/my-app --auth better-auth"
+  echo "  bash scripts/create-fast-project.sh temp/my-app --auth better-auth --with ssr,seo,monitoring"
+  echo "  bash scripts/create-fast-project.sh temp/my-app --without charts,security --with monitoring"
   exit 1
 fi
 
@@ -54,7 +95,8 @@ node "$CLI_DIST" \
   "$TARGET_DIR" \
   --yes \
   --fast \
-  --auth "$AUTH_MODE"
+  --auth "$AUTH_MODE" \
+  "${EXTRA_ARGS[@]}"
 
 echo "[3/3] keyword scan (should be empty)"
 if command -v rg >/dev/null 2>&1; then
