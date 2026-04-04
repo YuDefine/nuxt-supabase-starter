@@ -72,6 +72,68 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 - `deploy-cloudflare`, `deploy-vercel`, `deploy-node`
 - `quality`, `git-hooks`
 
+### Tech Stack 選擇指引
+
+根據專案需求，從每個決策點選擇合適的選項，再組合成 `--auth` / `--with` / `--without` 參數。
+
+#### 決策矩陣
+
+| 決策點 | 選項 | 預設 | 適合場景 | 取捨與限制 |
+|--------|------|:----:|----------|------------|
+| **Auth** | `nuxt-auth-utils` | ✅ | 所有平台、Edge/Workers | Cookie-based session，輕量 |
+| | `better-auth` | | 需要 DB session、多裝置管理 | 自動啟用 `database`；Workers 需 Hyperdrive |
+| | `none` | | 純靜態、不需認證 | — |
+| **Rendering** | SPA（預設） | ✅ | Dashboard、內部工具 | 無 SEO、首屏較慢 |
+| | `ssr` | | 面向用戶產品、需要 SEO | 解鎖 `seo` 功能；伺服器成本較高 |
+| **Deploy** | `deploy-cloudflare` | ✅ | Edge 部署、低延遲 | 需 Wrangler；better-auth 需加 Hyperdrive |
+| | `deploy-vercel` | | 已有 Vercel 團隊 | Serverless，冷啟動 |
+| | `deploy-node` | | 自建主機、Docker | 需自行管理伺服器 |
+| **Testing** | `testing-full` | ✅ | 正式專案、CI/CD | Vitest + Playwright（E2E），安裝較慢 |
+| | `testing-vitest` | | 快速迭代、僅 unit test | 無 E2E |
+| | 無 | | prototype、hackathon | `--without testing-full` |
+| **State** | `pinia` | ✅ | 需全域狀態管理 | Pinia + Colada query caching |
+| | 無 | | 極簡應用 | `--without pinia` |
+| **Monitoring** | `monitoring` | | 生產環境需錯誤追蹤 | Sentry + Evlog；`--with monitoring` |
+| | 無 | ✅ | 開發階段 | — |
+| **Extras** | `charts` | ✅ | 數據視覺化 | Unovis |
+| | `security` | ✅ | 生產環境 | CSP headers、CSRF 防護 |
+| | `image` | ✅ | 有圖片內容 | @nuxt/image 自動壓縮 |
+| | `seo` | | 需要 SEO | 依賴 `ssr`；`--with ssr,seo` |
+| | `vueuse` | ✅ | 常用 composables | VueUse utilities |
+| **Quality** | `quality` | ✅ | 所有專案 | OXLint + OXFmt（Rust，極快） |
+| **Git** | `git-hooks` | ✅ | 團隊協作 | Husky + Commitlint |
+
+#### 互斥規則
+
+- Auth：`nuxt-auth-utils` 和 `better-auth` 不能同時選
+- Testing：`testing-full` 和 `testing-vitest` 不能同時選
+- Deploy：三個部署目標只能選一
+- SEO 依賴 SSR：選 `seo` 會自動啟用 `ssr`
+
+#### 決策流程
+
+```
+需要認證嗎？
+├─ 是 → 需要 DB session 管理？
+│       ├─ 是 → --auth better-auth
+│       └─ 否 → --auth nuxt-auth-utils（預設）
+└─ 否 → --auth none
+
+面向誰？
+├─ 終端用戶（需 SEO）→ --with ssr,seo
+└─ 內部用戶（Dashboard）→ 預設 SPA 即可
+
+部署到哪？
+├─ Cloudflare → deploy-cloudflare（預設）
+├─ Vercel → --without deploy-cloudflare --with deploy-vercel
+└─ 自建主機 → --without deploy-cloudflare --with deploy-node
+
+需要多快啟動？
+├─ 最快（prototype）→ --fast --without testing-full
+├─ 正常 → 預設即可
+└─ 最小 → --minimal --with ui,database
+```
+
 ### 驗證沒有預設關鍵字殘留
 
 ```bash
