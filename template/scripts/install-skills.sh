@@ -61,12 +61,6 @@ echo ""
 echo "📝 注意：design orchestrator 為手動管理，位於 .claude/skills/design/"
 echo ""
 
-# Excalidraw Diagram Workbench
-echo "📦 Excalidraw Diagram Workbench..."
-npx skills add YuDefine/excalidraw-diagram-workbench@excalidraw-diagram $COPY_FLAGS
-echo "  ✓ Excalidraw Diagram Workbench 完成"
-echo ""
-
 # 實用工具
 echo "📦 實用工具 Skills..."
 npx skills add vercel-labs/skills@find-skills $COPY_FLAGS
