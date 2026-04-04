@@ -203,6 +203,7 @@ export function generatePackageJson(
   basePkg.scripts.setup = 'bash scripts/setup.sh'
   basePkg.scripts['skills:install'] = 'bash ./scripts/install-skills.sh'
   basePkg.scripts['skills:list'] = 'bash ./scripts/check-skills.sh'
+  basePkg.scripts['skills:update'] = 'bash ./scripts/install-skills.sh'
 
   // Sort dependencies
   basePkg.dependencies = sortObject(basePkg.dependencies)
