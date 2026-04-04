@@ -12,8 +12,8 @@ type CliAuth = 'nuxt-auth-utils' | 'better-auth' | 'none'
 
 function isMonorepoRoot(dir: string): boolean {
   return (
-    existsSync(resolve(dir, 'template/packages/create-nuxt-starter'))
-    && existsSync(resolve(dir, 'scripts/create-clean.sh'))
+    existsSync(resolve(dir, 'template/packages/create-nuxt-starter')) &&
+    existsSync(resolve(dir, 'scripts/create-clean.sh'))
   )
 }
 
@@ -110,9 +110,7 @@ function buildSelectionsFromArgs(args: {
 
   const useFastPreset = args.fast === true || presetArg === 'fast'
 
-  const selected = new Set(
-    args.minimal ? [] : getDefaultSelections(args.projectName).features,
-  )
+  const selected = new Set(args.minimal ? [] : getDefaultSelections(args.projectName).features)
 
   if (useFastPreset) {
     selected.delete('testing-full')
@@ -212,7 +210,7 @@ const main = defineCommand({
     const invocationCwd = getInvocationCwd(monorepoRoot)
     const projectName = args.dir as string | undefined
     const hasCustomFlags = Boolean(
-      args.auth || args.with || args.without || args.minimal || args.preset || args.fast,
+      args.auth || args.with || args.without || args.minimal || args.preset || args.fast
     )
 
     // Validate directory
@@ -242,10 +240,11 @@ const main = defineCommand({
         fast: args.fast as boolean | undefined,
       })
 
+      const displayName = basename(resolve(invocationCwd, name))
       if (hasCustomFlags) {
-        consola.info(`使用自訂參數配置建立專案：${name}`)
+        consola.info(`使用自訂參數配置建立專案：${displayName}`)
       } else {
-        consola.info(`使用預設配置建立專案：${name}`)
+        consola.info(`使用預設配置建立專案：${displayName}`)
       }
     } else {
       // Interactive mode

@@ -202,9 +202,13 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
 }
 
 export function displaySummary(selections: UserSelections): void {
+  // Use basename for display — projectName may be an absolute path from scripts
+  const displayName = selections.projectName.includes('/')
+    ? selections.projectName.split('/').pop()!
+    : selections.projectName
   consola.log('')
   consola.log('📋 專案配置摘要：')
-  consola.log(`   專案名稱：${selections.projectName}`)
+  consola.log(`   專案名稱：${displayName}`)
   consola.log(`   功能：`)
 
   for (const featureId of selections.features) {
