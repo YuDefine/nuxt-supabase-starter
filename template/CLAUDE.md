@@ -60,7 +60,7 @@ Nuxt 4, Vue 3 (Composition API + `<script setup>`), TypeScript, Tailwind CSS, Nu
 ## Commands
 
 ```bash
-pnpm dev             # Nuxt dev server（需要時自動啟動，見 browser-use-screenshot skill）
+pnpm dev             # Nuxt dev server（需要時自動啟動，見 review-screenshot skill）
 pnpm check           # vp check (lint + fmt + test) + typecheck
 vp test              # All tests + coverage
 vp lint              # Lint only
@@ -98,7 +98,7 @@ supabase gen types typescript --local > app/types/database.types.ts  # Generate 
 
 ## Proactive Behaviors
 
-- **Dev server**：需要截圖/瀏覽/測試 UI 時，自動偵測並啟動。詳見 `browser-use-screenshot` skill
+- **Dev server**：需要截圖/瀏覽/測試 UI 時，自動偵測並啟動。詳見 `review-screenshot` skill
 - **產品思維**（僅在需求模糊時）：從用戶角度提問協助釐清，需求明確時直接執行
 - **其餘自動行為**（知識搜索、知識萃取、Review 深度、UI QA）由 `.claude/hooks/` 強制觸發，詳見全域 `~/.claude/CLAUDE.md` Auto-Harness
 

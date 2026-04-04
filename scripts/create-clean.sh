@@ -444,11 +444,10 @@ if [ -f "pnpm-workspace.yaml" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 22. 更新 browser-use-screenshot skill 中的 starter 名稱
+# 22. 更新截圖 skill 中的 starter 名稱
 # ---------------------------------------------------------------------------
 for skill_file in \
-  ".claude/skills/browser-use-screenshot/SKILL.md" \
-  ".claude/skills/review-screenshot.md"; do
+  ".claude/skills/review-screenshot/SKILL.md"; do
   if [ -f "$skill_file" ]; then
     sed -i '' "s/nuxt-supabase-starter/${PROJECT_NAME}/g" "$skill_file"
   fi

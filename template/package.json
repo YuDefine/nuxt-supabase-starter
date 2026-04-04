@@ -28,7 +28,7 @@
     "setup": "bash scripts/setup.sh",
     "skills:install": "bash ./scripts/install-skills.sh",
     "skills:list": "bash ./scripts/check-skills.sh",
-    "skills:update": "npx skills update",
+    "skills:update": "bash ./scripts/install-skills.sh",
     "tag": "git tag v$(node -p \"require('./package.json').version\") && git push origin --tags",
     "test": "vp test --coverage",
     "test:e2e": "playwright test",
