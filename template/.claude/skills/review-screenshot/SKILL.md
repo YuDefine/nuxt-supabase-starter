@@ -1,140 +1,91 @@
 ---
 name: review-screenshot
-description: '針對人工檢查清單的 todo 項目逐一截圖附註，輔助人工驗收。搭配 /spectra workflow 的 ## 人工檢查 區塊使用。'
+description: "截圖、看畫面、確認 UI、看一下頁面、幫我看 UI、review screenshot、跑檢查清單 — 統一截圖入口，派遣 screenshot-review agent（Sonnet）執行。"
 ---
 
-# 人工檢查截圖（Review Screenshot）
+# 截圖（統一入口）
 
-針對 Spectra tasks artifact 中 `## 人工檢查` 的 todo 項目，逐一截圖並附註，產出可視覺對照的驗收報告。
+所有截圖工作由 `screenshot-review` agent（Sonnet）執行。**MUST** 使用 Agent tool 派遣，不要在主 session 直接跑 browser-use 命令。
 
 ## 觸發時機
 
-- 使用者說「幫我截圖檢查」「review screenshot」「跑一下檢查清單」
-- Spectra workflow 完成後，使用者想要視覺驗收
-- 使用者指定特定 todo 項目要截圖（如「截圖 #3」）
+- 「截圖」「看畫面」「幫我看 UI」「看一下頁面」（一般截圖）
+- 「review screenshot」「跑檢查清單」「截圖檢查」（review 驗收）
+- UI 實作後確認、除錯截圖
+- Spectra workflow 完成後視覺驗收
 
-## 前置條件（自動處理，不詢問使用者）
+## 工具選擇規則
 
-### 1. 找到 dev server port
+| 場景 | 工具 | 原因 |
+|---|---|---|
+| 一般截圖、UI 確認、review 驗收 | `browser-use` CLI | 快速、低延遲（50ms） |
+| 響應式截圖（需調整視窗大小） | Playwright MCP | browser-use 固定 1920x1080 無法調整 |
+| 多分頁/跨頁操作 | Playwright MCP | browser-use 單一 session 限制 |
 
-**不要假設 port**，多個 Nuxt 專案可能同時運行。
+Agent 會根據任務自動選擇工具，主 session 不需指定。
 
-```bash
-ps aux | grep -E 'nuxt-supabase-starter.*nuxt' | grep -v grep
-```
-
-- 有找到且 port 可連線 → 直接使用
-- 有找到但 port 無回應 → process 掛掉了，kill 後重啟
-- 完全沒找到 → 自動找可用 port 並啟動
-
-### 2. 登入測試帳號
-
-依專案 auth 設定登入（better-auth email/password 或 dev-login route）。
-
-### 3. Color Mode（Light Mode 強制）
-
-Chromium headless 預設跟隨系統偏好，可能進入 dark mode。截圖前執行：
-
-```bash
-browser-use eval "localStorage.setItem('nuxt-color-mode', 'light'); document.documentElement.classList.remove('dark'); document.documentElement.classList.add('light'); document.documentElement.style.colorScheme = 'light'"
-```
-
-### 4. 截圖與互動
-
-- **截圖指令** — `browser-use screenshot <path>`
-- **互動操作** — `browser-use state` → `browser-use click <index>` → `browser-use screenshot`
-- **結束清理** — `browser-use close`
-
-若同一 conversation 已完成前置檢查，跳過直接截圖。
-
-## 流程
-
-### Step 1: 定位人工檢查清單
-
-找到目前的 change 和對應的 tasks artifact：
-
-```bash
-spectra list --json
-```
-
-讀取 tasks artifact，找到 `## 人工檢查` 區塊，解析所有帶有 `#N` 流水號的 todo 項目。
-
-如果使用者指定特定項目（如 `#3` 或 `#1~#5`），只處理指定範圍。
-
-### Step 2: 逐項截圖
-
-對每個可截圖的 todo 項目：
-
-1. **判斷截圖目標** — 根據 todo 描述推斷需要截圖的頁面/狀態
-   - 如 `確認 happy path 正常運作` → 截圖主要功能頁面
-   - 如 `確認 loading 狀態` → 截圖 loading 中的畫面
-   - 如 `確認手機響應式` → 調整視窗大小後截圖
-   - 非 UI 項目（如 `vp check 通過`）→ 跳過截圖，標註「非 UI 項目」
-
-2. **執行截圖** — 使用 browser-use CLI
-
-```bash
-# 命名規則：<change-name>-#<N>-<brief-desc>.png
-browser-use screenshot screenshots/local/review/<change-name>-#<N>-<brief-desc>.png
-```
-
-3. **讀取截圖** — 用 Read tool 查看截圖內容
-
-4. **記錄結果** — 在報告中附註觀察
-
-### Step 3: 產出截圖報告
-
-在 `screenshots/local/review/` 建立報告檔案 `<change-name>-review.md`：
-
-```markdown
-# 人工檢查截圖報告
-
-> 來源：`<change-name>` | Specs: `<spec-1>`, `<spec-2>`
-> 日期：YYYY-MM-DD
-
-## 截圖結果
-
-### #1 實際操作功能，確認 happy path 正常運作
-
-- 狀態：✅ 通過 / ⚠️ 需確認 / ❌ 有問題
-- 截圖：`screenshots/local/review/<change-name>-#1-happy-path.png`
-- 附註：（觀察到的畫面描述）
-
-### #5 vp check 全部通過
-
-- 狀態：✅ 通過（非 UI 項目，透過 CLI 驗證）
-- 驗證指令：`vp check`
-
-## 摘要
-
-- 通過：N 項
-- 需確認：N 項
-- 有問題：N 項
-```
-
-### Step 4: 回報使用者
-
-展示報告摘要。使用者可以用「#3 的截圖有問題」這種方式溝通。
-
-## 截圖存放規則
+## 截圖存放統一規則
 
 ```
-screenshots/local/review/
-├── <change-name>-#1-happy-path.png
-├── <change-name>-#2-edge-case-empty.png
-└── <change-name>-review.md
+screenshots/<environment>/<語義>/
 ```
 
-- 全部存在 `screenshots/local/review/`（`screenshots/local/` 已在 `.gitignore`）
-- 檔名含流水號 `#N`，方便對照
+- `<environment>`：`local`、`staging`、`production` 等，依專案狀況
+- `<語義>`：自由命名，如 `review/`、`debug/`、`feature-xxx/`、`<change-name>/`
+- Review 報告：`screenshots/<env>/<語義>/review.md`
+- **MUST** `mkdir -p` 確保目錄存在
+- `.gitignore` 已加入 `screenshots/`
+
+## 派遣方式
+
+使用 Agent tool：
+
+- `subagent_type`: `"screenshot-review"`
+- `prompt`: 描述截圖任務
+
+### Ad-hoc 截圖
+
+```
+prompt: |
+  截圖驗證以下頁面：
+  1. /path/to/page — 頁面描述
+  2. /path/to/page2 — 頁面描述
+  Dev server port: <port>（若已知）
+```
+
+### Review 截圖（Spectra 人工檢查）
+
+```
+prompt: |
+  針對 change `<change-name>` 的人工檢查清單逐項截圖驗證：
+
+  ## 人工檢查
+  - [ ] #1 實際操作功能，確認 happy path 正常運作
+  - [ ] #2 測試 edge case...
+  ...
+
+  Dev server port: <port>（若已知）
+```
+
+### 除錯截圖
+
+```
+prompt: |
+  除錯截圖：頁面 /path 出現 [問題描述]，需要截圖確認目前狀態。
+  Dev server port: <port>（若已知）
+```
+
+## 結果處理
+
+Agent 回傳後，主 session 應：
+
+1. 向使用者展示摘要表格（通過/需確認/有問題）
+2. 列出需要人工確認的項目及截圖路徑
+3. 報告檔位置：`screenshots/<env>/<語義>/review.md`
 
 ## 注意事項
 
-- **Dev Server Stale Cache**：Nitro dev server 有時快取已刪除的檔案引用導致 500 error。解法：重啟 dev server。若仍有問題，刪除 `.nuxt/` 後重啟
-
-## Guardrails
-
-- **NEVER** 對非 UI 項目強行截圖 — 用 CLI 驗證即可
-- **ALWAYS** 讀取截圖後再判斷狀態，不要未看先判
-- **ALWAYS** 保留截圖檔案，不要自動清除
-- 截圖失敗時標註失敗原因，不要跳過
+- Agent 使用 Sonnet 模型，節省 cost
+- 截圖存放在 `screenshots/<env>/<語義>/`（gitignored）
+- Agent 會產出 `review.md` 報告，主 session 應向使用者展示摘要
+- 主 session **不需要**自己跑 `browser-use` 命令

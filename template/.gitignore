@@ -33,7 +33,8 @@ supabase/.temp/
 coverage/
 .nuxtrc
 
-# Screenshots (browser-use)
+# Screenshots
+screenshots/
 temp/
 
 # Spectra runtime state (keep .spectra.yaml and folder skeleton)
@@ -52,32 +53,15 @@ yarn-error.log*
 # Legacy skills directory (replaced by .claude/skills/)
 .agents/
 
-# Third-party skills (installed via scripts/install-skills.sh)
-# Only project-specific skills (pinia-store, server-api, supabase-*, spectra-*) are tracked
-.claude/skills/contributing/
+# Third-party skills NOT used by scaffold (installed on-demand via npx skills add)
+# Skills referenced in assemble.ts MUST be tracked as real directories
 .claude/skills/create-evlog-*/
 .claude/skills/document-writer/
-.claude/skills/find-skills/
-.claude/skills/motion/
-.claude/skills/nuxt/
-.claude/skills/nuxt-better-auth/
 .claude/skills/nuxt-content/
 .claude/skills/nuxt-modules/
-.claude/skills/nuxt-ui/
 .claude/skills/nuxthub/
-.claude/skills/pinia/
-.claude/skills/reka-ui/
 .claude/skills/review-logging-patterns/
-.claude/skills/supabase-postgres-best-practices/
-.claude/skills/test-driven-development/
 .claude/skills/ts-library/
-.claude/skills/vitest/
-.claude/skills/vitepress/
-.claude/skills/vue/
-.claude/skills/vue-best-practices/
-.claude/skills/vue-testing-best-practices/
-.claude/skills/vueuse/
-.claude/skills/vueuse-functions/
 .claude/skills/versions.json
 
 # TypeScript

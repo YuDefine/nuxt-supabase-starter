@@ -464,7 +464,7 @@ function copyClaudeCodeAssets(targetDir: string, selectedFeatureIds: string[]): 
     'vitest',
     'test-driven-development',
     'review-rules',
-    'browser-use-screenshot',
+    'review-screenshot',
     'find-skills',
 
     // Spectra SDD (Spec-Driven Development)
@@ -524,7 +524,6 @@ function copyClaudeCodeAssets(targetDir: string, selectedFeatureIds: string[]): 
       'typeset',
       'adapt',
       // UI workflow support
-      'contributing',
       'review-archive',
       'review-screenshot',
       'subagent-dev'
@@ -1131,7 +1130,7 @@ export function generateClaudeMd(targetDir: string, selectedFeatureIds: string[]
   }
   if (selectedFeatureIds.includes('pinia')) skillRows.push('| Pinia Store | `pinia-store` |')
   skillRows.push('| TDD | `test-driven-development` |')
-  skillRows.push('| 截圖調試 | `browser-use-screenshot` |')
+  skillRows.push('| 截圖驗證 | `review-screenshot` |')
 
   if (skillRows.length > 0) {
     sections.push('## AI Skills')
