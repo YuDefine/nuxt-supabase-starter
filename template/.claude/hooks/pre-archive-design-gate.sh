@@ -29,8 +29,18 @@ fi
 OPENSPEC_DIR="${_PROJECT}/openspec"
 ACTIVE_CHANGE=""
 
-# Find active change directory (skip archive/)
-if [ -d "$OPENSPEC_DIR/changes" ]; then
+# Try to extract target change name from skill args
+TARGET_CHANGE=$(echo "$INPUT" | jq -r '.tool_input.args // ""' 2>/dev/null || echo "")
+# Strip leading/trailing whitespace
+TARGET_CHANGE=$(echo "$TARGET_CHANGE" | xargs 2>/dev/null || echo "")
+
+# If args specify a change name, use it directly
+if [ -n "$TARGET_CHANGE" ] && [ -d "$OPENSPEC_DIR/changes/$TARGET_CHANGE" ] && [ -f "$OPENSPEC_DIR/changes/$TARGET_CHANGE/proposal.md" ]; then
+  ACTIVE_CHANGE="$OPENSPEC_DIR/changes/$TARGET_CHANGE/"
+fi
+
+# Fallback: find first active change directory (skip archive/)
+if [ -z "$ACTIVE_CHANGE" ] && [ -d "$OPENSPEC_DIR/changes" ]; then
   for dir in "$OPENSPEC_DIR/changes"/*/; do
     [ -d "$dir" ] || continue
     [[ "$(basename "$dir")" == "archive" ]] && continue
@@ -58,8 +68,8 @@ BLOCKED=false
 MESSAGES=()
 
 # --- Check 1: 人工檢查 ---
-if grep -q '^## 人工檢查' "$TASKS_FILE"; then
-  UNCHECKED=$(sed -n '/^## 人工檢查/,/^## /p' "$TASKS_FILE" | grep -c '^\- \[ \]' || true)
+if grep -q '^## .*人工檢查' "$TASKS_FILE"; then
+  UNCHECKED=$(sed -n '/^## .*人工檢查/,/^## /p' "$TASKS_FILE" | grep -c '^\- \[ \]' || true)
   if [ "$UNCHECKED" -gt 0 ]; then
     BLOCKED=true
     MESSAGES+=("[Guard] 人工檢查有 ${UNCHECKED} 個未完成項目。

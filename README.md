@@ -132,7 +132,7 @@ Nuxt 4 + Vue 3 + TypeScript + Supabase + Nuxt UI + Tailwind CSS + Pinia + Better
 
 | 文件                                             | 說明                      |
 | ------------------------------------------------ | ------------------------- |
-| [WORKFLOW.md](template/docs/WORKFLOW.md)         | TDD、自動化檢查、Git 規範 |
+| [WORKFLOW.md](template/docs/WORKFLOW.md)         | SDD、TDD、自動化檢查、Git 規範 |
 | [FAQ.md](template/docs/FAQ.md)                   | 常見疑問集                |
 | [DEPLOYMENT.md](template/docs/DEPLOYMENT.md)     | 部署指南                  |
 | [TECH_STACK.md](docs/TECH_STACK.md)              | 技術棧與選型理由          |

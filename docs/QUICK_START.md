@@ -91,30 +91,30 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 
 #### 決策矩陣
 
-| 決策點 | 選項 | 預設 | 適合場景 | 取捨與限制 |
-|--------|------|:----:|----------|------------|
-| **Auth** | `nuxt-auth-utils` | ✅ | 所有平台、Edge/Workers | Cookie-based session，輕量 |
-| | `better-auth` | | 需要 DB session、多裝置管理 | 自動啟用 `database`；Workers 需 Hyperdrive |
-| | `none` | | 純靜態、不需認證 | — |
-| **Rendering** | SPA（預設） | ✅ | Dashboard、內部工具 | 無 SEO、首屏較慢 |
-| | `ssr` | | 面向用戶產品、需要 SEO | 解鎖 `seo` 功能；伺服器成本較高 |
-| **Deploy** | `deploy-cloudflare` | ✅ | Edge 部署、低延遲 | 需 Wrangler；better-auth 需加 Hyperdrive |
-| | `deploy-vercel` | | 已有 Vercel 團隊 | Serverless，冷啟動 |
-| | `deploy-node` | | 自建主機、Docker | 需自行管理伺服器 |
-| **Testing** | `testing-full` | ✅ | 正式專案、CI/CD | Vitest + Playwright（E2E），安裝較慢 |
-| | `testing-vitest` | | 快速迭代、僅 unit test | 無 E2E |
-| | 無 | | prototype、hackathon | `--without testing-full` |
-| **State** | `pinia` | ✅ | 需全域狀態管理 | Pinia + Colada query caching |
-| | 無 | | 極簡應用 | `--without pinia` |
-| **Monitoring** | `monitoring` | | 生產環境需錯誤追蹤 | Sentry + Evlog；`--with monitoring` |
-| | 無 | ✅ | 開發階段 | — |
-| **Extras** | `charts` | ✅ | 數據視覺化 | Unovis |
-| | `security` | ✅ | 生產環境 | CSP headers、CSRF 防護 |
-| | `image` | ✅ | 有圖片內容 | @nuxt/image 自動壓縮 |
-| | `seo` | | 需要 SEO | 依賴 `ssr`；`--with ssr,seo` |
-| | `vueuse` | ✅ | 常用 composables | VueUse utilities |
-| **Quality** | `quality` | ✅ | 所有專案 | OXLint + OXFmt（Rust，極快） |
-| **Git** | `git-hooks` | ✅ | 團隊協作 | Husky + Commitlint |
+| 決策點         | 選項                | 預設 | 適合場景                    | 取捨與限制                                 |
+| -------------- | ------------------- | :--: | --------------------------- | ------------------------------------------ |
+| **Auth**       | `nuxt-auth-utils`   |  ✅  | 所有平台、Edge/Workers      | Cookie-based session，輕量                 |
+|                | `better-auth`       |      | 需要 DB session、多裝置管理 | 自動啟用 `database`；Workers 需 Hyperdrive |
+|                | `none`              |      | 純靜態、不需認證            | —                                          |
+| **Rendering**  | SPA（預設）         |  ✅  | Dashboard、內部工具         | 無 SEO、首屏較慢                           |
+|                | `ssr`               |      | 面向用戶產品、需要 SEO      | 解鎖 `seo` 功能；伺服器成本較高            |
+| **Deploy**     | `deploy-cloudflare` |  ✅  | Edge 部署、低延遲           | 需 Wrangler；better-auth 需加 Hyperdrive   |
+|                | `deploy-vercel`     |      | 已有 Vercel 團隊            | Serverless，冷啟動                         |
+|                | `deploy-node`       |      | 自建主機、Docker            | 需自行管理伺服器                           |
+| **Testing**    | `testing-full`      |  ✅  | 正式專案、CI/CD             | Vitest + Playwright（E2E），安裝較慢       |
+|                | `testing-vitest`    |      | 快速迭代、僅 unit test      | 無 E2E                                     |
+|                | 無                  |      | prototype、hackathon        | `--without testing-full`                   |
+| **State**      | `pinia`             |  ✅  | 需全域狀態管理              | Pinia + Colada query caching               |
+|                | 無                  |      | 極簡應用                    | `--without pinia`                          |
+| **Monitoring** | `monitoring`        |      | 生產環境需錯誤追蹤          | Sentry + Evlog；`--with monitoring`        |
+|                | 無                  |  ✅  | 開發階段                    | —                                          |
+| **Extras**     | `charts`            |  ✅  | 數據視覺化                  | Unovis                                     |
+|                | `security`          |  ✅  | 生產環境                    | CSP headers、CSRF 防護                     |
+|                | `image`             |  ✅  | 有圖片內容                  | @nuxt/image 自動壓縮                       |
+|                | `seo`               |      | 需要 SEO                    | 依賴 `ssr`；`--with ssr,seo`               |
+|                | `vueuse`            |  ✅  | 常用 composables            | VueUse utilities                           |
+| **Quality**    | `quality`           |  ✅  | 所有專案                    | OXLint + OXFmt（Rust，極快）               |
+| **Git**        | `git-hooks`         |  ✅  | 團隊協作                    | Husky + Commitlint                         |
 
 #### 互斥規則
 
@@ -174,6 +174,8 @@ pnpm dev          # 開啟 http://localhost:3000 看 Demo
 > 現有專案整合：[INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md)
 
 ---
+
+v1-data-migration
 
 ## 前置條件
 
@@ -302,15 +304,15 @@ supabase migration new <name>  # 建立新 migration
 
 ## 相關文件
 
-| 文件                                           | 說明                        |
-| ---------------------------------------------- | --------------------------- |
-| [CLAUDE_CODE_GUIDE.md](./CLAUDE_CODE_GUIDE.md) | Claude Code 配置指南        |
-| [SUPABASE_MCP.md](../template/docs/SUPABASE_MCP.md) | Supabase MCP 整合      |
-| [SUPABASE_GUIDE.md](./SUPABASE_GUIDE.md)       | Supabase 入門與 RLS         |
-| [WORKFLOW.md](../template/docs/WORKFLOW.md)    | TDD 開發流程                |
-| [OPENSPEC.md](../template/docs/OPENSPEC.md)    | Spectra 工作流程            |
-| [API_PATTERNS.md](../template/docs/API_PATTERNS.md) | Server API 設計模式    |
-| [DEPLOYMENT.md](../template/docs/DEPLOYMENT.md) | Cloudflare Workers 部署指南 |
+| 文件                                                | 說明                        |
+| --------------------------------------------------- | --------------------------- |
+| [CLAUDE_CODE_GUIDE.md](./CLAUDE_CODE_GUIDE.md)      | Claude Code 配置指南        |
+| [SUPABASE_MCP.md](../template/docs/SUPABASE_MCP.md) | Supabase MCP 整合           |
+| [SUPABASE_GUIDE.md](./SUPABASE_GUIDE.md)            | Supabase 入門與 RLS         |
+| [WORKFLOW.md](../template/docs/WORKFLOW.md)         | SDD、TDD 開發流程           |
+| [OPENSPEC.md](../template/docs/OPENSPEC.md)         | Spectra 工作流程            |
+| [API_PATTERNS.md](../template/docs/API_PATTERNS.md) | Server API 設計模式         |
+| [DEPLOYMENT.md](../template/docs/DEPLOYMENT.md)     | Cloudflare Workers 部署指南 |
 
 ---
 

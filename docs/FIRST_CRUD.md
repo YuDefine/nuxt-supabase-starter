@@ -408,11 +408,11 @@ describe('POST /api/v1/bookmarks', () => {
 
 ### 延伸學習
 
-- **Migration 規範** — `docs/verify/SUPABASE_MIGRATION_GUIDE.md`
-- **RLS 最佳實踐** — `docs/verify/RLS_BEST_PRACTICES.md`
-- **API 設計指南** — `docs/verify/API_DESIGN_GUIDE.md`
-- **Pinia 架構** — `docs/verify/PINIA_ARCHITECTURE.md`
-- **Auth 整合** — `docs/verify/AUTH_INTEGRATION.md`
+- **Migration 規範** — [`SUPABASE_MIGRATION_GUIDE.md`](../template/docs/verify/SUPABASE_MIGRATION_GUIDE.md)
+- **RLS 最佳實踐** — [`RLS_BEST_PRACTICES.md`](../template/docs/verify/RLS_BEST_PRACTICES.md)
+- **API 設計指南** — [`API_DESIGN_GUIDE.md`](../template/docs/verify/API_DESIGN_GUIDE.md)
+- **Pinia 架構** — [`PINIA_ARCHITECTURE.md`](../template/docs/verify/PINIA_ARCHITECTURE.md)
+- **Auth 整合** — [`AUTH_INTEGRATION.md`](../template/docs/verify/AUTH_INTEGRATION.md)
 
 ---
 
@@ -426,7 +426,7 @@ describe('POST /api/v1/bookmarks', () => {
 | ---- | -------------------------------------- | ---------------------------------------------- |
 | 1    | [SUPABASE_GUIDE.md](SUPABASE_GUIDE.md) | Migration 進階、RLS 深入、Local-first 開發流程 |
 | 2    | [API_PATTERNS.md](../template/docs/API_PATTERNS.md) | RESTful 設計模式、分頁、搜尋、錯誤處理         |
-| 3    | [WORKFLOW.md](../template/docs/WORKFLOW.md) | TDD 紅綠重構循環、自動化檢查流程               |
+| 3    | [WORKFLOW.md](../template/docs/WORKFLOW.md) | SDD、TDD 紅綠重構循環、自動化檢查流程          |
 | 4    | [FAQ.md](../template/docs/FAQ.md) | 常見問題速查、技術決策指南                     |
 
 ### 🟡 進階（深入掌握）
