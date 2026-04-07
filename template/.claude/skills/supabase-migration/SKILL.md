@@ -37,6 +37,23 @@ WITH (security_invoker = true)
 AS SELECT ...;
 ```
 
+**原因：** Postgres 的 view 預設 bypass RLS（以 view owner 的權限執行）。不加 `security_invoker = true` 等於 RLS 對 view 無效。
+
+## SECURITY DEFINER 函式位置
+
+**NEVER** 將 SECURITY DEFINER 函式放在 exposed schema（`public`）：
+
+```sql
+-- ❌ public schema — 透過 Data API 可直接呼叫，繞過所有存取控制
+CREATE FUNCTION public.dangerous_func() ... SECURITY DEFINER ...;
+
+-- ✅ private schema + 明確 GRANT
+CREATE FUNCTION your_schema.safe_func() ... SECURITY DEFINER SET search_path = '' ...;
+GRANT EXECUTE ON FUNCTION your_schema.safe_func TO authenticated;
+```
+
+若需要透過 PostgREST（Data API）呼叫，在 `public` 建立 thin wrapper（SECURITY INVOKER）呼叫 private schema 的實作。
+
 ## 開發流程
 
 ```bash
@@ -44,9 +61,12 @@ supabase migration new <description>    # 建立 migration
 # 編輯 SQL（保持單一主題）
 supabase db reset                       # 套用到本機
 supabase db lint --level warning        # 安全檢查
+supabase db advisors                    # Schema 建議（CLI v2.81.3+，涵蓋 index/security/performance）
 supabase gen types typescript --local | tee app/types/database.types.ts > /dev/null
 pnpm typecheck                          # 類型檢查
 ```
+
+> `supabase db advisors` 需 CLI v2.81.3+。若版本不足，可用 MCP `get_advisors` 替代。
 
 ## Schema 規範
 
@@ -86,7 +106,8 @@ SELECT setval(
 
 - [ ] 使用 `supabase migration new` 建立（遵循 CLAUDE.md）
 - [ ] 所有函式有 `SET search_path = ''`（遵循 CLAUDE.md）
+- [ ] **SECURITY DEFINER 函式不在 `public` schema**（放 private schema + GRANT）
 - [ ] 所有 View 有 `security_invoker = true`
 - [ ] 表格/函式引用使用 schema 前綴
-- [ ] `supabase db reset` + `db lint` + `pnpm typecheck` 通過
+- [ ] `supabase db reset` + `db lint` + `db advisors` + `pnpm typecheck` 通過
 - [ ] RLS 已設定（如適用）

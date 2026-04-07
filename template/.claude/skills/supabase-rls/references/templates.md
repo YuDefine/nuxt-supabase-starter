@@ -50,6 +50,33 @@ FOR ALL USING (
 );
 ```
 
+## Storage Bucket Policy（需支援 upsert）
+
+Storage upsert = 覆蓋既有檔案，需要 INSERT + SELECT + UPDATE 三個 policy 同時存在。
+
+```sql
+-- ✅ 完整的 Storage upsert 支援
+CREATE POLICY "Auth users can upload" ON storage.objects
+FOR INSERT WITH CHECK (
+  bucket_id = 'avatars'
+  AND (SELECT auth.role()) = 'authenticated'
+);
+
+CREATE POLICY "Auth users can read own" ON storage.objects
+FOR SELECT USING (
+  bucket_id = 'avatars'
+  AND (SELECT auth.uid()) = owner
+);
+
+CREATE POLICY "Auth users can update own" ON storage.objects
+FOR UPDATE USING (
+  bucket_id = 'avatars'
+  AND (SELECT auth.uid()) = owner
+);
+
+-- ❌ 只有 INSERT — 新上傳正常，但覆蓋（upsert）靜默失敗
+```
+
 ## 角色階層
 
 ```

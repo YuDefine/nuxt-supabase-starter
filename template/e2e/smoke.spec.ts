@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { expect, test } from '@nuxt/test-utils/playwright'
 
 /**
  * Smoke Tests — 頁面渲染基本驗證
@@ -10,16 +10,16 @@ import { test, expect } from '@playwright/test'
  */
 
 test.describe('Public pages render correctly', () => {
-  test('homepage loads successfully', async ({ page }) => {
-    await page.goto('/')
+  test('homepage loads successfully', async ({ page, goto }) => {
+    await goto('/', { waitUntil: 'hydration' })
 
     // 頁面應成功載入（非 error page）
     await expect(page).toHaveTitle(/.+/)
     expect(page.url()).not.toContain('/error')
   })
 
-  test('login page renders with form', async ({ page }) => {
-    await page.goto('/auth/login')
+  test('login page renders with form', async ({ page, goto }) => {
+    await goto('/auth/login', { waitUntil: 'hydration' })
 
     // 應顯示登入表單元素
     await expect(page.getByRole('heading', { name: 'Sign In' })).toBeVisible()
@@ -28,15 +28,15 @@ test.describe('Public pages render correctly', () => {
     await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible()
   })
 
-  test('register page renders', async ({ page }) => {
-    await page.goto('/auth/register')
+  test('register page renders', async ({ page, goto }) => {
+    await goto('/auth/register', { waitUntil: 'hydration' })
 
     // 應顯示註冊頁面
     await expect(page.locator('form')).toBeVisible()
   })
 
-  test('forgot-password page renders', async ({ page }) => {
-    await page.goto('/auth/forgot-password')
+  test('forgot-password page renders', async ({ page, goto }) => {
+    await goto('/auth/forgot-password', { waitUntil: 'hydration' })
 
     // 應顯示忘記密碼頁面
     await expect(page.locator('form')).toBeVisible()
@@ -44,8 +44,8 @@ test.describe('Public pages render correctly', () => {
 })
 
 test.describe('Protected pages redirect to login', () => {
-  test('profile page redirects unauthenticated user', async ({ page }) => {
-    await page.goto('/profile')
+  test('profile page redirects unauthenticated user', async ({ page, goto }) => {
+    await goto('/profile', { waitUntil: 'hydration' })
 
     // 應重導至登入頁面（帶 redirect query）
     await expect(page).toHaveURL(/\/auth\/login/)
@@ -53,8 +53,8 @@ test.describe('Protected pages redirect to login', () => {
 })
 
 test.describe('Navigation works correctly', () => {
-  test('login page has link to register', async ({ page }) => {
-    await page.goto('/auth/login')
+  test('login page has link to register', async ({ page, goto }) => {
+    await goto('/auth/login', { waitUntil: 'hydration' })
 
     // 點擊 "Sign up" 連結
     const signUpLink = page.getByRole('link', { name: 'Sign up' })
@@ -65,8 +65,8 @@ test.describe('Navigation works correctly', () => {
     await expect(page).toHaveURL(/\/auth\/register/)
   })
 
-  test('login page has link to forgot password', async ({ page }) => {
-    await page.goto('/auth/login')
+  test('login page has link to forgot password', async ({ page, goto }) => {
+    await goto('/auth/login', { waitUntil: 'hydration' })
 
     // 點擊 "Forgot password?" 連結
     const forgotLink = page.getByRole('link', { name: 'Forgot password?' })

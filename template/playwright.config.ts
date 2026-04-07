@@ -1,15 +1,17 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig, devices } from '@playwright/test'
+import type { ConfigOptions } from '@nuxt/test-utils/playwright'
 
 /**
  * Playwright E2E 測試配置
  *
  * - Chrome-only：快速回饋，避免跨瀏覽器維護成本
- * - WebServer：自動啟動 Nuxt dev server
+ * - @nuxt/test-utils：自動 build + 啟動 Nuxt server（port 自動分配）
  * - Storage state：支援 authenticated 測試
  */
 export { defineConfig }
 
-export const config = defineConfig({
+export const config = defineConfig<ConfigOptions>({
   testDir: './e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
@@ -18,7 +20,10 @@ export const config = defineConfig({
   reporter: process.env.CI ? 'github' : 'html',
 
   use: {
-    baseURL: 'http://localhost:3000',
+    nuxt: {
+      rootDir: fileURLToPath(new URL('.', import.meta.url)),
+      dev: true,
+    },
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -45,14 +50,6 @@ export const config = defineConfig({
       testMatch: /.*smoke\.spec\.ts/,
     },
   ],
-
-  /* WebServer：自動啟動 Nuxt dev server */
-  webServer: {
-    command: 'pnpm dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
 })
 
 export default config
