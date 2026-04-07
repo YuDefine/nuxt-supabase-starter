@@ -27,7 +27,6 @@
 | 情境                         | 觸發              | 說明                        |
 | ---------------------------- | ----------------- | --------------------------- |
 | 準備開始或繼續實作           | `spectra-apply`   | 按 tasks 執行               |
-| 實作中需要 TDD               | `spectra-tdd`     | 若 `.spectra.yaml` 啟用 tdd |
 | 實作中遇到非預期錯誤         | `spectra-debug`   | 四階段系統性排查            |
 | 實作中發現 spec 有誤或過時   | `spectra-ingest`  | 更新 artifacts，不停下實作  |
 | 架構決策點（多種做法都可行） | `spectra-discuss` | 記錄決策到 artifacts        |

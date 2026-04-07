@@ -60,7 +60,6 @@ AI：/spectra-apply
 | `/spectra-ask`     | 查詢規格文件         | 問題     | 回答                             |
 | `/spectra-ingest`  | 從外部上下文更新變更 | 變更名稱 | 更新後的 artifacts               |
 | `/spectra-debug`   | 系統化除錯           | 問題描述 | 除錯報告                         |
-| `/spectra-tdd`     | 依 TDD 流程實作      | 功能描述 | 測試 + 程式碼                    |
 | `/spectra-analyze` | 分析現有程式碼       | -        | 分析報告                         |
 | `/spectra-clarify` | 釐清需求             | -        | 釐清結果                         |
 | `/spectra-sync`    | 同步規格             | 變更名稱 | 更新後的 specs                   |

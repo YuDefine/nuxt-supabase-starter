@@ -25,7 +25,7 @@
 
 ```bash
 # 從 Starter 複製 CLAUDE.md 到你的專案根目錄
-curl -o CLAUDE.md https://raw.githubusercontent.com/YuDefine/nuxt-supabase-starter/main/CLAUDE.md
+curl -o CLAUDE.md https://raw.githubusercontent.com/YuDefine/nuxt-supabase-starter/main/template/CLAUDE.md
 ```
 
 **重要**：修改 CLAUDE.md 中的以下區塊以符合你的專案：
@@ -45,9 +45,9 @@ Nuxt 4, Vue 3 (Composition API + <script setup>), TypeScript, Tailwind CSS, Nuxt
 ### 1.2 複製 .claude 目錄
 
 ```bash
-# 複製整個 .claude 目錄
+# 複製整個 .claude 目錄（注意：starter 是 monorepo，.claude 在 template/ 下）
 git clone --depth 1 https://github.com/YuDefine/nuxt-supabase-starter.git /tmp/starter
-cp -r /tmp/starter/.claude .
+cp -r /tmp/starter/template/.claude .
 rm -rf /tmp/starter
 ```
 
@@ -483,4 +483,4 @@ supabase status
 | [QUICK_START.md](QUICK_START.md)                    | 從零開始建立完整專案  |
 | [CLAUDE_CODE_GUIDE.md](CLAUDE_CODE_GUIDE.md)        | Claude Code 詳細配置  |
 | [SUPABASE_MCP.md](../template/docs/SUPABASE_MCP.md) | Supabase MCP 整合說明 |
-| [WORKFLOW.md](../template/docs/WORKFLOW.md)         | TDD 開發流程          |
+| [WORKFLOW.md](../template/docs/WORKFLOW.md)         | SDD、TDD 開發流程     |
