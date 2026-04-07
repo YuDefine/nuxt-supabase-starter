@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { expect, test } from '@nuxt/test-utils/playwright'
 
 /**
  * Auth E2E Tests — 認證流程測試
@@ -10,8 +10,8 @@ import { test, expect } from '@playwright/test'
  */
 
 test.describe('Login page', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/auth/login')
+  test.beforeEach(async ({ goto }) => {
+    await goto('/auth/login', { waitUntil: 'hydration' })
   })
 
   test('renders all form elements', async ({ page }) => {
@@ -88,8 +88,8 @@ test.describe('Login flow with test account', () => {
   // 如果沒有測試帳號，跳過這些測試
   test.skip(!email || !password, 'E2E_USER_EMAIL and E2E_USER_PASSWORD required')
 
-  test('successful login redirects to home', async ({ page }) => {
-    await page.goto('/auth/login')
+  test('successful login redirects to home', async ({ page, goto }) => {
+    await goto('/auth/login', { waitUntil: 'hydration' })
 
     await page.getByPlaceholder('you@example.com').fill(email!)
     await page.getByPlaceholder('Enter your password').fill(password!)
@@ -99,8 +99,8 @@ test.describe('Login flow with test account', () => {
     await expect(page).not.toHaveURL(/\/auth\/login/, { timeout: 15_000 })
   })
 
-  test('login with redirect query parameter', async ({ page }) => {
-    await page.goto('/auth/login?redirect=/profile')
+  test('login with redirect query parameter', async ({ page, goto }) => {
+    await goto('/auth/login?redirect=/profile', { waitUntil: 'hydration' })
 
     await page.getByPlaceholder('you@example.com').fill(email!)
     await page.getByPlaceholder('Enter your password').fill(password!)

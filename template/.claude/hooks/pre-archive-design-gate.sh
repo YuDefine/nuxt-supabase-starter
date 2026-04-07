@@ -105,11 +105,13 @@ fi
 if [ "$HAS_UI" = true ]; then
   DESIGN_PASSED=false
 
-  # Signal A: design-review.md 存在且有實質內容（≥10 行 + 截圖證據）
+  # Signal A: design-review.md 存在且有實質內容（≥10 行 + 截圖證據 + fidelity report + 無未修復 DRIFT）
   if [ -f "$ACTIVE_CHANGE/design-review.md" ]; then
     LINE_COUNT=$(wc -l < "$ACTIVE_CHANGE/design-review.md" | tr -d ' ')
     HAS_SCREENSHOT=$(grep -ciE '\.png|\.jpg|\.jpeg|screenshot|截圖' "$ACTIVE_CHANGE/design-review.md" 2>/dev/null || echo 0)
-    if [ "$LINE_COUNT" -ge 10 ] && [ "$HAS_SCREENSHOT" -gt 0 ]; then
+    HAS_FIDELITY=$(grep -c 'Design Fidelity Report\|Fidelity Score' "$ACTIVE_CHANGE/design-review.md" 2>/dev/null || echo 0)
+    HAS_UNRESOLVED_DRIFT=$(grep -ciE '^\| .* \| DRIFT \|' "$ACTIVE_CHANGE/design-review.md" 2>/dev/null || echo 0)
+    if [ "$LINE_COUNT" -ge 10 ] && [ "$HAS_SCREENSHOT" -gt 0 ] && [ "$HAS_FIDELITY" -gt 0 ] && [ "$HAS_UNRESOLVED_DRIFT" -eq 0 ]; then
       DESIGN_PASSED=true
     fi
   fi
@@ -125,18 +127,41 @@ if [ "$HAS_UI" = true ]; then
 
   if [ "$DESIGN_PASSED" = false ]; then
     BLOCKED=true
+
+    # 組合具體失敗原因
+    FAIL_REASONS=""
+    if [ ! -f "$ACTIVE_CHANGE/design-review.md" ]; then
+      FAIL_REASONS="${FAIL_REASONS}\n  - design-review.md 不存在"
+    else
+      if [ "${LINE_COUNT:-0}" -lt 10 ]; then
+        FAIL_REASONS="${FAIL_REASONS}\n  - design-review.md 內容不足（< 10 行）"
+      fi
+      if [ "${HAS_SCREENSHOT:-0}" -eq 0 ]; then
+        FAIL_REASONS="${FAIL_REASONS}\n  - design-review.md 缺少截圖證據"
+      fi
+      if [ "${HAS_FIDELITY:-0}" -eq 0 ]; then
+        FAIL_REASONS="${FAIL_REASONS}\n  - design-review.md 缺少 Design Fidelity Report 段落"
+      fi
+      if [ "${HAS_UNRESOLVED_DRIFT:-0}" -gt 0 ]; then
+        FAIL_REASONS="${FAIL_REASONS}\n  - design-review.md 有 ${HAS_UNRESOLVED_DRIFT} 個未修復的 DRIFT 項目"
+      fi
+    fi
+
     MESSAGES+=("[Guard] Design Gate 未通過 — change「${CHANGE_NAME}」包含 UI 變更但缺少設計審查證據。
 
+具體失敗原因：${FAIL_REASONS}
+
 需要以下任一信號（禁止捏造內容繞過）：
-  A. design-review.md（>=10 行 + 包含截圖路徑/截圖證據）
+  A. design-review.md（>=10 行 + 截圖證據 + Design Fidelity Report + 無未修復 DRIFT）
   B. tasks.md 的 Design Review 區塊全部完成 [x]（需使用者確認）
 
 禁止建立空的或草率的 design-review.md 繞過。你必須：
-  1. 實際執行 /design improve [affected pages] — 取得診斷
-  2. 依計劃跑 targeted design skills
-  3. 執行 /audit 確認 Critical = 0
-  4. 派遣 screenshot-review agent（model: sonnet）執行截圖驗證
-  5. 將截圖路徑寫入 design-review.md，展示給使用者確認
+  1. 實際執行 /design improve [affected pages] — 取得診斷 + Fidelity Report
+  2. 修復所有 DRIFT 項目（Fidelity Score < 8/8 時必做）
+  3. 依計劃跑 targeted design skills
+  4. 執行 /audit 確認 Critical = 0
+  5. 派遣 screenshot-review agent（model: sonnet）執行截圖驗證
+  6. 將截圖路徑寫入 design-review.md，確認無 DRIFT 項，展示給使用者確認
 見 .claude/rules/proactive-skills.md Design Gate 段落")
   fi
 fi

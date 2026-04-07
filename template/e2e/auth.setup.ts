@@ -1,4 +1,4 @@
-import { test as setup, expect } from '@playwright/test'
+import { expect, test as setup } from '@nuxt/test-utils/playwright'
 
 /**
  * Auth Setup — 建立 authenticated storage state
@@ -14,20 +14,20 @@ import { test as setup, expect } from '@playwright/test'
 
 const AUTH_FILE = 'e2e/.auth/user.json'
 
-setup('authenticate as default user', async ({ page }) => {
+setup('authenticate as default user', async ({ page, goto }) => {
   const email = process.env.E2E_USER_EMAIL
   const password = process.env.E2E_USER_PASSWORD
 
   if (!email || !password) {
     // 如果沒有提供測試帳號，建立空的 storage state
     // 這讓 CI 可以只跑不需要認證的測試
-    await page.goto('/')
+    await goto('/')
     await page.context().storageState({ path: AUTH_FILE })
     return
   }
 
   // 前往登入頁面
-  await page.goto('/auth/login')
+  await goto('/auth/login')
 
   // 填入測試帳號
   await page.getByPlaceholder('you@example.com').fill(email)

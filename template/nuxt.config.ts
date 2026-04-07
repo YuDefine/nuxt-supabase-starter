@@ -49,6 +49,9 @@ export default defineNuxtConfig({
   ],
 
   icon: {
+    // ssr: false 時 @nuxt/icon 預設使用 "iconify" CDN provider，
+    // 會被 CSP connect-src 擋掉。強制使用 server bundle（讀取本地 @iconify-json/*）
+    provider: 'server',
     customCollections: [
       {
         prefix: 'custom',

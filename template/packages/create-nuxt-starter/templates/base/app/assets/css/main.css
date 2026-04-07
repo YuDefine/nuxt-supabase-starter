@@ -1,1 +1,12 @@
 @import 'tailwindcss';
+
+/*
+ * 字體載入：Nuxt UI 自動註冊 @nuxt/fonts，只需在 @theme 中宣告字體名稱即可。
+ * 不要使用 @import url() 或手動 <link> 載入 Google Fonts。
+ * 參考：https://ui.nuxt.com/docs/getting-started/integrations/fonts
+ *
+ * 範例：
+ * @theme {
+ *   --font-sans: 'Noto Sans TC', sans-serif;
+ * }
+ */

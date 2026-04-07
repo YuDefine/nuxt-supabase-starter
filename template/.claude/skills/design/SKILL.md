@@ -48,6 +48,22 @@ Before any diagnosis or planning, always check:
 
 This applies to every mode. Skip only if foundation is confirmed.
 
+### Fidelity Checkpoint Extraction
+
+若 `.impeccable.md` 存在，**必須**讀取並提取以下 7 個 fidelity checkpoint 維度，供後續 Step 2.5 比對使用：
+
+| 維度 | 從 `.impeccable.md` 提取 |
+|---|---|
+| **Color System** | 所有 color roles、tokens、hex 值 |
+| **Typography** | 字體名稱、sizing 規則、特殊設定（如 tabular-nums） |
+| **Spacing & Layout Tokens** | 定義的間距慣例（page padding、card gap、form gap 等） |
+| **Component Conventions** | Nuxt UI 元件清單、自訂元件清單（StatCard、EmptyState 等） |
+| **Interaction Patterns** | 各介面的互動規範（CRUD sort/filter/pagination、empty state CTA 等） |
+| **Layout Architecture** | 各介面的 layout 規格（desktop sidebar+breadcrumb、auth centered card 等） |
+| **Design Principles** | 編號原則清單（如「數據是主角」、「路徑最短」等） |
+
+這些 checkpoint 是後續 Fidelity Check 的**唯一比對來源**——不使用 `.impeccable.md` 以外的假設。
+
 ### Tech Stack Detection
 
 Detect the project's UI tech stack to ensure all design skills produce compatible output:
@@ -159,6 +175,54 @@ Read `references/diagnosis.md` for the full rubric. Assess these dimensions:
 | Accessibility | Low contrast? No keyboard nav? Missing alt text? |
 | Consistency   | Deviates from design system? Mixed patterns?     |
 
+### 2.5. Design Fidelity Check（improve 模式，`.impeccable.md` 存在時必跑）
+
+**條件**：`.impeccable.md` 存在時必跑，不存在時跳過此步驟。
+
+逐一比對 Step 1 提取的 fidelity checkpoints vs 目標頁面/元件的實際 code，涵蓋 8 個維度：
+
+| Fidelity 維度 | 比對什麼 |
+|---|---|
+| **Color Tokens** | `app.config.ts` tokens 是否與 Color System 表一致？元件是否使用 token 而非 hardcoded hex？secondary/accent 有使用嗎？ |
+| **Typography** | 字體有載入嗎？數字用 `tabular-nums`？body >= 16px？ |
+| **Spacing** | page padding 符合定義（如 `py-8`/`py-4`）？card gap 符合（如 `gap-6`）？form gap 符合（如 `gap-4`）？ |
+| **Component Usage** | Nuxt UI 元件作為 base？自訂元件（StatCard、EmptyState 等）有建構嗎？ |
+| **Interaction Patterns** | Admin CRUD 有 sort/filter/pagination？empty state 有 text+CTA？ |
+| **Layout Fidelity** | desktop 有 sidebar+breadcrumb+max-width？auth 有 centered card？符合 Layout Architecture 定義？ |
+| **Design Principles** | 數據是主角？路徑最短？透明可追溯？a11y 達標？逐條原則驗證 |
+| **Anti-references** | 無過度裝飾？無冰冷金融風？無遊戲化？符合 `.impeccable.md` 的反面教材定義？ |
+
+**輸出格式**（附加在 Quick Assessment 之後）：
+
+```markdown
+### Design Fidelity Report
+Source: .impeccable.md
+
+| 維度 | 狀態 | 證據 |
+|---|---|---|
+| Color Tokens | PASS / DRIFT / MISSING | [具體發現] |
+| Typography | PASS / DRIFT / MISSING | [具體發現] |
+| Spacing | PASS / DRIFT / MISSING | [具體發現] |
+| Component Usage | PASS / DRIFT / MISSING | [具體發現] |
+| Interaction Patterns | PASS / DRIFT / MISSING | [具體發現] |
+| Layout Fidelity | PASS / DRIFT / MISSING | [具體發現] |
+| Design Principles | PASS / DRIFT / MISSING | [具體發現] |
+| Anti-references | PASS / DRIFT / MISSING | [具體發現] |
+
+Fidelity Score: N/8 PASS
+
+**DRIFT 修復清單（design skill 之前優先修復）：**
+1. [具體 drift + 檔案 + 修復方式]
+2. ...
+```
+
+**狀態定義**：
+- **PASS** — 實作與 `.impeccable.md` 定義一致
+- **DRIFT** — 實作偏離定義（有定義但未遵循）→ 必須修復
+- **MISSING** — `.impeccable.md` 有定義但實作中完全缺失 → 必須補齊
+
+**關鍵規則**：DRIFT 和 MISSING 項目成為**最高優先**，在跑任何 design skill 之前先修復。
+
 ### 3. Map Issues to Skills
 
 Each problem maps to a specific skill. See `references/skill-map.md` for the complete issue → skill mapping.
@@ -193,6 +257,7 @@ Accessibility:[rating] — [finding]
 Consistency:  [rating] — [finding]
 
 ### Core Plan (execute in this order)
+0. **修復所有 DRIFT 項目**（來自 Design Fidelity Report，Fidelity Score < 8/8 時必做）
 1. `/skill [target]` — fixes [what]
 2. `/skill [target]` — fixes [what]
 ...
@@ -358,8 +423,28 @@ When multiple skills are needed, follow this sequence (skip what's not needed):
 | Accessibility | ★★★☆☆ | ...     |
 | Consistency   | ★★★☆☆ | ...     |
 
+## Design Fidelity Report
+Source: .impeccable.md
+
+| 維度 | 狀態 | 證據 |
+|---|---|---|
+| Color Tokens | PASS / DRIFT / MISSING | [具體發現] |
+| Typography | PASS / DRIFT / MISSING | [具體發現] |
+| Spacing | PASS / DRIFT / MISSING | [具體發現] |
+| Component Usage | PASS / DRIFT / MISSING | [具體發現] |
+| Interaction Patterns | PASS / DRIFT / MISSING | [具體發現] |
+| Layout Fidelity | PASS / DRIFT / MISSING | [具體發現] |
+| Design Principles | PASS / DRIFT / MISSING | [具體發現] |
+| Anti-references | PASS / DRIFT / MISSING | [具體發現] |
+
+Fidelity Score: N/8 PASS
+
+### DRIFT 修復記錄
+- [修復前] → [修復後] — [檔案]
+
 ## Planned Skills
 
+0. **修復所有 DRIFT 項目**（來自 Design Fidelity Report）
 1. /skill [target] — rationale
 2. /skill [target] — rationale
    ...
