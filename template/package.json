@@ -35,7 +35,8 @@
     "test:unit": "vp test test/unit",
     "test:watch": "vp test --watch",
     "typecheck": "nuxt typecheck",
-    "update": "nuxt upgrade && pnpm skills:update && pnpm update --latest"
+    "update": "nuxt upgrade && pnpm skills:update && pnpm update --latest",
+    "audit:ux-drift": "node scripts/audit-ux-drift.mts"
   },
   "dependencies": {
     "@nuxt/image": "^2.0.0",
