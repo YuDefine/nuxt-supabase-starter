@@ -41,10 +41,10 @@ FINDINGS=()
 # --- Check 1: User Journeys section ---
 if ! grep -q '^## User Journeys' "$PROPOSAL_FILE" 2>/dev/null; then
   HAS_UI_SCOPE=false
-  if [ -f "$TASKS_FILE" ] && grep -qiE "${SUX_UI_EXT}|pages/|components/|layouts/" "$TASKS_FILE" 2>/dev/null; then
+  if [ -f "$TASKS_FILE" ] && grep -qiE "${SUX_UI_EXT_RE}|pages/|components/|layouts/" "$TASKS_FILE" 2>/dev/null; then
     HAS_UI_SCOPE=true
   fi
-  if grep -qiE "${SUX_UI_EXT}|pages/|components/|layouts/" "$PROPOSAL_FILE" 2>/dev/null; then
+  if grep -qiE "${SUX_UI_EXT_RE}|pages/|components/|layouts/" "$PROPOSAL_FILE" 2>/dev/null; then
     HAS_UI_SCOPE=true
   fi
 
@@ -75,10 +75,10 @@ fi
 
 # --- Check 2: Affected Entity Matrix ---
 HAS_DB_SCOPE=false
-if grep -qiE "${SUX_MIGRATIONS_DIR}|\.sql|ALTER TABLE|ADD COLUMN|CREATE TABLE|CHECK.*IN|${SUX_TYPES_DIRS%% *}" "$PROPOSAL_FILE" 2>/dev/null; then
+if grep -qiE "${SUX_MIGRATIONS_DIR}|\.sql|ALTER TABLE|ADD COLUMN|CREATE TABLE|CHECK.*IN|${SUX_TYPES_PRIMARY}" "$PROPOSAL_FILE" 2>/dev/null; then
   HAS_DB_SCOPE=true
 fi
-if [ -f "$TASKS_FILE" ] && grep -qiE "${SUX_MIGRATIONS_DIR}|${SUX_TYPES_DIRS%% *}/" "$TASKS_FILE" 2>/dev/null; then
+if [ -f "$TASKS_FILE" ] && grep -qiE "${SUX_MIGRATIONS_DIR}|${SUX_TYPES_PRIMARY}/" "$TASKS_FILE" 2>/dev/null; then
   HAS_DB_SCOPE=true
 fi
 
@@ -112,7 +112,7 @@ if [ -f "$TASKS_FILE" ] && grep -q '^## User Journeys' "$PROPOSAL_FILE" 2>/dev/n
   while IFS= read -r url; do
     [ -z "$url" ] && continue
     url_frag="${url#/}"
-    if ! grep -qE "(${SUX_UI_DIRS%% *}${url}|${url_frag}${SUX_UI_EXT}|${url}\b)" "$TASKS_FILE" 2>/dev/null; then
+    if ! grep -qE "(${SUX_UI_DIRS%% *}${url}|${url_frag}${SUX_UI_EXT_RE}|${url}\b)" "$TASKS_FILE" 2>/dev/null; then
       UNMAPPED+=("$url")
     fi
   done <<< "$JOURNEY_URLS"
@@ -129,7 +129,7 @@ fi
 if [ -f "$TASKS_FILE" ]; then
   HAS_MIGRATION_TASK=$(grep -cE "${SUX_MIGRATIONS_DIR}|migration new|ADD COLUMN|CHECK.*IN" "$TASKS_FILE" 2>/dev/null || true)
   HAS_MIGRATION_TASK=${HAS_MIGRATION_TASK:-0}
-  HAS_TYPES_TASK=$(grep -cE "${SUX_TYPES_DIRS%% *}/" "$TASKS_FILE" 2>/dev/null || true)
+  HAS_TYPES_TASK=$(grep -cE "${SUX_TYPES_PRIMARY}/" "$TASKS_FILE" 2>/dev/null || true)
   HAS_TYPES_TASK=${HAS_TYPES_TASK:-0}
 
   if [ "$HAS_MIGRATION_TASK" -gt 0 ] && [ "$HAS_TYPES_TASK" -eq 0 ]; then
@@ -138,7 +138,7 @@ if [ -f "$TASKS_FILE" ]; then
       ENUM_HINT=$(grep -rciE 'enum|new type' "$SPECS_DIR" 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')
     fi
     if [ "$ENUM_HINT" -gt 0 ]; then
-      FINDINGS+=("tasks 有 migration 但缺 ${SUX_TYPES_DIRS%% *} 同步 task — spec 提到 enum / type 擴張，tasks 沒列對應更新任務。
+      FINDINGS+=("tasks 有 migration 但缺 ${SUX_TYPES_PRIMARY} 同步 task — spec 提到 enum / type 擴張，tasks 沒列對應更新任務。
 
 TypeScript enum 不會從 DB 自動衍生，需要手動同步。")
     fi

@@ -13,7 +13,9 @@
  * Falls back to Nuxt-style defaults when no config is present.
  *
  * Usage:
- *   node scripts/audit-ux-drift.ts
+ *   node scripts/audit-ux-drift.mts             # full repo scan (default)
+ *   node scripts/audit-ux-drift.mts --changed   # scan only files in git diff
+ *   node scripts/audit-ux-drift.mts --json      # machine-readable output
  *
  * Exit: 0 clean · 1 drift found · 2 script error
  *
@@ -45,11 +47,43 @@ interface DriftFinding {
   enumName: string
   present: string[]
   missing: string[]
-  handlerKind: 'switch' | 'if-chain' | 'mixed'
+  handlerKind: 'switch' | 'if-chain'
 }
+
+interface CliOptions {
+  changed: boolean
+  json: boolean
+}
+
+function parseArgs(argv: string[]): CliOptions {
+  const opts: CliOptions = { changed: false, json: false }
+  for (const arg of argv.slice(2)) {
+    if (arg === '--changed') opts.changed = true
+    else if (arg === '--json') opts.json = true
+    else if (arg === '--help' || arg === '-h') {
+      console.log(
+        'Usage: audit-ux-drift.mts [--changed] [--json]\n' +
+          '  --changed   Scan only files touched in git diff HEAD\n' +
+          '  --json      Emit machine-readable JSON on stdout'
+      )
+      process.exit(0)
+    } else {
+      console.error(`audit-ux-drift: unknown flag ${arg}`)
+      process.exit(2)
+    }
+  }
+  return opts
+}
+
+const cli = parseArgs(process.argv)
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
+
+// Maximum directory levels to walk upward when hunting for a project root
+// marker (spectra-ux.config.json or .git). 8 is generous enough for deeply
+// nested scripts/ layouts while still failing fast on malformed installs.
+const MAX_WALK_DEPTH = 8
 
 function findRepoRoot(): string {
   // Prefer spectra-ux.config.json as the root marker — it's the canonical
@@ -57,7 +91,7 @@ function findRepoRoot(): string {
   // layouts (e.g. starter templates inside a parent monorepo) where .git
   // would walk past the actual project root.
   let dir = __dirname
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < MAX_WALK_DEPTH; i++) {
     if (existsSync(resolve(dir, 'spectra-ux.config.json'))) return dir
     const parent = dirname(dir)
     if (parent === dir) break
@@ -65,7 +99,7 @@ function findRepoRoot(): string {
   }
   // Fallback: walk up looking for .git
   dir = __dirname
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < MAX_WALK_DEPTH; i++) {
     if (existsSync(resolve(dir, '.git'))) return dir
     const parent = dirname(dir)
     if (parent === dir) break
@@ -96,8 +130,6 @@ function loadConfig(): ScanConfig {
       }
     }
     const p = raw.paths ?? {}
-    const asArray = (v: string | string[] | undefined, fallback: string[]) =>
-      v == null ? fallback : Array.isArray(v) ? v : [v]
     return {
       typesDirs: asArray(p.types, DEFAULT_CONFIG.typesDirs),
       uiDirs: asArray(p.ui, DEFAULT_CONFIG.uiDirs),
@@ -105,11 +137,14 @@ function loadConfig(): ScanConfig {
       serverDirs: asArray(p.server, DEFAULT_CONFIG.serverDirs),
     }
   } catch (err) {
-    console.error(
-      `audit-ux-drift: failed to read spectra-ux.config.json: ${err}`
-    )
+    console.error(`audit-ux-drift: failed to read spectra-ux.config.json: ${err}`)
     return DEFAULT_CONFIG
   }
+}
+
+function asArray(v: string | string[] | undefined, fallback: string[]): string[] {
+  if (v === null || v === undefined) return fallback
+  return Array.isArray(v) ? v : [v]
 }
 
 const config = loadConfig()
@@ -126,6 +161,27 @@ function gitList(dir: string, exts: string[]): string[] {
     .filter(Boolean)
     .filter((p) => exts.some((e) => p.endsWith(e)))
     .map((p) => resolve(repoRoot, p))
+}
+
+/** Files touched in the working tree + index (for --changed mode). */
+function gitTouchedFiles(): Set<string> {
+  const touched = new Set<string>()
+  const diffArgs = [
+    ['diff', '--name-only', 'HEAD'],
+    ['diff', '--cached', '--name-only'],
+  ]
+  for (const args of diffArgs) {
+    const result = spawnSync('git', args, {
+      cwd: repoRoot,
+      encoding: 'utf-8',
+    })
+    if (result.status === 0 && result.stdout) {
+      for (const line of result.stdout.split('\n').filter(Boolean)) {
+        touched.add(resolve(repoRoot, line))
+      }
+    }
+  }
+  return touched
 }
 
 function readSafe(path: string): string {
@@ -148,8 +204,7 @@ function extractEnums(): EnumDef[] {
     const rel = relative(repoRoot, file)
 
     // Pattern A: export const FOO_BAR = ['a', 'b', 'c'] as const
-    const constAsConstRe =
-      /export\s+const\s+([A-Z][A-Z0-9_]*)\s*=\s*\[([^\]]+)\]\s*as\s+const/g
+    const constAsConstRe = /export\s+const\s+([A-Z][A-Z0-9_]*)\s*=\s*\[([^\]]+)\]\s*as\s+const/g
     let match: RegExpExecArray | null
     while ((match = constAsConstRe.exec(content)) !== null) {
       const name = match[1]!
@@ -159,8 +214,7 @@ function extractEnums(): EnumDef[] {
     }
 
     // Pattern B: z.enum(['a', 'b', 'c']) assigned to a const
-    const zEnumRe =
-      /(?:export\s+)?const\s+(\w+)\s*=\s*z\.enum\s*\(\s*\[([^\]]+)\]/g
+    const zEnumRe = /(?:export\s+)?const\s+(\w+)\s*=\s*z\.enum\s*\(\s*\[([^\]]+)\]/g
     while ((match = zEnumRe.exec(content)) !== null) {
       const name = match[1]!
       const body = match[2]!
@@ -190,13 +244,8 @@ function collectConsumers(): string[] {
   return [...set]
 }
 
-function auditFile(file: string, enumDef: EnumDef): DriftFinding | null {
-  const content = readSafe(file)
-  if (!content) return null
-
-  const ignoreRe = new RegExp(
-    `ux-drift-audit:\\s*ignore\\s+${enumDef.name}\\b`
-  )
+function auditFile(file: string, content: string, enumDef: EnumDef): DriftFinding | null {
+  const ignoreRe = new RegExp(`ux-drift-audit:\\s*ignore\\s+${enumDef.name}\\b`)
   if (ignoreRe.test(content)) return null
 
   const present = new Set<string>()
@@ -211,11 +260,11 @@ function auditFile(file: string, enumDef: EnumDef): DriftFinding | null {
   const missing = enumDef.values.filter((v) => !present.has(v))
   if (missing.length === 0) return null
 
+  // Classify: a file with `case '...':` lines is treated as a switch,
+  // otherwise it's an if-chain. Switches that use assertNever are already
+  // compiler-enforced, so they're excluded from drift reports.
   const hasCase = /\bcase\s+['"]/m.test(content)
-  const hasIf = /\bif\s*\(\s*\w+\s*===/m.test(content)
-  let handlerKind: DriftFinding['handlerKind'] = 'if-chain'
-  if (hasCase && !hasIf) handlerKind = 'switch'
-  else if (hasCase && hasIf) handlerKind = 'mixed'
+  const handlerKind: DriftFinding['handlerKind'] = hasCase ? 'switch' : 'if-chain'
 
   if (handlerKind === 'switch' && /assertNever\s*\(/.test(content)) {
     return null
@@ -224,45 +273,80 @@ function auditFile(file: string, enumDef: EnumDef): DriftFinding | null {
   return {
     file: relative(repoRoot, file),
     enumName: enumDef.name,
-    present: [...present].sort(),
+    present: [...present].toSorted(),
     missing,
     handlerKind,
   }
 }
 
-function main(): void {
+interface Report {
+  enums: Array<{ name: string; values: string[]; source: string }>
+  scanned: number
+  mode: 'full' | 'changed'
+  findings: DriftFinding[]
+}
+
+function runScan(): Report {
   const enums = extractEnums()
-  if (enums.length === 0) {
-    console.log('⊘ No enum-like definitions found in configured types dirs.')
-    process.exit(0)
+  const allConsumers = collectConsumers()
+
+  let consumers = allConsumers
+  if (cli.changed) {
+    const touched = gitTouchedFiles()
+    consumers = allConsumers.filter((c) => touched.has(c))
   }
 
-  console.log(`→ Scanning ${enums.length} enum(s) across codebase...`)
-  for (const e of enums) {
-    console.log(`  · ${e.name} (${e.values.length} values) ← ${e.source}`)
-  }
-  console.log()
-
-  const consumers = collectConsumers()
   const findings: DriftFinding[] = []
-
   for (const consumer of consumers) {
+    const content = readSafe(consumer)
+    if (!content) continue
     for (const enumDef of enums) {
-      const finding = auditFile(consumer, enumDef)
+      const finding = auditFile(consumer, content, enumDef)
       if (finding) findings.push(finding)
     }
   }
 
-  if (findings.length === 0) {
-    console.log('✓ No UX drift detected.')
-    process.exit(0)
+  return {
+    enums: enums.map((e) => ({
+      name: e.name,
+      values: e.values,
+      source: e.source,
+    })),
+    scanned: consumers.length,
+    mode: cli.changed ? 'changed' : 'full',
+    findings,
+  }
+}
+
+function emitJson(report: Report): void {
+  console.log(JSON.stringify(report, null, 2))
+}
+
+function emitText(report: Report): void {
+  if (report.enums.length === 0) {
+    console.log('⊘ No enum-like definitions found in configured types dirs.')
+    return
   }
 
-  console.log(`✗ Found ${findings.length} suspected drift site(s):`)
+  const label = report.mode === 'changed' ? ' (changed files only)' : ''
+  console.log(
+    `→ Scanning ${report.enums.length} enum(s) across codebase${label}...`
+  )
+  for (const e of report.enums) {
+    console.log(`  · ${e.name} (${e.values.length} values) ← ${e.source}`)
+  }
+  console.log()
+
+  if (report.findings.length === 0) {
+    console.log('✓ No UX drift detected.')
+    return
+  }
+
+  console.log(`✗ Found ${report.findings.length} suspected drift site(s):`)
   console.log()
 
   const byFile = new Map<string, DriftFinding[]>()
-  for (const f of findings) {
+  for (const f of report.findings) {
     const arr = byFile.get(f.file) ?? []
     arr.push(f)
     byFile.set(f.file, arr)
@@ -285,6 +369,19 @@ function main(): void {
   )
   console.log()
   console.log('See docs/rules/ux-completeness.md — Exhaustiveness Rule')
+}
+
+function main(): void {
+  const report = runScan()
+
+  if (cli.json) {
+    emitJson(report)
+  } else {
+    emitText(report)
+  }
+
+  if (report.enums.length === 0) process.exit(0)
+  if (report.findings.length === 0) process.exit(0)
   process.exit(1)
 }
 
