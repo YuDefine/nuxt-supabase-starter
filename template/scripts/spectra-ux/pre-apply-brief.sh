@@ -30,8 +30,8 @@ CHANGE_NAME=$(basename "$CHANGE_DIR")
 PROPOSAL_FILE="$CHANGE_DIR/proposal.md"
 [ -f "$PROPOSAL_FILE" ] || exit 0
 
-JOURNEY_BLOCK=$(sed -n '/^## User Journeys/,/^## /p' "$PROPOSAL_FILE" 2>/dev/null | sed '$d' || true)
-ENTITY_BLOCK=$(sed -n '/^## Affected Entity Matrix/,/^## /p' "$PROPOSAL_FILE" 2>/dev/null | sed '$d' || true)
+JOURNEY_BLOCK=$(sux_extract_section "$PROPOSAL_FILE" 'User Journeys')
+ENTITY_BLOCK=$(sux_extract_section "$PROPOSAL_FILE" 'Affected Entity Matrix')
 
 if [ -z "$JOURNEY_BLOCK" ] && [ -z "$ENTITY_BLOCK" ]; then
   exit 0
