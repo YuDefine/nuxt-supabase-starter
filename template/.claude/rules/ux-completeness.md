@@ -1,0 +1,203 @@
+---
+description: UX 完整性規則——定義 "feature complete"、強制列舉 user-facing surface、防止 DB+API 完成但 UI 缺失
+globs: ['openspec/changes/**', 'app/**/*.vue', 'shared/types/**/*.ts', 'supabase/migrations/**']
+---
+
+# UX Completeness
+
+**核心命題**：feature 的完成度由**使用者結果**定義，不由「tasks 打勾 + tests 綠」定義。DB allow ≠ feature ready；tests pass ≠ UX done。
+
+此規則優先於 spectra skill 內嵌說明與其他規則。
+
+> 本檔為 starter template 的預設規則，複製出去後依專案實際使用調整。
+
+## Definition of Done
+
+一個 change 只有在以下全部成立時才算完成：
+
+1. 每個宣告的 **User Journey** 都能由對應角色在瀏覽器端走完（有截圖佐證）
+2. 每個受影響的 **entity** 都有 admin 管理路徑與 end-user 消費路徑（或明確宣告不需要）
+3. 每個被觸動的 **enum / const array** 在所有消費點都有對應分支（exhaustiveness 保證）
+4. 每個新增的 **route** 有 navigation 入口或明確宣告為 internal-only
+5. 每個新增的 UI surface 具備 **empty / loading / error / unauthorized** 四種 state 的處理
+
+**完成不是「我改完了」，是「使用者可以做事了」**。
+
+## 必填 Propose 區塊
+
+`spectra-propose` 階段，`proposal.md` 必須包含以下兩個區塊（或明確的 Non-UI 宣告）：
+
+### `## Affected Entity Matrix`
+
+每個被動的 DB entity（table、enum 擴張、column 新增）都要列一個矩陣：
+
+```markdown
+### Entity: posts
+
+| Dimension       | Values                                                         |
+| --------------- | -------------------------------------------------------------- |
+| Columns touched | `status` (enum expansion: +'archived'), `author_id`            |
+| Roles           | admin, author, reader                                          |
+| Actions         | create, read, update, delete, filter, archive                  |
+| States          | empty, loading, error, success, unauthorized                   |
+| Surfaces        | `/posts` (list), `/posts/[id]` (detail), `/admin/posts` (管理) |
+```
+
+寫不出矩陣 = scope 沒想清楚，不允許進入 tasks 階段。
+
+### `## User Journeys`
+
+每個 entity × 每個 role × 每個關鍵 action 至少一條具體 journey，URL 與步驟皆須明確：
+
+```markdown
+### 文章歸檔流程
+
+- **Author** 在 `/posts` 看到自己的文章列表 → 點「歸檔」→ 確認 → 列表更新為已歸檔狀態
+- **Admin** 在 `/admin/posts` 以「已歸檔」篩選 → 看到所有歸檔文章 → 可復原
+- **Reader** 在 `/posts` 列表看不到已歸檔文章（預設過濾）
+```
+
+**純後端 change 的例外**：若此 change 完全沒有 user-facing 影響，必須寫：
+
+```markdown
+## User Journeys
+
+**No user-facing journey (backend-only)**
+
+理由：<具體說明為何沒有 UI 影響，例如 cron job / 內部 API / 資料修復 script>
+```
+
+沒寫這個宣告 = 視為漏寫 journey。
+
+## 必填 Tasks 區塊
+
+`tasks.md` 必須包含 `## Affected Entity Matrix` 衍生出的所有對應 task：
+
+- 每個 surface → 一個實作 task
+- 每個 journey → 一個人工檢查 task
+- 每個 enum 擴張 → 對應 `shared/types/` task
+- 每個 DB migration 修改 column/enum → 對應 API validation schema task + consuming UI task
+- 每個新 route → 一個 navigation 入口 task
+
+**不允許**：tasks 中只有「更新 UI」這種 catch-all 任務。必須拆到具體 `.vue` 檔案路徑。
+
+## Exhaustiveness Rule（結構性強制）
+
+所有 enum / const array 的分支處理必須用 `switch + assertNever` pattern，**禁止** `if/else if/else` 鏈：
+
+```typescript
+// ❌ 錯誤——加新 enum 值時 TypeScript 不會抱怨，靜默漏 case
+function getStatusLabel(status: PostStatus): string {
+  if (status === 'draft') return '草稿'
+  if (status === 'published') return '已發布'
+  return '未知' // 默默吃掉未知值
+}
+
+// ✅ 正確——加新 enum 值時 compiler 立刻報錯
+import { assertNever } from '~/utils/assert-never'
+
+function getStatusLabel(status: PostStatus): string {
+  switch (status) {
+    case 'draft':
+      return '草稿'
+    case 'published':
+      return '已發布'
+    case 'archived':
+      return '已歸檔'
+    default:
+      return assertNever(status, 'getStatusLabel')
+  }
+}
+```
+
+**適用範圍**：任何從 `shared/types/**/*.ts` 匯入的 enum / const array、任何 Zod `z.enum()` 衍生的 union type。
+
+**離線稽核**：`pnpm audit:ux-drift` 會掃描所有非 exhaustive 的 enum 分支並回報。
+
+## Navigation Reachability Rule
+
+新增 `app/pages/**/*.vue` 檔案（非動態 `[id].vue` 或子路由）時：
+
+1. **MUST** 在 `app/layouts/default.vue`（或對應 layout）的 navigation 清單中加入入口
+2. **或** 在 proposal 明確宣告 `navigation: internal-only`，並說明使用者如何到達（例如從其他頁面點擊）
+3. pre-archive hook 會檢查這點，漏掉會 warn
+
+## Reverse Relationship Rule
+
+新增 FK（`column REFERENCES other_table`）時，必須檢查「被指向的 entity 詳情頁是否需要顯示反向關聯」：
+
+- `comments.post_id → posts.id` → post 詳情頁可能需要顯示「這篇文章的所有留言」
+- 評估後若需要 → 加入 tasks；不需要 → 在 proposal 的 Non-Goals 明確排除
+
+## State Coverage Rule
+
+每個新 list/form page 必須處理四種 state：
+
+| State        | 表現                                       |
+| ------------ | ------------------------------------------ |
+| Empty        | 第一次進入、無資料時的空狀態文案/圖示/引導 |
+| Loading      | 資料載入中的骨架屏或 spinner               |
+| Error        | 載入失敗的錯誤提示與重試路徑               |
+| Unauthorized | 權限不足時的導向或提示                     |
+
+存在任一 state 未處理 = Design Gate 不通過。
+
+## 心智模型清單
+
+照這個順序自問，對上「是」就停下處理：
+
+1. **「DB allow ≠ feature ready」**——migration 通過 != 功能可用
+2. **「Tests pass ≠ UX done」**——API test 綠 != 使用者能做事
+3. **「Reuse 反咬」**——「既有頁面有了」不代表「不用改」，branching logic 反而需要更多改動
+4. **「列舉比記憶可靠」**——用 grep / codebase-memory-mcp 找 surface，不要靠記憶
+5. **「Journey 比檔案清單強」**——「admin 在 X 做 Y」比「更新 X.vue」更能暴露遺漏
+6. **「Admin 路徑同等重要」**——主流程是秀場、admin 管理是舞台，兩者都不能少
+7. **「Completion momentum is a liar」**——感覺完成時離真正完成還差一哩，那一哩通常是 UI
+
+## Workflow Integration
+
+| Spectra phase                       | Gate script                                              | When to run                                          |
+| ----------------------------------- | -------------------------------------------------------- | ---------------------------------------------------- |
+| Before `spectra-propose`            | `bash scripts/spectra-ux/pre-propose-scan.sh`            | 注入 blast radius 要求，提醒必填區塊                 |
+| After `spectra-propose`             | `bash scripts/spectra-ux/post-propose-check.sh <change>` | 驗證 proposal 完整性                                 |
+| Before `spectra-apply`              | `bash scripts/spectra-ux/pre-apply-brief.sh <change>`    | 簡報 user journeys                                   |
+| Before `spectra-archive`            | `bash scripts/spectra-ux/archive-gate.sh <change>`       | 驗證 journey URL touch、schema drift、exhaustiveness |
+| **Session start / after `/assign`** | `pnpm spectra:roadmap`                                   | 重算 `openspec/ROADMAP.md`（儀表板）                 |
+
+**Claude Code 使用者**：上述由 `.claude/hooks/` 自動觸發。
+**Codex / Copilot / Cursor 使用者**：必須在對應 spectra 階段手動呼叫這些腳本。session 開始時也必須手動跑一次 `pnpm spectra:roadmap`。
+
+## 必禁事項
+
+- **NEVER** 寫空洞的 User Journeys 為通過 gate
+- **NEVER** 用 Non-Goals 隱藏忘記做的 surface（必須有具體理由）
+- **NEVER** 把 `if/else if/else` 用在 enum 分支
+- **NEVER** 新增 route 但不在 navigation 加入口（除非明確宣告 internal-only）
+- **NEVER** 把「tasks 全勾 + tests 綠」當作 feature complete 的充分條件
+
+## 與既有規則的關係
+
+- **`proactive-skills.md` Design Gate**：本規則**擴充**而非取代。Design Gate 檢查 UI 視覺品質；UX Completeness 檢查 UI 功能覆蓋
+- **`development.md` UI Reuse**：本規則**補充**。Reuse 檢查「是否重複寫了」；UX Completeness 檢查「是否漏改了既有的」
+- **`migration.md` / `rls-policy.md`**：本規則**串聯**。migration 只是起點，後面還有 types + API + UI + navigation 四層
+
+## 違反時的回報方式
+
+hook 或 agent 偵測到違反時，輸出格式統一為：
+
+```
+[UX Gate] <檢查名稱> 不通過
+
+問題：<一句話描述>
+
+證據：
+  - <檔案/行號/具體缺漏>
+
+修正方式：
+  - <具體步驟>
+
+繞過：
+  - 若此為刻意決定，加入 <繞過 marker>
+```
+
+**禁止** 捏造 journey、空洞的 entity matrix、或只為通過 gate 而寫的佔位內容。發現 → 當場 flag 給使用者。

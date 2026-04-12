@@ -242,10 +242,10 @@ export interface UseRefHistoryOptions<Raw, Serialized = Raw>
    */
   shouldCommit?: (oldValue: Raw | undefined, newValue: Raw) => boolean
 }
-export interface UseRefHistoryReturn<
+export interface UseRefHistoryReturn<Raw, Serialized> extends UseManualRefHistoryReturn<
   Raw,
-  Serialized,
-> extends UseManualRefHistoryReturn<Raw, Serialized> {
+  Serialized
+> {
   /**
    * A ref representing if the tracking is enabled
    */
@@ -280,6 +280,6 @@ export interface UseRefHistoryReturn<
  */
 export declare function useRefHistory<Raw, Serialized = Raw>(
   source: Ref<Raw>,
-  options?: UseRefHistoryOptions<Raw, Serialized>,
+  options?: UseRefHistoryOptions<Raw, Serialized>
 ): UseRefHistoryReturn<Raw, Serialized>
 ```

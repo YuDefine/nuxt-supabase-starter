@@ -55,7 +55,7 @@ export interface FormatTimeAgoIntlOptions {
    */
   joinParts?: (
     parts: Intl.RelativeTimeFormatPart[],
-    locale?: Intl.UnicodeBCP47LocaleIdentifier | Intl.Locale,
+    locale?: Intl.UnicodeBCP47LocaleIdentifier | Intl.Locale
   ) => string
   /**
    * Custom units
@@ -93,11 +93,11 @@ export interface TimeAgoUnit {
  */
 export declare function useTimeAgoIntl(
   time: MaybeRefOrGetter<Date | number | string>,
-  options?: UseTimeAgoIntlOptions<false>,
+  options?: UseTimeAgoIntlOptions<false>
 ): UseTimeAgoReturn<false>
 export declare function useTimeAgoIntl(
   time: MaybeRefOrGetter<Date | number | string>,
-  options: UseTimeAgoIntlOptions<true>,
+  options: UseTimeAgoIntlOptions<true>
 ): UseTimeAgoReturn<true>
 /**
  * Non-reactive version of useTimeAgoIntl
@@ -105,13 +105,13 @@ export declare function useTimeAgoIntl(
 export declare function formatTimeAgoIntl(
   from: Date,
   options?: FormatTimeAgoIntlOptions,
-  now?: Date | number,
+  now?: Date | number
 ): string
 /**
  * Format parts into a string
  */
 export declare function formatTimeAgoIntlParts(
   parts: Intl.RelativeTimeFormatPart[],
-  options?: FormatTimeAgoIntlOptions,
+  options?: FormatTimeAgoIntlOptions
 ): string
 ```

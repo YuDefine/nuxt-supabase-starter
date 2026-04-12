@@ -96,11 +96,6 @@
       "sourceType": "github",
       "computedHash": "b01b8be227a2a094e4b65f340c5a767bdbfd27d8bf2ccee4f75c203e44a5a592"
     },
-    "find-skills": {
-      "source": "vercel-labs/skills",
-      "sourceType": "github",
-      "computedHash": "9e1c8b3103f92fa8092568a44fe64858de7c5c9dc65ce4bea8f168080e889cfd"
-    },
     "finishing-a-development-branch": {
       "source": "obra/superpowers",
       "sourceType": "github",

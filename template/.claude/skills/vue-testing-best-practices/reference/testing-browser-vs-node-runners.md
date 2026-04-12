@@ -23,7 +23,9 @@ Use Vitest for most component tests (fast), but use Vitest Browser Mode when tes
 ## When to Use Each Approach
 
 ### Node-Based Runner (Vitest + happy-dom/jsdom)
+
 Best for:
+
 - Pure logic testing
 - State management
 - Event emission
@@ -35,8 +37,8 @@ Best for:
 // vitest.config.js
 export default defineConfig({
   test: {
-    environment: 'happy-dom',  // or 'jsdom'
-  }
+    environment: 'happy-dom', // or 'jsdom'
+  },
 })
 ```
 
@@ -50,7 +52,9 @@ test('button emits click event', async () => {
 ```
 
 ### Vitest Browser Mode
+
 Required for:
+
 - CSS computed styles verification
 - CSS transitions/animations
 - Real focus/blur behavior
@@ -92,7 +96,7 @@ test('has correct hover styling', async () => {
 
   // Check initial style
   await expect.element(button).toHaveStyle({
-    backgroundColor: 'rgb(59, 130, 246)'  // blue
+    backgroundColor: 'rgb(59, 130, 246)', // blue
   })
 })
 
@@ -109,6 +113,7 @@ test('maintains focus after click', async () => {
 ## Examples: What Each Runner Can/Cannot Test
 
 ### Styles - Browser Required
+
 ```javascript
 // Node runner: CANNOT verify actual CSS
 test('danger button has red background', () => {
@@ -121,12 +126,13 @@ test('danger button has red background', () => {
 test('danger button renders red', async () => {
   const { getByRole } = render(Button, { props: { variant: 'danger' } })
   await expect.element(getByRole('button')).toHaveStyle({
-    backgroundColor: 'rgb(239, 68, 68)'
+    backgroundColor: 'rgb(239, 68, 68)',
   })
 })
 ```
 
 ### Computed CSS Styles - Browser Required
+
 ```javascript
 // Node runner: CANNOT get real computed styles
 test('button has correct padding', () => {
@@ -142,12 +148,13 @@ test('button has correct padding', async () => {
   const button = getByRole('button')
 
   await expect.element(button).toHaveStyle({
-    padding: '12px 24px'
+    padding: '12px 24px',
   })
 })
 ```
 
 ### Native Events - Browser Required
+
 ```javascript
 // Node runner: Synthetic events only
 test('handles drag and drop', async () => {
@@ -191,6 +198,7 @@ export default defineConfig({
 ```
 
 ### Directory Structure
+
 ```
 tests/
 ├── unit/              # Fast node-based tests
@@ -204,5 +212,6 @@ tests/
 ```
 
 ## Reference
+
 - [Vue.js Testing - Component Testing](https://vuejs.org/guide/scaling-up/testing#component-testing)
 - [Vitest Browser Mode](https://vitest.dev/guide/browser.html)

@@ -73,6 +73,7 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 
 - 專案名稱：最後一段路徑就是專案名稱（例如 `temp/my-product`）
 - Auth：`--auth nuxt-auth-utils`、`--auth better-auth`、`--auth none`
+- CI 模式：`--ci simple`（預設）、`--ci advanced`
 - 快速預設：`--fast`（等同 `--preset fast`，會移除 testing）
 - 功能新增：`--with <feature1,feature2>`
 - 功能移除：`--without <feature1,feature2>`
@@ -84,6 +85,7 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 - `testing-full`, `testing-vitest`, `monitoring`
 - `deploy-cloudflare`, `deploy-vercel`, `deploy-node`
 - `quality`, `git-hooks`
+- `ci-simple`, `ci-advanced`
 
 ### Tech Stack 選擇指引
 
@@ -115,12 +117,15 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 |                | `vueuse`            |  ✅  | 常用 composables            | VueUse utilities                           |
 | **Quality**    | `quality`           |  ✅  | 所有專案                    | OXLint + OXFmt（Rust，極快）               |
 | **Git**        | `git-hooks`         |  ✅  | 團隊協作                    | Husky + Commitlint                         |
+| **CI**         | `ci-simple`         |  ✅  | Prototype / 個人專案        | push/PR 跑 format/lint/typecheck/test      |
+|                | `ci-advanced`       |      | 團隊 / 生產專案             | GitHub Flow：PR gate + path filter + CI→E2E workflow_run 鏈 + artifact |
 
 #### 互斥規則
 
 - Auth：`nuxt-auth-utils` 和 `better-auth` 不能同時選
 - Testing：`testing-full` 和 `testing-vitest` 不能同時選
 - Deploy：三個部署目標只能選一
+- CI：`ci-simple` 和 `ci-advanced` 不能同時選
 - SEO 依賴 SSR：選 `seo` 會自動啟用 `ssr`
 
 #### 決策流程
@@ -145,6 +150,16 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 ├─ 最快（prototype）→ --fast --without testing-full
 ├─ 正常 → 預設即可
 └─ 最小 → --minimal --with ui,database
+
+CI 要多嚴謹？
+├─ Prototype / 個人專案 → --ci simple（預設）
+│  └─ push/PR 跑基本檢查，不卡 roadmap，好上手
+└─ 團隊 / 生產專案 → --ci advanced
+   ├─ PR gate + path filter（docs 改動不觸發）
+   ├─ concurrency cancel-in-progress（節省 runner）
+   ├─ CI 成功後才觸發 E2E workflow（workflow_run 鏈）
+   ├─ Playwright report artifact upload
+   └─ Self-host Supabase：改 runs-on: self-hosted 並移除 supabase start 步驟
 ```
 
 ### 驗證沒有預設關鍵字殘留

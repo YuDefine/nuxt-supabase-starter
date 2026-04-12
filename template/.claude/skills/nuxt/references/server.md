@@ -65,7 +65,7 @@ export default defineEventHandler(async (event) => {
   if (!userId) {
     throw createError({
       statusCode: 400,
-      message: 'User ID is required'
+      message: 'User ID is required',
     })
   }
 
@@ -74,7 +74,7 @@ export default defineEventHandler(async (event) => {
   if (!user) {
     throw createError({
       statusCode: 404,
-      message: 'User not found'
+      message: 'User not found',
     })
   }
 
@@ -107,7 +107,7 @@ export default defineEventHandler(async (event) => {
   if (!body.name || !body.email) {
     throw createError({
       statusCode: 400,
-      message: 'Missing required fields: name, email'
+      message: 'Missing required fields: name, email',
     })
   }
 
@@ -127,7 +127,7 @@ import * as v from 'valibot'
 
 const UserSchema = v.object({
   name: v.pipe(v.string(), v.minLength(1)),
-  email: v.pipe(v.string(), v.email())
+  email: v.pipe(v.string(), v.email()),
 })
 
 export default defineEventHandler(async (event) => {
@@ -145,7 +145,7 @@ import * as v from 'valibot'
 
 const QuerySchema = v.object({
   page: v.optional(v.pipe(v.string(), v.transform(Number)), '1'),
-  limit: v.optional(v.pipe(v.string(), v.transform(Number)), '10')
+  limit: v.optional(v.pipe(v.string(), v.transform(Number)), '10'),
 })
 
 export default defineEventHandler(async (event) => {
@@ -163,7 +163,7 @@ throw createError({
   statusCode: 400,
   statusMessage: 'Bad Request',
   message: 'Invalid input',
-  data: { field: 'email' } // Optional additional data
+  data: { field: 'email' }, // Optional additional data
 })
 ```
 
@@ -188,7 +188,7 @@ export default defineEventHandler((event) => {
   if (!token) {
     throw createError({
       statusCode: 401,
-      message: 'Unauthorized'
+      message: 'Unauthorized',
     })
   }
 
@@ -205,8 +205,12 @@ Reusable server functions (auto-imported):
 // server/utils/db.ts
 import { db } from './database'
 
-export async function fetchUsers(options: { page: number, limit: number }) {
-  return await db.select().from('users').limit(options.limit).offset((options.page - 1) * options.limit)
+export async function fetchUsers(options: { page: number; limit: number }) {
+  return await db
+    .select()
+    .from('users')
+    .limit(options.limit)
+    .offset((options.page - 1) * options.limit)
 }
 
 export async function fetchUserById(id: string) {
@@ -236,8 +240,8 @@ export const fetchRepo = defineCachedFunction(
     return await $fetch(`https://api.github.com/repos/${owner}/${repo}`)
   },
   {
-    maxAge: 60 * 5,  // Cache for 5 minutes
-    swr: true,       // Stale-while-revalidate
+    maxAge: 60 * 5, // Cache for 5 minutes
+    swr: true, // Stale-while-revalidate
     name: 'github-repo',
     getKey: (owner, repo) => `${owner}/${repo}`,
   }
@@ -256,9 +260,9 @@ export default defineCachedEventHandler(
     return await fetchProductById(productId)
   },
   {
-    maxAge: 3600,  // Cache for 1 hour
-    swr: true,     // Serve stale while revalidating
-    getKey: event => getRouterParam(event, 'productId') ?? '',
+    maxAge: 3600, // Cache for 1 hour
+    swr: true, // Serve stale while revalidating
+    getKey: (event) => getRouterParam(event, 'productId') ?? '',
   }
 )
 ```
@@ -272,7 +276,10 @@ Centralize error handling for H3 errors, validation errors, and fallbacks:
 import { isError, createError } from 'h3'
 import * as v from 'valibot'
 
-export function handleApiError(error: unknown, fallback: { statusCode?: number, message: string }): never {
+export function handleApiError(
+  error: unknown,
+  fallback: { statusCode?: number; message: string }
+): never {
   // Re-throw existing H3 errors
   if (isError(error)) throw error
 
@@ -339,7 +346,7 @@ setCookie(event, 'token', 'value', {
   httpOnly: true,
   secure: true,
   sameSite: 'lax',
-  maxAge: 60 * 60 * 24 * 7 // 1 week
+  maxAge: 60 * 60 * 24 * 7, // 1 week
 })
 
 // Redirect
@@ -362,9 +369,7 @@ export default defineEventHandler(async (event) => {
   const data = await readBody(event)
 
   // Don't block response with analytics logging
-  event.waitUntil(
-    logAnalytics(data)
-  )
+  event.waitUntil(logAnalytics(data))
 
   return { success: true }
 })
@@ -408,7 +413,7 @@ export default defineWebSocketHandler({
   },
   close(peer) {
     console.log('Client disconnected:', peer.id)
-  }
+  },
 })
 ```
 
@@ -418,8 +423,8 @@ Enable in config:
 // nuxt.config.ts
 export default defineNuxtConfig({
   nitro: {
-    experimental: { websocket: true }
-  }
+    experimental: { websocket: true },
+  },
 })
 ```
 

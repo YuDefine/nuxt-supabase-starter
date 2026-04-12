@@ -15,6 +15,7 @@ export interface FeatureModule {
     | 'quality'
     | 'git'
     | 'rendering'
+    | 'ci'
   dependencies?: string[]
   incompatible?: string[]
   packages: Record<string, string>

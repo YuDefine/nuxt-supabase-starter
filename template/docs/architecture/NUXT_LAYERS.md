@@ -96,12 +96,12 @@ layers/
 
 每個 layer 透過 **目錄命名慣例** 取得獨立的路由命名空間：
 
-| Layer      | Pages 目錄                       | 產生的路由                                        |
-| ---------- | -------------------------------- | ------------------------------------------------- |
-| admin      | `layers/admin/pages/admin/`      | `/admin`, `/admin/users`, `/admin/settings`       |
-| portal     | `layers/portal/pages/my/`        | `/my`, `/my/profile`, `/my/settings`              |
-| public     | `layers/public/pages/public/`    | `/public`                                         |
-| app (core) | `app/pages/`                     | `/`, `/items`, `/categories` 等核心路由           |
+| Layer      | Pages 目錄                    | 產生的路由                                  |
+| ---------- | ----------------------------- | ------------------------------------------- |
+| admin      | `layers/admin/pages/admin/`   | `/admin`, `/admin/users`, `/admin/settings` |
+| portal     | `layers/portal/pages/my/`     | `/my`, `/my/profile`, `/my/settings`        |
+| public     | `layers/public/pages/public/` | `/public`                                   |
+| app (core) | `app/pages/`                  | `/`, `/items`, `/categories` 等核心路由     |
 
 Nuxt 在 build 時自動合併所有 layer 的 `pages/` 目錄，產生統一的路由表。不需要額外的路由配置。
 
@@ -140,14 +140,14 @@ definePageMeta({
 
 可用的 layouts：
 
-| Layout    | 來源                                 | 用途                |
-| --------- | ------------------------------------ | ------------------- |
-| `default` | `app/layouts/default.vue`            | 核心側邊欄 layout   |
-| `admin`   | `layers/admin/layouts/admin.vue`     | 管理後台            |
-| `portal`  | `layers/portal/layouts/portal.vue`   | 使用者端 Mobile-first |
-| `public`  | `layers/public/layouts/public.vue`   | 公開頁面            |
-| `auth`    | `app/layouts/auth.vue`               | 登入頁              |
-| `mobile`  | `app/layouts/mobile.vue`             | 行動版              |
+| Layout    | 來源                               | 用途                  |
+| --------- | ---------------------------------- | --------------------- |
+| `default` | `app/layouts/default.vue`          | 核心側邊欄 layout     |
+| `admin`   | `layers/admin/layouts/admin.vue`   | 管理後台              |
+| `portal`  | `layers/portal/layouts/portal.vue` | 使用者端 Mobile-first |
+| `public`  | `layers/public/layouts/public.vue` | 公開頁面              |
+| `auth`    | `app/layouts/auth.vue`             | 登入頁                |
+| `mobile`  | `app/layouts/mobile.vue`           | 行動版                |
 
 ## 元件覆寫機制
 
@@ -170,15 +170,15 @@ export default defineNuxtConfig({
 
 所有 layer 共享 `app/` 中的程式碼：
 
-| 目錄               | 內容                                                     |
-| ------------------ | -------------------------------------------------------- |
-| `app/components/`  | 共用 UI 元件（表格、表單、對話框等）                     |
-| `app/composables/` | 共用 composables（`useUserRole` 等）                     |
+| 目錄               | 內容                                                      |
+| ------------------ | --------------------------------------------------------- |
+| `app/components/`  | 共用 UI 元件（表格、表單、對話框等）                      |
+| `app/composables/` | 共用 composables（`useUserRole` 等）                      |
 | `app/stores/`      | Pinia stores（`useUserStore`、`useUserPreferencesStore`） |
-| `app/utils/`       | 工具函式                                                 |
-| `app/queries/`     | Pinia Colada query 定義                                  |
-| `app/middleware/`  | 全域 middleware（`auth.global.ts`）                      |
-| `app/pages/`       | 核心頁面                                                 |
+| `app/utils/`       | 工具函式                                                  |
+| `app/queries/`     | Pinia Colada query 定義                                   |
+| `app/middleware/`  | 全域 middleware（`auth.global.ts`）                       |
+| `app/pages/`       | 核心頁面                                                  |
 
 ### layers/ 目錄（專屬 UI）
 

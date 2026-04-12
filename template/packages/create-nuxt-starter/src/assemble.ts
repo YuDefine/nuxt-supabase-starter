@@ -466,7 +466,6 @@ function copyClaudeCodeAssets(targetDir: string, selectedFeatureIds: string[]): 
     'test-driven-development',
     'review-rules',
     'review-screenshot',
-    'find-skills',
 
     // Spectra SDD (Spec-Driven Development)
     'spectra',
@@ -622,6 +621,7 @@ function copyHooks(targetDir: string, feats: string[]): void {
   files.push(
     'knowledge-search-reminder.sh',
     'pre-commit-review.sh',
+    'post-bash-error-debug.sh',
     'post-edit-ui-qa.sh',
     'post-propose-design-inject.sh',
     'pre-archive-design-gate.sh'
@@ -689,7 +689,7 @@ function generateSettings(targetDir: string, feats: string[]): void {
   editWritePostHooks.push(hookEntry('post-edit-ui-qa.sh', 5))
   postToolUse.push({ matcher: 'Edit|Write', hooks: editWritePostHooks })
 
-  // PostToolUse: Bash — code-review-graph (always)
+  // PostToolUse: Bash — code-review-graph (always) + bash-error-debug nudge
   postToolUse.push({
     matcher: 'Bash',
     hooks: [
@@ -700,6 +700,7 @@ function generateSettings(targetDir: string, feats: string[]): void {
         timeout: 30,
         type: 'command',
       },
+      hookEntry('post-bash-error-debug.sh', 5),
     ],
   })
 
@@ -754,6 +755,7 @@ function generateSettings(targetDir: string, feats: string[]): void {
     'Bash(test:*)',
     'Bash(fi)',
     'Bash(done)',
+    'Bash(openssl rand:*)',
     // pnpm — always
     'Bash(pnpm check:*)',
     'Bash(pnpm test:*)',
@@ -990,14 +992,6 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
     lines.push('')
   }
 
-  // 實用工具 — always
-  lines.push('# 實用工具')
-  lines.push('echo "📦 實用工具 Skills..."')
-  lines.push('npx skills add vercel-labs/skills@find-skills $COPY_FLAGS')
-  lines.push('echo "  ✓ 實用工具 Skills 完成"')
-  lines.push('echo ""')
-  lines.push('')
-
   // Footer
   lines.push('echo "✅ 所有 skills 安裝完成！"')
   lines.push('echo ""')
@@ -1015,16 +1009,31 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
 // --- CI/CD Workflows ---
 
 function copyWorkflows(targetDir: string, feats: string[]): void {
-  const files = ['ci.yml']
-  if (has(feats, 'deploy-cloudflare')) files.push('deploy-staging.yml', 'deploy-production.yml')
-  // Vercel uses built-in Git integration — no workflow needed
-  if (has(feats, 'testing-full')) files.push('e2e.yml')
+  // CI mode: advanced wins if explicitly selected, otherwise simple is the default.
+  const ciMode: 'simple' | 'advanced' = has(feats, 'ci-advanced') ? 'advanced' : 'simple'
 
-  copyFilesList(
-    join(STARTER_ROOT, 'scripts', 'templates', 'github', '.github', 'workflows'),
-    join(targetDir, '.github', 'workflows'),
-    files
-  )
+  // Pairs of [source filename in templates, destination filename in .github/workflows].
+  const files: Array<[string, string]> = [[`ci-${ciMode}.yml`, 'ci.yml']]
+
+  if (has(feats, 'deploy-cloudflare')) {
+    files.push(['deploy-staging.yml', 'deploy-staging.yml'])
+    files.push(['deploy-production.yml', 'deploy-production.yml'])
+  }
+  // Vercel uses built-in Git integration — no workflow needed
+
+  if (has(feats, 'testing-full')) {
+    files.push([`e2e-${ciMode}.yml`, 'e2e.yml'])
+  }
+
+  const srcDir = join(STARTER_ROOT, 'scripts', 'templates', 'github', '.github', 'workflows')
+  const destDir = join(targetDir, '.github', 'workflows')
+  mkdirSync(destDir, { recursive: true })
+  for (const [srcName, destName] of files) {
+    const src = join(srcDir, srcName)
+    if (existsSync(src)) {
+      cpSync(src, join(destDir, destName))
+    }
+  }
 }
 
 // --- docs/verify ---

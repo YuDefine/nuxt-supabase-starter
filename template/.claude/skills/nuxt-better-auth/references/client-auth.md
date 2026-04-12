@@ -6,16 +6,16 @@ Main composable for auth state and methods.
 
 ```ts
 const {
-  user,           // Ref<AuthUser | null>
-  session,        // Ref<AuthSession | null>
-  loggedIn,       // ComputedRef<boolean>
-  ready,          // ComputedRef<boolean> - session fetch complete
-  client,         // Better Auth client (client-side only)
-  signIn,         // Proxy to client.signIn
-  signUp,         // Proxy to client.signUp
-  signOut,        // Sign out and clear session
-  fetchSession,   // Manually refresh session
-  updateUser      // Optimistic local user update
+  user, // Ref<AuthUser | null>
+  session, // Ref<AuthSession | null>
+  loggedIn, // ComputedRef<boolean>
+  ready, // ComputedRef<boolean> - session fetch complete
+  client, // Better Auth client (client-side only)
+  signIn, // Proxy to client.signIn
+  signUp, // Proxy to client.signUp
+  signOut, // Sign out and clear session
+  fetchSession, // Manually refresh session
+  updateUser, // Optimistic local user update
 } = useUserSession()
 ```
 
@@ -23,12 +23,15 @@ const {
 
 ```ts
 // Email/password
-await signIn.email({
-  email: 'user@example.com',
-  password: 'password123'
-}, {
-  onSuccess: () => navigateTo('/dashboard')
-})
+await signIn.email(
+  {
+    email: 'user@example.com',
+    password: 'password123',
+  },
+  {
+    onSuccess: () => navigateTo('/dashboard'),
+  }
+)
 
 // OAuth
 await signIn.social({ provider: 'github' })
@@ -37,13 +40,16 @@ await signIn.social({ provider: 'github' })
 ## Sign Up
 
 ```ts
-await signUp.email({
-  email: 'user@example.com',
-  password: 'password123',
-  name: 'John Doe'
-}, {
-  onSuccess: () => navigateTo('/welcome')
-})
+await signUp.email(
+  {
+    email: 'user@example.com',
+    password: 'password123',
+    name: 'John Doe',
+  },
+  {
+    onSuccess: () => navigateTo('/welcome'),
+  }
+)
 ```
 
 ## Sign Out
@@ -58,7 +64,7 @@ await signOut({ redirect: '/login' })
 
 ```vue
 <script setup>
-const { user, loggedIn, ready } = useUserSession()
+  const { user, loggedIn, ready } = useUserSession()
 </script>
 
 <template>
@@ -82,11 +88,15 @@ function getSafeRedirect() {
   return redirect
 }
 
-await signIn.email({
-  email, password
-}, {
-  onSuccess: () => navigateTo(getSafeRedirect())
-})
+await signIn.email(
+  {
+    email,
+    password,
+  },
+  {
+    onSuccess: () => navigateTo(getSafeRedirect()),
+  }
+)
 ```
 
 ## Wait for Session

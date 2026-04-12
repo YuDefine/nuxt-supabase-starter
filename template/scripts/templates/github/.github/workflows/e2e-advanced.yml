@@ -1,0 +1,95 @@
+# Advanced E2E Workflow
+# 透過 workflow_run 於 CI 成功後觸發，避免 CI 失敗時浪費 runner
+# 配套 ci-advanced.yml 使用
+#
+# 若你的 Supabase 是自架且放在自己 VM，建議在同台跑 self-hosted runner
+# 並移除下方的 "Setup Supabase CLI" + "Start Supabase" + "Cleanup Supabase" 步驟
+# 改把 SUPABASE_URL / SUPABASE_KEY 從環境變數或 secrets 帶入
+name: E2E Tests
+
+on:
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Playwright E2E
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.HEAD_SHA }}
+
+      - name: Setup Vite+ (vp)
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: '22'
+          cache: true
+
+      - name: Install dependencies
+        run: vp install
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Supabase
+        id: supabase
+        run: |
+          supabase start
+          {
+            echo "anon_key=$(supabase status -o env | grep '^ANON_KEY=' | cut -d= -f2- | tr -d '\"')"
+            echo "service_role_key=$(supabase status -o env | grep '^SERVICE_ROLE_KEY=' | cut -d= -f2- | tr -d '\"')"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Seed database
+        run: supabase db reset
+
+      - name: Build Nuxt
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          NITRO_PRESET: node-server
+          SUPABASE_URL: http://127.0.0.1:54321
+          SUPABASE_KEY: ${{ steps.supabase.outputs.anon_key }}
+        run: vp run build
+
+      - name: Run E2E tests
+        env:
+          NUXT_SESSION_PASSWORD: e2e-ci-session-password-at-least-32-chars
+          SUPABASE_URL: http://127.0.0.1:54321
+          SUPABASE_KEY: ${{ steps.supabase.outputs.anon_key }}
+          SUPABASE_SECRET_KEY: ${{ steps.supabase.outputs.service_role_key }}
+        run: vp run test:e2e
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+
+      - name: Cleanup Supabase
+        if: always()
+        run: supabase stop

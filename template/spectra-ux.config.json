@@ -1,33 +1,25 @@
 {
-  "version": "1.2.0",
+  "version": "1.3.1",
   "agents": {
     "claude": true,
     "codex": true,
     "copilot": true
   },
   "paths": {
-    "types": [
-      "shared/types"
-    ],
-    "ui": [
-      "app/pages",
-      "app/components"
-    ],
-    "uiExtensions": [
-      ".vue"
-    ],
-    "server": [
-      "server",
-      "shared"
-    ],
+    "types": ["shared/types"],
+    "ui": ["app/pages", "app/components"],
+    "uiExtensions": [".vue"],
+    "server": ["server", "shared"],
     "migrations": "supabase/migrations",
-    "navigation": [
-      "app/layouts/default.vue"
-    ],
+    "navigation": ["app/layouts/default.vue"],
     "utils": "app/utils",
     "scripts": "scripts",
     "openspec": "openspec",
     "rulesOutput": "docs/rules/ux-completeness.md"
+  },
+  "roadmap": {
+    "enabled": true,
+    "path": "openspec/ROADMAP.md"
   },
   "packageManager": "pnpm",
   "gitHooks": {

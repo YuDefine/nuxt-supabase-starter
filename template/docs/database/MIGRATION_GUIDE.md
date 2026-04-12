@@ -63,11 +63,11 @@ pnpm typecheck
 
 ## 3. 檔案結構與腳本
 
-| 位置                                              | 說明                                                       |
-| ------------------------------------------------- | ---------------------------------------------------------- |
-| `supabase/migrations/<timestamp>_baseline.sql`    | 最新基線，任何增修在此檔案之後累積                         |
-| `supabase/migrations/archive/`                    | 已過時或舊版本的 migrations，僅供參考                      |
-| `supabase/seed.sql`                               | 開發用種子資料                                             |
+| 位置                                           | 說明                                  |
+| ---------------------------------------------- | ------------------------------------- |
+| `supabase/migrations/<timestamp>_baseline.sql` | 最新基線，任何增修在此檔案之後累積    |
+| `supabase/migrations/archive/`                 | 已過時或舊版本的 migrations，僅供參考 |
+| `supabase/seed.sql`                            | 開發用種子資料                        |
 
 ---
 
@@ -176,12 +176,12 @@ git push origin main
 
 ## 7. GUI 使用準則
 
-| 功能                  | 可否使用 | 備註                                                                 |
-| --------------------- | -------- | -------------------------------------------------------------------- |
-| 查看資料 / RLS        | ✅       | 無需額外動作                                                         |
-| 快速修改欄位或 policy | ⚠️       | 僅限 PoC，用完記得 `supabase db diff --use-migra` 產出 migration     |
-| 直接在 GUI 建立函式   | ❌       | 無法控制 `search_path`，請改在 repository 編寫                       |
-| 匯入 SQL              | ❌       | 可能與 Repo diff，不允許                                             |
+| 功能                  | 可否使用 | 備註                                                             |
+| --------------------- | -------- | ---------------------------------------------------------------- |
+| 查看資料 / RLS        | ✅       | 無需額外動作                                                     |
+| 快速修改欄位或 policy | ⚠️       | 僅限 PoC，用完記得 `supabase db diff --use-migra` 產出 migration |
+| 直接在 GUI 建立函式   | ❌       | 無法控制 `search_path`，請改在 repository 編寫                   |
+| 匯入 SQL              | ❌       | 可能與 Repo diff，不允許                                         |
 
 ---
 

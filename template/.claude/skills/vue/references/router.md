@@ -144,10 +144,10 @@ Common route types:
 
 ```ts
 import type {
-  RouteLocationNormalized,     // Resolved route (after navigation)
+  RouteLocationNormalized, // Resolved route (after navigation)
   RouteLocationNormalizedLoaded, // Current route (from useRoute)
-  RouteLocationRaw,            // Input to router.push()
-  RouteRecordRaw,              // Route config definition
+  RouteLocationRaw, // Input to router.push()
+  RouteRecordRaw, // Route config definition
 } from 'vue-router'
 ```
 
@@ -161,7 +161,9 @@ route.meta.customField // any
 
 // ✅ Extend the interface
 declare module 'vue-router' {
-  interface RouteMeta { customField: string }
+  interface RouteMeta {
+    customField: string
+  }
 }
 ```
 
@@ -175,7 +177,5 @@ const route = useRoute()
 const id = route.params.id
 
 // ✅ Handle both cases
-const id = Array.isArray(route.params.id)
-  ? route.params.id[0]
-  : route.params.id
+const id = Array.isArray(route.params.id) ? route.params.id[0] : route.params.id
 ```

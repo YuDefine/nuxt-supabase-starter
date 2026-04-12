@@ -73,7 +73,7 @@ Render any HTML/SVG element with animation capabilities:
 
 ```vue
 <script setup lang="ts">
-import { motion } from 'motion-v'
+  import { motion } from 'motion-v'
 </script>
 
 <template>

@@ -2,16 +2,16 @@
 
 ## 技術堆疊
 
-| 層級 | 技術 |
-|------|------|
-| 框架 | Nuxt 4（Vue 3 Composition API + `<script setup>`） |
-| 語言 | TypeScript |
-| 樣式 | Tailwind CSS + Nuxt UI |
-| 狀態管理 | Pinia + Pinia Colada（server state） |
-| 工具庫 | VueUse |
-| 資料庫 | Supabase（PostgreSQL） |
-| 認證 | nuxt-auth-utils（Cookie Session） |
-| 部署 | Cloudflare Workers / Pages（或其他 Nitro preset） |
+| 層級     | 技術                                               |
+| -------- | -------------------------------------------------- |
+| 框架     | Nuxt 4（Vue 3 Composition API + `<script setup>`） |
+| 語言     | TypeScript                                         |
+| 樣式     | Tailwind CSS + Nuxt UI                             |
+| 狀態管理 | Pinia + Pinia Colada（server state）               |
+| 工具庫   | VueUse                                             |
+| 資料庫   | Supabase（PostgreSQL）                             |
+| 認證     | nuxt-auth-utils（Cookie Session）                  |
+| 部署     | Cloudflare Workers / Pages（或其他 Nitro preset）  |
 
 ## 核心架構決策
 
@@ -35,11 +35,11 @@
 
 ### Client 讀、Server 寫
 
-| 操作 | 方式 | 說明 |
-|------|------|------|
-| Client READ | `useSupabaseClient<Database>()` | 僅限 RLS `TO public` 的表 |
-| Server READ | `/api/v1/*` endpoints | RLS `TO authenticated` 的表 |
-| ALL WRITES | `/api/v1/*` endpoints | insert/update/delete 一律走 server |
+| 操作        | 方式                            | 說明                               |
+| ----------- | ------------------------------- | ---------------------------------- |
+| Client READ | `useSupabaseClient<Database>()` | 僅限 RLS `TO public` 的表          |
+| Server READ | `/api/v1/*` endpoints           | RLS `TO authenticated` 的表        |
+| ALL WRITES  | `/api/v1/*` endpoints           | insert/update/delete 一律走 server |
 
 Client 端 **永遠不做** `.insert()` / `.update()` / `.delete()` / `.upsert()`。
 

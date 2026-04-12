@@ -24,10 +24,10 @@ export interface UseCssSupportsReturn extends Supportable {}
 export declare function useCssSupports(
   property: MaybeRefOrGetter<string>,
   value: MaybeRefOrGetter<string>,
-  options?: UseCssSupportsOptions,
+  options?: UseCssSupportsOptions
 ): UseCssSupportsReturn
 export declare function useCssSupports(
   conditionText: MaybeRefOrGetter<string>,
-  options?: UseCssSupportsOptions,
+  options?: UseCssSupportsOptions
 ): UseCssSupportsReturn
 ```

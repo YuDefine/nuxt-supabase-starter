@@ -14,7 +14,7 @@ Specify language after opening backticks:
 ````md
 ```js
 export default {
-  name: 'MyComponent'
+  name: 'MyComponent',
 }
 ```
 ````
@@ -61,9 +61,9 @@ Inline highlighting with comment:
 export default {
   data() {
     return {
-      msg: 'Highlighted!' // [!code highlight]
+      msg: 'Highlighted!', // [!code highlight]
     }
-  }
+  },
 }
 ```
 ````
@@ -77,9 +77,9 @@ Blur other code and focus specific lines:
 export default {
   data() {
     return {
-      msg: 'Focused!' // [!code focus]
+      msg: 'Focused!', // [!code focus]
     }
-  }
+  },
 }
 ```
 ````
@@ -116,10 +116,10 @@ Color lines as errors or warnings:
 export default {
   data() {
     return {
-      msg: 'Error',   // [!code error]
-      msg: 'Warning'  // [!code warning]
+      msg: 'Error', // [!code error]
+      msg: 'Warning', // [!code warning]
     }
-  }
+  },
 }
 ```
 ````
@@ -132,8 +132,8 @@ Enable globally:
 // .vitepress/config.ts
 export default {
   markdown: {
-    lineNumbers: true
-  }
+    lineNumbers: true,
+  },
 }
 ```
 
@@ -169,11 +169,15 @@ Tabbed code blocks:
 ::: code-group
 
 ```js [JavaScript]
-export default { /* ... */ }
+export default {
+  /* ... */
+}
 ```
 
 ```ts [TypeScript]
-export default defineConfig({ /* ... */ })
+export default defineConfig({
+  /* ... */
+})
 ```
 
 :::

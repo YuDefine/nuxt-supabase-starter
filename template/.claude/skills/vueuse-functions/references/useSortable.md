@@ -24,13 +24,17 @@ npm i sortablejs@^1
 
 ```vue
 <script setup lang="ts">
-import { useSortable } from '@vueuse/integrations/useSortable'
-import { shallowRef, useTemplateRef } from 'vue'
+  import { useSortable } from '@vueuse/integrations/useSortable'
+  import { shallowRef, useTemplateRef } from 'vue'
 
-const el = useTemplateRef('el')
-const list = shallowRef([{ id: 1, name: 'a' }, { id: 2, name: 'b' }, { id: 3, name: 'c' }])
+  const el = useTemplateRef('el')
+  const list = shallowRef([
+    { id: 1, name: 'a' },
+    { id: 2, name: 'b' },
+    { id: 3, name: 'c' },
+  ])
 
-useSortable(el, list)
+  useSortable(el, list)
 </script>
 
 <template>
@@ -46,23 +50,27 @@ useSortable(el, list)
 
 ```vue
 <script setup lang="ts">
-import { useSortable } from '@vueuse/integrations/useSortable'
-import { shallowRef, useTemplateRef } from 'vue'
+  import { useSortable } from '@vueuse/integrations/useSortable'
+  import { shallowRef, useTemplateRef } from 'vue'
 
-const el = useTemplateRef('el')
-const list = shallowRef([{ id: 1, name: 'a' }, { id: 2, name: 'b' }, { id: 3, name: 'c' }])
+  const el = useTemplateRef('el')
+  const list = shallowRef([
+    { id: 1, name: 'a' },
+    { id: 2, name: 'b' },
+    { id: 3, name: 'c' },
+  ])
 
-const animation = 200
+  const animation = 200
 
-const { option } = useSortable(el, list, {
-  handle: '.handle',
-  // or option set
-  // animation
-})
+  const { option } = useSortable(el, list, {
+    handle: '.handle',
+    // or option set
+    // animation
+  })
 
-// You can use the option method to set and get the option of Sortable
-option('animation', animation)
-// option('animation') // 200
+  // You can use the option method to set and get the option of Sortable
+  option('animation', animation)
+  // option('animation') // 200
 </script>
 
 <template>
@@ -79,12 +87,16 @@ option('animation', animation)
 
 ```vue
 <script setup lang="ts">
-import { useSortable } from '@vueuse/integrations/useSortable'
-import { shallowRef } from 'vue'
+  import { useSortable } from '@vueuse/integrations/useSortable'
+  import { shallowRef } from 'vue'
 
-const list = shallowRef([{ id: 1, name: 'a' }, { id: 2, name: 'b' }, { id: 3, name: 'c' }])
+  const list = shallowRef([
+    { id: 1, name: 'a' },
+    { id: 2, name: 'b' },
+    { id: 3, name: 'c' },
+  ])
 
-useSortable('#dv', list)
+  useSortable('#dv', list)
 </script>
 
 <template>
@@ -146,7 +158,7 @@ useSortable(el, list, {
     nextTick(() => {
       /* do something */
     })
-  }
+  },
 })
 ```
 
@@ -177,10 +189,7 @@ export interface UseSortableReturn {
    * @param name a Sortable.Options property.
    * @param value a value.
    */
-  option: (<K extends keyof Sortable.Options>(
-    name: K,
-    value: Sortable.Options[K],
-  ) => void) &
+  option: (<K extends keyof Sortable.Options>(name: K, value: Sortable.Options[K]) => void) &
     (<K extends keyof Sortable.Options>(name: K) => Sortable.Options[K])
 }
 export interface UseSortableOptions extends Options, ConfigurableDocument {
@@ -201,12 +210,12 @@ export interface UseSortableOptions extends Options, ConfigurableDocument {
 export declare function useSortable<T>(
   selector: string,
   list: MaybeRef<T[]>,
-  options?: UseSortableOptions,
+  options?: UseSortableOptions
 ): UseSortableReturn
 export declare function useSortable<T>(
   el: MaybeRefOrGetter<MaybeElement>,
   list: MaybeRef<T[]>,
-  options?: UseSortableOptions,
+  options?: UseSortableOptions
 ): UseSortableReturn
 /**
  * Inserts a element into the DOM at a given index.
@@ -215,11 +224,7 @@ export declare function useSortable<T>(
  * @param {number} index
  * @see https://github.com/Alfred-Skyblue/vue-draggable-plus/blob/a3829222095e1949bf2c9a20979d7b5930e66f14/src/utils/index.ts#L81C1-L94C2
  */
-export declare function insertNodeAt(
-  parentElement: Element,
-  element: Element,
-  index: number,
-): void
+export declare function insertNodeAt(parentElement: Element, element: Element, index: number): void
 /**
  * Removes a node from the DOM.
  * @param {Node} node
@@ -230,6 +235,6 @@ export declare function moveArrayElement<T>(
   list: MaybeRef<T[]>,
   from: number,
   to: number,
-  e?: Sortable.SortableEvent | null,
+  e?: Sortable.SortableEvent | null
 ): void
 ```

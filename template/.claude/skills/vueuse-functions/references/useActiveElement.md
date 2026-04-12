@@ -10,14 +10,14 @@ Reactive `document.activeElement`. Returns a shallow ref that updates when focus
 
 ```vue
 <script setup lang="ts">
-import { useActiveElement } from '@vueuse/core'
-import { watch } from 'vue'
+  import { useActiveElement } from '@vueuse/core'
+  import { watch } from 'vue'
 
-const activeElement = useActiveElement()
+  const activeElement = useActiveElement()
 
-watch(activeElement, (el) => {
-  console.log('focus changed to', el)
-})
+  watch(activeElement, (el) => {
+    console.log('focus changed to', el)
+  })
 </script>
 ```
 
@@ -70,8 +70,9 @@ export interface UseActiveElementOptions
    */
   triggerOnRemoval?: boolean
 }
-export type UseActiveElementReturn<T extends HTMLElement = HTMLElement> =
-  ShallowRef<T | null | undefined>
+export type UseActiveElementReturn<T extends HTMLElement = HTMLElement> = ShallowRef<
+  T | null | undefined
+>
 /**
  * Reactive `document.activeElement`
  *
@@ -81,6 +82,6 @@ export type UseActiveElementReturn<T extends HTMLElement = HTMLElement> =
  * @__NO_SIDE_EFFECTS__
  */
 export declare function useActiveElement<T extends HTMLElement>(
-  options?: UseActiveElementOptions,
+  options?: UseActiveElementOptions
 ): UseActiveElementReturn<T>
 ```

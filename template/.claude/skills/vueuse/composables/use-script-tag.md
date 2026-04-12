@@ -15,7 +15,7 @@ useScriptTag(
   // on script tag loaded.
   (el: HTMLScriptElement) => {
     // do something
-  },
+  }
 )
 ```
 

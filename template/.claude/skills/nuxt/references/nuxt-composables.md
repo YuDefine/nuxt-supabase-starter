@@ -118,12 +118,12 @@ const { data, error, pending, refresh } = await useFetch('/api/users')
 
 // With params
 const { data } = await useFetch('/api/users', {
-  query: { page: 1, limit: 10 }
+  query: { page: 1, limit: 10 },
 })
 
 // With key for deduplication
 const { data } = await useFetch(`/api/users/${userId}`, {
-  key: `user-${userId}`
+  key: `user-${userId}`,
 })
 
 // Lazy fetch (doesn't block navigation)
@@ -133,13 +133,13 @@ const { data } = await useLazyFetch('/api/users')
 const page = ref(1)
 const { data } = await useFetch('/api/users', {
   query: { page },
-  watch: [page]
+  watch: [page],
 })
 
 // Cancel requests with AbortController signal (Nuxt 4.2+)
 const controller = new AbortController()
 const { data } = await useFetch('/api/users', {
-  signal: controller.signal
+  signal: controller.signal,
 })
 // Later: controller.abort() to cancel the request
 
@@ -156,7 +156,7 @@ await execute({ signal: abortController.signal })
 // Custom async logic
 const { data, error, pending, refresh } = await useAsyncData('users', async () => {
   const response = await $fetch('/api/users')
-  return response.filter(u => u.active)
+  return response.filter((u) => u.active)
 })
 
 // Lazy version
@@ -172,37 +172,29 @@ const { data } = await useAsyncData('users', async () => {
 // Later: controller.abort() to cancel
 
 // Custom cache logic with getCachedData
-const { data } = await useAsyncData('users',
-  async () => $fetch('/api/users'),
-  {
-    getCachedData: (key) => {
-      // Return cached data or null/undefined to trigger fetch
-      const cached = useNuxtData(key)
-      return cached.data.value
-    }
-  }
-)
+const { data } = await useAsyncData('users', async () => $fetch('/api/users'), {
+  getCachedData: (key) => {
+    // Return cached data or null/undefined to trigger fetch
+    const cached = useNuxtData(key)
+    return cached.data.value
+  },
+})
 
 // Deep reactivity for nested objects
 // Default is shallow in Nuxt 4 (was deep in Nuxt 3)
-const { data } = await useAsyncData('user',
-  async () => $fetch('/api/user'),
-  {
-    deep: true // Makes nested properties reactive
-  }
-)
+const { data } = await useAsyncData('user', async () => $fetch('/api/user'), {
+  deep: true, // Makes nested properties reactive
+})
 
 // Deduplication strategies (Nuxt 4.2+)
-const { data } = await useAsyncData('users',
-  async () => $fetch('/api/users'),
-  {
-    dedupe: 'cancel' // Cancel existing requests when new one starts
-    // dedupe: 'defer' // Prevent new requests while one is pending
-  }
-)
+const { data } = await useAsyncData('users', async () => $fetch('/api/users'), {
+  dedupe: 'cancel', // Cancel existing requests when new one starts
+  // dedupe: 'defer' // Prevent new requests while one is pending
+})
 
 // Manual cancellation via execute/refresh
-const { data, execute } = await useAsyncData('users',
+const { data, execute } = await useAsyncData(
+  'users',
   async ({ signal }) => $fetch('/api/users', { signal }),
   { immediate: false }
 )
@@ -268,17 +260,15 @@ useHead({
   title: 'User Profile',
   meta: [
     { name: 'description', content: 'View user profile' },
-    { property: 'og:title', content: 'User Profile' }
+    { property: 'og:title', content: 'User Profile' },
   ],
-  link: [
-    { rel: 'canonical', href: 'https://example.com/profile' }
-  ]
+  link: [{ rel: 'canonical', href: 'https://example.com/profile' }],
 })
 
 // Dynamic values
 const user = ref({ name: 'John' })
 useHead({
-  title: () => `${user.value.name}'s Profile`
+  title: () => `${user.value.name}'s Profile`,
 })
 ```
 
@@ -292,7 +282,7 @@ useSeoMeta({
   ogTitle: 'User Profile',
   ogDescription: 'View user profile',
   ogImage: 'https://example.com/image.jpg',
-  twitterCard: 'summary_large_image'
+  twitterCard: 'summary_large_image',
 })
 ```
 

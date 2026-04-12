@@ -59,7 +59,7 @@ const { system, store } = useColorMode()
 system.value // 'dark' | 'light'
 store.value // 'dark' | 'light' | 'auto'
 
-const myColorMode = computed(() => store.value === 'auto' ? system.value : store.value)
+const myColorMode = computed(() => (store.value === 'auto' ? system.value : store.value))
 ```
 
 ## Component Usage
@@ -77,11 +77,11 @@ const myColorMode = computed(() => store.value === 'auto' ? system.value : store
 ## Type Declarations
 
 ```ts
-export type BasicColorMode = "light" | "dark"
-export type BasicColorSchema = BasicColorMode | "auto"
-export interface UseColorModeOptions<
-  T extends string = BasicColorMode,
-> extends UseStorageOptions<T | BasicColorMode> {
+export type BasicColorMode = 'light' | 'dark'
+export type BasicColorSchema = BasicColorMode | 'auto'
+export interface UseColorModeOptions<T extends string = BasicColorMode> extends UseStorageOptions<
+  T | BasicColorMode
+> {
   /**
    * CSS Selector for the target element applying to
    *
@@ -110,10 +110,7 @@ export interface UseColorModeOptions<
    *
    * @default undefined
    */
-  onChanged?: (
-    mode: T | BasicColorMode,
-    defaultHandler: (mode: T | BasicColorMode) => void,
-  ) => void
+  onChanged?: (mode: T | BasicColorMode, defaultHandler: (mode: T | BasicColorMode) => void) => void
   /**
    * Custom storage ref
    *
@@ -153,9 +150,7 @@ export interface UseColorModeOptions<
    */
   disableTransition?: boolean
 }
-export type UseColorModeReturn<T extends string = BasicColorMode> = Ref<
-  T | BasicColorSchema
-> & {
+export type UseColorModeReturn<T extends string = BasicColorMode> = Ref<T | BasicColorSchema> & {
   store: Ref<T | BasicColorSchema>
   system: ComputedRef<BasicColorMode>
   state: ComputedRef<T | BasicColorMode>
@@ -167,6 +162,6 @@ export type UseColorModeReturn<T extends string = BasicColorMode> = Ref<
  * @param options
  */
 export declare function useColorMode<T extends string = BasicColorMode>(
-  options?: UseColorModeOptions<T>,
+  options?: UseColorModeOptions<T>
 ): UseColorModeReturn<T>
 ```

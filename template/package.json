@@ -9,6 +9,7 @@
   },
   "type": "module",
   "scripts": {
+    "audit:ux-drift": "node scripts/audit-ux-drift.mts",
     "build": "nuxt build",
     "check": "vp check && pnpm typecheck",
     "db:backup": "bash ./scripts/backup-supabase.sh",
@@ -29,14 +30,14 @@
     "skills:install": "bash ./scripts/install-skills.sh",
     "skills:list": "bash ./scripts/check-skills.sh",
     "skills:update": "bash ./scripts/install-skills.sh",
+    "spectra:roadmap": "node scripts/spectra-ux/roadmap-sync.mts",
     "tag": "git tag v$(node -p \"require('./package.json').version\") && git push origin --tags",
     "test": "vp test --coverage",
     "test:e2e": "playwright test",
     "test:unit": "vp test test/unit",
     "test:watch": "vp test --watch",
     "typecheck": "nuxt typecheck",
-    "update": "nuxt upgrade && pnpm skills:update && pnpm update --latest",
-    "audit:ux-drift": "node scripts/audit-ux-drift.mts"
+    "update": "nuxt upgrade && pnpm skills:update && pnpm update --latest"
   },
   "dependencies": {
     "@nuxt/image": "^2.0.0",

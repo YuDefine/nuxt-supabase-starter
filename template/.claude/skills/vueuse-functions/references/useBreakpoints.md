@@ -21,26 +21,24 @@ const smallerThanLg = breakpoints.smaller('lg') // only smaller than lg
 
 ```vue
 <script setup lang="ts">
-import { useBreakpoints } from '@vueuse/core'
+  import { useBreakpoints } from '@vueuse/core'
 
-const breakpoints = useBreakpoints({
-  mobile: 0, // optional
-  tablet: 640,
-  laptop: 1024,
-  desktop: 1280,
-})
+  const breakpoints = useBreakpoints({
+    mobile: 0, // optional
+    tablet: 640,
+    laptop: 1024,
+    desktop: 1280,
+  })
 
-// Can be 'mobile' or 'tablet' or 'laptop' or 'desktop'
-const activeBreakpoint = breakpoints.active()
+  // Can be 'mobile' or 'tablet' or 'laptop' or 'desktop'
+  const activeBreakpoint = breakpoints.active()
 
-// true or false
-const laptop = breakpoints.between('laptop', 'desktop')
+  // true or false
+  const laptop = breakpoints.between('laptop', 'desktop')
 </script>
 
 <template>
-  <div :class="activeBreakpoint">
-    ...
-  </div>
+  <div :class="activeBreakpoint">...</div>
 </template>
 ```
 
@@ -96,7 +94,7 @@ If you are using `useBreakpoints` with SSR enabled, then you need to specify whi
 import { breakpointsTailwind, useBreakpoints } from '@vueuse/core'
 
 const breakpoints = useBreakpoints(breakpointsTailwind, {
-  ssrWidth: 768 // Will enable SSR mode and render like if the screen was 768px wide
+  ssrWidth: 768, // Will enable SSR mode and render like if the screen was 768px wide
 })
 ```
 
@@ -125,11 +123,8 @@ import { breakpointsTailwind } from '@vueuse/core'
 ## Type Declarations
 
 ```ts
-export * from "./breakpoints"
-export type Breakpoints<K extends string = string> = Record<
-  K,
-  MaybeRefOrGetter<number | string>
->
+export * from './breakpoints'
+export type Breakpoints<K extends string = string> = Record<K, MaybeRefOrGetter<number | string>>
 export interface UseBreakpointsOptions extends ConfigurableWindow {
   /**
    * The query strategy to use for the generated shortcut methods like `.lg`
@@ -139,28 +134,22 @@ export interface UseBreakpointsOptions extends ConfigurableWindow {
    *
    * @default "min-width"
    */
-  strategy?: "min-width" | "max-width"
+  strategy?: 'min-width' | 'max-width'
   ssrWidth?: number
 }
-export type UseBreakpointReturn<K extends string = string> = Record<
-  K,
-  ComputedRef<boolean>
-> & {
+export type UseBreakpointReturn<K extends string = string> = Record<K, ComputedRef<boolean>> & {
   greaterOrEqual: (k: MaybeRefOrGetter<K>) => ComputedRef<boolean>
   smallerOrEqual: (k: MaybeRefOrGetter<K>) => ComputedRef<boolean>
   greater: (k: MaybeRefOrGetter<K>) => ComputedRef<boolean>
   smaller: (k: MaybeRefOrGetter<K>) => ComputedRef<boolean>
-  between: (
-    a: MaybeRefOrGetter<K>,
-    b: MaybeRefOrGetter<K>,
-  ) => ComputedRef<boolean>
+  between: (a: MaybeRefOrGetter<K>, b: MaybeRefOrGetter<K>) => ComputedRef<boolean>
   isGreater: (k: MaybeRefOrGetter<K>) => boolean
   isGreaterOrEqual: (k: MaybeRefOrGetter<K>) => boolean
   isSmaller: (k: MaybeRefOrGetter<K>) => boolean
   isSmallerOrEqual: (k: MaybeRefOrGetter<K>) => boolean
   isInBetween: (a: MaybeRefOrGetter<K>, b: MaybeRefOrGetter<K>) => boolean
   current: () => ComputedRef<K[]>
-  active: () => ComputedRef<K | "">
+  active: () => ComputedRef<K | ''>
 }
 /**
  * Reactively viewport breakpoints
@@ -171,6 +160,6 @@ export type UseBreakpointReturn<K extends string = string> = Record<
  */
 export declare function useBreakpoints<K extends string>(
   breakpoints: Breakpoints<K>,
-  options?: UseBreakpointsOptions,
+  options?: UseBreakpointsOptions
 ): UseBreakpointReturn<K>
 ```

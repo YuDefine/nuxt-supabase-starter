@@ -12,10 +12,8 @@ import { useAsyncState } from '@vueuse/core'
 import axios from 'axios'
 
 const { state, isReady, isLoading, error } = useAsyncState(
-  axios
-    .get('https://jsonplaceholder.typicode.com/todos/1')
-    .then(t => t.data),
-  { id: null },
+  axios.get('https://jsonplaceholder.typicode.com/todos/1').then((t) => t.data),
+  { id: null }
 )
 ```
 

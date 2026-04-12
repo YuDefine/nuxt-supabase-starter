@@ -5,6 +5,7 @@
 Middleware 中的 `getUserSession(event)` 內部消耗了 request body stream。後續 API handler 呼叫 `readBody()` 時 stream 已空，導致無限等待（不是 error，是 hang）。
 
 症狀：
+
 - API 無限 hang 最終返回 500
 - `Workers runtime canceled this request because it detected that your Workers code had hung`
 - 只有 POST/PUT/DELETE 有 body 的請求會發生

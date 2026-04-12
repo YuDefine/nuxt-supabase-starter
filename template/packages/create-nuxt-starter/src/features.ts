@@ -302,6 +302,31 @@ export const featureModules: FeatureModule[] = [
     templateDir: 'features/quality',
   },
 
+  // CI - Simple（預設）
+  {
+    id: 'ci-simple',
+    name: 'Simple CI',
+    description: 'Push/PR 跑 format/lint/typecheck/test — 適合 prototype / 個人專案',
+    default: true,
+    group: 'ci',
+    incompatible: ['ci-advanced'],
+    packages: {},
+    templateDir: 'features/ci-simple',
+  },
+
+  // CI - Advanced（GitHub Flow 嚴謹版）
+  {
+    id: 'ci-advanced',
+    name: 'Advanced CI (GitHub Flow)',
+    description:
+      'PR gate + path filter + concurrency + CI→E2E workflow_run 鏈 + artifact — 適合團隊/生產',
+    default: false,
+    group: 'ci',
+    incompatible: ['ci-simple'],
+    packages: {},
+    templateDir: 'features/ci-advanced',
+  },
+
   // Git Hooks
   {
     id: 'git-hooks',

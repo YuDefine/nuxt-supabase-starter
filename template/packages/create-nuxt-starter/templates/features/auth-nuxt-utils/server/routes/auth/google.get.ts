@@ -6,19 +6,19 @@ export default defineOAuthGoogleEventHandler({
         email: googleUser.email as string,
         name: googleUser.name as string,
         picture: googleUser.picture as string | undefined,
-        provider: "google",
+        provider: 'google',
       },
       loggedInAt: Date.now(),
-    });
+    })
 
-    const rawRedirect = getCookie(event, "auth-redirect") || "/";
-    deleteCookie(event, "auth-redirect");
+    const rawRedirect = getCookie(event, 'auth-redirect') || '/'
+    deleteCookie(event, 'auth-redirect')
     const redirectPath =
-      rawRedirect.startsWith("/") && !rawRedirect.startsWith("//") ? rawRedirect : "/";
-    return sendRedirect(event, redirectPath);
+      rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : '/'
+    return sendRedirect(event, redirectPath)
   },
 
   onError(event) {
-    return sendRedirect(event, "/auth/login?error=google_auth_failed");
+    return sendRedirect(event, '/auth/login?error=google_auth_failed')
   },
-});
+})

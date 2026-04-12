@@ -29,9 +29,15 @@ import { readonly, ref } from 'vue'
 export function useCounter(initialValue = 0) {
   const count = ref(initialValue)
 
-  function increment() { count.value++ }
-  function decrement() { count.value-- }
-  function reset() { count.value = initialValue }
+  function increment() {
+    count.value++
+  }
+  function decrement() {
+    count.value--
+  }
+  function reset() {
+    count.value = initialValue
+  }
 
   return {
     count: readonly(count), // readonly if shouldn't be mutated
@@ -107,11 +113,9 @@ export function useAsyncData<T>(fetcher: () => Promise<T>) {
     error.value = null
     try {
       data.value = await fetcher()
-    }
-    catch (e) {
+    } catch (e) {
       error.value = e as Error
-    }
-    finally {
+    } finally {
       loading.value = false
     }
   }
@@ -164,10 +168,8 @@ export function useSearch() {
         query: { q: newQuery },
         signal: abortController.signal,
       })
-    }
-    catch (e) {
-      if (e.name !== 'AbortError')
-        throw e
+    } catch (e) {
+      if (e.name !== 'AbortError') throw e
     }
   })
 }
@@ -181,10 +183,8 @@ export function useSendFlow() {
   const amount = ref('')
 
   const next = () => {
-    if (step.value === 'input')
-      step.value = 'confirm'
-    else if (step.value === 'confirm')
-      step.value = 'success'
+    if (step.value === 'input') step.value = 'confirm'
+    else if (step.value === 'confirm') step.value = 'success'
   }
 
   return { step, amount, next }
@@ -198,7 +198,7 @@ export function useUserLocation() {
   const location = ref<GeolocationPosition | null>(null)
 
   if (import.meta.client) {
-    navigator.geolocation.getCurrentPosition(pos => location.value = pos)
+    navigator.geolocation.getCurrentPosition((pos) => (location.value = pos))
   }
 
   return { location }
@@ -237,8 +237,7 @@ export function useAutoSave(content: Ref<string>) {
   const hasChanges = ref(false)
 
   const save = useDebounceFn(async () => {
-    if (!hasChanges.value)
-      return
+    if (!hasChanges.value) return
     await $fetch('/api/save', { method: 'POST', body: { content: content.value } })
     hasChanges.value = false
   }, 1000)
@@ -312,10 +311,14 @@ watch([condition, dep], ([cond, d]) => {
 export function usePolling() {
   let interval: NodeJS.Timeout
 
-  onMounted(() => { interval = setInterval(poll, 5000) })
+  onMounted(() => {
+    interval = setInterval(poll, 5000)
+  })
   onUnmounted(() => clearInterval(interval))
   onDeactivated(() => clearInterval(interval)) // Pause when deactivated
-  onActivated(() => { interval = setInterval(poll, 5000) }) // Resume
+  onActivated(() => {
+    interval = setInterval(poll, 5000)
+  }) // Resume
 }
 ```
 

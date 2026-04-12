@@ -12,26 +12,24 @@ Reactive media controls for both `audio` and `video` elements
 
 ```vue
 <script setup lang="ts">
-import { useMediaControls } from '@vueuse/core'
-import { onMounted, useTemplateRef } from 'vue'
+  import { useMediaControls } from '@vueuse/core'
+  import { onMounted, useTemplateRef } from 'vue'
 
-const video = useTemplateRef('video')
-const { playing, currentTime, duration, volume } = useMediaControls(video, {
-  src: 'video.mp4',
-})
+  const video = useTemplateRef('video')
+  const { playing, currentTime, duration, volume } = useMediaControls(video, {
+    src: 'video.mp4',
+  })
 
-// Change initial media properties
-onMounted(() => {
-  volume.value = 0.5
-  currentTime.value = 60
-})
+  // Change initial media properties
+  onMounted(() => {
+    volume.value = 0.5
+    currentTime.value = 60
+  })
 </script>
 
 <template>
   <video ref="video" />
-  <button @click="playing = !playing">
-    Play / Pause
-  </button>
+  <button @click="playing = !playing">Play / Pause</button>
   <span>{{ currentTime }} / {{ duration }}</span>
 </template>
 ```
@@ -46,25 +44,22 @@ be `-1` if there is no selected track.
 
 ```vue
 <script setup lang="ts">
-import { useMediaControls } from '@vueuse/core'
-import { useTemplateRef } from 'vue'
+  import { useMediaControls } from '@vueuse/core'
+  import { useTemplateRef } from 'vue'
 
-const video = useTemplateRef('video')
-const {
-  tracks,
-  enableTrack
-} = useMediaControls(video, {
-  src: 'video.mp4',
-  tracks: [
-    {
-      default: true,
-      src: './subtitles.vtt',
-      kind: 'subtitles',
-      label: 'English',
-      srcLang: 'en',
-    },
-  ]
-})
+  const video = useTemplateRef('video')
+  const { tracks, enableTrack } = useMediaControls(video, {
+    src: 'video.mp4',
+    tracks: [
+      {
+        default: true,
+        src: './subtitles.vtt',
+        kind: 'subtitles',
+        label: 'English',
+        srcLang: 'en',
+      },
+    ],
+  })
 </script>
 
 <template>
@@ -183,10 +178,7 @@ export interface UseMediaControlsReturn {
   muted: ShallowRef<boolean>
   tracks: Ref<UseMediaTextTrack[]>
   selectedTrack: ShallowRef<number>
-  enableTrack: (
-    track: number | UseMediaTextTrack,
-    disableTracks?: boolean,
-  ) => void
+  enableTrack: (track: number | UseMediaTextTrack, disableTracks?: boolean) => void
   disableTrack: (track?: number | UseMediaTextTrack) => void
   supportsPictureInPicture: boolean
   togglePictureInPicture: () => Promise<PictureInPictureWindow | void>
@@ -196,6 +188,6 @@ export interface UseMediaControlsReturn {
 }
 export declare function useMediaControls(
   target: MaybeRef<HTMLMediaElement | null | undefined>,
-  options?: UseMediaControlsOptions,
+  options?: UseMediaControlsOptions
 ): UseMediaControlsReturn
 ```

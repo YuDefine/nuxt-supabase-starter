@@ -1,3 +1,8 @@
+---
+name: design-retro
+description: 分析 docs/design-review-findings.md 歷史，識別跨 spec 的重複 UI 問題模式，提出流程改善建議。spectra-archive 完成或 findings 累積 5 倍數時主動觸發。
+---
+
 # Design Retro
 
 分析 Design Review 歷史發現，識別跨 spec 的重複問題模式，主動提出流程改善建議。
@@ -12,6 +17,7 @@
 ### 手動觸發
 
 使用者執行 `/design-retro` 時。可選參數：
+
 - `/design-retro` — 分析全部歷史
 - `/design-retro last 3` — 只分析最近 3 個 change
 
@@ -42,6 +48,7 @@
 ```
 
 趨勢判定：
+
 - `↑` — 最近 3 個 change 中出現 ≥ 2 次
 - `→` — 穩定出現但無明顯增減
 - `↓` — 最近 3 個 change 中未出現
@@ -88,6 +95,7 @@
 問題在 propose 階段就能預防，但 spec 沒有涵蓋。
 
 **判定條件**：
+
 - 同類別問題在 ≥ 3 個 change 中重複出現
 - 問題屬於可預測類型（spacing、layout、typography、consistency）
 
@@ -98,6 +106,7 @@
 問題在實作時應該被 skill 攔住，但沒有。
 
 **判定條件**：
+
 - 問題屬於 hardening 類型（a11y、responsive、hardening）
 - 對應的 design skill 未被觸發（如該用 /harden 但沒用）
 
@@ -108,6 +117,7 @@
 問題反映開發者（包括 AI）缺乏某方面意識。
 
 **判定條件**：
+
 - 問題類型不屬於任何現有 `.claude/rules/` 的覆蓋範圍
 - 或現有規則不夠具體
 
@@ -123,10 +133,12 @@
 # Design Retro — YYYY-MM-DD
 
 ## 分析範圍
+
 - 涵蓋 change: [change-1], [change-2], ...（共 N 個）
 - 總 findings: M 筆
 
 ## 頻率摘要
+
 [Phase 2.1 的表格]
 
 ## 診斷結果
@@ -134,6 +146,7 @@
 ### 需要行動的模式
 
 #### 1. [類別] — [問題描述]
+
 - **層級**: A / B / C
 - **證據**: 在 [change-x], [change-y], [change-z] 中出現
 - **根因**: [為什麼重複發生]
@@ -143,12 +156,15 @@
 - **預期效果**: [實施後預期減少的問題量]
 
 ### 已改善的模式（正向回饋）
+
 - [類別] 從 X% 降至 Y%（自從 [改善措施] 實施後）
 
 ### 暫不行動（觀察中）
+
 - [類別]: 出現 N 次，尚未達行動門檻，持續觀察
 
 ## 建議優先序
+
 1. [最高優先] — 影響範圍最大 / 嚴重度最高
 2. ...
 3. ...
@@ -170,11 +186,11 @@
 
 ### YYYY-MM-DD
 
-| # | 建議 | 決策 | 備註 |
-|---|------|------|------|
-| 1 | propose 加 spacing checklist | 同意 | 已更新 spectra-propose template |
-| 2 | 強制觸發 /harden | 延後 | 等累積更多數據 |
-| 3 | 新增 a11y rule | 不同意 | 現有 /audit 已足夠 |
+| #   | 建議                         | 決策   | 備註                            |
+| --- | ---------------------------- | ------ | ------------------------------- |
+| 1   | propose 加 spacing checklist | 同意   | 已更新 spectra-propose template |
+| 2   | 強制觸發 /harden             | 延後   | 等累積更多數據                  |
+| 3   | 新增 a11y rule               | 不同意 | 現有 /audit 已足夠              |
 ```
 
 ## 護欄

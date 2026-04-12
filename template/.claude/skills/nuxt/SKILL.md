@@ -1,6 +1,6 @@
 ---
 name: nuxt
-description: Use when working on Nuxt 4+ projects - provides server routes, file-based routing, middleware patterns, Nuxt-specific composables, and configuration with latest docs. Covers h3 v1 helpers (validation, WebSocket, SSE) and nitropack v2 patterns. Updated for Nuxt 4.3+.
+description: Use when working on Nuxt 4+ projects — server routes, routing, middleware, composables, h3 v1 helpers, nitropack v2. Updated for Nuxt 4.3+.
 license: MIT
 ---
 
@@ -57,9 +57,12 @@ Read specific files based on current work:
 import { z } from 'zod'
 
 export default defineEventHandler(async (event) => {
-  const { name } = await getValidatedQuery(event, z.object({
-    name: z.string().default('world'),
-  }).parse)
+  const { name } = await getValidatedQuery(
+    event,
+    z.object({
+      name: z.string().default('world'),
+    }).parse
+  )
   return { message: `Hello ${name}` }
 })
 ```

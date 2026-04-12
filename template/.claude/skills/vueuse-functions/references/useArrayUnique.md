@@ -71,6 +71,6 @@ export type UseArrayUniqueReturn<T = any> = ComputedRef<T[]>
  */
 export declare function useArrayUnique<T>(
   list: MaybeRefOrGetter<MaybeRefOrGetter<T>[]>,
-  compareFn?: (a: T, b: T, array: T[]) => boolean,
+  compareFn?: (a: T, b: T, array: T[]) => boolean
 ): UseArrayUniqueReturn<T>
 ```

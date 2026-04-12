@@ -55,9 +55,9 @@ Apply in page:
 
 ```vue
 <script setup lang="ts">
-definePageMeta({
-  middleware: ['admin']
-})
+  definePageMeta({
+    middleware: ['admin'],
+  })
 </script>
 ```
 
@@ -96,8 +96,8 @@ Plugins extend Vue app with global functionality. Run during app initialization.
 export default defineNuxtPlugin((nuxtApp) => {
   return {
     provide: {
-      hello: (name: string) => `Hello ${name}!`
-    }
+      hello: (name: string) => `Hello ${name}!`,
+    },
   }
 })
 ```
@@ -106,8 +106,8 @@ Use in components:
 
 ```vue
 <script setup lang="ts">
-const { $hello } = useNuxtApp()
-console.log($hello('World')) // "Hello World!"
+  const { $hello } = useNuxtApp()
+  console.log($hello('World')) // "Hello World!"
 </script>
 ```
 
@@ -122,7 +122,7 @@ import 'vue-toastification/dist/index.css'
 export default defineNuxtPlugin((nuxtApp) => {
   nuxtApp.vueApp.use(Toast, {
     position: 'top-right',
-    timeout: 3000
+    timeout: 3000,
   } as PluginOptions)
 })
 ```
@@ -175,12 +175,12 @@ plugins/
 ```ts
 // plugins/api.ts
 export default defineNuxtPlugin(async (nuxtApp) => {
-  const config = await fetch('/api/config').then(r => r.json())
+  const config = await fetch('/api/config').then((r) => r.json())
 
   return {
     provide: {
-      config
-    }
+      config,
+    },
   }
 })
 ```
@@ -252,7 +252,7 @@ export default defineNuxtPlugin((nuxtApp) => {
       if (auth.token) {
         options.headers = {
           ...options.headers,
-          Authorization: `Bearer ${auth.token}`
+          Authorization: `Bearer ${auth.token}`,
         }
       }
     },
@@ -260,13 +260,13 @@ export default defineNuxtPlugin((nuxtApp) => {
       if (response.status === 401) {
         navigateTo('/login')
       }
-    }
+    },
   })
 
   return {
     provide: {
-      api
-    }
+      api,
+    },
   }
 })
 ```

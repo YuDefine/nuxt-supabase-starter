@@ -108,12 +108,12 @@ export default defineEventHandler(async (event) => {
 
 ### 角色階層
 
-| 角色      | 權限範圍            |
-| --------- | ------------------- |
-| `admin`   | 完整系統管理權限    |
-| `editor`  | 資料 CRUD           |
-| `viewer`  | 基本資料讀取        |
-| `pending` | 無權限（等待授權）  |
+| 角色      | 權限範圍           |
+| --------- | ------------------ |
+| `admin`   | 完整系統管理權限   |
+| `editor`  | 資料 CRUD          |
+| `viewer`  | 基本資料讀取       |
+| `pending` | 無權限（等待授權） |
 
 ### 權限檢查最佳實踐
 
@@ -316,9 +316,7 @@ await app.from('audit_logs').insert({
 // 多欄位搜尋（使用 OR 條件）
 if (query.search) {
   const searchStr = `%${query.search}%`
-  itemsQuery = itemsQuery.or(
-    `name.ilike.${searchStr},code.ilike.${searchStr}`
-  )
+  itemsQuery = itemsQuery.or(`name.ilike.${searchStr},code.ilike.${searchStr}`)
 }
 ```
 
@@ -377,9 +375,7 @@ export default defineEventHandler(async (event): Promise<ItemListResponse> => {
   // 5. 搜尋條件
   if (query.search) {
     const searchStr = `%${query.search}%`
-    itemsQuery = itemsQuery.or(
-      `name.ilike.${searchStr},code.ilike.${searchStr}`
-    )
+    itemsQuery = itemsQuery.or(`name.ilike.${searchStr},code.ilike.${searchStr}`)
   }
 
   // 6. 排序

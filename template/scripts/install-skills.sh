@@ -61,14 +61,14 @@ echo ""
 echo "📝 注意：design orchestrator 為手動管理，位於 .claude/skills/design/"
 echo ""
 
-# 實用工具
-echo "📦 實用工具 Skills..."
-npx skills add vercel-labs/skills@find-skills $COPY_FLAGS
-echo "  ✓ 實用工具 Skills 完成"
-echo ""
-
 echo "✅ 所有 skills 安裝完成！"
 echo ""
+
+# Post-process: 壓縮超標的 vendor skill description
+echo "🔧 Post-process: 壓縮超標 skill descriptions..."
+bash "$(dirname "$0")/compress-skill-descriptions.sh"
+echo ""
+
 echo "💡 提示："
 echo "  - 查看已安裝：pnpm skills:list"
 echo "  - 重新安裝/更新：pnpm skills:install（本腳本）"

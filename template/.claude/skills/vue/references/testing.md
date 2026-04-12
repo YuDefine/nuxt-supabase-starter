@@ -39,7 +39,7 @@ import Button from './Button.vue'
 
 it('renders slot', () => {
   const wrapper = mount(Button, {
-    slots: { default: 'Click me' }
+    slots: { default: 'Click me' },
   })
   expect(wrapper.text()).toBe('Click me')
 })
@@ -56,7 +56,7 @@ it('emits on click', async () => {
 ```ts
 it('applies variant class', () => {
   const wrapper = mount(Button, {
-    props: { variant: 'primary' }
+    props: { variant: 'primary' },
   })
   expect(wrapper.classes()).toContain('btn-primary')
 })
@@ -79,8 +79,8 @@ it('renders named slots', () => {
   const wrapper = mount(Card, {
     slots: {
       header: '<h1>Title</h1>',
-      default: '<p>Content</p>'
-    }
+      default: '<p>Content</p>',
+    },
   })
   expect(wrapper.html()).toContain('<h1>Title</h1>')
 })
@@ -144,8 +144,8 @@ import { vi } from 'vitest'
 vi.mock('./useAuth', () => ({
   useAuth: vi.fn(() => ({
     user: { id: 1, name: 'Test' },
-    isAuthenticated: true
-  }))
+    isAuthenticated: true,
+  })),
 }))
 ```
 
@@ -154,7 +154,7 @@ vi.mock('./useAuth', () => ({
 ```ts
 global.fetch = vi.fn(() =>
   Promise.resolve({
-    json: () => Promise.resolve({ data: [] })
+    json: () => Promise.resolve({ data: [] }),
   })
 )
 ```

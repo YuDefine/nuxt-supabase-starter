@@ -69,14 +69,12 @@ Progressive reference system for Vue 3 projects. Load only files relevant to cur
 
 ```vue
 <script setup lang="ts">
-const { count = 0 } = defineProps<{ count?: number }>()
-const emit = defineEmits<{ update: [value: number] }>()
+  const { count = 0 } = defineProps<{ count?: number }>()
+  const emit = defineEmits<{ update: [value: number] }>()
 </script>
 
 <template>
-  <button @click="emit('update', count + 1)">
-    Count: {{ count }}
-  </button>
+  <button @click="emit('update', count + 1)">Count: {{ count }}</button>
 </template>
 ```
 

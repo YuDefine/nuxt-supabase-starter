@@ -58,7 +58,9 @@ export default <Environment>{
   setup() {
     globalThis.myGlobal = 'value'
     return {
-      teardown() { delete globalThis.myGlobal },
+      teardown() {
+        delete globalThis.myGlobal
+      },
     }
   },
 }
@@ -105,8 +107,8 @@ expectTypeOf(greet).returns.toBeString()
 expectTypeOf(greet).parameter(0).toBeString()
 
 // Equality
-expectTypeOf<B>().toMatchTypeOf<A>()     // Subset matching
-expectTypeOf<A>().toEqualTypeOf<B>()     // Exact match
+expectTypeOf<B>().toMatchTypeOf<A>() // Subset matching
+expectTypeOf<A>().toEqualTypeOf<B>() // Exact match
 expectTypeOf<A>().not.toEqualTypeOf<B>()
 
 // Nullable
@@ -121,7 +123,7 @@ import { assertType } from 'vitest'
 // @ts-expect-error - should fail type check
 assertType<string>(result)
 
-assertType<User | null>(result)  // Correct
+assertType<User | null>(result) // Correct
 ```
 
 Run: `vitest typecheck` or `vitest --typecheck`
@@ -132,7 +134,7 @@ Run: `vitest typecheck` or `vitest --typecheck`
 defineConfig({
   test: {
     projects: [
-      'packages/*',  // Glob for package configs
+      'packages/*', // Glob for package configs
       {
         test: {
           name: 'unit',
@@ -183,7 +185,7 @@ defineConfig({
   test: {
     browser: {
       enabled: true,
-      name: 'chromium',  // or 'firefox', 'webkit'
+      name: 'chromium', // or 'firefox', 'webkit'
       provider: 'playwright',
     },
   },
@@ -246,7 +248,7 @@ import { bench, describe } from 'vitest'
 
 describe('sort', () => {
   bench('native', () => {
-    [1, 5, 4, 2, 3].sort((a, b) => a - b)
+    ;[1, 5, 4, 2, 3].sort((a, b) => a - b)
   })
 
   bench('lodash', () => {

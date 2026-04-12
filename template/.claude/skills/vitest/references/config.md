@@ -36,9 +36,12 @@ Merge configs:
 import { defineConfig, mergeConfig } from 'vitest/config'
 import viteConfig from './vite.config'
 
-export default mergeConfig(viteConfig, defineConfig({
-  test: { environment: 'jsdom' },
-}))
+export default mergeConfig(
+  viteConfig,
+  defineConfig({
+    test: { environment: 'jsdom' },
+  })
+)
 ```
 
 ## Common Options
@@ -46,8 +49,8 @@ export default mergeConfig(viteConfig, defineConfig({
 ```ts
 defineConfig({
   test: {
-    globals: true,                    // Enable global APIs without imports
-    environment: 'node',              // 'node', 'jsdom', 'happy-dom'
+    globals: true, // Enable global APIs without imports
+    environment: 'node', // 'node', 'jsdom', 'happy-dom'
     setupFiles: ['./tests/setup.ts'], // Run before each test file
     include: ['**/*.{test,spec}.{js,ts,jsx,tsx}'],
     exclude: ['**/node_modules/**', '**/dist/**'],
@@ -55,13 +58,13 @@ defineConfig({
     hookTimeout: 10000,
     watch: true,
     coverage: {
-      provider: 'v8',                 // or 'istanbul'
+      provider: 'v8', // or 'istanbul'
       reporter: ['text', 'html'],
       include: ['src/**/*.ts'],
     },
-    isolate: true,                    // Each file in separate process
-    fileParallelism: true,            // Run test files in parallel
-    pool: 'threads',                  // 'threads', 'forks', 'vmThreads'
+    isolate: true, // Each file in separate process
+    fileParallelism: true, // Run test files in parallel
+    pool: 'threads', // 'threads', 'forks', 'vmThreads'
     poolOptions: {
       threads: { maxThreads: 4, minThreads: 1 },
     },
@@ -78,7 +81,9 @@ defineConfig({
 ```ts
 export default defineConfig(({ mode }) => ({
   plugins: mode === 'test' ? [] : [myPlugin()],
-  test: { /* options */ },
+  test: {
+    /* options */
+  },
 }))
 ```
 

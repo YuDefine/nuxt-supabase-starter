@@ -22,4 +22,12 @@ cat <<'PROMPT'
 - 本次是否有值得記錄到 skill 的流程或注意事項？
 - 如適用：通用 → `~/.claude/skills/`；專案專用 → `.claude/skills/`
 
+### 3. HANDOFF.md 交接檢查
+檢查是否有未完成的工作需要交接：
+- `openspec/changes/` 中有非 archive 的 active change？
+- `git status --porcelain` 有未 commit 的變更？
+
+**如果有**：建立或更新 `HANDOFF.md`（格式見 `.claude/rules/handoff.md`）
+**如果沒有**：跳過（也清理舊的 HANDOFF.md，如果存在的話）
+
 PROMPT

@@ -75,11 +75,11 @@ max.value = 3 // clamped.value automatically becomes 3
 export declare function useClamp(
   value: ReadonlyRefOrGetter<number>,
   min: MaybeRefOrGetter<number>,
-  max: MaybeRefOrGetter<number>,
+  max: MaybeRefOrGetter<number>
 ): ComputedRef<number>
 export declare function useClamp(
   value: MaybeRefOrGetter<number>,
   min: MaybeRefOrGetter<number>,
-  max: MaybeRefOrGetter<number>,
+  max: MaybeRefOrGetter<number>
 ): Ref<number>
 ```
