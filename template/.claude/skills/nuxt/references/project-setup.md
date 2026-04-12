@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: {node-version: 22, cache: pnpm}
+        with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm prepare
       - run: pnpm lint
@@ -45,7 +45,7 @@ export default withNuxt(
     vue: true,
     pnpm: true,
     ignores: ['.eslintcache', 'cache/**', '.claude/**', 'README.md', 'docs/**'],
-  }),
+  })
 )
 ```
 
@@ -92,12 +92,12 @@ on: push
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    permissions: {contents: read, id-token: write}
+    permissions: { contents: read, id-token: write }
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: {node-version: 22, cache: pnpm}
+        with: { node-version: 22, cache: pnpm }
       - run: pnpm install
       - uses: nuxt-hub/action@v2
         with:

@@ -15,13 +15,14 @@ model: sonnet
 
 ## 工具選擇
 
-| 場景 | 工具 | 原因 |
-|---|---|---|
-| 一般截圖、UI 確認、review 驗收 | `browser-use` CLI | 快速、低延遲（50ms） |
-| 響應式截圖（需調整視窗大小） | Playwright MCP | browser-use 固定 1920x1080 無法調整 |
-| 多分頁/跨頁操作 | Playwright MCP | browser-use 單一 session 限制 |
+完整決策規則見 `.claude/rules/screenshot-strategy.md`。
 
-預設使用 `browser-use`，只在需要調整視窗或多分頁時切換 Playwright MCP。
+速記：**預設 `browser-use` CLI**（含探索式互動 / console debug），下列情境切 Playwright CLI：
+
+- 需要調整視窗大小（響應式 / 多 breakpoint）
+- 需要跨瀏覽器（Safari / Firefox）
+- 需要多分頁 / 跨 session
+- 需要沉澱為可重跑的 spec
 
 ## 前置條件（自動處理）
 
@@ -122,19 +123,44 @@ screenshots/local/<semantic-topic>/
    browser-use screenshot screenshots/<env>/<folder-name>/#<N>-<desc>-after.png
    ```
 
-## Playwright MCP 命令對照
+## Playwright CLI 用法（響應式 / 跨瀏覽器 / 多分頁）
 
-當需要響應式截圖或多分頁時，使用 Playwright MCP：
+當 browser-use 不夠用時，寫 Playwright script 臨時跑或沉澱到 `tests/e2e/`：
 
-| browser-use | Playwright MCP |
-|---|---|
-| `browser-use open <url>` | `browser_navigate { url }` |
-| `browser-use screenshot <path>` | `browser_take_screenshot` |
-| `browser-use click <index>` | `browser_click { selector }` |
-| `browser-use type <index> <text>` | `browser_type { selector, text }` |
-| `browser-use wait text <text>` | `browser_wait_for_text { text }` |
-| N/A | `browser_resize { width, height }` ← 響應式截圖 |
-| N/A | `browser_new_tab` ← 多分頁 |
+```bash
+# 一次跑完三個 viewport
+npx playwright test tests/e2e/screenshots/<topic>.spec.ts \
+  --project=desktop --project=tablet --project=mobile
+```
+
+Script 骨架（`tests/e2e/screenshots/<topic>.spec.ts`）：
+
+```typescript
+import { test, expect } from '@playwright/test'
+
+const BREAKPOINTS = [
+  { name: 'desktop', width: 1440, height: 900 },
+  { name: 'tablet', width: 768, height: 1024 },
+  { name: 'mobile', width: 375, height: 812 },
+]
+
+for (const bp of BREAKPOINTS) {
+  test(`<topic> @ ${bp.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: bp.width, height: bp.height })
+    await page.goto('http://localhost:3000/auth/_dev-login?redirect=/target')
+    await page.waitForSelector('text=目標文字')
+    await page.screenshot({
+      path: `screenshots/local/<folder>/${bp.name}-<desc>.png`,
+      fullPage: true,
+    })
+  })
+}
+```
+
+跨瀏覽器：在 `playwright.config.ts` 的 `projects` 加 `{ name: 'webkit', use: devices['Desktop Safari'] }`，然後 `--project=webkit`。
+多分頁：`const p2 = await context.newPage()`。
+
+若專案尚無 `playwright.config.ts`，先 `pnpm create playwright` 建立（選 `tests/e2e` 目錄）。
 
 ## Dev-login Route 模板
 

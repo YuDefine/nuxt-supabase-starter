@@ -37,7 +37,9 @@ test('with tags', { tags: ['db', 'slow'] }, async () => {})
 test.skip('skipped', () => {})
 test.only('only this runs', () => {})
 test.todo('implement later')
-test.fails('expected to fail', () => { expect(1).toBe(2) })
+test.fails('expected to fail', () => {
+  expect(1).toBe(2)
+})
 test.skipIf(process.env.CI)('not in CI', () => {})
 test.runIf(process.env.CI)('only in CI', () => {})
 
@@ -102,7 +104,7 @@ describe('User', () => {
 describe.skip('skipped', () => {})
 describe.only('only this', () => {})
 describe.concurrent('parallel', () => {})
-describe.shuffle('random order', () => {})  // Randomize test order
+describe.shuffle('random order', () => {}) // Randomize test order
 describe.each([{ name: 'Chrome' }, { name: 'Firefox' }])('$name', ({ name }) => {})
 ```
 
@@ -111,15 +113,25 @@ describe.each([{ name: 'Chrome' }, { name: 'Firefox' }])('$name', ({ name }) => 
 ```ts
 import { afterAll, afterEach, beforeAll, beforeEach } from 'vitest'
 
-beforeAll(async () => { await setupDatabase() })
-afterAll(async () => { await teardownDatabase() })
-beforeEach(async () => { await clearTestData() })
-afterEach(async () => { await cleanupMocks() })
+beforeAll(async () => {
+  await setupDatabase()
+})
+afterAll(async () => {
+  await teardownDatabase()
+})
+beforeEach(async () => {
+  await clearTestData()
+})
+afterEach(async () => {
+  await cleanupMocks()
+})
 
 // Return cleanup function
 beforeAll(async () => {
   const server = await startServer()
-  return async () => { await server.close() }
+  return async () => {
+    await server.close()
+  }
 })
 ```
 
@@ -132,7 +144,7 @@ import { aroundEach, aroundAll } from 'vitest'
 
 aroundEach(async (runTest) => {
   await db.beginTransaction()
-  await runTest()  // Must be called!
+  await runTest() // Must be called!
   await db.rollback()
 })
 
@@ -151,7 +163,9 @@ import { onTestFailed, onTestFinished } from 'vitest'
 test('with cleanup', () => {
   const db = connect()
   onTestFinished(() => db.close())
-  onTestFailed(({ task }) => { console.log('Failed:', task.result?.errors) })
+  onTestFailed(({ task }) => {
+    console.log('Failed:', task.result?.errors)
+  })
 })
 
 // Reusable pattern
@@ -187,8 +201,18 @@ test('query', async ({ db, user }) => {
 
 // Fixture options
 const test = base.extend({
-  setup: [async ({}, use) => { await use() }, { auto: true }],  // Always run
-  connection: [async ({}, use) => { /* ... */ }, { scope: 'file' }],  // Once per file
+  setup: [
+    async ({}, use) => {
+      await use()
+    },
+    { auto: true },
+  ], // Always run
+  connection: [
+    async ({}, use) => {
+      /* ... */
+    },
+    { scope: 'file' },
+  ], // Once per file
 })
 ```
 

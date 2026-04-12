@@ -62,8 +62,6 @@ AI：/spectra-apply
 | `/spectra-debug`   | 系統化除錯           | 問題描述 | 除錯報告                         |
 | `/spectra-analyze` | 分析現有程式碼       | -        | 分析報告                         |
 | `/spectra-clarify` | 釐清需求             | -        | 釐清結果                         |
-| `/spectra-sync`    | 同步規格             | 變更名稱 | 更新後的 specs                   |
-| `/spectra-verify`  | 驗證實作             | 變更名稱 | 驗證報告                         |
 
 ---
 
@@ -263,15 +261,7 @@ The system SHALL allow users to create todo items.
 我想改善使用者體驗，但不確定從哪裡開始...
 ```
 
-### 3. 善用 verify
-
-實作完成後，用 `/spectra-verify` 確認符合規格：
-
-```
-/spectra-verify add-todos
-```
-
-### 4. 小步快跑
+### 3. 小步快跑
 
 將大功能拆成多個小變更，每個變更獨立可交付：
 

@@ -6,14 +6,14 @@
 
 ## 1. 資料模型
 
-| 表/函式                                | 說明                                                                                                                             |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `app.allowed_emails`                   | 白名單，決定誰可以登入、預設角色、顯示名稱、部門。Email 會先經 `app.normalize_email()`（trim + lower），必須唯一。               |
+| 表/函式                                | 說明                                                                                                                                |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `app.allowed_emails`                   | 白名單，決定誰可以登入、預設角色、顯示名稱、部門。Email 會先經 `app.normalize_email()`（trim + lower），必須唯一。                  |
 | `app.user_roles`                       | 單一來源的角色資訊，`id` 永遠等於 `auth.users.sub`。欄位含 `role`, `display_name`, `department`, `authorized_at`, `authorized_by`。 |
-| `app.user_preferences`                 | 以 `auth.users.sub` 為 PK，觸發器會在 auth UUID 改變時自動搬移。                                                                |
-| `app.apply_user_authorization()`       | 依白名單、現有記錄、Google metadata 決定最終角色並 upsert `app.user_roles`。                                                     |
-| `app.sync_user_info_from_auth()`       | 掛在 `auth.users` insert/update：呼叫 `app.apply_user_authorization()`，必要時把舊 `app.user_preferences.user_id` 更新為新 UUID。 |
-| `app.get_manageable_users()` 等 helper | 提供 API 查詢用的資料表函式，並內建 RLS 權限判斷。                                                                               |
+| `app.user_preferences`                 | 以 `auth.users.sub` 為 PK，觸發器會在 auth UUID 改變時自動搬移。                                                                    |
+| `app.apply_user_authorization()`       | 依白名單、現有記錄、Google metadata 決定最終角色並 upsert `app.user_roles`。                                                        |
+| `app.sync_user_info_from_auth()`       | 掛在 `auth.users` insert/update：呼叫 `app.apply_user_authorization()`，必要時把舊 `app.user_preferences.user_id` 更新為新 UUID。   |
+| `app.get_manageable_users()` 等 helper | 提供 API 查詢用的資料表函式，並內建 RLS 權限判斷。                                                                                  |
 
 ### 角色階層
 
@@ -28,12 +28,12 @@ pending → 登入但未授權
 
 `app.allowed_emails` 表作為登入許可的閘道，決定誰可以進入系統：
 
-| 欄位           | 說明                                                     |
-| -------------- | -------------------------------------------------------- |
+| 欄位           | 說明                                                    |
+| -------------- | ------------------------------------------------------- |
 | `email`        | 經 `app.normalize_email()` 標準化（trim + lower），唯一 |
-| `default_role` | `app.user_role` enum，預設 `viewer`，首次登入時套用      |
-| `reason/notes` | 紀錄加入白名單原因或其他備註                             |
-| `added_by`     | 追蹤操作者，引用 `auth.users.id`                         |
+| `default_role` | `app.user_role` enum，預設 `viewer`，首次登入時套用     |
+| `reason/notes` | 紀錄加入白名單原因或其他備註                            |
+| `added_by`     | 追蹤操作者，引用 `auth.users.id`                        |
 
 自動化機制：
 
@@ -79,15 +79,15 @@ app.normalize_email(email)
 
 ## 3. API 介面
 
-| Method | Path                     | 說明                                                                  |
-| ------ | ------------------------ | --------------------------------------------------------------------- |
-| GET    | `/api/check-access`      | 回傳登入者角色與基本資料（來源 `app.user_roles`）。                   |
-| GET    | `/api/admin/user-roles`  | 依當前使用者權限回傳可管理名單（使用 `app.get_manageable_users()`）。 |
-| POST   | `/api/admin/user-roles`  | 新增/調整角色。Body：`user_sub`, `role`, `display_name?`, `department?`。 |
-| DELETE | `/api/admin/user-roles`  | 撤銷授權（將角色改為 `pending`）。                                    |
-| GET    | `/api/admin/whitelist`   | 回傳全量白名單（依 `created_at` DESC），需 admin 身份。               |
-| POST   | `/api/admin/whitelist`   | `emails[]` 批次 upsert，支援覆寫 `default_role`/`notes` 等。          |
-| DELETE | `/api/admin/whitelist`   | 移除單一 email。                                                      |
+| Method | Path                    | 說明                                                                      |
+| ------ | ----------------------- | ------------------------------------------------------------------------- |
+| GET    | `/api/check-access`     | 回傳登入者角色與基本資料（來源 `app.user_roles`）。                       |
+| GET    | `/api/admin/user-roles` | 依當前使用者權限回傳可管理名單（使用 `app.get_manageable_users()`）。     |
+| POST   | `/api/admin/user-roles` | 新增/調整角色。Body：`user_sub`, `role`, `display_name?`, `department?`。 |
+| DELETE | `/api/admin/user-roles` | 撤銷授權（將角色改為 `pending`）。                                        |
+| GET    | `/api/admin/whitelist`  | 回傳全量白名單（依 `created_at` DESC），需 admin 身份。                   |
+| POST   | `/api/admin/whitelist`  | `emails[]` 批次 upsert，支援覆寫 `default_role`/`notes` 等。              |
+| DELETE | `/api/admin/whitelist`  | 移除單一 email。                                                          |
 
 伺服器端所有 API 皆使用 `getUserSession(event)` 取得使用者身份（nuxt-auth-utils），並以 `session.user.id` 當作使用者 ID。
 
@@ -165,13 +165,13 @@ WHERE email = 'former@example.com';
 
 ## 5. 權限矩陣
 
-| 動作                       | admin          | editor                    | viewer                      | pending |
-| -------------------------- | -------------- | ------------------------- | --------------------------- | ------- |
-| 查看所有 `app.user_roles`  | ✅             | ✅（僅 viewer/pending）   | ❌                          | ❌      |
-| 更新 `app.user_roles`      | ✅（任意角色） | ✅（僅 viewer/pending）   | 僅可更新自己的 display/dept | ❌      |
-| 呼叫 `/api/admin/whitelist`| ✅             | ✅（可選，視 API 限制）   | ❌                          | ❌      |
-| 刪除 `app.allowed_emails`  | ✅             | ✅                        | ❌                          | ❌      |
-| 授權 editor                | ✅             | ❌                        | ❌                          | ❌      |
+| 動作                        | admin          | editor                  | viewer                      | pending |
+| --------------------------- | -------------- | ----------------------- | --------------------------- | ------- |
+| 查看所有 `app.user_roles`   | ✅             | ✅（僅 viewer/pending） | ❌                          | ❌      |
+| 更新 `app.user_roles`       | ✅（任意角色） | ✅（僅 viewer/pending） | 僅可更新自己的 display/dept | ❌      |
+| 呼叫 `/api/admin/whitelist` | ✅             | ✅（可選，視 API 限制） | ❌                          | ❌      |
+| 刪除 `app.allowed_emails`   | ✅             | ✅                      | ❌                          | ❌      |
+| 授權 editor                 | ✅             | ❌                      | ❌                          | ❌      |
 
 RLS 仍是最終防線，API 只是 UX 限制；若要開放 editor 更多權限，請先調整 API，再確認 `can_manage_user` 與 `can_authorize_role` 是否允許。
 
@@ -222,15 +222,15 @@ WHERE ur.role = 'pending';
 
 ## 8. 疑難排解
 
-| 症狀                                        | 可能原因                                                                 | 解法                                                                                                         |
-| ------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| 白名單已有資料，但登入後仍是 `pending`      | 尚未授權、`default_role` 為 `pending`、或 `normalize_email` 結果不一致   | 檢查 `allowed_emails` 是否真正存在，並確認 email 小寫；必要時使用 SQL upsert                                 |
-| `user_preferences` 多出一筆舊 UUID          | seed 中保留舊資料但未登入                                                | `DELETE FROM app.user_preferences WHERE user_id NOT IN (SELECT id FROM auth.users);`，再讓使用者重新登入      |
-| `type user_role already exists` 在 push 時  | 遠端仍有舊 schema                                                        | 先 `supabase migration repair --status reverted <timestamp>` 或在基線中加 `IF NOT EXISTS`                    |
-| 管理員無法授權 editor                       | API 限制 + RLS 雙層保護                                                  | 需同時修改 `/api/admin/user-roles`（允許 editor）與確認 `can_authorize_role()` 是否回傳 true                 |
-| 加入白名單後仍被導向 `/forbidden`？          | Google 登入的 email 大小寫不一致                                          | 檢查 `normalize_email` 結果，確認 email 小寫                                                                |
-| 想一次新增多位同部門使用者？                 | —                                                                        | 使用 `/api/admin/whitelist` POST，帶入 `department` 與 `default_role`                                        |
-| 誰修改了白名單？                             | —                                                                        | 查詢 `added_by` 欄位或使用 Supabase Studio 的 Row Level History                                              |
+| 症狀                                       | 可能原因                                                               | 解法                                                                                                     |
+| ------------------------------------------ | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 白名單已有資料，但登入後仍是 `pending`     | 尚未授權、`default_role` 為 `pending`、或 `normalize_email` 結果不一致 | 檢查 `allowed_emails` 是否真正存在，並確認 email 小寫；必要時使用 SQL upsert                             |
+| `user_preferences` 多出一筆舊 UUID         | seed 中保留舊資料但未登入                                              | `DELETE FROM app.user_preferences WHERE user_id NOT IN (SELECT id FROM auth.users);`，再讓使用者重新登入 |
+| `type user_role already exists` 在 push 時 | 遠端仍有舊 schema                                                      | 先 `supabase migration repair --status reverted <timestamp>` 或在基線中加 `IF NOT EXISTS`                |
+| 管理員無法授權 editor                      | API 限制 + RLS 雙層保護                                                | 需同時修改 `/api/admin/user-roles`（允許 editor）與確認 `can_authorize_role()` 是否回傳 true             |
+| 加入白名單後仍被導向 `/forbidden`？        | Google 登入的 email 大小寫不一致                                       | 檢查 `normalize_email` 結果，確認 email 小寫                                                             |
+| 想一次新增多位同部門使用者？               | —                                                                      | 使用 `/api/admin/whitelist` POST，帶入 `department` 與 `default_role`                                    |
+| 誰修改了白名單？                           | —                                                                      | 查詢 `added_by` 欄位或使用 Supabase Studio 的 Row Level History                                          |
 
 ---
 

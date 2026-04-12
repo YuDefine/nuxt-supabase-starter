@@ -11,10 +11,7 @@ Configuring `nuxt.config.ts`, modules, auto-imports, runtime config, layers.
 export default defineNuxtConfig({
   devtools: { enabled: true },
 
-  modules: [
-    '@nuxtjs/tailwindcss',
-    '@pinia/nuxt'
-  ],
+  modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt'],
 
   runtimeConfig: {
     // Private (server-only)
@@ -22,8 +19,8 @@ export default defineNuxtConfig({
 
     public: {
       // Public (client + server)
-      apiBase: process.env.API_BASE || 'http://localhost:3000'
-    }
+      apiBase: process.env.API_BASE || 'http://localhost:3000',
+    },
   },
 
   app: {
@@ -31,10 +28,10 @@ export default defineNuxtConfig({
       title: 'My App',
       meta: [
         { charset: 'utf-8' },
-        { name: 'viewport', content: 'width=device-width, initial-scale=1' }
-      ]
-    }
-  }
+        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+      ],
+    },
+  },
 })
 ```
 
@@ -136,11 +133,8 @@ Nuxt auto-imports from these directories:
 ```ts
 export default defineNuxtConfig({
   imports: {
-    dirs: [
-      'stores',
-      'types'
-    ]
-  }
+    dirs: ['stores', 'types'],
+  },
 })
 ```
 
@@ -149,8 +143,8 @@ export default defineNuxtConfig({
 ```ts
 export default defineNuxtConfig({
   imports: {
-    autoImport: false
-  }
+    autoImport: false,
+  },
 })
 ```
 
@@ -162,12 +156,15 @@ export default defineNuxtConfig({
     '@nuxtjs/tailwindcss',
     '@pinia/nuxt',
     '@vueuse/nuxt',
-    ['@nuxtjs/google-fonts', {
-      families: {
-        Inter: [400, 700]
-      }
-    }]
-  ]
+    [
+      '@nuxtjs/google-fonts',
+      {
+        families: {
+          Inter: [400, 700],
+        },
+      },
+    ],
+  ],
 })
 ```
 
@@ -180,8 +177,8 @@ For non-sensitive config exposed to client:
 export default defineAppConfig({
   theme: {
     primaryColor: '#3b82f6',
-    borderRadius: '0.5rem'
-  }
+    borderRadius: '0.5rem',
+  },
 })
 ```
 
@@ -199,8 +196,8 @@ export default defineNuxtConfig({
   typescript: {
     strict: true,
     typeCheck: true,
-    shim: false
-  }
+    shim: false,
+  },
 })
 ```
 
@@ -209,18 +206,18 @@ export default defineNuxtConfig({
 ```ts
 export default defineNuxtConfig({
   build: {
-    transpile: ['some-package']
+    transpile: ['some-package'],
   },
 
   vite: {
     css: {
       preprocessorOptions: {
         scss: {
-          additionalData: '@use "@/assets/styles/variables" as *;'
-        }
-      }
-    }
-  }
+          additionalData: '@use "@/assets/styles/variables" as *;',
+        },
+      },
+    },
+  },
 })
 ```
 
@@ -234,8 +231,8 @@ export default defineNuxtConfig({
     '/': { prerender: true },
     '/api/**': { cors: true },
     '/admin/**': { ssr: false },
-    '/blog/**': { swr: 3600 } // Cache for 1 hour
-  }
+    '/blog/**': { swr: 3600 }, // Cache for 1 hour
+  },
 })
 ```
 
@@ -246,11 +243,11 @@ Use `isr` for incremental static regeneration:
 ```ts
 export default defineNuxtConfig({
   routeRules: {
-    '/': { prerender: true },        // Static at build time
-    '/**': { isr: 60 },              // Regenerate every 60s
-    '/package/**': { isr: 60 },      // ISR for dynamic routes
-    '/search': { isr: false, cache: false },  // No cache
-  }
+    '/': { prerender: true }, // Static at build time
+    '/**': { isr: 60 }, // Regenerate every 60s
+    '/package/**': { isr: 60 }, // ISR for dynamic routes
+    '/search': { isr: false, cache: false }, // No cache
+  },
 })
 ```
 
@@ -263,8 +260,8 @@ export default defineNuxtConfig({
   routeRules: {
     '/admin/**': { appLayout: 'admin' },
     '/docs/**': { appLayout: 'docs' },
-    '/': { appLayout: 'default' }
-  }
+    '/': { appLayout: 'default' },
+  },
 })
 ```
 
@@ -286,7 +283,7 @@ export default defineNuxtConfig({
       }
     },
     '@nuxtjs/tailwindcss',
-  ]
+  ],
 })
 ```
 
@@ -311,7 +308,7 @@ export default defineNuxtModule({
         ...nitroConfig.storage.cache,
       }
     })
-  }
+  },
 })
 ```
 
@@ -319,7 +316,7 @@ Then register in nuxt.config.ts:
 
 ```ts
 export default defineNuxtConfig({
-  modules: ['~/modules/vercel-cache']
+  modules: ['~/modules/vercel-cache'],
 })
 ```
 
@@ -328,14 +325,14 @@ export default defineNuxtConfig({
 ```ts
 export default defineNuxtConfig({
   future: {
-    compatibilityVersion: 4
+    compatibilityVersion: 4,
   },
 
   experimental: {
     typedPages: true,
     viewTransition: true,
-    payloadExtraction: true // Enable ISR/SWR payload extraction (Nuxt 4.3+)
-  }
+    payloadExtraction: true, // Enable ISR/SWR payload extraction (Nuxt 4.3+)
+  },
 })
 ```
 
@@ -351,9 +348,9 @@ export default defineNuxtConfig({
     preset: 'vercel',
     compressPublicAssets: true,
     routeRules: {
-      '/api/**': { cors: true }
-    }
-  }
+      '/api/**': { cors: true },
+    },
+  },
 })
 ```
 
@@ -363,9 +360,7 @@ Extend or share configuration:
 
 ```ts
 export default defineNuxtConfig({
-  extends: [
-    './base-layer'
-  ]
+  extends: ['./base-layer'],
 })
 ```
 
@@ -385,9 +380,9 @@ export default defineNuxtConfig({
   runtimeConfig: {
     apiSecret: process.env.API_SECRET,
     public: {
-      apiBase: process.env.API_BASE
-    }
-  }
+      apiBase: process.env.API_BASE,
+    },
+  },
 })
 ```
 

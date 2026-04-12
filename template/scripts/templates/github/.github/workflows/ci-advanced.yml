@@ -1,0 +1,72 @@
+# Advanced CI Workflow (GitHub Flow 嚴謹版)
+# 適合團隊 / 生產專案：PR gate + path filter + concurrency + CI→E2E workflow_run 鏈
+#
+# 配套的 e2e.yml 透過 workflow_run 於本 workflow 成功後觸發
+# 若你的 Supabase 是自架且放在自己 VM，建議在同台機器跑 GitHub Actions self-hosted runner
+# 並把 runs-on: ubuntu-latest 改成 runs-on: self-hosted，同時移除 supabase start 步驟
+name: CI
+
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'server/**'
+      - 'shared/**'
+      - 'layers/**'
+      - 'supabase/**'
+      - 'nuxt.config.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'tsconfig*.json'
+      - '.github/workflows/ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'server/**'
+      - 'shared/**'
+      - 'layers/**'
+      - 'supabase/**'
+      - 'nuxt.config.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'tsconfig*.json'
+      - '.github/workflows/ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Format / Lint / Typecheck / Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Vite+ (vp)
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: '22'
+          cache: true
+
+      - name: Install dependencies
+        run: vp install
+
+      - name: Format check
+        run: vp run format:check
+
+      - name: Lint
+        run: vp run lint
+
+      - name: Typecheck
+        run: vp run typecheck
+
+      - name: Unit tests
+        run: vp run test

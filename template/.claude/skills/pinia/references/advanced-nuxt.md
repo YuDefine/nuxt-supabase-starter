@@ -16,6 +16,7 @@ npx nuxi@latest module add pinia
 This installs both `@pinia/nuxt` and `pinia`. If `pinia` isn't installed, add it manually.
 
 > **npm users:** If you get `ERESOLVE unable to resolve dependency tree`, add to `package.json`:
+>
 > ```json
 > "overrides": { "vue": "latest" }
 > ```
@@ -32,6 +33,7 @@ export default defineNuxtConfig({
 ## Auto Imports
 
 These are automatically available:
+
 - `usePinia()` - get pinia instance
 - `defineStore()` - define stores
 - `storeToRefs()` - extract reactive refs
@@ -57,10 +59,10 @@ Use `callOnce()` for SSR-friendly data fetching:
 
 ```vue
 <script setup>
-const store = useStore()
+  const store = useStore()
 
-// Run once, data persists across navigations
-await callOnce('user', () => store.fetchUser())
+  // Run once, data persists across navigations
+  await callOnce('user', () => store.fetchUser())
 </script>
 ```
 
@@ -68,10 +70,10 @@ await callOnce('user', () => store.fetchUser())
 
 ```vue
 <script setup>
-const store = useStore()
+  const store = useStore()
 
-// Refetch on every navigation (like useFetch)
-await callOnce('user', () => store.fetchUser(), { mode: 'navigation' })
+  // Refetch on every navigation (like useFetch)
+  await callOnce('user', () => store.fetchUser(), { mode: 'navigation' })
 </script>
 ```
 

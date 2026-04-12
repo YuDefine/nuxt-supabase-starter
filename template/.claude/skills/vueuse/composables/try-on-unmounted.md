@@ -10,9 +10,7 @@ Safe . Call if it's inside a component lifecycle, if not, do nothing
 ```ts
 import { tryOnUnmounted } from '@vueuse/core'
 
-tryOnUnmounted(() => {
-
-})
+tryOnUnmounted(() => {})
 ```
 
 ## Reference

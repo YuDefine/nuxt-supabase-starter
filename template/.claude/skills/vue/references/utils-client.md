@@ -69,8 +69,12 @@ export function isValidEmail(email: string): boolean {
 }
 
 export function isValidUrl(url: string): boolean {
-  try { new URL(url); return true }
-  catch { return false }
+  try {
+    new URL(url)
+    return true
+  } catch {
+    return false
+  }
 }
 ```
 
@@ -79,7 +83,8 @@ export function isValidUrl(url: string): boolean {
 ```ts
 // utils/transformers.ts
 export function slugify(text: string): string {
-  return text.toLowerCase()
+  return text
+    .toLowerCase()
     .replace(/[^\w\s-]/g, '')
     .replace(/\s+/g, '-')
 }
@@ -98,8 +103,11 @@ export function parseQuery(search: string): Record<string, string> {
 }
 
 export function parseJSON<T>(json: string, fallback: T): T {
-  try { return JSON.parse(json) }
-  catch { return fallback }
+  try {
+    return JSON.parse(json)
+  } catch {
+    return fallback
+  }
 }
 ```
 

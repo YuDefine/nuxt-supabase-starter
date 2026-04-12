@@ -1,5 +1,5 @@
 #!/bin/bash
-# pre-archive-design-gate.sh
+# pre-archive-design-gate.sh — canonical version
 # PreToolUse hook: blocks spectra-archive if:
 #   1. 人工檢查 section incomplete
 #   2. UI changes lack design review evidence
@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-# Monorepo detection
+# Monorepo detection: if repo has a `template/app` sub-directory treat template/ as project root
 if [ -d "${CLAUDE_PROJECT_DIR}/template/app" ]; then
   _PROJECT="${CLAUDE_PROJECT_DIR}/template"
 else
@@ -29,18 +29,15 @@ fi
 OPENSPEC_DIR="${_PROJECT}/openspec"
 ACTIVE_CHANGE=""
 
-# Try to extract target change name from skill args
+# Extract target change name from skill args
 TARGET_CHANGE=$(echo "$INPUT" | jq -r '.tool_input.args // ""' 2>/dev/null || echo "")
-# Strip leading/trailing whitespace
 TARGET_CHANGE=$(echo "$TARGET_CHANGE" | xargs 2>/dev/null || echo "")
 
-# If args specify a change name, use it directly
+# If args specify a change name AND proposal exists, use it directly
 if [ -n "$TARGET_CHANGE" ] && [ -d "$OPENSPEC_DIR/changes/$TARGET_CHANGE" ] && [ -f "$OPENSPEC_DIR/changes/$TARGET_CHANGE/proposal.md" ]; then
   ACTIVE_CHANGE="$OPENSPEC_DIR/changes/$TARGET_CHANGE/"
-fi
-
-# Fallback: find first active change directory (skip archive/)
-if [ -z "$ACTIVE_CHANGE" ] && [ -d "$OPENSPEC_DIR/changes" ]; then
+elif [ -d "$OPENSPEC_DIR/changes" ]; then
+  # Fallback: find first active change (skip archive/)
   for dir in "$OPENSPEC_DIR/changes"/*/; do
     [ -d "$dir" ] || continue
     [[ "$(basename "$dir")" == "archive" ]] && continue
@@ -70,6 +67,7 @@ MESSAGES=()
 # --- Check 1: 人工檢查 ---
 if grep -q '^## .*人工檢查' "$TASKS_FILE"; then
   UNCHECKED=$(sed -n '/^## .*人工檢查/,/^## /p' "$TASKS_FILE" | grep -c '^\- \[ \]' || true)
+  UNCHECKED=${UNCHECKED:-0}
   if [ "$UNCHECKED" -gt 0 ]; then
     BLOCKED=true
     MESSAGES+=("[Guard] 人工檢查有 ${UNCHECKED} 個未完成項目。
@@ -118,9 +116,12 @@ if [ "$HAS_UI" = true ]; then
   # Signal A: design-review.md 存在且有實質內容（≥10 行 + 截圖證據 + fidelity report + 無未修復 DRIFT）
   if [ -f "$ACTIVE_CHANGE/design-review.md" ]; then
     LINE_COUNT=$(wc -l < "$ACTIVE_CHANGE/design-review.md" | tr -d ' ')
-    HAS_SCREENSHOT=$(grep -ciE '\.png|\.jpg|\.jpeg|screenshot|截圖' "$ACTIVE_CHANGE/design-review.md" 2>/dev/null || echo 0)
-    HAS_FIDELITY=$(grep -c 'Design Fidelity Report\|Fidelity Score' "$ACTIVE_CHANGE/design-review.md" 2>/dev/null || echo 0)
-    HAS_UNRESOLVED_DRIFT=$(grep -ciE '^\| .* \| DRIFT \|' "$ACTIVE_CHANGE/design-review.md" 2>/dev/null || echo 0)
+    HAS_SCREENSHOT=$(grep -ciE '\.png|\.jpg|\.jpeg|screenshot|截圖' "$ACTIVE_CHANGE/design-review.md" 2>/dev/null || true)
+    HAS_SCREENSHOT=${HAS_SCREENSHOT:-0}
+    HAS_FIDELITY=$(grep -c 'Design Fidelity Report\|Fidelity Score' "$ACTIVE_CHANGE/design-review.md" 2>/dev/null || true)
+    HAS_FIDELITY=${HAS_FIDELITY:-0}
+    HAS_UNRESOLVED_DRIFT=$(grep -ciE '^\| .* \| DRIFT \|' "$ACTIVE_CHANGE/design-review.md" 2>/dev/null || true)
+    HAS_UNRESOLVED_DRIFT=${HAS_UNRESOLVED_DRIFT:-0}
     if [ "$LINE_COUNT" -ge 10 ] && [ "$HAS_SCREENSHOT" -gt 0 ] && [ "$HAS_FIDELITY" -gt 0 ] && [ "$HAS_UNRESOLVED_DRIFT" -eq 0 ]; then
       DESIGN_PASSED=true
     fi
@@ -128,7 +129,7 @@ if [ "$HAS_UI" = true ]; then
 
   # Signal B: Design Review section 全部完成
   if [ "$DESIGN_PASSED" = false ] && grep -q '## .*Design Review' "$TASKS_FILE" 2>/dev/null; then
-    DR_UNCHECKED=$(sed -n '/## .*Design Review/,/^## /p' "$TASKS_FILE" | grep -c '\- \[ \]' 2>/dev/null || echo 0)
+    DR_UNCHECKED=$(sed -n '/## .*Design Review/,/^## /p' "$TASKS_FILE" | grep -c '\- \[ \]' 2>/dev/null || true)
     DR_UNCHECKED=${DR_UNCHECKED:-0}
     if [ "$DR_UNCHECKED" -eq 0 ]; then
       DESIGN_PASSED=true

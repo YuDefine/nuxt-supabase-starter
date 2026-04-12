@@ -14,9 +14,9 @@ Critical Vue 3 gotchas that cause silent failures or hard-to-debug issues.
 const count = ref(0)
 
 // WRONG
-count++           // Tries to increment the ref object
-count = 5         // Reassigns variable, loses reactivity
-items.push(4)     // Error: push is not a function
+count++ // Tries to increment the ref object
+count = 5 // Reassigns variable, loses reactivity
+items.push(4) // Error: push is not a function
 
 // CORRECT
 count.value++
@@ -37,12 +37,12 @@ const state = reactive({ count: 0, name: 'Vue' })
 // WRONG - destructured variables lose reactivity
 const { count, name } = state
 state.count++
-console.log(count)  // Still 0!
+console.log(count) // Still 0!
 
 // CORRECT - use toRefs()
 const { count, name } = toRefs(state)
 state.count++
-console.log(count.value)  // 1
+console.log(count.value) // 1
 
 // BEST - just use ref() instead of reactive()
 const count = ref(0)
@@ -60,7 +60,7 @@ console.log(proxy === raw) // false
 
 // WRONG - creating multiple proxies
 const a = reactive({})
-const b = reactive(a)  // Returns same proxy
+const b = reactive(a) // Returns same proxy
 console.log(a === b) // true (same object)
 
 // GOTCHA - nested objects get proxied too
@@ -77,13 +77,13 @@ console.log(nested.obj === nested.obj) // true (same proxy)
 ```ts
 // WRONG - mutates state
 const doubled = computed(() => {
-  count.value++  // Side effect!
+  count.value++ // Side effect!
   return count.value * 2
 })
 
 // WRONG - async operation
 const data = computed(async () => {
-  return await fetch('/api')  // Side effect!
+  return await fetch('/api') // Side effect!
 })
 
 // CORRECT - pure computation only
@@ -101,7 +101,7 @@ watch(count, (newVal) => {
 const fullName = computed(() => `${first.value} ${last.value}`)
 
 // WRONG - computed values are read-only
-fullName.value = 'John Doe'  // Error!
+fullName.value = 'John Doe' // Error!
 
 // CORRECT - use writable computed
 const fullName = computed({
@@ -110,7 +110,7 @@ const fullName = computed({
     const [f, l] = val.split(' ')
     first.value = f
     last.value = l
-  }
+  },
 })
 ```
 
@@ -127,7 +127,7 @@ const results = ref([])
 // WRONG - race condition
 watch(query, async (q) => {
   const res = await fetch(`/api?q=${q}`)
-  results.value = await res.json()  // May overwrite newer results!
+  results.value = await res.json() // May overwrite newer results!
 })
 
 // CORRECT - use onWatcherCleanup (Vue 3.5+)
@@ -157,14 +157,20 @@ watch(query, async (q, oldQ, onCleanup) => {
 const obj = reactive({ nested: { count: 0 } })
 
 // GOTCHA - oldValue === newValue for deep watches
-watch(obj, (newVal, oldVal) => {
-  console.log(newVal === oldVal)  // true! Same object
-}, { deep: true })
+watch(
+  obj,
+  (newVal, oldVal) => {
+    console.log(newVal === oldVal) // true! Same object
+  },
+  { deep: true }
+)
 
 // If you need old value, clone first:
 watch(
   () => structuredClone(obj),
-  (newVal, oldVal) => { /* now different */ }
+  (newVal, oldVal) => {
+    /* now different */
+  }
 )
 ```
 
@@ -178,8 +184,8 @@ watch(
 const props = defineProps<{ count: number; user: User }>()
 
 // WRONG - direct mutation
-props.count++  // Vue warning
-props.user.name = 'New'  // No warning but still wrong!
+props.count++ // Vue warning
+props.user.name = 'New' // No warning but still wrong!
 
 // CORRECT - emit to parent
 const emit = defineEmits(['update:count', 'update-user'])
@@ -195,15 +201,21 @@ const localUser = ref({ ...props.user })
 ```ts
 // WRONG (Vue < 3.5)
 const { count } = defineProps<{ count: number }>()
-watch(count, () => {})  // Won't trigger!
+watch(count, () => {}) // Won't trigger!
 
 // CORRECT - use getter
 const props = defineProps<{ count: number }>()
-watch(() => props.count, () => {})
+watch(
+  () => props.count,
+  () => {}
+)
 
 // Vue 3.5+ - destructuring works with reactive props
 const { count } = defineProps<{ count: number }>()
-watch(() => count, () => {})  // Works in 3.5+
+watch(
+  () => count,
+  () => {}
+) // Works in 3.5+
 ```
 
 ## Lifecycle Hooks
@@ -287,7 +299,7 @@ watchEffect(() => {
 const model = defineModel<{ name: string }>()
 
 // WRONG - mutation doesn't notify parent
-model.value.name = 'New'  // Parent won't know!
+model.value.name = 'New' // Parent won't know!
 
 // CORRECT - replace entire object
 model.value = { ...model.value, name: 'New' }
@@ -300,12 +312,12 @@ const model = defineModel<string>()
 
 // WRONG - value not updated yet
 model.value = 'new'
-console.log(model.value)  // Still old value!
+console.log(model.value) // Still old value!
 
 // CORRECT - wait for nextTick
 model.value = 'new'
 await nextTick()
-console.log(model.value)  // Now 'new'
+console.log(model.value) // Now 'new'
 ```
 
 ## Component Events
@@ -341,14 +353,14 @@ const emit = defineEmits(['click'])
 ```ts
 // Provider
 const count = ref(0)
-provide('count', count)  // Pass the ref, not .value
+provide('count', count) // Pass the ref, not .value
 
 // Consumer
-const count = inject('count')  // Receives the ref
-console.log(count.value)  // Reactive!
+const count = inject('count') // Receives the ref
+console.log(count.value) // Reactive!
 
 // WRONG - loses reactivity
-provide('count', count.value)  // Just passes number
+provide('count', count.value) // Just passes number
 ```
 
 ### Must Call Provide Synchronously
@@ -397,7 +409,7 @@ Common causes:
 
 ```ts
 // WRONG
-const width = ref(window.innerWidth)  // undefined on server
+const width = ref(window.innerWidth) // undefined on server
 
 // CORRECT
 const width = ref(0)

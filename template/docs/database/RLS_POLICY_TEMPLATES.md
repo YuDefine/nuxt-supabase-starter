@@ -34,7 +34,7 @@ FOR SELECT TO public USING (true);
 | 函式                             | 用途                     |
 | -------------------------------- | ------------------------ |
 | `app.current_user_role()`        | 取得當前使用者角色       |
-| `app.current_user_id()`         | 取得當前使用者 ID        |
+| `app.current_user_id()`          | 取得當前使用者 ID        |
 | `app.can_manage_user(target_id)` | 檢查是否可管理目標使用者 |
 | `app.can_authorize_role(role)`   | 檢查是否可授權該角色     |
 

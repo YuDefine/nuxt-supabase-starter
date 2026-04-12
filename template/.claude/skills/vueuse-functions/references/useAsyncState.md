@@ -13,10 +13,8 @@ import { useAsyncState } from '@vueuse/core'
 import axios from 'axios'
 
 const { state, isReady, isLoading, error } = useAsyncState(
-  axios
-    .get('https://jsonplaceholder.typicode.com/todos/1')
-    .then(t => t.data),
-  { id: null },
+  axios.get('https://jsonplaceholder.typicode.com/todos/1').then((t) => t.data),
+  { id: null }
 )
 ```
 
@@ -46,26 +44,22 @@ Set `immediate: false` to prevent automatic execution on creation.
 
 ```vue
 <script setup lang="ts">
-import { useAsyncState } from '@vueuse/core'
+  import { useAsyncState } from '@vueuse/core'
 
-const { state, execute, executeImmediate } = useAsyncState(action, '', { immediate: false })
+  const { state, execute, executeImmediate } = useAsyncState(action, '', { immediate: false })
 
-async function action(event) {
-  await new Promise(resolve => setTimeout(resolve, 500))
-  return `${event.target.textContent} clicked!`
-}
+  async function action(event) {
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    return `${event.target.textContent} clicked!`
+  }
 </script>
 
 <template>
   <p>State: {{ state }}</p>
 
-  <button class="button" @click="executeImmediate">
-    Execute now
-  </button>
+  <button class="button" @click="executeImmediate">Execute now</button>
 
-  <button class="ml-2 button" @click="event => execute(500, event)">
-    Execute with delay
-  </button>
+  <button class="ml-2 button" @click="(event) => execute(500, event)">Execute with delay</button>
 </template>
 ```
 
@@ -97,11 +91,7 @@ const { state } = useAsyncState(promise, initialState, {
 ## Type Declarations
 
 ```ts
-export interface UseAsyncStateReturnBase<
-  Data,
-  Params extends any[],
-  Shallow extends boolean,
-> {
+export interface UseAsyncStateReturnBase<Data, Params extends any[], Shallow extends boolean> {
   state: Shallow extends true ? Ref<Data> : Ref<UnwrapRef<Data>>
   isReady: Ref<boolean>
   isLoading: Ref<boolean>
@@ -180,6 +170,6 @@ export declare function useAsyncState<
 >(
   promise: Promise<Data> | ((...args: Params) => Promise<Data>),
   initialState: MaybeRef<Data>,
-  options?: UseAsyncStateOptions<Shallow, Data>,
+  options?: UseAsyncStateOptions<Shallow, Data>
 ): UseAsyncStateReturn<Data, Params, Shallow>
 ```

@@ -12,11 +12,11 @@ Provides reactive bindings for the [Gamepad API](https://developer.mozilla.org/e
 
 ```vue
 <script setup lang="ts">
-import { useGamepad } from '@vueuse/core'
-import { computed } from 'vue'
+  import { useGamepad } from '@vueuse/core'
+  import { computed } from 'vue'
 
-const { isSupported, gamepads } = useGamepad()
-const gamepad = computed(() => gamepads.value.find(g => g.mapping === 'standard'))
+  const { isSupported, gamepads } = useGamepad()
+  const gamepad = computed(() => gamepads.value.find((g) => g.mapping === 'standard'))
 </script>
 
 <template>
@@ -98,9 +98,9 @@ To make the Gamepad API easier to use, we provide mappings to map a controller t
 
 ```vue
 <script setup>
-import { mapGamepadToXbox360Controller } from '@vueuse/core'
+  import { mapGamepadToXbox360Controller } from '@vueuse/core'
 
-const controller = mapGamepadToXbox360Controller(gamepad)
+  const controller = mapGamepadToXbox360Controller(gamepad)
 </script>
 
 <template>
@@ -124,8 +124,7 @@ In other frameworks or plain Vue, you can wrap your usage component with a `<Cli
 ## Type Declarations
 
 ```ts
-export interface UseGamepadOptions
-  extends ConfigurableWindow, ConfigurableNavigator {}
+export interface UseGamepadOptions extends ConfigurableWindow, ConfigurableNavigator {}
 export interface UseGamepadReturn extends Supportable, Pausable {
   onConnected: EventHookOn<number>
   onDisconnected: EventHookOn<number>
@@ -135,7 +134,7 @@ export interface UseGamepadReturn extends Supportable, Pausable {
  * Maps a standard standard gamepad to an Xbox 360 Controller.
  */
 export declare function mapGamepadToXbox360Controller(
-  gamepad: Ref<Gamepad | undefined>,
+  gamepad: Ref<Gamepad | undefined>
 ): ComputedRef<{
   buttons: {
     a: GamepadButton
@@ -172,7 +171,5 @@ export declare function mapGamepadToXbox360Controller(
   back: GamepadButton
   start: GamepadButton
 } | null>
-export declare function useGamepad(
-  options?: UseGamepadOptions,
-): UseGamepadReturn
+export declare function useGamepad(options?: UseGamepadOptions): UseGamepadReturn
 ```

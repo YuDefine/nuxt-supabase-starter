@@ -85,7 +85,7 @@ cd "$ROOT_DIR"
 
 run_step \
   "install scaffold deps" \
-  pnpm --dir "$ROOT_DIR" install --filter create-nuxt-starter --ignore-scripts
+  pnpm --dir "$ROOT_DIR/template" install --filter create-nuxt-starter --ignore-scripts
 
 if [[ ! -f "$CLI_DIST" || "$CLI_SRC" -nt "$CLI_DIST" ]]; then
   run_step \

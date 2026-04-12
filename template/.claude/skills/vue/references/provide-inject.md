@@ -12,19 +12,19 @@ Provide data from ancestor components to any descendant, avoiding prop drilling.
 ```vue
 <!-- Provider.vue -->
 <script setup lang="ts">
-import { provide, ref } from 'vue'
+  import { provide, ref } from 'vue'
 
-const message = ref('hello')
-provide('message', message)
+  const message = ref('hello')
+  provide('message', message)
 </script>
 ```
 
 ```vue
 <!-- DeepChild.vue (any level deep) -->
 <script setup lang="ts">
-import { inject } from 'vue'
+  import { inject } from 'vue'
 
-const message = inject('message')
+  const message = inject('message')
 </script>
 ```
 
@@ -43,21 +43,21 @@ export const countKey = Symbol() as InjectionKey<number>
 ```vue
 <!-- Provider.vue -->
 <script setup lang="ts">
-import { provide, ref } from 'vue'
-import { messageKey } from './keys'
+  import { provide, ref } from 'vue'
+  import { messageKey } from './keys'
 
-const message = ref('hello')
-provide(messageKey, message)
+  const message = ref('hello')
+  provide(messageKey, message)
 </script>
 ```
 
 ```vue
 <!-- Injector.vue -->
 <script setup lang="ts">
-import { inject } from 'vue'
-import { messageKey } from './keys'
+  import { inject } from 'vue'
+  import { messageKey } from './keys'
 
-const message = inject(messageKey) // Ref<string> | undefined
+  const message = inject(messageKey) // Ref<string> | undefined
 </script>
 ```
 
@@ -91,10 +91,10 @@ Provide reactive values for automatic updates:
 ```vue
 <!-- Provider.vue -->
 <script setup lang="ts">
-import { provide, ref } from 'vue'
+  import { provide, ref } from 'vue'
 
-const count = ref(0)
-provide('count', count)
+  const count = ref(0)
+  provide('count', count)
 </script>
 ```
 
@@ -107,27 +107,27 @@ Keep mutations in the provider, expose update functions:
 ```vue
 <!-- Provider.vue -->
 <script setup lang="ts">
-import { provide, ref, readonly } from 'vue'
+  import { provide, ref, readonly } from 'vue'
 
-const location = ref('North Pole')
+  const location = ref('North Pole')
 
-function updateLocation(newLocation: string) {
-  location.value = newLocation
-}
+  function updateLocation(newLocation: string) {
+    location.value = newLocation
+  }
 
-provide('location', {
-  location: readonly(location), // Prevent direct mutation
-  updateLocation
-})
+  provide('location', {
+    location: readonly(location), // Prevent direct mutation
+    updateLocation,
+  })
 </script>
 ```
 
 ```vue
 <!-- Injector.vue -->
 <script setup lang="ts">
-import { inject } from 'vue'
+  import { inject } from 'vue'
 
-const { location, updateLocation } = inject('location')!
+  const { location, updateLocation } = inject('location')!
 </script>
 
 <template>

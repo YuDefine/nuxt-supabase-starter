@@ -6,7 +6,7 @@
 import { expect } from 'vitest'
 
 // Equality
-expect(1 + 1).toBe(2)              // Strict ===
+expect(1 + 1).toBe(2) // Strict ===
 expect({ a: 1 }).toEqual({ a: 1 }) // Deep equality
 expect({ a: 1 }).toStrictEqual({ a: 1 }) // Checks undefined props
 
@@ -108,30 +108,29 @@ expect('hello world').toEqual(expect.stringContaining('world'))
 expect('hello world').toEqual(expect.stringMatching(/world$/))
 expect({ value: null }).toEqual({ value: expect.anything() })
 expect([1, 2]).toEqual(expect.not.arrayContaining([3]))
-expect(0.1 + 0.2).toEqual(expect.closeTo(0.3, 5))  // Floating point
+expect(0.1 + 0.2).toEqual(expect.closeTo(0.3, 5)) // Floating point
 ```
 
 ## Soft & Poll Assertions
 
 ```ts
 // Continue after failure
-expect.soft(1).toBe(2)  // Marks failed but continues
-expect.soft(2).toBe(3)  // Also runs
+expect.soft(1).toBe(2) // Marks failed but continues
+expect.soft(2).toBe(3) // Also runs
 
 // Retry until passes
 await expect.poll(() => fetchStatus()).toBe('ready')
-await expect.poll(
-  () => document.querySelector('.element'),
-  { interval: 100, timeout: 5000 }
-).toBeTruthy()
+await expect
+  .poll(() => document.querySelector('.element'), { interval: 100, timeout: 5000 })
+  .toBeTruthy()
 ```
 
 ## Assertion Count
 
 ```ts
 test('async assertions', async () => {
-  expect.assertions(2)      // Exactly 2 must run
-  expect.hasAssertions()    // At least 1 must run
+  expect.assertions(2) // Exactly 2 must run
+  expect.hasAssertions() // At least 1 must run
 })
 ```
 
@@ -148,7 +147,9 @@ expect.extend({
   },
 })
 
-test('custom', () => { expect(100).toBeWithinRange(90, 110) })
+test('custom', () => {
+  expect(100).toBeWithinRange(90, 110)
+})
 ```
 
 ## Snapshots
@@ -157,7 +158,9 @@ test('custom', () => { expect(100).toBeWithinRange(90, 110) })
 expect(data).toMatchSnapshot()
 expect(data).toMatchInlineSnapshot(`{ "id": 1 }`)
 await expect(result).toMatchFileSnapshot('./expected.json')
-expect(() => { throw new Error('fail') }).toThrowErrorMatchingSnapshot()
+expect(() => {
+  throw new Error('fail')
+}).toThrowErrorMatchingSnapshot()
 
 // With hints
 expect(header).toMatchSnapshot('header')
@@ -175,7 +178,9 @@ Update snapshots: `vitest -u` or press `u` in watch mode.
 
 ```ts
 expect.addSnapshotSerializer({
-  test(val) { return val && typeof val.toJSON === 'function' },
+  test(val) {
+    return val && typeof val.toJSON === 'function'
+  },
   serialize(val, config, indentation, depth, refs, printer) {
     return printer(val.toJSON(), config, indentation, depth, refs)
   },
@@ -192,12 +197,12 @@ vitest run --coverage
 defineConfig({
   test: {
     coverage: {
-      provider: 'v8',  // or 'istanbul'
+      provider: 'v8', // or 'istanbul'
       enabled: true,
       reporter: ['text', 'json', 'html'],
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['node_modules/', 'tests/', '**/*.d.ts'],
-      all: true,  // Report uncovered files
+      all: true, // Report uncovered files
       thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
     },
   },
@@ -237,8 +242,8 @@ defineConfig({
   test: {
     fileParallelism: true,
     maxWorkers: 4,
-    pool: 'threads',  // 'threads', 'forks', 'vmThreads'
-    maxConcurrency: 5,  // Max concurrent tests per file
+    pool: 'threads', // 'threads', 'forks', 'vmThreads'
+    maxConcurrency: 5, // Max concurrent tests per file
     isolate: true,
     sequence: {
       shuffle: true,

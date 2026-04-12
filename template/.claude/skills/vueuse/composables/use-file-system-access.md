@@ -22,7 +22,7 @@ const {
   open,
   save,
   saveAs,
-  updateData
+  updateData,
 } = useFileSystemAccess()
 ```
 

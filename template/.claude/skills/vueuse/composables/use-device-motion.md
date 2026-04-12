@@ -10,12 +10,7 @@ Reactive DeviceMotionEvent. Provide web developers with information about the sp
 ```ts
 import { useDeviceMotion } from '@vueuse/core'
 
-const {
-  acceleration,
-  accelerationIncludingGravity,
-  rotationRate,
-  interval,
-} = useDeviceMotion()
+const { acceleration, accelerationIncludingGravity, rotationRate, interval } = useDeviceMotion()
 ```
 
 ## Options

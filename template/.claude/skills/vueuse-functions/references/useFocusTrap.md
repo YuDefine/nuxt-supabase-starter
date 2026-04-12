@@ -20,24 +20,20 @@ npm i focus-trap@^7
 
 ```vue
 <script setup lang="ts">
-import { useFocusTrap } from '@vueuse/integrations/useFocusTrap'
-import { useTemplateRef } from 'vue'
+  import { useFocusTrap } from '@vueuse/integrations/useFocusTrap'
+  import { useTemplateRef } from 'vue'
 
-const target = useTemplateRef('target')
-const { hasFocus, activate, deactivate } = useFocusTrap(target)
+  const target = useTemplateRef('target')
+  const { hasFocus, activate, deactivate } = useFocusTrap(target)
 </script>
 
 <template>
   <div>
-    <button @click="activate()">
-      Activate
-    </button>
+    <button @click="activate()">Activate</button>
     <div ref="target">
       <span>Has Focus: {{ hasFocus }}</span>
-      <input type="text">
-      <button @click="deactivate()">
-        Deactivate
-      </button>
+      <input type="text" />
+      <button @click="deactivate()">Deactivate</button>
     </div>
   </div>
 </template>
@@ -47,30 +43,26 @@ const { hasFocus, activate, deactivate } = useFocusTrap(target)
 
 ```vue
 <script setup lang="ts">
-import { useFocusTrap } from '@vueuse/integrations/useFocusTrap'
-import { useTemplateRef } from 'vue'
+  import { useFocusTrap } from '@vueuse/integrations/useFocusTrap'
+  import { useTemplateRef } from 'vue'
 
-const targetOne = useTemplateRef('targetOne')
-const targetTwo = useTemplateRef('targetTwo')
-const { hasFocus, activate, deactivate } = useFocusTrap([targetOne, targetTwo])
+  const targetOne = useTemplateRef('targetOne')
+  const targetTwo = useTemplateRef('targetTwo')
+  const { hasFocus, activate, deactivate } = useFocusTrap([targetOne, targetTwo])
 </script>
 
 <template>
   <div>
-    <button @click="activate()">
-      Activate
-    </button>
+    <button @click="activate()">Activate</button>
     <div ref="targetOne">
       <span>Has Focus: {{ hasFocus }}</span>
-      <input type="text">
+      <input type="text" />
     </div>
     ...
     <div ref="targetTow">
       <p>Another target here</p>
-      <input type="text">
-      <button @click="deactivate()">
-        Deactivate
-      </button>
+      <input type="text" />
+      <button @click="deactivate()">Deactivate</button>
     </div>
   </div>
 </template>
@@ -80,32 +72,24 @@ const { hasFocus, activate, deactivate } = useFocusTrap([targetOne, targetTwo])
 
 ```vue
 <script setup lang="ts">
-import { useFocusTrap } from '@vueuse/integrations/useFocusTrap'
-import { computed, shallowRef, useTemplateRef } from 'vue'
+  import { useFocusTrap } from '@vueuse/integrations/useFocusTrap'
+  import { computed, shallowRef, useTemplateRef } from 'vue'
 
-const left = useTemplateRef('left')
-const right = useTemplateRef('right')
-const currentRef = shallowRef<'left' | 'right'>('left')
+  const left = useTemplateRef('left')
+  const right = useTemplateRef('right')
+  const currentRef = shallowRef<'left' | 'right'>('left')
 
-const target = computed(() =>
-  currentRef.value === 'left'
-    ? left
-    : currentRef.value === 'right'
-      ? right
-      : null,
-)
+  const target = computed(() =>
+    currentRef.value === 'left' ? left : currentRef.value === 'right' ? right : null
+  )
 
-const { activate } = useFocusTrap(target)
+  const { activate } = useFocusTrap(target)
 </script>
 
 <template>
   <div>
-    <div ref="left" class="left">
-      ...
-    </div>
-    <div ref="right" class="right">
-      ...
-    </div>
+    <div ref="left" class="left">...</div>
+    <div ref="right" class="right">...</div>
   </div>
 </template>
 ```
@@ -114,18 +98,16 @@ const { activate } = useFocusTrap(target)
 
 ```vue
 <script setup lang="ts">
-import { useFocusTrap } from '@vueuse/integrations/useFocusTrap'
-import { useTemplateRef } from 'vue'
+  import { useFocusTrap } from '@vueuse/integrations/useFocusTrap'
+  import { useTemplateRef } from 'vue'
 
-const target = useTemplateRef('target')
-const { hasFocus, activate, deactivate } = useFocusTrap(target, { immediate: true })
+  const target = useTemplateRef('target')
+  const { hasFocus, activate, deactivate } = useFocusTrap(target, { immediate: true })
 </script>
 
 <template>
   <div>
-    <div ref="target">
-      ...
-    </div>
+    <div ref="target">...</div>
   </div>
 </template>
 ```
@@ -136,31 +118,27 @@ This function can't properly activate focus on elements with conditional renderi
 
 ```vue
 <script setup lang="ts">
-import { useFocusTrap } from '@vueuse/integrations/useFocusTrap'
-import { nextTick, useTemplateRef } from 'vue'
+  import { useFocusTrap } from '@vueuse/integrations/useFocusTrap'
+  import { nextTick, useTemplateRef } from 'vue'
 
-const target = useTemplateRef('target')
-const { activate, deactivate } = useFocusTrap(target, { immediate: true })
+  const target = useTemplateRef('target')
+  const { activate, deactivate } = useFocusTrap(target, { immediate: true })
 
-const show = ref(false)
+  const show = ref(false)
 
-async function reveal() {
-  show.value = true
+  async function reveal() {
+    show.value = true
 
-  await nextTick()
-  activate()
-}
+    await nextTick()
+    activate()
+  }
 </script>
 
 <template>
   <div>
-    <div v-if="show" ref="target">
-      ...
-    </div>
+    <div v-if="show" ref="target">...</div>
 
-    <button @click="reveal">
-      Reveal and Focus
-    </button>
+    <button @click="reveal">Reveal and Focus</button>
   </div>
 </template>
 ```
@@ -171,17 +149,15 @@ With the `UseFocusTrap` component, Focus Trap will be activated automatically on
 
 ```vue
 <script setup lang="ts">
-import { UseFocusTrap } from '@vueuse/integrations/useFocusTrap/component'
-import { shallowRef } from 'vue'
+  import { UseFocusTrap } from '@vueuse/integrations/useFocusTrap/component'
+  import { shallowRef } from 'vue'
 
-const show = shallowRef(false)
+  const show = shallowRef(false)
 </script>
 
 <template>
   <UseFocusTrap v-if="show" :options="{ immediate: true }">
-    <div class="modal">
-      ...
-    </div>
+    <div class="modal">...</div>
   </UseFocusTrap>
 </template>
 ```
@@ -237,9 +213,7 @@ export interface UseFocusTrapReturn {
  * @see https://vueuse.org/useFocusTrap
  */
 export declare function useFocusTrap(
-  target: MaybeRefOrGetter<
-    Arrayable<MaybeRefOrGetter<string> | MaybeComputedElementRef>
-  >,
-  options?: UseFocusTrapOptions,
+  target: MaybeRefOrGetter<Arrayable<MaybeRefOrGetter<string> | MaybeComputedElementRef>>,
+  options?: UseFocusTrapOptions
 ): UseFocusTrapReturn
 ```

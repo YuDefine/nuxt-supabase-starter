@@ -9,6 +9,7 @@ import { confirmScaffold, displaySummary, getDefaultSelections, promptUser } fro
 import { postScaffold } from './post-scaffold'
 
 type CliAuth = 'nuxt-auth-utils' | 'better-auth' | 'none'
+type CliCi = 'simple' | 'advanced'
 
 function isMonorepoRoot(dir: string): boolean {
   return (
@@ -76,6 +77,7 @@ function inferTestingLevel(features: string[]): 'full' | 'vitest-only' | 'none' 
 function buildSelectionsFromArgs(args: {
   projectName: string
   auth?: string
+  ci?: string
   with?: string
   without?: string
   minimal?: boolean
@@ -98,6 +100,13 @@ function buildSelectionsFromArgs(args: {
   const authArg = args.auth as CliAuth | undefined
   if (authArg && !validAuthValues.includes(authArg)) {
     consola.error(`--auth 只接受：${validAuthValues.join(' | ')}`)
+    process.exit(1)
+  }
+
+  const validCiValues: CliCi[] = ['simple', 'advanced']
+  const ciArg = args.ci as CliCi | undefined
+  if (ciArg && !validCiValues.includes(ciArg)) {
+    consola.error(`--ci 只接受：${validCiValues.join(' | ')}`)
     process.exit(1)
   }
 
@@ -135,6 +144,13 @@ function buildSelectionsFromArgs(args: {
     selected.delete('auth-better-auth')
     if (authArg === 'nuxt-auth-utils') addFeature('auth-nuxt-utils')
     if (authArg === 'better-auth') addFeature('auth-better-auth')
+  }
+
+  if (ciArg) {
+    selected.delete('ci-simple')
+    selected.delete('ci-advanced')
+    if (ciArg === 'simple') addFeature('ci-simple')
+    if (ciArg === 'advanced') addFeature('ci-advanced')
   }
 
   for (const featureId of fromWith) {
@@ -179,6 +195,11 @@ const main = defineCommand({
       description: 'Auth provider: nuxt-auth-utils | better-auth | none',
       required: false,
     },
+    ci: {
+      type: 'string',
+      description: 'CI mode: simple | advanced (default: simple)',
+      required: false,
+    },
     preset: {
       type: 'string',
       description: 'Profile preset: default | fast',
@@ -210,7 +231,7 @@ const main = defineCommand({
     const invocationCwd = getInvocationCwd(monorepoRoot)
     const projectName = args.dir as string | undefined
     const hasCustomFlags = Boolean(
-      args.auth || args.with || args.without || args.minimal || args.preset || args.fast
+      args.auth || args.ci || args.with || args.without || args.minimal || args.preset || args.fast
     )
 
     // Validate directory
@@ -233,6 +254,7 @@ const main = defineCommand({
       selections = buildSelectionsFromArgs({
         projectName: name,
         auth: args.auth as string | undefined,
+        ci: args.ci as string | undefined,
         with: args.with as string | undefined,
         without: args.without as string | undefined,
         minimal: args.minimal as boolean | undefined,

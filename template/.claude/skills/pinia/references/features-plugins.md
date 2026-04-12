@@ -32,9 +32,9 @@ Plugins receive a context object:
 import { PiniaPluginContext } from 'pinia'
 
 export function myPiniaPlugin(context: PiniaPluginContext) {
-  context.pinia   // pinia instance
-  context.app     // Vue app instance
-  context.store   // store being augmented
+  context.pinia // pinia instance
+  context.app // Vue app instance
+  context.store // store being augmented
   context.options // store definition options
 }
 ```
@@ -96,7 +96,9 @@ Define custom options consumed by plugins:
 // Store definition
 defineStore('search', {
   actions: {
-    searchContacts() { /* ... */ },
+    searchContacts() {
+      /* ... */
+    },
   },
   debounce: {
     searchContacts: 300,
@@ -121,7 +123,9 @@ For Setup Stores, pass options as third argument:
 ```ts
 defineStore(
   'search',
-  () => { /* ... */ },
+  () => {
+    /* ... */
+  },
   {
     debounce: { searchContacts: 300 },
   }

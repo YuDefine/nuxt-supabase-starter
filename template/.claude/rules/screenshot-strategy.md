@@ -1,0 +1,82 @@
+# Screenshot Strategy
+
+截圖工具選擇規則。所有截圖工作由 `review-screenshot` skill 派遣 `screenshot-review` agent 執行，agent 依本規則挑工具。
+
+## 可用工具
+
+| 工具              | 特性                                                 | 成本 |
+| ----------------- | ---------------------------------------------------- | ---- |
+| `browser-use` CLI | 快（~50ms）、固定 1920×1080、單 session、可互動探索  | 低   |
+| Playwright CLI    | 可調視窗、可多分頁、跨瀏覽器、可沉澱為 spec、CI 友善 | 中   |
+
+> **Playwright MCP 已棄用**。響應式 / 跨瀏覽器 / 多分頁情境改用 Playwright CLI script。
+
+## 決策樹
+
+```
+要截圖 →
+│
+├─ 1. 需要調整視窗大小（響應式 / 多 breakpoint）？
+│   └─ 是 → Playwright CLI
+│
+├─ 2. 需要跨瀏覽器（Safari / Firefox）？
+│   └─ 是 → Playwright CLI
+│
+├─ 3. 需要多分頁 / 跨 session？
+│   └─ 是 → Playwright CLI
+│
+├─ 4. 這組截圖下次還要重拍（回歸 / CI）？
+│   └─ 是 → Playwright CLI（沉澱為 .spec.ts）
+│
+└─ 5. 其他一切（單次驗收、探索、debug、人工檢查清單）
+    └─ browser-use CLI（預設）
+```
+
+## 場景對照
+
+| 使用者意圖                         | 工具            | 理由                       |
+| ---------------------------------- | --------------- | -------------------------- |
+| 「截圖確認這頁」                   | browser-use CLI | 一次性、目標明確           |
+| 「跑人工檢查清單」                 | browser-use CLI | 固定腳本、逐項拍           |
+| Spectra review 驗收                | browser-use CLI | 預先列好 URL               |
+| Design Review 視覺 QA              | browser-use CLI | 頁面固定、抓大圖           |
+| 「我不確定該點哪，你幫我看看」     | browser-use CLI | `state`+`click` 可探索 DOM |
+| 「為什麼這按鈕沒反應」             | browser-use CLI | `eval` 可看 console        |
+| 「empty state 長怎樣」             | browser-use CLI | 配合 DB mock 拍單張        |
+| 「看看 mobile / tablet / desktop」 | Playwright CLI  | `projects` 多 viewport     |
+| 「在 Safari / Firefox 看」         | Playwright CLI  | `--project=webkit`         |
+| 「開兩個分頁測協作」               | Playwright CLI  | `context.newPage()`        |
+| Critical journey 回歸截圖          | Playwright CLI  | 寫成 .spec.ts，CI 每次跑   |
+
+## 互動探索的補位
+
+原本 Playwright MCP 的「邊看邊決定」能力由 **browser-use CLI** 承接：
+
+- `browser-use state` — 取得 DOM + 元素 index
+- `browser-use click <index>` — 互動點擊
+- `browser-use eval "<js>"` — 執行任意 JS（讀 console / localStorage / 狀態）
+- `browser-use screenshot <path>` — 任何步驟都能截圖
+
+只有三件事 browser-use 做不到（→ Playwright CLI）：調視窗、多分頁、跨瀏覽器。
+
+## 一句話記憶
+
+- **預設 browser-use CLI** — 快、便宜、可互動、夠用
+- **響應式 / 多分頁 / 跨瀏覽器 / 要沉澱 → Playwright CLI**
+
+## 截圖存放
+
+```
+screenshots/<environment>/<語義>/
+```
+
+- `<environment>`: `local` / `staging` / `production`
+- `<語義>`: `review/` / `debug/` / `<change-name>/`
+- Review 報告: `screenshots/<env>/<語義>/review.md`
+- Playwright spec: `tests/e2e/<topic>.spec.ts`，輸出同樣放 `screenshots/`
+- **MUST** `mkdir -p` 確保目錄存在
+- `screenshots/` 已 gitignored
+
+## 沉澱規則
+
+同一組截圖被重複拍第 3 次 → **必須** 沉澱為 Playwright CLI spec，避免每次從頭描述。spec 放 `tests/e2e/screenshots/`，可手動跑或併入 CI。

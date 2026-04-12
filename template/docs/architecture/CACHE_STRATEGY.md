@@ -61,13 +61,13 @@ export default cachedEventHandler(
 
 ### 快取參數說明
 
-| 參數          | 說明             | 建議值                            |
-| ------------- | ---------------- | --------------------------------- |
-| `maxAge`      | 快取有效期（秒） | 列表：1800、詳情：3600            |
-| `staleMaxAge` | 過期容忍期（秒） | maxAge 的 2 倍                    |
-| `swr`         | 背景重新驗證     | 通常為 `true`                     |
-| `name`        | 快取名稱         | 資源類型-操作（如 `items-list`）  |
-| `getKey`      | 快取 key 函式    | 包含所有查詢參數                  |
+| 參數          | 說明             | 建議值                           |
+| ------------- | ---------------- | -------------------------------- |
+| `maxAge`      | 快取有效期（秒） | 列表：1800、詳情：3600           |
+| `staleMaxAge` | 過期容忍期（秒） | maxAge 的 2 倍                   |
+| `swr`         | 背景重新驗證     | 通常為 `true`                    |
+| `name`        | 快取名稱         | 資源類型-操作（如 `items-list`） |
+| `getKey`      | 快取 key 函式    | 包含所有查詢參數                 |
 
 ### SWR 行為
 
@@ -141,8 +141,7 @@ getKey: () => 'items' // 所有查詢都共用同一份快取
 // app/queries/items.ts
 export const itemKeys = {
   all: ['items'] as const,
-  list: (filters?: Record<string, unknown>) =>
-    [...itemKeys.all, 'list', filters ?? {}] as const,
+  list: (filters?: Record<string, unknown>) => [...itemKeys.all, 'list', filters ?? {}] as const,
   detail: (id: number) => [...itemKeys.all, 'detail', id] as const,
 }
 ```
@@ -323,8 +322,7 @@ import { toValue } from 'vue'
 // Query Keys
 export const itemKeys = {
   all: ['items'] as const,
-  list: (filters?: Record<string, unknown>) =>
-    [...itemKeys.all, 'list', filters ?? {}] as const,
+  list: (filters?: Record<string, unknown>) => [...itemKeys.all, 'list', filters ?? {}] as const,
   detail: (id: number) => [...itemKeys.all, 'detail', id] as const,
 }
 

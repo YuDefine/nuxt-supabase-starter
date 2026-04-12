@@ -22,6 +22,7 @@ Follow Kent C. Dodds' testing philosophy: "The more your tests resemble how your
 - [ ] Use data-testid attributes for elements without semantic meaning
 
 **Incorrect:**
+
 ```javascript
 import { mount } from '@vue/test-utils'
 import Counter from './Counter.vue'
@@ -50,6 +51,7 @@ test('has increment button', () => {
 ```
 
 **Correct:**
+
 ```javascript
 import { mount } from '@vue/test-utils'
 import Counter from './Counter.vue'
@@ -57,7 +59,7 @@ import Counter from './Counter.vue'
 // CORRECT: Testing behavior like a user would
 test('counter displays updated value after clicking increment', async () => {
   const wrapper = mount(Counter, {
-    props: { max: 10 }
+    props: { max: 10 },
   })
 
   // Assert initial visible state
@@ -104,11 +106,12 @@ test('increments counter on button click', async () => {
 ## What to Test vs What Not to Test
 
 ### DO Test (Public Interface)
+
 ```javascript
 // Props affect rendered output
 test('shows title from props', () => {
   const wrapper = mount(Card, {
-    props: { title: 'Hello World' }
+    props: { title: 'Hello World' },
   })
   expect(wrapper.text()).toContain('Hello World')
 })
@@ -116,7 +119,7 @@ test('shows title from props', () => {
 // Slots render correctly
 test('renders slot content', () => {
   const wrapper = mount(Card, {
-    slots: { default: '<p>Slot content</p>' }
+    slots: { default: '<p>Slot content</p>' },
   })
   expect(wrapper.text()).toContain('Slot content')
 })
@@ -130,6 +133,7 @@ test('emits close event when X clicked', async () => {
 ```
 
 ### DON'T Test (Implementation Details)
+
 ```javascript
 // Don't test internal computed properties
 // Don't test internal methods
@@ -139,6 +143,7 @@ test('emits close event when X clicked', async () => {
 ```
 
 ## Reference
+
 - [Vue.js Testing Guide](https://vuejs.org/guide/scaling-up/testing)
 - [Vue Test Utils - Testing Philosophy](https://test-utils.vuejs.org/guide/)
 - [Testing Library Guiding Principles](https://testing-library.com/docs/guiding-principles)

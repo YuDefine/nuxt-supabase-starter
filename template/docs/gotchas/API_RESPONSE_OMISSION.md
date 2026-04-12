@@ -23,7 +23,7 @@ return rows.map(
     ({
       id: row.id,
       name: row.name,
-      type: row.type,       // 確保所有欄位都有映射
+      type: row.type, // 確保所有欄位都有映射
       category: row.category, // 確保所有欄位都有映射
       // ...
     }) satisfies YourResponseType

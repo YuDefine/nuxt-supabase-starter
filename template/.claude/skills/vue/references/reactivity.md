@@ -21,13 +21,13 @@ count.value++
 
 ```vue
 <script setup lang="ts">
-import { ref } from 'vue'
+  import { ref } from 'vue'
 
-const count = ref(0)
+  const count = ref(0)
 
-function increment() {
-  count.value++
-}
+  function increment() {
+    count.value++
+  }
 </script>
 
 <template>
@@ -65,7 +65,7 @@ interface State {
 
 const state: State = reactive({
   count: 0,
-  name: 'Vue'
+  name: 'Vue',
 })
 
 state.count++ // reactive
@@ -99,7 +99,7 @@ Both `ref()` and `reactive()` are deeply reactive by default:
 ```ts
 const obj = ref({
   nested: { count: 0 },
-  arr: ['foo', 'bar']
+  arr: ['foo', 'bar'],
 })
 
 // These trigger updates
@@ -160,8 +160,8 @@ const fullNameWritable = computed({
     return `${firstName.value} ${lastName.value}`
   },
   set(newValue: string) {
-    [firstName.value, lastName.value] = newValue.split(' ')
-  }
+    ;[firstName.value, lastName.value] = newValue.split(' ')
+  },
 })
 ```
 
@@ -173,11 +173,11 @@ const fullNameWritable = computed({
 
 ```ts
 // ✅ Cached - only recalculates when items changes
-const activeItems = computed(() => items.value.filter(x => x.active))
+const activeItems = computed(() => items.value.filter((x) => x.active))
 
 // ❌ Not cached - runs on every render
 function getActiveItems() {
-  return items.value.filter(x => x.active)
+  return items.value.filter((x) => x.active)
 }
 ```
 
@@ -206,7 +206,10 @@ const obj = reactive({ count: 0 })
 watch(x, (newX) => console.log(newX))
 
 // Getter function
-watch(() => obj.count, (count) => console.log(count))
+watch(
+  () => obj.count,
+  (count) => console.log(count)
+)
 
 // Multiple sources
 watch([x, () => obj.count], ([newX, newCount]) => {
@@ -218,10 +221,10 @@ watch([x, () => obj.count], ([newX, newCount]) => {
 
 ```ts
 watch(source, callback, {
-  immediate: true,  // Run immediately on creation
-  deep: true,       // Watch nested properties
-  once: true,       // Trigger only once (3.4+)
-  flush: 'post'     // Run after DOM update
+  immediate: true, // Run immediately on creation
+  deep: true, // Watch nested properties
+  once: true, // Trigger only once (3.4+)
+  flush: 'post', // Run after DOM update
 })
 ```
 
@@ -270,14 +273,18 @@ watch(id, async (newId) => {
 
 ```ts
 const stop = watch(source, callback)
-const stop2 = watchEffect(() => { /* ... */ })
+const stop2 = watchEffect(() => {
+  /* ... */
+})
 
 // Stop manually
 stop()
 stop2()
 
 // Pause/Resume (3.5+)
-const { stop, pause, resume } = watchEffect(() => { /* ... */ })
+const { stop, pause, resume } = watchEffect(() => {
+  /* ... */
+})
 ```
 
 <!--

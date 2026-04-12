@@ -7,7 +7,7 @@ export async function postScaffold(
   targetDir: string,
   projectName: string,
   invocationCwd: string,
-  monorepoRoot?: string,
+  monorepoRoot?: string
 ): Promise<void> {
   // Use the user's actual cwd for the cd hint, not invocationCwd
   // (which may differ when running inside the monorepo)

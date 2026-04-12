@@ -13,7 +13,7 @@ const { list, containerProps, wrapperProps } = useVirtualList(
   {
     // Keep `itemHeight` in sync with the item's row.
     itemHeight: 22,
-  },
+  }
 )
 ```
 

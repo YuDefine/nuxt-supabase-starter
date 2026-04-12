@@ -45,8 +45,5 @@ ignore:
 ## Usage
 
 ```vue
-<UTimeline
-  :items="items"
-  @select="handleSelect"
-/>
+<UTimeline :items="items" @select="handleSelect" />
 ```

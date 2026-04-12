@@ -10,12 +10,12 @@ export default defineNuxtConfig({
   modules: ['@nuxthub/core', '@onmax/nuxt-better-auth'],
   hub: { database: true },
   auth: {
-    secondaryStorage: true,  // Optional: KV for session caching
+    secondaryStorage: true, // Optional: KV for session caching
     schema: {
-      usePlural: false,      // user vs users
-      casing: 'camelCase'    // camelCase or snake_case
-    }
-  }
+      usePlural: false, // user vs users
+      casing: 'camelCase', // camelCase or snake_case
+    },
+  },
 })
 ```
 
@@ -39,10 +39,10 @@ import { schema } from 'hub:db'
 export const posts = sqliteTable('posts', {
   id: text('id').primaryKey(),
   title: text('title').notNull(),
-  authorId: text('author_id').notNull()
+  authorId: text('author_id')
+    .notNull()
     .references(() => schema.user.id),
-  createdAt: integer('created_at', { mode: 'timestamp' })
-    .$defaultFn(() => new Date()),
+  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 })
 ```
 
@@ -127,8 +127,8 @@ Database adapter injected via context:
 import { defineServerAuth } from '#auth/server'
 
 export default defineServerAuth(({ db }) => ({
-  database: db,  // Already configured when hub.database: true
-  emailAndPassword: { enabled: true }
+  database: db, // Already configured when hub.database: true
+  emailAndPassword: { enabled: true },
 }))
 ```
 

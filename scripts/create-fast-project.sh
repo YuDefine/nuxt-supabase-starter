@@ -83,7 +83,7 @@ if [[ -e "$TARGET_DIR" ]]; then
 fi
 
 echo "[1/3] install scaffold dependencies"
-pnpm --dir "$ROOT_DIR" install --filter create-nuxt-starter --ignore-scripts
+pnpm --dir "$ROOT_DIR/template" install --filter create-nuxt-starter --ignore-scripts
 
 if [[ ! -f "$CLI_DIST" || "$CLI_SRC" -nt "$CLI_DIST" ]]; then
   echo "[1.5/3] build scaffold cli"

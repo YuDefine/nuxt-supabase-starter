@@ -44,11 +44,7 @@ If you must wait multiple storages, put them into a `Promise.allSettled()`
 
 ```ts
 router.onReady(async () => {
-  await Promise.allSettled([
-    accessToken,
-    refreshToken,
-    userData,
-  ])
+  await Promise.allSettled([accessToken, refreshToken, userData])
 
   app.mount('app')
 })
@@ -65,7 +61,7 @@ const { promise, resolve } = Promise.withResolvers()
 const accessToken = useStorageAsync('access.token', '', SomeAsyncStorage, {
   onReady(value) {
     resolve(value)
-  }
+  },
 })
 
 // At main.ts
@@ -83,17 +79,14 @@ Simply use `resolve` as callback:
 
 ```ts
 const accessToken = useStorageAsync('access.token', '', SomeAsyncStorage, {
-  onReady: resolve
+  onReady: resolve,
 })
 ```
 
 ## Type Declarations
 
 ```ts
-export interface UseStorageAsyncOptions<T> extends Omit<
-  UseStorageOptions<T>,
-  "serializer"
-> {
+export interface UseStorageAsyncOptions<T> extends Omit<UseStorageOptions<T>, 'serializer'> {
   /**
    * Custom data serialization
    */
@@ -107,30 +100,30 @@ export declare function useStorageAsync(
   key: string,
   initialValue: MaybeRefOrGetter<string>,
   storage?: StorageLikeAsync,
-  options?: UseStorageAsyncOptions<string>,
+  options?: UseStorageAsyncOptions<string>
 ): RemovableRef<string> & Promise<RemovableRef<string>>
 export declare function useStorageAsync(
   key: string,
   initialValue: MaybeRefOrGetter<boolean>,
   storage?: StorageLikeAsync,
-  options?: UseStorageAsyncOptions<boolean>,
+  options?: UseStorageAsyncOptions<boolean>
 ): RemovableRef<boolean> & Promise<RemovableRef<boolean>>
 export declare function useStorageAsync(
   key: string,
   initialValue: MaybeRefOrGetter<number>,
   storage?: StorageLikeAsync,
-  options?: UseStorageAsyncOptions<number>,
+  options?: UseStorageAsyncOptions<number>
 ): RemovableRef<number> & Promise<RemovableRef<number>>
 export declare function useStorageAsync<T>(
   key: string,
   initialValue: MaybeRefOrGetter<T>,
   storage?: StorageLikeAsync,
-  options?: UseStorageAsyncOptions<T>,
+  options?: UseStorageAsyncOptions<T>
 ): RemovableRef<T> & Promise<RemovableRef<T>>
 export declare function useStorageAsync<T = unknown>(
   key: string,
   initialValue: MaybeRefOrGetter<null>,
   storage?: StorageLikeAsync,
-  options?: UseStorageAsyncOptions<T>,
+  options?: UseStorageAsyncOptions<T>
 ): RemovableRef<T> & Promise<RemovableRef<T>>
 ```

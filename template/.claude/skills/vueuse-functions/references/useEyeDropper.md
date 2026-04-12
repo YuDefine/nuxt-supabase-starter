@@ -19,9 +19,7 @@ const { isSupported, open, sRGBHex } = useEyeDropper()
 ```vue
 <template>
   <UseEyeDropper v-slot="{ isSupported, sRGBHex, open }">
-    <button :disabled="!isSupported" @click="() => open()">
-      sRGBHex: {{ sRGBHex }}
-    </button>
+    <button :disabled="!isSupported" @click="() => open()">sRGBHex: {{ sRGBHex }}</button>
   </UseEyeDropper>
 </template>
 ```
@@ -40,7 +38,7 @@ export interface EyeDropper {
   open: (options?: EyeDropperOpenOptions) => Promise<{
     sRGBHex: string
   }>
-  [Symbol.toStringTag]: "EyeDropper"
+  [Symbol.toStringTag]: 'EyeDropper'
 }
 export interface UseEyeDropperOptions {
   /**
@@ -66,7 +64,5 @@ export interface UseEyeDropperReturn extends Supportable {
  *
  * @__NO_SIDE_EFFECTS__
  */
-export declare function useEyeDropper(
-  options?: UseEyeDropperOptions,
-): UseEyeDropperReturn
+export declare function useEyeDropper(options?: UseEyeDropperOptions): UseEyeDropperReturn
 ```

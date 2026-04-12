@@ -1,0 +1,75 @@
+name: Template CI
+
+on:
+  pull_request:
+    paths:
+      - 'template/app/**'
+      - 'template/server/**'
+      - 'template/shared/**'
+      - 'template/layers/**'
+      - 'template/supabase/**'
+      - 'template/nuxt.config.ts'
+      - 'template/package.json'
+      - 'template/pnpm-lock.yaml'
+      - 'template/tsconfig*.json'
+      - '.github/workflows/template-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'template/app/**'
+      - 'template/server/**'
+      - 'template/shared/**'
+      - 'template/layers/**'
+      - 'template/supabase/**'
+      - 'template/nuxt.config.ts'
+      - 'template/package.json'
+      - 'template/pnpm-lock.yaml'
+      - 'template/tsconfig*.json'
+      - '.github/workflows/template-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: template-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Format / Lint / Typecheck / Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: template
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Vite+ (vp)
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: '22'
+          cache: true
+
+      - name: Install dependencies
+        run: vp install
+
+      - name: Format check
+        run: vp fmt --check
+
+      - name: Lint
+        run: vp lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: vp test --coverage
+
+      - name: UX drift audit
+        run: pnpm audit:ux-drift
+
+      - name: Spectra roadmap drift check
+        run: pnpm spectra:roadmap --check

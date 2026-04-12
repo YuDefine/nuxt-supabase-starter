@@ -12,8 +12,10 @@ import { watchThrottled } from '@vueuse/core'
 
 watchThrottled(
   source,
-  () => { console.log('changed!') },
-  { throttle: 500 },
+  () => {
+    console.log('changed!')
+  },
+  { throttle: 500 }
 )
 ```
 

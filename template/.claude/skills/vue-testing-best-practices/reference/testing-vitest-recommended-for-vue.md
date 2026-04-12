@@ -31,6 +31,7 @@ npm install -D vitest @vue/test-utils jsdom
 ```
 
 **vite.config.js:**
+
 ```javascript
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
@@ -43,12 +44,13 @@ export default defineConfig({
     // Use happy-dom for faster tests (or 'jsdom' for better compatibility)
     environment: 'happy-dom',
     // Optional: Setup files for global configuration
-    setupFiles: ['./src/test/setup.js']
-  }
+    setupFiles: ['./src/test/setup.js'],
+  },
 })
 ```
 
 **package.json:**
+
 ```json
 {
   "scripts": {
@@ -60,6 +62,7 @@ export default defineConfig({
 ```
 
 **tsconfig.json (if using TypeScript):**
+
 ```json
 {
   "compilerOptions": {
@@ -72,7 +75,7 @@ export default defineConfig({
 
 ```javascript
 // src/components/Counter.test.js
-import { describe, it, expect, beforeEach } from 'vitest'  // optional with globals: true
+import { describe, it, expect, beforeEach } from 'vitest' // optional with globals: true
 import { mount } from '@vue/test-utils'
 import Counter from './Counter.vue'
 
@@ -96,14 +99,14 @@ describe('Counter', () => {
 
 ## Vitest vs Jest Comparison
 
-| Feature | Vitest | Jest |
-|---------|--------|------|
-| Vite Integration | Native | Requires config |
-| Speed | Very fast (ESM native) | Slower with Vite |
-| Watch Mode | Excellent | Good |
-| Vue SFC Support | Works with Vite | Needs vue-jest |
-| Config Sharing | Same as vite.config | Separate |
-| API | Jest-compatible | Standard |
+| Feature          | Vitest                 | Jest             |
+| ---------------- | ---------------------- | ---------------- |
+| Vite Integration | Native                 | Requires config  |
+| Speed            | Very fast (ESM native) | Slower with Vite |
+| Watch Mode       | Excellent              | Good             |
+| Vue SFC Support  | Works with Vite        | Needs vue-jest   |
+| Config Sharing   | Same as vite.config    | Separate         |
+| API              | Jest-compatible        | Standard         |
 
 ## Using with Testing Library
 
@@ -126,7 +129,7 @@ import UserCard from './UserCard.vue'
 
 test('displays user name', () => {
   render(UserCard, {
-    props: { name: 'John Doe' }
+    props: { name: 'John Doe' },
   })
 
   expect(screen.getByText('John Doe')).toBeInTheDocument()
@@ -150,32 +153,34 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      exclude: ['node_modules', 'test']
+      exclude: ['node_modules', 'test'],
     },
     // Helpful for debugging
     reporters: ['verbose'],
     // Run tests in sequence in CI
     poolOptions: {
       threads: {
-        singleThread: process.env.CI === 'true'
-      }
-    }
-  }
+        singleThread: process.env.CI === 'true',
+      },
+    },
+  },
 })
 ```
 
 ## Common Patterns
 
 ### Mocking Modules
+
 ```javascript
 import { vi } from 'vitest'
 
 vi.mock('@/api/users', () => ({
-  fetchUser: vi.fn().mockResolvedValue({ name: 'John' })
+  fetchUser: vi.fn().mockResolvedValue({ name: 'John' }),
 }))
 ```
 
 ### Testing with Fake Timers
+
 ```javascript
 import { vi, beforeEach, afterEach } from 'vitest'
 
@@ -199,6 +204,7 @@ test('debounced search', async () => {
 ```
 
 ## Reference
+
 - [Vitest Documentation](https://vitest.dev/)
 - [Vue.js Testing Guide](https://vuejs.org/guide/scaling-up/testing)
 - [Vue Test Utils](https://test-utils.vuejs.org/)

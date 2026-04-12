@@ -101,7 +101,7 @@ const { status, data, close } = useWebSocket('ws://websocketurl', {
   autoReconnect: {
     retries: 5,
     // Exponential backoff: 1s, 2s, 4s, 8s, 16s
-    delay: retries => Math.min(1000 * 2 ** (retries - 1), 30000),
+    delay: (retries) => Math.min(1000 * 2 ** (retries - 1), 30000),
   },
 })
 ```
@@ -113,7 +113,7 @@ const { status, data, close } = useWebSocket('ws://websocketurl', {
   autoReconnect: {
     retries: 5,
     // Linear backoff: 1s, 2s, 3s, 4s, 5s
-    delay: retries => retries * 1000,
+    delay: (retries) => retries * 1000,
   },
 })
 ```
@@ -140,7 +140,7 @@ import { useWebSocket } from '@vueuse/core'
 const { status, data, close } = useWebSocket('ws://websocketurl', {
   heartbeat: {
     message: 'ping',
-    scheduler: cb => useIntervalFn(cb, 2000),
+    scheduler: (cb) => useIntervalFn(cb, 2000),
     pongTimeout: 1000,
   },
 })
@@ -161,7 +161,7 @@ const { status, data, send, open, close } = useWebSocket('ws://websocketurl', {
 ## Type Declarations
 
 ```ts
-export type WebSocketStatus = "OPEN" | "CONNECTING" | "CLOSED"
+export type WebSocketStatus = 'OPEN' | 'CONNECTING' | 'CLOSED'
 export type WebSocketHeartbeatMessage = string | ArrayBuffer | Blob
 export interface UseWebSocketOptions {
   onConnected?: (ws: WebSocket) => void
@@ -268,7 +268,7 @@ export interface UseWebSocketReturn<T> {
   /**
    * Closes the websocket connection gracefully.
    */
-  close: WebSocket["close"]
+  close: WebSocket['close']
   /**
    * Reopen the websocket connection.
    * If there the current one is active, will close it before opening a new one.
@@ -294,6 +294,6 @@ export interface UseWebSocketReturn<T> {
  */
 export declare function useWebSocket<Data = any>(
   url: MaybeRefOrGetter<string | URL | undefined>,
-  options?: UseWebSocketOptions,
+  options?: UseWebSocketOptions
 ): UseWebSocketReturn<Data>
 ```

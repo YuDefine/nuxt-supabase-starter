@@ -10,9 +10,7 @@ Safe . Call if it's inside a component lifecycle, if not, just call the function
 ```ts
 import { tryOnMounted } from '@vueuse/core'
 
-tryOnMounted(() => {
-
-})
+tryOnMounted(() => {})
 ```
 
 ## Reference

@@ -18,7 +18,7 @@
 
     <footer class="border-t py-4">
       <UContainer>
-        <p class="text-center text-sm text-gray-500">{{projectName}}</p>
+        <p class="text-center text-sm text-gray-500">{{ projectName }}</p>
       </UContainer>
     </footer>
   </div>

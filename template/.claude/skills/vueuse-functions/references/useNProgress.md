@@ -73,6 +73,6 @@ export interface UseNProgressReturn {
  */
 export declare function useNProgress(
   currentProgress?: MaybeRefOrGetter<number | null | undefined>,
-  options?: UseNProgressOptions,
+  options?: UseNProgressOptions
 ): UseNProgressReturn
 ```

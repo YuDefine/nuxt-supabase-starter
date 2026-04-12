@@ -28,8 +28,7 @@ const {
   tag: 'test',
 })
 
-if (isSupported.value && permissionGranted.value)
-  show()
+if (isSupported.value && permissionGranted.value) show()
 ```
 
 ## Options

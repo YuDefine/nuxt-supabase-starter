@@ -12,7 +12,9 @@ import { useRTDB } from '@vueuse/firebase/useRTDB'
 import { initializeApp } from 'firebase/app'
 import { getDatabase } from 'firebase/database'
 
-const app = initializeApp({ /* config */ })
+const app = initializeApp({
+  /* config */
+})
 const db = getDatabase(app)
 
 // in setup()

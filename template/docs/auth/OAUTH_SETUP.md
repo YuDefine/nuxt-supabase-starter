@@ -121,11 +121,11 @@ export default defineNuxtConfig({
 
 ## 6. 疑難排解
 
-| 症狀                               | 可能原因                             | 解法                                        |
-| ---------------------------------- | ------------------------------------ | ------------------------------------------- |
-| OAuth 失敗 `redirect_uri_mismatch` | Redirect URL 不在 Google 清單        | 確認 `/auth/google` 已加入                  |
-| Session 無法建立                   | `NUXT_SESSION_PASSWORD` 未設定或太短 | 設定至少 32 字元的密碼                      |
+| 症狀                               | 可能原因                             | 解法                                          |
+| ---------------------------------- | ------------------------------------ | --------------------------------------------- |
+| OAuth 失敗 `redirect_uri_mismatch` | Redirect URL 不在 Google 清單        | 確認 `/auth/google` 已加入                    |
+| Session 無法建立                   | `NUXT_SESSION_PASSWORD` 未設定或太短 | 設定至少 32 字元的密碼                        |
 | 登入後被導向 `/forbidden`          | Email 不在白名單或角色為 `pending`   | 檢查 `app.allowed_emails` 和 `app.user_roles` |
-| API 回傳 401                       | Cookie 未正確設定或已過期            | 檢查瀏覽器 Cookie，重新登入                |
+| API 回傳 401                       | Cookie 未正確設定或已過期            | 檢查瀏覽器 Cookie，重新登入                   |
 
 確保上述步驟完成後，再開始測試登入流程；任何調整（例如換 Domain）都要同步更新 Google 設定與環境變數。

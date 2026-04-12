@@ -24,9 +24,9 @@ export default defineAppConfig({
       primary: 'indigo',
       secondary: 'violet',
       success: 'emerald',
-      error: 'rose'
-    }
-  }
+      error: 'rose',
+    },
+  },
 })
 ```
 
@@ -37,9 +37,9 @@ ui({
   ui: {
     colors: {
       primary: 'indigo',
-      secondary: 'violet'
-    }
-  }
+      secondary: 'violet',
+    },
+  },
 })
 ```
 
@@ -52,9 +52,9 @@ ui({
 export default defineNuxtConfig({
   ui: {
     theme: {
-      colors: ['primary', 'secondary', 'tertiary'] // Add new color
-    }
-  }
+      colors: ['primary', 'secondary', 'tertiary'], // Add new color
+    },
+  },
 })
 ```
 
@@ -81,7 +81,7 @@ export default defineNuxtConfig({
 ```ts
 // app.config.ts
 export default defineAppConfig({
-  ui: { colors: { tertiary: 'tertiary' } }
+  ui: { colors: { tertiary: 'tertiary' } },
 })
 ```
 
@@ -166,24 +166,26 @@ export default defineAppConfig({
   ui: {
     button: {
       slots: {
-        base: 'font-bold rounded-full'
+        base: 'font-bold rounded-full',
       },
       variants: {
         size: {
-          md: { base: 'px-6 py-3' }
-        }
+          md: { base: 'px-6 py-3' },
+        },
       },
-      compoundVariants: [{
-        color: 'neutral',
-        variant: 'outline',
-        class: { base: 'ring-2' }
-      }],
+      compoundVariants: [
+        {
+          color: 'neutral',
+          variant: 'outline',
+          class: { base: 'ring-2' },
+        },
+      ],
       defaultVariants: {
         color: 'neutral',
-        variant: 'outline'
-      }
-    }
-  }
+        variant: 'outline',
+      },
+    },
+  },
 })
 ```
 
@@ -211,8 +213,8 @@ export default {
   slots: {
     base: '...',
     root: '...',
-    icon: '...'
-  }
+    icon: '...',
+  },
 }
 ```
 
@@ -221,7 +223,9 @@ export default {
 ```ts
 ui: {
   button: {
-    slots: { base: 'font-bold' }  // ✅ Match slots structure
+    slots: {
+      base: 'font-bold'
+    } // ✅ Match slots structure
   }
 }
 ```
@@ -233,7 +237,7 @@ Components like Container, Skeleton, Form, Main use flat `base:` in their theme:
 ```ts
 // Component theme (Container, Skeleton, etc.)
 export default {
-  base: 'w-full max-w-container'
+  base: 'w-full max-w-container',
 }
 ```
 
@@ -242,7 +246,7 @@ export default {
 ```ts
 ui: {
   container: {
-    base: 'max-w-lg'  // ✅ Match flat structure
+    base: 'max-w-lg' // ✅ Match flat structure
   }
 }
 ```
@@ -253,14 +257,16 @@ ui: {
 // ❌ WRONG - Don't use slots for flat-base components
 ui: {
   container: {
-    slots: { base: 'max-w-lg' }  // TypeScript error!
+    slots: {
+      base: 'max-w-lg'
+    } // TypeScript error!
   }
 }
 
 // ❌ WRONG - Don't use flat for slots-based components
 ui: {
   button: {
-    base: 'font-bold'  // Won't work correctly
+    base: 'font-bold' // Won't work correctly
   }
 }
 ```
@@ -279,23 +285,23 @@ export default {
   slots: {
     root: 'relative',
     base: 'px-4 py-2',
-    icon: 'size-5'
+    icon: 'size-5',
   },
   variants: {
     color: {
       primary: { base: 'bg-primary text-inverted' },
-      neutral: { base: 'bg-neutral text-default' }
+      neutral: { base: 'bg-neutral text-default' },
     },
     size: {
       sm: { base: 'text-sm', icon: 'size-4' },
       md: { base: 'text-base', icon: 'size-5' },
-      lg: { base: 'text-lg', icon: 'size-6' }
-    }
+      lg: { base: 'text-lg', icon: 'size-6' },
+    },
   },
   defaultVariants: {
     color: 'primary',
-    size: 'md'
-  }
+    size: 'md',
+  },
 }
 ```
 
@@ -309,8 +315,10 @@ colorMode.preference = 'dark' // 'light', 'dark', 'system'
 ```
 
 ```vue
-<UColorModeButton /> <!-- Toggle button -->
-<UColorModeSelect /> <!-- Dropdown select -->
+<UColorModeButton />
+<!-- Toggle button -->
+<UColorModeSelect />
+<!-- Dropdown select -->
 ```
 
 ## Best Practices

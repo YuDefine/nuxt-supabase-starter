@@ -27,16 +27,18 @@ tags: [vue3, state-management, pinia, composables, ssr, vueuse]
 ## Avoid Exporting Mutable Module State
 
 **BAD:**
+
 ```ts
 // store/cart.ts
 import { reactive } from 'vue'
 
 export const cart = reactive({
-  items: [] as Array<{ id: string; qty: number }>
+  items: [] as Array<{ id: string; qty: number }>,
 })
 ```
 
 **GOOD:**
+
 ```ts
 // composables/useCartStore.ts
 import { reactive, readonly } from 'vue'
@@ -45,7 +47,7 @@ let _store: ReturnType<typeof createCartStore> | null = null
 
 function createCartStore() {
   const state = reactive({
-    items: [] as Array<{ id: string; qty: number }>
+    items: [] as Array<{ id: string; qty: number }>,
   })
 
   function addItem(id: string, qty = 1) {
@@ -59,7 +61,7 @@ function createCartStore() {
 
   return {
     state: readonly(state),
-    addItem
+    addItem,
   }
 }
 
@@ -74,6 +76,7 @@ export function useCartStore() {
 Module singletons live for the runtime lifetime. In SSR this can leak state between requests.
 
 **BAD:**
+
 ```ts
 // shared singleton reused across requests
 const cartStore = useCartStore()
@@ -93,7 +96,7 @@ import { defineStore } from 'pinia'
 
 export const useCartStore = defineStore('cart', {
   state: () => ({
-    items: [] as Array<{ id: string; qty: number }>
+    items: [] as Array<{ id: string; qty: number }>,
   }),
   actions: {
     addItem(id: string, qty = 1) {
@@ -103,8 +106,8 @@ export const useCartStore = defineStore('cart', {
         return
       }
       this.items.push({ id, qty })
-    }
-  }
+    },
+  },
 })
 ```
 
@@ -129,7 +132,7 @@ export const useAuthState = createGlobalState(() => {
   return {
     token,
     isAuthenticated,
-    setToken
+    setToken,
   }
 })
 ```

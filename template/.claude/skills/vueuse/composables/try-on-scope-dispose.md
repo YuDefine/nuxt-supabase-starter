@@ -10,9 +10,7 @@ Safe . Call if it's inside an effect scope lifecycle, if not, do nothing
 ```ts
 import { tryOnScopeDispose } from '@vueuse/core'
 
-tryOnScopeDispose(() => {
-
-})
+tryOnScopeDispose(() => {})
 ```
 
 ## Reference

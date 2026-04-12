@@ -87,7 +87,7 @@ export default {
   extends: DefaultTheme,
   enhanceApp({ app }) {
     app.component('MyGlobalComponent', MyGlobalComponent)
-  }
+  },
 }
 ```
 
@@ -169,9 +169,9 @@ npm install -D stylus # for .styl/.stylus
 
 ```vue
 <style lang="scss">
-.title {
-  font-size: 20px;
-}
+  .title {
+    font-size: 20px;
+  }
 </style>
 ```
 

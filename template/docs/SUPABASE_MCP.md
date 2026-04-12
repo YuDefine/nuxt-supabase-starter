@@ -336,8 +336,8 @@ supabase login
 
 ## 相關文件
 
-| 文件                                                                 | 說明                      |
-| -------------------------------------------------------------------- | ------------------------- |
-| [MIGRATION_GUIDE.md](./database/MIGRATION_GUIDE.md)                  | Migration 工作流          |
-| [MCP 官方文件](https://modelcontextprotocol.io/)                     | Model Context Protocol    |
-| [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | Supabase MCP 文件         |
+| 文件                                                                 | 說明                   |
+| -------------------------------------------------------------------- | ---------------------- |
+| [MIGRATION_GUIDE.md](./database/MIGRATION_GUIDE.md)                  | Migration 工作流       |
+| [MCP 官方文件](https://modelcontextprotocol.io/)                     | Model Context Protocol |
+| [Supabase MCP](https://supabase.com/docs/guides/getting-started/mcp) | Supabase MCP 文件      |

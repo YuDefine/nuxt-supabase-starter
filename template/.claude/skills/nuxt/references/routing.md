@@ -106,16 +106,16 @@ pages/
 
 ```vue
 <script setup lang="ts">
-definePage({
-  name: 'user-profile',
-  path: '/profile/:userId',  // Override default path
-  alias: ['/me', '/profile'],
-  meta: {
-    requiresAuth: true,
-    title: 'User Profile',
-    roles: ['user', 'admin']
-  }
-})
+  definePage({
+    name: 'user-profile',
+    path: '/profile/:userId', // Override default path
+    alias: ['/me', '/profile'],
+    meta: {
+      requiresAuth: true,
+      title: 'User Profile',
+      roles: ['user', 'admin'],
+    },
+  })
 </script>
 
 <template>
@@ -174,13 +174,13 @@ await navigateTo('/docs', { open: { target: '_blank' } })
 
 ```vue
 <script setup lang="ts">
-definePageMeta({
-  middleware: ['auth', 'admin'],
-  layout: 'dashboard',
-  meta: {
-    requiresAuth: true
-  }
-})
+  definePageMeta({
+    middleware: ['auth', 'admin'],
+    layout: 'dashboard',
+    meta: {
+      requiresAuth: true,
+    },
+  })
 </script>
 ```
 
@@ -190,20 +190,20 @@ Use `setPageLayout()` to switch layouts programmatically:
 
 ```vue
 <script setup lang="ts">
-const user = useUser()
+  const user = useUser()
 
-// Switch layout based on auth state
-if (!user.value) {
-  setPageLayout('guest')
-} else {
-  setPageLayout('dashboard')
-}
+  // Switch layout based on auth state
+  if (!user.value) {
+    setPageLayout('guest')
+  } else {
+    setPageLayout('dashboard')
+  }
 
-// With layout props (Nuxt 4.3+)
-setPageLayout('dashboard', {
-  sidebar: 'collapsed',
-  theme: 'dark'
-})
+  // With layout props (Nuxt 4.3+)
+  setPageLayout('dashboard', {
+    sidebar: 'collapsed',
+    theme: 'dark',
+  })
 </script>
 ```
 

@@ -11,14 +11,9 @@ Reactive BroadcastChannel API.
 import { useBroadcastChannel } from '@vueuse/core'
 import { shallowRef } from 'vue'
 
-const {
-  isSupported,
-  channel,
-  post,
-  close,
-  error,
-  isClosed,
-} = useBroadcastChannel({ name: 'vueuse-demo-channel' })
+const { isSupported, channel, post, close, error, isClosed } = useBroadcastChannel({
+  name: 'vueuse-demo-channel',
+})
 
 const message = shallowRef('')
 

@@ -12,8 +12,8 @@
   "type": "module",
   "scripts": {
     "build": "tsdown src/cli.ts --format esm --out-dir dist",
-    "start": "node dist/cli.js",
     "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

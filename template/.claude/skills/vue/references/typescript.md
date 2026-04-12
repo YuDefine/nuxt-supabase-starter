@@ -98,13 +98,13 @@ Define generic components with typed slots:
 
 ```vue
 <script setup lang="ts" generic="T extends { id: string }">
-defineProps<{
-  items: T[]
-}>()
+  defineProps<{
+    items: T[]
+  }>()
 
-defineSlots<{
-  default: (props: { item: T }) => any
-}>()
+  defineSlots<{
+    default: (props: { item: T }) => any
+  }>()
 </script>
 
 <template>

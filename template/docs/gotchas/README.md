@@ -4,13 +4,13 @@
 
 ## 索引
 
-| 文件 | 問題摘要 |
-|------|----------|
+| 文件                                                  | 問題摘要                                                                             |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | [CF_WORKERS_BODY_STREAM](./CF_WORKERS_BODY_STREAM.md) | Cloudflare Workers request body stream 只能讀一次，middleware 讀過後 handler 會 hang |
-| [CF_WORKERS_SUBREQUEST](./CF_WORKERS_SUBREQUEST.md) | Cloudflare Workers 限制 subrequest 數量，for-loop 逐一操作會超限 |
-| [PINIA_COLADA_TIMING](./PINIA_COLADA_TIMING.md) | Mutation 的 cache invalidation 在額外 API 呼叫完成前就觸發 |
-| [USEQUERY_ENABLED_GUARD](./USEQUERY_ENABLED_GUARD.md) | useQuery 在元件 setup 時立即執行，缺少 enabled 守衛會送出無效請求 |
-| [API_RESPONSE_OMISSION](./API_RESPONSE_OMISSION.md) | API response 手動 .map() 遺漏欄位，靜默顯示空白無報錯 |
+| [CF_WORKERS_SUBREQUEST](./CF_WORKERS_SUBREQUEST.md)   | Cloudflare Workers 限制 subrequest 數量，for-loop 逐一操作會超限                     |
+| [PINIA_COLADA_TIMING](./PINIA_COLADA_TIMING.md)       | Mutation 的 cache invalidation 在額外 API 呼叫完成前就觸發                           |
+| [USEQUERY_ENABLED_GUARD](./USEQUERY_ENABLED_GUARD.md) | useQuery 在元件 setup 時立即執行，缺少 enabled 守衛會送出無效請求                    |
+| [API_RESPONSE_OMISSION](./API_RESPONSE_OMISSION.md)   | API response 手動 .map() 遺漏欄位，靜默顯示空白無報錯                                |
 
 ## 文件格式
 

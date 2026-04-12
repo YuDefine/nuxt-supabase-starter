@@ -19,10 +19,10 @@ Use custom directives when:
 
 ```vue
 <script setup lang="ts">
-// v-focus directive
-const vFocus = {
-  mounted: (el: HTMLElement) => el.focus()
-}
+  // v-focus directive
+  const vFocus = {
+    mounted: (el: HTMLElement) => el.focus(),
+  }
 </script>
 
 <template>
@@ -53,7 +53,7 @@ const myDirective = {
   beforeUnmount(el, binding, vnode) {},
 
   // After parent component unmounts
-  unmounted(el, binding, vnode) {}
+  unmounted(el, binding, vnode) {},
 }
 ```
 
@@ -61,12 +61,12 @@ const myDirective = {
 
 ```ts
 interface DirectiveBinding<T = any> {
-  value: T           // v-my-dir="value"
-  oldValue: T        // Previous value (beforeUpdate/updated only)
-  arg?: string       // v-my-dir:arg
-  modifiers: Record<string, boolean>  // v-my-dir.foo.bar → { foo: true, bar: true }
-  instance: ComponentPublicInstance   // Component using the directive
-  dir: ObjectDirective               // Directive definition object
+  value: T // v-my-dir="value"
+  oldValue: T // Previous value (beforeUpdate/updated only)
+  arg?: string // v-my-dir:arg
+  modifiers: Record<string, boolean> // v-my-dir.foo.bar → { foo: true, bar: true }
+  instance: ComponentPublicInstance // Component using the directive
+  dir: ObjectDirective // Directive definition object
 }
 ```
 
@@ -98,7 +98,7 @@ const vColor = {
   },
   updated(el, binding) {
     el.style.color = binding.value
-  }
+  },
 }
 
 // Shorthand (same behavior)
@@ -114,7 +114,7 @@ const vColor = (el: HTMLElement, binding: DirectiveBinding<string>) => {
 const app = createApp(App)
 
 app.directive('focus', {
-  mounted: (el) => el.focus()
+  mounted: (el) => el.focus(),
 })
 
 // Shorthand
@@ -134,7 +134,7 @@ Pass multiple values:
 ```ts
 const vDemo = (el: HTMLElement, binding: DirectiveBinding<{ color: string; text: string }>) => {
   console.log(binding.value.color) // 'white'
-  console.log(binding.value.text)  // 'hello'
+  console.log(binding.value.text) // 'hello'
 }
 ```
 
@@ -160,7 +160,7 @@ const vClickOutside = {
   },
   unmounted(el: HTMLElement) {
     document.removeEventListener('click', el._clickOutside)
-  }
+  },
 }
 ```
 
@@ -173,7 +173,7 @@ const vTooltip = {
   },
   updated(el: HTMLElement, binding: DirectiveBinding<string>) {
     el.setAttribute('title', binding.value)
-  }
+  },
 }
 ```
 
@@ -185,7 +185,7 @@ const vPermission = {
     if (!hasPermission(binding.value)) {
       el.parentNode?.removeChild(el)
     }
-  }
+  },
 }
 ```
 
@@ -206,7 +206,7 @@ declare module 'vue' {
 export default {
   mounted: (el, binding) => {
     el.style.backgroundColor = binding.value
-  }
+  },
 } satisfies HighlightDirective
 ```
 

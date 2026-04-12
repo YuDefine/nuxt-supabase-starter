@@ -167,6 +167,23 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
 
   if (typeof gitChoice === 'symbol') process.exit(0)
 
+  // 12. CI mode
+  const ciChoice = (await consola.prompt('GitHub Actions CI 模式？', {
+    type: 'select',
+    options: [
+      {
+        label: 'Simple（推薦）— Push/PR 跑 format/lint/typecheck/test',
+        value: 'ci-simple',
+      },
+      {
+        label: 'Advanced — GitHub Flow 嚴謹版：PR gate + path filter + CI→E2E 鏈 + artifact',
+        value: 'ci-advanced',
+      },
+    ],
+  })) as string
+
+  if (typeof ciChoice === 'symbol') process.exit(0)
+
   // Collect features
   const features: string[] = []
   if (ssrEnabled) features.push('ssr')
@@ -181,6 +198,7 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
   features.push(`deploy-${deployChoice}`)
   if (qualityChoice !== 'none') features.push(qualityChoice)
   if (gitChoice !== 'none') features.push(gitChoice)
+  features.push(ciChoice)
 
   // Resolve dependencies
   const resolved = resolveFeatureDependencies(features)

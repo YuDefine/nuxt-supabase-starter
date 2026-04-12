@@ -14,8 +14,7 @@ const target = shallowRef()
 const { focused } = useFocus(target)
 
 watch(focused, (focused) => {
-  if (focused)
-    console.log('input element has been focused')
+  if (focused) console.log('input element has been focused')
   else console.log('input element has lost focus')
 })
 ```

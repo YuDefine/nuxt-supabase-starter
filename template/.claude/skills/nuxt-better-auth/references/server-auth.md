@@ -71,17 +71,17 @@ Restrict access based on user properties:
 ```ts
 // Single value - exact match
 await requireUserSession(event, {
-  user: { role: 'admin' }
+  user: { role: 'admin' },
 })
 
 // Array - OR logic (any value matches)
 await requireUserSession(event, {
-  user: { role: ['admin', 'moderator'] }
+  user: { role: ['admin', 'moderator'] },
 })
 
 // Multiple fields - AND logic (all must match)
 await requireUserSession(event, {
-  user: { role: 'admin', verified: true }
+  user: { role: 'admin', verified: true },
 })
 ```
 
@@ -93,13 +93,13 @@ For complex validation logic:
 await requireUserSession(event, {
   rule: ({ user, session }) => {
     return user.subscription?.active && user.points > 100
-  }
+  },
 })
 
 // Combined with user matching
 await requireUserSession(event, {
   user: { verified: true },
-  rule: ({ user }) => user.subscription?.plan === 'pro'
+  rule: ({ user }) => user.subscription?.plan === 'pro',
 })
 ```
 
@@ -109,7 +109,7 @@ await requireUserSession(event, {
 // Admin-only endpoint
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event, {
-    user: { role: 'admin' }
+    user: { role: 'admin' },
   })
   return getAdminData()
 })
@@ -117,7 +117,7 @@ export default defineEventHandler(async (event) => {
 // Premium feature
 export default defineEventHandler(async (event) => {
   await requireUserSession(event, {
-    rule: ({ user }) => ['pro', 'enterprise'].includes(user.plan)
+    rule: ({ user }) => ['pro', 'enterprise'].includes(user.plan),
   })
   return getPremiumContent()
 })

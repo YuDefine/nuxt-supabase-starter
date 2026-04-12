@@ -63,10 +63,10 @@ In Setup Stores: `ref()` → state, `computed()` → getters, `function()` → a
 
 ```vue
 <script setup>
-import { useCounterStore } from '@/stores/counter'
+  import { useCounterStore } from '@/stores/counter'
 
-const store = useCounterStore()
-// Access: store.count, store.doubleCount, store.increment()
+  const store = useCounterStore()
+  // Access: store.count, store.doubleCount, store.increment()
 </script>
 ```
 
@@ -74,19 +74,19 @@ const store = useCounterStore()
 
 ```vue
 <script setup>
-import { storeToRefs } from 'pinia'
-import { useCounterStore } from '@/stores/counter'
+  import { storeToRefs } from 'pinia'
+  import { useCounterStore } from '@/stores/counter'
 
-const store = useCounterStore()
+  const store = useCounterStore()
 
-// ❌ Breaks reactivity
-const { name, doubleCount } = store
+  // ❌ Breaks reactivity
+  const { name, doubleCount } = store
 
-// ✅ Preserves reactivity for state/getters
-const { name, doubleCount } = storeToRefs(store)
+  // ✅ Preserves reactivity for state/getters
+  const { name, doubleCount } = storeToRefs(store)
 
-// ✅ Actions can be destructured directly
-const { increment } = store
+  // ✅ Actions can be destructured directly
+  const { increment } = store
 </script>
 ```
 
@@ -317,20 +317,18 @@ async orderCart() {
 ### Subscribing to Actions
 
 ```ts
-const unsubscribe = someStore.$onAction(
-  ({ name, store, args, after, onError }) => {
-    const startTime = Date.now()
-    console.log(`Start "${name}" with params [${args.join(', ')}]`)
+const unsubscribe = someStore.$onAction(({ name, store, args, after, onError }) => {
+  const startTime = Date.now()
+  console.log(`Start "${name}" with params [${args.join(', ')}]`)
 
-    after((result) => {
-      console.log(`Finished "${name}" after ${Date.now() - startTime}ms`)
-    })
+  after((result) => {
+    console.log(`Finished "${name}" after ${Date.now() - startTime}ms`)
+  })
 
-    onError((error) => {
-      console.warn(`Failed "${name}": ${error}`)
-    })
-  }
-)
+  onError((error) => {
+    console.warn(`Failed "${name}": ${error}`)
+  })
+})
 
 unsubscribe() // Cleanup
 ```
@@ -376,7 +374,9 @@ export const useSearchFilters = defineStore('search-filters', () => {
   const appProvided = inject('appProvided')
 
   // Don't return these - access them directly in components
-  return { /* ... */ }
+  return {
+    /* ... */
+  }
 })
 ```
 

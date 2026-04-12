@@ -75,7 +75,7 @@ Available in `defineServerAuth()` callback:
 ```ts
 interface ServerAuthContext {
   runtimeConfig: RuntimeConfig
-  db?: DrizzleDatabase  // When NuxtHub enabled
+  db?: DrizzleDatabase // When NuxtHub enabled
 }
 ```
 
@@ -83,14 +83,14 @@ interface ServerAuthContext {
 
 ```vue
 <script setup lang="ts">
-import type { AuthUser } from '#nuxt-better-auth'
+  import type { AuthUser } from '#nuxt-better-auth'
 
-const { user } = useUserSession()
-// user is Ref<AuthUser | null>
+  const { user } = useUserSession()
+  // user is Ref<AuthUser | null>
 
-function greet(u: AuthUser) {
-  return `Hello, ${u.name}`
-}
+  function greet(u: AuthUser) {
+    return `Hello, ${u.name}`
+  }
 </script>
 ```
 
@@ -115,9 +115,9 @@ export default defineServerAuth(() => ({
   user: {
     additionalFields: {
       plan: { type: 'string' },
-      credits: { type: 'number' }
-    }
-  }
+      credits: { type: 'number' },
+    },
+  },
 }))
 ```
 
@@ -137,6 +137,6 @@ interface AuthUser {
 ```ts
 // Fully typed
 await requireUserSession(event, {
-  user: { role: 'admin' }  // TypeScript knows valid fields
+  user: { role: 'admin' }, // TypeScript knows valid fields
 })
 ```

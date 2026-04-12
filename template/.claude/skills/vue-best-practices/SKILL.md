@@ -1,10 +1,10 @@
 ---
 name: vue-best-practices
-description: MUST be used for Vue.js tasks. Strongly recommends Composition API with `<script setup>` and TypeScript as the standard approach. Covers Vue 3, SSR, Volar, vue-tsc. Load for any Vue, .vue files, Vue Router, Pinia, or Vite with Vue work. ALWAYS use Composition API unless the project explicitly requires Options API.
+description: MUST be used for Vue.js tasks. Covers Composition API, <script setup>, TypeScript, Vue 3, SSR, Volar, Vue Router, Pinia. ALWAYS use Composition API.
 license: MIT
 metadata:
   author: github.com/vuejs-ai
-  version: "18.0.0"
+  version: '18.0.0'
 ---
 
 # Vue Best Practices Workflow
@@ -12,6 +12,7 @@ metadata:
 Use this skill as an instruction set. Follow the workflow in order unless the user explicitly asks for a different order.
 
 ## Core Principles
+
 - **Keep state predictable:** one source of truth, derive everything else.
 - **Make data flow explicit:** Props down, Events up for most cases.
 - **Favor small, focused components:** easier to test, reuse, and maintain.

@@ -23,7 +23,7 @@ To request a wake lock immediately, even if the document is hidden, use `forceRe
 ## Type Declarations
 
 ```ts
-type WakeLockType = "screen"
+type WakeLockType = 'screen'
 export interface WakeLockSentinel extends EventTarget {
   type: WakeLockType
   released: boolean
@@ -45,7 +45,5 @@ export interface UseWakeLockReturn extends Supportable {
  *
  * @__NO_SIDE_EFFECTS__
  */
-export declare function useWakeLock(
-  options?: UseWakeLockOptions,
-): UseWakeLockReturn
+export declare function useWakeLock(options?: UseWakeLockOptions): UseWakeLockReturn
 ```
