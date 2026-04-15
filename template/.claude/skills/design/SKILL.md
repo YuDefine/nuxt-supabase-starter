@@ -370,6 +370,7 @@ After the user completes this phase, suggest writing the Carry-Forward section t
 7. **End with /polish** — it's always the last step
 8. **Respect time** — if 1-2 skills suffice, say so. Don't over-prescribe.
 9. **Proactive plan execution** — After outputting the diagnosis report and action plan, ALWAYS ask the user: "要進入 Plan Mode 逐步執行這些改進嗎？" If the user agrees, enter plan mode and create a structured implementation plan that walks through each skill/step sequentially, waiting for user approval at each phase before proceeding to the next.
+10. **Cite references** — When recommending design systems or patterns, cite specific examples from `references/design-systems.md`. Include industry-specific benchmarks and maturity assessments from `references/diagnosis.md`.
 
 ## Canonical Skill Order
 
@@ -461,3 +462,22 @@ Fidelity Score: N/8 PASS
 
 2. 此檔案是 `pre-archive-design-gate.sh` hook 的主要檢查依據
 3. 若 Design Decisions 中有影響 spec 的發現，提醒執行 `spectra-ingest` 更新 artifacts
+
+## Reference Resources
+
+### Internal References (always consult)
+- `references/design-systems.md` — Industry-categorized design system index (209 systems)
+- `references/skill-map.md` — Issue → Skill mapping + library recommendations
+- `references/diagnosis.md` — 8-dimension diagnostic rubric + maturity model
+
+### When to Cite External References
+| Mode | Citation Pattern |
+|------|------------------|
+| `/design new` | Cite similar industry systems as inspiration |
+| `/design improve` | Cite mature systems as benchmarks |
+| `/design iterate` | Cite maturity model for progression tracking |
+
+### Key External Resources
+- [awesome-design-systems](https://github.com/alexpate/awesome-design-systems) — Comprehensive index
+- [Design Systems Repo](https://designsystemsrepo.com/) — Searchable database
+- [Component Gallery](https://component.gallery/) — UI pattern reference

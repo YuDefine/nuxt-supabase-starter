@@ -14,6 +14,7 @@ import { PROFILE_SELECT_FIELDS } from '../../../utils/profile-fields'
 import { getServerSupabaseClient } from '../../../utils/supabase'
 
 export default defineEventHandler(async (event): Promise<ProfileResponse> => {
+  const log = useLogger(event)
   const user = requireAuth(event)
 
   const client = getServerSupabaseClient()
@@ -25,6 +26,10 @@ export default defineEventHandler(async (event): Promise<ProfileResponse> => {
     .single()
 
   if (error) {
+    // PGRST116 (404) 是預期錯誤，不需要 log.error
+    if (error.code !== PGRST_NOT_FOUND) {
+      log.error(error as Error, { step: 'db-select' })
+    }
     throw createError({
       statusCode: error.code === PGRST_NOT_FOUND ? 404 : 500,
       statusMessage: error.code === PGRST_NOT_FOUND ? '找不到您的 Profile' : '查詢失敗，請稍後再試',

@@ -80,7 +80,7 @@
 - 測試 migration
 - 探索資料庫結構
 
-**前提**：需要先執行 `supabase start`
+**前提**：需要先執行 `supabase start`（本地模式；遠端模式請用 SSH）
 
 ### Remote Supabase Cloud（生產環境）
 
@@ -218,8 +218,8 @@ supabase migration new create_todos_table
 # 2. 編輯 SQL 檔案
 
 # 3. 本地測試
-supabase db reset
-supabase db lint --level warning
+pnpm db:reset
+pnpm db:lint
 
 # 4. 推送到遠端
 supabase db push
@@ -314,7 +314,7 @@ supabase login
 
 ### Q: Claude 無法連接 MCP？
 
-1. 確認 Supabase 已啟動：`supabase status`
+1. 確認 Supabase 已啟動：`supabase status`（本地模式）
 2. 確認 `.mcp.json` 存在且格式正確
 3. 確認 `.claude/settings.json` 有啟用 MCP
 

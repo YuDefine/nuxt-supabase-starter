@@ -12,6 +12,7 @@ export default defineConfig({
   },
   test: {
     exclude: ['e2e/**', 'node_modules/**', '.nuxt/**', '.output/**'],
+    setupFiles: ['./test/setup-env.ts'],
     coverage: {
       provider: 'v8',
     },

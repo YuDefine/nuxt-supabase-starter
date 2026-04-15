@@ -49,7 +49,7 @@ cp <最新備份路徑> ./supabase/seed.sql
 - 檔案大小: XX KB
 - 資料列數: XX 行
 
-建議：執行 `supabase db reset` 測試新的 seed 是否正常運作。
+建議：執行 `pnpm db:reset` 測試新的 seed 是否正常運作。
 ```
 
 **失敗時：**
@@ -60,7 +60,7 @@ cp <最新備份路徑> ./supabase/seed.sql
 錯誤: [錯誤訊息]
 
 可能原因:
-- 本地 Supabase 未運行（執行 `supabase status` 檢查）
+- 本地 Supabase 未運行（執行 `supabase status` 檢查，僅本地模式）
 - 磁碟空間不足
 - ...
 

@@ -15,6 +15,7 @@ import { validateQuery } from '../../../utils/validation'
 import { getServerSupabaseClient } from '../../../utils/supabase'
 
 export default defineEventHandler(async (event): Promise<ProfileListResponse> => {
+  const log = useLogger(event)
   // 權限檢查：僅 admin 可查看列表
   requireRole(event, ['admin'])
 
@@ -45,6 +46,7 @@ export default defineEventHandler(async (event): Promise<ProfileListResponse> =>
   const [countResult, dataResult] = await Promise.all([countQuery, dataQuery])
 
   if (countResult.error) {
+    log.error(countResult.error as Error, { step: 'db-count' })
     throw createError({
       statusCode: 500,
       statusMessage: '查詢失敗，請稍後再試',
@@ -52,6 +54,7 @@ export default defineEventHandler(async (event): Promise<ProfileListResponse> =>
   }
 
   if (dataResult.error) {
+    log.error(dataResult.error as Error, { step: 'db-select' })
     throw createError({
       statusCode: 500,
       statusMessage: '查詢失敗，請稍後再試',

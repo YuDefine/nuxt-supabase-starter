@@ -238,7 +238,7 @@ WHERE ur.role = 'pending';
 
 - [ ] 任何授權流程調整有更新本文件。
 - [ ] 若新增角色/欄位，記得同步 `user_role` enum、RLS policy、`apply_user_authorization()`。
-- [ ] 使用者相關的 migrations 皆已通過 `supabase db reset`、lint 驗證。
+- [ ] 使用者相關的 migrations 皆已通過 `pnpm db:reset`、`pnpm db:lint` 驗證。
 - [ ] 新 API 已在 `server/api/`、`app/components` 中更新呼叫方式與錯誤處理。
 
 讓授權流程保持透明，才能在大量新使用者或遠端重建時維持可信狀態。任何流程變更請立即回寫此手冊。
