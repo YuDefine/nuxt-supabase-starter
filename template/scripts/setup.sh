@@ -230,55 +230,80 @@ fi
 echo ""
 
 # --------------------------------------------------
-# 4. 啟動 Supabase
+# 4. 啟動 Supabase（依模式切換）
 # --------------------------------------------------
 
-if supabase status &> /dev/null; then
-  echo "ℹ️  Supabase 已在執行中，跳過啟動"
+# 從 .env 讀取 SUPABASE_MODE
+SUPABASE_MODE="${SUPABASE_MODE:-local}"
+if [ -f .env ]; then
+  _mode=$(grep '^SUPABASE_MODE=' .env 2>/dev/null | cut -d'=' -f2-)
+  [ -n "$_mode" ] && SUPABASE_MODE="$_mode"
+fi
+
+if [ "$SUPABASE_MODE" = "remote" ]; then
+  # --- 遠端模式 ---
+  DEV_SSH_HOST=$(grep '^DEV_SSH_HOST=' .env 2>/dev/null | cut -d'=' -f2-)
+  echo "ℹ️  Supabase 模式：remote（$DEV_SSH_HOST）"
+  echo "   確認遠端已啟動：ssh $DEV_SSH_HOST 'supabase status'"
+  echo ""
+
+  # Supabase keys 需手動從遠端取得填入 .env
+  if [ -f .env ] && grep -q '<Publishable_key>\|<Secret_key>' .env 2>/dev/null; then
+    echo "  ⚠️  SUPABASE_KEY / SUPABASE_SECRET_KEY 尚未填入"
+    echo "     請從遠端取得：ssh $DEV_SSH_HOST 'supabase status'"
+  fi
 else
-  echo "🐘 啟動 Supabase..."
-  supabase start
+  # --- 本地模式（預設）---
+  if supabase status &> /dev/null; then
+    echo "ℹ️  Supabase 已在執行中，跳過啟動"
+  else
+    echo "🐘 啟動 Supabase..."
+    supabase start
+  fi
 fi
 echo ""
 
 # --------------------------------------------------
-# 4b. 自動填入 Supabase keys 到 .env
+# 4b. 自動填入 keys 與 secrets 到 .env
 # --------------------------------------------------
 
 if [ -f .env ]; then
-  echo "🔑 自動填入 Supabase keys..."
+  echo "🔑 檢查 .env secrets..."
 
-  SB_STATUS=$(supabase status -o env 2>/dev/null || true)
+  # 本地模式：自動填入 Supabase keys
+  if [ "$SUPABASE_MODE" = "local" ]; then
+    SB_STATUS=$(supabase status -o env 2>/dev/null || true)
 
-  if [ -n "$SB_STATUS" ]; then
-    ANON_KEY=$(echo "$SB_STATUS" | grep '^ANON_KEY=' | cut -d'=' -f2-)
-    SERVICE_KEY=$(echo "$SB_STATUS" | grep '^SERVICE_ROLE_KEY=' | cut -d'=' -f2-)
+    if [ -n "$SB_STATUS" ]; then
+      ANON_KEY=$(echo "$SB_STATUS" | grep '^ANON_KEY=' | cut -d'=' -f2-)
+      SERVICE_KEY=$(echo "$SB_STATUS" | grep '^SERVICE_ROLE_KEY=' | cut -d'=' -f2-)
 
-    if [ -n "$ANON_KEY" ]; then
-      sed -i.bak "s|<Publishable_key>|${ANON_KEY}|g" .env && rm -f .env.bak
-      echo "  ✅ SUPABASE_KEY + NUXT_PUBLIC_SUPABASE_KEY 已填入"
+      if [ -n "$ANON_KEY" ]; then
+        sed -i.bak "s|<Publishable_key>|${ANON_KEY}|g" .env && rm -f .env.bak
+        echo "  ✅ SUPABASE_KEY + NUXT_PUBLIC_SUPABASE_KEY 已填入"
+      fi
+
+      if [ -n "$SERVICE_KEY" ]; then
+        sed -i.bak "s|<Secret_key>|${SERVICE_KEY}|g" .env && rm -f .env.bak
+        echo "  ✅ SUPABASE_SECRET_KEY 已填入"
+      fi
+    else
+      echo "  ⚠️  無法取得 Supabase keys，請手動填入 .env"
     fi
+  fi
 
-    if [ -n "$SERVICE_KEY" ]; then
-      sed -i.bak "s|<Secret_key>|${SERVICE_KEY}|g" .env && rm -f .env.bak
-      echo "  ✅ SUPABASE_SECRET_KEY 已填入"
-    fi
+  # 自動產生 session password（偵測 .env 中的空值）
+  if grep -q '^NUXT_SESSION_PASSWORD=$' .env 2>/dev/null; then
+    SESSION_PWD=$(openssl rand -base64 32)
+    sed -i.bak "s|^NUXT_SESSION_PASSWORD=$|NUXT_SESSION_PASSWORD=${SESSION_PWD}|" .env && rm -f .env.bak
+    echo "  ✅ NUXT_SESSION_PASSWORD 已自動產生"
+  fi
 
-    # 自動產生 session password（偵測 .env 中的空值）
-    if grep -q '^NUXT_SESSION_PASSWORD=$' .env 2>/dev/null; then
-      SESSION_PWD=$(openssl rand -base64 32)
-      sed -i.bak "s|^NUXT_SESSION_PASSWORD=$|NUXT_SESSION_PASSWORD=${SESSION_PWD}|" .env && rm -f .env.bak
-      echo "  ✅ NUXT_SESSION_PASSWORD 已自動產生"
-    fi
-
-    # 自動產生 Better Auth secret（從 .env 偵測，不依賴互動變數）
-    if grep -q '^BETTER_AUTH_SECRET=$' .env 2>/dev/null; then
-      AUTH_SECRET=$(openssl rand -base64 32)
-      sed -i.bak "s|^BETTER_AUTH_SECRET=$|BETTER_AUTH_SECRET=${AUTH_SECRET}|" .env && rm -f .env.bak
-      echo "  ✅ BETTER_AUTH_SECRET 已自動產生"
-    fi
-  else
-    echo "  ⚠️  無法取得 Supabase keys，請手動填入 .env"
+  # 自動產生 Better Auth secret（從 .env 偵測，不依賴互動變數）
+  if grep -q '^BETTER_AUTH_SECRET=$' .env 2>/dev/null; then
+    AUTH_SECRET=$(openssl rand -base64 32)
+    sed -i.bak "s|^BETTER_AUTH_SECRET=$|BETTER_AUTH_SECRET=${AUTH_SECRET}|" .env && rm -f .env.bak
+    echo "  ✅ BETTER_AUTH_SECRET 已自動產生"
   fi
   echo ""
 fi

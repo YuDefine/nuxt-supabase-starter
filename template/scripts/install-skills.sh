@@ -45,9 +45,7 @@ echo ""
 
 # Evlog（Observability）
 echo "📦 Evlog Skills..."
-for skill in create-evlog-adapter create-evlog-enricher create-evlog-framework-integration review-logging-patterns; do
-  npx skills add hugorcd/evlog@$skill $COPY_FLAGS
-done
+npx skills add https://www.evlog.dev $COPY_FLAGS
 echo "  ✓ Evlog Skills 完成"
 echo ""
 

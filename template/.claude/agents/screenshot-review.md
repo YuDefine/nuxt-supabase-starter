@@ -55,11 +55,27 @@ done
 - 有 `server/routes/auth/__test-login.get.ts` → `browser-use open "http://localhost:<port>/auth/__test-login?email=test@test.local&role=admin&redirect=/"`
 - 有 email/password 表單 → 填表登入
 
-### 3. 強制 Light Mode
+### 3. Color Mode 處理
+
+主 session 可能指定 `colorMode: light`、`colorMode: dark`、或不指定。
+
+| 指定               | 行為                                              |
+| ------------------ | ------------------------------------------------- |
+| `colorMode: light` | 只拍 light，截圖直接存在語義目錄下                |
+| `colorMode: dark`  | 只拍 dark，截圖直接存在語義目錄下                 |
+| **未指定（預設）** | **兩種都拍**，分別存到 `light/` 和 `dark/` 子目錄 |
+
+切換 color mode 的 JS snippet：
 
 ```bash
+# 切到 light
 browser-use eval "localStorage.setItem('nuxt-color-mode', 'light'); document.documentElement.classList.remove('dark'); document.documentElement.classList.add('light'); document.documentElement.style.colorScheme = 'light'"
+
+# 切到 dark
+browser-use eval "localStorage.setItem('nuxt-color-mode', 'dark'); document.documentElement.classList.remove('light'); document.documentElement.classList.add('dark'); document.documentElement.style.colorScheme = 'dark'"
 ```
+
+**未指定時的流程**：對每個截圖目標，先切 light 拍一張，再切 dark 拍一張。切換後 **MUST** reload 頁面（`browser-use open` 同一 URL）確保主題完整套用。
 
 ## 截圖存放（嚴格規範）
 
@@ -74,6 +90,8 @@ screenshots/<environment>/<語義>/
 
 ### Spectra change 截圖
 
+**指定單一 color mode 時**：
+
 ```bash
 mkdir -p screenshots/local/<change-name>
 ```
@@ -85,19 +103,35 @@ screenshots/local/<change-name>/
 └── review.md
 ```
 
-### Ad-hoc 截圖驗證（無 change）
-
-根據當下驗證行為取語意名稱：
+**未指定 color mode 時（預設）**：
 
 ```bash
-mkdir -p screenshots/local/<semantic-topic>
+mkdir -p screenshots/local/<change-name>/light
+mkdir -p screenshots/local/<change-name>/dark
 ```
 
 ```
-screenshots/local/<semantic-topic>/
-├── #1-<desc>.png
-├── #2-<desc>.png
+screenshots/local/<change-name>/
+├── light/
+│   ├── #1-happy-path.png
+│   └── #2-edge-case.png
+├── dark/
+│   ├── #1-happy-path.png
+│   └── #2-edge-case.png
 └── review.md
+```
+
+### Ad-hoc 截圖驗證（無 change）
+
+根據當下驗證行為取語意名稱，color mode 子目錄規則同上：
+
+```bash
+# 指定單一 mode
+mkdir -p screenshots/local/<semantic-topic>
+
+# 未指定（預設）
+mkdir -p screenshots/local/<semantic-topic>/light
+mkdir -p screenshots/local/<semantic-topic>/dark
 ```
 
 ## 截圖流程
@@ -109,18 +143,39 @@ screenshots/local/<semantic-topic>/
 1. **判斷截圖目標** — 根據描述推斷需要截圖的頁面/狀態
    - UI 項目 → 導航到對應頁面，截圖
    - 非 UI 項目（`pnpm check`、`console.log`）→ 用 CLI 驗證，標註「非 UI 項目」
-2. **執行截圖**：
+2. **執行截圖**（依 color mode 設定）：
+
+   **指定單一 mode 時**：
+
    ```bash
+   # 套用指定的 color mode（見前置條件 §3）
    browser-use open "http://localhost:<port>/auth/<login-route>?redirect=/目標路徑"
    browser-use wait text "目標文字"
    browser-use screenshot screenshots/<env>/<folder-name>/#<N>-<brief-desc>.png
    ```
-3. **讀取截圖** — 用 Read tool 查看截圖，記錄觀察
+
+   **未指定 mode 時（預設雙模式）**：
+
+   ```bash
+   # — Light —
+   browser-use eval "localStorage.setItem('nuxt-color-mode', 'light'); document.documentElement.classList.remove('dark'); document.documentElement.classList.add('light'); document.documentElement.style.colorScheme = 'light'"
+   browser-use open "http://localhost:<port>/auth/<login-route>?redirect=/目標路徑"
+   browser-use wait text "目標文字"
+   browser-use screenshot screenshots/<env>/<folder-name>/light/#<N>-<brief-desc>.png
+
+   # — Dark —
+   browser-use eval "localStorage.setItem('nuxt-color-mode', 'dark'); document.documentElement.classList.remove('light'); document.documentElement.classList.add('dark'); document.documentElement.style.colorScheme = 'dark'"
+   browser-use open "http://localhost:<port>/auth/<login-route>?redirect=/目標路徑"
+   browser-use wait text "目標文字"
+   browser-use screenshot screenshots/<env>/<folder-name>/dark/#<N>-<brief-desc>.png
+   ```
+
+3. **讀取截圖** — 用 Read tool 查看截圖，記錄觀察（雙模式時兩張都看）
 4. **互動驗證**（如需要）：
    ```bash
    browser-use state          # 取得元素 index
    browser-use click <index>  # 互動
-   browser-use screenshot screenshots/<env>/<folder-name>/#<N>-<desc>-after.png
+   browser-use screenshot screenshots/<env>/<folder-name>/<mode>/#<N>-<desc>-after.png
    ```
 
 ## Playwright CLI 用法（響應式 / 跨瀏覽器 / 多分頁）
@@ -136,24 +191,24 @@ npx playwright test tests/e2e/screenshots/<topic>.spec.ts \
 Script 骨架（`tests/e2e/screenshots/<topic>.spec.ts`）：
 
 ```typescript
-import { test, expect } from '@playwright/test'
+import { test, expect } from "@playwright/test";
 
 const BREAKPOINTS = [
-  { name: 'desktop', width: 1440, height: 900 },
-  { name: 'tablet', width: 768, height: 1024 },
-  { name: 'mobile', width: 375, height: 812 },
-]
+  { name: "desktop", width: 1440, height: 900 },
+  { name: "tablet", width: 768, height: 1024 },
+  { name: "mobile", width: 375, height: 812 },
+];
 
 for (const bp of BREAKPOINTS) {
   test(`<topic> @ ${bp.name}`, async ({ page }) => {
-    await page.setViewportSize({ width: bp.width, height: bp.height })
-    await page.goto('http://localhost:3000/auth/_dev-login?redirect=/target')
-    await page.waitForSelector('text=目標文字')
+    await page.setViewportSize({ width: bp.width, height: bp.height });
+    await page.goto("http://localhost:3000/auth/_dev-login?redirect=/target");
+    await page.waitForSelector("text=目標文字");
     await page.screenshot({
       path: `screenshots/local/<folder>/${bp.name}-<desc>.png`,
       fullPage: true,
-    })
-  })
+    });
+  });
 }
 ```
 
@@ -169,11 +224,11 @@ for (const bp of BREAKPOINTS) {
 ```typescript
 // server/routes/auth/_dev-login.get.ts
 export default defineEventHandler(async (event) => {
-  if (!import.meta.dev) throw createError({ status: 404 })
-  const query = getQuery(event)
+  if (!import.meta.dev) throw createError({ status: 404 });
+  const query = getQuery(event);
   // ... set session
-  return sendRedirect(event, (query.redirect as string) || '/')
-})
+  return sendRedirect(event, (query.redirect as string) || "/");
+});
 ```
 
 ## 產出報告
@@ -185,14 +240,16 @@ export default defineEventHandler(async (event) => {
 
 > Change: `<change-name>` （或 topic: `<topic>`）
 > 日期：YYYY-MM-DD
+> Color mode：light + dark / light only / dark only
 
 ## 截圖結果
 
 ### #1 <描述>
 
 - 狀態：✅ 通過 / ⚠️ 需確認 / ❌ 有問題
-- 截圖：`screenshots/<env>/<folder-name>/#1-desc.png`
-- 觀察：（實際看到的畫面描述）
+- 截圖（light）：`screenshots/<env>/<folder-name>/light/#1-desc.png`
+- 截圖（dark）：`screenshots/<env>/<folder-name>/dark/#1-desc.png`
+- 觀察：（實際看到的畫面描述，分別註明 light/dark 差異）
 
 ...
 
@@ -202,6 +259,8 @@ export default defineEventHandler(async (event) => {
 - 需確認：N 項
 - 有問題：N 項
 ```
+
+> 指定單一 mode 時，截圖路徑不帶 `light/` / `dark/` 子目錄，報告只列一行截圖。
 
 ## 回傳給主 session
 

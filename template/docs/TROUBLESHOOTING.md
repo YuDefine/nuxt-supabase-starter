@@ -180,7 +180,7 @@ pnpm db:types
 **診斷：**
 
 ```bash
-supabase db reset
+pnpm db:reset
 ```
 
 - 問題存在：`Error: syntax error at or near "..."` 並指出 migration 檔案
@@ -189,7 +189,7 @@ supabase db reset
 **修復：** 修正對應 migration 的 SQL 語法，再執行：
 
 ```bash
-supabase db reset && supabase db lint --level warning && pnpm db:types && pnpm typecheck
+pnpm db:reset && pnpm db:lint && pnpm db:types && pnpm typecheck
 ```
 
 ---
@@ -243,7 +243,7 @@ grep NUXT_OAUTH_GOOGLE .env     # 以 Google 為例
 **診斷：**
 
 ```bash
-supabase db lint --level warning
+pnpm db:lint
 ```
 
 另可在 Supabase Studio (http://127.0.0.1:54323) SQL Editor 查詢 policy：
@@ -319,7 +319,7 @@ WHERE schemaname = 'public' AND tableowner != 'postgres';
 
 ```bash
 supabase migration new create_table_name   # 編輯 .sql 寫入 CREATE TABLE
-supabase db reset && supabase db lint --level warning && pnpm db:types
+pnpm db:reset && pnpm db:lint && pnpm db:types
 ```
 
 ---
@@ -611,7 +611,7 @@ betterAuth: {
 **診斷：**
 
 ```bash
-supabase db lint --level warning
+pnpm db:lint
 ```
 
 另可在 Supabase Studio (http://127.0.0.1:54323) 的 Logs 頁面觀察查詢模式：
@@ -889,7 +889,7 @@ WHERE state != 'idle' ORDER BY query_start;
 **診斷：**
 
 ```bash
-supabase db lint --level warning
+pnpm db:lint
 ```
 
 - 問題存在：`WARNING: table "xxx" is not protected by RLS`
@@ -923,7 +923,7 @@ CREATE POLICY "users_read_own" ON public.xxx
 
 ### 22a. seed.sql 未執行
 
-**問題：** `supabase db reset` 後 table 存在但沒有測試資料。
+**問題：** `pnpm db:reset` 後 table 存在但沒有測試資料。
 
 **診斷：**
 
@@ -938,17 +938,17 @@ ls -la supabase/seed.sql
 
 ```bash
 # 確認 seed.sql 存在且語法正確
-supabase db reset    # seed.sql 在所有 migration 套用後自動執行
+pnpm db:reset    # seed.sql 在所有 migration 套用後自動執行
 ```
 
 ### 22b. seed.sql 語法錯誤
 
-**問題：** `supabase db reset` 執行到 seed 階段時失敗。
+**問題：** `pnpm db:reset` 執行到 seed 階段時失敗。
 
 **診斷：**
 
 ```bash
-supabase db reset 2>&1 | grep -A 3 "seed"
+pnpm db:reset 2>&1 | grep -A 3 "seed"
 ```
 
 - 問題存在：`Error: error executing seed: ...` 後面接 SQL 語法錯誤

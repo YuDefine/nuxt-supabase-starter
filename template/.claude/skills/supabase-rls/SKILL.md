@@ -58,4 +58,4 @@ ALTER TABLE your_schema.new_table FORCE ROW LEVEL SECURITY;
 - [ ] **有 UPDATE policy 的表必須同時有 SELECT policy**（否則 UPDATE 靜默失敗）
 - [ ] **Storage bucket 的 upsert 場景需 INSERT + SELECT + UPDATE 三個 policy**
 - [ ] Policy 中 **NEVER** 使用 `user_metadata` / `raw_user_meta_data` 做授權判斷
-- [ ] `supabase db lint --level warning` 無警告
+- [ ] `pnpm db:lint` 無警告

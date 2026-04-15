@@ -329,14 +329,14 @@ CREATE POLICY "Users can view own todos"
 #### 4. 本地測試
 
 ```bash
-supabase db reset
-supabase db lint --level warning
+pnpm db:reset
+pnpm db:lint
 ```
 
 #### 5. 產生 TypeScript 類型
 
 ```bash
-supabase gen types typescript --local | tee app/types/database.types.ts > /dev/null
+pnpm db:types
 ```
 
 #### 6. 驗證程式碼

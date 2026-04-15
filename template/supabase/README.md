@@ -9,6 +9,6 @@
 
 1. 不要手動建立 migration SQL 檔案，請使用 Supabase CLI 指令產生。
 2. 建立 migration 後，請依序執行：
-   - `supabase db reset`
-   - `supabase db lint --level warning`
+   - `pnpm db:reset`
+   - `pnpm db:lint`
    - `pnpm db:types`

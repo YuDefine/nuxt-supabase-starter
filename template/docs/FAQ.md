@@ -155,13 +155,13 @@ supabase migration new add_user_roles
 # 2. 編輯 migration 檔案（在 supabase/migrations/ 下）
 
 # 3. 本地測試
-supabase db reset
+pnpm db:reset
 
 # 4. 安全檢查
-supabase db lint --level warning
+pnpm db:lint
 
 # 5. 重新產生類型
-supabase gen types typescript --local | tee app/types/database.types.ts > /dev/null
+pnpm db:types
 
 # 6. 最後才 push
 supabase db push
@@ -220,7 +220,7 @@ END; $$;
 
 1. 檢查是否有該操作（INSERT/UPDATE/DELETE）的 RLS policy
 2. 確認 policy 包含 `service_role` 繞過
-3. 使用 `supabase db lint --level warning` 檢查
+3. 使用 `pnpm db:lint` 檢查
 
 > 📖 完整診斷：[TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
@@ -287,7 +287,7 @@ supabase start
 **解決**：
 
 ```bash
-supabase gen types typescript --local | tee app/types/database.types.ts > /dev/null
+pnpm db:types
 ```
 
 > 📖 完整診斷：[TROUBLESHOOTING.md](TROUBLESHOOTING.md)
@@ -474,7 +474,7 @@ N+1 問題通常出現在逐筆查詢關聯資料。偵測方式：
 
 ```bash
 # 檢查 Supabase 慢查詢 log
-supabase db lint --level warning
+pnpm db:lint
 ```
 
 **修復模式**：使用 `.select('*, relation(*)')` 一次取回關聯資料，避免迴圈中逐筆查詢。
@@ -520,7 +520,7 @@ supabase db lint --level warning
 
 1. 每個功能在獨立 branch 開發，各自建立 migration
 2. Migration 檔名帶時間戳（`supabase migration new` 自動處理）
-3. 合併前執行 `supabase db reset` 確認所有 migration 可正常套用
+3. 合併前執行 `pnpm db:reset` 確認所有 migration 可正常套用
 4. 若遠端已有衝突的 migration，使用 `supabase migration repair --status reverted <version>` 處理
 
 > 📖 診斷步驟：[TROUBLESHOOTING.md](TROUBLESHOOTING.md#11-migration-repair)

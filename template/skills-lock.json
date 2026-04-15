@@ -6,6 +6,11 @@
       "sourceType": "github",
       "computedHash": "1b1db5d2fb133511785345f0fcb0c9d12a805b04a2789028d8890ebe448aad12"
     },
+    "analyze-logs": {
+      "source": "evlog.dev",
+      "sourceType": "well-known",
+      "computedHash": "28bd8254997b767ebba1f7f2cf4567ddb6c51b1fcdca9baf9b9cd7ee3ca51d7c"
+    },
     "animate": {
       "source": "pbakaus/impeccable",
       "sourceType": "github",
@@ -217,9 +222,9 @@
       "computedHash": "246e65cd72a7e360987d94e6c61564ce6d71c6361d1784d529d70e4cbbe8522d"
     },
     "review-logging-patterns": {
-      "source": "hugorcd/evlog",
-      "sourceType": "github",
-      "computedHash": "8edb563b6e649700b8fc567cf6a7019d72eb0da1c277d2f3eb188bb829ca3e47"
+      "source": "evlog.dev",
+      "sourceType": "well-known",
+      "computedHash": "16ec9091a37cfce1089d137da6c4d2997d771a8eb914a952df7654afbcdd1f36"
     },
     "slidev": {
       "source": "antfu/skills",

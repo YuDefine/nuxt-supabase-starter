@@ -83,7 +83,7 @@ $ curl -s http://localhost:3000/api/v1/bookmarks | jq .
 # 開啟 Supabase Studio
 # http://localhost:54323 → Table Editor
 # 或用 SQL：
-supabase db reset  # 重新套用所有 migration
+pnpm db:reset  # 重新套用所有 migration
 ```
 
 2. **確認 API handler 邏輯**：
