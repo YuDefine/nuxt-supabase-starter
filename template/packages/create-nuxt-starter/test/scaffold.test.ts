@@ -28,6 +28,14 @@ describe('scaffold: base-only (no features)', () => {
     expect(existsSync(join(targetDir, 'app', 'pages', 'index.vue'))).toBe(true)
     expect(existsSync(join(targetDir, '.gitignore'))).toBe(true)
     expect(existsSync(join(targetDir, '.env.example'))).toBe(true)
+    expect(existsSync(join(targetDir, '.claude', 'settings.json'))).toBe(true)
+    expect(existsSync(join(targetDir, '.claude', 'versions.json'))).toBe(true)
+    expect(existsSync(join(targetDir, '.claude', 'commands', 'validate-starter.md'))).toBe(true)
+    expect(existsSync(join(targetDir, '.github', 'prompts'))).toBe(true)
+    expect(existsSync(join(targetDir, '.github', 'skills'))).toBe(true)
+    expect(existsSync(join(targetDir, '.scaffold-cleanup'))).toBe(false)
+    expect(existsSync(join(targetDir, 'scripts', 'compress-skill-descriptions.sh'))).toBe(true)
+    expect(existsSync(join(targetDir, 'scripts', 'templates', 'clean', 'README.md'))).toBe(true)
 
     const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf-8'))
     expect(pkg.name).toBe('base-only')
@@ -43,6 +51,34 @@ describe('scaffold: base-only (no features)', () => {
     expect(config).not.toContain('better-auth')
     expect(config).not.toContain('@nuxtjs/supabase')
   })
+
+  it('defaults production sourcemaps to false without monitoring', () => {
+    const targetDir = join(TEST_DIR, 'base-only-sourcemap')
+    assembleProject(targetDir, [], 'base-only-sourcemap')
+
+    const config = readFileSync(join(targetDir, 'nuxt.config.ts'), 'utf-8')
+    expect(config).toContain('sourcemap: false')
+  })
+
+  it('uses template install-skills script without removed vendor skill ids', () => {
+    const targetDir = join(TEST_DIR, 'base-only-skills')
+    assembleProject(targetDir, [], 'base-only-skills')
+
+    const script = readFileSync(join(targetDir, 'scripts', 'install-skills.sh'), 'utf-8')
+    expect(script).toContain('本地 design skills 已直接內建於 .claude/skills/')
+    expect(script).not.toMatch(
+      /for skill in .*arrange.*extract.*frontend-design.*harden.*normalize.*onboard.*teach-impeccable/
+    )
+  })
+
+  it('uses setup script that never auto-deletes starter repos', () => {
+    const targetDir = join(TEST_DIR, 'base-only-setup')
+    assembleProject(targetDir, [], 'base-only-setup')
+
+    const script = readFileSync(join(targetDir, 'scripts', 'setup.sh'), 'utf-8')
+    expect(script).toContain('setup 已停用自動刪除 starter repo 的行為')
+    expect(script).not.toContain('rm -rf "$CLEANUP_PATH"')
+  })
 })
 
 describe('scaffold: all features', () => {
@@ -57,18 +93,21 @@ describe('scaffold: all features', () => {
     expect(pkg.dependencies['@nuxt/ui']).toBeDefined()
     expect(pkg.dependencies['nuxt-auth-utils']).toBeDefined()
     expect(pkg.dependencies['@supabase/supabase-js']).toBeDefined()
-    expect(pkg.dependencies['@nuxtjs/seo']).toBeDefined()
+    expect(pkg.dependencies['@nuxtjs/sitemap']).toBeDefined()
+    expect(pkg.dependencies['@nuxtjs/robots']).toBeDefined()
+    expect(pkg.dependencies['nuxt-site-config']).toBeDefined()
     expect(pkg.dependencies['nuxt-security']).toBeDefined()
-    expect(pkg.devDependencies['vitest']).toBeDefined()
     expect(pkg.devDependencies['@playwright/test']).toBeDefined()
-    expect(pkg.devDependencies['oxlint']).toBeDefined()
+    expect(pkg.devDependencies['vite-plus']).toBeDefined()
     expect(pkg.devDependencies['husky']).toBeDefined()
 
     const config = readFileSync(join(targetDir, 'nuxt.config.ts'), 'utf-8')
     expect(config).toContain('@nuxt/ui')
     expect(config).toContain('nuxt-auth-utils')
     expect(config).toContain('@nuxtjs/supabase')
+    expect(config).toContain('@nuxtjs/sitemap')
     expect(config).toContain('ssr: true')
+    expect(config).toContain('sourcemap: false')
 
     // Auth pages exist
     expect(existsSync(join(targetDir, 'app', 'pages', 'auth', 'login.vue'))).toBe(true)
@@ -110,29 +149,32 @@ describe('non-interactive mode', () => {
 })
 
 describe('SSR and SEO coupling', () => {
-  it('ssr: false 時不應包含 @nuxtjs/seo', () => {
+  it('ssr: false 時不應包含 SEO modules', () => {
     const targetDir = join(TEST_DIR, 'spa-no-seo')
     assembleProject(targetDir, ['ui'], 'spa-no-seo')
 
     const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf-8'))
-    expect(pkg.dependencies?.['@nuxtjs/seo']).toBeUndefined()
+    expect(pkg.dependencies?.['@nuxtjs/sitemap']).toBeUndefined()
+    expect(pkg.dependencies?.['nuxt-site-config']).toBeUndefined()
 
     const config = readFileSync(join(targetDir, 'nuxt.config.ts'), 'utf-8')
     expect(config).toContain('ssr: false')
-    expect(config).not.toContain('@nuxtjs/seo')
+    expect(config).not.toContain('@nuxtjs/sitemap')
   })
 
-  it('ssr: true 時 nuxt.config 包含 ssr: true 和 @nuxtjs/seo', () => {
+  it('ssr: true 時 nuxt.config 包含 ssr: true 和 SEO modules', () => {
     const features = resolveFeatureDependencies(['ssr', 'seo'])
     const targetDir = join(TEST_DIR, 'ssr-with-seo')
     assembleProject(targetDir, features, 'ssr-with-seo')
 
     const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf-8'))
-    expect(pkg.dependencies['@nuxtjs/seo']).toBeDefined()
+    expect(pkg.dependencies['@nuxtjs/sitemap']).toBeDefined()
+    expect(pkg.dependencies['nuxt-site-config']).toBeDefined()
 
     const config = readFileSync(join(targetDir, 'nuxt.config.ts'), 'utf-8')
     expect(config).toContain('ssr: true')
-    expect(config).toContain('@nuxtjs/seo')
+    expect(config).toContain('@nuxtjs/sitemap')
+    expect(config).toContain('sourcemap: false')
   })
 
   it('seo 自動拉入 ssr dependency', () => {

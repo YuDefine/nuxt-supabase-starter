@@ -7,6 +7,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 ### 1. Visual Quality
 
 **What to check:**
+
 - Color usage: Is it monochromatic/all gray? Are colors meaningful or decorative?
 - Typography: System fonts only? No hierarchy? Inconsistent sizing/weight?
 - Visual hierarchy: Can you identify primary action in 2 seconds? Does eye flow make sense?
@@ -14,6 +15,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Polish: Pixel-aligned? Consistent border-radius? Consistent shadow system?
 
 **Signals of problems:**
+
 - All text is same size/weight
 - No color beyond gray/black/white
 - Spacing values are arbitrary (13px, 17px, 22px instead of a scale)
@@ -27,6 +29,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 ### 2. Interaction Quality
 
 **What to check:**
+
 - Hover states: Do interactive elements respond to hover?
 - Focus states: Visible focus indicators for keyboard navigation?
 - Active/pressed states: Feedback when clicking?
@@ -36,6 +39,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Transitions: Smooth state changes or jarring jumps?
 
 **Signals of problems:**
+
 - No `:hover` styles on buttons/links
 - No `transition` properties on interactive elements
 - cursor: pointer missing on clickable non-button elements
@@ -49,6 +53,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 ### 3. Structural Quality
 
 **What to check:**
+
 - Layout system: CSS Grid/Flexbox used intentionally? Or position:absolute chaos?
 - Grouping: Related items visually grouped? Sections clearly separated?
 - Information density: Too sparse? Too cluttered?
@@ -56,6 +61,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Responsive structure: Flex/grid that adapts? Or fixed widths?
 
 **Signals of problems:**
+
 - Deeply nested divs with manual positioning
 - Equal visual weight on all elements (flat hierarchy)
 - Identical card grid with no variation
@@ -69,6 +75,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 ### 4. Copy & Messaging
 
 **What to check:**
+
 - Button labels: Descriptive or generic ("Submit", "Click here")?
 - Error messages: Helpful or cryptic ("Error occurred")?
 - Empty states: Guided or blank?
@@ -76,6 +83,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Tone: Consistent with product personality?
 
 **Signals of problems:**
+
 - Generic labels ("OK", "Cancel", "Submit")
 - Technical error messages shown to users
 - Empty containers with no guidance
@@ -89,6 +97,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 ### 5. Resilience
 
 **What to check:**
+
 - Error handling: What happens when API calls fail?
 - Loading states: Skeleton screens? Spinners? Nothing?
 - Empty states: First-time experience when no data exists?
@@ -97,6 +106,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Offline: Any graceful degradation?
 
 **Signals of problems:**
+
 - try/catch blocks that swallow errors silently
 - No loading indicators during data fetches
 - Blank screens when data is empty
@@ -110,6 +120,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 ### 6. Performance
 
 **What to check:**
+
 - Images: Optimized? Lazy loaded? Correct format (WebP/AVIF)?
 - Bundle: Code-split? Dynamic imports for heavy components?
 - Rendering: Unnecessary re-renders? Layout thrashing?
@@ -117,6 +128,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Fonts: Subset? Font-display: swap? Preloaded?
 
 **Signals of problems:**
+
 - Large PNG/JPG images without optimization
 - Single bundle with everything imported at top level
 - useEffect with missing/wrong dependency arrays
@@ -130,6 +142,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 ### 7. Accessibility
 
 **What to check:**
+
 - Color contrast: 4.5:1 for normal text, 3:1 for large text (WCAG AA)
 - Semantic HTML: Proper heading hierarchy? Button vs div?
 - ARIA: Labels on icon buttons? Roles on custom components?
@@ -138,6 +151,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Motion: `prefers-reduced-motion` respected?
 
 **Signals of problems:**
+
 - Light gray text on white background
 - `<div onClick>` instead of `<button>`
 - Icon-only buttons without aria-label
@@ -152,6 +166,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 ### 8. Design System Consistency
 
 **What to check:**
+
 - Token usage: Colors from variables/tokens or hard-coded hex?
 - Component reuse: Using shared components or one-off implementations?
 - Pattern consistency: Same interaction pattern for same action across app?
@@ -159,6 +174,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Spacing scale: Using defined scale or arbitrary values?
 
 **Signals of problems:**
+
 - Hard-coded color values (#3b82f6) instead of var(--primary)
 - Similar but slightly different button implementations
 - Modal close behavior differs across the app
@@ -171,12 +187,12 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 
 ## Severity Classification
 
-| Severity | Definition | Action |
-|---|---|---|
-| **Critical** | Prevents use for some users (a11y violations, broken states, unusable on mobile) | Must fix. Recommend immediately. |
-| **High** | Significantly hurts UX (no feedback, confusing flow, poor hierarchy) | Should fix. High-priority recommendation. |
-| **Medium** | Noticeable quality gap (generic type, missing animations, inconsistent spacing) | Recommend if time allows. |
-| **Low** | Refinement opportunity (could be more delightful, slightly better copy) | Mention as nice-to-have. |
+| Severity     | Definition                                                                       | Action                                    |
+| ------------ | -------------------------------------------------------------------------------- | ----------------------------------------- |
+| **Critical** | Prevents use for some users (a11y violations, broken states, unusable on mobile) | Must fix. Recommend immediately.          |
+| **High**     | Significantly hurts UX (no feedback, confusing flow, poor hierarchy)             | Should fix. High-priority recommendation. |
+| **Medium**   | Noticeable quality gap (generic type, missing animations, inconsistent spacing)  | Recommend if time allows.                 |
+| **Low**      | Refinement opportunity (could be more delightful, slightly better copy)          | Mention as nice-to-have.                  |
 
 ## Quick Assessment Template
 
@@ -203,28 +219,28 @@ When evaluating existing design systems or planning new ones, assess maturity ac
 
 ### Maturity Levels
 
-| Level | Name | Characteristics |
-|-------|------|-----------------|
-| **0** | None | No design system; ad-hoc styling, hard-coded values |
-| **1** | Foundation | Basic tokens (colors, fonts); no reusable components |
-| **2** | Component | Reusable components exist; limited documentation |
-| **3** | Systematic | Pattern library; usage guidelines; some governance |
-| **4** | Comprehensive | V&T guide; a11y standards; i18n; multi-platform |
-| **5** | Ecosystem | Token pipeline; Figma sync; automated testing; contribution model |
+| Level | Name          | Characteristics                                                   |
+| ----- | ------------- | ----------------------------------------------------------------- |
+| **0** | None          | No design system; ad-hoc styling, hard-coded values               |
+| **1** | Foundation    | Basic tokens (colors, fonts); no reusable components              |
+| **2** | Component     | Reusable components exist; limited documentation                  |
+| **3** | Systematic    | Pattern library; usage guidelines; some governance                |
+| **4** | Comprehensive | V&T guide; a11y standards; i18n; multi-platform                   |
+| **5** | Ecosystem     | Token pipeline; Figma sync; automated testing; contribution model |
 
 ### Maturity Rubric
 
 Score each dimension 0-5:
 
-| Dimension | 0 | 1 | 2 | 3 | 4 | 5 |
-|-----------|---|---|---|---|---|---|
-| **Tokens** | None | Colors only | + Typography | + Spacing | + Motion, shadows | Token pipeline |
-| **Components** | None | <5 basic | 10-20 common | Full set | All states/variants | Auto-generated docs |
-| **Documentation** | None | README | Usage notes | Full docs | Interactive examples | Versioned, searchable |
-| **Voice & Tone** | None | Informal | Basic guide | Full V&T | Context-aware | Content linting |
-| **Accessibility** | Ignored | Color contrast | WCAG A | WCAG AA | WCAG AAA | Automated a11y CI |
-| **Multi-platform** | Single | Responsive | Mobile-first | Native + web | Token sync | Unified codebase |
-| **Governance** | None | One owner | Team review | Contribution guide | Automated checks | Community model |
+| Dimension          | 0       | 1              | 2            | 3                  | 4                    | 5                     |
+| ------------------ | ------- | -------------- | ------------ | ------------------ | -------------------- | --------------------- |
+| **Tokens**         | None    | Colors only    | + Typography | + Spacing          | + Motion, shadows    | Token pipeline        |
+| **Components**     | None    | <5 basic       | 10-20 common | Full set           | All states/variants  | Auto-generated docs   |
+| **Documentation**  | None    | README         | Usage notes  | Full docs          | Interactive examples | Versioned, searchable |
+| **Voice & Tone**   | None    | Informal       | Basic guide  | Full V&T           | Context-aware        | Content linting       |
+| **Accessibility**  | Ignored | Color contrast | WCAG A       | WCAG AA            | WCAG AAA             | Automated a11y CI     |
+| **Multi-platform** | Single  | Responsive     | Mobile-first | Native + web       | Token sync           | Unified codebase      |
+| **Governance**     | None    | One owner      | Team review  | Contribution guide | Automated checks     | Community model       |
 
 ### Maturity Assessment Template
 
@@ -253,12 +269,12 @@ Use during `/design improve` and `/design iterate`:
 
 ### Benchmark Comparisons
 
-| Company Stage | Typical Level | Reference Systems | Focus Areas |
-|---------------|---------------|-------------------|-------------|
-| **Startup (MVP)** | 1-2 | Use Chakra/shadcn | Ship fast, consistency later |
-| **Growth** | 2-3 | Polaris, Evergreen | Documentation, patterns |
-| **Enterprise** | 3-4 | Carbon, Spectrum | Governance, accessibility |
-| **Platform** | 4-5 | Material, Fluent | Ecosystem, automation |
+| Company Stage     | Typical Level | Reference Systems  | Focus Areas                  |
+| ----------------- | ------------- | ------------------ | ---------------------------- |
+| **Startup (MVP)** | 1-2           | Use Chakra/shadcn  | Ship fast, consistency later |
+| **Growth**        | 2-3           | Polaris, Evergreen | Documentation, patterns      |
+| **Enterprise**    | 3-4           | Carbon, Spectrum   | Governance, accessibility    |
+| **Platform**      | 4-5           | Material, Fluent   | Ecosystem, automation        |
 
 ### When to Assess Maturity
 

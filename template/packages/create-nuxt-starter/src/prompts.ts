@@ -73,7 +73,7 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
   // 6. Extras (multiselect)
   const extrasOptions = [
     { label: '圖表 (nuxt-charts)', value: 'charts' },
-    { label: 'SEO (@nuxtjs/seo)（需要 SSR）', value: 'seo' },
+    { label: 'SEO（robots / sitemap / schema.org，需要 SSR）', value: 'seo' },
     { label: '安全性 Headers (nuxt-security)', value: 'security' },
     { label: '影像最佳化 (@nuxt/image)', value: 'image' },
     { label: 'VueUse 工具庫', value: 'vueuse' },

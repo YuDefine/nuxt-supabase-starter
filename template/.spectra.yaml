@@ -8,6 +8,7 @@ locale: tw
 tdd: true
 audit: true
 parallel_tasks: true
+design_review: true # Trigger /design workflow for UI-touching tasks
 
 # Claude slash commands (Skills format is default in 2.2.3, no need for old commands)
 claude_slash_commands: false
@@ -15,3 +16,30 @@ claude_slash_commands: false
 # Claude Code skill effort levels (low/medium/high/max)
 claude_effort:
   apply: high
+
+# Design workflow integration
+design:
+  # Tasks touching these paths trigger Design Review
+  ui_paths:
+    - 'app/pages/**'
+    - 'app/components/**'
+    - 'app/layouts/**'
+    - '**/*.vue'
+
+  # Design Review checkpoints (injected into tasks when ui_paths touched)
+  review_steps:
+    - check_impeccable: '/teach-impeccable if .impeccable.md missing'
+    - design_improve: '/design improve [affected files]'
+    - fix_drift: 'Fidelity Score must reach 8/8, max 2 rounds'
+    - targeted_skills: 'Execute /design plan in canonical order'
+    - audit: '/audit — Critical must be 0'
+    - screenshot: '/review-screenshot — visual QA'
+
+  # Trigger points (after which task group to run Design Review)
+  trigger_after:
+    - pattern: 'Auth|Login|Callback'
+      scope: 'app/pages/auth/**'
+    - pattern: 'Admin|Management|Dashboard'
+      scope: 'app/pages/admin/**'
+    - pattern: 'Form|List|Table|CRUD'
+      scope: 'app/pages/**'

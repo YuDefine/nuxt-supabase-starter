@@ -466,18 +466,21 @@ Fidelity Score: N/8 PASS
 ## Reference Resources
 
 ### Internal References (always consult)
+
 - `references/design-systems.md` — Industry-categorized design system index (209 systems)
 - `references/skill-map.md` — Issue → Skill mapping + library recommendations
 - `references/diagnosis.md` — 8-dimension diagnostic rubric + maturity model
 
 ### When to Cite External References
-| Mode | Citation Pattern |
-|------|------------------|
-| `/design new` | Cite similar industry systems as inspiration |
-| `/design improve` | Cite mature systems as benchmarks |
+
+| Mode              | Citation Pattern                             |
+| ----------------- | -------------------------------------------- |
+| `/design new`     | Cite similar industry systems as inspiration |
+| `/design improve` | Cite mature systems as benchmarks            |
 | `/design iterate` | Cite maturity model for progression tracking |
 
 ### Key External Resources
+
 - [awesome-design-systems](https://github.com/alexpate/awesome-design-systems) — Comprehensive index
 - [Design Systems Repo](https://designsystemsrepo.com/) — Searchable database
 - [Component Gallery](https://component.gallery/) — UI pattern reference

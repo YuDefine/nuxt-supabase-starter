@@ -87,14 +87,16 @@ function printUnresolvedReport(projectRoot, unresolved) {
 
   for (const [file, tags] of grouped.entries()) {
     console.error(`- ${file}`)
-    for (const tag of [...tags].sort((a, b) => a.localeCompare(b))) {
+    for (const tag of [...tags].toSorted((a, b) => a.localeCompare(b))) {
       console.error(`  - <${tag}>`)
     }
   }
 
   console.error('')
   console.error(`Total ${unresolved.length} unresolved component usages.`)
-  console.error('Hint: if you just added a component, verify the file name and path, then run nuxt prepare / typecheck.')
+  console.error(
+    'Hint: if you just added a component, verify the file name and path, then run nuxt prepare / typecheck.'
+  )
 }
 
 function printParseErrorReport(projectRoot, parseErrors) {
@@ -118,7 +120,9 @@ async function run() {
   try {
     registeredComponents = await loadRegisteredComponents(projectRoot)
   } catch (error) {
-    console.error('Cannot read .nuxt/components.d.ts. Please run nuxt prepare or pnpm typecheck first.')
+    console.error(
+      'Cannot read .nuxt/components.d.ts. Please run nuxt prepare or pnpm typecheck first.'
+    )
     if (error instanceof Error) {
       console.error(error.message)
     }

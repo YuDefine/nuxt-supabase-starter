@@ -87,7 +87,10 @@ run_step \
   "install scaffold deps" \
   pnpm --dir "$ROOT_DIR/template" install --filter create-nuxt-starter --ignore-scripts
 
-if [[ ! -f "$CLI_DIST" || "$CLI_SRC" -nt "$CLI_DIST" ]]; then
+if [[ ! -f "$CLI_DIST" ]] || \
+   find "$CLI_DIR/src" -type f -newer "$CLI_DIST" | grep -q . || \
+   [[ "$CLI_DIR/package.json" -nt "$CLI_DIST" ]] || \
+   [[ -f "$CLI_DIR/tsconfig.json" && "$CLI_DIR/tsconfig.json" -nt "$CLI_DIST" ]]; then
   run_step \
     "build scaffold cli" \
     pnpm --dir "$CLI_DIR" run build
@@ -100,6 +103,33 @@ run_step \
 if [[ ! -f "$TARGET_DIR/package.json" ]]; then
   fail "missing package.json in scaffolded project"
 fi
+
+for required_path in \
+  "$TARGET_DIR/.claude/settings.json" \
+  "$TARGET_DIR/.claude/versions.json" \
+  "$TARGET_DIR/.claude/commands/validate-starter.md" \
+  "$TARGET_DIR/scripts/compress-skill-descriptions.sh" \
+  "$TARGET_DIR/scripts/templates/clean/README.md"; do
+  if [[ ! -e "$required_path" ]]; then
+    fail "missing shared template asset: $required_path"
+  fi
+done
+pass "shared template assets copied"
+
+if [[ -e "$TARGET_DIR/.scaffold-cleanup" ]]; then
+  fail "scaffold output unexpectedly contains .scaffold-cleanup"
+fi
+pass "no deferred cleanup marker generated"
+
+if grep -q 'rm -rf "$CLEANUP_PATH"' "$TARGET_DIR/scripts/setup.sh"; then
+  fail "setup.sh still contains dangerous auto-delete cleanup"
+fi
+pass "setup.sh keeps cleanup manual"
+
+if grep -qE 'for skill in .*arrange.*extract.*frontend-design.*harden.*normalize.*onboard.*teach-impeccable' "$TARGET_DIR/scripts/install-skills.sh"; then
+  fail "install-skills.sh still contains removed upstream impeccable skill ids"
+fi
+pass "install-skills.sh uses supported upstream skill ids"
 
 PACKAGE_NAME="$(node -e "const p=require('$TARGET_DIR/package.json'); process.stdout.write(p.name)")"
 if [[ "$PACKAGE_NAME" != "$PROJECT_NAME" ]]; then

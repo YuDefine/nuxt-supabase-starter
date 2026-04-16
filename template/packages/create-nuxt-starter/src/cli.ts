@@ -40,13 +40,17 @@ function detectMonorepoRoot(): string | undefined {
 }
 
 function getInvocationCwd(monorepoRoot: string | undefined): string {
-  // When running inside the starter monorepo, resolve to the parent directory
-  // so projects are created as siblings (e.g. ../test-project), not inside the repo.
+  const initCwd = process.env.INIT_CWD?.trim()
+
+  // Inside the starter monorepo, prefer the user's actual invocation cwd
+  // so relative output paths match the docs and shell expectation.
   if (monorepoRoot) {
-    return resolve(monorepoRoot, '..')
+    if (initCwd && initCwd.length > 0) {
+      return initCwd
+    }
+    return monorepoRoot
   }
 
-  const initCwd = process.env.INIT_CWD?.trim()
   if (initCwd && initCwd.length > 0) {
     return initCwd
   }
@@ -298,7 +302,7 @@ const main = defineCommand({
     }
 
     // Post-scaffold
-    await postScaffold(targetDir, pkgName, invocationCwd, monorepoRoot)
+    await postScaffold(targetDir, pkgName, invocationCwd)
   },
 })
 

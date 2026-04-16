@@ -118,9 +118,19 @@ export const featureModules: FeatureModule[] = [
     group: 'extras',
     dependencies: ['ssr'],
     packages: {
-      '@nuxtjs/seo': '^3.4.0',
+      '@nuxtjs/robots': '^5.7.0',
+      '@nuxtjs/sitemap': '^7.6.0',
+      'nuxt-schema-org': '^5.0.10',
+      'nuxt-seo-utils': '^7.0.19',
+      'nuxt-site-config': '^3.2.21',
     },
-    nuxtModules: ['@nuxtjs/seo'],
+    nuxtModules: [
+      'nuxt-site-config',
+      '@nuxtjs/robots',
+      '@nuxtjs/sitemap',
+      'nuxt-schema-org',
+      'nuxt-seo-utils',
+    ],
     envVars: {
       NUXT_PUBLIC_SITE_URL: 'http://localhost:3000',
     },
@@ -186,7 +196,7 @@ export const featureModules: FeatureModule[] = [
     templateDir: 'features/vueuse',
   },
 
-  // Testing - Full
+  // Testing - Full (depends on quality for vite-plus)
   {
     id: 'testing-full',
     name: 'Vitest + Playwright',
@@ -194,11 +204,11 @@ export const featureModules: FeatureModule[] = [
     default: true,
     group: 'testing',
     incompatible: ['testing-vitest'],
+    dependencies: ['quality'],
     devPackages: {
-      vitest: '^4.1.0',
-      '@vitest/coverage-v8': '^4.1.0',
       '@nuxt/test-utils': '^4.0.0',
       '@playwright/test': '^1.58.2',
+      '@vitest/coverage-v8': '^4.1.2',
       '@vue/test-utils': '^2.4.6',
       'happy-dom': '^20.8.4',
     },
@@ -207,7 +217,7 @@ export const featureModules: FeatureModule[] = [
     templateDir: 'features/testing-full',
   },
 
-  // Testing - Vitest only
+  // Testing - Vitest only (depends on quality for vite-plus)
   {
     id: 'testing-vitest',
     name: '僅 Vitest',
@@ -215,10 +225,10 @@ export const featureModules: FeatureModule[] = [
     default: false,
     group: 'testing',
     incompatible: ['testing-full'],
+    dependencies: ['quality'],
     devPackages: {
-      vitest: '^4.1.0',
-      '@vitest/coverage-v8': '^4.1.0',
       '@nuxt/test-utils': '^4.0.0',
+      '@vitest/coverage-v8': '^4.1.2',
       '@vue/test-utils': '^2.4.6',
       'happy-dom': '^20.8.4',
     },
@@ -287,16 +297,15 @@ export const featureModules: FeatureModule[] = [
     templateDir: 'features/deploy-node',
   },
 
-  // Code Quality
+  // Code Quality (Vite+ = unified toolchain: vitest + oxlint + oxfmt)
   {
     id: 'quality',
-    name: 'OXLint + OXFmt',
-    description: '程式碼品質工具（Rust 實作，極快）',
+    name: 'Vite+ (OXLint + OXFmt)',
+    description: 'Vite+ 統一工具鏈（Rust 實作，極快）',
     default: true,
     group: 'quality',
     devPackages: {
-      oxlint: '^1.55.0',
-      oxfmt: '^0.40.0',
+      'vite-plus': '^0.1.14',
     },
     packages: {},
     templateDir: 'features/quality',

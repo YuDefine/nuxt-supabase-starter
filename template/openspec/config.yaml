@@ -29,5 +29,15 @@ rules:
   tasks:
     - Follow TDD: write test first, verify red, implement, verify green
     - Each task should be independently verifiable
-    - If change involves UI (.vue files), include a "Design Review" section after functional tasks
-    - Design Review tasks: /teach-impeccable (if needed) → /design improve → targeted skills → /audit → review-screenshot
+    - When any task touches UI paths (`.vue`, `pages/`, `components/`, `layouts/`), the task group MUST include a Design Review section before 人工檢查
+    - Design Review section MUST include: impeccable check, /design improve, DRIFT fix loop, targeted skills, /audit, /review-screenshot
+    - 'UI-affecting tasks MUST include a `> QA:` annotation listing key screens/routes and manual test focus points'
+
+  design_workflow:
+    - Design Review is mandatory for UI-touching changes; it is not optional polish
+    - /teach-impeccable runs once per project if .impeccable.md is missing
+    - /design improve produces a Design Fidelity Report; all DRIFT items must be fixed before proceeding
+    - Fidelity fix loop has max 2 rounds; if still failing, escalate to user
+    - /audit must reach Critical = 0 before marking Design Review complete
+    - /review-screenshot captures visual evidence for archive
+    - Design Review findings are logged to docs/design-review-findings.md for cross-change pattern analysis

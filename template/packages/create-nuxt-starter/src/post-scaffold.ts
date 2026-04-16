@@ -1,13 +1,11 @@
 import { execFileSync } from 'node:child_process'
-import { writeFileSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { relative } from 'node:path'
 import { consola } from 'consola'
 
 export async function postScaffold(
   targetDir: string,
   projectName: string,
-  invocationCwd: string,
-  monorepoRoot?: string
+  invocationCwd: string
 ): Promise<void> {
   // Use the user's actual cwd for the cd hint, not invocationCwd
   // (which may differ when running inside the monorepo)
@@ -38,16 +36,7 @@ export async function postScaffold(
     consola.warn('Git 初始化失敗，請手動執行。')
   }
 
-  // 3. Save monorepo clone path for deferred cleanup during `pnpm run setup`
-  if (monorepoRoot) {
-    try {
-      writeFileSync(join(targetDir, '.scaffold-cleanup'), monorepoRoot, 'utf8')
-    } catch {
-      // Non-critical — setup.sh will skip cleanup if marker is missing
-    }
-  }
-
-  // 4. Display next steps
+  // 3. Display next steps
   consola.log('')
   consola.box(
     [

@@ -191,24 +191,24 @@ npx playwright test tests/e2e/screenshots/<topic>.spec.ts \
 Script 骨架（`tests/e2e/screenshots/<topic>.spec.ts`）：
 
 ```typescript
-import { test, expect } from "@playwright/test";
+import { test, expect } from '@playwright/test'
 
 const BREAKPOINTS = [
-  { name: "desktop", width: 1440, height: 900 },
-  { name: "tablet", width: 768, height: 1024 },
-  { name: "mobile", width: 375, height: 812 },
-];
+  { name: 'desktop', width: 1440, height: 900 },
+  { name: 'tablet', width: 768, height: 1024 },
+  { name: 'mobile', width: 375, height: 812 },
+]
 
 for (const bp of BREAKPOINTS) {
   test(`<topic> @ ${bp.name}`, async ({ page }) => {
-    await page.setViewportSize({ width: bp.width, height: bp.height });
-    await page.goto("http://localhost:3000/auth/_dev-login?redirect=/target");
-    await page.waitForSelector("text=目標文字");
+    await page.setViewportSize({ width: bp.width, height: bp.height })
+    await page.goto('http://localhost:3000/auth/_dev-login?redirect=/target')
+    await page.waitForSelector('text=目標文字')
     await page.screenshot({
       path: `screenshots/local/<folder>/${bp.name}-<desc>.png`,
       fullPage: true,
-    });
-  });
+    })
+  })
 }
 ```
 
@@ -224,11 +224,11 @@ for (const bp of BREAKPOINTS) {
 ```typescript
 // server/routes/auth/_dev-login.get.ts
 export default defineEventHandler(async (event) => {
-  if (!import.meta.dev) throw createError({ status: 404 });
-  const query = getQuery(event);
+  if (!import.meta.dev) throw createError({ status: 404 })
+  const query = getQuery(event)
   // ... set session
-  return sendRedirect(event, (query.redirect as string) || "/");
-});
+  return sendRedirect(event, (query.redirect as string) || '/')
+})
 ```
 
 ## 產出報告
