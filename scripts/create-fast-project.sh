@@ -85,18 +85,29 @@ fi
 echo "[1/3] install scaffold dependencies"
 pnpm --dir "$ROOT_DIR/template" install --filter create-nuxt-starter --ignore-scripts
 
-if [[ ! -f "$CLI_DIST" || "$CLI_SRC" -nt "$CLI_DIST" ]]; then
+if [[ ! -f "$CLI_DIST" ]] || \
+   find "$CLI_DIR/src" -type f -newer "$CLI_DIST" | grep -q . || \
+   [[ "$CLI_DIR/package.json" -nt "$CLI_DIST" ]] || \
+   [[ -f "$CLI_DIR/tsconfig.json" && "$CLI_DIR/tsconfig.json" -nt "$CLI_DIST" ]]; then
   echo "[1.5/3] build scaffold cli"
   pnpm --dir "$CLI_DIR" run build
 fi
 
 echo "[2/3] scaffold project (fast profile)"
-node "$CLI_DIST" \
-  "$TARGET_DIR" \
-  --yes \
-  --fast \
-  --auth "$AUTH_MODE" \
-  "${EXTRA_ARGS[@]}"
+if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
+  node "$CLI_DIST" \
+    "$TARGET_DIR" \
+    --yes \
+    --fast \
+    --auth "$AUTH_MODE" \
+    "${EXTRA_ARGS[@]}"
+else
+  node "$CLI_DIST" \
+    "$TARGET_DIR" \
+    --yes \
+    --fast \
+    --auth "$AUTH_MODE"
+fi
 
 echo "[3/3] keyword scan (should be empty)"
 if command -v rg >/dev/null 2>&1; then

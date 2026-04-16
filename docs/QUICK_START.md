@@ -69,6 +69,8 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 	--without testing-full
 ```
 
+相對路徑（例如 `temp/my-product`）會建立在你**目前執行指令的目錄**底下。以上面例子來說，如果你人在 starter repo root，產物就會落在 `./temp/my-product`。
+
 參數說明：
 
 - 專案名稱：最後一段路徑就是專案名稱（例如 `temp/my-product`）
@@ -127,6 +129,8 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 - Deploy：三個部署目標只能選一
 - CI：`ci-simple` 和 `ci-advanced` 不能同時選
 - SEO 依賴 SSR：選 `seo` 會自動啟用 `ssr`
+- Scaffold 預設會關閉 production sourcemap，避免 Cloudflare SSR build 額外記憶體負擔
+- Monitoring 的 source map 上傳依賴 `SENTRY_AUTH_TOKEN`；未設定時維持 `sourcemap: false`，有設定時才改用 hidden source maps 上傳到 Sentry
 
 #### 決策流程
 
@@ -228,7 +232,7 @@ pnpm dev          # 開啟 http://localhost:3000
 bash scripts/install-skills.sh
 ```
 
-安裝與你選擇的功能對應的 Skills 到 `.claude/skills/`（腳本由 scaffold 依選配自動產生，只安裝需要的 skills）。命令權限和 MCP Servers 已在 `.claude/settings.json` 中預先配置。
+安裝第三方 Skills 的最新版到 `.claude/skills/`；隨 starter 版控的本地 skills 會在 scaffold 時直接一併帶出。命令權限和 MCP Servers 已在 `.claude/settings.json` 中預先配置。
 
 > 📖 關於 Supabase MCP：[SUPABASE_MCP.md](../template/docs/SUPABASE_MCP.md)
 

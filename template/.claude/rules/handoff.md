@@ -38,9 +38,9 @@
 
 ## 與 MEMORY.md 的差別
 
-| | HANDOFF.md | MEMORY.md |
-|---|---|---|
-| 範圍 | 單次交接 | 跨 session 持久 |
-| 內容 | 當前 WIP 狀態、blocker、next steps | 使用者偏好、專案知識、回饋 |
-| 生命週期 | 用完刪除 | 長期維護 |
-| 位置 | `template/HANDOFF.md` | `~/.claude/projects/.../memory/` |
+|          | HANDOFF.md                         | MEMORY.md                        |
+| -------- | ---------------------------------- | -------------------------------- |
+| 範圍     | 單次交接                           | 跨 session 持久                  |
+| 內容     | 當前 WIP 狀態、blocker、next steps | 使用者偏好、專案知識、回饋       |
+| 生命週期 | 用完刪除                           | 長期維護                         |
+| 位置     | `template/HANDOFF.md`              | `~/.claude/projects/.../memory/` |

@@ -14,14 +14,14 @@ echo ""
 # --------------------------------------------------
 
 if [ -f .scaffold-cleanup ]; then
-  CLEANUP_PATH=$(cat .scaffold-cleanup)
-  if [ -n "$CLEANUP_PATH" ] && [ -d "$CLEANUP_PATH" ]; then
-    echo "🧹 清除暫存的 starter repo..."
-    rm -rf "$CLEANUP_PATH"
-    echo "✅ 暫存 repo 已刪除：$CLEANUP_PATH"
-    echo ""
+  CLEANUP_PATH=$(tr -d '\r\n' < .scaffold-cleanup)
+  echo "⚠️ 偵測到舊版 .scaffold-cleanup marker。"
+  echo "   為避免誤刪任何目錄，setup 已停用自動刪除 starter repo 的行為。"
+  if [ -n "$CLEANUP_PATH" ]; then
+    echo "   如需移除來源 starter clone，請自行確認後手動刪除：$CLEANUP_PATH"
   fi
   rm -f .scaffold-cleanup
+  echo ""
 fi
 
 # --------------------------------------------------
@@ -41,6 +41,40 @@ detect_os() {
     MINGW*|MSYS*|CYGWIN*)  echo "windows" ;;
     *)  echo "unknown" ;;
   esac
+}
+
+get_supabase_port() {
+  local section="$1"
+  awk -F'=' -v target="[$section]" '
+    $0 == target { in_section = 1; next }
+    /^\[/ && in_section { exit }
+    in_section && $1 ~ /^[[:space:]]*port[[:space:]]*$/ {
+      gsub(/[[:space:]]/, "", $2)
+      print $2
+      exit
+    }
+  ' supabase/config.toml 2>/dev/null
+}
+
+check_port_in_use() {
+  local port="$1"
+  if [ -z "$port" ]; then
+    return 1
+  fi
+
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+    return $?
+  fi
+
+  return 1
+}
+
+print_port_usage() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | sed 's/^/     /'
+  fi
 }
 
 OS="$(detect_os)"
@@ -257,6 +291,32 @@ else
   if supabase status &> /dev/null; then
     echo "ℹ️  Supabase 已在執行中，跳過啟動"
   else
+    API_PORT="$(get_supabase_port api)"
+    DB_PORT="$(get_supabase_port db)"
+    STUDIO_PORT="$(get_supabase_port studio)"
+    CONFLICT_PORTS=()
+
+    for port in "$API_PORT" "$DB_PORT" "$STUDIO_PORT"; do
+      if check_port_in_use "$port"; then
+        CONFLICT_PORTS+=("$port")
+      fi
+    done
+
+    if [ ${#CONFLICT_PORTS[@]} -gt 0 ]; then
+      echo "❌ 無法啟動本地 Supabase：偵測到必要連接埠已被占用"
+      for port in "${CONFLICT_PORTS[@]}"; do
+        echo "   - Port $port"
+        print_port_usage "$port"
+      done
+      echo ""
+      echo "   請先停止既有的 Supabase / 其他服務，或調整 supabase/config.toml 的 port 設定後再重試。"
+      echo "   可用指令："
+      echo "     lsof -i :<port>"
+      echo "     supabase stop --project-id <project-id>"
+      echo "     supabase start"
+      exit 1
+    fi
+
     echo "🐘 啟動 Supabase..."
     supabase start
   fi
@@ -315,6 +375,16 @@ fi
 echo "🔧 產生資料庫型別..."
 pnpm db:types
 echo ""
+
+# --------------------------------------------------
+# 6. 安裝 Claude Code Skills
+# --------------------------------------------------
+
+if [ -f scripts/install-skills.sh ]; then
+  echo "🤖 安裝 Claude Code Skills..."
+  pnpm skills:install
+  echo ""
+fi
 
 # ============================================
 # .env 設定檢查

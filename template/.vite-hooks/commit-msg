@@ -1,3 +1,2 @@
 #!/usr/bin/env sh
-cd "$(git rev-parse --show-toplevel)/template"
 pnpm commitlint --edit $1

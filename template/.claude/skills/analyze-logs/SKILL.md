@@ -4,7 +4,7 @@ description: Analyze application logs from the .evlog/logs/ directory. Use when 
 license: MIT
 metadata:
   author: HugoRCD
-  version: "0.1"
+  version: '0.1'
 ---
 
 # Analyze application logs
@@ -24,6 +24,7 @@ Read and analyze structured wide-event logs from the local `.evlog/logs/` direct
 Logs are written by evlog's file system drain as `.jsonl` files, organized by date.
 
 **Format detection**: The drain supports two modes:
+
 - **NDJSON** (default, `pretty: false`): One compact JSON object per line. Parse line-by-line.
 - **Pretty** (`pretty: true`): Multi-line indented JSON per event. Parse by reading the entire file and splitting on top-level objects (e.g. `JSON.parse('[' + content.replace(/\}\n\{/g, '},{') + ']')`) or use a streaming JSON parser.
 
@@ -75,22 +76,22 @@ After setup, the user needs to trigger some requests to generate logs, then re-a
 
 Each line is a self-contained JSON object (wide event). Key fields:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `timestamp` | `string` | ISO 8601 timestamp |
-| `level` | `string` | `info`, `warn`, `error`, `debug` |
-| `service` | `string` | Service name |
-| `environment` | `string` | `development`, `production`, etc. |
-| `method` | `string` | HTTP method (`GET`, `POST`, etc.) |
-| `path` | `string` | Request path (`/api/checkout`) |
-| `status` | `number` | HTTP response status code |
-| `duration` | `string` | Request duration (`"234ms"`) |
-| `requestId` | `string` | Unique request identifier |
-| `error` | `object` | Error details: `name`, `message`, `stack`, `statusCode`, `data` |
-| `error.data.why` | `string` | Human-readable explanation of what went wrong |
-| `error.data.fix` | `string` | Suggested fix for the error |
-| `source` | `string` | `client` for browser logs, absent for server logs |
-| `userAgent` | `object` | Parsed browser/OS/device info |
+| Field            | Type     | Description                                                     |
+| ---------------- | -------- | --------------------------------------------------------------- |
+| `timestamp`      | `string` | ISO 8601 timestamp                                              |
+| `level`          | `string` | `info`, `warn`, `error`, `debug`                                |
+| `service`        | `string` | Service name                                                    |
+| `environment`    | `string` | `development`, `production`, etc.                               |
+| `method`         | `string` | HTTP method (`GET`, `POST`, etc.)                               |
+| `path`           | `string` | Request path (`/api/checkout`)                                  |
+| `status`         | `number` | HTTP response status code                                       |
+| `duration`       | `string` | Request duration (`"234ms"`)                                    |
+| `requestId`      | `string` | Unique request identifier                                       |
+| `error`          | `object` | Error details: `name`, `message`, `stack`, `statusCode`, `data` |
+| `error.data.why` | `string` | Human-readable explanation of what went wrong                   |
+| `error.data.fix` | `string` | Suggested fix for the error                                     |
+| `source`         | `string` | `client` for browser logs, absent for server logs               |
+| `userAgent`      | `object` | Parsed browser/OS/device info                                   |
 
 All other fields are application-specific context added via `log.set()` (e.g. `user`, `cart`, `payment`).
 

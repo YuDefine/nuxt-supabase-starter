@@ -188,15 +188,19 @@ export default defineNuxtConfig({
   // Sentry 建置時設定：Source Maps 上傳
   // 需要設定 SENTRY_AUTH_TOKEN、SENTRY_ORG、SENTRY_PROJECT 環境變數
   sentry: {
+    enabled: Boolean(process.env.SENTRY_AUTH_TOKEN),
+    telemetry: false,
     org: process.env.SENTRY_ORG,
     project: process.env.SENTRY_PROJECT,
     authToken: process.env.SENTRY_AUTH_TOKEN,
   },
 
-  // 啟用 hidden source maps（上傳到 Sentry 但不公開）
-  sourcemap: {
-    client: 'hidden',
-  },
+  // 只有在有 auth token 時才啟用 hidden source maps，上傳到 Sentry
+  sourcemap: process.env.SENTRY_AUTH_TOKEN
+    ? {
+        client: 'hidden',
+      }
+    : false,
 
   nitro: {
     experimental: {

@@ -1,7 +1,6 @@
-type ConsoleArgs = Parameters<typeof console.warn>
+import { beforeEach } from 'vitest'
 
-const originalConsoleWarn = console.warn.bind(console)
-const originalConsoleError = console.error.bind(console)
+type ConsoleArgs = Parameters<typeof console.warn>
 
 function formatConsoleArgs(args: ConsoleArgs): string {
   return args
@@ -35,12 +34,20 @@ function throwOnVueUnresolvedComponent(level: 'warn' | 'error', args: ConsoleArg
   }
 }
 
-console.warn = (...args: ConsoleArgs) => {
-  throwOnVueUnresolvedComponent('warn', args)
-  originalConsoleWarn(...args)
-}
+// Vitest 4 provides a different `console` object to test modules.
+// We patch `globalThis.console` which is what Vue runtime actually uses.
+beforeEach(() => {
+  const gc = globalThis.console
+  const originalWarn = gc.warn.bind(gc)
+  const originalError = gc.error.bind(gc)
 
-console.error = (...args: ConsoleArgs) => {
-  throwOnVueUnresolvedComponent('error', args)
-  originalConsoleError(...args)
-}
+  gc.warn = (...args: ConsoleArgs) => {
+    throwOnVueUnresolvedComponent('warn', args)
+    originalWarn(...args)
+  }
+
+  gc.error = (...args: ConsoleArgs) => {
+    throwOnVueUnresolvedComponent('error', args)
+    originalError(...args)
+  }
+})

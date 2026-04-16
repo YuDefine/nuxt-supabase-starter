@@ -37,10 +37,12 @@ export function assembleProject(
   // 6. Generate CLAUDE.md
   generateClaudeMd(targetDir, selectedFeatureIds)
 
-  // 7. Copy skills, agents, and review rules
-  copyClaudeCodeAssets(targetDir, selectedFeatureIds)
+  // 7. Copy shared template assets first so scaffold inherits template updates.
+  copyTemplateClaudeAssets(targetDir)
+  copyTemplateGitHubAssets(targetDir)
 
-  // 8. Copy rules, hooks, commands, settings, guard system
+  // 8. Layer feature-gated assets and generated settings on top.
+  copyClaudeCodeAssets(targetDir, selectedFeatureIds)
   copyRules(targetDir, selectedFeatureIds)
   copyHooks(targetDir, selectedFeatureIds)
   copyCommands(targetDir, selectedFeatureIds)
@@ -94,6 +96,17 @@ function copyDirectoryFiltered(src: string, dest: string, exclude: Set<string>):
       mkdirSync(dirname(destPath), { recursive: true })
       cpSync(srcPath, destPath)
     }
+  }
+}
+
+function copyTemplateClaudeAssets(targetDir: string): void {
+  copyDirectory(join(STARTER_ROOT, '.claude'), join(targetDir, '.claude'))
+}
+
+function copyTemplateGitHubAssets(targetDir: string): void {
+  const githubDir = join(STARTER_ROOT, '.github')
+  if (existsSync(githubDir)) {
+    copyDirectory(githubDir, join(targetDir, '.github'))
   }
 }
 
@@ -155,22 +168,22 @@ export function generatePackageJson(
     }
   }
 
-  // Add feature-specific scripts
+  // Add feature-specific scripts (vite-plus unified toolchain)
   if (
     selectedFeatureIds.includes('testing-full') ||
     selectedFeatureIds.includes('testing-vitest')
   ) {
-    basePkg.scripts.test = 'vitest run --coverage'
-    basePkg.scripts['test:unit'] = 'vitest run test/unit'
-    basePkg.scripts['test:watch'] = 'vitest watch'
+    basePkg.scripts.test = 'vp test --coverage'
+    basePkg.scripts['test:unit'] = 'vp test test/unit'
+    basePkg.scripts['test:watch'] = 'vp test --watch'
   }
   if (selectedFeatureIds.includes('testing-full')) {
     basePkg.scripts['test:e2e'] = 'playwright test'
   }
   if (selectedFeatureIds.includes('quality')) {
-    basePkg.scripts.lint = 'oxlint --deny-warnings .'
-    basePkg.scripts.format = 'oxfmt .'
-    basePkg.scripts['format:check'] = 'oxfmt --check .'
+    basePkg.scripts.lint = 'vp lint'
+    basePkg.scripts.format = 'vp fmt'
+    basePkg.scripts['format:check'] = 'vp fmt --check'
     basePkg.scripts.check = 'pnpm format && pnpm lint && pnpm typecheck'
     if (
       selectedFeatureIds.includes('testing-full') ||
@@ -181,14 +194,19 @@ export function generatePackageJson(
   }
   if (selectedFeatureIds.includes('quality') && selectedFeatureIds.includes('git-hooks')) {
     basePkg['lint-staged'] = {
-      '*.{js,ts,vue}': ['oxlint --fix', 'oxfmt'],
+      '*.{js,ts,vue}': ['vp lint --fix', 'vp fmt'],
     }
   }
-  if (selectedFeatureIds.includes('git-hooks')) {
-    basePkg.scripts.prepare = selectedFeatureIds.includes('git-hooks')
-      ? 'husky && nuxt prepare'
-      : 'nuxt prepare'
+  // Prepare script: vp config (if quality) + husky (if git-hooks) + nuxt prepare
+  const prepareParts: string[] = []
+  if (selectedFeatureIds.includes('quality')) {
+    prepareParts.push('vp config')
   }
+  if (selectedFeatureIds.includes('git-hooks')) {
+    prepareParts.push('husky')
+  }
+  prepareParts.push('nuxt prepare')
+  basePkg.scripts.prepare = prepareParts.join(' && ')
   if (selectedFeatureIds.includes('database')) {
     basePkg.scripts['db:reset'] = 'bash ./scripts/db-reset.sh && pnpm db:types'
     basePkg.scripts['db:lint'] = 'supabase db lint --level warning'
@@ -204,6 +222,10 @@ export function generatePackageJson(
   basePkg.scripts['skills:install'] = 'bash ./scripts/install-skills.sh'
   basePkg.scripts['skills:list'] = 'bash ./scripts/check-skills.sh'
   basePkg.scripts['skills:update'] = 'bash ./scripts/install-skills.sh'
+
+  // Spectra UX completeness (always needed)
+  basePkg.scripts['audit:ux-drift'] = 'npx tsx scripts/audit-ux-drift.mts'
+  basePkg.scripts['spectra:roadmap'] = 'npx tsx scripts/spectra-ux/roadmap-sync.mts'
 
   // Sort dependencies
   basePkg.dependencies = sortObject(basePkg.dependencies)
@@ -338,15 +360,20 @@ export function generateNuxtConfig(targetDir: string, selectedFeatureIds: string
     configBlocks.push(`    redirect: false,`)
     configBlocks.push(`  },`)
   }
+  if (!selectedFeatureIds.includes('monitoring')) {
+    configBlocks.push(`  sourcemap: false,`)
+  }
   if (selectedFeatureIds.includes('monitoring')) {
     configBlocks.push(`  sentry: {`)
+    configBlocks.push(`    enabled: Boolean(process.env.SENTRY_AUTH_TOKEN),`)
+    configBlocks.push(`    telemetry: false,`)
     configBlocks.push(`    org: process.env.SENTRY_ORG,`)
     configBlocks.push(`    project: process.env.SENTRY_PROJECT,`)
     configBlocks.push(`    authToken: process.env.SENTRY_AUTH_TOKEN,`)
     configBlocks.push(`  },`)
-    configBlocks.push(`  sourcemap: {`)
+    configBlocks.push(`  sourcemap: process.env.SENTRY_AUTH_TOKEN ? {`)
     configBlocks.push(`    client: 'hidden',`)
-    configBlocks.push(`  },`)
+    configBlocks.push(`  } : false,`)
     configBlocks.push(`  evlog: {`)
     configBlocks.push(`    env: { service: '{{projectName}}' },`)
     configBlocks.push(`    include: ['/api/**'],`)
@@ -502,6 +529,7 @@ function copyClaudeCodeAssets(targetDir: string, selectedFeatureIds: string[]): 
       'motion',
       // Design orchestration + sub-skills
       'design',
+      'design-retro',
       'frontend-design',
       'animate',
       'arrange',
@@ -535,6 +563,11 @@ function copyClaudeCodeAssets(targetDir: string, selectedFeatureIds: string[]): 
 
   // VueUse
   if (selectedFeatureIds.includes('vueuse')) skills.push('vueuse', 'vueuse-functions')
+
+  // Monitoring — evlog skills
+  if (selectedFeatureIds.includes('monitoring')) {
+    skills.push('analyze-logs', 'review-logging-patterns')
+  }
 
   // Files to exclude from skill copies (prevent nested CLAUDE.md conflicts)
   const skillExclude = new Set(['CLAUDE.md'])
@@ -596,16 +629,41 @@ function hasAny(ids: string[], ...features: string[]): boolean {
 // --- Rules ---
 
 function copyRules(targetDir: string, feats: string[]): void {
-  const files = ['testing-anti-patterns.md', 'development.md', 'error-handling.md']
-  if (hasAny(feats, 'auth-nuxt-utils', 'auth-better-auth')) files.push('auth.md')
-  if (has(feats, 'database')) {
-    files.push('database-access.md', 'migration.md', 'rls-policy.md')
-    files.push('api-patterns.md', 'mcp-remote.md')
-  }
-  if (has(feats, 'monitoring')) files.push('logging.md')
+  // Always-included rules (core workflow + quality)
+  const files = [
+    'testing-anti-patterns.md',
+    'development.md',
+    'error-handling.md',
+    'commit.md',
+    'handoff.md',
+    'knowledge-and-decisions.md',
+    'manual-review.md',
+    'review-tiers.md',
+    'screenshot-strategy.md',
+    'unused-features.md',
+    'ux-completeness.md',
+    'proactive-skills.md',
+  ]
 
-  // Spectra + Design proactive trigger rules — always included
-  files.push('proactive-skills.md')
+  // Auth-specific rules
+  if (hasAny(feats, 'auth-nuxt-utils', 'auth-better-auth')) files.push('auth.md')
+
+  // Database-specific rules
+  if (has(feats, 'database')) {
+    files.push(
+      'database-access.md',
+      'migration.md',
+      'rls-policy.md',
+      'api-patterns.md',
+      'mcp-remote.md',
+      'query-optimization.md',
+      'storage.md',
+      'trigger.md'
+    )
+  }
+
+  // Monitoring-specific rules
+  if (has(feats, 'monitoring')) files.push('logging.md')
 
   copyFilesList(join(STARTER_ROOT, '.claude', 'rules'), join(targetDir, '.claude', 'rules'), files)
 }
@@ -613,19 +671,30 @@ function copyRules(targetDir: string, feats: string[]): void {
 // --- Hooks ---
 
 function copyHooks(targetDir: string, feats: string[]): void {
-  const files = ['stop-accumulate.sh', 'init-code-graph.sh']
-  if (has(feats, 'quality')) files.push('post-edit-typecheck.sh')
-  if (has(feats, 'database')) files.push('post-migration-gen-types.sh')
-
-  // Spectra + Design hooks — always included
-  files.push(
+  // Always-included hooks (core workflow + Spectra + Design)
+  const files = [
+    'stop-accumulate.sh',
+    'init-code-graph.sh',
     'knowledge-search-reminder.sh',
     'pre-commit-review.sh',
     'post-bash-error-debug.sh',
     'post-edit-ui-qa.sh',
     'post-propose-design-inject.sh',
-    'pre-archive-design-gate.sh'
-  )
+    'pre-archive-design-gate.sh',
+    // Spectra UX hooks
+    'post-edit-roadmap-sync.sh',
+    'post-propose-journey-check.sh',
+    'pre-apply-journey-brief.sh',
+    'pre-archive-ux-gate.sh',
+    'pre-propose-ux-scan.sh',
+    'session-start-roadmap-sync.sh',
+  ]
+
+  // Quality-specific hooks
+  if (has(feats, 'quality')) files.push('post-edit-typecheck.sh')
+
+  // Database-specific hooks
+  if (has(feats, 'database')) files.push('post-migration-gen-types.sh')
 
   copyFilesList(join(STARTER_ROOT, '.claude', 'hooks'), join(targetDir, '.claude', 'hooks'), files)
 }
@@ -683,31 +752,26 @@ function generateSettings(targetDir: string, feats: string[]): void {
     })
   }
 
-  // PostToolUse: Edit|Write — typecheck(quality) + ui-qa(always)
+  // PostToolUse: Edit|Write — typecheck(quality) + ui-qa(always) + roadmap-sync
   const editWritePostHooks: object[] = []
   if (has(feats, 'quality')) editWritePostHooks.push(hookEntry('post-edit-typecheck.sh', 90))
   editWritePostHooks.push(hookEntry('post-edit-ui-qa.sh', 5))
+  editWritePostHooks.push(hookEntry('post-edit-roadmap-sync.sh', 10))
   postToolUse.push({ matcher: 'Edit|Write', hooks: editWritePostHooks })
 
-  // PostToolUse: Bash — code-review-graph (always) + bash-error-debug nudge
+  // PostToolUse: Bash — bash-error-debug nudge
   postToolUse.push({
     matcher: 'Bash',
-    hooks: [
-      {
-        command:
-          "jq -r '.tool_input.command' | grep -q '^git commit' && code-review-graph update 2>/dev/null || true",
-        statusMessage: 'Updating code knowledge graph...',
-        timeout: 30,
-        type: 'command',
-      },
-      hookEntry('post-bash-error-debug.sh', 5),
-    ],
+    hooks: [hookEntry('post-bash-error-debug.sh', 5)],
   })
 
-  // PostToolUse: Skill — design inject (always)
+  // PostToolUse: Skill — design inject + journey check (always)
   postToolUse.push({
     matcher: 'Skill',
-    hooks: [hookEntry('post-propose-design-inject.sh', 10)],
+    hooks: [
+      hookEntry('post-propose-design-inject.sh', 10),
+      hookEntry('post-propose-journey-check.sh', 10),
+    ],
   })
 
   // PreToolUse: Edit|Write — knowledge search + guard
@@ -730,8 +794,16 @@ function generateSettings(targetDir: string, feats: string[]): void {
     ],
   })
 
-  // PreToolUse: Skill — archive design gate (always)
-  preToolUse.push({ matcher: 'Skill', hooks: [hookEntry('pre-archive-design-gate.sh', 10)] })
+  // PreToolUse: Skill — archive design gate + ux gate + journey brief + propose ux scan
+  preToolUse.push({
+    matcher: 'Skill',
+    hooks: [
+      hookEntry('pre-archive-design-gate.sh', 10),
+      hookEntry('pre-archive-ux-gate.sh', 10),
+      hookEntry('pre-apply-journey-brief.sh', 10),
+      hookEntry('pre-propose-ux-scan.sh', 10),
+    ],
+  })
 
   // --- MCP ---
   const enabledMcp: string[] = []
@@ -822,6 +894,10 @@ function generateSettings(targetDir: string, feats: string[]): void {
               ...hookEntry('init-code-graph.sh', 120),
               statusMessage: 'Initializing code knowledge graph...',
             },
+            {
+              ...hookEntry('session-start-roadmap-sync.sh', 30),
+              statusMessage: 'Syncing Spectra roadmap...',
+            },
           ],
         },
       ],
@@ -856,13 +932,38 @@ function copyGuardSystem(targetDir: string): void {
 // --- Scripts ---
 
 function copyScripts(targetDir: string, feats: string[]): void {
-  const files = ['check-skills.sh', 'setup.sh']
-  if (has(feats, 'database')) files.push('backup-supabase.sh')
+  // Always-included scripts
+  const files = ['check-skills.sh', 'setup.sh', 'restore-hooks.sh', 'audit-ux-drift.mts']
+
+  // Database-specific scripts
+  if (has(feats, 'database')) {
+    files.push('backup-supabase.sh', 'db-lint.sh', 'db-reset.sh', 'db-types.sh', 'supabase-sync.sh')
+  }
 
   copyFilesList(join(STARTER_ROOT, 'scripts'), join(targetDir, 'scripts'), files)
 
+  // Copy scripts/lib (always needed)
+  const libSrc = join(STARTER_ROOT, 'scripts', 'lib')
+  const libDest = join(targetDir, 'scripts', 'lib')
+  if (existsSync(libSrc)) {
+    mkdirSync(libDest, { recursive: true })
+    copyDirectory(libSrc, libDest)
+  }
+
   // Generate install-skills.sh dynamically based on selected features
   generateInstallSkillsScript(targetDir, feats)
+
+  // Copy spectra-ux scripts (always needed for Spectra workflow)
+  const spectraUxSrc = join(STARTER_ROOT, 'scripts', 'spectra-ux')
+  const spectraUxDest = join(targetDir, 'scripts', 'spectra-ux')
+  if (existsSync(spectraUxSrc)) {
+    mkdirSync(spectraUxDest, { recursive: true })
+    copyDirectory(spectraUxSrc, spectraUxDest)
+  }
+
+  // Finally sync the full template scripts tree so Quick Start always inherits
+  // the latest shared scripts, skill installers, and script templates.
+  copyDirectory(join(STARTER_ROOT, 'scripts'), join(targetDir, 'scripts'))
 }
 
 function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
@@ -1357,8 +1458,8 @@ function replacePlaceholders(dir: string, projectName: string): void {
         ].includes(ext || '')
       ) {
         let content = readFileSync(fullPath, 'utf-8')
-        if (content.includes('{{projectName}}')) {
-          content = content.replaceAll('{{projectName}}', projectName)
+        if (/\{\{\s*projectName\s*\}\}/.test(content)) {
+          content = content.replace(/\{\{\s*projectName\s*\}\}/g, projectName)
           writeFileSync(fullPath, content)
         }
       }

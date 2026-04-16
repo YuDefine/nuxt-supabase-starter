@@ -3,7 +3,7 @@
 # Skills 安裝／更新腳本
 # 統一使用 --agent claude-code --copy：直接寫入 .claude/skills/，不建立 symlink
 # 重複執行會覆寫為最新版（等同 update）
-# 更新日期：2026-04-04
+# 更新日期：2026-04-16
 
 set -e
 
@@ -50,12 +50,17 @@ echo "  ✓ Evlog Skills 完成"
 echo ""
 
 # Impeccable Design Skills（pbakaus/impeccable）
+# 注意：部分 design skills 是本專案手動維護的本地 skills，
+# 例如 arrange / extract / frontend-design / harden / normalize / onboard /
+# teach-impeccable / design / design-retro / review-archive / subagent-dev。
+# 這些已隨 template/.claude/skills 直接提供，不應再從上游覆寫。
 echo "📦 Impeccable Design Skills..."
-for skill in adapt animate arrange audit bolder clarify colorize critique delight distill extract frontend-design harden normalize onboard optimize overdrive polish quieter teach-impeccable typeset; do
+for skill in adapt animate audit bolder clarify colorize critique delight distill optimize overdrive polish quieter typeset; do
   npx skills add pbakaus/impeccable@$skill $COPY_FLAGS
 done
 echo "  ✓ Impeccable Design Skills 完成"
 echo ""
+echo "📝 注意：本地 design skills 已直接內建於 .claude/skills/"
 echo "📝 注意：design orchestrator 為手動管理，位於 .claude/skills/design/"
 echo ""
 

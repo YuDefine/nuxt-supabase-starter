@@ -22,7 +22,7 @@
 
 ## 安裝機制
 
-所有 Skills 使用 [skills.sh](https://skills.sh) 的 `npx skills add` 安裝，統一採用 `--agent claude-code --copy` 模式：
+第三方 Skills 使用 [skills.sh](https://skills.sh) 的 `npx skills add` 安裝，統一採用 `--agent claude-code --copy` 模式：
 
 ```bash
 npx skills add <registry>@<skill-name> --agent claude-code --copy -y
@@ -33,6 +33,8 @@ npx skills add <registry>@<skill-name> --agent claude-code --copy -y
 - `-y`：自動確認
 
 重複執行會覆寫為最新版，等同更新。
+
+> 部分 Skills（例如 `design`、`arrange`、`frontend-design`、`review-archive`、`subagent-dev`）是隨 starter 版控的本地 skills，會在 scaffold 時直接複製，不透過 registry 安裝。
 
 ---
 
@@ -80,15 +82,24 @@ npx skills add <registry>@<skill-name> --agent claude-code --copy -y
 
 ### Design Skills（Impeccable）
 
-22 個設計相關 Skills，由 `pbakaus/impeccable` 提供：
+Design skills 分成兩類：
+
+1. **第三方 vendor skills**：由 `pbakaus/impeccable` 安裝與更新
+2. **starter 本地 skills**：直接隨 `.claude/skills/` 版控
+
+第三方 vendor skills：
 
 ```
-adapt, animate, arrange, audit, bolder, clarify, colorize, critique,
-delight, distill, extract, frontend-design, harden, normalize, onboard,
-optimize, overdrive, polish, quieter, teach-impeccable, typeset
+adapt, animate, audit, bolder, clarify, colorize, critique, delight,
+distill, optimize, overdrive, polish, quieter, typeset
 ```
 
-> `design` orchestrator 為手動管理，不在自動安裝範圍內。
+starter 本地 skills：
+
+```
+arrange, design, design-retro, extract, frontend-design, harden,
+normalize, onboard, teach-impeccable
+```
 
 ### 工具
 
@@ -102,7 +113,8 @@ optimize, overdrive, polish, quieter, teach-impeccable, typeset
 
 ```
 design, design-retro, nuxt-auth-utils, pinia-store, review-archive,
-review-rules, review-screenshot, server-api, spectra, spectra-apply,
+arrange, extract, frontend-design, harden, normalize, onboard,
+teach-impeccable, review-rules, review-screenshot, server-api, spectra, spectra-apply,
 spectra-archive, spectra-ask, spectra-audit, spectra-debug,
 spectra-discuss, spectra-ingest, spectra-propose, subagent-dev,
 supabase-arch, supabase-migration, supabase-rls
