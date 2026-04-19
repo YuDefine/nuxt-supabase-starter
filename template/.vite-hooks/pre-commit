@@ -1,6 +1,9 @@
 #!/usr/bin/env sh
-# 檢查是否有 Supabase migration 檔案被修改
-MIGRATION_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep "^supabase/migrations/.*\.sql$" || true)
+# 切到 vite.config.ts 所在目錄（template/），以支援 monorepo 與獨立專案兩種結構
+cd "$(dirname "$0")/.." || exit 1
+
+# 檢查是否有 Supabase migration 檔案被修改（相容 repo root 與 template/ 為 root 兩種路徑）
+MIGRATION_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E "^(template/)?supabase/migrations/.*\.sql$" || true)
 
 if [ -n "$MIGRATION_FILES" ]; then
   echo "🔍 檢測到 Supabase migration 檔案變更，執行安全檢查..."
