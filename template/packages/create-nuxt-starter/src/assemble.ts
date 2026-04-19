@@ -527,12 +527,12 @@ function copyClaudeCodeAssets(targetDir: string, selectedFeatureIds: string[]): 
       'nuxt-ui',
       'reka-ui',
       'motion',
-      // Design orchestration + sub-skills
+      // Design orchestration + sub-skills（impeccable v2.1）
       'design',
       'design-retro',
-      'frontend-design',
+      'impeccable',
+      'adapt',
       'animate',
-      'arrange',
       'audit',
       'bolder',
       'clarify',
@@ -540,17 +540,14 @@ function copyClaudeCodeAssets(targetDir: string, selectedFeatureIds: string[]): 
       'critique',
       'delight',
       'distill',
-      'extract',
       'harden',
-      'normalize',
-      'onboard',
+      'layout',
       'optimize',
       'overdrive',
       'polish',
       'quieter',
-      'teach-impeccable',
+      'shape',
       'typeset',
-      'adapt',
       // UI workflow support
       'review-archive',
       'review-screenshot',
@@ -877,7 +874,7 @@ function generateSettings(targetDir: string, feats: string[]): void {
     )
   }
   if (has(feats, 'ui')) {
-    allow.push('Skill(frontend-design)', 'WebFetch(domain:ui.nuxt.com)')
+    allow.push('Skill(impeccable)', 'WebFetch(domain:ui.nuxt.com)')
   }
   if (has(feats, 'vueuse')) allow.push('WebFetch(domain:vueuse.org)')
   if (has(feats, 'pinia')) allow.push('WebFetch(domain:pinia-colada.esm.dev)')
@@ -1059,9 +1056,9 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
   // Impeccable Design Skills — only if ui
   if (has(feats, 'ui')) {
     const impeccableSkills = [
+      'impeccable',
       'adapt',
       'animate',
-      'arrange',
       'audit',
       'bolder',
       'clarify',
@@ -1069,16 +1066,13 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
       'critique',
       'delight',
       'distill',
-      'extract',
-      'frontend-design',
       'harden',
-      'normalize',
-      'onboard',
+      'layout',
       'optimize',
       'overdrive',
       'polish',
       'quieter',
-      'teach-impeccable',
+      'shape',
       'typeset',
     ]
     lines.push('# Impeccable Design Skills（pbakaus/impeccable）')
@@ -1381,7 +1375,7 @@ export function generateClaudeMd(targetDir: string, selectedFeatureIds: string[]
   if (selectedFeatureIds.includes('ui')) {
     skillRows.push('| UI components | `nuxt-ui` |')
     skillRows.push('| UI 設計規劃 | `/design` |')
-    skillRows.push('| 建構前端介面 | `/frontend-design` |')
+    skillRows.push('| 建構前端介面 | `/impeccable craft` |')
   }
   if (authSkill) skillRows.push(`| Auth | ${authSkill} |`)
   if (selectedFeatureIds.includes('vueuse')) skillRows.push('| VueUse | `vueuse` |')

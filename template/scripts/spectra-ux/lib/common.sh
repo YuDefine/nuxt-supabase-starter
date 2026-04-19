@@ -9,6 +9,8 @@
 #   sux_extract_journey_urls — extract URLs from a proposal's User Journeys
 #   sux_extract_section      — extract a ## Section from a markdown file
 #   sux_touched_files        — list git-tracked files touched in working tree + index
+#   sux_change_touched_files — like sux_touched_files, but also includes commits
+#                              since the change dir was first introduced (for archive)
 #   sux_count_marker         — count bypass markers in a file, defaults to 0
 #   sux_check_url_touched    — check if a URL's page file was touched in git diff
 #   sux_url_has_page         — check if a URL maps to any existing page file
@@ -151,6 +153,45 @@ sux_touched_files() {
     export SUX_TOUCHED_FILES
   fi
   printf '%s\n' "${SUX_TOUCHED_FILES:-}"
+}
+
+# List files touched for a spectra change, broadening sux_touched_files to also
+# include commits since the change directory was first introduced.
+#
+# Rationale: by the time `spectra-archive` runs, the change's implementation is
+# typically already committed — looking only at working tree + index (the
+# default sux_touched_files behavior) would report an empty set and break
+# every "touch detection" check. Walking from the first commit that added
+# anything under the change dir captures the full scope of the change even
+# after merges.
+#
+# Callers (e.g. archive-gate.sh) should assign the result to SUX_TOUCHED_FILES
+# before invoking any check that consumes the cache:
+#
+#   SUX_TOUCHED_FILES=$(sux_change_touched_files "$CHANGE_DIR")
+#   export SUX_TOUCHED_FILES
+sux_change_touched_files() {
+  local change_dir=$1
+  local repo_root first_commit base rel_path
+  repo_root=$(sux_repo_root)
+  rel_path=${change_dir#"$repo_root/"}
+
+  first_commit=$(git -C "$repo_root" log --format=%H -- "$rel_path/" 2>/dev/null | tail -1)
+
+  if [ -n "$first_commit" ] && base=$(git -C "$repo_root" rev-parse --verify "${first_commit}^" 2>/dev/null); then
+    {
+      git -C "$repo_root" diff --name-only "$base" HEAD 2>/dev/null
+      git -C "$repo_root" diff --name-only HEAD 2>/dev/null
+      git -C "$repo_root" diff --cached --name-only 2>/dev/null
+    } | sort -u
+  else
+    # Change not committed yet (or its first commit is the repo root) —
+    # fall back to working tree + index only.
+    {
+      git -C "$repo_root" diff --name-only HEAD 2>/dev/null
+      git -C "$repo_root" diff --cached --name-only 2>/dev/null
+    } | sort -u
+  fi
 }
 
 # Extract a `## Section` block from a markdown file. The block starts at

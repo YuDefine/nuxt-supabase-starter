@@ -12,7 +12,25 @@
 
 ## Active Changes
 
-_(尚未執行 sync — 請跑 `pnpm spectra:roadmap`)_
+_last synced: 2026-04-19T11:41:33.856Z_
+
+_No active changes._
+
+### Ready to apply
+
+_(none)_
+
+### In progress
+
+_(none)_
+
+### Draft
+
+_(none)_
+
+### Blocked
+
+_(none)_
 
 <!-- SPECTRA-UX:ROADMAP-AUTO:/active -->
 
@@ -20,9 +38,32 @@ _(尚未執行 sync — 請跑 `pnpm spectra:roadmap`)_
 
 ## Parallel Tracks
 
-_(尚未執行 sync)_
+> Which active changes can be worked on **simultaneously** without stepping on each other.
+
+### Independent (can run in parallel)
+
+_(none)_
+
+### Mutex (same spec touched)
+
+_(none)_
+
+### Blocked by dependency
+
+_(none)_
 
 <!-- SPECTRA-UX:ROADMAP-AUTO:/parallelism -->
+
+<!-- SPECTRA-UX:ROADMAP-AUTO:parked -->
+
+## Parked Changes
+
+> 已 `spectra park` 的 changes。檔案暫時從 `openspec/changes/` 移出，
+> metadata 保留在 `.spectra/spectra.db`。`spectra unpark <name>` 可取回。
+
+_No parked changes._
+
+<!-- SPECTRA-UX:ROADMAP-AUTO:/parked -->
 
 <!-- SPECTRA-UX:ROADMAP-MANUAL:backlog -->
 

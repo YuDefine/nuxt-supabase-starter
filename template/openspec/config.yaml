@@ -35,7 +35,7 @@ rules:
 
   design_workflow:
     - Design Review is mandatory for UI-touching changes; it is not optional polish
-    - /teach-impeccable runs once per project if .impeccable.md is missing
+    - /impeccable teach runs once per project if .impeccable.md is missing
     - /design improve produces a Design Fidelity Report; all DRIFT items must be fixed before proceeding
     - Fidelity fix loop has max 2 rounds; if still failing, escalate to user
     - /audit must reach Critical = 0 before marking Design Review complete
