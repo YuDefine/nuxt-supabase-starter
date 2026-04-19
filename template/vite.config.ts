@@ -81,6 +81,10 @@ export default defineConfig({
       'node_modules/**',
       '**/database.types.ts',
       'pnpm-lock.yaml',
+      '.claude/**',
+      '.agents/**',
+      '.agent/**',
+      '.github/**',
     ],
   },
   staged: {
