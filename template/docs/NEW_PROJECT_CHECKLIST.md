@@ -104,6 +104,6 @@ pnpm skills:list
 
 1. 📖 閱讀 Supabase 官方文件建立第一個資料表
 2. 🔐 參考 [Better Auth 文件](https://www.better-auth.com/) 設定 OAuth
-3. 🎨 執行 `/teach-impeccable` 建立設計脈絡（產出 `.impeccable.md`，所有 design skills 的前提）
+3. 🎨 執行 `/impeccable teach` 建立設計脈絡（產出 `.impeccable.md`，所有 design skills 的前提）
 4. 🤖 使用 `/spectra-propose` 建立第一個功能
 5. 📝 定期執行 `pnpm skills:update` 更新 skills

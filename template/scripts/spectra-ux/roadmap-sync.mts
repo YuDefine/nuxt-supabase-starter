@@ -12,6 +12,10 @@
  *     task completion % and the specs each change touches
  *   - "Parallel Tracks" — spec-collision analysis: independent (safe to run
  *     in parallel) / mutex (same spec touched) / blocked (explicit depends)
+ *   - "Parked Changes" — sourced from `spectra list --parked --json`. Parked
+ *     changes have their working directory removed but metadata persists in
+ *     `.spectra/spectra.db`; this section keeps them visible so they don't
+ *     fall off the roadmap until explicitly unparked or archived.
  *
  * What stays manual:
  *   - "Next Moves" — future intent captured during /spectra-discuss and
@@ -34,6 +38,7 @@
  * See docs/rules/ux-completeness.md and docs/ROADMAP.md for the workflow.
  */
 
+import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -45,9 +50,16 @@ const MARKERS = {
   activeEnd: '<!-- SPECTRA-UX:ROADMAP-AUTO:/active -->',
   parallelismStart: '<!-- SPECTRA-UX:ROADMAP-AUTO:parallelism -->',
   parallelismEnd: '<!-- SPECTRA-UX:ROADMAP-AUTO:/parallelism -->',
+  parkedStart: '<!-- SPECTRA-UX:ROADMAP-AUTO:parked -->',
+  parkedEnd: '<!-- SPECTRA-UX:ROADMAP-AUTO:/parked -->',
   backlogStart: '<!-- SPECTRA-UX:ROADMAP-MANUAL:backlog -->',
   backlogEnd: '<!-- SPECTRA-UX:ROADMAP-MANUAL:/backlog -->',
 } as const
+
+// Where the spectra CLI keeps parked-change metadata. Used by mtimeFastPath
+// so park/unpark invalidates the cache even though no file in openspec/changes
+// actually moves.
+const SPECTRA_DB_REL_PATH = '.spectra/spectra.db'
 
 // Max directory levels to walk upward when finding the project root.
 const MAX_WALK_DEPTH = 8
@@ -80,9 +92,18 @@ interface ParallelismReport {
   blocked: Array<{ change: string; waitsFor: string[] }>
 }
 
+interface ParkedChange {
+  name: string
+  tasksDone: number
+  tasksTotal: number
+  summary: string
+}
+
 interface SyncReport {
   changes: ChangeInfo[]
   parallelism: ParallelismReport
+  parked: ParkedChange[]
+  parkedSource: 'cli' | 'unavailable'
   roadmapPath: string
   wrote: boolean
   skipped: 'mtime' | 'check-only' | null
@@ -161,7 +182,8 @@ function loadConfig(): Config {
       roadmap?: { enabled?: boolean; path?: string }
     }
     const openspecDir = raw.paths?.openspec ?? defaults.openspecDir
-    const roadmapPath = raw.roadmap?.path ?? `${openspecDir.replace(/\/$/, '')}/ROADMAP.md`
+    const roadmapPath =
+      raw.roadmap?.path ?? `${openspecDir.replace(/\/$/, '')}/ROADMAP.md`
     const enabled = raw.roadmap?.enabled ?? true
     return { openspecDir, roadmapPath, enabled }
   } catch (err) {
@@ -411,6 +433,54 @@ function analyzeParallelism(changes: ChangeInfo[]): ParallelismReport {
   return { independent, mutex, blocked }
 }
 
+// ---------------- parked changes ----------------
+
+interface ParkedRaw {
+  name: string
+  completedTasks?: number
+  totalTasks?: number
+  summary?: string
+}
+
+/**
+ * Fetch the parked-change list via `spectra list --parked --json`. Parked
+ * changes don't live on disk under openspec/changes/, so we can't scan them
+ * the same way as active ones — the CLI is the authoritative source.
+ *
+ * Returns `{ parked: [], source: 'unavailable' }` (with a single warning to
+ * stderr) when the spectra CLI isn't on PATH or the call fails. We never
+ * crash the sync — a missing CLI just means the Parked block renders empty.
+ */
+function collectParkedChanges(): {
+  parked: ParkedChange[]
+  source: 'cli' | 'unavailable'
+} {
+  try {
+    const raw = execFileSync('spectra', ['list', '--parked', '--json'], {
+      cwd: repoRoot,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    const parsed = JSON.parse(raw) as { parked?: ParkedRaw[] }
+    const list = parsed.parked ?? []
+    const parked = list
+      .filter((p): p is ParkedRaw => Boolean(p && typeof p.name === 'string'))
+      .map<ParkedChange>((p) => ({
+        name: p.name,
+        tasksDone: typeof p.completedTasks === 'number' ? p.completedTasks : 0,
+        tasksTotal: typeof p.totalTasks === 'number' ? p.totalTasks : 0,
+        summary: (p.summary ?? '').trim(),
+      }))
+      .toSorted((a, b) => a.name.localeCompare(b.name))
+    return { parked, source: 'cli' }
+  } catch (err) {
+    console.warn(
+      `roadmap-sync: spectra CLI unavailable, parked block will render empty (${(err as Error).message})`
+    )
+    return { parked: [], source: 'unavailable' }
+  }
+}
+
 // ---------------- rendering ----------------
 
 function fmtPercent(done: number, total: number): string {
@@ -486,7 +556,10 @@ function renderParallelismBlock(report: ParallelismReport): string {
 
   const blockedBody = report.blocked.length
     ? report.blocked
-        .map((b) => `- \`${b.change}\` waits for: ${b.waitsFor.map((w) => `\`${w}\``).join(', ')}`)
+        .map(
+          (b) =>
+            `- \`${b.change}\` waits for: ${b.waitsFor.map((w) => `\`${w}\``).join(', ')}`
+        )
         .join('\n')
     : ''
 
@@ -503,32 +576,83 @@ function renderParallelismBlock(report: ParallelismReport): string {
     .trimEnd()
 }
 
+function renderParkedBlock(
+  parked: ParkedChange[],
+  source: 'cli' | 'unavailable'
+): string {
+  const intro = [
+    '## Parked Changes',
+    '',
+    '> 已 `spectra park` 的 changes。檔案暫時從 `openspec/changes/` 移出，',
+    '> metadata 保留在 `.spectra/spectra.db`。`spectra unpark <name>` 可取回。',
+    '',
+  ]
+
+  if (source === 'unavailable') {
+    return [
+      ...intro,
+      '_spectra CLI unavailable — run `spectra list --parked` manually to inspect parked work._',
+    ]
+      .join('\n')
+      .trimEnd()
+  }
+
+  if (parked.length === 0) {
+    return [...intro, '_No parked changes._'].join('\n').trimEnd()
+  }
+
+  const summary = `${parked.length} parked change${parked.length === 1 ? '' : 's'}`
+  const items = parked
+    .map((p) => {
+      const progress =
+        p.tasksTotal > 0
+          ? `${p.tasksDone}/${p.tasksTotal} tasks (${fmtPercent(p.tasksDone, p.tasksTotal)})`
+          : 'proposal only'
+      const summaryLine = p.summary ? `\n  - Summary: ${p.summary}` : ''
+      return `- **${p.name}** — ${progress}${summaryLine}`
+    })
+    .join('\n')
+
+  return [...intro, summary, '', items].join('\n').trimEnd()
+}
+
 // ---------------- writing ----------------
 
 /**
- * Replace content between two markers. If the markers don't exist, append a
- * new block at the end of the file separated by a blank line. The markers
+ * Replace content between two markers. If the markers don't exist and an
+ * `insertBefore` anchor is provided, insert the new block immediately above
+ * that anchor; otherwise append at the end of the file. The markers
  * themselves are preserved verbatim.
  */
 function replaceBetween(
   content: string,
   startMarker: string,
   endMarker: string,
-  body: string
+  body: string,
+  insertBefore?: string
 ): string {
   const startIdx = content.indexOf(startMarker)
   const endIdx = content.indexOf(endMarker)
   const block = `${startMarker}\n\n${body}\n\n${endMarker}`
 
-  if (startIdx === -1 || endIdx === -1 || endIdx < startIdx) {
-    // Append a new block; ensure single trailing newline
-    const sep = content.endsWith('\n') ? '\n' : '\n\n'
-    return `${content}${sep}${block}\n`
+  if (startIdx !== -1 && endIdx !== -1 && endIdx >= startIdx) {
+    const before = content.slice(0, startIdx)
+    const after = content.slice(endIdx + endMarker.length)
+    return `${before}${block}${after}`
   }
 
-  const before = content.slice(0, startIdx)
-  const after = content.slice(endIdx + endMarker.length)
-  return `${before}${block}${after}`
+  if (insertBefore) {
+    const anchorIdx = content.indexOf(insertBefore)
+    if (anchorIdx !== -1) {
+      const before = content.slice(0, anchorIdx).replace(/\n*$/, '\n\n')
+      const after = content.slice(anchorIdx)
+      return `${before}${block}\n\n${after}`
+    }
+  }
+
+  // Append a new block; ensure single trailing newline
+  const sep = content.endsWith('\n') ? '\n' : '\n\n'
+  return `${content}${sep}${block}\n`
 }
 
 function scaffoldRoadmap(): string {
@@ -543,6 +667,9 @@ function scaffoldRoadmap(): string {
     '',
     MARKERS.parallelismStart,
     MARKERS.parallelismEnd,
+    '',
+    MARKERS.parkedStart,
+    MARKERS.parkedEnd,
     '',
     MARKERS.backlogStart,
     '',
@@ -579,9 +706,13 @@ function mtimeFastPath(roadmapPath: string, changes: ChangeInfo[]): boolean {
   const roadmapMtime = statMtime(roadmapPath)
   if (roadmapMtime === 0) return false
   const latestChangeMtime = changes.reduce((max, c) => Math.max(max, c.mtime), 0)
+  // Park/unpark mutates `.spectra/spectra.db` without touching any file under
+  // openspec/changes/, so we have to peek at the DB mtime explicitly.
+  const parkedDbMtime = statMtime(resolve(repoRoot, SPECTRA_DB_REL_PATH))
+  const latest = Math.max(latestChangeMtime, parkedDbMtime)
   // Give a small epsilon (1s) so filesystems with second-resolution don't
   // cause false-negative "stale" detection right after a sync.
-  return roadmapMtime >= latestChangeMtime - 1
+  return roadmapMtime >= latest - 1
 }
 
 // ---------------- main ----------------
@@ -592,10 +723,13 @@ function syncRoadmap(): SyncReport {
 
   const changes = scanChanges(config.openspecDir)
   const parallelism = analyzeParallelism(changes)
+  const { parked, source: parkedSource } = collectParkedChanges()
 
   const report: SyncReport = {
     changes,
     parallelism,
+    parked,
+    parkedSource,
     roadmapPath,
     wrote: false,
     skipped: null,
@@ -615,6 +749,7 @@ function syncRoadmap(): SyncReport {
   const now = new Date()
   const activeBody = renderActiveBlock(changes, now)
   const parallelismBody = renderParallelismBlock(parallelism)
+  const parkedBody = renderParkedBlock(parked, parkedSource)
 
   let content = readOrScaffoldRoadmap(roadmapPath)
   content = replaceBetween(content, MARKERS.activeStart, MARKERS.activeEnd, activeBody)
@@ -623,6 +758,15 @@ function syncRoadmap(): SyncReport {
     MARKERS.parallelismStart,
     MARKERS.parallelismEnd,
     parallelismBody
+  )
+  // First-time installs land the parked block right above the MANUAL backlog
+  // so the rendering order is: active → parallelism → parked → backlog.
+  content = replaceBetween(
+    content,
+    MARKERS.parkedStart,
+    MARKERS.parkedEnd,
+    parkedBody,
+    MARKERS.backlogStart
   )
 
   // Ensure the manual block exists so users/agents have somewhere to write.
@@ -667,6 +811,10 @@ function emitJson(report: SyncReport): void {
           blockedReason: c.blockedReason,
         })),
         parallelism: report.parallelism,
+        parked: {
+          source: report.parkedSource,
+          items: report.parked,
+        },
       },
       null,
       2
@@ -694,10 +842,17 @@ function emitText(report: SyncReport): void {
   const draft = report.changes.filter((c) => c.stage === 'draft').length
   const blocked = report.changes.filter((c) => c.stage === 'blocked').length
   const mutex = report.parallelism.mutex.length
+  const parkedCount = report.parked.length
 
   const verb = report.wrote ? 'updated' : 'already current'
+  const parkedSegment =
+    parkedCount > 0
+      ? ` · ${parkedCount} parked`
+      : report.parkedSource === 'unavailable'
+        ? ' · parked unavailable'
+        : ''
   console.log(
-    `✓ roadmap-sync: ${verb} (${active} change${active === 1 ? '' : 's'}: ${ready} ready · ${wip} wip · ${draft} draft · ${blocked} blocked)`
+    `✓ roadmap-sync: ${verb} (${active} change${active === 1 ? '' : 's'}: ${ready} ready · ${wip} wip · ${draft} draft · ${blocked} blocked${parkedSegment})`
   )
   if (mutex > 0) {
     console.log(`  ⚠ ${mutex} spec collision${mutex === 1 ? '' : 's'} — check Parallel Tracks`)

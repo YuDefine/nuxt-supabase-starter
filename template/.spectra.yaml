@@ -28,7 +28,7 @@ design:
 
   # Design Review checkpoints (injected into tasks when ui_paths touched)
   review_steps:
-    - check_impeccable: '/teach-impeccable if .impeccable.md missing'
+    - check_impeccable: '/impeccable teach if .impeccable.md missing'
     - design_improve: '/design improve [affected files]'
     - fix_drift: 'Fidelity Score must reach 8/8, max 2 rounds'
     - targeted_skills: 'Execute /design plan in canonical order'

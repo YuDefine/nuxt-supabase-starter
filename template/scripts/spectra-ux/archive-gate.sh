@@ -36,8 +36,11 @@ TASKS_FILE="$CHANGE_DIR/tasks.md"
 [ -f "$PROPOSAL_FILE" ] || exit 0
 
 REPO_ROOT=$(sux_repo_root)
-# Prime the cache once so all subsequent git-diff consumers reuse it.
-sux_touched_files --refresh >/dev/null
+# Archive runs after implementation is committed, so working tree + index
+# alone would be empty. Broaden the cache to include everything touched
+# since the change dir was introduced.
+SUX_TOUCHED_FILES=$(sux_change_touched_files "$CHANGE_DIR")
+export SUX_TOUCHED_FILES
 
 BLOCKED=false
 MESSAGES=()

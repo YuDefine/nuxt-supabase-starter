@@ -67,7 +67,7 @@ describe('scaffold: base-only (no features)', () => {
     const script = readFileSync(join(targetDir, 'scripts', 'install-skills.sh'), 'utf-8')
     expect(script).toContain('本地 design skills 已直接內建於 .claude/skills/')
     expect(script).not.toMatch(
-      /for skill in .*arrange.*extract.*frontend-design.*harden.*normalize.*onboard.*teach-impeccable/
+      /for skill in .*\b(arrange|extract|frontend-design|normalize|onboard|teach-impeccable)\b/
     )
   })
 
