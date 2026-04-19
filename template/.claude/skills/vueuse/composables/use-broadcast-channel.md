@@ -11,9 +11,14 @@ Reactive BroadcastChannel API.
 import { useBroadcastChannel } from '@vueuse/core'
 import { shallowRef } from 'vue'
 
-const { isSupported, channel, post, close, error, isClosed } = useBroadcastChannel({
-  name: 'vueuse-demo-channel',
-})
+const {
+  isSupported,
+  channel,
+  post,
+  close,
+  error,
+  isClosed,
+} = useBroadcastChannel({ name: 'vueuse-demo-channel' })
 
 const message = shallowRef('')
 
@@ -28,21 +33,21 @@ close()
 
 ## Options
 
-| Option | Type     | Default | Description              |
-| ------ | -------- | ------- | ------------------------ |
-| name   | `string` | -       | The name of the channel. |
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| name | `string` | - | The name of the channel. |
 
 ## Returns
 
-| Name        | Type                                              |
-| ----------- | ------------------------------------------------- |
-| isSupported | `useSupported`                                    |
-| channel     | `shallowRef&lt;BroadcastChannel \| undefined&gt;` |
-| data        | `shallowRef`                                      |
-| post        | `Ref`                                             |
-| close       | `Ref`                                             |
-| error       | `shallowRef&lt;Event \| null&gt;`                 |
-| isClosed    | `shallowRef`                                      |
+| Name | Type |
+| --- | --- |
+| isSupported | `useSupported` |
+| channel | `shallowRef&lt;BroadcastChannel \| undefined&gt;` |
+| data | `shallowRef` |
+| post | `Ref` |
+| close | `Ref` |
+| error | `shallowRef&lt;Event \| null&gt;` |
+| isClosed | `shallowRef` |
 
 ## Reference
 

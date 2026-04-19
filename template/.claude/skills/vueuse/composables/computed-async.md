@@ -17,7 +17,7 @@ const userInfo = computedAsync(
   async () => {
     return await mockLookUp(name.value)
   },
-  null // initial state
+  null, // initial state
 )
 ```
 

@@ -12,7 +12,7 @@ Reactive `Array.find`.
 import { useArrayFind } from '@vueuse/core'
 
 const list = [ref(1), ref(-1), ref(2)]
-const positive = useArrayFind(list, (val) => val > 0)
+const positive = useArrayFind(list, val => val > 0)
 // positive.value: 1
 ```
 
@@ -22,7 +22,7 @@ const positive = useArrayFind(list, (val) => val > 0)
 import { useArrayFind } from '@vueuse/core'
 
 const list = reactive([-1, -2])
-const positive = useArrayFind(list, (val) => val > 0)
+const positive = useArrayFind(list, val => val > 0)
 // positive.value: undefined
 list.push(1)
 // positive.value: 1
@@ -45,6 +45,6 @@ export type UseArrayFindReturn<T = any> = ComputedRef<T | undefined>
  */
 export declare function useArrayFind<T>(
   list: MaybeRefOrGetter<MaybeRefOrGetter<T>[]>,
-  fn: (element: T, index: number, array: MaybeRefOrGetter<T>[]) => boolean
+  fn: (element: T, index: number, array: MaybeRefOrGetter<T>[]) => boolean,
 ): UseArrayFindReturn<T>
 ```

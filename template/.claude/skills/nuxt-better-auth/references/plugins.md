@@ -10,7 +10,12 @@ import { defineServerAuth } from '#auth/server'
 
 export default defineServerAuth(({ runtimeConfig }) => ({
   emailAndPassword: { enabled: true },
-  plugins: [admin(), twoFactor({ issuer: 'MyApp' }), passkey(), multiSession()],
+  plugins: [
+    admin(),
+    twoFactor({ issuer: 'MyApp' }),
+    passkey(),
+    multiSession()
+  ]
 }))
 ```
 
@@ -19,15 +24,15 @@ export default defineServerAuth(({ runtimeConfig }) => ({
 ```ts
 // app/auth.config.ts
 import { createAppAuthClient } from '#auth/client'
-import {
-  adminClient,
-  twoFactorClient,
-  passkeyClient,
-  multiSessionClient,
-} from 'better-auth/client/plugins'
+import { adminClient, twoFactorClient, passkeyClient, multiSessionClient } from 'better-auth/client/plugins'
 
 export default createAppAuthClient({
-  plugins: [adminClient(), twoFactorClient(), passkeyClient(), multiSessionClient()],
+  plugins: [
+    adminClient(),
+    twoFactorClient(),
+    passkeyClient(),
+    multiSessionClient()
+  ]
 })
 ```
 

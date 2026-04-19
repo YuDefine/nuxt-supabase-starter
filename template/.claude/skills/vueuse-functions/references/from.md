@@ -24,15 +24,13 @@ useSubscription(
     .pipe(
       mapTo(1),
       takeUntil(fromEvent(button, 'click')),
-      withLatestFrom(
-        from(count, {
-          immediate: true,
-          deep: false,
-        })
-      ),
-      map(([curr, total]) => curr + total)
+      withLatestFrom(from(count, {
+        immediate: true,
+        deep: false,
+      })),
+      map(([curr, total]) => curr + total),
     )
-    .subscribe(toObserver(count)) // same as ).subscribe(val => (count.value = val))
+    .subscribe(toObserver(count)), // same as ).subscribe(val => (count.value = val))
 )
 ```
 
@@ -73,10 +71,10 @@ useSubscription(
 ```ts
 export declare function from<T>(
   value: ObservableInput<T> | Ref<T>,
-  watchOptions?: WatchOptions
+  watchOptions?: WatchOptions,
 ): Observable<T>
 export declare function fromEvent<T extends HTMLElement | null>(
   value: MaybeRef<T>,
-  event: string
+  event: string,
 ): Observable<Event>
 ```

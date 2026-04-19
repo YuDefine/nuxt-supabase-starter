@@ -35,7 +35,7 @@ export interface MemoryInfo {
    * The currently active segment of JS heap, in bytes.
    */
   readonly usedJSHeapSize: number
-  [Symbol.toStringTag]: 'MemoryInfo'
+  [Symbol.toStringTag]: "MemoryInfo"
 }
 export interface UseMemoryOptions extends ConfigurableScheduler {
   /**

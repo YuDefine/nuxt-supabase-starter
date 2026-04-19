@@ -14,19 +14,19 @@ const value = ref(3.1415)
 const result = usePrecision(value, 2) // 3.14
 
 const ceilResult = usePrecision(value, 2, {
-  math: 'ceil',
+  math: 'ceil'
 }) // 3.15
 
 const floorResult = usePrecision(value, 3, {
-  math: 'floor',
+  math: 'floor'
 }) // 3.141
 ```
 
 ## Options
 
-| Option | Type                           | Default | Description                |
-| ------ | ------------------------------ | ------- | -------------------------- |
-| math   | `'floor' \| 'ceil' \| 'round'` | round   | Method to use for rounding |
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| math | `'floor' \| 'ceil' \| 'round'` | round | Method to use for rounding |
 
 ## Reference
 

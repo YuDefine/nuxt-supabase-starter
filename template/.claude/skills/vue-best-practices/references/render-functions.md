@@ -22,23 +22,21 @@ tags: [vue3, render-function, h, v-model, directives, performance, jsx]
 ## Prefer templates over render functions
 
 **BAD:**
-
 ```vue
 <script setup>
-  import { h, ref } from 'vue'
+import { h, ref } from 'vue'
 
-  const count = ref(0)
-  const render = () => h('div', `Count: ${count.value}`)
+const count = ref(0)
+const render = () => h('div', `Count: ${count.value}`)
 </script>
 ```
 
 **GOOD:**
-
 ```vue
 <script setup>
-  import { ref } from 'vue'
+import { ref } from 'vue'
 
-  const count = ref(0)
+const count = ref(0)
 </script>
 
 <template>
@@ -49,7 +47,6 @@ tags: [vue3, render-function, h, v-model, directives, performance, jsx]
 ## Always add keys for list rendering
 
 **BAD:**
-
 ```javascript
 import { h, ref } from 'vue'
 
@@ -57,17 +54,14 @@ export default {
   setup() {
     const items = ref([{ id: 1, name: 'Apple' }])
 
-    return () =>
-      h(
-        'ul',
-        items.value.map((item) => h('li', item.name))
-      )
-  },
+    return () => h('ul',
+      items.value.map(item => h('li', item.name))
+    )
+  }
 }
 ```
 
 **GOOD:**
-
 ```javascript
 import { h, ref } from 'vue'
 
@@ -75,19 +69,16 @@ export default {
   setup() {
     const items = ref([{ id: 1, name: 'Apple' }])
 
-    return () =>
-      h(
-        'ul',
-        items.value.map((item) => h('li', { key: item.id }, item.name))
-      )
-  },
+    return () => h('ul',
+      items.value.map(item => h('li', { key: item.id }, item.name))
+    )
+  }
 }
 ```
 
 ## Use `withModifiers` / `withKeys` for event modifiers
 
 **BAD:**
-
 ```javascript
 import { h } from 'vue'
 
@@ -99,12 +90,11 @@ export default {
     }
 
     return () => h('button', { onClick: handleClick }, 'Click')
-  },
+  }
 }
 ```
 
 **GOOD:**
-
 ```javascript
 import { h, withModifiers, withKeys } from 'vue'
 
@@ -113,27 +103,21 @@ export default {
     const handleClick = () => {}
     const handleEnter = () => {}
 
-    return () =>
-      h('div', [
-        h(
-          'button',
-          {
-            onClick: withModifiers(handleClick, ['stop', 'prevent']),
-          },
-          'Click'
-        ),
-        h('input', {
-          onKeyup: withKeys(handleEnter, ['enter']),
-        }),
-      ])
-  },
+    return () => h('div', [
+      h('button', {
+        onClick: withModifiers(handleClick, ['stop', 'prevent'])
+      }, 'Click'),
+      h('input', {
+        onKeyup: withKeys(handleEnter, ['enter'])
+      })
+    ])
+  }
 }
 ```
 
 ## Implement `v-model` explicitly
 
 **BAD:**
-
 ```javascript
 import { h, ref } from 'vue'
 import CustomInput from './CustomInput.vue'
@@ -142,12 +126,11 @@ export default {
   setup() {
     const text = ref('')
     return () => h(CustomInput, { modelValue: text.value })
-  },
+  }
 }
 ```
 
 **GOOD:**
-
 ```javascript
 import { h, ref } from 'vue'
 import CustomInput from './CustomInput.vue'
@@ -155,21 +138,17 @@ import CustomInput from './CustomInput.vue'
 export default {
   setup() {
     const text = ref('')
-    return () =>
-      h(CustomInput, {
-        modelValue: text.value,
-        'onUpdate:modelValue': (value) => {
-          text.value = value
-        },
-      })
-  },
+    return () => h(CustomInput, {
+      modelValue: text.value,
+      'onUpdate:modelValue': (value) => { text.value = value }
+    })
+  }
 }
 ```
 
 ## Use `withDirectives` for custom directives
 
 **BAD:**
-
 ```javascript
 import { h } from 'vue'
 
@@ -178,12 +157,11 @@ const vFocus = { mounted: (el) => el.focus() }
 export default {
   setup() {
     return () => h('input', { 'v-focus': true })
-  },
+  }
 }
 ```
 
 **GOOD:**
-
 ```javascript
 import { h, withDirectives } from 'vue'
 
@@ -192,26 +170,24 @@ const vFocus = { mounted: (el) => el.focus() }
 export default {
   setup() {
     return () => withDirectives(h('input'), [[vFocus]])
-  },
+  }
 }
 ```
 
 ## Prefer functional components for stateless UI
 
 **BAD:**
-
 ```javascript
 import { h } from 'vue'
 
 export default {
   setup() {
     return () => h('span', { class: 'badge' }, 'New')
-  },
+  }
 }
 ```
 
 **GOOD:**
-
 ```javascript
 import { h } from 'vue'
 

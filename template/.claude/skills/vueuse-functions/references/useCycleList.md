@@ -60,7 +60,7 @@ export interface UseCycleListOptions<T> {
  */
 export declare function useCycleList<T>(
   list: MaybeRefOrGetter<T[]>,
-  options?: UseCycleListOptions<T>
+  options?: UseCycleListOptions<T>,
 ): UseCycleListReturn<T>
 export interface UseCycleListReturn<T> {
   state: ShallowRef<T>

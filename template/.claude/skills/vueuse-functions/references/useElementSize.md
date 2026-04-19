@@ -10,15 +10,18 @@ Reactive size of an HTML element. [ResizeObserver MDN](https://developer.mozilla
 
 ```vue
 <script setup lang="ts">
-  import { useElementSize } from '@vueuse/core'
-  import { useTemplateRef } from 'vue'
+import { useElementSize } from '@vueuse/core'
+import { useTemplateRef } from 'vue'
 
-  const el = useTemplateRef('el')
-  const { width, height } = useElementSize(el)
+const el = useTemplateRef('el')
+const { width, height } = useElementSize(el)
 </script>
 
 <template>
-  <div ref="el">Height: {{ height }} Width: {{ width }}</div>
+  <div ref="el">
+    Height: {{ height }}
+    Width: {{ width }}
+  </div>
 </template>
 ```
 
@@ -36,11 +39,11 @@ Reactive size of an HTML element. [ResizeObserver MDN](https://developer.mozilla
 
 ```vue
 <script setup lang="ts">
-  import { vElementSize } from '@vueuse/components'
+import { vElementSize } from '@vueuse/components'
 
-  function onResize({ width, height }: { width: number; height: number }) {
-    console.log(width, height)
-  }
+function onResize({ width, height }: { width: number, height: number }) {
+  console.log(width, height)
+}
 </script>
 
 <template>
@@ -71,6 +74,6 @@ export interface UseElementSizeReturn {
 export declare function useElementSize(
   target: MaybeComputedElementRef,
   initialSize?: ElementSize,
-  options?: UseElementSizeOptions
+  options?: UseElementSizeOptions,
 ): UseElementSizeReturn
 ```

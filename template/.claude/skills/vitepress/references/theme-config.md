@@ -14,19 +14,19 @@ export default {
   themeConfig: {
     // Site title in nav (overrides config.title)
     siteTitle: 'My Docs',
-    siteTitle: false, // Hide title
-
+    siteTitle: false,  // Hide title
+    
     // Logo
     logo: '/logo.svg',
     logo: { light: '/light-logo.svg', dark: '/dark-logo.svg', alt: 'Logo' },
-
+    
     // Nav links
     nav: [
       { text: 'Guide', link: '/guide/' },
       { text: 'API', link: '/api/' },
-      { text: 'GitHub', link: 'https://github.com/...' },
-    ],
-  },
+      { text: 'GitHub', link: 'https://github.com/...' }
+    ]
+  }
 }
 ```
 
@@ -38,8 +38,8 @@ nav: [
     text: 'Dropdown',
     items: [
       { text: 'Item A', link: '/item-a' },
-      { text: 'Item B', link: '/item-b' },
-    ],
+      { text: 'Item B', link: '/item-b' }
+    ]
   },
   // With sections
   {
@@ -49,11 +49,11 @@ nav: [
         text: 'v2.x',
         items: [
           { text: 'v2.0', link: '/v2/' },
-          { text: 'v2.1', link: '/v2.1/' },
-        ],
-      },
-    ],
-  },
+          { text: 'v2.1', link: '/v2.1/' }
+        ]
+      }
+    ]
+  }
 ]
 ```
 
@@ -66,8 +66,8 @@ nav: [
   {
     text: 'Guide',
     link: '/guide/',
-    activeMatch: '/guide/', // Regex pattern
-  },
+    activeMatch: '/guide/'  // Regex pattern
+  }
 ]
 ```
 
@@ -81,9 +81,9 @@ sidebar: [
     text: 'Guide',
     items: [
       { text: 'Introduction', link: '/guide/' },
-      { text: 'Getting Started', link: '/guide/getting-started' },
-    ],
-  },
+      { text: 'Getting Started', link: '/guide/getting-started' }
+    ]
+  }
 ]
 ```
 
@@ -199,8 +199,8 @@ socialLinks: [
   {
     icon: { svg: '<svg>...</svg>' },
     link: 'https://...',
-    ariaLabel: 'Custom Link',
-  },
+    ariaLabel: 'Custom Link'
+  }
 ]
 ```
 
@@ -232,7 +232,7 @@ Enable in site config:
 
 ```ts
 export default {
-  lastUpdated: true, // Get timestamp from git
+  lastUpdated: true  // Get timestamp from git
 }
 ```
 
@@ -262,9 +262,9 @@ outline: {
 Or just the level:
 
 ```ts
-outline: 'deep' // Same as [2, 6]
-outline: 2 // Only h2
-outline: [2, 4] // h2 through h4
+outline: 'deep'  // Same as [2, 6]
+outline: 2       // Only h2
+outline: [2, 4]  // h2 through h4
 ```
 
 ## Doc Footer Navigation
@@ -284,7 +284,7 @@ docFooter: {
 ## External Link Icon
 
 ```ts
-externalLinkIcon: true // Show icon on external links
+externalLinkIcon: true  // Show icon on external links
 ```
 
 ## Appearance Toggle Labels

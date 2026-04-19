@@ -21,7 +21,6 @@ Use `await` with triggers and `setValue`, use `nextTick` for reactive updates, a
 - [ ] Consider using `waitFor` from testing-library for polling assertions
 
 **Incorrect:**
-
 ```javascript
 import { mount } from '@vue/test-utils'
 import SearchComponent from './SearchComponent.vue'
@@ -30,8 +29,8 @@ import SearchComponent from './SearchComponent.vue'
 test('search filters results', () => {
   const wrapper = mount(SearchComponent)
 
-  wrapper.find('input').setValue('vue') // Missing await!
-  wrapper.find('button').trigger('click') // Missing await!
+  wrapper.find('input').setValue('vue')  // Missing await!
+  wrapper.find('button').trigger('click')  // Missing await!
 
   // This assertion likely fails - DOM hasn't updated yet
   expect(wrapper.findAll('.result').length).toBe(3)
@@ -41,7 +40,7 @@ test('search filters results', () => {
 test('loads data from API', async () => {
   const wrapper = mount(DataLoader)
 
-  await nextTick() // This won't wait for the API call!
+  await nextTick()  // This won't wait for the API call!
 
   // Assertion runs before fetch completes
   expect(wrapper.find('.data').text()).toBe('Loaded data')
@@ -49,7 +48,6 @@ test('loads data from API', async () => {
 ```
 
 **Correct:**
-
 ```javascript
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
@@ -80,7 +78,6 @@ test('loads data from API', async () => {
 ## When to Use Each Method
 
 ### `await trigger()` / `await setValue()` - User Interactions
-
 ```javascript
 // These methods return nextTick internally
 await wrapper.find('button').trigger('click')
@@ -89,7 +86,6 @@ await wrapper.find('form').trigger('submit')
 ```
 
 ### `await nextTick()` - Programmatic Reactive Updates
-
 ```javascript
 import { nextTick } from 'vue'
 
@@ -99,20 +95,19 @@ test('reflects programmatic state changes', async () => {
   // Direct state modification (when testing with exposed internals)
   wrapper.vm.count = 5
 
-  await nextTick() // Wait for Vue to update DOM
+  await nextTick()  // Wait for Vue to update DOM
 
   expect(wrapper.find('.count').text()).toBe('5')
 })
 ```
 
 ### `await flushPromises()` - External Async Operations
-
 ```javascript
 import { flushPromises } from '@vue/test-utils'
 
 test('displays fetched data', async () => {
   const wrapper = mount(UserProfile, {
-    props: { userId: 1 },
+    props: { userId: 1 }
   })
 
   // Wait for component's API call to complete
@@ -125,15 +120,14 @@ test('displays fetched data', async () => {
 test('processes data after fetch', async () => {
   const wrapper = mount(DataProcessor)
 
-  await flushPromises() // Wait for fetch
-  await flushPromises() // Wait for processing triggered by fetch
+  await flushPromises()  // Wait for fetch
+  await flushPromises()  // Wait for processing triggered by fetch
 
   expect(wrapper.find('.processed').exists()).toBe(true)
 })
 ```
 
 ## Common Pattern: Combining Methods
-
 ```javascript
 test('submits form and shows success', async () => {
   const wrapper = mount(ContactForm)
@@ -154,7 +148,6 @@ test('submits form and shows success', async () => {
 ```
 
 ## Testing with MSW or Mock APIs
-
 ```javascript
 import { flushPromises } from '@vue/test-utils'
 import { rest } from 'msw'
@@ -178,6 +171,5 @@ test('displays user data', async () => {
 ```
 
 ## Reference
-
 - [Vue Test Utils - Asynchronous Behavior](https://test-utils.vuejs.org/guide/advanced/async-suspense)
 - [Vue.js Testing Guide](https://vuejs.org/guide/scaling-up/testing)

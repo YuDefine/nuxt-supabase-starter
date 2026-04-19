@@ -16,13 +16,13 @@ npm i drauu@^0
 
 ```vue
 <script setup lang="ts">
-  import { toRefs } from '@vueuse/core'
-  import { useDrauu } from '@vueuse/integrations/useDrauu'
-  import { useTemplateRef } from 'vue'
+import { toRefs } from '@vueuse/core'
+import { useDrauu } from '@vueuse/integrations/useDrauu'
+import { useTemplateRef } from 'vue'
 
-  const target = useTemplateRef('target')
-  const { undo, redo, canUndo, canRedo, brush } = useDrauu(target)
-  const { color, size } = toRefs(brush)
+const target = useTemplateRef('target')
+const { undo, redo, canUndo, canRedo, brush } = useDrauu(target)
+const { color, size } = toRefs(brush)
 </script>
 
 <template>
@@ -33,7 +33,7 @@ npm i drauu@^0
 ## Type Declarations
 
 ```ts
-export type UseDrauuOptions = Omit<Options, 'el'>
+export type UseDrauuOptions = Omit<Options, "el">
 export interface UseDrauuReturn {
   drauuInstance: Ref<Drauu | undefined>
   load: (svg: string) => void
@@ -60,6 +60,6 @@ export interface UseDrauuReturn {
  */
 export declare function useDrauu(
   target: MaybeComputedElementRef,
-  options?: UseDrauuOptions
+  options?: UseDrauuOptions,
 ): UseDrauuReturn
 ```

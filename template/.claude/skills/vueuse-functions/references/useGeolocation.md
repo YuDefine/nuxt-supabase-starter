@@ -31,7 +31,8 @@ const { coords, locatedAt, error, resume, pause } = useGeolocation()
 ```vue
 <template>
   <UseGeolocation v-slot="{ coords: { latitude, longitude } }">
-    Latitude: {{ latitude }} Longitude: {{ longitude }}
+    Latitude: {{ latitude }}
+    Longitude: {{ longitude }}
   </UseGeolocation>
 </template>
 ```
@@ -39,11 +40,12 @@ const { coords, locatedAt, error, resume, pause } = useGeolocation()
 ## Type Declarations
 
 ```ts
-export interface UseGeolocationOptions extends Partial<PositionOptions>, ConfigurableNavigator {
+export interface UseGeolocationOptions
+  extends Partial<PositionOptions>, ConfigurableNavigator {
   immediate?: boolean
 }
 export interface UseGeolocationReturn extends Supportable {
-  coords: Ref<Omit<GeolocationPosition['coords'], 'toJSON'>>
+  coords: Ref<Omit<GeolocationPosition["coords"], "toJSON">>
   locatedAt: ShallowRef<number | null>
   error: ShallowRef<GeolocationPositionError | null>
   resume: () => void
@@ -55,5 +57,7 @@ export interface UseGeolocationReturn extends Supportable {
  * @see https://vueuse.org/useGeolocation
  * @param options
  */
-export declare function useGeolocation(options?: UseGeolocationOptions): UseGeolocationReturn
+export declare function useGeolocation(
+  options?: UseGeolocationOptions,
+): UseGeolocationReturn
 ```

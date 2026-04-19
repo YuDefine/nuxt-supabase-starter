@@ -27,13 +27,9 @@ const state = reactive({
   progress: 0,
 })
 
-watchExtractedObservable(
-  player,
-  (p) => p.progress$,
-  (percentage) => {
-    state.progress = percentage * 100
-  }
-)
+watchExtractedObservable(player, p => p.progress$, (percentage) => {
+  state.progress = percentage * 100
+})
 ```
 
 If you want to add custom error handling to an `Observable` that might error, you can supply an optional `onError` configuration. Without this, RxJS will treat any error in the supplied `Observable` as an "unhandled error" and it will be thrown in a new call stack and reported to `window.onerror` (or `process.on('error')` if you happen to be in Node).
@@ -53,21 +49,16 @@ const state = reactive({
   progress: 0,
 })
 
-watchExtractedObservable(
-  player,
-  (p) => p.progress$,
-  (percentage) => {
-    state.progress = percentage * 100
+watchExtractedObservable(player, p => p.progress$, (percentage) => {
+  state.progress = percentage * 100
+}, {
+  onError: (err: unknown) => {
+    console.error(err)
   },
-  {
-    onError: (err: unknown) => {
-      console.error(err)
-    },
-    onComplete: () => {
-      state.progress = 100 // or 0, or whatever
-    },
-  }
-)
+  onComplete: () => {
+    state.progress = 100 // or 0, or whatever
+  },
+})
 ```
 
 If you want, you can also pass `watch` options as the last argument:
@@ -85,21 +76,15 @@ const state = reactive({
   progress: 0,
 })
 
-watchExtractedObservable(
-  player,
-  (p) => p.progress$,
-  (percentage) => {
-    state.progress = percentage * 100
-  },
-  {
-    onError: (err: unknown) => {
-      console.error(err)
-    },
-  },
-  {
-    immediate: true,
+watchExtractedObservable(player, p => p.progress$, (percentage) => {
+  state.progress = percentage * 100
+}, {
+  onError: (err: unknown) => {
+    console.error(err)
   }
-)
+}, {
+  immediate: true
+})
 ```
 
 ## Subscription Options
@@ -119,13 +104,9 @@ import { ref } from 'vue'
 
 const source = ref({ data$: null })
 
-const stop = watchExtractedObservable(
-  source,
-  (s) => s.data$,
-  (data) => {
-    console.log(data)
-  }
-)
+const stop = watchExtractedObservable(source, s => s.data$, (data) => {
+  console.log(data)
+})
 
 // Later, stop watching
 stop()
@@ -135,10 +116,14 @@ stop()
 
 ```ts
 export type OnCleanup = (cleanupFn: () => void) => void
-export type WatchExtractedObservableCallback<Value, OldValue, ObservableElement> = (
+export type WatchExtractedObservableCallback<
+  Value,
+  OldValue,
+  ObservableElement,
+> = (
   value: NonNullable<Value>,
   oldValue: OldValue,
-  onCleanup: OnCleanup
+  onCleanup: OnCleanup,
 ) => Observable<ObservableElement>
 export interface WatchExtractedObservableOptions {
   onError?: (err: unknown) => void
@@ -150,10 +135,14 @@ export declare function watchExtractedObservable<
   Immediate extends Readonly<boolean> = false,
 >(
   sources: [...T],
-  extractor: WatchExtractedObservableCallback<MapSources<T>, MapOldSources<T, Immediate>, E>,
+  extractor: WatchExtractedObservableCallback<
+    MapSources<T>,
+    MapOldSources<T, Immediate>,
+    E
+  >,
   callback: (snapshot: E) => void,
   subscriptionOptions?: WatchExtractedObservableOptions,
-  watchOptions?: WatchOptions<Immediate>
+  watchOptions?: WatchOptions<Immediate>,
 ): WatchHandle
 export declare function watchExtractedObservable<
   T extends Readonly<MultiWatchSources>,
@@ -161,17 +150,29 @@ export declare function watchExtractedObservable<
   Immediate extends Readonly<boolean> = false,
 >(
   source: T,
-  extractor: WatchExtractedObservableCallback<MapSources<T>, MapOldSources<T, Immediate>, E>,
+  extractor: WatchExtractedObservableCallback<
+    MapSources<T>,
+    MapOldSources<T, Immediate>,
+    E
+  >,
   callback: (snapshot: E) => void,
   subscriptionOptions?: WatchExtractedObservableOptions,
-  watchOptions?: WatchOptions<Immediate>
+  watchOptions?: WatchOptions<Immediate>,
 ): WatchHandle
-export declare function watchExtractedObservable<T, E, Immediate extends Readonly<boolean> = false>(
+export declare function watchExtractedObservable<
+  T,
+  E,
+  Immediate extends Readonly<boolean> = false,
+>(
   source: WatchSource<T>,
-  extractor: WatchExtractedObservableCallback<T, Immediate extends true ? T | undefined : T, E>,
+  extractor: WatchExtractedObservableCallback<
+    T,
+    Immediate extends true ? T | undefined : T,
+    E
+  >,
   callback: (snapshot: E) => void,
   subscriptionOptions?: WatchExtractedObservableOptions,
-  watchOptions?: WatchOptions<Immediate>
+  watchOptions?: WatchOptions<Immediate>,
 ): WatchHandle
 export declare function watchExtractedObservable<
   T extends object,
@@ -179,9 +180,13 @@ export declare function watchExtractedObservable<
   Immediate extends Readonly<boolean> = false,
 >(
   source: T,
-  extractor: WatchExtractedObservableCallback<T, Immediate extends true ? T | undefined : T, E>,
+  extractor: WatchExtractedObservableCallback<
+    T,
+    Immediate extends true ? T | undefined : T,
+    E
+  >,
   callback: (snapshot: E) => void,
   subscriptionOptions?: WatchExtractedObservableOptions,
-  watchOptions?: WatchOptions<Immediate>
+  watchOptions?: WatchOptions<Immediate>,
 ): WatchHandle
 ```

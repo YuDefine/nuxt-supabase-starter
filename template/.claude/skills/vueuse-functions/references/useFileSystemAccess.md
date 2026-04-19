@@ -23,7 +23,7 @@ const {
   open,
   save,
   saveAs,
-  updateData,
+  updateData
 } = useFileSystemAccess()
 ```
 
@@ -85,9 +85,13 @@ interface FileSystemWritableFileStream extends WritableStream {
  */
 interface FileSystemWritableFileStreamWrite {
   (data: string | BufferSource | Blob): Promise<void>
-  (options: { type: 'write'; position: number; data: string | BufferSource | Blob }): Promise<void>
-  (options: { type: 'seek'; position: number }): Promise<void>
-  (options: { type: 'truncate'; size: number }): Promise<void>
+  (options: {
+    type: "write"
+    position: number
+    data: string | BufferSource | Blob
+  }): Promise<void>
+  (options: { type: "seek"; position: number }): Promise<void>
+  (options: { type: "truncate"; size: number }): Promise<void>
 }
 /**
  * FileStream.write
@@ -95,26 +99,26 @@ interface FileSystemWritableFileStreamWrite {
  */
 export type FileSystemAccessWindow = Window & {
   showSaveFilePicker: (
-    options: FileSystemAccessShowSaveFileOptions
+    options: FileSystemAccessShowSaveFileOptions,
   ) => Promise<FileSystemFileHandle>
   showOpenFilePicker: (
-    options: FileSystemAccessShowOpenFileOptions
+    options: FileSystemAccessShowOpenFileOptions,
   ) => Promise<FileSystemFileHandle[]>
 }
 export type UseFileSystemAccessCommonOptions = Pick<
   FileSystemAccessShowOpenFileOptions,
-  'types' | 'excludeAcceptAllOption'
+  "types" | "excludeAcceptAllOption"
 >
 export type UseFileSystemAccessShowSaveFileOptions = Pick<
   FileSystemAccessShowSaveFileOptions,
-  'suggestedName'
+  "suggestedName"
 >
 export type UseFileSystemAccessOptions = ConfigurableWindow &
   UseFileSystemAccessCommonOptions & {
     /**
      * file data type
      */
-    dataType?: MaybeRefOrGetter<'Text' | 'ArrayBuffer' | 'Blob'>
+    dataType?: MaybeRefOrGetter<"Text" | "ArrayBuffer" | "Blob">
   }
 /**
  * Create and read and write local files.
@@ -125,21 +129,21 @@ export declare function useFileSystemAccess(): UseFileSystemAccessReturn<
 >
 export declare function useFileSystemAccess(
   options: UseFileSystemAccessOptions & {
-    dataType: 'Text'
-  }
+    dataType: "Text"
+  },
 ): UseFileSystemAccessReturn<string>
 export declare function useFileSystemAccess(
   options: UseFileSystemAccessOptions & {
-    dataType: 'ArrayBuffer'
-  }
+    dataType: "ArrayBuffer"
+  },
 ): UseFileSystemAccessReturn<ArrayBuffer>
 export declare function useFileSystemAccess(
   options: UseFileSystemAccessOptions & {
-    dataType: 'Blob'
-  }
+    dataType: "Blob"
+  },
 ): UseFileSystemAccessReturn<Blob>
 export declare function useFileSystemAccess(
-  options: UseFileSystemAccessOptions
+  options: UseFileSystemAccessOptions,
 ): UseFileSystemAccessReturn<string | ArrayBuffer | Blob>
 export interface UseFileSystemAccessReturn<T = string> extends Supportable {
   data: ShallowRef<T | undefined>

@@ -103,10 +103,10 @@ export type UseIntervalReturn =
  */
 export declare function useInterval(
   interval?: MaybeRefOrGetter<number>,
-  options?: UseIntervalOptions<false>
+  options?: UseIntervalOptions<false>,
 ): Readonly<ShallowRef<number>>
 export declare function useInterval(
   interval: MaybeRefOrGetter<number>,
-  options: UseIntervalOptions<true>
+  options: UseIntervalOptions<true>,
 ): Readonly<UseIntervalControls & Pausable>
 ```

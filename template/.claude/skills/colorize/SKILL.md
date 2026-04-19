@@ -1,18 +1,16 @@
 ---
 name: colorize
-description: Add strategic color to features that are too monochromatic or lack visual interest. Makes interfaces more engaging and expressive.
-user-invokable: true
-args:
-  - name: target
-    description: The feature or component to colorize (optional)
-    required: false
+description: Add strategic color to features that are too monochromatic or lack visual interest, making interfaces more engaging and expressive. Use when the user mentions the design looking gray, dull, lacking warmth, needing more color, or wanting a more vibrant or expressive palette.
+version: 2.1.1
+user-invocable: true
+argument-hint: "[target]"
 ---
 
 Strategically introduce color to designs that are too monochromatic, gray, or lacking in visual warmth and personality.
 
 ## MANDATORY PREPARATION
 
-Use the frontend-design skill — it contains design principles, anti-patterns, and the **Context Gathering Protocol**. Follow the protocol before proceeding — if no design context exists yet, you MUST run teach-impeccable first. Additionally gather: existing brand colors.
+Invoke /impeccable — it contains design principles, anti-patterns, and the **Context Gathering Protocol**. Follow the protocol before proceeding — if no design context exists yet, you MUST run /impeccable teach first. Additionally gather: existing brand colors.
 
 ---
 
@@ -34,7 +32,7 @@ Analyze the current state and identify opportunities:
    - **Wayfinding**: Helping users navigate and understand structure
    - **Delight**: Moments of visual interest and personality
 
-If any of these are unclear from the codebase, STOP and call the AskUserQuestion tool to clarify.
+If any of these are unclear from the codebase, ask the user directly to clarify what you cannot infer.
 
 **CRITICAL**: More color ≠ better. Strategic color beats rainbow vomit every time. Every color should have a purpose.
 
@@ -54,7 +52,6 @@ Create a purposeful color introduction plan:
 Add color systematically across these dimensions:
 
 ### Semantic Color
-
 - **State indicators**:
   - Success: Green tones (emerald, forest, mint)
   - Error: Red/pink tones (rose, crimson, coral)
@@ -66,7 +63,6 @@ Add color systematically across these dimensions:
 - **Progress indicators**: Colored bars, rings, or charts showing completion or health
 
 ### Accent Color Application
-
 - **Primary actions**: Color the most important buttons/CTAs
 - **Links**: Add color to clickable text (maintain accessibility)
 - **Icons**: Colorize key icons for recognition and personality
@@ -74,35 +70,30 @@ Add color systematically across these dimensions:
 - **Hover states**: Introduce color on interaction
 
 ### Background & Surfaces
-
 - **Tinted backgrounds**: Replace pure gray (`#f5f5f5`) with warm neutrals (`oklch(97% 0.01 60)`) or cool tints (`oklch(97% 0.01 250)`)
 - **Colored sections**: Use subtle background colors to separate areas
 - **Gradient backgrounds**: Add depth with subtle, intentional gradients (not generic purple-blue)
 - **Cards & surfaces**: Tint cards or surfaces slightly for warmth
 
-**Use OKLCH for color**: It's perceptually uniform, meaning equal steps in lightness _look_ equal. Great for generating harmonious scales.
+**Use OKLCH for color**: It's perceptually uniform, meaning equal steps in lightness *look* equal. Great for generating harmonious scales.
 
 ### Data Visualization
-
 - **Charts & graphs**: Use color to encode categories or values
 - **Heatmaps**: Color intensity shows density or importance
 - **Comparison**: Color coding for different datasets or timeframes
 
 ### Borders & Accents
-
 - **Accent borders**: Add colored left/top borders to cards or sections
 - **Underlines**: Color underlines for emphasis or active states
 - **Dividers**: Subtle colored dividers instead of gray lines
 - **Focus rings**: Colored focus indicators matching brand
 
 ### Typography Color
-
 - **Colored headings**: Use brand colors for section headings (maintain contrast)
 - **Highlight text**: Color for emphasis or categories
 - **Labels & tags**: Small colored labels for metadata or categories
 
 ### Decorative Elements
-
 - **Illustrations**: Add colored illustrations or icons
 - **Shapes**: Geometric shapes in brand colors as background elements
 - **Gradients**: Colorful gradient overlays or mesh backgrounds
@@ -113,26 +104,22 @@ Add color systematically across these dimensions:
 Ensure color addition improves rather than overwhelms:
 
 ### Maintain Hierarchy
-
 - **Dominant color** (60%): Primary brand color or most used accent
 - **Secondary color** (30%): Supporting color for variety
 - **Accent color** (10%): High contrast for key moments
 - **Neutrals** (remaining): Gray/black/white for structure
 
 ### Accessibility
-
 - **Contrast ratios**: Ensure WCAG compliance (4.5:1 for text, 3:1 for UI components)
 - **Don't rely on color alone**: Use icons, labels, or patterns alongside color
 - **Test for color blindness**: Verify red/green combinations work for all users
 
 ### Cohesion
-
 - **Consistent palette**: Use colors from defined palette, not arbitrary choices
 - **Systematic application**: Same color meanings throughout (green always = success)
 - **Temperature consistency**: Warm palette stays warm, cool stays cool
 
 **NEVER**:
-
 - Use every color in the rainbow (choose 2-4 colors beyond neutrals)
 - Apply color randomly without semantic meaning
 - Put gray text on colored backgrounds—it looks washed out; use a darker shade of the background color or transparency instead

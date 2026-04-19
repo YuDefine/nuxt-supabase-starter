@@ -71,7 +71,7 @@ description: 分析 docs/design-review-findings.md 歷史，識別跨 spec 的�
 | 發現來源 | 次數 | 常見類別 |
 |---------|------|---------|
 | /audit | 15 | a11y, color |
-| /arrange | 10 | spacing, layout |
+| /layout | 10 | spacing, layout |
 | /design improve | 8 | consistency |
 ```
 

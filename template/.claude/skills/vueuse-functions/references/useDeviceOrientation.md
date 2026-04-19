@@ -11,7 +11,12 @@ Reactive [DeviceOrientationEvent](https://developer.mozilla.org/en-US/docs/Web/A
 ```ts
 import { useDeviceOrientation } from '@vueuse/core'
 
-const { isAbsolute, alpha, beta, gamma } = useDeviceOrientation()
+const {
+  isAbsolute,
+  alpha,
+  beta,
+  gamma,
+} = useDeviceOrientation()
 ```
 
 | State      | Type      | Description                                                                                                                |
@@ -28,7 +33,9 @@ You can find [more information about the state on the MDN](https://developer.moz
 ```vue
 <template>
   <UseDeviceOrientation v-slot="{ alpha, beta, gamma }">
-    Alpha: {{ alpha }} Beta: {{ beta }} Gamma: {{ gamma }}
+    Alpha: {{ alpha }}
+    Beta: {{ beta }}
+    Gamma: {{ gamma }}
   </UseDeviceOrientation>
 </template>
 ```
@@ -52,6 +59,6 @@ export interface UseDeviceOrientationReturn extends Supportable {
  * @__NO_SIDE_EFFECTS__
  */
 export declare function useDeviceOrientation(
-  options?: UseDeviceOrientationOptions
+  options?: UseDeviceOrientationOptions,
 ): UseDeviceOrientationReturn
 ```

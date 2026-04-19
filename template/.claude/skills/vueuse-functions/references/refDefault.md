@@ -29,5 +29,8 @@ console.log(state.value) // default
  *
  * @__NO_SIDE_EFFECTS__
  */
-export declare function refDefault<T>(source: Ref<T | undefined | null>, defaultValue: T): Ref<T>
+export declare function refDefault<T>(
+  source: Ref<T | undefined | null>,
+  defaultValue: T,
+): Ref<T>
 ```

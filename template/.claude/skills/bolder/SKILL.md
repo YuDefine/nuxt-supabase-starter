@@ -1,18 +1,16 @@
 ---
 name: bolder
-description: Amplify safe or boring designs to make them more visually interesting and stimulating. Increases impact while maintaining usability.
-user-invokable: true
-args:
-  - name: target
-    description: The feature or component to make bolder (optional)
-    required: false
+description: Amplify safe or boring designs to make them more visually interesting and stimulating. Increases impact while maintaining usability. Use when the user says the design looks bland, generic, too safe, lacks personality, or wants more visual impact and character.
+version: 2.1.1
+user-invocable: true
+argument-hint: "[target]"
 ---
 
 Increase visual impact and personality in designs that are too safe, generic, or visually underwhelming, creating more engaging and memorable experiences.
 
 ## MANDATORY PREPARATION
 
-Use the frontend-design skill — it contains design principles, anti-patterns, and the **Context Gathering Protocol**. Follow the protocol before proceeding — if no design context exists yet, you MUST run teach-impeccable first.
+Invoke /impeccable — it contains design principles, anti-patterns, and the **Context Gathering Protocol**. Follow the protocol before proceeding — if no design context exists yet, you MUST run /impeccable teach first.
 
 ---
 
@@ -34,11 +32,11 @@ Analyze what makes the design feel too safe or boring:
    - Who's the audience? (What will resonate?)
    - What are the constraints? (Brand guidelines, accessibility, performance)
 
-If any of these are unclear from the codebase, STOP and call the AskUserQuestion tool to clarify.
+If any of these are unclear from the codebase, ask the user directly to clarify what you cannot infer.
 
 **CRITICAL**: "Bolder" doesn't mean chaotic or garish. It means distinctive, memorable, and confident. Think intentional drama, not random chaos.
 
-**WARNING - AI SLOP TRAP**: When making things "bolder," AI defaults to the same tired tricks: cyan/purple gradients, glassmorphism, neon accents on dark backgrounds, gradient text on metrics. These are the OPPOSITE of bold—they're generic. Review ALL the DON'T guidelines in the frontend-design skill before proceeding. Bold means distinctive, not "more effects."
+**WARNING - AI SLOP TRAP**: When making things "bolder," AI defaults to the same tired tricks: cyan/purple gradients, glassmorphism, neon accents on dark backgrounds, gradient text on metrics. These are the OPPOSITE of bold—they're generic. Review ALL the DON'T guidelines in the impeccable skill before proceeding. Bold means distinctive, not "more effects."
 
 ## Plan Amplification
 
@@ -56,14 +54,12 @@ Create a strategy to increase impact while maintaining coherence:
 Systematically increase impact across these dimensions:
 
 ### Typography Amplification
-
-- **Replace generic fonts**: Swap system fonts for distinctive choices (see frontend-design skill for inspiration)
+- **Replace generic fonts**: Swap system fonts for distinctive choices (see impeccable skill for inspiration)
 - **Extreme scale**: Create dramatic size jumps (3x-5x differences, not 1.5x)
 - **Weight contrast**: Pair 900 weights with 200 weights, not 600 with 400
 - **Unexpected choices**: Variable fonts, display fonts for headlines, condensed/extended widths, monospace as intentional accent (not as lazy "dev tool" default)
 
 ### Color Intensification
-
 - **Increase saturation**: Shift to more vibrant, energetic colors (but not neon)
 - **Bold palette**: Introduce unexpected color combinations—avoid the purple-blue gradient AI slop
 - **Dominant color strategy**: Let one bold color own 60% of the design
@@ -72,7 +68,6 @@ Systematically increase impact across these dimensions:
 - **Rich gradients**: Intentional multi-stop gradients (not generic purple-to-blue)
 
 ### Spatial Drama
-
 - **Extreme scale jumps**: Make important elements 3-5x larger than surroundings
 - **Break the grid**: Let hero elements escape containers and cross boundaries
 - **Asymmetric layouts**: Replace centered, balanced layouts with tension-filled asymmetry
@@ -80,7 +75,6 @@ Systematically increase impact across these dimensions:
 - **Overlap**: Layer elements intentionally for depth
 
 ### Visual Effects
-
 - **Dramatic shadows**: Large, soft shadows for elevation (but not generic drop shadows on rounded rectangles)
 - **Background treatments**: Mesh patterns, noise textures, geometric patterns, intentional gradients (not purple-to-blue)
 - **Texture & depth**: Grain, halftone, duotone, layered elements—NOT glassmorphism (it's overused AI slop)
@@ -88,21 +82,18 @@ Systematically increase impact across these dimensions:
 - **Custom elements**: Illustrative elements, custom icons, decorative details that reinforce brand
 
 ### Motion & Animation
-
 - **Entrance choreography**: Staggered, dramatic page load animations with 50-100ms delays
 - **Scroll effects**: Parallax, reveal animations, scroll-triggered sequences
 - **Micro-interactions**: Satisfying hover effects, click feedback, state changes
 - **Transitions**: Smooth, noticeable transitions using ease-out-quart/quint/expo (not bounce or elastic—they cheapen the effect)
 
 ### Composition Boldness
-
 - **Hero moments**: Create clear focal points with dramatic treatment
 - **Diagonal flows**: Escape horizontal/vertical rigidity with diagonal arrangements
 - **Full-bleed elements**: Use full viewport width/height for impact
 - **Unexpected proportions**: Golden ratio? Throw it out. Try 70/30, 80/20 splits
 
 **NEVER**:
-
 - Add effects randomly without purpose (chaos ≠ bold)
 - Sacrifice readability for aesthetics (body text must be readable)
 - Make everything bold (then nothing is bold - need contrast)

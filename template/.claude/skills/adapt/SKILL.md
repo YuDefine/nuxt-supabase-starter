@@ -1,21 +1,16 @@
 ---
 name: adapt
-description: Adapt designs to work across different screen sizes, devices, contexts, or platforms. Ensures consistent experience across varied environments.
-user-invokable: true
-args:
-  - name: target
-    description: The feature or component to adapt (optional)
-    required: false
-  - name: context
-    description: What to adapt for (mobile, tablet, desktop, print, email, etc.)
-    required: false
+description: Adapt designs to work across different screen sizes, devices, contexts, or platforms. Implements breakpoints, fluid layouts, and touch targets. Use when the user mentions responsive design, mobile layouts, breakpoints, viewport adaptation, or cross-device compatibility.
+version: 2.1.1
+user-invocable: true
+argument-hint: "[target] [context (mobile, tablet, print...)]"
 ---
 
 Adapt existing designs to work effectively across different contexts - different screen sizes, devices, platforms, or use cases.
 
 ## MANDATORY PREPARATION
 
-Use the frontend-design skill — it contains design principles, anti-patterns, and the **Context Gathering Protocol**. Follow the protocol before proceeding — if no design context exists yet, you MUST run teach-impeccable first. Additionally gather: target platforms/devices and usage contexts.
+Invoke /impeccable — it contains design principles, anti-patterns, and the **Context Gathering Protocol**. Follow the protocol before proceeding — if no design context exists yet, you MUST run /impeccable teach first. Additionally gather: target platforms/devices and usage contexts.
 
 ---
 
@@ -50,14 +45,12 @@ Create context-appropriate strategy:
 ### Mobile Adaptation (Desktop → Mobile)
 
 **Layout Strategy**:
-
 - Single column instead of multi-column
 - Vertical stacking instead of side-by-side
 - Full-width components instead of fixed widths
 - Bottom navigation instead of top/side navigation
 
 **Interaction Strategy**:
-
 - Touch targets 44x44px minimum (not hover-dependent)
 - Swipe gestures where appropriate (lists, carousels)
 - Bottom sheets instead of dropdowns
@@ -65,14 +58,12 @@ Create context-appropriate strategy:
 - Larger tap areas with more spacing
 
 **Content Strategy**:
-
 - Progressive disclosure (don't show everything at once)
 - Prioritize primary content (secondary content in tabs/accordions)
 - Shorter text (more concise)
 - Larger text (16px minimum)
 
 **Navigation Strategy**:
-
 - Hamburger menu or bottom navigation
 - Reduce navigation complexity
 - Sticky headers for context
@@ -81,14 +72,12 @@ Create context-appropriate strategy:
 ### Tablet Adaptation (Hybrid Approach)
 
 **Layout Strategy**:
-
 - Two-column layouts (not single or three-column)
 - Side panels for secondary content
 - Master-detail views (list + detail)
 - Adaptive based on orientation (portrait vs landscape)
 
 **Interaction Strategy**:
-
 - Support both touch and pointer
 - Touch targets 44x44px but allow denser layouts than phone
 - Side navigation drawers
@@ -97,14 +86,12 @@ Create context-appropriate strategy:
 ### Desktop Adaptation (Mobile → Desktop)
 
 **Layout Strategy**:
-
 - Multi-column layouts (use horizontal space)
 - Side navigation always visible
 - Multiple information panels simultaneously
 - Fixed widths with max-width constraints (don't stretch to 4K)
 
 **Interaction Strategy**:
-
 - Hover states for additional information
 - Keyboard shortcuts
 - Right-click context menus
@@ -112,7 +99,6 @@ Create context-appropriate strategy:
 - Multi-select with Shift/Cmd
 
 **Content Strategy**:
-
 - Show more information upfront (less progressive disclosure)
 - Data tables with many columns
 - Richer visualizations
@@ -121,14 +107,12 @@ Create context-appropriate strategy:
 ### Print Adaptation (Screen → Print)
 
 **Layout Strategy**:
-
 - Page breaks at logical points
 - Remove navigation, footer, interactive elements
 - Black and white (or limited color)
 - Proper margins for binding
 
 **Content Strategy**:
-
 - Expand shortened content (show full URLs, hidden sections)
 - Add page numbers, headers, footers
 - Include metadata (print date, page title)
@@ -137,14 +121,12 @@ Create context-appropriate strategy:
 ### Email Adaptation (Web → Email)
 
 **Layout Strategy**:
-
 - Narrow width (600px max)
 - Single column only
 - Inline CSS (no external stylesheets)
 - Table-based layouts (for email client compatibility)
 
 **Interaction Strategy**:
-
 - Large, obvious CTAs (buttons not text links)
 - No hover states (not reliable)
 - Deep links to web app for complex interactions
@@ -156,7 +138,6 @@ Apply changes systematically:
 ### Responsive Breakpoints
 
 Choose appropriate breakpoints:
-
 - Mobile: 320px-767px
 - Tablet: 768px-1023px
 - Desktop: 1024px+
@@ -195,7 +176,6 @@ Choose appropriate breakpoints:
 **IMPORTANT**: Test on real devices, not just browser DevTools. Device emulation is helpful but not perfect.
 
 **NEVER**:
-
 - Hide core functionality on mobile (if it matters, make it work)
 - Assume desktop = powerful device (consider accessibility, older machines)
 - Use different information architecture across contexts (confusing)

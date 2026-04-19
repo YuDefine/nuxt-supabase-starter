@@ -10,19 +10,21 @@ Make elements draggable.
 
 ```vue
 <script setup lang="ts">
-  import { useDraggable } from '@vueuse/core'
-  import { useTemplateRef } from 'vue'
+import { useDraggable } from '@vueuse/core'
+import { useTemplateRef } from 'vue'
 
-  const el = useTemplateRef('el')
+const el = useTemplateRef('el')
 
-  // `style` will be a helper computed for `left: ?px; top: ?px;`
-  const { x, y, style } = useDraggable(el, {
-    initialValue: { x: 40, y: 40 },
-  })
+// `style` will be a helper computed for `left: ?px; top: ?px;`
+const { x, y, style } = useDraggable(el, {
+  initialValue: { x: 40, y: 40 },
+})
 </script>
 
 <template>
-  <div ref="el" :style="style" style="position: fixed">Drag me! I am at {{ x }}, {{ y }}</div>
+  <div ref="el" :style="style" style="position: fixed">
+    Drag me! I am at {{ x }}, {{ y }}
+  </div>
 </template>
 ```
 
@@ -104,7 +106,7 @@ const { x, y, style } = useDraggable(el, {
   autoScroll: {
     speed: 2, // Control the speed of auto-scroll.
     margin: 30, // Set the margin from the edge that triggers auto-scroll.
-    direction: 'both', // Determine the direction of auto-scroll.
+    direction: 'both' // Determine the direction of auto-scroll.
   },
 })
 ```
@@ -170,7 +172,9 @@ export interface UseDraggableOptions {
    *
    * @default undefined
    */
-  containerElement?: MaybeRefOrGetter<HTMLElement | SVGElement | null | undefined>
+  containerElement?: MaybeRefOrGetter<
+    HTMLElement | SVGElement | null | undefined
+  >
   /**
    * Handle that triggers the drag event
    *
@@ -206,7 +210,7 @@ export interface UseDraggableOptions {
    *
    * @default 'both'
    */
-  axis?: 'x' | 'y' | 'both'
+  axis?: "x" | "y" | "both"
   /**
    * Disabled drag and drop.
    *
@@ -260,7 +264,7 @@ export interface UseDraggableOptions {
          *
          * @default 'both'
          */
-        direction?: 'x' | 'y' | 'both'
+        direction?: "x" | "y" | "both"
       }
   >
 }
@@ -280,6 +284,6 @@ export interface UseDraggableReturn {
  */
 export declare function useDraggable(
   target: MaybeRefOrGetter<HTMLElement | SVGElement | null | undefined>,
-  options?: UseDraggableOptions
+  options?: UseDraggableOptions,
 ): UseDraggableReturn
 ```

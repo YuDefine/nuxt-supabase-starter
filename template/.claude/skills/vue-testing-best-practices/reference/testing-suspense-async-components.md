@@ -21,7 +21,6 @@ Create a test wrapper component with Suspense or use a `mountSuspense` helper fu
 - [ ] Consider using `@testing-library/vue` with caution (has Suspense issues)
 
 **Incorrect:**
-
 ```javascript
 import { mount } from '@vue/test-utils'
 import AsyncUserProfile from './AsyncUserProfile.vue'
@@ -30,7 +29,7 @@ import AsyncUserProfile from './AsyncUserProfile.vue'
 test('displays user data', async () => {
   // This won't render - Vue expects Suspense wrapper for async setup
   const wrapper = mount(AsyncUserProfile, {
-    props: { userId: 1 },
+    props: { userId: 1 }
   })
 
   await flushPromises()
@@ -41,7 +40,6 @@ test('displays user data', async () => {
 ```
 
 **Correct - Manual Wrapper Component:**
-
 ```javascript
 import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, Suspense } from 'vue'
@@ -56,7 +54,7 @@ test('displays user data', async () => {
         <AsyncUserProfile :user-id="1" />
         <template #fallback>Loading...</template>
       </Suspense>
-    `,
+    `
   })
 
   const wrapper = mount(TestWrapper)
@@ -74,7 +72,6 @@ test('displays user data', async () => {
 ```
 
 **Correct - Reusable Helper Function:**
-
 ```javascript
 // test-utils.js
 import { mount, flushPromises } from '@vue/test-utils'
@@ -86,11 +83,15 @@ export async function mountSuspense(component, options = {}) {
   const wrapper = mount(
     defineComponent({
       render() {
-        return h(Suspense, null, {
-          default: () => h(component, props, slots),
-          fallback: () => h('div', 'Loading...'),
-        })
-      },
+        return h(
+          Suspense,
+          null,
+          {
+            default: () => h(component, props, slots),
+            fallback: () => h('div', 'Loading...')
+          }
+        )
+      }
     }),
     mountOptions
   )
@@ -101,7 +102,7 @@ export async function mountSuspense(component, options = {}) {
   return {
     wrapper,
     // Provide easy access to the actual component
-    component: wrapper.findComponent(component),
+    component: wrapper.findComponent(component)
   }
 }
 ```
@@ -117,8 +118,8 @@ test('displays user data', async () => {
     global: {
       stubs: {
         // Stub any child components if needed
-      },
-    },
+      }
+    }
   })
 
   expect(component.find('.username').text()).toBe('John')
@@ -126,7 +127,7 @@ test('displays user data', async () => {
 
 test('handles errors gracefully', async () => {
   const { component } = await mountSuspense(AsyncUserProfile, {
-    props: { userId: 'invalid' },
+    props: { userId: 'invalid' }
   })
 
   expect(component.find('.error').exists()).toBe(true)
@@ -154,9 +155,9 @@ test('catches async errors', async () => {
     render() {
       return h(Suspense, null, {
         default: () => h(AsyncComponent, { shouldFail: true }),
-        fallback: () => h('div', 'Loading...'),
+        fallback: () => h('div', 'Loading...')
       })
-    },
+    }
   })
 
   const wrapper = mount(TestWrapper)
@@ -176,7 +177,7 @@ import AsyncPage from './AsyncPage.vue'
 
 test('renders async page', async () => {
   const wrapper = await mountSuspended(AsyncPage, {
-    props: { id: 1 },
+    props: { id: 1 }
   })
 
   expect(wrapper.find('h1').text()).toBe('Page Title')
@@ -186,7 +187,6 @@ test('renders async page', async () => {
 ## Important Caveats
 
 ### @testing-library/vue Limitation
-
 ```javascript
 // CAUTION: @testing-library/vue has issues with Suspense
 // Use @vue/test-utils for async components instead
@@ -201,7 +201,7 @@ test('async component with testing library', async () => {
         <AsyncComponent />
       </Suspense>
     `,
-    components: { AsyncComponent },
+    components: { AsyncComponent }
   }
 
   const { getByText } = render(TestWrapper)
@@ -213,7 +213,6 @@ test('async component with testing library', async () => {
 ```
 
 ### Accessing Component Instance
-
 ```javascript
 test('access vm on async component', async () => {
   const { wrapper, component } = await mountSuspense(AsyncComponent)
@@ -225,7 +224,6 @@ test('access vm on async component', async () => {
 ```
 
 ## Reference
-
 - [Vue Test Utils - Async Suspense](https://test-utils.vuejs.org/guide/advanced/async-suspense)
 - [Vue.js Suspense Documentation](https://vuejs.org/guide/built-ins/suspense.html)
 - [Testing Library Vue Suspense Issue](https://github.com/testing-library/vue-testing-library/issues/230)

@@ -1,101 +1,55 @@
 ---
 name: nuxt
 description: Use when working on Nuxt 4+ projects — server routes, routing, middleware, composables, h3 v1 helpers, nitropack v2. Updated for Nuxt 4.3+.
-license: MIT
+metadata:
+  author: Anthony Fu
+  version: "2026.1.28"
+  source: Generated from https://github.com/nuxt/nuxt, scripts located at https://github.com/antfu/skills
 ---
 
-# Nuxt 4+ Development
+Nuxt is a full-stack Vue framework that provides server-side rendering, file-based routing, auto-imports, and a powerful module system. It uses Nitro as its server engine for universal deployment across Node.js, serverless, and edge platforms.
 
-Progressive guidance for Nuxt 4+ projects (v4.3+) with latest patterns and conventions.
+> The skill is based on Nuxt 3.x, generated at 2026-01-28.
 
-## When to Use
+## Core
 
-Working with:
+| Topic | Description | Reference |
+|-------|-------------|-----------|
+| Directory Structure | Project folder structure, conventions, file organization | [core-directory-structure](references/core-directory-structure.md) |
+| Configuration | nuxt.config.ts, app.config.ts, runtime config, environment variables | [core-config](references/core-config.md) |
+| CLI Commands | Dev server, build, generate, preview, and utility commands | [core-cli](references/core-cli.md) |
+| Routing | File-based routing, dynamic routes, navigation, middleware, layouts | [core-routing](references/core-routing.md) |
+| Data Fetching | useFetch, useAsyncData, $fetch, caching, refresh | [core-data-fetching](references/core-data-fetching.md) |
+| Modules | Creating and using Nuxt modules, Nuxt Kit utilities | [core-modules](references/core-modules.md) |
+| Deployment | Platform-agnostic deployment with Nitro, Vercel, Netlify, Cloudflare | [core-deployment](references/core-deployment.md) |
 
-- Server routes (API endpoints, server middleware, server utils)
-- File-based routing (pages, layouts, route groups)
-- Nuxt middleware (route guards, navigation)
-- Nuxt plugins (app extensions)
-- Nuxt-specific features (auto-imports, layers, modules)
+## Features
 
-## Available Guidance
+| Topic | Description | Reference |
+|-------|-------------|-----------|
+| Composables Auto-imports | Vue APIs, Nuxt composables, custom composables, utilities | [features-composables](references/features-composables.md) |
+| Components Auto-imports | Component naming, lazy loading, hydration strategies | [features-components-autoimport](references/features-components-autoimport.md) |
+| Built-in Components | NuxtLink, NuxtPage, NuxtLayout, ClientOnly, and more | [features-components](references/features-components.md) |
+| State Management | useState composable, SSR-friendly state, Pinia integration | [features-state](references/features-state.md) |
+| Server Routes | API routes, server middleware, Nitro server engine | [features-server](references/features-server.md) |
 
-Read specific files based on current work:
+## Rendering
 
-- **[references/server.md](references/server.md)** - API routes, server middleware, validation (Zod), WebSocket, SSE
-- **[references/routing.md](references/routing.md)** - File-based routing, route groups, typed router, definePage
-- **[references/middleware-plugins.md](references/middleware-plugins.md)** - Route middleware, plugins, app lifecycle
-- **[references/nuxt-composables.md](references/nuxt-composables.md)** - Nuxt composables (useRequestURL, useFetch, navigation)
-- **[references/nuxt-components.md](references/nuxt-components.md)** - NuxtLink, NuxtImg, NuxtTime (prefer over HTML elements)
-- **[references/nuxt-config.md](references/nuxt-config.md)** - Configuration, modules, auto-imports, layers
+| Topic | Description | Reference |
+|-------|-------------|-----------|
+| Rendering Modes | Universal (SSR), client-side (SPA), hybrid rendering, route rules | [rendering-modes](references/rendering-modes.md) |
 
-**For Vue composables:** See `vue` skill composables.md (VueUse, Composition API patterns)
-**For UI components:** use `nuxt-ui` skill
-**For database/storage:** use `nuxthub` skill
-**For content-driven sites:** use `nuxt-content` skill
-**For creating modules:** use `nuxt-modules` skill
-**For project scaffolding/CI:** use `ts-library` skill
+## Best Practices
 
-## Loading Files
+| Topic | Description | Reference |
+|-------|-------------|-----------|
+| Data Fetching Patterns | Efficient fetching, caching, parallel requests, error handling | [best-practices-data-fetching](references/best-practices-data-fetching.md) |
+| SSR & Hydration | Avoiding context leaks, hydration mismatches, composable patterns | [best-practices-ssr](references/best-practices-ssr.md) |
 
-**Consider loading these reference files based on your task:**
+## Advanced
 
-- [ ] [references/server.md](references/server.md) - if creating API endpoints or server middleware
-- [ ] [references/routing.md](references/routing.md) - if setting up pages, layouts, or route groups
-- [ ] [references/nuxt-composables.md](references/nuxt-composables.md) - if using Nuxt composables (useFetch, useRequestURL, etc.)
-- [ ] [references/middleware-plugins.md](references/middleware-plugins.md) - if working with middleware or plugins
-- [ ] [references/nuxt-components.md](references/nuxt-components.md) - if using Nuxt components (NuxtLink, NuxtImg, etc.)
-- [ ] [references/nuxt-config.md](references/nuxt-config.md) - if editing nuxt.config.ts
-- [ ] [references/project-setup.md](references/project-setup.md) - if setting up CI/ESLint/build tools
-
-**DO NOT load all files at once.** Load only what's relevant to your current task.
-
-## Quick Start
-
-```ts
-// server/api/hello.get.ts
-import { z } from 'zod'
-
-export default defineEventHandler(async (event) => {
-  const { name } = await getValidatedQuery(
-    event,
-    z.object({
-      name: z.string().default('world'),
-    }).parse
-  )
-  return { message: `Hello ${name}` }
-})
-```
-
-## Nuxt 4 vs Older Versions
-
-**You are working with Nuxt 4+.** Key differences:
-
-| Old (Nuxt 2/3)    | New (Nuxt 4)                    |
-| ----------------- | ------------------------------- |
-| `<Nuxt />`        | `<NuxtPage />`                  |
-| `context.params`  | `getRouterParam(event, 'name')` |
-| `window.origin`   | `useRequestURL().origin`        |
-| String routes     | Typed router with route names   |
-| Separate layouts/ | Parent routes with `<slot>`     |
-
-**If you're unsure about Nuxt 4 patterns, read the relevant guidance file first.**
-
-## Latest Documentation
-
-**When to fetch latest docs:**
-
-- New Nuxt 4 features not covered here
-- Module-specific configuration
-- Breaking changes or deprecations
-- Advanced use cases
-
-**Official sources:**
-
-- Nuxt: https://nuxt.com/docs
-- h3 (server engine): https://v1.h3.dev/
-- Nitro: https://nitro.build/
-
-## Token Efficiency
-
-Main skill: ~300 tokens. Each sub-file: ~800-1500 tokens. Only load files relevant to current task.
+| Topic | Description | Reference |
+|-------|-------------|-----------|
+| Layers | Extending applications with reusable layers | [advanced-layers](references/advanced-layers.md) |
+| Lifecycle Hooks | Build-time, runtime, and server hooks | [advanced-hooks](references/advanced-hooks.md) |
+| Module Authoring | Creating publishable Nuxt modules with Nuxt Kit | [advanced-module-authoring](references/advanced-module-authoring.md) |

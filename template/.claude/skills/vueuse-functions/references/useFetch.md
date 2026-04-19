@@ -72,7 +72,8 @@ import { useFetch } from '@vueuse/core'
 const { abort, canAbort } = useFetch(url)
 
 setTimeout(() => {
-  if (canAbort.value) abort()
+  if (canAbort.value)
+    abort()
 }, 100)
 ```
 
@@ -95,7 +96,8 @@ const { data } = useFetch(url, {
   async beforeFetch({ url, options, cancel }) {
     const myToken = await getMyToken()
 
-    if (!myToken) cancel()
+    if (!myToken)
+      cancel()
 
     options.headers = {
       ...options.headers,
@@ -116,7 +118,8 @@ import { useFetch } from '@vueuse/core'
 // ---cut---
 const { data } = useFetch(url, {
   afterFetch(ctx) {
-    if (ctx.data.title === 'HxH') ctx.data.title = 'Hunter x Hunter' // Modifies the response data
+    if (ctx.data.title === 'HxH')
+      ctx.data.title = 'Hunter x Hunter' // Modifies the response data
 
     return ctx
   },
@@ -132,7 +135,8 @@ const { data } = useFetch(url, {
   updateDataOnError: true,
   onFetchError(ctx) {
     // ctx.data can be null when 5xx response
-    if (ctx.data === null) ctx.data = { title: 'Hunter x Hunter' } // Modifies the response data
+    if (ctx.data === null)
+      ctx.data = { title: 'Hunter x Hunter' } // Modifies the response data
 
     ctx.error = new Error('Custom Error') // Modifies the error
     return ctx
@@ -213,7 +217,8 @@ const { isFetching, error, data } = useMyFetch('users', {
   async beforeFetch({ url, options, cancel }) {
     const myToken = await getMyToken()
 
-    if (!myToken) cancel()
+    if (!myToken)
+      cancel()
 
     options.headers = {
       ...options.headers,
@@ -253,7 +258,8 @@ const useMyFetch = createFetch({
               isRefreshing = false
               setMyToken(newToken.value)
               onRefreshed()
-            } else {
+            }
+            else {
               refreshSubscribers.length = 0
               // handle refresh token error
             }
@@ -293,7 +299,7 @@ async function refreshToken() {
 }
 
 function onRefreshed() {
-  refreshSubscribers.forEach((callback) => callback())
+  refreshSubscribers.forEach(callback => callback())
   refreshSubscribers.length = 0
 }
 
@@ -382,35 +388,38 @@ export interface UseFetchReturn<T> {
   get: () => UseFetchReturn<T> & PromiseLike<UseFetchReturn<T>>
   post: (
     payload?: MaybeRefOrGetter<unknown>,
-    type?: string
+    type?: string,
   ) => UseFetchReturn<T> & PromiseLike<UseFetchReturn<T>>
   put: (
     payload?: MaybeRefOrGetter<unknown>,
-    type?: string
+    type?: string,
   ) => UseFetchReturn<T> & PromiseLike<UseFetchReturn<T>>
   delete: (
     payload?: MaybeRefOrGetter<unknown>,
-    type?: string
+    type?: string,
   ) => UseFetchReturn<T> & PromiseLike<UseFetchReturn<T>>
   patch: (
     payload?: MaybeRefOrGetter<unknown>,
-    type?: string
+    type?: string,
   ) => UseFetchReturn<T> & PromiseLike<UseFetchReturn<T>>
   head: (
     payload?: MaybeRefOrGetter<unknown>,
-    type?: string
+    type?: string,
   ) => UseFetchReturn<T> & PromiseLike<UseFetchReturn<T>>
   options: (
     payload?: MaybeRefOrGetter<unknown>,
-    type?: string
+    type?: string,
   ) => UseFetchReturn<T> & PromiseLike<UseFetchReturn<T>>
-  json: <JSON = any>() => UseFetchReturn<JSON> & PromiseLike<UseFetchReturn<JSON>>
+  json: <JSON = any>() => UseFetchReturn<JSON> &
+    PromiseLike<UseFetchReturn<JSON>>
   text: () => UseFetchReturn<string> & PromiseLike<UseFetchReturn<string>>
   blob: () => UseFetchReturn<Blob> & PromiseLike<UseFetchReturn<Blob>>
-  arrayBuffer: () => UseFetchReturn<ArrayBuffer> & PromiseLike<UseFetchReturn<ArrayBuffer>>
-  formData: () => UseFetchReturn<FormData> & PromiseLike<UseFetchReturn<FormData>>
+  arrayBuffer: () => UseFetchReturn<ArrayBuffer> &
+    PromiseLike<UseFetchReturn<ArrayBuffer>>
+  formData: () => UseFetchReturn<FormData> &
+    PromiseLike<UseFetchReturn<FormData>>
 }
-type Combination = 'overwrite' | 'chain'
+type Combination = "overwrite" | "chain"
 export interface BeforeFetchContext {
   /**
    * The computed url of the current request
@@ -480,21 +489,24 @@ export interface UseFetchOptions {
    * Will run immediately before the fetch request is dispatched
    */
   beforeFetch?: (
-    ctx: BeforeFetchContext
-  ) => Promise<Partial<BeforeFetchContext> | void> | Partial<BeforeFetchContext> | void
+    ctx: BeforeFetchContext,
+  ) =>
+    | Promise<Partial<BeforeFetchContext> | void>
+    | Partial<BeforeFetchContext>
+    | void
   /**
    * Will run immediately after the fetch request is returned.
    * Runs after any 2xx response
    */
   afterFetch?: (
-    ctx: AfterFetchContext
+    ctx: AfterFetchContext,
   ) => Promise<Partial<AfterFetchContext>> | Partial<AfterFetchContext>
   /**
    * Will run immediately after the fetch request is returned.
    * Runs after any 4xx and 5xx response
    */
   onFetchError?: (
-    ctx: OnFetchErrorContext
+    ctx: OnFetchErrorContext,
   ) => Promise<Partial<OnFetchErrorContext>> | Partial<OnFetchErrorContext>
 }
 export interface CreateFetchOptions {
@@ -516,17 +528,19 @@ export interface CreateFetchOptions {
    */
   fetchOptions?: RequestInit
 }
-export declare function createFetch(config?: CreateFetchOptions): typeof useFetch
+export declare function createFetch(
+  config?: CreateFetchOptions,
+): typeof useFetch
 export declare function useFetch<T>(
-  url: MaybeRefOrGetter<string>
+  url: MaybeRefOrGetter<string>,
 ): UseFetchReturn<T> & PromiseLike<UseFetchReturn<T>>
 export declare function useFetch<T>(
   url: MaybeRefOrGetter<string>,
-  useFetchOptions: UseFetchOptions
+  useFetchOptions: UseFetchOptions,
 ): UseFetchReturn<T> & PromiseLike<UseFetchReturn<T>>
 export declare function useFetch<T>(
   url: MaybeRefOrGetter<string>,
   options: RequestInit,
-  useFetchOptions?: UseFetchOptions
+  useFetchOptions?: UseFetchOptions,
 ): UseFetchReturn<T> & PromiseLike<UseFetchReturn<T>>
 ```

@@ -33,8 +33,11 @@ import { useMouse, useParentElement } from '@vueuse/core'
 
 const parentEl = useParentElement()
 
-const extractor: UseMouseEventExtractor = (event) =>
-  event instanceof MouseEvent ? [event.offsetX, event.offsetY] : null
+const extractor: UseMouseEventExtractor = event => (
+  event instanceof MouseEvent
+    ? [event.offsetX, event.offsetY]
+    : null
+)
 
 const { x, y, sourceType } = useMouse({ target: parentEl, type: extractor })
 ```
@@ -43,19 +46,23 @@ const { x, y, sourceType } = useMouse({ target: parentEl, type: extractor })
 
 ```vue
 <template>
-  <UseMouse v-slot="{ x, y }"> x: {{ x }} y: {{ y }} </UseMouse>
+  <UseMouse v-slot="{ x, y }">
+    x: {{ x }}
+    y: {{ y }}
+  </UseMouse>
 </template>
 ```
 
 ## Type Declarations
 
 ```ts
-export type UseMouseCoordType = 'page' | 'client' | 'screen' | 'movement'
-export type UseMouseSourceType = 'mouse' | 'touch' | null
+export type UseMouseCoordType = "page" | "client" | "screen" | "movement"
+export type UseMouseSourceType = "mouse" | "touch" | null
 export type UseMouseEventExtractor = (
-  event: MouseEvent | Touch
+  event: MouseEvent | Touch,
 ) => [x: number, y: number] | null | undefined
-export interface UseMouseOptions extends ConfigurableWindow, ConfigurableEventFilter {
+export interface UseMouseOptions
+  extends ConfigurableWindow, ConfigurableEventFilter {
   /**
    * Mouse position based by page, client, screen, or relative to previous position
    *

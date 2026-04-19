@@ -24,7 +24,6 @@ tags: [vue3, keepalive, cache, performance, router, dynamic-components]
 Use KeepAlive when switching between views where state should persist (tabs, multi-step forms, dashboards). Avoid it when each visit should start fresh.
 
 **BAD:**
-
 ```vue
 <template>
   <!-- State resets on every switch -->
@@ -33,7 +32,6 @@ Use KeepAlive when switching between views where state should persist (tabs, mul
 ```
 
 **GOOD:**
-
 ```vue
 <template>
   <!-- State preserved between switches -->
@@ -69,7 +67,7 @@ Always cap cache size with `max` and restrict caching to specific components whe
 ```vue
 <!-- TabA.vue -->
 <script setup>
-  defineOptions({ name: 'TabA' })
+defineOptions({ name: 'TabA' })
 </script>
 ```
 
@@ -87,14 +85,14 @@ Vue 3 has no direct API to remove a specific cached instance. Use keys or dynami
 
 ```vue
 <script setup>
-  import { ref, reactive } from 'vue'
+import { ref, reactive } from 'vue'
 
-  const currentView = ref('Dashboard')
-  const viewKeys = reactive({ Dashboard: 0, Settings: 0 })
+const currentView = ref('Dashboard')
+const viewKeys = reactive({ Dashboard: 0, Settings: 0 })
 
-  function invalidateCache(view) {
-    viewKeys[view]++
-  }
+function invalidateCache(view) {
+  viewKeys[view]++
+}
 </script>
 
 <template>
@@ -110,15 +108,15 @@ Cached components are not destroyed on switch. Use activation hooks for refresh 
 
 ```vue
 <script setup>
-  import { onActivated, onDeactivated } from 'vue'
+import { onActivated, onDeactivated } from 'vue'
 
-  onActivated(() => {
-    refreshData()
-  })
+onActivated(() => {
+  refreshData()
+})
 
-  onDeactivated(() => {
-    pauseTimers()
-  })
+onDeactivated(() => {
+  pauseTimers()
+})
 </script>
 ```
 

@@ -39,14 +39,17 @@ watch(idle, (idleValue) => {
 
 ```vue
 <template>
-  <UseIdle v-slot="{ idle }" :timeout="5 * 60 * 1000"> Is Idle: {{ idle }} </UseIdle>
+  <UseIdle v-slot="{ idle }" :timeout="5 * 60 * 1000">
+    Is Idle: {{ idle }}
+  </UseIdle>
 </template>
 ```
 
 ## Type Declarations
 
 ```ts
-export interface UseIdleOptions extends ConfigurableWindow, ConfigurableEventFilter {
+export interface UseIdleOptions
+  extends ConfigurableWindow, ConfigurableEventFilter {
   /**
    * Event names that listen to for detected user activity
    *
@@ -78,5 +81,8 @@ export interface UseIdleReturn extends Stoppable {
  * @param timeout default to 1 minute
  * @param options IdleOptions
  */
-export declare function useIdle(timeout?: number, options?: UseIdleOptions): UseIdleReturn
+export declare function useIdle(
+  timeout?: number,
+  options?: UseIdleOptions,
+): UseIdleReturn
 ```

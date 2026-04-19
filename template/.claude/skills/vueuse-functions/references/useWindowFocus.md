@@ -10,9 +10,9 @@ Reactively track window focus with `window.onfocus` and `window.onblur` events.
 
 ```vue
 <script setup lang="ts">
-  import { useWindowFocus } from '@vueuse/core'
+import { useWindowFocus } from '@vueuse/core'
 
-  const focused = useWindowFocus()
+const focused = useWindowFocus()
 </script>
 
 <template>
@@ -24,7 +24,9 @@ Reactively track window focus with `window.onfocus` and `window.onblur` events.
 
 ```vue
 <template>
-  <UseWindowFocus v-slot="{ focused }"> Document Focus: {{ focused }} </UseWindowFocus>
+  <UseWindowFocus v-slot="{ focused }">
+    Document Focus: {{ focused }}
+  </UseWindowFocus>
 </template>
 ```
 
@@ -38,5 +40,7 @@ Reactively track window focus with `window.onfocus` and `window.onblur` events.
  *
  * @__NO_SIDE_EFFECTS__
  */
-export declare function useWindowFocus(options?: ConfigurableWindow): ShallowRef<boolean>
+export declare function useWindowFocus(
+  options?: ConfigurableWindow,
+): ShallowRef<boolean>
 ```

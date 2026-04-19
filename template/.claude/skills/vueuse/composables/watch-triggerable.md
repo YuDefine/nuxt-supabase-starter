@@ -13,7 +13,10 @@ import { nextTick, shallowRef } from 'vue'
 
 const source = shallowRef(0)
 
-const { trigger, ignoreUpdates } = watchTriggerable(source, (v) => console.log(`Changed to ${v}!`))
+const { trigger, ignoreUpdates } = watchTriggerable(
+  source,
+  v => console.log(`Changed to ${v}!`),
+)
 
 source.value = 'bar'
 await nextTick() // logs: Changed to bar!
@@ -24,8 +27,8 @@ trigger() // logs: Changed to bar!
 
 ## Returns
 
-| Name    | Type  |
-| ------- | ----- |
+| Name | Type |
+| --- | --- |
 | trigger | `Ref` |
 
 ## Reference

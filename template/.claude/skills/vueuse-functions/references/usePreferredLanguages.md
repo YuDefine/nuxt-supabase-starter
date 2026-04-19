@@ -36,6 +36,6 @@ const languages = usePreferredLanguages()
  * @__NO_SIDE_EFFECTS__
  */
 export declare function usePreferredLanguages(
-  options?: ConfigurableWindow
+  options?: ConfigurableWindow,
 ): ShallowRef<readonly string[]>
 ```

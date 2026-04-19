@@ -10,18 +10,23 @@ Reactive DeviceOrientationEvent. Provide web developers with information from th
 ```ts
 import { useDeviceOrientation } from '@vueuse/core'
 
-const { isAbsolute, alpha, beta, gamma } = useDeviceOrientation()
+const {
+  isAbsolute,
+  alpha,
+  beta,
+  gamma,
+} = useDeviceOrientation()
 ```
 
 ## Returns
 
-| Name        | Type           |
-| ----------- | -------------- |
+| Name | Type |
+| --- | --- |
 | isSupported | `useSupported` |
-| isAbsolute  | `shallowRef`   |
-| alpha       | `Ref`          |
-| beta        | `Ref`          |
-| gamma       | `Ref`          |
+| isAbsolute | `shallowRef` |
+| alpha | `Ref` |
+| beta | `Ref` |
+| gamma | `Ref` |
 
 ## Reference
 

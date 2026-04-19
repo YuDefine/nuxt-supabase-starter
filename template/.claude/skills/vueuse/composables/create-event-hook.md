@@ -15,8 +15,8 @@ export function useMyFetch(url) {
   const fetchError = createEventHook<any>()
 
   fetch(url)
-    .then((result) => fetchResult.trigger(result))
-    .catch((error) => fetchError.trigger(error.message))
+    .then(result => fetchResult.trigger(result))
+    .catch(error => fetchError.trigger(error.message))
 
   return {
     onResult: fetchResult.on,
@@ -27,12 +27,12 @@ export function useMyFetch(url) {
 
 ## Returns
 
-| Name    | Type  |
-| ------- | ----- |
-| on      | `Ref` |
-| off     | `Ref` |
+| Name | Type |
+| --- | --- |
+| on | `Ref` |
+| off | `Ref` |
 | trigger | `Ref` |
-| clear   | `Ref` |
+| clear | `Ref` |
 
 ## Reference
 

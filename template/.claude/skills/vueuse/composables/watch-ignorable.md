@@ -13,7 +13,10 @@ import { nextTick, shallowRef } from 'vue'
 
 const source = shallowRef('foo')
 
-const { stop, ignoreUpdates } = watchIgnorable(source, (v) => console.log(`Changed to ${v}!`))
+const { stop, ignoreUpdates } = watchIgnorable(
+  source,
+  v => console.log(`Changed to ${v}!`),
+)
 
 source.value = 'bar'
 await nextTick() // logs: Changed to bar!
@@ -36,10 +39,10 @@ await nextTick() // logs: Changed to logged!
 
 ## Returns
 
-| Name                   | Type  |
-| ---------------------- | ----- |
-| stop                   | `Ref` |
-| ignoreUpdates          | `Ref` |
+| Name | Type |
+| --- | --- |
+| stop | `Ref` |
+| ignoreUpdates | `Ref` |
 | ignorePrevAsyncUpdates | `Ref` |
 
 ## Reference
