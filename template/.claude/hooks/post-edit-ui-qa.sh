@@ -50,7 +50,7 @@ fi
 # 首次 UI 編輯
 if [ "$COUNT" -eq 1 ]; then
   if [ "$HAS_IMPECCABLE" = false ]; then
-    echo "🎨 首次 UI 編輯 — .impeccable.md 不存在。建議先執行 /teach-impeccable 建立設計脈絡。"
+    echo "🎨 首次 UI 編輯 — .impeccable.md 不存在。建議先執行 /impeccable teach 建立設計脈絡。"
   fi
   exit 0
 fi

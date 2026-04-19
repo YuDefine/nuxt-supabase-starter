@@ -78,7 +78,7 @@ cat <<EOF
 
 ## N. Design Review
 
-- [ ] N.1 檢查 .impeccable.md 是否存在，若無則執行 /teach-impeccable
+- [ ] N.1 檢查 .impeccable.md 是否存在，若無則執行 /impeccable teach
 - [ ] N.2 執行 /design improve [affected pages/components]
 - [ ] N.3 依 /design 計劃按 canonical order 執行 targeted skills
 - [ ] N.4 執行 /audit — 確認 Critical = 0
