@@ -62,6 +62,6 @@ export interface UseShareReturn extends Supportable {
  */
 export declare function useShare(
   shareOptions?: MaybeRefOrGetter<UseShareOptions>,
-  options?: ConfigurableNavigator
+  options?: ConfigurableNavigator,
 ): UseShareReturn
 ```

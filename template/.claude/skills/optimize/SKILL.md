@@ -1,11 +1,9 @@
 ---
 name: optimize
-description: Improve interface performance across loading speed, rendering, animations, images, and bundle size. Makes experiences faster and smoother.
-user-invokable: true
-args:
-  - name: target
-    description: The feature or area to optimize (optional)
-    required: false
+description: Diagnoses and fixes UI performance across loading speed, rendering, animations, images, and bundle size. Use when the user mentions slow, laggy, janky, performance, bundle size, load time, or wants a faster, smoother experience.
+version: 2.1.1
+user-invocable: true
+argument-hint: "[target]"
 ---
 
 Identify and fix performance issues to create faster, smoother user experiences.
@@ -36,7 +34,6 @@ Create systematic improvement plan:
 ### Loading Performance
 
 **Optimize Images**:
-
 - Use modern formats (WebP, AVIF)
 - Proper sizing (don't load 3000px image for 300px display)
 - Lazy loading for below-fold images
@@ -45,7 +42,7 @@ Create systematic improvement plan:
 - Use CDN for faster delivery
 
 ```html
-<img
+<img 
   src="hero.webp"
   srcset="hero-400.webp 400w, hero-800.webp 800w, hero-1200.webp 1200w"
   sizes="(max-width: 400px) 400px, (max-width: 800px) 800px, 1200px"
@@ -55,7 +52,6 @@ Create systematic improvement plan:
 ```
 
 **Reduce JavaScript Bundle**:
-
 - Code splitting (route-based, component-based)
 - Tree shaking (remove unused code)
 - Remove unused dependencies
@@ -64,18 +60,16 @@ Create systematic improvement plan:
 
 ```javascript
 // Lazy load heavy component
-const HeavyChart = lazy(() => import('./HeavyChart'))
+const HeavyChart = lazy(() => import('./HeavyChart'));
 ```
 
 **Optimize CSS**:
-
 - Remove unused CSS
 - Critical CSS inline, rest async
 - Minimize CSS files
 - Use CSS containment for independent regions
 
 **Optimize Fonts**:
-
 - Use `font-display: swap` or `optional`
 - Subset fonts (only characters you need)
 - Preload critical fonts
@@ -92,7 +86,6 @@ const HeavyChart = lazy(() => import('./HeavyChart'))
 ```
 
 **Optimize Loading Strategy**:
-
 - Critical resources first (async/defer non-critical)
 - Preload critical assets
 - Prefetch likely next pages
@@ -102,23 +95,21 @@ const HeavyChart = lazy(() => import('./HeavyChart'))
 ### Rendering Performance
 
 **Avoid Layout Thrashing**:
-
 ```javascript
 // ❌ Bad: Alternating reads and writes (causes reflows)
-elements.forEach((el) => {
-  const height = el.offsetHeight // Read (forces layout)
-  el.style.height = height * 2 // Write
-})
+elements.forEach(el => {
+  const height = el.offsetHeight; // Read (forces layout)
+  el.style.height = height * 2; // Write
+});
 
 // ✅ Good: Batch reads, then batch writes
-const heights = elements.map((el) => el.offsetHeight) // All reads
+const heights = elements.map(el => el.offsetHeight); // All reads
 elements.forEach((el, i) => {
-  el.style.height = heights[i] * 2 // All writes
-})
+  el.style.height = heights[i] * 2; // All writes
+});
 ```
 
 **Optimize Rendering**:
-
 - Use CSS `contain` property for independent regions
 - Minimize DOM depth (flatter is faster)
 - Reduce DOM size (fewer elements)
@@ -126,7 +117,6 @@ elements.forEach((el, i) => {
 - Virtual scrolling for very long lists (react-window, react-virtualized)
 
 **Reduce Paint & Composite**:
-
 - Use `transform` and `opacity` for animations (GPU-accelerated)
 - Avoid animating layout properties (width, height, top, left)
 - Use `will-change` sparingly for known expensive operations
@@ -135,7 +125,6 @@ elements.forEach((el, i) => {
 ### Animation Performance
 
 **GPU Acceleration**:
-
 ```css
 /* ✅ GPU-accelerated (fast) */
 .animated {
@@ -151,7 +140,6 @@ elements.forEach((el, i) => {
 ```
 
 **Smooth 60fps**:
-
 - Target 16ms per frame (60fps)
 - Use `requestAnimationFrame` for JS animations
 - Debounce/throttle scroll handlers
@@ -159,22 +147,20 @@ elements.forEach((el, i) => {
 - Avoid long-running JavaScript during animations
 
 **Intersection Observer**:
-
 ```javascript
 // Efficiently detect when elements enter viewport
 const observer = new IntersectionObserver((entries) => {
-  entries.forEach((entry) => {
+  entries.forEach(entry => {
     if (entry.isIntersecting) {
       // Element is visible, lazy load or animate
     }
-  })
-})
+  });
+});
 ```
 
 ### React/Framework Optimization
 
 **React-specific**:
-
 - Use `memo()` for expensive components
 - `useMemo()` and `useCallback()` for expensive computations
 - Virtualize long lists
@@ -183,7 +169,6 @@ const observer = new IntersectionObserver((entries) => {
 - Use React DevTools Profiler
 
 **Framework-agnostic**:
-
 - Minimize re-renders
 - Debounce expensive operations
 - Memoize computed values
@@ -192,14 +177,12 @@ const observer = new IntersectionObserver((entries) => {
 ### Network Optimization
 
 **Reduce Requests**:
-
 - Combine small files
 - Use SVG sprites for icons
 - Inline small critical assets
 - Remove unused third-party scripts
 
 **Optimize APIs**:
-
 - Use pagination (don't load everything)
 - GraphQL to request only needed fields
 - Response compression (gzip, brotli)
@@ -207,7 +190,6 @@ const observer = new IntersectionObserver((entries) => {
 - CDN for static assets
 
 **Optimize for Slow Connections**:
-
 - Adaptive loading based on connection (navigator.connection)
 - Optimistic UI updates
 - Request prioritization
@@ -216,7 +198,6 @@ const observer = new IntersectionObserver((entries) => {
 ## Core Web Vitals Optimization
 
 ### Largest Contentful Paint (LCP < 2.5s)
-
 - Optimize hero images
 - Inline critical CSS
 - Preload key resources
@@ -224,14 +205,12 @@ const observer = new IntersectionObserver((entries) => {
 - Server-side rendering
 
 ### First Input Delay (FID < 100ms) / INP (< 200ms)
-
 - Break up long tasks
 - Defer non-critical JavaScript
 - Use web workers for heavy computation
 - Reduce JavaScript execution time
 
 ### Cumulative Layout Shift (CLS < 0.1)
-
 - Set dimensions on images and videos
 - Don't inject content above existing content
 - Use `aspect-ratio` CSS property
@@ -248,7 +227,6 @@ const observer = new IntersectionObserver((entries) => {
 ## Performance Monitoring
 
 **Tools to use**:
-
 - Chrome DevTools (Lighthouse, Performance panel)
 - WebPageTest
 - Core Web Vitals (Chrome UX Report)
@@ -256,7 +234,6 @@ const observer = new IntersectionObserver((entries) => {
 - Performance monitoring (Sentry, DataDog, New Relic)
 
 **Key metrics**:
-
 - LCP, FID/INP, CLS (Core Web Vitals)
 - Time to Interactive (TTI)
 - First Contentful Paint (FCP)
@@ -267,7 +244,6 @@ const observer = new IntersectionObserver((entries) => {
 **IMPORTANT**: Measure on real devices with real network conditions. Desktop Chrome with fast connection isn't representative.
 
 **NEVER**:
-
 - Optimize without measuring (premature optimization)
 - Sacrifice accessibility for performance
 - Break functionality while optimizing
@@ -285,6 +261,6 @@ Test that optimizations worked:
 - **Different devices**: Test on low-end Android, not just flagship iPhone
 - **Slow connections**: Throttle to 3G, test experience
 - **No regressions**: Ensure functionality still works
-- **User perception**: Does it _feel_ faster?
+- **User perception**: Does it *feel* faster?
 
 Remember: Performance is a feature. Fast experiences feel more responsive, more polished, more professional. Optimize systematically, measure ruthlessly, and prioritize user-perceived performance.

@@ -45,6 +45,6 @@ export type UseIntervalFnReturn = Pausable
 export declare function useIntervalFn(
   cb: Fn,
   interval?: MaybeRefOrGetter<number>,
-  options?: UseIntervalFnOptions
+  options?: UseIntervalFnOptions,
 ): UseIntervalFnReturn
 ```

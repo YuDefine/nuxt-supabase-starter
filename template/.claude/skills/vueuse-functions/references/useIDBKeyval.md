@@ -18,10 +18,7 @@ npm install idb-keyval@^6
 import { useIDBKeyval } from '@vueuse/integrations/useIDBKeyval'
 
 // bind object
-const { data: storedObject, isFinished } = useIDBKeyval('my-idb-keyval-store', {
-  hello: 'hi',
-  greeting: 'Hello',
-})
+const { data: storedObject, isFinished } = useIDBKeyval('my-idb-keyval-store', { hello: 'hi', greeting: 'Hello' })
 
 // update object
 storedObject.value.hello = 'hola'
@@ -91,6 +88,6 @@ export interface UseIDBKeyvalReturn<T> {
 export declare function useIDBKeyval<T>(
   key: IDBValidKey,
   initialValue: MaybeRefOrGetter<T>,
-  options?: UseIDBOptions<T>
+  options?: UseIDBOptions<T>,
 ): UseIDBKeyvalReturn<T>
 ```

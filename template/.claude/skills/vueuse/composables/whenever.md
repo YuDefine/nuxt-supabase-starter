@@ -11,8 +11,8 @@ Shorthand for watching value to be truthy.
 import { useAsyncState, whenever } from '@vueuse/core'
 
 const { state, isReady } = useAsyncState(
-  fetch('https://jsonplaceholder.typicode.com/todos/1').then((t) => t.json()),
-  {}
+  fetch('https://jsonplaceholder.typicode.com/todos/1').then(t => t.json()),
+  {},
 )
 
 whenever(isReady, () => console.log(state))
@@ -20,9 +20,9 @@ whenever(isReady, () => console.log(state))
 
 ## Options
 
-| Option | Type      | Default | Description                                 |
-| ------ | --------- | ------- | ------------------------------------------- |
-| once   | `boolean` | false   | Only trigger once when the condition is met |
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| once | `boolean` | false | Only trigger once when the condition is met |
 
 ## Reference
 

@@ -8,32 +8,35 @@ Use this table during diagnostic scans to map problems to the right skill.
 
 | Observed Problem                         | Skill               | Notes                                   |
 | ---------------------------------------- | ------------------- | --------------------------------------- |
-| No design context / brand unclear        | `/teach-impeccable` | Run once per project                    |
-| No design system (colors, fonts, tokens) | `/teach-impeccable` | Gather context and define design system |
-| Deviates from design system              | `/normalize`        | Align back to system                    |
-| Too many elements, overwhelming          | `/distill`          | Simplify before enhancing               |
-| Repeated patterns not extracted          | `/extract`          | Pull into design system                 |
-| Poor spacing, weak layout, bad grouping  | `/arrange`          | Structure & visual rhythm               |
-| Generic fonts, no type hierarchy         | `/typeset`          | Font choice, scale, weight              |
-| Monochromatic, all gray                  | `/colorize`         | Strategic color addition                |
-| Too safe, boring, generic                | `/bolder`           | Amplify visual impact                   |
-| Too intense, aggressive, noisy           | `/quieter`          | Tone down, add sophistication           |
-| No transitions, jarring state changes    | `/animate`          | Purposeful motion                       |
-| Unclear labels, jargon, bad errors       | `/clarify`          | UX copy improvement                     |
-| Functional but lifeless                  | `/delight`          | Joy, personality, surprise              |
-| Poor first-time experience               | `/onboard`          | Empty states, guided flows              |
-| No error/loading/empty states            | `/harden`           | Edge cases, i18n, resilience            |
-| Slow load, janky scroll, heavy bundle    | `/optimize`         | Performance improvement                 |
-| Doesn't work on mobile/tablet            | `/adapt`            | Cross-device adaptation                 |
-| Needs pixel-perfect final pass           | `/polish`           | Alignment, consistency, details         |
-| Want "how did they do that?" moment      | `/overdrive`        | Technically ambitious                   |
+| No design context / brand unclear        | `/impeccable teach`   | Run once per project                       |
+| No design system (colors, fonts, tokens) | `/impeccable teach`   | Gather context and define design system    |
+| Need requirements clarified before code  | `/impeccable shape`   | (v2) Shape phase before craft              |
+| Build a new feature / page               | `/impeccable craft`   | Main build flow (replaces v1 frontend-design) |
+| Deviates from design system              | `/polish`             | (v2.1) Absorbs v1 /normalize               |
+| Too many elements, overwhelming          | `/distill`            | Simplify before enhancing                  |
+| Repeated patterns not extracted          | `/impeccable extract` | (v2.1) Pull into design system             |
+| Poor spacing, weak layout, bad grouping  | `/layout`             | (v2.1 renamed from /arrange)               |
+| Generic fonts, no type hierarchy         | `/typeset`            | Font choice, scale, weight                 |
+| Monochromatic, all gray                  | `/colorize`           | Strategic color addition                   |
+| Too safe, boring, generic                | `/bolder`             | Amplify visual impact                      |
+| Too intense, aggressive, noisy           | `/quieter`            | Tone down, add sophistication              |
+| No transitions, jarring state changes    | `/animate`            | Purposeful motion                          |
+| Unclear labels, jargon, bad errors       | `/clarify`            | UX copy improvement                        |
+| Functional but lifeless                  | `/delight`            | Joy, personality, surprise                 |
+| Poor first-time experience               | `/harden`             | (v2.1) Absorbs v1 /onboard                 |
+| No error/loading/empty states            | `/harden`             | Edge cases, i18n, resilience               |
+| Slow load, janky scroll, heavy bundle    | `/optimize`           | Performance improvement                    |
+| Doesn't work on mobile/tablet            | `/adapt`              | Cross-device adaptation                    |
+| Needs pixel-perfect final pass           | `/polish`             | Alignment, consistency, details            |
+| Want "how did they do that?" moment      | `/overdrive`          | Technically ambitious                      |
 
 ## Skill Categories
 
 ### Foundational (run first)
 
-- **`/teach-impeccable`** — Establishes persistent design context (`.impeccable.md`). Run once per project. All other design skills read this file.
-- **`frontend-design`** — Reference skill providing design principles, anti-patterns, and the "AI Slop Test". Auto-loaded by other skills. Not directly invoked.
+- **`/impeccable teach`** — Establishes persistent design context (`.impeccable.md`). Run once per project. All other design skills read this file. (v2.0 renamed from `/teach-impeccable`)
+- **`/impeccable shape`** — (v2) Requirements gathering before code generation. Good for reducing rework.
+- **`/impeccable craft`** — Main build flow. Produces distinctive, production-grade frontend code. Umbrella skill that absorbed v1 `frontend-design`.
 - **`/nuxt-ui`** — Nuxt UI v4 component library reference (125+ components). Use when project has `@nuxt/ui`. Provides component APIs, theming via `app.config.ts`, and Tailwind Variants integration.
 
 ### Diagnostic (assess without changing)
@@ -43,10 +46,10 @@ Use this table during diagnostic scans to map problems to the right skill.
 
 ### Structural (reshape)
 
-- **`/arrange`** — Layout, spacing, visual rhythm, hierarchy. Fixes monotonous grids and weak grouping.
+- **`/layout`** — Layout, spacing, visual rhythm, hierarchy. Fixes monotonous grids and weak grouping. (v2.1 renamed from `/arrange`)
 - **`/distill`** — Removes unnecessary complexity. 80/20 analysis, progressive disclosure.
-- **`/extract`** — Identifies and consolidates reusable components and design tokens.
-- **`/normalize`** — Aligns feature with existing design system. Fixes drift and inconsistencies.
+- **`/impeccable extract`** — Identifies and consolidates reusable components and design tokens. (v2.1 moved into `impeccable` umbrella)
+- **`/polish`** — Aligns feature with existing design system, fixes drift + final pass. (v2.1 absorbed v1 `/normalize`)
 
 ### Visual (refine aesthetics)
 
@@ -60,12 +63,12 @@ Use this table during diagnostic scans to map problems to the right skill.
 - **`/animate`** — Motion: entrance sequences, micro-interactions, state transitions. Includes performance guidance (60fps, GPU, reduced-motion).
 - **`/clarify`** — UX copy: error messages, form labels, CTAs, help text, empty states.
 - **`/delight`** — Personality: micro-interactions with joy, playful copy, easter eggs, celebrations.
-- **`/onboard`** — First-time UX: welcome flows, tooltips, empty states, progressive disclosure.
 
 ### Resilience (strengthen)
 
+- **`/harden`** — Edge cases, text overflow, i18n, error handling, input validation, a11y resilience, AND first-time UX (welcome flows, tooltips, empty states, progressive disclosure). (v2.1 absorbed v1 `/onboard`)
 - **`/optimize`** — Performance: Core Web Vitals, bundle size, rendering, animations.
-- **`/harden`** — Edge cases: text overflow, i18n, error handling, input validation, a11y resilience.
+- **`/audit`** — Diagnostic verification: accessibility, performance, theming, responsive. Run before `/polish` to catch Critical issues.
 
 ### Production (ship)
 
@@ -92,7 +95,7 @@ Some skills are alternatives, not complements:
 ### Visual Refresh
 
 ```
-/critique → /arrange → /typeset → /colorize → /animate → /polish
+/critique → /layout → /typeset → /colorize → /animate → /polish
 ```
 
 ### Production Hardening
@@ -104,13 +107,13 @@ Some skills are alternatives, not complements:
 ### Design System Bootstrap
 
 ```
-/teach-impeccable → /normalize → /extract
+/impeccable teach → /polish → /impeccable extract
 ```
 
 ### Nuxt UI Project (auto-detected)
 
 ```
-/teach-impeccable → /nuxt-ui (component reference) → build with <UComponent> markup → /normalize → /polish
+/impeccable teach → /nuxt-ui (component reference) → build with <UComponent> markup → /polish
 ```
 
 ---
@@ -125,16 +128,16 @@ When recommending skills, also suggest compatible open-source libraries for fast
 
 | Skill               | Recommended Libraries                                                                                 | Notes                                       |
 | ------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `/teach-impeccable` | —                                                                                                     | Outputs `.impeccable.md`, no library needed |
-| `/normalize`        | [Style Dictionary](https://amzn.github.io/style-dictionary/), [Tokens Studio](https://tokens.studio/) | Token management & sync                     |
+| `/impeccable teach` | —                                                                                                     | Outputs `.impeccable.md`, no library needed |
+| `/polish`           | [Style Dictionary](https://amzn.github.io/style-dictionary/), [Tokens Studio](https://tokens.studio/) | Token management & sync (absorbs v1 `/normalize`) |
 
 #### Structural
 
 | Skill      | Recommended Libraries                                        | Notes                        |
 | ---------- | ------------------------------------------------------------ | ---------------------------- |
-| `/arrange` | CSS Grid, Flexbox (native)                                   | Use with Tailwind or vanilla |
+| `/layout`  | CSS Grid, Flexbox (native)                                   | Use with Tailwind or vanilla |
 | `/distill` | —                                                            | Analysis skill, no library   |
-| `/extract` | [Style Dictionary](https://amzn.github.io/style-dictionary/) | Token extraction pipeline    |
+| `/impeccable extract` | [Style Dictionary](https://amzn.github.io/style-dictionary/) | Token extraction pipeline    |
 
 #### Visual
 
@@ -152,7 +155,7 @@ When recommending skills, also suggest compatible open-source libraries for fast
 | `/animate` | [Motion](https://motion.dev/) (React), [GSAP](https://gsap.com/), [anime.js](https://animejs.com/)                           | React: Motion; Vanilla: anime.js |
 | `/clarify` | —                                                                                                                            | Content skill, no library        |
 | `/delight` | [Lottie](https://airbnb.io/lottie/), [Rive](https://rive.app/), [canvas-confetti](https://github.com/catdad/canvas-confetti) | Micro-animations, celebrations   |
-| `/onboard` | [Shepherd.js](https://shepherdjs.dev/), [Driver.js](https://driverjs.com/)                                                   | Tours, onboarding                |
+| `/harden`  | [Shepherd.js](https://shepherdjs.dev/), [Driver.js](https://driverjs.com/)                                                   | Tours, onboarding (v2.1 absorbed v1 `/onboard`) |
 
 #### Resilience
 

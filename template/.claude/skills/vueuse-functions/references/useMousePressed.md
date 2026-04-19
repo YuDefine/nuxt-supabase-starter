@@ -26,17 +26,19 @@ To only capture `mousedown` and `touchstart` on specific element, you can specif
 
 ```vue
 <script setup lang="ts">
-  import { useMousePressed } from '@vueuse/core'
-  // ---cut---
-  import { useTemplateRef } from 'vue'
+import { useMousePressed } from '@vueuse/core'
+// ---cut---
+import { useTemplateRef } from 'vue'
 
-  const el = useTemplateRef('el')
+const el = useTemplateRef('el')
 
-  const { pressed } = useMousePressed({ target: el })
+const { pressed } = useMousePressed({ target: el })
 </script>
 
 <template>
-  <div ref="el">Only clicking on this element will trigger the update.</div>
+  <div ref="el">
+    Only clicking on this element will trigger the update.
+  </div>
 </template>
 ```
 
@@ -44,7 +46,9 @@ To only capture `mousedown` and `touchstart` on specific element, you can specif
 
 ```vue
 <template>
-  <UseMousePressed v-slot="{ pressed }"> Is Pressed: {{ pressed }} </UseMousePressed>
+  <UseMousePressed v-slot="{ pressed }">
+    Is Pressed: {{ pressed }}
+  </UseMousePressed>
 </template>
 ```
 
@@ -106,5 +110,7 @@ export interface UseMousePressedReturn {
  * @see https://vueuse.org/useMousePressed
  * @param options
  */
-export declare function useMousePressed(options?: UseMousePressedOptions): UseMousePressedReturn
+export declare function useMousePressed(
+  options?: UseMousePressedOptions,
+): UseMousePressedReturn
 ```

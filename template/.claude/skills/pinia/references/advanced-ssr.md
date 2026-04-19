@@ -13,8 +13,8 @@ Pinia works with SSR when stores are called at the top of `setup`, getters, or a
 
 ```vue
 <script setup>
-  // ✅ Works - pinia knows the app context in setup
-  const main = useMainStore()
+// ✅ Works - pinia knows the app context in setup
+const main = useMainStore()
 </script>
 ```
 
@@ -57,11 +57,11 @@ Works normally:
 
 ```vue
 <script setup>
-  const store = useStore()
+const store = useStore()
 
-  onServerPrefetch(async () => {
-    await store.fetchData()
-  })
+onServerPrefetch(async () => {
+  await store.fetchData()
+})
 </script>
 ```
 

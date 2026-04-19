@@ -44,7 +44,9 @@ Our applications normally are not empathetic to battery level, we can make a few
       <p>Is Charging: {{ charging }}</p>
       <p>Battery Level: {{ (level * 100).toFixed(0) }}%</p>
     </div>
-    <div v-else>Battery API not supported</div>
+    <div v-else>
+      Battery API not supported
+    </div>
   </UseBattery>
 </template>
 ```
@@ -72,5 +74,7 @@ export interface BatteryManager extends EventTarget {
  *
  * @__NO_SIDE_EFFECTS__
  */
-export declare function useBattery(options?: UseBatteryOptions): UseBatteryReturn
+export declare function useBattery(
+  options?: UseBatteryOptions,
+): UseBatteryReturn
 ```

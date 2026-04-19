@@ -22,7 +22,6 @@ Use snapshots sparingly for regression detection. Prefer behavioral assertions t
 - [ ] Consider inline snapshots for small, critical structures
 
 **Incorrect:**
-
 ```javascript
 import { mount } from '@vue/test-utils'
 import UserCard from './UserCard.vue'
@@ -30,7 +29,7 @@ import UserCard from './UserCard.vue'
 // BAD: Snapshot-only test proves nothing about functionality
 test('UserCard renders correctly', () => {
   const wrapper = mount(UserCard, {
-    props: { user: { name: 'John', email: 'john@example.com' } },
+    props: { user: { name: 'John', email: 'john@example.com' } }
   })
 
   expect(wrapper.html()).toMatchSnapshot()
@@ -44,7 +43,6 @@ test('UserCard renders correctly', () => {
 ```
 
 **Correct:**
-
 ```javascript
 import { mount } from '@vue/test-utils'
 import UserCard from './UserCard.vue'
@@ -52,7 +50,7 @@ import UserCard from './UserCard.vue'
 // CORRECT: Test actual behavior
 test('UserCard displays user information', () => {
   const wrapper = mount(UserCard, {
-    props: { user: { name: 'John', email: 'john@example.com' } },
+    props: { user: { name: 'John', email: 'john@example.com' } }
   })
 
   expect(wrapper.find('[data-testid="user-name"]').text()).toBe('John')
@@ -61,7 +59,7 @@ test('UserCard displays user information', () => {
 
 test('UserCard email link is clickable', async () => {
   const wrapper = mount(UserCard, {
-    props: { user: { name: 'John', email: 'john@example.com' } },
+    props: { user: { name: 'John', email: 'john@example.com' } }
   })
 
   const emailLink = wrapper.find('a[href^="mailto:"]')
@@ -71,7 +69,7 @@ test('UserCard email link is clickable', async () => {
 
 test('UserCard emits select event when clicked', async () => {
   const wrapper = mount(UserCard, {
-    props: { user: { id: 1, name: 'John' } },
+    props: { user: { id: 1, name: 'John' } }
   })
 
   await wrapper.trigger('click')
@@ -84,12 +82,11 @@ test('UserCard emits select event when clicked', async () => {
 ## When Snapshots ARE Useful
 
 ### Regression Detection for Stable Components
-
 ```javascript
 // ACCEPTABLE: Snapshot as additional check, not the only check
 test('ErrorBoundary renders error message', () => {
   const wrapper = mount(ErrorBoundary, {
-    props: { error: new Error('Something went wrong') },
+    props: { error: new Error('Something went wrong') }
   })
 
   // Primary assertions - verify behavior
@@ -102,7 +99,6 @@ test('ErrorBoundary renders error message', () => {
 ```
 
 ### Inline Snapshots for Small Structures
-
 ```javascript
 // ACCEPTABLE: Inline snapshot for small, critical structure
 test('generates correct list markup', () => {
@@ -115,12 +111,11 @@ test('generates correct list markup', () => {
 ```
 
 ### Complex SVG or Icon Output
-
 ```javascript
 // ACCEPTABLE: Snapshot for complex generated content
 test('renders correct chart SVG', () => {
   const wrapper = mount(PieChart, {
-    props: { data: [30, 40, 30] },
+    props: { data: [30, 40, 30] }
   })
 
   // Verify key behavior
@@ -134,12 +129,11 @@ test('renders correct chart SVG', () => {
 ## Better Alternatives to Snapshots
 
 ### Test Specific Elements
-
 ```javascript
 // Instead of snapshotting entire component
 test('renders product with all required fields', () => {
   const wrapper = mount(ProductCard, {
-    props: { product: { name: 'Widget', price: 9.99, inStock: true } },
+    props: { product: { name: 'Widget', price: 9.99, inStock: true } }
   })
 
   expect(wrapper.find('.product-name').text()).toBe('Widget')
@@ -149,11 +143,10 @@ test('renders product with all required fields', () => {
 ```
 
 ### Test CSS Classes for Styling
-
 ```javascript
 test('applies danger styling for errors', () => {
   const wrapper = mount(Alert, {
-    props: { type: 'error', message: 'Failed!' },
+    props: { type: 'error', message: 'Failed!' }
   })
 
   expect(wrapper.classes()).toContain('alert-danger')
@@ -162,7 +155,6 @@ test('applies danger styling for errors', () => {
 ```
 
 ### Use Testing Library Queries
-
 ```javascript
 import { render, screen } from '@testing-library/vue'
 
@@ -182,25 +174,24 @@ test('form has accessible labels', () => {
 // ANTI-PATTERN: Giant component snapshot
 test('page renders', () => {
   const wrapper = mount(EntirePageComponent)
-  expect(wrapper.html()).toMatchSnapshot() // 500+ lines of HTML
+  expect(wrapper.html()).toMatchSnapshot()  // 500+ lines of HTML
 })
 
 // ANTI-PATTERN: Snapshot with dynamic content
 test('shows current date', () => {
   const wrapper = mount(DateDisplay)
-  expect(wrapper.html()).toMatchSnapshot() // Fails every day!
+  expect(wrapper.html()).toMatchSnapshot()  // Fails every day!
 })
 
 // ANTI-PATTERN: Snapshot after every test
 test('button works', async () => {
   const wrapper = mount(Counter)
   await wrapper.find('button').trigger('click')
-  expect(wrapper.html()).toMatchSnapshot() // Redundant
+  expect(wrapper.html()).toMatchSnapshot()  // Redundant
 })
 ```
 
 ## Reference
-
 - [Vue.js Testing Guide - What Not to Test](https://vuejs.org/guide/scaling-up/testing)
 - [Effective Snapshot Testing](https://kentcdodds.com/blog/effective-snapshot-testing)
 - [Vitest Snapshot Testing](https://vitest.dev/guide/snapshot.html)

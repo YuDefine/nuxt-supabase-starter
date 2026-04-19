@@ -13,7 +13,7 @@ import { useTimeoutPoll } from '@vueuse/core'
 const count = ref(0)
 
 async function fetchData() {
-  await new Promise((resolve) => setTimeout(resolve, 1000))
+  await new Promise(resolve => setTimeout(resolve, 1000))
   count.value++
 }
 
@@ -23,18 +23,18 @@ const { isActive, pause, resume } = useTimeoutPoll(fetchData, 1000)
 
 ## Options
 
-| Option            | Type      | Default | Description                                             |
-| ----------------- | --------- | ------- | ------------------------------------------------------- |
-| immediate         | `boolean` | true    | Start the timer immediately                             |
-| immediateCallback | `boolean` | false   | Execute the callback immediately after calling `resume` |
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| immediate | `boolean` | true | Start the timer immediately |
+| immediateCallback | `boolean` | false | Execute the callback immediately after calling `resume` |
 
 ## Returns
 
-| Name     | Type         |
-| -------- | ------------ |
+| Name | Type |
+| --- | --- |
 | isActive | `shallowRef` |
-| pause    | `Ref`        |
-| resume   | `Ref`        |
+| pause | `Ref` |
+| resume | `Ref` |
 
 ## Reference
 

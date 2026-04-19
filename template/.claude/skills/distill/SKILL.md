@@ -1,18 +1,16 @@
 ---
 name: distill
-description: Strip designs to their essence by removing unnecessary complexity. Great design is simple, powerful, and clean.
-user-invokable: true
-args:
-  - name: target
-    description: The feature or component to distill (optional)
-    required: false
+description: Strip designs to their essence by removing unnecessary complexity. Great design is simple, powerful, and clean. Use when the user asks to simplify, declutter, reduce noise, remove elements, or make a UI cleaner and more focused.
+version: 2.1.1
+user-invocable: true
+argument-hint: "[target]"
 ---
 
 Remove unnecessary complexity from designs, revealing the essential elements and creating clarity through ruthless simplification.
 
 ## MANDATORY PREPARATION
 
-Use the frontend-design skill — it contains design principles, anti-patterns, and the **Context Gathering Protocol**. Follow the protocol before proceeding — if no design context exists yet, you MUST run teach-impeccable first.
+Invoke /impeccable — it contains design principles, anti-patterns, and the **Context Gathering Protocol**. Follow the protocol before proceeding — if no design context exists yet, you MUST run /impeccable teach first.
 
 ---
 
@@ -34,7 +32,7 @@ Analyze what makes the design feel complex or cluttered:
    - What can be removed, hidden, or combined?
    - What's the 20% that delivers 80% of value?
 
-If any of these are unclear from the codebase, STOP and call the AskUserQuestion tool to clarify.
+If any of these are unclear from the codebase, ask the user directly to clarify what you cannot infer.
 
 **CRITICAL**: Simplicity is not about removing features - it's about removing obstacles between users and their goals. Every element should justify its existence.
 
@@ -54,7 +52,6 @@ Create a ruthless editing strategy:
 Systematically remove complexity across these dimensions:
 
 ### Information Architecture
-
 - **Reduce scope**: Remove secondary actions, optional features, redundant information
 - **Progressive disclosure**: Hide complexity behind clear entry points (accordions, modals, step-through flows)
 - **Combine related actions**: Merge similar buttons, consolidate forms, group related content
@@ -62,7 +59,6 @@ Systematically remove complexity across these dimensions:
 - **Remove redundancy**: If it's said elsewhere, don't repeat it here
 
 ### Visual Simplification
-
 - **Reduce color palette**: Use 1-2 colors plus neutrals, not 5-7 colors
 - **Limit typography**: One font family, 3-4 sizes maximum, 2-3 weights
 - **Remove decorations**: Eliminate borders, shadows, backgrounds that don't serve hierarchy or function
@@ -71,7 +67,6 @@ Systematically remove complexity across these dimensions:
 - **Consistent spacing**: Use one spacing scale, remove arbitrary gaps
 
 ### Layout Simplification
-
 - **Linear flow**: Replace complex grids with simple vertical flow where possible
 - **Remove sidebars**: Move secondary content inline or hide it
 - **Full-width**: Use available space generously instead of complex multi-column layouts
@@ -79,7 +74,6 @@ Systematically remove complexity across these dimensions:
 - **Generous white space**: Let content breathe, don't pack everything tight
 
 ### Interaction Simplification
-
 - **Reduce choices**: Fewer buttons, fewer options, clearer path forward (paradox of choice is real)
 - **Smart defaults**: Make common choices automatic, only ask when necessary
 - **Inline actions**: Replace modal flows with inline editing where possible
@@ -87,7 +81,6 @@ Systematically remove complexity across these dimensions:
 - **Clear CTAs**: ONE obvious next step, not five competing actions
 
 ### Content Simplification
-
 - **Shorter copy**: Cut every sentence in half, then do it again
 - **Active voice**: "Save changes" not "Changes will be saved"
 - **Remove jargon**: Plain language always wins
@@ -96,14 +89,12 @@ Systematically remove complexity across these dimensions:
 - **Remove redundant copy**: No headers restating intros, no repeated explanations, say it once
 
 ### Code Simplification
-
 - **Remove unused code**: Dead CSS, unused components, orphaned files
 - **Flatten component trees**: Reduce nesting depth
 - **Consolidate styles**: Merge similar styles, use utilities consistently
 - **Reduce variants**: Does that component need 12 variations, or can 3 cover 90% of cases?
 
 **NEVER**:
-
 - Remove necessary functionality (simplicity ≠ feature-less)
 - Sacrifice accessibility for simplicity (clear labels and ARIA still required)
 - Make things so simple they're unclear (mystery ≠ minimalism)
@@ -124,7 +115,6 @@ Ensure simplification improves usability:
 ## Document Removed Complexity
 
 If you removed features or options:
-
 - Document why they were removed
 - Consider if they need alternative access points
 - Note any user feedback to monitor

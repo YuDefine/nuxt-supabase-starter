@@ -22,7 +22,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Mix of border-radius values with no pattern
 - Hard-coded colors instead of tokens/variables
 
-**Maps to:** `/typeset`, `/colorize`, `/bolder`, `/quieter`, `/arrange`
+**Maps to:** `/typeset`, `/colorize`, `/bolder`, `/quieter`, `/layout`
 
 ---
 
@@ -68,7 +68,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Fixed pixel widths that break on different screens
 - No visual separation between distinct content sections
 
-**Maps to:** `/arrange`, `/distill`, `/adapt`
+**Maps to:** `/layout`, `/distill`, `/adapt`
 
 ---
 
@@ -90,7 +90,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Missing placeholder/help text on form fields
 - Inconsistent tone (formal in one place, casual in another)
 
-**Maps to:** `/clarify`, `/onboard`, `/delight`
+**Maps to:** `/clarify`, `/harden`, `/delight`
 
 ---
 
@@ -113,7 +113,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Text overflow: hidden without ellipsis or wrapping strategy
 - No input validation (rely entirely on server)
 
-**Maps to:** `/harden`, `/clarify`, `/onboard`
+**Maps to:** `/harden`, `/clarify`, `/harden`
 
 ---
 
@@ -181,7 +181,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Mix of naming conventions (camelCase + kebab-case + BEM)
 - No shared spacing scale (random margin/padding values)
 
-**Maps to:** `/normalize`, `/extract`
+**Maps to:** `/polish`, `/impeccable extract`
 
 ---
 

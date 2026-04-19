@@ -29,7 +29,7 @@ export interface UseToNumberOptions {
    *
    * @default 'parseFloat'
    */
-  method?: 'parseFloat' | 'parseInt' | ((value: string | number) => number)
+  method?: "parseFloat" | "parseInt" | ((value: string | number) => number)
   /**
    * The base in mathematical numeral systems passed to `parseInt`.
    * Only works with `method: 'parseInt'`
@@ -49,6 +49,6 @@ export interface UseToNumberOptions {
  */
 export declare function useToNumber(
   value: MaybeRefOrGetter<number | string>,
-  options?: UseToNumberOptions
+  options?: UseToNumberOptions,
 ): ComputedRef<number>
 ```

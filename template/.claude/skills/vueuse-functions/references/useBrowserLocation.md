@@ -51,6 +51,6 @@ export type UseBrowserLocationReturn = Ref<BrowserLocationState>
  * @__NO_SIDE_EFFECTS__
  */
 export declare function useBrowserLocation(
-  options?: UseBrowserLocationOptions
+  options?: UseBrowserLocationOptions,
 ): UseBrowserLocationReturn
 ```

@@ -37,6 +37,6 @@ export type SharedComposableReturn<T extends AnyFn = AnyFn> = T
  * @__NO_SIDE_EFFECTS__
  */
 export declare function createSharedComposable<Fn extends AnyFn>(
-  composable: Fn
+  composable: Fn,
 ): SharedComposableReturn<Fn>
 ```

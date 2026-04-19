@@ -42,7 +42,7 @@ Auto-detection logic:
 
 Before any diagnosis or planning, always check:
 
-- `.impeccable.md` exists? → If no, plan MUST start with `/teach-impeccable`
+- `.impeccable.md` exists? → If no, plan MUST start with `/impeccable teach`
 - Design system exists? (`design-system/MASTER.md` or equivalent tokens/variables file)
 - **Tech stack** — detect and lock (see Tech Stack Detection below)
 
@@ -74,7 +74,7 @@ Detect the project's UI tech stack to ensure all design skills produce compatibl
      - If `@nuxt/ui` in `package.json` dependencies → Stack = **Nuxt UI** (use `<UButton>`, `<UCard>`, etc.)
      - If no `@nuxt/ui` → Stack = **Tailwind CSS** (with Vue/Nuxt conventions)
    - Otherwise → Stack = **Tailwind CSS** (default)
-3. **Propagate to all skills** — when the plan references `/frontend-design`, `/colorize`, `/typeset`, etc., include the detected stack so output uses the correct component library and conventions
+3. **Propagate to all skills** — when the plan references `/impeccable craft`, `/colorize`, `/typeset`, etc., include the detected stack so output uses the correct component library and conventions
 
 | Detected Stack   | Component Style                         | Color System                                    | Skill Integration                                                       |
 | ---------------- | --------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------- |
@@ -84,8 +84,8 @@ Detect the project's UI tech stack to ensure all design skills produce compatibl
 **When Nuxt UI is detected:**
 
 - `/colorize` and `/typeset` recommendations must map to Nuxt UI's theme system (`app.config.ts` → `ui` key), not raw CSS
-- `/normalize` checks against Nuxt UI component conventions, not just design tokens
-- `/frontend-design` produces `<UComponent>` markup, not raw HTML+Tailwind
+- `/polish` checks against Nuxt UI component conventions and design tokens (absorbs v1 `/normalize`)
+- `/impeccable craft` produces `<UComponent>` markup, not raw HTML+Tailwind
 - Include `/nuxt-ui` skill knowledge when building or reviewing components
 
 ---
@@ -105,7 +105,7 @@ Ask if not already clear:
 
 ### 2. Establish Design System (if none exists)
 
-Use `/teach-impeccable` to gather design context, then define the design system directly:
+Use `/impeccable teach` to gather design context, then define the design system directly:
 
 - Style direction (minimal, bold, editorial, etc.)
 - Color palette (primary, neutral, semantic colors)
@@ -122,10 +122,11 @@ Output a phased plan:
 ## Design Plan: [project name]
 
 ### Phase 1 — Foundation
-□ /teach-impeccable                          ← establish design context & design system
+□ /impeccable teach                          ← establish design context & design system
+□ /shape                                     ← (optional) requirements gathering before code
 
 ### Phase 2 — Build
-□ Implement using frontend-design principles
+□ /impeccable craft                          ← main build flow
 □ Core components: [list expected components, e.g. ServerCard, MetricGauge, Sidebar]
 
 ### Phase 3 — Enhance (3-4 targeted skills)
@@ -133,6 +134,7 @@ Output a phased plan:
 
 ### Phase 4 — Ship
 □ [1-2 resilience skills if needed]
+□ /audit                                     ← diagnostic verification (Critical = 0)
 □ /polish                                    ← always last
 ```
 
@@ -140,14 +142,32 @@ Output a phased plan:
 
 | Project Type      | Priority Skills                                     |
 | ----------------- | --------------------------------------------------- |
-| Data dashboard    | `/arrange` → `/typeset` → `/colorize`               |
-| Consumer app      | `/animate` → `/delight` → `/onboard`                |
+| Data dashboard    | `/layout` → `/typeset` → `/colorize`                |
+| Consumer app      | `/animate` → `/delight` → `/harden`                 |
 | Developer tool    | `/clarify` → `/distill` → `/typeset`                |
 | Marketing/landing | `/bolder` → `/colorize` → `/animate` → `/overdrive` |
-| Internal tool     | `/clarify` → `/arrange` → `/harden`                 |
-| E-commerce        | `/colorize` → `/animate` → `/onboard` → `/adapt`    |
+| Internal tool     | `/clarify` → `/layout` → `/harden`                  |
+| E-commerce        | `/colorize` → `/animate` → `/harden` → `/adapt`     |
 
 Phase 2 should list expected component names so the user has a build checklist.
+
+### When to Run `/shape` (判準)
+
+`/shape` does a structured discovery interview then writes a design brief **before** `/impeccable craft`. Run it when:
+
+- ✅ Requirements are fuzzy, open to multiple valid interpretations
+- ✅ Multi-stakeholder feature (cross-role, cross-team)
+- ✅ Scope touches multiple entities / pages / flows — coordination risk
+- ✅ The cost of rework is high (large surface area, production traffic)
+- ❌ Skip when: single implementer, requirements already explicit, tight existing spec, single-component tweak
+
+### Exit Criteria (`new` mode)
+
+- [ ] `.impeccable.md` exists with Design Context
+- [ ] All core components in Phase 2 built and mounted into a reachable page
+- [ ] `/audit` passed with Critical = 0
+- [ ] `/polish` passed — no remaining Medium issues
+- [ ] Design system tokens (`design-system/MASTER.md` or equivalent) committed
 
 ---
 
@@ -161,6 +181,8 @@ Phase 2 should list expected component names so the user has a build checklist.
 - **Read the actual code.** Never plan without seeing the implementation.
 
 ### 2. Diagnostic Scan
+
+**Consider running `/critique` first** for a high-level UX assessment (hierarchy, IA, emotional resonance, persona-based testing) before the detailed rubric below — it surfaces directional issues that the structural rubric misses. Treat `/critique` output as input to Step 3's skill mapping.
 
 Read `references/diagnosis.md` for the full rubric. Assess these dimensions:
 
@@ -275,6 +297,14 @@ N. `/polish [target]` — final pass
 
 **Be specific.** Not "run /colorize" but "run `/colorize` on the settings panel — the entire page is gray-on-white with no visual hierarchy between sections."
 
+### Exit Criteria (`improve` mode)
+
+- [ ] All skills in Core Plan executed on their specified targets
+- [ ] `/audit [target]` passed with Critical = 0
+- [ ] `/polish [target]` passed — no remaining Medium issues on the scope
+- [ ] Follow-Up items logged (to `openspec/changes/` or `docs/`) if deferred
+- [ ] Excluded skills documented with rationale
+
 ---
 
 ## Mode: `iterate` — Multi-Phase Incremental Improvement
@@ -298,8 +328,8 @@ Ask if not clear:
 
 **Distinguish two types of drift:**
 
-- **Accidental drift:** New code uses hard-coded values instead of existing tokens → `/normalize`
-- **Intentional expansion:** New features need tokens that don't exist yet (e.g., notification badge color) → First update MASTER.md with new tokens, THEN `/normalize`
+- **Accidental drift:** New code uses hard-coded values instead of existing tokens → `/polish` (v2.1 merged `/normalize` into `/polish`)
+- **Intentional expansion:** New features need tokens that don't exist yet (e.g., notification badge color) → First update MASTER.md with new tokens, THEN `/polish`
 
 ### 3. Assess Scoped Area Only
 
@@ -316,7 +346,7 @@ Recommend running `/audit` on the scoped area for a systematic diagnostic. Alter
 
 ### Alignment Check
 - Design system compliance: [OK / drifting (N violations) / missing]
-- Drift type: [accidental → /normalize | expansion needed → update MASTER.md first]
+- Drift type: [accidental → /polish | expansion needed → update MASTER.md first, then /polish]
 - Consistency with shipped phases: [OK / diverging — specify where]
 
 ### This Phase (3-6 skills)
@@ -357,48 +387,72 @@ After the user completes this phase, suggest writing the Carry-Forward section t
 - [WATCH] ...
 ```
 
+### Exit Criteria (`iterate` mode)
+
+- [ ] Design system token violations quantified → 0 (re-scan after fixes)
+- [ ] All Phase Completion Criteria items checked
+- [ ] `/polish` passed on scoped area — no remaining Medium issues
+- [ ] Cross-phase consistency verified (compare to prior phase's shipped patterns)
+- [ ] Carry-Forward section appended to `design-system/PHASE_LOG.md`
+
 ---
 
 ## Output Rules
 
 1. **Always read code first** — never plan blind
 2. **Be specific** — name files, components, line ranges
-3. **3-6 skills per plan** — split overflow into "Follow-up" or "Carry-Forward", never dump all 19
+3. **3-6 skills per plan** — split overflow into "Follow-up" or "Carry-Forward", never dump all 18
 4. **Explain exclusions** — "skipping /animate — this is a data-entry form where motion distracts"
 5. **Check mutual exclusivity** — see `references/skill-map.md` "Mutual Exclusivity" section. Never recommend `/bolder` + `/quieter` together; pick one direction. Run `/distill` before `/bolder`, not alongside.
 6. **Follow canonical order** — deviations need explicit justification
 7. **End with /polish** — it's always the last step
 8. **Respect time** — if 1-2 skills suffice, say so. Don't over-prescribe.
-9. **Proactive plan execution** — After outputting the diagnosis report and action plan, ALWAYS ask the user: "要進入 Plan Mode 逐步執行這些改進嗎？" If the user agrees, enter plan mode and create a structured implementation plan that walks through each skill/step sequentially, waiting for user approval at each phase before proceeding to the next.
+9. **Proactive plan execution** — After outputting the diagnosis report and action plan for `/design new|improve|iterate`, ALWAYS ask the user: "要進入 Plan Mode 逐步執行這些改進嗎？" If the user agrees, enter plan mode and create a structured implementation plan that walks through each skill/step sequentially, waiting for user approval at each phase before proceeding to the next. **Skip this prompt** when answering meta/strategy questions that don't match the three canonical modes (e.g. "should we adopt X", "what's the difference between Y and Z") — give a direct answer instead.
 10. **Cite references** — When recommending design systems or patterns, cite specific examples from `references/design-systems.md`. Include industry-specific benchmarks and maturity assessments from `references/diagnosis.md`.
 
-## Canonical Skill Order
+## Diagnostic Skills (assess without changing code)
 
-When multiple skills are needed, follow this sequence (skip what's not needed):
+Two standalone diagnostic tools sit **outside** the production pipeline. Invoke as needed — they are inputs to planning, not steps in execution.
+
+| Tool | Produces | When to use |
+|---|---|---|
+| `/critique [target]` | UX evaluation with persona testing: hierarchy, IA, emotional resonance, cognitive load. Qualitative + quantitative score. | **Early** — as part of `improve` mode Step 2 to surface directional issues before the structural rubric. Also useful when you don't trust your own read of the design. |
+| `/audit [target]` | Severity-rated issue list: a11y, performance, theming drift, responsive. Critical/High/Medium breakdown. | **Late** — right before `/polish` to verify readiness. Also as a periodic health check during `iterate`. |
+
+`/critique` tells you **whether the design works** as an experience. `/audit` tells you **whether the implementation is production-safe**. They rarely substitute for each other.
+
+## Canonical Skill Order (production pipeline)
+
+When executing a multi-skill plan, follow this sequence (skip what's not needed):
 
 ```
-/teach-impeccable               ← foundation & design system (if no .impeccable.md)
+/impeccable teach               ← foundation & design system (if no .impeccable.md)
+/shape                          ← (optional) requirements gathering before code — see 判準 in `new` mode
   ↓
-/normalize                      ← align with system (if drifting)
-/distill                        ← simplify first (if cluttered)
+/impeccable craft               ← main build flow
+/distill                        ← simplify (if cluttered)
   ↓
-/arrange                        ← structure & layout
+/layout                         ← structure & layout
 /typeset                        ← typography
 /colorize | /bolder | /quieter  ← color & intensity (pick one direction)
   ↓
 /animate                        ← motion
 /clarify                        ← copy & messaging
 /delight                        ← personality & joy
-/onboard                        ← first-time UX (if applicable)
+/overdrive                      ← (optional) ambitious wow-factor — marketing/landing, hero moments
+/harden                         ← resilience, edge cases, first-time UX
   ↓
-/harden                         ← resilience & edge cases
 /optimize                       ← performance
 /adapt                          ← cross-platform (if needed)
+/impeccable extract             ← consolidate patterns into design system (if applicable)
   ↓
-/polish                         ← always last
+/audit                          ← diagnostic verification (Critical must = 0)
+/polish                         ← always last (final pass + design-system alignment)
 ```
 
-**This order is mandatory.** Rationale: fix structure before visuals, visuals before experience, everything before hardening, polish is always final. If you need to deviate, state why in the plan.
+**This order is mandatory.** Rationale: fix structure before visuals, visuals before experience, everything before hardening, audit → polish always final. If you need to deviate, state why in the plan.
+
+> **Legacy v1 names**: if you encounter `/arrange`, `/normalize`, `/onboard`, `/frontend-design`, `/teach-impeccable`, or `/extract` in archived artifacts, see `references/migration.md`.
 
 ## Step 6: Persist Evidence（Spectra 整合）
 
@@ -470,6 +524,7 @@ Fidelity Score: N/8 PASS
 - `references/design-systems.md` — Industry-categorized design system index (209 systems)
 - `references/skill-map.md` — Issue → Skill mapping + library recommendations
 - `references/diagnosis.md` — 8-dimension diagnostic rubric + maturity model
+- `references/migration.md` — v1 → v2 command name mapping (historical only — for reading archived artifacts)
 
 ### When to Cite External References
 

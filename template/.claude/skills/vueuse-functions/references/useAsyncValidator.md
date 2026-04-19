@@ -27,16 +27,16 @@ export type AsyncValidatorError = Error & {
 }
 export interface UseAsyncValidatorExecuteReturn {
   pass: boolean
-  errors: AsyncValidatorError['errors'] | undefined
+  errors: AsyncValidatorError["errors"] | undefined
   errorInfo: AsyncValidatorError | null
-  errorFields: AsyncValidatorError['fields'] | undefined
+  errorFields: AsyncValidatorError["fields"] | undefined
 }
 export interface UseAsyncValidatorReturn {
   pass: ShallowRef<boolean>
   isFinished: ShallowRef<boolean>
-  errors: ComputedRef<AsyncValidatorError['errors'] | undefined>
+  errors: ComputedRef<AsyncValidatorError["errors"] | undefined>
   errorInfo: ShallowRef<AsyncValidatorError | null>
-  errorFields: ComputedRef<AsyncValidatorError['fields'] | undefined>
+  errorFields: ComputedRef<AsyncValidatorError["fields"] | undefined>
   execute: () => Promise<UseAsyncValidatorExecuteReturn>
 }
 export interface UseAsyncValidatorOptions {
@@ -65,6 +65,6 @@ export interface UseAsyncValidatorOptions {
 export declare function useAsyncValidator(
   value: MaybeRefOrGetter<Record<string, any>>,
   rules: MaybeRefOrGetter<Rules>,
-  options?: UseAsyncValidatorOptions
+  options?: UseAsyncValidatorOptions,
 ): UseAsyncValidatorReturn & PromiseLike<UseAsyncValidatorReturn>
 ```

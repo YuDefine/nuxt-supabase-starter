@@ -18,11 +18,11 @@ Fullscreen specified element. Some platforms (like iOS's Safari) only allow full
 
 ```vue
 <script setup lang="ts">
-  import { useFullscreen } from '@vueuse/core'
-  import { useTemplateRef } from 'vue'
+import { useFullscreen } from '@vueuse/core'
+import { useTemplateRef } from 'vue'
 
-  const el = useTemplateRef('el')
-  const { isFullscreen, enter, exit, toggle } = useFullscreen(el)
+const el = useTemplateRef('el')
+const { isFullscreen, enter, exit, toggle } = useFullscreen(el)
 </script>
 
 <template>
@@ -36,7 +36,9 @@ Fullscreen specified element. Some platforms (like iOS's Safari) only allow full
 <template>
   <UseFullscreen v-slot="{ toggle }">
     <video />
-    <button @click="toggle">Go Fullscreen</button>
+    <button @click="toggle">
+      Go Fullscreen
+    </button>
   </UseFullscreen>
 </template>
 ```
@@ -67,6 +69,6 @@ export interface UseFullscreenReturn extends Supportable {
  */
 export declare function useFullscreen(
   target?: MaybeElementRef,
-  options?: UseFullscreenOptions
+  options?: UseFullscreenOptions,
 ): UseFullscreenReturn
 ```

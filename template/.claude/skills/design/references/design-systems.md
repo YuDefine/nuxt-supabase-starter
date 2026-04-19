@@ -141,7 +141,7 @@ Industry-categorized design system index for contextual recommendations during `
 
 ## Voice & Tone Leaders
 
-These systems have **comprehensive V&T documentation** — reference for `/clarify` and `/teach-impeccable`:
+These systems have **comprehensive V&T documentation** — reference for `/clarify` and `/impeccable teach`:
 
 ### Tier 1: Dedicated V&T Guides
 

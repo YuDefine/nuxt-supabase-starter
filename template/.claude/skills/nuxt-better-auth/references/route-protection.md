@@ -12,8 +12,8 @@ export default defineNuxtConfig({
     '/admin/**': { auth: { user: { role: 'admin' } } },
     '/dashboard/**': { auth: 'user' },
     '/login': { auth: 'guest' },
-    '/public/**': { auth: false },
-  },
+    '/public/**': { auth: false }
+  }
 })
 ```
 
@@ -32,24 +32,24 @@ Override or define auth for specific pages:
 
 ```vue
 <script setup>
-  // Require authentication
-  definePageMeta({ auth: 'user' })
+// Require authentication
+definePageMeta({ auth: 'user' })
 </script>
 ```
 
 ```vue
 <script setup>
-  // Require admin role
-  definePageMeta({
-    auth: { user: { role: 'admin' } },
-  })
+// Require admin role
+definePageMeta({
+  auth: { user: { role: 'admin' } }
+})
 </script>
 ```
 
 ```vue
 <script setup>
-  // Guest-only (login page)
-  definePageMeta({ auth: 'guest' })
+// Guest-only (login page)
+definePageMeta({ auth: 'guest' })
 </script>
 ```
 
@@ -73,10 +73,10 @@ Override or define auth for specific pages:
 export default defineNuxtConfig({
   auth: {
     redirects: {
-      login: '/login', // Where to redirect unauthenticated users
-      guest: '/dashboard', // Where to redirect logged-in users from guest pages
-    },
-  },
+      login: '/login',    // Where to redirect unauthenticated users
+      guest: '/dashboard' // Where to redirect logged-in users from guest pages
+    }
+  }
 })
 ```
 

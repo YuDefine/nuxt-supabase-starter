@@ -23,7 +23,10 @@ You can define named events with the second parameter
 ```ts
 import { useEventSource } from '@vueuse/core'
 // ---cut---
-const { event, data } = useEventSource('https://event-source-url', ['notice', 'update'])
+const { event, data } = useEventSource(
+  'https://event-source-url',
+  ['notice', 'update']
+)
 ```
 
 ### immediate
@@ -45,9 +48,13 @@ Reconnect on errors automatically (disabled by default).
 ```ts
 import { useEventSource } from '@vueuse/core'
 // ---cut---
-const { status, data, close } = useEventSource('https://event-source-url', [], {
-  autoReconnect: true,
-})
+const { status, data, close } = useEventSource(
+  'https://event-source-url',
+  [],
+  {
+    autoReconnect: true,
+  }
+)
 ```
 
 Or with more controls over its behavior:
@@ -55,15 +62,19 @@ Or with more controls over its behavior:
 ```ts
 import { useEventSource } from '@vueuse/core'
 // ---cut---
-const { status, data, close } = useEventSource('https://event-source-url', [], {
-  autoReconnect: {
-    retries: 3,
-    delay: 1000,
-    onFailed() {
-      alert('Failed to connect EventSource after 3 retries')
+const { status, data, close } = useEventSource(
+  'https://event-source-url',
+  [],
+  {
+    autoReconnect: {
+      retries: 3,
+      delay: 1000,
+      onFailed() {
+        alert('Failed to connect EventSource after 3 retries')
+      },
     },
-  },
-})
+  }
+)
 ```
 
 ### Data Serialization
@@ -73,11 +84,15 @@ Apply custom transformations to incoming data using a serialization function.
 ```ts
 import { useEventSource } from '@vueuse/core'
 // ---cut---
-const { data } = useEventSource('https://event-source-url', [], {
-  serializer: {
-    read: (rawData) => JSON.parse(rawData),
-  },
-})
+const { data } = useEventSource(
+  'https://event-source-url',
+  [],
+  {
+    serializer: {
+      read: rawData => JSON.parse(rawData),
+    },
+  }
+)
 
 // If server sends: '{"name":"John","age":30}'
 // data.value will be: { name: 'John', age: 30 }
@@ -86,7 +101,7 @@ const { data } = useEventSource('https://event-source-url', [], {
 ## Type Declarations
 
 ```ts
-export type EventSourceStatus = 'CONNECTING' | 'OPEN' | 'CLOSED'
+export type EventSourceStatus = "CONNECTING" | "OPEN" | "CLOSED"
 export interface UseEventSourceOptions<Data> extends EventSourceInit {
   /**
    * Enabled auto reconnect
@@ -156,7 +171,7 @@ export interface UseEventSourceReturn<Events extends string[], Data = any> {
   /**
    * Closes the EventSource connection gracefully.
    */
-  close: EventSource['close']
+  close: EventSource["close"]
   /**
    * Reopen the EventSource connection.
    * If there the current one is active, will close it before opening a new one.
@@ -184,6 +199,6 @@ export interface UseEventSourceReturn<Events extends string[], Data = any> {
 export declare function useEventSource<Events extends string[], Data = any>(
   url: MaybeRefOrGetter<string | URL | undefined>,
   events?: Events,
-  options?: UseEventSourceOptions<Data>
+  options?: UseEventSourceOptions<Data>,
 ): UseEventSourceReturn<Events, Data>
 ```

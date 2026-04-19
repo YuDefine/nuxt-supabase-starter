@@ -23,12 +23,10 @@ export const useAuthStore = defineStore('auth', {
 ```
 
 **Works:** Composables returning `ref()`:
-
 - `useLocalStorage`
 - `useAsyncState`
 
 **Doesn't work in Option Stores:**
-
 - Composables exposing functions
 - Composables exposing readonly data
 
@@ -44,9 +42,8 @@ import { ref } from 'vue'
 export const useVideoPlayer = defineStore('video', () => {
   const videoElement = ref<HTMLVideoElement>()
   const src = ref('/data/video.mp4')
-  const { playing, volume, currentTime, togglePictureInPicture } = useMediaControls(videoElement, {
-    src,
-  })
+  const { playing, volume, currentTime, togglePictureInPicture } =
+    useMediaControls(videoElement, { src })
 
   function loadVideo(element: HTMLVideoElement, newSrc: string) {
     videoElement.value = element
@@ -103,7 +100,7 @@ export const useColorStore = defineStore('colors', () => {
   return {
     // Skip hydration for client-only state
     lastColor: skipHydrate(lastColor),
-    open, // Function - no hydration needed
+    open,       // Function - no hydration needed
     isSupported, // Boolean - not reactive
   }
 })

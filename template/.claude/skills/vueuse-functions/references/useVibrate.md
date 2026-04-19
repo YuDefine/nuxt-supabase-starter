@@ -38,7 +38,8 @@ stop()
 ## Type Declarations
 
 ```ts
-export interface UseVibrateOptions extends ConfigurableNavigator, ConfigurableScheduler {
+export interface UseVibrateOptions
+  extends ConfigurableNavigator, ConfigurableScheduler {
   /**
    *
    * Vibration Pattern
@@ -79,5 +80,7 @@ export interface UseVibrateReturn extends Supportable {
  *
  * @__NO_SIDE_EFFECTS__
  */
-export declare function useVibrate(options?: UseVibrateOptions): UseVibrateReturn
+export declare function useVibrate(
+  options?: UseVibrateOptions,
+): UseVibrateReturn
 ```

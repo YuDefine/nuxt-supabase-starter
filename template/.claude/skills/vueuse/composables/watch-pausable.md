@@ -13,7 +13,10 @@ import { nextTick, shallowRef } from 'vue'
 
 const source = shallowRef('foo')
 
-const { stop, pause, resume } = watchPausable(source, (v) => console.log(`Changed to ${v}!`))
+const { stop, pause, resume } = watchPausable(
+  source,
+  v => console.log(`Changed to ${v}!`),
+)
 
 source.value = 'bar'
 await nextTick() // Changed to bar!
@@ -31,12 +34,12 @@ await nextTick() // Changed to hello!
 
 ## Returns
 
-| Name     | Type              |
-| -------- | ----------------- |
-| stop     | `watchWithFilter` |
-| pause    | `Ref`             |
-| resume   | `Ref`             |
-| isActive | `Ref`             |
+| Name | Type |
+| --- | --- |
+| stop | `watchWithFilter` |
+| pause | `Ref` |
+| resume | `Ref` |
+| isActive | `Ref` |
 
 ## Reference
 

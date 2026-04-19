@@ -10,14 +10,14 @@ Lock scrolling of the element.
 
 ```vue
 <script setup lang="ts">
-  import { useScrollLock } from '@vueuse/core'
-  import { useTemplateRef } from 'vue'
+import { useScrollLock } from '@vueuse/core'
+import { useTemplateRef } from 'vue'
 
-  const el = useTemplateRef('el')
-  const isLocked = useScrollLock(el)
+const el = useTemplateRef('el')
+const isLocked = useScrollLock(el)
 
-  isLocked.value = true // lock
-  isLocked.value = false // unlock
+isLocked.value = true // lock
+isLocked.value = false // unlock
 </script>
 
 <template>
@@ -29,11 +29,11 @@ Lock scrolling of the element.
 
 ```vue
 <script setup lang="ts">
-  import { vScrollLock } from '@vueuse/components'
+import { vScrollLock } from '@vueuse/components'
 
-  const data = ref([1, 2, 3, 4, 5, 6])
-  const isLocked = ref(false)
-  const toggleLock = useToggle(isLocked)
+const data = ref([1, 2, 3, 4, 5, 6])
+const isLocked = ref(false)
+const toggleLock = useToggle(isLocked)
 </script>
 
 <template>
@@ -42,7 +42,9 @@ Lock scrolling of the element.
       {{ item }}
     </div>
   </div>
-  <button @click="toggleLock()">Toggle lock state</button>
+  <button @click="toggleLock()">
+    Toggle lock state
+  </button>
 </template>
 ```
 
@@ -56,7 +58,9 @@ Lock scrolling of the element.
  * @param element
  */
 export declare function useScrollLock(
-  element: MaybeRefOrGetter<HTMLElement | SVGElement | Window | Document | null | undefined>,
-  initialState?: boolean
+  element: MaybeRefOrGetter<
+    HTMLElement | SVGElement | Window | Document | null | undefined
+  >,
+  initialState?: boolean,
 ): WritableComputedRef<boolean, boolean>
 ```

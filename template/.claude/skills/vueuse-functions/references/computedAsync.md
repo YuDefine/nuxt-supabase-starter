@@ -19,7 +19,7 @@ const userInfo = computedAsync(
   async () => {
     return await mockLookUp(name.value)
   },
-  null // initial state
+  null, // initial state
 )
 ```
 
@@ -34,11 +34,9 @@ import { shallowRef } from 'vue'
 const evaluating = shallowRef(false)
 
 const userInfo = computedAsync(
-  async () => {
-    /* your logic */
-  },
+  async () => { /* your logic */ },
   null,
-  evaluating // can also be passed via options: { evaluating }
+  evaluating, // can also be passed via options: { evaluating }
 )
 ```
 
@@ -57,11 +55,12 @@ const downloads = computedAsync(async (onCancel) => {
 
   onCancel(() => abortController.abort())
 
-  return await fetch(`https://api.npmjs.org/downloads/point/last-week/${packageName.value}`, {
-    signal: abortController.signal,
-  })
-    .then((response) => (response.ok ? response.json() : { downloads: '—' }))
-    .then((result) => result.downloads)
+  return await fetch(
+    `https://api.npmjs.org/downloads/point/last-week/${packageName.value}`,
+    { signal: abortController.signal },
+  )
+    .then(response => response.ok ? response.json() : { downloads: '—' })
+    .then(result => result.downloads)
 }, 0)
 ```
 
@@ -76,11 +75,9 @@ import { shallowRef } from 'vue'
 const evaluating = shallowRef(false)
 
 const userInfo = computedAsync(
-  async () => {
-    /* your logic */
-  },
+  async () => { /* your logic */ },
   null,
-  { lazy: true, evaluating }
+  { lazy: true, evaluating },
 )
 ```
 
@@ -103,7 +100,7 @@ const userInfo = computedAsync(
     onError(e) {
       console.error('Failed to fetch user info', e)
     },
-  }
+  },
 )
 ```
 
@@ -122,7 +119,7 @@ const userInfo = computedAsync(
     return await fetchNestedData(name.value)
   },
   null,
-  { shallow: false } // enables deep reactivity
+  { shallow: false }, // enables deep reactivity
 )
 ```
 
@@ -141,7 +138,9 @@ const userInfo = computedAsync(
  * @param cancelCallback The provided callback is invoked when a re-evaluation of the computed value is triggered before the previous one finished
  */
 export type AsyncComputedOnCancel = (cancelCallback: Fn) => void
-export interface AsyncComputedOptions<Lazy = boolean> extends ConfigurableFlushSync {
+export interface AsyncComputedOptions<
+  Lazy = boolean,
+> extends ConfigurableFlushSync {
   /**
    * Should value be evaluated lazily
    *
@@ -174,22 +173,22 @@ export interface AsyncComputedOptions<Lazy = boolean> extends ConfigurableFlushS
 export declare function computedAsync<T>(
   evaluationCallback: (onCancel: AsyncComputedOnCancel) => T | Promise<T>,
   initialState: T,
-  optionsOrRef: AsyncComputedOptions<true>
+  optionsOrRef: AsyncComputedOptions<true>,
 ): ComputedRef<T>
 export declare function computedAsync<T>(
   evaluationCallback: (onCancel: AsyncComputedOnCancel) => T | Promise<T>,
   initialState: undefined,
-  optionsOrRef: AsyncComputedOptions<true>
+  optionsOrRef: AsyncComputedOptions<true>,
 ): ComputedRef<T | undefined>
 export declare function computedAsync<T>(
   evaluationCallback: (onCancel: AsyncComputedOnCancel) => T | Promise<T>,
   initialState: T,
-  optionsOrRef?: Ref<boolean> | AsyncComputedOptions
+  optionsOrRef?: Ref<boolean> | AsyncComputedOptions,
 ): Ref<T>
 export declare function computedAsync<T>(
   evaluationCallback: (onCancel: AsyncComputedOnCancel) => T | Promise<T>,
   initialState?: undefined,
-  optionsOrRef?: Ref<boolean> | AsyncComputedOptions
+  optionsOrRef?: Ref<boolean> | AsyncComputedOptions,
 ): Ref<T | undefined>
 /** @deprecated use `computedAsync` instead */
 export declare const asyncComputed: typeof computedAsync
