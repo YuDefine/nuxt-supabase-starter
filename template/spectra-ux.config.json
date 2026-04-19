@@ -6,24 +6,12 @@
     "copilot": true
   },
   "paths": {
-    "types": [
-      "shared/types"
-    ],
-    "ui": [
-      "app/pages",
-      "app/components"
-    ],
-    "uiExtensions": [
-      ".vue"
-    ],
-    "server": [
-      "server",
-      "shared"
-    ],
+    "types": ["shared/types"],
+    "ui": ["app/pages", "app/components"],
+    "uiExtensions": [".vue"],
+    "server": ["server", "shared"],
     "migrations": "supabase/migrations",
-    "navigation": [
-      "app/layouts/default.vue"
-    ],
+    "navigation": ["app/layouts/default.vue"],
     "utils": "app/utils",
     "scripts": "scripts",
     "openspec": "openspec",

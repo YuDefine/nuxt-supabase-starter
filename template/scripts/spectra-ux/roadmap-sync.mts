@@ -182,8 +182,7 @@ function loadConfig(): Config {
       roadmap?: { enabled?: boolean; path?: string }
     }
     const openspecDir = raw.paths?.openspec ?? defaults.openspecDir
-    const roadmapPath =
-      raw.roadmap?.path ?? `${openspecDir.replace(/\/$/, '')}/ROADMAP.md`
+    const roadmapPath = raw.roadmap?.path ?? `${openspecDir.replace(/\/$/, '')}/ROADMAP.md`
     const enabled = raw.roadmap?.enabled ?? true
     return { openspecDir, roadmapPath, enabled }
   } catch (err) {
@@ -556,10 +555,7 @@ function renderParallelismBlock(report: ParallelismReport): string {
 
   const blockedBody = report.blocked.length
     ? report.blocked
-        .map(
-          (b) =>
-            `- \`${b.change}\` waits for: ${b.waitsFor.map((w) => `\`${w}\``).join(', ')}`
-        )
+        .map((b) => `- \`${b.change}\` waits for: ${b.waitsFor.map((w) => `\`${w}\``).join(', ')}`)
         .join('\n')
     : ''
 
@@ -576,10 +572,7 @@ function renderParallelismBlock(report: ParallelismReport): string {
     .trimEnd()
 }
 
-function renderParkedBlock(
-  parked: ParkedChange[],
-  source: 'cli' | 'unavailable'
-): string {
+function renderParkedBlock(parked: ParkedChange[], source: 'cli' | 'unavailable'): string {
   const intro = [
     '## Parked Changes',
     '',
