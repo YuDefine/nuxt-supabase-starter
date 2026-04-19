@@ -1,2 +1,9 @@
 #!/usr/bin/env sh
-pnpm commitlint --edit $1
+# 解析 commit msg 檔為絕對路徑(若為相對則相對於原始 PWD 解析),再切到 template/ 執行 commitlint
+MSG_PATH="$1"
+case "$MSG_PATH" in
+  /*) ;;
+  *) MSG_PATH="$PWD/$MSG_PATH" ;;
+esac
+cd "$(dirname "$0")/.." || exit 1
+pnpm commitlint --edit "$MSG_PATH"
