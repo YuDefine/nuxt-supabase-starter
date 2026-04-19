@@ -63,13 +63,13 @@ jobs:
         run: vp lint
 
       - name: Typecheck
-        run: pnpm typecheck
+        run: vp run typecheck
 
       - name: Unit tests
         run: vp test --coverage
 
       - name: UX drift audit
-        run: pnpm audit:ux-drift
+        run: vp run audit:ux-drift
 
       - name: Spectra roadmap drift check
-        run: pnpm spectra:roadmap --check
+        run: vp run spectra:roadmap --check

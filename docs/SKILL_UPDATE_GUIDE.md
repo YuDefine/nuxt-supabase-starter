@@ -80,25 +80,40 @@ npx skills add <registry>@<skill-name> --agent claude-code --copy -y
 | `create-evlog-framework-integration`     | `hugorcd/evlog` | 框架整合       |
 | `review-logging-patterns`                | `hugorcd/evlog` | 日誌模式審查   |
 
-### Design Skills（Impeccable）
+### Design Skills（Impeccable v2.1）
+
+> **Breaking change 2026-04**：pbakaus/impeccable v2.0 重寫為單一 umbrella skill `impeccable`，v2.1 再收斂為 18 個 skill。
+> v1 的 `arrange / normalize / onboard / frontend-design / teach-impeccable / extract` 已 deprecated。
+> 執行 `pnpm skills:install` 會自動移除這些本地 v1 stub。
 
 Design skills 分成兩類：
 
 1. **第三方 vendor skills**：由 `pbakaus/impeccable` 安裝與更新
 2. **starter 本地 skills**：直接隨 `.claude/skills/` 版控
 
-第三方 vendor skills：
+第三方 vendor skills（18 個，v2.1）：
 
 ```
-adapt, animate, audit, bolder, clarify, colorize, critique, delight,
-distill, optimize, overdrive, polish, quieter, typeset
+impeccable（umbrella）, adapt, animate, audit, bolder, clarify, colorize,
+critique, delight, distill, harden, layout, optimize, overdrive, polish,
+quieter, shape, typeset
 ```
 
-starter 本地 skills：
+v1 → v2 對照：
+
+| v1 | v2 | 說明 |
+|---|---|---|
+| `/frontend-design` | `/impeccable craft` | renamed，併入主 skill |
+| `/teach-impeccable` | `/impeccable teach` | renamed |
+| `/extract` | `/impeccable extract` | renamed |
+| `/arrange` | `/layout` | renamed（v2.1） |
+| `/normalize` | `/polish` | merged（v2.1） |
+| `/onboard` | `/harden` | merged（v2.1） |
+
+starter 本地 skills（保留）：
 
 ```
-arrange, design, design-retro, extract, frontend-design, harden,
-normalize, onboard, teach-impeccable
+design, design-retro
 ```
 
 ### 工具
@@ -113,8 +128,7 @@ normalize, onboard, teach-impeccable
 
 ```
 design, design-retro, nuxt-auth-utils, pinia-store, review-archive,
-arrange, extract, frontend-design, harden, normalize, onboard,
-teach-impeccable, review-rules, review-screenshot, server-api, spectra, spectra-apply,
+review-rules, review-screenshot, server-api, spectra, spectra-apply,
 spectra-archive, spectra-ask, spectra-audit, spectra-debug,
 spectra-discuss, spectra-ingest, spectra-propose, subagent-dev,
 supabase-arch, supabase-migration, supabase-rls
