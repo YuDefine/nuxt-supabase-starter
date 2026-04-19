@@ -281,7 +281,7 @@ NUXT_OAUTH_GOOGLE_CLIENT_SECRET=<client_secret>
 claude
 
 # 建立設計脈絡（產出 .impeccable.md，所有 design skills 的前提）
-> /teach-impeccable
+> /impeccable teach
 ```
 
 這會互動式地收集你的設計偏好（風格方向、色彩、字型、間距），並存入 `.impeccable.md`。後續所有 design skills（`/design`、`/colorize`、`/typeset` 等）都會讀取這個檔案。
