@@ -89,5 +89,6 @@ export default defineConfig({
   },
   staged: {
     '*.{js,ts,vue}': ['vp lint --fix', 'vp fmt'],
+    '*.md': ['vp fmt'],
   },
 })
