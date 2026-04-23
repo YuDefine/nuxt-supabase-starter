@@ -2,8 +2,8 @@
  * Supabase Server 工具函式
  *
  * 提供 Server-side Supabase 存取：
- * - getServerSupabaseClient(): Service Role Client（無 RLS 限制）
- * - getSupabaseWithContext(event): Context-aware Client（帶 RLS application context）
+ * - getServerSupabaseClient(): 特權 service-role client（僅系統任務使用）
+ * - getSupabaseWithContext(event): request-scoped client（帶 application context）
  *
  * @module server/utils/supabase
  */
@@ -26,7 +26,8 @@ let serviceClient: SupabaseClient<Database> | null = null
  *
  * 使用 Service Role Key，繞過所有 RLS 限制。
  *
- * ⚠️ 注意：此 Client 無 RLS 保護，請謹慎使用！
+ * ⚠️ 注意：此 Client 無 RLS 保護，僅供 audit、backfill、修復腳本、背景工作等系統任務使用。
+ * 一般 request handler 請優先使用 getSupabaseWithContext(event)。
  */
 export function getServerSupabaseClient(): SupabaseClient<Database> {
   if (serviceClient) {
@@ -57,7 +58,7 @@ export function getServerSupabaseClient(): SupabaseClient<Database> {
  * 取得帶 RLS Application Context 的 Supabase Client
  *
  * 從 session 取得 user 資訊，透過 RPC 設定 application context，
- * 讓 RLS policy 可以透過 current_setting() 存取使用者身份。
+ * 讓 handler 保有 request-scoped 身分上下文與一致的資料存取路徑。
  *
  * @throws 401 - 未登入
  * @throws 500 - RPC 設定失敗

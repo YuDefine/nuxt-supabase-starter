@@ -31,6 +31,9 @@ supabase/.temp/
 
 # Testing
 coverage/
+playwright-report/
+test-results/
+blob-report/
 .nuxtrc
 
 # Screenshots
@@ -50,11 +53,12 @@ yarn-error.log*
 # Claude Code (local settings)
 .claude/settings.local.json
 
-# Legacy skills directory (replaced by .claude/skills/)
-.agents/
-
-# Third-party skills NOT used by scaffold (installed on-demand via npx skills add)
-# Skills referenced in assemble.ts MUST be tracked as real directories
+# Third-party vendor skills installed later via `npx skills add --copy` are
+# treated as local install artifacts, not starter source. Ignore them here so
+# optional registry installs do not pollute the template baseline or scaffold
+# output with version-drift noise.
+# Skills referenced in assemble.ts are part of the starter contract and MUST
+# stay tracked as real directories under `.claude/skills/`.
 .claude/skills/create-evlog-*/
 .claude/skills/document-writer/
 .claude/skills/nuxt-content/

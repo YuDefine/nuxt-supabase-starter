@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "editor": {
+    "vimMode": false
+  },
+  "permissions": {
+    "allow": [
+      "Shell(cat)",
+      "Shell(curl)",
+      "Shell(echo)",
+      "Shell(find)",
+      "Shell(git)",
+      "Shell(gh)",
+      "Shell(grep)",
+      "Shell(head)",
+      "Shell(jq)",
+      "Shell(ls)",
+      "Shell(node)",
+      "Shell(npx)",
+      "Shell(openssl)",
+      "Shell(pnpm)",
+      "Shell(rg)",
+      "Shell(sort)",
+      "Shell(supabase)",
+      "Shell(test)",
+      "Shell(tree)",
+      "Shell(wc)",
+      "WebFetch(github.com)",
+      "WebFetch(pinia-colada.esm.dev)",
+      "WebFetch(supabase.com)",
+      "WebFetch(ui.nuxt.com)",
+      "WebFetch(vueuse.org)",
+      "Mcp(local-supabase:*)"
+    ],
+    "deny": [
+      "Read(.env*)",
+      "Write(.env*)",
+      "Write(.github/workflows/**)",
+      "Write(supabase/migrations/**)",
+      "Write(wrangler.jsonc)",
+      "Write(wrangler.toml)"
+    ]
+  }
+}

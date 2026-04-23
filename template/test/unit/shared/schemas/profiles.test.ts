@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vite-plus/test'
 import {
+  profileSchema,
   profileListQuerySchema,
+  profileListResponseSchema,
+  profileResponseSchema,
   profileUpdateBodySchema,
   profileIdParamSchema,
 } from '../../../../shared/schemas/profiles'
@@ -134,6 +137,61 @@ describe('profiles schemas', () => {
       const result = profileIdParamSchema.safeParse({})
 
       expect(result.success).toBe(false)
+    })
+  })
+
+  describe('profileSchema', () => {
+    it('should accept a valid profile row', () => {
+      const result = profileSchema.parse({
+        id: '550e8400-e29b-41d4-a716-446655440000',
+        display_name: 'Alice',
+        avatar_url: null,
+        role: 'admin',
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: null,
+      })
+
+      expect(result.role).toBe('admin')
+    })
+
+    it('should reject profile rows missing required keys', () => {
+      const result = profileSchema.safeParse({
+        id: '550e8400-e29b-41d4-a716-446655440000',
+        display_name: 'Alice',
+      })
+
+      expect(result.success).toBe(false)
+    })
+  })
+
+  describe('response schemas', () => {
+    const profile = {
+      id: '550e8400-e29b-41d4-a716-446655440000',
+      display_name: 'Alice',
+      avatar_url: null,
+      role: 'user',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: null,
+    }
+
+    it('should validate single profile responses', () => {
+      const result = profileResponseSchema.parse({ data: profile })
+
+      expect(result.data.id).toBe(profile.id)
+    })
+
+    it('should validate paginated profile responses', () => {
+      const result = profileListResponseSchema.parse({
+        data: [profile],
+        pagination: {
+          page: 1,
+          perPage: 20,
+          total: 1,
+          totalPages: 1,
+        },
+      })
+
+      expect(result.pagination.totalPages).toBe(1)
     })
   })
 })

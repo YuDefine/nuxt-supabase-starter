@@ -1,0 +1,18 @@
+<!-- SPECTRA:START v1.0.2 -->
+
+# Spectra Instructions
+
+This project uses Spectra for Spec-Driven Development(SDD).
+
+## Directory Structure
+
+- **Specs**: `openspec/specs/` - Current truth, what IS built
+- **Changes**: `openspec/changes/` - Proposals, what SHOULD change
+- **Archive**: `openspec/changes/archive/` - Completed changes
+- **Config**: `openspec/config.yaml` - Project context and rules
+
+## Workflow
+
+discuss? → propose → apply ⇄ ingest → archive
+
+<!-- SPECTRA:END -->

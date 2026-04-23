@@ -1,0 +1,15 @@
+---
+description: TDMS 分層真相規則（意圖 / DB / 契約 / API / UI）
+globs:
+  ["server/**/*.ts", "shared/**/*.ts", "supabase/migrations/**", "openspec/**", "docs/decisions/**"]
+---
+
+# Truth Layers
+
+- **意圖層**：跨功能需求、限制、架構方向放在 `openspec/project.md`、`openspec/specs/`、`docs/decisions/`
+- **持久化層**：schema、constraint、RLS、trigger、function 只以 `supabase/migrations/**` 為準；不要只在 TypeScript 或 Zod 裡宣告資料庫真相
+- **契約層**：`shared/schemas/*.ts` 是 request/response contract 的真相來源；同檔輸出 Zod schema 與衍生型別；`shared/types/*.ts` 只做相容轉發或 UI/view-model 型別
+- **服務/API 層**：handler 必須驗證輸入、使用 `getSupabaseWithContext(event)` 進行 request-scoped 存取，並在回傳前以 response schema `parse()`
+- **特權存取例外**：`getServerSupabaseClient()` 只留給稽核、背景工作、資料修復等系統任務；不要把它當成 request handler 預設路徑
+- **UI 層**：`app/` 與元件只消費契約，不重寫角色、constraint、交易邊界等規則
+- **變更同步**：若修改 migration、shared contract、API response shape，必須在同一切面同步更新相鄰測試

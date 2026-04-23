@@ -7,7 +7,9 @@ context: |
   Critical constraints:
   - Auth uses @onmax/nuxt-better-auth, NEVER Supabase Auth APIs
   - Client-side: SELECT only via useSupabaseClient()
-  - Server-side: All writes via /api/v1/* endpoints
+  - Server-side: request handlers use /api/v1/* + getSupabaseWithContext(event)
+  - Shared request/response contracts live in shared/schemas/*
+  - API handlers MUST parse outgoing payloads with shared response schemas
   - RLS policies MUST include service_role bypass for API writes
   - Migrations via CLI only (supabase migration new), never manual .sql files
 
@@ -22,13 +24,16 @@ rules:
     - Include error handling and edge cases
   design:
     - Follow Data Access Pattern (client reads, server writes)
+    - Keep truth layers aligned: intent in openspec/docs/decisions, persistence in migrations, contracts in shared/schemas
     - RLS policies must include service_role bypass
+    - Request handlers should prefer getSupabaseWithContext(event); getServerSupabaseClient() is for privileged system tasks
     - UI changes MUST use Nuxt UI components (UButton, UCard, UTable, etc.)
     - All color/spacing MUST use design system tokens, never hardcoded values
     - Read .impeccable.md for design direction before making UI decisions
   tasks:
     - Follow TDD: write test first, verify red, implement, verify green
     - Each task should be independently verifiable
+    - Contract changes must update adjacent response/request tests in the same change
     - When any task touches UI paths (`.vue`, `pages/`, `components/`, `layouts/`), the task group MUST include a Design Review section before 人工檢查
     - Design Review section MUST include: impeccable check, /design improve, DRIFT fix loop, targeted skills, /audit, /review-screenshot
     - 'UI-affecting tasks MUST include a `> QA:` annotation listing key screens/routes and manual test focus points'

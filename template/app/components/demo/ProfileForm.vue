@@ -5,7 +5,7 @@
    * @module app/components/demo/ProfileForm
    */
 
-  import type { Profile } from '#shared/types/profiles'
+  import type { Profile } from '#shared/schemas/profiles'
 
   const props = defineProps<{
     profile: Profile

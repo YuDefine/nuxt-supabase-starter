@@ -104,7 +104,100 @@ if [ "$HAS_DB_SCOPE" = true ]; then
   fi
 fi
 
-# --- Check 3: Journey URL → task mapping ---
+# --- Check 3: Implementation Risk Plan ---
+HAS_SERVER_SCOPE=false
+HAS_UI_SCOPE=false
+HAS_SENSITIVE_SCOPE=false
+
+if grep -qiE "${SUX_UI_EXT_RE}|pages/|components/|layouts/" "$PROPOSAL_FILE" 2>/dev/null; then
+  HAS_UI_SCOPE=true
+fi
+if [ -f "$TASKS_FILE" ] && sux_tasks_has_ui_scope "$TASKS_FILE"; then
+  HAS_UI_SCOPE=true
+fi
+
+if grep -qiE "server/api/|api/|defineEventHandler|useFetch|\\bfetch\\(|\\$fetch\\(|endpoint|handler|route rules|rpc|mutation|query" "$PROPOSAL_FILE" 2>/dev/null; then
+  HAS_SERVER_SCOPE=true
+fi
+if [ -f "$TASKS_FILE" ] && grep -qiE "server/api/|api/|handler|endpoint|route" "$TASKS_FILE" 2>/dev/null; then
+  HAS_SERVER_SCOPE=true
+fi
+
+if grep -qiE "${SUX_MIGRATIONS_DIR}|\\.sql|ALTER TABLE|ADD COLUMN|CREATE TABLE|CHECK.*IN|${SUX_TYPES_PRIMARY}|auth|permission|rbac|role|policy|raw sql|view\\b|trigger\\b" "$PROPOSAL_FILE" 2>/dev/null; then
+  HAS_SENSITIVE_SCOPE=true
+fi
+if [ -f "$TASKS_FILE" ] && grep -qiE "${SUX_MIGRATIONS_DIR}|${SUX_TYPES_PRIMARY}/|auth|permission|rbac|role|policy|raw sql" "$TASKS_FILE" 2>/dev/null; then
+  HAS_SENSITIVE_SCOPE=true
+fi
+
+RISK_BLOCK=$(sux_extract_section "$PROPOSAL_FILE" 'Implementation Risk Plan')
+if [ -z "$RISK_BLOCK" ]; then
+  FINDINGS+=("缺 \`## Implementation Risk Plan\` 區塊 — proposal 沒先回答 implementation 前提，這些通常會拖到 \`/commit\` 才被打回。
+
+請在 proposal.md 加入：
+
+\`\`\`markdown
+## Implementation Risk Plan
+
+- Truth layer / invariants:
+- Review tier:
+- Contract / failure paths:
+- Test plan:
+- Artifact sync:
+\`\`\`
+
+保持精簡，但五行都要有內容。")
+else
+  MISSING_FIELDS=()
+
+  if ! printf '%s\n' "$RISK_BLOCK" | grep -qi 'Truth layer / invariants:'; then
+    MISSING_FIELDS+=('Truth layer / invariants')
+  fi
+  if ! printf '%s\n' "$RISK_BLOCK" | grep -qi 'Review tier:'; then
+    MISSING_FIELDS+=('Review tier')
+  fi
+  if ! printf '%s\n' "$RISK_BLOCK" | grep -qi 'Contract / failure paths:'; then
+    MISSING_FIELDS+=('Contract / failure paths')
+  fi
+  if ! printf '%s\n' "$RISK_BLOCK" | grep -qi 'Test plan:'; then
+    MISSING_FIELDS+=('Test plan')
+  fi
+  if ! printf '%s\n' "$RISK_BLOCK" | grep -qi 'Artifact sync:'; then
+    MISSING_FIELDS+=('Artifact sync')
+  fi
+
+  if [ "${#MISSING_FIELDS[@]}" -gt 0 ]; then
+    FINDINGS+=("\`## Implementation Risk Plan\` 缺欄位：
+$(printf '  - %s\n' "${MISSING_FIELDS[@]}")
+
+請補齊固定五行，避免 scope / review / sync 前提漏掉。")
+  fi
+
+  if [ "$HAS_SENSITIVE_SCOPE" = true ] && ! printf '%s\n' "$RISK_BLOCK" | grep -qiE 'Truth layer / invariants:.*[^[:space:]]'; then
+    FINDINGS+=("`Truth layer / invariants` 不能留空 — change 牽涉 migration / schema / auth / permission 等敏感 scope。
+
+請寫清楚：
+  - 哪個 artifact 是 single source of truth
+  - 哪些 invariants 不能漂移
+  - 哪些同步層必須一起更新")
+  fi
+
+  if [ "$HAS_SERVER_SCOPE" = true ] && ! printf '%s\n' "$RISK_BLOCK" | grep -qiE 'Contract / failure paths:.*[^[:space:]]'; then
+    FINDINGS+=("`Contract / failure paths` 不能留空 — change 包含 API / server scope。
+
+請至少交代 success / empty / conflict / unauthorized / upstream-failure 中哪些需要處理。")
+  fi
+
+  if [ "$HAS_UI_SCOPE" = true ] && ! printf '%s\n' "$RISK_BLOCK" | grep -qiE 'Test plan:.*(screenshot|manual|browser|journey|review)'; then
+    FINDINGS+=("`Test plan` 對 UI scope 太弱 — proposal 有 UI 影響時，測試計畫至少要提到 screenshot、manual journey，或等效的瀏覽器驗證證據。")
+  fi
+
+  if [ "$HAS_DB_SCOPE" = true ] && ! printf '%s\n' "$RISK_BLOCK" | grep -qiE 'Artifact sync:.*(tasks|roadmap|report|docs|type|migration|spec|handoff|tech-debt)'; then
+    FINDINGS+=("`Artifact sync` 對資料層 change 太弱 — proposal 需要先交代 tasks / roadmap / docs / report / types 等同步面，避免實作完才補文件。")
+  fi
+fi
+
+# --- Check 4: Journey URL → task mapping ---
 if [ -f "$TASKS_FILE" ] && grep -q '^## User Journeys' "$PROPOSAL_FILE" 2>/dev/null; then
   JOURNEY_URLS=$(sux_extract_journey_urls "$PROPOSAL_FILE")
 
@@ -125,7 +218,7 @@ $(printf '  - %s\n' "${UNMAPPED[@]}")
   fi
 fi
 
-# --- Check 4: Enum expansion needs types sync ---
+# --- Check 5: Enum expansion needs types sync ---
 if [ -f "$TASKS_FILE" ]; then
   HAS_MIGRATION_TASK=$(grep -cE "${SUX_MIGRATIONS_DIR}|migration new|ADD COLUMN|CHECK.*IN" "$TASKS_FILE" 2>/dev/null || true)
   HAS_MIGRATION_TASK=${HAS_MIGRATION_TASK:-0}

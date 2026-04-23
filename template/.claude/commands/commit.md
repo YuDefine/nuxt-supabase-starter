@@ -28,7 +28,22 @@ $ARGUMENTS
 
 兩個 ✅ 都出現才進入 0-B。
 
-### 0-B. CI 等效檢查（Fix-Verify Loop）
+### 0-B. UI Design Review（條件觸發）
+
+```bash
+git diff --name-only
+```
+
+**同時滿足才觸發**：
+
+1. 變更含 `.vue` 檔的 `<template>` 區塊
+2. 屬於下列之一：新增頁面/元件、佈局結構變動、互動流程變動、大範圍樣式調整
+
+**不觸發**：純 `<script>` / `<style>` 微調、composable / store / API 純邏輯、測試、文件、設定檔、單純重構不影響視覺輸出。
+
+觸發時派 `screenshot-review` agent 截圖並評估。問題修正後輸出 `✅ 0-B 通過`；不觸發則直接輸出 `⏭️ 0-B 跳過（無 UI 變更）`。
+
+### 0-C. CI 等效檢查（Fix-Verify Loop）
 
 ```bash
 pnpm check
@@ -38,7 +53,7 @@ pnpm check
 
 **禁止**用 `npx vitest run` / `npx eslint` 等個別工具替代 `pnpm check`。若 `.claude/worktrees/` 干擾結果，先清理再跑。
 
-通過後輸出 `✅ 0-B 通過`。
+通過後輸出 `✅ 0-C 通過`。
 
 ## Step 1: Schema 同步檢查（條件觸發）
 
@@ -69,7 +84,7 @@ git diff --stat
 
 ## Step 3: 分析變更並分組
 
-依功能/目的分組，輸出給使用者確認：
+依功能/目的分組並輸出：
 
 ```text
 ### Group 1: [功能描述]
@@ -78,11 +93,7 @@ git diff --stat
 - path/to/file.ts
 ```
 
-## Step 4: 確認分組
-
-向使用者確認分組是否合適。
-
-## Step 5: 逐一執行 Commit
+## Step 4: 逐一執行 Commit
 
 對每個分組：
 
@@ -97,7 +108,7 @@ EOF
 git log -1 --oneline
 ```
 
-## Step 6: 版本號升級與 Deploy Commit
+## Step 5: 版本號升級與 Deploy Commit
 
 判斷升級類型：
 
@@ -122,7 +133,7 @@ pnpm tag
 
 `pnpm tag` 會建立 `v{版本號}` tag 並推送到 origin。
 
-## Step 7: 完成報告
+## Step 6: 完成報告
 
 ```text
 ✅ Commit 完成！
@@ -134,4 +145,87 @@ pnpm tag
 
 版本：1.7.1 → 1.8.0 (minor)
 Tag：v1.8.0 已建立並推送
+```
+
+## Step 7: 更新 HANDOFF.md 與 ROADMAP
+
+遵守 `.claude/rules/handoff.md`：commit 完成後**必須**更新 `HANDOFF.md`，把**所有可延續且尚未被接手的後續工作**寫入 —— 不限於 spectra change。同時同步 Spectra ROADMAP。
+
+### 7-A. 判斷是否需要 handoff
+
+檢查以下任一條件成立 → 需要 handoff：
+
+- `openspec/changes/` 仍有非 archive 目錄（in-progress spectra change）
+- `git status` 仍有 uncommitted 變更（刻意未入本次 commit 的 WIP）
+- 本次 session 中提及但未做的後續工作（例：refactor 機會、文件更新、測試補強、效能優化）
+- 本次 commit 揭露的新 follow-up（`@followup[TD-NNN]` marker、TODO 註解、scope 外發現）
+- commit 後必要的驗證 / 部署步驟（人工檢查、deploy smoke test、DB migration 套用）
+- 使用者曾提過但還沒做的事（在本 session 或前 session 出現過的 backlog）
+- 使用者明確表達接下來要交接 / 暫停
+
+全部不成立（真正什麼都沒得做了）→ 跳到 7-D：若 `HANDOFF.md` 存在且內容已過時，清空或刪除。
+
+### 7-B. 收集下一步資訊
+
+從本次 session 脈絡、`git log`、`docs/tech-debt.md`、`openspec/ROADMAP.md` 的 Next Moves 萃取：
+
+- **In Progress**：正在進行但未完結的工作（spectra change / 自由任務皆可，含進度描述）
+- **Blocked**：被什麼擋住、需要什麼才能繼續（無則省略此區塊）
+- **Next Steps**（不分來源，一律收齊，按優先序排列）：
+  - commit 後的驗證動作：人工檢查、截圖 review、deploy smoke test
+  - follow-up marker：`@followup[TD-NNN]` 指向的 tech debt
+  - session 中浮現但刻意未處理的機會：refactor、抽共用元件、補測試
+  - 跨 session backlog：使用者提過的待辦、roadmap 的 near-term 項目
+  - 注意事項 / 陷阱：下一人接手前需要知道的隱性脈絡
+
+### 7-C. 寫入 `HANDOFF.md`
+
+依 `.claude/rules/handoff.md` 格式覆寫：
+
+```markdown
+# Handoff
+
+## In Progress
+
+- [ ] <任務描述（spectra change 名稱 / 自由任務 / WIP）>
+- <做到哪、關鍵檔案或決策點>
+
+## Blocked
+
+- <blocker 描述；無則省略整個區塊>
+
+## Next Steps
+
+1. <下一步，按優先序>
+2. <...>
+```
+
+**禁止**：
+
+- 編造不存在的 in-progress / blocker
+- 只寫 openspec 相關內容而漏掉其他可延續工作
+- 為了「填滿」區塊灌水 —— 真沒有就省略該區塊
+
+### 7-D. 同步 Spectra ROADMAP
+
+```bash
+pnpm spectra:roadmap
+```
+
+重算 `openspec/ROADMAP.md` 的 AUTO 區塊（Active Changes / Active Claims / Parallel Tracks / Parked Changes）。
+
+若 7-B 收集到的 **Next Steps** 中包含跨 session backlog（不只是「commit 後立刻要做」的驗證動作），依 `.claude/rules/proactive-skills.md` 的「Spectra Roadmap Maintenance」**手動**更新 MANUAL 區塊的 `## Next Moves`，格式：
+
+```text
+- [priority] 描述 — 依賴：xxx / 獨立 / 互斥：yyy
+```
+
+**禁止**：手編 `<!-- SPECTRA-UX:ROADMAP-AUTO:* -->` 區塊（會被下次 sync 覆寫）。
+
+### 7-E. 報告
+
+```text
+✅ HANDOFF.md 已更新
+✅ ROADMAP 已同步
+（或：無可延續工作，HANDOFF.md 已清空 / 未建立）
 ```

@@ -1,7 +1,8 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, join, resolve } from 'pathe'
 import { getModuleById } from './features'
+import type { AgentRuntime } from './types'
 
 const TEMPLATES_DIR = resolve(import.meta.dirname, '..', 'templates')
 const STARTER_ROOT = resolve(import.meta.dirname, '..', '..', '..')
@@ -9,7 +10,8 @@ const STARTER_ROOT = resolve(import.meta.dirname, '..', '..', '..')
 export function assembleProject(
   targetDir: string,
   selectedFeatureIds: string[],
-  projectName: string
+  projectName: string,
+  agentTargets: AgentRuntime[] = ['claude-code']
 ): void {
   // 1. Copy base template
   copyDirectory(join(TEMPLATES_DIR, 'base'), targetDir)
@@ -26,7 +28,7 @@ export function assembleProject(
   }
 
   // 3. Generate package.json
-  generatePackageJson(targetDir, selectedFeatureIds, projectName)
+  generatePackageJson(targetDir, selectedFeatureIds, projectName, agentTargets)
 
   // 4. Generate nuxt.config.ts
   generateNuxtConfig(targetDir, selectedFeatureIds)
@@ -34,11 +36,19 @@ export function assembleProject(
   // 5. Generate .env.example
   generateEnvExample(targetDir, selectedFeatureIds)
 
-  // 6. Generate CLAUDE.md
-  generateClaudeMd(targetDir, selectedFeatureIds)
+  // 6. Generate runtime docs
+  if (hasAgent(agentTargets, 'claude-code')) {
+    generateClaudeMd(targetDir, selectedFeatureIds)
+  }
 
   // 7. Copy shared template assets first so scaffold inherits template updates.
   copyTemplateClaudeAssets(targetDir)
+  if (hasAgent(agentTargets, 'codex')) {
+    copyTemplateCodexAssets(targetDir)
+  }
+  if (hasAgent(agentTargets, 'cursor')) {
+    copyTemplateCursorAssets(targetDir)
+  }
   copyTemplateGitHubAssets(targetDir)
 
   // 8. Layer feature-gated assets and generated settings on top.
@@ -48,7 +58,7 @@ export function assembleProject(
   copyCommands(targetDir, selectedFeatureIds)
   generateSettings(targetDir, selectedFeatureIds)
   copyGuardSystem(targetDir)
-  copyScripts(targetDir, selectedFeatureIds)
+  copyScripts(targetDir, selectedFeatureIds, agentTargets)
   copyWorkflows(targetDir, selectedFeatureIds)
   copyVerifyDocs(targetDir, selectedFeatureIds)
 
@@ -103,6 +113,36 @@ function copyTemplateClaudeAssets(targetDir: string): void {
   copyDirectory(join(STARTER_ROOT, '.claude'), join(targetDir, '.claude'))
 }
 
+function copyTemplateCursorAssets(targetDir: string): void {
+  const cursorDir = join(STARTER_ROOT, '.cursor')
+  if (existsSync(cursorDir)) {
+    copyDirectory(cursorDir, join(targetDir, '.cursor'))
+  }
+  copyAgentsInstructionFile(targetDir)
+}
+
+function copyTemplateCodexAssets(targetDir: string): void {
+  const codexDir = join(STARTER_ROOT, '.codex')
+  if (existsSync(codexDir)) {
+    copyDirectory(codexDir, join(targetDir, '.codex'))
+  }
+
+  const agentsDir = join(STARTER_ROOT, '.agents')
+  if (existsSync(agentsDir)) {
+    copyDirectory(agentsDir, join(targetDir, '.agents'))
+  }
+
+  copyAgentsInstructionFile(targetDir)
+}
+
+function copyAgentsInstructionFile(targetDir: string): void {
+  const agentsFile = join(STARTER_ROOT, 'AGENTS.md')
+  if (existsSync(agentsFile)) {
+    mkdirSync(targetDir, { recursive: true })
+    cpSync(agentsFile, join(targetDir, 'AGENTS.md'))
+  }
+}
+
 function copyTemplateGitHubAssets(targetDir: string): void {
   const githubDir = join(STARTER_ROOT, '.github')
   if (existsSync(githubDir)) {
@@ -141,7 +181,8 @@ function orderByDependency(featureIds: string[]): string[] {
 export function generatePackageJson(
   targetDir: string,
   selectedFeatureIds: string[],
-  projectName: string
+  projectName: string,
+  agentTargets: AgentRuntime[]
 ): void {
   const pkgPath = join(targetDir, 'package.json')
   const basePkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
@@ -209,6 +250,8 @@ export function generatePackageJson(
   basePkg.scripts.prepare = prepareParts.join(' && ')
   if (selectedFeatureIds.includes('database')) {
     basePkg.scripts['db:reset'] = 'bash ./scripts/db-reset.sh && pnpm db:types'
+    basePkg.scripts['db:drizzle:pull'] = 'drizzle-kit pull --config=drizzle.config.ts'
+    basePkg.scripts['db:drizzle:studio'] = 'drizzle-kit studio --config=drizzle.config.ts'
     basePkg.scripts['db:lint'] = 'supabase db lint --level warning'
     basePkg.scripts['db:types'] = 'bash ./scripts/db-types.sh'
     basePkg.scripts['db:backup'] = 'bash ./scripts/backup-supabase.sh'
@@ -219,9 +262,15 @@ export function generatePackageJson(
   // Always add
   basePkg.scripts.typecheck = 'nuxt typecheck'
   basePkg.scripts.setup = 'bash scripts/setup.sh'
-  basePkg.scripts['skills:install'] = 'bash ./scripts/install-skills.sh'
-  basePkg.scripts['skills:list'] = 'bash ./scripts/check-skills.sh'
-  basePkg.scripts['skills:update'] = 'bash ./scripts/install-skills.sh'
+  if (hasAgent(agentTargets, 'claude-code')) {
+    basePkg.scripts['skills:install'] = 'bash ./scripts/install-skills.sh'
+    basePkg.scripts['skills:list'] = 'bash ./scripts/check-skills.sh'
+    basePkg.scripts['skills:update'] = 'bash ./scripts/install-skills.sh'
+  } else {
+    delete basePkg.scripts['skills:install']
+    delete basePkg.scripts['skills:list']
+    delete basePkg.scripts['skills:update']
+  }
 
   // Spectra UX completeness (always needed)
   basePkg.scripts['audit:ux-drift'] = 'npx tsx scripts/audit-ux-drift.mts'
@@ -623,6 +672,10 @@ function hasAny(ids: string[], ...features: string[]): boolean {
   return features.some((f) => ids.includes(f))
 }
 
+function hasAgent(agentTargets: AgentRuntime[], agent: AgentRuntime): boolean {
+  return agentTargets.includes(agent)
+}
+
 // --- Rules ---
 
 function copyRules(targetDir: string, feats: string[]): void {
@@ -771,11 +824,17 @@ function generateSettings(targetDir: string, feats: string[]): void {
   })
 
   // PreToolUse: Edit|Write — knowledge search + guard
-  preToolUse.push({ matcher: 'Edit|Write', hooks: [hookEntry('knowledge-search-reminder.sh', 5)] })
+  preToolUse.push({
+    matcher: 'Edit|Write',
+    hooks: [hookEntry('knowledge-search-reminder.sh', 5)],
+  })
   preToolUse.push({
     matcher: 'Edit|Write',
     hooks: [
-      { command: 'node "$CLAUDE_PROJECT_DIR"/.claude/scripts/guard-check.mjs', type: 'command' },
+      {
+        command: 'node "$CLAUDE_PROJECT_DIR"/.claude/scripts/guard-check.mjs',
+        type: 'command',
+      },
     ],
   })
 
@@ -926,7 +985,7 @@ function copyGuardSystem(targetDir: string): void {
 
 // --- Scripts ---
 
-function copyScripts(targetDir: string, feats: string[]): void {
+function copyScripts(targetDir: string, feats: string[], agentTargets: AgentRuntime[]): void {
   // Always-included scripts
   const files = ['check-skills.sh', 'setup.sh', 'restore-hooks.sh', 'audit-ux-drift.mts']
 
@@ -946,7 +1005,9 @@ function copyScripts(targetDir: string, feats: string[]): void {
   }
 
   // Generate install-skills.sh dynamically based on selected features
-  generateInstallSkillsScript(targetDir, feats)
+  if (hasAgent(agentTargets, 'claude-code')) {
+    generateInstallSkillsScript(targetDir, feats)
+  }
 
   // Copy spectra-ux scripts (always needed for Spectra workflow)
   const spectraUxSrc = join(STARTER_ROOT, 'scripts', 'spectra-ux')
@@ -959,6 +1020,10 @@ function copyScripts(targetDir: string, feats: string[]): void {
   // Finally sync the full template scripts tree so Quick Start always inherits
   // the latest shared scripts, skill installers, and script templates.
   copyDirectory(join(STARTER_ROOT, 'scripts'), join(targetDir, 'scripts'))
+
+  if (!hasAgent(agentTargets, 'claude-code')) {
+    rmSync(join(targetDir, 'scripts', 'install-skills.sh'), { force: true })
+  }
 }
 
 function generateInstallSkillsScript(targetDir: string, feats: string[]): void {

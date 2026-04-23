@@ -5,15 +5,15 @@ category: Workflow
 tags: ["workflow", "discuss", "thinking"]
 ---
 
-<!-- SPECTRA:START v1.0.1 -->
+<!-- SPECTRA:START v1.0.2 -->
 
 Have a focused discussion about a topic and reach a conclusion.
 
-**IMPORTANT: Discuss mode is for thinking, not implementing.** You may read files, search code, and investigate the codebase, but you must NEVER write code or implement features. If the user asks you to implement something, remind them to exit discuss mode first (e.g., start a change with `/spectra-propose`). You MAY create Spectra artifacts (proposals, designs, specs) if the user asks—that's capturing thinking, not implementing.
+**IMPORTANT: Discuss mode is for thinking, not implementing.** You may read files, search code, and investigate the codebase, but you must NEVER write code or implement features. If the user asks you to implement something, remind them to exit discuss mode first (e.g., start a change with `/spectra:propose`). You MAY create Spectra artifacts (proposals, designs, specs) if the user asks—that's capturing thinking, not implementing.
 
 **This is a task-oriented discussion.** Every discussion has a topic, works toward a goal, and ends with a clear conclusion. Unlike open-ended exploration, discuss mode converges.
 
-**Input**: The argument after `/spectra-discuss` is the topic. Could be:
+**Input**: The argument after `/spectra:discuss` is the topic. Could be:
 
 - A design question: "should we use WebSockets or SSE?"
 - A problem to solve: "the auth system is getting unwieldy"
@@ -170,6 +170,8 @@ The conclusion should be one of:
 - **Next-step recommendation**: "We need to spike the plugin API first to validate the approach"
 - **Explicit deferral**: "We don't have enough info yet. Specifically, we need to know X before deciding"
 
+**Example elicitation**: When the discussion converges on a specific requirement or behavior, propose a concrete example before capturing the decision. Instead of concluding "search should sort by relevance", propose: "So if we have items scored 0.9, 0.3, 0.7, the result order would be 0.9, 0.7, 0.3 — is that right?" This naturally produces `##### Example:` content for the spec and confirms shared understanding with real values.
+
 **If the user wants to move faster.** Sometimes the user signals impatience — "let's just go with X", "I don't want to overthink this", "can we move on?". Respect their pace:
 
 1. **First time**: Briefly flag if there's an important unresolved question — one sentence, not a lecture. "Before we commit to X, worth noting that Y could affect Z. Want to address it or move forward?"
@@ -222,7 +224,7 @@ Present the summary and say something like "I'll capture this to design.md unles
 
 When the discussion converges on building something:
 
-- "Ready to formalize this? `/spectra-propose`"
+- "Ready to formalize this? `/spectra:propose`"
 - Or capture the decision in existing artifacts and continue
 
 ---

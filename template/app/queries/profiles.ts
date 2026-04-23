@@ -12,7 +12,7 @@ import type {
   ProfileListResponse,
   ProfileResponse,
   ProfileUpdateBody,
-} from '#shared/types/profiles'
+} from '#shared/schemas/profiles'
 
 // ---------------------------------------------------------------------------
 // Query Key Factory

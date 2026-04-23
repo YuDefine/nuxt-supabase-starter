@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|StrReplace|Delete",
+        "command": ".cursor/hooks/legacy-prewrite-bridge.sh"
+      }
+    ],
+    "afterFileEdit": [
+      {
+        "command": ".cursor/hooks/legacy-after-file-edit.sh"
+      }
+    ],
+    "postToolUse": [
+      {
+        "matcher": "Shell",
+        "command": ".cursor/hooks/legacy-post-shell.sh"
+      },
+      {
+        "matcher": "MCP: .*apply_migration",
+        "command": ".cursor/hooks/post-migration-gen-types.sh"
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": ".cursor/hooks/permission-shell-guard.sh",
+        "failClosed": false
+      }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": ".cursor/hooks/permission-mcp-guard.sh",
+        "failClosed": false
+      }
+    ],
+    "sessionStart": [
+      {
+        "command": ".cursor/hooks/session-start-context.sh"
+      }
+    ]
+  }
+}
