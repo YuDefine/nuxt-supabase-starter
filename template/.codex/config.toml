@@ -1,0 +1,6 @@
+# Auto-generated from .claude/settings.json
+enabledMcpjsonServers = ["local-supabase"]
+includeGitInstructions = false
+
+[features]
+codex_hooks = true
