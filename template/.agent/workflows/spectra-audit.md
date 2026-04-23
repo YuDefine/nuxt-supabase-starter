@@ -5,7 +5,7 @@ category: Development
 tags: ["development", "security", "audit"]
 ---
 
-<!-- SPECTRA:START v1.0.1 -->
+<!-- SPECTRA:START v1.0.2 -->
 
 Audit changed code for security sharp edges — API design traps, dangerous defaults, and interfaces that make it easy to do the wrong thing.
 
@@ -17,8 +17,8 @@ Good APIs don't require developers to "be careful" to stay secure. If the correc
 
 This skill operates in two modes depending on how it's invoked:
 
-- **Standalone** (`/spectra-audit`): Full 3-agent parallel analysis on current git diff. See [Standalone Mode](#standalone-mode).
-- **Discipline** (via `/spectra-apply` when `audit: true`): Condensed checklist applied during implementation. See [Discipline Mode](#discipline-mode).
+- **Standalone** (`/spectra:audit`): Full 3-agent parallel analysis on current git diff. See [Standalone Mode](#standalone-mode).
+- **Discipline** (via `/spectra:apply` when `audit: true`): Condensed checklist applied during implementation. See [Discipline Mode](#discipline-mode).
 
 Both modes share the same [Core Framework](#core-framework).
 
@@ -26,7 +26,7 @@ Both modes share the same [Core Framework](#core-framework).
 
 ## Standalone Mode
 
-When invoked directly as `/spectra-audit`:
+When invoked directly as `/spectra:audit`:
 
 ### Phase 1: Gather Changes
 
@@ -88,7 +88,7 @@ End with a brief summary of what was fixed (or confirm the code is clean).
 
 ## Discipline Mode
 
-When referenced by `/spectra-apply` (via `spectra instructions --skill audit`), do NOT launch the 3-agent workflow above. Instead, apply this condensed checklist continuously during implementation.
+When referenced by `/spectra:apply` (via `spectra instructions --skill audit`), do NOT launch the 3-agent workflow above. Instead, apply this condensed checklist continuously during implementation.
 
 ### Quick 3-Role Check
 
@@ -181,7 +181,7 @@ verify_ssl: fasle # not "false", might be treated as truthy?
 # Dangerous combination
 auth_required: true
 bypass_auth_for_health: true
-health_check_path: '/' # oops, entire site bypasses auth
+health_check_path: "/" # oops, entire site bypasses auth
 ```
 
 #### 5. Silent Failures

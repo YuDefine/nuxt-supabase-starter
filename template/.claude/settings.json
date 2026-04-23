@@ -1,5 +1,7 @@
 {
-  "enabledMcpjsonServers": ["local-supabase"],
+  "enabledMcpjsonServers": [
+    "local-supabase"
+  ],
   "hooks": {
     "PostToolUse": [
       {
@@ -25,7 +27,7 @@
             "type": "command"
           },
           {
-            "_sux_version": "1.3.1",
+            "_sux_version": "1.13.1",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-edit-roadmap-sync.sh",
             "timeout": 10,
             "type": "command"
@@ -51,7 +53,7 @@
             "type": "command"
           },
           {
-            "_sux_version": "1.3.1",
+            "_sux_version": "1.13.1",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-propose-journey-check.sh",
             "timeout": 10,
             "type": "command"
@@ -99,24 +101,37 @@
             "type": "command"
           },
           {
-            "_sux_version": "1.3.1",
+            "_sux_version": "1.13.1",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-propose-ux-scan.sh",
             "statusMessage": "Injecting UX scan requirements...",
             "timeout": 5,
             "type": "command"
           },
           {
-            "_sux_version": "1.3.1",
+            "_sux_version": "1.13.1",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-apply-journey-brief.sh",
             "statusMessage": "Briefing user journeys...",
             "timeout": 5,
             "type": "command"
           },
           {
-            "_sux_version": "1.3.1",
+            "_sux_version": "1.13.1",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-archive-ux-gate.sh",
             "statusMessage": "Running UX archive gate...",
             "timeout": 15,
+            "type": "command"
+          },
+          {
+            "command": "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/pre-archive-followup-gate.sh",
+            "statusMessage": "Running follow-up register gate...",
+            "timeout": 10,
+            "type": "command"
+          },
+          {
+            "_sux_version": "1.13.1",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-archive-followup-gate.sh",
+            "statusMessage": "Running follow-up register gate...",
+            "timeout": 10,
             "type": "command"
           }
         ],
@@ -127,7 +142,7 @@
       {
         "hooks": [
           {
-            "_sux_version": "1.3.1",
+            "_sux_version": "1.13.1",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start-roadmap-sync.sh",
             "timeout": 10,
             "type": "command"

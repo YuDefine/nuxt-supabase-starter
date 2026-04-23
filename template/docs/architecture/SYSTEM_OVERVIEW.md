@@ -83,7 +83,7 @@ base/           ← 共用：API routes、composables、types、utils
 │  └────┬────┘ │
 └───────┼──────┘
         │
-        │ service_role key（server-only）
+        │ request-scoped client（`getSupabaseWithContext`）
         │
 ┌───────▼──────┐
 │   Supabase   │
@@ -101,7 +101,7 @@ base/           ← 共用：API routes、composables、types、utils
 1. **Browser** → 發送請求，cookie 自動附帶
 2. **Nuxt Server** → `getUserSession(event)` 解析 cookie，取得使用者身份
 3. **API Route** → `requireRole()` 檢查權限 → Zod schema 驗證輸入
-4. **Supabase** → 使用 `service_role` key 執行查詢，RLS 作為額外防護層
+4. **Supabase** → 透過 request-scoped client 執行查詢；只有 audit、backfill、修復腳本等系統任務才直接用 `service_role`
 5. **Response** → 統一格式 `{ data, pagination? }` 回傳
 
 ### Client 直讀路徑（SELECT only）

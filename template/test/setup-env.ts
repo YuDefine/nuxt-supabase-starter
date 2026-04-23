@@ -37,6 +37,15 @@ function throwOnVueUnresolvedComponent(level: 'warn' | 'error', args: ConsoleArg
 // Vitest 4 provides a different `console` object to test modules.
 // We patch `globalThis.console` which is what Vue runtime actually uses.
 beforeEach(() => {
+  Object.assign(globalThis, {
+    useLogger: () => ({
+      error: () => {},
+      warn: () => {},
+      info: () => {},
+      debug: () => {},
+    }),
+  })
+
   const gc = globalThis.console
   const originalWarn = gc.warn.bind(gc)
   const originalError = gc.error.bind(gc)

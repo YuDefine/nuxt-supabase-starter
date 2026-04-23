@@ -179,8 +179,8 @@ import { getSupabaseWithContext } from '~~/server/utils/supabase'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
-  const supabase = await getSupabaseWithContext(event)
-  const { data } = await supabase.from('resources').select('*')
+  const { client } = await getSupabaseWithContext(event)
+  const { data } = await client.from('resources').select('*')
   return { data }
 })
 ```

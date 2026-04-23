@@ -57,14 +57,14 @@ export default defineEventHandler(async (event) => {
   const sortOrder = query.sortOrder === 'asc' ? true : false
 
   // 取得 Supabase client
-  const supabase = await getSupabaseWithContext(event)
+  const { client } = await getSupabaseWithContext(event)
 
   // 計算 offset
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
 
   // 查詢
-  const { data, error, count } = await supabase
+  const { data, error, count } = await client
     .schema('app')
     .from('todos')
     .select('*', { count: 'exact' })
@@ -107,14 +107,9 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const supabase = await getSupabaseWithContext(event)
+  const { client } = await getSupabaseWithContext(event)
 
-  const { data, error } = await supabase
-    .schema('app')
-    .from('todos')
-    .select('*')
-    .eq('id', id)
-    .single()
+  const { data, error } = await client.schema('app').from('todos').select('*').eq('id', id).single()
 
   if (error) {
     throw createError({
@@ -150,10 +145,10 @@ export default defineEventHandler(async (event) => {
   const body = await readValidatedBody(event, createTodoSchema.parse)
 
   // 3. 取得 Supabase client
-  const supabase = await getSupabaseWithContext(event)
+  const { client } = await getSupabaseWithContext(event)
 
   // 4. 新增資料
-  const { data, error } = await supabase
+  const { data, error } = await client
     .schema('app')
     .from('todos')
     .insert({
@@ -213,7 +208,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const supabase = await getSupabaseWithContext(event)
+  const { client } = await getSupabaseWithContext(event)
 
   // 如果是標記完成，順便記錄完成時間
   const updateData = {
@@ -222,7 +217,7 @@ export default defineEventHandler(async (event) => {
     ...(body.completed === false && { completed_at: null }),
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .schema('app')
     .from('todos')
     .update(updateData)
@@ -258,9 +253,9 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const supabase = await getSupabaseWithContext(event)
+  const { client } = await getSupabaseWithContext(event)
 
-  const { error } = await supabase.schema('app').from('todos').delete().eq('id', id)
+  const { error } = await client.schema('app').from('todos').delete().eq('id', id)
 
   if (error) {
     throw createError({
@@ -285,7 +280,7 @@ export default defineEventHandler(async (event) => {
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '~~/app/types/database.types'
 
-// 取得 Service Role Client（可繞過 RLS）
+// 取得特權 Service Role Client（僅系統任務使用）
 export function getServerSupabaseClient(): SupabaseClient<Database> {
   const config = useRuntimeConfig()
 
@@ -297,10 +292,20 @@ export function getServerSupabaseClient(): SupabaseClient<Database> {
   })
 }
 
-// 取得帶有使用者上下文的 Client
-export async function getSupabaseWithContext(event: H3Event): Promise<SupabaseClient<Database>> {
-  // 在 Server 端我們使用 service_role，因為 RLS 已經有 service_role 繞過政策
-  return getServerSupabaseClient()
+// 取得 request-scoped Client
+export async function getSupabaseWithContext(event: H3Event): Promise<{
+  client: SupabaseClient<Database>
+  user: Awaited<ReturnType<typeof requireAuth>>
+}> {
+  const user = await requireAuth(event)
+  const client = getServerSupabaseClient()
+
+  await client.rpc('set_app_context', {
+    p_user_id: user.id,
+    p_user_role: user.role,
+  } as never)
+
+  return { client, user }
 }
 
 // 要求使用者已登入
@@ -359,18 +364,14 @@ export default defineEventHandler(async (event) => {
   const user = await requireAuth(event)
   const body = await readValidatedBody(event, batchCreateSchema.parse)
 
-  const supabase = await getSupabaseWithContext(event)
+  const { client } = await getSupabaseWithContext(event)
 
   const itemsWithUserId = body.items.map((item) => ({
     ...item,
     user_id: user.id,
   }))
 
-  const { data, error } = await supabase
-    .schema('app')
-    .from('todos')
-    .insert(itemsWithUserId)
-    .select()
+  const { data, error } = await client.schema('app').from('todos').insert(itemsWithUserId).select()
 
   if (error) {
     throw createError({
@@ -401,9 +402,9 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const supabase = await getSupabaseWithContext(event)
+  const { client } = await getSupabaseWithContext(event)
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .schema('app')
     .from('todos')
     .select('*')
@@ -430,10 +431,10 @@ export default defineEventHandler(async (event) => {
   const user = await requireAuth(event)
   const body = await readValidatedBody(event, createTodoSchema.parse)
 
-  const supabase = await getSupabaseWithContext(event)
+  const { client } = await getSupabaseWithContext(event)
 
   // 新增資料
-  const { data, error } = await supabase
+  const { data, error } = await client
     .schema('app')
     .from('todos')
     .insert({ ...body, user_id: user.id })
@@ -445,7 +446,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // 記錄操作日誌
-  await supabase
+  await client
     .schema('core')
     .from('operation_logs')
     .insert({
@@ -474,10 +475,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '缺少 Todo ID' })
   }
 
-  const supabase = await getSupabaseWithContext(event)
+  const { client } = await getSupabaseWithContext(event)
 
   // 先確認 todo 存在
-  const { data: todo, error: todoError } = await supabase
+  const { data: todo, error: todoError } = await client
     .schema('app')
     .from('todos')
     .select('id')
@@ -489,7 +490,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // 取得留言
-  const { data, error } = await supabase
+  const { data, error } = await client
     .schema('app')
     .from('todo_comments')
     .select(
@@ -657,9 +658,10 @@ export default defineEventHandler(async (event) => {
   // ...
 })
 
-// ✅ 安全：確認使用者已登入
+// ✅ 安全：確認使用者已登入，並使用 request-scoped client
 export default defineEventHandler(async (event) => {
   await requireAuth(event)
+  const { client } = await getSupabaseWithContext(event)
   // ...
 })
 ```

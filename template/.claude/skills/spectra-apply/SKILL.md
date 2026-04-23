@@ -1,12 +1,13 @@
 ---
 name: spectra-apply
-description: 'Implement or resume tasks from a Spectra change'
+description: "Implement or resume tasks from a Spectra change"
+effort: high
 license: MIT
 compatibility: Requires spectra CLI.
 metadata:
   author: spectra
-  version: '1.0'
-  generatedBy: 'Spectra'
+  version: "1.0"
+  generatedBy: "Spectra"
 ---
 
 Implement tasks from a Spectra change.
@@ -130,6 +131,19 @@ If the apply instructions JSON includes a `preflight` field, act on its `status`
 
 If the `preflight` field is absent (blocked or all_done states), skip this step.
 
+3c. **Artifact quality check**
+
+Run `spectra analyze <change-name> --json` to check cross-artifact consistency (Coverage, Consistency, Ambiguity, Gaps).
+
+- **Zero findings**: silently continue.
+- **Warning/Suggestion only**: display a one-line summary (e.g., "⚠ Artifact analysis: 2 warnings found") and continue automatically.
+- **Critical findings**: display each Critical finding (summary + location + recommendation), then use the **AskUserQuestion tool**:
+  - **Fix and continue** — fix the artifact issues inline, then proceed
+  - **Continue anyway** — skip fixes and start implementation
+  - **Stop** — end the workflow
+
+  If there is no AskUserQuestion tool available, present options as plain text and wait for the user's response.
+
 4. **Read context files**
 
    Read the files listed in `contextFiles` from the apply instructions output.
@@ -173,9 +187,16 @@ If the `preflight` field is absent (blocked or all_done states), skip this step.
      2. **Quality** — derive values from existing state instead of duplicating; use existing types and constants over new literals
      3. **Efficiency** — parallelize independent async operations; avoid unnecessary awaits; match operation scope to actual need
      4. **No Placeholders in artifacts** — if the design or spec for this task contains placeholder language (TBD, TODO, "add appropriate handling"), pause and fix the artifact first or flag to the user. Do not implement against vague requirements.
+     5. **Examples as verification** — if the spec for this task's scope includes `##### Example:` blocks, use them as concrete test cases:
+        - When TDD is enabled: derive the first failing test directly from the example's GIVEN/WHEN/THEN values
+        - When TDD is not enabled: after implementing, verify the code handles the example's input→output correctly
+        - Example tables map to parameterized tests — one test per row
+          Do NOT invent additional test values beyond what the spec examples provide without reason. The examples ARE the agreed specification.
    - Make the code changes required
    - Keep changes minimal and focused
-   - Mark task complete in the tasks file: `- [ ]` → `- [x]`
+   - **Verify before marking done** — re-read the task description from the tasks file. For each requirement stated in the description, confirm it is addressed by your changes. If any requirement is missing, implement it now. Do not mark the task complete until every part of the description is covered.
+   - Mark task complete by running: `spectra task done --change "<name>" <task-id>`
+     This command marks the checkbox in tasks.md AND records which files were modified for this task.
    - Continue to next task
 
    **Parallel task dispatch**: When consecutive `[P]`-marked tasks are found and `parallel_tasks: true` is configured (see Step 5), dispatch them as parallel agents in a single message. If any `[P]` task fails, pause and report.
@@ -190,14 +211,16 @@ If the `preflight` field is absent (blocked or all_done states), skip this step.
 
 ## Rationalization Table
 
-| What You're Thinking                                       | What You Should Do                                                               |
-| ---------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| "This task is trivial, I don't need to re-read the design" | Re-read. Context compression loses details. 30s of reading saves 30min of rework |
-| "I already know how this works, skip the code search"      | Search anyway. Someone may have added a utility since you last looked            |
-| "The test is obvious, I'll add it after implementation"    | If TDD is enabled, test first. If not, still write it before marking done        |
-| "This is just a small refactor, no test needed"            | Small refactors are how regressions sneak in. Write the test                     |
-| "The artifact says X but Y makes more sense"               | Pause and suggest updating the artifact. Don't silently deviate                  |
-| "I'll fix this other thing I noticed while I'm here"       | Finish current task first. Address the other thing separately                    |
+| What You're Thinking                                               | What You Should Do                                                                                                                            |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| "This task looks done, I'll mark it complete"                      | Re-read the task description first. Check whether your diff covers every part of it. Incomplete tasks marked done are the #1 source of rework |
+| "This task is trivial, I don't need to re-read the design"         | Re-read. Context compression loses details. 30s of reading saves 30min of rework                                                              |
+| "I already know how this works, skip the code search"              | Search anyway. Someone may have added a utility since you last looked                                                                         |
+| "The test is obvious, I'll add it after implementation"            | If TDD is enabled, test first. If not, still write it before marking done                                                                     |
+| "This is just a small refactor, no test needed"                    | Small refactors are how regressions sneak in. Write the test                                                                                  |
+| "The artifact says X but Y makes more sense"                       | Pause and suggest updating the artifact. Don't silently deviate                                                                               |
+| "I'll fix this other thing I noticed while I'm here"               | Finish current task first. Address the other thing separately                                                                                 |
+| "The example values are just illustrations, I'll pick better ones" | Use the spec example values exactly. They were chosen deliberately                                                                            |
 
 ---
 

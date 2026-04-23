@@ -5,17 +5,17 @@ category: Development
 tags: ["development", "debugging"]
 ---
 
-<!-- SPECTRA:START v1.0.1 -->
+<!-- SPECTRA:START v1.0.2 -->
 
 Systematically debug a problem using a four-phase workflow.
 
 **This skill enforces debugging discipline.** No guessing, no random changes, no "let me try this." Every step is deliberate and evidence-based.
 
-**Input**: The argument after `/spectra-debug` describes the bug or unexpected behavior. Examples:
+**Input**: The argument after `/spectra:debug` describes the bug or unexpected behavior. Examples:
 
-- `/spectra-debug the search returns duplicate results`
-- `/spectra-debug crash on startup after upgrading`
-- `/spectra-debug file watcher misses rename events`
+- `/spectra:debug the search returns duplicate results`
+- `/spectra:debug crash on startup after upgrading`
+- `/spectra:debug file watcher misses rename events`
 
 ---
 

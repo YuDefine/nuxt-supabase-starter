@@ -65,6 +65,28 @@ Surface Blast Radius for <change>:
 
 若純後端，寫：`**No user-facing journey (backend-only)**` 並說明理由。
 
+### `## Implementation Risk Plan`（強制，保持精簡）
+
+用 5 行回答這次 change 最容易在 `/commit` 才被發現的前提問題：
+
+```markdown
+## Implementation Risk Plan
+
+- Truth layer / invariants:
+- Review tier:
+- Contract / failure paths:
+- Test plan:
+- Artifact sync:
+```
+
+重點是把前提說清楚，不是把 implementation 細節全部寫進 proposal。
+例如：
+  - Truth layer / invariants：哪個 artifact 是 single source of truth、哪些語義不能漂
+  - Review tier：Tier 1 / 2 / 3，決定後續 review 強度
+  - Contract / failure paths：success / empty / conflict / unauthorized / third-party fail
+  - Test plan：unit / integration / e2e / screenshot / manual evidence
+  - Artifact sync：tasks / roadmap / handoff / tech-debt / docs / report 要同步哪些
+
 ## 步驟 5: tasks.md 必須涵蓋每個 surface
 
 每個在 blast radius 掃描中找到的 UI 檔案，在 tasks.md 必須有：

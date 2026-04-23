@@ -115,10 +115,10 @@ import { getSupabaseWithContext } from '~~/server/utils/supabase'
 
 export default defineEventHandler(async (event) => {
   // 取得 Supabase Client
-  const supabase = await getSupabaseWithContext(event)
+  const { client } = await getSupabaseWithContext(event)
 
   // 使用特定 schema
-  const db = supabase.schema('your_schema')
+  const db = client.schema('your_schema')
 
   // 執行查詢
   const { data, error } = await db.from('resources').select('*').is('deleted_at', null)
@@ -310,8 +310,8 @@ export default defineEventHandler(async (event) => {
   const query = await getValidatedQuery(event, resourceListQuerySchema.parse)
 
   // 3. 取得 Supabase Client
-  const supabase = await getSupabaseWithContext(event)
-  const db = supabase.schema('your_schema')
+  const { client } = await getSupabaseWithContext(event)
+  const db = client.schema('your_schema')
 
   // 4. 建立查詢
   let dbQuery = db.from('resources').select('*', { count: 'exact' }).is('deleted_at', null)

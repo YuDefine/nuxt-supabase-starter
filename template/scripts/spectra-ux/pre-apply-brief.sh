@@ -32,8 +32,9 @@ PROPOSAL_FILE="$CHANGE_DIR/proposal.md"
 
 JOURNEY_BLOCK=$(sux_extract_section "$PROPOSAL_FILE" 'User Journeys')
 ENTITY_BLOCK=$(sux_extract_section "$PROPOSAL_FILE" 'Affected Entity Matrix')
+RISK_BLOCK=$(sux_extract_section "$PROPOSAL_FILE" 'Implementation Risk Plan')
 
-if [ -z "$JOURNEY_BLOCK" ] && [ -z "$ENTITY_BLOCK" ]; then
+if [ -z "$JOURNEY_BLOCK" ] && [ -z "$ENTITY_BLOCK" ] && [ -z "$RISK_BLOCK" ]; then
   exit 0
 fi
 
@@ -45,6 +46,12 @@ echo ""
 if [ -n "$ENTITY_BLOCK" ]; then
   echo "═══ Affected Entity Matrix ═══"
   echo "$ENTITY_BLOCK"
+  echo ""
+fi
+
+if [ -n "$RISK_BLOCK" ]; then
+  echo "═══ Implementation Risk Plan（先對齊前提再動手） ═══"
+  echo "$RISK_BLOCK"
   echo ""
 fi
 

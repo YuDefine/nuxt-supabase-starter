@@ -7,12 +7,15 @@
  */
 
 import { createError, defineEventHandler, getQuery } from 'h3'
-import { profileListQuerySchema } from '#shared/schemas/profiles'
-import type { ProfileListResponse } from '#shared/types/profiles'
+import {
+  profileListQuerySchema,
+  profileListResponseSchema,
+  type ProfileListResponse,
+} from '#shared/schemas/profiles'
 import { requireRole, createPaginatedResponse } from '../../../utils/api-response'
 import { PROFILE_SELECT_FIELDS } from '../../../utils/profile-fields'
 import { validateQuery } from '../../../utils/validation'
-import { getServerSupabaseClient } from '../../../utils/supabase'
+import { getSupabaseWithContext } from '../../../utils/supabase'
 
 export default defineEventHandler(async (event): Promise<ProfileListResponse> => {
   const log = useLogger(event)
@@ -23,7 +26,7 @@ export default defineEventHandler(async (event): Promise<ProfileListResponse> =>
   const query = validateQuery(getQuery(event), profileListQuerySchema)
   const { page, perPage, search } = query
 
-  const client = getServerSupabaseClient()
+  const { client } = await getSupabaseWithContext(event)
 
   // 建立查詢
   let countQuery = client.from('profiles').select('id', { count: 'exact', head: true })
@@ -61,9 +64,11 @@ export default defineEventHandler(async (event): Promise<ProfileListResponse> =>
     })
   }
 
-  return createPaginatedResponse(dataResult.data, {
-    page,
-    perPage,
-    total: countResult.count ?? 0,
-  })
+  return profileListResponseSchema.parse(
+    createPaginatedResponse(dataResult.data, {
+      page,
+      perPage,
+      total: countResult.count ?? 0,
+    })
+  )
 })

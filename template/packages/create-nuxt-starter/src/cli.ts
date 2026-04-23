@@ -7,9 +7,11 @@ import { assembleProject } from './assemble'
 import { featureModules, getModuleById, resolveFeatureDependencies } from './features'
 import { confirmScaffold, displaySummary, getDefaultSelections, promptUser } from './prompts'
 import { postScaffold } from './post-scaffold'
+import type { AgentRuntime } from './types'
 
 type CliAuth = 'nuxt-auth-utils' | 'better-auth' | 'none'
 type CliCi = 'simple' | 'advanced'
+const VALID_AGENT_TARGETS = ['claude-code', 'codex', 'cursor'] as const
 
 function isMonorepoRoot(dir: string): boolean {
   return (
@@ -78,6 +80,21 @@ function inferTestingLevel(features: string[]): 'full' | 'vitest-only' | 'none' 
   return 'none'
 }
 
+function parseAgentTargets(value: string | undefined): AgentRuntime[] | undefined {
+  if (!value) return undefined
+
+  const parsed = parseCsv(value)
+  const invalid = parsed.filter((item) => !VALID_AGENT_TARGETS.includes(item as AgentRuntime))
+
+  if (invalid.length > 0) {
+    consola.error(`--agents 只接受：${VALID_AGENT_TARGETS.join(' | ')}`)
+    consola.error(`無效值：${invalid.join(', ')}`)
+    process.exit(1)
+  }
+
+  return [...new Set(parsed)] as AgentRuntime[]
+}
+
 function buildSelectionsFromArgs(args: {
   projectName: string
   auth?: string
@@ -87,6 +104,7 @@ function buildSelectionsFromArgs(args: {
   minimal?: boolean
   preset?: string
   fast?: boolean
+  agents?: string
 }) {
   const availableFeatureIds = new Set(featureModules.map((mod) => mod.id))
   const fromWith = parseCsv(args.with)
@@ -122,6 +140,7 @@ function buildSelectionsFromArgs(args: {
   }
 
   const useFastPreset = args.fast === true || presetArg === 'fast'
+  const agentTargets = parseAgentTargets(args.agents) ?? getDefaultSelections(args.projectName).agentTargets
 
   const selected = new Set(args.minimal ? [] : getDefaultSelections(args.projectName).features)
 
@@ -173,6 +192,7 @@ function buildSelectionsFromArgs(args: {
     ssr: features.includes('ssr'),
     deploymentTarget: inferDeploymentTarget(features),
     testingLevel: inferTestingLevel(features),
+    agentTargets,
   }
 }
 
@@ -214,6 +234,11 @@ const main = defineCommand({
       description: 'Alias of --preset fast',
       default: false,
     },
+    agents: {
+      type: 'string',
+      description: 'Comma-separated AI runtimes: claude-code,codex,cursor',
+      required: false,
+    },
     with: {
       type: 'string',
       description: 'Comma-separated feature ids to add (e.g. charts,monitoring)',
@@ -235,7 +260,14 @@ const main = defineCommand({
     const invocationCwd = getInvocationCwd(monorepoRoot)
     const projectName = args.dir as string | undefined
     const hasCustomFlags = Boolean(
-      args.auth || args.ci || args.with || args.without || args.minimal || args.preset || args.fast
+      args.auth ||
+        args.ci ||
+        args.with ||
+        args.without ||
+        args.minimal ||
+        args.preset ||
+        args.fast ||
+        args.agents
     )
 
     // Validate directory
@@ -264,6 +296,7 @@ const main = defineCommand({
         minimal: args.minimal as boolean | undefined,
         preset: args.preset as string | undefined,
         fast: args.fast as boolean | undefined,
+        agents: args.agents as string | undefined,
       })
 
       const displayName = basename(resolve(invocationCwd, name))
@@ -294,7 +327,7 @@ const main = defineCommand({
     consola.start(`正在建立專案 ${pkgName}...`)
 
     try {
-      assembleProject(targetDir, selections.features, pkgName)
+      assembleProject(targetDir, selections.features, pkgName, selections.agentTargets)
       consola.success('專案檔案建立完成！')
     } catch (error) {
       consola.error('建立專案失敗：', error)

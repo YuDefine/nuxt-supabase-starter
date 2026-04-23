@@ -1,3 +1,5 @@
+export type AgentRuntime = 'claude-code' | 'codex' | 'cursor'
+
 export interface FeatureModule {
   id: string
   name: string
@@ -31,4 +33,5 @@ export interface UserSelections {
   ssr: boolean
   deploymentTarget: 'cloudflare' | 'vercel' | 'node'
   testingLevel: 'full' | 'vitest-only' | 'none'
+  agentTargets: AgentRuntime[]
 }

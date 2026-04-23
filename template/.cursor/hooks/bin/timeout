@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "$#" -lt 2 ]; then
+  echo "usage: timeout <seconds> <command> [args...]" >&2
+  exit 2
+fi
+shift
+exec "$@"

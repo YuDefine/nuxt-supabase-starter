@@ -56,12 +56,19 @@ export const featureModules: FeatureModule[] = [
     packages: {
       '@supabase/supabase-js': '^2.99.1',
       '@nuxtjs/supabase': '^2.0.4',
+      'drizzle-orm': '^0.45.2',
+      postgres: '^3.4.9',
+    },
+    devPackages: {
+      'drizzle-kit': '^0.31.10',
     },
     nuxtModules: ['@nuxtjs/supabase'],
     envVars: {
       SUPABASE_URL: 'http://127.0.0.1:54321',
       SUPABASE_KEY: '# Supabase anon/public key',
       SUPABASE_SECRET_KEY: '# Supabase service role key',
+      DATABASE_URL: 'postgres://postgres:postgres@127.0.0.1:54322/postgres',
+      ADMIN_DATABASE_URL: '# Optional: direct Drizzle URL override (fallback to DATABASE_URL)',
     },
     templateDir: 'features/database',
   },

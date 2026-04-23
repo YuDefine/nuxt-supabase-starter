@@ -1,6 +1,20 @@
 import { consola } from 'consola'
-import type { UserSelections } from './types'
+import type { AgentRuntime, UserSelections } from './types'
 import { featureModules, resolveFeatureDependencies } from './features'
+
+function normalizePromptValues(values: unknown): string[] {
+  if (!Array.isArray(values)) return []
+
+  return values
+    .map((item) => {
+      if (typeof item === 'string') return item
+      if (item && typeof item === 'object' && 'value' in item) {
+        return String((item as { value: unknown }).value)
+      }
+      return ''
+    })
+    .filter(Boolean)
+}
 
 export async function promptUser(defaultProjectName?: string): Promise<UserSelections> {
   consola.log('')
@@ -87,17 +101,7 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
 
   if (typeof extrasRaw === 'symbol') process.exit(0)
 
-  const extras = Array.isArray(extrasRaw)
-    ? extrasRaw
-        .map((item) => {
-          if (typeof item === 'string') return item
-          if (item && typeof item === 'object' && 'value' in item) {
-            return String((item as { value: unknown }).value)
-          }
-          return ''
-        })
-        .filter(Boolean)
-    : []
+  const extras = normalizePromptValues(extrasRaw)
 
   // 6. State management
   const stateChoice = (await consola.prompt('狀態管理？', {
@@ -184,6 +188,24 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
 
   if (typeof ciChoice === 'symbol') process.exit(0)
 
+  // 13. AI runtimes
+  const agentTargetOptions: Array<{ label: string; value: AgentRuntime }> = [
+    { label: 'Claude Code（預設）', value: 'claude-code' },
+    { label: 'Codex', value: 'codex' },
+    { label: 'Cursor', value: 'cursor' },
+  ]
+  const agentTargetsRaw = await consola.prompt('要產出哪些 AI runtime 設定？（空白鍵選擇）', {
+    type: 'multiselect',
+    options: agentTargetOptions,
+    initial: ['claude-code'],
+  })
+
+  if (typeof agentTargetsRaw === 'symbol') process.exit(0)
+
+  const agentTargets = normalizePromptValues(agentTargetsRaw) as AgentRuntime[]
+  const resolvedAgentTargets =
+    agentTargets.length > 0 ? agentTargets : (['claude-code'] satisfies AgentRuntime[])
+
   // Collect features
   const features: string[] = []
   if (ssrEnabled) features.push('ssr')
@@ -216,6 +238,7 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
     ssr: ssrEnabled,
     deploymentTarget: deployChoice,
     testingLevel: testingChoice,
+    agentTargets: resolvedAgentTargets,
   }
 }
 
@@ -227,6 +250,7 @@ export function displaySummary(selections: UserSelections): void {
   consola.log('')
   consola.log('📋 專案配置摘要：')
   consola.log(`   專案名稱：${displayName}`)
+  consola.log(`   AI Runtime：${selections.agentTargets.join(', ')}`)
   consola.log(`   功能：`)
 
   for (const featureId of selections.features) {
@@ -259,5 +283,6 @@ export function getDefaultSelections(projectName: string): UserSelections {
     ssr: features.includes('ssr'),
     deploymentTarget: 'cloudflare',
     testingLevel: 'full',
+    agentTargets: ['claude-code'],
   }
 }

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vite-plus/test'
 
 // Mock server utils
 vi.mock('../../../../../../server/utils/supabase', () => ({
-  getServerSupabaseClient: vi.fn(),
+  getSupabaseWithContext: vi.fn(),
 }))
 
 vi.mock('../../../../../../server/utils/validation', () => ({
@@ -16,6 +16,9 @@ vi.mock('../../../../../../server/utils/api-response', () => ({
 
 vi.mock('../../../../../../shared/schemas/profiles', () => ({
   profileListQuerySchema: {},
+  profileListResponseSchema: {
+    parse: vi.fn((value: unknown) => value),
+  },
 }))
 
 // Mock h3
@@ -31,7 +34,8 @@ vi.mock('h3', () => ({
 }))
 
 import { getQuery } from 'h3'
-import { getServerSupabaseClient } from '../../../../../../server/utils/supabase'
+import { profileListResponseSchema } from '../../../../../../shared/schemas/profiles'
+import { getSupabaseWithContext } from '../../../../../../server/utils/supabase'
 import { validateQuery } from '../../../../../../server/utils/validation'
 import { requireRole, createPaginatedResponse } from '../../../../../../server/utils/api-response'
 
@@ -61,6 +65,12 @@ describe('GET /api/v1/profiles', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubGlobal('useLogger', () => ({
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+    }))
 
     vi.mocked(validateQuery).mockReturnValue({
       page: 1,
@@ -87,7 +97,10 @@ describe('GET /api/v1/profiles', () => {
       from: vi.fn().mockReturnValueOnce(mockSelectCount).mockReturnValueOnce(mockSelect),
     }
 
-    vi.mocked(getServerSupabaseClient).mockReturnValue(mockClient as any)
+    vi.mocked(getSupabaseWithContext).mockResolvedValue({
+      client: mockClient as any,
+      user: { id: 'user-1', role: 'admin' },
+    })
     vi.mocked(createPaginatedResponse).mockReturnValue({
       data: mockProfiles,
       pagination: { page: 1, perPage: 20, total: 1, totalPages: 1 },
@@ -122,6 +135,15 @@ describe('GET /api/v1/profiles', () => {
       page: 1,
       perPage: 20,
       total: 1,
+    })
+  })
+
+  it('should parse the response payload before returning', async () => {
+    await handler(mockEvent)
+
+    expect(profileListResponseSchema.parse).toHaveBeenCalledWith({
+      data: mockProfiles,
+      pagination: { page: 1, perPage: 20, total: 1, totalPages: 1 },
     })
   })
 })

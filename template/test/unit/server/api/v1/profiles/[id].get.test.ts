@@ -14,7 +14,7 @@ vi.mock('h3', () => ({
 
 // Mock server utils
 vi.mock('../../../../../../server/utils/supabase', () => ({
-  getServerSupabaseClient: vi.fn(),
+  getSupabaseWithContext: vi.fn(),
 }))
 
 vi.mock('../../../../../../server/utils/api-response', () => ({
@@ -27,11 +27,15 @@ vi.mock('../../../../../../server/utils/validation', () => ({
 
 vi.mock('../../../../../../shared/schemas/profiles', () => ({
   profileIdParamSchema: {},
+  profileResponseSchema: {
+    parse: vi.fn((value: unknown) => value),
+  },
 }))
 
 import { getRouterParam } from 'h3'
+import { profileResponseSchema } from '../../../../../../shared/schemas/profiles'
 import { requireAuth } from '../../../../../../server/utils/api-response'
-import { getServerSupabaseClient } from '../../../../../../server/utils/supabase'
+import { getSupabaseWithContext } from '../../../../../../server/utils/supabase'
 import { validateParam } from '../../../../../../server/utils/validation'
 import handler from '../../../../../../server/api/v1/profiles/[id].get'
 
@@ -53,6 +57,12 @@ describe('GET /api/v1/profiles/:id', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubGlobal('useLogger', () => ({
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+    }))
     vi.mocked(getRouterParam).mockReturnValue('550e8400-e29b-41d4-a716-446655440000')
     vi.mocked(validateParam).mockReturnValue({ id: '550e8400-e29b-41d4-a716-446655440000' })
   })
@@ -67,11 +77,15 @@ describe('GET /api/v1/profiles/:id', () => {
         }),
       }),
     }
-    vi.mocked(getServerSupabaseClient).mockReturnValue(mockClient as any)
+    vi.mocked(getSupabaseWithContext).mockResolvedValue({
+      client: mockClient as any,
+      user: { id: 'user-1', role: 'user' },
+    })
 
     const result = await handler(mockEvent)
 
     expect(result).toEqual({ data: mockProfile })
+    expect(profileResponseSchema.parse).toHaveBeenCalledWith({ data: mockProfile })
   })
 
   it('should throw 401 when not logged in', async () => {
@@ -101,7 +115,10 @@ describe('GET /api/v1/profiles/:id', () => {
         }),
       }),
     }
-    vi.mocked(getServerSupabaseClient).mockReturnValue(mockClient as any)
+    vi.mocked(getSupabaseWithContext).mockResolvedValue({
+      client: mockClient as any,
+      user: { id: 'user-1', role: 'user' },
+    })
 
     await expect(handler(mockEvent)).rejects.toMatchObject({
       statusCode: 404,
@@ -121,7 +138,10 @@ describe('GET /api/v1/profiles/:id', () => {
         }),
       }),
     }
-    vi.mocked(getServerSupabaseClient).mockReturnValue(mockClient as any)
+    vi.mocked(getSupabaseWithContext).mockResolvedValue({
+      client: mockClient as any,
+      user: { id: 'user-1', role: 'user' },
+    })
 
     await expect(handler(mockEvent)).rejects.toMatchObject({
       statusCode: 500,

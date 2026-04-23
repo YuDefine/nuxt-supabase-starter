@@ -7,13 +7,16 @@
  */
 
 import { createError, defineEventHandler, getRouterParam } from 'h3'
-import { profileIdParamSchema } from '#shared/schemas/profiles'
-import type { ProfileResponse } from '#shared/types/profiles'
+import {
+  profileIdParamSchema,
+  profileResponseSchema,
+  type ProfileResponse,
+} from '#shared/schemas/profiles'
 import { requireAuth } from '../../../utils/api-response'
 import { PGRST_NOT_FOUND } from '../../../utils/db-errors'
 import { PROFILE_SELECT_FIELDS } from '../../../utils/profile-fields'
 import { validateParam } from '../../../utils/validation'
-import { getServerSupabaseClient } from '../../../utils/supabase'
+import { getSupabaseWithContext } from '../../../utils/supabase'
 
 export default defineEventHandler(async (event): Promise<ProfileResponse> => {
   const log = useLogger(event)
@@ -23,7 +26,7 @@ export default defineEventHandler(async (event): Promise<ProfileResponse> => {
   const rawId = getRouterParam(event, 'id')
   const { id } = validateParam({ id: rawId }, profileIdParamSchema)
 
-  const client = getServerSupabaseClient()
+  const { client } = await getSupabaseWithContext(event)
 
   const { data, error } = await client
     .from('profiles')
@@ -43,5 +46,5 @@ export default defineEventHandler(async (event): Promise<ProfileResponse> => {
     })
   }
 
-  return { data }
+  return profileResponseSchema.parse({ data })
 })

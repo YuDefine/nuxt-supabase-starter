@@ -4,7 +4,7 @@
  * Manages user state from session, computes display name / role,
  * and loads full profile from API when needed.
  */
-import type { Profile } from '#shared/types/profiles'
+import type { Profile, ProfileResponse } from '#shared/schemas/profiles'
 
 export const useUserStore = defineStore('user', () => {
   const { user: sessionUser, loggedIn } = useUserSession()
@@ -52,7 +52,7 @@ export const useUserStore = defineStore('user', () => {
     error.value = null
 
     try {
-      const response = await $fetch<{ data: Profile }>('/api/v1/profiles/me')
+      const response = await $fetch<ProfileResponse>('/api/v1/profiles/me')
       profile.value = response.data
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to load profile'

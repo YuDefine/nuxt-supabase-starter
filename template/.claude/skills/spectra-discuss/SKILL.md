@@ -1,13 +1,13 @@
 ---
 name: spectra-discuss
-description: 'Have a focused discussion about a topic and reach a conclusion'
+description: "Have a focused discussion about a topic and reach a conclusion"
 disallowedTools: [Edit, Write]
 license: MIT
 compatibility: Requires spectra CLI.
 metadata:
   author: spectra
-  version: '1.0'
-  generatedBy: 'Spectra'
+  version: "1.0"
+  generatedBy: "Spectra"
 ---
 
 Have a focused discussion about a topic and reach a conclusion.
@@ -172,6 +172,8 @@ The conclusion should be one of:
 - **Direction consensus**: "The auth refactor should split into gateway + provider"
 - **Next-step recommendation**: "We need to spike the plugin API first to validate the approach"
 - **Explicit deferral**: "We don't have enough info yet. Specifically, we need to know X before deciding"
+
+**Example elicitation**: When the discussion converges on a specific requirement or behavior, propose a concrete example before capturing the decision. Instead of concluding "search should sort by relevance", propose: "So if we have items scored 0.9, 0.3, 0.7, the result order would be 0.9, 0.7, 0.3 — is that right?" This naturally produces `##### Example:` content for the spec and confirms shared understanding with real values.
 
 **If the user wants to move faster.** Sometimes the user signals impatience — "let's just go with X", "I don't want to overthink this", "can we move on?". Respect their pace:
 

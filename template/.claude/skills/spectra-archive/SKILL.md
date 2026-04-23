@@ -1,12 +1,12 @@
 ---
 name: spectra-archive
-description: 'Archive a completed change'
+description: "Archive a completed change"
 license: MIT
 compatibility: Requires spectra CLI.
 metadata:
   author: spectra
-  version: '1.0'
-  generatedBy: 'Spectra'
+  version: "1.0"
+  generatedBy: "Spectra"
 ---
 
 Archive a completed change.
@@ -67,7 +67,17 @@ Archive a completed change.
 
    If user chooses sync, use Task tool (subagent_type: "general-purpose", prompt: "Use Skill tool to invoke spectra-sync-specs for change '<name>'. Delta spec analysis: <include the analyzed delta spec summary>"). Proceed to archive regardless of choice.
 
-5. **Perform the archive**
+5. **Clean up tracking file**
+
+   Delete `.spectra/touched/<change-name>.json` if it exists. This file contains implementation tracking data that is not needed after archiving.
+
+   ```bash
+   rm -f .spectra/touched/<change-name>.json
+   ```
+
+   If the file does not exist, silently continue.
+
+6. **Perform the archive**
 
    Use the `spectra archive` CLI command which handles the full archive workflow
    (spec snapshot, delta application, @trace injection, identity recording, vector indexing):
@@ -83,7 +93,7 @@ Archive a completed change.
 
    **If archive fails** with "already exists" error, suggest renaming existing archive.
 
-6. **Display summary**
+7. **Display summary**
 
    Show archive completion summary including:
    - Change name

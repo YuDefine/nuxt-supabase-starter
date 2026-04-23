@@ -7,7 +7,7 @@
    * @module app/components/demo/UserTable
    */
 
-  import type { Profile, ProfileListQuery } from '#shared/types/profiles'
+  import type { Profile, ProfileListQuery } from '#shared/schemas/profiles'
   import type { PaginationMeta } from '#shared/types/pagination'
   import type { TableColumn } from '#ui/types'
 

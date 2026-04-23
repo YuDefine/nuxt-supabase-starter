@@ -36,10 +36,10 @@ server/
 
 ### 使用 Zod Schema
 
-所有 API 必須使用 Zod 進行請求驗證，Schema 定義在 `shared/types/` 目錄：
+所有 API 必須使用 Zod 進行 request/response 契約定義，Schema 放在 `shared/schemas/`，並由同一個模組導出衍生型別：
 
 ```typescript
-// shared/types/items.ts
+// shared/schemas/items.ts
 import { z } from 'zod'
 
 // 共用分頁查詢 Schema（可複用）
@@ -65,7 +65,18 @@ export const createItemSchema = z.object({
 
 // 更新資源 Schema（所有欄位變成可選）
 export const updateItemSchema = createItemSchema.partial()
+
+// 回應 Schema
+export const itemResponseSchema = z.object({
+  data: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+    code: z.string().nullable(),
+  }),
+})
 ```
+
+`shared/types/` 若存在，僅作為相容轉發或 UI/view-model 型別，不再作為新的 request/response 真相來源。
 
 ### 在 API 中使用驗證
 
@@ -83,6 +94,18 @@ const params = await getValidatedRouterParams(
     id: z.coerce.number().int().positive(),
   }).parse
 )
+```
+
+### 回應出口驗證
+
+handler 回傳前，必須用 response schema `parse()`，讓欄位遺漏或 shape drift 在 server 端當場失敗，而不是把 `undefined` 靜默送到前端：
+
+```typescript
+const payload = {
+  data: item,
+}
+
+return itemResponseSchema.parse(payload)
 ```
 
 ---
@@ -136,10 +159,10 @@ import { getSupabaseWithContext } from '~~/server/utils/supabase'
 
 export default defineEventHandler(async (event) => {
   // 取得帶有 RLS Context 的 Client
-  const supabase = await getSupabaseWithContext(event)
+  const { client } = await getSupabaseWithContext(event)
 
   // 使用特定 schema
-  const app = supabase.schema('app')
+  const app = client.schema('app')
 
   // 執行查詢
   const { data, error } = await app.from('items').select('*').is('deleted_at', null)
@@ -356,7 +379,7 @@ const { data, count, error } = await itemsQuery.range(from, to)
 ```typescript
 // server/api/v1/items/index.get.ts
 import { getSupabaseWithContext, requireRole } from '~~/server/utils/supabase'
-import { itemListQuerySchema, type ItemListResponse } from '~~/shared/types/items'
+import { itemListQuerySchema, type ItemListResponse } from '~~/shared/schemas/items'
 
 export default defineEventHandler(async (event): Promise<ItemListResponse> => {
   // 1. 權限檢查
@@ -366,8 +389,8 @@ export default defineEventHandler(async (event): Promise<ItemListResponse> => {
   const query = await getValidatedQuery(event, itemListQuerySchema.parse)
 
   // 3. 取得 Supabase Client
-  const supabase = await getSupabaseWithContext(event)
-  const app = supabase.schema('app')
+  const { client } = await getSupabaseWithContext(event)
+  const app = client.schema('app')
 
   // 4. 建立查詢
   let itemsQuery = app.from('items').select('*', { count: 'exact' }).is('deleted_at', null)
@@ -409,7 +432,7 @@ export default defineEventHandler(async (event): Promise<ItemListResponse> => {
 ```typescript
 // server/api/v1/items/index.post.ts
 import { getSupabaseWithContext, requireRole } from '~~/server/utils/supabase'
-import { createItemSchema, type CreateItemResponse } from '~~/shared/types/items'
+import { createItemSchema, type CreateItemResponse } from '~~/shared/schemas/items'
 
 export default defineEventHandler(async (event): Promise<CreateItemResponse> => {
   // 1. 權限檢查（editor 以上）
@@ -419,8 +442,8 @@ export default defineEventHandler(async (event): Promise<CreateItemResponse> => 
   const body = await readValidatedBody(event, createItemSchema.parse)
 
   // 3. 取得 Supabase Client
-  const supabase = await getSupabaseWithContext(event)
-  const app = supabase.schema('app')
+  const { client } = await getSupabaseWithContext(event)
+  const app = client.schema('app')
 
   // 4. 新增資料
   const { data, error } = await app
@@ -468,7 +491,7 @@ POST /api/v1/items/import
 2. **正式匯入**：`{ dry_run: false }` — 解析後直接寫入
 
 ```typescript
-// shared/types/items.ts
+// shared/schemas/items.ts
 export const importItemsSchema = z.object({
   category_id: z.number().int().positive(),
   dry_run: z.boolean().default(true),
@@ -503,7 +526,7 @@ interface CompleteItemResponse {
 建立新 API 時，確認以下項目：
 
 - [ ] 使用正確的檔案命名（`index.get.ts`、`index.post.ts`）
-- [ ] 在 `shared/types/` 定義 Zod Schema 和 TypeScript 型別
+- [ ] 在 `shared/schemas/` 定義 request/response schema 與衍生型別
 - [ ] 在最開頭進行權限檢查（`requireRole`）
 - [ ] 使用 `getValidatedQuery` 或 `readValidatedBody` 驗證輸入
 - [ ] 使用 `getSupabaseWithContext` 取得資料庫連線

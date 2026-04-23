@@ -123,7 +123,7 @@ export default defineEventHandler(async (event) => {
 ```ts
 // 取得設定 RLS Context 的 Supabase Client
 export default defineEventHandler(async (event) => {
-  const client = await getSupabaseWithContext(event)
+  const { client } = await getSupabaseWithContext(event)
   // client 已呼叫 app.set_app_context(user_id, role)
 
   const { data } = await client.schema('app').from('user_roles').select('*')

@@ -5,11 +5,11 @@ globs: ['openspec/changes/**', 'app/**/*.vue', 'shared/types/**/*.ts', 'supabase
 
 # UX Completeness
 
+繁體中文 | [English](./ux-completeness.en.md)
+
 **核心命題**：feature 的完成度由**使用者結果**定義，不由「tasks 打勾 + tests 綠」定義。DB allow ≠ feature ready；tests pass ≠ UX done。
 
 此規則優先於 spectra skill 內嵌說明與其他規則。
-
-> 本檔為 starter template 的預設規則，複製出去後依專案實際使用調整。
 
 ## Definition of Done
 
@@ -25,22 +25,22 @@ globs: ['openspec/changes/**', 'app/**/*.vue', 'shared/types/**/*.ts', 'supabase
 
 ## 必填 Propose 區塊
 
-`spectra-propose` 階段，`proposal.md` 必須包含以下兩個區塊（或明確的 Non-UI 宣告）：
+spectra-propose 階段，`proposal.md` 必須包含以下三個區塊（或明確的 Non-UI 宣告）：
 
 ### `## Affected Entity Matrix`
 
 每個被動的 DB entity（table、enum 擴張、column 新增）都要列一個矩陣：
 
 ```markdown
-### Entity: posts
+### Entity: nfc_cards
 
-| Dimension       | Values                                                         |
-| --------------- | -------------------------------------------------------------- |
-| Columns touched | `status` (enum expansion: +'archived'), `author_id`            |
-| Roles           | admin, author, reader                                          |
-| Actions         | create, read, update, delete, filter, archive                  |
-| States          | empty, loading, error, success, unauthorized                   |
-| Surfaces        | `/posts` (list), `/posts/[id]` (detail), `/admin/posts` (管理) |
+| Dimension       | Values                                                          |
+| --------------- | --------------------------------------------------------------- |
+| Columns touched | `card_type` (enum expansion: +'kit'), `kit_id` (new FK)         |
+| Roles           | admin, staff                                                    |
+| Actions         | create, read, update, delete, filter, swap                      |
+| States          | empty, loading, error, success, unauthorized                    |
+| Surfaces        | `/nfc-cards` (管理), `/warehouse` (掃描), `/asset-loans` (檢視) |
 ```
 
 寫不出矩陣 = scope 沒想清楚，不允許進入 tasks 階段。
@@ -50,11 +50,12 @@ globs: ['openspec/changes/**', 'app/**/*.vue', 'shared/types/**/*.ts', 'supabase
 每個 entity × 每個 role × 每個關鍵 action 至少一條具體 journey，URL 與步驟皆須明確：
 
 ```markdown
-### 文章歸檔流程
+### Kit 卡片註冊流程
 
-- **Author** 在 `/posts` 看到自己的文章列表 → 點「歸檔」→ 確認 → 列表更新為已歸檔狀態
-- **Admin** 在 `/admin/posts` 以「已歸檔」篩選 → 看到所有歸檔文章 → 可復原
-- **Reader** 在 `/posts` 列表看不到已歸檔文章（預設過濾）
+- **Admin** 開啟 `/nfc-cards` → 點「新增卡片」→ 選類型「設備組合標籤」→ 選 kit → 儲存 → 列表看到新卡片
+- **Admin** 在 `/nfc-cards` 以「設備組合標籤」篩選 → 看到所有 kit 卡片
+- **Admin** 編輯現有 kit 卡片 → 改綁定 → 儲存成功
+- **Staff** 在 `/warehouse` 刷 kit 貼紙 → 進入組裝模式
 ```
 
 **純後端 change 的例外**：若此 change 完全沒有 user-facing 影響，必須寫：
@@ -69,6 +70,39 @@ globs: ['openspec/changes/**', 'app/**/*.vue', 'shared/types/**/*.ts', 'supabase
 
 沒寫這個宣告 = 視為漏寫 journey。
 
+### `## Implementation Risk Plan`
+
+這個區塊的目的不是寫 implementation 細節，而是把**最容易拖到 `/commit` 才被追問的前提問題**提前回答。固定使用以下五行：
+
+```markdown
+## Implementation Risk Plan
+
+- Truth layer / invariants:
+- Review tier:
+- Contract / failure paths:
+- Test plan:
+- Artifact sync:
+```
+
+說明如下：
+
+- **Truth layer / invariants**：哪個 artifact 是 single source of truth、哪些語義不能漂、哪些同步層必須一起維持一致
+- **Review tier**：Tier 1 / 2 / 3，決定後續 review、audit、screenshot review 強度
+- **Contract / failure paths**：success / empty / conflict / unauthorized / third-party fail 等要如何處理
+- **Test plan**：至少交代 unit / integration / e2e / screenshot / manual evidence 中哪些會做
+- **Artifact sync**：除了 code 外，`tasks.md`、`ROADMAP.md`、`HANDOFF.md`、`docs/tech-debt.md`、docs / reports 還要同步哪些
+
+### Scope-sensitive 要求
+
+以下 scope 不允許只寫空標題：
+
+- 觸及 **migration / schema / auth / permission / raw SQL**：`Truth layer / invariants` 必須具體
+- 觸及 **API / server**：`Contract / failure paths` 必須具體
+- 觸及 **UI**：`Test plan` 至少要提 screenshot、manual journey，或等效瀏覽器驗證
+- 觸及 **DB / shared types**：`Artifact sync` 不能只寫「更新文件」，必須點名同步面
+
+寫不出這五行 = scope 還沒收斂，不應進入 apply。
+
 ## 必填 Tasks 區塊
 
 `tasks.md` 必須包含 `## Affected Entity Matrix` 衍生出的所有對應 task：
@@ -79,7 +113,7 @@ globs: ['openspec/changes/**', 'app/**/*.vue', 'shared/types/**/*.ts', 'supabase
 - 每個 DB migration 修改 column/enum → 對應 API validation schema task + consuming UI task
 - 每個新 route → 一個 navigation 入口 task
 
-**不允許**：tasks 中只有「更新 UI」這種 catch-all 任務。必須拆到具體 `.vue` 檔案路徑。
+**不允許**：tasks 中只有「更新 UI」這種 catch-all 任務。必須拆到具體 .vue 檔案路徑。
 
 ## Exhaustiveness Rule（結構性強制）
 
@@ -87,25 +121,32 @@ globs: ['openspec/changes/**', 'app/**/*.vue', 'shared/types/**/*.ts', 'supabase
 
 ```typescript
 // ❌ 錯誤——加新 enum 值時 TypeScript 不會抱怨，靜默漏 case
-function getStatusLabel(status: PostStatus): string {
-  if (status === 'draft') return '草稿'
-  if (status === 'published') return '已發布'
-  return '未知' // 默默吃掉未知值
+function getBindingIcon(cardType: NfcCardType): string {
+  if (cardType === 'tray') return 'i-lucide-monitor'
+  if (cardType === 'staff') return 'i-lucide-user'
+  return 'i-lucide-credit-card' // 默默吃掉未知值
 }
 
 // ✅ 正確——加新 enum 值時 compiler 立刻報錯
 import { assertNever } from '~/utils/assert-never'
 
-function getStatusLabel(status: PostStatus): string {
-  switch (status) {
-    case 'draft':
-      return '草稿'
-    case 'published':
-      return '已發布'
-    case 'archived':
-      return '已歸檔'
+function getBindingIcon(cardType: NfcCardType): string {
+  switch (cardType) {
+    case 'tray':
+      return 'i-lucide-monitor'
+    case 'staff':
+      return 'i-lucide-user'
+    case 'equipment':
+      return 'i-lucide-microscope'
+    case 'kit':
+      return 'i-lucide-package'
+    case 'flat_burr':
+    case 'drill_burr':
+      return 'i-lucide-credit-card'
+    case 'warehouse':
+      return 'i-lucide-warehouse'
     default:
-      return assertNever(status, 'getStatusLabel')
+      return assertNever(cardType, 'getBindingIcon')
   }
 }
 ```
@@ -126,7 +167,7 @@ function getStatusLabel(status: PostStatus): string {
 
 新增 FK（`column REFERENCES other_table`）時，必須檢查「被指向的 entity 詳情頁是否需要顯示反向關聯」：
 
-- `comments.post_id → posts.id` → post 詳情頁可能需要顯示「這篇文章的所有留言」
+- `inspection_equipment.kit_id → equipment_kits.id` → equipment 詳情頁可能需要顯示「屬於 kit X」
 - 評估後若需要 → 加入 tasks；不需要 → 在 proposal 的 Non-Goals 明確排除
 
 ## State Coverage Rule
@@ -151,21 +192,25 @@ function getStatusLabel(status: PostStatus): string {
 3. **「Reuse 反咬」**——「既有頁面有了」不代表「不用改」，branching logic 反而需要更多改動
 4. **「列舉比記憶可靠」**——用 grep / codebase-memory-mcp 找 surface，不要靠記憶
 5. **「Journey 比檔案清單強」**——「admin 在 X 做 Y」比「更新 X.vue」更能暴露遺漏
-6. **「Admin 路徑同等重要」**——主流程是秀場、admin 管理是舞台，兩者都不能少
+6. **「Admin 路徑同等重要」**——Kiosk 流程是秀場、admin 管理是舞台，兩者都不能少
 7. **「Completion momentum is a liar」**——感覺完成時離真正完成還差一哩，那一哩通常是 UI
 
 ## Workflow Integration
 
-| Spectra phase                       | Gate script                                              | When to run                                          |
-| ----------------------------------- | -------------------------------------------------------- | ---------------------------------------------------- |
-| Before `spectra-propose`            | `bash scripts/spectra-ux/pre-propose-scan.sh`            | 注入 blast radius 要求，提醒必填區塊                 |
-| After `spectra-propose`             | `bash scripts/spectra-ux/post-propose-check.sh <change>` | 驗證 proposal 完整性                                 |
-| Before `spectra-apply`              | `bash scripts/spectra-ux/pre-apply-brief.sh <change>`    | 簡報 user journeys                                   |
-| Before `spectra-archive`            | `bash scripts/spectra-ux/archive-gate.sh <change>`       | 驗證 journey URL touch、schema drift、exhaustiveness |
-| **Session start / after `/assign`** | `pnpm spectra:roadmap`                                   | 重算 `openspec/ROADMAP.md`（儀表板）                 |
+| Spectra phase                       | Gate script                                              | When to run                                                     |
+| ----------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------- |
+| Before `spectra-propose`            | `bash scripts/spectra-ux/pre-propose-scan.sh`            | 注入 blast radius 要求，提醒必填區塊                            |
+| After `spectra-propose`             | `bash scripts/spectra-ux/post-propose-check.sh <change>` | 驗證 proposal 完整性                                            |
+| After `spectra-propose`             | `bash scripts/spectra-ux/design-inject.sh <change>`      | 若有 UI scope，提醒補上 `## Design Review` 區塊                 |
+| Before `spectra-apply`              | `bash scripts/spectra-ux/pre-apply-brief.sh <change>`    | 簡報 user journeys                                              |
+| During UI edits                     | `bash scripts/spectra-ux/ui-qa-reminder.sh <file>`       | 中途提醒 design / screenshot review，不要等到 archive 才檢查    |
+| Before `spectra-archive`            | `bash scripts/spectra-ux/design-gate.sh <change>`        | 阻擋未完成人工檢查或缺設計審查證據的 UI change                  |
+| Before `spectra-archive`            | `bash scripts/spectra-ux/archive-gate.sh <change>`       | 驗證 journey URL touch、schema drift、exhaustiveness            |
+| Before `spectra-archive` (v1.5+)    | `bash scripts/spectra-ux/followup-gate.sh <change>`      | 驗證 tasks.md 的 `@followup[TD-NNN]` 都在 `docs/tech-debt.md` 登記 |
+| **Session start / after `/assign`** | `pnpm spectra:roadmap` && `pnpm spectra:claims` && `pnpm spectra:followups` | 重算 ROADMAP、查看 active claims、摘要 follow-up 狀態 |
 
-**Claude Code 使用者**：上述由 `.claude/hooks/` 自動觸發。
-**Codex / Cursor 使用者**：必須在對應 spectra 階段手動呼叫這些腳本。session 開始時也必須手動跑一次 `pnpm spectra:roadmap`。
+**Claude Code 使用者**：上述由 `.claude/hooks/` 自動觸發，無需手動。
+**Codex / Cursor 使用者**：必須在對應 spectra 階段手動呼叫這些腳本，session 開始時也必須手動跑一次 `pnpm spectra:roadmap`、`pnpm spectra:claims`、`pnpm spectra:followups`。
 
 ## 必禁事項
 
@@ -174,12 +219,13 @@ function getStatusLabel(status: PostStatus): string {
 - **NEVER** 把 `if/else if/else` 用在 enum 分支
 - **NEVER** 新增 route 但不在 navigation 加入口（除非明確宣告 internal-only）
 - **NEVER** 把「tasks 全勾 + tests 綠」當作 feature complete 的充分條件
-
+- **NEVER** 手編 `openspec/ROADMAP.md` 的 `<!-- SPECTRA-UX:ROADMAP-AUTO:* -->` 區塊
+- **NEVER** 未 claim 就開始做 active spectra change
 ## 與既有規則的關係
 
 - **`proactive-skills.md` Design Gate**：本規則**擴充**而非取代。Design Gate 檢查 UI 視覺品質；UX Completeness 檢查 UI 功能覆蓋
 - **`development.md` UI Reuse**：本規則**補充**。Reuse 檢查「是否重複寫了」；UX Completeness 檢查「是否漏改了既有的」
-- **`migration.md` / `rls-policy.md`**：本規則**串聯**。migration 只是起點，後面還有 types + API + UI + navigation 四層
+- **`migration.md`**：本規則**串聯**。migration 只是起點，後面還有 types + API + UI + navigation 四層
 
 ## 違反時的回報方式
 

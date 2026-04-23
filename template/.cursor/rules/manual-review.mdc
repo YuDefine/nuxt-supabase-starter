@@ -1,0 +1,25 @@
+---
+description: 人工檢查 checkbox 的唯一合法更新流程
+alwaysApply: false
+---
+
+# 人工檢查（Manual Review）
+
+## 核心規則
+
+**NEVER** 自行標記 `## 人工檢查` 區塊中的 `- [ ]` 為 `- [x]`。
+
+人工檢查的 checkbox 只能在以下流程中標記：
+
+1. 派遣 screenshot-review agent 截圖驗證
+2. 向使用者展示截圖結果，逐項詢問確認
+3. 使用者回覆 OK → 標記該項 `[x]`
+4. 使用者回覆有問題 → 不標記，記錄問題
+5. 使用者回覆 skip → 標記 `[x]` 並加註 `（skip）`
+6. 使用者回覆 skip all → 全部標記 `[x]` 並加註
+
+## 禁止事項
+
+- **NEVER** 問使用者「要直接標記完成嗎」然後代勾
+- **NEVER** 在未截圖驗證的情況下標記完成
+- **NEVER** 將 screenshot review 的靜態 QA 等同於人工檢查的功能驗證

@@ -28,11 +28,15 @@ describe('scaffold: base-only (no features)', () => {
     expect(existsSync(join(targetDir, 'app', 'pages', 'index.vue'))).toBe(true)
     expect(existsSync(join(targetDir, '.gitignore'))).toBe(true)
     expect(existsSync(join(targetDir, '.env.example'))).toBe(true)
+    expect(existsSync(join(targetDir, 'CLAUDE.md'))).toBe(true)
+    expect(existsSync(join(targetDir, 'AGENTS.md'))).toBe(false)
+    expect(existsSync(join(targetDir, '.cursor'))).toBe(false)
+    expect(existsSync(join(targetDir, '.codex'))).toBe(false)
+    expect(existsSync(join(targetDir, '.agents'))).toBe(false)
     expect(existsSync(join(targetDir, '.claude', 'settings.json'))).toBe(true)
     expect(existsSync(join(targetDir, '.claude', 'versions.json'))).toBe(true)
+    expect(existsSync(join(targetDir, '.claude', 'skills'))).toBe(true)
     expect(existsSync(join(targetDir, '.claude', 'commands', 'validate-starter.md'))).toBe(true)
-    expect(existsSync(join(targetDir, '.github', 'prompts'))).toBe(true)
-    expect(existsSync(join(targetDir, '.github', 'skills'))).toBe(true)
     expect(existsSync(join(targetDir, '.scaffold-cleanup'))).toBe(false)
     expect(existsSync(join(targetDir, 'scripts', 'compress-skill-descriptions.sh'))).toBe(true)
     expect(existsSync(join(targetDir, 'scripts', 'templates', 'clean', 'README.md'))).toBe(true)
@@ -65,7 +69,7 @@ describe('scaffold: base-only (no features)', () => {
     assembleProject(targetDir, [], 'base-only-skills')
 
     const script = readFileSync(join(targetDir, 'scripts', 'install-skills.sh'), 'utf-8')
-    expect(script).toContain('本地 design skills 已直接內建於 .claude/skills/')
+    expect(script).toContain('本地 starter design skills 已直接內建於 .claude/skills/')
     expect(script).not.toMatch(
       /for skill in .*\b(arrange|extract|frontend-design|normalize|onboard|teach-impeccable)\b/
     )
@@ -143,8 +147,29 @@ describe('non-interactive mode', () => {
     expect(selections.features).toContain('deploy-cloudflare')
     expect(selections.deploymentTarget).toBe('cloudflare')
     expect(selections.ssr).toBe(false)
+    expect(selections.agentTargets).toEqual(['claude-code'])
     // SEO not in defaults because SSR is off by default
     expect(selections.features).not.toContain('seo')
+  })
+})
+
+describe('agent runtime selection', () => {
+  it('supports codex + cursor multi-select while keeping claude source assets', () => {
+    const targetDir = join(TEST_DIR, 'multi-agent-project')
+    assembleProject(targetDir, [], 'multi-agent-project', ['codex', 'cursor'])
+
+    expect(existsSync(join(targetDir, 'CLAUDE.md'))).toBe(false)
+    expect(existsSync(join(targetDir, 'AGENTS.md'))).toBe(true)
+    expect(existsSync(join(targetDir, '.codex', 'config.toml'))).toBe(true)
+    expect(existsSync(join(targetDir, '.agents', 'skills', 'commit', 'SKILL.md'))).toBe(true)
+    expect(existsSync(join(targetDir, '.cursor', 'hooks.json'))).toBe(true)
+    expect(existsSync(join(targetDir, '.claude', 'settings.json'))).toBe(true)
+    expect(existsSync(join(targetDir, 'scripts', 'install-skills.sh'))).toBe(false)
+
+    const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf-8'))
+    expect(pkg.scripts['skills:install']).toBeUndefined()
+    expect(pkg.scripts['skills:list']).toBeUndefined()
+    expect(pkg.scripts['skills:update']).toBeUndefined()
   })
 })
 

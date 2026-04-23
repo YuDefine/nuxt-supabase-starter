@@ -17,11 +17,18 @@ vi.mock('../../../../../../server/utils/api-response', () => ({
 }))
 
 vi.mock('../../../../../../server/utils/supabase', () => ({
-  getServerSupabaseClient: vi.fn(),
+  getSupabaseWithContext: vi.fn(),
+}))
+
+vi.mock('../../../../../../shared/schemas/profiles', () => ({
+  profileResponseSchema: {
+    parse: vi.fn((value: unknown) => value),
+  },
 }))
 
 import { requireAuth } from '../../../../../../server/utils/api-response'
-import { getServerSupabaseClient } from '../../../../../../server/utils/supabase'
+import { profileResponseSchema } from '../../../../../../shared/schemas/profiles'
+import { getSupabaseWithContext } from '../../../../../../server/utils/supabase'
 import handler from '../../../../../../server/api/v1/profiles/me.get'
 
 describe('GET /api/v1/profiles/me', () => {
@@ -36,6 +43,12 @@ describe('GET /api/v1/profiles/me', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubGlobal('useLogger', () => ({
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+    }))
   })
 
   it('should return the current user profile', async () => {
@@ -48,7 +61,10 @@ describe('GET /api/v1/profiles/me', () => {
         }),
       }),
     }
-    vi.mocked(getServerSupabaseClient).mockReturnValue(mockClient as any)
+    vi.mocked(getSupabaseWithContext).mockResolvedValue({
+      client: mockClient as any,
+      user: { id: 'user-1', role: 'user' },
+    })
 
     const event = {
       context: {
@@ -60,6 +76,7 @@ describe('GET /api/v1/profiles/me', () => {
 
     expect(result).toEqual({ data: mockProfile })
     expect(mockClient.from).toHaveBeenCalledWith('profiles')
+    expect(profileResponseSchema.parse).toHaveBeenCalledWith({ data: mockProfile })
   })
 
   it('should throw 401 when not logged in', async () => {
@@ -89,7 +106,10 @@ describe('GET /api/v1/profiles/me', () => {
         }),
       }),
     }
-    vi.mocked(getServerSupabaseClient).mockReturnValue(mockClient as any)
+    vi.mocked(getSupabaseWithContext).mockResolvedValue({
+      client: mockClient as any,
+      user: { id: 'user-999', role: 'user' },
+    })
 
     const event = {
       context: { session: { user: { id: 'user-999' } } },
