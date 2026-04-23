@@ -670,7 +670,6 @@ function copyRules(targetDir: string, feats: string[]): void {
 function copyHooks(targetDir: string, feats: string[]): void {
   // Always-included hooks (core workflow + Spectra + Design)
   const files = [
-    'stop-accumulate.sh',
     'init-code-graph.sh',
     'knowledge-search-reminder.sh',
     'pre-commit-review.sh',
@@ -898,7 +897,6 @@ function generateSettings(targetDir: string, feats: string[]): void {
           ],
         },
       ],
-      Stop: [{ hooks: [hookEntry('stop-accumulate.sh', 5)] }],
     },
     includeGitInstructions: false,
     permissions: { allow },
