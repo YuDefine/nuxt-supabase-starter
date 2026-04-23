@@ -165,7 +165,7 @@ function getStatusLabel(status: PostStatus): string {
 | **Session start / after `/assign`** | `pnpm spectra:roadmap`                                   | 重算 `openspec/ROADMAP.md`（儀表板）                 |
 
 **Claude Code 使用者**：上述由 `.claude/hooks/` 自動觸發。
-**Codex / Copilot / Cursor 使用者**：必須在對應 spectra 階段手動呼叫這些腳本。session 開始時也必須手動跑一次 `pnpm spectra:roadmap`。
+**Codex / Cursor 使用者**：必須在對應 spectra 階段手動呼叫這些腳本。session 開始時也必須手動跑一次 `pnpm spectra:roadmap`。
 
 ## 必禁事項
 

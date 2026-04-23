@@ -3,7 +3,6 @@
   "agents": {
     "claude": true,
     "codex": true,
-    "copilot": true
   },
   "paths": {
     "types": ["shared/types"],

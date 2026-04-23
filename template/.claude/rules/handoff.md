@@ -6,7 +6,7 @@
 
 - Session 結束時有 in-progress 的 spectra change（`openspec/changes/` 含非 archive 目錄）
 - 被 `/clear` 打斷前，有未 commit 的 WIP
-- 交接給其他 agent（`/assign`、Codex、Copilot）
+- 交接給其他 agent（`/assign`、Codex、Cursor）
 - 使用者明確要求
 
 ## 格式
