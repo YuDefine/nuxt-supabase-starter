@@ -4,7 +4,7 @@
 # Outputs blast-radius scan instructions and required-section reminders for
 # any agent about to run spectra-propose. Agent-agnostic; called by:
 #   - Claude Code: .claude/hooks/pre-propose-ux-scan.sh (thin wrapper)
-#   - Codex / Copilot: invoked manually per AGENTS.md instructions
+#   - Codex / other external runtimes: invoked manually per AGENTS.md instructions
 #   - Humans: invoked from CLI
 #
 # Exit: always 0 (informational only)

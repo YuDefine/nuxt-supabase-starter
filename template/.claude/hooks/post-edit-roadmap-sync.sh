@@ -4,7 +4,7 @@
 # Narrowly scoped to avoid noise on every single edit.
 #
 # Note: this only fires for in-session Claude Code edits. External runtimes
-# (Codex CLI, Copilot CLI) won't trigger it — that's what SessionStart is
+# outside Claude's native hook loop won't trigger it — that's what SessionStart is
 # for, and what the manual `pnpm spectra:roadmap` call after /assign
 # is for.
 #

@@ -149,7 +149,7 @@ For each issue, tag with **P0-P3 severity** (consult [heuristics-scoring](refere
 #### Persona Red Flags
 > *Consult [personas](reference/personas.md)*
 
-Auto-select 2-3 personas most relevant to this interface type (use the selection table in the reference). If `.github/copilot-instructions.md` contains a `## Design Context` section from `impeccable teach`, also generate 1-2 project-specific personas from the audience/brand info.
+Auto-select 2-3 personas most relevant to this interface type (use the selection table in the reference). If `.impeccable.md` contains a `## Design Context` section, also generate 1-2 project-specific personas from the audience/brand info.
 
 For each selected persona, walk through the primary user action and list specific red flags found:
 

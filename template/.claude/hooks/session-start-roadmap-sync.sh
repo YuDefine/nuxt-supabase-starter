@@ -3,7 +3,7 @@
 # the start of every session so the agent sees the latest view of in-flight
 # spectra work before its first tool call. This is the last line of defense:
 # if hooks fire midway (PostToolUse) were missed because /assign delegated
-# work to an external runtime (Codex / Copilot / Claude native subagent),
+# work to an external runtime (Codex / Claude native subagent / other CLI),
 # SessionStart catches up.
 #
 # Cheap: runs roadmap-sync.mts with its mtime fast path, so this is ~10ms
