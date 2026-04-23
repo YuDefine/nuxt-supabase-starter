@@ -1,0 +1,40 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "HOOK_EVENT='PostToolUse' ORIGINAL_HOOK_COMMAND='\"$(git rev-parse --show-toplevel)\"/.codex/hooks/post-bash-error-debug.sh' \"$(git rev-parse --show-toplevel)/.codex/hooks/_codex_hook_wrapper.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "HOOK_EVENT='PreToolUse' ORIGINAL_HOOK_COMMAND='\"$(git rev-parse --show-toplevel)\"/.codex/hooks/pre-commit-review.sh' \"$(git rev-parse --show-toplevel)/.codex/hooks/_codex_hook_wrapper.sh\"",
+            "statusMessage": "Checking commit authorization...",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "HOOK_EVENT='SessionStart' ORIGINAL_HOOK_COMMAND='\"$(git rev-parse --show-toplevel)\"/.codex/hooks/session-start-roadmap-sync.sh' \"$(git rev-parse --show-toplevel)/.codex/hooks/_codex_hook_wrapper.sh\"",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}
