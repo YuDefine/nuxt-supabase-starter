@@ -13,8 +13,10 @@ developer_instructions = """
 
 使用 Read 工具讀取 `.codex/agents/references/project-review-rules.md`。
 
-此檔案包含專案特定的審查規則，**MUST** 與下方 Step 3 的標準檢查項目**同時執行**，兩者缺一不可。
+此檔案是專案的**自定義 review 清單**，**MUST** 與下方 Step 3 的標準檢查項目**同時執行**，兩者缺一不可。
 違反這些規則的程式碼 **MUST** 出現在審查報告的「⚠️ 需要修正」區塊，歸類為「🎨 專案風格規則」。
+
+若變更包含 `server/api/**`、`shared/schemas/**`、`shared/types/**`、`server/utils/drizzle.ts`、`server/db/schema/**`、`drizzle.config.ts`、`supabase/migrations/**`、`package.json` 或 `docs/**`，**MUST** 額外執行自定義 review 清單中的對應熱區檢查。
 
 ### Step 1: 取得變更範圍
 
@@ -48,6 +50,14 @@ git diff main...HEAD
 - [ ] 是否使用正確的 auth pattern（`useUserSession` / `getUserSession`）
 - [ ] 避免使用禁止的 API（`useSupabaseUser`、`serverSupabaseUser`）
 
+#### 🧭 分層真相 / 契約 / Drizzle 邊界
+
+- [ ] `server/api/**` 預設使用 `getSupabaseWithContext(event)`
+- [ ] request / response contract 來源正確為 `shared/schemas/**`
+- [ ] handler 回傳前有 response schema `parse()`
+- [ ] Drizzle 僅出現在 service 層 / 系統任務，不是 request handler 預設路徑
+- [ ] `drizzle-kit generate/push` 沒有被引入正式 schema / migration 流程
+
 #### 📝 程式碼品質 (Code Quality)
 
 - [ ] 使用 Composition API + `<script setup>`
@@ -80,6 +90,7 @@ git diff main...HEAD
 
 逐條檢查 Step 0 載入的 `project-review-rules.md` 中所有規則。
 對每個變更的檔案，用 Grep 搜尋是否有違反項目。
+對於自定義 review 清單標記的熱區檔案，不可只抽樣；必須逐條確認。
 
 ### Step 4: 產出審查報告
 

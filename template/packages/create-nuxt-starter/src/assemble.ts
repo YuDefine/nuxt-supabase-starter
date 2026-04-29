@@ -1,4 +1,12 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, join, resolve } from 'pathe'
 import { getModuleById } from './features'

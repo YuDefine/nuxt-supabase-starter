@@ -1,6 +1,9 @@
 # Auto-generated from .claude/settings.json
-enabledMcpjsonServers = ["local-supabase"]
 includeGitInstructions = false
+enabledMcpjsonServers = ["local-supabase"]
+
+[enabledPlugins]
+hub-core@clade = true
 
 [features]
 codex_hooks = true

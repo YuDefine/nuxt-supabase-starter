@@ -1,14 +1,7 @@
 #!/usr/bin/env node
 
 import os from 'node:os'
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -183,10 +176,7 @@ export function removeClaim(config: ClaimsRuntimeConfig, change: string): void {
   if (existsSync(path)) rmSync(path)
 }
 
-export function collectClaims(
-  config: ClaimsRuntimeConfig,
-  now: Date = new Date()
-): ClaimView[] {
+export function collectClaims(config: ClaimsRuntimeConfig, now: Date = new Date()): ClaimView[] {
   if (!config.enabled) return []
   const dir = resolve(config.repoRoot, config.claimsDir)
   if (!existsSync(dir)) return []
@@ -241,12 +231,14 @@ function resolveEnvSessionId(): string | null {
   return null
 }
 
-export function resolveIdentity(opts: {
-  owner?: string | null
-  runtime?: string | null
-  sessionId?: string | null
-  allowFallbackOwner?: boolean
-} = {}): Identity {
+export function resolveIdentity(
+  opts: {
+    owner?: string | null
+    runtime?: string | null
+    sessionId?: string | null
+    allowFallbackOwner?: boolean
+  } = {}
+): Identity {
   const runtime = opts.runtime?.trim() || detectRuntime()
   const sessionId = opts.sessionId?.trim() || resolveEnvSessionId()
   const envOwner = process.env.SPECTRA_UX_CLAIM_OWNER?.trim() || null
