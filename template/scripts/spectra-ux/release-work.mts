@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 
-import { collectClaims, loadClaimsRuntimeConfig, readClaim, removeClaim, resolveIdentity } from './claims-lib.mts'
+import {
+  collectClaims,
+  loadClaimsRuntimeConfig,
+  readClaim,
+  removeClaim,
+  resolveIdentity,
+} from './claims-lib.mts'
 
 interface CliOptions {
   change: string | null
@@ -70,7 +76,8 @@ function main(): void {
     return
   }
 
-  const existingView = collectClaims(config).find((view) => view.record.change === opts.change) ?? null
+  const existingView =
+    collectClaims(config).find((view) => view.record.change === opts.change) ?? null
   const identity = resolveIdentity({
     owner: opts.owner,
     runtime: opts.runtime,

@@ -124,7 +124,7 @@ Task 1: Add new API endpoint
 
 Implementer: "Before I begin - should this use service_role or authenticated?"
 
-You: "service_role - it's a server API endpoint"
+You: "先用 getSupabaseWithContext(event) 保留 request context；只有 audit、backfill、修復腳本等系統任務才直用 service_role"
 
 Implementer: "Got it. Implementing now..."
 [Later] Implementer:

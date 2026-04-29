@@ -1,7 +1,8 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-04-29T07:53:37.678Z",
+  "syncedAt": "2026-04-29T10:22:29.882Z",
   "checksums": {
+    "rules/code-style.md": "feb414a0792c268d",
     "rules/commit.md": "5377033603178fbe",
     "rules/error-handling.md": "6b9aacf3906f1166",
     "rules/follow-up-register.md": "5eb9b636ce4765fe",

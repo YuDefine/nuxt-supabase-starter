@@ -329,7 +329,7 @@ function generateIndexFile(composables: ComposableInfo[]): void {
     byCategory[c.category].push(c)
   }
 
-  const categories = Object.keys(byCategory).toSorted()
+  const categories = Object.keys(byCategory).sort()
   for (const cat of categories) {
     byCategory[cat].sort((a, b) => a.name.localeCompare(b.name))
   }
