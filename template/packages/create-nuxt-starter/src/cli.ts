@@ -6,7 +6,7 @@ import { consola } from 'consola'
 import { assembleProject } from './assemble'
 import { featureModules, getModuleById, resolveFeatureDependencies } from './features'
 import { confirmScaffold, displaySummary, getDefaultSelections, promptUser } from './prompts'
-import { postScaffold } from './post-scaffold'
+import { postScaffold, type CladeModules } from './post-scaffold'
 import type { AgentRuntime } from './types'
 
 type CliAuth = 'nuxt-auth-utils' | 'better-auth' | 'none'
@@ -80,6 +80,49 @@ function inferTestingLevel(features: string[]): 'full' | 'vitest-only' | 'none' 
   return 'none'
 }
 
+function inferCladeModules(features: string[]): CladeModules {
+  const hasBetterAuth = features.includes('auth-better-auth')
+  const hasNuxtAuthUtils = features.includes('auth-nuxt-utils')
+
+  let auth: CladeModules['auth']
+  if (hasBetterAuth) {
+    auth = 'better-auth'
+  } else if (hasNuxtAuthUtils) {
+    auth = 'nuxt-auth-utils'
+  } else {
+    // No auth feature selected — clade manifest still requires a value.
+    // Fall back to the lightest cookie-based option; the user can later
+    // change .claude/hub.json if they actually integrate auth.
+    consola.warn(
+      '[clade] 未選 auth feature；hub.json 暫填 nuxt-auth-utils。實際接認證後請改 .claude/hub.json + 跑 pnpm hub:sync。'
+    )
+    auth = 'nuxt-auth-utils'
+  }
+
+  const deploy = inferDeploymentTarget(features)
+  const runtime: CladeModules['runtime'] =
+    deploy === 'vercel' ? 'vercel-node' : deploy === 'node' ? 'nitro-self-hosted' : 'cf-workers'
+
+  // db-runtime schema only allows cf-workers / supabase-self-hosted.
+  // Self-hosted Node deploy implies self-hosted Supabase; otherwise treat
+  // DB connection as cf-workers (Supabase Cloud over HTTP, which Vercel
+  // and CF Workers both use).
+  const dbRuntime: CladeModules['dbRuntime'] =
+    runtime === 'nitro-self-hosted' ? 'supabase-self-hosted' : 'cf-workers'
+  const dbSchema: CladeModules['dbSchema'] =
+    dbRuntime === 'supabase-self-hosted' ? 'supabase-self-hosted' : 'supabase'
+
+  const localHooks = features.includes('database') ? ['post-migration-gen-types.sh'] : []
+  return {
+    auth,
+    dbSchema,
+    dbRuntime,
+    runtime,
+    framework: 'nuxt',
+    localHooks,
+  }
+}
+
 function parseAgentTargets(value: string | undefined): AgentRuntime[] | undefined {
   if (!value) return undefined
 
@@ -140,7 +183,8 @@ function buildSelectionsFromArgs(args: {
   }
 
   const useFastPreset = args.fast === true || presetArg === 'fast'
-  const agentTargets = parseAgentTargets(args.agents) ?? getDefaultSelections(args.projectName).agentTargets
+  const agentTargets =
+    parseAgentTargets(args.agents) ?? getDefaultSelections(args.projectName).agentTargets
 
   const selected = new Set(args.minimal ? [] : getDefaultSelections(args.projectName).features)
 
@@ -261,13 +305,13 @@ const main = defineCommand({
     const projectName = args.dir as string | undefined
     const hasCustomFlags = Boolean(
       args.auth ||
-        args.ci ||
-        args.with ||
-        args.without ||
-        args.minimal ||
-        args.preset ||
-        args.fast ||
-        args.agents
+      args.ci ||
+      args.with ||
+      args.without ||
+      args.minimal ||
+      args.preset ||
+      args.fast ||
+      args.agents
     )
 
     // Validate directory
@@ -335,7 +379,7 @@ const main = defineCommand({
     }
 
     // Post-scaffold
-    await postScaffold(targetDir, pkgName, invocationCwd)
+    await postScaffold(targetDir, pkgName, invocationCwd, inferCladeModules(selections.features))
   },
 })
 
