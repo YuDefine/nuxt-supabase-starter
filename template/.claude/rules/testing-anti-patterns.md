@@ -1,3 +1,10 @@
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/core/testing-anti-patterns.md
+Edit at: /Users/charles/offline/clade
+Local edits will be reverted by the next sync.
+-->
+
 ---
 description: Testing anti-patterns to avoid — mock 濫用、test-only production methods、不完整 mock
 globs: ['test/**/*.ts']

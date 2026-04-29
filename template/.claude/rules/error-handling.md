@@ -1,3 +1,10 @@
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/core/error-handling.md
+Edit at: /Users/charles/offline/clade
+Local edits will be reverted by the next sync.
+-->
+
 ---
 description: 錯誤處理規範（Server 驗證 + Client 顯示）
 globs: ['app/**/*.{vue,ts}', 'server/**/*.ts']

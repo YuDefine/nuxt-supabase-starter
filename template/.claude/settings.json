@@ -1,156 +1,4 @@
 {
-  "enabledMcpjsonServers": [
-    "local-supabase"
-  ],
-  "hooks": {
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-migration-gen-types.sh",
-            "timeout": 30,
-            "type": "command"
-          }
-        ],
-        "matcher": "mcp__local-supabase__apply_migration"
-      },
-      {
-        "hooks": [
-          {
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-edit-typecheck.sh",
-            "timeout": 90,
-            "type": "command"
-          },
-          {
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-edit-ui-qa.sh",
-            "timeout": 5,
-            "type": "command"
-          },
-          {
-            "_sux_version": "1.13.1",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-edit-roadmap-sync.sh",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Edit|Write"
-      },
-      {
-        "hooks": [
-          {
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-bash-error-debug.sh",
-            "timeout": 5,
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash"
-      },
-      {
-        "hooks": [
-          {
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-propose-design-inject.sh",
-            "timeout": 10,
-            "type": "command"
-          },
-          {
-            "_sux_version": "1.13.1",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-propose-journey-check.sh",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Skill"
-      }
-    ],
-    "PreToolUse": [
-      {
-        "hooks": [
-          {
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/knowledge-search-reminder.sh",
-            "timeout": 5,
-            "type": "command"
-          }
-        ],
-        "matcher": "Edit|Write"
-      },
-      {
-        "hooks": [
-          {
-            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/scripts/guard-check.mjs",
-            "type": "command"
-          }
-        ],
-        "matcher": "Edit|Write"
-      },
-      {
-        "hooks": [
-          {
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-commit-review.sh",
-            "statusMessage": "Checking commit authorization...",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash"
-      },
-      {
-        "hooks": [
-          {
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-archive-design-gate.sh",
-            "timeout": 10,
-            "type": "command"
-          },
-          {
-            "_sux_version": "1.13.1",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-propose-ux-scan.sh",
-            "statusMessage": "Injecting UX scan requirements...",
-            "timeout": 5,
-            "type": "command"
-          },
-          {
-            "_sux_version": "1.13.1",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-apply-journey-brief.sh",
-            "statusMessage": "Briefing user journeys...",
-            "timeout": 5,
-            "type": "command"
-          },
-          {
-            "_sux_version": "1.13.1",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-archive-ux-gate.sh",
-            "statusMessage": "Running UX archive gate...",
-            "timeout": 15,
-            "type": "command"
-          },
-          {
-            "command": "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/pre-archive-followup-gate.sh",
-            "statusMessage": "Running follow-up register gate...",
-            "timeout": 10,
-            "type": "command"
-          },
-          {
-            "_sux_version": "1.13.1",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-archive-followup-gate.sh",
-            "statusMessage": "Running follow-up register gate...",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "Skill"
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "_sux_version": "1.13.1",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start-roadmap-sync.sh",
-            "timeout": 10,
-            "type": "command"
-          }
-        ]
-      }
-    ]
-  },
   "includeGitInstructions": false,
   "permissions": {
     "allow": [
@@ -186,11 +34,13 @@
       "Bash(pnpm add:*)",
       "Bash(pnpm db:*)",
       "Bash(pnpm skills:*)",
+      "Bash(pnpm hub:*)",
       "Bash(npx tsx:*)",
       "Bash(npx nuxi:*)",
       "Bash(npx skills:*)",
       "Bash(npx skills add:*)",
       "Bash(claude skills:*)",
+      "Bash(claude plugin:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git diff:*)",
@@ -212,5 +62,41 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:pinia-colada.esm.dev)"
     ]
+  },
+  "enabledMcpjsonServers": [
+    "local-supabase"
+  ],
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "mcp__local-supabase__apply_migration",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-migration-gen-types.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/_bootstrap-check.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "hub-core@clade": true,
+    "hub-auth-better-auth@clade": true,
+    "hub-db-schema-supabase@clade": true,
+    "hub-db-runtime-cf-workers@clade": true,
+    "hub-runtime-cf-workers@clade": true,
+    "hub-framework-nuxt@clade": true
   }
 }

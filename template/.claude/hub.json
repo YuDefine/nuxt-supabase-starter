@@ -1,0 +1,13 @@
+{
+  "$schema": "../../../clade/manifest.schema.json",
+  "version": "0.1.0",
+  "modules": {
+    "auth": "better-auth",
+    "db-schema": "supabase",
+    "db-runtime": "cf-workers",
+    "runtime": "cf-workers",
+    "framework": "nuxt",
+    "domain": []
+  },
+  "localHooks": ["post-migration-gen-types.sh"]
+}

@@ -1,0 +1,32 @@
+{
+  "cladeRoot": "/Users/charles/offline/clade",
+  "syncedAt": "2026-04-29T07:53:37.678Z",
+  "checksums": {
+    "rules/commit.md": "5377033603178fbe",
+    "rules/error-handling.md": "6b9aacf3906f1166",
+    "rules/follow-up-register.md": "5eb9b636ce4765fe",
+    "rules/handoff.md": "9d7992c00da3704d",
+    "rules/knowledge-and-decisions.md": "fb1944f41a0e28d9",
+    "rules/logging.md": "879624ddc2b10785",
+    "rules/manual-review.md": "006a70507c76daa8",
+    "rules/proactive-skills.md": "d2beccbefcec70ca",
+    "rules/review-tiers.md": "f35387b124295192",
+    "rules/scope-discipline.md": "5ad04df6c9b5e9c5",
+    "rules/screenshot-strategy.md": "5cb6b2d0f3695149",
+    "rules/testing-anti-patterns.md": "694438ff8d975ab3",
+    "rules/truth-layers.md": "cba05246f0c06769",
+    "rules/ux-completeness.md": "48ccdc9551317953",
+    "rules/work-claims.md": "8c09518cea38198e",
+    "rules/auth.md": "c6db189aa7ceddb7",
+    "rules/migration.md": "4b54f424c21749ed",
+    "rules/query-optimization.md": "c575709a323371c9",
+    "rules/rls-policy.md": "0d3d9d860a170133",
+    "rules/trigger.md": "1cb89f6fae2097a3",
+    "rules/database-access.md": "ebffe3768ddd926f",
+    "rules/mcp-remote.md": "2a0168f78da344a9",
+    "rules/storage.md": "a5feef015fdfbef2",
+    "rules/unused-features.md": "3df47e9a324fdb4f",
+    "rules/api-patterns.md": "8ba3b78377243277",
+    "rules/development.md": "9c8ff3992c2af057"
+  }
+}

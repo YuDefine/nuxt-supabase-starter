@@ -1,3 +1,10 @@
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/core/review-tiers.md
+Edit at: /Users/charles/offline/clade
+Local edits will be reverted by the next sync.
+-->
+
 ---
 description: Review tiers 規則——依變更規模與風險決定 self-review、spectra-audit、code-review 的最低要求
 globs: ['**/*']

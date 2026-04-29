@@ -1,3 +1,10 @@
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/core/logging.md
+Edit at: /Users/charles/offline/clade
+Local edits will be reverted by the next sync.
+-->
+
 ---
 description: Server API logging 與錯誤記錄規範（evlog）
 globs: ['server/api/**/*.ts']

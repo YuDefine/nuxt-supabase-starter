@@ -1,3 +1,10 @@
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/core/handoff.md
+Edit at: /Users/charles/offline/clade
+Local edits will be reverted by the next sync.
+-->
+
 ---
 description: Handoff 規則——當 session 尚有未完成的 spectra work、blocker 或跨 agent 交接時，必須留下可執行的交接文件
 globs: ['HANDOFF.md', 'openspec/changes/**']

@@ -828,11 +828,11 @@ function renderClaimsBlock(claims: ClaimView[], enabled: boolean): string {
     .trimEnd()
 }
 
-function renderParallelismBlock(report: ParallelismReport): string {
-  const section = (title: string, body: string): string => {
-    return `### ${title}\n\n${body || '_(none)_'}\n`
-  }
+function parallelismSection(title: string, body: string): string {
+  return `### ${title}\n\n${body || '_(none)_'}\n`
+}
 
+function renderParallelismBlock(report: ParallelismReport): string {
   const indepBody = report.independent.length
     ? report.independent.map((n) => `- \`${n}\``).join('\n')
     : ''
@@ -860,9 +860,9 @@ function renderParallelismBlock(report: ParallelismReport): string {
     '',
     '> Which active changes can be worked on **simultaneously** without stepping on each other.',
     '',
-    section('Independent (can run in parallel)', indepBody),
-    section('Mutex (same spec touched)', mutexBody),
-    section('Blocked by dependency', blockedBody),
+    parallelismSection('Independent (can run in parallel)', indepBody),
+    parallelismSection('Mutex (same spec touched)', mutexBody),
+    parallelismSection('Blocked by dependency', blockedBody),
   ]
     .join('\n')
     .trimEnd()
@@ -1145,18 +1145,19 @@ function emitJson(report: SyncReport): void {
  * SessionStart / PostToolUse hooks (which typically redirect stdout to
  * /dev/null) still surface the warnings to the agent.
  */
+function manualDriftLabel(t: ManualDriftType): string {
+  if (t === 'archived-as-active') return 'archived-as-active'
+  if (t === 'td-status-mismatch') return 'td-status-mismatch'
+  return 'version-mismatch'
+}
+
 function emitManualDrift(drifts: ManualDrift[]): void {
   if (drifts.length === 0) return
-  const label = (t: ManualDriftType): string => {
-    if (t === 'archived-as-active') return 'archived-as-active'
-    if (t === 'td-status-mismatch') return 'td-status-mismatch'
-    return 'version-mismatch'
-  }
   console.error(
     `⚠ roadmap-sync: MANUAL block drift detected (${drifts.length} item${drifts.length === 1 ? '' : 's'})`
   )
   for (const drift of drifts) {
-    console.error(`  [line ${drift.lineNumber}] [${label(drift.type)}]`)
+    console.error(`  [line ${drift.lineNumber}] [${manualDriftLabel(drift.type)}]`)
     console.error(`    claim   : ${drift.claim}`)
     console.error(`    reality : ${drift.reality}`)
     console.error(`    fix     : ${drift.hint}`)

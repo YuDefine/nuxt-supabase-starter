@@ -1,3 +1,10 @@
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/modules/runtime/cf-workers/api-patterns.md
+Edit at: /Users/charles/offline/clade
+Local edits will be reverted by the next sync.
+-->
+
 ---
 description: Server API 設計規範
 globs: ["server/api/**/*.ts"]

@@ -217,8 +217,8 @@ async function main() {
   const registerIds = new Set(register.map((e) => e.id))
   const markerIds = new Set(allMarkers.map((m) => m.id))
 
-  const unregistered = [...markerIds].filter((id) => !registerIds.has(id)).sort()
-  const orphaned = [...registerIds].filter((id) => !markerIds.has(id)).sort()
+  const unregistered = [...markerIds].filter((id) => !registerIds.has(id)).toSorted()
+  const orphaned = [...registerIds].filter((id) => !markerIds.has(id)).toSorted()
 
   const incomplete = register.filter((e) => {
     if (e.status === 'wontfix') {
@@ -282,7 +282,7 @@ async function main() {
 
     const activeEntries = register
       .filter((e) => e.status === 'open' || e.status === 'in-progress')
-      .sort((a, b) => (PRIORITY_WEIGHT[b.priority] ?? 0) - (PRIORITY_WEIGHT[a.priority] ?? 0))
+      .toSorted((a, b) => (PRIORITY_WEIGHT[b.priority] ?? 0) - (PRIORITY_WEIGHT[a.priority] ?? 0))
 
     if (activeEntries.length > 0) {
       const top = activeEntries.slice(0, 5)
