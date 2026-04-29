@@ -270,6 +270,7 @@ export function generatePackageJson(
   // Always add
   basePkg.scripts.typecheck = 'nuxt typecheck'
   basePkg.scripts.setup = 'bash scripts/setup.sh'
+  basePkg.scripts['verify:starter'] = 'node scripts/verify-starter.mjs'
   if (hasAgent(agentTargets, 'claude-code')) {
     basePkg.scripts['skills:install'] = 'bash ./scripts/install-skills.sh'
     basePkg.scripts['skills:list'] = 'bash ./scripts/check-skills.sh'
@@ -995,7 +996,13 @@ function copyGuardSystem(targetDir: string): void {
 
 function copyScripts(targetDir: string, feats: string[], agentTargets: AgentRuntime[]): void {
   // Always-included scripts
-  const files = ['check-skills.sh', 'setup.sh', 'restore-hooks.sh', 'audit-ux-drift.mts']
+  const files = [
+    'check-skills.sh',
+    'setup.sh',
+    'restore-hooks.sh',
+    'audit-ux-drift.mts',
+    'verify-starter.mjs',
+  ]
 
   // Database-specific scripts
   if (has(feats, 'database')) {

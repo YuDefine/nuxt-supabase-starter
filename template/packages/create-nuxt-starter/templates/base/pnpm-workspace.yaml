@@ -1,0 +1,10 @@
+# pnpm v11+ 的 build script approval dict。
+# 這些都是知名 OSS（native binding 或 wasm 編譯），預填 true 讓 pnpm install
+# 不會 ERR_PNPM_IGNORED_BUILDS 並 abort。若要收緊，把對應 key 改 false。
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
+  maplibre-gl: true
+  sharp: true
+  vue-demi: true
+  workerd: true

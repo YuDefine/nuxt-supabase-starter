@@ -51,7 +51,8 @@
     "test:unit": "vp test test/unit",
     "test:watch": "vp test --watch",
     "typecheck": "nuxt typecheck",
-    "update": "nuxt upgrade && pnpm skills:update && pnpm update --latest"
+    "update": "nuxt upgrade && pnpm skills:update && pnpm update --latest",
+    "verify:starter": "node scripts/verify-starter.mjs"
   },
   "dependencies": {
     "@nuxt/image": "^2.0.0",
