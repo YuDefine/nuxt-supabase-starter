@@ -1,3 +1,10 @@
+---
+audience: both
+applies-to: maintenance
+related:
+  - CLAUDE_CODE_GUIDE.md
+---
+
 # Skills 更新指南
 
 管理與更新 Claude Code Skills 的完整指南。

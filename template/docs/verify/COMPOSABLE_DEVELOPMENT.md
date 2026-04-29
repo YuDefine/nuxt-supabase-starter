@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Vue Composable 開發指南
 
 ## 命名規範

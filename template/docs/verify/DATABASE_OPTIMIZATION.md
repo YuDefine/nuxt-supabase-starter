@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # 資料庫效能優化指南
 
 本文檔說明 Supabase (PostgreSQL) 資料庫效能優化的最佳實踐。

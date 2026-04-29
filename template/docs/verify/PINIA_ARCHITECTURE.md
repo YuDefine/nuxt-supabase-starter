@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Pinia 全域狀態管理架構
 
 ## 概述

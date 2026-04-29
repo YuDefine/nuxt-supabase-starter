@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Server Middleware Templates
 
 This project provides opt-in middleware templates in `scripts/templates/server/middleware/`. These are not auto-installed — copy them when needed.

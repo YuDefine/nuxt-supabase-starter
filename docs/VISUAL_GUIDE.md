@@ -1,3 +1,11 @@
+---
+audience: human
+applies-to: overview
+related:
+  - QUICK_START.md
+  - TECH_STACK.md
+---
+
 # 視覺導覽
 
 透過架構圖和應用程式導覽，快速了解 Starter 的完整功能。

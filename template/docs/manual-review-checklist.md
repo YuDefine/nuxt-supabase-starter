@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # 人工檢查清單（Manual Review Checklist）
 
 Spectra tasks 完成後，建議人工確認以下項目。此清單由所有 `/spectra-*` workflow 共用，在 tasks artifact 最後自動附加。

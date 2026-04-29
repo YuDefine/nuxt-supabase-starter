@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # RLS 政策最佳實踐
 
 本文檔說明 Row Level Security (RLS) 的設計原則與常見模式。

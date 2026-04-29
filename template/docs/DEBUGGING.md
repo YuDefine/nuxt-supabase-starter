@@ -1,6 +1,17 @@
+---
+audience: both
+applies-to: post-scaffold
+related:
+  - TROUBLESHOOTING.md
+  - FAQ.md
+ai-lookup: 方法論教學型 doc，含 4 個典型 debug 場景。AI 應先讀使用者描述的錯誤訊息，跳到對應段落（測試失敗 / API 錯誤 / 慢查詢 / UI 狀態）取得「怎麼讀 + 修復」步驟
+---
+
 # 除錯指南
 
 遇到問題時，這份指南教你怎麼看懂錯誤、找到原因、修復問題。
+
+> AI agent：本檔依「錯誤類型」分節，每節結構為「典型輸出 → 怎麼讀 → 修復」。對症狀型問題（port 佔用 / supabase start 失敗等）先看 [TROUBLESHOOTING.md](TROUBLESHOOTING.md)；本檔處理需要分析的場景。
 
 ---
 

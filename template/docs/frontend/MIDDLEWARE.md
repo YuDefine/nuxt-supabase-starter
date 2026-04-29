@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # 中間件開發指南
 
 本文檔說明 Nuxt 4 / Nitro 的中間件開發模式，包含 Server Middleware 和 Client Middleware。

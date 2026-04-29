@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # 環境變數與密鑰策略
 
 > 此文件說明命名規則、必填變數、常見錯誤以及如何安全地分享設定。

@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # 認證系統整合指引（nuxt-auth-utils）
 
 此文件說明本專案的認證架構：Cookie-based Session、OAuth 流程、權限檢查與錯誤處理。設定 Provider 的步驟請參考 [OAUTH_SETUP](./OAUTH_SETUP.md)。

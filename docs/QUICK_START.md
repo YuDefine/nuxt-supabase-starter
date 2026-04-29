@@ -1,3 +1,13 @@
+---
+audience: both
+applies-to: pre-scaffold
+related:
+  - AGENTS.md
+  - INTEGRATION_GUIDE.md
+  - FIRST_CRUD.md
+next-doc: ./AGENTS.md
+---
+
 # 快速開始
 
 從零開始建立一個包含完整 Tech Stack 和 AI 開發工具的專案。
@@ -194,8 +204,6 @@ pnpm dev          # 開啟 http://localhost:3000 看 Demo
 
 ---
 
-v1-data-migration
-
 ## 前置條件
 
 在開始之前，請確認已安裝：
@@ -244,13 +252,33 @@ pnpm hub:doctor   # 診斷 + 列出問題
 
 > ⚠️ 前置：clade 中央倉必須在本機可達，預設找 `~/clade` 或 `~/offline/clade`，或設 `CLADE_HOME=/path/to/clade`。沒裝會 warn 但不擋 scaffold；之後手動 clone + `pnpm hub:bootstrap` 即可。
 
-**選用 — 把專案登記到本機 consumers 清單**，未來中央倉發新版時 `propagate.mjs` 才會推到這裡：
+#### Wire pre-commit hook（選用但建議）
+
+bootstrap 結束時 clade 會提示 `⚠ pre-commit 未 wire — Layer 3 防呆未生效`。這是用來在 commit 前自動跑 `pnpm hub:check` 擋下對 clade-managed 檔案的本地改動。擇一安裝：
 
 ```bash
-echo "$(pwd)" >> "${CLADE_HOME:-$HOME/offline/clade}/consumers.local"
+# A. 直接 cp clade 預設 hook（不依賴 husky）
+cp "${CLADE_HOME:-$HOME/offline/clade}/vendor/git-pre-commit.sh" .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+
+# B. 已用 husky 的話，在 .husky/pre-commit 加一行
+echo 'pnpm hub:check' >> .husky/pre-commit
 ```
 
-（scaffold 完成時 next-steps box 會印實際路徑，照那個寫即可。）未登記不影響日常開發（仍能 `pnpm hub:sync` 主動拉），只是不會被中央倉的 bump branch 自動推進。
+未 wire 仍可開發，但若不慎改到 `.claude/rules/`、`.claude/skills/` 等 clade 治理檔，要等下一次 `pnpm hub:check` 或 SessionStart hook 才會被偵測。
+
+**自動登記到本機 consumers 清單**：scaffold CLI 預設會把新專案的絕對路徑 append 到 `${CLADE_HOME:-$HOME/offline/clade}/consumers.local`，未來中央倉 `propagate.mjs` 發新版時才會推到這裡：
+
+- 互動模式：跑到 git init 之後會問一次（預設 yes，按 enter 就過）
+- 非互動模式（`--yes` / `bash scripts/create-fast-project.sh`）：直接登記
+- 不想登記：加 `--no-register-consumer`（例如臨時測試專案）
+- 已登記過（重跑 scaffold 到同一路徑）：自動偵測並跳過，不會重複寫入
+
+未登記不影響日常開發（仍能 `pnpm hub:sync` 主動拉），只是不會被中央倉的 bump branch 自動推進。手動登記等價命令：
+
+```bash
+echo "$(pwd) flow=main" >> "${CLADE_HOME:-$HOME/offline/clade}/consumers.local"
+```
 
 ### 設定 Claude Code
 

@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Supabase Migration & Schema Playbook
 
 > 目標：任何人都能在不問人的情況下新增/修改 schema、濃縮基線、同步環境，並確保安全性。若無法照以下流程完成，請在 PR 中修正文檔。

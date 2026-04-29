@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # 截圖調試指南（browser-use CLI）
 
 ## 概述

@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Gotchas
 
 開發過程中踩過的坑與解決方案。這些是實際遇到的問題，不是假設性的風險。

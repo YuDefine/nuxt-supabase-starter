@@ -1,3 +1,11 @@
+---
+audience: both
+applies-to: pre-scaffold
+related:
+  - QUICK_START.md
+  - AGENTS.md
+---
+
 # CLI Scaffold（create-nuxt-starter）
 
 互動式 CLI 工具，用於從 starter template 建立客製化的 Nuxt 專案。

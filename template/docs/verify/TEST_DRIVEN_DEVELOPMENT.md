@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # TDD 實踐指南
 
 ## 核心流程

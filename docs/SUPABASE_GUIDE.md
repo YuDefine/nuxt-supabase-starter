@@ -1,3 +1,11 @@
+---
+audience: both
+applies-to: post-scaffold
+related:
+  - FIRST_CRUD.md
+  - ../template/docs/database
+---
+
 # Supabase 入門指南
 
 > 給有 Nuxt 經驗但第一次接觸 Supabase 的開發者

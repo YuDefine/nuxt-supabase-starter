@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # `.claude` -> `.cursor` 能力對照表（初版）
 
 > 範圍：`template/.claude` 與 `template/.cursor`  

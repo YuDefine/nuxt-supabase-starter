@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Error Handling 指南
 
 > Server-side 驗證與 Client-side 錯誤顯示的完整規範。

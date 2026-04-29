@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # OAuth 設定流程（nuxt-auth-utils）
 
 本系統使用 **nuxt-auth-utils** 進行 Cookie-based Session 認證，支援 Google 登入（可擴充其他 OAuth Provider）。此文件說明如何從零設定 OAuth Provider。

@@ -1,3 +1,11 @@
+---
+audience: both
+applies-to: overview
+related:
+  - QUICK_START.md
+  - VISUAL_GUIDE.md
+---
+
 # Tech Stack 詳細說明
 
 完整技術棧介紹與選型理由。

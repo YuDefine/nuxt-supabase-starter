@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Supabase MCP 整合指南
 
 > 讓 Claude 直接操作 Supabase 資料庫

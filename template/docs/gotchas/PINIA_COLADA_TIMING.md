@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Pinia Colada Mutation Cache Invalidation 時序問題
 
 ## Problem

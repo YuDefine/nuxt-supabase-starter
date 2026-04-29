@@ -1,3 +1,12 @@
+---
+audience: both
+applies-to: pre-scaffold
+prerequisites:
+  - 既有 Nuxt 專案
+related:
+  - QUICK_START.md
+---
+
 # 整合指南
 
 將 Claude Code 配置和 Supabase 整合注入現有 Nuxt 專案。

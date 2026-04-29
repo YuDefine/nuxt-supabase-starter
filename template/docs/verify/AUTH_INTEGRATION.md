@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # 認證系統整合指引
 
 此專案支援兩種認證方案，建立專案時二擇一。兩者皆透過 `useUserSession()` 提供統一的 client 端體驗。

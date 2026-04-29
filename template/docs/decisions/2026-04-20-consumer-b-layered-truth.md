@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: architecture
+---
+
 # <consumer-b> Layered Truth for Starter
 
 ## Decision

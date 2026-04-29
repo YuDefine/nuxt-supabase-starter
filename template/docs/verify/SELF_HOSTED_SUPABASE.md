@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Self-hosted Supabase 部署指南
 
 > 本文件說明如何部署與維護 Self-hosted Supabase，適用於需要完全控制基礎設施的情境。

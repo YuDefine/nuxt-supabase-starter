@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Server API 設計模式
 
 > 在 Nuxt 中建立安全、可維護的 Server API

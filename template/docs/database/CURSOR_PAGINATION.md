@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Cursor Pagination Guide
 
 本專案支援兩種分頁模式：**offset**（傳統頁碼）與 **cursor**（游標），由同一組 API endpoint 同時提供，透過 query 參數自動偵測切換。
