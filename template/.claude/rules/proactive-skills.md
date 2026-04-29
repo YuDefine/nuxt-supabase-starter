@@ -1,3 +1,10 @@
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/core/proactive-skills.md
+Edit at: <clade-central-repo>
+Local edits will be reverted by the next sync.
+-->
+
 # Proactive Skill Orchestra
 
 所有 Spectra sub-skill 與 Design skill 應在適當情境下**主動調用**，不需使用者手動指定。此規則優先於個別 SKILL.md 的指示。
@@ -229,7 +236,7 @@ Design 工作可能發現 spec 未涵蓋的問題。發現時不停下，按以�
 
 若 change 純後端（migration、API、RLS、config），不觸發 Design Checkpoint，直接走 Spectra 標準流程。判斷依據：change 的 tasks artifact 中是否有任何 task 涉及 `.vue` / `pages/` / `components/` / `layouts/` 檔案，且 git diff 中無 `.vue` 檔案。
 
-<!-- SPECTRA-UX:START v1.13.1 -->
+<!-- SPECTRA-UX:START v1.13.4 -->
 
 繁體中文 | [English](./proactive-skills-section.en.md)
 
@@ -274,6 +281,48 @@ UI change 在 archive 前，至少要有以下其中一種完整證據，且**�
 - tasks.md 的 `## Design Review` 區塊全部完成
 
 缺一不可時，`pre-archive-design-gate.sh` 會擋下 archive。
+
+## Ingest Triggers
+
+`spectra-ingest` 是 apply 階段的「需求漂移補丁」。當 proposal / tasks / design artifact 與實際需求或實作現況出現結構性落差時，**Claude MUST 主動引導使用者**（不是等使用者自己想起）。
+
+### 主動觸發信號
+
+Apply 階段中偵測到以下任一信號 → 必須立即處理：
+
+1. **使用者口頭改需求** — 對話中出現「順便加…」「其實應該…」「我想改成…」「還要支援…」等擴增或修改
+2. **Journey / Entity 遺漏** — 實作中發現觸動了 proposal 的 `User Journeys` / `Affected Entity Matrix` 未列之 surface 或 schema
+3. **Tasks 結構性落差** — 不是單一 task 字句調整，而是要整段新增 / 刪除 / 重排
+4. **Design scope 溢出** — design review 發現 UI 影響範圍超出 proposal 原列頁面 / 元件
+5. **Schema 漂移** — migration 新增 enum / column 但 `Affected Entity Matrix` 沒對應紀錄
+6. **Risk plan 前提變動** — 實作中發現 `Implementation Risk Plan` 的 truth layer / contract / test plan 需要更新
+
+`post-edit-drift-check.sh`（hook）會自動偵測 5、4、2 的部分靜默漂移，寫 stderr 提示 Claude 考慮 ingest。LLM 判斷層面則需要主動感知 1、3、6。
+
+### 決策規則（明確直接做、模糊再詢問）
+
+| 情況 | 動作 |
+| --- | --- |
+| 信號明確（migration 新增未紀錄欄位、使用者直白改需求、journey 遺漏具體 URL） | Claude **直接跑** `spectra-ingest`，口頭告知「偵測到 X，已觸發 ingest 更新 Y」 |
+| 信號模糊（不確定是否達結構性落差門檻、可能只是 task 字句微調） | 先口頭詢問使用者，描述信號並列出選項（ingest vs. 在當前 tasks 微調）讓使用者選 |
+
+**NEVER** 偵測到信號卻靜默繼續實作 — 會導致 proposal / tasks 與實作永久不同步。
+
+### 必要流程
+
+1. 判斷信號明確度 → 直接跑 `spectra-ingest` 或先問
+2. 確認 proposal / tasks / design artifact 已同步新需求
+3. 繼續或調整當前 apply，不回頭修舊 task 的字句以敷衍差異
+4. Archive 前已被 ingest 吸收的漏項不需再補 `@followup` marker
+
+### 與其他登記出口的分界
+
+- **當前 change 本身的 scope 漏項 → `spectra-ingest`**（本節規則）
+- 範圍外技術債 → `docs/tech-debt.md` + `@followup[TD-NNN]`
+- Session 未完 WIP → `HANDOFF.md`
+- 未來才做的工作 → `openspec/ROADMAP.md` `## Next Moves`
+
+**心智模型**：ingest 是「這個 change 自己要改」；tech-debt / handoff / roadmap 是「這個 change 之外的事」。分不清時預設走 ingest，不要為了維持原 proposal 敘述而把應補項偽裝成 follow-up。
 
 ## Scope Discipline
 

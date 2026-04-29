@@ -45,7 +45,13 @@
     "update": "nuxt upgrade && pnpm skills:update && pnpm update --latest",
     "spectra:claim": "node scripts/spectra-ux/claim-work.mts",
     "spectra:release": "node scripts/spectra-ux/release-work.mts",
-    "spectra:claims": "node scripts/spectra-ux/claims-status.mts"
+    "spectra:claims": "node scripts/spectra-ux/claims-status.mts",
+    "postinstall": "node -e \"const f=require('node:fs'),p=require('node:path'),o=require('node:os'),s=require('node:child_process');const c=process.env.CLADE_HOME||[p.join(o.homedir(),'clade'),p.join(o.homedir(),'offline','clade')].find(x=>f.existsSync(x));if(!c){console.warn('[clade] not found locally — skip bootstrap. Set CLADE_HOME or clone to ~/clade');process.exit(0)}const r=s.spawnSync('node',[p.join(c,'scripts','bootstrap-hub.mjs')],{stdio:'inherit'});process.exit(r.status||0)\"",
+    "hub:bootstrap": "node ${CLADE_HOME:-$HOME/offline/clade}/scripts/bootstrap-hub.mjs",
+    "hub:check": "node ${CLADE_HOME:-$HOME/offline/clade}/scripts/sync-rules.mjs --check",
+    "hub:sync": "node ${CLADE_HOME:-$HOME/offline/clade}/scripts/sync-rules.mjs",
+    "hub:doctor": "node ${CLADE_HOME:-$HOME/offline/clade}/scripts/sync-rules.mjs --check",
+    "hub:prune": "node ${CLADE_HOME:-$HOME/offline/clade}/scripts/sync-rules.mjs --prune"
   },
   "dependencies": {
     "@nuxt/image": "^2.0.0",

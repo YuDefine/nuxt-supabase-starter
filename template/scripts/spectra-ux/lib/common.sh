@@ -9,11 +9,12 @@
 #   sux_extract_journey_urls — extract URLs from a proposal's User Journeys
 #   sux_extract_section      — extract a ## Section from a markdown file
 #   sux_touched_files        — list git-tracked files touched in working tree + index
-#   sux_change_touched_files — like sux_touched_files, but also includes commits
-#                              since the change dir was first introduced (for archive)
+#   sux_change_touched_files — list files touched for a specific change
 #   sux_count_marker         — count bypass markers in a file, defaults to 0
 #   sux_check_url_touched    — check if a URL's page file was touched in git diff
 #   sux_url_has_page         — check if a URL maps to any existing page file
+#   sux_path_is_ui_related   — check if a file path points at a configured UI file
+#   sux_tasks_has_ui_scope   — check if tasks.md text mentions configured UI files/dirs
 
 # Idempotent guard so multiple sources don't redefine.
 if [ -n "${SUX_COMMON_LOADED:-}" ]; then
@@ -157,19 +158,6 @@ sux_touched_files() {
 
 # List files touched for a spectra change, broadening sux_touched_files to also
 # include commits since the change directory was first introduced.
-#
-# Rationale: by the time `spectra-archive` runs, the change's implementation is
-# typically already committed — looking only at working tree + index (the
-# default sux_touched_files behavior) would report an empty set and break
-# every "touch detection" check. Walking from the first commit that added
-# anything under the change dir captures the full scope of the change even
-# after merges.
-#
-# Callers (e.g. archive-gate.sh) should assign the result to SUX_TOUCHED_FILES
-# before invoking any check that consumes the cache:
-#
-#   SUX_TOUCHED_FILES=$(sux_change_touched_files "$CHANGE_DIR")
-#   export SUX_TOUCHED_FILES
 sux_change_touched_files() {
   local change_dir=$1
   local repo_root first_commit base rel_path
@@ -185,8 +173,6 @@ sux_change_touched_files() {
       git -C "$repo_root" diff --cached --name-only 2>/dev/null
     } | sort -u
   else
-    # Change not committed yet (or its first commit is the repo root) —
-    # fall back to working tree + index only.
     {
       git -C "$repo_root" diff --name-only HEAD 2>/dev/null
       git -C "$repo_root" diff --cached --name-only 2>/dev/null
@@ -200,6 +186,25 @@ sux_extract_section() {
   local file=$1 heading=$2
   [ -f "$file" ] || return 0
   sed -n "/^## ${heading}/,/^## /p" "$file" 2>/dev/null | sed '$d'
+}
+
+# Check whether a tasks / proposal file appears to include UI scope.
+# This is a lightweight heuristic used by design-related gates and reminders.
+sux_tasks_has_ui_scope() {
+  local file=$1 ui_dir
+  [ -f "$file" ] || return 1
+
+  if grep -qiE "(${SUX_UI_EXT_RE})|pages/|components/|layouts/" "$file" 2>/dev/null; then
+    return 0
+  fi
+
+  for ui_dir in $SUX_UI_DIRS; do
+    if grep -qiF "${ui_dir}/" "$file" 2>/dev/null; then
+      return 0
+    fi
+  done
+
+  return 1
 }
 
 # Count occurrences of a bypass marker in tasks.md (or any file), defaulting
@@ -254,5 +259,48 @@ sux_url_has_page() {
       fi
     done
   done
+  return 1
+}
+
+# Check whether a file path points to a configured UI file or directory.
+sux_path_is_ui_related() {
+  local path=$1 ui_dir
+  [ -n "$path" ] || return 1
+
+  case "$path" in
+    *".md"|*".json"|*".yml"|*".yaml") ;;
+  esac
+
+  if echo "$path" | grep -qE "(${SUX_UI_EXT_RE})$" 2>/dev/null; then
+    return 0
+  fi
+
+  for ui_dir in $SUX_UI_DIRS; do
+    case "$path" in
+      "$ui_dir"/*|*/"$ui_dir"/*) return 0 ;;
+    esac
+  done
+
+  return 1
+}
+
+# Check whether a tasks file appears to include UI work based on configured
+# UI dirs/extensions. This is text-based on purpose: propose-time tasks.md
+# often references target files before they exist on disk.
+sux_tasks_has_ui_scope() {
+  local file=$1 ui_dir base
+  [ -f "$file" ] || return 1
+
+  if grep -qiE "(${SUX_UI_EXT_RE})" "$file" 2>/dev/null; then
+    return 0
+  fi
+
+  for ui_dir in $SUX_UI_DIRS; do
+    base=${ui_dir##*/}
+    if grep -qiE "${ui_dir}/|${base}/" "$file" 2>/dev/null; then
+      return 0
+    fi
+  done
+
   return 1
 }

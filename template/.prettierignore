@@ -1,0 +1,4 @@
+# clade 治理區域 — chmod 444 + checksum gate，不要 reformat
+.claude/rules/
+.claude/skills/
+.claude/hooks/
