@@ -1,6 +1,18 @@
+---
+audience: both
+applies-to: post-scaffold
+related:
+  - DEBUGGING.md
+  - FAQ.md
+  - AGENTS.md
+ai-lookup: 看 ## 快速查找 表用症狀關鍵字定位 anchor，每節皆為「症狀 → 診斷 → 修復」三段式
+---
+
 # 疑難排解指南
 
 依照「症狀」分類，格式：**問題** → **可能原因** → **診斷指令** → **解決方案**。
+
+> AI agent：開頭 `## 快速查找` 表是入口。比對使用者描述的症狀 → 跳到對應 anchor → 跑「診斷」命令 → 視結果跑「修復」命令。每節都是 deterministic 結構，可直接消費。
 
 ---
 

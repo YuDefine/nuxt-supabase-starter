@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: architecture
+---
+
 # TDMS Layered Truth for Starter
 
 ## Decision

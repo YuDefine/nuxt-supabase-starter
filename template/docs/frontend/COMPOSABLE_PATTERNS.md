@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Composable 開發模式
 
 本文檔說明 Vue 3 Composable 的設計模式與最佳實踐，適用於 Nuxt 4 專案。

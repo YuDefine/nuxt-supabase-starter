@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # 團隊協作工作流程
 
 以實際情境說明多人開發時的分支策略、Migration 管理、衝突解決。

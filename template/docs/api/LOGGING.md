@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Logging 指南
 
 > Server API 結構化日誌（evlog）的完整使用規範。

@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # OAuth 設定指南
 
 ## Google OAuth

@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Solutions Knowledge Base
 
 此目錄存放專案開發過程中累積的問題解決經驗。由 Claude 自動萃取和搜索，不需手動維護。

@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: architecture
+---
+
 # Nuxt Layers 架構
 
 ## 概覽

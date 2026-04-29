@@ -1,3 +1,13 @@
+---
+audience: both
+applies-to: post-scaffold
+related:
+  - TROUBLESHOOTING.md
+  - DEBUGGING.md
+  - WORKFLOW.md
+ai-lookup: H3 標題即問題本身，使用者問句可直接 grep。問題型問題優先 TROUBLESHOOTING.md，本檔處理「為什麼這樣設計」「該選 A 還 B」型架構問題
+---
+
 # 常見疑問集（FAQ）
 
 開發過程中常見問題的集中解答。

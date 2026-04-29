@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Pinia Colada useQuery 缺少 enabled 守衛
 
 ## Problem

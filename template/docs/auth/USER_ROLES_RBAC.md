@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # 使用者角色與授權作業手冊
 
 此文件統整專案的認證/授權模型：資料表、函式、API、日常維運與疑難排解。所有角色/偏好相關物件均位於 `app` schema。

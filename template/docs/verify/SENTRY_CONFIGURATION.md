@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Sentry 錯誤追蹤配置
 
 ## 架構

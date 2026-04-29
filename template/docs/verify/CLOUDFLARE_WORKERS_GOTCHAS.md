@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Cloudflare Workers 注意事項
 
 ## Request Body Stream

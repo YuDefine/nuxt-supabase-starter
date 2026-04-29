@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Cloudflare Workers Subrequest 數量限制
 
 ## Problem

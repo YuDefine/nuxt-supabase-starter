@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: architecture
+---
+
 # 快取策略指南
 
 本文檔說明專案的快取策略，包含 Server-side 快取（cachedEventHandler）與 Client-side 快取（Pinia Colada）。

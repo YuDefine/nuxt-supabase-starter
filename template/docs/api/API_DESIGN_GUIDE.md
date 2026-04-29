@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # API 設計指南
 
 本文檔說明本專案的 API 設計模式與最佳實踐，適用於 Nuxt 4 + Nitro 後端。

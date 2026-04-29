@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Spectra 使用指南
 
 > 用結構化的方式讓 AI 更好地理解你的需求

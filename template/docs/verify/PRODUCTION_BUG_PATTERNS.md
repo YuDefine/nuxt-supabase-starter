@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Production Bug Patterns
 
 上線後才發現、在 code review 階段未被攔截的錯誤模式。記錄這些模式以防止重複發生。

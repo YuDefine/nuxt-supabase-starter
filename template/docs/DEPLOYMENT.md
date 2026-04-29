@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # 部署指南
 
 從開發到 Production 的完整部署流程（Cloudflare Workers）。

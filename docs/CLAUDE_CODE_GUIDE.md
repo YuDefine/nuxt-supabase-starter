@@ -1,3 +1,11 @@
+---
+audience: both
+applies-to: post-scaffold
+related:
+  - ../template/docs/AGENTS.md
+  - SKILL_UPDATE_GUIDE.md
+---
+
 # Claude Code 配置指南
 
 > 理解並客製化 AI 開發助手的行為

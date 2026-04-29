@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Audit Logging
 
 This project provides an audit logging foundation as a template — not auto-applied, so you add it when your project needs it.

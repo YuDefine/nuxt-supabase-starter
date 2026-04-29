@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # API Response 手動映射遺漏欄位
 
 ## Problem

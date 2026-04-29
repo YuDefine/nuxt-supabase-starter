@@ -1,3 +1,14 @@
+---
+audience: both
+applies-to: post-scaffold
+prerequisites:
+  - scaffold 已完成
+  - pnpm verify:starter 通過
+related:
+  - SUPABASE_GUIDE.md
+  - ../template/docs/OPENSPEC.md
+---
+
 # 建立你的第一個功能：書籤管理
 
 從資料庫到 UI 的完整開發流程，15 分鐘上手。

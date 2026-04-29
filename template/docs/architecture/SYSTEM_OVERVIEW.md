@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: architecture
+---
+
 # 系統架構概觀
 
 ## 技術堆疊

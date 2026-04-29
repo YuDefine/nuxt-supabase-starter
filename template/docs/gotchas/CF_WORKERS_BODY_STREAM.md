@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Cloudflare Workers Request Body Stream 只能讀一次
 
 ## Problem

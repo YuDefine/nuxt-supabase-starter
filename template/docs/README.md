@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # 文件索引
 
 本專案所有開發文件的索引。

@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # RLS Policy 模板
 
 > Row Level Security 政策撰寫規範，包含 `TO public` 陷阱、Helper 函式、Policy 模板與常見問題排查。

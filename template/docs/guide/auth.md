@@ -1,3 +1,8 @@
+---
+audience: both
+applies-to: post-scaffold
+---
+
 # Authentication
 
 This project supports two auth providers. You choose one during `pnpm setup`.
