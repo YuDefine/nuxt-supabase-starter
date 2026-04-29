@@ -298,6 +298,24 @@ const main = defineCommand({
       description: 'Start from empty feature set instead of defaults',
       default: false,
     },
+    'register-consumer': {
+      type: 'boolean',
+      description:
+        '登記到 clade consumers.local，讓 propagate 自動推到此專案（--no-register-consumer 跳過）',
+      default: true,
+    },
+    'wire-pre-commit': {
+      type: 'boolean',
+      description:
+        'wire pre-commit hook 跑 hub:check 擋掉 clade-managed 檔的本地誤改（--no-wire-pre-commit 跳過）',
+      default: true,
+    },
+    'clone-clade': {
+      type: 'boolean',
+      description:
+        '找不到 clade 中央倉時，嘗試 git clone 到 ~/offline/clade（--no-clone-clade 跳過）',
+      default: true,
+    },
   },
   async run({ args }) {
     const monorepoRoot = detectMonorepoRoot()
@@ -379,7 +397,12 @@ const main = defineCommand({
     }
 
     // Post-scaffold
-    await postScaffold(targetDir, pkgName, invocationCwd, inferCladeModules(selections.features))
+    await postScaffold(targetDir, pkgName, invocationCwd, inferCladeModules(selections.features), {
+      yes: args.yes as boolean,
+      registerConsumer: args['register-consumer'] as boolean,
+      wirePreCommit: args['wire-pre-commit'] as boolean,
+      cloneClade: args['clone-clade'] as boolean,
+    })
   },
 })
 
