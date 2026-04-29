@@ -226,6 +226,32 @@ pnpm run setup    # 檢查環境 → 選擇 Auth → 安裝依賴 → 啟動 Sup
 pnpm dev          # 開啟 http://localhost:3000
 ```
 
+### Clade 中央倉（rules / skills / hooks 的 source）
+
+新專案的 `.claude/rules/`、`.claude/skills/`、部分 `.claude/hooks/` 與 `.claude/scripts/` 由 [clade](https://github.com/YuDefine/clade) 中央倉治理 — scaffold CLI 已自動：
+
+- 寫好 `.claude/hub.json`（依你選的 auth / runtime 等模組）
+- 注入 `package.json` 的 `postinstall` + `hub:*` scripts
+- 重新從 `.claude/` 投影 `.codex/`、`.agents/`、`AGENTS.md`
+
+`pnpm install` 的 `postinstall` 會自動跑 clade `bootstrap-hub.mjs`，把最新規則拉下來。常用命令：
+
+```bash
+pnpm hub:check    # 檢查 vs clade 中央倉的 drift
+pnpm hub:sync     # 從 clade 拉最新規則
+pnpm hub:doctor   # 診斷 + 列出問題
+```
+
+> ⚠️ 前置：clade 中央倉必須在本機可達，預設找 `~/clade` 或 `~/offline/clade`，或設 `CLADE_HOME=/path/to/clade`。沒裝會 warn 但不擋 scaffold；之後手動 clone + `pnpm hub:bootstrap` 即可。
+
+**選用 — 把專案登記到本機 consumers 清單**，未來中央倉發新版時 `propagate.mjs` 才會推到這裡：
+
+```bash
+echo "$(pwd)" >> "${CLADE_HOME:-$HOME/offline/clade}/consumers.local"
+```
+
+（scaffold 完成時 next-steps box 會印實際路徑，照那個寫即可。）未登記不影響日常開發（仍能 `pnpm hub:sync` 主動拉），只是不會被中央倉的 bump branch 自動推進。
+
 ### 設定 Claude Code
 
 ```bash

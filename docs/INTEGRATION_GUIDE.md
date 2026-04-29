@@ -10,50 +10,97 @@
 
 ## 整合項目總覽
 
-| 類別        | 內容                                | 必要性 |
-| ----------- | ----------------------------------- | ------ |
-| Claude 配置 | CLAUDE.md、commands、agents、skills | 推薦   |
-| Supabase    | 資料庫整合、TypeScript 類型         | 選用   |
-| 開發工具    | 品質檢查腳本、commitlint            | 推薦   |
-| Better Auth | OAuth 認證                          | 選用   |
+| 類別        | 內容                                                  | 必要性 |
+| ----------- | ----------------------------------------------------- | ------ |
+| Clade       | 中央倉的 rules / skills / hooks / scripts 投影到 `.claude/` | 推薦   |
+| Claude 配置 | CLAUDE.md、commands、agents、settings.json（本地）    | 推薦   |
+| Supabase    | 資料庫整合、TypeScript 類型                           | 選用   |
+| 開發工具    | 品質檢查腳本、commitlint                              | 推薦   |
+| Better Auth | OAuth 認證                                            | 選用   |
 
 ---
 
-## 1. Claude Code 配置
+## 1. Claude Code 配置（Claude Code First + clade）
 
-### 1.1 複製 CLAUDE.md
+本 starter 採「**Claude Code First + clade 中央倉**」架構：
+
+```
+clade（~/offline/clade）         ← 跨專案共用：rules / skills / hooks / scripts
+  └→ 你的專案/.claude/            ← 投影目標 + 你的 settings.json / hub.json
+       └→ .codex/ / .agents/ / AGENTS.md    ← sync-to-agents 投影
+```
+
+### 1.1 安裝 clade 中央倉（首次）
 
 ```bash
-# 從 Starter 複製 CLAUDE.md 到你的專案根目錄
+git clone https://github.com/YuDefine/clade.git ~/offline/clade
+# 或設 CLADE_HOME 到自訂路徑
+```
+
+### 1.2 把現有專案註冊為 clade consumer
+
+進入你現有 Nuxt 專案根目錄，跑 clade 的 `init-consumer.mjs` 一鍵建立：
+
+```bash
+cd /path/to/your-existing-nuxt-app
+
+node ~/offline/clade/scripts/init-consumer.mjs \
+  --auth better-auth \
+  --db-schema supabase \
+  --db-runtime cf-workers \
+  --runtime cf-workers \
+  --framework nuxt
+```
+
+參數說明（依專案實況調整）：
+
+| Flag           | 可選值                                           | 說明                                |
+| -------------- | ------------------------------------------------ | ----------------------------------- |
+| `--auth`       | `better-auth` / `nuxt-auth-utils` / `supabase-self-hosted` | 認證機制                            |
+| `--db-schema`  | `supabase` / `supabase-self-hosted`              | DB schema 來源                      |
+| `--db-runtime` | `cf-workers` / `supabase-self-hosted`            | DB 連線 runtime                     |
+| `--runtime`    | `cf-workers` / `vercel-node` / `nitro-self-hosted` | 部署 runtime                        |
+| `--framework`  | `nuxt` / `next` / `sveltekit`                    | 框架（本 starter 的場景固定 `nuxt`） |
+| `--local-hooks` | 例如 `post-migration-gen-types.sh`              | 你自家保留的 `.claude/hooks/*.sh`（逗號分隔） |
+| `--force`      | —                                                | 覆寫既有 `.claude/hub.json`         |
+
+`init-consumer.mjs` 會做：
+
+1. 寫 `.claude/hub.json`（manifest）
+2. Vendor `.claude/hooks/_bootstrap-check.sh`（SessionStart 自動 drift 偵測）
+3. Patch `.claude/settings.json` — 加 SessionStart hook、清掉 stale hook 引用
+4. Patch `package.json` — 加 `postinstall` + `hub:bootstrap` / `hub:check` / `hub:sync` / `hub:doctor` / `hub:prune` / `hub:vendor` 等 scripts
+5. 跑 `bootstrap-hub.mjs` — 從 clade 拉所有 rules / skills / hooks / scripts 進 `.claude/`
+
+### 1.3 投影到 Codex / Cursor 等 runtime（可選）
+
+若你也用 Codex / Cursor / 其他 AI runtime，`.codex/`、`.agents/`、`AGENTS.md` 都是從 `.claude/` sync-to-agents 投影出來的：
+
+```bash
+node ~/.claude/scripts/sync-to-agents.mjs
+```
+
+**禁止**直接編輯 `.codex/` 或 `AGENTS.md` — 要改先回 `.claude/` 改、再 sync。
+
+### 1.4 修改 CLAUDE.md 對齊你的專案
+
+```bash
 curl -o CLAUDE.md https://raw.githubusercontent.com/YuDefine/nuxt-supabase-starter/main/template/CLAUDE.md
 ```
 
-**重要**：修改 CLAUDE.md 中的以下區塊以符合你的專案：
+替換 `## Project` / `## Stack` 區塊：
 
 ```markdown
 ## Project
 
-<!-- TODO: 替換為你的專案說明 -->
 [專案名稱] 是一個使用 Nuxt 4 和 Nuxt UI 建構的 [專案類型] 系統。
 
 ## Stack
 
-<!-- TODO: 替換為你的技術棧 -->
 Nuxt 4, Vue 3 (Composition API + <script setup>), TypeScript, Tailwind CSS, Nuxt UI, Pinia, VueUse, Supabase (PostgreSQL)
 ```
 
-### 1.2 複製 .claude 目錄
-
-```bash
-# 複製整個 .claude 目錄（注意：starter 是 monorepo，.claude 在 template/ 下）
-git clone --depth 1 https://github.com/YuDefine/nuxt-supabase-starter.git /tmp/starter
-cp -r /tmp/starter/template/.claude .
-rm -rf /tmp/starter
-```
-
-> `.claude/` 目錄包含 `settings.json`（權限設定）、`commands/`（自定義指令）、`agents/`（SubAgents）、`skills/`（AI Skills），以及 `hooks/`（Auto-Harness 自動化鉤子）和 `rules/`（開發規範規則）。
-
-### 1.3 設定 Claude Code 權限
+### 1.5 設定 Claude Code 權限
 
 編輯 `.claude/settings.json`，根據你的需求調整權限：
 
