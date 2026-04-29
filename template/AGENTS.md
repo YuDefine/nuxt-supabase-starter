@@ -6,11 +6,27 @@
 
 ## Source Of Truth
 
-- `.claude/` 是本專案唯一真理。
-- 規則 source 在 `.claude/rules/`。
-- workflow / skills source 在 `.agents/skills/` 與 `.agents/skills/`。
-- hooks / agents / settings source 在 `.claude/` 內對應路徑。
-- `AGENTS.md`、`.agents/`、`.codex/` 都是投影；若需調整內容，先改 `.claude/`，再用 `sync-to-agents` 同步。
+兩層來源 — 上游進來、下游投影出去，**永遠單向**：
+
+```
+clade（~/offline/clade）         ← 跨專案共用中央倉
+  └→ .claude/                     ← 本專案 source（AI Agent First）
+       └→ .codex/ / .agents/ / AGENTS.md    ← sync-to-agents 投影
+```
+
+- 上游：`rules/`、`skills/`、部分 `hooks/`、`scripts/` 由 clade 治理（見 `.claude/.hub-state.json` 的 checksum 清單）。要改這些**先改 clade 中央倉**，跑 `pnpm hub:sync` 投到本專案；直接在 `.claude/rules/` 等改 → SessionStart `_bootstrap-check.sh` 會自動還原 + commit hook 會擋。
+- 本層：`.claude/` 是本專案唯一 source（settings.json、hub.json、本地 commands/agents、business-specific hooks）。
+- 下游：`.codex/`、`.agents/`、`AGENTS.md` 全是 sync-to-agents 從 `.claude/` 投影出來。**禁止**直接編輯，要改先回 `.claude/` 改、再跑 `node ~/.codex/scripts/sync-to-agents.mjs` 重投影。
+
+常用命令：
+
+| 動作                                | 命令                                       |
+| ----------------------------------- | ------------------------------------------ |
+| 從 clade 拉新版到本專案             | `pnpm hub:sync`                            |
+| 檢查本專案 vs clade drift           | `pnpm hub:check`                           |
+| 從 `.claude/` 重投影到 codex/agents | `node ~/.codex/scripts/sync-to-agents.mjs` |
+| 完整 bootstrap（首次）              | `pnpm hub:bootstrap`                       |
+
 <!-- SPECTRA:START v1.0.2 -->
 
 # Spectra Instructions

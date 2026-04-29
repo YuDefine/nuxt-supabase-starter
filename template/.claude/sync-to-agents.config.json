@@ -124,6 +124,16 @@
       "mode": "source-pointer",
       "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
       "verify": []
+    },
+    "code-style.md": {
+      "mode": "source-pointer",
+      "summary": "Keep canonical rule in .claude/rules; expose only source pointer in CLAUDE.md",
+      "verify": []
+    },
+    "work-claims.md": {
+      "mode": "source-pointer",
+      "summary": "Keep canonical rule in .claude/rules; expose only source pointer in CLAUDE.md",
+      "verify": []
     }
   },
   "verification": {

@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-04-29T10:22:29.882Z",
+  "syncedAt": "2026-04-29T18:28:14.147Z",
   "checksums": {
     "rules/code-style.md": "feb414a0792c268d",
     "rules/commit.md": "5377033603178fbe",
@@ -10,7 +10,7 @@
     "rules/knowledge-and-decisions.md": "fb1944f41a0e28d9",
     "rules/logging.md": "879624ddc2b10785",
     "rules/manual-review.md": "006a70507c76daa8",
-    "rules/proactive-skills.md": "d2beccbefcec70ca",
+    "rules/proactive-skills.md": "90f5cccccabd9d5d",
     "rules/review-tiers.md": "f35387b124295192",
     "rules/scope-discipline.md": "5ad04df6c9b5e9c5",
     "rules/screenshot-strategy.md": "5cb6b2d0f3695149",
@@ -29,5 +29,21 @@
     "rules/unused-features.md": "3df47e9a324fdb4f",
     "rules/api-patterns.md": "8ba3b78377243277",
     "rules/development.md": "9c8ff3992c2af057"
+  },
+  "bootstrap": {
+    "at": "2026-04-29T18:28:14.182Z",
+    "version": "0.1.9",
+    "modules": {
+      "auth": "better-auth",
+      "db-schema": "supabase",
+      "db-runtime": "cf-workers",
+      "runtime": "cf-workers",
+      "framework": "nuxt",
+      "domain": []
+    },
+    "runtime": {
+      "claudeCode": true,
+      "codex": true
+    }
   }
 }

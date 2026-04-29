@@ -3,7 +3,12 @@ includeGitInstructions = false
 enabledMcpjsonServers = ["local-supabase"]
 
 [enabledPlugins]
-hub-core@clade = true
+"hub-core@clade" = true
+"hub-auth-better-auth@clade" = true
+"hub-db-schema-supabase@clade" = true
+"hub-db-runtime-cf-workers@clade" = true
+"hub-runtime-cf-workers@clade" = true
+"hub-framework-nuxt@clade" = true
 
 [features]
 codex_hooks = true
