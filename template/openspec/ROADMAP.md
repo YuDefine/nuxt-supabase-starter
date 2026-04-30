@@ -12,7 +12,7 @@
 
 ## Active Changes
 
-_last synced: 2026-04-19T11:41:33.856Z_
+_last synced: 2026-04-29T21:40:23.557Z_
 
 _No active changes._
 
@@ -33,6 +33,19 @@ _(none)_
 _(none)_
 
 <!-- SPECTRA-UX:ROADMAP-AUTO:/active -->
+
+<!-- SPECTRA-UX:ROADMAP-AUTO:claims -->
+
+## Active Claims
+
+> 即時 ownership 由 `.spectra/claims/*.json` 提供。
+> 接手 handoff / 開始做 change 時，先 claim，再移除 `HANDOFF.md` 對應項目。
+
+_No active claims._
+
+> 若你要開始做上面的 active change，先跑 `spectra:claim -- <change>`。
+
+<!-- SPECTRA-UX:ROADMAP-AUTO:/claims -->
 
 <!-- SPECTRA-UX:ROADMAP-AUTO:parallelism -->
 
