@@ -24,24 +24,44 @@ globs: ['**/*']
 | **Code review（commit 0-A）** | **Codex（`codex review --uncommitted`，GPT-5.5；最多 2 輪：Round 1 = `high` → Round 2 = `xhigh`）** | code review 適合 codex CLI 的 diff-aware 機制 + 漸進加深 reasoning；改由 codex 統一執行 review、Claude Code 主線負責修。詳見 `plugins/hub-core/commands/commit.md` Step 0-A。 |
 | **Spectra `propose` 階段**（discuss → propose 銜接） | **使用者選擇 A. Codex GPT-5.5 xhigh / B. Claude Code 繼續做** | propose 牽涉抽象決策、需高思考預算；給使用者選擇權。詳見 `spectra-propose` Step 0 與 `ux-completeness.md` Workflow Integration。 |
 
+## Codex 派工的標準流程（所有 routing 共用）
+
+派 Codex 出去工作**一律走原生 `codex` CLI + background bash**——**禁止**任何 `codex:rescue` / `codex:setup` / `codex:codex-rescue` / `/assign /codex:*` plugin 路線（已驗證無法使用）。
+
+主線 Claude 自己派、自己等通知、自己讀檔回報，**禁止**叫使用者切到 Codex CLI、**禁止**「Stop here」純文字 handoff。
+
+模板：
+
+1. 用 **Write** 把指示寫到 `/tmp/codex-<topic>-<slug>-prompt.md`（prompt 太長不要 inline）
+2. **Bash** tool（`run_in_background=true`）：
+
+   ```bash
+   cd <cwd> && codex exec \
+     --model gpt-5.5 \
+     -s <read-only|workspace-write> \
+     --skip-git-repo-check \
+     -c model_reasoning_effort=<medium|high|xhigh> \
+     < /tmp/codex-<topic>-<slug>-prompt.md 2>&1
+   ```
+
+3. 立刻簡短回報 bash job ID 給使用者
+4. 收到 `<task-notification> status=completed` → 立刻 BashOutput 讀 stdout → 整理結果回報
+5. **NEVER** 沉默等使用者來問進度
+
+各 routing 的參數差異：
+
+| Routing | `<topic>` | `<cwd>` | sandbox | reasoning effort |
+| --- | --- | --- | --- | --- |
+| WebSearch | `websearch` | `/tmp` | `read-only` | `medium` |
+| Spectra propose（A 路徑） | `spectra-propose` | consumer repo root | `workspace-write` | `xhigh` |
+
 ## WebSearch Handoff（具體做法）
 
 Claude Code session 內偵測到「需要 WebSearch」時：
 
 1. **NEVER** 直接呼叫 Claude Code 內建的 `WebSearch` 工具
-2. **MUST** 改成輸出 handoff 訊息給使用者：
-
-   ```
-   🔎 此工作需要 web search → 交給 Codex（GPT-5.5 medium）
-
-   請切換到 Codex CLI（或在 IDE 內切到 Codex），把模型設為 GPT-5.5 medium，執行：
-
-       <把要查的問題 / 關鍵字 / 上下文清楚列出>
-
-   並把搜尋結果（連結 / 摘要）帶回來，本 session 會接續處理。
-   ```
-
-3. **STOP** 等使用者帶結果回來再繼續
+2. **MUST** 走「Codex 派工的標準流程」（見上節），參數：`<topic>=websearch`、`<cwd>=/tmp`、`-s read-only`、`-c model_reasoning_effort=medium`
+3. prompt 內容固定包含：要查的問題 + 期望輸出格式（連結 / 摘要 / 條列重點）
 
 ### 例外（仍可在當前 session 直接處理）
 
@@ -58,7 +78,10 @@ Claude Code session 內偵測到「需要 WebSearch」時：
 
 ## 必禁事項
 
-- **NEVER** 在 Claude Code session 直接呼叫 `WebSearch` 工具（改 handoff 給 Codex GPT-5.5 medium）
-- **NEVER** 在 Spectra discuss → propose 銜接點省略 A/B 詢問（除非 discuss 已收到 B 答覆並標記）
+- **NEVER** 在 Claude Code session 直接呼叫 `WebSearch` 工具（改派背景 codex GPT-5.5 medium）
+- **NEVER** 印「請開啟 Codex CLI」「Stop here」「請貼 prompt」這類純文字 handoff 訊息要使用者手動切 — 主線必須自己派背景 codex
+- **NEVER** 嘗試 `codex:rescue` / `codex:setup` / `/assign /codex:*` plugin 路線（已驗證無法使用，2026-04-29 已 uninstall + 全清）
+- **NEVER** 沉默等使用者問進度；收到 `<task-notification> status=completed` 必須立刻自己讀檔回報
+- **NEVER** 在 Spectra discuss → propose 銜接點省略 A/B 詢問（除非 discuss 已明示選擇並標記）
 - **NEVER** 在 commit 0-A 用 `simplify` skill / `code-review` agent 自行 review（改派 codex），也 **NEVER** 改用其他模型或顛倒兩輪 reasoning effort
 - **NEVER** 把 routing 例外寫死在個別 skill；要加例外請改本檔的 Routing Table

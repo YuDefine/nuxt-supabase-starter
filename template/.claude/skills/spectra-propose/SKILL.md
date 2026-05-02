@@ -33,35 +33,56 @@ If no argument is provided, the workflow will extract requirements from conversa
 
 0. **Choose execution platform** （discuss → propose 銜接）
 
-   Before doing anything else, ask via **AskUserQuestion**:
+   **Detect handoff intent first（不要重問）：**
+   - 若上游 `spectra-discuss` 在 transition 時明示「使用者已選 A」 → 直接走 **A 路徑**
+   - 若明示「使用者已選 B」 → skip 這整個 Step 0，直接跳到 Step 1
+   - 否則用 **AskUserQuestion** 詢問：
+     - **A. Codex（GPT-5.5 xhigh）** — 主線派 Codex 在背景執行 propose
+     - **B. Claude Code 繼續做** — 在當前 session 走 Step 1-11
+   - If **AskUserQuestion** is unavailable, present as plain text and wait for the user's reply
 
-   | Option | 行為 |
-   | --- | --- |
-   | **A. Codex（GPT-5.5 xhigh）** | 把 propose 交給 Codex CLI / GPT-5.5 xhigh 執行；本 session **STOP** |
-   | **B. Claude Code 繼續做** | 在當前 session 接著走 Step 1 ~ 11 |
+   ### A 路徑：主線 Claude **自己派 Codex 在背景跑**（**禁止**叫使用者切 CLI、**禁止**「Stop here」）
 
-   **Skip this step** when the upstream `spectra-discuss` already collected a B answer in the same session（discuss handoff 會把選擇傳下來）。Do not double-ask.
+   依以下順序執行（每一步都是主線 Claude 自己做，不需使用者介入）：
 
-   - 選 **A** → 印出以下 handoff 訊息，然後**立刻結束本 skill**，不要執行任何後續 step：
+   1. **解析 change name + requirement**：從 argument / discuss artifacts / 對話脈絡萃取，導出 kebab-case `<change-name>` 與一句話 requirement
+   2. **Write prompt 檔到 `/tmp/codex-spectra-propose-<change-name>-prompt.md`**，內容固定包含：
 
-     ```
-     ✅ 已選擇 A：Codex GPT-5.5 xhigh 執行 propose
+      ```
+      請以本 repo 的 spectra-propose 流程建立 change `<change-name>`。
+      Requirement：<一句話需求>
 
-     請開啟 Codex CLI（或在 IDE 內切到 Codex），把模型設為 GPT-5.5 xhigh
-     （或等效的最高思考預算設定），然後執行：
+      讀取以下檔案理解流程後執行：
+      - .claude/skills/spectra-propose/SKILL.md（**只執行 Step 1 ~ 11**，**跳過** Step 0 — 已決定由你執行）
+      - .claude/rules/ux-completeness.md（必填區塊：Affected Entity Matrix / User Journeys / Implementation Risk Plan）
+      - .claude/rules/agent-routing.md
+      - 任何 discuss 階段已捕獲的 design.md / spec.md（位置：openspec/changes/<change-name>/，若已存在）
 
-         /spectra-propose <change-name-or-requirement>
+      完成標準：`spectra park <change-name>` 執行成功。
+      不要呼叫 /spectra-apply。產出後在 stdout 摘要 artifacts 列表 + `spectra validate` 結果。
+      ```
+   3. **背景啟動 codex exec**（**Bash** tool 加 `run_in_background=true`）：
 
-     並把 discuss 階段已捕獲的結論 / design.md / spec.md 作為輸入。
+      ```bash
+      cd <consumer-repo-root> && codex exec \
+        --model gpt-5.5 \
+        -s workspace-write \
+        --skip-git-repo-check \
+        -c model_reasoning_effort=xhigh \
+        < /tmp/codex-spectra-propose-<change-name>-prompt.md 2>&1
+      ```
 
-     本 Claude Code session 不繼續 propose；
-     等 Codex 產出 artifacts、`spectra validate` 通過、`spectra park` 完成後，
-     回來這裡接 `/spectra-apply <change-name>`。
-     ```
+   4. **立刻**簡短回報給使用者：「已派 Codex GPT-5.5 xhigh 在背景執行 `/spectra-propose <change-name>`（bash job `<id>`，output stream 跟著走）」
+   5. **等通知**：收到 `<task-notification> status=completed` 時**立刻**：
+      - 用 BashOutput 讀該 job 的完整 stdout（或對應 output 檔）
+      - 摘要：產出哪些 artifacts、`spectra validate` 結果、是否 park 成功
+      - 列出後續可選動作（`/spectra-apply <change-name>` 等）
+   6. **NEVER** 沉默等使用者來問進度；通知一到自己讀檔回報
+   7. **本 session 不再執行任何 Step 1 ~ 11**（避免雙重生產）— Step 0 A 路徑結束本 skill
 
-   - 選 **B** → continue to Step 1 below.
+   ### B 路徑
 
-   If **AskUserQuestion** is unavailable, present the same two options as plain text and wait for the user's response.
+   continue to Step 1 below.
 
 1. **Determine the requirement source**
 
