@@ -1,7 +1,8 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-02T14:32:18.831Z",
+  "syncedAt": "2026-05-02T15:01:37.721Z",
   "checksums": {
+    "rules/agent-routing.md": "99273b922a602cb0",
     "rules/code-style.md": "feb414a0792c268d",
     "rules/commit.md": "3ba7cddd24e59a4b",
     "rules/error-handling.md": "6b9aacf3906f1166",
@@ -16,7 +17,7 @@
     "rules/screenshot-strategy.md": "5cb6b2d0f3695149",
     "rules/testing-anti-patterns.md": "694438ff8d975ab3",
     "rules/truth-layers.md": "cba05246f0c06769",
-    "rules/ux-completeness.md": "48ccdc9551317953",
+    "rules/ux-completeness.md": "f53612edc3ee0f27",
     "rules/work-claims.md": "8c09518cea38198e",
     "rules/auth.md": "c6db189aa7ceddb7",
     "rules/migration.md": "4b54f424c21749ed",
@@ -30,15 +31,15 @@
     "rules/api-patterns.md": "8ba3b78377243277",
     "rules/development.md": "9c8ff3992c2af057",
     "scripts/commit-lock.mjs": "f81c79df484ce5db",
-    "skills/spectra/SKILL.md": "b7bdefa35f77d0a2",
+    "skills/spectra/SKILL.md": "e4e45b224e8eaa6f",
     "skills/spectra-apply/SKILL.md": "a5723373b246c141",
     "skills/spectra-archive/SKILL.md": "6d9fb82053a688b8",
     "skills/spectra-ask/SKILL.md": "b3f64a6516d00855",
     "skills/spectra-audit/SKILL.md": "8f5778710f1bc3e3",
     "skills/spectra-commit/SKILL.md": "2be9a744540b4399",
     "skills/spectra-debug/SKILL.md": "ec91c4309dc73b9c",
-    "skills/spectra-discuss/SKILL.md": "6114e8a3de2db7ac",
+    "skills/spectra-discuss/SKILL.md": "052f875871583d1b",
     "skills/spectra-ingest/SKILL.md": "12e2b6efa6a3d0d9",
-    "skills/spectra-propose/SKILL.md": "10fdc7379659707e"
+    "skills/spectra-propose/SKILL.md": "c310bccf6bd7e1d6"
   }
 }

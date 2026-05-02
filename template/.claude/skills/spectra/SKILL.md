@@ -41,6 +41,8 @@ Ask the user what they want to do. Use **AskUserQuestion** with these options:
 
 After the user picks, invoke the corresponding skill with the Skill tool.
 
+> **Note**：選到 `Propose` 時，`spectra-propose` 入口的 Step 0 會再問一次「A. Codex GPT-5.5 xhigh / B. Claude Code 繼續做」。orchestrator **不要**在這裡先問，避免雙重詢問。
+
 ### Step 3: Active changes exist — Determine next action
 
 For each active change, run:
