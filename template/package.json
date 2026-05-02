@@ -31,6 +31,9 @@
     "hub:doctor": "node ${CLADE_HOME:-$HOME/offline/clade}/scripts/sync-rules.mjs --check",
     "hub:prune": "node ${CLADE_HOME:-$HOME/offline/clade}/scripts/sync-rules.mjs --prune",
     "hub:sync": "node ${CLADE_HOME:-$HOME/offline/clade}/scripts/hub-sync.mjs",
+    "hub:vendor": "node ${CLADE_HOME:-$HOME/offline/clade}/scripts/sync-vendor.mjs",
+    "hub:vendor:check": "node ${CLADE_HOME:-$HOME/offline/clade}/scripts/sync-vendor.mjs --check",
+    "hub:vendor:force": "node ${CLADE_HOME:-$HOME/offline/clade}/scripts/sync-vendor.mjs --force",
     "lint": "vp lint",
     "postinstall": "node -e \"const f=require('node:fs'),p=require('node:path'),o=require('node:os'),s=require('node:child_process');const c=process.env.CLADE_HOME||[p.join(o.homedir(),'clade'),p.join(o.homedir(),'offline','clade')].find(x=>f.existsSync(x));if(!c){console.warn('[clade] not found locally — skip bootstrap. Set CLADE_HOME or clone to ~/clade');process.exit(0)}const r=s.spawnSync('node',[p.join(c,'scripts','bootstrap-hub.mjs')],{stdio:'inherit'});process.exit(r.status||0)\"",
     "prepare": "vp config && bash scripts/restore-hooks.sh && nuxt prepare",
@@ -52,10 +55,7 @@
     "test:watch": "vp test --watch",
     "typecheck": "nuxt typecheck",
     "update": "nuxt upgrade && pnpm skills:update && pnpm update --latest",
-    "verify:starter": "node scripts/verify-starter.mjs",
-    "hub:vendor": "node ${CLADE_HOME:-$HOME/offline/clade}/scripts/sync-vendor.mjs",
-    "hub:vendor:check": "node ${CLADE_HOME:-$HOME/offline/clade}/scripts/sync-vendor.mjs --check",
-    "hub:vendor:force": "node ${CLADE_HOME:-$HOME/offline/clade}/scripts/sync-vendor.mjs --force"
+    "verify:starter": "node scripts/verify-starter.mjs"
   },
   "dependencies": {
     "@nuxt/image": "^2.0.0",
