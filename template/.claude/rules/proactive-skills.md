@@ -47,6 +47,14 @@ Local edits will be reverted by the next sync.
 | Archive 完成 + change 有 UI（design review findings） | `design-retro`    | 分析 findings、識別重複模式、建議改善 |
 | Findings 累積達 5 的倍數（5、10、15…）                | `design-retro`    | 週期性全量分析                        |
 
+### Sub-skill 禁用清單（永不觸發）
+
+| Sub-skill        | 規則                | 替代方式                                                              |
+| ---------------- | ------------------- | --------------------------------------------------------------------- |
+| `spectra-commit` | **NEVER** 主動觸發  | 走 `rules/core/commit.md` 規範的標準 commit 工序（含 hooks / 訊息格式） |
+
+**原因**：spectra-commit 是 spectra CLI 上游帶來的薄殼，本治理範圍下 commit 必須統一走 `rules/core/commit.md`。Claude 偵測到使用者要 commit Spectra change 的相關檔案時，**MUST** 直接走標準 git / `/commit` 流程，**NEVER** 改派 spectra-commit。
+
 ## Design Skill 自主觸發
 
 ### 觸發條件

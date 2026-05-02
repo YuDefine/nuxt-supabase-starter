@@ -1,16 +1,16 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-04-29T18:28:14.147Z",
+  "syncedAt": "2026-05-02T14:16:24.192Z",
   "checksums": {
     "rules/code-style.md": "feb414a0792c268d",
-    "rules/commit.md": "5377033603178fbe",
+    "rules/commit.md": "3ba7cddd24e59a4b",
     "rules/error-handling.md": "6b9aacf3906f1166",
     "rules/follow-up-register.md": "5eb9b636ce4765fe",
     "rules/handoff.md": "9d7992c00da3704d",
     "rules/knowledge-and-decisions.md": "fb1944f41a0e28d9",
     "rules/logging.md": "879624ddc2b10785",
     "rules/manual-review.md": "006a70507c76daa8",
-    "rules/proactive-skills.md": "90f5cccccabd9d5d",
+    "rules/proactive-skills.md": "3d50b6fed29ccf8c",
     "rules/review-tiers.md": "f35387b124295192",
     "rules/scope-discipline.md": "5ad04df6c9b5e9c5",
     "rules/screenshot-strategy.md": "5cb6b2d0f3695149",
@@ -28,22 +28,17 @@
     "rules/storage.md": "a5feef015fdfbef2",
     "rules/unused-features.md": "3df47e9a324fdb4f",
     "rules/api-patterns.md": "8ba3b78377243277",
-    "rules/development.md": "9c8ff3992c2af057"
-  },
-  "bootstrap": {
-    "at": "2026-04-29T18:28:14.182Z",
-    "version": "0.1.9",
-    "modules": {
-      "auth": "better-auth",
-      "db-schema": "supabase",
-      "db-runtime": "cf-workers",
-      "runtime": "cf-workers",
-      "framework": "nuxt",
-      "domain": []
-    },
-    "runtime": {
-      "claudeCode": true,
-      "codex": true
-    }
+    "rules/development.md": "9c8ff3992c2af057",
+    "scripts/commit-lock.mjs": "f81c79df484ce5db",
+    "skills/spectra/SKILL.md": "b7bdefa35f77d0a2",
+    "skills/spectra-apply/SKILL.md": "a5723373b246c141",
+    "skills/spectra-archive/SKILL.md": "6d9fb82053a688b8",
+    "skills/spectra-ask/SKILL.md": "b3f64a6516d00855",
+    "skills/spectra-audit/SKILL.md": "8f5778710f1bc3e3",
+    "skills/spectra-commit/SKILL.md": "2be9a744540b4399",
+    "skills/spectra-debug/SKILL.md": "ec91c4309dc73b9c",
+    "skills/spectra-discuss/SKILL.md": "6114e8a3de2db7ac",
+    "skills/spectra-ingest/SKILL.md": "12e2b6efa6a3d0d9",
+    "skills/spectra-propose/SKILL.md": "10fdc7379659707e"
   }
 }

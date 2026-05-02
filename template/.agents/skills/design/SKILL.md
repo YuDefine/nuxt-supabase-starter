@@ -7,6 +7,35 @@ description: UI/UX design orchestrator — coordinates multiple design skills in
 
 You are a design director coordinating specialized design skills. Your job: **assess → diagnose → plan**. You do NOT execute design work yourself — you produce a clear, prioritized action plan telling the user which skills to run, in what order, on what targets.
 
+## Prerequisites（必裝第三方 skill）
+
+本 skill 是純 orchestrator，所有實際工作交由第三方 skill 執行。Clade 不自動安裝這些 skill，consumer 首次使用前 **MUST** 手動安裝。
+
+### 1. pbakaus/impeccable（v3.x）
+
+impeccable 是 1 個 skill 含 24 個 sub-command：craft / shape / teach / document / extract / critique / audit / polish / bolder / quieter / distill / harden / onboard / animate / colorize / typeset / layout / delight / overdrive / clarify / adapt / optimize / live。
+
+```bash
+npx skills add pbakaus/impeccable
+```
+
+**檢查**：`ls .agents/skills/impeccable/SKILL.md` 應存在，且 frontmatter `version` 為 `3.x`（v3.0.5 或更新）。
+
+### 2. 呼叫形式（v3 原生）
+
+clade design plan **一律使用 v3 原生呼叫形式** `/impeccable <subcommand>`（例如 `/impeccable colorize`、`/impeccable typeset`、`/impeccable polish`），對齊 v3 作者「impeccable 是一個 skill、底下用 sub-command 組織」的設計理念。直接複製 plan 內的指令即可執行。
+
+> **可選：pin alias**
+> v3 提供 `node .agents/skills/impeccable/scripts/pin.mjs pin <command>` 把 sub-command 轉成獨立 slash command（如 `/colorize` → `/impeccable colorize`）。clade design 文件**不依賴**這個機制；只在你個人偏好短名打字時自行 pin 你常用的幾個。pin 是 escape hatch，不是預期 path。
+
+### 3. nuxt/ui（偵測到 Nuxt UI stack 時）
+
+```bash
+npx skills add nuxt/ui --skill nuxt-ui
+```
+
+未安裝時 `/design` 仍可產出 plan，但 plan 內引用的指令會無效。先補裝再執行。
+
 ## Step 0: Determine Mode
 
 If the user specifies a mode, use it:
@@ -42,39 +71,42 @@ Auto-detection logic:
 
 Before any diagnosis or planning, always check:
 
-- `.impeccable.md` exists? → If no, plan MUST start with `/impeccable teach`
-- Design system exists? (`design-system/MASTER.md` or equivalent tokens/variables file)
-- **Tech stack** — detect and lock (see Tech Stack Detection below)
+- **`PRODUCT.md` 存在？**（必要）— 若無，plan MUST start with `/impeccable teach`
+- **`DESIGN.md` 存在？**（強烈建議）— 若無但 PRODUCT.md 存在且 code 已存在，建議跑 `/impeccable document` 從現有 code 反推 DESIGN.md
+- Design system tokens 檔（`design-system/MASTER.md` 或 `app.config.ts` 的 `ui` 區塊）— 用於 iterate 模式追蹤跨 phase 一致性
+- **Tech stack** — detect and lock（見 Tech Stack Detection）
+- **Register** — brand vs product（見 Step 1.5）
 
 This applies to every mode. Skip only if foundation is confirmed.
 
 ### Fidelity Checkpoint Extraction
 
-若 `.impeccable.md` 存在，**必須**讀取並提取以下 7 個 fidelity checkpoint 維度，供後續 Step 2.5 比對使用：
+若 `PRODUCT.md`（必要）和 `DESIGN.md`（建議）存在，**必須**讀取並提取以下 8 個 fidelity checkpoint 維度，供後續 Step 2.5 比對使用：
 
-| 維度                        | 從 `.impeccable.md` 提取                                                  |
-| --------------------------- | ------------------------------------------------------------------------- |
-| **Color System**            | 所有 color roles、tokens、hex 值                                          |
-| **Typography**              | 字體名稱、sizing 規則、特殊設定（如 tabular-nums）                        |
-| **Spacing & Layout Tokens** | 定義的間距慣例（page padding、card gap、form gap 等）                     |
-| **Component Conventions**   | Nuxt UI 元件清單、自訂元件清單（StatCard、EmptyState 等）                 |
-| **Interaction Patterns**    | 各介面的互動規範（CRUD sort/filter/pagination、empty state CTA 等）       |
-| **Layout Architecture**     | 各介面的 layout 規格（desktop sidebar+breadcrumb、auth centered card 等） |
-| **Design Principles**       | 編號原則清單（如「數據是主角」、「路徑最短」等）                          |
+| 維度                        | 主要來源                  | 提取重點                                                                  |
+| --------------------------- | ------------------------- | ------------------------------------------------------------------------- |
+| **Color System**            | `DESIGN.md`               | 所有 color roles、tokens、OKLCH/hex 值、color strategy（restrained/committed/full palette/drenched） |
+| **Typography**              | `DESIGN.md`               | 字體名稱、sizing 規則、特殊設定（如 tabular-nums）、line length cap        |
+| **Spacing & Layout Tokens** | `DESIGN.md`               | 間距慣例（page padding、card gap、form gap 等）                            |
+| **Component Conventions**   | `DESIGN.md`               | Nuxt UI 元件清單、自訂元件清單（StatCard、EmptyState 等）                  |
+| **Interaction Patterns**    | `PRODUCT.md` + `DESIGN.md`| 各介面的互動規範（CRUD sort/filter/pagination、empty state CTA 等）         |
+| **Layout Architecture**     | `DESIGN.md`               | 各介面的 layout 規格（desktop sidebar+breadcrumb、auth centered card 等）  |
+| **Design Principles**       | `PRODUCT.md`              | strategic principles（如「數據是主角」、「路徑最短」等）                    |
+| **Brand & Anti-references** | `PRODUCT.md`              | brand voice、tone、anti-references（過度裝飾、冰冷金融風、遊戲化等）        |
 
-這些 checkpoint 是後續 Fidelity Check 的**唯一比對來源**——不使用 `.impeccable.md` 以外的假設。
+這些 checkpoint 是後續 Fidelity Check 的**唯一比對來源**——不使用 PRODUCT.md / DESIGN.md 以外的假設。
 
 ### Tech Stack Detection
 
 Detect the project's UI tech stack to ensure all design skills produce compatible output:
 
-1. **Check `.impeccable.md`** — if it specifies a stack, use it
+1. **Check `DESIGN.md`** — if it specifies a stack, use it（DESIGN.md 通常含 component library 與 styling 系統）
 2. **Check project files:**
    - `nuxt.config.ts` or `nuxt.config.js` exists → **Nuxt project**
      - If `@nuxt/ui` in `package.json` dependencies → Stack = **Nuxt UI** (use `<UButton>`, `<UCard>`, etc.)
      - If no `@nuxt/ui` → Stack = **Tailwind CSS** (with Vue/Nuxt conventions)
    - Otherwise → Stack = **Tailwind CSS** (default)
-3. **Propagate to all skills** — when the plan references `/impeccable craft`, `/colorize`, `/typeset`, etc., include the detected stack so output uses the correct component library and conventions
+3. **Propagate to all skills** — when the plan references `/impeccable craft`, `/impeccable colorize`, `/impeccable typeset`, etc., include the detected stack so output uses the correct component library and conventions
 
 | Detected Stack   | Component Style                         | Color System                                    | Skill Integration                                                       |
 | ---------------- | --------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------- |
@@ -83,10 +115,29 @@ Detect the project's UI tech stack to ensure all design skills produce compatibl
 
 **When Nuxt UI is detected:**
 
-- `/colorize` and `/typeset` recommendations must map to Nuxt UI's theme system (`app.config.ts` → `ui` key), not raw CSS
-- `/polish` checks against Nuxt UI component conventions and design tokens (absorbs v1 `/normalize`)
+- `/impeccable colorize` and `/impeccable typeset` recommendations must map to Nuxt UI's theme system (`app.config.ts` → `ui` key), not raw CSS
+- `/impeccable polish` checks against Nuxt UI component conventions and design tokens
 - `/impeccable craft` produces `<UComponent>` markup, not raw HTML+Tailwind
 - Include `/nuxt-ui` skill knowledge when building or reviewing components
+
+### Step 1.5: Register Detection
+
+每個 design task 強制分類成兩種 register，影響所有 sub-command 的判斷基準：
+
+| Register    | 適用情境                                            | 設計取向                              |
+| ----------- | --------------------------------------------------- | ------------------------------------- |
+| **brand**   | marketing、landing、campaign、long-form content、portfolio — 設計**就是**產品 | 視覺優先、風格大膽、可全 palette 或 drenched |
+| **product** | app UI、admin、dashboard、tool — 設計**服務**產品   | 任務優先、restrained 預設、克制陳述     |
+
+**判斷優先序**（first match wins）：
+
+1. 任務文字本身的線索（"landing page" → brand；"dashboard" → product）
+2. 焦點頁面 / 檔案 / route（`pages/landing.vue` → brand；`pages/admin/*.vue` → product）
+3. `PRODUCT.md` 的 `register` 欄位（推薦明確標註）
+
+若 PRODUCT.md 缺 `register` 欄位，從 Users / Product Purpose 區段推論一次並在本 session 內 cache，並建議使用者跑 `/impeccable teach` 補欄位。
+
+**為什麼 clade design 也要管 register**：plan 內推薦的 skill 序列在 brand vs product 不同——例如 brand 模式下 `/impeccable overdrive` 是合理 hero 選項；product 模式則幾乎永遠是 over-design。register 進 plan rationale，能避免推錯方向。
 
 ---
 
@@ -105,55 +156,60 @@ Ask if not already clear:
 
 ### 2. Establish Design System (if none exists)
 
-Use `/impeccable teach` to gather design context, then define the design system directly:
+`/impeccable teach` 在 v3 會引導建立 **PRODUCT.md**（必要：使用者、品牌、語氣、anti-references、strategic principles、register）和 **DESIGN.md**（建議：色彩、字體、層次、元件、layout 規格）。teach 完成後再進入後續：
 
 - Style direction (minimal, bold, editorial, etc.)
-- Color palette (primary, neutral, semantic colors)
+- Color palette + **color strategy**（restrained / committed / full palette / drenched — 強制 commitment axis）
 - Typography pairing (heading + body fonts)
 - Spacing scale and layout pattern
 
 Present recommendations to user for approval before proceeding.
 
+> **若專案已有 code 但沒有 DESIGN.md**：先跑 `/impeccable document` 從現有 code 反推 DESIGN.md，再進 enhance 階段。比讓 `/impeccable teach` 從零問一次省力。
+
 ### 3. Build the Plan
 
-Output a phased plan:
+Output a phased plan：
 
 ```
 ## Design Plan: [project name]
+Register: brand | product
 
 ### Phase 1 — Foundation
-□ /impeccable teach                          ← establish design context & design system
-□ /shape                                     ← (optional) requirements gathering before code
+□ /impeccable teach                          ← 建立 PRODUCT.md + DESIGN.md
+□ /impeccable shape                                     ← (optional) 寫 code 前的需求釐清
 
 ### Phase 2 — Build
-□ /impeccable craft                          ← main build flow
+□ /impeccable craft                          ← 主 build flow（強制 shape brief 經使用者確認）
 □ Core components: [list expected components, e.g. ServerCard, MetricGauge, Sidebar]
 
 ### Phase 3 — Enhance (3-4 targeted skills)
 □ [selected skills with specific component targets]
+□ /impeccable live                                      ← (optional) 瀏覽器即時挑元素生成變體迭代
 
 ### Phase 4 — Ship
 □ [1-2 resilience skills if needed]
-□ /audit                                     ← diagnostic verification (Critical = 0)
-□ /polish                                    ← always last
+□ /impeccable audit                                     ← diagnostic verification (Critical = 0)
+□ /impeccable polish                                    ← always last
+□ /impeccable extract                        ← (optional) 把可重用 tokens / 元件抽進 design system
 ```
 
 **Customize Phase 3 by project type** (read `references/skill-map.md` for full catalog):
 
 | Project Type      | Priority Skills                                     |
 | ----------------- | --------------------------------------------------- |
-| Data dashboard    | `/layout` → `/typeset` → `/colorize`                |
-| Consumer app      | `/animate` → `/delight` → `/harden`                 |
-| Developer tool    | `/clarify` → `/distill` → `/typeset`                |
-| Marketing/landing | `/bolder` → `/colorize` → `/animate` → `/overdrive` |
-| Internal tool     | `/clarify` → `/layout` → `/harden`                  |
-| E-commerce        | `/colorize` → `/animate` → `/harden` → `/adapt`     |
+| Data dashboard    | `/impeccable layout` → `/impeccable typeset` → `/impeccable colorize`                |
+| Consumer app      | `/impeccable animate` → `/impeccable delight` → `/impeccable harden`                 |
+| Developer tool    | `/impeccable clarify` → `/impeccable distill` → `/impeccable typeset`                |
+| Marketing/landing | `/impeccable bolder` → `/impeccable colorize` → `/impeccable animate` → `/impeccable overdrive` |
+| Internal tool     | `/impeccable clarify` → `/impeccable layout` → `/impeccable harden`                  |
+| E-commerce        | `/impeccable colorize` → `/impeccable animate` → `/impeccable harden` → `/impeccable adapt`     |
 
 Phase 2 should list expected component names so the user has a build checklist.
 
-### When to Run `/shape` (判準)
+### When to Run `/impeccable shape` (判準)
 
-`/shape` does a structured discovery interview then writes a design brief **before** `/impeccable craft`. Run it when:
+`/impeccable shape` does a structured discovery interview then writes a design brief **before** `/impeccable craft`. Run it when:
 
 - ✅ Requirements are fuzzy, open to multiple valid interpretations
 - ✅ Multi-stakeholder feature (cross-role, cross-team)
@@ -163,11 +219,12 @@ Phase 2 should list expected component names so the user has a build checklist.
 
 ### Exit Criteria (`new` mode)
 
-- [ ] `.impeccable.md` exists with Design Context
+- [ ] `PRODUCT.md` exists with users / brand / register / strategic principles
+- [ ] `DESIGN.md` exists with tokens（colors / typography / spacing / components）
 - [ ] All core components in Phase 2 built and mounted into a reachable page
-- [ ] `/audit` passed with Critical = 0
-- [ ] `/polish` passed — no remaining Medium issues
-- [ ] Design system tokens (`design-system/MASTER.md` or equivalent) committed
+- [ ] `/impeccable audit` passed with Critical = 0
+- [ ] `/impeccable polish` passed — no remaining Medium issues
+- [ ] Design system tokens (`design-system/MASTER.md`、`app.config.ts`、或等價檔) committed
 
 ---
 
@@ -182,7 +239,7 @@ Phase 2 should list expected component names so the user has a build checklist.
 
 ### 2. Diagnostic Scan
 
-**Consider running `/critique` first** for a high-level UX assessment (hierarchy, IA, emotional resonance, persona-based testing) before the detailed rubric below — it surfaces directional issues that the structural rubric misses. Treat `/critique` output as input to Step 3's skill mapping.
+**Consider running `/impeccable critique` first** for a high-level UX assessment (hierarchy, IA, emotional resonance, persona-based testing) before the detailed rubric below — it surfaces directional issues that the structural rubric misses. Treat `/impeccable critique` output as input to Step 3's skill mapping.
 
 Read `references/diagnosis.md` for the full rubric. Assess these dimensions:
 
@@ -197,40 +254,41 @@ Read `references/diagnosis.md` for the full rubric. Assess these dimensions:
 | Accessibility | Low contrast? No keyboard nav? Missing alt text? |
 | Consistency   | Deviates from design system? Mixed patterns?     |
 
-### 2.5. Design Fidelity Check（improve 模式，`.impeccable.md` 存在時必跑）
+### 2.5. Design Fidelity Check（improve 模式，PRODUCT.md / DESIGN.md 存在時必跑）
 
-**條件**：`.impeccable.md` 存在時必跑，不存在時跳過此步驟。
+**條件**：`PRODUCT.md` 存在時必跑（DESIGN.md 缺失時部分維度標 MISSING）；兩者都不存在跳過此步驟並建議先跑 `/impeccable teach`。
 
 逐一比對 Step 1 提取的 fidelity checkpoints vs 目標頁面/元件的實際 code，涵蓋 8 個維度：
 
-| Fidelity 維度            | 比對什麼                                                                                                              |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| **Color Tokens**         | `app.config.ts` tokens 是否與 Color System 表一致？元件是否使用 token 而非 hardcoded hex？secondary/accent 有使用嗎？ |
-| **Typography**           | 字體有載入嗎？數字用 `tabular-nums`？body >= 16px？                                                                   |
-| **Spacing**              | page padding 符合定義（如 `py-8`/`py-4`）？card gap 符合（如 `gap-6`）？form gap 符合（如 `gap-4`）？                 |
-| **Component Usage**      | Nuxt UI 元件作為 base？自訂元件（StatCard、EmptyState 等）有建構嗎？                                                  |
-| **Interaction Patterns** | Admin CRUD 有 sort/filter/pagination？empty state 有 text+CTA？                                                       |
-| **Layout Fidelity**      | desktop 有 sidebar+breadcrumb+max-width？auth 有 centered card？符合 Layout Architecture 定義？                       |
-| **Design Principles**    | 數據是主角？路徑最短？透明可追溯？a11y 達標？逐條原則驗證                                                             |
-| **Anti-references**      | 無過度裝飾？無冰冷金融風？無遊戲化？符合 `.impeccable.md` 的反面教材定義？                                            |
+| Fidelity 維度                | 來源                       | 比對什麼                                                                                                              |
+| ---------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **Color Tokens**             | DESIGN.md                  | `app.config.ts`/CSS vars 是否與 DESIGN.md Color System 一致？元件用 token 而非 hardcoded hex？OKLCH？無 `#000`/`#fff`？ |
+| **Typography**               | DESIGN.md                  | 字體有載入嗎？數字用 `tabular-nums`？body line length ≤ 75ch？scale ratio ≥ 1.25？                                      |
+| **Spacing**                  | DESIGN.md                  | page padding / card gap / form gap 是否符合定義？rhythm 有變化還是 flat？                                              |
+| **Component Usage**          | DESIGN.md                  | Nuxt UI 元件作為 base？自訂元件（StatCard、EmptyState 等）有建構嗎？無 nested cards？                                  |
+| **Interaction Patterns**     | PRODUCT.md + DESIGN.md     | Admin CRUD 有 sort/filter/pagination？empty state 有 text+CTA？符合 PRODUCT.md 互動原則？                                |
+| **Layout Fidelity**          | DESIGN.md                  | desktop 有 sidebar+breadcrumb+max-width？auth 有 centered card？符合 Layout Architecture？                              |
+| **Design Principles**        | PRODUCT.md                 | strategic principles 逐條驗證（數據是主角？路徑最短？透明可追溯？a11y 達標？）                                          |
+| **Brand & Anti-references**  | PRODUCT.md                 | 無 PRODUCT.md 列出的反面教材（過度裝飾、冰冷金融風、遊戲化等）？brand voice 一致？無 v3 absolute bans（side-stripe、gradient text、glassmorphism、hero-metric template、identical card grids、modal as first thought）？ |
 
 **輸出格式**（附加在 Quick Assessment 之後）：
 
 ```markdown
 ### Design Fidelity Report
 
-Source: .impeccable.md
+Source: PRODUCT.md + DESIGN.md
+Register: brand | product
 
-| 維度                 | 狀態                   | 證據       |
-| -------------------- | ---------------------- | ---------- |
-| Color Tokens         | PASS / DRIFT / MISSING | [具體發現] |
-| Typography           | PASS / DRIFT / MISSING | [具體發現] |
-| Spacing              | PASS / DRIFT / MISSING | [具體發現] |
-| Component Usage      | PASS / DRIFT / MISSING | [具體發現] |
-| Interaction Patterns | PASS / DRIFT / MISSING | [具體發現] |
-| Layout Fidelity      | PASS / DRIFT / MISSING | [具體發現] |
-| Design Principles    | PASS / DRIFT / MISSING | [具體發現] |
-| Anti-references      | PASS / DRIFT / MISSING | [具體發現] |
+| 維度                      | 狀態                   | 證據       |
+| ------------------------- | ---------------------- | ---------- |
+| Color Tokens              | PASS / DRIFT / MISSING | [具體發現] |
+| Typography                | PASS / DRIFT / MISSING | [具體發現] |
+| Spacing                   | PASS / DRIFT / MISSING | [具體發現] |
+| Component Usage           | PASS / DRIFT / MISSING | [具體發現] |
+| Interaction Patterns      | PASS / DRIFT / MISSING | [具體發現] |
+| Layout Fidelity           | PASS / DRIFT / MISSING | [具體發現] |
+| Design Principles         | PASS / DRIFT / MISSING | [具體發現] |
+| Brand & Anti-references   | PASS / DRIFT / MISSING | [具體發現] |
 
 Fidelity Score: N/8 PASS
 
@@ -242,9 +300,9 @@ Fidelity Score: N/8 PASS
 
 **狀態定義**：
 
-- **PASS** — 實作與 `.impeccable.md` 定義一致
+- **PASS** — 實作與 PRODUCT.md / DESIGN.md 定義一致
 - **DRIFT** — 實作偏離定義（有定義但未遵循）→ 必須修復
-- **MISSING** — `.impeccable.md` 有定義但實作中完全缺失 → 必須補齊
+- **MISSING** — PRODUCT.md / DESIGN.md 有定義但實作中完全缺失 → 必須補齊；若是 DESIGN.md 本身缺、source 維度直接標 MISSING 並建議跑 `/impeccable document`
 
 **關鍵規則**：DRIFT 和 MISSING 項目成為**最高優先**，在跑任何 design skill 之前先修復。
 
@@ -286,7 +344,7 @@ Consistency:  [rating] — [finding]
 1. `/skill [target]` — fixes [what]
 2. `/skill [target]` — fixes [what]
 ...
-N. `/polish [target]` — final pass
+N. `/impeccable polish [target]` — final pass
 
 ### Follow-Up (if time allows)
 - `/skill [target]` — [what it would improve]
@@ -295,13 +353,13 @@ N. `/polish [target]` — final pass
 - `/skill` — [why it's excluded for this case]
 ```
 
-**Be specific.** Not "run /colorize" but "run `/colorize` on the settings panel — the entire page is gray-on-white with no visual hierarchy between sections."
+**Be specific.** Not "run /impeccable colorize" but "run `/impeccable colorize` on the settings panel — the entire page is gray-on-white with no visual hierarchy between sections."
 
 ### Exit Criteria (`improve` mode)
 
 - [ ] All skills in Core Plan executed on their specified targets
-- [ ] `/audit [target]` passed with Critical = 0
-- [ ] `/polish [target]` passed — no remaining Medium issues on the scope
+- [ ] `/impeccable audit [target]` passed with Critical = 0
+- [ ] `/impeccable polish [target]` passed — no remaining Medium issues on the scope
 - [ ] Follow-Up items logged (to `openspec/changes/` or `docs/`) if deferred
 - [ ] Excluded skills documented with rationale
 
@@ -322,18 +380,18 @@ Ask if not clear:
 ### 2. Check Design System State
 
 - `design-system/MASTER.md` exists? Page overrides?
-- `.impeccable.md` up to date?
+- `PRODUCT.md` / `DESIGN.md` up to date?
 - Read `design-system/PHASE_LOG.md` if it exists — it contains carry-forward notes from prior phases.
 - Scan for design system drift: search for hard-coded hex values, non-standard spacing, inconsistent tokens in the new code.
 
 **Distinguish two types of drift:**
 
-- **Accidental drift:** New code uses hard-coded values instead of existing tokens → `/polish` (v2.1 merged `/normalize` into `/polish`)
-- **Intentional expansion:** New features need tokens that don't exist yet (e.g., notification badge color) → First update MASTER.md with new tokens, THEN `/polish`
+- **Accidental drift:** New code uses hard-coded values instead of existing tokens → `/impeccable polish`
+- **Intentional expansion:** New features need tokens that don't exist yet (e.g., notification badge color) → First update DESIGN.md（和 MASTER.md if applicable）with new tokens, THEN `/impeccable polish`
 
 ### 3. Assess Scoped Area Only
 
-Recommend running `/audit` on the scoped area for a systematic diagnostic. Alternatively, perform a manual scan using `references/diagnosis.md`, but:
+Recommend running `/impeccable audit` on the scoped area for a systematic diagnostic. Alternatively, perform a manual scan using `references/diagnosis.md`, but:
 
 - **Only** new/changed code in this phase's scope
 - Compare against existing shipped patterns — is it consistent?
@@ -346,20 +404,20 @@ Recommend running `/audit` on the scoped area for a systematic diagnostic. Alter
 
 ### Alignment Check
 - Design system compliance: [OK / drifting (N violations) / missing]
-- Drift type: [accidental → /polish | expansion needed → update MASTER.md first, then /polish]
+- Drift type: [accidental → /impeccable polish | expansion needed → update MASTER.md first, then /impeccable polish]
 - Consistency with shipped phases: [OK / diverging — specify where]
 
 ### This Phase (3-6 skills)
 1. `/skill [target]` — [rationale]
 2. `/skill [target]` — [rationale]
 ...
-N. `/polish [scoped area]` — final pass
+N. `/impeccable polish [scoped area]` — final pass
 
 ### Phase Completion Criteria
 - [ ] All design system token violations resolved
 - [ ] [specific criterion based on findings]
 - [ ] [specific criterion based on findings]
-- [ ] /polish passed with no remaining issues
+- [ ] /impeccable polish passed with no remaining issues
 - [ ] Carry-Forward written to design-system/PHASE_LOG.md
 
 ### Not Needed This Phase
@@ -391,7 +449,7 @@ After the user completes this phase, suggest writing the Carry-Forward section t
 
 - [ ] Design system token violations quantified → 0 (re-scan after fixes)
 - [ ] All Phase Completion Criteria items checked
-- [ ] `/polish` passed on scoped area — no remaining Medium issues
+- [ ] `/impeccable polish` passed on scoped area — no remaining Medium issues
 - [ ] Cross-phase consistency verified (compare to prior phase's shipped patterns)
 - [ ] Carry-Forward section appended to `design-system/PHASE_LOG.md`
 
@@ -402,57 +460,58 @@ After the user completes this phase, suggest writing the Carry-Forward section t
 1. **Always read code first** — never plan blind
 2. **Be specific** — name files, components, line ranges
 3. **3-6 skills per plan** — split overflow into "Follow-up" or "Carry-Forward", never dump all 18
-4. **Explain exclusions** — "skipping /animate — this is a data-entry form where motion distracts"
-5. **Check mutual exclusivity** — see `references/skill-map.md` "Mutual Exclusivity" section. Never recommend `/bolder` + `/quieter` together; pick one direction. Run `/distill` before `/bolder`, not alongside.
+4. **Explain exclusions** — "skipping /impeccable animate — this is a data-entry form where motion distracts"
+5. **Check mutual exclusivity** — see `references/skill-map.md` "Mutual Exclusivity" section. Never recommend `/impeccable bolder` + `/impeccable quieter` together; pick one direction. Run `/impeccable distill` before `/impeccable bolder`, not alongside.
 6. **Follow canonical order** — deviations need explicit justification
-7. **End with /polish** — it's always the last step
+7. **End with /impeccable polish** — it's always the last step
 8. **Respect time** — if 1-2 skills suffice, say so. Don't over-prescribe.
 9. **Proactive plan execution** — After outputting the diagnosis report and action plan for `/design new|improve|iterate`, ALWAYS ask the user: "要進入 Plan Mode 逐步執行這些改進嗎？" If the user agrees, enter plan mode and create a structured implementation plan that walks through each skill/step sequentially, waiting for user approval at each phase before proceeding to the next. **Skip this prompt** when answering meta/strategy questions that don't match the three canonical modes (e.g. "should we adopt X", "what's the difference between Y and Z") — give a direct answer instead.
 10. **Cite references** — When recommending design systems or patterns, cite specific examples from `references/design-systems.md`. Include industry-specific benchmarks and maturity assessments from `references/diagnosis.md`.
 
 ## Diagnostic Skills (assess without changing code)
 
-Two standalone diagnostic tools sit **outside** the production pipeline. Invoke as needed — they are inputs to planning, not steps in execution.
+Three standalone diagnostic / iteration tools sit **outside** the production pipeline. Invoke as needed — they are inputs to planning or interactive 探索, not steps in execution.
 
 | Tool | Produces | When to use |
 |---|---|---|
-| `/critique [target]` | UX evaluation with persona testing: hierarchy, IA, emotional resonance, cognitive load. Qualitative + quantitative score. | **Early** — as part of `improve` mode Step 2 to surface directional issues before the structural rubric. Also useful when you don't trust your own read of the design. |
-| `/audit [target]` | Severity-rated issue list: a11y, performance, theming drift, responsive. Critical/High/Medium breakdown. | **Late** — right before `/polish` to verify readiness. Also as a periodic health check during `iterate`. |
+| `/impeccable critique [target]` | UX evaluation with persona testing: hierarchy, IA, emotional resonance, cognitive load. Qualitative + quantitative score. | **Early** — as part of `improve` mode Step 2 to surface directional issues before the structural rubric. Also useful when you don't trust your own read of the design. |
+| `/impeccable audit [target]` | Severity-rated issue list: a11y, performance, theming drift, responsive. Critical/High/Medium breakdown. | **Late** — right before `/impeccable polish` to verify readiness. Also as a periodic health check during `iterate`. |
+| `/impeccable live` | 在 dev server 瀏覽器中 hover/挑元素，當下生成多個視覺變體並挑選 → 寫回原始碼。 | **互動探索** — 對特定元件想試多種風格但難以言述時。Vite/Next React/TSX、Nuxt、純 HTML 都支援。需 dev server 運作中。 |
 
-`/critique` tells you **whether the design works** as an experience. `/audit` tells you **whether the implementation is production-safe**. They rarely substitute for each other.
+`/impeccable critique` tells you **whether the design works** as an experience. `/impeccable audit` tells you **whether the implementation is production-safe**. `/impeccable live` lets you **iterate visually instead of textually**. They rarely substitute for each other.
 
 ## Canonical Skill Order (production pipeline)
 
 When executing a multi-skill plan, follow this sequence (skip what's not needed):
 
 ```
-/impeccable teach               ← foundation & design system (if no .impeccable.md)
-/shape                          ← (optional) requirements gathering before code — see 判準 in `new` mode
+/impeccable teach               ← foundation：建立 PRODUCT.md（必要）+ DESIGN.md（建議）
+/impeccable document            ← (alt) 已有 code 但無 DESIGN.md 時，從 code 反推 DESIGN.md
+/impeccable shape                          ← (optional) 寫 code 前需求釐清 — 見 `new` mode 判準
   ↓
-/impeccable craft               ← main build flow
-/distill                        ← simplify (if cluttered)
+/impeccable craft               ← 主 build flow（強制 shape brief 經使用者確認才能 build）
+/impeccable distill                        ← simplify (if cluttered)
   ↓
-/layout                         ← structure & layout
-/typeset                        ← typography
-/colorize | /bolder | /quieter  ← color & intensity (pick one direction)
+/impeccable layout                         ← structure & layout
+/impeccable typeset                        ← typography
+/impeccable colorize | /impeccable bolder | /impeccable quieter  ← color & intensity (pick one direction)
   ↓
-/animate                        ← motion
-/clarify                        ← copy & messaging
-/delight                        ← personality & joy
-/overdrive                      ← (optional) ambitious wow-factor — marketing/landing, hero moments
-/harden                         ← resilience, edge cases, first-time UX
+/impeccable animate                        ← motion
+/impeccable clarify                        ← copy & messaging
+/impeccable delight                        ← personality & joy
+/impeccable overdrive                      ← (optional) ambitious wow-factor — brand register only
+/impeccable harden                         ← resilience, edge cases
+/impeccable onboard                        ← first-run flows、empty states、activation
   ↓
-/optimize                       ← performance
-/adapt                          ← cross-platform (if needed)
+/impeccable optimize                       ← performance
+/impeccable adapt                          ← cross-platform (if needed)
 /impeccable extract             ← consolidate patterns into design system (if applicable)
   ↓
-/audit                          ← diagnostic verification (Critical must = 0)
-/polish                         ← always last (final pass + design-system alignment)
+/impeccable audit                          ← diagnostic verification (Critical must = 0)
+/impeccable polish                         ← always last (final pass + design-system alignment)
 ```
 
 **This order is mandatory.** Rationale: fix structure before visuals, visuals before experience, everything before hardening, audit → polish always final. If you need to deviate, state why in the plan.
-
-> **Legacy v1 names**: if you encounter `/arrange`, `/normalize`, `/onboard`, `/frontend-design`, `/teach-impeccable`, or `/extract` in archived artifacts, see `references/migration.md`.
 
 ## Step 6: Persist Evidence（Spectra 整合）
 
@@ -483,18 +542,19 @@ When executing a multi-skill plan, follow this sequence (skip what's not needed)
 
 ## Design Fidelity Report
 
-Source: .impeccable.md
+Source: PRODUCT.md + DESIGN.md
+Register: brand | product
 
-| 維度                 | 狀態                   | 證據       |
-| -------------------- | ---------------------- | ---------- |
-| Color Tokens         | PASS / DRIFT / MISSING | [具體發現] |
-| Typography           | PASS / DRIFT / MISSING | [具體發現] |
-| Spacing              | PASS / DRIFT / MISSING | [具體發現] |
-| Component Usage      | PASS / DRIFT / MISSING | [具體發現] |
-| Interaction Patterns | PASS / DRIFT / MISSING | [具體發現] |
-| Layout Fidelity      | PASS / DRIFT / MISSING | [具體發現] |
-| Design Principles    | PASS / DRIFT / MISSING | [具體發現] |
-| Anti-references      | PASS / DRIFT / MISSING | [具體發現] |
+| 維度                      | 狀態                   | 證據       |
+| ------------------------- | ---------------------- | ---------- |
+| Color Tokens              | PASS / DRIFT / MISSING | [具體發現] |
+| Typography                | PASS / DRIFT / MISSING | [具體發現] |
+| Spacing                   | PASS / DRIFT / MISSING | [具體發現] |
+| Component Usage           | PASS / DRIFT / MISSING | [具體發現] |
+| Interaction Patterns      | PASS / DRIFT / MISSING | [具體發現] |
+| Layout Fidelity           | PASS / DRIFT / MISSING | [具體發現] |
+| Design Principles         | PASS / DRIFT / MISSING | [具體發現] |
+| Brand & Anti-references   | PASS / DRIFT / MISSING | [具體發現] |
 
 Fidelity Score: N/8 PASS
 
@@ -524,7 +584,6 @@ Fidelity Score: N/8 PASS
 - `references/design-systems.md` — Industry-categorized design system index (209 systems)
 - `references/skill-map.md` — Issue → Skill mapping + library recommendations
 - `references/diagnosis.md` — 8-dimension diagnostic rubric + maturity model
-- `references/migration.md` — v1 → v2 command name mapping (historical only — for reading archived artifacts)
 
 ### When to Cite External References
 

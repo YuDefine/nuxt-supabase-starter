@@ -58,6 +58,7 @@ function formatLock(lock) {
 }
 
 function acquire() {
+  // 1) 若已有非 stale lock → 直接拒絕
   const existing = readLock()
   if (existing && !isStale(existing)) {
     console.error('[/commit lock] ⛔ 另一個 session 正在跑 /commit')
@@ -73,9 +74,18 @@ function acquire() {
     process.exit(1)
   }
 
+  // 2) Stale → 先 unlink，避免兩個 process 同時跑到 wx 都失敗
   if (existing && isStale(existing)) {
     console.error('[/commit lock] 發現 stale lock，自動清除：')
     console.error(formatLock(existing))
+    try {
+      unlinkSync(LOCK_FILE)
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        console.error(`[/commit lock] ⚠️ 清除 stale lock 失敗：${err.message}`)
+        process.exit(1)
+      }
+    }
   }
 
   mkdirSync(dirname(LOCK_FILE), { recursive: true })
@@ -89,20 +99,37 @@ function acquire() {
     user: userInfo().username,
     cwd: process.cwd(),
   }
-  writeFileSync(LOCK_FILE, JSON.stringify(payload, null, 2), { mode: 0o644 })
+
+  // 3) 用 wx flag 做 atomic exclusive create — 兩個 process 同時跑只有一個會成功
+  try {
+    writeFileSync(LOCK_FILE, JSON.stringify(payload, null, 2), { mode: 0o644, flag: 'wx' })
+  } catch (err) {
+    if (err.code === 'EEXIST') {
+      // 另一個 process 在我們 readLock → writeFile 中間搶先了
+      const winner = readLock()
+      console.error('[/commit lock] ⛔ 另一個 session 同時 acquire，本 session 退讓')
+      console.error(formatLock(winner))
+      console.error('')
+      console.error('處置：等對方完成或重跑 /commit')
+      process.exit(1)
+    }
+    console.error(`[/commit lock] ⚠️ 寫入 lock 失敗：${err.message}`)
+    process.exit(1)
+  }
+
   console.log('[/commit lock] ✓ acquired')
   console.log(formatLock(payload))
 }
 
 function release() {
-  if (!existsSync(LOCK_FILE)) {
-    console.log('[/commit lock] (no lock to release)')
-    return
-  }
   try {
     unlinkSync(LOCK_FILE)
     console.log('[/commit lock] ✓ released')
   } catch (err) {
+    if (err.code === 'ENOENT') {
+      console.log('[/commit lock] (no lock to release)')
+      return
+    }
     console.error(`[/commit lock] ⚠️ 釋放失敗：${err.message}`)
     process.exit(1)
   }

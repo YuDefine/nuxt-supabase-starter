@@ -65,7 +65,7 @@ Local edits will be reverted by the next sync.
 - **每個 commit 獨立且完整** — 不相關的變更**MUST**分到不同 commit
 - **Commit message 使用繁體中文**描述
 - **所有 uncommitted 變更都必須入庫**，**NEVER** 以「不在本次範圍」「影響不大」為由跳過任何檔案
-- **`.gitignore` 變更**：若發現有變更，先 `git checkout .gitignore` 還原，**NEVER** commit
+- **`.gitignore` 變更**：只允許保留 Clade 管理的 installation artifact / runtime state ignore 條目（例如 `.claude/.commit.lock`、`codex/`）；其他變更先 `git checkout .gitignore` 還原，**NEVER** commit
 - **`.env` / 敏感檔案**：警告使用者但仍由使用者決定是否 commit，**NEVER** 自行跳過
 - **修正所有發現的問題**：review / lint / typecheck / test 發現的問題都**MUST**修正，**NEVER** 以「建議性質」「不在本次範圍」為由跳過
 
