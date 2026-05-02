@@ -73,10 +73,19 @@ If no argument is provided, the workflow will extract requirements from conversa
       ```
 
    4. **立刻**簡短回報給使用者：「已派 Codex GPT-5.5 xhigh 在背景執行 `/spectra-propose <change-name>`（bash job `<id>`，output stream 跟著走）」
-   5. **等通知**：收到 `<task-notification> status=completed` 時**立刻**：
-      - 用 BashOutput 讀該 job 的完整 stdout（或對應 output 檔）
-      - 摘要：產出哪些 artifacts、`spectra validate` 結果、是否 park 成功
-      - 列出後續可選動作（`/spectra-apply <change-name>` 等）
+   5. **等通知 + Open Questions 主動檢查**：收到 `<task-notification> status=completed` 時**立刻**依序執行：
+      1. 用 BashOutput 讀該 job 的完整 stdout（或對應 output 檔）
+      2. 簡短摘要：產出哪些 artifacts、`spectra validate` 結果、是否 park 成功
+      3. **MUST 掃 design.md 的 Open Questions**（不論前面摘要多漂亮，這步**不能省略**）：
+         - 用 Read 讀 `openspec/changes/<change-name>/design.md`
+         - 用 grep 找 `## Open Questions`（或同義變體：`## Open Question`、`## 待決問題`、`## Unresolved Questions`）標題
+         - 若標題存在且區塊內容非空（不是 `(none)` / `N/A` / `無` / 只剩空 bullet / 只剩註解）：
+           - **立刻**用 **AskUserQuestion** 把每一題列給使用者（一次最多 5 題，超過分批問）；題目沿用 design.md 的原句，必要時補一句脈絡讓使用者好答
+           - **NEVER** 把「要不要回答 open questions」包成 A/B/C/D 選單裡的一個選項丟給使用者選 — open questions 是 apply 前的硬決策，**MUST** 主動拿到答案
+           - **NEVER** 自行假設答案、自行標 wontfix、或推給未來（"晚點再決定"、"apply 時再說"）
+           - 若 **AskUserQuestion** 不可用，就用純文字逐題列出並等使用者回覆
+         - 拿到答案後：`spectra unpark <change-name>` → 用 Edit 把 design.md 的 `## Open Questions` 段落改為 `## Resolved Questions`，每題下補一行 `**Answer:** <使用者回答>` → `spectra analyze <change-name> --json` 確認沒新 Critical/Warning → `spectra validate <change-name>` → `spectra park <change-name>`
+      4. **Open Questions 處理完（或本來就沒有）後**才列出後續可選動作（`/spectra-apply <change-name>` 等）
    6. **NEVER** 沉默等使用者來問進度；通知一到自己讀檔回報
    7. **本 session 不再執行任何 Step 1 ~ 11**（避免雙重生產）— Step 0 A 路徑結束本 skill
 

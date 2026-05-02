@@ -30,14 +30,19 @@ globs: ['**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts,md,json}', '.*rc*', '.*.config.
 - `package.json` 內的 `eslintConfig` 鍵
 - `.eslintignore`
 
-### 禁止所有 prettier 相關檔案（含 `.prettierignore`）
+### 禁止所有 prettier config 檔（`.prettierignore` 例外）
 
 **NEVER** 建立或保留以下任一檔案：
 
 - `.prettierrc`、`.prettierrc.json`、`.prettierrc.yaml`、`.prettierrc.yml`、`.prettierrc.toml`
 - `.prettierrc.js`、`.prettierrc.cjs`、`.prettierrc.mjs`、`prettier.config.*`
-- **`.prettierignore`**（即使 oxfmt 為了 migration 相容會讀，但既然不用 prettier，就不該有 prettier 命名的 ignore 檔；用 oxfmt 自家 `.oxfmtrc.json` 的 `ignorePatterns`）
 - `package.json` 內的 `prettier` 鍵
+
+#### `.prettierignore` 例外（clade-managed）
+
+`.prettierignore` 由 clade 治理（`scripts/lib/prettierignore-governance.mjs`），**只能**保留 clade-managed LOCKED projections（`.claude/rules/`、`.claude/skills/`、`.claude/hooks/`、`.claude/agents/`、`.agents/`、`.codex/`）的 ignore 條目。**禁止**手動加任何其他條目，也**禁止**整個刪除——刪掉之後 `pnpm hub:bootstrap` 會自動重建。
+
+理由：vite-plus 0.1.14 / oxfmt 0.42.0 的 `.oxfmtrc.json` `ignorePatterns` 欄位**不會被套用到 file walking**（已驗證 bug，2026-05），導致 oxfmt 走訪 LOCKED 目錄時試圖寫入 chmod 444 檔案、被報成 format issue 讓 `pnpm vp fmt --check` 紅燈。`.prettierignore` 是 oxfmt 預設 fallback ignore-file，能正確生效。等 oxfmt 修好 `ignorePatterns` 之後可以撤回此例外。
 
 ### 禁止把 eslint / prettier 加進 dependencies
 
@@ -107,21 +112,33 @@ pnpm exec vp lint --fix --no-error-on-unmatched-pattern "$@"
 pnpm exec vp fmt --no-error-on-unmatched-pattern "$@"
 ```
 
-### 自家 ignore patterns — 用 `.oxfmtrc.json`
+### 自家 ignore patterns — 雙軌制
 
-oxfmt 自家 config（`.oxfmtrc.json`）含 `ignorePatterns` 欄位，是當前**正確且唯一**的 ignore 機制：
+**(A) 專案自己的 ignore（用 `.oxfmtrc.json` `ignorePatterns`）**
+
+oxfmt 自家 config（`.oxfmtrc.json`）的 `ignorePatterns` 欄位是專案 ignore 的**主要**機制：
 
 ```json
 {
   "$schema": "https://oxc.rs/schemas/oxfmtrc.json",
   "ignorePatterns": [
-    ".claude/rules/**",
-    ".claude/skills/**",
-    ".claude/hooks/**",
-    "shared/types/database.types.ts"
+    "coverage/**",
+    ".nuxt/**",
+    ".output/**",
+    "dist/**",
+    "node_modules/**",
+    "**/database.types.ts",
+    "pnpm-lock.yaml",
+    "supabase/seed.sql"
   ]
 }
 ```
+
+> ⚠️ **已知 upstream bug**（2026-05 驗證）：vite-plus 0.1.14 / oxfmt 0.42.0 的 `ignorePatterns` 欄位**不會被套用到 file walking**——換句話說只有用 `--ignore-path` 或預設 fallback（`.gitignore` / `.prettierignore`）才會生效。等 oxfmt 修好之後 `ignorePatterns` 才會回到「正確且唯一」位置。
+
+**(B) Clade-managed LOCKED projections ignore（用 `.prettierignore`，clade 治理）**
+
+`.claude/rules/`、`.claude/skills/`、`.claude/hooks/`、`.claude/agents/`、`.agents/`、`.codex/` 這些 clade 投影目錄是 chmod 444，oxfmt 不能寫入但會走訪到，會被報 format issue。clade 透過 `scripts/lib/prettierignore-governance.mjs` 在 `pnpm hub:bootstrap` 時自動寫 `.prettierignore`，oxfmt 預設 fallback 就會讀到並跳過。**consumer 不要手動編輯這個檔**。
 
 對 oxlint，用 `.oxlintrc.json` 的 `ignorePatterns`（同名欄位）：
 
@@ -139,7 +156,7 @@ pnpm exec vp fmt --init        # 產 .oxfmtrc.json 預設值
 pnpm exec vp fmt --migrate=prettier  # 從既有 prettier config 遷移（若有）
 ```
 
-`.gitignore` 不該作為 lint/format ignore（git 跟 lint 是獨立面向）。雖然 oxfmt 在無自家 config 時會 fallback 讀 `.gitignore` + `.prettierignore`，但專案應**主動建立 `.oxfmtrc.json`** 不依賴 fallback。
+`.gitignore` 不該作為 lint/format ignore（git 跟 lint 是獨立面向）。LOCKED 投影目錄走 `.prettierignore`（B 軌）；專案自家 ignore 走 `.oxfmtrc.json` `ignorePatterns`（A 軌，等 oxfmt 修好後生效；目前可暫時 fallback 用 `.gitignore` 已 ignore 的條目掩護）。
 
 ## 心智模型
 
