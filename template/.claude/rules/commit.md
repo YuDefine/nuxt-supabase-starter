@@ -16,7 +16,7 @@ Local edits will be reverted by the next sync.
 - **0-A** `codex review --uncommitted`（GPT 5.5，最多 2 輪 review-fix loop：Round 1 = `high`、Round 2 = `xhigh`）— 重用性、品質、邏輯、安全；review 由 codex 執行，修正由 Claude Code 主線執行
 - **0-B** `pnpm check` — format / lint / typecheck / test 全綠
 - **Step 1** Schema 同步檢查 — `database.types.ts` 與 migration 對齊
-- **Step 6** 版本號升級 + tag push — `feat` → minor、其他 → patch
+- **Step 5** 版本號升級 + tag push — `feat` → minor、其他 → patch
 
 這些檢查**無法事後補跑**：漏跑的 commit 已經在 history 裡，壞版本號已經 push 出去。
 
