@@ -505,7 +505,7 @@ drift warning 時**必須**主動更新 MANUAL 區塊（Current State / Next Mov
 | 新 session 開始 | `session-start-roadmap-sync.sh` | 永遠對齊 roadmap + claims |
 | Edit/Write | `post-edit-roadmap-sync.sh` | 有 claim heartbeat 或改到 `openspec/changes/**` 時即時反映 |
 | `spectra park` / `spectra unpark` 之後 | **你必須手動** `pnpm spectra:roadmap` | hook 沒監聽 `.spectra/spectra.db` |
-| `/assign /spectra-*` 結束後 | **你必須手動** `pnpm spectra:roadmap && pnpm spectra:claims` | 外部 runtime 不觸發 hook |
+| 在外部 runtime（背景 codex / 非 Claude Code session）跑 spectra command 之後 | **你必須手動** `pnpm spectra:roadmap && pnpm spectra:claims` | 外部 runtime 不觸發 PostToolUse hook |
 
 ### Work Claim 規則（v1.10+）
 
@@ -645,7 +645,7 @@ drift warning 時**必須**主動更新 MANUAL 區塊（Current State / Next Mov
 | 新 session 開始 | `session-start-roadmap-sync.sh` | 永遠對齊 |
 | Edit/Write 到 `openspec/changes/**` | `post-edit-roadmap-sync.sh` | 即時反映 |
 | `spectra park` / `spectra unpark` 之後 | **你必須手動** `pnpm spectra:roadmap` | hook 沒監聽 `.spectra/spectra.db` |
-| `/assign /spectra-*` 結束後 | **你必須手動** `pnpm spectra:roadmap` | 外部 runtime 不觸發 hook |
+| 在外部 runtime（背景 codex / 非 Claude Code session）跑 spectra command 之後 | **你必須手動** `pnpm spectra:roadmap` | 外部 runtime 不觸發 PostToolUse hook |
 
 ### Claude 主動維護的時機
 
