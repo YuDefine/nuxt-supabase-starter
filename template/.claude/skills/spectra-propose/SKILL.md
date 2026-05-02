@@ -31,6 +31,38 @@ If no argument is provided, the workflow will extract requirements from conversa
 
 **Steps**
 
+0. **Choose execution platform** （discuss → propose 銜接）
+
+   Before doing anything else, ask via **AskUserQuestion**:
+
+   | Option | 行為 |
+   | --- | --- |
+   | **A. Codex（GPT-5.5 xhigh）** | 把 propose 交給 Codex CLI / GPT-5.5 xhigh 執行；本 session **STOP** |
+   | **B. Claude Code 繼續做** | 在當前 session 接著走 Step 1 ~ 11 |
+
+   **Skip this step** when the upstream `spectra-discuss` already collected a B answer in the same session（discuss handoff 會把選擇傳下來）。Do not double-ask.
+
+   - 選 **A** → 印出以下 handoff 訊息，然後**立刻結束本 skill**，不要執行任何後續 step：
+
+     ```
+     ✅ 已選擇 A：Codex GPT-5.5 xhigh 執行 propose
+
+     請開啟 Codex CLI（或在 IDE 內切到 Codex），把模型設為 GPT-5.5 xhigh
+     （或等效的最高思考預算設定），然後執行：
+
+         /spectra-propose <change-name-or-requirement>
+
+     並把 discuss 階段已捕獲的結論 / design.md / spec.md 作為輸入。
+
+     本 Claude Code session 不繼續 propose；
+     等 Codex 產出 artifacts、`spectra validate` 通過、`spectra park` 完成後，
+     回來這裡接 `/spectra-apply <change-name>`。
+     ```
+
+   - 選 **B** → continue to Step 1 below.
+
+   If **AskUserQuestion** is unavailable, present the same two options as plain text and wait for the user's response.
+
 1. **Determine the requirement source**
 
    a. **Argument provided** (e.g., "add dark mode") → use it as the requirement description, skip to deriving the change name below.

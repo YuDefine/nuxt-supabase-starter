@@ -233,10 +233,19 @@ Present the summary and say something like "I'll capture this to design.md unles
 
 ### Transition to action
 
-When the discussion converges on building something:
+When the discussion converges on building something, **MUST** ask via **AskUserQuestion** who runs propose before invoking anything:
 
-- "Ready to formalize this? `/spectra-propose`"
-- Or capture the decision in existing artifacts and continue
+| Option                           | 誰執行                                              | 適用場景                                                                 |
+| -------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------ |
+| **A. Codex（GPT-5.5 xhigh）**    | 切到 Codex CLI、模型設為 GPT-5.5 xhigh              | propose 牽涉高度抽象決策、想要更高思考預算、或想用另一個模型獨立審視     |
+| **B. Claude Code 繼續做**        | 當前 session 直接接 `/spectra-propose`              | discuss 上下文已成熟、想保持單一 session 連續性                          |
+| **Stay**                         | 不進 propose，繼續 capture 到既有 artifacts         | 結論還沒到「值得開 change」的程度，先存進 design.md / spec.md            |
+
+- 選 **A** → 輸出 handoff 指示（請見 `spectra-propose` Step 0 的訊息），**並在此 session 停止**，不要呼叫 `/spectra-propose`
+- 選 **B** → 呼叫 `/spectra-propose <change-name>`，並在 propose Step 0 標記「已在 discuss 選 B」以避免重複詢問
+- 選 **Stay** → 把 conclusion 寫進對應 artifact，繼續討論
+
+If **AskUserQuestion** is unavailable, present the same three options as plain text and wait for the user's reply.
 
 ---
 
