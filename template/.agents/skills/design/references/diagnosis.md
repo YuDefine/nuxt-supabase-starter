@@ -22,7 +22,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Mix of border-radius values with no pattern
 - Hard-coded colors instead of tokens/variables
 
-**Maps to:** `/typeset`, `/colorize`, `/bolder`, `/quieter`, `/layout`
+**Maps to:** `/impeccable typeset`, `/impeccable colorize`, `/impeccable bolder`, `/impeccable quieter`, `/impeccable layout`
 
 ---
 
@@ -46,7 +46,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - States handled with display:none/block (no animation)
 - Loading just shows a spinner with no context
 
-**Maps to:** `/animate`, `/harden`, `/clarify`
+**Maps to:** `/impeccable animate`, `/impeccable harden`, `/impeccable clarify`
 
 ---
 
@@ -68,7 +68,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Fixed pixel widths that break on different screens
 - No visual separation between distinct content sections
 
-**Maps to:** `/layout`, `/distill`, `/adapt`
+**Maps to:** `/impeccable layout`, `/impeccable distill`, `/impeccable adapt`
 
 ---
 
@@ -90,7 +90,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Missing placeholder/help text on form fields
 - Inconsistent tone (formal in one place, casual in another)
 
-**Maps to:** `/clarify`, `/harden`, `/delight`
+**Maps to:** `/impeccable clarify`, `/impeccable harden`, `/impeccable delight`
 
 ---
 
@@ -113,7 +113,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Text overflow: hidden without ellipsis or wrapping strategy
 - No input validation (rely entirely on server)
 
-**Maps to:** `/harden`, `/clarify`, `/harden`
+**Maps to:** `/impeccable harden`, `/impeccable clarify`, `/impeccable harden`
 
 ---
 
@@ -135,7 +135,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - CSS animations on `width`, `height`, `margin`, `padding`
 - Multiple font files loaded synchronously
 
-**Maps to:** `/optimize`
+**Maps to:** `/impeccable optimize`
 
 ---
 
@@ -159,7 +159,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Images without alt attributes
 - Animations without reduced-motion media query
 
-**Maps to:** `/harden`, `/adapt`
+**Maps to:** `/impeccable harden`, `/impeccable adapt`
 
 ---
 
@@ -181,7 +181,7 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Mix of naming conventions (camelCase + kebab-case + BEM)
 - No shared spacing scale (random margin/padding values)
 
-**Maps to:** `/polish`, `/impeccable extract`
+**Maps to:** `/impeccable polish`, `/impeccable extract`
 
 ---
 
