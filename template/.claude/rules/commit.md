@@ -13,7 +13,7 @@ Local edits will be reverted by the next sync.
 
 `/commit` 封裝了品質閘門，繞過等於讓壞 code / 壞版本號 / 壞 tag 進 repo：
 
-- **0-A** `simplify` skill + `code-review` agent — 重用性、品質、邏輯、安全
+- **0-A** `codex review --uncommitted`（GPT 5.5，最多 2 輪 review-fix loop：Round 1 = `high`、Round 2 = `xhigh`）— 重用性、品質、邏輯、安全；review 由 codex 執行，修正由 Claude Code 主線執行
 - **0-B** `pnpm check` — format / lint / typecheck / test 全綠
 - **Step 1** Schema 同步檢查 — `database.types.ts` 與 migration 對齊
 - **Step 6** 版本號升級 + tag push — `feat` → minor、其他 → patch
@@ -32,13 +32,31 @@ Local edits will be reverted by the next sync.
 
 ## WIP 預設範圍
 
-**預設所有 `git status` 顯示的 uncommitted 變更都納入本次 `/commit`**，在分組階段依功能拆成獨立 commit。
+**預設所有 `git status` 顯示的 uncommitted 變更都納入本次 `/commit`**，照常跑 review（0-A）並在分組階段依功能拆成獨立 commit。**這是無條件預設，不需要徵詢使用者。**
 
-- 看到不認得的變更 → 先 `git diff` 確認內容合理 → 納入讓分組階段處理，**NEVER** `git restore --staged` / `git checkout --` 清場
-- **排除條件（唯一）**：使用者在 `$ARGUMENTS` 中明確指名排除（例如「排除 .env.local」「只 commit app/」）
-- **NEVER** 以「這個不在我 scope」「看起來是別的 session 做的」自行排除 — 先假設是使用者並行工作 + 一律保留
+- **看到不認得的變更**：直接納入分組流程。**NEVER** 為了「決定要不要納入」而向使用者徵詢；分組是 Step 3 的工作，不是 Step 0 的判斷題
+- **排除條件（唯一）**：使用者在 `$ARGUMENTS` 中**明確**指名排除（例如「排除 .env.local」「只 commit app/」）。其他任何情境一律全包
+- **NEVER** 以「這個不在我 scope」「看起來是別的 session 做的」「不確定是否該 commit」自行排除或徵詢使用者意見 — 先假設是使用者並行工作 + 一律保留並走分組流程
 
 **理由**：品質閘門成本高，把 WIP 分次 commit 等於多跑一次閘門，浪費時間與 token。`/commit` 的分組階段就是設計來把「主線工作 + 並行 WIP」自然分類到不同 commit group。
+
+## WIP 阻礙處理（唯一允許的脫離預設方式）
+
+當 WIP 確實構成阻礙（例：壞掉的實驗碼讓 0-A / 0-B 過不了、明顯不該入庫的 debug 殘留、與本次 commit 主題完全互斥的半成品）時，**唯一允許**的處置流程是 **stash + handoff**：
+
+```bash
+git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
+```
+
+接著**MUST**在 `HANDOFF.md` 的 `In Progress` 或 `Next Steps` 區塊寫入：
+
+- stash 訊息（讓人能用 `git stash list` 對應）
+- 為何 stash（哪個檔、為何不能納入本次 commit）
+- 接手指引（要怎麼 `git stash pop` / 該如何收尾）
+
+寫完 HANDOFF 後再繼續 `/commit` 的後續流程。
+
+**理由**：stash 保留變更可恢復、handoff 留下 paper trail，等同「延後處理」而非「丟棄」。任何形式的 `git restore` / `git checkout --` / `git reset` / `git revert` 都會**永久毀掉使用者的 WIP**，這是不可接受的成本。
 
 ## 禁止事項
 
@@ -50,13 +68,25 @@ Local edits will be reverted by the next sync.
 - **NEVER** 在 lock 被佔用時自行 `rm .claude/.commit.lock` — 必須回報使用者由其判斷對方是否真的卡住
 - **NEVER** 漏跑 Final Step `release` — 即使前面失敗也要釋放，避免下次 session 卡在 stale lock
 
+### WIP 處置禁令（嚴格）
+
+**完全禁止任何會丟失 WIP 的動作，包括「向使用者建議」這些動作**：
+
+- **NEVER** 執行 `git restore` / `git restore --staged` / `git checkout --` / `git checkout <path>` 清場 — 這會永久毀掉 unstaged 變更
+- **NEVER** 執行 `git reset --hard` / `git reset HEAD --hard` / `git clean -fd` — 同上
+- **NEVER** 提議 `git revert` 或在輸出中暗示「可以 revert XX」「要不要還原 XX」「這部分先 revert」 — `revert` 在使用者語境通常意指**丟棄變更**，會誤導使用者破壞 WIP；真正需要還原既有 commit 的情境極罕見且應由使用者主動發起
+- **NEVER** 以「這變更看起來壞掉了 / 不該存在 / 不在 scope，是否要還原？」徵詢使用者 — 唯一允許的選項是 `git stash` + `HANDOFF.md`，照「WIP 阻礙處理」流程走
+- **NEVER** 把「revert / restore / discard」包裝成「清理」「重置」「回到乾淨狀態」等委婉說法繞過上述禁令
+
+**唯一例外**：使用者在 `$ARGUMENTS` 中**明確、主動、白紙黑字**寫出 `git restore` / `git checkout --` / `revert` 等指令或變更名稱，且語意無歧義時才能執行。**NEVER** 從「不在 scope」「看起來壞掉」等模糊語氣自行解讀為「使用者想丟棄」。
+
 ## 例外（極少）
 
 以下情境允許直接 `git commit`，**MUST** 在 commit message 註明理由：
 
 1. **`/commit` 本身壞掉** — command 檔被改壞、依賴的 agent 不可用時的救火
 2. **Merge commit / rebase resolution** — `git merge` / `git rebase --continue` 的自動 commit
-3. **`git revert`** — 還原既有 commit，無需重跑品質檢查
+3. **`git revert` 既有 commit** — 還原已 push 的 commit，無需重跑品質檢查。**注意**：此例外**僅**適用於使用者**主動**指明要 revert 哪個 commit（例如 `git revert abc1234`）的情境；**NEVER** 主線自行提議 revert，也**NEVER** 用 `git revert` 處理 uncommitted WIP（uncommitted 變更的處置一律走「WIP 阻礙處理」的 stash + handoff）
 
 例外情境外，一律走 `/commit`。
 
@@ -65,7 +95,7 @@ Local edits will be reverted by the next sync.
 - **每個 commit 獨立且完整** — 不相關的變更**MUST**分到不同 commit
 - **Commit message 使用繁體中文**描述
 - **所有 uncommitted 變更都必須入庫**，**NEVER** 以「不在本次範圍」「影響不大」為由跳過任何檔案
-- **`.gitignore` 變更**：只允許保留 Clade 管理的 installation artifact / runtime state ignore 條目（例如 `.claude/.commit.lock`、`codex/`）；其他變更先 `git checkout .gitignore` 還原，**NEVER** commit
+- **`.gitignore` 變更**：只允許保留 Clade 管理的 installation artifact / runtime state ignore 條目（例如 `.claude/.commit.lock`、`codex/`）；其他變更**MUST** `git stash push -- .gitignore` 並寫入 `HANDOFF.md`（**NEVER** `git checkout .gitignore` 直接還原），由使用者後續確認是否要保留
 - **`.env` / 敏感檔案**：警告使用者但仍由使用者決定是否 commit，**NEVER** 自行跳過
 - **修正所有發現的問題**：review / lint / typecheck / test 發現的問題都**MUST**修正，**NEVER** 以「建議性質」「不在本次範圍」為由跳過
 
