@@ -60,7 +60,9 @@ globs: ['**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts,md,json}', '.*rc*', '.*.config.
 - `eslint --fix` / `eslint .`
 - `prettier --write` / `prettier --check`
 
-一律改用 `vp lint` / `vp fmt` / `vp staged`（Vite+ 提供）或直接 `oxlint --fix` / `oxfmt`（oxc CLI）。
+一律改用 `vp lint` / `vp fmt` / `vp staged`（Vite+ 提供）。
+
+> ⚠️ **NEVER** 直接呼叫 `oxlint` / `oxfmt` CLI binary：在 vite-plus 0.1.x 起，這兩個 binary 已退化成 IDE-only / LSP-only stub，直接執行會回傳 `This oxfmt wrapper is for IDE extension use only` 錯誤導致 pre-commit / CI 失敗。**MUST** 走 `vp lint` / `vp fmt` 入口（vp 內部會用編譯版 oxc）。
 
 ## 必須事項（MUST）
 
@@ -85,17 +87,19 @@ pnpm vp staged
 
 ```js
 module.exports = {
-  '*.{js,ts,vue,jsx,tsx}': ['oxlint --fix', 'oxfmt'],
+  '*.{js,ts,vue,jsx,tsx}': ['vp lint --fix', 'vp fmt'],
   '*.md': (files) => {
     const allowed = files.filter(
       (f) => !f.startsWith('.claude/rules/') && !f.startsWith('.claude/skills/') && !f.startsWith('.claude/hooks/')
     )
-    return allowed.length ? [`oxfmt ${allowed.join(' ')}`] : []
+    return allowed.length ? [`vp fmt ${allowed.join(' ')}`] : []
   },
 }
 ```
 
 `.claude/{rules,skills,hooks}/` 由 clade 治理（chmod 444），lint-staged 必須排除。
+
+> ⚠️ **NEVER** 用 `oxlint --fix` / `oxfmt` 直接呼叫（見上節「禁止在 lint-staged ... 中呼叫 eslint / prettier」的注意事項）。`vp lint` / `vp fmt` 是唯一正確入口。
 
 ### Pre-commit hook 用 `vp staged`
 
