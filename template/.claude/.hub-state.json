@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-02T18:48:05.407Z",
+  "syncedAt": "2026-05-02T18:53:11.289Z",
   "checksums": {
     "rules/agent-routing.md": "375923309bff6e69",
     "rules/code-style.md": "b318cc4f9a35cb40",
@@ -41,21 +41,5 @@
     "skills/spectra-discuss/SKILL.md": "a4208dafe61c616b",
     "skills/spectra-ingest/SKILL.md": "12e2b6efa6a3d0d9",
     "skills/spectra-propose/SKILL.md": "304f8865d53bfe3a"
-  },
-  "bootstrap": {
-    "at": "2026-05-02T18:48:05.684Z",
-    "version": "0.3.2",
-    "modules": {
-      "auth": "better-auth",
-      "db-schema": "supabase",
-      "db-runtime": "cf-workers",
-      "runtime": "cf-workers",
-      "framework": "nuxt",
-      "domain": []
-    },
-    "runtime": {
-      "claudeCode": true,
-      "codex": true
-    }
   }
 }
