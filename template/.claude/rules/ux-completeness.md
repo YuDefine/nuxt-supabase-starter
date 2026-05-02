@@ -215,7 +215,7 @@ function getBindingIcon(cardType: NfcCardType): string {
 | Before `spectra-archive`            | `bash scripts/spectra-ux/design-gate.sh <change>`        | 阻擋未完成人工檢查或缺設計審查證據的 UI change                  |
 | Before `spectra-archive`            | `bash scripts/spectra-ux/archive-gate.sh <change>`       | 驗證 journey URL touch、schema drift、exhaustiveness            |
 | Before `spectra-archive` (v1.5+)    | `bash scripts/spectra-ux/followup-gate.sh <change>`      | 驗證 tasks.md 的 `@followup[TD-NNN]` 都在 `docs/tech-debt.md` 登記 |
-| **Session start / after `/assign`** | `pnpm spectra:roadmap` && `pnpm spectra:claims` && `pnpm spectra:followups` | 重算 ROADMAP、查看 active claims、摘要 follow-up 狀態 |
+| **Session start / 外部 runtime 跑完 spectra 後** | `pnpm spectra:roadmap` && `pnpm spectra:claims` && `pnpm spectra:followups` | 重算 ROADMAP、查看 active claims、摘要 follow-up 狀態 |
 
 **Claude Code 使用者**：上述由 `.claude/hooks/` 自動觸發，無需手動。
 **Codex / Cursor 使用者**：必須在對應 spectra 階段手動呼叫這些腳本，session 開始時也必須手動跑一次 `pnpm spectra:roadmap`、`pnpm spectra:claims`、`pnpm spectra:followups`。

@@ -26,7 +26,7 @@ globs: ['**/*']
 
 ## Codex 派工的標準流程（所有 routing 共用）
 
-派 Codex 出去工作**一律走原生 `codex` CLI + background bash**——**禁止**任何 `codex:rescue` / `codex:setup` / `codex:codex-rescue` / `/assign /codex:*` plugin 路線（已驗證無法使用）。
+派 Codex 出去工作**一律走原生 `codex` CLI + background bash**——**禁止**任何 `codex:rescue` / `codex:setup` / `codex:codex-rescue` plugin 路線（已驗證無法使用）。
 
 主線 Claude 自己派、自己等通知、自己讀檔回報，**禁止**叫使用者切到 Codex CLI、**禁止**「Stop here」純文字 handoff。
 
@@ -80,7 +80,7 @@ Claude Code session 內偵測到「需要 WebSearch」時：
 
 - **NEVER** 在 Claude Code session 直接呼叫 `WebSearch` 工具（改派背景 codex GPT-5.5 medium）
 - **NEVER** 印「請開啟 Codex CLI」「Stop here」「請貼 prompt」這類純文字 handoff 訊息要使用者手動切 — 主線必須自己派背景 codex
-- **NEVER** 嘗試 `codex:rescue` / `codex:setup` / `/assign /codex:*` plugin 路線（已驗證無法使用，2026-04-29 已 uninstall + 全清）
+- **NEVER** 嘗試 `codex:rescue` / `codex:setup` plugin 路線（已驗證無法使用，2026-04-29 已 uninstall + 全清；`/assign` skill 也已於 2026-05-02 移除）
 - **NEVER** 沉默等使用者問進度；收到 `<task-notification> status=completed` 必須立刻自己讀檔回報
 - **NEVER** 在 Spectra discuss → propose 銜接點省略 A/B 詢問（除非 discuss 已明示選擇並標記）
 - **NEVER** 在 commit 0-A 用 `simplify` skill / `code-review` agent 自行 review（改派 codex），也 **NEVER** 改用其他模型或顛倒兩輪 reasoning effort
