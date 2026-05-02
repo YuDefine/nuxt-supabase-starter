@@ -14,7 +14,8 @@ Local edits will be reverted by the next sync.
 `/commit` 封裝了品質閘門，繞過等於讓壞 code / 壞版本號 / 壞 tag 進 repo：
 
 - **0-A** `codex review --uncommitted`（GPT 5.5，最多 2 輪 review-fix loop：Round 1 = `high`、Round 2 = `xhigh`）— 重用性、品質、邏輯、安全；review 由 codex 執行，修正由 Claude Code 主線執行
-- **0-B** `pnpm check` — format / lint / typecheck / test 全綠
+- **0-B** UI Design Review（條件觸發）— 含 `.vue` 模板變動 + 屬於頁面/元件/佈局/互動/樣式變更時派 screenshot-review agent
+- **0-C** **format / lint / typecheck / test 全綠**：跑 `pnpm check`（多數專案含 format/lint/typecheck）**並且**確認 test 也有跑。**若 `package.json` 的 `scripts.check` 不含 `test` / `vitest`，必須額外跑 `pnpm test`（或 `vp test run` / `pnpm test:unit`），否則 CI 抓到的測試失敗（hook timeout、flake、新增測試壞掉）會在 commit 後才暴露**
 - **Step 1** Schema 同步檢查 — `database.types.ts` 與 migration 對齊
 - **Step 5** 版本號升級 + tag push — `feat` → minor、其他 → patch
 
@@ -60,13 +61,14 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 ## 禁止事項
 
-- **NEVER** `git commit` / `git commit -m` — 繞過 0-A / 0-B 品質閘門
+- **NEVER** `git commit` / `git commit -m` — 繞過 0-A / 0-B / 0-C 品質閘門
 - **NEVER** `git commit --amend` 修改已 push 的 commit — 會破壞遠端 history
 - **NEVER** `git commit --no-verify` — 繞過 pre-commit hook
 - **NEVER** 以「變更很小」「只是 typo」「趕時間」為由跳過 `/commit`
 - **NEVER** 讓 agent / subagent 自主執行 `git commit` — commit 必須在主線經過使用者確認分組
 - **NEVER** 在 lock 被佔用時自行 `rm .claude/.commit.lock` — 必須回報使用者由其判斷對方是否真的卡住
 - **NEVER** 漏跑 Final Step `release` — 即使前面失敗也要釋放，避免下次 session 卡在 stale lock
+- **NEVER** 把 `pnpm check` 當作完整 0-C；**MUST** 先 grep 確認 `scripts.check` 含 `test` / `vitest`，不含就額外跑 `pnpm test`。許多 consumer 的 `pnpm check` 只跑 format/lint/typecheck（CI 才跑完整 test），漏跑會讓 hook timeout / flake / 新增測試破壞在 commit 後才暴露
 
 ### WIP 處置禁令（嚴格）
 

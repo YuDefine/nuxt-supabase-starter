@@ -1,0 +1,8 @@
+# Clade-managed LOCKED projections (ignored by oxfmt)
+# Workaround for vite-plus 0.1.14 / oxfmt 0.42.0 — `.oxfmtrc.json` ignorePatterns is not applied to file walking.
+.claude/rules/
+.claude/skills/
+.claude/hooks/
+.claude/agents/
+.agents/
+.codex/

@@ -1,5 +1,6 @@
 #!/usr/bin/env sh
 # 切到 vite.config.ts 所在目錄（template/），以支援 monorepo 與獨立專案兩種結構
+# vp config 重新生成此檔時會把這個 cd 拿掉，要記得補回來
 cd "$(dirname "$0")/.." || exit 1
 
 # 檢查是否有 Supabase migration 檔案被修改（相容 repo root 與 template/ 為 root 兩種路徑）

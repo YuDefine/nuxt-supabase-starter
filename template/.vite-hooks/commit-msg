@@ -1,4 +1,4 @@
 #!/usr/bin/env sh
-# git hook 從 repo root 執行；package.json 在 template/，需 cd 過去
+# 切到 commitlint.config.* 所在目錄（template/）
 cd "$(dirname "$0")/.." || exit 1
 pnpm commitlint --edit "$1"
