@@ -206,7 +206,7 @@ function getBindingIcon(cardType: NfcCardType): string {
 
 | Spectra phase                       | Gate script                                              | When to run                                                     |
 | ----------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------- |
-| Before `spectra-propose` (handoff)  | **AskUserQuestion**：A. Codex GPT-5.5 xhigh / B. Claude Code 繼續做 | discuss 結束、進入 propose 前必詢問；由 `spectra-propose` Step 0 強制執行 |
+| Before `spectra-propose` (handoff)  | **AskUserQuestion**：A. Codex GPT-5.5 xhigh / B. Claude Code 繼續做；A 路徑由主線 Claude 自己派背景 `codex exec`（**禁止**叫使用者切 CLI） | discuss 結束、進入 propose 前必詢問；由 `spectra-propose` Step 0 統一分流，詳見 `agent-routing.md` |
 | Before `spectra-propose`            | `bash scripts/spectra-ux/pre-propose-scan.sh`            | 注入 blast radius 要求，提醒必填區塊                            |
 | After `spectra-propose`             | `bash scripts/spectra-ux/post-propose-check.sh <change>` | 驗證 proposal 完整性                                            |
 | After `spectra-propose`             | `bash scripts/spectra-ux/design-inject.sh <change>`      | 若有 UI scope，提醒補上 `## Design Review` 區塊                 |

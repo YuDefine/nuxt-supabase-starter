@@ -235,15 +235,21 @@ Present the summary and say something like "I'll capture this to design.md unles
 
 When the discussion converges on building something, **MUST** ask via **AskUserQuestion** who runs propose before invoking anything:
 
-| Option                           | 誰執行                                              | 適用場景                                                                 |
-| -------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------ |
-| **A. Codex（GPT-5.5 xhigh）**    | 切到 Codex CLI、模型設為 GPT-5.5 xhigh              | propose 牽涉高度抽象決策、想要更高思考預算、或想用另一個模型獨立審視     |
-| **B. Claude Code 繼續做**        | 當前 session 直接接 `/spectra-propose`              | discuss 上下文已成熟、想保持單一 session 連續性                          |
-| **Stay**                         | 不進 propose，繼續 capture 到既有 artifacts         | 結論還沒到「值得開 change」的程度，先存進 design.md / spec.md            |
+| Option                           | 行為                                                                                       | 適用場景                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| **A. Codex（GPT-5.5 xhigh）**    | 主線 Claude 自己派 Codex 在背景跑（不要使用者切 CLI）                                      | propose 牽涉高度抽象決策、想要更高思考預算、或想用另一個模型獨立審視     |
+| **B. Claude Code 繼續做**        | 當前 session 直接接 `/spectra-propose` 走 Step 1-11                                        | discuss 上下文已成熟、想保持單一 session 連續性                          |
+| **Stay**                         | 不進 propose，繼續 capture 到既有 artifacts                                                | 結論還沒到「值得開 change」的程度，先存進 design.md / spec.md            |
 
-- 選 **A** → 輸出 handoff 指示（請見 `spectra-propose` Step 0 的訊息），**並在此 session 停止**，不要呼叫 `/spectra-propose`
-- 選 **B** → 呼叫 `/spectra-propose <change-name>`，並在 propose Step 0 標記「已在 discuss 選 B」以避免重複詢問
-- 選 **Stay** → 把 conclusion 寫進對應 artifact，繼續討論
+統一處理：**選 A 或 B 都 invoke `/spectra-propose <change-name>`**，並在呼叫前的訊息明示使用者選擇，讓 spectra-propose Step 0 統一分流——discuss 自己**不**派 codex、**不**印 handoff 純文字訊息。
+
+- 選 **A** → 主線**先**輸出 `▶ 使用者在 discuss 選擇 A（Codex GPT-5.5 xhigh）— 接下來由 spectra-propose Step 0 派 Codex 在背景執行` → 接著 invoke `/spectra-propose <change-name>`
+- 選 **B** → 主線輸出 `▶ 使用者在 discuss 選擇 B（Claude Code 繼續）— spectra-propose Step 0 會 skip 詢問，直接走 Step 1` → 接著 invoke `/spectra-propose <change-name>`
+- 選 **Stay** → 把 conclusion 寫進對應 artifact，繼續討論（不 invoke propose）
+
+**禁止事項**：
+- **NEVER** 在 A 路徑印「請開啟 Codex CLI」「Stop here」「請貼 prompt 到 Codex」之類的純文字 handoff — 主線必須自己派背景 codex
+- **NEVER** 自己重複 spectra-propose Step 0 的派發邏輯，要 invoke `/spectra-propose` 讓 Step 0 統一處理
 
 If **AskUserQuestion** is unavailable, present the same three options as plain text and wait for the user's reply.
 
