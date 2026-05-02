@@ -21,6 +21,7 @@ globs: ['**/*']
 | 工作類別 | 由誰執行 | 為什麼 |
 | --- | --- | --- |
 | **Web search**（網頁搜尋、即時資料、外部資訊查詢） | **Codex（GPT-5.5 medium）** | 搜尋型查詢適合中等思考預算 + Codex 的搜尋整合；不浪費 Claude Code 的 context 與 token。 |
+| **Code review（commit 0-A）** | **Codex（`codex review --uncommitted`，GPT-5.5；最多 2 輪：Round 1 = `high` → Round 2 = `xhigh`）** | code review 適合 codex CLI 的 diff-aware 機制 + 漸進加深 reasoning；改由 codex 統一執行 review、Claude Code 主線負責修。詳見 `plugins/hub-core/commands/commit.md` Step 0-A。 |
 | **Spectra `propose` 階段**（discuss → propose 銜接） | **使用者選擇 A. Codex GPT-5.5 xhigh / B. Claude Code 繼續做** | propose 牽涉抽象決策、需高思考預算；給使用者選擇權。詳見 `spectra-propose` Step 0 與 `ux-completeness.md` Workflow Integration。 |
 
 ## WebSearch Handoff（具體做法）
@@ -59,4 +60,5 @@ Claude Code session 內偵測到「需要 WebSearch」時：
 
 - **NEVER** 在 Claude Code session 直接呼叫 `WebSearch` 工具（改 handoff 給 Codex GPT-5.5 medium）
 - **NEVER** 在 Spectra discuss → propose 銜接點省略 A/B 詢問（除非 discuss 已收到 B 答覆並標記）
+- **NEVER** 在 commit 0-A 用 `simplify` skill / `code-review` agent 自行 review（改派 codex），也 **NEVER** 改用其他模型或顛倒兩輪 reasoning effort
 - **NEVER** 把 routing 例外寫死在個別 skill；要加例外請改本檔的 Routing Table
