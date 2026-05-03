@@ -65,7 +65,7 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 - **NEVER** `git commit --amend` 修改已 push 的 commit — 會破壞遠端 history
 - **NEVER** `git commit --no-verify` — 繞過 pre-commit hook
 - **NEVER** 以「變更很小」「只是 typo」「趕時間」為由跳過 `/commit`
-- **NEVER** 讓 agent / subagent 自主執行 `git commit` — commit 必須在主線經過使用者確認分組
+- **NEVER** 讓 subagent 自主執行 `git commit` — commit **必須在主線執行**；使用者觸發 `/commit` 即代表授權整批分組，主線**不需**在分組後另行徵詢確認（policy 與 `/commit` Step 0-Scope 一致：commit 流程預設無互動）
 - **NEVER** 在 lock 被佔用時自行 `rm .claude/.commit.lock` — 必須回報使用者由其判斷對方是否真的卡住
 - **NEVER** 漏跑 Final Step `release` — 即使前面失敗也要釋放，避免下次 session 卡在 stale lock
 - **NEVER** 把 `pnpm check` 當作完整 0-C；**MUST** 先 grep 確認 `scripts.check` 含 `test` / `vitest`，不含就額外跑 `pnpm test`。許多 consumer 的 `pnpm check` 只跑 format/lint/typecheck（CI 才跑完整 test），漏跑會讓 hook timeout / flake / 新增測試破壞在 commit 後才暴露
