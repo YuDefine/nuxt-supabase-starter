@@ -29,8 +29,10 @@ printf '%s\n' "$COUNT" > "$COUNTER_FILE"
 ROOT=$(sux_repo_root)
 
 if [ "$COUNT" -eq 1 ]; then
-  if [ ! -f "$ROOT/.impeccable.md" ]; then
-    echo "首次 UI 編輯：尚未看到 .impeccable.md。建議先建立設計脈絡，再持續修改 UI。"
+  if [ ! -f "$ROOT/PRODUCT.md" ]; then
+    echo "首次 UI 編輯：尚未看到 PRODUCT.md。建議先跑 /impeccable teach 建立設計脈絡，再持續修改 UI。"
+  elif [ ! -f "$ROOT/DESIGN.md" ]; then
+    echo "首次 UI 編輯：PRODUCT.md 已建立但缺 DESIGN.md。已有 code 可跑 /impeccable document 反推；尚未實作可待 craft 後再 document。"
   fi
   exit 0
 fi

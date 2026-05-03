@@ -41,10 +41,10 @@ Design Review 提醒：change「${CHANGE_NAME}」包含 UI scope，但 tasks.md 
 
 ## ${NEXT_SECTION}. Design Review
 
-- [ ] ${NEXT_SECTION}.1 檢查 .impeccable.md 是否存在，若無則先建立設計脈絡
+- [ ] ${NEXT_SECTION}.1 檢查 PRODUCT.md（必要）+ DESIGN.md（建議）；缺 PRODUCT.md 跑 /impeccable teach、缺 DESIGN.md 跑 /impeccable document
 - [ ] ${NEXT_SECTION}.2 執行 /design improve [affected pages/components]
 - [ ] ${NEXT_SECTION}.3 依計劃按 canonical order 執行 targeted design skills
-- [ ] ${NEXT_SECTION}.4 執行 /audit，確認 Critical = 0
+- [ ] ${NEXT_SECTION}.4 執行 /impeccable audit，確認 Critical = 0
 - [ ] ${NEXT_SECTION}.5 執行 screenshot review，補 design-review.md / 視覺 QA 證據
 
 完整規則見同目錄的 `manual-review.md`、`screenshot-strategy.md` 與 proactive-skills 的 Design Review orchestration 段落。

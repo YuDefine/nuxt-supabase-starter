@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-03T19:31:16.067Z",
+  "syncedAt": "2026-05-03T19:45:41.216Z",
   "checksums": {
     "rules/agent-routing.md": "375923309bff6e69",
     "rules/code-style.md": "b318cc4f9a35cb40",
@@ -45,21 +45,5 @@
     "commands/commit.md": "74eedf2c22b264f7",
     "commands/db-migration.md": "e30b907e0df07ec5",
     "commands/doc-sync.md": "abc0cb56c1d851f0"
-  },
-  "bootstrap": {
-    "at": "2026-05-03T19:31:16.354Z",
-    "version": "0.3.10",
-    "modules": {
-      "auth": "better-auth",
-      "db-schema": "supabase",
-      "db-runtime": "cf-workers",
-      "runtime": "cf-workers",
-      "framework": "nuxt",
-      "domain": []
-    },
-    "runtime": {
-      "claudeCode": true,
-      "codex": true
-    }
   }
 }
