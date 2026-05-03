@@ -47,20 +47,33 @@ node .claude/scripts/commit-lock.mjs acquire
 
 除 A、B 外**一律全包**。
 
-### 阻礙處理：stash + HANDOFF（唯一允許脫離預設的方式）
+### 阻礙處理：stash + HANDOFF（**極少數例外**，先確認真的需要）
 
-當某個 WIP 檔案**確實**會卡住流程（例：壞掉的實驗碼讓 0-A 過不了、debug print 還沒清掉、明顯與本次主題完全互斥的半成品），**唯一允許**的處置是：
+**預設行為是把所有 WIP 都靠 Step 3 分組成獨立 commit group**，stash 是**極少數例外**。在啟動 stash 前**MUST**先排除下列「假阻礙」情境（這些情境**一律走分組納入**，**NEVER** stash）：
+
+- 「這些變更跟本次主題不同」 → 拆成另一個 commit group（feat / fix / chore / refactor / docs 各自獨立）
+- 「不認得是哪來的」 → 假設是並行 session 的工作，照常納入分組
+- 「想讓 commit 看起來乾淨」 → commit 不需要乾淨，每個 group 內部完整即可
+- 「跟我手上的工作無關」 → 不關 scope，照樣納入分組
+
+**stash 觸發條件**（嚴格收斂為下列任一）：
+
+1. **品質閘門卡死且短時間修不好** — 壞掉的實驗碼讓 0-A / 0-B / 0-C 持續紅燈，且修復成本明顯超過本次 commit 範圍
+2. **明確不該入庫的殘留** — debug print、暫時 `console.log`、假資料、敏感資訊（且使用者尚未確認要保留）
+3. **使用者主動在 `$ARGUMENTS` 指名要 stash** 某些檔案 / 變更
+
+確認觸發後執行（**優先只 stash 阻礙檔**，避免擴大連坐）：
 
 ```bash
-git stash push -u -- <具體檔案路徑>  # 只 stash 阻礙檔，不要 stash 全部
-# 或必要時整批：
+git stash push -u -- <具體檔案路徑>  # 優先：只 stash 阻礙檔
+# 確實必要時才整批：
 git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 ```
 
 接著**立即**更新 `HANDOFF.md`（依 `.claude/rules/handoff.md` 格式），在 `In Progress` 或 `Next Steps` 寫入：
 
 - stash 訊息對應（用 `git stash list` 能找到）
-- 為何 stash（哪個檔、為何不能納入本次 commit）
+- 為何 stash（哪個檔、為何不能納入本次 commit；對齊上面 1/2/3 哪一條觸發條件）
 - 接手指引（`git stash pop` 後該怎麼收尾）
 
 寫完 HANDOFF 才繼續 0-A。
