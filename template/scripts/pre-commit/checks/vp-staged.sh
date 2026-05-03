@@ -60,13 +60,27 @@ while IFS= read -r -d '' file; do
   esac
 done < <(git diff --cached --name-only --diff-filter=ACM -z)
 
+# vp 在 staged paths 全被 vite.config.lint.ignorePatterns 過濾後會 exit 1 +
+# 印「No files found to lint」— 視為 success（不是真正的 lint error）
+run_vp_with_empty_tolerance() {
+  local out exit_code=0
+  out="$(pnpm exec "$@" 2>&1)" || exit_code=$?
+  echo "$out"
+  if ((exit_code != 0)); then
+    if echo "$out" | grep -qE "No files found to (lint|format)"; then
+      return 0
+    fi
+    return "$exit_code"
+  fi
+}
+
 if ((${#lint_targets[@]} > 0)); then
   echo "🔍 vp lint --fix (${#lint_targets[@]} files)..."
-  pnpm exec vp lint --fix "${lint_targets[@]}"
+  run_vp_with_empty_tolerance vp lint --fix "${lint_targets[@]}"
 fi
 
 if ((${#fmt_targets[@]} > 0)); then
   echo "🎨 vp fmt (${#fmt_targets[@]} files)..."
-  pnpm exec vp fmt "${fmt_targets[@]}"
+  run_vp_with_empty_tolerance vp fmt "${fmt_targets[@]}"
   git add -- "${fmt_targets[@]}"
 fi
