@@ -41,23 +41,44 @@ Local edits will be reverted by the next sync.
 
 **理由**：品質閘門成本高，把 WIP 分次 commit 等於多跑一次閘門，浪費時間與 token。`/commit` 的分組階段就是設計來把「主線工作 + 並行 WIP」自然分類到不同 commit group。
 
-## WIP 阻礙處理（唯一允許的脫離預設方式）
+## WIP 阻礙處理（**極少數例外**，預設一律靠分組納入）
 
-當 WIP 確實構成阻礙（例：壞掉的實驗碼讓 0-A / 0-B 過不了、明顯不該入庫的 debug 殘留、與本次 commit 主題完全互斥的半成品）時，**唯一允許**的處置流程是 **stash + handoff**：
+**預設一律靠 Step 3 分組納入處理 WIP**，stash 是**極少數例外**。「主題不同 / 看起來不相關 / 不認得來源」**全部**透過拆獨立 commit group 解決，**NEVER** 因此啟動 stash —— Step 3 分組就是設計來把多主題、跨 session 的 WIP 自然拆成多個 commit group 的。
+
+**下列情境不是阻礙，不能啟動 stash 流程**：
+
+- 「這些變更跟本次主題不一樣」→ 拆成另一個 commit group（feat / fix / chore / refactor / docs 各自獨立 group）
+- 「不認得這些變更來自哪」→ 假設是並行 session 的工作，照常納入分組
+- 「想讓本次 commit 主題乾淨」→ commit 不需要乾淨，每個 group 內部完整即可
+- 「這個檔案跟我手上工作無關」→ 不關你的事，納入分組
+
+**stash 觸發條件（嚴格收斂為下列任一，且使用者明確要求視為涵蓋）**：
+
+1. **品質閘門卡死且短時間修不好** — 壞掉的實驗碼讓 0-A / 0-B / 0-C 持續紅燈，且修復成本明顯超過本次 commit 範圍
+2. **明確不該入庫的殘留** — debug print、暫時 `console.log`、假資料、敏感資訊（且使用者尚未確認要保留）
+3. **使用者主動在 `$ARGUMENTS` 指名要 stash** 某些檔案 / 變更
+
+確認觸發後（且優先 **stash 該檔本身**，而非整批 stash）：
 
 ```bash
+git stash push -u -- <具體檔案路徑>          # 優先：只 stash 阻礙檔
+# 確實必要時才整批：
 git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 ```
 
 接著**MUST**在 `HANDOFF.md` 的 `In Progress` 或 `Next Steps` 區塊寫入：
 
 - stash 訊息（讓人能用 `git stash list` 對應）
-- 為何 stash（哪個檔、為何不能納入本次 commit）
+- 為何 stash（哪個檔、為何不能納入本次 commit；對齊上面 1/2/3 哪一條）
 - 接手指引（要怎麼 `git stash pop` / 該如何收尾）
 
 寫完 HANDOFF 後再繼續 `/commit` 的後續流程。
 
-**理由**：stash 保留變更可恢復、handoff 留下 paper trail，等同「延後處理」而非「丟棄」。任何形式的 `git restore` / `git checkout --` / `git reset` / `git revert` 都會**永久毀掉使用者的 WIP**，這是不可接受的成本。
+**理由**：
+
+- 多主題 WIP 用分組就能乾淨入庫，stash 只會把工作往後推，違反「不要把工作往後放」原則。
+- stash 仍保留變更可恢復、handoff 留下 paper trail，等同「延後處理」而非「丟棄」；但分組納入比 stash 更直接、更省下次 `/commit` 的閘門成本。
+- 任何形式的 `git restore` / `git checkout --` / `git reset` / `git revert` 都會**永久毀掉使用者的 WIP**，這是不可接受的成本（見下節嚴格禁令）。
 
 ## 禁止事項
 

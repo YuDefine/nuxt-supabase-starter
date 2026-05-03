@@ -93,7 +93,7 @@ export default defineConfig({
   },
   staged: {
     '*.{js,ts,vue}': ['vp lint --fix', 'vp fmt'],
-    // .md 過濾 clade LOCKED 投影路徑（.claude/{rules,skills,hooks,agents}、
+    // .md 過濾 clade LOCKED 投影路徑（.claude/{rules,skills,hooks,agents,commands}、
     // .agents/、.codex/）；這些檔案 oxfmt ignorePatterns 會 filter 掉，若把
     // 它們交給 vp fmt 會以 'Expected at least one target file' 失敗
     '*.md': (files) => {
@@ -103,6 +103,7 @@ export default defineConfig({
           !f.includes('/.claude/skills/') &&
           !f.includes('/.claude/hooks/') &&
           !f.includes('/.claude/agents/') &&
+          !f.includes('/.claude/commands/') &&
           !f.includes('/.agents/') &&
           !f.includes('/.codex/')
       )
