@@ -6,3 +6,5 @@
 .claude/agents/
 .agents/
 .codex/
+
+.claude/commands/
