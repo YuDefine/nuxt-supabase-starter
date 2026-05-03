@@ -20,7 +20,7 @@ globs: ['supabase/migrations/**/*.sql', 'server/**/*.ts']
 - **NEVER** use MCP `execute_sql` for DDL — `supabase_admin` owner breaks CI/CD
 - **MUST** use `bigint GENERATED ALWAYS AS IDENTITY` for new table primary keys — **NEVER** `bigserial`（SQL 標準，避免 sequence ownership 問題）
 - Existing tables using `bigserial` **SHALL NOT** be migrated（風險高、收益低）
-- After migration: `supabase db reset` → `supabase db lint --level warning` → `supabase gen types typescript --local` → `pnpm typecheck`
+- After migration：依 runtime variant 跑 reset → lint → gen types → typecheck（具體命令見對應 `db-runtime/<variant>` rule，例如 self-hosted 走 `pnpm db:reset` / `pnpm db:lint` / `pnpm db:types`；local docker 走 `supabase db reset` / `supabase db lint` / `supabase gen types typescript --local`）
 - **SHOULD** run `supabase db advisors`（CLI v2.81.3+）檢查 schema 建議 — 涵蓋 index、security、performance 問題
 
 > 本檔為 starter template 的預設規則，複製出去後依專案實際使用調整。
