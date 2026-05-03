@@ -45,8 +45,9 @@ globs: ['**/*']
    ```
 
 3. 立刻簡短回報 bash job ID 給使用者
-4. 收到 `<task-notification> status=completed` → 立刻 BashOutput 讀 stdout → 整理結果回報
-5. **NEVER** 沉默等使用者來問進度
+4. 立刻啟動 **Codex Watch Protocol**（見下節）— **MUST** `ScheduleWakeup` 第一次進度檢查，**禁止**只乾等 `<task-notification>`
+5. 收到 `<task-notification> status=completed` → 立刻 BashOutput 讀 stdout → 整理結果回報；watch loop 自然終止
+6. **NEVER** 沉默等使用者來問進度
 
 各 routing 的參數差異：
 
@@ -54,6 +55,79 @@ globs: ['**/*']
 | --- | --- | --- | --- | --- |
 | WebSearch | `websearch` | `/tmp` | `read-only` | `medium` |
 | Spectra propose（A 路徑） | `spectra-propose` | consumer repo root | `workspace-write` | `xhigh` |
+
+## Codex Watch Protocol（防止主線乾等與卡住盲區）
+
+**核心命題**：派出 codex 後**主線不能單純等 `<task-notification>`**。codex 中途可能 `fetch failed`、sandbox 拒絕、互動 prompt、或長時間靜默；若沒有監看，主線完全不知道進度，使用者也只能空等。
+
+### 監看排程
+
+| 時機 | 動作 |
+| --- | --- |
+| 派出 background bash 後**立刻** | `ScheduleWakeup(180, "codex <topic> <slug> 首次進度檢查")` |
+| 每次 wakeup（系統自動觸發） | 1) 若已收到 `<task-notification status=completed>` → 走既有結束流程，**不再 wakeup**；2) 否則 BashOutput 讀 tail（≤200 行） → 套用「健康判斷」 → 決定下次 wakeup 間隔 |
+| 累計 wakeup ≥ 30 min 仍未完成 | **MUST** 用 `AskUserQuestion` 給使用者 [1] 繼續等 N 分 / [2] kill jobId 重派 / [3] 中止 — **禁止**自行決定 |
+
+### 健康判斷（每次 wakeup 必跑）
+
+讀 BashOutput tail，依末尾訊號決定下一步：
+
+| 訊號 | 判定 | 下次 wakeup |
+| --- | --- | --- |
+| 末尾持續有新 `exec` 行、`succeeded in`、`tokens used` 或 diff 輸出 | 健康 | `600` 秒（10 分，跨一次 cache TTL，可接受） |
+| 末尾出現 `Codex Report` 或 `tokens used:` 後無新行 | 即將完成 | `60` 秒（cache 內，便宜） |
+| 末尾 60s+ 無新輸出（看 BashOutput timestamp） | 輕度可疑 | `120` 秒；連續兩次無輸出 → 視為卡住，跳「介入觸發」 |
+| 末尾出現 `fetch failed` / `sandbox: rejected` / `Permission denied` / `EACCES` / 認證失敗 | 阻塞 | **立刻**跳「介入觸發」，不再 wakeup |
+| 末尾出現互動 prompt（`Continue?`、`y/N`、`Press Enter`、`waiting for input`） | 異常（codex sandbox 不該有） | **立刻**跳「介入觸發」 |
+| codex 自我宣告 blocker（「無法繼續」「需要使用者決定」「missing context」等） | 阻塞 | **立刻**跳「介入觸發」 |
+
+### 介入觸發（用 AskUserQuestion）
+
+偵測到阻塞或卡住時，**MUST** 立刻向使用者開問題，**禁止**自行 kill 或調整 prompt：
+
+```
+codex 跑了 N 分鐘，目前狀態：<一句話卡點>
+
+末尾輸出（≤10 行）：
+<tail>
+
+要怎麼處理？
+[1] 繼續等 N 分 — 主線再 wakeup 看一次
+[2] kill <jobId> 後重派（請告知 prompt 要怎麼調整）
+[3] 直接中止
+```
+
+選項數量與內容可依情境調整，但**必須**包含至少 [繼續等 / kill 重派 / 中止] 三類其中兩類。
+
+### `ScheduleWakeup` 用法守則
+
+`delaySeconds` 遵守 prompt-cache TTL（300s 是 worst-of-both）：
+
+| 情境 | 建議值 |
+| --- | --- |
+| 健康、跨 cache 一次性可接受 | `600`–`900`（10–15 分） |
+| 即將完成 / 等通知收尾 | `60`–`120`（cache 內） |
+| 輕度可疑、要近距離觀察 | `120`–`180` |
+
+**禁止** `< 60`（runtime clamp 也會擋）或 `> 1800`（跨多次 TTL，偵測太遲）。
+
+`reason` 欄位**必須**具體：例如「kiosk-multilingual codex 進度檢查（已派出 3 分）」，**NEVER** 寫「waiting」「monitoring codex」這種空泛字眼。
+
+### 與「不要把工作往後放」禁令的關係
+
+全域 CLAUDE.md 規定**禁止**把工作排到未來（不主動推薦 `/schedule`、`/loop`、「N 週後再做」）。本 protocol 的 `ScheduleWakeup` 屬於**主動監看**，不是延後工作 — 它存在的目的是**縮短**「主線發現問題的時間」，不是把責任往後推。兩者方向相反，**不衝突**。
+
+判別準則：
+
+- 合法用途 → 派出 background job 後監看其進度、卡住偵測、收尾通知
+- 仍禁止 → 把當下可處理的事推遲到未來、為「等使用者反應」排 follow-up、用 schedule 填充看似貼心的提醒
+
+### 監看期間的紀律
+
+- **NEVER** 在 wakeup loop 中跑與監看無關的探索動作（grep / 額外 Read / 開新 subagent）— 監看就是監看
+- **NEVER** 在 watch 中途自行決定殺掉 / 重派 codex — 必須先 AskUserQuestion
+- **NEVER** 看到健康訊號就提早終止 watch loop（例如「應該快好了」直接放著） — 必須跑到收到 `<task-notification>` 為止
+- **MUST** 收到 `<task-notification>` 後**不再** ScheduleWakeup（否則 wakeup 會在 codex 已結束後重複觸發）
 
 ## WebSearch Handoff（具體做法）
 
@@ -82,6 +156,9 @@ Claude Code session 內偵測到「需要 WebSearch」時：
 - **NEVER** 印「請開啟 Codex CLI」「Stop here」「請貼 prompt」這類純文字 handoff 訊息要使用者手動切 — 主線必須自己派背景 codex
 - **NEVER** 嘗試 `codex:rescue` / `codex:setup` plugin 路線（已驗證無法使用，2026-04-29 已 uninstall + 全清；`/assign` skill 也已於 2026-05-02 移除）
 - **NEVER** 沉默等使用者問進度；收到 `<task-notification> status=completed` 必須立刻自己讀檔回報
+- **NEVER** 派出 codex 後不啟動 Codex Watch Protocol — 「乾等盲區」是已驗證會吃使用者體驗的根因
+- **NEVER** 偵測到 `fetch failed` / sandbox 拒絕 / 互動 prompt 還繼續 wakeup — 必須立刻 `AskUserQuestion` 介入
+- **NEVER** 在 watch loop 中跑與監看無關的工作（grep、Read、subagent）— 監看純粹只看進度
 - **NEVER** 在 Spectra discuss → propose 銜接點省略 A/B 詢問（除非 discuss 已明示選擇並標記）
 - **NEVER** 在 commit 0-A 用 `simplify` skill / `code-review` agent 自行 review（改派 codex），也 **NEVER** 改用其他模型或顛倒兩輪 reasoning effort
 - **NEVER** 把 routing 例外寫死在個別 skill；要加例外請改本檔的 Routing Table
