@@ -1,2 +1,4 @@
 #!/usr/bin/env sh
-pnpm commitlint --edit $1
+# 切到 commitlint.config.* 所在目錄（template/）
+cd "$(dirname "$0")/.." || exit 1
+pnpm commitlint --edit "$1"
