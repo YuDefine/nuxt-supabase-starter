@@ -178,3 +178,57 @@ spectra-ux 另外提供一組配套規則，預設安裝在與 `docs/rules/ux-co
 - 定期執行 `node ~/.claude/scripts/sync-to-agents.mjs`，讓 Codex surface 與 `.claude/` 保持一致。
 - 專案特化 promotion 規則放在 `.claude/sync-to-agents.config.json`。
 - 若 source 與投影不一致，以 `.claude/` 為準，之後再同步生成。
+
+<!-- CLADE:SNIPPET:post-push-ci-watch:START -->
+
+## Post-Push CI Watcher
+
+當主線執行 `git push --tags`（或推單一 tag、或 push commit 觸發發版 workflow）**成功**後，**若**該 repo 含 `.github/workflows/*.yml` 且 `gh` CLI 可用：
+
+**MUST** 立刻用 `Agent(run_in_background=true)` 開 watcher subagent 監看 GitHub Actions 結果，**NEVER** 自己同步 block 等待 — 主線繼續對話，watcher 完成時系統會自動通知主線。
+
+### Watcher subagent prompt 模板
+
+Subagent 任務應包含（cwd 設為 push 發生的 repo path）：
+
+1. `gh run list --limit 1 --json databaseId,name,status,conclusion,url,headBranch,event,createdAt`
+   - 若 list 空 / `gh` 未登入 / 無權限 → 回報 `status: unavailable` + 原因，結束
+   - 若最新 run 的 `createdAt` 早於 push 時間（不是這次 push 觸發的） → 同上回報 unavailable
+2. `timeout 900 gh run watch <databaseId> --exit-status`
+   - exit 0 → `status: success`
+   - exit 124 → `status: timeout`（15 min 上限）
+   - 其他非 0 → `status: fail`；補跑 `gh run view <databaseId> --log-failed` 截前 200 行作 `logExcerpt`
+3. 結構化回報（≤200 字）：
+   - `status`、`runUrl`、`version`（由 `git describe --tags --abbrev=0` 抓；無 tag 則填 commit short sha）
+   - 若 fail：`failedJob`、`logExcerpt`（節錄前 30 行）
+
+### Watcher 完成後主線必做
+
+- **success** → 一行報 `v<version> CI 綠燈 — <runUrl>` 後結束本話題，**NEVER** 多嘴
+- **fail / timeout** → **MUST** 用 `AskUserQuestion` 給使用者二選一：
+  - `[1] 立刻 root-cause + 修` — 讀 `logExcerpt` 找根因，進除錯流程；修完前 **NEVER** 主動 push
+  - `[2] 登記 HANDOFF.md` — 在 repo root 的 `HANDOFF.md` 末尾 append：
+
+    ```
+    - [ ] [<YYYY-MM-DD>] v<version> CI <fail|timeout> — <failedJob>
+      - Run: <runUrl>
+      - 根因猜測: <一行>
+    ```
+
+    若 `HANDOFF.md` 不存在 → 先建立骨架：
+
+    ```
+    # HANDOFF
+
+    ## CI 紅燈待辦
+    ```
+
+- **unavailable** → 一行報「watcher 無法啟動（<原因>），略過」結束，**NEVER** 追問使用者
+
+### 禁忌
+
+- **NEVER** 在 watcher 回報前主動結束話題或叫 user 自己看
+- **NEVER** 在 user 未選 `[1]` 前替他改 code / push commit 修 CI
+- **NEVER** 對沒有 `.github/workflows/` 的 repo 套用這條規則（直接跳過 watcher）
+- **NEVER** 重開新 watcher 取代尚在跑的 watcher（避免重複監看同一個 run）
+<!-- CLADE:SNIPPET:post-push-ci-watch:END -->
