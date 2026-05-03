@@ -25,6 +25,22 @@ CONFIG="$HOME/.codex/config.toml"
 BACKUP="$CONFIG.review-wrapper-bak-$$"
 RESTORED=0
 
+# trap doesn't fire under SIGKILL, leaving *.review-wrapper-bak-<pid> behind
+# and the user with no codex config. Reclaim before moving our own.
+for stale in "$CONFIG".review-wrapper-bak-*; do
+  [[ -e "$stale" ]] || continue
+  stale_pid="${stale##*-}"
+  [[ "$stale_pid" =~ ^[0-9]+$ ]] || continue
+  kill -0 "$stale_pid" 2>/dev/null && continue
+  if [[ ! -f "$CONFIG" ]]; then
+    mv "$stale" "$CONFIG"
+    echo "[codex-review-safe] ✓ recovered config from dead PID $stale_pid" >&2
+  else
+    rm -f "$stale"
+    echo "[codex-review-safe] ✓ removed stale backup from dead PID $stale_pid" >&2
+  fi
+done
+
 cleanup() {
   if [[ "$RESTORED" -eq 0 && -f "$BACKUP" ]]; then
     mv "$BACKUP" "$CONFIG"
