@@ -1,6 +1,13 @@
 ---
 description: 同步更新 docs/verify/ 文件，確保文件反映當前系統狀態
 ---
+<!--
+🔒 LOCKED — managed by clade
+Source: plugins/hub-core/commands/doc-sync.md
+Edit at: /Users/charles/offline/clade
+Local edits will be reverted by the next sync.
+-->
+
 
 ## User Input
 

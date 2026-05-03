@@ -1,6 +1,13 @@
 ---
 description: 依功能分類變更並逐步完成 commit，遵循 commitlint 規範
 ---
+<!--
+🔒 LOCKED — managed by clade
+Source: plugins/hub-core/commands/commit.md
+Edit at: /Users/charles/offline/clade
+Local edits will be reverted by the next sync.
+-->
+
 
 ## User Input
 
@@ -20,37 +27,111 @@ node .claude/scripts/commit-lock.mjs acquire
 
 成功後此 session 取得獨占權，直到最後一步釋放。**中斷處理**：若 `/commit` 流程中途失敗 / 使用者中斷，仍**必須**在終止前呼叫 `node .claude/scripts/commit-lock.mjs release`；漏釋放的鎖會在 30 分鐘後被下次 acquire 自動清除（可用 `COMMIT_LOCK_STALE_MINUTES` 調整）。
 
-## Step 0-Scope: WIP 預設全部納入
+## Step 0-Scope: WIP 預設全部納入（果斷，不徵詢）
 
-**預設行為**：所有 `git status` 顯示的 uncommitted 變更（含與本次工作無關、其他 session 並行的 WIP）**一律**列入本次 `/commit` 流程，在分組階段依功能自然分成不同 commit。
+**預設行為**：所有 `git status` 顯示的 uncommitted 變更（含與本次工作無關、其他 session 並行的 WIP、不認得的檔案）**一律無條件**列入本次 `/commit` 流程，照常跑 0-A review、在 Step 3 依功能分組成獨立 commit。
 
-**理由**：`/commit` 已付出品質閘門的完整成本。把 WIP 排除在外等於下次 `/commit` 要重跑一次，浪費時間與 token，還會讓 WIP 長期積著。
+**這是預設動作，不需要徵詢使用者意見。** Step 0-Scope 不是「決定要不要納入」的判斷步驟，而是「確認預設已生效」的紀錄步驟。看到 `git status` 任何輸出 → 直接進 0-A，**NEVER** 在這一步停下來問使用者「XX 看起來不在本次 scope，要不要排除？」。
 
-**排除條件（唯一）**：使用者在 `$ARGUMENTS` 中**明確**指名要排除的檔案 / 路徑 / scope，例如：
+**理由**：`/commit` 已付出品質閘門的完整成本。把 WIP 排除在外等於下次 `/commit` 要重跑一次閘門，浪費時間與 token。Step 3 分組階段就是設計來把「主線工作 + 並行 WIP」自然分到不同 commit，**根本不需要在 Step 0 預先排除任何東西**。
+
+### 唯一允許的排除路徑
+
+**A. 使用者在 `$ARGUMENTS` 明確指名排除**（白紙黑字、語意無歧義）：
 
 - 「排除 `.env.local`」
 - 「不要動 `reports/`」
 - 「只 commit `app/` 底下」
 
-**NEVER** 自行判定「這個不在我 scope」而排除。看到不認得的變更 → `git diff` 確認內容合理 → 納入流程讓分組階段分類。**NEVER** `git restore --staged` 或 `git checkout --` 清場。
+**B. WIP 確實構成阻礙時的 stash + handoff 流程**（見下節）
+
+除 A、B 外**一律全包**。
+
+### 阻礙處理：stash + HANDOFF（唯一允許脫離預設的方式）
+
+當某個 WIP 檔案**確實**會卡住流程（例：壞掉的實驗碼讓 0-A 過不了、debug print 還沒清掉、明顯與本次主題完全互斥的半成品），**唯一允許**的處置是：
+
+```bash
+git stash push -u -- <具體檔案路徑>  # 只 stash 阻礙檔，不要 stash 全部
+# 或必要時整批：
+git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
+```
+
+接著**立即**更新 `HANDOFF.md`（依 `.claude/rules/handoff.md` 格式），在 `In Progress` 或 `Next Steps` 寫入：
+
+- stash 訊息對應（用 `git stash list` 能找到）
+- 為何 stash（哪個檔、為何不能納入本次 commit）
+- 接手指引（`git stash pop` 後該怎麼收尾）
+
+寫完 HANDOFF 才繼續 0-A。
+
+### 嚴格禁令
+
+- **NEVER** 提議 / 暗示 / 委婉建議任何形式的丟棄 WIP 動作：
+  - **NEVER** `git restore` / `git restore --staged` / `git checkout --` / `git checkout <path>`
+  - **NEVER** `git reset --hard` / `git clean -fd`
+  - **NEVER** 在輸出寫「可以 revert XX」「要不要還原 XX」「先 revert 這部分」「discard 這個變更」「回到乾淨狀態」「清掉 XX」 — 這些都會誘導使用者毀掉自己的 WIP
+- **NEVER** 把上述動作包裝成「清理 / 重置 / 回到 baseline / 還原成乾淨狀態」等委婉說法
+- **NEVER** 以「這變更看起來壞掉 / 不該存在 / 不在 scope，是否要還原？」徵詢使用者意見 — 阻礙的唯一解法是 stash + HANDOFF
+- **NEVER** 自行判定「這個不在我 scope」「這看起來像別的 session 的殘留」而要求使用者決定要不要丟 — 一律假設使用者並行工作中
+
+**唯一例外**：使用者在 `$ARGUMENTS` **明確、主動**寫出 `git restore` / `git checkout --` / `revert <commit>` 等指令或具體變更名稱，且語意完全無歧義時，才能執行。從模糊語氣（「不要這個」「這個怪怪的」）解讀為「使用者想丟棄」**一律禁止** — 必須先確認是「排除本次 commit」（→ stash）還是「丟棄變更」（→ 拒絕，請使用者明確下指令）。
 
 ## Step 0: 品質檢查
 
-### 0-A. 程式碼審查（平行）
+### 0-A. 程式碼審查（委託 codex GPT 5.5，最多 2 輪：High → xHigh）
 
-**在同一訊息內**平行派兩個 subagent，等兩者都回報：
+**審查由 codex 執行，修正由 AI Agent 主線執行**。原本主線自跑的 `simplify` skill / `code-review` agent **不再使用**。
 
-1. **general-purpose agent** — 於 agent 內透過 Skill tool 呼叫 `simplify` skill，審查重用性、品質、效率
-2. **code-review agent**（`agent_type: code-review`）— 審查邏輯與安全
+兩輪採**漸進加深 reasoning effort**：Round 1 用 `high` 抓常見問題（速度與成本最佳化），Round 2 用 `xhigh` 抓 Round 1 漏網的深層問題（最高推理）。
 
-**所有回報的問題必須修正**。完成後明確輸出：
+#### 執行方式：背景跑 + 每 ~5 分鐘確認進度
 
-```text
-✅ 0-A-1 simplify 通過
-✅ 0-A-2 code-review 通過
+`codex review` 在 `high` / `xhigh` 推理下常需數分鐘。**MUST** 用 Bash `run_in_background: true` 啟動，並**每 ~5 分鐘**讀一次背景輸出確認進度（process 還活著、有沒有錯訊、跑到哪一檔）。建議用 `ScheduleWakeup({delaySeconds: 270})` 排隔，避開 prompt cache 5 分鐘 TTL 邊界（300s 是 cache miss 最差解）。
+
+- **NEVER** 把 codex review 用 foreground 同步阻塞主線 — 等下去什麼事都做不了
+- **NEVER** 連續多次 sleep <60s 短輪詢 — 會把 cache 燒光也吵
+- **NEVER** 就乾等到 codex 自己結束才看一眼 — 中途卡住（codex auth 過期、context 超量、模型拒答）會白等
+- **NEVER** wake 起來只回報「還在跑」— 每次 poll **MUST** 讀實際輸出有具體狀態（哪一步、哪個檔、有沒有 issue 浮現）才算數
+- 結束條件：背景 process 結束、輸出含完成標記、或使用者叫停 — 才進入後續判斷
+
+#### Round 1 — codex review (high)
+
+```bash
+.codex/scripts/codex-review-safe.sh high
 ```
 
-兩個 ✅ 都出現才進入 0-B。
+> ℹ️ wrapper 暫時把 `~/.codex/config.toml` 移開避開 MCP server hang（codex CLI 對 nested TOML override 是 merge 不是 replace；MCP 載入 + 卡死是已知問題）。`trap EXIT` 確保不論 codex 怎麼結束 config 都會還原。**不要**改回 `codex review --uncommitted` 直接跑 — 在配 codebase-memory-mcp 的環境會卡 70 秒 fetch failed 死掉。
+
+讀完 codex 輸出後判斷：
+
+- **無問題** → 輸出 `✅ 0-A Round 1 通過（codex high 無 issue）`，跳到 0-B
+- **有問題** → AI Agent 主線**逐一修正 codex 列出的所有問題**，修完進入 Round 2
+
+#### Round 2 — codex review (xhigh，僅在 Round 1 有問題時執行)
+
+```bash
+.codex/scripts/codex-review-safe.sh xhigh
+```
+
+讀完輸出後判斷：
+
+- **無問題** → 輸出 `✅ 0-A Round 2 通過（codex xhigh 無 issue）`，進入 0-B
+- **仍有問題** → AI Agent 主線再次修正所有問題，修完**直接進入 0-B**（最多 2 輪 review，不做第 3 次）
+
+完成後明確輸出：
+
+```text
+✅ 0-A 通過（codex review 已完成 {1|2} 輪）
+```
+
+**禁止**：
+
+- **NEVER** 改用其他模型（必須 `gpt-5.5`）
+- **NEVER** 顛倒兩輪的 reasoning effort 或兩輪都用同一檔（Round 1 必為 `high`、Round 2 必為 `xhigh`）
+- **NEVER** 把 codex 列出的問題判定為「建議性質」「不在本次範圍」而跳過 — 一律修
+- **NEVER** 做第 3 輪 review（會無限拖長 commit 流程；2 輪內處理不完代表變更太大，應先 split）
+- **NEVER** 跳過 Round 2 — 只要 Round 1 有任何修正，**MUST** 跑 Round 2 用 `xhigh` 驗證
 
 ### 0-B. UI Design Review（條件觸發）
 
@@ -69,33 +150,78 @@ git diff --name-only
 
 ### 0-C. CI 等效檢查（Fix-Verify Loop）
 
+跑下列指令確保 **format / lint / typecheck / test 全部 0 errors + 0 warnings + 0 test failures**：
+
 ```bash
 pnpm check
 ```
 
-失敗時進入 loop：修復 → `vp fmt` → `pnpm check` → 重複直到 0 errors + 0 warnings。
+**檢查 `pnpm check` 是否真的包含 test**（多數 consumer 的 `check` 只有 format/lint/typecheck，**CI 才跑完整 test**，本地不補跑就會在 push 後才看到測試失敗）：
 
-**禁止**用 `npx vitest run` / `npx eslint` 等個別工具替代 `pnpm check`。若 `.claude/worktrees/` 干擾結果，先清理再跑。
+```bash
+node -e "const s=require('./package.json').scripts.check||''; console.log(/test|vitest/.test(s)?'check-includes-test':'check-missing-test')"
+```
 
-通過後輸出 `✅ 0-C 通過`。
+若輸出 `check-missing-test`，**必須**額外跑：
+
+```bash
+pnpm test          # 或 vp test run / pnpm test:unit，依 consumer 設定
+```
+
+失敗時進入 loop：修復 → `vp fmt` → 重跑上述兩步 → 直到全綠。
+
+**禁止**用 `npx vitest run` / `npx eslint` 等個別工具替代 `pnpm check` / `pnpm test`。若 `.claude/worktrees/` 干擾結果，先清理再跑。
+
+通過後輸出 `✅ 0-C 通過（format/lint/typecheck/test 全綠）`。
 
 ## Step 1: Schema 同步檢查（條件觸發）
 
-```bash
-git diff --name-only | grep -q "database.types.ts" && echo HAS || echo NO
-```
-
-若 `database.types.ts` 有變更：
+**觸發條件**：types 檔或任一 migration 有變更（含 staged + unstaged）。
 
 ```bash
-supabase db reset
-supabase gen types typescript --local > /tmp/types-from-migration.ts
-diff app/types/database.types.ts /tmp/types-from-migration.ts
+# 從 package.json 讀 types 路徑（若有自訂路徑）；fallback 到 conventional locations
+# 避開頂層 return（Node script 不允許）— 用 if/else 與 .find()
+TYPES=$(node -e "
+  const fs = require('fs');
+  const pkg = require('./package.json');
+  const custom = pkg.config && pkg.config.dbTypesPath;
+  const candidates = [
+    'packages/core/app/types/database.types.ts',
+    'app/types/database.types.ts',
+    'shared/types/database.types.ts',
+    'src/types/database.types.ts',
+  ];
+  const path = custom || candidates.find(function(p) { return fs.existsSync(p); }) || 'app/types/database.types.ts';
+  console.log(path);
+")
+
+# 檢查 types 或 migrations 是否變更（HEAD diff 含 staged）
+git diff --name-only HEAD -- "$TYPES" supabase/migrations/ | grep -q . && echo HAS || echo NO
 ```
 
-有差異 → **停止 commit**，提示使用者建立對應 migration。
+若 HAS（types 檔或 migrations 有變更）：
 
-> 若專案改用遠端 LXC Supabase，將上述指令改為 `pnpm db:reset` / `pnpm db:types`（見 `.claude/rules/migration.md`）
+```bash
+# 1. 先把 working tree 的版本（含 staged + unstaged）拷一份備查
+cp "$TYPES" /tmp/types-before-reset.ts
+
+# 2. 重置 DB + 從 migrations 重新生成 types（自動偵測 LXC/Docker 模式）
+if node -e "process.exit(require('./package.json').scripts?.['db:reset'] ? 0 : 1)" 2>/dev/null; then
+  # LXC / 遠端 Supabase 模式：consumer 提供 pnpm db:reset wrapper（會 reset DB + 跑 db:types 寫到 $TYPES）
+  pnpm db:reset
+else
+  # 本機 Docker Supabase 模式
+  supabase db reset
+  supabase gen types typescript --local > "$TYPES"
+fi
+
+# 3. 比對：working tree 版本 vs migrations 推導版本
+diff /tmp/types-before-reset.ts "$TYPES"
+```
+
+有差異 → **停止 commit**，提示使用者依差異建立對應 migration 或還原 `$TYPES`。
+
+> **遠端 LXC 模式注意**：`pnpm db:types` 通常**直接寫入** `$TYPES` 不輸出 stdout，所以**不能**用 `> /tmp/...` 重導向取值（一定要先 `cp` 備份再 `pnpm db:reset`）。
 
 ## Step 2: 檢查變更狀態
 
@@ -104,7 +230,10 @@ git status
 git diff --stat
 ```
 
-若 `.gitignore` 有變更 → `git checkout .gitignore` 還原。
+若 `.gitignore` 有變更：
+
+- **允許保留**：僅新增 Clade 管理的 installation artifact / runtime state ignore 條目（例如 `.claude/.commit.lock`、`codex/`）
+- **其他任何變更** → `git stash push -- .gitignore` 並寫入 `HANDOFF.md`，**NEVER** `git checkout .gitignore` 直接還原（會毀掉使用者的 WIP）
 
 ## Step 3: 分析變更並分組
 
@@ -246,13 +375,52 @@ pnpm spectra:roadmap
 
 **禁止**：手編 `<!-- SPECTRA-UX:ROADMAP-AUTO:* -->` 區塊（會被下次 sync 覆寫）。
 
-### 7-E. 報告
+### 7-E. 把 HANDOFF/ROADMAP 變更納入 commit
+
+7-C/7-D 修改的是 tracked 檔（`HANDOFF.md`、`openspec/ROADMAP.md`），**MUST** 在 Step 8 `/ship` 之前 commit 進去，否則 working tree 會 dirty、`/ship` 開出的 PR 也不含這次的交接狀態。
+
+```bash
+# 只 stage 7-C/7-D 動到的檔，避免誤包其他 WIP（commit 流程預設不該再撿東西）
+git add HANDOFF.md openspec/ROADMAP.md 2>/dev/null || true
+
+# 若沒實際變動（HANDOFF 不需更新、ROADMAP 已 current），跳過 commit
+if ! git diff --cached --quiet -- HANDOFF.md openspec/ROADMAP.md 2>/dev/null; then
+  git commit -m "$(cat <<'EOF'
+📝 docs(handoff): 更新 commit 後交接狀態
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+EOF
+)"
+  git log -1 --oneline
+fi
+```
+
+> 注意：這個 commit **不**重新 bump 版本（不是 deploy），只是把 HANDOFF/ROADMAP 落入 history。Tag 仍指向 Step 5 的 deploy commit；後續 fresh clone 想拉最新交接資訊時，看 main 即可。
+
+### 7-F. 報告
 
 ```text
-✅ HANDOFF.md 已更新
-✅ ROADMAP 已同步
+✅ HANDOFF.md 已更新（已入 commit / 無變更略過）
+✅ ROADMAP 已同步（已入 commit / 無變更略過）
 （或：無可延續工作，HANDOFF.md 已清空 / 未建立）
 ```
+
+## Step 8: 自動銜接 /ship（條件觸發）
+
+```bash
+git branch --show-current
+```
+
+**觸發條件**：當前**不在 main / master 分支**，且 consumer 提供 `/ship` skill（會 push branch 並開 PR）。
+
+```text
+🚀 Commit 完成！要繼續執行 /ship 推送並建立 PR 嗎？
+```
+
+- 同意 → 執行 `/ship` skill
+- 拒絕或已在 main / master → 跳過
+
+**不觸發**：在 main / master 分支，或 consumer 沒有 `/ship` skill。
 
 ## Final Step: 釋放 /commit lock（**必做最後一步**）
 
