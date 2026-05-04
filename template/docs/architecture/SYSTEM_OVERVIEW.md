@@ -143,7 +143,7 @@ supabase/
 
 ## 相關文件
 
-- [API 設計指南](../api/README.md)
-- [認證整合](../auth/README.md)
-- [資料庫指南](../database/README.md)
+- [API 設計指南](../api/API_DESIGN_GUIDE.md)
+- [認證整合](../auth/AUTH_INTEGRATION.md)
+- [資料庫指南](../database/MIGRATION_GUIDE.md)
 - [Gotchas](../gotchas/README.md)

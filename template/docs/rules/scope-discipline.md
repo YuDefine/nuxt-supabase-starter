@@ -5,7 +5,7 @@ globs: ['openspec/**', 'docs/tech-debt.md', 'docs/decisions/**', 'HANDOFF.md']
 
 # Scope Discipline
 
-繁體中文 | [English](./scope-discipline.en.md)
+繁體中文
 
 **核心命題**：scope discipline 不是「範圍外就裝沒看到」，而是三件事一起成立：
 

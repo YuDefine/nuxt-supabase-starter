@@ -324,4 +324,4 @@ add-todos-due-date   # 到期日功能
 
 ## 相關資源
 
-- [project.md](../openspec/project.md) - 本專案的技術上下文
+- `openspec/project.md` - 本專案的技術上下文

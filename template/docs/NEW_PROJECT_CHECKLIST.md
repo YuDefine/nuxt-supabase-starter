@@ -41,13 +41,13 @@ pnpm verify:starter --full
 
 ## ✅ Clade 整合
 
-| 項目                                        | Verify                                                                                                         | Fix                                                                                                       |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `.claude/hub.json` 存在 + 合法              | `node -e "JSON.parse(require('fs').readFileSync('.claude/hub.json'))"`                                         | `pnpm hub:bootstrap`                                                                                      |
-| `package.json` postinstall 含 bootstrap-hub | `grep -q bootstrap-hub package.json`                                                                           | 重跑 init-consumer                                                                                        |
-| `hub:*` scripts 完整                        | `node -e "const p=require('./package.json'); ['hub:check','hub:sync','hub:bootstrap'].every(s=>p.scripts[s])"` | 重跑 init-consumer                                                                                        |
-| Clade drift = 0                             | `pnpm hub:check`                                                                                               | `pnpm hub:sync`（先確認 working tree 乾淨）                                                               |
-| Pre-commit hook wired                       | `grep -lE 'hub:check\|git-pre-commit.sh' .husky/pre-commit .git/hooks/pre-commit 2>/dev/null`                  | scaffold 預設自動 wire；手動見 [QUICK_START.md](../../docs/QUICK_START.md#wire-pre-commit-hook選用但建議) |
+| 項目                                        | Verify                                                                                                         | Fix                                                                    |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `.claude/hub.json` 存在 + 合法              | `node -e "JSON.parse(require('fs').readFileSync('.claude/hub.json'))"`                                         | `pnpm hub:bootstrap`                                                   |
+| `package.json` postinstall 含 bootstrap-hub | `grep -q bootstrap-hub package.json`                                                                           | 重跑 init-consumer                                                     |
+| `hub:*` scripts 完整                        | `node -e "const p=require('./package.json'); ['hub:check','hub:sync','hub:bootstrap'].every(s=>p.scripts[s])"` | 重跑 init-consumer                                                     |
+| Clade drift = 0                             | `pnpm hub:check`                                                                                               | `pnpm hub:sync`（先確認 working tree 乾淨）                            |
+| Pre-commit hook wired                       | `grep -lE 'hub:check\|git-pre-commit.sh' .husky/pre-commit .git/hooks/pre-commit 2>/dev/null`                  | scaffold 預設自動 wire；手動見 [QUICK_START.md](verify/QUICK_START.md) |
 
 ## ✅ Supabase 設定
 
@@ -103,7 +103,7 @@ ls .claude/skills/ | sort
 
 | 項目              | Verify                                              | Fix                      |
 | ----------------- | --------------------------------------------------- | ------------------------ |
-| `pnpm dev` 啟動   | 開瀏覽器到 http://localhost:3000 看到初始頁         | 看 stderr 訊息修對應問題 |
+| `pnpm dev` 啟動   | 開瀏覽器到 `localhost:3000` 看到初始頁              | 看 stderr 訊息修對應問題 |
 | `pnpm check` 通過 | `pnpm check`（含 format → lint → typecheck → test） | 修出錯項目               |
 | `pnpm test` 通過  | `pnpm test`                                         | 修失敗測試               |
 
@@ -123,7 +123,7 @@ ls .claude/skills/ | sort
 1. **設計脈絡**（首次必跑）：在 Claude Code session 內執行 `/impeccable teach` 產出 `.impeccable.md`
 2. **第一個功能**：`/spectra-propose` 建立 change → `/spectra-apply` 實作
 3. **OAuth**（如選了 better-auth / nuxt-auth-utils）：去 provider console 申請 credentials → 填 `.env`（**人類執行，AI 不代填**）
-4. **完整教學**：[FIRST_CRUD.md](../../docs/FIRST_CRUD.md) 從資料庫到 UI 走一遍
+4. **完整教學**：先看 [DEV_RECIPES.md](DEV_RECIPES.md)，再用 `/spectra-propose` 建立第一個 CRUD change
 
 ## ⚠️ 常見問題
 
@@ -162,4 +162,4 @@ drift 通常代表本地誤改了 clade-managed 檔。處理路徑：
 
 - 如果是誤改 → `pnpm hub:sync` 還原（先 stash 自家工作）
 - 如果是合理改動 → 改動應該回中央倉 `~/offline/clade/`，不該留在 consumer
-- 詳見 [INTEGRATION_GUIDE.md](../../docs/INTEGRATION_GUIDE.md) 與 root [`CLAUDE.md`](../../CLAUDE.md)
+- 詳見 [WORKFLOW.md](WORKFLOW.md) 與 root `CLAUDE.md`

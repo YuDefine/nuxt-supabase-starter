@@ -126,7 +126,7 @@ pnpm docs:build  # 建置靜態網站
 2. 寫入需要集中管理（權限檢查、日誌、業務邏輯）
 3. 讀多寫少，Client 直連減少延遲
 
-**詳細說明**：見 [CLAUDE.md](../CLAUDE.md#-supabase-資料存取策略)
+**詳細說明**：見 root `CLAUDE.md` 的 Supabase 資料存取策略。
 
 ---
 
@@ -562,5 +562,5 @@ pnpm db:lint
 ## 還有問題？
 
 1. 搜尋 `docs/` 目錄的其他文件
-2. 查看 [CLAUDE.md](../CLAUDE.md) 的相關章節
+2. 查看 root `CLAUDE.md` 的相關章節
 3. 使用 Claude Code 詢問（它會參考專案的 Skills 和規範）

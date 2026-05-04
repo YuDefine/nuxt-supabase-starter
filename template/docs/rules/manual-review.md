@@ -5,7 +5,7 @@ globs: ['openspec/changes/**/tasks.md', 'docs/manual-review-archive.md']
 
 # 人工檢查（Manual Review）
 
-繁體中文 | [English](./manual-review.en.md)
+繁體中文
 
 ## 核心規則
 

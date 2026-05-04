@@ -5,7 +5,7 @@ globs: ['**/*']
 
 # Review Tiers
 
-繁體中文 | [English](./review-tiers.en.md)
+繁體中文
 
 變更大小與風險面向，決定 review 的最低強度。
 

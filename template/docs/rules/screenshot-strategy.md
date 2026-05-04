@@ -5,7 +5,7 @@ globs: ['screenshots/**', 'tests/e2e/**', 'openspec/changes/**/design-review.md'
 
 # Screenshot Strategy
 
-繁體中文 | [English](./screenshot-strategy.en.md)
+繁體中文
 
 所有截圖工作都應先判斷：這是一次性探索，還是需要可重現的回歸驗證。
 

@@ -51,7 +51,7 @@ pnpm db:types
 pnpm dev
 ```
 
-瀏覽器會自動開啟 http://localhost:3000
+瀏覽器會自動開啟 `localhost:3000`
 
 ### 6. 驗證
 
