@@ -25,6 +25,8 @@ npx skills add pbakaus/impeccable
 
 **檢查**：`ls .agents/skills/impeccable/SKILL.md` 應存在，且 frontmatter `version` 為 `3.0.6`（不是 `2.x` — v2 只有 craft/teach/extract，無法滿足本 orchestrator plan 引用的 sub-command）。
 
+**新 consumer 安裝 / 升降版操作流程**：見 `references/impeccable-install.md`（含標準 install-skills.sh snippet、copy vs symlink mode、vp-staged 已知衝突繞法）。
+
 ### 2. 呼叫形式（v3 原生）
 
 clade design plan **一律使用 v3 原生呼叫形式** `/impeccable <subcommand>`（例如 `/impeccable colorize`、`/impeccable typeset`、`/impeccable polish`），對齊 v3 作者「impeccable 是一個 skill、底下用 sub-command 組織」的設計理念。直接複製 plan 內的指令即可執行。
