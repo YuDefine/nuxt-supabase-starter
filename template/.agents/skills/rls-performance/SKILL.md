@@ -10,7 +10,7 @@ description: >-
 
 # RLS Performance Playbook
 
-專案有 345+ RLS policy 與 206+ SECURITY DEFINER function，加上 self-hosted LXC 的 connection pool 限制，任何 N+1 或 full scan 都會被放大。本 skill 是遇到效能問題時的操作手冊。
+大型專案常累積大量 RLS policy 與 SECURITY DEFINER function，加上 self-hosted LXC 的 connection pool 限制，任何 N+1 或 full scan 都會被放大。本 skill 是遇到效能問題時的操作手冊。
 
 決策原則（「MUST 做 / NEVER 做」）仍在 `.claude/rules/{database,database-design}.md`，本檔提供**實際診斷與優化工具**。
 
@@ -37,7 +37,7 @@ set local request.jwt.claims to '{"sub": "<user_uuid>", "role": "authenticated"}
 
 -- 2. 跑實際 query
 explain (analyze, buffers, verbose, format text)
-select ... from tdms.xxx where ...;
+select ... from <schema>.<table> where ...;
 
 -- 3. 還原
 reset role;
@@ -161,7 +161,7 @@ select
   mean_exec_time::int as mean_ms,
   query
 from pg_stat_statements
-where query ilike '%tdms.%'
+where query ilike '%<your-schema>.%'  -- 換成業務 schema（或拿掉 where 子句看全部）
 order by total_exec_time desc
 limit 20;
 ```
@@ -197,7 +197,7 @@ limit 20;
 
 ## Self-Hosting LXC 責任模型
 
-本專案自建 `fc-supabase-dev` / `fc-supabase-prod`（LXC + Docker Compose），Supabase Cloud 提供的功能我們需要自己維護：
+當專案自建 dev / prod LXC（Docker Compose 部署），Supabase Cloud 提供的功能必須自行維護：
 
 | 面向              | Cloud 提供                 | 自建需自行處理                              |
 | ----------------- | -------------------------- | ------------------------------------------- |
@@ -211,16 +211,16 @@ limit 20;
 
 ### 關鍵依賴
 
-- **Cloudflare Tunnel**：fc-supabase-prod 對外唯一入口。Tunnel 斷 = 全站掛（登入 / API 都不通）。任何影響 host 頻寬的操作都會波及（見 `database.md` Production 存取安全規範）
-- **Tailscale**：Dev / 備份 / SSH 的通道。若 relay mode 密集連線會癱瘓整條網路
-- **無自動備份**（目前狀態）— 若 LXC 壞掉，復原倚賴最近一次手動 dump。**Action item**：應建立排程備份到 Synology NAS
+- **Cloudflare Tunnel**（若採此架構）：production LXC 對外唯一入口。Tunnel 斷 = 全站掛（登入 / API 都不通）。任何影響 host 頻寬的操作都會波及（見 `database.md` Production 存取安全規範）
+- **Tailscale**（若採此架構）：Dev / 備份 / SSH 的通道。若 relay mode 密集連線會癱瘓整條網路
+- **備份策略**：自架沒有內建 PITR / 自動 snapshot — **MUST** 規劃排程備份（例：`pg_dump` 經 Tailscale 推到 NAS / 物件儲存）；無備份 = 復原倚賴最近一次手動 dump
 
 ## 效能事故處理 SOP
 
 API 變慢或 `PGRST003` 出現時：
 
 1. 先看 `log.error` 是否有 `PGRST003`（pool 耗盡）
-2. SSH 到 fc-supabase-dev/prod 跑 `pg_stat_activity`（上方診斷 query）找 long-running query
+2. SSH 到目標 LXC 跑 `pg_stat_activity`（上方診斷 query）找 long-running query
 3. 取該 query 跑 `EXPLAIN ANALYZE`（記得 `set local role`）
 4. 若是 RLS policy 問題 → 改 policy 或加 index
 5. 若是 N+1 → 改用 `select(*, related(*))` embed 或 RPC

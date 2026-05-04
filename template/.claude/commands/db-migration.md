@@ -65,8 +65,8 @@ SET search_path = public           -- 禁止！
 
 #### Schema 規範
 
-- 使用正確的 schema：`core.`, `tdms.`, `public.`
-- 所有表格/函式引用使用完整路徑
+- 使用正確的 schema 前綴（如 `public.`、`core.`，或專案自訂業務 schema）
+- 所有表格/函式引用使用完整路徑（避免裸表名觸發 `search_path` resolution）
 
 ### Step 4: 本地測試與類型產生（自動）
 

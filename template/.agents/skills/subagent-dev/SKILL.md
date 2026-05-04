@@ -36,7 +36,7 @@ If tasks are tightly coupled → manual execution or break down further.
 3. **Implementer implements, tests, commits, self-reviews**
 4. **Dispatch spec reviewer subagent** (using `./spec-reviewer-prompt.md` template)
 5. **If spec issues found** → implementer fixes → spec reviewer re-reviews
-6. **Dispatch code quality reviewer** (using TDMS `code-review` agent)
+6. **Dispatch code quality reviewer** (using the project's `code-review` agent)
 7. **If quality issues found** → implementer fixes → quality reviewer re-reviews
 8. **Mark task complete** with `update_plan`
 9. → Next task
@@ -89,7 +89,7 @@ Implementer subagents report one of four statuses:
 
 ### Stage 2: Code Quality Review
 
-- Dispatch code quality review using TDMS `code-review` agent (`.codex/agents/code-review.md`)
+- Dispatch code quality review using the project's `code-review` agent (`.codex/agents/code-review.md`)
 - Pass review scope via git diff:
   ```bash
   BASE_SHA=$(git rev-parse HEAD~N)  # commits before this task
@@ -182,7 +182,7 @@ Task 2: Add UI component
 **Works with:**
 
 - **Spectra SDD workflow** — `/spectra-propose` creates the plan, this skill executes it
-- **TDMS code-review agent** (`.codex/agents/code-review.md`) — used for code quality review stage
+- **`code-review` agent** (`.codex/agents/code-review.md`) — used for code quality review stage
 - **test-driven-development skill** — subagents follow TDD for each task
 - **testing-anti-patterns rule** — auto-loaded when editing test files
 

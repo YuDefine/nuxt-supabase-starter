@@ -7,7 +7,7 @@ Use this template when dispatching a code quality reviewer subagent.
 **Only dispatch after spec compliance review passes.**
 
 ````
-Dispatch the TDMS code-review agent (.codex/agents/code-review.md):
+Dispatch the project's code-review agent (.codex/agents/code-review.md):
 
   spawn_agent 工具:
     description: "Code quality review for Task N"
