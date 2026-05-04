@@ -74,10 +74,13 @@ globs: ['HANDOFF.md', 'openspec/changes/**']
 | 文件 | 用途 | 生命週期 |
 | --- | --- | --- |
 | `HANDOFF.md` | 尚未被接手的 WIP、blocker、next steps | 短期、用完即清 |
+| `tasks/<id>.md` | 本 session 工作記憶（per-session 一檔） | 短期、session 結束升級或刪 |
 | `.spectra/claims/**` | 即時 ownership / heartbeat | 短期、機器維護 |
 | `docs/solutions/**` | 非直覺問題的解法沉澱 | 長期 |
 | `docs/decisions/**` | 架構決策與取捨 | 長期 |
 | `openspec/ROADMAP.md` | 進行中 change、active claims、未來工作排序 | 持續維護 |
+
+**與 `session-tasks.md` 的銜接**：tasks 檔內未完項在 session 結束時若需下一 session 立刻接手，**MUST** 升到 `HANDOFF.md` 的 `## In Progress`，不能只留在 tasks 檔等下一 session 自己 grep。
 
 ## 禁止事項
 
