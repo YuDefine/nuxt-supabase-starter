@@ -1,8 +1,8 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-03T21:49:00.208Z",
+  "syncedAt": "2026-05-04T00:36:24.869Z",
   "checksums": {
-    "rules/agent-routing.md": "f49ca70b15ce5eb0",
+    "rules/agent-routing.md": "2ce281f0e32c09ae",
     "rules/code-style.md": "b318cc4f9a35cb40",
     "rules/commit.md": "d54c2e42526e7afd",
     "rules/error-handling.md": "6b9aacf3906f1166",
@@ -41,7 +41,7 @@
     "skills/spectra-debug/SKILL.md": "ec91c4309dc73b9c",
     "skills/spectra-discuss/SKILL.md": "a4208dafe61c616b",
     "skills/spectra-ingest/SKILL.md": "12e2b6efa6a3d0d9",
-    "skills/spectra-propose/SKILL.md": "304f8865d53bfe3a",
+    "skills/spectra-propose/SKILL.md": "7398f6e96bdbb817",
     "commands/commit.md": "74eedf2c22b264f7",
     "commands/db-migration.md": "e30b907e0df07ec5",
     "commands/doc-sync.md": "abc0cb56c1d851f0"

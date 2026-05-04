@@ -38,11 +38,13 @@ globs: ['**/*']
    ```bash
    cd <cwd> && codex exec \
      --model gpt-5.5 \
-     -s <read-only|workspace-write> \
+     --dangerously-bypass-approvals-and-sandbox \
      --skip-git-repo-check \
      -c model_reasoning_effort=<medium|high|xhigh> \
      < /tmp/codex-<topic>-<slug>-prompt.md 2>&1
    ```
+
+   > ⚠️ `--dangerously-bypass-approvals-and-sandbox` 在背景非互動 codex 是**必要**的，不是偷懶 — codex `exec` 沒人可批准時，sandbox 為非 `danger-full-access` 的 MCP tool call 全部會被自動回 `user cancelled`（codebase-memory-mcp 等都會死）。Codex 官方文檔 `agent-approvals-security` 把這個 flag 與 `-s danger-full-access` 並列為「非互動信任環境」的標準寫法。**禁止**把它換回 `-s read-only` / `-s workspace-write` — 那會讓 codex 失去 MCP 能力（`approval_mode = "auto"` 在 `mcp_servers.*` 不是合法 codex config key，無法作為替代）。
 
 3. 立刻簡短回報 bash job ID 給使用者
 4. 立刻啟動 **Codex Watch Protocol**（見下節）— **MUST** `ScheduleWakeup` 第一次進度檢查，**禁止**只乾等 `<task-notification>`
@@ -51,10 +53,12 @@ globs: ['**/*']
 
 各 routing 的參數差異：
 
-| Routing | `<topic>` | `<cwd>` | sandbox | reasoning effort |
+| Routing | `<topic>` | `<cwd>` | reasoning effort | 預期動作 |
 | --- | --- | --- | --- | --- |
-| WebSearch | `websearch` | `/tmp` | `read-only` | `medium` |
-| Spectra propose（A 路徑） | `spectra-propose` | consumer repo root | `workspace-write` | `xhigh` |
+| WebSearch | `websearch` | `/tmp` | `medium` | 純讀（搜尋網頁/查文件） |
+| Spectra propose（A 路徑） | `spectra-propose` | consumer repo root | `xhigh` | 寫 spec/proposal 到 `openspec/changes/<change>/` |
+
+> sandbox flag 統一使用 `--dangerously-bypass-approvals-and-sandbox`，不再分 `-s read-only` / `-s workspace-write`（在背景 codex 會擋 MCP）。「預期動作」由主線在 prompt 內陳述，靠 codex 自律。
 
 ## Codex Watch Protocol（防止主線乾等與卡住盲區）
 
@@ -134,7 +138,7 @@ codex 跑了 N 分鐘，目前狀態：<一句話卡點>
 Claude Code session 內偵測到「需要 WebSearch」時：
 
 1. **NEVER** 直接呼叫 Claude Code 內建的 `WebSearch` 工具
-2. **MUST** 走「Codex 派工的標準流程」（見上節），參數：`<topic>=websearch`、`<cwd>=/tmp`、`-s read-only`、`-c model_reasoning_effort=medium`
+2. **MUST** 走「Codex 派工的標準流程」（見上節），參數：`<topic>=websearch`、`<cwd>=/tmp`、`-c model_reasoning_effort=medium`（sandbox flag 已統一在模板內）
 3. prompt 內容固定包含：要查的問題 + 期望輸出格式（連結 / 摘要 / 條列重點）
 
 ### 例外（仍可在當前 session 直接處理）
