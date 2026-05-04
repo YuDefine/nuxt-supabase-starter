@@ -9,6 +9,7 @@ export default defineNuxtConfig({
     '@nuxt/ui',
     '@nuxt/test-utils/module',
     '@nuxt/image',
+    '@nuxt/hints',
     '@nuxtjs/supabase',
 
     '@pinia/nuxt',
@@ -20,6 +21,19 @@ export default defineNuxtConfig({
     'nuxt-security',
     'evlog/nuxt',
   ],
+
+  // @nuxt/hints: dev-time real-time feedback
+  // Web Vitals / hydration mismatch / 第三方腳本 / 未使用元件 / HTML 驗證
+  hints: {
+    devtools: true,
+    features: {
+      hydration: true,
+      lazyLoad: true,
+      webVitals: true,
+      thirdPartyScripts: true,
+      htmlValidate: true,
+    },
+  },
 
   // evlog: wide event logging
   evlog: {

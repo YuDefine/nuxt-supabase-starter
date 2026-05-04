@@ -11,15 +11,19 @@ You are a design director coordinating specialized design skills. Your job: **as
 
 本 skill 是純 orchestrator，所有實際工作交由第三方 skill 執行。Clade 不自動安裝這些 skill，consumer 首次使用前 **MUST** 手動安裝。
 
-### 1. pbakaus/impeccable（v3.x）
+### 1. pbakaus/impeccable（鎖定 v3.0.6）
 
 impeccable 是 1 個 skill 含 24 個 sub-command：craft / shape / teach / document / extract / critique / audit / polish / bolder / quieter / distill / harden / onboard / animate / colorize / typeset / layout / delight / overdrive / clarify / adapt / optimize / live。
+
+> **Clade 鎖定版本：`skill-v3.0.6`**（2026-05-04 對齊；GitHub release: <https://github.com/pbakaus/impeccable/releases/tag/skill-v3.0.6>）
+>
+> Consumer 升降版必須對齊此版本。新版發佈時由 clade 統一更新本檔再 propagate；不要在個別 consumer 自行升版。
 
 ```bash
 npx skills add pbakaus/impeccable
 ```
 
-**檢查**：`ls .agents/skills/impeccable/SKILL.md` 應存在，且 frontmatter `version` 為 `3.x`（v3.0.5 或更新）。
+**檢查**：`ls .agents/skills/impeccable/SKILL.md` 應存在，且 frontmatter `version` 為 `3.0.6`（不是 `2.x` — v2 只有 craft/teach/extract，無法滿足本 orchestrator plan 引用的 sub-command）。
 
 ### 2. 呼叫形式（v3 原生）
 

@@ -49,23 +49,19 @@ npx skills add https://www.evlog.dev $COPY_FLAGS
 echo "  ✓ Evlog Skills 完成"
 echo ""
 
-# Impeccable Design Skills（pbakaus/impeccable v2.1）
-# v2.0 breaking: frontend-design → impeccable（umbrella）、teach-impeccable → /impeccable teach
-# v2.1 breaking: arrange → layout、normalize merged into polish、onboard merged into harden、
-#                extract → /impeccable extract、新增 shape
+# Impeccable Design Skill（pbakaus/impeccable v3.0.6 — 單一 skill 含 24 sub-command；clade design orchestrator 鎖定此版本）
+# v3.0 breaking: 拆分形態（@adapt / @animate / ...）合併為單一 skill，sub-command 改由 SKILL.md 統一定義
 # 本地 starter skills（不從 upstream 覆寫）：design / design-retro / review-archive / subagent-dev
-echo "📦 Impeccable Design Skills（v2.1）..."
-for skill in impeccable adapt animate audit bolder clarify colorize critique delight distill layout optimize overdrive polish quieter shape typeset; do
-  npx skills add pbakaus/impeccable@$skill $COPY_FLAGS
-done
-echo "  ✓ Impeccable Design Skills 完成"
+echo "📦 Impeccable Design Skill..."
+npx skills add pbakaus/impeccable $COPY_FLAGS
+echo "  ✓ Impeccable Design Skill 完成"
 echo ""
 
-# 清理 v1 deprecated stub（若從舊版 starter 衍生而來）
+# 清理 v1.x / v2.x deprecated sub-skill 目錄（v3 已合併為單一 skill）
 DEPRECATED_DIR="$(pwd)/.claude/skills"
-for legacy in arrange normalize onboard teach-impeccable frontend-design extract; do
+for legacy in adapt animate arrange audit bolder clarify colorize critique delight distill extract frontend-design harden layout normalize onboard optimize overdrive polish quieter shape teach-impeccable typeset; do
   if [ -d "$DEPRECATED_DIR/$legacy" ] && grep -qi impeccable "$DEPRECATED_DIR/$legacy/SKILL.md" 2>/dev/null; then
-    echo "🧹 移除 v1 deprecated：$legacy"
+    echo "🧹 移除 deprecated sub-skill：$legacy"
     rm -rf "$DEPRECATED_DIR/$legacy"
   fi
 done

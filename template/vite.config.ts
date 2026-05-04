@@ -94,8 +94,10 @@ export default defineConfig({
   staged: {
     '*.{js,ts,vue}': ['vp lint --fix', 'vp fmt'],
     // .md 過濾 clade LOCKED 投影路徑（.claude/{rules,skills,hooks,agents,commands}、
-    // .agents/、.codex/）；這些檔案 oxfmt ignorePatterns 會 filter 掉，若把
-    // 它們交給 vp fmt 會以 'Expected at least one target file' 失敗
+    // .agents/、.codex/）；這些檔案被 fmt.ignorePatterns 全部 filter 後給 vp fmt 會以
+    // 'All matched files may have been excluded by ignore rules' 失敗（vp 0.1.20 仍在）。
+    // 但 lint-staged transform 回傳 [] 又會觸發 vp staged「Expected at least one target file」，
+    // 兩個 vp 行為都搞不定空陣列；折衷：0 target 時回傳 ['true'] noop bash 命令避開。
     '*.md': (files) => {
       const allowed = files.filter(
         (f) =>
@@ -107,7 +109,7 @@ export default defineConfig({
           !f.includes('/.agents/') &&
           !f.includes('/.codex/')
       )
-      return allowed.length > 0 ? [`vp fmt ${allowed.join(' ')}`] : []
+      return allowed.length > 0 ? [`vp fmt ${allowed.join(' ')}`] : ['true']
     },
   },
 })
