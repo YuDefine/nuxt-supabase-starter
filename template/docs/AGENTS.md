@@ -10,7 +10,7 @@ next-doc: ./NEW_PROJECT_CHECKLIST.md
 # AGENTS — template layer 入口
 
 > 此檔給「scaffold 出來的新專案內 Claude Code session」用。
-> 不要跟 root [`AGENTS.md`](../AGENTS.md) 混淆 — 那份是 sync-to-agents 從 `.claude/` 投影的行為規則，每次 session 自動載入。
+> 不要跟 root `AGENTS.md` 混淆 — 那份是 sync-to-agents 從 `.claude/` 投影的行為規則，每次 session 自動載入。
 > 這份是 docs 導航入口，AI 要查文件、找 next-action、看哪個 skill 該觸發時走這裡。
 
 ## 你在哪
@@ -80,23 +80,23 @@ rm .claude/.first-run
 
 > **首選**：先看 [DEV_RECIPES.md](DEV_RECIPES.md) — 15 種常見開發場景（加 entity / 加 page / 加 API / 加 OAuth / 加 webhook / 加 cron / 整合 vendor / 加上傳 / 加搜尋 / 加 i18n / 加付費 / 加 charts / 重構等）打包成可直接套用的 spectra-propose 範本。AI 收到「我要加 X」時直接套 recipe，不必每次重新規劃。
 
-| 使用者說                          | 觸發                                                         | 入口檔                                                             |
-| --------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------ |
-| 「加 X 功能 / 整合 Y / 加 OAuth」 | 套對應 recipe → spectra-propose                              | [DEV_RECIPES.md](DEV_RECIPES.md)                                   |
-| 「建第一個功能 / CRUD」           | spectra-propose → spectra-apply                              | [WORKFLOW.md](WORKFLOW.md) → [OPENSPEC.md](OPENSPEC.md)            |
-| 「我想做 X 功能」（需求模糊）     | spectra-discuss 先收斂                                       | [OPENSPEC.md](OPENSPEC.md)                                         |
-| 「需求清楚，開始做」              | spectra-propose                                              | [OPENSPEC.md](OPENSPEC.md)                                         |
-| 「繼續上次的工作」                | 讀 HANDOFF.md / openspec/ROADMAP.md / spectra-ingest         | `.claude/rules/handoff.md`                                         |
-| 「設定 OAuth」                    | 列出缺哪些 env var，引導使用者去 provider console            | [auth/](auth/)                                                     |
-| 「設計脈絡 / UI 風格」            | /impeccable teach（首次）/ /impeccable document（既有 code） | `.claude/rules/proactive-skills.md`                                |
-| 「跑全套品質檢查」                | `pnpm check`（format → lint → typecheck → test）             | [verify/](verify/)                                                 |
-| 「部署到 Cloudflare」             | wrangler deploy（**人類執行**，AI 不代跑）                   | [DEPLOYMENT.md](DEPLOYMENT.md)（meta layer）                       |
-| 「Bug / 行為異常」                | systematic-debugging skill → 找 root cause                   | [DEBUGGING.md](DEBUGGING.md)                                       |
-| 「資料庫怎麼用」                  | supabase-rls / supabase-migration skills                     | [database/](database/)                                             |
-| 「API 怎麼寫」                    | server-api skill                                             | [API_PATTERNS.md](API_PATTERNS.md)                                 |
-| 「Auth 怎麼用」                   | nuxt-better-auth / nuxt-auth-utils skill                     | [auth/](auth/)                                                     |
-| 「升級 clade rules」              | `pnpm hub:sync`（**先確認 working tree 乾淨**）              | `.claude/rules/code-style.md` 等                                   |
-| 「`pnpm hub:check` 報 drift」     | **禁止**靜默 sync，先判斷場景                                | meta layer [HUB_DRIFT_RUNBOOK.md](../../docs/HUB_DRIFT_RUNBOOK.md) |
+| 使用者說                          | 觸發                                                         | 入口檔                                                  |
+| --------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------- |
+| 「加 X 功能 / 整合 Y / 加 OAuth」 | 套對應 recipe → spectra-propose                              | [DEV_RECIPES.md](DEV_RECIPES.md)                        |
+| 「建第一個功能 / CRUD」           | spectra-propose → spectra-apply                              | [WORKFLOW.md](WORKFLOW.md) → [OPENSPEC.md](OPENSPEC.md) |
+| 「我想做 X 功能」（需求模糊）     | spectra-discuss 先收斂                                       | [OPENSPEC.md](OPENSPEC.md)                              |
+| 「需求清楚，開始做」              | spectra-propose                                              | [OPENSPEC.md](OPENSPEC.md)                              |
+| 「繼續上次的工作」                | 讀 HANDOFF.md / openspec/ROADMAP.md / spectra-ingest         | `.claude/rules/handoff.md`                              |
+| 「設定 OAuth」                    | 列出缺哪些 env var，引導使用者去 provider console            | [auth/](auth/)                                          |
+| 「設計脈絡 / UI 風格」            | /impeccable teach（首次）/ /impeccable document（既有 code） | `.claude/rules/proactive-skills.md`                     |
+| 「跑全套品質檢查」                | `pnpm check`（format → lint → typecheck → test）             | [verify/](verify/)                                      |
+| 「部署到 Cloudflare」             | wrangler deploy（**人類執行**，AI 不代跑）                   | [DEPLOYMENT.md](DEPLOYMENT.md)（meta layer）            |
+| 「Bug / 行為異常」                | systematic-debugging skill → 找 root cause                   | [DEBUGGING.md](DEBUGGING.md)                            |
+| 「資料庫怎麼用」                  | supabase-rls / supabase-migration skills                     | [database/](database/)                                  |
+| 「API 怎麼寫」                    | server-api skill                                             | [API_PATTERNS.md](API_PATTERNS.md)                      |
+| 「Auth 怎麼用」                   | nuxt-better-auth / nuxt-auth-utils skill                     | [auth/](auth/)                                          |
+| 「升級 clade rules」              | `pnpm hub:sync`（**先確認 working tree 乾淨**）              | `.claude/rules/code-style.md` 等                        |
+| 「`pnpm hub:check` 報 drift」     | **禁止**靜默 sync，先判斷場景                                | `HUB_DRIFT_RUNBOOK.md`（meta layer）                    |
 
 ## 常用命令快查
 
@@ -169,6 +169,6 @@ rm .claude/.first-run
 | Debugging        | [DEBUGGING.md](DEBUGGING.md)                              |
 | Troubleshooting  | [TROUBLESHOOTING.md](TROUBLESHOOTING.md)                  |
 | FAQ              | [FAQ.md](FAQ.md)                                          |
-| 部署             | meta layer [DEPLOYMENT.md](../../docs/DEPLOYMENT.md)      |
+| 部署             | [DEPLOYMENT.md](DEPLOYMENT.md)                            |
 | 架構決策         | [decisions/](decisions/) / [architecture/](architecture/) |
 | 既有問題解法     | [solutions/](solutions/) / [gotchas/](gotchas/)           |

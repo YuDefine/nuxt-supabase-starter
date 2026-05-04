@@ -1,0 +1,52 @@
+services:
+  postgrest-core-a:
+    image: postgrest/postgrest:latest
+    environment:
+      PGRST_DB_URI: ${POSTGREST_DB_URI}
+      PGRST_DB_SCHEMAS: ${POSTGREST_CORE_SCHEMAS:-core}
+      PGRST_DB_ANON_ROLE: ${POSTGREST_ANON_ROLE:-anon}
+      PGRST_DB_CHANNEL: ${POSTGREST_CORE_CHANNEL:-pgrst_core}
+      PGRST_DB_CHANNEL_ENABLED: 'true'
+      PGRST_ADMIN_SERVER_PORT: 3001
+    expose:
+      - '3000'
+      - '3001'
+
+  postgrest-core-b:
+    image: postgrest/postgrest:latest
+    environment:
+      PGRST_DB_URI: ${POSTGREST_DB_URI}
+      PGRST_DB_SCHEMAS: ${POSTGREST_CORE_SCHEMAS:-core}
+      PGRST_DB_ANON_ROLE: ${POSTGREST_ANON_ROLE:-anon}
+      PGRST_DB_CHANNEL: ${POSTGREST_CORE_CHANNEL:-pgrst_core}
+      PGRST_DB_CHANNEL_ENABLED: 'true'
+      PGRST_ADMIN_SERVER_PORT: 3001
+    expose:
+      - '3000'
+      - '3001'
+
+  postgrest-app-a:
+    image: postgrest/postgrest:latest
+    environment:
+      PGRST_DB_URI: ${POSTGREST_DB_URI}
+      PGRST_DB_SCHEMAS: ${POSTGREST_APP_SCHEMAS:-public}
+      PGRST_DB_ANON_ROLE: ${POSTGREST_ANON_ROLE:-anon}
+      PGRST_DB_CHANNEL: ${POSTGREST_APP_CHANNEL:-pgrst_app}
+      PGRST_DB_CHANNEL_ENABLED: 'true'
+      PGRST_ADMIN_SERVER_PORT: 3001
+    expose:
+      - '3000'
+      - '3001'
+
+  postgrest-app-b:
+    image: postgrest/postgrest:latest
+    environment:
+      PGRST_DB_URI: ${POSTGREST_DB_URI}
+      PGRST_DB_SCHEMAS: ${POSTGREST_APP_SCHEMAS:-public}
+      PGRST_DB_ANON_ROLE: ${POSTGREST_ANON_ROLE:-anon}
+      PGRST_DB_CHANNEL: ${POSTGREST_APP_CHANNEL:-pgrst_app}
+      PGRST_DB_CHANNEL_ENABLED: 'true'
+      PGRST_ADMIN_SERVER_PORT: 3001
+    expose:
+      - '3000'
+      - '3001'

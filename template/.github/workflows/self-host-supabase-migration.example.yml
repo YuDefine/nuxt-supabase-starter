@@ -1,0 +1,49 @@
+name: Self-host Supabase Migration Example
+
+on:
+  workflow_dispatch:
+    inputs:
+      migration:
+        description: Migration SQL path to classify before deploy
+        required: true
+        default: supabase/migrations/example.sql
+
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    outputs:
+      hard_stop: ${{ steps.risk.outputs.hard_stop }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: risk
+        run: |
+          pnpm --silent postgrest:risk "${{ inputs.migration }}" | tee migration-risk.json
+          hard_stop="$(node -e "const fs=require('node:fs');const j=JSON.parse(fs.readFileSync('migration-risk.json','utf8'));process.stdout.write(String(j.hardStop))")"
+          echo "hard_stop=${hard_stop}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: migration-risk
+          path: migration-risk.json
+
+  ready-gate:
+    needs: classify
+    if: needs.classify.outputs.hard_stop != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Wait for PostgREST readiness
+        run: pnpm postgrest:ready --url="${POSTGREST_READY_URLS}"
+        env:
+          POSTGREST_READY_URLS: ${{ secrets.POSTGREST_READY_URLS }}

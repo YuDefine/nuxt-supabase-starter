@@ -5,7 +5,7 @@ globs: ['openspec/changes/**/tasks.md', 'docs/tech-debt.md']
 
 # Follow-up Register
 
-繁體中文 | [English](./follow-up-register.en.md)
+繁體中文
 
 **核心命題**：tasks.md 內的「DEFERRED / LOCAL BLOCKED / follow-up」註記在 archive 後會被埋進歸檔目錄，導致未解決項目消失在眾人視野。本規則用 **marker + register + archive gate** 三層結構強制這些項目不會遺漏。
 

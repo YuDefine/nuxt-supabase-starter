@@ -13,7 +13,7 @@ globs:
 
 # Truth Layers
 
-繁體中文 | [English](./truth-layers.en.md)
+繁體中文
 
 > Optional rule: 若專案有明確的資料層、契約層、API 層、UI 層，保留此規則。若專案沒有這種分層，可在安裝後移除或調整。
 
