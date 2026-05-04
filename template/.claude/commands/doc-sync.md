@@ -88,25 +88,4 @@ $ARGUMENTS
 
 ## 文件清單
 
-目前 docs/verify/ 包含：
-
-- README.md - 開發手冊（主文件）
-- QUICK_START.md - 快速開始
-- AUTH_INTEGRATION.md - 認證整合
-- CLOUDFLARE_WORKERS_GOTCHAS.md - CF Workers 注意事項
-- DATABASE_PERFORMANCE_OPTIMIZATION.md - 資料庫效能
-- EMAIL_WHITELIST.md - Email 白名單
-- ENVIRONMENT_VARIABLES.md - 環境變數
-- MONITORING_TABLES.md - 監控表結構
-- OAUTH_SETUP.md - OAuth 設定
-- PINIA_ARCHITECTURE.md - Pinia 架構
-- REMOTE_DEPLOYMENT.md - 遠端部署
-- RLS_PERFORMANCE_OPTIMIZATION.md - RLS 效能
-- SENTRY_CONFIGURATION.md - Sentry 設定
-- SUPABASE_ARCH_GUIDELINES.md - Supabase 架構
-- SUPABASE_BACKUP_RESTORE.md - 備份還原
-- SUPABASE_MIGRATION_GUIDE.md - Migration 指南
-- SUPABASE_STUDIO_WORKFLOW.md - Studio 工作流程
-- TEST_DRIVEN_DEVELOPMENT.md - TDD 指南
-- USER_PREFERENCES.md - 使用者偏好
-- USER_ROLES_AUTH.md - 使用者角色
+各 consumer 的 `docs/verify/` 結構不同，執行此 command 前**先讀** consumer 自己的 `docs/verify/README.md` 取得當前清單，再依使用者描述的變更類型對照需要更新的檔案。**禁止**根據此 command 內嵌假設的清單去更新；該清單會隨 consumer 演化而漂移。
