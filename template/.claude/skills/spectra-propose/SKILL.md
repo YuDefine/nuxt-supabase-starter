@@ -66,7 +66,7 @@ If no argument is provided, the workflow will extract requirements from conversa
       ```bash
       cd <consumer-repo-root> && codex exec \
         --model gpt-5.5 \
-        -s workspace-write \
+        --dangerously-bypass-approvals-and-sandbox \
         --skip-git-repo-check \
         -c model_reasoning_effort=xhigh \
         < /tmp/codex-spectra-propose-<change-name>-prompt.md 2>&1
