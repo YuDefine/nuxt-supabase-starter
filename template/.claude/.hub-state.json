@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-04T01:08:39.503Z",
+  "syncedAt": "2026-05-04T01:19:17.102Z",
   "checksums": {
     "rules/agent-routing.md": "2ce281f0e32c09ae",
     "rules/code-style.md": "b318cc4f9a35cb40",
@@ -32,9 +32,6 @@
     "rules/development.md": "9c8ff3992c2af057",
     "scripts/codex-review-safe.sh": "6221a65e9f017014",
     "scripts/commit-lock.mjs": "f81c79df484ce5db",
-    "scripts/postgrest-resilience/classify-migration.mjs": "a58b79c593cf234e",
-    "scripts/postgrest-resilience/ready-watch.mjs": "6dc7f13c9ec314b8",
-    "scripts/postgrest-resilience/smoke-runner.mjs": "b7579e0d2f1a33ce",
     "skills/spectra/SKILL.md": "e4e45b224e8eaa6f",
     "skills/spectra-apply/SKILL.md": "a5723373b246c141",
     "skills/spectra-archive/SKILL.md": "6d9fb82053a688b8",
