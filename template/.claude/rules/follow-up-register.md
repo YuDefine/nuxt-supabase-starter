@@ -158,6 +158,7 @@ pnpm spectra:followups --fail-on-drift  # CI gate：未登記 marker 時 exit 1
 - **`ux-completeness.md`**：本規則補充「Definition of Done」延伸面——即使 tasks 全勾，若有 follow-up marker 未登記 register，archive 仍被擋。
 - **`proactive-skills.md` Design Gate**：Design Gate 檢查 UI 視覺品質；本 Follow-up Gate 檢查未解決項是否有追蹤。兩者並存。
 - **`commit.md`**：本規則不阻擋 commit，只阻擋 archive。commit `/commit` 流程不變。
+- **`session-tasks.md`**：`tasks/<id>.md` 內出現「等待中」「之後再說」性質的項目，session 結束升級時 **MUST** 建 TD-NNN entry，不能只留註記在 tasks 檔（tasks 檔會被刪 / archive，註記跟著消失）。
 
 ---
 
