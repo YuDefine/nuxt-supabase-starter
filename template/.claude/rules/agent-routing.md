@@ -165,6 +165,7 @@ Claude Code session 收到 spectra propose 請求時：
    - **是 Design Review** → 主線 Claude Opus 4.7 xhigh **自己做**，不派 codex
    - **不是 Design Review** → 派 background codex GPT-5.5 high 做完整 phase
 3. 每個非 Design Review phase 的派工：
+   - prompt **第一行 MUST** 是 `[DELEGATED-BY-CLAUDE-CODE]` marker（Codex 端 Runtime Gate 會驗，缺 marker 會被擋掉，見下節）
    - prompt 內容：phase 標題、該 phase 全部 tasks、相關 design.md / specs / tasks 段落、acceptance criteria、`spectra task done <change> <task-id>` 完成標記指令
    - `<topic>=spectra-apply-<phase-id>`、`<cwd>=consumer repo root`、`-c model_reasoning_effort=high`
 4. 收到 `<task-notification status=completed>` 後，主線 **MUST**：
@@ -172,6 +173,40 @@ Claude Code session 收到 spectra propose 請求時：
    - sanity check（typecheck、相關 test、git diff）
    - 若有遺漏 → **AskUserQuestion** 給使用者 [1] 主線補 / [2] 重派 codex / [3] 中止
 5. 全部 phases 完成後，主線**自己**跑 Section 7 Design Review（不派出去）
+
+## Codex `$spectra-apply` Runtime Gate
+
+**核心命題**：`$spectra-apply` 在 Codex 端不允許由使用者直接觸發。Codex 進入 spectra-apply 流程**必須**是 Claude Code 主線派工的結果——Codex 是執行手，不是 quality gate。
+
+### 為什麼擋
+
+| 風險 | 說明 |
+| --- | --- |
+| 跳過 claim | Codex 直接跑容易略過 `work-claims.md` 規定的「先 claim 再做 active change」流程 |
+| 跳過 Design Review 回收 | spectra-apply 的 Design Review phase 必須由主線 Claude Opus 4.7 自己做（見上面 Routing Table）；Codex 直接跑會把 Design Review phase 一起做掉，Design 品質降級 |
+| 失去 cross-check | 主線是 quality gate（typecheck / git diff / tasks.md checkbox 確認）；Codex 直接跑沒人 cross-check |
+
+### Marker 機制
+
+主線派 Codex 跑 spectra apply phase 時，prompt **第一行 MUST 是 `[DELEGATED-BY-CLAUDE-CODE]`**（見上節 Spectra Apply Phase Dispatch Step 3）。
+
+Codex session 收到 `$spectra-apply`（或任何要它執行 spectra-apply 流程的請求）時，**MUST** 第一件事檢查 prompt body 是否含 `[DELEGATED-BY-CLAUDE-CODE]` marker：
+
+- **有 marker** → 正常執行 spectra-apply skill
+- **沒 marker** → 立即 STOP、**不執行任何 `spectra` 命令**、不修改任何檔案，回覆使用者：
+
+  > `$spectra-apply` 只能由 Claude Code 主線派工執行。請改在 Claude Code 跑 `/spectra-apply`（主線會自動把非 Design Review phase 派給 Codex 處理，並在 prompt 內加 `[DELEGATED-BY-CLAUDE-CODE]` marker）。
+
+### 設計限制
+
+純 prompt-level 自律 gate，不是硬鎖：
+- 設計目標是擋「使用者沒想清楚就在 Codex 喊 `$spectra-apply`」這種非預期觸發
+- 使用者本人若刻意把 marker 貼進 prompt 強行 bypass 是有意行為，不在這個 gate 設計範圍
+- 真正的 hard enforce 需要動 spectra CLI 本身（驗 stdin/env），但 spectra 不在 clade 治理範圍
+
+### 與其他 spectra 入口的關係
+
+本 gate **只**作用於 `$spectra-apply`（最容易踩到 claim / Design Review 跳過坑的入口）。其他 `$spectra-*` 在 Codex 端的限制策略不在本節範圍——若未來發現類似問題，比照本節設計獨立加 gate。
 
 ## WebSearch Handoff（具體做法）
 
@@ -209,4 +244,6 @@ Claude Code session 內偵測到「需要 WebSearch」時：
 - **NEVER** 在 spectra-apply 派 codex 用 medium effort — 一律用 high（medium 漏 schema drift 風險高）
 - **NEVER** task 粒度派 codex — 一律 phase 粒度，避免大量 round-trip
 - **NEVER** 在 commit 0-A 用 `simplify` skill / `code-review` agent 自行 review（改派 codex），也 **NEVER** 改用其他模型或顛倒兩輪 reasoning effort
+- **NEVER** 在 Codex 端執行 `$spectra-apply` 而 prompt body 沒有 `[DELEGATED-BY-CLAUDE-CODE]` marker — **MUST** 立即 STOP 且不執行任何 `spectra` 命令（見「Codex `$spectra-apply` Runtime Gate」）
+- **NEVER** 主線派 Codex 跑 spectra apply phase 而 prompt 第一行不是 `[DELEGATED-BY-CLAUDE-CODE]` marker — 會被 Codex 端 Runtime Gate 擋掉、整個 phase dispatch 白做
 - **NEVER** 把 routing 例外寫死在個別 skill；要加例外請改本檔的 Routing Table
