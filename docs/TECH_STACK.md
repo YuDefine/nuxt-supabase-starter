@@ -44,14 +44,15 @@ related:
 
 ### 開發工具
 
-| 技術                                                              | 說明                           |
-| ----------------------------------------------------------------- | ------------------------------ |
-| [Vite+](https://viteplus.dev/) (Vitest + OXLint + OXFmt)          | 統一工具鏈（測試、品質、格式） |
-| [@nuxt/test-utils](https://nuxt.com/docs/getting-started/testing) | Nuxt 整合測試                  |
-| [Supabase CLI](https://supabase.com/docs/guides/cli)              | 本地開發、Migration            |
-| [Zod](https://zod.dev/)                                           | Schema 驗證                    |
-| [Commitlint](https://commitlint.js.org/)                          | Commit 規範                    |
-| [VitePress](https://vitepress.dev/)                               | 文件網站產生器                 |
+| 技術                                                              | 說明                                                       |
+| ----------------------------------------------------------------- | ---------------------------------------------------------- |
+| [Vite+](https://viteplus.dev/) (Vitest + OXLint + OXFmt)          | 統一工具鏈（測試、品質、格式）                             |
+| [@nuxt/hints](https://nuxt.com/modules/hints)                     | Dev-time DX（Web Vitals / hydration / 未用元件 / HTML 驗證）|
+| [@nuxt/test-utils](https://nuxt.com/docs/getting-started/testing) | Nuxt 整合測試                                              |
+| [Supabase CLI](https://supabase.com/docs/guides/cli)              | 本地開發、Migration                                        |
+| [Zod](https://zod.dev/)                                           | Schema 驗證                                                |
+| [Commitlint](https://commitlint.js.org/)                          | Commit 規範                                                |
+| [VitePress](https://vitepress.dev/)                               | 文件網站產生器                                             |
 
 ### 部署與監控
 

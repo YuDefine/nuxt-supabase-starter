@@ -14,7 +14,7 @@
     "build": "tsdown src/cli.ts --format esm --out-dir dist",
     "dev": "tsx src/cli.ts",
     "start": "node dist/cli.js",
-    "test": "vitest run",
+    "test": "vp test run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
