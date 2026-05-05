@@ -31,17 +31,13 @@ If no argument is provided, the workflow will extract requirements from conversa
 
 **Steps**
 
-0. **Choose execution platform** （discuss → propose 銜接）
+0. **Dispatch Codex draft + 主線 cross-check**（預設流程，無 A/B 詢問）
 
-   **Detect handoff intent first（不要重問）：**
-   - 若上游 `spectra-discuss` 在 transition 時明示「使用者已選 A」 → 直接走 **A 路徑**
-   - 若明示「使用者已選 B」 → skip 這整個 Step 0，直接跳到 Step 1
-   - 否則用 **AskUserQuestion** 詢問：
-     - **A. Codex（GPT-5.5 xhigh）** — 主線派 Codex 在背景執行 propose
-     - **B. Claude Code 繼續做** — 在當前 session 走 Step 1-11
-   - If **AskUserQuestion** is unavailable, present as plain text and wait for the user's reply
+   **預設行為**：本 skill 一律走「Codex GPT-5.5 xhigh draft + 主線 Claude Opus xhigh cross-check」流程。**禁止** AskUserQuestion 問 A/B。
 
-   ### A 路徑：主線 Claude **自己派 Codex 在背景跑**（**禁止**叫使用者切 CLI、**禁止**「Stop here」）
+   **唯一例外**：使用者**明確**說「不要派 codex」「我要純 Claude propose」「直接你做」等指令 → 跳過 Step 0，直接走 Step 1~11（純 Claude 路徑，但 Step 8 必須補 7 步 Design Review check）。**否則一律走以下流程**。
+
+   ### Phase 0a：派 Codex 在背景跑
 
    依以下順序執行（每一步都是主線 Claude 自己做，不需使用者介入）：
 
@@ -54,9 +50,18 @@ If no argument is provided, the workflow will extract requirements from conversa
 
       讀取以下檔案理解流程後執行：
       - .claude/skills/spectra-propose/SKILL.md（**只執行 Step 1 ~ 11**，**跳過** Step 0 — 已決定由你執行）
-      - .claude/rules/ux-completeness.md（必填區塊：Affected Entity Matrix / User Journeys / Implementation Risk Plan）
+      - .claude/rules/ux-completeness.md（必填區塊：Affected Entity Matrix / User Journeys / Implementation Risk Plan + Design Review 7 步 template）
       - .claude/rules/agent-routing.md
       - 任何 discuss 階段已捕獲的 design.md / spec.md（位置：openspec/changes/<change-name>/，若已存在）
+
+      若 change 包含 UI scope（tasks 涉及 .vue / pages/ / components/ / layouts/），tasks.md **必須**包含完整 7 步 Design Review section（N.1~N.7）：
+        - N.1 檢查 PRODUCT.md / DESIGN.md
+        - N.2 /design improve + Fidelity Report
+        - N.3 修復 DRIFT loop
+        - N.4 按 canonical order 跑 targeted impeccable skills
+        - N.5 /impeccable audit Critical = 0
+        - N.6 review-screenshot 視覺 QA
+        - N.7 Fidelity 確認
 
       完成標準：`spectra park <change-name>` 執行成功。
       不要呼叫 /spectra-apply。產出後在 stdout 摘要 artifacts 列表 + `spectra validate` 結果。
@@ -72,24 +77,76 @@ If no argument is provided, the workflow will extract requirements from conversa
         < /tmp/codex-spectra-propose-<change-name>-prompt.md 2>&1
       ```
 
-   4. **立刻**簡短回報給使用者：「已派 Codex GPT-5.5 xhigh 在背景執行 `/spectra-propose <change-name>`（bash job `<id>`，output stream 跟著走）」
-   5. **等通知 + Open Questions 主動檢查**：收到 `<task-notification> status=completed` 時**立刻**依序執行：
-      1. 用 BashOutput 讀該 job 的完整 stdout（或對應 output 檔）
-      2. 簡短摘要：產出哪些 artifacts、`spectra validate` 結果、是否 park 成功
-      3. **MUST 掃 design.md 的 Open Questions**（不論前面摘要多漂亮，這步**不能省略**）：
-         - 用 Read 讀 `openspec/changes/<change-name>/design.md`
-         - 用 grep 找 `## Open Questions`（或同義變體：`## Open Question`、`## 待決問題`、`## Unresolved Questions`）標題
-         - 若標題存在且區塊內容非空（不是 `(none)` / `N/A` / `無` / 只剩空 bullet / 只剩註解）：
-           - **立刻**用 **AskUserQuestion** 把每一題列給使用者（一次最多 5 題，超過分批問）；題目沿用 design.md 的原句，必要時補一句脈絡讓使用者好答
-           - **NEVER** 把「要不要回答 open questions」包成 A/B/C/D 選單裡的一個選項丟給使用者選 — open questions 是 apply 前的硬決策，**MUST** 主動拿到答案
-           - **NEVER** 自行假設答案、自行標 wontfix、或推給未來（"晚點再決定"、"apply 時再說"）
-           - 若 **AskUserQuestion** 不可用，就用純文字逐題列出並等使用者回覆
-         - 拿到答案後：`spectra unpark <change-name>` → 用 Edit 把 design.md 的 `## Open Questions` 段落改為 `## Resolved Questions`，每題下補一行 `**Answer:** <使用者回答>` → `spectra analyze <change-name> --json` 確認沒新 Critical/Warning → `spectra validate <change-name>` → `spectra park <change-name>`
-      4. **Open Questions 處理完（或本來就沒有）後**才列出後續可選動作（`/spectra-apply <change-name>` 等）
-   6. **NEVER** 沉默等使用者來問進度；通知一到自己讀檔回報
-   7. **本 session 不再執行任何 Step 1 ~ 11**（避免雙重生產）— Step 0 A 路徑結束本 skill
+   4. **立刻**簡短回報給使用者：「已派 Codex GPT-5.5 xhigh 在背景 draft `/spectra-propose <change-name>`（bash job `<id>`），完成後主線會 cross-check 並補 Design Review template」
+   5. 啟動 **Codex Watch Protocol**（見 `agent-routing.md`）— `ScheduleWakeup(180, "...")` 監看進度
 
-   ### B 路徑
+   ### Phase 0b：主線 Cross-Check（codex 完成後**立刻**執行）
+
+   收到 `<task-notification> status=completed` 時**立刻**依序執行：
+
+   1. **Read codex stdout** 摘要：BashOutput 讀完整 stdout，回報 artifacts list / `spectra validate` 結果
+
+   2. **若 codex 已 `spectra park <change-name>`**：先 `spectra unpark <change-name>` 才能繼續 cross-check
+
+   3. **跑 post-propose-check.sh**（檢查 User Journeys / Affected Entity Matrix / Implementation Risk Plan / Design Review 7 步）：
+
+      ```bash
+      bash scripts/spectra-ux/post-propose-check.sh <change-name>
+      ```
+
+      若有 FINDINGS → 主線**自己**直接 Edit proposal.md / tasks.md 補齊（**不要**回 codex 修，太慢）
+
+   4. **跑 design-inject.sh**（若 UI scope，提醒 7 步 template）：
+
+      ```bash
+      bash scripts/spectra-ux/design-inject.sh <change-name>
+      ```
+
+   5. **若 Design Review section 缺或不完整 7 步 → 主線自己 Edit tasks.md 補齊**：
+
+      位置：tasks.md 最後一個功能區塊之後、`## 人工檢查` 之前。N = 上一個功能區塊的序號 + 1。
+
+      ```markdown
+      ## N. Design Review
+
+      - [ ] N.1 檢查 PRODUCT.md（必要）+ DESIGN.md（建議）；缺 PRODUCT.md 跑 /impeccable teach、缺 DESIGN.md 跑 /impeccable document
+      - [ ] N.2 執行 /design improve [affected pages/components]，產出 Design Fidelity Report
+      - [ ] N.3 修復所有 DRIFT 項目（Fidelity Score < 8/8 時必做，loop 直到 DRIFT = 0，max 2 輪）
+      - [ ] N.4 依 /design improve 計劃按 canonical order 執行 targeted impeccable skills（layout / typeset / clarify / harden / colorize 等實際所需項目）
+      - [ ] N.5 執行 /impeccable audit，確認 Critical = 0
+      - [ ] N.6 執行 review-screenshot，補 design-review.md / 視覺 QA 證據
+      - [ ] N.7 Fidelity 確認 — design-review.md 中無 DRIFT 項
+      ```
+
+      `[affected pages/components]` 替換為此 change 實際涉及的 UI 檔案/頁面。
+
+   6. **掃 design.md 的 Open Questions**（不論前面摘要多漂亮，這步**不能省略**）：
+      - Read `openspec/changes/<change-name>/design.md`
+      - grep 找 `## Open Questions`（或同義變體：`## Open Question`、`## 待決問題`、`## Unresolved Questions`）
+      - 若標題存在且區塊內容非空（不是 `(none)` / `N/A` / `無` / 只剩空 bullet / 只剩註解）：
+        - **立刻**用 **AskUserQuestion** 把每一題列給使用者（一次最多 5 題，超過分批問）
+        - **NEVER** 把「要不要回答 open questions」包成 A/B/C/D 選單裡的一個選項
+        - **NEVER** 自行假設答案、自行標 wontfix、或推給未來
+        - 拿到答案後 Edit design.md 把 `## Open Questions` 改為 `## Resolved Questions`，每題下補 `**Answer:** <使用者回答>`
+
+   7. **跑 `spectra analyze <change-name> --json`** 確認無 Critical/Warning（max 2 輪 fix loop，與 Step 9 邏輯相同）
+
+   8. **`spectra validate <change-name>`** 確認 artifacts 結構合法
+
+   9. **`spectra park <change-name>`** 結束流程
+
+   10. 回報使用者：artifacts list + cross-check 結果（補了什麼、Design Review 7 步 OK 與否、analyze/validate 結果）+ `/spectra-apply <change-name>` 提示
+
+   **禁止事項**（重點重申）：
+
+   - **NEVER** 在 Step 0 用 AskUserQuestion 問 A/B（已預設 codex draft）— 除非使用者**明確**要求純 Claude propose
+   - **NEVER** 派 codex 後不跑 cross-check（post-propose-check + design-inject + 主線補 Design Review 7 步 + spectra analyze）
+   - **NEVER** 把 cross-check 的修補工作丟回 codex（太慢、來回成本高）— 主線**自己** Edit 修
+   - **NEVER** 沉默等使用者來問進度；通知一到自己讀檔 + cross-check 完整流程
+
+   **本 session 不再執行任何 Step 1 ~ 11**（避免雙重生產）— Step 0 結束本 skill。
+
+   ### 純 Claude 路徑（使用者明確要求時）
 
    continue to Step 1 below.
 
@@ -365,6 +422,14 @@ If no argument is provided, the workflow will extract requirements from conversa
    - Are success/failure conditions testable and specific?
    - Are boundary conditions defined (empty input, max limits, error cases)?
    - Could "the system" refer to multiple components? Be explicit.
+
+   **Check 5: Design Review 7-step template (UI scope only)**
+
+   If `tasks.md` references any `.vue` / `pages/` / `components/` / `layouts/` files:
+   - tasks.md **MUST** contain a `## N. Design Review` section before `## 人工檢查` (with N = last functional section number + 1)
+   - The section **MUST** have all 7 checkboxes (N.1 through N.7) covering: PRODUCT.md/DESIGN.md check, /design improve + Fidelity Report, DRIFT fix loop, canonical-order targeted impeccable skills, /impeccable audit Critical = 0, review-screenshot, Fidelity confirmation
+   - Verify by running `bash scripts/spectra-ux/post-propose-check.sh <change-name>` and acting on its FINDINGS
+   - If anything is missing, fix tasks.md inline now — do NOT let an incomplete Design Review section through. Archive gate will block it later anyway.
 
 ---
 
