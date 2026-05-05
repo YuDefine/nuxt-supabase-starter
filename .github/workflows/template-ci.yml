@@ -8,10 +8,12 @@ on:
       - 'template/shared/**'
       - 'template/layers/**'
       - 'template/supabase/**'
+      - 'template/scripts/**'
       - 'template/nuxt.config.ts'
       - 'template/package.json'
       - 'template/pnpm-lock.yaml'
       - 'template/tsconfig*.json'
+      - 'template/.claude/hub.json'
       - '.github/workflows/template-ci.yml'
   push:
     branches: [main]
@@ -21,10 +23,12 @@ on:
       - 'template/shared/**'
       - 'template/layers/**'
       - 'template/supabase/**'
+      - 'template/scripts/**'
       - 'template/nuxt.config.ts'
       - 'template/package.json'
       - 'template/pnpm-lock.yaml'
       - 'template/tsconfig*.json'
+      - 'template/.claude/hub.json'
       - '.github/workflows/template-ci.yml'
   workflow_dispatch:
 

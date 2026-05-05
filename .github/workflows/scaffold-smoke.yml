@@ -16,6 +16,11 @@ on:
       - scripts/smoke-scaffold.sh
       - template/packages/create-nuxt-starter/**
       - template/scripts/templates/github/.github/workflows/**
+      - package.json
+      - docs/QUICK_START.md
+      - docs/CLAUDE_CODE_GUIDE.md
+      - docs/CLI_SCAFFOLD.md
+      - .github/workflows/scaffold-smoke.yml
   workflow_dispatch:
 
 jobs:
