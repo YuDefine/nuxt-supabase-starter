@@ -62,6 +62,7 @@ scan_placeholders() {
       --glob '!pnpm-lock.yaml' \
       --glob '!README.md' \
       --glob '!.scaffold-cleanup' \
+      --glob '!verify-starter.mjs' \
       || true
   else
     grep -RInE "$pattern" "$target" \
@@ -73,6 +74,7 @@ scan_placeholders() {
       --exclude=pnpm-lock.yaml \
       --exclude=README.md \
       --exclude=.scaffold-cleanup \
+      --exclude=verify-starter.mjs \
       || true
   fi
 }
