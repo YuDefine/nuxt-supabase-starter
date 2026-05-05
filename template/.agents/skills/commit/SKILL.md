@@ -98,9 +98,9 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 兩輪採**漸進加深 reasoning effort**：Round 1 用 `high` 抓常見問題（速度與成本最佳化），Round 2 用 `xhigh` 抓 Round 1 漏網的深層問題（最高推理）。
 
-#### 執行方式：背景跑 + 每 ~5 分鐘確認進度
+#### 執行方式：背景跑 + 每 3 分鐘確認進度
 
-`codex review` 在 `high` / `xhigh` 推理下常需數分鐘。**MUST** 用 Bash `run_in_background: true` 啟動，並**每 ~5 分鐘**讀一次背景輸出確認進度（process 還活著、有沒有錯訊、跑到哪一檔）。建議用 `ScheduleWakeup({delaySeconds: 270})` 排隔，避開 prompt cache 5 分鐘 TTL 邊界（300s 是 cache miss 最差解）。
+`codex review` 在 `high` / `xhigh` 推理下常需數分鐘。**MUST** 用 Bash `run_in_background: true` 啟動，並**每 3 分鐘**讀一次背景輸出確認進度（process 還活著、有沒有錯訊、跑到哪一檔）。建議用 `ScheduleWakeup({delaySeconds: 180})` 排隔——3 分鐘穩穩落在 prompt cache 5 分鐘 TTL 內（300s 是 cache miss 最差解），又是使用者明定的上限，不可拉長。
 
 - **NEVER** 把 codex review 用 foreground 同步阻塞主線 — 等下去什麼事都做不了
 - **NEVER** 連續多次 sleep <60s 短輪詢 — 會把 cache 燒光也吵

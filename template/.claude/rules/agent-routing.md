@@ -78,7 +78,7 @@ globs: ['**/*']
 
 | 訊號 | 判定 | 下次 wakeup |
 | --- | --- | --- |
-| 末尾持續有新 `exec` 行、`succeeded in`、`tokens used` 或 diff 輸出 | 健康 | `600` 秒（10 分，跨一次 cache TTL，可接受） |
+| 末尾持續有新 `exec` 行、`succeeded in`、`tokens used` 或 diff 輸出 | 健康 | `180` 秒（3 分，cache 內；使用者要求上限） |
 | 末尾出現 `Codex Report` 或 `tokens used:` 後無新行 | 即將完成 | `60` 秒（cache 內，便宜） |
 | 末尾 60s+ 無新輸出（看 BashOutput timestamp） | 輕度可疑 | `120` 秒；連續兩次無輸出 → 視為卡住，跳「介入觸發」 |
 | 末尾出現 `fetch failed` / `sandbox: rejected` / `Permission denied` / `EACCES` / 認證失敗 | 阻塞 | **立刻**跳「介入觸發」，不再 wakeup |
@@ -105,15 +105,15 @@ codex 跑了 N 分鐘，目前狀態：<一句話卡點>
 
 ### `ScheduleWakeup` 用法守則
 
-`delaySeconds` 遵守 prompt-cache TTL（300s 是 worst-of-both）：
+`delaySeconds` 一律落在 prompt cache 5 分鐘 TTL 內（< 300）：
 
 | 情境 | 建議值 |
 | --- | --- |
-| 健康、跨 cache 一次性可接受 | `600`–`900`（10–15 分） |
+| 健康（預設、上限） | `180`（3 分，cache 內、使用者明定上限） |
 | 即將完成 / 等通知收尾 | `60`–`120`（cache 內） |
 | 輕度可疑、要近距離觀察 | `120`–`180` |
 
-**禁止** `< 60`（runtime clamp 也會擋）或 `> 1800`（跨多次 TTL，偵測太遲）。
+**禁止** `< 60`（runtime clamp 也會擋）或 `> 180`（使用者要求每 3 分鐘必檢查；更長偵測太遲）。
 
 `reason` 欄位**必須**具體：例如「kiosk-multilingual codex 進度檢查（已派出 3 分）」，**NEVER** 寫「waiting」「monitoring codex」這種空泛字眼。
 
