@@ -10,6 +10,7 @@
     "preview": "nuxt preview"
   },
   "dependencies": {
+    "@nuxt/hints": "^1.1.0",
     "nuxt": "^4.4.2",
     "zod": "^4.3.6"
   },

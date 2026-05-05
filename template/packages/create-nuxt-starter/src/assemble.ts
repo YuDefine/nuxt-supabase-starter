@@ -306,7 +306,8 @@ export function generateNuxtConfig(targetDir: string, selectedFeatureIds: string
   let config = readFileSync(configPath, 'utf-8')
 
   // Collect nuxt modules
-  const modules: string[] = []
+  // @nuxt/hints 是必裝模組（dev-time DX：Web Vitals / hydration / HTML 驗證）
+  const modules: string[] = ['@nuxt/hints']
   for (const featureId of selectedFeatureIds) {
     const mod = getModuleById(featureId)
     if (mod?.nuxtModules) {
@@ -373,6 +374,18 @@ export function generateNuxtConfig(targetDir: string, selectedFeatureIds: string
 
   // Config blocks
   const configBlocks: string[] = []
+
+  // @nuxt/hints 必裝設定（dev-time real-time feedback）
+  configBlocks.push(`  hints: {`)
+  configBlocks.push(`    devtools: true,`)
+  configBlocks.push(`    features: {`)
+  configBlocks.push(`      hydration: true,`)
+  configBlocks.push(`      lazyLoad: true,`)
+  configBlocks.push(`      webVitals: true,`)
+  configBlocks.push(`      thirdPartyScripts: true,`)
+  configBlocks.push(`      htmlValidate: true,`)
+  configBlocks.push(`    },`)
+  configBlocks.push(`  },`)
 
   if (selectedFeatureIds.includes('image')) {
     configBlocks.push(`  image: {`)
