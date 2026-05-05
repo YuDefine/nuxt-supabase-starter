@@ -226,8 +226,7 @@ function loadConfig(): Config {
       claims?: { enabled?: boolean; path?: string; staleSeconds?: number }
     }
     const openspecDir = raw.paths?.openspec ?? defaults.openspecDir
-    const roadmapPath =
-      raw.roadmap?.path ?? `${openspecDir.replace(/\/$/, '')}/ROADMAP.md`
+    const roadmapPath = raw.roadmap?.path ?? `${openspecDir.replace(/\/$/, '')}/ROADMAP.md`
     const enabled = raw.roadmap?.enabled ?? true
     const claimsEnabled = raw.claims?.enabled ?? defaults.claimsEnabled
     const claimsDir = raw.claims?.path ?? defaults.claimsDir
@@ -642,8 +641,7 @@ function detectManualDrift(content: string, openspecDir: string): ManualDrift[] 
     if (endIdx === -1) continue
     autoRanges.push([startIdx, endIdx])
   }
-  const inAutoRegion = (idx: number): boolean =>
-    autoRanges.some(([s, e]) => idx >= s && idx <= e)
+  const inAutoRegion = (idx: number): boolean => autoRanges.some(([s, e]) => idx >= s && idx <= e)
 
   const drifts: ManualDrift[] = []
   const seen = new Set<string>()
@@ -780,8 +778,9 @@ function fmtClaimLine(claim: ClaimView): string {
     claim.record.paths.length > 0
       ? `\n  - Paths: ${claim.record.paths.map((path) => `\`${path}\``).join(', ')}`
       : ''
-  const takeover =
-    claim.stale ? `\n  - Status: stale (last heartbeat ${claim.record.updatedAt})` : ''
+  const takeover = claim.stale
+    ? `\n  - Status: stale (last heartbeat ${claim.record.updatedAt})`
+    : ''
   return `- **${claim.record.change}** — ${claim.record.owner} (${claim.record.runtime})\n  - Accepted from: ${claim.record.acceptedFrom}\n  - Last heartbeat: ${claim.record.updatedAt}${task}${note}${session}${paths}${takeover}`
 }
 
@@ -848,10 +847,7 @@ function renderParallelismBlock(report: ParallelismReport): string {
 
   const blockedBody = report.blocked.length
     ? report.blocked
-        .map(
-          (b) =>
-            `- \`${b.change}\` waits for: ${b.waitsFor.map((w) => `\`${w}\``).join(', ')}`
-        )
+        .map((b) => `- \`${b.change}\` waits for: ${b.waitsFor.map((w) => `\`${w}\``).join(', ')}`)
         .join('\n')
     : ''
 
@@ -868,10 +864,7 @@ function renderParallelismBlock(report: ParallelismReport): string {
     .trimEnd()
 }
 
-function renderParkedBlock(
-  parked: ParkedChange[],
-  source: 'cli' | 'unavailable'
-): string {
+function renderParkedBlock(parked: ParkedChange[], source: 'cli' | 'unavailable'): string {
   const intro = [
     '## Parked Changes',
     '',
@@ -1204,7 +1197,9 @@ function emitText(report: SyncReport): void {
     console.log(`  ⚠ ${mutex} spec collision${mutex === 1 ? '' : 's'} — check Parallel Tracks`)
   }
   if (staleClaims > 0) {
-    console.log(`  ⚠ ${staleClaims} stale claim${staleClaims === 1 ? '' : 's'} — review Active Claims before takeover`)
+    console.log(
+      `  ⚠ ${staleClaims} stale claim${staleClaims === 1 ? '' : 's'} — review Active Claims before takeover`
+    )
   }
   emitManualDrift(report.manualDrift)
 }

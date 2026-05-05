@@ -53,11 +53,13 @@ const STEPS_7: StepDef[] = [
   {
     key: 'N.3',
     matcher: /DRIFT.*loop|loop.*DRIFT|修復.*DRIFT|fix.*DRIFT/i,
-    defaultText: '修復所有 DRIFT 項目（Fidelity Score < 8/8 時必做，loop 直到 DRIFT = 0，max 2 輪）',
+    defaultText:
+      '修復所有 DRIFT 項目（Fidelity Score < 8/8 時必做，loop 直到 DRIFT = 0，max 2 輪）',
   },
   {
     key: 'N.4',
-    matcher: /canonical order|targeted.*skills|impeccable skills|layout.*typeset|typeset.*colorize/i,
+    matcher:
+      /canonical order|targeted.*skills|impeccable skills|layout.*typeset|typeset.*colorize/i,
     defaultText:
       '依 /design improve 計劃按 canonical order 執行 targeted impeccable skills（layout / typeset / clarify / harden / colorize 等實際所需項目）',
   },
@@ -168,10 +170,7 @@ interface UpgradeResult {
   changed: boolean
 }
 
-function upgradeSection(
-  oldSectionLines: string[],
-  sectionNumber: number,
-): UpgradeResult {
+function upgradeSection(oldSectionLines: string[], sectionNumber: number): UpgradeResult {
   const checkboxes = parseCheckboxes(oldSectionLines)
   const matchedKeys: string[] = []
   const missingKeys: string[] = []
@@ -214,8 +213,14 @@ function upgradeSection(
 
   // Compare with old section to detect actual change
   const newSectionLines = [heading, ...body]
-  const oldTrimmed = oldSectionLines.map((l) => l.replace(/\s+$/, '')).join('\n').trim()
-  const newTrimmed = newSectionLines.map((l) => l.replace(/\s+$/, '')).join('\n').trim()
+  const oldTrimmed = oldSectionLines
+    .map((l) => l.replace(/\s+$/, ''))
+    .join('\n')
+    .trim()
+  const newTrimmed = newSectionLines
+    .map((l) => l.replace(/\s+$/, ''))
+    .join('\n')
+    .trim()
   const changed = oldTrimmed !== newTrimmed
 
   return { newSectionLines, matchedKeys, missingKeys, changed }
@@ -247,9 +252,8 @@ async function processFile(tasksPath: string): Promise<ChangeReport> {
     // Auto-insert: find next section number, insert 7-step Design Review block
     // before "## 人工檢查" / "## Manual Review" if present, otherwise append at end.
     const lastSectionMatch = [...raw.matchAll(/^##\s+(\d+)\.\s/gm)]
-    const lastNumber = lastSectionMatch.length > 0
-      ? Math.max(...lastSectionMatch.map((m) => parseInt(m[1], 10)))
-      : 0
+    const lastNumber =
+      lastSectionMatch.length > 0 ? Math.max(...lastSectionMatch.map((m) => parseInt(m[1], 10))) : 0
     const nextN = lastNumber + 1
 
     const newBlock: string[] = ['', `## ${nextN}. Design Review`, '']

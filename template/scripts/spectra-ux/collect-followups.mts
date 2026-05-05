@@ -302,7 +302,9 @@ async function main() {
       console.log(`⚠ Incomplete entries: ${summary}`)
     }
     if (orphaned.length > 0) {
-      console.log(`ℹ Orphaned entries: ${orphaned.length} (run \`pnpm spectra:followups\` for list)`)
+      console.log(
+        `ℹ Orphaned entries: ${orphaned.length} (run \`pnpm spectra:followups\` for list)`
+      )
     }
 
     console.log('Detail: pnpm spectra:followups')
@@ -314,7 +316,9 @@ async function main() {
     console.log(`- Register entries: ${register.length}`)
     console.log(`- Unique marker IDs in tasks.md: ${markerIds.size}`)
     console.log(`- Total marker occurrences: ${allMarkers.length}`)
-    const statusSummary = Object.entries(byStatus).map(([s, n]) => `${s}=${n}`).join(', ')
+    const statusSummary = Object.entries(byStatus)
+      .map(([s, n]) => `${s}=${n}`)
+      .join(', ')
     console.log(`- By status: ${statusSummary || '(empty)'}`)
     console.log('')
 
@@ -324,7 +328,9 @@ async function main() {
       console.log('| ID | Title | Priority | Status | Discovered |')
       console.log('| --- | --- | --- | --- | --- |')
       for (const e of register) {
-        console.log(`| ${e.id} | ${e.title} | ${e.priority} | ${e.status} | ${e.discovered ?? '—'} |`)
+        console.log(
+          `| ${e.id} | ${e.title} | ${e.priority} | ${e.status} | ${e.discovered ?? '—'} |`
+        )
       }
       console.log('')
     }
