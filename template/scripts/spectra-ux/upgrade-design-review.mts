@@ -104,18 +104,20 @@ async function findActiveTasksFiles(): Promise<string[]> {
   } catch {
     return []
   }
-  const out: string[] = []
-  for (const name of entries) {
-    if (name === 'archive' || name.startsWith('.')) continue
-    const p = join(changesDir, name, 'tasks.md')
-    try {
-      const s = await stat(p)
-      if (s.isFile()) out.push(p)
-    } catch {
-      /* tasks.md missing — skip */
-    }
-  }
-  return out
+  const candidates = entries
+    .filter((name) => name !== 'archive' && !name.startsWith('.'))
+    .map((name) => join(changesDir, name, 'tasks.md'))
+  const probed = await Promise.all(
+    candidates.map(async (p) => {
+      try {
+        const s = await stat(p)
+        return s.isFile() ? p : null
+      } catch {
+        return null
+      }
+    })
+  )
+  return probed.filter((p): p is string => p !== null)
 }
 
 interface SectionRange {
@@ -163,6 +165,45 @@ function parseCheckboxes(sectionLines: string[]): ParsedCheckbox[] {
   return out
 }
 
+interface SectionSegment {
+  checkbox: ParsedCheckbox
+  // Lines belonging to this checkbox (sub-items, screenshot links, evidence notes,
+  // anything between this checkbox and the next checkbox). Preserved verbatim during
+  // upgrade so user-supplied review evidence is not silently deleted.
+  evidence: string[]
+}
+
+function parseSection(sectionLines: string[]): SectionSegment[] {
+  const segments: SectionSegment[] = []
+  let current: SectionSegment | null = null
+
+  for (let i = 0; i < sectionLines.length; i++) {
+    const line = sectionLines[i]
+    if (i === 0 && SECTION_HEADING_RE.test(line)) continue
+
+    const m = line.match(CHECKBOX_RE)
+    if (m) {
+      if (current) segments.push(current)
+      current = {
+        checkbox: { checked: m[1] === 'x', rawNumber: m[2], text: m[3] },
+        evidence: [],
+      }
+    } else if (current) {
+      current.evidence.push(line)
+    }
+  }
+  if (current) segments.push(current)
+
+  // The final segment's trailing blank lines belong to the section trailer
+  // (between this section and the next), not to the last checkbox's evidence.
+  if (segments.length > 0) {
+    const lastEv = segments[segments.length - 1].evidence
+    while (lastEv.length > 0 && lastEv[lastEv.length - 1].trim() === '') lastEv.pop()
+  }
+
+  return segments
+}
+
 interface UpgradeResult {
   newSectionLines: string[]
   matchedKeys: string[]
@@ -171,20 +212,25 @@ interface UpgradeResult {
 }
 
 function upgradeSection(oldSectionLines: string[], sectionNumber: number): UpgradeResult {
-  const checkboxes = parseCheckboxes(oldSectionLines)
+  const segments = parseSection(oldSectionLines)
   const matchedKeys: string[] = []
   const missingKeys: string[] = []
 
   // For each canonical step, find the best-matching existing checkbox.
-  // A checkbox can only be claimed once.
-  const claimed = new Set<number>() // index into checkboxes
-  const stepResolved: { key: string; checked: boolean; text: string }[] = []
+  // A segment (checkbox + its evidence) can only be claimed once.
+  const claimed = new Set<number>()
+  const stepResolved: {
+    key: string
+    checked: boolean
+    text: string
+    evidence: string[]
+  }[] = []
 
   for (const step of STEPS_7) {
     let pickIdx = -1
-    for (let i = 0; i < checkboxes.length; i++) {
+    for (let i = 0; i < segments.length; i++) {
       if (claimed.has(i)) continue
-      if (step.matcher.test(checkboxes[i].text)) {
+      if (step.matcher.test(segments[i].checkbox.text)) {
         pickIdx = i
         break
       }
@@ -194,12 +240,18 @@ function upgradeSection(oldSectionLines: string[], sectionNumber: number): Upgra
       matchedKeys.push(step.key)
       stepResolved.push({
         key: step.key,
-        checked: checkboxes[pickIdx].checked,
-        text: checkboxes[pickIdx].text,
+        checked: segments[pickIdx].checkbox.checked,
+        text: segments[pickIdx].checkbox.text,
+        evidence: segments[pickIdx].evidence,
       })
     } else {
       missingKeys.push(step.key)
-      stepResolved.push({ key: step.key, checked: false, text: step.defaultText })
+      stepResolved.push({
+        key: step.key,
+        checked: false,
+        text: step.defaultText,
+        evidence: [],
+      })
     }
   }
 
@@ -208,6 +260,7 @@ function upgradeSection(oldSectionLines: string[], sectionNumber: number): Upgra
   for (const r of stepResolved) {
     const num = `${sectionNumber}.${r.key.split('.')[1]}`
     body.push(`- [${r.checked ? 'x' : ' '}] ${num} ${r.text}`)
+    for (const ev of r.evidence) body.push(ev)
   }
   body.push('')
 
@@ -340,24 +393,25 @@ async function processFile(tasksPath: string): Promise<ChangeReport> {
 
 async function main() {
   const tasksFiles = await findActiveTasksFiles()
-  const reports: ChangeReport[] = []
-  for (const f of tasksFiles) {
-    try {
-      reports.push(await processFile(f))
-    } catch (err) {
-      reports.push({
-        change: relative(join(ROOT, 'openspec', 'changes'), f).split('/')[0],
-        tasksPath: relative(ROOT, f),
-        hasUiScope: false,
-        hasSection: false,
-        existingStepCount: 0,
-        matchedSteps: [],
-        missingSteps: [],
-        upgraded: false,
-        reason: `error: ${(err as Error).message}`,
-      })
-    }
-  }
+  const reports: ChangeReport[] = await Promise.all(
+    tasksFiles.map(async (f): Promise<ChangeReport> => {
+      try {
+        return await processFile(f)
+      } catch (err) {
+        return {
+          change: relative(join(ROOT, 'openspec', 'changes'), f).split('/')[0],
+          tasksPath: relative(ROOT, f),
+          hasUiScope: false,
+          hasSection: false,
+          existingStepCount: 0,
+          matchedSteps: [],
+          missingSteps: [],
+          upgraded: false,
+          reason: `error: ${(err as Error).message}`,
+        }
+      }
+    })
+  )
 
   if (JSON_OUT) {
     console.log(JSON.stringify({ dryRun: DRY_RUN, reports }, null, 2))

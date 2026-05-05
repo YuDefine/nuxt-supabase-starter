@@ -58,21 +58,21 @@ const PRIORITY_WEIGHT: Record<string, number> = {
 }
 
 async function walkTaskFiles(dir: string): Promise<string[]> {
-  const results: string[] = []
+  let entries: Awaited<ReturnType<typeof readdir>>
   try {
-    const entries = await readdir(dir, { withFileTypes: true })
-    for (const entry of entries) {
-      const full = join(dir, entry.name)
-      if (entry.isDirectory()) {
-        results.push(...(await walkTaskFiles(full)))
-      } else if (entry.isFile() && entry.name === 'tasks.md') {
-        results.push(full)
-      }
-    }
+    entries = await readdir(dir, { withFileTypes: true })
   } catch {
-    /* directory not present; ignore */
+    return []
   }
-  return results
+  const nested = await Promise.all(
+    entries.map(async (entry) => {
+      const full = join(dir, entry.name)
+      if (entry.isDirectory()) return walkTaskFiles(full)
+      if (entry.isFile() && entry.name === 'tasks.md') return [full]
+      return []
+    })
+  )
+  return nested.flat()
 }
 
 async function scanMarkers(file: string): Promise<MarkerOccurrence[]> {
@@ -208,10 +208,8 @@ async function main() {
   }
 
   const taskFiles = await walkTaskFiles(CHANGES_DIR)
-  const allMarkers: MarkerOccurrence[] = []
-  for (const file of taskFiles) {
-    allMarkers.push(...(await scanMarkers(file)))
-  }
+  const markerBatches = await Promise.all(taskFiles.map(scanMarkers))
+  const allMarkers: MarkerOccurrence[] = markerBatches.flat()
 
   const register = await parseRegister(REGISTER_PATH)
   const registerIds = new Set(register.map((e) => e.id))

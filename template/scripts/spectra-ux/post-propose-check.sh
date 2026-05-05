@@ -242,14 +242,24 @@ if [ -f "$TASKS_FILE" ] && [ "$HAS_UI_SCOPE" = true ]; then
     DR_TASK_LINES=$(printf '%s\n' "$DESIGN_SECTION" | grep -cE '^\- \[[ x]\]' || true)
     DR_TASK_LINES=${DR_TASK_LINES:-0}
 
+    # Parse N.k task lines into per-step text so each grep only sees its own line.
+    # Using whole DESIGN_SECTION causes cross-step false negatives — e.g. N.7's "無 DRIFT"
+    # makes N.3's "DRIFT" matcher pass even when N.3 is actually missing.
+    DR_STEP_TEXT=()
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^-\ \[[\ x]\]\ [0-9]+\.([0-9]+)\ (.+)$ ]]; then
+        DR_STEP_TEXT[${BASH_REMATCH[1]}]="${BASH_REMATCH[2]}"
+      fi
+    done <<< "$DESIGN_SECTION"
+
     DR_MISSING=()
-    printf '%s\n' "$DESIGN_SECTION" | grep -qiE 'PRODUCT\.md|DESIGN\.md|impeccable teach|impeccable document' || DR_MISSING+=('N.1 PRODUCT.md / DESIGN.md 檢查')
-    printf '%s\n' "$DESIGN_SECTION" | grep -qiE '/design improve|design improve|Fidelity Report' || DR_MISSING+=('N.2 /design improve + Fidelity Report')
-    printf '%s\n' "$DESIGN_SECTION" | grep -qiE 'DRIFT|loop|修復.*DRIFT|fix.*DRIFT' || DR_MISSING+=('N.3 修復 DRIFT loop')
-    printf '%s\n' "$DESIGN_SECTION" | grep -qiE 'canonical order|targeted.*skills|impeccable skills|layout.*typeset|typeset.*colorize' || DR_MISSING+=('N.4 按 canonical order 跑 targeted impeccable skills')
-    printf '%s\n' "$DESIGN_SECTION" | grep -qiE '/impeccable audit|impeccable audit|Critical = 0|Critical=0' || DR_MISSING+=('N.5 /impeccable audit Critical = 0')
-    printf '%s\n' "$DESIGN_SECTION" | grep -qiE 'review-screenshot|screenshot review|視覺 QA' || DR_MISSING+=('N.6 review-screenshot 視覺 QA')
-    printf '%s\n' "$DESIGN_SECTION" | grep -qiE 'Fidelity 確認|Fidelity check|無 DRIFT 項|無 DRIFT|DRIFT = 0' || DR_MISSING+=('N.7 Fidelity 確認')
+    echo "${DR_STEP_TEXT[1]:-}" | grep -qiE 'PRODUCT\.md|DESIGN\.md|impeccable teach|impeccable document' || DR_MISSING+=('N.1 PRODUCT.md / DESIGN.md 檢查')
+    echo "${DR_STEP_TEXT[2]:-}" | grep -qiE '/design improve|design improve|Fidelity Report' || DR_MISSING+=('N.2 /design improve + Fidelity Report')
+    echo "${DR_STEP_TEXT[3]:-}" | grep -qiE 'DRIFT|loop|修復.*DRIFT|fix.*DRIFT' || DR_MISSING+=('N.3 修復 DRIFT loop')
+    echo "${DR_STEP_TEXT[4]:-}" | grep -qiE 'canonical order|targeted.*skills|impeccable skills|layout.*typeset|typeset.*colorize' || DR_MISSING+=('N.4 按 canonical order 跑 targeted impeccable skills')
+    echo "${DR_STEP_TEXT[5]:-}" | grep -qiE '/impeccable audit|impeccable audit|Critical = 0|Critical=0' || DR_MISSING+=('N.5 /impeccable audit Critical = 0')
+    echo "${DR_STEP_TEXT[6]:-}" | grep -qiE 'review-screenshot|screenshot review|視覺 QA' || DR_MISSING+=('N.6 review-screenshot 視覺 QA')
+    echo "${DR_STEP_TEXT[7]:-}" | grep -qiE 'Fidelity 確認|Fidelity check|無 DRIFT 項|無 DRIFT|DRIFT = 0' || DR_MISSING+=('N.7 Fidelity 確認')
 
     if [ "${#DR_MISSING[@]}" -gt 0 ]; then
       FINDINGS+=("\`## Design Review\` 區塊缺 7 步 template 中的：
