@@ -75,7 +75,10 @@ export default defineNuxtConfig({
   },
 
   typescript: {
-    typeCheck: true,
+    // CI 關掉避免 Playwright E2E dev mode 載入 vite-plugin-checker 時的
+    // /_nuxt/@vite-plugin-checker-runtime 解析失敗。Template CI 的 typecheck
+    // step 用 `vp run typecheck` 獨立跑，不依賴此 dev-time plugin。
+    typeCheck: !process.env.CI,
   },
 
   runtimeConfig: {
