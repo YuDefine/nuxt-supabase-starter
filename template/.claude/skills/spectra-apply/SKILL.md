@@ -182,9 +182,76 @@ Run `spectra analyze <change-name> --json` to check cross-artifact consistency (
    - Remaining tasks overview
    - Dynamic instruction from CLI
 
+6b. **Phase Dispatch Decision**（per `agent-routing.md`）
+
+   Before implementing tasks, decide dispatch model **per phase**（`## N. <phase>` section in tasks.md）:
+
+   1. **Read tasks.md** and identify all `## N.` phase sections
+   2. **For each phase, classify**:
+      - **Design Review phase** — title contains "Design Review" OR phase body references `/design improve` / `/impeccable audit` / `/impeccable *` / `review-screenshot` / `/design *`
+        → **主線 Claude Opus 4.7 xhigh 自己做**，**永不**派 codex
+        → Design skill (`/impeccable *`, `/design improve`, screenshot review) is Claude Code first-class; codex tooling weak in this domain
+      - **Non-Design-Review phase** — everything else (schema, API, UI build, tests, docs)
+        → **派 background codex GPT-5.5 high**（**不要** medium）
+        → Phase 粒度避免大量 codex round-trip
+   3. **NEVER** dispatch with `medium` effort — schema drift / cross-file refactor / enum exhaustiveness require `high` minimum
+   4. **NEVER** dispatch task-by-task — phase-level only
+
+   **Codex phase dispatch template**（per `agent-routing.md` 「Codex 派工的標準流程」+「Spectra Apply Phase Dispatch」）:
+
+   1. Write prompt to `/tmp/codex-spectra-apply-<change>-phase-<N>-prompt.md`，內容固定包含：
+
+      ```
+      請執行本 repo 的 spectra-apply phase <N>（<phase-title>）的全部 tasks。
+
+      Change: <change-name>
+      Phase: <N>. <phase-title>
+      Tasks（請依序完成並用 `spectra task done <change> <task-id>` 標記）：
+
+      <每個 task 的編號 + 描述，從 tasks.md 抓>
+
+      讀取以下檔案了解上下文：
+      - openspec/changes/<change-name>/proposal.md
+      - openspec/changes/<change-name>/design.md
+      - openspec/changes/<change-name>/specs/*/spec.md
+      - openspec/changes/<change-name>/tasks.md
+      - .claude/rules/（相關 rule，例如 server-api / pinia-store / supabase-* / development）
+
+      Acceptance：所有 phase <N> 的 tasks 完成、checkbox 已勾、相關 typecheck / unit test 通過、git diff 對應預期變更。
+      不要動 phase <N> 以外的 tasks。不要碰 ## Design Review 區塊（主線會自己做）。
+      不要呼叫 /spectra-archive。
+      ```
+
+   2. Background bash:
+
+      ```bash
+      cd <consumer-repo-root> && codex exec \
+        --model gpt-5.5 \
+        --dangerously-bypass-approvals-and-sandbox \
+        --skip-git-repo-check \
+        -c model_reasoning_effort=high \
+        < /tmp/codex-spectra-apply-<change>-phase-<N>-prompt.md 2>&1
+      ```
+
+   3. Inform user briefly + start Codex Watch Protocol（見 `agent-routing.md`）
+
+   4. After `<task-notification status=completed>`:
+      - BashOutput → read full stdout
+      - Read tasks.md → confirm phase <N> all checkboxes are `[x]`
+      - Sanity check: `pnpm typecheck` (or equivalent), relevant tests, `git diff` review
+      - **If gaps detected** → AskUserQuestion: [1] 主線補齊 / [2] 重派 codex / [3] 中止
+
+   5. Move to next phase (re-classify and dispatch or self-execute)
+
+   6. After ALL non-Design-Review phases complete → **主線自己**執行 `## N. Design Review` phase（`/design improve`, /impeccable skills, /impeccable audit, review-screenshot）
+
 7. **Implement tasks (loop until done or blocked)**
 
    **Reminder: Track progress by editing checkboxes in the tasks file only. Do not use any built-in task tracker.**
+
+   **Dispatch reminder**: For each phase, follow Step 6b's classification:
+   - Non-Design-Review phase → dispatch codex GPT-5.5 high (phase granularity)
+   - Design Review phase → 主線 self-execute (NEVER dispatch)
 
    For each pending task:
    - Show which task is being worked on
@@ -311,6 +378,11 @@ What would you like to do?
 - Pause on errors, blockers, or unclear requirements - don't guess
 - Use contextFiles from CLI output, don't assume specific file names
 - **No external task tracking** — do not use any built-in task management, todo list, or progress tracking tool; the tasks file is the only system
+- **Phase dispatch discipline**（per `agent-routing.md`）:
+  - **NEVER** dispatch Design Review phase to codex — Design skill is Claude Code first-class
+  - **NEVER** dispatch with `medium` effort — use `high` minimum
+  - **NEVER** dispatch task-by-task — phase granularity only
+  - **NEVER** skip cross-check after codex phase completion — read tasks.md, confirm checkboxes, run typecheck/test, review diff
 - If **AskUserQuestion tool** is not available, ask the same questions as plain text and wait for the user's response
 
 **Fluid Workflow Integration**
