@@ -22,7 +22,9 @@ export const config = defineConfig<ConfigOptions>({
   use: {
     nuxt: {
       rootDir: fileURLToPath(new URL('.', import.meta.url)),
-      dev: true,
+      // CI 走 production build（workflow 前一 step 已 nuxt build），避免 dev mode
+      // 為每個 spec 重啟 Nuxt 累積 timeout；本地保 dev mode 利於 HMR debug。
+      dev: !process.env.CI,
     },
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
