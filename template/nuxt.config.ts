@@ -180,6 +180,22 @@ export default defineNuxtConfig({
         'object-src': ["'none'"],
         'script-src-attr': ["'none'"],
         'style-src': ["'self'", "'unsafe-inline'"],
+        'connect-src': [
+          "'self'",
+          // local Supabase（.env.example 預設 SUPABASE_URL=http://127.0.0.1:54321）
+          'http://127.0.0.1:54321',
+          'http://localhost:54321',
+          'ws://127.0.0.1:54321',
+          'ws://localhost:54321',
+          // managed / self-hosted Supabase（fork 後依實際 host 調整）
+          'https://*.supabase.co',
+          'wss://*.supabase.co',
+          // Sentry
+          'https://*.ingest.sentry.io',
+          'https://*.ingest.us.sentry.io',
+          // Iconify CDN（@nuxt/icon dev mode；prod 已 bundle）
+          'https://api.iconify.design',
+        ],
         'upgrade-insecure-requests': true,
       },
       xFrameOptions: 'DENY',
