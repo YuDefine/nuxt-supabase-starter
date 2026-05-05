@@ -13,15 +13,15 @@ applies-to: post-scaffold
 
 ## Index
 
-| ID     | Title                                                 | Priority | Status     | Discovered                       | Owner   |
-| ------ | ----------------------------------------------------- | -------- | ---------- | -------------------------------- | ------- |
-| TD-001 | upgrade-design-review.mts 會吃掉 Design Review 證據行 | mid      | done       | 2026-05-05 — codex review xhigh  | clade   |
-| TD-002 | post-propose-check.sh DESIGN_SECTION grep 跨步誤判    | mid      | done       | 2026-05-05 — codex review xhigh  | clade   |
-| TD-003 | spectra-ux .mts no-await-in-loop lint warnings        | low      | done       | 2026-05-05 — pnpm check 0-C      | clade   |
-| TD-004 | scaffold-smoke path filter 沒命中 deploy commit       | mid      | done       | 2026-05-05 — v0.30.1+ CI runs    | starter |
-| TD-005 | propagate auto-commit 沒觸發 Template CI              | high     | done       | 2026-05-05 — clade-fix-3 watcher | clade   |
-| TD-006 | hub:vendor 不在 propagate 自動流程內                  | high     | done       | 2026-05-05 — clade-fix-3 watcher | clade   |
-| TD-007 | Template E2E v0.30.4 cancelled 原因不明               | low      | monitoring | 2026-05-05 — v0.30.4 CI          | starter |
+| ID     | Title                                                 | Priority | Status | Discovered                       | Owner   |
+| ------ | ----------------------------------------------------- | -------- | ------ | -------------------------------- | ------- |
+| TD-001 | upgrade-design-review.mts 會吃掉 Design Review 證據行 | mid      | done   | 2026-05-05 — codex review xhigh  | clade   |
+| TD-002 | post-propose-check.sh DESIGN_SECTION grep 跨步誤判    | mid      | done   | 2026-05-05 — codex review xhigh  | clade   |
+| TD-003 | spectra-ux .mts no-await-in-loop lint warnings        | low      | done   | 2026-05-05 — pnpm check 0-C      | clade   |
+| TD-004 | scaffold-smoke path filter 沒命中 deploy commit       | mid      | done   | 2026-05-05 — v0.30.1+ CI runs    | starter |
+| TD-005 | propagate auto-commit 沒觸發 Template CI              | high     | done   | 2026-05-05 — clade-fix-3 watcher | clade   |
+| TD-006 | hub:vendor 不在 propagate 自動流程內                  | high     | done   | 2026-05-05 — clade-fix-3 watcher | clade   |
+| TD-007 | Template E2E v0.30.4 cancelled 原因不明               | low      | done   | 2026-05-05 — v0.30.4 CI          | starter |
 
 ---
 
@@ -276,11 +276,11 @@ starter v0.3.37 propagate 後 hub.json 是 v0.3.37 但 roadmap-sync.mts 還是 v
 
 ## TD-007 — Template E2E v0.30.4 cancelled 原因不明
 
-**Status**: monitoring
+**Status**: done
 **Priority**: low
 **Discovered**: 2026-05-05 — v0.30.4 (76f67fa) Template E2E run
-**Triage**: 2026-05-06 — root cause 已找到，等 v0.3.39 era 自然驗證
-**Location**: starter `template/playwright.config.ts` (`use.nuxt.dev: true`)、`.github/workflows/template-e2e.yml`
+**Resolution**: 2026-05-06 — starter 9d68955 + 2b37ca7
+**Location**: starter `template/playwright.config.ts` (`use.nuxt.dev`)、`template/nuxt.config.ts` (`typescript.typeCheck`)
 **Related markers**: run 25403838318
 
 ### Problem
@@ -309,9 +309,17 @@ v0.30.4 是第一次 Template CI success，Template E2E 真的跑了（前面 v0
 
 - 下次 Template CI success 後 E2E 真的跑完，conclusion 是 success 或 failure（不是 cancelled）
 
-### Status: monitoring
+### Resolution notes
 
-修法是猜測（沒本地 reproduce），先觀察 v0.3.39 propagate 觸發的兩個 in-progress E2E run（25405691049 / 25405846276）的 conclusion：
+**兩階段 fix**（v0.3.39 propagate 觸發的 run 25405691049 / 25405846276 仍 cancel → 確認需主動修法）：
 
-- 若兩個都 success / failure（非 cancel）→ 自我修復或 v0.3.38 → v0.3.39 vendor scripts 改動間接修好（lint warning 修法不太可能影響 dev mode plugin runtime，但無法排除）→ 標 done
-- 若仍 cancel → 走 fix approach #1（dev: !process.env.CI），新一輪驗證
+1. starter `9d68955`：`nuxt.config.ts` 改 `typescript.typeCheck: !process.env.CI`
+   - 修掉 `Failed to resolve "/_nuxt/@vite-plugin-checker-runtime"` error（typeCheck:true 在 dev mode 注入 vite-plugin-checker，CI ubuntu 環境 plugin runtime 解析失敗）
+   - 但下一輪 E2E run 25407272134 變成 timeout cancel：dev mode 為每個 spec 重啟 Nuxt，23 tests 累積超過 timeout-minutes:15
+2. starter `2b37ca7`：`playwright.config.ts` 改 `use.nuxt.dev: !process.env.CI`
+   - CI 走 production build E2E（workflow 前 step `Build Nuxt` 已 nuxt build），不再為每 spec 重啟 dev server
+   - E2E run 25408209957 跑 10 分鐘（vs 之前 cancel 在 11~16 分鐘），conclusion = failure（非 cancel）→ acceptance 達成
+
+實際 test failure 本身是另外的 bug（assertion / supabase setup / fixture），與 TD-007 無關。TD-007 的核心是「E2E 跑得完才能看到真實 fail / pass」，現在 cancel 噪音清掉了，後續 test failure 才能正常 surface 並修。
+
+兩個修法保留：`typeCheck:!CI` 不嚴格必要（dev:false 之後 vite-plugin-checker 已不會被載入），但 typecheck 已在 Template CI typecheck step 獨立跑、CI dev-time HMR 反饋無意義，保留更乾淨。
