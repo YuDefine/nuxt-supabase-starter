@@ -498,7 +498,7 @@ function checkResidualKeywords() {
       '-ni',
       'nuxt[- ]supabase starter|nuxt-supabase-starter|^demo$',
       '--glob',
-      '!**/verify-starter.mjs',
+      '!verify-starter.mjs',
       '--glob',
       '!docs/**',
       '--glob',
