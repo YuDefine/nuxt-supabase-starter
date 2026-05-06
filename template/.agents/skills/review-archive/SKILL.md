@@ -70,6 +70,15 @@ spectra list --json
 - #3 響應式 ✅
 ```
 
+### Step 6: 提示截圖歸檔
+
+歸檔完成後 prompt 使用者：
+
+> 已歸檔 N 項人工檢查。要不要順手把對應截圖資料夾 sweep 到 `screenshots/<env>/_archive/`？
+> 執行 `/screenshots-archive change <change-name>` 即可。
+
+**目的**：讓 `screenshots/<env>/` 頂層只剩 current pending review，user 一眼能找到「現在要做人工檢查的是哪個」。
+
 ## Guardrails
 
 - **NEVER** 刪除 tasks artifact 中的人工檢查項目 — 只標記 `[x]` 和加歸檔註記
