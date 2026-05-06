@@ -13,7 +13,7 @@ You are a design director coordinating specialized design skills. Your job: **as
 
 ### 1. pbakaus/impeccable（鎖定 v3.0.6）
 
-impeccable 是 1 個 skill 含 24 個 sub-command：craft / shape / teach / document / extract / critique / audit / polish / bolder / quieter / distill / harden / onboard / animate / colorize / typeset / layout / delight / overdrive / clarify / adapt / optimize / live。
+impeccable 是 1 個 skill 含 23 個 sub-command：craft / shape / teach / document / extract / critique / audit / polish / bolder / quieter / distill / harden / onboard / animate / colorize / typeset / layout / delight / overdrive / clarify / adapt / optimize / live（不含 pin/unpin 兩個 management 命令，作者自己標註 "Plus two management commands"，不算 sub-command）。
 
 > **Clade 鎖定版本：`skill-v3.0.6`**（2026-05-04 對齊；GitHub release: <https://github.com/pbakaus/impeccable/releases/tag/skill-v3.0.6>）
 >
@@ -31,8 +31,10 @@ npx skills add pbakaus/impeccable
 
 clade design plan **一律使用 v3 原生呼叫形式** `/impeccable <subcommand>`（例如 `/impeccable colorize`、`/impeccable typeset`、`/impeccable polish`），對齊 v3 作者「impeccable 是一個 skill、底下用 sub-command 組織」的設計理念。直接複製 plan 內的指令即可執行。
 
-> **可選：pin alias**
-> v3 提供 `node .agents/skills/impeccable/scripts/pin.mjs pin <command>` 把 sub-command 轉成獨立 slash command（如 `/colorize` → `/impeccable colorize`）。clade design 文件**不依賴**這個機制；只在你個人偏好短名打字時自行 pin 你常用的幾個。pin 是 escape hatch，不是預期 path。
+> **可選：pin / unpin alias**
+> v3 提供 `node .agents/skills/impeccable/scripts/pin.mjs pin <command>` 把 sub-command 轉成獨立 slash command（如 `/colorize` → `/impeccable colorize`），對應的 `unpin` 還原。clade design 文件**不依賴**這個機制；只在你個人偏好短名打字時自行 pin 常用幾個。
+>
+> **使用者問起 pin/unpin 時的標準回答**：pin/unpin 是 v3 為個人短名偏好提供的 escape hatch，不是預期 path；clade design plan 一律輸出完整 `/impeccable <subcommand>` 形式，沒 pin 也能直接執行。pin 後的 alias 只在 user 自己機器有效，不在 clade 治理範圍。
 
 ### 3. nuxt/ui（偵測到 Nuxt UI stack 時）
 
@@ -145,6 +147,24 @@ Detect the project's UI tech stack to ensure all design skills produce compatibl
 
 **為什麼 clade design 也要管 register**：plan 內推薦的 skill 序列在 brand vs product 不同——例如 brand 模式下 `/impeccable overdrive` 是合理 hero 選項；product 模式則幾乎永遠是 over-design。register 進 plan rationale，能避免推錯方向。
 
+### Step 1.6: Register × Command Matrix
+
+每個 sub-command 對 brand vs product register 的取向（plan 決策時逐條對照）：
+
+| Sub-command | brand register | product register | 備註 |
+| --- | --- | --- | --- |
+| `/impeccable bolder` | ✅ 預設 | ⚠ 慎用（限 hero / landing 區塊） | brand 場景的 amplification 工具；product 全頁 bolder 易壓垮可讀性 |
+| `/impeccable quieter` | ⚠ 慎用 | ✅ 預設 | product UI 的 retreat 工具；brand 全 quieter 通常喪失亮點 |
+| `/impeccable colorize` | ✅ 自由（full palette / drenched 皆可） | ⚠ restrained / committed 為主 | product 預設 restrained；brand 可上 full palette |
+| `/impeccable overdrive` | ✅ 限 hero | ❌ 幾乎永遠 over-design | product overdrive = 雜訊 |
+| `/impeccable distill` | ⚠ 視內容 | ✅ 預設 | product 任務優先，先簡化；brand long-form 不一定要 distill |
+| `/impeccable harden` | ⚠ 限 form / CTA / payment | ✅ 必要 | product CRUD/data 非常需要；brand 主要在 form/CTA 邊界 |
+| `/impeccable onboard` | ⚠ 限 trial flow / signup | ✅ 預設 | product 的 first-run、empty state、activation hint 必備 |
+| `/impeccable delight` | ✅ 自由（personality 載體） | ⚠ 微量（只在轉場/成功 CTA） | product 過多 delight = 干擾任務 |
+| `/impeccable layout` / `/impeccable typeset` / `/impeccable polish` / `/impeccable audit` / `/impeccable clarify` / `/impeccable animate` / `/impeccable optimize` / `/impeccable adapt` / `/impeccable critique` / `/impeccable extract` / `/impeccable live` / `/impeccable shape` / `/impeccable teach` / `/impeccable document` / `/impeccable craft` | ✅ 通用 | ✅ 通用 | 兩個 register 都需要；只是調強度而非取向 |
+
+**規則**：plan 草擬完成後，逐條 sub-command 對照本表 — 若選擇與 register 衝突（如 product 模式選 `/impeccable overdrive`），rationale 必須額外說明為何此 case 例外（通常是 brand-style hero 嵌在 product app 中、或 product 內的 marketing 頁面）。
+
 ---
 
 ## Mode: `new` — Build New Interface
@@ -162,7 +182,16 @@ Ask if not already clear:
 
 ### 2. Establish Design System (if none exists)
 
-`/impeccable teach` 在 v3 會引導建立 **PRODUCT.md**（必要：使用者、品牌、語氣、anti-references、strategic principles、register）和 **DESIGN.md**（建議：色彩、字體、層次、元件、layout 規格）。teach 完成後再進入後續：
+**先決：teach vs document（避免從零問起）**
+
+| 專案狀態 | 用哪個 | 理由 |
+| --- | --- | --- |
+| 完全空 repo / 還沒寫 UI 程式碼 | `/impeccable teach` | 從零問品牌、使用者、語氣等，產 PRODUCT.md + DESIGN.md |
+| 已有 UI code 但沒有 DESIGN.md | 先 `/impeccable document` 反推 DESIGN.md，再 `/impeccable teach` 補 PRODUCT.md 缺欄位 | document 從現有 code 反推比 teach 從零問省力；PRODUCT.md（品牌、register、anti-references）仍需 teach 補 |
+| 已有 PRODUCT.md + DESIGN.md | 跳過此 step → 直接進 Phase 3 | foundation 已建立 |
+| 只有 PRODUCT.md，缺 DESIGN.md | 視 code 多寡：有 code 跑 `/impeccable document`；無 code 跑 `/impeccable teach`（DESIGN.md 部分） | 對齊主表決策邏輯 |
+
+`/impeccable teach` 在 v3 會引導建立 **PRODUCT.md**（必要：使用者、品牌、語氣、anti-references、strategic principles、register）和 **DESIGN.md**（建議：色彩、字體、層次、元件、layout 規格）。後續涵蓋：
 
 - Style direction (minimal, bold, editorial, etc.)
 - Color palette + **color strategy**（restrained / committed / full palette / drenched — 強制 commitment axis）
@@ -170,8 +199,6 @@ Ask if not already clear:
 - Spacing scale and layout pattern
 
 Present recommendations to user for approval before proceeding.
-
-> **若專案已有 code 但沒有 DESIGN.md**：先跑 `/impeccable document` 從現有 code 反推 DESIGN.md，再進 enhance 階段。比讓 `/impeccable teach` 從零問一次省力。
 
 ### 3. Build the Plan
 
@@ -183,10 +210,10 @@ Register: brand | product
 
 ### Phase 1 — Foundation
 □ /impeccable teach                          ← 建立 PRODUCT.md + DESIGN.md
-□ /impeccable shape                                     ← (optional) 寫 code 前的需求釐清
+□ /impeccable shape                          ← (optional) 寫 code 前需求釐清 [Gate: 見下方 "shape brief gate"]
 
 ### Phase 2 — Build
-□ /impeccable craft                          ← 主 build flow（強制 shape brief 經使用者確認）
+□ /impeccable craft                          ← 主 build flow [Pre-condition: 見下方 "shape brief gate"]
 □ Core components: [list expected components, e.g. ServerCard, MetricGauge, Sidebar]
 
 ### Phase 3 — Enhance (3-4 targeted skills)
@@ -205,11 +232,17 @@ Register: brand | product
 | Project Type      | Priority Skills                                     |
 | ----------------- | --------------------------------------------------- |
 | Data dashboard    | `/impeccable layout` → `/impeccable typeset` → `/impeccable colorize`                |
-| Consumer app      | `/impeccable animate` → `/impeccable delight` → `/impeccable harden`                 |
+| Consumer app      | `/impeccable onboard` → `/impeccable animate` → `/impeccable delight` → `/impeccable harden` |
 | Developer tool    | `/impeccable clarify` → `/impeccable distill` → `/impeccable typeset`                |
-| Marketing/landing | `/impeccable bolder` → `/impeccable colorize` → `/impeccable animate` → `/impeccable overdrive` |
+| Marketing/landing | `/impeccable bolder` → `/impeccable colorize` → `/impeccable animate` → `/impeccable overdrive` → `/impeccable optimize` |
 | Internal tool     | `/impeccable clarify` → `/impeccable layout` → `/impeccable harden`                  |
-| E-commerce        | `/impeccable colorize` → `/impeccable animate` → `/impeccable harden` → `/impeccable adapt`     |
+| E-commerce        | `/impeccable colorize` → `/impeccable onboard` → `/impeccable animate` → `/impeccable harden` → `/impeccable optimize` → `/impeccable adapt` |
+
+**Corrective triggers**（覆蓋上表，視 phase 結果或實況決定）：
+
+- 前一 phase `/impeccable bolder` 推太過 / marketing 太狂熱 → 下一輪改用 `/impeccable quieter`（**不要**與 `bolder` 同 phase；mutual exclusive）
+- 任何 type 缺 first-run、empty state、activation hint → 補 `/impeccable onboard`（即使原表沒列，例如 dashboard / internal tool 的空狀態）
+- 任何 type 上線前感受 LCP 慢 / bundle 過大 / animation jank → 補 `/impeccable optimize`（marketing 與 e-commerce 已內建，其他 type 遇到才加）
 
 Phase 2 should list expected component names so the user has a build checklist.
 
@@ -222,6 +255,19 @@ Phase 2 should list expected component names so the user has a build checklist.
 - ✅ Scope touches multiple entities / pages / flows — coordination risk
 - ✅ The cost of rework is high (large surface area, production traffic)
 - ❌ Skip when: single implementer, requirements already explicit, tight existing spec, single-component tweak
+
+### shape brief gate（hard gate，違反等於跳過 shape）
+
+impeccable v3 preflight 對 `shape → craft` 的 gate 是**硬性**的。Plan 範本縮寫的 "Gate" / "Pre-condition" 完整定義如下：
+
+- **Phase 1 Gate（shape 跑完後）**：shape 產出 brief 後，**MUST** 由使用者**另外一輪明確回應**確認（例如 "OK"、"go"、"看起來對"、"進 craft"）。以下都**不算**通過：
+  - ❌ self-confirmed brief（impeccable 自己宣稱已對齊）
+  - ❌ self-revised brief（impeccable 改完自己過）
+  - ❌ 使用者只回 "繼續" 但沒看 brief 內容（要確認 user 真讀過）
+- **Phase 2 Pre-condition（craft 起跑前）**：兩條擇一才能進 craft：
+  1. shape brief 經 Phase 1 Gate 通過
+  2. 跳過 shape：使用者已直接給足 brief（明確需求 + 已確認驗收標準），且本次 plan 顯式註記 "skip shape: brief 由 user 直接給"
+- 違反 gate 的後果：v3 craft 會在實作中途偏離預期，user 通常會中斷重打需求 → rework cost 高過跑 shape 的成本
 
 ### Exit Criteria (`new` mode)
 
