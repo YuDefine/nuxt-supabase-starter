@@ -17,7 +17,7 @@ Execute in order. No step skipped, no step reordered.
 7. On `exit`: run the cleanup at the bottom.
 
 Harness policy:
-- **AI Agent**: run the poll as a **background task** (no short timeout). The harness notifies you when it completes, so the main conversation stays free. Do not block the shell.
+- **Claude Code**: run the poll as a **background task** (no short timeout). The harness notifies you when it completes, so the main conversation stays free. Do not block the shell.
 - **Cursor**: run the poll in the **foreground** (blocking shell; not a background terminal, not a subagent). Cursor background terminals and subagents do not reliably resume the chat with poll stdout.
 - **Codex**: run the poll in the **foreground** (blocking shell; not a background task, not a subagent). Codex background exec sessions do not reliably surface poll stdout back into the conversation at the moment events arrive, so a "fire-and-forget" background poll will stall live mode.
 - **Other harnesses**: foreground unless you know stdout reliably returns to this session.
@@ -411,7 +411,7 @@ When `_acceptResult.carbonize === true`, the accepted variant was stitched into 
 Do these five steps in the current thread, synchronously, before the next poll. Do not poll again until the file is clean.
 
 1. **Locate the carbonize block** in the source file (`_acceptResult.file`). It's bracketed by `<!-- impeccable-carbonize-start SESSION_ID -->` and `<!-- impeccable-carbonize-end SESSION_ID -->` and contains a `<style data-impeccable-css="SESSION_ID">` element. If the variant declared parameters, an `<!-- impeccable-param-values SESSION_ID: {...} -->` comment sits alongside the style tag with the user's chosen values; read it first; it drives steps 3 and 4 below.
-2. **Move the CSS rules** into the project's real stylesheet. Which stylesheet depends on the project (e.g. `public/css/workflow.css` for this repo, or the component's co-located CSS file for a Vite/Next project; pick whichever already owns styling for the surrounding element).
+2. **Move the CSS rules** into the project's real stylesheet. Which stylesheet depends on the project (e.g. `site/styles/workflow.css` for an Astro project, or the component's co-located CSS file for a Vite/Next project; pick whichever already owns styling for the surrounding element).
 3. **Bake in parameter values while rewriting selectors.** For `@scope ([data-impeccable-variant="N"])` wrappers: retarget to real, semantic classes on the accepted HTML (`.why-visual--v2 .v2-label { … }`). For `:scope[data-p-<id>="VALUE"]` selectors: keep only the branch matching the chosen value from the param-values comment; drop the others (they're dead after accept). For `var(--p-<id>, DEFAULT)` in the CSS: either substitute the literal value, or if the param is still useful as a knob going forward, leave the var and update its initial declaration to the chosen value.
 4. **Unwrap the accepted content.** Delete the `<div data-impeccable-variant="N" style="display: contents">` that wraps it. Drop `data-impeccable-params` and any `data-p-*` attributes from it; those are live-mode plumbing, not source.
 5. **Delete the inline `<style>` block, the `<!-- impeccable-param-values -->` comment if present, and both `<!-- impeccable-carbonize-start/end -->` markers.** Also drop any `@scope` rules for variants other than the accepted one; those are dead code now.
