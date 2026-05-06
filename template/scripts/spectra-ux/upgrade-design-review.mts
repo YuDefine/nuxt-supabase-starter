@@ -316,10 +316,8 @@ async function processFile(tasksPath: string): Promise<ChangeReport> {
     }
     newBlock.push('')
 
-    // Find insertion point: before "## 人工檢查" / "## Manual Review" — accept
-    // numbered prefixes too (e.g. "## 10. 人工檢查") which are common in this repo.
-    // Otherwise append at end of file.
-    const manualHeadingRe = /^##\s+(?:\d+\.\s*)?(?:人工檢查|Manual Review)\s*$/im
+    // Find insertion point: before "## 人工檢查" / "## Manual Review", else end of file
+    const manualHeadingRe = /^##\s+(?:人工檢查|Manual Review)\s*$/im
     const manualMatch = lines.findIndex((l) => manualHeadingRe.test(l))
 
     let newContent: string
