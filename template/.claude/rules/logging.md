@@ -71,6 +71,33 @@ if (error) {
 }
 ```
 
+## createError 必帶 why
+
+`server/api/**` 的非預期錯誤路徑，`throw createError(...)` **MUST** 帶 `why`，視情況補 `fix` / `link` / `cause`：
+
+- `message` — 給使用者看的中文訊息
+- `why` — 給排障的英文說明（為什麼會走到這裡）
+- `fix` — 給開發者的下一步（怎麼修）
+- `link` — 對應 docs / runbook URL（選用）
+- `cause` — 原始 error 物件，evlog 自動 unwrap
+
+```typescript
+// ✅ 結構化錯誤
+throw createError({
+  status: 500,
+  message: '稽核紀錄寫入失敗',
+  why: '業務異動必須與 audit row 同步落地，不能只完成其中之一',
+  fix: '檢查 audit_logs RLS、trigger、hash advisory lock 與 service_role 設定',
+  cause: error,
+})
+
+// ❌ 只給 message
+throw createError({ status: 500, message: '失敗' })
+```
+
+只給 `message` = 浪費 evlog `error.data.why` / `error.data.fix` 結構化錯誤的核心特色。
+review 時 grep 抓 `createError\(\{[^}]*\}\)` 不含 `why:` 一律列 🟠 Major。
+
 ## log.error 參數必須非 null
 
 ```typescript

@@ -36,6 +36,11 @@
       "sourceType": "github",
       "computedHash": "8df9b47092524833138b58682d03f2e153a242e550d1693657afdbee0cc9cdb0"
     },
+    "build-audit-logs": {
+      "source": "evlog.dev",
+      "sourceType": "well-known",
+      "computedHash": "10e462fd3fea48c1868fd81cf4e2fcc28bc4cc35e3351c61fdb0bb0b50adb48a"
+    },
     "clarify": {
       "source": "pbakaus/impeccable",
       "sourceType": "github",

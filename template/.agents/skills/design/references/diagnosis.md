@@ -81,6 +81,9 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Empty states: Guided or blank?
 - Help text: Present where needed? Concise?
 - Tone: Consistent with product personality?
+- **Engineering jargon**: 是否出現 HTTP / auth / DB / system internals / dev concepts 範疇英文？（見 `references/copy-tone.md`）
+- **Domain-appropriate terminology**: 保留的英文是否屬該行業專業詞、且 PRODUCT.md Users 欄位可推得目標使用者熟悉？
+- **中英混用**: 是否出現「驗證 token 失敗 / 呼叫 API 中 / sync 失敗」這類工程詞嵌中文 sentence？
 
 **Signals of problems:**
 
@@ -89,8 +92,15 @@ Use this rubric when assessing UI code in `improve` and `iterate` modes. Read th
 - Empty containers with no guidance
 - Missing placeholder/help text on form fields
 - Inconsistent tone (formal in one place, casual in another)
+- 直接顯露 `400 Bad Request` / `401 Unauthorized` / `Token expired` / `500 Internal Server Error` 等 HTTP / auth 文字
+- 直接顯露 `Constraint violation` / `Foreign key error` / `Null pointer` 等 DB / system 內部錯誤
+- 出現 `Payload` / `Endpoint` / `Webhook` / `UUID` / `Hash` / `Schema` / `Cache` 等 dev concepts
+- 縮寫未展開且目標使用者非技術人員（`RBAC` / `SSO` / `CRUD` / `MFA` 給一般消費者）
+- 中英混用且英文是工程詞（如「驗證 token 失敗」、「呼叫 API 中」、「parse 錯誤」）
 
 **Maps to:** `/impeccable clarify`, `/impeccable harden`, `/impeccable delight`
+
+**Block rule**：觸發任一 engineering jargon signal 時 → 此維度自動降到 ★★☆☆☆ 以下，**MUST** 在 Core Plan 排 `/impeccable clarify` 並 brief 引用 `references/copy-tone.md`。未通過 Copy Tone Check 的 plan 不得進 ship phase（詳見 SKILL.md Step 1.7 Copy Tone Lock）。
 
 ---
 
