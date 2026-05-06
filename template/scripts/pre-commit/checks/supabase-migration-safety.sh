@@ -31,7 +31,28 @@ done < <(git diff --cached --name-only --diff-filter=ACM -z -- 'supabase/migrati
 echo "🔍 偵測到 ${#migration_files[@]} 個 staged migration，執行安全檢查..."
 
 # 1) search_path 檢查
-forbidden=$(grep -nE "SET[[:space:]]+search_path[[:space:]]*=[[:space:]]*[^']" "${migration_files[@]}" 2>/dev/null || true)
+# 用 awk 做 per-statement 驗證：先剝掉 `--` 行尾註解，再依 `;` 切成多個 statement，
+# 對每個 `SET search_path = X` 個別判斷。唯一允許 X = `''`（空字串）。
+# 為什麼不用 line-level grep -v：`SET search_path = ''; SET search_path = public`
+# 同一行混合允許 + 禁止形式時，line-level 過濾會把整行視為允許而漏掉違規 statement。
+forbidden=$(awk '
+  function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+  {
+    line = $0
+    sub(/[ \t]*--.*$/, "", line)              # strip line comment
+    n = split(line, stmts, ";")
+    for (i = 1; i <= n; i++) {
+      s = trim(stmts[i])
+      if (s == "") continue
+      if (match(s, /^SET[ \t]+search_path[ \t]*=[ \t]*/)) {
+        val = trim(substr(s, RSTART + RLENGTH))
+        if (val != "\047\047") {              # \047 = single quote
+          printf("%s:%d: %s\n", FILENAME, NR, s)
+        }
+      }
+    }
+  }
+' "${migration_files[@]}" 2>/dev/null || true)
 if [[ -n "$forbidden" ]]; then
   cat <<EOF >&2
 
@@ -45,10 +66,13 @@ $forbidden
 
 正確範例：
   SET search_path = ''               -- ✅ 正確
+  SET search_path = '';              -- ✅ 正確
 
 錯誤範例：
   SET search_path = public, pg_temp  -- ❌ 錯誤
   SET search_path = public           -- ❌ 錯誤
+  SET search_path = 'public'         -- ❌ 錯誤（帶引號的非空字串）
+  SET search_path = '', public       -- ❌ 錯誤（空字串後仍接非空 schema）
 
 EOF
   exit 1
