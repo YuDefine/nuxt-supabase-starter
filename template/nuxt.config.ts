@@ -244,5 +244,11 @@ export default defineNuxtConfig({
       deployConfig: true,
       nodeCompat: true,
     },
+    // evlog@2.10 _http adapter 帶 `import('nitro/runtime-config')` v3 fallback；nitropack v2
+    // cloudflare preset 下 rollup 會把這個 dynamic import 當 unresolved external 直接 throw
+    // (`and externals are not allowed!`)。給 noop stub 讓 build 通過；runtime 會走 `nitropack/runtime` 那條路徑，stub 永遠不被執行。
+    virtual: {
+      'nitro/runtime-config': 'export const useRuntimeConfig = () => ({});',
+    },
   },
 })
