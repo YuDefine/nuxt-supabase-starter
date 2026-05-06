@@ -1,4 +1,4 @@
 {
   "$schema": "https://oxc.rs/schemas/oxfmtrc.json",
-  "ignorePatterns": [".claude/rules/**", ".claude/skills/**", ".claude/hooks/**"]
+  "ignorePatterns": [".claude/rules/**", ".claude/skills/**", ".claude/hooks/**", ".wrangler/**"]
 }

@@ -8,3 +8,6 @@
 .codex/
 
 .claude/commands/
+
+# Build artifact (cloudflare wrangler) — ignored by oxfmt due to same 0.42 bug
+.wrangler/
