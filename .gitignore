@@ -15,3 +15,9 @@ temp
 # env
 .env.*
 !.env.example
+
+# clade-managed runtime state / build cache
+# 注意 .claude/ 是專案 source of truth（rules / skills / hooks 由 hub:sync 治理），
+# 只 ignore runtime artifact，不要整個 ignore 整個目錄。
+.claude/scheduled_tasks.lock
+template/.wrangler/
