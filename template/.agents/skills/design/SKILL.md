@@ -11,19 +11,24 @@ You are a design director coordinating specialized design skills. Your job: **as
 
 本 skill 是純 orchestrator，所有實際工作交由第三方 skill 執行。Clade 不自動安裝這些 skill，consumer 首次使用前 **MUST** 手動安裝。
 
-### 1. pbakaus/impeccable（鎖定 v3.0.6）
+### 1. pbakaus/impeccable（對齊 v3.0.7）
 
 impeccable 是 1 個 skill 含 23 個 sub-command：craft / shape / teach / document / extract / critique / audit / polish / bolder / quieter / distill / harden / onboard / animate / colorize / typeset / layout / delight / overdrive / clarify / adapt / optimize / live（不含 pin/unpin 兩個 management 命令，作者自己標註 "Plus two management commands"，不算 sub-command）。
 
-> **Clade 鎖定版本：`skill-v3.0.6`**（2026-05-04 對齊；GitHub release: <https://github.com/pbakaus/impeccable/releases/tag/skill-v3.0.6>）
+> **Clade 對齊版本：`skill-v3.0.7`**（2026-05-06 升級；GitHub release: <https://github.com/pbakaus/impeccable/releases/tag/skill-v3.0.7>）
+>
+> v3.0.6 → v3.0.7 是 patch 升級（新 hero detector for italic-serif 與 eyebrow chips、live mode session journal 新增 status/resume/complete sub-sub-command、SKILL.md 文字精簡）；sub-command 集不變，本 orchestrator 內容無需大幅調整。
 >
 > Consumer 升降版必須對齊此版本。新版發佈時由 clade 統一更新本檔再 propagate；不要在個別 consumer 自行升版。
 
 ```bash
-npx skills add pbakaus/impeccable
+# 重要：npx skills add 預設拉 default branch HEAD（不穩，refactor 即漂）。
+# 對齊 release tag 必須改用 `npx skills check`（會把 .agents/skills/<skill> 改成 symlink → .agents/skills/）。
+npx skills add pbakaus/impeccable --agent claude-code --copy -y
+npx skills check                                                # ← 升到 latest stable release tag
 ```
 
-**檢查**：`ls .agents/skills/impeccable/SKILL.md` 應存在，且 frontmatter `version` 為 `3.0.6`（不是 `2.x` — v2 只有 craft/teach/extract，無法滿足本 orchestrator plan 引用的 sub-command）。
+**檢查**：`shasum -a 256 .agents/skills/impeccable/SKILL.md` 應為 `f6a77113c482fbe4d83948285da54a392a13e0a06863469a178d7b5dbe797fd4`（v3.0.7 SKILL.md 內容 hash）。若不對齊，跑 `npx skills check` 對齊 latest release。
 
 **新 consumer 安裝 / 升降版操作流程**：見 `references/impeccable-install.md`（含標準 install-skills.sh snippet、copy vs symlink mode、vp-staged 已知衝突繞法）。
 
