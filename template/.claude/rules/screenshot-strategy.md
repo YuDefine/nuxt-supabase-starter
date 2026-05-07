@@ -61,6 +61,27 @@ screenshots/<environment>/<topic>/
 
 換句話說：任何要交付給 user 的截圖路徑必須是 `screenshots/<env>/<topic>/...`，不能漂走。
 
+## 回傳值陷阱（browser-harness）
+
+`capture_screenshot(path)` 已經把有效 PNG 寫到 `path` 並**回傳 path 字串**（不是 base64 data）。
+
+- **NEVER** 對回傳值做 `base64.b64decode()` — Python 預設 `validate=False`，會默默吞掉路徑裡的 `.` `/` 等非 base64 字元，把 `/tmp/shot.png` 這種輸入解出 9 byte 垃圾並覆蓋掉原本正確的檔案；呼叫**不會 raise**，症狀是 Preview 報「檔案可能已損毀」
+- **NEVER** 拿回傳值再 `open(path, "wb").write(...)` — helper 已經寫好了，再寫一次只是覆蓋
+- 要存自訂檔名 → 直接傳 path 當第一個參數：`capture_screenshot("/tmp/foo.png", max_dim=1800)`
+- 要拿原始 base64（極少用，例如要 inline 進 IPC payload）→ 走 raw CDP：`cdp("Page.captureScreenshot", format="png")["data"]`
+
+正確 vs 錯誤對照：
+
+```python
+# ✅ 正確
+capture_screenshot("/tmp/x2-01.png", max_dim=1800)
+
+# ❌ 錯誤（Sonnet 實測踩過：21 個檔案全變 9 byte 垃圾）
+shot = capture_screenshot()
+with open("/tmp/x2-01.png", "wb") as f:
+    f.write(base64.b64decode(shot))   # decode path 字串！
+```
+
 ## 歸檔機制
 
 `screenshots/<env>/` 預設只放「目前 pending 人工檢查」的 topic；已收錄到 `docs/manual-review-archive.md` 的 change，對應截圖資料夾搬到 `screenshots/<env>/_archive/YYYY-MM/<topic>/`。
@@ -113,6 +134,7 @@ screenshots/local/
 - **NEVER** 把「有截圖」誤當成「已完成人工檢查」
 - **NEVER** 把截圖散落在 repo 各處，不留語義化路徑
 - **NEVER** `capture_screenshot()` 不帶 path 用於人工檢查交付（路徑強制規範）
+- **NEVER** `base64.b64decode(capture_screenshot(...))` — 回傳的是 path 字串，不是 base64；解碼會默默吐 9 byte 垃圾覆蓋檔案（回傳值陷阱）
 - **NEVER** 把已歸檔 change 的截圖資料夾留在 `screenshots/<env>/` 頂層 — sweep 到 `_archive/YYYY-MM/` 才算完整收尾
 - **NEVER** 對偵測到空狀態的頁面硬拍交付 — 走 Empty Data Handling 流程
 - **NEVER** 改 component 加 fallback 假資料來填空 UI — 治標不治本
