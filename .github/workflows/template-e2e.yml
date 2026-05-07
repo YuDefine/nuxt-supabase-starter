@@ -69,6 +69,7 @@ jobs:
 
       - name: Run E2E tests
         env:
+          NITRO_PRESET: node-server
           NUXT_SESSION_PASSWORD: e2e-ci-session-password-at-least-32-chars
           SUPABASE_URL: http://127.0.0.1:54321
           SUPABASE_KEY: ${{ steps.supabase.outputs.anon_key }}
