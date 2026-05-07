@@ -18,7 +18,10 @@ jobs:
     name: Playwright E2E
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 30 min cap：@nuxt/test-utils 在 dev: false 下每個 spec 都重新 build Nuxt（~30s/spec），
+    # 23 specs × ~30s = 11+ min build 開銷，加實際 test 跑不完原 15 min。
+    # 治本作法（共用 Nuxt instance）見 TD-001。
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: template
