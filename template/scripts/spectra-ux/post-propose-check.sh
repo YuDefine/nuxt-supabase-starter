@@ -189,11 +189,11 @@ $(printf '  - %s\n' "${MISSING_FIELDS[@]}")
   fi
 
   if [ "$HAS_UI_SCOPE" = true ] && ! printf '%s\n' "$RISK_BLOCK" | grep -qiE 'Test plan:.*(screenshot|manual|browser|journey|review)'; then
-    FINDINGS+=("`Test plan` 對 UI scope 太弱 — proposal 有 UI 影響時，測試計畫至少要提到 screenshot、manual journey，或等效的瀏覽器驗證證據。")
+    FINDINGS+=("\`Test plan\` 對 UI scope 太弱 — proposal 有 UI 影響時，測試計畫至少要提到 screenshot、manual journey，或等效的瀏覽器驗證證據。")
   fi
 
   if [ "$HAS_DB_SCOPE" = true ] && ! printf '%s\n' "$RISK_BLOCK" | grep -qiE 'Artifact sync:.*(tasks|roadmap|report|docs|type|migration|spec|handoff|tech-debt)'; then
-    FINDINGS+=("`Artifact sync` 對資料層 change 太弱 — proposal 需要先交代 tasks / roadmap / docs / report / types 等同步面，避免實作完才補文件。")
+    FINDINGS+=("\`Artifact sync\` 對資料層 change 太弱 — proposal 需要先交代 tasks / roadmap / docs / report / types 等同步面，避免實作完才補文件。")
   fi
 fi
 
@@ -292,6 +292,61 @@ if [ -f "$TASKS_FILE" ]; then
       FINDINGS+=("tasks 有 migration 但缺 ${SUX_TYPES_PRIMARY} 同步 task — spec 提到 enum / type 擴張，tasks 沒列對應更新任務。
 
 TypeScript enum 不會從 DB 自動衍生，需要手動同步。")
+    fi
+  fi
+fi
+
+# --- Check 6: Fixtures / Seed Plan ---
+# Trigger: HAS_UI_SCOPE=true 且 proposal 有 ## Affected Entity Matrix（=有 entity 動）
+# 完整規則見 ux-completeness.md 「必填 Fixtures / Seed Plan」段落
+if [ -f "$TASKS_FILE" ] \
+  && [ "$HAS_UI_SCOPE" = true ] \
+  && grep -q '^## Affected Entity Matrix' "$PROPOSAL_FILE" 2>/dev/null; then
+
+  HAS_FIXTURES_SECTION=$(grep -cE '^## .*Fixtures' "$TASKS_FILE" 2>/dev/null || true)
+  HAS_FIXTURES_SECTION=${HAS_FIXTURES_SECTION:-0}
+
+  # 偵測專案 seed 慣例位置（給 finding 範本當提示用）
+  SEED_HINT=""
+  REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+  for candidate in "supabase/seed.sql" "db/seed.sql" "prisma/seed.ts" "drizzle/seed.ts"; do
+    if [ -f "$REPO_ROOT/$candidate" ]; then
+      SEED_HINT="$candidate"
+      break
+    fi
+  done
+  SEED_HINT_TXT="${SEED_HINT:-<偵測不到專案 seed 慣例位置，請手動指定>}"
+
+  if [ "$HAS_FIXTURES_SECTION" -eq 0 ]; then
+    FINDINGS+=("缺 \`## Fixtures / Seed Plan\` 區塊 — change 包含 UI scope 且 \`Affected Entity Matrix\` 列了 entity，但 tasks.md 沒列 fixtures 規劃。
+
+UI 展示頁面在 dev / staging 沒有持久化 mock 會導致 review 拍照空畫面、無效檢視。請在最後一個功能區塊之後、\`## Design Review\` 之前加入：
+
+\`\`\`markdown
+## N. Fixtures / Seed Plan
+
+- [ ] N.1 \`<entity_a>\` — happy path 至少 3 筆（含關聯 entity X / Y）+ edge case 1 筆 → 寫進 \`${SEED_HINT_TXT}\`
+- [ ] N.2 跑 \`<reset-or-seed-command>\` 重建本機 DB 並驗證 list / detail 頁面非空
+\`\`\`
+
+完整 template + 例外宣告（\`**Existing seed sufficient**\`）見 \`ux-completeness.md\` 的「必填 Fixtures / Seed Plan」段落。")
+  else
+    FIXTURES_SECTION=$(sed -n '/^## .*Fixtures/,/^## /p' "$TASKS_FILE" 2>/dev/null | sed '$d')
+    FIXTURES_TASK_LINES=$(printf '%s\n' "$FIXTURES_SECTION" | grep -cE '^\- \[[ x]\]' || true)
+    FIXTURES_TASK_LINES=${FIXTURES_TASK_LINES:-0}
+    HAS_EXISTING_DECLARATION=$(printf '%s\n' "$FIXTURES_SECTION" | grep -ciE 'Existing seed sufficient' || true)
+    HAS_EXISTING_DECLARATION=${HAS_EXISTING_DECLARATION:-0}
+
+    if [ "$FIXTURES_TASK_LINES" -eq 0 ] && [ "$HAS_EXISTING_DECLARATION" -eq 0 ]; then
+      FINDINGS+=("\`## Fixtures / Seed Plan\` 區塊內容不完整 — 沒有任何 task checkbox、也沒有 \`**Existing seed sufficient**\` 宣告。
+
+請至少補一條 task：
+
+\`\`\`markdown
+- [ ] N.1 \`<entity>\` — happy path 至少 N 筆 → 寫進 \`${SEED_HINT_TXT}\`
+\`\`\`
+
+或若既有 seed 已足夠，明確宣告 \`**Existing seed sufficient**\` 並寫一行理由（哪些頁面靠哪些既有 row 撐住）。")
     fi
   fi
 fi
