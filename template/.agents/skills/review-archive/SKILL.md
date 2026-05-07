@@ -70,12 +70,17 @@ spectra list --json
 - #3 響應式 ✅
 ```
 
-### Step 6: 提示截圖歸檔
+回報後**自動**進入 Step 6 sweep 截圖；sweep 完成後合併回報尾巴附 sweep 結果（由 `screenshots-archive` skill 自己印出，不重複格式化）。
 
-歸檔完成後 prompt 使用者：
+### Step 6: 自動 sweep 截圖
 
-> 已歸檔 N 項人工檢查。要不要順手把對應截圖資料夾 sweep 到 `screenshots/<env>/_archive/`？
-> 執行 `/screenshots-archive change <change-name>` 即可。
+歸檔完成後**自動**用 Skill tool 呼叫 `screenshots-archive change <change-name>`，把對應截圖資料夾搬到 `screenshots/<env>/_archive/YYYY-MM/`。
+
+**不再 prompt 是否要做** — review-archive 完成 = 該 change 已寫入 `docs/manual-review-archive.md` = sweep 對齊條件 100% 滿足，沒有人為再決定一次的空間。
+
+**對齊失敗處理**（極少見：topic 名與 change 名不一致）：由 `screenshots-archive` 內部用 request_user_input 列頂層所有候選 topic 讓 user 手選 + 「跳過」選項，本 skill 不重複 prompt。
+
+**例外旗標**：user 在觸發 review-archive 時若明確說「不要 sweep 截圖」/「`--no-sweep`」，跳過此步並在 Step 5 回報結尾附註「screenshot sweep 已跳過（user 指示）」。
 
 **目的**：讓 `screenshots/<env>/` 頂層只剩 current pending review，user 一眼能找到「現在要做人工檢查的是哪個」。
 
@@ -83,5 +88,7 @@ spectra list --json
 
 - **NEVER** 刪除 tasks artifact 中的人工檢查項目 — 只標記 `[x]` 和加歸檔註記
 - **NEVER** 歸檔未確認的項目 — 除非使用者明確同意
+- **NEVER** 把 Step 6 退回成「prompt 提示 user 要不要 sweep」— 已固化為自動執行；想跳過走明確的 `--no-sweep` 例外旗標
 - **ALWAYS** 保留 `#N` 編號和來源追溯資訊
 - **ALWAYS** 在歸檔前確認 `docs/manual-review-archive.md` 存在
+- **ALWAYS** 在 Step 5 回報後自動觸發 Step 6 截圖 sweep，除非 user 明確 `--no-sweep`
