@@ -239,7 +239,11 @@ export default defineNuxtConfig({
     experimental: {
       openAPI: true,
     },
-    preset: 'cloudflare_module',
+    // Env-aware：@nuxt/test-utils 在 e2e per-test rebuild 時不讀 NITRO_PRESET env，
+    // 只讀 nuxt.config.ts 寫死的值，導致 preset 退回 cloudflare-module-legacy 後撞
+    // postgres@3.4.9 的 cloudflare:sockets external（legacy preset 不認）。
+    // 讓 preset 走 env 後，CI workflow 設 NITRO_PRESET=node-server 才能真正生效。
+    preset: process.env.NITRO_PRESET || 'cloudflare_module',
     cloudflare: {
       deployConfig: true,
       nodeCompat: true,

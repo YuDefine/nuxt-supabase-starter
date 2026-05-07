@@ -457,7 +457,10 @@ export function generateNuxtConfig(targetDir: string, selectedFeatureIds: string
   const nitroLines: string[] = []
   if (selectedFeatureIds.includes('deploy-cloudflare')) {
     nitroLines.push(`  nitro: {`)
-    nitroLines.push(`    preset: 'cloudflare_module',`)
+    // Env-aware：@nuxt/test-utils e2e per-test rebuild 不讀 NITRO_PRESET env，
+    // 只讀 nuxt.config.ts 寫死的值。讓 preset 走 env 後 CI 才能切 node-server preset
+    // 避開 cloudflare-module-legacy 撞 postgres@3.4.9 cloudflare:sockets external。
+    nitroLines.push(`    preset: process.env.NITRO_PRESET || 'cloudflare_module',`)
     nitroLines.push(`    cloudflare: {`)
     nitroLines.push(`      deployConfig: true,`)
     nitroLines.push(`      nodeCompat: true,`)
