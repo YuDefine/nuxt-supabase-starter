@@ -52,7 +52,7 @@
 <template>
   <div class="space-y-6">
     <div class="text-center">
-      <h1 class="text-2xl font-bold text-(--ui-text-highlighted)">Welcome Back</h1>
+      <h1 class="text-2xl font-bold text-(--ui-text-highlighted)">Sign In</h1>
       <p class="mt-1 text-sm text-(--ui-text-muted)">Sign in to your account to continue</p>
     </div>
 
@@ -74,6 +74,7 @@
           placeholder="you@example.com"
           icon="i-lucide-mail"
           autocomplete="email"
+          required
         />
       </UFormField>
 
@@ -81,9 +82,10 @@
         <UInput
           v-model="form.password"
           type="password"
-          placeholder="••••••••"
+          placeholder="Enter your password"
           icon="i-lucide-lock"
           autocomplete="current-password"
+          required
         />
       </UFormField>
 
@@ -118,6 +120,7 @@
           variant="outline"
           block
           icon="i-lucide-github"
+          aria-label="GitHub"
           @click="handleOAuthLogin('github')"
         />
         <UButton
@@ -125,6 +128,7 @@
           variant="outline"
           block
           icon="i-lucide-chrome"
+          aria-label="Google"
           @click="handleOAuthLogin('google')"
         />
         <UButton
@@ -132,6 +136,7 @@
           variant="outline"
           block
           icon="i-lucide-type"
+          aria-label="LINE"
           @click="handleOAuthLogin('line')"
         />
       </div>
