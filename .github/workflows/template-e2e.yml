@@ -24,6 +24,9 @@ jobs:
         working-directory: template
     env:
       HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      # E2E 跑 node-server preset，避開 cloudflare-module-legacy 的 cloudflare:sockets external。
+      # 提到 job 層讓所有 step 自動繼承，避免單獨 step 漏設 drift。
+      NITRO_PRESET: node-server
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -62,14 +65,12 @@ jobs:
       - name: Build Nuxt
         env:
           NODE_OPTIONS: --max-old-space-size=4096
-          NITRO_PRESET: node-server
           SUPABASE_URL: http://127.0.0.1:54321
           SUPABASE_KEY: ${{ steps.supabase.outputs.anon_key }}
         run: vp run build
 
       - name: Run E2E tests
         env:
-          NITRO_PRESET: node-server
           NUXT_SESSION_PASSWORD: e2e-ci-session-password-at-least-32-chars
           SUPABASE_URL: http://127.0.0.1:54321
           SUPABASE_KEY: ${{ steps.supabase.outputs.anon_key }}
