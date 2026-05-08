@@ -331,6 +331,17 @@ export async function createReviewApp(repoRoot = process.cwd()): Promise<any> {
   return app
 }
 
+function topicMatchesChange(topic: string, change: string): boolean {
+  if (topic === change) return true
+  if (change.startsWith(topic + '-')) return true
+  if (topic.startsWith(change + '-')) return true
+  return false
+}
+
+function filterPoolsForChange(pools: ScreenshotTopic[], change: string): ScreenshotTopic[] {
+  return pools.filter((pool) => topicMatchesChange(pool.topic, change))
+}
+
 async function listPendingChanges(repoRoot: string): Promise<ChangeSummary[]> {
   const changesRoot = join(repoRoot, 'openspec', 'changes')
   if (!existsSync(changesRoot)) return []
@@ -343,7 +354,11 @@ async function listPendingChanges(repoRoot: string): Promise<ChangeSummary[]> {
     if (!entry.isDirectory() || entry.name === 'archive' || entry.name.startsWith('.')) continue
     const tasksPath = join(changesRoot, entry.name, 'tasks.md')
     if (!existsSync(tasksPath)) continue
-    const summary = await summarizeChange(entry.name, tasksPath, pools)
+    const summary = await summarizeChange(
+      entry.name,
+      tasksPath,
+      filterPoolsForChange(pools, entry.name)
+    )
     if (summary) summaries.push(summary)
   }
 
@@ -378,7 +393,7 @@ async function summarizeChange(
 
 async function readChangeDetail(repoRoot: string, change: string): Promise<ChangeDetail> {
   const tasksPath = resolveChangeTasksPath(repoRoot, change)
-  const [content, version, pools] = await Promise.all([
+  const [content, version, allPools] = await Promise.all([
     readFile(tasksPath, 'utf8'),
     readFileVersion(tasksPath),
     listScreenshotPools(repoRoot),
@@ -387,6 +402,7 @@ async function readChangeDetail(repoRoot: string, change: string): Promise<Chang
   if (parsed.sections.length === 0) {
     throw new HttpError(404, `Change has no ## 人工檢查 section: ${change}`)
   }
+  const pools = filterPoolsForChange(allPools, change)
   const summary = await summarizeChange(change, tasksPath, pools)
   if (!summary) throw new HttpError(404, `Change has no manual-review tasks: ${change}`)
   return {
@@ -792,15 +808,6 @@ function renderReviewHtml(): string {
       margin: 0 0 10px;
       font-size: 16px;
     }
-    .topic-select {
-      width: 100%;
-      min-height: 36px;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: var(--panel);
-      color: var(--ink);
-      margin-bottom: 12px;
-    }
     .thumb-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(138px, 1fr));
@@ -1082,7 +1089,6 @@ function renderReviewHtml(): string {
       </section>
       <aside class="screenshot-pane">
         <h2>截圖</h2>
-        <select id="topicSelect" class="topic-select" aria-label="截圖 topic"></select>
         <div id="selectionStatus" class="status"></div>
         <div id="thumbGrid" class="thumb-grid"></div>
       </aside>
@@ -1120,7 +1126,6 @@ function renderReviewHtml(): string {
       changes: [],
       current: null,
       activeIndex: 0,
-      selectedTopic: '',
     };
     const el = {
       changeStatus: document.getElementById('changeStatus'),
@@ -1129,7 +1134,6 @@ function renderReviewHtml(): string {
       reloadButton: document.getElementById('reloadButton'),
       banner: document.getElementById('banner'),
       taskList: document.getElementById('taskList'),
-      topicSelect: document.getElementById('topicSelect'),
       selectionStatus: document.getElementById('selectionStatus'),
       thumbGrid: document.getElementById('thumbGrid'),
       viewer: document.getElementById('viewer'),
@@ -1217,7 +1221,6 @@ function renderReviewHtml(): string {
       state.current = data.change;
       state.activeIndex = Math.max(0, (state.current.items || []).findIndex(function (item) { return !item.checked; }));
       if (state.activeIndex < 0) state.activeIndex = 0;
-      state.selectedTopic = topicKey((state.current.screenshotPools || [])[0]) || '';
       renderChanges();
       renderCurrent();
     }
@@ -1230,7 +1233,6 @@ function renderReviewHtml(): string {
         showBanner('人工檢查格式錯誤，需先修正下列 tasks.md 行才能寫入', 'error');
       }
       renderTasks();
-      renderTopics();
       renderThumbs();
     }
 
@@ -1279,57 +1281,59 @@ function renderReviewHtml(): string {
       });
     }
 
-    function topicKey(pool) {
-      return pool ? pool.env + '/' + pool.topic : '';
-    }
-
-    function renderTopics() {
-      const pools = state.current.screenshotPools || [];
-      if (!pools.length) {
-        el.topicSelect.innerHTML = '<option value="">此 change 尚無截圖資料夾</option>';
-        el.topicSelect.disabled = true;
-        return;
-      }
-      el.topicSelect.disabled = false;
-      el.topicSelect.innerHTML = pools.map(function (pool) {
-        const key = topicKey(pool);
-        return '<option value="' + esc(key) + '"' + (key === state.selectedTopic ? ' selected' : '') + '>' + esc(key) + ' (' + pool.files.length + ')</option>';
-      }).join('');
-      el.topicSelect.onchange = function () {
-        state.selectedTopic = el.topicSelect.value;
-        renderThumbs();
-      };
-    }
-
     function activeItem() {
       if (!state.current || !state.current.items.length) return null;
       return state.current.items[Math.min(state.activeIndex, state.current.items.length - 1)];
     }
 
-    function activePool() {
+    // 把該 change 所有 matched topic 的 files 合成一個 flat list
+    function changeFiles() {
       const pools = state.current ? state.current.screenshotPools || [] : [];
-      return pools.find(function (pool) { return topicKey(pool) === state.selectedTopic; }) || pools[0];
+      const seen = new Set();
+      const files = [];
+      for (const pool of pools) {
+        for (const file of pool.files || []) {
+          if (seen.has(file.relPath)) continue;
+          seen.add(file.relPath);
+          files.push(file);
+        }
+      }
+      return files;
     }
 
     function renderThumbs() {
       const item = activeItem();
-      const pool = activePool();
       if (!item) {
         el.selectionStatus.textContent = '尚未選擇檢查項';
         el.thumbGrid.replaceChildren(emptyMessage('先在中間點一個檢查項，這裡會顯示對應截圖'));
         return;
       }
-      const allFiles = pool && pool.files ? pool.files : [];
+      const change = state.current;
+      const pools = change ? change.screenshotPools || [] : [];
+      const allFiles = changeFiles();
       const matched = allFiles.filter(function (f) { return fileMatchesItem(f.name, item.id); });
       const idLabel = item.id.replace(/^#/, '');
-      if (!allFiles.length) {
-        el.selectionStatus.textContent = '檢查項 ' + item.id + ' · 此 change 尚無截圖資料夾';
-        el.thumbGrid.replaceChildren(emptyMessage('此 change 還沒有對應截圖（screenshots/<env>/<topic>/）'));
+      if (!pools.length) {
+        el.selectionStatus.textContent = '檢查項 ' + item.id + ' · 此 change 尚無對應截圖資料夾';
+        const div = document.createElement('div');
+        div.className = 'empty';
+        const p1 = document.createElement('p');
+        p1.textContent = '找不到屬於此 change 的截圖資料夾。';
+        const p2 = document.createElement('p');
+        p2.textContent = '命名規範：screenshots/<env>/' + (change ? change.name : '<change-name>') + '/';
+        const p3 = document.createElement('p');
+        p3.textContent = '（資料夾名等於 change name，或以 change name + - 開頭）';
+        p3.style.opacity = '0.7';
+        p3.style.fontSize = '12px';
+        div.appendChild(p1);
+        div.appendChild(p2);
+        div.appendChild(p3);
+        el.thumbGrid.replaceChildren(div);
         return;
       }
-      el.selectionStatus.textContent = '檢查項 ' + item.id + ' · 對應 ' + matched.length + ' / ' + allFiles.length + ' 張';
+      el.selectionStatus.textContent = '檢查項 ' + item.id + ' · 對應 ' + matched.length + ' / ' + allFiles.length + ' 張（topic 資料夾：' + pools.map(function (p) { return p.env + '/' + p.topic; }).join(', ') + '）';
       if (!matched.length) {
-        const hint = '此 topic 共 ' + allFiles.length + ' 張，但無檔名以 #' + idLabel + '- 開頭的截圖。請以 #' + idLabel + '-... 命名後重整。';
+        const hint = '此 change 共 ' + allFiles.length + ' 張截圖，但無檔名以 #' + idLabel + '- 或 #' + idLabel + '<letter>- 開頭。請以 #' + idLabel + '-... 命名後重整。';
         el.thumbGrid.replaceChildren(emptyMessage(hint));
         return;
       }
