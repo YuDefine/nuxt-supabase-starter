@@ -44,6 +44,15 @@ notify-deploy:
 
 The leading `./` is critical — it tells GitHub Actions to resolve the action from the calling repo's working tree (i.e., the vendored copy), not from any remote ref. **And because it resolves from the working tree, the calling job MUST run `actions/checkout` first** — even when the job has no other reason to check out the repo (e.g. a notify-only job that just reports `needs.*.result`). Forgetting this is the most common breakage when migrating from a remote-action reference (`uses: org/repo@v1`, which doesn't need a checkout) to the vendored model.
 
+### Why this README warning isn't the only safeguard
+
+In v1.157~v1.159 this exact rule was violated three times across 4 consumer repos despite the warning above. Documentation-level reminders proved unreliable, so the rule is now **machine-enforced** by `scripts/audit-vendor-checkout.mjs` (run from clade's repo root):
+
+- `pnpm audit:vendor-checkout` — standalone CLI; scans every consumer in `consumers.local`, exits 1 on any finding
+- `node scripts/propagate.mjs` — automatically calls `auditConsumerWorkflows()` per consumer **before** writing any files; missing checkout → that consumer's propagate is **aborted** (returns `failed`, others continue)
+
+If you add a new vendored action under `vendor/actions/<name>/`, the audit covers it automatically — `listVendoredActionNames()` enumerates the directory.
+
 Runner requirements: `jq` and `curl` available. GitHub-hosted runners ship both. Self-hosted runners must install them.
 
 ## Inputs

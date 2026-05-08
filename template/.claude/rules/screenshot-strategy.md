@@ -48,8 +48,17 @@ screenshots/<environment>/<topic>/
 ```
 
 - `<environment>`：`local` / `staging` / `production`
-- `<topic>`：`review/` / `debug/` / `<change-name>/`
+- `<topic>`：依用途分兩類，**MUST** 嚴格區分（見下節）
 - 評估報告可放 `review.md`
+
+### 兩類截圖必分清楚
+
+| 類別 | 用途 | `<topic>` 約束 | 檔名約束 | review GUI 自動載入 |
+| --- | --- | --- | --- | --- |
+| **A. 人工檢查截圖** | 對應 spectra change tasks.md `## 人工檢查` 各 item | **MUST** = `<change-name>`（一字不差等於 `openspec/changes/<change-name>/` 目錄名） | **MUST** `#<item-id>[<variant>]-<descriptor>.<ext>`（見下節「檔名強制規範」） | ✅ 是 |
+| **B. Ad-hoc / debug 截圖** | 探索、debug、screenshot review 視覺 QA、polish 過程觀察 | 自由語義（`debug-clock-overlap`、`live-preview-design-token`、`exploration-typography` 等） | 自由命名 | ❌ 否（資料夾名與 active change 不 match） |
+
+**禁止把兩類混在同一資料夾** — review GUI 用資料夾名 + 檔名 id 配對 item，A 類資料夾混入 B 類 ad-hoc 檔會造成「對應 0 張」誤導。
 
 ## 路徑強制規範（hard rule）
 
