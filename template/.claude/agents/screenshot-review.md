@@ -63,9 +63,115 @@ done
 | 情境 | 做法 |
 | --- | --- |
 | 使用者 Chrome 對 `localhost:<port>` 已登入 | 直接 `new_tab(URL)`，不需 dev-login |
-| Chrome 沒登入過、且專案有 `server/routes/auth/_dev-login.get.ts` | 走 `new_tab("http://localhost:<port>/auth/_dev-login?redirect=/...")` 取得 session |
-| Chrome 沒登入過、且專案有 `server/routes/auth/__test-login.get.ts` | 走 `new_tab("http://localhost:<port>/auth/__test-login?email=test@test.local&role=admin&redirect=/...")` |
+| Chrome 沒登入過、且專案有 `server/routes/auth/_dev-login.get.ts` 或 `packages/*/server/routes/auth/_dev-login.get.ts` | 走 `GET /auth/_dev-login`，用 canonical `as=<role>` + `redirect=<target>` |
+| Chrome 沒登入過、且專案有 `server/routes/auth/__test-login.get.ts` | 走 legacy `GET /auth/__test-login`，用 `role=<role>` + `email=e2e-<role>@test.local` + `redirect=<target>` |
+| Chrome 沒登入過、且專案有 `server/api/_dev/login.post.ts` | 先用 `js("fetch(...)")` POST `/api/_dev/login` 建立 cookie，再 `goto_url(target)` |
 | 撞到登入頁（page_info 顯示 redirect 到 `/auth/login` 等） | **MUST** 停下來告訴主 session「需要使用者先在 Chrome 完成登入」，**NEVER** 從截圖讀帳密填寫 |
+
+#### Dev-login route 偵測
+
+先用檔案判斷專案型態：
+
+```bash
+find server packages -path '*/server/routes/auth/_dev-login.get.ts' -print 2>/dev/null | head -1
+find server packages -path '*/server/routes/auth/__test-login.get.ts' -print 2>/dev/null | head -1
+find server packages -path '*/server/api/_dev/login.post.ts' -print 2>/dev/null | head -1
+```
+
+#### Role / scenario 推斷
+
+若主 session brief 明確指定角色，優先使用 brief。否則依目標 URL 推斷：
+
+| URL pattern | Canonical scenario |
+| --- | --- |
+| `/admin`, `/admin/*`, `/api/admin/*` | `admin` |
+| `/manager`, `/reports`, `/kpi`, `/procurement` | `manager`（若專案無此 role 則 fallback `admin`） |
+| `/employee`, `/my`, `/profile`, `/clock`, `/kiosk` | `employee` / `staff` |
+| 明確驗證 unauthorized / guest / no-access | `unauthorized` / `guest` |
+| 其他 | project default non-admin scenario |
+
+Project-specific mapping:
+
+| Project shape | GET `_dev-login` param | Legacy `__test-login` param | POST `_dev/login` body |
+| --- | --- | --- | --- |
+| perno | `as=admin` for `/admin/*`，否則 `as=employee`，brief 有指定就用 `ehr_hr_manager` / `trac_manager` 等 | N/A | N/A |
+| yuntech-usr-sroi | `as=admin` for `/admin/users`、`/admin/reports`、school-window/budget admin surfaces；否則 `as=executor` | N/A | N/A |
+| TDMS | 若 `_dev-login` alias 存在則 `as=admin\|manager\|staff\|unauthorized` | `role=admin\|manager\|staff\|unauthorized` | N/A |
+| better-auth / RAG | N/A | N/A | `as=admin` for `/admin/*`，否則 `as=member`；admin email 必須在 ALLOWLIST |
+
+#### GET dev-login 呼叫
+
+```bash
+browser-harness -c '
+from urllib.parse import quote
+port = "<port>"
+target = "/protected/path"
+role = "admin"  # inferred by table above
+login_url = f"http://localhost:{port}/auth/_dev-login?as={quote(role)}&redirect={quote(target, safe=\"\")}"
+new_tab(login_url)
+wait_for_load()
+info = page_info()
+assert f"localhost:{port}" in info["url"], f"unexpected host: {info[\"url\"]}"
+'
+```
+
+Legacy TDMS:
+
+```bash
+browser-harness -c '
+from urllib.parse import quote
+port = "<port>"
+target = "/protected/path"
+role = "admin"
+email = f"e2e-{role}@test.local"
+login_url = f"http://localhost:{port}/auth/__test-login?email={quote(email)}&role={quote(role)}&redirect={quote(target, safe=\"\")}"
+new_tab(login_url)
+wait_for_load()
+info = page_info()
+assert f"localhost:{port}" in info["url"], f"unexpected host: {info[\"url\"]}"
+'
+```
+
+#### POST better-auth dev-login 呼叫
+
+`browser-harness` 可以在目前 tab 執行 fetch。先開 origin、再 POST、最後導向目標：
+
+```bash
+browser-harness -c '
+import json
+port = "<port>"
+target = "/protected/path"
+payload = {
+  "email": "admin@test.local",  # admin route: allowlisted email; otherwise member@test.local
+  "as": "admin",                # admin for /admin/*, member otherwise
+}
+new_tab(f"http://localhost:{port}/")
+wait_for_load()
+result = js("""
+  (async () => {
+    const response = await fetch("/api/_dev/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(%s)
+    });
+    return JSON.stringify({
+      ok: response.ok,
+      status: response.status,
+      body: await response.text()
+    });
+  })()
+""" % json.dumps(payload))
+parsed = json.loads(result)
+assert parsed["ok"], f"dev-login failed: {parsed[\"status\"]} {parsed[\"body\"]}"
+goto_url(f"http://localhost:{port}{target}")
+wait_for_load()
+info = page_info()
+assert f"localhost:{port}" in info["url"], f"unexpected host: {info[\"url\"]}"
+'
+```
+
+POST 路由若拒絕 `as=admin`，**只**在 brief 提供正確 ALLOWLIST email 時才重試。**NEVER** 為了截圖去 patch app middleware 或 auth guard。
 
 判斷「是否撞到登入頁」：
 
