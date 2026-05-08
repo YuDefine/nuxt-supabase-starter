@@ -108,7 +108,8 @@ export default defineConfig({
           !f.includes('/.claude/agents/') &&
           !f.includes('/.claude/commands/') &&
           !f.includes('/.agents/') &&
-          !f.includes('/.codex/')
+          !f.includes('/.codex/') &&
+          !f.includes('/.github/actions/')
       )
       return allowed.length > 0 ? [`vp fmt ${allowed.join(' ')}`] : ['true']
     },

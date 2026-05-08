@@ -41,6 +41,7 @@
     "postinstall": "node -e \"const f=require('node:fs'),p=require('node:path'),o=require('node:os'),s=require('node:child_process');const c=process.env.CLADE_HOME||[p.join(o.homedir(),'clade'),p.join(o.homedir(),'offline','clade')].find(x=>f.existsSync(x));if(!c){console.warn('[clade] not found locally — skip bootstrap. Set CLADE_HOME or clone to ~/clade');process.exit(0)}const r=s.spawnSync('node',[p.join(c,'scripts','bootstrap-hub.mjs')],{stdio:'inherit'});process.exit(r.status||0)\"",
     "prepare": "vp config && bash scripts/restore-hooks.sh && nuxt prepare",
     "preview": "nuxt preview",
+    "review:ui": "node -e \"for (const p of ['tsx', 'hono']) { try { require.resolve(p) } catch { console.error('[review:ui] Missing ' + p + '. Install with: pnpm add -D tsx hono'); process.exit(1) } }\" && pnpm exec tsx scripts/review-gui.mts",
     "setup": "bash scripts/setup.sh",
     "skills:install": "bash ./scripts/install-skills.sh",
     "skills:list": "bash ./scripts/check-skills.sh",

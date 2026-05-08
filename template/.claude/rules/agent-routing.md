@@ -24,7 +24,8 @@ globs: ['**/*']
 | **Code review（commit 0-A）** | **Codex（`codex review --uncommitted`，GPT-5.5；最多 2 輪：Round 1 = `high` → Round 2 = `xhigh`）** | code review 適合 codex CLI 的 diff-aware 機制 + 漸進加深 reasoning；改由 codex 統一執行 review、Claude Code 主線負責修。詳見 `.claude/commands/commit.md` Step 0-A（consumer 端由 plugin loader 載入）。 |
 | **Spectra `propose` 階段（draft）** | **預設 Codex GPT-5.5 xhigh draft，無 A/B 詢問**（除非使用者明確要求純 Claude） | propose 是抽象決策 + 高思考預算工作；codex xhigh draft + 主線 cross-check 比擇一執行更穩。詳見 `spectra-propose` Step 0。 |
 | **Spectra `propose` cross-check** | **主線 Claude Opus 4.7 xhigh** | codex 回後主線必跑：post-propose-check + design-inject + 主線補 Design Review 7 步 template + spectra analyze。主線 = quality gate，不只是 dispatcher。 |
-| **Spectra `apply`（非 Design Review phase，phase 粒度）** | **Codex GPT-5.5 high**（不要 medium） | mechanical 寫 code 用 high 夠；medium 漏 schema drift / cross-file refactor / enum exhaustiveness 風險高。phase 粒度避免大量 round-trip。 |
+| **Spectra `apply`（非 Design Review、非 UI view phase，phase 粒度）** | **Codex GPT-5.5 high**（不要 medium） | mechanical 寫 code 用 high 夠；medium 漏 schema drift / cross-file refactor / enum exhaustiveness 風險高。phase 粒度避免大量 round-trip。 |
+| **Spectra `apply` UI view phase（component / page / view / layout / styling）** | **主線 Claude Opus 4.7 xhigh，永不派 codex** | UI view 層的視覺 / 互動 / a11y 細節需要與 Design skill 緊耦合，Codex 在此領域 tooling 弱。Frontend 但非 view 的工作（store / hook / API client / type / util）不在此範圍，仍走 codex。 |
 | **Spectra `apply` Section 7（Design Review）** | **主線 Claude Opus 4.7 xhigh，永不派 codex** | Design skill（`/impeccable *` / `/design improve` / `/impeccable audit` / review-screenshot）是 Claude Code 一等公民，Codex 在此領域 tooling 弱。 |
 
 ## Codex 派工的標準流程（所有 routing 共用）
@@ -60,7 +61,7 @@ globs: ['**/*']
 | --- | --- | --- | --- | --- |
 | WebSearch | `websearch` | `/tmp` | `medium` | 純讀（搜尋網頁/查文件） |
 | Spectra propose（draft） | `spectra-propose` | consumer repo root | `xhigh` | 寫 spec/proposal 到 `openspec/changes/<change>/`（主線之後 cross-check） |
-| Spectra apply phase（非 Design Review） | `spectra-apply-<phase-id>` | consumer repo root | `high` | 完成單一 phase 內所有 tasks，回報 tasks.md checkbox 狀態 |
+| Spectra apply phase（非 Design Review、非 UI view） | `spectra-apply-<phase-id>` | consumer repo root | `high` | 完成單一 phase 內所有 tasks，回報 tasks.md checkbox 狀態 |
 
 > sandbox flag 統一使用 `--dangerously-bypass-approvals-and-sandbox`，不再分 `-s read-only` / `-s workspace-write`（在背景 codex 會擋 MCP）。「預期動作」由主線在 prompt 內陳述，靠 codex 自律。
 
@@ -161,18 +162,28 @@ Claude Code session 收到 spectra propose 請求時：
 執行 `spectra-apply` 時，phase 粒度派 codex：
 
 1. Read tasks.md，按 `## N.` 切分 phase
-2. **判斷該 phase 是否為 Design Review**（標題含 "Design Review" 或內容含 `/design improve` / `/impeccable audit`）：
-   - **是 Design Review** → 主線 Claude Opus 4.7 xhigh **自己做**，不派 codex
-   - **不是 Design Review** → 派 background codex GPT-5.5 high 做完整 phase
-3. 每個非 Design Review phase 的派工：
+2. **每個 phase 三類分類**（依序判定，命中即停）：
+   - **A. Design Review phase**：標題含 "Design Review" 或內容含 `/design improve` / `/impeccable audit` / `/impeccable *` / `review-screenshot`
+     → **主線 Claude Opus 4.7 xhigh 自己做，永不派 codex**
+   - **B. UI view phase**：phase 內任一 task 描述/路徑指涉 view 層檔案——`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且該 phase 沒有摻入非 view 的 frontend / backend 工作**（store / hook / API client / type / util / migration / API server）
+     → **主線 Claude Opus 4.7 xhigh 自己做，永不派 codex**
+   - **C. 其他 phase**：上述兩類以外（schema、migration、API server、CLI、純 backend、frontend 但非 view 的 store / hook / API client / type / util、unit test、docs）
+     → **派 background codex GPT-5.5 high 做完整 phase**
+3. **混雜 phase fallback**（A、B 都不是純 view、又混雜 view 與非 view 工作）：
+   - **看該 phase 是否已開工**（任一 task `[x]` 或 git history 顯示 phase 內檔案已被改）：
+     - **已開工** → **主線整個 phase 自己做**（safety fallback；不重切，不派 codex）
+     - **未開工** → **STOP**，回覆使用者：「phase `<N>. <title>` 同時混雜 UI view 與非 UI 工作，違反新版 Phase Dispatch 規則。請改跑 `/spectra-ingest <change>` 把 UI view tasks 與其他 tasks 切成獨立 phase 後再 `/spectra-apply`。」**禁止**主線自行修改 tasks.md phase 結構（這屬 ingest 範圍，避免 propose / apply 邊界混淆）
+4. 每個 C 類（codex）派工：
    - prompt **第一行 MUST** 是 `[DELEGATED-BY-CLAUDE-CODE]` marker（Codex 端 Runtime Gate 會驗，缺 marker 會被擋掉，見下節）
    - prompt 內容：phase 標題、該 phase 全部 tasks、相關 design.md / specs / tasks 段落、acceptance criteria、`spectra task done <change> <task-id>` 完成標記指令
+   - prompt 內**MUST**附帶硬指令：「**禁止**修改 view 層檔案（`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss`）；若 task 需要 view 層改動，回報 'view layer change required, defer to main thread' 並跳過該 task」
    - `<topic>=spectra-apply-<phase-id>`、`<cwd>=consumer repo root`、`-c model_reasoning_effort=high`
-4. 收到 `<task-notification status=completed>` 後，主線 **MUST**：
+5. 收到 `<task-notification status=completed>` 後，主線 **MUST**：
    - Read tasks.md 確認該 phase 所有 checkbox 已勾
    - sanity check（typecheck、相關 test、git diff）
+   - **MUST** 額外驗證 codex 沒踩到 view 層：`git diff --name-only` 過濾 `.vue` / `.tsx` / `.jsx` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss`，若有任何 view 層檔案被 codex 動過 → **AskUserQuestion**：[1] 主線 revert + 重派 codex（剝除 view 改動）/ [2] 接受並由主線自己跑該 view phase / [3] 中止
    - 若有遺漏 → **AskUserQuestion** 給使用者 [1] 主線補 / [2] 重派 codex / [3] 中止
-5. 全部 phases 完成後，主線**自己**跑 Section 7 Design Review（不派出去）
+6. 全部 phases 完成後，主線**自己**跑 Section 7 Design Review（不派出去）
 
 ## Codex `$spectra-apply` Runtime Gate
 
@@ -241,6 +252,10 @@ Claude Code session 內偵測到「需要 WebSearch」時：
 - **NEVER** 在 Spectra propose 階段問 A/B（已預設 codex draft）— 除非使用者**明確**要求純 Claude propose
 - **NEVER** 派 codex propose 後不跑 cross-check（post-propose-check + design-inject + 主線補 Design Review 7 步 + spectra analyze）
 - **NEVER** 在 spectra-apply Section 7（Design Review）派 codex — 主線自己做
+- **NEVER** 在 spectra-apply 把 UI view phase（component / page / view / layout / styling）派給 codex — 主線自己做。Frontend 但非 view 的（store / hook / API client / type / util）仍走 codex
+- **NEVER** 派 codex 跑 UI view phase 時省略 prompt 內「禁止改 view 層檔案」硬指令 — 缺這條 codex 容易順手改到 .vue / .tsx
+- **NEVER** 收到 codex 完工通知後跳過 view-layer drift 檢查（`git diff --name-only` 過濾 view 路徑） — 是主要的回收 quality gate
+- **NEVER** 在 spectra-apply 偵測到「混雜 phase（UI view + 非 view 摻在同 phase）且未開工」時自行修改 tasks.md 拆 phase — 該交給 `/spectra-ingest` 處理（apply / propose / ingest 邊界要清楚）
 - **NEVER** 在 spectra-apply 派 codex 用 medium effort — 一律用 high（medium 漏 schema drift 風險高）
 - **NEVER** task 粒度派 codex — 一律 phase 粒度，避免大量 round-trip
 - **NEVER** 在 commit 0-A 用 `simplify` skill / `code-review` agent 自行 review（改派 codex），也 **NEVER** 改用其他模型或顛倒兩輪 reasoning effort

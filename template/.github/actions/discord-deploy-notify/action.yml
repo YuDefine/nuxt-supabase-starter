@@ -1,0 +1,131 @@
+name: "Discord Deploy Notify"
+description: "Post a Discord embed summarizing a deploy workflow run, with consistent color/icon/language conventions across YuDefine consumer repos."
+author: "YuDefine/clade"
+
+inputs:
+  webhook_url:
+    description: "Discord webhook URL. Empty value causes the action to skip with a warning (does not fail the calling job)."
+    required: true
+  title:
+    description: "Embed title prefix."
+    required: false
+    default: "Deploy"
+  target:
+    description: "Optional environment label (e.g. production, staging) appended to the title in parentheses."
+    required: false
+    default: ""
+  results:
+    description: "JSON array of {name, result} per upstream job. result must be one of success|failure|cancelled|skipped."
+    required: false
+    default: "[]"
+  language:
+    description: 'Title-string language. Must be "zh" or "en".'
+    required: false
+    default: "zh"
+  tag:
+    description: "Optional tag/version label appended to the title. Falls back to $GITHUB_REF_NAME when empty."
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Post Discord notification
+      shell: bash
+      env:
+        WEBHOOK_URL: ${{ inputs.webhook_url }}
+        TITLE: ${{ inputs.title }}
+        TARGET: ${{ inputs.target }}
+        RESULTS: ${{ inputs.results }}
+        LANGUAGE: ${{ inputs.language }}
+        TAG_INPUT: ${{ inputs.tag }}
+      run: |
+        set -euo pipefail
+
+        if [ -z "$WEBHOOK_URL" ]; then
+          echo "::warning::DISCORD webhook not provided, skipping notification"
+          exit 0
+        fi
+
+        if [ "$LANGUAGE" != "zh" ] && [ "$LANGUAGE" != "en" ]; then
+          echo "::error::Invalid language input: '$LANGUAGE'. Must be 'zh' or 'en'."
+          exit 1
+        fi
+
+        TAG="$TAG_INPUT"
+        if [ -z "$TAG" ]; then
+          TAG="${GITHUB_REF_NAME:-}"
+        fi
+
+        FAILED_COUNT=$(printf '%s' "$RESULTS" | jq '[.[] | select(.result != "success")] | length')
+        if [ "$FAILED_COUNT" = "0" ]; then
+          COLOR=3066993
+          if [ "$LANGUAGE" = "zh" ]; then
+            STATUS_STR="✅ 部署成功"
+          else
+            STATUS_STR="✅ Deploy succeeded"
+          fi
+        else
+          COLOR=15158332
+          if [ "$LANGUAGE" = "zh" ]; then
+            STATUS_STR="❌ 部署失敗"
+          else
+            STATUS_STR="❌ Deploy failed"
+          fi
+        fi
+
+        TITLE_FULL="$STATUS_STR — $TITLE"
+        if [ -n "$TARGET" ]; then
+          case "$TARGET" in
+            production) TARGET_ABBREV="Prod" ;;
+            staging)    TARGET_ABBREV="Stg" ;;
+            *)          TARGET_ABBREV="$TARGET" ;;
+          esac
+          TITLE_FULL="$TITLE_FULL [$TARGET_ABBREV]"
+        fi
+        if [ -n "$TAG" ]; then
+          TITLE_FULL="$TITLE_FULL — $TAG"
+        fi
+
+        RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+        TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+        FIELDS_JSON=$(printf '%s' "$RESULTS" | jq '
+          map({
+            name: .name,
+            value: (
+              (
+                if .result == "success" then "✅"
+                elif .result == "failure" then "❌"
+                elif .result == "cancelled" then "⏹️"
+                elif .result == "skipped" then "⏭️"
+                else "❓"
+                end
+              ) + " " + .result
+            ),
+            inline: true
+          })
+        ')
+
+        EMBED=$(jq -n \
+          --arg title "$TITLE_FULL" \
+          --arg url "$RUN_URL" \
+          --argjson color "$COLOR" \
+          --argjson fields "$FIELDS_JSON" \
+          --arg footer "$GITHUB_REPOSITORY" \
+          --arg ts "$TS" \
+          '{
+            title: $title,
+            url: $url,
+            color: $color,
+            footer: { text: $footer },
+            timestamp: $ts
+          } + (if ($fields | length) > 0 then { fields: $fields } else {} end)')
+
+        PAYLOAD=$(jq -n --argjson embed "$EMBED" '{ embeds: [$embed] }')
+
+        if ! curl -sf -X POST "$WEBHOOK_URL" \
+             -H 'Content-Type: application/json' \
+             -d "$PAYLOAD"; then
+          echo "::warning::Discord webhook failed"
+        fi
