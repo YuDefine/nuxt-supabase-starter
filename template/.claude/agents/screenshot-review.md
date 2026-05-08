@@ -103,64 +103,117 @@ wait_for_load()
 
 ## 截圖存放（嚴格規範）
 
-完整規則見 `.claude/rules/screenshot-strategy.md` §路徑強制規範 + §歸檔機制。
+完整規則見 `.claude/rules/screenshot-strategy.md` §路徑強制規範 + §檔名強制規範 + §歸檔機制。
 
-```
-screenshots/<environment>/<語義>/
-```
+### 兩類截圖必分清楚
 
-- `<environment>`：`local`、`staging`、`production` 等，依專案狀況
-- `<語義>`：自由命名，如 `review/`、`debug/`、`feature-xxx/`、`<change-name>/`
+| 類別 | 用途 | 資料夾 | 檔名 | review GUI 是否會自動載入 |
+| --- | --- | --- | --- | --- |
+| **A. 人工檢查截圖** | 對應 spectra change tasks.md `## 人工檢查` 各 item | **MUST** `screenshots/<env>/<change-name>/`（資料夾名 == change name，不是 phase / section / 自由語義） | **MUST** `#<item-id>[<variant>]-<descriptor>.png`（id 與 tasks.md `## 人工檢查` 的 `#N` / `#N.M` 完全相等） | ✅ 是，`pnpm review:ui` 自動配對 |
+| **B. Ad-hoc / debug 截圖** | 探索、debug、screenshot review 視覺 QA、其他驗證 | `screenshots/<env>/<semantic-topic>/`（自由語義） | 自由命名 | ❌ 否 |
+
+**兩類混在同一資料夾 = review GUI 配對失敗**。截圖前**MUST** 先確定這次拍的是 A 還是 B：
+
+- 主 session brief 提到 spectra change name 或 `## 人工檢查` 清單 → A 類
+- 主 session brief 是 ad-hoc 探索、debug、polish UI、live preview → B 類
+
+### 通用規則
+
+- `<environment>`：`local`、`staging`、`production` 等
 - **MUST** `mkdir -p` 確保目錄存在
-- **MUST** `capture_screenshot(path=...)` 永遠帶 explicit path — 不帶 path 預設落 `/tmp/shot.png`，user 找不到
-- **NEVER** 直接存到 `screenshots/`、`screenshots/local/`、`screenshots/<env>/_archive/`、專案根目錄、`temp/`、或其他位置
-- **NEVER** 在 `screenshots/<env>/_archive/` 下建立新資料夾 — `_archive/` 只給 `/screenshots-archive` skill 寫入，agent 截圖只能落在 `screenshots/<env>/<topic>/` 頂層
+- **MUST** `capture_screenshot(path=...)` 永遠帶 explicit path
+- **NEVER** 直接存到 `screenshots/`、`screenshots/local/`、`screenshots/<env>/_archive/`、專案根目錄、`temp/`
+- **NEVER** 在 `screenshots/<env>/_archive/` 下建立新資料夾 — `_archive/` 只給 `/screenshots-archive` skill 寫入
 
-### Spectra change 截圖
+### A 類：人工檢查截圖（review:ui 配對用）
 
-**指定單一 color mode 時**：
+#### 資料夾命名（hard rule）
 
 ```bash
 mkdir -p screenshots/local/<change-name>
 ```
 
+`<change-name>` **MUST** 等於 `openspec/changes/<change-name>/` 的目錄名 — 一字不差。**禁止**用 `phase-N-section-N`、`<change-prefix>`、`<feature-tag>`、`<topic>` 等別名；review:ui 用 substring match（`change === topic` 或 `change.startsWith(topic+'-')` 或 `topic.startsWith(change+'-')`）認資料夾，命名漂走 review GUI 就找不到對應 topic、整個 change 拍出來等於白拍。
+
+#### 檔名（hard rule）
+
+對 tasks.md `## 人工檢查` 每個 item，截圖檔名首段 token **MUST** 對齊該 item id：
+
+```text
+#<item-id>[<variant>]-<descriptor>.<ext>
+```
+
+- `<item-id>`：parent 用 `#1`、`#2`、`#N`；scoped sub-item 用 `#3.1`、`#3.2` — 與 tasks.md 完全一致
+- `<variant>`：選填，單一小寫英文字母 `a`–`z`，給同 item 多角度（light/dark mode、不同 viewport、不同流程節點）
+- `<descriptor>`：kebab-case 描述頁面或場景
+
+```text
+✅ #1-clock-light.png             # item #1，唯一一張
+✅ #1a-clock-light.png            # item #1，第 a 個變體
+✅ #1b-clock-dark.png             # item #1，第 b 個變體
+✅ #3.1-mobile-petition.png       # scoped item #3.1
+✅ #8.2-salary-positive.png       # parent item #8.2
+
+❌ 8.1-home.png                   # legacy section.item，缺 `#` → 改 `#1-home.png`
+❌ clock-light.png                # 沒有 id token，review:ui 找不到對應 item
+❌ #1_clock-light.png             # 用 `_` 而非 `-`，pattern 不認
+```
+
+#### 完整資料夾示意
+
 ```
 screenshots/local/<change-name>/
-├── #1-happy-path.png
-├── #2-edge-case.png
-└── review.md
+├── #1-clock-light.png             # 對應 tasks.md `## 人工檢查` item #1
+├── #1a-clock-active-light.png     # item #1 第 a 變體
+├── #1b-clock-active-dark.png      # item #1 第 b 變體
+├── #2-salary-positive.png         # item #2
+├── #3-leave-quotas.png            # item #3
+└── review.md                      # 截圖報告
 ```
 
-**未指定 color mode 時（預設）**：
-
-```bash
-mkdir -p screenshots/local/<change-name>/light
-mkdir -p screenshots/local/<change-name>/dark
-```
+或用 `light/` `dark/` 子目錄（review:ui 會 recurse 收集，filename basename 相同就好）：
 
 ```
 screenshots/local/<change-name>/
 ├── light/
-│   ├── #1-happy-path.png
-│   └── #2-edge-case.png
+│   ├── #1-clock.png
+│   ├── #2-salary.png
+│   └── #3-leave-quotas.png
 ├── dark/
-│   ├── #1-happy-path.png
-│   └── #2-edge-case.png
+│   ├── #1-clock.png
+│   ├── #2-salary.png
+│   └── #3-leave-quotas.png
 └── review.md
 ```
 
-### Ad-hoc 截圖驗證（無 change）
+#### 收到 brief 時的拍攝流程
 
-根據當下驗證行為取語意名稱，color mode 子目錄規則同上：
+1. 讀 `openspec/changes/<change-name>/tasks.md` 找 `## 人工檢查` 區塊
+2. 列出每個 item 的 id（`#1`, `#2`, `#3.1`, ...）+ description
+3. 為每個 item 規劃要拍的場景（happy path / variants / states）
+4. 檔名首段 token 對齊 item id；descriptor 反映 item description 的關鍵字
+5. 最後 review:ui 載入此 change 時應該每個 item 都有 ≥ 1 張對應檔
+
+#### review:ui 配對行為（給 agent 自查）
+
+- 資料夾名：`change === topic` 或 `change.startsWith(topic+'-')` 或 `topic.startsWith(change+'-')` 才會被認為屬於該 change
+- 檔名：`^#?(\d+(?:\.\d+)?)[a-z]?(?=[-._])` 擷取 id；id 必須等於 item id（去 `#`）才會 match
+- 不符合上面任一條件 → review:ui 顯示「對應 0 張」「請以 `#<id>-...` 命名後重整」 = 拍出來等於白拍
+
+### B 類：Ad-hoc / debug / screenshot review 視覺 QA
+
+不需要對應 tasks.md item，自由語義命名：
 
 ```bash
-# 指定單一 mode
 mkdir -p screenshots/local/<semantic-topic>
-
-# 未指定（預設）
+# 或
 mkdir -p screenshots/local/<semantic-topic>/light
 mkdir -p screenshots/local/<semantic-topic>/dark
 ```
+
+`<semantic-topic>` 例：`debug-clock-overlap`、`live-preview-design-token`、`exploration-typography`
+
+**B 類資料夾不會被 review:ui 載入到任一 change**（資料夾名與 active change 名稱不 match） — 這是預期行為，B 類本來就不該干擾人工檢查 GUI。
 
 ## 拍前 Emptiness Preflight
 
