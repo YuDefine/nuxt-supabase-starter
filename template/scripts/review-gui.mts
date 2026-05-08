@@ -847,27 +847,60 @@ function renderReviewHtml(): string {
       position: fixed;
       inset: 0;
       display: none;
-      place-items: center;
-      padding: 20px;
-      background: rgba(30, 37, 33, .78);
+      flex-direction: column;
+      background: rgba(30, 37, 33, .82);
       z-index: 20;
     }
-    .viewer.open { display: grid; }
-    .viewer-inner {
-      max-width: min(1100px, 96vw);
-      max-height: 92vh;
-      display: grid;
-      gap: 10px;
+    .viewer.open { display: flex; }
+    .viewer-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      flex: 0 0 auto;
+      color: rgba(255,255,255,.92);
     }
-    .viewer img {
+    .viewer-label {
+      flex: 1 1 auto;
+      min-width: 0;
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      opacity: .85;
+    }
+    .viewer-hint {
+      font-size: 12px;
+      opacity: .65;
+    }
+    .viewer-stage {
+      flex: 1 1 auto;
+      overflow: auto;
+      padding: 0 20px 20px;
+      display: grid;
+      place-items: center;
+      cursor: zoom-in;
+    }
+    .viewer-stage.zoomed {
+      place-items: start;
+      cursor: zoom-out;
+    }
+    .viewer-stage img {
       max-width: 100%;
-      max-height: 82vh;
+      max-height: calc(100vh - 96px);
       object-fit: contain;
       background: var(--panel);
       border-radius: 8px;
+      display: block;
+    }
+    .viewer-stage.zoomed img {
+      max-width: none;
+      max-height: none;
+      width: auto;
+      height: auto;
+      object-fit: initial;
     }
     .viewer button {
-      justify-self: end;
       padding: 0 12px;
     }
     @media (max-width: 900px) {
@@ -1056,8 +1089,12 @@ function renderReviewHtml(): string {
     </main>
   </div>
   <div id="viewer" class="viewer" role="dialog" aria-modal="true" aria-label="截圖大圖檢視">
-    <div class="viewer-inner">
+    <div class="viewer-toolbar">
+      <span class="viewer-label" id="viewerLabel"></span>
+      <span class="viewer-hint">點圖切 1:1 / Esc 關閉</span>
       <button id="viewerClose" type="button">關閉 (Esc)</button>
+    </div>
+    <div class="viewer-stage" id="viewerStage">
       <img id="viewerImage" alt="">
     </div>
   </div>
@@ -1084,7 +1121,6 @@ function renderReviewHtml(): string {
       current: null,
       activeIndex: 0,
       selectedTopic: '',
-      selectedShots: {},
     };
     const el = {
       changeStatus: document.getElementById('changeStatus'),
@@ -1097,11 +1133,31 @@ function renderReviewHtml(): string {
       selectionStatus: document.getElementById('selectionStatus'),
       thumbGrid: document.getElementById('thumbGrid'),
       viewer: document.getElementById('viewer'),
+      viewerStage: document.getElementById('viewerStage'),
       viewerImage: document.getElementById('viewerImage'),
+      viewerLabel: document.getElementById('viewerLabel'),
       viewerClose: document.getElementById('viewerClose'),
       shortcutModal: document.getElementById('shortcutModal'),
       shortcutModalClose: document.getElementById('shortcutModalClose'),
     };
+
+    // 從截圖檔名擷取 item id token。支援 #N-、#N.M-、Nb-、N.Ma- 等變體。
+    function extractFilenameId(name) {
+      const m = name.match(/^#?(\d+(?:\.\d+)?)([a-z]?)(?=[-._])/i);
+      return m ? m[1] : null;
+    }
+    function fileMatchesItem(filename, itemId) {
+      const fileId = extractFilenameId(filename);
+      if (!fileId) return false;
+      const target = itemId.replace(/^#/, '');
+      if (fileId === target) return true;
+      // legacy section.item 命名（如 8.1-...）對應 parent item
+      if (!target.includes('.') && fileId.includes('.')) {
+        const parts = fileId.split('.');
+        if (parts.length === 2 && parts[1] === target) return true;
+      }
+      return false;
+    }
 
     function esc(value) {
       return String(value ?? '').replace(/[&<>"']/g, function (ch) {
@@ -1193,12 +1249,11 @@ function renderReviewHtml(): string {
       }).join('');
       const items = change.items.map(function (item, index) {
         const active = index === state.activeIndex;
-        const selectedCount = (state.selectedShots[item.id] || []).length;
         return '<article class="task-item' + (active ? ' active' : '') + (item.scoped ? ' scoped' : '') + '" data-item="' + esc(item.id) + '">' +
           '<div class="task-head">' +
           '<span class="task-id">' + esc(item.id) + '</span>' +
           '<span class="task-desc">' + esc(item.description) + '</span>' +
-          '<span class="task-state">' + (item.checked ? '已通過' : '待檢查') + (selectedCount ? ' · ' + selectedCount + ' 張截圖' : '') + '</span>' +
+          '<span class="task-state">' + (item.checked ? '已通過' : '待檢查') + '</span>' +
           '</div>' +
           '<textarea class="note" data-note="' + esc(item.id) + '" placeholder="填寫說明（「有問題」必填、「跳過」可選填）"></textarea>' +
           '<div class="actions">' +
@@ -1211,7 +1266,9 @@ function renderReviewHtml(): string {
       el.taskList.innerHTML = malformed + items;
       el.taskList.querySelectorAll('[data-item]').forEach(function (node, index) {
         node.addEventListener('click', function (event) {
-          if (event.target && event.target.dataset && event.target.dataset.action) return;
+          // 點 textarea / button / input / select 不應重建列表（會把使用者 focus 與輸入丟掉）
+          if (event.target.closest && event.target.closest('button, textarea, input, select')) return;
+          if (state.activeIndex === index) return;
           state.activeIndex = index;
           renderTasks();
           renderThumbs();
@@ -1259,44 +1316,59 @@ function renderReviewHtml(): string {
       const pool = activePool();
       if (!item) {
         el.selectionStatus.textContent = '尚未選擇檢查項';
-        el.thumbGrid.innerHTML = '<div class="empty">先在中間點一個檢查項，這裡會顯示對應截圖</div>';
+        el.thumbGrid.replaceChildren(emptyMessage('先在中間點一個檢查項，這裡會顯示對應截圖'));
         return;
       }
-      if (!pool || !pool.files.length) {
-        el.selectionStatus.textContent = '檢查項 ' + item.id + ' 為純文字檢查（不需截圖）';
-        el.thumbGrid.innerHTML = '<div class="empty">此 change 還沒有對應截圖（screenshots/&lt;env&gt;/&lt;topic&gt;/）</div>';
+      const allFiles = pool && pool.files ? pool.files : [];
+      const matched = allFiles.filter(function (f) { return fileMatchesItem(f.name, item.id); });
+      const idLabel = item.id.replace(/^#/, '');
+      if (!allFiles.length) {
+        el.selectionStatus.textContent = '檢查項 ' + item.id + ' · 此 change 尚無截圖資料夾';
+        el.thumbGrid.replaceChildren(emptyMessage('此 change 還沒有對應截圖（screenshots/<env>/<topic>/）'));
         return;
       }
-      const selected = new Set(state.selectedShots[item.id] || []);
-      el.selectionStatus.textContent = '檢查項 ' + item.id + ' · 已選 ' + selected.size + ' 張';
-      el.thumbGrid.innerHTML = pool.files.map(function (file) {
-        const isSelected = selected.has(file.relPath);
-        return '<button type="button" class="thumb' + (isSelected ? ' selected' : '') + '" data-shot="' + esc(file.relPath) + '" data-url="' + esc(file.url) + '">' +
-          '<span class="thumb-frame"><img loading="lazy" decoding="async" src="' + esc(file.url) + '" alt="' + esc(file.relPath) + '"></span>' +
-          '<span>' + esc(file.name) + '</span>' +
-          '</button>';
-      }).join('');
-      el.thumbGrid.querySelectorAll('[data-shot]').forEach(function (button) {
-        button.addEventListener('click', function (event) {
-          if (event.detail >= 2) openViewer(button.dataset.url, button.dataset.shot);
-          else toggleShot(item.id, button.dataset.shot);
-        });
-        button.addEventListener('keydown', function (event) {
-          if (event.key === 'Enter') {
-            event.preventDefault();
-            openViewer(button.dataset.url, button.dataset.shot);
-          }
-        });
-      });
+      el.selectionStatus.textContent = '檢查項 ' + item.id + ' · 對應 ' + matched.length + ' / ' + allFiles.length + ' 張';
+      if (!matched.length) {
+        const hint = '此 topic 共 ' + allFiles.length + ' 張，但無檔名以 #' + idLabel + '- 開頭的截圖。請以 #' + idLabel + '-... 命名後重整。';
+        el.thumbGrid.replaceChildren(emptyMessage(hint));
+        return;
+      }
+      el.thumbGrid.replaceChildren(...matched.map(buildThumbButton));
     }
 
-    function toggleShot(itemId, relPath) {
-      const list = new Set(state.selectedShots[itemId] || []);
-      if (list.has(relPath)) list.delete(relPath);
-      else list.add(relPath);
-      state.selectedShots[itemId] = Array.from(list);
-      renderTasks();
-      renderThumbs();
+    function emptyMessage(text) {
+      const div = document.createElement('div');
+      div.className = 'empty';
+      div.textContent = text;
+      return div;
+    }
+
+    function buildThumbButton(file) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'thumb';
+      button.dataset.shot = file.relPath;
+      button.dataset.url = file.url;
+      const frame = document.createElement('span');
+      frame.className = 'thumb-frame';
+      const img = document.createElement('img');
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.src = file.url;
+      img.alt = file.relPath;
+      frame.appendChild(img);
+      const caption = document.createElement('span');
+      caption.textContent = file.name;
+      button.appendChild(frame);
+      button.appendChild(caption);
+      button.addEventListener('click', function () { openViewer(file.url, file.relPath); });
+      button.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          openViewer(file.url, file.relPath);
+        }
+      });
+      return button;
     }
 
     async function saveAction(itemId, action) {
@@ -1321,7 +1393,6 @@ function renderReviewHtml(): string {
             itemId: itemId,
             action: action,
             note: note,
-            screenshots: state.selectedShots[itemId] || [],
             version: change.version,
           }),
         });
@@ -1353,6 +1424,9 @@ function renderReviewHtml(): string {
     function openViewer(url, label) {
       el.viewerImage.src = url;
       el.viewerImage.alt = label || '截圖';
+      el.viewerLabel.textContent = label || '';
+      el.viewerStage.classList.remove('zoomed');
+      el.viewerStage.scrollTo({ top: 0, left: 0 });
       el.viewer.classList.add('open');
       el.viewerClose.focus();
     }
@@ -1360,6 +1434,7 @@ function renderReviewHtml(): string {
     function closeViewer() {
       el.viewer.classList.remove('open');
       el.viewerImage.removeAttribute('src');
+      el.viewerStage.classList.remove('zoomed');
     }
 
     let shortcutModalPrevFocus = null;
@@ -1440,6 +1515,12 @@ function renderReviewHtml(): string {
     el.viewerClose.addEventListener('click', closeViewer);
     el.viewer.addEventListener('click', function (event) {
       if (event.target === el.viewer) closeViewer();
+    });
+    el.viewerStage.addEventListener('click', function (event) {
+      // 點圖切 1:1 / fit 對調；點圖外 stage 不關（避免誤觸）
+      if (event.target === el.viewerImage || event.target === el.viewerStage) {
+        el.viewerStage.classList.toggle('zoomed');
+      }
     });
     el.shortcutModalClose.addEventListener('click', closeShortcutModal);
     el.shortcutModal.addEventListener('click', function (event) {

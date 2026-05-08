@@ -61,6 +61,63 @@ screenshots/<environment>/<topic>/
 
 換句話說：任何要交付給 user 的截圖路徑必須是 `screenshots/<env>/<topic>/...`，不能漂走。
 
+## 檔名強制規範（hard rule）
+
+人工檢查截圖**MUST** 與 `## 人工檢查` 的 item id 一一對應，讓 `pnpm review:ui` 自動把
+截圖配到正確的 item，使用者不需要手動挑選清單（review GUI 也設計成只顯示對應該 item 的截圖）。
+
+### 命名格式
+
+```text
+#<item-id>[<variant>]-<descriptor>.<ext>
+```
+
+- `<item-id>`：對應 tasks.md `## 人工檢查` 的 canonical id（`#1` parent / `#3.1` scoped）。
+  **MUST** 與 `manual-review.md` 規範的 `#N` / `#N.M` 完全一致。
+- `<variant>`：選填的單一小寫英文字母（`a`–`z`），用於同一 item 的多角度截圖（例如 light/dark
+  mode、不同 viewport、不同子流程節點）。例：`#1a-`、`#3.1b-`。
+- `<descriptor>`：kebab-case 描述，至少含頁面或場景關鍵字。例：`clock-light`、`leave-quotas-mobile`。
+
+### 範例
+
+```text
+✅ #1-clock-light.png             ← item #1，唯一一張
+✅ #1a-clock-light.png            ← item #1，第 a 個變體（明亮模式）
+✅ #1b-clock-dark.png             ← item #1，第 b 個變體（暗色模式）
+✅ #3.1-mobile-petition-list.png  ← scoped item #3.1
+✅ #8.2-salary-positive-negative.png ← parent item #8.2 之外，等於主流程那張
+
+❌ 8.1-home.png                   ← legacy section.item 命名，缺 `#`，請改成 `#1-home.png`
+❌ clock-light.png                ← 沒有 id，review GUI 無法配對
+❌ #1_clock-light.png             ← 用 `_` 而非 `-`，pattern 不認
+❌ #1-Clock_Light.PNG             ← 大小寫混用、底線、kebab 走樣
+```
+
+### review GUI 配對邏輯（補充說明）
+
+`pnpm review:ui` 用 regex `^#?(\d+(?:\.\d+)?)[a-z]?(?=[-._])` 從檔名擷取 id token。
+直接 match item id；對 legacy `<section>.<item>` 命名（例 `8.1-`）會自動 fallback
+配到 parent item id（例 item `#1`），但這只是過渡期 fallback，**新拍截圖一律走
+canonical 格式**。命名漂走的副作用是 review GUI 顯示「對應 0 / N 張」，使用者
+看不到截圖、無法逐項確認。
+
+### 與 manual-review.md 的契約
+
+manual-review.md 規定 item id 一律 `#N` / `#N.M`；本檔規定截圖檔名首段 token
+與該 id 嚴格相等（含 `#` 前綴）。兩條規則一起成立，review GUI 才能真正自動配對。
+
+### 違反時
+
+```
+[Screenshot Naming] 檔名與 item id 不對應
+
+問題：screenshots/<env>/<topic>/<file> 不符合 #<item-id>[<variant>]-<descriptor>.<ext>
+
+修正：
+  - 將檔名首段改成 #<item-id> 或 #<item-id><variant>（單一英文字母）
+  - 同 item 多角度截圖用 a/b/c... 變體後綴，descriptor 區分情境
+```
+
 ## 回傳值陷阱（browser-harness）
 
 `capture_screenshot(path)` 已經把有效 PNG 寫到 `path` 並**回傳 path 字串**（不是 base64 data）。
