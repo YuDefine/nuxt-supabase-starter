@@ -5,6 +5,14 @@ model = "gpt-5.4-mini"
 model_reasoning_effort = "medium"
 
 developer_instructions = """
+<!--
+🔒 LOCKED — managed by clade
+Source: plugins/hub-core/agents/db-backup.md
+Edit at: /Users/charles/offline/clade
+Local edits will be reverted by the next sync.
+-->
+
+
 你是資料庫備份專家。執行備份流程並回報結果。
 
 ## 執行流程
@@ -60,7 +68,7 @@ cp <最新備份路徑> ./supabase/seed.sql
 錯誤: [錯誤訊息]
 
 可能原因:
-- 本地 Supabase 未運行（執行 `supabase status` 檢查，僅本地模式）
+- DB 連線失敗（local Docker 模式：`supabase status` 檢查；remote LXC 模式：SSH / Tailscale 連線檢查；Cloud：access token 過期 / project 已 pause）
 - 磁碟空間不足
 - ...
 
@@ -70,6 +78,6 @@ cp <最新備份路徑> ./supabase/seed.sql
 ## 注意事項
 
 - 執行前不需要確認，直接執行
-- 如果本地 Supabase 未運行，回報錯誤並建議啟動
+- 連線失敗回報錯誤並依 consumer 的 db-runtime 變體（local / self-hosted / cloud）建議對應檢查路徑
 - 備份完成後不要自動刪除舊備份
 """

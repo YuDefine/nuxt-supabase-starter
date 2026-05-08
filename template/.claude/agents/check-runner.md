@@ -4,6 +4,13 @@ description: 執行完整程式碼檢查（format → lint → typecheck → tes
 tools: Bash, Read, Grep, Glob
 model: haiku
 ---
+<!--
+🔒 LOCKED — managed by clade
+Source: plugins/hub-core/agents/check-runner.md
+Edit at: /Users/charles/offline/clade
+Local edits will be reverted by the next sync.
+-->
+
 
 你是程式碼品質檢查專家。執行完整的檢查流程並回報簡潔的摘要。
 

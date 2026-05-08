@@ -282,6 +282,98 @@ TDD cycle:
 4. THEN claim complete
 ```
 
+## Anti-Pattern 6: Boundary Values Not Tested
+
+**The violation:**
+
+```typescript
+// Schema accepts optional return_notes
+const schema = z.object({
+  return_notes: z.string().trim().max(500).optional(),
+})
+
+// ❌ Test only happy paths
+test('manual return with notes', () => {
+  expect(schema.parse({ return_notes: '主管代為結案' })).toEqual({...})
+})
+
+test('manual return without notes', () => {
+  expect(schema.parse({ return_notes: undefined })).toEqual({})
+})
+
+// Both pass. Implementation ships. Then production:
+// Client sends { return_notes: null } → 400 ZodError, dialog dies on submit.
+```
+
+**Why this is wrong:**
+
+- **`.optional()` rejects null** — Zod's `.optional()` means `string | undefined`, NOT `string | null`. JSON serialization preserves null. Forms commonly emit `null` for "user cleared the field" or "input was empty."
+- **Test only covered the values the implementer thought of** — `undefined` and a string. The actual production payload is `null` (because the dialog code does `value.trim() || null`).
+- **The boundary that ships to production is the one the test forgot.**
+
+This generalizes beyond null: zero, empty string, empty array, NaN, Infinity, max-length+1, unicode, leading/trailing whitespace, mixed-case enums.
+
+**The fix:**
+
+```typescript
+// 1. Schema accepts the actual production payload
+const schema = z.object({
+  return_notes: z.string().trim().max(500).nullish(), // .nullable().optional()
+})
+
+// 2. Test covers every boundary value that crosses the wire
+describe('return_notes boundaries', () => {
+  test.each([
+    ['undefined (field omitted)',     undefined,           true],
+    ['null (form cleared)',           null,                true],   // ← the one that bit us
+    ['empty string',                  '',                  true],
+    ['whitespace only',               '   ',               true],
+    ['valid string',                  '主管代為結案',       true],
+    ['max length',                    'x'.repeat(500),     true],
+    ['over max length',               'x'.repeat(501),     false],  // expect rejection
+  ])('%s', (_label, input, shouldPass) => {
+    const result = schema.safeParse({ return_notes: input })
+    expect(result.success).toBe(shouldPass)
+  })
+})
+```
+
+### Gate Function
+
+```
+BEFORE writing the test for any field that crosses a wire (HTTP body, form payload, query param):
+  Enumerate the boundary values:
+    - null
+    - undefined
+    - empty string ('')
+    - whitespace only ('   ')
+    - zero / negative
+    - max length / max length + 1
+    - empty array / array of one / array of max+1
+    - NaN, Infinity (for numbers)
+    - case sensitivity (for enums)
+    - unicode / emoji / RTL chars (for strings displayed to users)
+
+  For each boundary the schema is supposed to ACCEPT → write a passing test
+  For each boundary the schema is supposed to REJECT → write a test asserting rejection
+
+  IF you cannot enumerate what the schema should do at each boundary:
+    STOP - you don't have a complete spec
+    Pin down the contract before writing the implementation
+
+  Trace the actual production payload:
+    - What does the form / dialog / client code emit when the field is empty?
+    - Is it `null`, `undefined`, `''`, or omitted entirely?
+    - Read the client code, don't guess.
+```
+
+### Red flags
+
+- Test file only contains "happy path" + "missing field" cases for an optional input
+- Schema uses `.optional()` for fields the form clears to `null`
+- "It works on my machine" but breaks in another environment that uses different defaults
+- Test passes; manual QA submits the form and 400s
+
 ## When Mocks Become Too Complex
 
 **Warning signs:**
@@ -313,6 +405,7 @@ TDD cycle:
 | Mock without understanding      | Understand dependencies first, mock minimally |
 | Incomplete mocks                | Mirror real API completely                    |
 | Tests as afterthought           | TDD - tests first                             |
+| Boundary values not tested      | Enumerate null/empty/zero/max+1 boundaries; trace actual client payload |
 | Over-complex mocks              | Consider integration tests                    |
 
 ## Red Flags
@@ -323,6 +416,8 @@ TDD cycle:
 - Test fails when you remove mock
 - Can't explain why mock is needed
 - Mocking "just to be safe"
+- Optional input field test only covers `undefined` (forgets `null` and empty string)
+- Schema uses `.optional()` for a field the form sends as `null`
 
 ## The Bottom Line
 

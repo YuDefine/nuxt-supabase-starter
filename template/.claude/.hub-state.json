@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-07T16:33:19.625Z",
+  "syncedAt": "2026-05-08T15:42:59.043Z",
   "checksums": {
     "rules/agent-routing.md": "1e79a3cccb41c646",
     "rules/audit-pattern.md": "1d72e5274498727f",
@@ -11,13 +11,14 @@
     "rules/handoff.md": "bc09773c20e47e63",
     "rules/knowledge-and-decisions.md": "fb1944f41a0e28d9",
     "rules/logging.md": "c9f3ebd8aa048e46",
-    "rules/manual-review.md": "2a3e467fac3d5268",
+    "rules/manual-review.md": "7d485dc07e77ec74",
     "rules/proactive-skills.md": "0c217c148d00bf23",
     "rules/review-tiers.md": "f35387b124295192",
     "rules/scope-discipline.md": "5ad04df6c9b5e9c5",
     "rules/screenshot-strategy.md": "071149263a61ae75",
     "rules/session-tasks.md": "c9abcabc9caa41c4",
-    "rules/testing-anti-patterns.md": "694438ff8d975ab3",
+    "rules/test-scripts.md": "f2279b3ea0afb2e2",
+    "rules/testing-anti-patterns.md": "29653c5a67a86be5",
     "rules/truth-layers.md": "cba05246f0c06769",
     "rules/ux-completeness.md": "a590ef579f066d69",
     "rules/work-claims.md": "8c09518cea38198e",
@@ -37,7 +38,7 @@
     "scripts/commit-lock.mjs": "f81c79df484ce5db",
     "skills/spectra/SKILL.md": "e4e45b224e8eaa6f",
     "skills/spectra-apply/SKILL.md": "0b34c8e86d712530",
-    "skills/spectra-archive/SKILL.md": "51106219157d6c54",
+    "skills/spectra-archive/SKILL.md": "38bd6194089d06e3",
     "skills/spectra-ask/SKILL.md": "b3f64a6516d00855",
     "skills/spectra-audit/SKILL.md": "8f5778710f1bc3e3",
     "skills/spectra-commit/SKILL.md": "2be9a744540b4399",
@@ -47,6 +48,11 @@
     "skills/spectra-propose/SKILL.md": "9da4b7a3a0566d57",
     "commands/commit.md": "2758b3b69092ee07",
     "commands/db-migration.md": "e5c82dd3565bce47",
-    "commands/doc-sync.md": "cdad8d95f0d048bf"
+    "commands/doc-sync.md": "cdad8d95f0d048bf",
+    "agents/check-runner.md": "e6fb8dac01cc591c",
+    "agents/code-review.md": "df6d0adb93b11d63",
+    "agents/db-backup.md": "fd21fd01389c5d29",
+    "agents/references/project-review-rules.md": "87cf9a505f823518",
+    "agents/screenshot-review.md": "6a86e634a0587dbe"
   }
 }

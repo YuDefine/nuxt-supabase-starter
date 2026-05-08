@@ -1,31 +1,31 @@
-name: "Discord Deploy Notify"
-description: "Post a Discord embed summarizing a deploy workflow run, with consistent color/icon/language conventions across YuDefine consumer repos."
-author: "YuDefine/clade"
+name: 'Discord Deploy Notify'
+description: 'Post a Discord embed summarizing a deploy workflow run, with consistent color/icon/language conventions across YuDefine consumer repos.'
+author: 'YuDefine/clade'
 
 inputs:
   webhook_url:
-    description: "Discord webhook URL. Empty value causes the action to skip with a warning (does not fail the calling job)."
+    description: 'Discord webhook URL. Empty value causes the action to skip with a warning (does not fail the calling job).'
     required: true
   title:
-    description: "Embed title prefix."
+    description: 'Embed title prefix.'
     required: false
-    default: "Deploy"
+    default: 'Deploy'
   target:
-    description: "Optional environment label (e.g. production, staging) appended to the title in parentheses."
+    description: 'Optional environment label (e.g. production, staging) appended to the title in parentheses.'
     required: false
-    default: ""
+    default: ''
   results:
-    description: "JSON array of {name, result} per upstream job. result must be one of success|failure|cancelled|skipped."
+    description: 'JSON array of {name, result} per upstream job. result must be one of success|failure|cancelled|skipped.'
     required: false
-    default: "[]"
+    default: '[]'
   language:
     description: 'Title-string language. Must be "zh" or "en".'
     required: false
-    default: "zh"
+    default: 'zh'
   tag:
-    description: "Optional tag/version label appended to the title. Falls back to $GITHUB_REF_NAME when empty."
+    description: 'Optional tag/version label appended to the title. Falls back to $GITHUB_REF_NAME when empty.'
     required: false
-    default: ""
+    default: ''
 
 runs:
   using: composite

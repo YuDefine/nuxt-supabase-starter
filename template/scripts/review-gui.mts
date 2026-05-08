@@ -287,7 +287,8 @@ async function loadHono(): Promise<any> {
       '[review:ui] Missing Hono runtime dependency.\n' +
         'Install consumer dev dependencies with: pnpm add -D hono tsx\n' +
         'Then run: pnpm review:ui\n\n' +
-        `Original error: ${message}`
+        `Original error: ${message}`,
+      { cause: err }
     )
   }
 }
@@ -346,7 +347,7 @@ async function listPendingChanges(repoRoot: string): Promise<ChangeSummary[]> {
     if (summary) summaries.push(summary)
   }
 
-  return summaries.sort((a, b) => {
+  return summaries.toSorted((a, b) => {
     if (a.pending !== b.pending) return b.pending - a.pending
     if (a.malformed !== b.malformed) return b.malformed - a.malformed
     return a.name.localeCompare(b.name)
@@ -399,7 +400,7 @@ async function readChangeDetail(repoRoot: string, change: string): Promise<Chang
 
 function resolveChangeTasksPath(repoRoot: string, change: string): string {
   if (!/^[A-Za-z0-9._-]+$/.test(change) || change === 'archive') {
-    throw new HttpError(400, 'Invalid change name')
+    throw new HttpError(400, '無效的 change 名稱')
   }
   const tasksPath = join(repoRoot, 'openspec', 'changes', change, 'tasks.md')
   if (!existsSync(tasksPath)) throw new HttpError(404, `tasks.md not found for change: ${change}`)
@@ -528,7 +529,7 @@ async function listScreenshotPools(repoRoot: string): Promise<ScreenshotTopic[]>
     }
   }
 
-  return pools.sort((a, b) => `${a.env}/${a.topic}`.localeCompare(`${b.env}/${b.topic}`))
+  return pools.toSorted((a, b) => `${a.env}/${a.topic}`.localeCompare(`${b.env}/${b.topic}`))
 }
 
 async function collectImages(absDir: string, relRoot: string): Promise<ScreenshotFile[]> {
@@ -550,22 +551,22 @@ async function collectImages(absDir: string, relRoot: string): Promise<Screensho
       name: entry.name,
     })
   }
-  return files.sort((a, b) => a.relPath.localeCompare(b.relPath))
+  return files.toSorted((a, b) => a.relPath.localeCompare(b.relPath))
 }
 
 async function serveScreenshot(repoRoot: string, c: any): Promise<any> {
   const rawPath = decodeURIComponent(c.req.path.replace(/^\/api\/screenshot\//, ''))
   if (!rawPath.startsWith('screenshots/'))
-    throw new HttpError(400, 'Screenshot path must start with screenshots/')
+    throw new HttpError(400, '截圖路徑必須以 screenshots/ 開頭')
   const normalized = normalize(rawPath)
   if (normalized.startsWith('..') || normalized.includes(`${sep}..${sep}`))
-    throw new HttpError(400, 'Invalid screenshot path')
+    throw new HttpError(400, '無效的截圖路徑')
   const abs = resolve(repoRoot, normalized)
   const screenshotsRoot = resolve(repoRoot, 'screenshots')
-  if (!abs.startsWith(screenshotsRoot + sep)) throw new HttpError(400, 'Invalid screenshot path')
-  if (!existsSync(abs)) throw new HttpError(404, 'Screenshot not found')
+  if (!abs.startsWith(screenshotsRoot + sep)) throw new HttpError(400, '無效的截圖路徑')
+  if (!existsSync(abs)) throw new HttpError(404, '截圖不存在')
   const ext = abs.slice(abs.lastIndexOf('.')).toLowerCase()
-  if (!IMAGE_EXTS.has(ext)) throw new HttpError(415, 'Unsupported screenshot file type')
+  if (!IMAGE_EXTS.has(ext)) throw new HttpError(415, '不支援的截圖檔案類型')
   return new Response(Readable.toWeb(createReadStream(abs)) as any, {
     headers: {
       'content-type': imageMime(ext),
@@ -588,11 +589,11 @@ function toPosix(path: string): string {
 
 function renderReviewHtml(): string {
   return `<!doctype html>
-<html lang="en">
+<html lang="zh-Hant-TW">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Manual Review</title>
+  <title>人工檢查</title>
   <style>
     :root {
       color-scheme: light;
@@ -910,36 +911,171 @@ function renderReviewHtml(): string {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
+
+    /* ── onboarding 面板 ── */
+    .onboard {
+      margin: 0 0 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+    .onboard summary {
+      cursor: pointer;
+      font-weight: 600;
+      list-style: none;
+      user-select: none;
+    }
+    .onboard summary::-webkit-details-marker { display: none; }
+    .onboard summary::before {
+      content: '▶';
+      display: inline-block;
+      width: 14px;
+      font-size: 10px;
+      transition: transform .15s;
+      color: var(--accent);
+    }
+    .onboard[open] summary::before { transform: rotate(90deg); }
+    .onboard-steps {
+      margin: 8px 0 0;
+      padding-left: 18px;
+      line-height: 1.7;
+    }
+    .onboard-steps li { margin-bottom: 4px; }
+    .onboard-actions {
+      margin: 6px 0 0;
+      padding-left: 0;
+      list-style: none;
+      display: grid;
+      gap: 3px;
+    }
+    .onboard-hint {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .kbd {
+      display: inline-block;
+      min-width: 18px;
+      padding: 0 6px;
+      border: 1px solid var(--line);
+      border-bottom-width: 2px;
+      border-radius: 4px;
+      background: var(--panel-2);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+      font-weight: 600;
+      text-align: center;
+      line-height: 18px;
+      color: var(--ink);
+    }
+
+    /* ── 快捷鍵 modal ── */
+    .shortcut-modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(30, 37, 33, .55);
+      z-index: 1000;
+    }
+    .shortcut-modal.open { display: flex; }
+    .shortcut-modal-inner {
+      background: var(--panel);
+      border-radius: 12px;
+      padding: 22px 26px;
+      min-width: 320px;
+      max-width: 480px;
+      box-shadow: var(--shadow);
+    }
+    .shortcut-modal-inner h3 {
+      margin: 0 0 14px;
+      font-size: 18px;
+    }
+    .shortcut-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+    .shortcut-table td {
+      padding: 4px 0;
+      vertical-align: top;
+    }
+    .shortcut-table td:first-child {
+      width: 130px;
+      white-space: nowrap;
+    }
+    #shortcutModalClose {
+      margin-top: 16px;
+      width: 100%;
+    }
+
   </style>
 </head>
 <body>
   <div class="app">
     <aside class="sidebar">
-      <h1>Manual Review</h1>
-      <div id="changeStatus" class="status">Loading changes...</div>
+      <h1>人工檢查</h1>
+      <details id="onboardPanel" class="onboard" open>
+        <summary>怎麼用</summary>
+        <ol class="onboard-steps">
+          <li>從下方清單選一個 <b>change</b>（每個 change 顯示 metrics：待檢查、已通過、格式錯誤、截圖 topic 數）</li>
+          <li>中間是檢查項清單，逐項決定：
+            <ul class="onboard-actions">
+              <li><span class="kbd">O</span> ✓ 通過</li>
+              <li><span class="kbd">I</span> ⚠ 有問題（必填說明）</li>
+              <li><span class="kbd">S</span> ⤵ 跳過（可選填）</li>
+            </ul>
+          </li>
+          <li>右側是截圖：先點檢查項，再點縮圖把截圖綁到該項</li>
+          <li>雙擊縮圖或按 <span class="kbd">Enter</span> 放大；<span class="kbd">Esc</span> 關閉</li>
+        </ol>
+        <p class="onboard-hint">按 <span class="kbd">?</span> 顯示完整鍵盤快捷鍵</p>
+      </details>
+      <div id="changeStatus" class="status">載入 change 清單中…</div>
       <div id="changeList" class="change-list"></div>
     </aside>
     <main>
       <section class="review-pane">
         <div class="toolbar">
-          <h2 id="currentTitle">Select a change</h2>
-          <button id="reloadButton" type="button">Reload</button>
+          <h2 id="currentTitle">選擇一個 change 開始</h2>
+          <button id="reloadButton" type="button" title="重新載入目前 change">重新載入</button>
         </div>
         <div id="banner" class="banner"></div>
         <div id="taskList" class="task-list"></div>
       </section>
       <aside class="screenshot-pane">
-        <h2>Screenshots</h2>
-        <select id="topicSelect" class="topic-select" aria-label="Screenshot topic"></select>
+        <h2>截圖</h2>
+        <select id="topicSelect" class="topic-select" aria-label="截圖 topic"></select>
         <div id="selectionStatus" class="status"></div>
         <div id="thumbGrid" class="thumb-grid"></div>
       </aside>
     </main>
   </div>
-  <div id="viewer" class="viewer" role="dialog" aria-modal="true" aria-label="Full-size screenshot">
+  <div id="viewer" class="viewer" role="dialog" aria-modal="true" aria-label="截圖大圖檢視">
     <div class="viewer-inner">
-      <button id="viewerClose" type="button">Close</button>
+      <button id="viewerClose" type="button">關閉 (Esc)</button>
       <img id="viewerImage" alt="">
+    </div>
+  </div>
+  <div id="shortcutModal" class="shortcut-modal" role="dialog" aria-modal="true" aria-label="鍵盤快捷鍵">
+    <div class="shortcut-modal-inner">
+      <h3>鍵盤快捷鍵</h3>
+      <table class="shortcut-table">
+        <tbody>
+          <tr><td><span class="kbd">J</span> / <span class="kbd">K</span></td><td>下一個 / 上一個檢查項</td></tr>
+          <tr><td><span class="kbd">O</span></td><td>標記為 ✓ 通過</td></tr>
+          <tr><td><span class="kbd">I</span></td><td>標記為 ⚠ 有問題</td></tr>
+          <tr><td><span class="kbd">S</span></td><td>標記為 ⤵ 跳過</td></tr>
+          <tr><td><span class="kbd">Enter</span></td><td>放大第一張截圖</td></tr>
+          <tr><td><span class="kbd">Esc</span></td><td>關閉大圖 / 此視窗</td></tr>
+          <tr><td><span class="kbd">?</span></td><td>顯示這個視窗</td></tr>
+        </tbody>
+      </table>
+      <button id="shortcutModalClose" type="button">關閉 (Esc)</button>
     </div>
   </div>
   <script>
@@ -963,6 +1099,8 @@ function renderReviewHtml(): string {
       viewer: document.getElementById('viewer'),
       viewerImage: document.getElementById('viewerImage'),
       viewerClose: document.getElementById('viewerClose'),
+      shortcutModal: document.getElementById('shortcutModal'),
+      shortcutModalClose: document.getElementById('shortcutModalClose'),
     };
 
     function esc(value) {
@@ -993,8 +1131,8 @@ function renderReviewHtml(): string {
       const data = await api('/api/changes');
       state.changes = data.changes || [];
       el.changeStatus.textContent = state.changes.length
-        ? state.changes.length + ' changes with manual review'
-        : 'No pending manual-review sections';
+        ? state.changes.length + ' 個 change 含人工檢查區塊'
+        : '目前沒有待處理的人工檢查項目';
       renderChanges();
       if (!state.current && state.changes[0]) await loadChange(state.changes[0].name);
     }
@@ -1005,10 +1143,10 @@ function renderReviewHtml(): string {
         return '<button type="button" class="change-row" data-change="' + esc(change.name) + '" aria-current="' + (current ? 'true' : 'false') + '">' +
           '<span class="change-name">' + esc(change.name) + '</span>' +
           '<span class="metrics">' +
-          '<span class="metric">' + change.pending + ' pending</span>' +
-          '<span class="metric">' + change.checked + '/' + change.total + ' checked</span>' +
-          '<span class="metric' + (change.malformed ? ' bad' : '') + '">' + change.malformed + ' malformed</span>' +
-          '<span class="metric">' + change.screenshotTopicCount + ' topics</span>' +
+          '<span class="metric" title="尚未檢查的項目數">' + change.pending + ' 待檢查</span>' +
+          '<span class="metric" title="已通過 / 總項目數">' + change.checked + '/' + change.total + ' 已通過</span>' +
+          '<span class="metric' + (change.malformed ? ' bad' : '') + '" title="tasks.md 格式錯誤行數（需先修復才能寫入）">' + change.malformed + ' 格式錯誤</span>' +
+          '<span class="metric" title="對應的截圖資料夾數（screenshots/&lt;env&gt;/&lt;topic&gt;/）">' + change.screenshotTopicCount + ' 個截圖 topic</span>' +
           '</span>' +
           '</button>';
       }).join('');
@@ -1033,7 +1171,7 @@ function renderReviewHtml(): string {
       if (!change) return;
       el.currentTitle.textContent = change.name;
       if (change.malformedLines.length) {
-        showBanner('Malformed manual-review schema blocks writes. Fix the listed tasks.md lines first.', 'error');
+        showBanner('人工檢查格式錯誤，需先修正下列 tasks.md 行才能寫入', 'error');
       }
       renderTasks();
       renderTopics();
@@ -1043,15 +1181,15 @@ function renderReviewHtml(): string {
     function renderTasks() {
       const change = state.current;
       if (!change) {
-        el.taskList.innerHTML = '<div class="empty">Select a change to begin.</div>';
+        el.taskList.innerHTML = '<div class="empty">← 從左側選一個 change 開始檢查</div>';
         return;
       }
       if (!change.items.length && !change.malformedLines.length) {
-        el.taskList.innerHTML = '<div class="empty">This change has a manual-review heading but no parseable items.</div>';
+        el.taskList.innerHTML = '<div class="empty">此 change 有 ## 人工檢查 區塊，但沒有可解析的項目</div>';
         return;
       }
       const malformed = change.malformedLines.map(function (line) {
-        return '<div class="task-item"><div class="task-head"><span class="task-id">Line ' + line.lineNumber + '</span><span class="task-desc">' + esc(line.raw) + '</span><span class="task-state">malformed</span></div></div>';
+        return '<div class="task-item"><div class="task-head"><span class="task-id">第 ' + line.lineNumber + ' 行</span><span class="task-desc">' + esc(line.raw) + '</span><span class="task-state">格式錯誤</span></div></div>';
       }).join('');
       const items = change.items.map(function (item, index) {
         const active = index === state.activeIndex;
@@ -1060,13 +1198,13 @@ function renderReviewHtml(): string {
           '<div class="task-head">' +
           '<span class="task-id">' + esc(item.id) + '</span>' +
           '<span class="task-desc">' + esc(item.description) + '</span>' +
-          '<span class="task-state">' + (item.checked ? 'checked' : 'pending') + (selectedCount ? ' · ' + selectedCount + ' screenshots' : '') + '</span>' +
+          '<span class="task-state">' + (item.checked ? '已通過' : '待檢查') + (selectedCount ? ' · ' + selectedCount + ' 張截圖' : '') + '</span>' +
           '</div>' +
-          '<textarea class="note" data-note="' + esc(item.id) + '" placeholder="Issue or skip note"></textarea>' +
+          '<textarea class="note" data-note="' + esc(item.id) + '" placeholder="填寫說明（「有問題」必填、「跳過」可選填）"></textarea>' +
           '<div class="actions">' +
-          '<button class="ok" data-action="ok" data-id="' + esc(item.id) + '" type="button">OK</button>' +
-          '<button class="issue" data-action="issue" data-id="' + esc(item.id) + '" type="button">Issue</button>' +
-          '<button class="skip" data-action="skip" data-id="' + esc(item.id) + '" type="button">SKIP</button>' +
+          '<button class="ok" data-action="ok" data-id="' + esc(item.id) + '" type="button" title="標記此項通過 (O)">✓ 通過</button>' +
+          '<button class="issue" data-action="issue" data-id="' + esc(item.id) + '" type="button" title="標記此項有問題，需填寫說明 (I)">⚠ 有問題</button>' +
+          '<button class="skip" data-action="skip" data-id="' + esc(item.id) + '" type="button" title="跳過此項，可選填原因 (S)">⤵ 跳過</button>' +
           '</div>' +
           '</article>';
       }).join('');
@@ -1091,7 +1229,7 @@ function renderReviewHtml(): string {
     function renderTopics() {
       const pools = state.current.screenshotPools || [];
       if (!pools.length) {
-        el.topicSelect.innerHTML = '<option value="">No screenshot pools</option>';
+        el.topicSelect.innerHTML = '<option value="">此 change 尚無截圖資料夾</option>';
         el.topicSelect.disabled = true;
         return;
       }
@@ -1120,17 +1258,17 @@ function renderReviewHtml(): string {
       const item = activeItem();
       const pool = activePool();
       if (!item) {
-        el.selectionStatus.textContent = 'No active item';
-        el.thumbGrid.innerHTML = '<div class="empty">Select a review item.</div>';
+        el.selectionStatus.textContent = '尚未選擇檢查項';
+        el.thumbGrid.innerHTML = '<div class="empty">先在中間點一個檢查項，這裡會顯示對應截圖</div>';
         return;
       }
       if (!pool || !pool.files.length) {
-        el.selectionStatus.textContent = 'Item ' + item.id + ' accepts text-only review';
-        el.thumbGrid.innerHTML = '<div class="empty">No screenshots found under screenshots/&lt;env&gt;/&lt;topic&gt;/.</div>';
+        el.selectionStatus.textContent = '檢查項 ' + item.id + ' 為純文字檢查（不需截圖）';
+        el.thumbGrid.innerHTML = '<div class="empty">此 change 還沒有對應截圖（screenshots/&lt;env&gt;/&lt;topic&gt;/）</div>';
         return;
       }
       const selected = new Set(state.selectedShots[item.id] || []);
-      el.selectionStatus.textContent = 'Item ' + item.id + ' · ' + selected.size + ' selected';
+      el.selectionStatus.textContent = '檢查項 ' + item.id + ' · 已選 ' + selected.size + ' 張';
       el.thumbGrid.innerHTML = pool.files.map(function (file) {
         const isSelected = selected.has(file.relPath);
         return '<button type="button" class="thumb' + (isSelected ? ' selected' : '') + '" data-shot="' + esc(file.relPath) + '" data-url="' + esc(file.url) + '">' +
@@ -1165,13 +1303,13 @@ function renderReviewHtml(): string {
       const change = state.current;
       if (!change) return;
       if (change.malformedLines.length) {
-        showBanner('Fix malformed schema before writing.', 'error');
+        showBanner('寫入前需先修正格式錯誤', 'error');
         return;
       }
       const noteNode = el.taskList.querySelector('[data-note="' + CSS.escape(itemId) + '"]');
       const note = noteNode ? noteNode.value : '';
       if (action === 'issue' && !note.trim()) {
-        showBanner('Issue requires a short note.', 'error');
+        showBanner('「有問題」需要簡短說明', 'error');
         if (noteNode) noteNode.focus();
         return;
       }
@@ -1189,15 +1327,15 @@ function renderReviewHtml(): string {
         });
         state.current = data.change;
         if (data.archive && data.archive.status === 'success') {
-          showBanner('Saved. Review archive completed.', '');
+          showBanner('已儲存，Review archive 完成', '');
         } else if (data.archive && data.archive.status === 'failed') {
-          showBanner('Saved. Review archive failed: ' + (data.archive.message || data.archive.stderr || 'manual recovery needed'), 'error');
+          showBanner('已儲存，但 Review archive 失敗：' + (data.archive.message || data.archive.stderr || '需手動處理'), 'error');
         } else {
-          showBanner('Saved ' + itemId + ' as ' + action + '.', '');
+          showBanner('已將 ' + itemId + ' 標記為 ' + action, '');
         }
         renderCurrent();
       } catch (err) {
-        if (err.status === 409) showBanner('Write conflict. Reload the change before saving.', 'error');
+        if (err.status === 409) showBanner('寫入衝突，請先重新載入再儲存', 'error');
         else showBanner(err.message || String(err), 'error');
       }
     }
@@ -1214,7 +1352,7 @@ function renderReviewHtml(): string {
 
     function openViewer(url, label) {
       el.viewerImage.src = url;
-      el.viewerImage.alt = label || 'Screenshot';
+      el.viewerImage.alt = label || '截圖';
       el.viewer.classList.add('open');
       el.viewerClose.focus();
     }
@@ -1224,6 +1362,38 @@ function renderReviewHtml(): string {
       el.viewerImage.removeAttribute('src');
     }
 
+    let shortcutModalPrevFocus = null;
+    function openShortcutModal() {
+      shortcutModalPrevFocus = document.activeElement;
+      // 把 modal 以外的所有頂層 children inert，防 keyboard tab 到下方 review action buttons
+      const root = document.body;
+      for (const child of Array.from(root.children)) {
+        if (child !== el.shortcutModal && !child.hasAttribute('inert')) {
+          child.setAttribute('inert', '');
+          child.dataset._inertByModal = '1';
+        }
+      }
+      el.shortcutModal.classList.add('open');
+      el.shortcutModalClose.focus();
+    }
+
+    function closeShortcutModal() {
+      el.shortcutModal.classList.remove('open');
+      // 還原 inert
+      const root = document.body;
+      for (const child of Array.from(root.children)) {
+        if (child.dataset._inertByModal === '1') {
+          child.removeAttribute('inert');
+          delete child.dataset._inertByModal;
+        }
+      }
+      // 還原 focus 到打開前的元素
+      if (shortcutModalPrevFocus && typeof shortcutModalPrevFocus.focus === 'function') {
+        shortcutModalPrevFocus.focus();
+      }
+      shortcutModalPrevFocus = null;
+    }
+
     document.addEventListener('keydown', function (event) {
       if (el.viewer.classList.contains('open')) {
         if (event.key === 'Escape') {
@@ -1231,6 +1401,21 @@ function renderReviewHtml(): string {
           closeViewer();
         }
         return;
+      }
+      if (el.shortcutModal.classList.contains('open')) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          closeShortcutModal();
+        }
+        return;
+      }
+      if (event.key === '?' || (event.shiftKey && event.key === '/')) {
+        const tag = document.activeElement ? document.activeElement.tagName : '';
+        if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) {
+          event.preventDefault();
+          openShortcutModal();
+          return;
+        }
       }
       const tag = document.activeElement ? document.activeElement.tagName : '';
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
@@ -1256,10 +1441,14 @@ function renderReviewHtml(): string {
     el.viewer.addEventListener('click', function (event) {
       if (event.target === el.viewer) closeViewer();
     });
+    el.shortcutModalClose.addEventListener('click', closeShortcutModal);
+    el.shortcutModal.addEventListener('click', function (event) {
+      if (event.target === el.shortcutModal) closeShortcutModal();
+    });
 
     loadChanges().catch(function (err) {
       showBanner(err.message || String(err), 'error');
-      el.changeStatus.textContent = 'Unable to load changes';
+      el.changeStatus.textContent = '無法載入 change 清單';
     });
   </script>
 </body>

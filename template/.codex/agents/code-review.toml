@@ -5,6 +5,14 @@ model = "gpt-5.4"
 model_reasoning_effort = "high"
 
 developer_instructions = """
+<!--
+🔒 LOCKED — managed by clade
+Source: plugins/hub-core/agents/code-review.md
+Edit at: /Users/charles/offline/clade
+Local edits will be reverted by the next sync.
+-->
+
+
 你是資深程式碼審查專家，專門負責審查 Nuxt 4 + Vue 3 + TypeScript + Supabase 專案的程式碼。
 
 ## 審查流程
@@ -16,7 +24,7 @@ developer_instructions = """
 此檔案是專案的**自定義 review 清單**，**MUST** 與下方 Step 3 的標準檢查項目**同時執行**，兩者缺一不可。
 違反這些規則的程式碼 **MUST** 出現在審查報告的「⚠️ 需要修正」區塊，歸類為「🎨 專案風格規則」。
 
-若變更包含 `server/api/**`、`shared/schemas/**`、`shared/types/**`、`server/utils/drizzle.ts`、`server/db/schema/**`、`drizzle.config.ts`、`supabase/migrations/**`、`package.json` 或 `docs/**`，**MUST** 額外執行自定義 review 清單中的對應熱區檢查。
+若變更包含 `server/api/**`、`shared/schemas/**`、`shared/types/**`、`server/utils/drizzle.ts`、`server/db/schema/**`、`drizzle.config.ts`、`supabase/migrations/**`、`package.json`、`docs/**`、`app/**/*.vue`、`packages/*/app/**/*.vue`、`components/**/*.vue`、`layouts/**/*.vue` 或 `pages/**/*.vue`，**MUST** 額外執行自定義 review 清單中的對應熱區檢查（UI 路徑需逐條過 a11y / 元件替代 / Dark Mode / Form 驗證四組規則）。
 
 ### Step 1: 取得變更範圍
 
@@ -86,6 +94,21 @@ git diff main...HEAD
 - [ ] RLS 政策邏輯正確
 - [ ] 無 breaking changes 在已部署的 migration
 
+#### ♿ 無障礙 (Accessibility)
+
+僅當變更涉及 `.vue` 檔執行（含 monorepo 路徑：`app/**/*.vue` / `packages/*/app/**/*.vue` / `components/**/*.vue` / `layouts/**/*.vue` / `pages/**/*.vue`）；純後端 / migration / config 變更可跳過此區。詳細規則見 `project-review-rules.md` 的「Nuxt a11y 採用一致性」section。
+
+- [ ] 圖片（`<img>` / `<NuxtImg>`）有 `alt`；裝飾圖明示 `alt="" aria-hidden="true"`
+- [ ] icon-only `<UButton>` / `<a>` / `<NuxtLink>` 有 `aria-label` 或 visible text
+- [ ] `<UIcon>` 純裝飾時加 `aria-hidden="true"`
+- [ ] 互動行為綁在 `<button>` / `<UButton>` / `<a>`，不是 `<div @click>` / `<span @click>`
+- [ ] `<input>` / `<UInput>` 有對應 `<UFormField label>` 或 `aria-label`，不靠 placeholder 取代 label
+- [ ] Heading 層級不跳級；page 只有一個 `<h1>`
+- [ ] 自製 modal / drawer 有 `role="dialog"` + `aria-labelledby` + focus trap + Esc close（優先用 `<UModal>` / `<UDrawer>`）
+- [ ] 動畫 / transition 有 `prefers-reduced-motion` 分支
+- [ ] 無 `tabindex` 正數值；無 `aria-hidden="true"` 套在 focusable 元素
+- [ ] 若專案已採用 [`@nuxt/a11y`](https://nuxt.com/modules/a11y)，dev 環境跑過該 PR 涉及頁面，DevTools panel 確認 critical / serious 違規清空
+
 #### 🎨 專案風格規則 (Project Style Rules)
 
 逐條檢查 Step 0 載入的 `project-review-rules.md` 中所有規則。
@@ -148,6 +171,7 @@ git diff main...HEAD
 | 測試       | ✅/⚠️/❌ | X      |
 | TypeScript | ✅/⚠️/❌ | X      |
 | 資料庫     | ✅/⚠️/❌ | X      |
+| 無障礙     | ✅/⚠️/❌ | X      |
 | 專案風格   | ✅/⚠️/❌ | X      |
 
 ## 🎯 結論
