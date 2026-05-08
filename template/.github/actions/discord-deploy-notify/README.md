@@ -19,19 +19,30 @@ To update the action: edit in clade, bump clade version (`node scripts/publish.m
 ## Usage in a consumer workflow
 
 ```yaml
-- uses: ./.github/actions/discord-deploy-notify
-  with:
-    webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-    target: production
-    language: zh
-    results: |
-      [
-        {"name":"CI","result":"${{ needs.ci.result }}"},
-        {"name":"Deploy","result":"${{ needs.deploy.result }}"}
-      ]
+notify-deploy:
+  if: always()
+  needs: [ci, deploy]
+  runs-on: ubuntu-latest
+  steps:
+    # ⚠️ Required: vendored local actions need the repo checked out before they resolve.
+    # Without this step the runner errors out with:
+    #   ##[error]Can't find 'action.yml'... Did you forget to run actions/checkout
+    #   before running your local action?
+    - uses: actions/checkout@v5
+
+    - uses: ./.github/actions/discord-deploy-notify
+      with:
+        webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        target: production
+        language: zh
+        results: |
+          [
+            {"name":"CI","result":"${{ needs.ci.result }}"},
+            {"name":"Deploy","result":"${{ needs.deploy.result }}"}
+          ]
 ```
 
-The leading `./` is critical — it tells GitHub Actions to resolve the action from the calling repo's working tree (i.e., the vendored copy), not from any remote ref.
+The leading `./` is critical — it tells GitHub Actions to resolve the action from the calling repo's working tree (i.e., the vendored copy), not from any remote ref. **And because it resolves from the working tree, the calling job MUST run `actions/checkout` first** — even when the job has no other reason to check out the repo (e.g. a notify-only job that just reports `needs.*.result`). Forgetting this is the most common breakage when migrating from a remote-action reference (`uses: org/repo@v1`, which doesn't need a checkout) to the vendored model.
 
 Runner requirements: `jq` and `curl` available. GitHub-hosted runners ship both. Self-hosted runners must install them.
 

@@ -36,6 +36,50 @@ globs: ['openspec/changes/**/tasks.md', 'docs/manual-review-archive.md']
 
 截圖是證據，不是使用者確認本身。
 
+## Screenshot Review ≠ Functional Verification（Hard Rule）
+
+Screenshot review **只覆蓋視覺層**，**不**覆蓋功能 round-trip。下列工作 screenshot review **不能**算驗收完成：
+
+| 類型 | Screenshot 能驗 | Screenshot 不能驗 |
+| --- | --- | --- |
+| 按鈕 / 控件**存在** | ✅ | — |
+| Layout / 字級 / 色彩 / a11y attribute | ✅ | — |
+| Empty / Loading / Error state 的**視覺呈現** | ✅ | — |
+| **Form submit 真的送到 server** | — | ❌ 必須使用者實作 |
+| **Server 真的回 200 + DB 真的變更** | — | ❌ 必須使用者實作 |
+| **Dialog 提交後 list refetch + 顯示新狀態** | — | ❌ 必須使用者實作 |
+| **Edge case payload（null / 空 / 邊界）** | — | ❌ 必須使用者實作 |
+| **權限拒絕 path** | — | ❌ 必須使用者實作 |
+
+### 真實案例（為什麼這條 rule 存在）
+
+> 2026-05-08，`loan-conflict-prompt-and-manual-return` change 的 phase 7 screenshot review 報告 Fidelity 8/8、0 DRIFT、0 Critical，包含「Manual return dialog 結構正確」「Submit loading state OK」。Phase 6 quality gates 全綠（焦點 test 23 個）。
+>
+> 使用者人工檢查 #39 實際送出 dialog → 立刻收到 400 ZodError：「`return_notes`: expected string, received null」。Schema 用 `.optional()` 而非 `.nullish()`，client 送 `null`，phase 2 codex 寫的 test 沒含 `null` boundary case。
+>
+> Screenshot review 全綠 + test 全綠 + design fidelity 8/8 都沒擋住這個 bug — 因為**沒有任何環節真實送出 form**。
+
+### 規約
+
+- **MUST** 把 functional round-trip（form submit / mutation / API call → response → state update）列為**使用者人工檢查項目**，不依賴 screenshot review
+- **MUST** 在 tasks.md 的 `## 人工檢查` 區塊明寫「送出 → 確認 server response → 確認 DB / list refetch」流程，不要只寫「看到按鈕」
+- **NEVER** 把 screenshot review 「按鈕存在 + dialog 結構正確」當成 round-trip 已驗證
+- **NEVER** 在使用者尚未真實互動驗收前 archive UI change
+
+### 給 propose / spec 寫作者
+
+寫 `## 人工檢查` 項目時，**MUST** 用「動詞 → 結果」格式描述真實使用者操作：
+
+```markdown
+✅ 好：
+- [ ] #N Admin 在 `/asset-loans` 點品項 → 開 slideover → 點某筆 active loan 旁「手動歸還」→ dialog 開啟 → 選「正常」+ 不填備註 → 送出 → 200 OK，loan 狀態變 returned，列表自動刷新
+
+❌ 不夠：
+- [ ] #N 確認手動歸還按鈕能用
+```
+
+「能用」是模糊驗收，落到實作會被解讀為「能點到 / 看到 dialog」，漏掉真實送出 + DB 變更。
+
 ## 可解析格式（hard rule）
 
 `tasks.md` 的 `## 人工檢查` 區塊必須使用可被工具穩定解析的 `#N` schema。

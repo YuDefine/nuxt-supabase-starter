@@ -60,14 +60,15 @@ while IFS= read -r -d '' file; do
   esac
 done < <(git diff --cached --name-only --diff-filter=ACM -z)
 
-# vp 在 staged paths 全被 vite.config.lint.ignorePatterns 過濾後會 exit 1 +
-# 印「No files found to lint」— 視為 success（不是真正的 lint error）
+# vp 在 staged paths 全被 vite.config.lint.ignorePatterns / .oxfmtrc.json ignore 後會 exit 非零 +
+# 印 (a) 舊版「No files found to (lint|format)」(b) 新版「Expected at least one target file」
+# 兩種訊息都視為 success（不是真正的 lint/fmt error）
 run_vp_with_empty_tolerance() {
   local out exit_code=0
   out="$(pnpm exec "$@" 2>&1)" || exit_code=$?
   echo "$out"
   if ((exit_code != 0)); then
-    if echo "$out" | grep -qE "No files found to (lint|format)"; then
+    if echo "$out" | grep -qE "No files found to (lint|format)|Expected at least one target file"; then
       return 0
     fi
     return "$exit_code"
