@@ -187,21 +187,35 @@ Run `spectra analyze <change-name> --json` to check cross-artifact consistency (
    Before implementing tasks, decide dispatch model **per phase**（`## N. <phase>` section in tasks.md）:
 
    1. **Read tasks.md** and identify all `## N.` phase sections
-   2. **For each phase, classify**:
-      - **Design Review phase** — title contains "Design Review" OR phase body references `/design improve` / `/impeccable audit` / `/impeccable *` / `review-screenshot` / `/design *`
+   2. **For each phase, classify into one of three categories**（依序判定，命中即停）:
+      - **A. Design Review phase** — title contains "Design Review" OR phase body references `/design improve` / `/impeccable audit` / `/impeccable *` / `review-screenshot` / `/design *`
         → **主線 Claude Opus 4.7 xhigh 自己做**，**永不**派 codex
-        → Design skill (`/impeccable *`, `/design improve`, screenshot review) is Claude Code first-class; codex tooling weak in this domain
-      - **Non-Design-Review phase** — everything else (schema, API, UI build, tests, docs)
+        → Design skill is Claude Code first-class; codex tooling weak in this domain
+      - **B. UI view phase** — phase 內任一 task 描述/路徑指涉 view 層檔案：`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且**該 phase 沒有摻入非 view 的 frontend / backend 工作（store / hook / API client / type / util / migration / API server）
+        → **主線 Claude Opus 4.7 xhigh 自己做**，**永不**派 codex
+        → UI view 層的視覺 / 互動 / a11y 細節需要與 Design skill 緊耦合；frontend 但非 view 的工作（store / hook / API client / type / util）不在此範圍，走 C 類
+      - **C. Other phase** — 上述兩類以外（schema / migration / API server / CLI / 純 backend / frontend 但非 view 的 store / hook / API client / type / util / unit test / docs）
         → **派 background codex GPT-5.5 high**（**不要** medium）
         → Phase 粒度避免大量 codex round-trip
-   3. **NEVER** dispatch with `medium` effort — schema drift / cross-file refactor / enum exhaustiveness require `high` minimum
-   4. **NEVER** dispatch task-by-task — phase-level only
+   3. **Mixed-phase fallback**（A、B 都不是純 view、又混雜 view 與非 view 工作）:
+      - **看該 phase 是否已開工**（任一 task `[x]`，或 git history 顯示 phase 內檔案已被改）:
+        - **已開工** → **主線整個 phase 自己做**（safety fallback；不重切、不派 codex；該 phase 內的 codex 工作量由主線吸收）
+        - **未開工** → **STOP**，回覆使用者:
+          ```
+          phase `<N>. <title>` 同時混雜 UI view 與非 UI 工作，違反新版 Phase Dispatch 規則。
+          請改跑 `/spectra-ingest <change-name>` 把 UI view tasks 與其他 tasks 切成獨立 phase 後再 `/spectra-apply`。
+          ```
+          **NEVER** 主線自行修改 tasks.md phase 結構 — 該交給 `/spectra-ingest`，避免 propose / apply / ingest 邊界混淆
+   4. **NEVER** dispatch with `medium` effort — schema drift / cross-file refactor / enum exhaustiveness require `high` minimum
+   5. **NEVER** dispatch task-by-task — phase-level only
 
-   **Codex phase dispatch template**（per `agent-routing.md` 「Codex 派工的標準流程」+「Spectra Apply Phase Dispatch」）:
+   **Codex phase dispatch template**（C 類專用，per `agent-routing.md` 「Codex 派工的標準流程」+「Spectra Apply Phase Dispatch」）:
 
    1. Write prompt to `/tmp/codex-spectra-apply-<change>-phase-<N>-prompt.md`，內容固定包含：
 
       ```
+      [DELEGATED-BY-CLAUDE-CODE]
+
       請執行本 repo 的 spectra-apply phase <N>（<phase-title>）的全部 tasks。
 
       Change: <change-name>
@@ -216,6 +230,12 @@ Run `spectra analyze <change-name> --json` to check cross-artifact consistency (
       - openspec/changes/<change-name>/specs/*/spec.md
       - openspec/changes/<change-name>/tasks.md
       - .claude/rules/（相關 rule，例如 server-api / pinia-store / supabase-* / development）
+
+      View-layer guard（**MUST**）：
+      禁止修改 view 層檔案：
+      - 副檔名：`.vue` / `.tsx` / `.jsx` / `.css` / `.scss`
+      - 目錄：`app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/`
+      若 task 需要 view 層改動，回報 "view layer change required, defer to main thread" 並跳過該 task（不要勾 checkbox），主線會自己處理。
 
       Acceptance：所有 phase <N> 的 tasks 完成、checkbox 已勾、相關 typecheck / unit test 通過、git diff 對應預期變更。
       不要動 phase <N> 以外的 tasks。不要碰 ## Design Review 區塊（主線會自己做）。
@@ -239,19 +259,22 @@ Run `spectra analyze <change-name> --json` to check cross-artifact consistency (
       - BashOutput → read full stdout
       - Read tasks.md → confirm phase <N> all checkboxes are `[x]`
       - Sanity check: `pnpm typecheck` (or equivalent), relevant tests, `git diff` review
+      - **MUST view-layer drift check**: `git diff --name-only HEAD~? -- '*.vue' '*.tsx' '*.jsx' '*.css' '*.scss' 'app/pages/**' 'app/components/**' 'pages/**' 'components/**' 'views/**' 'layouts/**'`（取自上次 codex dispatch 之前 commit 為 base；若無 commit 用 working tree diff）。**若有任何 view 層檔案被 codex 動過** → AskUserQuestion: [1] 主線 revert view 改動 + 重派 codex（剝除 view 改動）/ [2] 接受並由主線自己重跑該 view phase / [3] 中止
       - **If gaps detected** → AskUserQuestion: [1] 主線補齊 / [2] 重派 codex / [3] 中止
 
    5. Move to next phase (re-classify and dispatch or self-execute)
 
-   6. After ALL non-Design-Review phases complete → **主線自己**執行 `## N. Design Review` phase（`/design improve`, /impeccable skills, /impeccable audit, review-screenshot）
+   6. After ALL C 類 phases complete → **主線自己**執行所有 A、B 類 phases（Design Review / UI view），用 `/design improve`, /impeccable skills, /impeccable audit, review-screenshot 等 Claude Code first-class 工具
 
 7. **Implement tasks (loop until done or blocked)**
 
    **Reminder: Track progress by editing checkboxes in the tasks file only. Do not use any built-in task tracker.**
 
-   **Dispatch reminder**: For each phase, follow Step 6b's classification:
-   - Non-Design-Review phase → dispatch codex GPT-5.5 high (phase granularity)
-   - Design Review phase → 主線 self-execute (NEVER dispatch)
+   **Dispatch reminder**: For each phase, follow Step 6b's three-way classification:
+   - Class C（Other）→ dispatch codex GPT-5.5 high (phase granularity)
+   - Class A（Design Review）→ 主線 self-execute (NEVER dispatch)
+   - Class B（UI view: component / page / view / layout / styling）→ 主線 self-execute (NEVER dispatch)
+   - Mixed phase（UI view + 非 view 摻同 phase）→ 已開工主線吸收、未開工 STOP 提示 `/spectra-ingest`
 
    For each pending task:
    - Show which task is being worked on
@@ -380,8 +403,12 @@ What would you like to do?
 - **No external task tracking** — do not use any built-in task management, todo list, or progress tracking tool; the tasks file is the only system
 - **Phase dispatch discipline**（per `agent-routing.md`）:
   - **NEVER** dispatch Design Review phase to codex — Design skill is Claude Code first-class
+  - **NEVER** dispatch UI view phase（component / page / view / layout / styling）to codex — UI view 層的視覺 / 互動 / a11y 細節必須跟 Design skill 緊耦合，主線自己做。Frontend 但非 view 的（store / hook / API client / type / util）仍走 codex
   - **NEVER** dispatch with `medium` effort — use `high` minimum
   - **NEVER** dispatch task-by-task — phase granularity only
+  - **NEVER** dispatch a codex phase without including the「view-layer guard」instruction in the prompt — without it, codex tends to incidentally touch `.vue` / `.tsx` files
+  - **NEVER** skip view-layer drift check after codex completion — `git diff --name-only` filtered by view paths is the primary quality gate
+  - **NEVER** auto-fix mixed phases by editing tasks.md mid-apply — that belongs to `/spectra-ingest`; for未開工 mixed phase, STOP and instruct the user to run ingest
   - **NEVER** skip cross-check after codex phase completion — read tasks.md, confirm checkboxes, run typecheck/test, review diff
 - If **AskUserQuestion tool** is not available, ask the same questions as plain text and wait for the user's response
 

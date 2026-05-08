@@ -103,7 +103,9 @@ routeRules: {
   // Setup / Bootstrap endpoints — secret token 保護
   '/api/setup/**': { csurf: false },
 
-  // Webhook endpoints — 第三方 POST 過來，沒 CSRF token
+  // Webhook endpoints — 第三方 POST 過來，沒 cookie / 沒 CSRF token；
+  // 改以 HMAC 簽名 / Bearer token / 共享 secret 取代 CSRF 防護
+  '/api/webhooks/**': { csurf: false, security: { csrf: false } },
   '/api/v1/<provider>/webhook': { csurf: false, security: { csrf: false } },
 
   // Dev-only endpoints
@@ -116,9 +118,27 @@ routeRules: {
 
 **規則**：
 - **MUST** 每條 csurf 例外都附 inline 註解說明**為什麼安全**（用什麼機制取代 CSRF 防護）
+- **MUST** 凡是有 `server/api/webhooks/**` 或 `server/api/**/webhook.{post,get}.ts` 結構的 endpoint，**必須**有對應的 `routeRules` csurf 例外。沒設例外 = 第三方 POST 永遠收到 403，等同 endpoint 從未存在；常見症狀是「告警 / payment / build hook 永遠不觸發，但 endpoint code 看起來沒問題」
+- **MUST** webhook endpoint 必須在 handler 內以 HMAC 簽名 / Bearer token / 共享 secret 驗證來源；csurf 例外不是「免驗證」而是「換驗證機制」
 - **NEVER** 用 wildcard 整段豁免（例如 `/api/**: { csurf: false }`）
 - **NEVER** 對讀取 session cookie 的 endpoint 關 CSRF
 - 加新 `/mcp/**` 或 `/api/auth/**` 路由前**MUST** 確認：要嘛 Bearer token、要嘛 GET-only 且不存取 session
+
+### Webhook 例外的快速自查
+
+任何 `server/api/webhooks/**` 或同義結構新增時，**MUST** 跑一次：
+
+```bash
+# 1. 列出所有 server-side webhook endpoint 實作
+fd -e ts -p 'server/api/webhooks/' -p 'server/api/.*/webhook\.(post|get)\.ts'
+
+# 2. 列出 nuxt.config 內的 csurf 例外
+rg -nP "(csurf|security:\\s*\\{\\s*csrf)" nuxt.config.ts
+
+# 3. 兩邊對照：每個 endpoint 路徑都要在 routeRules 有對應 wildcard / 顯式例外
+```
+
+對應不上 = 該 endpoint 對外 POST **必定** HTTP 403。建議部署後立刻 `curl -X POST` 一次驗收。
 
 ## CF Workers 相容性
 
@@ -146,4 +166,21 @@ Consumer `runtime: cf-workers` 時：
 修正：
   - 將該欄位補到 baseline 列出的值（不可任意修改）
   - 若有充分理由偏離，記錄到 docs/decisions/YYYY-MM-DD-csp-<topic>.md
+```
+
+```
+[Nuxt Security] webhook endpoint 缺 csurf 例外
+
+問題：<webhook endpoint 路徑> 存在於 server/api/webhooks/**，但 nuxt.config.ts 的
+      routeRules 沒有對應的 { csurf: false, security: { csrf: false } } 例外。
+      此 endpoint 對外 POST 一律收到 HTTP 403 CSRF Token Mismatch，第三方告警
+      / payment / build hook 永遠不會觸發。
+
+修正：
+  - 在 nuxt.config.ts 加：
+      routeRules: {
+        '/api/webhooks/**': { csurf: false, security: { csrf: false } },
+      }
+  - 確認 handler 內已有 HMAC 簽名 / Bearer / 共享 secret 驗證取代 CSRF
+  - 部署後 curl -X POST 該 endpoint 一次，確認不再回 403
 ```

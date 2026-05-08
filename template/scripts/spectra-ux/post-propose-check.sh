@@ -18,6 +18,123 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=lib/common.sh
 . "$SCRIPT_DIR/lib/common.sh"
+
+sux_manual_review_schema_violations() {
+  local file=$1
+  [ -f "$file" ] || return 0
+
+  local in_manual=false line line_no=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line_no=$((line_no + 1))
+
+    if printf '%s\n' "$line" | grep -Eq '^##[[:space:]].*人工檢查[[:space:]]*$'; then
+      in_manual=true
+      continue
+    fi
+
+    if [ "$in_manual" = true ] && printf '%s\n' "$line" | grep -Eq '^##[[:space:]]'; then
+      in_manual=false
+    fi
+
+    [ "$in_manual" = true ] || continue
+
+    if printf '%s\n' "$line" | grep -Eq '^[[:space:]]*- \[[ x]\] '; then
+      if printf '%s\n' "$line" | grep -Eq '^(- \[[ x]\] #[1-9][0-9]* .+|  - \[[ x]\] #[1-9][0-9]*\.[1-9][0-9]* .+)$'; then
+        continue
+      fi
+      printf '%s\t%s\n' "$line_no" "$line"
+    fi
+  done < "$file"
+}
+
+sux_run_check7_self_test() {
+  local tmp valid legacy missing no_manual count
+  tmp=$(mktemp -d)
+  trap "rm -rf '$tmp'" EXIT
+
+  valid="$tmp/valid.md"
+  legacy="$tmp/legacy.md"
+  missing="$tmp/missing.md"
+  no_manual="$tmp/no-manual.md"
+
+  cat > "$valid" <<'EOF_VALID'
+## 9. 人工檢查
+
+- [ ] #1 Parent pending
+- [x] #2 Parent checked
+  - [ ] #2.1 Scoped pending
+  - [x] #2.2 Scoped checked（skip）
+EOF_VALID
+
+  cat > "$legacy" <<'EOF_LEGACY'
+## 8. 人工檢查
+
+- [ ] 8.1 Legacy id
+EOF_LEGACY
+
+  cat > "$missing" <<'EOF_MISSING'
+## 8. 人工檢查
+
+- [ ] Missing id
+EOF_MISSING
+
+  cat > "$no_manual" <<'EOF_NO_MANUAL'
+## 1. Implementation
+
+- [ ] 1.1 No manual section
+EOF_NO_MANUAL
+
+  count=$(sux_manual_review_schema_violations "$valid" | wc -l | tr -d ' ')
+  [ "$count" = "0" ] || { echo "Check 7 self-test failed: valid fixture produced findings" >&2; return 1; }
+
+  count=$(sux_manual_review_schema_violations "$legacy" | wc -l | tr -d ' ')
+  [ "$count" = "1" ] || { echo "Check 7 self-test failed: legacy fixture did not produce exactly one finding" >&2; return 1; }
+
+  count=$(sux_manual_review_schema_violations "$missing" | wc -l | tr -d ' ')
+  [ "$count" = "1" ] || { echo "Check 7 self-test failed: missing-id fixture did not produce exactly one finding" >&2; return 1; }
+
+  count=$(sux_manual_review_schema_violations "$no_manual" | wc -l | tr -d ' ')
+  [ "$count" = "0" ] || { echo "Check 7 self-test failed: no-manual fixture produced findings" >&2; return 1; }
+
+  echo "✓ Check 7 self-test passed"
+}
+
+if [ "${1:-}" = "--self-test-check7" ]; then
+  sux_run_check7_self_test
+  exit $?
+fi
+
+if [ "${1:-}" = "--check7-only" ]; then
+  sux_load_config
+  target=${2:-}
+  [ -n "$target" ] || { echo "Usage: post-propose-check.sh --check7-only <change-name|tasks.md>" >&2; exit 2; }
+  if [ -f "$target" ]; then
+    TASKS_FILE=$target
+    CHANGE_NAME=$(basename "$(dirname "$target")")
+  else
+    CHANGE_DIR=$(sux_find_change_by_name "$target") || {
+      echo "Check 7: change not found: $target" >&2
+      exit 2
+    }
+    TASKS_FILE="$CHANGE_DIR/tasks.md"
+    CHANGE_NAME=$(basename "$CHANGE_DIR")
+  fi
+
+  count=0
+  while IFS=$'\t' read -r line_no offending_line; do
+    [ -n "${line_no:-}" ] || continue
+    count=$((count + 1))
+    echo "Manual Review schema violation — change ${CHANGE_NAME}, tasks.md:${line_no}"
+    echo "  offending: ${offending_line}"
+    echo "  expected: #N parent or two-space indented #N.M scoped item"
+  done < <(sux_manual_review_schema_violations "$TASKS_FILE")
+  if [ "$count" -gt 0 ]; then
+    exit 1
+  fi
+  echo "✓ Check 7 passed (${CHANGE_NAME})"
+  exit 0
+fi
+
 sux_load_config
 
 CHANGE_DIR=""
@@ -174,7 +291,7 @@ $(printf '  - %s\n' "${MISSING_FIELDS[@]}")
   fi
 
   if [ "$HAS_SENSITIVE_SCOPE" = true ] && ! printf '%s\n' "$RISK_BLOCK" | grep -qiE 'Truth layer / invariants:.*[^[:space:]]'; then
-    FINDINGS+=("`Truth layer / invariants` 不能留空 — change 牽涉 migration / schema / auth / permission 等敏感 scope。
+    FINDINGS+=("\`Truth layer / invariants\` 不能留空 — change 牽涉 migration / schema / auth / permission 等敏感 scope。
 
 請寫清楚：
   - 哪個 artifact 是 single source of truth
@@ -183,7 +300,7 @@ $(printf '  - %s\n' "${MISSING_FIELDS[@]}")
   fi
 
   if [ "$HAS_SERVER_SCOPE" = true ] && ! printf '%s\n' "$RISK_BLOCK" | grep -qiE 'Contract / failure paths:.*[^[:space:]]'; then
-    FINDINGS+=("`Contract / failure paths` 不能留空 — change 包含 API / server scope。
+    FINDINGS+=("\`Contract / failure paths\` 不能留空 — change 包含 API / server scope。
 
 請至少交代 success / empty / conflict / unauthorized / upstream-failure 中哪些需要處理。")
   fi
@@ -276,6 +393,69 @@ $(printf '  - %s\n' "${DR_MISSING[@]}")
   fi
 fi
 
+# --- Check 4c: Phase Purity (UI view vs 非 view 必須切成獨立 phase) ---
+# Trigger: HAS_UI_SCOPE=true，掃所有 `## N. <title>` phase，跳過 Design Review / Fixtures / 人工檢查
+# 違規：同 phase 同時 hit view 與非 view 關鍵字（spectra-apply Phase Dispatch 仰賴 phase purity）
+if [ -f "$TASKS_FILE" ] && [ "$HAS_UI_SCOPE" = true ]; then
+  # 抽出所有 `## ` heading（functional phases）
+  PHASE_HEADINGS=$(grep -nE '^## ' "$TASKS_FILE" 2>/dev/null || true)
+  MIXED_PHASES=()
+
+  # 用 awk 把每個 `## ` heading 之間的內容切片，逐一檢查
+  while IFS= read -r heading_line; do
+    [ -z "$heading_line" ] && continue
+    # heading_line 形如 "12:## 3. UI Implementation"
+    line_no=${heading_line%%:*}
+    title=${heading_line#*:## }
+
+    # 跳過不需要 purity 檢查的 phase
+    case "$title" in
+      *Design\ Review*|*Fixtures*|*Seed\ Plan*|*人工檢查*|*Manual\ Review*) continue ;;
+    esac
+
+    # 抽出該 phase body：從本 heading 後到下一個 `## ` 之前
+    phase_body=$(awk -v start="$line_no" 'NR>start { if (/^## /) exit; print }' "$TASKS_FILE")
+    [ -z "$phase_body" ] && continue
+
+    # has_view：phase body 提到 view 層檔案 / 目錄
+    has_view=0
+    if printf '%s\n' "$phase_body" | grep -qiE "(${SUX_UI_EXT_RE})|\.tsx\b|\.jsx\b|\.css\b|\.scss\b|app/pages/|app/components/|(^|[^/])pages/|(^|[^/])components/|views/|layouts/" 2>/dev/null; then
+      has_view=1
+    fi
+
+    # has_nonview：phase body 提到非 view 工作（backend / store / hook / API client / type / migration / util）
+    has_nonview=0
+    if printf '%s\n' "$phase_body" | grep -qiE "server/api/|server/utils/|server/middleware/|composables/|stores/|pinia/|shared/types/|${SUX_TYPES_PRIMARY}/|${SUX_MIGRATIONS_DIR}|\.sql\b|drizzle/|prisma/|defineEventHandler|useFetch\(|\\\$fetch\(|api/.*\.ts" 2>/dev/null; then
+      has_nonview=1
+    fi
+
+    if [ "$has_view" -eq 1 ] && [ "$has_nonview" -eq 1 ]; then
+      MIXED_PHASES+=("\`## $title\` (line $line_no)")
+    fi
+  done <<< "$PHASE_HEADINGS"
+
+  if [ "${#MIXED_PHASES[@]}" -gt 0 ]; then
+    MIXED_LIST=$(printf -- '- %s\n' "${MIXED_PHASES[@]}")
+    FINDINGS+=("Phase Purity 違規 — 以下 phase 同時混雜 UI view 與非 view 工作：
+
+${MIXED_LIST}
+
+spectra-apply Phase Dispatch 規則仰賴 phase purity：UI view phase（component / page / view / layout / styling）由主線 Claude Code 自己做、非 view phase 派 codex GPT-5.5 high。混雜 phase 會破壞 dispatch 邊界。
+
+**MUST** 把 view 層改動（\`.vue\` / \`.tsx\` / \`.jsx\` / \`pages/\` / \`components/\` / \`views/\` / \`layouts/\` / \`.css\` / \`.scss\`）切成獨立 phase（建議命名 \`## N. UI / View Implementation\`），其他工作（schema / migration / API server / store / hook / API client / type / util）放別的 phase。
+
+例：
+\`\`\`markdown
+## 1. Database Schema       (純 migration)
+## 2. API Endpoints         (純 server/api/)
+## 3. Pinia Store + Composables  (純 store / composable / type，frontend 但非 view)
+## 4. UI / View Implementation  (純 .vue / app/pages/ / app/components/)
+## 5. Fixtures / Seed Plan
+## 6. Design Review
+\`\`\`")
+  fi
+fi
+
 # --- Check 5: Enum expansion needs types sync ---
 if [ -f "$TASKS_FILE" ]; then
   HAS_MIGRATION_TASK=$(grep -cE "${SUX_MIGRATIONS_DIR}|migration new|ADD COLUMN|CHECK.*IN" "$TASKS_FILE" 2>/dev/null || true)
@@ -349,6 +529,23 @@ UI 展示頁面在 dev / staging 沒有持久化 mock 會導致 review 拍照空
 或若既有 seed 已足夠，明確宣告 \`**Existing seed sufficient**\` 並寫一行理由（哪些頁面靠哪些既有 row 撐住）。")
     fi
   fi
+fi
+
+# --- Check 7: Manual Review schema ---
+if [ -f "$TASKS_FILE" ]; then
+  while IFS=$'\t' read -r line_no offending_line; do
+    [ -n "${line_no:-}" ] || continue
+    FINDINGS+=("Manual Review schema violation — change \`${CHANGE_NAME}\`, tasks.md:${line_no}
+
+Offending line:
+\`\`\`markdown
+${offending_line}
+\`\`\`
+
+Expected:
+- parent item: \`- [ ] #N description\` or \`- [x] #N description\`
+- scoped item: \`  - [ ] #N.M description\` or \`  - [x] #N.M description\`")
+  done < <(sux_manual_review_schema_violations "$TASKS_FILE")
 fi
 
 # --- Output ---

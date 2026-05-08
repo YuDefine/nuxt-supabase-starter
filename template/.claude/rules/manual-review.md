@@ -36,6 +36,27 @@ globs: ['openspec/changes/**/tasks.md', 'docs/manual-review-archive.md']
 
 截圖是證據，不是使用者確認本身。
 
+## 可解析格式（hard rule）
+
+`tasks.md` 的 `## 人工檢查` 區塊必須使用可被工具穩定解析的 `#N` schema。
+
+Parent item 格式：
+
+```markdown
+- [ ] #1 確認主要流程可完成
+- [x] #2 確認錯誤狀態可理解（skip）
+```
+
+Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
+
+```markdown
+- [ ] #3 確認行動版流程
+  - [ ] #3.1 390px viewport 無水平溢出
+  - [x] #3.2 keyboard focus state 清楚
+```
+
+禁止在 `## 人工檢查` checkbox line 使用 legacy section ids，例如 `8.1`、`9.3`，也禁止省略 `#N` / `#N.M`。這個 schema 只讓 tooling 能定位與寫回項目，不改變人工檢查 ownership：agent 仍然 **NEVER** 在未取得使用者明確 OK、Issue handling、skip 或 skip all 前自行勾選。
+
 ## 建議流程
 
 1. 依 task 清單逐項截圖

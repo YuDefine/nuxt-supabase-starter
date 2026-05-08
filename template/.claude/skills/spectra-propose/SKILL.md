@@ -56,6 +56,13 @@ If no argument is provided, the workflow will extract requirements from conversa
 
       若 change 包含 UI scope 且 proposal 有 ## Affected Entity Matrix（= entity 動且有 UI 展示），tasks.md **必須**包含 `## N. Fixtures / Seed Plan` section（每個有 Surfaces 的 entity 一條 task，或 `**Existing seed sufficient**` 宣告 + 一行理由）。
 
+      **Phase Purity（UI view vs 非 view 必須切成獨立 phase）**：
+      若 change 同時涉及 UI view 層（`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss`）與**非 view 工作**（schema / migration / API server / store / hook / API client / type / util / 純 backend），tasks.md **必須**把這兩類切成不同的 `## N.` phase：
+      - 例：`## 1. Database Schema` + `## 2. API Endpoints` + `## 3. Pinia Store + Composables` + `## 4. UI View Implementation` + `## 5. Fixtures / Seed Plan` + `## 6. Design Review`
+      - **禁止**把 view 層改動（`.vue` / `app/pages/` 等）與非 view 工作混進同一 phase
+      - 理由：spectra-apply 會把 UI view phase 由主線 Claude Code 自己做、其他 phase 派給 codex；混雜 phase 會破壞 dispatch 規則
+      - frontend 但非 view 的（store / hook / API client / type / util / unit test）算非 view，可以與 backend 工作放同 phase 或自己一個 phase 都可
+
       若 change 包含 UI scope（tasks 涉及 .vue / pages/ / components/ / layouts/），tasks.md **必須**包含完整 7 步 Design Review section（N.1~N.7）：
         - N.1 檢查 PRODUCT.md / DESIGN.md
         - N.2 /design improve + Fidelity Report
@@ -442,6 +449,16 @@ If no argument is provided, the workflow will extract requirements from conversa
    - Reason: UI pages displaying empty data on dev/staging make `review-screenshot` worthless. Fixtures are part of feature completeness, not a review-time afterthought.
    - Verify by running `bash scripts/spectra-ux/post-propose-check.sh <change-name>` and acting on Check 6 FINDINGS
    - Full template + exemption rules see `ux-completeness.md` 「必填 Fixtures / Seed Plan」section
+
+   **Check 7: Phase Purity (UI view vs 非 view 必須切成獨立 phase)**
+
+   If `tasks.md` includes UI view scope (any task references `.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss`):
+   - For each functional `## N. <title>` phase in tasks.md (excluding `## N. Design Review` and `## N. Fixtures / Seed Plan`):
+     - **MUST NOT** mix view-layer file references with non-view work (schema / migration / API server / store / hook / API client / type / util / 純 backend)
+     - 一個 phase 要嘛純 view 工作（component / page / view / layout / styling），要嘛純非 view 工作；混雜 phase 違規
+   - Verify by running `bash scripts/spectra-ux/post-propose-check.sh <change-name>` and acting on Check 4c FINDINGS
+   - If a mixed phase is detected, **MUST** split inline now into independent phases — do NOT defer to ingest. spectra-apply Phase Dispatch 規則仰賴 phase purity；混雜 phase 在 apply 時會被擋下要求重 ingest，propose 階段就修掉成本最低
+   - Reason: spectra-apply 把 UI view phase 由主線 Claude Code 自己做、其他 phase 派給 codex GPT-5.5 high；phase 混雜會破壞 dispatch 邊界，要嘛讓 codex 碰 view 層、要嘛讓主線吞下原本可以 offload 的 mechanical 工作
 
 ---
 
