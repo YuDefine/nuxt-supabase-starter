@@ -25,6 +25,7 @@ const NEXT_HEADING_RE = /^##\s+/
 const CHECKBOX_LINE_RE = /^[ \t]*- \[[ xX]\]\s+/
 const PARENT_ITEM_RE = /^- \[([ xX])\] (#[1-9][0-9]*) (.+)$/
 const SCOPED_ITEM_RE = /^  - \[([ xX])\] (#[1-9][0-9]*\.[1-9][0-9]*) (.+)$/
+const TRAILING_NO_SCREENSHOT_RE = /(^|[^ ]) @no-screenshot$/
 
 export interface ManualReviewItem {
   id: string
@@ -35,6 +36,7 @@ export interface ManualReviewItem {
   raw: string
   lineIndex: number
   lineNumber: number
+  noScreenshot: boolean
 }
 
 export interface ManualReviewMalformedLine {
@@ -185,15 +187,31 @@ function toReviewItem(
   scoped: boolean
 ): ManualReviewItem {
   const id = match[2]!
+  const { description, noScreenshot } = parseNoScreenshotMarker(match[3]!.trim())
   return {
     id,
-    description: match[3]!.trim(),
+    description,
     checked: match[1]!.toLowerCase() === 'x',
     scoped,
     parentId: scoped ? id.split('.')[0]! : null,
     raw,
     lineIndex,
     lineNumber: lineIndex + 1,
+    noScreenshot,
+  }
+}
+
+function parseNoScreenshotMarker(description: string): {
+  description: string
+  noScreenshot: boolean
+} {
+  if (!TRAILING_NO_SCREENSHOT_RE.test(description)) {
+    return { description, noScreenshot: false }
+  }
+
+  return {
+    description: description.slice(0, -' @no-screenshot'.length).trim(),
+    noScreenshot: true,
   }
 }
 
