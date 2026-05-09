@@ -15,15 +15,15 @@
 
 ## 2. Scaffolder CLI `--evlog-preset` flag（M3b.2）
 
-- [ ] 2.1 `packages/create-nuxt-starter/src/cli.ts` 加 `--evlog-preset <name>` flag — accept enum `none | baseline | d-pattern-audit | nuxthub-ai`，default 為 `baseline`
-- [ ] 2.2 `packages/create-nuxt-starter/src/prompts.ts` 加 wizard 問答 — flag 沒帶時對話式問 evlog preset 偏好（含 4 個選項 + 各自描述）
-- [ ] 2.3 新增 `packages/create-nuxt-starter/src/evlog-preset.ts` helper — 內含 4 個 preset 對應的 file copy / overlay 規則（baseline → 7 個檔；d-pattern-audit → baseline + 1 個 audit-pattern 檔；nuxthub-ai → 替換 evlog-sentry-drain 為 evlog-nuxthub-drain + 加 ai-sdk-logger）
-- [ ] 2.4 `packages/create-nuxt-starter/src/assemble.ts` 整合：依 `selections.evlogPreset` 跑 helper.applyPreset()
-- [ ] 2.5 `packages/create-nuxt-starter/src/types.ts` 加 `evlogPreset` field 到 `Selections` interface
-- [ ] 2.6 加 vitest 單元測試：`packages/create-nuxt-starter/test/evlog-preset.test.ts` — 驗證 4 個 preset 各自 applyPreset 後 file tree 正確
-- [ ] 2.7 加 e2e 測試：`packages/create-nuxt-starter/test/cli-evlog-preset.e2e.test.ts` — 驗 CLI 4 個 flag 值各自 scaffold 出符合預期的 starter
-- [ ] 2.8 `pnpm test` 全綠
-- [ ] 2.9 update `packages/create-nuxt-starter/README.md`：加 `--evlog-preset` 章節 + 4 個 preset 使用情境介紹
+- [x] 2.1 `packages/create-nuxt-starter/src/cli.ts` 加 `--evlog-preset <name>` flag — accept enum `none | baseline | d-pattern-audit | nuxthub-ai`，default `baseline`；含 validation + 加進 `hasCustomFlags` 偵測
+- [x] 2.2 `packages/create-nuxt-starter/src/prompts.ts` 加 wizard 問答（line 209-233）— 4 個 select option 各帶描述；`displaySummary` 也加 evlog preset 顯示
+- [x] 2.3 新增 `packages/create-nuxt-starter/src/evlog-preset.ts` helper — `applyEvlogPreset(targetDir, preset, starterRoot)` recursive cp `presets/evlog-<preset>/` 進 target dir（skip PRESET.md），return `{applied, skipped}`；含 `describeEvlogPreset()` helper
+- [x] 2.4 `packages/create-nuxt-starter/src/assemble.ts` 整合：`assembleProject()` 加第 5 個 optional param `evlogPreset: EvlogPreset = 'baseline'`，step 11 呼叫 `applyEvlogPreset(targetDir, evlogPreset, STARTER_ROOT)`
+- [x] 2.5 `packages/create-nuxt-starter/src/types.ts` 加 `EvlogPreset` type + `EVLOG_PRESETS` const + `UserSelections.evlogPreset` field；`getDefaultSelections()` 加 default `'baseline'`
+- [x] 2.6 加 vitest 單元測試：`packages/create-nuxt-starter/test/evlog-preset.test.ts` — 6 cases (none/baseline/d-pattern-audit/nuxthub-ai/missing dir/describeEvlogPreset)
+- [ ] 2.7 加 e2e 測試：`packages/create-nuxt-starter/test/cli-evlog-preset.e2e.test.ts` — **deferred**: 需 build + scaffold 跑，較重；留 follow-up TD
+- [x] 2.8 `pnpm test` 全綠 — 20 tests pass (6 new + 14 existing in scaffold.test.ts)
+- [x] 2.9 update `packages/create-nuxt-starter/README.md`（新建）：加 `--evlog-preset` 章節 + 4 個 preset 使用情境介紹 + 範例
 
 ## 3. 整合驗證
 

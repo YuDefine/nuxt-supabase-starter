@@ -7,7 +7,7 @@ import { assembleProject } from './assemble'
 import { featureModules, getModuleById, resolveFeatureDependencies } from './features'
 import { confirmScaffold, displaySummary, getDefaultSelections, promptUser } from './prompts'
 import { postScaffold, type CladeModules } from './post-scaffold'
-import type { AgentRuntime } from './types'
+import { EVLOG_PRESETS, type AgentRuntime, type EvlogPreset } from './types'
 
 type CliAuth = 'nuxt-auth-utils' | 'better-auth' | 'none'
 type CliCi = 'simple' | 'advanced'
@@ -148,6 +148,7 @@ function buildSelectionsFromArgs(args: {
   preset?: string
   fast?: boolean
   agents?: string
+  evlogPreset?: string
 }) {
   const availableFeatureIds = new Set(featureModules.map((mod) => mod.id))
   const fromWith = parseCsv(args.with)
@@ -181,6 +182,13 @@ function buildSelectionsFromArgs(args: {
     consola.error(`--preset 只接受：${validPresetValues.join(' | ')}`)
     process.exit(1)
   }
+
+  const evlogPresetArg = args.evlogPreset as EvlogPreset | undefined
+  if (evlogPresetArg && !EVLOG_PRESETS.includes(evlogPresetArg)) {
+    consola.error(`--evlog-preset 只接受：${EVLOG_PRESETS.join(' | ')}`)
+    process.exit(1)
+  }
+  const evlogPreset: EvlogPreset = evlogPresetArg ?? 'baseline'
 
   const useFastPreset = args.fast === true || presetArg === 'fast'
   const agentTargets =
@@ -237,6 +245,7 @@ function buildSelectionsFromArgs(args: {
     deploymentTarget: inferDeploymentTarget(features),
     testingLevel: inferTestingLevel(features),
     agentTargets,
+    evlogPreset,
   }
 }
 
@@ -316,6 +325,12 @@ const main = defineCommand({
         '找不到 clade 中央倉時，嘗試 git clone 到 ~/offline/clade（--no-clone-clade 跳過）',
       default: true,
     },
+    'evlog-preset': {
+      type: 'string',
+      description:
+        'evlog preset: none | baseline | d-pattern-audit | nuxthub-ai (default: baseline)',
+      required: false,
+    },
   },
   async run({ args }) {
     const monorepoRoot = detectMonorepoRoot()
@@ -329,7 +344,8 @@ const main = defineCommand({
       args.minimal ||
       args.preset ||
       args.fast ||
-      args.agents
+      args.agents ||
+      args['evlog-preset']
     )
 
     // Validate directory
@@ -359,6 +375,7 @@ const main = defineCommand({
         preset: args.preset as string | undefined,
         fast: args.fast as boolean | undefined,
         agents: args.agents as string | undefined,
+        evlogPreset: args['evlog-preset'] as string | undefined,
       })
 
       const displayName = basename(resolve(invocationCwd, name))
@@ -389,7 +406,13 @@ const main = defineCommand({
     consola.start(`正在建立專案 ${pkgName}...`)
 
     try {
-      assembleProject(targetDir, selections.features, pkgName, selections.agentTargets)
+      assembleProject(
+        targetDir,
+        selections.features,
+        pkgName,
+        selections.agentTargets,
+        selections.evlogPreset
+      )
       consola.success('專案檔案建立完成！')
     } catch (error) {
       consola.error('建立專案失敗：', error)

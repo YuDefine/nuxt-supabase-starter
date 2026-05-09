@@ -9,8 +9,9 @@ import {
 } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { dirname, join, resolve } from 'pathe'
+import { applyEvlogPreset } from './evlog-preset'
 import { getModuleById } from './features'
-import type { AgentRuntime } from './types'
+import type { AgentRuntime, EvlogPreset } from './types'
 
 const TEMPLATES_DIR = resolve(import.meta.dirname, '..', 'templates')
 const STARTER_ROOT = resolve(import.meta.dirname, '..', '..', '..')
@@ -19,7 +20,8 @@ export function assembleProject(
   targetDir: string,
   selectedFeatureIds: string[],
   projectName: string,
-  agentTargets: AgentRuntime[] = ['claude-code']
+  agentTargets: AgentRuntime[] = ['claude-code'],
+  evlogPreset: EvlogPreset = 'baseline'
 ): void {
   // 1. Copy base template
   copyDirectory(join(TEMPLATES_DIR, 'base'), targetDir)
@@ -76,6 +78,13 @@ export function assembleProject(
 
   // 10. Replace template placeholders
   replacePlaceholders(targetDir, projectName)
+
+  // 11. Apply evlog preset (overlay file set on top of starter template)
+  // 對應 spectra change add-evlog-baseline-and-scaffolder-preset-flag M3b.2.
+  // baseline 是 default — starter template 自家已含 baseline wiring (M3b.1)，
+  // 所以 baseline 套等於再次覆蓋（idempotent）。如需 d-pattern-audit / nuxthub-ai
+  // 則 overlay 額外 file 進 target dir。
+  applyEvlogPreset(targetDir, evlogPreset, STARTER_ROOT)
 }
 
 function copyDirectory(src: string, dest: string): void {
@@ -1391,12 +1400,23 @@ export function generateClaudeMd(targetDir: string, selectedFeatureIds: string[]
     sections.push('')
   }
 
-  if (hasAuthUtils) {
+  if (hasAuthUtils || hasBetterAuth) {
     sections.push('### 截圖調試')
     sections.push('')
-    sections.push(
-      '- **Auth**：先導航到 `/auth/_dev-login`（dev-only route，自動建立 session），可帶 `?email=` 指定使用者、`?redirect=` 指定起始頁'
-    )
+    if (hasAuthUtils) {
+      sections.push(
+        '- **Auth**：先導航到 `GET /auth/_dev-login`（dev-only route，自動建立 session），canonical query：`?as=<role>` 指定角色／場景、`?email=<email>` 指定使用者、`?redirect=<safePath>` 指定起始頁（同站 path）'
+      )
+      sections.push(
+        '- `?role=` 是舊別名，新 test/spec 一律用 `?as=`；route 是 lookup-only，必須先 seed 對應使用者'
+      )
+    }
+    if (hasBetterAuth) {
+      sections.push(
+        '- **Auth**：先 `POST /api/_dev/login` body `{ email, password?, as? }`（dev-only route，回 Set-Cookie 建立 session），確認 200 後再導航到目標頁面；此 route 故意沒有 `redirect` 參數'
+      )
+      sections.push('- `as=admin` 必須 email 在 `ADMIN_EMAIL_ALLOWLIST` 內；非 local 環境一律 404')
+    }
     sections.push('- Dev server 已經在跑，自己用 `ps aux | grep nuxt` 找 port，不要問')
     sections.push('- 截圖完成後 `browser-use close` 關閉瀏覽器')
     sections.push('- **NEVER** patch `auth.global.ts` — 一律用 dev-login route')

@@ -1,5 +1,5 @@
 import { consola } from 'consola'
-import type { AgentRuntime, UserSelections } from './types'
+import type { AgentRuntime, EvlogPreset, UserSelections } from './types'
 import { featureModules, resolveFeatureDependencies } from './features'
 
 function normalizePromptValues(values: unknown): string[] {
@@ -206,6 +206,33 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
   const resolvedAgentTargets =
     agentTargets.length > 0 ? agentTargets : (['claude-code'] satisfies AgentRuntime[])
 
+  // 14. evlog preset
+  const evlogPresetChoice = (await consola.prompt('evlog preset？（wide event logging tier）', {
+    type: 'select',
+    options: [
+      {
+        label:
+          'baseline（推薦）— T1: drain pipeline + 5 件套 enricher + sampling/redaction + client transport',
+        value: 'baseline',
+      },
+      {
+        label: 'd-pattern-audit — baseline + O1 D-pattern audit chain (HMAC-signed audit log)',
+        value: 'd-pattern-audit',
+      },
+      {
+        label: 'nuxthub-ai — NuxtHub D1 drain + AI agent context (cost tracking + SSE/MCP child)',
+        value: 'nuxthub-ai',
+      },
+      {
+        label: 'none — 不套 evlog（純 Nuxt + Supabase starter）',
+        value: 'none',
+      },
+    ],
+    initial: 'baseline',
+  })) as EvlogPreset
+
+  if (typeof evlogPresetChoice === 'symbol') process.exit(0)
+
   // Collect features
   const features: string[] = []
   if (ssrEnabled) features.push('ssr')
@@ -239,6 +266,7 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
     deploymentTarget: deployChoice,
     testingLevel: testingChoice,
     agentTargets: resolvedAgentTargets,
+    evlogPreset: evlogPresetChoice,
   }
 }
 
@@ -251,6 +279,7 @@ export function displaySummary(selections: UserSelections): void {
   consola.log('📋 專案配置摘要：')
   consola.log(`   專案名稱：${displayName}`)
   consola.log(`   AI Runtime：${selections.agentTargets.join(', ')}`)
+  consola.log(`   evlog preset：${selections.evlogPreset}`)
   consola.log(`   功能：`)
 
   for (const featureId of selections.features) {
@@ -284,5 +313,6 @@ export function getDefaultSelections(projectName: string): UserSelections {
     deploymentTarget: 'cloudflare',
     testingLevel: 'full',
     agentTargets: ['claude-code'],
+    evlogPreset: 'baseline',
   }
 }
