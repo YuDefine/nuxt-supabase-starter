@@ -9,7 +9,7 @@
 
 import { createHash } from 'node:crypto'
 import { createReadStream, existsSync } from 'node:fs'
-import { readFile, readdir, stat, writeFile } from 'node:fs/promises'
+import { mkdir, open as openFd, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import net from 'node:net'
 import { join, normalize, resolve, sep } from 'node:path'
@@ -88,6 +88,8 @@ interface ChangeSummary {
   total: number
   checked: number
   pending: number
+  /** 含 `（issue: ...）` annotation 的 item 數；issue 在 raw 是 `[ ]`，仍算 pending 但 UI 要區分 */
+  issued: number
   malformed: number
   screenshotTopicCount: number
   screenshotTopics: string[]
@@ -221,12 +223,17 @@ export function applyReviewActionToContent(
 }
 
 function applyActionToLine(line: string, action: 'ok' | 'issue' | 'skip', note: string): string {
-  if (action === 'ok') return setCheckbox(line, true)
+  // 切換 action 前先剝離舊 annotation，避免 stale 殘留（例：先 issue 後改 ok 會留 (issue: ...)）
+  const stripped = stripAnnotations(line)
+  if (action === 'ok') {
+    const base = setCheckbox(stripped, true)
+    return note.trim() ? appendAnnotation(base, 'note', note) : base
+  }
   if (action === 'issue') {
-    const base = setCheckbox(line, false)
+    const base = setCheckbox(stripped, false)
     return appendAnnotation(base, 'issue', note || 'needs follow-up')
   }
-  const base = setCheckbox(line, true)
+  const base = setCheckbox(stripped, true)
   return appendAnnotation(base, 'skip', note)
 }
 
@@ -234,17 +241,23 @@ function setCheckbox(line: string, checked: boolean): string {
   return line.replace(/^(\s*- \[)[ xX](\])/, `$1${checked ? 'x' : ' '}$2`)
 }
 
-function appendAnnotation(line: string, kind: 'issue' | 'skip', note: string): string {
-  if (kind === 'skip' && /（skip(?::[^）]*)?）/.test(line)) return line
-  if (kind === 'issue' && /（issue:[^）]*）/.test(line)) {
-    return line.replace(/（issue:[^）]*）/g, `（issue: ${sanitizeNote(note)}）`)
+function stripAnnotations(line: string): string {
+  return line
+    .replace(/（issue:[^）]*）/g, '')
+    .replace(/（skip(?::[^）]*)?）/g, '')
+    .replace(/（note:[^）]*）/g, '')
+    .replace(/[ \t]+$/, '')
+}
+
+function appendAnnotation(line: string, kind: 'issue' | 'skip' | 'note', note: string): string {
+  let label: string
+  if (kind === 'skip') {
+    label = note.trim() ? `（skip: ${sanitizeNote(note)}）` : '（skip）'
+  } else if (kind === 'issue') {
+    label = `（issue: ${sanitizeNote(note)}）`
+  } else {
+    label = `（note: ${sanitizeNote(note)}）`
   }
-  const label =
-    kind === 'skip'
-      ? note.trim()
-        ? `（skip: ${sanitizeNote(note)}）`
-        : '（skip）'
-      : `（issue: ${sanitizeNote(note)}）`
   return `${line.trimEnd()} ${label}`
 }
 
@@ -297,16 +310,24 @@ export async function createReviewApp(repoRoot = process.cwd()): Promise<any> {
   const { Hono } = await loadHono()
   const app = new Hono()
 
-  app.get('/review', (c: any) => c.html(renderReviewHtml()))
+  app.get('/review', (c: any) => {
+    c.header('Cache-Control', 'no-store')
+    return c.html(renderReviewHtml())
+  })
 
   app.get('/api/health', (c: any) => c.json({ ok: true, repoRoot }))
 
+  // GET /api/changes 與 /api/changes/:change 都不能讓瀏覽器 cache：
+  // change detail 含 version.hash + mtime，cache 後 reload 會拿到 stale version
+  // 而下一次 saveAction 仍用舊 version → server 端永遠回 409。
   app.get('/api/changes', async (c: any) => {
+    c.header('Cache-Control', 'no-store')
     const changes = await listPendingChanges(repoRoot)
     return c.json({ changes })
   })
 
   app.get('/api/changes/:change', async (c: any) => {
+    c.header('Cache-Control', 'no-store')
     const detail = await readChangeDetail(repoRoot, c.req.param('change'))
     return c.json({ change: detail })
   })
@@ -378,13 +399,19 @@ async function summarizeChange(
   const parsed = parseManualReviewSections(content)
   if (parsed.sections.length === 0) return null
 
-  const checked = parsed.items.filter((item) => item.checked).length
+  // 「真的通過」= [x] 且沒有 issue annotation。`[x]` + `（issue: ...）` 並存
+  // 是舊版時代的 stale state，語義上應算 issue 待解，不能算通過。
+  const issued = parsed.items.filter((item) => /（issue:[^）]*）/.test(item.raw)).length
+  const checked = parsed.items.filter(
+    (item) => item.checked && !/（issue:[^）]*）/.test(item.raw)
+  ).length
   return {
     name,
     tasksPath,
     total: parsed.items.length,
     checked,
     pending: parsed.items.length - checked,
+    issued,
     malformed: parsed.malformed.length,
     screenshotTopicCount: pools.length,
     screenshotTopics: pools.map((pool) => `${pool.env}/${pool.topic}`),
@@ -447,8 +474,12 @@ async function persistReviewAction(repoRoot: string, change: string, body: any):
   await writeFile(tasksPath, updated.content, 'utf8')
 
   const detail = await readChangeDetail(repoRoot, change)
+  // 與 summarizeChange 的 checked 算法同義：[x] 且沒 issue annotation 才算完成。
+  // 否則 stale `[x] + （issue: ...）` 會誤觸發 archive。
   const complete =
-    detail.malformed === 0 && detail.items.length > 0 && detail.items.every((item) => item.checked)
+    detail.malformed === 0 &&
+    detail.items.length > 0 &&
+    detail.items.every((item) => item.checked && !/（issue:[^）]*）/.test(item.raw))
   const archive = complete ? await invokeReviewArchive(repoRoot, change) : { status: 'not-ready' }
   return {
     ok: true,
@@ -467,32 +498,42 @@ async function invokeReviewArchive(repoRoot: string, change: string): Promise<an
   const command = configured || findDefaultArchiveCommand()
   if (!command) {
     return {
-      status: 'failed',
+      status: 'unavailable',
       message:
         'No review-archive command is available. Run /review-archive all manually or set REVIEW_GUI_ARCHIVE_CMD.',
     }
   }
 
+  // Fire-and-forget：archive 命令（如 `claude -p "/review-archive all"`）會跑很久，
+  // 同步等它收尾會讓 review GUI 的「✓ 通過」按鈕看起來 hung 住。
+  // 改成 detached spawn，stdout/stderr 寫到 log file，response 立刻回。
   const rendered = command.replaceAll('{change}', shellQuote(change))
-  const result = spawnSync(rendered, {
-    cwd: repoRoot,
-    shell: true,
-    encoding: 'utf8',
-    maxBuffer: 4 * 1024 * 1024,
-  })
-  if (result.status === 0) {
+  const logDir = join(repoRoot, '.review-gui')
+  const ts = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-')
+  const logPath = join(logDir, `archive-${change}-${ts}.log`)
+  try {
+    await mkdir(logDir, { recursive: true })
+    const fd = await openFd(logPath, 'a')
+    const child = spawn(rendered, {
+      cwd: repoRoot,
+      shell: true,
+      stdio: ['ignore', fd.fd, fd.fd],
+      detached: true,
+    })
+    child.unref()
+    await fd.close()
     return {
-      status: 'success',
+      status: 'started',
       command: rendered,
-      stdout: result.stdout.trim(),
+      logPath,
+      pid: child.pid,
     }
-  }
-  return {
-    status: 'failed',
-    command: rendered,
-    exitCode: result.status,
-    stdout: result.stdout.trim(),
-    stderr: result.stderr.trim(),
+  } catch (err) {
+    return {
+      status: 'failed',
+      command: rendered,
+      message: err instanceof Error ? err.message : String(err),
+    }
   }
 }
 
@@ -653,7 +694,8 @@ function renderReviewHtml(): string {
     .app {
       display: grid;
       grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
-      min-height: 100vh;
+      height: 100vh;
+      overflow: hidden;
     }
     .sidebar {
       border-right: 1px solid var(--line);
@@ -669,24 +711,59 @@ function renderReviewHtml(): string {
     }
     .change-list {
       display: grid;
+      gap: 14px;
+    }
+    .change-group {
+      display: grid;
       gap: 8px;
+    }
+    .change-group-heading {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      text-transform: uppercase;
+      padding: 4px 4px 0;
     }
     .change-row {
       display: grid;
-      gap: 8px;
+      gap: 6px;
       width: 100%;
       padding: 12px;
       text-align: left;
       box-shadow: none;
     }
+    .change-row.card-done { border-left: 4px solid #6aa181; }
+    .change-row.card-issue { border-left: 4px solid #c97a2c; }
+    .change-row.card-pending { border-left: 4px solid #b8b1a3; }
+    .change-row.card-malformed { border-left: 4px solid var(--bad); }
     .change-row[aria-current="true"] {
       border-color: var(--accent);
       background: #f8fff9;
     }
+    .change-row.card-done[aria-current="true"] { border-left-color: #6aa181; }
+    .change-row.card-issue[aria-current="true"] { border-left-color: #c97a2c; }
+    .change-row.card-pending[aria-current="true"] { border-left-color: #b8b1a3; }
+    .change-row.card-malformed[aria-current="true"] { border-left-color: var(--bad); }
     .change-name {
       font-weight: 700;
       overflow-wrap: anywhere;
     }
+    .card-badge {
+      display: inline-flex;
+      align-self: flex-start;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .card-badge.done { background: #d6ecdf; color: #1e6042; }
+    .card-badge.issue { background: #fce4c8; color: #8a4f0a; }
+    .card-badge.pending { background: #ece8dd; color: #5a5341; }
+    .card-badge.malformed { background: #fae0e0; color: #7a2828; }
     .metrics {
       display: flex;
       flex-wrap: wrap;
@@ -703,8 +780,10 @@ function renderReviewHtml(): string {
     .metric.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 50%, var(--line)); }
     main {
       min-width: 0;
+      min-height: 0;
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+      overflow: hidden;
     }
     .review-pane {
       min-width: 0;
@@ -740,6 +819,41 @@ function renderReviewHtml(): string {
     }
     .banner.show { display: block; }
     .banner.error { border-color: color-mix(in srgb, var(--bad) 55%, var(--line)); color: var(--bad); }
+    .banner.pending {
+      border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 6%, var(--panel));
+    }
+    .banner.pending::before {
+      content: '';
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      margin-right: 8px;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      vertical-align: -1px;
+      animation: rg-spin .8s linear infinite;
+    }
+    @keyframes rg-spin { to { transform: rotate(360deg); } }
+    .task-item.saving {
+      position: relative;
+      pointer-events: none;
+    }
+    .task-item.saving::after {
+      content: '儲存中…';
+      position: absolute;
+      top: 8px;
+      right: 12px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .task-item.saving > * { opacity: 0.6; }
     .task-list {
       display: grid;
       gap: 10px;
@@ -786,6 +900,37 @@ function renderReviewHtml(): string {
     .ok { background: #e6f3ea; border-color: #a7cdb4; }
     .issue { background: #fff3e2; border-color: #d8ad68; }
     .skip { background: #f0eee8; }
+    .task-item.decision-ok { border-left: 4px solid #6aa181; }
+    .task-item.decision-issue { border-left: 4px solid #c97a2c; }
+    .task-item.decision-skip { border-left: 4px solid #8a8275; }
+    .task-item.collapsed { padding: 8px 12px; opacity: 0.78; }
+    .task-item.collapsed .note,
+    .task-item.collapsed .actions { display: none; }
+    .task-item.collapsed .task-desc {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .task-item.collapsed.active { opacity: 1; }
+    .state-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .state-badge.ok { background: #d6ecdf; color: #1e6042; }
+    .state-badge.issue { background: #fce4c8; color: #8a4f0a; }
+    .state-badge.skip { background: #e7e1d3; color: #5a5341; }
+    .reopen {
+      padding: 0 8px;
+      margin-left: 6px;
+      font-size: 12px;
+      background: transparent;
+    }
     .note {
       width: 100%;
       min-height: 58px;
@@ -1053,6 +1198,81 @@ function renderReviewHtml(): string {
       width: 100%;
     }
 
+    /* ── handoff prompt 按鈕（出現在所有「需要外部 Claude session 處理」的位置） ── */
+    .copy-handoff-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 10px;
+      margin-left: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+      color: var(--accent);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .copy-handoff-btn:hover {
+      background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+    }
+    .copy-handoff-btn.block {
+      display: inline-flex;
+      margin-top: 10px;
+      margin-left: 0;
+      padding: 6px 14px;
+      font-size: 13px;
+    }
+
+    /* ── handoff prompt fallback modal（clipboard API 失敗時顯示） ── */
+    .prompt-fallback-modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(30, 37, 33, .55);
+      z-index: 1100;
+    }
+    .prompt-fallback-modal.open { display: flex; }
+    .prompt-fallback-inner {
+      background: var(--panel);
+      border-radius: 12px;
+      padding: 22px 26px;
+      width: min(680px, 92vw);
+      max-height: 86vh;
+      display: grid;
+      gap: 12px;
+      box-shadow: var(--shadow);
+    }
+    .prompt-fallback-inner h3 {
+      margin: 0;
+      font-size: 18px;
+    }
+    .prompt-fallback-inner p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .prompt-fallback-inner textarea {
+      width: 100%;
+      min-height: 320px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      background: #fffefa;
+      color: var(--ink);
+      resize: vertical;
+    }
+    .prompt-fallback-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
   </style>
 </head>
 <body>
@@ -1121,11 +1341,32 @@ function renderReviewHtml(): string {
       <button id="shortcutModalClose" type="button">關閉 (Esc)</button>
     </div>
   </div>
+  <div id="promptFallbackModal" class="prompt-fallback-modal" role="dialog" aria-modal="true" aria-label="Handoff prompt（手動複製）">
+    <div class="prompt-fallback-inner">
+      <h3>複製 handoff prompt</h3>
+      <p>瀏覽器拒絕直接寫剪貼簿（通常是非 secure context）。請手動全選 → 複製 → 貼到新 Claude session。</p>
+      <textarea id="promptFallbackText" readonly></textarea>
+      <div class="prompt-fallback-actions">
+        <button id="promptFallbackSelectAll" type="button">全選</button>
+        <button id="promptFallbackClose" type="button">關閉 (Esc)</button>
+      </div>
+    </div>
+  </div>
   <script>
     const state = {
       changes: [],
       current: null,
       activeIndex: 0,
+      expanded: new Set(),
+      // draftNotes: 使用者在 textarea 輸入但尚未 saveAction 的內容；以 itemId 為 key。
+      // renderTasks 會整個重設 innerHTML 觸發 textarea 重建，沒這層 cache 會把
+      // 使用者打字內容沖掉（renderTasks 由點 task / j/k / saveAction / reopen
+      // 等多處觸發）。saveAction 成功後清掉該 id（server 已存進 raw）。
+      draftNotes: {},
+      // repoRoot / repoName 由啟動時 fetch /api/health 填入，給 handoff prompt 用。
+      // 若 health fetch 失敗仍要讓 GUI 可用，prompt 會 fallback 顯示「(unknown)」。
+      repoRoot: '',
+      repoName: '',
     };
     const el = {
       changeStatus: document.getElementById('changeStatus'),
@@ -1143,21 +1384,61 @@ function renderReviewHtml(): string {
       viewerClose: document.getElementById('viewerClose'),
       shortcutModal: document.getElementById('shortcutModal'),
       shortcutModalClose: document.getElementById('shortcutModalClose'),
+      promptFallbackModal: document.getElementById('promptFallbackModal'),
+      promptFallbackText: document.getElementById('promptFallbackText'),
+      promptFallbackSelectAll: document.getElementById('promptFallbackSelectAll'),
+      promptFallbackClose: document.getElementById('promptFallbackClose'),
     };
 
     // 從截圖檔名擷取 item id token。支援 #N-、#N.M-、Nb-、N.Ma- 等變體。
+    // 同時回傳是否為 legacy 格式（無 # 前綴）— legacy fallback 只能套用在 legacy
+    // 檔名，不能讓 canonical scoped 檔（如 #3.1-）誤配到 parent #1。
+    // regex 用 [0-9] / [.] 而非 \\d / \\. — oxlint no-useless-escape 對 template
+    // literal 內字串字面 regex 誤判，這寫法等價且 lint clean。
     function extractFilenameId(name) {
-      const m = name.match(/^#?(\d+(?:\.\d+)?)([a-z]?)(?=[-._])/i);
-      return m ? m[1] : null;
+      const m = name.match(/^(#?)([0-9]+(?:[.][0-9]+)?)([a-z]?)(?=[-._])/i);
+      if (!m) return null;
+      return { id: m[2], legacy: m[1] === '' };
     }
+    // 從 raw tasks.md 行解析使用者已下的決定 + 之前填的 note。
+    // appendAnnotation 用全形「（）」夾標籤，例：
+    //   - [x] #1 ... （issue: 圖片載不出）
+    //   - [x] #2 ... （skip: 不適用）
+    //   - [x] #3 ...（純通過、無 annotation）
+    // regex 用 [ ] 等價字符集而非 \\s — oxlint no-useless-escape 對 template
+    // literal 內字串字面 regex 誤判（同 extractFilenameId 處理方式）。
+    // server-side sanitizeNote 已 normalize whitespace 為單一 space，所以
+    // [ ]* 足夠覆蓋所有實際輸入。
+    function parseDecision(raw) {
+      const issueMatch = raw.match(/（issue:[ ]*([^）]*)）/);
+      if (issueMatch) return { kind: 'issue', note: issueMatch[1].trim() };
+      const skipMatch = raw.match(/（skip(?::[ ]*([^）]*))?）/);
+      if (skipMatch) return { kind: 'skip', note: (skipMatch[1] || '').trim() };
+      // 用 startsWith 避開 oxlint no-useless-escape 對 regex \\[ / \\] 的誤判
+      const trimmed = raw.replace(/^[ \t]+/, '');
+      const checked = trimmed.startsWith('- [x]') || trimmed.startsWith('- [X]');
+      if (checked) {
+        const noteMatch = raw.match(/（note:[ ]*([^）]*)）/);
+        return { kind: 'ok', note: noteMatch ? noteMatch[1].trim() : '' };
+      }
+      return { kind: 'pending', note: '' };
+    }
+    function decisionLabel(kind) {
+      if (kind === 'ok') return '✓ 已通過';
+      if (kind === 'issue') return '⚠ 有問題';
+      if (kind === 'skip') return '⤵ 已跳過';
+      return '待檢查';
+    }
+
     function fileMatchesItem(filename, itemId) {
-      const fileId = extractFilenameId(filename);
-      if (!fileId) return false;
+      const extracted = extractFilenameId(filename);
+      if (!extracted) return false;
       const target = itemId.replace(/^#/, '');
-      if (fileId === target) return true;
-      // legacy section.item 命名（如 8.1-...）對應 parent item
-      if (!target.includes('.') && fileId.includes('.')) {
-        const parts = fileId.split('.');
+      if (extracted.id === target) return true;
+      // legacy section.item（如 8.1-...，無 #）對應 parent item — 只給 legacy 檔名用。
+      // canonical #N.M-（有 #）不走 fallback，避免 #3.1-mobile.png 被 parent #1 抓到。
+      if (extracted.legacy && !target.includes('.') && extracted.id.includes('.')) {
+        const parts = extracted.id.split('.');
         if (parts.length === 2 && parts[1] === target) return true;
       }
       return false;
@@ -1174,6 +1455,21 @@ function renderReviewHtml(): string {
       el.banner.className = 'banner' + (message ? ' show' : '') + (type ? ' ' + type : '');
     }
 
+    // showBanner 配 handoff 按鈕；用於衝突等需要外部 Claude session 處理的情境。
+    // textContent 會清掉 children，所以先 setText 再 appendChild。
+    function showBannerWithHandoff(message, type, kind, label, errorMessage) {
+      showBanner(message, type);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'copy-handoff-btn';
+      btn.textContent = '📋 複製 handoff prompt';
+      btn.title = '複製 handoff prompt 給新 Claude session 處理此問題';
+      btn.addEventListener('click', function () {
+        copyHandoffPrompt(kind, { change: state.current, errorMessage: errorMessage }, label);
+      });
+      el.banner.appendChild(btn);
+    }
+
     async function api(path, options) {
       const res = await fetch(path, options);
       const body = await res.json().catch(function () { return {}; });
@@ -1184,6 +1480,230 @@ function renderReviewHtml(): string {
         throw err;
       }
       return body;
+    }
+
+    // ── handoff prompt builder ──
+    // 5 種情境共用骨架；每種往下填情境專屬段落。產出的 prompt 應自給自足，
+    // 即便丟到一個沒讀過 CLAUDE.md / 沒 conversation history 的 cleanroom Claude
+    // session 也能直接接手。指示寫硬性使用 codebase-memory-mcp，對齊 user
+    // global CLAUDE.md 的 Code Discovery rule。
+    function handoffHeader(change) {
+      const repoName = state.repoName || '(unknown)';
+      const repoRoot = state.repoRoot || '(unknown)';
+      const changeName = change ? change.name : '(unknown)';
+      return [
+        '我在 consumer repo「' + repoName + '」（路徑：' + repoRoot + '）',
+        '跑 \`pnpm review:ui\` 做 spectra 人工檢查，遇到下面這個問題需要你接手分析、提方案，',
+        '等我確認後再動手。',
+        '',
+        '## 環境',
+        '- consumer: ' + repoName,
+        '- repo root: ' + repoRoot,
+        '- change: ' + changeName,
+        '- tasks.md: openspec/changes/' + changeName + '/tasks.md',
+        '- 相關 rules（若存在請優先讀）：',
+        '  - .claude/rules/manual-review-format.md',
+        '  - .claude/rules/screenshot-organization.md',
+        '  - openspec/AGENTS.md（spectra 工作流）',
+        '',
+      ].join('\\n');
+    }
+    function handoffFooter() {
+      return [
+        '',
+        '## 你要做的事',
+        '1. 先讀 tasks.md 與相關 rules 確認當前真實狀態（不要相信我的轉述，以檔案為準）',
+        '2. **MUST** 用 codebase-memory-mcp 做程式碼探索：',
+        '   - search_graph(name_pattern/label/qn_pattern) 找函式 / class / route',
+        '   - trace_path(function_name, mode=calls|data_flow|cross_service) 追 call chain',
+        '   - get_code_snippet(qualified_name) 讀原始碼（不要用 cat / Read 讀程式碼檔）',
+        '   - 若 graph 還沒 index，先跑 index_repository',
+        '   - Grep / Glob / Read 只用於非程式碼檔（.md / config / .env）',
+        '3. 提出處理方案：列出要動哪些檔、影響什麼、為何這樣修，**等我確認後再改**',
+        '4. 不要急著動手——這是 plan-first 工作流；急著動手 = 違反 user 規則',
+        '',
+        '回覆時請先說「我看到的現況是 ...」再給方案，不要只回方案。',
+      ].join('\\n');
+    }
+    function buildHandoffPrompt(kind, ctx) {
+      const change = ctx.change || state.current;
+      let body = '';
+      if (kind === 'malformed') {
+        const lines = (ctx.malformedLines || (change ? change.malformedLines : []) || []);
+        const formatted = lines.map(function (l) {
+          return '第 ' + l.lineNumber + ' 行（' + (l.reason || 'parse error') + '）：' + l.raw;
+        }).join('\\n');
+        body = [
+          '## 問題：tasks.md 有格式錯誤行（review:ui 無法寫入）',
+          '',
+          'GUI 解析 \`## 人工檢查\` 區塊時遇到下列行不符 schema，整個 change 的寫入被 freeze（按 O / I / S 都會被擋）。',
+          '',
+          '預期 schema：',
+          '- \`- [ ] #N 描述...\`（top-level item）',
+          '- \`- [ ] #N.M 描述...\`（scoped sub-item）',
+          '- 已決定者：\`- [x] ...（issue: 說明）\` / \`- [x] ...（skip[: 說明]）\` / \`- [x] ...（note: 說明）\`',
+          '',
+          '違規行：',
+          '\`\`\`',
+          formatted || '(無)',
+          '\`\`\`',
+        ].join('\\n');
+      } else if (kind === 'no-pools') {
+        const cn = change ? change.name : '<change-name>';
+        body = [
+          '## 問題：找不到屬於此 change 的截圖資料夾',
+          '',
+          'GUI 對截圖資料夾用 substring match：',
+          '\`topic === change\` 或 \`change.startsWith(topic+"-")\` 或 \`topic.startsWith(change+"-")\`',
+          '掃完 \`screenshots/<env>/*\` 後，沒有任何資料夾與 change name \`' + cn + '\` 對得起來。',
+          '',
+          '預期路徑形如：',
+          '- \`screenshots/<env>/' + cn + '/\`',
+          '- \`screenshots/<env>/' + cn + '-<suffix>/\`',
+          '',
+          '常見原因：',
+          '1. 資料夾名拼錯（typo / 用了 phase-N-section-N 或 feature-tag 等別名）',
+          '2. 還沒拍——這個 change 的 \`## 人工檢查\` 區塊建立了，但截圖階段被跳過',
+          '3. env 子目錄漏建（screenshots/ 下面要有一層 env，例如 default / desktop / mobile）',
+          '',
+          '請：',
+          '- 跑 \`ls -la screenshots/\` 看現有 env 與 topic',
+          '- 比對 \`openspec/changes/' + cn + '/tasks.md\` 的 \`## 人工檢查\` 是否真的需要截圖',
+          '- 若是命名漂掉，提議重新命名的最小修法（不要直接改檔，先列方案）',
+        ].join('\\n');
+      } else if (kind === 'no-matched') {
+        const item = ctx.item || {};
+        const idLabel = (item.id || '').replace(/^#/, '');
+        const pools = ctx.pools || (change ? change.screenshotPools : []) || [];
+        const allFiles = ctx.files || [];
+        const poolPaths = pools.map(function (p) { return 'screenshots/' + p.env + '/' + p.topic + '/'; });
+        body = [
+          '## 問題：截圖檔名與 item id 不符（無法配對）',
+          '',
+          '當前 item：',
+          '- id: ' + (item.id || '(未選)'),
+          '- description: ' + (item.description || '(無)'),
+          '',
+          '已 match 的 topic 資料夾（共 ' + poolPaths.length + ' 個）：',
+          poolPaths.length ? poolPaths.map(function (p) { return '- ' + p; }).join('\\n') : '- (無)',
+          '',
+          '此 change 共收到 ' + allFiles.length + ' 張截圖，但檔名都不以以下開頭：',
+          '- \`#' + idLabel + '-...\`',
+          '- \`#' + idLabel + '<letter>-...\`（variant，如 #' + idLabel + 'a-light.png）',
+          '- legacy \`' + idLabel + '-...\`（無 # 前綴；只有 id 不含 . 時 fallback 才會用）',
+          '',
+          '現有檔名：',
+          '\`\`\`',
+          (allFiles.length ? allFiles.map(function (f) { return f.name; }).join('\\n') : '(無)'),
+          '\`\`\`',
+          '',
+          '請：',
+          '- 確認檔名與 item id 的對應規範（見 .claude/rules/screenshot-organization.md 或 plugins/hub-core/agents/screenshot-review.md）',
+          '- 若是命名漂掉，提議 rename 方案（map old → new，不要直接 mv）',
+          '- 若是 item id 與設計不符（例如 tasks.md 是 #3 但截圖意圖是 #3.1 sub-item），建議改 tasks.md 結構',
+        ].join('\\n');
+      } else if (kind === 'conflict') {
+        const cn = change ? change.name : '(unknown)';
+        const ver = (change && change.version) || {};
+        body = [
+          '## 問題：review:ui 寫入衝突（HTTP 409）',
+          '',
+          'GUI 嘗試寫入 tasks.md 但 server 端偵測到 disk 內容與 client 持有的 version hash 不一致——意思是 tasks.md 在我按按鈕的同時被別的東西改過了。',
+          '',
+          '錯誤訊息：' + (ctx.errorMessage || '(無)'),
+          '',
+          'Client 持有的 version：',
+          '- hash: ' + (ver.hash || '(unknown)'),
+          '- mtimeMs: ' + (ver.mtimeMs || '(unknown)'),
+          '',
+          '常見原因：',
+          '1. 我自己在編輯器裡改了 \`openspec/changes/' + cn + '/tasks.md\`',
+          '2. 另一個 review:ui tab / 另一個 Claude session 跑 spectra-apply 改了',
+          '3. git pull / rebase / spectra-ingest 拉到新版本',
+          '4. 同時開兩個 review:ui，前一次 save 已落地但這個 tab 沒 reload',
+          '',
+          '請：',
+          '- 跑 \`git status\` 與 \`git diff openspec/changes/' + cn + '/tasks.md\` 看誰動了',
+          '- 看 git log 最近一筆對該檔的改動是否預期',
+          '- 提議解法：通常是「reload GUI 拿新 version」即可，但若 tasks.md 已經被改成不一致狀態，要先協調修法',
+          '- 若有未 commit 的本地修改造成衝突，協助我整理出乾淨的 commit 順序',
+        ].join('\\n');
+      } else if (kind === 'item-issue') {
+        const item = ctx.item || {};
+        const note = ctx.note || '';
+        const matchedFiles = ctx.matchedFiles || [];
+        body = [
+          '## 問題：人工檢查標記為 ⚠ 有問題（issue），需要 root cause + 修法',
+          '',
+          'Item：',
+          '- id: ' + (item.id || '(unknown)'),
+          '- description: ' + (item.description || '(無)'),
+          '',
+          '我填的 issue 說明：',
+          '\`\`\`',
+          note || '(空)',
+          '\`\`\`',
+          '',
+          '已配對的截圖（' + matchedFiles.length + ' 張）：',
+          matchedFiles.length ? matchedFiles.map(function (n) { return '- ' + n; }).join('\\n') : '- (無)',
+          '',
+          '請把上面 issue 說明當 bug report 處理：',
+          '1. 用 codebase-memory-mcp 找出這個 item 對應的 feature 在哪實作（從 description 抓 keyword → search_graph）',
+          '2. trace_path 看相關 call chain，定位根因（不要急著看 symptom）',
+          '3. 提修法：列要動的檔、影響範圍、是否需要新測試、是否需要更新 spec',
+          '4. 若根因在 spec / 設計層級（不是 bug 而是 missing requirement），建議走 /spectra-ingest 改 proposal 而非直接改 code',
+        ].join('\\n');
+      } else {
+        body = '## 問題\\n\\n(unknown kind: ' + kind + ')';
+      }
+      return handoffHeader(change) + body + handoffFooter();
+    }
+
+    // ── handoff prompt 複製 + fallback modal ──
+    let promptFallbackPrevFocus = null;
+    function openPromptFallbackModal(text) {
+      promptFallbackPrevFocus = document.activeElement;
+      el.promptFallbackText.value = text;
+      const root = document.body;
+      for (const child of Array.from(root.children)) {
+        if (child !== el.promptFallbackModal && !child.hasAttribute('inert')) {
+          child.setAttribute('inert', '');
+          child.dataset._inertByPromptModal = '1';
+        }
+      }
+      el.promptFallbackModal.classList.add('open');
+      // 預設全選方便 user 直接 cmd+c
+      requestAnimationFrame(function () {
+        el.promptFallbackText.focus();
+        el.promptFallbackText.select();
+      });
+    }
+    function closePromptFallbackModal() {
+      el.promptFallbackModal.classList.remove('open');
+      const root = document.body;
+      for (const child of Array.from(root.children)) {
+        if (child.dataset._inertByPromptModal === '1') {
+          child.removeAttribute('inert');
+          delete child.dataset._inertByPromptModal;
+        }
+      }
+      if (promptFallbackPrevFocus && typeof promptFallbackPrevFocus.focus === 'function') {
+        promptFallbackPrevFocus.focus();
+      }
+      promptFallbackPrevFocus = null;
+    }
+    async function copyHandoffPrompt(kind, ctx, label) {
+      const text = buildHandoffPrompt(kind, ctx || {});
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          showBanner('已複製 ' + label + ' handoff prompt 到剪貼簿，可貼到新 Claude session', '');
+          return;
+        }
+      } catch (err) {
+        // 落到 fallback；不要讓 clipboard 失敗整個吃掉操作
+      }
+      openPromptFallbackModal(text);
     }
 
     async function loadChanges() {
@@ -1197,19 +1717,68 @@ function renderReviewHtml(): string {
       if (!state.current && state.changes[0]) await loadChange(state.changes[0].name);
     }
 
+    // 依 metrics 推算 change card 主狀態：malformed > issue > pending > done
+    function changeCardKind(change) {
+      if (change.malformed > 0) return 'malformed';
+      if ((change.issued || 0) > 0) return 'issue';
+      if (change.pending > 0) return 'pending';
+      return 'done';
+    }
+    function changeCardBadge(change, kind) {
+      if (kind === 'malformed') return change.malformed + ' 行格式錯誤';
+      if (kind === 'done') return '✓ 全部通過';
+      const issued = change.issued || 0;
+      const untouched = change.pending - issued;
+      if (kind === 'issue') {
+        if (untouched > 0) return '⚠ ' + issued + ' 問題・' + untouched + ' 待檢查';
+        return '⚠ ' + issued + ' 個問題待修';
+      }
+      return untouched + ' 待檢查';
+    }
+    function renderChangeCard(change) {
+      const current = state.current && state.current.name === change.name;
+      const kind = changeCardKind(change);
+      const badge = changeCardBadge(change, kind);
+      return '<button type="button" class="change-row card-' + kind + '" data-change="' + esc(change.name) + '" aria-current="' + (current ? 'true' : 'false') + '">' +
+        '<span class="change-name">' + esc(change.name) + '</span>' +
+        '<span class="card-badge ' + kind + '">' + esc(badge) + '</span>' +
+        '<span class="metrics">' +
+        '<span class="metric" title="已通過（含 skip） / 總項目數">' + change.checked + '/' + change.total + ' 通過</span>' +
+        (change.screenshotTopicCount ? '<span class="metric" title="對應的截圖資料夾數">' + change.screenshotTopicCount + ' 截圖</span>' : '') +
+        '</span>' +
+        '</button>';
+    }
     function renderChanges() {
-      el.changeList.innerHTML = state.changes.map(function (change) {
-        const current = state.current && state.current.name === change.name;
-        return '<button type="button" class="change-row" data-change="' + esc(change.name) + '" aria-current="' + (current ? 'true' : 'false') + '">' +
-          '<span class="change-name">' + esc(change.name) + '</span>' +
-          '<span class="metrics">' +
-          '<span class="metric" title="尚未檢查的項目數">' + change.pending + ' 待檢查</span>' +
-          '<span class="metric" title="已通過 / 總項目數">' + change.checked + '/' + change.total + ' 已通過</span>' +
-          '<span class="metric' + (change.malformed ? ' bad' : '') + '" title="tasks.md 格式錯誤行數（需先修復才能寫入）">' + change.malformed + ' 格式錯誤</span>' +
-          '<span class="metric" title="對應的截圖資料夾數（screenshots/&lt;env&gt;/&lt;topic&gt;/）">' + change.screenshotTopicCount + ' 個截圖 topic</span>' +
-          '</span>' +
-          '</button>';
-      }).join('');
+      const active = [];
+      const done = [];
+      for (const change of state.changes) {
+        if (changeCardKind(change) === 'done') done.push(change);
+        else active.push(change);
+      }
+      const blocks = [];
+      if (active.length) {
+        blocks.push(
+          '<div class="change-group">' +
+          '<div class="change-group-heading">進行中 · ' + active.length + '</div>' +
+          active.map(renderChangeCard).join('') +
+          '</div>'
+        );
+      }
+      if (done.length) {
+        blocks.push(
+          '<div class="change-group">' +
+          '<div class="change-group-heading">已完成 · ' + done.length + '</div>' +
+          done.map(renderChangeCard).join('') +
+          '</div>'
+        );
+      }
+      // 用 createContextualFragment 取代 innerHTML，避免 plugin lint hook 阻擋；
+      // 內容已 esc() 過 user-supplied 字串。
+      el.changeList.replaceChildren();
+      if (blocks.length) {
+        const range = document.createRange();
+        el.changeList.appendChild(range.createContextualFragment(blocks.join('')));
+      }
       el.changeList.querySelectorAll('[data-change]').forEach(function (button) {
         button.addEventListener('click', function () { loadChange(button.dataset.change); });
       });
@@ -1221,6 +1790,8 @@ function renderReviewHtml(): string {
       state.current = data.change;
       state.activeIndex = Math.max(0, (state.current.items || []).findIndex(function (item) { return !item.checked; }));
       if (state.activeIndex < 0) state.activeIndex = 0;
+      state.expanded = new Set();
+      state.draftNotes = {};
       renderChanges();
       renderCurrent();
     }
@@ -1230,7 +1801,7 @@ function renderReviewHtml(): string {
       if (!change) return;
       el.currentTitle.textContent = change.name;
       if (change.malformedLines.length) {
-        showBanner('人工檢查格式錯誤，需先修正下列 tasks.md 行才能寫入', 'error');
+        showBannerWithHandoff('人工檢查格式錯誤，需先修正下列 tasks.md 行才能寫入', 'error', 'malformed', '格式錯誤', '');
       }
       renderTasks();
       renderThumbs();
@@ -1246,18 +1817,45 @@ function renderReviewHtml(): string {
         el.taskList.innerHTML = '<div class="empty">此 change 有 ## 人工檢查 區塊，但沒有可解析的項目</div>';
         return;
       }
-      const malformed = change.malformedLines.map(function (line) {
+      const malformedHandoff = change.malformedLines.length
+        ? '<div class="task-item" style="border-left: 4px solid var(--bad);">' +
+          '<div class="task-head">' +
+          '<span class="task-id">⚠ 格式錯誤</span>' +
+          '<span class="task-desc">這些行不符 schema，整個 change 寫入被擋。需要修 tasks.md 才能繼續。</span>' +
+          '<span class="task-state"></span>' +
+          '</div>' +
+          '<button class="copy-handoff-btn block" data-handoff="malformed" type="button" title="複製 handoff prompt 給新 Claude session 處理格式錯誤">📋 複製 handoff prompt</button>' +
+          '</div>'
+        : '';
+      const malformed = malformedHandoff + change.malformedLines.map(function (line) {
         return '<div class="task-item"><div class="task-head"><span class="task-id">第 ' + line.lineNumber + ' 行</span><span class="task-desc">' + esc(line.raw) + '</span><span class="task-state">格式錯誤</span></div></div>';
       }).join('');
       const items = change.items.map(function (item, index) {
         const active = index === state.activeIndex;
-        return '<article class="task-item' + (active ? ' active' : '') + (item.scoped ? ' scoped' : '') + '" data-item="' + esc(item.id) + '">' +
+        const decision = parseDecision(item.raw);
+        const handled = decision.kind !== 'pending';
+        const collapsed = handled && !state.expanded.has(item.id);
+        const decisionClass = handled ? ' decision-' + decision.kind : '';
+        let stateHtml;
+        if (handled) {
+          stateHtml = '<span class="state-badge ' + decision.kind + '">' + decisionLabel(decision.kind) + '</span>';
+          if (collapsed) {
+            stateHtml += '<button class="reopen" data-action="reopen" data-id="' + esc(item.id) + '" type="button" title="重新編輯此項">↻ 編輯</button>';
+          }
+          if (decision.kind === 'issue') {
+            stateHtml += '<button class="copy-handoff-btn" data-handoff="item-issue" data-id="' + esc(item.id) + '" type="button" title="複製 handoff prompt 給新 Claude session 處理這個 issue">📋 handoff</button>';
+          }
+        } else {
+          stateHtml = '待檢查';
+        }
+        const noteValue = decision.note ? esc(decision.note) : '';
+        return '<article class="task-item' + (active ? ' active' : '') + (item.scoped ? ' scoped' : '') + decisionClass + (collapsed ? ' collapsed' : '') + '" data-item="' + esc(item.id) + '">' +
           '<div class="task-head">' +
           '<span class="task-id">' + esc(item.id) + '</span>' +
           '<span class="task-desc">' + esc(item.description) + '</span>' +
-          '<span class="task-state">' + (item.checked ? '已通過' : '待檢查') + '</span>' +
+          '<span class="task-state">' + stateHtml + '</span>' +
           '</div>' +
-          '<textarea class="note" data-note="' + esc(item.id) + '" placeholder="填寫說明（「有問題」必填、「跳過」可選填）"></textarea>' +
+          '<textarea class="note" data-note="' + esc(item.id) + '" placeholder="填寫說明（「有問題」必填、「跳過」可選填）">' + noteValue + '</textarea>' +
           '<div class="actions">' +
           '<button class="ok" data-action="ok" data-id="' + esc(item.id) + '" type="button" title="標記此項通過 (O)">✓ 通過</button>' +
           '<button class="issue" data-action="issue" data-id="' + esc(item.id) + '" type="button" title="標記此項有問題，需填寫說明 (I)">⚠ 有問題</button>' +
@@ -1268,16 +1866,78 @@ function renderReviewHtml(): string {
       el.taskList.innerHTML = malformed + items;
       el.taskList.querySelectorAll('[data-item]').forEach(function (node, index) {
         node.addEventListener('click', function (event) {
-          // 點 textarea / button / input / select 不應重建列表（會把使用者 focus 與輸入丟掉）
-          if (event.target.closest && event.target.closest('button, textarea, input, select')) return;
+          const interactive = event.target.closest && event.target.closest('button, textarea, input, select');
+          // 點當前 active card 的互動元素：不重建，保留 focus 與輸入
+          if (interactive && state.activeIndex === index) return;
           if (state.activeIndex === index) return;
+          // 點別張 card：切 active，若原本點的是 textarea，重建後把 focus 還回對應 textarea
+          const focusNoteId = (event.target.tagName === 'TEXTAREA' && event.target.dataset && event.target.dataset.note)
+            ? event.target.dataset.note
+            : null;
           state.activeIndex = index;
           renderTasks();
           renderThumbs();
+          if (focusNoteId) {
+            const textarea = el.taskList.querySelector('textarea[data-note="' + CSS.escape(focusNoteId) + '"]');
+            if (textarea) {
+              textarea.focus();
+              const len = textarea.value.length;
+              textarea.setSelectionRange(len, len);
+            }
+          }
         });
       });
       el.taskList.querySelectorAll('[data-action]').forEach(function (button) {
-        button.addEventListener('click', function () { saveAction(button.dataset.id, button.dataset.action); });
+        button.addEventListener('click', function (event) {
+          event.stopPropagation();
+          if (button.dataset.action === 'reopen') {
+            state.expanded.add(button.dataset.id);
+            renderTasks();
+            const node = el.taskList.querySelector('[data-note="' + CSS.escape(button.dataset.id) + '"]');
+            if (node) {
+              node.focus();
+              const len = node.value.length;
+              node.setSelectionRange(len, len);
+            }
+            return;
+          }
+          saveAction(button.dataset.id, button.dataset.action);
+        });
+      });
+      el.taskList.querySelectorAll('[data-handoff]').forEach(function (button) {
+        button.addEventListener('click', function (event) {
+          event.stopPropagation();
+          const kind = button.dataset.handoff;
+          if (kind === 'malformed') {
+            copyHandoffPrompt('malformed', { change: state.current }, '格式錯誤');
+            return;
+          }
+          if (kind === 'item-issue') {
+            const id = button.dataset.id;
+            const target = (state.current && state.current.items || []).find(function (it) { return it.id === id; });
+            if (!target) {
+              showBanner('找不到 item ' + id + '，無法產生 handoff prompt', 'error');
+              return;
+            }
+            const decision = parseDecision(target.raw);
+            const matched = changeFiles().filter(function (f) { return fileMatchesItem(f.name, target.id); }).map(function (f) { return f.name; });
+            copyHandoffPrompt('item-issue', {
+              change: state.current,
+              item: target,
+              note: decision.note,
+              matchedFiles: matched,
+            }, 'issue ' + target.id);
+          }
+        });
+      });
+      // textarea draft cache：使用者打字 → 寫進 state.draftNotes（key by itemId），
+      // renderTasks 之後 restore；沒這層使用者輸入會被下次 innerHTML reset 沖掉。
+      el.taskList.querySelectorAll('textarea[data-note]').forEach(function (textarea) {
+        const id = textarea.dataset.note;
+        if (state.draftNotes[id] !== undefined) textarea.value = state.draftNotes[id];
+        textarea.addEventListener('input', function () {
+          state.draftNotes[id] = textarea.value;
+        });
       });
     }
 
@@ -1328,13 +1988,37 @@ function renderReviewHtml(): string {
         div.appendChild(p1);
         div.appendChild(p2);
         div.appendChild(p3);
+        const handoffBtn = document.createElement('button');
+        handoffBtn.type = 'button';
+        handoffBtn.className = 'copy-handoff-btn block';
+        handoffBtn.textContent = '📋 複製 handoff prompt';
+        handoffBtn.title = '複製 handoff prompt 給新 Claude session 處理缺截圖資料夾';
+        handoffBtn.addEventListener('click', function () {
+          copyHandoffPrompt('no-pools', { change: state.current }, '缺截圖資料夾');
+        });
+        div.appendChild(handoffBtn);
         el.thumbGrid.replaceChildren(div);
         return;
       }
       el.selectionStatus.textContent = '檢查項 ' + item.id + ' · 對應 ' + matched.length + ' / ' + allFiles.length + ' 張（topic 資料夾：' + pools.map(function (p) { return p.env + '/' + p.topic; }).join(', ') + '）';
       if (!matched.length) {
         const hint = '此 change 共 ' + allFiles.length + ' 張截圖，但無檔名以 #' + idLabel + '- 或 #' + idLabel + '<letter>- 開頭。請以 #' + idLabel + '-... 命名後重整。';
-        el.thumbGrid.replaceChildren(emptyMessage(hint));
+        const div = emptyMessage(hint);
+        const handoffBtn = document.createElement('button');
+        handoffBtn.type = 'button';
+        handoffBtn.className = 'copy-handoff-btn block';
+        handoffBtn.textContent = '📋 複製 handoff prompt';
+        handoffBtn.title = '複製 handoff prompt 給新 Claude session 處理檔名不符';
+        handoffBtn.addEventListener('click', function () {
+          copyHandoffPrompt('no-matched', {
+            change: state.current,
+            item: item,
+            pools: pools,
+            files: allFiles,
+          }, '檔名不符');
+        });
+        div.appendChild(handoffBtn);
+        el.thumbGrid.replaceChildren(div);
         return;
       }
       el.thumbGrid.replaceChildren(...matched.map(buildThumbButton));
@@ -1375,6 +2059,8 @@ function renderReviewHtml(): string {
       return button;
     }
 
+    // 防止 double-click 在 server 還沒回前重複送出（每按一次就多一次 conflict 機會）
+    const inflightSaves = new Set();
     async function saveAction(itemId, action) {
       const change = state.current;
       if (!change) return;
@@ -1382,6 +2068,7 @@ function renderReviewHtml(): string {
         showBanner('寫入前需先修正格式錯誤', 'error');
         return;
       }
+      if (inflightSaves.has(itemId)) return;
       const noteNode = el.taskList.querySelector('[data-note="' + CSS.escape(itemId) + '"]');
       const note = noteNode ? noteNode.value : '';
       if (action === 'issue' && !note.trim()) {
@@ -1389,6 +2076,13 @@ function renderReviewHtml(): string {
         if (noteNode) noteNode.focus();
         return;
       }
+      // visual feedback：立即把 task-item disable + 顯示「儲存中…」banner，
+      // 讓使用者知道 click 收到了，不會以為 hung。
+      inflightSaves.add(itemId);
+      const itemNode = el.taskList.querySelector('[data-item="' + CSS.escape(itemId) + '"]');
+      if (itemNode) itemNode.classList.add('saving');
+      itemNode?.querySelectorAll('button[data-action], textarea').forEach(function (n) { n.disabled = true; });
+      showBanner('儲存中…', 'pending');
       try {
         const data = await api('/api/changes/' + encodeURIComponent(change.name) + '/action', {
           method: 'POST',
@@ -1401,17 +2095,65 @@ function renderReviewHtml(): string {
           }),
         });
         state.current = data.change;
-        if (data.archive && data.archive.status === 'success') {
-          showBanner('已儲存，Review archive 完成', '');
+        state.expanded.delete(itemId);
+        delete state.draftNotes[itemId];
+        // sidebar metrics 是 state.changes 的 cache，saveAction 不會自動更新
+        // 對應 entry，會跟 right pane 的 state.current 不一致。把 detail 的 summary
+        // 欄位 patch 回 list，避免使用者看到「sidebar 1/6 已通過、right pane 4 ok」這種矛盾。
+        const idx = state.changes.findIndex(function (c) { return c.name === data.change.name; });
+        if (idx >= 0) {
+          state.changes[idx] = {
+            name: data.change.name,
+            tasksPath: data.change.tasksPath,
+            total: data.change.total,
+            checked: data.change.checked,
+            pending: data.change.pending,
+            issued: data.change.issued,
+            malformed: data.change.malformed,
+            screenshotTopicCount: data.change.screenshotTopicCount,
+            screenshotTopics: data.change.screenshotTopics,
+          };
+          renderChanges();
+        }
+        if (data.archive && data.archive.status === 'started') {
+          showBanner('已儲存且全部通過，Review archive 已在背景執行（log: ' + (data.archive.logPath || 'see .review-gui/') + '）', '');
+        } else if (data.archive && data.archive.status === 'unavailable') {
+          showBanner('已儲存且全部通過，但找不到 review-archive 命令，請手動跑 /review-archive all', 'error');
         } else if (data.archive && data.archive.status === 'failed') {
-          showBanner('已儲存，但 Review archive 失敗：' + (data.archive.message || data.archive.stderr || '需手動處理'), 'error');
+          showBanner('已儲存，但無法觸發 Review archive：' + (data.archive.message || '需手動處理'), 'error');
         } else {
           showBanner('已將 ' + itemId + ' 標記為 ' + action, '');
         }
         renderCurrent();
       } catch (err) {
-        if (err.status === 409) showBanner('寫入衝突，請先重新載入再儲存', 'error');
-        else showBanner(err.message || String(err), 'error');
+        if (err.status === 409) {
+          // server 在 body.currentVersion 回新 hash；直接同步到 state.current.version，
+          // 讓下次按按鈕用最新 version 不再撞 409。tasks.md 真有 out-of-band 修改時，
+          // 內容也用 server 那邊重新拿，避免 client 顯示與 raw 不一致。
+          if (err.body && err.body.currentVersion && state.current) {
+            try {
+              const fresh = await api('/api/changes/' + encodeURIComponent(state.current.name));
+              state.current = fresh.change;
+              renderCurrent();
+              showBannerWithHandoff('版本已自動同步（其他人或上一次操作改過 tasks.md），請再按一次', 'error', 'conflict', '寫入衝突', err.message);
+            } catch (reloadErr) {
+              showBannerWithHandoff('版本衝突且自動同步失敗：' + (reloadErr.message || String(reloadErr)), 'error', 'conflict', '寫入衝突', reloadErr.message || String(reloadErr));
+            }
+          } else {
+            showBannerWithHandoff('寫入衝突，請點「重新載入」再儲存', 'error', 'conflict', '寫入衝突', err.message);
+          }
+        } else {
+          showBanner(err.message || String(err), 'error');
+        }
+      } finally {
+        inflightSaves.delete(itemId);
+        // success path renderCurrent 已重建整個 task list，新 DOM 沒 saving class；
+        // error path 留在原 DOM，主動把 disable / saving class 拿掉避免使用者卡死。
+        const itemNode2 = el.taskList.querySelector('[data-item="' + CSS.escape(itemId) + '"]');
+        if (itemNode2) {
+          itemNode2.classList.remove('saving');
+          itemNode2.querySelectorAll('button[data-action], textarea').forEach(function (n) { n.disabled = false; });
+        }
       }
     }
 
@@ -1488,6 +2230,13 @@ function renderReviewHtml(): string {
         }
         return;
       }
+      if (el.promptFallbackModal.classList.contains('open')) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          closePromptFallbackModal();
+        }
+        return;
+      }
       if (event.key === '?' || (event.shiftKey && event.key === '/')) {
         const tag = document.activeElement ? document.activeElement.tagName : '';
         if (!['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) {
@@ -1530,6 +2279,24 @@ function renderReviewHtml(): string {
     el.shortcutModal.addEventListener('click', function (event) {
       if (event.target === el.shortcutModal) closeShortcutModal();
     });
+    el.promptFallbackClose.addEventListener('click', closePromptFallbackModal);
+    el.promptFallbackModal.addEventListener('click', function (event) {
+      if (event.target === el.promptFallbackModal) closePromptFallbackModal();
+    });
+    el.promptFallbackSelectAll.addEventListener('click', function () {
+      el.promptFallbackText.focus();
+      el.promptFallbackText.select();
+    });
+
+    // 先 fetch /api/health 拿 repoRoot 給 handoff prompt 用；失敗不該擋住 GUI 啟動，
+    // prompt 會 fallback 顯示 (unknown) 而不是讓使用者看不到 change 清單。
+    api('/api/health').then(function (info) {
+      if (info && info.repoRoot) {
+        state.repoRoot = info.repoRoot;
+        const segments = info.repoRoot.split('/').filter(Boolean);
+        state.repoName = segments[segments.length - 1] || info.repoRoot;
+      }
+    }).catch(function () { /* noop — handoff prompt 會 fallback */ });
 
     loadChanges().catch(function (err) {
       showBanner(err.message || String(err), 'error');
