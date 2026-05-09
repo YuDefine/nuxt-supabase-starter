@@ -41,7 +41,7 @@ export function assembleProject(
   generatePackageJson(targetDir, selectedFeatureIds, projectName, agentTargets)
 
   // 4. Generate nuxt.config.ts
-  generateNuxtConfig(targetDir, selectedFeatureIds)
+  generateNuxtConfig(targetDir, selectedFeatureIds, evlogPreset)
 
   // 5. Generate .env.example
   generateEnvExample(targetDir, selectedFeatureIds)
@@ -310,7 +310,11 @@ function sortObject(obj: Record<string, string> | undefined): Record<string, str
 
 // --- nuxt.config.ts generation ---
 
-export function generateNuxtConfig(targetDir: string, selectedFeatureIds: string[]): void {
+export function generateNuxtConfig(
+  targetDir: string,
+  selectedFeatureIds: string[],
+  evlogPreset: EvlogPreset = 'baseline'
+): void {
   const configPath = join(targetDir, 'nuxt.config.ts')
   let config = readFileSync(configPath, 'utf-8')
 
@@ -322,6 +326,14 @@ export function generateNuxtConfig(targetDir: string, selectedFeatureIds: string
     if (mod?.nuxtModules) {
       modules.push(...mod.nuxtModules)
     }
+  }
+
+  // T3 stack：用 @evlog/nuxthub 取代 evlog/nuxt（@evlog/nuxthub 自動 install
+  // evlog/nuxt + 接 NuxtHub D1 drain）。對應 master plan § 5 stack 分類 T3。
+  if (evlogPreset === 'nuxthub-ai') {
+    const evlogIdx = modules.indexOf('evlog/nuxt')
+    if (evlogIdx >= 0) modules[evlogIdx] = '@evlog/nuxthub'
+    else modules.push('@evlog/nuxthub')
   }
 
   const modulesStr = modules.map((m) => `    '${m}',`).join('\n')

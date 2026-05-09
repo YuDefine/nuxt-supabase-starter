@@ -88,7 +88,7 @@ _No parked changes._
 
 ### 近期
 
-_(尚未累積)_
+- [mid] M3b.3 scaffolder `--multi-package` flag (T4 layout overlay) — 依賴：M3b.2 已完成 (commit `a9dd764`)；獨立於其他 starter 工作
 
 ### 中期
 
@@ -97,5 +97,12 @@ _(尚未累積)_
 ### 長期
 
 _(尚未累積)_
+
+---
+
+## Done
+
+- 2026-05-09 M3b.1 starter T1 evlog baseline wiring (depth 3 → 6+) — commit `728d534`
+- 2026-05-09 M3b.2 scaffolder CLI `--evlog-preset` flag — commit `a9dd764` (8/9) + integration verify follow-up (this session)
 
 <!-- SPECTRA-UX:ROADMAP-MANUAL:/backlog -->
