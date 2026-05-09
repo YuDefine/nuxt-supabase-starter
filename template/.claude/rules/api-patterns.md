@@ -18,7 +18,7 @@ globs: ["server/api/**/*.ts"]
 **MUST** use `getSupabaseWithContext(event)` for request-scoped database access
 **MUST** parse outgoing handler payloads with response schema `parse()` before returning
 **NEVER** use `getServerSupabaseClient()` as the default path in request handlers — reserve it for privileged system tasks
-**MUST** log mutations to `audit_logs` table（action, target_type, target_id, details）— 選用
+**MUST** log mutations to audit table — 表名與欄位慣例見 `db-schema/<variant>/audit-schema.md`
 **MUST** use unified response format `{ data, pagination? }`
 **NEVER** return raw database errors to client — use `handleDbError()` + `createError()` with user-friendly message
 **MUST** `const log = useLogger(event)` as first line — see `logging.md` for evlog patterns
@@ -52,15 +52,16 @@ Template 預設部署到 **Cloudflare Workers**（`nitro.preset: 'cloudflare_mod
 - **NEVER** 用 Node.js-only API（`Buffer`, `process.env` 部分、`fs`）— 改用 Web Standard API
 - **Env 存取**：透過 `useRuntimeConfig()` 或 `event.context.cloudflare.env`，**NEVER** 用 `process.env`
 
-## Audit Logs（選用）
+## Audit Logs
 
-Template **預設未建立** `audit_logs` 表。若專案需要 audit 需求：
+Audit table 命名、欄位、hash chain、RLS、helper 統一規約見：
 
-1. 建 migration：`public.audit_logs`（uuid PK、user_id、action enum、target_type、target_id、changes JSONB、created_at）
-2. RLS：immutable（只 INSERT + SELECT，無 UPDATE / DELETE policy）
-3. API handler 在 mutation 成功後插入 log
-4. **NEVER** log sensitive 欄位（密碼、token、PII）
-5. 建表後更新本檔，把本段改為具體欄位規約
+- **通用 D-pattern**：`db-schema/supabase/audit-schema.md`（perno / yuntech / agentic-rag 用 `audit_logs` 表）
+- **TDMS legacy**：`db-schema/supabase-self-hosted/audit-schema.md`（TDMS 用 `tdms.operation_logs`）
+
+Runtime module 不重複定義 schema；session agent 從 `db-schema/<variant>/audit-schema.md` 找完整規約。
+
+<!-- requires-module: db-schema -->
 
 ## Idempotency 與 Retry
 

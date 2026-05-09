@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-09T13:48:30.877Z",
+  "syncedAt": "2026-05-09T14:29:06.824Z",
   "checksums": {
     "rules/agent-routing.md": "1e79a3cccb41c646",
     "rules/audit-pattern.md": "1d72e5274498727f",
@@ -26,6 +26,7 @@
     "rules/work-claims.md": "8c09518cea38198e",
     "rules/auth.md": "c6db189aa7ceddb7",
     "rules/dev-login.md": "ef01c2d38c7c5c5d",
+    "rules/audit-schema.md": "22ec61fa5a47b482",
     "rules/migration.md": "bdf116993ee0d143",
     "rules/query-optimization.md": "c575709a323371c9",
     "rules/rls-policy.md": "0d3d9d860a170133",
@@ -34,7 +35,7 @@
     "rules/mcp-remote.md": "2a0168f78da344a9",
     "rules/storage.md": "a5feef015fdfbef2",
     "rules/unused-features.md": "3df47e9a324fdb4f",
-    "rules/api-patterns.md": "8ba3b78377243277",
+    "rules/api-patterns.md": "49de04b1c9634b56",
     "rules/secrets.md": "511993ce4fb56ca8",
     "rules/development.md": "f4f90eb7a6575bd5",
     "rules/nuxt-security.md": "c927040a3373c1d7",
