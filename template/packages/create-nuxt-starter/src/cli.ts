@@ -214,6 +214,12 @@ function buildSelectionsFromArgs(args: {
     selected.add(featureId)
   }
 
+  // evlog preset (≠ 'none') 必須帶 monitoring feature wire `evlog/nuxt` module
+  // 與 `evlog: { ... }` nuxt.config 區塊；single source of truth 仍是 monitoring feature。
+  if (evlogPreset !== 'none') {
+    addFeature('monitoring')
+  }
+
   if (authArg) {
     selected.delete('auth-nuxt-utils')
     selected.delete('auth-better-auth')

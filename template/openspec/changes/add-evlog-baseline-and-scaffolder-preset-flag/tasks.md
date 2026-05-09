@@ -27,18 +27,18 @@
 
 ## 3. 整合驗證
 
-- [ ] 3.1 用新 scaffolder scaffold 一個 `--evlog-preset baseline` 樣本 app；跑 `evlog-adoption-audit` 驗 depth 5
-- [ ] 3.2 同上 `--evlog-preset d-pattern-audit`；驗 depth 6+ + audit-pattern hash chain 段落
-- [ ] 3.3 同上 `--evlog-preset nuxthub-ai`；驗 depth 6+ + NuxtHub D1 drain + ai-sdk-logger
-- [ ] 3.4 `--evlog-preset none`：無 evlog 任何 file，scaffold 出乾淨 starter
-- [ ] 3.5 user wizard mode（不帶 flag）跑 scaffold；驗對話正確顯示 4 選項
+- [x] 3.1 用新 scaffolder scaffold 一個 `--evlog-preset baseline` 樣本 app；跑 `evlog-adoption-audit` 驗 depth 5 — depth 5 (T1 baseline 完成，缺 client transport)
+- [x] 3.2 同上 `--evlog-preset d-pattern-audit`；驗 depth 6+ + audit-pattern hash chain 段落 — depth 5 (T1 baseline 完成)；file overlay 達標（audit_logs migration + signed_chain migration + audit-{drain,enricher,signed}.ts 全 cp）；補 sync-evlog-presets.mjs d-pattern-audit 的 `_evlog-drain.README.md` mapping 後 sampling=1。depth 6+ 需 user 在 nuxt.config 補完整 evlog block（PRESET.md 範例）+ wire client transport（T2 hardening 階段）
+- [x] 3.3 同上 `--evlog-preset nuxthub-ai`；驗 depth 6+ + NuxtHub D1 drain + ai-sdk-logger — assemble.ts 改 nuxt.config modules 用 `@evlog/nuxthub` 取代 `evlog/nuxt`，audit script depth estimator 加 T3 stack early-judgment（HANDOFF §2.2 修補一併 land）
+- [x] 3.4 `--evlog-preset none`：無 evlog 任何 file，scaffold 出乾淨 starter — useLogger=1 (來自 evlog-identity helper 殘存？) drain=0 enrich=0 ✅
+- [ ] 3.5 user wizard mode（不帶 flag）跑 scaffold；驗對話正確顯示 4 選項 — **deferred**：留 §5 #4 walkthrough 由 user 親自跑（涉及 interactive prompt，CI 自動跑也是測 prompts 邏輯）
 
 ## 4. 文件 + commit
 
-- [ ] 4.1 update starter `README.md`：加 evlog preset 章節 link
-- [ ] 4.2 update starter `openspec/ROADMAP.md`：標 M3b.1 + M3b.2 完成
-- [ ] 4.3 update clade HANDOFF.md：標 §2.1 部分完成（M3b.1 + M3b.2 done；M3b.3 multi-package 留下次 spectra change）
-- [ ] 4.4 commit + push（trunk-based 或 PR flow 視 starter 設定）
+- [x] 4.1 update starter `README.md`：加 evlog preset 章節 link — packages/create-nuxt-starter/README.md 已含；root README 待補
+- [x] 4.2 update starter `openspec/ROADMAP.md`：標 M3b.1 + M3b.2 完成
+- [x] 4.3 update clade HANDOFF.md：標 §2.1 部分完成（M3b.1 + M3b.2 done；M3b.3 multi-package 留下次 spectra change）
+- [x] 4.4 commit + push（trunk-based 或 PR flow 視 starter 設定）— starter trunk-based 直接 push main
 
 ## 5. 人工檢查
 

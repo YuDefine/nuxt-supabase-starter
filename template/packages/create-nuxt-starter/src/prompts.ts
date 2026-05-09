@@ -244,6 +244,11 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
   if (testingChoice === 'full') features.push('testing-full')
   else if (testingChoice === 'vitest-only') features.push('testing-vitest')
   if (monitoringChoice !== 'none') features.push(monitoringChoice)
+  // evlog preset (≠ 'none') 必須帶 monitoring feature wire `evlog/nuxt` module；
+  // user 在 step 9 選「不需要 monitoring」但 step 9.5 選非 none preset 時自動補上。
+  if (evlogPresetChoice !== 'none' && !features.includes('monitoring')) {
+    features.push('monitoring')
+  }
   features.push(`deploy-${deployChoice}`)
   if (qualityChoice !== 'none') features.push(qualityChoice)
   if (gitChoice !== 'none') features.push(gitChoice)
