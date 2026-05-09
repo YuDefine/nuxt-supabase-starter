@@ -331,6 +331,22 @@ Run `spectra analyze <change-name> --json` to check cross-artifact consistency (
 
    Confirm `state: "all_done"`. If not, review remaining tasks and complete them.
 
+8b. **Manual review handoff**
+
+   When tasks.md still contains unchecked items in the `## 人工檢查` section (typical at this point — implementation tasks `[x]` but manual-review items `[ ]`), **MUST** hand off to the local manual-review GUI rather than walking through items inline in chat.
+
+   - **DEFAULT path**: Reply to the user with something like:
+     > Implementation 完成，剩 `<N>` 項 `## 人工檢查`。請在 consumer repo root 執行 `pnpm review:ui` 開本地 GUI 驗收 — 自動依 `#N` / `#N.M` 檔名配對截圖、鍵盤 OK / Issue / SKIP、conflict-aware 寫回 tasks.md。完成後回報，我繼續 Step 9 status。
+   - Wait for the user to complete the GUI flow and report back. Do NOT proceed to Step 9 / propose archive until the user signals manual review is done.
+   - **NEVER** default to `AskUserQuestion` chat dialog walking items one-by-one — it burns tokens, ignores the screenshot pool, and contradicts `rules/core/manual-review.md` 標準流程.
+
+   **Fallback to chat-based confirmation only when**:
+   - Consumer lacks the `review:ui` script (offer to run `pnpm hub:check` or propagate from clade first)
+   - User explicitly says "skip the GUI, just confirm in chat"
+   - Pure-backend change with 1–2 yes/no items and zero screenshot evidence needed
+
+   Once manual review is complete (all `## 人工檢查` items resolved with user confirmation), proceed to Step 9.
+
 9. **On completion or pause, show status**
 
    Display:
