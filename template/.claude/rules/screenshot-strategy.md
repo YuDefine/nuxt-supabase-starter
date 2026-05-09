@@ -172,6 +172,20 @@ screenshots/local/
 
 同一組截圖被重複拍第 3 次，**SHOULD** 轉成 Playwright spec，避免每次重述操作步驟。
 
+## round-trip-only manual-review item
+
+有些 `## 人工檢查` 項目只能由使用者親自操作驗收，截圖無法證明功能 round-trip 已通過。這類 item 不需要截圖，**MUST** 在 tasks.md 對應 checkbox line 行尾加上 `@no-screenshot` marker，讓 `pnpm review:ui` 顯示 round-trip-only UI，而不是提示補截圖或複製 handoff prompt。
+
+典型 round-trip-only 情境：
+
+- form submit 真的送到 server，並確認 response / DB / list refetch。
+- API 行為需要觀察 request → response → state update。
+- status transition 需要送出後確認狀態實際轉移。
+- 樂觀鎖 409 / conflict path 需要真實觸發並檢查 copy 與保留輸入。
+- 權限拒絕 path 需要真實使用低權限角色操作並確認拒絕結果。
+
+`@no-screenshot` 是 manual-review schema 的一部分，不是截圖檔名規則。完整語法、parent / scoped item 範例，以及 `@followup[TD-NNN] @no-screenshot` canonical ordering，見 `manual-review.md` 的「`@no-screenshot` Marker（hard rule）」。
+
 ## Empty Data Handling
 
 截圖時遇到空狀態 = 無效 review。處理走兩段策略：
