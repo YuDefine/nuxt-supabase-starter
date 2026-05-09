@@ -241,18 +241,28 @@ export function applyReviewActionToContent(
 }
 
 function applyActionToLine(line: string, action: 'ok' | 'issue' | 'skip', note: string): string {
+  const { core, marker } = extractTrailingNoScreenshot(line)
   // 切換 action 前先剝離舊 annotation，避免 stale 殘留（例：先 issue 後改 ok 會留 (issue: ...)）
-  const stripped = stripAnnotations(line)
+  const stripped = stripAnnotations(core)
+  let result: string
   if (action === 'ok') {
     const base = setCheckbox(stripped, true)
-    return note.trim() ? appendAnnotation(base, 'note', note) : base
-  }
-  if (action === 'issue') {
+    result = note.trim() ? appendAnnotation(base, 'note', note) : base
+  } else if (action === 'issue') {
     const base = setCheckbox(stripped, false)
-    return appendAnnotation(base, 'issue', note || 'needs follow-up')
+    result = appendAnnotation(base, 'issue', note || 'needs follow-up')
+  } else {
+    const base = setCheckbox(stripped, true)
+    result = appendAnnotation(base, 'skip', note)
   }
-  const base = setCheckbox(stripped, true)
-  return appendAnnotation(base, 'skip', note)
+
+  return marker ? `${result}${marker}` : result
+}
+
+function extractTrailingNoScreenshot(line: string): { core: string; marker: string } {
+  const match = line.match(/^(.+[^ ])( @no-screenshot)$/)
+  if (!match) return { core: line, marker: '' }
+  return { core: match[1]!, marker: match[2]! }
 }
 
 function setCheckbox(line: string, checked: boolean): string {
@@ -1991,6 +2001,12 @@ function renderReviewHtml(): string {
       const allFiles = changeFiles();
       const matched = allFiles.filter(function (f) { return fileMatchesItem(f.name, item.id); });
       const idLabel = item.id.replace(/^#/, '');
+      const poolSummary = pools.length ? pools.map(function (p) { return p.env + '/' + p.topic; }).join(', ') : '無';
+      if (item.noScreenshot === true) {
+        el.selectionStatus.textContent = '檢查項 ' + item.id + ' · 純功能驗證 (no-screenshot) · 對應 ' + matched.length + ' / ' + allFiles.length + ' 張（topic 資料夾：' + poolSummary + '）';
+        el.thumbGrid.replaceChildren(roundTripOnlyMessage(item.description));
+        return;
+      }
       if (!pools.length) {
         el.selectionStatus.textContent = '檢查項 ' + item.id + ' · 此 change 尚無對應截圖資料夾';
         const div = document.createElement('div');
@@ -2018,7 +2034,26 @@ function renderReviewHtml(): string {
         el.thumbGrid.replaceChildren(div);
         return;
       }
-      el.selectionStatus.textContent = '檢查項 ' + item.id + ' · 對應 ' + matched.length + ' / ' + allFiles.length + ' 張（topic 資料夾：' + pools.map(function (p) { return p.env + '/' + p.topic; }).join(', ') + '）';
+      el.selectionStatus.textContent = '檢查項 ' + item.id + ' · 對應 ' + matched.length + ' / ' + allFiles.length + ' 張（topic 資料夾：' + poolSummary + '）';
+      if (!matched.length && allFiles.length > 0) {
+        const div = descriptionGuidanceMessage(item.description);
+        const handoffBtn = document.createElement('button');
+        handoffBtn.type = 'button';
+        handoffBtn.className = 'copy-handoff-btn block';
+        handoffBtn.textContent = '📋 複製 handoff prompt';
+        handoffBtn.title = '複製 handoff prompt 給新 Claude session 處理檔名不符';
+        handoffBtn.addEventListener('click', function () {
+          copyHandoffPrompt('no-matched', {
+            change: state.current,
+            item: item,
+            pools: pools,
+            files: allFiles,
+          }, '檔名不符');
+        });
+        div.appendChild(handoffBtn);
+        el.thumbGrid.replaceChildren(div);
+        return;
+      }
       if (!matched.length) {
         const hint = '此 change 共 ' + allFiles.length + ' 張截圖，但無檔名以 #' + idLabel + '- 或 #' + idLabel + '<letter>- 開頭。請以 #' + idLabel + '-... 命名後重整。';
         const div = emptyMessage(hint);
@@ -2040,6 +2075,37 @@ function renderReviewHtml(): string {
         return;
       }
       el.thumbGrid.replaceChildren(...matched.map(buildThumbButton));
+    }
+
+    function roundTripOnlyMessage(description) {
+      const div = document.createElement('div');
+      div.className = 'empty';
+      const title = document.createElement('p');
+      title.textContent = '此項為純功能驗證';
+      const body = document.createElement('p');
+      body.textContent = description;
+      const hint = document.createElement('p');
+      hint.textContent = '親自操作後可直接勾 OK，不需截圖';
+      hint.style.opacity = '0.7';
+      hint.style.fontSize = '12px';
+      div.appendChild(title);
+      div.appendChild(body);
+      div.appendChild(hint);
+      return div;
+    }
+
+    function descriptionGuidanceMessage(description) {
+      const div = document.createElement('div');
+      div.className = 'empty';
+      const body = document.createElement('p');
+      body.textContent = description;
+      const hint = document.createElement('p');
+      hint.textContent = '若此項為純功能驗證（form submit / API 行為 / status transition），照上述步驟親自操作後可直接勾 OK，不需截圖';
+      hint.style.opacity = '0.7';
+      hint.style.fontSize = '12px';
+      div.appendChild(body);
+      div.appendChild(hint);
+      return div;
     }
 
     function emptyMessage(text) {
