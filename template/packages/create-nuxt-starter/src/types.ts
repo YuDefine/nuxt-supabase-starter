@@ -1,5 +1,14 @@
 export type AgentRuntime = 'claude-code' | 'codex' | 'cursor'
 
+export type EvlogPreset = 'none' | 'baseline' | 'd-pattern-audit' | 'nuxthub-ai'
+
+export const EVLOG_PRESETS: readonly EvlogPreset[] = [
+  'none',
+  'baseline',
+  'd-pattern-audit',
+  'nuxthub-ai',
+] as const
+
 export interface FeatureModule {
   id: string
   name: string
@@ -34,4 +43,5 @@ export interface UserSelections {
   deploymentTarget: 'cloudflare' | 'vercel' | 'node'
   testingLevel: 'full' | 'vitest-only' | 'none'
   agentTargets: AgentRuntime[]
+  evlogPreset: EvlogPreset
 }
