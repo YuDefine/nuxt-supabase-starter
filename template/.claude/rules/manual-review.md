@@ -115,9 +115,15 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 
 完整命名規範（含變體、legacy fallback、違反處理）見 `screenshot-strategy.md`。
 
-## 建議流程
+## 標準流程
 
-1. 依 task 清單逐項截圖
+**首選（DEFAULT）**：tasks.md 仍有 `## 人工檢查` 未勾項時，第一動作 **MUST** 是引導使用者跑 `pnpm review:ui`——本地 GUI 自動依 `#N` / `#N.M` schema 配對截圖、可鍵盤完成 OK / Issue / SKIP、conflict-aware 寫回 tasks.md，不在 chat 內燒 token。完整工具行為見 `vendor/scripts/review-gui.mts`。
+
+**NEVER** 預設用 `AskUserQuestion` 在 chat 內逐項彈對話框——那是 fallback，不是 default path。
+
+**Fallback**（`pnpm review:ui` 不可用時——consumer 沒有該 script、使用者明確拒絕 GUI、或 pure backend 完全無 UI 證據需求）：
+
+1. 依 task 清單逐項準備截圖或證據
 2. 說明截圖中看到的狀態
 3. 問使用者這一項是否通過
 4. 依使用者答覆決定勾選、保留未勾、或註記 skip

@@ -377,12 +377,20 @@ Apply 階段中偵測到以下任一信號 → 必須立即處理：
 
 `## 人工檢查` 的 checkbox **不能由 agent 自行代勾**。
 
+**MUST** 進入人工檢查階段（implementation tasks 完成、剩 `## 人工檢查` 區塊）時，**第一動作就是引導使用者跑 `pnpm review:ui`**——本地 GUI、不燒 chat token、自動依 `#N` / `#N.M` 檔名配對截圖、可鍵盤完成 OK / Issue / SKIP，並 conflict-aware 寫回 tasks.md。
+
+**NEVER** 預設用 `AskUserQuestion` 在 chat 內逐項彈對話框走人工檢查——那是 `pnpm review:ui` 不可用時的 fallback，不是 default path。
+
 正確流程：
 
-1. 截圖或準備驗收證據
-2. 向使用者逐項展示
-3. 使用者回覆 OK / 問題 / skip
-4. 依答覆更新 checkbox
+1. **首選（DEFAULT）**：tasks.md 仍有 `## 人工檢查` 未勾項 → 主線回「請在 consumer repo root 執行 `pnpm review:ui` 開本地 GUI 驗收」，等使用者跑完 GUI 流程回報後繼續
+2. **Fallback**（GUI 不可用時）：截圖 → 逐項展示 → 使用者回覆 OK / 問題 / skip → 依答覆更新 checkbox
+
+GUI 不可用的具體情境（觸發 fallback 的條件）：
+
+- Consumer 沒有 `pnpm review:ui` script（先建議跑 `pnpm hub:check` 或從 clade propagate 補上）
+- 使用者明確說「不要開 GUI，直接在 chat 走」
+- Pure backend change 完全無 UI 證據需求，且只剩 1–2 項 yes/no 確認
 
 靜態 screenshot review 是證據，不等同於使用者驗收。
 
