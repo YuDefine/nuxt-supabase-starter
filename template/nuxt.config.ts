@@ -35,13 +35,27 @@ export default defineNuxtConfig({
     },
   },
 
-  // evlog: wide event logging
+  // evlog: wide event logging — T1 baseline preset (depth 5)
+  // 對應 presets/evlog-baseline/PRESET.md pre-applied 範例 + master plan § 14 真實 API
   evlog: {
     env: { service: 'nuxt-supabase-starter' },
     include: ['/api/**'],
     sampling: {
-      rates: { info: 10 },
-      keep: [{ status: 400 }, { duration: 1000 }],
+      // rates 是百分比 0-100；error 預設 100 不可降
+      rates: { error: 100, warn: 100, info: 50, debug: 0 },
+      // keep[] 是 OR-logic TailSamplingCondition[]：{ status?, duration?, path? }
+      // audit forceKeep 由 server/plugins/evlog-enrich.ts 末尾 evlog:emit:keep hook wire
+      // (evlog 2.16 無內建 audit forceKeep — master plan § 14 第 12 條校正)
+      keep: [
+        { status: 400 }, // 4xx / 5xx 永遠 keep
+        { duration: 1000 }, // 慢 endpoint (≥ 1s) 永遠 keep
+      ],
+    },
+    redact: true, // 啟用 builtins: jwt / bearer / email / ipv4 / phone / creditCard / iban
+    transport: {
+      enabled: true,
+      endpoint: '/api/_evlog/ingest',
+      credentials: 'include',
     },
   },
 
