@@ -108,11 +108,16 @@ from urllib.parse import quote
 port = "<port>"
 target = "/protected/path"
 role = "admin"  # inferred by table above
-login_url = f"http://localhost:{port}/auth/_dev-login?as={quote(role)}&redirect={quote(target, safe=\\"\\")}"
+# 注意：Python f-string 內部 {...} 不能含跳脫的 " 符號（Python <3.12 SyntaxError），
+# 因此 quote(target, safe="") 與 info["url"] 都先存到 variable 再插值。
+encoded_role = quote(role)
+encoded_target = quote(target, safe="")
+login_url = f"http://localhost:{port}/auth/_dev-login?as={encoded_role}&redirect={encoded_target}"
 new_tab(login_url)
 wait_for_load()
 info = page_info()
-assert f"localhost:{port}" in info["url"], f"unexpected host: {info[\\"url\\"]}"
+url_seen = info["url"]
+assert f"localhost:{port}" in url_seen, f"unexpected host: {url_seen}"
 '
 ```
 
@@ -125,11 +130,15 @@ port = "<port>"
 target = "/protected/path"
 role = "admin"
 email = f"e2e-{role}@test.local"
-login_url = f"http://localhost:{port}/auth/__test-login?email={quote(email)}&role={quote(role)}&redirect={quote(target, safe=\\"\\")}"
+encoded_email = quote(email)
+encoded_role = quote(role)
+encoded_target = quote(target, safe="")
+login_url = f"http://localhost:{port}/auth/__test-login?email={encoded_email}&role={encoded_role}&redirect={encoded_target}"
 new_tab(login_url)
 wait_for_load()
 info = page_info()
-assert f"localhost:{port}" in info["url"], f"unexpected host: {info[\\"url\\"]}"
+url_seen = info["url"]
+assert f"localhost:{port}" in url_seen, f"unexpected host: {url_seen}"
 '
 ```
 
@@ -164,11 +173,15 @@ result = js(\"""
   })()
 \""" % json.dumps(payload))
 parsed = json.loads(result)
-assert parsed["ok"], f"dev-login failed: {parsed[\\"status\\"]} {parsed[\\"body\\"]}"
+# 同樣避開 f-string 內部 {...} 含跳脫雙引號（Python <3.12 SyntaxError）。
+status_seen = parsed["status"]
+body_seen = parsed["body"]
+assert parsed["ok"], f"dev-login failed: {status_seen} {body_seen}"
 goto_url(f"http://localhost:{port}{target}")
 wait_for_load()
 info = page_info()
-assert f"localhost:{port}" in info["url"], f"unexpected host: {info[\\"url\\"]}"
+url_seen = info["url"]
+assert f"localhost:{port}" in url_seen, f"unexpected host: {url_seen}"
 '
 ```
 
