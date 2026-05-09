@@ -1,17 +1,17 @@
 ## 1. Starter 自家 evlog baseline wiring（M3b.1）
 
-- [ ] 1.1 確認 starter working tree clean（user `assemble.ts` + `_dev-login.get.ts` WIP 先 commit / stash）
-- [ ] 1.2 `pnpm add evlog@^2.16.0 @sentry/nuxt`（如尚未裝）
-- [ ] 1.3 cp `presets/evlog-baseline/server/plugins/evlog-drain.ts` → `server/plugins/evlog-drain.ts`
-- [ ] 1.4 cp `presets/evlog-baseline/server/plugins/evlog-enrich.ts` → `server/plugins/evlog-enrich.ts`
-- [ ] 1.5 cp `presets/evlog-baseline/server/plugins/evlog-sentry-drain.ts` → `server/plugins/evlog-sentry-drain.ts`
-- [ ] 1.6 cp `presets/evlog-baseline/server/plugins/_evlog-drain.README.md` → `server/plugins/_evlog-drain.README.md`
-- [ ] 1.7 cp `presets/evlog-baseline/app/utils/evlog-identity.ts` → `app/utils/evlog-identity.ts`
-- [ ] 1.8 cp `presets/evlog-baseline/docs/evlog-client-transport.md` → `docs/evlog-client-transport.md`
-- [ ] 1.9 修 starter `nuxt.config.ts` — 套 `PRESET.md` pre-applied evlog block（modules 加 `evlog`、加 `evlog: { ... }` config 含 sampling / redaction / client transport / typed fields）
-- [ ] 1.10 補 `.env.example` evlog 環境變數（`SENTRY_DSN` / `NUXT_PUBLIC_SENTRY_DSN` / `EVLOG_CLIENT_RATE_LIMIT_PER_MIN=100`）
-- [ ] 1.11 `pnpm typecheck` 0 errors
-- [ ] 1.12 跑 `node /Users/charles/offline/clade/scripts/evlog-adoption-audit.mjs --repo $(pwd)` 驗 depth ≥ 5；block signals 0/4
+- [ ] 1.1 確認 starter working tree clean（user `assemble.ts` + `_dev-login.get.ts` WIP 先 commit / stash） — **deferred**: user WIP 留 unstaged，本 commit 走 selective stage 不影響
+- [x] 1.2 `pnpm add evlog@^2.16.0 @sentry/nuxt` — bump `^2.10.0 → ^2.16.0`（redact/transport API 必需；@sentry/nuxt 已裝 ^10.46.0）
+- [x] 1.3 cp `presets/evlog-baseline/server/plugins/evlog-drain.ts` → `server/plugins/evlog-drain.ts`
+- [x] 1.4 cp `presets/evlog-baseline/server/plugins/evlog-enrich.ts` → `server/plugins/evlog-enrich.ts` — 含 `evlog:emit:keep` audit forceKeep hook（master plan §14 第 12 條校正後 v0.5.26 散播版）
+- [x] 1.5 cp `presets/evlog-baseline/server/plugins/evlog-sentry-drain.ts` → `server/plugins/evlog-sentry-drain.ts`
+- [x] 1.6 cp `presets/evlog-baseline/server/plugins/_evlog-drain.README.md` → `server/plugins/_evlog-drain.README.md`
+- [x] 1.7 cp `presets/evlog-baseline/app/utils/evlog-identity.ts` → `app/utils/evlog-identity.ts`
+- [x] 1.8 cp `presets/evlog-baseline/docs/evlog-client-transport.md` → `docs/evlog-client-transport.md`
+- [x] 1.9 修 starter `nuxt.config.ts:38-60` — 對齊 PRESET.md pre-applied 範例（rates 4 levels, keep[], redact: true, transport block）
+- [x] 1.10 `.env.example:83-87` 補 `EVLOG_CLIENT_RATE_LIMIT_PER_MIN=100`（SENTRY_DSN / NUXT_PUBLIC_SENTRY_DSN 已存在 line 77-78）
+- [x] 1.11 `pnpm typecheck` 0 errors
+- [x] 1.12 audit script: block 0/4, **depth 6+** (含 client transport，超過目標 ≥5), enrichers.installed=5, audit.forceKeepWired=1
 
 ## 2. Scaffolder CLI `--evlog-preset` flag（M3b.2）
 
