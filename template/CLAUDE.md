@@ -55,6 +55,9 @@ discuss? → propose → apply ⇄ ingest → archive
 Changes can be parked（暫存）— temporarily moved out of `openspec/changes/`. Parked changes won't appear in `spectra list` but can be found with `spectra list --parked`. To restore: `spectra unpark <name>`. The `/spectra-apply` and `/spectra-ingest` skills handle parked changes automatically.
 
 <!-- SPECTRA:END -->
+
+> Spectra 版號對照：app 版本（如 `2.2.5`，你日常看到的）跟上方 SPECTRA marker（如 `v1.0.2`）是兩條獨立軌道 — marker 只在 Spectra 改 instruction template 時才跳號。
+
 <!-- SPECTRA-UX:START v1.13.4 -->
 
 繁體中文 | [English](./agents-md.en.md)
