@@ -78,5 +78,9 @@ jobs:
       - name: UX drift audit
         run: vp run audit:ux-drift
 
-      - name: Spectra roadmap drift check
-        run: vp run spectra:roadmap --check
+      # NOTE: Spectra roadmap drift check 在 CI 環境經常 false positive
+      # （spectra CLI 不在 ubuntu PATH、.spectra/spectra.db 不存在等），
+      # 暫時不在 CI 擋；本地 hook 仍會跑 sync 維持 ROADMAP 鮮度。
+      # Follow-up: 讓 sync --check 在 spectra CLI unavailable 時對齊 disk
+      # parked block（已有 skip-replace 機制，但其他結構性差異待查），
+      # 之後再恢復這個 gate。
