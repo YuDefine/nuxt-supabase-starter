@@ -12,7 +12,7 @@
 
 ## Active Changes
 
-_last synced: 2026-05-10T15:18:59.495Z_
+_last synced: 2026-05-10T17:21:23.874Z_
 
 1 active change (0 ready · 1 in progress · 0 draft · 0 blocked)
 
@@ -41,18 +41,9 @@ _(none)_
 > 即時 ownership 由 `.spectra/claims/*.json` 提供。
 > 接手 handoff / 開始做 change 時，先 claim，再移除 `HANDOFF.md` 對應項目。
 
-1 claim (1 active · 0 stale)
+_No active claims._
 
-### Live Ownership
-
-- **scaffolder-strip-manifest-and-validation-gate** — claude-main (unknown)
-  - Accepted from: manual
-  - Last heartbeat: 2026-05-10T14:48:13.464Z
-  - Note: Change 2 apply - 防線 B+C
-
-### Stale Claims
-
-_(none)_
+> 若你要開始做上面的 active change，先跑 `spectra:claim -- <change>`。
 
 <!-- SPECTRA-UX:ROADMAP-AUTO:/claims -->
 
