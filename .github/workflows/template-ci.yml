@@ -51,6 +51,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Install ripgrep
+        run: sudo apt-get install -y ripgrep
+
       - name: Setup Vite+ (vp)
         uses: voidzero-dev/setup-vp@v1
         with:
