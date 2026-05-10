@@ -6,11 +6,17 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const TEMPLATE_ROOT = resolve(SCRIPT_DIR, '..')
+const REPO_ROOT = resolve(TEMPLATE_ROOT, '..')
 const CREATE_PACKAGE_DIR = join(TEMPLATE_ROOT, 'packages', 'create-nuxt-starter')
 const FIXTURE_ROOT = join(TEMPLATE_ROOT, 'temp', 'validate-starter')
-const CLADE_HOME = process.env.CLADE_HOME ?? '/Users/charles/offline/clade'
 
-export const AUDIT_SCRIPT = join(CLADE_HOME, 'scripts', 'evlog-adoption-audit.mjs')
+const VENDORED_AUDIT_SCRIPT = join(REPO_ROOT, 'scripts', 'vendor', 'evlog-adoption-audit.mjs')
+const CLADE_AUDIT_SCRIPT = process.env.CLADE_HOME
+  ? join(process.env.CLADE_HOME, 'scripts', 'evlog-adoption-audit.mjs')
+  : null
+
+export const AUDIT_SCRIPT =
+  CLADE_AUDIT_SCRIPT && existsSync(CLADE_AUDIT_SCRIPT) ? CLADE_AUDIT_SCRIPT : VENDORED_AUDIT_SCRIPT
 
 let scaffolderModules
 
