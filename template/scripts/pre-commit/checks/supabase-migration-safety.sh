@@ -10,7 +10,10 @@
 #   1) 禁止 `SET search_path = public` 等具名 schema 設定
 #      （Supabase function security best practice — 防 search_path injection）
 #      所有 function 必須使用 SET search_path = ''（空字串）
-#   2) supabase db lint --level warning（warn-only，不擋 commit）
+#   2) Out-of-order timestamp 檢查
+#      新增 / rename 的 migration timestamp 必須晚於 origin/main 上的 latest
+#      （supabase db push 預設拒絕 out-of-order，會讓 production deploy 紅燈）
+#   3) supabase db lint --level warning（warn-only，不擋 commit）
 
 set -euo pipefail
 
@@ -78,7 +81,82 @@ EOF
   exit 1
 fi
 
-# 2) supabase db lint（warn-only）
+# 2) Out-of-order timestamp 檢查
+# 抓 staged 新增 (A) + rename (R) 的 migration（rename 後新名也要符合順序）
+out_of_order=()
+while IFS= read -r -d '' file; do
+  out_of_order+=("$file")
+done < <(git diff --cached --name-only --diff-filter=AR -z -- 'supabase/migrations/*.sql')
+
+if ((${#out_of_order[@]} > 0)); then
+  # origin/main 上 supabase/migrations/*.sql 的 latest timestamp
+  # 不主動 fetch（避免拖慢 commit），用 local cached origin/main ref
+  latest_on_main=""
+  if git rev-parse --verify origin/main >/dev/null 2>&1; then
+    latest_on_main=$(
+      git ls-tree -r --name-only origin/main -- 'supabase/migrations/' 2>/dev/null \
+        | awk -F/ '{print $NF}' \
+        | grep -oE '^[0-9]{14}' \
+        | sort -n \
+        | tail -1
+    )
+  fi
+
+  if [[ -n "$latest_on_main" ]]; then
+    fail_entries=()
+    for f in "${out_of_order[@]}"; do
+      bname=$(basename "$f")
+      [[ "$bname" =~ ^[0-9]{14}_ ]] || continue
+      ts="${bname:0:14}"
+      if [[ "$ts" < "$latest_on_main" || "$ts" == "$latest_on_main" ]]; then
+        fail_entries+=("$f|$ts")
+      fi
+    done
+
+    if ((${#fail_entries[@]} > 0)); then
+      now=$(date -u +%Y%m%d%H%M%S)
+      cat <<EOF >&2
+
+❌ 錯誤：偵測到 out-of-order migration（timestamp 早於或等於 origin/main latest）！
+
+origin/main 上 latest migration timestamp: $latest_on_main
+
+問題檔案：
+EOF
+      for entry in "${fail_entries[@]}"; do
+        f="${entry%|*}"
+        ts="${entry##*|}"
+        echo "  $f (timestamp: $ts)" >&2
+      done
+      cat <<EOF >&2
+
+⚠️  Supabase db push 預設拒絕 out-of-order migration —
+   tag push 觸發 production deploy 時會紅燈。
+
+修正方式（rename 到當下 UTC timestamp）：
+EOF
+      for entry in "${fail_entries[@]}"; do
+        f="${entry%|*}"
+        bname=$(basename "$f")
+        # 切掉 14 位 timestamp + 底線，保留 descriptor
+        rest="${bname:15}"
+        echo "  git mv $f supabase/migrations/${now}_${rest}" >&2
+      done
+      cat <<'EOF' >&2
+
+繞過：若已驗證遠端環境從未 applied 此 migration、確需保留原 timestamp，
+      此 hook 仍會擋；請依上述 git mv 命令重新命名後再 commit。
+
+詳細規則：rules/modules/db-runtime/supabase-self-hosted/migration.md
+          「Timestamp 順序契約」段落
+
+EOF
+      exit 1
+    fi
+  fi
+fi
+
+# 3) supabase db lint（warn-only）
 if command -v supabase >/dev/null 2>&1; then
   echo "🔍 supabase db lint --level warning..."
   if ! supabase db lint --level warning 2>/dev/null; then

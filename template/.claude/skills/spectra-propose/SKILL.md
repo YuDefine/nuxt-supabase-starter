@@ -48,6 +48,13 @@ If no argument is provided, the workflow will extract requirements from conversa
       請以本 repo 的 spectra-propose 流程建立 change `<change-name>`。
       Requirement：<一句話需求>
 
+      Plan-first（**MUST**，per `.claude/rules/agent-routing.md` Plan-first 條目）：
+      在動任何 Edit / Write / Bash 寫入動作之前，先在 stdout 最開頭輸出一段 `## Plan` section，包含：
+      - **要動的具體檔案**（每條一行的相對路徑，例如 `openspec/changes/<change-name>/proposal.md`、`openspec/changes/<change-name>/design.md`、`openspec/changes/<change-name>/tasks.md`、`openspec/changes/<change-name>/specs/<capability>/spec.md`）
+      - **每個檔案打算寫什麼**（一句話 — 例如 proposal.md 的章節列表、design.md 的決策骨架、tasks.md 預期 phase 數量與分層、specs 的 ADDED/MODIFIED/REMOVED 走向）
+      - **預期 phase 切分**（特別是 UI view phase vs 非 view phase 的邊界，呼應下方 Phase Purity 規則）
+      Plan 寫完後**立刻**繼續執行，**不要**停下來等確認。Plan 是事前公開思路給主線 Claude cross-check，不是 review gate。
+
       讀取以下檔案理解流程後執行：
       - .claude/skills/spectra-propose/SKILL.md（**只執行 Step 1 ~ 11**，**跳過** Step 0 — 已決定由你執行）
       - .claude/rules/ux-completeness.md（必填區塊：Affected Entity Matrix / User Journeys / Implementation Risk Plan + Fixtures / Seed Plan + Design Review 7 步 template）
@@ -152,6 +159,7 @@ If no argument is provided, the workflow will extract requirements from conversa
    - **NEVER** 派 codex 後不跑 cross-check（post-propose-check + design-inject + 主線補 Design Review 7 步 + spectra analyze）
    - **NEVER** 把 cross-check 的修補工作丟回 codex（太慢、來回成本高）— 主線**自己** Edit 修
    - **NEVER** 沉默等使用者來問進度；通知一到自己讀檔 + cross-check 完整流程
+   - **NEVER** 派 codex draft 而 prompt 漏掉 Plan-first 段落 — codex 必須在動筆前先輸出 `## Plan`（要動哪些檔 / 每檔寫什麼 / phase 切分），主線 cross-check 才有對齊基準
 
    **本 session 不再執行任何 Step 1 ~ 11**（避免雙重生產）— Step 0 結束本 skill。
 
