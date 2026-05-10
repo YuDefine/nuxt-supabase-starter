@@ -15,6 +15,7 @@
 | TD-001 | Template E2E 跑超過 15 min（root cause = retry 放大）   | mid      | done   | 2026-05-07 v0.30.9 | —     |
 | TD-002 | Scaffolder `nuxthub-ai` preset 不自動生 D1 evlog_events migration | high     | done | 2026-05-10         | —     |
 | TD-003 | Scaffolder dist 在非 TTY (Claude Code Bash / CI) 必經 `script` wrapper | low      | open   | 2026-05-10         | —     |
+| TD-004 | Spectra roadmap drift check 在 CI 永遠 false positive | mid      | open   | 2026-05-10 v0.31.0 | —     |
 
 ---
 
@@ -167,3 +168,39 @@ if (selections.useYes) return // skip confirm entirely
 
 - `node dist/cli.js test-app-X --yes --evlog-preset baseline ... < /dev/null` 直接成功，不需 `script` wrapper
 - e2e workflow `template-e2e.yml` scaffold step 不需特殊 wrapper
+
+---
+
+## TD-004 — Spectra roadmap drift check 在 CI 永遠 false positive
+
+**Status**: open
+**Priority**: mid
+**Discovered**: 2026-05-10 — v0.31.0 release 後 Template CI 反覆撞 stale
+**Location**: `template/scripts/spectra-advanced/roadmap-sync.mts`、`.github/workflows/template-ci.yml`
+
+### Problem
+
+`Template CI` workflow 跑 `vp run spectra:roadmap --check` 永遠回 stale，即使 local 已先跑 `pnpm spectra:roadmap` sync 並 commit ROADMAP.md。CI 環境（ubuntu runner）跟 local（macOS）跑出的 sync 結果有 structural diff，導致 `--check` 報 stale。
+
+排除過的點：
+- `_last synced: <ISO>_` 已被 `normaliseTimestamp()` 過濾。
+- Spectra CLI 不在 PATH（CI ENOENT）→ source = 'unavailable' → caller 已加 `skipParkedReplace`，不重寫 parked block。Local 模擬同樣環境跑 `--check` 是 PASS。
+- `.spectra/claims/` 在 CI 不存在 → `collectClaims` 返回空，跟 local 一致。
+- MANUAL drift detection 純看檔案內容 + openspec/changes/archive、docs/tech-debt.md、package.json，CI / local 一致。
+
+剩下未明確的差異點未追到：可能是 active changes 區塊的 progress 計算、parallelism block 的 mutex 排序，或某個 render path 對「empty input」與「missing input」的輸出細節。
+
+### Workaround
+
+`.github/workflows/template-ci.yml` 已暫時把 `Spectra roadmap drift check` step 拿掉（v0.31.0 後續 commit）。Local hook 仍會跑 sync 維持 ROADMAP 鮮度，pre-commit 也在改 spectra artifact 時觸發。
+
+### Fix approach
+
+1. 在 CI 加一個 debug step 印 `vp run spectra:roadmap --json` 與 disk ROADMAP.md 的 diff，定位真正 structural difference 來源
+2. 視原因修 sync 對齊（多半在 collectParkedChanges / renderParallelismBlock / renderActiveBlock 對 missing CLI / empty input 的處理上）
+3. 修完之後恢復 `Spectra roadmap drift check` step
+
+### Acceptance
+
+- 連續 5 次 main push CI 跑 `vp run spectra:roadmap --check` 都綠
+- ROADMAP drift gate 在 CI 重新 enabled 且不再 false positive
