@@ -1293,13 +1293,13 @@ export function generateClaudeMd(targetDir: string, selectedFeatureIds: string[]
 
   const sections: string[] = []
 
-  // Spectra Instructions
-  sections.push('<!-- SPECTRA:START v2.2.3 -->')
+  // Spectra Instructions（內容對齊 spectra binary 生成的 CLAUDE.md template；marker version 跟著 spectra 升版）
+  sections.push('<!-- SPECTRA:START v1.0.2 -->')
   sections.push('')
   sections.push('# Spectra Instructions')
   sections.push('')
   sections.push(
-    'This project uses Spectra 2.2.3 for Spec-Driven Development (SDD). Specs live in `openspec/specs/`, change proposals in `openspec/changes/`. Config: `.spectra.yaml`.'
+    'This project uses Spectra for Spec-Driven Development(SDD). Specs live in `openspec/specs/`, change proposals in `openspec/changes/`.'
   )
   sections.push('')
   sections.push('## Use `/spectra-*` skills when:')
@@ -1310,10 +1310,20 @@ export function generateClaudeMd(targetDir: string, selectedFeatureIds: string[]
   sections.push("- There's an in-progress change to continue → `/spectra-ingest`")
   sections.push('- User asks about specs or how something works → `/spectra-ask`')
   sections.push('- Implementation is done → `/spectra-archive`')
+  sections.push('- Commit only files related to a specific change → `/spectra-commit`')
   sections.push('')
   sections.push('## Workflow')
   sections.push('')
   sections.push('discuss? → propose → apply ⇄ ingest → archive')
+  sections.push('')
+  sections.push('- `discuss` is optional — skip if requirements are clear')
+  sections.push('- Requirements change mid-work? Plan mode → `ingest` → resume `apply`')
+  sections.push('')
+  sections.push('## Parked Changes')
+  sections.push('')
+  sections.push(
+    "Changes can be parked（暫存）— temporarily moved out of `openspec/changes/`. Parked changes won't appear in `spectra list` but can be found with `spectra list --parked`. To restore: `spectra unpark <name>`. The `/spectra-apply` and `/spectra-ingest` skills handle parked changes automatically."
+  )
   sections.push('')
   sections.push('<!-- SPECTRA:END -->')
   sections.push('')
