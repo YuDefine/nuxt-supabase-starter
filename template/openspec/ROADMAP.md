@@ -12,9 +12,9 @@
 
 ## Active Changes
 
-_last synced: 2026-04-29T21:40:23.557Z_
+_last synced: 2026-05-10T11:40:29.758Z_
 
-_No active changes._
+1 active change (0 ready · 1 in progress · 0 draft · 0 blocked)
 
 ### Ready to apply
 
@@ -22,7 +22,7 @@ _(none)_
 
 ### In progress
 
-_(none)_
+- **add-evlog-baseline-and-scaffolder-preset-flag** — 27/35 tasks (77%)
 
 ### Draft
 
@@ -55,7 +55,7 @@ _No active claims._
 
 ### Independent (can run in parallel)
 
-_(none)_
+- `add-evlog-baseline-and-scaffolder-preset-flag`
 
 ### Mutex (same spec touched)
 
