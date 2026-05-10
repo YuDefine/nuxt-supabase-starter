@@ -1,4 +1,9 @@
 #!/usr/bin/env sh
+# 在切目錄前先把 $1 轉成絕對路徑（git 傳的是相對於 worktree top-level 的 .git/COMMIT_EDITMSG）
+case "$1" in
+  /*) MSG="$1" ;;
+  *)  MSG="$(pwd)/$1" ;;
+esac
 # 切到 commitlint.config.* 所在目錄（template/）
 cd "$(dirname "$0")/.." || exit 1
-pnpm commitlint --edit "$1"
+pnpm commitlint --edit "$MSG"
