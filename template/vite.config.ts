@@ -93,7 +93,17 @@ export default defineConfig({
     ],
   },
   staged: {
-    '*.{js,ts,vue}': ['vp lint --fix', 'vp fmt'],
+    // *.d.ts 在 lint.ignorePatterns 內，全 .d.ts staged 時 vp lint 會以
+    // 'No files found to lint' exit 1（vp 0.1.20 仍在，與 *.md 那邊 fmt 的
+    // 'All matched files may have been excluded' 對稱 bug）。
+    // 折衷同 *.md：lintable 為 0 時跳過 lint，仍跑 fmt（fmt 對 .d.ts 不 ignore）。
+    '*.{js,ts,vue}': (files) => {
+      const lintable = files.filter((f) => !f.endsWith('.d.ts'))
+      const cmds: string[] = []
+      if (lintable.length > 0) cmds.push(`vp lint --fix ${lintable.join(' ')}`)
+      cmds.push(`vp fmt ${files.join(' ')}`)
+      return cmds
+    },
     // .md 過濾 clade LOCKED 投影路徑（.claude/{rules,skills,hooks,agents,commands}、
     // .agents/、.codex/）；這些檔案被 fmt.ignorePatterns 全部 filter 後給 vp fmt 會以
     // 'All matched files may have been excluded by ignore rules' 失敗（vp 0.1.20 仍在）。
