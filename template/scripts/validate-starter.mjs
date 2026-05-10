@@ -176,7 +176,8 @@ export function auditProject(targetDir) {
   const target = result.targets?.[0]
 
   if (!target || typeof result.blocked !== 'number' || !target.signals) {
-    throw new Error(`audit output shape mismatch for ${targetDir}`)
+    const detail = target?.error ? ` — audit error: ${target.error}` : ''
+    throw new Error(`audit output shape mismatch for ${targetDir}${detail}`)
   }
 
   return {
