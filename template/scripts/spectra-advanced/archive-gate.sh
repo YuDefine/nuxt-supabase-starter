@@ -7,6 +7,8 @@
 #   Check 3: Exhaustiveness Drift — audit-ux-drift reports (warn only)
 #   Check 4: Manual Review Kind Validation — `## 人工檢查` items must be checked or
 #            (for `[discuss]` kind) carry a `(claude-discussed: <ISO>)` evidence trail
+#   Check 5: Screenshot Quality Audit — review screenshots must be final-state,
+#            schema-valid, and free of exploration/debug spillover
 #
 # Usage:
 #   archive-gate.sh <change-name>
@@ -143,11 +145,14 @@ fi
 # Spec: openspec/specs/manual-review-item-kind/spec.md "Archive Gate Validation By Kind"
 #
 # Decision matrix:
-#   review:ui [x]    -> pass
-#   review:ui [ ]    -> block (must be human-checked)
-#   discuss   [x]    -> pass (claude-discussed annotation optional but expected)
-#   discuss   [ ] +annotation -> warn (issue path; user's call)
-#   discuss   [ ] no-annotation -> block (run /spectra-archive Step 2.5)
+#   review:ui   [x]    -> pass
+#   review:ui   [ ]    -> block (must be human-checked)
+#   discuss     [x]    -> pass (claude-discussed annotation optional but expected)
+#   discuss     [ ] +annotation -> warn (issue path; user's call)
+#   discuss     [ ] no-annotation -> block (run /spectra-archive Step 2.5)
+#   verify:auto [x]    -> pass
+#   verify:auto [ ] +annotation -> warn (agent ran round-trip; user 還沒在 GUI 點 OK)
+#   verify:auto [ ] no-annotation -> block (agent 沒跑或失敗；回 /spectra-apply Step 8a 重跑)
 #
 # Missing leading kind marker:
 #   apply Default Kind Derivation Rule based on proposal's User Journeys section.
@@ -173,6 +178,8 @@ if [ -f "$TASKS_FILE" ]; then
     REVIEW_UI_BLOCKED=()
     DISCUSS_BLOCKED=()
     DISCUSS_WARN=()
+    VERIFY_AUTO_BLOCKED=()
+    VERIFY_AUTO_WARN=()
 
     while IFS= read -r line; do
       # Match parent OR scoped item; capture checkbox state + id + remainder.
@@ -186,7 +193,7 @@ if [ -f "$TASKS_FILE" ]; then
 
       # Detect leading kind marker (must be first token after id).
       ITEM_KIND="$DEFAULT_KIND"
-      if [[ "$REST" =~ ^\[(review:ui|discuss)\][[:space:]] ]]; then
+      if [[ "$REST" =~ ^\[(review:ui|discuss|verify:auto)\][[:space:]] ]]; then
         ITEM_KIND="${BASH_REMATCH[1]}"
       fi
 
@@ -195,7 +202,7 @@ if [ -f "$TASKS_FILE" ]; then
         CHECKED=true
       fi
 
-      # claude-discussed annotation present?
+      # claude-discussed / verified-auto annotations present?
       # bash [[ =~ ]] mishandles literal parens in regex — assign to a var first.
       HAS_DISCUSSED_ANNOTATION=false
       DISCUSSED_RE='\(claude-discussed:[^)]*\)'
@@ -203,10 +210,25 @@ if [ -f "$TASKS_FILE" ]; then
         HAS_DISCUSSED_ANNOTATION=true
       fi
 
+      HAS_VERIFIED_AUTO_ANNOTATION=false
+      VERIFIED_AUTO_RE='\(verified-auto:[^)]*\)'
+      if [[ "$line" =~ $VERIFIED_AUTO_RE ]]; then
+        HAS_VERIFIED_AUTO_ANNOTATION=true
+      fi
+
       if [ "$ITEM_KIND" = 'review:ui' ]; then
         if [ "$CHECKED" = false ]; then
           REVIEW_UI_BLOCKED+=("$ID")
         fi
+      elif [ "$ITEM_KIND" = 'verify:auto' ]; then
+        if [ "$CHECKED" = false ]; then
+          if [ "$HAS_VERIFIED_AUTO_ANNOTATION" = true ]; then
+            VERIFY_AUTO_WARN+=("$ID")
+          else
+            VERIFY_AUTO_BLOCKED+=("$ID")
+          fi
+        fi
+        # verify:auto [x]: pass (user 在 GUI 點過 OK = 雙層保險完成)
       else
         # discuss
         if [ "$CHECKED" = false ]; then
@@ -243,6 +265,52 @@ if [ -f "$TASKS_FILE" ]; then
         echo "[UX Gate] warn — discuss item has claude-discussed annotation but checkbox unchecked (issue path): $id" >&2
       done
     fi
+
+    if [ "${#VERIFY_AUTO_BLOCKED[@]}" -gt 0 ]; then
+      BLOCKED=true
+      for id in "${VERIFY_AUTO_BLOCKED[@]}"; do
+        echo "[UX Gate] verify:auto item lacks verified-auto evidence trail: $id — agent 沒跑或 round-trip 失敗；run /spectra-apply to invoke Step 8a Verify-Auto Pass" >&2
+      done
+      MESSAGES+=("[UX Gate] Manual Review Kind Validation 未通過 — 上述 [verify:auto] 項目尚未取得 (verified-auto: <ISO> ...) evidence trail。
+跑 \`/spectra-apply\` 觸發 Step 8a Verify-Auto Pass 後再 archive。")
+    fi
+
+    if [ "${#VERIFY_AUTO_WARN[@]}" -gt 0 ]; then
+      for id in "${VERIFY_AUTO_WARN[@]}"; do
+        echo "[UX Gate] warn — verify:auto item has verified-auto annotation but user 未在 review GUI 點 OK: $id" >&2
+      done
+    fi
+  fi
+fi
+
+# --- Check 5: Screenshot Quality Audit ---
+SCREENSHOT_AUDIT_SCRIPT="$REPO_ROOT/${SUX_SCRIPTS_DIR}/spectra-advanced/audit-screenshot-quality.mts"
+if [ ! -f "$SCREENSHOT_AUDIT_SCRIPT" ] && [ -f "$REPO_ROOT/vendor/scripts/spectra-advanced/audit-screenshot-quality.mts" ]; then
+  # clade source checkout verification path; consumers use scripts/spectra-advanced.
+  SCREENSHOT_AUDIT_SCRIPT="$REPO_ROOT/vendor/scripts/spectra-advanced/audit-screenshot-quality.mts"
+fi
+
+if [ ! -f "$SCREENSHOT_AUDIT_SCRIPT" ]; then
+  echo "[UX Gate] warn — screenshot quality audit script not found; skipping Check 5 (fail-open for pre-propagate consumers)." >&2
+else
+  SCREENSHOT_AUDIT_OUTPUT=""
+  SCREENSHOT_AUDIT_STATUS=0
+  if command -v pnpm >/dev/null 2>&1 && (cd "$REPO_ROOT" && pnpm exec tsx --version >/dev/null 2>&1); then
+    SCREENSHOT_AUDIT_OUTPUT=$(cd "$REPO_ROOT" && pnpm exec tsx "$SCREENSHOT_AUDIT_SCRIPT" "$CHANGE_NAME" --fail-on-issues 2>&1) || SCREENSHOT_AUDIT_STATUS=$?
+  elif command -v node >/dev/null 2>&1; then
+    SCREENSHOT_AUDIT_OUTPUT=$(cd "$REPO_ROOT" && node --experimental-strip-types "$SCREENSHOT_AUDIT_SCRIPT" "$CHANGE_NAME" --fail-on-issues 2>&1) || SCREENSHOT_AUDIT_STATUS=$?
+  else
+    SCREENSHOT_AUDIT_STATUS=2
+    SCREENSHOT_AUDIT_OUTPUT="node runtime not found"
+  fi
+
+  if [ "$SCREENSHOT_AUDIT_STATUS" -ne 0 ]; then
+    BLOCKED=true
+    if [ -n "$SCREENSHOT_AUDIT_OUTPUT" ]; then
+      echo "$SCREENSHOT_AUDIT_OUTPUT" >&2
+    fi
+    MESSAGES+=("[UX Gate] Screenshot Quality Audit 未通過 — review pipeline 截圖存在 warning / critical 或 audit script error。
+跑 \`pnpm spectra:audit-screenshots $CHANGE_NAME\` 查看完整報告；整理 final-state 截圖、移動探索圖到 _exploration/，或為 round-trip-only item 加上 @no-screenshot 後再 archive。")
   fi
 fi
 

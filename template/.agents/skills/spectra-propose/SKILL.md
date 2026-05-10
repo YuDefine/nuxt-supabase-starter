@@ -156,8 +156,8 @@ If no argument is provided, the workflow will extract requirements from conversa
 
       **Rule 1：每條 item line MUST 有 leading marker**
 
-      - 每條 `- [ ] #N ...` / `- [ ] #N.M ...` line **MUST** 在 id 後緊接 `[review:ui]` 或 `[discuss]` marker
-      - 缺 marker → 依下方 Rule 2 / Rule 3 的內容分類補上正確 marker；**禁止**仰賴 Default Kind Derivation Rule（fallback 只給既有 in-flight legacy item 用）
+      - 每條 `- [ ] #N ...` / `- [ ] #N.M ...` line **MUST** 在 id 後緊接 `[review:ui]`、`[verify:auto]` 或 `[discuss]` marker（三擇一）
+      - 缺 marker → 依下方 Rule 2 / Rule 3 / Rule 4 的內容分類補上正確 marker；**禁止**仰賴 Default Kind Derivation Rule（fallback 只給既有 in-flight legacy item 用，且 fallback 不涵蓋 `[verify:auto]`）
 
       **Rule 2：Evidence-collection items MUST 標 `[discuss]`**
 
@@ -172,18 +172,51 @@ If no argument is provided, the workflow will extract requirements from conversa
 
       行為：
 
-      - 若該 item 標了 `[review:ui]` → flag misclassified，主線改為 `[discuss]`
+      - 若該 item 標了 `[review:ui]` 或 `[verify:auto]` → flag misclassified，主線改為 `[discuss]`
       - **若該 change 為 backend-only**（proposal 含 `**No user-facing journey (backend-only)**`）：
         - SSH / psql / curl / `\d` / `SELECT` / 受控 drift 製造 / migration 存在性驗證等**純技術 evidence**項目 **MUST** 從 `## 人工檢查` 搬到 `## N. Backend Verification Evidence` section（N = 最後一個功能區塊序號 + 1，位於最後功能區塊之後、`## 人工檢查` 之前）由 apply Claude 自跑自貼。`## 人工檢查` 只保留 production 授權 / 商業判斷 / production 觀察三類 `[discuss]` items
         - 若 Backend Verification Evidence 已存在，append 而非新增
         - 若移完後 `## 人工檢查` 為空 → 替換成固定文字：`_本 change 為 backend-only，所有驗證由 apply 階段 Claude 自跑（見 `## N. Backend Verification Evidence`）；deploy 前無使用者人工檢查項目。_`
       - **若該 change 為 user-facing**：evidence-collection items 留在 `## 人工檢查` 但**MUST** 標 `[discuss]`（Claude 在 archive Step 2.5 walkthrough 主動準備 evidence）
 
-      **Rule 3：Real user round-trip items MUST 標 `[review:ui]`**
+      **Rule 3：Real user round-trip items 依「人 vs agent 自跑」分流**
 
-      若 item 描述含真實使用者 round-trip（具體 URL + 使用者動作 + 預期 server/UI 結果）→ **MUST** 標 `[review:ui]`。誤標 `[discuss]` → 主線改為 `[review:ui]`。
+      若 item 描述含真實使用者 round-trip（具體 URL + 使用者動作 + 預期 server/UI 結果），依下方 Rule 4 判定該標 `[verify:auto]`（agent 用 browser-harness 能跑）或 `[review:ui]`（真的需要人）。誤標 `[discuss]` → 主線改為 `[verify:auto]` 或 `[review:ui]`。
 
-      完整規約見 `.claude/rules/manual-review.md`「Item Kind Marker」+ `.claude/rules/ux-completeness.md`「必填 Backend-only Manual Review 規約」。
+      **Rule 4：「真的需要人」白名單 — 落單者改 `[verify:auto]`**
+
+      `[review:ui]` 只給「agent 用 browser-harness 也跑不了」的項目。description 含下列任一關鍵字才 `[review:ui]`：
+
+      - 收 email / 收 webhook（agent inbox 不可達）
+      - 「視覺主觀」/「美感」/「a11y 主觀判斷」
+      - 「實體裝置」/「真機」/「手機」/「平板」/ 「kiosk QR」/「印表機」/「條碼槍」
+      - 「跨機器」/「跨 session」/ 生產環境授權後操作
+      - 「電話」/「SMS」等規格外的非 UI 環境
+
+      其餘真實使用者 round-trip → **MUST** 標 `[verify:auto]`：
+
+      - 純 UI 點按 / 填表 / 送出 form
+      - 觀察 toast / banner / 列表刷新 / 徽章 / 排序 / 計數
+      - 權限拒絕 path（送 403 / 401 行為）
+      - Edge case payload（空、null、邊界值）
+
+      行為：
+
+      - 若 item 標了 `[review:ui]` 但描述符合 `[verify:auto]` 條件（不在白名單） → flag misclassified，主線改為 `[verify:auto]`
+      - 若 item 標了 `[verify:auto]` 但描述需收 email / 實體裝置 / 視覺主觀（在白名單）→ flag misclassified，主線改為 `[review:ui]`
+
+      反面範例：
+
+      ```markdown
+      ❌ - [ ] #1 [review:ui] admin /settings 改排程 09:00 → reload 仍 09:00
+         理由：純 UI round-trip，agent 用 browser-harness 完全能跑；應該 [verify:auto]
+
+      ✅ - [ ] #1 [verify:auto] admin /settings 改排程 09:00 → 200 toast → reload 仍 09:00
+      ✅ - [ ] #2 [review:ui] cron 觸發 → 借用人 inbox 收到逾期通知 email
+      ✅ - [ ] #3 [discuss] production seed 授權與 cron 監控確認
+      ```
+
+      完整規約見 `.claude/rules/manual-review.md`「Item Kind Marker」+「Kind 分類指引」+ `.claude/rules/ux-completeness.md`「必填 Backend-only Manual Review 規約」。
 
    5.6 **Artifact 語言遵循 check**：
 
@@ -534,11 +567,12 @@ If no argument is provided, the workflow will extract requirements from conversa
 
    **Check 8: Manual Review Marker Hygiene** (applies to **every** change, not only backend-only)
 
-   Verify all three rules from Step 5.5 Manual Review Marker Hygiene Check:
+   Verify all four rules from Step 5.5 Manual Review Marker Hygiene Check:
 
-   1. **Every `## 人工檢查` item line MUST carry a leading `[review:ui]` or `[discuss]` marker** (right after `#N` / `#N.M`, before the description). Default Kind Derivation Rule is a fallback for legacy in-flight items only — newly authored content **MUST** be explicit.
-   2. **Evidence-collection items MUST be marked `[discuss]`** (NOT `[review:ui]`). Forbidden `[review:ui]` patterns include: SSH / `docker exec` / `psql` / `\d <table>` / `SELECT FROM` / `curl` triggering endpoint or cron / `SET session_replication_role` / controlled drift fabrication / migration existence verification / 商業判斷類「分布是否符合預期」.
-   3. **Real user round-trip items MUST be marked `[review:ui]`** — concrete URL + user verb + expected server/UI result.
+   1. **Every `## 人工檢查` item line MUST carry a leading `[review:ui]`, `[verify:auto]` or `[discuss]` marker** (right after `#N` / `#N.M`, before the description). Default Kind Derivation Rule is a fallback for legacy in-flight items only — newly authored content **MUST** be explicit. Default fallback does NOT cover `[verify:auto]`.
+   2. **Evidence-collection items MUST be marked `[discuss]`** (NOT `[review:ui]` or `[verify:auto]`). Forbidden `[review:ui]` / `[verify:auto]` patterns include: SSH / `docker exec` / `psql` / `\d <table>` / `SELECT FROM` / `curl` triggering endpoint or cron / `SET session_replication_role` / controlled drift fabrication / migration existence verification / 商業判斷類「分布是否符合預期」.
+   3. **Real user round-trip items 依「人 vs agent 自跑」分流** — see Rule 4 below for splitting between `[review:ui]` and `[verify:auto]`.
+   4. **`[review:ui]` is reserved for things only a human can do**. Only mark `[review:ui]` when description matches the human-only allowlist: receiving email/webhook, subjective visual judgment, physical devices (kiosk QR scanner, printer, barcode reader), real mobile/tablet, cross-machine, non-UI environments (phone/SMS). Everything else that's a real user UI round-trip — clicks, form submits, observing toast/banner/list refetch/badges/sort/permission rejection/edge payloads — **MUST** be marked `[verify:auto]` (agent runs full round-trip via browser-harness in spectra-apply Step 8a).
 
    When a violation is detected, the main thread Edit tasks.md inline (do NOT round-trip back to codex). For backend-only changes specifically:
 
@@ -554,7 +588,7 @@ If no argument is provided, the workflow will extract requirements from conversa
 
    For **user-facing** changes: evidence-collection items can stay in `## 人工檢查` but **MUST** be marked `[discuss]` — Claude proactively prepares evidence + walks the user through during spectra-archive Step 2.5.
 
-   Reason: forcing users to SSH + psql + curl is not "manual review" — it's evidence collection Claude can automate. Real `[review:ui]` items are reserved for genuine round-trip verification. Mixing the two dilutes the user's attention.
+   Reason: forcing users to SSH + psql + curl is not "manual review" — it's evidence collection Claude can automate. Forcing users to manually round-trip pure UI flows is also wasted attention — agents can do it via browser-harness (`[verify:auto]`). Real `[review:ui]` items are reserved for things genuinely requiring a human (email inbox, physical devices, subjective judgment). Mixing dilutes the user's attention.
 
    Full 規約 (含 Item Kind Marker schema、三類定義、Backend Verification Evidence 模板、反面範例、違反回報格式) 見 `manual-review.md` 「Item Kind Marker」 + `ux-completeness.md` 「必填 Backend-only Manual Review 規約」
 

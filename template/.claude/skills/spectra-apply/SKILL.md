@@ -339,12 +339,52 @@ Run `spectra analyze <change-name> --json` to check cross-artifact consistency (
 
    Confirm `state: "all_done"`. If not, review remaining tasks and complete them.
 
+8a. **Verify-Auto Pass**（Step 8b 前 hard gate）
+
+   Read `tasks.md` `## 人工檢查` 找未勾 `[verify:auto]` items。**MUST** 先處理完所有 `[verify:auto]` items 才進 Step 8b — 把「agent 能自跑」的 round-trip 用 evidence trail 預先消掉，user 在 GUI 只需要 review evidence 點 OK，不用再自己跑一次。
+
+   **Skip-condition**：`## 人工檢查` 沒任何未勾 `[verify:auto]` item → 直接跳 Step 8b。
+
+   **執行流程**：
+
+   1. **派遣 screenshot-review agent 用 `mode: verify`**：
+
+      ```
+      Agent({
+        subagent_type: "screenshot-review",
+        prompt: `mode: verify
+        Change: <change-name>
+        未勾 [verify:auto] items：
+        - #1 admin /settings 改排程 09:00 → 200 toast → reload 仍 09:00
+        - #4 /asset-loans 紅標+徽章+置頂排序
+
+        Dev server port: <port>（若已知）
+
+        每條 item 完整 round-trip 並回報 PASS / FAIL / UNCERTAIN，附 network status、DOM 觀察、final-state screenshot 路徑。`
+      })
+      ```
+
+      Agent 詳細行為見 `.claude/agents/screenshot-review.md` § verify mode（觀察 network response status、觀察 DOM 預期變化、撞 emptiness 主動補 seed、截 final-state screenshot 到 `screenshots/local/<change-name>/#N-final.png`）。
+
+   2. **依 agent 回報主線 Edit tasks.md**：
+
+      - **PASS** → 主線寫入 `(verified-auto: <ISO> network=<status>[ dom=<obs>][ ...])` annotation；**NEVER** 代勾 `[x]`（user 仍要在 GUI 點 OK 才勾，雙層保險）。可用 `applyVerifiedAutoAnnotationToContent` helper 或直接 Edit。
+      - **FAIL**（response 4xx/5xx 而 description 預期 200、DOM 預期變化沒發生） → 保留 `[ ]` + 寫 `（issue: <網路狀態 / DOM 觀察>）`，主線回報 user：「verify-auto FAIL — 看起來 server 行為跟 description 不符，請檢查」
+      - **UNCERTAIN**（fixtures 缺、撞登入頁、agent 解不開） → 不寫 annotation；主線回報 user：「verify-auto UNCERTAIN — 是否升級成 [review:ui]（需人親操）或補 fixtures plan？」並等 user 決定
+
+   3. 全部 `[verify:auto]` items 處理完才進 Step 8b。
+
+   **Guardrails**：
+   - **NEVER** 代勾 `[x]` — annotation 只是 evidence trail，最終勾選由 user 在 GUI 完成
+   - **NEVER** 在 agent 沒成功 round-trip（沒 network 觀察 / 沒 final-state screenshot）的情況下寫 `(verified-auto:)` annotation — 這條 rule 也明列在 `manual-review.md` 禁止事項
+   - **MUST** 主動處理 emptiness（補 seed / fixtures），不要 punt 給 user — user-facing change 一定有 fixtures plan，跑 reset 不該卡
+
 8b. **Manual review handoff**
 
    When tasks.md still contains unchecked items in the `## 人工檢查` section (typical at this point — implementation tasks `[x]` but manual-review items `[ ]`), **MUST** hand off to the local manual-review GUI rather than walking through items inline in chat.
 
    - **DEFAULT path**: Reply to the user with something like:
-     > Implementation 完成，剩 `<N>` 項 `## 人工檢查`。請在 consumer repo root 執行 `pnpm review:ui` 開本地 GUI 驗收 — 自動依 `#N` / `#N.M` 檔名配對截圖、鍵盤 OK / Issue / SKIP、conflict-aware 寫回 tasks.md。完成後回報，我繼續 Step 9 status。
+     > Implementation 完成。Step 8a 已對 `<M>` 項 `[verify:auto]` 跑完 agent round-trip，剩 `<N>` 項 `## 人工檢查` 待你確認。請在 consumer repo root 執行 `pnpm review:ui` 開本地 GUI 驗收 — `[verify:auto]` 項顯示 evidence + final-state screenshot 等你點 OK；`[review:ui]` 項顯示截圖等你親操確認。完成後回報，我繼續 Step 9 status。
    - Wait for the user to complete the GUI flow and report back. Do NOT proceed to Step 9 / propose archive until the user signals manual review is done.
    - **NEVER** default to `AskUserQuestion` chat dialog walking items one-by-one — it burns tokens, ignores the screenshot pool, and contradicts `rules/core/manual-review.md` 標準流程.
 

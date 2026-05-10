@@ -27,7 +27,7 @@ globs: ['screenshots/**', 'tests/e2e/**', 'openspec/changes/**/design-review.md'
 
 1. 需要多 viewport / responsive？→ Playwright
 2. 需要跨瀏覽器？→ Playwright
-3. 需要多分頁 / 多 session？→ Playwright（browser-harness 多 session 走 `BU_NAME` 可行但偏 ad-hoc）
+3. 需要多分頁 / 多 session？→ Playwright（`BU_NAME` 隔離只在 remote cloud browser 有效；local 連 user Chrome 是單一 daemon session，多 tab 並存要顯式 `switch_tab(target_id)` 重綁，見下「Tab Session Binding 陷阱」）
 4. 這組截圖之後還要重拍？→ Playwright
 5. 其他一次性檢查 → `browser-harness`
 
@@ -59,6 +59,26 @@ screenshots/<environment>/<topic>/
 | **B. Ad-hoc / debug 截圖** | 探索、debug、screenshot review 視覺 QA、polish 過程觀察 | 自由語義（`debug-clock-overlap`、`live-preview-design-token`、`exploration-typography` 等） | 自由命名 | ❌ 否（資料夾名與 active change 不 match） |
 
 **禁止把兩類混在同一資料夾** — review GUI 用資料夾名 + 檔名 id 配對 item，A 類資料夾混入 B 類 ad-hoc 檔會造成「對應 0 張」誤導。
+
+### 驗收截圖 vs 探索截圖
+
+人工檢查資料夾 `screenshots/<env>/<change-name>/` 是 review pipeline，只能放「使用者可據此勾 OK / issue」的最終驗收證據。截圖應呈現 item 要求的最終狀態，例如 submit/save 後 toast 可見、數值已更新、modal 已關閉且列表刷新、readonly / disabled / unauthorized 狀態明確呈現，或 item 明確要求的 error / empty / conflict final state。
+
+每個 `#N` / `#N.M` 預設 1 張驗收截圖；需要 light / dark、viewport、角色或同一驗收點的必要 variant 時，最多 4 張。若超過 4 張，必須做其中一種整理：
+
+- 拆成多個人工檢查 item，讓每張圖有明確驗收目標。
+- 只保留 1–4 張 final-state variant，其餘移到 `_exploration/`。
+- 若此 item 本質不能用截圖證明 round-trip，改在 tasks.md 行尾標 `@no-screenshot`。
+
+驗收截圖 descriptor 應使用 final-state 詞彙，例如 `saved`、`success`、`final`、`updated`、`readonly`、`disabled`、`unauthorized`、`empty-state`、`conflict`。禁止把 `attempt`、`after-click`、`500-detail`、`error-detail`、`debug`、`exploration`、`try`、`probe` 等探索字眼留在 review topic 根目錄。
+
+探索截圖是 agent 找路、debug、確認 DOM/route/state 的過程證據，必須放在：
+
+```text
+screenshots/<env>/<change-name>/_exploration/
+```
+
+`_exploration/` 不被 review GUI / screenshot quality audit 當成驗收證據；裡面的檔名可自由命名，但不能拿來要求使用者在 `pnpm review:ui` 裡判斷 OK。
 
 ## 路徑強制規範（hard rule）
 
@@ -148,6 +168,38 @@ with open("/tmp/x2-01.png", "wb") as f:
     f.write(base64.b64decode(shot))   # decode path 字串！
 ```
 
+## Tab Session Binding 陷阱（browser-harness）
+
+browser-harness 連 user 已開的 Chrome（local CDP）時，daemon 內部維護**單一** `self.session` + `self.target_id`。所有不指定 `session_id` 的操作（`click_at_xy` / `capture_screenshot` / `cdp(...)`）都打到這個 default session。
+
+「多 session 開不同 tab 獨立作業」這件事在 local 模式**做不到原生隔離**——`BU_NAME` 是 remote cloud browser 的 daemon process 隔離 mechanism，local 用同一台 user Chrome 時所有 BU_NAME 共享同一個 daemon，仍然是單 session_id + 單 target_id 的綁定模型。
+
+### 兩個飄走情境
+
+1. **本 tab 自己 navigate 走**：在綁的 tab 裡點 sidebar 連結 / 觸發 `navigateTo()` / 撞到 middleware redirect → daemon 還是綁同一個 target_id，但 url 已不是預期頁面。`page_info()["url"]` 會誠實反映——所以每次操作前先 verify。
+2. **誤以為 daemon 跟著 user 切 tab**：daemon **不會**主動跟 user 操作的 tab 走（user 開新 tab、Chrome 自動 activate user tab，daemon 仍綁原 target_id）。但若你呼叫 `ensure_real_tab()` 時原 tab 已 stale，會 fallback 切到 `list_tabs()[0]`——多 tab 並存時不可預測，容易跳到 user 業務 tab。
+
+### 隔離規則（多 tab 並存時 MUST）
+
+- **MUST** 開新 tab 時記下 `target_id = new_tab(url)` 回傳值
+- **MUST** 每個關鍵操作（click / capture / form fill）前 verify `page_info()["url"]` 仍是預期 url；不對就 `switch_tab(target_id)` 重綁
+- **MUST** navigate 用 `goto_url(url)`（同 tab）或 `new_tab(url)`（新 tab + 自動切），**NEVER** click sidebar 連結讓綁的 tab 自己跳走
+- **NEVER** 寬鬆呼叫 `ensure_real_tab()` 期望它「修好」綁定——它只 fallback 到 `list_tabs()[0]`，多 tab 並存時不可預測
+- **NEVER** 用 prefix 比對 cleanup `cdp("Target.closeTarget", targetId=...)`——`target_id` 是完整字串，prefix 比對會誤關別 tab（清掉 user 工作 tab = 不可恢復的破壞）
+
+### 與 user 業務 tab 共存的兩條策略
+
+| 情境 | 做法 |
+| --- | --- |
+| User 並行業務不會被打擾（你只 navigate、不戳 user tab） | 開新 tab + 嚴守上面隔離規則就夠 |
+| User 業務 tab 持續活動且你需要**反覆** click / capture | **MUST** 主動詢問 user 暫停業務操作幾分鐘，或改開乾淨 Chrome window 隔離；硬撐會持續產生錯誤 tab 的截圖 |
+
+### 診斷與救援
+
+- 拍出來的截圖明顯不是預期頁面（內容是別頁面、空白、高度不對）→ 不是 helper bug，是 daemon 綁的 target_id 上跑了別的內容；先 `page_info()` + `list_tabs()` 對比
+- daemon process 重啟（每次 `browser-harness -c` 都是新 process）會掉 binding，要重新 attach；`new_tab(url)` 會自動 attach 新 tab，從乾淨狀態開始
+- `_mark_tab()` 會在 tab title 加 🟢 prefix，user 看 Chrome tab bar 就知道哪個是 agent 在控；title 沒 🟢 = daemon 沒綁這個 tab
+
 ## 歸檔機制
 
 `screenshots/<env>/` 預設只放「目前 pending 人工檢查」的 topic；已收錄到 `docs/manual-review-archive.md` 的 change，對應截圖資料夾搬到 `screenshots/<env>/_archive/YYYY-MM/<topic>/`。
@@ -213,6 +265,8 @@ screenshots/local/
 - **NEVER** 在需要多 viewport / 跨瀏覽器時硬用一次性工具
 - **NEVER** 把「有截圖」誤當成「已完成人工檢查」
 - **NEVER** 把截圖散落在 repo 各處，不留語義化路徑
+- **NEVER** 把探索 / debug / attempt 截圖留在 `screenshots/<env>/<change-name>/` review pipeline 根目錄；一律移到 `_exploration/`
+- **NEVER** 讓同一個人工檢查 item 在 review pipeline 中累積超過 4 張 final-state variant
 - **NEVER** `capture_screenshot()` 不帶 path 用於人工檢查交付（路徑強制規範）
 - **NEVER** `base64.b64decode(capture_screenshot(...))` — 回傳的是 path 字串，不是 base64；解碼會默默吐 9 byte 垃圾覆蓋檔案（回傳值陷阱）
 - **NEVER** 把已歸檔 change 的截圖資料夾留在 `screenshots/<env>/` 頂層 — sweep 到 `_archive/YYYY-MM/` 才算完整收尾
@@ -220,3 +274,6 @@ screenshots/local/
 - **NEVER** 改 component 加 fallback 假資料來填空 UI — 治標不治本
 - **NEVER** 在 dev 用 ad-hoc UI / API 補資料而不沉澱進 seed 檔 — 不持久化
 - **NEVER** 在 staging 未授權前自動寫資料
+- **NEVER** 假設 browser-harness daemon 會跟著 user 切 tab — local 模式 daemon 綁單一 target_id，多 tab 並存要靠 `switch_tab(target_id)` 顯式管理（見「Tab Session Binding 陷阱」）
+- **NEVER** 在 `cdp("Target.closeTarget", targetId=...)` 用 target_id prefix 比對 — 必須完整字串比對，否則會誤關 user 工作 tab（不可恢復的破壞）
+- **NEVER** 在 user 持續活動的 Chrome 上硬撐截圖 — 主動詢問暫停業務操作或改開乾淨 Chrome window
