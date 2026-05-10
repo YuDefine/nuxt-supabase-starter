@@ -53,6 +53,7 @@ else
 fi
 cd "$ROOT_DIR"
 PROJECT_NAME="$(basename "$ROOT_DIR")"
+STRIP_MANIFEST_PATH="$ROOT_DIR/presets/_base/strip-manifest.json"
 
 # ---------------------------------------------------------------------------
 # 顏色輸出
@@ -67,6 +68,221 @@ info()    { echo -e "${CYAN}[INFO]${NC} $1"; }
 success() { echo -e "${GREEN}[DONE]${NC} $1"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error()   { echo -e "${RED}[ERROR]${NC} $1"; }
+
+ASSUME_YES=false
+DRY_RUN=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --yes|-y)
+      ASSUME_YES=true
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      ;;
+    *)
+      error "未知參數: $arg"
+      exit 1
+      ;;
+  esac
+done
+
+REMOVED_COUNT=0
+KEPT_COUNT=0
+
+# ---------------------------------------------------------------------------
+# Helper: strip manifest validation + cleanup
+# ---------------------------------------------------------------------------
+run_strip_manifest() {
+  local mode="$1"
+
+  node - "$STRIP_MANIFEST_PATH" "$ROOT_DIR" "$mode" <<'NODE'
+const fs = require('node:fs')
+const path = require('node:path')
+
+const [manifestPath, rootDir, mode] = process.argv.slice(2)
+const allowedConsumers = new Set(['create-clean', 'scaffolder'])
+const consumer = 'create-clean'
+
+function fail(message) {
+  console.error(`[strip-manifest] ${message}`)
+  process.exit(1)
+}
+
+function isObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function validateSelector(selector, fieldName, index) {
+  if (typeof selector !== 'string' || selector.trim() === '') {
+    fail(`${manifestPath}: entries[${index}].${fieldName} must be a non-empty string`)
+  }
+
+  if (selector.startsWith('/') || /^[A-Za-z]:[\\/]/.test(selector)) {
+    fail(`${manifestPath}: entries[${index}].${fieldName} absolute paths are not allowed: ${selector}`)
+  }
+
+  const parts = selector.split(/[\\/]+/)
+  if (parts.includes('..')) {
+    fail(`${manifestPath}: entries[${index}].${fieldName} path traversal is not allowed: ${selector}`)
+  }
+
+  const resolved = path.resolve(rootDir, selector)
+  const relative = path.relative(rootDir, resolved)
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    fail(`${manifestPath}: entries[${index}].${fieldName} escapes root: ${selector}`)
+  }
+
+  return selector.replace(/\\/g, '/')
+}
+
+function globToRegExp(glob) {
+  let pattern = ''
+  for (let i = 0; i < glob.length; i++) {
+    const char = glob[i]
+    const next = glob[i + 1]
+    if (char === '*' && next === '*') {
+      pattern += '.*'
+      i++
+    } else if (char === '*') {
+      pattern += '[^/]*'
+    } else {
+      pattern += char.replace(/[|\\{}()[\]^$+?.]/g, '\\$&')
+    }
+  }
+  return new RegExp(`^${pattern}$`)
+}
+
+function walk(relativeDir = '') {
+  const absoluteDir = path.join(rootDir, relativeDir)
+  if (!fs.existsSync(absoluteDir)) return []
+
+  const results = []
+  for (const dirent of fs.readdirSync(absoluteDir, { withFileTypes: true })) {
+    const relativePath = path.posix.join(relativeDir, dirent.name)
+    results.push(relativePath)
+    if (dirent.isDirectory()) {
+      results.push(...walk(relativePath))
+    }
+  }
+  return results
+}
+
+function resolveMatches(entry) {
+  if (entry.path) {
+    return fs.existsSync(path.join(rootDir, entry.path)) ? [entry.path] : []
+  }
+
+  const matcher = globToRegExp(entry.glob)
+  return walk().filter((relativePath) => matcher.test(relativePath))
+}
+
+if (!fs.existsSync(manifestPath)) {
+  fail(`${manifestPath} is missing`)
+}
+
+let manifest
+try {
+  manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+} catch (error) {
+  fail(`${manifestPath} is malformed JSON: ${error.message}`)
+}
+
+if (!isObject(manifest)) {
+  fail(`${manifestPath}: manifest must be an object`)
+}
+
+if (manifest.schema_version !== 1) {
+  fail(`${manifestPath}: unknown schema_version ${String(manifest.schema_version)}`)
+}
+
+if (!Array.isArray(manifest.entries)) {
+  fail(`${manifestPath}: entries must be an array`)
+}
+
+const applicableEntries = manifest.entries.map((entry, index) => {
+  if (!isObject(entry)) {
+    fail(`${manifestPath}: entries[${index}] must be an object`)
+  }
+
+  const hasPath = Object.hasOwn(entry, 'path')
+  const hasGlob = Object.hasOwn(entry, 'glob')
+  if (hasPath === hasGlob) {
+    fail(`${manifestPath}: entries[${index}] must include exactly one of path or glob`)
+  }
+
+  const selectorField = hasPath ? 'path' : 'glob'
+  const selector = validateSelector(entry[selectorField], selectorField, index)
+
+  if (typeof entry.reason !== 'string' || entry.reason.trim() === '') {
+    fail(`${manifestPath}: entries[${index}].reason must be a non-empty string`)
+  }
+
+  if (!Array.isArray(entry.consumers) || entry.consumers.length === 0) {
+    fail(`${manifestPath}: entries[${index}].consumers are required`)
+  }
+
+  for (const item of entry.consumers) {
+    if (typeof item !== 'string' || !allowedConsumers.has(item)) {
+      fail(`${manifestPath}: entries[${index}].consumers has unknown consumer: ${String(item)}`)
+    }
+  }
+
+  if (typeof entry.required !== 'boolean') {
+    fail(`${manifestPath}: entries[${index}].required must be boolean`)
+  }
+
+  return {
+    selector,
+    selectorField,
+    path: selectorField === 'path' ? selector : undefined,
+    glob: selectorField === 'glob' ? selector : undefined,
+    reason: entry.reason,
+    consumers: entry.consumers,
+    required: entry.required,
+  }
+}).filter((entry) => entry.consumers.includes(consumer))
+
+if (mode === 'validate') {
+  process.exit(0)
+}
+
+if (mode !== 'dry-run' && mode !== 'apply') {
+  fail(`unknown strip mode: ${mode}`)
+}
+
+for (const entry of applicableEntries) {
+  const matches = resolveMatches(entry)
+
+  if (matches.length === 0) {
+    if (entry.required) {
+      fail(`${manifestPath}: required ${entry.selectorField} is absent: ${entry.selector}`)
+    }
+    console.log(`[strip] ${mode === 'dry-run' ? 'would skip' : 'skipped'}: ${entry.selector} (${entry.reason})`)
+    continue
+  }
+
+  if (mode === 'dry-run') {
+    console.log(`[strip] would strip: ${entry.selector} (${entry.reason})`)
+    continue
+  }
+
+  for (const match of matches) {
+    fs.rmSync(path.join(rootDir, match), { recursive: true, force: true })
+  }
+  console.log(`[strip] stripped: ${entry.selector} (${entry.reason})`)
+}
+NODE
+}
+
+# Fail closed before any cleanup starts; dry-run reports manifest actions only.
+run_strip_manifest "validate"
+
+if [ "$DRY_RUN" = true ]; then
+  info "Dry run: manifest-driven strip entries"
+  run_strip_manifest "dry-run"
+  exit 0
+fi
 
 # ---------------------------------------------------------------------------
 # 確認提示
@@ -104,7 +320,7 @@ echo "  - 所有設定檔 (nuxt.config.ts, tsconfig, etc.)"
 echo ""
 
 # 支援 --yes 旗標跳過確認（用於 CI）
-if [[ "${1:-}" != "--yes" ]]; then
+if [ "$ASSUME_YES" != true ]; then
   echo -e "${RED}此操作不可逆！請確認你已經 commit 或備份了所有重要變更。${NC}"
   echo ""
   read -r -p "確定要繼續嗎？(y/N) " response
@@ -119,8 +335,8 @@ if [[ "${1:-}" != "--yes" ]]; then
   esac
 fi
 
-REMOVED_COUNT=0
-KEPT_COUNT=0
+info "套用 strip manifest..."
+run_strip_manifest "apply"
 
 # ---------------------------------------------------------------------------
 # Helper: 清空目錄但保留 .gitkeep
@@ -425,12 +641,8 @@ fi
 info "Starter 展示文件已在 repo root docs/，跳過"
 
 # ---------------------------------------------------------------------------
-# 21b. 移除 starter scaffolding CLI（packages/create-nuxt-starter）
+# 21b. 清理 packages workspace metadata
 # ---------------------------------------------------------------------------
-if [ -d "packages/create-nuxt-starter" ]; then
-  rm -rf packages/create-nuxt-starter
-  success "移除 packages/create-nuxt-starter/"
-fi
 # 若 packages/ 目錄空了，移除
 if [ -d "packages" ] && [ -z "$(ls -A packages 2>/dev/null)" ]; then
   rm -rf packages

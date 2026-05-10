@@ -1,0 +1,61 @@
+name: Validate Starter
+
+on:
+  pull_request:
+    paths:
+      - "template/packages/create-nuxt-starter/**"
+      - "template/presets/**"
+      - "template/scripts/validate-starter.mjs"
+      - "template/package.json"
+      - "template/pnpm-lock.yaml"
+      - ".github/workflows/validate-starter.yml"
+  push:
+    branches: [main]
+    paths:
+      - "template/packages/create-nuxt-starter/**"
+      - "template/presets/**"
+      - "template/scripts/validate-starter.mjs"
+      - "template/package.json"
+      - "template/pnpm-lock.yaml"
+      - ".github/workflows/validate-starter.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-starter-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Fresh Scaffold Audit Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLADE_HOME: ${{ github.workspace }}/clade
+    defaults:
+      run:
+        working-directory: template
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Checkout clade audit scripts
+        uses: actions/checkout@v5
+        with:
+          repository: YuDefine/clade
+          path: clade
+          token: ${{ secrets.CLADE_REPO_TOKEN || github.token }}
+
+      - name: Setup Vite+ (vp)
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version: "22"
+          cache: true
+
+      - name: Install dependencies
+        run: vp install
+
+      - name: Validate starter scaffolds
+        run: vp run validate:starter

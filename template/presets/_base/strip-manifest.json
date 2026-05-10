@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "path": "packages/create-nuxt-starter",
+      "reason": "scaffolder-package",
+      "consumers": ["create-clean"],
+      "required": false
+    },
+    {
+      "path": "presets/_base/strip-manifest.json",
+      "reason": "projection-metadata",
+      "consumers": ["create-clean", "scaffolder"],
+      "required": false
+    },
+    {
+      "path": ".spectra/claims",
+      "reason": "projection-metadata",
+      "consumers": ["create-clean", "scaffolder"],
+      "required": false
+    },
+    {
+      "path": ".spectra/spectra.db",
+      "reason": "projection-metadata",
+      "consumers": ["create-clean", "scaffolder"],
+      "required": false
+    },
+    {
+      "path": ".clade",
+      "reason": "projection-metadata",
+      "consumers": ["create-clean", "scaffolder"],
+      "required": false
+    },
+    {
+      "path": ".agent",
+      "reason": "projection-metadata",
+      "consumers": ["create-clean"],
+      "required": false
+    }
+  ]
+}

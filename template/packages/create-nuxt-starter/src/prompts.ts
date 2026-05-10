@@ -1,5 +1,11 @@
 import { consola } from 'consola'
-import type { AgentRuntime, EvlogPreset, UserSelections } from './types'
+import {
+  DEFAULT_DB_STACK,
+  type AgentRuntime,
+  type DbStack,
+  type EvlogPreset,
+  type UserSelections,
+} from './types'
 import { featureModules, resolveFeatureDependencies } from './features'
 
 function normalizePromptValues(values: unknown): string[] {
@@ -14,6 +20,12 @@ function normalizePromptValues(values: unknown): string[] {
       return ''
     })
     .filter(Boolean)
+}
+
+function assertWizardAuthCompatible(authChoice: string, dbStack: DbStack): void {
+  if (dbStack !== 'nuxthub-d1' || authChoice !== 'auth-nuxt-utils') return
+
+  throw new Error('dbStack nuxthub-d1 只支援 Better Auth 或不啟用 auth；不支援 nuxt-auth-utils')
 }
 
 export async function promptUser(defaultProjectName?: string): Promise<UserSelections> {
@@ -233,6 +245,25 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
 
   if (typeof evlogPresetChoice === 'symbol') process.exit(0)
 
+  // 15. DB stack
+  let dbStack: DbStack
+  if (evlogPresetChoice === 'nuxthub-ai') {
+    dbStack = 'nuxthub-d1'
+    consola.info('evlog preset nuxthub-ai 已自動選用 NuxtHub D1 database stack。')
+  } else {
+    dbStack = (await consola.prompt('Database stack？', {
+      type: 'select',
+      options: [
+        { label: 'Supabase（預設）', value: 'supabase' },
+        { label: 'NuxtHub D1', value: 'nuxthub-d1' },
+      ],
+      initial: DEFAULT_DB_STACK,
+    })) as DbStack
+  }
+
+  if (typeof dbStack === 'symbol') process.exit(0)
+  assertWizardAuthCompatible(authChoice, dbStack)
+
   // Collect features
   const features: string[] = []
   if (ssrEnabled) features.push('ssr')
@@ -255,7 +286,11 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
   features.push(ciChoice)
 
   // Resolve dependencies
-  const resolved = resolveFeatureDependencies(features)
+  const resolvedWithDependencies = resolveFeatureDependencies(features)
+  const resolved =
+    dbStack === 'nuxthub-d1'
+      ? resolvedWithDependencies.filter((featureId) => featureId !== 'database')
+      : resolvedWithDependencies
 
   // Check if dependencies were auto-added
   const autoAdded = resolved.filter((f) => !features.includes(f))
@@ -272,6 +307,7 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
     testingLevel: testingChoice,
     agentTargets: resolvedAgentTargets,
     evlogPreset: evlogPresetChoice,
+    dbStack,
   }
 }
 
@@ -284,6 +320,7 @@ export function displaySummary(selections: UserSelections): void {
   consola.log('📋 專案配置摘要：')
   consola.log(`   專案名稱：${displayName}`)
   consola.log(`   AI Runtime：${selections.agentTargets.join(', ')}`)
+  consola.log(`   DB stack：${selections.dbStack}`)
   consola.log(`   evlog preset：${selections.evlogPreset}`)
   consola.log(`   功能：`)
 
@@ -319,5 +356,6 @@ export function getDefaultSelections(projectName: string): UserSelections {
     testingLevel: 'full',
     agentTargets: ['claude-code'],
     evlogPreset: 'baseline',
+    dbStack: DEFAULT_DB_STACK,
   }
 }

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, readdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { basename, resolve } from 'pathe'
 import { defineCommand, runMain } from 'citty'
 import { consola } from 'consola'
@@ -7,11 +8,22 @@ import { assembleProject } from './assemble'
 import { featureModules, getModuleById, resolveFeatureDependencies } from './features'
 import { confirmScaffold, displaySummary, getDefaultSelections, promptUser } from './prompts'
 import { postScaffold, type CladeModules } from './post-scaffold'
-import { EVLOG_PRESETS, type AgentRuntime, type EvlogPreset } from './types'
+import {
+  DB_STACKS,
+  DEFAULT_DB_STACK,
+  EVLOG_PRESETS,
+  type AgentRuntime,
+  type DbStack,
+  type EvlogPreset,
+  type UserSelections,
+} from './types'
 
 type CliAuth = 'nuxt-auth-utils' | 'better-auth' | 'none'
 type CliCi = 'simple' | 'advanced'
 const VALID_AGENT_TARGETS = ['claude-code', 'codex', 'cursor'] as const
+const VALID_AUTH_VALUES: CliAuth[] = ['nuxt-auth-utils', 'better-auth', 'none']
+const VALID_CI_VALUES: CliCi[] = ['simple', 'advanced']
+const NUXTHUB_D1_ALLOWED_AUTH: CliAuth[] = ['better-auth', 'none']
 
 function isMonorepoRoot(dir: string): boolean {
   return (
@@ -138,10 +150,49 @@ function parseAgentTargets(value: string | undefined): AgentRuntime[] | undefine
   return [...new Set(parsed)] as AgentRuntime[]
 }
 
-function buildSelectionsFromArgs(args: {
+function failValidation(message: string): never {
+  throw new Error(message)
+}
+
+function inferAuthFromFeatures(features: string[]): CliAuth {
+  if (features.includes('auth-better-auth')) return 'better-auth'
+  if (features.includes('auth-nuxt-utils')) return 'nuxt-auth-utils'
+  return 'none'
+}
+
+function setAuthFeature(selected: Set<string>, auth: CliAuth): void {
+  selected.delete('auth-nuxt-utils')
+  selected.delete('auth-better-auth')
+  if (auth === 'nuxt-auth-utils') selected.add('auth-nuxt-utils')
+  if (auth === 'better-auth') selected.add('auth-better-auth')
+}
+
+export function validateAuthDbStackCompatibility(auth: CliAuth, dbStack: DbStack): void {
+  if (dbStack !== 'nuxthub-d1' || auth !== 'nuxt-auth-utils') return
+
+  failValidation(
+    `dbStack nuxthub-d1 只支援 auth=${NUXTHUB_D1_ALLOWED_AUTH.join(
+      ' | '
+    )}；不支援 auth=nuxt-auth-utils`
+  )
+}
+
+function resolveDbStack(evlogPreset: EvlogPreset, dbArg: DbStack | undefined): DbStack {
+  if (evlogPreset === 'nuxthub-ai') {
+    if (dbArg === 'supabase') {
+      failValidation('--evlog-preset nuxthub-ai 會使用 NuxtHub D1，不能同時指定 --db supabase')
+    }
+    return 'nuxthub-d1'
+  }
+
+  return dbArg ?? DEFAULT_DB_STACK
+}
+
+export function buildSelectionsFromArgs(args: {
   projectName: string
   auth?: string
   ci?: string
+  db?: string
   with?: string
   without?: string
   minimal?: boolean
@@ -149,46 +200,47 @@ function buildSelectionsFromArgs(args: {
   fast?: boolean
   agents?: string
   evlogPreset?: string
-}) {
+}): UserSelections {
   const availableFeatureIds = new Set(featureModules.map((mod) => mod.id))
   const fromWith = parseCsv(args.with)
   const fromWithout = parseCsv(args.without)
   const unknown = [...fromWith, ...fromWithout].filter((id) => !availableFeatureIds.has(id))
 
   if (unknown.length > 0) {
-    consola.error(`未知的 feature id：${unknown.join(', ')}`)
-    consola.info('可用 feature id：')
-    consola.info(featureModules.map((mod) => `  - ${mod.id}`).join('\n'))
-    process.exit(1)
+    failValidation(
+      `未知的 feature id：${unknown.join(', ')}\n可用 feature id：\n${featureModules
+        .map((mod) => `  - ${mod.id}`)
+        .join('\n')}`
+    )
   }
 
-  const validAuthValues: CliAuth[] = ['nuxt-auth-utils', 'better-auth', 'none']
   const authArg = args.auth as CliAuth | undefined
-  if (authArg && !validAuthValues.includes(authArg)) {
-    consola.error(`--auth 只接受：${validAuthValues.join(' | ')}`)
-    process.exit(1)
+  if (authArg && !VALID_AUTH_VALUES.includes(authArg)) {
+    failValidation(`--auth 只接受：${VALID_AUTH_VALUES.join(' | ')}`)
   }
 
-  const validCiValues: CliCi[] = ['simple', 'advanced']
   const ciArg = args.ci as CliCi | undefined
-  if (ciArg && !validCiValues.includes(ciArg)) {
-    consola.error(`--ci 只接受：${validCiValues.join(' | ')}`)
-    process.exit(1)
+  if (ciArg && !VALID_CI_VALUES.includes(ciArg)) {
+    failValidation(`--ci 只接受：${VALID_CI_VALUES.join(' | ')}`)
+  }
+
+  const dbArg = args.db as DbStack | undefined
+  if (dbArg && !DB_STACKS.includes(dbArg)) {
+    failValidation(`--db 只接受：${DB_STACKS.join(' | ')}`)
   }
 
   const validPresetValues = ['default', 'fast'] as const
   const presetArg = args.preset as (typeof validPresetValues)[number] | undefined
   if (presetArg && !validPresetValues.includes(presetArg)) {
-    consola.error(`--preset 只接受：${validPresetValues.join(' | ')}`)
-    process.exit(1)
+    failValidation(`--preset 只接受：${validPresetValues.join(' | ')}`)
   }
 
   const evlogPresetArg = args.evlogPreset as EvlogPreset | undefined
   if (evlogPresetArg && !EVLOG_PRESETS.includes(evlogPresetArg)) {
-    consola.error(`--evlog-preset 只接受：${EVLOG_PRESETS.join(' | ')}`)
-    process.exit(1)
+    failValidation(`--evlog-preset 只接受：${EVLOG_PRESETS.join(' | ')}`)
   }
   const evlogPreset: EvlogPreset = evlogPresetArg ?? 'baseline'
+  const dbStack = resolveDbStack(evlogPreset, dbArg)
 
   const useFastPreset = args.fast === true || presetArg === 'fast'
   const agentTargets =
@@ -225,6 +277,8 @@ function buildSelectionsFromArgs(args: {
     selected.delete('auth-better-auth')
     if (authArg === 'nuxt-auth-utils') addFeature('auth-nuxt-utils')
     if (authArg === 'better-auth') addFeature('auth-better-auth')
+  } else if (dbStack === 'nuxthub-d1') {
+    setAuthFeature(selected, 'better-auth')
   }
 
   if (ciArg) {
@@ -242,7 +296,12 @@ function buildSelectionsFromArgs(args: {
     selected.delete(featureId)
   }
 
-  const features = resolveFeatureDependencies([...selected])
+  const resolvedFeatures = resolveFeatureDependencies([...selected])
+  const features =
+    dbStack === 'nuxthub-d1'
+      ? resolvedFeatures.filter((featureId) => featureId !== 'database')
+      : resolvedFeatures
+  validateAuthDbStackCompatibility(inferAuthFromFeatures(features), dbStack)
 
   return {
     projectName: args.projectName,
@@ -252,6 +311,7 @@ function buildSelectionsFromArgs(args: {
     testingLevel: inferTestingLevel(features),
     agentTargets,
     evlogPreset,
+    dbStack,
   }
 }
 
@@ -337,6 +397,11 @@ const main = defineCommand({
         'evlog preset: none | baseline | d-pattern-audit | nuxthub-ai (default: baseline)',
       required: false,
     },
+    db: {
+      type: 'string',
+      description: 'Database stack: supabase | nuxthub-d1 (default: supabase)',
+      required: false,
+    },
   },
   async run({ args }) {
     const monorepoRoot = detectMonorepoRoot()
@@ -351,6 +416,7 @@ const main = defineCommand({
       args.preset ||
       args.fast ||
       args.agents ||
+      args.db ||
       args['evlog-preset']
     )
 
@@ -371,18 +437,24 @@ const main = defineCommand({
     if (args.yes || hasCustomFlags) {
       // Non-interactive mode with defaults/custom flags
       const name = projectName || 'nuxt-app'
-      selections = buildSelectionsFromArgs({
-        projectName: name,
-        auth: args.auth as string | undefined,
-        ci: args.ci as string | undefined,
-        with: args.with as string | undefined,
-        without: args.without as string | undefined,
-        minimal: args.minimal as boolean | undefined,
-        preset: args.preset as string | undefined,
-        fast: args.fast as boolean | undefined,
-        agents: args.agents as string | undefined,
-        evlogPreset: args['evlog-preset'] as string | undefined,
-      })
+      try {
+        selections = buildSelectionsFromArgs({
+          projectName: name,
+          auth: args.auth as string | undefined,
+          ci: args.ci as string | undefined,
+          db: args.db as string | undefined,
+          with: args.with as string | undefined,
+          without: args.without as string | undefined,
+          minimal: args.minimal as boolean | undefined,
+          preset: args.preset as string | undefined,
+          fast: args.fast as boolean | undefined,
+          agents: args.agents as string | undefined,
+          evlogPreset: args['evlog-preset'] as string | undefined,
+        })
+      } catch (error) {
+        consola.error((error as Error).message)
+        process.exit(1)
+      }
 
       const displayName = basename(resolve(invocationCwd, name))
       if (hasCustomFlags) {
@@ -417,7 +489,8 @@ const main = defineCommand({
         selections.features,
         pkgName,
         selections.agentTargets,
-        selections.evlogPreset
+        selections.evlogPreset,
+        selections.dbStack
       )
       consola.success('專案檔案建立完成！')
     } catch (error) {
@@ -431,8 +504,11 @@ const main = defineCommand({
       registerConsumer: args['register-consumer'] as boolean,
       wirePreCommit: args['wire-pre-commit'] as boolean,
       cloneClade: args['clone-clade'] as boolean,
+      dbStack: selections.dbStack,
     })
   },
 })
 
-runMain(main)
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  runMain(main)
+}

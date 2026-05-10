@@ -11,17 +11,25 @@ import { randomBytes } from 'node:crypto'
 import { dirname, join, resolve } from 'pathe'
 import { applyEvlogPreset } from './evlog-preset'
 import { getModuleById } from './features'
-import type { AgentRuntime, EvlogPreset } from './types'
+import { applyOverlay } from './overlays'
+import { applyStripManifest, loadStripManifest } from './strip-manifest'
+import { DEFAULT_DB_STACK, type AgentRuntime, type DbStack, type EvlogPreset } from './types'
 
 const TEMPLATES_DIR = resolve(import.meta.dirname, '..', 'templates')
 const STARTER_ROOT = resolve(import.meta.dirname, '..', '..', '..')
+
+export interface AssembleProjectOptions {
+  stripManifestPath?: string
+}
 
 export function assembleProject(
   targetDir: string,
   selectedFeatureIds: string[],
   projectName: string,
   agentTargets: AgentRuntime[] = ['claude-code'],
-  evlogPreset: EvlogPreset = 'baseline'
+  evlogPreset: EvlogPreset = 'baseline',
+  dbStack: DbStack = DEFAULT_DB_STACK,
+  options: AssembleProjectOptions = {}
 ): void {
   // 1. Copy base template
   copyDirectory(join(TEMPLATES_DIR, 'base'), targetDir)
@@ -41,10 +49,10 @@ export function assembleProject(
   generatePackageJson(targetDir, selectedFeatureIds, projectName, agentTargets)
 
   // 4. Generate nuxt.config.ts
-  generateNuxtConfig(targetDir, selectedFeatureIds, evlogPreset)
+  generateNuxtConfig(targetDir, selectedFeatureIds, evlogPreset, dbStack)
 
   // 5. Generate .env.example
-  generateEnvExample(targetDir, selectedFeatureIds)
+  generateEnvExample(targetDir, selectedFeatureIds, dbStack)
 
   // 6. Generate runtime docs
   if (hasAgent(agentTargets, 'claude-code')) {
@@ -76,15 +84,36 @@ export function assembleProject(
   copySpectraWorkflows(targetDir)
   copySpectraConfig(targetDir)
 
-  // 10. Replace template placeholders
+  // 10. Apply database stack overlay before evlog preset files are layered on top.
+  if (dbStack === 'nuxthub-d1') {
+    applyOverlay(targetDir, 'db-nuxthub-d1', {
+      auth: inferAuthSelection(selectedFeatureIds),
+      dbStack,
+    })
+  }
+
+  // 11. Replace template placeholders
   replacePlaceholders(targetDir, projectName)
 
-  // 11. Apply evlog preset (overlay file set on top of starter template)
+  // 12. Apply evlog preset (overlay file set on top of starter template)
   // 對應 spectra change add-evlog-baseline-and-scaffolder-preset-flag M3b.2.
   // baseline 是 default — starter template 自家已含 baseline wiring (M3b.1)，
   // 所以 baseline 套等於再次覆蓋（idempotent）。如需 d-pattern-audit / nuxthub-ai
   // 則 overlay 額外 file 進 target dir。
   applyEvlogPreset(targetDir, evlogPreset, STARTER_ROOT)
+
+  // 13. Strip starter/scaffolder meta-only artifacts after every file source has landed.
+  applyStripManifest(targetDir, loadStripManifest(options.stripManifestPath), {
+    consumer: 'scaffolder',
+  })
+}
+
+function inferAuthSelection(
+  selectedFeatureIds: string[]
+): 'better-auth' | 'nuxt-auth-utils' | 'none' {
+  if (selectedFeatureIds.includes('auth-better-auth')) return 'better-auth'
+  if (selectedFeatureIds.includes('auth-nuxt-utils')) return 'nuxt-auth-utils'
+  return 'none'
 }
 
 function copyDirectory(src: string, dest: string): void {
@@ -313,7 +342,8 @@ function sortObject(obj: Record<string, string> | undefined): Record<string, str
 export function generateNuxtConfig(
   targetDir: string,
   selectedFeatureIds: string[],
-  evlogPreset: EvlogPreset = 'baseline'
+  evlogPreset: EvlogPreset = 'baseline',
+  dbStack: DbStack = DEFAULT_DB_STACK
 ): void {
   const configPath = join(targetDir, 'nuxt.config.ts')
   let config = readFileSync(configPath, 'utf-8')
@@ -327,6 +357,13 @@ export function generateNuxtConfig(
       modules.push(...mod.nuxtModules)
     }
   }
+  const usesNuxthubD1 = dbStack === 'nuxthub-d1'
+
+  if (usesNuxthubD1) {
+    modules.push('@nuxthub/core')
+    const supabaseIdx = modules.indexOf('@nuxtjs/supabase')
+    if (supabaseIdx >= 0) modules.splice(supabaseIdx, 1)
+  }
 
   // T3 stack：用 @evlog/nuxthub 取代 evlog/nuxt（@evlog/nuxthub 自動 install
   // evlog/nuxt + 接 NuxtHub D1 drain）。對應 master plan § 5 stack 分類 T3。
@@ -336,7 +373,7 @@ export function generateNuxtConfig(
     else modules.push('@evlog/nuxthub')
   }
 
-  const modulesStr = modules.map((m) => `    '${m}',`).join('\n')
+  const modulesStr = [...new Set(modules)].map((m) => `    '${m}',`).join('\n')
   config = config.replace('    // __MODULES__', modulesStr)
 
   // SSR mode
@@ -347,7 +384,7 @@ export function generateNuxtConfig(
   const runtimeLines: string[] = []
   const publicLines: string[] = []
 
-  if (selectedFeatureIds.includes('database')) {
+  if (selectedFeatureIds.includes('database') && !usesNuxthubD1) {
     runtimeLines.push(`    supabase: {`)
     runtimeLines.push(`      secretKey: process.env.SUPABASE_SECRET_KEY,`)
     runtimeLines.push(`    },`)
@@ -446,7 +483,7 @@ export function generateNuxtConfig(
     configBlocks.push(`    csrf: true,`)
     configBlocks.push(`  },`)
   }
-  if (selectedFeatureIds.includes('database')) {
+  if (selectedFeatureIds.includes('database') && !usesNuxthubD1) {
     configBlocks.push(`  supabase: {`)
     configBlocks.push(`    useSsrCookies: true,`)
     configBlocks.push(`    redirect: false,`)
@@ -469,6 +506,11 @@ export function generateNuxtConfig(
     configBlocks.push(`  evlog: {`)
     configBlocks.push(`    env: { service: '{{projectName}}' },`)
     configBlocks.push(`    include: ['/api/**'],`)
+    configBlocks.push(`  },`)
+  }
+  if (usesNuxthubD1) {
+    configBlocks.push(`  hub: {`)
+    configBlocks.push(`    database: true,`)
     configBlocks.push(`  },`)
   }
 
@@ -501,7 +543,11 @@ export function generateNuxtConfig(
 
 // --- .env.example generation ---
 
-export function generateEnvExample(targetDir: string, selectedFeatureIds: string[]): void {
+export function generateEnvExample(
+  targetDir: string,
+  selectedFeatureIds: string[],
+  dbStack: DbStack = DEFAULT_DB_STACK
+): void {
   const envExamplePath = join(targetDir, '.env.example')
   const envPath = join(targetDir, '.env')
   const exampleLines = [
@@ -524,7 +570,7 @@ export function generateEnvExample(targetDir: string, selectedFeatureIds: string
     selectedFeatureIds.includes('auth-better-auth')
 
   // Supabase CLI 標準 local dev 預設值（公開 demo JWT，非 secret）
-  if (selectedFeatureIds.includes('database')) {
+  if (selectedFeatureIds.includes('database') && dbStack !== 'nuxthub-d1') {
     generatedValues.SUPABASE_URL = 'http://127.0.0.1:54321'
     generatedValues.SUPABASE_KEY =
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0'

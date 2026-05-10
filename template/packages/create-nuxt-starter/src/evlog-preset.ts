@@ -61,6 +61,6 @@ export function describeEvlogPreset(preset: EvlogPreset): string {
     case 'd-pattern-audit':
       return 'baseline + O1 D-pattern audit chain（HMAC-signed audit log + diff-cron）'
     case 'nuxthub-ai':
-      return 'NuxtHub D1 drain + AI agent context（cost tracking + SSE/MCP child logger）'
+      return 'NuxtHub AI evlog layer（D1 stack 由 scaffolder dbStack overlay 套用）'
   }
 }
