@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# spectra-ux: pre-propose UX scan
+# spectra-advanced: pre-propose UX scan
 #
 # Outputs blast-radius scan instructions and required-section reminders for
 # any agent about to run spectra-propose. Agent-agnostic; called by:

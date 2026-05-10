@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# spectra-ux: post-propose validation
+# spectra-advanced: post-propose validation
 #
 # Validates a freshly created proposal:
 #   1. Has ## User Journeys (or backend-only declaration)

@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# spectra-ux common functions — sourced by the gate scripts.
+# spectra-advanced common functions — sourced by the gate scripts.
+#
+# (Function/var prefix `sux_` / `SUX_` retained from the legacy `spectra-ux`
+#  package name — internal API, not renamed in this rename change to keep the
+#  diff focused on the directory + path rename.)
 #
 # Provides:
 #   sux_repo_root            — find the project root (cwd-aware, agent-agnostic)
-#   sux_load_config          — load spectra-ux.config.json into env vars
+#   sux_load_config          — load spectra-advanced.config.json (or legacy spectra-ux.config.json) into env vars
 #   sux_find_active_change   — locate the most recent active spectra change
 #   sux_find_change_by_name  — locate a change by name
 #   sux_extract_journey_urls — extract URLs from a proposal's User Journeys
@@ -39,12 +43,19 @@ sux_repo_root() {
   git rev-parse --show-toplevel 2>/dev/null || pwd
 }
 
-# Load spectra-ux.config.json paths into SUX_* env vars.
+# Load spectra-advanced.config.json paths into SUX_* env vars.
+# Legacy fallback: if the new file is absent, read spectra-ux.config.json
+# (the pre-rename filename). Consumers migrate naturally on the next propagate
+# (propagate.mjs renames the file) so the fallback can be removed in a future
+# major bump.
 # Falls back to sensible defaults (Nuxt convention) for any missing field.
 sux_load_config() {
   local root config
   root=$(sux_repo_root)
-  config="$root/spectra-ux.config.json"
+  config="$root/spectra-advanced.config.json"
+  if [ ! -f "$config" ] && [ -f "$root/spectra-ux.config.json" ]; then
+    config="$root/spectra-ux.config.json"
+  fi
 
   # Defaults
   SUX_TYPES_DIRS="shared/types"

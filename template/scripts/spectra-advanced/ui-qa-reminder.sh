@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# spectra-ux: UI edit reminder
+# spectra-advanced: UI edit reminder
 #
 # Emits lightweight reminders during active UI work so design / QA checks do
 # not all get deferred until archive time.
@@ -18,7 +18,7 @@ if ! sux_path_is_ui_related "$FILE_PATH"; then
   exit 0
 fi
 
-COUNTER_FILE="/tmp/spectra-ux-ui-edit-counter-$(date +%Y%m%d)-${PPID:-$$}"
+COUNTER_FILE="/tmp/spectra-advanced-ui-edit-counter-$(date +%Y%m%d)-${PPID:-$$}"
 COUNT=0
 if [ -f "$COUNTER_FILE" ]; then
   COUNT=$(cat "$COUNTER_FILE" 2>/dev/null || echo 0)

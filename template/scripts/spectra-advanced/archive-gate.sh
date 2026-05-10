@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# spectra-ux: archive gate
+# spectra-advanced: archive gate
 #
 # Validates a change before archive:
 #   Check 1: Journey URL Touch — proposal's journey URLs map to touched files
 #   Check 2: Schema-Types Drift — migration enum/column changes need shared types sync
 #   Check 3: Exhaustiveness Drift — audit-ux-drift reports (warn only)
+#   Check 4: Manual Review Kind Validation — `## 人工檢查` items must be checked or
+#            (for `[discuss]` kind) carry a `(claude-discussed: <ISO>)` evidence trail
 #
 # Usage:
 #   archive-gate.sh <change-name>
@@ -133,6 +135,113 @@ if command -v node >/dev/null 2>&1 && [ -f "$AUDIT_SCRIPT" ]; then
         echo "[UX Gate] warn — audit-ux-drift 偵測到 ${DRIFT_COUNT} 個 enum exhaustiveness 漂移點（含既有）。" >&2
         echo "跑 \`pnpm audit:ux-drift\` 查看完整報告。" >&2
       fi
+    fi
+  fi
+fi
+
+# --- Check 4: Manual Review Kind Validation ---
+# Spec: openspec/specs/manual-review-item-kind/spec.md "Archive Gate Validation By Kind"
+#
+# Decision matrix:
+#   review:ui [x]    -> pass
+#   review:ui [ ]    -> block (must be human-checked)
+#   discuss   [x]    -> pass (claude-discussed annotation optional but expected)
+#   discuss   [ ] +annotation -> warn (issue path; user's call)
+#   discuss   [ ] no-annotation -> block (run /spectra-archive Step 2.5)
+#
+# Missing leading kind marker:
+#   apply Default Kind Derivation Rule based on proposal's User Journeys section.
+if [ -f "$TASKS_FILE" ]; then
+  # Detect default kind from proposal: backend-only declaration -> discuss, else review:ui
+  DEFAULT_KIND='review:ui'
+  if grep -qF '**No user-facing journey (backend-only)**' "$PROPOSAL_FILE" 2>/dev/null; then
+    DEFAULT_KIND='discuss'
+  fi
+
+  # Extract `## 人工檢查` section content; tolerate missing section.
+  # Use awk (not sux_extract_section) because the latter's `sed '$d'` trims the last
+  # line — which is the actual checkbox when 人工檢查 is the file's final section.
+  KIND_SECTION=$(awk '
+    /^## .*人工檢查/ { in_section=1; next }
+    in_section && /^## / { in_section=0 }
+    in_section { print }
+  ' "$TASKS_FILE")
+
+  if [ -n "$KIND_SECTION" ]; then
+    # Walk each checkbox line under 人工檢查. Match parent `- [ ] #N` and scoped
+    # `  - [ ] #N.M` lines. Other content (prose, blank lines) silently ignored.
+    REVIEW_UI_BLOCKED=()
+    DISCUSS_BLOCKED=()
+    DISCUSS_WARN=()
+
+    while IFS= read -r line; do
+      # Match parent OR scoped item; capture checkbox state + id + remainder.
+      if [[ "$line" =~ ^[[:space:]]*-[[:space:]]\[([[:space:]xX])\][[:space:]]+(#[0-9]+(\.[0-9]+)?)[[:space:]]+(.*)$ ]]; then
+        STATE="${BASH_REMATCH[1]}"
+        ID="${BASH_REMATCH[2]}"
+        REST="${BASH_REMATCH[4]}"
+      else
+        continue
+      fi
+
+      # Detect leading kind marker (must be first token after id).
+      ITEM_KIND="$DEFAULT_KIND"
+      if [[ "$REST" =~ ^\[(review:ui|discuss)\][[:space:]] ]]; then
+        ITEM_KIND="${BASH_REMATCH[1]}"
+      fi
+
+      CHECKED=false
+      if [[ "$STATE" =~ [xX] ]]; then
+        CHECKED=true
+      fi
+
+      # claude-discussed annotation present?
+      # bash [[ =~ ]] mishandles literal parens in regex — assign to a var first.
+      HAS_DISCUSSED_ANNOTATION=false
+      DISCUSSED_RE='\(claude-discussed:[^)]*\)'
+      if [[ "$line" =~ $DISCUSSED_RE ]]; then
+        HAS_DISCUSSED_ANNOTATION=true
+      fi
+
+      if [ "$ITEM_KIND" = 'review:ui' ]; then
+        if [ "$CHECKED" = false ]; then
+          REVIEW_UI_BLOCKED+=("$ID")
+        fi
+      else
+        # discuss
+        if [ "$CHECKED" = false ]; then
+          if [ "$HAS_DISCUSSED_ANNOTATION" = true ]; then
+            DISCUSS_WARN+=("$ID")
+          else
+            DISCUSS_BLOCKED+=("$ID")
+          fi
+        fi
+        # discuss [x] (with or without annotation): pass (annotation expected but warn-only handled by other tooling)
+      fi
+    done <<< "$KIND_SECTION"
+
+    if [ "${#REVIEW_UI_BLOCKED[@]}" -gt 0 ]; then
+      BLOCKED=true
+      for id in "${REVIEW_UI_BLOCKED[@]}"; do
+        echo "[UX Gate] review:ui item not checked by user: $id" >&2
+      done
+      MESSAGES+=("[UX Gate] Manual Review Kind Validation 未通過 — 上述 [review:ui] 項目尚未經使用者親自勾選。
+跑 \`pnpm review:ui\` 完成 round-trip 驗收後再 archive。")
+    fi
+
+    if [ "${#DISCUSS_BLOCKED[@]}" -gt 0 ]; then
+      BLOCKED=true
+      for id in "${DISCUSS_BLOCKED[@]}"; do
+        echo "[UX Gate] discuss item lacks claude-discussed evidence trail: $id — run /spectra-archive to invoke Step 2.5 walkthrough" >&2
+      done
+      MESSAGES+=("[UX Gate] Manual Review Kind Validation 未通過 — 上述 [discuss] 項目尚未取得 (claude-discussed: <ISO>) evidence trail。
+跑 \`/spectra-archive\` 觸發 Step 2.5 Discuss Items Walkthrough 後再 archive。")
+    fi
+
+    if [ "${#DISCUSS_WARN[@]}" -gt 0 ]; then
+      for id in "${DISCUSS_WARN[@]}"; do
+        echo "[UX Gate] warn — discuss item has claude-discussed annotation but checkbox unchecked (issue path): $id" >&2
+      done
     fi
   fi
 fi

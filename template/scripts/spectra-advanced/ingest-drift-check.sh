@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# spectra-ux: post-edit drift detector for spectra-ingest
+# spectra-advanced: post-edit drift detector for spectra-ingest
 #
 # Detects structural drift between the edited file and the active change's
 # proposal. Emits stderr reminders so Claude notices it should consider
@@ -53,7 +53,7 @@ esac
 # Rate-limit: only warn once per (change, file) per session so back-to-back
 # edits on the same file don't flood stderr.
 FP="${CHANGE_NAME}__$(printf '%s' "$REL_PATH" | tr '/ .' '___')"
-SEEN_FILE="/tmp/spectra-ux-ingest-drift-$(date +%Y%m%d)-${PPID:-$$}"
+SEEN_FILE="/tmp/spectra-advanced-ingest-drift-$(date +%Y%m%d)-${PPID:-$$}"
 if [ -f "$SEEN_FILE" ] && grep -Fxq "$FP" "$SEEN_FILE" 2>/dev/null; then
   exit 0
 fi

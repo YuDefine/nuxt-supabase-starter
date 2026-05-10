@@ -101,20 +101,25 @@ If parked changes exist, mention them: "另外有 N 個暫存的 change：{names
 
 當使用者選擇「歸檔」或說「archive」時，**MUST** 按順序執行：
 
-1. **檢查人工檢查狀態** — 讀取 tasks artifact 的 `## 人工檢查` 區塊
-   - 如果有未完成的 `[ ]` 項目 → 提醒使用者，用 request_user_input 詢問：
+1. **檢查人工檢查狀態（kind-aware）** — 讀取 tasks artifact 的 `## 人工檢查` 區塊，依每條 item 的 leading kind marker 分流。
+   - 解析每條 `- [ ]` / `- [x]` 行的 leading marker：`[review:ui]` 或 `[discuss]`。缺 marker 時依 Default Kind Derivation Rule 推導（proposal 含 `**No user-facing journey (backend-only)**` → `discuss`，其餘 → `review:ui`）。
+   - 計算未勾項分組：`unchecked_review_ui` 與 `unchecked_discuss`。
+   - **若 `unchecked_review_ui` > 0 且 `unchecked_discuss` > 0**（混合 kind）：依序執行 — 先跑 spectra-archive 內建 Step 2.5「Discuss Items Walkthrough」（讓 Claude 主動準備 evidence 與使用者討論並寫 `(claude-discussed: <ISO>)` annotation），再用 request_user_input 提示是否跑 `/review-screenshot` 處理 `[review:ui]` items。順序：discuss 先、review:ui 後 — 讓使用者見過所有討論點再進視覺驗收。
+   - **若只有 `unchecked_review_ui` > 0**：用 request_user_input 詢問：
      - 「先跑檢查」→ invoke `/review-screenshot`
-     - 「全部標記完成並歸檔」→ 繼續
+     - 「全部標記完成並歸檔」→ 繼續（archive-gate Check 4 會擋下未勾 `[review:ui]`）
      - 「取消」→ 停止
-   - 如果全部 `[x]` 或沒有人工檢查區塊 → 繼續
+   - **若只有 `unchecked_discuss` > 0**：直接進入 spectra-archive Step 2.5 流程（由 spectra-archive skill 內部處理）；orchestrator 不需另外提示。
+   - **若全部 `[x]` 或沒有人工檢查區塊** → 繼續。
 
 2. **歸檔人工檢查** — invoke `/review-archive all`
-   - 將所有檢查項目（含 `#N` 編號、來源 change/spec 追溯）遷移到 `docs/manual-review-archive.md`
+   - 將所有檢查項目（含 `#N` 編號、kind marker、來源 change/spec 追溯）遷移到 `docs/manual-review-archive.md`
 
 3. **歸檔 Spectra change** — invoke `/spectra-archive`
    - 歸檔 change artifacts 到 `openspec/changes/archive/`
+   - spectra-archive 內部會在 Step 3.5 執行 Discuss Items Walkthrough（若上面 Step 1 未先跑）
 
-這確保每次 archive 時，人工檢查結果不會遺失，且可追溯到對應的 change 和 spec。
+這確保每次 archive 時，`[review:ui]` 與 `[discuss]` 兩 kind 的人工檢查結果都不會遺失，且可追溯到對應的 change 和 spec。
 
 ## 人工檢查清單（自動附加）
 
@@ -123,21 +128,23 @@ If parked changes exist, mention them: "另外有 N 個暫存的 change：{names
 1. 讀取 `docs/manual-review-checklist.md` 取得共用清單
 2. 從清單中挑選**與此 change 相關**的檢查項目（不需要全部複製）
 3. 每個項目加上 `#N` 流水號（從 #1 開始）
-4. 附加到 tasks artifact 最後一個 `##` 之後，格式：
+4. **每個項目 MUST 標 `[review:ui]` 或 `[discuss]` kind marker**（緊接 `#N` 後第一個 token）— 使用者 round-trip 驗收 → `[review:ui]`；Claude 主導的 evidence-based 討論 → `[discuss]`
+5. 附加到 tasks artifact 最後一個 `##` 之後，格式：
 
 ```markdown
 ## 人工檢查
 
 > 來源：`<change-name>` | Specs: `<spec-1>`, `<spec-2>`
 
-- [ ] #1 實際操作功能，確認 happy path 正常運作
-- [ ] #2 測試 edge case（空資料、超長文字、特殊字元）
-- [ ] #3 確認手機/平板響應式顯示正常
+- [ ] #1 [review:ui] 實際操作功能，確認 happy path 正常運作
+- [ ] #2 [review:ui] 測試 edge case（空資料、超長文字、特殊字元）
+- [ ] #3 [discuss] 確認 24h soak window 後 drift count 在預期範圍 @no-screenshot
 ```
 
 - `來源` 標註 change name，`Specs` 列出此 change 包含的 spec names
 - `#N` 流水號用於溝通定位（如「#3 有問題」）、截圖命名、歸檔追蹤
-- 如果 tasks 已有 `## 人工檢查` 區塊，更新而非重複新增
+- Kind marker 決定 archive 流程：`[review:ui]` 走 `/review-screenshot`、`[discuss]` 走 spectra-archive Step 2.5 walkthrough
+- 如果 tasks 已有 `## 人工檢查` 區塊，更新而非重複新增；既有無 marker items 不強制 retrofit（依 Default Kind Derivation Rule 處理）
 - 完成檢查後，用 `/review-archive` 遷移到 `docs/manual-review-archive.md`
 
 ## 相關 Skills

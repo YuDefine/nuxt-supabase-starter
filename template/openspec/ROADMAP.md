@@ -12,7 +12,7 @@
 
 ## Active Changes
 
-_last synced: 2026-05-10T11:40:29.758Z_
+_last synced: 2026-05-10T15:18:59.495Z_
 
 1 active change (0 ready · 1 in progress · 0 draft · 0 blocked)
 
@@ -41,9 +41,18 @@ _(none)_
 > 即時 ownership 由 `.spectra/claims/*.json` 提供。
 > 接手 handoff / 開始做 change 時，先 claim，再移除 `HANDOFF.md` 對應項目。
 
-_No active claims._
+1 claim (1 active · 0 stale)
 
-> 若你要開始做上面的 active change，先跑 `spectra:claim -- <change>`。
+### Live Ownership
+
+- **scaffolder-strip-manifest-and-validation-gate** — claude-main (unknown)
+  - Accepted from: manual
+  - Last heartbeat: 2026-05-10T14:48:13.464Z
+  - Note: Change 2 apply - 防線 B+C
+
+### Stale Claims
+
+_(none)_
 
 <!-- SPECTRA-UX:ROADMAP-AUTO:/claims -->
 
@@ -88,6 +97,9 @@ _No parked changes._
 
 ### 近期
 
+- [high] **Change 1** `starter-hygiene-boundary-rules`（meta vs template 邊界治理）— 新增 `.claude/rules/starter-hygiene.md`（meta 維護用）+ pre-commit hook 擋 `.env` / dogfood 進 `template/` + root CLAUDE.md 補邊界指引；Tier 1，獨立
+- [high] **Change 3** unpark + apply `nuxthub-d1-stack-as-first-class-scaffold`（已 parked，proposal 完整、32 tasks 寫好）— 獨立於 Change 1，可並行
+- [mid] **Change 2** `scaffolder-strip-manifest-and-validation-gate`（防線 B/C — 投影+驗證）— 抽 `presets/_base/strip-manifest.json` 為 SoT；create-clean.sh 與 scaffolder 共用；validate-starter 補 4 條 audit regression（baseline / d-pattern-audit / nuxthub-ai / none）+ CI gate；Tier 2，依賴：Change 1 已合（先有 rule 才知 strip 什麼）+ Change 3 已合（避免中途改變 strip 清單）
 - [mid] M3b.3 scaffolder `--multi-package` flag (T4 layout overlay) — 依賴：M3b.2 已完成 (commit `a9dd764`)；獨立於其他 starter 工作
 
 ### 中期

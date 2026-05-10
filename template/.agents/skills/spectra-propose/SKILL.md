@@ -79,6 +79,20 @@ If no argument is provided, the workflow will extract requirements from conversa
         - N.6 review-screenshot 視覺 QA
         - N.7 Fidelity 確認
 
+      **Manual Review Item Kind Marker（hard rule，所有 change）**：
+      `## 人工檢查` 區塊每條 checkbox 行 **MUST** 在 `#N` / `#N.M` 後緊接 leading kind marker `[review:ui]` 或 `[discuss]`：
+
+      - `[review:ui]` — 真實使用者 round-trip 驗收（form submit → server response → DB / list refetch / UI 狀態）。具體 URL + 動詞 → 結果格式。Claude 禁止代勾。
+      - `[discuss]` — Claude 主導的 evidence-based 討論（production 授權 / 商業判斷 / production 觀察 / 後端 evidence 查驗 / 合理性檢查）。spectra-archive Step 2.5 walkthrough 由 Claude 主動準備證據與使用者討論。
+
+      **分類指引**：描述含 SSH / `docker exec` / `psql` / `\d <table>` / `SELECT ... FROM` / `curl` 觸發 endpoint / 受控 drift 製造 / migration 存在性驗證 / 合理性檢查等 evidence-collection pattern → `[discuss]`；描述含「使用者點 X → 看到 Y」具體 round-trip → `[review:ui]`。
+
+      **Backend-only Manual Review 規約**（適用 `## User Journeys` 為 `**No user-facing journey (backend-only)**` 的 change）：
+      tasks.md 的 `## 人工檢查` **只**允許 `[discuss]` kind 的代表性 use cases：(1) production 授權 (2) 商業判斷 (3) production 觀察。**禁止**把 SSH / psql / `\d <table>` / `SELECT FROM` / `curl` 觸發 endpoint / `SET session_replication_role` / 受控 drift 製造 / migration 存在性驗證等 evidence collection 寫進 `## 人工檢查` — 這些 **MUST** 寫進新的 `## N. Backend Verification Evidence` section 由 apply 階段 Claude 自跑自貼。若三類都沒有，`## 人工檢查` 寫成固定文字 `_本 change 為 backend-only，所有驗證由 apply 階段 Claude 自跑（見 `## N. Backend Verification Evidence`）；deploy 前無使用者人工檢查項目。_`。完整規約見 `.claude/rules/ux-completeness.md` 「必填 Backend-only Manual Review 規約」與 `.claude/rules/manual-review.md` 「Item Kind Marker」。
+
+      **Artifact 語言遵循**：
+      開工前先 `grep -lE "繁體|繁中|不要使用簡體" AGENTS.md .claude/rules/*.md 2>/dev/null`。若命中（consumer 規定繁體中文），**全部** artifact（proposal.md / design.md / tasks.md / spec.md）**MUST** 用繁體中文撰寫，**禁止**英文 artifact。code 識別字、技術名詞（如 `audit_signed_chain`、`business_keys_drift`）、SQL/code block 不譯。若 grep 未命中視為無語言規定。
+
       完成標準：`spectra park <change-name>` 執行成功。
       不要呼叫 /spectra-apply。產出後在 stdout 摘要 artifacts 列表 + `spectra validate` 結果。
       ```
@@ -107,7 +121,7 @@ If no argument is provided, the workflow will extract requirements from conversa
    3. **跑 post-propose-check.sh**（檢查 User Journeys / Affected Entity Matrix / Implementation Risk Plan / Design Review 7 步）：
 
       ```bash
-      bash scripts/spectra-ux/post-propose-check.sh <change-name>
+      bash scripts/spectra-advanced/post-propose-check.sh <change-name>
       ```
 
       若有 FINDINGS → 主線**自己**直接 Edit proposal.md / tasks.md 補齊（**不要**回 codex 修，太慢）
@@ -115,7 +129,7 @@ If no argument is provided, the workflow will extract requirements from conversa
    4. **跑 design-inject.sh**（若 UI scope，提醒 7 步 template）：
 
       ```bash
-      bash scripts/spectra-ux/design-inject.sh <change-name>
+      bash scripts/spectra-advanced/design-inject.sh <change-name>
       ```
 
    5. **若 Design Review section 缺或不完整 7 步 → 主線自己 Edit tasks.md 補齊**：
@@ -135,6 +149,56 @@ If no argument is provided, the workflow will extract requirements from conversa
       ```
 
       `[affected pages/components]` 替換為此 change 實際涉及的 UI 檔案/頁面。
+
+   5.5 **Manual Review Marker Hygiene Check**（所有 change，不限 backend-only）：
+
+      Read tasks.md `## 人工檢查` 區塊全部 checkbox，依以下三類 hygiene rule 檢查並修正。違規 → 主線**自己**直接 Edit tasks.md（**不**回 codex 修，太慢）。
+
+      **Rule 1：每條 item line MUST 有 leading marker**
+
+      - 每條 `- [ ] #N ...` / `- [ ] #N.M ...` line **MUST** 在 id 後緊接 `[review:ui]` 或 `[discuss]` marker
+      - 缺 marker → 依下方 Rule 2 / Rule 3 的內容分類補上正確 marker；**禁止**仰賴 Default Kind Derivation Rule（fallback 只給既有 in-flight legacy item 用）
+
+      **Rule 2：Evidence-collection items MUST 標 `[discuss]`**
+
+      若 item description 含下列 evidence-collection 動詞 / 模式：
+
+      - `Apply ... migration`、`verify ... exists`
+      - `SSH`、`docker exec`、`psql`
+      - `\d <table>`、`SELECT ... FROM`
+      - `curl`、`Trigger ... cron`、`Run /_cron/`
+      - `SET session_replication_role`、`UPDATE ... WHERE`、受控 drift 製造
+      - 「合理性檢查」、「分布是否符合預期」等商業判斷類
+
+      行為：
+
+      - 若該 item 標了 `[review:ui]` → flag misclassified，主線改為 `[discuss]`
+      - **若該 change 為 backend-only**（proposal 含 `**No user-facing journey (backend-only)**`）：
+        - SSH / psql / curl / `\d` / `SELECT` / 受控 drift 製造 / migration 存在性驗證等**純技術 evidence**項目 **MUST** 從 `## 人工檢查` 搬到 `## N. Backend Verification Evidence` section（N = 最後一個功能區塊序號 + 1，位於最後功能區塊之後、`## 人工檢查` 之前）由 apply Claude 自跑自貼。`## 人工檢查` 只保留 production 授權 / 商業判斷 / production 觀察三類 `[discuss]` items
+        - 若 Backend Verification Evidence 已存在，append 而非新增
+        - 若移完後 `## 人工檢查` 為空 → 替換成固定文字：`_本 change 為 backend-only，所有驗證由 apply 階段 Claude 自跑（見 `## N. Backend Verification Evidence`）；deploy 前無使用者人工檢查項目。_`
+      - **若該 change 為 user-facing**：evidence-collection items 留在 `## 人工檢查` 但**MUST** 標 `[discuss]`（Claude 在 archive Step 2.5 walkthrough 主動準備 evidence）
+
+      **Rule 3：Real user round-trip items MUST 標 `[review:ui]`**
+
+      若 item 描述含真實使用者 round-trip（具體 URL + 使用者動作 + 預期 server/UI 結果）→ **MUST** 標 `[review:ui]`。誤標 `[discuss]` → 主線改為 `[review:ui]`。
+
+      完整規約見 `.claude/rules/manual-review.md`「Item Kind Marker」+ `.claude/rules/ux-completeness.md`「必填 Backend-only Manual Review 規約」。
+
+   5.6 **Artifact 語言遵循 check**：
+
+      ```bash
+      grep -lE "繁體|繁中|不要使用簡體" AGENTS.md .claude/rules/*.md 2>/dev/null
+      ```
+
+      - **若 grep 命中**（consumer 規定繁體中文）：
+        1. Read proposal.md / design.md / tasks.md，heuristic 偵測：連續 3+ 行純 ASCII 句子且不在 ` ``` ` code block / table / inline code 內 → 視為英文段落
+        2. 主線**自己** Edit 翻成繁體中文，保留：
+           - SQL / code / shell command（` ``` ` block 內）
+           - Code 識別字、檔案路徑、技術名詞（如 `audit_signed_chain`、`business_keys_drift`、`PostgREST`）
+           - inline code（單 backtick 內的字串）
+        3. 標題用語對齊既有繁中規則檔（例如 `## Why` / `## What Changes` / `## Non-Goals` / `## Affected Entity Matrix` 等 OpenSpec / Spectra 制式英文標題**保留不譯**，body 內容才翻）
+      - **若無命中**：跳過此 step
 
    6. **掃 design.md 的 Open Questions**（不論前面摘要多漂亮，這步**不能省略**）：
       - Read `openspec/changes/<change-name>/design.md`
@@ -445,7 +509,7 @@ If no argument is provided, the workflow will extract requirements from conversa
    If `tasks.md` references any `.vue` / `pages/` / `components/` / `layouts/` files:
    - tasks.md **MUST** contain a `## N. Design Review` section before `## 人工檢查` (with N = last functional section number + 1)
    - The section **MUST** have all 7 checkboxes (N.1 through N.7) covering: PRODUCT.md/DESIGN.md check, /design improve + Fidelity Report, DRIFT fix loop, canonical-order targeted impeccable skills, /impeccable audit Critical = 0, review-screenshot, Fidelity confirmation
-   - Verify by running `bash scripts/spectra-ux/post-propose-check.sh <change-name>` and acting on its FINDINGS
+   - Verify by running `bash scripts/spectra-advanced/post-propose-check.sh <change-name>` and acting on its FINDINGS
    - If anything is missing, fix tasks.md inline now — do NOT let an incomplete Design Review section through. Archive gate will block it later anyway.
 
    **Check 6: Fixtures / Seed Plan (UI scope + Affected Entity Matrix)**
@@ -455,7 +519,7 @@ If no argument is provided, the workflow will extract requirements from conversa
    - Either include at least one `- [ ]` task line per entity-with-Surfaces (entity name, minimum row count, target seed file path) **OR** an explicit `**Existing seed sufficient**` declaration with one-line justification
    - Detected seed-file conventions (in order): `supabase/seed.sql` / `db/seed.sql` / `prisma/seed.ts` / `drizzle/seed.ts`
    - Reason: UI pages displaying empty data on dev/staging make `review-screenshot` worthless. Fixtures are part of feature completeness, not a review-time afterthought.
-   - Verify by running `bash scripts/spectra-ux/post-propose-check.sh <change-name>` and acting on Check 6 FINDINGS
+   - Verify by running `bash scripts/spectra-advanced/post-propose-check.sh <change-name>` and acting on Check 6 FINDINGS
    - Full template + exemption rules see `ux-completeness.md` 「必填 Fixtures / Seed Plan」section
 
    **Check 7: Phase Purity (UI view vs 非 view 必須切成獨立 phase)**
@@ -464,9 +528,48 @@ If no argument is provided, the workflow will extract requirements from conversa
    - For each functional `## N. <title>` phase in tasks.md (excluding `## N. Design Review` and `## N. Fixtures / Seed Plan`):
      - **MUST NOT** mix view-layer file references with non-view work (schema / migration / API server / store / hook / API client / type / util / 純 backend)
      - 一個 phase 要嘛純 view 工作（component / page / view / layout / styling），要嘛純非 view 工作；混雜 phase 違規
-   - Verify by running `bash scripts/spectra-ux/post-propose-check.sh <change-name>` and acting on Check 4c FINDINGS
+   - Verify by running `bash scripts/spectra-advanced/post-propose-check.sh <change-name>` and acting on Check 4c FINDINGS
    - If a mixed phase is detected, **MUST** split inline now into independent phases — do NOT defer to ingest. spectra-apply Phase Dispatch 規則仰賴 phase purity；混雜 phase 在 apply 時會被擋下要求重 ingest，propose 階段就修掉成本最低
    - Reason: spectra-apply 把 UI view phase 由主線 AI Agent 自己做、其他 phase 派給 codex GPT-5.5 high；phase 混雜會破壞 dispatch 邊界，要嘛讓 codex 碰 view 層、要嘛讓主線吞下原本可以 offload 的 mechanical 工作
+
+   **Check 8: Manual Review Marker Hygiene** (applies to **every** change, not only backend-only)
+
+   Verify all three rules from Step 5.5 Manual Review Marker Hygiene Check:
+
+   1. **Every `## 人工檢查` item line MUST carry a leading `[review:ui]` or `[discuss]` marker** (right after `#N` / `#N.M`, before the description). Default Kind Derivation Rule is a fallback for legacy in-flight items only — newly authored content **MUST** be explicit.
+   2. **Evidence-collection items MUST be marked `[discuss]`** (NOT `[review:ui]`). Forbidden `[review:ui]` patterns include: SSH / `docker exec` / `psql` / `\d <table>` / `SELECT FROM` / `curl` triggering endpoint or cron / `SET session_replication_role` / controlled drift fabrication / migration existence verification / 商業判斷類「分布是否符合預期」.
+   3. **Real user round-trip items MUST be marked `[review:ui]`** — concrete URL + user verb + expected server/UI result.
+
+   When a violation is detected, the main thread Edit tasks.md inline (do NOT round-trip back to codex). For backend-only changes specifically:
+
+   - Pure technical evidence items (SSH / psql / curl / `\d` / `SELECT` / drift fabrication / migration existence verify) **MUST** be moved out of `## 人工檢查` into `## N. Backend Verification Evidence` section (位置：最後一個功能區塊之後、`## 人工檢查` 之前；N = 上一個功能區塊序號 + 1) — apply Claude self-runs them and pastes evidence under each task.
+   - `## 人工檢查` retains only `[discuss]` items in three categories:
+     1. **Production 授權型** — deploy 前 final go/no-go ack、production-only 破壞性操作授權
+     2. **商業判斷型** — Claude 無法自動判斷「結果是否合理」的觀察項
+     3. **Production 觀察型** — deploy 後 N 小時 / N 天的 production-only soak window 觀察
+   - 若三類都沒有，`## 人工檢查` **MUST** 寫成固定文字（archive gate 視為合法）：
+     ```
+     _本 change 為 backend-only，所有驗證由 apply 階段 Claude 自跑（見 `## N. Backend Verification Evidence`）；deploy 前無使用者人工檢查項目。_
+     ```
+
+   For **user-facing** changes: evidence-collection items can stay in `## 人工檢查` but **MUST** be marked `[discuss]` — Claude proactively prepares evidence + walks the user through during spectra-archive Step 2.5.
+
+   Reason: forcing users to SSH + psql + curl is not "manual review" — it's evidence collection Claude can automate. Real `[review:ui]` items are reserved for genuine round-trip verification. Mixing the two dilutes the user's attention.
+
+   Full 規約 (含 Item Kind Marker schema、三類定義、Backend Verification Evidence 模板、反面範例、違反回報格式) 見 `manual-review.md` 「Item Kind Marker」 + `ux-completeness.md` 「必填 Backend-only Manual Review 規約」
+
+   **Check 9: Artifact language convention**
+
+   ```bash
+   grep -lE "繁體|繁中|不要使用簡體" AGENTS.md .claude/rules/*.md 2>/dev/null
+   ```
+
+   If the grep matches (consumer enforces 繁體中文):
+   - All artifacts (`proposal.md` / `design.md` / `tasks.md` / `specs/**/*.md`) **MUST** be written in 繁體中文.
+   - Code identifiers, file paths, technical names (e.g., `audit_signed_chain`, `business_keys_drift`, `PostgREST`), SQL blocks, shell commands, and inline `code` remain untranslated.
+   - OpenSpec / Spectra 制式英文標題（如 `## Why`、`## What Changes`、`## Non-Goals`、`## Affected Entity Matrix`、`## User Journeys`、`## Implementation Risk Plan`）保留英文，body 內容必須繁中。
+   - If codex draft produced English artifacts despite the convention, fix inline now — main thread Edit 翻譯，**不要**回 codex 重 draft.
+   - Reason: codex GPT-5.5 在 prompt 已有繁中指示時仍可能默認輸出英文；主線 cross-check 是最後一道翻譯把關。違反語言慣例會讓使用者在 review/manual-check 階段卡關。
 
 ---
 

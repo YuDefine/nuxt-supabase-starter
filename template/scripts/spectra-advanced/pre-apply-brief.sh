@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# spectra-ux: pre-apply journey brief
+# spectra-advanced: pre-apply journey brief
 #
 # Briefs the implementer with the User Journeys and Affected Entity Matrix
 # from a change's proposal, plus exit criteria.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# spectra-ux v1.5+: Follow-up Register Archive Gate
+# spectra-advanced v1.5+: Follow-up Register Archive Gate
 #
 # Blocks spectra-archive when tasks.md contains @followup[TD-NNN] markers
 # that are not registered in docs/tech-debt.md, or registered without
@@ -33,7 +33,7 @@ if [ ! -f "$REGISTER" ]; then
   # Register file missing. If tasks.md has markers, fail; otherwise pass.
   if grep -qE '@followup\[TD-[0-9]+\]' "$TASKS"; then
     echo "[Follow-up Gate] docs/tech-debt.md not found but tasks.md contains @followup markers" >&2
-    echo "  修正：建立 docs/tech-debt.md（template 位於 spectra-ux templates/openspec/tech-debt.md）" >&2
+    echo "  修正：建立 docs/tech-debt.md（template 位於 spectra-advanced templates/openspec/tech-debt.md）" >&2
     exit 2
   fi
   exit 0

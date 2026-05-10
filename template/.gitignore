@@ -76,3 +76,5 @@ yarn-error.log*
 
 # Clade local runtime state
 codex/
+.spectra/
+openspec/.vector-search.db*
