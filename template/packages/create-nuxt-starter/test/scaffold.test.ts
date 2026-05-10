@@ -1,9 +1,10 @@
-import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'pathe'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { assembleProject } from '../src/assemble'
 import { getDefaultSelections } from '../src/prompts'
 import { resolveFeatureDependencies } from '../src/features'
+import { buildSelectionsFromArgs } from '../src/cli'
 
 const TEST_DIR = join(import.meta.dirname, '.tmp-test')
 
@@ -11,6 +12,11 @@ function cleanTestDir() {
   if (existsSync(TEST_DIR)) {
     rmSync(TEST_DIR, { recursive: true, force: true })
   }
+}
+
+function writeText(path: string, value: string) {
+  mkdirSync(join(path, '..'), { recursive: true })
+  writeFileSync(path, value)
 }
 
 beforeEach(() => cleanTestDir())
@@ -82,6 +88,34 @@ describe('scaffold: base-only (no features)', () => {
     const script = readFileSync(join(targetDir, 'scripts', 'setup.sh'), 'utf-8')
     expect(script).toContain('setup 已停用自動刪除 starter repo 的行為')
     expect(script).not.toContain('rm -rf "$CLEANUP_PATH"')
+  })
+
+  it('strips scaffolder meta-only files while keeping runtime files', () => {
+    const targetDir = join(TEST_DIR, 'base-only-strip')
+    assembleProject(targetDir, [], 'base-only-strip')
+
+    expect(existsSync(join(targetDir, 'packages', 'create-nuxt-starter'))).toBe(false)
+    expect(existsSync(join(targetDir, 'presets', '_base', 'strip-manifest.json'))).toBe(false)
+    expect(existsSync(join(targetDir, '.spectra', 'claims'))).toBe(false)
+    expect(existsSync(join(targetDir, '.spectra', 'spectra.db'))).toBe(false)
+    expect(existsSync(join(targetDir, '.clade'))).toBe(false)
+
+    expect(existsSync(join(targetDir, 'app'))).toBe(true)
+    expect(existsSync(join(targetDir, 'server'))).toBe(true)
+    expect(existsSync(join(targetDir, 'nuxt.config.ts'))).toBe(true)
+    expect(existsSync(join(targetDir, 'package.json'))).toBe(true)
+  })
+
+  it('fails closed when strip cleanup receives a malformed manifest', () => {
+    const manifestPath = join(TEST_DIR, 'malformed-strip-manifest.json')
+    const targetDir = join(TEST_DIR, 'malformed-strip')
+    writeText(manifestPath, '{ not json }\n')
+
+    expect(() =>
+      assembleProject(targetDir, [], 'malformed-strip', undefined, undefined, undefined, {
+        stripManifestPath: manifestPath,
+      })
+    ).toThrow(/strip-manifest.*malformed/i)
   })
 })
 
@@ -214,5 +248,31 @@ describe('directory conflict handling', () => {
     const targetDir = join(TEST_DIR, 'new-dir')
     assembleProject(targetDir, [], 'new-dir')
     expect(existsSync(targetDir)).toBe(true)
+  })
+})
+
+describe('scaffold: nuxthub-ai db stack', () => {
+  it('keeps NuxtHub D1 files and omits Supabase DB layout after strip cleanup', () => {
+    const projectName = 'nuxthub-ai-strip'
+    const selections = buildSelectionsFromArgs({
+      projectName,
+      evlogPreset: 'nuxthub-ai',
+    })
+    const targetDir = join(TEST_DIR, projectName)
+
+    assembleProject(
+      targetDir,
+      selections.features,
+      projectName,
+      selections.agentTargets,
+      selections.evlogPreset,
+      selections.dbStack
+    )
+
+    expect(existsSync(join(targetDir, 'server/database/migrations/0002_evlog_events.sql'))).toBe(
+      true
+    )
+    expect(existsSync(join(targetDir, 'wrangler.jsonc.template'))).toBe(true)
+    expect(existsSync(join(targetDir, 'server/db'))).toBe(false)
   })
 })

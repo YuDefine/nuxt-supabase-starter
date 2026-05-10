@@ -11,6 +11,7 @@ import {
 import { homedir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import { consola } from 'consola'
+import { DEFAULT_DB_STACK, type DbStack } from './types'
 
 export interface CladeModules {
   auth: 'better-auth' | 'nuxt-auth-utils' | 'supabase-self-hosted'
@@ -26,6 +27,7 @@ export interface PostScaffoldOptions {
   registerConsumer: boolean
   wirePreCommit: boolean
   cloneClade: boolean
+  dbStack?: DbStack
 }
 
 export async function postScaffold(
@@ -125,9 +127,21 @@ export async function postScaffold(
     '',
     '接下來：',
     `  cd ${relativeTargetDir}`,
-    '  pnpm run setup           # 檢查環境 → 啟動 Supabase → 產生型別',
-    '  pnpm dev                 # 啟動開發伺服器',
   ]
+
+  if ((opts.dbStack ?? DEFAULT_DB_STACK) === 'nuxthub-d1') {
+    nextSteps.push(
+      '  npx nuxthub link        # 連結 NuxtHub project',
+      '  pnpm hub:db:migrations:apply --local',
+      '  pnpm dev                # 啟動本機開發伺服器',
+      '  pnpm verify:starter     # 檢查 scaffold 狀態'
+    )
+  } else {
+    nextSteps.push(
+      '  pnpm run setup           # 檢查環境 → 啟動 Supabase → 產生型別',
+      '  pnpm dev                 # 啟動開發伺服器'
+    )
+  }
 
   if (cladeRoot && !consumerRegistered) {
     nextSteps.push(

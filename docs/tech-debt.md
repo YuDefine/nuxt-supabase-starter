@@ -13,7 +13,7 @@
 | ID     | Title                                                   | Priority | Status | Discovered         | Owner |
 | ------ | ------------------------------------------------------- | -------- | ------ | ------------------ | ----- |
 | TD-001 | Template E2E 跑超過 15 min（root cause = retry 放大）   | mid      | done   | 2026-05-07 v0.30.9 | —     |
-| TD-002 | Scaffolder `nuxthub-ai` preset 不自動生 D1 evlog_events migration | high     | open   | 2026-05-10         | —     |
+| TD-002 | Scaffolder `nuxthub-ai` preset 不自動生 D1 evlog_events migration | high     | done | 2026-05-10         | —     |
 | TD-003 | Scaffolder dist 在非 TTY (Claude Code Bash / CI) 必經 `script` wrapper | low      | open   | 2026-05-10         | —     |
 
 ---
@@ -49,7 +49,7 @@ CI Template E2E 在 v0.30.9 與 v0.30.10 持續撞 timeout，原以為是 `@nuxt
 
 ## TD-002 — Scaffolder `nuxthub-ai` preset 與 NuxtHub D1 stack **整體未對齊**（不只是缺 migration，是 DB stack 沒切換）
 
-**Status**: design proposed（2026-05-10 user 拍板走方向 A，設計 doc 已產，等下個 session 實作）
+**Status**: done（2026-05-10 archived as `2026-05-10-nuxthub-d1-stack-as-first-class-scaffold`，scaffolder-nuxthub-d1-stack capability 上線：8 added requirements、overlay 機制 + db-nuxthub-d1 templates + scaffolder integration + e2e/audit regression tests / 41 passed）
 **Priority**: high — 用 `--evlog-preset nuxthub-ai` scaffold 出來的新專案**從根本上不會跑成功**：scaffolder 預設 Supabase stack，nuxthub-ai preset 只 wire evlog 上層，沒切 DB 底層
 **Discovered**: 2026-05-10 — clade HANDOFF §2.1 C 群 + 後續 TD-002 fix attempt 挖開更深 gap
 **Design doc**: `decisions/2026-05-10-nuxthub-d1-stack-as-first-class-scaffold.md`（含架構選擇、phase 切分、acceptance）

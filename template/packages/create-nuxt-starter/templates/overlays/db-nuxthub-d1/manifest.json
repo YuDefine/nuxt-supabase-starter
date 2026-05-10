@@ -1,0 +1,57 @@
+{
+  "name": "db-nuxthub-d1",
+  "description": "Switch the generated database stack from Supabase PostgreSQL to NuxtHub D1.",
+  "requires": {
+    "auth": ["better-auth", "none"]
+  },
+  "conflicts_with": ["db-supabase"],
+  "add": [
+    "server/database/schema/index.ts",
+    {
+      "path": "server/database/migrations/0001_better_auth_d1.sql",
+      "when": {
+        "auth": ["better-auth"]
+      }
+    },
+    "server/database/migrations/0002_evlog_events.sql",
+    "wrangler.jsonc.template"
+  ],
+  "remove": [
+    ".env.test",
+    ".mcp.json",
+    "drizzle.config.ts",
+    "scripts/backup-supabase.sh",
+    "scripts/db-reset.sh",
+    "scripts/db-types.sh",
+    "scripts/supabase-sync.sh",
+    "scripts/supabase-tunnel.sh",
+    "server/db",
+    "server/utils/drizzle.ts",
+    "server/utils/supabase.ts",
+    "supabase"
+  ],
+  "package_json": {
+    "remove_scripts": [
+      "db:backup",
+      "db:drizzle:pull",
+      "db:drizzle:studio",
+      "db:lint",
+      "db:reset",
+      "db:types",
+      "supabase:check",
+      "supabase:sync"
+    ],
+    "add_scripts": {
+      "hub:db:migrations:apply": "nuxt db migrate",
+      "hub:db:migrations:create": "nuxt db generate",
+      "hub:db:studio": "nuxt db sql"
+    },
+    "remove_dependencies": ["@nuxtjs/supabase", "@supabase/supabase-js", "postgres"],
+    "add_dependencies": {
+      "@evlog/nuxthub": "^2.16.0",
+      "@nuxthub/core": "^0.10.7",
+      "drizzle-orm": "^0.45.2"
+    },
+    "remove_dev_dependencies": ["drizzle-kit"]
+  }
+}

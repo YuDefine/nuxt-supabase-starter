@@ -2,12 +2,18 @@ export type AgentRuntime = 'claude-code' | 'codex' | 'cursor'
 
 export type EvlogPreset = 'none' | 'baseline' | 'd-pattern-audit' | 'nuxthub-ai'
 
+export type DbStack = 'supabase' | 'nuxthub-d1'
+
 export const EVLOG_PRESETS: readonly EvlogPreset[] = [
   'none',
   'baseline',
   'd-pattern-audit',
   'nuxthub-ai',
 ] as const
+
+export const DB_STACKS: readonly DbStack[] = ['supabase', 'nuxthub-d1'] as const
+
+export const DEFAULT_DB_STACK: DbStack = 'supabase'
 
 export interface FeatureModule {
   id: string
@@ -44,4 +50,5 @@ export interface UserSelections {
   testingLevel: 'full' | 'vitest-only' | 'none'
   agentTargets: AgentRuntime[]
   evlogPreset: EvlogPreset
+  dbStack: DbStack
 }

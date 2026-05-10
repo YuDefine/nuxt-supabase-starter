@@ -152,6 +152,37 @@ bash scripts/create-fast-project.sh temp/<NAME> \
 - LLM API（Anthropic / OpenAI）secret 放 `runtimeConfig`，**不可** `NUXT_PUBLIC_*`
 - streaming response 在 Workers 上要用 `Response` + `ReadableStream`，不可用 Node `Readable`
 
+### R7b — AI / RAG / LLM 應用（NuxtHub D1 first-class stack）
+
+**適合**：AI agent / RAG / chatbot，需要 Cloudflare Workers + NuxtHub D1、evlog NuxtHub drain、AI cost tracking、SSE/MCP child logger 的新專案。
+
+**不適合**：需要 Supabase Postgres / pgvector 的專案，或想同時保留 Supabase DB scripts 的混合 stack。
+
+```bash
+bash scripts/create-fast-project.sh temp/<NAME> \
+  --auth better-auth \
+  --evlog-preset nuxthub-ai
+```
+
+行為：
+
+- `--evlog-preset nuxthub-ai` 會自動 imply `dbStack=nuxthub-d1`；不需要另外指定 DB stack。
+- 生成結果走 NuxtHub D1 layout：`server/database/migrations/`、`wrangler.jsonc.template`、`hub:db:migrations:*` scripts。
+- Supabase DB layout 會被移除：不保留 `server/db/`、`db:drizzle:pull`、Supabase DB sync scripts。
+- 明確指定混合 stack 會被拒絕：`--evlog-preset nuxthub-ai --db supabase` 必須 fail fast，不會產生半套專案。
+
+首次 local D1 migration：
+
+```bash
+cd temp/<NAME>
+cp wrangler.jsonc.template wrangler.jsonc
+pnpm install
+pnpm hub:db:migrations:apply
+pnpm exec wrangler d1 execute DB --local --command "SELECT count(*) FROM evlog_events"
+```
+
+若專案其實需要 Supabase + pgvector，請使用 R7，並把 NuxtHub/Vectorize 當後續架構決策，不要用 `nuxthub-ai` 走混合 DB stack。
+
 ### R8 — E-commerce（產品 / 訂單 / 金流）
 
 **適合**：B2C 電商、訂單系統。
@@ -214,7 +245,7 @@ bash scripts/create-fast-project.sh temp/<NAME> \
 | 多租戶 / multi-tenant / 多組織 / org / workspace | R4 |
 | prototype / hackathon / demo / 快速 / 急 | R5 |
 | API / mobile backend / 無 UI | R6 |
-| AI / chatbot / LLM / RAG / 向量 / embedding | R7 |
+| AI / chatbot / LLM / RAG / 向量 / embedding | R7；若指定 NuxtHub / D1 / Workers AI / agent cost tracking → R7b |
 | 電商 / shop / 訂單 / 金流 / Stripe | R8 |
 | 靜態 / 純前端 / 不需登入 / portfolio | R9 |
 | 內部工具 / 公司用 / 不對外 | R10 |
