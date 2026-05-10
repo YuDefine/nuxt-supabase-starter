@@ -36,8 +36,10 @@ jobs:
         with:
           node-version: 24
 
-      - name: Enable corepack
-        run: corepack enable
+      - name: Enable corepack and pin pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.28.1 --activate
 
       - name: Run scaffold smoke test
         run: bash scripts/smoke-scaffold.sh temp/ci-scaffold-smoke
