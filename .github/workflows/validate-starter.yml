@@ -32,21 +32,12 @@ jobs:
     name: Fresh Scaffold Audit Gate
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      CLADE_HOME: ${{ github.workspace }}/clade
     defaults:
       run:
         working-directory: template
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-
-      - name: Checkout clade audit scripts
-        uses: actions/checkout@v5
-        with:
-          repository: YuDefine/clade
-          path: clade
-          token: ${{ secrets.CLADE_REPO_TOKEN || github.token }}
 
       - name: Setup Vite+ (vp)
         uses: voidzero-dev/setup-vp@v1
