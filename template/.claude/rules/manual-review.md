@@ -112,10 +112,11 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 
 ## Item Kind Marker（hard rule）
 
-每條 `## 人工檢查` checkbox 行 **MUST** 在 `#N` / `#N.M` 後緊接一個 leading kind marker，二擇一：
+每條 `## 人工檢查` checkbox 行 **MUST** 在 `#N` / `#N.M` 後緊接一個 leading kind marker，三擇一：
 
-- `[review:ui]` — 真實使用者 round-trip 驗收（form submit、API 行為、UI 狀態轉換）。**MUST** 由使用者親自完成，agent 禁止代勾。
-- `[discuss]` — Claude 主導的 evidence-based 討論項目（例：production 授權、商業判斷、production 觀察、後端 evidence 查驗）。spectra-archive Step 2.5 walkthrough 流程下，Claude 主動準備證據與使用者討論、取得 OK 後可代勾並寫入 `(claude-discussed: <ISO-8601-timestamp>)` annotation。
+- `[review:ui]` — **真的需要人**親自完成的驗收（agent 用 browser-harness 也跑不了）。例：收 email / 收 webhook / 實體裝置 / 視覺主觀美感 / 真機跨機器。**MUST** 由使用者親自完成，agent 禁止代勾。
+- `[verify:auto]` — agent 用 browser-harness **完整 round-trip** 即可驗證的 UI 操作（純 UI 點按、表單送出、看 toast / 排序 / 徽章 / 數值 / 權限拒絕 / edge payload）。spectra-apply Step 8a Verify-Auto Pass 由 screenshot-review agent (verify mode) 自跑、寫入 `(verified-auto: <ISO> network=<status>[ dom=<obs>][ ...])` annotation 證明 round-trip 真實發生；user 仍需在 review GUI 點 OK 才勾 `[x]`（雙層保險）。
+- `[discuss]` — Claude 主導的後端 evidence-based 討論項目（例：production 授權、商業判斷、production 觀察、後端 evidence 查驗）。spectra-archive Step 2.5 walkthrough 流程下，Claude 主動準備證據與使用者討論、取得 OK 後可代勾並寫入 `(claude-discussed: <ISO-8601-timestamp>)` annotation。
 
 ### Canonical line format
 
@@ -125,7 +126,7 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 
 - Marker **MUST** 是 `#N` / `#N.M` 後第一個 token，與 id 之間僅一個空白。
 - Marker 出現在 description 中間（例：`Click the [discuss] button`）視為 plain text，**MUST NOT** 被解析成 marker。
-- 兩 kind 互斥，同一行只能擇一。
+- 三 kind 互斥，同一行只能擇一。
 
 ### Default Kind Derivation Rule（fallback）
 
@@ -133,6 +134,8 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 
 - proposal 含 `**No user-facing journey (backend-only)**` → default kind = `discuss`
 - 其餘 → default kind = `review:ui`
+
+**Fallback 不涵蓋 `[verify:auto]`** — 因為 verify:auto 需要 spectra-apply Step 8a 主動跑 round-trip，不適合 silent fallback。新寫 verify:auto items **MUST** 顯式標 marker。
 
 **Fallback ≠ 允許省略**：所有**新寫**或**ingest 修改**的 `## 人工檢查` items **MUST** 顯式標 marker。Default 只給既有 in-flight change 過渡用。spectra-propose / spectra-ingest 的 Manual Review Marker Hygiene Check 會擋下未標 marker 的新內容。
 
@@ -142,17 +145,49 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 - [ ] #N [<kind>] <description> [@followup[TD-NNN]] [@no-screenshot]
 ```
 
-`[<kind>]` 永遠在最前（緊接 `#N`），`@no-screenshot` 永遠在最後；`@followup[TD-NNN]` 若存在須夾在 description 與 `@no-screenshot` 之間。寫回 annotation（`（issue: ...）` / `（skip）` / `（note: ...）` / `(claude-discussed: <ISO>)`）**MUST** 插在 description 後、所有 trailing markers (`@followup` / `@no-screenshot`) 前。
+`[<kind>]` 永遠在最前（緊接 `#N`），`@no-screenshot` 永遠在最後；`@followup[TD-NNN]` 若存在須夾在 description 與 `@no-screenshot` 之間。寫回 annotation（`（issue: ...）` / `（skip）` / `（note: ...）` / `(claude-discussed: <ISO>)` / `(verified-auto: <ISO> ...)`）**MUST** 插在 description 後、所有 trailing markers (`@followup` / `@no-screenshot`) 前。
 
 ### Kind 分類指引（給 propose / spec 寫作者）
 
 寫 `## 人工檢查` 時依以下指引判斷 marker：
 
-- 描述包含 evidence-collection 動詞 / 模式（SSH、`docker exec`、`psql`、`\d <table>`、`SELECT ... FROM`、`curl` 觸發 endpoint 或 cron、受控 drift 製造、migration 存在性驗證、合理性檢查）→ `[discuss]`
-- 描述包含真實使用者 round-trip（具體 URL + 使用者動作 + 預期 server/UI 結果）→ `[review:ui]`
-- production 授權 / 商業判斷 / production 觀察項目 → `[discuss]`
+**`[discuss]`（後端 evidence collection）**
 
-混淆時的判定原則：「Claude 能不能自跑並貼證據？」能 → `[discuss]`；只能由使用者親自操作 → `[review:ui]`。
+- SSH、`docker exec`、`psql`、`\d <table>`、`SELECT ... FROM`、`curl` 觸發 endpoint 或 cron、受控 drift 製造、migration 存在性驗證、合理性檢查
+- production 授權 / 商業判斷 / production 觀察項目
+
+**`[verify:auto]`（agent 用 browser-harness 完整 round-trip 即可驗）**
+
+- 純 UI 點按、填表、送出 form
+- 觀察 toast / banner / 列表刷新 / 徽章 / 排序 / 計數
+- 權限拒絕 path（送 403 / 401 行為）
+- Edge case payload（空、null、邊界值）— agent 可送任意 payload
+- agent 應主動補 fixtures / seed（依 screenshot-strategy.md 空資料解決流程），不要 punt 給 user
+
+**`[review:ui]`（真的需要人）白名單**
+
+- 收 email / 收 webhook（agent inbox 不可達）
+- 視覺主觀判斷（美感、a11y 第三方主觀）
+- 實體裝置（kiosk QR scan、印表機、條碼槍）
+- 跨 session / 跨機器（手機真機、平板真機、生產環境授權後操作）
+- 規格外的非 UI 環境（電話、SMS）
+
+混淆時的判定原則：
+
+- agent 能用 SSH / psql / curl 自跑並貼後端 evidence？→ `[discuss]`
+- agent 能用 browser-harness 完整 round-trip + 觀察 network/DOM？→ `[verify:auto]`
+- 都不能（必須人親自操作）→ `[review:ui]`
+
+**反面範例**：
+
+```markdown
+❌ - [ ] #1 [review:ui] admin /settings 改排程到 09:00 → reload 仍 09:00
+   理由：純 UI round-trip，agent 用 browser-harness 完全能跑；應該標 [verify:auto]
+
+✅ - [ ] #1 [verify:auto] admin /settings 改排程到 09:00 → 200 toast → reload 仍 09:00
+✅ - [ ] #2 [review:ui] cron 觸發 → 借用人 inbox 收到逾期通知 email
+✅ - [ ] #3 [discuss] production seed 授權與 cron 監控確認
+```
 
 ## `@no-screenshot` Marker（hard rule）
 
@@ -203,9 +238,28 @@ Scoped sub-item 範例：
 
 ## 標準流程
 
-依 item 的 kind marker 走不同 flow。**MUST** 兩種 flow 都覆蓋 — 一個 change 的 `## 人工檢查` 區塊可同時包含兩種 kind 的 items。
+依 item 的 kind marker 走不同 flow。**MUST** 三種 flow 都覆蓋 — 一個 change 的 `## 人工檢查` 區塊可同時包含三種 kind 的 items。
 
-### `[review:ui]` flow（DEFAULT for round-trip 驗收）
+### `[verify:auto]` flow（spectra-apply Step 8a Verify-Auto Pass）
+
+tasks.md 有未勾 `[verify:auto]` items 時，spectra-apply Step 8a 主動處理：
+
+1. apply 階段主線 Claude 派遣 screenshot-review agent 用 `mode: verify`
+2. agent 對每條 item 用 browser-harness 完整 round-trip：
+   - 依 description「動詞 → 結果」執行 UI 動作
+   - 觀察 mutation network response status（assert 對應 expected）
+   - 觀察 DOM 預期變化（list refetch / toast / banner / 狀態轉換）
+   - 撞 emptiness preflight → 主動補 seed / fixtures（依 screenshot-strategy.md 空資料解決流程）
+   - 截 final-state screenshot
+3. agent 回報每 item PASS / FAIL / UNCERTAIN：
+   - **PASS** → 主線 Edit tasks.md 寫入 `(verified-auto: <ISO> network=<status>[ dom=<obs>][ ...])` annotation；保留 `[ ]`（user 仍要在 GUI 點 OK 才勾）
+   - **FAIL** → 保留 `[ ]` + 寫 `（issue: ...）` annotation，主線報告 user
+   - **UNCERTAIN**（fixtures 缺、撞登入頁、agent 解不開）→ 不寫 annotation；主線回報 user 升級成 `[review:ui]` 或補 fixtures plan
+4. agent 跑完後 user 在 review GUI 看 evidence + final-state screenshot 點 OK，才真的勾 `[x]`
+
+archive-gate.sh Check 4 會驗 `[verify:auto]` items：勾選 `[x]` 或含 `(verified-auto: ...)` annotation（後者 warn 不 block，視為 issue path）；都沒則 block。
+
+### `[review:ui]` flow（真的需要人）
 
 tasks.md 仍有未勾 `[review:ui]` 項時，第一動作 **MUST** 是引導使用者跑 `pnpm review:ui` — 本地 GUI 自動依 `#N` / `#N.M` schema 配對截圖、可鍵盤完成 OK / Issue / SKIP、conflict-aware 寫回 tasks.md，不在 chat 內燒 token。完整工具行為見 `vendor/scripts/review-gui.mts`。
 
@@ -233,13 +287,21 @@ archive-gate.sh Check 4 會驗 `[discuss]` items 必須勾選或含 `(claude-dis
 
 ### 混合 kind change
 
-一個 change 同時含未勾 `[review:ui]` + `[discuss]` items 時，**MUST** 兩 flow 依序執行（順序：discuss walkthrough 先、`pnpm review:ui` 後 — 讓使用者在見過所有討論點後再進視覺驗收）。spectra orchestrator Archive Flow Step 1 已內建這個分流邏輯。
+一個 change 同時含未勾 `[verify:auto]` + `[discuss]` + `[review:ui]` items 時，**MUST** 依以下順序執行（早→晚，讓 user 拿到的 review GUI 內容最完整）：
+
+1. **apply 階段** — Step 8a Verify-Auto Pass：agent 自跑 `[verify:auto]` items 並寫 `(verified-auto:)` annotation
+2. **archive 階段 Step 2.5** — Discuss Items Walkthrough：Claude 主動準備 `[discuss]` evidence、與 user 討論
+3. **archive 階段 review GUI** — `pnpm review:ui` 一次處理所有未勾 `[review:ui]` + `[verify:auto]` items（user 在 GUI 看 evidence/screenshot 點 OK / Issue / Skip）
+
+spectra orchestrator Archive Flow Step 1 已內建這個分流邏輯。
 
 ## 禁止事項
 
 - **NEVER** 問「要不要我直接幫你勾完」
 - **NEVER** 在未展示證據的情況下代勾任何 item（含 `[discuss]` items — Step 2.5 walkthrough 的 evidence 展示是強制前提）
 - **NEVER** 對 `[review:ui]` items 在使用者尚未親自 round-trip 的情況下代勾，即使 Claude 已分析過程式碼
+- **NEVER** 對 `[verify:auto]` items 代勾 `[x]` — agent 寫 `(verified-auto:)` annotation 是 evidence trail，user 在 GUI 點 OK 才能勾
+- **NEVER** 對 `[verify:auto]` items 在 agent round-trip 沒成功（沒 final-state screenshot / 沒 network 觀察）的情況下寫 `(verified-auto:)` annotation
 - **NEVER** 把 screenshot review 當成等同於人工功能驗證
 - **NEVER** 為了通過 gate 而批次勾選未確認的項目
 - **NEVER** 對 `[discuss]` items 寫入 `(claude-discussed: ...)` annotation 而沒有實際與使用者討論並取得 OK

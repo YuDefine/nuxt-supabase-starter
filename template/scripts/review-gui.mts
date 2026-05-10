@@ -27,13 +27,12 @@ const PARENT_ITEM_RE = /^- \[([ xX])\] (#[1-9][0-9]*) (.+)$/
 const SCOPED_ITEM_RE = /^  - \[([ xX])\] (#[1-9][0-9]*\.[1-9][0-9]*) (.+)$/
 const TRAILING_NO_SCREENSHOT_RE = /(^|[^ ]) @no-screenshot$/
 // 解析 leading kind marker — 必須緊接 `#N` / `#N.M` 後第一個 token、含一個 trailing space。
-// description-mid 的 [discuss] / [review:ui] 不會被命中（不是行首）。
+// description-mid 的 [discuss] / [review:ui] / [verify:auto] 不會被命中（不是行首）。
 const LEADING_KIND_RE = /^\[([^\]]+)\]\s+/
-const VALID_KINDS = new Set(['review:ui', 'discuss'])
+const VALID_KINDS = new Set(['review:ui', 'discuss', 'verify:auto'])
 const BACKEND_ONLY_DECLARATION = '**No user-facing journey (backend-only)**'
-const CLAUDE_DISCUSSED_RE = /\(claude-discussed:[^)]*\)/
 
-export type ManualReviewItemKind = 'review:ui' | 'discuss'
+export type ManualReviewItemKind = 'review:ui' | 'discuss' | 'verify:auto'
 
 export interface ManualReviewItem {
   id: string
@@ -45,7 +44,7 @@ export interface ManualReviewItem {
   lineIndex: number
   lineNumber: number
   noScreenshot: boolean
-  /** Leading kind marker — `[review:ui]` / `[discuss]`. 缺 marker 時依 defaultKind 推導 */
+  /** Leading kind marker — `[review:ui]` / `[discuss]` / `[verify:auto]`. 缺 marker 時依 defaultKind 推導 */
   kind: ManualReviewItemKind
   /** 原始 raw 行有 explicit leading kind marker（true）或走 default 推導（false） */
   hasExplicitKind: boolean
@@ -360,6 +359,100 @@ function applyClaudeDiscussedToLine(line: string, isoTimestamp: string): string 
   const checked = setCheckbox(cleaned, true)
   const annotated = `${checked.trimEnd()} (claude-discussed: ${isoTimestamp})`
   return trailing ? `${annotated}${trailing}` : annotated
+}
+
+export interface VerifyAutoEvidence {
+  /** Mutation HTTP status code observed by agent，必填以證明 round-trip 真的發生 */
+  network: string
+  /** DOM 觀察結果（list refetch / toast / banner 等），可選 */
+  dom?: string
+  /** 其他自由 key=value（不能含 space 或 `)`），依 key 字典序輸出 */
+  [key: string]: string | undefined
+}
+
+/**
+ * 在 tasks.md item line 上記錄「screenshot-review agent verify mode round-trip」的 evidence trail，
+ * 用於 spectra-apply Step 8a Verify-Auto Pass 的 PASS 路徑。
+ *
+ * 行為：
+ * - **不**勾選 checkbox（保留 `[ ]`）— `[verify:auto]` 仍需 user 在 review GUI 點 OK 才勾，避免 agent 觀察品質不足造成假通過
+ * - 在 description 後、所有 trailing markers (`@followup` / `@no-screenshot`) 前插入
+ *   `(verified-auto: <ISO> network=<status>[ dom=<obs>][ key=value]...)` annotation
+ * - 保留 leading kind marker `[verify:auto]`
+ * - 保留 trailing markers 原順序
+ *
+ * 預期僅對 `kind: 'verify:auto'` items 呼叫 — caller 自行確認 kind。
+ */
+export function applyVerifiedAutoAnnotationToContent(
+  content: string,
+  itemId: string,
+  isoTimestamp: string,
+  evidence: VerifyAutoEvidence,
+  options: ParseManualReviewOptions = {}
+): { content: string; lineBefore: string; lineAfter: string } {
+  const parsed = parseManualReviewSections(content, options)
+  if (parsed.malformed.length > 0) {
+    throw new HttpError(
+      422,
+      'Manual-review section has malformed checkbox lines. Fix schema before writing.'
+    )
+  }
+  const item = parsed.items.find((candidate) => candidate.id === itemId)
+  if (!item) throw new HttpError(404, `Manual-review item not found: ${itemId}`)
+
+  const newline = content.includes('\r\n') ? '\r\n' : '\n'
+  const lines = content.split(/\r?\n/)
+  const lineBefore = lines[item.lineIndex] ?? ''
+  const lineAfter = applyVerifiedAutoToLine(lineBefore, isoTimestamp, evidence)
+  lines[item.lineIndex] = lineAfter
+  return { content: lines.join(newline), lineBefore, lineAfter }
+}
+
+function applyVerifiedAutoToLine(
+  line: string,
+  isoTimestamp: string,
+  evidence: VerifyAutoEvidence
+): string {
+  const { core, trailing } = extractTrailingMarkers(line)
+  // 先 strip 舊 verified-auto（避免 retry 時 stale 重複），保留其他 annotations
+  const cleaned = stripVerifiedAutoAnnotation(core)
+  // verify:auto 設計上保留 `[ ]`，user 在 review GUI 確認後才勾 — 不在 helper 裡代勾
+  const evidenceStr = serializeVerifyEvidence(evidence)
+  const annotated = `${cleaned.trimEnd()} (verified-auto: ${isoTimestamp}${evidenceStr ? ' ' + evidenceStr : ''})`
+  return trailing ? `${annotated}${trailing}` : annotated
+}
+
+function stripVerifiedAutoAnnotation(line: string): string {
+  return line.replace(/\s*\(verified-auto:[^)]*\)/g, '').replace(/[ \t]+$/, '')
+}
+
+function serializeVerifyEvidence(evidence: VerifyAutoEvidence): string {
+  const parts: string[] = []
+  // 固定 key 順序：network 先、dom 次、其餘依字典序
+  const fixedKeys = ['network', 'dom']
+  for (const k of fixedKeys) {
+    const v = evidence[k]
+    if (v !== undefined && v !== '') parts.push(`${k}=${sanitizeEvidenceValue(v)}`)
+  }
+  const otherKeys = Object.keys(evidence)
+    .filter((k) => !fixedKeys.includes(k))
+    .sort()
+  for (const k of otherKeys) {
+    const v = evidence[k]
+    if (v !== undefined && v !== '') parts.push(`${k}=${sanitizeEvidenceValue(v)}`)
+  }
+  return parts.join(' ')
+}
+
+function sanitizeEvidenceValue(v: string): string {
+  // 禁止 space / `(` / `)` / 控制字符；空白替成 `-`，括號剝掉，避免破壞 annotation 解析
+  return (
+    v
+      .replace(/[\s]+/g, '-')
+      .replace(/[()]/g, '')
+      .replace(/[\x00-\x1f]/g, '')
+      .slice(0, 120) || 'unknown'
+  )
 }
 
 function applyActionToLine(line: string, action: 'ok' | 'issue' | 'skip', note: string): string {
@@ -1134,7 +1227,7 @@ function renderReviewHtml(): string {
     .state-badge.ok { background: #d6ecdf; color: #1e6042; }
     .state-badge.issue { background: #fce4c8; color: #8a4f0a; }
     .state-badge.skip { background: #e7e1d3; color: #5a5341; }
-    /* Kind badge — 在 task-id 後顯示小標籤區分 review:ui / discuss */
+    /* Kind badge — 在 task-id 後顯示小標籤區分 review:ui / discuss / verify:auto */
     .kind-badge {
       display: inline-block;
       margin-left: 6px;
@@ -1148,6 +1241,34 @@ function renderReviewHtml(): string {
     }
     .kind-badge.review-ui { background: #e6eef7; color: #2455a3; }
     .kind-badge.discuss { background: #f3e7d6; color: #8a4f0a; }
+    .kind-badge.verify-auto { background: #e0eee0; color: #2a6b2a; }
+    /* verify:auto evidence chip — 在 task-head 顯示「agent 已驗」+ tooltip 顯示 (verified-auto: ...) 內容 */
+    .verified-auto-chip {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: #d6ecdf;
+      color: #1e6042;
+      font-size: 10px;
+      font-weight: 600;
+      cursor: help;
+      vertical-align: middle;
+    }
+    /* verify-auto evidence card — bodyHtml 顯示 agent 觀察到的 network/dom 證據 + final-state screenshot 提示 */
+    .verify-auto-card {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border: 1px solid #b9d6b9;
+      border-radius: 6px;
+      background: #f0f7ee;
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .verify-auto-card strong { color: #1e6042; font-weight: 600; }
+    .verify-auto-card code { background: #d6ecdf; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+    .task-item.kind-verify-auto { background: #f4faf2; }
     /* Discuss-specific viewer card — 取代 OK/Issue/Skip + thumbnail */
     .discuss-card {
       margin-top: 12px;
@@ -2080,11 +2201,20 @@ function renderReviewHtml(): string {
         const collapsed = handled && !state.expanded.has(item.id);
         const decisionClass = handled ? ' decision-' + decision.kind : '';
         const isDiscuss = item.kind === 'discuss';
-        const kindClass = isDiscuss ? ' kind-discuss' : ' kind-review-ui';
-        // Kind badge：discuss 用 dotted pill、review:ui 用 plain pill。aria-label 給 a11y。
-        const kindBadge = isDiscuss
-          ? '<span class="kind-badge discuss" aria-label="此項由 Claude 主導，無需手動操作">[discuss]</span>'
-          : '<span class="kind-badge review-ui" aria-label="此項需要使用者親自操作驗收">[review:ui]</span>';
+        const isVerifyAuto = item.kind === 'verify:auto';
+        const kindClass = isDiscuss ? ' kind-discuss' : (isVerifyAuto ? ' kind-verify-auto' : ' kind-review-ui');
+        // Kind badge：三 kind 各一色。aria-label 給 a11y。
+        let kindBadge;
+        if (isDiscuss) {
+          kindBadge = '<span class="kind-badge discuss" aria-label="此項由 Claude 主導，無需手動操作">[discuss]</span>';
+        } else if (isVerifyAuto) {
+          kindBadge = '<span class="kind-badge verify-auto" aria-label="此項由 agent 用 browser-harness 自動 round-trip，使用者只需確認 evidence">[verify:auto]</span>';
+        } else {
+          kindBadge = '<span class="kind-badge review-ui" aria-label="此項需要使用者親自操作驗收">[review:ui]</span>';
+        }
+        // 解析 (verified-auto: <ISO> network=... dom=...) annotation — 只對 verify:auto items 取
+        const verifiedAutoMatch = isVerifyAuto ? item.raw.match(/\(verified-auto:\s*([^)]+)\)/) : null;
+        const verifiedAutoEvidence = verifiedAutoMatch ? verifiedAutoMatch[1].trim() : null;
         let stateHtml;
         if (handled) {
           stateHtml = '<span class="state-badge ' + decision.kind + '">' + decisionLabel(decision.kind) + '</span>';
@@ -2094,24 +2224,46 @@ function renderReviewHtml(): string {
           if (decision.kind === 'issue' && !isDiscuss) {
             stateHtml += '<button class="copy-handoff-btn" data-handoff="item-issue" data-id="' + esc(item.id) + '" type="button" title="複製 handoff prompt 給新 Claude session 處理這個 issue">📋 handoff</button>';
           }
+        } else if (isDiscuss) {
+          stateHtml = '由 Claude 主導';
+        } else if (isVerifyAuto && verifiedAutoEvidence) {
+          stateHtml = '<span class="verified-auto-chip" title="agent 已 round-trip — ' + esc(verifiedAutoEvidence) + '">✓ agent 已驗</span> 待確認';
+        } else if (isVerifyAuto) {
+          stateHtml = '待 agent 跑';
         } else {
-          stateHtml = isDiscuss ? '由 Claude 主導' : '待檢查';
+          stateHtml = '待檢查';
         }
         const noteValue = decision.note ? esc(decision.note) : '';
         // Discuss items：不顯示 textarea / OK / Issue / SKIP buttons / handoff button（spec line 169）。
         // 改顯示 dedicated 卡片提示「此項由 Claude 主導」。
-        const bodyHtml = isDiscuss
-          ? '<div class="discuss-card">' +
+        // verify:auto items：跟 review:ui 一樣顯示 OK/Issue/Skip（user 仍要點 OK 才勾），多顯示 evidence card。
+        let bodyHtml;
+        if (isDiscuss) {
+          bodyHtml = '<div class="discuss-card">' +
               '<h3>此項由 Claude 主導</h3>' +
               '<p>' + esc(item.description) + '</p>' +
               '<p class="notice">archive 階段 Claude 會主動準備證據與你討論，這裡無需操作。</p>' +
-            '</div>'
-          : '<textarea class="note" data-note="' + esc(item.id) + '" placeholder="填寫說明（「有問題」必填、「跳過」可選填）">' + noteValue + '</textarea>' +
+            '</div>';
+        } else {
+          const evidenceCard = (isVerifyAuto && verifiedAutoEvidence)
+            ? '<div class="verify-auto-card">' +
+                '<strong>agent verify-auto 通過</strong>：<code>' + esc(verifiedAutoEvidence) + '</code>' +
+                '<p style="margin:6px 0 0">看右側 final-state screenshot 確認後按「✓ 通過」；發現異常按「⚠ 有問題」。</p>' +
+              '</div>'
+            : (isVerifyAuto
+              ? '<div class="verify-auto-card" style="background:#fdf6e3;border-color:#d6c899">' +
+                  '<strong>等待 agent 跑 verify-auto</strong>' +
+                  '<p style="margin:6px 0 0">spectra-apply Step 8a 會由主線派 screenshot-review agent 自跑 round-trip。若主線沒跑，回去要求補。</p>' +
+                '</div>'
+              : '');
+          bodyHtml = evidenceCard +
+            '<textarea class="note" data-note="' + esc(item.id) + '" placeholder="填寫說明（「有問題」必填、「跳過」可選填）">' + noteValue + '</textarea>' +
             '<div class="actions">' +
               '<button class="ok" data-action="ok" data-id="' + esc(item.id) + '" type="button" title="標記此項通過 (O)">✓ 通過</button>' +
               '<button class="issue" data-action="issue" data-id="' + esc(item.id) + '" type="button" title="標記此項有問題，需填寫說明 (I)">⚠ 有問題</button>' +
               '<button class="skip" data-action="skip" data-id="' + esc(item.id) + '" type="button" title="跳過此項，可選填原因 (S)">⤵ 跳過</button>' +
             '</div>';
+        }
         return '<article class="task-item' + (active ? ' active' : '') + (item.scoped ? ' scoped' : '') + decisionClass + (collapsed ? ' collapsed' : '') + kindClass + '" data-item="' + esc(item.id) + '">' +
           '<div class="task-head">' +
           '<span class="task-id">' + esc(item.id) + kindBadge + '</span>' +
