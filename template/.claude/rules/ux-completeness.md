@@ -174,6 +174,110 @@ spectra-propose 階段，`proposal.md` 必須包含以下三個區塊（或明�
 - apply 階段執行 fixtures task = 自動產生持久化 mock，下次 reset DB 還在
 - review 階段 screenshot-review agent 拍前若仍偵測到空狀態，可立刻反查 tasks.md 是否有 Fixtures Plan，定位是「沒規劃」還是「沒執行」
 
+## 必填 Backend-only Manual Review 規約
+
+**核心命題**：當 `## User Journeys` 為 `**No user-facing journey (backend-only)**` 時，`## 人工檢查` 區塊**不該**塞滿 Claude 自己就能跑的 evidence collection（SSH + psql + curl + 查表 + schema introspect）。那些屬於 apply 階段 Claude 該自驗的工作，不是使用者該人工做的。把它們塞進「人工檢查」會誤導使用者去 SSH 跑 SQL，且把真正該由使用者把關的項目（production 授權 / 商業判斷 / production 觀察）淹沒在技術 evidence 之中。
+
+### 觸發條件
+
+`proposal.md` 的 `## User Journeys` 為 `**No user-facing journey (backend-only)**` 宣告時，本規約**強制**生效。
+
+### `## 人工檢查` 限制（hard rule）
+
+backend-only change 的 `## 人工檢查` **MUST** 只保留 `[discuss]` kind 的代表性 use cases：
+
+1. **Production 授權型**：deploy 前的 final go/no-go ack、production-only 破壞性操作（rotation / migration / data fix）前的人工授權
+2. **商業判斷型**：Claude 無法自動判斷「結果是否合理」的觀察項，例如「drift 統計分布是否符合業務預期」「異常頻率是否在容忍範圍」「告警閾值需要調整嗎」
+3. **Production 觀察型**：deploy 後 N 小時 / N 天的 production-only soak window 觀察，無法在 dev / staging 提前完成
+
+上述三類 **MUST** 標 `[discuss]` marker；spectra-archive Step 2.5 walkthrough 流程下由 Claude 主動準備 evidence 與使用者討論。**user-facing change 也可對個別 item 標 `[discuss]`**（例：純資料修復 task 雖屬於含 UI 的 change，但實際驗證仰賴 evidence 而非 round-trip）— 此時不需 `**No user-facing journey**` 宣告，逐項標 marker 即可。
+
+**MUST NOT** 把以下項目放進 `## 人工檢查`（即使該 change 是 backend-only）：
+
+- SSH 進 dev / staging LXC 跑 psql / `docker exec` 等技術 evidence
+- `curl` 觸發 endpoint / cron 並查 response
+- `\d <table>` / `SELECT` 驗證 schema / 資料狀態
+- 受控製造 drift / seed test data 等可程式化操作
+- migration apply 後的 schema 存在性驗證
+- 任何 Claude 在 apply 階段可自動執行 + 可貼證據的工作
+
+這些**不是人工檢查**，是 evidence collection。
+
+### `## N. Backend Verification Evidence` section（取代）
+
+把上述被排除項目改寫進 tasks.md 新的 `## N. Backend Verification Evidence` section（位置：最後一個功能區塊之後、`## 人工檢查` 之前。N = 上一個功能區塊的序號 + 1）：
+
+```markdown
+## N. Backend Verification Evidence
+
+> 由 apply 階段 Claude 自跑、自貼證據；**非**使用者人工檢查項目。每條 task 完成時 Claude **MUST** 在 task 下貼出實際 SQL / curl / docker exec 的輸出（節錄關鍵欄位即可）作為 evidence，archive 前查 task 已勾且有證據。
+
+- [ ] N.1 Apply migration 到 dev LXC，驗證 `<schema>.<column>` 存在且型別正確 — 貼 `\d <table>` 輸出
+- [ ] N.2 製造受控 drift（`SET session_replication_role = replica` + UPDATE）→ 觸發 cron → 貼 `audit_chain_drift` 查詢結果（drift_type / count）
+- [ ] N.3 …
+```
+
+### 例外宣告
+
+若 backend-only change 確實不需要任何使用者授權 / 商業判斷 / production 觀察，`## 人工檢查` 區塊**MUST** 寫成下列固定文字（archive gate 會把它視為合法宣告）：
+
+```markdown
+## 人工檢查
+
+_本 change 為 backend-only，所有驗證由 apply 階段 Claude 自跑（見 `## N. Backend Verification Evidence`）；deploy 前無使用者人工檢查項目。_
+```
+
+**禁止**寫空 section 或刪掉 `## 人工檢查` 標題 — archive gate 會誤判為「漏寫」。
+
+### 反面範例（為什麼這條規則存在）
+
+```markdown
+❌ 不該出現的人工檢查（<consumer-a> TD-044 原版，且未標 marker）：
+
+- [ ] #1 Apply the TD-044 migration to dev LXC and verify `audit_signed_chain.signed_business_keys` exists as nullable `jsonb`. @no-screenshot
+- [ ] #2 Trigger or seed controlled drift rows on dev LXC, run `/_cron/audit-chain-diff`, and verify only-business-key drift inserts `business_keys_drift`. @no-screenshot
+- [ ] #3 On dev LXC, verify business-key plus other-field drift inserts both `business_keys_drift` and `evlog_hash_mismatch` for the same event. @no-screenshot
+```
+
+問題：
+
+- 全部都是 SSH + psql + curl + `SELECT` 才能驗的事 → 是 evidence collection，不是人工檢查
+- 使用者打開 `pnpm review:ui` 看到這 3 條完全不知道怎麼做（無從判斷是要登入哪台 host、跑什麼指令、查什麼結果）
+- 真正該人工做的事（如「deploy production 前最後確認」「24h soak 後檢查 drift 是否爆量」）反而沒寫
+- 缺 `[review:ui]` / `[discuss]` marker；Default Kind Derivation Rule 會把它們推為 `[discuss]`（因 backend-only），但寫作者**MUST**顯式標 marker 而非依賴 fallback
+
+```markdown
+✅ 修正版：evidence collection 移到 `## N. Backend Verification Evidence`，
+   `## 人工檢查` 只保留真正需要使用者判斷的 [discuss] 項目：
+
+## 人工檢查
+
+- [ ] #1 [discuss] 24h soak 後確認 `business_keys_drift` count 是否在預期範圍 @no-screenshot
+- [ ] #2 [discuss] Production deploy 授權 — confirm migration M-042 已驗證且預備好回滾路徑 @no-screenshot
+```
+
+### 與其他規則的關係
+
+- `manual-review.md`：定義 `## 人工檢查` checkbox 不可由 agent 自行勾選；本規則補上 backend-only case 該放什麼進區塊。
+- `proactive-skills.md`：spectra-propose Phase 0a prompt 與 Phase 0b cross-check 必須執行此規約；違反 → propose Final Verification Check 8 不過。
+- `screenshot-strategy.md`：本規則排除的 evidence collection 不需要截圖；保留的三類項目通常也不需要截圖（用 `@no-screenshot` marker）。
+
+### 違反時的回報方式
+
+```
+[UX Gate] Backend-only Manual Review 規約不通過
+
+問題：change `<name>` 為 backend-only，但 `## 人工檢查` 含 SSH/psql/curl 等技術 evidence
+
+證據：
+  - tasks.md L<line>: <違規 checkbox 文字>
+
+修正方式：
+  - 把該項目從 `## 人工檢查` 移到 `## N. Backend Verification Evidence` section
+  - 或保留該項目但確認其屬於 production 授權 / 商業判斷 / production 觀察 三類其一
+  - 若全移走後 `## 人工檢查` 已空，改寫成例外宣告固定文字
+```
+
 ## Exhaustiveness Rule（結構性強制）
 
 所有 enum / const array 的分支處理必須用 `switch + assertNever` pattern，**禁止** `if/else if/else` 鏈：
@@ -259,14 +363,14 @@ function getBindingIcon(cardType: NfcCardType): string {
 | Spectra phase                       | Gate script                                              | When to run                                                     |
 | ----------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------- |
 | Before `spectra-propose` (handoff)  | **AskUserQuestion**：A. Codex GPT-5.5 xhigh / B. Claude Code 繼續做；A 路徑由主線 Claude 自己派背景 `codex exec`（**禁止**叫使用者切 CLI） | discuss 結束、進入 propose 前必詢問；由 `spectra-propose` Step 0 統一分流，詳見 `agent-routing.md` |
-| Before `spectra-propose`            | `bash scripts/spectra-ux/pre-propose-scan.sh`            | 注入 blast radius 要求，提醒必填區塊                            |
-| After `spectra-propose`             | `bash scripts/spectra-ux/post-propose-check.sh <change>` | 驗證 proposal 完整性                                            |
-| After `spectra-propose`             | `bash scripts/spectra-ux/design-inject.sh <change>`      | 若有 UI scope，提醒補上 `## Design Review` 區塊                 |
-| Before `spectra-apply`              | `bash scripts/spectra-ux/pre-apply-brief.sh <change>`    | 簡報 user journeys                                              |
-| During UI edits                     | `bash scripts/spectra-ux/ui-qa-reminder.sh <file>`       | 中途提醒 design / screenshot review，不要等到 archive 才檢查    |
-| Before `spectra-archive`            | `bash scripts/spectra-ux/design-gate.sh <change>`        | 阻擋未完成人工檢查或缺設計審查證據的 UI change                  |
-| Before `spectra-archive`            | `bash scripts/spectra-ux/archive-gate.sh <change>`       | 驗證 journey URL touch、schema drift、exhaustiveness            |
-| Before `spectra-archive` (v1.5+)    | `bash scripts/spectra-ux/followup-gate.sh <change>`      | 驗證 tasks.md 的 `@followup[TD-NNN]` 都在 `docs/tech-debt.md` 登記 |
+| Before `spectra-propose`            | `bash scripts/spectra-advanced/pre-propose-scan.sh`            | 注入 blast radius 要求，提醒必填區塊                            |
+| After `spectra-propose`             | `bash scripts/spectra-advanced/post-propose-check.sh <change>` | 驗證 proposal 完整性                                            |
+| After `spectra-propose`             | `bash scripts/spectra-advanced/design-inject.sh <change>`      | 若有 UI scope，提醒補上 `## Design Review` 區塊                 |
+| Before `spectra-apply`              | `bash scripts/spectra-advanced/pre-apply-brief.sh <change>`    | 簡報 user journeys                                              |
+| During UI edits                     | `bash scripts/spectra-advanced/ui-qa-reminder.sh <file>`       | 中途提醒 design / screenshot review，不要等到 archive 才檢查    |
+| Before `spectra-archive`            | `bash scripts/spectra-advanced/design-gate.sh <change>`        | 阻擋未完成人工檢查或缺設計審查證據的 UI change                  |
+| Before `spectra-archive`            | `bash scripts/spectra-advanced/archive-gate.sh <change>`       | 驗證 journey URL touch、schema drift、exhaustiveness            |
+| Before `spectra-archive` (v1.5+)    | `bash scripts/spectra-advanced/followup-gate.sh <change>`      | 驗證 tasks.md 的 `@followup[TD-NNN]` 都在 `docs/tech-debt.md` 登記 |
 | **Session start / 外部 runtime 跑完 spectra 後** | `pnpm spectra:roadmap` && `pnpm spectra:claims` && `pnpm spectra:followups` | 重算 ROADMAP、查看 active claims、摘要 follow-up 狀態 |
 
 **Claude Code 使用者**：上述由 `.claude/hooks/` 自動觸發，無需手動。
@@ -281,6 +385,7 @@ function getBindingIcon(cardType: NfcCardType): string {
 - **NEVER** 把「tasks 全勾 + tests 綠」當作 feature complete 的充分條件
 - **NEVER** 手編 `openspec/ROADMAP.md` 的 `<!-- SPECTRA-UX:ROADMAP-AUTO:* -->` 區塊
 - **NEVER** 未 claim 就開始做 active spectra change
+- **NEVER** 把 backend evidence collection（SSH / psql / `\d <table>` / `SELECT FROM` / 觸發 cron / 受控 drift 製造 / migration 存在性驗證）放進 backend-only change 的 `## 人工檢查`；改寫進 `## N. Backend Verification Evidence` 由 apply Claude 自跑自貼（見「必填 Backend-only Manual Review 規約」）
 ## 與既有規則的關係
 
 - **`proactive-skills.md` Design Gate**：本規則**擴充**而非取代。Design Gate 檢查 UI 視覺品質；UX Completeness 檢查 UI 功能覆蓋

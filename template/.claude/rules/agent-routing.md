@@ -164,8 +164,8 @@ Claude Code session 收到 spectra propose 請求時：
    2. 派 background codex GPT-5.5 xhigh draft（走「Codex 派工的標準流程」）
    3. 收到 `<task-notification status=completed>` 後，主線 **MUST** 依序：
       - Read codex 產出的 proposal.md / design.md / tasks.md
-      - 跑 `bash scripts/spectra-ux/post-propose-check.sh <change>`（檢查 User Journeys / Affected Entity Matrix / Implementation Risk Plan / Design Review 7 步）
-      - 跑 `bash scripts/spectra-ux/design-inject.sh <change>`（若 UI scope，提醒 7 步 template）
+      - 跑 `bash scripts/spectra-advanced/post-propose-check.sh <change>`（檢查 User Journeys / Affected Entity Matrix / Implementation Risk Plan / Design Review 7 步）
+      - 跑 `bash scripts/spectra-advanced/design-inject.sh <change>`（若 UI scope，提醒 7 步 template）
       - **若 Design Review section 缺**：主線**自己**直接 Edit tasks.md 補完整 7 步 template（**不要**回 codex 修，太慢）
       - 跑 `spectra analyze <change> --json` 確認無 Critical/Warning
    4. 結束後 `spectra park <change>`，回報 artifacts list + cross-check 結果

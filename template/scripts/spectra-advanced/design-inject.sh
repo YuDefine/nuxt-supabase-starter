@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# spectra-ux: post-propose design review reminder
+# spectra-advanced: post-propose design review reminder
 #
 # Detects newly created UI-scoped changes and reminds the agent to add a
 # Design Review block to tasks.md if it's missing.

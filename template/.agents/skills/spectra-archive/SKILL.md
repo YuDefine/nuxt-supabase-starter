@@ -60,6 +60,62 @@ Archive a completed change.
 
    **If no tasks file exists:** Proceed without task-related warning.
 
+3.5. **Discuss Items Walkthrough** (Step 2.5 in the spec — runs after artifact + task completion checks, before delta sync preview)
+
+   Spec authority: `openspec/specs/manual-review-item-kind/spec.md` "Spectra-Archive Discuss Walkthrough"
+
+   Read `openspec/changes/<change-name>/tasks.md` `## 人工檢查` section. Identify every unchecked item where `kind = "discuss"` (either explicit `[discuss]` marker, OR derived via Default Kind Derivation Rule when proposal.md contains `**No user-facing journey (backend-only)**`).
+
+   **For each unchecked `[discuss]` item, the main thread Claude SHALL** (proactively, without prompting):
+
+   1. Read the item description and surrounding context (proposal.md User Journeys, related task results, recent diff).
+   2. **Prepare evidence** relevant to the item — pick whichever combination is most informative:
+      - `grep` / `rg` results showing the relevant code paths or migrations touched
+      - Recent `git diff` excerpts (focused on the area the item references)
+      - Command output (if the item asks about deploy / migration / cron / data state, run the relevant query and paste the output)
+      - Data summary (e.g., row counts, distribution stats, drift counts)
+      - Cross-consumer / cross-environment check results (e.g., per-consumer migration apply status)
+   3. Present to the user, in this format:
+
+      ```
+      ### Discuss item #<id> [discuss] <description>
+
+      **Evidence:**
+      <grep / diff / command output / summary>
+
+      **My read:** <one or two sentences explaining what the evidence implies>
+
+      請確認：OK / Issue / Skip
+      ```
+
+   4. Wait for the user's response. Branch on the answer:
+
+      - **OK**: Edit `tasks.md` for this line:
+        - Set checkbox to `[x]`
+        - Insert `(claude-discussed: <ISO-8601-timestamp>)` annotation between description and any trailing markers (`@followup[TD-NNN]` / `@no-screenshot`), preserving canonical ordering. Use the current ISO-8601 UTC timestamp (`new Date().toISOString()`).
+        - Example before: `- [ ] #2 [discuss] Confirm rollout @no-screenshot`
+        - Example after: `- [x] #2 [discuss] Confirm rollout (claude-discussed: 2026-05-10T14:23:00Z) @no-screenshot`
+      - **Issue**: Edit `tasks.md`:
+        - Keep checkbox as `[ ]`
+        - Append `（issue: <user note>）` annotation between description and trailing markers
+        - Note in summary: this item is intentionally left unchecked; archive **does NOT** block on it (user retains control)
+      - **Skip**: Edit `tasks.md`:
+        - Set checkbox to `[x]`
+        - Append `（skip）` annotation (or `（skip: <reason>）` if the user gave a reason)
+
+   5. Move to the next unchecked `[discuss]` item until all are processed.
+
+   **Skip-condition**: if `## 人工檢查` has no unchecked `[discuss]` items, skip this step silently.
+
+   **Out of scope here**: unchecked `[review:ui]` items are NOT processed in this step — they are routed to `/review-screenshot` by the orchestrator's Archive Flow (`spectra/SKILL.md` Step 1). If `[review:ui]` items remain unchecked at this point, the orchestrator should already have prompted the user; if they reach Step 6 unchecked, archive-gate.sh Check 4 will block.
+
+   **Restrictions** (hard rules from `manual-review.md`):
+
+   - **NEVER** mark a `[discuss]` item `[x]` without showing the user evidence first AND receiving an explicit OK
+   - **NEVER** write `(claude-discussed: <ISO>)` annotation without an actual discussion taking place
+   - **NEVER** batch-process multiple `[discuss]` items in one user prompt — present them one at a time so the user can give a focused answer per item
+   - **NEVER** touch `[review:ui]` items during this step
+
 4. **Preview delta spec sync (informational)**
 
    The `spectra archive` CLI applies delta specs to main specs by default; this step previews what will be applied so the user can choose to sync or skip via the CLI flag in step 6.

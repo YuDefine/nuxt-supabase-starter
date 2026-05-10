@@ -41,7 +41,7 @@ globs: ['docs/tech-debt.md', '**/docs/tech-debt.md']
 
 ## 為什麼一律先問 clade
 
-Consumer 端的 `.claude/` / `scripts/spectra-ux/` / vendor 副本是 clade **投影**（帶 LOCKED banner、chmod 444、checksum gate）。
+Consumer 端的 `.claude/` / `scripts/spectra-advanced/` / vendor 副本是 clade **投影**（帶 LOCKED banner、chmod 444、checksum gate）。
 
 - 在 consumer 端登 TD 描述「投影層的問題」→ 修法看似在 consumer，但下次 propagate 會把 consumer 修法蓋回 clade 版本 → TD 永遠修不完
 - 唯一不被蓋的是 consumer 自家業務檔（`server/api/**`、`server/utils/**`、自家 migration、自家 nuxt.config 業務段、`local/**` rule 等）
