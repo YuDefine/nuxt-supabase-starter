@@ -1,0 +1,384 @@
+#!/usr/bin/env bash
+set -u
+
+REQUIRED_CHECKS=(
+  private-env-file
+  secret-like-content
+  real-email-identifier
+  real-tenant-identifier
+  unmarked-starter-only-doc
+  dogfood-business-code
+  dogfood-schema-hint
+  maintenance-script-misplacement
+)
+
+HOOK_CHECKS=(
+  private-env-file
+  secret-like-content
+  real-email-identifier
+  real-tenant-identifier
+  unmarked-starter-only-doc
+  dogfood-business-code
+  dogfood-schema-hint
+  maintenance-script-misplacement
+)
+
+failed=0
+tmp_paths=""
+
+cleanup() {
+  if [[ -n "${tmp_paths}" && -f "${tmp_paths}" ]]; then
+    rm -f "${tmp_paths}"
+  fi
+}
+trap cleanup EXIT
+
+report_failure() {
+  local check_name="$1"
+  local problem="$2"
+  local evidence="$3"
+  local fix="$4"
+  local bypass="$5"
+
+  {
+    printf '[Starter Hygiene] %s 不通過\n' "${check_name}"
+    printf '問題: %s\n' "${problem}"
+    printf '證據: %s\n' "${evidence}"
+    printf '修正方式: %s\n' "${fix}"
+    printf '繞過方式: %s\n\n' "${bypass}"
+  } >&2
+
+  failed=1
+}
+
+scanner_error() {
+  report_failure \
+    "maintenance-script-misplacement" \
+    "$1" \
+    "$2" \
+    "修正 hook / rule 對齊問題後重跑；若是 staged blob 問題，請重新 stage 或手動檢查該檔案。" \
+    "只有在 Spectra artifact / PR / commit context 記錄明確 rationale 後，才允許維護者明示 bypass。"
+}
+
+contains_item() {
+  local needle="$1"
+  shift
+  local item
+
+  for item in "$@"; do
+    [[ "${item}" == "${needle}" ]] && return 0
+  done
+
+  return 1
+}
+
+verify_check_names() {
+  local rule_path=".claude/rules/starter-hygiene.md"
+  local check_name
+
+  if [[ ${#HOOK_CHECKS[@]} -ne ${#REQUIRED_CHECKS[@]} ]]; then
+    scanner_error "hook check name 數量與 rule 預期不一致，為避免 hygiene drift 採 fail-closed。" "hook check list"
+    return 1
+  fi
+
+  if [[ ! -f "${rule_path}" ]]; then
+    scanner_error "找不到 root starter hygiene rule，無法確認 hook check names 是否對齊。" "${rule_path}"
+    return 1
+  fi
+
+  for check_name in "${REQUIRED_CHECKS[@]}"; do
+    if ! contains_item "${check_name}" "${HOOK_CHECKS[@]}"; then
+      scanner_error "hook 缺少 Phase A 定義的 check name，為避免靜默污染採 fail-closed。" "missing check: ${check_name}"
+      return 1
+    fi
+
+    if ! grep -Fq -- "${check_name}" "${rule_path}"; then
+      scanner_error "rule 與 hook check name 對不上，為避免 hygiene drift 採 fail-closed。" "${rule_path} + ${check_name}"
+      return 1
+    fi
+  done
+
+  return 0
+}
+
+is_placeholder_value() {
+  local value="$1"
+  local normalized
+
+  normalized="$(printf '%s' "${value}" | tr '[:upper:]' '[:lower:]')"
+  normalized="${normalized%\"}"
+  normalized="${normalized#\"}"
+  normalized="${normalized%\'}"
+  normalized="${normalized#\'}"
+
+  [[ -z "${normalized}" ]] && return 0
+  [[ "${normalized}" =~ ^(\$|\$\{|<|\{) ]] && return 0
+  [[ "${normalized}" =~ ^(true|false|null|none|dev|development|test|testing|local|public|anon|0|1|3000|5432)$ ]] && return 0
+  [[ "${normalized}" == *"your_"* || "${normalized}" == *"your-"* ]] && return 0
+  [[ "${normalized}" == *"example"* || "${normalized}" == *"placeholder"* ]] && return 0
+  [[ "${normalized}" == *"changeme"* || "${normalized}" == *"change_me"* || "${normalized}" == *"replace"* ]] && return 0
+  [[ "${normalized}" == *"xxxxx"* || "${normalized}" == *"xxxx"* || "${normalized}" == *"sk-xxxxx"* ]] && return 0
+  [[ "${normalized}" == *"localhost"* || "${normalized}" == *"127.0.0.1"* || "${normalized}" == *"0.0.0.0"* ]] && return 0
+  [[ "${normalized}" == *"demo"* || "${normalized}" == *"sample"* || "${normalized}" == *"acme"* ]] && return 0
+  [[ "${normalized}" == "00000000-0000-0000-0000-000000000000" ]] && return 0
+
+  return 1
+}
+
+check_private_env_path() {
+  local path="$1"
+
+  if [[ "${path}" == "template/.env" || "${path}" == "template/.env.local" || "${path}" == */.env || "${path}" == */.env.local ]]; then
+    report_failure \
+      "private-env-file" \
+      "私人環境檔不能進入會被 scaffold 帶走的 template tree。" \
+      "${path} + private env path" \
+      "移除該檔；若使用者需要設定範本，改用 template/.env.example 並只保留 placeholder。" \
+      "只有在 Spectra artifact / PR / commit context 記錄此檔為刻意保留且已去識別化後，才允許維護者明示 bypass。"
+  fi
+}
+
+check_env_example_values() {
+  local path="$1"
+  local blob="$2"
+  local line key value
+
+  [[ "${path}" == "template/.env.example" || "${path}" == */.env.example ]] || return 0
+
+  while IFS= read -r line; do
+    [[ "${line}" =~ ^[[:space:]]*$ || "${line}" =~ ^[[:space:]]*# ]] && continue
+    line="${line#export }"
+    [[ "${line}" == *"="* ]] || continue
+
+    key="${line%%=*}"
+    value="${line#*=}"
+    key="$(printf '%s' "${key}" | tr '[:lower:]' '[:upper:]')"
+
+    if [[ "${key}" =~ (KEY|TOKEN|SECRET|PASSWORD|DATABASE|DSN|URL|SUPABASE|OPENAI|RESEND|STRIPE|SLACK|JWT|AUTH) ]] && ! is_placeholder_value "${value}"; then
+      report_failure \
+        "private-env-file" \
+        ".env.example 只能保留 placeholder；敏感設定不能放入看似真實的值。" \
+        "${path} + .env.example non-placeholder value category" \
+        "把值改成 your_value_here、example、sk-xxxxx、localhost 或其他明確 placeholder。" \
+        "只有在 Spectra artifact / PR / commit context 記錄該值是去識別化範例後，才允許維護者明示 bypass。"
+      return 0
+    fi
+  done <<< "${blob}"
+}
+
+check_secret_like_content() {
+  local path="$1"
+  local blob="$2"
+  local category=""
+
+  if grep -Eq -- '(^|[^[:alnum:]_])sk-[A-Za-z0-9_-]{20,}' <<< "${blob}"; then
+    category="API key prefix"
+  elif grep -Eq -- 'Bearer[[:space:]]+[A-Za-z0-9._~+/=-]{20,}' <<< "${blob}"; then
+    category="Bearer token"
+  elif grep -Eq -- 'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}' <<< "${blob}"; then
+    category="JWT-shaped token"
+  elif grep -Eq -- 'https://hooks\.slack\.com/services/[A-Za-z0-9/_-]+' <<< "${blob}"; then
+    category="Slack webhook URL"
+  elif grep -Eq -- '-----BEGIN [A-Z ]*PRIVATE KEY-----' <<< "${blob}"; then
+    category="private key block"
+  elif grep -Eq -- '(^|[^A-Z0-9])(AKIA[0-9A-Z]{16})([^A-Z0-9]|$)' <<< "${blob}"; then
+    category="AWS access key id"
+  elif grep -Eq -- 'AIza[0-9A-Za-z_-]{35}' <<< "${blob}"; then
+    category="Google API key prefix"
+  fi
+
+  if [[ -n "${category}" ]]; then
+    report_failure \
+      "secret-like-content" \
+      "template staged content 含疑似 secret，不能進入 starter seed。" \
+      "${path} + ${category}" \
+      "移除 secret，改用 placeholder，並重新 stage 去識別化後的內容。" \
+      "只有在 Spectra artifact / PR / commit context 記錄此值是無效範例且已去識別化後，才允許維護者明示 bypass。"
+  fi
+}
+
+check_email_identifiers() {
+  local path="$1"
+  local blob="$2"
+  local email domain
+
+  while IFS= read -r email; do
+    [[ -z "${email}" ]] && continue
+    domain="$(printf '%s' "${email##*@}" | tr '[:upper:]' '[:lower:]')"
+
+    case "${domain}" in
+      example.com|example.org|example.net|example.test|localhost|localhost.local|test.local|invalid.test)
+        continue
+        ;;
+    esac
+
+    report_failure \
+      "real-email-identifier" \
+      "template staged content 含非 placeholder email，可能把可識別使用者資料帶進 starter。" \
+      "${path} + email address pattern" \
+      "改用 user@example.com、admin@example.test 或其他明確範例 domain。" \
+      "只有在 Spectra artifact / PR / commit context 記錄該 email 為去識別化範例後，才允許維護者明示 bypass。"
+    return 0
+  done < <(grep -Eio -- '[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}' <<< "${blob}" || true)
+}
+
+check_tenant_identifiers() {
+  local path="$1"
+  local blob="$2"
+  local uuid line lowered
+
+  while IFS= read -r uuid; do
+    [[ -z "${uuid}" ]] && continue
+    if [[ "${uuid}" != "00000000-0000-0000-0000-000000000000" ]]; then
+      report_failure \
+        "real-tenant-identifier" \
+        "template staged content 含非 placeholder UUID，可能對應真實 tenant / org / user。" \
+        "${path} + non-placeholder UUID pattern" \
+        "改用 00000000-0000-0000-0000-000000000000、demo-tenant 或 example-org。" \
+        "只有在 Spectra artifact / PR / commit context 記錄該 identifier 為去識別化範例後，才允許維護者明示 bypass。"
+      return 0
+    fi
+  done < <(grep -Eio -- '[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}' <<< "${blob}" || true)
+
+  while IFS= read -r line; do
+    [[ -z "${line}" ]] && continue
+    lowered="$(printf '%s' "${line}" | tr '[:upper:]' '[:lower:]')"
+    if [[ "${lowered}" == *"example"* || "${lowered}" == *"placeholder"* || "${lowered}" == *"your_"* || "${lowered}" == *"your-"* || "${lowered}" == *"demo"* || "${lowered}" == *"sample"* || "${lowered}" == *"acme"* || "${lowered}" == *"test"* || "${lowered}" == *"00000000"* ]]; then
+      continue
+    fi
+
+    report_failure \
+      "real-tenant-identifier" \
+      "template staged content 含疑似真實 tenant / org / customer identifier。" \
+      "${path} + tenant identifier assignment pattern" \
+      "改用 demo-tenant、example-org、零值 UUID，或移到 template/.examples/ 並去識別化。" \
+      "只有在 Spectra artifact / PR / commit context 記錄該 identifier 為去識別化範例後，才允許維護者明示 bypass。"
+    return 0
+  done < <(grep -Ei -- '(tenant|organization|org|customer|company)[_-]?(id|slug|key|name)?[[:space:]]*[:=][[:space:]]*["'\'']?[A-Za-z0-9][A-Za-z0-9._-]{5,}' <<< "${blob}" || true)
+}
+
+check_starter_only_docs() {
+  local path="$1"
+  local blob="$2"
+
+  [[ "${path}" == *.md ]] || return 0
+  [[ "${path}" == template/.claude/* || "${path}" == template/.agents/* || "${path}" == template/.codex/* || "${path}" == template/openspec/* ]] && return 0
+  [[ "${path}" == template/.examples/* || "${path}" == template/.starter/* || "${path}" == *.starter.md ]] && return 0
+
+  if grep -Eiq -- '(starter-only|internal-only|do not scaffold|dogfood)' <<< "${blob}"; then
+    report_failure \
+      "unmarked-starter-only-doc" \
+      "一般 starter 文件含 starter-only / internal-only 標記文字，但檔案路徑未明確標記。" \
+      "${path} + starter-only marker category" \
+      "改名為 *.starter.md，或移入 template/.starter/ / template/.examples/。" \
+      "只有在 Spectra artifact / PR / commit context 記錄為刻意保留且路徑已補標記後，才允許維護者明示 bypass。"
+  fi
+}
+
+check_dogfood_business_code() {
+  local path="$1"
+  local blob="$2"
+
+  if [[ "${path}" =~ ^template/(app/pages|app/components|server|supabase|tests|test)/ ]] && grep -Eiq -- '(dogfood|yuntech|sroi|tdms|perno|procurement|workstation|inspection_equipment|school[-_]window)' <<< "${blob}"; then
+    report_failure \
+      "dogfood-business-code" \
+      "template staged content 含 dogfood / business-specific keyword，不能污染 scaffold seed。" \
+      "${path} + business-specific keyword category" \
+      "移到 root docs / examples / playground，或另開 change 設計為 starter-safe 範例。" \
+      "只有在 Spectra artifact / PR / commit context 記錄該內容是去識別化 starter 範例後，才允許維護者明示 bypass。"
+  fi
+}
+
+check_dogfood_schema_hint() {
+  local path="$1"
+  local blob="$2"
+
+  [[ "${path}" == template/supabase/* ]] || return 0
+
+  if grep -Eiq -- '(tenant[-_ ]specific|tenant_schema|private seed|real tenant|customer_id|organization_id|tenant_id)' <<< "${blob}"; then
+    report_failure \
+      "dogfood-schema-hint" \
+      "template Supabase schema / seed 含 tenant-specific 或 private seed hint。" \
+      "${path} + dogfood schema hint category" \
+      "改成通用 starter schema；業務範例移到 template/.examples/ 並去識別化。" \
+      "只有在 Spectra artifact / PR / commit context 記錄該 schema hint 是 starter-safe 範例後，才允許維護者明示 bypass。"
+  fi
+}
+
+check_maintenance_script_misplacement() {
+  local path="$1"
+  local blob="$2"
+
+  [[ "${path}" == template/scripts/* ]] || return 0
+
+  if [[ "${path}" =~ (audit|validate|release|scaffold|create-clean|hub|spectra|commit|pre-commit|post-scaffold) ]] || grep -Eiq -- '(starter hygiene|hub:sync|sync-to-agents|spectra archive|release workflow|validate-starter|create-clean|scaffolder)' <<< "${blob}"; then
+    report_failure \
+      "maintenance-script-misplacement" \
+      "root 維護腳本或 scaffolder tooling 不應放進會被 scaffold 帶走的 template/scripts/。" \
+      "${path} + maintenance script category" \
+      "移到 repo root scripts/；template/scripts/ 只保留 scaffold 後專案會用到的腳本。" \
+      "只有在 Spectra artifact / PR / commit context 記錄該 script 是使用者專案 runtime 需要後，才允許維護者明示 bypass。"
+  fi
+}
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+  scanner_error "無法定位 git repo root，starter hygiene hook 採 fail-closed。" "git rev-parse --show-toplevel"
+  exit 1
+}
+
+cd "${repo_root}" || {
+  scanner_error "無法切換到 git repo root，starter hygiene hook 採 fail-closed。" "${repo_root}"
+  exit 1
+}
+
+verify_check_names || exit 1
+
+tmp_paths="$(mktemp "${TMPDIR:-/tmp}/starter-hygiene-staged.XXXXXX")" || {
+  scanner_error "無法建立暫存路徑清單，starter hygiene hook 採 fail-closed。" "mktemp staged paths"
+  exit 1
+}
+
+if ! git diff --cached --name-only -z --diff-filter=ACMR -- template > "${tmp_paths}"; then
+  scanner_error "無法讀取 staged template path 清單，starter hygiene hook 採 fail-closed。" "git diff --cached --name-only -- template"
+  exit 1
+fi
+
+staged_paths=()
+while IFS= read -r -d '' path; do
+  staged_paths+=("${path}")
+done < "${tmp_paths}"
+
+if [[ ${#staged_paths[@]} -eq 0 ]]; then
+  exit 0
+fi
+
+for path in "${staged_paths[@]}"; do
+  blob=""
+
+  check_private_env_path "${path}"
+
+  if ! blob="$(git show ":${path}" 2>/dev/null)"; then
+    report_failure \
+      "maintenance-script-misplacement" \
+      "無法讀取 staged blob，starter hygiene hook 採 fail-closed。" \
+      "${path} + staged blob read failure" \
+      "重新 stage 該檔或手動檢查 staged 內容；必要時重跑 full-tree audit。" \
+      "只有在 Spectra artifact / PR / commit context 記錄明確 rationale 後，才允許維護者明示 bypass。"
+    continue
+  fi
+
+  check_env_example_values "${path}" "${blob}"
+  check_secret_like_content "${path}" "${blob}"
+  check_email_identifiers "${path}" "${blob}"
+  check_tenant_identifiers "${path}" "${blob}"
+  check_starter_only_docs "${path}" "${blob}"
+  check_dogfood_business_code "${path}" "${blob}"
+  check_dogfood_schema_hint "${path}" "${blob}"
+  check_maintenance_script_misplacement "${path}" "${blob}"
+done
+
+if [[ ${failed} -ne 0 ]]; then
+  exit 1
+fi
+
+exit 0
