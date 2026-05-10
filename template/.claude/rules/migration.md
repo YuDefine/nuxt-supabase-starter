@@ -25,6 +25,50 @@ globs: ['supabase/migrations/**/*.sql', 'server/**/*.ts']
 
 > 本檔為 starter template 的預設規則，複製出去後依專案實際使用調整。
 
+## Timestamp 順序契約
+
+`supabase migration new <name>` 用**建立當下**的 local clock 命名（`YYYYMMDDHHMMSS_*.sql`），
+**branch 久放會 timestamp drift**：day 1 跑 `migration new`、day 5 才 merge，
+期間其他人在 day 3 加的 migration 先 merge 走 → 你的檔 timestamp 反而比已合併的早。
+
+`supabase db push` 預設拒絕 out-of-order migration（fail with `--include-all` hint），
+production deploy 直接紅燈。
+
+### MUST
+
+- **MUST** commit / push migration 前確認 timestamp 晚於 `origin/main` 上所有已存在的 migration
+- **MUST** 走 `supabase migration new`，**NEVER** 手寫 timestamp
+- **MUST** 偵測到 out-of-order 時用 `git mv` rename 到當下 UTC timestamp 並重發版本
+
+### NEVER
+
+- **NEVER** 在 `supabase db push` 加 `--include-all` flag — 永久關掉 supabase 的 out-of-order 保護，任何後續漂移都會默默放行
+- **NEVER** 為了「保留 commit 順序」而手改 migration 檔 timestamp — 用 `supabase migration new` 重生
+
+### 自動化
+
+`vendor/scripts/pre-commit/checks/supabase-migration-safety.sh` 第 2 條
+（clade v0.5.27+）會在 commit 階段擋 out-of-order migration，並印 `git mv` 建議命令。
+hook 用 `origin/main` 已快取 ref 比對（不主動 fetch，避免拖慢 commit）。
+
+### Out-of-order 修補 SOP
+
+當 deploy workflow 報「Found local migration files to be inserted before the last migration on remote database」：
+
+1. 確認遠端 `supabase_migrations.schema_migrations` 最後一筆 timestamp（SSH + psql）
+2. `git mv supabase/migrations/<old>_<name>.sql supabase/migrations/$(date -u +%Y%m%d%H%M%S)_<name>.sql`
+3. commit + push main → staging 重 deploy 驗證
+4. staging 綠 → tag → push tag 觸發 production deploy
+5. 若 dev 環境已 applied 舊 timestamp（schema_migrations 留舊 entry），跑
+   `supabase migration repair --status reverted <old-timestamp>` 校正
+
+### 為什麼 rename 是治標、hook 是治根
+
+rename 解單次紅燈；hook 防再犯。兩者都不可繞過：
+
+- **NEVER** 用 `git commit --no-verify` 跳過 hook
+- **NEVER** 把 hook 的 fail 當 false positive 直接強推 — 先確認 `origin/main` 是否同步
+
 ## Schema 暴露策略
 
 Template 預設只使用 `public` schema，並被 PostgREST 自動暴露為 Data API。

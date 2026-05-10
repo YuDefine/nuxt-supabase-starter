@@ -224,6 +224,14 @@ Run `spectra analyze <change-name> --json` to check cross-artifact consistency (
 
       <每個 task 的編號 + 描述，從 tasks.md 抓>
 
+      Plan-first（**MUST**，per `.claude/rules/agent-routing.md` Plan-first 條目）：
+      在動任何 Edit / Write / Bash 寫入動作之前，先在 stdout 最開頭輸出一段 `## Plan` section，包含：
+      - **要動的具體檔案**（每條一行的相對路徑；對應到 phase <N> 內每個 task 的預期落點）
+      - **每個檔案打算做什麼變動**（一句話 — 例如 schema 加哪欄 / API 加哪 endpoint / store 加哪個 action / migration 寫什麼）
+      - **預期影響範圍**（typecheck / 哪些 unit test 會被觸發 / 是否需要 migration / runtime 行為改變）
+      - **task → 檔案對應表**（每個 task ID 對應到哪些檔案，若某 task 不需要改檔請標 `(no file change — verification only)`）
+      Plan 寫完後**立刻**繼續執行，**不要**停下來等確認。Plan 是事前公開思路給主線 cross-check，不是 review gate；主線會用 plan vs. `git diff` 對齊抓「漏做的 task」與「踩到 view 層」這類 drift。
+
       讀取以下檔案了解上下文：
       - openspec/changes/<change-name>/proposal.md
       - openspec/changes/<change-name>/design.md
@@ -423,6 +431,7 @@ What would you like to do?
   - **NEVER** dispatch with `medium` effort — use `high` minimum
   - **NEVER** dispatch task-by-task — phase granularity only
   - **NEVER** dispatch a codex phase without including the「view-layer guard」instruction in the prompt — without it, codex tends to incidentally touch `.vue` / `.tsx` files
+  - **NEVER** dispatch a codex phase without including the「Plan-first」instruction in the prompt — without it, 主線只能從 `git diff` 反推 codex 意圖，cross-check 易漏「漏做的 task」與「踩到 view 層」這類 drift（per `agent-routing.md` Plan-first 條目）
   - **NEVER** skip view-layer drift check after codex completion — `git diff --name-only` filtered by view paths is the primary quality gate
   - **NEVER** auto-fix mixed phases by editing tasks.md mid-apply — that belongs to `/spectra-ingest`; for未開工 mixed phase, STOP and instruct the user to run ingest
   - **NEVER** skip cross-check after codex phase completion — read tasks.md, confirm checkboxes, run typecheck/test, review diff

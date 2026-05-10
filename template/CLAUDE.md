@@ -232,3 +232,23 @@ Subagent 任務應包含（cwd 設為 push 發生的 repo path）：
 - **NEVER** 對沒有 `.github/workflows/` 的 repo 套用這條規則（直接跳過 watcher）
 - **NEVER** 重開新 watcher 取代尚在跑的 watcher（避免重複監看同一個 run）
 <!-- CLADE:SNIPPET:post-push-ci-watch:END -->
+
+<!-- CLADE:SNIPPET:archive-commit-order:START -->
+
+## Spectra Change 收尾：先 archive 再 /commit
+
+當 Spectra change 的 M.1-M.8 + archive gate 全綠、要收尾時，**MUST** 走以下順序：
+
+1. **先**跑 `/spectra-archive`（不要先 /commit fix）
+2. **再**跑單一 `/commit` — 一次包掉 manual review fix + archive directory rename + spec snapshot
+
+### 為什麼
+
+`/commit` 是慢路徑（review、message 生成、hooks），分兩段跑時間翻倍；archive 純 bookkeeping（rename + 落 snapshot），不值得獨立 ceremony，跟 fix 一起 commit 反而最省時。commit message 用雙標題 `fix: ...; archive: ...` 表達即可。
+
+### 禁忌
+
+- **NEVER** 先跑 `/commit` 收 fix 再跑 archive — 等於強迫雙倍慢路徑
+- **NEVER** 用 `/spectra-commit` 收尾 — 速度優先，selective stage 不值得
+- **NEVER** 在 archive 之後分兩個 `/commit`（一個包 fix、一個包 archive）— 同上理由
+<!-- CLADE:SNIPPET:archive-commit-order:END -->
