@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-10T10:43:57.421Z",
+  "syncedAt": "2026-05-10T10:54:02.800Z",
   "checksums": {
     "rules/agent-routing.md": "6432e78be83aa4d1",
     "rules/audit-pattern.md": "1d72e5274498727f",
@@ -19,6 +19,7 @@
     "rules/scope-discipline.md": "5ad04df6c9b5e9c5",
     "rules/screenshot-strategy.md": "debefc803ed4ace7",
     "rules/session-tasks.md": "c9abcabc9caa41c4",
+    "rules/tech-debt-routing.md": "b38b071b0303bfb9",
     "rules/test-scripts.md": "f2279b3ea0afb2e2",
     "rules/testing-anti-patterns.md": "29653c5a67a86be5",
     "rules/truth-layers.md": "cba05246f0c06769",
