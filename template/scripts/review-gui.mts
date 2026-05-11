@@ -2217,9 +2217,9 @@ function renderReviewHtml(): string {
           kindBadge = '<span class="kind-badge review-ui" aria-label="此項需要使用者親自操作驗收">[review:ui]</span>';
         }
         // 解析 (verified-auto: <ISO> network=... dom=...) annotation — 只對 verify:auto items 取
-        // regex literal 在 outer template literal 內，`\` 必須 double 才能在 render 後保留：
-        // .mts source `\\(` → backtick string 解析 → `\(` → 瀏覽器 regex literal → 匹配 literal `(`
-        // 原版單 `\` 被 backtick 解析吃掉，render 成 `(verified-auto:s*([^)]+))`，group 結構錯位
+        // regex literal 在 outer template literal 內，\`\\\` 必須 double 才能在 render 後保留：
+        // .mts source \`\\\\(\` → backtick string 解析 → \`\\(\` → 瀏覽器 regex literal → 匹配 literal \`(\`
+        // 原版單 \`\\\` 被 backtick 解析吃掉，render 成 \`(verified-auto:s*([^)]+))\`，group 結構錯位
         const verifiedAutoMatch = isVerifyAuto ? item.raw.match(/\\(verified-auto:\\s*([^)]+)\\)/) : null;
         const verifiedAutoEvidence = verifiedAutoMatch ? verifiedAutoMatch[1].trim() : null;
         let stateHtml;
