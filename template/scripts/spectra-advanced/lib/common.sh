@@ -232,8 +232,10 @@ sux_count_marker() {
 sux_extract_journey_urls() {
   local proposal=$1
   [ -f "$proposal" ] || return 0
+  # grep -oE 在 0 match 時 return 1，會在 set -o pipefail + set -e 下讓 caller 靜默 exit。
+  # 用 `|| true` 讓 0 match 視為「empty result」而非 error
   sux_extract_section "$proposal" 'User Journeys' \
-    | grep -oE '`/[a-z0-9_/-]+`' \
+    | { grep -oE '`/[a-z0-9_/-]+`' || true; } \
     | sort -u \
     | tr -d '`'
 }

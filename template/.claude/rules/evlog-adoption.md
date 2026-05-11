@@ -160,6 +160,54 @@ rg -n "interface .*EvlogFields" server/utils packages/**/server/utils
 rg -n "signed\\(\\{|auditEnricher\\(|auditOnly\\(" server/plugins packages/**/server/plugins
 ```
 
+## Catalogs 採用（evlog 2.17+）
+
+`defineErrorCatalog` / `defineAuditCatalog` / `defineError` / `defineAuditAction` 把散落的 ad-hoc error code + audit action 集中宣告，配 `declare module 'evlog'` augment `ErrorCode` / `AuditAction` 聯合型別。詳見 `docs/evlog-master-plan.md` § 15 與 `vendor/snippets/evlog-catalogs/` cookbook 範本。
+
+### MUST
+
+- **MUST** evlog floor 為 `^2.17.0`（catalogs API 在 2.17 才 export；2.16 沒有）
+- **MUST** 新增 `server/api/` endpoint 走 catalog factory（`throw billingErrors.PAYMENT_DECLINED({ ... })`），不可新增 ad-hoc `throw createError({ statusCode, statusMessage })`
+- **MUST** prefix 採 module-level（`auth` / `billing` / `machines` / `ai` / `mcp` 等），不加 consumer namespace
+- **MUST** 每個 catalog 檔案配對 `declare module 'evlog'` 區塊（同檔末尾或統一 `index.ts`）
+- **MUST** audit catalog KEY 對齊 D-pattern `audit_logs.action_name` 字串（有 D-pattern consumer 適用）；遷移前先 `SELECT DISTINCT action_name FROM audit_logs` 拿 canonical 列表
+- **MUST** 既存 ad-hoc createError 走 spectra change 批次遷移（不強制立即全改；新增 endpoint 必走 catalog）
+
+### MUST NOT
+
+- **MUST NOT** 在 catalog prefix 加 consumer namespace（**禁止** `tdms.auth.X` / `perno.billing.X`）— 破壞 cross-consumer 聚合語意
+- **MUST NOT** 在測試檔 hard-code error code 字串（用 `errors.X.code` 或 `catalog.X.code`，否則 catalog 改名測試漏網）
+- **MUST NOT** 在 `declare module 'evlog'` 寫進 `*.test.ts` / `*.spec.ts`（測試檔的 augmentation 不會散播到 production type space，反而誤導 IDE）
+- **MUST NOT** 在 enricher 內 `throw billingErrors.X()`（enricher 失敗會破整個 wide event；catalog error 限 endpoint handler 層）
+- **MUST NOT** 跨 npm 套件用同 prefix（兩份 catalog augment 互蓋 → TypeScript 拿後 import 的版本）
+
+### Catalog 反模式（補既有反模式列表）
+
+| 反模式 | 為什麼壞 | 怎麼改 |
+| --- | --- | --- |
+| 新 endpoint 沒走 catalog 直接 `throw createError({ statusCode, statusMessage })` | catalog 採用後新 endpoint 漏網 → 沒型別、Sentry 聚合不準、未來再做一輪 migration | 走對應 module catalog；查不到對應 catalog 就先在 catalog 補新 KEY 再 throw |
+| catalog 檔案無 `declare module 'evlog'` augment | `ErrorCode` / `AuditAction` 聯合漏這些 code → IDE 補完不到 → 後續開發者寫 ad-hoc | 檔案末尾或統一 `index.ts` 必補 `interface RegisteredErrorCatalogs { <prefix>: typeof <catalog> }` |
+| catalog 跨 npm 套件用同 prefix | 同 prefix 兩份不同 catalog → augment 互蓋 → TypeScript 拿到後 import 的版本 | 不同 npm 套件用不同 prefix（`auth-core` / `auth-saml`） |
+
+### Review 檢查（補既有 grep）
+
+```bash
+# Catalog 採用度
+rg -n "defineErrorCatalog\\(|defineAuditCatalog\\(" server/utils packages/**/server/utils | wc -l
+rg -n "declare module ['\"]evlog['\"]" server/utils packages/**/server/utils | wc -l
+
+# Catalog ad-hoc 殘留（server/api 內仍 throw createError 的點）
+rg -n "throw createError\\(" server/api packages/**/server/api | wc -l
+
+# Catalog prefix consumer-namespace 違反（block）
+rg -n "defineErrorCatalog\\(['\"](?:tdms|perno|sroi|rag|starter)\\." server packages/**/server
+
+# Catalog 測試 hard-code 字串（block）
+rg -nE "code:\\s*['\"][a-z][a-z0-9._]*\\.[A-Z_]+['\"]" "**/*.test.ts" "**/*.spec.ts"
+```
+
+完整 audit signal 在 `scripts/evlog-adoption-audit.mjs`：`catalog.errorCatalogs` / `catalog.auditCatalogs` / `catalog.declareModuleBlocks` / `catalog.adhocServerErrors`（warn）/ `catalog.testHardcodedCode`（block）/ `catalog.consumerNamespacedPrefix`（block）/ `catalog.missingDeclareModule`（warn）。
+
 ## Migration 順序建議
 
 ### 從 depth 0/1 → 5（T1）

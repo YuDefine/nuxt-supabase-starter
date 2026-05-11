@@ -82,6 +82,8 @@ if (error) {
 
 ## createError 必帶 why（structured error 必填欄位）
 
+> 新增 endpoint 應改走 catalog factory（`throw billingErrors.PAYMENT_DECLINED({ ... })`）；catalog 內的 `why` / `fix` / `link` 預先宣告，呼叫端不需重複。詳見 `evlog-adoption.md` 「Catalogs 採用」段。本節規則套用在 catalog 尚未涵蓋的場景與既存未遷移的 ad-hoc createError。
+
 `server/api/**` 的非預期錯誤路徑，`throw createError(...)` **MUST** 帶 `why`，視情況補 `fix` / `link` / `cause` / `code` / `internal`：
 
 | 欄位 | 必填？ | 用途 |

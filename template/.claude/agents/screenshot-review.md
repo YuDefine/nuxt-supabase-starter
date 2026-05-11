@@ -648,6 +648,113 @@ agent 回傳：
 #4 UNCERTAIN — dev DB 無 overdue loan，已試補 seed.sql 但 fixtures plan 沒列；建議升級 review:ui 或補 fixtures
 ```
 
+### Time Budget & Checkpoint Cadence（hard rule）
+
+**Hard budget: 60 分鐘**（從 agent 收到 brief 算起）。到 60 分鐘無論進度，**MUST**：
+
+1. 立刻停止任何新動作（不再開新 browser-harness call、不再 retry）
+2. 更新 `progress.json`（見下）把未完成 items 標 `status: "UNCERTAIN(time-budget-exhausted)"`
+3. 在 review.md 結尾寫 `## Time Budget Exhausted` section：已完成 N / 未完成 M / 卡點 K
+4. 回傳主線，**NEVER** 再嘗試「最後一個 item 跑完就好」這種拖延
+
+**Cooperative Checkpoint**（**MUST** 滿足以下兩條取較短者）：
+
+- **每完成一個 item 之後**：更新 `progress.json` + 跑一個 cheap tool call（如 `Bash("date")` 或 `Read` `progress.json` 自己剛寫的檔）強制 return main loop
+- **每 15 分鐘**（即使沒新完成 item）：同上
+
+存在原因：`SendMessage` 是 cooperative — 訊息 queue 進 agent inbox 後，**只有 agent 完成當下 tool call、回到 main loop、發出下一個 tool call 時**才會被遞送。verify mode 若把整段 `browser-harness -c '...'` 包成單一 Bash call、內含 10+ 動作（每個 `wait_for_load` 2–5s、`capture_screenshot` 3–10s），整個 call 可能跑 5–15 分鐘以上，**期間主線完全無法介入**。Checkpoint 是強制 return main loop 的機制。
+
+### 為什麼單一 long browser-harness call 會 break SendMessage
+
+`browser-harness -c '...'` 是單一 Bash 工具呼叫，期間 Python 程式跑多少瀏覽器互動主線都看不到。寫法影響主線可介入性：
+
+**❌ 反例（10 動作包成單 call，主線 5–15 分鐘叫不動）**：
+
+```bash
+browser-harness -c '
+js("...安裝 fetch hook...")
+click_at_xy(x1, y1); wait_for_load()
+fill("input#name", "test"); click_at_xy(x2, y2); wait_for_load()
+click_at_xy(x3, y3); wait_for_load()
+capture_screenshot("...#1.png")
+# ... 還有 5 個動作 ...
+'
+```
+
+**✅ 正解（拆成多個 ≤ 1 語義動作的 call）**：
+
+```bash
+# Call 1：登入 + 跳目標頁（一個語義：「到達待操作頁面」）
+browser-harness -c 'new_tab("..."); wait_for_load(); page_info()'
+# → return main loop（SendMessage queue 在此被處理）
+
+# Call 2：安裝 fetch hook + 填表送出（一個語義：「執行 mutation」）
+browser-harness -c 'js("...fetch hook..."); fill("..."); click_at_xy(..); wait_for_load()'
+# → return main loop
+
+# Call 3：觀察 mutation + DOM + 截圖（一個語義：「收集 evidence」）
+browser-harness -c 'mutations=js("return ..."); capture_screenshot("...")'
+# → return main loop
+```
+
+**規則**：單個 `browser-harness -c '...'` **MUST** ≤ 1 語義動作（例如：「登入 + 跳轉首頁」算一個；「填表 + 送出 + 觀察 toast」算一個）。**NEVER** 把多個 verify item round-trip 串在同一個 call。
+
+### Fail-Fast 條件（hard rule）
+
+撞到以下情況 → 標 **UNCERTAIN** 並跳下一 item，**NEVER** 無限 retry：
+
+1. **登入頁打不開** — dev-login route 不存在 / cookie 失效 / 撞 OAuth flow
+2. **必要 fixture 缺**且 tasks.md 沒對應 Fixtures Plan 條目 — Emptiness Preflight 命中且自動補 seed 失敗
+3. **DOM selector 連續 3 次找不到** — 嘗試 3 種不同 selector / id / text 仍找不到目標元素
+4. **同一 item 累計嘗試 > 5 分鐘** — 不管原因，超過就標 UNCERTAIN
+5. **click 後 DOM 連續 2 次無預期變化** — 例如點 readOnly button / hidden overlay 接收 click，DOM 無 mutation / 無 navigation / 無 toast
+
+**MUST** 在 `progress.json` `blockers` 欄位記下原因，主線據此判斷升級成 `[review:ui]` 或補 fixtures plan。
+
+### progress.json 寫盤 contract（hard rule）
+
+Verify mode **MUST** 在 `screenshots/<env>/<change-name>/progress.json` 寫入並維護以下 schema：
+
+```json
+{
+  "started_at": "2026-05-11T08:00:00Z",
+  "last_update": "2026-05-11T08:13:42Z",
+  "budget_minutes": 60,
+  "items_total": 6,
+  "items_done": [
+    {
+      "id": "#1",
+      "status": "PASS",
+      "network": "PATCH /api/v1/system-settings 200",
+      "dom": "toast-saved reload-persists-09:00",
+      "screenshot": "screenshots/local/<change>/#1-final.png"
+    },
+    {
+      "id": "#3",
+      "status": "FAIL",
+      "network": "PATCH /api/... 500",
+      "dom": "no-toast",
+      "screenshot": null,
+      "issue": "server returned 500 unexpectedly"
+    }
+  ],
+  "items_in_progress": "#4",
+  "items_pending": ["#5", "#6"],
+  "blockers": []
+}
+```
+
+`status` 值域：`"PASS"` / `"FAIL"` / `"UNCERTAIN"` / `"UNCERTAIN(time-budget-exhausted)"` / `"UNCERTAIN(<fail-fast-reason>)"`。
+
+寫入時機（**MUST** 任一觸發都更新 `last_update` + 對應欄位）：
+
+- 每完成 / 失敗一個 item 之後
+- 每 15 分鐘（即使沒新進度，仍更新 `last_update` 標記 agent 還活著）
+- 撞 fail-fast 條件後（寫進 `blockers`）
+- Time budget 到期前（自我中止流程觸發前）
+
+**用途**：主線 Watch Protocol 靠這個 file 判斷 agent 健康（見 `rules/core/agent-routing.md` § screenshot-review Verify Mode Dispatch & Watch Protocol）。**NEVER** 把進度只寫進 review.md — review.md 是給人讀的，progress.json 是給主線機器讀的。
+
 ### Verify mode 不適用情境（→ UNCERTAIN）
 
 - 收 email / 收 webhook（agent inbox 不可達）
