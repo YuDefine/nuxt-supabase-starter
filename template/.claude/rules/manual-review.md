@@ -29,6 +29,8 @@ globs: ['openspec/changes/**/tasks.md', 'docs/manual-review-archive.md']
 
 **`[discuss]` items 例外**：spectra-archive Step 2.5「Discuss Items Walkthrough」流程中，主線 Claude 主動準備 evidence、向使用者展示後取得明確 OK，可由 Claude 勾選 `[x]` 並插入 `(claude-discussed: <ISO-8601-timestamp>)` annotation 作為 evidence trail。詳見下方「Item Kind Marker」與「標準流程」章節。
 
+**`[verify:e2e]` / `[verify:api]` automatic channel 例外**：spectra-apply Step 8a 寫入對應 `(verified-e2e: ...)` / `(verified-api: ...)` annotation 後，review-gui auto-check helper 可自動勾 `[x]`；這些 channel 不需要使用者在 GUI 再確認。`[verify:ui]` 仍需使用者在 GUI 確認 visual evidence。
+
 ## 人工檢查與靜態 QA 的差別
 
 | 類型 | 目的 | 能否直接勾選人工檢查 |
@@ -112,21 +114,26 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 
 ## Item Kind Marker（hard rule）
 
-每條 `## 人工檢查` checkbox 行 **MUST** 在 `#N` / `#N.M` 後緊接一個 leading kind marker，三擇一：
+每條 `## 人工檢查` checkbox 行 **MUST** 在 `#N` / `#N.M` 後緊接一個 leading kind marker。合法 marker：
 
-- `[review:ui]` — **真的需要人**親自完成的驗收（agent 用 browser-harness 也跑不了）。例：收 email / 收 webhook / 實體裝置 / 視覺主觀美感 / 真機跨機器。**MUST** 由使用者親自完成，agent 禁止代勾。
-- `[verify:auto]` — agent 用 browser-harness **完整 round-trip** 即可驗證的 UI 操作（純 UI 點按、表單送出、看 toast / 排序 / 徽章 / 數值 / 權限拒絕 / edge payload）。spectra-apply Step 8a Verify-Auto Pass 由 screenshot-review agent (verify mode) 自跑、寫入 `(verified-auto: <ISO> network=<status>[ dom=<obs>][ ...])` annotation 證明 round-trip 真實發生；user 仍需在 review GUI 點 OK 才勾 `[x]`（雙層保險）。
-- `[discuss]` — Claude 主導的後端 evidence-based 討論項目（例：production 授權、商業判斷、production 觀察、後端 evidence 查驗）。spectra-archive Step 2.5 walkthrough 流程下，Claude 主動準備證據與使用者討論、取得 OK 後可代勾並寫入 `(claude-discussed: <ISO-8601-timestamp>)` annotation。
+- `[review:ui]` — 需要使用者親自確認的 UI / UX 驗收。例：收 email / 收 webhook / 實體裝置 / 視覺主觀美感 / 真機跨機器。**MUST** 由使用者完成，agent 禁止代勾。
+- `[discuss]` — Claude 主導的 evidence-based 討論項目。例：production 授權、商業判斷、production 觀察、後端 evidence 查驗。spectra-archive Step 2.5 walkthrough 流程下，Claude 主動準備證據與使用者討論、取得 OK 後可代勾並寫入 `(claude-discussed: <ISO-8601-timestamp>)` annotation。
+- `[verify:e2e]` — Playwright spec-based automated round-trip。主線在 `e2e/verify/<change>/<topic>.spec.ts` 寫 spec、跑 `pnpm test:e2e:verify <change>`，通過後寫 `(verified-e2e: <ISO> spec=<path> trace=<path>)` annotation。
+- `[verify:api]` — 純 HTTP round-trip（curl / ofetch / fetch）。主線跑 request，通過後寫 `(verified-api: <ISO> <METHOD> <URL> <STATUS>[ body=<hash>])` annotation。
+- `[verify:ui]` — final-state screenshot + DOM observation。主線派 screenshot-review agent `mode: verify` 只開已知 URL、等待載入、截 final-state screenshot、記錄 DOM 觀察，回來後寫 `(verified-ui: <ISO> screenshot=<path>[ dom=<obs>])` annotation；使用者仍需在 review GUI 點 OK 才勾 `[x]`。
+- `[verify:<a>+<b>]` / `[verify:<a>+<b>+<c>]` — multi-marker，僅允許組合 `e2e` / `api` / `ui` verify channels，例如 `[verify:api+ui]` 或 `[verify:e2e+ui]`。
+- `[verify:auto]` — **DEPRECATED alias**，僅為既有 consumer tasks.md 相容保留；解析時視為 synthetic `[verify:api+ui]` 並 emit deprecation warning。新項目 **NEVER** 使用 `[verify:auto]`。
 
 ### Canonical line format
 
 ```
-- [ ] #N [<kind>] <description> [@followup[TD-NNN]] [@no-screenshot]
+- [ ] #N [<kind>] <description> [(verified-<channel>: ...)]... [@followup[TD-NNN]] [@no-screenshot]
 ```
 
 - Marker **MUST** 是 `#N` / `#N.M` 後第一個 token，與 id 之間僅一個空白。
 - Marker 出現在 description 中間（例：`Click the [discuss] button`）視為 plain text，**MUST NOT** 被解析成 marker。
-- 三 kind 互斥，同一行只能擇一。
+- `[review:ui]` / `[discuss]` 不得與 verify multi-marker 混用。`[verify:api+review:ui]`、`[verify:api+discuss]` 都是非法 marker。
+- Verify multi-marker 的 channel canonical order 是 `e2e → api → ui`；annotation 寫回也 **MUST** 依此順序。
 
 ### Default Kind Derivation Rule（fallback）
 
@@ -135,17 +142,17 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 - proposal 含 `**No user-facing journey (backend-only)**` → default kind = `discuss`
 - 其餘 → default kind = `review:ui`
 
-**Fallback 不涵蓋 `[verify:auto]`** — 因為 verify:auto 需要 spectra-apply Step 8a 主動跑 round-trip，不適合 silent fallback。新寫 verify:auto items **MUST** 顯式標 marker。
+**Fallback 不涵蓋任何 `verify:*`** — verify channels 代表 apply 階段會收集自動 evidence，不能由 proposal default silent derive。新寫 verify items **MUST** 顯式標 marker。
 
 **Fallback ≠ 允許省略**：所有**新寫**或**ingest 修改**的 `## 人工檢查` items **MUST** 顯式標 marker。Default 只給既有 in-flight change 過渡用。spectra-propose / spectra-ingest 的 Manual Review Marker Hygiene Check 會擋下未標 marker 的新內容。
 
 ### 與 `@no-screenshot` / `@followup[TD-NNN]` 共存 ordering
 
 ```
-- [ ] #N [<kind>] <description> [@followup[TD-NNN]] [@no-screenshot]
+- [ ] #N [<kind>] <description> [(verified-<channel>: ...)]... [@followup[TD-NNN]] [@no-screenshot]
 ```
 
-`[<kind>]` 永遠在最前（緊接 `#N`），`@no-screenshot` 永遠在最後；`@followup[TD-NNN]` 若存在須夾在 description 與 `@no-screenshot` 之間。寫回 annotation（`（issue: ...）` / `（skip）` / `（note: ...）` / `(claude-discussed: <ISO>)` / `(verified-auto: <ISO> ...)`）**MUST** 插在 description 後、所有 trailing markers (`@followup` / `@no-screenshot`) 前。
+`[<kind>]` 永遠在最前（緊接 `#N`），`@no-screenshot` 永遠在最後；`@followup[TD-NNN]` 若存在須夾在 description 與 `@no-screenshot` 之間。寫回 annotation（`（issue: ...）` / `（skip）` / `（note: ...）` / `(claude-discussed: <ISO>)` / `(verified-e2e: ...)` / `(verified-api: ...)` / `(verified-ui: ...)`）**MUST** 插在 description 後、所有 trailing markers (`@followup` / `@no-screenshot`) 前。
 
 ### Kind 分類指引（給 propose / spec 寫作者）
 
@@ -156,13 +163,31 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 - SSH、`docker exec`、`psql`、`\d <table>`、`SELECT ... FROM`、`curl` 觸發 endpoint 或 cron、受控 drift 製造、migration 存在性驗證、合理性檢查
 - production 授權 / 商業判斷 / production 觀察項目
 
-**`[verify:auto]`（agent 用 browser-harness 完整 round-trip 即可驗）**
+**`[verify:e2e]`（Playwright spec 完整 journey）**
 
-- 純 UI 點按、填表、送出 form
-- 觀察 toast / banner / 列表刷新 / 徽章 / 排序 / 計數
-- 權限拒絕 path（送 403 / 401 行為）
-- Edge case payload（空、null、邊界值）— agent 可送任意 payload
-- agent 應主動補 fixtures / seed（依 screenshot-strategy.md 空資料解決流程），不要 punt 給 user
+- mutation persistence across reload
+- 多角色 authz + state changes 的完整 journey
+- 需要 page navigation + state assertion 的流程
+- 需要 CI / local spec 可重跑的 regression evidence
+
+**`[verify:api]`（HTTP round-trip）**
+
+- 純 backend contract / endpoint authz
+- admin 200 / manager 403 / staff 403 這類 per-role status matrix
+- 只需要 METHOD / URL / STATUS / optional body hash 即可驗證的 mutation
+- 可由 curl / ofetch 重現的 evidence collection
+
+**`[verify:ui]`（final-state visual evidence）**
+
+- 純 final-state 視覺狀態：toast / banner / badge / sort order / readonly hint / counter
+- 已有 seed / URL，可直接開頁後截 final-state screenshot
+- 不需要 agent 執行 mutation / 填表 / 多角色切換
+
+**Multi-marker（多 channel evidence）**
+
+- mutation + visual confirmation → `[verify:api+ui]`
+- persistence journey + 額外 visual artifact → `[verify:e2e+ui]`
+- endpoint matrix + screenshot summary → `[verify:api+ui]`
 
 **`[review:ui]`（真的需要人）白名單**
 
@@ -174,17 +199,21 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 
 混淆時的判定原則：
 
-- agent 能用 SSH / psql / curl 自跑並貼後端 evidence？→ `[discuss]`
-- agent 能用 browser-harness 完整 round-trip + 觀察 network/DOM？→ `[verify:auto]`
+- 主線能用 Playwright spec 重現 journey / persistence？→ `[verify:e2e]`
+- 主線能用 curl / ofetch 重現 HTTP round-trip？→ `[verify:api]`
+- 只需 final-state screenshot + DOM observation？→ `[verify:ui]`
+- 同一 business assertion 需要多種 evidence？→ `[verify:<a>+<b>]`
+- 需要 SSH / psql 等不可由 HTTP 重現的 walkthrough？→ `[discuss]`
 - 都不能（必須人親自操作）→ `[review:ui]`
 
 **反面範例**：
 
 ```markdown
 ❌ - [ ] #1 [review:ui] admin /settings 改排程到 09:00 → reload 仍 09:00
-   理由：純 UI round-trip，agent 用 browser-harness 完全能跑；應該標 [verify:auto]
+   理由：persistence journey 可由 Playwright spec 重現；應該標 [verify:e2e]
 
-✅ - [ ] #1 [verify:auto] admin /settings 改排程到 09:00 → 200 toast → reload 仍 09:00
+✅ - [ ] #1 [verify:e2e] admin /settings 改排程到 09:00 → 200 toast → reload 仍 09:00
+✅ - [ ] #1 [verify:api+ui] admin /settings 改排程到 09:00 → PATCH 200 + 畫面顯示新值
 ✅ - [ ] #2 [review:ui] cron 觸發 → 借用人 inbox 收到逾期通知 email
 ✅ - [ ] #3 [discuss] production seed 授權與 cron 監控確認
 ```
@@ -238,44 +267,95 @@ Scoped sub-item 範例：
 
 ## 標準流程
 
-依 item 的 kind marker 走不同 flow。**MUST** 三種 flow 都覆蓋 — 一個 change 的 `## 人工檢查` 區塊可同時包含三種 kind 的 items。
+依 item 的 kind marker 走不同 flow。**MUST** 覆蓋 verify channels、`[review:ui]`、`[discuss]` — 一個 change 的 `## 人工檢查` 區塊可同時包含多種 kind 的 items。
 
-### `[verify:auto]` flow（spectra-apply Step 8a Verify-Auto Pass）
+### `[verify:*]` flow（spectra-apply Step 8a Verify Channel Pass）
 
-tasks.md 有未勾 `[verify:auto]` items 時，spectra-apply Step 8a 主動處理：
+tasks.md 有未勾 `[verify:e2e]` / `[verify:api]` / `[verify:ui]` / multi-marker items 時，spectra-apply Step 8a **MUST** 依 channel 分流處理。Cookbook 與範本見 `vendor/snippets/verify-channels/README.md`。
 
-1. apply 階段主線 Claude 派遣 screenshot-review agent 用 `mode: verify`
-2. agent 對每條 item 用 browser-harness 完整 round-trip：
-   - 依 description「動詞 → 結果」執行 UI 動作
-   - 觀察 mutation network response status（assert 對應 expected）
-   - 觀察 DOM 預期變化（list refetch / toast / banner / 狀態轉換）
-   - 撞 emptiness preflight → 主動補 seed / fixtures（依 screenshot-strategy.md 空資料解決流程）
-   - 截 final-state screenshot
-3. agent 回報每 item PASS / FAIL / UNCERTAIN：
-   - **PASS** → 主線 Edit tasks.md 寫入 `(verified-auto: <ISO> network=<status>[ dom=<obs>][ ...])` annotation；保留 `[ ]`（user 仍要在 GUI 點 OK 才勾）
-   - **FAIL** → 保留 `[ ]` + 寫 `（issue: ...）` annotation，主線報告 user
-   - **UNCERTAIN**（fixtures 缺、撞登入頁、agent 解不開）→ 不寫 annotation；主線回報 user 升級成 `[review:ui]` 或補 fixtures plan
-4. agent 跑完後 user 在 review GUI 看 evidence + final-state screenshot 點 OK，才真的勾 `[x]`
+#### `[verify:e2e]` channel
 
-archive-gate.sh Check 4 會驗 `[verify:auto]` items：勾選 `[x]` 或含 `(verified-auto: ...)` annotation（後者 warn 不 block，視為 issue path）；都沒則 block。
+**Dispatch**：主線 Claude **自己寫** Playwright spec 到 `e2e/verify/<change>/<topic>.spec.ts`（參考 `vendor/snippets/verify-channels/e2e-spec.template.ts`），跑：
+
+```bash
+pnpm test:e2e:verify <change>
+```
+
+**Evidence trail**：spec pass 後，主線在 item line 寫：
+
+```text
+(verified-e2e: <ISO-8601> spec=<repo-relative-path> trace=<repo-relative-path>)
+```
+
+**Archive-gate 結果**：`verify:e2e` 是 automatic channel；annotation present 即通過，可由 `autoCheckCompletedAutomaticItems(...)` 自動 flip `[x]`。缺 annotation 時 archive-gate **MUST** block。
+
+#### `[verify:api]` channel
+
+**Dispatch**：主線 Claude **自己跑** curl / ofetch HTTP round-trip（參考 `vendor/snippets/verify-channels/api-roundtrip.template.sh`），不得派 screenshot-review agent 代跑 API mutation。
+
+**Evidence trail**：request 通過後，主線在 item line 寫：
+
+```text
+(verified-api: <ISO-8601> <METHOD> <URL> <STATUS>[ body=<sha256-12chars>])
+```
+
+**Archive-gate 結果**：`verify:api` 是 automatic channel；annotation present 即通過，可由 `autoCheckCompletedAutomaticItems(...)` 自動 flip `[x]`。缺 annotation 時 archive-gate **MUST** block。
+
+#### `[verify:ui]` channel
+
+**Dispatch**：主線 Claude 派 screenshot-review agent `mode: verify`，但 scope **只限** open known URL + wait for load + capture final-state screenshot + DOM observation（參考 `vendor/snippets/verify-channels/ui-final-state-brief.template.md`）。agent **NEVER** 負責 mutation / form fill / multi-role login；那些屬於 `verify:api` 或 `verify:e2e` channel。
+
+**Evidence trail**：agent 回報 final-state screenshot 與 DOM 觀察後，主線在 item line 寫：
+
+```text
+(verified-ui: <ISO-8601> screenshot=<repo-relative-path>[ dom=<short-observation>])
+```
+
+**Archive-gate 結果**：`verify:ui` 是 semi-automatic channel；annotation present 只是 visual evidence，使用者仍 **MUST** 在 review GUI 點 OK 才能 flip `[x]`。缺 annotation 時 GUI 顯示 evidence missing；未勾 `[x]` 時 archive-gate **MUST** block。
+
+#### Multi-marker items
+
+Multi-marker item **MUST** 由主線依 channel order `e2e → api → ui` 逐一執行，每完成一個 channel 就寫對應 annotation。例：
+
+```markdown
+- [ ] #1 [verify:api+ui] admin 改 offset → 200 + grid 顯示更新 (verified-api: 2026-05-11T08:00:00Z PATCH /api/v1/machines/4/slots/403 200) (verified-ui: 2026-05-11T08:00:30Z screenshot=screenshots/local/<change>/#1-final.png dom=grid-updated)
+```
+
+- 若 item 只含 automatic channels（`verify:e2e` / `verify:api`），最後一個 channel annotation 寫入後 `autoCheckCompletedAutomaticItems(...)` 可自動 flip `[x]`。
+- 若 item 含 `verify:ui` 或 `review:ui`，automatic channel 只完成 evidence；checkbox **MUST** 保持 `[ ]`，等使用者在 GUI 確認。
+- Archive-gate **MUST** 對每個 kind 獨立驗證並取 worst-case（block > warn > pass）。
+
+#### `[verify:auto]` deprecated alias
+
+`[verify:auto]` 僅為 backward compatibility。解析時 **SHALL** 視為 synthetic `[verify:api+ui]`：
+
+1. 主線先跑 `verify:api` channel，寫 `(verified-api: ...)`
+2. 再跑 `verify:ui` channel，寫 `(verified-ui: ...)`
+3. 使用者仍需在 review GUI 對 UI evidence 點 OK 才能勾 `[x]`
+
+Archive-gate / parser **MUST** emit deprecation warning。新 authoring **NEVER** 使用 `[verify:auto]`；新項目必須使用 explicit `[verify:e2e]` / `[verify:api]` / `[verify:ui]` 或 multi-marker。
 
 #### Pre-verify baseline 假設（hard rule）
 
-`[verify:auto]` 派工的 baseline 假設是 consumer 端**已預先 ready** 以下兩條，agent / 主線 **NEVER** 在派工當下才問 user：
+Verify channel baseline 是 consumer 端**已預先 ready** 的 codebase 層長期狀態。主線 **MUST** 在 dispatch 前 grep / read 檢查 baseline；缺任何必要項即 stop + 回報 user 補齊，**NEVER** 派出去讓 agent / spec / curl 撞到再升 UNCERTAIN。
 
-1. **多角色 dev-login route 已就緒** — `server/routes/auth/_dev-login.get.ts`（或等價 `__test-login`）涵蓋實際 app 用到的所有角色（admin / manager / staff / unauthorized 等），env-gated 開放（如 `NUXT_E2E_TESTING=true`）
-2. **Canonical seed data 已就緒** — `supabase/seed.sql`（或專案慣例 seed 檔）覆蓋已 archive verify:auto items 涉及到的 entity，含 happy path + 已知 edge case（如 overdue loan / pending recapture / 多狀態 fixture）
+| Channel | Baseline |
+| --- | --- |
+| all `verify:*` | env-gated dev-login route 已就緒：`server/routes/auth/_dev-login.get.ts` 或 `server/routes/auth/__test-login.get.ts`（含 packages equivalent） |
+| `verify:e2e` | Playwright config + `e2e/fixtures/index.ts` style three-role fixture（`adminPage` / `managerPage` / `staffPage`） |
+| `verify:api` | `__test-login` 或等價 session bypass route，可讓 curl / ofetch 建立 role session |
+| `verify:ui` | canonical seed data（`supabase/seed.sql` 或專案等價 seed 檔）覆蓋 final-state URL 所需 entity |
 
-**Why**：每次 verify-auto 派工才當下問 user「你 dev-login 跟 seed 準備好了嗎」會破壞流程連續性、把 baseline 維護責任推給 user 在錯誤時機處理。多角色 dev-login + canonical seed 是**長期 codebase baseline**（不是 runtime process），一旦設好就持續存在，跟「禁止自動啟 dev server」這類 runtime 規則不衝突。
+**Why**：baseline 維護不是任何單一 spectra change 的臨時工作。每次 verify dispatch 才問 user 或讓 agent 補 seed，會把長期 codebase baseline 拖進錯誤時機，且會製造 seed.sql source-of-truth 漂移。
 
-**Agent 端對應行為**：撞 baseline 缺（dev-login route 不存在 / seed 缺 entity）屬 `screenshot-review.md` § Fail-Fast 條件 #1 / #2 — 標 UNCERTAIN 跳下一條，主線回報 user「baseline 缺 X，建議補齊後重派；不要當下幫 user 補 seed / 加 dev-login route」。
+**Agent 端對應行為**：`screenshot-review` verify mode 撞 baseline 缺（dev-login route 不存在 / seed 缺 entity / known URL 只能呈現空資料）屬 Fail-Fast UNCERTAIN；agent **NEVER** 補 seed、patch auth、或升級成 mutation runner。
 
-**主線端對應行為**：派 verify-auto agent 前**MUST**先 grep / read 確認以下兩條，缺則先停下回報 user 補齊再派，**NEVER** 派出去讓 agent 撞到再升 UNCERTAIN：
+**主線端對應行為**：
 
-- `server/routes/auth/_dev-login.get.ts` 或 `__test-login.get.ts` 存在
-- `supabase/seed.sql` 或同等 seed 檔存在（不檢查內容完整度，那是 fixtures plan 的責任）
-
-baseline 維護不屬於任何單一 spectra change 的 scope — 應由 consumer 自家 `ROADMAP.md` / dedicated infra change 處理。
+- Dispatch `verify:e2e` 前 **MUST** 確認 Playwright config、dev-login / `__test-login`、three-role fixture 存在。
+- Dispatch `verify:api` 前 **MUST** 確認可用 session bypass route。
+- Dispatch `verify:ui` 前 **MUST** 確認 dev-login route + seed file 存在。
+- Baseline 不完整時，將缺口登記到 consumer 的 `ROADMAP.md` / `docs/tech-debt.md` / dedicated infra change，而不是降低 verification channel。
 
 ### `[review:ui]` flow（真的需要人）
 
@@ -305,11 +385,11 @@ archive-gate.sh Check 4 會驗 `[discuss]` items 必須勾選或含 `(claude-dis
 
 ### 混合 kind change
 
-一個 change 同時含未勾 `[verify:auto]` + `[discuss]` + `[review:ui]` items 時，**MUST** 依以下順序執行（早→晚，讓 user 拿到的 review GUI 內容最完整）：
+一個 change 同時含未勾 `[verify:*]` + `[discuss]` + `[review:ui]` items 時，**MUST** 依以下順序執行（早→晚，讓 user 拿到的 review GUI 內容最完整）：
 
-1. **apply 階段** — Step 8a Verify-Auto Pass：agent 自跑 `[verify:auto]` items 並寫 `(verified-auto:)` annotation
+1. **apply 階段** — Step 8a Verify Channel Pass：主線依 `e2e → api → ui` 跑 verify channels，寫 `(verified-e2e:)` / `(verified-api:)` / `(verified-ui:)` annotations；automatic-only items 由 helper 自動勾 `[x]`
 2. **archive 階段 Step 2.5** — Discuss Items Walkthrough：Claude 主動準備 `[discuss]` evidence、與 user 討論
-3. **archive 階段 review GUI** — `pnpm review:ui` 一次處理所有未勾 `[review:ui]` + `[verify:auto]` items（user 在 GUI 看 evidence/screenshot 點 OK / Issue / Skip）
+3. **archive 階段 review GUI** — `pnpm review:ui` 一次處理所有未勾 `[review:ui]` + `[verify:ui]` items（user 在 GUI 看 evidence/screenshot 點 OK / Issue / Skip）
 
 spectra orchestrator Archive Flow Step 1 已內建這個分流邏輯。
 
@@ -318,10 +398,13 @@ spectra orchestrator Archive Flow Step 1 已內建這個分流邏輯。
 - **NEVER** 問「要不要我直接幫你勾完」
 - **NEVER** 在未展示證據的情況下代勾任何 item（含 `[discuss]` items — Step 2.5 walkthrough 的 evidence 展示是強制前提）
 - **NEVER** 對 `[review:ui]` items 在使用者尚未親自 round-trip 的情況下代勾，即使 Claude 已分析過程式碼
-- **NEVER** 對 `[verify:auto]` items 代勾 `[x]` — agent 寫 `(verified-auto:)` annotation 是 evidence trail，user 在 GUI 點 OK 才能勾
-- **NEVER** 對 `[verify:auto]` items 在 agent round-trip 沒成功（沒 final-state screenshot / 沒 network 觀察）的情況下寫 `(verified-auto:)` annotation
+- **NEVER** 對 `[verify:e2e]` / `[verify:api]` items 在 annotation 寫入後仍要求 user 在 GUI 確認 — automatic channel 完成後由 `autoCheckCompletedAutomaticItems(...)` 自動 done
+- **NEVER** 對 `[verify:ui]` items 在使用者尚未於 review GUI 確認 visual evidence 前代勾 `[x]`
+- **NEVER** 新增 `[verify:auto]` marker 給新 item — 使用 explicit `[verify:e2e]` / `[verify:api]` / `[verify:ui]` 或 multi-marker
+- **NEVER** 在 `verify:ui` agent dispatch 時讓 agent 同時負責 mutation / form fill / multi-role login — 那些屬 `verify:api` / `verify:e2e` channel
+- **NEVER** 對任何 `verify:*` channel 在 evidence 沒成功產出時寫 `(verified-<channel>:)` annotation
 - **NEVER** 把 screenshot review 當成等同於人工功能驗證
 - **NEVER** 為了通過 gate 而批次勾選未確認的項目
 - **NEVER** 對 `[discuss]` items 寫入 `(claude-discussed: ...)` annotation 而沒有實際與使用者討論並取得 OK
-- **NEVER** 派 `[verify:auto]` agent 前不檢查 dev-login route + seed.sql baseline — 撞 baseline 缺後升 UNCERTAIN 是浪費 budget；主線預先 grep 確認，缺則停下回報 user 補齊再派
-- **NEVER** 在 verify-auto 派工當下才問 user「dev-login / seed 準備好了嗎」— baseline 是 codebase 層長期狀態，不該每次派工都驚動 user
+- **NEVER** dispatch verify channels 前不檢查 per-channel baseline — 撞 baseline 缺後升 UNCERTAIN 是浪費 budget；主線預先 grep / read 確認，缺則停下回報 user 補齊
+- **NEVER** 在 verify dispatch 當下才問 user「dev-login / seed 準備好了嗎」— baseline 是 codebase 層長期狀態，不該每次派工都驚動 user

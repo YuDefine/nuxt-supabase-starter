@@ -361,39 +361,66 @@ function applyMissingEvidenceRule(
   changeName: string,
   issues: Issue[]
 ) {
-  const HAS_VERIFIED_AUTO_ANNOTATION = /\(verified-auto:\s+[^)]+\)/
   for (const item of items) {
     // [discuss] — archive-gate Check 4 已驗 (claude-discussed: ...) annotation，
     // 本檢查不重複處理
-    if (item.kind === 'discuss') continue
+    if (item.kinds.includes('discuss')) continue
 
-    const hasAnnotation = HAS_VERIFIED_AUTO_ANNOTATION.test(item.raw)
-    const hasScreenshot = (byItem.get(item.id) ?? []).length > 0
-
-    // [verify:auto] 永遠需要 (verified-auto: ...) annotation 證明 agent 真的 round-trip
-    // 過。@no-screenshot 只代表「不需 final-state screenshot」，**不能**讓 verify:auto
-    // 繞過 annotation 要求。
-    if (item.kind === 'verify:auto') {
-      if (hasAnnotation) continue
-      // 沒 annotation 時，最後一道防線是 final-state screenshot（除非 @no-screenshot）
-      if (hasScreenshot && !item.noScreenshot) continue
-      // 缺 evidence
-      const missing = item.noScreenshot
-        ? '(verified-auto: <ISO> ...) annotation'
-        : 'final-state screenshot 或 (verified-auto: ...) annotation'
+    if (hasDeprecatedVerifyAutoMarker(item)) {
       issues.push({
-        severity: 'critical',
-        code: 'missing_screenshot_evidence',
+        severity: 'warning',
+        code: 'verify_auto_deprecated',
         change: changeName,
         itemId: item.id,
         file: `openspec/changes/${changeName}/tasks.md:${item.lineNumber}`,
-        message: `${item.id} is [verify:auto]${item.noScreenshot ? ' @no-screenshot' : ''} but lacks ${missing} — agent round-trip evidence missing`,
+        message: `${item.id} uses deprecated [verify:auto]; audit resolves it as [verify:api+ui]`,
         suggestion:
-          'rerun spectra-apply Step 8a Verify-Auto Pass to write (verified-auto: <ISO> ...) annotation; if agent cannot round-trip this item, downgrade kind to [review:ui]',
+          'replace [verify:auto] with the explicit channel marker from vendor/snippets/verify-channels/README.md',
       })
-      continue
     }
 
+    if (item.kinds.includes('verify:e2e') && !item.annotations.verifiedE2e) {
+      issues.push({
+        severity: 'critical',
+        code: 'missing_verify_e2e_annotation',
+        change: changeName,
+        itemId: item.id,
+        file: `openspec/changes/${changeName}/tasks.md:${item.lineNumber}`,
+        message: `${item.id} is [${formatKinds(item.kinds)}] but lacks (verified-e2e: ...) evidence`,
+        suggestion:
+          'run the verify:e2e channel and write (verified-e2e: <ISO> spec=<path> trace=<path>) before archive',
+      })
+    }
+
+    if (item.kinds.includes('verify:api') && !item.annotations.verifiedApi) {
+      issues.push({
+        severity: 'critical',
+        code: 'missing_verify_api_annotation',
+        change: changeName,
+        itemId: item.id,
+        file: `openspec/changes/${changeName}/tasks.md:${item.lineNumber}`,
+        message: `${item.id} is [${formatKinds(item.kinds)}] but lacks (verified-api: ...) evidence`,
+        suggestion:
+          'run the verify:api channel and write (verified-api: <ISO> <METHOD> <URL> <STATUS>[ body=<digest>]) before archive',
+      })
+    }
+
+    if (item.kinds.includes('verify:ui') && !item.annotations.verifiedUi) {
+      issues.push({
+        severity: 'warning',
+        code: 'missing_verify_ui_annotation',
+        change: changeName,
+        itemId: item.id,
+        file: `openspec/changes/${changeName}/tasks.md:${item.lineNumber}`,
+        message: `${item.id} is [${formatKinds(item.kinds)}] but lacks (verified-ui: ...) evidence`,
+        suggestion:
+          'capture final-state UI evidence and write (verified-ui: <ISO> screenshot=<path>[ dom=<obs>]); user GUI confirmation is still required',
+      })
+    }
+
+    if (item.kinds.some((kind) => kind.startsWith('verify:'))) continue
+
+    const hasScreenshot = (byItem.get(item.id) ?? []).length > 0
     // [review:ui] @no-screenshot — round-trip-only by human verification，
     // 規約允許跳過 screenshot evidence 檢查
     if (item.noScreenshot) continue
@@ -410,6 +437,21 @@ function applyMissingEvidenceRule(
         'capture final-state evidence or add @no-screenshot when the item is round-trip-only',
     })
   }
+}
+
+function hasDeprecatedVerifyAutoMarker(item: ManualReviewItem): boolean {
+  return /^\s*- \[[ xX]\]\s+#[1-9][0-9]*(?:\.[1-9][0-9]*)?\s+\[verify:auto\]\s/.test(item.raw)
+}
+
+function formatKinds(kinds: ReadonlyArray<string>): string {
+  const verifyChannels = kinds
+    .filter((kind) => kind.startsWith('verify:'))
+    .map((kind) => kind.slice('verify:'.length))
+  const nonVerifyKinds = kinds.filter((kind) => !kind.startsWith('verify:'))
+  if (verifyChannels.length > 0 && nonVerifyKinds.length === 0) {
+    return `verify:${verifyChannels.join('+')}`
+  }
+  return kinds.join('+')
 }
 
 async function applyReviewReferenceRule(changeName: string, issues: Issue[]) {

@@ -339,52 +339,128 @@ Run `spectra analyze <change-name> --json` to check cross-artifact consistency (
 
    Confirm `state: "all_done"`. If not, review remaining tasks and complete them.
 
-8a. **Verify-Auto Pass**（Step 8b 前 hard gate）
+8a. **Verify Channel Pass**（Step 8b 前 hard gate）
 
-   Read `tasks.md` `## 人工檢查` 找未勾 `[verify:auto]` items。**MUST** 先處理完所有 `[verify:auto]` items 才進 Step 8b — 把「agent 能自跑」的 round-trip 用 evidence trail 預先消掉，user 在 GUI 只需要 review evidence 點 OK，不用再自己跑一次。
+   Read `tasks.md` `## 人工檢查` 找未勾 `[verify:e2e]` / `[verify:api]` / `[verify:ui]` / `[verify:<a>+<b>]` / deprecated `[verify:auto]` items。**MUST** 先處理完所有 verify channels 才進 Step 8b。
 
-   **Skip-condition**：`## 人工檢查` 沒任何未勾 `[verify:auto]` item → 直接跳 Step 8b。
+   **Skip-condition**：`## 人工檢查` 沒任何未勾 `verify:*` item → 直接跳 Step 8b。
+
+   Cookbook 與範本入口：`vendor/snippets/verify-channels/README.md`。
+
+   **Pre-verify baseline check（dispatch 前必做）**：
+
+   1. 主線先 grep / read dev-login route：
+
+      ```bash
+      find server packages -path '*/server/routes/auth/_dev-login.get.ts' -o -path '*/server/routes/auth/__test-login.get.ts' 2>/dev/null
+      ```
+
+   2. 依 channel 補查：
+      - `[verify:e2e]`：Playwright config + `e2e/fixtures/index.ts` style three-role fixture 必須存在
+      - `[verify:api]`：`__test-login` 或等價 session bypass route 必須存在
+      - `[verify:ui]`：`supabase/seed.sql` 或專案等價 seed file 必須存在
+   3. 缺 baseline → **STOP**，回報 user 補齊 baseline；**NEVER** 降級 channel、派 agent 撞錯、或讓 screenshot-review 補 seed。
 
    **執行流程**：
 
-   1. **派遣 screenshot-review agent 用 `mode: verify`**：
+   1. **解析未勾 verify items 並依 `kinds` 分類**
 
+      - 單一 `[verify:e2e]` / `[verify:api]` / `[verify:ui]` 依該 channel 執行。
+      - Multi-marker 依 `e2e → api → ui` 順序逐 channel 執行。
+      - Deprecated `[verify:auto]` **MUST** resolution as `[verify:api+ui]`；同時記錄 deprecation warning，後續 archive-gate 也會 warn。
+
+   2. **`[verify:e2e]` channel — 主線自己寫 Playwright spec**
+
+      - Copy/adapt `vendor/snippets/verify-channels/e2e-spec.template.ts`。
+      - Spec path **MUST** 是 `e2e/verify/<change>/<topic>.spec.ts`。
+      - 跑：
+
+        ```bash
+        pnpm test:e2e:verify <change>
+        ```
+
+      - Spec pass 後，主線 Edit tasks.md 寫：
+
+        ```text
+        (verified-e2e: <ISO-8601> spec=e2e/verify/<change>/<topic>.spec.ts trace=<trace-path>)
+        ```
+
+      - Spec fail → 保留 `[ ]`，寫 `（issue: <spec failure summary>）` 或回報 blocker；**NEVER** 寫 `(verified-e2e:)`。
+
+   3. **`[verify:api]` channel — 主線自己跑 HTTP round-trip**
+
+      - Copy/adapt `vendor/snippets/verify-channels/api-roundtrip.template.sh` 或直接用 curl / ofetch 跑等價 request。
+      - 通過後，主線 Edit tasks.md 寫：
+
+        ```text
+        (verified-api: <ISO-8601> <METHOD> <URL> <STATUS>[ body=<sha256-12chars>])
+        ```
+
+      - Request fail / status 不符 → 保留 `[ ]`，寫 `（issue: <METHOD URL expected/actual>）` 或回報 blocker；**NEVER** 寫 `(verified-api:)`。
+
+   4. **`[verify:ui]` channel — 派 screenshot-review `mode: verify`（UI only）**
+
+      - Copy/adapt `vendor/snippets/verify-channels/ui-final-state-brief.template.md`。
+      - Brief **MUST** 提供 change name、dev server URL、每個 item 的 known URL、expected DOM observation、預期 screenshot path。
+      - Agent scope **MUST** 限於 open known URL + wait for load + final-state screenshot + DOM observation。
+      - Agent **NEVER** 做 mutation / form fill / click sequences / multi-role login switching / seed repair。
+      - PASS 後，主線 Edit tasks.md 寫：
+
+        ```text
+        (verified-ui: <ISO-8601> screenshot=screenshots/local/<change>/#<id>-final.png[ dom=<obs>])
+        ```
+
+      - FAIL / UNCERTAIN → 保留 `[ ]`，寫 issue 或回報 blocker；**NEVER** 寫 `(verified-ui:)`。
+
+      Brief 範例：
+
+      ```text
+      mode: verify
+      Channel: verify:ui
+      Change: <change-name>
+      Dev server URL: http://localhost:<port>
+
+      Items:
+      - #3 [verify:ui]
+        Description: /asset-loans 顯示 overdue badge + top-sort
+        Known URL: http://localhost:<port>/asset-loans
+        Expected DOM observation: overdue badge visible, overdue rows sorted first
+        Screenshot path: screenshots/local/<change-name>/#3-final.png
+
+      Scope:
+      - Open the known URL, wait for load, capture final-state screenshot, record DOM observation.
+      - Do NOT click, fill forms, submit mutations, switch roles, repair seed, or patch network.
       ```
-      Agent({
-        agent_type: "screenshot-review",
-        prompt: `mode: verify
-        Change: <change-name>
-        未勾 [verify:auto] items：
-        - #1 admin /settings 改排程 09:00 → 200 toast → reload 仍 09:00
-        - #4 /asset-loans 紅標+徽章+置頂排序
 
-        Dev server port: <port>（若已知）
+   5. **Multi-marker completion semantics**
 
-        每條 item 完整 round-trip 並回報 PASS / FAIL / UNCERTAIN，附 network status、DOM 觀察、final-state screenshot 路徑。`
-      })
-      ```
+      - 每個 channel 完成就寫對應 annotation；同一 line 可同時有 `(verified-e2e:)` / `(verified-api:)` / `(verified-ui:)`，順序 **MUST** 是 e2e → api → ui。
+      - 最後一個 channel 完成且 item 不含 `verify:ui` / `review:ui` 時，呼叫 review-gui auto-check helper `autoCheckCompletedAutomaticItems(...)`，自動 flip `[x]`。
+      - item 含 `verify:ui` 或 `review:ui` 時，checkbox **MUST** 保持 `[ ]`，等 user 在 review GUI 確認。
 
-      Agent 詳細行為見 `.codex/agents/screenshot-review.md` § verify mode（觀察 network response status、觀察 DOM 預期變化、撞 emptiness 主動補 seed、截 final-state screenshot 到 `screenshots/local/<change-name>/#N-final.png`）。
+   6. **Deprecated `[verify:auto]` alias**
 
-   2. **依 agent 回報主線 Edit tasks.md**：
+      - Alias resolution：視為 `[verify:api+ui]`。
+      - 主線先跑 API channel，再派 UI channel。
+      - 新 tasks **NEVER** author `[verify:auto]`；若 Step 8a 碰到它，只做 backward-compatible execution 並保留 deprecation warning。
 
-      - **PASS** → 主線寫入 `(verified-auto: <ISO> network=<status>[ dom=<obs>][ ...])` annotation；**NEVER** 代勾 `[x]`（user 仍要在 GUI 點 OK 才勾，雙層保險）。可用 `applyVerifiedAutoAnnotationToContent` helper 或直接 Edit。
-      - **FAIL**（response 4xx/5xx 而 description 預期 200、DOM 預期變化沒發生） → 保留 `[ ]` + 寫 `（issue: <網路狀態 / DOM 觀察>）`，主線回報 user：「verify-auto FAIL — 看起來 server 行為跟 description 不符，請檢查」
-      - **UNCERTAIN**（fixtures 缺、撞登入頁、agent 解不開） → 不寫 annotation；主線回報 user：「verify-auto UNCERTAIN — 是否升級成 [review:ui]（需人親操）或補 fixtures plan？」並等 user 決定
+   7. **Exit**
 
-   3. 全部 `[verify:auto]` items 處理完才進 Step 8b。
+      - 所有 automatic-only items 完成 annotations 後，呼叫 `autoCheckCompletedAutomaticItems(...)` 讓 review-gui helper 自動勾 `[x]`。
+      - 所有含 `verify:ui` 的 items 保持未勾，進 Step 8b 由 user GUI 確認 visual evidence。
 
    **Guardrails**：
-   - **NEVER** 代勾 `[x]` — annotation 只是 evidence trail，最終勾選由 user 在 GUI 完成
-   - **NEVER** 在 agent 沒成功 round-trip（沒 network 觀察 / 沒 final-state screenshot）的情況下寫 `(verified-auto:)` annotation — 這條 rule 也明列在 `manual-review.md` 禁止事項
-   - **MUST** 主動處理 emptiness（補 seed / fixtures），不要 punt 給 user — user-facing change 一定有 fixtures plan，跑 reset 不該卡
+   - **NEVER** 要求 user 在 GUI 確認 `[verify:e2e]` / `[verify:api]` automatic-only items；annotation pass 後 helper 自動 done。
+   - **NEVER** 對含 `[verify:ui]` 的 item 代勾 `[x]`；final-state screenshot 需要 user eye。
+   - **NEVER** 在沒有成功 evidence 時寫 `(verified-<channel>:)` annotation。
+   - **NEVER** 派 screenshot-review agent 負責 mutation / form fill / multi-role login；改用 `verify:e2e` 或 `verify:api`。
 
 8b. **Manual review handoff**
 
    When tasks.md still contains unchecked items in the `## 人工檢查` section (typical at this point — implementation tasks `[x]` but manual-review items `[ ]`), **MUST** hand off to the local manual-review GUI rather than walking through items inline in chat.
 
    - **DEFAULT path**: Reply to the user with something like:
-     > Implementation 完成。Step 8a 已對 `<M>` 項 `[verify:auto]` 跑完 agent round-trip，剩 `<N>` 項 `## 人工檢查` 待你確認。請在 consumer repo root 執行 `pnpm review:ui` 開本地 GUI 驗收 — `[verify:auto]` 項顯示 evidence + final-state screenshot 等你點 OK；`[review:ui]` 項顯示截圖等你親操確認。完成後回報，我繼續 Step 9 status。
+     > Implementation 完成。Step 8a 已處理 verify channels：automatic `[verify:e2e]` / `[verify:api]` items 已寫 annotation 並自動完成；含 `[verify:ui]` / `[review:ui]` 的 `<N>` 項仍待你確認。請在 consumer repo root 執行 `pnpm review:ui` 開本地 GUI 驗收 — `[verify:ui]` 項顯示 final-state screenshot + DOM observation 等你點 OK；`[review:ui]` 項顯示人工驗收 evidence。完成後回報，我繼續 Step 9 status。
    - Wait for the user to complete the GUI flow and report back. Do NOT proceed to Step 9 / propose archive until the user signals manual review is done.
    - **NEVER** default to `request_user_input` chat dialog walking items one-by-one — it burns tokens, ignores the screenshot pool, and contradicts `rules/core/manual-review.md` 標準流程.
 
