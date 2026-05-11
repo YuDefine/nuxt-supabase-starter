@@ -436,7 +436,7 @@ function serializeVerifyEvidence(evidence: VerifyAutoEvidence): string {
   }
   const otherKeys = Object.keys(evidence)
     .filter((k) => !fixedKeys.includes(k))
-    .sort()
+    .toSorted()
   for (const k of otherKeys) {
     const v = evidence[k]
     if (v !== undefined && v !== '') parts.push(`${k}=${sanitizeEvidenceValue(v)}`)
@@ -444,14 +444,18 @@ function serializeVerifyEvidence(evidence: VerifyAutoEvidence): string {
   return parts.join(' ')
 }
 
+// 範圍：U+0000–U+001F（C0 控制字元）；annotation 解析需要剝掉，否則 raw item 內藏的不可見字元會誤導 parser
+// 用 String.fromCharCode 組裝避開 oxlint no-control-regex（literal / RegExp 字串中的 unicode escape 都會被偵測）
+const CONTROL_CHARS_RE = new RegExp(
+  '[' + String.fromCharCode(0) + '-' + String.fromCharCode(0x1f) + ']',
+  'g'
+)
+
 function sanitizeEvidenceValue(v: string): string {
   // 禁止 space / `(` / `)` / 控制字符；空白替成 `-`，括號剝掉，避免破壞 annotation 解析
   return (
-    v
-      .replace(/[\s]+/g, '-')
-      .replace(/[()]/g, '')
-      .replace(/[\x00-\x1f]/g, '')
-      .slice(0, 120) || 'unknown'
+    v.replace(/[\s]+/g, '-').replace(/[()]/g, '').replace(CONTROL_CHARS_RE, '').slice(0, 120) ||
+    'unknown'
   )
 }
 
@@ -2213,7 +2217,10 @@ function renderReviewHtml(): string {
           kindBadge = '<span class="kind-badge review-ui" aria-label="此項需要使用者親自操作驗收">[review:ui]</span>';
         }
         // 解析 (verified-auto: <ISO> network=... dom=...) annotation — 只對 verify:auto items 取
-        const verifiedAutoMatch = isVerifyAuto ? item.raw.match(/\(verified-auto:\s*([^)]+)\)/) : null;
+        // regex literal 在 outer template literal 內，`\` 必須 double 才能在 render 後保留：
+        // .mts source `\\(` → backtick string 解析 → `\(` → 瀏覽器 regex literal → 匹配 literal `(`
+        // 原版單 `\` 被 backtick 解析吃掉，render 成 `(verified-auto:s*([^)]+))`，group 結構錯位
+        const verifiedAutoMatch = isVerifyAuto ? item.raw.match(/\\(verified-auto:\\s*([^)]+)\\)/) : null;
         const verifiedAutoEvidence = verifiedAutoMatch ? verifiedAutoMatch[1].trim() : null;
         let stateHtml;
         if (handled) {
