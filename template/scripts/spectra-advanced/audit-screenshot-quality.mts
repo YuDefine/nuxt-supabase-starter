@@ -248,7 +248,9 @@ async function collectScreenshotFiles(
         })
       }
 
-      if (hasExplorationKeyword(relPath)) {
+      // 只看 baseName 不看完整路徑，避免 change 名稱含 debug/probe/try 等字
+      // 觸發全 change 下所有合法 final-state 截圖被誤標為 exploration
+      if (hasExplorationKeyword(baseName)) {
         issues.push({
           severity: 'warning',
           code: 'exploration_keyword',
@@ -359,28 +361,53 @@ function applyMissingEvidenceRule(
   changeName: string,
   issues: Issue[]
 ) {
+  const HAS_VERIFIED_AUTO_ANNOTATION = /\(verified-auto:\s+[^)]+\)/
   for (const item of items) {
-    if (item.checked || item.kind === 'discuss' || item.noScreenshot) continue
-    if ((byItem.get(item.id) ?? []).length > 0) continue
-    // verify:auto items 設計上保證 agent round-trip 完一定拍 final-state screenshot；
-    // 沒截圖 = agent 沒跑或失敗 = 比 review:ui 缺截圖更嚴重，升 critical
-    const severity: Severity = item.kind === 'verify:auto' ? 'critical' : 'warning'
-    const reason =
-      item.kind === 'verify:auto'
-        ? `${item.id} is [verify:auto] but has no final-state screenshot — agent round-trip didn't complete`
-        : `${item.id} is pending [${item.kind}] but has no screenshot evidence and no @no-screenshot marker`
-    const suggestion =
-      item.kind === 'verify:auto'
-        ? 'rerun spectra-apply Step 8a Verify-Auto Pass; if agent cannot round-trip this item, downgrade kind to [review:ui]'
-        : 'capture final-state evidence or add @no-screenshot when the item is round-trip-only'
+    // [discuss] — archive-gate Check 4 已驗 (claude-discussed: ...) annotation，
+    // 本檢查不重複處理
+    if (item.kind === 'discuss') continue
+
+    const hasAnnotation = HAS_VERIFIED_AUTO_ANNOTATION.test(item.raw)
+    const hasScreenshot = (byItem.get(item.id) ?? []).length > 0
+
+    // [verify:auto] 永遠需要 (verified-auto: ...) annotation 證明 agent 真的 round-trip
+    // 過。@no-screenshot 只代表「不需 final-state screenshot」，**不能**讓 verify:auto
+    // 繞過 annotation 要求。
+    if (item.kind === 'verify:auto') {
+      if (hasAnnotation) continue
+      // 沒 annotation 時，最後一道防線是 final-state screenshot（除非 @no-screenshot）
+      if (hasScreenshot && !item.noScreenshot) continue
+      // 缺 evidence
+      const missing = item.noScreenshot
+        ? '(verified-auto: <ISO> ...) annotation'
+        : 'final-state screenshot 或 (verified-auto: ...) annotation'
+      issues.push({
+        severity: 'critical',
+        code: 'missing_screenshot_evidence',
+        change: changeName,
+        itemId: item.id,
+        file: `openspec/changes/${changeName}/tasks.md:${item.lineNumber}`,
+        message: `${item.id} is [verify:auto]${item.noScreenshot ? ' @no-screenshot' : ''} but lacks ${missing} — agent round-trip evidence missing`,
+        suggestion:
+          'rerun spectra-apply Step 8a Verify-Auto Pass to write (verified-auto: <ISO> ...) annotation; if agent cannot round-trip this item, downgrade kind to [review:ui]',
+      })
+      continue
+    }
+
+    // [review:ui] @no-screenshot — round-trip-only by human verification，
+    // 規約允許跳過 screenshot evidence 檢查
+    if (item.noScreenshot) continue
+    if (hasScreenshot) continue
+    // [review:ui] 沒 screenshot 也沒 @no-screenshot → warn
     issues.push({
-      severity,
+      severity: 'warning',
       code: 'missing_screenshot_evidence',
       change: changeName,
       itemId: item.id,
       file: `openspec/changes/${changeName}/tasks.md:${item.lineNumber}`,
-      message: reason,
-      suggestion,
+      message: `${item.id} is pending [${item.kind}] but has no screenshot evidence and no @no-screenshot marker`,
+      suggestion:
+        'capture final-state evidence or add @no-screenshot when the item is round-trip-only',
     })
   }
 }

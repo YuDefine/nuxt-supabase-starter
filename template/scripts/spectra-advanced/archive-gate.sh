@@ -310,7 +310,7 @@ else
       echo "$SCREENSHOT_AUDIT_OUTPUT" >&2
     fi
     MESSAGES+=("[UX Gate] Screenshot Quality Audit 未通過 — review pipeline 截圖存在 warning / critical 或 audit script error。
-跑 \`pnpm spectra:audit-screenshots $CHANGE_NAME\` 查看完整報告；整理 final-state 截圖、移動探索圖到 _exploration/，或為 round-trip-only item 加上 @no-screenshot 後再 archive。")
+跑 \`node --experimental-strip-types scripts/spectra-advanced/audit-screenshot-quality.mts $CHANGE_NAME\` 查看完整報告；整理 final-state 截圖、移動探索圖到 _exploration/，或為 round-trip-only item 加上 @no-screenshot 後再 archive。")
   fi
 fi
 
