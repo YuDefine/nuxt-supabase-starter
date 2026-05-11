@@ -145,14 +145,19 @@ fi
 # Spec: openspec/specs/manual-review-item-kind/spec.md "Archive Gate Validation By Kind"
 #
 # Decision matrix:
-#   review:ui   [x]    -> pass
-#   review:ui   [ ]    -> block (must be human-checked)
-#   discuss     [x]    -> pass (claude-discussed annotation optional but expected)
-#   discuss     [ ] +annotation -> warn (issue path; user's call)
-#   discuss     [ ] no-annotation -> block (run /spectra-archive Step 2.5)
-#   verify:auto [x]    -> pass
-#   verify:auto [ ] +annotation -> warn (agent ran round-trip; user 還沒在 GUI 點 OK)
-#   verify:auto [ ] no-annotation -> block (agent 沒跑或失敗；回 /spectra-apply Step 8a 重跑)
+#   review:ui      [x]                 -> pass
+#   review:ui      [ ]                 -> block (must be human-checked)
+#   discuss        [x]                 -> pass (claude-discussed annotation optional)
+#   discuss        [ ] +annotation     -> warn (issue path; user's call)
+#   discuss        [ ] no-annotation   -> block (run /spectra-archive Step 2.5)
+#   verify:e2e     any +annotation     -> pass (automatic channel self-completes)
+#   verify:e2e     any no-annotation   -> block
+#   verify:api     any +annotation     -> pass (automatic channel self-completes)
+#   verify:api     any no-annotation   -> block
+#   verify:ui      [x] +annotation     -> pass
+#   verify:ui      [ ] +annotation     -> block (awaiting user GUI confirmation)
+#   verify:ui      any no-annotation   -> block
+#   verify:auto                        -> deprecated alias for verify:api+ui
 #
 # Missing leading kind marker:
 #   apply Default Kind Derivation Rule based on proposal's User Journeys section.
@@ -163,25 +168,124 @@ if [ -f "$TASKS_FILE" ]; then
     DEFAULT_KIND='discuss'
   fi
 
+  normalize_review_kinds() {
+    local rest="$1"
+    local id="$2"
+    local line_number="$3"
+    KINDS_RESULT=("$DEFAULT_KIND")
+
+    if [[ "$rest" =~ ^\[([^]]+)\][[:space:]] ]]; then
+      local marker="${BASH_REMATCH[1]}"
+      case "$marker" in
+        review:ui|discuss)
+          KINDS_RESULT=("$marker")
+          ;;
+        verify:auto)
+          echo "[UX Gate] verify:auto is deprecated; prefer verify:api+ui at $TASKS_FILE:$line_number ($id)" >&2
+          KINDS_RESULT=('verify:api' 'verify:ui')
+          ;;
+        verify:*)
+          local channels="${marker#verify:}"
+          local remaining="$channels"
+          local token
+          local seen_e2e=false
+          local seen_api=false
+          local seen_ui=false
+          while :; do
+            token="${remaining%%+*}"
+            case "$token" in
+              e2e) seen_e2e=true ;;
+              api) seen_api=true ;;
+              ui) seen_ui=true ;;
+              *)
+                echo "[UX Gate] warn — unknown manual-review kind marker [$marker] at $TASKS_FILE:$line_number; falling back to $DEFAULT_KIND" >&2
+                KINDS_RESULT=("$DEFAULT_KIND")
+                return
+                ;;
+            esac
+            [ "$remaining" = "$token" ] && break
+            remaining="${remaining#*+}"
+          done
+
+          KINDS_RESULT=()
+          [ "$seen_e2e" = true ] && KINDS_RESULT+=('verify:e2e')
+          [ "$seen_api" = true ] && KINDS_RESULT+=('verify:api')
+          [ "$seen_ui" = true ] && KINDS_RESULT+=('verify:ui')
+          return 0
+          ;;
+        *)
+          echo "[UX Gate] warn — unknown manual-review kind marker [$marker] at $TASKS_FILE:$line_number; falling back to $DEFAULT_KIND" >&2
+          ;;
+      esac
+    fi
+    return 0
+  }
+
+  format_kind_label() {
+    local has_verify=false
+    local has_non_verify=false
+    local channels=()
+    local labels=()
+    local kind
+
+    for kind in "${KINDS_RESULT[@]}"; do
+      case "$kind" in
+        verify:e2e) has_verify=true; channels+=('e2e'); labels+=("$kind") ;;
+        verify:api) has_verify=true; channels+=('api'); labels+=("$kind") ;;
+        verify:ui) has_verify=true; channels+=('ui'); labels+=("$kind") ;;
+        *) has_non_verify=true; labels+=("$kind") ;;
+      esac
+    done
+
+    if [ "$has_verify" = true ] && [ "$has_non_verify" = false ]; then
+      local joined=''
+      local channel
+      for channel in "${channels[@]}"; do
+        if [ -z "$joined" ]; then
+          joined="$channel"
+        else
+          joined="$joined+$channel"
+        fi
+      done
+      KIND_LABEL="verify:$joined"
+      return
+    fi
+
+    KIND_LABEL=''
+    for kind in "${labels[@]}"; do
+      if [ -z "$KIND_LABEL" ]; then
+        KIND_LABEL="$kind"
+      else
+        KIND_LABEL="$KIND_LABEL+$kind"
+      fi
+    done
+    return 0
+  }
+
+  has_kind() {
+    local needle="$1"
+    local kind
+    for kind in "${KINDS_RESULT[@]}"; do
+      [ "$kind" = "$needle" ] && return 0
+    done
+    return 1
+  }
+
   # Extract `## 人工檢查` section content; tolerate missing section.
   # Use awk (not sux_extract_section) because the latter's `sed '$d'` trims the last
   # line — which is the actual checkbox when 人工檢查 is the file's final section.
   KIND_SECTION=$(awk '
     /^## .*人工檢查/ { in_section=1; next }
     in_section && /^## / { in_section=0 }
-    in_section { print }
+    in_section { print NR "\t" $0 }
   ' "$TASKS_FILE")
 
   if [ -n "$KIND_SECTION" ]; then
     # Walk each checkbox line under 人工檢查. Match parent `- [ ] #N` and scoped
     # `  - [ ] #N.M` lines. Other content (prose, blank lines) silently ignored.
-    REVIEW_UI_BLOCKED=()
-    DISCUSS_BLOCKED=()
-    DISCUSS_WARN=()
-    VERIFY_AUTO_BLOCKED=()
-    VERIFY_AUTO_WARN=()
+    MANUAL_GATE_BLOCKED=false
 
-    while IFS= read -r line; do
+    while IFS=$'\t' read -r line_number line; do
       # Match parent OR scoped item; capture checkbox state + id + remainder.
       if [[ "$line" =~ ^[[:space:]]*-[[:space:]]\[([[:space:]xX])\][[:space:]]+(#[0-9]+(\.[0-9]+)?)[[:space:]]+(.*)$ ]]; then
         STATE="${BASH_REMATCH[1]}"
@@ -191,18 +295,19 @@ if [ -f "$TASKS_FILE" ]; then
         continue
       fi
 
-      # Detect leading kind marker (must be first token after id).
-      ITEM_KIND="$DEFAULT_KIND"
-      if [[ "$REST" =~ ^\[(review:ui|discuss|verify:auto)\][[:space:]] ]]; then
-        ITEM_KIND="${BASH_REMATCH[1]}"
-      fi
+      # Detect leading kind marker (must be first token after id), then resolve
+      # `[verify:auto]` and `[verify:<a>+<b>]` into an independent kind array.
+      KINDS_RESULT=()
+      KIND_LABEL=''
+      normalize_review_kinds "$REST" "$ID" "$line_number"
+      format_kind_label
 
       CHECKED=false
       if [[ "$STATE" =~ [xX] ]]; then
         CHECKED=true
       fi
 
-      # claude-discussed / verified-auto annotations present?
+      # Evidence annotations present?
       # bash [[ =~ ]] mishandles literal parens in regex — assign to a var first.
       HAS_DISCUSSED_ANNOTATION=false
       DISCUSSED_RE='\(claude-discussed:[^)]*\)'
@@ -210,75 +315,67 @@ if [ -f "$TASKS_FILE" ]; then
         HAS_DISCUSSED_ANNOTATION=true
       fi
 
-      HAS_VERIFIED_AUTO_ANNOTATION=false
-      VERIFIED_AUTO_RE='\(verified-auto:[^)]*\)'
-      if [[ "$line" =~ $VERIFIED_AUTO_RE ]]; then
-        HAS_VERIFIED_AUTO_ANNOTATION=true
+      HAS_VERIFIED_E2E_ANNOTATION=false
+      VERIFIED_E2E_RE='\(verified-e2e:[^)]*\)'
+      if [[ "$line" =~ $VERIFIED_E2E_RE ]]; then
+        HAS_VERIFIED_E2E_ANNOTATION=true
       fi
 
-      if [ "$ITEM_KIND" = 'review:ui' ]; then
-        if [ "$CHECKED" = false ]; then
-          REVIEW_UI_BLOCKED+=("$ID")
-        fi
-      elif [ "$ITEM_KIND" = 'verify:auto' ]; then
-        if [ "$CHECKED" = false ]; then
-          if [ "$HAS_VERIFIED_AUTO_ANNOTATION" = true ]; then
-            VERIFY_AUTO_WARN+=("$ID")
+      HAS_VERIFIED_API_ANNOTATION=false
+      VERIFIED_API_RE='\(verified-api:[^)]*\)'
+      if [[ "$line" =~ $VERIFIED_API_RE ]]; then
+        HAS_VERIFIED_API_ANNOTATION=true
+      fi
+
+      HAS_VERIFIED_UI_ANNOTATION=false
+      VERIFIED_UI_RE='\(verified-ui:[^)]*\)'
+      if [[ "$line" =~ $VERIFIED_UI_RE ]]; then
+        HAS_VERIFIED_UI_ANNOTATION=true
+      fi
+
+      if has_kind 'review:ui' && [ "$CHECKED" = false ]; then
+        MANUAL_GATE_BLOCKED=true
+        echo "[UX Gate] review:ui item not checked by user: $ID" >&2
+      fi
+
+      if has_kind 'discuss'; then
+        if [ "$HAS_DISCUSSED_ANNOTATION" = false ]; then
+          if [ "$CHECKED" = false ]; then
+            MANUAL_GATE_BLOCKED=true
+            echo "[UX Gate] discuss item lacks (claude-discussed: ...) annotation: $ID — run /spectra-archive to invoke Step 2.5 walkthrough" >&2
           else
-            VERIFY_AUTO_BLOCKED+=("$ID")
+            echo "[UX Gate] warn — discuss item checked without (claude-discussed: ...) annotation: $ID" >&2
           fi
+        elif [ "$CHECKED" = false ]; then
+          echo "[UX Gate] warn — discuss item has (claude-discussed: ...) annotation but checkbox unchecked (issue path): $ID" >&2
         fi
-        # verify:auto [x]: pass (user 在 GUI 點過 OK = 雙層保險完成)
-      else
-        # discuss
-        if [ "$CHECKED" = false ]; then
-          if [ "$HAS_DISCUSSED_ANNOTATION" = true ]; then
-            DISCUSS_WARN+=("$ID")
-          else
-            DISCUSS_BLOCKED+=("$ID")
-          fi
+      fi
+
+      if has_kind 'verify:e2e' && [ "$HAS_VERIFIED_E2E_ANNOTATION" = false ]; then
+        MANUAL_GATE_BLOCKED=true
+        echo "[UX Gate] $KIND_LABEL item lacks (verified-e2e: ...) annotation: $ID — run pnpm test:e2e:verify $CHANGE_NAME to produce the evidence" >&2
+      fi
+
+      if has_kind 'verify:api' && [ "$HAS_VERIFIED_API_ANNOTATION" = false ]; then
+        MANUAL_GATE_BLOCKED=true
+        echo "[UX Gate] $KIND_LABEL item lacks (verified-api: ...) annotation: $ID" >&2
+      fi
+
+      if has_kind 'verify:ui'; then
+        if [ "$HAS_VERIFIED_UI_ANNOTATION" = false ]; then
+          MANUAL_GATE_BLOCKED=true
+          echo "[UX Gate] $KIND_LABEL item missing (verified-ui: ...) annotation: $ID" >&2
+        elif [ "$CHECKED" = false ]; then
+          MANUAL_GATE_BLOCKED=true
+          echo "[UX Gate] $KIND_LABEL item awaits user GUI confirmation (verify:ui channel requires checkmark): $ID" >&2
         fi
-        # discuss [x] (with or without annotation): pass (annotation expected but warn-only handled by other tooling)
       fi
     done <<< "$KIND_SECTION"
 
-    if [ "${#REVIEW_UI_BLOCKED[@]}" -gt 0 ]; then
+    if [ "$MANUAL_GATE_BLOCKED" = true ]; then
       BLOCKED=true
-      for id in "${REVIEW_UI_BLOCKED[@]}"; do
-        echo "[UX Gate] review:ui item not checked by user: $id" >&2
-      done
-      MESSAGES+=("[UX Gate] Manual Review Kind Validation 未通過 — 上述 [review:ui] 項目尚未經使用者親自勾選。
-跑 \`pnpm review:ui\` 完成 round-trip 驗收後再 archive。")
-    fi
-
-    if [ "${#DISCUSS_BLOCKED[@]}" -gt 0 ]; then
-      BLOCKED=true
-      for id in "${DISCUSS_BLOCKED[@]}"; do
-        echo "[UX Gate] discuss item lacks claude-discussed evidence trail: $id — run /spectra-archive to invoke Step 2.5 walkthrough" >&2
-      done
-      MESSAGES+=("[UX Gate] Manual Review Kind Validation 未通過 — 上述 [discuss] 項目尚未取得 (claude-discussed: <ISO>) evidence trail。
-跑 \`/spectra-archive\` 觸發 Step 2.5 Discuss Items Walkthrough 後再 archive。")
-    fi
-
-    if [ "${#DISCUSS_WARN[@]}" -gt 0 ]; then
-      for id in "${DISCUSS_WARN[@]}"; do
-        echo "[UX Gate] warn — discuss item has claude-discussed annotation but checkbox unchecked (issue path): $id" >&2
-      done
-    fi
-
-    if [ "${#VERIFY_AUTO_BLOCKED[@]}" -gt 0 ]; then
-      BLOCKED=true
-      for id in "${VERIFY_AUTO_BLOCKED[@]}"; do
-        echo "[UX Gate] verify:auto item lacks verified-auto evidence trail: $id — agent 沒跑或 round-trip 失敗；run /spectra-apply to invoke Step 8a Verify-Auto Pass" >&2
-      done
-      MESSAGES+=("[UX Gate] Manual Review Kind Validation 未通過 — 上述 [verify:auto] 項目尚未取得 (verified-auto: <ISO> ...) evidence trail。
-跑 \`/spectra-apply\` 觸發 Step 8a Verify-Auto Pass 後再 archive。")
-    fi
-
-    if [ "${#VERIFY_AUTO_WARN[@]}" -gt 0 ]; then
-      for id in "${VERIFY_AUTO_WARN[@]}"; do
-        echo "[UX Gate] warn — verify:auto item has verified-auto annotation but user 未在 review GUI 點 OK: $id" >&2
-      done
+      MESSAGES+=("[UX Gate] Manual Review Kind Validation 未通過 — 上述人工檢查項目的 kind-specific evidence 或使用者確認尚未完成。
+依 stderr 的 [UX Gate] kind 原因補齊 annotation、執行 \`pnpm review:ui\`，或跑對應 verify channel 後再 archive。")
     fi
   fi
 fi

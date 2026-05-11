@@ -27,12 +27,66 @@ const PARENT_ITEM_RE = /^- \[([ xX])\] (#[1-9][0-9]*) (.+)$/
 const SCOPED_ITEM_RE = /^  - \[([ xX])\] (#[1-9][0-9]*\.[1-9][0-9]*) (.+)$/
 const TRAILING_NO_SCREENSHOT_RE = /(^|[^ ]) @no-screenshot$/
 // 解析 leading kind marker — 必須緊接 `#N` / `#N.M` 後第一個 token、含一個 trailing space。
-// description-mid 的 [discuss] / [review:ui] / [verify:auto] 不會被命中（不是行首）。
+// description-mid 的 [discuss] / [review:ui] / [verify:*] 不會被命中（不是行首）。
 const LEADING_KIND_RE = /^\[([^\]]+)\]\s+/
-const VALID_KINDS = new Set(['review:ui', 'discuss', 'verify:auto'])
+const VERIFY_CHANNEL_ORDER = ['e2e', 'api', 'ui'] as const
+const VERIFY_KIND_ORDER = ['verify:e2e', 'verify:api', 'verify:ui'] as const
+const VALID_KINDS = new Set(['review:ui', 'discuss', 'verify:auto', ...VERIFY_KIND_ORDER])
+const VERIFY_CHANNELS = new Set<string>(VERIFY_CHANNEL_ORDER)
 const BACKEND_ONLY_DECLARATION = '**No user-facing journey (backend-only)**'
+const STRUCTURED_ANNOTATION_ORDER = [
+  'verifiedE2e',
+  'verifiedApi',
+  'verifiedUi',
+  'claudeDiscussed',
+] as const
 
-export type ManualReviewItemKind = 'review:ui' | 'discuss' | 'verify:auto'
+export type ManualReviewItemKind =
+  | 'review:ui'
+  | 'discuss'
+  | 'verify:auto'
+  | 'verify:e2e'
+  | 'verify:api'
+  | 'verify:ui'
+
+type ResolvedManualReviewItemKind = Exclude<ManualReviewItemKind, 'verify:auto'>
+type DefaultManualReviewItemKind = Extract<ManualReviewItemKind, 'review:ui' | 'discuss'>
+type StructuredAnnotationKey = (typeof STRUCTURED_ANNOTATION_ORDER)[number]
+
+export interface VerifiedE2eAnnotation {
+  raw: string
+  timestamp: string
+  spec: string
+  trace: string
+}
+
+export interface VerifiedApiAnnotation {
+  raw: string
+  timestamp: string
+  method: string
+  url: string
+  status: string
+  body?: string
+}
+
+export interface VerifiedUiAnnotation {
+  raw: string
+  timestamp: string
+  screenshot: string
+  dom?: string
+}
+
+export interface ClaudeDiscussedAnnotation {
+  raw: string
+  timestamp: string
+}
+
+export interface ManualReviewItemAnnotations {
+  verifiedE2e?: VerifiedE2eAnnotation
+  verifiedApi?: VerifiedApiAnnotation
+  verifiedUi?: VerifiedUiAnnotation
+  claudeDiscussed?: ClaudeDiscussedAnnotation
+}
 
 export interface ManualReviewItem {
   id: string
@@ -44,8 +98,12 @@ export interface ManualReviewItem {
   lineIndex: number
   lineNumber: number
   noScreenshot: boolean
-  /** Leading kind marker — `[review:ui]` / `[discuss]` / `[verify:auto]`. 缺 marker 時依 defaultKind 推導 */
+  /** Resolved leading kind marker；legacy field，等於 `kinds[0]`。 */
   kind: ManualReviewItemKind
+  /** Resolved kind markers；`[verify:auto]` 會展開成 `['verify:api', 'verify:ui']`。 */
+  kinds: ReadonlyArray<ResolvedManualReviewItemKind>
+  /** Structured evidence annotations parsed from raw line. */
+  annotations: ManualReviewItemAnnotations
   /** 原始 raw 行有 explicit leading kind marker（true）或走 default 推導（false） */
   hasExplicitKind: boolean
 }
@@ -134,7 +192,7 @@ class HttpError extends Error {
  */
 export function deriveDefaultKindFromProposal(
   proposalContent: string | null
-): ManualReviewItemKind {
+): DefaultManualReviewItemKind {
   if (!proposalContent) return 'review:ui'
   return proposalContent.includes(BACKEND_ONLY_DECLARATION) ? 'discuss' : 'review:ui'
 }
@@ -142,13 +200,19 @@ export function deriveDefaultKindFromProposal(
 export interface ParseManualReviewOptions {
   /** Default kind 套用條件：item line 沒 leading marker 時 fallback 到此值。預設 `review:ui` */
   defaultKind?: ManualReviewItemKind
+  /** Warning context for parser diagnostics. */
+  sourcePath?: string
 }
 
 export function parseManualReviewSections(
   content: string,
   options: ParseManualReviewOptions = {}
 ): ParsedManualReview {
-  const defaultKind: ManualReviewItemKind = options.defaultKind ?? 'review:ui'
+  const defaultKind = normalizeDefaultKind(options.defaultKind ?? 'review:ui', {
+    sourcePath: options.sourcePath ?? '<inline>',
+    lineNumber: 0,
+  })
+  const sourcePath = options.sourcePath ?? '<inline>'
   const lines = content.split(/\r?\n/)
   const sections: ManualReviewSection[] = []
   let current: ManualReviewSection | null = null
@@ -179,7 +243,7 @@ export function parseManualReviewSections(
 
     const parent = line.match(PARENT_ITEM_RE)
     if (parent) {
-      const item = toReviewItem(parent, line, i, false, defaultKind)
+      const item = toReviewItem(parent, line, i, false, defaultKind, sourcePath)
       current.items.push(item)
       parentIds.add(item.id)
       continue
@@ -187,7 +251,7 @@ export function parseManualReviewSections(
 
     const scoped = line.match(SCOPED_ITEM_RE)
     if (scoped) {
-      const item = toReviewItem(scoped, line, i, true, defaultKind)
+      const item = toReviewItem(scoped, line, i, true, defaultKind, sourcePath)
       const parentId = item.id.split('.')[0]!
       if (!parentIds.has(parentId)) {
         current.malformed.push({
@@ -220,16 +284,22 @@ function toReviewItem(
   raw: string,
   lineIndex: number,
   scoped: boolean,
-  defaultKind: ManualReviewItemKind
+  defaultKind: DefaultManualReviewItemKind,
+  sourcePath: string
 ): ManualReviewItem {
   const id = match[2]!
   const rawDescription = match[3]!.trim()
   const {
     description: afterKind,
-    kind,
+    kinds,
     hasExplicitKind,
-  } = parseLeadingKindMarker(rawDescription, defaultKind)
-  const { description, noScreenshot } = parseNoScreenshotMarker(afterKind)
+  } = parseLeadingKindMarker(rawDescription, defaultKind, {
+    sourcePath,
+    lineNumber: lineIndex + 1,
+  })
+  const annotations = parseStructuredAnnotations(raw, { sourcePath, lineNumber: lineIndex + 1 })
+  const withoutAnnotations = stripStructuredAnnotations(afterKind)
+  const { description, noScreenshot } = parseNoScreenshotMarker(withoutAnnotations)
   return {
     id,
     description,
@@ -240,7 +310,9 @@ function toReviewItem(
     lineIndex,
     lineNumber: lineIndex + 1,
     noScreenshot,
-    kind,
+    kind: kinds[0]!,
+    kinds,
+    annotations,
     hasExplicitKind,
   }
 }
@@ -254,25 +326,151 @@ function toReviewItem(
  */
 function parseLeadingKindMarker(
   description: string,
-  defaultKind: ManualReviewItemKind
-): { description: string; kind: ManualReviewItemKind; hasExplicitKind: boolean } {
+  defaultKind: DefaultManualReviewItemKind,
+  context: ParserWarningContext
+): {
+  description: string
+  kinds: ReadonlyArray<ResolvedManualReviewItemKind>
+  hasExplicitKind: boolean
+} {
   const match = description.match(LEADING_KIND_RE)
   if (!match) {
-    return { description, kind: defaultKind, hasExplicitKind: false }
+    return { description, kinds: [defaultKind], hasExplicitKind: false }
   }
   const candidate = match[1]!
-  if (!VALID_KINDS.has(candidate)) {
-    // Malformed kind → warn + 保留 literal 在 description + 套 defaultKind
-    process.stderr.write(
-      `[review-gui] warn: unknown manual-review kind marker [${candidate}] — falling back to default '${defaultKind}'\n`
-    )
-    return { description, kind: defaultKind, hasExplicitKind: false }
+  const parsed = parseKindMarkerCandidate(candidate, defaultKind, context)
+  if (!parsed.valid) {
+    return { description, kinds: [defaultKind], hasExplicitKind: false }
   }
   return {
     description: description.slice(match[0]!.length),
-    kind: candidate as ManualReviewItemKind,
+    kinds: parsed.kinds,
     hasExplicitKind: true,
   }
+}
+
+interface ParserWarningContext {
+  sourcePath: string
+  lineNumber: number
+}
+
+function formatParserLocation(context: ParserWarningContext): string {
+  return context.lineNumber > 0 ? `${context.sourcePath}:${context.lineNumber}` : context.sourcePath
+}
+
+function warnParser(context: ParserWarningContext, message: string): void {
+  process.stderr.write(`[review-gui] warn: ${formatParserLocation(context)}: ${message}\n`)
+}
+
+function errorParser(context: ParserWarningContext, message: string): void {
+  process.stderr.write(`[review-gui] error: ${formatParserLocation(context)}: ${message}\n`)
+}
+
+function normalizeDefaultKind(
+  candidate: ManualReviewItemKind,
+  context: ParserWarningContext
+): DefaultManualReviewItemKind {
+  if (candidate === 'review:ui' || candidate === 'discuss') return candidate
+  warnParser(
+    context,
+    `invalid default manual-review kind '${candidate}' — falling back to default 'review:ui'`
+  )
+  return 'review:ui'
+}
+
+function parseKindMarkerCandidate(
+  candidate: string,
+  defaultKind: DefaultManualReviewItemKind,
+  context: ParserWarningContext
+): { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> } | { valid: false } {
+  if (candidate === 'verify:auto') {
+    warnParser(context, '[verify:auto] is deprecated; prefer [verify:api+ui]')
+    return { valid: true, kinds: ['verify:api', 'verify:ui'] }
+  }
+
+  if (candidate.includes('+')) {
+    return parseMultiChannelKindMarker(candidate, defaultKind, context)
+  }
+
+  if (!VALID_KINDS.has(candidate)) {
+    warnParser(
+      context,
+      `unknown manual-review kind marker [${candidate}] — falling back to default '${defaultKind}'`
+    )
+    return { valid: false }
+  }
+
+  return { valid: true, kinds: [candidate as ResolvedManualReviewItemKind] }
+}
+
+function parseMultiChannelKindMarker(
+  candidate: string,
+  defaultKind: DefaultManualReviewItemKind,
+  context: ParserWarningContext
+): { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> } | { valid: false } {
+  if (!candidate.startsWith('verify:')) {
+    warnParser(
+      context,
+      `invalid multi-channel manual-review kind marker [${candidate}] — only verify:* channels may be combined; falling back to default '${defaultKind}'`
+    )
+    return { valid: false }
+  }
+
+  const rawChannels = candidate.slice('verify:'.length).split('+')
+  if (rawChannels.length < 2 || rawChannels.length > 3) {
+    warnParser(
+      context,
+      `invalid multi-channel manual-review kind marker [${candidate}] — expected 2 or 3 verify channels; falling back to default '${defaultKind}'`
+    )
+    return { valid: false }
+  }
+
+  const seen = new Set<string>()
+  for (const channel of rawChannels) {
+    if (!VERIFY_CHANNELS.has(channel)) {
+      warnParser(
+        context,
+        `invalid multi-channel manual-review kind marker [${candidate}] — unknown verify channel '${channel}'; falling back to default '${defaultKind}'`
+      )
+      return { valid: false }
+    }
+    if (seen.has(channel)) {
+      warnParser(
+        context,
+        `invalid multi-channel manual-review kind marker [${candidate}] — duplicate verify channel '${channel}'; falling back to default '${defaultKind}'`
+      )
+      return { valid: false }
+    }
+    seen.add(channel)
+  }
+
+  return {
+    valid: true,
+    kinds: VERIFY_CHANNEL_ORDER.filter((channel) => seen.has(channel)).map(
+      (channel) => `verify:${channel}` as ResolvedManualReviewItemKind
+    ),
+  }
+}
+
+function canonicalizeLeadingKindMarker(line: string): string {
+  return line.replace(
+    /^(\s*- \[[ xX]\]\s+#[1-9][0-9]*(?:\.[1-9][0-9]*)?\s+)\[verify:([^\]]*\+[^\]]*)\]/,
+    (full: string, prefix: string, channelsText: string) => {
+      const channels = channelsText.split('+')
+      if (
+        channels.length < 2 ||
+        channels.length > 3 ||
+        channels.some((channel) => !VERIFY_CHANNELS.has(channel)) ||
+        new Set(channels).size !== channels.length
+      ) {
+        return full
+      }
+      const canonical = VERIFY_CHANNEL_ORDER.filter((channel) => channels.includes(channel)).join(
+        '+'
+      )
+      return `${prefix}[verify:${canonical}]`
+    }
+  )
 }
 
 function parseNoScreenshotMarker(description: string): {
@@ -287,6 +485,162 @@ function parseNoScreenshotMarker(description: string): {
     description: description.slice(0, -' @no-screenshot'.length).trim(),
     noScreenshot: true,
   }
+}
+
+function parseStructuredAnnotations(
+  line: string,
+  context: ParserWarningContext
+): ManualReviewItemAnnotations {
+  const annotations: ManualReviewItemAnnotations = {}
+  const matches = line.matchAll(
+    /\((verified-e2e|verified-api|verified-ui|claude-discussed):\s*([^)]*)\)/g
+  )
+  for (const match of matches) {
+    const prefix = match[1]!
+    const body = match[2]!.trim()
+    const raw = match[0]!
+    const key = annotationPrefixToKey(prefix)
+    if (annotations[key]) {
+      errorParser(
+        context,
+        `duplicate (${prefix}: ...) annotation on manual-review item — keeping the last one`
+      )
+    }
+
+    const parsed = parseStructuredAnnotationValue(prefix, raw, body, context)
+    if (parsed) {
+      Object.assign(annotations, parsed)
+    }
+  }
+  return annotations
+}
+
+function parseStructuredAnnotationValue(
+  prefix: string,
+  raw: string,
+  body: string,
+  context: ParserWarningContext
+): ManualReviewItemAnnotations | null {
+  const parts = body.split(/\s+/).filter(Boolean)
+  const timestamp = parts[0]
+  if (!timestamp) {
+    warnParser(context, `malformed (${prefix}: ...) annotation — missing timestamp`)
+    return null
+  }
+
+  if (prefix === 'verified-e2e') {
+    const spec = findKeyValue(parts, 'spec')
+    const trace = findKeyValue(parts, 'trace')
+    if (!spec || !trace) {
+      warnParser(
+        context,
+        `malformed (${prefix}: ...) annotation — expected spec=<path> trace=<path>`
+      )
+      return null
+    }
+    return { verifiedE2e: { raw, timestamp, spec, trace } }
+  }
+
+  if (prefix === 'verified-api') {
+    const method = parts[1]
+    const url = parts[2]
+    const status = parts[3]
+    if (!method || !url || !status) {
+      warnParser(
+        context,
+        `malformed (${prefix}: ...) annotation — expected <ISO> <METHOD> <URL> <STATUS>`
+      )
+      return null
+    }
+    const bodyDigest = findKeyValue(parts, 'body')
+    return {
+      verifiedApi: {
+        raw,
+        timestamp,
+        method,
+        url,
+        status,
+        ...(bodyDigest ? { body: bodyDigest } : {}),
+      },
+    }
+  }
+
+  if (prefix === 'verified-ui') {
+    const screenshot = findKeyValue(parts, 'screenshot')
+    if (!screenshot) {
+      warnParser(context, `malformed (${prefix}: ...) annotation — expected screenshot=<path>`)
+      return null
+    }
+    const dom = findKeyValue(parts, 'dom')
+    return {
+      verifiedUi: {
+        raw,
+        timestamp,
+        screenshot,
+        ...(dom ? { dom } : {}),
+      },
+    }
+  }
+
+  return { claudeDiscussed: { raw, timestamp } }
+}
+
+function findKeyValue(parts: string[], key: string): string | undefined {
+  const prefix = `${key}=`
+  return parts.find((part) => part.startsWith(prefix))?.slice(prefix.length)
+}
+
+function annotationPrefixToKey(prefix: string): StructuredAnnotationKey {
+  if (prefix === 'verified-e2e') return 'verifiedE2e'
+  if (prefix === 'verified-api') return 'verifiedApi'
+  if (prefix === 'verified-ui') return 'verifiedUi'
+  return 'claudeDiscussed'
+}
+
+function stripStructuredAnnotations(line: string): string {
+  return line
+    .replace(/\s*\((?:verified-e2e|verified-api|verified-ui|claude-discussed):[^)]*\)/g, '')
+    .replace(/[ \t]+$/, '')
+}
+
+function collectStructuredAnnotationRaw(line: string): {
+  base: string
+  annotations: Partial<Record<StructuredAnnotationKey, string>>
+} {
+  const annotations: Partial<Record<StructuredAnnotationKey, string>> = {}
+  const base = line.replace(
+    /\s*\((verified-e2e|verified-api|verified-ui|claude-discussed):[^)]*\)/g,
+    (raw: string, prefix: string) => {
+      annotations[annotationPrefixToKey(prefix)] = raw.trim()
+      return ''
+    }
+  )
+  return { base: base.replace(/[ \t]+$/, ''), annotations }
+}
+
+function renderStructuredAnnotations(
+  annotations: Partial<Record<StructuredAnnotationKey, string>>
+): string {
+  return STRUCTURED_ANNOTATION_ORDER.flatMap((key) =>
+    annotations[key] ? [annotations[key]!] : []
+  ).join(' ')
+}
+
+function upsertStructuredAnnotation(
+  line: string,
+  key: StructuredAnnotationKey,
+  annotation: string
+): string {
+  const { base, annotations } = collectStructuredAnnotationRaw(line)
+  annotations[key] = annotation
+  const rendered = renderStructuredAnnotations(annotations)
+  return rendered ? `${base.trimEnd()} ${rendered}` : base
+}
+
+function canonicalizeStructuredAnnotations(line: string): string {
+  const { base, annotations } = collectStructuredAnnotationRaw(line)
+  const rendered = renderStructuredAnnotations(annotations)
+  return rendered ? `${base.trimEnd()} ${rendered}` : base
 }
 
 export function applyReviewActionToContent(
@@ -313,6 +667,51 @@ export function applyReviewActionToContent(
   const lineAfter = applyActionToLine(lineBefore, action, note)
   lines[item.lineIndex] = lineAfter
   return { content: lines.join(newline), lineBefore, lineAfter }
+}
+
+function isAutomaticOnlyKinds(kinds: ReadonlyArray<ResolvedManualReviewItemKind>): boolean {
+  return kinds.length > 0 && kinds.every((kind) => kind === 'verify:e2e' || kind === 'verify:api')
+}
+
+function hasExpectedAutomaticAnnotations(item: ManualReviewItem): boolean {
+  return item.kinds.every((kind) => {
+    if (kind === 'verify:e2e') return Boolean(item.annotations.verifiedE2e)
+    if (kind === 'verify:api') return Boolean(item.annotations.verifiedApi)
+    return false
+  })
+}
+
+/**
+ * Step 8a helper：pure automatic channels (`verify:e2e` / `verify:api`) complete from
+ * evidence annotations alone. UI-confirmation channels remain user-driven.
+ */
+export function autoCheckCompletedAutomaticItems(
+  content: string,
+  options: ParseManualReviewOptions = {}
+): { content: string; checkedItemIds: string[] } {
+  const parsed = parseManualReviewSections(content, options)
+  if (parsed.malformed.length > 0) {
+    throw new HttpError(
+      422,
+      'Manual-review section has malformed checkbox lines. Fix schema before writing.'
+    )
+  }
+
+  const newline = content.includes('\r\n') ? '\r\n' : '\n'
+  const lines = content.split(/\r?\n/)
+  const checkedItemIds: string[] = []
+
+  for (const item of parsed.items) {
+    if (item.checked) continue
+    if (!isAutomaticOnlyKinds(item.kinds)) continue
+    if (!hasExpectedAutomaticAnnotations(item)) continue
+
+    const lineBefore = lines[item.lineIndex] ?? ''
+    lines[item.lineIndex] = setCheckbox(canonicalizeLeadingKindMarker(lineBefore), true)
+    checkedItemIds.push(item.id)
+  }
+
+  return { content: lines.join(newline), checkedItemIds }
 }
 
 /**
@@ -354,10 +753,12 @@ export function applyClaudeDiscussedAnnotationToContent(
 
 function applyClaudeDiscussedToLine(line: string, isoTimestamp: string): string {
   const { core, trailing } = extractTrailingMarkers(line)
-  // 先 strip 舊 claude-discussed（避免 stale 重複），保留其他 annotations（issue/skip/note 由各 action 自行管理）
-  const cleaned = stripClaudeDiscussedAnnotation(core)
-  const checked = setCheckbox(cleaned, true)
-  const annotated = `${checked.trimEnd()} (claude-discussed: ${isoTimestamp})`
+  const checked = setCheckbox(canonicalizeLeadingKindMarker(core), true)
+  const annotated = upsertStructuredAnnotation(
+    checked,
+    'claudeDiscussed',
+    `(claude-discussed: ${isoTimestamp})`
+  )
   return trailing ? `${annotated}${trailing}` : annotated
 }
 
@@ -368,6 +769,23 @@ export interface VerifyAutoEvidence {
   dom?: string
   /** 其他自由 key=value（不能含 space 或 `)`），依 key 字典序輸出 */
   [key: string]: string | undefined
+}
+
+export interface VerifiedE2eEvidence {
+  spec: string
+  trace: string
+}
+
+export interface VerifiedApiEvidence {
+  method: string
+  url: string
+  status: string
+  body?: string
+}
+
+export interface VerifiedUiEvidence {
+  screenshot: string
+  dom?: string
 }
 
 /**
@@ -408,6 +826,92 @@ export function applyVerifiedAutoAnnotationToContent(
   return { content: lines.join(newline), lineBefore, lineAfter }
 }
 
+export function applyVerifiedE2eAnnotationToContent(
+  content: string,
+  itemId: string,
+  isoTimestamp: string,
+  evidence: VerifiedE2eEvidence,
+  options: ParseManualReviewOptions = {}
+): { content: string; lineBefore: string; lineAfter: string } {
+  return applyVerifyChannelAnnotationToContent(content, itemId, {
+    key: 'verifiedE2e',
+    annotation: `(verified-e2e: ${isoTimestamp} spec=${sanitizeEvidenceValue(evidence.spec)} trace=${sanitizeEvidenceValue(evidence.trace)})`,
+    options,
+  })
+}
+
+export function applyVerifiedApiAnnotationToContent(
+  content: string,
+  itemId: string,
+  isoTimestamp: string,
+  evidence: VerifiedApiEvidence,
+  options: ParseManualReviewOptions = {}
+): { content: string; lineBefore: string; lineAfter: string } {
+  const body = evidence.body ? ` body=${sanitizeEvidenceValue(evidence.body)}` : ''
+  return applyVerifyChannelAnnotationToContent(content, itemId, {
+    key: 'verifiedApi',
+    annotation: `(verified-api: ${isoTimestamp} ${sanitizeEvidenceValue(
+      evidence.method.toUpperCase()
+    )} ${sanitizeEvidenceValue(evidence.url)} ${sanitizeEvidenceValue(evidence.status)}${body})`,
+    options,
+  })
+}
+
+export function applyVerifiedUiAnnotationToContent(
+  content: string,
+  itemId: string,
+  isoTimestamp: string,
+  evidence: VerifiedUiEvidence,
+  options: ParseManualReviewOptions = {}
+): { content: string; lineBefore: string; lineAfter: string } {
+  const dom = evidence.dom ? ` dom=${sanitizeEvidenceValue(evidence.dom)}` : ''
+  return applyVerifyChannelAnnotationToContent(content, itemId, {
+    key: 'verifiedUi',
+    annotation: `(verified-ui: ${isoTimestamp} screenshot=${sanitizeEvidenceValue(
+      evidence.screenshot
+    )}${dom})`,
+    options,
+  })
+}
+
+function applyVerifyChannelAnnotationToContent(
+  content: string,
+  itemId: string,
+  input: {
+    key: Extract<StructuredAnnotationKey, 'verifiedE2e' | 'verifiedApi' | 'verifiedUi'>
+    annotation: string
+    options: ParseManualReviewOptions
+  }
+): { content: string; lineBefore: string; lineAfter: string } {
+  const parsed = parseManualReviewSections(content, input.options)
+  if (parsed.malformed.length > 0) {
+    throw new HttpError(
+      422,
+      'Manual-review section has malformed checkbox lines. Fix schema before writing.'
+    )
+  }
+  const item = parsed.items.find((candidate) => candidate.id === itemId)
+  if (!item) throw new HttpError(404, `Manual-review item not found: ${itemId}`)
+
+  const newline = content.includes('\r\n') ? '\r\n' : '\n'
+  const lines = content.split(/\r?\n/)
+  const lineBefore = lines[item.lineIndex] ?? ''
+  const lineAfter = applyVerifyChannelAnnotationToLine(lineBefore, input.key, input.annotation)
+  lines[item.lineIndex] = lineAfter
+  return { content: lines.join(newline), lineBefore, lineAfter }
+}
+
+function applyVerifyChannelAnnotationToLine(
+  line: string,
+  key: Extract<StructuredAnnotationKey, 'verifiedE2e' | 'verifiedApi' | 'verifiedUi'>,
+  annotation: string
+): string {
+  const { core, trailing } = extractTrailingMarkers(line)
+  const canonicalCore = canonicalizeLeadingKindMarker(core)
+  const annotated = upsertStructuredAnnotation(canonicalCore, key, annotation)
+  return trailing ? `${annotated}${trailing}` : annotated
+}
+
 function applyVerifiedAutoToLine(
   line: string,
   isoTimestamp: string,
@@ -415,10 +919,12 @@ function applyVerifiedAutoToLine(
 ): string {
   const { core, trailing } = extractTrailingMarkers(line)
   // 先 strip 舊 verified-auto（避免 retry 時 stale 重複），保留其他 annotations
-  const cleaned = stripVerifiedAutoAnnotation(core)
+  const cleaned = stripVerifiedAutoAnnotation(canonicalizeLeadingKindMarker(core))
   // verify:auto 設計上保留 `[ ]`，user 在 review GUI 確認後才勾 — 不在 helper 裡代勾
   const evidenceStr = serializeVerifyEvidence(evidence)
-  const annotated = `${cleaned.trimEnd()} (verified-auto: ${isoTimestamp}${evidenceStr ? ' ' + evidenceStr : ''})`
+  const annotated = canonicalizeStructuredAnnotations(
+    `${cleaned.trimEnd()} (verified-auto: ${isoTimestamp}${evidenceStr ? ' ' + evidenceStr : ''})`
+  )
   return trailing ? `${annotated}${trailing}` : annotated
 }
 
@@ -462,7 +968,7 @@ function sanitizeEvidenceValue(v: string): string {
 function applyActionToLine(line: string, action: 'ok' | 'issue' | 'skip', note: string): string {
   const { core, trailing } = extractTrailingMarkers(line)
   // 切換 action 前先剝離舊 annotation，避免 stale 殘留（例：先 issue 後改 ok 會留 (issue: ...)）
-  const stripped = stripAnnotations(core)
+  const stripped = stripAnnotations(canonicalizeLeadingKindMarker(core))
   let result: string
   if (action === 'ok') {
     const base = setCheckbox(stripped, true)
@@ -519,15 +1025,12 @@ function setCheckbox(line: string, checked: boolean): string {
 }
 
 function stripAnnotations(line: string): string {
-  return line
+  const withoutActionAnnotations = line
     .replace(/（issue:[^）]*）/g, '')
     .replace(/（skip(?::[^）]*)?）/g, '')
     .replace(/（note:[^）]*）/g, '')
     .replace(/[ \t]+$/, '')
-}
-
-function stripClaudeDiscussedAnnotation(line: string): string {
-  return line.replace(/\s*\(claude-discussed:[^)]*\)/g, '').replace(/[ \t]+$/, '')
+  return canonicalizeStructuredAnnotations(withoutActionAnnotations)
 }
 
 function appendAnnotation(line: string, kind: 'issue' | 'skip' | 'note', note: string): string {
@@ -679,7 +1182,7 @@ async function listPendingChanges(repoRoot: string): Promise<ChangeSummary[]> {
 async function loadProposalDefaultKind(
   repoRoot: string,
   change: string
-): Promise<ManualReviewItemKind> {
+): Promise<DefaultManualReviewItemKind> {
   const proposalPath = join(repoRoot, 'openspec', 'changes', change, 'proposal.md')
   if (!existsSync(proposalPath)) return 'review:ui'
   try {
@@ -698,7 +1201,7 @@ async function summarizeChange(
 ): Promise<ChangeSummary | null> {
   const content = await readFile(tasksPath, 'utf8')
   const defaultKind = await loadProposalDefaultKind(repoRoot, name)
-  const parsed = parseManualReviewSections(content, { defaultKind })
+  const parsed = parseManualReviewSections(content, { defaultKind, sourcePath: tasksPath })
   if (parsed.sections.length === 0) return null
 
   // 「真的通過」= [x] 且沒有 issue annotation。`[x]` + `（issue: ...）` 並存
@@ -728,7 +1231,7 @@ async function readChangeDetail(repoRoot: string, change: string): Promise<Chang
     listScreenshotPools(repoRoot),
     loadProposalDefaultKind(repoRoot, change),
   ])
-  const parsed = parseManualReviewSections(content, { defaultKind })
+  const parsed = parseManualReviewSections(content, { defaultKind, sourcePath: tasksPath })
   if (parsed.sections.length === 0) {
     throw new HttpError(404, `Change has no ## 人工檢查 section: ${change}`)
   }
@@ -776,6 +1279,7 @@ async function persistReviewAction(repoRoot: string, change: string, body: any):
   const defaultKind = await loadProposalDefaultKind(repoRoot, change)
   const updated = applyReviewActionToContent(content, body.itemId, action, body.note || '', {
     defaultKind,
+    sourcePath: tasksPath,
   })
   await writeFile(tasksPath, updated.content, 'utf8')
 
@@ -1231,7 +1735,7 @@ function renderReviewHtml(): string {
     .state-badge.ok { background: #d6ecdf; color: #1e6042; }
     .state-badge.issue { background: #fce4c8; color: #8a4f0a; }
     .state-badge.skip { background: #e7e1d3; color: #5a5341; }
-    /* Kind badge — 在 task-id 後顯示小標籤區分 review:ui / discuss / verify:auto */
+    /* Kind badge — 在 task-id 後顯示小標籤區分 review:ui / discuss / verify:* */
     .kind-badge {
       display: inline-block;
       margin-left: 6px;
@@ -1246,6 +1750,107 @@ function renderReviewHtml(): string {
     .kind-badge.review-ui { background: #e6eef7; color: #2455a3; }
     .kind-badge.discuss { background: #f3e7d6; color: #8a4f0a; }
     .kind-badge.verify-auto { background: #e0eee0; color: #2a6b2a; }
+    .kind-badge.verify-e2e { background: #e8edf7; color: #284b8f; }
+    .kind-badge.verify-api { background: #dff1ec; color: #176052; }
+    .kind-badge.verify-ui { background: #f1e5f5; color: #6b347e; }
+    .self-completed-section {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f5f1e8;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+    .self-completed-section summary {
+      cursor: pointer;
+      padding: 10px 12px;
+      font-weight: 700;
+      color: var(--muted);
+    }
+    .self-completed-list {
+      display: grid;
+      gap: 10px;
+      padding: 0 10px 10px;
+    }
+    .evidence-panel,
+    .compound-evidence,
+    .verified-ui-panel {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border: 1px solid #b9d6c7;
+      border-radius: 6px;
+      background: #f2f8f5;
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .compound-evidence {
+      display: grid;
+      gap: 8px;
+      background: #f7f5ee;
+      border-color: var(--line);
+    }
+    .evidence-panel h3,
+    .compound-evidence h3,
+    .verified-ui-panel h3 {
+      margin: 0 0 6px;
+      font-size: 13px;
+      color: var(--accent);
+    }
+    .evidence-panel p,
+    .compound-evidence p,
+    .verified-ui-panel p {
+      margin: 4px 0;
+    }
+    .evidence-panel code,
+    .compound-evidence code,
+    .verified-ui-panel code {
+      background: rgba(255, 255, 255, .72);
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 11px;
+    }
+    .evidence-link {
+      color: var(--focus);
+      overflow-wrap: anywhere;
+    }
+    .evidence-missing {
+      border-color: #d8c37c;
+      background: #fff8df;
+      color: #6b5115;
+    }
+    .evidence-notice {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      vertical-align: middle;
+    }
+    .status-badge.status-ok { background: #d6ecdf; color: #1e6042; }
+    .status-badge.status-warn { background: #ffe9bd; color: #7a520f; }
+    .status-badge.status-bad { background: #f8d2d2; color: #8a2525; }
+    .status-badge.status-neutral { background: #e7e1d3; color: #5a5341; }
+    .verified-ui-image {
+      display: block;
+      width: 100%;
+      max-height: 360px;
+      object-fit: contain;
+      margin-top: 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+    }
+    .task-item.kind-automatic {
+      background: #f3faf6;
+    }
+    .task-item.kind-verify-ui {
+      background: #fbf7fc;
+    }
     /* verify:auto evidence chip — 在 task-head 顯示「agent 已驗」+ tooltip 顯示 (verified-auto: ...) 內容 */
     .verified-auto-chip {
       display: inline-block;
@@ -1726,6 +2331,7 @@ function renderReviewHtml(): string {
       current: null,
       activeIndex: 0,
       expanded: new Set(),
+      selfCompletedOpen: false,
       // draftNotes: 使用者在 textarea 輸入但尚未 saveAction 的內容；以 itemId 為 key。
       // renderTasks 會整個重設 innerHTML 觸發 textarea 重建，沒這層 cache 會把
       // 使用者打字內容沖掉（renderTasks 由點 task / j/k / saveAction / reopen
@@ -2156,9 +2762,16 @@ function renderReviewHtml(): string {
       showBanner('');
       const data = await api('/api/changes/' + encodeURIComponent(name));
       state.current = data.change;
-      state.activeIndex = Math.max(0, (state.current.items || []).findIndex(function (item) { return !item.checked; }));
+      const items = state.current.items || [];
+      state.activeIndex = items.findIndex(function (item) {
+        return !item.checked && requiresUserConfirmation(item);
+      });
+      if (state.activeIndex < 0) {
+        state.activeIndex = items.findIndex(function (item) { return !item.checked; });
+      }
       if (state.activeIndex < 0) state.activeIndex = 0;
       state.expanded = new Set();
+      state.selfCompletedOpen = false;
       state.draftNotes = {};
       renderChanges();
       renderCurrent();
@@ -2173,6 +2786,199 @@ function renderReviewHtml(): string {
       }
       renderTasks();
       renderThumbs();
+    }
+
+    function itemKinds(item) {
+      return Array.isArray(item.kinds) && item.kinds.length ? item.kinds : [item.kind || 'review:ui'];
+    }
+
+    function hasKind(item, kind) {
+      return itemKinds(item).includes(kind);
+    }
+
+    function isAutomaticKind(kind) {
+      return kind === 'verify:e2e' || kind === 'verify:api';
+    }
+
+    function isAutomaticOnly(item) {
+      const kinds = itemKinds(item);
+      return kinds.length > 0 && kinds.every(isAutomaticKind);
+    }
+
+    function requiresUserConfirmation(item) {
+      return hasKind(item, 'review:ui') || hasKind(item, 'verify:ui');
+    }
+
+    function isSoloKind(item, kind) {
+      const kinds = itemKinds(item);
+      return kinds.length === 1 && kinds[0] === kind;
+    }
+
+    function localFileHref(path) {
+      if (!path) return '#';
+      const root = state.repoRoot ? state.repoRoot.replace(/\\/$/, '') : '';
+      const abs = path.startsWith('/') ? path : (root ? root + '/' + path : path);
+      return 'file://' + encodeURI(abs).replace(/#/g, '%23');
+    }
+
+    function screenshotUrl(path) {
+      if (!path) return '';
+      if (path.startsWith('screenshots/')) {
+        return '/api/screenshot/' + path.split('/').map(encodeURIComponent).join('/');
+      }
+      return localFileHref(path);
+    }
+
+    function statusClass(status) {
+      const code = Number(status);
+      if (code >= 200 && code < 300) return 'status-ok';
+      if (code >= 400 && code < 500) return 'status-warn';
+      if (code >= 500) return 'status-bad';
+      return 'status-neutral';
+    }
+
+    function renderEvidenceMissing() {
+      return '<div class="evidence-panel evidence-missing">evidence missing — run /spectra-apply Step 8a</div>';
+    }
+
+    function renderE2eEvidence(item, title) {
+      const evidence = item.annotations && item.annotations.verifiedE2e;
+      if (!evidence) return (title ? '<h3>' + esc(title) + '</h3>' : '') + renderEvidenceMissing();
+      return '<div class="evidence-panel">' +
+        (title ? '<h3>' + esc(title) + '</h3>' : '') +
+        '<p>spec: <a class="evidence-link" href="' + esc(localFileHref(evidence.spec)) + '" target="_blank" rel="noreferrer">' + esc(evidence.spec) + '</a></p>' +
+        '<p>trace: <a class="evidence-link" href="' + esc(localFileHref(evidence.trace)) + '" target="_blank" rel="noreferrer">' + esc(evidence.trace) + '</a></p>' +
+        '<p class="evidence-notice">自動完成，無需操作；archive-gate 認 annotation 為 evidence</p>' +
+      '</div>';
+    }
+
+    function renderApiEvidence(item, title) {
+      const evidence = item.annotations && item.annotations.verifiedApi;
+      if (!evidence) return (title ? '<h3>' + esc(title) + '</h3>' : '') + renderEvidenceMissing();
+      const body = evidence.body ? '<p>body: <code>' + esc(evidence.body) + '</code></p>' : '';
+      return '<div class="evidence-panel">' +
+        (title ? '<h3>' + esc(title) + '</h3>' : '') +
+        '<p><code>' + esc(evidence.method) + '</code> <code>' + esc(evidence.url) + '</code> <span class="status-badge ' + statusClass(evidence.status) + '">' + esc(evidence.status) + '</span></p>' +
+        body +
+        '<p class="evidence-notice">自動完成，無需操作</p>' +
+      '</div>';
+    }
+
+    function renderUiEvidence(item, title) {
+      const evidence = item.annotations && item.annotations.verifiedUi;
+      if (!evidence) return (title ? '<h3>' + esc(title) + '</h3>' : '') + renderEvidenceMissing();
+      const src = screenshotUrl(evidence.screenshot);
+      const dom = evidence.dom ? '<p>DOM: <code>' + esc(evidence.dom) + '</code></p>' : '';
+      return '<div class="verified-ui-panel">' +
+        (title ? '<h3>' + esc(title) + '</h3>' : '') +
+        '<p><a class="evidence-link" href="' + esc(localFileHref(evidence.screenshot)) + '" target="_blank" rel="noreferrer">' + esc(evidence.screenshot) + '</a></p>' +
+        '<img class="verified-ui-image" src="' + esc(src) + '" alt="' + esc(evidence.screenshot) + '">' +
+        dom +
+      '</div>';
+    }
+
+    function renderCompoundEvidence(item) {
+      const parts = [];
+      if (hasKind(item, 'verify:e2e')) parts.push(renderE2eEvidence(item, 'Playwright spec evidence'));
+      if (hasKind(item, 'verify:api')) parts.push(renderApiEvidence(item, 'API round-trip evidence'));
+      if (hasKind(item, 'verify:ui')) parts.push(renderUiEvidence(item, 'Final-state screenshot'));
+      if (!parts.length) return '';
+      return '<div class="compound-evidence"><h3>Compound evidence</h3>' + parts.join('') + '</div>';
+    }
+
+    function renderEvidenceForItem(item) {
+      if (hasKind(item, 'discuss')) {
+        return '<div class="discuss-card">' +
+            '<h3>此項由 Claude 主導</h3>' +
+            '<p>' + esc(item.description) + '</p>' +
+            '<p class="notice">archive 階段 Claude 會主動準備證據與你討論，這裡無需操作。</p>' +
+          '</div>';
+      }
+      if (isSoloKind(item, 'verify:e2e')) {
+        return '<div class="evidence-panel"><h3>此項由 Playwright spec 自動完成</h3><p>' + esc(item.description) + '</p></div>' +
+          renderE2eEvidence(item, '');
+      }
+      if (isSoloKind(item, 'verify:api')) {
+        return '<div class="evidence-panel"><h3>此項由 API round-trip 自動完成</h3><p>' + esc(item.description) + '</p></div>' +
+          renderApiEvidence(item, '');
+      }
+      if (isSoloKind(item, 'verify:ui')) {
+        return renderUiEvidence(item, 'Final-state screenshot');
+      }
+      if (itemKinds(item).length > 1) return renderCompoundEvidence(item);
+      return '';
+    }
+
+    function renderKindBadges(item) {
+      return itemKinds(item).map(function (kind) {
+        const className = kind.replace(':', '-');
+        let label = '此項需要使用者親自操作驗收';
+        if (kind === 'discuss') label = '此項由 Claude 主導，無需手動操作';
+        if (kind === 'verify:e2e') label = '此項由 Playwright spec 自動完成';
+        if (kind === 'verify:api') label = '此項由 API round-trip 自動完成';
+        if (kind === 'verify:ui') label = '此項需要使用者確認 final-state screenshot';
+        return '<span class="kind-badge ' + esc(className) + '" aria-label="' + esc(label) + '">[' + esc(kind) + ']</span>';
+      }).join('');
+    }
+
+    function renderTaskControls(item, noteValue) {
+      if (!requiresUserConfirmation(item)) return '';
+      return '<textarea class="note" data-note="' + esc(item.id) + '" placeholder="填寫說明（「有問題」必填、「跳過」可選填）">' + noteValue + '</textarea>' +
+        '<div class="actions">' +
+          '<button class="ok" data-action="ok" data-id="' + esc(item.id) + '" type="button" title="標記此項通過 (O)">✓ 通過</button>' +
+          '<button class="issue" data-action="issue" data-id="' + esc(item.id) + '" type="button" title="標記此項有問題，需填寫說明 (I)">⚠ 有問題</button>' +
+          '<button class="skip" data-action="skip" data-id="' + esc(item.id) + '" type="button" title="跳過此項，可選填原因 (S)">⤵ 跳過</button>' +
+        '</div>';
+    }
+
+    function renderTaskItem(item, index) {
+      const active = index === state.activeIndex;
+      const decision = parseDecision(item.raw);
+      const handled = decision.kind !== 'pending';
+      const collapsed = handled && !state.expanded.has(item.id);
+      const decisionClass = handled ? ' decision-' + decision.kind : '';
+      const isDiscuss = hasKind(item, 'discuss');
+      const kindClass = isDiscuss
+        ? ' kind-discuss'
+        : (isAutomaticOnly(item) ? ' kind-automatic' : (hasKind(item, 'verify:ui') ? ' kind-verify-ui' : ' kind-review-ui'));
+      let stateHtml;
+      if (handled) {
+        stateHtml = '<span class="state-badge ' + decision.kind + '">' + decisionLabel(decision.kind) + '</span>';
+        if (collapsed && requiresUserConfirmation(item)) {
+          stateHtml += '<button class="reopen" data-action="reopen" data-id="' + esc(item.id) + '" type="button" title="重新編輯此項">↻ 編輯</button>';
+        }
+        if (decision.kind === 'issue' && requiresUserConfirmation(item)) {
+          stateHtml += '<button class="copy-handoff-btn" data-handoff="item-issue" data-id="' + esc(item.id) + '" type="button" title="複製 handoff prompt 給新 Claude session 處理這個 issue">📋 handoff</button>';
+        }
+      } else if (isDiscuss) {
+        stateHtml = '由 Claude 主導';
+      } else if (isAutomaticOnly(item)) {
+        stateHtml = 'Self-Completed';
+      } else if (hasKind(item, 'verify:ui')) {
+        stateHtml = '待人工確認';
+      } else {
+        stateHtml = '待檢查';
+      }
+      const noteValue = decision.note ? esc(decision.note) : '';
+      const bodyHtml = renderEvidenceForItem(item) + renderTaskControls(item, noteValue);
+      return '<article class="task-item' + (active ? ' active' : '') + (item.scoped ? ' scoped' : '') + decisionClass + (collapsed ? ' collapsed' : '') + kindClass + '" data-item="' + esc(item.id) + '" data-index="' + index + '">' +
+        '<div class="task-head">' +
+        '<span class="task-id">' + esc(item.id) + renderKindBadges(item) + '</span>' +
+        '<span class="task-desc">' + esc(item.description) + '</span>' +
+        '<span class="task-state">' + stateHtml + '</span>' +
+        '</div>' +
+        bodyHtml +
+        '</article>';
+    }
+
+    function renderSelfCompletedSection(entries) {
+      if (!entries.length) return '';
+      return '<details id="selfCompletedSection" class="self-completed-section"' + (state.selfCompletedOpen ? ' open' : '') + '>' +
+        '<summary>Self-Completed (' + entries.length + ')</summary>' +
+        '<div class="self-completed-list">' +
+        entries.map(function (entry) { return renderTaskItem(entry.item, entry.index); }).join('') +
+        '</div>' +
+      '</details>';
     }
 
     function renderTasks() {
@@ -2198,100 +3004,30 @@ function renderReviewHtml(): string {
       const malformed = malformedHandoff + change.malformedLines.map(function (line) {
         return '<div class="task-item"><div class="task-head"><span class="task-id">第 ' + line.lineNumber + ' 行</span><span class="task-desc">' + esc(line.raw) + '</span><span class="task-state">格式錯誤</span></div></div>';
       }).join('');
-      const items = change.items.map(function (item, index) {
-        const active = index === state.activeIndex;
-        const decision = parseDecision(item.raw);
-        const handled = decision.kind !== 'pending';
-        const collapsed = handled && !state.expanded.has(item.id);
-        const decisionClass = handled ? ' decision-' + decision.kind : '';
-        const isDiscuss = item.kind === 'discuss';
-        const isVerifyAuto = item.kind === 'verify:auto';
-        const kindClass = isDiscuss ? ' kind-discuss' : (isVerifyAuto ? ' kind-verify-auto' : ' kind-review-ui');
-        // Kind badge：三 kind 各一色。aria-label 給 a11y。
-        let kindBadge;
-        if (isDiscuss) {
-          kindBadge = '<span class="kind-badge discuss" aria-label="此項由 Claude 主導，無需手動操作">[discuss]</span>';
-        } else if (isVerifyAuto) {
-          kindBadge = '<span class="kind-badge verify-auto" aria-label="此項由 agent 用 browser-harness 自動 round-trip，使用者只需確認 evidence">[verify:auto]</span>';
-        } else {
-          kindBadge = '<span class="kind-badge review-ui" aria-label="此項需要使用者親自操作驗收">[review:ui]</span>';
-        }
-        // 解析 (verified-auto: <ISO> network=... dom=...) annotation — 只對 verify:auto items 取
-        // regex literal 在 outer template literal 內，\`\\\` 必須 double 才能在 render 後保留：
-        // .mts source \`\\\\(\` → backtick string 解析 → \`\\(\` → 瀏覽器 regex literal → 匹配 literal \`(\`
-        // 原版單 \`\\\` 被 backtick 解析吃掉，render 成 \`(verified-auto:s*([^)]+))\`，group 結構錯位
-        const verifiedAutoMatch = isVerifyAuto ? item.raw.match(/\\(verified-auto:\\s*([^)]+)\\)/) : null;
-        const verifiedAutoEvidence = verifiedAutoMatch ? verifiedAutoMatch[1].trim() : null;
-        let stateHtml;
-        if (handled) {
-          stateHtml = '<span class="state-badge ' + decision.kind + '">' + decisionLabel(decision.kind) + '</span>';
-          if (collapsed) {
-            stateHtml += '<button class="reopen" data-action="reopen" data-id="' + esc(item.id) + '" type="button" title="重新編輯此項">↻ 編輯</button>';
-          }
-          if (decision.kind === 'issue' && !isDiscuss) {
-            stateHtml += '<button class="copy-handoff-btn" data-handoff="item-issue" data-id="' + esc(item.id) + '" type="button" title="複製 handoff prompt 給新 Claude session 處理這個 issue">📋 handoff</button>';
-          }
-        } else if (isDiscuss) {
-          stateHtml = '由 Claude 主導';
-        } else if (isVerifyAuto && verifiedAutoEvidence) {
-          stateHtml = '<span class="verified-auto-chip" title="agent 已 round-trip — ' + esc(verifiedAutoEvidence) + '">✓ agent 已驗</span> 待確認';
-        } else if (isVerifyAuto) {
-          stateHtml = '待 agent 跑';
-        } else {
-          stateHtml = '待檢查';
-        }
-        const noteValue = decision.note ? esc(decision.note) : '';
-        // Discuss items：不顯示 textarea / OK / Issue / SKIP buttons / handoff button（spec line 169）。
-        // 改顯示 dedicated 卡片提示「此項由 Claude 主導」。
-        // verify:auto items：跟 review:ui 一樣顯示 OK/Issue/Skip（user 仍要點 OK 才勾），多顯示 evidence card。
-        let bodyHtml;
-        if (isDiscuss) {
-          bodyHtml = '<div class="discuss-card">' +
-              '<h3>此項由 Claude 主導</h3>' +
-              '<p>' + esc(item.description) + '</p>' +
-              '<p class="notice">archive 階段 Claude 會主動準備證據與你討論，這裡無需操作。</p>' +
-            '</div>';
-        } else {
-          const evidenceCard = (isVerifyAuto && verifiedAutoEvidence)
-            ? '<div class="verify-auto-card">' +
-                '<strong>agent verify-auto 通過</strong>：<code>' + esc(verifiedAutoEvidence) + '</code>' +
-                '<p style="margin:6px 0 0">看右側 final-state screenshot 確認後按「✓ 通過」；發現異常按「⚠ 有問題」。</p>' +
-              '</div>'
-            : (isVerifyAuto
-              ? '<div class="verify-auto-card" style="background:#fdf6e3;border-color:#d6c899">' +
-                  '<strong>等待 agent 跑 verify-auto</strong>' +
-                  '<p style="margin:6px 0 0">spectra-apply Step 8a 會由主線派 screenshot-review agent 自跑 round-trip。若主線沒跑，回去要求補。</p>' +
-                '</div>'
-              : '');
-          bodyHtml = evidenceCard +
-            '<textarea class="note" data-note="' + esc(item.id) + '" placeholder="填寫說明（「有問題」必填、「跳過」可選填）">' + noteValue + '</textarea>' +
-            '<div class="actions">' +
-              '<button class="ok" data-action="ok" data-id="' + esc(item.id) + '" type="button" title="標記此項通過 (O)">✓ 通過</button>' +
-              '<button class="issue" data-action="issue" data-id="' + esc(item.id) + '" type="button" title="標記此項有問題，需填寫說明 (I)">⚠ 有問題</button>' +
-              '<button class="skip" data-action="skip" data-id="' + esc(item.id) + '" type="button" title="跳過此項，可選填原因 (S)">⤵ 跳過</button>' +
-            '</div>';
-        }
-        return '<article class="task-item' + (active ? ' active' : '') + (item.scoped ? ' scoped' : '') + decisionClass + (collapsed ? ' collapsed' : '') + kindClass + '" data-item="' + esc(item.id) + '">' +
-          '<div class="task-head">' +
-          '<span class="task-id">' + esc(item.id) + kindBadge + '</span>' +
-          '<span class="task-desc">' + esc(item.description) + '</span>' +
-          '<span class="task-state">' + stateHtml + '</span>' +
-          '</div>' +
-          bodyHtml +
-          '</article>';
-      }).join('');
+      const indexedItems = change.items.map(function (item, index) { return { item: item, index: index }; });
+      const selfCompleted = indexedItems.filter(function (entry) { return isAutomaticOnly(entry.item); });
+      const interactive = indexedItems.filter(function (entry) { return !isAutomaticOnly(entry.item); });
+      const items = renderSelfCompletedSection(selfCompleted) +
+        interactive.map(function (entry) { return renderTaskItem(entry.item, entry.index); }).join('');
       el.taskList.innerHTML = malformed + items;
+      const selfSection = el.taskList.querySelector('#selfCompletedSection');
+      if (selfSection) {
+        selfSection.addEventListener('toggle', function () {
+          state.selfCompletedOpen = selfSection.open;
+        });
+      }
       el.taskList.querySelectorAll('[data-item]').forEach(function (node, index) {
         node.addEventListener('click', function (event) {
           const interactive = event.target.closest && event.target.closest('button, textarea, input, select');
           // 點當前 active card 的互動元素：不重建，保留 focus 與輸入
-          if (interactive && state.activeIndex === index) return;
-          if (state.activeIndex === index) return;
+          const itemIndex = Number(node.dataset.index);
+          if (interactive && state.activeIndex === itemIndex) return;
+          if (state.activeIndex === itemIndex) return;
           // 點別張 card：切 active，若原本點的是 textarea，重建後把 focus 還回對應 textarea
           const focusNoteId = (event.target.tagName === 'TEXTAREA' && event.target.dataset && event.target.dataset.note)
             ? event.target.dataset.note
             : null;
-          state.activeIndex = index;
+          state.activeIndex = itemIndex;
           renderTasks();
           renderThumbs();
           if (focusNoteId) {
@@ -2387,9 +3123,14 @@ function renderReviewHtml(): string {
       }
       // Discuss items：不顯示 thumbnail grid、不顯示 handoff button、不顯示 unmatched guidance（spec line 169）。
       // 只在 thumb pane 顯示「此項由 Claude 主導」提示，與中間 task list 的 discuss-card 呼應。
-      if (item.kind === 'discuss') {
+      if (hasKind(item, 'discuss')) {
         el.selectionStatus.textContent = '檢查項 ' + item.id + ' · 此項由 Claude 主導，無需截圖驗證';
         el.thumbGrid.replaceChildren(discussThumbMessage(item.description));
+        return;
+      }
+      if (isAutomaticOnly(item)) {
+        el.selectionStatus.textContent = '檢查項 ' + item.id + ' · Self-Completed · 無需截圖操作';
+        el.thumbGrid.replaceChildren(automaticThumbMessage(item.description));
         return;
       }
       const change = state.current;
@@ -2507,6 +3248,23 @@ function renderReviewHtml(): string {
       return div;
     }
 
+    function automaticThumbMessage(description) {
+      const div = document.createElement('div');
+      div.className = 'empty';
+      const title = document.createElement('p');
+      title.textContent = 'Self-Completed';
+      const body = document.createElement('p');
+      body.textContent = description;
+      const hint = document.createElement('p');
+      hint.textContent = 'automatic channel 的 evidence 顯示在中間清單，無需 OK / Issue / SKIP';
+      hint.style.opacity = '0.7';
+      hint.style.fontSize = '12px';
+      div.appendChild(title);
+      div.appendChild(body);
+      div.appendChild(hint);
+      return div;
+    }
+
     function descriptionGuidanceMessage(description) {
       const div = document.createElement('div');
       div.className = 'empty';
@@ -2561,6 +3319,11 @@ function renderReviewHtml(): string {
     async function saveAction(itemId, action) {
       const change = state.current;
       if (!change) return;
+      const targetItem = (change.items || []).find(function (item) { return item.id === itemId; });
+      if (!targetItem || !requiresUserConfirmation(targetItem)) {
+        showBanner('此項自動完成或由 Claude 主導，無需在 GUI 操作', '');
+        return;
+      }
       if (change.malformedLines.length) {
         showBanner('寫入前需先修正格式錯誤', 'error');
         return;
@@ -2749,9 +3512,9 @@ function renderReviewHtml(): string {
       const key = event.key.toLowerCase();
       if (key === 'j') { event.preventDefault(); moveActive(1); }
       else if (key === 'k') { event.preventDefault(); moveActive(-1); }
-      else if (key === 'o') { event.preventDefault(); saveAction(item.id, 'ok'); }
-      else if (key === 'i') { event.preventDefault(); saveAction(item.id, 'issue'); }
-      else if (key === 's') { event.preventDefault(); saveAction(item.id, 'skip'); }
+      else if (key === 'o') { event.preventDefault(); if (requiresUserConfirmation(item)) saveAction(item.id, 'ok'); }
+      else if (key === 'i') { event.preventDefault(); if (requiresUserConfirmation(item)) saveAction(item.id, 'issue'); }
+      else if (key === 's') { event.preventDefault(); if (requiresUserConfirmation(item)) saveAction(item.id, 'skip'); }
       else if (key === 'enter') {
         const first = el.thumbGrid.querySelector('[data-url]');
         if (first) openViewer(first.dataset.url, first.dataset.shot);
