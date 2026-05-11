@@ -275,9 +275,9 @@ rg -nE "code:\\s*['\"][a-z][a-z0-9._]*\\.[A-Z_]+['\"]" "**/*.test.ts" "**/*.spec
 ## MUST
 
 - evlog 採用 **MUST** 走 cookbook + spectra template + starter preset 三層治理；**MUST NOT** consumer 自家從零摸索 wiring
-- 任何 drain **MUST** 經 `pipeline.wrap` 包覆（見 `rules/core/logging.md` Drain pipeline 規範）
+- 任何自家 drain **MUST** 經 `createDrainPipeline(opts)(drain)` 包覆（見 `rules/core/logging.md` Drain pipeline 規範）
 - production sampling **MUST** 滿足 error 100% / audit forceKeep 100% / warn ≥ 50% / info ≥ 10%
-- production **MUST** 開 `redactionPolicy`，至少含 6 類 secret keys + 3 類 patterns（見 logging.md）
+- production **MUST** 開 `evlog.redact`，至少涵蓋 password 與 token / authorization（見 logging.md）
 - 5 件套 enricher（UA / RequestSize / Geo / TraceContext + multi-tenant 加 tenant）**MUST** 全裝
 - client transport **MUST** 開（5 consumer 共同 gap），endpoint **MUST** 套 CSRF + rate-limit + redaction
 - O1 overlay **MUST** 不取代 D-pattern DB canonical truth；evlog signed chain 是 derived stream
@@ -287,9 +287,9 @@ rg -nE "code:\\s*['\"][a-z][a-z0-9._]*\\.[A-Z_]+['\"]" "**/*.test.ts" "**/*.spec
 ## MUST NOT
 
 - **MUST NOT** 在 `server/api/` 使用 `consola`（遷至 `useLogger`）
-- **MUST NOT** 用 raw drain（沒 `pipeline.wrap`）— Workers subrequest budget 會被吃光
+- **MUST NOT** 用 raw drain（沒 `createDrainPipeline`）— Workers subrequest budget 會被吃光
 - **MUST NOT** sample `error` < 100% 或 `audit` 不 forceKeep
-- **MUST NOT** 在 `redactionPolicy` 缺 `password` / `token` / `authorization` keys
+- **MUST NOT** 在 `redact.paths` 缺 `password` 或 `token|authorization`；`redact: true` 視為啟用 builtins
 - **MUST NOT** 把 `auditEventId` 漏掉（evlog audit event 沒 `auditEventId` = D-pattern source 找不回）
 - **MUST NOT** 把 evlog signed chain 當 audit canonical truth — DB row 才是
 - **MUST NOT** 在 enricher 內 await DB query — 拖慢 hot path；resolve 函式要 sync 或 cache
@@ -302,9 +302,9 @@ rg -nE "code:\\s*['\"][a-z][a-z0-9._]*\\.[A-Z_]+['\"]" "**/*.test.ts" "**/*.spec
 | 反模式 | 為什麼壞 | 怎麼改 |
 | --- | --- | --- |
 | consumer 自家寫 drain（不引用 vendor snippet） | drift；clade 升版 snippet 時 consumer 不會跟上 | `cp -r ~/offline/clade/openspec/templates/evlog-*` 或裝對應 plugin |
-| 把 raw drain 直接接 Sentry | Workers 50 subrequest 用光 | 套 `createPipeline` 包覆 |
-| sampling = 0.1 全 level（含 error） | error 90% 漏；告警失效 | `byLevel.error: 1.0`，`forceKeep` 加 audit |
-| `redactionPolicy` 只 keys 沒 patterns | API key（無共通名稱）漏 redact | 加 `patterns` regex（sk- / Bearer / JWT） |
+| 把 raw drain 直接接 Sentry | Workers 50 subrequest 用光 | 套 `createDrainPipeline(opts)(drain)` 包覆 |
+| sampling rate 用 0.1 全 level（含 error） | evlog rates 是 0-100；error 會被誤 sample，告警失效 | `rates.error: 100`，audit consumer 另 wire `evlog:emit:keep` |
+| `redact` 只列 paths 沒 patterns / builtins | API key（無共通名稱）漏 redact | 加 `patterns` regex（sk- / Bearer / JWT）或直接 `redact: true` |
 | typed fields 把整個 request body 塞進去 | 失去 wide event 彈性；schema 改一處全 endpoint 重 build | typed 只用於跨 endpoint 共用核心欄位 |
 | client transport endpoint 沒 rate-limit | client bug 暴量打死 endpoint | rate-limit 100 req/min/user + CSRF + redaction |
 | 在 enricher 內 await DB query 抓 tenant tier | hot path 拖慢；fail 影響整個 wide event | enricher 只 resolve sync 欄位；tier 由 consumer 在 handler 內 `log.set` |
@@ -316,16 +316,16 @@ rg -nE "code:\\s*['\"][a-z][a-z0-9._]*\\.[A-Z_]+['\"]" "**/*.test.ts" "**/*.spec
 
 ```bash
 # Depth marker（自評用）
-rg -n "useLogger\\(event\\)" server | wc -l
-rg -n "createPipeline\\(|pipeline\\.wrap" server/plugins | wc -l
-rg -n "samplingPolicy\\(|redactionPolicy\\(" server/plugins | wc -l
-rg -n "evlog:[\\s\\S]*client:[\\s\\S]*enabled:\\s*true" nuxt.config.ts
+rg -n "useLogger\\(event\\)" server packages/**/server | wc -l
+rg -n "createDrainPipeline\\(" server/plugins packages/**/server/plugins | wc -l
+rg -nM "rates:\\s*\\{[\\s\\S]*error:\\s*100" nuxt.config.ts packages/**/nuxt.config.ts
+rg -n "redact:\\s*(true|\\{)" nuxt.config.ts packages/**/nuxt.config.ts
+rg -nM "transport:\\s*\\{[\\s\\S]{0,200}?enabled:\\s*true" nuxt.config.ts packages/**/nuxt.config.ts
 
 # 反模式
-rg -n "createSentryDrain\\(" server | rg -v "pipeline\\.wrap" # raw drain
-rg -nA10 "samplingPolicy\\(" server/plugins | rg "error:\\s*0\\." # error sampled
-rg -nA10 "redactionPolicy\\(" server/plugins | rg -v "password|token|authorization" # 缺核心 keys
-rg -n "consola" server/api # consola 遷移漏網
+rg -n "createSentryDrain\\(" server packages/**/server | rg -v "createDrainPipeline" # raw drain
+rg -n "error:\\s*[0-9]+" nuxt.config.ts packages/**/nuxt.config.ts # 檢查 error rate 是否 < 100
+rg -n "consola" server/api packages/**/server/api # consola 遷移漏網
 ```
 
-完整 static audit script 在 M2 階段補：`scripts/evlog-adoption-audit.mjs`（spec 見 `docs/evlog-master-plan.md` § 10.1）。
+完整 static audit script 已落地在 `scripts/evlog-adoption-audit.mjs`。
