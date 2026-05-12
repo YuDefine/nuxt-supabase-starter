@@ -16,8 +16,139 @@ import { join, normalize, resolve, sep } from 'node:path'
 import { Readable } from 'node:stream'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 
 const DEFAULT_PORT = 5174
+
+// =============================================================================
+// Manual Review Pre-Flight Pattern Source
+// =============================================================================
+// Loads the same patterns.json that post-propose-manual-review-check.sh uses,
+// keeping the bash hook and GUI client in lockstep (single source-of-truth).
+// Patterns evaluate on parent item block content (parent line + scoped children
+// joined by newlines) so that a sample UID / URL inline in a sub-item satisfies
+// `requiresPresenceOf` / `requiresAbsenceOf` on the parent.
+
+export interface ManualReviewPatternEntry {
+  code: string
+  description: string
+  regex: string
+  regexFlags?: string
+  anchor: string
+  remediation: string
+  requiresPresenceOf?: string
+  requiresAbsenceOf?: string
+  appliesTo?: string
+}
+
+let cachedPatterns: ManualReviewPatternEntry[] | null = null
+
+function locatePatternsFile(): string | null {
+  // Search upward from CWD looking for vendor/snippets/manual-review-enforcement/patterns.json
+  // (works in both clade central repo and consumer repos).
+  let dir = process.cwd()
+  for (let i = 0; i < 8; i++) {
+    const candidate = join(dir, 'vendor', 'snippets', 'manual-review-enforcement', 'patterns.json')
+    if (existsSync(candidate)) return candidate
+    const parent = resolve(dir, '..')
+    if (parent === dir) break
+    dir = parent
+  }
+  return null
+}
+
+/**
+ * Translate POSIX bracket expressions used by the bash hook into JS-compatible
+ * regex syntax. patterns.json is designed for both `grep -E` (POSIX) and JS
+ * `RegExp`; this one-way transform keeps a single source-of-truth.
+ */
+function translatePosixToJs(pattern: string): string {
+  return pattern
+    .replace(/\[\[:space:\]\]/g, '\\s')
+    .replace(/\[\[:digit:\]\]/g, '\\d')
+    .replace(/\[\[:alpha:\]\]/g, '[A-Za-z]')
+    .replace(/\[\[:alnum:\]\]/g, '[A-Za-z0-9]')
+    .replace(/\[\[:upper:\]\]/g, '[A-Z]')
+    .replace(/\[\[:lower:\]\]/g, '[a-z]')
+}
+
+export function loadManualReviewPatterns(): ManualReviewPatternEntry[] {
+  if (cachedPatterns !== null) return cachedPatterns
+  const path = locatePatternsFile()
+  if (!path) {
+    cachedPatterns = []
+    return cachedPatterns
+  }
+  try {
+    const raw = readFileSync(path, 'utf8')
+    const parsed = JSON.parse(raw) as { patterns?: ManualReviewPatternEntry[] }
+    const entries = Array.isArray(parsed.patterns) ? parsed.patterns : []
+    cachedPatterns = entries.map((p) => ({
+      ...p,
+      regex: translatePosixToJs(p.regex),
+      requiresPresenceOf: p.requiresPresenceOf
+        ? translatePosixToJs(p.requiresPresenceOf)
+        : undefined,
+      requiresAbsenceOf: p.requiresAbsenceOf ? translatePosixToJs(p.requiresAbsenceOf) : undefined,
+    }))
+  } catch {
+    cachedPatterns = []
+  }
+  return cachedPatterns
+}
+
+/**
+ * Evaluate manual-review patterns against an item block.
+ * `block`: parent line (+ optional scoped children joined by newline).
+ * `isParent`: when true, requiresPresenceOf / requiresAbsenceOf evaluate against
+ *   the full block; when false, only against the line itself.
+ * `appliesTo: parentLineOnly` patterns skip scoped children entirely.
+ */
+export function evaluateManualReviewPatterns(
+  block: string,
+  isParent: boolean
+): Array<{ code: string; description: string; anchor: string }> {
+  const patterns = loadManualReviewPatterns()
+  const hits: Array<{ code: string; description: string; anchor: string }> = []
+  // Primary regex evaluates against the first line (the item line itself).
+  const firstLine = block.split('\n')[0] ?? ''
+  for (const p of patterns) {
+    if (p.appliesTo === 'parentLineOnly' && !isParent) continue
+    let primaryRe: RegExp
+    try {
+      primaryRe = new RegExp(p.regex, p.regexFlags ?? '')
+    } catch {
+      continue
+    }
+    if (!primaryRe.test(firstLine)) continue
+    const scope = isParent ? block : firstLine
+    if (p.requiresPresenceOf) {
+      try {
+        const re = new RegExp(p.requiresPresenceOf, p.regexFlags ?? '')
+        if (re.test(scope)) continue
+      } catch {
+        // invalid regex → fall through to hit
+      }
+    }
+    if (p.requiresAbsenceOf) {
+      try {
+        const re = new RegExp(p.requiresAbsenceOf, p.regexFlags ?? '')
+        if (re.test(scope)) continue
+      } catch {
+        // invalid regex → fall through to hit
+      }
+    }
+    // MULTI_STEP_NOT_SCOPED special case: skip if parent block already contains
+    // scoped sub-items (lines beginning with two-space indent + `- [`).
+    if (p.code === 'MULTI_STEP_NOT_SCOPED' && isParent) {
+      const hasScopedChildren = block.split('\n').some((l) => /^ {2}- \[[ xX]\]/.test(l))
+      if (hasScopedChildren) continue
+    }
+    hits.push({ code: p.code, description: p.description, anchor: p.anchor })
+  }
+  return hits
+}
+
 const PORT_FALLBACK_RANGE = 20
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif'])
 const MANUAL_REVIEW_HEADING_RE = /^##\s+.*人工檢查\s*$/
@@ -26,6 +157,11 @@ const CHECKBOX_LINE_RE = /^[ \t]*- \[[ xX]\]\s+/
 const PARENT_ITEM_RE = /^- \[([ xX])\] (#[1-9][0-9]*) (.+)$/
 const SCOPED_ITEM_RE = /^  - \[([ xX])\] (#[1-9][0-9]*\.[1-9][0-9]*) (.+)$/
 const TRAILING_NO_SCREENSHOT_RE = /(^|[^ ]) @no-screenshot$/
+// `@no-manual-review-check[<reason>]` bypass marker per manual-review.md hard rule.
+// Empty brackets and bare marker (no brackets) are invalid by schema → not captured here.
+// May coexist with trailing `@no-screenshot` (canonical ordering: bypass then no-screenshot).
+const TRAILING_NO_MANUAL_REVIEW_CHECK_RE =
+  /@no-manual-review-check\[([^\][]+)\](?:\s+@no-screenshot)?\s*$/
 // 解析 leading kind marker — 必須緊接 `#N` / `#N.M` 後第一個 token、含一個 trailing space。
 // description-mid 的 [discuss] / [review:ui] / [verify:*] 不會被命中（不是行首）。
 const LEADING_KIND_RE = /^\[([^\]]+)\]\s+/
@@ -98,6 +234,10 @@ export interface ManualReviewItem {
   lineIndex: number
   lineNumber: number
   noScreenshot: boolean
+  /** Pre-flight bypass marker `@no-manual-review-check[<reason>]`，若 valid 則 hook + GUI 跳過 pattern eval。 */
+  bypassManualReviewCheck: { reason: string } | null
+  /** Pre-flight hit findings — patterns.json regex matches against item block。bypassManualReviewCheck 非 null 時為空。 */
+  manualReviewHits: Array<{ code: string; description: string; anchor: string }>
   /** Resolved leading kind marker；legacy field，等於 `kinds[0]`。 */
   kind: ManualReviewItemKind
   /** Resolved kind markers；`[verify:auto]` 會展開成 `['verify:api', 'verify:ui']`。 */
@@ -274,6 +414,29 @@ export function parseManualReviewSections(
     })
   }
 
+  // Post-pass: evaluate Pre-Review Data Readiness patterns against each item.
+  // Parent items see the full block (parent line + scoped children); scoped items
+  // see only their own line. Bypassed items keep `manualReviewHits` empty.
+  for (const section of sections) {
+    const byParent = new Map<string, ManualReviewItem[]>()
+    for (const item of section.items) {
+      if (item.scoped && item.parentId) {
+        if (!byParent.has(item.parentId)) byParent.set(item.parentId, [])
+        byParent.get(item.parentId)!.push(item)
+      }
+    }
+    for (const item of section.items) {
+      if (item.bypassManualReviewCheck) continue
+      if (item.scoped) {
+        item.manualReviewHits = evaluateManualReviewPatterns(item.raw, false)
+      } else {
+        const children = byParent.get(item.id) ?? []
+        const block = [item.raw, ...children.map((c) => c.raw)].join('\n')
+        item.manualReviewHits = evaluateManualReviewPatterns(block, true)
+      }
+    }
+  }
+
   const items = sections.flatMap((section) => section.items)
   const malformed = sections.flatMap((section) => section.malformed)
   return { sections, items, malformed }
@@ -299,7 +462,15 @@ function toReviewItem(
   })
   const annotations = parseStructuredAnnotations(raw, { sourcePath, lineNumber: lineIndex + 1 })
   const withoutAnnotations = stripStructuredAnnotations(afterKind)
-  const { description, noScreenshot } = parseNoScreenshotMarker(withoutAnnotations)
+  // Parse bypass marker before @no-screenshot so they coexist correctly.
+  const { description: afterBypass, bypassManualReviewCheck } =
+    parseNoManualReviewCheckMarker(withoutAnnotations)
+  const { description, noScreenshot } = parseNoScreenshotMarker(afterBypass)
+  if (bypassManualReviewCheck) {
+    process.stderr.write(
+      `[info] ${sourcePath}:${lineIndex + 1} bypass: ${bypassManualReviewCheck.reason}\n`
+    )
+  }
   return {
     id,
     description,
@@ -310,6 +481,9 @@ function toReviewItem(
     lineIndex,
     lineNumber: lineIndex + 1,
     noScreenshot,
+    bypassManualReviewCheck,
+    // Filled in by parseManualReviewSections post-pass once scoped children are available.
+    manualReviewHits: [],
     kind: kinds[0]!,
     kinds,
     annotations,
@@ -484,6 +658,32 @@ function parseNoScreenshotMarker(description: string): {
   return {
     description: description.slice(0, -' @no-screenshot'.length).trim(),
     noScreenshot: true,
+  }
+}
+
+/**
+ * Parse `@no-manual-review-check[<reason>]` bypass marker per manual-review.md hard rule.
+ * Empty brackets `[]` and bare marker (no brackets) are invalid → returns null.
+ * Marker must be trailing (optionally followed by `@no-screenshot`).
+ */
+function parseNoManualReviewCheckMarker(description: string): {
+  description: string
+  bypassManualReviewCheck: { reason: string } | null
+} {
+  const match = description.match(TRAILING_NO_MANUAL_REVIEW_CHECK_RE)
+  if (!match) {
+    return { description, bypassManualReviewCheck: null }
+  }
+  const reason = match[1]!.trim()
+  if (!reason) {
+    return { description, bypassManualReviewCheck: null }
+  }
+  // Strip the bypass marker but preserve trailing @no-screenshot for downstream parser.
+  const stripped = description.slice(0, match.index).trim()
+  const afterScreenshot = match[0]!.endsWith('@no-screenshot') ? ' @no-screenshot' : ''
+  return {
+    description: (stripped + afterScreenshot).trim(),
+    bypassManualReviewCheck: { reason },
   }
 }
 
@@ -1710,6 +1910,40 @@ function renderReviewHtml(): string {
     .ok { background: #e6f3ea; border-color: #a7cdb4; }
     .issue { background: #fff3e2; border-color: #d8ad68; }
     .skip { background: #f0eee8; }
+    /* Pre-flight warning banner — Layer C of manual-review.md mechanical enforcement.
+       Amber treatment, distinct from red verify-channel evidence-missing banners.
+       Banner does NOT block — user can still OK / Issue / SKIP. */
+    .manual-review-banner {
+      background: #fff7e0;
+      border: 1px solid #d8a851;
+      border-left: 4px solid #c97a2c;
+      padding: 8px 12px;
+      margin: 8px 0;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #6b4a14;
+    }
+    .manual-review-banner .mr-banner-title {
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .manual-review-banner ul {
+      margin: 4px 0 4px 16px;
+      padding: 0;
+    }
+    .manual-review-banner li {
+      margin: 2px 0;
+    }
+    .manual-review-banner code {
+      background: #ffe9b3;
+      padding: 0 4px;
+      border-radius: 2px;
+    }
+    .manual-review-banner .mr-banner-hint {
+      margin-top: 6px;
+      font-style: italic;
+      opacity: 0.85;
+    }
     .task-item.decision-ok { border-left: 4px solid #6aa181; }
     .task-item.decision-issue { border-left: 4px solid #c97a2c; }
     .task-item.decision-skip { border-left: 4px solid #8a8275; }
@@ -2964,6 +3198,7 @@ function renderReviewHtml(): string {
         stateHtml = '待檢查';
       }
       const noteValue = decision.note ? esc(decision.note) : '';
+      const bannerHtml = renderManualReviewBanner(item);
       const bodyHtml = renderEvidenceForItem(item) + renderTaskControls(item, noteValue);
       return '<article class="task-item' + (active ? ' active' : '') + (item.scoped ? ' scoped' : '') + decisionClass + (collapsed ? ' collapsed' : '') + kindClass + '" data-item="' + esc(item.id) + '" data-index="' + index + '">' +
         '<div class="task-head">' +
@@ -2971,8 +3206,23 @@ function renderReviewHtml(): string {
         '<span class="task-desc">' + esc(item.description) + '</span>' +
         '<span class="task-state">' + stateHtml + '</span>' +
         '</div>' +
+        bannerHtml +
         bodyHtml +
         '</article>';
+    }
+
+    function renderManualReviewBanner(item) {
+      var hits = item.manualReviewHits || [];
+      if (!hits.length) return '';
+      var lines = hits.map(function (h) {
+        return '<li><code>' + esc(h.code) + '</code> — ' + esc(h.description) +
+               ' <a href=".claude/rules/' + esc(h.anchor) + '" target="_blank" style="opacity:.8;font-size:11px;">(rule)</a></li>';
+      }).join('');
+      return '<div class="manual-review-banner" role="alert" data-mr-banner="1">' +
+             '<div class="mr-banner-title">⚠ Pre-Review Data Readiness — ' + hits.length + ' 個 pattern 命中</div>' +
+             '<ul>' + lines + '</ul>' +
+             '<div class="mr-banner-hint">建議跑 <code>/spectra-ingest</code> 補上具體 sample / URL / scoped sub-items（warning non-blocking — 仍可 OK / Issue / SKIP）。</div>' +
+             '</div>';
     }
 
     function renderSelfCompletedSection(entries) {
