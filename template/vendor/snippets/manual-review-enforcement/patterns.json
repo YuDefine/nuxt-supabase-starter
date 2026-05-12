@@ -1,0 +1,52 @@
+{
+  "$schema": "./patterns.schema.json",
+  "version": "1.0.0",
+  "description": "Single source-of-truth regex patterns for Pre-Review Data Readiness enforcement. Consumed by post-propose-manual-review-check.sh (via jq) and vendor/scripts/review-gui.mts (via import).",
+  "patterns": [
+    {
+      "code": "ABSTRACT_REFERENCE",
+      "description": "模糊指代詞命中（per manual-review.md Pre-Review Data Readiness）— item description 使用「某張」「某筆」「任一」等抽象指代，未 inline 具體 sample identifier",
+      "regex": "某張|某筆|某個|任一張|任一筆|隨便一張|找一張|挑一筆|找某筆|現有的一筆|適合的一筆|\\bany [A-Z]|\\bsome [A-Z]|\\ba record\\b|\\bpick one\\b|\\bfind a [A-Za-z]+\\b|\\ban existing one\\b",
+      "regexFlags": "i",
+      "anchor": "manual-review.md#pre-review-data-readiness-hard-rule",
+      "remediation": "Replace abstract reference with specific sample identifier (PK, UUID, business key, NFC UID) from docs/FIXTURES.md and ensure the sample is persisted in supabase/seed.sql under ## N. Fixtures / Seed Plan."
+    },
+    {
+      "code": "CARD_WITHOUT_UID",
+      "description": "描述提及 NFC / 刷卡 / 員工卡 / staff UID / card UID，但同一 item 內無具體 UID inline",
+      "regex": "刷卡|NFC|員工卡|staff UID|card UID|staffUid|staffCardUid",
+      "regexFlags": "i",
+      "requiresPresenceOf": "[`'][0-9A-Fa-f]{8,20}[`']|card_uid[=:][[:space:]]*[0-9A-Fa-f]{8,20}|UID[[:space:]]+[`'][0-9A-Fa-f]{8,20}|TDMS-SEED-[A-Z0-9-]+|TEST-[A-Z0-9-]+",
+      "anchor": "manual-review.md#實體裝置--規格外輸入的替代路徑",
+      "remediation": "Inline the specific card UID from docs/FIXTURES.md (4-byte UID like 04A1B2C3, or 7-byte UID like 04469C0FCB2A81, or stable seed key like TDMS-SEED-* / TEST-*); ensure the card is seeded persistently. For dev override path, reference the env-gated `Dev: card UID` input or `/__dev/scan?uid=...` endpoint. The UID MUST appear in the item description with explicit context (e.g., `card_uid=04A1B2C3`, UID `04A1B2C3`, or `04469C0FCB2A81`)."
+    },
+    {
+      "code": "UI_ITEM_NO_URL",
+      "description": "[review:ui] / [verify:ui] item 描述未出現具體 URL（http:// / https:// / /xxx path）— 只說『kiosk 頁』『dashboard』『設定頁』不算",
+      "regex": "^\\s*-\\s*\\[[ x]\\]\\s*#[0-9.]+\\s*\\[(review|verify):ui\\]",
+      "regexFlags": "",
+      "requiresAbsenceOf": "https?://|/[a-z][a-z0-9-]*(/|\\s|$)",
+      "anchor": "manual-review.md#通則",
+      "remediation": "Add a specific URL (e.g., http://localhost:8787/kiosk/workstation or /admin/kiosk-tokens?card_uid=...) so the reviewer can navigate directly. Generic labels like『kiosk page』『dashboard』『設定頁』are insufficient."
+    },
+    {
+      "code": "MULTI_STEP_NOT_SCOPED",
+      "description": "parent item line 含 ≥ 2 個串接動詞（→ chain 或重複的『然後』『接著』），但未拆 #N.M scoped sub-items",
+      "regex": "→[^\\n]*→[^\\n]*→|然後[^\\n]*然後|接著[^\\n]*接著",
+      "regexFlags": "",
+      "appliesTo": "parentLineOnly",
+      "anchor": "manual-review.md#通則",
+      "remediation": "Split the flow chain into #N.M scoped sub-items (one atomic action per line: open X → input Y → click Z → confirm W). Each sub-item must include a falsifiable observation (specific toast text, badge state, route change, field value)."
+    }
+  ],
+  "bypass": {
+    "marker": "@no-manual-review-check",
+    "schema": "@no-manual-review-check[<reason>]",
+    "rules": [
+      "Trailing token on a ## 人工檢查 checkbox line",
+      "<reason> MUST be non-empty (empty brackets or bare marker without brackets are invalid and ignored)",
+      "Canonical ordering with other trailing markers: @followup[TD-NNN] @no-manual-review-check[<reason>] @no-screenshot",
+      "Hook and review-gui both skip pattern evaluation for marked items but emit info-level log naming the reason"
+    ]
+  }
+}
