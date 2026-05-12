@@ -95,13 +95,44 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 **完全禁止任何會丟失 WIP 的動作，包括「向使用者建議」這些動作**：
 
+#### Git 命令禁令
+
 - **NEVER** 執行 `git restore` / `git restore --staged` / `git checkout --` / `git checkout <path>` 清場 — 這會永久毀掉 unstaged 變更
 - **NEVER** 執行 `git reset --hard` / `git reset HEAD --hard` / `git clean -fd` — 同上
+- **NEVER** 執行 `git stash drop` / `git stash clear`
 - **NEVER** 提議 `git revert` 或在輸出中暗示「可以 revert XX」「要不要還原 XX」「這部分先 revert」 — `revert` 在使用者語境通常意指**丟棄變更**，會誤導使用者破壞 WIP；真正需要還原既有 commit 的情境極罕見且應由使用者主動發起
-- **NEVER** 以「這變更看起來壞掉了 / 不該存在 / 不在 scope，是否要還原？」徵詢使用者 — 唯一允許的選項是 `git stash` + `HANDOFF.md`，照「WIP 阻礙處理」流程走
-- **NEVER** 把「revert / restore / discard」包裝成「清理」「重置」「回到乾淨狀態」等委婉說法繞過上述禁令
 
-**唯一例外**：使用者在 `$ARGUMENTS` 中**明確、主動、白紙黑字**寫出 `git restore` / `git checkout --` / `revert` 等指令或變更名稱，且語意無歧義時才能執行。**NEVER** 從「不在 scope」「看起來壞掉」等模糊語氣自行解讀為「使用者想丟棄」。
+#### 檔案系統等效動作禁令（同樣 destructive）
+
+以下動作功能上等同破壞性 git 命令，**MUST** 視同 WIP 處置禁令範圍（容易誤以為「不是 git 所以 OK」）：
+
+- **NEVER** `mv <git-tracked-path> <elsewhere>` / `mv <elsewhere> <git-tracked-path>` 反向 hook 工作（例：把 `openspec/changes/archive/2026-MM-DD-*/` 搬回 `openspec/changes/*/`、把 `screenshots/<env>/_archive/*` 搬回頂層）
+- **NEVER** `rm -rf <openspec/changes/**>` / `rm -rf <screenshots/**>` 等批次刪除含 user-authored / hook-authored 內容的目錄
+- **NEVER** `cp --remove-destination` / `cp -f` 覆蓋 git-tracked 檔案
+- **NEVER** `sed -i` / `awk -i inplace` / `perl -i` 在 git-tracked 檔案上 in-place 寫入而**沒走 Edit/Write tool**（無 user 看得到的 diff）
+- **NEVER** `echo > <git-tracked-path>` / `cat > <git-tracked-path>` / `tee` 覆蓋 git-tracked 檔案內容
+- **NEVER** 用 shell script / subprocess 包裝上述動作試圖繞過 tool-level 觀察
+
+#### 推理層禁令
+
+- **NEVER** 以「這變更看起來壞掉了 / 不該存在 / 不在 scope，是否要還原？」徵詢使用者 — 唯一允許的選項是 `git stash` + `HANDOFF.md`，照「WIP 阻礙處理」流程走
+- **NEVER** 把「revert / restore / discard」包裝成「清理」「重置」「回到乾淨狀態」「對齊規約」「修正狀態」等委婉說法繞過上述禁令
+- **NEVER** 拿其他 rule（例 manual-review.md `[discuss]` 應 user walkthrough）當理由還原 hook 自動產出 — rule 衝突一律保留現狀 + AskUserQuestion（詳見 `scope-discipline.md`「Rule 衝突解法」）
+- **NEVER** 看到 hook 自動 archive directory / spec 自動 propagate / annotation 自動寫入時，自行判定「應該還原」— 自動產出 = 跨 session 成果，必先 AskUserQuestion
+
+#### 話術關鍵詞 = 立即停手訊號
+
+chat / thinking / tool call description 中出現以下任一關鍵詞，**MUST** 立即停手（不下任何命令，AskUserQuestion 給使用者拍板）：
+
+中：`revert` / `還原` / `回退` / `退回` / `撤回` / `復原` / `恢復` / `清除` / `清掉` / `重置` / `回到乾淨狀態` / `丟掉` / `刪掉` / `修正狀態` / `對齊狀態` / `把 X 還回 Y` / `把 X 搬回 Y` / `先還原再 …`
+
+En：`revert` / `undo` / `rollback` / `roll back` / `reset` / `discard` / `drop` / `restore` / `clean up` / `go back` / `undo this` / `fix the state` / `align with` / `move X back to Y` / `restore X to original`
+
+詳細停手定義 + 為什麼話術即訊號，見 `scope-discipline.md`「話術關鍵詞 = 立即停手訊號」。
+
+#### 唯一例外
+
+使用者在 `$ARGUMENTS` 中**明確、主動、白紙黑字**寫出 `git restore` / `git checkout --` / `mv <具體路徑> <具體路徑>` / `rm -rf <具體路徑>` / `revert <具體 commit>` 等指令或具體變更名稱，且語意無歧義時才能執行。**NEVER** 從「不在 scope」「看起來壞掉」「違反 X rule」等模糊語氣自行解讀為「使用者想丟棄」。
 
 ## 例外（極少）
 
