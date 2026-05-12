@@ -36,6 +36,8 @@ Implement tasks from a Spectra change.
 
    Always announce: "Using change: <name>" and how to override (e.g., `/spectra-apply <other>`).
 
+   Then invoke `/rename <name>` (AI Agent built-in slash command) to rename this session after the change — makes concurrent change sessions easy to identify in the session list. If the SlashCommand tool is unavailable in this environment, skip silently.
+
 2. **Check status to understand the schema**
 
    ```bash
