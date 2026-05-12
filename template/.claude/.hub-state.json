@@ -1,11 +1,11 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-12T08:54:54.393Z",
+  "syncedAt": "2026-05-12T10:10:20.400Z",
   "checksums": {
     "rules/agent-routing.md": "2940eca1986327ca",
     "rules/audit-pattern.md": "1d72e5274498727f",
     "rules/code-style.md": "b318cc4f9a35cb40",
-    "rules/commit.md": "d54c2e42526e7afd",
+    "rules/commit.md": "ffca032b3b16b6a8",
     "rules/error-handling.md": "6b9aacf3906f1166",
     "rules/evlog-adoption.md": "4855b909a832f8ec",
     "rules/follow-up-register.md": "8cf0b083ba7dd744",
@@ -16,7 +16,7 @@
     "rules/output-hygiene.md": "017f4205c3ccc5d7",
     "rules/proactive-skills.md": "2bffde383fbb788a",
     "rules/review-tiers.md": "f35387b124295192",
-    "rules/scope-discipline.md": "5ad04df6c9b5e9c5",
+    "rules/scope-discipline.md": "a7999d2919bc9611",
     "rules/screenshot-strategy.md": "9b5a25acd594f560",
     "rules/session-tasks.md": "c9abcabc9caa41c4",
     "rules/tech-debt-routing.md": "ab3876d44ea69af6",

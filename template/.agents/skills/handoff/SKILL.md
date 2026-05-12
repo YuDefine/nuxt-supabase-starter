@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Session 交接管理。雙模：(A) 當前有 in-progress 工作時，只做交接寫入（升級未完項到 HANDOFF.md / tech-debt / ROADMAP / spectra change）。(B) 當前沒有要交辦的時，整理現有 HANDOFF.md + 評估剩餘 outstanding 工作適合串行還是並行，推薦並讓使用者用 request_user_input 選擇下一步。Use when user types /handoff.
+description: Session 交接管理。雙模：(A) 當前 chat session 有 in-progress 工作時，只做交接寫入（升級未完項到 HANDOFF.md / tech-debt / ROADMAP / spectra change）。(B) 當前 chat session 沒有要交辦的時，整理現有 HANDOFF.md + 評估剩餘 outstanding 工作適合串行還是並行，推薦並讓使用者用 request_user_input 選擇下一步。「Session」指當前 chat session，**不是** working tree / git state — user 並行多 session 工作，git 髒污可能來自別 session。Use when user types /handoff.
 license: MIT
 metadata:
   author: clade
@@ -13,26 +13,37 @@ metadata:
 
 ## Step 1 — 偵測模式
 
-**Mode A — 有未交辦工作**（任一條成立即 Mode A）：
-- `TaskList` 顯示任何 `in_progress` 或 `pending` 自己 owner 的 task
-- `tasks/<date>-*.md` 內有 unchecked 項
-- 任何 active spectra change（`openspec/changes/<name>/tasks.md` 有 unchecked 項）
-- `git status` 顯示自己這 session 動的 uncommitted WIP（不算 propagate auto-stash 殘留 / 與當前 session 無關的 user 既有 dirty）
-- 對話脈絡明顯顯示 user 正在 mid-task
+「Session」=**當前這個 chat session**，不是 working tree / git state / 檔案系統狀態。User 經常並行多開 AI Agent session 工作，所以 `git status` 髒污、`tasks/<date>-*.md` 內 unchecked 項、active spectra change 的 unchecked tasks **都可能來自別的 session**，不能拿來判斷當前 session 是否有未交辦工作。
 
-**Mode B — 沒有要交辦的**：以上皆否。
+**Mode A — 當前 chat session 有未交辦工作**（任一條成立即 Mode A）：
+- `TaskList` 顯示當前 session 任何 `in_progress` 或 `pending` task（TaskList 是 per-session 工具狀態，可信）
+- 當前 chat 對話脈絡明顯顯示 user 正在 mid-task（我剛在做某事還沒收尾、user 剛交辦一個多步驟工作做到一半）
 
-宣布偵測結果一句話：「偵測到 Mode A（理由）」或「偵測到 Mode B（session 清空）」。
+**Mode B — 當前 chat session 沒有要交辦的**：以上皆否（即使 working tree 髒、tasks/ 有別 session 的 unchecked、spectra changes 有別 session 的 active work，都仍是 Mode B —— 那些屬於別 session 的責任）。
+
+**禁止訊號**（這些都不算「當前 session」狀態）：
+- ❌ `git status --short` 有 dirty file
+- ❌ `tasks/<YYYY-MM-DD-HHMM>-*.md` 存在或有 unchecked 項
+- ❌ `openspec/changes/<name>/tasks.md` 有 unchecked 項
+- ❌ `HANDOFF.md` 有 In Progress 段落
+
+宣布偵測結果一句話：「偵測到 Mode A（理由：當前 session TaskList 有 N 個 in-progress / 對話脈絡顯示 mid-task on X）」或「偵測到 Mode B（當前 session 清空）」。
 
 ## Step 2A — Mode A 流程（只做交接寫入）
 
 只做以下，不做 reorganize、不做下一步推薦：
 
-1. **盤點未完項**：
-   - `TaskList` 取所有未 completed task
-   - `tasks/<date>-*.md` unchecked 項
-   - active spectra change unchecked tasks
-   - uncommitted WIP（git status）
+1. **盤點當前 session 未完項**（**只**從 per-session 來源蒐集）：
+   - `TaskList` 取當前 session 所有未 completed task
+   - 當前 chat 對話脈絡（我剛在做、user 剛交辦但沒做完的工作）
+
+   **NEVER** 把以下當「當前 session 未完項」（這些屬於別 session 或檔案系統狀態，不是當前 chat 在做的事）：
+   - ❌ `tasks/<date>-*.md` 既有 unchecked 項
+   - ❌ active spectra change 既有 unchecked tasks
+   - ❌ `git status` dirty 檔案
+
+   例外：若當前 chat 對話脈絡明確指向某個 tasks/<date>-*.md / spectra change / dirty file 就是當前 session 在動的，那才算當前 session 工作 —— 由對話脈絡決定歸屬，不是由檔案存在決定。
+
 2. **逐項分類升級**（依 `rules/core/session-tasks.md` 升級路徑表）：
 
    | 未完項類型 | 升級到 |
@@ -49,7 +60,7 @@ metadata:
    - 主要檔案路徑（讓接手者直接跳）
    - 目前做到哪裡 / 還剩什麼
    - 已踩過的坑（避免下一 session 重踩）
-4. **清理 session-tasks**：所有未完項升級完成後 → `mv tasks/<date>-*.md tasks/archive/` 或直接刪
+4. **清理 session-tasks**：所有未完項升級完成後 → 只 `mv` / 刪「當前 session 自己開的」`tasks/<date>-*.md`（依 `rules/core/session-tasks.md`「NEVER 動別人的 tasks 檔」）。若當前 session 從頭到尾沒開 tasks 檔，跳過此步。
 5. **回報**：一句話總結升級數量（如「升級 3 到 HANDOFF / 1 到 tech-debt / 砍 2」）。**禁止**追加「下一步建議」或「要不要繼續做 X」。
 
 ## Step 2B — Mode B 流程（整理 + 推薦）
