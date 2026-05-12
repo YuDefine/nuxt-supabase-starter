@@ -86,9 +86,7 @@ export function loadManualReviewPatterns(): ManualReviewPatternEntry[] {
     cachedPatterns = entries.map((p) => ({
       ...p,
       regex: translatePosixToJs(p.regex),
-      requiresPresenceOf: p.requiresPresenceOf
-        ? translatePosixToJs(p.requiresPresenceOf)
-        : undefined,
+      requiresPresenceOf: p.requiresPresenceOf ? translatePosixToJs(p.requiresPresenceOf) : undefined,
       requiresAbsenceOf: p.requiresAbsenceOf ? translatePosixToJs(p.requiresAbsenceOf) : undefined,
     }))
   } catch {
@@ -160,8 +158,7 @@ const TRAILING_NO_SCREENSHOT_RE = /(^|[^ ]) @no-screenshot$/
 // `@no-manual-review-check[<reason>]` bypass marker per manual-review.md hard rule.
 // Empty brackets and bare marker (no brackets) are invalid by schema → not captured here.
 // May coexist with trailing `@no-screenshot` (canonical ordering: bypass then no-screenshot).
-const TRAILING_NO_MANUAL_REVIEW_CHECK_RE =
-  /@no-manual-review-check\[([^\][]+)\](?:\s+@no-screenshot)?\s*$/
+const TRAILING_NO_MANUAL_REVIEW_CHECK_RE = /@no-manual-review-check\[([^\][]+)\](?:\s+@no-screenshot)?\s*$/
 // 解析 leading kind marker — 必須緊接 `#N` / `#N.M` 後第一個 token、含一個 trailing space。
 // description-mid 的 [discuss] / [review:ui] / [verify:*] 不會被命中（不是行首）。
 const LEADING_KIND_RE = /^\[([^\]]+)\]\s+/
@@ -529,7 +526,9 @@ interface ParserWarningContext {
 }
 
 function formatParserLocation(context: ParserWarningContext): string {
-  return context.lineNumber > 0 ? `${context.sourcePath}:${context.lineNumber}` : context.sourcePath
+  return context.lineNumber > 0
+    ? `${context.sourcePath}:${context.lineNumber}`
+    : context.sourcePath
 }
 
 function warnParser(context: ParserWarningContext, message: string): void {
@@ -556,7 +555,9 @@ function parseKindMarkerCandidate(
   candidate: string,
   defaultKind: DefaultManualReviewItemKind,
   context: ParserWarningContext
-): { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> } | { valid: false } {
+):
+  | { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> }
+  | { valid: false } {
   if (candidate === 'verify:auto') {
     warnParser(context, '[verify:auto] is deprecated; prefer [verify:api+ui]')
     return { valid: true, kinds: ['verify:api', 'verify:ui'] }
@@ -581,7 +582,9 @@ function parseMultiChannelKindMarker(
   candidate: string,
   defaultKind: DefaultManualReviewItemKind,
   context: ParserWarningContext
-): { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> } | { valid: false } {
+):
+  | { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> }
+  | { valid: false } {
   if (!candidate.startsWith('verify:')) {
     warnParser(
       context,
@@ -692,9 +695,7 @@ function parseStructuredAnnotations(
   context: ParserWarningContext
 ): ManualReviewItemAnnotations {
   const annotations: ManualReviewItemAnnotations = {}
-  const matches = line.matchAll(
-    /\((verified-e2e|verified-api|verified-ui|claude-discussed):\s*([^)]*)\)/g
-  )
+  const matches = line.matchAll(/\((verified-e2e|verified-api|verified-ui|claude-discussed):\s*([^)]*)\)/g)
   for (const match of matches) {
     const prefix = match[1]!
     const body = match[2]!.trim()
@@ -732,10 +733,7 @@ function parseStructuredAnnotationValue(
     const spec = findKeyValue(parts, 'spec')
     const trace = findKeyValue(parts, 'trace')
     if (!spec || !trace) {
-      warnParser(
-        context,
-        `malformed (${prefix}: ...) annotation — expected spec=<path> trace=<path>`
-      )
+      warnParser(context, `malformed (${prefix}: ...) annotation — expected spec=<path> trace=<path>`)
       return null
     }
     return { verifiedE2e: { raw, timestamp, spec, trace } }
@@ -821,9 +819,8 @@ function collectStructuredAnnotationRaw(line: string): {
 function renderStructuredAnnotations(
   annotations: Partial<Record<StructuredAnnotationKey, string>>
 ): string {
-  return STRUCTURED_ANNOTATION_ORDER.flatMap((key) =>
-    annotations[key] ? [annotations[key]!] : []
-  ).join(' ')
+  return STRUCTURED_ANNOTATION_ORDER.flatMap((key) => (annotations[key] ? [annotations[key]!] : []))
+    .join(' ')
 }
 
 function upsertStructuredAnnotation(
@@ -2662,6 +2659,33 @@ function renderReviewHtml(): string {
       });
     }
 
+    // 對 raw 字串切出 http(s) URL，URL/text 兩段各自 esc 後拼回。
+    // 比「先 esc 再掃 URL」安全：raw 字串內的 quote 與 ampersand 邊界仍是原樣，
+    // URL regex 能正確判斷終點；先 esc 後 URL 末端會把 entity 吃進去。
+    // regex 字符類用顯式列舉取代 \\s — 同 extractFilenameId / parseDecision。
+    function escWithLinks(value) {
+      const s = String(value ?? '');
+      const urlRe = /(https?:[/][/][^ \t\r\n<>"'`)]+)/g;
+      let out = '';
+      let last = 0;
+      for (const m of s.matchAll(urlRe)) {
+        out += esc(s.slice(last, m.index));
+        let url = m[0];
+        let trailing = '';
+        while (url.length && '.,!?)'.indexOf(url[url.length - 1]) !== -1) {
+          trailing = url.slice(-1) + trailing;
+          url = url.slice(0, -1);
+        }
+        if (url) {
+          out += '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(url) + '</a>';
+        }
+        out += esc(trailing);
+        last = m.index + m[0].length;
+      }
+      out += esc(s.slice(last));
+      return out;
+    }
+
     function showBanner(message, type) {
       el.banner.textContent = message || '';
       el.banner.className = 'banner' + (message ? ' show' : '') + (type ? ' ' + type : '');
@@ -3128,16 +3152,16 @@ function renderReviewHtml(): string {
       if (hasKind(item, 'discuss')) {
         return '<div class="discuss-card">' +
             '<h3>此項由 Claude 主導</h3>' +
-            '<p>' + esc(item.description) + '</p>' +
+            '<p>' + escWithLinks(item.description) + '</p>' +
             '<p class="notice">archive 階段 Claude 會主動準備證據與你討論，這裡無需操作。</p>' +
           '</div>';
       }
       if (isSoloKind(item, 'verify:e2e')) {
-        return '<div class="evidence-panel"><h3>此項由 Playwright spec 自動完成</h3><p>' + esc(item.description) + '</p></div>' +
+        return '<div class="evidence-panel"><h3>此項由 Playwright spec 自動完成</h3><p>' + escWithLinks(item.description) + '</p></div>' +
           renderE2eEvidence(item, '');
       }
       if (isSoloKind(item, 'verify:api')) {
-        return '<div class="evidence-panel"><h3>此項由 API round-trip 自動完成</h3><p>' + esc(item.description) + '</p></div>' +
+        return '<div class="evidence-panel"><h3>此項由 API round-trip 自動完成</h3><p>' + escWithLinks(item.description) + '</p></div>' +
           renderApiEvidence(item, '');
       }
       if (isSoloKind(item, 'verify:ui')) {
@@ -3203,7 +3227,7 @@ function renderReviewHtml(): string {
       return '<article class="task-item' + (active ? ' active' : '') + (item.scoped ? ' scoped' : '') + decisionClass + (collapsed ? ' collapsed' : '') + kindClass + '" data-item="' + esc(item.id) + '" data-index="' + index + '">' +
         '<div class="task-head">' +
         '<span class="task-id">' + esc(item.id) + renderKindBadges(item) + '</span>' +
-        '<span class="task-desc">' + esc(item.description) + '</span>' +
+        '<span class="task-desc">' + escWithLinks(item.description) + '</span>' +
         '<span class="task-state">' + stateHtml + '</span>' +
         '</div>' +
         bannerHtml +
