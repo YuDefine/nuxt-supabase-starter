@@ -196,7 +196,20 @@ sux_change_touched_files() {
 sux_extract_section() {
   local file=$1 heading=$2
   [ -f "$file" ] || return 0
-  sed -n "/^## ${heading}/,/^## /p" "$file" 2>/dev/null | sed '$d'
+  awk -v heading="$heading" '
+    BEGIN { in_section = 0 }
+    $0 ~ ("^## " heading) {
+      in_section = 1
+      print
+      next
+    }
+    in_section && /^## / {
+      exit
+    }
+    in_section {
+      print
+    }
+  ' "$file" 2>/dev/null
 }
 
 # Check whether a tasks / proposal file appears to include UI scope.

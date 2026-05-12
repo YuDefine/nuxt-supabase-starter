@@ -46,6 +46,7 @@
     "skills:install": "bash ./scripts/install-skills.sh",
     "skills:list": "bash ./scripts/check-skills.sh",
     "skills:update": "bash ./scripts/install-skills.sh",
+    "spectra:audit-screenshots": "node -e \"try { require.resolve('tsx') } catch { console.error('[spectra:audit-screenshots] Missing tsx. Install with: pnpm add -D tsx'); process.exit(1) }\" && pnpm exec tsx scripts/spectra-advanced/audit-screenshot-quality.mts",
     "spectra:claim": "node scripts/spectra-advanced/claim-work.mts",
     "spectra:claims": "node scripts/spectra-advanced/claims-status.mts",
     "spectra:followups": "node scripts/spectra-advanced/collect-followups.mts",
