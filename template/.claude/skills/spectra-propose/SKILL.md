@@ -96,6 +96,39 @@ If no argument is provided, the workflow will extract requirements from conversa
       **Backend-only Manual Review 規約**（適用 `## User Journeys` 為 `**No user-facing journey (backend-only)**` 的 change）：
       tasks.md 的 `## 人工檢查` **只**允許 `[discuss]` kind 的代表性 use cases：(1) production 授權 (2) 商業判斷 (3) production 觀察，以及可由 HTTP 重現的 `[verify:api]` round-trip。**禁止**把 SSH / psql / `\d <table>` / `SELECT FROM` / `SET session_replication_role` / 受控 drift 製造 / migration 存在性驗證等 evidence collection 寫進 `## 人工檢查` — 這些 **MUST** 寫進新的 `## N. Backend Verification Evidence` section 由 apply 階段 Claude 自跑自貼。若三類與 `[verify:api]` 都沒有，`## 人工檢查` 寫成固定文字 `_本 change 為 backend-only，所有驗證由 apply 階段 Claude 自跑（見 `## N. Backend Verification Evidence`）；deploy 前無使用者人工檢查項目。_`。完整規約見 `.claude/rules/ux-completeness.md` 「必填 Backend-only Manual Review 規約」與 `.claude/rules/manual-review.md` 「Item Kind Marker」。
 
+      **Manual Review Items 強制段（user-facing change 適用）**：
+      凡 `## 人工檢查` items 涉及以下情境時，**MUST** 拆 `#N.M` scoped sub-items 並 inline 具體 sample identifier：
+
+      - NFC / 刷卡 / 員工卡 / 員工 UID / 卡片 UID
+      - staff login / user role / 多角色 authz
+      - 業務 entity 操作（具體 work_report id / equipment id / loan id / business key）
+      - 多步驟流程（流程含「→」「然後」「接著」「完成後」等過渡詞 ≥ 2 個串接）
+      - 實體裝置（kiosk / 平板 / 真機 / 印表機 / 條碼槍）
+
+      **MUST** 從 `docs/FIXTURES.md`（或 `supabase/seed.sql` / 對應 seed file）抓 stable sample identifier，並在 `## N. Fixtures / Seed Plan` task 確認該 sample 寫進 seed。
+
+      **反面範例（禁止）**：
+      - ❌ `刷卡 → 進入毛刺 → 操作完成 → 自動回 standby`（無 URL、無 UID、無 step）
+      - ❌ `使用者輸入某個 staff 卡號`（模糊指代）
+      - ❌ `進入報工頁面送出`（無具體 report id、無 button selector）
+
+      **正面範例（要求）**：
+      ```
+      - [ ] #N [review:ui] kiosk 毛刺流程 round-trip 驗證
+        - [ ] #N.1 開 http://localhost:8787/kiosk/workstation → 確認 standby 頁面
+        - [ ] #N.2 點「手動輸入」按鈕 → 輸入 flat_burr UID `047D6201CC2A81` → 點確認
+        - [ ] #N.3 點「手動輸入」→ 輸入 staff UID `04469C0FCB2A81` → 自動 navigate /kiosk/workstation/deburring?...
+        - [ ] #N.4 DevTools Application → Session Storage → 確認 key `kiosk:scan-token` 存在
+        - [ ] #N.5 選系列 HGH15C → 輸數量 1 → 送出 → 完成回饋畫面
+        - [ ] #N.6 等 3 秒 auto-return → URL = /kiosk/workstation → sessionStorage key 已消失
+      ```
+
+      **寫完 tasks.md 後 MUST 自查**：
+      ```bash
+      grep -nE '(刷卡|某張|某筆|任一|挑一筆|隨便|→.*→)' openspec/changes/<change-name>/tasks.md
+      ```
+      若有 hit 在 `## 人工檢查` 區塊 → 改寫成 scoped sub-items + inline sample。完整規約見 `.claude/rules/manual-review.md` 「`[review:ui]` 純功能驗證 step actionability」+「Pre-Review Data Readiness」。
+
       **Artifact 語言遵循**：
       開工前先 `grep -lE "繁體|繁中|不要使用簡體" CLAUDE.md .claude/rules/*.md 2>/dev/null`。若命中（consumer 規定繁體中文），**全部** artifact（proposal.md / design.md / tasks.md / spec.md）**MUST** 用繁體中文撰寫，**禁止**英文 artifact。code 識別字、技術名詞（如 `audit_signed_chain`、`business_keys_drift`）、SQL/code block 不譯。若 grep 未命中視為無語言規定。
 
@@ -131,6 +164,16 @@ If no argument is provided, the workflow will extract requirements from conversa
       ```
 
       若有 FINDINGS → 主線**自己**直接 Edit proposal.md / tasks.md 補齊（**不要**回 codex 修，太慢）
+
+   3a. **跑 post-propose-manual-review-check.sh**（檢查 ## 人工檢查 item step actionability，per Layer B of `manual-review.md` mechanical enforcement）：
+
+      ```bash
+      bash scripts/spectra-advanced/post-propose-manual-review-check.sh <change-name>
+      ```
+
+      Exit 2 = 有 findings（ABSTRACT_REFERENCE / CARD_WITHOUT_UID / UI_ITEM_NO_URL / MULTI_STEP_NOT_SCOPED 任一）→ 主線**自己**直接 Edit tasks.md 改寫 ## 人工檢查 items：拆 `#N.M` scoped sub-items、inline 具體 sample UID（從 `docs/FIXTURES.md` 抓）、加具體 URL、模糊驗收動詞改為 falsifiable observation。完整修正指引見 hook stdout + `.claude/rules/manual-review.md`「`[review:ui]` 純功能驗證 step actionability」。
+
+      Legitimate false positive（e.g., 真機掃 SMS 無 dev replay endpoint）→ 在該 item 加 `@no-manual-review-check[<reason>]` trailing marker。
 
    4. **跑 design-inject.sh**（若 UI scope，提醒 7 步 template）：
 
@@ -237,7 +280,37 @@ If no argument is provided, the workflow will extract requirements from conversa
       ✅ - [ ] #3 [discuss] production seed 授權與 cron 監控確認
       ```
 
-      完整規約見 `.claude/rules/manual-review.md`「Item Kind Marker」+「Kind 分類指引」+ `.claude/rules/ux-completeness.md`「必填 Backend-only Manual Review 規約」。
+      **Rule 5：`[review:ui]` step actionability — 流程式描述要拆**
+
+      對標 `[review:ui]` 的 line，檢查描述是否屬「流程式描述」（user 看完仍不知道從哪開始）。命中下列任一條件 → flag 為非 actionable，**MUST** 由主線直接 Edit tasks.md 改寫：
+
+      - **流程式串接**：parent line 含 ≥ 2 個串接動詞（「刷卡 → 進入 → 完成 → 回 standby」「掃 QR → 進入 → 提交」「掃條碼 → 入庫 → 列印標籤」等）但**未拆 `#N.M` sub-items**
+      - **缺具體 URL**：item 描述未出現任何 `/xxx` 路徑或具體頁面 anchor（只說「kiosk 頁」「dashboard」「設定頁」不算）
+      - **實體裝置動詞但缺替代輸入線索**：描述含「刷卡」「掃 QR」「掃條碼」「印表機」「真機」「平板」「kiosk」等實體裝置動詞，但未提及 dev override（UID input / simulate endpoint / paste payload / desktop responsive emulation 等）也未引用具體 sample（UID / payload / 條碼字串）
+      - **模糊驗收動詞**：描述含「正常」「正確」「能用」「順利」「OK」這類無 falsifiable observation 的字眼（無「200 toast `X`」「badge 變 Y」「URL 變 /Z」這類具體觀察）
+
+      行為：
+
+      - 主線直接 Edit tasks.md，依 `manual-review.md` 的「`[review:ui]` 純功能驗證 step actionability」拆 `#N.M` scoped sub-items：每條一個原子動作（開 URL → 輸入 Y / 點 Z → 確認具體觀察 W）
+      - 若改寫需要的 dev override / baseline 未就緒（grep consumer codebase 找不到 dev input route / simulate endpoint / seed sample），**MUST** 在 design.md「Open Questions」或 tasks.md TD-NNN 段登記 baseline 缺口，並在 item 行尾加 `@followup[TD-NNN]` marker
+      - 若 sample 在 seed 中尚未建，**MUST** 在 `## N. Fixtures / Seed Plan` 補對應 task；引用的 stable identifier（UID / business key）與 item 描述一字不差
+      - 完整規約見 `manual-review.md` 的「`[review:ui]` 純功能驗證 step actionability」
+
+      反面範例：
+
+      ```markdown
+      ❌ - [ ] #7 [review:ui] kiosk 平板實機驗證：刷卡 → 進入毛刺 → 操作完成 → 自動回 standby，且 token 已 consume
+         理由：流程式串接、無具體 URL、無 sample UID、無 dev 替代輸入路徑、模糊驗收（「操作完成」「token 已 consume」未指明在哪查、看到什麼）
+
+      ✅ - [ ] #7 [review:ui] kiosk 刷卡 round-trip（standby → 操作頁 → 完成 → 自動回 standby + token consume）
+           - [ ] #7.1 桌機開 /kiosk，確認 standby（時鐘 + 「請刷卡」提示）
+           - [ ] #7.2 右下 `Dev: card UID` input 輸入 `04A1B2C3`（admin 樣本卡）→ Enter
+           - [ ] #7.3 切到操作頁，header 顯示「測試 Admin」+ 操作選單
+           - [ ] #7.4 點「完成操作」→ 200 toast「操作已記錄」→ 2 秒內回 standby
+           - [ ] #7.5 開 /admin/kiosk-tokens?card_uid=04A1B2C3，row `status=consumed` 且 `consumed_at` 為剛剛時間
+      ```
+
+      完整規約見 `.claude/rules/manual-review.md`「Item Kind Marker」+「Kind 分類指引」+「`[review:ui]` 純功能驗證 step actionability」+ `.claude/rules/ux-completeness.md`「必填 Backend-only Manual Review 規約」。
 
    5.6 **Artifact 語言遵循 check**：
 
