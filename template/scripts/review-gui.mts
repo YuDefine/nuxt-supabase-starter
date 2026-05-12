@@ -1715,7 +1715,11 @@ function renderReviewHtml(): string {
     .task-item.decision-skip { border-left: 4px solid #8a8275; }
     .task-item.collapsed { padding: 8px 12px; opacity: 0.78; }
     .task-item.collapsed .note,
-    .task-item.collapsed .actions { display: none; }
+    .task-item.collapsed .actions,
+    .task-item.collapsed .evidence-panel,
+    .task-item.collapsed .compound-evidence,
+    .task-item.collapsed .verified-ui-panel,
+    .task-item.collapsed .discuss-card { display: none; }
     .task-item.collapsed .task-desc {
       white-space: nowrap;
       overflow: hidden;

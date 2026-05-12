@@ -336,7 +336,11 @@ Claude Code session 內偵測到「需要 WebSearch」時：
 - **NEVER** 在 spectra-apply 派 codex 用 medium effort — 一律用 high（medium 漏 schema drift 風險高）
 - **NEVER** task 粒度派 codex — 一律 phase 粒度，避免大量 round-trip
 - **NEVER** 派 Codex 寫 code（spectra-propose draft / spectra-apply phase）而 prompt 漏掉 Plan-first 硬指令 — 沒有 plan 主線只能從 diff 反推 codex 意圖，cross-check 成本高且容易漏掉「codex 漏做某檔」。Plan 是事前公開思路，不是 review gate（codex 寫完 plan 必須立刻續跑，不停下來）
-- **NEVER** 在 commit 0-A 用 `simplify` skill / `code-review` agent 自行 review（改派 codex），也 **NEVER** 改用其他模型或顛倒兩輪 reasoning effort
+- **NEVER** 在 commit 0-A 跳過 0-A.0 `simplify` skill —— simplify 看 reuse / 精簡這條軸 codex 不會抓，必須序跑在 codex 之前
+- **NEVER** 在 commit 0-A 把 `simplify` 跟 codex 並行 —— simplify 修完才是 codex 應該看的版本
+- **NEVER** 在 commit 0-A 啟用 `code-review` agent —— 職責已由 codex high + xhigh 取代（同模型盲點、跨模型才有意義）
+- **NEVER** 改用其他模型、或顛倒兩輪 reasoning effort（0-A.1 必為 `high`、0-A.2 必為 `xhigh`）
+- **NEVER** 在 commit 0-A 把 0-A.2 改回 Round 1 有任何修正就強制觸發 —— 只在 codex 自己標 Critical / Major 時才升級 xhigh，避免 xhigh 反射觸發拖長 commit
 - **NEVER** 在 Codex 端執行 `$spectra-apply` 而 prompt body 沒有 `[DELEGATED-BY-CLAUDE-CODE]` marker — **MUST** 立即 STOP 且不執行任何 `spectra` 命令（見「Codex `$spectra-apply` Runtime Gate」）
 - **NEVER** 主線派 Codex 跑 spectra apply phase 而 prompt 第一行不是 `[DELEGATED-BY-CLAUDE-CODE]` marker — 會被 Codex 端 Runtime Gate 擋掉、整個 phase dispatch 白做
 - **NEVER** 把 routing 例外寫死在個別 skill；要加例外請改本檔的 Routing Table
