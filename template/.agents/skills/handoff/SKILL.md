@@ -1,0 +1,143 @@
+---
+name: handoff
+description: Session 交接管理。雙模：(A) 當前有 in-progress 工作時，只做交接寫入（升級未完項到 HANDOFF.md / tech-debt / ROADMAP / spectra change）。(B) 當前沒有要交辦的時，整理現有 HANDOFF.md + 評估剩餘 outstanding 工作適合串行還是並行，推薦並讓使用者用 request_user_input 選擇下一步。Use when user types /handoff.
+license: MIT
+metadata:
+  author: clade
+  version: "1.0"
+---
+
+# /handoff
+
+雙模 session 交接管理：模式由「當前是否有未交辦工作」自動決定。
+
+## Step 1 — 偵測模式
+
+**Mode A — 有未交辦工作**（任一條成立即 Mode A）：
+- `TaskList` 顯示任何 `in_progress` 或 `pending` 自己 owner 的 task
+- `tasks/<date>-*.md` 內有 unchecked 項
+- 任何 active spectra change（`openspec/changes/<name>/tasks.md` 有 unchecked 項）
+- `git status` 顯示自己這 session 動的 uncommitted WIP（不算 propagate auto-stash 殘留 / 與當前 session 無關的 user 既有 dirty）
+- 對話脈絡明顯顯示 user 正在 mid-task
+
+**Mode B — 沒有要交辦的**：以上皆否。
+
+宣布偵測結果一句話：「偵測到 Mode A（理由）」或「偵測到 Mode B（session 清空）」。
+
+## Step 2A — Mode A 流程（只做交接寫入）
+
+只做以下，不做 reorganize、不做下一步推薦：
+
+1. **盤點未完項**：
+   - `TaskList` 取所有未 completed task
+   - `tasks/<date>-*.md` unchecked 項
+   - active spectra change unchecked tasks
+   - uncommitted WIP（git status）
+2. **逐項分類升級**（依 `rules/core/session-tasks.md` 升級路徑表）：
+
+   | 未完項類型 | 升級到 |
+   | --- | --- |
+   | 下一 session 要立刻接手的 in-progress 工作 | `HANDOFF.md` `## In Progress` section |
+   | 被 blocker 卡住（缺權限 / 缺決策 / 等外部） | `HANDOFF.md` `## Blocked` |
+   | 等待外部 signal（合約 / ramp 日期 / 第三方 API ready） | `docs/tech-debt.md` 建 `TD-NNN` |
+   | 未來才做、可排優先序 | `openspec/ROADMAP.md` `## Next Moves` |
+   | 規模膨脹（要動 spec / design review / 跨多檔） | 新 spectra change（先 `/spectra-propose`） |
+   | 純放棄 | 直接刪 |
+
+3. **寫入**：依分類 Edit / Write 對應檔案。HANDOFF.md `## In Progress` 條目 MUST 含：
+   - change / task 名稱
+   - 主要檔案路徑（讓接手者直接跳）
+   - 目前做到哪裡 / 還剩什麼
+   - 已踩過的坑（避免下一 session 重踩）
+4. **清理 session-tasks**：所有未完項升級完成後 → `mv tasks/<date>-*.md tasks/archive/` 或直接刪
+5. **回報**：一句話總結升級數量（如「升級 3 到 HANDOFF / 1 到 tech-debt / 砍 2」）。**禁止**追加「下一步建議」或「要不要繼續做 X」。
+
+## Step 2B — Mode B 流程（整理 + 推薦）
+
+### 2B.1 整理現有 HANDOFF.md
+
+讀 HANDOFF.md，逐段判斷：
+
+| 內容類型 | 動作 |
+| --- | --- |
+| 已完成的 wave / 歷史 narrative | 移到 `docs/archives/<yyyy-mm>-<topic>.md` |
+| 與當前 SoT 矛盾（版本過時、檔案已不存在） | 修正或刪除 |
+| 重複條目（同一事在 HANDOFF / tech-debt / ROADMAP 都有） | 留最該的位置，其他刪 |
+| 寫法違反當前專案規則（如 clade 自治區內 `consumer 自治區工作` violation） | 依規則重寫或刪除 |
+| 仍 valid 的稽核 baseline 表 / outstanding follow-up | 保留 |
+
+**MUST** 載入 `.claude/rules/local/*.md` 內所有自治區規則。若有 `clade-role-and-todo-discipline.md` 之類 local rule 限定 HANDOFF 寫法，整理時必須遵守。
+
+### 2B.2 盤點剩餘 outstanding
+
+從以下來源蒐集 outstanding 工作：
+
+- 整理後的 `HANDOFF.md`
+- `docs/tech-debt.md` 未解決的 TD-NNN
+- `openspec/ROADMAP.md` `## Next Moves`
+- 任何已 archive 但留下 follow-up 註記的 change
+
+每條 outstanding 抓三件資料：
+- 標題（一句話）
+- 涉及檔案 / module / consumer
+- 依賴關係（依賴誰、誰依賴它）
+
+### 2B.3 Serial vs Parallel 評估
+
+對每條 outstanding 套 rubric：
+
+**Serial 訊號**（任一成立 → serial）：
+- 同檔 / 同 module 內順序改動
+- 同一 spectra change 內 phase 間有依賴（phase B 依賴 phase A 落地）
+- 共享 mutex 資源：DB migration、單一 config 檔、單一 secret rotation
+- 後一步的設計需要前一步的結果（探索結論決定後續方向）
+
+**Parallel 訊號**（全成立 → parallel candidate）：
+- 動到的檔案 / module / consumer 不重疊
+- 沒有 phase 依賴（各自獨立完工）
+- 無共享 mutex 資源
+- 可獨立驗證（各自有 acceptance criteria）
+
+若 Parallel candidate，**MUST** 套用 thin-brief 長駐 subagent 模式（避免 fresh subagent fan-out 冷載 N 倍 repo context）：
+- 主線預先用 codebase-memory-mcp（`search_graph` / `trace_path` / `get_code_snippet`）定位每條 outstanding 的檔案路徑 + 符號 + 依賴，把結果寫進 brief
+- 一條 outstanding 配一個長駐 named subagent；後續 phase 推進**MUST** 用 `SendMessage({to: name})` 續跑，**NEVER** 為同一條 outstanding 的下一個 phase 重開新 subagent
+- Thin brief（3–5K 具體指示：檔案路徑、規則條目、驗收標準），**禁止**冷載整份 repo / AGENTS.md / rules
+- 不同 outstanding 的長駐 subagent 可同時跑（多個 `Agent` tool call 放同一訊息）
+
+### 2B.4 推薦 + request_user_input
+
+寫一段「outstanding 盤點 + serial/parallel 推薦」訊息：
+
+```
+Outstanding（N 條）：
+
+1. <標題> — <涉及範圍> — <serial/parallel 判定>
+2. ...
+
+推薦執行模式：<serial | parallel | mixed>
+理由：<rubric 命中哪幾條>
+```
+
+接著用 `request_user_input` 問 user 選擇：
+- Option 1: 推薦的執行模式 + 起手 outstanding（label 標 `(Recommended)`）
+- Option 2-3: 替代方案（如「先做 outstanding #2」/「mixed: 先 serial #1 再 parallel #2-#3」）
+- Option 4（optional）: 「都先不做，session 收工」
+
+**禁止行為**（依 user AGENTS.md「不要把工作往後放」+ `clade-role-and-todo-discipline.md`「Session 結尾自查」）：
+- 推薦清單裡放「N 週後再回頭做」/「排程 /schedule 在 X 天後」
+- 推薦清單裡放當前主線「無法完整 own」的工作（consumer 自治區工作 / user 必須親自操作的外部系統指令）
+- 用「block production」「最高優先」包裝其他自治區工作
+- 推薦的 Option 1 不該是「都不做」（除非真的盤點為空）
+
+## Output contract
+
+- Mode A：成功 = HANDOFF.md / tech-debt / ROADMAP 有對應寫入 + tasks 檔已清；訊息只含升級摘要
+- Mode B：成功 = HANDOFF.md 已整理 + 盤點訊息 + `request_user_input` 已發出讓 user 選
+- 失敗 / blocked：明確說明卡點，不假裝完成
+
+## 與其他 skill 的銜接
+
+- `/spectra-commit` — Mode A 升級 spectra change WIP 時，commit 用此 skill 走 selective stage
+- `/spectra-propose` — Mode A「規模膨脹」分類升級時，後續開新 change 入口
+- `/spectra-apply` — Mode B `request_user_input` user 選定起手 active change 後的執行入口
+- `subagent-dev` — Mode B `request_user_input` user 選 parallel 後，subagent fan-out 由此 skill 執行
