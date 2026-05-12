@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-12T10:27:24.522Z",
+  "syncedAt": "2026-05-12T11:07:13.908Z",
   "checksums": {
     "rules/agent-routing.md": "2940eca1986327ca",
     "rules/audit-pattern.md": "1d72e5274498727f",
@@ -12,7 +12,7 @@
     "rules/handoff.md": "bc09773c20e47e63",
     "rules/knowledge-and-decisions.md": "fb1944f41a0e28d9",
     "rules/logging.md": "63b2b824d5016bae",
-    "rules/manual-review.md": "b23b6450efa5af2d",
+    "rules/manual-review.md": "04489b3ebbf1acd1",
     "rules/output-hygiene.md": "017f4205c3ccc5d7",
     "rules/proactive-skills.md": "2bffde383fbb788a",
     "rules/review-tiers.md": "f35387b124295192",
@@ -23,7 +23,7 @@
     "rules/test-scripts.md": "f2279b3ea0afb2e2",
     "rules/testing-anti-patterns.md": "29653c5a67a86be5",
     "rules/truth-layers.md": "cba05246f0c06769",
-    "rules/ux-completeness.md": "b0c1258e346629de",
+    "rules/ux-completeness.md": "dde0d1bb49dc2c4a",
     "rules/work-claims.md": "8c09518cea38198e",
     "rules/auth.md": "c6db189aa7ceddb7",
     "rules/dev-login.md": "ef01c2d38c7c5c5d",
