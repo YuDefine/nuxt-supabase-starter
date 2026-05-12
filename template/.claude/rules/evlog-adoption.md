@@ -287,6 +287,7 @@ rg -nE "code:\\s*['\"][a-z][a-z0-9._]*\\.[A-Z_]+['\"]" "**/*.test.ts" "**/*.spec
 ## MUST NOT
 
 - **MUST NOT** 在 `server/api/` 使用 `consola`（遷至 `useLogger`）
+- **MUST NOT** 新增或保留 `consola` runtime dependency 作為 evlog fallback；非 request path 用 evlog standalone API，drain failure fallback 用帶註解的 `console.error`
 - **MUST NOT** 用 raw drain（沒 `createDrainPipeline`）— Workers subrequest budget 會被吃光
 - **MUST NOT** sample `error` < 100% 或 `audit` 不 forceKeep
 - **MUST NOT** 在 `redact.paths` 缺 `password` 或 `token|authorization`；`redact: true` 視為啟用 builtins
@@ -325,7 +326,7 @@ rg -nM "transport:\\s*\\{[\\s\\S]{0,200}?enabled:\\s*true" nuxt.config.ts packag
 # 反模式
 rg -n "createSentryDrain\\(" server packages/**/server | rg -v "createDrainPipeline" # raw drain
 rg -n "error:\\s*[0-9]+" nuxt.config.ts packages/**/nuxt.config.ts # 檢查 error rate 是否 < 100
-rg -n "consola" server/api packages/**/server/api # consola 遷移漏網
+rg -n "consola" server package.json packages/**/server packages/**/package.json # consola 遷移漏網
 ```
 
 完整 static audit script 已落地在 `scripts/evlog-adoption-audit.mjs`。

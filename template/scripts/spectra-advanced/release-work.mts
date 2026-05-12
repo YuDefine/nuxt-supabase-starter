@@ -37,6 +37,7 @@ function parseArgs(argv: string[]): CliOptions {
 
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!
+    if (arg === '--') continue
     if (arg === '--owner') opts.owner = argv[++i] ?? null
     else if (arg === '--runtime') opts.runtime = argv[++i] ?? null
     else if (arg === '--session') opts.sessionId = argv[++i] ?? null

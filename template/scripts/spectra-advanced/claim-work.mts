@@ -52,6 +52,7 @@ function parseArgs(argv: string[]): CliOptions {
 
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!
+    if (arg === '--') continue
     if (arg === '--task') opts.task = argv[++i] ?? null
     else if (arg === '--note') opts.note = argv[++i] ?? null
     else if (arg === '--path') opts.paths.push(argv[++i] ?? '')

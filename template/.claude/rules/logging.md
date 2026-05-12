@@ -24,8 +24,33 @@ evlog（https://www.evlog.dev/）是 wide-event-style structured logger。clade 
 ## Logger 選擇
 
 - **API handler** → `const log = useLogger(event)` from `evlog`（第一行）
-- **Utils（無 event）** → `consola.withTag('...')`
-- **NEVER** 在 `server/api/` 使用 `consola` — 遷移至 `useLogger`
+- **Request 呼叫的 utils** → 優先讓 caller 傳入 `RequestLogger`，用同一個 request-scoped wide event 累積 context
+- **非 request job / cron / script** → `initLogger()` + `createLogger()` / `createRequestLogger()`，一個 logical operation 最後 `emit()`
+- **Drain pipeline failure fallback** → 只允許帶 `evlog-exempt` 註解的 `console.error`，避免 drain 壞掉時再透過同一條 drain 記錄自己
+- **NEVER** 新增或使用 `consola` — evlog 已提供 request、standalone job、drain pipeline 三種場景的原生 API
+
+```ts
+import type { RequestLogger } from 'evlog'
+
+export async function runDomainOperation(options: {
+  log?: RequestLogger
+}) {
+  options.log?.set({ operation: 'domain-operation' })
+}
+```
+
+```ts
+import { createRequestLogger } from 'evlog'
+
+const log = createRequestLogger({ path: 'cron/stale-lifespan-check' })
+try {
+  log.set({ operation: 'stale-lifespan-check' })
+} catch (error) {
+  log.error(error as Error, { step: 'cron-run' })
+} finally {
+  log.emit()
+}
+```
 
 ## log.error 使用時機
 
@@ -191,9 +216,10 @@ import { createSentryDrain } from 'evlog/sentry'
 
 const pipeline = createDrainPipeline({
   batch: { size: 50, intervalMs: 1000 },
-  retry: { maxAttempts: 3, backoff: [200, 1000, 3000] },
+  retry: { maxAttempts: 3, backoff: 'exponential', initialDelayMs: 200, maxDelayMs: 3000 },
   maxBufferSize: 1_000_000,
   onDropped: (events, reason) => {
+    // evlog-exempt: drain failure fallback must not recurse through evlog itself
     console.error('[evlog drain pipeline dropped]', reason, events.length)
   },
 })

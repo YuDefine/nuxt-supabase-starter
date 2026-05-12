@@ -337,7 +337,7 @@ fi
 
 # --- Check 4b: Design Review section structural completeness (7-step template) ---
 if [ -f "$TASKS_FILE" ] && [ "$HAS_UI_SCOPE" = true ]; then
-  DESIGN_SECTION=$(sed -n '/^## .*Design Review/,/^## /p' "$TASKS_FILE" 2>/dev/null | sed '$d')
+  DESIGN_SECTION=$(sux_extract_section "$TASKS_FILE" '.*Design Review')
 
   if [ -z "$DESIGN_SECTION" ]; then
     FINDINGS+=("缺 \`## N. Design Review\` 區塊 — change 包含 UI scope，但 tasks.md 沒有 Design Review section。
