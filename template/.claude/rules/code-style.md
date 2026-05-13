@@ -66,6 +66,56 @@ globs: ['**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts,md,json}', '.*rc*', '.*.config.
 
 ## 必須事項（MUST）
 
+### `vite.config.ts` 必備欄位（跨 consumer 統一，避免 propagate drift）
+
+clade 散播檔（`vendor/scripts/*.mts`、`scripts/spectra-advanced/*`、`.github/actions/*`）會進到每個 consumer 的 `vp fmt` 掃描範圍。若 clade 與 consumer 的 `vite.config.ts` fmt 設定不一致，consumer 端 `vp fmt --check` 會把 clade 寫出的程式重排成 consumer 風格 → 形成 LOCKED 檔被改動 → CI 紅燈或下次 propagate 出現 drift commit。
+
+**MUST** 在 `vite.config.ts` 顯式設下列欄位（取代 oxfmt default 隱式套用），不要依賴 default：
+
+```ts
+fmt: {
+  semi: false,
+  singleQuote: true,
+  printWidth: 100,
+  tabWidth: 2,
+  useTabs: false,
+  trailingComma: 'all',          // 對齊 Prettier 3.0+ 與 oxfmt default（業界主流）
+  quoteProps: 'as-needed',
+  arrowParens: 'always',
+  endOfLine: 'lf',
+  // ignorePatterns: [...]          // 專案自家 ignore
+}
+```
+
+理由：
+
+- `semi: false` + `singleQuote: true` 依 5 consumer codebase 投票（4-1）
+- `trailingComma: 'all'` 對齊 Prettier 3.0+（2023-07 起 default）與 oxfmt default — Internet Explorer 已 EOL，舊 `'es5'` value 不再需要
+- `printWidth: 100` 對齊全 consumer
+- 其他欄位明寫避免「default 哪天改了，全 consumer 一起 drift」
+
+**禁止**只設部分欄位（例如只設 `singleQuote` + `semi` 不設 `trailingComma`）— 哪天 oxfmt default 改了，未顯式設的 consumer 會偷偷飄離。
+
+對 `lint`，**MUST** 顯式設 `categories` + `plugins`（不要依賴 default）：
+
+```ts
+lint: {
+  categories: {
+    correctness: 'error',
+    suspicious: 'warn',
+    pedantic: 'off',
+    perf: 'warn',
+    style: 'off',
+    restriction: 'off',
+    nursery: 'off',
+  },
+  plugins: ['typescript', 'unicorn', 'import', 'promise'],
+  rules: { /* 專案特例 turn-off */ },
+  env: { browser: true, node: true, es2024: true },
+  ignorePatterns: [/* ... */],
+}
+```
+
 ### 用 vp 命令做 lint / format
 
 ```bash
