@@ -255,7 +255,7 @@ node -e "const s=require('./package.json').scripts.check||''; console.log(/test|
 pnpm test          # 或 vp test run / pnpm test:unit，依 consumer 設定
 ```
 
-失敗時進入 loop：修復 → `vp fmt` → 重跑上述兩步 → 直到全綠。
+失敗時進入 loop：修復 → `pnpm format`（裸打 `vp fmt` 必須加 `--ignore-path .oxfmtignore`） → 重跑上述兩步 → 直到全綠。
 
 **禁止**用 `npx vitest run` / `npx eslint` 等個別工具替代 `pnpm check` / `pnpm test`。若 `.claude/worktrees/` 干擾結果，先清理再跑。
 

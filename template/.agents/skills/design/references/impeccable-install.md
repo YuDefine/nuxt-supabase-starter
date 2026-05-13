@@ -80,7 +80,7 @@ vp 0.1.20 仍有此 bug（驗證過）。**繞法**：transform function 0 targe
     !f.includes('/.agents/') &&
     !f.includes('/.codex/')
   )
-  return allowed.length > 0 ? [`vp fmt ${allowed.join(' ')}`] : ['true']
+  return allowed.length > 0 ? [`vp fmt --ignore-path .oxfmtignore ${allowed.join(' ')}`] : ['true']
 }
 ```
 

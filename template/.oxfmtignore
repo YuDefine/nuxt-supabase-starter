@@ -1,0 +1,9 @@
+# Clade-managed LOCKED projections (ignored by oxfmt)
+# Pass --ignore-path .oxfmtignore to all vp fmt invocations. oxfmt does not auto-detect this filename.
+.claude/rules/
+.claude/skills/
+.claude/hooks/
+.claude/agents/
+.claude/commands/
+.agents/
+.codex/
