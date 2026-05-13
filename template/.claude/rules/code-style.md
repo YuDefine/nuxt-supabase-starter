@@ -122,67 +122,53 @@ perno consumer v0.40.0（2026-05-13）CI 紅燈：`_ci-reusable.yml` 跑 `vp run
 
 clade 散播檔（`vendor/scripts/*.mts`、`scripts/spectra-advanced/*`、`.github/actions/*`）會進到每個 consumer 的 `vp fmt` 掃描範圍。若 clade 與 consumer 的 `vite.config.ts` fmt 設定不一致，consumer 端 `vp fmt --check` 會把 clade 寫出的程式重排成 consumer 風格 → 形成 LOCKED 檔被改動 → CI 紅燈或下次 propagate 出現 drift commit。
 
-**MUST** 在 `vite.config.ts` 顯式設下列欄位（取代 oxfmt default 隱式套用），不要依賴 default：
+**MUST** 從 clade 散播的 `vendor/oxc-shared/preset.mjs` import baseline 並 spread merge：
 
 ```ts
-fmt: {
-  semi: false,
-  singleQuote: true,
-  printWidth: 100,
-  tabWidth: 2,
-  useTabs: false,
-  trailingComma: 'all',          // 對齊 Prettier 3.0+ 與 oxfmt default（業界主流）
-  quoteProps: 'as-needed',
-  arrowParens: 'always',
-  endOfLine: 'lf',
-  // ignorePatterns: [...]          // 專案自家 ignore
-}
+import { defineConfig } from 'vite-plus'
+import { lintBase, fmtBase } from './vendor/oxc-shared/preset.mjs'
+
+export default defineConfig({
+  resolve: { alias: [/* consumer build config */] },
+
+  lint: {
+    ...lintBase,
+    rules: {
+      ...lintBase.rules,
+      // 業務 override 僅放這裡（屬於 baseline 的請改 preset.mjs，跨 consumer 統一）
+      'unicorn/no-thenable': 'off', // supabase PostgREST mock builder chain
+    },
+    ignorePatterns: [...lintBase.ignorePatterns, '.wrangler/'],
+  },
+
+  fmt: {
+    ...fmtBase,
+    // experimentalTailwindcss stylesheet 各 consumer 路徑不同，不在 preset
+    experimentalTailwindcss: { stylesheet: './app/assets/css/main.css' },
+    ignorePatterns: [...fmtBase.ignorePatterns, 'AGENTS.md'],
+  },
+})
 ```
 
-理由：
+baseline 內容（自 `vendor/oxc-shared/preset.mjs`）：
 
-- `semi: false` + `singleQuote: true` 依 5 consumer codebase 投票（4-1）
-- `trailingComma: 'all'` 對齊 Prettier 3.0+（2023-07 起 default）與 oxfmt default — Internet Explorer 已 EOL，舊 `'es5'` value 不再需要
-- `printWidth: 100` 對齊全 consumer
-- 其他欄位明寫避免「default 哪天改了，全 consumer 一起 drift」
+- `fmt`: `semi: false`, `singleQuote: true`, `printWidth: 100`, `tabWidth: 2`, `trailingComma: 'all'`, `quoteProps: 'as-needed'`, `arrowParens: 'always'`, `endOfLine: 'lf'`, `htmlWhitespaceSensitivity: 'css'`, `vueIndentScriptAndStyle: true`, `experimentalSortPackageJson: { sortScripts: true }`
+- `lint.categories`: `correctness:error` / `suspicious:warn` / `perf:warn` / `pedantic|style|restriction|nursery:off`
+- `lint.plugins`: `['typescript', 'unicorn', 'import', 'promise']`
+- `lint.rules`: `no-console:off`, `no-debugger:warn`, `no-alert:error`, `eqeqeq:['error','always']`, `@typescript-eslint/no-unused-vars:warn`, `no-await-in-loop:off`, `no-underscore-dangle:['warn',{allow:['__dirname','__filename']}]`
+- `lint.env`: `{ browser: true, node: true, es2024: true }`
+- 共通 `ignorePatterns`：`node_modules/`, `.nuxt/`, `.output/`, `dist/`, `coverage/`, `supabase/`, `.claude/skills/`, `.agents/`, `.codex/`, `.clade/`, `*.d.ts`（lint）;  `**/*.md`, `coverage/**`, `.nuxt/**`, `.output/**`, `pnpm-lock.yaml`, `.claude/plugins/cache/**`, `.spectra/**`（fmt）
 
-**禁止**只設部分欄位（例如只設 `singleQuote` + `semi` 不設 `trailingComma`）— 哪天 oxfmt default 改了，未顯式設的 consumer 會偷偷飄離。
+**禁止**：
 
-對 `lint`，**MUST** 顯式設 `categories` + `plugins`（不要依賴 default）：
-
-```ts
-lint: {
-  categories: {
-    correctness: 'error',
-    suspicious: 'warn',
-    pedantic: 'off',
-    perf: 'warn',
-    style: 'off',
-    restriction: 'off',
-    nursery: 'off',
-  },
-  plugins: ['typescript', 'unicorn', 'import', 'promise'],
-  rules: {
-    // oxlint patch 升版（vite-plus ^0.1.21 range 內）可能把 stylistic / suspicious
-    // rule 默認等級從 'warn' 升 'error'。對 perno-style code（_ prefix internal var、
-    // 既有 audit chain `_serviceClient` / `__dirname` 等慣例）會讓 lint baseline drift。
-    // MUST 顯式宣告以下 rule level，避免 patch 升版破壞 CI lint gate：
-    'no-underscore-dangle': 'warn',
-    /* 其他專案特例 turn-off */
-  },
-  env: { browser: true, node: true, es2024: true },
-  ignorePatterns: [
-    // ... 其他既有 ignore
-    '.clade/',  // clade improvement-loop tooling local install artifact (consumer 端 sync 來，不該由 consumer lint 掃)
-  ],
-}
-```
+- 直接 inline 寫 `lint:` / `fmt:` 全部欄位而不 import preset — 哪天 preset 升版（例：oxlint patch 升 `no-underscore-dangle` 從 warn 升 error 要在 preset 反制），consumer 就會 silently drift。
+- 在 consumer 端的 `vendor/oxc-shared/preset.mjs` 投影檔直接改 — 下次 propagate 會覆蓋。要改 baseline → cd 到 clade 改 `vendor/oxc-shared/preset.mjs` 再 propagate。
 
 **真實事故參考**：perno 2026-05-14 觀察 `vp lint scripts/audit-ux-drift.mts`（檔案內容無 git diff）：
 - @ v0.39.2: `Found 2 warnings and 0 errors`
 - @ main (v0.40.0): `Found 0 warnings and 1 error`
 
-`pnpm-lock.yaml` 自 v0.39.2 後重生兩次，oxlint 在 `^0.1.21` 內升 patch，把 `no-underscore-dangle` rule level 從 warn 升 error。perno 5 個 consumer 都吃 clade 同一份 oxlint dep range — **MUST** 在 baseline `vite.config.ts` `lint.rules` 顯式 pin 此 rule，避免散播 drift。
+`pnpm-lock.yaml` 自 v0.39.2 後重生兩次，oxlint 在 `^0.1.21` 內升 patch，把 `no-underscore-dangle` rule level 從 warn 升 error。perno 5 個 consumer 都吃 clade 同一份 oxlint dep range — preset 已 pin 此 rule 為 `['warn', { allow: ['__dirname', '__filename'] }]`，import 即享 single source of truth。
 
 ### 用 vp 命令做 lint / format
 
