@@ -16,6 +16,8 @@ Local edits will be reverted by the next sync.
 - **0-A** `codex review --uncommitted`（GPT 5.5，最多 2 輪 review-fix loop：Round 1 = `high`、Round 2 = `xhigh`）— 重用性、品質、邏輯、安全；review 由 codex 執行，修正由 Claude Code 主線執行
 - **0-B** UI Design Review（條件觸發）— 含 `.vue` 模板變動 + 屬於頁面/元件/佈局/互動/樣式變更時派 screenshot-review agent
 - **0-C** **format / lint / typecheck / test 全綠**：跑 `pnpm check`（多數專案含 format/lint/typecheck）**並且**確認 test 也有跑。**若 `package.json` 的 `scripts.check` 不含 `test` / `vitest`，必須額外跑 `pnpm test`（或 `vp test run` / `pnpm test:unit`），否則 CI 抓到的測試失敗（hook timeout、flake、新增測試壞掉）會在 commit 後才暴露**
+
+**並行執行**：0-A.0 simplify 序跑完後，**0-A.1（codex high 背景）/ 0-B（screenshot subagent）/ 0-C（主線 foreground check）三軸 MUST 並行**——序跑會浪費 5–10 分鐘閘門時間。`codex review --uncommitted` 啟動時讀 working tree snapshot，後續變動不影響它正在進行的 review，所以三軸並行安全。詳細啟動順序與大改動 fallback 見 `.claude/commands/commit.md` 的「0-A/B/C 並行策略」。
 - **Step 1** Schema 同步檢查 — `database.types.ts` 與 migration 對齊
 - **Step 5** 版本號升級 + tag push — `feat` → minor、其他 → patch
 
