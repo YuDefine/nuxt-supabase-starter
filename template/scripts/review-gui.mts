@@ -2130,6 +2130,10 @@ function renderReviewHtml(): string {
       border: 1px solid var(--line);
       border-radius: 6px;
       background: #fff;
+      cursor: zoom-in;
+    }
+    .verified-ui-image:hover {
+      border-color: var(--accent, #5a8dee);
     }
     .task-item.kind-automatic {
       background: #f3faf6;
@@ -2774,11 +2778,14 @@ function renderReviewHtml(): string {
     // 即便丟到一個沒讀過 CLAUDE.md / 沒 conversation history 的 cleanroom Claude
     // session 也能直接接手。指示寫硬性使用 codebase-memory-mcp，對齊 user
     // global CLAUDE.md 的 Code Discovery rule。
-    function handoffHeader(change) {
+    function handoffHeader(change, ctx) {
       const repoName = state.repoName || '(unknown)';
       const repoRoot = state.repoRoot || '(unknown)';
       const changeName = change ? change.name : '(unknown)';
-      return [
+      const item = (ctx && ctx.item) || null;
+      const kinds = item ? itemKinds(item) : null;
+      const kindLine = kinds && kinds.length ? '- item kind: ' + kinds.join(' + ') : null;
+      const lines = [
         '我在 consumer repo「' + repoName + '」（路徑：' + repoRoot + '）',
         '跑 \`pnpm review:ui\` 做 spectra 人工檢查，遇到下面這個問題需要你接手分析、提方案，',
         '等我確認後再動手。',
@@ -2788,12 +2795,18 @@ function renderReviewHtml(): string {
         '- repo root: ' + repoRoot,
         '- change: ' + changeName,
         '- tasks.md: openspec/changes/' + changeName + '/tasks.md',
+      ];
+      if (kindLine) lines.push(kindLine);
+      lines.push(
         '- 相關 rules（若存在請優先讀）：',
-        '  - .claude/rules/manual-review-format.md',
-        '  - .claude/rules/screenshot-organization.md',
+        '  - .claude/rules/manual-review.md（item kind marker / decision 語法 / Pre-Review Data Readiness）',
+        '  - .claude/rules/screenshot-strategy.md（截圖檔名 / 路徑 / 變體規範）',
+        '  - .claude/rules/fixtures-reference.md（sample / URL / scoped sub-items 必備樣態）',
+        '  - .claude/rules/tech-debt-routing.md（決定 TD 該登 clade 還是 consumer）',
         '  - openspec/AGENTS.md（spectra 工作流）',
         '',
-      ].join('\\n');
+      );
+      return lines.join('\\n');
     }
     function handoffFooter() {
       return [
@@ -2885,7 +2898,7 @@ function renderReviewHtml(): string {
           '\`\`\`',
           '',
           '請：',
-          '- 確認檔名與 item id 的對應規範（見 .claude/rules/screenshot-organization.md 或 plugins/hub-core/agents/screenshot-review.md）',
+          '- 確認檔名與 item id 的對應規範（見 .claude/rules/screenshot-strategy.md §檔名強制規範，或 plugins/hub-core/agents/screenshot-review.md）',
           '- 若是命名漂掉，提議 rename 方案（map old → new，不要直接 mv）',
           '- 若是 item id 與設計不符（例如 tasks.md 是 #3 但截圖意圖是 #3.1 sub-item），建議改 tasks.md 結構',
         ].join('\\n');
@@ -2919,6 +2932,21 @@ function renderReviewHtml(): string {
         const item = ctx.item || {};
         const note = ctx.note || '';
         const matchedFiles = ctx.matchedFiles || [];
+        const hits = Array.isArray(item.manualReviewHits) ? item.manualReviewHits : [];
+        const hitLines = hits.length
+          ? [
+              '',
+              '## Pre-Review Data Readiness 命中（review:ui client-side 偵測）',
+              ''
+            ].concat(
+              hits.map(function (h) {
+                return '- \`' + h.code + '\` — ' + h.description + '（rule: .claude/rules/' + h.anchor + '）';
+              })
+            ).concat([
+              '',
+              '這些 pattern 通常代表 proposal 階段 sample / URL / scoped sub-item 沒寫齊。處理 issue 時先判斷：root cause 是不是「proposal 不完整導致截圖難對焦」而非「實作 bug」。',
+            ])
+          : [];
         body = [
           '## 問題：人工檢查標記為 ⚠ 有問題（issue），需要 root cause + 修法',
           '',
@@ -2933,17 +2961,22 @@ function renderReviewHtml(): string {
           '',
           '已配對的截圖（' + matchedFiles.length + ' 張）：',
           matchedFiles.length ? matchedFiles.map(function (n) { return '- ' + n; }).join('\\n') : '- (無)',
+        ].concat(hitLines).concat([
           '',
           '請把上面 issue 說明當 bug report 處理：',
           '1. 用 codebase-memory-mcp 找出這個 item 對應的 feature 在哪實作（從 description 抓 keyword → search_graph）',
           '2. trace_path 看相關 call chain，定位根因（不要急著看 symptom）',
           '3. 提修法：列要動的檔、影響範圍、是否需要新測試、是否需要更新 spec',
-          '4. 若根因在 spec / 設計層級（不是 bug 而是 missing requirement），建議走 /spectra-ingest 改 proposal 而非直接改 code',
-        ].join('\\n');
+          '4. 修法路由（看 .claude/rules/tech-debt-routing.md）：',
+          '   - 根因是 spec / 設計層級缺漏 → \`/spectra-ingest\` 改 proposal',
+          '   - 根因是 code bug 但影響窄、可延後 → 登 docs/tech-debt.md TD-NNN',
+          '   - 根因跨多個 consumer / 在投影層（clade 中央倉）→ 提示要去 clade 改，不要在當前 consumer 改',
+          '   - 純 bug 當下可修 → 提方案等確認後改',
+        ]).join('\\n');
       } else {
         body = '## 問題\\n\\n(unknown kind: ' + kind + ')';
       }
-      return handoffHeader(change) + body + handoffFooter();
+      return handoffHeader(change, ctx) + body + handoffFooter();
     }
 
     // ── handoff prompt 複製 + fallback modal ──
@@ -3185,7 +3218,7 @@ function renderReviewHtml(): string {
       return '<div class="verified-ui-panel">' +
         (title ? '<h3>' + esc(title) + '</h3>' : '') +
         '<p><a class="evidence-link" href="' + esc(localFileHref(evidence.screenshot)) + '" target="_blank" rel="noreferrer">' + esc(evidence.screenshot) + '</a></p>' +
-        '<img class="verified-ui-image" src="' + esc(src) + '" alt="' + esc(evidence.screenshot) + '">' +
+        '<img class="verified-ui-image" src="' + esc(src) + '" alt="' + esc(evidence.screenshot) + '" title="點擊放大檢視">' +
         dom +
       '</div>';
     }
@@ -3445,6 +3478,14 @@ function renderReviewHtml(): string {
         if (state.draftNotes[id] !== undefined) textarea.value = state.draftNotes[id];
         textarea.addEventListener('input', function () {
           state.draftNotes[id] = textarea.value;
+        });
+      });
+      // 任務卡片內的內嵌截圖（Final-state / verified-ui）：點擊放大進 viewer，
+      // 與右側 thumbnail grid 一致。stopPropagation 防止冒泡到 task-item card 觸發 active 切換。
+      el.taskList.querySelectorAll('img.verified-ui-image').forEach(function (img) {
+        img.addEventListener('click', function (event) {
+          event.stopPropagation();
+          openViewer(img.src, img.alt || '');
         });
       });
     }
