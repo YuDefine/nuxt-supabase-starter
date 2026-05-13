@@ -69,6 +69,53 @@ oxfmt 不會自動 fallback 讀 `.oxfmtignore`（只有 `.prettierignore` / `.gi
 
 > ⚠️ **NEVER** 直接呼叫 `oxlint` / `oxfmt` CLI binary：在 vite-plus 0.1.x 起，這兩個 binary 已退化成 IDE-only / LSP-only stub，直接執行會回傳 `This oxfmt wrapper is for IDE extension use only` 錯誤導致 pre-commit / CI 失敗。**MUST** 走 `vp lint` / `vp fmt` 入口（vp 內部會用編譯版 oxc）。
 
+### CI workflow 禁止跑 `vp check` / `vp run check`（hard rule）
+
+**NEVER** 在 `.github/workflows/**.yml` 跑 `vp check` 或 `vp run check`。
+
+理由：`vp check` 內部 fmt step **不支援 `--ignore-path` flag**（CLI 沒這 option，pass-through 也不一定生效），意思是 CI 環境下 `vp check` 會掃描整 working tree 包括 LOCKED projection（`.claude/agents/`、`.claude/commands/` 等 chmod 444 檔），撞 oxfmt format issue → CI 紅燈。
+
+consumer 端 LOCKED projection 的 ignore 機制設計：
+- `.oxfmtignore` 由 clade `scripts/lib/oxfmtignore-governance.mjs` 在 `pnpm hub:bootstrap` 時生成
+- oxfmt **不會自動 fallback** 讀 `.oxfmtignore`（只認 `.prettierignore` / `.gitignore` 是 fallback，但 `.prettierignore` 已 v0.4.x 黑名單）
+- 所有 `vp fmt` 調用入口**必須**顯式帶 `--ignore-path .oxfmtignore`
+- clade 散播的 `package.json` `format` / `format:check` script 預埋此 flag：
+  ```json
+  "format:check": "vp fmt --check --ignore-path .oxfmtignore",
+  "format": "vp fmt --write --ignore-path .oxfmtignore",
+  ```
+
+**MUST** CI workflow 拆 step 跑各別 npm script，每個 script 自帶必要 flag：
+
+```yaml
+# ✅ 正確 — TDMS 模式（mirror this pattern in all consumers）
+- name: Format check
+  run: vp run format:check       # 帶 --ignore-path .oxfmtignore
+
+- name: Lint
+  run: vp run lint               # 帶 --deny-warnings（若 consumer baseline 為 0 warnings）
+
+- name: Typecheck
+  run: vp run typecheck
+
+- name: Run tests
+  run: vp run test
+```
+
+```yaml
+# ❌ 錯誤 — 撞 LOCKED projection
+- name: Check (lint + format + typecheck)
+  run: vp run check              # = pnpm check = vp check && ... (vp check 沒 ignore-path)
+```
+
+對應 `package.json` `check` script（local dev / pre-push 用）可保留 `vp check` 但 consumer 必須**清楚知道**這個 script 在 LOCKED projection 既有的情況下會撞——dev 端用 `vp staged` (pre-commit) 或拆 step 跑各別 npm script 替代。
+
+### 真實事故參考
+
+perno consumer v0.40.0（2026-05-13）CI 紅燈：`_ci-reusable.yml` 跑 `vp run check` → vp check 撞 9 個 LOCKED projection format issue → deploy/migrate job 沒跑 → production 沒上線。修法 = 把 `vp run check` 拆成 `vp run format:check` + `vp run typecheck`（對齊 TDMS）。詳見 perno `docs/tech-debt.md` TD-056（CI workflow ignore-path drift）。
+
+`pnpm-lock.yaml` 重生時 oxlint patch 升版可能讓既有 warning 升 error（perno 2026-05-14 觀察到 `vp lint` 對 `scripts/audit-ux-drift.mts` 從「2 warnings + 0 errors」變成「0 warnings + 1 error」）。CI lint baseline 需週期性 audit。
+
 ## 必須事項（MUST）
 
 ### `vite.config.ts` 必備欄位（跨 consumer 統一，避免 propagate drift）
@@ -115,11 +162,27 @@ lint: {
     nursery: 'off',
   },
   plugins: ['typescript', 'unicorn', 'import', 'promise'],
-  rules: { /* 專案特例 turn-off */ },
+  rules: {
+    // oxlint patch 升版（vite-plus ^0.1.21 range 內）可能把 stylistic / suspicious
+    // rule 默認等級從 'warn' 升 'error'。對 perno-style code（_ prefix internal var、
+    // 既有 audit chain `_serviceClient` / `__dirname` 等慣例）會讓 lint baseline drift。
+    // MUST 顯式宣告以下 rule level，避免 patch 升版破壞 CI lint gate：
+    'no-underscore-dangle': 'warn',
+    /* 其他專案特例 turn-off */
+  },
   env: { browser: true, node: true, es2024: true },
-  ignorePatterns: [/* ... */],
+  ignorePatterns: [
+    // ... 其他既有 ignore
+    '.clade/',  // clade improvement-loop tooling local install artifact (consumer 端 sync 來，不該由 consumer lint 掃)
+  ],
 }
 ```
+
+**真實事故參考**：perno 2026-05-14 觀察 `vp lint scripts/audit-ux-drift.mts`（檔案內容無 git diff）：
+- @ v0.39.2: `Found 2 warnings and 0 errors`
+- @ main (v0.40.0): `Found 0 warnings and 1 error`
+
+`pnpm-lock.yaml` 自 v0.39.2 後重生兩次，oxlint 在 `^0.1.21` 內升 patch，把 `no-underscore-dangle` rule level 從 warn 升 error。perno 5 個 consumer 都吃 clade 同一份 oxlint dep range — **MUST** 在 baseline `vite.config.ts` `lint.rules` 顯式 pin 此 rule，避免散播 drift。
 
 ### 用 vp 命令做 lint / format
 

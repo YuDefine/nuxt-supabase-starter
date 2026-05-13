@@ -2720,7 +2720,7 @@ function renderReviewHtml(): string {
     // regex 字符類用顯式列舉取代 \\s — 同 extractFilenameId / parseDecision。
     function escWithLinks(value) {
       const s = String(value ?? '');
-      const urlRe = /(https?:[/][/][^\s<>"'\u0060)]+)/g;
+      const urlRe = /(https?:[/][/][^\\s<>"'\u0060)]+)/g;
       let out = '';
       let last = 0;
       for (const m of s.matchAll(urlRe)) {
