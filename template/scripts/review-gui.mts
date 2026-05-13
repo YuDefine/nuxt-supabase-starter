@@ -86,7 +86,9 @@ export function loadManualReviewPatterns(): ManualReviewPatternEntry[] {
     cachedPatterns = entries.map((p) => ({
       ...p,
       regex: translatePosixToJs(p.regex),
-      requiresPresenceOf: p.requiresPresenceOf ? translatePosixToJs(p.requiresPresenceOf) : undefined,
+      requiresPresenceOf: p.requiresPresenceOf
+        ? translatePosixToJs(p.requiresPresenceOf)
+        : undefined,
       requiresAbsenceOf: p.requiresAbsenceOf ? translatePosixToJs(p.requiresAbsenceOf) : undefined,
     }))
   } catch {
@@ -158,7 +160,8 @@ const TRAILING_NO_SCREENSHOT_RE = /(^|[^ ]) @no-screenshot$/
 // `@no-manual-review-check[<reason>]` bypass marker per manual-review.md hard rule.
 // Empty brackets and bare marker (no brackets) are invalid by schema → not captured here.
 // May coexist with trailing `@no-screenshot` (canonical ordering: bypass then no-screenshot).
-const TRAILING_NO_MANUAL_REVIEW_CHECK_RE = /@no-manual-review-check\[([^\][]+)\](?:\s+@no-screenshot)?\s*$/
+const TRAILING_NO_MANUAL_REVIEW_CHECK_RE =
+  /@no-manual-review-check\[([^\][]+)\](?:\s+@no-screenshot)?\s*$/
 // 解析 leading kind marker — 必須緊接 `#N` / `#N.M` 後第一個 token、含一個 trailing space。
 // description-mid 的 [discuss] / [review:ui] / [verify:*] 不會被命中（不是行首）。
 const LEADING_KIND_RE = /^\[([^\]]+)\]\s+/
@@ -526,9 +529,7 @@ interface ParserWarningContext {
 }
 
 function formatParserLocation(context: ParserWarningContext): string {
-  return context.lineNumber > 0
-    ? `${context.sourcePath}:${context.lineNumber}`
-    : context.sourcePath
+  return context.lineNumber > 0 ? `${context.sourcePath}:${context.lineNumber}` : context.sourcePath
 }
 
 function warnParser(context: ParserWarningContext, message: string): void {
@@ -555,9 +556,7 @@ function parseKindMarkerCandidate(
   candidate: string,
   defaultKind: DefaultManualReviewItemKind,
   context: ParserWarningContext
-):
-  | { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> }
-  | { valid: false } {
+): { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> } | { valid: false } {
   if (candidate === 'verify:auto') {
     warnParser(context, '[verify:auto] is deprecated; prefer [verify:api+ui]')
     return { valid: true, kinds: ['verify:api', 'verify:ui'] }
@@ -582,9 +581,7 @@ function parseMultiChannelKindMarker(
   candidate: string,
   defaultKind: DefaultManualReviewItemKind,
   context: ParserWarningContext
-):
-  | { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> }
-  | { valid: false } {
+): { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> } | { valid: false } {
   if (!candidate.startsWith('verify:')) {
     warnParser(
       context,
@@ -695,7 +692,9 @@ function parseStructuredAnnotations(
   context: ParserWarningContext
 ): ManualReviewItemAnnotations {
   const annotations: ManualReviewItemAnnotations = {}
-  const matches = line.matchAll(/\((verified-e2e|verified-api|verified-ui|claude-discussed):\s*([^)]*)\)/g)
+  const matches = line.matchAll(
+    /\((verified-e2e|verified-api|verified-ui|claude-discussed):\s*([^)]*)\)/g
+  )
   for (const match of matches) {
     const prefix = match[1]!
     const body = match[2]!.trim()
@@ -733,7 +732,10 @@ function parseStructuredAnnotationValue(
     const spec = findKeyValue(parts, 'spec')
     const trace = findKeyValue(parts, 'trace')
     if (!spec || !trace) {
-      warnParser(context, `malformed (${prefix}: ...) annotation — expected spec=<path> trace=<path>`)
+      warnParser(
+        context,
+        `malformed (${prefix}: ...) annotation — expected spec=<path> trace=<path>`
+      )
       return null
     }
     return { verifiedE2e: { raw, timestamp, spec, trace } }
@@ -819,8 +821,9 @@ function collectStructuredAnnotationRaw(line: string): {
 function renderStructuredAnnotations(
   annotations: Partial<Record<StructuredAnnotationKey, string>>
 ): string {
-  return STRUCTURED_ANNOTATION_ORDER.flatMap((key) => (annotations[key] ? [annotations[key]!] : []))
-    .join(' ')
+  return STRUCTURED_ANNOTATION_ORDER.flatMap((key) =>
+    annotations[key] ? [annotations[key]!] : []
+  ).join(' ')
 }
 
 function upsertStructuredAnnotation(
@@ -1995,6 +1998,23 @@ function renderReviewHtml(): string {
       margin-bottom: 12px;
       overflow: hidden;
     }
+    .handled-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 14px 0 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .02em;
+    }
+    .handled-divider::before,
+    .handled-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--line);
+    }
     .self-completed-section summary {
       cursor: pointer;
       padding: 10px 12px;
@@ -2047,6 +2067,37 @@ function renderReviewHtml(): string {
     .evidence-link {
       color: var(--focus);
       overflow-wrap: anywhere;
+    }
+    .auto-evidence-collapse {
+      border: 1px solid #b9d6c7;
+      border-radius: 6px;
+      background: #f2f8f5;
+      font-size: 12px;
+      overflow: hidden;
+    }
+    .auto-evidence-collapse > summary {
+      cursor: pointer;
+      padding: 6px 10px;
+      color: #176052;
+      font-weight: 600;
+      list-style: none;
+    }
+    .auto-evidence-collapse > summary::-webkit-details-marker { display: none; }
+    .auto-evidence-collapse > summary::before {
+      content: '▸ ';
+      display: inline-block;
+      width: 12px;
+      transition: transform .15s ease;
+    }
+    .auto-evidence-collapse[open] > summary::before { content: '▾ '; }
+    .auto-evidence-collapse[open] > summary {
+      border-bottom: 1px solid #cfe3d8;
+    }
+    .auto-evidence-collapse > .evidence-panel {
+      margin: 0;
+      border: none;
+      background: transparent;
+      border-radius: 0;
     }
     .evidence-missing {
       border-color: #d8c37c;
@@ -2665,7 +2716,7 @@ function renderReviewHtml(): string {
     // regex 字符類用顯式列舉取代 \\s — 同 extractFilenameId / parseDecision。
     function escWithLinks(value) {
       const s = String(value ?? '');
-      const urlRe = /(https?:[/][/][^ \t\r\n<>"'`)]+)/g;
+      const urlRe = /(https?:[/][/][^ \t\r\n<>"'\u0060)]+)/g;
       let out = '';
       let last = 0;
       for (const m of s.matchAll(urlRe)) {
@@ -3139,10 +3190,29 @@ function renderReviewHtml(): string {
       '</div>';
     }
 
+    function autoEvidenceSummary(item, kind) {
+      if (kind === 'e2e') {
+        const ev = item.annotations && item.annotations.verifiedE2e;
+        if (!ev) return '⚠ Playwright spec evidence — missing';
+        const spec = String(ev.spec || '').split('/').pop() || ev.spec || '';
+        return '✓ Playwright: ' + spec + ' — 自動完成';
+      }
+      if (kind === 'api') {
+        const ev = item.annotations && item.annotations.verifiedApi;
+        if (!ev) return '⚠ API round-trip evidence — missing';
+        return '✓ ' + (ev.method || '') + ' ' + (ev.url || '') + ' ' + (ev.status || '') + ' — 自動完成';
+      }
+      return '';
+    }
+
+    function wrapAutoEvidence(item, kind, innerHtml) {
+      return '<details class="auto-evidence-collapse"><summary>' + esc(autoEvidenceSummary(item, kind)) + '</summary>' + innerHtml + '</details>';
+    }
+
     function renderCompoundEvidence(item) {
       const parts = [];
-      if (hasKind(item, 'verify:e2e')) parts.push(renderE2eEvidence(item, 'Playwright spec evidence'));
-      if (hasKind(item, 'verify:api')) parts.push(renderApiEvidence(item, 'API round-trip evidence'));
+      if (hasKind(item, 'verify:e2e')) parts.push(wrapAutoEvidence(item, 'e2e', renderE2eEvidence(item, 'Playwright spec evidence')));
+      if (hasKind(item, 'verify:api')) parts.push(wrapAutoEvidence(item, 'api', renderApiEvidence(item, 'API round-trip evidence')));
       if (hasKind(item, 'verify:ui')) parts.push(renderUiEvidence(item, 'Final-state screenshot'));
       if (!parts.length) return '';
       return '<div class="compound-evidence"><h3>Compound evidence</h3>' + parts.join('') + '</div>';
@@ -3285,8 +3355,15 @@ function renderReviewHtml(): string {
       const indexedItems = change.items.map(function (item, index) { return { item: item, index: index }; });
       const selfCompleted = indexedItems.filter(function (entry) { return isAutomaticOnly(entry.item); });
       const interactive = indexedItems.filter(function (entry) { return !isAutomaticOnly(entry.item); });
+      const interactivePending = interactive.filter(function (entry) { return parseDecision(entry.item.raw).kind === 'pending'; });
+      const interactiveHandled = interactive.filter(function (entry) { return parseDecision(entry.item.raw).kind !== 'pending'; });
+      const handledDivider = interactiveHandled.length
+        ? '<div class="handled-divider" role="separator"><span>已註記 (' + interactiveHandled.length + ')</span></div>'
+        : '';
       const items = renderSelfCompletedSection(selfCompleted) +
-        interactive.map(function (entry) { return renderTaskItem(entry.item, entry.index); }).join('');
+        interactivePending.map(function (entry) { return renderTaskItem(entry.item, entry.index); }).join('') +
+        handledDivider +
+        interactiveHandled.map(function (entry) { return renderTaskItem(entry.item, entry.index); }).join('');
       el.taskList.innerHTML = malformed + items;
       const selfSection = el.taskList.querySelector('#selfCompletedSection');
       if (selfSection) {

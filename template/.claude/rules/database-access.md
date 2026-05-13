@@ -12,11 +12,16 @@ globs: ["app/**/*.{vue,ts}", "server/**/*.ts"]
 
 # Database Access Pattern
 
-- **Client**: READ only via `useSupabaseClient<Database>()` — **僅限 RLS SELECT `TO public` 的表**
-- **Server**: request-scoped 讀寫一律經 `/api/v1/*` + `getSupabaseWithContext(event)`
+- **Client（預設）**: READ only via `useSupabaseClient<Database>()` — **僅限 RLS SELECT `TO public` 的表**
+- **Server（預設）**: request-scoped 讀寫一律經 `/api/v1/*` + `getSupabaseWithContext(event)`
 - **Privileged system tasks**: `getServerSupabaseClient()` 僅用於 audit logging、backfill、資料修復、背景工作
 - **Optional transactional query layer**: `server/utils/drizzle.ts` 僅用於 service 層 / 系統任務；**NEVER** 讓 Drizzle 接管 migration、RLS、trigger
-- **NEVER** `.insert()/.update()/.delete()/.upsert()` from client
+- **Client-side writes are architecture exceptions** — 只有在 proposal / ADR 明確記錄並同時滿足下列條件時，才可從 client 使用 `.insert()` / `.update()` / `.delete()` / `.upsert()`：
+  - RLS policy 能完整表達 tenant / user scope 與所有授權規則
+  - GRANT 只開必要 schema / table / operation，不給寬權限
+  - 不需要 `service_role`、server-only secret、跨表 transaction、workflow transition、audit-chain、storage upload 或外部 API
+  - 不涉及角色 / 權限、薪資、簽核、出勤、稽核、批次修復等敏感流程
+  - 有 focused tests 驗證 allow path、deny path、tenant isolation 與 RLS 失敗時的 UI/錯誤處理
 - **NEVER** client 直讀 RLS `TO authenticated` 的表 — `anon` 角色會靜默回傳 0 筆（見 `supabase-rls` skill）
 
 ## MCP 存取
