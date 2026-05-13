@@ -208,6 +208,9 @@ for i in $(seq 0 $((PATTERN_COUNT - 1))); do
 
     # Skip blank or non-checkbox lines for pattern checks unless pattern explicitly targets them.
     [ -z "$(printf '%s' "$line" | tr -d '[:space:]')" ] && continue
+    if ! printf '%s\n' "$line" | grep -qE '^[[:space:]]*-[[:space:]]*\[[ xX]\]'; then
+      continue
+    fi
 
     # Apply appliesTo restriction.
     if [ "$APPLIES_TO" = "parentLineOnly" ] && is_scoped_child "$line"; then
