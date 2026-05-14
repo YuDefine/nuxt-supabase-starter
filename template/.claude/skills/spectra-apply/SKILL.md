@@ -400,9 +400,19 @@ Run `spectra analyze <change-name> --json` to check cross-artifact consistency (
 
       - Request fail / status 不符 → 保留 `[ ]`，寫 `（issue: <METHOD URL expected/actual>）` 或回報 blocker；**NEVER** 寫 `(verified-api:)`。
 
-   4. **`[verify:ui]` channel — 派 screenshot-review `mode: verify`（UI only）**
+   4. **`[verify:ui]` channel — 派 verify mode（UI only）**
 
-      - Copy/adapt `vendor/snippets/verify-channels/ui-final-state-brief.template.md`。
+      **Runtime 選擇**（default codex；Claude subagent fallback）：
+
+      - **Default — codex**：偵測 `command -v codex` 存在且 env `CLADE_FORCE_CLAUDE_SCREENSHOT` 未設 → 呼叫 `node <clade-vendor>/scripts/codex-dispatch-screenshot-verify.mjs --change <name> --consumer-path . --dev-server-url <url> --items-json <items.json>`。Dispatcher 跑完 stdout 印 JSON 摘要（`{"runtime":"codex","change":...,"items":[...],"audit_exit_code":N,"progress_json":"...","review_md":"..."}`），主線解析該 JSON 後對 `items[].status === "PASS"` 的 item 寫 `(verified-ui:)` annotation。Codex 任一 item `status` 不是 `PASS` 時 → 保留 `[ ]` + 寫 issue / blocker（業務結果，**NEVER** fallback Claude — 同一 brief 在 Claude 也會撞同樣業務問題）
+      - **Fallback — Claude subagent**：以下任一情境**才** fallback 到 `screenshot-review` subagent（brief copy/adapt 自 `vendor/snippets/verify-channels/ui-final-state-brief.template.md`）：
+        - `command -v codex` 不存在
+        - env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 強制退場（debug / 退場用）
+        - Dispatcher exit 非 0 **且** stdout 沒印出可 parse 的 JSON 摘要（機械故障，例如 codex auth 失效、subprocess crash）
+      - 兩 runtime 走相同的 brief contract（change name、dev server URL、items、Scope）；codex runtime 多了 self-contained guardrails（codex 不會 auto-load `screenshot-review.md`）
+
+      共用規約：
+
       - Brief **MUST** 提供 change name、dev server URL、每個 item 的 known URL、expected DOM observation、預期 screenshot path。
       - Agent scope **MUST** 限於 open known URL + wait for load + final-state screenshot + DOM observation。
       - Agent **NEVER** 做 mutation / form fill / click sequences / multi-role login switching / seed repair。
