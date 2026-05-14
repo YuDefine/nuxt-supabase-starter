@@ -50,9 +50,25 @@ export const lintBase = {
     'no-await-in-loop': 'off',
     // perno 2026-05-14: oxlint ^0.1.21 patch upgrade flipped this from warn→error.
     // Explicit pin keeps `_serviceClient` / fixture private prefix conventions
-    // from breaking CI lint gate on lockfile regen. `allow` lets Node ESM
-    // `__dirname` / `__filename` reconstructions (via fileURLToPath) pass.
-    'no-underscore-dangle': ['warn', { allow: ['__dirname', '__filename'] }],
+    // from breaking CI lint gate on lockfile regen. `allow` covers:
+    //   __dirname / __filename — Node ESM reconstructions (via fileURLToPath)
+    //   _serviceClient — Supabase admin-client private convention (perno / sroi)
+    //   _samples / _corrupt / _evlogFlushPromise — internal audit/digest fields
+    //     in vendor/scripts/*, plugins/hub-core/scripts/commit-lock.mjs, and
+    //     vendor/snippets/evlog-drain-pipeline/* (all propagate to consumers).
+    'no-underscore-dangle': [
+      'warn',
+      {
+        allow: [
+          '__dirname',
+          '__filename',
+          '_serviceClient',
+          '_samples',
+          '_corrupt',
+          '_evlogFlushPromise',
+        ],
+      },
+    ],
   },
   plugins: ['typescript', 'unicorn', 'import', 'promise'],
   env: {
