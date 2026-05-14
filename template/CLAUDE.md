@@ -148,3 +148,17 @@ Subagent 任務應包含（cwd 設為 push 發生的 repo path）：
 - **NEVER** 用 `/spectra-commit` 收尾 — 速度優先，selective stage 不值得
 - **NEVER** 在 archive 之後分兩個 `/commit`（一個包 fix、一個包 archive）— 同上理由
 <!-- CLADE:SNIPPET:archive-commit-order:END -->
+
+<!-- CLADE:SNIPPET:worktree-default:START -->
+
+## Session-level Worktree
+
+要動 code 的 session（implement / fix / refactor / migration）**MUST** 跑在獨立 git worktree，**NEVER** 直接在 main 改。用 `/wt <slug>` 建立：worktree 落在 `<consumer-parent>/<consumer>-wt/<slug>/`、branch 走 `session/<YYYY-MM-DD-HHMM>-<slug>` 命名規約。
+
+Read-only session（grep、看 log、解釋 code 不寫檔）可留在 main worktree。
+
+**Silent branch 禁令**：Claude **MUST NOT** 跑 `git checkout -b` / `git branch <name>` 或任何會建新 ref 的指令，**除非**先取得 user 明確同意。`/wt` 用的 `session/<date-slug>` 規約命名是唯一例外。
+
+詳見 `.claude/rules/worktree-default.md`。
+
+<!-- CLADE:SNIPPET:worktree-default:END -->
