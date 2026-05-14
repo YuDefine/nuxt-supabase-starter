@@ -37,37 +37,83 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-app
 # 非互動模式（使用預設配置）
 pnpm --dir template/packages/create-nuxt-starter dev temp/my-app --yes
 
-# 非互動模式（自訂配置）
+# 非互動模式（用 stack preset 一行直達）
 pnpm --dir template/packages/create-nuxt-starter dev temp/my-app \
     --yes \
-    --fast \
+    --preset cloudflare-nuxthub-ai
+
+# 非互動模式（自訂微調）
+pnpm --dir template/packages/create-nuxt-starter dev temp/my-app \
+    --yes \
     --auth better-auth \
     --with charts,monitoring \
-    --without testing-full
+    --without testing-full,testing-vitest
 ```
 
 ### 非互動參數
 
-- `--auth`：`nuxt-auth-utils` | `better-auth` | `none`
-- `--fast`：最快預設（等同 `--preset fast`，移除 testing）
-- `--preset`：`default` | `fast`
+- `--preset`：`cloudflare-supabase`（預設）| `cloudflare-nuxthub-ai` | `vercel-supabase` | `self-hosted-node` | `minimal`
+- `--auth`：`nuxt-auth-utils` | `better-auth` | `none`（覆蓋 preset 的 auth 預設）
+- `--ci`：`simple` | `advanced`（覆蓋 preset 的 ci 預設）
+- `--db`：`supabase` | `nuxthub-d1`（覆蓋 preset 的 dbStack）
+- `--evlog-preset`：`none` | `baseline` | `d-pattern-audit` | `nuxthub-ai`（覆蓋 preset 的 evlog）
 - `--with`：逗號分隔 feature id，加入功能
-- `--without`：逗號分隔 feature id，移除功能
-- `--minimal`：從空白功能集開始（不載入預設）
+- `--without`：逗號分隔 feature id，移除功能（含跳過 testing：`--without testing-full,testing-vitest`）
+- `--minimal`：從空白功能集開始（新版改用 `--preset minimal` 更明確）
+
+#### 破壞性變更（舊版使用者）
+
+| 舊用法                  | 新用法                                            |
+| ----------------------- | ------------------------------------------------- |
+| `--preset default`      | `--preset cloudflare-supabase`（或不帶 flag）     |
+| `--preset fast`         | `--preset cloudflare-supabase --without testing-full,testing-vitest` |
+| `--fast`                | `--without testing-full,testing-vitest`           |
+
+CLI 傳入舊值時會 fail 並提示等價寫法。
 
 ## 互動選單流程
+
+第一步是 **stack preset picker**，6 個選項（5 個 preset + custom 逃生口）：
+
+| 選項                       | 行為                                                                   |
+| -------------------------- | ---------------------------------------------------------------------- |
+| `cloudflare-supabase`      | Cloudflare + Supabase + baseline evlog（預設）                          |
+| `cloudflare-nuxthub-ai`    | NuxtHub D1 + nuxthub-ai evlog + Better Auth（強制）                     |
+| `vercel-supabase`          | Vercel + Supabase + baseline evlog                                     |
+| `self-hosted-node`         | Node 部署 + Supabase + ci-advanced                                     |
+| `minimal`                  | 最小起手：純 Nuxt + Cloudflare，無 auth / db / monitoring / extras     |
+| `custom`                   | 走完整 15-prompt wizard，完全不受 preset 影響                          |
+
+選 preset（非 custom）後 wizard 只問 **8 個非 preset 決策**：
+
+1. 專案名稱
+2. 認證系統（preset 提供 default，使用者可改）
+3. UI 框架（Nuxt UI / 不需要）
+4. 渲染模式（SPA / SSR）
+5. 額外功能（多選：圖表、SEO、安全性、影像最佳化、VueUse）
+6. 狀態管理（Pinia / 不需要）
+7. 測試框架（Vitest + Playwright / 僅 Vitest / 不需要）
+8. AI runtime（多選：claude-code / codex / cursor）
+
+被 preset 決定的 prompt（資料庫 / 部署目標 / 監控 / CI 模式 / evlog preset / DB stack）會直接跳過。
+
+選 `custom` 時走完整 15-prompt 路徑：
 
 1. 專案名稱
 2. 認證系統（nuxt-auth-utils / Better Auth / 不需要）
 3. 資料庫（Supabase / 不需要）
 4. UI 框架（Nuxt UI / 不需要）
-5. 額外功能（多選：圖表、SEO、安全性、影像最佳化、VueUse）
-6. 狀態管理（Pinia / 不需要）
-7. 測試框架（Vitest + Playwright / 僅 Vitest / 不需要）
-8. 監控（Sentry + Evlog / 不需要）
-9. 部署目標（Cloudflare / Vercel / Node.js）
-10. 程式碼品質（OXLint + OXFmt / 不需要）
-11. Git Hooks（Husky + Commitlint / 不需要）
+5. 渲染模式（SPA / SSR）
+6. 額外功能（多選：圖表、SEO、安全性、影像最佳化、VueUse）
+7. 狀態管理（Pinia / 不需要）
+8. 測試框架（Vitest + Playwright / 僅 Vitest / 不需要）
+9. 監控（Sentry + Evlog / 不需要）
+10. 部署目標（Cloudflare / Vercel / Node.js）
+11. 程式碼品質（OXLint + OXFmt / 不需要）
+12. Git Hooks（Husky + Commitlint / 不需要）
+13. CI 模式（Simple / Advanced）
+14. AI runtime（多選）
+15. evlog preset + DB stack
 
 ## 功能模組一覽
 

@@ -94,18 +94,20 @@ if [[ ! -f "$CLI_DIST" ]] || \
 fi
 
 echo "[2/3] scaffold project (fast profile)"
+# wrapper 提供 "fast profile" 語義：跳過 testing，其餘走 cloudflare-supabase preset 預設。
+# CLI 的 --fast flag 已移除，改用 --without testing-full,testing-vitest 達到等價效果。
 if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
   node "$CLI_DIST" \
     "$TARGET_DIR" \
     --yes \
-    --fast \
+    --without testing-full,testing-vitest \
     --auth "$AUTH_MODE" \
     "${EXTRA_ARGS[@]}"
 else
   node "$CLI_DIST" \
     "$TARGET_DIR" \
     --yes \
-    --fast \
+    --without testing-full,testing-vitest \
     --auth "$AUTH_MODE"
 fi
 

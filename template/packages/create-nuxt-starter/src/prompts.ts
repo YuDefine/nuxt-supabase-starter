@@ -6,7 +6,14 @@ import {
   type EvlogPreset,
   type UserSelections,
 } from './types'
-import { featureModules, resolveFeatureDependencies } from './features'
+import { featureModules, getModuleById, resolveFeatureDependencies } from './features'
+import {
+  PRESETS,
+  applyPreset,
+  getPresetById,
+  type PresetDefinition,
+  type PresetId,
+} from './presets'
 
 function normalizePromptValues(values: unknown): string[] {
   if (!Array.isArray(values)) return []
@@ -32,6 +39,219 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
   consola.log('')
   consola.box('Create Nuxt Starter')
 
+  // 0. Preset picker — 5 個 stack preset + custom 逃生口（完整 15-prompt wizard）
+  const presetChoice = (await consola.prompt('選擇 stack preset？', {
+    type: 'select',
+    options: [
+      ...PRESETS.map((p) => ({ label: `${p.label} — ${p.description}`, value: p.id as string })),
+      {
+        label: 'custom — 走完整 wizard（15 個 prompt 自由組合，不套用任何 preset 預設）',
+        value: 'custom',
+      },
+    ],
+    initial: 'cloudflare-supabase',
+  })) as string
+
+  if (typeof presetChoice === 'symbol') process.exit(0)
+
+  if (presetChoice !== 'custom') {
+    const preset = getPresetById(presetChoice)
+    if (!preset) {
+      throw new Error(`未知的 preset id：${presetChoice}`)
+    }
+    return promptUserPreset(preset, defaultProjectName)
+  }
+
+  return promptUserCustom(defaultProjectName)
+}
+
+// Short wizard for preset path (8 prompts vs custom's 15):
+// preset already decides dbStack / evlogPreset / deploy / monitoring / ci, so we
+// only ask for projectName / auth / ui / ssr / extras / state / testing / agentTargets.
+async function promptUserPreset(
+  preset: PresetDefinition,
+  defaultProjectName?: string
+): Promise<UserSelections> {
+  // 1. Project name
+  const projectName =
+    defaultProjectName ||
+    ((await consola.prompt('專案名稱：', {
+      type: 'text',
+      default: 'nuxt-app',
+      placeholder: 'nuxt-app',
+    })) as string)
+
+  if (typeof projectName === 'symbol') process.exit(0)
+
+  // 2. Auth — preset.authDefault 為 initial 值，使用者可調整
+  const authChoice = (await consola.prompt('認證系統？', {
+    type: 'select',
+    options: [
+      {
+        label: 'nuxt-auth-utils — Cookie session，適用所有部署環境',
+        value: 'auth-nuxt-utils',
+      },
+      {
+        label: 'Better Auth — 需要 DB 連線，Workers + 自架 DB 需 Hyperdrive',
+        value: 'auth-better-auth',
+      },
+      { label: '不需要', value: 'none' },
+    ],
+    initial: preset.authDefault,
+  })) as string
+
+  if (typeof authChoice === 'symbol') process.exit(0)
+  assertWizardAuthCompatible(authChoice, preset.dbStack)
+
+  // 3. UI
+  const uiChoice = (await consola.prompt('UI 框架？', {
+    type: 'select',
+    options: [
+      { label: 'Nuxt UI（推薦）', value: 'ui' },
+      { label: '不需要', value: 'none' },
+    ],
+  })) as string
+
+  if (typeof uiChoice === 'symbol') process.exit(0)
+
+  // 4. Rendering mode
+  const renderingChoice = (await consola.prompt('渲染模式？', {
+    type: 'select',
+    options: [
+      { label: 'SPA（ssr: false）— 預設', value: 'spa' },
+      { label: 'SSR（ssr: true）— 需要 Node.js 或 Workers 環境', value: 'ssr' },
+    ],
+  })) as string
+
+  if (typeof renderingChoice === 'symbol') process.exit(0)
+  const ssrEnabled = renderingChoice === 'ssr'
+
+  // 5. Extras (multiselect)
+  const extrasOptions = [
+    { label: '圖表 (nuxt-charts)', value: 'charts' },
+    { label: 'SEO（robots / sitemap / schema.org，需要 SSR）', value: 'seo' },
+    { label: '安全性 Headers (nuxt-security)', value: 'security' },
+    { label: '影像最佳化 (@nuxt/image)', value: 'image' },
+    { label: 'VueUse 工具庫', value: 'vueuse' },
+  ]
+  const defaultExtras = preset.startEmpty ? [] : ['charts', 'security', 'image', 'vueuse']
+  const extrasRaw = await consola.prompt('額外功能？（空白鍵選擇）', {
+    type: 'multiselect',
+    options: extrasOptions,
+    initial: defaultExtras,
+  })
+
+  if (typeof extrasRaw === 'symbol') process.exit(0)
+  const extras = normalizePromptValues(extrasRaw)
+
+  // 6. State management
+  const stateChoice = (await consola.prompt('狀態管理？', {
+    type: 'select',
+    options: [
+      { label: 'Pinia + Colada（推薦）', value: 'pinia' },
+      { label: '不需要', value: 'none' },
+    ],
+    initial: preset.startEmpty ? 'none' : 'pinia',
+  })) as string
+
+  if (typeof stateChoice === 'symbol') process.exit(0)
+
+  // 7. Testing
+  const testingChoice = (await consola.prompt('測試框架？', {
+    type: 'select',
+    options: [
+      { label: 'Vitest + Playwright（推薦）', value: 'full' },
+      { label: '僅 Vitest', value: 'vitest-only' },
+      { label: '不需要', value: 'none' },
+    ],
+    initial: preset.startEmpty ? 'none' : 'full',
+  })) as string as 'full' | 'vitest-only' | 'none'
+
+  if (typeof testingChoice === 'symbol') process.exit(0)
+
+  // 8. AI runtimes
+  const agentTargetOptions: Array<{ label: string; value: AgentRuntime }> = [
+    { label: 'Claude Code（預設）', value: 'claude-code' },
+    { label: 'Codex', value: 'codex' },
+    { label: 'Cursor', value: 'cursor' },
+  ]
+  const agentTargetsRaw = await consola.prompt('要產出哪些 AI runtime 設定？（空白鍵選擇）', {
+    type: 'multiselect',
+    options: agentTargetOptions,
+    initial: ['claude-code'],
+  })
+
+  if (typeof agentTargetsRaw === 'symbol') process.exit(0)
+  const agentTargets = normalizePromptValues(agentTargetsRaw) as AgentRuntime[]
+  const resolvedAgentTargets =
+    agentTargets.length > 0 ? agentTargets : (['claude-code'] satisfies AgentRuntime[])
+
+  // 組裝 features：起手用 preset 套出的 base set，蓋掉 auth / 補 extras / state / testing。
+  const selected = applyPreset(preset)
+
+  // auth 覆蓋 preset 預設
+  selected.delete('auth-nuxt-utils')
+  selected.delete('auth-better-auth')
+  if (authChoice === 'auth-nuxt-utils') selected.add('auth-nuxt-utils')
+  if (authChoice === 'auth-better-auth') {
+    selected.add('auth-better-auth')
+    // dependency: better-auth 需要 database（resolveFeatureDependencies 會補上）
+  }
+
+  // UI / state / SSR
+  if (uiChoice === 'ui') selected.add('ui')
+  else selected.delete('ui')
+
+  if (ssrEnabled) selected.add('ssr')
+  else selected.delete('ssr')
+
+  if (stateChoice === 'pinia') selected.add('pinia')
+  else selected.delete('pinia')
+
+  // Extras：clear group, 加 user 勾選的（保留 ssr 若已加）
+  for (const mod of featureModules) {
+    if (mod.group === 'extras' && mod.id !== 'ssr') selected.delete(mod.id)
+  }
+  for (const id of extras) selected.add(id)
+
+  // Testing
+  selected.delete('testing-full')
+  selected.delete('testing-vitest')
+  if (testingChoice === 'full') selected.add('testing-full')
+  else if (testingChoice === 'vitest-only') selected.add('testing-vitest')
+
+  // evlog → monitoring 與 cli.ts 對齊
+  if (preset.evlogPreset !== 'none') {
+    selected.add('monitoring')
+  }
+
+  const resolvedWithDependencies = resolveFeatureDependencies([...selected])
+  const resolved =
+    preset.dbStack === 'nuxthub-d1'
+      ? resolvedWithDependencies.filter((id) => id !== 'database')
+      : resolvedWithDependencies
+
+  // 自動補的 dependencies 提示
+  const autoAdded = resolved.filter((f) => !selected.has(f))
+  if (autoAdded.length > 0) {
+    const names = autoAdded.map((id) => getModuleById(id)?.name || id)
+    consola.info(`自動加入相依功能：${names.join(', ')}`)
+  }
+
+  return {
+    projectName,
+    features: resolved,
+    ssr: ssrEnabled,
+    deploymentTarget: preset.deploy,
+    testingLevel: testingChoice,
+    agentTargets: resolvedAgentTargets,
+    evlogPreset: preset.evlogPreset,
+    dbStack: preset.dbStack,
+  }
+}
+
+// Full 15-prompt wizard — 走 custom 逃生口時使用。完全不受 preset 影響。
+async function promptUserCustom(defaultProjectName?: string): Promise<UserSelections> {
   // 1. Project name
   const projectName =
     defaultProjectName ||
