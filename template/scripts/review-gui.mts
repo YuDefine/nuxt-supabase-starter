@@ -3048,6 +3048,38 @@ function renderReviewHtml(): string {
           '   - 根因跨多個 consumer / 在投影層（clade 中央倉）→ 提示要去 clade 改，不要在當前 consumer 改',
           '   - 純 bug 當下可修 → 提方案等確認後改',
         ]).join('\\n');
+      } else if (kind === 'manual-review-readiness') {
+        const item = ctx.item || {};
+        const hits = Array.isArray(item.manualReviewHits) ? item.manualReviewHits : [];
+        const hitLines = hits.length
+          ? hits.map(function (h) {
+              return '- \`' + h.code + '\` — ' + h.description + '（rule: .claude/rules/' + h.anchor + '）';
+            }).join('\\n')
+          : '- (無)';
+        const cn = change ? change.name : '<change>';
+        body = [
+          '## 問題：Pre-Review Data Readiness 命中（review:ui 提示 proposal 資料不完整）',
+          '',
+          'Item：',
+          '- id: ' + (item.id || '(unknown)'),
+          '- description: ' + (item.description || '(無)'),
+          '',
+          '命中 pattern（' + hits.length + ' 個）：',
+          hitLines,
+          '',
+          '這些 pattern 代表 proposal 階段沒寫齊：缺具體 sample / URL / scoped sub-items / 截圖目標 / 驗收條件等，導致 review:ui 看到 item 時很難對焦（不知道要拍什麼、不知道哪段 UI 要驗）。這是 warning 不是 block——但通常代表 proposal 該補資料而非直接 OK / SKIP 過。',
+          '',
+          '請：',
+          '1. 讀 \`openspec/changes/' + cn + '/proposal.md\` + \`tasks.md\` 看當前描述',
+          '2. 對命中的每個 pattern，依 \`.claude/rules/manual-review.md\` §Pre-Review Data Readiness 與相關 rule（見上面 anchor）判斷該補哪類資料',
+          '3. 用 \`/spectra-ingest\` 流程提議補強：',
+          '   - 缺 sample → 找實際 fixture / URL / 內容範例',
+          '   - 缺 scoped sub-items → 拆成 #N.1 / #N.2 等可獨立驗的 sub-item',
+          '   - 缺驗收條件 → 補 expected behavior / screenshot intent',
+          '4. 等我確認後再寫進 tasks.md / proposal.md（plan-first）',
+          '',
+          '若評估後判斷 proposal 已足夠（pattern 屬 false positive），直接回報「不用補」並說明理由即可，我會在 review:ui 直接 OK / Issue / SKIP 帶過 warning。',
+        ].join('\\n');
       } else {
         body = '## 問題\\n\\n(unknown kind: ' + kind + ')';
       }
@@ -3461,6 +3493,7 @@ function renderReviewHtml(): string {
              '<div class="mr-banner-title">⚠ Pre-Review Data Readiness — ' + hits.length + ' 個 pattern 命中</div>' +
              '<ul>' + lines + '</ul>' +
              '<div class="mr-banner-hint">建議跑 <code>/spectra-ingest</code> 補上具體 sample / URL / scoped sub-items（warning non-blocking — 仍可 OK / Issue / SKIP）。</div>' +
+             '<button class="copy-handoff-btn block" data-handoff="manual-review-readiness" data-id="' + esc(item.id) + '" type="button" title="複製 handoff prompt 給新 Claude session 跑 /spectra-ingest 補齊 proposal 資料">📋 複製 ingest prompt</button>' +
              '</div>';
     }
 
@@ -3580,6 +3613,20 @@ function renderReviewHtml(): string {
               note: decision.note,
               matchedFiles: matched,
             }, 'issue ' + target.id);
+            return;
+          }
+          if (kind === 'manual-review-readiness') {
+            const id = button.dataset.id;
+            const target = (state.current && state.current.items || []).find(function (it) { return it.id === id; });
+            if (!target) {
+              showBanner('找不到 item ' + id + '，無法產生 ingest prompt', 'error');
+              return;
+            }
+            copyHandoffPrompt('manual-review-readiness', {
+              change: state.current,
+              item: target,
+            }, 'ingest readiness ' + target.id);
+            return;
           }
         });
       });
