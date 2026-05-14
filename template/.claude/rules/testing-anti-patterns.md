@@ -426,3 +426,48 @@ BEFORE writing the test for any field that crosses a wire (HTTP body, form paylo
 If TDD reveals you're testing mock behavior, you've gone wrong.
 
 Fix: Test real behavior or question why you're mocking at all.
+
+## E2E 以風險路徑排序，非數量
+
+E2E test coverage 不該用「跑了幾條」當 KPI，也不該用「按鈕能不能按、頁面能不能打開」當 confidence proxy。AI 大量產出 happy path E2E 後，**測試數量會通膨**，但對「這個 change 安不安全」的證明力卻可能下降 — 因為真正會出事的是失敗路徑、權限切換、資料邊界，這些不會在 happy path 露面。
+
+對應 [@FortesHuang HJnWgQGJMx](https://hackmd.io/@FortesHuang/HJnWgQGJMx)：「真正昂貴的不是 coding，而是定義規則、驗證規則。」
+
+### 反模式
+
+- **數量 KPI**：「這條 spectra change 加了 5 條 E2E」當作 done — 不問這 5 條覆蓋了什麼風險路徑
+- **Happy path bias**：登入成功 → 點某按鈕 → 看到「成功」訊息；不測登入失敗、無權限、cache 過期、duplicate request、partial write
+- **Coverage % 假性 confidence**：line coverage 80% 但 critical path（auth check / migration / payment）為 0%
+- **Test 名稱不對應風險**：`test('clicks button')` vs `test('rejects when user lacks write permission on shared resource')`
+
+### 正模式
+
+對每條 spectra change / PR，先問：**這次改動動到的程式碼，最可能出事的路徑是什麼？**
+
+排序依據（高到低）：
+
+1. **權限 / 認證邊界** — 用低權限 user 跑、過期 token、無 session、cross-tenant
+2. **資料一致性** — partial write、concurrent update、cache invalidation、race condition
+3. **失敗情境** — DB 連不上、external API timeout、middleware reject、quota exceeded
+4. **input 邊界** — null / empty / max+1 / Unicode / SQL injection 嘗試
+5. **Happy path** — 最後才覆蓋，用來確認流程沒壞
+
+### 落地建議
+
+- **Spectra change archive 前**：design.md / proposal.md 內含 § 「Risk paths」，列出該 change 動到的高風險路徑 + 對應 E2E 在哪
+- **Manual review 對應**：`rules/core/manual-review.md` 的 `[verify:e2e]` marker 應指向**風險路徑**，而非 happy path
+- **Review GUI 對應**：review-gui 在 archive 前可以 prompt「列出本 change 的 top 3 風險路徑跟對應測試」
+- **不**強制要求所有 PR 都附 risk-path doc — 純文件 / refactor / typo change 跳過
+- **不**用 coverage % 當 gate；用 risk-path 對應度當 review 對話起點
+
+### 規約最小要求
+
+當 change 動到下列任一類別，archive 前 **MUST** 在 design.md 或 proposal.md 列出對應風險路徑：
+
+- 認證 / 授權邏輯
+- DB schema migration
+- 跨服務 / 跨 module 的 contract（API / event / cache key）
+- payment / billing / 不可逆操作
+- 資料 deletion / soft-delete logic
+
+其他 change 為**建議**而非強制。違反靠 reviewer 在 manual-review tier 1/2 攔截，不靠 CI gate（會誤殺 typo fix）。

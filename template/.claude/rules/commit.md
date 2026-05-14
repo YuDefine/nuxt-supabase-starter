@@ -43,6 +43,23 @@ Local edits will be reverted by the next sync.
 
 **理由**：品質閘門成本高，把 WIP 分次 commit 等於多跑一次閘門，浪費時間與 token。`/commit` 的分組階段就是設計來把「主線工作 + 並行 WIP」自然分類到不同 commit group。
 
+## LOCKED projection signal — precheck 自動處理
+
+Step 0-Precheck 跑 `.claude/scripts/commit-precheck.mjs` 時，三種模式由 precheck 自動分流（**本節沒有新規則要記，只是說明 precheck 的自動行為**）：
+
+| Mode | 條件 | 行為 |
+| --- | --- | --- |
+| `normal` | 沒 propagate marker + 沒 LOCKED 異動 signal | 跟「WIP 預設範圍」一樣全包 |
+| `propagate-staged` | `.claude/.propagate-marker.json` 存在且未過期（24h 內） | 自動分成 `🧹 chore(clade)` group + 業務 group；**不需手動 `git reset HEAD`** |
+| `cross-session-conflict` | LOCKED 投影檔異動 ≥ 3 檔 **且** 任一 mtime < 60s（disk 上正在被別 session 改） | **停下** + HANDOFF.md；**NEVER** 全包進業務 commit、**NEVER** 自行 stash 別 session 的 in-progress LOCKED 變更 |
+
+Threshold 環境變數（必要時可調）：
+
+- `COMMIT_PRECHECK_LOCKED_MIN`（default `3`）：LOCKED 異動門檻檔數
+- `COMMIT_PRECHECK_LOCKED_MTIME_S`（default `60`）：最近 mtime 門檻秒數
+
+**理由**：commit.md 的「預設全包」假設 dirty 都是本/並行 session 合理 WIP。當 (A) propagate 剛 stage 投影層、或 (B) 別 session 正在動 LOCKED projection 時，這個假設破裂——precheck 自動偵測並分流，避免使用者每次都得重新判斷（過往多次撞到 TDMS `bcfde9c8` 投影層被誤 commit、跨 session WIP 被偷走 等問題）。
+
 ## WIP 阻礙處理（**極少數例外**，預設一律靠分組納入）
 
 **預設一律靠 Step 3 分組納入處理 WIP**，stash 是**極少數例外**。「主題不同 / 看起來不相關 / 不認得來源」**全部**透過拆獨立 commit group 解決，**NEVER** 因此啟動 stash —— Step 3 分組就是設計來把多主題、跨 session 的 WIP 自然拆成多個 commit group 的。
