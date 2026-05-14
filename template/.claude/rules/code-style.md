@@ -293,10 +293,14 @@ pnpm exec vp fmt --migrate=prettier  # 從既有 prettier config 遷移（若有
 - `scripts/sync-rules.mjs --check` 在跑 drift report 時偵測 consumer 端 `.prettierignore` 存在 → 列為 drift
 - `scripts/lib/oxfmtignore-governance.mjs` 在 `pnpm hub:bootstrap` 時主動刪除舊 `.prettierignore`（self-healing）
 - `pnpm hub:check` 包含上述 drift signal，consumer 端 CI 應啟用此 job
+- `scripts/audit-tooling-drift.mjs`（v1.3.19）：掃每個 consumer 的 `vite.config.ts` 對齊狀態。報兩個 signal：
+  1. **presetImport** — 是否從 `./vendor/oxc-shared/preset.mjs` import `lintBase` + `fmtBase`
+  2. **inlineDrift** — 未 import preset 時，inline 寫死的 fmt baseline 欄位（`trailingComma`、`semi`、`singleQuote`、`printWidth` 等 11 項）與 baseline 不一致的 entries
+  - 用法：`node scripts/audit-tooling-drift.mjs [--markdown|--json]`；diagnostic-only，exit code 永遠 0；HANDOFF §4 baseline 由此 script 維護
 
 ### 建議擴充（尚未實作）
 
-- `scripts/audit-tooling-drift.mjs`：掃 consumer 是否有 `.eslintrc*` / `.prettierrc*` 等檔案，存在則報 drift
+- `scripts/audit-tooling-drift.mjs` Phase 2：併入 `.eslintrc*` / `.prettierrc*` / `eslint.config.*` / `prettier.config.*` 等禁用 config 檔的存在性掃描（目前 sync-rules.mjs 只認 `.prettierignore` 一條）
 - pre-commit hook 加 check：偵測到 eslint/prettier config 進 staging 直接擋
 - CI workflow 同步檢查
 
