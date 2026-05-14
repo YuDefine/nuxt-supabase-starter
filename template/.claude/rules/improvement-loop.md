@@ -93,7 +93,18 @@ digest 與 closure scanner **MUST NOT** 自動修改：
 
 **禁**：在 consumer working tree dirty 時跑 propagate / install-clade-gate。consumer 應先 commit 完業務 WIP，再做 improvement-loop projection。
 
-Canary 觀察期建議 1 週：每天看 `.clade/ledger/signals.jsonl`（gitignored）的 redaction leak 跟 noise rate。沒有 leak、shim transparency 維持、digest emit 順利，才把其他 consumer 的 `improvement_loop_enabled` 翻成 true。
+Widen rollout 是 **signal-based**，不綁日曆。在 canary consumer 上累積到下列 threshold **全部**通過，才把其他 consumer 的 `improvement_loop_enabled` 翻 true：
+
+| 指標 | Threshold | 取得方式 |
+| --- | --- | --- |
+| Redacted signal accumulated | `≥ 20` records | `.clade/ledger/signals.jsonl`（gitignored）行數 |
+| Redaction leak | `= 0` | validator reject count（任何 record 仍 match `SECRET_PATTERNS` 即 leak） |
+| Shim exit-code mismatch | `= 0` | `bin/vp` / `bin/clade-gate` ledger vs underlying tool exit |
+| Digest emit success | `≥ 1` 次 | `docs/digests/<date>.md` 存在且非空 |
+| False positive 抽查 | top 5 candidates 人工檢視可接受 | 在 `docs/discussions/` 留紀錄 |
+| Wrapper transparency | `pnpm test` / `vp check` 前後輸出一致 | 比對 backup vs 包裝後行為 |
+
+採 signal threshold 而非「觀察 N 週」的原因：日曆 gate 跟 [本 loop 設計精神](../../docs/discussions/2026-05-14-improvement-loop.md) 相左 — output volume ≠ confidence。要 widen，必須拿出證據（signal ≥ N、leak = 0、抽查通過），不是熬時間。
 
 Widen rollout 不能用 propagate 自動觸發 — 要逐個 consumer 在乾淨 working tree 下手動翻 flag + propagate + install-clade-gate。
 
