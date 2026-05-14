@@ -1,10 +1,10 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-13T21:05:01.871Z",
+  "syncedAt": "2026-05-14T04:37:21.667Z",
   "checksums": {
     "rules/agent-routing.md": "3179c7cefce3f427",
     "rules/audit-pattern.md": "1d72e5274498727f",
-    "rules/code-style.md": "171a755d54072e25",
+    "rules/code-style.md": "c4186fbefd258759",
     "rules/commit.md": "51373069ba001154",
     "rules/error-handling.md": "6b9aacf3906f1166",
     "rules/evlog-adoption.md": "4855b909a832f8ec",
