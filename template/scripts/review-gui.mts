@@ -848,7 +848,8 @@ export function applyReviewActionToContent(
   itemId: string,
   action: 'ok' | 'issue' | 'skip',
   note = '',
-  options: ParseManualReviewOptions = {}
+  options: ParseManualReviewOptions = {},
+  finding = ''
 ): { content: string; lineBefore: string; lineAfter: string } {
   const parsed = parseManualReviewSections(content, options)
   if (parsed.malformed.length > 0) {
@@ -864,7 +865,7 @@ export function applyReviewActionToContent(
   const newline = content.includes('\r\n') ? '\r\n' : '\n'
   const lines = content.split(/\r?\n/)
   const lineBefore = lines[item.lineIndex] ?? ''
-  const lineAfter = applyActionToLine(lineBefore, action, note)
+  const lineAfter = applyActionToLine(lineBefore, action, note, finding)
   lines[item.lineIndex] = lineAfter
   return { content: lines.join(newline), lineBefore, lineAfter }
 }
@@ -1165,7 +1166,12 @@ function sanitizeEvidenceValue(v: string): string {
   )
 }
 
-function applyActionToLine(line: string, action: 'ok' | 'issue' | 'skip', note: string): string {
+function applyActionToLine(
+  line: string,
+  action: 'ok' | 'issue' | 'skip',
+  note: string,
+  finding: string
+): string {
   const { core, trailing } = extractTrailingMarkers(line)
   // 切換 action 前先剝離舊 annotation，避免 stale 殘留（例：先 issue 後改 ok 會留 (issue: ...)）
   const stripped = stripAnnotations(canonicalizeLeadingKindMarker(core))
@@ -1180,6 +1186,7 @@ function applyActionToLine(line: string, action: 'ok' | 'issue' | 'skip', note: 
     const base = setCheckbox(stripped, true)
     result = appendAnnotation(base, 'skip', note)
   }
+  if (finding.trim()) result = appendAnnotation(result, 'finding', finding)
 
   return trailing ? `${result}${trailing}` : result
 }
@@ -1229,16 +1236,23 @@ function stripAnnotations(line: string): string {
     .replace(/（issue:[^）]*）/g, '')
     .replace(/（skip(?::[^）]*)?）/g, '')
     .replace(/（note:[^）]*）/g, '')
+    .replace(/（finding:[^）]*）/g, '')
     .replace(/[ \t]+$/, '')
   return canonicalizeStructuredAnnotations(withoutActionAnnotations)
 }
 
-function appendAnnotation(line: string, kind: 'issue' | 'skip' | 'note', note: string): string {
+function appendAnnotation(
+  line: string,
+  kind: 'issue' | 'skip' | 'note' | 'finding',
+  note: string
+): string {
   let label: string
   if (kind === 'skip') {
     label = note.trim() ? `（skip: ${sanitizeNote(note)}）` : '（skip）'
   } else if (kind === 'issue') {
     label = `（issue: ${sanitizeNote(note)}）`
+  } else if (kind === 'finding') {
+    label = `（finding: ${sanitizeNote(note)}）`
   } else {
     label = `（note: ${sanitizeNote(note)}）`
   }
@@ -1477,10 +1491,14 @@ async function persistReviewAction(repoRoot: string, change: string, body: any):
 
   const content = await readFile(tasksPath, 'utf8')
   const defaultKind = await loadProposalDefaultKind(repoRoot, change)
-  const updated = applyReviewActionToContent(content, body.itemId, action, body.note || '', {
-    defaultKind,
-    sourcePath: tasksPath,
-  })
+  const updated = applyReviewActionToContent(
+    content,
+    body.itemId,
+    action,
+    body.note || '',
+    { defaultKind, sourcePath: tasksPath },
+    body.finding || ''
+  )
   await writeFile(tasksPath, updated.content, 'utf8')
 
   const detail = await readChangeDetail(repoRoot, change)
@@ -1973,6 +1991,17 @@ function renderReviewHtml(): string {
     .state-badge.ok { background: #d6ecdf; color: #1e6042; }
     .state-badge.issue { background: #fce4c8; color: #8a4f0a; }
     .state-badge.skip { background: #e7e1d3; color: #5a5341; }
+    /* 母項有子項時，body 顯示這條提示，告知使用者回饋焦點在子項。 */
+    .parent-children-hint {
+      margin-top: 6px;
+      padding: 6px 10px;
+      border-left: 3px solid color-mix(in srgb, var(--muted) 50%, transparent);
+      background: color-mix(in srgb, var(--panel) 60%, transparent);
+      color: var(--muted);
+      font-size: 12px;
+      font-style: italic;
+      border-radius: 4px;
+    }
     /* Kind badge — 在 task-id 後顯示小標籤區分 review:ui / discuss / verify:* */
     .kind-badge {
       display: inline-block;
@@ -2205,6 +2234,43 @@ function renderReviewHtml(): string {
       background: #fffefa;
       color: var(--ink);
     }
+    /* 額外發現 disclosure — 與 ok/issue/skip 主要按鈕並列在 actions 之後，
+       預設收合，hasFinding 時 server 端寫回後 open 起來方便繼續編輯。 */
+    details.finding {
+      margin-top: 8px;
+      font-size: 12px;
+    }
+    details.finding > summary {
+      cursor: pointer;
+      color: var(--muted);
+      padding: 4px 0;
+      user-select: none;
+      list-style: none;
+    }
+    details.finding > summary::-webkit-details-marker { display: none; }
+    details.finding > summary:hover { color: var(--ink); }
+    details.finding[open] > summary { color: var(--ink); margin-bottom: 6px; }
+    .finding-input {
+      width: 100%;
+      min-height: 44px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      resize: vertical;
+      background: #fffefa;
+      color: var(--ink);
+      font-size: 12px;
+    }
+    /* 已註記 item 在 collapsed 狀態下，state-badge 旁的 📝 提示「有額外發現」 */
+    .finding-indicator {
+      display: inline-block;
+      margin-left: 6px;
+      font-size: 13px;
+      cursor: help;
+      opacity: 0.85;
+    }
+    /* discuss / automatic kind 不走人工確認，連帶隱藏 finding disclosure */
+    .task-item.kind-discuss details.finding { display: none; }
     .screenshot-pane {
       min-width: 0;
       border-left: 1px solid var(--line);
@@ -2627,6 +2693,9 @@ function renderReviewHtml(): string {
       // 使用者打字內容沖掉（renderTasks 由點 task / j/k / saveAction / reopen
       // 等多處觸發）。saveAction 成功後清掉該 id（server 已存進 raw）。
       draftNotes: {},
+      // 母項（#3）若有子項（#3.1、#3.2...），UI 不顯示按鈕跟 textarea — 使用者只對子項回饋。
+      // 由 rebuildParentChildrenIndex 在 loadChange 後重建。
+      parentsWithChildren: new Set(),
       // repoRoot / repoName 由啟動時 fetch /api/health 填入，給 handoff prompt 用。
       // 若 health fetch 失敗仍要讓 GUI 可用，prompt 會 fallback 顯示「(unknown)」。
       repoRoot: '',
@@ -2692,6 +2761,12 @@ function renderReviewHtml(): string {
       if (kind === 'issue') return '⚠ 有問題';
       if (kind === 'skip') return '⤵ 已跳過';
       return '待檢查';
+    }
+    // 與 ok/issue/skip 正交：finding 是「除了主要結論之外順手記下的觀察」，
+    // 通常是 TD 候選，可單獨存在也可跟任一主要 action 共存。
+    function parseFinding(raw) {
+      const m = raw.match(/（finding:[ ]*([^）]*)）/);
+      return m ? m[1].trim() : '';
     }
 
     function fileMatchesItem(filename, itemId) {
@@ -3108,6 +3183,7 @@ function renderReviewHtml(): string {
       showBanner('');
       const data = await api('/api/changes/' + encodeURIComponent(name));
       state.current = data.change;
+      rebuildParentChildrenIndex();
       const items = state.current.items || [];
       state.activeIndex = items.findIndex(function (item) {
         return !item.checked && requiresUserConfirmation(item);
@@ -3119,6 +3195,7 @@ function renderReviewHtml(): string {
       state.expanded = new Set();
       state.selfCompletedOpen = false;
       state.draftNotes = {};
+      state.draftFindings = {};
       renderChanges();
       renderCurrent();
     }
@@ -3152,7 +3229,25 @@ function renderReviewHtml(): string {
     }
 
     function requiresUserConfirmation(item) {
+      // 母項若有子項（#3 → #3.1, #3.2...）: 母項本身不要使用者填回饋，焦點全給子項。
+      // 影響：renderTaskControls 不渲染 textarea+按鈕、saveAction 拒收、O/I/S keyboard no-op。
+      if (parentHasChildren(item)) return false;
       return hasKind(item, 'review:ui') || hasKind(item, 'verify:ui');
+    }
+
+    function parentHasChildren(item) {
+      if (!item || item.scoped) return false;
+      return state.parentsWithChildren ? state.parentsWithChildren.has(item.id) : false;
+    }
+
+    function rebuildParentChildrenIndex() {
+      const set = new Set();
+      const items = (state.current && state.current.items) || [];
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        if (it.scoped && it.parentId) set.add(it.parentId);
+      }
+      state.parentsWithChildren = set;
     }
 
     function isSoloKind(item, kind) {
@@ -3286,14 +3381,22 @@ function renderReviewHtml(): string {
       }).join('');
     }
 
-    function renderTaskControls(item, noteValue) {
+    function renderTaskControls(item, noteValue, findingValue) {
+      if (parentHasChildren(item)) {
+        return '<div class="parent-children-hint">↓ 母項不需要回饋，請對下方子項分別作回饋</div>';
+      }
       if (!requiresUserConfirmation(item)) return '';
+      const hasFinding = Boolean(findingValue);
       return '<textarea class="note" data-note="' + esc(item.id) + '" placeholder="填寫說明（「有問題」必填、「跳過」可選填）">' + noteValue + '</textarea>' +
         '<div class="actions">' +
           '<button class="ok" data-action="ok" data-id="' + esc(item.id) + '" type="button" title="標記此項通過 (O)">✓ 通過</button>' +
           '<button class="issue" data-action="issue" data-id="' + esc(item.id) + '" type="button" title="標記此項有問題，需填寫說明 (I)">⚠ 有問題</button>' +
           '<button class="skip" data-action="skip" data-id="' + esc(item.id) + '" type="button" title="跳過此項，可選填原因 (S)">⤵ 跳過</button>' +
-        '</div>';
+        '</div>' +
+        '<details class="finding"' + (hasFinding ? ' open' : '') + '>' +
+          '<summary title="此欄與 ✓/⚠/⤵ 正交；按主要按鈕送出時一起寫回。可空白；填了就會以 （finding: ...）落在同一行，方便後續 TD 登記。">+ 額外發現' + (hasFinding ? '（已填）' : '（選填）') + '</summary>' +
+          '<textarea class="finding-input" data-finding="' + esc(item.id) + '" placeholder="順手記下的觀察 / TD 候選（與主要結論獨立）">' + findingValue + '</textarea>' +
+        '</details>';
     }
 
     function renderTaskItem(item, index) {
@@ -3306,15 +3409,24 @@ function renderReviewHtml(): string {
       const kindClass = isDiscuss
         ? ' kind-discuss'
         : (isAutomaticOnly(item) ? ' kind-automatic' : (hasKind(item, 'verify:ui') ? ' kind-verify-ui' : ' kind-review-ui'));
+      const persistedFinding = parseFinding(item.raw);
+      const draftFinding = state.draftFindings[item.id];
+      const findingSeed = draftFinding !== undefined ? draftFinding : persistedFinding;
+      const findingValue = findingSeed ? esc(findingSeed) : '';
       let stateHtml;
       if (handled) {
         stateHtml = '<span class="state-badge ' + decision.kind + '">' + decisionLabel(decision.kind) + '</span>';
+        if (persistedFinding) {
+          stateHtml += '<span class="finding-indicator" title="額外發現：' + esc(persistedFinding) + '">📝</span>';
+        }
         if (collapsed && requiresUserConfirmation(item)) {
           stateHtml += '<button class="reopen" data-action="reopen" data-id="' + esc(item.id) + '" type="button" title="重新編輯此項">↻ 編輯</button>';
         }
         if (decision.kind === 'issue' && requiresUserConfirmation(item)) {
           stateHtml += '<button class="copy-handoff-btn" data-handoff="item-issue" data-id="' + esc(item.id) + '" type="button" title="複製 handoff prompt 給新 Claude session 處理這個 issue">📋 handoff</button>';
         }
+      } else if (parentHasChildren(item)) {
+        stateHtml = '由子項回饋';
       } else if (isDiscuss) {
         stateHtml = '由 Claude 主導';
       } else if (isAutomaticOnly(item)) {
@@ -3326,7 +3438,7 @@ function renderReviewHtml(): string {
       }
       const noteValue = decision.note ? esc(decision.note) : '';
       const bannerHtml = renderManualReviewBanner(item);
-      const bodyHtml = renderEvidenceForItem(item) + renderTaskControls(item, noteValue);
+      const bodyHtml = renderEvidenceForItem(item) + renderTaskControls(item, noteValue, findingValue);
       return '<article class="task-item' + (active ? ' active' : '') + (item.scoped ? ' scoped' : '') + decisionClass + (collapsed ? ' collapsed' : '') + kindClass + '" data-item="' + esc(item.id) + '" data-index="' + index + '">' +
         '<div class="task-head">' +
         '<span class="task-id">' + esc(item.id) + renderKindBadges(item) + '</span>' +
@@ -3478,6 +3590,14 @@ function renderReviewHtml(): string {
         if (state.draftNotes[id] !== undefined) textarea.value = state.draftNotes[id];
         textarea.addEventListener('input', function () {
           state.draftNotes[id] = textarea.value;
+        });
+      });
+      // 同型 draft cache：finding textarea（與 note 平行，只是 key 不同）
+      el.taskList.querySelectorAll('textarea[data-finding]').forEach(function (textarea) {
+        const id = textarea.dataset.finding;
+        if (state.draftFindings[id] !== undefined) textarea.value = state.draftFindings[id];
+        textarea.addEventListener('input', function () {
+          state.draftFindings[id] = textarea.value;
         });
       });
       // 任務卡片內的內嵌截圖（Final-state / verified-ui）：點擊放大進 viewer，
@@ -3717,7 +3837,11 @@ function renderReviewHtml(): string {
       if (!change) return;
       const targetItem = (change.items || []).find(function (item) { return item.id === itemId; });
       if (!targetItem || !requiresUserConfirmation(targetItem)) {
-        showBanner('此項自動完成或由 Claude 主導，無需在 GUI 操作', '');
+        if (targetItem && parentHasChildren(targetItem)) {
+          showBanner('此項是母項，請對其子項分別作回饋', '');
+        } else {
+          showBanner('此項自動完成或由 Claude 主導，無需在 GUI 操作', '');
+        }
         return;
       }
       if (change.malformedLines.length) {
@@ -3732,6 +3856,8 @@ function renderReviewHtml(): string {
         if (noteNode) noteNode.focus();
         return;
       }
+      const findingNode = el.taskList.querySelector('[data-finding="' + CSS.escape(itemId) + '"]');
+      const finding = findingNode ? findingNode.value : '';
       // visual feedback：立即把 task-item disable + 顯示「儲存中…」banner，
       // 讓使用者知道 click 收到了，不會以為 hung。
       inflightSaves.add(itemId);
@@ -3747,12 +3873,14 @@ function renderReviewHtml(): string {
             itemId: itemId,
             action: action,
             note: note,
+            finding: finding,
             version: change.version,
           }),
         });
         state.current = data.change;
         state.expanded.delete(itemId);
         delete state.draftNotes[itemId];
+        delete state.draftFindings[itemId];
         // sidebar metrics 是 state.changes 的 cache，saveAction 不會自動更新
         // 對應 entry，會跟 right pane 的 state.current 不一致。把 detail 的 summary
         // 欄位 patch 回 list，避免使用者看到「sidebar 1/6 已通過、right pane 4 ok」這種矛盾。
