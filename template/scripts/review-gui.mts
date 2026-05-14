@@ -2205,6 +2205,43 @@ function renderReviewHtml(): string {
       background: #fffefa;
       color: var(--ink);
     }
+    /* 額外發現 disclosure — 與 ok/issue/skip 主要按鈕並列在 actions 之後，
+       預設收合，hasFinding 時 server 端寫回後 open 起來方便繼續編輯。 */
+    details.finding {
+      margin-top: 8px;
+      font-size: 12px;
+    }
+    details.finding > summary {
+      cursor: pointer;
+      color: var(--muted);
+      padding: 4px 0;
+      user-select: none;
+      list-style: none;
+    }
+    details.finding > summary::-webkit-details-marker { display: none; }
+    details.finding > summary:hover { color: var(--ink); }
+    details.finding[open] > summary { color: var(--ink); margin-bottom: 6px; }
+    .finding-input {
+      width: 100%;
+      min-height: 44px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      resize: vertical;
+      background: #fffefa;
+      color: var(--ink);
+      font-size: 12px;
+    }
+    /* 已註記 item 在 collapsed 狀態下，state-badge 旁的 📝 提示「有額外發現」 */
+    .finding-indicator {
+      display: inline-block;
+      margin-left: 6px;
+      font-size: 13px;
+      cursor: help;
+      opacity: 0.85;
+    }
+    /* discuss / automatic kind 不走人工確認，連帶隱藏 finding disclosure */
+    .task-item.kind-discuss details.finding { display: none; }
     .screenshot-pane {
       min-width: 0;
       border-left: 1px solid var(--line);
@@ -3119,6 +3156,7 @@ function renderReviewHtml(): string {
       state.expanded = new Set();
       state.selfCompletedOpen = false;
       state.draftNotes = {};
+      state.draftFindings = {};
       renderChanges();
       renderCurrent();
     }
@@ -3732,6 +3770,8 @@ function renderReviewHtml(): string {
         if (noteNode) noteNode.focus();
         return;
       }
+      const findingNode = el.taskList.querySelector('[data-finding="' + CSS.escape(itemId) + '"]');
+      const finding = findingNode ? findingNode.value : '';
       // visual feedback：立即把 task-item disable + 顯示「儲存中…」banner，
       // 讓使用者知道 click 收到了，不會以為 hung。
       inflightSaves.add(itemId);
@@ -3747,12 +3787,14 @@ function renderReviewHtml(): string {
             itemId: itemId,
             action: action,
             note: note,
+            finding: finding,
             version: change.version,
           }),
         });
         state.current = data.change;
         state.expanded.delete(itemId);
         delete state.draftNotes[itemId];
+        delete state.draftFindings[itemId];
         // sidebar metrics 是 state.changes 的 cache，saveAction 不會自動更新
         // 對應 entry，會跟 right pane 的 state.current 不一致。把 detail 的 summary
         // 欄位 patch 回 list，避免使用者看到「sidebar 1/6 已通過、right pane 4 ok」這種矛盾。
