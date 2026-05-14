@@ -50,5 +50,5 @@
 
 - [x] 6.1 `spectra validate improve-scaffold-ux-with-preset-picker` 通過
 - [x] 6.2 `spectra analyze improve-scaffold-ux-with-preset-picker` 無 critical findings（coverage/consistency warning 已對齊 requirement 與 design topic 至 task heading）
-- [ ] 6.3 commit：先 `git reset HEAD` 撤掉 propagate 投影 + 別 session WIP，再 selective stage 本 change 影響的 10 個檔 + 4 個 spectra change 檔
-- [ ] 6.4 `/spectra-archive` 把 change 收進 archive
+- [x] 6.3 commit：先 `git reset HEAD` 撤掉 propagate 投影 + 別 session WIP，再 selective stage 本 change 影響的 10 個檔 + 4 個 spectra change 檔
+- [x] 6.4 `/spectra-archive` 把 change 收進 archive
