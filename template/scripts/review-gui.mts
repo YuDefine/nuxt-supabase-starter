@@ -274,6 +274,35 @@ export interface FileVersion {
   mtimeMs: number
 }
 
+/**
+ * Build a set of parent item IDs that own at least one scoped child (`#N.M`).
+ * Server-side equivalent of the GUI's `rebuildParentChildrenIndex()` so the
+ * completion counter and archive-readiness check share one notion of
+ * "parent-with-children".
+ */
+export function buildParentsWithScopedChildren(items: readonly ManualReviewItem[]): Set<string> {
+  const parents = new Set<string>()
+  for (const item of items) {
+    if (item.scoped && item.parentId) parents.add(item.parentId)
+  }
+  return parents
+}
+
+/**
+ * Whether `item` is a parent that owns at least one scoped child. Such parents
+ * are intentionally excluded from completion / archive counts: the GUI's
+ * `requiresUserConfirmation()` returns false for them so users cannot OK / Issue
+ * / Skip the parent directly. Counting them in `pending` keeps the change
+ * stuck even after every scoped child passes.
+ */
+export function manualReviewItemHasScopedChildren(
+  item: ManualReviewItem,
+  parentsWithScopedChildren: ReadonlySet<string>
+): boolean {
+  if (item.scoped) return false
+  return parentsWithScopedChildren.has(item.id)
+}
+
 interface CliOptions {
   host: string
   port: number
@@ -1418,18 +1447,26 @@ async function summarizeChange(
   const parsed = parseManualReviewSections(content, { defaultKind, sourcePath: tasksPath })
   if (parsed.sections.length === 0) return null
 
+  // 排除 parent-with-children：GUI 的 `requiresUserConfirmation` 對這類 item 回 false
+  // （UI 不允許 user 直接勾），若仍把它們算進 total / pending，子項全勾後 change 仍會
+  // 卡在 pending 不會自動 archive。helper 與 archive completion check 共用同一語義。
+  const parentsWithChildren = buildParentsWithScopedChildren(parsed.items)
+  const effectiveItems = parsed.items.filter(
+    (item) => !manualReviewItemHasScopedChildren(item, parentsWithChildren)
+  )
+
   // 「真的通過」= [x] 且沒有 issue annotation。`[x]` + `（issue: ...）` 並存
   // 是舊版時代的 stale state，語義上應算 issue 待解，不能算通過。
-  const issued = parsed.items.filter((item) => /（issue:[^）]*）/.test(item.raw)).length
-  const checked = parsed.items.filter(
+  const issued = effectiveItems.filter((item) => /（issue:[^）]*）/.test(item.raw)).length
+  const checked = effectiveItems.filter(
     (item) => item.checked && !/（issue:[^）]*）/.test(item.raw)
   ).length
   return {
     name,
     tasksPath,
-    total: parsed.items.length,
+    total: effectiveItems.length,
     checked,
-    pending: parsed.items.length - checked,
+    pending: effectiveItems.length - checked,
     issued,
     malformed: parsed.malformed.length,
     screenshotTopicCount: pools.length,
@@ -1503,11 +1540,16 @@ async function persistReviewAction(repoRoot: string, change: string, body: any):
 
   const detail = await readChangeDetail(repoRoot, change)
   // 與 summarizeChange 的 checked 算法同義：[x] 且沒 issue annotation 才算完成。
-  // 否則 stale `[x] + （issue: ...）` 會誤觸發 archive。
+  // 否則 stale `[x] + （issue: ...）` 會誤觸發 archive。同樣排除 parent-with-children
+  // — GUI 不讓使用者勾母項，若算進 effectiveItems 子項全勾仍判 incomplete，change 永遠卡。
+  const parentsWithChildren = buildParentsWithScopedChildren(detail.items)
+  const effectiveItems = detail.items.filter(
+    (item) => !manualReviewItemHasScopedChildren(item, parentsWithChildren)
+  )
   const complete =
     detail.malformed === 0 &&
-    detail.items.length > 0 &&
-    detail.items.every((item) => item.checked && !/（issue:[^）]*）/.test(item.raw))
+    effectiveItems.length > 0 &&
+    effectiveItems.every((item) => item.checked && !/（issue:[^）]*）/.test(item.raw))
   const archive = complete ? await invokeReviewArchive(repoRoot, change) : { status: 'not-ready' }
   return {
     ok: true,

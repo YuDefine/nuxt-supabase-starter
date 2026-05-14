@@ -30,6 +30,7 @@
 //   This preset turns the rule into an importable artifact; changing the
 //   baseline = edit this file in clade + propagate.
 
+/** @type {import('oxlint').OxlintConfig} */
 export const lintBase = {
   categories: {
     correctness: 'error',
@@ -91,6 +92,7 @@ export const lintBase = {
   ],
 }
 
+/** @type {import('oxfmt').OxfmtConfig} */
 export const fmtBase = {
   semi: false,
   singleQuote: true,
