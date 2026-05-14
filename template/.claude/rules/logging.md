@@ -238,19 +238,24 @@ const rawDrain = createSentryDrain({ dsn: process.env.SENTRY_DSN })
 
 ### Cloudflare Workers flush
 
-Nuxt drain 以 `nitroApp.hooks.hook('evlog:drain', drain)` 註冊；Cloudflare Workers consumer **MUST** 另在 `request` hook 把 `drain.flush()` 掛到 platform `waitUntil`，否則 worker 回收時 in-memory batch 可能被丟掉。
+Nuxt drain 以 `nitroApp.hooks.hook('evlog:drain', drain)` 註冊；Cloudflare Workers consumer **MUST** 另在 `afterResponse` hook 把 `drain.flush()` 掛到 platform `waitUntil`，否則 worker 回收時 in-memory batch 可能被丟掉。
 
 ```ts
 nitroApp.hooks.hook('evlog:drain', drain)
 nitroApp.hooks.hook('close', () => drain.flush())
 
-nitroApp.hooks.hook('request', (event) => {
+// 用 afterResponse 而非 request：current request 的 wide event 在 afterResponse
+// 才由 evlog emit 進 buffer。在 request 時 flush 只會處理先前殘留 batch、漏掉
+// 當前 event；低流量場景 worker 回收前不會再有 request 觸發下一次 flush。
+nitroApp.hooks.hook('afterResponse', (event) => {
   const waitUntil = event.context.cloudflare?.context?.waitUntil
   if (typeof waitUntil === 'function') {
     waitUntil(drain.flush())
   }
 })
 ```
+
+**禁止**改回 `request` hook + `waitUntil(drain.flush())` pattern — `request` hook 早於該次 request 的 wide event 被 evlog emit 進 buffer（evlog 在 `afterResponse` 才 emit），低流量 Workers 環境下會永久遺失當前 event。
 
 ### 三條 meta-event 必接
 
@@ -514,6 +519,9 @@ rg -P -n 'createError\(\{(?![^}]*why)' server packages clients
 
 # Enricher stack
 rg -n "createUserAgentEnricher\\(|createGeoEnricher\\(|createTraceContextEnricher\\(" server/plugins packages/**/server/plugins
+
+# Workers flush hook（必須 afterResponse，不可 request）
+rg -nP "hooks\.hook\(['\"]request['\"][\s\S]{0,200}?waitUntil\(drain\.flush" server/plugins packages/**/server/plugins
 ```
 
 完整 review automation 在 M2 階段補：`scripts/evlog-adoption-audit.mjs`（spec 見 `docs/evlog-master-plan.md` § 10）。
