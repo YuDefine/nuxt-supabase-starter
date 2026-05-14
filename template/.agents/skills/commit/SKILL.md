@@ -81,6 +81,15 @@ rm -f .claude/.propagate-marker.json
 
 接著繼續跑 Step 0-Scope（剩餘業務 dirty 走原邏輯）。
 
+### `mode=managed-batch-write` → 提示 + fall through 到 normal
+
+precheck 看到 LOCKED 檔與 `.claude/.hub-state.json` 同批寫入（≤5s 內），但沒 marker — 通常是 `sync-rules.mjs` 單獨跑、`bootstrap-check.sh` 還原 drift、或 `pnpm hub:check`。precheck 已把 guidance 寫到 stderr，**MUST** 把 stderr 帶給 user 看。
+
+接著照 `normal` 走 Step 0-Scope，但 Step 3 分組時：
+
+- **MUST** 把 LOCKED 檔（`.claude/rules/` / `.agents/commands/` / `.agents/skills/spectra-*/` / `.codex/agents/` / `scripts/spectra-advanced/`）獨立成 `🧹 chore(clade)` group，跟業務 commit 分開
+- **NEVER** 把這些 LOCKED 檔混進 feat / fix / refactor group — 它們是 clade 投影層異動，不屬於 consumer 業務變更
+
 ### `mode=cross-session-conflict` → **停下** + HANDOFF.md
 
 precheck 已 exit 2 + stderr 列出最近異動的 LOCKED 檔。**MUST**：
@@ -93,7 +102,7 @@ precheck 已 exit 2 + stderr 列出最近異動的 LOCKED 檔。**MUST**：
 
 ## Step 0-Scope: WIP 預設全部納入（果斷，不徵詢）
 
-> **適用 mode**：`normal` 走整段；`propagate-staged` 已在 Step 0-Precheck 把投影層分離出去，本步只處理剩餘業務 dirty；`cross-session-conflict` 不會走到這（Step 0-Precheck 已 exit）。
+> **適用 mode**：`normal` / `managed-batch-write` 走整段（後者要在 Step 3 把 LOCKED 檔獨立成 chore(clade) group）；`propagate-staged` 已在 Step 0-Precheck 把投影層分離出去，本步只處理剩餘業務 dirty；`cross-session-conflict` 不會走到這（Step 0-Precheck 已 exit）。
 
 **預設行為**：所有 `git status` 顯示的 uncommitted 變更（含與本次工作無關、其他 session 並行的 WIP、不認得的檔案）**一律無條件**列入本次 `/commit` 流程，照常跑 0-A review、在 Step 3 依功能分組成獨立 commit。
 
