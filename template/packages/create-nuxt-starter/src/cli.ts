@@ -9,6 +9,13 @@ import { featureModules, getModuleById, resolveFeatureDependencies } from './fea
 import { confirmScaffold, displaySummary, getDefaultSelections, promptUser } from './prompts'
 import { postScaffold, type CladeModules } from './post-scaffold'
 import {
+  PRESET_IDS,
+  applyPreset,
+  getPresetById,
+  isPresetId,
+  type PresetDefinition,
+} from './presets'
+import {
   DB_STACKS,
   DEFAULT_DB_STACK,
   EVLOG_PRESETS,
@@ -229,28 +236,48 @@ export function buildSelectionsFromArgs(args: {
     failValidation(`--db 只接受：${DB_STACKS.join(' | ')}`)
   }
 
-  const validPresetValues = ['default', 'fast'] as const
-  const presetArg = args.preset as (typeof validPresetValues)[number] | undefined
-  if (presetArg && !validPresetValues.includes(presetArg)) {
-    failValidation(`--preset 只接受：${validPresetValues.join(' | ')}`)
+  const presetArgRaw = args.preset as string | undefined
+  if (presetArgRaw === 'default') {
+    failValidation(
+      `--preset default 已移除。請改用 --preset cloudflare-supabase（功能等價）。\n可用 preset：${PRESET_IDS.join(' | ')}`
+    )
   }
+  if (presetArgRaw === 'fast') {
+    failValidation(
+      `--preset fast 已移除。請改用 --preset cloudflare-supabase --without testing-full,testing-vitest。\n可用 preset：${PRESET_IDS.join(' | ')}`
+    )
+  }
+  if (presetArgRaw && !isPresetId(presetArgRaw)) {
+    failValidation(`--preset 只接受：${PRESET_IDS.join(' | ')}`)
+  }
+  if (args.fast === true) {
+    failValidation('--fast 已移除。請改用 --without testing-full,testing-vitest 達到等價效果。')
+  }
+  const preset: PresetDefinition | undefined = presetArgRaw
+    ? getPresetById(presetArgRaw)
+    : undefined
 
   const evlogPresetArg = args.evlogPreset as EvlogPreset | undefined
   if (evlogPresetArg && !EVLOG_PRESETS.includes(evlogPresetArg)) {
     failValidation(`--evlog-preset 只接受：${EVLOG_PRESETS.join(' | ')}`)
   }
-  const evlogPreset: EvlogPreset = evlogPresetArg ?? 'baseline'
-  const dbStack = resolveDbStack(evlogPreset, dbArg)
+  const evlogPreset: EvlogPreset = evlogPresetArg ?? preset?.evlogPreset ?? 'baseline'
+  const dbStack = resolveDbStack(evlogPreset, dbArg ?? preset?.dbStack)
 
-  const useFastPreset = args.fast === true || presetArg === 'fast'
   const agentTargets =
     parseAgentTargets(args.agents) ?? getDefaultSelections(args.projectName).agentTargets
 
-  const selected = new Set(args.minimal ? [] : getDefaultSelections(args.projectName).features)
-
-  if (useFastPreset) {
-    selected.delete('testing-full')
-    selected.delete('testing-vitest')
+  // Base feature set:
+  // - --minimal flag (legacy): empty set
+  // - --preset <id>: preset's feature set via applyPreset (handles startEmpty)
+  // - neither: default features from featureModules
+  let selected: Set<string>
+  if (args.minimal) {
+    selected = new Set()
+  } else if (preset) {
+    selected = applyPreset(preset)
+  } else {
+    selected = new Set(getDefaultSelections(args.projectName).features)
   }
 
   const addFeature = (featureId: string) => {
@@ -345,12 +372,12 @@ const main = defineCommand({
     },
     preset: {
       type: 'string',
-      description: 'Profile preset: default | fast',
+      description: `Stack preset: ${PRESET_IDS.join(' | ')}`,
       required: false,
     },
     fast: {
       type: 'boolean',
-      description: 'Alias of --preset fast',
+      description: '[deprecated, removed] 改用 --without testing-full,testing-vitest',
       default: false,
     },
     agents: {

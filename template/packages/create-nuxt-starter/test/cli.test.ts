@@ -132,6 +132,7 @@ describe('CLI dbStack selection', () => {
 describe('wizard dbStack selection', () => {
   it('auto-selects NuxtHub D1 for nuxthub-ai without prompting for DB stack', async () => {
     const responses: unknown[] = [
+      'custom', // preset picker → 走完整 15-prompt wizard
       'auth-better-auth',
       'database',
       'none',
@@ -159,6 +160,7 @@ describe('wizard dbStack selection', () => {
 
   it('rejects wizard NuxtHub D1 with nuxt-auth-utils', async () => {
     const responses: unknown[] = [
+      'custom', // preset picker → 走完整 15-prompt wizard
       'auth-nuxt-utils',
       'database',
       'none',
@@ -177,5 +179,188 @@ describe('wizard dbStack selection', () => {
     vi.spyOn(consola, 'prompt').mockImplementation(async () => responses.shift())
 
     await expect(promptUser('wizard-invalid')).rejects.toThrow(/nuxthub-d1.*Better Auth/)
+  })
+})
+
+describe('--preset stack values', () => {
+  it('--preset cloudflare-supabase 等同預設行為', () => {
+    const defaults = buildSelectionsFromArgs({ projectName: 'default-app' })
+    const preset = buildSelectionsFromArgs({
+      projectName: 'preset-app',
+      preset: 'cloudflare-supabase',
+    })
+
+    expect(preset.deploymentTarget).toBe(defaults.deploymentTarget)
+    expect(preset.dbStack).toBe(defaults.dbStack)
+    expect(preset.evlogPreset).toBe(defaults.evlogPreset)
+    expect([...preset.features].toSorted()).toEqual([...defaults.features].toSorted())
+  })
+
+  it('--preset cloudflare-nuxthub-ai 自動鎖 dbStack=nuxthub-d1 + evlogPreset=nuxthub-ai + better-auth', () => {
+    const selections = buildSelectionsFromArgs({
+      projectName: 'nuxthub-ai-app',
+      preset: 'cloudflare-nuxthub-ai',
+    })
+
+    expect(selections.dbStack).toBe('nuxthub-d1')
+    expect(selections.evlogPreset).toBe('nuxthub-ai')
+    expect(selections.features).toContain('auth-better-auth')
+    expect(selections.features).not.toContain('auth-nuxt-utils')
+    expect(selections.features).not.toContain('database')
+    expect(selections.features).toContain('monitoring')
+  })
+
+  it('--preset vercel-supabase 切到 Vercel deploy', () => {
+    const selections = buildSelectionsFromArgs({
+      projectName: 'vercel-app',
+      preset: 'vercel-supabase',
+    })
+
+    expect(selections.deploymentTarget).toBe('vercel')
+    expect(selections.features).toContain('deploy-vercel')
+    expect(selections.features).not.toContain('deploy-cloudflare')
+    expect(selections.features).not.toContain('deploy-node')
+  })
+
+  it('--preset self-hosted-node 帶 Node deploy + ci-advanced', () => {
+    const selections = buildSelectionsFromArgs({
+      projectName: 'node-app',
+      preset: 'self-hosted-node',
+    })
+
+    expect(selections.deploymentTarget).toBe('node')
+    expect(selections.features).toContain('deploy-node')
+    expect(selections.features).toContain('ci-advanced')
+    expect(selections.features).not.toContain('ci-simple')
+  })
+
+  it('--preset minimal 從空集合起手，不含 default features', () => {
+    const selections = buildSelectionsFromArgs({
+      projectName: 'minimal-app',
+      preset: 'minimal',
+    })
+
+    expect(selections.features).not.toContain('database')
+    expect(selections.features).not.toContain('ui')
+    expect(selections.features).not.toContain('auth-nuxt-utils')
+    expect(selections.features).not.toContain('auth-better-auth')
+    expect(selections.features).not.toContain('monitoring')
+    // 但仍含 preset 自帶的 deploy + ci
+    expect(selections.features).toContain('deploy-cloudflare')
+    expect(selections.features).toContain('ci-simple')
+    expect(selections.evlogPreset).toBe('none')
+  })
+
+  it('--with auth-better-auth 可覆蓋 preset 的 auth 預設', () => {
+    const selections = buildSelectionsFromArgs({
+      projectName: 'override-auth',
+      preset: 'cloudflare-supabase',
+      with: 'auth-better-auth',
+    })
+
+    expect(selections.features).toContain('auth-better-auth')
+    expect(selections.features).not.toContain('auth-nuxt-utils')
+  })
+
+  it('--preset default 已移除，提示改用 cloudflare-supabase', () => {
+    expect(() =>
+      buildSelectionsFromArgs({ projectName: 'legacy-default', preset: 'default' })
+    ).toThrow(/--preset default 已移除.*cloudflare-supabase/s)
+  })
+
+  it('--preset fast 已移除，提示改用 --without testing-*', () => {
+    expect(() => buildSelectionsFromArgs({ projectName: 'legacy-fast', preset: 'fast' })).toThrow(
+      /--preset fast 已移除.*--without testing-full,testing-vitest/s
+    )
+  })
+
+  it('--fast flag 已移除，提示改用 --without testing-*', () => {
+    expect(() => buildSelectionsFromArgs({ projectName: 'legacy-fast-flag', fast: true })).toThrow(
+      /--fast 已移除/
+    )
+  })
+
+  it('未知 preset id 顯示可用值清單', () => {
+    expect(() =>
+      buildSelectionsFromArgs({ projectName: 'unknown', preset: 'unknown-preset' })
+    ).toThrow(/cloudflare-supabase.*cloudflare-nuxthub-ai/s)
+  })
+})
+
+describe('wizard preset picker', () => {
+  it('選 cloudflare-supabase preset 走 short wizard（不問 db/evlog/deploy/monitoring/ci）', async () => {
+    const responses: unknown[] = [
+      'cloudflare-supabase', // preset picker
+      'auth-nuxt-utils', // auth
+      'ui', // UI
+      'spa', // SSR
+      ['charts', 'security', 'image', 'vueuse'], // extras
+      'pinia', // state
+      'full', // testing
+      ['claude-code'], // agent targets
+    ]
+    const prompt = vi.spyOn(consola, 'prompt').mockImplementation(async () => responses.shift())
+
+    const selections = await promptUser('preset-wizard-app')
+
+    expect(selections.dbStack).toBe('supabase')
+    expect(selections.evlogPreset).toBe('baseline')
+    expect(selections.deploymentTarget).toBe('cloudflare')
+    expect(selections.features).toContain('monitoring')
+    expect(selections.features).toContain('ci-simple')
+    expect(selections.features).toContain('deploy-cloudflare')
+
+    // short wizard 不該問被 preset 鎖死的 prompt
+    const promptLabels = prompt.mock.calls.map(([message]) => message)
+    expect(promptLabels).not.toContain('資料庫？')
+    expect(promptLabels).not.toContain('部署目標？')
+    expect(promptLabels).not.toContain('監控與錯誤追蹤？')
+    expect(promptLabels).not.toContain('GitHub Actions CI 模式？')
+    expect(promptLabels).not.toContain('Database stack？')
+    expect(promptLabels).not.toContain('evlog preset？（wide event logging tier）')
+  })
+
+  it('選 minimal preset 後 features 不含 default 套件', async () => {
+    const responses: unknown[] = [
+      'minimal',
+      'none', // auth
+      'none', // UI
+      'spa',
+      [], // extras 全空
+      'none', // state
+      'none', // testing
+      ['claude-code'],
+    ]
+    vi.spyOn(consola, 'prompt').mockImplementation(async () => responses.shift())
+
+    const selections = await promptUser('minimal-wizard-app')
+
+    expect(selections.evlogPreset).toBe('none')
+    expect(selections.features).not.toContain('database')
+    expect(selections.features).not.toContain('ui')
+    expect(selections.features).not.toContain('monitoring')
+    expect(selections.features).toContain('deploy-cloudflare')
+  })
+
+  it('選 cloudflare-nuxthub-ai preset 自動鎖 dbStack + better-auth', async () => {
+    const responses: unknown[] = [
+      'cloudflare-nuxthub-ai',
+      'auth-better-auth', // preset 預設就是 better-auth，這裡照樣選
+      'ui',
+      'spa',
+      ['charts'],
+      'pinia',
+      'full',
+      ['claude-code'],
+    ]
+    vi.spyOn(consola, 'prompt').mockImplementation(async () => responses.shift())
+
+    const selections = await promptUser('nuxthub-wizard-app')
+
+    expect(selections.dbStack).toBe('nuxthub-d1')
+    expect(selections.evlogPreset).toBe('nuxthub-ai')
+    expect(selections.features).toContain('auth-better-auth')
+    expect(selections.features).not.toContain('auth-nuxt-utils')
+    expect(selections.features).not.toContain('database') // d1 模式 strip 掉
   })
 })

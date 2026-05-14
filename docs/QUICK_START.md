@@ -38,7 +38,15 @@ pnpm --dir template/packages/create-nuxt-starter install --ignore-scripts
 pnpm --dir template/packages/create-nuxt-starter dev
 ```
 
-CLI 會依序引導你填寫：專案名稱 → Auth → 資料庫 → UI → 渲染模式 → 額外功能 → 測試 → 部署目標等。
+CLI 會先讓你選 **stack preset**（cloudflare-supabase / cloudflare-nuxthub-ai / vercel-supabase / self-hosted-node / minimal），然後只問剩下的非 preset 決策（auth / UI / SSR / extras / state / testing / agent runtime）= **共 9 個 prompt**。
+
+需要完全自由組合？preset picker 最後一個選項 `custom` 走完整 15-prompt wizard，跟 preset 完全獨立。
+
+> **舊使用者注意（破壞性變更）**
+> - `--preset default` 已移除，改用 `--preset cloudflare-supabase`
+> - `--preset fast` 已移除，改用 `--without testing-full,testing-vitest`
+> - `--fast` flag 已移除，改用 `--without testing-full,testing-vitest`
+> CLI 傳入舊值時會 fail 並提示等價寫法，不會被靜默忽略。
 
 ### 最短路徑（給 agent 或腳本）
 
@@ -64,19 +72,25 @@ bash scripts/create-fast-project.sh temp/my-product \
 說明：
 
 - 自動安裝 scaffold 依賴 + 建立 + 關鍵字掃描
-- 不帶參數時使用預設值（auth=nuxt-auth-utils、SPA、Cloudflare）
-- 支援 `--auth`、`--with`、`--without`、`--minimal` 等所有 CLI 參數
-- `--fast` 已內建（自動移除 `testing-full`）
+- 不帶參數時使用 `cloudflare-supabase` preset 預設值（auth=nuxt-auth-utils、SPA、Cloudflare）
+- 支援 `--auth`、`--with`、`--without`、`--minimal`、`--preset <stack>` 等所有 CLI 參數
+- wrapper 內部已套 fast profile（`--without testing-full,testing-vitest`），等同舊版 `--fast` 行為
 
 ### 非互動（可腳本化）
 
 ```bash
+# 用 stack preset 一行直達（推薦）
 pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 	--yes \
-	--fast \
+	--preset cloudflare-nuxthub-ai \
+	--with charts,image
+
+# 或從預設 cloudflare-supabase preset 微調
+pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
+	--yes \
 	--auth better-auth \
 	--with charts,monitoring,image \
-	--without testing-full
+	--without testing-full,testing-vitest
 ```
 
 相對路徑（例如 `temp/my-product`）會建立在你**目前執行指令的目錄**底下。以上面例子來說，如果你人在 starter repo root，產物就會落在 `./temp/my-product`。
@@ -84,12 +98,12 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 參數說明：
 
 - 專案名稱：最後一段路徑就是專案名稱（例如 `temp/my-product`）
-- Auth：`--auth nuxt-auth-utils`、`--auth better-auth`、`--auth none`
-- CI 模式：`--ci simple`（預設）、`--ci advanced`
-- 快速預設：`--fast`（等同 `--preset fast`，會移除 testing）
+- Stack preset：`--preset <id>` 一行套整套部署 + DB + evlog + ci 預設（見下方 [Stack preset 對照](#stack-preset-對照表)）
+- Auth：`--auth nuxt-auth-utils`、`--auth better-auth`、`--auth none`（覆蓋 preset 的 auth 預設）
+- CI 模式：`--ci simple`、`--ci advanced`（覆蓋 preset 的 ci 預設）
 - 功能新增：`--with <feature1,feature2>`
-- 功能移除：`--without <feature1,feature2>`
-- 最小起始：`--minimal`（從空白功能集開始）
+- 功能移除：`--without <feature1,feature2>`（含跳過 testing：`--without testing-full,testing-vitest`）
+- 最小起始：`--minimal`（從空白功能集開始；新版改用 `--preset minimal` 更明確）
 
 常用 feature id：
 
@@ -98,6 +112,21 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 - `deploy-cloudflare`, `deploy-vercel`, `deploy-node`
 - `quality`, `git-hooks`
 - `ci-simple`, `ci-advanced`
+
+### Stack preset 對照表
+
+| Preset id                | Deploy     | DB stack    | Evlog preset | Auth 預設           | CI            |
+| ------------------------ | ---------- | ----------- | ------------ | ------------------- | ------------- |
+| `cloudflare-supabase`    | Cloudflare | Supabase    | baseline     | nuxt-auth-utils     | ci-simple     |
+| `cloudflare-nuxthub-ai`  | Cloudflare | NuxtHub D1  | nuxthub-ai   | better-auth（強制） | ci-simple     |
+| `vercel-supabase`        | Vercel     | Supabase    | baseline     | nuxt-auth-utils     | ci-simple     |
+| `self-hosted-node`       | Node       | Supabase    | baseline     | nuxt-auth-utils     | ci-advanced   |
+| `minimal`                | Cloudflare | Supabase    | none         | none                | ci-simple     |
+
+- 預設 preset：`cloudflare-supabase`（不帶 `--preset` 等於這個）
+- 互動模式第一步就是 preset picker，第 6 個選項 `custom` 走完整 15-prompt wizard，不套用任何 preset 預設
+- preset 套用後仍可用 `--with` / `--without` 微調，或用 `--auth` / `--ci` 覆蓋對應預設
+- `--preset minimal` 從空集合起手：不含 auth / database / monitoring / UI / extras，只含必要的 deploy + ci feature
 
 ### Tech Stack 選擇指引
 
@@ -161,9 +190,9 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 └─ 自建主機 → --without deploy-cloudflare --with deploy-node
 
 需要多快啟動？
-├─ 最快（prototype）→ --fast --without testing-full
-├─ 正常 → 預設即可
-└─ 最小 → --minimal --with ui,database
+├─ 最快（prototype）→ --without testing-full,testing-vitest
+├─ 正常 → 預設 --preset cloudflare-supabase 即可
+└─ 最小 → --preset minimal --with ui,database
 
 CI 要多嚴謹？
 ├─ Prototype / 個人專案 → --ci simple（預設）

@@ -149,8 +149,15 @@ Nuxt 4 + Vue 3 + TypeScript + Supabase + Nuxt UI + Tailwind CSS + Pinia + Better
 `create-nuxt-starter` 目前以 repo 內執行為主：
 
 ```bash
-pnpm --filter create-nuxt-starter dev -- /path/to/my-app --yes
+# 互動模式 — 第一步 picker 選 stack preset，後續只問 8 個非 preset 決策
+pnpm --filter create-nuxt-starter dev -- /path/to/my-app
+
+# 非互動 — 一行直達指定 preset
+pnpm --filter create-nuxt-starter dev -- /path/to/my-app \
+  --yes --preset cloudflare-supabase
 ```
+
+Stack preset：`cloudflare-supabase`（預設）/ `cloudflare-nuxthub-ai` / `vercel-supabase` / `self-hosted-node` / `minimal`。
 
 > 詳細說明請看 [CLI_SCAFFOLD.md](docs/CLI_SCAFFOLD.md)
 
