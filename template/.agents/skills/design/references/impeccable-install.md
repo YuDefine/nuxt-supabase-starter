@@ -1,6 +1,6 @@
 # Impeccable v3 安裝指南（給 consumer `install-skills.sh` 用）
 
-> Clade 鎖定版本見 `../SKILL.md` Prerequisites 區塊（目前 v3.0.6）。新 consumer 對齊本檔即可，不要從歷史 install-skills.sh copy v2 拆分形態。
+> Clade 鎖定版本見 `../SKILL.md` Prerequisites 區塊（目前 v3.1.0）。新 consumer 對齊本檔即可，不要從歷史 install-skills.sh copy v2 拆分形態。
 
 ## 標準 snippet
 
