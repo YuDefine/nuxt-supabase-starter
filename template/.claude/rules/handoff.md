@@ -12,8 +12,6 @@ globs: ['HANDOFF.md', 'openspec/changes/**']
 
 # Handoff
 
-繁體中文 | [English](./handoff.en.md)
-
 **核心命題**：session 結束時若仍有 in-progress 的變更、未 commit 的 WIP、或明確的 blocker，資訊不能只留在對話上下文。必須落到 `HANDOFF.md`，讓下一個 session / agent 能直接接手。
 
 此規則優先於個別 skill 說明與 ad-hoc 習慣。

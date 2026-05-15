@@ -115,8 +115,52 @@ Source：`~/offline/clade/vendor/scripts/wt-helper.mjs`（散播投影到各 con
 
 新建一律走 `/wt` + `session/<date>-<slug>` 規約。
 
+## §7 Stop hook 死鎖 fallback
+
+§1 規定 mid-conversation 不切 cwd，但實際會撞到一個死鎖：Stop hook 攔住代表 acceptance 未滿足要繼續做、cwd 卻在 main 上、main 又因別 session WIP 不能 commit / stash 整碗。此時三條路都被堵：
+
+- 繼續寫 main：`git add -A` 會混進別 session WIP 一起 commit（TDMS `bcfde9c8` 教訓）
+- mid-conversation 切 cwd 到 worktree：§1 禁止（破壞 file watcher / Bash state / 已讀檔的 path reference）
+- 開新 session：當前 session 已積累的上下文（哪幾個檔已 Read、acceptance 卡哪、debug 走到哪）會浪費
+
+**死鎖判定**（三條都成立）：
+- Stop hook 攔住、acceptance criterion 未滿足
+- 當前 cwd 在 main worktree（違反 §1 預設 — session 開頭就該建 worktree）
+- main 已有 dirty WIP（不論來自當前 session 或別 session）
+
+### 分支 A：MAY 建 worktree + 切 cwd 繼續
+
+**全部**條件成立才允許：
+
+- 自評當前 chat context 還有充裕餘地容納 cold-load 新 worktree path + 已讀檔重新 Read（**自評不確定就保守走 B**；不堆數字門檻是因為 Claude 無法可靠自我觀察 token %）
+- 剩餘要做的事範圍小（自評 ≤5 turn 可收尾到 acceptance）
+- 已 selective stash 當前 session 的 WIP：`git stash push -m "<slug>-handoff" -- <列舉自己改的檔>`；**NEVER** `git stash` 不指定路徑（會吃別 session WIP）
+
+執行順序：
+
+1. `/wt <slug>` 建 worktree
+2. Selective stash 當前 session 的改動
+3. cd 到 worktree、`git stash pop`
+4. **明告 user**：「先前對話 Read 過的檔案路徑都對應 main worktree，後續若引用會失效，會重新 Read」
+5. 繼續做 acceptance 收尾
+
+### 分支 B：MUST 走 handoff
+
+分支 A 任一條件不成立 → 跑 `/handoff`（Mode A 自動偵測，見 [[handoff]]）。HANDOFF.md `## In Progress` 條目 MUST 含：
+
+- Stop hook 攔點 + missing acceptance criterion
+- 當前 session 改過的檔案清單（**若已 selective stash 則註明 stash ref**，例 `stash@{0}: <slug>-handoff`）
+- 下一 session oneliner（per §1 oneliner 慣例）：`cd <worktree-path> && claude "<next-skill-invocation>"`
+
+結束當前 session。**NEVER** 為「不想 user 換 session」繞 §1 切 cwd。
+
+### 預防原則（比 fallback 更重要）
+
+死鎖根因是 session 開頭判定 read-only、中途升級成要動 code。Session 第一個 turn 偵測到「要動 code 但 cwd 在 main」就 **SHOULD** 立刻吐 oneliner 讓 user 開新 session（per §1「Session 開頭固定動作」），**不要**等到 acceptance 階段才補 worktree。§7 是 fallback、不是常用路徑。
+
 ## 相關規則
 
 - [[session-tasks]] — 共用時間戳 + slug 慣例
 - [[commit]] — staging 區規範（worktree 隔離後 staging 污染風險降到最低）
 - [[scope-discipline]] — 「不屬於當前 scope 的 worktree」應該另開 session
+- [[handoff]] — §7 分支 B 升級寫入入口

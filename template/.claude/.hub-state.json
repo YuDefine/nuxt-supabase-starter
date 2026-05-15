@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-15T10:13:46.776Z",
+  "syncedAt": "2026-05-15T10:23:37.762Z",
   "checksums": {
     "rules/agent-routing.md": "18ad91251ba77242",
     "rules/audit-pattern.md": "1d72e5274498727f",
@@ -11,7 +11,7 @@
     "rules/evlog-stream-extend.md": "f19b16e0543db1ed",
     "rules/fixtures-reference.md": "db3f57f7cc69059a",
     "rules/follow-up-register.md": "8cf0b083ba7dd744",
-    "rules/handoff.md": "bc09773c20e47e63",
+    "rules/handoff.md": "a63efd5b9f20f428",
     "rules/improvement-loop.md": "05b27c8bde9aa3a2",
     "rules/knowledge-and-decisions.md": "fb1944f41a0e28d9",
     "rules/logging.md": "23eb45223741b74a",
@@ -29,7 +29,7 @@
     "rules/truth-layers.md": "cba05246f0c06769",
     "rules/ux-completeness.md": "dde0d1bb49dc2c4a",
     "rules/work-claims.md": "8c09518cea38198e",
-    "rules/worktree-default.md": "e0a4d060f99e10bd",
+    "rules/worktree-default.md": "ffb5b344fc9cc105",
     "rules/auth.md": "c6db189aa7ceddb7",
     "rules/dev-login.md": "ef01c2d38c7c5c5d",
     "rules/audit-schema.md": "22ec61fa5a47b482",

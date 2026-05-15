@@ -18,6 +18,7 @@ metadata:
 **Mode A — 當前 chat session 有未交辦工作**（任一條成立即 Mode A）：
 - `TaskList` 顯示當前 session 任何 `in_progress` 或 `pending` task（TaskList 是 per-session 工具狀態，可信）
 - 當前 chat 對話脈絡明顯顯示 user 正在 mid-task（我剛在做某事還沒收尾、user 剛交辦一個多步驟工作做到一半）
+- Stop hook 攔住但 acceptance 未滿足 + 處於 [[worktree-default]] §7 死鎖（cwd 在 main + main 已 dirty）且當前 session 已自評不適合走 §7 分支 A（context 不寬裕 / 剩餘 work 不小 / 無法 selective stash）
 
 **Mode B — 當前 chat session 沒有要交辦的**：以上皆否（即使 working tree 髒、tasks/ 有別 session 的 unchecked、spectra changes 有別 session 的 active work，都仍是 Mode B —— 那些屬於別 session 的責任）。
 
@@ -60,6 +61,7 @@ metadata:
    - 主要檔案路徑（讓接手者直接跳）
    - 目前做到哪裡 / 還剩什麼
    - 已踩過的坑（避免下一 session 重踩）
+   - **若來自 [[worktree-default]] §7 死鎖**：額外加 Stop hook 攔點摘要、missing acceptance criterion、改過檔案的 selective stash ref（若有，例 `stash@{0}: <slug>-handoff`）、下一 session oneliner（`cd <worktree-path> && claude "<next-skill-invocation>"`）
 4. **清理 session-tasks**：所有未完項升級完成後 → 只 `mv` / 刪「當前 session 自己開的」`tasks/<date>-*.md`（依 `rules/core/session-tasks.md`「NEVER 動別人的 tasks 檔」）。若當前 session 從頭到尾沒開 tasks 檔，跳過此步。
 5. **回報**：一句話總結升級數量（如「升級 3 到 HANDOFF / 1 到 tech-debt / 砍 2」）。**禁止**追加「下一步建議」或「要不要繼續做 X」。
 
