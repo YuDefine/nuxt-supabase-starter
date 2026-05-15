@@ -157,6 +157,10 @@ Subagent 任務應包含（cwd 設為 push 發生的 repo path）：
 
 Read-only session（grep、看 log、解釋 code 不寫檔）可留在 main worktree。
 
+**例外：`/spectra-archive` 在 main 跑**。Archive 語意是「把 change 合併進 main」（mv folder、delta sync 進 specs、screenshot sweep），全部寫入 main，走 worktree 反而多一道 merge-back。其他 spectra-\* skill（`/spectra-apply` / `/spectra-ingest` / `/spectra-debug`）仍須走 worktree。
+
+**例外：`/handoff` Mode B 接續可遷 cwd**。`/handoff` Mode B 結束、user 選定下一步後，`/handoff` 內呼 `/wt <slug> --dispatch-from-handoff <next-skill>`，此路徑 `/wt` **MAY** 遷移 parent cwd 並 dispatch 下一個 skill，user 不必另開 terminal。`--dispatch-from-handoff` flag 僅 `/handoff` 可用；直接 user invoke `/wt` 仍走 refuse-and-guide oneliner。
+
 **Silent branch 禁令**：Claude **MUST NOT** 跑 `git checkout -b` / `git branch <name>` 或任何會建新 ref 的指令，**除非**先取得 user 明確同意。`/wt` 用的 `session/<date-slug>` 規約命名是唯一例外。
 
 詳見 `.claude/rules/worktree-default.md`。

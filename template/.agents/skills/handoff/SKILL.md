@@ -142,10 +142,31 @@ Outstanding（N 條）：
 - 用「block production」「最高優先」包裝其他自治區工作
 - 推薦的 Option 1 不該是「都不做」（除非真的盤點為空）
 
+### 2B.5 接續 dispatch（user 選定 outstanding 後）
+
+User 透過 `request_user_input` 選定下一步 outstanding（含明確的 next-skill 與 change-name / argument）後，**MUST** 依下表決定 dispatch path，**不要**輸出「請執行 cd ... && claude ...」oneliner 讓 user 另開 terminal（per [[worktree-default]] §7 分支 C 規約消除「另開 terminal」UX 痛點）：
+
+| Next-skill 類型 | Dispatch 行為 |
+| --- | --- |
+| `/spectra-archive <change-name>` | **直接** dispatch（透過 Skill tool 內呼），不建 worktree。Archive 是 main-bound 例外，per [[worktree-default]] §1 |
+| `/spectra-apply` / `/spectra-ingest` / `/spectra-debug`（要寫 tracked file 的 spectra-* skill） | 透過 Skill tool 內呼 `/wt <slug> --dispatch-from-handoff <next-skill-invocation>`，由 `/wt` 建 worktree + 遷 cwd + dispatch next skill（per [[worktree-default]] §7 分支 C） |
+| `/spectra-ask`、其他 read-only / 探索 skill | **直接** dispatch（無需 worktree） |
+| `/spectra-propose` / `/spectra-discuss` | **直接** dispatch（propose / discuss 階段純寫 `openspec/changes/<new>/` 內新檔，不碰既有 tracked file，與[[worktree-default]] §1 的 worktree 邊界相容） |
+| 不在表上的 skill | 走預設 oneliner 路徑（per §1 oneliner 慣例），讓 user 另開 session |
+
+**判定條件**：
+
+- 觸發此 dispatch path **MUST** 全部成立：當前 chat session 剛跑完 Mode B、user 已選定下一步、cwd 在 main worktree
+- 若任一條件不成立 → 走預設 oneliner（不要強行 dispatch）
+
+**Slug 解析**：`/wt <slug> --dispatch-from-handoff <next-skill-invocation>` 的 `<slug>` 由 change-name 直接帶入（per [[worktree-default]] §3 wt-helper 自動 normalize）。
+
+**禁止濫用 `--dispatch-from-handoff` flag**：此 flag **僅**在 2B.5 流程內合法使用。其他 skill 或 agent **MUST NOT** 自行帶 flag 繞過預設行為（per `/wt` SKILL.md Step 3' Flag 禁用範圍）。
+
 ## Output contract
 
 - Mode A：成功 = HANDOFF.md / tech-debt / ROADMAP 有對應寫入 + tasks 檔已清；訊息只含升級摘要
-- Mode B：成功 = HANDOFF.md 已整理 + 盤點訊息 + `request_user_input` 已發出讓 user 選
+- Mode B：成功 = HANDOFF.md 已整理 + 盤點訊息 + `request_user_input` 已發出讓 user 選 + user 選定後 2B.5 dispatch 已完成（直接 dispatch 或內呼 `/wt --dispatch-from-handoff`）
 - 失敗 / blocked：明確說明卡點，不假裝完成
 
 ## 與其他 skill 的銜接
