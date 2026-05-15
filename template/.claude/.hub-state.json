@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-15T09:04:59.174Z",
+  "syncedAt": "2026-05-15T09:12:27.484Z",
   "checksums": {
     "rules/agent-routing.md": "3179c7cefce3f427",
     "rules/audit-pattern.md": "1d72e5274498727f",
@@ -47,6 +47,7 @@
     "scripts/codex-review-safe.sh": "bbf8cae784512d09",
     "scripts/commit-lock.mjs": "f81c79df484ce5db",
     "skills/spectra/SKILL.md": "2ed77598eba98de6",
+    "skills/spectra-analyze/SKILL.md": "531951f39aff871d",
     "skills/spectra-apply/SKILL.md": "ee9e059ae5fdf1f0",
     "skills/spectra-archive/SKILL.md": "82c771b3b57c2e56",
     "skills/spectra-ask/SKILL.md": "b3f64a6516d00855",
@@ -54,8 +55,10 @@
     "skills/spectra-commit/SKILL.md": "2be9a744540b4399",
     "skills/spectra-debug/SKILL.md": "ec91c4309dc73b9c",
     "skills/spectra-discuss/SKILL.md": "a4208dafe61c616b",
+    "skills/spectra-drift/SKILL.md": "5ff79f5b1b8ee9fb",
     "skills/spectra-ingest/SKILL.md": "12e2b6efa6a3d0d9",
     "skills/spectra-propose/SKILL.md": "d67586d7df3ae58c",
+    "skills/spectra-verify/SKILL.md": "86cc572f903f1df3",
     "commands/commit.md": "da0bd1a9aed13a9d",
     "commands/db-migration.md": "e5c82dd3565bce47",
     "commands/doc-sync.md": "cdad8d95f0d048bf",

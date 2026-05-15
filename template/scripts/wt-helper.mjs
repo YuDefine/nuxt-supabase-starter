@@ -61,9 +61,10 @@ function makeSlugSafe(s) {
   return cleaned
 }
 
+const pad2 = (n) => String(n).padStart(2, '0')
+
 function timestampPrefix(date = new Date()) {
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}-${pad2(date.getHours())}${pad2(date.getMinutes())}`
 }
 
 function parseWorktreeList(porcelain) {
@@ -276,8 +277,12 @@ async function cmdCleanup(slug, opts) {
 
 async function main() {
   const [, , sub, ...rest] = process.argv
-  const flags = new Set(rest.filter((a) => a.startsWith('--')))
-  const positional = rest.filter((a) => !a.startsWith('--'))
+  const flags = new Set()
+  const positional = []
+  for (const a of rest) {
+    if (a.startsWith('--')) flags.add(a)
+    else positional.push(a)
+  }
   const opts = { json: flags.has('--json'), force: flags.has('--force') }
 
   switch (sub) {
