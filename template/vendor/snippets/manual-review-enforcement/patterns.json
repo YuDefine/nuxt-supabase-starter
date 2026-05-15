@@ -37,6 +37,14 @@
       "appliesTo": "parentLineOnly",
       "anchor": "manual-review.md#通則",
       "remediation": "Split the flow chain into #N.M scoped sub-items (one atomic action per line: open X → input Y → click Z → confirm W). Each sub-item must include a falsifiable observation (specific toast text, badge state, route change, field value)."
+    },
+    {
+      "code": "REVIEW_UI_BACKEND_ROUNDTRIP",
+      "description": "[review:ui] item 描述含 HTTP method + /api path 或 → status code（明顯為 backend round-trip）— 違反 [review:ui] 收斂原則 hard rule，MUST 改 [verify:api] / [verify:e2e] / [verify:api+ui]",
+      "regex": "^\\s*-\\s*\\[[ x]\\]\\s*#[0-9.]+\\s*\\[review:ui\\].*((GET|POST|PATCH|PUT|DELETE)\\s+/[a-zA-Z_]|→\\s*[2-5][0-9][0-9])",
+      "regexFlags": "",
+      "anchor": "manual-review.md#review-ui-收斂原則hard-rule",
+      "remediation": "HTTP method + path 或 → status code 是定義上的 agent-verifiable evidence（curl / ofetch / Playwright 可重現）。把這類 backend round-trip 標 [review:ui] 等於把該由 agent 自驗的工作丟回 user，違反 propose 階段對 user 時間的尊重。Replace `[review:ui]` with: (a) `[verify:api]` for pure HTTP round-trip（主線跑 curl，寫 (verified-api: <ISO> <METHOD> <URL> <STATUS>) annotation）, (b) `[verify:e2e]` for persistence / multi-role journey requiring Playwright spec, (c) `[verify:api+ui]` for mutation + final-state visual confirmation. See manual-review.md「[review:ui] 收斂原則 hard rule」+「Kind 分類指引」反面範例。"
     }
   ],
   "bypass": {
