@@ -281,6 +281,21 @@ if [ -f "$TASKS_FILE" ]; then
   ' "$TASKS_FILE")
 
   if [ -n "$KIND_SECTION" ]; then
+    # Pre-pass: collect parent IDs that own at least one scoped child (`#N.M`).
+    # Mirrors `buildParentsWithScopedChildren` in review-gui.mts so this hook
+    # shares the same notion of "parent-with-children" as the GUI's
+    # `requiresUserConfirmation()` carve-out. Parents whose semantic is fully
+    # aggregated from scoped children MUST NOT be flagged for unchecked-checkbox
+    # or missing-annotation independently — scoped children carry the evidence.
+    # Uses a space-delimited string (bash 3.2-compatible, no associative arrays
+    # — macOS /usr/bin/env bash is still 3.2).
+    PARENT_HAS_CHILDREN_LIST=""
+    while IFS=$'\t' read -r _pre_ln _pre_line; do
+      if [[ "$_pre_line" =~ ^[[:space:]]*-[[:space:]]\[[[:space:]xX]\][[:space:]]+#([0-9]+)\.[0-9]+[[:space:]] ]]; then
+        PARENT_HAS_CHILDREN_LIST="$PARENT_HAS_CHILDREN_LIST ${BASH_REMATCH[1]}"
+      fi
+    done <<< "$KIND_SECTION"
+
     # Walk each checkbox line under 人工檢查. Match parent `- [ ] #N` and scoped
     # `  - [ ] #N.M` lines. Other content (prose, blank lines) silently ignored.
     MANUAL_GATE_BLOCKED=false
@@ -290,9 +305,20 @@ if [ -f "$TASKS_FILE" ]; then
       if [[ "$line" =~ ^[[:space:]]*-[[:space:]]\[([[:space:]xX])\][[:space:]]+(#[0-9]+(\.[0-9]+)?)[[:space:]]+(.*)$ ]]; then
         STATE="${BASH_REMATCH[1]}"
         ID="${BASH_REMATCH[2]}"
+        SCOPED_SUFFIX="${BASH_REMATCH[3]}"
         REST="${BASH_REMATCH[4]}"
       else
         continue
+      fi
+
+      # Skip parent-with-children: semantic fully aggregated from scoped children.
+      # Aligns with review-gui.mts `requiresUserConfirmation()` returning false
+      # for these parents so users cannot OK / Issue / Skip them directly.
+      if [ -z "$SCOPED_SUFFIX" ]; then
+        _parent_num="${ID#\#}"
+        case " $PARENT_HAS_CHILDREN_LIST " in
+          *" $_parent_num "*) continue ;;
+        esac
       fi
 
       # Detect leading kind marker (must be first token after id), then resolve
