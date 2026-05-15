@@ -5,13 +5,15 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
-# evlog Stream Extend（讀端擴充）
+# evlog Extend 標準（讀端 + 進階 hook）
 
-> Reference：<https://www.evlog.dev/extend/stream> / <https://www.evlog.dev/extend/fs-reader> / <https://www.evlog.dev/extend/consumer-recipes>
+> Reference：<https://www.evlog.dev/extend/stream> / <https://www.evlog.dev/extend/fs-reader> / <https://www.evlog.dev/extend/consumer-recipes> / <https://www.evlog.dev/extend/custom-enrichers> / <https://www.evlog.dev/extend/tail-sampling>
 >
-> 寫端（drain / sampling / redaction）→ 見 `rules/core/evlog-adoption.md`
+> 寫端（drain / head sampling / redaction）→ 見 `rules/core/evlog-adoption.md` / `rules/core/logging.md`
 >
 > Catalogs（typed error code / audit action）→ 見 `rules/core/evlog-adoption.md` § Catalogs
+>
+> 本 rule 涵蓋的 /extend/* 章節：`stream` / `fs-reader` / `consumer-recipes` / `custom-enrichers` / `tail-sampling`。其餘（`plugins` / `identity-headers` / `custom-framework` / `custom-drains`）：5 consumer 全 Nuxt + 用既有 Sentry/Postgres drain，無實際 use case，未納入標準（need-driven 再補）。
 
 ## 何時用
 
