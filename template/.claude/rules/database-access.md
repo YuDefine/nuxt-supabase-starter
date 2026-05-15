@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: 資料庫存取模式（Supabase client/server 分工）
-globs: ["app/**/*.{vue,ts}", "server/**/*.ts"]
+paths: ["app/**/*.{vue,ts}", "server/**/*.ts"]
 ---
 
 # Database Access Pattern

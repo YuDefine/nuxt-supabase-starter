@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: Supabase Storage 使用規範（上傳、signed URL、policy、清理）
-globs: ['server/api/**/*.ts', 'supabase/migrations/**/*.sql']
+paths: ['server/api/**/*.ts', 'supabase/migrations/**/*.sql']
 ---
 
 # Storage

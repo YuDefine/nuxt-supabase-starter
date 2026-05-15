@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: Server / client logging 與錯誤記錄規範（evlog）
-globs:
+paths:
   - 'server/api/**/*.ts'
   - 'server/plugins/evlog-*.ts'
   - 'app/plugins/evlog-*.ts'

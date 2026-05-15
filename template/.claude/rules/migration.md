@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: Supabase Migration 操作規範
-globs: ['supabase/migrations/**/*.sql', 'server/**/*.ts']
+paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts']
 ---
 
 # Migration

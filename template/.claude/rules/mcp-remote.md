@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: 遠端 Supabase MCP 使用限制
-globs: ['supabase/migrations/**/*.sql', 'server/**/*.ts']
+paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts']
 ---
 
 # MCP Remote Database

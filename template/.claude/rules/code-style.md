@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: 程式碼格式化與 lint 工具鏈—一律用 vite-plus 的 oxfmt + oxlint，禁止 eslint / prettier
-globs: ['**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts,md,json}', '.*rc*', '.*.config.*']
+paths: ['**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts,md,json}', '.*rc*', '.*.config.*']
 ---
 
 # Code Style — vite-plus / oxc 工具鏈

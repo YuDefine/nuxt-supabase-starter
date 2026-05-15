@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: Cloudflare Workers secret 管理規約 — single source of truth = GitHub Secret
-globs: [".github/workflows/**/*.yml", "wrangler.toml", "wrangler.jsonc"]
+paths: [".github/workflows/**/*.yml", "wrangler.toml", "wrangler.jsonc"]
 ---
 
 # Cloudflare Workers Secrets

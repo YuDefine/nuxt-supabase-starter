@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: evlog 14 區塊全功能採用治理（template 選擇、preset、depth 自評、migration 順序）
-globs:
+paths:
   - 'nuxt.config.ts'
   - 'server/plugins/evlog-*.ts'
   - 'app/plugins/evlog-*.ts'
