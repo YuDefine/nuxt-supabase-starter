@@ -113,6 +113,126 @@ for await (const e of tailFsLogs({ pollIntervalMs: 500, signal: ac.signal })) {
 | `for await (const e of readFsLogs(...))` 在 production 跑分析 | FS writer 在 prod Workers 不可用，根本沒檔案可讀 | Postgres drain SQL query；或 SaaS（Sentry / Axiom）後端 query API |
 | 把 stream event 寫回 DB 當 audit | wide event 是 derived，缺 prev_hash / hash anchor | 走 D-pattern transactional outbox（`audit()` helper） |
 
+## Custom enrichers（/extend/custom-enrichers）
+
+### 何時用
+
+預設 5 件套 enricher（UA / Geo / RequestSize / TraceContext / Tenant — 見 `vendor/snippets/evlog-enrichers-stack/`）覆蓋通用情境。當 consumer 需要把**自家業務 metadata**附到每個 wide event 時，才寫自家 enricher：
+
+- **perno**: multi-tenant `tenant.id` / `tenant.org` 已是 production 需求
+- **TDMS**: 製造業 `station.id` / `workstation.kind` / `inspection.batch_id`
+- **edge-rag**: AI agent `agent.id` / `agent.run_id` / `retrieval.scope`
+
+### API surface
+
+```ts
+import { defineEnricher, composeEnrichers, getHeader } from 'evlog/toolkit'
+```
+
+`defineEnricher<T>({ name, field, compute })`：把 `compute(ctx)` 回傳值 merge 到 `event[field]`，回 `undefined` 即跳過。
+
+### Wiring
+
+```ts
+// server/utils/enrichers.ts
+import { defineEnricher, getHeader } from 'evlog/toolkit'
+
+export const tenantEnricher = defineEnricher<{ id: string }>({
+  name: 'tenant',
+  field: 'tenant',
+  compute: ({ headers }) => {
+    const id = getHeader(headers, 'x-tenant-id')
+    return id ? { id } : undefined
+  },
+})
+
+// server/plugins/evlog-enrich.ts
+import { composeEnrichers } from 'evlog/toolkit'
+import { createDefaultEnrichers } from 'evlog/enrichers'
+import { tenantEnricher } from '~/server/utils/enrichers'
+
+export default defineNitroPlugin((nitroApp) => {
+  nitroApp.hooks.hook('evlog:enrich', composeEnrichers([
+    createDefaultEnrichers(),
+    tenantEnricher,
+  ]))
+})
+```
+
+### MUST
+
+- **enricher 純函式**：`compute` 不得 `await`、不得 `throw`、不得 I/O — enricher 在 hot path，failure 會破整個 wide event chain（rule `evlog-adoption.md` § enricher 約束）
+- **field 命名 lower.dot.case**：對齊 catalog prefix 慣例（`tenant` / `tenant.org` / `agent.run_id`），便於 cross-event aggregation
+- **MUST 用 `composeEnrichers` 串 5 件套 + 自家**，禁止覆寫 default enricher
+
+### MUST NOT
+
+- **MUST NOT throw 在 enricher**：失敗回 `undefined` 即可；throw 會 cascade 破 evlog emit
+- **MUST NOT 在 enricher I/O**：不查 DB、不打 HTTP；要用查得到的資訊需在 `requireAuth` 階段先放進 `event.context.headers` 或 `logger.set(...)`
+- **MUST NOT 把 PII raw 寫進 enricher field**：PII 走 redact 層（rule `evlog-adoption.md` § Redaction）
+- **MUST NOT 用 `definePlugin` 包單純 enricher**：用 `defineEnricher` 即可；多 hook 共享狀態才升級到 `definePlugin`（本 rule 不涵蓋；need-driven 再補）
+
+## Tail sampling（/extend/tail-sampling）
+
+### 何時用
+
+「事後採樣」— request 完成後依結果（status / duration / context）決定 keep/drop，跟 head sampling（`sampling.rates.error` 預先比率）正交。低流量 consumer 也適用：保留所有 error / slow request、丟健康雜訊。
+
+典型 use case：
+
+- **perno**: enterprise tier user 的 5xx 全留（debug critical customer）
+- **TDMS**: 製造端 `inspection.failed` 全留 + `duration > 2000ms` 全留
+- **edge-rag**: AI agent `policy.deny` / `tool.invoke.failed` 全留
+
+### API surface
+
+```ts
+import { definePlugin, composeKeep } from 'evlog/toolkit'
+// 或直接 hook 'evlog:emit:keep'
+```
+
+### 跟 audit forceKeep 的關係
+
+`evlog:emit:keep` hook 同時承載**兩個 use case**：
+
+1. **audit forceKeep**（既有規約，5 consumer 已採用） — `kind === 'audit'` event 一律 `shouldKeep = true`，繞 head sampling 確保 audit 不被丟（見 `rules/core/logging.md` § audit forceKeep）
+2. **tail sampling decision**（本 §） — 依 `duration` / `status` / `context` 做事後 keep 判斷
+
+兩個 use case 共用同個 hook，預期 wire 在**同個 nitro plugin** 裡（拆兩 plugin 也行但無必要）。`extend.tailSamplingKeep` audit signal 偵測 hook 採用度，**不**區分這兩個 use case — 計數 > 0 即代表 consumer 已啟 hook（無論是 audit forceKeep 還是 tail sampling decision）。
+
+### Wiring（推薦 hook 形式，無需 plugin）
+
+```ts
+// server/plugins/evlog-tail-sampling.ts
+import { composeKeep } from 'evlog/toolkit'
+
+const keep = composeKeep([
+  ({ duration }) => duration && duration > 2000 ? true : undefined,
+  ({ event }) => event.level === 'error' ? true : undefined,
+  ({ context, status }) =>
+    context.user?.plan === 'enterprise' && status && status >= 500 ? true : undefined,
+])
+
+export default defineNitroPlugin((nitroApp) => {
+  nitroApp.hooks.hook('evlog:emit:keep', (ctx) => {
+    if (keep(ctx)) ctx.shouldKeep = true
+  })
+})
+```
+
+### MUST
+
+- **MUST 同步 + zero I/O**：keep hook 在每 request 結束後跑，必須極快；不 await、不 throw、不查 DB
+- **MUST 跟 head sampling 互補**：tail sampling **不**取代 `sampling.rates.error: 100`；用 tail 撈 head 丟掉的「健康但長」trace
+- **MUST 保留 error 全集**：`event.level === 'error'` → 一律 `shouldKeep = true`（regardless of head sample rate）
+- **MUST `composeKeep` 用 `undefined` 表 no-opinion**：predicate 回 `true` 即 keep，回 `undefined` 留給下一條，回 `false` 強制 drop（少用）
+
+### MUST NOT
+
+- **MUST NOT 把 head sampling 全 set 0 後靠 tail 補**：head 是流量控制（cost 防爆），tail 是品質提升（保證 critical 留）；兩者目的不同
+- **MUST NOT 在 keep hook 內依賴非同步 context**：`context.user` 必須是 `requireAuth` 階段同步寫入的；await 拿 user 違反 hot path 約束
+- **MUST NOT 用 tail sampling 取代 audit canonical**：audit row 在 DB（D-pattern），tail-sampled evlog event 是衍生 view
+
 ## 跟既有 layer 的關係
 
 - **寫端 drain**（evlog-adoption.md §「Drain pipeline」）：consumer 端設置 evlog write pipeline；本 rule 是讀端 view，必依賴寫端有 event 進來
@@ -131,14 +251,16 @@ for await (const e of tailFsLogs({ pollIntervalMs: 500, signal: ac.signal })) {
 
 ## Reference signal（不 block）
 
-`scripts/evlog-adoption-audit.mjs` 加 2 條 reference signal 度量 consumer 對 /extend/ 的採用狀態（純度量，不參與 block gate）：
+`scripts/evlog-adoption-audit.mjs` 加 4 條 reference signal 度量 consumer 對 /extend/ 的採用狀態（純度量，不參與 block gate）：
 
 ```
-extend.streamConsumer  consumer 端 useEvlogStream / EventSource _evlog stream 命中數
-extend.fsReader        readFsLogs / tailFsLogs 命中數
+extend.streamConsumer    useEvlogStream / EventSource _evlog stream 命中數（/extend/stream）
+extend.fsReader          readFsLogs / tailFsLogs 命中數（/extend/fs-reader）
+extend.customEnricher    defineEnricher( 命中數（/extend/custom-enrichers）
+extend.tailSamplingKeep  composeKeep / evlog:emit:keep 命中數（/extend/tail-sampling）
 ```
 
-兩者 > 0 即代表 consumer 已開始用 /extend/ 讀端能力；clade 不對採用度設目標值，consumer 自評需求。
+各 signal > 0 即代表 consumer 已採用對應擴充點；clade 不對採用度設目標值，consumer 自評需求。
 
 ## 反採用條件（明確不採用）
 
