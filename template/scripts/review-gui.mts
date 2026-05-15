@@ -571,10 +571,6 @@ function warnParser(context: ParserWarningContext, message: string): void {
   process.stderr.write(`[review-gui] warn: ${formatParserLocation(context)}: ${message}\n`)
 }
 
-function errorParser(context: ParserWarningContext, message: string): void {
-  process.stderr.write(`[review-gui] error: ${formatParserLocation(context)}: ${message}\n`)
-}
-
 function normalizeDefaultKind(
   candidate: ManualReviewItemKind,
   context: ParserWarningContext
