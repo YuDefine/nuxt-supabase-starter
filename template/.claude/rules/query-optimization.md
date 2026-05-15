@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: 查詢優化、EXPLAIN、index 設計與 RLS 效能測量
-globs: ['supabase/migrations/**/*.sql', 'server/api/**/*.ts']
+paths: ['supabase/migrations/**/*.sql', 'server/api/**/*.ts']
 ---
 
 # Query Optimization

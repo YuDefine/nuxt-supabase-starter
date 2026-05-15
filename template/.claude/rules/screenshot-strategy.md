@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: Screenshot strategy 規則——根據互動深度、跨裝置、跨瀏覽器與是否要沉澱成回歸測試，選擇 browser-harness 或 Playwright CLI
-globs: ['screenshots/**', 'tests/e2e/**', 'openspec/changes/**/design-review.md']
+paths: ['screenshots/**', 'tests/e2e/**', 'openspec/changes/**/design-review.md']
 ---
 
 # Screenshot Strategy

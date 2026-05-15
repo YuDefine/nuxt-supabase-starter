@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: Dev-login routes must stay local-only while giving screenshot review and E2E a canonical way to mint test sessions.
-globs: ['server/routes/auth/**/*dev-login*.ts', 'server/routes/auth/**/*test-login*.ts', 'server/api/_dev/**/*.ts', 'packages/*/server/routes/auth/**/*dev-login*.ts', 'packages/*/server/routes/auth/**/*test-login*.ts', 'e2e/**/*.ts', 'test/e2e/**/*.ts', 'tests/e2e/**/*.ts']
+paths: ['server/routes/auth/**/*dev-login*.ts', 'server/routes/auth/**/*test-login*.ts', 'server/api/_dev/**/*.ts', 'packages/*/server/routes/auth/**/*dev-login*.ts', 'packages/*/server/routes/auth/**/*test-login*.ts', 'e2e/**/*.ts', 'test/e2e/**/*.ts', 'tests/e2e/**/*.ts']
 ---
 
 # Dev-login

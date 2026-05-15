@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: 專案目前未使用的 Supabase 功能 — 引入前的決策與規約
-globs: ['supabase/migrations/**/*.sql', 'server/**/*.ts', 'app/**/*.{ts,vue}']
+paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts', 'app/**/*.{ts,vue}']
 ---
 
 # Unused Features Guardrails

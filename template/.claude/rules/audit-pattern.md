@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: D-pattern audit 規範（DB outbox canonical + evlog derived stream + hash anchor）
-globs: ['server/api/**/*.ts', 'server/utils/audit.ts', 'supabase/migrations/**/*.sql']
+paths: ['server/api/**/*.ts', 'server/utils/audit.ts', 'supabase/migrations/**/*.sql']
 ---
 
 # Audit Pattern

@@ -219,6 +219,26 @@
       "mode": "source-pointer",
       "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
       "verify": []
+    },
+    "agent-routing.codex-watch-protocol.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "manual-review.backend.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "manual-review.data-readiness.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "manual-review.evidence.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
     }
   },
   "verification": {

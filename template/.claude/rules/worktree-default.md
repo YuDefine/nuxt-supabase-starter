@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: Session-level git worktree 預設機制——每個會修改 code 的 session 走獨立 worktree，禁止 silent branch 建立，避免跨 session 的 staging / branch 狀態污染
-globs: ['vendor/scripts/wt-helper.mjs', 'plugins/hub-core/skills/wt/**']
+paths: ['vendor/scripts/wt-helper.mjs', 'plugins/hub-core/skills/wt/**']
 ---
 
 # Worktree Default

@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: Optional truth-layers 規則——適用於有明確 persistence / contract / API / UI 分層的專案，定義每一層的真相來源
-globs: ['openspec/**', 'docs/decisions/**', 'server/**/*.ts', 'shared/**/*.ts', 'src/**/*.ts', 'app/**/*.vue']
+paths: ['openspec/**', 'docs/decisions/**', 'server/**/*.ts', 'shared/**/*.ts', 'src/**/*.ts', 'app/**/*.vue']
 ---
 
 # Truth Layers

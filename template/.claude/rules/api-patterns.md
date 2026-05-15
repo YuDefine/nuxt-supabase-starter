@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: Server API 設計規範
-globs: ["server/api/**/*.ts"]
+paths: ["server/api/**/*.ts"]
 ---
 
 # API Patterns

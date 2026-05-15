@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: Tech debt 路由規則——決定發現的 TD 該登在 clade 還是當前 consumer，以散播範圍與修法歸屬為準
-globs: ['docs/tech-debt.md', '**/docs/tech-debt.md']
+paths: ['docs/tech-debt.md', '**/docs/tech-debt.md']
 ---
 
 # Tech Debt Routing

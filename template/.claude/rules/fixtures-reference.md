@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: Consumer 維護 docs/FIXTURES.md 作為「測試身分 / 樣本 UID / business key」speed reference；propose / ingest 階段引用此檔產生具體 sample inline，與 supabase/seed.sql cross-link
-globs: ['docs/FIXTURES.md', 'docs/fixtures.md']
+paths: ['docs/FIXTURES.md', 'docs/fixtures.md']
 ---
 
 # Fixtures Reference（hard rule）

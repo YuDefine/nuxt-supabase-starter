@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: Postgres Trigger 撰寫規範
-globs: ['supabase/migrations/**/*.sql']
+paths: ['supabase/migrations/**/*.sql']
 ---
 
 # Trigger

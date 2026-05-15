@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: Supabase audit table schema 慣例（audit_logs）
-globs: ["supabase/migrations/**/*.sql", "server/utils/audit*.ts", "server/api/**/*.ts"]
+paths: ["supabase/migrations/**/*.sql", "server/utils/audit*.ts", "server/api/**/*.ts"]
 ---
 
 # Audit Schema Conventions（supabase variant）

@@ -7,7 +7,7 @@ Local edits will be reverted by the next sync.
 
 ---
 description: 認證相關程式碼（login, session, user, auth）
-globs: ['app/**/*.{vue,ts}', 'server/**/*.ts']
+paths: ['app/**/*.{vue,ts}', 'server/**/*.ts']
 ---
 
 # Auth

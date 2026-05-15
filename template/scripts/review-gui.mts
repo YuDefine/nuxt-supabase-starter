@@ -1345,7 +1345,14 @@ export async function createReviewApp(repoRoot = process.cwd()): Promise<any> {
   const { Hono } = await loadHono()
   const app = new Hono()
 
+  // `/review` 與 `/review/<change>` 都回同一 HTML（SPA），URL 變動由 client
+  // 走 history.pushState / replaceState 控制。client 啟動會 parseLocationTarget
+  // 解析 path/hash，deep link reload 才需要 server 認 path。
   app.get('/review', (c: any) => {
+    c.header('Cache-Control', 'no-store')
+    return c.html(renderReviewHtml())
+  })
+  app.get('/review/:change', (c: any) => {
     c.header('Cache-Control', 'no-store')
     return c.html(renderReviewHtml())
   })
@@ -2773,6 +2780,57 @@ export function renderReviewHtml(): string {
       promptFallbackClose: document.getElementById('promptFallbackClose'),
     };
 
+    // ── URL <-> state 同步 ──
+    // path '/review/<change>' 對應 state.current.name
+    // hash '#item-<id>' 對應當前 active task item.id
+    // 點 change 用 pushState（可 back 回 list view），切 task 用 replaceState
+    // （避免 history 被連續按 j/k 灌爆）。reload / 分享 URL 由 client 啟動時
+    // parseLocationTarget 解析後 deep-link。
+    // 註：此 comment / 下方 helper 內**禁用** raw backtick — 整段 client JS
+    // 嵌在 outer template literal 內，raw backtick 會提早結束 template。
+    function parseLocationTarget() {
+      const path = window.location.pathname || '';
+      const m = path.match(/^\/review\/(.+)$/);
+      let change = null;
+      if (m) {
+        try { change = decodeURIComponent(m[1]); } catch (_) { change = m[1]; }
+      }
+      const hash = window.location.hash || '';
+      let itemId = null;
+      if (hash.indexOf('#item-') === 0) {
+        try { itemId = decodeURIComponent(hash.slice(6)); } catch (_) { itemId = hash.slice(6); }
+      }
+      return { change: change, itemId: itemId };
+    }
+    function urlForChange(name) {
+      return '/review/' + encodeURIComponent(name);
+    }
+    function urlForItem(name, itemId) {
+      return urlForChange(name) + '#item-' + encodeURIComponent(itemId);
+    }
+    function pushChangeUrl(name) {
+      const target = name ? urlForChange(name) : '/review';
+      const currentFull = window.location.pathname + window.location.hash;
+      if (currentFull === target) return;
+      history.pushState({ change: name, itemId: null }, '', target);
+    }
+    function replaceItemUrl(name, itemId) {
+      let target;
+      if (name && itemId) target = urlForItem(name, itemId);
+      else if (name) target = urlForChange(name);
+      else target = '/review';
+      const currentFull = window.location.pathname + window.location.hash;
+      if (currentFull === target) return;
+      history.replaceState({ change: name, itemId: itemId }, '', target);
+    }
+    function syncActiveItemUrl() {
+      const change = state.current;
+      if (!change) return;
+      const item = change.items && change.items[state.activeIndex];
+      if (!item) return;
+      replaceItemUrl(change.name, item.id);
+    }
+
     // 從截圖檔名擷取 item id token。支援 #N-、#N.M-、Nb-、N.Ma- 等變體。
     // 同時回傳是否為 legacy 格式（無 # 前綴）— legacy fallback 只能套用在 legacy
     // 檔名，不能讓 canonical scoped 檔（如 #3.1-）誤配到 parent #1。
@@ -3191,7 +3249,32 @@ export function renderReviewHtml(): string {
         ? state.changes.length + ' 個 change 含人工檢查區塊'
         : '目前沒有待處理的人工檢查項目';
       renderChanges();
-      if (!state.current && state.changes[0]) await loadChange(state.changes[0].name);
+      if (state.current) return;
+      // Deep link：URL 指定的 change（path 第二段）優先，匹配不到才 fallback
+      // 到第一筆。匹配不到時用 replaceState 把 path 清回 '/review'，避免
+      // 失效的 URL 留在 address bar。
+      const target = parseLocationTarget();
+      let bootName = null;
+      if (target.change && state.changes.find(function (c) { return c.name === target.change; })) {
+        bootName = target.change;
+      } else if (state.changes[0]) {
+        bootName = state.changes[0].name;
+      }
+      if (!bootName) {
+        history.replaceState({}, '', '/review');
+        return;
+      }
+      await loadChange(bootName);
+      // loadChange 完才知道 items；hash 指到的 item 在這裡 align。
+      if (target.itemId && state.current) {
+        const idx = state.current.items.findIndex(function (it) { return it.id === target.itemId; });
+        if (idx >= 0) {
+          state.activeIndex = idx;
+          renderTasks();
+          renderThumbs();
+          syncActiveItemUrl();
+        }
+      }
     }
 
     // 依 metrics 推算 change card 主狀態：malformed > issue > pending > done
@@ -3261,7 +3344,11 @@ export function renderReviewHtml(): string {
       });
     }
 
-    async function loadChange(name) {
+    // pushUrl 預設 true：一般 user click / init auto-load 要 push history
+    // 讓 back 能回 list view。popstate 觸發的 loadChange 傳 false，URL 已是
+    // 使用者想要的位置，再 push 會破壞 back/forward。
+    async function loadChange(name, pushUrl) {
+      if (pushUrl === undefined) pushUrl = true;
       showBanner('');
       const data = await api('/api/changes/' + encodeURIComponent(name));
       state.current = data.change;
@@ -3280,6 +3367,8 @@ export function renderReviewHtml(): string {
       state.draftFindings = {};
       renderChanges();
       renderCurrent();
+      if (pushUrl) pushChangeUrl(name);
+      syncActiveItemUrl();
     }
 
     function renderCurrent() {
@@ -3634,6 +3723,7 @@ export function renderReviewHtml(): string {
           state.activeIndex = itemIndex;
           renderTasks();
           renderThumbs();
+          syncActiveItemUrl();
           if (focusNoteId) {
             const textarea = el.taskList.querySelector('textarea[data-note="' + CSS.escape(focusNoteId) + '"]');
             if (textarea) {
@@ -4067,6 +4157,7 @@ export function renderReviewHtml(): string {
       const item = state.current.items[state.activeIndex];
       const node = el.taskList.querySelector('[data-item="' + CSS.escape(item.id) + '"]');
       if (node) node.scrollIntoView({ block: 'nearest' });
+      syncActiveItemUrl();
     }
 
     function openViewer(url, label) {
@@ -4116,6 +4207,46 @@ export function renderReviewHtml(): string {
       }
       shortcutModalPrevFocus = null;
     }
+
+    // back/forward 觸發 popstate：重新解析 URL，align state。
+    // - 同 change 內：只切 activeIndex（不重 fetch）
+    // - 換 change：重 loadChange，pushUrl=false（URL 已是使用者導航後位置）
+    // - 退到 list view：清掉 current
+    window.addEventListener('popstate', function () {
+      const target = parseLocationTarget();
+      if (!target.change) {
+        state.current = null;
+        state.activeIndex = 0;
+        renderChanges();
+        el.taskList.replaceChildren();
+        el.currentTitle.textContent = '';
+        return;
+      }
+      if (state.current && state.current.name === target.change) {
+        if (target.itemId) {
+          const idx = state.current.items.findIndex(function (it) { return it.id === target.itemId; });
+          if (idx >= 0 && idx !== state.activeIndex) {
+            state.activeIndex = idx;
+            renderTasks();
+            renderThumbs();
+          }
+        }
+        return;
+      }
+      loadChange(target.change, false).then(function () {
+        if (target.itemId && state.current) {
+          const idx = state.current.items.findIndex(function (it) { return it.id === target.itemId; });
+          if (idx >= 0) {
+            state.activeIndex = idx;
+            renderTasks();
+            renderThumbs();
+            syncActiveItemUrl();
+          }
+        }
+      }).catch(function (err) {
+        showBanner(err.message || String(err), 'error');
+      });
+    });
 
     document.addEventListener('keydown', function (event) {
       if (el.viewer.classList.contains('open')) {
@@ -4271,6 +4402,34 @@ function canListen(host: string, port: number): Promise<boolean> {
   })
 }
 
+// 啟動橫幅：iTerm2 / Terminal.app 對 raw http URL 都支援 cmd-click，所以 URL
+// 本身不加 underline 等 ANSI 修飾（部分 terminal 會把 escape 算進 URL 邊界），
+// 只用 bold + cyan 突顯。非 TTY（pipe to file / CI）自動省略 ANSI。
+function printStartupBanner(url: string, repoRoot: string): void {
+  const isTty = !!process.stdout.isTTY
+  const bold = isTty ? '\x1b[1m' : ''
+  const cyan = isTty ? '\x1b[36m' : ''
+  const dim = isTty ? '\x1b[2m' : ''
+  const reset = isTty ? '\x1b[0m' : ''
+  const lines: Array<[string, string]> = [
+    ['repo', `${dim}${repoRoot}${reset}`],
+    ['open', `${bold}${cyan}${url}${reset}`],
+  ]
+  const labelWidth = Math.max(...lines.map(([label]) => label.length))
+  const visible = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '')
+  const rendered = lines.map(([label, value]) => `${label.padEnd(labelWidth)}  ${value}`)
+  const innerWidth = Math.max(...rendered.map((l) => visible(l).length))
+  const horiz = '─'.repeat(innerWidth + 2)
+  console.log('')
+  console.log(`╭${horiz}╮`)
+  for (const line of rendered) {
+    const pad = ' '.repeat(innerWidth - visible(line).length)
+    console.log(`│ ${line}${pad} │`)
+  }
+  console.log(`╰${horiz}╯`)
+  console.log('')
+}
+
 function openBrowser(url: string): boolean {
   const command =
     process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open'
@@ -4314,8 +4473,7 @@ async function main() {
   if (!existsSync(options.repoRoot))
     throw new Error(`Repo root does not exist: ${options.repoRoot}`)
   const { url } = await startServer(options)
-  console.log(`[review:ui] repo: ${options.repoRoot}`)
-  console.log(`[review:ui] ${url}`)
+  printStartupBanner(url, options.repoRoot)
   if (options.openBrowser) {
     const opened = openBrowser(url)
     if (!opened) console.log(`[review:ui] Browser launch failed. Open this URL manually: ${url}`)
