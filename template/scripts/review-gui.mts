@@ -222,6 +222,12 @@ export interface ManualReviewItemAnnotations {
   verifiedApi?: VerifiedApiAnnotation
   verifiedUi?: VerifiedUiAnnotation
   claudeDiscussed?: ClaudeDiscussedAnnotation
+  // *List 保留同一個 raw 行裡所有同 prefix annotation。單值欄位 = 最後一個（back-compat）；
+  // upsert/canonicalize 路徑仍走單值 record，這裡只服務 parse + display 的多筆顯示需求。
+  verifiedE2eList?: VerifiedE2eAnnotation[]
+  verifiedApiList?: VerifiedApiAnnotation[]
+  verifiedUiList?: VerifiedUiAnnotation[]
+  claudeDiscussedList?: ClaudeDiscussedAnnotation[]
 }
 
 export interface ManualReviewItem {
@@ -728,17 +734,23 @@ function parseStructuredAnnotations(
     const prefix = match[1]!
     const body = match[2]!.trim()
     const raw = match[0]!
-    const key = annotationPrefixToKey(prefix)
-    if (annotations[key]) {
-      errorParser(
-        context,
-        `duplicate (${prefix}: ...) annotation on manual-review item — keeping the last one`
-      )
-    }
-
     const parsed = parseStructuredAnnotationValue(prefix, raw, body, context)
-    if (parsed) {
-      Object.assign(annotations, parsed)
+    if (!parsed) continue
+    if (parsed.verifiedE2e) {
+      ;(annotations.verifiedE2eList ??= []).push(parsed.verifiedE2e)
+      annotations.verifiedE2e = parsed.verifiedE2e
+    }
+    if (parsed.verifiedApi) {
+      ;(annotations.verifiedApiList ??= []).push(parsed.verifiedApi)
+      annotations.verifiedApi = parsed.verifiedApi
+    }
+    if (parsed.verifiedUi) {
+      ;(annotations.verifiedUiList ??= []).push(parsed.verifiedUi)
+      annotations.verifiedUi = parsed.verifiedUi
+    }
+    if (parsed.claudeDiscussed) {
+      ;(annotations.claudeDiscussedList ??= []).push(parsed.claudeDiscussed)
+      annotations.claudeDiscussed = parsed.claudeDiscussed
     }
   }
   return annotations
@@ -1714,7 +1726,7 @@ function toPosix(path: string): string {
   return path.split(sep).join('/')
 }
 
-function renderReviewHtml(): string {
+export function renderReviewHtml(): string {
   return `<!doctype html>
 <html lang="zh-Hant-TW">
 <head>
@@ -3356,53 +3368,74 @@ function renderReviewHtml(): string {
       return '<div class="evidence-panel evidence-missing">evidence missing — run /spectra-apply Step 8a</div>';
     }
 
+    function annotationList(item, listKey, singleKey) {
+      const a = item && item.annotations;
+      if (!a) return [];
+      if (Array.isArray(a[listKey]) && a[listKey].length) return a[listKey];
+      if (a[singleKey]) return [a[singleKey]];
+      return [];
+    }
+
     function renderE2eEvidence(item, title) {
-      const evidence = item.annotations && item.annotations.verifiedE2e;
-      if (!evidence) return (title ? '<h3>' + esc(title) + '</h3>' : '') + renderEvidenceMissing();
-      return '<div class="evidence-panel">' +
-        (title ? '<h3>' + esc(title) + '</h3>' : '') +
-        '<p>spec: <a class="evidence-link" href="' + esc(localFileHref(evidence.spec)) + '" target="_blank" rel="noreferrer">' + esc(evidence.spec) + '</a></p>' +
-        '<p>trace: <a class="evidence-link" href="' + esc(localFileHref(evidence.trace)) + '" target="_blank" rel="noreferrer">' + esc(evidence.trace) + '</a></p>' +
-        '<p class="evidence-notice">自動完成，無需操作；archive-gate 認 annotation 為 evidence</p>' +
-      '</div>';
+      const list = annotationList(item, 'verifiedE2eList', 'verifiedE2e');
+      if (!list.length) return (title ? '<h3>' + esc(title) + '</h3>' : '') + renderEvidenceMissing();
+      const head = title ? '<h3>' + esc(title) + '</h3>' : '';
+      return head + list.map(function(evidence, idx) {
+        return '<div class="evidence-panel">' +
+          (list.length > 1 ? '<p class="evidence-multi-label">記錄 ' + (idx + 1) + ' / ' + list.length + '</p>' : '') +
+          '<p>spec: <a class="evidence-link" href="' + esc(localFileHref(evidence.spec)) + '" target="_blank" rel="noreferrer">' + esc(evidence.spec) + '</a></p>' +
+          '<p>trace: <a class="evidence-link" href="' + esc(localFileHref(evidence.trace)) + '" target="_blank" rel="noreferrer">' + esc(evidence.trace) + '</a></p>' +
+          '<p class="evidence-notice">自動完成，無需操作；archive-gate 認 annotation 為 evidence</p>' +
+        '</div>';
+      }).join('');
     }
 
     function renderApiEvidence(item, title) {
-      const evidence = item.annotations && item.annotations.verifiedApi;
-      if (!evidence) return (title ? '<h3>' + esc(title) + '</h3>' : '') + renderEvidenceMissing();
-      const body = evidence.body ? '<p>body: <code>' + esc(evidence.body) + '</code></p>' : '';
-      return '<div class="evidence-panel">' +
-        (title ? '<h3>' + esc(title) + '</h3>' : '') +
-        '<p><code>' + esc(evidence.method) + '</code> <code>' + esc(evidence.url) + '</code> <span class="status-badge ' + statusClass(evidence.status) + '">' + esc(evidence.status) + '</span></p>' +
-        body +
-        '<p class="evidence-notice">自動完成，無需操作</p>' +
-      '</div>';
+      const list = annotationList(item, 'verifiedApiList', 'verifiedApi');
+      if (!list.length) return (title ? '<h3>' + esc(title) + '</h3>' : '') + renderEvidenceMissing();
+      const head = title ? '<h3>' + esc(title) + '</h3>' : '';
+      return head + list.map(function(evidence, idx) {
+        const body = evidence.body ? '<p>body: <code>' + esc(evidence.body) + '</code></p>' : '';
+        return '<div class="evidence-panel">' +
+          (list.length > 1 ? '<p class="evidence-multi-label">記錄 ' + (idx + 1) + ' / ' + list.length + '</p>' : '') +
+          '<p><code>' + esc(evidence.method) + '</code> <code>' + esc(evidence.url) + '</code> <span class="status-badge ' + statusClass(evidence.status) + '">' + esc(evidence.status) + '</span></p>' +
+          body +
+          '<p class="evidence-notice">自動完成，無需操作</p>' +
+        '</div>';
+      }).join('');
     }
 
     function renderUiEvidence(item, title) {
-      const evidence = item.annotations && item.annotations.verifiedUi;
-      if (!evidence) return (title ? '<h3>' + esc(title) + '</h3>' : '') + renderEvidenceMissing();
-      const src = screenshotUrl(evidence.screenshot);
-      const dom = evidence.dom ? '<p>DOM: <code>' + esc(evidence.dom) + '</code></p>' : '';
-      return '<div class="verified-ui-panel">' +
-        (title ? '<h3>' + esc(title) + '</h3>' : '') +
-        '<p><a class="evidence-link" href="' + esc(localFileHref(evidence.screenshot)) + '" target="_blank" rel="noreferrer">' + esc(evidence.screenshot) + '</a></p>' +
-        '<img class="verified-ui-image" src="' + esc(src) + '" alt="' + esc(evidence.screenshot) + '" title="點擊放大檢視">' +
-        dom +
-      '</div>';
+      const list = annotationList(item, 'verifiedUiList', 'verifiedUi');
+      if (!list.length) return (title ? '<h3>' + esc(title) + '</h3>' : '') + renderEvidenceMissing();
+      const head = title ? '<h3>' + esc(title) + '</h3>' : '';
+      return head + list.map(function(evidence, idx) {
+        const src = screenshotUrl(evidence.screenshot);
+        const dom = evidence.dom ? '<p>DOM: <code>' + esc(evidence.dom) + '</code></p>' : '';
+        return '<div class="verified-ui-panel">' +
+          (list.length > 1 ? '<p class="evidence-multi-label">記錄 ' + (idx + 1) + ' / ' + list.length + '</p>' : '') +
+          '<p><a class="evidence-link" href="' + esc(localFileHref(evidence.screenshot)) + '" target="_blank" rel="noreferrer">' + esc(evidence.screenshot) + '</a></p>' +
+          '<img class="verified-ui-image" src="' + esc(src) + '" alt="' + esc(evidence.screenshot) + '" title="點擊放大檢視">' +
+          dom +
+        '</div>';
+      }).join('');
     }
 
     function autoEvidenceSummary(item, kind) {
       if (kind === 'e2e') {
-        const ev = item.annotations && item.annotations.verifiedE2e;
-        if (!ev) return '⚠ Playwright spec evidence — missing';
+        const list = annotationList(item, 'verifiedE2eList', 'verifiedE2e');
+        if (!list.length) return '⚠ Playwright spec evidence — missing';
+        const ev = list[list.length - 1];
         const spec = String(ev.spec || '').split('/').pop() || ev.spec || '';
-        return '✓ Playwright: ' + spec + ' — 自動完成';
+        const suffix = list.length > 1 ? ' (+' + (list.length - 1) + ' more)' : '';
+        return '✓ Playwright: ' + spec + suffix + ' — 自動完成';
       }
       if (kind === 'api') {
-        const ev = item.annotations && item.annotations.verifiedApi;
-        if (!ev) return '⚠ API round-trip evidence — missing';
-        return '✓ ' + (ev.method || '') + ' ' + (ev.url || '') + ' ' + (ev.status || '') + ' — 自動完成';
+        const list = annotationList(item, 'verifiedApiList', 'verifiedApi');
+        if (!list.length) return '⚠ API round-trip evidence — missing';
+        const ev = list[list.length - 1];
+        const suffix = list.length > 1 ? ' (+' + (list.length - 1) + ' more)' : '';
+        return '✓ ' + (ev.method || '') + ' ' + (ev.url || '') + ' ' + (ev.status || '') + suffix + ' — 自動完成';
       }
       return '';
     }
