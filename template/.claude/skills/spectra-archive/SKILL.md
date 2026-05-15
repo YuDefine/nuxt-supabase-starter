@@ -116,11 +116,9 @@ Archive a completed change.
    - **NEVER** batch-process multiple `[discuss]` items in one user prompt — present them one at a time so the user can give a focused answer per item
    - **NEVER** touch `[review:ui]` items during this step
 
-4. **Preview delta spec sync (informational)**
+4. **Assess delta spec sync state**
 
-   The `spectra archive` CLI applies delta specs to main specs by default; this step previews what will be applied so the user can choose to sync or skip via the CLI flag in step 6.
-
-   Check for delta specs at `openspec/changes/<name>/specs/`. If none exist, proceed to step 5 without prompting.
+   Check for delta specs at `openspec/changes/<name>/specs/`. If none exist, proceed without sync prompt.
 
    **If delta specs exist:**
    - Compare each delta spec with its corresponding main spec at `openspec/specs/<capability>/spec.md`
@@ -128,11 +126,10 @@ Archive a completed change.
    - Show a combined summary before prompting
 
    **Prompt options:**
-   - "Sync now (recommended)" — step 6 runs `spectra archive <name>` (default: applies deltas)
-   - "Archive without syncing" — step 6 runs `spectra archive <name> --skip-specs`
-   - "Cancel" — STOP without archiving
+   - If changes needed: "Sync now (recommended)", "Archive without syncing"
+   - If already synced: "Archive now", "Sync anyway", "Cancel"
 
-   Record the user's choice for step 6. Do NOT invoke any separate sync skill — the CLI is the single source of truth for delta application.
+   If user chooses sync, use Task tool (subagent_type: "general-purpose", prompt: "Use Skill tool to invoke spectra-sync-specs for change '<name>'. Delta spec analysis: <include the analyzed delta spec summary>"). Proceed to archive regardless of choice.
 
 5. **Clean up tracking file**
 
@@ -248,8 +245,8 @@ Target archive directory already exists.
 - Don't block archive on warnings - just inform and confirm
 - Preserve .openspec.yaml when moving to archive (it moves with the directory)
 - Show clear summary of what happened
-- Delta spec application is performed by `spectra archive` itself (default behavior); user choice in step 4 only controls whether to pass `--skip-specs`. Do NOT invoke a separate sync skill — the CLI is SSOT.
-- If delta specs exist, always run the sync preview and show the combined summary before prompting
+- If sync is requested, use the Skill tool to invoke `spectra-sync-specs` (agent-driven)
+- If delta specs exist, always run the sync assessment and show the combined summary before prompting
 - If **AskUserQuestion tool** is not available, ask the same questions as plain text and wait for the user's response
 - **NEVER** skip Step 7 screenshot sweep silently — always run it (unless `--no-sweep`); sweep failure must surface in summary, but **NEVER** roll back the successful archive on sweep failure
 - **ALWAYS** call `screenshots-archive` via Skill tool with explicit `change <change-name>` argument so Mode B logic (caller-trusted, internal topic-mismatch prompt) kicks in

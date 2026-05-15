@@ -36,7 +36,16 @@ Have a focused discussion about a topic and reach a conclusion.
 
 ## Before You Speak
 
-Before asking anything, do a quick codebase scout to decide how to run this discussion.
+Before asking anything, load the shared vocabulary, then do a quick codebase scout to decide how to run this discussion.
+
+### Step 0: Load shared vocabulary
+
+Try to read `openspec/LANGUAGE.md`. This file is the project's canonical vocabulary — terms with `definition`, `avoid`, and `why` notes, plus principles for when legacy terminology may remain.
+
+- **If the file exists**: scan the canonical terms and their avoided synonyms. Prefer the canonical term when you summarize, capture conclusions, or update artifacts. If you notice a relevant `avoid` synonym in the user's topic or in the artifacts you read, plan to surface that as vocabulary drift in the conclusion.
+- **If the file does not exist**: continue silently with the normal flow. A missing vocabulary file is not an error; do not announce it, do not block, and do not stop to ask the user to create it.
+
+This step runs before the codebase scout, the assumptions list, the interview questions, and the conclusion capture.
 
 ### Step 1: Extract search terms
 
@@ -90,6 +99,26 @@ The user can switch modes at any time during the discussion:
 
 - **"Ask me questions instead"** / **"one at a time"** → switch to interview mode (the "How to Discuss" section below)
 - **"Just list your assumptions"** / **"what do you think?"** → run the codebase scout if not done yet, then switch to assumptions mode
+
+### Step 4: Interface depth check (conditional)
+
+After the codebase scout, evaluate whether the topic introduces a new architectural seam. Run this check **only** when the topic involves at least one of:
+
+- A **new module** (a new Rust crate, file under `src-tauri/src/commands/`, or a new top-level Svelte module).
+- A **new IPC command** (a new `#[tauri::command]` exposed to the frontend, or a new front-to-back message shape).
+- A **cross-layer Rust ↔ Tauri ↔ Svelte flow** that did not exist before.
+- A **new storage abstraction** (new on-disk format, new database table, new file-system layout, new adapter over existing storage).
+
+If none of those conditions apply, **skip this check**. Topics that only change static UI copy, visual styling, documentation wording, or other non-architectural surfaces SHALL skip the depth check entirely. The vocabulary load from Step 0 still happens; nothing else from this step runs.
+
+When the check is triggered, work through these four questions before you finalize assumptions or interview answers:
+
+1. **Seam location** — where does the boundary belong? Name the module, file, or store that owns the new contract.
+2. **Adapter count** — is there exactly one adapter on this path, or are several thin wrappers stacked on each other?
+3. **Depth** — what behaviour is hidden behind the interface? If the answer is "nothing — it just forwards calls", the seam is too shallow.
+4. **Deletion test** — if you deleted this module today, what would break? If nothing meaningful breaks, the module is a pass-through and probably should not exist.
+
+Surface the answers in the conclusion (or the assumptions list, if you are in assumptions mode) so the depth question is part of the captured decision, not an internal note.
 
 ---
 
@@ -228,6 +257,9 @@ Where to capture:
 | Design decision made       | `design.md`                  |
 | Scope changed              | `proposal.md`                |
 | New work identified        | `tasks.md`                   |
+| Vocabulary drift           | `openspec/LANGUAGE.md`       |
+
+**Vocabulary drift** means the discussion surfaced a recurring concept that is missing, ambiguous, or pulling away from the shared vocabulary loaded in Step 0. Examples: the topic uses a term that the vocabulary lists as an `avoid` synonym, or the discussion repeatedly names a concept that has no entry yet. When this happens, name it as vocabulary drift in the conclusion summary and direct the capture to `openspec/LANGUAGE.md`. The conclusion summary SHALL preserve this contract — do not silently rewrite the term in the artifacts without recording the drift.
 
 Present the summary and say something like "I'll capture this to design.md unless you'd rather not." Default to capturing — the user can decline.
 

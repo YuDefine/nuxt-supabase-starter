@@ -380,6 +380,7 @@ If no argument is provided, the workflow will extract requirements from conversa
    - If context is insufficient, use the **AskUserQuestion tool** to ask what they want to build
 
    From the resolved description, derive a kebab-case change name (e.g., "add dark mode" → `add-dark-mode`).
+   Do not keep archive-style date prefixes in active change names. If the source name starts with `YYYY-MM-DD-`, strip that date prefix before running `spectra new change`; archived change names and directories are historical references, not active names to reuse.
 
    **IMPORTANT**: Do NOT proceed without understanding what the user wants to build.
 
@@ -631,7 +632,17 @@ If no argument is provided, the workflow will extract requirements from conversa
    - Are boundary conditions defined (empty input, max limits, error cases)?
    - Could "the system" refer to multiple components? Be explicit.
 
-   **Check 5: Design Review 7-step template (UI scope only)**
+   **Check 5: Durable Handoff Review** (run BEFORE the CLI analyzer)
+
+   This change has to survive being parked or handed to another agent. Reject and fix any of the following:
+   - **File-path-only tasks**: a task whose entire description is "edit file X" with no behavior, contract, or verification target. File paths are locator context — the task SHALL still describe what is observably true when complete.
+   - **Line-number-coupled instructions**: design or tasks content that points to "line 42" / "the function on lines 80-95" as the only way to identify the work. Source line numbers drift; name the function, command, struct, or behavior instead.
+   - **Vague acceptance criteria**: success conditions like "works correctly", "behaves as expected", "handles edge cases" without naming the observable behavior or the verification target (test name, CLI invocation, analyzer rule, manual assertion).
+   - **Missing scope boundaries on non-trivial work**: design lacking explicit "in scope" / "out of scope" lines for any change that touches more than one subsystem or introduces new behavior. Trivial artifact-only edits MAY skip this; runtime, build, or tooling effects MUST NOT.
+
+   Fix every failure inline using the existing context before running the CLI analyzer. If a failure cannot be fixed without new input from the user, surface it explicitly rather than papering over it.
+
+   **Check 6: Design Review 7-step template (UI scope only)**
 
    If `tasks.md` references any `.vue` / `pages/` / `components/` / `layouts/` files:
    - tasks.md **MUST** contain a `## N. Design Review` section before `## 人工檢查` (with N = last functional section number + 1)
@@ -639,17 +650,17 @@ If no argument is provided, the workflow will extract requirements from conversa
    - Verify by running `bash scripts/spectra-advanced/post-propose-check.sh <change-name>` and acting on its FINDINGS
    - If anything is missing, fix tasks.md inline now — do NOT let an incomplete Design Review section through. Archive gate will block it later anyway.
 
-   **Check 6: Fixtures / Seed Plan (UI scope + Affected Entity Matrix)**
+   **Check 7: Fixtures / Seed Plan (UI scope + Affected Entity Matrix)**
 
    If `tasks.md` has UI scope **AND** `proposal.md` contains `## Affected Entity Matrix` (= entity-level changes that surface in UI):
    - tasks.md **MUST** contain a `## N. Fixtures / Seed Plan` section before `## Design Review` (with N = last functional section number + 1)
    - Either include at least one `- [ ]` task line per entity-with-Surfaces (entity name, minimum row count, target seed file path) **OR** an explicit `**Existing seed sufficient**` declaration with one-line justification
    - Detected seed-file conventions (in order): `supabase/seed.sql` / `db/seed.sql` / `prisma/seed.ts` / `drizzle/seed.ts`
    - Reason: UI pages displaying empty data on dev/staging make `review-screenshot` worthless. Fixtures are part of feature completeness, not a review-time afterthought.
-   - Verify by running `bash scripts/spectra-advanced/post-propose-check.sh <change-name>` and acting on Check 6 FINDINGS
+   - Verify by running `bash scripts/spectra-advanced/post-propose-check.sh <change-name>` and acting on Check 7 FINDINGS
    - Full template + exemption rules see `ux-completeness.md` 「必填 Fixtures / Seed Plan」section
 
-   **Check 7: Phase Purity (UI view vs 非 view 必須切成獨立 phase)**
+   **Check 8: Phase Purity (UI view vs 非 view 必須切成獨立 phase)**
 
    If `tasks.md` includes UI view scope (any task references `.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss`):
    - For each functional `## N. <title>` phase in tasks.md (excluding `## N. Design Review` and `## N. Fixtures / Seed Plan`):
@@ -659,7 +670,7 @@ If no argument is provided, the workflow will extract requirements from conversa
    - If a mixed phase is detected, **MUST** split inline now into independent phases — do NOT defer to ingest. spectra-apply Phase Dispatch 規則仰賴 phase purity；混雜 phase 在 apply 時會被擋下要求重 ingest，propose 階段就修掉成本最低
    - Reason: spectra-apply 把 UI view phase 由主線 Claude Code 自己做、其他 phase 派給 codex GPT-5.5 high；phase 混雜會破壞 dispatch 邊界，要嘛讓 codex 碰 view 層、要嘛讓主線吞下原本可以 offload 的 mechanical 工作
 
-   **Check 8: Manual Review Marker Hygiene** (applies to **every** change, not only backend-only)
+   **Check 9: Manual Review Marker Hygiene** (applies to **every** change, not only backend-only)
 
    Verify all four rules from Step 5.5 Manual Review Marker Hygiene Check:
 
@@ -687,7 +698,7 @@ If no argument is provided, the workflow will extract requirements from conversa
 
    Full 規約 (含 Item Kind Marker schema、verify channel cookbook、Backend Verification Evidence 模板、反面範例、違反回報格式) 見 `manual-review.md` 「Item Kind Marker」+ `vendor/snippets/verify-channels/README.md` + `ux-completeness.md` 「必填 Backend-only Manual Review 規約」
 
-   **Check 9: Artifact language convention**
+   **Check 10: Artifact language convention**
 
    ```bash
    grep -lE "繁體|繁中|不要使用簡體" CLAUDE.md .claude/rules/*.md 2>/dev/null
@@ -750,6 +761,8 @@ If no argument is provided, the workflow will extract requirements from conversa
     ```
 
     Inform the user that the change is parked and that running `/spectra-apply <change-name>` when ready will auto-unpark the change and start implementation.
+
+    If you are currently in Codex Plan Mode, also remind the user to switch the session to normal mode before running `/spectra-apply <change-name>`. This is only a reminder: do NOT try to use ExitPlanMode or EnterPlanMode, do NOT ask whether to switch modes, and do NOT invoke apply.
 
     The propose workflow ENDS here. Do NOT invoke `/spectra-apply`. Do NOT call **AskUserQuestion** to ask whether to park or apply. This behavior is identical across Auto Mode, interactive mode, and any other agent mode — parking is unconditional and does not depend on `AskUserQuestion` availability or UI auto-accept settings.
 

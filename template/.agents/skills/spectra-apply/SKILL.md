@@ -153,6 +153,24 @@ Run `spectra analyze <change-name> --json` to check cross-artifact consistency (
 
   If there is no request_user_input 工具 available, present options as plain text and wait for the user's response.
 
+3d. **Drift dormancy check** (passive trigger for stale changes)
+
+When the change has been dormant for more than 5 days AND the change directory has had zero commits in the past 3 days, surface a drift report before tasks begin — the change is likely out-of-sync with the current codebase.
+
+Detect dormancy from `.openspec.yaml` `created` and `git log -1 --format=%at -- docs/specs/changes/<name>/`:
+
+- **Both conditions met**: run `spectra drift <change-name>`, display the report, then use the **request_user_input 工具**:
+  - **Continue with apply** — proceed to tasks (recommended for Light drift)
+  - **Refresh first** — pause apply, run `/spectra-ingest <change-name>` to update artifacts, then resume
+  - **Stop** — end the workflow
+- **Either condition not met**: silently continue, no output.
+
+The trigger is guidance only — it MUST NOT block apply from proceeding when the user chooses to continue. Hard-blocking on dormancy would punish legitimate "I came back after a long weekend" cases.
+
+(Threshold reasoning: AI-assisted commits are daily-cadence. ≥5 days dormant + ≥3 days no commit ≈ genuine stagnation, not normal pacing.)
+
+If there is no request_user_input 工具 available, present options as plain text and wait for the user's response.
+
 4. **Read context files**
 
    Read the files listed in `contextFiles` from the apply instructions output.
@@ -289,6 +307,12 @@ Run `spectra analyze <change-name> --json` to check cross-artifact consistency (
    For each pending task:
    - Show which task is being worked on
    - Re-read the sections of design and spec files that are relevant to this task's scope — do not rely on memory from earlier in the conversation, as context may have been compressed
+   - **Read the Implementation Contract for this task before editing any source file.** If `design.md` exists and contains an `## Implementation Contract` section (or contract content under another heading the design uses), read the part of it that covers this task's scope. The contract names the observable behavior, interface or data shape, failure modes, acceptance criteria, and scope boundaries you must satisfy. Treat the contract as the durable handoff — it is what the task will be measured against, regardless of who started the change.
+   - **Detect unclear or path-only tasks before writing code.** A task is unclear if it:
+     - only names files to edit ("edit `foo.rs`", "update `bar.svelte`") with no behavior, contract, or verification target;
+     - is vague ("handle edge cases", "wire it up", "make it work");
+     - conflicts with the implementation contract (asks for behavior the contract excludes, or omits behavior the contract requires).
+       When this happens, pause. Either update the artifact (design or tasks) so the task names a concrete behavior and verification target, or report the blocker and wait for guidance. Do NOT silently guess against unclear requirements.
    - Before writing code, check:
      1. **Reuse** — search adjacent modules and shared utilities for existing implementations before writing new code
      2. **Quality** — derive values from existing state instead of duplicating; use existing types and constants over new literals
@@ -301,7 +325,7 @@ Run `spectra analyze <change-name> --json` to check cross-artifact consistency (
           Do NOT invent additional test values beyond what the spec examples provide without reason. The examples ARE the agreed specification.
    - Make the code changes required
    - Keep changes minimal and focused
-   - **Verify before marking done** — re-read the task description from the tasks file. For each requirement stated in the description, confirm it is addressed by your changes. If any requirement is missing, implement it now. Do not mark the task complete until every part of the description is covered.
+   - **Verify before marking done** — re-read the task description from the tasks file AND the relevant Implementation Contract content from design.md. For each requirement stated in the task description and each contract item that covers this task's scope, confirm it is addressed by your changes. Confirm the verification target named by the task (test name, CLI invocation, analyzer check, or manual assertion) actually passes. If any contract item, task requirement, or verification target is missing or failing, implement/fix it now. Do not mark the task complete until every part of the description is covered and the contract for this task is satisfied.
    - Mark task complete by running: `spectra task done --change "<name>" <task-id>`
      This command marks the checkbox in tasks.md AND records which files were modified for this task.
    - Continue to next task
