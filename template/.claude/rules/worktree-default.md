@@ -37,8 +37,24 @@ git worktree 從根本解掉這兩件事（per-session 獨立檔案系統 + 獨�
 ### Session 開頭固定動作
 
 1. **判斷**：使用者請求是 read-only 還是會動 code？
-2. **若會動 code**：用 `/wt <slug>` 建 worktree；session **SHALL** 提示使用者開新 agent session 到 worktree 路徑（**不要**在當前 session mid-conversation 切 cwd）
+2. **若會動 code**：用 `/wt <slug>` 建 worktree；session **SHALL** 吐 oneliner 形式的指引讓 user 一鍵接續（見下方「oneliner 慣例」），**不要**在當前 session mid-conversation 切 cwd
 3. **若只是 read-only**：直接做事，不必建
+
+### oneliner 慣例（refuse-and-guide 輸出格式）
+
+當 skill / agent 偵測到「該動 code 但 cwd 在 main」、或 propose / discuss 結束要 user 開新 session 接 apply 時，**MUST** 吐以下格式：
+
+```
+請執行：
+
+cd <worktree-absolute-path> && claude "<next-skill-invocation>"
+```
+
+- `<worktree-absolute-path>`：剛建好或既有的 worktree 絕對路徑（例 `<home>/offline/<consumer-b>-wt/fix-auth`）
+- `<next-skill-invocation>`：下一步要跑的 skill 加 argument（例 `/spectra-apply fix-auth`），**optional** — 純建 worktree 不知道下一步時省略，user 自己決定
+- **禁止**拆成「先 cd、再 claude、再輸入 command」三步指引 — user 痛點就是三跳
+
+Claude Code CLI 支援 `claude [prompt]` 啟動 session 時預填第一個 prompt（見 `claude --help`），所以 oneliner 物理可行；接續 session 第一個 turn 自動 dispatch 該 skill。
 
 ## §2 禁止 silent branch 建立
 

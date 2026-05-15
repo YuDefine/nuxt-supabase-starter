@@ -760,9 +760,33 @@ If no argument is provided, the workflow will extract requirements from conversa
     spectra park "<name>"
     ```
 
-    Inform the user that the change is parked and that running `/spectra-apply <change-name>` when ready will auto-unpark the change and start implementation.
+    **Pre-handoff: 自動準備 apply 用 worktree**（clade fork addition；not in upstream spectra）
 
-    If you are currently in Codex Plan Mode, also remind the user to switch the session to normal mode before running `/spectra-apply <change-name>`. This is only a reminder: do NOT try to use ExitPlanMode or EnterPlanMode, do NOT ask whether to switch modes, and do NOT invoke apply.
+    Per [[worktree-default]] §1, spectra-apply 必須在 isolated session worktree 跑（會寫 tracked product code）。Propose 結束時主動建好對應 worktree，user 才能一鍵接續 apply，不必再手動 `/wt`。
+
+    ```bash
+    node scripts/wt-helper.mjs add "<change-name>"
+    ```
+
+    Helper 行為與失敗處理見 `plugins/hub-core/skills/wt/SKILL.md`。若 helper fail with `Worktree path already exists`（slug 已存在，例如同名 change 之前建過、user 重跑 propose）→ 沿用既有 worktree 即可，視為成功；用 `node scripts/wt-helper.mjs list --json` 抓既有 path。其他 helper 錯誤 → 報錯但**仍**繼續吐下方 handoff message，附上錯誤摘要讓 user 手動處理。
+
+    **Handoff message（per [[worktree-default]] §1「oneliner 慣例」）**：
+
+    Inform the user that the change is parked and worktree is ready, **吐 oneliner**：
+
+    ```
+    Change `<change-name>` 已 park 完成；apply 用 worktree 已建好（或沿用既有）。
+
+    請執行：
+
+      cd <worktree-absolute-path> && claude "/spectra-apply <change-name>"
+    ```
+
+    `<worktree-absolute-path>` 從 wt-helper 輸出抓。Auto-unpark 由 `/spectra-apply` 內部處理。
+
+    **禁止**用「請 cd 到 X、再啟動 claude、再輸入 /spectra-apply Y」三步指引 — 那會讓使用者經歷三跳，違反 oneliner 慣例。
+
+    If you are currently in Codex Plan Mode, also remind the user to switch the session to normal mode before running the oneliner. This is only a reminder: do NOT try to use ExitPlanMode or EnterPlanMode, do NOT ask whether to switch modes, and do NOT invoke apply.
 
     The propose workflow ENDS here. Do NOT invoke `/spectra-apply`. Do NOT call **request_user_input** to ask whether to park or apply. This behavior is identical across Auto Mode, interactive mode, and any other agent mode — parking is unconditional and does not depend on `request_user_input` availability or UI auto-accept settings.
 

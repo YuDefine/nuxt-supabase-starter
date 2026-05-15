@@ -41,9 +41,9 @@ Helper 行為：
 - 若 `origin/main` 存在，跑 `git merge --ff-only origin/main` 拉最新投影層
 - 印出 path + branch + 開新 session 提示
 
-## Step 3 — 回報給 user
+## Step 3 — 回報給 user（oneliner 格式）
 
-把 helper output 原樣呈現，**加一句**明確指示：
+把 helper output 原樣呈現，**加一段** oneliner 形式的接續指引（per [[worktree-default]] §1「oneliner 慣例」）：
 
 ```
 Worktree 建好了：
@@ -51,13 +51,20 @@ Worktree 建好了：
   Path:   <path>
   Branch: session/<date>-<slug>
 
-請在新終端機開 AI Agent 或 Codex 到該路徑繼續：
+請執行：
 
-  cd <path>
-  # 然後啟動新 agent session
+  cd <path> && claude
+```
+
+若 `/wt <slug>` 是被其他 skill 內部呼叫且**有**明確的下一步 skill（例：spectra-apply 偵測 cwd 在 main 後內呼 wt，下一步要跑 `/spectra-apply <change-name>`），把該 skill invocation 接在後面：
+
+```
+  cd <path> && claude "/spectra-apply <change-name>"
+```
+
+`claude [prompt]` 啟動 session 時可預填第一個 prompt（見 `claude --help`），user 整段複製貼一次到位。
 
 當前 session 保持在 main worktree，繼續做你原本的事或結束。
-```
 
 ## 重要：絕對不要改當前 session 的 cwd
 

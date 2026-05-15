@@ -27,6 +27,49 @@ Implement tasks from a Spectra change.
 
 **Steps**
 
+0. **Worktree gate**（clade fork addition；not in upstream spectra）
+
+   Spectra-apply writes tracked product code, so per [[worktree-default]] §1 it **MUST** run in an isolated session worktree — multi-session 並行共用單一 working tree 會撞 staging / branch / WIP（見 worktree-default.md 開頭兩次真實事故）。Step 1 之前先 gate：
+
+   a. **Resolve change name early**（用 Step 1 同套規則 — argument > conversation context > `spectra list`）。Step 0 完成後 Step 1 可重用已解析的 name，不必再問。
+
+   b. **偵測 cwd**：
+
+      ```bash
+      git rev-parse --git-dir
+      ```
+
+      - 若 output 路徑含 `/worktrees/`（或 `git rev-parse --git-common-dir` ≠ `git rev-parse --git-dir`）→ cwd 已在某個 session worktree，**通過**，繼續 Step 1
+      - 否則 cwd 在 main，繼續 step c
+
+   c. **自動建 worktree**（idempotent）：
+
+      ```bash
+      node scripts/wt-helper.mjs add <change-name>
+      ```
+
+      wt-helper 用 change name 當 slug，內部 normalize（lowercase / 空白轉 `-` / collapse 重複 `-`）。Helper 行為與失敗處理見 `plugins/hub-core/skills/wt/SKILL.md`。
+
+      若 helper fail with `Worktree path already exists` → slug 對應的 worktree 已存在（前次 session 建過、未清掉），**沿用即可**，視為成功；用 `node scripts/wt-helper.mjs list --json` 抓既有 path。
+
+      其他 helper 錯誤 → 報錯並 STOP，**不要**降級回「在 main 跑」。
+
+   d. **吐 oneliner 並 STOP**（per [[worktree-default]] §1「oneliner 慣例」）：
+
+      ```
+      Spectra-apply 需要在 isolated worktree 跑（會寫 tracked product code，避免撞 staging / branch / WIP）。Worktree 已建好（或沿用既有）。
+
+      請執行：
+
+        cd <worktree-absolute-path> && claude "/spectra-apply <change-name>"
+      ```
+
+      `<worktree-absolute-path>` 從 wt-helper 輸出抓。`<change-name>` 是 Step 0a 已解析的 name。
+
+      **絕對不**在當前 session 跑 `cd` 繼續做事（mid-conversation 切 cwd 會壞 file watcher / Bash state，per `plugins/hub-core/skills/wt/SKILL.md` 「絕對不要改當前 session 的 cwd」規範）。
+
+   e. **Bypass 條件**：使用者**明確**訊息含「不要 worktree」「在 main 跑」「我知道風險」等字眼時，跳過 Step 0 直接 Step 1。**禁止** agent 自行判斷略過（包括 user 跑 `/spectra-apply` 本身不算明確 bypass — 那只是 invocation，不是 worktree 偏好）。
+
 1. **Select the change**
 
    If a name is provided, use it. Otherwise:
