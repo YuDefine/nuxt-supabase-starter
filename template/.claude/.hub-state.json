@@ -1,8 +1,8 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-16T14:59:42.625Z",
+  "syncedAt": "2026-05-16T15:05:02.376Z",
   "checksums": {
-    "rules/agent-routing.codex-watch-protocol.md": "987a16df03d2b2c3",
+    "rules/agent-routing.codex-watch-protocol.md": "651f5cefd6191297",
     "rules/agent-routing.md": "6fc1baf69bb8f33b",
     "rules/audit-pattern.md": "706d3ba1ac21f49f",
     "rules/code-style.md": "38ceec34dda19c3d",
@@ -12,7 +12,7 @@
     "rules/evlog-stream-extend.md": "f19b16e0543db1ed",
     "rules/fixtures-reference.md": "6617dc9558dc11de",
     "rules/follow-up-register.md": "4b59f08c794c49da",
-    "rules/goal-mode.md": "e24f6bc7f4f3162e",
+    "rules/goal-mode.md": "387efe160b5f3f5a",
     "rules/handoff.md": "d6a6498ebda10773",
     "rules/knowledge-and-decisions.md": "35f87be0b73f1716",
     "rules/logging.md": "02c281cd87c0169a",
@@ -20,7 +20,7 @@
     "rules/manual-review.data-readiness.md": "1002e0e02fb7cde8",
     "rules/manual-review.evidence.md": "69b00a653d2e2baf",
     "rules/manual-review.md": "fccc10b0af4560fa",
-    "rules/output-hygiene.md": "3c115ef62a2ef504",
+    "rules/output-hygiene.md": "a162df1b7f989ee6",
     "rules/proactive-skills.design-checkpoint.md": "dc94eb6d8d576d87",
     "rules/proactive-skills.ingest-triggers.md": "1950b59c41b0d2a4",
     "rules/proactive-skills.md": "7bf8a23e322f3dd8",
