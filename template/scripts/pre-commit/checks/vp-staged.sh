@@ -26,7 +26,6 @@ CLADE_MANAGED_PREFIXES=(
   '.claude/skills/'
   '.claude/hooks/'
   '.claude/commands/'
-  '.claude/agents/'
   '.codex/'
   'codex/'
   '.agents/'
