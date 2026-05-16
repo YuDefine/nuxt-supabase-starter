@@ -93,16 +93,27 @@ export default defineConfig({
     ],
   },
   staged: {
-    // *.d.ts 在 lint.ignorePatterns 內，全 .d.ts staged 時 vp lint 會以
-    // 'No files found to lint' exit 1（vp 0.1.20 仍在，與 *.md 那邊 fmt 的
-    // 'All matched files may have been excluded' 對稱 bug）。
-    // 折衷同 *.md：lintable 為 0 時跳過 lint，仍跑 fmt（fmt 對 .d.ts 不 ignore）。
+    // *.d.ts 在 lint.ignorePatterns 內、`.agents/skills/**/*.umd.js` 在
+    // fmt.ignorePatterns 內。staged 全落在這些 ignore 路徑時 vp lint / fmt
+    // 都會以 'No files found to lint' / 'All matched files may have been
+    // excluded by ignore rules' exit 1（vp 0.1.20 仍在），把 pre-commit
+    // 整個擋掉。
+    // 折衷同 *.md：先 filter，0 個就跳過該命令，避免 vp 對空陣列炸。
     '*.{js,ts,vue}': (files) => {
-      const lintable = files.filter((f) => !f.endsWith('.d.ts'))
+      const lintable = files.filter(
+        (f) =>
+          !f.endsWith('.d.ts') &&
+          !f.includes('/.claude/skills/') &&
+          !f.includes('/.agents/') &&
+          !f.includes('/.codex/')
+      )
+      const fmtable = files.filter(
+        (f) => !f.includes('/.claude/') && !f.includes('/.agents/') && !f.includes('/.codex/')
+      )
       const cmds: string[] = []
       if (lintable.length > 0) cmds.push(`vp lint --fix ${lintable.join(' ')}`)
-      cmds.push(`vp fmt ${files.join(' ')}`)
-      return cmds
+      if (fmtable.length > 0) cmds.push(`vp fmt ${fmtable.join(' ')}`)
+      return cmds.length > 0 ? cmds : ['true']
     },
     // .md 過濾 clade LOCKED 投影路徑（.claude/{rules,skills,hooks,agents,commands}、
     // .agents/、.codex/）；這些檔案被 fmt.ignorePatterns 全部 filter 後給 vp fmt 會以
