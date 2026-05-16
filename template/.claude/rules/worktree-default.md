@@ -184,7 +184,7 @@ Subagent 在 worktree 內跑爆（test fail / abort / 沒 commit 任何東西）
 殘留場景只剩一條：**主線在 main 上累積了當前 session 的 dirty WIP（不是別 session 的）+ Stop hook 攔住 + 還要繼續做**。這時：
 
 - 若剩下的事可以靠 `/wt` 隔離（例如「再加一個 feature」），跑 `/wt <剩下要做的事>`。新 worktree 從 main HEAD 開，看不到主線的 dirty WIP，互不干擾；squash 回來時若不撞同檔就乾淨整合，撞了走 §5 squash conflict fallback。
-- 若剩下的事必須在 main 直接處理（罕見），escalate to `/handoff`（Mode A 自動偵測，per [[handoff]]）。HANDOFF.md `## In Progress` 條目應含：Stop hook 攔點 + missing acceptance criterion + 當前 session 改過的檔案清單 + 下一 session oneliner。
+- 若剩下的事必須在 main 直接處理（罕見），escalate to `/handoff`（Mode A 自動偵測，per [[handoff]]）。HANDOFF.md `## In Progress` 條目應含：Stop hook 攔點 + missing acceptance criterion + 當前 session 改過的檔案清單 + 下一 session 接手指引（直接從 main 跑 `/<next-skill> <change-name>`；apply / ingest / debug 內建 worktree dispatch，archive 直接從 main 跑）。
 
 **移除**：先前的 §8 分支 A（建 worktree 並切 cwd 繼續）— 主線不切 cwd，新 model 沒這條路徑。先前的 §8 分支 C（`/handoff` 內呼 `/wt --dispatch-from-handoff` 路徑）— flag 已移除，dispatch 改走新 `/wt <slug>: /<next-skill>` form per [[wt]] Form 3。
 
