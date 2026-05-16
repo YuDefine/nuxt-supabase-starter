@@ -2665,6 +2665,9 @@ export function renderReviewHtml(): string {
     .copy-handoff-btn:hover {
       background: color-mix(in srgb, var(--accent) 18%, var(--panel));
     }
+    .copy-handoff-btn[hidden] {
+      display: none;
+    }
     .copy-handoff-btn.block {
       display: inline-flex;
       margin-top: 10px;
@@ -3406,6 +3409,70 @@ export function renderReviewHtml(): string {
           '回覆時請先說「我看到的現況是 ...」再給 bug 清單（區 A，若有）與 evidence 補齊計劃（區 B，若有）。',
         );
         return lines.join('\\n');
+      } else if (kind === 'feedback-given-group') {
+        // Group-level prompt：user 已對 N 個 change 的 items 標 issue + 寫好回饋，
+        // 想請 Claude 一次性讀全部 issue 註記做 root cause + 修法路由。
+        // 與 not-ready-group 一樣跳開 handoffHeader/footer 自組（涉及多 change）。
+        const list = Array.isArray(ctx.feedbackChanges) ? ctx.feedbackChanges : [];
+        const repoName = state.repoName || '(unknown)';
+        const repoRoot = state.repoRoot || '(unknown)';
+        const lines = [
+          '我在 consumer repo「' + repoName + '」（路徑：' + repoRoot + '）',
+          '跑 \`pnpm review:ui\` 做 spectra 人工檢查，已對 ' + list.length + ' 張 change 的 items 標 \`issue\` 並寫好回饋意見，',
+          '請逐張讀 \`openspec/changes/<change>/tasks.md\` 把所有 \`（issue: ...）\` 註記抓出來做 root cause 分析 + 修法路由。',
+          '',
+          '## 環境',
+          '- consumer: ' + repoName,
+          '- repo root: ' + repoRoot,
+          '',
+          '## 命中的 changes（共 ' + list.length + ' 張）',
+        ];
+        for (const c of list) {
+          lines.push('- \`' + c.name + '\` — ' + (c.issued || 0) + ' 個 issue');
+        }
+        lines.push(
+          '',
+          '## 相關 rules（必讀）',
+          '- .claude/rules/manual-review.md（issue 註記語意 + Pre-Review Data Readiness）',
+          '- .claude/rules/tech-debt-routing.md（修法路由：clade vs consumer / TD vs spec / spectra-ingest）',
+          '- openspec/AGENTS.md（spectra 工作流）',
+          '',
+          '## 你要做的事',
+          '',
+          '對每張 change 跑下面流程：',
+          '',
+          '1. 讀 \`openspec/changes/<change>/tasks.md\`，把所有 \`- [x] ... （issue: <note>）\` 行抓出來（一張 change 可能多個 issue）',
+          '2. 對**每個 issue 註記**做 root cause 分析：',
+          '   - 用 codebase-memory-mcp（search_graph / trace_path / get_code_snippet）定位該 item 對應的 feature 在哪實作',
+          '   - 從 issue note 描述的 symptom 反推根因（不要急著看 symptom）',
+          '   - 必要時補讀 \`proposal.md\` 看當初設計意圖',
+          '3. 依 \`.claude/rules/tech-debt-routing.md\` 把每個 issue 路由到正確的修法路徑：',
+          '   - **(A) spec / 設計層級缺漏** → \`/spectra-ingest\` 改 proposal.md / tasks.md',
+          '   - **(B) code bug 影響窄、可延後** → 登 \`docs/tech-debt.md\` 開 TD-NNN',
+          '   - **(C) 純 bug 當下可修** → 提方案等確認後改',
+          '   - **(D) 根因在 clade 投影層（rules / skills / vendor scripts）** → 提示要去 \`~/offline/clade\` 改源，不要在 consumer 改',
+          '   - **(E) false positive / 我誤標 issue** → 建議改回 OK，說明理由',
+          '',
+          '## 輸出格式',
+          '',
+          '每張 change 一段，結構：',
+          '',
+          '\`\`\`',
+          '### <change-name>',
+          '',
+          '- **#<item-id>** — <一句話描述 issue>',
+          '  - root cause: <分析結果，附 file:line 證據>',
+          '  - 路由: (A) / (B) / (C) / (D) / (E)',
+          '  - 建議: <具體要動的檔 / 開 TD / 改 proposal / 改回 OK 的理由>',
+          '\`\`\`',
+          '',
+          '## 規矩',
+          '- **MUST** 用 codebase-memory-mcp 探索；graph 未 index 先跑 index_repository',
+          '- Grep / Glob / Read 只用於非程式碼檔（.md / config / .env）',
+          '- **plan-first**：列完所有 issue 的分析 + 路由建議後**停下**等我確認，不要直接動手改檔',
+          '- 路由到 (D) clade 投影層的，列清楚但**不要**自己跨 repo 動手——那要切到 clade session 處理',
+        );
+        return lines.join('\\n');
       } else if (kind === 'evidence-fillin-item') {
         const item = ctx.item || {};
         const missingKinds = Array.isArray(ctx.missingKinds) ? ctx.missingKinds : [];
@@ -3616,12 +3683,18 @@ export function renderReviewHtml(): string {
     function renderChanges() {
       const ready = [];
       const notReady = [];
+      const feedbackGiven = [];
       const done = [];
       for (const change of state.changes) {
         const kind = changeCardKind(change);
         const evidenceMissingCount = Array.isArray(change.evidenceMissing) ? change.evidenceMissing.length : 0;
         if (kind === 'done') done.push(change);
         else if ((change.readinessHits || 0) > 0 || evidenceMissingCount > 0) notReady.push(change);
+        else if (
+          kind === 'issue' &&
+          (change.malformed || 0) === 0 &&
+          change.pending === (change.issued || 0)
+        ) feedbackGiven.push(change);
         else ready.push(change);
       }
       const blocks = [];
@@ -3641,6 +3714,17 @@ export function renderReviewHtml(): string {
             '<button class="copy-handoff-btn group" data-group-handoff="not-ready" type="button" title="複製健康檢查 prompt：讓 Claude 逐張讀 proposal/tasks 分類，只回報 bug，不徒增 noise">📋 健康檢查 prompt</button>' +
           '</div>' +
           notReady.map(renderChangeCard).join('') +
+          '</div>'
+        );
+      }
+      if (feedbackGiven.length) {
+        blocks.push(
+          '<div class="change-group">' +
+          '<div class="change-group-heading with-action">' +
+            '<span>📝 已回饋完畢 · ' + feedbackGiven.length + '</span>' +
+            '<button class="copy-handoff-btn group" data-group-handoff="feedback-given" type="button" title="複製分析 prompt：讓 Claude 讀我留在 tasks.md 的 issue 回饋，做 root cause 分析、提修法、依 tech-debt-routing 路由">📋 分析回饋 prompt</button>' +
+          '</div>' +
+          feedbackGiven.map(renderChangeCard).join('') +
           '</div>'
         );
       }
@@ -3671,6 +3755,14 @@ export function renderReviewHtml(): string {
               return (c.readinessHits || 0) > 0;
             });
             copyHandoffPrompt('not-ready-group', { notReadyChanges: notReadyChanges }, '健康檢查（' + notReadyChanges.length + ' change）');
+          } else if (kind === 'feedback-given') {
+            const feedbackChanges = (state.changes || []).filter(function (c) {
+              if ((c.malformed || 0) > 0) return false;
+              if ((c.readinessHits || 0) > 0) return false;
+              const issued = c.issued || 0;
+              return issued > 0 && c.pending === issued;
+            });
+            copyHandoffPrompt('feedback-given-group', { feedbackChanges: feedbackChanges }, '分析回饋（' + feedbackChanges.length + ' change）');
           }
         });
       });
