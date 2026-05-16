@@ -1,12 +1,12 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-16T15:05:02.376Z",
+  "syncedAt": "2026-05-16T15:09:13.929Z",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "651f5cefd6191297",
     "rules/agent-routing.md": "6fc1baf69bb8f33b",
     "rules/audit-pattern.md": "706d3ba1ac21f49f",
     "rules/code-style.md": "38ceec34dda19c3d",
-    "rules/commit.md": "73dcbccb014ed295",
+    "rules/commit.md": "acb20250453aa5f0",
     "rules/error-handling.md": "041428e045f73d9d",
     "rules/evlog-adoption.md": "a479a81bdfeeb201",
     "rules/evlog-stream-extend.md": "f19b16e0543db1ed",
@@ -65,7 +65,7 @@
     "skills/spectra-ingest/SKILL.md": "f87f4e0ecbb0f4ea",
     "skills/spectra-propose/SKILL.md": "40b37e546fb1ad8b",
     "skills/spectra-verify/SKILL.md": "86cc572f903f1df3",
-    "commands/commit.md": "da0bd1a9aed13a9d",
+    "commands/commit.md": "22e9726e0a47c3a0",
     "commands/db-migration.md": "e5c82dd3565bce47",
     "commands/doc-sync.md": "cdad8d95f0d048bf",
     "agents/check-runner.md": "e6fb8dac01cc591c",

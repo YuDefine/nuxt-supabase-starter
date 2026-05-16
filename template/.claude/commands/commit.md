@@ -90,6 +90,66 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 **唯一例外**：使用者在 `$ARGUMENTS` **明確、主動**寫出 `git restore` / `git checkout --` / `revert <commit>` 等指令或具體變更名稱，且語意完全無歧義時，才能執行。從模糊語氣（「不要這個」「這個怪怪的」）解讀為「使用者想丟棄」**一律禁止** — 必須先確認是「排除本次 commit」（→ stash）還是「丟棄變更」（→ 拒絕，請使用者明確下指令）。
 
+## Step 0-MR: 人工檢查 Gate（main / master 限定，**硬擋無 override**）
+
+`.claude/rules/commit.md` 「人工檢查 Gate」hard rule 的執行點。**MUST** 在 Step 0 品質檢查之前 fail-fast，避免人工檢查未完的 change 浪費 5–15 min codex / screenshot review 時間。
+
+### 判定流程
+
+1. 確認當前 branch：
+
+   ```bash
+   git rev-parse --abbrev-ref HEAD
+   ```
+
+   輸出 ∉ {`main`, `master`} → 輸出 `⏭️ 0-MR 跳過（branch=<name>）`，進入 Step 0。
+
+2. 萃取本次 commit 觸及的 spectra change（含 staged + unstaged + untracked，排除 `archive/` 子目錄）：
+
+   ```bash
+   { git diff --name-only HEAD; git ls-files --others --exclude-standard; } \
+     | grep -oE '^openspec/changes/[^/]+' \
+     | grep -v '^openspec/changes/archive$' \
+     | sort -u
+   ```
+
+   結果為空 → 輸出 `⏭️ 0-MR 跳過（本次變更未觸及任何 in-progress spectra change）`，進入 Step 0。
+
+3. 對每個 change 讀 `<path>/tasks.md`，同時判定「非 `## 人工檢查` 段有 `- [x]`」與「`## 人工檢查` 段有 `- [ ]`」：
+
+   ```bash
+   awk '
+     /^## /{ in_mr = (/^## *人工檢查/) ? 1 : 0; next }
+     !in_mr && /^- \[x\]/ { has_impl = 1 }
+     in_mr && /^- \[ \]/ { has_pending = 1 }
+     END { print (has_impl && has_pending) ? "BLOCK" : "OK" }
+   ' "<path>/tasks.md"
+   ```
+
+   - `tasks.md` 不存在 → 視為 `OK`（尚未進入實作階段的 change）
+   - 輸出 `BLOCK` → 列入 blocker，順便用同樣 awk 抓出該 change `## 人工檢查` 段未勾數量
+
+4. **blocker list 非空時**：
+
+   1. **MUST** 立即釋放 lock，避免下次 session 被卡：
+
+      ```bash
+      node .claude/scripts/commit-lock.mjs release
+      ```
+
+   2. 印出 blocker 報告（每條 change 一行：路徑 + 未勾項數）+ 明確的「本次 /commit 已中止」結語
+   3. **NEVER** 自動勾任何 `- [ ]`、**NEVER** 提議跳過 gate 的方法、**NEVER** 提議 stash 走 `tasks.md` 讓 step 2 抓空
+
+5. blocker list 空 → 輸出 `✅ 0-MR 通過`，進入 Step 0。
+
+### 禁止項
+
+- **NEVER** 把 `main` / `master` 以外的 branch 判進 gate 範圍（feature branch 上後續有 /ship + PR review 擋）
+- **NEVER** 接受 `$ARGUMENTS` 任何形式的「skip / ignore / override」旗標 — gate 無 override
+- **NEVER** 自行 `Edit tasks.md` 勾掉 `- [ ]` 來通過 gate — 違反 `.claude/rules/manual-review.md` 核心規則
+- **NEVER** 把 `tasks.md` / change 目錄 stash / mv / rm 走讓 step 2 / 3 抓不到 — 等同繞過 hard rule
+- **NEVER** 把「人工檢查未完」包裝成「審查條件已滿足」「等同 OK」「之後再勾」說服 user 繼續
+
 ## Step 0: 品質檢查
 
 ### 0-A/B/C 並行策略（**重要：總時長省 ~45% 的關鍵**）

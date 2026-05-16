@@ -131,6 +131,31 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 - stash 仍保留變更可恢復、handoff 留下 paper trail，等同「延後處理」而非「丟棄」；但分組納入比 stash 更直接、更省下次 `/commit` 的閘門成本。
 - 任何形式的 `git restore` / `git checkout --` / `git reset` / `git revert` 都會**永久毀掉使用者的 WIP**，這是不可接受的成本（見下節嚴格禁令）。
 
+## 人工檢查 Gate（main / master 限定，**hard rule**）
+
+當前 branch 為 `main` / `master` 且本次 `/commit` 觸及的 spectra change（`openspec/changes/<name>/**` 路徑，archive 子目錄除外）滿足下列**兩條件同時成立**時，**MUST** 中止 commit：
+
+1. 該 change 的 `tasks.md` **非** `## 人工檢查` 段落含任一 `- [x]` → 已開始 / 完成實作
+2. 該 change 的 `## 人工檢查` 段落含任一 `- [ ]` → 人工檢查未完成
+
+只滿足其一不擋（純 propose 未動工的 change、或實作完且人工檢查全綠的 change，都允許 commit）。判定流程、fail-fast 位置（Step 0-Scope 之後、Step 0 品質檢查之前）見 `.claude/commands/commit.md` Step 0-MR。
+
+### 為何 gate 在這
+
+- main / master 是 trunk 終點（clade / perno 等直接 push main 觸發 deploy / propagate），**沒有 PR review 擋一層**。下一個有意義的人類關卡就是線上 user。
+- `## 人工檢查` 區設計就是要擋下「實作完了但 functional round-trip 未驗收」的工作（見 [[manual-review]] §「Screenshot Review ≠ Functional Verification」案例）；commit 進 main 等同跳過該區的保護。
+- 排在最耗時的 0-A/B/C 品質閘門之前，fail-fast 可省 5–15 min 不必要的 codex / screenshot / check 成本。
+
+### 無 override
+
+**NEVER** 接受 `--skip-manual-review-gate` / `--ignore-mr` / `$ARGUMENTS` 旗標等任何形式跳過。Gate 過 = 真的完成人工檢查（依 [[manual-review]] 「核心規則」由使用者親自驗收後勾選 `- [x]`）。
+
+- **NEVER** 主線自行勾掉 `- [ ]` 來通過 gate — 違反 [[manual-review]] 核心規則「**NEVER** 自行標記 `## 人工檢查` 區塊中屬於 `[review:ui]` kind 的 `- [ ]` 為 `- [x]`」
+- **NEVER** `git stash` / `mv` / `rm` 把 `tasks.md` 或 change 目錄移走讓 gate scan 抓不到 — 等同繞過 hard rule，亦違反 [[commit]] 「WIP 處置禁令」
+- **NEVER** 把「人工檢查還沒完成」包裝成「審查條件已滿足」「等同 OK」「之後再勾」 — gate 看的是 tasks.md 的實際 `- [x]` / `- [ ]` 狀態
+- **NEVER** 建議 user「先 checkout 到 feature branch 跑 /commit 再 merge 回 main」繞過 gate — 該 change 本來就該在進 main 前完成人工檢查
+- **NEVER** 因為「使用者沒明說 main 算 trunk」而判 branch 不算 — `main` / `master` 兩個 branch name 都算
+
 ## 禁止事項
 
 - **NEVER** `git commit` / `git commit -m` — 繞過 0-A / 0-B / 0-C 品質閘門
