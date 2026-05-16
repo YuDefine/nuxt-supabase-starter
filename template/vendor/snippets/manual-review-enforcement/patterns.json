@@ -25,7 +25,7 @@
       "description": "[review:ui] / [verify:ui] item 描述未出現具體 URL（http:// / https:// / /xxx path）— 只說『kiosk 頁』『dashboard』『設定頁』不算",
       "regex": "^\\s*-\\s*\\[[ x]\\]\\s*#[0-9.]+\\s*\\[(review|verify):ui\\]",
       "regexFlags": "",
-      "requiresAbsenceOf": "https?://|/[a-z][a-z0-9-]*(/|\\s|$)",
+      "requiresAbsenceOf": "https?://|/[a-z][a-z0-9-]*(/|\\s|`|：|。|，|；|$)",
       "anchor": "manual-review.md#通則",
       "remediation": "Add a specific URL (e.g., http://localhost:8787/kiosk/workstation or /admin/kiosk-tokens?card_uid=...) so the reviewer can navigate directly. Generic labels like『kiosk page』『dashboard』『設定頁』are insufficient."
     },

@@ -1,14 +1,9 @@
----
-description: 人工檢查規則——`## 人工檢查` 只能在截圖驗證並取得使用者確認後勾選，不得由 agent 自行代勾
-globs: ['openspec/changes/**/tasks.md', 'docs/manual-review-archive.md']
----
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/manual-review.md
 Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
-
 
 # 人工檢查（Manual Review）
 

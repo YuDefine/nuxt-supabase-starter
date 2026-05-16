@@ -271,7 +271,10 @@ async function cmdCleanup(slug, opts) {
     try {
       const out = git(['diff', '--name-only', `main..${branchName}`], { cwd: consumerRoot })
       branchFiles = out.split('\n').filter(Boolean)
-    } catch {
+    } catch (err) {
+      console.error(
+        `warn: could not list files in main..${branchName} (${err?.message ?? err}); skipping squash-merge failure detection`
+      )
       branchFiles = []
     }
     const unlanded = []
