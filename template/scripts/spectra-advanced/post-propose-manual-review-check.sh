@@ -195,6 +195,9 @@ for i in $(seq 0 $((PATTERN_COUNT - 1))); do
   REQ_PRESENCE=$(jq -r ".patterns[$i].requiresPresenceOf // \"\"" "$PATTERNS_FILE")
   REQ_ABSENCE=$(jq -r ".patterns[$i].requiresAbsenceOf // \"\"" "$PATTERNS_FILE")
   APPLIES_TO=$(jq -r ".patterns[$i].appliesTo // \"\"" "$PATTERNS_FILE")
+  # requiresKindIn: pipe-joined allowed kinds (e.g. "review:ui" or "review:ui|verify:ui").
+  # Empty string means no kind filter.
+  KIND_FILTER=$(jq -r ".patterns[$i].requiresKindIn // [] | join(\"|\")" "$PATTERNS_FILE")
 
   # Build grep flags. `i` flag → case-insensitive.
   grep_flags='-E'
@@ -230,6 +233,17 @@ for i in $(seq 0 $((PATTERN_COUNT - 1))); do
     # Primary regex match.
     if ! printf '%s\n' "$line" | grep $grep_flags -q -- "$REGEX"; then
       continue
+    fi
+
+    # requiresKindIn: pattern only fires when item's leading kind marker is in the allowed list.
+    # Example: MULTI_STEP_NOT_SCOPED uses requiresKindIn: ["review:ui"] so it doesn't over-fire
+    # on [verify:api] / [verify:api+ui] / [verify:e2e] items (verify channels — agent runs the
+    # round-trip itself, not the user; arrow chains there describe agent-verifiable evidence).
+    if [ -n "$KIND_FILTER" ]; then
+      ITEM_KIND=$(printf '%s\n' "$line" | grep -oE '\[(review|verify|discuss):[a-z+]+\]' | head -1 | tr -d '[]')
+      if [ -z "$ITEM_KIND" ] || ! printf '%s\n' "$ITEM_KIND" | grep -qE "^(${KIND_FILTER})$"; then
+        continue
+      fi
     fi
 
     # For parent items, evaluate requiresPresenceOf / requiresAbsenceOf against

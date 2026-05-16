@@ -39,6 +39,7 @@ export interface ManualReviewPatternEntry {
   requiresPresenceOf?: string
   requiresAbsenceOf?: string
   appliesTo?: string
+  requiresKindIn?: string[]
 }
 
 let cachedPatterns: ManualReviewPatternEntry[] | null = null
@@ -121,6 +122,15 @@ export function evaluateManualReviewPatterns(
       continue
     }
     if (!primaryRe.test(firstLine)) continue
+    // requiresKindIn: pattern only fires when item's leading kind marker is in the allowed list.
+    // Example: MULTI_STEP_NOT_SCOPED uses requiresKindIn: ["review:ui"] so it doesn't over-fire
+    // on [verify:api] / [verify:api+ui] / [verify:e2e] items (verify channels — agent runs the
+    // round-trip itself, not the user; arrow chains there describe agent-verifiable evidence).
+    if (p.requiresKindIn && p.requiresKindIn.length > 0) {
+      const kindMatch = firstLine.match(/\[((?:review|verify|discuss):[a-z+]+)\]/)
+      const kind = kindMatch ? kindMatch[1] : null
+      if (!kind || !p.requiresKindIn.includes(kind)) continue
+    }
     const scope = isParent ? block : firstLine
     if (p.requiresPresenceOf) {
       try {
