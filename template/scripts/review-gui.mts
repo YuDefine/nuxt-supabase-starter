@@ -2737,6 +2737,7 @@ export function renderReviewHtml(): string {
       <section class="review-pane">
         <div class="toolbar">
           <h2 id="currentTitle">選擇一個 change 開始</h2>
+          <button id="evidenceSweepButton" class="copy-handoff-btn" type="button" hidden title="複製整張 change 的補 evidence prompt — 讓新 Claude session 一次跑 /spectra-apply Step 8a 補齊所有缺項">📋 補齊全 change 缺失 evidence</button>
           <button id="reloadButton" type="button" title="重新載入目前 change">重新載入</button>
         </div>
         <div id="banner" class="banner"></div>
@@ -2811,6 +2812,7 @@ export function renderReviewHtml(): string {
       changeStatus: document.getElementById('changeStatus'),
       changeList: document.getElementById('changeList'),
       currentTitle: document.getElementById('currentTitle'),
+      evidenceSweepButton: document.getElementById('evidenceSweepButton'),
       reloadButton: document.getElementById('reloadButton'),
       banner: document.getElementById('banner'),
       taskList: document.getElementById('taskList'),
@@ -3315,6 +3317,75 @@ export function renderReviewHtml(): string {
           '回覆時請先說「我看到的現況是 ...」再給 bug 清單（若有）。',
         );
         return lines.join('\\n');
+      } else if (kind === 'evidence-fillin-item') {
+        const item = ctx.item || {};
+        const missingKinds = Array.isArray(ctx.missingKinds) ? ctx.missingKinds : [];
+        const changeName = change ? change.name : '<change-name>';
+        const labelFor = function (k) {
+          if (k === 'e2e') return '- \`[verify:e2e]\` — 需要 Playwright spec round-trip';
+          if (k === 'api') return '- \`[verify:api]\` — 需要 HTTP round-trip evidence';
+          if (k === 'ui') return '- \`[verify:ui]\` — 需要 final-state screenshot + DOM observation';
+          return '- (unknown channel: ' + k + ')';
+        };
+        const channelLines = missingKinds.map(labelFor).join('\\n') || '- (無)';
+        body = [
+          '## 問題：人工檢查 item 缺 verify 證據（review:ui 顯示 evidence missing）',
+          '',
+          'Item：',
+          '- id: ' + (item.id || '(unknown)'),
+          '- description: ' + (item.description || '(無)'),
+          '',
+          '缺的 channel（共 ' + missingKinds.length + ' 個）：',
+          channelLines,
+          '',
+          '請依 \`/spectra-apply\` skill **Step 8a Verify Channel Pass** 對這個 item 補齊 evidence：',
+          '',
+          '1. Pre-verify baseline check（依該 channel）：',
+          '   - \`[verify:e2e]\`：Playwright config + e2e fixtures 必須存在',
+          '   - \`[verify:api]\`：\`__test-login\` 或等價 session bypass route 必須存在',
+          '   - \`[verify:ui]\`：\`supabase/seed.sql\` 或 seed 等價檔必須存在',
+          '   - 缺 baseline → **STOP**，回報 user 補齊；**NEVER** 降級 channel',
+          '',
+          '2. 依 channel 執行（cookbook 在 \`<clade-vendor>/snippets/verify-channels/\`）：',
+          '   - \`[verify:e2e]\`：寫並跑 \`e2e/verify/' + changeName + '/<topic>.spec.ts\` → pass 後 Edit tasks.md 加 \`(verified-e2e: <ISO-8601> spec=... trace=...)\`',
+          '   - \`[verify:api]\`：跑 HTTP round-trip → pass 後 Edit tasks.md 加 \`(verified-api: <ISO-8601> METHOD URL STATUS[ body=<sha256-12chars>])\`',
+          '   - \`[verify:ui]\`：default 走 codex dispatcher（\`node <clade-vendor>/scripts/codex-dispatch-screenshot-verify.mjs --change ' + changeName + ' --consumer-path . --dev-server-url <url> --items-json <items.json>\`）；fallback 走 \`screenshot-review\` subagent → PASS 後 Edit tasks.md 加 \`(verified-ui: <ISO-8601> screenshot=screenshots/local/' + changeName + '/#' + (item.id || '<id>') + '-final.png[ dom=<obs>])\`',
+          '',
+          '3. 多 channel 順序 **MUST** e2e → api → ui',
+          '',
+          '4. evidence 通不過：保留 \`[ ]\` + 寫 \`（issue: ...）\` 或回報 blocker；**NEVER** 寫不成功的 \`(verified-*:)\` annotation',
+          '',
+          '完成後 review:ui 對應 panel 會從 evidence missing 改顯示 evidence link。',
+        ].join('\\n');
+      } else if (kind === 'evidence-fillin-change') {
+        const pairs = Array.isArray(ctx.missing) ? ctx.missing : [];
+        const pairLines = pairs.map(function (p) {
+          const desc = p.description ? ' — ' + p.description : '';
+          return '- ' + p.itemId + ' [' + (p.kinds || []).join(' + ') + ']' + desc;
+        }).join('\\n') || '- (無)';
+        body = [
+          '## 問題：人工檢查整張 change 多項 item 缺 verify 證據（review:ui 全 change sweep）',
+          '',
+          '掃了當前 change 的 \`## 人工檢查\`，下列 item × channel 缺 evidence（共 ' + pairs.length + ' pair）：',
+          '',
+          pairLines,
+          '',
+          '請依 \`/spectra-apply\` skill **Step 8a Verify Channel Pass** 一次補齊所有缺項：',
+          '',
+          '1. 先做整批 pre-verify baseline check（依出現的 channel 種類）：',
+          '   - 有 \`[verify:e2e]\`：確認 Playwright config + e2e fixtures',
+          '   - 有 \`[verify:api]\`：確認 \`__test-login\` 或等價 session bypass route',
+          '   - 有 \`[verify:ui]\`：確認 \`supabase/seed.sql\` 或 seed 等價檔',
+          '   - 缺 baseline → **STOP**，回報 user 補齊；**NEVER** 降級 channel',
+          '',
+          '2. 對每個 item 依 e2e → api → ui 順序補對應 evidence；每完成一個 channel 立刻 Edit tasks.md 寫對應 \`(verified-*:)\` annotation（不要等到最後一起寫）',
+          '',
+          '3. 全部完成後請 user 在 review:ui 重新整理；含 \`verify:ui\` 的 item checkbox 仍保留 \`[ ]\` 等 user 在 GUI 視覺確認',
+          '',
+          '4. 任一 channel 通不過 → 保留 \`[ ]\` + 寫 \`（issue: ...）\`；**NEVER** 寫不成功的 \`(verified-*:)\` annotation',
+          '',
+          'Cookbook 與範本：\`<clade-vendor>/snippets/verify-channels/README.md\`',
+        ].join('\\n');
       } else {
         body = '## 問題\\n\\n(unknown kind: ' + kind + ')';
       }
@@ -3546,6 +3617,46 @@ export function renderReviewHtml(): string {
       }
       renderTasks();
       renderThumbs();
+      updateEvidenceSweepButton();
+    }
+
+    function computeMissingEvidence(change) {
+      const items = (change && change.items) || [];
+      const checks = [
+        { kind: 'verify:e2e', tag: 'e2e', listKey: 'verifiedE2eList', singleKey: 'verifiedE2e' },
+        { kind: 'verify:api', tag: 'api', listKey: 'verifiedApiList', singleKey: 'verifiedApi' },
+        { kind: 'verify:ui', tag: 'ui', listKey: 'verifiedUiList', singleKey: 'verifiedUi' },
+      ];
+      const byItem = new Map();
+      for (const item of items) {
+        if (!item || item.checked) continue;
+        const kinds = itemKinds(item);
+        for (const c of checks) {
+          if (!kinds.includes(c.kind)) continue;
+          const list = annotationList(item, c.listKey, c.singleKey);
+          if (list.length) continue;
+          if (!byItem.has(item.id)) byItem.set(item.id, { itemId: item.id, description: item.description || '', kinds: [], item: item });
+          byItem.get(item.id).kinds.push(c.tag);
+        }
+      }
+      return Array.from(byItem.values());
+    }
+
+    function updateEvidenceSweepButton() {
+      if (!el.evidenceSweepButton) return;
+      const change = state.current;
+      if (!change) {
+        el.evidenceSweepButton.hidden = true;
+        return;
+      }
+      const missing = computeMissingEvidence(change);
+      const pairCount = missing.reduce(function (acc, m) { return acc + m.kinds.length; }, 0);
+      if (!pairCount) {
+        el.evidenceSweepButton.hidden = true;
+        return;
+      }
+      el.evidenceSweepButton.hidden = false;
+      el.evidenceSweepButton.textContent = '📋 補齊全 change 缺失 evidence (' + pairCount + ')';
     }
 
     function itemKinds(item) {
@@ -3615,8 +3726,15 @@ export function renderReviewHtml(): string {
       return 'status-neutral';
     }
 
-    function renderEvidenceMissing() {
-      return '<div class="evidence-panel evidence-missing">evidence missing — run /spectra-apply Step 8a</div>';
+    function renderEvidenceMissing(item, kind) {
+      const itemId = item && item.id ? item.id : '';
+      const buttonHtml = itemId
+        ? '<button class="copy-handoff-btn inline" data-handoff="evidence-fillin-item" data-id="' + esc(itemId) + '" data-evidence-kind="' + esc(kind || '') + '" type="button" title="複製 handoff prompt 給新 Claude session 跑 /spectra-apply Step 8a 補齊這項 verify evidence">📋 補 evidence prompt</button>'
+        : '';
+      return '<div class="evidence-panel evidence-missing">' +
+          '<span>evidence missing — run /spectra-apply Step 8a</span>' +
+          buttonHtml +
+        '</div>';
     }
 
     function annotationList(item, listKey, singleKey) {
@@ -3629,7 +3747,7 @@ export function renderReviewHtml(): string {
 
     function renderE2eEvidence(item, title) {
       const list = annotationList(item, 'verifiedE2eList', 'verifiedE2e');
-      if (!list.length) return (title ? '<h3>' + esc(title) + '</h3>' : '') + renderEvidenceMissing();
+      if (!list.length) return (title ? '<h3>' + esc(title) + '</h3>' : '') + renderEvidenceMissing(item, 'e2e');
       const head = title ? '<h3>' + esc(title) + '</h3>' : '';
       return head + list.map(function(evidence, idx) {
         return '<div class="evidence-panel">' +
@@ -3643,7 +3761,7 @@ export function renderReviewHtml(): string {
 
     function renderApiEvidence(item, title) {
       const list = annotationList(item, 'verifiedApiList', 'verifiedApi');
-      if (!list.length) return (title ? '<h3>' + esc(title) + '</h3>' : '') + renderEvidenceMissing();
+      if (!list.length) return (title ? '<h3>' + esc(title) + '</h3>' : '') + renderEvidenceMissing(item, 'api');
       const head = title ? '<h3>' + esc(title) + '</h3>' : '';
       return head + list.map(function(evidence, idx) {
         const body = evidence.body ? '<p>body: <code>' + esc(evidence.body) + '</code></p>' : '';
@@ -3658,7 +3776,7 @@ export function renderReviewHtml(): string {
 
     function renderUiEvidence(item, title) {
       const list = annotationList(item, 'verifiedUiList', 'verifiedUi');
-      if (!list.length) return (title ? '<h3>' + esc(title) + '</h3>' : '') + renderEvidenceMissing();
+      if (!list.length) return (title ? '<h3>' + esc(title) + '</h3>' : '') + renderEvidenceMissing(item, 'ui');
       const head = title ? '<h3>' + esc(title) + '</h3>' : '';
       return head + list.map(function(evidence, idx) {
         const src = screenshotUrl(evidence.screenshot);
@@ -3953,6 +4071,21 @@ export function renderReviewHtml(): string {
               change: state.current,
               item: target,
             }, 'ingest readiness ' + target.id);
+            return;
+          }
+          if (kind === 'evidence-fillin-item') {
+            const id = button.dataset.id;
+            const target = (state.current && state.current.items || []).find(function (it) { return it.id === id; });
+            if (!target) {
+              showBanner('找不到 item ' + id + '，無法產生補 evidence prompt', 'error');
+              return;
+            }
+            const evidenceKind = button.dataset.evidenceKind || '';
+            copyHandoffPrompt('evidence-fillin-item', {
+              change: state.current,
+              item: target,
+              missingKinds: evidenceKind ? [evidenceKind] : [],
+            }, '補 ' + evidenceKind + ' evidence ' + target.id);
             return;
           }
         });
@@ -4386,6 +4519,7 @@ export function renderReviewHtml(): string {
         renderChanges();
         el.taskList.replaceChildren();
         el.currentTitle.textContent = '';
+        if (el.evidenceSweepButton) el.evidenceSweepButton.hidden = true;
         return;
       }
       if (state.current && state.current.name === target.change) {
@@ -4480,6 +4614,16 @@ export function renderReviewHtml(): string {
       if (state.current) loadChange(state.current.name);
       else loadChanges();
     });
+    if (el.evidenceSweepButton) {
+      el.evidenceSweepButton.addEventListener('click', function () {
+        const change = state.current;
+        if (!change) return;
+        const missing = computeMissingEvidence(change);
+        const pairCount = missing.reduce(function (acc, m) { return acc + m.kinds.length; }, 0);
+        if (!pairCount) return;
+        copyHandoffPrompt('evidence-fillin-change', { change: change, missing: missing }, '補 evidence (' + pairCount + ' pair)');
+      });
+    }
     el.viewerClose.addEventListener('click', closeViewer);
     el.viewer.addEventListener('click', function (event) {
       if (event.target === el.viewer) closeViewer();
