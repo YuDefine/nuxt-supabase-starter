@@ -153,15 +153,25 @@ Subagent 任務應包含（cwd 設為 push 發生的 repo path）：
 
 ## Session-level Worktree
 
-要動 code 的 session（implement / fix / refactor / migration）**MUST** 跑在獨立 git worktree，**NEVER** 直接在 main 改。用 `/wt <slug>` 建立：worktree 落在 `<consumer-parent>/<consumer>-wt/<slug>/`、branch 走 `session/<YYYY-MM-DD-HHMM>-<slug>` 命名規約。
+要動 code 的工作（implement / fix / refactor / migration）**MUST** 在獨立 git worktree 內執行，**NEVER** 直接在 main 改。操作上由 `/wt <task>` 全自動 orchestrate — `/wt` 建 worktree、dispatch subagent 進去做事、subagent commit 完回來主線 squash-merge 進 main 的 working tree、cleanup worktree。主線 chat session cwd 全程不動，user 不必開新 terminal、不必複製 oneliner、不必手動 `git worktree` 任何子命令。
 
 Read-only session（grep、看 log、解釋 code 不寫檔）可留在 main worktree。
 
-**例外：`/spectra-archive` 在 main 跑**。Archive 語意是「把 change 合併進 main」（mv folder、delta sync 進 specs、screenshot sweep），全部寫入 main，走 worktree 反而多一道 merge-back。其他 spectra-\* skill（`/spectra-apply` / `/spectra-ingest` / `/spectra-debug`）仍須走 worktree。
+**例外：`/spectra-archive` 在 main 跑**。Archive 語意是「把 change 合併進 main」（mv folder、delta sync 進 specs、screenshot sweep），全部寫入 main，走 worktree 反而多一道 merge-back。其他 spectra-\* skill（`/spectra-apply` / `/spectra-ingest` / `/spectra-debug`）仍須走 `/wt` 進 worktree。
 
-**例外：`/handoff` Mode B 接續可遷 cwd**。`/handoff` Mode B 結束、user 選定下一步後，`/handoff` 內呼 `/wt <slug> --dispatch-from-handoff <next-skill>`，此路徑 `/wt` **MAY** 遷移 parent cwd 並 dispatch 下一個 skill，user 不必另開 terminal。`--dispatch-from-handoff` flag 僅 `/handoff` 可用；直接 user invoke `/wt` 仍走 refuse-and-guide oneliner。
+**Parent cwd 不動 invariant**：`/wt` **SHALL NOT** 遷移 parent session 的 cwd — 所有 worktree 內的操作由 subagent 執行（subagent cwd = worktree path），主線（cwd = main）負責 dispatch + squash + cleanup。先前 `--dispatch-from-handoff` flag 機制已移除；新 orchestration model 透過 subagent 隔離 cwd 達到同樣的「不切 terminal」UX，且更嚴格地保留 parent cwd invariant。
 
-**Silent branch 禁令**：Claude **MUST NOT** 跑 `git checkout -b` / `git branch <name>` 或任何會建新 ref 的指令，**除非**先取得 user 明確同意。`/wt` 用的 `session/<date-slug>` 規約命名是唯一例外。
+**`/wt` invocation forms**：
+
+- `/wt <task description>` — 單條 ad-hoc。
+- `/wt A: ... B: ...` — 平行多 task，每 task 一 worktree + subagent。
+- `/wt <slug>: /<next-skill> <args>` — `/handoff` Mode B 內部 dispatch（subagent 在 worktree 跑指定 skill）。
+
+**Silent branch 禁令**：Claude **MUST NOT** 跑 `git checkout -b` / `git branch <name>` 或任何會建新 ref 的指令，**除非**先取得 user 明確同意。`/wt` 用的 `session/<date-slug>` 規約命名是唯一例外（`/wt` 呼叫本身就是 user 對該 branch 的授權）。
+
+**Commit 階段：subagent commit in worktree → 主線 squash 進 main → user 跑 `/commit`**。subagent 在 worktree 做 `git add + commit -m "wt: <slug>"`（可多 commit、**禁止** push / `/commit`）；主線跑 `git -C <main> merge --squash <session-branch>` 把改動 land 到 main 的 working tree（**不** commit on main）+ `wt-helper cleanup <slug> --force` 清 worktree；user 累積夠了在 main 主動 `/commit` 走 ceremony（lint / type / test / selective stage / push）。
+
+**Failure fallback**：subagent fail（test 不過、沒 commit）→ 保留 worktree + branch，主線回報路徑，user 從 main 跑 `git -C <wt> diff/log` 檢查；squash conflict（平行 task 改同檔）→ 保留該 worktree，main 維持上一個成功 squash 的狀態；cleanup 失敗 → 改動已在 main，報告 worktree 殘留路徑由 user 手動 `wt-helper cleanup --force`。
 
 詳見 `.claude/rules/worktree-default.md`。
 

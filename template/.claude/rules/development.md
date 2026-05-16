@@ -1,3 +1,7 @@
+---
+description: 開發規範（TDD, coding style, UI reuse）
+paths: ['app/**/*.{vue,ts}', 'server/**/*.ts', 'test/**/*.ts', 'shared/**/*.ts']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/framework/nuxt/development.md
@@ -5,10 +9,6 @@ Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 
----
-description: 開發規範（TDD, coding style, UI reuse）
-paths: ['app/**/*.{vue,ts}', 'server/**/*.ts', 'test/**/*.ts', 'shared/**/*.ts']
----
 
 # UI Reuse
 

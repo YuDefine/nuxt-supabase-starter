@@ -1,3 +1,7 @@
+---
+description: Postgres Trigger 撰寫規範
+paths: ['supabase/migrations/**/*.sql']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/db-schema/supabase/trigger.md
@@ -5,10 +9,6 @@ Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 
----
-description: Postgres Trigger 撰寫規範
-paths: ['supabase/migrations/**/*.sql']
----
 
 # Trigger
 

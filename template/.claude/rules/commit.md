@@ -43,6 +43,55 @@ Local edits will be reverted by the next sync.
 
 **理由**：品質閘門成本高，把 WIP 分次 commit 等於多跑一次閘門，浪費時間與 token。`/commit` 的分組階段就是設計來把「主線工作 + 並行 WIP」自然分類到不同 commit group。
 
+## Commit 預設位置：main worktree
+
+**`/commit` MUST 在 main worktree 跑、NEVER 在 session worktree 內跑**。Worktree 是工作區、main 是 commit ceremony 發起點。
+
+Worktree 完成驗證後的標準收尾流程（詳見 [[worktree-default]] §5）：**主線自動執行** stash + 跨 worktree pop + cleanup worktree（用 `git stash push -u -m "<slug>-handoff" -- <Edit/Write 過的檔>` selective stash + `git -C <main> stash pop` + pop 成功後 `node <main>/scripts/wt-helper.mjs cleanup <slug> --force`，**不切** session cwd），完成後 user 只需開 main session 跑 `claude "/commit"`。
+
+預檢：跑 pop 前 `git -C <main> status --porcelain` 若非空 → 中止 closure、stash entry 保留、提示 user 自行處理 main 端 WIP。
+
+Cleanup 安全性依賴 selective stash 列舉的完整性（漏列檔會永久丟）；pop 失敗時 **NEVER** 跑 cleanup（worktree 改動還沒進 main）。
+
+手動 fallback（user 明確要求自己處理時）：
+
+```bash
+# 在 worktree（驗證 OK、準備收尾）
+git stash push -u -m "<slug>-handoff"
+
+# 切回 main worktree（consumer 主路徑）
+cd ~/offline/<consumer>
+
+# Pop changes 進 main 的 working tree
+git stash pop
+
+# 跑 /commit（一次完成 0-A/B/C 品質閘門 + selective stage + commit + push）
+claude "/commit"
+```
+
+理由：
+
+- **單一 ceremony**：worktree 跑驗證、main 跑 commit handoff，分工清楚
+- **避免雙 hop**：worktree /commit → 再 cd main → ff merge → push 等於跑兩段 ceremony
+- **branch HEAD 乾淨**：worktree 內**不** commit，session branch 不留 dangling commit；`wt-helper cleanup <slug>` 後 branch 自然消失
+- **0-C 在 main 跑**：`pnpm check` / `pnpm test` 在 main 環境跑一次，跟 CI 環境一致
+
+### 此路徑的 stash 是合法中介
+
+下面「WIP 阻礙處理」把 stash 列為「**極少數例外**」**僅限**單一 working tree 內的 WIP 處置（多主題 WIP 預設靠 Step 3 分組納入）。**Worktree → main 跨 working tree handoff** 是不同情境——stash 在這裡是規約定義的中介機制、**不**受該禁令限制：
+
+| 情境 | Stash 是 | 替代做法 |
+| --- | --- | --- |
+| 單一 working tree 多主題 WIP（同一 cwd 內混了主題 A + B） | **last resort**（觸發三條件之一才用） | Step 3 分組納入 |
+| Worktree → main commit handoff | **合法規約中介**（每次收尾都用） | 無——這就是預設路徑 |
+
+### 禁止項
+
+- **NEVER** 在 worktree 內跑 `/commit`、`/spectra-commit`、或 `git commit` — 違反「commit 集中在 main」原則
+- **NEVER** 在 worktree 跑 /commit 後**又**試圖 stash 剩餘改動到 main — 已經分裂成兩段 commit
+- **NEVER** 用 `git stash push` 不加 `-u` — 漏掉 untracked 新檔
+- **NEVER** stash pop 撞 conflict 時用 `git checkout --` / `git restore` 「清理」 — 會永久毀掉 main 既有 WIP
+
 ## WIP 阻礙處理（**極少數例外**，預設一律靠分組納入）
 
 **預設一律靠 Step 3 分組納入處理 WIP**，stash 是**極少數例外**。「主題不同 / 看起來不相關 / 不認得來源」**全部**透過拆獨立 commit group 解決，**NEVER** 因此啟動 stash —— Step 3 分組就是設計來把多主題、跨 session 的 WIP 自然拆成多個 commit group 的。

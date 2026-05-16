@@ -1,3 +1,7 @@
+---
+description: Server API 設計規範
+paths: ["server/api/**/*.ts"]
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/runtime/cf-workers/api-patterns.md
@@ -5,10 +9,6 @@ Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 
----
-description: Server API 設計規範
-paths: ["server/api/**/*.ts"]
----
 
 # API Patterns
 

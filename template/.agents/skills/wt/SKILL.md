@@ -1,140 +1,274 @@
 ---
 name: wt
-description: 建立 session-level git worktree。`/wt <slug>` 建 isolated worktree 在 sibling dir、開 timestamped session branch、merge origin/main 拉投影層到位、回傳 path + branch + 「請開新 session 過去」指示。預設不會改變呼叫端 session 的 cwd（mid-conversation 切目錄會破壞 file watcher / Bash state）；唯一例外是 `/handoff` Mode B 內呼 `--dispatch-from-handoff` 路徑。Use when user types /wt 或請求新開 session worktree。
+description: Orchestrate a coding task inside a fresh git worktree end-to-end. `/wt <task>` builds a worktree, dispatches a subagent into it with the task, squash-merges the result back into main's working tree (no commit — user controls `/commit` timing), and removes the worktree. Supports parallel multi-task via `/wt A: ... B: ...`. The parent session's cwd never moves; the user never opens a new terminal or runs `git worktree` commands manually. Implements [[worktree-default]] §1 + §5 + §6.
 license: MIT
 metadata:
   author: clade
-  version: "1.1"
+  version: "2.0"
 ---
 
-# /wt — 建立 session worktree
+# /wt — orchestrate worktree task lifecycle
 
-實作 [[worktree-default]] §5 規約（含 §7 分支 C 內部 dispatch 路徑）。
+`/wt` is the single entry point for "do work in a worktree". It builds the worktree, runs the task via a subagent, squash-merges the result back to main's working tree, and cleans up the worktree — all in the current session, without migrating the parent cwd.
 
-## 使用情境
+The user's only follow-up action is to run `/commit` on main when enough work has accumulated.
 
-User 即將開始一條會修改 code 的工作（implement、fix、refactor、deploy 準備等）且當前 cwd 在 main worktree。`/wt <slug>` 把該工作隔離到獨立 worktree，避免 staging / branch / WIP 跨 session 污染。
+## When to invoke
 
-**不要在以下情境用**：
-- 只是 read-only 探索（grep、看 log、解釋 code 不寫檔）
-- 當前 cwd 已在某個 session worktree（`git rev-parse --git-dir` 含 `/worktrees/`）
-- User 沒明確要求建 worktree 而 agent 自己想開（先問再做）
+Whenever a coding task (write, edit, refactor, migration prep) is about to start from the main worktree. `/wt` makes per-task worktree isolation cheap; the previous "type a slug, copy a oneliner, open a new session" choreography is gone.
 
-## 兩種 invocation 模式
+**Do not invoke `/wt`** in these cases:
 
-`/wt` 有兩種 invocation 模式，行為不同：
+- The work is read-only (grep, log inspection, code explanation that writes nothing).
+- The skill being run is main-bound by design (`/spectra-archive`).
+- cwd is already inside a session worktree (`git rev-parse --git-dir` contains `/worktrees/`). The current worktree is the workspace; do not nest.
 
-1. **預設模式**（user 直接打 `/wt <slug>`、或其他 skill 呼叫但**沒**帶 dispatch flag）→ Step 1–3 走 oneliner，**不改** parent cwd
-2. **內部 dispatch 模式**（**僅** `/handoff` Mode B 接續路徑使用）→ 帶 `--dispatch-from-handoff <next-skill-invocation>` flag，跳過 Step 3 oneliner，改走 Step 3' 遷移 cwd + dispatch next skill
+## Invocation forms
 
-判定：`/wt <slug> --dispatch-from-handoff <next-skill-invocation>` 的 args 含 `--dispatch-from-handoff` 即進內部模式；否則走預設。
+### Form 1 — single ad-hoc task
 
-**Flag 禁用範圍**：除 `/handoff` skill 外，其他 skill 或 agent **MUST NOT** 自己帶這個 flag（即使覺得「這次該切 cwd」）— 這是 silent 違規，必須走 [[worktree-default]] §7 分支 B 走 `/handoff` 正規路徑。
+```
+/wt <task description>
+```
 
-## Step 1 — Slug 解析
+Examples:
 
-從 `/wt <slug>` 的 `<slug>` argument 取使用者提供的 short identifier。常見形式：`fix-auth`、`add-export`、`debug-cron`。
+```
+/wt refactor the cache layer to use LRU eviction
+/wt add unit tests for src/parsers/csv.ts covering empty / unicode / quoted rows
+/wt update Node version pin to 24 and rerun pnpm install
+```
 
-若 user 沒給 slug，**問**他要用什麼 slug，**不要**自己編。
+The skill derives a short slug from the task description (lowercased, kebab-case, trimmed to roughly 40 chars). If the user prefers an explicit slug, they MAY prefix the description with `<slug>:` — e.g., `/wt lru-cache: refactor the cache layer to use LRU eviction`.
 
-## Step 2 — 呼叫 wt-helper
+### Form 2 — parallel multi-task
+
+```
+/wt
+A: <task A description>
+B: <task B description>
+C: <task C description>
+```
+
+Or single line: `/wt A: task A B: task B`.
+
+Each labeled task becomes its own worktree + subagent. Subagents run concurrently. As each completes, the parent squash-merges that result and cleans that worktree up. A failure in one task does not block the others.
+
+Labels are arbitrary identifiers (A/B/C/feat-x/test-y). The skill normalizes them into slugs.
+
+### Form 3 — dispatch a named next-skill (internal, used by `/handoff` Mode B)
+
+```
+/wt <slug>: /<next-skill> <args>
+```
+
+Example:
+
+```
+/wt fix-auth: /spectra-apply fix-auth
+/wt evlog-dpattern: /spectra-ingest evlog-dpattern
+```
+
+This form is invoked by `/handoff` Mode B (per [[worktree-default]] §1 and [[handoff]] §2B.5) when the user has selected a worktree-requiring change from the outstanding-work list. The subagent inside the worktree runs `<next-skill>` as its first action.
+
+Direct user invocation of this form is allowed but uncommon — usually the user just types `/wt <task>` and lets the subagent figure out the work.
+
+## Per-task lifecycle
+
+For each task in the invocation, `/wt` SHALL execute the following sequence. With parallel tasks, steps 2–5 run concurrently across tasks; step 1 runs sequentially (one `wt-helper add` at a time).
+
+### Step 1 — Build the worktree
 
 ```bash
 node scripts/wt-helper.mjs add <slug>
 ```
 
-從當前 consumer cwd 跑（helper 自己用 `findConsumerRoot` 走最外層 `.git` 解析 consumer root）。
+Run from the main worktree's cwd. The helper:
 
-Helper 行為：
-- Slug normalize（lowercase、空白轉 `-`、collapse 重複 `-`、trim 首尾 `-`）
-- 建 branch `session/<YYYY-MM-DD-HHMM>-<slug>` 從 `main`
-- `git worktree add` 到 `<consumer-parent>/<consumer-name>-wt/<slug>/`
-- 若 `origin/main` 存在，跑 `git merge --ff-only origin/main` 拉最新投影層
-- 印出 path + branch + 開新 session 提示
+- Normalizes the slug.
+- Creates branch `session/<YYYY-MM-DD-HHMM>-<slug>` from `main`.
+- Materializes the worktree at `<consumer-parent>/<consumer-name>-wt/<slug>/`.
+- Merges `origin/main` if present.
 
-## Step 3 — 預設模式：回報給 user（oneliner 格式）
+Capture the worktree absolute path (the helper prints `cd <path>` and `Branch: <branch>` — parse them, or derive them from the consumer-root + slug convention).
 
-如果**沒有** `--dispatch-from-handoff` flag，把 helper output 原樣呈現，**加一段** oneliner 形式的接續指引（per [[worktree-default]] §1「oneliner 慣例」）：
+### Step 2 — Dispatch a subagent into the worktree
 
-```
-Worktree 建好了：
+Use the spawn_agent 工具 with:
 
-  Path:   <path>
-  Branch: session/<date>-<slug>
+- `name`: `wt-<slug>` (so a continuation pattern can `SendMessage({to: name})` later).
+- `isolation`: omit (the worktree itself is the isolation; the spawn_agent 工具's built-in worktree isolation is for the *parent's* repo, which we don't want).
+- `prompt`: see the subagent prompt template below.
 
-請執行：
+The subagent's cwd is set via the prompt — explicit instruction `your working directory is <worktree-path>; all writes happen there`. The parent's cwd remains on the main worktree.
 
-  cd <path> && claude
-```
-
-若 `/wt <slug>` 是被其他 skill 內部呼叫且**有**明確的下一步 skill（例：spectra-apply 偵測 cwd 在 main 後內呼 wt，下一步要跑 `/spectra-apply <change-name>`），把該 skill invocation 接在後面：
+#### Subagent prompt template
 
 ```
-  cd <path> && claude "/spectra-apply <change-name>"
+Your working directory is <worktree-absolute-path>. All file reads, writes,
+and shell commands MUST run there. Do NOT cd out of this directory.
+
+Task:
+<task description verbatim, or the next-skill invocation in form 3>
+
+Contract:
+1. Perform the task. Make commits inside the worktree as needed:
+     git add -A
+     git commit -m "wt: <slug> — <short description>"
+   Multiple commits are fine; only the squash-merged result lands on main.
+2. Do NOT run `git push` from the worktree. The session branch is short-lived.
+3. Do NOT run `/commit` or `/spectra-commit` inside the worktree. Commit ceremony
+   on main is the user's responsibility once changes accumulate.
+4. When done, report back with:
+   - Success: "done — commits: <SHA-list>, files: <count>". Optionally a one-line
+     summary of what changed.
+   - Failure: "fail — <reason>". If you abort before committing, the worktree
+     branch will be preserved for the user to inspect.
+
+Context for the task: <thin brief extracted from main session — see Parallel
+Subagent Fan-out guidance in user AGENTS.md>.
 ```
 
-`claude [prompt]` 啟動 session 時可預填第一個 prompt（見 `claude --help`），user 整段複製貼一次到位。
+The thin brief MUST be prepared *by the parent* before dispatching: file paths to touch, rules to follow, acceptance criteria. Do NOT spawn a subagent with only a task name and let it grep the repo cold — that violates the user's "Parallel Subagent Fan-out" rule and burns context.
 
-當前 session 保持在 main worktree，繼續做你原本的事或結束。
+For form 3 (dispatch a next-skill), the "Task" section is replaced with:
 
-## Step 3' — 內部 dispatch 模式：遷移 cwd + 內呼 next skill
+```
+Task:
+Invoke the Skill tool with skill="<next-skill-name>" and args="<args>".
+Run that skill to completion inside this worktree. Report back per the contract above.
+```
 
-如果 args 含 `--dispatch-from-handoff <next-skill-invocation>`（由 `/handoff` Mode B 內呼，per [[worktree-default]] §7 分支 C），跳過 Step 3 oneliner，改走：
+### Step 3 — Wait for subagent completion
 
-1. **印一行確認**：
+The spawn_agent 工具 call returns when the subagent finishes. Parse its report to determine success vs. failure.
 
-   ```
-   Worktree 建好了，dispatching：
-     Path:   <path>
-     Branch: session/<date>-<slug>
-     Next:   /<next-skill-invocation>
-
-   ⚠️ Parent session cwd 已遷移到上述 path。
-      先前對話 Read 過的檔案路徑都對應 main worktree，後續若引用會失效，需重新 Read。
-   ```
-
-2. **遷移 parent cwd** 到新 worktree 路徑（行為等同於主線執行 `cd <path>`）
-
-3. **透過 Skill tool 內呼 named next skill**，把原始 `<slug>` 對應的 change-name 作為 arg 傳入
-
-**失敗處理**（內部模式專屬）：
-
-- wt-helper add 失敗（slug collision / base branch 缺失 / 不在 repo 內）→ 印錯誤、**停下**、**不**遷 cwd、**不**呼 next skill。Parent session 仍在 main，可重試或讓 user 接手。
-- next skill dispatch 失敗（skill not found / 參數錯）→ 報告 failure；此時 cwd 已遷，parent session 在 worktree 內，user 可手動接續或重試 dispatch。
-
-## 重要：預設模式絕對不要改當前 session 的 cwd
-
-預設模式下，`/wt` 是 **utility skill**：它建好 worktree，**回報路徑給 user**，**到此為止**。**MUST NOT**：
-
-- 在當前 session 跑 `cd <new-worktree-path>`
-- 在當前 session 開始往 worktree 內寫檔
-- 假設 user 接下來會繼續在當前 session 工作
-
-理由：mid-conversation 切 cwd 會打壞 file watcher、Bash tool 內部 cwd state、未完成的 file read window。要在新 worktree 做事，是**另一個 agent session** 的工作。
-
-**唯一例外是內部 dispatch 模式**（`--dispatch-from-handoff` flag、僅 `/handoff` 可用、見 Step 3'）。Agent 在預設模式下**MUST NOT** 自行加 flag 繞過此規則。
-
-## 失敗處理
-
-| Helper 錯誤 | 原因 | 處理 |
-| --- | --- | --- |
-| `Worktree path already exists` | 同名 slug 已建過 worktree | 改名 / 用 `wt-helper cleanup <slug>` 先清掉舊的 |
-| `Base branch "main" not found` | Consumer 沒 main branch（用 master 等舊名） | 先 `git branch -m master main` 或暫時手動建 worktree |
-| `Not inside a git repository` | cwd 不在 git repo 內 | `cd` 到 consumer 後重跑 |
-| `warn: could not fast-forward merge origin/main` | local main 已 diverge 或 origin/main 不存在 | 進 worktree 後手動 `git merge`，**不影響** worktree 已建立 |
-
-## 後續維運
-
-User 想清理 worktree 時：
+If success, the subagent has committed inside the worktree. Verify by:
 
 ```bash
-node scripts/wt-helper.mjs list                    # 看所有 session worktree
-node scripts/wt-helper.mjs prune                   # 互動清掉所有 merged worktree
-node scripts/wt-helper.mjs cleanup <slug>          # 清單一條（必 merged）
-node scripts/wt-helper.mjs cleanup <slug> --force  # 強制清未 merged
+git -C <worktree-path> log --oneline main..HEAD
 ```
 
-## 相關
+The output should be non-empty.
 
-- [[worktree-default]] — 完整規約（含禁止 silent branch、propagate refuse-and-guide）
-- [[session-tasks]] — 共用 `<YYYY-MM-DD-HHMM>-<slug>` 命名慣例
+### Step 4 — Squash-merge into main's working tree
+
+From the parent's cwd (main), run:
+
+```bash
+git -C <main-worktree-path> merge --squash <branch-name>
+```
+
+`<branch-name>` is `session/<date>-<slug>`. `--squash` lands the diff on main's index + working tree **without** creating a commit on main. The user will commit later via `/commit`.
+
+If this command exits non-zero (merge conflict), go to "Squash-merge conflict" under Failure handling. Do not proceed to cleanup.
+
+### Step 5 — Cleanup the worktree
+
+```bash
+node scripts/wt-helper.mjs cleanup <slug> --force
+```
+
+`--force` is required because the branch is not actually merged (we squash-merged, which `git branch --merged` does not detect). The helper:
+
+- Removes the worktree directory.
+- Deletes the branch.
+
+If cleanup exits non-zero, go to "Cleanup failure" under Failure handling.
+
+### Step 6 — Report
+
+After all tasks in the invocation have either completed (lifecycle done) or failed (worktree preserved), emit one aggregated report:
+
+```
+✅ A (lru-cache): squashed onto main — 5 files modified
+   <one-line summary from subagent if available>
+✅ B (csv-tests): squashed onto main — 2 files added
+❌ C (node-upgrade): subagent fail — pnpm install exited 1
+   worktree preserved at ~/offline/<consumer>-wt/node-upgrade/
+   branch: session/<date>-node-upgrade
+⚠️ D (refactor-router): squash conflict on src/router.ts (overlapped with A)
+   worktree preserved at ~/offline/<consumer>-wt/refactor-router/
+
+Accumulated diff on main: <N> files
+Run /commit when ready.
+```
+
+## Failure handling
+
+### Subagent task failure
+
+Subagent reports failure or exits without commits. Preserve the worktree and branch; report the path. Do NOT squash, do NOT cleanup. The user can inspect via `git -C <wt-path> log/diff/status` from the main session — no need to switch cwd.
+
+### Squash-merge conflict
+
+`git merge --squash` returns non-zero with conflict markers in main's working tree. This means a parallel task already squashed changes that overlap this task's diff.
+
+- Abort the merge: `git -C <main-worktree-path> merge --abort` (or `git -C ... reset --merge` if `--abort` doesn't apply to the squash state).
+- Leave main's working tree at the last successfully-squashed state.
+- Preserve the conflicting worktree and branch; do NOT cleanup.
+- Report the conflicting file paths and the worktree path.
+- Do NOT attempt rebase, retry, or discard the subagent's work.
+
+### Cleanup failure
+
+Squash succeeded, but `wt-helper cleanup` exited non-zero (rare — usually a stale lock or stray process). The subagent's diff is already on main; the lifecycle succeeded from the user's perspective. Report the residual worktree path and a manual hint:
+
+```
+worktree residue at <path> — run `node scripts/wt-helper.mjs cleanup <slug> --force` manually
+```
+
+Do not rollback main's diff.
+
+## After `/wt` completes
+
+The accumulated diff is on main's working tree (unstaged, no commit). The user reviews via `git status` / `git diff` and runs `/commit` when ready.
+
+`/wt` does NOT:
+
+- Commit on main.
+- Push anywhere.
+- Modify the main branch's commit history.
+
+These remain explicit user actions.
+
+## Edge cases
+
+### Degenerate form: `/wt <single-token>` with no description and no `:`
+
+If the user types just `/wt fix-auth` (no description, no `:`-prefixed next-skill), prompt the user to clarify whether they want:
+
+- An ad-hoc task in a new worktree (ask for the task description).
+- A long-lived worktree session (deprecated via `/wt`; suggest `node scripts/wt-helper.mjs add fix-auth` + opening a fresh session in the resulting path).
+
+Do NOT silently build a worktree with no task — that's the deprecated v1 behavior and is gone.
+
+### cwd already inside a session worktree
+
+If `git rev-parse --git-dir` shows `/worktrees/`, refuse to invoke `/wt`. The current worktree IS the workspace. Tell the user: "Already inside worktree <name>; do the work here. Use `/wt` only from the main worktree."
+
+### Token `--dispatch-from-handoff` appears in args
+
+The flag from the previous `/wt` design is removed. If it appears in args, treat the token literally (it has no special meaning). Parent cwd never migrates regardless.
+
+### Subagent commits but you can't tell if the task fully succeeded
+
+The subagent's reported status is the authority. If it says "done", proceed to squash. If the subagent's commits exist but it failed to report cleanly, treat as failure (preserve worktree, report ambiguity).
+
+## Related rules
+
+- [[worktree-default]] — full rule baseline (§1 invariant, §5 mechanic, §6 tools).
+- [[handoff]] — Mode B dispatch path that invokes `/wt <slug>: /<next-skill>`.
+- [[session-tasks]] — shared `<YYYY-MM-DD-HHMM>-<slug>` naming convention.
+- [[scope-discipline]] — when a `/wt` task drifts beyond its slug's scope, open a separate `/wt` task or escalate to `/spectra-propose`.
+
+## Maintenance commands (rarely needed)
+
+```bash
+node scripts/wt-helper.mjs list                  # list session worktrees
+node scripts/wt-helper.mjs prune                 # interactively remove merged ones
+node scripts/wt-helper.mjs cleanup <slug>        # remove one (merge-checked)
+node scripts/wt-helper.mjs cleanup <slug> --force # remove unmerged
+```
+
+These are for inspecting or cleaning up residue from failed `/wt` invocations. The orchestrated path (success case) does not require manual maintenance.

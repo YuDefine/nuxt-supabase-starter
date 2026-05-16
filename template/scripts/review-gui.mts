@@ -314,6 +314,8 @@ interface CliOptions {
   port: number
   repoRoot: string
   openBrowser: boolean
+  /** Headless scan：不啟 server，輸出 readiness JSON 到 stdout 後結束。供 review-readiness-scan skill 使用。 */
+  scan: boolean
 }
 
 interface ScreenshotFile {
@@ -337,6 +339,10 @@ interface ChangeSummary {
   /** 含 `（issue: ...）` annotation 的 item 數；issue 在 raw 是 `[ ]`，仍算 pending 但 UI 要區分 */
   issued: number
   malformed: number
+  /** Pre-Review Data Readiness：effective items 命中的 manual-review pattern 總次數。0 = ready for review。 */
+  readinessHits: number
+  /** Hit code → count，提供 home page 顯示「MISSING_URL ×2, BACKEND_MISFLAGGED ×1」摘要。 */
+  hitsByCode: Record<string, number>
   screenshotTopicCount: number
   screenshotTopics: string[]
 }
@@ -1476,6 +1482,21 @@ async function summarizeChange(
   const checked = effectiveItems.filter(
     (item) => item.checked && !/（issue:[^）]*）/.test(item.raw)
   ).length
+  // Pre-Review Data Readiness：對齊 GUI 內顯示 banner 的 items 範圍——
+  // effective items（排除 parent-with-children，GUI 不讓 user 勾這類）+ 未勾且非 issued
+  // （[x] 或 issue 已經分流到別的處理路徑，readiness 只關注「等待 user 檢查」這群）。
+  const readinessTargets = effectiveItems.filter(
+    (item) => !item.checked && !/（issue:[^）]*）/.test(item.raw)
+  )
+  const hitsByCode: Record<string, number> = {}
+  let readinessHits = 0
+  for (const item of readinessTargets) {
+    const hits = item.manualReviewHits ?? []
+    for (const hit of hits) {
+      hitsByCode[hit.code] = (hitsByCode[hit.code] ?? 0) + 1
+      readinessHits++
+    }
+  }
   return {
     name,
     tasksPath,
@@ -1484,6 +1505,8 @@ async function summarizeChange(
     pending: effectiveItems.length - checked,
     issued,
     malformed: parsed.malformed.length,
+    readinessHits,
+    hitsByCode,
     screenshotTopicCount: pools.length,
     screenshotTopics: pools.map((pool) => `${pool.env}/${pool.topic}`),
   }
@@ -1863,6 +1886,7 @@ export function renderReviewHtml(): string {
       background: color-mix(in srgb, var(--panel) 76%, transparent);
     }
     .metric.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 50%, var(--line)); }
+    .metric.warn { color: #8a4f0a; background: #fce4c8; border-color: #f0c68d; font-weight: 600; }
     main {
       min-width: 0;
       min-height: 0;
@@ -2790,7 +2814,10 @@ export function renderReviewHtml(): string {
     // 嵌在 outer template literal 內，raw backtick 會提早結束 template。
     function parseLocationTarget() {
       const path = window.location.pathname || '';
-      const m = path.match(/^\/review\/(.+)$/);
+      // regex 用 [/] 而非 \\/ — outer template literal 會把 \\/ 縮成 /，瀏覽器
+      // 拿到 /^/review/(.+)$/ → flag 'r' 不合法 → Uncaught SyntaxError: Invalid
+      // regular expression flags。[/] 等價且不受 template literal escape 影響。
+      const m = path.match(/^[/]review[/](.+)$/);
       let change = null;
       if (m) {
         try { change = decodeURIComponent(m[1]); } catch (_) { change = m[1]; }
@@ -3295,32 +3322,56 @@ export function renderReviewHtml(): string {
       }
       return untouched + ' 待檢查';
     }
+    // 把 hitsByCode 轉成 home page 用的單行摘要，例：UI_ITEM_NO_URL ×2, REVIEW_UI_BACKEND_ROUNDTRIP ×1。
+    // 超過 3 個 code 後 truncate 顯示「+N more」避免擠爆 row。
+    function summarizeHits(hitsByCode) {
+      if (!hitsByCode) return '';
+      const entries = Object.entries(hitsByCode).toSorted(function (a, b) { return b[1] - a[1]; });
+      if (!entries.length) return '';
+      const top = entries.slice(0, 3).map(function (entry) { return entry[0] + ' ×' + entry[1]; });
+      const extra = entries.length - top.length;
+      return top.join(', ') + (extra > 0 ? ', +' + extra + ' more' : '');
+    }
     function renderChangeCard(change) {
       const current = state.current && state.current.name === change.name;
       const kind = changeCardKind(change);
       const badge = changeCardBadge(change, kind);
+      const hits = change.readinessHits || 0;
+      const hitSummary = hits > 0 ? summarizeHits(change.hitsByCode) : '';
       return '<button type="button" class="change-row card-' + kind + '" data-change="' + esc(change.name) + '" aria-current="' + (current ? 'true' : 'false') + '">' +
         '<span class="change-name">' + esc(change.name) + '</span>' +
         '<span class="card-badge ' + kind + '">' + esc(badge) + '</span>' +
         '<span class="metrics">' +
         '<span class="metric" title="已通過（含 skip） / 總項目數">' + change.checked + '/' + change.total + ' 通過</span>' +
+        (hits > 0 ? '<span class="metric warn" title="Pre-Review Data Readiness pattern hits（命中代表 item 缺資料無法直接 review）">⚠ ' + hits + ' hits: ' + esc(hitSummary) + '</span>' : '') +
         (change.screenshotTopicCount ? '<span class="metric" title="對應的截圖資料夾數">' + change.screenshotTopicCount + ' 截圖</span>' : '') +
         '</span>' +
         '</button>';
     }
     function renderChanges() {
-      const active = [];
+      const ready = [];
+      const notReady = [];
       const done = [];
       for (const change of state.changes) {
-        if (changeCardKind(change) === 'done') done.push(change);
-        else active.push(change);
+        const kind = changeCardKind(change);
+        if (kind === 'done') done.push(change);
+        else if ((change.readinessHits || 0) > 0) notReady.push(change);
+        else ready.push(change);
       }
       const blocks = [];
-      if (active.length) {
+      if (ready.length) {
         blocks.push(
           '<div class="change-group">' +
-          '<div class="change-group-heading">進行中 · ' + active.length + '</div>' +
-          active.map(renderChangeCard).join('') +
+          '<div class="change-group-heading">✅ Ready for review · ' + ready.length + '</div>' +
+          ready.map(renderChangeCard).join('') +
+          '</div>'
+        );
+      }
+      if (notReady.length) {
+        blocks.push(
+          '<div class="change-group">' +
+          '<div class="change-group-heading">⚠ Not yet ready — needs data fix · ' + notReady.length + '</div>' +
+          notReady.map(renderChangeCard).join('') +
           '</div>'
         );
       }
@@ -4405,6 +4456,9 @@ function canListen(host: string, port: number): Promise<boolean> {
 // 啟動橫幅：iTerm2 / Terminal.app 對 raw http URL 都支援 cmd-click，所以 URL
 // 本身不加 underline 等 ANSI 修飾（部分 terminal 會把 escape 算進 URL 邊界），
 // 只用 bold + cyan 突顯。非 TTY（pipe to file / CI）自動省略 ANSI。
+const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(0x1b)}\\[[0-9;]*m`, 'g')
+const stripAnsi = (s: string) => s.replace(ANSI_ESCAPE_PATTERN, '')
+
 function printStartupBanner(url: string, repoRoot: string): void {
   const isTty = !!process.stdout.isTTY
   const bold = isTty ? '\x1b[1m' : ''
@@ -4416,14 +4470,13 @@ function printStartupBanner(url: string, repoRoot: string): void {
     ['open', `${bold}${cyan}${url}${reset}`],
   ]
   const labelWidth = Math.max(...lines.map(([label]) => label.length))
-  const visible = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '')
   const rendered = lines.map(([label, value]) => `${label.padEnd(labelWidth)}  ${value}`)
-  const innerWidth = Math.max(...rendered.map((l) => visible(l).length))
+  const innerWidth = Math.max(...rendered.map((l) => stripAnsi(l).length))
   const horiz = '─'.repeat(innerWidth + 2)
   console.log('')
   console.log(`╭${horiz}╮`)
   for (const line of rendered) {
-    const pad = ' '.repeat(innerWidth - visible(line).length)
+    const pad = ' '.repeat(innerWidth - stripAnsi(line).length)
     console.log(`│ ${line}${pad} │`)
   }
   console.log(`╰${horiz}╯`)
@@ -4449,16 +4502,18 @@ function parseArgs(argv: string[]): CliOptions {
     port: DEFAULT_PORT,
     repoRoot: process.cwd(),
     openBrowser: true,
+    scan: false,
   }
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--no-open') opts.openBrowser = false
+    else if (arg === '--scan') opts.scan = true
     else if (arg === '--host') opts.host = argv[++i] || opts.host
     else if (arg === '--port') opts.port = Number(argv[++i] || DEFAULT_PORT)
     else if (arg === '--repo') opts.repoRoot = resolve(argv[++i] || opts.repoRoot)
     else if (arg === '--help' || arg === '-h') {
       console.log(
-        'Usage: review-gui.mts [--repo <path>] [--host 127.0.0.1] [--port 5174] [--no-open]'
+        'Usage: review-gui.mts [--repo <path>] [--host 127.0.0.1] [--port 5174] [--no-open] [--scan]'
       )
       process.exit(0)
     } else {
@@ -4472,6 +4527,10 @@ async function main() {
   const options = parseArgs(process.argv)
   if (!existsSync(options.repoRoot))
     throw new Error(`Repo root does not exist: ${options.repoRoot}`)
+  if (options.scan) {
+    await runScan(options.repoRoot)
+    return
+  }
   const { url } = await startServer(options)
   printStartupBanner(url, options.repoRoot)
   if (options.openBrowser) {
@@ -4480,6 +4539,47 @@ async function main() {
   } else {
     console.log('[review:ui] Browser launch skipped (--no-open)')
   }
+}
+
+/**
+ * Headless scan：reuse listPendingChanges 的同一份 evaluator，輸出 JSON 給 skill 消費。
+ * 結構穩定（任何欄位異動需更新 review-readiness-scan SKILL.md），避免 skill 端解析漂移。
+ */
+async function runScan(repoRoot: string): Promise<void> {
+  const changes = await listPendingChanges(repoRoot)
+  // pending=0 的 change 從 home page 隱藏不列；scan 也排除（review readiness 只關注待處理項目）。
+  const active = changes.filter((change) => change.pending > 0)
+  const ready = active
+    .filter((change) => change.readinessHits === 0 && change.malformed === 0)
+    .map((change) => ({
+      name: change.name,
+      pending: change.pending,
+      issued: change.issued,
+      total: change.total,
+    }))
+  const notReady = active
+    .filter((change) => change.readinessHits > 0 || change.malformed > 0)
+    .map((change) => ({
+      name: change.name,
+      pending: change.pending,
+      issued: change.issued,
+      total: change.total,
+      readinessHits: change.readinessHits,
+      malformed: change.malformed,
+      hitsByCode: change.hitsByCode,
+    }))
+  const output = {
+    schema: 'review-readiness-scan/v1',
+    generatedAt: new Date().toISOString(),
+    repoRoot,
+    counts: {
+      ready: ready.length,
+      notReady: notReady.length,
+    },
+    ready,
+    notReady,
+  }
+  process.stdout.write(JSON.stringify(output, null, 2) + '\n')
 }
 
 const invokedPath = process.argv[1] ? resolve(process.argv[1]) : ''

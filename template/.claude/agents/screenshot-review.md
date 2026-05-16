@@ -34,6 +34,25 @@ Local edits will be reverted by the next sync.
 
 ## 前置條件（自動處理）
 
+### 0. browser-harness 環境準備（MUST）
+
+Bash tool 呼叫不 source `~/.zshrc`，`BU_CDP_URL` 若未明示會 fallback 到使用者 daily Chrome → 撞 HTTP 403 / chrome:// popup。**MUST** 每個 Bash tool call 的 `browser-harness` 呼叫加 defensive prefix：
+
+```bash
+export BU_CDP_URL="${BU_CDP_URL:-http://127.0.0.1:9333}"
+browser-harness <<'PY'
+print(page_info())
+PY
+```
+
+同一 Bash call 內後續 Python 行不需重複 export（daemon 已 attach），但**每個 Bash tool call 都是 fresh shell**，所以每次都要 re-prefix。下方範例為節省篇幅僅在每塊第一個 call 標示，實務上**每個** Bash call 都要加。
+
+撞 HTTP 403 → daemon 接到 daily Chrome：
+```bash
+pkill -f browser_harness.daemon && rm -f /tmp/bu-default.sock /tmp/bu-default.pid
+```
+然後重新走 defensive prefix。
+
 ### 1. 找到 dev server
 
 ```bash
@@ -103,12 +122,13 @@ Project-specific mapping:
 #### GET dev-login 呼叫
 
 ```bash
-browser-harness -c '
+export BU_CDP_URL="${BU_CDP_URL:-http://127.0.0.1:9333}"
+browser-harness <<'PY'
 from urllib.parse import quote
 port = "<port>"
 target = "/protected/path"
 role = "admin"  # inferred by table above
-# 注意：Python f-string 內部 {...} 不能含跳脫的 " 符號（Python <3.12 SyntaxError），
+# Python <3.12 f-string 內部 {...} 不能重用外層引號（SyntaxError），
 # 因此 quote(target, safe="") 與 info["url"] 都先存到 variable 再插值。
 encoded_role = quote(role)
 encoded_target = quote(target, safe="")
@@ -118,13 +138,14 @@ wait_for_load()
 info = page_info()
 url_seen = info["url"]
 assert f"localhost:{port}" in url_seen, f"unexpected host: {url_seen}"
-'
+PY
 ```
 
 Legacy <consumer-b>:
 
 ```bash
-browser-harness -c '
+export BU_CDP_URL="${BU_CDP_URL:-http://127.0.0.1:9333}"
+browser-harness <<'PY'
 from urllib.parse import quote
 port = "<port>"
 target = "/protected/path"
@@ -139,7 +160,7 @@ wait_for_load()
 info = page_info()
 url_seen = info["url"]
 assert f"localhost:{port}" in url_seen, f"unexpected host: {url_seen}"
-'
+PY
 ```
 
 #### POST better-auth dev-login 呼叫
@@ -147,7 +168,8 @@ assert f"localhost:{port}" in url_seen, f"unexpected host: {url_seen}"
 `browser-harness` 可以在目前 tab 執行 fetch。先開 origin、再 POST、最後導向目標：
 
 ```bash
-browser-harness -c '
+export BU_CDP_URL="${BU_CDP_URL:-http://127.0.0.1:9333}"
+browser-harness <<'PY'
 import json
 port = "<port>"
 target = "/protected/path"
@@ -173,7 +195,7 @@ result = js("""
   })()
 """ % json.dumps(payload))
 parsed = json.loads(result)
-# 同樣避開 f-string 內部 {...} 含跳脫雙引號（Python <3.12 SyntaxError）。
+# 同樣避開 Python <3.12 f-string {...} 重用外層引號的限制。
 status_seen = parsed["status"]
 body_seen = parsed["body"]
 assert parsed["ok"], f"dev-login failed: {status_seen} {body_seen}"
@@ -182,7 +204,7 @@ wait_for_load()
 info = page_info()
 url_seen = info["url"]
 assert f"localhost:{port}" in url_seen, f"unexpected host: {url_seen}"
-'
+PY
 ```
 
 POST 路由若拒絕 `as=admin`，**只**在 brief 提供正確 ALLOWLIST email 時才重試。**NEVER** 為了截圖去 patch app middleware 或 auth guard。
@@ -190,11 +212,12 @@ POST 路由若拒絕 `as=admin`，**只**在 brief 提供正確 ALLOWLIST email 
 判斷「是否撞到登入頁」：
 
 ```bash
-browser-harness -c '
+export BU_CDP_URL="${BU_CDP_URL:-http://127.0.0.1:9333}"
+browser-harness <<'PY'
 info = page_info()
 print(info["url"])
 print(info["title"])
-'
+PY
 ```
 
 URL 含 `/auth/login` / `/login` / `/signin` 或 title 含「登入」/「Sign in」即視為撞牆。
@@ -209,14 +232,15 @@ URL 含 `/auth/login` / `/login` / `/signin` 或 title 含「登入」/「Sign i
 | `colorMode: dark`  | 只拍 dark，截圖直接存在語義目錄下                 |
 | **未指定（預設）** | **兩種都拍**，分別存到 `light/` 和 `dark/` 子目錄 |
 
-切換 color mode（在同一個 `-c` 區塊內做完，省一次 daemon round-trip）：
+切換 color mode（在同一個 heredoc 區塊內做完，省一次 daemon round-trip）：
 
 ```bash
-browser-harness -c '
-js("localStorage.setItem(\"nuxt-color-mode\", \"light\"); document.documentElement.classList.remove(\"dark\"); document.documentElement.classList.add(\"light\"); document.documentElement.style.colorScheme = \"light\"")
+export BU_CDP_URL="${BU_CDP_URL:-http://127.0.0.1:9333}"
+browser-harness <<'PY'
+js('localStorage.setItem("nuxt-color-mode", "light"); document.documentElement.classList.remove("dark"); document.documentElement.classList.add("light"); document.documentElement.style.colorScheme = "light"')
 goto_url(URL)            # 同一 tab reload，確保主題完整套用
 wait_for_load()
-'
+PY
 ```
 
 `dark` 對稱替換即可。
@@ -371,7 +395,8 @@ mkdir -p screenshots/local/<semantic-topic>/dark
 ### Heuristic 偵測
 
 ```bash
-browser-harness -c '
+export BU_CDP_URL="${BU_CDP_URL:-http://127.0.0.1:9333}"
+browser-harness <<'PY'
 import json
 result = js("""
   const text = document.body.innerText || "";
@@ -386,7 +411,7 @@ result = js("""
   });
 """)
 print(result)
-'
+PY
 ```
 
 ### 判定規則
@@ -497,39 +522,44 @@ console.log("clients:", clientScripts.map(k=>k.replace(/^dev:/,"")).join(","));
    **指定單一 mode 時**：
 
    ```bash
-   browser-harness -c '
+   export BU_CDP_URL="${BU_CDP_URL:-http://127.0.0.1:9333}"
+   browser-harness <<'PY'
    target = "http://localhost:<port>/目標路徑"   # 或走 dev-login route
    new_tab(target)
    wait_for_load()
    info = page_info()
-   assert "localhost:<port>" in info["url"], f"unexpected host: {info[\"url\"]}"
+   url_seen = info["url"]
+   assert "localhost:<port>" in url_seen, f"unexpected host: {url_seen}"
    wait_for_element("text=目標文字", timeout=10) if False else wait_for_load()  # 視需要等
    capture_screenshot("screenshots/<env>/<folder-name>/#<N>-<brief-desc>.png", max_dim=1800)
-   '
+   PY
    ```
 
    **未指定 mode 時（預設雙模式）**：
 
    ```bash
    # — Light —
-   browser-harness -c '
+   export BU_CDP_URL="${BU_CDP_URL:-http://127.0.0.1:9333}"
+   browser-harness <<'PY'
    target = "http://localhost:<port>/目標路徑"
    new_tab(target)
    wait_for_load()
    info = page_info()
-   assert "localhost:<port>" in info["url"], f"unexpected host: {info[\"url\"]}"
-   js("localStorage.setItem(\"nuxt-color-mode\", \"light\"); document.documentElement.classList.remove(\"dark\"); document.documentElement.classList.add(\"light\"); document.documentElement.style.colorScheme = \"light\"")
+   url_seen = info["url"]
+   assert "localhost:<port>" in url_seen, f"unexpected host: {url_seen}"
+   js('localStorage.setItem("nuxt-color-mode", "light"); document.documentElement.classList.remove("dark"); document.documentElement.classList.add("light"); document.documentElement.style.colorScheme = "light"')
    goto_url(target); wait_for_load()
    capture_screenshot("screenshots/<env>/<folder-name>/light/#<N>-<brief-desc>.png", max_dim=1800)
-   '
+   PY
 
    # — Dark —（複用同一 tab，daemon 保持狀態）
-   browser-harness -c '
+   export BU_CDP_URL="${BU_CDP_URL:-http://127.0.0.1:9333}"
+   browser-harness <<'PY'
    target = "http://localhost:<port>/目標路徑"
-   js("localStorage.setItem(\"nuxt-color-mode\", \"dark\"); document.documentElement.classList.remove(\"light\"); document.documentElement.classList.add(\"dark\"); document.documentElement.style.colorScheme = \"dark\"")
+   js('localStorage.setItem("nuxt-color-mode", "dark"); document.documentElement.classList.remove("light"); document.documentElement.classList.add("dark"); document.documentElement.style.colorScheme = "dark"')
    goto_url(target); wait_for_load()
    capture_screenshot("screenshots/<env>/<folder-name>/dark/#<N>-<brief-desc>.png", max_dim=1800)
-   '
+   PY
    ```
 
 4. **讀取截圖** — 用 Read tool 查看截圖，記錄觀察（雙模式時兩張都看）
@@ -537,11 +567,12 @@ console.log("clients:", clientScripts.map(k=>k.replace(/^dev:/,"")).join(","));
 
    ```bash
    # screenshot 看到目標座標 (x, y) 後直接 click，跳過 state→index→click 三步
-   browser-harness -c '
+   export BU_CDP_URL="${BU_CDP_URL:-http://127.0.0.1:9333}"
+   browser-harness <<'PY'
    click_at_xy(<x>, <y>)
    wait_for_load()
    capture_screenshot("screenshots/<env>/<folder-name>/<mode>/#<N>-<desc>-after.png", max_dim=1800)
-   '
+   PY
    ```
 
    **重要**：`click_at_xy` 接 CSS 像素，截圖檔是 device pixels（2× 螢幕會 ×2）。讀截圖時務必用 `js("window.devicePixelRatio")` 換算座標。
@@ -652,40 +683,54 @@ agent 回傳：
 - **每完成一個 item 之後**：更新 `progress.json` + 跑一個 cheap tool call（如 `Bash("date")` 或 `Read` `progress.json` 自己剛寫的檔）強制 return main loop
 - **每 15 分鐘**（即使沒新完成 item）：同上
 
-存在原因：`SendMessage` 是 cooperative — 訊息 queue 進 agent inbox 後，**只有 agent 完成當下 tool call、回到 main loop、發出下一個 tool call 時**才會被遞送。verify mode 若把整段 `browser-harness -c '...'` 包成單一 Bash call、內含 10+ 動作（每個 `wait_for_load` 2–5s、`capture_screenshot` 3–10s），整個 call 可能跑 5–15 分鐘以上，**期間主線完全無法介入**。Checkpoint 是強制 return main loop 的機制。
+存在原因：`SendMessage` 是 cooperative — 訊息 queue 進 agent inbox 後，**只有 agent 完成當下 tool call、回到 main loop、發出下一個 tool call 時**才會被遞送。verify mode 若把整段 `browser-harness <<'PY' ... PY` 包成單一 Bash call、內含 10+ 動作（每個 `wait_for_load` 2–5s、`capture_screenshot` 3–10s），整個 call 可能跑 5–15 分鐘以上，**期間主線完全無法介入**。Checkpoint 是強制 return main loop 的機制。
 
 ### 為什麼單一 long browser-harness call 會 break SendMessage
 
-`browser-harness -c '...'` 是單一 Bash 工具呼叫，期間 Python 程式跑多少瀏覽器互動主線都看不到。寫法影響主線可介入性：
+`browser-harness <<'PY' ... PY` 是單一 Bash 工具呼叫，期間 Python 程式跑多少瀏覽器互動主線都看不到。寫法影響主線可介入性：
 
 **❌ 反例（10 動作包成單 call，主線 5–15 分鐘叫不動）**：
 
 ```bash
-browser-harness -c '
+export BU_CDP_URL="${BU_CDP_URL:-http://127.0.0.1:9333}"
+browser-harness <<'PY'
 new_tab("http://localhost:3000/page-a"); wait_for_load(); capture_screenshot("...#1.png")
 goto_url("http://localhost:3000/page-b"); wait_for_load(); capture_screenshot("...#2.png")
 goto_url("http://localhost:3000/page-c"); wait_for_load(); capture_screenshot("...#3.png")
 # ... 還有多個 URL / item ...
-'
+PY
 ```
 
 **✅ 正解（拆成多個 ≤ 1 語義動作的 call）**：
 
 ```bash
 # Call 1：登入 + 跳目標頁（一個語義：「到達待操作頁面」）
-browser-harness -c 'new_tab("..."); wait_for_load(); page_info()'
+export BU_CDP_URL="${BU_CDP_URL:-http://127.0.0.1:9333}"
+browser-harness <<'PY'
+new_tab("...")
+wait_for_load()
+page_info()
+PY
 # → return main loop（SendMessage queue 在此被處理）
 
 # Call 2：等待 final-state element（一個語義：「確認畫面載入」）
-browser-harness -c 'wait_for_element("text=待驗狀態", timeout=10); page_info()'
+export BU_CDP_URL="${BU_CDP_URL:-http://127.0.0.1:9333}"
+browser-harness <<'PY'
+wait_for_element("text=待驗狀態", timeout=10)
+page_info()
+PY
 # → return main loop
 
 # Call 3：DOM observation + 截圖（一個語義：「收集 visual evidence」）
-browser-harness -c 'dom=js("return document.body.innerText"); capture_screenshot("...")'
+export BU_CDP_URL="${BU_CDP_URL:-http://127.0.0.1:9333}"
+browser-harness <<'PY'
+dom = js("return document.body.innerText")
+capture_screenshot("...")
+PY
 # → return main loop
 ```
 
-**規則**：單個 `browser-harness -c '...'` **MUST** ≤ 1 語義動作（例如：「登入 + 跳轉首頁」算一個；「等待 final-state element」算一個；「DOM observation + 截圖」算一個）。**NEVER** 把多個 verify item 串在同一個 call。
+**規則**：單個 `browser-harness <<'PY' ... PY` block **MUST** ≤ 1 語義動作（例如：「登入 + 跳轉首頁」算一個；「等待 final-state element」算一個；「DOM observation + 截圖」算一個）。**NEVER** 把多個 verify item 串在同一個 call。
 
 ### Fail-Fast 條件（hard rule）
 
@@ -761,11 +806,20 @@ Verify mode **MUST** 在 `screenshots/<env>/<change-name>/progress.json` 寫入�
 Spectra `/spectra-apply` 等情境需要多個 screenshot-review subagent 並行時，每個 subagent 透過 `BU_NAME` 隔離 daemon：
 
 ```bash
-BU_NAME=change-A browser-harness -c 'new_tab("...");  capture_screenshot("...")'
-BU_NAME=change-B browser-harness -c 'new_tab("...");  capture_screenshot("...")'
+export BU_CDP_URL="${BU_CDP_URL:-http://127.0.0.1:9333}"
+BU_NAME=change-A browser-harness <<'PY'
+new_tab("...")
+capture_screenshot("...")
+PY
+
+export BU_CDP_URL="${BU_CDP_URL:-http://127.0.0.1:9333}"
+BU_NAME=change-B browser-harness <<'PY'
+new_tab("...")
+capture_screenshot("...")
+PY
 ```
 
-預設 `BU_NAME=default`，多 subagent 不指定會搶同一個 daemon。
+預設 `BU_NAME=default`，多 subagent 不指定會搶同一個 daemon。`BU_CDP_URL` 與 `BU_NAME` 都要每個 Bash call 重新 export。
 
 ## Playwright CLI 用法（響應式 / 跨瀏覽器 / 多分頁）
 
@@ -899,6 +953,8 @@ browser-harness daemon 設計上常駐（保持後續呼叫快），**不需要*
 
 ## Guardrails
 
+- **MUST** 每個 Bash tool call 的 `browser-harness` 呼叫加 `export BU_CDP_URL="${BU_CDP_URL:-http://127.0.0.1:9333}"` defensive prefix — Bash tool 不 source `~/.zshrc`，少加會 fallback 到 daily Chrome 撞 HTTP 403
+- **MUST** 用 `browser-harness <<'PY' ... PY` heredoc，**NEVER** 用 `-c '...'`（舊版 syntax；雙重 shell 跳脫 + 撞 Python <3.12 f-string 限制）
 - **NEVER** 對非 UI 項目強行截圖
 - **NEVER** patch auth middleware — Chrome 沒登入過就走 dev-login route 或請使用者登入
 - **NEVER** 從截圖讀使用者帳密填寫登入表單 — 撞登入頁立刻停下回報
@@ -912,4 +968,5 @@ browser-harness daemon 設計上常駐（保持後續呼叫快），**不需要*
 - **ALWAYS** `capture_screenshot(..., max_dim=1800)` 避免超過 LLM 圖片邊長上限
 - 截圖失敗時記錄失敗原因，不要跳過
 - Dev server 500 → Nitro 快取問題，重啟 dev server；仍有問題刪 `.nuxt/` 後重啟
-- Tab 變 stale（chrome:// / about:blank）→ 在 `-c` block 開頭 `ensure_real_tab()` 救回
+- Tab 變 stale（chrome:// / about:blank）→ 在 heredoc block 開頭 `ensure_real_tab()` 救回
+- HTTP 403 / `--doctor` 顯示接到 daily Chrome → `pkill -f browser_harness.daemon && rm -f /tmp/bu-default.sock /tmp/bu-default.pid`，重新走 defensive prefix

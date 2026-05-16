@@ -539,7 +539,17 @@ If there is no AskUserQuestion tool available, present options as plain text and
    When tasks.md still contains unchecked items in the `## 人工檢查` section (typical at this point — implementation tasks `[x]` but manual-review items `[ ]`), **MUST** hand off to the local manual-review GUI rather than walking through items inline in chat.
 
    - **DEFAULT path**: Reply to the user with something like:
-     > Implementation 完成。Step 8a 已處理 verify channels：automatic `[verify:e2e]` / `[verify:api]` items 已寫 annotation 並自動完成；含 `[verify:ui]` / `[review:ui]` 的 `<N>` 項仍待你確認。請在 consumer repo root 執行 `pnpm review:ui` 開本地 GUI 驗收 — `[verify:ui]` 項顯示 final-state screenshot + DOM observation 等你點 OK；`[review:ui]` 項顯示人工驗收 evidence。完成後回報，我繼續 Step 9 status。
+     > Implementation 完成。Step 8a 已處理 verify channels：automatic `[verify:e2e]` / `[verify:api]` items 已寫 annotation 並自動完成；含 `[verify:ui]` / `[review:ui]` 的 `<N>` 項仍待你確認。請在**該 change 所在的 worktree root** 執行 `pnpm review:ui` 開本地 GUI 驗收：
+     >
+     >   cd <change-worktree-absolute-path>
+     >   pnpm review:ui
+     >
+     > GUI 啟動後直接打開：
+     >
+     >   http://127.0.0.1:5174/review/<change-name>
+     >
+     > GUI 會自動配對 `screenshots/local/<change-name>/#<N>-*.png`、conflict-aware 寫回 tasks.md、對 `[verify:e2e]` / `[verify:api]` automatic-only items 自動勾 `[x]`、對 `[verify:ui]` / `[review:ui]` items 顯示 evidence 等你 OK / Issue / Skip。完成後回報，我繼續 Step 9 status。
+   - **MUST 直接給 review-gui deep-link + worktree 絕對路徑**（per `rules/core/proactive-skills.md` § Inline Review-GUI Deep-Link）：訊息 **MUST** 含 (1) `cd <change-worktree-absolute-path>` 完整路徑（從 `git rev-parse --git-dir` 或 wt-helper list 抓），(2) `http://127.0.0.1:5174/review/<change-name>` 完整 URL。**NEVER** 寫「consumer repo root」「專案根目錄」當預設措辭——`openspec/changes/<name>/` 與 `screenshots/local/<name>/` 只在 worktree、main repo 沒有，使用者開新 terminal 落在 main 跑 `pnpm review:ui` 會空畫面。**NEVER** 列 dev server URL（`http://localhost:3040/admin/...`）當替代——review-gui 內部已有 final-state screenshot + evidence；列 dev server URL 反而模糊驗收入口。`5174` 是 `vendor/scripts/review-gui.mts` `DEFAULT_PORT`，找不到時會 fallback 到 5174-5194，由 GUI startup banner 告知 user，主線不必猜。
    - Wait for the user to complete the GUI flow and report back. Do NOT proceed to Step 9 / propose archive until the user signals manual review is done.
    - **NEVER** default to `AskUserQuestion` chat dialog walking items one-by-one — it burns tokens, ignores the screenshot pool, and contradicts `rules/core/manual-review.md` 標準流程.
 
