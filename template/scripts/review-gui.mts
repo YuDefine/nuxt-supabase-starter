@@ -2634,6 +2634,20 @@ export function renderReviewHtml(): string {
       padding: 6px 14px;
       font-size: 13px;
     }
+    .copy-handoff-btn.group {
+      margin-left: 0;
+      text-transform: none;
+      letter-spacing: 0;
+      font-size: 11px;
+      padding: 3px 10px;
+    }
+    .change-group-heading.with-action {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding-right: 4px;
+    }
 
     /* ── handoff prompt fallback modal（clipboard API 失敗時顯示） ── */
     .prompt-fallback-modal {
@@ -3215,6 +3229,62 @@ export function renderReviewHtml(): string {
           '',
           '若評估後判斷 proposal 已足夠（pattern 屬 false positive），直接回報「不用補」並說明理由即可，我會在 review:ui 直接 OK / Issue / SKIP 帶過 warning。',
         ].join('\\n');
+      } else if (kind === 'not-ready-group') {
+        // Group-level prompt：跳開 handoffHeader/footer 自組，因為涉及多 change
+        // 且核心訴求是「分類後只回報 bug 候選，WIP / false positive 完全不要列」
+        const list = Array.isArray(ctx.notReadyChanges) ? ctx.notReadyChanges : [];
+        const repoName = state.repoName || '(unknown)';
+        const repoRoot = state.repoRoot || '(unknown)';
+        const lines = [
+          '我在 consumer repo「' + repoName + '」（路徑：' + repoRoot + '）',
+          '跑 \`pnpm review:ui\` 做 spectra 人工檢查，home page 有 ' + list.length + ' 張 change 落在',
+          '「⚠ Not yet ready — needs data fix」這群（命中 Pre-Review Data Readiness pattern）。',
+          '請逐張做健康檢查，**只在判定是 bug 時才回報**——若只是 spec 還沒寫完 / WIP，不要介入。',
+          '',
+          '## 環境',
+          '- consumer: ' + repoName,
+          '- repo root: ' + repoRoot,
+          '',
+          '## 命中的 changes（共 ' + list.length + ' 張）',
+        ];
+        for (const c of list) {
+          const summary = summarizeHits(c.hitsByCode) || '(無 code 細節)';
+          lines.push('- \`' + c.name + '\` — ' + summary);
+        }
+        lines.push(
+          '',
+          '## 相關 rules（必讀）',
+          '- .claude/rules/manual-review.md（pattern code 對應的判斷準則 + Pre-Review Data Readiness 段）',
+          '- .claude/rules/fixtures-reference.md（sample / URL / scoped sub-items 樣態）',
+          '- .claude/rules/tech-debt-routing.md（修法路由：clade vs consumer / TD vs spec）',
+          '- openspec/AGENTS.md（spectra 工作流）',
+          '',
+          '## 你要做的事',
+          '',
+          '對每張 change 跑下面流程：',
+          '',
+          '1. 讀 \`openspec/changes/<change>/proposal.md\` 與 \`tasks.md\` 看當前狀態，把該 change 分到以下其一：',
+          '   - **(A) WIP / 還沒寫完 / 留待之後補**——proposal 還在打草稿、sample/URL 尚未補、相關 task 還沒動工。pattern 命中只是因為資料尚未到位，這是預期狀態。',
+          '   - **(B) bug 或規範違反**——spec 已完成但 item 內容與 spec 不符 / 違反 manual-review.md 規定（例：URL 寫了但對不上、multi-step 該拆但被合併、kind marker 用錯）。',
+          '   - **(C) false positive**——pattern 命中但不適用（例：item 是 backend-only，本來就不需 URL）。',
+          '',
+          '2. **只對 (B) 類回報**，每條給：',
+          '   - change name + item id',
+          '   - 命中的 pattern code + 違規證據（引 spec / 引實作位置）',
+          '   - 建議修法（要動哪些檔，依 \`.claude/rules/tech-debt-routing.md\` 路由：spec 缺漏 → \`/spectra-ingest\`；代碼 bug 影響窄 → \`docs/tech-debt.md\` TD-NNN；clade 投影層 → 提示去 clade 改）',
+          '',
+          '3. **(A) 與 (C) 完全不要列出**——不要寫「以下是略過的」「以下是 false positive」這類段落，那只是徒增噪音。',
+          '',
+          '4. **如果全部都是 (A) 或 (C)**：直接一句「全部都是 WIP / false positive，不用介入」結束。',
+          '',
+          '## 規矩',
+          '- **MUST** 用 codebase-memory-mcp 探索（search_graph / trace_path / get_code_snippet）；graph 未 index 先跑 index_repository',
+          '- Grep / Glob / Read 只用於非程式碼檔（.md / config / .env）',
+          '- 不要急著動手——plan-first，bug 候選列出來等我確認後再改',
+          '',
+          '回覆時請先說「我看到的現況是 ...」再給 bug 清單（若有）。',
+        );
+        return lines.join('\\n');
       } else {
         body = '## 問題\\n\\n(unknown kind: ' + kind + ')';
       }
@@ -3370,7 +3440,10 @@ export function renderReviewHtml(): string {
       if (notReady.length) {
         blocks.push(
           '<div class="change-group">' +
-          '<div class="change-group-heading">⚠ Not yet ready — needs data fix · ' + notReady.length + '</div>' +
+          '<div class="change-group-heading with-action">' +
+            '<span>⚠ Not yet ready — needs data fix · ' + notReady.length + '</span>' +
+            '<button class="copy-handoff-btn group" data-group-handoff="not-ready" type="button" title="複製健康檢查 prompt：讓 Claude 逐張讀 proposal/tasks 分類，只回報 bug，不徒增 noise">📋 健康檢查 prompt</button>' +
+          '</div>' +
           notReady.map(renderChangeCard).join('') +
           '</div>'
         );
@@ -3392,6 +3465,18 @@ export function renderReviewHtml(): string {
       }
       el.changeList.querySelectorAll('[data-change]').forEach(function (button) {
         button.addEventListener('click', function () { loadChange(button.dataset.change); });
+      });
+      el.changeList.querySelectorAll('[data-group-handoff]').forEach(function (button) {
+        button.addEventListener('click', function (event) {
+          event.stopPropagation();
+          const kind = button.dataset.groupHandoff;
+          if (kind === 'not-ready') {
+            const notReadyChanges = (state.changes || []).filter(function (c) {
+              return (c.readinessHits || 0) > 0;
+            });
+            copyHandoffPrompt('not-ready-group', { notReadyChanges: notReadyChanges }, '健康檢查（' + notReadyChanges.length + ' change）');
+          }
+        });
       });
     }
 
