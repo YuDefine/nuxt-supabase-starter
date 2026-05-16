@@ -30,7 +30,11 @@ pnpm exec tsx scripts/review-gui.mts --scan
   "ready":    [ { "name": "<change>", "pending": N, "issued": N, "total": N } ],
   "notReady": [ { "name": "<change>", "pending": N, "issued": N, "total": N,
                   "readinessHits": N, "malformed": N,
-                  "hitsByCode": { "UI_ITEM_NO_URL": 2, "REVIEW_UI_BACKEND_ROUNDTRIP": 1 } } ]
+                  "hitsByCode": { "UI_ITEM_NO_URL": 2, "REVIEW_UI_BACKEND_ROUNDTRIP": 1 },
+                  // evidenceMissing：item 標了 [verify:e2e/api/ui] 但缺對應 (verified-*:) annotation。
+                  // 落 notReady 群的另一條觸發路徑（與 readinessHits / malformed 並列），各 entry 一個 item。
+                  "evidenceMissing": [ { "itemId": "#3", "description": "...",
+                                          "kinds": ["e2e", "api", "ui"] } ] } ]
 }
 ```
 
@@ -46,18 +50,25 @@ HANDOFF.md 用 marker 包夾，每次重跑**覆蓋同一段**（不累積垃圾
 
 > 最後掃描：<generatedAt>　|　ready: N　not-ready: M
 
-### ✅ Ready for review（N changes）
+### ✅ 可以開始檢查（N changes）
 
 可批次跑 `pnpm review:ui` 處理：
 
 - `<change>` — pending N/total
 - ...
 
-### ⚠ Not yet ready — needs data fix（M changes）
+### ⚠ 尚未準備好，需先補強（M changes）
 
-下列 change 含 Pre-Review Data Readiness alert，**先補資料再 review**（patterns 詳見 `vendor/snippets/manual-review-enforcement/patterns.json`）：
+下列 change 落這群的原因有兩種，依實際 entry 欄位分開列：
+
+**(A) Pre-Review Data Readiness alert** — `readinessHits > 0`，**先補資料再 review**（patterns 詳見 `vendor/snippets/manual-review-enforcement/patterns.json`）：
 
 - `<change>` — pending N · ⚠ N hits: UI_ITEM_NO_URL ×2, REVIEW_UI_BACKEND_ROUNDTRIP ×1
+- ...
+
+**(B) Verify-channel evidence missing** — `evidenceMissing.length > 0`，**跑 `/spectra-apply` Step 8a 補 evidence**：
+
+- `<change>` — pending N · ⚠ N item 缺 evidence (e2e ×2, api ×1, ui ×1)
 - ...
 <!-- END: review-readiness-scan -->
 ```
