@@ -88,28 +88,6 @@ propose / ingest 階段命中即視為違反，**MUST** 改寫。
 1. **明確 URL** — 寫出要打開的具體頁面（含必要 query string / route param），不要只說「kiosk 頁」「dashboard」「設定頁」
 2. **逐步動作 sub-items** — 用 `#N.M` scoped 拆，每條 sub-item 一個原子動作（開 X → 輸入 Y / 點 Z → 確認 W）。**禁止**流程式描述（例「刷卡 → 進入毛刺 → 操作完成 → 自動回 standby」整條塞在 parent line）
 3. **預期觀察具體化** — 每步寫清楚「應看到什麼 / 不應看到什麼」（具體 toast 文字、badge 狀態、欄位值、route 變化），**禁止**寫「畫面正常」「狀態正確」「操作完成」這類模糊驗收
-4. **UI 元素 MUST 用使用者可見文字指代** — 引用 button / tab / card / region / selector / input / link / dialog / toast 等 UI 元素時，**MUST** 用使用者畫面上實際看得到的文字（i18n string、button label、tab 名稱、卡片標題 / region heading、placeholder、aria-label fallback），**NEVER** 用 codebase 內部識別符（component name、檔名、CSS class、test-id、store action、API endpoint name、fixture id）。User 看 UI 找不到 codebase 內部識別符對應的位置，整條 item 失去可執行性。寫作者**MUST** 先打開頁面確認該元素 user 實際看到的文字是什麼，再寫進 item
-
-### 反例：multi-card UI selector
-
-❌ 不夠（用 Vue component 檔名指代區塊，user 看 UI 找不到「`SupplierComparison`」在哪）：
-
-```markdown
-- [ ] #3.2 [review:ui] 開 `/reports/costs` 採購價格 tab，在 `SupplierComparison` selector 選 `成本報表測試耗材 A`，點 `匯出 PDF`，開啟下載檔確認至少 2 個 supplier rows、最低價標示與欄位對齊可讀。
-```
-
-✅ 好（用 user 在頁面上實際看到的中文卡片標題 + 真實 button 文字 + 具體驗收觀察）：
-
-```markdown
-- [ ] #3.2 [review:ui] 開 `/reports/costs`、點頂部「採購價格」tab → 找到頁面中的「供應商比較」卡片 → 在卡片內品項 selector 選「成本報表測試耗材 A」→ 點該卡片下方「匯出 PDF」按鈕 → 開啟下載檔確認：(a) 至少 2 個 supplier rows、(b) 最低價那列有「最低價」badge、(c) 欄位橫向對齊不溢出。
-```
-
-判斷準則（寫前自問）：
-
-- 「我寫的這個詞，user 不開 codebase 能在 UI 上看到嗎？」否 → 改成 user 看得到的
-- 對動態 / runtime label，引用既有 i18n key 對應的 zh-TW 翻譯，**NEVER** 引用 i18n key 本身（user 看到的是翻譯後的字）
-- 無可見文字的純圖示 button（icon-only）— 用「該卡片右上角的 ❌ 關閉圖示」「sidebar 最下面的齒輪圖示」等位置 + 圖示語義描述
-- 同時引用 codebase 路徑只在「期望結果是改檔」時可用（極罕見，通常 `[review:ui]` 不該動 codebase）
 
 ### 實體裝置 / 規格外輸入的替代路徑
 
