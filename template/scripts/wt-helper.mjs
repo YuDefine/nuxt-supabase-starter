@@ -13,7 +13,10 @@
  *   prune            Interactively remove worktrees whose branches are
  *                    already merged into main. Per-entry [y/N] confirm.
  *   cleanup <slug>   Remove one session worktree by slug. Refuses if branch
- *                    not merged unless --force.
+ *                    not merged unless --force. Even with --force, refuses
+ *                    if branch HEAD has files NOT landed into main's working
+ *                    tree (squash-merge failure detection); add
+ *                    --force-discard-unland to proceed anyway.
  *
  * Consumer-root resolution: walks up from cwd to the first `.git` (file or
  * directory), then uses `git rev-parse --git-common-dir` to canonicalize —
@@ -263,6 +266,37 @@ async function cmdCleanup(slug, opts) {
     }
   }
 
+  if (!opts.forceDiscardUnland) {
+    let branchFiles = []
+    try {
+      const out = git(['diff', '--name-only', `main..${branchName}`], { cwd: consumerRoot })
+      branchFiles = out.split('\n').filter(Boolean)
+    } catch {
+      branchFiles = []
+    }
+    const unlanded = []
+    for (const f of branchFiles) {
+      try {
+        git(['diff', '--quiet', branchName, '--', f], { cwd: consumerRoot })
+      } catch {
+        unlanded.push(f)
+      }
+    }
+    if (unlanded.length > 0) {
+      const preview = unlanded
+        .slice(0, 10)
+        .map((f) => `  - ${f}`)
+        .join('\n')
+      const more = unlanded.length > 10 ? `\n  ... and ${unlanded.length - 10} more` : ''
+      throw new Error(
+        `Branch ${branchName} has ${unlanded.length} file(s) whose branch HEAD content is NOT present in main's working tree (squash-merge may have failed or been aborted):\n` +
+          preview +
+          more +
+          `\nIf the squash succeeded and you intentionally want to discard the branch, add --force-discard-unland.`
+      )
+    }
+  }
+
   const removeArgs = ['worktree', 'remove']
   if (opts.force) removeArgs.push('--force')
   removeArgs.push(target.path)
@@ -283,7 +317,11 @@ async function main() {
     if (a.startsWith('--')) flags.add(a)
     else positional.push(a)
   }
-  const opts = { json: flags.has('--json'), force: flags.has('--force') }
+  const opts = {
+    json: flags.has('--json'),
+    force: flags.has('--force'),
+    forceDiscardUnland: flags.has('--force-discard-unland'),
+  }
 
   switch (sub) {
     case 'add':
