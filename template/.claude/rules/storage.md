@@ -1,3 +1,7 @@
+---
+description: Supabase Storage 使用規範（上傳、signed URL、policy、清理）
+paths: ['server/api/**/*.ts', 'supabase/migrations/**/*.sql']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/db-runtime/cf-workers/storage.md
@@ -5,10 +9,6 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
----
-description: Supabase Storage 使用規範（上傳、signed URL、policy、清理）
-paths: ['server/api/**/*.ts', 'supabase/migrations/**/*.sql']
----
 
 # Storage
 

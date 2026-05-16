@@ -1,3 +1,7 @@
+---
+description: Manual Review evidence 規約——寫 / 審 tasks.md 的 ## 人工檢查 區塊時 path-scoped 載入
+paths: ['openspec/changes/**/tasks.md', 'docs/manual-review-archive.md']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/manual-review.evidence.md
@@ -5,10 +9,6 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
----
-description: Manual Review evidence 規約——寫 / 審 tasks.md 的 ## 人工檢查 區塊時 path-scoped 載入
-paths: ['openspec/changes/**/tasks.md', 'docs/manual-review-archive.md']
----
 
 # Manual Review — Evidence & Authoring Schema
 

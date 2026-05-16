@@ -1,3 +1,7 @@
+---
+description: 遠端 Supabase MCP 使用限制
+paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/db-runtime/cf-workers/mcp-remote.md
@@ -5,10 +9,6 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
----
-description: 遠端 Supabase MCP 使用限制
-paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts']
----
 
 # MCP Remote Database
 

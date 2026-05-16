@@ -1,3 +1,7 @@
+---
+description: Codex 派工的標準流程模板、Codex Watch Protocol、Plan-first / Git baseline declaration、$spectra-apply Runtime Gate、screenshot-review verify mode 派工與監看；apply 階段或派 codex 時 path-scoped 載入
+paths: ['openspec/changes/**/tasks.md', 'openspec/changes/**/design.md', 'vendor/scripts/spectra-advanced/**', 'plugins/hub-core/agents/**', 'plugins/hub-core/skills/spectra-*/**', '.claude/commands/commit.md', 'screenshots/**/progress.json']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/agent-routing.codex-watch-protocol.md
@@ -5,10 +9,6 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
----
-description: Codex 派工的標準流程模板、Codex Watch Protocol、Plan-first / Git baseline declaration、$spectra-apply Runtime Gate、screenshot-review verify mode 派工與監看；apply 階段或派 codex 時 path-scoped 載入
-paths: ['openspec/changes/**/tasks.md', 'openspec/changes/**/design.md', 'vendor/scripts/spectra-advanced/**', 'plugins/hub-core/agents/**', 'plugins/hub-core/skills/spectra-*/**', '.claude/commands/commit.md', 'screenshots/**/progress.json']
----
 
 # Agent Routing — Codex / screenshot-review Dispatch & Watch Protocol
 

@@ -1,3 +1,7 @@
+---
+description: Follow-up Register 規則——強制 tasks.md 的未解決項目使用 @followup[TD-xxx] marker 並在 docs/tech-debt.md 留下可追蹤 entry；archive gate 攔截未登記 marker
+paths: ['openspec/changes/**/tasks.md', 'docs/tech-debt.md']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/follow-up-register.md
@@ -5,10 +9,6 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
----
-description: Follow-up Register 規則——強制 tasks.md 的未解決項目使用 @followup[TD-xxx] marker 並在 docs/tech-debt.md 留下可追蹤 entry；archive gate 攔截未登記 marker
-paths: ['openspec/changes/**/tasks.md', 'docs/tech-debt.md']
----
 
 # Follow-up Register
 

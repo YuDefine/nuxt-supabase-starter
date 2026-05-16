@@ -1,3 +1,7 @@
+---
+description: Consumer 維護 docs/FIXTURES.md 作為「測試身分 / 樣本 UID / business key」speed reference；propose / ingest 階段引用此檔產生具體 sample inline，與 supabase/seed.sql cross-link
+paths: ['docs/FIXTURES.md', 'docs/fixtures.md']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/fixtures-reference.md
@@ -5,10 +9,6 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
----
-description: Consumer 維護 docs/FIXTURES.md 作為「測試身分 / 樣本 UID / business key」speed reference；propose / ingest 階段引用此檔產生具體 sample inline，與 supabase/seed.sql cross-link
-paths: ['docs/FIXTURES.md', 'docs/fixtures.md']
----
 
 # Fixtures Reference（hard rule）
 

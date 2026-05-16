@@ -1,3 +1,7 @@
+---
+description: 查詢優化、EXPLAIN、index 設計與 RLS 效能測量
+paths: ['supabase/migrations/**/*.sql', 'server/api/**/*.ts']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/db-schema/supabase/query-optimization.md
@@ -5,10 +9,6 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
----
-description: 查詢優化、EXPLAIN、index 設計與 RLS 效能測量
-paths: ['supabase/migrations/**/*.sql', 'server/api/**/*.ts']
----
 
 # Query Optimization
 

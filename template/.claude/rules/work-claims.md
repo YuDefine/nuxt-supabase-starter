@@ -1,3 +1,7 @@
+---
+description: Work claim 規則——開始接手 spectra change 前先 claim，避免多個 session / agent 不自覺撞工
+paths: ['HANDOFF.md', 'openspec/ROADMAP.md', 'openspec/changes/**', '.spectra/claims/**']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/work-claims.md
@@ -5,10 +9,6 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
----
-description: Work claim 規則——開始接手 spectra change 前先 claim，避免多個 session / agent 不自覺撞工
-paths: ['HANDOFF.md', 'openspec/ROADMAP.md', 'openspec/changes/**', '.spectra/claims/**']
----
 
 # Work Claims
 

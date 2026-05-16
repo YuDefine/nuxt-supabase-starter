@@ -1,3 +1,7 @@
+---
+description: Session-scoped 輕量 todo 機制——以 per-session 分檔避免 multi-session 併發 lost update，並定義升級到 HANDOFF / ROADMAP / tech-debt / spectra change 的路徑
+paths: ['tasks/**']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/session-tasks.md
@@ -5,10 +9,6 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
----
-description: Session-scoped 輕量 todo 機制——以 per-session 分檔避免 multi-session 併發 lost update，並定義升級到 HANDOFF / ROADMAP / tech-debt / spectra change 的路徑
-paths: ['tasks/**']
----
 
 # Session Tasks
 

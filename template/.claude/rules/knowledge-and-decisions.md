@@ -1,3 +1,7 @@
+---
+description: 知識沉澱與決策記錄規則——非直覺問題解法要進 docs/solutions，跨任務技術決策要進 docs/decisions
+paths: ['docs/solutions/**', 'docs/decisions/**', 'openspec/**']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/knowledge-and-decisions.md
@@ -5,10 +9,6 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
----
-description: 知識沉澱與決策記錄規則——非直覺問題解法要進 docs/solutions，跨任務技術決策要進 docs/decisions
-paths: ['docs/solutions/**', 'docs/decisions/**', 'openspec/**']
----
 
 # Knowledge Accumulation & Decision Records
 

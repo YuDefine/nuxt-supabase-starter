@@ -1,3 +1,7 @@
+---
+description: Manual Review backend 規約——backend-only change 特別規約 + 標準流程（含 verify channel baseline）；動 server / test / e2e / supabase 時 path-scoped 載入
+paths: ['server/**/*.ts', 'test/**/*.ts', 'e2e/**/*.ts', 'supabase/**']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/manual-review.backend.md
@@ -5,10 +9,6 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
----
-description: Manual Review backend 規約——backend-only change 特別規約 + 標準流程（含 verify channel baseline）；動 server / test / e2e / supabase 時 path-scoped 載入
-paths: ['server/**/*.ts', 'test/**/*.ts', 'e2e/**/*.ts', 'supabase/**']
----
 
 # Manual Review — Backend Verification Flow
 

@@ -1,3 +1,7 @@
+---
+description: UI / design 工作的 Design Checkpoint、design skill 觸發順序、Design Review template、Design Gate、Cross-Change holistic review 與非 UI exception；動 UI 檔或寫 design artifact 時 path-scoped 載入
+paths: ['app/**/*.vue', 'app/**/*.ts', 'components/**', 'pages/**', 'layouts/**', 'openspec/changes/**/design.md', 'docs/specs/**/spec.md']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/proactive-skills.design-checkpoint.md
@@ -5,10 +9,6 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
----
-description: UI / design 工作的 Design Checkpoint、design skill 觸發順序、Design Review template、Design Gate、Cross-Change holistic review 與非 UI exception；動 UI 檔或寫 design artifact 時 path-scoped 載入
-paths: ['app/**/*.vue', 'app/**/*.ts', 'components/**', 'pages/**', 'layouts/**', 'openspec/changes/**/design.md', 'docs/specs/**/spec.md']
----
 
 # Proactive Skills — Design Checkpoint
 

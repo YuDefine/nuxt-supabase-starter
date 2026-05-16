@@ -18,7 +18,7 @@ metadata:
 **Mode A — 當前 chat session 有未交辦工作**（任一條成立即 Mode A）：
 - `TaskList` 顯示當前 session 任何 `in_progress` 或 `pending` task（TaskList 是 per-session 工具狀態，可信）
 - 當前 chat 對話脈絡明顯顯示 user 正在 mid-task（我剛在做某事還沒收尾、user 剛交辦一個多步驟工作做到一半）
-- Stop hook 攔住但 acceptance 未滿足 + 處於 [[worktree-default]] §7 死鎖（cwd 在 main + main 已 dirty）且當前 session 已自評不適合走 §7 分支 A（context 不寬裕 / 剩餘 work 不小 / 無法 selective stash）
+- Stop hook 攔住但 acceptance 未滿足 + 處於 [[worktree-default]] §8 死鎖（cwd 在 main + main 已 dirty）且當前 session 已自評不適合走 §7 分支 A（context 不寬裕 / 剩餘 work 不小 / 無法 selective stash）
 
 **Mode B — 當前 chat session 沒有要交辦的**：以上皆否（即使 working tree 髒、tasks/ 有別 session 的 unchecked、spectra changes 有別 session 的 active work，都仍是 Mode B —— 那些屬於別 session 的責任）。
 
@@ -61,7 +61,7 @@ metadata:
    - 主要檔案路徑（讓接手者直接跳）
    - 目前做到哪裡 / 還剩什麼
    - 已踩過的坑（避免下一 session 重踩）
-   - **若來自 [[worktree-default]] §7 死鎖**：額外加 Stop hook 攔點摘要、missing acceptance criterion、改過檔案的 selective stash ref（若有，例 `stash@{0}: <slug>-handoff`）、下一 session oneliner（`cd <worktree-path> && claude "<next-skill-invocation>"`）
+   - **若來自 [[worktree-default]] §8 死鎖**：額外加 Stop hook 攔點摘要、missing acceptance criterion、改過檔案的 selective stash ref（若有，例 `stash@{0}: <slug>-handoff`）、下一 session oneliner（`cd <worktree-path> && claude "<next-skill-invocation>"`）
 4. **清理 session-tasks**：所有未完項升級完成後 → 只 `mv` / 刪「當前 session 自己開的」`tasks/<date>-*.md`（依 `rules/core/session-tasks.md`「NEVER 動別人的 tasks 檔」）。若當前 session 從頭到尾沒開 tasks 檔，跳過此步。
 5. **回報**：一句話總結升級數量（如「升級 3 到 HANDOFF / 1 到 tech-debt / 砍 2」）。**禁止**追加「下一步建議」或「要不要繼續做 X」。
 
@@ -144,29 +144,29 @@ Outstanding（N 條）：
 
 ### 2B.5 接續 dispatch（user 選定 outstanding 後）
 
-User 透過 `request_user_input` 選定下一步 outstanding（含明確的 next-skill 與 change-name / argument）後，**MUST** 依下表決定 dispatch path，**不要**輸出「請執行 cd ... && claude ...」oneliner 讓 user 另開 terminal（per [[worktree-default]] §7 分支 C 規約消除「另開 terminal」UX 痛點）：
+User 透過 `request_user_input` 選定下一步 outstanding（含明確的 next-skill 與 change-name / argument）後，**MUST** 依下表透過 Skill tool 內呼對應的入口，**不要**輸出「請執行 cd ... && claude ...」oneliner 讓 user 另開 terminal。
 
 | Next-skill 類型 | Dispatch 行為 |
 | --- | --- |
-| `/spectra-archive <change-name>` | **直接** dispatch（透過 Skill tool 內呼），不建 worktree。Archive 是 main-bound 例外，per [[worktree-default]] §1 |
-| `/spectra-apply` / `/spectra-ingest` / `/spectra-debug`（要寫 tracked file 的 spectra-* skill） | 透過 Skill tool 內呼 `/wt <slug> --dispatch-from-handoff <next-skill-invocation>`，由 `/wt` 建 worktree + 遷 cwd + dispatch next skill（per [[worktree-default]] §7 分支 C） |
-| `/spectra-ask`、其他 read-only / 探索 skill | **直接** dispatch（無需 worktree） |
-| `/spectra-propose` / `/spectra-discuss` | **直接** dispatch（propose / discuss 階段純寫 `openspec/changes/<new>/` 內新檔，不碰既有 tracked file，與[[worktree-default]] §1 的 worktree 邊界相容） |
-| 不在表上的 skill | 走預設 oneliner 路徑（per §1 oneliner 慣例），讓 user 另開 session |
+| `/spectra-archive <change-name>` | **直接** 透過 Skill tool 內呼 `/spectra-archive <change-name>`，不建 worktree。Archive 是 main-bound 例外，per [[worktree-default]] §1 |
+| `/spectra-apply` / `/spectra-ingest` / `/spectra-debug`（要寫 tracked file 的 spectra-* skill） | 透過 Skill tool 內呼 `/wt <slug>: /<next-skill> <change-name>`，由 `/wt` 建 worktree + dispatch subagent 跑 next-skill + squash 回 main + cleanup（per [[wt]] Form 3）。Parent session cwd 不動 |
+| `/spectra-ask`、其他 read-only / 探索 skill | **直接** 透過 Skill tool 內呼（無需 worktree） |
+| `/spectra-propose` / `/spectra-discuss` | **直接** 透過 Skill tool 內呼（propose / discuss 階段純寫 `openspec/changes/<new>/` 內新檔，不碰既有 tracked file，與[[worktree-default]] §1 的 worktree 邊界相容） |
+| 不在表上的 skill | 評估後決定：若不寫 tracked file 直接 dispatch；若會寫則包進 `/wt <slug>: /<next-skill>` 走 worktree |
 
 **判定條件**：
 
 - 觸發此 dispatch path **MUST** 全部成立：當前 chat session 剛跑完 Mode B、user 已選定下一步、cwd 在 main worktree
-- 若任一條件不成立 → 走預設 oneliner（不要強行 dispatch）
+- 若 cwd 不在 main worktree（罕見 — 應該是 user 在 worktree session 跑了 `/handoff`）→ Mode B 已不適用，警示後返回
 
-**Slug 解析**：`/wt <slug> --dispatch-from-handoff <next-skill-invocation>` 的 `<slug>` 由 change-name 直接帶入（per [[worktree-default]] §3 wt-helper 自動 normalize）。
+**Slug 解析**：`/wt <slug>: /<next-skill> <change-name>` 的 `<slug>` 由 change-name 直接帶入（wt-helper 自動 normalize per [[worktree-default]] §3）。
 
-**禁止濫用 `--dispatch-from-handoff` flag**：此 flag **僅**在 2B.5 流程內合法使用。其他 skill 或 agent **MUST NOT** 自行帶 flag 繞過預設行為（per `/wt` SKILL.md Step 3' Flag 禁用範圍）。
+**Parent cwd 不動 invariant**：`/wt` Form 3 內部用 subagent 進 worktree 跑 next-skill，主線（當前 chat session）cwd 全程在 main worktree，per [[worktree-default]] §1。先前 `wt-relax-for-archive-and-handoff` change 引入的 `--dispatch-from-handoff` flag 已**移除**，**禁止**在 args 內帶此 flag。
 
 ## Output contract
 
 - Mode A：成功 = HANDOFF.md / tech-debt / ROADMAP 有對應寫入 + tasks 檔已清；訊息只含升級摘要
-- Mode B：成功 = HANDOFF.md 已整理 + 盤點訊息 + `request_user_input` 已發出讓 user 選 + user 選定後 2B.5 dispatch 已完成（直接 dispatch 或內呼 `/wt --dispatch-from-handoff`）
+- Mode B：成功 = HANDOFF.md 已整理 + 盤點訊息 + `request_user_input` 已發出讓 user 選 + user 選定後 2B.5 dispatch 已完成（直接 dispatch 或內呼 `/wt <slug>: /<next-skill> <change-name>`）
 - 失敗 / blocked：明確說明卡點，不假裝完成
 
 ## 與其他 skill 的銜接

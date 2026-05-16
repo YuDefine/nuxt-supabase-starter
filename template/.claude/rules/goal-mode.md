@@ -1,3 +1,6 @@
+---
+description: /goal 模式設定規則——goal 條件必須完全由 agent 自力達成，禁止把 user-bound action 寫進 goal，卡關時改走 /handoff
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/goal-mode.md
@@ -5,9 +8,6 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
----
-description: /goal 模式設定規則——goal 條件必須完全由 agent 自力達成，禁止把 user-bound action 寫進 goal，卡關時改走 /handoff
----
 
 # Goal Mode — 別把 user 動作寫進 agent goal
 

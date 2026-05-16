@@ -1,10 +1,3 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/logging.md
-Edit at: /Users/charles/offline/clade
-Local edits will be reverted by the next sync.
--->
-
 ---
 description: Server / client logging 與錯誤記錄規範（evlog）
 paths:
@@ -16,6 +9,13 @@ paths:
   - 'packages/**/server/plugins/evlog-*.ts'
   - 'packages/**/app/plugins/evlog-*.ts'
 ---
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/core/logging.md
+Edit at: /Users/charles/offline/clade
+Local edits will be reverted by the next sync.
+-->
+
 
 # Logging
 

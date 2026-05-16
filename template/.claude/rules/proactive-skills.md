@@ -109,7 +109,7 @@ Local edits will be reverted by the next sync.
 
 正確流程：
 
-1. **首選（DEFAULT）**：tasks.md 仍有 `## 人工檢查` 未勾項 → 主線回「請在 consumer repo root 執行 `pnpm review:ui` 開本地 GUI 驗收」，等使用者跑完 GUI 流程回報後繼續
+1. **首選（DEFAULT）**：tasks.md 仍有 `## 人工檢查` 未勾項 → 主線回「請在**該 change 所在的 worktree root** 執行 `pnpm review:ui` 開本地 GUI 驗收」（**MUST** 給絕對路徑，例 `cd /Users/charles/offline/perno-wt/<slug>`，不要寫成「consumer repo root」這種對 worktree workflow 會誤導的措辭——main worktree 沒有該 change 的 `openspec/changes/<name>/` 與 `screenshots/local/<name>/`，跑了會看不到任何項目），等使用者跑完 GUI 流程回報後繼續
 2. **Fallback**（GUI 不可用時）：截圖 → 逐項展示 → 使用者回覆 OK / 問題 / skip → 依答覆更新 checkbox
 
 GUI 不可用的具體情境（觸發 fallback 的條件）：
@@ -117,6 +117,74 @@ GUI 不可用的具體情境（觸發 fallback 的條件）：
 - Consumer 沒有 `pnpm review:ui` script（先建議跑 `pnpm hub:check` 或從 clade propagate 補上）
 - 使用者明確說「不要開 GUI，直接在 chat 走」
 - Pure backend change 完全無 UI 證據需求，且只剩 1–2 項 yes/no 確認
+
+### Inline Review-GUI Deep-Link（hard rule）
+
+引導使用者跑 `pnpm review:ui` 時，**MUST** 在 chat 訊息中**直接給出 review-gui 本身的 deep-link URL**，讓使用者啟動 GUI 後可以一鍵跳到該 change 頁面，不必再從左側 list 點選。
+
+review-gui SPA 路由規約：
+
+```
+http://127.0.0.1:5174/review/<change-name>
+```
+
+- port `5174` 是 `vendor/scripts/review-gui.mts` `DEFAULT_PORT` (見 review-gui.mts:21)；找不到 port 時會 fallback 到 5174-5194 之間
+- host 預設 bind `127.0.0.1`（見 review-gui.mts:4452）。**MUST** 用 `127.0.0.1` 不要用 `localhost` — 某些 user 端 `/etc/hosts` / DNS 配置 `localhost` 不解析到 `127.0.0.1`，會出現「無法存取」
+- `<change-name>` 一字不差等於 `openspec/changes/<change-name>/` 的目錄名
+- 例：`http://localhost:5174/review/ehr-performance-evaluation-m1`
+
+#### 訊息格式（必須照這個 shape）
+
+```
+請在該 change 所在的 worktree root 執行 `pnpm review:ui` 開本地 GUI 驗收：
+
+  cd <change-worktree-absolute-path>
+  pnpm review:ui
+
+GUI 啟動後直接打開：
+
+  http://127.0.0.1:5174/review/<change-name>
+
+GUI 會自動：
+- 配對 `screenshots/local/<change-name>/#<N>-*.png` 到對應 item
+- conflict-aware 寫回 tasks.md
+- 對 `[verify:e2e]` / `[verify:api]` automatic-only items 自動勾 `[x]`
+- 對 `[verify:ui]` / `[review:ui]` items 顯示 evidence + OK / Issue / Skip 按鈕
+
+完成後回報，我繼續下一步。
+```
+
+#### cwd 必須是 change 所在的 worktree（不是 main repo）
+
+per [[worktree-default]] §1，會寫 tracked code 的 spectra-apply 跑在 isolated worktree。Change 的 `openspec/changes/<name>/tasks.md` 與 `screenshots/local/<name>/` 只存在於這個 worktree，main repo（`~/offline/<consumer>/`）的對應目錄看不到。
+
+**MUST**：
+
+- 給使用者**完整絕對路徑**（從 `git rev-parse --git-dir` 解出 `.git/worktrees/<slug>` 父目錄的工作樹路徑，或從 `node scripts/wt-helper.mjs list --json` 抓對應 slug 的 `path`）
+- 訊息開頭明寫「該 change 所在的 worktree root」，不要寫「consumer repo root」「專案根目錄」這類對 worktree workflow 模糊的措辭
+
+**NEVER**：
+
+- 寫「consumer repo root」當預設措辭——使用者開新 terminal 時常會落在 main worktree，跑了會空畫面
+- 假設使用者已經在對的 cwd——絕對路徑寫進訊息成本極低、收益明顯
+
+#### 不該列的東西
+
+- **NEVER** 列 dev server URL（`http://localhost:3040/admin/...`）當「先 sanity check 用」—— review-gui 內部已經自帶 final-state screenshot + evidence，user 不需要自己再開分頁去看 dev server；列那一堆 URL 反而把 chat 變成 dev server route 列表，模糊掉 review-gui 是真正的驗收入口
+- **NEVER** 把 review-gui deep-link 寫成 `/review/<change-name>` 不加 host — 使用者拿到 path 還要自己 prepend `http://localhost:5174` 才能用
+- **NEVER** 把 port 寫成 placeholder `<port>` — 直接寫 `5174`（fallback 由 GUI startup banner 告知 user，主線不負責猜）
+- **NEVER** 在訊息末尾加「需要的話可以參考」「也可以打開 dev server 看」這類弱措辭——review-gui 就是入口，不需要替代方案
+
+#### Counter-examples
+
+- ❌ 「請跑 `pnpm review:ui`」結束（沒給 deep-link，user 要從 GUI list 自己找 change）
+- ❌ 「URL 在 GUI 裡」推給 GUI 顯示
+- ❌ 列一堆 `http://localhost:3040/admin/X` dev server URL（user 要看的是 review-gui，不是 dev server）
+- ❌ 寫 `/review/<change-name>` 不加 `http://localhost:5174`
+
+#### 例外：fallback 模式
+
+只有當 `pnpm review:ui` 不可用（consumer 沒這 script / user 明確拒絕 GUI / pure backend 完全無 UI 證據），才轉走 chat-based 逐項展示，那時才會用到 dev server URL 給 user。預設路徑（DEFAULT path）只給 review-gui deep-link。
 
 靜態 screenshot review 是證據，不等同於使用者驗收。詳細 marker / flow / kind 分類見 `manual-review.md` 與其 reference 檔。
 

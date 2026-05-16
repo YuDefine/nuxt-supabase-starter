@@ -1,3 +1,7 @@
+---
+description: D-pattern audit 規範（DB outbox canonical + evlog derived stream + hash anchor）
+paths: ['server/api/**/*.ts', 'server/utils/audit.ts', 'supabase/migrations/**/*.sql']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/audit-pattern.md
@@ -5,10 +9,6 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
----
-description: D-pattern audit 規範（DB outbox canonical + evlog derived stream + hash anchor）
-paths: ['server/api/**/*.ts', 'server/utils/audit.ts', 'supabase/migrations/**/*.sql']
----
 
 # Audit Pattern
 

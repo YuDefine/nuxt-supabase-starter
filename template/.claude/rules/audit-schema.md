@@ -1,3 +1,7 @@
+---
+description: Supabase audit table schema 慣例（audit_logs）
+paths: ["supabase/migrations/**/*.sql", "server/utils/audit*.ts", "server/api/**/*.ts"]
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/db-schema/supabase/audit-schema.md
@@ -5,10 +9,6 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
----
-description: Supabase audit table schema 慣例（audit_logs）
-paths: ["supabase/migrations/**/*.sql", "server/utils/audit*.ts", "server/api/**/*.ts"]
----
 
 # Audit Schema Conventions（supabase variant）
 

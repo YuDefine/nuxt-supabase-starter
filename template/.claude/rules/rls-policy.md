@@ -1,3 +1,7 @@
+---
+description: RLS Policy 撰寫規範
+paths: ['supabase/migrations/**/*.sql']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/db-schema/supabase/rls-policy.md
@@ -5,10 +9,6 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
----
-description: RLS Policy 撰寫規範
-paths: ['supabase/migrations/**/*.sql']
----
 
 # RLS Policy
 

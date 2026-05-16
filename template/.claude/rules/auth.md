@@ -1,3 +1,7 @@
+---
+description: 認證相關程式碼（login, session, user, auth）
+paths: ['app/**/*.{vue,ts}', 'server/**/*.ts']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/auth/better-auth/auth.md
@@ -5,10 +9,6 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
----
-description: 認證相關程式碼（login, session, user, auth）
-paths: ['app/**/*.{vue,ts}', 'server/**/*.ts']
----
 
 # Auth
 

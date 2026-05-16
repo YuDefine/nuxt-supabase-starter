@@ -540,6 +540,31 @@ If no argument is provided, the workflow will extract requirements from conversa
      - Removed: <paths to be deleted>
    ```
 
+5.5. **UI/UX Spec Source** (UI scope only) <!-- clade fork addition；not in upstream spectra -->
+
+   **Trigger**: proposal `## Impact` 含 `.vue` / `pages/` / `components/` / `app/` 路徑，或 `## Affected Entity Matrix` 含 Surfaces 欄。非 UI / bug fix / pure backend → 跳過此步直接進 Step 6。
+
+   **目的**：在生成 design.md 前，先把 spec 級 UX 需求準備好，融入 design.md 的 UX section（不獨立檔案）。視覺細節（typography / color / motion / craft）禁止在此階段決策，等 apply craft 階段介入。
+
+   **三種情境**：
+
+   - **新 surface / 新 capability**（proposal 含 New Capability + 新增 `.vue`/`pages/` 路徑）→ 跑 `/impeccable teach` 產 Design Context（users / brand / aesthetic / a11y），結果暫存待 Step 7 融入 design.md
+   - **延伸既有 surface**（modified capability + 現有 page/component 變更）→ 從 `PRODUCT.md` / `DESIGN.md` / 既有 component 萃取 Design Context，引用既有 docs 路徑
+   - **bug fix / 純非 UI** → 不該到這步（trigger 不符），回 Step 6
+
+   **spec 級 reference**（必含於後續 design.md UX section）：
+
+   - `interaction-design.md` — 互動模式、state、affordance、error handling
+   - `ux-writing.md` — voice/tone、文案規則、error message 標準
+   - `responsive-design.md` — 斷點、觸控目標、breakpoint constraint
+   - `spatial-design.md`（部分）— 資訊架構、layout grid 大方向（不到 px）
+
+   **視覺細節**（**禁止**在 propose 階段決策；等 apply craft 階段）：
+
+   - `typography.md` / `color-and-contrast.md` / `motion-design.md` / `craft.md`
+
+   Step 7 生成 design.md 時將融入上述 Design Context + spec 級 reference 至 UX section。
+
 6. **Get the artifact build order**
 
    ```bash
@@ -570,6 +595,8 @@ If no argument is provided, the workflow will extract requirements from conversa
      - `locale`: The language to write the artifact in (e.g., "Japanese (日本語)"). If present, you MUST write the artifact content in this language. Exception: spec files (specs/\*_/_.md) MUST always be written in English regardless of locale, because they use normative language (SHALL/MUST).
    - Read any completed dependency files for context
    - Generate the artifact content using `template` as the structure
+   - <!-- clade fork addition；not in upstream spectra -->
+     **UI scope supplement**: 若 Step 5.5 已產出 Design Context（artifact = `design`），於 design.md template 結構內補一個 `## UX Spec` section，包含：(1) Design Context（users / brand / aesthetic / a11y）；(2) spec 級 reference 對應的具體 UX 規格（interaction / ux-writing / responsive / spatial）；(3) 明確聲明「視覺細節（typography/color/motion）由 apply craft 階段決策，不在此規範」。spec 檔（specs/\*.md）永遠英文且只放 SHALL/MUST 規範語句，不在此補 UX context；tasks.md 不補（既有 Check 6 Design Review 7 步覆蓋 tasks 端）
    - Apply `context` and `rules` as constraints - but do NOT copy them into the file
    - Write the artifact via CLI (the CLI handles directory creation and format validation):
 

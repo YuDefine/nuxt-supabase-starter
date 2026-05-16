@@ -1,3 +1,7 @@
+---
+description: Tech debt 路由規則——決定發現的 TD 該登在 clade 還是當前 consumer，以散播範圍與修法歸屬為準
+paths: ['docs/tech-debt.md', '**/docs/tech-debt.md']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/tech-debt-routing.md
@@ -5,10 +9,6 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
----
-description: Tech debt 路由規則——決定發現的 TD 該登在 clade 還是當前 consumer，以散播範圍與修法歸屬為準
-paths: ['docs/tech-debt.md', '**/docs/tech-debt.md']
----
 
 # Tech Debt Routing
 

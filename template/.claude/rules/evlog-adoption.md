@@ -1,10 +1,3 @@
-<!--
-🔒 LOCKED — managed by clade
-Source: rules/core/evlog-adoption.md
-Edit at: /Users/charles/offline/clade
-Local edits will be reverted by the next sync.
--->
-
 ---
 description: evlog 14 區塊全功能採用治理（template 選擇、preset、depth 自評、migration 順序）
 paths:
@@ -15,6 +8,13 @@ paths:
   - 'packages/**/app/plugins/evlog-*.ts'
   - 'openspec/changes/evlog-*/**'
 ---
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/core/evlog-adoption.md
+Edit at: /Users/charles/offline/clade
+Local edits will be reverted by the next sync.
+-->
+
 
 # evlog Adoption
 

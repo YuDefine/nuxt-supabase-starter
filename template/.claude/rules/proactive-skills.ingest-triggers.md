@@ -1,3 +1,7 @@
+---
+description: Ingest triggers、UX Completeness Gate、Spectra Roadmap maintenance 與 Follow-up Register；寫 / 改 openspec/changes / HANDOFF / tech-debt / ROADMAP 時 path-scoped 載入
+paths: ['openspec/changes/**', 'openspec/ROADMAP.md', 'HANDOFF.md', 'docs/tech-debt.md']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/proactive-skills.ingest-triggers.md
@@ -5,10 +9,6 @@ Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
----
-description: Ingest triggers、UX Completeness Gate、Spectra Roadmap maintenance 與 Follow-up Register；寫 / 改 openspec/changes / HANDOFF / tech-debt / ROADMAP 時 path-scoped 載入
-paths: ['openspec/changes/**', 'openspec/ROADMAP.md', 'HANDOFF.md', 'docs/tech-debt.md']
----
 
 # Proactive Skills — Ingest, UX Gate, Roadmap & Follow-up Triggers
 
