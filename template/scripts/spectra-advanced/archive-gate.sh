@@ -10,6 +10,15 @@
 #   Check 5: Screenshot Quality Audit — review screenshots must be final-state,
 #            schema-valid, and free of exploration/debug spillover
 #
+# Precondition (per worktree-default.md §5.5 atomic landing): spectra-archive
+# Step 0 MUST run `wt-helper merge-back <change-name>` first so any session
+# worktree's committed work has landed on main's working tree before these
+# gates inspect `git diff`. Without that, Check 1 (Journey URL Touch) and
+# Check 2 (Schema-Types Drift) would see a false-clean main and produce
+# misleading "all clear" archives that miss the worktree's actual changes.
+# The archive skill's Step 0 ensures this; running this gate directly without
+# Step 0 first is a recipe for false positives on worktree-implemented changes.
+#
 # Usage:
 #   archive-gate.sh <change-name>
 #

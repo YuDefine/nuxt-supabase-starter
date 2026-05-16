@@ -1,17 +1,22 @@
 ---
 name: wt
-description: Orchestrate a coding task inside a fresh git worktree end-to-end. `/wt <task>` builds a worktree, dispatches a subagent into it with the task, squash-merges the result back into main's working tree (no commit — user controls `/commit` timing), and removes the worktree. Supports parallel multi-task via `/wt A: ... B: ...`. The parent session's cwd never moves; the user never opens a new terminal or runs `git worktree` commands manually. Implements [[worktree-default]] §1 + §5 + §6.
+description: Orchestrate a coding task inside a fresh git worktree end-to-end. `/wt <task>` builds a worktree, dispatches a subagent into it with the task, and reports back — the worktree is preserved with its committed work until `/spectra-archive` absorbs it (per [[worktree-default]] §5.5). Supports parallel multi-task via `/wt A: ... B: ...`. The parent session's cwd never moves; the user never opens a new terminal or runs `git worktree` commands manually. Implements [[worktree-default]] §1 + §5 + §6.
 license: MIT
 metadata:
   author: clade
-  version: "2.0"
+  version: "3.0"
 ---
 
 # /wt — orchestrate worktree task lifecycle
 
-`/wt` is the single entry point for "do work in a worktree". It builds the worktree, runs the task via a subagent, squash-merges the result back to main's working tree, and cleans up the worktree — all in the current session, without migrating the parent cwd.
+`/wt` is the single entry point for "do work in a worktree". It builds the worktree, runs the task via a subagent, and reports — without squashing or cleaning up. The worktree branch holds the committed work until the corresponding spectra change is archived; `/spectra-archive` Step 0 (per [[worktree-default]] §5.5) runs `wt-helper merge-back` to atomically absorb the worktree into main, then `/commit` lands the result.
 
-The user's only follow-up action is to run `/commit` on main when enough work has accumulated.
+This deferred-landing model guarantees main never carries half-done features between sessions: only fully-reviewed-and-archived changes touch main. The previous v2.0 behavior — `/wt` return time squash + cleanup — accumulated cross-session WIP in main and made `/commit` impossible whenever the 人工檢查 Gate triggered.
+
+The user's two follow-up actions are:
+
+1. Complete 人工檢查 + run `/spectra-archive <change>` — this absorbs the worktree.
+2. Run `/commit` on main — this ceremonies the accumulated diff.
 
 ## When to invoke
 
@@ -75,7 +80,7 @@ Direct user invocation of this form is allowed but uncommon — usually the user
 
 ## Per-task lifecycle
 
-For each task in the invocation, `/wt` SHALL execute the following sequence. With parallel tasks, steps 2–5 run concurrently across tasks; step 1 runs sequentially (one `wt-helper add` at a time).
+For each task in the invocation, `/wt` SHALL execute the following sequence. With parallel tasks, steps 2–3 run concurrently across tasks; step 1 runs sequentially (one `wt-helper add` at a time). **There is no squash or cleanup at `/wt` return** — those happen at archive time via `wt-helper merge-back` (per [[worktree-default]] §5.5).
 
 ### Step 1 — Build the worktree
 
@@ -151,86 +156,59 @@ git -C <worktree-path> log --oneline main..HEAD
 
 The output should be non-empty.
 
-### Step 4 — Squash-merge into main's working tree
+### Step 4 — Report (no squash, no cleanup)
 
-From the parent's cwd (main), run:
-
-```bash
-git -C <main-worktree-path> merge --squash <branch-name>
-```
-
-`<branch-name>` is `session/<date>-<slug>`. `--squash` lands the diff on main's index + working tree **without** creating a commit on main. The user will commit later via `/commit`.
-
-If this command exits non-zero (merge conflict), go to "Squash-merge conflict" under Failure handling. Do not proceed to cleanup.
-
-### Step 5 — Cleanup the worktree
-
-```bash
-node scripts/wt-helper.mjs cleanup <slug> --force
-```
-
-`--force` is required because the branch is not actually merged (we squash-merged, which `git branch --merged` does not detect). The helper:
-
-- Removes the worktree directory.
-- Deletes the branch.
-
-If cleanup exits non-zero, go to "Cleanup failure" under Failure handling.
-
-### Step 6 — Report
-
-After all tasks in the invocation have either completed (lifecycle done) or failed (worktree preserved), emit one aggregated report:
+After all tasks in the invocation have either completed (subagent committed) or failed (worktree preserved with whatever WIP exists), emit one aggregated report:
 
 ```
-✅ A (lru-cache): squashed onto main — 5 files modified
+✅ A (lru-cache): subagent committed — 5 files, 3 commits on branch session/<date>-lru-cache
    <one-line summary from subagent if available>
-✅ B (csv-tests): squashed onto main — 2 files added
+   pending: /spectra-archive <change> will absorb via wt-helper merge-back
+✅ B (csv-tests): subagent committed — 2 files added on branch session/<date>-csv-tests
 ❌ C (node-upgrade): subagent fail — pnpm install exited 1
    worktree preserved at ~/offline/<consumer>-wt/node-upgrade/
    branch: session/<date>-node-upgrade
-⚠️ D (refactor-router): squash conflict on src/router.ts (overlapped with A)
-   worktree preserved at ~/offline/<consumer>-wt/refactor-router/
 
-Accumulated diff on main: <N> files
-Run /commit when ready.
+Pending worktrees: <N> (absorbed at /spectra-archive of matching change)
 ```
+
+**Key shift from v2.0**: `/wt` no longer squashes or cleans up. Each worktree's branch carries committed work until its corresponding `/spectra-archive` run; archive Step 0 runs `wt-helper merge-back --auto-stash --noop-if-missing <change-name>` to atomically absorb + cleanup. This means main's working tree stays clean of in-progress work between sessions.
+
+For non-spectra ad-hoc tasks (Form 1 with no corresponding change), the user runs `wt-helper merge-back <slug>` manually when ready to land.
 
 ## Failure handling
 
 ### Subagent task failure
 
-Subagent reports failure or exits without commits. Preserve the worktree and branch; report the path. Do NOT squash, do NOT cleanup. The user can inspect via `git -C <wt-path> log/diff/status` from the main session — no need to switch cwd.
+Subagent reports failure or exits without commits. Preserve the worktree and branch; report the path. The user can inspect via `git -C <wt-path> log/diff/status` from the main session — no need to switch cwd.
 
-### Squash-merge conflict
+When the user fixes the underlying issue, they can either:
 
-`git merge --squash` returns non-zero with conflict markers in main's working tree. This means a parallel task already squashed changes that overlap this task's diff.
+- Re-run the subagent in the same worktree by passing the worktree path explicitly to a new Agent invocation, or
+- `wt-helper cleanup <slug> --force --force-discard-unland` to discard the worktree and start fresh via `/wt`.
 
-- Abort the merge: `git -C <main-worktree-path> merge --abort` (or `git -C ... reset --merge` if `--abort` doesn't apply to the squash state).
-- Leave main's working tree at the last successfully-squashed state.
-- Preserve the conflicting worktree and branch; do NOT cleanup.
-- Report the conflicting file paths and the worktree path.
-- Do NOT attempt rebase, retry, or discard the subagent's work.
+### Squash conflicts (no longer at `/wt` time)
 
-### Cleanup failure
-
-Squash succeeded, but `wt-helper cleanup` exited non-zero (rare — usually a stale lock or stray process). The subagent's diff is already on main; the lifecycle succeeded from the user's perspective. Report the residual worktree path and a manual hint:
-
-```
-worktree residue at <path> — run `node scripts/wt-helper.mjs cleanup <slug> --force` manually
-```
-
-Do not rollback main's diff.
+Squash happens at archive time (Step 0 of `/spectra-archive`, calling `wt-helper merge-back`). Conflict handling lives there — see [[worktree-default]] §5.5 and `spectra-archive/SKILL.md` Step 0. `/wt` does not encounter squash conflicts because it never squashes.
 
 ## After `/wt` completes
 
-The accumulated diff is on main's working tree (unstaged, no commit). The user reviews via `git status` / `git diff` and runs `/commit` when ready.
+Worktree(s) hold committed work on their session branches. Main's working tree is untouched.
+
+The user's next moves:
+
+1. (Spectra change worktree) When the change is ready to archive, run `/spectra-archive <change-name>`. Step 0 absorbs the worktree via `wt-helper merge-back --auto-stash --noop-if-missing`. Subsequent archive gates inspect the post-squash state.
+2. (Ad-hoc Form-1 worktree) When ready to land, run `node scripts/wt-helper.mjs merge-back <slug> --auto-stash`. The diff lands on main's working tree; main commit ceremony via `/commit`.
+3. Once one or more worktrees have been absorbed and main has accumulated diff, run `/commit` on main.
 
 `/wt` does NOT:
 
+- Squash to main.
+- Cleanup worktrees.
 - Commit on main.
 - Push anywhere.
-- Modify the main branch's commit history.
 
-These remain explicit user actions.
+These remain explicit later actions (archive + commit).
 
 ## Edge cases
 
@@ -262,13 +240,19 @@ The subagent's reported status is the authority. If it says "done", proceed to s
 - [[session-tasks]] — shared `<YYYY-MM-DD-HHMM>-<slug>` naming convention.
 - [[scope-discipline]] — when a `/wt` task drifts beyond its slug's scope, open a separate `/wt` task or escalate to `/spectra-propose`.
 
-## Maintenance commands (rarely needed)
+## Maintenance commands
 
 ```bash
-node scripts/wt-helper.mjs list                  # list session worktrees
-node scripts/wt-helper.mjs prune                 # interactively remove merged ones
-node scripts/wt-helper.mjs cleanup <slug>        # remove one (merge-checked)
-node scripts/wt-helper.mjs cleanup <slug> --force # remove unmerged
+node scripts/wt-helper.mjs list                              # list session worktrees
+node scripts/wt-helper.mjs merge-back <slug>                 # atomically land worktree → main
+node scripts/wt-helper.mjs merge-back <slug> --dry-run       # preview blockers
+node scripts/wt-helper.mjs merge-back <slug> --auto-stash    # stash main blockers
+node scripts/wt-helper.mjs land-pending <slug>               # alias for grandfathered worktrees
+node scripts/wt-helper.mjs prune                             # remove merged ones interactively
+node scripts/wt-helper.mjs cleanup <slug> --force --force-discard-unland  # discard worktree + commits
+node scripts/stash-reconcile.mjs                             # plan recovery for wt-merge-block/* stashes
 ```
 
-These are for inspecting or cleaning up residue from failed `/wt` invocations. The orchestrated path (success case) does not require manual maintenance.
+`merge-back` is the primary post-`/wt` action for ad-hoc Form-1 worktrees and for early-landing when needed. `/spectra-archive` calls it automatically as Step 0; users invoke it manually for non-spectra work.
+
+`cleanup --force --force-discard-unland` is for discarding unwanted worktrees (subagent fail, abandoned exploration). It permanently loses the branch's commits; use `merge-back` first to preserve the work.

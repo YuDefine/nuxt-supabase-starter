@@ -25,7 +25,27 @@ Archive a completed change.
 
 **Worktree exemption (clade fork addition)**: This skill is exempt from the [[worktree-default]] §1 worktree requirement. Archive is main-bound — every output (delta sync into `openspec/specs/<capability>/spec.md`, move into `openspec/changes/archive/`, screenshot sweep) targets main, so running inside a worktree adds a mandatory merge-back with no isolation benefit. The skill SHALL proceed regardless of whether cwd is on the main worktree or inside a session worktree; the orchestrator (e.g., `/handoff` Mode B Step 2B.5) SHALL dispatch this skill directly without routing through `/wt`. Do NOT add prose instructing the user to "open a worktree first" — that contradicts the §1 exemption.
 
+**Atomic merge-back contract (clade fork addition)**: Per [[worktree-default]] §5.5, worktree branches do NOT squash back to main at `/wt` return time — they wait until archive. Step 0 below absorbs any slug-matching session worktree into main BEFORE the archive gates run, so gates inspect the post-squash state and so main never carries half-done work between sessions.
+
 **Steps**
+
+0. **Atomic merge-back from active worktree** (clade fork addition)
+
+   Per [[worktree-default]] §5.5, any session worktree whose slug matches this change-name MUST be absorbed into main before archive gates run. If gates run on un-absorbed main, they would see a false-clean diff (worktree changes never landed) and produce a misleading archive.
+
+   ```bash
+   node scripts/wt-helper.mjs merge-back <change-name> --auto-stash --noop-if-missing
+   ```
+
+   - `--noop-if-missing` makes this a silent no-op when no matching worktree exists (solo archive path — change implemented directly on main).
+   - `--auto-stash` stashes any main-worktree blockers as `wt-merge-block/<change-name>/<ISO>` for later reconciliation via `node scripts/stash-reconcile.mjs`.
+   - On conflict, the squash aborts, the worktree + branch are preserved, and the stash is popped back. Surface the error and **STOP** the archive — the change cannot be archived until the conflict is resolved.
+
+   **Skip condition**: if `scripts/wt-helper.mjs` does not exist (consumer hasn't propagated the merge-back subcommand yet), skip this step silently with a one-line note: `Step 0: skipped — wt-helper merge-back not available (consumer pre-propagate)`.
+
+   **Output (when worktree absorbed)**:
+   - `merge-back: <change-name> absorbed into main` — proceed to Step 1
+   - `merge-back: <change-name> absorbed into main (blockers stashed as wt-merge-block/<name>/<ISO>) + worktree cleaned` — proceed; remind user in Step 8 summary that stash entry needs reconciliation
 
 1. **If no change name provided, prompt for selection**
 
@@ -183,11 +203,17 @@ Archive a completed change.
 
 **Change:** <change-name>
 **Schema:** <schema-name>
+**Worktree:** ✓ Absorbed into main (or: no worktree — solo path)
 **Archived to:** openspec/changes/archive/YYYY-MM-DD-<name>/
 **Specs:** ✓ Synced to main specs
 **Screenshots:** ✓ Swept to _archive/YYYY-MM/ (or: no screenshots / skipped (user --no-sweep) / sweep failed)
 
 All artifacts complete. All tasks complete.
+```
+
+If Step 0 stashed blockers, append a line under **Worktree**:
+```
+**Stash to reconcile:** wt-merge-block/<change-name>/<ISO> (run `node scripts/stash-reconcile.mjs` to plan)
 ```
 
 **Output On Success (No Delta Specs)**
