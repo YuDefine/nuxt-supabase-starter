@@ -86,7 +86,9 @@ export function loadManualReviewPatterns(): ManualReviewPatternEntry[] {
     cachedPatterns = entries.map((p) => ({
       ...p,
       regex: translatePosixToJs(p.regex),
-      requiresPresenceOf: p.requiresPresenceOf ? translatePosixToJs(p.requiresPresenceOf) : undefined,
+      requiresPresenceOf: p.requiresPresenceOf
+        ? translatePosixToJs(p.requiresPresenceOf)
+        : undefined,
       requiresAbsenceOf: p.requiresAbsenceOf ? translatePosixToJs(p.requiresAbsenceOf) : undefined,
     }))
   } catch {
@@ -158,7 +160,8 @@ const TRAILING_NO_SCREENSHOT_RE = /(^|[^ ]) @no-screenshot$/
 // `@no-manual-review-check[<reason>]` bypass marker per manual-review.md hard rule.
 // Empty brackets and bare marker (no brackets) are invalid by schema → not captured here.
 // May coexist with trailing `@no-screenshot` (canonical ordering: bypass then no-screenshot).
-const TRAILING_NO_MANUAL_REVIEW_CHECK_RE = /@no-manual-review-check\[([^\][]+)\](?:\s+@no-screenshot)?\s*$/
+const TRAILING_NO_MANUAL_REVIEW_CHECK_RE =
+  /@no-manual-review-check\[([^\][]+)\](?:\s+@no-screenshot)?\s*$/
 // 解析 leading kind marker — 必須緊接 `#N` / `#N.M` 後第一個 token、含一個 trailing space。
 // description-mid 的 [discuss] / [review:ui] / [verify:*] 不會被命中（不是行首）。
 const LEADING_KIND_RE = /^\[([^\]]+)\]\s+/
@@ -283,9 +286,7 @@ export interface FileVersion {
  * completion counter and archive-readiness check share one notion of
  * "parent-with-children".
  */
-export function buildParentsWithScopedChildren(
-  items: readonly ManualReviewItem[]
-): Set<string> {
+export function buildParentsWithScopedChildren(items: readonly ManualReviewItem[]): Set<string> {
   const parents = new Set<string>()
   for (const item of items) {
     if (item.scoped && item.parentId) parents.add(item.parentId)
@@ -569,9 +570,7 @@ interface ParserWarningContext {
 }
 
 function formatParserLocation(context: ParserWarningContext): string {
-  return context.lineNumber > 0
-    ? `${context.sourcePath}:${context.lineNumber}`
-    : context.sourcePath
+  return context.lineNumber > 0 ? `${context.sourcePath}:${context.lineNumber}` : context.sourcePath
 }
 
 function warnParser(context: ParserWarningContext, message: string): void {
@@ -594,9 +593,7 @@ function parseKindMarkerCandidate(
   candidate: string,
   defaultKind: DefaultManualReviewItemKind,
   context: ParserWarningContext
-):
-  | { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> }
-  | { valid: false } {
+): { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> } | { valid: false } {
   if (candidate === 'verify:auto') {
     warnParser(context, '[verify:auto] is deprecated; prefer [verify:api+ui]')
     return { valid: true, kinds: ['verify:api', 'verify:ui'] }
@@ -621,9 +618,7 @@ function parseMultiChannelKindMarker(
   candidate: string,
   defaultKind: DefaultManualReviewItemKind,
   context: ParserWarningContext
-):
-  | { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> }
-  | { valid: false } {
+): { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> } | { valid: false } {
   if (!candidate.startsWith('verify:')) {
     warnParser(
       context,
@@ -734,7 +729,9 @@ function parseStructuredAnnotations(
   context: ParserWarningContext
 ): ManualReviewItemAnnotations {
   const annotations: ManualReviewItemAnnotations = {}
-  const matches = line.matchAll(/\((verified-e2e|verified-api|verified-ui|claude-discussed):\s*([^)]*)\)/g)
+  const matches = line.matchAll(
+    /\((verified-e2e|verified-api|verified-ui|claude-discussed):\s*([^)]*)\)/g
+  )
   for (const match of matches) {
     const prefix = match[1]!
     const body = match[2]!.trim()
@@ -778,7 +775,10 @@ function parseStructuredAnnotationValue(
     const spec = findKeyValue(parts, 'spec')
     const trace = findKeyValue(parts, 'trace')
     if (!spec || !trace) {
-      warnParser(context, `malformed (${prefix}: ...) annotation — expected spec=<path> trace=<path>`)
+      warnParser(
+        context,
+        `malformed (${prefix}: ...) annotation — expected spec=<path> trace=<path>`
+      )
       return null
     }
     return { verifiedE2e: { raw, timestamp, spec, trace } }
@@ -864,8 +864,9 @@ function collectStructuredAnnotationRaw(line: string): {
 function renderStructuredAnnotations(
   annotations: Partial<Record<StructuredAnnotationKey, string>>
 ): string {
-  return STRUCTURED_ANNOTATION_ORDER.flatMap((key) => (annotations[key] ? [annotations[key]!] : []))
-    .join(' ')
+  return STRUCTURED_ANNOTATION_ORDER.flatMap((key) =>
+    annotations[key] ? [annotations[key]!] : []
+  ).join(' ')
 }
 
 function upsertStructuredAnnotation(
@@ -2173,6 +2174,17 @@ export function renderReviewHtml(): string {
       border-radius: 3px;
       font-size: 11px;
     }
+    /* 任務描述等地方由 escWithBackticks 產出的 inline code；點兩下整塊選取走下面
+       document dblclick handler（光靠 CSS user-select: all 會吃掉 cursor 行為）。*/
+    code.inline-code {
+      background: rgba(30, 37, 33, .07);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .92em;
+      word-break: break-all;
+      cursor: text;
+    }
     .evidence-link {
       color: var(--focus);
       overflow-wrap: anywhere;
@@ -2939,11 +2951,11 @@ export function renderReviewHtml(): string {
 
     // 切出 backtick-wrapped inline code，包成 <code class="inline-code">。配合下方
     // 全域 dblclick handler 達成「點兩下整塊選取」(/ 等符號 break default word
-    // selection)。regex 內 backtick 寫 `（外層 template literal 內 raw ` 會
-    // 把模板提早結束），\\n 是外層跳脫過的 \n，禁止 inline code 跨行。
+    // selection)。regex 內 backtick 用 \\u0060 escape（raw 寫法會把外層 template
+    // literal 提早結束），\\n 是外層跳脫過的 \\n，禁止 inline code 跨行。
     function escWithBackticks(value) {
       const s = String(value ?? '');
-      const tickRe = /`([^`\\n]+)`/g;
+      const tickRe = /\u0060([^\u0060\\n]+)\u0060/g;
       let out = '';
       let last = 0;
       for (const m of s.matchAll(tickRe)) {
@@ -2958,6 +2970,7 @@ export function renderReviewHtml(): string {
     // 對 raw 字串切出 http(s) URL，URL/text 兩段各自 esc 後拼回。
     // 比「先 esc 再掃 URL」安全：raw 字串內的 quote 與 ampersand 邊界仍是原樣，
     // URL regex 能正確判斷終點；先 esc 後 URL 末端會把 entity 吃進去。
+    // 非 URL 段落交給 escWithBackticks 處理 backtick → <code>。
     // regex 字符類用顯式列舉取代 \\s — 同 extractFilenameId / parseDecision。
     function escWithLinks(value) {
       const s = String(value ?? '');
@@ -2965,7 +2978,7 @@ export function renderReviewHtml(): string {
       let out = '';
       let last = 0;
       for (const m of s.matchAll(urlRe)) {
-        out += esc(s.slice(last, m.index));
+        out += escWithBackticks(s.slice(last, m.index));
         let url = m[0];
         let trailing = '';
         while (url.length && '.,!?)'.indexOf(url[url.length - 1]) !== -1) {
@@ -2978,7 +2991,7 @@ export function renderReviewHtml(): string {
         out += esc(trailing);
         last = m.index + m[0].length;
       }
-      out += esc(s.slice(last));
+      out += escWithBackticks(s.slice(last));
       return out;
     }
 
@@ -4401,6 +4414,22 @@ export function renderReviewHtml(): string {
       });
     });
 
+    // 雙擊 <code> 整塊選取；預設 dblclick 用 / 之類符號 break word boundary，會把
+    // 像 /reports/costs 之類路徑切成多段，反而難複製。涵蓋所有 <code>（含 evidence
+    // panel 既有的）。
+    document.addEventListener('dblclick', function (event) {
+      const target = event.target;
+      const codeEl = target && target.closest ? target.closest('code') : null;
+      if (!codeEl) return;
+      event.preventDefault();
+      const range = document.createRange();
+      range.selectNodeContents(codeEl);
+      const sel = window.getSelection();
+      if (!sel) return;
+      sel.removeAllRanges();
+      sel.addRange(range);
+    });
+
     document.addEventListener('keydown', function (event) {
       if (el.viewer.classList.contains('open')) {
         if (event.key === 'Escape') {
@@ -4572,9 +4601,7 @@ function printStartupBanner(url: string, repoRoot: string): void {
     ['open', `${bold}${cyan}${url}${reset}`],
   ]
   const labelWidth = Math.max(...lines.map(([label]) => label.length))
-  const rendered = lines.map(
-    ([label, value]) => `${label.padEnd(labelWidth)}  ${value}`
-  )
+  const rendered = lines.map(([label, value]) => `${label.padEnd(labelWidth)}  ${value}`)
   const innerWidth = Math.max(...rendered.map((l) => stripAnsi(l).length))
   const horiz = '─'.repeat(innerWidth + 2)
   console.log('')
