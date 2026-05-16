@@ -13,9 +13,10 @@
     },
     {
       "code": "CARD_WITHOUT_UID",
-      "description": "描述提及 NFC / 刷卡 / 員工卡 / staff UID / card UID，但同一 item 內無具體 UID inline",
+      "description": "描述提及 NFC / 刷卡 / 員工卡 / staff UID / card UID，但同一 item 內無具體 UID inline（parent block 含 sibling sub-items；sub-item 自身不獨立 fire）",
       "regex": "刷卡|NFC|員工卡|staff UID|card UID|staffUid|staffCardUid",
       "regexFlags": "i",
+      "appliesTo": "parentLineOnly",
       "requiresPresenceOf": "[`'][0-9A-Fa-f]{8,20}[`']|card_uid[=:][[:space:]]*[0-9A-Fa-f]{8,20}|UID[[:space:]]+[`'][0-9A-Fa-f]{8,20}|TDMS-SEED-[A-Z0-9-]+|TEST-[A-Z0-9-]+",
       "anchor": "manual-review.md#實體裝置--規格外輸入的替代路徑",
       "remediation": "Inline the specific card UID from docs/FIXTURES.md (4-byte UID like 04A1B2C3, or 7-byte UID like 04469C0FCB2A81, or stable seed key like TDMS-SEED-* / TEST-*); ensure the card is seeded persistently. For dev override path, reference the env-gated `Dev: card UID` input or `/__dev/scan?uid=...` endpoint. The UID MUST appear in the item description with explicit context (e.g., `card_uid=04A1B2C3`, UID `04A1B2C3`, or `04469C0FCB2A81`)."
