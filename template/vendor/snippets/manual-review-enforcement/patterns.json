@@ -35,6 +35,7 @@
       "regex": "→[^\\n]*→[^\\n]*→|然後[^\\n]*然後|接著[^\\n]*接著",
       "regexFlags": "",
       "appliesTo": "parentLineOnly",
+      "requiresKindIn": ["review:ui"],
       "anchor": "manual-review.md#通則",
       "remediation": "Split the flow chain into #N.M scoped sub-items (one atomic action per line: open X → input Y → click Z → confirm W). Each sub-item must include a falsifiable observation (specific toast text, badge state, route change, field value)."
     },
