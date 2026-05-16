@@ -80,6 +80,18 @@ Local edits will be reverted by the next sync.
 
 **與 `session-tasks.md` 的銜接**：tasks 檔內未完項在 session 結束時若需下一 session 立刻接手，**MUST** 升到 `HANDOFF.md` 的 `## In Progress`，不能只留在 tasks 檔等下一 session 自己 grep。
 
+## Drift detection (v1.13+)
+
+每次 session start 時，`session-start-roadmap-sync.sh` hook 會跑 `scripts/handoff-drift-scan.mjs`，自動掃所有 `session/*` worktree 跟 `HANDOFF.md` 內容比對，把 drift 寫到 stderr：
+
+- **unmentioned-progress** — branch HEAD 已 commit 但 slug 沒在 HANDOFF 出現 → 下個 session 看不到這個工作
+- **mention-stale** — branch 最新 commit 時間晚於 HANDOFF mtime → HANDOFF 描述可能過時
+- **merged-but-not-cleaned** — branch 已 fully merge 進 main 但 worktree 還在 → 可跑 `wt-helper cleanup` 或讓 archive 自動吸收
+
+理由：[[worktree-default]] §5.5 採 atomic landing model，worktree → main 吸收延後到 `/spectra-archive` 才發生。中間 subagent commit 後若 user 沒同步更新 HANDOFF，下個 session 可能誤判工作未做。drift scan 把這類情境 surface 出來。
+
+行為：scan 是純 informational，**不**擋 session、**不**自動改 HANDOFF。User 看到警告後依情境跑 `/handoff` refresh、或繼續工作（warnings 在每次 session start 重新評估，工作完成 archive 後自動消失）。
+
 ## 禁止事項
 
 - **NEVER** 把需要交接的資訊只留在對話裡

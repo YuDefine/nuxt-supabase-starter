@@ -33,7 +33,7 @@ git worktree 從根本解掉這兩件事（per-session 獨立檔案系統 + 獨�
 
 **例外：read-only session**。只跑 grep / 看 log / 列檔案 / 跑 audit / 查 git history / 解釋 code（不寫檔），**MAY** 在 main worktree。
 
-**例外：main-bound skill（`/spectra-archive`）**。`/spectra-archive` 語意就是「把 change 合併進 main」（mv change folder 進 `openspec/changes/archive/`、delta sync 進 `openspec/specs/<capability>/spec.md`、screenshot sweep、`.spectra/touched/<change>.json` 清理），所有寫入目標都是 main。走 worktree 反而多一道 merge-back，無 isolation benefit。因此 `/spectra-archive` **MAY** 在 main worktree 直接跑。其他 spectra-* skill（`/spectra-apply` / `/spectra-ingest` / `/spectra-debug`）**不在此例外**，仍須走 `/wt` 進 worktree。
+**例外：main-bound skill（`/spectra-archive`）**。`/spectra-archive` 語意就是「把 change 合併進 main」— 從 v3 開始這語意更嚴格：archive **先吸收**對應的 session worktree（Step 0 跑 `wt-helper merge-back`），再做 archive bookkeeping（mv change folder 進 `openspec/changes/archive/`、delta sync 進 `openspec/specs/<capability>/spec.md`、screenshot sweep、`.spectra/touched/<change>.json` 清理）。所有寫入目標仍是 main。走 worktree 反而多一道 merge-back，無 isolation benefit。因此 `/spectra-archive` **MAY** 在 main worktree 直接跑。其他 spectra-* skill（`/spectra-apply` / `/spectra-ingest` / `/spectra-debug`）**不在此例外**，仍須走 `/wt` 進 worktree。
 
 **判定「已在 worktree」**：`git rev-parse --git-dir` 結果若包含 `/worktrees/` 子路徑，則 cwd 已在某個 worktree，**不要**疊建新 worktree。User 應直接在當前 worktree 做事。
 
@@ -86,9 +86,27 @@ User 顯式呼叫的 script（例如 `scripts/propagate.mjs` 建 `bump/<version>
 
 `/wt` 建立 worktree 時已透過 `wt-helper add` 跑 `git merge --ff-only origin/main` 拉 main 最新投影層。一般情況下 worktree 內不需再手動 sync。
 
-## §5 Commit 階段：subagent → 主線 squash → user `/commit`
+## §5 Commit 階段：subagent commit → archive 吸收 → user `/commit`
 
-`/wt` orchestration 跑完後，subagent 在 worktree branch 上有 commit，主線把那些 commit 的內容 squash 進 main 的 working tree（**不** commit），由 user 在 main 跑 `/commit` 收尾。
+**v3 atomic landing model**（取代 v2 「`/wt` 返回時 squash」）：
+
+`/wt` orchestration 跑完後，subagent 在 worktree branch 上有 commit，**worktree 連同 branch 保留**（不 squash 不 cleanup）。當該 change 的人工檢查完成、跑 `/spectra-archive <change-name>` 時，archive Step 0 跑 `wt-helper merge-back` 把 worktree atomic 吸收進 main、cleanup worktree，然後做 archive bookkeeping（mv folder、delta sync、screenshot sweep）。User 之後在 main 跑 `/commit` 一次 commit 累積的 diff。
+
+### 為什麼從 v2 改 v3
+
+v2 失敗模式（<consumer-a> 2026-05-17 session 完整暴露）：
+
+- 多 session 平行 fan-out subagent，各自在 worktree commit → 各自在 main squash → main 累積 cross-session unstaged WIP
+- `/commit` 被 `commit.md` 人工檢查 Gate 擋（main/master + 實作 [x] + 人工檢查 [ ]），main 越積越多沒人能 commit
+- 別 session 同樣 squash 進 main 後，第 N+1 個 worktree squash 時撞 13 個 blocker 檔（M tasks.md + M code + untracked），需要 7 條 `cross-session-block-*` stash 才強推進去
+- `wt-helper cleanup` `--force` vs `--force-discard-unland` 訊息互相 deflect，user 要兩次才知道兩個 flag 都得加
+- 5/5 M1 worktree HANDOFF entries stale（branch HEAD 早已 commit P7 但 HANDOFF 還寫「P7 進行中」）
+
+v3 atomic landing 解這些：
+- Main 永遠 deployable — 只有 archive 完整通過（含 archive-gate.sh 5 條 hard rule）的 change 才會進
+- 多 session 平行不污染 main — 每條 worktree 各自保留到 archive
+- 一個 ceremony land 全部（merge-back + cleanup + archive bookkeeping 在 archive Step 0 + Step 6 之間原子完成）
+- 人工檢查 Gate 與 archive gate 對齊 — 都是「進 main 的關卡」而非「進 main 後另外擋」
 
 ### Mechanic
 
@@ -102,23 +120,25 @@ User 顯式呼叫的 script（例如 `scripts/propagate.mjs` 建 `bump/<version>
 
    **NEVER**：`git push` / `/commit` / `/spectra-commit` — 都在 subagent prompt 內顯式禁止。
 
-2. **主線 squash merge**（subagent 完成回報後，由 `/wt` 在 parent cwd 執行）：
+2. **`/wt` 返回時**：**不** squash，**不** cleanup。worktree + branch 保留，主線只報告 status。
+
+3. **`/spectra-archive <change-name>` Step 0 — atomic merge-back**（per [[spectra-archive]] Step 0）：
 
    ```bash
-   git -C <main-worktree-path> merge --squash <session-branch>
+   node scripts/wt-helper.mjs merge-back <change-name> --auto-stash --noop-if-missing
    ```
 
-   `--squash` 把 branch 改動 land 到 main 的 working tree + index，但 **不** 在 main 上生 commit。
+   `merge-back` 內部執行：
+   - 偵測 main worktree blockers（branch changeset 路徑上的 M / untracked 檔）
+   - `--auto-stash`：把 blockers 用 `wt-merge-block/<slug>/<ISO>` 前綴 stash 起來
+   - `git merge --squash <branch>` 把 branch 改動 land 到 main 的 working tree（**不** commit）
+   - cleanup worktree（`git worktree remove --force` + `git branch -D`）
+   - conflict → abort + 復原 stash + 保留 worktree + report
+   - `--noop-if-missing`：找不到對應 worktree 時 silent no-op（solo path — change 是直接在 main 做的）
 
-3. **主線 cleanup worktree**（squash 成功後）：
+4. **Archive 後續 step**（gates / spec sync / screenshot sweep / archive folder mv）跑於 post-squash main 狀態。所有 gate 檢查看到的是 worktree 工作 + main 既有狀態 merge 後的結果。
 
-   ```bash
-   node <main>/scripts/wt-helper.mjs cleanup <slug> --force
-   ```
-
-   `--force` 因為 branch 並非真的 merged（squash 不算 git 認知的 merge），不加 `--force` 會被擋。
-
-4. **User 在 main 跑 `/commit`**（時機由 user 決定，可累積多個 `/wt` 的 squash 結果再一次 commit）：
+5. **User 在 main 跑 `/commit`**（時機由 user 決定，可累積多個 archive 的結果再一次 commit）：
 
    ```bash
    claude "/commit"        # 或 user 在當前 main session 直接 invoke
@@ -126,56 +146,132 @@ User 顯式呼叫的 script（例如 `scripts/propagate.mjs` 建 `bump/<version>
 
    `/commit` 走 selective stage + 0-A/B/C 品質閘門（lint/type/test）+ commit + push。
 
-### 為什麼這樣設計
+   **此時 commit gate 不應被 人工檢查 Gate 擋** — 該 change 已 archive，tasks.md 已 mv 到 `openspec/changes/archive/`，commit.md 人工檢查 Gate 的 scope rule 排除 archive 子目錄。
 
-- **單一 ceremony**：subagent 在 worktree 是「做事」，main 是「shipping」。subagent 不跑 commit ceremony（lint/test/selective-stage），那由 user 在 main 跑 `/commit` 時一次到位。
-- **Branch HEAD 乾淨**：worktree session branch 的 commit 是拋棄式的，cleanup 後 branch 連同 commit 一起消失，main 上線性 commit 從 user 的 `/commit` 發起。
-- **`/commit` 0-C 在 main 跑**：`pnpm check` / `pnpm test` 在 main 環境跑，跟後續 push 的 CI 環境一致，避免 worktree-only env 漏跑。
-- **User 控制節奏**：squash 自動進 main 但不自動 commit，user 可累積多條 `/wt` 結果再一起 commit，也可 `git diff` 檢查後 selective stage。
+### Ad-hoc Form-1 worktree（非 spectra change）
+
+`/wt <task>` Form-1 ad-hoc 任務不對應任何 spectra change，因此沒有 `/spectra-archive` 觸發 merge-back。User 要 land 時手動跑：
+
+```bash
+node scripts/wt-helper.mjs merge-back <slug> --auto-stash
+```
+
+之後同樣走 `/commit` 收尾。
 
 ### 禁止項
 
-- **NEVER** 在 subagent prompt 內叫它跑 `/commit` / `/spectra-commit` — subagent commit 是拋棄式的，main commit 才是 ceremony
+- **NEVER** 在 subagent prompt 內叫它跑 `/commit` / `/spectra-commit` — subagent commit 是 worktree-local，main commit 才是 ceremony
 - **NEVER** 在 `/wt` orchestration 自動跑 `/commit` 收尾 — 那會剝奪 user 對 commit 時機的控制
 - **NEVER** 在 worktree 內 `git push` session branch — 那條 branch 短命，push 上去只會在 origin 留 stale ref
+- **NEVER** 在 `/wt` 返回時 squash（v3 的核心改動 — squash 推延到 archive）
+- **NEVER** 略過 `/spectra-archive` Step 0 直接做 archive bookkeeping — gates 會跑於 false-clean main，產出誤導 archive
+- **NEVER** 用 `wt-helper cleanup <slug> --force --force-discard-unland` 不先跑 `merge-back` — 會永久丟失 branch 的 commits。要保留工作必先 `merge-back`
 
-### Squash conflict fallback
+## §5.5 Merge-back ceremony
 
-`git merge --squash` 撞 conflict 的觸發條件：主 working tree 上有其他改動（典型情境 — 兩條平行 `/wt` 任務改了同一個檔）跟此 worktree branch 衝突。
+`wt-helper merge-back <slug>` 是 atomic landing 的核心命令，由 `/spectra-archive` Step 0 自動呼叫，或 user 對 ad-hoc worktree 手動呼叫。
 
-依以下順序處理（在 `/wt` SKILL.md 的 Failure handling 段有完整步驟）：
+### 命令簽名
 
-1. **Abort 該次 squash**：`git -C <main> merge --abort` 或 `git -C <main> reset --merge`
-2. **保留該 worktree + branch**：**NEVER** cleanup，讓 user 可從 main 跑 `git -C <wt-path> diff` 檢查
-3. **不要 force land**：不要 `git checkout --ours` / 自動 rebase — 會丟失 subagent 工作成果
+```bash
+node scripts/wt-helper.mjs merge-back <slug> [flags]
+```
 
-### Subagent fail fallback
+| Flag | 行為 |
+| --- | --- |
+| `--dry-run` | 預覽 blocker 清單，不執行 squash / stash / cleanup |
+| `--auto-stash` | 把 main blockers stash 起來（`wt-merge-block/<slug>/<ISO>` 前綴）後再 squash |
+| `--no-cleanup` | squash 成功後不 cleanup worktree（debug 用） |
+| `--noop-if-missing` | 找不到對應 worktree 時 silent no-op（給 archive hook 用） |
 
-Subagent 在 worktree 內跑爆（test fail / abort / 沒 commit 任何東西）：
+### 預設行為
 
-1. **NEVER** 嘗試 squash（沒 commit 可以 land）
-2. **保留 worktree + branch**：user 從 main 用 `git -C <wt-path> log/diff` 檢查
-3. **不切 cwd**：parent session 仍在 main，user 不必開新 session 進 worktree 也能看狀態
+1. 找 slug 對應的 session worktree（依 branch name `session/<date>-<slug>` + path `<consumer>-wt/<slug>` 比對）。找不到 → 預設 error（除非 `--noop-if-missing`）。
+2. 偵測 main worktree 的 blockers：`git diff --name-only main..<branch>` 列出 branch 動過的檔，跟 main `git status --porcelain` 的 M / untracked 路徑取交集。
+3. 有 blocker 但無 `--auto-stash` → throw with 建議「re-run with --auto-stash」+ 列出 blocker（最多 10 筆）。
+4. 有 `--auto-stash`：`git stash push -u -m "wt-merge-block/<slug>/<ISO>" -- <blocker paths>`，stash entry 保留待 user 後續用 `stash-reconcile.mjs` 處理。
+5. 沒 blocker 或 stash 完成 → `git merge --squash <branch>` 把改動 land 到 main 的 working tree + index（**不** commit）。
+6. 偵測 conflict：若有 unmerged file，`git merge --abort` + pop 回 stash + 保留 worktree + throw with 衝突檔清單。Worktree + branch 保留供 user 手動 reconcile，user 跑修完後再 `merge-back` 一次。
+7. Squash 成功 → 跑 `cmdCleanup(slug, { force: true, forceDiscardUnland: true })` 移除 worktree dir + delete branch。
 
-## §6 操作工具：`/wt` 與 `wt-helper.mjs`
+### Stash reconcile（後續清理）
+
+```bash
+node scripts/stash-reconcile.mjs                # 寫 markdown report 到 .spectra/stash-reconcile-<date>.md
+node scripts/stash-reconcile.mjs --interactive  # 互動式 apply / drop / view
+node scripts/stash-reconcile.mjs --json         # CI-friendly 機器輸出
+```
+
+報告會列每條 `wt-merge-block/<slug>/<ISO>` stash + legacy `cross-session-block-*` stash，給每條建議 `apply` / `drop` / `view-diff first` 加可貼上的 git 命令。
+
+### 失敗 fallback
+
+| 情境 | 處理 |
+| --- | --- |
+| Subagent 在 worktree 跑爆（沒 commit）| 保留 worktree + branch；user 從 main `git -C <wt-path> log/diff` 檢查；修完用同一 `/wt` Form 重派 subagent，或 `wt-helper cleanup <slug> --force --force-discard-unland` 放棄 |
+| `merge-back` blocker 偵測命中但 user 不想 stash | 不加 `--auto-stash`，user 手動處理 main 上 blocker（commit / stash / discard）後再 `merge-back` |
+| `merge-back` squash 撞 conflict（branch 改動跟 main 既有 commit 衝突）| auto-abort + pop stash + 保留 worktree；user 在 worktree 內 rebase / cherry-pick 修衝突後再 `merge-back` |
+| `merge-back` 成功但 cleanup 失敗（rare：stale lock）| 改動已在 main、squash 已成功；report 「worktree 殘留」+ 命令 `wt-helper cleanup <slug> --force --force-discard-unland`，user 手動清 |
+
+## §6 操作工具：`/wt`、`wt-helper.mjs`、`stash-reconcile.mjs`
 
 | 動作 | 指令 | 說明 |
 | --- | --- | --- |
-| 開始 worktree task（推薦入口） | `/wt <task description>` | `/wt` orchestrate 整段 lifecycle，user 不必管 worktree |
-| 平行多 task | `/wt A: ... B: ...` | 每 task 一個 worktree，subagent 平行跑，回來 squash 進 main |
+| 開始 worktree task（推薦入口） | `/wt <task description>` | `/wt` orchestrate build + dispatch + report；不 squash 不 cleanup（v3） |
+| 平行多 task | `/wt A: ... B: ...` | 每 task 一個 worktree，subagent 平行跑；各自保留待 archive |
 | Handoff dispatch（內部） | `/wt <slug>: /<next-skill> <args>` | `/handoff` Mode B 用，subagent 進 worktree 跑指定 skill |
-| 列出 session worktree | `node scripts/wt-helper.mjs list` 或 `--json` | 一般不需 |
-| 互動清掉 merged worktree | `node scripts/wt-helper.mjs prune` | `/wt` 正常路徑會自己 cleanup；只有 failed worktree 殘留時用 |
-| 強制清掉殘留 worktree | `node scripts/wt-helper.mjs cleanup <slug> --force` | 同上 |
+| 列出 session worktree | `node scripts/wt-helper.mjs list` 或 `--json` | 看 pending worktrees |
+| Atomic merge-back | `node scripts/wt-helper.mjs merge-back <slug>` | 把 worktree atomic land 進 main（squash + cleanup） |
+| Merge-back 預覽 | `node scripts/wt-helper.mjs merge-back <slug> --dry-run` | 列 blockers 不執行 |
+| Merge-back 自動 stash | `node scripts/wt-helper.mjs merge-back <slug> --auto-stash` | main blockers stash 成 `wt-merge-block/<slug>/<ISO>` |
+| Land grandfathered worktree | `node scripts/wt-helper.mjs land-pending <slug>` | alias of merge-back，給 v2 留下的 worktree 用（§7 migration） |
+| 互動清掉 merged worktree | `node scripts/wt-helper.mjs prune` | 處理 archive 後殘留 |
+| 強制清掉 worktree（**丟工作**） | `node scripts/wt-helper.mjs cleanup <slug> --force --force-discard-unland` | 永久砍 branch commits；要保留工作必先 merge-back |
+| Stash reconcile 報告 | `node scripts/stash-reconcile.mjs` | 列 `wt-merge-block/*` + legacy `cross-session-block-*` stash + 建議命令 |
+| Stash reconcile 互動 | `node scripts/stash-reconcile.mjs --interactive` | 一條一條 apply / drop / view |
+| HANDOFF drift scan | `node scripts/handoff-drift-scan.mjs` | 列 worktree branch 跟 HANDOFF.md 不一致；session-start hook 自動跑 |
 
 `/wt` skill source：`~/offline/clade/plugins/hub-core/skills/wt/SKILL.md`。  
-`wt-helper.mjs` source：`~/offline/clade/vendor/scripts/wt-helper.mjs`，散播投影到各 consumer 的 `scripts/wt-helper.mjs`。
+`wt-helper.mjs` / `stash-reconcile.mjs` / `handoff-drift-scan.mjs` source：`~/offline/clade/vendor/scripts/`，散播投影到各 consumer 的 `scripts/`。
 
 ## §7 升級路徑與 grandfathered worktree
+
+### 命名 grandfather（v1 → v2 既有規約）
 
 既有的、命名不符 `session/*` 的 worktree（例如 clade 上的 `[<consumer-a>-session-treat-publish-untracked]`）**grandfathered**，不強制重命名。`wt-helper list` 與 `prune` 只認 `session/` 前綴的 worktree，舊命名不受影響。
 
 新建一律走 `/wt` + `session/<date>-<slug>` 規約。
+
+### Migration from pre-atomic worktree flow（v2 → v3）
+
+v2 model：`/wt` 返回時 squash + cleanup。Consumer 端可能有從 v2 留下的 in-flight session worktree，subagent 已 commit 但還沒 squash（user 該 session 終止了 `/wt` 中途，或多 session 累積）。
+
+V3 model 對這些 worktree 的處置：
+
+1. **盤點現有 session worktree**：
+   ```bash
+   node scripts/wt-helper.mjs list
+   ```
+   每條都看 branch HEAD 是否 ahead of main（若 ahead = 有未 land 的 commit）。
+
+2. **依 worktree 對應的 spectra change 是否已完成人工檢查**分流：
+
+   - **若該 change 已完成人工檢查、ready archive** → 跑 `/spectra-archive <change-name>`。Archive Step 0 自動 merge-back 吸收 worktree。
+   - **若該 change 還在 implementation 中（人工檢查未完）** → 不動 worktree，繼續做。Archive 時自動吸收。
+   - **若 worktree 是 ad-hoc Form-1 task（無 spectra change）** → user 自決時機跑 `wt-helper land-pending <slug>`（alias of `merge-back`），手動 land 進 main。
+   - **若 worktree 已過時 / 工作不要了** → `wt-helper cleanup <slug> --force --force-discard-unland`（**永久砍 commit**，要保留工作必先 land-pending）。
+
+3. **Legacy `cross-session-block-*` stash**（從 v2 失敗 squash 累積的）：
+   ```bash
+   node scripts/stash-reconcile.mjs
+   ```
+   產出 markdown report 含 17 條 <consumer-a> legacy stash 的建議命令。User 自決定 apply / drop / view。
+
+4. **HANDOFF.md drift**：session-start 時 `handoff-drift-scan.mjs` 自動跑（透過 `session-start-roadmap-sync.sh` hook），對每條 session worktree 比對 branch HEAD 跟 HANDOFF.md 內 slug 提及，drift → stderr 警告。User 看到警告 → 跑 `/handoff` refresh。
+
+### 為什麼需要這條 migration 路徑
+
+V2 → V3 切換時，consumer 端可能正好有 mid-flow 的 worktree（subagent 已 commit 但還沒 squash）。直接套用 V3 規約會讓 `/wt` 不再自動 squash，舊 worktree 永遠不 land。`land-pending` 是 explicit migration tool — 同 `merge-back` 但容忍 multi-commit branch（V2 path 留下的 worktree 通常有多 commit），文件層面更清楚標明「這是給遷移用的」。
 
 ## §8 Stop hook 死鎖 fallback
 
