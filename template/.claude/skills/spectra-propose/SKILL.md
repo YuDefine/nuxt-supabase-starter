@@ -797,23 +797,17 @@ If no argument is provided, the workflow will extract requirements from conversa
 
     Helper 行為與失敗處理見 `plugins/hub-core/skills/wt/SKILL.md`。若 helper fail with `Worktree path already exists`（slug 已存在，例如同名 change 之前建過、user 重跑 propose）→ 沿用既有 worktree 即可，視為成功；用 `node scripts/wt-helper.mjs list --json` 抓既有 path。其他 helper 錯誤 → 報錯但**仍**繼續吐下方 handoff message，附上錯誤摘要讓 user 手動處理。
 
-    **Handoff message（per [[worktree-default]] §1「oneliner 慣例」）**：
+    **Handoff message**：
 
-    Inform the user that the change is parked and worktree is ready, **吐 oneliner**：
+    Output a single status line:
 
     ```
-    Change `<change-name>` 已 park 完成；apply 用 worktree 已建好（或沿用既有）。
-
-    請執行：
-
-      cd <worktree-absolute-path> && claude "/spectra-apply <change-name>"
+    Change `<change-name>` parked. Apply worktree ready at `<worktree-absolute-path>`. Run `/spectra-apply <change-name>` from any session to begin — apply skill handles worktree dispatch internally.
     ```
 
-    `<worktree-absolute-path>` 從 wt-helper 輸出抓。Auto-unpark 由 `/spectra-apply` 內部處理。
+    `<worktree-absolute-path>` 從 wt-helper 輸出抓。Auto-unpark 與 worktree dispatch 都由 `/spectra-apply` 內部處理；user 不需 `cd`，從 main 直接跑 `/spectra-apply` 即可。
 
-    **禁止**用「請 cd 到 X、再啟動 claude、再輸入 /spectra-apply Y」三步指引 — 那會讓使用者經歷三跳，違反 oneliner 慣例。
-
-    If you are currently in Codex Plan Mode, also remind the user to switch the session to normal mode before running the oneliner. This is only a reminder: do NOT try to use ExitPlanMode or EnterPlanMode, do NOT ask whether to switch modes, and do NOT invoke apply.
+    If you are currently in Codex Plan Mode, also remind the user to switch the session to normal mode before running `/spectra-apply`. This is only a reminder: do NOT try to use ExitPlanMode or EnterPlanMode, do NOT ask whether to switch modes, and do NOT invoke apply.
 
     The propose workflow ENDS here. Do NOT invoke `/spectra-apply`. Do NOT call **AskUserQuestion** to ask whether to park or apply. This behavior is identical across Auto Mode, interactive mode, and any other agent mode — parking is unconditional and does not depend on `AskUserQuestion` availability or UI auto-accept settings.
 

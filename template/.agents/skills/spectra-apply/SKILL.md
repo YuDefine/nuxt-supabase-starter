@@ -54,19 +54,19 @@ Implement tasks from a Spectra change.
 
       其他 helper 錯誤 → 報錯並 STOP，**不要**降級回「在 main 跑」。
 
-   d. **吐 oneliner 並 STOP**（per [[worktree-default]] §1「oneliner 慣例」）：
+   d. **Internally dispatch via `/wt` Form 3**：
+
+      Invoke the Skill tool with `/wt <change-name>: /spectra-apply <change-name>` (Form 3 per `plugins/hub-core/skills/wt/SKILL.md`). `/wt` orchestrates the worktree lifecycle (reuses the one prepared in Step 0c) and spawns a subagent that runs Step 1+ inside it. Subagent reports completion or structured failure back through `/wt`'s normal channel; parent cwd stays on main throughout.
+
+      Wait for the dispatched skill to return, surface its report to the user, and STOP — do **not** re-enter Step 1 in the parent session.
+
+      **Fallback** — if the Skill tool / `/wt` dispatch is unavailable in this environment (rare degradation; e.g., minimal runtime without skill support), emit a status-only message:
 
       ```
-      Spectra-apply 需要在 isolated worktree 跑（會寫 tracked product code，避免撞 staging / branch / WIP）。Worktree 已建好（或沿用既有）。
-
-      請執行：
-
-        cd <worktree-absolute-path> && claude "/spectra-apply <change-name>"
+      Worktree at <worktree-absolute-path> ready; please run `/spectra-apply <change-name>` from inside it manually.
       ```
 
-      `<worktree-absolute-path>` 從 wt-helper 輸出抓。`<change-name>` 是 Step 0a 已解析的 name。
-
-      **絕對不**在當前 session 跑 `cd` 繼續做事（mid-conversation 切 cwd 會壞 file watcher / Bash state，per `plugins/hub-core/skills/wt/SKILL.md` 「絕對不要改當前 session 的 cwd」規範）。
+      No `cd … && claude` oneliner under any branch. `<worktree-absolute-path>` 從 wt-helper 輸出抓；`<change-name>` 是 Step 0a 已解析的 name.
 
    e. **Bypass 條件**：使用者**明確**訊息含「不要 worktree」「在 main 跑」「我知道風險」等字眼時，跳過 Step 0 直接 Step 1。**禁止** agent 自行判斷略過（包括 user 跑 `/spectra-apply` 本身不算明確 bypass — 那只是 invocation，不是 worktree 偏好）。
 
