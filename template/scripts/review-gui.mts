@@ -3291,122 +3291,124 @@ export function renderReviewHtml(): string {
           '',
           '若評估後判斷 proposal 已足夠（pattern 屬 false positive），直接回報「不用補」並說明理由即可，我會在 review:ui 直接 OK / Issue / SKIP 帶過 warning。',
         ].join('\\n');
-      } else if (kind === 'not-ready-group') {
-        // Group-level prompt：跳開 handoffHeader/footer 自組，因為涉及多 change
-        // 且核心訴求是「分類後只回報 bug 候選，WIP / false positive 完全不要列」
-        const list = Array.isArray(ctx.notReadyChanges) ? ctx.notReadyChanges : [];
-        const readinessList = list.filter(function (c) { return (c.readinessHits || 0) > 0; });
-        const evidenceList = list.filter(function (c) {
-          return Array.isArray(c.evidenceMissing) && c.evidenceMissing.length > 0;
-        });
+      } else if (kind === 'health-check-group') {
+        // Group-level prompt：只列 readinessHits > 0 的 change（Pre-Review Data Readiness pattern hits）。
+        // 核心訴求是「分類後只回報 bug 候選，WIP / false positive 完全不要列」。
+        // 跳開 handoffHeader/footer 自組（涉及多 change）。
+        const list = Array.isArray(ctx.healthCheckChanges) ? ctx.healthCheckChanges : [];
         const repoName = state.repoName || '(unknown)';
         const repoRoot = state.repoRoot || '(unknown)';
         const lines = [
           '我在 consumer repo「' + repoName + '」（路徑：' + repoRoot + '）',
           '跑 \`pnpm review:ui\` 做 spectra 人工檢查，home page 有 ' + list.length + ' 張 change 落在',
-          '「⚠ 尚未準備好，需先補強」這群。落這群的原因有兩種：',
-          '  (1) **Pre-Review Data Readiness pattern hit**——spec / data 不齊；',
-          '  (2) **Verify-channel evidence missing**——item 標了 \`[verify:e2e/api/ui]\` 但缺對應 \`(verified-*:)\` annotation。',
-          '兩種要走不同處理路徑，**請依下方分區處理**。',
+          '「🩺 需健康檢查介入」這群——Pre-Review Data Readiness pattern hit（spec / data 不齊），',
+          '請逐張讀 \`openspec/changes/<change>/proposal.md\` 與 \`tasks.md\` 分類後只回報 bug 候選。',
           '',
           '## 環境',
           '- consumer: ' + repoName,
           '- repo root: ' + repoRoot,
+          '',
+          '## 命中的 changes（共 ' + list.length + ' 張）',
+          '',
         ];
-        if (readinessList.length) {
-          lines.push(
-            '',
-            '## 區 A：Data Readiness hits（共 ' + readinessList.length + ' 張）',
-            '',
-            '請逐張做健康檢查，**只在判定是 bug 時才回報**——若只是 spec 還沒寫完 / WIP，不要介入。',
-            '',
-            '### 命中的 changes',
-          );
-          for (const c of readinessList) {
-            const summary = summarizeHits(c.hitsByCode) || '(無 code 細節)';
-            lines.push('- \`' + c.name + '\` — ' + summary);
-          }
-          lines.push(
-            '',
-            '### 相關 rules（必讀）',
-            '- .claude/rules/manual-review.md（pattern code 對應的判斷準則 + Pre-Review Data Readiness 段）',
-            '- .claude/rules/fixtures-reference.md（sample / URL / scoped sub-items 樣態）',
-            '- .claude/rules/tech-debt-routing.md（修法路由：clade vs consumer / TD vs spec）',
-            '- openspec/AGENTS.md（spectra 工作流）',
-            '',
-            '### 你要做的事',
-            '',
-            '對每張 change 跑下面流程：',
-            '',
-            '1. 讀 \`openspec/changes/<change>/proposal.md\` 與 \`tasks.md\` 看當前狀態，把該 change 分到以下其一：',
-            '   - **(A) WIP / 還沒寫完 / 留待之後補**——proposal 還在打草稿、sample/URL 尚未補、相關 task 還沒動工。pattern 命中只是因為資料尚未到位，這是預期狀態。',
-            '   - **(B) bug 或規範違反**——spec 已完成但 item 內容與 spec 不符 / 違反 manual-review.md 規定（例：URL 寫了但對不上、multi-step 該拆但被合併、kind marker 用錯）。',
-            '   - **(C) false positive**——pattern 命中但不適用（例：item 是 backend-only，本來就不需 URL）。',
-            '',
-            '2. **只對 (B) 類回報**，每條給：',
-            '   - change name + item id',
-            '   - 命中的 pattern code + 違規證據（引 spec / 引實作位置）',
-            '   - 建議修法（要動哪些檔，依 \`.claude/rules/tech-debt-routing.md\` 路由：spec 缺漏 → \`/spectra-ingest\`；代碼 bug 影響窄 → \`docs/tech-debt.md\` TD-NNN；clade 投影層 → 提示去 clade 改）',
-            '',
-            '3. **(A) 與 (C) 完全不要列出**——不要寫「以下是略過的」「以下是 false positive」這類段落，那只是徒增噪音。',
-            '',
-            '4. **如果全部都是 (A) 或 (C)**：直接一句「全部都是 WIP / false positive，不用介入」結束。',
-          );
-        }
-        if (evidenceList.length) {
-          let totalItems = 0;
-          let totalPairs = 0;
-          for (const c of evidenceList) {
-            for (const m of c.evidenceMissing) {
-              totalItems++;
-              totalPairs += (m.kinds || []).length;
-            }
-          }
-          lines.push(
-            '',
-            '## 區 B：Verify-channel evidence missing（共 ' + evidenceList.length + ' 張 change · ' + totalItems + ' item · ' + totalPairs + ' pair）',
-            '',
-            '下列 item 在 tasks.md 標了 \`[verify:e2e]\` / \`[verify:api]\` / \`[verify:ui]\` 但缺對應 \`(verified-*:)\` annotation，',
-            'review:ui 對應 panel 顯示「evidence missing — run /spectra-apply Step 8a」。**這類不是 bug、不需 triage**，',
-            '直接依 \`/spectra-apply\` skill **Step 8a Verify Channel Pass** 一次補齊：',
-            '',
-            '### 缺 evidence 清單',
-          );
-          for (const c of evidenceList) {
-            lines.push('', '#### \`' + c.name + '\`');
-            for (const m of c.evidenceMissing) {
-              const desc = m.description ? ' — ' + m.description : '';
-              lines.push('- ' + m.itemId + ' [' + (m.kinds || []).join(' + ') + ']' + desc);
-            }
-          }
-          lines.push(
-            '',
-            '### 補 evidence 的規矩',
-            '',
-            '1. 先做整批 pre-verify baseline check（依出現的 channel 種類）：',
-            '   - 有 \`[verify:e2e]\`：確認 Playwright config + e2e fixtures',
-            '   - 有 \`[verify:api]\`：確認 \`__test-login\` 或等價 session bypass route',
-            '   - 有 \`[verify:ui]\`：確認 \`supabase/seed.sql\` 或 seed 等價檔',
-            '   - 缺 baseline → **STOP**，回報 user 補齊；**NEVER** 降級 channel',
-            '',
-            '2. 對每個 item 依 e2e → api → ui 順序補對應 evidence；每完成一個 channel 立刻 Edit tasks.md 寫對應 \`(verified-*:)\` annotation（不要等到最後一起寫）',
-            '',
-            '3. 全部完成後請 user 在 review:ui 重新整理；含 \`verify:ui\` 的 item checkbox 仍保留 \`[ ]\` 等 user 在 GUI 視覺確認',
-            '',
-            '4. 任一 channel 通不過 → 保留 \`[ ]\` + 寫 \`（issue: ...）\`；**NEVER** 寫不成功的 \`(verified-*:)\` annotation',
-            '',
-            'Cookbook 與範本：\`<clade-vendor>/snippets/verify-channels/README.md\`',
-          );
+        for (const c of list) {
+          const summary = summarizeHits(c.hitsByCode) || '(無 code 細節)';
+          lines.push('- \`' + c.name + '\` — ' + summary);
         }
         lines.push(
+          '',
+          '## 相關 rules（必讀）',
+          '- .claude/rules/manual-review.md（pattern code 對應的判斷準則 + Pre-Review Data Readiness 段）',
+          '- .claude/rules/fixtures-reference.md（sample / URL / scoped sub-items 樣態）',
+          '- .claude/rules/tech-debt-routing.md（修法路由：clade vs consumer / TD vs spec）',
+          '- openspec/AGENTS.md（spectra 工作流）',
+          '',
+          '## 你要做的事',
+          '',
+          '對每張 change 跑下面流程：',
+          '',
+          '1. 讀 \`openspec/changes/<change>/proposal.md\` 與 \`tasks.md\` 看當前狀態，把該 change 分到以下其一：',
+          '   - **(A) WIP / 還沒寫完 / 留待之後補**——proposal 還在打草稿、sample/URL 尚未補、相關 task 還沒動工。pattern 命中只是因為資料尚未到位，這是預期狀態。',
+          '   - **(B) bug 或規範違反**——spec 已完成但 item 內容與 spec 不符 / 違反 manual-review.md 規定（例：URL 寫了但對不上、multi-step 該拆但被合併、kind marker 用錯）。',
+          '   - **(C) false positive**——pattern 命中但不適用（例：item 是 backend-only，本來就不需 URL）。',
+          '',
+          '2. **只對 (B) 類回報**，每條給：',
+          '   - change name + item id',
+          '   - 命中的 pattern code + 違規證據（引 spec / 引實作位置）',
+          '   - 建議修法（要動哪些檔，依 \`.claude/rules/tech-debt-routing.md\` 路由：spec 缺漏 → \`/spectra-ingest\`；代碼 bug 影響窄 → \`docs/tech-debt.md\` TD-NNN；clade 投影層 → 提示去 clade 改）',
+          '',
+          '3. **(A) 與 (C) 完全不要列出**——不要寫「以下是略過的」「以下是 false positive」這類段落，那只是徒增噪音。',
+          '',
+          '4. **如果全部都是 (A) 或 (C)**：直接一句「全部都是 WIP / false positive，不用介入」結束。',
           '',
           '## 全域規矩',
           '- **MUST** 用 codebase-memory-mcp 探索（search_graph / trace_path / get_code_snippet）；graph 未 index 先跑 index_repository',
           '- Grep / Glob / Read 只用於非程式碼檔（.md / config / .env）',
-          '- 區 A 不要急著動手——plan-first，bug 候選列出來等我確認後再改',
-          '- 區 B 可直接照 Step 8a 流程跑，不需等確認；唯一例外是 baseline 缺漏要先 STOP',
+          '- plan-first，bug 候選列出來等我確認後再改',
           '',
-          '回覆時請先說「我看到的現況是 ...」再給 bug 清單（區 A，若有）與 evidence 補齊計劃（區 B，若有）。',
+          '回覆時請先說「我看到的現況是 ...」再給 bug 清單（若有）。',
+        );
+        return lines.join('\\n');
+      } else if (kind === 'apply-pending-group') {
+        // Group-level prompt：只列「純 evidence missing」的 change（無 pattern hit）。
+        // 核心訴求是「一次性跑 /spectra-apply Step 8a Verify Channel，不要逐 item triage」。
+        // 此 group 跑完後該群就清空、對應 change 進 ready 群。
+        const list = Array.isArray(ctx.applyPendingChanges) ? ctx.applyPendingChanges : [];
+        const repoName = state.repoName || '(unknown)';
+        const repoRoot = state.repoRoot || '(unknown)';
+        let totalItems = 0;
+        let totalPairs = 0;
+        for (const c of list) {
+          if (!Array.isArray(c.evidenceMissing)) continue;
+          for (const m of c.evidenceMissing) {
+            totalItems++;
+            totalPairs += (m.kinds || []).length;
+          }
+        }
+        const lines = [
+          '我在 consumer repo「' + repoName + '」（路徑：' + repoRoot + '）',
+          '跑 \`pnpm review:ui\` 做 spectra 人工檢查，home page 有 ' + list.length + ' 張 change 落在',
+          '「⏳ 等 apply 後就可處理」這群——item 標了 \`[verify:e2e/api/ui]\` 但缺對應 \`(verified-*:)\` annotation。',
+          '**這類不是 bug、不需 triage**，直接依 \`/spectra-apply\` skill **Step 8a Verify Channel Pass** 一次補齊。',
+          '',
+          '## 環境',
+          '- consumer: ' + repoName,
+          '- repo root: ' + repoRoot,
+          '',
+          '## 缺 evidence 清單（共 ' + list.length + ' 張 change · ' + totalItems + ' item · ' + totalPairs + ' pair）',
+        ];
+        for (const c of list) {
+          lines.push('', '### \`' + c.name + '\`');
+          if (!Array.isArray(c.evidenceMissing)) continue;
+          for (const m of c.evidenceMissing) {
+            const desc = m.description ? ' — ' + m.description : '';
+            lines.push('- ' + m.itemId + ' [' + (m.kinds || []).join(' + ') + ']' + desc);
+          }
+        }
+        lines.push(
+          '',
+          '## 補 evidence 的規矩',
+          '',
+          '1. 先做整批 pre-verify baseline check（依出現的 channel 種類）：',
+          '   - 有 \`[verify:e2e]\`：確認 Playwright config + e2e fixtures',
+          '   - 有 \`[verify:api]\`：確認 \`__test-login\` 或等價 session bypass route',
+          '   - 有 \`[verify:ui]\`：確認 \`supabase/seed.sql\` 或 seed 等價檔',
+          '   - 缺 baseline → **STOP**，回報 user 補齊；**NEVER** 降級 channel',
+          '',
+          '2. 對每個 item 依 e2e → api → ui 順序補對應 evidence；每完成一個 channel 立刻 Edit tasks.md 寫對應 \`(verified-*:)\` annotation（不要等到最後一起寫）',
+          '',
+          '3. 全部完成後請 user 在 review:ui 重新整理；含 \`verify:ui\` 的 item checkbox 仍保留 \`[ ]\` 等 user 在 GUI 視覺確認',
+          '',
+          '4. 任一 channel 通不過 → 保留 \`[ ]\` + 寫 \`（issue: ...）\`；**NEVER** 寫不成功的 \`(verified-*:)\` annotation',
+          '',
+          'Cookbook 與範本：\`<clade-vendor>/snippets/verify-channels/README.md\`',
+          '',
+          '## 全域規矩',
+          '- **MUST** 用 codebase-memory-mcp 探索（search_graph / trace_path / get_code_snippet）；graph 未 index 先跑 index_repository',
+          '- Grep / Glob / Read 只用於非程式碼檔（.md / config / .env）',
+          '- 可直接照 Step 8a 流程跑，不需等確認；唯一例外是 baseline 缺漏要先 STOP',
+          '',
+          '回覆時請先說「我看到的現況是 ...」再給 evidence 補齊計劃。',
         );
         return lines.join('\\n');
       } else if (kind === 'feedback-given-group') {
@@ -3682,14 +3684,20 @@ export function renderReviewHtml(): string {
     }
     function renderChanges() {
       const ready = [];
-      const notReady = [];
+      // not-ready 拆兩桶：healthCheckNeeded = pattern hits（spec/data 缺漏，須 ingest 介入）；
+      // applyPending = 純 evidence missing（跑 /spectra-apply Step 8a 即可補齊）。
+      // 同時命中時優先歸 healthCheckNeeded — pattern 是 spec/data 問題，必先修；
+      // 否則跑 Step 8a 補的 evidence 可能對應到「即將被改寫」的 item，做白工。
+      const healthCheckNeeded = [];
+      const applyPending = [];
       const feedbackGiven = [];
       const done = [];
       for (const change of state.changes) {
         const kind = changeCardKind(change);
         const evidenceMissingCount = Array.isArray(change.evidenceMissing) ? change.evidenceMissing.length : 0;
         if (kind === 'done') done.push(change);
-        else if ((change.readinessHits || 0) > 0 || evidenceMissingCount > 0) notReady.push(change);
+        else if ((change.readinessHits || 0) > 0) healthCheckNeeded.push(change);
+        else if (evidenceMissingCount > 0) applyPending.push(change);
         else if (
           kind === 'issue' &&
           (change.malformed || 0) === 0 &&
@@ -3706,14 +3714,25 @@ export function renderReviewHtml(): string {
           '</div>'
         );
       }
-      if (notReady.length) {
+      if (healthCheckNeeded.length) {
         blocks.push(
           '<div class="change-group">' +
           '<div class="change-group-heading with-action">' +
-            '<span>⚠ 尚未準備好，需先補強 · ' + notReady.length + '</span>' +
-            '<button class="copy-handoff-btn group" data-group-handoff="not-ready" type="button" title="複製健康檢查 prompt：讓 Claude 逐張讀 proposal/tasks 分類，只回報 bug，不徒增 noise">📋 健康檢查 prompt</button>' +
+            '<span>🩺 需健康檢查介入 · ' + healthCheckNeeded.length + '</span>' +
+            '<button class="copy-handoff-btn group" data-group-handoff="health-check" type="button" title="複製健康檢查 prompt：讓 Claude 逐張讀 proposal/tasks 分類 pattern hits，只回報 bug，不徒增 noise">📋 健康檢查 prompt</button>' +
           '</div>' +
-          notReady.map(renderChangeCard).join('') +
+          healthCheckNeeded.map(renderChangeCard).join('') +
+          '</div>'
+        );
+      }
+      if (applyPending.length) {
+        blocks.push(
+          '<div class="change-group">' +
+          '<div class="change-group-heading with-action">' +
+            '<span>⏳ 等 apply 後就可處理 · ' + applyPending.length + '</span>' +
+            '<button class="copy-handoff-btn group" data-group-handoff="apply-pending" type="button" title="複製整批補 evidence prompt：讓 Claude 一次跑 /spectra-apply Step 8a Verify Channel 補齊所有缺項，全做完此群就清空、change 進 ready">📋 補 evidence prompt（整批）</button>' +
+          '</div>' +
+          applyPending.map(renderChangeCard).join('') +
           '</div>'
         );
       }
@@ -3750,11 +3769,18 @@ export function renderReviewHtml(): string {
         button.addEventListener('click', function (event) {
           event.stopPropagation();
           const kind = button.dataset.groupHandoff;
-          if (kind === 'not-ready') {
-            const notReadyChanges = (state.changes || []).filter(function (c) {
+          if (kind === 'health-check') {
+            const healthCheckChanges = (state.changes || []).filter(function (c) {
               return (c.readinessHits || 0) > 0;
             });
-            copyHandoffPrompt('not-ready-group', { notReadyChanges: notReadyChanges }, '健康檢查（' + notReadyChanges.length + ' change）');
+            copyHandoffPrompt('health-check-group', { healthCheckChanges: healthCheckChanges }, '健康檢查（' + healthCheckChanges.length + ' change）');
+          } else if (kind === 'apply-pending') {
+            // applyPending 桶定義：純 evidence missing（無 pattern hit）
+            const applyPendingChanges = (state.changes || []).filter(function (c) {
+              if ((c.readinessHits || 0) > 0) return false;
+              return Array.isArray(c.evidenceMissing) && c.evidenceMissing.length > 0;
+            });
+            copyHandoffPrompt('apply-pending-group', { applyPendingChanges: applyPendingChanges }, '補 evidence（' + applyPendingChanges.length + ' change）');
           } else if (kind === 'feedback-given') {
             const feedbackChanges = (state.changes || []).filter(function (c) {
               if ((c.malformed || 0) > 0) return false;
