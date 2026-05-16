@@ -102,7 +102,7 @@ function mergedBranches(cwd, baseBranch = 'main') {
   }
   const set = new Set()
   for (const line of raw.split('\n')) {
-    const b = line.replace(/^\*?\s*/, '').trim()
+    const b = line.replace(/^[*+]?\s*/, '').trim()
     if (b) set.add(b)
   }
   return set
@@ -317,6 +317,7 @@ export {
   enrichWorktree,
   findConsumerRoot,
   makeSlugSafe,
+  mergedBranches,
   parseWorktreeList,
   sessionWorktrees,
   timestampPrefix,
