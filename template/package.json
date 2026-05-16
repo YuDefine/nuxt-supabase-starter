@@ -20,7 +20,7 @@
     "db:lint": "bash ./scripts/db-lint.sh",
     "db:reset": "bash ./scripts/db-reset.sh",
     "db:types": "bash ./scripts/db-types.sh",
-    "dev": "nuxt dev --dotenv .env -o",
+    "dev": "NODE_OPTIONS=--dns-result-order=ipv4first nuxt dev --dotenv .env -o",
     "docs:build": "vitepress build docs",
     "docs:dev": "vitepress dev docs --open",
     "docs:preview": "vitepress preview docs",
