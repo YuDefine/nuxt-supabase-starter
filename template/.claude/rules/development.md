@@ -1,6 +1,6 @@
 ---
 description: 開發規範（TDD, coding style, UI reuse）
-paths: ['app/**/*.{vue,ts}', 'server/**/*.ts', 'test/**/*.ts', 'shared/**/*.ts']
+paths: ['app/**/*.{vue,ts}', 'server/**/*.ts', 'test/**/*.ts', 'shared/**/*.ts', 'package.json']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -32,6 +32,7 @@ Local edits will be reverted by the next sync.
 - **ALWAYS** `PAGE_SIZE_MAX` from `shared/schemas/pagination` for `pageSize` max validation — NEVER hardcode
 - **ALWAYS** UTable cell slot 命名加 `-cell` 後綴：`#actions-cell="{ row }"`，**NEVER** `#actions="{ row }"`（不加 `-cell` slot 不會生效且無報錯）
 - **ALWAYS** Nuxt UI 元件顯式寫出樣式 props（`color`, `variant`, `size`）— **NEVER** 依賴預設值。實作前先搜尋既有頁面中相同語義的用法，複製其 props 組合。詳見 `DESIGN.md` Component Convention Overview（若有）
+- **ALWAYS** `package.json` 的 `dev` / `dev:*` script 前綴 `NODE_OPTIONS=--dns-result-order=ipv4first` — Node 18+ 在 macOS 把 `localhost` 預設解到 `::1`，造成 dev server banner 印 IPv6 位址 + 瀏覽器走 IPv6 stack 訪問緩慢。Prefix 後 listhen / fetch resolve `localhost` 走 IPv4，banner 與訪問都回到 `127.0.0.1` 路徑。社群標準解（Node 官方 doc `--dns-result-order`）
 
 <!-- SPECTRA-UX:START v1.0.0 -->
 
