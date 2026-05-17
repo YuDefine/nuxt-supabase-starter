@@ -1,4 +1,4 @@
-# Auto-generated from .claude/agents/db-backup.md
+# 🔒 LOCKED — managed by clade · auto-generated from .claude/agents/db-backup.md
 name = "db-backup"
 description = "執行資料庫備份並更新 seed.sql。當用戶要求備份資料庫、更新 seed、或同步種子資料時使用。"
 model = "gpt-5.4-mini"

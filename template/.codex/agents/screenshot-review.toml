@@ -1,4 +1,4 @@
-# Auto-generated from .claude/agents/screenshot-review.md
+# 🔒 LOCKED — managed by clade · auto-generated from .claude/agents/screenshot-review.md
 name = "screenshot-review"
 description = "截圖驗證 agent — 截圖並驗證 UI 狀態，回傳截圖報告。當使用者要求「截圖」、「截圖確認」、「視覺驗證」、或需要驗證 UI 修改結果時自動觸發。也用於 spectra-archive 前的視覺 QA。"
 model = "gpt-5.4"

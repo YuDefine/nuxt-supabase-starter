@@ -1,4 +1,4 @@
-# Auto-generated from .claude/agents/code-review.md
+# 🔒 LOCKED — managed by clade · auto-generated from .claude/agents/code-review.md
 name = "code-review"
 description = "Code review a pull request"
 model = "gpt-5.4"
