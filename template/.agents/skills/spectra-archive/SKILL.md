@@ -73,7 +73,7 @@ Archive a completed change.
 
    Read the tasks file (typically `tasks.md`) to check for incomplete tasks.
 
-   Count tasks marked with `- [ ]` (incomplete) vs `- [x]` (complete).
+   Count **leaf** tasks marked with `- [ ]` (incomplete) vs `- [x]` (complete). For `## 人工檢查` items, parent `#N` lines that own scoped `#N.M` children have state derived from children (see `rules/core/manual-review.md`「Parent State Derivation」) — never count those parent lines directly.
 
    **If incomplete tasks found:**
    - Display warning showing count of incomplete tasks

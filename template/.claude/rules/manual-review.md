@@ -236,6 +236,28 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 
 禁止在 `## 人工檢查` checkbox line 使用 legacy section ids，例如 `8.1`、`9.3`，也禁止省略 `#N` / `#N.M`。這個 schema 只讓 tooling 能定位與寫回項目，不改變人工檢查 ownership：agent 仍然 **NEVER** 在未取得使用者明確 OK、Issue handling、skip 或 skip all 前自行勾選 `[review:ui]` items；`[discuss]` items 的勾選規則見下方「Item Kind Marker」章節。
 
+### Parent State Derivation（hard rule）
+
+Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由所有 children AND derive，不接受 user 或 agent 直接對 parent line 給 feedback：
+
+- 所有 children `[x]` 且無 `（issue: ...）` annotation → parent line `[x]`
+- 任一 child `[ ]`、或帶 `（issue: ...）` → parent line `[ ]`（rollup 後若 child 改 issue 也要 un-rollup 回 `[ ]`）
+
+#### 真相層責任分工
+
+| 真相層 | 責任 |
+| --- | --- |
+| Review GUI (`applyReviewActionToContent`) | 每次寫回 child line 後 **MUST** 重 derive parent state 並寫回 parent line（auto-rollup / un-rollup） |
+| commit Step 0-MR awk gate | **MUST** leaf-only count — parent-with-scoped-children 不計 pending |
+| `spectra-advanced/archive-gate.sh` | **MUST** leaf-only count（已正確 — semantic fully aggregated from scoped children） |
+| 未來新加的 tooling | **MUST** 沿用 leaf-only count；禁止 naive `grep '- \[ \]'` 或同義 awk 計 pending |
+
+#### 禁止項
+
+- User 透過 GUI 對 parent line 直接 OK / Issue / Skip — GUI **MUST** 隱藏 parent 的 feedback 控制（既有行為：「母項不需要回饋，請對下方子項分別作回饋」）
+- Agent 自行 Edit tasks.md 把 parent flip `[x]` — 違反本段 + 「NEVER 代勾 review:ui」核心規則。Parent state 由 children 透過 GUI 自動 rollup，**不**經 agent 操作
+- 任何 gate / tooling 用 naive `grep '- \[ \]'` 或同義邏輯計 pending — **MUST** 排除 parent-with-scoped-children
+
 ## Item Kind Marker（hard rule）
 
 每條 `## 人工檢查` checkbox 行 **MUST** 在 `#N` / `#N.M` 後緊接一個 leading kind marker。合法 marker：
