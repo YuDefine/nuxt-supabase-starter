@@ -343,6 +343,15 @@ interface ScreenshotTopic {
 interface ChangeSummary {
   name: string
   tasksPath: string
+  /**
+   * 該 change 實際所在的 working tree 絕對路徑。
+   * - main repo → mainRoot
+   * - worktree → 對應 worktree path
+   * 後續 readChangeDetail / persistReviewAction / invokeReviewArchive / serveScreenshot 全部依此 route。
+   */
+  sourceRoot: string
+  /** Worktree slug；main repo 為 null。前端用此貼 `wt:<slug>` 標籤。 */
+  worktreeSlug: string | null
   total: number
   checked: number
   pending: number
@@ -1421,7 +1430,7 @@ async function loadHono(): Promise<any> {
   }
 }
 
-export async function createReviewApp(repoRoot = process.cwd()): Promise<any> {
+export async function createReviewApp(mainRoot = process.cwd()): Promise<any> {
   const { Hono } = await loadHono()
   const app = new Hono()
 
@@ -1437,32 +1446,34 @@ export async function createReviewApp(repoRoot = process.cwd()): Promise<any> {
     return c.html(renderReviewHtml())
   })
 
-  app.get('/api/health', (c: any) => c.json({ ok: true, repoRoot }))
+  app.get('/api/health', (c: any) => c.json({ ok: true, repoRoot: mainRoot }))
 
   // GET /api/changes 與 /api/changes/:change 都不能讓瀏覽器 cache：
   // change detail 含 version.hash + mtime，cache 後 reload 會拿到 stale version
   // 而下一次 saveAction 仍用舊 version → server 端永遠回 409。
   app.get('/api/changes', async (c: any) => {
     c.header('Cache-Control', 'no-store')
-    const changes = await listPendingChanges(repoRoot)
+    const changes = await listPendingChanges(mainRoot)
     return c.json({ changes })
   })
 
   app.get('/api/changes/:change', async (c: any) => {
     c.header('Cache-Control', 'no-store')
-    const detail = await readChangeDetail(repoRoot, c.req.param('change'))
+    const changeName = c.req.param('change')
+    const source = await ensureChangeRoute(mainRoot, changeName)
+    const detail = await readChangeDetail(source, changeName)
     return c.json({ change: detail })
   })
 
   app.post('/api/changes/:change/action', async (c: any) => {
     const change = c.req.param('change')
     const body = await c.req.json().catch(() => ({}))
-    const result = await persistReviewAction(repoRoot, change, body)
+    const result = await persistReviewAction(mainRoot, change, body)
     return c.json(result, result.statusCode || 200)
   })
 
   app.get('/api/screenshot/*', async (c: any) => {
-    return serveScreenshot(repoRoot, c)
+    return serveScreenshot(mainRoot, c)
   })
 
   app.onError((err: unknown, c: any) => {
@@ -1485,28 +1496,44 @@ function filterPoolsForChange(pools: ScreenshotTopic[], change: string): Screens
   return pools.filter((pool) => topicMatchesChange(pool.topic, change))
 }
 
-async function listPendingChanges(repoRoot: string): Promise<ChangeSummary[]> {
-  const changesRoot = join(repoRoot, 'openspec', 'changes')
-  if (!existsSync(changesRoot)) return []
+export async function listPendingChanges(mainRoot: string): Promise<ChangeSummary[]> {
+  const sources = await listSourceRoots(mainRoot)
+  // 重建兩個 module-level cache：sourceRootIndex 給 rootId → SourceRoot；changeRouteCache 給 change → SourceRoot。
+  sourceRootIndex = new Map(sources.map((src) => [src.rootId, src]))
+  changeRouteCache = new Map()
 
-  const pools = await listScreenshotPools(repoRoot)
-  const entries = await readdir(changesRoot, { withFileTypes: true })
-  const summaries: ChangeSummary[] = []
+  const summariesByName = new Map<string, ChangeSummary>()
+  // sources 已排序：main 在第一筆、worktree 在後。後寫蓋掉前寫 → worktree-prefer collision rule。
+  for (const src of sources) {
+    const changesRoot = join(src.root, 'openspec', 'changes')
+    if (!existsSync(changesRoot)) continue
 
-  for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name === 'archive' || entry.name.startsWith('.')) continue
-    const tasksPath = join(changesRoot, entry.name, 'tasks.md')
-    if (!existsSync(tasksPath)) continue
-    const summary = await summarizeChange(
-      repoRoot,
-      entry.name,
-      tasksPath,
-      filterPoolsForChange(pools, entry.name)
-    )
-    if (summary) summaries.push(summary)
+    const pools = await listScreenshotPools(src.root, src.rootId)
+    let entries
+    try {
+      entries = await readdir(changesRoot, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name === 'archive' || entry.name.startsWith('.')) continue
+      const tasksPath = join(changesRoot, entry.name, 'tasks.md')
+      if (!existsSync(tasksPath)) continue
+      const summary = await summarizeChange(
+        src.root,
+        entry.name,
+        tasksPath,
+        filterPoolsForChange(pools, entry.name),
+        src.slug
+      )
+      if (summary) {
+        summariesByName.set(summary.name, summary)
+        changeRouteCache.set(summary.name, src)
+      }
+    }
   }
 
-  return summaries.toSorted((a, b) => {
+  return Array.from(summariesByName.values()).toSorted((a, b) => {
     if (a.pending !== b.pending) return b.pending - a.pending
     if (a.malformed !== b.malformed) return b.malformed - a.malformed
     return a.name.localeCompare(b.name)
@@ -1532,13 +1559,14 @@ async function loadProposalDefaultKind(
 }
 
 async function summarizeChange(
-  repoRoot: string,
+  sourceRoot: string,
   name: string,
   tasksPath: string,
-  pools: ScreenshotTopic[]
+  pools: ScreenshotTopic[],
+  worktreeSlug: string | null = null
 ): Promise<ChangeSummary | null> {
   const content = await readFile(tasksPath, 'utf8')
-  const defaultKind = await loadProposalDefaultKind(repoRoot, name)
+  const defaultKind = await loadProposalDefaultKind(sourceRoot, name)
   const parsed = parseManualReviewSections(content, { defaultKind, sourcePath: tasksPath })
   if (parsed.sections.length === 0) return null
 
@@ -1607,6 +1635,8 @@ async function summarizeChange(
   return {
     name,
     tasksPath,
+    sourceRoot,
+    worktreeSlug,
     total: effectiveItems.length,
     checked,
     pending: effectiveItems.length - checked,
@@ -1621,20 +1651,20 @@ async function summarizeChange(
   }
 }
 
-async function readChangeDetail(repoRoot: string, change: string): Promise<ChangeDetail> {
-  const tasksPath = resolveChangeTasksPath(repoRoot, change)
+async function readChangeDetail(source: SourceRoot, change: string): Promise<ChangeDetail> {
+  const tasksPath = resolveChangeTasksPath(source.root, change)
   const [content, version, allPools, defaultKind] = await Promise.all([
     readFile(tasksPath, 'utf8'),
     readFileVersion(tasksPath),
-    listScreenshotPools(repoRoot),
-    loadProposalDefaultKind(repoRoot, change),
+    listScreenshotPools(source.root, source.rootId),
+    loadProposalDefaultKind(source.root, change),
   ])
   const parsed = parseManualReviewSections(content, { defaultKind, sourcePath: tasksPath })
   if (parsed.sections.length === 0) {
     throw new HttpError(404, `Change has no ## 人工檢查 section: ${change}`)
   }
   const pools = filterPoolsForChange(allPools, change)
-  const summary = await summarizeChange(repoRoot, change, tasksPath, pools)
+  const summary = await summarizeChange(source.root, change, tasksPath, pools, source.slug)
   if (!summary) throw new HttpError(404, `Change has no manual-review tasks: ${change}`)
   return {
     ...summary,
@@ -1645,17 +1675,18 @@ async function readChangeDetail(repoRoot: string, change: string): Promise<Chang
   }
 }
 
-function resolveChangeTasksPath(repoRoot: string, change: string): string {
+function resolveChangeTasksPath(sourceRoot: string, change: string): string {
   if (!/^[A-Za-z0-9._-]+$/.test(change) || change === 'archive') {
     throw new HttpError(400, '無效的 change 名稱')
   }
-  const tasksPath = join(repoRoot, 'openspec', 'changes', change, 'tasks.md')
+  const tasksPath = join(sourceRoot, 'openspec', 'changes', change, 'tasks.md')
   if (!existsSync(tasksPath)) throw new HttpError(404, `tasks.md not found for change: ${change}`)
   return tasksPath
 }
 
-async function persistReviewAction(repoRoot: string, change: string, body: any): Promise<any> {
-  const tasksPath = resolveChangeTasksPath(repoRoot, change)
+async function persistReviewAction(mainRoot: string, change: string, body: any): Promise<any> {
+  const source = await ensureChangeRoute(mainRoot, change)
+  const tasksPath = resolveChangeTasksPath(source.root, change)
   const action = body?.action
   if (!['ok', 'issue', 'skip'].includes(action))
     throw new HttpError(400, 'action must be ok, issue, or skip')
@@ -1674,7 +1705,7 @@ async function persistReviewAction(repoRoot: string, change: string, body: any):
   }
 
   const content = await readFile(tasksPath, 'utf8')
-  const defaultKind = await loadProposalDefaultKind(repoRoot, change)
+  const defaultKind = await loadProposalDefaultKind(source.root, change)
   const updated = applyReviewActionToContent(
     content,
     body.itemId,
@@ -1685,7 +1716,7 @@ async function persistReviewAction(repoRoot: string, change: string, body: any):
   )
   await writeFile(tasksPath, updated.content, 'utf8')
 
-  const detail = await readChangeDetail(repoRoot, change)
+  const detail = await readChangeDetail(source, change)
   // 與 summarizeChange 的 checked 算法同義：[x] 且沒 issue annotation 才算完成。
   // 否則 stale `[x] + （issue: ...）` 會誤觸發 archive。同樣排除 parent-with-children
   // — GUI 不讓使用者勾母項，若算進 effectiveItems 子項全勾仍判 incomplete，change 永遠卡。
@@ -1697,7 +1728,12 @@ async function persistReviewAction(repoRoot: string, change: string, body: any):
     detail.malformed === 0 &&
     effectiveItems.length > 0 &&
     effectiveItems.every((item) => item.checked && !/（issue:[^）]*）/.test(item.raw))
-  const archive = complete ? await invokeReviewArchive(repoRoot, change) : { status: 'not-ready' }
+  // archive cwd = change 所在的 source root（worktree-based change 在 worktree 跑 /review-archive
+  // 才能寫 docs/manual-review-archive.md；後續 /spectra-archive 在 main 跑時 wt-helper merge-back
+  // 把 doc 變動帶回 main）。
+  const archive = complete
+    ? await invokeReviewArchive(source.root, change)
+    : { status: 'not-ready' }
   return {
     ok: true,
     itemId: body.itemId,
@@ -1777,7 +1813,105 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`
 }
 
-async function listScreenshotPools(repoRoot: string): Promise<ScreenshotTopic[]> {
+/**
+ * 一個 review-gui server 同時要看 main repo + 所有 worktree 的 change。
+ * SourceRoot 是「change 實際 commit 寫入的 working tree」單位：main + 每個 worktree 各一筆。
+ * rootId 是 URL-safe namespace（`main` / `wt-<slug>`），給 `/api/screenshot/<rootId>/...` 用，避免不同 worktree 同 relPath 撞。
+ */
+export interface SourceRoot {
+  root: string
+  slug: string | null
+  branch: string
+  rootId: string
+}
+
+const WORKTREE_SLUG_BRANCH_RE = /^wt\/([^/]+)/
+
+function computeRootId(slug: string | null): string {
+  return slug === null ? 'main' : `wt-${slug}`
+}
+
+function computeWorktreeSlug(absPath: string, branch: string | undefined): string {
+  if (branch) {
+    const m = branch.match(WORKTREE_SLUG_BRANCH_RE)
+    if (m) return m[1]
+  }
+  return absPath.split(sep).filter(Boolean).pop() || absPath
+}
+
+/**
+ * 列出 main repo 及其所有 worktree（含 mainRoot 自己）。
+ * - parse `git worktree list --porcelain`
+ * - 失敗（非 git repo / git 不存在）→ 只回 mainRoot 一筆，行為等同改動前
+ * - main 永遠排第一筆；後續 collision (`change name` 重複) worktree 蓋過 main（worktree 是 ahead 版本）
+ */
+export async function listSourceRoots(mainRoot: string): Promise<SourceRoot[]> {
+  const mainAbs = resolve(mainRoot)
+  const result = spawnSync('git', ['-C', mainAbs, 'worktree', 'list', '--porcelain'], {
+    encoding: 'utf8',
+  })
+  if (result.status !== 0 || !result.stdout) {
+    return [{ root: mainAbs, slug: null, branch: '', rootId: 'main' }]
+  }
+  const sources: SourceRoot[] = []
+  let current: { worktree?: string; branch?: string } = {}
+  const flush = () => {
+    if (current.worktree) {
+      const abs = resolve(current.worktree)
+      const isMain = abs === mainAbs
+      const slug = isMain ? null : computeWorktreeSlug(abs, current.branch)
+      sources.push({ root: abs, slug, branch: current.branch ?? '', rootId: computeRootId(slug) })
+    }
+    current = {}
+  }
+  for (const line of result.stdout.split('\n')) {
+    if (line.startsWith('worktree ')) {
+      flush()
+      current.worktree = line.slice('worktree '.length).trim()
+    } else if (line.startsWith('branch ')) {
+      current.branch = line
+        .slice('branch '.length)
+        .trim()
+        .replace(/^refs\/heads\//, '')
+    } else if (line === '') {
+      flush()
+    }
+  }
+  flush()
+  // main 永遠在第一筆；後續 listPendingChanges 用 Map.set 順序，worktree 在 main 之後寫入會蓋掉 main。
+  return sources.toSorted((a, b) => {
+    if (a.slug === null && b.slug !== null) return -1
+    if (a.slug !== null && b.slug === null) return 1
+    return (a.slug || '').localeCompare(b.slug || '')
+  })
+}
+
+/**
+ * 每次 listPendingChanges 重建；route per-change API 用。
+ * key = change name；value = 該 change 所在的 SourceRoot。
+ * Deep link reload（沒先打 /api/changes）會 lazy 重建。
+ */
+let changeRouteCache: Map<string, SourceRoot> = new Map()
+let sourceRootIndex: Map<string, SourceRoot> = new Map()
+
+async function ensureChangeRoute(mainRoot: string, change: string): Promise<SourceRoot> {
+  const cached = changeRouteCache.get(change)
+  if (cached && existsSync(join(cached.root, 'openspec', 'changes', change, 'tasks.md'))) {
+    return cached
+  }
+  await listPendingChanges(mainRoot)
+  const fresh = changeRouteCache.get(change)
+  if (fresh) return fresh
+  const mainEntry = sourceRootIndex.get('main')
+  if (mainEntry) return mainEntry
+  return { root: resolve(mainRoot), slug: null, branch: '', rootId: 'main' }
+}
+
+function resolveSourceByRootId(rootId: string): SourceRoot | null {
+  return sourceRootIndex.get(rootId) ?? null
+}
+
+async function listScreenshotPools(repoRoot: string, rootId: string): Promise<ScreenshotTopic[]> {
   const root = join(repoRoot, 'screenshots')
   if (!existsSync(root)) return []
 
@@ -1795,7 +1929,7 @@ async function listScreenshotPools(repoRoot: string): Promise<ScreenshotTopic[]>
         continue
       const topicDir = join(envDir, topicEntry.name)
       const relRoot = join('screenshots', envEntry.name, topicEntry.name)
-      const files = await collectImages(topicDir, relRoot)
+      const files = await collectImages(topicDir, relRoot, rootId)
       pools.push({
         env: envEntry.name,
         topic: topicEntry.name,
@@ -1807,37 +1941,59 @@ async function listScreenshotPools(repoRoot: string): Promise<ScreenshotTopic[]>
   return pools.toSorted((a, b) => `${a.env}/${a.topic}`.localeCompare(`${b.env}/${b.topic}`))
 }
 
-async function collectImages(absDir: string, relRoot: string): Promise<ScreenshotFile[]> {
+async function collectImages(
+  absDir: string,
+  relRoot: string,
+  rootId: string
+): Promise<ScreenshotFile[]> {
   const files: ScreenshotFile[] = []
   for (const entry of await readdir(absDir, { withFileTypes: true })) {
     const abs = join(absDir, entry.name)
     const rel = join(relRoot, entry.name)
     if (entry.isDirectory()) {
-      files.push(...(await collectImages(abs, rel)))
+      files.push(...(await collectImages(abs, rel, rootId)))
       continue
     }
     if (!entry.isFile()) continue
     const ext = entry.name.slice(entry.name.lastIndexOf('.')).toLowerCase()
     if (!IMAGE_EXTS.has(ext)) continue
     const relPath = toPosix(rel)
+    const encodedRel = relPath.split('/').map(encodeURIComponent).join('/')
     files.push({
       relPath,
-      url: `/api/screenshot/${relPath.split('/').map(encodeURIComponent).join('/')}`,
+      url: `/api/screenshot/${encodeURIComponent(rootId)}/${encodedRel}`,
       name: entry.name,
     })
   }
   return files.toSorted((a, b) => a.relPath.localeCompare(b.relPath))
 }
 
-async function serveScreenshot(repoRoot: string, c: any): Promise<any> {
-  const rawPath = decodeURIComponent(c.req.path.replace(/^\/api\/screenshot\//, ''))
-  if (!rawPath.startsWith('screenshots/'))
+async function serveScreenshot(mainRoot: string, c: any): Promise<any> {
+  // URL：/api/screenshot/<rootId>/<relPath>。舊形式（直接 screenshots/... 開頭）保留 fallback → mainRoot。
+  const stripped = c.req.path.replace(/^\/api\/screenshot\//, '')
+  const slashIdx = stripped.indexOf('/')
+  if (slashIdx < 0) throw new HttpError(400, '截圖 URL 缺少路徑')
+  const firstSegment = decodeURIComponent(stripped.slice(0, slashIdx))
+  const remainder = stripped.slice(slashIdx + 1)
+  let sourceRoot: string
+  let relPath: string
+  if (firstSegment === 'screenshots') {
+    sourceRoot = mainRoot
+    relPath = decodeURIComponent(stripped)
+  } else {
+    if (sourceRootIndex.size === 0) await listPendingChanges(mainRoot)
+    const source = resolveSourceByRootId(firstSegment)
+    if (!source) throw new HttpError(404, `未知的 rootId: ${firstSegment}`)
+    sourceRoot = source.root
+    relPath = decodeURIComponent(remainder)
+  }
+  if (!relPath.startsWith('screenshots/'))
     throw new HttpError(400, '截圖路徑必須以 screenshots/ 開頭')
-  const normalized = normalize(rawPath)
+  const normalized = normalize(relPath)
   if (normalized.startsWith('..') || normalized.includes(`${sep}..${sep}`))
     throw new HttpError(400, '無效的截圖路徑')
-  const abs = resolve(repoRoot, normalized)
-  const screenshotsRoot = resolve(repoRoot, 'screenshots')
+  const abs = resolve(sourceRoot, normalized)
+  const screenshotsRoot = resolve(sourceRoot, 'screenshots')
   if (!abs.startsWith(screenshotsRoot + sep)) throw new HttpError(400, '無效的截圖路徑')
   if (!existsSync(abs)) throw new HttpError(404, '截圖不存在')
   const ext = abs.slice(abs.lastIndexOf('.')).toLowerCase()
@@ -1982,6 +2138,23 @@ export function renderReviewHtml(): string {
     .card-badge.issue { background: #fce4c8; color: #8a4f0a; }
     .card-badge.pending { background: #ece8dd; color: #5a5341; }
     .card-badge.malformed { background: #fae0e0; color: #7a2828; }
+    .wt-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 1px 7px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 600;
+      background: #dde6f2;
+      color: #2b4470;
+      margin-left: 6px;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    .wt-badge.detail {
+      font-size: 12px;
+      padding: 2px 9px;
+    }
     .metrics {
       display: flex;
       flex-wrap: wrap;
@@ -3149,22 +3322,33 @@ export function renderReviewHtml(): string {
     // global CLAUDE.md 的 Code Discovery rule。
     function handoffHeader(change, ctx) {
       const repoName = state.repoName || '(unknown)';
-      const repoRoot = state.repoRoot || '(unknown)';
+      const mainRepoRoot = state.repoRoot || '(unknown)';
       const changeName = change ? change.name : '(unknown)';
+      // 若 change 在 worktree，接手者 cwd 必須是 worktree 否則 tasks.md 路徑找不到。
+      const wtSlug = change ? change.worktreeSlug : null;
+      const sourceRoot = (change && change.sourceRoot) || mainRepoRoot;
       const item = (ctx && ctx.item) || null;
       const kinds = item ? itemKinds(item) : null;
       const kindLine = kinds && kinds.length ? '- item kind: ' + kinds.join(' + ') : null;
       const lines = [
-        '我在 consumer repo「' + repoName + '」（路徑：' + repoRoot + '）',
+        '我在 consumer repo「' + repoName + '」（路徑：' + mainRepoRoot + '）',
         '跑 \`pnpm review:ui\` 做 spectra 人工檢查，遇到下面這個問題需要你接手分析、提方案，',
         '等我確認後再動手。',
         '',
         '## 環境',
         '- consumer: ' + repoName,
-        '- repo root: ' + repoRoot,
+        '- main repo root: ' + mainRepoRoot,
+      ];
+      if (wtSlug) {
+        lines.push(
+          '- ⚠️ 此 change 位於 worktree \`' + wtSlug + '\`：開工前 \`cd ' + sourceRoot + '\`，所有檔案讀寫都以這個 worktree 為主',
+          '- working tree: ' + sourceRoot
+        );
+      }
+      lines.push(
         '- change: ' + changeName,
         '- tasks.md: openspec/changes/' + changeName + '/tasks.md',
-      ];
+      );
       if (kindLine) lines.push(kindLine);
       lines.push(
         '- 相關 rules（若存在請優先讀）：',
@@ -3819,8 +4003,15 @@ export function renderReviewHtml(): string {
       const evidencePairCount = evidenceMissingList.reduce(function (acc, m) {
         return acc + (Array.isArray(m.kinds) ? m.kinds.length : 0);
       }, 0);
+      const wtBadgeHtml = change.worktreeSlug
+        ? '<span class="wt-badge" title="此 change 位於 worktree '
+          + esc(change.sourceRoot || '')
+          + '">wt:'
+          + esc(change.worktreeSlug)
+          + '</span>'
+        : '';
       return '<button type="button" class="change-row card-' + kind + '" data-change="' + esc(change.name) + '" aria-current="' + (current ? 'true' : 'false') + '">' +
-        '<span class="change-name">' + esc(change.name) + '</span>' +
+        '<span class="change-name">' + esc(change.name) + wtBadgeHtml + '</span>' +
         '<span class="card-badge ' + kind + '">' + esc(badge) + '</span>' +
         '<span class="metrics">' +
         '<span class="metric" title="已通過（含 skip） / 總項目數">' + change.checked + '/' + change.total + ' 通過</span>' +
@@ -3973,7 +4164,15 @@ export function renderReviewHtml(): string {
     function renderCurrent() {
       const change = state.current;
       if (!change) return;
+      // textContent 一次清掉舊內容，再 appendChild 可選 wt badge。
       el.currentTitle.textContent = change.name;
+      if (change.worktreeSlug) {
+        const badge = document.createElement('span');
+        badge.className = 'wt-badge detail';
+        badge.title = 'Worktree: ' + (change.sourceRoot || '');
+        badge.textContent = 'wt:' + change.worktreeSlug;
+        el.currentTitle.appendChild(badge);
+      }
       if (change.malformedLines.length) {
         showBannerWithHandoff('人工檢查格式錯誤，需先修正下列 tasks.md 行才能寫入', 'error', 'malformed', '格式錯誤', '');
       }
