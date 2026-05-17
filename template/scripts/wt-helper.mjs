@@ -138,8 +138,12 @@ async function prompt(question) {
   }
 }
 
-async function cmdAdd(slug) {
-  if (!slug) throw new Error('Usage: wt-helper add <slug>')
+async function cmdAdd(slug, opts = {}) {
+  if (!slug) {
+    throw new Error(
+      'Usage: wt-helper add <slug> [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>]'
+    )
+  }
   const cleanSlug = makeSlugSafe(slug)
   const consumerRoot = findConsumerRoot()
   const name = basename(consumerRoot)
@@ -155,6 +159,85 @@ async function cmdAdd(slug) {
     git(['rev-parse', '--verify', baseRef], { cwd: consumerRoot })
   } catch {
     throw new Error(`Base branch "${baseRef}" not found in ${consumerRoot}`)
+  }
+
+  // Pre-fork baseline guard (only when --precheck-baseline given).
+  // Strategies: commit (selective stage + commit baseline on main),
+  // stash  (push -u stash on main → apply inside new worktree),
+  // warn   (stop with report — caller decides).
+  // Unmerged paths always stop, regardless of strategy.
+  let pendingStashName = null
+  if (opts.precheckBaseline !== undefined) {
+    const dirty = detectMainDirty(consumerRoot)
+    if (dirty.conflicted.length > 0) {
+      const preview = dirty.conflicted
+        .slice(0, 10)
+        .map((c) => `  ${c.status}  ${c.path}`)
+        .join('\n')
+      const more =
+        dirty.conflicted.length > 10 ? `\n  ... and ${dirty.conflicted.length - 10} more` : ''
+      throw new Error(
+        `Pre-fork baseline guard: main has ${dirty.conflicted.length} unmerged path(s):\n` +
+          preview +
+          more +
+          `\n\nResolve conflicts manually before fork. wt-helper refuses to auto-handle unmerged paths.`
+      )
+    }
+    const dirtyCount = dirty.modified.length + dirty.untracked.length
+    if (dirtyCount > 0) {
+      const strategy = opts.baselineStrategy || 'warn'
+      if (strategy === 'commit') {
+        const scopePaths = String(opts.baselineScopePaths || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+        if (scopePaths.length === 0) {
+          const dirtyPreview = [
+            ...dirty.modified.map((m) => `  ${m.status}  ${m.path}`),
+            ...dirty.untracked.map((u) => `  ??  ${u.path}`),
+          ]
+            .slice(0, 10)
+            .join('\n')
+          throw new Error(
+            `Pre-fork baseline guard: --baseline-strategy=commit requires --baseline-scope-paths <comma-list>.\n` +
+              `Dirty files (${dirtyCount}):\n${dirtyPreview}`
+          )
+        }
+        const changeLabel = opts.precheckBaseline || cleanSlug
+        const message = `baseline: ${changeLabel} pre-fork sync`
+        console.log(
+          `Pre-fork baseline: selective commit ${scopePaths.length} path(s) → "${message}"`
+        )
+        gitSelectiveCommit(consumerRoot, scopePaths, message)
+      } else if (strategy === 'stash') {
+        const iso = new Date().toISOString().replace(/[:.]/g, '-')
+        const stashName = opts.baselineStashName || `wt-baseline/${cleanSlug}/${iso}`
+        console.log(`Pre-fork baseline: stash ${dirtyCount} file(s) as '${stashName}'`)
+        git(['stash', 'push', '-u', '-m', stashName], {
+          cwd: consumerRoot,
+          stdio: 'inherit',
+        })
+        pendingStashName = stashName
+      } else if (strategy === 'warn') {
+        const preview = [
+          ...dirty.modified.map((m) => `  ${m.status}  ${m.path}`),
+          ...dirty.untracked.map((u) => `  ??  ${u.path}`),
+        ]
+          .slice(0, 20)
+          .join('\n')
+        const more = dirtyCount > 20 ? `\n  ... and ${dirtyCount - 20} more` : ''
+        throw new Error(
+          `Pre-fork baseline guard: main has ${dirtyCount} dirty file(s) and --baseline-strategy=warn:\n` +
+            preview +
+            more +
+            `\n\nPick a strategy and re-run with --baseline-strategy commit|stash, or commit/stash manually before fork.`
+        )
+      } else {
+        throw new Error(
+          `Pre-fork baseline guard: unknown --baseline-strategy "${strategy}" (expected commit|stash|warn)`
+        )
+      }
+    }
   }
 
   console.log(`Creating worktree: ${wtPath}`)
@@ -177,6 +260,25 @@ async function cmdAdd(slug) {
     }
   }
 
+  // Apply pre-fork baseline stash inside the freshly-created worktree (stash
+  // strategy). stash@{0} is our just-pushed entry; race window is process-local
+  // unless another tool pushed a stash mid-fork (extremely rare). On apply
+  // failure we keep the entry and warn so the user can recover by hand.
+  if (pendingStashName) {
+    try {
+      git(['stash', 'apply', 'stash@{0}'], { cwd: wtPath, stdio: 'inherit' })
+      git(['stash', 'drop', 'stash@{0}'], { cwd: consumerRoot, stdio: 'inherit' })
+      console.log(
+        `Pre-fork baseline: stash '${pendingStashName}' applied to worktree and dropped from stash list`
+      )
+    } catch (e) {
+      console.error(
+        `warn: stash apply to worktree failed; stash '${pendingStashName}' preserved in 'git stash list' for manual recovery.`
+      )
+      console.error(`error detail: ${e?.message ?? e}`)
+    }
+  }
+
   console.log('')
   console.log('Worktree ready.')
   console.log(`  cd ${wtPath}`)
@@ -185,6 +287,30 @@ async function cmdAdd(slug) {
   console.log(
     'Open a new Claude Code or Codex session in the worktree path to continue work isolated from main.'
   )
+}
+
+async function cmdDetectMainDirty(opts) {
+  const consumerRoot = findConsumerRoot()
+  const dirty = detectMainDirty(consumerRoot)
+  if (opts.json) {
+    console.log(JSON.stringify(dirty, null, 2))
+    return
+  }
+  const total = dirty.modified.length + dirty.untracked.length + dirty.conflicted.length
+  if (total === 0) {
+    console.log('main worktree clean')
+    return
+  }
+  console.log(`main worktree has ${total} dirty path(s):`)
+  for (const c of dirty.conflicted) {
+    console.log(`  conflicted ${c.status}  ${c.path}`)
+  }
+  for (const m of dirty.modified) {
+    console.log(`  modified   ${m.status}  ${m.path}`)
+  }
+  for (const u of dirty.untracked) {
+    console.log(`  untracked       ${u.path}`)
+  }
 }
 
 function enrichWorktree(consumerRoot, w, now = Date.now()) {
@@ -258,6 +384,59 @@ async function cmdPrune() {
       console.log(`Skipped ${c.path}`)
     }
   }
+}
+
+// Unmerged XY status codes from `git status --porcelain` (per git-status(1)
+// "Short Format" → "Unmerged entries"). Used by both pre-fork baseline guard
+// and merge-back to refuse auto-handling of in-conflict paths.
+const UNMERGED_XY = new Set(['DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU'])
+
+// Detect dirty paths in main's working tree (modified / untracked / unmerged).
+// Used by pre-fork baseline guard in cmdAdd + by `detect-main-dirty` subcommand
+// for callers (spectra-apply Step 0) that need to decide commit-vs-stash-vs-stop
+// before fork creates a worktree blind to main's working state.
+//
+// IMPORTANT: same parsing constraint as detectMergeBlockers — cannot use the
+// `git()` helper because it trims output, eating the leading space in porcelain
+// XY format (e.g., ` M README.md` → `M README.md`) and breaking column parsing.
+function detectMainDirty(consumerRoot) {
+  let statusRaw = ''
+  try {
+    statusRaw = execFileSync('git', ['status', '--porcelain'], {
+      cwd: consumerRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch {
+    return { modified: [], untracked: [], conflicted: [] }
+  }
+
+  const modified = []
+  const untracked = []
+  const conflicted = []
+  for (const line of statusRaw.split('\n')) {
+    if (line.length < 4) continue
+    const status = line.slice(0, 2)
+    const path = line.slice(3)
+    if (UNMERGED_XY.has(status)) {
+      conflicted.push({ path, status })
+    } else if (status === '??') {
+      untracked.push({ path })
+    } else {
+      modified.push({ path, status })
+    }
+  }
+  return { modified, untracked, conflicted }
+}
+
+// Stage a specific path list + commit — never `git add -A`, which would catch
+// cross-session WIP. Used by pre-fork baseline guard's `commit` strategy.
+function gitSelectiveCommit(consumerRoot, scopePaths, message) {
+  if (!Array.isArray(scopePaths) || scopePaths.length === 0) {
+    throw new Error('gitSelectiveCommit: scopePaths must be a non-empty array')
+  }
+  git(['add', '--', ...scopePaths], { cwd: consumerRoot, stdio: 'inherit' })
+  git(['commit', '-m', message], { cwd: consumerRoot, stdio: 'inherit' })
 }
 
 // Detect files in main's working tree that would block `git merge --squash <branch>`:
@@ -527,11 +706,36 @@ const cmdLandPending = cmdMergeBack
 
 async function main() {
   const [, , sub, ...rest] = process.argv
+
+  // Value-taking flags consume the next positional token unless it starts with `--`.
+  // Bare `--precheck-baseline` (no value) is allowed — it means "any-change
+  // baseline guard, no change context" (ad-hoc /wt path).
+  const VALUE_FLAGS = new Set([
+    '--precheck-baseline',
+    '--baseline-strategy',
+    '--baseline-scope-paths',
+    '--baseline-stash-name',
+  ])
   const flags = new Set()
+  const values = {}
   const positional = []
-  for (const a of rest) {
-    if (a.startsWith('--')) flags.add(a)
-    else positional.push(a)
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i]
+    if (a.startsWith('--')) {
+      if (VALUE_FLAGS.has(a)) {
+        const next = rest[i + 1]
+        if (next === undefined || next.startsWith('--')) {
+          values[a] = ''
+        } else {
+          values[a] = next
+          i++
+        }
+      } else {
+        flags.add(a)
+      }
+    } else {
+      positional.push(a)
+    }
   }
   const opts = {
     json: flags.has('--json'),
@@ -541,11 +745,20 @@ async function main() {
     autoStash: flags.has('--auto-stash'),
     cleanup: !flags.has('--no-cleanup'),
     noopIfMissing: flags.has('--noop-if-missing'),
+    precheckBaseline: Object.prototype.hasOwnProperty.call(values, '--precheck-baseline')
+      ? values['--precheck-baseline']
+      : undefined,
+    baselineStrategy: values['--baseline-strategy'],
+    baselineScopePaths: values['--baseline-scope-paths'],
+    baselineStashName: values['--baseline-stash-name'],
   }
 
   switch (sub) {
     case 'add':
-      await cmdAdd(positional[0])
+      await cmdAdd(positional[0], opts)
+      return
+    case 'detect-main-dirty':
+      await cmdDetectMainDirty(opts)
       return
     case 'list':
       await cmdList(opts)
@@ -563,11 +776,31 @@ async function main() {
       await cmdLandPending(positional[0], opts)
       return
     default:
-      console.error('Usage: wt-helper <add|list|prune|cleanup|merge-back|land-pending> [args]')
+      console.error(
+        'Usage: wt-helper <add|detect-main-dirty|list|prune|cleanup|merge-back|land-pending> [args]'
+      )
       console.error('')
       console.error(
         '  add <slug>                Create worktree at ~/offline/<consumer>-wt/<slug>/'
       )
+      console.error('    --precheck-baseline [<change>]')
+      console.error('                            Pre-fork dirty check on main; pairs with')
+      console.error(
+        '                            --baseline-strategy. Bare form = no change context.'
+      )
+      console.error('    --baseline-strategy commit|stash|warn')
+      console.error(
+        '                            commit: selective stage + commit baseline on main;'
+      )
+      console.error('                            stash: stash main → apply inside new worktree;')
+      console.error('                            warn: stop with report (default).')
+      console.error(
+        '    --baseline-scope-paths <comma>   Required for commit strategy; selective stage scope.'
+      )
+      console.error(
+        '    --baseline-stash-name <name>     Override default `wt-baseline/<slug>/<ISO>` stash name.'
+      )
+      console.error("  detect-main-dirty         Report main's dirty paths; pairs with --json.")
       console.error('  list [--json]             Enumerate session worktrees with staleness')
       console.error('  prune                     Interactively remove merged session worktrees')
       console.error('  cleanup <slug>            Remove worktree (gated by --force +')
@@ -589,14 +822,17 @@ async function main() {
 export {
   cmdAdd,
   cmdCleanup,
+  cmdDetectMainDirty,
   cmdLandPending,
   cmdList,
   cmdMergeBack,
   cmdPrune,
+  detectMainDirty,
   detectMergeBlockers,
   detectUnlandedFiles,
   enrichWorktree,
   findConsumerRoot,
+  gitSelectiveCommit,
   makeSlugSafe,
   mergedBranches,
   parseWorktreeList,

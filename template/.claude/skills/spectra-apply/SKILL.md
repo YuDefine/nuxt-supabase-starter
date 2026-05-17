@@ -42,15 +42,57 @@ Implement tasks from a Spectra change.
       - 若 output 路徑含 `/worktrees/`（或 `git rev-parse --git-common-dir` ≠ `git rev-parse --git-dir`）→ cwd 已在某個 session worktree，**通過**，繼續 Step 1
       - 否則 cwd 在 main，繼續 step c
 
-   c. **自動建 worktree**（idempotent）：
+   c. **Pre-fork baseline guard + 自動建 worktree**（idempotent）：
+
+      Spectra-apply 走 **commit-then-fork** — 有 change context，把屬於這條 change 的 baseline 自動 commit 上 main 再 fork，避免 worktree 看不到 main 的 untracked / modified baseline（[[worktree-default]] §1 Pre-fork baseline guard）。
+
+      **c.1 — 偵測 main dirty**：
 
       ```bash
+      node scripts/wt-helper.mjs detect-main-dirty --json
+      ```
+
+      解析回傳 `{ modified, untracked, conflicted }`：
+
+      - **conflicted 非空** → STOP，回報 user 解 conflict 再重試（wt-helper 拒絕自動處理 unmerged）
+      - **modified + untracked 為空**（clean）→ 跳到 c.4 直接 fork
+      - **modified + untracked 非空** → 進 c.2 做 scope filter
+
+      **c.2 — Scope filter（主線自己做，不靠 wt-helper）**：
+
+      把 dirty paths 分成 **scope-in**（屬於這條 change 的 baseline）vs **scope-out**（其他）。三來源 union：
+
+      1. 讀 `.spectra/touched/<change-name>.json`（若存在；spectra-commit 上次 sync 寫入）— 列出的 path 為 scope-in
+      2. Grep `openspec/changes/<change-name>/proposal.md` + `openspec/changes/<change-name>/specs/**/*.md`，找 `packages/` / `server/` / `app/` / `supabase/` / `scripts/` 等 module path 提及；任一 dirty path 是它們的子路徑或開頭命中 → scope-in
+      3. Fallback：dirty path basename 或開頭跟 change name slug 的 word 命中 → scope-in
+
+      其餘 dirty → scope-out。
+
+      **c.3 — 四情境決策**：
+
+      | 情境 | 行為 |
+      | --- | --- |
+      | scope-in 非空 + scope-out 為空 | 直接走 c.4，commit-then-fork |
+      | scope-in 非空 + scope-out 非空 | 印分類報告給 user（scope-in N 條 / scope-out N 條）後走 c.4，commit **只**包 scope-in；scope-out 留在 main 不動 |
+      | scope-in 為空 + scope-out 非空 | **STOP** + AskUserQuestion：(a) user 自己 commit/stash dirty 後重試；(b) 視為 cross-session WIP 不動 dirty 直接 fork（用 c.4 clean fork 命令）；(c) 中止 |
+      | scope-in 為空 + 三來源都對不上（spec 沒寫 path + touched 不存在 + keyword 不合）| 同上 STOP + ask；主線無法判斷時 **NEVER** 亂猜 |
+
+      **c.4 — Fork（commit-then-fork 或 clean fork）**：
+
+      ```bash
+      # 有 scope-in baseline 要 commit
+      node scripts/wt-helper.mjs add <change-name> \
+        --precheck-baseline <change-name> \
+        --baseline-strategy commit \
+        --baseline-scope-paths <comma-separated-scope-in-paths>
+
+      # 或：main clean / user 選 (b) cross-session 不動 dirty
       node scripts/wt-helper.mjs add <change-name>
       ```
 
-      wt-helper 用 change name 當 slug，內部 normalize（lowercase / 空白轉 `-` / collapse 重複 `-`）。Helper 行為與失敗處理見 `plugins/hub-core/skills/wt/SKILL.md`。
+      Helper 用 change name 當 slug，內部 normalize（lowercase / 空白轉 `-` / collapse 重複 `-`）。commit 策略時 helper 跑 selective stage（`git add -- <scope-paths>`，**禁** `git add -A`）+ commit `baseline: <change-name> pre-fork sync` + fork。Helper 行為與失敗處理見 `plugins/hub-core/skills/wt/SKILL.md`。
 
-      若 helper fail with `Worktree path already exists` → slug 對應的 worktree 已存在（前次 session 建過、未清掉），**沿用即可**，視為成功；用 `node scripts/wt-helper.mjs list --json` 抓既有 path。
+      若 helper fail with `Worktree path already exists` → slug 對應 worktree 已存在（前次 session 建過、未清掉），**沿用即可**，視為成功；用 `node scripts/wt-helper.mjs list --json` 抓既有 path。**注意**：既有 worktree 不會再跑 baseline guard，若 main 仍有屬於本 change 的 dirty baseline，必須 user 自己 commit 後 worktree 內 `git pull` 或 cherry-pick。
 
       其他 helper 錯誤 → 報錯並 STOP，**不要**降級回「在 main 跑」。
 
