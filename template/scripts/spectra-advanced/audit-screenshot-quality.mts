@@ -3,10 +3,10 @@
  * Screenshot Quality Audit.
  *
  * Usage:
- *   tsx scripts/spectra-advanced/audit-screenshot-quality.mts
- *   tsx scripts/spectra-advanced/audit-screenshot-quality.mts <change-name>
- *   tsx scripts/spectra-advanced/audit-screenshot-quality.mts --json
- *   tsx scripts/spectra-advanced/audit-screenshot-quality.mts --fail-on-issues
+ *   vp node scripts/spectra-advanced/audit-screenshot-quality.mts
+ *   vp node scripts/spectra-advanced/audit-screenshot-quality.mts <change-name>
+ *   vp node scripts/spectra-advanced/audit-screenshot-quality.mts --json
+ *   vp node scripts/spectra-advanced/audit-screenshot-quality.mts --fail-on-issues
  *
  * Exit:
  *   0 — clean, or issues found without --fail-on-issues

@@ -17,7 +17,7 @@ metadata:
 ## Step 1 — 跑 headless scan
 
 ```bash
-pnpm exec tsx scripts/review-gui.mts --scan
+vp node scripts/review-gui.mts --scan
 ```
 
 輸出 JSON（schema: `review-readiness-scan/v1`）到 stdout，結構：
@@ -39,7 +39,7 @@ pnpm exec tsx scripts/review-gui.mts --scan
 }
 ```
 
-> Tsx / hono 沒裝 → script 會先報 missing dep。讓 user 跑 `pnpm add -D tsx hono`，不要自動安裝。
+> Hono 沒裝 → script 會在 dynamic import 時報 missing dep。讓 user 跑 `pnpm add -D hono`，不要自動安裝。
 
 ## Step 2 — Patch HANDOFF.md 固定 section
 

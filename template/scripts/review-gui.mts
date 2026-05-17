@@ -1413,7 +1413,7 @@ async function loadHono(): Promise<any> {
     const message = err instanceof Error ? err.message : String(err)
     throw new Error(
       '[review:ui] Missing Hono runtime dependency.\n' +
-        'Install consumer dev dependencies with: pnpm add -D hono tsx\n' +
+        'Install consumer dev dependencies with: pnpm add -D hono\n' +
         'Then run: pnpm review:ui\n\n' +
         `Original error: ${message}`,
       { cause: err }
