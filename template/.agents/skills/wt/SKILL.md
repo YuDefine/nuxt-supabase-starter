@@ -82,18 +82,28 @@ Direct user invocation of this form is allowed but uncommon — usually the user
 
 For each task in the invocation, `/wt` SHALL execute the following sequence. With parallel tasks, steps 2–3 run concurrently across tasks; step 1 runs sequentially (one `wt-helper add` at a time). **There is no squash or cleanup at `/wt` return** — those happen at archive time via `wt-helper merge-back` (per [[worktree-default]] §5.5).
 
-### Step 1 — Build the worktree
+### Step 1 — Build the worktree (with pre-fork baseline guard)
+
+`/wt` ad-hoc invocation 沒有 spectra change context，所以**不能**做 scope-aware baseline commit（會撞 cross-session WIP）。預設走 **stash-apply** 策略 — 把 main 的 dirty（modified + untracked）一律 stash 起來、fork 後在新 worktree 內 `git stash apply` 把全部 baseline 帶過去，再 drop stash。Subagent 進 worktree 看 baseline 但收到 Step 2 的 warn 段落知道哪些檔不該動（[[worktree-default]] §1 Pre-fork baseline guard）。
 
 ```bash
-node scripts/wt-helper.mjs add <slug>
+node scripts/wt-helper.mjs add <slug> \
+  --precheck-baseline \
+  --baseline-strategy stash
 ```
 
 Run from the main worktree's cwd. The helper:
 
+- Detects main dirty paths（modified / untracked / unmerged）via `git status --porcelain`：
+  - **Unmerged 非空** → STOP，refuse to fork. User must resolve conflicts first.
+  - **Clean** → fork directly（no stash needed）.
+  - **Dirty 非空** → `git stash push -u -m wt-baseline/<slug>/<ISO>` on main.
 - Normalizes the slug.
 - Creates branch `session/<YYYY-MM-DD-HHMM>-<slug>` from `main`.
 - Materializes the worktree at `<consumer-parent>/<consumer-name>-wt/<slug>/`.
 - Merges `origin/main` if present.
+- （stash strategy + has stashed）cd 進 worktree 跑 `git stash apply stash@{0}` + `git stash drop stash@{0}` → worktree 看到 baseline dirty、main 的 stash list 清掉。
+- Stash apply 失敗 → warn user，保留 stash entry 供手動恢復（極罕見：worktree 起步是 main HEAD 副本，理論不該衝突）。
 
 Capture the worktree absolute path (the helper prints `cd <path>` and `Branch: <branch>` — parse them, or derive them from the consumer-root + slug convention).
 
@@ -113,14 +123,24 @@ The subagent's cwd is set via the prompt — explicit instruction `your working 
 Your working directory is <worktree-absolute-path>. All file reads, writes,
 and shell commands MUST run there. Do NOT cd out of this directory.
 
+⚠️ **Baseline notice**: This worktree may have inherited untracked + modified
+files from main's working tree via pre-fork stash-apply (Step 1 baseline guard,
+see worktree-default.md §1). Run `git status` on start — any file NOT
+mentioned in your task description below is main's starting state, **NOT
+yours to deal with**. They came from main and will be handled by main's own
+commit flow. Touching them in this worktree mixes scopes and bleeds them
+into your session branch's commits.
+
 Task:
 <task description verbatim, or the next-skill invocation in form 3>
 
 Contract:
 1. Perform the task. Make commits inside the worktree as needed:
-     git add -A
+     git add -- <files-you-actually-changed>     # selective, NOT `git add -A`
      git commit -m "wt: <slug> — <short description>"
    Multiple commits are fine; only the squash-merged result lands on main.
+   **MUST** selective stage — `git add -A` / `git add .` would catch any
+   baseline inherited from main and bleed it into your session branch.
 2. Do NOT run `git push` from the worktree. The session branch is short-lived.
 3. Do NOT run `/commit` or `/spectra-commit` inside the worktree. Commit ceremony
    on main is the user's responsibility once changes accumulate.

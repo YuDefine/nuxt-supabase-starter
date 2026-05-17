@@ -1565,14 +1565,22 @@ async function summarizeChange(
       readinessHits++
     }
   }
-  // Verify-channel evidence missing：對齊 client `computeMissingEvidence` 但限縮到「等 user 檢查」這群
-  // （未勾且非 issued）— 已勾或已 issued 的 item 走別的處理路徑，evidence-missing 對 readiness 評估無意義。
+  // Verify-channel evidence missing：對齊 client `computeMissingEvidence`，iterate ALL
+  // 未勾且非 issued items（含 parent-with-children）。parent 的 verify markers 是 explicit
+  // declaration，spectra-apply Step 8a 寫的 (verified-*: ...) annotation 直接寫在 parent line，
+  // 不繼承自子項；GUI 的 compound-evidence panel 也 render 在 parent line 上。
+  // 「由子項回饋」只影響 parent 的 OK/Issue/Skip 按鈕顯示，跟 evidence ownership 無關。
+  // 若沿用 `readinessTargets`（排除 parent-with-children）會讓 server 漏算 parent 缺 evidence
+  // 的情境，導致 change 被誤分到 ready 群（home page 應顯示在 applyPending）。
+  const evidenceTargets = parsed.items.filter(
+    (item) => !item.checked && !/（issue:[^）]*）/.test(item.raw)
+  )
   const evidenceMissing: Array<{
     itemId: string
     description: string
     kinds: ReadonlyArray<'e2e' | 'api' | 'ui'>
   }> = []
-  for (const item of readinessTargets) {
+  for (const item of evidenceTargets) {
     const tags: Array<'e2e' | 'api' | 'ui'> = []
     if (item.kinds.includes('verify:e2e') && !item.annotations.verifiedE2e) tags.push('e2e')
     if (item.kinds.includes('verify:api') && !item.annotations.verifiedApi) tags.push('api')
