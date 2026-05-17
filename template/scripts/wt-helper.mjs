@@ -28,6 +28,11 @@
  *                    Alias for merge-back. Semantic marker for migrating
  *                    grandfathered worktrees from the pre-atomic flow
  *                    (worktree-default.md §7).
+ *   rescue           List pre-fork baseline rescue candidates: pinned
+ *                    `refs/wt-baseline/*` (cmdAdd stash strategy + post-2026-05-17
+ *                    pin) and fsck-found dangling unreachable wt-baseline
+ *                    stashes (fallback). --show <ref|sha> prints the full
+ *                    patch via `git stash show -p`.
  *
  * Consumer-root resolution: walks up from cwd to the first `.git` (file or
  * directory), then uses `git rev-parse --git-common-dir` to canonicalize —
@@ -167,6 +172,7 @@ async function cmdAdd(slug, opts = {}) {
   // warn   (stop with report — caller decides).
   // Unmerged paths always stop, regardless of strategy.
   let pendingStashName = null
+  let pendingBaselineRef = null
   if (opts.precheckBaseline !== undefined) {
     const dirty = detectMainDirty(consumerRoot)
     if (dirty.conflicted.length > 0) {
@@ -212,12 +218,14 @@ async function cmdAdd(slug, opts = {}) {
       } else if (strategy === 'stash') {
         const iso = new Date().toISOString().replace(/[:.]/g, '-')
         const stashName = opts.baselineStashName || `wt-baseline/${cleanSlug}/${iso}`
+        const baselineRef = `refs/wt-baseline/${cleanSlug}/${iso}`
         console.log(`Pre-fork baseline: stash ${dirtyCount} file(s) as '${stashName}'`)
         git(['stash', 'push', '-u', '-m', stashName], {
           cwd: consumerRoot,
           stdio: 'inherit',
         })
         pendingStashName = stashName
+        pendingBaselineRef = baselineRef
       } else if (strategy === 'warn') {
         const preview = [
           ...dirty.modified.map((m) => `  ${m.status}  ${m.path}`),
@@ -261,15 +269,21 @@ async function cmdAdd(slug, opts = {}) {
   }
 
   // Apply pre-fork baseline stash inside the freshly-created worktree (stash
-  // strategy). stash@{0} is our just-pushed entry; race window is process-local
-  // unless another tool pushed a stash mid-fork (extremely rare). On apply
-  // failure we keep the entry and warn so the user can recover by hand.
+  // strategy). Before dropping from `git stash list`, pin the stash commit
+  // under `refs/wt-baseline/<slug>/<iso>` so the object stays reachable even
+  // after worktree cleanup. Without this pin, the stash becomes unreachable
+  // and the 47+ baseline files live only in the worktree's working tree —
+  // `wt-helper cleanup` then permanently destroys them (incident: TDMS
+  // 2026-05-17, kpi-prod-design-review-refresh). `wt-helper rescue` lists
+  // these refs for recovery.
   if (pendingStashName) {
     try {
       git(['stash', 'apply', 'stash@{0}'], { cwd: wtPath, stdio: 'inherit' })
+      const stashSha = git(['rev-parse', 'stash@{0}'], { cwd: consumerRoot })
+      git(['update-ref', pendingBaselineRef, stashSha], { cwd: consumerRoot })
       git(['stash', 'drop', 'stash@{0}'], { cwd: consumerRoot, stdio: 'inherit' })
       console.log(
-        `Pre-fork baseline: stash '${pendingStashName}' applied to worktree and dropped from stash list`
+        `Pre-fork baseline: stash '${pendingStashName}' applied to worktree; pinned as '${pendingBaselineRef}' (permanently reachable — use 'wt-helper rescue' to inspect/restore).`
       )
     } catch (e) {
       console.error(
@@ -484,6 +498,35 @@ function detectMergeBlockers(consumerRoot, branchName) {
   return blockers
 }
 
+// Detect uncommitted files in a session worktree's working tree. These would
+// be permanently destroyed by `git worktree remove --force` — distinct from
+// detectUnlandedFiles which only checks committed branch HEAD vs main. Gate
+// added after TDMS 2026-05-17 incident where 47 baseline files lived only in
+// the worktree's working tree (applied from stash, never committed) and
+// vanished on cleanup.
+function detectUncommittedWorktreeFiles(wtPath) {
+  let statusRaw = ''
+  try {
+    statusRaw = execFileSync('git', ['status', '--porcelain'], {
+      cwd: wtPath,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch {
+    return { modified: [], untracked: [] }
+  }
+  const modified = []
+  const untracked = []
+  for (const line of statusRaw.split('\n')) {
+    if (line.length < 4) continue
+    const status = line.slice(0, 2)
+    const path = line.slice(3)
+    if (status === '??') untracked.push({ path })
+    else modified.push({ path, status })
+  }
+  return { modified, untracked }
+}
+
 function detectUnlandedFiles(consumerRoot, branchName) {
   let branchFiles = []
   try {
@@ -504,7 +547,10 @@ function detectUnlandedFiles(consumerRoot, branchName) {
 }
 
 async function cmdCleanup(slug, opts) {
-  if (!slug) throw new Error('Usage: wt-helper cleanup <slug> [--force] [--force-discard-unland]')
+  if (!slug)
+    throw new Error(
+      'Usage: wt-helper cleanup <slug> [--force] [--force-discard-unland] [--force-discard-uncommitted]'
+    )
   const cleanSlug = makeSlugSafe(slug)
   const consumerRoot = findConsumerRoot()
   const wts = sessionWorktrees(consumerRoot)
@@ -515,15 +561,21 @@ async function cmdCleanup(slug, opts) {
 
   const branchName = target.branch.replace('refs/heads/', '')
 
-  // Pre-check BOTH gates upfront so the error message can recommend the
+  // Pre-check ALL gates upfront so the error message can recommend the
   // full flag combo in one go, rather than ping-ponging the user between
-  // --force and --force-discard-unland (TD-from-perno-session-2026-05-17).
+  // --force / --force-discard-unland / --force-discard-uncommitted.
+  // The third gate (uncommitted) was added after TDMS 2026-05-17 incident
+  // where 47 baseline files lived only in the worktree's working tree
+  // (applied from stash, never committed) and vanished on cleanup.
   const branchMerged = mergedBranches(consumerRoot).has(branchName)
   const unlanded = detectUnlandedFiles(consumerRoot, branchName)
+  const uncommitted = detectUncommittedWorktreeFiles(target.path)
+  const uncommittedCount = uncommitted.modified.length + uncommitted.untracked.length
   const needsForce = !branchMerged && !opts.force
   const needsDiscardUnland = unlanded.length > 0 && !opts.forceDiscardUnland
+  const needsDiscardUncommitted = uncommittedCount > 0 && !opts.forceDiscardUncommitted
 
-  if (needsForce || needsDiscardUnland) {
+  if (needsForce || needsDiscardUnland || needsDiscardUncommitted) {
     const issues = []
     if (needsForce) {
       issues.push(`- Branch ${branchName} is not merged into main (gated by --force)`)
@@ -538,18 +590,36 @@ async function cmdCleanup(slug, opts) {
         `- Branch ${branchName} has ${unlanded.length} file(s) whose content is NOT present in main's working tree (gated by --force-discard-unland):\n${preview}${more}`
       )
     }
+    if (needsDiscardUncommitted) {
+      const preview = [
+        ...uncommitted.modified.slice(0, 10).map((m) => `    - ${m.status}  ${m.path}`),
+        ...uncommitted.untracked.slice(0, 10).map((u) => `    - ??  ${u.path}`),
+      ]
+        .slice(0, 10)
+        .join('\n')
+      const more = uncommittedCount > 10 ? `\n    ... and ${uncommittedCount - 10} more` : ''
+      issues.push(
+        `- Worktree '${target.path}' has ${uncommittedCount} uncommitted file(s) that will be permanently destroyed by 'git worktree remove --force' (gated by --force-discard-uncommitted):\n${preview}${more}`
+      )
+    }
     const flagsNeeded = []
     if (needsForce) flagsNeeded.push('--force')
     if (needsDiscardUnland) flagsNeeded.push('--force-discard-unland')
+    if (needsDiscardUncommitted) flagsNeeded.push('--force-discard-uncommitted')
     throw new Error(
       `Cleanup blocked by ${issues.length} gate(s):\n` +
         issues.join('\n') +
         `\n\nResolution — re-run with the full flag combo:\n` +
         `  node scripts/wt-helper.mjs cleanup ${cleanSlug} ${flagsNeeded.join(' ')}\n` +
-        `\nWhy both: --force discards the unmerged branch ref; --force-discard-unland\n` +
-        `acknowledges that the branch's commits will be lost (their content never made\n` +
-        `it into main). Use \`wt-helper merge-back ${cleanSlug}\` first if you want to\n` +
-        `keep the work.`
+        `\nWhy each gate:\n` +
+        `  --force                       discards the unmerged branch ref\n` +
+        `  --force-discard-unland        acknowledges branch's commits will be lost\n` +
+        `                                (their content never made it into main)\n` +
+        `  --force-discard-uncommitted   acknowledges worktree's uncommitted files\n` +
+        `                                (modified/untracked, including pre-fork baseline\n` +
+        `                                 applied from stash) will be permanently destroyed\n` +
+        `\nUse \`wt-helper merge-back ${cleanSlug}\` first if you want to commit the work,\n` +
+        `or \`wt-helper rescue\` to see pinned pre-fork baselines available for restore.`
     )
   }
 
@@ -591,17 +661,30 @@ async function cmdMergeBack(slug, opts = {}) {
   const branchName = target.branch.replace('refs/heads/', '')
   const blockers = detectMergeBlockers(consumerRoot, branchName)
 
+  // Surface pinned pre-fork baselines for this slug so the user knows what's
+  // available for rescue if cleanup later detects uncommitted-baseline loss
+  // (cmdCleanup --force-discard-uncommitted gate, post-TDMS 2026-05-17 fix).
+  let baselineRefs = []
+  try {
+    const raw = git(['for-each-ref', '--format=%(refname)', `refs/wt-baseline/${cleanSlug}/`], {
+      cwd: consumerRoot,
+    })
+    baselineRefs = raw.split('\n').filter(Boolean)
+  } catch {}
+
   if (opts.dryRun) {
     console.log(`merge-back dry-run for ${cleanSlug}:`)
-    console.log(`  Worktree: ${target.path}`)
-    console.log(`  Branch:   ${branchName}`)
-    console.log(`  Blockers: ${blockers.length}`)
+    console.log(`  Worktree:        ${target.path}`)
+    console.log(`  Branch:          ${branchName}`)
+    console.log(`  Blockers:        ${blockers.length}`)
     for (const b of blockers.slice(0, 20)) {
       console.log(`    ${b.type.padEnd(10)} ${b.path}`)
     }
     if (blockers.length > 20) {
       console.log(`    ... and ${blockers.length - 20} more`)
     }
+    console.log(`  Pinned baselines: ${baselineRefs.length}`)
+    for (const r of baselineRefs) console.log(`    ${r}`)
     if (blockers.length > 0) {
       console.log(
         `  Action: blockers detected; without --auto-stash, merge-back would fail at pre-flight.`
@@ -609,7 +692,16 @@ async function cmdMergeBack(slug, opts = {}) {
     } else {
       console.log(`  Action: would squash + cleanup cleanly.`)
     }
-    return { absorbed: false, slug: cleanSlug, dryRun: true, blockers }
+    return { absorbed: false, slug: cleanSlug, dryRun: true, blockers, baselineRefs }
+  }
+
+  if (baselineRefs.length > 0) {
+    console.log(`merge-back: ${baselineRefs.length} pinned pre-fork baseline(s) for ${cleanSlug}:`)
+    for (const r of baselineRefs) console.log(`  ${r}`)
+    console.log(
+      `  → if cleanup later detects uncommitted files, inspect via 'wt-helper rescue --show <ref>'.`
+    )
+    console.log('')
   }
 
   let stashRef = null
@@ -726,13 +818,108 @@ async function cmdMergeBack(slug, opts = {}) {
     (stashRef ? ` (blockers stashed as ${stashRef})` : '') +
     (cleanupDone ? ' + worktree cleaned' : ' (cleanup skipped/failed)')
   console.log(summary)
-  return { absorbed: true, slug: cleanSlug, stashRef, cleanupDone, blockers }
+  return { absorbed: true, slug: cleanSlug, stashRef, cleanupDone, blockers, baselineRefs }
 }
 
 // Semantic alias for migrating grandfathered worktrees from the pre-atomic
 // flow (worktree-default.md §7). Mechanically identical to merge-back —
 // the distinction is documentation-level so migration commands stay clear.
 const cmdLandPending = cmdMergeBack
+
+// List pre-fork baseline rescue candidates: `refs/wt-baseline/*` (pinned by
+// cmdAdd stash strategy) plus dangling stash commits found via `git fsck
+// --unreachable` whose subject identifies them as wt-baseline stashes
+// (fallback for incidents pre-dating the pin mechanism). Optional --show
+// <ref-or-sha> prints the full patch via `git stash show -p`.
+async function cmdRescue(opts) {
+  const consumerRoot = findConsumerRoot()
+
+  if (opts.show) {
+    try {
+      execFileSync('git', ['stash', 'show', '-p', opts.show], {
+        cwd: consumerRoot,
+        stdio: 'inherit',
+      })
+    } catch (e) {
+      throw new Error(`rescue --show ${opts.show}: ${e?.message ?? e}`)
+    }
+    return
+  }
+
+  const pinned = []
+  try {
+    const raw = git(
+      ['for-each-ref', '--format=%(refname) %(objectname) %(subject)', 'refs/wt-baseline/'],
+      { cwd: consumerRoot }
+    )
+    for (const line of raw.split('\n').filter(Boolean)) {
+      const m = line.match(/^(\S+) (\S+) (.*)$/)
+      if (m) pinned.push({ ref: m[1], sha: m[2], subject: m[3] })
+    }
+  } catch {}
+
+  const dangling = []
+  try {
+    const raw = execFileSync('git', ['fsck', '--no-reflogs', '--unreachable'], {
+      cwd: consumerRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    for (const line of raw.split('\n')) {
+      const m = line.match(/^unreachable commit ([0-9a-f]+)$/)
+      if (!m) continue
+      const sha = m[1]
+      let subject = ''
+      try {
+        subject = git(['log', '-1', '--format=%s', sha], { cwd: consumerRoot })
+      } catch {
+        continue
+      }
+      if (/^On [^:]+: wt-baseline\//.test(subject)) {
+        dangling.push({ sha, subject })
+      }
+    }
+  } catch {}
+
+  // Deduplicate dangling by pinned sha — a pinned ref already covers its sha.
+  const pinnedShas = new Set(pinned.map((p) => p.sha))
+  const danglingFiltered = dangling.filter((d) => !pinnedShas.has(d.sha))
+
+  if (opts.json) {
+    console.log(JSON.stringify({ pinned, dangling: danglingFiltered }, null, 2))
+    return
+  }
+
+  if (pinned.length === 0 && danglingFiltered.length === 0) {
+    console.log('No wt-baseline rescue candidates found.')
+    return
+  }
+
+  if (pinned.length > 0) {
+    console.log(`Pinned pre-fork baselines (refs/wt-baseline/*) — ${pinned.length}:`)
+    for (const p of pinned) {
+      console.log(`  ${p.ref}`)
+      console.log(`    sha:     ${p.sha}`)
+      console.log(`    subject: ${p.subject}`)
+    }
+    console.log('')
+  }
+  if (danglingFiltered.length > 0) {
+    console.log(
+      `Dangling unreachable wt-baseline stashes (gc candidate within ~30 days) — ${danglingFiltered.length}:`
+    )
+    for (const d of danglingFiltered) {
+      console.log(`  sha:     ${d.sha}`)
+      console.log(`  subject: ${d.subject}`)
+    }
+    console.log('')
+  }
+  console.log('To inspect a candidate (read-only patch view):')
+  console.log('  node scripts/wt-helper.mjs rescue --show <ref-or-sha>')
+  console.log('To restore to current branch:')
+  console.log('  git stash apply <ref-or-sha>          # may conflict; resolve before committing')
+  console.log('  git checkout <ref-or-sha> -- <paths>  # selective restore by path')
+}
 
 async function main() {
   const [, , sub, ...rest] = process.argv
@@ -745,6 +932,7 @@ async function main() {
     '--baseline-strategy',
     '--baseline-scope-paths',
     '--baseline-stash-name',
+    '--show',
   ])
   const flags = new Set()
   const values = {}
@@ -771,6 +959,7 @@ async function main() {
     json: flags.has('--json'),
     force: flags.has('--force'),
     forceDiscardUnland: flags.has('--force-discard-unland'),
+    forceDiscardUncommitted: flags.has('--force-discard-uncommitted'),
     dryRun: flags.has('--dry-run'),
     autoStash: flags.has('--auto-stash'),
     cleanup: !flags.has('--no-cleanup'),
@@ -781,6 +970,7 @@ async function main() {
     baselineStrategy: values['--baseline-strategy'],
     baselineScopePaths: values['--baseline-scope-paths'],
     baselineStashName: values['--baseline-stash-name'],
+    show: values['--show'],
   }
 
   switch (sub) {
@@ -805,9 +995,12 @@ async function main() {
     case 'land-pending':
       await cmdLandPending(positional[0], opts)
       return
+    case 'rescue':
+      await cmdRescue(opts)
+      return
     default:
       console.error(
-        'Usage: wt-helper <add|detect-main-dirty|list|prune|cleanup|merge-back|land-pending> [args]'
+        'Usage: wt-helper <add|detect-main-dirty|list|prune|cleanup|merge-back|land-pending|rescue> [args]'
       )
       console.error('')
       console.error(
@@ -845,6 +1038,10 @@ async function main() {
         '    --noop-if-missing       silently no-op if no matching worktree (for hooks)'
       )
       console.error('  land-pending <slug>       Alias of merge-back for grandfathered worktrees')
+      console.error('  rescue [--show <ref|sha>] [--json]')
+      console.error('                            List pre-fork baseline rescue candidates')
+      console.error('                            (refs/wt-baseline/* pinned + fsck dangling).')
+      console.error('                            --show prints full patch via stash show -p.')
       process.exit(1)
   }
 }
@@ -857,8 +1054,10 @@ export {
   cmdList,
   cmdMergeBack,
   cmdPrune,
+  cmdRescue,
   detectMainDirty,
   detectMergeBlockers,
+  detectUncommittedWorktreeFiles,
   detectUnlandedFiles,
   enrichWorktree,
   findConsumerRoot,

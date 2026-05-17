@@ -53,7 +53,7 @@ Fork 出 worktree 之前（無論透過 `/wt` ad-hoc 或 `/spectra-apply` Step 0
 - **Clean** → 直接 fork（既有行為）。
 - **Dirty 非空** → 依 caller 路徑：
   - **Spectra workflow 路徑**（有 change context）走 **commit-then-fork**：主線從 `openspec/changes/<change>/` proposal + specs + `.spectra/touched/<change>.json` 萃取 affected paths（scope-in），呼叫 `wt-helper add ... --precheck-baseline <change> --baseline-strategy commit --baseline-scope-paths <comma>`。Helper 內部 selective stage + commit `baseline: <change> pre-fork sync` 上 main 再 fork。Scope-out（跨 session WIP）留在 main 不動。
-  - **Ad-hoc `/wt` 路徑**（無 change context）走 **stash-apply**：`wt-helper add ... --precheck-baseline --baseline-strategy stash`。Helper 內部 `git stash push -u -m wt-baseline/<slug>/<ISO>` 在 main，fork 後 cd 進 worktree `git stash apply` + `git stash drop`。Subagent 收到 [[wt]] Step 2 warn 段落，知道哪些檔是 main 的 starting state、不該動。
+  - **Ad-hoc `/wt` 路徑**（無 change context）走 **stash-apply**：`wt-helper add ... --precheck-baseline --baseline-strategy stash`。Helper 內部 `git stash push -u -m wt-baseline/<slug>/<ISO>` 在 main，fork 後 cd 進 worktree `git stash apply` → **pin stash sha 到 `refs/wt-baseline/<slug>/<ISO>` 永久 ref** → `git stash drop`（從 stash list 移除但物件仍 reachable）。Subagent 收到 [[wt]] Step 2 warn 段落，知道哪些檔是 main 的 starting state、不該動。Pin 機制是 TDMS 2026-05-17 事故修正：原本 stash drop 後物件變 unreachable，若 worktree 內 baseline 檔沒被任何 commit 帶走，cleanup 砍 worktree 就**永久消失**；pin 後可用 `wt-helper rescue` 列出救回。
   - **Ambiguous**（scope-in 為空但 scope-out 非空、或三來源都對不上）→ **STOP** + 回 user 拍策略。**NEVER** 主線亂猜。
 
 詳細 cookbook（4 種情境 + 完整 trace + scope filter 細節）見 `vendor/snippets/worktree-baseline/`。
@@ -245,11 +245,14 @@ node scripts/stash-reconcile.mjs --json         # CI-friendly 機器輸出
 
 | 前綴 | 何時產生 | 何時清掉 |
 | --- | --- | --- |
-| `wt-baseline/<slug>/<ISO>` | `wt-helper add ... --baseline-strategy stash`（§1 Pre-fork baseline guard / `/wt` ad-hoc 路徑）fork 之前 stash main dirty | Fork 後 worktree 內 `git stash apply` 成功就 `git stash drop`；apply 失敗則殘留供手動恢復 |
+| `wt-baseline/<slug>/<ISO>` (stash list) | `wt-helper add ... --baseline-strategy stash`（§1 Pre-fork baseline guard / `/wt` ad-hoc 路徑）fork 之前 stash main dirty | Fork 後 worktree 內 `git stash apply` 成功 → pin sha 到 `refs/wt-baseline/<slug>/<ISO>` 永久 ref → `git stash drop` 從 stash list 移除（物件仍 reachable）；apply 失敗則殘留供手動恢復 |
+| `refs/wt-baseline/<slug>/<ISO>` (永久 ref) | 由 `wt-helper add --baseline-strategy stash` 在 apply 成功後 pin（2026-05-17 後） | **不自動清** — 由 `wt-helper rescue --prune <ref>` 或 user 手動 `git update-ref -d <ref>` 釋放給 gc。設計理念：救援優先於 ref namespace 整潔 |
 | `wt-merge-block/<slug>/<ISO>` | `wt-helper merge-back ... --auto-stash` squash 之前 stash main blockers | 保留待 `stash-reconcile.mjs` 後續處理（user 自決 apply / drop） |
 | Legacy `cross-session-block-*` | v2 失敗 squash 累積（v3 已不再產生） | `stash-reconcile.mjs` 給建議命令處理 |
 
-`wt-baseline/*` 殘留是 rare — worktree 起步從 main HEAD 分出，stash apply 理論不該衝突，除非 .gitignore 或 worktree-init hook 寫入撞檔。出現時人工 `git stash apply <ref>` 進 worktree 內或 `git stash drop` 放棄。
+`wt-baseline/*` stash 殘留是 rare — worktree 起步從 main HEAD 分出，stash apply 理論不該衝突，除非 .gitignore 或 worktree-init hook 寫入撞檔。出現時人工 `git stash apply <ref>` 進 worktree 內或 `git stash drop` 放棄。
+
+`refs/wt-baseline/*` 永久 ref 是事故救援的最後保險絲：subagent 守 scope discipline 只 commit 它的範圍時，baseline 47+ 檔可能整批留在 worktree working tree 但沒被任何 commit 帶走；merge-back squash 不會帶走未 commit 檔，cleanup `--force-discard-uncommitted` 才會砍 worktree。即使整條鏈走完導致 working tree 消失，`refs/wt-baseline/` 還活著 → `wt-helper rescue --show <ref>` 看 patch → `git stash apply <ref>` 或 `git checkout <ref> -- <paths>` 救回。
 
 ### 失敗 fallback
 
@@ -259,6 +262,7 @@ node scripts/stash-reconcile.mjs --json         # CI-friendly 機器輸出
 | `merge-back` blocker 偵測命中但 user 不想 stash | 不加 `--auto-stash`，user 手動處理 main 上 blocker（commit / stash / discard）後再 `merge-back` |
 | `merge-back` squash 撞 conflict（branch 改動跟 main 既有 commit 衝突）| auto-abort + pop stash + 保留 worktree；user 在 worktree 內 rebase / cherry-pick 修衝突後再 `merge-back` |
 | `merge-back` 成功但 cleanup 失敗（rare：stale lock）| 改動已在 main、squash 已成功；report 「worktree 殘留」+ 命令 `wt-helper cleanup <slug> --force --force-discard-unland`，user 手動清 |
+| `cleanup` 拒絕：worktree 內有 uncommitted（典型：pre-fork baseline 沒被 commit 帶走）| `--force-discard-uncommitted` gate 擋住 — 別急著加 flag。先 `wt-helper rescue` 列 pinned baseline ref，用 `--show <ref>` 看 patch 確認哪些是真要救的；要救的用 `git checkout <ref> -- <paths>` 撈進 main 再 cleanup |
 
 ## §6 操作工具：`/wt`、`wt-helper.mjs`、`stash-reconcile.mjs`
 
@@ -273,7 +277,8 @@ node scripts/stash-reconcile.mjs --json         # CI-friendly 機器輸出
 | Merge-back 自動 stash | `node scripts/wt-helper.mjs merge-back <slug> --auto-stash` | main blockers stash 成 `wt-merge-block/<slug>/<ISO>` |
 | Land grandfathered worktree | `node scripts/wt-helper.mjs land-pending <slug>` | alias of merge-back，給 v2 留下的 worktree 用（§7 migration） |
 | 互動清掉 merged worktree | `node scripts/wt-helper.mjs prune` | 處理 archive 後殘留 |
-| 強制清掉 worktree（**丟工作**） | `node scripts/wt-helper.mjs cleanup <slug> --force --force-discard-unland` | 永久砍 branch commits；要保留工作必先 merge-back |
+| 強制清掉 worktree（**丟工作**） | `node scripts/wt-helper.mjs cleanup <slug> --force --force-discard-unland --force-discard-uncommitted` | 永久砍 branch commits + worktree 內未 commit 檔；要保留工作必先 merge-back + 從 `wt-helper rescue` 撈 baseline |
+| List pre-fork baseline 救援候選 | `node scripts/wt-helper.mjs rescue` | 列 `refs/wt-baseline/*` pinned ref + fsck dangling stash；`--show <ref\|sha>` 看 patch（read-only） |
 | Stash reconcile 報告 | `node scripts/stash-reconcile.mjs` | 列 `wt-merge-block/*` + legacy `cross-session-block-*` stash + 建議命令 |
 | Stash reconcile 互動 | `node scripts/stash-reconcile.mjs --interactive` | 一條一條 apply / drop / view |
 | HANDOFF drift scan | `node scripts/handoff-drift-scan.mjs` | 列 worktree branch 跟 HANDOFF.md 不一致；session-start hook 自動跑 |

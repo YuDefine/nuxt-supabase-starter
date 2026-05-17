@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+const pad2 = (n) => String(n).padStart(2, '0')
+
 /**
  * stash-reconcile.mjs — list + suggest actions for namespaced stash entries
  *
@@ -267,12 +269,14 @@ async function interactiveLoop(consumerRoot, entries) {
   }
 }
 
+const FLAG_SET = new Set(['--interactive', '--json', '--include-all'])
+
 async function main() {
-  const args = process.argv.slice(2)
+  const args = new Set(process.argv.slice(2).filter((a) => FLAG_SET.has(a)))
   const opts = {
-    interactive: args.includes('--interactive'),
-    json: args.includes('--json'),
-    includeAll: args.includes('--include-all'),
+    interactive: args.has('--interactive'),
+    json: args.has('--json'),
+    includeAll: args.has('--include-all'),
   }
 
   const consumerRoot = findConsumerRoot()
@@ -305,7 +309,6 @@ async function main() {
   const md = formatMarkdown(consumerRoot, entries)
   const reportDir = join(consumerRoot, '.spectra')
   mkdirSync(reportDir, { recursive: true })
-  const pad2 = (n) => String(n).padStart(2, '0')
   const now = new Date()
   const fname = `stash-reconcile-${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}-${pad2(now.getHours())}${pad2(now.getMinutes())}.md`
   const fpath = join(reportDir, fname)
