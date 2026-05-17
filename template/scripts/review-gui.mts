@@ -4067,7 +4067,10 @@ export function renderReviewHtml(): string {
 
     function localFileHref(path) {
       if (!path) return '#';
-      const root = state.repoRoot ? state.repoRoot.replace(/\\/$/, '') : '';
+      // 優先用當前 change 的 sourceRoot（worktree 路徑）；fallback main repoRoot。
+      const fromChange = state.current && state.current.sourceRoot;
+      const baseRaw = fromChange || state.repoRoot || '';
+      const root = baseRaw.replace(/\\/$/, '');
       const abs = path.startsWith('/') ? path : (root ? root + '/' + path : path);
       return 'file://' + encodeURI(abs).replace(/#/g, '%23');
     }
@@ -4075,7 +4078,11 @@ export function renderReviewHtml(): string {
     function screenshotUrl(path) {
       if (!path) return '';
       if (path.startsWith('screenshots/')) {
-        return '/api/screenshot/' + path.split('/').map(encodeURIComponent).join('/');
+        // 帶 rootId namespace 才能對應正確的 worktree screenshots/
+        const rootId = (state.current && state.current.worktreeSlug)
+          ? 'wt-' + state.current.worktreeSlug
+          : 'main';
+        return '/api/screenshot/' + encodeURIComponent(rootId) + '/' + path.split('/').map(encodeURIComponent).join('/');
       }
       return localFileHref(path);
     }
