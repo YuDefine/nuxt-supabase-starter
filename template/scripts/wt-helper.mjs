@@ -641,7 +641,7 @@ async function cmdCleanup(slug, opts) {
 async function cmdMergeBack(slug, opts = {}) {
   if (!slug) {
     throw new Error(
-      'Usage: wt-helper merge-back <slug> [--dry-run] [--auto-stash] [--no-cleanup] [--noop-if-missing]'
+      'Usage: wt-helper merge-back <slug> [--dry-run] [--auto-stash] [--include-worktree-wip] [--no-cleanup] [--noop-if-missing]'
     )
   }
   const cleanSlug = makeSlugSafe(slug)
@@ -660,6 +660,34 @@ async function cmdMergeBack(slug, opts = {}) {
 
   const branchName = target.branch.replace('refs/heads/', '')
   const blockers = detectMergeBlockers(consumerRoot, branchName)
+
+  // Pre-flight: worktree dirty tracked-file check (TDMS-1J 2026-05-18 incident).
+  // detectMergeBlockers only catches files in main that would be overwritten;
+  // it doesn't see edits inside the worktree that were never committed. Without
+  // this check, `git merge --squash` silently drops worktree WIP, then cleanup
+  // permanently destroys the worktree → WIP gone with no recovery path.
+  //
+  // Filter clade-managed projection paths (.agents/, .codex/, hub.json,
+  // wt-helper.mjs itself): those are propagate residue, not user WIP, and they
+  // re-materialize on next propagate. User code (server/, src/, app/, ...)
+  // and untracked files are real WIP and must be committed before squash.
+  const CLADE_MANAGED_PREFIXES = ['.agents/', '.codex/']
+  const CLADE_MANAGED_EXACT = new Set([
+    '.claude/hub.json',
+    '.claude/.hub-state.json',
+    'scripts/wt-helper.mjs',
+  ])
+  const isCladeManagedPath = (p) =>
+    CLADE_MANAGED_PREFIXES.some((pre) => p.startsWith(pre)) || CLADE_MANAGED_EXACT.has(p)
+  const wtDirty = detectUncommittedWorktreeFiles(target.path)
+  const wtUserDirty = [
+    ...wtDirty.modified
+      .filter((m) => !isCladeManagedPath(m.path))
+      .map((m) => ({ ...m, kind: 'modified' })),
+    ...wtDirty.untracked
+      .filter((u) => !isCladeManagedPath(u.path))
+      .map((u) => ({ ...u, status: '??', kind: 'untracked' })),
+  ]
 
   // Surface pinned pre-fork baselines for this slug so the user knows what's
   // available for rescue if cleanup later detects uncommitted-baseline loss
@@ -683,16 +711,27 @@ async function cmdMergeBack(slug, opts = {}) {
     if (blockers.length > 20) {
       console.log(`    ... and ${blockers.length - 20} more`)
     }
+    console.log(`  Worktree WIP:    ${wtUserDirty.length}`)
+    for (const d of wtUserDirty.slice(0, 20)) {
+      console.log(`    ${(d.status ?? '??').padEnd(3)} ${d.path}`)
+    }
+    if (wtUserDirty.length > 20) {
+      console.log(`    ... and ${wtUserDirty.length - 20} more`)
+    }
     console.log(`  Pinned baselines: ${baselineRefs.length}`)
     for (const r of baselineRefs) console.log(`    ${r}`)
-    if (blockers.length > 0) {
+    if (wtUserDirty.length > 0) {
+      console.log(
+        `  Action: worktree has uncommitted WIP; without --include-worktree-wip, merge-back would refuse.`
+      )
+    } else if (blockers.length > 0) {
       console.log(
         `  Action: blockers detected; without --auto-stash, merge-back would fail at pre-flight.`
       )
     } else {
       console.log(`  Action: would squash + cleanup cleanly.`)
     }
-    return { absorbed: false, slug: cleanSlug, dryRun: true, blockers, baselineRefs }
+    return { absorbed: false, slug: cleanSlug, dryRun: true, blockers, wtUserDirty, baselineRefs }
   }
 
   if (baselineRefs.length > 0) {
@@ -702,6 +741,44 @@ async function cmdMergeBack(slug, opts = {}) {
       `  → if cleanup later detects uncommitted files, inspect via 'wt-helper rescue --show <ref>'.`
     )
     console.log('')
+  }
+
+  // Act on worktree WIP detection from pre-flight: either auto-amend (opt-in)
+  // or refuse with clear remediation steps. See computation above for rationale.
+  if (wtUserDirty.length > 0) {
+    if (opts.includeWorktreeWip) {
+      const paths = wtUserDirty.map((d) => d.path)
+      try {
+        git(['add', '--', ...paths], { cwd: target.path })
+        git(['commit', '--amend', '--no-edit'], { cwd: target.path, stdio: 'inherit' })
+        console.log(
+          `merge-back: --include-worktree-wip auto-amended ${paths.length} dirty file(s) into ${branchName} HEAD`
+        )
+      } catch (e) {
+        throw new Error(`merge-back: --include-worktree-wip auto-amend failed: ${e.message ?? e}`)
+      }
+    } else {
+      const preview = wtUserDirty
+        .slice(0, 10)
+        .map((d) => `  ${(d.status ?? '??').padEnd(3)} ${d.path}`)
+        .join('\n')
+      const more = wtUserDirty.length > 10 ? `\n  ... and ${wtUserDirty.length - 10} more` : ''
+      throw new Error(
+        `merge-back blocked: worktree '${target.path}' has ${wtUserDirty.length} uncommitted edit(s) to tracked/untracked file(s):\n` +
+          preview +
+          more +
+          `\n\nAtomic-landing requires all worktree edits be committed before squash.\n` +
+          `'git merge --squash' only carries commits — uncommitted worktree WIP is dropped,\n` +
+          `then permanently destroyed by post-squash cleanup.\n\n` +
+          `Resolution — commit on the worktree branch first:\n` +
+          `  cd ${target.path}\n` +
+          `  git add <files>\n` +
+          `  git commit --amend --no-edit       # or new commit\n` +
+          `Then re-run: wt-helper merge-back ${cleanSlug}\n\n` +
+          `Override with --include-worktree-wip to auto-amend (not recommended — an explicit\n` +
+          `commit with a meaningful message is safer).`
+      )
+    }
   }
 
   let stashRef = null
@@ -962,6 +1039,7 @@ async function main() {
     forceDiscardUncommitted: flags.has('--force-discard-uncommitted'),
     dryRun: flags.has('--dry-run'),
     autoStash: flags.has('--auto-stash'),
+    includeWorktreeWip: flags.has('--include-worktree-wip'),
     cleanup: !flags.has('--no-cleanup'),
     noopIfMissing: flags.has('--noop-if-missing'),
     precheckBaseline: Object.prototype.hasOwnProperty.call(values, '--precheck-baseline')
@@ -1029,9 +1107,15 @@ async function main() {
       console.error('  cleanup <slug>            Remove worktree (gated by --force +')
       console.error('                            --force-discard-unland; pre-checks both)')
       console.error('  merge-back <slug>         Atomic squash into main + cleanup; flags:')
-      console.error('    --dry-run               preview blockers without acting')
+      console.error('    --dry-run               preview blockers + worktree WIP without acting')
       console.error(
         '    --auto-stash            stash main blockers as wt-merge-block/<slug>/<ISO>'
+      )
+      console.error(
+        '    --include-worktree-wip  auto-amend uncommitted worktree edits into branch HEAD'
+      )
+      console.error(
+        '                            (default: refuse with remediation; explicit commit safer)'
       )
       console.error('    --no-cleanup            skip worktree cleanup after squash')
       console.error(

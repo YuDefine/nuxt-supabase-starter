@@ -171,6 +171,8 @@ Read-only session（grep、看 log、解釋 code 不寫檔）可留在 main work
 
 **Commit 階段：subagent commit in worktree → 主線 squash 進 main → user 跑 `/commit`**。subagent 在 worktree 做 `git add + commit -m "wt: <slug>"`（可多 commit、**禁止** push / `/commit`）；主線跑 `git -C <main> merge --squash <session-branch>` 把改動 land 到 main 的 working tree（**不** commit on main）+ `wt-helper cleanup <slug> --force` 清 worktree；user 累積夠了在 main 主動 `/commit` 走 ceremony（lint / type / test / selective stage / push）。
 
+**Atomic-landing 自包約束**：subagent 在 worktree 內的 edit **MUST** 全部 commit 到 session branch 才能 merge-back — `git merge --squash` 只搬 commit，uncommitted WIP 會被後續 cleanup 永久砍掉。`wt-helper merge-back` 預設會 pre-flight 偵測 worktree 內 user-WIP（filter clade-managed projection 後）並 refuse，除非加 `--include-worktree-wip` 強制 auto-amend（不建議）。
+
 **Failure fallback**：subagent fail（test 不過、沒 commit）→ 保留 worktree + branch，主線回報路徑，user 從 main 跑 `git -C <wt> diff/log` 檢查；squash conflict（平行 task 改同檔）→ 保留該 worktree，main 維持上一個成功 squash 的狀態；cleanup 失敗 → 改動已在 main，報告 worktree 殘留路徑由 user 手動 `wt-helper cleanup --force`。
 
 詳見 `.claude/rules/worktree-default.md`。

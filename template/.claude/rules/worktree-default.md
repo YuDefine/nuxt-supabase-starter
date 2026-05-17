@@ -216,20 +216,24 @@ node scripts/wt-helper.mjs merge-back <slug> [flags]
 
 | Flag | 行為 |
 | --- | --- |
-| `--dry-run` | 預覽 blocker 清單，不執行 squash / stash / cleanup |
+| `--dry-run` | 預覽 blocker + worktree WIP 清單，不執行 squash / stash / cleanup |
 | `--auto-stash` | 把 main blockers stash 起來（`wt-merge-block/<slug>/<ISO>` 前綴）後再 squash |
+| `--include-worktree-wip` | Worktree 內有 uncommitted user WIP 時自動 `git add -- <paths> && git commit --amend --no-edit` 到 branch HEAD。**不建議** — 顯式 commit 比較安全（commit message 有語意） |
 | `--no-cleanup` | squash 成功後不 cleanup worktree（debug 用） |
 | `--noop-if-missing` | 找不到對應 worktree 時 silent no-op（給 archive hook 用） |
 
 ### 預設行為
 
 1. 找 slug 對應的 session worktree（依 branch name `session/<date>-<slug>` + path `<consumer>-wt/<slug>` 比對）。找不到 → 預設 error（除非 `--noop-if-missing`）。
-2. 偵測 main worktree 的 blockers：`git diff --name-only main..<branch>` 列出 branch 動過的檔，跟 main `git status --porcelain` 的 M / untracked 路徑取交集。
-3. 有 blocker 但無 `--auto-stash` → throw with 建議「re-run with --auto-stash」+ 列出 blocker（最多 10 筆）。
-4. 有 `--auto-stash`：`git stash push -u -m "wt-merge-block/<slug>/<ISO>" -- <blocker paths>`，stash entry 保留待 user 後續用 `stash-reconcile.mjs` 處理。
-5. 沒 blocker 或 stash 完成 → `git merge --squash <branch>` 把改動 land 到 main 的 working tree + index（**不** commit）。
-6. 偵測 conflict：若有 unmerged file，`git merge --abort` + pop 回 stash + 保留 worktree + throw with 衝突檔清單。Worktree + branch 保留供 user 手動 reconcile，user 跑修完後再 `merge-back` 一次。
-7. Squash 成功 → 跑 `cmdCleanup(slug, { force: true, forceDiscardUnland: true })` 移除 worktree dir + delete branch。
+2. **偵測 worktree 內 uncommitted user WIP**：`git -C <wtPath> status --porcelain` 列出 modified + untracked，過濾掉 clade-managed projection（`.agents/`、`.codex/`、`.claude/hub.json`、`.claude/.hub-state.json`、`scripts/wt-helper.mjs`），剩下的就是 user WIP。**有 user WIP 但無 `--include-worktree-wip` → throw with 修法**：建議 user `cd <wtPath> && git add <files> && git commit --amend --no-edit` 後再回來跑 merge-back。Atomic-landing 要求 worktree 的所有 user 變更都要 commit，否則 `git merge --squash` 不會帶走，cleanup 還會永久砍掉。**有 `--include-worktree-wip` → auto-amend**（不建議；commit message 會空）。
+3. 偵測 main worktree 的 blockers：`git diff --name-only main..<branch>` 列出 branch 動過的檔，跟 main `git status --porcelain` 的 M / untracked 路徑取交集。
+4. 有 blocker 但無 `--auto-stash` → throw with 建議「re-run with --auto-stash」+ 列出 blocker（最多 10 筆）。
+5. 有 `--auto-stash`：`git stash push -u -m "wt-merge-block/<slug>/<ISO>" -- <blocker paths>`，stash entry 保留待 user 後續用 `stash-reconcile.mjs` 處理。
+6. 沒 blocker 或 stash 完成 → `git merge --squash <branch>` 把改動 land 到 main 的 working tree + index（**不** commit）。
+7. 偵測 conflict：若有 unmerged file，`git merge --abort` + pop 回 stash + 保留 worktree + throw with 衝突檔清單。Worktree + branch 保留供 user 手動 reconcile，user 跑修完後再 `merge-back` 一次。
+8. Squash 成功 → 跑 `cmdCleanup(slug, { force: true, forceDiscardUnland: true })` 移除 worktree dir + delete branch。
+
+**為什麼步驟 2 必要**（TDMS-1J 2026-05-18 incident）：worktree 的「helper 在 commit、wiring 在 working tree」切錯型錯誤是無聲 footgun — 沒這道 check 時 squash 只搬 commit，cleanup 把 worktree 砍掉，wiring WIP 永久遺失沒 recovery path（baseline ref 只 cover fork 前 main 的 WIP，沒 cover worktree 內事後新增的 user edit）。
 
 ### Stash reconcile（後續清理）
 
