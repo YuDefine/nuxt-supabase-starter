@@ -87,7 +87,9 @@ export function loadManualReviewPatterns(): ManualReviewPatternEntry[] {
     cachedPatterns = entries.map((p) => ({
       ...p,
       regex: translatePosixToJs(p.regex),
-      requiresPresenceOf: p.requiresPresenceOf ? translatePosixToJs(p.requiresPresenceOf) : undefined,
+      requiresPresenceOf: p.requiresPresenceOf
+        ? translatePosixToJs(p.requiresPresenceOf)
+        : undefined,
       requiresAbsenceOf: p.requiresAbsenceOf ? translatePosixToJs(p.requiresAbsenceOf) : undefined,
     }))
   } catch {
@@ -168,7 +170,8 @@ const TRAILING_NO_SCREENSHOT_RE = /(^|[^ ]) @no-screenshot$/
 // `@no-manual-review-check[<reason>]` bypass marker per manual-review.md hard rule.
 // Empty brackets and bare marker (no brackets) are invalid by schema → not captured here.
 // May coexist with trailing `@no-screenshot` (canonical ordering: bypass then no-screenshot).
-const TRAILING_NO_MANUAL_REVIEW_CHECK_RE = /@no-manual-review-check\[([^\][]+)\](?:\s+@no-screenshot)?\s*$/
+const TRAILING_NO_MANUAL_REVIEW_CHECK_RE =
+  /@no-manual-review-check\[([^\][]+)\](?:\s+@no-screenshot)?\s*$/
 // 解析 leading kind marker — 必須緊接 `#N` / `#N.M` 後第一個 token、含一個 trailing space。
 // description-mid 的 [discuss] / [review:ui] / [verify:*] 不會被命中（不是行首）。
 const LEADING_KIND_RE = /^\[([^\]]+)\]\s+/
@@ -293,9 +296,7 @@ export interface FileVersion {
  * completion counter and archive-readiness check share one notion of
  * "parent-with-children".
  */
-export function buildParentsWithScopedChildren(
-  items: readonly ManualReviewItem[]
-): Set<string> {
+export function buildParentsWithScopedChildren(items: readonly ManualReviewItem[]): Set<string> {
   const parents = new Set<string>()
   for (const item of items) {
     if (item.scoped && item.parentId) parents.add(item.parentId)
@@ -363,7 +364,11 @@ interface ChangeSummary {
    * 的清單。每個 entry 一個 item（kinds 可能多個 tag）。配合 home page 把這類 change 歸到 not-ready 群、
    * 健康檢查 prompt 一併列出由 Claude 跑 `/spectra-apply` Step 8a 補齊。
    */
-  evidenceMissing: Array<{ itemId: string; description: string; kinds: ReadonlyArray<'e2e' | 'api' | 'ui'> }>
+  evidenceMissing: Array<{
+    itemId: string
+    description: string
+    kinds: ReadonlyArray<'e2e' | 'api' | 'ui'>
+  }>
   screenshotTopicCount: number
   screenshotTopics: string[]
 }
@@ -591,9 +596,7 @@ interface ParserWarningContext {
 }
 
 function formatParserLocation(context: ParserWarningContext): string {
-  return context.lineNumber > 0
-    ? `${context.sourcePath}:${context.lineNumber}`
-    : context.sourcePath
+  return context.lineNumber > 0 ? `${context.sourcePath}:${context.lineNumber}` : context.sourcePath
 }
 
 function warnParser(context: ParserWarningContext, message: string): void {
@@ -616,9 +619,7 @@ function parseKindMarkerCandidate(
   candidate: string,
   defaultKind: DefaultManualReviewItemKind,
   context: ParserWarningContext
-):
-  | { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> }
-  | { valid: false } {
+): { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> } | { valid: false } {
   if (candidate === 'verify:auto') {
     warnParser(context, '[verify:auto] is deprecated; prefer [verify:api+ui]')
     return { valid: true, kinds: ['verify:api', 'verify:ui'] }
@@ -643,9 +644,7 @@ function parseMultiChannelKindMarker(
   candidate: string,
   defaultKind: DefaultManualReviewItemKind,
   context: ParserWarningContext
-):
-  | { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> }
-  | { valid: false } {
+): { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> } | { valid: false } {
   if (!candidate.startsWith('verify:')) {
     warnParser(
       context,
@@ -756,7 +755,9 @@ function parseStructuredAnnotations(
   context: ParserWarningContext
 ): ManualReviewItemAnnotations {
   const annotations: ManualReviewItemAnnotations = {}
-  const matches = line.matchAll(/\((verified-e2e|verified-api|verified-ui|claude-discussed):\s*([^)]*)\)/g)
+  const matches = line.matchAll(
+    /\((verified-e2e|verified-api|verified-ui|claude-discussed):\s*([^)]*)\)/g
+  )
   for (const match of matches) {
     const prefix = match[1]!
     const body = match[2]!.trim()
@@ -800,7 +801,10 @@ function parseStructuredAnnotationValue(
     const spec = findKeyValue(parts, 'spec')
     const trace = findKeyValue(parts, 'trace')
     if (!spec || !trace) {
-      warnParser(context, `malformed (${prefix}: ...) annotation — expected spec=<path> trace=<path>`)
+      warnParser(
+        context,
+        `malformed (${prefix}: ...) annotation — expected spec=<path> trace=<path>`
+      )
       return null
     }
     return { verifiedE2e: { raw, timestamp, spec, trace } }
@@ -886,8 +890,9 @@ function collectStructuredAnnotationRaw(line: string): {
 function renderStructuredAnnotations(
   annotations: Partial<Record<StructuredAnnotationKey, string>>
 ): string {
-  return STRUCTURED_ANNOTATION_ORDER.flatMap((key) => (annotations[key] ? [annotations[key]!] : []))
-    .join(' ')
+  return STRUCTURED_ANNOTATION_ORDER.flatMap((key) =>
+    annotations[key] ? [annotations[key]!] : []
+  ).join(' ')
 }
 
 function upsertStructuredAnnotation(
@@ -970,9 +975,7 @@ function rollupParentForScopedItem(
   const siblings = reparsed.items.filter((i) => i.scoped && i.parentId === scopedItem.parentId)
   if (siblings.length === 0) return null
 
-  const allChildrenOk = siblings.every(
-    (i) => i.checked && !/（issue:[^）]*）/.test(i.raw)
-  )
+  const allChildrenOk = siblings.every((i) => i.checked && !/（issue:[^）]*）/.test(i.raw))
 
   const lineBefore = lines[parent.lineIndex] ?? ''
   if (allChildrenOk === parent.checked) return null
@@ -3765,7 +3768,7 @@ export function renderReviewHtml(): string {
       if (kind === 'malformed') return change.malformed + ' 行格式錯誤';
       if (kind === 'done') return '✓ 全部通過';
       const issued = change.issued || 0;
-      // userPending：對齊 server `userActionPending`——user 還能點的 review:ui/verify:ui 項目數。
+      // userPending：對齊 server userActionPending — user 還能點的 review:ui/verify:ui 項目數。
       // verify:api/e2e 自動驗證且 user 點不到的 item 不算進去；舊版用 pending-issued 會把這些列為「待檢查」誤導。
       const userPending = change.userActionPending || 0;
       if (kind === 'issue') {
@@ -5083,9 +5086,7 @@ function printStartupBanner(url: string, repoRoot: string): void {
     ['open', `${bold}${cyan}${url}${reset}`],
   ]
   const labelWidth = Math.max(...lines.map(([label]) => label.length))
-  const rendered = lines.map(
-    ([label, value]) => `${label.padEnd(labelWidth)}  ${value}`
-  )
+  const rendered = lines.map(([label, value]) => `${label.padEnd(labelWidth)}  ${value}`)
   const innerWidth = Math.max(...rendered.map((l) => stripAnsi(l).length))
   const horiz = '─'.repeat(innerWidth + 2)
   console.log('')

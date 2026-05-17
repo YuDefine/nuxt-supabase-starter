@@ -658,25 +658,55 @@ async function cmdMergeBack(slug, opts = {}) {
     try {
       git(['merge', '--abort'], { cwd: consumerRoot, stdio: 'ignore' })
     } catch {}
+
+    // Pop stash and re-check — git stash pop can leave UU in index when stash
+    // content conflicts with the post-abort working tree. Previously this was
+    // swallowed with only `console.error('warn:')`, letting half-resolved UU
+    // accumulate silently across sessions until later flows (archive, propagate)
+    // failed in puzzling ways. Now we surface pop conflicts as part of the throw.
+    let popUnmerged = []
+    let popExitError = null
     if (stashRef) {
       try {
         git(['stash', 'pop'], { cwd: consumerRoot, stdio: 'inherit' })
       } catch (e) {
-        console.error(
-          `warn: stash pop failed; '${stashRef}' preserved in stash list — recover manually.`
-        )
+        popExitError = e
       }
+      // Status re-check is authoritative — git stash pop with conflicts exits 1
+      // AND leaves UU entries, but exit code alone isn't reliable across git
+      // versions. The UU paths are the actual breakage signal.
+      const statusAfterPop = git(['status', '--porcelain'], { cwd: consumerRoot })
+      popUnmerged = statusAfterPop
+        .split('\n')
+        .filter((line) => /^(UU|AA|DD|AU|UA|UD|DU) /.test(line))
+        .map((line) => line.slice(3).trim())
     }
-    const detail =
+
+    const squashDetail =
       conflicted.length > 0
-        ? `${conflicted.length} file(s) hit merge conflict:\n` +
+        ? `${conflicted.length} file(s) hit merge conflict during squash:\n` +
           conflicted
             .slice(0, 10)
             .map((f) => `  ${f}`)
             .join('\n')
         : `squash failed: ${squashError?.message ?? squashError}`
+
+    const popDetail =
+      popUnmerged.length > 0
+        ? `\n\nstash pop also conflicted; ${popUnmerged.length} file(s) left UU in index:\n` +
+          popUnmerged
+            .slice(0, 10)
+            .map((f) => `  ${f}`)
+            .join('\n') +
+          `\nstash '${stashRef}' preserved — \`git stash list\` to inspect; ` +
+          `resolve UU (\`git checkout --ours/--theirs <path> && git add <path>\`) before re-running.`
+        : popExitError
+          ? `\n\nstash pop exited with error but no UU detected; stash '${stashRef}' preserved — inspect with \`git stash list\`.`
+          : ''
+
     throw new Error(
-      `merge-back: ${detail}\n\nWorktree '${target.path}' + branch '${branchName}' preserved.\n` +
+      `merge-back: ${squashDetail}${popDetail}\n\n` +
+        `Worktree '${target.path}' + branch '${branchName}' preserved.\n` +
         `Resolve conflicts manually then re-run \`wt-helper merge-back ${cleanSlug}\`.`
     )
   }

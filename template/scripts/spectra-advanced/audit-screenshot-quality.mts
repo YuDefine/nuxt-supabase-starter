@@ -361,10 +361,21 @@ function applyMissingEvidenceRule(
   changeName: string,
   issues: Issue[]
 ) {
+  // Parent State Derivation hard rule (manual-review.md): parent-with-scoped-children
+  // 的 verify:* / screenshot evidence 由 children 承擔，parent state 由 rollup 推導。
+  // 對齊 archive-gate.sh Check 4 與 review-gui.mts buildParentsWithScopedChildren —
+  // 統一以「parent-with-scoped-children 為 non-leaf」語義跳過 leaf-only 檢查。
+  const parentIdsWithScopedChildren = new Set(
+    items.filter((i) => i.scoped && i.parentId).map((i) => i.parentId as string)
+  )
+
   for (const item of items) {
     // [discuss] — archive-gate Check 4 已驗 (claude-discussed: ...) annotation，
     // 本檢查不重複處理
     if (item.kinds.includes('discuss')) continue
+
+    // Parent-with-scoped-children: leaf-only check — evidence 在 children 行上
+    if (parentIdsWithScopedChildren.has(item.id)) continue
 
     if (hasDeprecatedVerifyAutoMarker(item)) {
       issues.push({

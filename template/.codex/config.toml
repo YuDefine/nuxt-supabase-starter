@@ -1,4 +1,4 @@
-# Auto-generated from .claude/settings.json
+# 🔒 LOCKED — managed by clade · auto-generated from .claude/settings.json
 includeGitInstructions = false
 enabledMcpjsonServers = ["local-supabase"]
 
