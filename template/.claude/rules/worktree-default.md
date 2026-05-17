@@ -60,6 +60,28 @@ Fork 出 worktree 之前（無論透過 `/wt` ad-hoc 或 `/spectra-apply` Step 0
 
 **為什麼**：worktree 從 main HEAD 分出，看不到 working tree 的 untracked / modified。沒這道 guard 時 subagent 進 worktree 看 baseline 全缺 fail-fast，主線只能 AskUserQuestion 要 user 拍 baseline strategy（commit / cross-wt stash / 全包同 worktree / inspect first）。Pre-fork guard 讓 main 完成過的 baseline（典型 case：spectra Section 1+2.1 寫了 schema/migration 沒 commit 就轉 Section 2）能進 worktree，避免每次 fork 都打擾 user。
 
+### Anti-pattern：手動 `git stash push -u -- <pathspec>` 做 selective baseline sync
+
+**NEVER** 主線自己跑 `git stash push -u -m "<msg>" -- <pathspec>` 試圖 scope 部分檔案進 stash，再 cd 到別處 `stash apply` 做 cross-worktree baseline sync。
+
+**為什麼禁**：git 2.50.1 (Apple Git-155) 在 dirty working tree 撞到 scope leak — pathspec 正確 scope working tree 端的移除，但 stash commit 包整個 tracked tree 的所有 modifications。apply 到 fresh worktree 會帶進大量 cross-session noise。詳見 [[pitfall-git-stash-pathspec-scope-leak]]。
+
+**正解**：
+
+1. **Worktree baseline sync** → 走 `wt-helper add --precheck-baseline`（§1 上文）。helper internal 對 stash strategy 用 bulk stash（不帶 pathspec）+ subagent prompt warn，避開此 bug
+2. **非 worktree 場景的 selective sync** → 用 patch + 檔案複製組合：
+   ```bash
+   # Tracked file modifications
+   git diff --binary -- <paths> | git -C <target> apply
+
+   # Untracked files
+   rsync -R <paths> <target>/
+   # 或 cp <src> <dst>
+   ```
+3. **長期 cross-branch sync** → 用 `git format-patch` + `git am`（commit-level transfer，含 message）
+
+**判別**：任何「想把 X、Y、Z 三個檔的改動搬去別 worktree」的場景，**第一反應應該是 wt-helper 或 patch route**，**禁止**自己手寫 `git stash push -u -- <paths>`。
+
 ## §2 禁止 silent branch 建立
 
 Agent **MUST NOT** 跑 `git checkout -b`、`git branch <name>`、或任何會產生新 ref 的指令，**除非**先取得使用者明確同意。
