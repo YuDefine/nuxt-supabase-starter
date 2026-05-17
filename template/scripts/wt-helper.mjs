@@ -41,7 +41,7 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, realpathSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { stdin, stdout } from 'node:process'
 import { createInterface } from 'node:readline/promises'
@@ -170,24 +170,41 @@ async function cmdAdd(slug, opts = {}) {
   // Strategies: commit (selective stage + commit baseline on main),
   // stash  (push -u stash on main → apply inside new worktree),
   // warn   (stop with report — caller decides).
-  // Unmerged paths always stop, regardless of strategy.
+  // Unmerged paths are triaged by classifyUnmergedSafety: stale UU (no
+  // markers + no in-progress op state) auto-resolves via `git add`; real
+  // conflicts or mid-operation state still stop with diagnostics.
   let pendingStashName = null
   let pendingBaselineRef = null
   if (opts.precheckBaseline !== undefined) {
-    const dirty = detectMainDirty(consumerRoot)
+    let dirty = detectMainDirty(consumerRoot)
     if (dirty.conflicted.length > 0) {
-      const preview = dirty.conflicted
-        .slice(0, 10)
-        .map((c) => `  ${c.status}  ${c.path}`)
-        .join('\n')
-      const more =
-        dirty.conflicted.length > 10 ? `\n  ... and ${dirty.conflicted.length - 10} more` : ''
-      throw new Error(
-        `Pre-fork baseline guard: main has ${dirty.conflicted.length} unmerged path(s):\n` +
-          preview +
-          more +
-          `\n\nResolve conflicts manually before fork. wt-helper refuses to auto-handle unmerged paths.`
-      )
+      const { safe, unsafe } = classifyUnmergedSafety(consumerRoot, dirty.conflicted)
+      if (unsafe.length > 0) {
+        const preview = unsafe
+          .slice(0, 10)
+          .map((u) => `  ${u.status}  ${u.path}  (${u.reason})`)
+          .join('\n')
+        const more = unsafe.length > 10 ? `\n  ... and ${unsafe.length - 10} more` : ''
+        throw new Error(
+          `Pre-fork baseline guard: main has ${unsafe.length} unsafe unmerged path(s):\n` +
+            preview +
+            more +
+            `\n\nReasons: 'markers' = file contains <<<<<<< conflict markers (real conflict);` +
+            ` 'merge-head' / 'rebase-head' / 'cherry-pick-head' = repo is mid-operation` +
+            ` (.git/MERGE_HEAD or equivalent exists). Resolve manually before fork;` +
+            ` wt-helper refuses to auto-handle these — any action risks data loss.`
+        )
+      }
+      if (safe.length > 0) {
+        console.log(
+          `Pre-fork baseline: auto-resolving ${safe.length} stale unmerged path(s)` +
+            ` (no markers, no in-progress op): ${safe.map((s) => s.path).join(', ')}`
+        )
+        git(['add', '--', ...safe.map((s) => s.path)], { cwd: consumerRoot, stdio: 'inherit' })
+        // Re-run detectMainDirty so downstream sees the resolved paths as
+        // modified (now staged adds) instead of conflicted.
+        dirty = detectMainDirty(consumerRoot)
+      }
     }
     const dirtyCount = dirty.modified.length + dirty.untracked.length
     if (dirtyCount > 0) {
@@ -441,6 +458,78 @@ function detectMainDirty(consumerRoot) {
     }
   }
   return { modified, untracked, conflicted }
+}
+
+// Classify each unmerged path as safe-resolvable or unsafe. Stale UU (index
+// residue from a prior merge/rebase that was never finalized) has no conflict
+// markers in the file and no in-progress operation state — `git add` to mark
+// resolved is data-safe. Real conflicts (markers in file) or mid-operation
+// state (.git/MERGE_HEAD / REBASE_HEAD / CHERRY_PICK_HEAD, plus the
+// rebase-merge/ and rebase-apply/ directories git uses for interactive and
+// am-based rebases) require user intervention; auto-resolving them risks
+// data loss.
+//
+// Returns: { safe: [{ path, status }], unsafe: [{ path, status, reason }] }
+// where reason ∈ 'markers' | 'merge-head' | 'rebase-head' | 'cherry-pick-head'
+export function classifyUnmergedSafety(consumerRoot, conflicted) {
+  if (!Array.isArray(conflicted) || conflicted.length === 0) {
+    return { safe: [], unsafe: [] }
+  }
+
+  // Resolve the actual .git dir (handles main worktree, submodule, linked
+  // worktree). For the consumerRoot we expect a main repo, but be defensive.
+  let gitDir = join(consumerRoot, '.git')
+  try {
+    const raw = git(['rev-parse', '--git-dir'], { cwd: consumerRoot })
+    gitDir = resolve(consumerRoot, raw)
+  } catch {}
+
+  let inProgressReason = null
+  if (existsSync(join(gitDir, 'MERGE_HEAD'))) {
+    inProgressReason = 'merge-head'
+  } else if (
+    existsSync(join(gitDir, 'REBASE_HEAD')) ||
+    existsSync(join(gitDir, 'rebase-merge')) ||
+    existsSync(join(gitDir, 'rebase-apply'))
+  ) {
+    inProgressReason = 'rebase-head'
+  } else if (existsSync(join(gitDir, 'CHERRY_PICK_HEAD'))) {
+    inProgressReason = 'cherry-pick-head'
+  }
+
+  if (inProgressReason) {
+    return {
+      safe: [],
+      unsafe: conflicted.map((c) => ({ path: c.path, status: c.status, reason: inProgressReason })),
+    }
+  }
+
+  // Match a conflict marker line. Git always writes markers as a row of seven
+  // identical chars; the start/end variants have a trailing space + label,
+  // and the middle separator is the bare seven `=` row. Use multiline-anchored
+  // regex so we match whole lines only and avoid catching `<<<<<<<` embedded in
+  // prose.
+  const MARKER_RE = /^(?:<{7}(?: .*)?|={7}|>{7}(?: .*)?)$/m
+  const safe = []
+  const unsafe = []
+  for (const c of conflicted) {
+    const abs = join(consumerRoot, c.path)
+    let hasMarkers = false
+    try {
+      const content = readFileSync(abs, 'utf8')
+      hasMarkers = MARKER_RE.test(content)
+    } catch {
+      // File missing (DD/DU/UD state) → conservative: treat as having
+      // markers so cmdAdd refuses auto-resolve.
+      hasMarkers = true
+    }
+    if (hasMarkers) {
+      unsafe.push({ path: c.path, status: c.status, reason: 'markers' })
+    } else {
+      safe.push({ path: c.path, status: c.status })
+    }
+  }
+  return { safe, unsafe }
 }
 
 // Stage a specific path list + commit — never `git add -A`, which would catch
@@ -1152,6 +1241,7 @@ export {
   sessionWorktrees,
   timestampPrefix,
 }
+// classifyUnmergedSafety is exported via `export function` at definition site.
 
 function resolveRealPath(p) {
   try {

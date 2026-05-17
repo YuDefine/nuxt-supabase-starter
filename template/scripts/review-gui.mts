@@ -3191,7 +3191,22 @@ export function renderReviewHtml(): string {
         '3. 提出處理方案：列出要動哪些檔、影響什麼、為何這樣修，**等我確認後再改**',
         '4. 不要急著動手——這是 plan-first 工作流；急著動手 = 違反 user 規則',
         '',
+        '',
+        handoffStillVisibleNote(),
+        '',
         '回覆時請先說「我看到的現況是 ...」再給方案，不要只回方案。',
+      ].join('\\n');
+    }
+    // 給「按鈕還在」狀況的固定指引：問題不在 consumer 而在 clade 中央倉。
+    // 三類根因都有可能：實際改動沒落地 / GUI 偵測 false positive / 這份 prompt 講不清楚。
+    function handoffStillVisibleNote() {
+      return [
+        '## 若處理完後 review:ui 同一顆按鈕還顯示',
+        '代表 GUI 偵測條件還沒消除——根因有三種，**全部**回到 \`~/offline/clade\` 改，不要在 consumer 改：',
+        '1. 改動沒真的落地 → 跑 \`git diff\` / \`git status\` 確認；review:ui home 也要重新整理',
+        '2. review:ui 偵測邏輯 false positive（按鈕條件本來就不該成立）→ 改 \`~/offline/clade/vendor/scripts/review-gui.mts\` 的偵測函式，跑 \`vp check && node scripts/publish.mjs patch && node scripts/propagate.mjs\`',
+        '3. 這份 prompt 講不清楚導致沒抓對根因 → 改 \`~/offline/clade/vendor/scripts/review-gui.mts\` 的 \`buildHandoffPrompt\`（或對應 group 段）後 propagate',
+        'consumer 端的 \`scripts/review-gui.mts\` 是 clade 投影（LOCKED + chmod 444），直接改會被下次 propagate 蓋回去。',
       ].join('\\n');
     }
     function buildHandoffPrompt(kind, ctx) {
@@ -3429,6 +3444,8 @@ export function renderReviewHtml(): string {
           '- Grep / Glob / Read 只用於非程式碼檔（.md / config / .env）',
           '- plan-first，bug 候選列出來等我確認後再改',
           '',
+          handoffStillVisibleNote(),
+          '',
           '回覆時請先說「我看到的現況是 ...」再給 bug 清單（若有）。',
         );
         return lines.join('\\n');
@@ -3490,6 +3507,8 @@ export function renderReviewHtml(): string {
           '- **MUST** 用 codebase-memory-mcp 探索（search_graph / trace_path / get_code_snippet）；graph 未 index 先跑 index_repository',
           '- Grep / Glob / Read 只用於非程式碼檔（.md / config / .env）',
           '- 可直接照 Step 8a 流程跑，不需等確認；唯一例外是 baseline 缺漏要先 STOP',
+          '',
+          handoffStillVisibleNote(),
           '',
           '回覆時請先說「我看到的現況是 ...」再給 evidence 補齊計劃。',
         );
@@ -3597,6 +3616,8 @@ export function renderReviewHtml(): string {
           '- **plan-first**：列完三類項目的分析 + 路由建議後**停下**等我確認，不要直接動手改檔',
           '- 路由到 (D) clade 投影層的，列清楚但**不要**自己跨 repo 動手——那要切到 clade session 處理',
           '- 沒命中項目的小節（例如某 change 無 issue）可直接寫「無」省略，不要硬湊',
+          '',
+          handoffStillVisibleNote(),
         );
         return lines.join('\\n');
       } else if (kind === 'evidence-fillin-item') {
