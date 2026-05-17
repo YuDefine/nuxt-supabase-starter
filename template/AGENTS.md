@@ -161,6 +161,8 @@ Read-only session（grep、看 log、解釋 code 不寫檔）可留在 main work
 
 **Parent cwd 不動 invariant**：`/wt` **SHALL NOT** 遷移 parent session 的 cwd — 所有 worktree 內的操作由 subagent 執行（subagent cwd = worktree path），主線（cwd = main）負責 dispatch + squash + cleanup。先前 `--dispatch-from-handoff` flag 機制已移除；新 orchestration model 透過 subagent 隔離 cwd 達到同樣的「不切 terminal」UX，且更嚴格地保留 parent cwd invariant。
 
+**階段間 setup chore 由主線自動代勞**：subagent 完成階段性 commit 後、下一階段 dispatch 之前若需要在 worktree 跑 local-only setup（`pnpm install` / `db:reset` / `db:types` / `supabase:sync` / `lint` / `test`），主線 **MUST** 自己用 Bash `cd <worktree-path> && <cmd>` 一行式跑掉，**NEVER** 把指令清單貼給 user 叫他切 cd 去跑。Bash 每次呼叫是獨立子 shell，`cd` 只在 subshell 內、session cwd 不變、不違反 invariant。真 destructive 操作（prod migration / `git push --force` / secrets / outbound 訊息 / shared infra）仍需 user 拍板。
+
 **`/wt` invocation forms**：
 
 - `/wt <task description>` — 單條 ad-hoc。
