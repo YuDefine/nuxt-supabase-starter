@@ -87,9 +87,7 @@ export function loadManualReviewPatterns(): ManualReviewPatternEntry[] {
     cachedPatterns = entries.map((p) => ({
       ...p,
       regex: translatePosixToJs(p.regex),
-      requiresPresenceOf: p.requiresPresenceOf
-        ? translatePosixToJs(p.requiresPresenceOf)
-        : undefined,
+      requiresPresenceOf: p.requiresPresenceOf ? translatePosixToJs(p.requiresPresenceOf) : undefined,
       requiresAbsenceOf: p.requiresAbsenceOf ? translatePosixToJs(p.requiresAbsenceOf) : undefined,
     }))
   } catch {
@@ -170,8 +168,7 @@ const TRAILING_NO_SCREENSHOT_RE = /(^|[^ ]) @no-screenshot$/
 // `@no-manual-review-check[<reason>]` bypass marker per manual-review.md hard rule.
 // Empty brackets and bare marker (no brackets) are invalid by schema → not captured here.
 // May coexist with trailing `@no-screenshot` (canonical ordering: bypass then no-screenshot).
-const TRAILING_NO_MANUAL_REVIEW_CHECK_RE =
-  /@no-manual-review-check\[([^\][]+)\](?:\s+@no-screenshot)?\s*$/
+const TRAILING_NO_MANUAL_REVIEW_CHECK_RE = /@no-manual-review-check\[([^\][]+)\](?:\s+@no-screenshot)?\s*$/
 // 解析 leading kind marker — 必須緊接 `#N` / `#N.M` 後第一個 token、含一個 trailing space。
 // description-mid 的 [discuss] / [review:ui] / [verify:*] 不會被命中（不是行首）。
 const LEADING_KIND_RE = /^\[([^\]]+)\]\s+/
@@ -296,7 +293,9 @@ export interface FileVersion {
  * completion counter and archive-readiness check share one notion of
  * "parent-with-children".
  */
-export function buildParentsWithScopedChildren(items: readonly ManualReviewItem[]): Set<string> {
+export function buildParentsWithScopedChildren(
+  items: readonly ManualReviewItem[]
+): Set<string> {
   const parents = new Set<string>()
   for (const item of items) {
     if (item.scoped && item.parentId) parents.add(item.parentId)
@@ -364,11 +363,7 @@ interface ChangeSummary {
    * 的清單。每個 entry 一個 item（kinds 可能多個 tag）。配合 home page 把這類 change 歸到 not-ready 群、
    * 健康檢查 prompt 一併列出由 Claude 跑 `/spectra-apply` Step 8a 補齊。
    */
-  evidenceMissing: Array<{
-    itemId: string
-    description: string
-    kinds: ReadonlyArray<'e2e' | 'api' | 'ui'>
-  }>
+  evidenceMissing: Array<{ itemId: string; description: string; kinds: ReadonlyArray<'e2e' | 'api' | 'ui'> }>
   screenshotTopicCount: number
   screenshotTopics: string[]
 }
@@ -596,7 +591,9 @@ interface ParserWarningContext {
 }
 
 function formatParserLocation(context: ParserWarningContext): string {
-  return context.lineNumber > 0 ? `${context.sourcePath}:${context.lineNumber}` : context.sourcePath
+  return context.lineNumber > 0
+    ? `${context.sourcePath}:${context.lineNumber}`
+    : context.sourcePath
 }
 
 function warnParser(context: ParserWarningContext, message: string): void {
@@ -619,7 +616,9 @@ function parseKindMarkerCandidate(
   candidate: string,
   defaultKind: DefaultManualReviewItemKind,
   context: ParserWarningContext
-): { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> } | { valid: false } {
+):
+  | { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> }
+  | { valid: false } {
   if (candidate === 'verify:auto') {
     warnParser(context, '[verify:auto] is deprecated; prefer [verify:api+ui]')
     return { valid: true, kinds: ['verify:api', 'verify:ui'] }
@@ -644,7 +643,9 @@ function parseMultiChannelKindMarker(
   candidate: string,
   defaultKind: DefaultManualReviewItemKind,
   context: ParserWarningContext
-): { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> } | { valid: false } {
+):
+  | { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> }
+  | { valid: false } {
   if (!candidate.startsWith('verify:')) {
     warnParser(
       context,
@@ -755,9 +756,7 @@ function parseStructuredAnnotations(
   context: ParserWarningContext
 ): ManualReviewItemAnnotations {
   const annotations: ManualReviewItemAnnotations = {}
-  const matches = line.matchAll(
-    /\((verified-e2e|verified-api|verified-ui|claude-discussed):\s*([^)]*)\)/g
-  )
+  const matches = line.matchAll(/\((verified-e2e|verified-api|verified-ui|claude-discussed):\s*([^)]*)\)/g)
   for (const match of matches) {
     const prefix = match[1]!
     const body = match[2]!.trim()
@@ -801,10 +800,7 @@ function parseStructuredAnnotationValue(
     const spec = findKeyValue(parts, 'spec')
     const trace = findKeyValue(parts, 'trace')
     if (!spec || !trace) {
-      warnParser(
-        context,
-        `malformed (${prefix}: ...) annotation — expected spec=<path> trace=<path>`
-      )
+      warnParser(context, `malformed (${prefix}: ...) annotation — expected spec=<path> trace=<path>`)
       return null
     }
     return { verifiedE2e: { raw, timestamp, spec, trace } }
@@ -890,9 +886,8 @@ function collectStructuredAnnotationRaw(line: string): {
 function renderStructuredAnnotations(
   annotations: Partial<Record<StructuredAnnotationKey, string>>
 ): string {
-  return STRUCTURED_ANNOTATION_ORDER.flatMap((key) =>
-    annotations[key] ? [annotations[key]!] : []
-  ).join(' ')
+  return STRUCTURED_ANNOTATION_ORDER.flatMap((key) => (annotations[key] ? [annotations[key]!] : []))
+    .join(' ')
 }
 
 function upsertStructuredAnnotation(
@@ -975,7 +970,9 @@ function rollupParentForScopedItem(
   const siblings = reparsed.items.filter((i) => i.scoped && i.parentId === scopedItem.parentId)
   if (siblings.length === 0) return null
 
-  const allChildrenOk = siblings.every((i) => i.checked && !/（issue:[^）]*）/.test(i.raw))
+  const allChildrenOk = siblings.every(
+    (i) => i.checked && !/（issue:[^）]*）/.test(i.raw)
+  )
 
   const lineBefore = lines[parent.lineIndex] ?? ''
   if (allChildrenOk === parent.checked) return null
@@ -3495,16 +3492,22 @@ export function renderReviewHtml(): string {
         );
         return lines.join('\\n');
       } else if (kind === 'feedback-given-group') {
-        // Group-level prompt：user 已對 N 個 change 的 items 標 issue + 寫好回饋，
-        // 想請 Claude 一次性讀全部 issue 註記做 root cause + 修法路由。
+        // Group-level prompt：user 已點完 N 張 change 的所有可動 item（review:ui / verify:ui），
+        // 剩下的 pending 都是 user 點不到的 — issue 註記、verify:api/e2e 自動驗證 evidence、
+        // discuss 議題。請 Claude 一次接手做 root cause / evidence 檢視 / 議題推進 + 路由。
         // 與 not-ready-group 一樣跳開 handoffHeader/footer 自組（涉及多 change）。
         const list = Array.isArray(ctx.feedbackChanges) ? ctx.feedbackChanges : [];
         const repoName = state.repoName || '(unknown)';
         const repoRoot = state.repoRoot || '(unknown)';
         const lines = [
           '我在 consumer repo「' + repoName + '」（路徑：' + repoRoot + '）',
-          '跑 \`pnpm review:ui\` 做 spectra 人工檢查，已對 ' + list.length + ' 張 change 的 items 標 \`issue\` 並寫好回饋意見，',
-          '請逐張讀 \`openspec/changes/<change>/tasks.md\` 把所有 \`（issue: ...）\` 註記抓出來做 root cause 分析 + 修法路由。',
+          '跑 \`pnpm review:ui\` 做 spectra 人工檢查，已對 ' + list.length + ' 張 change 的所有 user 可動 item（review:ui / verify:ui）',
+          '完成 OK / Issue 標記。剩下的 pending item 都是我點不到的——',
+          '請逐張讀 \`openspec/changes/<change>/tasks.md\` 把這三種接手分析做完：',
+          '',
+          '1. \`（issue: <note>）\` 註記 → root cause + 修法路由',
+          '2. \`[verify:api]\` / \`[verify:e2e]\` item 帶 \`(verified-*: ...)\` 但仍 \`[ ]\` → 看 evidence 是否合理',
+          '3. \`[discuss]\` item 仍 \`[ ]\` → 摘要議題、補上下文、給建議方向',
           '',
           '## 環境',
           '- consumer: ' + repoName,
@@ -3513,12 +3516,14 @@ export function renderReviewHtml(): string {
           '## 命中的 changes（共 ' + list.length + ' 張）',
         ];
         for (const c of list) {
-          lines.push('- \`' + c.name + '\` — ' + (c.issued || 0) + ' 個 issue');
+          const issued = c.issued || 0;
+          const tail = issued > 0 ? issued + ' 個 issue + verify/discuss 剩餘' : '無 issue，僅 verify/discuss 剩餘';
+          lines.push('- \`' + c.name + '\` — ' + tail);
         }
         lines.push(
           '',
           '## 相關 rules（必讀）',
-          '- .claude/rules/manual-review.md（issue 註記語意 + Pre-Review Data Readiness）',
+          '- .claude/rules/manual-review.md（issue 註記語意 + Pre-Review Data Readiness + verify channel）',
           '- .claude/rules/tech-debt-routing.md（修法路由：clade vs consumer / TD vs spec / spectra-ingest）',
           '- openspec/AGENTS.md（spectra 工作流）',
           '',
@@ -3526,36 +3531,69 @@ export function renderReviewHtml(): string {
           '',
           '對每張 change 跑下面流程：',
           '',
-          '1. 讀 \`openspec/changes/<change>/tasks.md\`，把所有 \`- [x] ... （issue: <note>）\` 行抓出來（一張 change 可能多個 issue）',
-          '2. 對**每個 issue 註記**做 root cause 分析：',
-          '   - 用 codebase-memory-mcp（search_graph / trace_path / get_code_snippet）定位該 item 對應的 feature 在哪實作',
-          '   - 從 issue note 描述的 symptom 反推根因（不要急著看 symptom）',
-          '   - 必要時補讀 \`proposal.md\` 看當初設計意圖',
-          '3. 依 \`.claude/rules/tech-debt-routing.md\` 把每個 issue 路由到正確的修法路徑：',
-          '   - **(A) spec / 設計層級缺漏** → \`/spectra-ingest\` 改 proposal.md / tasks.md',
-          '   - **(B) code bug 影響窄、可延後** → 登 \`docs/tech-debt.md\` 開 TD-NNN',
-          '   - **(C) 純 bug 當下可修** → 提方案等確認後改',
-          '   - **(D) 根因在 clade 投影層（rules / skills / vendor scripts）** → 提示要去 \`~/offline/clade\` 改源，不要在 consumer 改',
-          '   - **(E) false positive / 我誤標 issue** → 建議改回 OK，說明理由',
+          '### Step 1：讀 \`openspec/changes/<change>/tasks.md\` 把三類項目抓齊',
+          '- **(I) issue 註記**：所有 \`- [ ] ... （issue: <note>）\` 或 \`- [x] ... （issue: <note>）\` 行',
+          '- **(V) auto-verified pending**：標 \`[verify:api]\` / \`[verify:e2e]\` 且帶 \`(verified-api: ...)\` 或 \`(verified-e2e: ...)\` annotation 但仍 \`[ ]\` 的 item',
+          '- **(D) discuss 議題**：標 \`[discuss]\` 仍 \`[ ]\` 的 item',
+          '',
+          '一張 change 三類可能全有 / 全無，按實況列。',
+          '',
+          '### Step 2：對每個項目做對應分析',
+          '',
+          '**(I) issue 註記** → root cause 分析',
+          '- 用 codebase-memory-mcp（search_graph / trace_path / get_code_snippet）定位 item 對應的 feature 在哪實作',
+          '- 從 issue note 描述的 symptom 反推根因（不要急著看 symptom）',
+          '- 必要時補讀 \`proposal.md\` 看當初設計意圖',
+          '',
+          '**(V) auto-verified pending** → evidence 合理性檢視',
+          '- 讀 annotation 的 method / url / status / body hash / timestamp',
+          '- 對照該 item 預期行為（item description）：status code 對嗎？body fingerprint 有意義嗎？timestamp 在本次 apply 範圍內嗎？',
+          '- 合理 → 建議翻 \`[x]\`；不合理 → 建議改標 issue（指出 evidence 跟期望不符的點）；或建議補做更細的驗證',
+          '',
+          '**(D) discuss 議題** → 議題推進',
+          '- 用 codebase-memory-mcp 把 item description 涉及的 schema / config / migration 抓出來',
+          '- 補上下文（目前實作狀態、相關 commit、proposal.md 設計動機）',
+          '- 給建議方向（這個 production deploy check 怎麼做最有效？是否要寫 SQL? 是否要先補 fixture?）',
+          '',
+          '### Step 3：依 \`.claude/rules/tech-debt-routing.md\` 路由',
+          '- **(A) spec / 設計層級缺漏** → \`/spectra-ingest\` 改 proposal.md / tasks.md',
+          '- **(B) code bug 影響窄、可延後** → 登 \`docs/tech-debt.md\` 開 TD-NNN',
+          '- **(C) 純 bug 當下可修** → 提方案等確認後改',
+          '- **(D) 根因在 clade 投影層（rules / skills / vendor scripts）** → 提示要去 \`~/offline/clade\` 改源，不要在 consumer 改',
+          '- **(E) false positive / item 應改回 OK 或翻 [x]** → 說明理由',
           '',
           '## 輸出格式',
           '',
-          '每張 change 一段，結構：',
+          '每張 change 一段，按 (I) / (V) / (D) 分小節：',
           '',
           '\`\`\`',
           '### <change-name>',
           '',
+          '**(I) issue 註記（N 項）**',
           '- **#<item-id>** — <一句話描述 issue>',
           '  - root cause: <分析結果，附 file:line 證據>',
           '  - 路由: (A) / (B) / (C) / (D) / (E)',
           '  - 建議: <具體要動的檔 / 開 TD / 改 proposal / 改回 OK 的理由>',
+          '',
+          '**(V) auto-verified pending（N 項）**',
+          '- **#<item-id>** — <annotation 摘要>',
+          '  - 評估: <evidence 是否合理；對照 item description>',
+          '  - 路由: (A) / (B) / (C) / (D) / (E)',
+          '  - 建議: <翻 [x] / 改標 issue / 補驗證 / ...>',
+          '',
+          '**(D) discuss 議題（N 項）**',
+          '- **#<item-id>** — <議題摘要>',
+          '  - 上下文: <相關實作狀態、commit、proposal 意圖>',
+          '  - 路由: (A) / (B) / (C) / (D) / (E)',
+          '  - 建議: <具體推進方向>',
           '\`\`\`',
           '',
           '## 規矩',
           '- **MUST** 用 codebase-memory-mcp 探索；graph 未 index 先跑 index_repository',
           '- Grep / Glob / Read 只用於非程式碼檔（.md / config / .env）',
-          '- **plan-first**：列完所有 issue 的分析 + 路由建議後**停下**等我確認，不要直接動手改檔',
+          '- **plan-first**：列完三類項目的分析 + 路由建議後**停下**等我確認，不要直接動手改檔',
           '- 路由到 (D) clade 投影層的，列清楚但**不要**自己跨 repo 動手——那要切到 clade session 處理',
+          '- 沒命中項目的小節（例如某 change 無 issue）可直接寫「無」省略，不要硬湊',
         );
         return lines.join('\\n');
       } else if (kind === 'evidence-fillin-item') {
@@ -3727,12 +3765,15 @@ export function renderReviewHtml(): string {
       if (kind === 'malformed') return change.malformed + ' 行格式錯誤';
       if (kind === 'done') return '✓ 全部通過';
       const issued = change.issued || 0;
-      const untouched = change.pending - issued;
+      // userPending：對齊 server `userActionPending`——user 還能點的 review:ui/verify:ui 項目數。
+      // verify:api/e2e 自動驗證且 user 點不到的 item 不算進去；舊版用 pending-issued 會把這些列為「待檢查」誤導。
+      const userPending = change.userActionPending || 0;
       if (kind === 'issue') {
-        if (untouched > 0) return '⚠ ' + issued + ' 問題・' + untouched + ' 待檢查';
+        if (userPending > 0) return '⚠ ' + issued + ' 問題・' + userPending + ' 待檢查';
         return '⚠ ' + issued + ' 個問題待修';
       }
-      return untouched + ' 待檢查';
+      if (userPending === 0) return '✓ 待 Claude 接手';
+      return userPending + ' 待檢查';
     }
     // 把 hitsByCode 轉成 home page 用的單行摘要，例：UI_ITEM_NO_URL ×2, REVIEW_UI_BACKEND_ROUNDTRIP ×1。
     // 超過 3 個 code 後 truncate 顯示「+N more」避免擠爆 row。
@@ -3782,9 +3823,9 @@ export function renderReviewHtml(): string {
         else if ((change.readinessHits || 0) > 0) healthCheckNeeded.push(change);
         else if (evidenceMissingCount > 0) applyPending.push(change);
         else if (
-          kind === 'issue' &&
           (change.malformed || 0) === 0 &&
-          (change.userActionPending || 0) === 0
+          (change.userActionPending || 0) === 0 &&
+          (change.pending || 0) > 0
         ) feedbackGiven.push(change);
         else ready.push(change);
       }
@@ -3823,8 +3864,8 @@ export function renderReviewHtml(): string {
         blocks.push(
           '<div class="change-group">' +
           '<div class="change-group-heading with-action">' +
-            '<span>📝 已回饋完畢 · ' + feedbackGiven.length + '</span>' +
-            '<button class="copy-handoff-btn group" data-group-handoff="feedback-given" type="button" title="複製分析 prompt：讓 Claude 讀我留在 tasks.md 的 issue 回饋，做 root cause 分析、提修法、依 tech-debt-routing 路由">📋 分析回饋 prompt</button>' +
+            '<span>🤖 等 Claude 接手 · ' + feedbackGiven.length + '</span>' +
+            '<button class="copy-handoff-btn group" data-group-handoff="feedback-given" type="button" title="複製接手 prompt：讓 Claude 處理 user 已點完剩下的 issue 回饋 / verify auto-evidence / discuss 議題，做 root cause + 路由建議">📋 接手分析 prompt</button>' +
           '</div>' +
           feedbackGiven.map(renderChangeCard).join('') +
           '</div>'
@@ -3868,10 +3909,11 @@ export function renderReviewHtml(): string {
             const feedbackChanges = (state.changes || []).filter(function (c) {
               if ((c.malformed || 0) > 0) return false;
               if ((c.readinessHits || 0) > 0) return false;
-              const issued = c.issued || 0;
-              return issued > 0 && (c.userActionPending || 0) === 0;
+              if (Array.isArray(c.evidenceMissing) && c.evidenceMissing.length > 0) return false;
+              if ((c.userActionPending || 0) > 0) return false;
+              return (c.pending || 0) > 0;
             });
-            copyHandoffPrompt('feedback-given-group', { feedbackChanges: feedbackChanges }, '分析回饋（' + feedbackChanges.length + ' change）');
+            copyHandoffPrompt('feedback-given-group', { feedbackChanges: feedbackChanges }, '接手分析（' + feedbackChanges.length + ' change）');
           }
         });
       });
@@ -5041,7 +5083,9 @@ function printStartupBanner(url: string, repoRoot: string): void {
     ['open', `${bold}${cyan}${url}${reset}`],
   ]
   const labelWidth = Math.max(...lines.map(([label]) => label.length))
-  const rendered = lines.map(([label, value]) => `${label.padEnd(labelWidth)}  ${value}`)
+  const rendered = lines.map(
+    ([label, value]) => `${label.padEnd(labelWidth)}  ${value}`
+  )
   const innerWidth = Math.max(...rendered.map((l) => stripAnsi(l).length))
   const horiz = '─'.repeat(innerWidth + 2)
   console.log('')
