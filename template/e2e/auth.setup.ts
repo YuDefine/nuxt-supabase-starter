@@ -1,44 +1,48 @@
 import { expect, test as setup } from '@nuxt/test-utils/playwright'
 
 /**
- * Auth Setup — 建立 authenticated storage state
+ * Auth Setup — build an authenticated storage state for the default
+ * Playwright project.
  *
- * 此 setup 會在所有需要登入的測試之前執行一次，
- * 將登入狀態儲存到 e2e/.auth/user.json，
- * 後續測試可直接載入已認證的 session。
+ * Runs once before the `chromium` project. Hits the dev-login route
+ * (`POST /api/_dev/login`) to mint a real Better Auth session, then writes
+ * cookies + origins to `e2e/.auth/user.json`. Subsequent specs in the
+ * `chromium` project load this state and start already authenticated as the
+ * default member.
  *
- * 環境變數：
- * - E2E_USER_EMAIL: 測試用帳號 email
- * - E2E_USER_PASSWORD: 測試用帳號密碼
+ * Project-specific role fixtures (admin / guest) live in
+ * `e2e/fixtures/index.ts` and create their own contexts per-test — they do
+ * not share storage state.
+ *
+ * Required env (loaded from `.env`):
+ *   NUXT_DEV_LOGIN_PASSWORD   any password >= 8 chars; the dev-login route
+ *                             uses this when the request body omits `password`
+ *
+ * If `NUXT_DEV_LOGIN_PASSWORD` is missing the setup writes an empty storage
+ * state so unauthenticated smoke specs can still run in CI without the secret.
  */
 
 const AUTH_FILE = 'e2e/.auth/user.json'
+const DEFAULT_MEMBER_EMAIL = 'e2e-member@test.local'
 
-setup('authenticate as default user', async ({ page, goto }) => {
-  const email = process.env.E2E_USER_EMAIL
-  const password = process.env.E2E_USER_PASSWORD
+setup('authenticate as default member', async ({ page, goto }) => {
+  const hasPassword = Boolean(process.env.NUXT_DEV_LOGIN_PASSWORD)
 
-  if (!email || !password) {
-    // 如果沒有提供測試帳號，建立空的 storage state
-    // 這讓 CI 可以只跑不需要認證的測試
+  if (!hasPassword) {
+    // Allow CI to run unauthenticated smoke specs without the secret.
     await goto('/')
     await page.context().storageState({ path: AUTH_FILE })
     return
   }
 
-  // 前往登入頁面
-  await goto('/auth/login')
+  const response = await page.context().request.post('/api/_dev/login', {
+    data: { email: DEFAULT_MEMBER_EMAIL, as: 'member' },
+  })
 
-  // 填入測試帳號
-  await page.getByPlaceholder('you@example.com').fill(email)
-  await page.getByPlaceholder('Enter your password').fill(password)
+  expect(response.ok(), `dev-login failed: ${response.status()} ${await response.text()}`).toBe(
+    true
+  )
 
-  // 送出登入表單
-  await page.getByRole('button', { name: 'Sign In' }).click()
-
-  // 等待登入完成（重導至首頁或 dashboard）
-  await expect(page).not.toHaveURL(/\/auth\/login/)
-
-  // 儲存 authenticated state
+  await goto('/')
   await page.context().storageState({ path: AUTH_FILE })
 })
