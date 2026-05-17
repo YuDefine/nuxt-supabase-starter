@@ -201,6 +201,8 @@ v3 atomic landing 解這些：
 
 ### Mechanic
 
+**Codex 派工例外**：派 codex 跑 phase（per [[agent-routing.codex-watch-protocol]] § Commit Prohibition）時，**codex 不可 commit**。codex 改完 worktree working tree、回報 `PHASE_X_RESULT` 即停手；由**主線**（或派 codex 的 `/wt` Claude subagent）在 worktree 內 commit (`wt: ...` prefix) 把 codex output 變成 phase-level checkpoint。本段「Subagent 在 worktree commit」**只適用於 Claude subagent**（如 `/spectra-ingest` 用的 wt subagent — 有完整 Claude rules access、能 self-discipline），**不適用於 codex 派工**。
+
 1. **Subagent 在 worktree 內 commit**（由 `/wt` Form 1 / 2 / 3 的 prompt template 強制執行）：
 
    ```bash
