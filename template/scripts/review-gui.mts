@@ -348,6 +348,12 @@ interface ChangeSummary {
   pending: number
   /** 含 `（issue: ...）` annotation 的 item 數；issue 在 raw 是 `[ ]`，仍算 pending 但 UI 要區分 */
   issued: number
+  /**
+   * effective items 中「需要 user 親自確認（review:ui / verify:ui）」且未 [x]、未標 issue 的數量。
+   * verify:api / verify:e2e 自動驗證 item（GUI `requiresUserConfirmation` 回 false）即使 [ ]
+   * 也不算進此值。home page 用此判斷「user 是否還有可點的 item」，0 = 所有可點項已處理。
+   */
+  userActionPending: number
   malformed: number
   /** Pre-Review Data Readiness：effective items 命中的 manual-review pattern 總次數。0 = ready for review。 */
   readinessHits: number
@@ -1550,6 +1556,15 @@ async function summarizeChange(
   const checked = effectiveItems.filter(
     (item) => item.checked && !/（issue:[^）]*）/.test(item.raw)
   ).length
+  // user-actionable pending：對齊 GUI `requiresUserConfirmation`——只認 review:ui / verify:ui
+  // （verify:api / verify:e2e 自動驗證 item user 點不到）。home page feedbackGiven 分類用此值
+  // 取代 `pending === issued`：verify:api 自動驗證但未 [x] 的 item 不該卡住 user 可點項已全處理的 change。
+  const userActionPending = effectiveItems.filter(
+    (item) =>
+      (item.kinds.includes('review:ui') || item.kinds.includes('verify:ui')) &&
+      !item.checked &&
+      !/（issue:[^）]*）/.test(item.raw)
+  ).length
   // Pre-Review Data Readiness：對齊 GUI 內顯示 banner 的 items 範圍——
   // effective items（排除 parent-with-children，GUI 不讓 user 勾這類）+ 未勾且非 issued
   // （[x] 或 issue 已經分流到別的處理路徑，readiness 只關注「等待 user 檢查」這群）。
@@ -1596,6 +1611,7 @@ async function summarizeChange(
     checked,
     pending: effectiveItems.length - checked,
     issued,
+    userActionPending,
     malformed: parsed.malformed.length,
     readinessHits,
     hitsByCode,
@@ -3768,7 +3784,7 @@ export function renderReviewHtml(): string {
         else if (
           kind === 'issue' &&
           (change.malformed || 0) === 0 &&
-          change.pending === (change.issued || 0)
+          (change.userActionPending || 0) === 0
         ) feedbackGiven.push(change);
         else ready.push(change);
       }
@@ -3853,7 +3869,7 @@ export function renderReviewHtml(): string {
               if ((c.malformed || 0) > 0) return false;
               if ((c.readinessHits || 0) > 0) return false;
               const issued = c.issued || 0;
-              return issued > 0 && c.pending === issued;
+              return issued > 0 && (c.userActionPending || 0) === 0;
             });
             copyHandoffPrompt('feedback-given-group', { feedbackChanges: feedbackChanges }, '分析回饋（' + feedbackChanges.length + ' change）');
           }
