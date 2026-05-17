@@ -1496,17 +1496,58 @@ function filterPoolsForChange(pools: ScreenshotTopic[], change: string): Screens
   return pools.filter((pool) => topicMatchesChange(pool.topic, change))
 }
 
+/**
+ * List `openspec/changes/**` blob hashes at HEAD as a Map<relativePath, blobSha>.
+ * Used by listPendingChanges to detect "worktree HEAD did not diverge from main HEAD
+ * for this file" — in which case main's working-tree state (which may have uncommitted
+ * updates) is canonical and worktree should NOT shadow main per the collision rule.
+ *
+ * Returns empty map on git error (safe default: behave like pre-fix, no skip).
+ */
+function listOpenspecChangesBlobHashes(repoRoot: string): Map<string, string> {
+  const result = new Map<string, string>()
+  try {
+    const res = spawnSync(
+      'git',
+      ['-C', repoRoot, 'ls-tree', '-r', 'HEAD', '--', 'openspec/changes/'],
+      { encoding: 'utf8' }
+    )
+    if (res.status !== 0) return result
+    for (const line of res.stdout.split('\n')) {
+      // ls-tree -r format: "<mode> blob <sha>\t<path>"
+      const m = line.match(/^\d+\s+blob\s+([0-9a-f]+)\t(.+)$/)
+      if (m) result.set(m[2], m[1])
+    }
+  } catch {
+    // ignore
+  }
+  return result
+}
+
 export async function listPendingChanges(mainRoot: string): Promise<ChangeSummary[]> {
   const sources = await listSourceRoots(mainRoot)
   // 重建兩個 module-level cache：sourceRootIndex 給 rootId → SourceRoot；changeRouteCache 給 change → SourceRoot。
   sourceRootIndex = new Map(sources.map((src) => [src.rootId, src]))
   changeRouteCache = new Map()
 
+  // Diff-aware collision rule (refines the older worktree-prefer rule):
+  // 「worktree 是 ahead 版本」假設只在 worktree's HEAD committed changes to that
+  // specific change file 時成立。若 worktree HEAD == main HEAD for `<change>/tasks.md`
+  // （worktree fork 自 main 後沒 commit 過該 change file），main 的 working-tree
+  // 才是 canonical（main 可能有未 commit 的 WIP 更新），worktree **MUST NOT** shadow main。
+  // 對應 anti-pattern：active worktree A 做 change X，但繼承了 main 的 change Y / Z 目錄；
+  // user 在 main 改 Y / Z 的 tasks.md（未 commit），舊規則讓 worktree 的 stale Y / Z 蓋過 main。
+  const mainBlobHashes = listOpenspecChangesBlobHashes(mainRoot)
+
   const summariesByName = new Map<string, ChangeSummary>()
-  // sources 已排序：main 在第一筆、worktree 在後。後寫蓋掉前寫 → worktree-prefer collision rule。
+  // sources 已排序：main 在第一筆、worktree 在後。後寫蓋掉前寫 → worktree-prefer collision rule
+  // （受 mainBlobHashes 判斷 skip 條件約束，見下方）。
   for (const src of sources) {
     const changesRoot = join(src.root, 'openspec', 'changes')
     if (!existsSync(changesRoot)) continue
+
+    // 對 worktree source 預載 HEAD blob hash（main source 跳過：main 永遠是 fallback target）
+    const wtBlobHashes = src.worktreeSlug !== null ? listOpenspecChangesBlobHashes(src.root) : null
 
     const pools = await listScreenshotPools(src.root, src.rootId)
     let entries
@@ -1519,6 +1560,16 @@ export async function listPendingChanges(mainRoot: string): Promise<ChangeSummar
       if (!entry.isDirectory() || entry.name === 'archive' || entry.name.startsWith('.')) continue
       const tasksPath = join(changesRoot, entry.name, 'tasks.md')
       if (!existsSync(tasksPath)) continue
+      // Diff-aware skip：worktree HEAD 跟 main HEAD 對該 change tasks.md 的 blob hash 相同
+      // → worktree 沒在這條 change 上 commit 任何變動 → 不蓋過 main entry（讓 main 的
+      // working-tree state 服務 user）。兩邊 hash 任一缺失（檔不在 HEAD tree、git 失敗等）
+      // 視為「無法確認 worktree 沒動過」→ 保守走舊邏輯（overwrite as usual）。
+      if (wtBlobHashes !== null) {
+        const relPath = `openspec/changes/${entry.name}/tasks.md`
+        const wtHash = wtBlobHashes.get(relPath)
+        const mainHash = mainBlobHashes.get(relPath)
+        if (wtHash && mainHash && wtHash === mainHash) continue
+      }
       const summary = await summarizeChange(
         src.root,
         entry.name,
