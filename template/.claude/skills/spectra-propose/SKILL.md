@@ -29,6 +29,18 @@ If no argument is provided, the workflow will extract requirements from conversa
 
 **Prerequisites**: This skill requires the `spectra` CLI. If any `spectra` command fails with "command not found" or similar, report the error and STOP.
 
+**Pre-flight: dirty main 不擋 propose**（clade fork addition；not in upstream spectra）
+
+Main worktree 的 staged / modified / untracked / unmerged **完全不影響**本 skill 啟動或執行。**NEVER**：
+
+- 反射性建議 user 先 `git commit` / `git stash` 再跑 propose
+- 用 `AskUserQuestion` 問 staged 內容代表什麼意圖
+- 跳過 Step 11 `wt-helper add` 想避開「dirty fork 風險」
+
+**理由**：Step 1–10 只寫 `openspec/changes/<change-name>/`（artifact creation，零 git 寫操作）→ 跟 user WIP 路徑完全不撞檔。Step 11 `wt-helper add "<change-name>"` 不帶 `--precheck-baseline` flag → 跳過整套 dirty baseline guard → 直接 fork 基於 main HEAD commit 的乾淨 worktree。Fork 後 main 的 WIP **全部留在 main worktree**（git worktree 本來就這樣），不被打擾。完整 rationale 與 anti-pattern 警示見 [[worktree-default]] §1「Pre-flight guard 不適用範圍：spectra-propose」。
+
+**唯一 path collision 例外**：若 user 的 staged / WIP **就在** `openspec/changes/<change-name>/` 子目錄裡（重跑同名 change 的場景），先 `git diff openspec/changes/<change-name>/` inspect、跟 user 對齊是否覆蓋。**這是 path collision，不是 main dirty 的一般情況。**
+
 **Steps**
 
 0. **Dispatch Codex draft + 主線 cross-check**（預設流程，無 A/B 詢問）
