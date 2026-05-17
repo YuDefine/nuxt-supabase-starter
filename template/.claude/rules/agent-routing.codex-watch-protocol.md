@@ -43,11 +43,11 @@ Local edits will be reverted by the next sync.
 
 各 routing 的參數差異：
 
-| Routing | `<topic>` | `<cwd>` | reasoning effort | 預期動作 | Plan-first |
-| --- | --- | --- | --- | --- | --- |
-| WebSearch | `websearch` | `/tmp` | `medium` | 純讀（搜尋網頁/查文件） | 否 |
-| Spectra propose（draft） | `spectra-propose` | consumer repo root | `xhigh` | 寫 spec/proposal 到 `openspec/changes/<change>/`（主線之後 cross-check） | **是** |
-| Spectra apply phase（非 Design Review、非 UI view） | `spectra-apply-<phase-id>` | consumer repo root | `high` | 完成單一 phase 內所有 tasks，回報 tasks.md checkbox 狀態 | **是** |
+| Routing | `<topic>` | `<cwd>` | reasoning effort | 預期動作 | Plan-first | Commit Prohibition |
+| --- | --- | --- | --- | --- | --- | --- |
+| WebSearch | `websearch` | `/tmp` | `medium` | 純讀（搜尋網頁/查文件） | 否 | N/A（不寫檔） |
+| Spectra propose（draft） | `spectra-propose` | consumer repo root | `xhigh` | 寫 spec/proposal 到 `openspec/changes/<change>/`（主線之後 cross-check） | **是** | **是** |
+| Spectra apply phase（非 Design Review、非 UI view） | `spectra-apply-<phase-id>` | consumer repo root | `high` | 完成單一 phase 內所有 tasks，回報 tasks.md checkbox 狀態 | **是** | **是** |
 
 > sandbox flag 統一使用 `--dangerously-bypass-approvals-and-sandbox`，不再分 `-s read-only` / `-s workspace-write`（在背景 codex 會擋 MCP）。「預期動作」由主線在 prompt 內陳述，靠 codex 自律。
 
@@ -111,6 +111,41 @@ hub:bootstrap 自動同步產生（請完全忽略，與本次工作無關）：
 
 - `codex review --uncommitted` 與 WebSearch 不需要這段（review 的本質就是讀 dirty diff、WebSearch 純讀不動檔）
 - 同一條派工 round-trip ≥ 2 次都因**同類 dirty** 停手（例：hub:bootstrap 反覆觸發 LOCKED projection 更新），且**剩餘工作是純 mechanical**（明確檔案 swap、< 5 行 edit），主線改自己做合理；但同步要 root-cause baseline 為什麼沒穩定（hub:bootstrap 重複跑？missing path？）並修，不是只把當下 task 收掉跳過教訓
+
+### Commit Prohibition（codex 派工 hard rule）
+
+派 Codex **寫 code / 改檔** 時，prompt **MUST** 內含以下硬指令（**WebSearch / `codex review` 不需要** — 它們純讀不寫）：
+
+```
+## Commit Prohibition（**MUST**）
+
+你**禁止**執行以下任何動作，**即使在 worktree 內也不行**：
+
+- `git commit` / `git commit -m ...` / `git commit --amend`
+- `git add ... && git commit ...` 任何 commit composite
+- `git stash` / `git stash push` / `git stash pop` 等同步抹掉 working tree 的操作（中途 stash 也會繞過主線 review）
+- `git push`
+- `/commit`
+- `/spectra-commit`
+
+理由：codex 在背景跑、沒有人在審；任何 codex 自己下的 commit 都**繞過了 `/commit` ceremony 的 review gate**（commit.md Step 0-A codex review、Step 0-B Design Review、Step 0-C format/lint/typecheck/test、commitlint、版本號升級）。即使後續 `/spectra-archive` 會 squash 掉 session branch 的 commit，過程中仍會留下未被任何人 review 的 commit 紀錄；多 phase 串聯時，後一 phase codex 會看到前一 phase codex 的 commit 而非 main + dirty 的真實 baseline，背書放大錯誤。
+
+你要做的只是：
+
+1. 用 Edit / Write / Bash mv/cp/rm/sed 等對 worktree 內檔案動作
+2. 跑 `git status` / `git diff` 確認 scope 沒外溢
+3. **MUST NOT** stage / commit / push / stash — 編輯完直接停手
+4. 在 `PHASE_X_RESULT` 報告中列出 `files_changed: <list>`，主線會用 `git diff` cross-check 後決定要不要 commit
+
+主線（Claude Code main session、或派 codex 的 /wt Claude subagent）才有資格 commit codex 的 output —— 主線會 read 你的 diff、對照 plan、確認 scope discipline 後，由主線下 `git commit` with `wt:` prefix（per worktree-default.md §5）保留為 phase-level checkpoint。
+```
+
+理由：codex 在背景非互動跑、無對話視窗、無 user 即時審；任何 codex 自下的 commit 都繞過 `/commit` 的多軸 review gate（commit.md Step 0-A codex review、Step 0-B Design Review、Step 0-C format/lint/typecheck/test、commitlint、版本號）。即使 `/spectra-archive` 最後會 squash 掉 session branch 的 commit、main 上只剩 ceremony commit，**過程中** session branch 仍會累積未被任何人 review 過的 commit；後續 phase codex 在錯誤 baseline 上工作會放大錯誤。把 commit 權集中在主線手中是唯一一致的 review gate。
+
+例外：
+
+- `codex review --uncommitted` 與 WebSearch 不寫檔，本節不適用
+- 對 `claude` type subagent（如 `/spectra-ingest` 在 /wt 內派出的 wt subagent）**不**強制此禁令——這些 subagent 有完整 Claude rules access、能 self-discipline，可沿用 worktree-default.md §5 的 subagent commit 規約。本節只 scope 在「codex 派工」這條路徑
 
 ## Codex Watch Protocol（防止主線乾等與卡住盲區）
 
@@ -220,9 +255,20 @@ Claude Code session 收到 spectra propose 請求時：
    - prompt 內**MUST**附帶硬指令：「**禁止**修改 view 層檔案（`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss`）；若 task 需要 view 層改動，回報 'view layer change required, defer to main thread' 並跳過該 task」
    - `<topic>=spectra-apply-<phase-id>`、`<cwd>=consumer repo root`、`-c model_reasoning_effort=high`
 5. 收到 `<task-notification status=completed>` 後，主線 **MUST**：
+   - Read codex stdout 的 `PHASE_X_RESULT` + Plan section（事前公開的思路）
    - Read tasks.md 確認該 phase 所有 checkbox 已勾
-   - sanity check（typecheck、相關 test、git diff）
-   - **MUST** 額外驗證 codex 沒踩到 view 層：`git diff --name-only` 過濾 `.vue` / `.tsx` / `.jsx` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss`，若有任何 view 層檔案被 codex 動過 → **AskUserQuestion**：[1] 主線 revert + 重派 codex（剝除 view 改動）/ [2] 接受並由主線自己跑該 view phase / [3] 中止
+   - **Diff review**：`git -C <wt> diff --stat` + `git -C <wt> diff` 看 codex 改了什麼（codex 不 commit、改動全在 worktree working tree per § Commit Prohibition）
+   - **MUST** 額外驗證 codex 沒踩到 view 層：`git diff --name-only` 過濾 `.vue` / `.tsx` / `.jsx` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss`，若有任何 view 層檔案被 codex 動過 → **AskUserQuestion**：[1] 主線 `git checkout -- <view files>` 復原 + 重派 codex / [2] 接受並由主線自己跑該 view phase / [3] 中止
+   - **MUST** scope discipline check：`git status --porcelain=v1` 列所有改動，比對 prompt 內 scope 宣告；超出範圍 → AskUserQuestion 處理
+   - sanity check（typecheck、相關 test）
+   - **主線下 phase-level commit**：選擇性 stage + commit 把 codex output 凍結成 phase checkpoint：
+     ```bash
+     cd <worktree>
+     git add -- <files codex 真的該動的 scoped paths>
+     git status --porcelain=v1  # 確認只 stage scoped paths，沒撈到別 session WIP
+     git -c commit.gpgsign=false commit --no-verify -m "wt: <change>-phase-<N> — <short, what codex did>"
+     ```
+     **commit message 用 `wt:` 前綴**（不是 commitlint feat: / fix: 等型別 — 那些保留給 main 上的 ceremony commit）。**用 `--no-verify`** — pre-commit hook 的 commitlint 會 reject `wt:` 前綴；worktree 內的 phase checkpoint 不需要走 commitlint，真 review 由主線此處做完。
    - 若有遺漏 → **AskUserQuestion** 給使用者 [1] 主線補 / [2] 重派 codex / [3] 中止
 6. 全部 phases 完成後，主線**自己**跑 Section 7 Design Review（不派出去）
 
