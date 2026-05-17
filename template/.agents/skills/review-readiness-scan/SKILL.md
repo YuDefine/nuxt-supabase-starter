@@ -17,7 +17,7 @@ metadata:
 ## Step 1 — 跑 headless scan
 
 ```bash
-vp node scripts/review-gui.mts --scan
+node scripts/review-gui.mts --scan
 ```
 
 輸出 JSON（schema: `review-readiness-scan/v1`）到 stdout，結構：
