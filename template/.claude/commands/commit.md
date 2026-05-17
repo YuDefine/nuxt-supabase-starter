@@ -115,19 +115,32 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
    結果為空 → 輸出 `⏭️ 0-MR 跳過（本次變更未觸及任何 in-progress spectra change）`，進入 Step 0。
 
-3. 對每個 change 讀 `<path>/tasks.md`，同時判定「非 `## 人工檢查` 段有 `- [x]`」與「`## 人工檢查` 段有 `- [ ]`」：
+3. 對每個 change 讀 `<path>/tasks.md`，同時判定「非 `## 人工檢查` 段有 `- [x]`」與「`## 人工檢查` 段有 **leaf** `- [ ]`」（parent `#N` 有 scoped `#N.M` 子項時，parent 由子項 derive，**MUST** leaf-only 計，見 `.claude/rules/manual-review.md` 「Parent State Derivation」段）：
 
    ```bash
    awk '
      /^## /{ in_mr = (/^## *人工檢查/) ? 1 : 0; next }
      !in_mr && /^- \[x\]/ { has_impl = 1 }
-     in_mr && /^- \[ \]/ { has_pending = 1 }
-     END { print (has_impl && has_pending) ? "BLOCK" : "OK" }
+     in_mr && /^- \[[ x]\] #[0-9]+ / {
+       pid = $0; sub(/^- \[[ x]\] #/, "", pid); sub(/ .*/, "", pid)
+       parent_pending[pid] = (/^- \[ \]/); next
+     }
+     in_mr && /^  - \[[ x]\] #[0-9]+\.[0-9]+ / {
+       pid = $0; sub(/^  - \[[ x]\] #/, "", pid); sub(/\..*/, "", pid)
+       has_scoped_child[pid] = 1
+       if (/^  - \[ \]/) has_pending_leaf = 1
+       next
+     }
+     END {
+       for (p in parent_pending)
+         if (parent_pending[p] && !(p in has_scoped_child)) has_pending_leaf = 1
+       print (has_impl && has_pending_leaf) ? "BLOCK" : "OK"
+     }
    ' "<path>/tasks.md"
    ```
 
    - `tasks.md` 不存在 → 視為 `OK`（尚未進入實作階段的 change）
-   - 輸出 `BLOCK` → 列入 blocker，順便用同樣 awk 抓出該 change `## 人工檢查` 段未勾數量
+   - 輸出 `BLOCK` → 列入 blocker，順便用同樣 leaf-only 邏輯抓出未勾 leaf 數量（同 awk 改 END 累加 `pending_count` 並 print）
 
 4. **blocker list 非空時**：
 

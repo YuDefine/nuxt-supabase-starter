@@ -67,6 +67,32 @@ metadata:
 
 ## Step 2B — Mode B 流程（整理 + 推薦）
 
+### 2B.0 Session-end pitfall sweep（呼叫 /oops Mode C）
+
+在動 HANDOFF.md 前，先回顧當前 chat session transcript 掃 missed lessons。觸發訊號：
+
+- user 糾正 Claude 的訊號（「不對」「不是這樣」「不要這樣做」「重做」「應該先 X」）
+- session 中解過的 cryptic runtime error 或 stack trace
+- 升 npm 套件大版 / 動 evlog / Supabase RLS / Cloudflare Workers config / nuxt-security / Better Auth / supabase-js 過程中發現的非預期行為
+- 跨 consumer 散播某 fix 過程中發現新的 contract 變更
+
+對每個 candidate **MUST** 判斷分流：
+
+| Candidate 等級 | 動作 |
+| --- | --- |
+| 符合 `/oops` Mode B 四條件齊備（root cause / detection / fix / prevention） | dispatch `/oops` 走完整 Mode B pipeline 寫進 `~/offline/clade/docs/pitfalls/` |
+| 個人偏好 / 跨專案沿用的行為更正（user 糾正用詞、強調某做法） | dispatch `/oops` Mode B 輕量降級 → 寫 auto-memory `feedback` type |
+| 只給當前 repo 的 self-improvement lesson | dispatch `/oops` Mode B 輕量降級 → 寫 `<consumer>/tasks/lessons.md` |
+| 一次性 typo / 純業務邏輯 bug / 純設計問題 | 跳過（不該成為 pitfall 也不該佔 memory 槽位） |
+
+若 sweep 為空（無 candidate）→ 一句話宣告「無 missed lesson」繼續 2B.1。
+
+**禁止行為**：
+
+- ❌ 把 sweep candidate 一次塞給 user 讓他選哪些要記 — 主動分流後直接 dispatch，user 看結果
+- ❌ 把 candidate 暫存到 HANDOFF.md `outstanding` 段 — sweep 是 session 內 cleanup，不該變成跨 session 待辦
+- ❌ 強推 candidate 升級到 pitfall — 不符四條件就降級或跳過，不硬塞
+
 ### 2B.1 整理現有 HANDOFF.md
 
 讀 HANDOFF.md，逐段判斷：
@@ -166,7 +192,7 @@ User 透過 `request_user_input` 選定下一步 outstanding（含明確的 next
 ## Output contract
 
 - Mode A：成功 = HANDOFF.md / tech-debt / ROADMAP 有對應寫入 + tasks 檔已清；訊息只含升級摘要
-- Mode B：成功 = HANDOFF.md 已整理 + 盤點訊息 + `request_user_input` 已發出讓 user 選 + user 選定後 2B.5 dispatch 已完成（直接 dispatch 或內呼 `/wt <slug>: /<next-skill> <change-name>`）
+- Mode B：成功 = 2B.0 pitfall sweep 已執行（dispatch `/oops` 或宣告「無 missed lesson」）+ HANDOFF.md 已整理 + 盤點訊息 + `request_user_input` 已發出讓 user 選 + user 選定後 2B.5 dispatch 已完成（直接 dispatch 或內呼 `/wt <slug>: /<next-skill> <change-name>`）
 - 失敗 / blocked：明確說明卡點，不假裝完成
 
 ## 與其他 skill 的銜接
@@ -174,4 +200,5 @@ User 透過 `request_user_input` 選定下一步 outstanding（含明確的 next
 - `/spectra-commit` — Mode A 升級 spectra change WIP 時，commit 用此 skill 走 selective stage
 - `/spectra-propose` — Mode A「規模膨脹」分類升級時，後續開新 change 入口
 - `/spectra-apply` — Mode B `request_user_input` user 選定起手 active change 後的執行入口
+- `/oops` — Mode B 2B.0 sweep missed lessons 時的 dispatch 目標（pitfall / memory / lessons.md 三層分流）
 - `subagent-dev` — Mode B `request_user_input` user 選 parallel 後，subagent fan-out 由此 skill 執行
