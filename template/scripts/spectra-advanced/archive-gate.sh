@@ -427,9 +427,7 @@ if [ ! -f "$SCREENSHOT_AUDIT_SCRIPT" ]; then
 else
   SCREENSHOT_AUDIT_OUTPUT=""
   SCREENSHOT_AUDIT_STATUS=0
-  if command -v pnpm >/dev/null 2>&1 && (cd "$REPO_ROOT" && pnpm exec tsx --version >/dev/null 2>&1); then
-    SCREENSHOT_AUDIT_OUTPUT=$(cd "$REPO_ROOT" && pnpm exec tsx "$SCREENSHOT_AUDIT_SCRIPT" "$CHANGE_NAME" --fail-on-issues 2>&1) || SCREENSHOT_AUDIT_STATUS=$?
-  elif command -v node >/dev/null 2>&1; then
+  if command -v node >/dev/null 2>&1; then
     SCREENSHOT_AUDIT_OUTPUT=$(cd "$REPO_ROOT" && node --experimental-strip-types "$SCREENSHOT_AUDIT_SCRIPT" "$CHANGE_NAME" --fail-on-issues 2>&1) || SCREENSHOT_AUDIT_STATUS=$?
   else
     SCREENSHOT_AUDIT_STATUS=2
