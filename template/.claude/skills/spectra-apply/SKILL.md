@@ -68,14 +68,13 @@ Implement tasks from a Spectra change.
 
       其餘 dirty → scope-out。
 
-      **c.3 — 四情境決策**：
+      **c.3 — 三情境決策**：
 
       | 情境 | 行為 |
       | --- | --- |
       | scope-in 非空 + scope-out 為空 | 直接走 c.4，commit-then-fork |
       | scope-in 非空 + scope-out 非空 | 印分類報告給 user（scope-in N 條 / scope-out N 條）後走 c.4，commit **只**包 scope-in；scope-out 留在 main 不動 |
-      | scope-in 為空 + scope-out 非空 | **STOP** + AskUserQuestion：(a) user 自己 commit/stash dirty 後重試；(b) 視為 cross-session WIP 不動 dirty 直接 fork（用 c.4 clean fork 命令）；(c) 中止 |
-      | scope-in 為空 + 三來源都對不上（spec 沒寫 path + touched 不存在 + keyword 不合）| 同上 STOP + ask；主線無法判斷時 **NEVER** 亂猜 |
+      | scope-in 為空（無論 scope-out 為空或非空、無論三來源是否對得上）| 直接走 c.4 **clean fork**；若 scope-out 非空，印一行通知：`main 有 <N> 條 dirty 不屬於本 change，已留在 main 不動，worktree 從 HEAD fork`。**NEVER** STOP / AskUserQuestion / 要求 user 先 commit/stash —— worktree 隔離已處理 main WIP 對 apply 的影響；同檔衝突是 merge-back 時的事，不在 apply 範圍 |
 
       **c.4 — Fork（commit-then-fork 或 clean fork）**：
 
@@ -672,6 +671,7 @@ What would you like to do?
 - Pause on errors, blockers, or unclear requirements - don't guess
 - Use contextFiles from CLI output, don't assume specific file names
 - **No external task tracking** — do not use any built-in task management, todo list, or progress tracking tool; the tasks file is the only system
+- **Worktree isolation — NEVER halt apply on main's WIP**: Step 0 必須自動把 user 帶進 worktree（用 commit-then-fork 或 clean fork，視 scope 而定）；無論 Step 0c 階段或 apply 進行中，**NEVER** 因 main repo 的 dirty WIP / staged / untracked / 同檔別 session WIP 中斷 apply、AskUserQuestion 要 user clean main、或建議 user 自己處理後重試。worktree 是獨立 working tree，main 的 WIP 不在 worktree 也無法影響它；同檔衝突是 merge-back 時的事，由 `/spectra-commit` + user 決策處理。唯一合法 STOP 是 unmerged conflict（wt-helper 拒絕 fork）或 helper 本身錯誤；user-decision-needed pause **NEVER**。
 - **Phase dispatch discipline**（per `agent-routing.md`）:
   - **NEVER** dispatch Design Review phase to codex — Design skill is Claude Code first-class
   - **NEVER** dispatch UI view phase（component / page / view / layout / styling）to codex — UI view 層的視覺 / 互動 / a11y 細節必須跟 Design skill 緊耦合，主線自己做。Frontend 但非 view 的（store / hook / API client / type / util）仍走 codex
