@@ -151,7 +151,7 @@ if command -v node >/dev/null 2>&1 && [ -f "$AUDIT_SCRIPT" ]; then
 fi
 
 # --- Check 4: Manual Review Kind Validation ---
-# Spec: openspec/specs/manual-review-item-kind/spec.md "Archive Gate Validation By Kind"
+# Spec: clade docs/archives/openspec-specs/manual-review-item-kind/spec.md "Archive Gate Validation By Kind"
 #
 # Decision matrix:
 #   review:ui      [x]                 -> pass

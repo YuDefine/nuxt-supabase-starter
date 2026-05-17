@@ -49,7 +49,7 @@ Dev-login routes are local/test-only auth bypasses for screenshot automation, E2
 ## Decision Reference
 
 完整 canonical decision matrix（route path / method / guard / params / DB mode / audit / naming / open redirect）+
-per-variant TypeScript skeletons + per-consumer migration plan：見 clade `openspec/discussions/dev-login-canonical-design.md`。
+per-variant TypeScript skeletons + per-consumer migration plan：見 clade `docs/archives/openspec-discussions/dev-login-canonical-design.md`。
 
 ## Screenshot Integration
 

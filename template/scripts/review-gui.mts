@@ -906,6 +906,19 @@ function canonicalizeStructuredAnnotations(line: string): string {
   return rendered ? `${base.trimEnd()} ${rendered}` : base
 }
 
+export interface ParentRollupResult {
+  parentId: string
+  lineBefore: string
+  lineAfter: string
+}
+
+export interface ApplyReviewActionResult {
+  content: string
+  lineBefore: string
+  lineAfter: string
+  parentRollup?: ParentRollupResult
+}
+
 export function applyReviewActionToContent(
   content: string,
   itemId: string,
@@ -913,7 +926,7 @@ export function applyReviewActionToContent(
   note = '',
   options: ParseManualReviewOptions = {},
   finding = ''
-): { content: string; lineBefore: string; lineAfter: string } {
+): ApplyReviewActionResult {
   const parsed = parseManualReviewSections(content, options)
   if (parsed.malformed.length > 0) {
     throw new HttpError(
@@ -930,7 +943,42 @@ export function applyReviewActionToContent(
   const lineBefore = lines[item.lineIndex] ?? ''
   const lineAfter = applyActionToLine(lineBefore, action, note, finding)
   lines[item.lineIndex] = lineAfter
-  return { content: lines.join(newline), lineBefore, lineAfter }
+
+  const parentRollup = item.scoped ? rollupParentForScopedItem(lines, item, options) : null
+
+  const result: ApplyReviewActionResult = {
+    content: lines.join(newline),
+    lineBefore,
+    lineAfter,
+  }
+  if (parentRollup) result.parentRollup = parentRollup
+  return result
+}
+
+function rollupParentForScopedItem(
+  lines: string[],
+  scopedItem: ManualReviewItem,
+  options: ParseManualReviewOptions
+): ParentRollupResult | null {
+  if (!scopedItem.scoped || !scopedItem.parentId) return null
+
+  const reparsed = parseManualReviewSections(lines.join('\n'), options)
+  const parent = reparsed.items.find((i) => i.id === scopedItem.parentId && !i.scoped)
+  if (!parent) return null
+
+  const siblings = reparsed.items.filter((i) => i.scoped && i.parentId === scopedItem.parentId)
+  if (siblings.length === 0) return null
+
+  const allChildrenOk = siblings.every((i) => i.checked && !/（issue:[^）]*）/.test(i.raw))
+
+  const lineBefore = lines[parent.lineIndex] ?? ''
+  if (allChildrenOk === parent.checked) return null
+
+  const lineAfter = setCheckbox(lineBefore, allChildrenOk)
+  if (lineAfter === lineBefore) return null
+
+  lines[parent.lineIndex] = lineAfter
+  return { parentId: parent.id, lineBefore, lineAfter }
 }
 
 function isAutomaticOnlyKinds(kinds: ReadonlyArray<ResolvedManualReviewItemKind>): boolean {
@@ -1632,6 +1680,7 @@ async function persistReviewAction(repoRoot: string, change: string, body: any):
     action,
     lineBefore: updated.lineBefore,
     lineAfter: updated.lineAfter,
+    parentRollup: updated.parentRollup ?? null,
     complete,
     archive,
     change: detail,
