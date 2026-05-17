@@ -64,6 +64,24 @@ Fork 出 worktree 之前（無論透過 `/wt` ad-hoc 或 `/spectra-apply` Step 0
 
 **為什麼**：worktree 從 main HEAD 分出，看不到 working tree 的 untracked / modified。沒這道 guard 時 subagent 進 worktree 看 baseline 全缺 fail-fast，主線只能 AskUserQuestion 要 user 拍 baseline strategy（commit / cross-wt stash / 全包同 worktree / inspect first）。Pre-fork guard 讓 main 完成過的 baseline（典型 case：spectra Section 1+2.1 寫了 schema/migration 沒 commit 就轉 Section 2）能進 worktree，避免每次 fork 都打擾 user。
 
+### Pre-flight guard 不適用範圍：spectra-propose
+
+`spectra-propose` Step 11 的 `wt-helper add "<change-name>"` 呼叫**預設不帶** `--precheck-baseline`，因此上述整套 dirty / unmerged / scope guard **不適用**於 propose 流程。
+
+**理由**：
+
+- **Step 1–10 不寫 user WIP 路徑**：propose 全程只寫 `openspec/changes/<change-name>/`（proposal.md / design.md / tasks.md / specs/），跟 main 的 staged / modified / untracked 路徑完全不撞檔。
+- **Step 11 fork 不在乎 dirty**：`git worktree add` 基於 main HEAD **commit** 分出新 worktree，main 的 working tree state 完全留在 main worktree，不會帶到新 fork。
+- **Apply 階段才動 product code**：apply 階段在 propose 建好的 worktree 跑，主 session 的 staged / WIP 留在 main worktree 不被打擾。
+
+**操作守則**：
+
+- 看到 main dirty / staged / unmerged 時**直接** `/spectra-propose <name>`，**NEVER** 反射性建議 user 先 commit / stash / 詢問 staged 內容
+- Propose 進行時 main worktree 仍可被其他 session 改動，無 race（propose 只寫 `openspec/changes/<change-name>/`）
+- 例外：若 user 的 staged / WIP **就在** `openspec/changes/<change-name>/` 子目錄裡（重跑 propose 同名 change 的場景），先 inspect、跟 user 對齊是否覆蓋 — 但這不是 main dirty 的一般情況，是 path collision 的特殊情況
+
+> Anti-pattern 警示：別把這條鬆綁推廣到 `/spectra-apply` / `/spectra-ingest` / `/spectra-debug` — 這些 skill **會**寫 tracked product code，**仍須**走 §1 Pre-fork baseline guard（apply Step 0 是 commit-then-fork，per [[worktree-default]] §1）。本例外**僅限** propose，因為 propose 的 fork 純粹是「為後續 apply 預備 worktree」，不寫 product code。
+
 ### Anti-pattern：手動 `git stash push -u -- <pathspec>` 做 selective baseline sync
 
 **NEVER** 主線自己跑 `git stash push -u -m "<msg>" -- <pathspec>` 試圖 scope 部分檔案進 stash，再 cd 到別處 `stash apply` 做 cross-worktree baseline sync。
