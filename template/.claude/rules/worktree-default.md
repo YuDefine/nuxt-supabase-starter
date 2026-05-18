@@ -349,23 +349,32 @@ node scripts/wt-helper.mjs merge-back <slug> [flags]
 ### Stash reconcile（後續清理）
 
 ```bash
-node scripts/stash-reconcile.mjs                # 寫 markdown report 到 .spectra/stash-reconcile-<date>.md
-node scripts/stash-reconcile.mjs --interactive  # 互動式 apply / drop / view
-node scripts/stash-reconcile.mjs --json         # CI-friendly 機器輸出
+node scripts/stash-reconcile.mjs                       # 寫 markdown report 到 .spectra/stash-reconcile-<date>.md
+node scripts/stash-reconcile.mjs --interactive         # 互動式 apply / drop / view
+node scripts/stash-reconcile.mjs --json                # CI-friendly 機器輸出
+node scripts/stash-reconcile.mjs --slug <slug>         # 只看跟某 slug 相關的 stash（merge-back 收尾 hint 會帶這 flag）
+node scripts/stash-reconcile.mjs --stale-days 7        # 只看 >7d 的；handoff Mode B §2B.1.5 用此模式掃 audit
+node scripts/stash-reconcile.mjs --include-all         # 含 unnamespaced（手命名 / legacy 雜項）
 ```
 
-報告會列每條 `wt-merge-block/<slug>/<ISO>` stash + legacy `cross-session-block-*` stash + 殘留的 `wt-baseline/<slug>/<ISO>` stash，給每條建議 `apply` / `drop` / `view-diff first` 加可貼上的 git 命令。
+報告會列每條 namespaced stash + 殘留 baseline stash，給每條建議 `apply` / `drop` / `view-diff first` 加可貼上的 git 命令。**永遠不 auto-pop / auto-stage / auto-commit**：apply 後 user WIP 在 working tree，必須走 `/spectra-commit` 或 `/commit` 的 selective stage（**禁止** `git add -A`）。
+
+`wt-helper merge-back` 成功收尾若產出 `wt-merge-block/<slug>/<ISO>` stash，自動印 reconcile hint 帶 `--slug <slug>` 參數，user 直接複製貼上即可走互動流程。
 
 ### Stash 命名空間
 
-| 前綴 | 何時產生 | 何時清掉 |
+| 前綴 / 樣態 | 何時產生 | 何時清掉 |
 | --- | --- | --- |
-| `wt-baseline/<slug>/<ISO>` (stash list) | `wt-helper add ... --baseline-strategy stash`（§1 Pre-fork baseline guard / `/wt` ad-hoc 路徑）fork 之前 stash main dirty | Fork 後 worktree 內 `git stash apply` 成功 → pin sha 到 `refs/wt-baseline/<slug>/<ISO>` 永久 ref → `git stash drop` 從 stash list 移除（物件仍 reachable）；apply 失敗則殘留供手動恢復 |
+| `wt-baseline/<slug>/<ISO>` (stash list) | `wt-helper add ... --baseline-strategy stash`（§1 Pre-fork baseline guard / `/wt` ad-hoc 路徑）fork 之前 stash main dirty | Fork 後 worktree 內 `git stash apply` 成功 → pin sha 到 `refs/wt-baseline/<slug>/<ISO>` 永久 ref → `git stash drop` 從 stash list 移除（物件仍 reachable）；apply 失敗則殘留供手動恢復；殘留時 `stash-reconcile` 偵測對應 `refs/wt-baseline/` 已 pin 會推薦 `drop` |
+| `wt-final-baseline/<slug>/<ISO>` | `wt-helper add` 變種（rare：second snapshot 在 apply 前/後） | 同上；`stash-reconcile` 視為 `wt-baseline` 等價處理 |
 | `refs/wt-baseline/<slug>/<ISO>` (永久 ref) | 由 `wt-helper add --baseline-strategy stash` 在 apply 成功後 pin（2026-05-17 後） | **不自動清** — 由 `wt-helper rescue --prune <ref>` 或 user 手動 `git update-ref -d <ref>` 釋放給 gc。設計理念：救援優先於 ref namespace 整潔 |
-| `wt-merge-block/<slug>/<ISO>` | `wt-helper merge-back ... --auto-stash` squash 之前 stash main blockers | 保留待 `stash-reconcile.mjs` 後續處理（user 自決 apply / drop） |
-| Legacy `cross-session-block-*` | v2 失敗 squash 累積（v3 已不再產生） | `stash-reconcile.mjs` 給建議命令處理 |
+| `wt-merge-block/<slug>/<ISO>` | `wt-helper merge-back ... --auto-stash` squash 之前 stash main blockers | merge-back 收尾印 `--slug <slug>` reconcile hint，user 跑 `stash-reconcile --interactive` 自決 apply / drop |
+| `clade-propagate-v<ver>-<ts>` | `scripts/propagate.mjs` dirty consumer 流程 stash pop 失敗時保留（v0.3.45+） | publish 收尾跑 `stash-reconcile --include-all --stale-days 1` 收掉；通常 user WIP 已自動 restore，stash 可 drop |
+| `clade-publish: <free-form>` | clade-publish skill Step 3 selective stage 前 user 手動 stash 並行 session WIP | publish + propagate 收尾跑 `stash-reconcile --interactive` 看 recommendAction 自決 |
+| Legacy `cross-session-block-*` | v2 失敗 squash 累積（v3 已不再產生） | `stash-reconcile` 給建議命令處理 |
+| spectra-apply phase suffixes（`-baseline-drift` / `-p7-wip` / 其他） | spectra-apply / change 內部 phase 切換時手動 stash | `stash-reconcile` 偵測 change 是否 archive，已 archive 推薦 `view-diff` 再決定 drop |
 
-`wt-baseline/*` stash 殘留是 rare — worktree 起步從 main HEAD 分出，stash apply 理論不該衝突，除非 .gitignore 或 worktree-init hook 寫入撞檔。出現時人工 `git stash apply <ref>` 進 worktree 內或 `git stash drop` 放棄。
+`wt-baseline/*` stash 殘留是 rare — worktree 起步從 main HEAD 分出，stash apply 理論不該衝突，除非 .gitignore 或 worktree-init hook 寫入撞檔。出現時用 `stash-reconcile --slug <slug>` 看建議或人工 `git stash apply <ref>` 進 worktree 內 / `git stash drop` 放棄。
 
 `refs/wt-baseline/*` 永久 ref 是事故救援的最後保險絲：subagent 守 scope discipline 只 commit 它的範圍時，baseline 47+ 檔可能整批留在 worktree working tree 但沒被任何 commit 帶走；merge-back squash 不會帶走未 commit 檔，cleanup `--force-discard-uncommitted` 才會砍 worktree。即使整條鏈走完導致 working tree 消失，`refs/wt-baseline/` 還活著 → `wt-helper rescue --show <ref>` 看 patch → `git stash apply <ref>` 或 `git checkout <ref> -- <paths>` 救回。
 
@@ -394,8 +403,10 @@ node scripts/stash-reconcile.mjs --json         # CI-friendly 機器輸出
 | 互動清掉 merged worktree | `node scripts/wt-helper.mjs prune` | 處理 archive 後殘留 |
 | 強制清掉 worktree（**丟工作**） | `node scripts/wt-helper.mjs cleanup <slug> --force --force-discard-unland --force-discard-uncommitted` | 永久砍 branch commits + worktree 內未 commit 檔；要保留工作必先 merge-back + 從 `wt-helper rescue` 撈 baseline |
 | List pre-fork baseline 救援候選 | `node scripts/wt-helper.mjs rescue` | 列 `refs/wt-baseline/*` pinned ref + fsck dangling stash；`--show <ref\|sha>` 看 patch（read-only） |
-| Stash reconcile 報告 | `node scripts/stash-reconcile.mjs` | 列 `wt-merge-block/*` + legacy `cross-session-block-*` stash + 建議命令 |
-| Stash reconcile 互動 | `node scripts/stash-reconcile.mjs --interactive` | 一條一條 apply / drop / view |
+| Stash reconcile 報告 | `node scripts/stash-reconcile.mjs` | 列 namespaced stash（含 `wt-merge-block/*`、`wt-baseline/*`、`clade-publish:*`、`clade-propagate-v*`、legacy `cross-session-block-*`、spectra-apply phase suffix）+ 建議命令 |
+| Stash reconcile 互動 | `node scripts/stash-reconcile.mjs --interactive` | 一條一條 apply / drop / view（never auto-pop） |
+| Stash reconcile by slug | `node scripts/stash-reconcile.mjs --slug <slug>` | merge-back 收尾 hint 帶此 flag，只看跟此 slug 相關的 stash |
+| Stash reconcile stale 掃描 | `node scripts/stash-reconcile.mjs --stale-days 7` | 只看 >7d；handoff Mode B §2B.1.5 用此模式 |
 | HANDOFF drift scan | `node scripts/handoff-drift-scan.mjs` | 列 worktree branch 跟 HANDOFF.md 不一致；session-start hook 自動跑 |
 
 `/wt` skill source：`~/offline/clade/plugins/hub-core/skills/wt/SKILL.md`。  

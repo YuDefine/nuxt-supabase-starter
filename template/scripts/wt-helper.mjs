@@ -876,6 +876,9 @@ async function cmdMergeBack(slug, opts = {}) {
     console.log(
       `  → if cleanup later detects uncommitted files, inspect via 'wt-helper rescue --show <ref>'.`
     )
+    console.log(
+      `  → redundant 'wt-baseline/${cleanSlug}/<ISO>' stash entries are safe to drop via 'node scripts/stash-reconcile.mjs --slug ${cleanSlug} --interactive'.`
+    )
     console.log('')
   }
 
@@ -1033,6 +1036,12 @@ async function cmdMergeBack(slug, opts = {}) {
     (stashRef ? ` (blockers stashed as ${stashRef})` : '') +
     (cleanupDone ? ' + worktree cleaned' : ' (cleanup skipped/failed)')
   console.log(summary)
+  if (stashRef) {
+    console.log('')
+    console.log(`Reconcile blocker stash for '${cleanSlug}':`)
+    console.log(`  node scripts/stash-reconcile.mjs --slug ${cleanSlug} --interactive`)
+    console.log(`(Stash preserved in 'git stash list' — apply/drop is user's call.)`)
+  }
   return { absorbed: true, slug: cleanSlug, stashRef, cleanupDone, blockers, baselineRefs }
 }
 

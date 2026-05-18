@@ -220,13 +220,33 @@ function inspectStashShape(consumerRoot, ref) {
   return { stat, files, totalLines: files.length }
 }
 
-function recommendAction(consumerRoot, ref, files) {
-  // If applying the stash would overwrite currently-modified files in main → "view diff first".
-  // If stash content is already present on main (zero net diff) → "drop is safe".
-  // Otherwise → "apply".
+function recommendAction(consumerRoot, ref, files, namespace) {
+  // Kind-specific shortcut: wt-baseline / wt-final-baseline that's already
+  // pinned as refs/wt-baseline/<slug>/<iso> is safe to drop (the applied
+  // content survives in the pinned ref; the stash entry is a redundant copy).
+  if (namespace && (namespace.kind === 'wt-baseline' || namespace.kind === 'wt-final-baseline')) {
+    if (hasPinnedBaselineRef(consumerRoot, namespace.slug, namespace.iso)) {
+      return {
+        action: 'drop',
+        reason: `pinned as refs/wt-baseline/${namespace.slug}/${namespace.iso}`,
+      }
+    }
+  }
+
+  // Kind-specific shortcut: spectra-apply phase stash whose change is archived
+  // is presumed stale (defaults to view-diff rather than drop, since user may
+  // still want to inspect content before discarding).
+  if (namespace && namespace.kind?.startsWith('spectra-apply')) {
+    if (isArchivedChange(consumerRoot, namespace.slug)) {
+      return {
+        action: 'view-diff',
+        reason: `change '${namespace.slug}' is archived — inspect before drop`,
+      }
+    }
+  }
+
   if (files.length === 0) return { action: 'view-diff', reason: 'no files in stash (corrupted?)' }
 
-  // Quick heuristic: check if any file in stash is currently dirty in main
   let statusRaw = ''
   try {
     statusRaw = gitRaw(['status', '--porcelain'], { cwd: consumerRoot })
@@ -245,8 +265,6 @@ function recommendAction(consumerRoot, ref, files) {
     }
   }
 
-  // Check if stash content is already on main (apply would be no-op)
-  // Compare stash's content vs HEAD: if diff is empty, it's already absorbed
   try {
     const diff = gitTrim(['diff', `${ref}^..${ref}`], { cwd: consumerRoot })
     if (!diff) return { action: 'drop', reason: 'stash content matches HEAD (already absorbed)' }
@@ -255,10 +273,17 @@ function recommendAction(consumerRoot, ref, files) {
   return { action: 'apply', reason: 'no conflicts; stash brings new content' }
 }
 
+const SAFETY_BANNER = [
+  'Safety: stash apply does NOT pop or stage. After apply, your WIP sits in',
+  'the working tree. To commit, run /spectra-commit or /commit with selective',
+  'stage (do NOT git add -A).',
+].join(' ')
+
 function formatMarkdown(consumerRoot, entries) {
   const lines = []
   const ts = new Date().toISOString().replace('T', ' ').slice(0, 16)
   lines.push(`# Stash Reconcile Report`, '')
+  lines.push(`> ${SAFETY_BANNER}`, '')
   lines.push(`Generated: ${ts}`)
   lines.push(`Consumer: ${consumerRoot}`)
   lines.push(`Entries: ${entries.length}`, '')
@@ -330,6 +355,9 @@ async function prompt(question) {
 }
 
 async function interactiveLoop(consumerRoot, entries) {
+  console.log('')
+  console.log(`Safety: ${SAFETY_BANNER}`)
+  console.log('')
   for (const e of entries) {
     console.log('')
     console.log(`── ${e.ref} ──`)
@@ -373,19 +401,45 @@ async function interactiveLoop(consumerRoot, entries) {
   }
 }
 
-const FLAG_SET = new Set(['--interactive', '--json', '--include-all'])
+function parseArgs(argv) {
+  const opts = {
+    interactive: false,
+    json: false,
+    includeAll: false,
+    staleDays: null,
+    slug: null,
+  }
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]
+    if (a === '--interactive') opts.interactive = true
+    else if (a === '--json') opts.json = true
+    else if (a === '--include-all') opts.includeAll = true
+    else if (a === '--stale-days') {
+      const n = Number(argv[++i])
+      if (!Number.isFinite(n) || n < 0) {
+        throw new Error(`--stale-days requires a non-negative number (got: ${argv[i]})`)
+      }
+      opts.staleDays = n
+    } else if (a === '--slug') {
+      const s = argv[++i]
+      if (!s) throw new Error('--slug requires a substring argument')
+      opts.slug = s
+    } else {
+      throw new Error(`unknown argument: ${a}`)
+    }
+  }
+  return opts
+}
 
 async function main() {
-  const args = new Set(process.argv.slice(2).filter((a) => FLAG_SET.has(a)))
-  const opts = {
-    interactive: args.has('--interactive'),
-    json: args.has('--json'),
-    includeAll: args.has('--include-all'),
-  }
+  const opts = parseArgs(process.argv.slice(2))
 
   const consumerRoot = findConsumerRoot()
   const all = listStashes(consumerRoot)
-  const filtered = opts.includeAll ? all : filterNamespaced(all)
+  let filtered = opts.includeAll ? all : filterNamespaced(all)
+  if (opts.staleDays !== null) {
+    filtered = filterByStaleDays(filtered, opts.staleDays)
+  }
 
   if (filtered.length === 0) {
     if (opts.json) console.log(JSON.stringify({ entries: [] }, null, 2))
@@ -393,12 +447,23 @@ async function main() {
     process.exit(1)
   }
 
-  const entries = filtered.map((s) => {
+  let entries = filtered.map((s) => {
     const namespace = parseNamespace(s.message)
     const shape = inspectStashShape(consumerRoot, s.ref)
-    const recommendation = recommendAction(consumerRoot, s.ref, shape.files)
+    const recommendation = recommendAction(consumerRoot, s.ref, shape.files, namespace)
+    if (opts.staleDays !== null) {
+      recommendation.reason = `[STALE >${opts.staleDays}d] ${recommendation.reason}`
+    }
     return { ...s, namespace, shape, recommendation }
   })
+  if (opts.slug !== null) {
+    entries = filterBySlug(entries, opts.slug)
+    if (entries.length === 0) {
+      if (opts.json) console.log(JSON.stringify({ entries: [] }, null, 2))
+      else console.log(`No stashes match slug '${opts.slug}'.`)
+      process.exit(1)
+    }
+  }
 
   if (opts.json) {
     console.log(JSON.stringify({ entries }, null, 2))
@@ -423,5 +488,14 @@ async function main() {
 
 main().catch((e) => {
   console.error('error:', e.message ?? e)
+  const usage = [
+    '',
+    'Usage:',
+    '  node scripts/stash-reconcile.mjs [--interactive|--json] [--include-all]',
+    '                                   [--stale-days <N>] [--slug <substring>]',
+    '',
+    'See file header for full flag reference.',
+  ].join('\n')
+  console.error(usage)
   process.exit(2)
 })
