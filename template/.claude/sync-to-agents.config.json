@@ -239,6 +239,11 @@
       "mode": "source-pointer",
       "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
       "verify": []
+    },
+    "db-preview-env.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
     }
   },
   "verification": {

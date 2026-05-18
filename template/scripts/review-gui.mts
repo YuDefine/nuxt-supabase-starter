@@ -3501,10 +3501,65 @@ export function renderReviewHtml(): string {
     }
 
     // ── handoff prompt builder ──
-    // 5 種情境共用骨架；每種往下填情境專屬段落。產出的 prompt 應自給自足，
+    // 11 種情境共用骨架；每種往下填情境專屬段落。產出的 prompt 應自給自足，
     // 即便丟到一個沒讀過 CLAUDE.md / 沒 conversation history 的 cleanroom Claude
-    // session 也能直接接手。指示寫硬性使用 codebase-memory-mcp，對齊 user
-    // global CLAUDE.md 的 Code Discovery rule。
+    // session 也能直接接手。
+    //
+    // Rules / codebase-memory-mcp 指引依 kind 條件式注入：footer 不再 blanket 套用——
+    // 純檔案系統 / git 操作的 kind（malformed / no-pools / no-matched / conflict /
+    // evidence-fillin-*）不需要 code graph，避免 cleanroom session 被引導往錯方向 +
+    // 浪費 token 載 5 條 rules。需要 code 探索的 kind（item-issue / *-group / readiness）
+    // 自己加 codeExplorationGuidance()。
+    function relevantRules(kind) {
+      const map = {
+        'malformed': ['.claude/rules/manual-review.md（schema 段）'],
+        'no-pools': ['.claude/rules/screenshot-strategy.md'],
+        'no-matched': ['.claude/rules/screenshot-strategy.md（§檔名強制規範）', 'plugins/hub-core/agents/screenshot-review.md'],
+        'conflict': [],
+        'item-issue': [
+          '.claude/rules/manual-review.md',
+          '.claude/rules/tech-debt-routing.md',
+        ],
+        'manual-review-readiness': [
+          '.claude/rules/manual-review.md（Pre-Review Data Readiness 段）',
+          '.claude/rules/fixtures-reference.md',
+        ],
+        'evidence-fillin-item': [
+          '.claude/rules/manual-review.md（verify channel 語意）',
+        ],
+        'evidence-fillin-change': [
+          '.claude/rules/manual-review.md（verify channel 語意）',
+        ],
+      };
+      const rules = map[kind] || [];
+      if (!rules.length) return '';
+      return [
+        '',
+        '## 相關 rules（必讀）',
+        ...rules.map(function (r) { return '- ' + r; }),
+      ].join('\\n');
+    }
+    function needsCodeExploration(kind) {
+      // 只對「需要追實作 / 找 call chain / 看 schema」的 kind 強推 codebase-memory-mcp。
+      // 純檔案系統 / git / Playwright baseline 操作不需要 code graph。
+      const codeKinds = [
+        'item-issue',
+        'manual-review-readiness',
+        'health-check-group',
+        'feedback-given-group',
+        'apply-pending-group',
+      ];
+      return codeKinds.indexOf(kind) !== -1;
+    }
+    function codeExplorationGuidance() {
+      return [
+        '',
+        '## 程式碼探索規矩',
+        '- **MUST** 用 codebase-memory-mcp：search_graph（找函式 / class / route）→ trace_path（追 call chain）→ get_code_snippet（讀原始碼）',
+        '- graph 未 index 先跑 index_repository',
+        '- Grep / Glob / Read 只用於非程式碼檔（.md / config / .env）',
+      ].join('\\n');
+    }
     function handoffHeader(change, ctx) {
       const repoName = state.repoName || '(unknown)';
       const mainRepoRoot = state.repoRoot || '(unknown)';
@@ -3535,36 +3590,29 @@ export function renderReviewHtml(): string {
         '- tasks.md: openspec/changes/' + changeName + '/tasks.md',
       );
       if (kindLine) lines.push(kindLine);
-      lines.push(
-        '- 相關 rules（若存在請優先讀）：',
-        '  - .claude/rules/manual-review.md（item kind marker / decision 語法 / Pre-Review Data Readiness）',
-        '  - .claude/rules/screenshot-strategy.md（截圖檔名 / 路徑 / 變體規範）',
-        '  - .claude/rules/fixtures-reference.md（sample / URL / scoped sub-items 必備樣態）',
-        '  - .claude/rules/tech-debt-routing.md（決定 TD 該登 clade 還是 consumer）',
-        '  - openspec/AGENTS.md（spectra 工作流）',
-        '',
-      );
+      lines.push('');
       return lines.join('\\n');
     }
-    function handoffFooter() {
-      return [
+    function handoffFooter(kind) {
+      // relevantRules / codeExplorationGuidance 各自負責 leading '\\n' 段落分隔；
+      // 為空時整段不附加，避免 conflict / 純檔案 kind 多出空白章節。
+      const rules = relevantRules(kind);
+      const codeGuide = needsCodeExploration(kind) ? codeExplorationGuidance() : '';
+      const youDo = [
         '',
         '## 你要做的事',
-        '1. 先讀 tasks.md 與相關 rules 確認當前真實狀態（不要相信我的轉述，以檔案為準）',
-        '2. **MUST** 用 codebase-memory-mcp 做程式碼探索：',
-        '   - search_graph(name_pattern/label/qn_pattern) 找函式 / class / route',
-        '   - trace_path(function_name, mode=calls|data_flow|cross_service) 追 call chain',
-        '   - get_code_snippet(qualified_name) 讀原始碼（不要用 cat / Read 讀程式碼檔）',
-        '   - 若 graph 還沒 index，先跑 index_repository',
-        '   - Grep / Glob / Read 只用於非程式碼檔（.md / config / .env）',
-        '3. 提出處理方案：列出要動哪些檔、影響什麼、為何這樣修，**等我確認後再改**',
-        '4. 不要急著動手——這是 plan-first 工作流；急著動手 = 違反 user 規則',
+        '1. 先讀 tasks.md 確認當前真實狀態（不要相信我的轉述，以檔案為準）',
+        '2. 提出處理方案：列出要動哪些檔、影響什麼、為何這樣修，**等我確認後再改**',
+        '3. 不要急著動手——這是 plan-first 工作流；急著動手 = 違反 user 規則',
+      ].join('\\n');
+      const tail = [
         '',
         '',
         handoffStillVisibleNote(),
         '',
         '回覆時請先說「我看到的現況是 ...」再給方案，不要只回方案。',
       ].join('\\n');
+      return rules + youDo + codeGuide + tail;
     }
     // 給「按鈕還在」狀況的固定指引：問題不在 consumer 而在 clade 中央倉。
     // 三類根因都有可能：實際改動沒落地 / GUI 偵測 false positive / 這份 prompt 講不清楚。
@@ -3573,8 +3621,9 @@ export function renderReviewHtml(): string {
         '## 若處理完後 review:ui 同一顆按鈕還顯示',
         '代表 GUI 偵測條件還沒消除——根因有三種，**全部**回到 \`~/offline/clade\` 改，不要在 consumer 改：',
         '1. 改動沒真的落地 → 跑 \`git diff\` / \`git status\` 確認；review:ui home 也要重新整理',
-        '2. review:ui 偵測邏輯 false positive（按鈕條件本來就不該成立）→ 改 \`~/offline/clade/vendor/scripts/review-gui.mts\` 的偵測函式，跑 \`vp check && node scripts/publish.mjs patch && node scripts/propagate.mjs\`',
-        '3. 這份 prompt 講不清楚導致沒抓對根因 → 改 \`~/offline/clade/vendor/scripts/review-gui.mts\` 的 \`buildHandoffPrompt\`（或對應 group 段）後 propagate',
+        '2. review:ui 偵測邏輯 false positive（按鈕條件本來就不該成立）→ 改 \`~/offline/clade/vendor/scripts/review-gui.mts\` 的偵測函式',
+        '3. 這份 prompt 講不清楚導致沒抓對根因 → 改 \`~/offline/clade/vendor/scripts/review-gui.mts\` 的 \`buildHandoffPrompt\`（或對應 group 段）',
+        '改完依 \`~/offline/clade/CLAUDE.md\` § 異動 clade 後的標準流程 散播（vp check → commit → publish patch → push --tags → propagate）。',
         'consumer 端的 \`scripts/review-gui.mts\` 是 clade 投影（LOCKED + chmod 444），直接改會被下次 propagate 蓋回去。',
       ].join('\\n');
     }
@@ -3876,7 +3925,7 @@ export function renderReviewHtml(): string {
           '',
           '5. 任一 channel 通不過 → 保留 \`[ ]\` + 寫 \`（issue: ...）\`；**NEVER** 寫不成功的 \`(verified-*:)\` annotation',
           '',
-          'Cookbook 與範本：\`<clade-vendor>/snippets/verify-channels/README.md\`',
+          'Cookbook 與範本：\`~/offline/clade/vendor/snippets/verify-channels/README.md\`（Charles clade home；其他機器跑 \`find ~ -name verify-channels -type d 2>/dev/null\` 找）',
           '',
           '## 全域規矩',
           '- **MUST** 用 codebase-memory-mcp 探索（search_graph / trace_path / get_code_snippet）；graph 未 index 先跑 index_repository',
@@ -4024,10 +4073,10 @@ export function renderReviewHtml(): string {
           '   - \`[verify:ui]\`：\`supabase/seed.sql\` 或 seed 等價檔必須存在',
           '   - 缺 baseline → **STOP**，回報 user 補齊；**NEVER** 降級 channel',
           '',
-          '2. 依 channel 執行（cookbook 在 \`<clade-vendor>/snippets/verify-channels/\`）：',
+          '2. 依 channel 執行（cookbook 在 \`~/offline/clade/vendor/snippets/verify-channels/\`；若你機器無此路徑跑 \`find ~ -name verify-channels -type d 2>/dev/null\` 找）：',
           '   - \`[verify:e2e]\`：寫並跑 \`e2e/verify/' + changeName + '/<topic>.spec.ts\` → pass 後 Edit tasks.md 加 \`(verified-e2e: <ISO-8601> spec=... trace=...)\`',
           '   - \`[verify:api]\`：跑 HTTP round-trip → pass 後 Edit tasks.md 加 \`(verified-api: <ISO-8601> METHOD URL STATUS[ body=<sha256-12chars>])\`',
-          '   - \`[verify:ui]\`：default 走 codex dispatcher（\`node <clade-vendor>/scripts/codex-dispatch-screenshot-verify.mjs --change ' + changeName + ' --consumer-path . --dev-server-url <url> --items-json <items.json>\`）；fallback 走 \`screenshot-review\` subagent → PASS 後 Edit tasks.md 加 \`(verified-ui: <ISO-8601> screenshot=screenshots/local/' + changeName + '/#' + (item.id || '<id>') + '-final.png[ dom=<obs>])\`',
+          '   - \`[verify:ui]\`：default 走 codex dispatcher（\`node ~/offline/clade/vendor/scripts/codex-dispatch-screenshot-verify.mjs --change ' + changeName + ' --consumer-path . --dev-server-url <url> --items-json <items.json>\`）；fallback 走 \`screenshot-review\` subagent → PASS 後 Edit tasks.md 加 \`(verified-ui: <ISO-8601> screenshot=screenshots/local/' + changeName + '/#' + (item.id || '<id>') + '-final.png[ dom=<obs>])\`',
           '',
           '3. 多 channel 順序 **MUST** e2e → api → ui',
           '',
@@ -4090,13 +4139,13 @@ export function renderReviewHtml(): string {
             '',
             '4. 任一 channel 通不過 → 保留 \`[ ]\` + 寫 \`（issue: ...）\`；**NEVER** 寫不成功的 \`(verified-*:)\` annotation',
             '',
-            'Cookbook 與範本：\`<clade-vendor>/snippets/verify-channels/README.md\`',
+            'Cookbook 與範本：\`~/offline/clade/vendor/snippets/verify-channels/README.md\`（Charles clade home；其他機器跑 \`find ~ -name verify-channels -type d 2>/dev/null\` 找）',
           ].join('\\n');
         }
       } else {
         body = '## 問題\\n\\n(unknown kind: ' + kind + ')';
       }
-      return handoffHeader(change, ctx) + body + handoffFooter();
+      return handoffHeader(change, ctx) + body + handoffFooter(kind);
     }
 
     // ── handoff prompt 複製 + fallback modal ──

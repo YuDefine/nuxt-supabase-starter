@@ -750,6 +750,94 @@ function detectUnlandedFiles(consumerRoot, branchName) {
   return unlanded
 }
 
+// Merge main into the session worktree branch before merge-back squash, so
+// conflicts (if any) surface in the worktree's working tree rather than main's.
+// Legacy merge-back ran `git merge --squash <branch>` at main, contaminating
+// main on conflict (recovery required `merge --abort` + stash pop dance and
+// repeatedly destabilized publish/propagate flows). Pre-sync inverts direction:
+// `git merge origin/main` inside <wtPath> isolates conflict resolution there.
+//
+// Strategy: merge (not rebase). Final merge-back is squash so wt commit-chain
+// shape is irrelevant; rebase would force per-commit replay on multi-phase wt
+// (e.g. 9-commit feature branches), strictly more painful than one merge pass.
+//
+// Returns { synced: false, behind: 0 } if wt is up-to-date with target.
+// Returns { synced: true, behind: N } on clean merge (creates a discrete
+// `wt: pre-sync main into <branch>` commit on the wt branch).
+// Throws with structured guidance on conflict — does NOT auto-abort; leaves wt
+// in unmerged state so user can inspect markers, resolve, commit, re-run.
+export function syncWorktreeWithMain(wtPath, branchName, slug) {
+  let targetRef = 'main'
+  let hasOriginMain = false
+  try {
+    git(['rev-parse', '--verify', 'origin/main'], { cwd: wtPath })
+    hasOriginMain = true
+  } catch {}
+
+  if (hasOriginMain) {
+    try {
+      git(['fetch', 'origin', 'main'], { cwd: wtPath, stdio: 'inherit' })
+      targetRef = 'origin/main'
+    } catch (e) {
+      console.error(
+        `warn: pre-sync fetch origin main failed (${e.message ?? e}); falling back to local main`
+      )
+    }
+  }
+
+  let behind = 0
+  try {
+    const out = git(['rev-list', '--count', `${branchName}..${targetRef}`], { cwd: wtPath })
+    behind = parseInt(out, 10) || 0
+  } catch {
+    return { synced: false, behind: 0 }
+  }
+
+  if (behind === 0) {
+    return { synced: false, behind: 0 }
+  }
+
+  const commitMsg = `wt: pre-sync main into ${branchName}`
+  let mergeError = null
+  try {
+    git(['merge', '--no-ff', '-m', commitMsg, targetRef], { cwd: wtPath, stdio: 'inherit' })
+  } catch (e) {
+    mergeError = e
+  }
+
+  const statusRaw = git(['status', '--porcelain'], { cwd: wtPath })
+  const conflicted = statusRaw
+    .split('\n')
+    .filter((line) => /^(UU|AA|DD|AU|UA|UD|DU) /.test(line))
+    .map((line) => line.slice(3).trim())
+
+  if (conflicted.length > 0 || mergeError) {
+    const preview = conflicted
+      .slice(0, 10)
+      .map((f) => `  ${f}`)
+      .join('\n')
+    const more = conflicted.length > 10 ? `\n  ... and ${conflicted.length - 10} more` : ''
+    const detail =
+      conflicted.length > 0
+        ? `${conflicted.length} file(s) hit conflict during pre-sync:\n${preview}${more}`
+        : `pre-sync merge failed: ${mergeError?.message ?? mergeError}`
+    throw new Error(
+      `merge-back pre-sync blocked: ${detail}\n\n` +
+        `Worktree '${wtPath}' is left in unmerged state — main's working tree was NOT touched.\n` +
+        `Resolution — resolve in worktree, then re-run merge-back:\n` +
+        `  cd ${wtPath}\n` +
+        `  # resolve conflict markers, git add <files>\n` +
+        `  git commit --no-edit       # finalize the pre-sync merge\n` +
+        `  cd -\n` +
+        `  node scripts/wt-helper.mjs merge-back ${slug}\n\n` +
+        `Override (NOT recommended): re-run with --skip-pre-sync to attempt squash directly\n` +
+        `(legacy path — conflicts would surface in main's working tree).`
+    )
+  }
+
+  return { synced: true, behind }
+}
+
 async function cmdCleanup(slug, opts) {
   if (!slug)
     throw new Error(
@@ -845,7 +933,7 @@ async function cmdCleanup(slug, opts) {
 async function cmdMergeBack(slug, opts = {}) {
   if (!slug) {
     throw new Error(
-      'Usage: wt-helper merge-back <slug> [--dry-run] [--auto-stash] [--include-worktree-wip] [--no-cleanup] [--noop-if-missing]'
+      'Usage: wt-helper merge-back <slug> [--dry-run] [--auto-stash] [--include-worktree-wip] [--no-cleanup] [--noop-if-missing] [--skip-pre-sync]'
     )
   }
   const cleanSlug = makeSlugSafe(slug)
@@ -897,6 +985,14 @@ async function cmdMergeBack(slug, opts = {}) {
     baselineRefs = raw.split('\n').filter(Boolean)
   } catch {}
 
+  let preSyncBehind = 0
+  if (!opts.skipPreSync) {
+    try {
+      const out = git(['rev-list', '--count', `${branchName}..main`], { cwd: target.path })
+      preSyncBehind = parseInt(out, 10) || 0
+    } catch {}
+  }
+
   if (opts.dryRun) {
     console.log(`merge-back dry-run for ${cleanSlug}:`)
     console.log(`  Worktree:        ${target.path}`)
@@ -917,6 +1013,11 @@ async function cmdMergeBack(slug, opts = {}) {
     }
     console.log(`  Pinned baselines: ${baselineRefs.length}`)
     for (const r of baselineRefs) console.log(`    ${r}`)
+    if (opts.skipPreSync) {
+      console.log(`  Pre-sync:        SKIPPED (--skip-pre-sync)`)
+    } else {
+      console.log(`  Pre-sync behind: ${preSyncBehind} commit(s) on main`)
+    }
     if (wtUserDirty.length > 0) {
       console.log(
         `  Action: worktree has uncommitted WIP; without --include-worktree-wip, merge-back would refuse.`
@@ -925,10 +1026,22 @@ async function cmdMergeBack(slug, opts = {}) {
       console.log(
         `  Action: blockers detected; without --auto-stash, merge-back would fail at pre-flight.`
       )
+    } else if (preSyncBehind > 0 && !opts.skipPreSync) {
+      console.log(
+        `  Action: would merge origin/main into wt (${preSyncBehind} commit(s)), then squash + cleanup. Conflicts (if any) stay in wt.`
+      )
     } else {
       console.log(`  Action: would squash + cleanup cleanly.`)
     }
-    return { absorbed: false, slug: cleanSlug, dryRun: true, blockers, wtUserDirty, baselineRefs }
+    return {
+      absorbed: false,
+      slug: cleanSlug,
+      dryRun: true,
+      blockers,
+      wtUserDirty,
+      baselineRefs,
+      preSyncBehind,
+    }
   }
 
   if (baselineRefs.length > 0) {
@@ -979,6 +1092,15 @@ async function cmdMergeBack(slug, opts = {}) {
           `Then re-run: wt-helper merge-back ${cleanSlug}\n\n` +
           `Override with --include-worktree-wip to auto-amend (not recommended — an explicit\n` +
           `commit with a meaningful message is safer).`
+      )
+    }
+  }
+
+  if (!opts.skipPreSync) {
+    const syncResult = syncWorktreeWithMain(target.path, branchName, cleanSlug)
+    if (syncResult.synced) {
+      console.log(
+        `merge-back: pre-synced wt with main (${syncResult.behind} commit(s) behind, merge commit: 'wt: pre-sync main into ${branchName}')`
       )
     }
   }
@@ -1259,6 +1381,7 @@ async function main() {
     includeWorktreeWip: flags.has('--include-worktree-wip'),
     cleanup: !flags.has('--no-cleanup'),
     noopIfMissing: flags.has('--noop-if-missing'),
+    skipPreSync: flags.has('--skip-pre-sync'),
     precheckBaseline: Object.prototype.hasOwnProperty.call(values, '--precheck-baseline')
       ? values['--precheck-baseline']
       : undefined,
@@ -1337,6 +1460,10 @@ async function main() {
       console.error('    --no-cleanup            skip worktree cleanup after squash')
       console.error(
         '    --noop-if-missing       silently no-op if no matching worktree (for hooks)'
+      )
+      console.error('    --skip-pre-sync         skip wt-side merge of origin/main before squash')
+      console.error(
+        '                            (default: pre-sync isolates conflicts in wt, not main)'
       )
       console.error('  land-pending <slug>       Alias of merge-back for grandfathered worktrees')
       console.error('  rescue [--show <ref|sha>] [--json]')
