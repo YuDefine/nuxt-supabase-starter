@@ -173,6 +173,49 @@ Commit 完直接停手回報，**NEVER** 自己跑下一 phase。主線會在 co
 
 **核心命題**：派出 codex 後**主線不能單純等 `<task-notification>`**。codex 中途可能 `fetch failed`、sandbox 拒絕、互動 prompt、或長時間靜默；若沒有監看，主線完全不知道進度，使用者也只能空等。
 
+### 跨 sandbox 可見度約束（主線 ↔ subagent 中介）
+
+派 codex 透過 subagent 中介（例 `/spectra-apply` Phase Dispatch 用 `Agent` tool 開 subagent，subagent 在自家 sandbox 派 codex）時，主線跟 subagent 是**不同 bash sandbox**（Claude Code Agent tool 的 process namespace isolation）。本約束**不適用**主線直接 Bash 派 codex 的情境 — 那種情況下 BashOutput / ps 都在主線 sandbox 內正常 work。
+
+#### NEVER 用主線 ps 驗 subagent 的 background bash（失敗模式 1：false positive panic）
+
+Subagent 回報「codex PID X running, awaiting notification」後，主線跑 `ps aux | grep codex` **必然**看不到 — 不是 codex 死了，是 sandbox 隔離，subagent sandbox 內的 process 主線看不到屬正常。
+
+- **NEVER** 用 `ps aux | grep codex` 從主線驗證 subagent 的 background process — 沒輸出**不**代表 codex 死了
+- 要驗證 → `SendMessage({to: <agent-id>, message: "回報 BashOutput shell <id> 進度"})`，由 subagent 自家 sandbox 跑 BashOutput / `ps -p <PID>` 驗
+- 要看實質進展 → 透過**共享 filesystem**（worktree git log、`/tmp/codex-*-stdout.log`、tasks.md checkbox），不透過 process tree
+
+#### MUST 每 ~3 分鐘主動 poll 共享 FS，不死等 task-notification（失敗模式 2：false negative silent miss）
+
+`<task-notification>` 是 subagent → 主線的理想路徑，但 subagent 可能 yield 在不 resume 狀態 → codex 已 exit、worktree 已長出 phase commit、log 已寫「hook: Stop Completed」「tokens used」，主線**乾等** 5-15 分鐘才發現 codex 早完成。
+
+派 subagent 走 codex 路徑後，主線 **MUST** 每 ~3 分鐘主動跑共享 FS poll（**不**依賴 subagent 主動 surface）：
+
+```bash
+cd <worktree> && \
+  git log main..HEAD --oneline | head -3 && \
+  grep -c '\- \[x\]' openspec/changes/<change>/tasks.md && \
+  /bin/ls -la /tmp/codex-phase-*-stdout.log && \
+  tail -15 /tmp/codex-phase-<N>-stdout.log
+```
+
+訊號判讀：
+
+| 觀察 | 判定 | 動作 |
+| --- | --- | --- |
+| log 末尾含「hook: Stop Completed」/「tokens used:」 | codex 已 exit，subagent 未 surface | **MUST** SendMessage 給 subagent 詢問結果，**不**自行進下一步 |
+| log mtime > 3 min 沒動 + 無「Stop Completed」 | codex 卡住或被殺 | **MUST** SendMessage 給 subagent 詢問 BashOutput 狀態 |
+| log 持續變長 + tasks.md `[x]` count 上升 | codex 跑中健康 | 繼續下次 poll，不打擾 subagent |
+| `git log main..HEAD` commit count 上升 | phase 完成（subagent 端 codex 已 self-commit per § Commit Authorization） | **MUST** SendMessage 給 subagent 進下個 phase |
+
+**`<task-notification>` 與主動 FS poll 並行**，poll 是**兜底**不是冗餘 — notification 路徑健康時 poll 也只是讀靜態檔，成本極低。
+
+#### 為什麼不違反「監看期間紀律」
+
+下方「監看期間的紀律」§ 寫 **NEVER** 在 wakeup loop 跑與監看無關的探索動作（grep / 額外 Read / 開新 subagent）。本節的 FS poll **就是**監看本身（讀 git log / 讀 stdout log / 讀 tasks.md 都是進度信號讀取），不算違反。違反的是趁 poll 順手做別的事（grep 其他模組、讀無關檔）。
+
+> 對應 pitfall（含完整 root cause、Symptom log 樣例、反面範例）：`docs/pitfalls/2026-05-18-subagent-background-bash-invisible-from-main-ps.md`
+
 ### 監看排程
 
 | 時機 | 動作 |
@@ -241,6 +284,8 @@ codex 跑了 N 分鐘，目前狀態：<一句話卡點>
 - **NEVER** 在 watch 中途自行決定殺掉 / 重派 codex — 必須先 AskUserQuestion
 - **NEVER** 看到健康訊號就提早終止 watch loop（例如「應該快好了」直接放著） — 必須跑到收到 `<task-notification>` 為止
 - **MUST** 收到 `<task-notification>` 後**不再** ScheduleWakeup（否則 wakeup 會在 codex 已結束後重複觸發）
+- **NEVER** 在 subagent dispatch 後用主線 `ps aux | grep codex` 驗證 subagent 的 background process — 屬 sandbox 隔離正常，會誤判 codex 死亡（見 § 跨 sandbox 可見度約束 失敗模式 1）
+- **MUST** 透過 subagent 中介派 codex 時，主線**每 ~3 分鐘**主動 poll 共享 FS（git log / tasks.md / stdout log），不只等 `<task-notification>`（見 § 跨 sandbox 可見度約束 失敗模式 2）
 
 ## Spectra Propose Handoff（具體做法）
 

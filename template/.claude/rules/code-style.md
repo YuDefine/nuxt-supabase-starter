@@ -123,11 +123,13 @@ consumer 端 LOCKED projection 的 ignore 機制設計：
 
 對應 `package.json` `check` script（local dev / pre-push 用）可保留 `vp check` 但 consumer 必須**清楚知道**這個 script 在 LOCKED projection 既有的情況下會撞——dev 端用 `vp staged` (pre-commit) 或拆 step 跑各別 npm script 替代。
 
+<!-- starter:strip-begin -->
 ### 真實事故參考
 
 perno consumer v0.40.0（2026-05-13）CI 紅燈：`_ci-reusable.yml` 跑 `vp run check` → vp check 撞 9 個 LOCKED projection format issue → deploy/migrate job 沒跑 → production 沒上線。修法 = 把 `vp run check` 拆成 `vp run format:check` + `vp run typecheck`（對齊 TDMS）。詳見 perno `docs/tech-debt.md` TD-056（CI workflow ignore-path drift）。
 
 `pnpm-lock.yaml` 重生時 oxlint patch 升版可能讓既有 warning 升 error（perno 2026-05-14 觀察到 `vp lint` 對 `scripts/audit-ux-drift.mts` 從「2 warnings + 0 errors」變成「0 warnings + 1 error」）。CI lint baseline 需週期性 audit。
+<!-- starter:strip-end -->
 
 ## 必須事項（MUST）
 
