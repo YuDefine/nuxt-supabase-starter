@@ -31,7 +31,7 @@ description: 逐套件升級 npm/pnpm dependencies，每個 package 派 codex gp
 
 **禁止**直接在 main working tree 跑這個 skill — 升爆掉一條 package 整個 main 都會卡，bisect / rollback 成本爆增。
 
-## Step 1 — Detect package manager + 收 outdated list
+## Step 1 — Detect package manager + 收 outdated list + 讀 deps 分類
 
 1. **偵測 package manager**（看 lockfile）：
    ```bash
@@ -39,17 +39,32 @@ description: 逐套件升級 npm/pnpm dependencies，每個 package 派 codex gp
    ```
    找到的對應 `pnpm` / `npm` / `yarn` / `bun`。**沒有 lockfile** → STOP，回覆「找不到 lockfile，無法判定 package manager」。
 
-2. **拉 outdated JSON**：
+2. **拉 outdated**：
    ```bash
-   pnpm outdated --format=json   # 或 npm outdated --json / yarn outdated --json
+   pnpm outdated           # 或 npm outdated / yarn outdated
    ```
 
-3. **分類排序**（從低風險到高風險升）：
+   > pnpm `--format=json` 在 monorepo workspace 會回多行 NDJSON 不是純 JSON，直接讀人類格式 + 主線自己 parse 比較穩。
+
+3. **讀 package.json 把每個 outdated 套件分類為 deps / devDeps**（**P0，下 prompt 必用**）：
+   ```bash
+   python3 -c "
+   import json
+   p = json.load(open('package.json'))
+   for pkg in <outdated_pkg_list>:
+       if pkg in p.get('dependencies', {}): print(f'{pkg}  dep')
+       elif pkg in p.get('devDependencies', {}): print(f'{pkg}  devDep')
+   "
+   ```
+
+   後續 prompt builder 依此結果決定 `pnpm add <pkg>` 還是 `pnpm add -D <pkg>` — **NEVER** 預設 `-D`，否則會把 dependencies 套件靜默搬到 devDependencies（實證踩坑：TDMS 第一次 run wrangler 被誤搬，commit 後才發現）。
+
+4. **分類版號差距**（從低風險到高風險升）：
    - **patch**（`1.2.3 → 1.2.4`）：通常安全
    - **minor**（`1.2.3 → 1.3.0`）：should be safe 但偶爾有 regression
    - **major**（`1.x → 2.x`）：高機率 breaking change
 
-4. **回報計畫給使用者**並等確認：
+5. **回報計畫給使用者**並等確認：
 
    ```
    偵測到 <PM>，outdated 共 <N> 個：
@@ -64,6 +79,8 @@ description: 逐套件升級 npm/pnpm dependencies，每個 package 派 codex gp
 
    使用者可指定排除清單（如 `vue` lockstep with `nuxt`，先不動）。**MUST 等使用者確認**才進 Step 2 — 不要自決定。
 
+   > Smoke test 建議：第一次跑這個 skill on 一個新 consumer 時，先挑 1 個最低風險 patch 跑 smoke，驗證 worktree fork + codex dispatch + commit boundary 都對，再批次推剩下的（實證：TDMS 第一次 run 就用這方式發現 prompt builder `-D` bug）。
+
 ## Step 2 — 逐套件 codex 派工 loop
 
 每個 package 走以下子流程，**一個 package 一個 codex 派工**、**一個 commit**：
@@ -72,12 +89,19 @@ description: 逐套件升級 npm/pnpm dependencies，每個 package 派 codex gp
 
 用 medium variant template（見 [§ Prompt templates](#prompt-templates) § A）。**MUST** 內含：
 - `[DELEGATED-BY-CLAUDE-CODE]` marker（第一行，per [[agent-routing]] codex-watch-protocol § Runtime Gate）
-- 目標 package 名 + current version → target version
-- Plan-first 硬指令（per codex-watch-protocol § Plan-first）
-- Git Baseline 段（worktree 內若有 LOCKED projection 或主線 dirty，per codex-watch-protocol § Git Baseline）
+- 目標 package 名 + current version → target version + **正確的 install flag**（依 Step 1.3 deps/devDeps 偵測結果決定 `pnpm add <pkg>` 或 `pnpm add -D <pkg>`）
+- Git Baseline 段（per codex-watch-protocol § Git Baseline；列當前 worktree 內所有 main fork 過來的 in-flight 變更 path，**不要列死**——每個 consumer / 每次 fork 都不同，主線跑 `git status --porcelain` 動態抓）
 - Commit Authorization 段（per codex-watch-protocol § Commit Authorization；message format `wt: upgrade-<pkg>-<from>→<to>`）
-- 驗證步驟（typecheck + build + relevant test）
 - 失敗時的回報格式（讓主線決定要不要升 high）
+
+**Plan-first 條件化**（DRY + 降 token）：
+- Patch 升版（X.Y.Z 第三位變動）：**MAY 省略** Plan-first 硬指令，prompt 直接列「install → typecheck → commit」固定三步。Plan 段對固定 mechanical 流程價值不高。
+- Minor / Major：**MUST** 加 Plan-first（因為 codex 可能需要決定要不要跑 build / 跑哪些 test、改 source code）。
+
+**驗證步驟**（依升版類型）：
+- Patch：`pnpm install`（隱式跑） + `pnpm typecheck` 0 errors。不需 build / test，太慢且無新風險。
+- Minor：typecheck + 如有 build script 跑一次 + 相關 test。
+- Major：typecheck + build + 全 test + codex 自己決定要不要 smoke test。
 
 ### 2.2 Dispatch background bash（medium）
 
@@ -91,6 +115,8 @@ cd <worktree-path> && codex exec \
 ```
 
 `run_in_background=true`、立刻 `ScheduleWakeup(180, ...)` 啟動 [[agent-routing.codex-watch-protocol]] § Codex Watch Protocol。
+
+**Wakeup 雜訊接受限制**：ScheduleWakeup 沒有 cancel API；package 已完成 + task-notification 已到後，先前排的 wakeup 仍會觸發 1–2 次「請 watch jobId X」prompt。主線收到時做兩件事：(1) 用 jobId 對齊當前 package（已完成的 jobId 直接忽略）；(2) 不為已完成的 package 再次 reschedule。9 個 package batch 約會多耗 3-5 turns 處理舊 wakeup，可接受。
 
 ### 2.3 收到 `<task-notification status=completed>` 後判定
 
@@ -199,78 +225,161 @@ node scripts/wt-helper.mjs merge-back upgrade-deps-<slug> --auto-stash
 之後在 main 走 `/commit` 或 `/spectra-commit` 收尾。
 ```
 
-**MUST** 把摘要直接輸出在主線回應裡（不另寫檔）。**禁止**主線在 worktree 內自動跑 merge-back — 那是使用者的決定點。
+**MUST** 把摘要直接輸出在主線回應裡（不另寫檔）。**禁止**主線在 worktree 內自動跑 merge-back — 那是使用者的決定點（除非使用者明確說「都做」/「一起 land」等等）。
+
+### merge-back gotcha — pre-fork baseline 卡關
+
+如果使用者授權主線跑 merge-back，常會撞到下面這條：
+
+```
+error: merge-back blocked: worktree '<wt-path>' has N uncommitted edit(s) to tracked/untracked file(s)
+```
+
+**為什麼會卡**：`wt-helper add --baseline-strategy stash` 在 fork 時把 main 的 dirty state 用 stash 帶進 worktree，這些檔在 worktree 內以 `M`（unstaged）狀態存在（codex 守規約沒動它們）。`wt-helper merge-back` 出於 atomic landing 安全考量，要求 worktree 完全乾淨（包括 baseline 帶過來的 dirty）後才肯 squash。
+
+**解法（per-baseline-file 處理）**：
+
+```bash
+cd <wt-path>
+# 比對 worktree baseline 檔 vs main 現狀
+for f in <list>; do
+  if diff -q <wt-path>/"$f" <main-path>/"$f" >/dev/null 2>&1; then
+    echo "IDENTICAL: $f"
+  else
+    echo "DIVERGED: $f  (main 在 fork 後又被改)"
+  fi
+done
+```
+
+兩種情況：
+
+1. **IDENTICAL**（baseline 跟 main 現狀完全相同）：`git checkout HEAD -- <file>` 在 worktree 把它退回 HEAD（清空 unstaged），merge-back 重跑。data 在 main 還在，沒丟失。
+2. **DIVERGED**（main 在 fork 後又有別 session 改動）：worktree 的版本是過期 snapshot。**仍然** `git checkout HEAD -- <file>` 在 worktree（pinned `refs/wt-baseline/<slug>/<ISO>` 永久 ref 是安全網，data 可救回），merge-back 重跑。merge-back 只搬 commit 的 diff（package.json + lockfile），main 上別 session 的 dirty 完全不會被踩。
+
+**禁止項**：
+- **NEVER** `git stash` 在 worktree 內把 baseline 收起來 — wt-helper 規約禁止
+- **NEVER** `git add` baseline files 之後 commit 進 worktree branch — 會在 merge-back squash 時把不屬於 upgrade 的改動一起 land 到 main
+- **NEVER** 用 `--include-worktree-wip` flag — wt-helper 自己警告 not recommended（會 auto-amend 上個 commit，commit message 失焦）
+
+### land 後在 main 上 selective stage 的特殊情況
+
+merge-back 完成後 main 的 index + working tree 會被 squash 寫入「9 個 package commit 的合併 diff」。**但是** 並行 session 的 staged WIP **不會被擠掉** — 它們仍在 main 的 staged area。
+
+直接 `git commit` 會把所有 staged（包含別 session 的 WIP）一起送進 commit history。**MUST** 走 selective stage：
+
+```bash
+git reset HEAD                      # 清掉 index（main 的 unstaged WIP 保留在 working tree）
+git add package.json <lockfile>     # 只 stage 升級檔
+git commit -m "..."                 # 只 commit 升級檔；別 session WIP 留在 working tree 不動
+```
+
+commit message 範例（依 consumer commitlint 設定調整 prefix；TDMS 是 emoji + conventional commits）：
+
+```
+🧹 chore: 升級 N 套件 patch/minor 版本
+
+- foo 1.2.3 → 1.2.4 (patch)
+- bar 2.x → 3.0 (minor)
+- ...
+
+(可選) <pkg> 順手從 X 移到 Y。
+
+由 clade upgrade-packages skill 委派 codex medium 在 worktree
+內逐套件升級 + typecheck 驗證 + per-package commit + squash
+merge-back 完成。
+```
+
+**單行 body 長度限制**：commitlint 預設 `body-max-line-length: 100`，中文 1 字 ≈ 3 bytes 偶爾會踩，斷行寫多行 bullet 比較穩。
 
 ## Prompt templates
 
 ### § A — Medium 派工 prompt（per-package）
+
+主線在生 prompt 時用 substitution：
+- `<pkg>` / `<from>` / `<to>` / `<wt-path>` / `<branch>` / `<PM>` / `<lockfile>`：每個 package 不同
+- `<install-flag>`：依 Step 1.3 偵測，`dep` 用空字串、`devDep` 用 `-D`
+- `<baseline-paths>`：主線跑 `cd <wt-path> && git status --porcelain` 動態抓 unstaged + untracked，過濾掉 codex 應該動的 path 後列入
+- `<plan-first-block>`：patch 升版時填空字串、minor/major 時填下方 Plan-first 區段
+- `<verification-steps>`：依升版類型填 typecheck（patch）/ typecheck + build（minor）/ typecheck + build + test（major）
+
+模板：
 
 ```markdown
 [DELEGATED-BY-CLAUDE-CODE]
 
 # Task: 升級 <pkg> 從 <from> 到 <to>
 
-你在 worktree `<wt-path>`（branch `session/...-upgrade-deps-...`）跑。Package manager 是 `<PM>`。
+你在 worktree `<wt-path>`（branch `<branch>`）跑。Package manager 是 `<PM>`。
 
-## Plan-first（MUST）
-
-在動任何 Edit / Write / Bash 寫入動作之前，先在 stdout 輸出 `## Plan` section：
-- 預期要改的檔案（`package.json`、lockfile、如果 breaking 還要列其他必改檔）
-- 預期的驗證指令（`<PM> install`、typecheck、build、test）
-- 預期影響範圍
-
-Plan 寫完**立刻**繼續執行，不要等確認。
+<plan-first-block>
 
 ## Git Baseline
 
-worktree 內這些 path 是 LOCKED projection（clade 中央倉散播，檔頭有 🔒 banner）：
-- `.claude/` `.agents/` `AGENTS.md` `AGENTS.md` `.codex/scripts/` `scripts/wt-helper.mjs`
+worktree 內這些 path 是 main fork 過來的 in-flight 變更，**不要動**：
 
-**不要動它們**，與本次升級無關。
+<baseline-paths>
 
-你的工作範圍**只動**：`package.json` + lockfile（+ 必要時 source code）。
+你的工作範圍**只動**：`package.json` + `<lockfile>`。
 
 ## 升版步驟
 
-1. `<PM> add <pkg>@<to>` 或手改 `package.json` + 跑 `<PM> install`
-2. 跑 typecheck（pnpm typecheck / npm run typecheck / tsc --noEmit，自己依專案判定）
-3. 跑 build（如果有 build script）
-4. 跑 relevant test（如果有 test 跟這個 package 直接相關，例如 `pnpm test -- <pattern>`；找不到就跑全部）
-5. 全綠後 commit
+1. `<PM> add <install-flag> <pkg>@<to>`
+<verification-steps>
+N. 全綠後 commit
 
 ## Commit Authorization
 
 **允許**：
-- Selective stage：`git add package.json <lockfile> <其他必改檔>`
+- Selective stage：`git add package.json <lockfile>`
 - Commit：`git commit --no-verify -m "wt: upgrade-<pkg>-<from>→<to>"`
 
 **禁止**：
 - `git add -A` / `git add .`
 - `git push` / `git stash` / `git commit --amend`
 - 修改 view 層檔（`.vue` / `.tsx` / `.jsx` / `app/pages/` 等）— 升 deps 不該動 view
+- 動 Git Baseline 列的 in-flight 檔案
 
 ## 回報格式（MUST，stdout 結尾輸出）
 
 成功：
-```
+`​`​`
 PHASE_RESULT: SUCCESS
 COMMIT: <sha>
-FILES_CHANGED: package.json, <lockfile>, ...
-VERIFICATION: typecheck PASS, build PASS, test PASS
-```
+FILES_CHANGED: package.json, <lockfile>
+VERIFICATION: <依驗證步驟回報，例如 "typecheck PASS"、"typecheck PASS, build PASS">
+`​`​`
 
 失敗：
-```
+`​`​`
 PHASE_RESULT: FAILURE
 STAGE_FAILED: <install | typecheck | build | test>
 ERROR_TAIL:
 <≤ 30 行 error message>
 HYPOTHESIS: <一句話猜為什麼炸>
 SUGGESTED_NEXT: <要不要升 high research / 要查什麼 issue / changelog>
-```
+`​`​`
 
 失敗時**不要**自己 commit、不要強過 fail、不要刪 / revert lockfile。**保留** working tree 失敗狀態讓主線決定。
 ```
+
+**`<plan-first-block>` 填充**（minor / major 才填，patch 留空）：
+
+```markdown
+## Plan-first（MUST）
+
+在動任何 Edit / Write / Bash 寫入動作之前，先在 stdout 輸出 `## Plan` section：
+- 預期要改的檔案
+- 預期的驗證指令
+- 預期影響範圍
+
+Plan 寫完**立刻**繼續執行，不要等確認。
+```
+
+**`<verification-steps>` 填充**：
+
+- Patch：`2. <PM> typecheck → 0 errors`
+- Minor：`2. <PM> typecheck → 0 errors\n3. <PM> build → 成功（若有 build script）`
+- Major：`2. <PM> typecheck → 0 errors\n3. <PM> build → 成功\n4. <PM> test 相關測試 → 全綠`
 
 ### § B — High research 派工 prompt（escalation）
 

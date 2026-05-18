@@ -36,19 +36,27 @@ clade 規約管 capability，consumer 在 `registry/consumers.json` 宣告自家
 
 ### 1. Schema migration gate（必備）
 
-- **MUST** PR open / migration change 時 CI 跑 schema diff 或 migration replay
-- **MUST** diff 結果以 PR comment / artifact / status 形式可被 reviewer 看到
+- **MUST** migration change 時 CI 跑 schema diff 或 migration replay（trigger 由 `workflow_model` 決定）
+- **MUST** diff 結果以 commit comment / PR comment / artifact / status 形式可被 reviewer 看到
 - **MUST** disposable DB instance 完全脫離 shared staging — 不允許用 staging schema 當 diff baseline
+- **MUST** schema-gate 結果**真的擋住** staging migration（trunk-based: `deploy-staging.yml` 的 migrate job `needs: [schema-gate]`；pr-based: required check 鎖 merge）
 
-最便宜實作：CI throwaway Postgres → replay PR migrations → `pg_dump --schema-only` diff → PR comment。範本 `vendor/snippets/db-preview-env/schema-migration-gate/`。
+### Trigger 由 `workflow_model` 決定
+
+| Consumer `workflow_model` | Schema-gate trigger | 評論去處 | 阻擋方式 |
+| --- | --- | --- | --- |
+| `trunk-based`（目前 5 個 consumer 全部）| `on: push: [main]`，pre-deploy step | commit comment | deploy-staging.yml migrate `needs: schema-gate` |
+| `pr-merge-based`（rare，目前無）| `on: pull_request:` | PR comment | required status check |
+
+**有 PR-CI infra 的 trunk-based consumer** 可同時跑 pr-based template 當早期 gate — 兩個並存無衝突。範本：`vendor/snippets/db-preview-env/schema-migration-gate/{trunk-based,pr-based}.workflow.yml.template`。
 
 ### 2. Staging isolation（必備）
 
-- **MUST** staging environment = 「**merge 後**整合環境」，不承擔 PR validation
-- **NEVER** 讓任何 PR pipeline 直接對 shared staging schema 套 migration
-- **MUST** PR validation 用 disposable / per-PR DB（schema-migration-gate 即可滿足）
+- **MUST** staging environment 不承擔 pre-validation 角色 — schema 變動**MUST** 先過 schema-migration-gate 才能套 staging
+- **NEVER** 讓 main push 直接觸發 staging migrate 而**跳過** schema-gate
+- **MUST** PR / push validation 用 disposable PG（schema-migration-gate 即可滿足）
 
-如果 consumer 目前 staging 同時當 PR validation 環境，**MUST** 在 `docs/tech-debt.md` 開 TD 追蹤拆分計畫；不能無限延期。
+如果 consumer 目前 staging migrate 沒擋 schema-gate（即 main push 直接到 staging migrate 不經 throwaway diff），**MUST** 在 `docs/tech-debt.md` 開 TD 追蹤；不能無限延期。
 
 ### 3. Production data sanitization（必備條件）
 
@@ -63,14 +71,14 @@ clade 規約管 capability，consumer 在 `registry/consumers.json` 宣告自家
 
 範本：`vendor/snippets/db-preview-env/sanitize/`（pgcrypto-based 因為 `postgresql-anonymizer` 不在 supabase/postgres image）。
 
-### 4. Preview lifecycle（compose-per-PR / lxc-per-PR 才適用）
+### 4. Preview lifecycle（compose-stack / lxc-stack 才適用）
 
 如果採用 ephemeral preview env（非僅 CI gate）：
 
-- **MUST** 每 preview 有 unique secrets（JWT secret、DB password）— **NEVER** 跨 PR 共用
-- **MUST** 有 TTL 或 PR close 觸發的 teardown 機制
-- **MUST** 有 reconciliation job 清孤兒 stack（PR 已 close 但 stack 沒砍）
-- **MUST** 命名規範 `<consumer>-pr-<n>`，避免跨 consumer 撞名
+- **MUST** 每 preview 有 unique secrets（JWT secret、DB password）— **NEVER** 跨 preview 共用
+- **MUST** 有 TTL 或 close-signal 觸發的 teardown（trunk-based: tag-based / branch-deleted 觸發；pr-based: PR close 觸發）
+- **MUST** 有 reconciliation job 清孤兒 stack
+- **MUST** 命名規範 `<consumer>-<scope>-<n>`，避免跨 consumer 撞名（trunk-based scope 可為 commit-sha-prefix / branch-name；pr-based 為 pr-<n>）
 
 ### 5. Production migration classification + gate
 
@@ -80,7 +88,7 @@ clade 規約管 capability，consumer 在 `registry/consumers.json` 宣告自家
 - `expand-contract`：需 N+1 deploy 流程 + 暫態驗證
 - `maintenance-required`：需停機窗口
 
-**MUST** PR 描述標出 migration 風險分類；reviewer **MUST** 對 `expand-contract` / `maintenance-required` 拍板才能 merge。
+**MUST** commit / PR 描述標出 migration 風險分類；reviewer **MUST** 對 `expand-contract` / `maintenance-required` 拍板才能 merge / tag。
 
 **現成自動化工具**：clade 已散播 `vendor/scripts/postgrest-migration-risk.mjs`（per-consumer 自動分類）+ `postgrest-ready-gate.mjs` + `postgrest-smoke.mjs`。consumer 可串 GitHub Actions `workflow_dispatch` input 把分類做成手動 gate — 範例：TDMS `.github/workflows/ci.yml` `approve_high_risk_migration: choice` input。
 
