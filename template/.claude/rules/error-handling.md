@@ -42,6 +42,7 @@ Supabase REST API 錯誤分兩層：**Postgres error code**（`23503` 等）與 
 | ---------- | ---- | ---------------------------- | ------------------------------------- |
 | `PGRST000` | 503  | 連不到 DB                    | 告警，檢查 Postgres / Supavisor 狀態  |
 | `PGRST003` | 504  | 等 PostgREST pool 超時       | Pool 滿了，檢查 idle connection       |
+| `PGRST103` | 416  | `.range(offset, end)` offset 超出實際筆數 | **預期**情境（前端 page state 過時 / 改 search 未 reset page）；handler **MUST** 回 200 + 空頁，**禁止** throw 500 / `log.error`。用 `isPostgrestRangeError()` helper + `emptyPaginatedResponse()`。 |
 | `PGRST116` | 406  | `.single()` 取到 0 或 >1 筆  | **預期**的 404 情境，不要 `log.error` |
 | `PGRST200` | 400  | Foreign key / embed 關聯失效 | Schema cache 過期，通常會自動恢復     |
 | `PGRST202` | 404  | RPC 函數簽名過期             | Reload schema cache                   |
@@ -54,4 +55,5 @@ Supabase REST API 錯誤分兩層：**Postgres error code**（`23503` 等）與 
 - **4xx 是 caller 的錯**（user input / stale type）→ 不要 `log.error`，轉友善訊息即可
 - **5xx / 503 / 504 是系統問題** → `log.error` + 告警；`PGRST003` 代表 pool 耗盡，事故級
 - **`PGRST116` 特別注意** — `.single()` 查不到資料時拋的是 `PGRST116`（406），不是 404；handler 應轉為 `createError({ status: 404 })` 後再丟出，**禁止** 寫 `log.error`
+- **`PGRST103` 特別注意** — 任何 `.range(offset, end)` + `count: 'exact'` 的 list handler **MUST** 偵測 `PGRST103`（offset 超出實際筆數，多半因前端 page state 過時 / 改 filter 未 reset page），用 `isPostgrestRangeError(error)` helper 偵測、回 `emptyPaginatedResponse({ page, pageSize, count })`（200 + 空頁），**禁止** `throw 500` 或 `log.error`。Reference: `docs/pitfalls/2026-05-18-postgrest-pgrst103-offset-out-of-range.md`
 - **`42501` 出現在 API 回應** → 代表 RLS 擋住且沒有對應 bypass；檢查 server 是否用 `getSupabaseWithContext()` 以及 policy 的 `auth.role() = 'service_role'` 條件
