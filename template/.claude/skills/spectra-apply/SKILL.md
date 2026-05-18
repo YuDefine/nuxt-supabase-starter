@@ -176,6 +176,20 @@ Implement tasks from a Spectra change.
    - `schemaName`: The workflow being used (e.g., "spec-driven")
    - Which artifact contains the tasks (typically "tasks" for spec-driven, check status for others)
 
+2.5. **Stash Reconcile (clade fork; not in upstream spectra)**
+
+   Scan namespaced stashes related to this change before starting work. Catches resume scenarios where the previous session's WIP got auto-stashed by wt-helper / propagate / clade-publish and never reapplied — without this, apply will run on a clean baseline while real WIP rots in stash.
+
+   - Run: `node scripts/stash-reconcile.mjs --slug "<change-name>" --json`
+   - Parse stdout JSON. If `entries.length === 0`, continue silently to Step 3.
+   - If hits: print one-line summary `⚠ Stash Reconcile: N entries match slug '<change>'`, then use **AskUserQuestion**:
+     - **Show full report** — print each entry's `ref`, `namespace.kind`, `createdAt`, file list, and `recommendation.action`/`recommendation.reason`; then re-ask the same question
+     - **Apply recommended** — for every entry where `recommendation.action === "apply"`, run `git stash apply <ref>` (safety contract: NEVER `pop` / `drop` here; the stash entries stay intact). Then continue to Step 3.
+     - **Ignore and continue** — proceed with apply on current tree without touching stash
+     - **Stop cycle** — abort spectra-apply (user will reconcile manually)
+   - **Skip condition**: if user passed `--no-reconcile` (or said "不要掃 stash" / "skip reconcile" when invoking the skill), skip this step and print `Stash reconcile: skipped (user --no-reconcile)`.
+   - **Failure handling**: if `stash-reconcile.mjs` exits non-zero or JSON parse fails, print the error and continue to Step 3 (reconcile is advisory — do NOT block apply).
+
 3. **Get apply instructions**
 
    ```bash

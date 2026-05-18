@@ -187,6 +187,21 @@ Archive a completed change.
    - **Skip condition**: if user explicitly passed `--no-sweep` (or said "不要 sweep 截圖") when invoking spectra-archive, skip this step and note in Step 8 summary: `Screenshots: sweep skipped (user --no-sweep)`.
    - **Failure handling**: if `screenshots-archive` errors (e.g., disk write failure), do NOT fail the overall archive — log the error and note in Step 8 summary: `Screenshots: sweep failed — see error above`. The change is already archived; sweep is best-effort cleanup.
 
+7.5. **Reconcile stale stash (clade fork; not in upstream spectra)**
+
+   After successful archive, the change directory has moved to `openspec/changes/archive/<change-name>/`. `stash-reconcile.mjs` will now mark any stash matching this slug as **stale** via `isArchivedChange()` — housekeeping moment to drop stash entries that exist solely because this change was active.
+
+   - Run: `node scripts/stash-reconcile.mjs --slug "<change-name>" --json`
+   - Parse stdout JSON. If `entries.length === 0`, continue silently to Step 8 (note `Reconcile: 0 entries` in summary).
+   - If hits: print summary `⚠ Archive cleanup: N stash entries for archived slug '<change>'`, then use **AskUserQuestion**:
+     - **Show full report** — print each entry's `ref`, `namespace.kind`, `createdAt`, file list, and `recommendation.action`/`recommendation.reason` (recommendation will typically be `drop` for archived-slug entries, or `view-diff` for unknown shapes); then re-ask
+     - **Drop stale** — for every entry where `recommendation.action === "drop"`, run `git stash drop <ref>`. Safety: ONLY drop entries the script explicitly flagged as `drop`; never blanket-drop based on slug match alone.
+     - **Per-entry prompt** — for each entry, ask `drop / view-diff / keep` individually (use AskUserQuestion per entry)
+     - **Keep all** — leave stash untouched (default when uncertain)
+   - **Skip condition**: same `--no-reconcile` semantics as spectra-apply / spectra-verify; if skipped, note in Step 8 summary `Reconcile: skipped (user --no-reconcile)`.
+   - **Failure handling**: script error → print error but do NOT fail the archive. The change is already archived; reconcile is best-effort cleanup. Note in Step 8 summary: `Reconcile: failed — see error above`.
+   - **Note in Step 8 summary**: append `Reconcile: N entries dropped` / `Reconcile: N entries kept` / `Reconcile: 0 entries` / `Reconcile: skipped` / `Reconcile: failed` according to outcome.
+
 8. **Display summary**
 
    Show archive completion summary including:
