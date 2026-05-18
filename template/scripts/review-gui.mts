@@ -3560,6 +3560,110 @@ export function renderReviewHtml(): string {
         '- Grep / Glob / Read 只用於非程式碼檔（.md / config / .env）',
       ].join('\\n');
     }
+    function verifyChannelBaselineSection() {
+      // 不含 step 編號，由 caller 自己排序；避免 evidence-fillin-item / -change 不同步驟順序時撞號。
+      return [
+        'Pre-verify baseline check（依出現的 channel 種類）：',
+        '- 有 \`[verify:e2e]\`：確認 Playwright config + e2e fixtures 存在',
+        '- 有 \`[verify:api]\`：確認 \`__test-login\` 或等價 session bypass route 存在',
+        '- 有 \`[verify:ui]\`：確認 \`supabase/seed.sql\` 或 seed 等價檔存在',
+        '- 缺 baseline → **STOP**，回報 user 補齊；**NEVER** 降級 channel',
+      ].join('\\n');
+    }
+    function verifyChannelOrderSection() {
+      // 不含 step 編號，由 caller 自己排序。
+      return [
+        '依 e2e → api → ui 順序補對應 evidence；每完成一個 channel 立刻 Edit tasks.md 寫對應 \`(verified-*: ...)\` annotation（不要等到最後一起寫）。',
+        '',
+        '全部完成後請 user 在 review:ui 重新整理；含 \`verify:ui\` 的 item checkbox 仍保留 \`[ ]\` 等 user 在 GUI 視覺確認。',
+        '',
+        '任一 channel 通不過 → 保留 \`[ ]\` + 寫 \`（issue: ...）\`；**NEVER** 寫不成功的 \`(verified-*:)\` annotation。',
+      ].join('\\n');
+    }
+    function feedbackGivenSummaryPrompt(list, repoName, repoRoot) {
+      const tableRows = list.map(function (c) {
+        return '| \`' + c.name + '\` | ' + (c.issued || 0) + ' | _ | _ | _ | _ | _ |';
+      }).join('\\n');
+      return [
+        '我在 consumer repo「' + repoName + '」（路徑：' + repoRoot + '）',
+        '跑 \`pnpm review:ui\` 做 spectra 人工檢查，有 ' + list.length + ' 張 change 落「等 Claude 接手」群。',
+        '',
+        '**N=' + list.length + ' 已超過 4 張閾值——一次嚼三類項目 × 五路由會超 token 預算（單張深度 5-15k token）。**',
+        '',
+        '## 你要做的事（**MUST**，順序執行）',
+        '',
+        '先填下面 summary table，產出後立刻 STOP 等 user 選優先順序：',
+        '',
+        '- **STOP after summary table**',
+        '- **Do not analyze individual changes yet**',
+        '- **Wait for user to specify which change(s) to deep-dive**',
+        '- **Only choose priorities after user replies**',
+        '',
+        '## 環境',
+        '- consumer: ' + repoName,
+        '- repo root: ' + repoRoot,
+        '',
+        '## 命中的 changes（共 ' + list.length + ' 張）',
+        '',
+        '| change | I (issue) | V (verify pending) | D (discuss) | risk | blocking? | needs code mcp? | recommended first action |',
+        '| --- | ---: | ---: | ---: | --- | --- | --- | --- |',
+        tableRows,
+        '',
+        '欄位說明：',
+        '- **I (issue)**：已預填，server 計算的 issue 註記數',
+        '- **V (verify pending)** / **D (discuss)** / **risk** / **blocking?** / **needs code mcp?** / **recommended first action**：由你逐張 \`Read openspec/changes/<change>/tasks.md\` 後填入；**不要展開深度分析**，只填這幾欄',
+        '- **risk**：low / med / high（指根因不明 / 影響範圍大小 / 已有 evidence vs 純猜）',
+        '- **blocking?**：blocking / non-blocking（會卡 archive 嗎？卡 prod 嗎？）',
+        '- **needs code mcp?**：yes / no / unknown（單純看 spec 還是要展開 codebase-memory-mcp 才能判）',
+        '- **recommended first action**：一句話 hint，例：「補 sample data → /spectra-ingest」「審 evidence body fingerprint → 若不合理改標 issue」',
+        '',
+        '## 排序建議（產 summary 時用）',
+        '',
+        'blocking issue > failed/ambiguous verification > discuss-only',
+        '',
+        '## 規矩',
+        '- 讀 tasks.md 用 \`Read\`（不是 codebase-memory-mcp，因為這只是 .md schema 抓三類項目）',
+        '- 每張只花 1-2 分鐘掃，不要展開深度 trace_path',
+        '- summary 產完 STOP；user 會告訴你深入哪幾張',
+        '',
+        handoffStillVisibleNote(),
+      ].join('\\n');
+    }
+    function planDiscipline(kind) {
+      // 三層分類（依 codex 諮詢 2026-05-18）：
+      // - 'direct'：限定動作範圍可直接做完回報（malformed typo / evidence annotation 寫入）
+      // - 'diagnose'：只 diagnose + 提建議，不動手做完（檔案系統 / git mismatch 類）
+      // - 'plan-first'：列方案等確認（涉及 spec / code / 多檔）
+      const directKinds = ['malformed', 'evidence-fillin-item', 'evidence-fillin-change'];
+      const diagnoseKinds = ['no-pools', 'no-matched', 'conflict'];
+      if (directKinds.indexOf(kind) !== -1) {
+        const range = kind === 'malformed'
+          ? '- 限 format/schema 違規一行的 typo / 標點修正；若 item identity 不明、語意結構壞掉 → **STOP** 回報 user，不要自行重組 list'
+          : '- 限既有 Step 8a 流程明訂的 evidence annotation 寫入（\`(verified-e2e: ...)\` / \`(verified-api: ...)\` / \`(verified-ui: ...)\`）；測試 fail / ambiguous → **NEVER** 順手修 code，回報 blocker';
+        return [
+          '',
+          '## 處理紀律',
+          '此類修法**範圍鎖死**可直接做完回報：',
+          range,
+          '- 動作範圍外（動 spec / code / 多檔）→ plan-first 列方案等確認',
+        ].join('\\n');
+      }
+      if (diagnoseKinds.indexOf(kind) !== -1) {
+        return [
+          '',
+          '## 處理紀律',
+          '此類為 **diagnose-only fast path**：定位 mismatch / hash / pool routing 問題後提建議，**不動手做完**——',
+          '- 列出根因評估 + 修法方案（reload / rename / 重拍 / git revert）',
+          '- 動作由 user 自己執行（rename 檔 / 拍截圖 / reload GUI），cleanroom 不替 user 操作',
+        ].join('\\n');
+      }
+      // plan-first kinds: item-issue / manual-review-readiness / *-group
+      return [
+        '',
+        '## 處理紀律',
+        'plan-first 必須：列方案 + 影響範圍 + 為何這樣修，**等我確認後再改**——急著動手 = 違反 user 規則',
+      ].join('\\n');
+    }
     function handoffHeader(change, ctx) {
       const repoName = state.repoName || '(unknown)';
       const mainRepoRoot = state.repoRoot || '(unknown)';
@@ -3594,16 +3698,16 @@ export function renderReviewHtml(): string {
       return lines.join('\\n');
     }
     function handoffFooter(kind) {
-      // relevantRules / codeExplorationGuidance 各自負責 leading '\\n' 段落分隔；
-      // 為空時整段不附加，避免 conflict / 純檔案 kind 多出空白章節。
+      // relevantRules / codeExplorationGuidance / planDiscipline 各自負責 leading '\\n'
+      // 段落分隔；為空時整段不附加，避免 conflict / 純檔案 kind 多出空白章節。
       const rules = relevantRules(kind);
       const codeGuide = needsCodeExploration(kind) ? codeExplorationGuidance() : '';
+      const discipline = planDiscipline(kind);
       const youDo = [
         '',
         '## 你要做的事',
         '1. 先讀 tasks.md 確認當前真實狀態（不要相信我的轉述，以檔案為準）',
-        '2. 提出處理方案：列出要動哪些檔、影響什麼、為何這樣修，**等我確認後再改**',
-        '3. 不要急著動手——這是 plan-first 工作流；急著動手 = 違反 user 規則',
+        '2. 提出處理方案：列出要動哪些檔、影響什麼、為何這樣修',
       ].join('\\n');
       const tail = [
         '',
@@ -3612,7 +3716,7 @@ export function renderReviewHtml(): string {
         '',
         '回覆時請先說「我看到的現況是 ...」再給方案，不要只回方案。',
       ].join('\\n');
-      return rules + youDo + codeGuide + tail;
+      return rules + youDo + discipline + codeGuide + tail;
     }
     // 給「按鈕還在」狀況的固定指引：問題不在 consumer 而在 clade 中央倉。
     // 三類根因都有可能：實際改動沒落地 / GUI 偵測 false positive / 這份 prompt 講不清楚。
@@ -3655,6 +3759,15 @@ export function renderReviewHtml(): string {
         body = [
           '## 問題：找不到屬於此 change 的截圖資料夾',
           '',
+          '## Tier 0（**先問 user 一句，再進 Tier 1，90% 案例就解**）',
+          '',
+          '請先問 user 一句：「截圖是真的還沒拍，還是命名漂掉了？」',
+          '',
+          '- 若 user 答**還沒拍** → 直接告訴 user 該補拍哪些 item 的截圖，**不要往下做 Tier 1 分析**',
+          '- 若 user 答**命名漂了** / 不確定 / 沒回 → 進 Tier 1 命名規範分析',
+          '',
+          '## Tier 1 — 命名規範分析（user 確認是命名問題才做）',
+          '',
           'GUI 對截圖資料夾用 substring match：',
           '\`topic === change\` 或 \`change.startsWith(topic+"-")\` 或 \`topic.startsWith(change+"-")\`',
           '掃完 \`screenshots/<env>/*\` 後，沒有任何資料夾與 change name \`' + cn + '\` 對得起來。',
@@ -3681,6 +3794,15 @@ export function renderReviewHtml(): string {
         const poolPaths = pools.map(function (p) { return 'screenshots/' + p.env + '/' + p.topic + '/'; });
         body = [
           '## 問題：截圖檔名與 item id 不符（無法配對）',
+          '',
+          '## Tier 0（**先問 user 一句，再進 Tier 1，90% 案例就解**）',
+          '',
+          '請先問 user 一句：「這個 item 的截圖是真的還沒拍，還是命名漂掉了？」',
+          '',
+          '- 若 user 答**還沒拍** → 直接告訴 user 該補拍 \`#' + idLabel + '-...\` 命名格式的截圖，**不要往下做 Tier 1 分析**',
+          '- 若 user 答**命名漂了** / 不確定 / 沒回 → 進 Tier 1 配對規範分析',
+          '',
+          '## Tier 1 — 配對規範分析（user 確認是命名問題才做）',
           '',
           '當前 item：',
           '- id: ' + (item.id || '(未選)'),
@@ -3710,7 +3832,14 @@ export function renderReviewHtml(): string {
         body = [
           '## 問題：review:ui 寫入衝突（HTTP 409）',
           '',
-          'GUI 嘗試寫入 tasks.md 但 server 端偵測到 disk 內容與 client 持有的 version hash 不一致——意思是 tasks.md 在我按按鈕的同時被別的東西改過了。',
+          '## Tier 0（**先做這個再進 Tier 1，90% 案例就解**）',
+          '',
+          '請 user 直接在瀏覽器 reload review:ui（cmd+R / ctrl+R），讓 client 重抓最新 hash 再試一次。',
+          '若 reload 後仍 409，再進 Tier 1 細部診斷。',
+          '',
+          '## Tier 1 — 細部診斷（reload 也沒解才做）',
+          '',
+          'GUI 嘗試寫入 tasks.md 但 server 端偵測到 disk 內容與 client 持有的 version hash 不一致——意思是 tasks.md 在 user 按按鈕的同時被別的東西改過了。',
           '',
           '錯誤訊息：' + (ctx.errorMessage || '(無)'),
           '',
@@ -3765,15 +3894,42 @@ export function renderReviewHtml(): string {
           matchedFiles.length ? matchedFiles.map(function (n) { return '- ' + n; }).join('\\n') : '- (無)',
         ].concat(hitLines).concat([
           '',
-          '請把上面 issue 說明當 bug report 處理：',
-          '1. 用 codebase-memory-mcp 找出這個 item 對應的 feature 在哪實作（從 description 抓 keyword → search_graph）',
-          '2. trace_path 看相關 call chain，定位根因（不要急著看 symptom）',
-          '3. 提修法：列要動的檔、影響範圍、是否需要新測試、是否需要更新 spec',
-          '4. 修法路由（看 .claude/rules/tech-debt-routing.md）：',
-          '   - 根因是 spec / 設計層級缺漏 → \`/spectra-ingest\` 改 proposal',
-          '   - 根因是 code bug 但影響窄、可延後 → 登 docs/tech-debt.md TD-NNN',
-          '   - 根因跨多個 consumer / 在投影層（clade 中央倉）→ 提示要去 clade 改，不要在當前 consumer 改',
-          '   - 純 bug 當下可修 → 提方案等確認後改',
+          '## Step 1：1 分鐘 issue triage（**MUST 先做，不要直接展開 code trace**）',
+          '',
+          '依 issue note 文字把這個問題分到下列三類之一，給理由：',
+          '',
+          '### (1) UX/copy 問題（純展示層）',
+          '信號：文案 / 顏色 / 對齊 / 樣式 / 按鈕（顏色/位置）/ icon / spacing / margin / padding / layout / overflow / responsive / mobile / a11y / contrast / 字級 / 動畫 / hover / focus / disabled state / empty state / loading state / CTA / 英文翻譯',
+          '→ workflow：直接給 Edit 修法（改 copy / Tailwind class / UI hint），**不用** codebase-memory-mcp',
+          '',
+          '### (2) Behavior bug（功能 / 資料 / API）',
+          '信號：錯誤 / fail / 沒儲存 / API / 資料 / migration / validation / permission / null/undefined / status code / query / routing / navigation / state / cache / stale / race / auth / session / pagination / filter / sort / timezone / date / i18n locale / webhook / job / queue',
+          '→ workflow：codebase-memory-mcp 找實作 + trace_path 找根因，**plan-first 列方案**',
+          '',
+          '### (3) Spec gap（規格沒寫 / 設計層級缺漏）',
+          '信號：「應該要 X 但沒看到」「spec 沒寫」「不知道對不對」「ambiguous」「漏掉 case」「缺驗收條件」',
+          '→ workflow：列要補的 spec 段 + 建議跑 \`/spectra-ingest <change>\` 改 proposal.md / tasks.md，**不要動 code**',
+          '',
+          '## 陷阱反例（不要被字面騙）',
+          '',
+          '- 「按鈕位置不對，點了沒反應」看似 UX → 核心是 click handler / disabled state（**Behavior**）',
+          '- 「錯誤訊息太紅太嚇人」看似 Behavior(error) → 核心是 copy / visual tone（**UX**）',
+          '- 「列表沒資料」看似 Behavior(empty) → 可能是 empty state UI 沒做（**UX**）或是 query 條件錯（**Behavior**）',
+          '',
+          '## 兩邊都中 / 都不中',
+          '',
+          '- 兩邊都中 → **預設 Behavior**（誤判成 UX 會漏掉資料破壞 / 功能壞掉）',
+          '- 兩邊都不中 → 先做 lightweight triage（讀 spec + 看 screenshot + 看程式碼入口）再分類；不要直接展開 code trace',
+          '',
+          '## Step 2：依分類走對應 workflow',
+          '',
+          '修法路由（依 .claude/rules/tech-debt-routing.md）：',
+          '- (1) UX/copy → 提 Edit 修法 + 寫 issue 後續對應動作（多為「直接動手」）',
+          '- (2) Behavior → 提修法 + 列要動的檔 + 影響範圍 + 是否需要新測試 + 是否需要更新 spec',
+          '  - 根因 code bug 影響窄、可延後 → 登 \`docs/tech-debt.md\` TD-NNN',
+          '  - 根因跨多個 consumer / 在投影層（clade 中央倉）→ 提示要去 \`~/offline/clade\` 改',
+          '  - 純 bug 當下可修 → 提方案等確認後改',
+          '- (3) Spec gap → 列要補的 spec 段 + 建議 \`/spectra-ingest\`，**不要動 code**',
         ]).join('\\n');
       } else if (kind === 'manual-review-readiness') {
         const item = ctx.item || {};
@@ -3945,6 +4101,11 @@ export function renderReviewHtml(): string {
         const list = Array.isArray(ctx.feedbackChanges) ? ctx.feedbackChanges : [];
         const repoName = state.repoName || '(unknown)';
         const repoRoot = state.repoRoot || '(unknown)';
+        // N >= 4 走 summary table 分批（依 codex 諮詢 2026-05-18）。每張 deep-dive 5-15k token，
+        // N=4 已是 20-60k，再加 spec/code context 會超 cleanroom session budget。
+        if (list.length >= 4) {
+          return feedbackGivenSummaryPrompt(list, repoName, repoRoot);
+        }
         const lines = [
           '我在 consumer repo「' + repoName + '」（路徑：' + repoRoot + '）',
           '跑 \`pnpm review:ui\` 做 spectra 人工檢查，已對 ' + list.length + ' 張 change 的所有 user 可動 item（review:ui / verify:ui）',
@@ -4067,20 +4228,21 @@ export function renderReviewHtml(): string {
           '',
           '請依 \`/spectra-apply\` skill **Step 8a Verify Channel Pass** 對這個 item 補齊 evidence：',
           '',
-          '1. Pre-verify baseline check（依該 channel）：',
-          '   - \`[verify:e2e]\`：Playwright config + e2e fixtures 必須存在',
-          '   - \`[verify:api]\`：\`__test-login\` 或等價 session bypass route 必須存在',
-          '   - \`[verify:ui]\`：\`supabase/seed.sql\` 或 seed 等價檔必須存在',
-          '   - 缺 baseline → **STOP**，回報 user 補齊；**NEVER** 降級 channel',
+          '### 1. Baseline check',
           '',
-          '2. 依 channel 執行（cookbook 在 \`~/offline/clade/vendor/snippets/verify-channels/\`；若你機器無此路徑跑 \`find ~ -name verify-channels -type d 2>/dev/null\` 找）：',
-          '   - \`[verify:e2e]\`：寫並跑 \`e2e/verify/' + changeName + '/<topic>.spec.ts\` → pass 後 Edit tasks.md 加 \`(verified-e2e: <ISO-8601> spec=... trace=...)\`',
-          '   - \`[verify:api]\`：跑 HTTP round-trip → pass 後 Edit tasks.md 加 \`(verified-api: <ISO-8601> METHOD URL STATUS[ body=<sha256-12chars>])\`',
-          '   - \`[verify:ui]\`：default 走 codex dispatcher（\`node ~/offline/clade/vendor/scripts/codex-dispatch-screenshot-verify.mjs --change ' + changeName + ' --consumer-path . --dev-server-url <url> --items-json <items.json>\`）；fallback 走 \`screenshot-review\` subagent → PASS 後 Edit tasks.md 加 \`(verified-ui: <ISO-8601> screenshot=screenshots/local/' + changeName + '/#' + (item.id || '<id>') + '-final.png[ dom=<obs>])\`',
+          verifyChannelBaselineSection(),
           '',
-          '3. 多 channel 順序 **MUST** e2e → api → ui',
+          '### 2. 依 channel 執行',
           '',
-          '4. evidence 通不過：保留 \`[ ]\` + 寫 \`（issue: ...）\` 或回報 blocker；**NEVER** 寫不成功的 \`(verified-*:)\` annotation',
+          '（cookbook 在 \`~/offline/clade/vendor/snippets/verify-channels/\`；若你機器無此路徑跑 \`find ~ -name verify-channels -type d 2>/dev/null\` 找）',
+          '',
+          '- \`[verify:e2e]\`：寫並跑 \`e2e/verify/' + changeName + '/<topic>.spec.ts\` → pass 後 Edit tasks.md 加 \`(verified-e2e: <ISO-8601> spec=... trace=...)\`',
+          '- \`[verify:api]\`：跑 HTTP round-trip → pass 後 Edit tasks.md 加 \`(verified-api: <ISO-8601> METHOD URL STATUS[ body=<sha256-12chars>])\`',
+          '- \`[verify:ui]\`：default 走 codex dispatcher（\`node ~/offline/clade/vendor/scripts/codex-dispatch-screenshot-verify.mjs --change ' + changeName + ' --consumer-path . --dev-server-url <url> --items-json <items.json>\`）；fallback 走 \`screenshot-review\` subagent → PASS 後 Edit tasks.md 加 \`(verified-ui: <ISO-8601> screenshot=screenshots/local/' + changeName + '/#' + (item.id || '<id>') + '-final.png[ dom=<obs>])\`',
+          '',
+          '### 3. 順序、寫入、失敗處理',
+          '',
+          verifyChannelOrderSection(),
           '',
           '完成後 review:ui 對應 panel 會從 evidence missing 改顯示 evidence link。',
         ].join('\\n');
@@ -4127,17 +4289,13 @@ export function renderReviewHtml(): string {
             '',
             '請依 \`/spectra-apply\` skill **Step 8a Verify Channel Pass** 一次補齊所有缺項：',
             '',
-            '1. 先做整批 pre-verify baseline check（依出現的 channel 種類）：',
-            '   - 有 \`[verify:e2e]\`：確認 Playwright config + e2e fixtures',
-            '   - 有 \`[verify:api]\`：確認 \`__test-login\` 或等價 session bypass route',
-            '   - 有 \`[verify:ui]\`：確認 \`supabase/seed.sql\` 或 seed 等價檔',
-            '   - 缺 baseline → **STOP**，回報 user 補齊；**NEVER** 降級 channel',
+            '### 1. 整批 Baseline check',
             '',
-            '2. 對每個 item 依 e2e → api → ui 順序補對應 evidence；每完成一個 channel 立刻 Edit tasks.md 寫對應 \`(verified-*:)\` annotation（不要等到最後一起寫）',
+            verifyChannelBaselineSection(),
             '',
-            '3. 全部完成後請 user 在 review:ui 重新整理；含 \`verify:ui\` 的 item checkbox 仍保留 \`[ ]\` 等 user 在 GUI 視覺確認',
+            '### 2. 順序、寫入、失敗處理',
             '',
-            '4. 任一 channel 通不過 → 保留 \`[ ]\` + 寫 \`（issue: ...）\`；**NEVER** 寫不成功的 \`(verified-*:)\` annotation',
+            verifyChannelOrderSection(),
             '',
             'Cookbook 與範本：\`~/offline/clade/vendor/snippets/verify-channels/README.md\`（Charles clade home；其他機器跑 \`find ~ -name verify-channels -type d 2>/dev/null\` 找）',
           ].join('\\n');

@@ -139,13 +139,33 @@ tasks/
 
 ## 與 `tasks/lessons.md` 的關係
 
-`lessons.md` 維持單檔，因為：
+**`tasks/lessons.md` 是 consumer 自家 opt-in 短期 working memory，NOT MUST**。跨 session 但只對當前 consumer 有意義的 lesson **MAY** 用此檔短期記錄；沒這個檔也合法（多數 consumer 不需要）。
 
-- 寫入時機（被糾正後）頻率極低
-- 內容是長期累積的個人 lessons，不是 session-scoped working memory
-- 撞檔機率可忽略（兩 session 同時被糾正且同時寫 lessons 的機率近零）
+完整路線決策見 [`docs/discussions/2026-05-18-lessons-md-path.md`](../../docs/discussions/2026-05-18-lessons-md-path.md)。
 
-若實務上發現 `lessons.md` 也有併發問題，再考慮拆 `lessons/<topic>.md`。預設保持簡單。
+### 跟其他 SoT 的邊界
+
+寫到 lessons.md 前，先問「換到另一 project 還適用嗎？」決定該寫哪：
+
+| 條目性質 | 寫到哪 | 觸發 |
+| --- | --- | --- |
+| **跨 consumer** 共享的根因分析 | clade `docs/pitfalls/`（走 `/oops` Mode B） | root cause + detection + fix + prevention 四項齊備 |
+| **跨 conversation / 跨 project** 個人偏好或行為更正 | auto-memory `feedback` type | user 糾正且該 lesson 在任何 project 都適用 |
+| **跨 session 但只對當前 consumer** 的 lesson | `tasks/lessons.md`（本檔） | 只對當前 repo 有效；不夠成熟升 pitfall；不適合 auto-memory（換 project 不適用） |
+| **consumer 自家業務規約**（演進成穩定規約） | `.claude/rules/local/<topic>.md` | 從 lessons.md 升級；override clade core 須加 [[local-rule-override]] 宣告 |
+
+### 升級路徑（lessons.md → 其他 SoT）
+
+- **熟了升 pitfall**：四項齊備 → `/oops` Mode B → 從 lessons.md 移除
+- **熟了升 rules/local/**：演進成穩定 consumer 規約 → 寫 `.claude/rules/local/<topic>.md` → 從 lessons.md 移除
+- **發現跨 project 適用 → 升 auto-memory**：改寫成 auto-memory `feedback` type → 從 lessons.md 移除
+- **過時**：直接刪行（git history 留證）
+
+### 撞檔與 handoff
+
+- 單檔設計：寫入時機（被糾正後）頻率極低，撞檔機率可忽略；若實務上發現 lessons.md 也有併發問題，再考慮拆 `lessons/<topic>.md`
+- `/handoff` **NOT** 強制 sweep lessons.md（避免 ritual）；consumer 自家 session 想做手動觸發即可
+- clade 不對 lessons.md 設 audit signal（純 consumer 自治區）
 
 ---
 
