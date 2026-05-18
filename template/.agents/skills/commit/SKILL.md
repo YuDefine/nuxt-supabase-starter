@@ -330,6 +330,8 @@ pnpm test          # 或 vp test run / pnpm test:unit，依 consumer 設定
 
 失敗時進入 loop：修復 → `pnpm format`（裸打 `vp fmt` 必須加 `--ignore-path .oxfmtignore`） → 重跑上述兩步 → 直到全綠。
 
+> ⚠️ **oxfmt batched false-positive workaround**（vite-plus 0.1.21 已知 bug）：第一次 `pnpm format:check` 紅時，**先**跑 `pnpm format`（vp fmt --write）一次再重跑 check；仍紅就重複，**最多 3 輪通常會收斂**。若想確認是 batched bug 而非真 format issue，對命中 file 跑 single-file `vp fmt --check <path>` — 通過 = 確認 vite-plus batched 互動 bug，可安心進下步。**NEVER** 動 `.oxfmtignore` 或 LOCKED projection（`.claude/rules/` / `AGENTS.md` / `AGENTS.md` / spectra change markdown）試圖讓 oxfmt 滿意 — 那是 governance violation。詳見 `docs/pitfalls/2026-05-18-oxfmt-batched-check-false-positive.md`。
+
 **禁止**用 `npx vitest run` / `npx eslint` 等個別工具替代 `pnpm check` / `pnpm test`。若 `.claude/worktrees/` 干擾結果，先清理再跑。
 
 通過後輸出 `✅ 0-C 通過（format/lint/typecheck/test 全綠）`。
