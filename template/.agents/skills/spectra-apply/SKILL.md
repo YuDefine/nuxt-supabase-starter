@@ -357,7 +357,31 @@ If there is no request_user_input 工具 available, present options as plain tex
       - 目錄：`app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/`
       若 task 需要 view 層改動，回報 "view layer change required, defer to main thread" 並跳過該 task（不要勾 checkbox），主線會自己處理。
 
-      Acceptance：所有 phase <N> 的 tasks 完成、checkbox 已勾、相關 typecheck / unit test 通過、git diff 對應預期變更。
+      Commit Authorization（**MUST**，per `.claude/rules/agent-routing.codex-watch-protocol.md` § Commit Authorization）：
+      完成 phase <N> 全部 tasks 後，**MUST** 在 worktree 內 commit 一次（一 phase 一 commit）：
+
+      1. **Commit 前 self-check（任一條命中即 abort、NEVER commit）**：
+         - View-layer drift：
+
+           git diff --staged --name-only | grep -E '\.vue$|\.tsx$|\.jsx$|\.css$|\.scss$|app/(pages|components|layouts)/|^(pages|components|layouts|views)/'
+
+           命中 → 回報 "view layer drift: <files>" 並中止
+         - Scope discipline：
+
+           git diff --staged --name-only
+
+           對比本 phase 預期落點 — 超出範圍 → 回報 "scope drift: <files>" 並中止
+      2. **Selective stage**：`git add -- <each scoped file path>` — **禁止** `git add -A` / `git add .`（會撈到 baseline）
+      3. **Commit**：
+
+         git commit --no-verify -m "wt: <change-name>-phase-<N> — <一行說明>"
+
+         - **MUST** `--no-verify`（commitlint 會擋 `wt:` prefix）
+         - **MUST** 用 `wt: <change-name>-phase-<N>` format（主線用 `git log main..HEAD` 對齊 phase）
+
+      仍禁止：`git push` / `git stash`（中途）/ `git commit --amend` / `/commit` / `/spectra-commit` / 跨 phase 混 commit。
+
+      Acceptance：所有 phase <N> 的 tasks 完成、checkbox 已勾、相關 typecheck / unit test 通過、phase commit 已在 worktree 內成立、`git log main..HEAD` 顯示 `wt: <change>-phase-<N> — ...`。
       不要動 phase <N> 以外的 tasks。不要碰 ## Design Review 區塊（主線會自己做）。
       不要呼叫 /spectra-archive。
       ```
@@ -375,12 +399,14 @@ If there is no request_user_input 工具 available, present options as plain tex
 
    3. Inform user briefly + start Codex Watch Protocol（見 `agent-routing.md`）
 
-   4. After `<task-notification status=completed>`:
+   4. After `<task-notification status=completed>` — codex 已在 worktree 自 commit per § Commit Authorization：
       - BashOutput → read full stdout
       - Read tasks.md → confirm phase <N> all checkboxes are `[x]`
-      - Sanity check: `pnpm typecheck` (or equivalent), relevant tests, `git diff` review
-      - **MUST view-layer drift check**: `git diff --name-only HEAD~? -- '*.vue' '*.tsx' '*.jsx' '*.css' '*.scss' 'app/pages/**' 'app/components/**' 'pages/**' 'components/**' 'views/**' 'layouts/**'`（取自上次 codex dispatch 之前 commit 為 base；若無 commit 用 working tree diff）。**若有任何 view 層檔案被 codex 動過** → request_user_input: [1] 主線 revert view 改動 + 重派 codex（剝除 view 改動）/ [2] 接受並由主線自己重跑該 view phase / [3] 中止
-      - **If gaps detected** → request_user_input: [1] 主線補齊 / [2] 重派 codex / [3] 中止
+      - **MUST commit boundary check**: `git -C <wt> log main..HEAD --oneline` — confirm exactly one new commit per dispatched phase, format `wt: <change>-phase-<N> — ...`. Multiple commits per phase / missing commit / format mismatch → request_user_input: [1] 主線 squash codex 的 multiple commits / [2] `git -C <wt> reset --soft main` 退 staging 重派 / [3] 中止
+      - **MUST view-layer drift double-check**: `git -C <wt> diff main..HEAD --name-only -- '*.vue' '*.tsx' '*.jsx' '*.css' '*.scss' 'app/pages/**' 'app/components/**' 'app/layouts/**' 'pages/**' 'components/**' 'layouts/**' 'views/**'`（codex 自驗應已 abort，此處再驗保險）。**若有任何 view 層檔案被 codex 動過** → request_user_input: [1] `git -C <wt> reset --soft main` 退 staging + 主線剔除 view 改動 + 重派 codex / [2] 接受並由主線自己重跑該 view phase / [3] 中止
+      - **Scope discipline cross-check**: `git -C <wt> diff main..HEAD --name-only` vs prompt 內 phase scope 宣告。超出範圍 → request_user_input 處理
+      - Sanity check: `pnpm typecheck` (or equivalent), relevant tests
+      - **If gaps detected** → request_user_input: [1] 主線在 worktree 內 commit 補丁 / [2] reset 重派 codex / [3] 中止
 
    5. Move to next phase (re-classify and dispatch or self-execute)
 
