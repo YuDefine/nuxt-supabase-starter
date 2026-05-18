@@ -143,6 +143,20 @@ async function prompt(question) {
   }
 }
 
+// Paths under clade-managed projection control. Kept aligned with the
+// hub:bootstrap auto-sync range in scripts/sync-rules.mjs — when adding new
+// sync targets, also extend this regex so wt-helper recognizes them as
+// projection drift instead of user WIP. Long-term: derive dynamically from
+// sync-rules.mjs once it exports its target manifest.
+// Covers: .agents/, .codex/ (Codex projection), .claude/{rules,skills,
+// commands,agents,scripts,hooks}/ (Claude Code projection), .claude/hub.json
+// + .claude/.hub-state.json (plumbing), scripts/wt-helper.mjs (self), and
+// the AGENTS.md + CLAUDE.md instruction-injection files.
+const LOCKED_PROJECTION_RE =
+  /^(\.agents\/|\.codex\/|\.claude\/(rules|skills|commands|agents|scripts|hooks)\/|\.claude\/(hub\.json|\.hub-state\.json)$|scripts\/wt-helper\.mjs$|AGENTS\.md$|CLAUDE\.md$)/
+
+const isLockedProjectionPath = (p) => LOCKED_PROJECTION_RE.test(p)
+
 async function cmdAdd(slug, opts = {}) {
   if (!slug) {
     throw new Error(
@@ -296,6 +310,14 @@ async function cmdAdd(slug, opts = {}) {
   if (pendingStashName) {
     try {
       git(['stash', 'apply', 'stash@{0}'], { cwd: wtPath, stdio: 'inherit' })
+      // Reset worktree index so the baseline files land as unstaged modifications
+      // (or untracked, for -u stash entries). git-stash-apply restores the stash's
+      // staged state, including untracked files brought in via `-u`. Without this
+      // reset, a subsequent `git add -- <single-file>` won't unstage the baseline
+      // files, leading to scope leak in the next commit (TDMS 2026-05-18 incident:
+      // fix-devlogin-loopback commit picked up 46 files / 7472 insertions).
+      // See pitfall-wt-helper-baseline-staged-index.
+      git(['reset', 'HEAD', '--'], { cwd: wtPath, stdio: 'inherit' })
       const stashSha = git(['rev-parse', 'stash@{0}'], { cwd: consumerRoot })
       git(['update-ref', pendingBaselineRef, stashSha], { cwd: consumerRoot })
       git(['stash', 'drop', 'stash@{0}'], { cwd: consumerRoot, stdio: 'inherit' })
@@ -317,9 +339,7 @@ async function cmdAdd(slug, opts = {}) {
           cwd: consumerRoot,
         })
         const allUntracked = untrackedTree.split('\n').filter(Boolean)
-        const LOCKED_PROJECTION =
-          /^(\.agents\/|\.codex\/|\.claude\/(rules|skills|commands|agents|scripts|hooks)\/|scripts\/wt-helper\.mjs$|AGENTS\.md$|CLAUDE\.md$)/
-        const nonProjection = allUntracked.filter((p) => !LOCKED_PROJECTION.test(p))
+        const nonProjection = allUntracked.filter((p) => !isLockedProjectionPath(p))
         if (nonProjection.length > 0) {
           const sample = nonProjection.slice(0, 5).join(', ')
           const more = nonProjection.length > 5 ? `, ... +${nonProjection.length - 5} more` : ''
