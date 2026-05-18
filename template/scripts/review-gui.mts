@@ -1887,7 +1887,7 @@ function computeWorktreeSlug(absPath: string, branch: string | undefined): strin
     const m = branch.match(WORKTREE_SLUG_BRANCH_RE)
     if (m) return m[1]
   }
-  return absPath.split(sep).filter(Boolean).pop() || absPath
+  return absPath.split(sep).findLast((segment) => Boolean(segment)) ?? absPath
 }
 
 /**
@@ -5439,21 +5439,23 @@ async function main() {
  * Headless scan：reuse listPendingChanges 的同一份 evaluator，輸出 JSON 給 skill 消費。
  * 結構穩定（任何欄位異動需更新 review-readiness-scan SKILL.md），避免 skill 端解析漂移。
  */
+function isChangeNotReady(change: ChangeSummary): boolean {
+  return change.readinessHits > 0 || change.malformed > 0 || change.evidenceMissing.length > 0
+}
+
 async function runScan(repoRoot: string): Promise<void> {
   const changes = await listPendingChanges(repoRoot)
   // pending=0 的 change 從 home page 隱藏不列；scan 也排除（review readiness 只關注待處理項目）。
   const active = changes.filter((change) => change.pending > 0)
-  const isNotReady = (change: ChangeSummary): boolean =>
-    change.readinessHits > 0 || change.malformed > 0 || change.evidenceMissing.length > 0
   const ready = active
-    .filter((change) => !isNotReady(change))
+    .filter((change) => !isChangeNotReady(change))
     .map((change) => ({
       name: change.name,
       pending: change.pending,
       issued: change.issued,
       total: change.total,
     }))
-  const notReady = active.filter(isNotReady).map((change) => ({
+  const notReady = active.filter(isChangeNotReady).map((change) => ({
     name: change.name,
     pending: change.pending,
     issued: change.issued,
