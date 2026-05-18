@@ -97,7 +97,9 @@ export function loadManualReviewPatterns(): ManualReviewPatternEntry[] {
     cachedPatterns = entries.map((p) => ({
       ...p,
       regex: translatePosixToJs(p.regex),
-      requiresPresenceOf: p.requiresPresenceOf ? translatePosixToJs(p.requiresPresenceOf) : undefined,
+      requiresPresenceOf: p.requiresPresenceOf
+        ? translatePosixToJs(p.requiresPresenceOf)
+        : undefined,
       requiresAbsenceOf: p.requiresAbsenceOf ? translatePosixToJs(p.requiresAbsenceOf) : undefined,
     }))
   } catch {
@@ -188,7 +190,8 @@ const TRAILING_NO_SCREENSHOT_RE = /(^|[^ ]) @no-screenshot$/
 // `@no-manual-review-check[<reason>]` bypass marker per manual-review.md hard rule.
 // Empty brackets and bare marker (no brackets) are invalid by schema → not captured here.
 // May coexist with trailing `@no-screenshot` (canonical ordering: bypass then no-screenshot).
-const TRAILING_NO_MANUAL_REVIEW_CHECK_RE = /@no-manual-review-check\[([^\][]+)\](?:\s+@no-screenshot)?\s*$/
+const TRAILING_NO_MANUAL_REVIEW_CHECK_RE =
+  /@no-manual-review-check\[([^\][]+)\](?:\s+@no-screenshot)?\s*$/
 // 解析 leading kind marker — 必須緊接 `#N` / `#N.M` 後第一個 token、含一個 trailing space。
 // description-mid 的 [discuss] / [review:ui] / [verify:*] 不會被命中（不是行首）。
 const LEADING_KIND_RE = /^\[([^\]]+)\]\s+/
@@ -313,9 +316,7 @@ export interface FileVersion {
  * completion counter and archive-readiness check share one notion of
  * "parent-with-children".
  */
-export function buildParentsWithScopedChildren(
-  items: readonly ManualReviewItem[]
-): Set<string> {
+export function buildParentsWithScopedChildren(items: readonly ManualReviewItem[]): Set<string> {
   const parents = new Set<string>()
   for (const item of items) {
     if (item.scoped && item.parentId) parents.add(item.parentId)
@@ -397,7 +398,11 @@ interface ChangeSummary {
    * 的清單。每個 entry 一個 item（kinds 可能多個 tag）。配合 home page 把這類 change 歸到 not-ready 群、
    * 健康檢查 prompt 一併列出由 Claude 跑 `/spectra-apply` Step 8a 補齊。
    */
-  evidenceMissing: Array<{ itemId: string; description: string; kinds: ReadonlyArray<'e2e' | 'api' | 'ui'> }>
+  evidenceMissing: Array<{
+    itemId: string
+    description: string
+    kinds: ReadonlyArray<'e2e' | 'api' | 'ui'>
+  }>
   /**
    * Impl task 總數 — 計算 `- [ ] N.M ...` / `- [x] N.M ...` 行（含小數點 ID，無 `#` 前綴）。
    * 排除 `## 人工檢查` 區塊（那邊用 `#N` / `#N.M` 格式）。用於 home page 判斷該 change 是
@@ -643,9 +648,7 @@ interface ParserWarningContext {
 }
 
 function formatParserLocation(context: ParserWarningContext): string {
-  return context.lineNumber > 0
-    ? `${context.sourcePath}:${context.lineNumber}`
-    : context.sourcePath
+  return context.lineNumber > 0 ? `${context.sourcePath}:${context.lineNumber}` : context.sourcePath
 }
 
 function warnParser(context: ParserWarningContext, message: string): void {
@@ -668,9 +671,7 @@ function parseKindMarkerCandidate(
   candidate: string,
   defaultKind: DefaultManualReviewItemKind,
   context: ParserWarningContext
-):
-  | { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> }
-  | { valid: false } {
+): { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> } | { valid: false } {
   if (candidate === 'verify:auto') {
     warnParser(context, '[verify:auto] is deprecated; prefer [verify:api+ui]')
     return { valid: true, kinds: ['verify:api', 'verify:ui'] }
@@ -695,9 +696,7 @@ function parseMultiChannelKindMarker(
   candidate: string,
   defaultKind: DefaultManualReviewItemKind,
   context: ParserWarningContext
-):
-  | { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> }
-  | { valid: false } {
+): { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> } | { valid: false } {
   if (!candidate.startsWith('verify:')) {
     warnParser(
       context,
@@ -808,7 +807,9 @@ function parseStructuredAnnotations(
   context: ParserWarningContext
 ): ManualReviewItemAnnotations {
   const annotations: ManualReviewItemAnnotations = {}
-  const matches = line.matchAll(/\((verified-e2e|verified-api|verified-ui|claude-discussed):\s*([^)]*)\)/g)
+  const matches = line.matchAll(
+    /\((verified-e2e|verified-api|verified-ui|claude-discussed):\s*([^)]*)\)/g
+  )
   for (const match of matches) {
     const prefix = match[1]!
     const body = match[2]!.trim()
@@ -852,7 +853,10 @@ function parseStructuredAnnotationValue(
     const spec = findKeyValue(parts, 'spec')
     const trace = findKeyValue(parts, 'trace')
     if (!spec || !trace) {
-      warnParser(context, `malformed (${prefix}: ...) annotation — expected spec=<path> trace=<path>`)
+      warnParser(
+        context,
+        `malformed (${prefix}: ...) annotation — expected spec=<path> trace=<path>`
+      )
       return null
     }
     return { verifiedE2e: { raw, timestamp, spec, trace } }
@@ -938,8 +942,9 @@ function collectStructuredAnnotationRaw(line: string): {
 function renderStructuredAnnotations(
   annotations: Partial<Record<StructuredAnnotationKey, string>>
 ): string {
-  return STRUCTURED_ANNOTATION_ORDER.flatMap((key) => (annotations[key] ? [annotations[key]!] : []))
-    .join(' ')
+  return STRUCTURED_ANNOTATION_ORDER.flatMap((key) =>
+    annotations[key] ? [annotations[key]!] : []
+  ).join(' ')
 }
 
 function upsertStructuredAnnotation(
@@ -1022,9 +1027,7 @@ function rollupParentForScopedItem(
   const siblings = reparsed.items.filter((i) => i.scoped && i.parentId === scopedItem.parentId)
   if (siblings.length === 0) return null
 
-  const allChildrenOk = siblings.every(
-    (i) => i.checked && !/（issue:[^）]*）/.test(i.raw)
-  )
+  const allChildrenOk = siblings.every((i) => i.checked && !/（issue:[^）]*）/.test(i.raw))
 
   const lineBefore = lines[parent.lineIndex] ?? ''
   if (allChildrenOk === parent.checked) return null
@@ -1900,7 +1903,9 @@ async function persistReviewAction(mainRoot: string, change: string, body: any):
   // archive cwd = change 所在的 source root（worktree-based change 在 worktree 跑 /review-archive
   // 才能寫 docs/manual-review-archive.md；後續 /spectra-archive 在 main 跑時 wt-helper merge-back
   // 把 doc 變動帶回 main）。
-  const archive = complete ? await invokeReviewArchive(source.root, change) : { status: 'not-ready' }
+  const archive = complete
+    ? await invokeReviewArchive(source.root, change)
+    : { status: 'not-ready' }
   return {
     ok: true,
     itemId: body.itemId,
@@ -2036,7 +2041,10 @@ export async function listSourceRoots(mainRoot: string): Promise<SourceRoot[]> {
       flush()
       current.worktree = line.slice('worktree '.length).trim()
     } else if (line.startsWith('branch ')) {
-      current.branch = line.slice('branch '.length).trim().replace(/^refs\/heads\//, '')
+      current.branch = line
+        .slice('branch '.length)
+        .trim()
+        .replace(/^refs\/heads\//, '')
     } else if (line === '') {
       flush()
     }
@@ -4033,29 +4041,58 @@ export function renderReviewHtml(): string {
           const desc = p.description ? ' — ' + p.description : '';
           return '- ' + p.itemId + ' [' + (p.kinds || []).join(' + ') + ']' + desc;
         }).join('\\n') || '- (無)';
-        body = [
-          '## 問題：人工檢查整張 change 多項 item 缺 verify 證據（review:ui 全 change sweep）',
-          '',
-          '掃了當前 change 的 \`## 人工檢查\`，下列 item × channel 缺 evidence（共 ' + pairs.length + ' pair）：',
-          '',
-          pairLines,
-          '',
-          '請依 \`/spectra-apply\` skill **Step 8a Verify Channel Pass** 一次補齊所有缺項：',
-          '',
-          '1. 先做整批 pre-verify baseline check（依出現的 channel 種類）：',
-          '   - 有 \`[verify:e2e]\`：確認 Playwright config + e2e fixtures',
-          '   - 有 \`[verify:api]\`：確認 \`__test-login\` 或等價 session bypass route',
-          '   - 有 \`[verify:ui]\`：確認 \`supabase/seed.sql\` 或 seed 等價檔',
-          '   - 缺 baseline → **STOP**，回報 user 補齊；**NEVER** 降級 channel',
-          '',
-          '2. 對每個 item 依 e2e → api → ui 順序補對應 evidence；每完成一個 channel 立刻 Edit tasks.md 寫對應 \`(verified-*:)\` annotation（不要等到最後一起寫）',
-          '',
-          '3. 全部完成後請 user 在 review:ui 重新整理；含 \`verify:ui\` 的 item checkbox 仍保留 \`[ ]\` 等 user 在 GUI 視覺確認',
-          '',
-          '4. 任一 channel 通不過 → 保留 \`[ ]\` + 寫 \`（issue: ...）\`；**NEVER** 寫不成功的 \`(verified-*:)\` annotation',
-          '',
-          'Cookbook 與範本：\`<clade-vendor>/snippets/verify-channels/README.md\`',
-        ].join('\\n');
+        // Defense-in-depth：sweep button 已由 updateEvidenceSweepButton 對 non-ready change 隱藏，
+        // 但若呼叫端直接打到此分支（dev console、未來新 caller），仍給正確 prompt 避免誤導 agent。
+        const ctxChange = ctx.change || {};
+        const readyForStep8a = isApplyComplete(ctxChange) && !(ctxChange.readinessHits || 0);
+        if (!readyForStep8a) {
+          const implTotal = ctxChange.implTotal || 0;
+          const implDone = ctxChange.implDone || 0;
+          const implPct = implTotal > 0 ? Math.round((implDone / implTotal) * 100) : 0;
+          const hits = ctxChange.readinessHits || 0;
+          const blocker = hits > 0
+            ? 'change 含 ' + hits + ' 個 Pre-Review Data Readiness pattern hits（spec / data 缺漏）'
+            : 'impl 進度 ' + implPct + '%（< ' + Math.round(APPLY_COMPLETE_THRESHOLD * 100) + '% threshold）';
+          body = [
+            '## 問題：人工檢查 evidence 補齊請求但 change 還沒 ready（不該跑 Step 8a）',
+            '',
+            '當前 change 不在「✅ Apply 已完成、可補 evidence」群：' + blocker + '。',
+            '直接跑 Step 8a Verify Channel Pass 會撞 UI 不存在 / curl 打不通 / spec 待修，做白工。',
+            '',
+            '正確路徑：',
+            hits > 0
+              ? '- 跑 \`/spectra-ingest <change>\` 補上 spec / data hits（修 Pre-Review Data Readiness 違反），再回 review:ui'
+              : '- 繼續 \`/spectra-apply <change>\` 完成 implementation phase（特別是 §3 UI / §6 Fixtures section），等 impl 進度過 ' + Math.round(APPLY_COMPLETE_THRESHOLD * 100) + '% 後 change 會自動進「✅ Apply 已完成」群',
+            '',
+            '當前 change 缺 evidence 的 item 列表（供參考、**不要**照這個跑 Step 8a）：',
+            '',
+            pairLines,
+          ].join('\\n');
+        } else {
+          body = [
+            '## 問題：人工檢查整張 change 多項 item 缺 verify 證據（review:ui 全 change sweep）',
+            '',
+            '掃了當前 change 的 \`## 人工檢查\`，下列 item × channel 缺 evidence（共 ' + pairs.length + ' pair）：',
+            '',
+            pairLines,
+            '',
+            '請依 \`/spectra-apply\` skill **Step 8a Verify Channel Pass** 一次補齊所有缺項：',
+            '',
+            '1. 先做整批 pre-verify baseline check（依出現的 channel 種類）：',
+            '   - 有 \`[verify:e2e]\`：確認 Playwright config + e2e fixtures',
+            '   - 有 \`[verify:api]\`：確認 \`__test-login\` 或等價 session bypass route',
+            '   - 有 \`[verify:ui]\`：確認 \`supabase/seed.sql\` 或 seed 等價檔',
+            '   - 缺 baseline → **STOP**，回報 user 補齊；**NEVER** 降級 channel',
+            '',
+            '2. 對每個 item 依 e2e → api → ui 順序補對應 evidence；每完成一個 channel 立刻 Edit tasks.md 寫對應 \`(verified-*:)\` annotation（不要等到最後一起寫）',
+            '',
+            '3. 全部完成後請 user 在 review:ui 重新整理；含 \`verify:ui\` 的 item checkbox 仍保留 \`[ ]\` 等 user 在 GUI 視覺確認',
+            '',
+            '4. 任一 channel 通不過 → 保留 \`[ ]\` + 寫 \`（issue: ...）\`；**NEVER** 寫不成功的 \`(verified-*:)\` annotation',
+            '',
+            'Cookbook 與範本：\`<clade-vendor>/snippets/verify-channels/README.md\`',
+          ].join('\\n');
+        }
       } else {
         body = '## 問題\\n\\n(unknown kind: ' + kind + ')';
       }
@@ -4405,9 +4442,10 @@ export function renderReviewHtml(): string {
       const byItem = new Map();
       for (const item of items) {
         if (!item || item.checked) continue;
-        // 對齊 server-side `evidenceMissing` (見此檔 `summarizeChange` 內 `evidenceTargets`)：
-        // `（issue: ...）` annotation 是規約定義的 deferred state（manual-review.md：任一 channel
-        // 通不過 → 保留 `[ ]` + 寫 `（issue: ...）`），不該被當「缺 evidence」。
+        // 對齊 server-side evidenceMissing (見此檔 summarizeChange 內 evidenceTargets)：
+        // （issue: ...） annotation 是規約定義的 deferred state（manual-review.md：任一 channel
+        // 通不過 → 保留 [ ] + 寫 （issue: ...）），不該被當「缺 evidence」。
+        // NOTE: 內聯識別符不加 backtick — backtick + 後接中文觸發 oxfmt 0.1.21 parser bug。
         if (item.raw && /（issue:[^）]*）/.test(item.raw)) continue;
         const kinds = itemKinds(item);
         for (const c of checks) {
@@ -4430,7 +4468,14 @@ export function renderReviewHtml(): string {
       }
       const missing = computeMissingEvidence(change);
       const pairCount = missing.reduce(function (acc, m) { return acc + m.kinds.length; }, 0);
-      if (!pairCount) {
+      // Sweep button 只在 change 屬「✅ Apply 已完成、可補 evidence」群（readyForEvidence）時顯示。
+      // - applyInProgress（impl < APPLY_COMPLETE_THRESHOLD）：UI page 不存在 / curl 打不通，
+      //   生成的 Step 8a prompt 會誤導 agent 跑 verify 撞 404
+      // - healthCheckNeeded（readinessHits > 0）：spec/data 缺漏，該先跑 spectra-ingest 補資料
+      //   而不是 Step 8a verify
+      // 與 renderChanges 分組邏輯（L4225-4236）對齊：只有 readyForEvidence 群可進 Step 8a。
+      const readyForStep8a = isApplyComplete(change) && !(change.readinessHits || 0);
+      if (!pairCount || !readyForStep8a) {
         el.evidenceSweepButton.hidden = true;
         return;
       }
@@ -5531,9 +5576,7 @@ function printStartupBanner(url: string, repoRoot: string): void {
     ['open', `${bold}${cyan}${url}${reset}`],
   ]
   const labelWidth = Math.max(...lines.map(([label]) => label.length))
-  const rendered = lines.map(
-    ([label, value]) => `${label.padEnd(labelWidth)}  ${value}`
-  )
+  const rendered = lines.map(([label, value]) => `${label.padEnd(labelWidth)}  ${value}`)
   const innerWidth = Math.max(...rendered.map((l) => stripAnsi(l).length))
   const horiz = '─'.repeat(innerWidth + 2)
   console.log('')
