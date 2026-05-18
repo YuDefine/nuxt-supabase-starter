@@ -256,7 +256,18 @@ v3 atomic landing 解這些：
 
 ### Mechanic
 
-**Codex 派工例外**：派 codex 跑 phase（per [[agent-routing.codex-watch-protocol]] § Commit Prohibition）時，**codex 不可 commit**。codex 改完 worktree working tree、回報 `PHASE_X_RESULT` 即停手；由**主線**（或派 codex 的 `/wt` Claude subagent）在 worktree 內 commit (`wt: ...` prefix) 把 codex output 變成 phase-level checkpoint。本段「Subagent 在 worktree commit」**只適用於 Claude subagent**（如 `/spectra-ingest` 用的 wt subagent — 有完整 Claude rules access、能 self-discipline），**不適用於 codex 派工**。
+**Codex 派工規約**（per [[agent-routing.codex-watch-protocol]] § Commit Authorization）：派 codex 跑 phase 時 **codex 可在 worktree 內 commit**，但 **MUST** 遵守：
+
+- **一 phase 一 commit**：每完成 phase 全部 tasks + 自驗 view-layer + 自驗 scope 後 commit 一次（不可跨 phase 混 commit、不可 `git commit --amend`）
+- **Commit message**：`wt: <change>-phase-<N> — <short>` 強制格式（主線用 `git log main..HEAD` 機械化對齊 phase 邊界）
+- **`--no-verify`**：commitlint emoji-conventional 會擋 `wt:` prefix
+- **Selective stage**：`git add -- <each scoped file>`，**禁止** `git add -A` / `git add .`（會撈到 baseline）
+- **Commit 前自跑** view-layer drift check + scope discipline check（命中即 abort，**禁止** commit、回報主線）
+- **仍禁止**：`git push` / `git stash`（中途）/ `git commit --amend` / `/commit` / `/spectra-commit`
+
+主線（Claude Code main session 或 `/wt` 派出的 Claude subagent）收到 codex 完工通知後 **MUST**：(1) `git log main..HEAD` 確認 commit 邊界對齊 phase 數量 + format；(2) 跑 view-layer drift double-check 保險；(3) 跑 scope discipline cross-check；(4) drift 發現 → `git -C <wt> reset --soft main` 退 staging + 重派 codex；(5) 跑 typecheck / 相關 test。
+
+本段「Subagent 在 worktree commit」**對 Claude subagent 與 codex 都適用**（兩者規約相同：`wt:` prefix + `--no-verify` + selective stage + self-check）。差別只在 commit message 後綴：Claude subagent 用 `wt: <slug> — <free-form>`，codex 派工強制 `wt: <change>-phase-<N> — <short>` 以利主線對齊 phase。
 
 1. **Subagent 在 worktree 內 commit**（由 `/wt` Form 1 / 2 / 3 的 prompt template 強制執行）：
 
