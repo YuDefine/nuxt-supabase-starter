@@ -179,11 +179,13 @@ baseline 內容（自 `vendor/oxc-shared/preset.mjs`）：
 - 直接 inline 寫 `lint:` / `fmt:` 全部欄位而不 import preset — 哪天 preset 升版（例：oxlint patch 升 `no-underscore-dangle` 從 warn 升 error 要在 preset 反制），consumer 就會 silently drift。
 - 在 consumer 端的 `vendor/oxc-shared/preset.mjs` 投影檔直接改 — 下次 propagate 會覆蓋。要改 baseline → cd 到 clade 改 `vendor/oxc-shared/preset.mjs` 再 propagate。
 
+<!-- starter:strip-begin -->
 **真實事故參考**：perno 2026-05-14 觀察 `vp lint scripts/audit-ux-drift.mts`（檔案內容無 git diff）：
 - @ v0.39.2: `Found 2 warnings and 0 errors`
 - @ main (v0.40.0): `Found 0 warnings and 1 error`
 
 `pnpm-lock.yaml` 自 v0.39.2 後重生兩次，oxlint 在 `^0.1.21` 內升 patch，把 `no-underscore-dangle` rule level 從 warn 升 error。perno 5 個 consumer 都吃 clade 同一份 oxlint dep range — preset 已 pin 此 rule 為 `['warn', { allow: ['__dirname', '__filename'] }]`，import 即享 single source of truth。
+<!-- starter:strip-end -->
 
 ### 用 vp 命令做 lint / format
 
