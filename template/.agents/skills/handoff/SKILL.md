@@ -31,6 +31,28 @@ metadata:
 
 宣布偵測結果一句話：「偵測到 Mode A（理由：當前 session TaskList 有 N 個 in-progress / 對話脈絡顯示 mid-task on X）」或「偵測到 Mode B（當前 session 清空）」。
 
+## Step 1.5 — 路徑解析 invariant（Mode A / B 共用）
+
+`HANDOFF.md` / `docs/tech-debt.md` / `openspec/ROADMAP.md` 是「跨 change 全局狀態」，**不該** per-worktree 分裂。`/handoff` 若在 linked worktree 內跑、寫到 cwd-相對的 `HANDOFF.md`，得等 squash merge-back 才出現在 main，下一 session 接手會看到舊版。
+
+**MUST** 在進入 Step 2A / 2B 寫入動作前先解析 main worktree absolute path：
+
+```bash
+GIT_COMMON_DIR="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+if [ -z "$GIT_COMMON_DIR" ]; then
+  echo "warn: not inside a git repo; falling back to cwd for HANDOFF writes" >&2
+  MAIN_WT_PATH="$(pwd)"
+else
+  # linked worktree: .git/worktrees/<slug>/.. → main repo's .git dir
+  # so dirname(GIT_COMMON_DIR) 是 main worktree path（main 與 linked 都成立）
+  MAIN_WT_PATH="$(dirname "$GIT_COMMON_DIR")"
+fi
+```
+
+實際操作：所有 `HANDOFF.md` / `docs/tech-debt.md` / `openspec/ROADMAP.md` / `docs/archives/<yyyy-mm>-<topic>.md` 寫入路徑都用 `$MAIN_WT_PATH/<rel>` 絕對路徑（Edit / Write tool 的 `file_path` 參數）；**禁止**用 cwd-相對路徑寫這幾個檔。其餘檔案（`.claude/rules/local/*.md` 讀取、`tasks/<date>-*.md` 清理）保持 cwd 相對行為。
+
+> Why：`git rev-parse --path-format=absolute --git-common-dir` 在 main worktree 回 `.../.git`，在 linked worktree 回 `.../.git/worktrees/<slug>`；兩者的 dirname 就是 main worktree path（main 自己 / linked 的 main）。`stash list` 是 repo-wide（`refs/stash` 共享所有 worktree），所以 §2B.1.5 stash audit 不需此 path resolution，但 file write 必須。
+
 ## Step 2A — Mode A 流程（只做交接寫入）
 
 只做以下，不做 reorganize、不做下一步推薦：
@@ -57,7 +79,7 @@ metadata:
    | 規模膨脹（要動 spec / design review / 跨多檔） | 新 spectra change（先 `/spectra-propose`） |
    | 純放棄 | 直接刪 |
 
-3. **寫入**：依分類 Edit / Write 對應檔案。HANDOFF.md `## In Progress` 條目 MUST 含：
+3. **寫入**：依分類 Edit / Write 對應檔案，path **MUST** 用 Step 1.5 解析出的 `$MAIN_WT_PATH/<rel>` 絕對路徑（即使當前 cwd 在 linked worktree）。HANDOFF.md `## In Progress` 條目 MUST 含：
    - change / task 名稱
    - 主要檔案路徑（讓接手者直接跳）
    - 目前做到哪裡 / 還剩什麼
@@ -107,6 +129,32 @@ metadata:
 | 仍 valid 的稽核 baseline 表 / outstanding follow-up | 保留 |
 
 **MUST** 載入 `.claude/rules/local/*.md` 內所有自治區規則。若有 `clade-role-and-todo-discipline.md` 之類 local rule 限定 HANDOFF 寫法，整理時必須遵守。
+
+寫入 `HANDOFF.md` 與 archive 檔的路徑 **MUST** 用 Step 1.5 解析出的 `$MAIN_WT_PATH/HANDOFF.md` / `$MAIN_WT_PATH/docs/archives/<yyyy-mm>-<topic>.md`，不用 cwd 相對。
+
+### 2B.1.5 Stash 陳舊掃描
+
+`git stash` 的 `refs/stash` 是 repo-wide（不分 worktree），跨 session 容易累積無人清的 stash。Mode B 整理 HANDOFF 時順手掃一輪：
+
+```bash
+node scripts/stash-reconcile.mjs --include-all --stale-days 7 --json 2>/dev/null
+```
+
+對回傳的每一筆 stash entry：
+
+| 條件 | 動作 |
+| --- | --- |
+| `namespace.kind` 為 `wt-merge-block` / `wt-baseline` / `wt-final-baseline` 且對應 change 已 archive（`openspec/changes/archive/<slug>/` 存在） | 在 HANDOFF.md `## Stash Audit` 段加一行「stash@{N} (wt-merge-block, slug=X) — change archived, safe to drop via stash-reconcile --interactive」|
+| `kind` 為 `clade-publish` / `clade-propagate` 且 `recommendation.action` = `drop` | 同上記一行 |
+| `kind` 為 `unknown` 且 createdAt >7d | 列入 audit 段，附 `git stash show <ref>` 命令供 user 自行檢查 |
+| 其他（active 或新 stash） | 跳過 |
+
+**禁止行為**：
+
+- ❌ 自動跑 `git stash drop` / `apply` —— 只在 HANDOFF.md 寫摘要，user 自行抉擇是否跑 `stash-reconcile --interactive`
+- ❌ 把 stash audit 改寫進 `## In Progress` 段 —— audit 是「待清，不擋 next session 接手」，不是 in-progress 工作
+
+寫入 `## Stash Audit` 段時 path 用 Step 1.5 的 `$MAIN_WT_PATH/HANDOFF.md`。若無 stash 需要 audit，跳過此小節（不必為了寫而寫空段）。
 
 ### 2B.2 盤點剩餘 outstanding
 
@@ -183,8 +231,9 @@ User 透過 `request_user_input` 選定下一步 outstanding（含明確的 next
 
 **判定條件**：
 
-- 觸發此 dispatch path **MUST** 全部成立：當前 chat session 剛跑完 Mode B、user 已選定下一步、cwd 在 main worktree
-- 若 cwd 不在 main worktree（罕見 — 應該是 user 在 worktree session 跑了 `/handoff`）→ Mode B 已不適用，警示後返回
+- 觸發此 dispatch path **MUST** 全部成立：當前 chat session 剛跑完 Mode B、user 已選定下一步
+- Mode B 的寫入動作（§2B.1 / §2B.1.5）透過 Step 1.5 的 `$MAIN_WT_PATH` 已落到 main worktree absolute path，與 cwd 無關
+- 若 cwd 不在 main worktree（user 在 linked worktree session 跑了 `/handoff`）→ dispatch 階段 **MUST** 在內呼 `/wt` / next-skill 前先 `cd "$MAIN_WT_PATH"` 切換工作目錄，dispatch 完成後不必還原（session 已收尾交接）。直接 dispatch 純 read-only / propose / discuss 類 skill 不寫 tracked file 時可省略此切換
 
 **Slug 解析**：`/wt <slug>: /<next-skill> <change-name>` 的 `<slug>` 由 change-name 直接帶入（wt-helper 自動 normalize per [[worktree-default]] §3）。
 
