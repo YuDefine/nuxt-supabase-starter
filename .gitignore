@@ -22,3 +22,6 @@ temp
 .claude/scheduled_tasks.lock
 .claude/.commit.lock
 template/.wrangler/
+
+# 本地 MCP server 設定（含個人 absolute path，不適合共享）
+.mcp.json
