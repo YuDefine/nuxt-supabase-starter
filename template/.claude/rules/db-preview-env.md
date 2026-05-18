@@ -82,15 +82,26 @@ clade 規約管 capability，consumer 在 `registry/consumers.json` 宣告自家
 
 **MUST** PR 描述標出 migration 風險分類；reviewer **MUST** 對 `expand-contract` / `maintenance-required` 拍板才能 merge。
 
-### 6. 主幹 deploy gate（formalize trunk-based pattern）
+**現成自動化工具**：clade 已散播 `vendor/scripts/postgrest-migration-risk.mjs`（per-consumer 自動分類）+ `postgrest-ready-gate.mjs` + `postgrest-smoke.mjs`。consumer 可串 GitHub Actions `workflow_dispatch` input 把分類做成手動 gate — 範例：TDMS `.github/workflows/ci.yml` `approve_high_risk_migration: choice` input。
 
-- **MUST** `push branches: [main]` 觸發 staging deploy 一條獨立 workflow
-- **MUST** `tags: ['v*']` 觸發 production deploy 一條獨立 workflow
-- **MUST** production workflow 內有明確 confirm gate（環境變數 / GitHub environment protection / approval reviewer）
-- **NEVER** 讓 main push 直接打到 production
-- **NEVER** 把 production deploy 跟 staging deploy 寫在同一條 workflow 內共用 trigger
+### 6. 主幹 deploy gate
 
-範本：`vendor/snippets/db-preview-env/production-confirm-gate.workflow.yml.template`。
+至少**兩條獨立 workflow**：一條 **PR-validation gate**（schema-migration-gate 即滿足），一條 **production deploy**（tag-triggered）。
+
+- **MUST** PR-validation gate 在 PR 階段跑，**NEVER** 用 shared staging 當 validation 環境
+- **MUST** production deploy 走 tag-trigger（tag pattern 由 consumer 自選 — `v*` 是 semver convention，`*` 也合法；perno 用 `v*`、TDMS 用 `*`）
+- **MUST** production workflow 內有明確 confirm gate（環境變數 / GitHub environment protection / approval reviewer / `workflow_dispatch` approve input 都算）
+- **NEVER** 讓 PR / main push 直接打到 production
+- **NEVER** 把 production deploy 跟 PR-validation 寫在同一條 workflow 內共用 trigger
+
+**兩個典型 pattern**（consumer 自選）：
+
+| Pattern | 適用 | 範例 consumer |
+| --- | --- | --- |
+| `main → staging` push + `tag → production` | 有 persistent staging LXC 作 merge 整合環境 | perno（`bigbyte-perno-staging` LXC）|
+| `PR → schema-migration-gate` + `tag → production`（trunk-based，無 staging）| 單 dev LXC + tag-driven prod | TDMS（`fc-supabase-dev` 單 LXC）|
+
+兩種 pattern 都滿足契約 — 重點是 PR 驗證**不**污染 shared writeable env。
 
 ## SHOULD
 
