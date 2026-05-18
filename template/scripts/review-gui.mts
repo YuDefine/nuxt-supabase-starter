@@ -1491,11 +1491,11 @@ export async function createReviewApp(mainRoot = process.cwd()): Promise<any> {
   // 解析 path/hash，deep link reload 才需要 server 認 path。
   app.get('/review', (c: any) => {
     c.header('Cache-Control', 'no-store')
-    return c.html(renderReviewHtml())
+    return c.html(renderReviewHtml({ mainRoot }))
   })
   app.get('/review/:change', (c: any) => {
     c.header('Cache-Control', 'no-store')
-    return c.html(renderReviewHtml())
+    return c.html(renderReviewHtml({ mainRoot }))
   })
 
   app.get('/api/health', (c: any) => c.json({ ok: true, repoRoot: mainRoot }))
@@ -2214,7 +2214,21 @@ function toPosix(path: string): string {
   return path.split(sep).join('/')
 }
 
-export function renderReviewHtml(): string {
+function readCladeHubVersion(mainRoot: string): string | null {
+  try {
+    const raw = readFileSync(join(mainRoot, '.claude', 'hub.json'), 'utf8')
+    const parsed = JSON.parse(raw) as { version?: unknown }
+    if (typeof parsed.version !== 'string') return null
+    // 限制 safe charset 後直接 inline 進 HTML（semver 形態，無需 escape）
+    return /^[\w.\-+]+$/.test(parsed.version) ? parsed.version : null
+  } catch {
+    return null
+  }
+}
+
+export function renderReviewHtml(opts: { mainRoot?: string } = {}): string {
+  const version = readCladeHubVersion(opts.mainRoot ?? process.cwd())
+  const versionBadge = version ? `<span class="title-version">v${version}</span>` : ''
   return `<!doctype html>
 <html lang="zh-Hant-TW">
 <head>
@@ -2274,10 +2288,27 @@ export function renderReviewHtml(): string {
       overflow: auto;
     }
     .sidebar h1 {
-      margin: 0 0 14px;
+      margin: 0 0 4px;
       font-size: 18px;
       line-height: 1.2;
       letter-spacing: 0;
+    }
+    .title-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: baseline;
+      margin: 0 0 14px;
+      font-size: 11px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .title-meta .title-version {
+      font-weight: 600;
+      color: var(--accent);
+    }
+    .title-meta .title-updated {
+      font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
     }
     .change-list {
       display: grid;
@@ -3222,6 +3253,10 @@ export function renderReviewHtml(): string {
   <div class="app">
     <aside class="sidebar">
       <h1>人工檢查</h1>
+      <div class="title-meta">
+        ${versionBadge}
+        <span class="title-updated" id="updatedAt" aria-live="off"></span>
+      </div>
       <details id="onboardPanel" class="onboard" open>
         <summary>怎麼用</summary>
         <ol class="onboard-steps">
@@ -5745,6 +5780,17 @@ export function renderReviewHtml(): string {
       el.currentTitle.classList.remove('loading-spin');
       el.currentTitle.textContent = '選擇一個 change 開始';
     });
+
+    function pad2(n) { return (n < 10 ? '0' : '') + n; }
+    function tickUpdatedAt() {
+      const d = new Date();
+      const s = d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate() + ' '
+        + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+      const target = document.getElementById('updatedAt');
+      if (target) target.textContent = s;
+    }
+    tickUpdatedAt();
+    setInterval(tickUpdatedAt, 1000);
   </script>
 </body>
 </html>`
