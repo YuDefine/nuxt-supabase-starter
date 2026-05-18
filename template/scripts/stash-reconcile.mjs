@@ -5,11 +5,27 @@ const pad2 = (n) => String(n).padStart(2, '0')
 /**
  * stash-reconcile.mjs — list + suggest actions for namespaced stash entries
  *
- * Surfaces git stash entries created by the worktree atomicity workflow:
+ * Surfaces git stash entries created by clade workflows:
  *   - `wt-merge-block/<slug>/<ISO>` — main-worktree blockers stashed by
  *     `wt-helper merge-back --auto-stash` (rules/core/worktree-default.md §5.5)
+ *   - `wt-baseline/<slug>/<ISO>` / `wt-final-baseline/<slug>/<ISO>` — pre-fork
+ *     baseline snapshots from `wt-helper add --baseline-strategy stash` (the
+ *     applied content is also pinned as `refs/wt-baseline/<slug>/<ISO>`, so
+ *     stash entries with a matching ref are safe to drop)
  *   - `cross-session-block-*` — legacy ad-hoc prefix from the pre-atomic
  *     pain era (perno 2026-05-17 session); included for migration coverage
+ *   - `clade-propagate-v<ver>-<ts>` — auto-stash from `propagate.mjs` dirty
+ *     consumer flow when stash pop fails post-write (scripts/propagate.mjs)
+ *   - `clade-publish: <free-form>` — manual stash from clade-publish skill
+ *     when stashing parallel-session WIP before publish
+ *   - spectra-apply phase suffixes (`-baseline-drift`, `-p7-wip`,
+ *     `-conflict-snapshot-with-markers`, `-shared-files`,
+ *     `-perf-eval-tasks-bleed`) — stale once the change is archived
+ *
+ * Safety contract: this script NEVER pops or auto-commits. `apply` uses
+ * `git stash apply` (entry preserved). After apply, user WIP sits in the
+ * working tree — commit via `/spectra-commit` or `/commit` with selective
+ * stage; do NOT `git add -A`.
  *
  * Default: write a markdown report at `.spectra/stash-reconcile-<YYYY-MM-DD-HHMM>.md`
  * with one section per matched stash entry, including:
@@ -22,10 +38,14 @@ const pad2 = (n) => String(n).padStart(2, '0')
  *   - copy-paste commands the user can run
  *
  * Flags:
- *   --interactive  prompt per stash with [a]pply / [d]rop / [v]iew / [s]kip menu
- *   --json         machine-readable output to stdout (no file written)
- *   --include-all  include unnamespaced stashes (filter disabled; useful for
- *                  one-time inventory of legacy stash state)
+ *   --interactive       prompt per stash with [a]pply / [d]rop / [v]iew / [s]kip menu
+ *   --json              machine-readable output to stdout (no file written)
+ *   --include-all       include unnamespaced stashes (filter disabled; useful for
+ *                       one-time inventory of legacy stash state)
+ *   --stale-days <N>    keep only stashes older than N days (entries are tagged
+ *                       with `[STALE >Nd]` in their reason field)
+ *   --slug <substring>  keep only stashes whose parsed slug includes <substring>
+ *                       (used by wt-helper merge-back's reconcile hint)
  *
  * Exit codes:
  *   0  success (report written / interactive complete)
@@ -39,7 +59,26 @@ import { dirname, join, resolve } from 'node:path'
 import { stdin, stdout } from 'node:process'
 import { createInterface } from 'node:readline/promises'
 
-const NAMESPACED_PREFIXES = ['wt-merge-block/', 'cross-session-block-']
+// Substring patterns used to filter "namespaced" (clade-managed) stashes. Order
+// matters only for parseNamespace classification; filterNamespaced is a flat OR.
+// Suffix patterns ('-baseline-drift', etc.) require end-of-message match in
+// parseNamespace to avoid false-matching e.g. 'feat-shared-files-refactor'.
+const NAMESPACED_PREFIXES = [
+  'wt-final-baseline/',
+  'wt-merge-block/',
+  'wt-baseline/',
+  'cross-session-block-',
+  'clade-propagate-v',
+  'clade-publish:',
+]
+
+const NAMESPACED_SUFFIXES = [
+  '-baseline-drift',
+  '-p7-wip',
+  '-conflict-snapshot-with-markers',
+  '-shared-files',
+  '-perf-eval-tasks-bleed',
+]
 
 function gitRaw(args, opts = {}) {
   return execFileSync('git', args, {
@@ -82,21 +121,86 @@ function listStashes(consumerRoot) {
 }
 
 function filterNamespaced(stashes) {
-  return stashes.filter((s) => NAMESPACED_PREFIXES.some((p) => s.message.includes(p)))
+  return stashes.filter((s) => {
+    if (NAMESPACED_PREFIXES.some((p) => s.message.includes(p))) return true
+    return NAMESPACED_SUFFIXES.some((suf) => s.message.endsWith(suf))
+  })
+}
+
+function filterByStaleDays(stashes, days) {
+  const cutoffMs = Date.now() - days * 24 * 60 * 60 * 1000
+  return stashes.filter((s) => {
+    const t = Date.parse(s.createdAt)
+    if (Number.isNaN(t)) return false
+    return t < cutoffMs
+  })
+}
+
+function filterBySlug(entries, slugFilter) {
+  const needle = slugFilter.toLowerCase()
+  return entries.filter((e) => (e.namespace?.slug ?? '').toLowerCase().includes(needle))
 }
 
 function parseNamespace(message) {
-  // wt-merge-block/<slug>/<ISO>
+  // Order matters: wt-final-baseline before wt-baseline (more specific first).
+  const finalBaseline = message.match(/wt-final-baseline\/([^/]+)\/([0-9TZ:-]+)/)
+  if (finalBaseline) {
+    return { kind: 'wt-final-baseline', slug: finalBaseline[1], iso: finalBaseline[2] }
+  }
   const wtMatch = message.match(/wt-merge-block\/([^/]+)\/([0-9TZ:-]+)/)
   if (wtMatch) {
     return { kind: 'wt-merge-block', slug: wtMatch[1], iso: wtMatch[2] }
+  }
+  const baseline = message.match(/wt-baseline\/([^/]+)\/([0-9TZ:-]+)/)
+  if (baseline) {
+    return { kind: 'wt-baseline', slug: baseline[1], iso: baseline[2] }
   }
   // cross-session-block-<slug>[-suffix]  (legacy from perno 2026-05-17)
   const csMatch = message.match(/cross-session-block-(.+)$/)
   if (csMatch) {
     return { kind: 'cross-session-block', slug: csMatch[1], iso: null }
   }
+  // clade-propagate-v<semver>-<ms-timestamp>
+  const propagate = message.match(/clade-propagate-v([\d.]+)-(\d+)/)
+  if (propagate) {
+    return { kind: 'clade-propagate', slug: `v${propagate[1]}`, iso: propagate[2] }
+  }
+  // clade-publish: <free-form description>
+  const publish = message.match(/clade-publish:\s*(.+)$/)
+  if (publish) {
+    return { kind: 'clade-publish', slug: publish[1].slice(0, 40), iso: null }
+  }
+  // spectra-apply phase suffixes: <slug>-<phase-suffix>
+  for (const suf of NAMESPACED_SUFFIXES) {
+    if (message.endsWith(suf)) {
+      const slug = message.slice(0, -suf.length)
+      return { kind: `spectra-apply${suf}`, slug, iso: null }
+    }
+  }
   return { kind: 'unknown', slug: null, iso: null }
+}
+
+function hasPinnedBaselineRef(consumerRoot, slug, iso) {
+  if (!slug || !iso) return false
+  try {
+    const refs = gitTrim(['for-each-ref', '--format=%(refname)', 'refs/wt-baseline/'], {
+      cwd: consumerRoot,
+    })
+    const target = `refs/wt-baseline/${slug}/${iso}`
+    return refs.split('\n').includes(target)
+  } catch {
+    return false
+  }
+}
+
+function isArchivedChange(consumerRoot, slug) {
+  if (!slug) return false
+  try {
+    const archivePath = join(consumerRoot, 'openspec', 'changes', 'archive', slug)
+    return existsSync(archivePath)
+  } catch {
+    return false
+  }
 }
 
 function inspectStashShape(consumerRoot, ref) {
