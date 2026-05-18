@@ -179,6 +179,42 @@ item_block_content() {
   printf '%s' "$content"
 }
 
+# For a scoped sub-item at idx, find the enclosing parent's idx by walking
+# backwards until is_parent_item matches. Returns the parent idx on stdout,
+# or empty string if no parent found (malformed input).
+parent_idx_of_child() {
+  local idx=$1
+  local prev=$((idx - 1))
+  while [ $prev -ge 0 ]; do
+    local p="${manual_block_lines[$prev]}"
+    if is_parent_item "$p"; then
+      printf '%s' "$prev"
+      return
+    fi
+    prev=$((prev - 1))
+  done
+  printf ''
+}
+
+# Compute the group block (parent + all scoped sub-items) that the given line
+# idx belongs to. Used by patterns with `requiresAbsenceOfScope: "group"` so
+# parent and sub-items share a single evaluation scope.
+group_block_for() {
+  local idx=$1
+  local line="${manual_block_lines[$idx]}"
+  if is_parent_item "$line"; then
+    item_block_content "$idx"
+    return
+  fi
+  local parent_idx
+  parent_idx=$(parent_idx_of_child "$idx")
+  if [ -z "$parent_idx" ]; then
+    printf '%s' "$line"
+    return
+  fi
+  item_block_content "$parent_idx"
+}
+
 # Load pattern count.
 PATTERN_COUNT=$(jq '.patterns | length' "$PATTERNS_FILE")
 
@@ -194,6 +230,8 @@ for i in $(seq 0 $((PATTERN_COUNT - 1))); do
   ANCHOR=$(jq -r ".patterns[$i].anchor" "$PATTERNS_FILE")
   REQ_PRESENCE=$(jq -r ".patterns[$i].requiresPresenceOf // \"\"" "$PATTERNS_FILE")
   REQ_ABSENCE=$(jq -r ".patterns[$i].requiresAbsenceOf // \"\"" "$PATTERNS_FILE")
+  REQ_PRESENCE_SCOPE=$(jq -r ".patterns[$i].requiresPresenceOfScope // \"\"" "$PATTERNS_FILE")
+  REQ_ABSENCE_SCOPE=$(jq -r ".patterns[$i].requiresAbsenceOfScope // \"\"" "$PATTERNS_FILE")
   APPLIES_TO=$(jq -r ".patterns[$i].appliesTo // \"\"" "$PATTERNS_FILE")
   # requiresKindIn: pipe-joined allowed kinds (e.g. "review:ui" or "review:ui|verify:ui").
   # Empty string means no kind filter.
@@ -248,7 +286,11 @@ for i in $(seq 0 $((PATTERN_COUNT - 1))); do
 
     # For parent items, evaluate requiresPresenceOf / requiresAbsenceOf against
     # the full item block (parent + scoped children). For scoped children,
-    # evaluate against the line itself.
+    # evaluate against the line itself by default. Patterns may opt into
+    # `requiresAbsenceOfScope: "group"` / `requiresPresenceOfScope: "group"`
+    # to share a single scope across parent + sub-items (e.g. UI_ITEM_NO_URL —
+    # any URL in the group satisfies the rule, including continuation sub-items
+    # that inherit a sibling's URL context).
     if is_parent_item "$line"; then
       scope_content=$(item_block_content "$idx")
     else
@@ -257,14 +299,22 @@ for i in $(seq 0 $((PATTERN_COUNT - 1))); do
 
     # requiresPresenceOf: pattern fires when primary matches AND this regex is ABSENT from the item block.
     if [ -n "$REQ_PRESENCE" ]; then
-      if printf '%s\n' "$scope_content" | grep -E -q -- "$REQ_PRESENCE"; then
+      presence_scope="$scope_content"
+      if [ "$REQ_PRESENCE_SCOPE" = "group" ]; then
+        presence_scope=$(group_block_for "$idx")
+      fi
+      if printf '%s\n' "$presence_scope" | grep -E -q -- "$REQ_PRESENCE"; then
         continue
       fi
     fi
 
     # requiresAbsenceOf: pattern fires when primary matches AND this regex is ABSENT from the item block.
     if [ -n "$REQ_ABSENCE" ]; then
-      if printf '%s\n' "$scope_content" | grep -E -q -- "$REQ_ABSENCE"; then
+      absence_scope="$scope_content"
+      if [ "$REQ_ABSENCE_SCOPE" = "group" ]; then
+        absence_scope=$(group_block_for "$idx")
+      fi
+      if printf '%s\n' "$absence_scope" | grep -E -q -- "$REQ_ABSENCE"; then
         continue
       fi
     fi

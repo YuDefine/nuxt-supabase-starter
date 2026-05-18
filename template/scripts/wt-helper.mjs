@@ -823,25 +823,18 @@ async function cmdMergeBack(slug, opts = {}) {
   // this check, `git merge --squash` silently drops worktree WIP, then cleanup
   // permanently destroys the worktree → WIP gone with no recovery path.
   //
-  // Filter clade-managed projection paths (.agents/, .codex/, hub.json,
-  // wt-helper.mjs itself): those are propagate residue, not user WIP, and they
-  // re-materialize on next propagate. User code (server/, src/, app/, ...)
-  // and untracked files are real WIP and must be committed before squash.
-  const CLADE_MANAGED_PREFIXES = ['.agents/', '.codex/']
-  const CLADE_MANAGED_EXACT = new Set([
-    '.claude/hub.json',
-    '.claude/.hub-state.json',
-    'scripts/wt-helper.mjs',
-  ])
-  const isCladeManagedPath = (p) =>
-    CLADE_MANAGED_PREFIXES.some((pre) => p.startsWith(pre)) || CLADE_MANAGED_EXACT.has(p)
+  // Filter clade-managed projection paths via the shared LOCKED_PROJECTION
+  // regex (kept in sync with hub:bootstrap auto-sync range — see top-of-file
+  // constant). Those are propagate residue, not user WIP, and re-materialize
+  // on next bootstrap. User code (server/, src/, app/, ...) and untracked
+  // non-projection files are real WIP and must be committed before squash.
   const wtDirty = detectUncommittedWorktreeFiles(target.path)
   const wtUserDirty = [
     ...wtDirty.modified
-      .filter((m) => !isCladeManagedPath(m.path))
+      .filter((m) => !isLockedProjectionPath(m.path))
       .map((m) => ({ ...m, kind: 'modified' })),
     ...wtDirty.untracked
-      .filter((u) => !isCladeManagedPath(u.path))
+      .filter((u) => !isLockedProjectionPath(u.path))
       .map((u) => ({ ...u, status: '??', kind: 'untracked' })),
   ]
 
@@ -954,17 +947,26 @@ async function cmdMergeBack(slug, opts = {}) {
         `merge-back blocked: ${blockers.length} file(s) in main's working tree would be overwritten by squash:\n` +
           preview +
           more +
-          `\n\nRe-run with --auto-stash to stash these as 'wt-merge-block/${cleanSlug}/<ISO>'\n` +
-          `for later reconciliation via \`node scripts/stash-reconcile.mjs\`.`
+          `\n\nRe-run with --auto-stash to bulk-stash main's dirty state as 'wt-merge-block/${cleanSlug}/<ISO>'\n` +
+          `(blockers + any unrelated dirty paths); reconcile later via \`node scripts/stash-reconcile.mjs\`.`
       )
     }
     const isoTs = new Date().toISOString().replace(/[:.]/g, '-')
     const stashMsg = `wt-merge-block/${cleanSlug}/${isoTs}`
-    const blockerPaths = blockers.map((b) => b.path)
     try {
-      git(['stash', 'push', '-u', '-m', stashMsg, '--', ...blockerPaths], { cwd: consumerRoot })
+      // Bulk stash (no pathspec) — matches cmdAdd's baseline-stash strategy.
+      // Previously this used `git stash push -u -m <msg> -- <blocker-paths>`,
+      // but `git stash push -u` with pathspec hits a scope-leak bug on
+      // git 2.50.1 (TDMS 2026-05-18: 22 blockers requested → 74 files stashed
+      // including unrelated main tracked-tree mods). Bulk stash makes the
+      // semantics explicit: "snapshot main's dirty state so squash can land,
+      // user reconciles via stash-reconcile.mjs". See pitfall-git-stash-
+      // pathspec-scope-leak (merge-back surface).
+      git(['stash', 'push', '-u', '-m', stashMsg], { cwd: consumerRoot })
       stashRef = stashMsg
-      console.log(`merge-back: stashed ${blockers.length} blocker(s) as '${stashMsg}'`)
+      console.log(
+        `merge-back: bulk-stashed main's dirty state as '${stashMsg}' (covers ${blockers.length} blocker(s) + any unrelated dirty paths)`
+      )
     } catch (e) {
       throw new Error(`merge-back: failed to stash blockers: ${e.message ?? e}`, { cause: e })
     }

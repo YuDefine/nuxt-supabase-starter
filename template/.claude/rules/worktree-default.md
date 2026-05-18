@@ -466,6 +466,35 @@ V2 → V3 切換時，consumer 端可能正好有 mid-flow 的 worktree（subage
 
 Session 開頭判定要動 code 就 **SHOULD** 立刻打 `/wt <task>`，不要先在 main 改一改才想到該開 worktree。這條原則跟前一版本一樣 — 只是現在 `/wt` 是同 session 內的自動 orchestration，不再要求 user 另開 terminal。
 
+## §9 spectra DB 跨 worktree 共享心智模型
+
+`.git/spectra-app/spectra.db` 是 **單一 SQLite 檔案、跨所有 worktree 共享**（住在 `.git/` 共用目錄）。從任何 worktree 跑 `spectra list / status / park / unpark / archive / task done` 都讀寫同一個 DB。後果：
+
+- `spectra list` 從 main 跑會列出 **所有 sibling worktree 內的 active change**（不只 main disk 上看得到的）
+- 「main disk 沒對應 directory + spectra list 顯示 active + spectra park/unpark 回 'does not exist' / 'is not parked'」**不**代表 zombie / DB 髒；多半是別 session 在 sibling worktree 物化內容
+
+2026-05-18 TDMS session 連續犯兩次：誤判 `single-equipment-kiosk-return` / `consumable-po-warehouse-item-link` 為 zombie，跑 `DELETE FROM in_progress_change` 想 surgical fix，**直接破壞 sibling worktree session 的 in_progress state**（後 mdfind 才發現位置在 `~/offline/<consumer>-wt/<slug>/`，從 `/tmp/spectra-db-backup-*.db` restore 復原）。
+
+### MUST
+
+- **NEVER** 對 `.git/spectra-app/spectra.db` 跑 `DELETE` / `UPDATE` / `INSERT` — 跨 worktree 共享，本 session 的 surgery 會影響別 worktree 的 in_progress / parked / archived state
+- **NEVER** 把「main disk 無 directory + spectra list 顯示 active + park/unpark 失敗」直接判為 zombie 或系統性 bug
+- 偵測 "zombie" 前 **MUST** 先跑：
+  - `git worktree list` 看是否有 sibling worktree
+  - `find ~/offline/<consumer>-wt -path "*<change-name>*"` 找實際物化位置
+  - `mdfind "<change-name>"` 全機 search 確認沒漏
+- 啟動 active / parked change `apply` 前 **MUST** 先 `git worktree list`，確認別 session 沒在同一 change 上做（避免雙 session apply 同一 change）
+
+### Workaround / Recovery
+
+碰到看似 zombie pattern 一律 **STOP + AskUserQuestion**，不擅自 DB surgery。
+
+若已誤動 DB：`cp /tmp/spectra-db-backup-*.db .git/spectra-app/spectra.db` restore（前提是 session 內有先 backup；若未 backup，看 `.git/logs/` 或 SQLite WAL 復原可能性）。
+
+### 可選 helper
+
+未來可加 `vendor/scripts/spectra-worktree-check.mjs` 對 `<change-name>` 比對 main disk vs sibling worktree disk，輸出物化位置，避免每次 session 手動跑 `find` / `mdfind`。
+
 ## 相關規則
 
 - [[wt]] — `/wt` skill 完整使用手冊（三種 invocation form、subagent contract、failure handling）

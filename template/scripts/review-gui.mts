@@ -40,6 +40,16 @@ export interface ManualReviewPatternEntry {
   requiresAbsenceOf?: string
   appliesTo?: string
   requiresKindIn?: string[]
+  /**
+   * `"group"` → requiresAbsenceOf evaluates against the parent's full group
+   * block (parent line + all scoped sub-items) regardless of whether the
+   * current item is the parent or a sub-item. Use for rules where any line
+   * in the group can satisfy the requirement (e.g. UI_ITEM_NO_URL: parent
+   * declares the URL once, sub-items inherit). Default (omitted) keeps the
+   * legacy scope: parent → full block, sub-item → its own line.
+   */
+  requiresAbsenceOfScope?: 'group'
+  requiresPresenceOfScope?: 'group'
 }
 
 let cachedPatterns: ManualReviewPatternEntry[] | null = null
@@ -100,19 +110,27 @@ export function loadManualReviewPatterns(): ManualReviewPatternEntry[] {
 
 /**
  * Evaluate manual-review patterns against an item block.
- * `block`: parent line (+ optional scoped children joined by newline).
- * `isParent`: when true, requiresPresenceOf / requiresAbsenceOf evaluate against
- *   the full block; when false, only against the line itself.
+ * `block`: when `isParent` is true, the parent line + scoped children joined
+ *   by newline; when `isParent` is false, the sub-item line by itself.
+ * `isParent`: drives default presence/absence scope (parent → full block,
+ *   sub-item → its own line).
+ * `groupBlock`: optional override — the parent's full group block (parent
+ *   line + all scoped sub-items) used when a pattern declares
+ *   `requiresAbsenceOfScope: "group"` or `requiresPresenceOfScope: "group"`.
+ *   Defaults to `block` for backward compat (callers that only have one
+ *   block keep prior semantics).
  * `appliesTo: parentLineOnly` patterns skip scoped children entirely.
  */
 export function evaluateManualReviewPatterns(
   block: string,
-  isParent: boolean
+  isParent: boolean,
+  groupBlock?: string
 ): Array<{ code: string; description: string; anchor: string }> {
   const patterns = loadManualReviewPatterns()
   const hits: Array<{ code: string; description: string; anchor: string }> = []
   // Primary regex evaluates against the first line (the item line itself).
   const firstLine = block.split('\n')[0] ?? ''
+  const effectiveGroupBlock = groupBlock ?? block
   for (const p of patterns) {
     if (p.appliesTo === 'parentLineOnly' && !isParent) continue
     let primaryRe: RegExp
@@ -131,8 +149,9 @@ export function evaluateManualReviewPatterns(
       const kind = kindMatch ? kindMatch[1] : null
       if (!kind || !p.requiresKindIn.includes(kind)) continue
     }
-    const scope = isParent ? block : firstLine
+    const defaultScope = isParent ? block : firstLine
     if (p.requiresPresenceOf) {
+      const scope = p.requiresPresenceOfScope === 'group' ? effectiveGroupBlock : defaultScope
       try {
         const re = new RegExp(p.requiresPresenceOf, p.regexFlags ?? '')
         if (re.test(scope)) continue
@@ -141,6 +160,7 @@ export function evaluateManualReviewPatterns(
       }
     }
     if (p.requiresAbsenceOf) {
+      const scope = p.requiresAbsenceOfScope === 'group' ? effectiveGroupBlock : defaultScope
       try {
         const re = new RegExp(p.requiresAbsenceOf, p.regexFlags ?? '')
         if (re.test(scope)) continue
@@ -506,14 +526,24 @@ export function parseManualReviewSections(
         byParent.get(item.parentId)!.push(item)
       }
     }
+    // Pre-build group blocks per parent id so sub-items can pass their
+    // parent's full group as `groupBlock` for `requiresAbsenceOfScope: "group"`
+    // patterns (e.g. UI_ITEM_NO_URL — continuation sub-items inherit the URL
+    // declared in a sibling).
+    const groupBlocks = new Map<string, string>()
+    for (const item of section.items) {
+      if (item.scoped) continue
+      const children = byParent.get(item.id) ?? []
+      groupBlocks.set(item.id, [item.raw, ...children.map((c) => c.raw)].join('\n'))
+    }
     for (const item of section.items) {
       if (item.bypassManualReviewCheck) continue
       if (item.scoped) {
-        item.manualReviewHits = evaluateManualReviewPatterns(item.raw, false)
+        const groupBlock = groupBlocks.get(item.parentId!) ?? item.raw
+        item.manualReviewHits = evaluateManualReviewPatterns(item.raw, false, groupBlock)
       } else {
-        const children = byParent.get(item.id) ?? []
-        const block = [item.raw, ...children.map((c) => c.raw)].join('\n')
-        item.manualReviewHits = evaluateManualReviewPatterns(block, true)
+        const block = groupBlocks.get(item.id) ?? item.raw
+        item.manualReviewHits = evaluateManualReviewPatterns(block, true, block)
       }
     }
   }

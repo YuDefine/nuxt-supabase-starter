@@ -1,6 +1,6 @@
 {
   "$schema": "./patterns.schema.json",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Single source-of-truth regex patterns for Pre-Review Data Readiness enforcement. Consumed by post-propose-manual-review-check.sh (via jq) and vendor/scripts/review-gui.mts (via import).",
   "patterns": [
     {
@@ -23,12 +23,13 @@
     },
     {
       "code": "UI_ITEM_NO_URL",
-      "description": "[review:ui] / [verify:ui] item 描述未出現具體 URL（http:// / https:// / /xxx path）— 只說『kiosk 頁』『dashboard』『設定頁』不算",
+      "description": "[review:ui] / [verify:ui] item group 內無任一 URL（http:// / https:// / /xxx path）— 只說『kiosk 頁』『dashboard』『設定頁』不算。Group = parent #N + 所有 #N.M sub-items；任一行含 URL 即整 group satisfied（cover Case A: parent 無 URL + sub-item 有；Case B: continuation sub-item「接續 #N.1 環境」靠 sibling URL）",
       "regex": "^\\s*-\\s*\\[[ x]\\]\\s*#[0-9.]+\\s*\\[(review|verify):ui\\]",
       "regexFlags": "",
       "requiresAbsenceOf": "https?://|/[a-z][a-z0-9-]*(/|\\s|`|：|。|，|；|$)",
+      "requiresAbsenceOfScope": "group",
       "anchor": "manual-review.md#通則",
-      "remediation": "Add a specific URL (e.g., http://localhost:8787/kiosk/workstation or /admin/kiosk-tokens?card_uid=...) so the reviewer can navigate directly. Generic labels like『kiosk page』『dashboard』『設定頁』are insufficient."
+      "remediation": "Add a specific URL (e.g., http://localhost:8787/kiosk/workstation or /admin/kiosk-tokens?card_uid=...) somewhere in the item group (parent line OR any scoped sub-item) so the reviewer can navigate directly. Continuation sub-items that share the sibling's URL context (e.g., 「接續 #1.1 環境，輸入 ...」) automatically satisfy the rule. Generic labels like『kiosk page』『dashboard』『設定頁』are insufficient."
     },
     {
       "code": "MULTI_STEP_NOT_SCOPED",
