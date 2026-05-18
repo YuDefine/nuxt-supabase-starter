@@ -20,12 +20,12 @@ Local edits will be reverted by the next sync.
 
 依序使用 Read 工具讀取以下兩份規則檔（**全部視為人為定義的 must-follow**，違反一律歸 🟠 Major）：
 
-1. `.claude/agents/references/project-review-rules.md` — clade 中央倉跨 consumer 共用嚴格條目（LOCKED；目前內容是 Nuxt + Supabase stack baseline，所有 consumer 都收同一份）
-2. `.claude/agents/references/local-review-rules.md` — consumer 在地自管條目（**可選**：檔案不存在則 skip，無需報錯）
+1. `.claude/agents/references/clade-review-rules.md` — clade 中央倉跨 consumer 共用嚴格條目（LOCKED；目前內容是 Nuxt + Supabase stack baseline，所有 consumer 都收同一份）
+2. `.claude/agents/references/project-review-rules.md` — 該專案本地自管條目（**可選**：檔案不存在則 skip，無需報錯）
 
-兩份規則 **MUST** 與下方 Step 3 的標準檢查項目**同時執行**。違反者 **MUST** 出現在審查報告「⚠️ 需要修正」區塊，歸類為「🎨 自定義 Review 規則」並標註來源層（project / local）。
+兩份規則 **MUST** 與下方 Step 3 的標準檢查項目**同時執行**。違反者 **MUST** 出現在審查報告「⚠️ 需要修正」區塊，歸類為「🎨 自定義 Review 規則」並標註來源層（clade / project）。
 
-若變更包含 `server/api/**`、`shared/schemas/**`、`shared/types/**`、`server/utils/drizzle.ts`、`server/db/schema/**`、`drizzle.config.ts`、`supabase/migrations/**`、`package.json`、`docs/**`、`app/**/*.vue`、`packages/*/app/**/*.vue`、`components/**/*.vue`、`layouts/**/*.vue` 或 `pages/**/*.vue`，**MUST** 額外執行 project / local 規則中對應熱區的檢查（UI 路徑需逐條過 a11y / 元件替代 / Dark Mode / Form 驗證四組規則）。
+若變更包含 `server/api/**`、`shared/schemas/**`、`shared/types/**`、`server/utils/drizzle.ts`、`server/db/schema/**`、`drizzle.config.ts`、`supabase/migrations/**`、`package.json`、`docs/**`、`app/**/*.vue`、`packages/*/app/**/*.vue`、`components/**/*.vue`、`layouts/**/*.vue` 或 `pages/**/*.vue`，**MUST** 額外執行 clade / project 規則中對應熱區的檢查（UI 路徑需逐條過 a11y / 元件替代 / Dark Mode / Form 驗證四組規則）。
 
 > **commit-time gate**：`vendor/scripts/review-checklist-audit.mjs` 會把兩份規則的「Reviewer 檢查方式」grep pattern 對 staged files 跑硬 gate，違反者擋 commit（`git commit --no-verify` 可繞）。agent review 是軟性引導 / advisory，與 gate 互補。
 
@@ -99,7 +99,7 @@ git diff main...HEAD
 
 #### ♿ 無障礙 (Accessibility)
 
-僅當變更涉及 `.vue` 檔執行（含 monorepo 路徑：`app/**/*.vue` / `packages/*/app/**/*.vue` / `components/**/*.vue` / `layouts/**/*.vue` / `pages/**/*.vue`）；純後端 / migration / config 變更可跳過此區。詳細規則見 `project-review-rules.md` 的「Nuxt a11y 採用一致性」section。
+僅當變更涉及 `.vue` 檔執行（含 monorepo 路徑：`app/**/*.vue` / `packages/*/app/**/*.vue` / `components/**/*.vue` / `layouts/**/*.vue` / `pages/**/*.vue`）；純後端 / migration / config 變更可跳過此區。詳細規則見 `clade-review-rules.md` 的「Nuxt a11y 採用一致性」section。
 
 - [ ] 圖片（`<img>` / `<NuxtImg>`）有 `alt`；裝飾圖明示 `alt="" aria-hidden="true"`
 - [ ] icon-only `<UButton>` / `<a>` / `<NuxtLink>` 有 `aria-label` 或 visible text
@@ -112,12 +112,12 @@ git diff main...HEAD
 - [ ] 無 `tabindex` 正數值；無 `aria-hidden="true"` 套在 focusable 元素
 - [ ] 若專案已採用 [`@nuxt/a11y`](https://nuxt.com/modules/a11y)，dev 環境跑過該 PR 涉及頁面，DevTools panel 確認 critical / serious 違規清空
 
-#### 🎨 自定義 Review 規則（兩層：project / local）
+#### 🎨 自定義 Review 規則（兩層：clade / project）
 
-逐條檢查 Step 0 載入的 `project-review-rules.md`、`local-review-rules.md`（如存在）中所有規則。
+逐條檢查 Step 0 載入的 `clade-review-rules.md`、`project-review-rules.md`（如存在）中所有規則。
 對每個變更的檔案，用 Grep 搜尋是否有違反項目。
 對於規則中標記的熱區檔案，不可只抽樣；必須逐條確認。
-報告違反項時 **MUST** 標註來源層（project / local），方便讀者判斷規則範圍與後續 promote / demote 路徑。
+報告違反項時 **MUST** 標註來源層（clade / project），方便讀者判斷規則範圍與後續 promote / demote 路徑。
 
 ### Step 4: 產出審查報告
 

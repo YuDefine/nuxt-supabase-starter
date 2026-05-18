@@ -29,7 +29,8 @@ Dispatch the project's code-review agent (.codex/agents/code-review.md):
       [task summary and plan reference]
 
       Follow the review process defined in .codex/agents/code-review.md.
-      Also load .codex/agents/references/project-review-rules.md for project-specific rules.
+      Also load .codex/agents/references/clade-review-rules.md (clade-wide shared baseline)
+      and .codex/agents/references/project-review-rules.md (if present, project-specific rules).
 
       ## Additional Checks (beyond standard code review)
 
