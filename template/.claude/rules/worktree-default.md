@@ -92,6 +92,61 @@ Fork 出 worktree 之前（無論透過 `/wt` ad-hoc 或 `/spectra-apply` Step 0
 
 詳細 cookbook（4 種情境 + 完整 trace + scope filter 細節）見 `vendor/snippets/worktree-baseline/`。
 
+#### Stash strategy 的隱性風險（hard rule）
+
+`--baseline-strategy stash` 設計**假設** dirty main = clade projection drift（`.agents/` / `.codex/` / `.claude/` 等 LOCKED 投影層的 lint sync），safe to stash and later drop。**實際 dirty main 可能包含**：
+
+- ✅ clade projection drift（預期）
+- ❌ **in-flight feature code 還沒 commit**（屬於某 spectra change 在 `deferred-to-user: db:reset / db:types must run on main before /commit` 之類的 deferred 階段）
+- ❌ 另一 parallel session 的 user WIP
+
+stash 不區分這三類，全部一起 push 進 pinned ref + apply 到 worktree。後續 merge-back 撞 conflict 時若 agent 走「reset worktree branch 到 subagent commit + 乾淨 squash + cleanup」（即俗稱 Path X 救援），baseline 中的 in-flight feature code 會從 main working tree 整段消失，只活在 `refs/wt-baseline/<slug>/<ISO>` pinned ref，typecheck / runtime 都不會抓（main HEAD 從沒 commit 過該 feature，import / type 在 HEAD 視角下「合理消失」）。
+
+**Pre-fork audit（agent MUST 跑）**：
+
+```bash
+# wt-helper add --baseline-strategy stash 之前
+git status --porcelain | grep '^??' \
+  | grep -vE '^\?\? (\.agents/|\.codex/|\.claude/)' \
+  | head -20
+# 非空 → baseline 含非 projection untracked 檔，高機率是 in-flight feature；
+# 建議先 commit baseline、或改走 commit-then-fork（如果有 change context）
+```
+
+**Merge-back 撞 conflict 時（agent MUST 跑）**：
+
+```bash
+# 撞到 'untracked working tree files would be overwritten by merge' 之類
+SLUG=<your-slug>
+REF=$(git for-each-ref refs/wt-baseline/$SLUG/ --format='%(refname)' | head -1)
+git ls-tree -r "$REF^3" --name-only \
+  | grep -vE '^(\.agents/|\.codex/|\.claude/(rules|skills|commands|agents|scripts|hooks)/|scripts/wt-helper\.mjs$|AGENTS\.md$|CLAUDE\.md$)' \
+  | head -20
+# 非空 → baseline 含非 LOCKED projection 路徑，NEVER 走 Path X
+# 改走：手動 git checkout "$REF^3" -- <feature-paths> + git checkout "$REF" -- <tracked-modified-paths> 把 baseline 帶回 main，再手動 squash / cherry-pick
+```
+
+**Recovery（已撞坑後）**：
+
+```bash
+SLUG=<your-slug>
+REF=$(git for-each-ref refs/wt-baseline/$SLUG/ --format='%(refname)' | head -1)
+# 列消失的檔案
+git ls-tree -r "$REF^3" --name-only   # untracked tree（feature 通常在這）
+git ls-tree -r "$REF" --name-only      # tracked-modified tree
+# 選擇性還原
+git checkout "$REF^3" -- <untracked-paths>
+git checkout "$REF" -- <tracked-modified-paths>
+```
+
+**NEVER**：
+
+- `--baseline-strategy stash` 跑完未 pre-fork audit 就直接 dispatch subagent
+- merge-back 撞 conflict 時不查 baseline 內容、直接 `git reset --hard <subagent-commit>` 走 Path X
+- cleanup `--force-discard-uncommitted` 不先 `wt-helper rescue` 確認 baseline 內容
+
+完整 root cause + recovery：[`pitfall-pre-fork-baseline-hides-in-flight-feature`](../../docs/pitfalls/2026-05-18-pre-fork-baseline-hides-in-flight-feature.md)。
+
 > Rationale (2026-05-18)：原規約「unmerged 永遠 STOP」過嚴，stale UU（index residue 無實際衝突）會強制 user 介入解 `git add`，跟 worktree 自動化目標衝突。Helper 端兩條 safety check（marker scan + in-progress state 偵測）對 stale 場景 false-positive 風險極低，對真衝突仍 fail-safe。
 
 **為什麼**：worktree 從 main HEAD 分出，看不到 working tree 的 untracked / modified。沒這道 guard 時 subagent 進 worktree 看 baseline 全缺 fail-fast，主線只能 AskUserQuestion 要 user 拍 baseline strategy（commit / cross-wt stash / 全包同 worktree / inspect first）。Pre-fork guard 讓 main 完成過的 baseline（典型 case：spectra Section 1+2.1 寫了 schema/migration 沒 commit 就轉 Section 2）能進 worktree，避免每次 fork 都打擾 user。

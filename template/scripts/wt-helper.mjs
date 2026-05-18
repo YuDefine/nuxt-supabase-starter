@@ -302,6 +302,53 @@ async function cmdAdd(slug, opts = {}) {
       console.log(
         `Pre-fork baseline: stash '${pendingStashName}' applied to worktree; pinned as '${pendingBaselineRef}' (permanently reachable — use 'wt-helper rescue' to inspect/restore).`
       )
+
+      // Audit baseline untracked tree for non-LOCKED-projection paths. These are
+      // likely in-flight feature code (e.g. a spectra change in deferred-to-user
+      // phase). If merge-back later fails with conflicts and the agent goes
+      // "Path X" (reset worktree branch to subagent commit + squash + cleanup),
+      // these files vanish from main's working tree silently — main HEAD never
+      // had them, so typecheck/runtime don't catch it. See
+      // pitfall-pre-fork-baseline-hides-in-flight-feature (2026-05-18 TDMS
+      // fix-vending-dispatch-dialog incident, 53-file vending feature stack
+      // lost from main).
+      try {
+        const untrackedTree = git(['ls-tree', '-r', `${pendingBaselineRef}^3`, '--name-only'], {
+          cwd: consumerRoot,
+        })
+        const allUntracked = untrackedTree.split('\n').filter(Boolean)
+        const LOCKED_PROJECTION =
+          /^(\.agents\/|\.codex\/|\.claude\/(rules|skills|commands|agents|scripts|hooks)\/|scripts\/wt-helper\.mjs$|AGENTS\.md$|CLAUDE\.md$)/
+        const nonProjection = allUntracked.filter((p) => !LOCKED_PROJECTION.test(p))
+        if (nonProjection.length > 0) {
+          const sample = nonProjection.slice(0, 5).join(', ')
+          const more = nonProjection.length > 5 ? `, ... +${nonProjection.length - 5} more` : ''
+          console.warn('')
+          console.warn(
+            `⚠️  Pre-fork baseline contains ${nonProjection.length} non-LOCKED-projection untracked file(s).`
+          )
+          console.warn(`    These may be in-flight feature code (not just clade projection drift).`)
+          console.warn(`    Sample: ${sample}${more}`)
+          console.warn(`    If merge-back later fails with untracked-overwrite conflicts:`)
+          console.warn(
+            `      • NEVER run 'git reset --hard <subagent-commit>' (Path X) before auditing baseline.`
+          )
+          console.warn(`      • Audit baseline: git ls-tree -r ${pendingBaselineRef}^3 --name-only`)
+          console.warn(`      • Recovery: git checkout ${pendingBaselineRef}^3 -- <paths>`)
+          console.warn(
+            `    See pitfall-pre-fork-baseline-hides-in-flight-feature for full root cause.`
+          )
+          console.warn('')
+        }
+      } catch (auditErr) {
+        // Audit is informational; ^3 parent may not exist if stash had no
+        // untracked content. Do NOT block worktree creation on audit failure.
+        // Suppress benign "Not a valid object name" cases; surface other errors.
+        const msg = auditErr?.message ?? String(auditErr)
+        if (!/Not a valid object name|unknown revision/.test(msg)) {
+          console.error(`note: baseline content audit skipped: ${msg}`)
+        }
+      }
     } catch (e) {
       console.error(
         `warn: stash apply to worktree failed; stash '${pendingStashName}' preserved in 'git stash list' for manual recovery.`

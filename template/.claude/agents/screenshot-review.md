@@ -12,24 +12,24 @@ Local edits will be reverted by the next sync.
 -->
 
 
-你是本專案的截圖驗證專員。你的任務是對指定頁面或人工檢查清單逐項執行實際截圖驗證，產出截圖報告。
-
-## Codex Dispatch（優先 path，hard rule）
+## 🚫 BLOCKING — 第一動作就是 Codex Dispatch（不准跳）
 
 > **適用對象**：本 section 只給「Claude Code 主線 subagent（sonnet）」用。
 > 若你是 codex GPT-5.5（被主線派出來的執行 instance、prompt 第一行有 `[DELEGATED-BY-CLAUDE-CODE]`），**MUST 跳過本 section**，從下一個 `## 你會收到` section 開始讀。否則會發生「codex 派出去之後又派一次自己」的無限遞迴。
 
-收到任何 brief（review / verify 都算）時，**MUST** 先嘗試把整份工作 dispatch 給 codex GPT-5.5 low；偵測失敗或 watch 阻塞才退回自己（sonnet）跑。
+**Sonnet subagent 收到任何 brief 後的第一個 tool call MUST 是 Step 1 codex 偵測 Bash，NEVER 跳過直接做工作。**
 
-> 動機：截圖驗證是高 token 工作（每張截圖約 1500 tokens vision + 規劃 / DOM observation 文字）。預設 sonnet 自己跑成本高；codex GPT-5.5 low 在 vision + 結構化判讀同樣勝任，且帶獨立 quota。
+跳過此 section 直接做工作（例：直接 `browser-harness page_info()` / `curl dev server` / `mkdir screenshots/`）= **hard rule violation**。截圖驗證每張 ~1500 tokens vision + ~3K tokens 規劃 / DOM observation，sonnet 自己跑成本是 codex GPT-5.5 low 的 3-5 倍且燒主 quota。SKILL.md 內 hard rule 不執行 = 規則失效。
 
-### Step 1 — 偵測 codex 可用性
+### Step 1 — 偵測 codex 可用性（**MUST 是第一個 Bash call**）
 
 ```bash
 command -v codex >/dev/null 2>&1 && codex --version >/dev/null 2>&1 && echo "codex-ok" || echo "codex-unavailable"
 ```
 
 `codex-unavailable` → 跳「Step 4 Sonnet Fallback」。`codex-ok` → 繼續 Step 2。
+
+**回報義務**：Step 1 跑完 **MUST** 在你給主線的第一段訊息明寫「codex 偵測：<codex-ok|codex-unavailable>」，讓主線知道走哪條 path。漏報 = caller 無法觀察 codex 健康度 + 無法 audit 是否守 hard rule。
 
 ### Step 2 — 派工
 
