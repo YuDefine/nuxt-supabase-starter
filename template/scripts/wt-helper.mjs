@@ -844,7 +844,9 @@ async function cmdMergeBack(slug, opts = {}) {
           `merge-back: --include-worktree-wip auto-amended ${paths.length} dirty file(s) into ${branchName} HEAD`
         )
       } catch (e) {
-        throw new Error(`merge-back: --include-worktree-wip auto-amend failed: ${e.message ?? e}`)
+        throw new Error(`merge-back: --include-worktree-wip auto-amend failed: ${e.message ?? e}`, {
+          cause: e,
+        })
       }
     } else {
       const preview = wtUserDirty
@@ -894,7 +896,7 @@ async function cmdMergeBack(slug, opts = {}) {
       stashRef = stashMsg
       console.log(`merge-back: stashed ${blockers.length} blocker(s) as '${stashMsg}'`)
     } catch (e) {
-      throw new Error(`merge-back: failed to stash blockers: ${e.message ?? e}`)
+      throw new Error(`merge-back: failed to stash blockers: ${e.message ?? e}`, { cause: e })
     }
   }
 
@@ -1007,7 +1009,7 @@ async function cmdRescue(opts) {
         stdio: 'inherit',
       })
     } catch (e) {
-      throw new Error(`rescue --show ${opts.show}: ${e?.message ?? e}`)
+      throw new Error(`rescue --show ${opts.show}: ${e?.message ?? e}`, { cause: e })
     }
     return
   }
