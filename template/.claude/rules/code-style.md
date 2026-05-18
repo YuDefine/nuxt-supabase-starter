@@ -19,6 +19,19 @@ Local edits will be reverted by the next sync.
 - `vp` 已 batteries-included，不需要額外裝 / 維護兩套生態系
 - 統一工具鏈避免 consumer 之間 lint rule drift
 
+## Governance — lint / fmt 設定改在哪
+
+**跨 consumer 統一的 baseline**（oxlint rules / oxfmt 風格 / 共用 ignore patterns）**MUST** 改在 clade 中央倉 `vendor/oxc-shared/preset.mjs`，再 `node scripts/publish.mjs <bump> && node scripts/propagate.mjs` 散播到所有 consumer。**NEVER** 在 consumer 端的 `vendor/oxc-shared/preset.mjs` 投影副本直接改 — 下次 propagate 會覆蓋，且各 consumer 會 silently drift。
+
+**consumer 自家業務 override**（單一 consumer 因第三方套件需要關掉某條 rule、或自家業務需要加 ignore path）寫在該 consumer 的 `vite.config.ts` 內、`spread baseline 之後`的 override block，**禁止**整段 inline 重寫 baseline（會 silently drift）。範例見下方 § `vite.config.ts` 必備欄位。
+
+判斷流程：
+
+1. 「這條規則 / 風格 / ignore 是否每個 consumer 都該套？」
+   - 是 → clade `vendor/oxc-shared/preset.mjs`（baseline）
+   - 否，只有單一 consumer 需要 → 該 consumer 自家 `vite.config.ts` override block
+2. 不確定 → 預設放 clade baseline（過鬆比過嚴容易補；先散播再個別 override 比反向收斂容易）
+
 ## 禁止事項（NEVER）
 
 ### 禁止建立 eslint 設定檔
