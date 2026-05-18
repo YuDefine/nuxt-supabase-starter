@@ -52,7 +52,24 @@ export interface ManualReviewPatternEntry {
   requiresPresenceOfScope?: 'group'
 }
 
-let cachedPatterns: ManualReviewPatternEntry[] | null = null
+interface CompiledManualReviewPatternEntry extends ManualReviewPatternEntry {
+  // Precompiled regex objects — populated lazily by `loadManualReviewPatterns`
+  // so `evaluateManualReviewPatterns` skips repeated `new RegExp(...)` per item.
+  _primaryRe: RegExp | null
+  _presenceRe: RegExp | null
+  _absenceRe: RegExp | null
+}
+
+let cachedPatterns: CompiledManualReviewPatternEntry[] | null = null
+
+function compileOrNull(source: string | undefined, flags: string | undefined): RegExp | null {
+  if (!source) return null
+  try {
+    return new RegExp(source, flags ?? '')
+  } catch {
+    return null
+  }
+}
 
 function locatePatternsFile(): string | null {
   // Search upward from CWD looking for vendor/snippets/manual-review-enforcement/patterns.json
@@ -94,14 +111,20 @@ export function loadManualReviewPatterns(): ManualReviewPatternEntry[] {
     const raw = readFileSync(path, 'utf8')
     const parsed = JSON.parse(raw) as { patterns?: ManualReviewPatternEntry[] }
     const entries = Array.isArray(parsed.patterns) ? parsed.patterns : []
-    cachedPatterns = entries.map((p) => ({
-      ...p,
-      regex: translatePosixToJs(p.regex),
-      requiresPresenceOf: p.requiresPresenceOf
-        ? translatePosixToJs(p.requiresPresenceOf)
-        : undefined,
-      requiresAbsenceOf: p.requiresAbsenceOf ? translatePosixToJs(p.requiresAbsenceOf) : undefined,
-    }))
+    cachedPatterns = entries.map((p) => {
+      const regex = translatePosixToJs(p.regex)
+      const presence = p.requiresPresenceOf ? translatePosixToJs(p.requiresPresenceOf) : undefined
+      const absence = p.requiresAbsenceOf ? translatePosixToJs(p.requiresAbsenceOf) : undefined
+      return {
+        ...p,
+        regex,
+        requiresPresenceOf: presence,
+        requiresAbsenceOf: absence,
+        _primaryRe: compileOrNull(regex, p.regexFlags),
+        _presenceRe: compileOrNull(presence, p.regexFlags),
+        _absenceRe: compileOrNull(absence, p.regexFlags),
+      }
+    })
   } catch {
     cachedPatterns = []
   }
@@ -126,19 +149,15 @@ export function evaluateManualReviewPatterns(
   isParent: boolean,
   groupBlock?: string
 ): Array<{ code: string; description: string; anchor: string }> {
-  const patterns = loadManualReviewPatterns()
+  const patterns = loadManualReviewPatterns() as CompiledManualReviewPatternEntry[]
   const hits: Array<{ code: string; description: string; anchor: string }> = []
   // Primary regex evaluates against the first line (the item line itself).
   const firstLine = block.split('\n')[0] ?? ''
   const effectiveGroupBlock = groupBlock ?? block
   for (const p of patterns) {
     if (p.appliesTo === 'parentLineOnly' && !isParent) continue
-    let primaryRe: RegExp
-    try {
-      primaryRe = new RegExp(p.regex, p.regexFlags ?? '')
-    } catch {
-      continue
-    }
+    const primaryRe = p._primaryRe
+    if (!primaryRe) continue
     if (!primaryRe.test(firstLine)) continue
     // requiresKindIn: pattern only fires when item's leading kind marker is in the allowed list.
     // Example: MULTI_STEP_NOT_SCOPED uses requiresKindIn: ["review:ui"] so it doesn't over-fire
@@ -150,23 +169,13 @@ export function evaluateManualReviewPatterns(
       if (!kind || !p.requiresKindIn.includes(kind)) continue
     }
     const defaultScope = isParent ? block : firstLine
-    if (p.requiresPresenceOf) {
+    if (p._presenceRe) {
       const scope = p.requiresPresenceOfScope === 'group' ? effectiveGroupBlock : defaultScope
-      try {
-        const re = new RegExp(p.requiresPresenceOf, p.regexFlags ?? '')
-        if (re.test(scope)) continue
-      } catch {
-        // invalid regex → fall through to hit
-      }
+      if (p._presenceRe.test(scope)) continue
     }
-    if (p.requiresAbsenceOf) {
+    if (p._absenceRe) {
       const scope = p.requiresAbsenceOfScope === 'group' ? effectiveGroupBlock : defaultScope
-      try {
-        const re = new RegExp(p.requiresAbsenceOf, p.regexFlags ?? '')
-        if (re.test(scope)) continue
-      } catch {
-        // invalid regex → fall through to hit
-      }
+      if (p._absenceRe.test(scope)) continue
     }
     // MULTI_STEP_NOT_SCOPED special case: skip if parent block already contains
     // scoped sub-items (lines beginning with two-space indent + `- [`).
@@ -1638,57 +1647,72 @@ export async function listPendingChanges(mainRoot: string): Promise<ChangeSummar
   // 的 active copy；main 已 archive 的 change 不該再在 review GUI 顯示為 pending。
   const archivedInMain = listMainArchivedChangeNames(mainRoot)
 
-  const summariesByName = new Map<string, ChangeSummary>()
-  // sources 已排序：main 在第一筆、worktree 在後。後寫蓋掉前寫 → worktree-prefer collision rule
-  // （受 mainBlobHashes 判斷 skip 條件約束，見下方）。
-  for (const src of sources) {
-    const changesRoot = join(src.root, 'openspec', 'changes')
-    if (!existsSync(changesRoot)) continue
+  // Parallelize per-source work: pools walk + per-change summarize all overlap.
+  // Result is an array of `{ src, summaries }` in the same order as `sources`,
+  // so the downstream merge preserves the legacy collision rule (main first,
+  // worktree later writes shadow main).
+  const partials = await Promise.all(
+    sources.map(async (src) => {
+      const changesRoot = join(src.root, 'openspec', 'changes')
+      if (!existsSync(changesRoot)) return { src, summaries: [] as ChangeSummary[] }
 
-    // 對 worktree source 預載 HEAD blob hash（main source 跳過：main 永遠是 fallback target）
-    const wtBlobHashes = src.slug !== null ? listOpenspecChangesBlobHashes(src.root) : null
+      // 對 worktree source 預載 HEAD blob hash（main source 跳過：main 永遠是 fallback target）
+      const wtBlobHashes = src.slug !== null ? listOpenspecChangesBlobHashes(src.root) : null
 
-    const pools = await listScreenshotPools(src.root, src.rootId)
-    let entries
-    try {
-      entries = await readdir(changesRoot, { withFileTypes: true })
-    } catch {
-      continue
-    }
-    for (const entry of entries) {
-      if (!entry.isDirectory() || entry.name === 'archive' || entry.name.startsWith('.')) continue
-      // archive-aware dedupe：sibling worktree 的 active copy 若在 main 已 archive，跳過。
-      // 只對 worktree source 套用（main 自己的 archive folder 已在上一行的 name === 'archive' 排除）。
-      if (src.slug !== null && archivedInMain.has(entry.name)) continue
-      const tasksPath = join(changesRoot, entry.name, 'tasks.md')
-      if (!existsSync(tasksPath)) continue
-      // Diff-aware skip：worktree HEAD 跟 main HEAD 對該 change tasks.md 的 blob hash 相同
-      // → worktree 沒在這條 change 上 commit 任何變動 → 不蓋過 main entry（讓 main 的
-      // working-tree state 服務 user）。兩邊 hash 任一缺失（檔不在 HEAD tree、git 失敗等）
-      // 視為「無法確認 worktree 沒動過」→ 保守走舊邏輯（overwrite as usual）。
-      if (wtBlobHashes !== null) {
-        const relPath = `openspec/changes/${entry.name}/tasks.md`
-        const wtHash = wtBlobHashes.get(relPath)
-        const mainHash = mainBlobHashes.get(relPath)
-        if (wtHash && mainHash && wtHash === mainHash) {
-          // HEAD blobs match — but worktree working tree could still carry uncommitted
-          // edits (mid-`/spectra-apply` scenario). Only skip when working tree is also
-          // confirmed clean; otherwise fall through and let worktree shadow main so the
-          // user sees the WIP edits in the review GUI.
-          if (!isWtPathDirty(src.root, relPath)) continue
-        }
-      }
-      const summary = await summarizeChange(
-        src.root,
-        entry.name,
-        tasksPath,
-        filterPoolsForChange(pools, entry.name),
-        src.slug
+      const [pools, entries] = await Promise.all([
+        listScreenshotPools(src.root, src.rootId),
+        readdir(changesRoot, { withFileTypes: true }).catch(() => null),
+      ])
+      if (!entries) return { src, summaries: [] as ChangeSummary[] }
+
+      const summarized = await Promise.all(
+        entries.map(async (entry) => {
+          if (!entry.isDirectory() || entry.name === 'archive' || entry.name.startsWith('.'))
+            return null
+          // archive-aware dedupe：sibling worktree 的 active copy 若在 main 已 archive，跳過。
+          // 只對 worktree source 套用（main 自己的 archive folder 已在上一行的 name === 'archive' 排除）。
+          if (src.slug !== null && archivedInMain.has(entry.name)) return null
+          const tasksPath = join(changesRoot, entry.name, 'tasks.md')
+          if (!existsSync(tasksPath)) return null
+          // Diff-aware skip：worktree HEAD 跟 main HEAD 對該 change tasks.md 的 blob hash 相同
+          // → worktree 沒在這條 change 上 commit 任何變動 → 不蓋過 main entry（讓 main 的
+          // working-tree state 服務 user）。兩邊 hash 任一缺失（檔不在 HEAD tree、git 失敗等）
+          // 視為「無法確認 worktree 沒動過」→ 保守走舊邏輯（overwrite as usual）。
+          if (wtBlobHashes !== null) {
+            const relPath = `openspec/changes/${entry.name}/tasks.md`
+            const wtHash = wtBlobHashes.get(relPath)
+            const mainHash = mainBlobHashes.get(relPath)
+            if (wtHash && mainHash && wtHash === mainHash) {
+              // HEAD blobs match — but worktree working tree could still carry uncommitted
+              // edits (mid-`/spectra-apply` scenario). Only skip when working tree is also
+              // confirmed clean; otherwise fall through and let worktree shadow main so the
+              // user sees the WIP edits in the review GUI.
+              if (!isWtPathDirty(src.root, relPath)) return null
+            }
+          }
+          return summarizeChange(
+            src.root,
+            entry.name,
+            tasksPath,
+            filterPoolsForChange(pools, entry.name),
+            src.slug
+          )
+        })
       )
-      if (summary) {
-        summariesByName.set(summary.name, summary)
-        changeRouteCache.set(summary.name, src)
+      return {
+        src,
+        summaries: summarized.filter((s): s is ChangeSummary => s !== null),
       }
+    })
+  )
+
+  const summariesByName = new Map<string, ChangeSummary>()
+  // partials 維持 sources 的順序：main 第一筆、worktree 在後。後寫蓋掉前寫 → worktree-prefer
+  // collision rule（受 mainBlobHashes 判斷 skip 條件約束）。
+  for (const { src, summaries } of partials) {
+    for (const summary of summaries) {
+      summariesByName.set(summary.name, summary)
+      changeRouteCache.set(summary.name, src)
     }
   }
 
@@ -2414,6 +2438,19 @@ export function renderReviewHtml(): string {
       animation: rg-spin .8s linear infinite;
     }
     @keyframes rg-spin { to { transform: rotate(360deg); } }
+    .loading-spin::before {
+      content: '';
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      margin-right: 10px;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      vertical-align: -1px;
+      animation: rg-spin .8s linear infinite;
+      opacity: .7;
+    }
     .task-item.saving {
       position: relative;
       pointer-events: none;
@@ -3201,13 +3238,13 @@ export function renderReviewHtml(): string {
         </ol>
         <p class="onboard-hint">按 <span class="kbd">?</span> 顯示完整鍵盤快捷鍵</p>
       </details>
-      <div id="changeStatus" class="status">載入 change 清單中…</div>
+      <div id="changeStatus" class="status loading-spin">載入 change 清單中…</div>
       <div id="changeList" class="change-list"></div>
     </aside>
     <main>
       <section class="review-pane">
         <div class="toolbar">
-          <h2 id="currentTitle">選擇一個 change 開始</h2>
+          <h2 id="currentTitle" class="loading-spin">載入 change 清單中…</h2>
           <button id="evidenceSweepButton" class="copy-handoff-btn" type="button" hidden title="複製整張 change 的補 evidence prompt — 讓新 Claude session 一次跑 /spectra-apply Step 8a 補齊所有缺項">📋 補齊全 change 缺失 evidence</button>
           <button id="reloadButton" type="button" title="重新載入目前 change">重新載入</button>
         </div>
@@ -4357,9 +4394,14 @@ export function renderReviewHtml(): string {
       showBanner('');
       const data = await api('/api/changes');
       state.changes = data.changes || [];
+      el.changeStatus.classList.remove('loading-spin');
       el.changeStatus.textContent = state.changes.length
         ? state.changes.length + ' 個 change 含人工檢查區塊'
         : '目前沒有待處理的人工檢查項目';
+      if (!state.changes.length) {
+        el.currentTitle.classList.remove('loading-spin');
+        el.currentTitle.textContent = '選擇一個 change 開始';
+      }
       renderChanges();
       if (state.current) return;
       // Deep link：URL 指定的 change（path 第二段）優先，匹配不到才 fallback
@@ -4623,6 +4665,7 @@ export function renderReviewHtml(): string {
       const change = state.current;
       if (!change) return;
       // textContent 一次清掉舊內容，再 appendChild 可選 wt badge。
+      el.currentTitle.classList.remove('loading-spin');
       el.currentTitle.textContent = change.name;
       if (change.worktreeSlug) {
         const badge = document.createElement('span');
@@ -5697,7 +5740,10 @@ export function renderReviewHtml(): string {
 
     loadChanges().catch(function (err) {
       showBanner(err.message || String(err), 'error');
+      el.changeStatus.classList.remove('loading-spin');
       el.changeStatus.textContent = '無法載入 change 清單';
+      el.currentTitle.classList.remove('loading-spin');
+      el.currentTitle.textContent = '選擇一個 change 開始';
     });
   </script>
 </body>

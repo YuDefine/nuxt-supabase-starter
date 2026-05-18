@@ -56,6 +56,20 @@ Verify that an implementation matches the change artifacts (specs, tasks, design
    - `schemaName`: The workflow being used (e.g., "spec-driven")
    - Which artifacts exist for this change
 
+2.5. **Stash Reconcile (clade fork; not in upstream spectra)**
+
+   Scan namespaced stashes related to this change before verifying. Prevents false-positive pass when WIP fixes are stuck in stash (auto-stashed by wt-helper / propagate / clade-publish) and never reapplied to the tree under verification — without this, verify on a clean tree reports green but real fixes haven't landed.
+
+   - Run: `node scripts/stash-reconcile.mjs --slug "<change-name>" --json`
+   - Parse stdout JSON. If `entries.length === 0`, continue silently to Step 3.
+   - If hits: print one-line summary `⚠ Stash Reconcile: N entries match slug '<change>'`, then use **request_user_input**:
+     - **Show full report** — print each entry's `ref`, `namespace.kind`, `createdAt`, file list, and `recommendation.action`/`recommendation.reason`; then re-ask the same question
+     - **Apply recommended** — for every entry where `recommendation.action === "apply"`, run `git stash apply <ref>` (safety contract: NEVER `pop` / `drop` here). Then continue to Step 3.
+     - **Ignore and continue** — proceed with verify on current tree without touching stash
+     - **Stop verify** — abort verification (user will reconcile manually)
+   - **Skip condition**: if user passed `--no-reconcile` (or said "不要掃 stash" / "skip reconcile"), skip this step and print `Stash reconcile: skipped (user --no-reconcile)`.
+   - **Failure handling**: if the script exits non-zero or JSON parse fails, print the error and continue to Step 3 (reconcile is advisory — do NOT block verify).
+
 3. **Get the change directory and load artifacts**
 
    ```bash
