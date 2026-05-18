@@ -50,6 +50,7 @@ Screenshot review **只覆蓋視覺層**，**不**覆蓋功能 round-trip。下�
 | **Edge case payload（null / 空 / 邊界）** | — | ❌ 必須使用者實作 |
 | **權限拒絕 path** | — | ❌ 必須使用者實作 |
 
+<!-- starter:strip-begin -->
 ### 真實案例（為什麼這條 rule 存在）
 
 > 2026-05-08，`loan-conflict-prompt-and-manual-return` change 的 phase 7 screenshot review 報告 Fidelity 8/8、0 DRIFT、0 Critical，包含「Manual return dialog 結構正確」「Submit loading state OK」。Phase 6 quality gates 全綠（焦點 test 23 個）。
@@ -57,6 +58,7 @@ Screenshot review **只覆蓋視覺層**，**不**覆蓋功能 round-trip。下�
 > 使用者人工檢查 #39 實際送出 dialog → 立刻收到 400 ZodError：「`return_notes`: expected string, received null」。Schema 用 `.optional()` 而非 `.nullish()`，client 送 `null`，phase 2 codex 寫的 test 沒含 `null` boundary case。
 >
 > Screenshot review 全綠 + test 全綠 + design fidelity 8/8 都沒擋住這個 bug — 因為**沒有任何環節真實送出 form**。
+<!-- starter:strip-end -->
 
 ### 規約
 
@@ -674,11 +676,13 @@ Session worktree fork 在 clade hook 升版前時，worktree 內 `scripts/spectr
 
 3. 或在 worktree 內跑 `pnpm hub:bootstrap` sync clade projection，再用 worktree-local hook（清乾淨 stale state）
 
+<!-- starter:strip-begin -->
 ### 為什麼這條 hard rule 存在
 
 實證 2026-05-18 <consumer-b> session：在修 `receiving-scan-status-flow/tasks.md` #10 的 UI_ITEM_NO_URL violation 時，新寫的 sub-item `#10.1` 內含「對**任一筆** scan 操作 status 變更...」字眼 — 這正是 ABSTRACT_REFERENCE pattern（`某張|某筆|某個|任一張|任一筆|...`）要消的模糊指代。Commit 後 user 重整 GUI 才發現 → 再跑一輪 fix。Hook re-run 可以在 commit 前**當下抓到**，省一輪 round-trip + user 介入。
 
 任何 ingest / 手動 edit `## 人工檢查` 都可能引入新的 pattern hit（特別是寫範例 step 時不小心用了規避詞）。validation gate 是廉價的自動化檢查（< 1s），跳過它代表把驗證責任推給 GUI / user。
+<!-- starter:strip-end -->
 
 ## 禁止事項
 
