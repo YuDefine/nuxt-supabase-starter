@@ -328,6 +328,14 @@ If there is no request_user_input 工具 available, present options as plain tex
 
       <每個 task 的編號 + 描述，從 tasks.md 抓>
 
+      Worktree workaround（clade TD-015 / spectra ≤2.3.1）：
+      你在 session worktree 內跑 `spectra task done` 時，`.spectra/touched/` 會正確寫到當前 worktree ✅，
+      但 tasks.md 的 `[ ] → [x]` 翻轉可能寫到 AI Agent system-managed agent worktree（`<consumer>/.claude/worktrees/agent-*/`），
+      導致**當前 worktree 的 tasks.md 沒翻**。每跑完一次 `spectra task done`：
+      1. `git -C $(pwd) diff -- openspec/changes/<change>/tasks.md` 確認當前 worktree 看得到 `[ ] → [x]`
+      2. 若 diff 空 → 手動 Edit tasks.md 把對應行 `- [ ] <task-id>` 改成 `- [x] <task-id>`
+      3. **NEVER** 動 `<consumer>/.claude/worktrees/agent-*/` 內任何檔（harness 自管，session 結束會 GC）
+
       Plan-first（**MUST**，per `.claude/rules/agent-routing.md` Plan-first 條目）：
       在動任何 Edit / Write / Bash 寫入動作之前，先在 stdout 最開頭輸出一段 `## Plan` section，包含：
       - **要動的具體檔案**（每條一行的相對路徑；對應到 phase <N> 內每個 task 的預期落點）
@@ -412,6 +420,11 @@ If there is no request_user_input 工具 available, present options as plain tex
    - **Verify before marking done** — re-read the task description from the tasks file AND the relevant Implementation Contract content from design.md. For each requirement stated in the task description and each contract item that covers this task's scope, confirm it is addressed by your changes. Confirm the verification target named by the task (test name, CLI invocation, analyzer check, or manual assertion) actually passes. If any contract item, task requirement, or verification target is missing or failing, implement/fix it now. Do not mark the task complete until every part of the description is covered and the contract for this task is satisfied.
    - Mark task complete by running: `spectra task done --change "<name>" <task-id>`
      This command marks the checkbox in tasks.md AND records which files were modified for this task.
+
+     **Worktree workaround (clade TD-015 / spectra ≤2.3.1)**: when running inside a session worktree (path `<consumer>-wt/<slug>/`), `spectra task done` writes `.spectra/touched/<change>.json` to the current worktree ✅ but its `tasks.md` checkbox flip can land in the AI Agent system-managed agent worktree (`<consumer>/.claude/worktrees/agent-*/`) instead. Workaround:
+       1. After `spectra task done`, **MUST** verify `git -C $(pwd) diff -- openspec/changes/<change>/tasks.md` shows the `[ ] → [x]` flip in the current worktree.
+       2. If diff is empty → mirror-flip manually with Edit (change `- [ ] <task-id>` to `- [x] <task-id>` on the matching line). The `.spectra/touched/` write already happened, so this is a UI-only sync.
+       3. **NEVER** touch `<consumer>/.claude/worktrees/agent-*/`; that's AI Agent harness state — let it GC at session end.
    - Continue to next task
 
    **Parallel task dispatch**: When consecutive `[P]`-marked tasks are found and `parallel_tasks: true` is configured (see Step 5), dispatch them as parallel agents in a single message. If any `[P]` task fails, pause and report.
