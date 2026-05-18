@@ -26,6 +26,7 @@ Dev-login routes are local/test-only auth bypasses for screenshot automation, E2
 - **MUST** emit a structured server-side dev-login log containing route, email, requested `as`, resolved role, action, and environment.
 - **MUST** mark any persistent rows created by dev-login with a dev/test provider marker such as `provider='dev-login'`, `provider='test'`, or `provider_id='e2e-*'`.
 - **MUST** add or update focused tests for the guard, role resolution, email handling, session payload, and open-redirect rejection.
+- **MUST** normalize IPv6 zone-id before comparing against any loopback allowlist (e.g. `Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])`). On macOS, h3 `getRequestIP(event)` returns IPv6 with zone-id (`::1%lo0`); strict Set comparison fails and the gate falls through to 404. Use `ip.replace(/%.*$/, '')` (or equivalent normalization) before the lookup. See `docs/pitfalls/2026-05-18-macos-ipv6-zone-id-loopback-gate.md`.
 
 ## NEVER
 
