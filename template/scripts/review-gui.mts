@@ -326,6 +326,11 @@ interface CliOptions {
   openBrowser: boolean
   /** Headless scan：不啟 server，輸出 readiness JSON 到 stdout 後結束。供 review-readiness-scan skill 使用。 */
   scan: boolean
+  /**
+   * User 顯式帶 `--repo <path>` → 視為已知意圖（如 CI / 腳本指定 main path 跑 scan），
+   * skip preflightCwd 的 worktree 拒絕檢查。預設 process.cwd() 啟動時 enforce check。
+   */
+  explicitRepo: boolean
 }
 
 interface ScreenshotFile {
@@ -1547,7 +1552,7 @@ export async function listPendingChanges(mainRoot: string): Promise<ChangeSummar
     if (!existsSync(changesRoot)) continue
 
     // 對 worktree source 預載 HEAD blob hash（main source 跳過：main 永遠是 fallback target）
-    const wtBlobHashes = src.worktreeSlug !== null ? listOpenspecChangesBlobHashes(src.root) : null
+    const wtBlobHashes = src.slug !== null ? listOpenspecChangesBlobHashes(src.root) : null
 
     const pools = await listScreenshotPools(src.root, src.rootId)
     let entries
@@ -5397,6 +5402,7 @@ function parseArgs(argv: string[]): CliOptions {
     repoRoot: process.cwd(),
     openBrowser: true,
     scan: false,
+    explicitRepo: false,
   }
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]
@@ -5404,8 +5410,10 @@ function parseArgs(argv: string[]): CliOptions {
     else if (arg === '--scan') opts.scan = true
     else if (arg === '--host') opts.host = argv[++i] || opts.host
     else if (arg === '--port') opts.port = Number(argv[++i] || DEFAULT_PORT)
-    else if (arg === '--repo') opts.repoRoot = resolve(argv[++i] || opts.repoRoot)
-    else if (arg === '--help' || arg === '-h') {
+    else if (arg === '--repo') {
+      opts.repoRoot = resolve(argv[++i] || opts.repoRoot)
+      opts.explicitRepo = true
+    } else if (arg === '--help' || arg === '-h') {
       console.log(
         'Usage: review-gui.mts [--repo <path>] [--host 127.0.0.1] [--port 5174] [--no-open] [--scan]'
       )
@@ -5417,10 +5425,69 @@ function parseArgs(argv: string[]): CliOptions {
   return opts
 }
 
+/**
+ * Worktree-aware preflight — review-gui aggregates main + all worktrees from the
+ * main repo (see listSourceRoots). Starting from a non-main worktree produces:
+ *   - stale snapshots: process reads worktree's review-gui.mts version (may not
+ *     have latest collision fix), then becomes long-lived singleton serving
+ *     wrong data
+ *   - main-only changes missing from /api/changes home (worktree's stale copy
+ *     of openspec/changes/<name>/ shadows main's authoritative version under
+ *     pre-b3a6b86 collision rules; even with the fix, starting from worktree
+ *     means singleton outlives propagate cycles)
+ *
+ * Refuse running from a non-main worktree. Skip if user passed `--repo` explicitly
+ * (treat as intentional override, e.g. CI scan against absolute path).
+ */
+function preflightCwd(options: CliOptions): void {
+  if (options.explicitRepo) return
+  let gitDir: string
+  let commonDir: string
+  try {
+    const gitDirResult = spawnSync('git', ['rev-parse', '--git-dir'], {
+      cwd: options.repoRoot,
+      encoding: 'utf8',
+    })
+    const commonDirResult = spawnSync('git', ['rev-parse', '--git-common-dir'], {
+      cwd: options.repoRoot,
+      encoding: 'utf8',
+    })
+    if (gitDirResult.status !== 0 || commonDirResult.status !== 0) return
+    gitDir = (gitDirResult.stdout || '').trim()
+    commonDir = (commonDirResult.stdout || '').trim()
+  } catch {
+    return
+  }
+  if (!gitDir || !commonDir) return
+  const absGitDir = resolve(options.repoRoot, gitDir)
+  const absCommonDir = resolve(options.repoRoot, commonDir)
+  if (absGitDir === absCommonDir) return
+  const mainRoot = absCommonDir.replace(/[\\/]\.git[\\/]*$/, '')
+  console.error('')
+  console.error('✗ review-gui refuses to start from a non-main worktree.')
+  console.error(`  cwd: ${options.repoRoot}`)
+  console.error(`  Detected worktree git-dir: ${absGitDir}`)
+  console.error(`  Main worktree git-dir:    ${absCommonDir}`)
+  console.error('')
+  console.error('  Reason: review-gui aggregates main + all worktrees from the main')
+  console.error('  repo. Starting from a worktree creates a long-lived singleton with')
+  console.error('  stale code that survives propagate cycles, and may shadow main-only')
+  console.error('  changes from /api/changes home page.')
+  console.error('')
+  console.error('  Run from main worktree:')
+  console.error(`    cd ${mainRoot}`)
+  console.error('    pnpm review:ui')
+  console.error('')
+  console.error('  To override (e.g. CI scan against an absolute path):')
+  console.error(`    review-gui.mts --repo ${mainRoot}${options.scan ? ' --scan' : ''}`)
+  process.exit(2)
+}
+
 async function main() {
   const options = parseArgs(process.argv)
   if (!existsSync(options.repoRoot))
     throw new Error(`Repo root does not exist: ${options.repoRoot}`)
+  preflightCwd(options)
   if (options.scan) {
     await runScan(options.repoRoot)
     return
