@@ -580,9 +580,8 @@ If there is no request_user_input 工具 available, present options as plain tex
    When tasks.md still contains unchecked items in the `## 人工檢查` section (typical at this point — implementation tasks `[x]` but manual-review items `[ ]`), **MUST** hand off to the local manual-review GUI rather than walking through items inline in chat.
 
    - **DEFAULT path**: Reply to the user with something like:
-     > Implementation 完成。Step 8a 已處理 verify channels：automatic `[verify:e2e]` / `[verify:api]` items 已寫 annotation 並自動完成；含 `[verify:ui]` / `[review:ui]` 的 `<N>` 項仍待你確認。請在**該 change 所在的 worktree root** 執行 `pnpm review:ui` 開本地 GUI 驗收：
+     > Implementation 完成。Step 8a 已處理 verify channels：automatic `[verify:e2e]` / `[verify:api]` items 已寫 annotation 並自動完成；含 `[verify:ui]` / `[review:ui]` 的 `<N>` 項仍待你確認。請在 main consumer root 執行 `pnpm review:ui` 開本地 GUI 驗收（review-gui 會自動聚合 main + 所有 worktree 的 change，**不必 cd**）：
      >
-     >   cd <change-worktree-absolute-path>
      >   pnpm review:ui
      >
      > GUI 啟動後直接打開：
@@ -590,7 +589,7 @@ If there is no request_user_input 工具 available, present options as plain tex
      >   http://127.0.0.1:5174/review/<change-name>
      >
      > GUI 會自動配對 `screenshots/local/<change-name>/#<N>-*.png`、conflict-aware 寫回 tasks.md、對 `[verify:e2e]` / `[verify:api]` automatic-only items 自動勾 `[x]`、對 `[verify:ui]` / `[review:ui]` items 顯示 evidence 等你 OK / Issue / Skip。完成後回報，我繼續 Step 9 status。
-   - **MUST 直接給 review-gui deep-link + worktree 絕對路徑**（per `rules/core/proactive-skills.md` § Inline Review-GUI Deep-Link）：訊息 **MUST** 含 (1) `cd <change-worktree-absolute-path>` 完整路徑（從 `git rev-parse --git-dir` 或 wt-helper list 抓），(2) `http://127.0.0.1:5174/review/<change-name>` 完整 URL。**NEVER** 寫「consumer repo root」「專案根目錄」當預設措辭——`openspec/changes/<name>/` 與 `screenshots/local/<name>/` 只在 worktree、main repo 沒有，使用者開新 terminal 落在 main 跑 `pnpm review:ui` 會空畫面。**NEVER** 列 dev server URL（`http://localhost:3040/admin/...`）當替代——review-gui 內部已有 final-state screenshot + evidence；列 dev server URL 反而模糊驗收入口。`5174` 是 `vendor/scripts/review-gui.mts` `DEFAULT_PORT`，找不到時會 fallback 到 5174-5194，由 GUI startup banner 告知 user，主線不必猜。
+   - **MUST 直接給 review-gui deep-link**（per `rules/core/proactive-skills.md` § Inline Review-GUI Deep-Link）：訊息 **MUST** 含 `http://127.0.0.1:5174/review/<change-name>` 完整 URL。**NEVER** 寫「請在 worktree root 執行」當預設措辭——review-gui (`vendor/scripts/review-gui.mts:1890` `listSourceRoots`) 從 cwd 跑 `git worktree list --porcelain` 聚合 main + 所有 worktree 的 change，從 main consumer root 跑一次就涵蓋；從 worktree 跑反而少看 change。**NEVER** 列 dev server URL（`http://localhost:3040/admin/...`）當替代——review-gui 內部已有 final-state screenshot + evidence。若 review 過程發現需要 fresh screenshot 或 user 想 sanity check，**MUST** 由 agent 自起 dev server（per `rules/core/proactive-skills.md` § Dev Server Auto-Spawn：scan free port 3001–3050、避開 3000、`run_in_background`、回報 URL + shellId），**NEVER** 叫 user cd worktree 跑 `pnpm dev`。`5174` 是 `vendor/scripts/review-gui.mts` `DEFAULT_PORT`，找不到時會 fallback 到 5174-5194，由 GUI startup banner 告知 user，主線不必猜。
    - Wait for the user to complete the GUI flow and report back. Do NOT proceed to Step 9 / propose archive until the user signals manual review is done.
    - **NEVER** default to `request_user_input` chat dialog walking items one-by-one — it burns tokens, ignores the screenshot pool, and contradicts `rules/core/manual-review.md` 標準流程.
 
