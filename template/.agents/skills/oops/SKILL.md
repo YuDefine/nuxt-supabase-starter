@@ -1,6 +1,6 @@
 ---
 name: oops
-description: '踩坑經驗整合入口（查 + 寫，跨 consumer 共享）。Use when 升 npm 套件大版（升前/升後各查一次）、看到 cryptic runtime error（含「while capturing another error」「Cannot read properties of undefined」等通用訊息）、動 evlog / audit / Supabase RLS / Workers config / nuxt-security / Better Auth / supabase-js、跨 consumer 散播某 fix 前 → 先查經驗庫；或 user 表達踩到坑、被糾正、解完問題想記下來、session 結束想補登 missed lesson → 走新增分流。SoT 在 ~/offline/clade/docs/pitfalls/，查詢走 codebase-memory-mcp search_code w/ path_filter="^docs/pitfalls/"。'
+description: '踩坑經驗整合入口（查 + 寫，跨 consumer 共享）。Use when 升 npm 套件大版（升前/升後各查一次）、看到 cryptic runtime error（含「while capturing another error」「Cannot read properties of undefined」等通用訊息）、動 evlog / audit / Supabase RLS / Workers config / nuxt-security / Better Auth / supabase-js、跨 consumer 散播某 fix 前 → 先查經驗庫；或 user 表達踩到坑、被糾正、解完問題想記下來、session 結束想補登 missed lesson → 走新增分流；或 CWD = ~/offline/clade 且 user 未帶具體 error，想分析 consumer 累積貢獻、評估 clade 標準層該怎麼補 → 走 Mode D self-improvement sweep。SoT 在 ~/offline/clade/docs/pitfalls/，查詢走 codebase-memory-mcp search_code w/ path_filter="^docs/pitfalls/"。'
 effort: medium
 license: MIT
 metadata:
@@ -18,6 +18,7 @@ metadata:
 - **Mode A 查詢**：遇到問題先查 clade 經驗庫，命中 → 直接套 fix recipe（節省 debug 時間）
 - **Mode B 新增**：踩到新坑 → 沉澱到中央庫，避免重踩 + 跨 consumer 散播警示
 - **Mode C handoff sweep**：被 /handoff 呼叫，掃 session 內 missed lessons
+- **Mode D clade self-improvement sweep**（clade-only）：在 clade session 主動掃 pitfalls + digest + signals + 5 consumer 狀態，分析跨 consumer 反覆出現的 pattern，輸出「clade 標準層該怎麼補」的 candidate list 進 `tasks/<date>-clade-improve-sweep.md`
 
 此 skill 優先於個別 skill 內嵌的踩坑指示。
 
@@ -364,6 +365,136 @@ cd /Users/charles/offline/clade && node scripts/pitfalls-audit.mjs
 
 ---
 
+## Mode D：clade self-improvement sweep（clade-only）
+
+### 觸發條件
+
+**MUST** 同時滿足：
+
+1. CWD = `/Users/charles/offline/clade`（**NEVER** 在 consumer session 跑 Mode D — 那是 clade 自治區的事）
+2. user 跑 `/oops` 時**未**附帶具體 cryptic error / pitfall 候選內容；**或**明確說「sweep / 自我改善 / 分析 consumer 貢獻」等字眼
+
+若兩條件不齊備：
+- 在 consumer session 跑 → 走 Mode A（查詢）或 Mode B（新增）
+- 在 clade session 但帶具體 error → 仍走 Mode A / Mode B（Mode D 不取代）
+- 不確定 → 問 user：「要走查詢（A）/ 新增（B）/ self-improvement sweep（D）？」
+
+### 紀律（自治區規則延伸）
+
+Mode D 輸出**只**寫「**clade 標準層**該怎麼補」，**NEVER** 寫以下任一：
+
+- ❌「對 perno 跑 X」「替 starter 升 Y」這種 consumer 動作（即使 evidence 顯示 consumer 該動）
+- ❌ 替 consumer 拆 phase / 規劃實作步驟
+- ❌「block production」「user 必做」等催促語（即使真的 block consumer，那是 consumer 自家 HANDOFF 該登）
+- ❌ 直接動 `docs/digests/`（不污染 improvement-digest.mjs auto pipeline）
+- ❌ 直接 draft `docs/pitfalls/` 新條目（候選若值得升級成 pitfall，標記 `候選升級 → Mode B`，由 user 決定後再走 Mode B Step 1-9）
+
+Mode D 是**分析 + 候選清單**，不是執行；user 看完 `tasks/<date>-clade-improve-sweep.md` 自行決定哪幾條落地。
+
+### Step 1 — 收集 6 個輸入源
+
+每個來源都 **MAY skip**（檔案不存在 / 路徑不通則跳過並在最後 report 註明）。**NEVER** 因為單一來源 miss 就放棄整個 sweep。
+
+| # | 來源 | 收集方式 | 看什麼訊號 |
+| --- | --- | --- | --- |
+| 1 | `docs/pitfalls/*.md`（不含 `_archive/`） | `mcp__codebase-memory-mcp__search_code` w/ `path_filter="^docs/pitfalls/"` + 抽 frontmatter（`status`, `prevention[].status`, `cross_consumer_impact`） | (a) `prevention.status = accepted` 但對應 TD 仍 `open` 超過 N 天；(b) `cross_consumer_impact` ≥ 3 個 consumer `affected` 但 prevention 全部 `candidate`；(c) `status = open` 超過 30 天 |
+| 2 | `docs/digests/*.md`（排除 `_bootstrap-*`） | Read 最近 3 份；抽 `DIG-` id + `kind` + `severity` | (a) 同一 DIG- 連續 ≥ 2 份 digest 都出現未收斂；(b) candidate kind 集中在某個主題（如同主題 tech-debt 反覆出現） |
+| 3 | `vendor/signals/ledger/*.jsonl`（若存在） | `ls vendor/signals/ledger/ 2>/dev/null` → 若有檔，`tail -200` 抽最近事件；frequency map by `event_type` | (a) 高頻 reject 比率（validator 擋訊號）；(b) 高頻同類 event；(c) 某 consumer signal 量驟降（instrumentation 可能壞了） |
+| 4 | 5 consumer git log（最近 30 天） | 對 `registry/consumers.json` 內每個 consumer 跑 `git -C <path> log --since="30 days ago" --pretty=format:"%h %s" \| head -50`；consumer 路徑用 `~/offline/<consumer_id>` 推（starter 例外：用 `nuxt-supabase-starter`） | (a) commit message 反覆出現某 keyword（如 `fix typecheck`, `revert`, `hotfix`）→ 標準層可能缺；(b) 多個 consumer 同期出現相似 commit pattern → 系統性問題 |
+| 5 | 5 consumer `tasks/lessons.md` | `cat ~/offline/<consumer>/tasks/lessons.md 2>/dev/null`（檔案常不存在，skip 即可） | (a) 多個 consumer lessons.md 出現同一類 pattern → 該 promote 進 `rules/core/` |
+| 6 | 5 consumer `.claude/rules/local/*.md` | `ls ~/offline/<consumer>/.claude/rules/local/ 2>/dev/null`；列出檔名 + 一行 description（讀檔頭） | (a) 多個 consumer 自寫同主題 local rule → clade core 該補的 signal；(b) 出現「workaround clade 限制」字眼 |
+
+**MCP 缺失時 fallback** — Step 1#1 改用 `rg --files-with-matches "<keyword>" docs/pitfalls/`。其他來源都是純檔案讀，不依賴 MCP。
+
+### Step 2 — 跨來源比對抽 pattern
+
+對每個收集到的 candidate 訊號，問三個問題：
+
+1. **這個 pattern 在幾個 consumer 出現？**（單一 consumer 不是 Mode D 該管的；那是該 consumer 自家 session 的事）
+2. **clade 既有標準是否覆蓋？**（搜 `rules/core/*.md` + `vendor/snippets/*/` + `vendor/scripts/*-audit.mjs` 有沒有相關 §）
+3. **建議的標準層行動類型**（五選一，並非全部都有）：
+   - `rule-section`：在現有 `rules/core/<topic>.md` 加新 §
+   - `cookbook`：在 `vendor/snippets/<topic>/` 加 template / README
+   - `audit-signal`：擴充既有 audit script 加新 signal，或新建 `<topic>-audit.mjs`
+   - `pitfall-upgrade`：訊號夠成熟，建議走 `/oops` Mode B 升級成 pitfall
+   - `rule-promotion`：consumer local rule / lessons 在多 consumer 重複，建議 promote 進 `rules/core/`
+
+**單 consumer pattern 處置**：在分析中**忽略**或 **MAY** 用一句話標註「僅 <consumer> 觀察到，建議由該 consumer 自家 session 處理」（**NEVER** 拆 phase / 列步驟）。
+
+### Step 3 — 寫 tasks/<date>-clade-improve-sweep.md
+
+檔名：`tasks/<YYYY-MM-DD-HHMM>-clade-improve-sweep.md`（用 `date +%Y-%m-%d-%H%M` 取當下時間）
+
+格式：
+
+```markdown
+# Clade self-improvement sweep — <ISO date>
+
+> Mode D output. 不執行，僅候選清單；user 看完決定哪幾條落地。
+> Session-tied tasks file；未升級項 session 結束時走 /handoff 升 HANDOFF.md / docs/tech-debt.md / 直接刪。
+
+## 輸入源狀態
+
+- pitfalls: <N> 條目掃描完成
+- digests: 最近 <N> 份
+- signals/ledger: <available | not-bootstrapped>
+- consumer git log: <N>/5 reachable
+- consumer lessons.md: <N>/5 present
+- consumer local rules: <N>/5 has rules/local/
+
+## Candidates
+
+### SWEEP-001 — <一句話標題>
+
+- **行動類型**: `rule-section` | `cookbook` | `audit-signal` | `pitfall-upgrade` | `rule-promotion`
+- **跨 consumer 證據**: <N>/5 consumer 出現；list: <consumer ids>
+- **clade 覆蓋現況**: <既有 rule / cookbook / audit 路徑，或「無」>
+- **建議落地位置**: <具體 file path + § 名>
+- **Evidence**:
+  - <來源 1 + 引用片段>
+  - <來源 2 + 引用片段>
+- **預估 effort**: low | medium | high
+- **若 user 接受**: 直接 plan mode 動手 / 進 docs/tech-debt.md TD-NNN / 走 /oops Mode B
+
+### SWEEP-002 — ...
+
+## 跳過項（單 consumer / 證據不足）
+
+- <一行說明哪些 candidate 被排除 + 原因>
+
+## 工具鏈缺口（若有）
+
+- <例：vendor/signals/ledger/ 目錄不存在 → improvement-loop instrumentation 還沒 bootstrap>
+- <例：consumer X repo 路徑不通 → registry 可能要更新>
+```
+
+**規約**：
+- `SWEEP-NNN` 編號從 001 開始，per-file 不跨 session 累積（每次 sweep 新檔重編）
+- 「建議落地位置」**MUST** 給具體 file path（不寫「補某個 rule」這種模糊話）
+- Evidence 引用 **MUST** 至少一條可驗證（檔案路徑 + 行號 / commit SHA / DIG-id / pitfall id）
+- **NEVER** 把跳過項當主候選清單第二段（顯著區隔，否則 user 容易誤讀）
+
+### Step 4 — Session 對話回報
+
+寫完 tasks 檔後給 user 看：
+
+1. **輸入源狀態總覽**（哪幾個 source 抓到 / skip）
+2. **Top 3-5 candidates**（按跨 consumer 影響度排）— 一行標題 + 建議行動類型
+3. **工具鏈缺口**（若有）— 標準層自身的稽核盲點
+4. **下一步問句**：「要逐條討論哪幾條落地？還是直接 plan mode 處理某條？」
+
+**NEVER** 在回報結尾推薦 `/schedule` / `/loop` 排程 — sweep 是 ad-hoc 觸發，user 想再跑會自己跑。
+
+### Step 5 — 不做的事（明確列出避免漂移）
+
+- ❌ **不**動 `docs/digests/`（improvement-digest.mjs 自動跑，Mode D 只**讀**不**寫**）
+- ❌ **不**直接 draft `docs/pitfalls/` 條目（候選若值得升 pitfall，標 `pitfall-upgrade`，由 user 走 Mode B）
+- ❌ **不**動 `rules/core/` / `vendor/snippets/` / `vendor/scripts/`（這些是「建議落地位置」，不是 Mode D 該執行的事）
+- ❌ **不**列任何 consumer-side 動作（即使 evidence 顯示）
+- ❌ **不**跑 propagate / publish（Mode D 完全不該觸發散播）
+
+---
+
 ## Status Lifecycle
 
 | Status | 條件 | 判定方式 |
@@ -427,11 +558,12 @@ binary 由 `codebase-memory-mcp install` 安裝到 `~/.local/bin/codebase-memory
 ## 與其他規則的關係
 
 - **`knowledge-and-decisions.md`**：管 consumer 自家 `docs/solutions/` 與 `docs/decisions/`，屬 consumer-local 知識；本 skill 補上**跨 consumer**共享知識的維度
-- **`improvement-loop` skill**：digest 是**自動**從 signal 抽出來的候選；pitfalls 是**人類**事後寫的根因分析。digest candidate 升級成 pitfall 時 digest 條目加 `promoted_to_pitfall: <id>`，**不**標 resolved
+- **`vendor/scripts/improvement-digest.mjs` + `vendor/signals/`**：digest 是**自動**（事件觸發 batch）從 signal ledger 抽出來的候選；pitfalls 是**人類**事後寫的根因分析。digest candidate 升級成 pitfall 時 digest 條目加 `promoted_to_pitfall: <id>`，**不**標 resolved
 - **`tech-debt-routing.md`**：管 TD 寫在 clade 還是 consumer；本 skill 管 pitfall（非 TD）寫在 clade。判斷：條目能讓「下次同類問題立刻被偵測」屬 pitfall；只是「我們知道有這條 TD 要處理」屬 tech-debt
 - **`follow-up-register.md`**：pitfall `prevention.status = accepted` 必須在 `docs/tech-debt.md` 建 TD-NNN 條目，由 follow-up register 規則接管
 - **`evlog-adoption.md` / `audit-pattern.md` / `logging.md`**：主題 rule 規範**正向**做法；pitfalls 補上**反向**真實踩過的坑，幫助 agent 理解規則背後動機
 - **`/handoff` skill**：session 結束時觸發本 skill Mode C
+- **Mode D vs improvement-digest.mjs**：兩者輸入有重疊（pitfalls / signals / tech-debt），但 cadence 與輸出不同。digest 是**事件觸發** batch，產出 `docs/digests/<date>.md`（半結構化候選，走 DIG-hash + evidence predicate）；Mode D 是 **user 觸發** ad-hoc sweep，產出 `tasks/<date>-clade-improve-sweep.md`（session-tied 候選清單，含 5 consumer 即時狀態如 git log / lessons.md / local rules，digest 不掃這些）。Mode D **不**寫 digest，避免污染 auto pipeline；digest 若已有對應 DIG-id，Mode D candidate 標 `related: DIG-xxxx` 交叉引用
 
 ## 違反時的回報方式
 
