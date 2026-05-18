@@ -76,8 +76,11 @@ export default defineNitroPlugin((nitroApp) => {
   nitroApp.hooks.hook('evlog:drain', drain)
   nitroApp.hooks.hook('close', () => drain.flush())
 
-  // Cloudflare Workers per-request flush
-  nitroApp.hooks.hook('request', (event) => {
+  // Cloudflare Workers per-request flush — 用 afterResponse 而非 request：
+  // current request 的 wide event 在 afterResponse 才由 evlog emit 進 buffer。
+  // 在 request 時 flush 只會處理先前殘留 batch、漏掉當前 event；低流量場景
+  // worker 回收前不會再有 request 觸發下一次 flush。
+  nitroApp.hooks.hook('afterResponse', (event) => {
     const waitUntil = event.context.cloudflare?.context?.waitUntil
     if (typeof waitUntil === 'function') {
       waitUntil(drain.flush())

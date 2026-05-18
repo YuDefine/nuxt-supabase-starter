@@ -77,7 +77,10 @@ onDropped: (events, error) => {
 ## Workers `event.waitUntil` 必接
 
 ```ts
-nitroApp.hooks.hook('request', (event) => {
+// 用 afterResponse 而非 request：current request 的 wide event 在 afterResponse
+// 才由 evlog emit 進 buffer。在 request 時 flush 只會處理先前殘留 batch、漏掉
+// 當前 event；低流量場景 worker 回收前不會再有 request 觸發下一次 flush。
+nitroApp.hooks.hook('afterResponse', (event) => {
   const waitUntil = event.context.cloudflare?.context?.waitUntil
   if (typeof waitUntil === 'function') {
     waitUntil(drain.flush())
@@ -86,6 +89,8 @@ nitroApp.hooks.hook('request', (event) => {
 ```
 
 **為什麼**：Workers 的 request handler return 後，runtime 立即回收 worker context（包含 in-memory batch）。沒 wire `waitUntil` 時 Worker 結束 = batch 丟失。`waitUntil` 把 flush promise 註冊給 runtime，runtime 等 promise resolve 才回收。
+
+**禁止**改回 `request` hook：早於該次 request 的 wide event 被 evlog emit 進 buffer（evlog 在 `afterResponse` 才 emit），低流量 Workers 環境下會永久遺失當前 event。
 
 **警告**：本地 `pnpm dev`（node-server preset）`waitUntil` 是 noop，dev 看起來都 OK。**只有** production `wrangler dev --remote` 或 deployed Worker 才能真的驗證 batch flush。adoption checklist 必跑這條 smoke test。
 
