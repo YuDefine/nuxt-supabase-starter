@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-17T23:26:11.821Z",
+  "syncedAt": "2026-05-18T00:01:21.385Z",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "78712a85d56ef350",
     "rules/agent-routing.md": "6fc1baf69bb8f33b",
@@ -19,7 +19,7 @@
     "rules/manual-review.backend.md": "e85cb5d10ceb0ae7",
     "rules/manual-review.data-readiness.md": "7f510d7ccc9d10e7",
     "rules/manual-review.evidence.md": "69b00a653d2e2baf",
-    "rules/manual-review.md": "89d16d7b25d08e28",
+    "rules/manual-review.md": "92ed277618ccb3d5",
     "rules/output-hygiene.md": "a162df1b7f989ee6",
     "rules/proactive-skills.design-checkpoint.md": "dc94eb6d8d576d87",
     "rules/proactive-skills.ingest-triggers.md": "1950b59c41b0d2a4",
@@ -46,7 +46,7 @@
     "rules/mcp-remote.md": "c00a1cca655e6158",
     "rules/storage.md": "77248931c050016c",
     "rules/unused-features.md": "12fb9f424578c6e8",
-    "rules/api-patterns.md": "5d4b64395b987873",
+    "rules/api-patterns.md": "a6c3fb970f0f39a1",
     "rules/secrets.md": "109e090a25f62e76",
     "rules/development.md": "b731d99423f34d57",
     "rules/nuxt-security.md": "8fb13f9c77568a33",

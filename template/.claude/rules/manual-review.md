@@ -649,6 +649,37 @@ archive-gate.sh Check 4 會驗 `[discuss]` items 必須勾選或含 `(claude-dis
 
 spectra orchestrator Archive Flow Step 1 已內建這個分流邏輯。
 
+## Post-Edit Validation Gate（hard rule）
+
+修改 `tasks.md` `## 人工檢查` 區（透過 `/spectra-ingest` / `/spectra-propose` / 手動 Edit）後，**MUST** 在 commit 前重跑 hook 驗證 0 violation，**NEVER** 只靠目測。
+
+```bash
+bash scripts/spectra-advanced/post-propose-manual-review-check.sh <change-name>
+```
+
+預期輸出 `✓ post-propose-manual-review-check passed (N items)` 才能 commit。出現 finding 即修，修完重跑直到綠燈。
+
+### Stale-hook fallback（worktree drift 場景）
+
+Session worktree fork 在 clade hook 升版前時，worktree 內 `scripts/spectra-advanced/post-propose-manual-review-check.sh` / `vendor/snippets/manual-review-enforcement/patterns.json` 可能是 pre-update 版本 — 跑 worktree-local hook 會撞 stale regex / 缺 KIND_FILTER 等 false positive。**MUST** fallback：
+
+1. 在 main worktree（fresh hook）跑 hook 對該 change 路徑（hook 看的是 `<cwd>/openspec/changes/<name>/tasks.md`，若 main 跟 worktree 的 change tasks.md 已分歧，要先複製 worktree 版本進 main 暫存 — 但這違反 scope discipline）
+2. 或直接對個別 pattern 用 grep 驗：
+
+   ```bash
+   PATTERN='某張|某筆|某個|任一張|任一筆|...'   # 從 main 的 patterns.json 抓
+   awk '/^## 人工檢查/,0' <worktree>/openspec/changes/<name>/tasks.md \
+     | grep -iE "$PATTERN" && echo "HIT" || echo "NO_HIT"
+   ```
+
+3. 或在 worktree 內跑 `pnpm hub:bootstrap` sync clade projection，再用 worktree-local hook（清乾淨 stale state）
+
+### 為什麼這條 hard rule 存在
+
+實證 2026-05-18 TDMS session：在修 `receiving-scan-status-flow/tasks.md` #10 的 UI_ITEM_NO_URL violation 時，新寫的 sub-item `#10.1` 內含「對**任一筆** scan 操作 status 變更...」字眼 — 這正是 ABSTRACT_REFERENCE pattern（`某張|某筆|某個|任一張|任一筆|...`）要消的模糊指代。Commit 後 user 重整 GUI 才發現 → 再跑一輪 fix。Hook re-run 可以在 commit 前**當下抓到**，省一輪 round-trip + user 介入。
+
+任何 ingest / 手動 edit `## 人工檢查` 都可能引入新的 pattern hit（特別是寫範例 step 時不小心用了規避詞）。validation gate 是廉價的自動化檢查（< 1s），跳過它代表把驗證責任推給 GUI / user。
+
 ## 禁止事項
 
 - **NEVER** 問「要不要我直接幫你勾完」
@@ -664,3 +695,4 @@ spectra orchestrator Archive Flow Step 1 已內建這個分流邏輯。
 - **NEVER** 對 `[discuss]` items 寫入 `(claude-discussed: ...)` annotation 而沒有實際與使用者討論並取得 OK
 - **NEVER** dispatch verify channels 前不檢查 per-channel baseline — 撞 baseline 缺後升 UNCERTAIN 是浪費 budget；主線預先 grep / read 確認，缺則停下回報 user 補齊
 - **NEVER** 在 verify dispatch 當下才問 user「dev-login / seed 準備好了嗎」— baseline 是 codebase 層長期狀態，不該每次派工都驚動 user
+- **NEVER** 修完 `## 人工檢查` 區後直接 commit 而沒重跑 `post-propose-manual-review-check.sh` 驗 0 violation — 見「Post-Edit Validation Gate」。實證會在 ingest 過程引入新 pattern hit（如寫範例 step 時用「任一筆」），目測抓不到
