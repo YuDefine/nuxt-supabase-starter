@@ -1,12 +1,13 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-18T09:28:03.689Z",
+  "syncedAt": "2026-05-18T09:47:52.729Z",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "f00b7c4f9128fad7",
     "rules/agent-routing.md": "d9cb26fff5d22483",
     "rules/audit-pattern.md": "706d3ba1ac21f49f",
     "rules/code-style.md": "e4fe42a6b3c64bd5",
     "rules/commit.md": "acb20250453aa5f0",
+    "rules/db-preview-env.md": "407b94e4947b8587",
     "rules/error-handling.md": "5cbe9562e589e0e0",
     "rules/evlog-adoption.md": "a479a81bdfeeb201",
     "rules/evlog-stream-extend.md": "f19b16e0543db1ed",
@@ -34,7 +35,7 @@
     "rules/truth-layers.md": "6187f5e5616ec5bc",
     "rules/ux-completeness.md": "f9068951b3bd1d38",
     "rules/work-claims.md": "ad46038f41afaaf0",
-    "rules/worktree-default.md": "36207f99bdb072cc",
+    "rules/worktree-default.md": "33413ba2cf0d14e4",
     "rules/auth.md": "7a906a7ce8eb18d6",
     "rules/dev-login.md": "60f876a2edf9ccc2",
     "rules/audit-schema.md": "a9126eed8a69c275",
