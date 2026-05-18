@@ -8,7 +8,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { createReadStream, existsSync } from 'node:fs'
+import { createReadStream, existsSync, readdirSync } from 'node:fs'
 import { mkdir, open as openFd, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import net from 'node:net'
@@ -1559,6 +1559,59 @@ function listOpenspecChangesBlobHashes(repoRoot: string): Map<string, string> {
   return result
 }
 
+/**
+ * Check if a worktree has uncommitted changes (modified / staged / untracked) for a
+ * specific path. Used by listPendingChanges diff-aware skip to confirm the worktree's
+ * working tree is also clean before allowing main to shadow worktree.
+ *
+ * Without this check, the skip silently drops worktree entries when a sibling worktree
+ * has mid-`/spectra-apply` edits to `<change>/tasks.md`: HEAD blob still matches main
+ * (commit hasn't happened yet), but the worktree's working tree carries uncommitted
+ * updates that the user MUST see in the GUI.
+ *
+ * Returns `true` (= dirty / cannot confirm clean) on git error — conservative default
+ * matching the calling site's "skip only when we can fully prove clean" posture.
+ */
+function isWtPathDirty(wtRoot: string, relPath: string): boolean {
+  try {
+    const res = spawnSync('git', ['-C', wtRoot, 'status', '--porcelain', '--', relPath], {
+      encoding: 'utf8',
+    })
+    if (res.status !== 0) return true
+    return res.stdout.trim().length > 0
+  } catch {
+    return true
+  }
+}
+
+/**
+ * List change names that exist under main's `openspec/changes/archive/` directory.
+ * Archive folders follow the convention `YYYY-MM-DD-<change-name>`.
+ *
+ * Used by listPendingChanges to dedupe stale sibling-worktree copies: when a change
+ * has been archived in main, sibling worktrees forked before the archive still carry
+ * the pre-archive active copy. Those stale copies should NOT surface in the review
+ * GUI as pending work — the change is already done in main.
+ *
+ * Returns empty set on fs error (safe default: behave like pre-fix, no dedupe).
+ */
+function listMainArchivedChangeNames(mainRoot: string): Set<string> {
+  const result = new Set<string>()
+  const archiveRoot = join(mainRoot, 'openspec', 'changes', 'archive')
+  if (!existsSync(archiveRoot)) return result
+  try {
+    const entries = readdirSync(archiveRoot, { withFileTypes: true })
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const match = entry.name.match(/^\d{4}-\d{2}-\d{2}-(.+)$/)
+      if (match) result.add(match[1])
+    }
+  } catch {
+    // ignore
+  }
+  return result
+}
+
 export async function listPendingChanges(mainRoot: string): Promise<ChangeSummary[]> {
   const sources = await listSourceRoots(mainRoot)
   // 重建兩個 module-level cache：sourceRootIndex 給 rootId → SourceRoot；changeRouteCache 給 change → SourceRoot。
@@ -1573,6 +1626,9 @@ export async function listPendingChanges(mainRoot: string): Promise<ChangeSummar
   // 對應 anti-pattern：active worktree A 做 change X，但繼承了 main 的 change Y / Z 目錄；
   // user 在 main 改 Y / Z 的 tasks.md（未 commit），舊規則讓 worktree 的 stale Y / Z 蓋過 main。
   const mainBlobHashes = listOpenspecChangesBlobHashes(mainRoot)
+  // sibling-worktree stale copy dedupe：fork 點早於 archive 的 worktree 仍會帶著 pre-archive
+  // 的 active copy；main 已 archive 的 change 不該再在 review GUI 顯示為 pending。
+  const archivedInMain = listMainArchivedChangeNames(mainRoot)
 
   const summariesByName = new Map<string, ChangeSummary>()
   // sources 已排序：main 在第一筆、worktree 在後。後寫蓋掉前寫 → worktree-prefer collision rule
@@ -1593,6 +1649,9 @@ export async function listPendingChanges(mainRoot: string): Promise<ChangeSummar
     }
     for (const entry of entries) {
       if (!entry.isDirectory() || entry.name === 'archive' || entry.name.startsWith('.')) continue
+      // archive-aware dedupe：sibling worktree 的 active copy 若在 main 已 archive，跳過。
+      // 只對 worktree source 套用（main 自己的 archive folder 已在上一行的 name === 'archive' 排除）。
+      if (src.slug !== null && archivedInMain.has(entry.name)) continue
       const tasksPath = join(changesRoot, entry.name, 'tasks.md')
       if (!existsSync(tasksPath)) continue
       // Diff-aware skip：worktree HEAD 跟 main HEAD 對該 change tasks.md 的 blob hash 相同
@@ -1603,7 +1662,13 @@ export async function listPendingChanges(mainRoot: string): Promise<ChangeSummar
         const relPath = `openspec/changes/${entry.name}/tasks.md`
         const wtHash = wtBlobHashes.get(relPath)
         const mainHash = mainBlobHashes.get(relPath)
-        if (wtHash && mainHash && wtHash === mainHash) continue
+        if (wtHash && mainHash && wtHash === mainHash) {
+          // HEAD blobs match — but worktree working tree could still carry uncommitted
+          // edits (mid-`/spectra-apply` scenario). Only skip when working tree is also
+          // confirmed clean; otherwise fall through and let worktree shadow main so the
+          // user sees the WIP edits in the review GUI.
+          if (!isWtPathDirty(src.root, relPath)) continue
+        }
       }
       const summary = await summarizeChange(
         src.root,

@@ -325,49 +325,97 @@ async function cmdAdd(slug, opts = {}) {
         `Pre-fork baseline: stash '${pendingStashName}' applied to worktree; pinned as '${pendingBaselineRef}' (permanently reachable — use 'wt-helper rescue' to inspect/restore).`
       )
 
-      // Audit baseline untracked tree for non-LOCKED-projection paths. These are
-      // likely in-flight feature code (e.g. a spectra change in deferred-to-user
-      // phase). If merge-back later fails with conflicts and the agent goes
-      // "Path X" (reset worktree branch to subagent commit + squash + cleanup),
-      // these files vanish from main's working tree silently — main HEAD never
-      // had them, so typecheck/runtime don't catch it. See
-      // pitfall-pre-fork-baseline-hides-in-flight-feature (2026-05-18 TDMS
-      // fix-vending-dispatch-dialog incident, 53-file vending feature stack
-      // lost from main).
+      // Audit baseline content (BOTH untracked tree AND tracked modifications) for
+      // non-LOCKED-projection paths. These are likely in-flight feature code (e.g. a
+      // spectra change in deferred-to-user phase). If merge-back later fails with
+      // conflicts and the agent goes "Path X" (reset worktree branch to subagent commit
+      // + squash + cleanup), these files vanish from main's working tree silently —
+      // main HEAD never had them, so typecheck/runtime don't catch it.
+      //
+      // Two scan targets:
+      //   • Untracked tree from `<ref>^3` parent (git-stash -u packs untracked into ^3).
+      //   • Tracked mods from `<ref>^1..<ref>` diff (^1 = HEAD-at-stash-time; the diff
+      //     surfaces files modified in working tree at stash time, which the stash
+      //     commit carries forward).
+      //
+      // See pitfall-pre-fork-baseline-hides-in-flight-feature (2026-05-18 TDMS
+      // fix-vending-dispatch-dialog incident, 53-file vending feature stack lost from
+      // main). Original audit only inspected `^3` — tracked-file feature drift slipped
+      // through silently.
       try {
-        const untrackedTree = git(['ls-tree', '-r', `${pendingBaselineRef}^3`, '--name-only'], {
-          cwd: consumerRoot,
-        })
-        const allUntracked = untrackedTree.split('\n').filter(Boolean)
-        const nonProjection = allUntracked.filter((p) => !isLockedProjectionPath(p))
+        const baselinePaths = new Set()
+
+        try {
+          const untrackedTree = git(['ls-tree', '-r', `${pendingBaselineRef}^3`, '--name-only'], {
+            cwd: consumerRoot,
+          })
+          untrackedTree
+            .split('\n')
+            .filter(Boolean)
+            .forEach((p) => baselinePaths.add(p))
+        } catch (untrackedErr) {
+          // ^3 parent may not exist if stash had no untracked content (`-u` saw no
+          // untracked files). Silently swallow benign "Not a valid object name" /
+          // "unknown revision"; surface other errors.
+          const msg = untrackedErr?.message ?? String(untrackedErr)
+          if (!/Not a valid object name|unknown revision/.test(msg)) {
+            console.error(`note: baseline untracked-tree scan skipped: ${msg}`)
+          }
+        }
+
+        try {
+          const trackedDiff = git(
+            ['diff', '--name-only', `${pendingBaselineRef}^1`, pendingBaselineRef],
+            { cwd: consumerRoot }
+          )
+          trackedDiff
+            .split('\n')
+            .filter(Boolean)
+            .forEach((p) => baselinePaths.add(p))
+        } catch (trackedErr) {
+          // ^1 parent should always exist (the HEAD at stash-creation time), but tolerate
+          // edge cases (e.g. shallow clone, dangling ref) and surface non-benign errors.
+          const msg = trackedErr?.message ?? String(trackedErr)
+          if (!/Not a valid object name|unknown revision/.test(msg)) {
+            console.error(`note: baseline tracked-diff scan skipped: ${msg}`)
+          }
+        }
+
+        const nonProjection = [...baselinePaths].filter((p) => !isLockedProjectionPath(p))
         if (nonProjection.length > 0) {
           const sample = nonProjection.slice(0, 5).join(', ')
           const more = nonProjection.length > 5 ? `, ... +${nonProjection.length - 5} more` : ''
           console.warn('')
           console.warn(
-            `⚠️  Pre-fork baseline contains ${nonProjection.length} non-LOCKED-projection untracked file(s).`
+            `⚠️  Pre-fork baseline contains ${nonProjection.length} non-LOCKED-projection file(s) (untracked + tracked-modified).`
           )
           console.warn(`    These may be in-flight feature code (not just clade projection drift).`)
           console.warn(`    Sample: ${sample}${more}`)
-          console.warn(`    If merge-back later fails with untracked-overwrite conflicts:`)
+          console.warn(`    If merge-back later fails with overwrite / conflict errors:`)
           console.warn(
             `      • NEVER run 'git reset --hard <subagent-commit>' (Path X) before auditing baseline.`
           )
-          console.warn(`      • Audit baseline: git ls-tree -r ${pendingBaselineRef}^3 --name-only`)
-          console.warn(`      • Recovery: git checkout ${pendingBaselineRef}^3 -- <paths>`)
+          console.warn(
+            `      • Audit untracked: git ls-tree -r ${pendingBaselineRef}^3 --name-only`
+          )
+          console.warn(
+            `      • Audit tracked mods: git diff --name-only ${pendingBaselineRef}^1 ${pendingBaselineRef}`
+          )
+          console.warn(
+            `      • Recovery (untracked): git checkout ${pendingBaselineRef}^3 -- <paths>`
+          )
+          console.warn(
+            `      • Recovery (tracked mods): git checkout ${pendingBaselineRef} -- <paths>`
+          )
           console.warn(
             `    See pitfall-pre-fork-baseline-hides-in-flight-feature for full root cause.`
           )
           console.warn('')
         }
       } catch (auditErr) {
-        // Audit is informational; ^3 parent may not exist if stash had no
-        // untracked content. Do NOT block worktree creation on audit failure.
-        // Suppress benign "Not a valid object name" cases; surface other errors.
+        // Outer guard: if both scans throw unexpectedly, surface but never block.
         const msg = auditErr?.message ?? String(auditErr)
-        if (!/Not a valid object name|unknown revision/.test(msg)) {
-          console.error(`note: baseline content audit skipped: ${msg}`)
-        }
+        console.error(`note: baseline content audit skipped: ${msg}`)
       }
     } catch (e) {
       console.error(
