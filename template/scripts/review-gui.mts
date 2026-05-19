@@ -1817,9 +1817,25 @@ async function summarizeChange(
     if (item.annotations[ak]) return true
     const children = evidenceChildrenByParent.get(item.id) ?? []
     if (children.length === 0) return false
-    const relevantChildren = children.filter((c) => c.kinds.includes(kind))
-    if (relevantChildren.length === 0) return false
-    return relevantChildren.every((c) => Boolean(c.annotations[ak]))
+    // Path A (strict)：children 之中有任一條帶 explicit verify marker（per
+    // manual-review.md Item Kind Marker hard rule），視為 propose 已正確分配 sub-scope
+    // → 只認 kind-matching children 都已 annotate。
+    // Path B (lenient fallback)：children 全無 verify marker（典型 propose hygiene
+    // 漏網——parent 是 [verify:api+ui] 但 sub-step 直接寫 `- [ ] #N.M PATCH ...` 沒補
+    // [verify:*] marker），此時 marker 不能用來分流 sub-scope，改以 annotation
+    // presence 作為 evidence intent：任一 child 帶該 kind 的 annotation 即視為 rollup
+    // 通過。Evidence-truth-over-marker-hygiene 的安全網，避免 parent 因 propose
+    // 漏標 marker 而永久卡在 evidenceMissing。propose-time hook 補 marker 後此
+    // 分支會永不觸發。
+    const childrenHaveAnyVerifyMarker = children.some((c) =>
+      c.kinds.some((k) => k.startsWith('verify:')),
+    )
+    if (childrenHaveAnyVerifyMarker) {
+      const relevantChildren = children.filter((c) => c.kinds.includes(kind))
+      if (relevantChildren.length === 0) return false
+      return relevantChildren.every((c) => Boolean(c.annotations[ak]))
+    }
+    return children.some((c) => Boolean(c.annotations[ak]))
   }
   const evidenceTargets = parsed.items.filter(
     (item) => !item.checked && !/（issue:[^）]*）/.test(item.raw),
@@ -2259,13 +2275,10 @@ function readCladeHubMeta(mainRoot: string): { version: string | null; mtimeMs: 
   }
 }
 
-function padTwoDigits(n: number): string {
-  return (n < 10 ? '0' : '') + n
-}
-
 function formatVersionTimestamp(mtimeMs: number): string {
   const d = new Date(mtimeMs)
-  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${padTwoDigits(d.getHours())}:${padTwoDigits(d.getMinutes())}:${padTwoDigits(d.getSeconds())}`
+  const pad = (n: number) => (n < 10 ? '0' : '') + n
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
 export function renderReviewHtml(opts: { mainRoot?: string } = {}): string {
@@ -4145,15 +4158,24 @@ export function renderReviewHtml(opts: { mainRoot?: string } = {}): string {
         const list = Array.isArray(ctx.applyPendingChanges) ? ctx.applyPendingChanges : [];
         const repoName = state.repoName || '(unknown)';
         const repoRoot = state.repoRoot || '(unknown)';
+        // 預先 per-change 統計 (給清單 header + 完成 checklist 用)。
+        const perChangeStats = list.map(function (c) {
+          const evList = Array.isArray(c.evidenceMissing) ? c.evidenceMissing : [];
+          let items = 0;
+          let pairs = 0;
+          for (const m of evList) {
+            items++;
+            pairs += (m.kinds || []).length;
+          }
+          return { name: c.name, items: items, pairs: pairs };
+        });
         let totalItems = 0;
         let totalPairs = 0;
-        for (const c of list) {
-          if (!Array.isArray(c.evidenceMissing)) continue;
-          for (const m of c.evidenceMissing) {
-            totalItems++;
-            totalPairs += (m.kinds || []).length;
-          }
+        for (const s of perChangeStats) {
+          totalItems += s.items;
+          totalPairs += s.pairs;
         }
+        const LARGE_BATCH_THRESHOLD = 15;
         const lines = [
           '我在 consumer repo「' + repoName + '」（路徑：' + repoRoot + '）',
           '跑 \`pnpm review:ui\` 做 spectra 人工檢查，home page 有 ' + list.length + ' 張 change 落在',
@@ -4165,9 +4187,19 @@ export function renderReviewHtml(opts: { mainRoot?: string } = {}): string {
           '- repo root: ' + repoRoot,
           '',
           '## 缺 evidence 清單（共 ' + list.length + ' 張 change · ' + totalItems + ' item · ' + totalPairs + ' pair）',
+          '',
+          '**完成定義**：所有 ' + totalItems + ' item 都收到對應 \`(verified-*:)\` annotation 寫進 tasks.md；user reload review:ui 後這群該完全清空。**漏一個 item / 一個 kind 都算未完成**。',
         ];
-        for (const c of list) {
-          lines.push('', '### \`' + c.name + '\`');
+        if (totalItems > LARGE_BATCH_THRESHOLD) {
+          lines.push(
+            '',
+            '⚠️ **本批 ' + totalItems + ' item 屬大量**（> ' + LARGE_BATCH_THRESHOLD + '）。**MUST** 一張 change 全部做完才進下一張；**NEVER** 一次橫掃 4 張 marathon。每完成一張立刻 commit 或讓 user 知道進度，避免中途 context exhaust 整批白做。',
+          );
+        }
+        for (let i = 0; i < list.length; i++) {
+          const c = list[i];
+          const stats = perChangeStats[i];
+          lines.push('', '### \`' + c.name + '\` (' + stats.items + ' item · ' + stats.pairs + ' pair)');
           if (!Array.isArray(c.evidenceMissing)) continue;
           for (const m of c.evidenceMissing) {
             const desc = m.description ? ' — ' + m.description : '';
@@ -4190,11 +4222,39 @@ export function renderReviewHtml(opts: { mainRoot?: string } = {}): string {
           '   - 任一 grep 0 命中 → 該 item 跳過 evidence 補齊、寫 \`（issue: §3 UI 或 §6 Fixtures 未完成，blocker：<具體缺什麼>）\`，**NEVER** 寫不成功的 \`(verified-*:)\` annotation',
           '   - 全部 item 都命中此情境 → STOP，回 user：「該 change 的核心 impl section 還沒完成，補 evidence 整批 abort，先回到 /spectra-apply」',
           '',
-          '3. 對每個 item 依 e2e → api → ui 順序補對應 evidence；每完成一個 channel 立刻 Edit tasks.md 寫對應 \`(verified-*:)\` annotation（不要等到最後一起寫）',
+          '3. **Leaf-only 寫法**（hard rule，對齊 manual-review.md「Parent State Derivation」）：若上方列表同時出現 parent (\`#N\`) + scoped children (\`#N.M\`)，**只在 children 寫 \`(verified-*:)\` annotation**，parent 行透過 rollup 自動 derive。**NEVER** 在 parent 行寫 annotation —— review-gui 會雙寫過濾但容易混淆 reviewer。',
           '',
-          '4. 全部完成後請 user 在 review:ui 重新整理；含 \`verify:ui\` 的 item checkbox 仍保留 \`[ ]\` 等 user 在 GUI 視覺確認',
+          '4. **Missing marker 修補授權**（典型 propose hygiene 漏網）：若 scoped child 沒 \`[verify:*]\` leading marker 但 description 對得上 parent verify scope（PATCH /api → verify:api、UI reload 確認 → verify:ui、e2e journey → verify:e2e），**先補 marker 再寫 annotation**。Marker 必須**緊接** \`#N.M\` 後第一個 token：',
+          '   - Before: \`- [ ] #1.1 PATCH /api/v1/company → 200\`',
+          '   - After:  \`- [ ] #1.1 [verify:api] PATCH /api/v1/company → 200 (verified-api: <ISO> PATCH /api/v1/company 200)\`',
+          '   - 不確定 parent verify scope 拆 sub-kind 怎麼分時，**stop + 回報 user**，**NEVER** 亂猜亂標',
           '',
-          '5. 任一 channel 通不過 → 保留 \`[ ]\` + 寫 \`（issue: ...）\`；**NEVER** 寫不成功的 \`(verified-*:)\` annotation',
+          '5. 對每個 item 依 e2e → api → ui 順序補對應 evidence；每完成一個 channel 立刻 Edit tasks.md 寫對應 \`(verified-*:)\` annotation（**不要**等到最後一起寫）。Format 嚴格對齊 spectra-apply Step 8a：',
+          '   - \`(verified-e2e: <ISO-8601> spec=<path> trace=<path>)\`',
+          '   - \`(verified-api: <ISO-8601> <METHOD> <URL> <STATUS>[ body=<hash>])\`',
+          '   - \`(verified-ui: <ISO-8601> screenshot=<path>[ dom=<obs>])\`',
+          '',
+          '6. **進度收尾規矩**（避免 marathon 中途靜默離開）：',
+          '   - 每完成**一張 change** 立刻向 user 回報「✅ change \`<name>\` — N item annotated」並繼續下一張',
+          '   - **NEVER** 等 4 張全做完才一次回報',
+          '   - 中途 token 不夠 / blocker / baseline 缺 → **MUST** 回報「⚠️ change \`<name>\` 剩 X item 未補，原因 \`<reason>\`，已停在此」**才**離開；**NEVER** 靜默離開讓 user 自己發現',
+          '',
+          '7. 全部完成後請 user 在 review:ui 重新整理；含 \`verify:ui\` 的 item checkbox 仍保留 \`[ ]\` 等 user 在 GUI 視覺確認',
+          '',
+          '8. 任一 channel 通不過 → 保留 \`[ ]\` + 寫 \`（issue: ...）\`；**NEVER** 寫不成功的 \`(verified-*:)\` annotation',
+          '',
+          '## 完成 checklist',
+          '',
+          '完成每張 change 後在心中（或回報訊息中）勾選：',
+        );
+        for (const s of perChangeStats) {
+          lines.push(
+            '- [ ] \`' + s.name + '\` — ' + s.items + ' item · ' + s.pairs + ' pair',
+          );
+        }
+        lines.push(
+          '',
+          '最後彙整一行回報給 user：「全部完成 N/' + list.length + ' 張 change · M/' + totalItems + ' item annotated」（N / M 是實際完成數，若有 issue / skip 也明列）',
           '',
           'Cookbook 與範本：\`~/offline/clade/vendor/snippets/verify-channels/README.md\`（Charles clade home；其他機器跑 \`find ~ -name verify-channels -type d 2>/dev/null\` 找）',
           '',
@@ -4783,9 +4843,19 @@ export function renderReviewHtml(opts: { mainRoot?: string } = {}): string {
         if (annotationList(item, c.listKey, c.singleKey).length) return true;
         const children = childrenByParent.get(item.id) || [];
         if (children.length === 0) return false;
-        const relevant = children.filter((ch) => itemKinds(ch).includes(c.kind));
-        if (relevant.length === 0) return false;
-        return relevant.every((ch) => annotationList(ch, c.listKey, c.singleKey).length > 0);
+        // 詳見 server-side hasEvidenceFor 雙路註解：Path A strict（children 有 explicit
+        // verify marker 走 kind-matching 全 annotate）vs Path B lenient fallback（children
+        // 全無 verify marker → 用 annotation presence 推導 evidence intent）。
+        // 安全網用以兜底 propose hygiene 漏網（[verify:api+ui] parent + 未補 marker 的 child）。
+        const childrenHaveAnyVerifyMarker = children.some((ch) =>
+          itemKinds(ch).some((k) => k.startsWith('verify:'))
+        );
+        if (childrenHaveAnyVerifyMarker) {
+          const relevant = children.filter((ch) => itemKinds(ch).includes(c.kind));
+          if (relevant.length === 0) return false;
+          return relevant.every((ch) => annotationList(ch, c.listKey, c.singleKey).length > 0);
+        }
+        return children.some((ch) => annotationList(ch, c.listKey, c.singleKey).length > 0);
       }
       const byItem = new Map();
       for (const item of items) {
