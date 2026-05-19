@@ -82,6 +82,28 @@ Archive a completed change.
 
    **If no tasks file exists:** Proceed without task-related warning.
 
+3.3. **Manual-Review Pattern Re-check** (clade fork addition — archive gate for `## 人工檢查` hygiene)
+
+   `## 人工檢查` items can drift between propose / ingest and archive (apply phase edits, screenshot annotations, fix-up rewrites). Re-run the same enforcement hook that `/spectra-propose` uses, so jargon leakage / abstract reference / missing URL etc. doesn't slip into archive:
+
+   ```bash
+   bash scripts/spectra-advanced/post-propose-manual-review-check.sh <change-name>
+   ```
+
+   Exit 2 = pattern findings (any of `ABSTRACT_REFERENCE` / `CARD_WITHOUT_UID` / `UI_ITEM_NO_URL` / `MULTI_STEP_NOT_SCOPED` / `REVIEW_UI_BACKEND_ROUNDTRIP` / `INTERNAL_JARGON_LEAKAGE`).
+
+   **If findings exist:**
+   - Display warning showing pattern hit summary (parsed from hook stderr)
+   - Prompt user: "Archive 前 manual-review 還有 N 個 pattern 命中（見上）— 修完再 archive vs 帶 followup 跳過？"
+     - **Fix now** → main thread Edit `tasks.md` per hook remediation guidance; re-run hook; loop until clean
+     - **Bypass with @followup** → user adds `@followup[TD-NNN]` to each hit item + opens consumer-side TD; main thread re-runs hook to confirm bypass markers recognized; proceed
+     - **Bypass with @no-manual-review-check** → only if hit is legitimate false positive (e.g., 真機掃 SMS 無 dev replay endpoint); main thread adds marker + re-runs hook; proceed
+   - Proceed only after hook exits 0 or user explicitly confirms bypass strategy
+
+   **If hook exits 0:** Silent skip — proceed to Step 3.5.
+
+   Reference: `vendor/snippets/manual-review-enforcement/patterns.json` + `rules/core/manual-review.data-readiness.md`.
+
 3.5. **Discuss Items Walkthrough** (Step 2.5 in the spec — runs after artifact + task completion checks, before delta sync preview)
 
    Spec authority: `openspec/specs/manual-review-item-kind/spec.md` "Spectra-Archive Discuss Walkthrough"
