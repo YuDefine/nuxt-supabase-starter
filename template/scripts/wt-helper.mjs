@@ -1171,12 +1171,21 @@ async function cmdMergeBack(slug, opts = {}) {
 
   // Act on worktree WIP detection from pre-flight: either auto-amend (opt-in)
   // or refuse with clear remediation steps. See computation above for rationale.
+  //
+  // Helper-internal amend uses --no-verify per worktree-default.md §5: the wt:
+  // prefix on HEAD commit message fails commitlint emoji-conventional with
+  // subject-empty. Main-line manual amend (the else-branch remediation below)
+  // keeps the --no-verify-free form because commit.md hard rule forbids it for
+  // main-line user actions; users are expected to write a non-wt: subject.
   if (wtUserDirty.length > 0) {
     if (opts.includeWorktreeWip) {
       const paths = wtUserDirty.map((d) => d.path)
       try {
         git(['add', '--', ...paths], { cwd: target.path })
-        git(['commit', '--amend', '--no-edit'], { cwd: target.path, stdio: 'inherit' })
+        git(['commit', '--amend', '--no-edit', '--no-verify'], {
+          cwd: target.path,
+          stdio: 'inherit',
+        })
         console.log(
           `merge-back: --include-worktree-wip auto-amended ${paths.length} dirty file(s) into ${branchName} HEAD`,
         )
