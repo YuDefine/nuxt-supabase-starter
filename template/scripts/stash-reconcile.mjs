@@ -147,13 +147,29 @@ function parseNamespace(message) {
   if (finalBaseline) {
     return { kind: 'wt-final-baseline', slug: finalBaseline[1], iso: finalBaseline[2] }
   }
+  // Phase 7 (Q8) namespace: wt-merge-block/<slug>/<session_id>/<iso>
+  // (session_id has form <base36>-<base36>-<host-suffix>). Backward-compat:
+  // legacy wt-merge-block/<slug>/<iso> still parses (session_id field is null).
+  const wtNew = message.match(/wt-merge-block\/([^/]+)\/([^/]+)\/(\d{4}-\d{2}-\d{2}T[0-9-]+Z)/)
+  if (wtNew) {
+    return { kind: 'wt-merge-block', slug: wtNew[1], session_id: wtNew[2], iso: wtNew[3] }
+  }
   const wtMatch = message.match(/wt-merge-block\/([^/]+)\/([0-9TZ:-]+)/)
   if (wtMatch) {
-    return { kind: 'wt-merge-block', slug: wtMatch[1], iso: wtMatch[2] }
+    return { kind: 'wt-merge-block', slug: wtMatch[1], session_id: null, iso: wtMatch[2] }
+  }
+  const baselineNew = message.match(/wt-baseline\/([^/]+)\/([^/]+)\/(\d{4}-\d{2}-\d{2}T[0-9-]+Z)/)
+  if (baselineNew) {
+    return {
+      kind: 'wt-baseline',
+      slug: baselineNew[1],
+      session_id: baselineNew[2],
+      iso: baselineNew[3],
+    }
   }
   const baseline = message.match(/wt-baseline\/([^/]+)\/([0-9TZ:-]+)/)
   if (baseline) {
-    return { kind: 'wt-baseline', slug: baseline[1], iso: baseline[2] }
+    return { kind: 'wt-baseline', slug: baseline[1], session_id: null, iso: baseline[2] }
   }
   // cross-session-block-<slug>[-suffix]  (legacy from perno 2026-05-17)
   const csMatch = message.match(/cross-session-block-(.+)$/)

@@ -45,7 +45,13 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { stdin, stdout } from 'node:process'
 import { createInterface } from 'node:readline/promises'
-import { dropClaim, findClaimByWorktree, readActiveClaims, writeClaim } from './claim-helper.mjs'
+import {
+  dropClaim,
+  findClaimByWorktree,
+  genSessionId,
+  readActiveClaims,
+  writeClaim,
+} from './claim-helper.mjs'
 import { isLockedProjectionPath } from './locked-projection.mjs'
 
 function git(args, opts = {}) {
@@ -320,6 +326,10 @@ async function cmdAdd(slug, opts = {}) {
   // Unmerged paths are triaged by classifyUnmergedSafety: stale UU (no
   // markers + no in-progress op state) auto-resolves via `git add`; real
   // conflicts or mid-operation state still stop with diagnostics.
+  // Pre-gen session_id so the pre-fork baseline stash carries it in the name;
+  // the same id is later passed to writeClaim() so stash + claim share identity.
+  // Phase 7 (Q8): stash-reconcile namespace tags map back to a specific session.
+  const preGenSessionId = genSessionId()
   let pendingStashName = null
   let pendingBaselineRef = null
   if (opts.precheckBaseline !== undefined) {
@@ -412,7 +422,8 @@ async function cmdAdd(slug, opts = {}) {
         gitSelectiveCommit(consumerRoot, scopePaths, message)
       } else if (strategy === 'stash') {
         const iso = new Date().toISOString().replace(/[:.]/g, '-')
-        const stashName = opts.baselineStashName || `wt-baseline/${cleanSlug}/${iso}`
+        const stashName =
+          opts.baselineStashName || `wt-baseline/${cleanSlug}/${preGenSessionId}/${iso}`
         const baselineRef = `refs/wt-baseline/${cleanSlug}/${iso}`
         console.log(`Pre-fork baseline: stash ${dirtyCount} file(s) as '${stashName}'`)
         git(['stash', 'push', '-u', '-m', stashName], {
@@ -599,6 +610,7 @@ async function cmdAdd(slug, opts = {}) {
       .map((s) => s.trim())
       .filter(Boolean)
     const claim = writeClaim(consumerRoot, {
+      session_id: preGenSessionId,
       agent: opts.agent ?? 'claude-code',
       consumer: basename(consumerRoot),
       worktree_path: wtPath,
@@ -1416,7 +1428,21 @@ async function cmdMergeBack(slug, opts = {}) {
       )
     }
     const isoTs = new Date().toISOString().replace(/[:.]/g, '-')
-    const stashMsg = `wt-merge-block/${cleanSlug}/${isoTs}`
+    // Phase 7 (Q8): stash namespace carries the merge-back's session_id (from
+    // its worktree claim) so stash-reconcile can attribute a stash back to a
+    // specific session. Fallback to slug-only when no claim found (warn so
+    // path-detection-only attribution is visible).
+    let mergeBackClaim = null
+    try {
+      mergeBackClaim = findClaimByWorktree(consumerRoot, target.path)
+    } catch {}
+    const sessionPart = mergeBackClaim?.session_id ? `/${mergeBackClaim.session_id}` : ''
+    if (!mergeBackClaim) {
+      console.error(
+        `note: no .clade/claims/ entry for worktree ${target.path} — stash falls back to slug-only namespace`,
+      )
+    }
+    const stashMsg = `wt-merge-block/${cleanSlug}${sessionPart}/${isoTs}`
     try {
       // Bulk stash (no pathspec) — matches cmdAdd's baseline-stash strategy.
       // Previously this used `git stash push -u -m <msg> -- <blocker-paths>`,
