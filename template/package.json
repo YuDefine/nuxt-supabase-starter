@@ -109,7 +109,7 @@
     "vue-tsc": "^3.2.6"
   },
   "engines": {
-    "node": ">=18"
+    "node": "^24"
   },
   "packageManager": "pnpm@10.28.1"
 }
