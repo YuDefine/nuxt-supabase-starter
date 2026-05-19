@@ -64,7 +64,19 @@ description: 逐套件升級 npm/pnpm dependencies，每個 package 派 codex gp
    - **minor**（`1.2.3 → 1.3.0`）：should be safe 但偶爾有 regression
    - **major**（`1.x → 2.x`）：高機率 breaking change
 
-5. **回報計畫給使用者**並等確認：
+5. **`@types/*` 特殊封頂（MUST 在分類後立刻套用）**：
+
+   `@types/<lib>` 的 major 版號**跟著對應 runtime / lib 版本走**，不是越新越好。**MUST** 把每個 `@types/*` 套件的 target version 上限封頂為 project 當前對應版本的 major：
+
+   - `@types/node` → ≤ project Node major（讀 `.nvmrc` / `.tool-versions` / `package.json` `engines.node` / `Dockerfile` 任一可靠來源；都查不到才問 user）
+   - `@types/react` → ≤ `dependencies.react` 的 major
+   - 其餘 `@types/<lib>` 同理跟 `<lib>` 自身 major
+
+   若 `pnpm outdated` 給的 Latest 超過上限，target 改成「上限 major 內最新」（例：Node 20 環境 + `@types/node` Latest 是 22.x → target 鎖 `^20.x` 最新 minor/patch，**不**升 22）。Step 6 回報給 user 的計畫表 **MUST** 在這些 `@types/*` 條目後標註「(capped to Node N / react N)」讓 user 看到封頂邏輯有作用。
+
+   **NEVER** 為了「升到最新」把 `@types/*` 推超過對應 runtime / lib — 型別會漂移：typecheck 用的是 newer types，但 runtime 跑的是舊版 API，bug 表現是「TS 說沒問題、prod 卻炸」這種最難 debug 的型別。
+
+6. **回報計畫給使用者**並等確認：
 
    ```
    偵測到 <PM>，outdated 共 <N> 個：
