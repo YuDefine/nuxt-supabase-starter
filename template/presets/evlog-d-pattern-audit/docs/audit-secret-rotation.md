@@ -41,12 +41,12 @@ openssl rand -hex 64
 
 把新 secret + 新 version number 記下：
 
-| Field     | 舊         | 新         |
-| --------- | ---------- | ---------- |
-| secret    | `0xabc...` | `0xdef...` |
-| version   | 1          | 2          |
-| algorithm | sha256     | sha256     |
-| 開始日    | 2026-02-01 | 2026-05-09 |
+| Field | 舊 | 新 |
+| --- | --- | --- |
+| secret | `0xabc...` | `0xdef...` |
+| version | 1 | 2 |
+| algorithm | sha256 | sha256 |
+| 開始日 | 2026-02-01 | 2026-05-09 |
 
 ### Step 2：雙 secret 期 — drain 用新 secret，cron 雙驗證
 
@@ -55,8 +55,8 @@ drain side：
 ```ts
 // packages/core/server/plugins/evlog-audit-signed.ts
 const config = useRuntimeConfig()
-const secret = config.evlog.auditSecret // 從 env 讀新 secret
-const secretVersion = config.evlog.auditSecretVersion // = 2
+const secret = config.evlog.auditSecret  // 從 env 讀新 secret
+const secretVersion = config.evlog.auditSecretVersion  // = 2
 
 const signedAuditDrain = signed(auditWriter, {
   strategy: 'hmac',
@@ -72,8 +72,8 @@ cron side：
 ```ts
 // diff-cron.ts 的 verification 改成「依 row.signed_secret_version 找對應 secret 重算」
 const SECRETS: Record<number, string> = {
-  1: process.env.EVLOG_AUDIT_SECRET_V1!, // 舊
-  2: process.env.EVLOG_AUDIT_SECRET_V2!, // 新
+  1: process.env.EVLOG_AUDIT_SECRET_V1!,  // 舊
+  2: process.env.EVLOG_AUDIT_SECRET_V2!,  // 新
 }
 
 const recomputed = computeEvlogHash(SECRETS[s.signed_secret_version], a, s.evlog_prev_hash)
@@ -113,7 +113,6 @@ pnpm build && wrangler deploy
 cutover 時間越近，舊 v1 row 越多，cron 應持續 0 drift（除非真的有問題）。
 
 監控查詢：
-
 ```sql
 SELECT
   drift_type,
@@ -128,13 +127,11 @@ GROUP BY drift_type;
 預期：所有 drift_type count = 0。
 
 如果出現 `evlog_hash_mismatch`：
-
 1. 確認 row.signed_secret_version 對應的 secret 是否正確
 2. 確認 cron env 兩條 secret 都 set
 3. 重 deploy cron
 
 如果出現 `evlog_chain_break`：
-
 - rotation 期間理論上不該發生（chain 不依賴 secret）
 - 出現代表 drain instance race（多 worker 同時寫）— 加 advisory lock per tenant
 
@@ -157,12 +154,12 @@ wrangler secret delete EVLOG_AUDIT_SECRET_V1
 
 ## 反模式
 
-| 反模式                                                                   | 為什麼壞                                                                             |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| 直接換 secret 不過渡期                                                   | 舊 row 全部變成 evlog_hash_mismatch drift；cron 滿屏 false-positive 無法分辨真 drift |
-| 兩 secret 用同一 env name 切換                                           | drain 在 propagate 中途會混 — 部分 instance 用舊、部分用新；version 註記跟不上       |
-| 忘了 backfill SECRET_V1 env                                              | cron 重算 v1 row 拿不到 secret → false-positive evlog_hash_mismatch                  |
-| 用 audit_signed_chain.evlog_prev_hash 重算 chain（取代 secret rotation） | chain 不依賴 secret；rotation 不該動 chain                                           |
+| 反模式 | 為什麼壞 |
+| --- | --- |
+| 直接換 secret 不過渡期 | 舊 row 全部變成 evlog_hash_mismatch drift；cron 滿屏 false-positive 無法分辨真 drift |
+| 兩 secret 用同一 env name 切換 | drain 在 propagate 中途會混 — 部分 instance 用舊、部分用新；version 註記跟不上 |
+| 忘了 backfill SECRET_V1 env | cron 重算 v1 row 拿不到 secret → false-positive evlog_hash_mismatch |
+| 用 audit_signed_chain.evlog_prev_hash 重算 chain（取代 secret rotation） | chain 不依賴 secret；rotation 不該動 chain |
 
 ## Step 結束時的 checklist
 

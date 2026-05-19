@@ -34,7 +34,10 @@ export default defineNuxtConfig({
       // rates 0-100；audit forceKeep 由 server/plugins/evlog-enrich.ts 末尾
       // evlog:emit:keep hook wire (evlog 2.16 無內建 — master plan §14 第 12 條校正)
       rates: { error: 100, warn: 100, info: 50, debug: 0 },
-      keep: [{ status: 400 }, { duration: 1000 }],
+      keep: [
+        { status: 400 },
+        { duration: 1000 },
+      ],
       // cost-based forceKeep 走 server/plugins/evlog-cost-keep.ts 用 'evlog:emit:keep' Nitro hook
       // （keep[] 不接 callback，要 cost / event-shape filter 必走 Nitro hook）
     },

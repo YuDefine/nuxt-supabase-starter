@@ -14,12 +14,12 @@ Reference: `docs/evlog-master-plan.md` § 3.2 + § 7（Cloudflare Workers 限制
 
 ## 為什麼強制 pipeline
 
-| 不走 pipeline  | 後果                                                                                |
-| -------------- | ----------------------------------------------------------------------------------- |
-| 沒 batch       | 一次 request 50 events × `fetch` = 50 subrequest 用光，其他 fetch（DB、第三方）失敗 |
-| 沒 retry       | Sentry / Axiom 限速 429 → drop event → wide event 信號斷                            |
-| 沒 buffer 上限 | event 暴量時 Worker 128MB 記憶體被吃光 → OOM                                        |
-| 沒 flush hook  | Worker 結束時 in-memory batch 被 GC → event 丟失                                    |
+| 不走 pipeline | 後果 |
+| --- | --- |
+| 沒 batch | 一次 request 50 events × `fetch` = 50 subrequest 用光，其他 fetch（DB、第三方）失敗 |
+| 沒 retry | Sentry / Axiom 限速 429 → drop event → wide event 信號斷 |
+| 沒 buffer 上限 | event 暴量時 Worker 128MB 記憶體被吃光 → OOM |
+| 沒 flush hook | Worker 結束時 in-memory batch 被 GC → event 丟失 |
 
 `createDrainPipeline` 把這 4 個問題一次包好。本 snippet 提供經 5 consumer 驗證的預設值。
 
@@ -43,16 +43,16 @@ Reference: `docs/evlog-master-plan.md` § 3.2 + § 7（Cloudflare Workers 限制
 
 ## Pipeline 預設值（與 Workers 限制對齊）
 
-| Option                 | 值                    | 為什麼                                                      |
-| ---------------------- | --------------------- | ----------------------------------------------------------- |
-| `batch.size`           | 50                    | 一次 `fetch` 帶 50 events = 1 subrequest（Workers 50 上限） |
-| `batch.intervalMs`     | 5000                  | 5 秒沒滿也 flush，避免 event 卡太久看不到                   |
-| `retry.maxAttempts`    | 3                     | 對 429 / 短暫 502 有彈性；3 次失敗就 drop（onDropped 觀測） |
-| `retry.backoff`        | `'exponential'`       | 1s → 2s → 4s（hit `maxDelayMs` 截）對下游 friendly          |
-| `retry.initialDelayMs` | 1000                  | 1 秒緩衝，多數 Sentry 限速 1 秒內恢復                       |
-| `retry.maxDelayMs`     | 30000                 | 上限 30 秒，避免單一壞 batch 卡太久                         |
-| `maxBufferSize`        | 1000                  | 1000 events 上限；超過 drop 最舊                            |
-| `onDropped`            | console + Sentry meta | drop 必觀測，不可 silent                                    |
+| Option | 值 | 為什麼 |
+| --- | --- | --- |
+| `batch.size` | 50 | 一次 `fetch` 帶 50 events = 1 subrequest（Workers 50 上限） |
+| `batch.intervalMs` | 5000 | 5 秒沒滿也 flush，避免 event 卡太久看不到 |
+| `retry.maxAttempts` | 3 | 對 429 / 短暫 502 有彈性；3 次失敗就 drop（onDropped 觀測） |
+| `retry.backoff` | `'exponential'` | 1s → 2s → 4s（hit `maxDelayMs` 截）對下游 friendly |
+| `retry.initialDelayMs` | 1000 | 1 秒緩衝，多數 Sentry 限速 1 秒內恢復 |
+| `retry.maxDelayMs` | 30000 | 上限 30 秒，避免單一壞 batch 卡太久 |
+| `maxBufferSize` | 1000 | 1000 events 上限；超過 drop 最舊 |
+| `onDropped` | console + Sentry meta | drop 必觀測，不可 silent |
 
 高量 consumer（> 1000 req/s）可調 `batch.size` 100、`maxBufferSize` 5000；低量 consumer 預設值即可。
 
@@ -128,8 +128,8 @@ export default defineNuxtConfig({
       // keep[] 是 OR-logic 條件：符合任一就強制 keep（取代 legacy `forceKeep` callback）
       // 條件型別：{ status?: number, duration?: number, path?: string }
       keep: [
-        { status: 400 }, // 4xx / 5xx 永遠 keep
-        { duration: 1000 }, // 慢 endpoint (≥ 1s) 永遠 keep
+        { status: 400 },     // 4xx / 5xx 永遠 keep
+        { duration: 1000 },  // 慢 endpoint (≥ 1s) 永遠 keep
         { path: '/api/critical/**' }, // critical path 永遠 keep
       ],
     },
