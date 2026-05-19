@@ -125,13 +125,14 @@ hub:bootstrap 自動同步產生（請完全忽略，與本次工作無關）：
 
 - 一 phase 結束 commit 一次（多檔可同一 commit）
 - Selective stage：`git add -- <each scoped file path>`
-- Commit：`git commit --no-verify -m "wt: <change>-phase-<N> — <一行說明>"`
+- Commit：`git commit -m "🧹 chore: wt <change>-phase-<N> — <一行說明>"`（emoji-conventional commitlint 合規，pre-commit / commit-msg hook 必跑）
 
 **禁止**：
 
 - `git add -A` / `git add .`（會撈到 main fork 過來的 baseline）
 - 跨 phase 混 commit（一個 commit 含多 phase 的改動 → 主線無法用 `git log main..HEAD` 對齊 phase 邊界）
-- 改 commit message format（**MUST** 用 `wt: <change>-phase-<N> — <short>`，commitlint 會擋，所以 **MUST** 加 `--no-verify`）
+- 改 commit message format（**MUST** 用 `🧹 chore: wt <change>-phase-<N> — <short>`，emoji + type + `wt` 主旨 subject 一體格式）
+- `--no-verify`（per [[commit]] hard rule，主線/subagent/codex 一視同仁；hook 擋住代表 phase 內容有問題，必須修而非繞）
 - `git push` / `git push --force`
 - `git stash` / `git stash push` / `git stash pop`（中途 stash 抹掉 working tree 會繞過主線監看）
 - `git commit --amend`（一 phase 一 commit、不要 amend 修飾）
@@ -153,9 +154,9 @@ hub:bootstrap 自動同步產生（請完全忽略，與本次工作無關）：
 
 **Commit message format（MUST）**：
 
-   wt: <change-name>-phase-<N> — <一行說明 codex 做了什麼>
+   🧹 chore: wt <change-name>-phase-<N> — <一行說明 codex 做了什麼>
 
-範例：`wt: consumable-po-link-phase-3 — admin PO entry page + handler + types`
+範例：`🧹 chore: wt consumable-po-link-phase-3 — admin PO entry page + handler + types`
 
 Commit 完直接停手回報，**NEVER** 自己跑下一 phase。主線會在 commit 後做 phase boundary 對齊 + view-layer drift 再驗 + scope cross-check，再決定 [接受 / reset 重派 / 中止]。
 ```
@@ -167,7 +168,7 @@ Commit 完直接停手回報，**NEVER** 自己跑下一 phase。主線會在 co
 例外：
 
 - `codex review --uncommitted` 與 WebSearch 不寫檔，本節不適用
-- 對 `claude` type subagent（如 `/spectra-ingest` 在 /wt 內派出的 wt subagent）規約相同（`wt:` prefix + `--no-verify` + selective stage + self-check），per worktree-default.md §5
+- 對 `claude` type subagent（如 `/spectra-ingest` 在 /wt 內派出的 wt subagent）規約相同（`🧹 chore: wt …` 前綴 + selective stage + self-check + hook 必跑），per worktree-default.md §5
 
 ## Codex Watch Protocol（防止主線乾等與卡住盲區）
 
@@ -324,7 +325,7 @@ Claude Code session 收到 spectra propose 請求時：
 5. 收到 `<task-notification status=completed>` 後，主線 **MUST**（codex 已在 worktree 自 commit per § Commit Authorization）：
    - Read codex stdout 的 `PHASE_X_RESULT` + Plan section（事前公開的思路）
    - Read tasks.md 確認該 phase 所有 checkbox 已勾
-   - **Phase boundary 對齊**：`git -C <wt> log main..HEAD --oneline` — confirm exactly one new commit per dispatched phase, format `wt: <change>-phase-<N> — ...`。多 commit / missing commit / format 不符 → **AskUserQuestion**：[1] 主線 squash codex 的多 commits / [2] `git -C <wt> reset --soft main` 退 staging 重派 / [3] 中止
+   - **Phase boundary 對齊**：`git -C <wt> log main..HEAD --oneline` — confirm exactly one new commit per dispatched phase, format `🧹 chore: wt <change>-phase-<N> — ...`。多 commit / missing commit / format 不符 → **AskUserQuestion**：[1] 主線 squash codex 的多 commits / [2] `git -C <wt> reset --soft main` 退 staging 重派 / [3] 中止
    - **View-layer drift double-check**：codex 端 self-check 命中時應已 abort，主線此處再驗一次保險：
      ```bash
      git -C <wt> diff main..HEAD --name-only \

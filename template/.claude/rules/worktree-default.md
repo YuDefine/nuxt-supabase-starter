@@ -248,22 +248,22 @@ v3 atomic landing 解這些：
 **Codex 派工規約**（per [[agent-routing.codex-watch-protocol]] § Commit Authorization）：派 codex 跑 phase 時 **codex 可在 worktree 內 commit**，但 **MUST** 遵守：
 
 - **一 phase 一 commit**：每完成 phase 全部 tasks + 自驗 view-layer + 自驗 scope 後 commit 一次（不可跨 phase 混 commit、不可 `git commit --amend`）
-- **Commit message**：`wt: <change>-phase-<N> — <short>` 強制格式（主線用 `git log main..HEAD` 機械化對齊 phase 邊界）
-- **`--no-verify`**：commitlint emoji-conventional 會擋 `wt:` prefix
+- **Commit message**：`🧹 chore: wt <change>-phase-<N> — <short>` 強制格式（emoji-conventional commitlint 合規；主線用 `git log main..HEAD --grep "^🧹 chore: wt "` 機械化對齊 phase 邊界）
+- **不繞 hook**：pre-commit / commit-msg hook 正常跑，**禁止** `--no-verify`（per [[commit]] hard rule，主線/subagent/codex 一視同仁）
 - **Selective stage**：`git add -- <each scoped file>`，**禁止** `git add -A` / `git add .`（會撈到 baseline）
 - **Commit 前自跑** view-layer drift check + scope discipline check（命中即 abort，**禁止** commit、回報主線）
 - **仍禁止**：`git push` / `git stash`（中途）/ `git commit --amend` / `/commit` / `/spectra-commit`
 
 主線（Claude Code main session 或 `/wt` 派出的 Claude subagent）收到 codex 完工通知後 **MUST**：(1) `git log main..HEAD` 確認 commit 邊界對齊 phase 數量 + format；(2) 跑 view-layer drift double-check 保險；(3) 跑 scope discipline cross-check；(4) drift 發現 → `git -C <wt> reset --soft main` 退 staging + 重派 codex；(5) 跑 typecheck / 相關 test。
 
-本段「Subagent 在 worktree commit」**對 Claude subagent 與 codex 都適用**（兩者規約相同：`wt:` prefix + `--no-verify` + selective stage + self-check）。差別只在 commit message 後綴：Claude subagent 用 `wt: <slug> — <free-form>`，codex 派工強制 `wt: <change>-phase-<N> — <short>` 以利主線對齊 phase。
+本段「Subagent 在 worktree commit」**對 Claude subagent 與 codex 都適用**（兩者規約相同：`🧹 chore: wt …` 前綴 + selective stage + self-check + hook 必跑）。差別只在 subject 後綴：Claude subagent 用 `🧹 chore: wt <slug> — <free-form>`，codex 派工強制 `🧹 chore: wt <change>-phase-<N> — <short>` 以利主線對齊 phase。
 
 1. **Subagent 在 worktree 內 commit**（由 `/wt` Form 1 / 2 / 3 的 prompt template 強制執行）：
 
    ```bash
    # 在 subagent cwd（= worktree path）
-   git add -A
-   git commit -m "wt: <slug> — <short>"   # 可多個 commit
+   git add -- <each scoped file>          # selective stage，禁止 git add -A
+   git commit -m "🧹 chore: wt <slug> — <short>"   # 可多個 commit；pre-commit / commit-msg hook 必跑
    ```
 
    **NEVER**：`git push` / `/commit` / `/spectra-commit` — 都在 subagent prompt 內顯式禁止。
@@ -369,7 +369,7 @@ node scripts/wt-helper.mjs merge-back <slug> [flags]
 
 1. 找 slug 對應的 session worktree（依 branch name `session/<date>-<slug>` + path `<consumer>-wt/<slug>` 比對）。找不到 → 預設 error（除非 `--noop-if-missing`）。
 2. **偵測 worktree 內 uncommitted user WIP**：`git -C <wtPath> status --porcelain` 列出 modified + untracked，過濾掉 clade-managed projection（`.agents/`、`.codex/`、`.claude/hub.json`、`.claude/.hub-state.json`、`scripts/wt-helper.mjs`），剩下的就是 user WIP。**有 user WIP 但無 `--include-worktree-wip` → throw with 修法**：建議 user `cd <wtPath> && git add <files> && git commit --amend --no-edit` 後再回來跑 merge-back。Atomic-landing 要求 worktree 的所有 user 變更都要 commit，否則 `git merge --squash` 不會帶走，cleanup 還會永久砍掉。**有 `--include-worktree-wip` → auto-amend**（不建議；commit message 會空）。
-2.5. **Pre-sync wt with main**（預設開啟；`--skip-pre-sync` 關閉）：在 `<wtPath>` 跑 `git fetch origin main`（若 `origin/main` 存在；否則用 local main）+ `git rev-list --count <branch>..<targetRef>` 算落差。落差為 0 → no-op。落差 > 0 → `git merge --no-ff -m "wt: pre-sync main into <branch>" <targetRef>` 把 main 灌進 wt 分支。Conflict 留在 wt 內（不 auto-abort），main working tree **完全不動**；user 在 wt 解完衝突 + commit 後重跑 merge-back。設計動機：把衝突隔離在 wt path，避免汙染 main（過往 squash conflict 一炸 main 就要靠 stash 救，多次造成 publish / propagate 流程不穩——對應 `clade_publish_interleaved_wip_same_file` / `clade_propagate_stash_pop_loop` 教訓）。
+2.5. **Pre-sync wt with main**（預設開啟；`--skip-pre-sync` 關閉）：在 `<wtPath>` 跑 `git fetch origin main`（若 `origin/main` 存在；否則用 local main）+ `git rev-list --count <branch>..<targetRef>` 算落差。落差為 0 → no-op。落差 > 0 → `git merge --no-ff -m "🧹 chore: wt pre-sync main into <branch>" <targetRef>` 把 main 灌進 wt 分支。Conflict 留在 wt 內（不 auto-abort），main working tree **完全不動**；user 在 wt 解完衝突 + commit 後重跑 merge-back。設計動機：把衝突隔離在 wt path，避免汙染 main（過往 squash conflict 一炸 main 就要靠 stash 救，多次造成 publish / propagate 流程不穩——對應 `clade_publish_interleaved_wip_same_file` / `clade_propagate_stash_pop_loop` 教訓）。
 3. 偵測 main worktree 的 blockers：`git diff --name-only main..<branch>` 列出 branch 動過的檔，跟 main `git status --porcelain` 的 M / untracked 路徑取交集。
 4. 有 blocker 但無 `--auto-stash` → throw with 建議「re-run with --auto-stash」+ 列出 blocker（最多 10 筆）。
 5. 有 `--auto-stash`：`git stash push -u -m "wt-merge-block/<slug>/<ISO>" -- <blocker paths>`，stash entry 保留待 user 後續用 `stash-reconcile.mjs` 處理。

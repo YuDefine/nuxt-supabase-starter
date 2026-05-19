@@ -103,7 +103,7 @@ description: 逐套件升級 npm/pnpm dependencies，每個 package 派 codex gp
 - `[DELEGATED-BY-CLAUDE-CODE]` marker（第一行，per [[agent-routing]] codex-watch-protocol § Runtime Gate）
 - 目標 package 名 + current version → target version + **正確的 install flag**（依 Step 1.3 deps/devDeps 偵測結果決定 `pnpm add <pkg>` 或 `pnpm add -D <pkg>`）
 - Git Baseline 段（per codex-watch-protocol § Git Baseline；列當前 worktree 內所有 main fork 過來的 in-flight 變更 path，**不要列死**——每個 consumer / 每次 fork 都不同，主線跑 `git status --porcelain` 動態抓）
-- Commit Authorization 段（per codex-watch-protocol § Commit Authorization；message format `wt: upgrade-<pkg>-<from>→<to>`）
+- Commit Authorization 段（per codex-watch-protocol § Commit Authorization；message format `🧹 chore: wt upgrade-<pkg>-<from>→<to>`）
 - 失敗時的回報格式（讓主線決定要不要升 high）
 
 **Plan-first 條件化**（DRY + 降 token）：
@@ -136,7 +136,7 @@ cd <worktree-path> && codex exec \
 
 | 訊號 | 判定 | 下一步 |
 | --- | --- | --- |
-| `PHASE_RESULT: SUCCESS` + worktree 多了一個 `wt: upgrade-<pkg>-...` commit | 成功 | 記錄到摘要、進下一 package |
+| `PHASE_RESULT: SUCCESS` + worktree 多了一個 `🧹 chore: wt upgrade-<pkg>-...` commit | 成功 | 記錄到摘要、進下一 package |
 | `PHASE_RESULT: FAILURE` + codex 自報原因（typecheck error / build fail / test fail / install conflict） | 失敗 → 進 2.4 升 high research | 不馬上問使用者；先讓 codex high 自己研究 |
 | Plan section 缺 / commit message format 不符 / scope drift（動了 package.json 以外的檔） | codex 漏跑硬指令 | 不升 high；直接 request_user_input [重派 medium / 升 high / 跳過 / 中止] |
 | `fetch failed` / sandbox 拒絕 / 互動 prompt 卡住 | 環境問題 | per watch protocol 「介入觸發」，request_user_input |
@@ -152,7 +152,7 @@ cd <worktree-path> && codex exec \
 - 明確指示走研究模式：先 **github** plugin 查 `<pkg>` repo 的 issues / releases / changelog，再 **browser-use** / web search 查官方 migration guide
 - 研究完才動手改檔（可能需要改 import path、API 簽名、config 結構）
 - 一樣的 Git Baseline / Commit Authorization 硬指令
-- Commit message format `wt: upgrade-<pkg>-<from>→<to> (researched <issue-url-slug>)`
+- Commit message format `🧹 chore: wt upgrade-<pkg>-<from>→<to> (researched <issue-url-slug>)`
 
 Dispatch：
 
@@ -390,10 +390,11 @@ N. 全綠後 commit
 
 **允許**：
 - Selective stage：`git add package.json <lockfile>`
-- Commit：`git commit --no-verify -m "wt: upgrade-<pkg>-<from>→<to>"`
+- Commit：`git commit -m "🧹 chore: wt upgrade-<pkg>-<from>→<to>"`（emoji-conventional commitlint 合規，pre-commit / commit-msg hook 必跑）
 
 **禁止**：
 - `git add -A` / `git add .`
+- `--no-verify`（per `rules/core/commit.md` hard rule，hook 擋住代表 upgrade 內容有問題，必須修而非繞）
 - `git push` / `git stash` / `git commit --amend`
 - 修改 view 層檔（`.vue` / `.tsx` / `.jsx` / `app/pages/` 等）— 升 deps 不該動 view
 - 動 Git Baseline 列的 in-flight 檔案
@@ -480,7 +481,7 @@ Codex 自報原因：<medium 給的 HYPOTHESIS>
 **Phase I（Implement）**：
 跟 medium 派工一樣的步驟（install → typecheck → build → test → commit），但 commit message 改成：
 \`\`\`
-wt: upgrade-<pkg>-<from>→<to> (researched <最關鍵的 issue/release URL slug>)
+🧹 chore: wt upgrade-<pkg>-<from>→<to> (researched <最關鍵的 issue/release URL slug>)
 \`\`\`
 
 ## Git Baseline / Commit Authorization

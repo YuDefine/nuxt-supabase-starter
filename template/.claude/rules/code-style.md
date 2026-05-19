@@ -71,6 +71,59 @@ oxfmt 不會自動 fallback 讀 `.oxfmtignore`（只有 `.prettierignore` / `.gi
 
 例外：當第三方套件（如 husky / lint-staged / Nuxt module）的 peer dependency 強制要求時，可保留，但**不該被 user code 直接呼叫**。
 
+### 禁止依賴全域 vite-plus（hard rule）
+
+`vite-plus`（vp）**MUST** 安裝為 consumer 的 per-project devDependency 並 pin 具體版本。**禁止**僅依賴全域 `pnpm add -g vite-plus` 而 consumer `package.json` 不列。
+
+**推薦寫法（catalog mode，對齊官方）**：
+
+```jsonc
+// package.json
+"devDependencies": { "vite-plus": "catalog:" }
+```
+```yaml
+# pnpm-workspace.yaml
+catalog:
+  vite-plus: 0.1.21      # ← strict pin，不要 ^ / ~
+```
+
+理由：vite-plus 官方 migrator（`packages/cli/src/migration/migrator.ts`）對 pnpm workspace 預設寫 `"catalog:"` 引用 + 把版本放 catalog；官方 repo 自家也用 `catalogMode: prefer`。catalog 機制把版本集中管理，未來拆 sub-package / 升級時改一處。
+
+**Fallback 寫法（devDeps direct）**：
+
+```jsonc
+"devDependencies": { "vite-plus": "0.1.21" }
+```
+
+純單 repo + 不打算用 catalog 時可走。功能等價，audit signal 都會回 `aligned`。
+
+#### 理由
+
+- 全域版本是 user 機器狀態，跨機器、跨 CI runner 不一致 → `vp lint` / `vp fmt` 行為漂移。CI 跟 dev 抓到不同 lint violation 是常見實證踩坑（user 升全域 → 突然某條 rule 變嚴 → dev 過 / CI 紅）。
+- vp bundle 的 oxlint / oxfmt 版本由 vp `dependencies` 嚴格 pin（`=1.63.0` / `=0.48.0` 之類），等同 vp 版本 = 工具鏈確定版本。vp 沒釘 = 工具鏈沒釘。
+- consumer 端升 vp **MUST** 走 [`upgrade-packages`](../../plugins/hub-core/skills/upgrade-packages/SKILL.md) skill（per-package commit + bisect-friendly + 走品質閘門），不是 user 跑 `pnpm add -g vite-plus@latest` 偷偷升所有 consumer。
+- 跨 consumer 工具鏈 lockstep 是 clade governance 的前提（[`code-style.md`](./code-style.md) § Governance），全域裝法繞過了這層治理。
+
+#### MUST
+
+- consumer 端 `vite-plus` 必 pin 具體版本（不是 `^` / `~` / `*`），透過下列任一機制：
+  - **catalog mode（推薦）**：`package.json` `"vite-plus": "catalog:"` + `pnpm-workspace.yaml` 的 `catalog.vite-plus: <pinned version>`
+  - **devDeps direct**：`package.json` `devDependencies.vite-plus: "<pinned version>"`
+- 新 fork consumer 第一件事：`pnpm add -D vite-plus@<latest stable>`。pnpm workspace consumer 建議手動改寫成 `"catalog:"` + 加 `pnpm-workspace.yaml` catalog，對齊官方 migrator 行為。
+
+#### NEVER
+
+- consumer `package.json` 完全沒 `vite-plus` 條目、跑 `vp` 靠 user `~/Library/pnpm/global/.../vite-plus`。
+- 跑 `pnpm add -g vite-plus`（純探索用 OK，但**MUST** 在當天內改成 per-project）。
+- 在 consumer 端用 `"vite-plus": "^0.1.x"` 浮動 range — vp 嚴格 pin oxlint / oxfmt，浮動 vp 等於浮動工具鏈。
+
+#### 對應偵測
+
+`scripts/audit-tooling-drift.mjs` 提供 `viteplusLocal` signal（diagnostic-only，exit code 永遠 0），對每個 consumer 讀 `package.json` 看 `vite-plus` 是否 pinned-local。
+
+#### 真實事故參考
+
+
 ### 禁止在 lint-staged / pre-commit / CI 命令中呼叫 eslint / prettier
 
 **NEVER** 在 hook script、`package.json` `scripts`、CI workflow 寫：
