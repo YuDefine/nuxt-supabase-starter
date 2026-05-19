@@ -6,9 +6,31 @@ description: '截圖、看畫面、確認 UI、看一下頁面、幫我看 UI、
 
 # 截圖（統一入口）
 
-所有截圖工作由 `screenshot-review` agent（Sonnet）執行。**MUST** 使用 spawn_agent 工具 派遣，不要在主 session 直接跑截圖命令。
+所有截圖工作派遣 `screenshot-review` agent（sonnet wrapper）。**MUST** 使用 spawn_agent 工具 派遣，**NEVER** 在主 session 直接跑 `browser-harness` / `curl dev server` / `mkdir screenshots/` 等截圖命令。
 
 工具選擇規則見 `.claude/rules/screenshot-strategy.md` — agent 會自行判斷，主 session 不需指定。
+
+## Runtime 階層（sonnet wrapper → codex 執行）
+
+`screenshot-review` agent 是**雙層 dispatch**：
+
+1. **Sonnet wrapper（agent body 第一段 § BLOCKING）**：收到 brief 後 Step 0 機械字面 grep 確認自己是 sonnet → Step 1 偵測 codex → Step 2 把 brief 包成 `[DELEGATED-BY-CLAUDE-CODE]` prompt 派給 codex GPT-5.5 low。**Sonnet 自己不跑 screenshot 工作**。
+2. **Codex 執行（GPT-5.5 low）**：實際 `browser-harness` / `new_tab` / `capture_screenshot` 在 codex 跑，每張 screenshot ~1500 vision + 3K planning tokens，成本是 sonnet 自己跑的 1/3–1/5。
+3. **Sonnet fallback（agent body Step 4）**：codex 不可用 / 派工失敗 / user 選 fallback 時，sonnet 才自己跑。
+
+主 session 派 Agent 後**期望看到**的 subagent 第一段回報：
+
+> 我收到的 prompt 第一行原文：`<brief 第一行>`
+> 身份判定：sonnet
+> codex 偵測：codex-ok
+> 已派工：jobId=<…>，sched wakeup 180s
+
+**警訊**（subagent 跳過 Step 0 / Step 1 直接做工作）：subagent 第一個 tool call 不是 `command -v codex` 而是 `browser-harness` / `curl` / `mkdir screenshots/` → 違反 agent body § BLOCKING hard rule，**MUST** 立刻打斷讓 agent 重來。**Incident（2026-05-19 align-shipments-rls-auth verify:ui）**：sonnet 直接做工作燒 115k tokens 卡 Chrome hydration debug，整次 dispatch 白做。
+
+## Brief 注意事項
+
+- Brief **NEVER** 在第一行寫 `[DELEGATED-BY-CLAUDE-CODE]` — 那是 codex 派工 marker，主線派 Claude subagent 不該帶。寫了會讓 sonnet 誤判身份直接讀 agent body 跳過 dispatch。
+- Brief 結構（Setup / Items / Output format）跟誰執行**無關** — 結構像 delegated 不代表你應該寫 marker。
 
 ## 觸發時機
 
@@ -62,6 +84,6 @@ Agent 回傳後，主 session 應：
 
 ## 注意事項
 
-- Agent 使用 Sonnet 模型，節省 cost
+- Agent 是 sonnet wrapper，實際 screenshot 工作派給 codex GPT-5.5 low（成本 1/3–1/5）；sonnet 只負責 dispatch + watch + 結果整理
 - 主 session **不需要**自己跑截圖命令
 - 主 session **不需要**決定用哪個工具 — agent 依 rule 判斷
