@@ -1,6 +1,6 @@
 {
   "$schema": "./patterns.schema.json",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Single source-of-truth regex patterns for Pre-Review Data Readiness enforcement. Consumed by post-propose-manual-review-check.sh (via jq) and vendor/scripts/review-gui.mts (via import).",
   "patterns": [
     {
@@ -40,6 +40,15 @@
       "requiresKindIn": ["review:ui"],
       "anchor": "manual-review.md#通則",
       "remediation": "Split the flow chain into #N.M scoped sub-items (one atomic action per line: open X → input Y → click Z → confirm W). Each sub-item must include a falsifiable observation (specific toast text, badge state, route change, field value)."
+    },
+    {
+      "code": "INTERNAL_JARGON_LEAKAGE",
+      "description": "[review:ui] / [verify:ui] item 描述洩漏 spec internal jargon（DB 欄位名 / capability flag / spec template heading）— 違反「UI 元素 MUST 用使用者可見文字指代」hard rule，user/QA 不該被迫讀資料庫 schema",
+      "regex": "\\b(Resolved Questions|total_quantity|has_vending_location)\\b",
+      "regexFlags": "",
+      "requiresKindIn": ["review:ui", "verify:ui"],
+      "anchor": "manual-review.md#通則",
+      "remediation": "Replace internal jargon with user-facing description that matches what user sees on screen: `Resolved Questions` 是 spec 起草階段內部 heading（不該出現在 item 描述，刪掉或重寫成 user 觀察）；`total_quantity` → 「總數量」/「庫存總和」；`has_vending_location` → 「在取料機已上架」（boolean 狀態用中文）。Per manual-review.data-readiness.md「UI 元素 MUST 用使用者可見文字指代」hard rule，**禁止**用 codebase 內部識別符（含 DB 欄位名 / capability flag / API endpoint name / fixture id / spec template heading）寫 user-facing item — user 看 UI 找不到這些識別符對應的元素，整條 item 失去可執行性。若需引用 schema-level concept 做 cross-reference，**MUST** 用 backtick + 中文 gloss 形式（例 「取料機位置 (`vending_location`)」）。新增禁詞由 audit signal 命中後 user-curated 進此列表。"
     },
     {
       "code": "REVIEW_UI_BACKEND_ROUNDTRIP",
