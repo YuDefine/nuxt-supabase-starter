@@ -45,7 +45,7 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { stdin, stdout } from 'node:process'
 import { createInterface } from 'node:readline/promises'
-import { dropClaim, findClaimByWorktree, writeClaim } from './claim-helper.mjs'
+import { dropClaim, findClaimByWorktree, readActiveClaims, writeClaim } from './claim-helper.mjs'
 
 function git(args, opts = {}) {
   const out = execFileSync('git', args, {
@@ -157,6 +157,79 @@ const LOCKED_PROJECTION_RE =
   /^(\.agents\/|\.codex\/|\.claude\/(rules|skills|commands|agents|scripts|hooks)\/|\.claude\/(hub\.json|\.hub-state\.json)$|scripts\/wt-helper\.mjs$|AGENTS\.md$|CLAUDE\.md$)/
 
 const isLockedProjectionPath = (p) => LOCKED_PROJECTION_RE.test(p)
+
+/**
+ * Simple glob matcher for claim expected_paths. Supports:
+ *   - exact path match
+ *   - "<prefix>/**" → recursive prefix match (any depth)
+ *   - "<prefix>/*"  → single-level match (one segment after prefix)
+ */
+function matchClaimGlob(path, pattern) {
+  if (pattern === path) return true
+  if (pattern.endsWith('/**')) {
+    const prefix = pattern.slice(0, -3)
+    return path === prefix || path.startsWith(`${prefix}/`)
+  }
+  if (pattern.endsWith('/*')) {
+    const prefix = pattern.slice(0, -2)
+    if (!path.startsWith(`${prefix}/`)) return false
+    return !path.slice(prefix.length + 1).includes('/')
+  }
+  return false
+}
+
+/**
+ * Classify a list of dirty paths against (1) LOCKED projection layer,
+ * (2) other-session active claims, (3) everything else (user code or
+ * orphan — caller decides downstream).
+ *
+ * `excludeClaim` is the claim attributed to the caller's own session
+ * (typically the merge-back's matching worktree); its expected_paths are
+ * NOT classified as "other session".
+ */
+function formatActiveSessionsForError(claims) {
+  if (claims.length === 0) return '  (none)'
+  return claims
+    .map(
+      (c) =>
+        `  - ${c.session_id} [${c.agent}] change=${c.change_id ?? '(none)'} branch=${c.branch ?? '(none)'} paths=${(c.expected_paths ?? []).length}`,
+    )
+    .join('\n')
+}
+
+function classifyDirtyPaths(consumerRoot, paths, { excludeClaim = null } = {}) {
+  const locked = []
+  const otherSession = []
+  const other = []
+  let activeClaims
+  try {
+    activeClaims = readActiveClaims(consumerRoot).filter(
+      (c) => !excludeClaim || c.session_id !== excludeClaim.session_id,
+    )
+  } catch {
+    activeClaims = []
+  }
+  for (const p of paths) {
+    if (isLockedProjectionPath(p)) {
+      locked.push({ path: p })
+      continue
+    }
+    const matchedClaim = activeClaims.find((c) =>
+      (c.expected_paths ?? []).some((pat) => matchClaimGlob(p, pat)),
+    )
+    if (matchedClaim) {
+      otherSession.push({
+        path: p,
+        session_id: matchedClaim.session_id,
+        change_id: matchedClaim.change_id,
+        branch: matchedClaim.branch,
+      })
+      continue
+    }
+    other.push({ path: p })
+  }
+  return { locked, otherSession, other }
+}
 
 // Whitelist of consumer-local paths where merge-back may auto-commit oxfmt
 // drift without user confirmation. These files are NOT in LOCKED_PROJECTION_RE
@@ -290,6 +363,37 @@ async function cmdAdd(slug, opts = {}) {
     }
     const dirtyCount = dirty.modified.length + dirty.untracked.length
     if (dirtyCount > 0) {
+      // Phase 3 (Q5) audit: classify dirty paths so user sees ownership
+      // before strategy selection. Other-session paths force STOP — we don't
+      // know how to safely fork on top of someone else's WIP.
+      const allDirtyPaths = [
+        ...dirty.modified.map((m) => m.path),
+        ...dirty.untracked.map((u) => u.path),
+      ]
+      const preForkCls = classifyDirtyPaths(consumerRoot, allDirtyPaths)
+      if (preForkCls.otherSession.length > 0) {
+        const preview = preForkCls.otherSession
+          .slice(0, 10)
+          .map(
+            (o) =>
+              `  ${o.path}  ← session ${o.session_id} / change ${o.change_id ?? '(none)'} / branch ${o.branch ?? '(none)'}`,
+          )
+          .join('\n')
+        const more =
+          preForkCls.otherSession.length > 10
+            ? `\n  ... and ${preForkCls.otherSession.length - 10} more`
+            : ''
+        throw new Error(
+          `Pre-fork baseline STOP: ${preForkCls.otherSession.length} dirty path(s) belong to another active session:\n` +
+            preview +
+            more +
+            `\n\nForking on top of another session's WIP would mix unrelated work into the new branch's baseline. ` +
+            `Wait for the other session to merge-back or coordinate before re-running.\n\n` +
+            `Override only if the other claim is stale:\n` +
+            `  node scripts/claim-helper.mjs drop <session-id>\n` +
+            `  node scripts/wt-helper.mjs add ${cleanSlug} ...`,
+        )
+      }
       const strategy = opts.baselineStrategy || 'warn'
       if (strategy === 'commit') {
         const scopePaths = String(opts.baselineScopePaths || '')
@@ -1261,6 +1365,50 @@ async function cmdMergeBack(slug, opts = {}) {
 
   let stashRef = null
   if (blockers.length > 0) {
+    // Classify blockers — if any belong to ANOTHER active session's claim,
+    // stop with explicit ownership diagnosis rather than silently stashing
+    // their WIP. This is Phase 3 (Q5) audit: claim-aware pre-merge-back gate.
+    // LOCKED projection blockers fall through to existing auto-stash path
+    // (they are clade-managed, safe to stash). Everything else is left for
+    // user decision via the existing --auto-stash flow.
+    const myClaim = findClaimByWorktree(consumerRoot, target.path)
+    const cls = classifyDirtyPaths(
+      consumerRoot,
+      blockers.map((b) => b.path),
+      { excludeClaim: myClaim },
+    )
+    if (cls.otherSession.length > 0) {
+      const preview = cls.otherSession
+        .slice(0, 10)
+        .map(
+          (o) =>
+            `  ${o.path}  ← session ${o.session_id} / change ${o.change_id ?? '(none)'} / branch ${o.branch ?? '(none)'}`,
+        )
+        .join('\n')
+      const more =
+        cls.otherSession.length > 10 ? `\n  ... and ${cls.otherSession.length - 10} more` : ''
+      const claims = readActiveClaims(consumerRoot).filter(
+        (c) => !myClaim || c.session_id !== myClaim.session_id,
+      )
+      throw new Error(
+        `merge-back STOP: ${cls.otherSession.length} blocker(s) overlap with another active session's claim:\n` +
+          preview +
+          more +
+          `\n\n` +
+          `These paths belong to a DIFFERENT session's worktree. Stashing them ` +
+          `would silently swallow that session's WIP — wt-helper refuses.\n\n` +
+          `Active sessions on this consumer (excluding self):\n` +
+          formatActiveSessionsForError(claims) +
+          `\n\nResolution paths:\n` +
+          `  1. Let the other session finish (merge-back its own work) first, then re-run.\n` +
+          `  2. If the other claim is stale (session no longer running):\n` +
+          `       node scripts/claim-helper.mjs drop <session-id>\n` +
+          `     then re-run merge-back.\n` +
+          `  3. If the path overlap is intentional cross-session collaboration:\n` +
+          `     coordinate manually (commit / stash by the other session) before re-running.`,
+      )
+    }
+
     if (!opts.autoStash) {
       const preview = blockers
         .slice(0, 10)
