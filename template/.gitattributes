@@ -1,0 +1,5 @@
+
+# clade-managed merge drivers — managed by propagate.mjs (do not edit between markers)
+.claude/hub.json merge=clade-regenerate
+.claude/.hub-state.json merge=clade-regenerate
+# end clade-managed merge drivers
