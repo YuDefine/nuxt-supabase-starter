@@ -109,6 +109,38 @@ Update an existing Spectra change — from a plan file or conversation context.
 
    Read existing artifacts for context before updating.
 
+   ---
+
+   **⚠ Pre-update gate: Plain-language scope check** (when scope is structurally changing)
+
+   If the new context (plan file or conversation) introduces **structural scope change** — not just adding task detail — present a plain-language summary BEFORE rewriting artifacts so the user can catch misunderstandings early.
+
+   **Trigger** structural-scope mode when the new context does any of:
+
+   - Changes the proposal's "Why" or core motivation (not just adds tasks)
+   - Touches DB schema / migration (new column, new table, new FK, enum extension)
+   - Changes user-facing journeys (new admin/staff flow, new role, new entity)
+   - Introduces a new architectural layer or cross-table relationship
+   - Expands or contracts the change's coverage beyond the original capability
+
+   **Skip** when the new context is purely additive task detail (e.g. "add screenshot to manual review step 3", "rename function X to Y", "fix typo in spec", "add @no-screenshot marker to item #4.2").
+
+   **Apply the same 4-part structure as `/spectra-discuss` § Plain-Language Synthesis**:
+
+   1. **現況** — what the change currently captures (use everyday metaphors — `櫃子` / `本子` / `服務窗口`, not `table` / `endpoint`)
+   2. **差異** — what the new context actually wants (layered table if multi-intent)
+   3. **建議調整** — N items, non-technical, with ASCII diagrams
+   4. **範圍邊界** — 做 / 不做 table
+   5. **Closing request_user_input** — one focused confirmation question
+
+   **Get explicit user confirmation** before proceeding to Step 5. If user signals "no, that's not what I meant" → loop back and clarify before touching artifacts.
+
+   **NEVER** apply structural artifact changes without this confirmation step. The cost of a misread ingest is high — completed `[x]` tasks may need rework, design.md may need recapture, capability boundaries may shift.
+
+   See `/spectra-discuss` SKILL.md § Plain-Language Synthesis for full structure, examples, and trigger details.
+
+   ---
+
 5. **Update artifacts**
 
    For each artifact, get instructions first:
@@ -268,4 +300,5 @@ Update an existing Spectra change — from a plan file or conversation context.
 - If `spectra` CLI is not available, report the error and stop
 - Verify each artifact file exists after writing before proceeding to next
 - **NEVER** skip the artifact workflow to write code directly
+- **NEVER** apply structural scope changes (DB schema / new journeys / new architectural layer) without running the Pre-update plain-language gate between Step 4 and Step 5 — see "Pre-update gate: Plain-language scope check" callout
 - If **request_user_input 工具** is not available, ask the same questions as plain text and wait for the user's response

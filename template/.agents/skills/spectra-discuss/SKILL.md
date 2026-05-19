@@ -194,6 +194,92 @@ Good: "Which errors are causing problems now? Are users seeing
 
 ---
 
+## Plain-Language Synthesis
+
+Before convergence, **MUST** pause for a plain-language synthesis when the discussion's stakes extend beyond pure-technical detail. Surface misalignment in user-domain language before fixing it in artifact-domain language.
+
+### Trigger
+
+Run synthesis when **any** of:
+
+- Discussion touches DB schema / migration / new table / new column / enum extension
+- Cross-functional decision (affects PM, ops, business owner, support, finance)
+- Multi-stage user workflow (admin + staff + customer involved)
+- Migration path mutates existing data
+- User signals confusion: "can you explain in plain terms" / "簡單說" / "I don't quite get X" / "what does this mean for users"
+
+**Skip** synthesis when the topic is purely technical (variable rename, internal helper refactor, dev-only script, lint config).
+
+### Why this exists
+
+A schema-aware assumptions list (Step 3 output) is enough for engineers, but breaks down for:
+
+- Domain experts / PM / business owner reading along
+- Engineers whose intent hasn't fully converged
+- Cross-functional decisions where DB choice ripples into business model
+
+Without a plain-language layer, propose may capture the surface motivation (e.g. "add 'part' enum value") and miss the real one underneath (e.g. "I need a two-layer inventory model + restock mutation"). Apply then catches the mismatch and burns ingest cycles.
+
+### Structure (4 parts, in order)
+
+1. **現況（為什麼這件事存在）** — describe status quo using everyday metaphors:
+   - DB table → 「櫃子」/「本子」/「資料夾」/「文件」
+   - API endpoint → 「服務窗口」
+   - cron job → 「鬧鐘」
+   - FK link → 「身份證對應」
+   - migration → 「整理舊資料」
+   - **NEVER** use schema / FK / enum / column / RPC / Zod / RLS / function signature vocabulary in this section
+
+2. **你要的兩件事的差異（layered intent table）** — when discussion uncovers layered intent (visibility vs management; admin vs user; read vs write; current vs future scope), make it a table:
+
+   | 層次 | 描述 | 誰負責 |
+   | --- | --- | --- |
+   | (e.g.) 看得到 | 倉儲頁能列出總量 | 既有 change |
+   | (e.g.) 管得到 | 倉儲頁能直接補貨 | 新 change |
+
+3. **建議做法（N 條，全非技術）** — numbered list, each:
+   - one-sentence summary in user's domain language
+   - 「理由」 / 「做法」 in one paragraph
+   - **NEVER** introduce field names, table names, enum values, FK terms, function signatures
+   - Use ASCII diagrams when explaining data flow / state transitions / 雙層 / 三層 models
+
+   Example diagram (everyday vocabulary):
+
+   ```
+   採購進來          倉庫存量          販賣機存量        員工領用
+   ┌────────┐  →  ┌────────┐  →  ┌─────────┐  → 
+   │ N 支    │    │ A 支    │    │ B 支     │
+   └────────┘    └────────┘    └─────────┘
+   ```
+
+4. **範圍邊界（做 vs 不做）** — table:
+
+   | 做 | 不做（未來另開） |
+   | --- | --- |
+   | (concrete action) | (concrete action with rationale) |
+
+5. **Close with one focused request_user_input** — the **single** highest-leverage undecided question, with concrete options. **NEVER** dump all open questions at once. Synthesis is meant to **surface** the critical drill, not exhaust all open items.
+
+### What this is NOT
+
+- **NOT patronizing** — plain language ≠ dumbed-down. Same intellectual rigor; only the vocabulary swaps.
+- **NOT a substitute for technical Convergence** — the conclusion summary in "## Convergence" still happens after, with proper capability / spec / artifact names.
+- **NOT triggered for trivial topics** — variable renames and pure refactors don't need synthesis.
+
+### Worked example (<consumer-b> warehouse inventory)
+
+Topic: "add 'part' to warehouse_items.item_category enum + integrate vending tool aggregation".
+
+- **Section 1 現況**: used 「文具櫃」 / 「專業刀具櫃」 / 「販賣機」 metaphors instead of `warehouse_items` / `tool_bodies` / `vending_slot_inventory`
+- **Section 2 layered table**: separated 「看得到」（既有 aggregation） vs 「管得到」（新 change） — surfaced that visibility layer was 90% done already
+- **Section 3 diagrams**: ASCII boxes `採購 → 倉庫 → 販賣機 → 員工` made the four-stage flow visceral in 5 seconds
+- **Section 4 boundary table**: made IN-scope vs FUTURE-scope obvious in 30 seconds
+- **Closing request_user_input**: one drill — "what's your real motivation behind this?" with 4 concrete options
+
+**Outcome**: real motivation surfaced — user wanted two-layer inventory model + restock mutation, not cosmetic enum addition. Scope went from "30-min cosmetic" to "architectural addition" before propose started. Without synthesis, propose would have captured surface intent and apply would have hit "wait, that's not what I meant" mid-flow, burning ingest cycles.
+
+---
+
 ## Convergence
 
 Discussions must converge. As the conversation progresses:
@@ -297,3 +383,4 @@ If **request_user_input** is unavailable, present the same three options as plai
 - **Do visualize** — A good diagram is worth many paragraphs.
 - **Do explore the codebase** — Ground discussions in reality.
 - **Do be opinionated** — Have a recommendation. The user can disagree.
+- **Do run Plain-Language Synthesis before Convergence** — when stakes touch DB schema / cross-functional / multi-stage user workflow / migration paths, plain-language synthesis surfaces misalignment in user-domain language before it hardens into artifacts. See "## Plain-Language Synthesis".
