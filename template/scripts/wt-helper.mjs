@@ -45,6 +45,7 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { stdin, stdout } from 'node:process'
 import { createInterface } from 'node:readline/promises'
+import { dropClaim, findClaimByWorktree, writeClaim } from './claim-helper.mjs'
 
 function git(args, opts = {}) {
   const out = execFileSync('git', args, {
@@ -490,6 +491,28 @@ async function cmdAdd(slug, opts = {}) {
       )
       console.error(`error detail: ${e?.message ?? e}`)
     }
+  }
+
+  // Write session claim so publish / propagate / /commit / other wt-helper
+  // invocations can see this worktree is active. expected_paths starts empty;
+  // SessionStart heartbeat hook refreshes; cleanup / successful merge-back
+  // drops the claim. See rules/core/session-claims.md.
+  try {
+    const expectedPaths = String(opts.expectedPaths ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    const claim = writeClaim(consumerRoot, {
+      agent: opts.agent ?? 'claude-code',
+      consumer: basename(consumerRoot),
+      worktree_path: wtPath,
+      branch,
+      change_id: cleanSlug,
+      expected_paths: expectedPaths,
+    })
+    console.log(`  Claim: ${claim.session_id} (.clade/claims/${claim.session_id}.json)`)
+  } catch (e) {
+    console.error(`note: claim write skipped: ${e.message ?? e}`)
   }
 
   console.log('')
@@ -990,6 +1013,15 @@ async function cmdCleanup(slug, opts) {
     git(['branch', opts.force ? '-D' : '-d', branchName], { cwd: consumerRoot })
   } catch {
     console.error(`warn: branch ${branchName} could not be deleted; keep manually`)
+  }
+  try {
+    const claim = findClaimByWorktree(consumerRoot, target.path)
+    if (claim) {
+      dropClaim(consumerRoot, claim.session_id)
+      console.log(`Dropped claim ${claim.session_id}`)
+    }
+  } catch {
+    // best-effort claim cleanup; never block worktree removal
   }
   console.log(`Removed ${target.path}`)
 }
