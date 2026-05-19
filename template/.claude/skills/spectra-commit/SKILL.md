@@ -11,7 +11,7 @@ metadata:
 <!--
 🔒 LOCKED — managed by clade
 Source: plugins/hub-core/skills/spectra-commit/
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 

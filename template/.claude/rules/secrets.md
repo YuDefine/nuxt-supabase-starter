@@ -5,7 +5,7 @@ paths: [".github/workflows/**/*.yml", "wrangler.toml", "wrangler.jsonc"]
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/runtime/cf-workers/secrets.md
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 
@@ -36,7 +36,7 @@ Local edits will be reverted by the next sync.
 - **Bootstrap 初次 deploy 之前**：worker 尚未存在、deploy workflow 還沒跑過第一次，需要手動 push 初始 secret 才能讓 first deploy 不 crash。第一次 deploy 後立即把 secret 加進 workflow `secrets:` list，後續 rotation 走正規流程
 - **緊急 incident response**：production secret 洩漏需立即 rotation，等不及下次 deploy。**必同時** `gh secret set` 更新 GitHub Secret + 開 issue / 在 commit message 註記，下次 deploy 會 overwrite 同值
 
-## 推送流程範例（perno production）
+## 推送流程範例（<consumer-a> production）
 
 ```yaml
 # .github/workflows/deploy-production.yml
@@ -70,7 +70,7 @@ Local edits will be reverted by the next sync.
 - **Consumer team handoff**：新 maintainer 只看 workflow yaml + Notion 就能看完整 secret 圖譜，不用問 “是不是還有什麼東西在 wrangler 裡？”
 - **CI/CD reproducibility**：deploy workflow 是 declarative；手動 `wrangler secret put` 是 imperative side effect，破壞 reproducibility
 
-## 反例（perno 2026-05-09）
+## 反例（<consumer-a> 2026-05-09）
 
 HANDOFF.md 指引設 `EVLOG_AUDIT_SECRET` 同時走 `gh secret set` + `wrangler secret put`，把後者也當 first-class 步驟。實際上：
 

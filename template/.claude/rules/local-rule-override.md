@@ -5,7 +5,7 @@ paths: ['.claude/rules/local/**/*.md']
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/local-rule-override.md
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 
@@ -44,14 +44,14 @@ Local edits will be reverted by the next sync.
 
 | Local rule 場景 | 該宣告嗎？ |
 | --- | --- |
-| TDMS `no-auto-dev-server.md` 收緊 clade `proactive-skills.md § Dev Server Auto-Spawn` | ✅ 該宣告 |
-| TDMS `nfc-uid-input-simulation.md` 規範 NFC UID 模擬（純 TDMS 業務） | ❌ 不需 |
-| TDMS `tailscale-fc-supabase-ops.md` 規範 fc-supabase 連線（純 TDMS infra） | ❌ 不需 |
+| <consumer-b> `no-auto-dev-server.md` 收緊 clade `proactive-skills.md § Dev Server Auto-Spawn` | ✅ 該宣告 |
+| <consumer-b> `nfc-uid-input-simulation.md` 規範 NFC UID 模擬（純 <consumer-b> 業務） | ❌ 不需 |
+| <consumer-b> `tailscale-fc-supabase-ops.md` 規範 fc-supabase 連線（純 <consumer-b> infra） | ❌ 不需 |
 | consumer 加「override clade `commit.md` 的 step 0-C」 | ✅ 該宣告 |
 
 ## Grandfathered local rules
 
-2026-05-18 前已存在的 local rule（如 TDMS `no-auto-dev-server.md`）**MAY** 暫緩補宣告。consumer 自家 session 下次 review local rule 時順手補即可。clade audit 對缺宣告的 grandfathered 檔純 warn，不阻擋 propagate / publish。
+2026-05-18 前已存在的 local rule（如 <consumer-b> `no-auto-dev-server.md`）**MAY** 暫緩補宣告。consumer 自家 session 下次 review local rule 時順手補即可。clade audit 對缺宣告的 grandfathered 檔純 warn，不阻擋 propagate / publish。
 
 ## 反向課題
 

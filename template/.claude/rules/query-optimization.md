@@ -5,7 +5,7 @@ paths: ['supabase/migrations/**/*.sql', 'server/api/**/*.ts']
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/db-schema/supabase/query-optimization.md
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 

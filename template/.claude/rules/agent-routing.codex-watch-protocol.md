@@ -5,7 +5,7 @@ paths: ['openspec/changes/**/tasks.md', 'openspec/changes/**/design.md', 'script
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/agent-routing.codex-watch-protocol.md
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 
@@ -105,7 +105,7 @@ hub:bootstrap 自動同步產生（請完全忽略，與本次工作無關）：
 
 派工視窗保護：若派 codex 期間預期會再跑 `pnpm install` / `pnpm hub:check` 等可能觸發 sync 的動作，**先在主線跑完讓 baseline 穩定**再派 codex；不要在 codex 跑的同時讓 hub:bootstrap 又撐出新 LOCKED diff，否則 codex 會再次按 scope discipline 停手。
 
-理由：codex 內建 scope discipline——看到工作目標範圍外的修改會合理地停下來避免越權踩到別 session WIP。兩種 dirty 來源 codex 都觀念正確：(1) 主線剛跑完 ingest / propose / TD / handoff 後 working tree 自然 dirty；(2) `pnpm install` postinstall 自動觸發 hub:bootstrap 把 main 的 clade 更新拉進來<!-- starter:strip-begin -->（實證：`.claude/.hub-state.json` syncedAt 跳到當天近期時間）<!-- starter:strip-end -->。兩種都不告知就會逼 codex 走「未知既有變更 → 停手」路徑，回來再 round-trip 重派比 prompt 多寫兩行貴得多。**禁止**把這當「codex 觀念錯」處理——它觀念是對的，是主線 prompt 沒給 git baseline。
+理由：codex 內建 scope discipline——看到工作目標範圍外的修改會合理地停下來避免越權踩到別 session WIP。兩種 dirty 來源 codex 都觀念正確：(1) 主線剛跑完 ingest / propose / TD / handoff 後 working tree 自然 dirty；(2) `pnpm install` postinstall 自動觸發 hub:bootstrap 把 main 的 clade 更新拉進來。兩種都不告知就會逼 codex 走「未知既有變更 → 停手」路徑，回來再 round-trip 重派比 prompt 多寫兩行貴得多。**禁止**把這當「codex 觀念錯」處理——它觀念是對的，是主線 prompt 沒給 git baseline。
 
 例外：
 

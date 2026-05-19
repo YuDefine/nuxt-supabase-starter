@@ -90,7 +90,7 @@ fi
 
 ## Step 2B — Mode B 流程（整理 + 推薦）
 
-### 2B.0 Session-end pitfall sweep（呼叫 /oops Mode C）
+### 2B.0 Session-end pitfall sweep（呼叫 /oops Mode C — from `hub-maintenance-full` plugin；無此 plugin 時跳過整段並繼續 2B.1）
 
 在動 HANDOFF.md 前，先回顧當前 chat session transcript 掃 missed lessons。觸發訊號：
 
@@ -250,5 +250,5 @@ User 透過 `request_user_input` 選定下一步 outstanding（含明確的 next
 - `/spectra-commit` — Mode A 升級 spectra change WIP 時，commit 用此 skill 走 selective stage
 - `/spectra-propose` — Mode A「規模膨脹」分類升級時，後續開新 change 入口
 - `/spectra-apply` — Mode B `request_user_input` user 選定起手 active change 後的執行入口
-- `/oops` — Mode B 2B.0 sweep missed lessons 時的 dispatch 目標（pitfall / memory / lessons.md 三層分流）
+- `/oops` — Mode B 2B.0 sweep missed lessons 時的 dispatch 目標（pitfall / memory / lessons.md 三層分流；from `hub-maintenance-full` plugin，不在 starter consumer 內安裝）
 - `subagent-dev` — Mode B `request_user_input` user 選 parallel 後，subagent fan-out 由此 skill 執行

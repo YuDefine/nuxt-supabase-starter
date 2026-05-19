@@ -5,7 +5,7 @@ paths: ['openspec/**', 'docs/decisions/**', 'server/**/*.ts', 'shared/**/*.ts', 
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/truth-layers.md
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 

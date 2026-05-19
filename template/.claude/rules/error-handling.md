@@ -5,7 +5,7 @@ paths: ['app/**/*.{vue,ts}', 'server/**/*.ts']
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/error-handling.md
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 

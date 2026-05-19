@@ -5,14 +5,14 @@ paths: ["supabase/migrations/**/*.sql", "server/utils/audit*.ts", "server/api/**
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/db-schema/supabase/audit-schema.md
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 
 
 # Audit Schema Conventions（supabase variant）
 
-通用 `audit_logs` 表名 + D-pattern hash chain 慣例。適用 perno / yuntech / agentic-rag 等 Supabase Cloud / self-hosted 走通用 schema 的 consumer。
+通用 `audit_logs` 表名 + D-pattern hash chain 慣例。適用 <consumer-a> / yuntech / agentic-rag 等 Supabase Cloud / self-hosted 走通用 schema 的 consumer。
 
 ## 表名與基本欄位
 

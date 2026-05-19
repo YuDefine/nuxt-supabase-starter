@@ -4,7 +4,7 @@ description: 依功能分類變更並逐步完成 commit，遵循 commitlint 規
 <!--
 🔒 LOCKED — managed by clade
 Source: plugins/hub-core/commands/commit.md
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 
