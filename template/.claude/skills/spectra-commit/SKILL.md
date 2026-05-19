@@ -64,6 +64,34 @@ This is a **utility skill** (not a workflow step). It reads source file tracking
 
    From the full `git status --porcelain` output, any dirty files NOT in the artifact set and NOT in the tracking file are "unrelated changes."
 
+<!-- clade fork begin: claim-aware partition (rules/core/session-claims.md) -->
+
+4a. **[Clade fork] Claim-aware partition of unrelated changes**
+
+    When multiple AI sessions work in parallel, some "unrelated changes" may
+    belong to **another active session's** worktree (not your current
+    commit's scope). Auto-committing them would silently swallow another
+    session's WIP. This step adds session-ownership classification.
+
+    Detection:
+    - Check whether `scripts/claim-helper.mjs` exists in the repo root.
+    - If yes, run `node scripts/claim-helper.mjs list` to enumerate active
+      session claims on this consumer.
+    - If no claim infra is present, skip 4a entirely — fall through to
+      upstream behavior (step 5).
+
+    For each path in "unrelated changes", classify by matching against each
+    active claim's `expected_paths` (glob support: exact match, `prefix/**`
+    recursive, `prefix/*` single-level):
+    - **Other-session paths**: matched to any active claim. **DO NOT** include
+      in commit set under any user option, even "Include all dirty files",
+      without explicit re-confirmation. List the matched session_id + change_id
+      so the user knows which session owns the path.
+    - **Truly unrelated**: no claim match. Same upstream behavior — exclude by
+      default, includable via "Include all dirty files".
+
+<!-- clade fork end -->
+
 5. **Display commit plan**
 
    Show the file list grouped into sections:
@@ -88,6 +116,19 @@ This is a **utility skill** (not a workflow step). It reads source file tracking
    - ??  tmp/scratch.js
    ```
 
+   <!-- clade fork begin: claim-aware partition (rules/core/session-claims.md) -->
+
+   When step 4a populated other-session paths, insert an extra section
+   between "Source Files" and "Unrelated Changes":
+
+   ```
+   ### Other Active Sessions (fail-closed; excluded even on "Include all")
+   - M  layers/workstation/foo.ts  ← session abc123 / change workstation-report-ux-polish
+   - ??  server/api/bar.ts          ← session def456 / change add-vending-stats
+   ```
+
+   <!-- clade fork end -->
+
    If no tracking file was found, show a warning instead of the Source Files section:
 
    ```
@@ -107,6 +148,21 @@ This is a **utility skill** (not a workflow step). It reads source file tracking
    - **Include all dirty files**: Add all unrelated files to the commit as well
    - **Customize**: Let the user add or remove specific files from the commit set
    - **Archive first, then commit together**: Run archive before committing — archive file moves will be included in this commit
+
+   <!-- clade fork begin: claim-aware partition (rules/core/session-claims.md) -->
+
+   **If "Other Active Sessions" section is non-empty** (step 4a populated it):
+
+   - **Commit as shown** / **Customize**: other-session paths stay excluded; no re-confirm needed.
+   - **Include all dirty files**: BEFORE proceeding, re-confirm with explicit
+     list of other-session paths. Use AskUserQuestion with options:
+       - **Skip other-session paths** (recommended): commit only truly-unrelated
+         dirty + artifact + source — leaves other sessions' WIP intact.
+       - **Force-include all (overwrites another session's commit opportunity)**:
+         risky; only choose if user confirms they own the other session too.
+       - **Stop and resolve manually**: abort commit; user investigates.
+
+   <!-- clade fork end -->
 
    If the user selects "Customize":
    - Show a numbered list of all dirty files (included and excluded)
