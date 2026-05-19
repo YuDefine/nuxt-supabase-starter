@@ -20,7 +20,12 @@ T1 + O1（baseline + D-pattern audit_logs + signed chain + outbox dispatcher）�
 // nuxt.config.ts — evlog-d-pattern-audit preset (T1 + O1)
 // 同 evlog-baseline，再加 audit signed chain
 export default defineNuxtConfig({
-  modules: ['nuxt-auth-utils', '@nuxtjs/supabase', '@sentry/nuxt/module', 'evlog/nuxt'],
+  modules: [
+    'nuxt-auth-utils',
+    '@nuxtjs/supabase',
+    '@sentry/nuxt/module',
+    'evlog/nuxt',
+  ],
   evlog: {
     env: { service: 'YOUR_APP_NAME' },
     include: ['/api/**'],
@@ -29,7 +34,10 @@ export default defineNuxtConfig({
       // audit forceKeep 由 server/plugins/evlog-enrich.ts 末尾 evlog:emit:keep hook wire
       // (evlog 2.16 無內建 audit forceKeep — master plan §14 第 12 條校正)
       rates: { error: 100, warn: 100, info: 50, debug: 0 },
-      keep: [{ status: 400 }, { duration: 1000 }],
+      keep: [
+        { status: 400 },
+        { duration: 1000 },
+      ],
     },
     redact: {
       // D-pattern consumer 必加 audit-specific paths

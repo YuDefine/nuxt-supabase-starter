@@ -15,7 +15,6 @@
 Reference: `docs/evlog-master-plan.md` § 5 + `rules/core/logging.md` Client logging 規範
 
 本 snippet 內容：
-
 - `identity-helper.ts` — 包 `setIdentity` / `clearIdentity` 的 helper（在 login / logout handler 呼叫）
 - 本 README — 配置與整合指引
 
@@ -30,14 +29,13 @@ export default defineNuxtConfig({
     transport: {
       enabled: true,
       endpoint: '/api/_evlog/ingest', // nuxt module 自動註冊 handler
-      credentials: 'same-origin', // 不送 cross-origin cookie
+      credentials: 'same-origin',     // 不送 cross-origin cookie
     },
   },
 })
 ```
 
 `evlog/nuxt` module 會：
-
 - 自動註冊 `/api/_evlog/ingest` server handler（接 client event，re-emit 為 server-side wide event 進 enricher / drain）
 - 自動 inject client plugin 包 `setMinLevel` / 預設 `keepalive: true` fetch + `sendBeacon` fallback
 - 自動套 server-side `redact` 二次過濾
@@ -50,33 +48,29 @@ import { syncEvlogIdentity, clearEvlogIdentity } from '~/utils/evlog-identity'
 
 // nuxt-auth-utils 範例
 const session = useUserSession()
-watch(
-  () => session.user.value,
-  (user) => {
-    if (user) syncEvlogIdentity({ userId: user.id, tenantId: user.tenantId })
-    else clearEvlogIdentity()
-  },
-  { immediate: true }
-)
+watch(() => session.user.value, (user) => {
+  if (user) syncEvlogIdentity({ userId: user.id, tenantId: user.tenantId })
+  else clearEvlogIdentity()
+}, { immediate: true })
 ```
 
 不同 auth solution 的 hook 點：
 
-| Auth            | 呼叫位置                                                                |
-| --------------- | ----------------------------------------------------------------------- |
-| nuxt-auth-utils | `useUserSession()` watcher（client side）                               |
-| Better Auth     | `createAuthMiddleware` after hook（server）/ session callback（client） |
-| LINE OAuth      | `/auth/line/callback` 成功後 redirect 前                                |
-| Supabase Auth   | `onAuthStateChange` callback                                            |
+| Auth | 呼叫位置 |
+| --- | --- |
+| nuxt-auth-utils | `useUserSession()` watcher（client side） |
+| Better Auth | `createAuthMiddleware` after hook（server）/ session callback（client） |
+| LINE OAuth | `/auth/line/callback` 成功後 redirect 前 |
+| Supabase Auth | `onAuthStateChange` callback |
 
 ## 反模式
 
-| 反模式                                                                                   | 為什麼壞                                                                           | 怎麼改                                                                  |
-| ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| 反模式 | 為什麼壞 | 怎麼改 |
+| --- | --- | --- |
 | 自寫 `app/plugins/evlog-client.client.ts` 包 `createHttpLogDrain` + `initLog({ drain })` | nuxt module 自動 init，重複 init race；且 `initLog` 不接 `drain` 參數（type fail） | 刪掉自家 plugin；只在 login/logout 呼叫 `setIdentity` / `clearIdentity` |
-| 自寫 `server/api/_evlog/ingest.post.ts`                                                  | 跟 nuxt module 註冊的 handler 衝突（後註冊覆蓋前）                                 | 刪掉自家 endpoint；module 已自帶                                        |
-| identity 寫進 cookie / localStorage 當 source of truth                                   | auth state 才是 source；多處存 = 不一致風險                                        | 只在 login 成功時 setIdentity，logout 時 clearIdentity                  |
-| 沒設 `transport.enabled = true` 但寫了 setIdentity                                       | identity 沒 forward 通道，只是 in-memory dead state                                | 一定要先開 transport，再加 setIdentity                                  |
+| 自寫 `server/api/_evlog/ingest.post.ts` | 跟 nuxt module 註冊的 handler 衝突（後註冊覆蓋前） | 刪掉自家 endpoint；module 已自帶 |
+| identity 寫進 cookie / localStorage 當 source of truth | auth state 才是 source；多處存 = 不一致風險 | 只在 login 成功時 setIdentity，logout 時 clearIdentity |
+| 沒設 `transport.enabled = true` 但寫了 setIdentity | identity 沒 forward 通道，只是 in-memory dead state | 一定要先開 transport，再加 setIdentity |
 
 ## minLevel / 自家 sampling
 
@@ -96,12 +90,12 @@ export default defineNuxtPlugin(() => {
 
 ## ingest endpoint 保護（nuxt module 內建 + 補強）
 
-| 保護                | nuxt module 內建？                                               | 補強建議                                                          |
-| ------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------- |
-| **CSRF**            | ❌（接 same-origin POST，相依 nuxt-security 的 csrf middleware） | consumer 加 `nuxt-security` 或 `useStorage('csrf')` token 驗證    |
-| **Rate-limit**      | ❌                                                               | consumer 加 `nuxt-rate-limit` 或 Cloudflare Rate Limiting binding |
-| **Body schema**     | ✅（module 自家 schema 驗證）                                    | 一般情況不需動                                                    |
-| **Redact 二次過濾** | ✅（透過 `evlog.redact: true` 對 ingest 也套用）                 | 配 `redact` 即可                                                  |
+| 保護 | nuxt module 內建？ | 補強建議 |
+| --- | --- | --- |
+| **CSRF** | ❌（接 same-origin POST，相依 nuxt-security 的 csrf middleware） | consumer 加 `nuxt-security` 或 `useStorage('csrf')` token 驗證 |
+| **Rate-limit** | ❌ | consumer 加 `nuxt-rate-limit` 或 Cloudflare Rate Limiting binding |
+| **Body schema** | ✅（module 自家 schema 驗證） | 一般情況不需動 |
+| **Redact 二次過濾** | ✅（透過 `evlog.redact: true` 對 ingest 也套用） | 配 `redact` 即可 |
 
 > yuntech-usr-sroi 採用 `nuxt-security` 的 csrf middleware（已在 `security: { csrf: true }` 啟用），不需要為 ingest endpoint 額外設定。
 

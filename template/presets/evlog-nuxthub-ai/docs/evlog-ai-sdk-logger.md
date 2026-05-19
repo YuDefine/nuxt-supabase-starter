@@ -15,19 +15,18 @@ Reference: `docs/evlog-master-plan.md` § 8.4 (agentic-rag T3)
 master plan 早期版本提到 `createAILogger` — **這個函式不存在**。本 snippet 是 convention：在現有 `useLogger(event)` 上掛 `ai.*` 欄位 + 用 `log.info('ai.tool_call', ...)` 發子事件。
 
 優點：
-
 - 共享 enricher / drain / sampling / redaction 配置
 - cost / token 與 user / route / tenant 在同一筆 wide event
 - 不是新 logger 種類，認知成本低
 
 ## 4 個 helper
 
-| Helper                                   | 用途                                                             |
-| ---------------------------------------- | ---------------------------------------------------------------- |
-| `recordAIGeneration(log, result)`        | generateText / streamText 落地後加 ai.\* 欄位                    |
-| `recordToolCall(log, name, ms, success)` | 每次 tool 執行 emit `ai.tool_call` 子事件                        |
-| `recordModeration(log, result)`          | moderation outcome；flagged 時 emit `ai.moderation_flagged` warn |
-| `recordEmbedding(log, result)`           | embedding query；cost > $0.001 才 keep（自家 sample）            |
+| Helper | 用途 |
+| --- | --- |
+| `recordAIGeneration(log, result)` | generateText / streamText 落地後加 ai.* 欄位 |
+| `recordToolCall(log, name, ms, success)` | 每次 tool 執行 emit `ai.tool_call` 子事件 |
+| `recordModeration(log, result)` | moderation outcome；flagged 時 emit `ai.moderation_flagged` warn |
+| `recordEmbedding(log, result)` | embedding query；cost > $0.001 才 keep（自家 sample） |
 
 `AILogFields` interface 列出共用 schema — T2 升級可改 evlog typed fields。
 
@@ -61,12 +60,12 @@ function estimateCost(model: string, usage: { promptTokens: number; completionTo
 
 ## Sampling 策略（高量 AI consumer）
 
-| 子事件                  | 採樣                  | 理由                                   |
-| ----------------------- | --------------------- | -------------------------------------- |
-| 主 generateText 落地    | 100%                  | wide event 的 ai.\* 欄位是核心，不採樣 |
-| `ai.tool_call` 子事件   | 100%                  | tool 失敗 / latency outlier 必須看到   |
-| `ai.embedding`          | cost > $0.001 才 keep | 高量 batch embed 量太大，自家 filter   |
-| `ai.moderation_flagged` | 100%                  | 合規必須有                             |
+| 子事件 | 採樣 | 理由 |
+| --- | --- | --- |
+| 主 generateText 落地 | 100% | wide event 的 ai.* 欄位是核心，不採樣 |
+| `ai.tool_call` 子事件 | 100% | tool 失敗 / latency outlier 必須看到 |
+| `ai.embedding` | cost > $0.001 才 keep | 高量 batch embed 量太大，自家 filter |
+| `ai.moderation_flagged` | 100% | 合規必須有 |
 
 進 nuxt.config.ts `evlog.sampling.byRoute`：
 
@@ -83,15 +82,14 @@ sampling: {
 
 **MUST NOT** 把以下寫進 `event.ai.*`：
 
-| 不可寫                        | 理由                            |
-| ----------------------------- | ------------------------------- |
+| 不可寫 | 理由 |
+| --- | --- |
 | Raw prompt（user query 全文） | PII risk + wide event size 撐爆 |
-| Raw output（model 完整回答）  | 同上                            |
-| Embedding vector              | 高維 array，wide event 不適合   |
-| API key / model token         | secret leak                     |
+| Raw output（model 完整回答） | 同上 |
+| Embedding vector | 高維 array，wide event 不適合 |
+| API key / model token | secret leak |
 
 **正解**：
-
 - prompt / output → 短 TTL server log（`evlog/fs` 寫 dev、production 不寫）
 - 真正需要 prompt 重現 → audit pattern + 短 TTL envelope（不進 audit DB）
 

@@ -306,6 +306,37 @@ node scripts/wt-helper.mjs merge-back <slug> --auto-stash
 
 之後同樣走 `/commit` 收尾。
 
+`/wt` 此處故意保留 deferred-landing — 因為 `/wt` 是「通用 worktree 建造器 primitive」，user 可能想連續開多條 worktree、靠 review 完一輪再 land、或讓多 session 累積進度由 `/spectra-archive` 統一吸收。**這條 deferred-landing 例外只屬於 `/wt` 本身**；任何把 `/wt` 包進更大 lifecycle 的 skill 都受下面「Skill-owned worktree lifecycle」管轄。
+
+### Skill-owned worktree lifecycle（auto merge-back contract）
+
+當某 skill **自己** fork worktree（無論透過 `wt-helper add` 直呼或 `/wt` 委派），且該 skill 有**清楚的 end-of-skill 完成點**、**無下游 skill 接手 landing**，則該 skill **MUST** 在完成點自主執行 merge-back + selective stage on main，**NEVER** 把這幾步當「下一步」丟給 user 自己跑。
+
+**典型符合**（自主 land 必為）：
+
+- `/upgrade-packages` — 跑完所有 package codex 派工就是終點，沒下游 skill
+- 任何未來「fork worktree 做機械化工作（migration、codemod、bulk rename、批次重構）→ 跑完就收工」的 skill
+
+**典型不符合**（保留 deferred-landing 例外）：
+
+- `/wt`（primitive，per 上節「Ad-hoc Form-1 worktree」）
+- `/spectra-apply` — 完成點交給 `/spectra-archive`，archive Step 0 已自動 `wt-helper merge-back --auto-stash --noop-if-missing`（per [[spectra-archive]] Step 0）
+- `/spectra-ingest` / `/spectra-debug` — 同 apply，後續 archive 吸收
+- `/spectra-propose` — fork 純粹預備 worktree 給後續 apply 寫 product code，propose 本身不寫 product code（per §1「Pre-flight guard 不適用範圍」），無 merge-back 對象
+
+**Auto merge-back 標準流程**（skill 內部實作必含）：
+
+1. **主線 cd 回 main consumer root**：merge-back 完成會 cleanup worktree，parent session cwd 若還停在 worktree 內會撞「no such file or directory」；先跑 `MAIN_PATH=$(git worktree list --porcelain | head -1 | awk '{print $2}'); cd "$MAIN_PATH"`
+2. **跑 `node scripts/wt-helper.mjs merge-back <slug> --auto-stash`**：捕捉 stdout/stderr
+3. **Pre-fork baseline blocker 自動清理**：撞 `merge-back blocked: worktree '<wt>' has N uncommitted edit(s)` 時，解析 blocker paths，對每條跑 `git -C <wt-path> checkout HEAD -- <path>` 退回 HEAD，再重跑 merge-back。**安全性**靠 §1 Pre-fork baseline guard 的 pinned `refs/wt-baseline/<slug>/<ISO>` 永久 ref 兜底（IDENTICAL data 在 main 還在、DIVERGED 可用 `wt-helper rescue --show <ref>` 救回）
+4. **真衝突（pre-sync / squash conflict）STOP**：wt-helper 已內部 abort + 救 stash + 保留 worktree；skill **NEVER** 主線自決，AskUserQuestion 給 user 拍板（手動解 / 丟掉 / 先看一下）
+5. **Selective stage on main**：merge-back 成功後 main 上有 squash diff + 並行 session 的 staged WIP；skill **MUST** 跑 `git reset HEAD && git add <skill 範圍檔>`（**禁止** `git add -A` / `git add .`），把並行 session 的 staged WIP 退回 unstaged 留 working tree
+6. **NEVER 自動 `/commit`**：commit 時機 / message / sign-off 留給 user（per 「禁止項」）
+
+**摘要彙報硬性**：skill 結束前**必印**摘要含「worktree absorbed + cleaned」「main staged 了哪些檔」「並行 session WIP 退回 unstaged」「下一步走 `/commit`」四要素，讓 user 知道現況不必猜。
+
+**例外**：user 在 skill 啟動前明確說「先別 land」/「我要 review worktree 內容」/「保留 worktree」等字眼 → skill 跳過 auto merge-back，只印手動指令清單。**NEVER** 主動延遲 — 預設一律自主完成。
+
 ### 禁止項
 
 - **NEVER** 在 subagent prompt 內叫它跑 `/commit` / `/spectra-commit` — subagent commit 是 worktree-local，main commit 才是 ceremony

@@ -19,11 +19,7 @@ import { defineConfig } from 'vite-plus'
 import { lintBase, fmtBase } from './vendor/oxc-shared/preset.mjs'
 
 export default defineConfig({
-  resolve: {
-    alias: [
-      /* consumer build config */
-    ],
-  },
+  resolve: { alias: [/* consumer build config */] },
 
   lint: {
     ...lintBase,
@@ -46,20 +42,23 @@ export default defineConfig({
       stylesheet: './app/assets/css/main.css',
       attributes: ['class'],
     },
-    ignorePatterns: [...fmtBase.ignorePatterns, 'AGENTS.md'],
+    ignorePatterns: [
+      ...fmtBase.ignorePatterns,
+      'AGENTS.md',
+    ],
   },
 })
 ```
 
 ## What goes in `lintBase` vs business override
 
-| Goes in `lintBase` (this file)                                                          | Stays as consumer override                                              |
-| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| categories (correctness/suspicious/perf/etc.)                                           | business `unicorn/*` exemptions                                         |
-| 4 plugins (typescript / unicorn / import / promise)                                     | per-consumer `experimentalTailwindcss.stylesheet` path                  |
-| common rules (no-console/no-debugger/no-alert/eqeqeq/no-underscore-dangle/etc.)         | consumer build directories in `ignorePatterns` (`.wrangler/`, `local/`) |
-| `env: { browser, node, es2024 }`                                                        |                                                                         |
-| common ignore prefixes (`node_modules/`, `.nuxt/`, `.output/`, `.claude/skills/`, etc.) |                                                                         |
+| Goes in `lintBase` (this file) | Stays as consumer override |
+| --- | --- |
+| categories (correctness/suspicious/perf/etc.) | business `unicorn/*` exemptions |
+| 4 plugins (typescript / unicorn / import / promise) | per-consumer `experimentalTailwindcss.stylesheet` path |
+| common rules (no-console/no-debugger/no-alert/eqeqeq/no-underscore-dangle/etc.) | consumer build directories in `ignorePatterns` (`.wrangler/`, `local/`) |
+| `env: { browser, node, es2024 }` | |
+| common ignore prefixes (`node_modules/`, `.nuxt/`, `.output/`, `.claude/skills/`, etc.) | |
 
 If you find yourself adding the same override to every consumer, **promote it
 to `preset.mjs`** rather than letting it duplicate.

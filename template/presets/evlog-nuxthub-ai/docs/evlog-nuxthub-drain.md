@@ -21,22 +21,22 @@ Schema 與寫入邏輯固定（不可自訂 column），與 `evlog-postgres-drai
 
 ## 為什麼選 NuxtHub 而非自寫 D1 drain
 
-| 替代                                         | 為什麼不選                                                  |
-| -------------------------------------------- | ----------------------------------------------------------- |
-| 手寫 D1 drain（類似 `evlog-postgres-drain`） | NuxtHub 已封 D1 schema + retry + retention，自寫等於重造    |
-| `@nuxthub/core` 直接寫 + 自家 cron           | 沒 schema migration tooling；`@evlog/nuxthub` schema 已經穩 |
-| Sentry only                                  | agentic-rag 沒 Sentry；NuxtHub 是 D1 stack 的自然選擇       |
+| 替代 | 為什麼不選 |
+| --- | --- |
+| 手寫 D1 drain（類似 `evlog-postgres-drain`） | NuxtHub 已封 D1 schema + retry + retention，自寫等於重造 |
+| `@nuxthub/core` 直接寫 + 自家 cron | 沒 schema migration tooling；`@evlog/nuxthub` schema 已經穩 |
+| Sentry only | agentic-rag 沒 Sentry；NuxtHub 是 D1 stack 的自然選擇 |
 
 ## T3 完整 stack 組合
 
-| Layer            | 用什麼                                                            |
-| ---------------- | ----------------------------------------------------------------- |
-| Drain            | `@evlog/nuxthub`（D1 主 sink）                                    |
-| Pipeline         | `@evlog/nuxthub` 內建 retry（不需 `evlog-drain-pipeline` 額外包） |
-| Enricher         | `evlog-enrichers-stack`（4 件 + tenant + cfGeo）                  |
-| AI 子事件        | `evlog-ai-sdk-logger`（Workers AI / cost / tokens）               |
-| Child logger     | `evlog-mcp-sse-child-logger`（SSE / MCP session）                 |
-| Client transport | `evlog-client-transport`（標準）                                  |
+| Layer | 用什麼 |
+| --- | --- |
+| Drain | `@evlog/nuxthub`（D1 主 sink） |
+| Pipeline | `@evlog/nuxthub` 內建 retry（不需 `evlog-drain-pipeline` 額外包） |
+| Enricher | `evlog-enrichers-stack`（4 件 + tenant + cfGeo） |
+| AI 子事件 | `evlog-ai-sdk-logger`（Workers AI / cost / tokens） |
+| Child logger | `evlog-mcp-sse-child-logger`（SSE / MCP session） |
+| Client transport | `evlog-client-transport`（標準） |
 
 ## 安裝 SOP
 
@@ -57,23 +57,22 @@ Schema 與寫入邏輯固定（不可自訂 column），與 `evlog-postgres-drai
 
 ## D1 寫入限制
 
-| 限制                              | 影響                                                                            |
-| --------------------------------- | ------------------------------------------------------------------------------- |
-| 100 writes/s（free tier）         | 高量 consumer 必加 sampling 降 info 量                                          |
-| 10MB 單一 statement               | batch 寫過大 row（含 attributes JSONB）會炸；retention cron 一次最多刪 1000 row |
-| Cross-region eventual consistency | 寫入後 1-2s 才在所有 region 可見；debug 即時 query 可能 race                    |
+| 限制 | 影響 |
+| --- | --- |
+| 100 writes/s（free tier） | 高量 consumer 必加 sampling 降 info 量 |
+| 10MB 單一 statement | batch 寫過大 row（含 attributes JSONB）會炸；retention cron 一次最多刪 1000 row |
+| Cross-region eventual consistency | 寫入後 1-2s 才在所有 region 可見；debug 即時 query 可能 race |
 
 對應對策：
-
 - sampling：`info: 0.1`（10% 採樣），audit force-keep
 - attributes 大 row：超過 100KB 的事件改走 `evlog-postgres-drain` 或 R2 cold storage
 - Cross-region：讀取永遠 eventual；不用 D1 做 hot path query
 
 ## Retention 與 vercel.json / wrangler.toml
 
-| Stack              | retention 觸發                                                 |
-| ------------------ | -------------------------------------------------------------- |
-| Vercel             | `vercel.json#crons[]` 觸發 `/api/_cron/evlog-cleanup`          |
+| Stack | retention 觸發 |
+| --- | --- |
+| Vercel | `vercel.json#crons[]` 觸發 `/api/_cron/evlog-cleanup` |
 | Cloudflare Workers | `wrangler.toml#triggers.crons` 觸發 `/api/_cron/evlog-cleanup` |
 
 `@evlog/nuxthub` 自動加 cron handler；consumer 不用自己寫。

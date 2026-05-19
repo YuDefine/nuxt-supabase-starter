@@ -12,17 +12,17 @@ Reference: `docs/evlog-master-plan.md` § 8.4 (agentic-rag T3) + nuxt-edge-agent
 
 ## 為什麼需要 child logger
 
-| 場景                  | parent log 行為                                   | child log 解法                  |
-| --------------------- | ------------------------------------------------- | ------------------------------- |
-| SSE chat stream       | Response 構造時 emit；stream 內 log.set 撞 sealed | child 在 stream settle 時 emit  |
-| MCP tool session 多輪 | 同上；多輪跨多個 fetch                            | child sessionLog 跨整個 session |
-| Durable Object alarm  | alarm callback 與初始 fetch 分離                  | child 在 alarm 觸發時 fork      |
+| 場景 | parent log 行為 | child log 解法 |
+| --- | --- | --- |
+| SSE chat stream | Response 構造時 emit；stream 內 log.set 撞 sealed | child 在 stream settle 時 emit |
+| MCP tool session 多輪 | 同上；多輪跨多個 fetch | child sessionLog 跨整個 session |
+| Durable Object alarm | alarm callback 與初始 fetch 分離 | child 在 alarm 觸發時 fork |
 
 ## API（2 個 helper）
 
-| Helper                                     | 用途                                                                                              |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| `forkChildLogger(event, options)`          | 從 parent log 建獨立 child；child 帶 `operation` + `_parentRequestId`；不自動 emit                |
+| Helper | 用途 |
+| --- | --- |
+| `forkChildLogger(event, options)` | 從 parent log 建獨立 child；child 帶 `operation` + `_parentRequestId`；不自動 emit |
 | `emitChildLogger(event, child, { error })` | stream settle / session close 時手動觸發 enricher + drain；error 時 `_forceKeep` 防被 sampling 丟 |
 
 ## 安裝 SOP
@@ -30,10 +30,9 @@ Reference: `docs/evlog-master-plan.md` § 8.4 (agentic-rag T3) + nuxt-edge-agent
 1. 確認 consumer 已裝 `evlog`（`createRequestLogger` from root）。
 2. 複製 `child-logger.ts` 到 `server/utils/sse-child-logger.ts`。
 3. 對使用 SSE 的 endpoint（例：`server/api/chat.post.ts`）改寫：
-
    ```ts
    import { forkChildLogger, emitChildLogger } from '~/server/utils/sse-child-logger'
-
+   
    if (wantsSseResponse(event)) {
      const streamLog = forkChildLogger<ChatLogFields>(event, {
        operation: 'web-chat-sse-stream',
@@ -45,7 +44,6 @@ Reference: `docs/evlog-master-plan.md` § 8.4 (agentic-rag T3) + nuxt-edge-agent
      })
    }
    ```
-
 4. dev：觸發 SSE endpoint，到 Sentry / D1 看到「parent wide event（operation: web-chat）+ child wide event（operation: web-chat-sse-stream），兩者用 `_parentRequestId` 串接」。
 
 ## 為什麼 child 要手動 emit + drain
@@ -72,7 +70,7 @@ parent useLogger(event)         ← 自動 emit (afterResponse)
   ├─ user / route / tenant
   └─ result / status
         ↓ child request via _parentRequestId
-
+        
 streamLog (forked child)        ← 手動 emit (onStreamSettled)
   ├─ operation: 'web-chat-sse-stream'
   ├─ _parentRequestId
@@ -86,10 +84,10 @@ streamLog (forked child)        ← 手動 emit (onStreamSettled)
 
 兩 snippet 配對使用：
 
-| 檔案                               | 職責                                                         |
-| ---------------------------------- | ------------------------------------------------------------ |
-| `evlog-ai-sdk-logger/ai-logger.ts` | 提供 `recordAIGeneration` / `recordToolCall` — 灌 ai.\* 欄位 |
-| 本 snippet                         | 提供 child logger lifecycle                                  |
+| 檔案 | 職責 |
+| --- | --- |
+| `evlog-ai-sdk-logger/ai-logger.ts` | 提供 `recordAIGeneration` / `recordToolCall` — 灌 ai.* 欄位 |
+| 本 snippet | 提供 child logger lifecycle |
 
 組合：
 

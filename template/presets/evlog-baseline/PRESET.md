@@ -19,7 +19,12 @@ T1 全套（drain pipeline + Sentry drain + 5 件套 enricher + sampling/redacti
 ```ts
 // nuxt.config.ts — evlog-baseline preset (T1 全套)
 export default defineNuxtConfig({
-  modules: ['nuxt-auth-utils', '@nuxtjs/supabase', '@sentry/nuxt/module', 'evlog/nuxt'],
+  modules: [
+    'nuxt-auth-utils',
+    '@nuxtjs/supabase',
+    '@sentry/nuxt/module',
+    'evlog/nuxt',
+  ],
   evlog: {
     env: { service: 'YOUR_APP_NAME' },
     include: ['/api/**'],

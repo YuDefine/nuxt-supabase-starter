@@ -174,15 +174,102 @@ High research 失敗原因 + 已查到的線索：<一句話>
 
 **禁止**主線自己決定跳過或中止 — 必須使用者選。
 
-## Step 3 — 摘要彙報
+## Step 3 — Auto-merge-back（主線自主完成，不留給 user）
 
-所有 packages 跑完（含跳過 / 中止）後，產出摘要：
+所有 package codex 派工跑完（成功 / 跳過 / 中止皆同）後，**MUST** 自主把 worktree merge-back 進 main，**NEVER** 把這步當「下一步」丟給 user 自己跑（per [[worktree-default]] §5「Skill-owned worktree lifecycle」）。
+
+### 3.1 主線 cd 回 main consumer root
+
+Parent session 此時在 worktree。merge-back 完成會 cleanup worktree，parent cwd 必須先離開：
+
+```bash
+# 從 worktree 抓 main path（git common dir 永遠指向 main）
+MAIN_PATH=$(git worktree list --porcelain | head -1 | awk '{print $2}')
+cd "$MAIN_PATH"
+```
+
+從此往後所有 Step 3 命令都在 main 跑。
+
+### 3.2 Merge-back（含 baseline blocker 自動處理）
+
+```bash
+node scripts/wt-helper.mjs merge-back <slug> --auto-stash
+```
+
+分流（依 wt-helper 回 message）：
+
+| 訊號 | 處理 |
+| --- | --- |
+| `merge-back: <slug> absorbed into main` | 成功 → 進 Step 3.3 |
+| `merge-back: <slug> absorbed into main (blockers stashed as wt-merge-block/<slug>/<ISO>)` | 成功 + main 端有 stash 紀錄 → 進 Step 3.3，Step 3.4 摘要末段提醒 user 用 `node scripts/stash-reconcile.mjs --slug <slug> --interactive` 收尾 |
+| `merge-back blocked: worktree '<wt-path>' has N uncommitted edit(s)` | Pre-fork baseline 殘留 → 進 3.2.a 自動清理 |
+| `merge-back blocked: <N> file(s) in main's working tree would be overwritten` | 上面 `--auto-stash` 應已涵蓋；若仍出現是 race condition → STOP + 報 user |
+| `error: merge conflict in <files>` / `pre-sync` conflict / `squash` conflict | Worktree 保留，wt-helper 內部已 abort + 救 stash → STOP + 報 user（不主線自決） |
+
+#### 3.2.a Pre-fork baseline blocker 自動清理
+
+`wt-helper add --baseline-strategy stash` fork 時把 main dirty 帶進 worktree（codex 守規約沒動），merge-back 出於 atomic-landing 安全考量拒絕 squash。**自動清理流程**：
+
+```bash
+WT_PATH="$(dirname "$MAIN_PATH")/$(basename "$MAIN_PATH")-wt/<slug>"
+# 從 wt-helper 錯誤 stdout 解析 blocker paths（每行 "  <status> <path>" 格式）
+# 對每條 blocker path，在 worktree 內把它退回 HEAD
+for path in <parsed-blocker-paths>; do
+  git -C "$WT_PATH" checkout HEAD -- "$path"
+done
+# 重跑 merge-back
+node scripts/wt-helper.mjs merge-back <slug> --auto-stash
+```
+
+**安全性論證**：
+- IDENTICAL baseline（main 跟 worktree 內的版本完全相同）：data 在 main HEAD 還在，沒丟失
+- DIVERGED baseline（main 被別 session 在 fork 後又改過）：worktree 內是過期 snapshot；`git checkout HEAD --` 後 worktree 版本沒了，但 **pinned `refs/wt-baseline/<slug>/<ISO>` 永久 ref 是安全網**（per [[worktree-default]] §1 Pre-fork baseline guard），data 可救回
+- merge-back 只搬「branch commits 的 diff」（= upgrade 結果），main 上別 session 的 dirty 完全不會被踩
+
+**NEVER**：
+- `git stash` 在 worktree 內把 baseline 收起來（wt-helper 規約禁止）
+- `git add` baseline files 之後 commit 進 worktree branch（會把不屬於 upgrade 的改動一起 squash 進 main）
+- 用 `--include-worktree-wip` flag（wt-helper 警告 not recommended，commit message 會被 auto-amend 失焦）
+
+**Step 3.4 摘要 MUST** 列出被自動清理的 baseline 路徑 + 對應的 pinned ref，讓 user 知道如何救援（即使機率極低）。
+
+#### 3.2.b 真衝突（pre-sync / squash conflict）
+
+wt-helper 已內部 abort + 救 stash + 保留 worktree。主線：
+
+1. STOP 整個流程（不繼續 stage / 不假裝完成）
+2. 把 wt-helper 印的衝突檔清單 + worktree path 列在 Step 3.4 摘要的 ❌ 區
+3. request_user_input 給三選項：
+   ```
+   [1] cd <wt-path> 手動解 conflict → commit → 重跑 merge-back
+   [2] 放棄 upgrade，丟掉 worktree（wt-helper cleanup --force --force-discard-unland，會永久砍 branch commits）
+   [3] 我先看一下狀態再決定（保留 worktree，結束本次 skill）
+   ```
+
+### 3.3 Selective stage on main
+
+merge-back 成功後 main 的 index 含 squash 寫入的「N 個 package upgrade 合併 diff」+ 並行 session 的 staged WIP。直接 `git commit` 會把別 session 的 WIP 一起 commit。**MUST** 走 selective stage：
+
+```bash
+git reset HEAD                                        # 清掉 index（並行 session 的 WIP 退回 unstaged 留 working tree）
+git add package.json <lockfile-path>                  # 只 stage upgrade 真的動的檔
+```
+
+`<lockfile-path>` 依 Step 1 偵測到的 package manager 對應：`pnpm-lock.yaml` / `package-lock.json` / `yarn.lock` / `bun.lockb`。
+
+**罕見情況**：若 Step 2 的某條 codex high-research 派工有 commit 過非 dep 檔（例如 import path 重寫），那些檔也會在 squash 後落在 main 的 working tree。摘要 Step 3.4 ⚠️ 區應列出，**MUST** 也加進 `git add`，但 stage 前用 `git status` 印給 user 看一下。
+
+**NEVER** `git add -A` / `git add .` — 會把並行 session 的 WIP 一起送進 stage。
+
+### 3.4 摘要彙報
+
+把摘要直接輸出在主線回應裡（不另寫檔）。**MUST** 反映「worktree 已 absorbed、main 已 selective staged」的新狀態：
 
 ```markdown
 ## upgrade-packages 摘要（<YYYY-MM-DD HH:MM>）
 
-**Worktree**：`<wt-path>`
-**Branch**：`session/<date>-upgrade-deps-<slug>`
+**Worktree**：`<wt-path>` → ✅ absorbed into main + cleaned
+**Branch**：`session/<date>-upgrade-deps-<slug>` → ✅ removed
 **Package manager**：`<PM>`
 **總計**：N 套件（M 成功、K 升 high 後成功、S 跳過、F 失敗）
 
@@ -191,15 +278,14 @@ High research 失敗原因 + 已查到的線索：<一句話>
 | Package | <from> | <to> | Commit |
 | --- | --- | --- | --- |
 | foo | 1.2.3 | 1.2.4 | abc1234 |
-| ... |
 
 ### ⚠️ 升 high research 後成功（K）
 
 | Package | <from> | <to> | Breaking change 摘要 | Commit |
 | --- | --- | --- | --- | --- |
-| bar | 2.x | 3.0 | import path 改 / new peer dep / ... | def5678 |
+| bar | 2.x | 3.0 | import path 改 / new peer dep | def5678 |
 
-對應的 research 線索（GitHub issue / release notes URL）：
+對應 research 線索：
 - bar 3.0：https://github.com/.../releases/tag/v3.0.0
 
 ### ⏭️ 跳過（S）
@@ -208,88 +294,49 @@ High research 失敗原因 + 已查到的線索：<一句話>
 | --- | --- | --- | --- |
 | baz | 1.x | 2.x | high research 仍失敗，使用者選擇跳過 |
 
-### ❌ 中止前未處理（F）
+### ❌ 未 land（F）
 
-| Package | <from> | <to> | 為什麼還沒升 |
-| --- | --- | --- | --- |
-| ... |
+（squash conflict 才會出現；正常完成時這區為空）
 
-### 下一步
+### 🧹 Baseline auto-cleanup（如有）
 
-要 land 這次升級，請在 main 跑：
+merge-back 撞 pre-fork baseline blocker 時自動清掉以下 worktree 內的 baseline 殘留：
 
-`​`​`bash
-node scripts/wt-helper.mjs merge-back upgrade-deps-<slug> --auto-stash
+- `.codex/AGENTS.md` (IDENTICAL — data 在 main HEAD 還在)
+- `server/api/foo.ts` (DIVERGED — 救援 ref: `refs/wt-baseline/<slug>/<ISO>`，用 `node scripts/wt-helper.mjs rescue --show <ref>` 看 patch)
+
+### 📦 Main 端狀態
+
+- Staged：`package.json`、`<lockfile-path>`（+ 任何被 squash 帶來的 codex high-research 非 dep 改動）
+- Unstaged：保留並行 session 原有 WIP，未動
+- 並行 session 的 staged WIP（若有）已退回 unstaged，**等你 commit 完後 user 自己決定要不要重 stage**
+
+### 下一步（user 拍板）
+
+走 `/commit` 收尾。commit message 範例（依 consumer commitlint 設定調整 prefix；TDMS 是 emoji + conventional commits）：
+
 `​`​`
-
-之後在 main 走 `/commit` 或 `/spectra-commit` 收尾。
-```
-
-**MUST** 把摘要直接輸出在主線回應裡（不另寫檔）。**禁止**主線在 worktree 內自動跑 merge-back — 那是使用者的決定點（除非使用者明確說「都做」/「一起 land」等等）。
-
-### merge-back gotcha — pre-fork baseline 卡關
-
-如果使用者授權主線跑 merge-back，常會撞到下面這條：
-
-```
-error: merge-back blocked: worktree '<wt-path>' has N uncommitted edit(s) to tracked/untracked file(s)
-```
-
-**為什麼會卡**：`wt-helper add --baseline-strategy stash` 在 fork 時把 main 的 dirty state 用 stash 帶進 worktree，這些檔在 worktree 內以 `M`（unstaged）狀態存在（codex 守規約沒動它們）。`wt-helper merge-back` 出於 atomic landing 安全考量，要求 worktree 完全乾淨（包括 baseline 帶過來的 dirty）後才肯 squash。
-
-**解法（per-baseline-file 處理）**：
-
-```bash
-cd <wt-path>
-# 比對 worktree baseline 檔 vs main 現狀
-for f in <list>; do
-  if diff -q <wt-path>/"$f" <main-path>/"$f" >/dev/null 2>&1; then
-    echo "IDENTICAL: $f"
-  else
-    echo "DIVERGED: $f  (main 在 fork 後又被改)"
-  fi
-done
-```
-
-兩種情況：
-
-1. **IDENTICAL**（baseline 跟 main 現狀完全相同）：`git checkout HEAD -- <file>` 在 worktree 把它退回 HEAD（清空 unstaged），merge-back 重跑。data 在 main 還在，沒丟失。
-2. **DIVERGED**（main 在 fork 後又有別 session 改動）：worktree 的版本是過期 snapshot。**仍然** `git checkout HEAD -- <file>` 在 worktree（pinned `refs/wt-baseline/<slug>/<ISO>` 永久 ref 是安全網，data 可救回），merge-back 重跑。merge-back 只搬 commit 的 diff（package.json + lockfile），main 上別 session 的 dirty 完全不會被踩。
-
-**禁止項**：
-- **NEVER** `git stash` 在 worktree 內把 baseline 收起來 — wt-helper 規約禁止
-- **NEVER** `git add` baseline files 之後 commit 進 worktree branch — 會在 merge-back squash 時把不屬於 upgrade 的改動一起 land 到 main
-- **NEVER** 用 `--include-worktree-wip` flag — wt-helper 自己警告 not recommended（會 auto-amend 上個 commit，commit message 失焦）
-
-### land 後在 main 上 selective stage 的特殊情況
-
-merge-back 完成後 main 的 index + working tree 會被 squash 寫入「9 個 package commit 的合併 diff」。**但是** 並行 session 的 staged WIP **不會被擠掉** — 它們仍在 main 的 staged area。
-
-直接 `git commit` 會把所有 staged（包含別 session 的 WIP）一起送進 commit history。**MUST** 走 selective stage：
-
-```bash
-git reset HEAD                      # 清掉 index（main 的 unstaged WIP 保留在 working tree）
-git add package.json <lockfile>     # 只 stage 升級檔
-git commit -m "..."                 # 只 commit 升級檔；別 session WIP 留在 working tree 不動
-```
-
-commit message 範例（依 consumer commitlint 設定調整 prefix；TDMS 是 emoji + conventional commits）：
-
-```
 🧹 chore: 升級 N 套件 patch/minor 版本
 
 - foo 1.2.3 → 1.2.4 (patch)
 - bar 2.x → 3.0 (minor)
 - ...
 
-(可選) <pkg> 順手從 X 移到 Y。
-
 由 clade upgrade-packages skill 委派 codex medium 在 worktree
 內逐套件升級 + typecheck 驗證 + per-package commit + squash
-merge-back 完成。
+merge-back + main selective stage 完成。
+`​`​`
+
+（commitlint `body-max-line-length: 100`，中文 1 字 ≈ 3 bytes 偶爾會踩，斷行寫多行 bullet 比較穩。）
+
+（若 3.2 撞 stash blocker：再加一條提醒 `node scripts/stash-reconcile.mjs --slug <slug> --interactive` 收尾。）
 ```
 
-**單行 body 長度限制**：commitlint 預設 `body-max-line-length: 100`，中文 1 字 ≈ 3 bytes 偶爾會踩，斷行寫多行 bullet 比較穩。
+**NEVER** 主線自己跑 `/commit` 收尾 — 那剝奪 user 對 commit 時機 / message / sign-off 的控制（per [[worktree-default]] §5「禁止項」）。
+
+### 例外：user 在 Step 0 之前明確說「不要 land」/「先看一下」
+
+跳過 Step 3.1–3.3，只跑 Step 3.4 摘要 + 在 ### 下一步 區改寫成手動指令清單。判定詞例：「先別 merge-back」「我要 review」「保留 worktree」。**NEVER** 主動延遲 — 預設一律自動 land。
 
 ## Prompt templates
 
@@ -462,12 +509,14 @@ WHY_STUCK: <一句話為什麼即使查到資訊也卡住 — 例：太多 break
 - **NEVER** 主線自己改 `package.json` 或跑 `pnpm install`（升 deps 全程委派給 codex）
 - **NEVER** medium 失敗就直接問使用者 — 必須先自動升 high research
 - **NEVER** high 也失敗就主線自己接手 — 必須 request_user_input 讓使用者選
-- **NEVER** 在 worktree 內自動跑 `wt-helper merge-back` — merge-back 是使用者決定點
+- **NEVER** 把 merge-back 當「下一步」丟給 user 自己跑（per [[worktree-default]] §5「Skill-owned worktree lifecycle」— skill 自己 own 的 worktree 必須自主完成 land）
+- **NEVER** 自動跑 `/commit` 收尾 — 即使 merge-back 成功也要把 commit 時機留給 user
 - **NEVER** 把 `[DELEGATED-BY-CLAUDE-CODE]` marker 漏掉 — codex 端有 Runtime Gate 會擋
 - **NEVER** 派 codex 時把 sandbox 換成 `read-only` / `workspace-write`（會擋 MCP，per [[agent-routing.codex-watch-protocol]]）
 
 ## 相關規約
 
 - [[worktree-default]] §1 — 寫 tracked code 必走 worktree
+- [[worktree-default]] §5 — Skill-owned worktree lifecycle 必自主 land
 - [[agent-routing.codex-watch-protocol]] — codex 派工標準流程、Plan-first、Git Baseline、Commit Authorization、Watch Protocol、Runtime Gate marker
-- [[commit]] — main 端 merge-back 後的 `/commit` 收尾流程
+- [[commit]] — main 端 selective stage 後的 `/commit` 收尾流程
