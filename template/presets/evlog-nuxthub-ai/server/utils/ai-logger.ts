@@ -66,7 +66,7 @@ export function recordAIGeneration(
     finishReason?: string
     durationMs: number
     cached?: boolean
-  }
+  },
 ) {
   log.set({
     ai: {
@@ -89,7 +89,7 @@ export function recordToolCall(
   toolName: string,
   durationMs: number,
   success: boolean,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
 ) {
   log.info('ai.tool_call', {
     ai: {
@@ -124,7 +124,7 @@ export function recordEmbedding(
     totalTokens?: number
     costUsd?: number
     durationMs: number
-  }
+  },
 ) {
   // 高量 sample：cost > $0.001 才 keep（自家 sampling，不依賴 evlog sampling）
   if ((result.costUsd ?? 0) > 0.001) {

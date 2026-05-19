@@ -73,7 +73,7 @@ export default defineNitroPlugin((nitroApp) => {
       const reason = error ? 'retry_exhausted' : 'buffer_overflow'
       logger.error(
         `Dropped ${events.length} events (${reason})`,
-        error ? { error: error.message } : {}
+        error ? { error: error.message } : {},
       )
       // 反模式（不要做）：在這裡再 throw / 丟回 evlog 製造遞迴
       // 想要把 drop 也 ship 到 Sentry，建議用 Sentry SDK 直送 captureMessage

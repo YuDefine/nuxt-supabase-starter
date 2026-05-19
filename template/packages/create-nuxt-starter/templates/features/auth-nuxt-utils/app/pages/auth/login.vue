@@ -23,7 +23,7 @@
     (val) => {
       if (val) router.replace(redirectTo.value)
     },
-    { immediate: true }
+    { immediate: true },
   )
 
   function handleGoogleSignIn() {

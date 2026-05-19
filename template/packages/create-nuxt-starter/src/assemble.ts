@@ -29,7 +29,7 @@ export function assembleProject(
   agentTargets: AgentRuntime[] = ['claude-code'],
   evlogPreset: EvlogPreset = 'baseline',
   dbStack: DbStack = DEFAULT_DB_STACK,
-  options: AssembleProjectOptions = {}
+  options: AssembleProjectOptions = {},
 ): void {
   // 1. Copy base template
   copyDirectory(join(TEMPLATES_DIR, 'base'), targetDir)
@@ -109,7 +109,7 @@ export function assembleProject(
 }
 
 function inferAuthSelection(
-  selectedFeatureIds: string[]
+  selectedFeatureIds: string[],
 ): 'better-auth' | 'nuxt-auth-utils' | 'none' {
   if (selectedFeatureIds.includes('auth-better-auth')) return 'better-auth'
   if (selectedFeatureIds.includes('auth-nuxt-utils')) return 'nuxt-auth-utils'
@@ -228,7 +228,7 @@ export function generatePackageJson(
   targetDir: string,
   selectedFeatureIds: string[],
   projectName: string,
-  agentTargets: AgentRuntime[]
+  agentTargets: AgentRuntime[],
 ): void {
   const pkgPath = join(targetDir, 'package.json')
   const basePkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
@@ -343,7 +343,7 @@ export function generateNuxtConfig(
   targetDir: string,
   selectedFeatureIds: string[],
   evlogPreset: EvlogPreset = 'baseline',
-  dbStack: DbStack = DEFAULT_DB_STACK
+  dbStack: DbStack = DEFAULT_DB_STACK,
 ): void {
   const configPath = join(targetDir, 'nuxt.config.ts')
   let config = readFileSync(configPath, 'utf-8')
@@ -546,7 +546,7 @@ export function generateNuxtConfig(
 export function generateEnvExample(
   targetDir: string,
   selectedFeatureIds: string[],
-  dbStack: DbStack = DEFAULT_DB_STACK
+  dbStack: DbStack = DEFAULT_DB_STACK,
 ): void {
   const envExamplePath = join(targetDir, '.env.example')
   const envPath = join(targetDir, '.env')
@@ -658,7 +658,7 @@ function copyClaudeCodeAssets(targetDir: string, selectedFeatureIds: string[]): 
       'supabase-migration',
       'supabase-rls',
       'supabase-arch',
-      'supabase-postgres-best-practices'
+      'supabase-postgres-best-practices',
     )
   }
 
@@ -692,7 +692,7 @@ function copyClaudeCodeAssets(targetDir: string, selectedFeatureIds: string[]): 
       // UI workflow support
       'review-archive',
       'review-screenshot',
-      'subagent-dev'
+      'subagent-dev',
     )
   }
 
@@ -800,7 +800,7 @@ function copyRules(targetDir: string, feats: string[]): void {
       'mcp-remote.md',
       'query-optimization.md',
       'storage.md',
-      'trigger.md'
+      'trigger.md',
     )
   }
 
@@ -1020,7 +1020,7 @@ function generateSettings(targetDir: string, feats: string[]): void {
       'mcp__local-supabase__search_docs',
       'mcp__local-supabase__get_advisors',
       'mcp__local-supabase__apply_migration',
-      'WebFetch(domain:supabase.com)'
+      'WebFetch(domain:supabase.com)',
     )
   }
   if (has(feats, 'ui')) {
@@ -1185,7 +1185,7 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
     lines.push('echo "📦 官方 Skills..."')
     if (has(feats, 'database')) {
       lines.push(
-        'npx skills add supabase/agent-skills@supabase-postgres-best-practices $COPY_FLAGS'
+        'npx skills add supabase/agent-skills@supabase-postgres-best-practices $COPY_FLAGS',
       )
     }
     if (has(feats, 'ui')) {
@@ -1310,7 +1310,7 @@ function copyVerifyDocs(targetDir: string, feats: string[]): void {
       'SUPABASE_MIGRATION_GUIDE.md',
       'RLS_BEST_PRACTICES.md',
       'SELF_HOSTED_SUPABASE.md',
-      'DATABASE_OPTIMIZATION.md'
+      'DATABASE_OPTIMIZATION.md',
     )
   }
   if (hasAny(feats, 'auth-nuxt-utils', 'auth-better-auth'))
@@ -1345,7 +1345,7 @@ export function generateClaudeMd(targetDir: string, selectedFeatureIds: string[]
   sections.push('# Spectra Instructions')
   sections.push('')
   sections.push(
-    'This project uses Spectra for Spec-Driven Development(SDD). Specs live in `openspec/specs/`, change proposals in `openspec/changes/`.'
+    'This project uses Spectra for Spec-Driven Development(SDD). Specs live in `openspec/specs/`, change proposals in `openspec/changes/`.',
   )
   sections.push('')
   sections.push('## Use `/spectra-*` skills when:')
@@ -1368,7 +1368,7 @@ export function generateClaudeMd(targetDir: string, selectedFeatureIds: string[]
   sections.push('## Parked Changes')
   sections.push('')
   sections.push(
-    "Changes can be parked（暫存）— temporarily moved out of `openspec/changes/`. Parked changes won't appear in `spectra list` but can be found with `spectra list --parked`. To restore: `spectra unpark <name>`. The `/spectra-apply` and `/spectra-ingest` skills handle parked changes automatically."
+    "Changes can be parked（暫存）— temporarily moved out of `openspec/changes/`. Parked changes won't appear in `spectra list` but can be found with `spectra list --parked`. To restore: `spectra unpark <name>`. The `/spectra-apply` and `/spectra-ingest` skills handle parked changes automatically.",
   )
   sections.push('')
   sections.push('<!-- SPECTRA:END -->')
@@ -1378,7 +1378,7 @@ export function generateClaudeMd(targetDir: string, selectedFeatureIds: string[]
   sections.push('# Proactive Skill Orchestra')
   sections.push('')
   sections.push(
-    '**所有 Spectra sub-skill 與 Design skill 依 `.claude/rules/proactive-skills.md` 自主觸發，不需使用者手動指定。**'
+    '**所有 Spectra sub-skill 與 Design skill 依 `.claude/rules/proactive-skills.md` 自主觸發，不需使用者手動指定。**',
   )
   sections.push('')
 
@@ -1473,15 +1473,15 @@ export function generateClaudeMd(targetDir: string, selectedFeatureIds: string[]
     sections.push('')
     if (hasAuthUtils) {
       sections.push(
-        '- **Auth**：先導航到 `GET /auth/_dev-login`（dev-only route，自動建立 session），canonical query：`?as=<role>` 指定角色／場景、`?email=<email>` 指定使用者、`?redirect=<safePath>` 指定起始頁（同站 path）'
+        '- **Auth**：先導航到 `GET /auth/_dev-login`（dev-only route，自動建立 session），canonical query：`?as=<role>` 指定角色／場景、`?email=<email>` 指定使用者、`?redirect=<safePath>` 指定起始頁（同站 path）',
       )
       sections.push(
-        '- `?role=` 是舊別名，新 test/spec 一律用 `?as=`；route 是 lookup-only，必須先 seed 對應使用者'
+        '- `?role=` 是舊別名，新 test/spec 一律用 `?as=`；route 是 lookup-only，必須先 seed 對應使用者',
       )
     }
     if (hasBetterAuth) {
       sections.push(
-        '- **Auth**：先 `POST /api/_dev/login` body `{ email, password?, as? }`（dev-only route，回 Set-Cookie 建立 session），確認 200 後再導航到目標頁面；此 route 故意沒有 `redirect` 參數'
+        '- **Auth**：先 `POST /api/_dev/login` body `{ email, password?, as? }`（dev-only route，回 Set-Cookie 建立 session），確認 200 後再導航到目標頁面；此 route 故意沒有 `redirect` 參數',
       )
       sections.push('- `as=admin` 必須 email 在 `ADMIN_EMAIL_ALLOWLIST` 內；非 local 環境一律 404')
     }

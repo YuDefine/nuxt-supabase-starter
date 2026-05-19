@@ -11,7 +11,7 @@ const ROOT_CREATE_CLEAN = join(
   '..',
   '..',
   'scripts',
-  'create-clean.sh'
+  'create-clean.sh',
 )
 
 function cleanTestDir() {
@@ -28,7 +28,7 @@ function writeText(path: string, value: string) {
 function writeManifest(value: unknown) {
   writeText(
     join(TEST_DIR, 'template', 'presets', '_base', 'strip-manifest.json'),
-    `${JSON.stringify(value, null, 2)}\n`
+    `${JSON.stringify(value, null, 2)}\n`,
   )
 }
 
@@ -121,7 +121,7 @@ describe('strip manifest create-clean gate', () => {
   it('fails closed when the manifest is malformed', () => {
     writeText(
       join(TEST_DIR, 'template', 'presets', '_base', 'strip-manifest.json'),
-      '{ not json }\n'
+      '{ not json }\n',
     )
 
     const result = runCreateCleanDryRun()

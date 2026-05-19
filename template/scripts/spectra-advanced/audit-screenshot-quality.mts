@@ -100,7 +100,7 @@ function parseArgs(argv: string[]): CliOptions {
           '',
           '  --json            Emit machine-readable JSON on stdout',
           '  --fail-on-issues  Exit 1 when any warning or critical issue is found',
-        ].join('\n')
+        ].join('\n'),
       )
       process.exit(0)
     } else if (arg.startsWith('-')) {
@@ -175,7 +175,7 @@ async function resolveChangeNames(changeName: string | null): Promise<string[]> 
   const entries = await readdir(CHANGES_DIR, { withFileTypes: true })
   return entries
     .filter(
-      (entry) => entry.isDirectory() && entry.name !== 'archive' && !entry.name.startsWith('.')
+      (entry) => entry.isDirectory() && entry.name !== 'archive' && !entry.name.startsWith('.'),
     )
     .map((entry) => entry.name)
     .toSorted()
@@ -219,7 +219,7 @@ async function readOptional(path: string): Promise<string | null> {
 
 async function collectScreenshotFiles(
   changeName: string,
-  issues: Issue[]
+  issues: Issue[],
 ): Promise<ScreenshotFile[]> {
   if (!existsSync(SCREENSHOTS_DIR)) return []
   const envs = await readdir(SCREENSHOTS_DIR, { withFileTypes: true })
@@ -298,7 +298,7 @@ function groupScreenshotsByItem(
   screenshots: ScreenshotFile[],
   itemIds: Set<string>,
   changeName: string,
-  issues: Issue[]
+  issues: Issue[],
 ): Map<string, ScreenshotFile[]> {
   const byItem = new Map<string, ScreenshotFile[]>()
   for (const screenshot of screenshots) {
@@ -326,7 +326,7 @@ function groupScreenshotsByItem(
 function applyCountRules(
   byItem: Map<string, ScreenshotFile[]>,
   changeName: string,
-  issues: Issue[]
+  issues: Issue[],
 ) {
   for (const [itemId, files] of byItem) {
     if (files.length > 7) {
@@ -359,14 +359,14 @@ function applyMissingEvidenceRule(
   items: ManualReviewItem[],
   byItem: Map<string, ScreenshotFile[]>,
   changeName: string,
-  issues: Issue[]
+  issues: Issue[],
 ) {
   // Parent State Derivation hard rule (manual-review.md): parent-with-scoped-children
   // 的 verify:* / screenshot evidence 由 children 承擔，parent state 由 rollup 推導。
   // 對齊 archive-gate.sh Check 4 與 review-gui.mts buildParentsWithScopedChildren —
   // 統一以「parent-with-scoped-children 為 non-leaf」語義跳過 leaf-only 檢查。
   const parentIdsWithScopedChildren = new Set(
-    items.filter((i) => i.scoped && i.parentId).map((i) => i.parentId as string)
+    items.filter((i) => i.scoped && i.parentId).map((i) => i.parentId as string),
   )
 
   for (const item of items) {

@@ -237,7 +237,7 @@ export function resolveIdentity(
     runtime?: string | null
     sessionId?: string | null
     allowFallbackOwner?: boolean
-  } = {}
+  } = {},
 ): Identity {
   const runtime = opts.runtime?.trim() || detectRuntime()
   const sessionId = opts.sessionId?.trim() || resolveEnvSessionId()
@@ -285,7 +285,7 @@ export function resolveIdentity(
 export function claimMatchesPath(
   config: ClaimsRuntimeConfig,
   claim: ClaimRecord,
-  filePath: string
+  filePath: string,
 ): boolean {
   const rel = normaliseRepoPath(config.repoRoot, filePath)
   if (!rel || rel === '.') return false

@@ -165,7 +165,7 @@ function main(): void {
     !opts.takeover
   ) {
     throw new Error(
-      `change ${opts.change} is already claimed by ${existing.owner}; use --takeover only after confirming handoff/stale state`
+      `change ${opts.change} is already claimed by ${existing.owner}; use --takeover only after confirming handoff/stale state`,
     )
   }
 

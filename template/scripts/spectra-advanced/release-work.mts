@@ -88,7 +88,7 @@ function main(): void {
 
   if (!opts.force && !sameOwner && !(existingView?.stale ?? false)) {
     throw new Error(
-      `change ${opts.change} is claimed by ${existing.owner}; pass --force only when you explicitly intend to clear it`
+      `change ${opts.change} is claimed by ${existing.owner}; pass --force only when you explicitly intend to clear it`,
     )
   }
 

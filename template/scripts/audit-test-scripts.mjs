@@ -32,7 +32,7 @@ if (args.has('--help') || args.has('-h')) {
     'Usage: audit-test-scripts.mjs [--json]\n' +
       '  --json   Emit machine-readable JSON on stdout\n' +
       '\n' +
-      'Exit codes: 0 clean / not-applicable, 1 drift, 2 error'
+      'Exit codes: 0 clean / not-applicable, 1 drift, 2 error',
   )
   process.exit(0)
 }
@@ -89,7 +89,7 @@ if (!isMultiProject) {
         status: 'not-applicable',
         reason: 'single-project vitest config',
         configPath: vitestConfigPath,
-      })
+      }),
     )
   else console.log('⊘ single-project vitest — rule not applicable, skip')
   process.exit(0)

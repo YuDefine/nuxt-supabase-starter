@@ -61,7 +61,7 @@ describe('drizzle utils', () => {
 
   it('should throw when no direct database url is configured', () => {
     expect(() => createAdminDrizzle()).toThrow(
-      'Missing ADMIN_DATABASE_URL or DATABASE_URL for Drizzle'
+      'Missing ADMIN_DATABASE_URL or DATABASE_URL for Drizzle',
     )
   })
 

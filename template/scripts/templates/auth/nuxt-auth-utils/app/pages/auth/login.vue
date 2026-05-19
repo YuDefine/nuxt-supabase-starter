@@ -15,7 +15,7 @@
     (val) => {
       if (val) navigateTo(redirectTo.value)
     },
-    { immediate: true }
+    { immediate: true },
   )
 
   // Check for error in URL (e.g., session expired)

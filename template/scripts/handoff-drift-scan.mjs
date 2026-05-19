@@ -121,7 +121,7 @@ function lastCommitTimestamp(consumerRoot, branchName) {
   try {
     const sec = parseInt(
       gitTrim(['log', '-1', '--format=%ct', branchName], { cwd: consumerRoot }),
-      10
+      10,
     )
     return Number.isFinite(sec) ? sec * 1000 : 0
   } catch {
@@ -219,13 +219,13 @@ async function main() {
   }
 
   console.error(
-    `[handoff-drift] ${warnings.length} of ${worktrees.length} session worktree(s) show drift:`
+    `[handoff-drift] ${warnings.length} of ${worktrees.length} session worktree(s) show drift:`,
   )
   for (const w of warnings) {
     console.error(`  - ${w.slug} (${w.drift}): ${w.message}`)
   }
   console.error(
-    `  Tip: run \`node scripts/wt-helper.mjs list\` for full state, or \`/handoff\` to refresh HANDOFF.md.`
+    `  Tip: run \`node scripts/wt-helper.mjs list\` for full state, or \`/handoff\` to refresh HANDOFF.md.`,
   )
 }
 

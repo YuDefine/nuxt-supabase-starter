@@ -64,7 +64,7 @@ function parseArgs(argv: string[]): CliOptions {
       console.log(
         'Usage: audit-ux-drift.mts [--changed] [--json]\n' +
           '  --changed   Scan only files touched in git diff HEAD\n' +
-          '  --json      Emit machine-readable JSON on stdout'
+          '  --json      Emit machine-readable JSON on stdout',
       )
       process.exit(0)
     } else {

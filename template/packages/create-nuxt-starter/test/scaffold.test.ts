@@ -77,7 +77,7 @@ describe('scaffold: base-only (no features)', () => {
     const script = readFileSync(join(targetDir, 'scripts', 'install-skills.sh'), 'utf-8')
     expect(script).toContain('本地 starter design skills 已直接內建於 .claude/skills/')
     expect(script).not.toMatch(
-      /for skill in .*\b(arrange|extract|frontend-design|normalize|onboard|teach-impeccable)\b/
+      /for skill in .*\b(arrange|extract|frontend-design|normalize|onboard|teach-impeccable)\b/,
     )
   })
 
@@ -114,7 +114,7 @@ describe('scaffold: base-only (no features)', () => {
     expect(() =>
       assembleProject(targetDir, [], 'malformed-strip', undefined, undefined, undefined, {
         stripManifestPath: manifestPath,
-      })
+      }),
     ).toThrow(/strip-manifest.*malformed/i)
   })
 })
@@ -266,11 +266,11 @@ describe('scaffold: nuxthub-ai db stack', () => {
       projectName,
       selections.agentTargets,
       selections.evlogPreset,
-      selections.dbStack
+      selections.dbStack,
     )
 
     expect(existsSync(join(targetDir, 'server/database/migrations/0002_evlog_events.sql'))).toBe(
-      true
+      true,
     )
     expect(existsSync(join(targetDir, 'wrangler.jsonc.template'))).toBe(true)
     expect(existsSync(join(targetDir, 'server/db'))).toBe(false)

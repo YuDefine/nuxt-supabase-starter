@@ -83,7 +83,7 @@ function checkPnpm() {
       'pnpm ≥ 9',
       'FAIL',
       '找不到 pnpm',
-      'corepack enable && corepack prepare pnpm@latest --activate'
+      'corepack enable && corepack prepare pnpm@latest --activate',
     )
     return
   }
@@ -101,7 +101,7 @@ function checkDocker() {
       'Docker daemon 運作中',
       'WARN',
       '找不到 docker 或 daemon 未啟動',
-      '啟動 Docker Desktop / OrbStack（Supabase 需要）'
+      '啟動 Docker Desktop / OrbStack（Supabase 需要）',
     )
 }
 
@@ -114,7 +114,7 @@ function checkSupabaseCli() {
       'Supabase CLI 已安裝',
       'WARN',
       '找不到 supabase CLI',
-      'brew install supabase/tap/supabase（macOS）/ scoop install supabase（Windows）'
+      'brew install supabase/tap/supabase（macOS）/ scoop install supabase（Windows）',
     )
 }
 
@@ -127,7 +127,7 @@ function checkClaudeCli() {
       'Claude Code CLI 已安裝',
       'WARN',
       '找不到 claude CLI',
-      'curl -fsSL https://claude.ai/install.sh | sh'
+      'curl -fsSL https://claude.ai/install.sh | sh',
     )
 }
 
@@ -145,7 +145,7 @@ function checkHubJson() {
       '.claude/hub.json 存在 + 合法',
       'FAIL',
       '缺檔或解析失敗',
-      'cd <projectDir> && pnpm hub:bootstrap'
+      'cd <projectDir> && pnpm hub:bootstrap',
     )
     return
   }
@@ -157,7 +157,7 @@ function checkHubJson() {
       '.claude/hub.json 存在 + 合法',
       'FAIL',
       `缺欄位: ${missing.join(', ')}`,
-      '重跑 init-consumer'
+      '重跑 init-consumer',
     )
     return
   }
@@ -165,7 +165,7 @@ function checkHubJson() {
     'hub-json',
     '.claude/hub.json 存在 + 合法',
     'OK',
-    `v${data.version}, modules=${Object.keys(data.modules).join('/')}`
+    `v${data.version}, modules=${Object.keys(data.modules).join('/')}`,
   )
 }
 
@@ -186,7 +186,7 @@ function checkPackageJson() {
       'postinstall 含 bootstrap-hub',
       'FAIL',
       'postinstall 缺 clade bootstrap',
-      '重跑 init-consumer'
+      '重跑 init-consumer',
     )
   }
 
@@ -200,7 +200,7 @@ function checkPackageJson() {
       'hub:* scripts 完整',
       'FAIL',
       `缺: ${missingScripts.join(', ')}`,
-      '重跑 init-consumer'
+      '重跑 init-consumer',
     )
   }
 }
@@ -338,7 +338,7 @@ function checkEnvFile() {
       '找不到 .env',
       existsSync(examplePath)
         ? 'cp .env.example .env 再填入實際值'
-        : '尚無 .env.example，待專案決定 env 範本'
+        : '尚無 .env.example，待專案決定 env 範本',
     )
     return
   }
@@ -379,7 +379,7 @@ function checkEnvFile() {
     '.env 全部 vars 已填',
     'WARN',
     `缺 ${missing.length} 個`,
-    hints.join('\n      ') + more
+    hints.join('\n      ') + more,
   )
 }
 
@@ -399,7 +399,7 @@ function checkSupabaseRunning() {
         'Supabase 本地服務運作中',
         'WARN',
         '已配置但未啟動',
-        'supabase start'
+        'supabase start',
       )
   } catch {
     record(
@@ -407,7 +407,7 @@ function checkSupabaseRunning() {
       'Supabase 本地服務運作中',
       'WARN',
       '無法解析 status',
-      'supabase start'
+      'supabase start',
     )
   }
 }
@@ -420,7 +420,7 @@ function checkDatabaseTypes() {
       'app/types/database.types.ts 存在',
       'WARN',
       '尚未產生',
-      'supabase gen types typescript --local | tee app/types/database.types.ts'
+      'supabase gen types typescript --local | tee app/types/database.types.ts',
     )
     return
   }
@@ -431,7 +431,7 @@ function checkDatabaseTypes() {
       'app/types/database.types.ts 存在',
       'WARN',
       `檔案僅 ${size} bytes，可能未填入內容`,
-      'supabase gen types typescript --local | tee app/types/database.types.ts'
+      'supabase gen types typescript --local | tee app/types/database.types.ts',
     )
   else record('db-types', 'app/types/database.types.ts 存在', 'OK', `${size} bytes`)
 }
@@ -442,7 +442,7 @@ function checkPreCommitWired() {
       'pre-commit',
       'pre-commit hook wired',
       'SKIP',
-      'starter 本體靠 /commit + SessionStart hook，不依賴 pre-commit'
+      'starter 本體靠 /commit + SessionStart hook，不依賴 pre-commit',
     )
     return
   }
@@ -462,7 +462,7 @@ function checkPreCommitWired() {
     'pre-commit hook wired',
     'WARN',
     '未 wire',
-    '重跑 scaffold 或手動 cp ~/offline/clade/vendor/git-pre-commit.sh .git/hooks/pre-commit'
+    '重跑 scaffold 或手動 cp ~/offline/clade/vendor/git-pre-commit.sh .git/hooks/pre-commit',
   )
 }
 
@@ -477,7 +477,7 @@ function checkHubDrift() {
       'clade drift = 0',
       'WARN',
       '偵測到 drift',
-      `跑 pnpm hub:check 看詳情；通常 pnpm hub:sync 即可：\n${out.split('\n').slice(0, 3).join('\n')}`
+      `跑 pnpm hub:check 看詳情；通常 pnpm hub:sync 即可：\n${out.split('\n').slice(0, 3).join('\n')}`,
     )
   }
 }
@@ -488,7 +488,7 @@ function checkResidualKeywords() {
       'residual-keywords',
       '無 starter 關鍵字殘留',
       'SKIP',
-      'starter 本體必然有 name="nuxt-supabase-starter" 等關鍵字，此檢查只對 scaffold 出來的新專案有意義'
+      'starter 本體必然有 name="nuxt-supabase-starter" 等關鍵字，此檢查只對 scaffold 出來的新專案有意義',
     )
     return
   }
@@ -507,7 +507,7 @@ function checkResidualKeywords() {
       '!node_modules/**',
       '.',
     ],
-    { cwd: ROOT, encoding: 'utf8' }
+    { cwd: ROOT, encoding: 'utf8' },
   )
   if (r.status === 1) {
     // ripgrep exit 1 = no matches
@@ -519,7 +519,7 @@ function checkResidualKeywords() {
       '無 starter 關鍵字殘留',
       'WARN',
       `${lines.length} 處殘留`,
-      '檢視首幾條：\n  ' + lines.slice(0, 3).join('\n  ')
+      '檢視首幾條：\n  ' + lines.slice(0, 3).join('\n  '),
     )
   } else {
     record('residual-keywords', '無 starter 關鍵字殘留', 'SKIP', '找不到 ripgrep')
@@ -532,7 +532,7 @@ function checkPnpmCheck() {
       'pnpm-check',
       'pnpm check 通過（format/lint/typecheck/test）',
       'SKIP',
-      '加 --full 啟用此檢查'
+      '加 --full 啟用此檢查',
     )
     return
   }
@@ -581,8 +581,8 @@ if (JSON_MODE) {
         checks: results,
       },
       null,
-      2
-    )
+      2,
+    ),
   )
 } else {
   const ICON = { OK: '✓', WARN: '⚠', FAIL: '✗', SKIP: '·' }
@@ -606,7 +606,7 @@ if (JSON_MODE) {
   }
   console.log('  ' + '─'.repeat(70))
   console.log(
-    `  總計：${c('OK')}${okCount} OK${r} / ${c('WARN')}${warnCount} WARN${r} / ${c('FAIL')}${failCount} FAIL${r} / ${skipCount} SKIP`
+    `  總計：${c('OK')}${okCount} OK${r} / ${c('WARN')}${warnCount} WARN${r} / ${c('FAIL')}${failCount} FAIL${r} / ${skipCount} SKIP`,
   )
   console.log('')
 

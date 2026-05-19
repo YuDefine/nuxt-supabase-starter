@@ -40,7 +40,7 @@ export default defineNitroPlugin((nitroApp) => {
       // helper 在 INSERT audit_logs 時就一起 set 進 wide event：
       //   useLogger(event).set({ audit: { tenantId: ... } })
       // 此處留空（或對齊 perno auth context 的 read 邏輯）
-    })
+    }),
   )
 
   // ── 2. dbChainEnricher 已被 audit() helper 直接 set 取代（見上方 design 註解）─

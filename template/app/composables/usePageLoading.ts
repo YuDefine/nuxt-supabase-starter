@@ -20,7 +20,7 @@ export interface UsePageLoadingReturn {
   error: Ref<string | null>
   withLoading: <T>(
     fn: () => Promise<T>,
-    options?: { timeout?: LoadingPreset | number }
+    options?: { timeout?: LoadingPreset | number },
   ) => Promise<T>
 }
 
@@ -36,7 +36,7 @@ export function usePageLoading(): UsePageLoadingReturn {
    */
   async function withLoading<T>(
     fn: () => Promise<T>,
-    options?: { timeout?: LoadingPreset | number }
+    options?: { timeout?: LoadingPreset | number },
   ): Promise<T> {
     const timeoutMs = resolveTimeout(options?.timeout)
 

@@ -30,7 +30,7 @@ function scaffoldProject() {
     projectName,
     selections.agentTargets,
     selections.evlogPreset,
-    selections.dbStack
+    selections.dbStack,
   )
   copyFileSync(join(targetDir, 'wrangler.jsonc.template'), join(targetDir, 'wrangler.jsonc'))
 
@@ -50,7 +50,7 @@ async function run(command: string, args: string[], cwd: string) {
     if (/(@evlog\/nuxthub|ERR_PNPM_FETCH_404|404 Not Found|not found)/i.test(output)) {
       throw new Error(
         `NuxtHub D1 smoke deferred: dependency install failed, likely @evlog/nuxthub package unavailable.\n${output}`,
-        { cause: error }
+        { cause: error },
       )
     }
     throw error
@@ -80,14 +80,14 @@ describe('NuxtHub D1 local migration smoke', () => {
           '--command',
           'SELECT count(*) AS count FROM evlog_events',
         ],
-        targetDir
+        targetDir,
       )
 
       expect(stdout).toContain('count')
       expect(
-        readFileSync(join(targetDir, 'server/database/migrations/0002_evlog_events.sql'), 'utf-8')
+        readFileSync(join(targetDir, 'server/database/migrations/0002_evlog_events.sql'), 'utf-8'),
       ).toContain('CREATE TABLE IF NOT EXISTS evlog_events')
     },
-    240_000
+    240_000,
   )
 })

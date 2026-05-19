@@ -134,7 +134,7 @@ export async function audit(event: H3Event, input: AuditInput): Promise<AuditRes
  */
 export function auditDeny(
   event: H3Event,
-  input: Omit<AuditInput, 'outcome'>
+  input: Omit<AuditInput, 'outcome'>,
 ): Promise<AuditResult> {
   return audit(event, { ...input, outcome: 'denied' })
 }

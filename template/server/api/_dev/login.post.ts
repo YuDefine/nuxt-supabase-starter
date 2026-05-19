@@ -81,7 +81,7 @@ function resolveDevLoginRole(input: {
 
 async function syncDevLoginRole(
   event: H3Event,
-  input: { userId: string; role: DevLoginRole; email: string }
+  input: { userId: string; role: DevLoginRole; email: string },
 ): Promise<void> {
   void event
   void input
@@ -94,7 +94,7 @@ async function syncDevLoginRole(
 async function finishAuthResponse(
   event: H3Event,
   response: Response,
-  input: { role: DevLoginRole; email: string; action: 'signed_in' | 'created_and_signed_in' }
+  input: { role: DevLoginRole; email: string; action: 'signed_in' | 'created_and_signed_in' },
 ) {
   const payload = (await response.json().catch(() => ({}))) as AuthPayload
 

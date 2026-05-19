@@ -48,7 +48,7 @@ interface ForkChildLoggerOptions {
  */
 export function forkChildLogger<T extends object = Record<string, unknown>>(
   event: H3Event,
-  options: ForkChildLoggerOptions
+  options: ForkChildLoggerOptions,
 ): RequestLogger<T> {
   const parent = useLogger(event)
   const parentCtx = parent.getContext()
@@ -59,7 +59,7 @@ export function forkChildLogger<T extends object = Record<string, unknown>>(
       path: typeof parentCtx.path === 'string' ? parentCtx.path : event.path,
       requestId: crypto.randomUUID(),
     },
-    { _deferDrain: true } // 不自動 emit；由呼叫端負責
+    { _deferDrain: true }, // 不自動 emit；由呼叫端負責
   )
 
   // 真實 FieldContext = DeepPartial<Omit<T, keyof InternalFields>> & InternalFields；
@@ -84,7 +84,7 @@ export async function emitChildLogger(
   child: RequestLogger<Record<string, unknown>>,
   options: {
     error?: unknown // 有錯時 forceKeep，避免被 sampling 丟
-  } = {}
+  } = {},
 ) {
   const emitted = child.emit({ _forceKeep: options.error !== undefined })
   if (!emitted) return // 已 emit 過（重複呼叫）

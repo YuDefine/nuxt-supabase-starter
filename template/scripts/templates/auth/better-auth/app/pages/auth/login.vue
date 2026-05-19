@@ -27,7 +27,7 @@
             await navigateTo(redirectTo.value)
           },
           onError: (ctx: any) => setError(ctx.error),
-        }
+        },
       )
     } catch (err) {
       setError(err)

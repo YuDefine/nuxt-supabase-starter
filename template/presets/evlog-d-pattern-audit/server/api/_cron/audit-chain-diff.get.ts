@@ -98,7 +98,7 @@ export default defineEventHandler(async (event) => {
   const { data: auditLogs } = await client
     .from('audit_logs')
     .select(
-      'event_id, tenant_id, action, actor_id, target_type, target_id, outcome, business_keys, prev_hash, hash, created_at'
+      'event_id, tenant_id, action, actor_id, target_type, target_id, outcome, business_keys, prev_hash, hash, created_at',
     )
     .gte('created_at', since)
     .order('created_at', { ascending: true })
@@ -112,10 +112,10 @@ export default defineEventHandler(async (event) => {
   if (!auditLogs || !signedChain) return { ok: false, reason: 'fetch failed' }
 
   const signedByEventId = new Map<string, SignedChainRow>(
-    signedChain.map((r) => [r.event_id, r as SignedChainRow])
+    signedChain.map((r) => [r.event_id, r as SignedChainRow]),
   )
   const auditByEventId = new Map<string, AuditLogsRow>(
-    auditLogs.map((r) => [r.event_id, r as AuditLogsRow])
+    auditLogs.map((r) => [r.event_id, r as AuditLogsRow]),
   )
 
   // ── Drift type 4: audit_signed_missing ──

@@ -115,7 +115,7 @@ async function findActiveTasksFiles(): Promise<string[]> {
       } catch {
         return null
       }
-    })
+    }),
   )
   return probed.filter((p): p is string => p !== null)
 }
@@ -412,7 +412,7 @@ async function main() {
           reason: `error: ${(err as Error).message}`,
         }
       }
-    })
+    }),
   )
 
   if (JSON_OUT) {

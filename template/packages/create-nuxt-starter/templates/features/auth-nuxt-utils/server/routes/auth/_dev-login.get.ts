@@ -38,7 +38,7 @@ function safeRedirect(value: unknown): string {
 
 async function findDevLoginUser(
   event: H3Event,
-  input: { email?: string; as?: string }
+  input: { email?: string; as?: string },
 ): Promise<DevLoginUserRecord> {
   void event
   void input

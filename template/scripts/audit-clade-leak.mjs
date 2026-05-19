@@ -156,7 +156,7 @@ async function main() {
   const state = await loadHubStateFiles(repoRoot)
   if (!state) {
     errors.push(
-      `no .hub-state.json found under ${repoRoot}/template/.claude/ or ${repoRoot}/.claude/ — audit cannot proceed`
+      `no .hub-state.json found under ${repoRoot}/template/.claude/ or ${repoRoot}/.claude/ — audit cannot proceed`,
     )
   } else {
     for (const rel of Object.keys(state.checksums)) {

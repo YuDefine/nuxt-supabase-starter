@@ -8,7 +8,7 @@ const script = join(process.cwd(), '.claude/scripts/postgrest-resilience/classif
 
 if (!existsSync(script)) {
   console.error(
-    'Missing .claude/scripts/postgrest-resilience/classify-migration.mjs. Run pnpm hub:sync first.'
+    'Missing .claude/scripts/postgrest-resilience/classify-migration.mjs. Run pnpm hub:sync first.',
   )
   process.exit(2)
 }

@@ -147,7 +147,7 @@ export function loadManualReviewPatterns(): ManualReviewPatternEntry[] {
 export function evaluateManualReviewPatterns(
   block: string,
   isParent: boolean,
-  groupBlock?: string
+  groupBlock?: string,
 ): Array<{ code: string; description: string; anchor: string }> {
   const patterns = loadManualReviewPatterns() as CompiledManualReviewPatternEntry[]
   const hits: Array<{ code: string; description: string; anchor: string }> = []
@@ -342,7 +342,7 @@ export function buildParentsWithScopedChildren(items: readonly ManualReviewItem[
  */
 export function manualReviewItemHasScopedChildren(
   item: ManualReviewItem,
-  parentsWithScopedChildren: ReadonlySet<string>
+  parentsWithScopedChildren: ReadonlySet<string>,
 ): boolean {
   if (item.scoped) return false
   return parentsWithScopedChildren.has(item.id)
@@ -449,7 +449,7 @@ class HttpError extends Error {
  * 仍依此 fallback 不破壞既有 archive flow（spec line 60-62 / task 8.5）。
  */
 export function deriveDefaultKindFromProposal(
-  proposalContent: string | null
+  proposalContent: string | null,
 ): DefaultManualReviewItemKind {
   if (!proposalContent) return 'review:ui'
   return proposalContent.includes(BACKEND_ONLY_DECLARATION) ? 'discuss' : 'review:ui'
@@ -464,7 +464,7 @@ export interface ParseManualReviewOptions {
 
 export function parseManualReviewSections(
   content: string,
-  options: ParseManualReviewOptions = {}
+  options: ParseManualReviewOptions = {},
 ): ParsedManualReview {
   const defaultKind = normalizeDefaultKind(options.defaultKind ?? 'review:ui', {
     sourcePath: options.sourcePath ?? '<inline>',
@@ -576,7 +576,7 @@ function toReviewItem(
   lineIndex: number,
   scoped: boolean,
   defaultKind: DefaultManualReviewItemKind,
-  sourcePath: string
+  sourcePath: string,
 ): ManualReviewItem {
   const id = match[2]!
   const rawDescription = match[3]!.trim()
@@ -596,7 +596,7 @@ function toReviewItem(
   const { description, noScreenshot } = parseNoScreenshotMarker(afterBypass)
   if (bypassManualReviewCheck) {
     process.stderr.write(
-      `[info] ${sourcePath}:${lineIndex + 1} bypass: ${bypassManualReviewCheck.reason}\n`
+      `[info] ${sourcePath}:${lineIndex + 1} bypass: ${bypassManualReviewCheck.reason}\n`,
     )
   }
   return {
@@ -629,7 +629,7 @@ function toReviewItem(
 function parseLeadingKindMarker(
   description: string,
   defaultKind: DefaultManualReviewItemKind,
-  context: ParserWarningContext
+  context: ParserWarningContext,
 ): {
   description: string
   kinds: ReadonlyArray<ResolvedManualReviewItemKind>
@@ -666,12 +666,12 @@ function warnParser(context: ParserWarningContext, message: string): void {
 
 function normalizeDefaultKind(
   candidate: ManualReviewItemKind,
-  context: ParserWarningContext
+  context: ParserWarningContext,
 ): DefaultManualReviewItemKind {
   if (candidate === 'review:ui' || candidate === 'discuss') return candidate
   warnParser(
     context,
-    `invalid default manual-review kind '${candidate}' — falling back to default 'review:ui'`
+    `invalid default manual-review kind '${candidate}' — falling back to default 'review:ui'`,
   )
   return 'review:ui'
 }
@@ -679,7 +679,7 @@ function normalizeDefaultKind(
 function parseKindMarkerCandidate(
   candidate: string,
   defaultKind: DefaultManualReviewItemKind,
-  context: ParserWarningContext
+  context: ParserWarningContext,
 ): { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> } | { valid: false } {
   if (candidate === 'verify:auto') {
     warnParser(context, '[verify:auto] is deprecated; prefer [verify:api+ui]')
@@ -693,7 +693,7 @@ function parseKindMarkerCandidate(
   if (!VALID_KINDS.has(candidate)) {
     warnParser(
       context,
-      `unknown manual-review kind marker [${candidate}] — falling back to default '${defaultKind}'`
+      `unknown manual-review kind marker [${candidate}] — falling back to default '${defaultKind}'`,
     )
     return { valid: false }
   }
@@ -704,12 +704,12 @@ function parseKindMarkerCandidate(
 function parseMultiChannelKindMarker(
   candidate: string,
   defaultKind: DefaultManualReviewItemKind,
-  context: ParserWarningContext
+  context: ParserWarningContext,
 ): { valid: true; kinds: ReadonlyArray<ResolvedManualReviewItemKind> } | { valid: false } {
   if (!candidate.startsWith('verify:')) {
     warnParser(
       context,
-      `invalid multi-channel manual-review kind marker [${candidate}] — only verify:* channels may be combined; falling back to default '${defaultKind}'`
+      `invalid multi-channel manual-review kind marker [${candidate}] — only verify:* channels may be combined; falling back to default '${defaultKind}'`,
     )
     return { valid: false }
   }
@@ -718,7 +718,7 @@ function parseMultiChannelKindMarker(
   if (rawChannels.length < 2 || rawChannels.length > 3) {
     warnParser(
       context,
-      `invalid multi-channel manual-review kind marker [${candidate}] — expected 2 or 3 verify channels; falling back to default '${defaultKind}'`
+      `invalid multi-channel manual-review kind marker [${candidate}] — expected 2 or 3 verify channels; falling back to default '${defaultKind}'`,
     )
     return { valid: false }
   }
@@ -728,14 +728,14 @@ function parseMultiChannelKindMarker(
     if (!VERIFY_CHANNELS.has(channel)) {
       warnParser(
         context,
-        `invalid multi-channel manual-review kind marker [${candidate}] — unknown verify channel '${channel}'; falling back to default '${defaultKind}'`
+        `invalid multi-channel manual-review kind marker [${candidate}] — unknown verify channel '${channel}'; falling back to default '${defaultKind}'`,
       )
       return { valid: false }
     }
     if (seen.has(channel)) {
       warnParser(
         context,
-        `invalid multi-channel manual-review kind marker [${candidate}] — duplicate verify channel '${channel}'; falling back to default '${defaultKind}'`
+        `invalid multi-channel manual-review kind marker [${candidate}] — duplicate verify channel '${channel}'; falling back to default '${defaultKind}'`,
       )
       return { valid: false }
     }
@@ -745,7 +745,7 @@ function parseMultiChannelKindMarker(
   return {
     valid: true,
     kinds: VERIFY_CHANNEL_ORDER.filter((channel) => seen.has(channel)).map(
-      (channel) => `verify:${channel}` as ResolvedManualReviewItemKind
+      (channel) => `verify:${channel}` as ResolvedManualReviewItemKind,
     ),
   }
 }
@@ -764,10 +764,10 @@ function canonicalizeLeadingKindMarker(line: string): string {
         return full
       }
       const canonical = VERIFY_CHANNEL_ORDER.filter((channel) => channels.includes(channel)).join(
-        '+'
+        '+',
       )
       return `${prefix}[verify:${canonical}]`
-    }
+    },
   )
 }
 
@@ -813,11 +813,11 @@ function parseNoManualReviewCheckMarker(description: string): {
 
 function parseStructuredAnnotations(
   line: string,
-  context: ParserWarningContext
+  context: ParserWarningContext,
 ): ManualReviewItemAnnotations {
   const annotations: ManualReviewItemAnnotations = {}
   const matches = line.matchAll(
-    /\((verified-e2e|verified-api|verified-ui|claude-discussed):\s*([^)]*)\)/g
+    /\((verified-e2e|verified-api|verified-ui|claude-discussed):\s*([^)]*)\)/g,
   )
   for (const match of matches) {
     const prefix = match[1]!
@@ -849,7 +849,7 @@ function parseStructuredAnnotationValue(
   prefix: string,
   raw: string,
   body: string,
-  context: ParserWarningContext
+  context: ParserWarningContext,
 ): ManualReviewItemAnnotations | null {
   const parts = body.split(/\s+/).filter(Boolean)
   const timestamp = parts[0]
@@ -864,7 +864,7 @@ function parseStructuredAnnotationValue(
     if (!spec || !trace) {
       warnParser(
         context,
-        `malformed (${prefix}: ...) annotation — expected spec=<path> trace=<path>`
+        `malformed (${prefix}: ...) annotation — expected spec=<path> trace=<path>`,
       )
       return null
     }
@@ -878,7 +878,7 @@ function parseStructuredAnnotationValue(
     if (!method || !url || !status) {
       warnParser(
         context,
-        `malformed (${prefix}: ...) annotation — expected <ISO> <METHOD> <URL> <STATUS>`
+        `malformed (${prefix}: ...) annotation — expected <ISO> <METHOD> <URL> <STATUS>`,
       )
       return null
     }
@@ -943,23 +943,23 @@ function collectStructuredAnnotationRaw(line: string): {
     (raw: string, prefix: string) => {
       annotations[annotationPrefixToKey(prefix)] = raw.trim()
       return ''
-    }
+    },
   )
   return { base: base.replace(/[ \t]+$/, ''), annotations }
 }
 
 function renderStructuredAnnotations(
-  annotations: Partial<Record<StructuredAnnotationKey, string>>
+  annotations: Partial<Record<StructuredAnnotationKey, string>>,
 ): string {
   return STRUCTURED_ANNOTATION_ORDER.flatMap((key) =>
-    annotations[key] ? [annotations[key]!] : []
+    annotations[key] ? [annotations[key]!] : [],
   ).join(' ')
 }
 
 function upsertStructuredAnnotation(
   line: string,
   key: StructuredAnnotationKey,
-  annotation: string
+  annotation: string,
 ): string {
   const { base, annotations } = collectStructuredAnnotationRaw(line)
   annotations[key] = annotation
@@ -992,13 +992,13 @@ export function applyReviewActionToContent(
   action: 'ok' | 'issue' | 'skip',
   note = '',
   options: ParseManualReviewOptions = {},
-  finding = ''
+  finding = '',
 ): ApplyReviewActionResult {
   const parsed = parseManualReviewSections(content, options)
   if (parsed.malformed.length > 0) {
     throw new HttpError(
       422,
-      'Manual-review section has malformed checkbox lines. Fix schema before writing.'
+      'Manual-review section has malformed checkbox lines. Fix schema before writing.',
     )
   }
 
@@ -1025,7 +1025,7 @@ export function applyReviewActionToContent(
 function rollupParentForScopedItem(
   lines: string[],
   scopedItem: ManualReviewItem,
-  options: ParseManualReviewOptions
+  options: ParseManualReviewOptions,
 ): ParentRollupResult | null {
   if (!scopedItem.scoped || !scopedItem.parentId) return null
 
@@ -1066,13 +1066,13 @@ function hasExpectedAutomaticAnnotations(item: ManualReviewItem): boolean {
  */
 export function autoCheckCompletedAutomaticItems(
   content: string,
-  options: ParseManualReviewOptions = {}
+  options: ParseManualReviewOptions = {},
 ): { content: string; checkedItemIds: string[] } {
   const parsed = parseManualReviewSections(content, options)
   if (parsed.malformed.length > 0) {
     throw new HttpError(
       422,
-      'Manual-review section has malformed checkbox lines. Fix schema before writing.'
+      'Manual-review section has malformed checkbox lines. Fix schema before writing.',
     )
   }
 
@@ -1110,13 +1110,13 @@ export function applyClaudeDiscussedAnnotationToContent(
   content: string,
   itemId: string,
   isoTimestamp: string,
-  options: ParseManualReviewOptions = {}
+  options: ParseManualReviewOptions = {},
 ): { content: string; lineBefore: string; lineAfter: string } {
   const parsed = parseManualReviewSections(content, options)
   if (parsed.malformed.length > 0) {
     throw new HttpError(
       422,
-      'Manual-review section has malformed checkbox lines. Fix schema before writing.'
+      'Manual-review section has malformed checkbox lines. Fix schema before writing.',
     )
   }
   const item = parsed.items.find((candidate) => candidate.id === itemId)
@@ -1136,7 +1136,7 @@ function applyClaudeDiscussedToLine(line: string, isoTimestamp: string): string 
   const annotated = upsertStructuredAnnotation(
     checked,
     'claudeDiscussed',
-    `(claude-discussed: ${isoTimestamp})`
+    `(claude-discussed: ${isoTimestamp})`,
   )
   return trailing ? `${annotated}${trailing}` : annotated
 }
@@ -1185,13 +1185,13 @@ export function applyVerifiedAutoAnnotationToContent(
   itemId: string,
   isoTimestamp: string,
   evidence: VerifyAutoEvidence,
-  options: ParseManualReviewOptions = {}
+  options: ParseManualReviewOptions = {},
 ): { content: string; lineBefore: string; lineAfter: string } {
   const parsed = parseManualReviewSections(content, options)
   if (parsed.malformed.length > 0) {
     throw new HttpError(
       422,
-      'Manual-review section has malformed checkbox lines. Fix schema before writing.'
+      'Manual-review section has malformed checkbox lines. Fix schema before writing.',
     )
   }
   const item = parsed.items.find((candidate) => candidate.id === itemId)
@@ -1210,7 +1210,7 @@ export function applyVerifiedE2eAnnotationToContent(
   itemId: string,
   isoTimestamp: string,
   evidence: VerifiedE2eEvidence,
-  options: ParseManualReviewOptions = {}
+  options: ParseManualReviewOptions = {},
 ): { content: string; lineBefore: string; lineAfter: string } {
   return applyVerifyChannelAnnotationToContent(content, itemId, {
     key: 'verifiedE2e',
@@ -1224,13 +1224,13 @@ export function applyVerifiedApiAnnotationToContent(
   itemId: string,
   isoTimestamp: string,
   evidence: VerifiedApiEvidence,
-  options: ParseManualReviewOptions = {}
+  options: ParseManualReviewOptions = {},
 ): { content: string; lineBefore: string; lineAfter: string } {
   const body = evidence.body ? ` body=${sanitizeEvidenceValue(evidence.body)}` : ''
   return applyVerifyChannelAnnotationToContent(content, itemId, {
     key: 'verifiedApi',
     annotation: `(verified-api: ${isoTimestamp} ${sanitizeEvidenceValue(
-      evidence.method.toUpperCase()
+      evidence.method.toUpperCase(),
     )} ${sanitizeEvidenceValue(evidence.url)} ${sanitizeEvidenceValue(evidence.status)}${body})`,
     options,
   })
@@ -1241,13 +1241,13 @@ export function applyVerifiedUiAnnotationToContent(
   itemId: string,
   isoTimestamp: string,
   evidence: VerifiedUiEvidence,
-  options: ParseManualReviewOptions = {}
+  options: ParseManualReviewOptions = {},
 ): { content: string; lineBefore: string; lineAfter: string } {
   const dom = evidence.dom ? ` dom=${sanitizeEvidenceValue(evidence.dom)}` : ''
   return applyVerifyChannelAnnotationToContent(content, itemId, {
     key: 'verifiedUi',
     annotation: `(verified-ui: ${isoTimestamp} screenshot=${sanitizeEvidenceValue(
-      evidence.screenshot
+      evidence.screenshot,
     )}${dom})`,
     options,
   })
@@ -1260,13 +1260,13 @@ function applyVerifyChannelAnnotationToContent(
     key: Extract<StructuredAnnotationKey, 'verifiedE2e' | 'verifiedApi' | 'verifiedUi'>
     annotation: string
     options: ParseManualReviewOptions
-  }
+  },
 ): { content: string; lineBefore: string; lineAfter: string } {
   const parsed = parseManualReviewSections(content, input.options)
   if (parsed.malformed.length > 0) {
     throw new HttpError(
       422,
-      'Manual-review section has malformed checkbox lines. Fix schema before writing.'
+      'Manual-review section has malformed checkbox lines. Fix schema before writing.',
     )
   }
   const item = parsed.items.find((candidate) => candidate.id === itemId)
@@ -1283,7 +1283,7 @@ function applyVerifyChannelAnnotationToContent(
 function applyVerifyChannelAnnotationToLine(
   line: string,
   key: Extract<StructuredAnnotationKey, 'verifiedE2e' | 'verifiedApi' | 'verifiedUi'>,
-  annotation: string
+  annotation: string,
 ): string {
   const { core, trailing } = extractTrailingMarkers(line)
   const canonicalCore = canonicalizeLeadingKindMarker(core)
@@ -1294,7 +1294,7 @@ function applyVerifyChannelAnnotationToLine(
 function applyVerifiedAutoToLine(
   line: string,
   isoTimestamp: string,
-  evidence: VerifyAutoEvidence
+  evidence: VerifyAutoEvidence,
 ): string {
   const { core, trailing } = extractTrailingMarkers(line)
   // 先 strip 舊 verified-auto（避免 retry 時 stale 重複），保留其他 annotations
@@ -1302,7 +1302,7 @@ function applyVerifiedAutoToLine(
   // verify:auto 設計上保留 `[ ]`，user 在 review GUI 確認後才勾 — 不在 helper 裡代勾
   const evidenceStr = serializeVerifyEvidence(evidence)
   const annotated = canonicalizeStructuredAnnotations(
-    `${cleaned.trimEnd()} (verified-auto: ${isoTimestamp}${evidenceStr ? ' ' + evidenceStr : ''})`
+    `${cleaned.trimEnd()} (verified-auto: ${isoTimestamp}${evidenceStr ? ' ' + evidenceStr : ''})`,
   )
   return trailing ? `${annotated}${trailing}` : annotated
 }
@@ -1333,7 +1333,7 @@ function serializeVerifyEvidence(evidence: VerifyAutoEvidence): string {
 // 用 String.fromCharCode 組裝避開 oxlint no-control-regex（literal / RegExp 字串中的 unicode escape 都會被偵測）
 const CONTROL_CHARS_RE = new RegExp(
   '[' + String.fromCharCode(0) + '-' + String.fromCharCode(0x1f) + ']',
-  'g'
+  'g',
 )
 
 function sanitizeEvidenceValue(v: string): string {
@@ -1348,7 +1348,7 @@ function applyActionToLine(
   line: string,
   action: 'ok' | 'issue' | 'skip',
   note: string,
-  finding: string
+  finding: string,
 ): string {
   const { core, trailing } = extractTrailingMarkers(line)
   // 切換 action 前先剝離舊 annotation，避免 stale 殘留（例：先 issue 後改 ok 會留 (issue: ...)）
@@ -1422,7 +1422,7 @@ function stripAnnotations(line: string): string {
 function appendAnnotation(
   line: string,
   kind: 'issue' | 'skip' | 'note' | 'finding',
-  note: string
+  note: string,
 ): string {
   let label: string
   if (kind === 'skip') {
@@ -1477,7 +1477,7 @@ async function loadHono(): Promise<any> {
         'Install consumer dev dependencies with: pnpm add -D hono\n' +
         'Then run: pnpm review:ui\n\n' +
         `Original error: ${message}`,
-      { cause: err }
+      { cause: err },
     )
   }
 }
@@ -1562,7 +1562,7 @@ function listOpenspecChangesBlobHashes(repoRoot: string): Map<string, string> {
     const res = spawnSync(
       'git',
       ['-C', repoRoot, 'ls-tree', '-r', 'HEAD', '--', 'openspec/changes/'],
-      { encoding: 'utf8' }
+      { encoding: 'utf8' },
     )
     if (res.status !== 0) return result
     for (const line of res.stdout.split('\n')) {
@@ -1695,15 +1695,15 @@ export async function listPendingChanges(mainRoot: string): Promise<ChangeSummar
             entry.name,
             tasksPath,
             filterPoolsForChange(pools, entry.name),
-            src.slug
+            src.slug,
           )
-        })
+        }),
       )
       return {
         src,
         summaries: summarized.filter((s): s is ChangeSummary => s !== null),
       }
-    })
+    }),
   )
 
   const summariesByName = new Map<string, ChangeSummary>()
@@ -1729,7 +1729,7 @@ export async function listPendingChanges(mainRoot: string): Promise<ChangeSummar
  */
 async function loadProposalDefaultKind(
   repoRoot: string,
-  change: string
+  change: string,
 ): Promise<DefaultManualReviewItemKind> {
   const proposalPath = join(repoRoot, 'openspec', 'changes', change, 'proposal.md')
   if (!existsSync(proposalPath)) return 'review:ui'
@@ -1746,7 +1746,7 @@ async function summarizeChange(
   name: string,
   tasksPath: string,
   pools: ScreenshotTopic[],
-  worktreeSlug: string | null = null
+  worktreeSlug: string | null = null,
 ): Promise<ChangeSummary | null> {
   const content = await readFile(tasksPath, 'utf8')
   const defaultKind = await loadProposalDefaultKind(sourceRoot, name)
@@ -1758,14 +1758,14 @@ async function summarizeChange(
   // 卡在 pending 不會自動 archive。helper 與 archive completion check 共用同一語義。
   const parentsWithChildren = buildParentsWithScopedChildren(parsed.items)
   const effectiveItems = parsed.items.filter(
-    (item) => !manualReviewItemHasScopedChildren(item, parentsWithChildren)
+    (item) => !manualReviewItemHasScopedChildren(item, parentsWithChildren),
   )
 
   // 「真的通過」= [x] 且沒有 issue annotation。`[x]` + `（issue: ...）` 並存
   // 是舊版時代的 stale state，語義上應算 issue 待解，不能算通過。
   const issued = effectiveItems.filter((item) => /（issue:[^）]*）/.test(item.raw)).length
   const checked = effectiveItems.filter(
-    (item) => item.checked && !/（issue:[^）]*）/.test(item.raw)
+    (item) => item.checked && !/（issue:[^）]*）/.test(item.raw),
   ).length
   // user-actionable pending：對齊 GUI `requiresUserConfirmation`——只認 review:ui / verify:ui
   // （verify:api / verify:e2e 自動驗證 item user 點不到）。home page feedbackGiven 分類用此值
@@ -1774,13 +1774,13 @@ async function summarizeChange(
     (item) =>
       (item.kinds.includes('review:ui') || item.kinds.includes('verify:ui')) &&
       !item.checked &&
-      !/（issue:[^）]*）/.test(item.raw)
+      !/（issue:[^）]*）/.test(item.raw),
   ).length
   // Pre-Review Data Readiness：對齊 GUI 內顯示 banner 的 items 範圍——
   // effective items（排除 parent-with-children，GUI 不讓 user 勾這類）+ 未勾且非 issued
   // （[x] 或 issue 已經分流到別的處理路徑，readiness 只關注「等待 user 檢查」這群）。
   const readinessTargets = effectiveItems.filter(
-    (item) => !item.checked && !/（issue:[^）]*）/.test(item.raw)
+    (item) => !item.checked && !/（issue:[^）]*）/.test(item.raw),
   )
   const hitsByCode: Record<string, number> = {}
   let readinessHits = 0
@@ -1799,7 +1799,7 @@ async function summarizeChange(
   // 若沿用 `readinessTargets`（排除 parent-with-children）會讓 server 漏算 parent 缺 evidence
   // 的情境，導致 change 被誤分到 ready 群（home page 應顯示在 applyPending）。
   const evidenceTargets = parsed.items.filter(
-    (item) => !item.checked && !/（issue:[^）]*）/.test(item.raw)
+    (item) => !item.checked && !/（issue:[^）]*）/.test(item.raw),
   )
   const evidenceMissing: Array<{
     itemId: string
@@ -1908,7 +1908,7 @@ async function persistReviewAction(mainRoot: string, change: string, body: any):
     action,
     body.note || '',
     { defaultKind, sourcePath: tasksPath },
-    body.finding || ''
+    body.finding || '',
   )
   await writeFile(tasksPath, updated.content, 'utf8')
 
@@ -1918,7 +1918,7 @@ async function persistReviewAction(mainRoot: string, change: string, body: any):
   // — GUI 不讓使用者勾母項，若算進 effectiveItems 子項全勾仍判 incomplete，change 永遠卡。
   const parentsWithChildren = buildParentsWithScopedChildren(detail.items)
   const effectiveItems = detail.items.filter(
-    (item) => !manualReviewItemHasScopedChildren(item, parentsWithChildren)
+    (item) => !manualReviewItemHasScopedChildren(item, parentsWithChildren),
   )
   const complete =
     detail.malformed === 0 &&
@@ -2140,7 +2140,7 @@ async function listScreenshotPools(repoRoot: string, rootId: string): Promise<Sc
 async function collectImages(
   absDir: string,
   relRoot: string,
-  rootId: string
+  rootId: string,
 ): Promise<ScreenshotFile[]> {
   const files: ScreenshotFile[] = []
   for (const entry of await readdir(absDir, { withFileTypes: true })) {
@@ -5843,7 +5843,7 @@ async function findAvailablePort(host: string, startPort: number): Promise<numbe
     if (await canListen(host, port)) return port
   }
   throw new Error(
-    `No available localhost port in range ${startPort}-${startPort + PORT_FALLBACK_RANGE}`
+    `No available localhost port in range ${startPort}-${startPort + PORT_FALLBACK_RANGE}`,
   )
 }
 
@@ -5921,7 +5921,7 @@ function parseArgs(argv: string[]): CliOptions {
       opts.explicitRepo = true
     } else if (arg === '--help' || arg === '-h') {
       console.log(
-        'Usage: review-gui.mts [--repo <path>] [--host 127.0.0.1] [--port 5174] [--no-open] [--scan]'
+        'Usage: review-gui.mts [--repo <path>] [--host 127.0.0.1] [--port 5174] [--no-open] [--scan]',
       )
       process.exit(0)
     } else {

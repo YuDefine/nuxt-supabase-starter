@@ -70,7 +70,7 @@ export async function promptUser(defaultProjectName?: string): Promise<UserSelec
 // only ask for projectName / auth / ui / ssr / extras / state / testing / agentTargets.
 async function promptUserPreset(
   preset: PresetDefinition,
-  defaultProjectName?: string
+  defaultProjectName?: string,
 ): Promise<UserSelections> {
   // 1. Project name
   const projectName =

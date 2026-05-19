@@ -95,7 +95,7 @@ export function isPresetId(id: string): id is PresetId {
 function replaceGroupFeature(
   selected: Set<string>,
   group: 'deployment' | 'ci' | 'auth',
-  targetId: string | undefined
+  targetId: string | undefined,
 ): void {
   for (const mod of featureModules) {
     if (mod.group === group) selected.delete(mod.id)
@@ -113,7 +113,7 @@ function replaceGroupFeature(
 // `--evlog-preset` flag, so we don't touch monitoring here.
 export function applyPreset(preset: PresetDefinition): Set<string> {
   const selected = new Set<string>(
-    preset.startEmpty ? [] : featureModules.filter((m) => m.default).map((m) => m.id)
+    preset.startEmpty ? [] : featureModules.filter((m) => m.default).map((m) => m.id),
   )
 
   replaceGroupFeature(selected, 'deployment', `deploy-${preset.deploy}`)
@@ -121,7 +121,7 @@ export function applyPreset(preset: PresetDefinition): Set<string> {
   replaceGroupFeature(
     selected,
     'auth',
-    preset.authDefault === 'none' ? undefined : preset.authDefault
+    preset.authDefault === 'none' ? undefined : preset.authDefault,
   )
 
   return selected

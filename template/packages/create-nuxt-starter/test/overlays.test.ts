@@ -24,7 +24,7 @@ function writeText(path: string, value: string) {
 function makeOverlay(
   name: string,
   manifest: Record<string, unknown>,
-  files: Record<string, string> = {}
+  files: Record<string, string> = {},
 ) {
   const overlayDir = join(TEST_DIR, 'overlays', name)
   writeJson(join(overlayDir, 'manifest.json'), {
@@ -81,7 +81,7 @@ describe('overlay compatibility', () => {
     }
 
     expect(() =>
-      validateOverlayCompatibility(manifest, { auth: 'better-auth', dbStack: 'nuxthub-d1' })
+      validateOverlayCompatibility(manifest, { auth: 'better-auth', dbStack: 'nuxthub-d1' }),
     ).not.toThrow()
   })
 
@@ -94,7 +94,7 @@ describe('overlay compatibility', () => {
     }
 
     expect(() =>
-      validateOverlayCompatibility(manifest, { auth: 'nuxt-auth-utils', dbStack: 'nuxthub-d1' })
+      validateOverlayCompatibility(manifest, { auth: 'nuxt-auth-utils', dbStack: 'nuxthub-d1' }),
     ).toThrow(/db-nuxthub-d1.*auth.*nuxt-auth-utils/)
   })
 
@@ -105,7 +105,7 @@ describe('overlay compatibility', () => {
     }
 
     expect(() =>
-      validateOverlayCompatibility(manifest, { auth: 'better-auth', dbStack: 'supabase' })
+      validateOverlayCompatibility(manifest, { auth: 'better-auth', dbStack: 'supabase' }),
     ).toThrow(/db-nuxthub-d1.*dbStack.*supabase/)
   })
 })
@@ -128,8 +128,8 @@ describe('applyOverlay', () => {
         { auth: 'better-auth' },
         {
           overlaysDir: join(TEST_DIR, 'overlays'),
-        }
-      )
+        },
+      ),
     ).toThrow(/missing-overlay.*not found/)
   })
 
@@ -144,7 +144,7 @@ describe('applyOverlay', () => {
       },
       {
         'server/database/schema/index.ts': 'export const d1Schema = {}\n',
-      }
+      },
     )
 
     applyOverlay(
@@ -153,12 +153,12 @@ describe('applyOverlay', () => {
       { auth: 'better-auth' },
       {
         overlaysDir: join(TEST_DIR, 'overlays'),
-      }
+      },
     )
 
     expect(existsSync(join(projectDir, 'server/db'))).toBe(false)
     expect(readFileSync(join(projectDir, 'server/database/schema/index.ts'), 'utf-8')).toContain(
-      'd1Schema'
+      'd1Schema',
     )
   })
 
@@ -179,7 +179,7 @@ describe('applyOverlay', () => {
         'server/database/migrations/0001_better_auth_d1.sql': 'create table user (id text);\n',
         'server/database/migrations/0002_evlog_events.sql':
           'create table evlog_events (id text);\n',
-      }
+      },
     )
 
     applyOverlay(
@@ -188,14 +188,14 @@ describe('applyOverlay', () => {
       { auth: 'none' },
       {
         overlaysDir: join(TEST_DIR, 'overlays'),
-      }
+      },
     )
 
     expect(existsSync(join(projectDir, 'server/database/migrations/0001_better_auth_d1.sql'))).toBe(
-      false
+      false,
     )
     expect(existsSync(join(projectDir, 'server/database/migrations/0002_evlog_events.sql'))).toBe(
-      true
+      true,
     )
   })
 
@@ -223,7 +223,7 @@ describe('applyOverlay', () => {
       { auth: 'better-auth' },
       {
         overlaysDir: join(TEST_DIR, 'overlays'),
-      }
+      },
     )
 
     const pkg = JSON.parse(readFileSync(join(projectDir, 'package.json'), 'utf-8'))

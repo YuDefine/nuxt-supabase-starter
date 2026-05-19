@@ -158,7 +158,7 @@ function runCommand(file, args, options) {
     const stderr = error.stderr ? `\nstderr:\n${error.stderr}` : ''
     throw new Error(
       `${file} ${args.join(' ')} failed with status ${error.status}${stdout}${stderr}`,
-      { cause: error }
+      { cause: error },
     )
   }
 }
@@ -212,7 +212,7 @@ export function evaluateCase(validationCase, targetDir, audit) {
 export function formatReportRow(row) {
   const status = row.ok ? 'ok' : 'FAIL'
   return `[${status}] preset=${row.preset} path=${row.path} signal=${row.signal} expected=${String(
-    row.expected
+    row.expected,
   )} actual=${String(row.actual)}`
 }
 
@@ -235,7 +235,7 @@ async function loadScaffolderModules() {
     ],
     {
       cwd: TEMPLATE_ROOT,
-    }
+    },
   )
 
   const assemble = await import(pathToFileURL(join(CREATE_PACKAGE_DIR, 'dist', 'assemble.js')).href)
@@ -265,7 +265,7 @@ function generateFixture(validationCase, modules) {
     projectName,
     selections.agentTargets,
     selections.evlogPreset,
-    selections.dbStack
+    selections.dbStack,
   )
 
   return targetDir

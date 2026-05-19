@@ -16,7 +16,7 @@ import type { PaginationInput, PaginatedResponse } from '../../shared/types/pagi
  */
 export function createPaginatedResponse<T>(
   data: T[],
-  pagination: PaginationInput
+  pagination: PaginationInput,
 ): PaginatedResponse<T> {
   const { page, perPage, total } = pagination
   const totalPages = total === 0 ? 0 : Math.ceil(total / perPage)

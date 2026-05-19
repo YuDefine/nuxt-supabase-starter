@@ -69,6 +69,6 @@ export default defineEventHandler(async (event): Promise<ProfileListResponse> =>
       page,
       perPage,
       total: countResult.count ?? 0,
-    })
+    }),
   )
 })

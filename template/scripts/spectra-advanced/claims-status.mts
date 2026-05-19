@@ -16,7 +16,7 @@ function parseArgs(argv: string[]): CliOptions {
       console.log(
         'Usage: claims-status.mts [--json] [--session-summary]\n' +
           '  --json             Emit machine-readable claim data.\n' +
-          '  --session-summary  Condensed output for SessionStart surfacing.'
+          '  --session-summary  Condensed output for SessionStart surfacing.',
       )
       process.exit(0)
     } else {
@@ -59,8 +59,8 @@ function main(): void {
           stale: stale.map((view) => view.record),
         },
         null,
-        2
-      )
+        2,
+      ),
     )
     return
   }
@@ -68,7 +68,7 @@ function main(): void {
   if (cli.sessionSummary) {
     if (claims.length === 0) return
     console.log(
-      `⚠ spectra claims: ${active.length} active · ${stale.length} stale (timeout: ${Math.floor(config.staleSeconds / 60)}m)`
+      `⚠ spectra claims: ${active.length} active · ${stale.length} stale (timeout: ${Math.floor(config.staleSeconds / 60)}m)`,
     )
     for (const view of active.slice(0, 5)) console.log(`  active: ${formatLine(view).slice(2)}`)
     for (const view of stale.slice(0, 5)) console.log(`  stale : ${formatLine(view).slice(2)}`)
@@ -81,7 +81,7 @@ function main(): void {
   }
 
   console.log(
-    `✓ spectra:claims: ${active.length} active · ${stale.length} stale (timeout: ${Math.floor(config.staleSeconds / 60)}m)`
+    `✓ spectra:claims: ${active.length} active · ${stale.length} stale (timeout: ${Math.floor(config.staleSeconds / 60)}m)`,
   )
   console.log('')
   console.log('### Active')

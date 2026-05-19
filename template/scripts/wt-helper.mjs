@@ -130,7 +130,7 @@ function mergedBranches(cwd, baseBranch = 'main') {
 function sessionWorktrees(cwd) {
   const out = git(['worktree', 'list', '--porcelain'], { cwd })
   return parseWorktreeList(out).filter(
-    (w) => w.branch && w.branch.startsWith('refs/heads/session/')
+    (w) => w.branch && w.branch.startsWith('refs/heads/session/'),
   )
 }
 
@@ -227,7 +227,7 @@ const stripTrailingNewlines = (s) => s.replace(/\n+$/, '')
 async function cmdAdd(slug, opts = {}) {
   if (!slug) {
     throw new Error(
-      'Usage: wt-helper add <slug> [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>]'
+      'Usage: wt-helper add <slug> [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>]',
     )
   }
   const cleanSlug = makeSlugSafe(slug)
@@ -273,13 +273,13 @@ async function cmdAdd(slug, opts = {}) {
             `\n\nReasons: 'markers' = file contains <<<<<<< conflict markers (real conflict);` +
             ` 'merge-head' / 'rebase-head' / 'cherry-pick-head' = repo is mid-operation` +
             ` (.git/MERGE_HEAD or equivalent exists). Resolve manually before fork;` +
-            ` wt-helper refuses to auto-handle these — any action risks data loss.`
+            ` wt-helper refuses to auto-handle these — any action risks data loss.`,
         )
       }
       if (safe.length > 0) {
         console.log(
           `Pre-fork baseline: auto-resolving ${safe.length} stale unmerged path(s)` +
-            ` (no markers, no in-progress op): ${safe.map((s) => s.path).join(', ')}`
+            ` (no markers, no in-progress op): ${safe.map((s) => s.path).join(', ')}`,
         )
         git(['add', '--', ...safe.map((s) => s.path)], { cwd: consumerRoot, stdio: 'inherit' })
         // Re-run detectMainDirty so downstream sees the resolved paths as
@@ -304,13 +304,13 @@ async function cmdAdd(slug, opts = {}) {
             .join('\n')
           throw new Error(
             `Pre-fork baseline guard: --baseline-strategy=commit requires --baseline-scope-paths <comma-list>.\n` +
-              `Dirty files (${dirtyCount}):\n${dirtyPreview}`
+              `Dirty files (${dirtyCount}):\n${dirtyPreview}`,
           )
         }
         const changeLabel = opts.precheckBaseline || cleanSlug
         const message = `baseline: ${changeLabel} pre-fork sync`
         console.log(
-          `Pre-fork baseline: selective commit ${scopePaths.length} path(s) → "${message}"`
+          `Pre-fork baseline: selective commit ${scopePaths.length} path(s) → "${message}"`,
         )
         gitSelectiveCommit(consumerRoot, scopePaths, message)
       } else if (strategy === 'stash') {
@@ -336,11 +336,11 @@ async function cmdAdd(slug, opts = {}) {
           `Pre-fork baseline guard: main has ${dirtyCount} dirty file(s) and --baseline-strategy=warn:\n` +
             preview +
             more +
-            `\n\nPick a strategy and re-run with --baseline-strategy commit|stash, or commit/stash manually before fork.`
+            `\n\nPick a strategy and re-run with --baseline-strategy commit|stash, or commit/stash manually before fork.`,
         )
       } else {
         throw new Error(
-          `Pre-fork baseline guard: unknown --baseline-strategy "${strategy}" (expected commit|stash|warn)`
+          `Pre-fork baseline guard: unknown --baseline-strategy "${strategy}" (expected commit|stash|warn)`,
         )
       }
     }
@@ -389,7 +389,7 @@ async function cmdAdd(slug, opts = {}) {
       git(['update-ref', pendingBaselineRef, stashSha], { cwd: consumerRoot })
       git(['stash', 'drop', 'stash@{0}'], { cwd: consumerRoot, stdio: 'inherit' })
       console.log(
-        `Pre-fork baseline: stash '${pendingStashName}' applied to worktree; pinned as '${pendingBaselineRef}' (permanently reachable — use 'wt-helper rescue' to inspect/restore).`
+        `Pre-fork baseline: stash '${pendingStashName}' applied to worktree; pinned as '${pendingBaselineRef}' (permanently reachable — use 'wt-helper rescue' to inspect/restore).`,
       )
 
       // Audit baseline content (BOTH untracked tree AND tracked modifications) for
@@ -433,7 +433,7 @@ async function cmdAdd(slug, opts = {}) {
         try {
           const trackedDiff = git(
             ['diff', '--name-only', `${pendingBaselineRef}^1`, pendingBaselineRef],
-            { cwd: consumerRoot }
+            { cwd: consumerRoot },
           )
           trackedDiff
             .split('\n')
@@ -454,28 +454,28 @@ async function cmdAdd(slug, opts = {}) {
           const more = nonProjection.length > 5 ? `, ... +${nonProjection.length - 5} more` : ''
           console.warn('')
           console.warn(
-            `⚠️  Pre-fork baseline contains ${nonProjection.length} non-LOCKED-projection file(s) (untracked + tracked-modified).`
+            `⚠️  Pre-fork baseline contains ${nonProjection.length} non-LOCKED-projection file(s) (untracked + tracked-modified).`,
           )
           console.warn(`    These may be in-flight feature code (not just clade projection drift).`)
           console.warn(`    Sample: ${sample}${more}`)
           console.warn(`    If merge-back later fails with overwrite / conflict errors:`)
           console.warn(
-            `      • NEVER run 'git reset --hard <subagent-commit>' (Path X) before auditing baseline.`
+            `      • NEVER run 'git reset --hard <subagent-commit>' (Path X) before auditing baseline.`,
           )
           console.warn(
-            `      • Audit untracked: git ls-tree -r ${pendingBaselineRef}^3 --name-only`
+            `      • Audit untracked: git ls-tree -r ${pendingBaselineRef}^3 --name-only`,
           )
           console.warn(
-            `      • Audit tracked mods: git diff --name-only ${pendingBaselineRef}^1 ${pendingBaselineRef}`
+            `      • Audit tracked mods: git diff --name-only ${pendingBaselineRef}^1 ${pendingBaselineRef}`,
           )
           console.warn(
-            `      • Recovery (untracked): git checkout ${pendingBaselineRef}^3 -- <paths>`
+            `      • Recovery (untracked): git checkout ${pendingBaselineRef}^3 -- <paths>`,
           )
           console.warn(
-            `      • Recovery (tracked mods): git checkout ${pendingBaselineRef} -- <paths>`
+            `      • Recovery (tracked mods): git checkout ${pendingBaselineRef} -- <paths>`,
           )
           console.warn(
-            `    See pitfall-pre-fork-baseline-hides-in-flight-feature for full root cause.`
+            `    See pitfall-pre-fork-baseline-hides-in-flight-feature for full root cause.`,
           )
           console.warn('')
         }
@@ -486,7 +486,7 @@ async function cmdAdd(slug, opts = {}) {
       }
     } catch (e) {
       console.error(
-        `warn: stash apply to worktree failed; stash '${pendingStashName}' preserved in 'git stash list' for manual recovery.`
+        `warn: stash apply to worktree failed; stash '${pendingStashName}' preserved in 'git stash list' for manual recovery.`,
       )
       console.error(`error detail: ${e?.message ?? e}`)
     }
@@ -498,7 +498,7 @@ async function cmdAdd(slug, opts = {}) {
   console.log(`  Branch: ${branch}`)
   console.log('')
   console.log(
-    'Open a new Claude Code or Codex session in the worktree path to continue work isolated from main.'
+    'Open a new Claude Code or Codex session in the worktree path to continue work isolated from main.',
   )
 }
 
@@ -532,7 +532,7 @@ function enrichWorktree(consumerRoot, w, now = Date.now()) {
   try {
     lastCommitSec = parseInt(
       git(['log', '-1', '--format=%ct', branchName], { cwd: consumerRoot }),
-      10
+      10,
     )
   } catch {}
   const lastCommitMs = Number.isFinite(lastCommitSec) ? lastCommitSec * 1000 : 0
@@ -847,7 +847,7 @@ export function syncWorktreeWithMain(wtPath, branchName, slug) {
       targetRef = 'origin/main'
     } catch (e) {
       console.error(
-        `warn: pre-sync fetch origin main failed (${e.message ?? e}); falling back to local main`
+        `warn: pre-sync fetch origin main failed (${e.message ?? e}); falling back to local main`,
       )
     }
   }
@@ -898,7 +898,7 @@ export function syncWorktreeWithMain(wtPath, branchName, slug) {
         `  cd -\n` +
         `  node scripts/wt-helper.mjs merge-back ${slug}\n\n` +
         `Override (NOT recommended): re-run with --skip-pre-sync to attempt squash directly\n` +
-        `(legacy path — conflicts would surface in main's working tree).`
+        `(legacy path — conflicts would surface in main's working tree).`,
     )
   }
 
@@ -908,13 +908,13 @@ export function syncWorktreeWithMain(wtPath, branchName, slug) {
 async function cmdCleanup(slug, opts) {
   if (!slug)
     throw new Error(
-      'Usage: wt-helper cleanup <slug> [--force] [--force-discard-unland] [--force-discard-uncommitted]'
+      'Usage: wt-helper cleanup <slug> [--force] [--force-discard-unland] [--force-discard-uncommitted]',
     )
   const cleanSlug = makeSlugSafe(slug)
   const consumerRoot = findConsumerRoot()
   const wts = sessionWorktrees(consumerRoot)
   const target = wts.find(
-    (w) => w.path.endsWith(`/${cleanSlug}`) && w.branch && w.branch.endsWith(`-${cleanSlug}`)
+    (w) => w.path.endsWith(`/${cleanSlug}`) && w.branch && w.branch.endsWith(`-${cleanSlug}`),
   )
   if (!target) throw new Error(`No session worktree found for slug: ${cleanSlug}`)
 
@@ -946,7 +946,7 @@ async function cmdCleanup(slug, opts) {
         .join('\n')
       const more = unlanded.length > 10 ? `\n    ... and ${unlanded.length - 10} more` : ''
       issues.push(
-        `- Branch ${branchName} has ${unlanded.length} file(s) whose content is NOT present in main's working tree (gated by --force-discard-unland):\n${preview}${more}`
+        `- Branch ${branchName} has ${unlanded.length} file(s) whose content is NOT present in main's working tree (gated by --force-discard-unland):\n${preview}${more}`,
       )
     }
     if (needsDiscardUncommitted) {
@@ -958,7 +958,7 @@ async function cmdCleanup(slug, opts) {
         .join('\n')
       const more = uncommittedCount > 10 ? `\n    ... and ${uncommittedCount - 10} more` : ''
       issues.push(
-        `- Worktree '${target.path}' has ${uncommittedCount} uncommitted file(s) that will be permanently destroyed by 'git worktree remove --force' (gated by --force-discard-uncommitted):\n${preview}${more}`
+        `- Worktree '${target.path}' has ${uncommittedCount} uncommitted file(s) that will be permanently destroyed by 'git worktree remove --force' (gated by --force-discard-uncommitted):\n${preview}${more}`,
       )
     }
     const flagsNeeded = []
@@ -978,7 +978,7 @@ async function cmdCleanup(slug, opts) {
         `                                (modified/untracked, including pre-fork baseline\n` +
         `                                 applied from stash) will be permanently destroyed\n` +
         `\nUse \`wt-helper merge-back ${cleanSlug}\` first if you want to commit the work,\n` +
-        `or \`wt-helper rescue\` to see pinned pre-fork baselines available for restore.`
+        `or \`wt-helper rescue\` to see pinned pre-fork baselines available for restore.`,
     )
   }
 
@@ -1000,14 +1000,14 @@ async function cmdCleanup(slug, opts) {
 async function cmdMergeBack(slug, opts = {}) {
   if (!slug) {
     throw new Error(
-      'Usage: wt-helper merge-back <slug> [--dry-run] [--auto-stash] [--include-worktree-wip] [--no-cleanup] [--noop-if-missing] [--skip-pre-sync]'
+      'Usage: wt-helper merge-back <slug> [--dry-run] [--auto-stash] [--include-worktree-wip] [--no-cleanup] [--noop-if-missing] [--skip-pre-sync]',
     )
   }
   const cleanSlug = makeSlugSafe(slug)
   const consumerRoot = findConsumerRoot()
   const wts = sessionWorktrees(consumerRoot)
   const target = wts.find(
-    (w) => w.path.endsWith(`/${cleanSlug}`) && w.branch && w.branch.endsWith(`-${cleanSlug}`)
+    (w) => w.path.endsWith(`/${cleanSlug}`) && w.branch && w.branch.endsWith(`-${cleanSlug}`),
   )
   if (!target) {
     if (opts.noopIfMissing) {
@@ -1107,15 +1107,15 @@ async function cmdMergeBack(slug, opts = {}) {
     }
     if (wtUserDirty.length > 0) {
       console.log(
-        `  Action: worktree has uncommitted WIP; without --include-worktree-wip, merge-back would refuse.`
+        `  Action: worktree has uncommitted WIP; without --include-worktree-wip, merge-back would refuse.`,
       )
     } else if (blockers.length > 0) {
       console.log(
-        `  Action: blockers detected; without --auto-stash, merge-back would fail at pre-flight.`
+        `  Action: blockers detected; without --auto-stash, merge-back would fail at pre-flight.`,
       )
     } else if (preSyncBehind > 0 && !opts.skipPreSync) {
       console.log(
-        `  Action: would merge origin/main into wt (${preSyncBehind} commit(s)), then squash + cleanup. Conflicts (if any) stay in wt.`
+        `  Action: would merge origin/main into wt (${preSyncBehind} commit(s)), then squash + cleanup. Conflicts (if any) stay in wt.`,
       )
     } else {
       console.log(`  Action: would squash + cleanup cleanly.`)
@@ -1136,10 +1136,10 @@ async function cmdMergeBack(slug, opts = {}) {
     console.log(`merge-back: ${baselineRefs.length} pinned pre-fork baseline(s) for ${cleanSlug}:`)
     for (const r of baselineRefs) console.log(`  ${r}`)
     console.log(
-      `  → if cleanup later detects uncommitted files, inspect via 'wt-helper rescue --show <ref>'.`
+      `  → if cleanup later detects uncommitted files, inspect via 'wt-helper rescue --show <ref>'.`,
     )
     console.log(
-      `  → redundant 'wt-baseline/${cleanSlug}/<ISO>' stash entries are safe to drop via 'node scripts/stash-reconcile.mjs --slug ${cleanSlug} --interactive'.`
+      `  → redundant 'wt-baseline/${cleanSlug}/<ISO>' stash entries are safe to drop via 'node scripts/stash-reconcile.mjs --slug ${cleanSlug} --interactive'.`,
     )
     console.log('')
   }
@@ -1157,14 +1157,14 @@ async function cmdMergeBack(slug, opts = {}) {
       const msg = `wt: ${cleanSlug} — oxfmt drift on ${paths.join(', ')}`
       git(['commit', '--no-verify', '-m', msg], { cwd: target.path, stdio: 'inherit' })
       console.log(
-        `merge-back: auto-committed ${paths.length} format-only drift file(s) on ${branchName} (oxfmt(HEAD) === current)`
+        `merge-back: auto-committed ${paths.length} format-only drift file(s) on ${branchName} (oxfmt(HEAD) === current)`,
       )
     } catch (e) {
       throw new Error(
         `merge-back: format-only auto-commit failed: ${e.message ?? e}\n` +
           `Affected paths: ${paths.join(', ')}\n` +
           `Resolution — commit manually in worktree, then re-run merge-back.`,
-        { cause: e }
+        { cause: e },
       )
     }
   }
@@ -1178,7 +1178,7 @@ async function cmdMergeBack(slug, opts = {}) {
         git(['add', '--', ...paths], { cwd: target.path })
         git(['commit', '--amend', '--no-edit'], { cwd: target.path, stdio: 'inherit' })
         console.log(
-          `merge-back: --include-worktree-wip auto-amended ${paths.length} dirty file(s) into ${branchName} HEAD`
+          `merge-back: --include-worktree-wip auto-amended ${paths.length} dirty file(s) into ${branchName} HEAD`,
         )
       } catch (e) {
         throw new Error(`merge-back: --include-worktree-wip auto-amend failed: ${e.message ?? e}`, {
@@ -1204,7 +1204,7 @@ async function cmdMergeBack(slug, opts = {}) {
           `  git commit --amend --no-edit       # or new commit\n` +
           `Then re-run: wt-helper merge-back ${cleanSlug}\n\n` +
           `Override with --include-worktree-wip to auto-amend (not recommended — an explicit\n` +
-          `commit with a meaningful message is safer).`
+          `commit with a meaningful message is safer).`,
       )
     }
   }
@@ -1213,7 +1213,7 @@ async function cmdMergeBack(slug, opts = {}) {
     const syncResult = syncWorktreeWithMain(target.path, branchName, cleanSlug)
     if (syncResult.synced) {
       console.log(
-        `merge-back: pre-synced wt with main (${syncResult.behind} commit(s) behind, merge commit: 'wt: pre-sync main into ${branchName}')`
+        `merge-back: pre-synced wt with main (${syncResult.behind} commit(s) behind, merge commit: 'wt: pre-sync main into ${branchName}')`,
       )
     }
   }
@@ -1231,7 +1231,7 @@ async function cmdMergeBack(slug, opts = {}) {
           preview +
           more +
           `\n\nRe-run with --auto-stash to bulk-stash main's dirty state as 'wt-merge-block/${cleanSlug}/<ISO>'\n` +
-          `(blockers + any unrelated dirty paths); reconcile later via \`node scripts/stash-reconcile.mjs\`.`
+          `(blockers + any unrelated dirty paths); reconcile later via \`node scripts/stash-reconcile.mjs\`.`,
       )
     }
     const isoTs = new Date().toISOString().replace(/[:.]/g, '-')
@@ -1248,7 +1248,7 @@ async function cmdMergeBack(slug, opts = {}) {
       git(['stash', 'push', '-u', '-m', stashMsg], { cwd: consumerRoot })
       stashRef = stashMsg
       console.log(
-        `merge-back: bulk-stashed main's dirty state as '${stashMsg}' (covers ${blockers.length} blocker(s) + any unrelated dirty paths)`
+        `merge-back: bulk-stashed main's dirty state as '${stashMsg}' (covers ${blockers.length} blocker(s) + any unrelated dirty paths)`,
       )
     } catch (e) {
       throw new Error(`merge-back: failed to stash blockers: ${e.message ?? e}`, { cause: e })
@@ -1322,7 +1322,7 @@ async function cmdMergeBack(slug, opts = {}) {
     throw new Error(
       `merge-back: ${squashDetail}${popDetail}\n\n` +
         `Worktree '${target.path}' + branch '${branchName}' preserved.\n` +
-        `Resolve conflicts manually then re-run \`wt-helper merge-back ${cleanSlug}\`.`
+        `Resolve conflicts manually then re-run \`wt-helper merge-back ${cleanSlug}\`.`,
     )
   }
 
@@ -1379,7 +1379,7 @@ async function cmdRescue(opts) {
   try {
     const raw = git(
       ['for-each-ref', '--format=%(refname) %(objectname) %(subject)', 'refs/wt-baseline/'],
-      { cwd: consumerRoot }
+      { cwd: consumerRoot },
     )
     for (const line of raw.split('\n').filter(Boolean)) {
       const m = line.match(/^(\S+) (\S+) (.*)$/)
@@ -1435,7 +1435,7 @@ async function cmdRescue(opts) {
   }
   if (danglingFiltered.length > 0) {
     console.log(
-      `Dangling unreachable wt-baseline stashes (gc candidate within ~30 days) — ${danglingFiltered.length}:`
+      `Dangling unreachable wt-baseline stashes (gc candidate within ~30 days) — ${danglingFiltered.length}:`,
     )
     for (const d of danglingFiltered) {
       console.log(`  sha:     ${d.sha}`)
@@ -1531,28 +1531,28 @@ async function main() {
       return
     default:
       console.error(
-        'Usage: wt-helper <add|detect-main-dirty|list|prune|cleanup|merge-back|land-pending|rescue> [args]'
+        'Usage: wt-helper <add|detect-main-dirty|list|prune|cleanup|merge-back|land-pending|rescue> [args]',
       )
       console.error('')
       console.error(
-        '  add <slug>                Create worktree at ~/offline/<consumer>-wt/<slug>/'
+        '  add <slug>                Create worktree at ~/offline/<consumer>-wt/<slug>/',
       )
       console.error('    --precheck-baseline [<change>]')
       console.error('                            Pre-fork dirty check on main; pairs with')
       console.error(
-        '                            --baseline-strategy. Bare form = no change context.'
+        '                            --baseline-strategy. Bare form = no change context.',
       )
       console.error('    --baseline-strategy commit|stash|warn')
       console.error(
-        '                            commit: selective stage + commit baseline on main;'
+        '                            commit: selective stage + commit baseline on main;',
       )
       console.error('                            stash: stash main → apply inside new worktree;')
       console.error('                            warn: stop with report (default).')
       console.error(
-        '    --baseline-scope-paths <comma>   Required for commit strategy; selective stage scope.'
+        '    --baseline-scope-paths <comma>   Required for commit strategy; selective stage scope.',
       )
       console.error(
-        '    --baseline-stash-name <name>     Override default `wt-baseline/<slug>/<ISO>` stash name.'
+        '    --baseline-stash-name <name>     Override default `wt-baseline/<slug>/<ISO>` stash name.',
       )
       console.error("  detect-main-dirty         Report main's dirty paths; pairs with --json.")
       console.error('  list [--json]             Enumerate session worktrees with staleness')
@@ -1562,31 +1562,31 @@ async function main() {
       console.error('  merge-back <slug>         Atomic squash into main + cleanup; flags:')
       console.error('    --dry-run               preview blockers + worktree WIP without acting')
       console.error(
-        '    --auto-stash            stash main blockers as wt-merge-block/<slug>/<ISO>'
+        '    --auto-stash            stash main blockers as wt-merge-block/<slug>/<ISO>',
       )
       console.error(
-        '    --include-worktree-wip  auto-amend uncommitted worktree edits into branch HEAD'
+        '    --include-worktree-wip  auto-amend uncommitted worktree edits into branch HEAD',
       )
       console.error(
-        '                            (default: refuse with remediation; explicit commit safer)'
+        '                            (default: refuse with remediation; explicit commit safer)',
       )
       console.error(
-        '                            NB: dirty files matching OXFMT_AUTO_PATHS whose drift'
+        '                            NB: dirty files matching OXFMT_AUTO_PATHS whose drift',
       )
       console.error(
-        '                            reproduces from oxfmt(HEAD) are auto-committed as a'
+        '                            reproduces from oxfmt(HEAD) are auto-committed as a',
       )
       console.error('                            separate "wt: <slug> — oxfmt drift on ..." commit')
       console.error(
-        '                            with no prompt (no flag needed; semantic drift still STOPs).'
+        '                            with no prompt (no flag needed; semantic drift still STOPs).',
       )
       console.error('    --no-cleanup            skip worktree cleanup after squash')
       console.error(
-        '    --noop-if-missing       silently no-op if no matching worktree (for hooks)'
+        '    --noop-if-missing       silently no-op if no matching worktree (for hooks)',
       )
       console.error('    --skip-pre-sync         skip wt-side merge of origin/main before squash')
       console.error(
-        '                            (default: pre-sync isolates conflicts in wt, not main)'
+        '                            (default: pre-sync isolates conflicts in wt, not main)',
       )
       console.error('  land-pending <slug>       Alias of merge-back for grandfathered worktrees')
       console.error('  rescue [--show <ref|sha>] [--json]')

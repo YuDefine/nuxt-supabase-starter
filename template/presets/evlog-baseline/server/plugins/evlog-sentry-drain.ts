@@ -64,7 +64,7 @@ export default defineNitroPlugin((nitroApp) => {
       const reason = error ? 'retry_exhausted' : 'buffer_overflow'
       logger.error(
         `Dropped ${events.length} events (${reason})`,
-        error ? { error: error.message } : {}
+        error ? { error: error.message } : {},
       )
     },
   })
