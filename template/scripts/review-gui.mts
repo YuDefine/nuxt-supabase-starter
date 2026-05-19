@@ -8,7 +8,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { createReadStream, existsSync, readdirSync } from 'node:fs'
+import { createReadStream, existsSync, readdirSync, statSync } from 'node:fs'
 import { mkdir, open as openFd, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import net from 'node:net'
@@ -1792,12 +1792,35 @@ async function summarizeChange(
     }
   }
   // Verify-channel evidence missing：對齊 client `computeMissingEvidence`，iterate ALL
-  // 未勾且非 issued items（含 parent-with-children）。parent 的 verify markers 是 explicit
-  // declaration，spectra-apply Step 8a 寫的 (verified-*: ...) annotation 直接寫在 parent line，
-  // 不繼承自子項；GUI 的 compound-evidence panel 也 render 在 parent line 上。
-  // 「由子項回饋」只影響 parent 的 OK/Issue/Skip 按鈕顯示，跟 evidence ownership 無關。
+  // 未勾且非 issued items（含 parent-with-children）。parent 的 verify markers 採雙路認定：
+  //   (a) parent line 自帶 (verified-*: ...) annotation — explicit declaration 慣例
+  //   (b) parent 所有相同 kind 的 scoped children 都有對應 annotation — rollup 語意
+  //       （對齊 manual-review.md「Parent State Derivation」+ archive-gate.sh
+  //       L323-329「semantic fully aggregated from scoped children」+ spectra-apply
+  //       Step 8a 在 leaf child line 寫 annotation 的實際慣例）
+  // 兩種之一成立即算 evidence present。Compound-evidence panel 仍 render 在 parent。
   // 若沿用 `readinessTargets`（排除 parent-with-children）會讓 server 漏算 parent 缺 evidence
   // 的情境，導致 change 被誤分到 ready 群（home page 應顯示在 applyPending）。
+  const evidenceChildrenByParent = new Map<string, ManualReviewItem[]>()
+  for (const item of parsed.items) {
+    if (item.scoped && item.parentId) {
+      const list = evidenceChildrenByParent.get(item.parentId) ?? []
+      list.push(item)
+      evidenceChildrenByParent.set(item.parentId, list)
+    }
+  }
+  const hasEvidenceFor = (
+    item: ManualReviewItem,
+    kind: 'verify:e2e' | 'verify:api' | 'verify:ui',
+    ak: 'verifiedE2e' | 'verifiedApi' | 'verifiedUi',
+  ): boolean => {
+    if (item.annotations[ak]) return true
+    const children = evidenceChildrenByParent.get(item.id) ?? []
+    if (children.length === 0) return false
+    const relevantChildren = children.filter((c) => c.kinds.includes(kind))
+    if (relevantChildren.length === 0) return false
+    return relevantChildren.every((c) => Boolean(c.annotations[ak]))
+  }
   const evidenceTargets = parsed.items.filter(
     (item) => !item.checked && !/（issue:[^）]*）/.test(item.raw),
   )
@@ -1808,9 +1831,12 @@ async function summarizeChange(
   }> = []
   for (const item of evidenceTargets) {
     const tags: Array<'e2e' | 'api' | 'ui'> = []
-    if (item.kinds.includes('verify:e2e') && !item.annotations.verifiedE2e) tags.push('e2e')
-    if (item.kinds.includes('verify:api') && !item.annotations.verifiedApi) tags.push('api')
-    if (item.kinds.includes('verify:ui') && !item.annotations.verifiedUi) tags.push('ui')
+    if (item.kinds.includes('verify:e2e') && !hasEvidenceFor(item, 'verify:e2e', 'verifiedE2e'))
+      tags.push('e2e')
+    if (item.kinds.includes('verify:api') && !hasEvidenceFor(item, 'verify:api', 'verifiedApi'))
+      tags.push('api')
+    if (item.kinds.includes('verify:ui') && !hasEvidenceFor(item, 'verify:ui', 'verifiedUi'))
+      tags.push('ui')
     if (tags.length > 0) {
       evidenceMissing.push({ itemId: item.id, description: item.description, kinds: tags })
     }
@@ -2214,21 +2240,35 @@ function toPosix(path: string): string {
   return path.split(sep).join('/')
 }
 
-function readCladeHubVersion(mainRoot: string): string | null {
+function readCladeHubMeta(mainRoot: string): { version: string | null; mtimeMs: number | null } {
+  const hubPath = join(mainRoot, '.claude', 'hub.json')
   try {
-    const raw = readFileSync(join(mainRoot, '.claude', 'hub.json'), 'utf8')
+    const raw = readFileSync(hubPath, 'utf8')
     const parsed = JSON.parse(raw) as { version?: unknown }
-    if (typeof parsed.version !== 'string') return null
-    // 限制 safe charset 後直接 inline 進 HTML（semver 形態，無需 escape）
-    return /^[\w.\-+]+$/.test(parsed.version) ? parsed.version : null
+    const version =
+      typeof parsed.version === 'string' && /^[\w.\-+]+$/.test(parsed.version)
+        ? parsed.version
+        : null
+    let mtimeMs: number | null = null
+    try {
+      mtimeMs = statSync(hubPath).mtimeMs
+    } catch {}
+    return { version, mtimeMs }
   } catch {
-    return null
+    return { version: null, mtimeMs: null }
   }
 }
 
+function formatVersionTimestamp(mtimeMs: number): string {
+  const d = new Date(mtimeMs)
+  const pad = (n: number) => (n < 10 ? '0' : '') + n
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
 export function renderReviewHtml(opts: { mainRoot?: string } = {}): string {
-  const version = readCladeHubVersion(opts.mainRoot ?? process.cwd())
+  const { version, mtimeMs } = readCladeHubMeta(opts.mainRoot ?? process.cwd())
   const versionBadge = version ? `<span class="title-version">v${version}</span>` : ''
+  const versionTimestamp = mtimeMs !== null ? formatVersionTimestamp(mtimeMs) : ''
   return `<!doctype html>
 <html lang="zh-Hant-TW">
 <head>
@@ -3255,7 +3295,7 @@ export function renderReviewHtml(opts: { mainRoot?: string } = {}): string {
       <h1>人工檢查</h1>
       <div class="title-meta">
         ${versionBadge}
-        <span class="title-updated" id="updatedAt" aria-live="off"></span>
+        <span class="title-updated" id="updatedAt" aria-live="off" title="此版本 .claude/hub.json 的散播時間（不是現在時間）">${versionTimestamp}</span>
       </div>
       <details id="onboardPanel" class="onboard" open>
         <summary>怎麼用</summary>
@@ -3790,15 +3830,15 @@ export function renderReviewHtml(opts: { mainRoot?: string } = {}): string {
       ].join('\\n');
       return rules + youDo + discipline + codeGuide + tail;
     }
-    // 給「按鈕還在」狀況的固定指引：問題不在 consumer 而在 clade 中央倉。
-    // 三類根因都有可能：實際改動沒落地 / GUI 偵測 false positive / 這份 prompt 講不清楚。
+    // 給「修正後 review:ui 仍有問題」狀況的固定指引：問題不在 consumer 而在 clade 中央倉。
+    // 三類根因都有可能：實際改動沒落地 / GUI 偵測或 UI 行為本身有 bug / 這份 prompt 講不清楚。
     function handoffStillVisibleNote() {
       return [
-        '## 若處理完後 review:ui 同一顆按鈕還顯示',
-        '代表 GUI 偵測條件還沒消除——根因有三種，**全部**回到 \`~/offline/clade\` 改，不要在 consumer 改：',
+        '## 若修正後 review:ui 仍有問題（同顆按鈕還在 / UI 顯示異常 / prompt 講不清楚導致重複撞牆）',
+        '代表這次 fix 沒對到根因，或根因本來就在 clade 中央倉而不在 consumer——三種可能，**全部**回到 \`~/offline/clade\` 改，不要在 consumer 改：',
         '1. 改動沒真的落地 → 跑 \`git diff\` / \`git status\` 確認；review:ui home 也要重新整理',
-        '2. review:ui 偵測邏輯 false positive（按鈕條件本來就不該成立）→ 改 \`~/offline/clade/vendor/scripts/review-gui.mts\` 的偵測函式',
-        '3. 這份 prompt 講不清楚導致沒抓對根因 → 改 \`~/offline/clade/vendor/scripts/review-gui.mts\` 的 \`buildHandoffPrompt\`（或對應 group 段）',
+        '2. review:ui 偵測邏輯 / UI 行為本身有 bug（按鈕條件本來就不該成立、render 錯、互動壞）→ 改 \`~/offline/clade/vendor/scripts/review-gui.mts\` 對應偵測函式或 render / handler 段',
+        '3. 這份 prompt 講不清楚導致接手 Claude 沒抓對根因 → 改 \`~/offline/clade/vendor/scripts/review-gui.mts\` 的 \`buildHandoffPrompt\`（或對應 group 段、\`handoffStillVisibleNote\` 本身）',
         '改完依 \`~/offline/clade/CLAUDE.md\` § 異動 clade 後的標準流程 散播（vp check → commit → publish patch → push --tags → propagate）。',
         'consumer 端的 \`scripts/review-gui.mts\` 是 clade 投影（LOCKED + chmod 444），直接改會被下次 propagate 蓋回去。',
       ].join('\\n');
@@ -4724,6 +4764,26 @@ export function renderReviewHtml(opts: { mainRoot?: string } = {}): string {
         { kind: 'verify:api', tag: 'api', listKey: 'verifiedApiList', singleKey: 'verifiedApi' },
         { kind: 'verify:ui', tag: 'ui', listKey: 'verifiedUiList', singleKey: 'verifiedUi' },
       ];
+      // Mirror server-side rollup: parent has evidence if either own annotation present OR
+      // all scoped children of the same kind have annotation. 詳見 server evidenceTargets
+      // 段落註解（雙路認定）。對齊 manual-review.md「Parent State Derivation」+ archive-gate.sh
+      // L323-329「semantic fully aggregated from scoped children」。
+      // NOTE: 內聯識別符不加 backtick — backtick + 後接中文觸發 Node strip-types parser bug。
+      const childrenByParent = new Map();
+      for (const it of items) {
+        if (it && it.scoped && it.parentId) {
+          if (!childrenByParent.has(it.parentId)) childrenByParent.set(it.parentId, []);
+          childrenByParent.get(it.parentId).push(it);
+        }
+      }
+      function hasEvidenceFor(item, c) {
+        if (annotationList(item, c.listKey, c.singleKey).length) return true;
+        const children = childrenByParent.get(item.id) || [];
+        if (children.length === 0) return false;
+        const relevant = children.filter((ch) => itemKinds(ch).includes(c.kind));
+        if (relevant.length === 0) return false;
+        return relevant.every((ch) => annotationList(ch, c.listKey, c.singleKey).length > 0);
+      }
       const byItem = new Map();
       for (const item of items) {
         if (!item || item.checked) continue;
@@ -4735,8 +4795,7 @@ export function renderReviewHtml(opts: { mainRoot?: string } = {}): string {
         const kinds = itemKinds(item);
         for (const c of checks) {
           if (!kinds.includes(c.kind)) continue;
-          const list = annotationList(item, c.listKey, c.singleKey);
-          if (list.length) continue;
+          if (hasEvidenceFor(item, c)) continue;
           if (!byItem.has(item.id)) byItem.set(item.id, { itemId: item.id, description: item.description || '', kinds: [], item: item });
           byItem.get(item.id).kinds.push(c.tag);
         }
@@ -5781,16 +5840,6 @@ export function renderReviewHtml(opts: { mainRoot?: string } = {}): string {
       el.currentTitle.textContent = '選擇一個 change 開始';
     });
 
-    function pad2(n) { return (n < 10 ? '0' : '') + n; }
-    function tickUpdatedAt() {
-      const d = new Date();
-      const s = d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate() + ' '
-        + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
-      const target = document.getElementById('updatedAt');
-      if (target) target.textContent = s;
-    }
-    tickUpdatedAt();
-    setInterval(tickUpdatedAt, 1000);
   </script>
 </body>
 </html>`
