@@ -2259,10 +2259,13 @@ function readCladeHubMeta(mainRoot: string): { version: string | null; mtimeMs: 
   }
 }
 
+function padTwoDigits(n: number): string {
+  return (n < 10 ? '0' : '') + n
+}
+
 function formatVersionTimestamp(mtimeMs: number): string {
   const d = new Date(mtimeMs)
-  const pad = (n: number) => (n < 10 ? '0' : '') + n
-  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${padTwoDigits(d.getHours())}:${padTwoDigits(d.getMinutes())}:${padTwoDigits(d.getSeconds())}`
 }
 
 export function renderReviewHtml(opts: { mainRoot?: string } = {}): string {
