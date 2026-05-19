@@ -234,6 +234,18 @@ Update an existing Spectra change — from a plan file or conversation context.
 
    Fix every failure inline using the existing context and the new plan/conversation source before running the CLI analyzer. Update incomplete design and task content so behavior contracts, verification criteria, and scope boundaries stay current with the new context. Preserve completed tasks unchanged.
 
+   **Check 7: Manual-Review Pattern Enforcement** (clade fork addition — `## 人工檢查` re-check after retro-update)
+
+   `/spectra-ingest` retro-updates a change after impl / verify, which can introduce **new** `## 人工檢查` items or modify existing ones — bypassing `/spectra-propose`'s post-propose-manual-review-check.sh. Re-run the same check at ingest time to catch jargon leakage / abstract reference / missing URL / etc. introduced by the update.
+
+   ```bash
+   bash scripts/spectra-advanced/post-propose-manual-review-check.sh <change-name>
+   ```
+
+   Exit 2 = pattern findings (any of `ABSTRACT_REFERENCE` / `CARD_WITHOUT_UID` / `UI_ITEM_NO_URL` / `MULTI_STEP_NOT_SCOPED` / `REVIEW_UI_BACKEND_ROUNDTRIP` / `INTERNAL_JARGON_LEAKAGE`). Main thread **SHALL** Edit `tasks.md` directly fix findings inline per hook stdout remediation guidance — do NOT round-trip to `codex` (slow). Reference: `vendor/snippets/manual-review-enforcement/patterns.json` + `rules/core/manual-review.data-readiness.md`.
+
+   Legitimate false positive (e.g., 真機掃 SMS 無 dev replay endpoint) → add `@no-manual-review-check[<reason>]` trailing marker per `manual-review.md`「`@no-manual-review-check` Marker」.
+
 ---
 
 ## Rationalization Table
