@@ -40,7 +40,7 @@
  * or already inside a session worktree.
  */
 
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { stdin, stdout } from 'node:process'
@@ -156,6 +156,73 @@ const LOCKED_PROJECTION_RE =
   /^(\.agents\/|\.codex\/|\.claude\/(rules|skills|commands|agents|scripts|hooks)\/|\.claude\/(hub\.json|\.hub-state\.json)$|scripts\/wt-helper\.mjs$|AGENTS\.md$|CLAUDE\.md$)/
 
 const isLockedProjectionPath = (p) => LOCKED_PROJECTION_RE.test(p)
+
+// Whitelist of consumer-local paths where merge-back may auto-commit oxfmt
+// drift without user confirmation. These files are NOT in LOCKED_PROJECTION_RE
+// (they are consumer-managed, not clade-projection), but they receive
+// auto-format passes from hooks and routinely produce zero-semantic drift
+// inside worktrees. Adding a path here is a deliberate trust decision: any
+// diff against HEAD that can be reproduced by `oxfmt(HEAD-version)` is
+// guaranteed to be format-only and safe to land via auto-commit.
+const OXFMT_AUTO_PATHS = new Set(['.claude/settings.json'])
+
+// Returns oxfmt's stdout when piping `text` through `oxfmt --stdin-filepath`,
+// or null if oxfmt is unavailable / errored. Tries direct `oxfmt` first, then
+// `pnpm exec oxfmt` as fallback. `cwd` matters because oxfmt resolves its
+// config (vite.config.ts / .oxfmtrc) from there — pass wtPath so config
+// matches what the worktree's hook would have applied.
+function runOxfmtStdin(text, filePath, cwd) {
+  const attempts = [
+    { cmd: 'oxfmt', args: [`--stdin-filepath=${filePath}`] },
+    { cmd: 'pnpm', args: ['exec', 'oxfmt', `--stdin-filepath=${filePath}`] },
+  ]
+  for (const { cmd, args } of attempts) {
+    try {
+      const r = spawnSync(cmd, args, {
+        input: text,
+        encoding: 'utf8',
+        cwd,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+      if (r.status === 0 && typeof r.stdout === 'string') return r.stdout
+    } catch {}
+  }
+  return null
+}
+
+// Whitelist gate for the auto-commit branch in cmdMergeBack. Returns true iff:
+//   1. filePath is in OXFMT_AUTO_PATHS, AND
+//   2. `oxfmt(HEAD:filePath)` byte-equals the current working-tree content
+//      (modulo trailing-newline normalization).
+// Condition 2 mathematically excludes semantic drift: if running oxfmt on
+// HEAD reproduces the current file, the only difference between HEAD and
+// working tree is format normalization. False on any failure path (file
+// missing in HEAD, oxfmt unavailable, content differs) → caller falls back
+// to the existing STOP + 4-option guidance.
+function isFormatOnlyDrift(wtPath, filePath) {
+  if (!OXFMT_AUTO_PATHS.has(filePath)) return false
+  let headText
+  try {
+    headText = execFileSync('git', ['show', `HEAD:${filePath}`], {
+      cwd: wtPath,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch {
+    return false
+  }
+  let currentText
+  try {
+    currentText = readFileSync(join(wtPath, filePath), 'utf8')
+  } catch {
+    return false
+  }
+  const formatted = runOxfmtStdin(headText, filePath, wtPath)
+  if (formatted === null) return false
+  return stripTrailingNewlines(formatted) === stripTrailingNewlines(currentText)
+}
+
+const stripTrailingNewlines = (s) => s.replace(/\n+$/, '')
 
 async function cmdAdd(slug, opts = {}) {
   if (!slug) {
@@ -965,7 +1032,7 @@ async function cmdMergeBack(slug, opts = {}) {
   // on next bootstrap. User code (server/, src/, app/, ...) and untracked
   // non-projection files are real WIP and must be committed before squash.
   const wtDirty = detectUncommittedWorktreeFiles(target.path)
-  const wtUserDirty = [
+  const wtUserDirtyAll = [
     ...wtDirty.modified
       .filter((m) => !isLockedProjectionPath(m.path))
       .map((m) => ({ ...m, kind: 'modified' })),
@@ -973,6 +1040,19 @@ async function cmdMergeBack(slug, opts = {}) {
       .filter((u) => !isLockedProjectionPath(u.path))
       .map((u) => ({ ...u, status: '??', kind: 'untracked' })),
   ]
+  // Partition: OXFMT_AUTO_PATHS entries whose drift is purely oxfmt
+  // normalization of the HEAD version are auto-commit candidates (no user
+  // prompt). Everything else stays as semantic user WIP and falls through to
+  // the existing STOP gate.
+  const wtFmtDrift = []
+  const wtUserDirty = []
+  for (const d of wtUserDirtyAll) {
+    if (d.kind === 'modified' && isFormatOnlyDrift(target.path, d.path)) {
+      wtFmtDrift.push(d)
+    } else {
+      wtUserDirty.push(d)
+    }
+  }
 
   // Surface pinned pre-fork baselines for this slug so the user knows what's
   // available for rescue if cleanup later detects uncommitted-baseline loss
@@ -1011,6 +1091,13 @@ async function cmdMergeBack(slug, opts = {}) {
     if (wtUserDirty.length > 20) {
       console.log(`    ... and ${wtUserDirty.length - 20} more`)
     }
+    console.log(`  Fmt-only drift:  ${wtFmtDrift.length} (would auto-commit on real run)`)
+    for (const d of wtFmtDrift.slice(0, 20)) {
+      console.log(`    ${(d.status ?? '??').padEnd(3)} ${d.path}`)
+    }
+    if (wtFmtDrift.length > 20) {
+      console.log(`    ... and ${wtFmtDrift.length - 20} more`)
+    }
     console.log(`  Pinned baselines: ${baselineRefs.length}`)
     for (const r of baselineRefs) console.log(`    ${r}`)
     if (opts.skipPreSync) {
@@ -1039,6 +1126,7 @@ async function cmdMergeBack(slug, opts = {}) {
       dryRun: true,
       blockers,
       wtUserDirty,
+      wtFmtDrift,
       baselineRefs,
       preSyncBehind,
     }
@@ -1054,6 +1142,31 @@ async function cmdMergeBack(slug, opts = {}) {
       `  → redundant 'wt-baseline/${cleanSlug}/<ISO>' stash entries are safe to drop via 'node scripts/stash-reconcile.mjs --slug ${cleanSlug} --interactive'.`
     )
     console.log('')
+  }
+
+  // Auto-commit format-only drift on OXFMT_AUTO_PATHS files (no user prompt).
+  // Branch runs BEFORE the wtUserDirty STOP gate, so mixed cases (format-only
+  // drift on settings.json + real WIP on server/foo.ts) auto-land the trivial
+  // bit first, then STOP cleanly on the remaining semantic edits. Uses
+  // --no-verify to skip re-running the same format hooks that produced the
+  // drift in the first place.
+  if (wtFmtDrift.length > 0) {
+    const paths = wtFmtDrift.map((d) => d.path)
+    try {
+      git(['add', '--', ...paths], { cwd: target.path })
+      const msg = `wt: ${cleanSlug} — oxfmt drift on ${paths.join(', ')}`
+      git(['commit', '--no-verify', '-m', msg], { cwd: target.path, stdio: 'inherit' })
+      console.log(
+        `merge-back: auto-committed ${paths.length} format-only drift file(s) on ${branchName} (oxfmt(HEAD) === current)`
+      )
+    } catch (e) {
+      throw new Error(
+        `merge-back: format-only auto-commit failed: ${e.message ?? e}\n` +
+          `Affected paths: ${paths.join(', ')}\n` +
+          `Resolution — commit manually in worktree, then re-run merge-back.`,
+        { cause: e }
+      )
+    }
   }
 
   // Act on worktree WIP detection from pre-flight: either auto-amend (opt-in)
@@ -1456,6 +1569,16 @@ async function main() {
       )
       console.error(
         '                            (default: refuse with remediation; explicit commit safer)'
+      )
+      console.error(
+        '                            NB: dirty files matching OXFMT_AUTO_PATHS whose drift'
+      )
+      console.error(
+        '                            reproduces from oxfmt(HEAD) are auto-committed as a'
+      )
+      console.error('                            separate "wt: <slug> — oxfmt drift on ..." commit')
+      console.error(
+        '                            with no prompt (no flag needed; semantic drift still STOPs).'
       )
       console.error('    --no-cleanup            skip worktree cleanup after squash')
       console.error(
