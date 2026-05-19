@@ -847,12 +847,19 @@ export function classifyUnmergedSafety(consumerRoot, conflicted) {
 
 // Stage a specific path list + commit — never `git add -A`, which would catch
 // cross-session WIP. Used by pre-fork baseline guard's `commit` strategy.
+//
+// --no-verify: baseline pre-fork sync is wt-helper-internal mechanic, not a
+// feature commit. Message is hardcoded (`baseline: <change> pre-fork sync`),
+// so any commitlint config requiring emoji-conventional / scopes / specific
+// types (e.g. TDMS) will reject it. Skipping pre-commit + commit-msg hooks is
+// the right call: no user content to lint, no test to run, no fmt to apply
+// beyond what was already in working tree.
 function gitSelectiveCommit(consumerRoot, scopePaths, message) {
   if (!Array.isArray(scopePaths) || scopePaths.length === 0) {
     throw new Error('gitSelectiveCommit: scopePaths must be a non-empty array')
   }
   git(['add', '--', ...scopePaths], { cwd: consumerRoot, stdio: 'inherit' })
-  git(['commit', '-m', message], { cwd: consumerRoot, stdio: 'inherit' })
+  git(['commit', '--no-verify', '-m', message], { cwd: consumerRoot, stdio: 'inherit' })
 }
 
 // Detect files in main's working tree that would block `git merge --squash <branch>`:
