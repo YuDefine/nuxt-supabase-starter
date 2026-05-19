@@ -46,6 +46,7 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { stdin, stdout } from 'node:process'
 import { createInterface } from 'node:readline/promises'
 import { dropClaim, findClaimByWorktree, readActiveClaims, writeClaim } from './claim-helper.mjs'
+import { isLockedProjectionPath } from './locked-projection.mjs'
 
 function git(args, opts = {}) {
   const out = execFileSync('git', args, {
@@ -144,19 +145,10 @@ async function prompt(question) {
   }
 }
 
-// Paths under clade-managed projection control. Kept aligned with the
-// hub:bootstrap auto-sync range in scripts/sync-rules.mjs — when adding new
-// sync targets, also extend this regex so wt-helper recognizes them as
-// projection drift instead of user WIP. Long-term: derive dynamically from
-// sync-rules.mjs once it exports its target manifest.
-// Covers: .agents/, .codex/ (Codex projection), .claude/{rules,skills,
-// commands,agents,scripts,hooks}/ (Claude Code projection), .claude/hub.json
-// + .claude/.hub-state.json (plumbing), scripts/wt-helper.mjs (self), and
-// the AGENTS.md + CLAUDE.md instruction-injection files.
-const LOCKED_PROJECTION_RE =
-  /^(\.agents\/|\.codex\/|\.claude\/(rules|skills|commands|agents|scripts|hooks)\/|\.claude\/(hub\.json|\.hub-state\.json)$|scripts\/wt-helper\.mjs$|AGENTS\.md$|CLAUDE\.md$)/
-
-const isLockedProjectionPath = (p) => LOCKED_PROJECTION_RE.test(p)
+// Paths under clade-managed projection control are matched by
+// LOCKED_PROJECTION_RE / isLockedProjectionPath imported from
+// `./locked-projection.mjs` (single source of truth shared with the clade
+// _validate-manifests.mjs cross-check — see Phase 6 / closes TD-018).
 
 /**
  * Simple glob matcher for claim expected_paths. Supports:
