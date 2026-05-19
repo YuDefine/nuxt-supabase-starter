@@ -191,7 +191,25 @@ review-gui (`vendor/scripts/review-gui.mts:1890` `listSourceRoots`) 從啟動 cw
 
 當 review-gui 顯示某 item 的 screenshot 不存在 / outdated，或 user 想開瀏覽器親自操作 sanity check 時，**agent 自己起 dev server**，禁止叫使用者「請 cd 到 worktree 跑 `pnpm dev`」。
 
-#### MUST
+行為依該 consumer 的 OAuth port-pin 屬性分流（讀 [`consumer-meta.md`](./consumer-meta.md) snapshot 的 `auth.portPinned` 欄位）：
+
+| Consumer 屬性 | 啟動方式 | 衝突處理 |
+|---|---|---|
+| `auth.portPinned = true` + `dev.leaseMode = strict` | **MUST** 走 [`vendor/scripts/dev-singleton.mjs`](../../vendor/scripts/dev-singleton.mjs) wrapper，鎖在 manifest 宣告的固定 port | cwd-mismatch → **refuse**（需 user 顯式 `--takeover`），參照 [`verification-lease.md`](./verification-lease.md) |
+| `auth.portPinned = true` + `dev.leaseMode = advisory` | 同上，但 advisory | cwd-mismatch → warn + reuse |
+| `auth.portPinned = false`（無 OAuth pin） | 走 scan-free-port 邏輯（下方 MUST） | 一 worktree 一 port，不互搶 |
+| 無 `.claude/consumer-meta.json`（未採用 manifest） | 沿用既有 scan-free-port 邏輯 | 一 worktree 一 port |
+
+#### Pinned consumer path（`auth.portPinned = true`）
+
+- **MUST** 用 `node vendor/scripts/dev-singleton.mjs --consumer-meta .claude/consumer-meta.json --label "<purpose>" -- pnpm dev`
+- **NEVER** 直接 `nuxt dev` / `pnpm dev` 不經 wrapper（會繞過 lease + cwd 檢查）
+- spawn 前先讀 `/tmp/<consumer_id>-verification-lease.json`，若有別人 hold → wrapper 自動印衝突訊息 + exit 1，agent **MUST** 把訊息原樣呈給 user，**NEVER** 自行 `--takeover`
+- 若 consumer 採用 [`vendor/snippets/dev-auth/`](../../vendor/snippets/dev-auth/) cookbook（dev-only signin endpoint，繞過 OAuth），manifest 的 `auth.devSigninEnabled` 變 `true` → port-pin 約束放寬，可改走下方 scan-free-port 邏輯
+
+#### Non-pinned consumer path（`auth.portPinned = false` 或未採用 manifest）
+
+##### MUST
 
 - **解析 sourceRoot**：review-gui `/api/changes` response 已帶該 change 對應的 working tree absolute path（main 或 `wt/<slug>`）；直接用作 `Bash(cwd=...)`
 - **掃 free port**：`lsof -iTCP:<port> -sTCP:LISTEN -t` 從 3001 掃到 3050 找第一個 free 的；**禁止**用 3000（使用者慣用，留給 user 自己的 dev server）
@@ -199,7 +217,7 @@ review-gui (`vendor/scripts/review-gui.mts:1890` `listSourceRoots`) 從啟動 cw
 - **回報 user**：URL（`http://127.0.0.1:<N>`）、background shell ID、以及一條 kill 指令（`lsof -ti:<N> | xargs kill`）
 - **Lifecycle**：一個 worktree 同時只開 1 個 dev server（spawn 前先 `lsof` 該 worktree 對應 port 是否已被自己開過）；不同 worktree 可並行（各自選不同 free port）；session 結束或 user 喊停時主動 kill
 
-#### 訊息格式
+##### 訊息格式
 
 ```
 Dev server 已啟動於 worktree `<slug>` (port <N>)：
@@ -212,7 +230,7 @@ shellId: <bg-id>
 
 #### Consumer 政策參照
 
-**預設所有 consumer 都允許 agent 自起 dev server**（按上述 MUST 規範）。consumer 若有 local rule 明確禁止（base infra 共享風險、上游頻寬限制等），fallback 給 user 一條一行指令：
+consumer 若有 local rule 明確禁止 agent 自起（base infra 共享風險、上游頻寬限制等），fallback 給 user 一條一行指令：
 
 ```
 請執行（agent 因 `<local-rule-path>` 不能自起）：
@@ -221,6 +239,16 @@ shellId: <bg-id>
 ```
 
 例外查詢：consumer `.claude/rules/local/` 下若有 `no-auto-dev-server*.md` / `dev-server-policy*.md` 之類檔案，啟動前先讀過。
+
+#### Worktree 環境檔 bootstrap
+
+開新 worktree 後，第一次 `dev:agent` 通常會因 gitignored env file（`.env.local`、`.env.<client-a>` 等）缺漏失敗。**MUST** 在 worktree 啟動前跑：
+
+```bash
+node vendor/scripts/wt-env-bootstrap.mjs --consumer-meta .claude/consumer-meta.json
+```
+
+它會依 `dev.envSyncPolicy.filesToCopy` 從 main worktree 拷貝必要檔。Consumer 自家 wt-helper 應該在 `worktree add` 後自動 invoke 一次。
 
 ## Review Tiers
 
