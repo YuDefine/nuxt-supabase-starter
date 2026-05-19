@@ -86,6 +86,19 @@ Local edits will be reverted by the next sync.
 
 **唯一例外**：使用者在 AskUserQuestion 後明確說「請 revert / 還原 / 對齊 rule A」。
 
+### 具體分支模板：當前 flow 規約要求「必修」撞別 session WIP
+
+最常見情境：`/commit` 跑 review / lint / typecheck / test 發現問題 → `commit.md` 規約「MUST 修，NEVER 以建議性質 / 不在本次範圍為由跳過」→ 但修法會動到別 session in-flight WIP（典型：`HANDOFF.md`、別 session 的 `tasks/<...>.md`、其他 active change 的 artifact）→ 撞上「不擅改他人成果」。
+
+此時 **MUST** 用 `AskUserQuestion` 帶以下兩個固定選項：
+
+- **A. 馬上修，回 flow 繼續** — 在當前 session 直接編輯該 WIP 檔，原 flow（`/commit` / `/spectra-archive` / 等）繼續走完。前提：user 確認該編輯不會跟別 session 的修改互踩（或別 session 已結束）
+- **B. 登 TD，放棄當前 flow** — 把問題寫進 `docs/tech-debt.md`（編號 `TD-NNN`），當前 flow **立即中止**（commit 不繼續、archive 不繼續），等別 session 結束後由 user 決定何時處理；已成功 commit 的 group 保留不動
+
+**NEVER** 自行二選一、自行 commit 略過該檔、自行用「不在 scope」當理由跳過 — 這兩條都是觸發 AskUserQuestion 的合法分支，不是 Claude 主線可單方決定的事。
+
+**為什麼預先固化 A/B**：這個衝突在 `/commit` 流程裡會反覆出現（review agent 跑出 nitpick → 落在 HANDOFF 是常態）。每次重新發明選項會讓 Claude 傾向「自行解讀」而不是嚴格走 AskUserQuestion；預先固化 = 把分支變成 reflex，不留發揮空間。
+
 ## 破壞性指令的 guardrails
 
 以下指令 **MUST** 先經使用者明確同意，且不得在 subagent 內自主執行：

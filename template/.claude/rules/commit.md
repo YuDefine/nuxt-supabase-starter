@@ -227,7 +227,7 @@ En：`revert` / `undo` / `rollback` / `roll back` / `reset` / `discard` / `drop`
 - **所有 uncommitted 變更都必須入庫**，**NEVER** 以「不在本次範圍」「影響不大」為由跳過任何檔案
 - **`.gitignore` 變更**：只允許保留 Clade 管理的 installation artifact / runtime state ignore 條目（例如 `.claude/.commit.lock`、`codex/`）；其他變更**MUST** `git stash push -- .gitignore` 並寫入 `HANDOFF.md`（**NEVER** `git checkout .gitignore` 直接還原），由使用者後續確認是否要保留
 - **`.env` / 敏感檔案**：警告使用者但仍由使用者決定是否 commit，**NEVER** 自行跳過
-- **修正所有發現的問題**：review / lint / typecheck / test 發現的問題都**MUST**修正，**NEVER** 以「建議性質」「不在本次範圍」為由跳過
+- **修正所有發現的問題**：review / lint / typecheck / test 發現的問題都**MUST**修正，**NEVER** 以「建議性質」「不在本次範圍」為由跳過。**例外**：修法會動到別 session in-flight WIP（典型：`HANDOFF.md`、別 session 的 `tasks/<...>.md`）時，**MUST** 走 `scope-discipline.md`「Rule 衝突解法 → 具體分支模板：當前 flow 規約要求『必修』撞別 session WIP」決策（A. 馬上修續 flow / B. 登 TD 中止 flow），由 user 拍板，**NEVER** 自行二選一
 
 ## Commit 類型（commitlint.config.js）
 
