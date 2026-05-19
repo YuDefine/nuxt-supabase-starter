@@ -415,7 +415,7 @@ async function cmdAdd(slug, opts = {}) {
           )
         }
         const changeLabel = opts.precheckBaseline || cleanSlug
-        const message = `baseline: ${changeLabel} pre-fork sync`
+        const message = `🧹 chore: baseline pre-fork sync for ${changeLabel}`
         console.log(
           `Pre-fork baseline: selective commit ${scopePaths.length} path(s) → "${message}"`,
         )
@@ -847,6 +847,12 @@ export function classifyUnmergedSafety(consumerRoot, conflicted) {
 
 // Stage a specific path list + commit — never `git add -A`, which would catch
 // cross-session WIP. Used by pre-fork baseline guard's `commit` strategy.
+//
+// Caller responsibility: pass a commitlint-compliant message (the baseline
+// caller in this file emits `🧹 chore(baseline): pre-fork sync for <change>`,
+// which clears emoji-conventional gates). pre-commit / commit-msg hooks run
+// normally — baseline content is user-edited working tree, lint/test/fmt over
+// it are legitimate gates.
 function gitSelectiveCommit(consumerRoot, scopePaths, message) {
   if (!Array.isArray(scopePaths) || scopePaths.length === 0) {
     throw new Error('gitSelectiveCommit: scopePaths must be a non-empty array')
@@ -995,7 +1001,7 @@ export function syncWorktreeWithMain(wtPath, branchName, slug) {
     return { synced: false, behind: 0 }
   }
 
-  const commitMsg = `wt: pre-sync main into ${branchName}`
+  const commitMsg = `🧹 chore: wt pre-sync main into ${branchName}`
   let mergeError = null
   try {
     git(['merge', '--no-ff', '-m', commitMsg, targetRef], { cwd: wtPath, stdio: 'inherit' })
@@ -1287,15 +1293,19 @@ async function cmdMergeBack(slug, opts = {}) {
   // Auto-commit format-only drift on OXFMT_AUTO_PATHS files (no user prompt).
   // Branch runs BEFORE the wtUserDirty STOP gate, so mixed cases (format-only
   // drift on settings.json + real WIP on server/foo.ts) auto-land the trivial
-  // bit first, then STOP cleanly on the remaining semantic edits. Uses
-  // --no-verify to skip re-running the same format hooks that produced the
-  // drift in the first place.
+  // bit first, then STOP cleanly on the remaining semantic edits.
+  //
+  // pre-commit / commit-msg hooks run normally. oxfmt is idempotent — re-running
+  // fmt on already-formatted content produces zero further drift. OXFMT_AUTO_PATHS
+  // are config files (settings.json, .editorconfig, etc.) which oxlint doesn't
+  // touch, so lint won't false-positive either. The `🧹 chore: wt ...` format
+  // clears emoji-conventional commitlint (consumer headerPattern bans scope).
   if (wtFmtDrift.length > 0) {
     const paths = wtFmtDrift.map((d) => d.path)
     try {
       git(['add', '--', ...paths], { cwd: target.path })
-      const msg = `wt: ${cleanSlug} — oxfmt drift on ${paths.join(', ')}`
-      git(['commit', '--no-verify', '-m', msg], { cwd: target.path, stdio: 'inherit' })
+      const msg = `🧹 chore: wt ${cleanSlug} oxfmt drift on ${paths.join(', ')}`
+      git(['commit', '-m', msg], { cwd: target.path, stdio: 'inherit' })
       console.log(
         `merge-back: auto-committed ${paths.length} format-only drift file(s) on ${branchName} (oxfmt(HEAD) === current)`,
       )
@@ -1303,7 +1313,7 @@ async function cmdMergeBack(slug, opts = {}) {
       throw new Error(
         `merge-back: format-only auto-commit failed: ${e.message ?? e}\n` +
           `Affected paths: ${paths.join(', ')}\n` +
-          `Resolution — commit manually in worktree, then re-run merge-back.`,
+          `Resolution — commit manually in worktree (resolve any hook violation first), then re-run merge-back.`,
         { cause: e },
       )
     }
@@ -1312,17 +1322,17 @@ async function cmdMergeBack(slug, opts = {}) {
   // Act on worktree WIP detection from pre-flight: either auto-amend (opt-in)
   // or refuse with clear remediation steps. See computation above for rationale.
   //
-  // Helper-internal amend uses --no-verify per worktree-default.md §5: the wt:
-  // prefix on HEAD commit message fails commitlint emoji-conventional with
-  // subject-empty. Main-line manual amend (the else-branch remediation below)
-  // keeps the --no-verify-free form because commit.md hard rule forbids it for
-  // main-line user actions; users are expected to write a non-wt: subject.
+  // pre-commit + commit-msg hooks run on amend. The HEAD commit message was
+  // produced by Claude/codex following worktree-default.md §5 (emoji + scope:
+  // `🧹 chore(wt): ...` or similar), so commit-msg passes. pre-commit may fail
+  // if amended user WIP has lint/test issues — that's a legitimate gate, the
+  // catch below surfaces remediation.
   if (wtUserDirty.length > 0) {
     if (opts.includeWorktreeWip) {
       const paths = wtUserDirty.map((d) => d.path)
       try {
         git(['add', '--', ...paths], { cwd: target.path })
-        git(['commit', '--amend', '--no-edit', '--no-verify'], {
+        git(['commit', '--amend', '--no-edit'], {
           cwd: target.path,
           stdio: 'inherit',
         })
@@ -1330,9 +1340,15 @@ async function cmdMergeBack(slug, opts = {}) {
           `merge-back: --include-worktree-wip auto-amended ${paths.length} dirty file(s) into ${branchName} HEAD`,
         )
       } catch (e) {
-        throw new Error(`merge-back: --include-worktree-wip auto-amend failed: ${e.message ?? e}`, {
-          cause: e,
-        })
+        throw new Error(
+          `merge-back: --include-worktree-wip auto-amend failed: ${e.message ?? e}\n` +
+            `Likely cause: pre-commit hook (lint/test/typecheck) rejected the amended WIP.\n` +
+            `Resolution — cd ${target.path}, fix the hook violation, then:\n` +
+            `  git add ${paths.slice(0, 3).join(' ')}${paths.length > 3 ? ' ...' : ''}\n` +
+            `  git commit --amend --no-edit\n` +
+            `Then re-run wt-helper merge-back.`,
+          { cause: e },
+        )
       }
     } else {
       const preview = wtUserDirty
@@ -1362,7 +1378,7 @@ async function cmdMergeBack(slug, opts = {}) {
     const syncResult = syncWorktreeWithMain(target.path, branchName, cleanSlug)
     if (syncResult.synced) {
       console.log(
-        `merge-back: pre-synced wt with main (${syncResult.behind} commit(s) behind, merge commit: 'wt: pre-sync main into ${branchName}')`,
+        `merge-back: pre-synced wt with main (${syncResult.behind} commit(s) behind, merge commit: '🧹 chore: wt pre-sync main into ${branchName}')`,
       )
     }
   }
@@ -1783,7 +1799,9 @@ async function main() {
       console.error(
         '                            reproduces from oxfmt(HEAD) are auto-committed as a',
       )
-      console.error('                            separate "wt: <slug> — oxfmt drift on ..." commit')
+      console.error(
+        '                            separate "🧹 chore: wt <slug> oxfmt drift on ..." commit',
+      )
       console.error(
         '                            with no prompt (no flag needed; semantic drift still STOPs).',
       )

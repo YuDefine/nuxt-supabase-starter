@@ -388,14 +388,14 @@ If there is no request_user_input 工具 available, present options as plain tex
       2. **Selective stage**：`git add -- <each scoped file path>` — **禁止** `git add -A` / `git add .`（會撈到 baseline）
       3. **Commit**：
 
-         git commit --no-verify -m "wt: <change-name>-phase-<N> — <一行說明>"
+         git commit -m "🧹 chore: wt <change-name>-phase-<N> — <一行說明>"
 
-         - **MUST** `--no-verify`（commitlint 會擋 `wt:` prefix）
-         - **MUST** 用 `wt: <change-name>-phase-<N>` format（主線用 `git log main..HEAD` 對齊 phase）
+         - **MUST** 用 `🧹 chore: wt <change-name>-phase-<N>` format（emoji-conventional commitlint 合規；主線用 `git log main..HEAD` 對齊 phase）
+         - **禁止** `--no-verify`（per `rules/core/commit.md` hard rule，hook 擋住代表 phase 內容有問題，必須修而非繞）
 
       仍禁止：`git push` / `git stash`（中途）/ `git commit --amend` / `/commit` / `/spectra-commit` / 跨 phase 混 commit。
 
-      Acceptance：所有 phase <N> 的 tasks 完成、checkbox 已勾、相關 typecheck / unit test 通過、phase commit 已在 worktree 內成立、`git log main..HEAD` 顯示 `wt: <change>-phase-<N> — ...`。
+      Acceptance：所有 phase <N> 的 tasks 完成、checkbox 已勾、相關 typecheck / unit test 通過、phase commit 已在 worktree 內成立、`git log main..HEAD` 顯示 `🧹 chore: wt <change>-phase-<N> — ...`。
       不要動 phase <N> 以外的 tasks。不要碰 ## Design Review 區塊（主線會自己做）。
       不要呼叫 /spectra-archive。
       ```
@@ -416,7 +416,7 @@ If there is no request_user_input 工具 available, present options as plain tex
    4. After `<task-notification status=completed>` — codex 已在 worktree 自 commit per § Commit Authorization：
       - BashOutput → read full stdout
       - Read tasks.md → confirm phase <N> all checkboxes are `[x]`
-      - **MUST commit boundary check**: `git -C <wt> log main..HEAD --oneline` — confirm exactly one new commit per dispatched phase, format `wt: <change>-phase-<N> — ...`. Multiple commits per phase / missing commit / format mismatch → request_user_input: [1] 主線 squash codex 的 multiple commits / [2] `git -C <wt> reset --soft main` 退 staging 重派 / [3] 中止
+      - **MUST commit boundary check**: `git -C <wt> log main..HEAD --oneline` — confirm exactly one new commit per dispatched phase, format `🧹 chore: wt <change>-phase-<N> — ...`. Multiple commits per phase / missing commit / format mismatch → request_user_input: [1] 主線 squash codex 的 multiple commits / [2] `git -C <wt> reset --soft main` 退 staging 重派 / [3] 中止
       - **MUST view-layer drift double-check**: `git -C <wt> diff main..HEAD --name-only -- '*.vue' '*.tsx' '*.jsx' '*.css' '*.scss' 'app/pages/**' 'app/components/**' 'app/layouts/**' 'pages/**' 'components/**' 'layouts/**' 'views/**'`（codex 自驗應已 abort，此處再驗保險）。**若有任何 view 層檔案被 codex 動過** → request_user_input: [1] `git -C <wt> reset --soft main` 退 staging + 主線剔除 view 改動 + 重派 codex / [2] 接受並由主線自己重跑該 view phase / [3] 中止
       - **Scope discipline cross-check**: `git -C <wt> diff main..HEAD --name-only` vs prompt 內 phase scope 宣告。超出範圍 → request_user_input 處理
       - Sanity check: `pnpm typecheck` (or equivalent), relevant tests

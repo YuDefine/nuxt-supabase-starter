@@ -93,7 +93,7 @@ Claude Code session 內偵測到「需要 WebSearch」時：
 - **NEVER** 在 spectra-apply 偵測到「混雜 phase（UI view + 非 view 摻在同 phase）且未開工」時自行修改 tasks.md 拆 phase — 該交給 `/spectra-ingest` 處理（apply / propose / ingest 邊界要清楚）
 - **NEVER** 在 spectra-apply 派 codex 用 medium effort — 一律用 high（medium 漏 schema drift 風險高）
 - **NEVER** task 粒度派 codex — 一律 phase 粒度，避免大量 round-trip
-- **NEVER** 派 codex 跑 spectra-apply phase 而 prompt 內漏 Commit Authorization 段（一 phase 一 commit / `wt: <change>-phase-<N>` format / `--no-verify` / commit 前自驗 view-layer + scope）— 缺這段 codex 不知道格式、會混 commit 或撞 commitlint hook，主線難對齊 phase 邊界
+- **NEVER** 派 codex 跑 spectra-apply phase 而 prompt 內漏 Commit Authorization 段（一 phase 一 commit / `🧹 chore: wt <change>-phase-<N>` format / hook 必跑禁 `--no-verify` / commit 前自驗 view-layer + scope）— 缺這段 codex 不知道格式、會混 commit 或撞 commitlint hook，主線難對齊 phase 邊界
 - **NEVER** 派 Codex 寫 code（spectra-propose draft / spectra-apply phase）而 prompt 漏掉 Plan-first 硬指令 — 沒有 plan 主線只能從 diff 反推 codex 意圖，cross-check 成本高且容易漏掉「codex 漏做某檔」。Plan 是事前公開思路，不是 review gate（codex 寫完 plan 必須立刻續跑，不停下來）
 - **NEVER** 在 commit 0-A 跳過 0-A.0 `simplify` skill —— simplify 看 reuse / 精簡這條軸 codex 不會抓，必須序跑在 codex 之前
 - **NEVER** 在 commit 0-A 把 `simplify` 跟 codex 並行 —— simplify 修完才是 codex 應該看的版本

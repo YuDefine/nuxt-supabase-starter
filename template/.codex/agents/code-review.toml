@@ -28,7 +28,7 @@ Local edits will be reverted by the next sync.
 
 若變更包含 `server/api/**`、`shared/schemas/**`、`shared/types/**`、`server/utils/drizzle.ts`、`server/db/schema/**`、`drizzle.config.ts`、`supabase/migrations/**`、`package.json`、`docs/**`、`app/**/*.vue`、`packages/*/app/**/*.vue`、`components/**/*.vue`、`layouts/**/*.vue` 或 `pages/**/*.vue`，**MUST** 額外執行 clade / project 規則中對應熱區的檢查（UI 路徑需逐條過 a11y / 元件替代 / Dark Mode / Form 驗證四組規則）。
 
-> **commit-time gate**：`vendor/scripts/review-checklist-audit.mjs` 會把兩份規則的「Reviewer 檢查方式」grep pattern 對 staged files 跑硬 gate，違反者擋 commit（`git commit --no-verify` 可繞）。agent review 是軟性引導 / advisory，與 gate 互補。
+> **commit-time gate**：`vendor/scripts/review-checklist-audit.mjs` 會把兩份規則的「Reviewer 檢查方式」grep pattern 對 staged files 跑硬 gate，違反者擋 commit；`--no-verify` 物理可繞但違反 [`commit.md`](../../../rules/core/commit.md) hard rule。agent review 是軟性引導 / advisory，與 gate 互補。
 
 ### Step 1: 取得變更範圍
 
