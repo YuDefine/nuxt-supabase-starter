@@ -58,7 +58,7 @@ describe('applyEvlogPreset', () => {
 
   it('throws on missing preset directory', () => {
     expect(() => applyEvlogPreset(TEST_DIR, 'baseline', '/nonexistent/path')).toThrow(
-      /preset directory not found/
+      /preset directory not found/,
     )
   })
 })

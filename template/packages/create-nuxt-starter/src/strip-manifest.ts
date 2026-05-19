@@ -51,7 +51,7 @@ export function loadStripManifest(manifestPath = DEFAULT_STRIP_MANIFEST_PATH): S
     manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
   } catch (error) {
     throw new StripManifestError(
-      `strip-manifest.json is malformed JSON: ${(error as Error).message}`
+      `strip-manifest.json is malformed JSON: ${(error as Error).message}`,
     )
   }
 
@@ -60,7 +60,7 @@ export function loadStripManifest(manifestPath = DEFAULT_STRIP_MANIFEST_PATH): S
 
 export function validateManifest(
   value: unknown,
-  options: { manifestPath?: string } = {}
+  options: { manifestPath?: string } = {},
 ): StripManifest {
   const manifestPath = options.manifestPath ?? 'strip-manifest.json'
 
@@ -87,7 +87,7 @@ export function validateManifest(
 export function applyStripManifest(
   targetDir: string,
   manifest: StripManifest,
-  options: ApplyStripManifestOptions
+  options: ApplyStripManifestOptions,
 ): StripManifestResult {
   if (!ALLOWED_CONSUMERS.includes(options.consumer)) {
     throw new StripManifestError(`strip-manifest.json: unknown consumer ${options.consumer}`)
@@ -105,7 +105,7 @@ export function applyStripManifest(
     if (matches.length === 0) {
       if (entry.required) {
         throw new StripManifestError(
-          `strip-manifest.json: required ${entry.selectorField} is absent: ${entry.selector}`
+          `strip-manifest.json: required ${entry.selectorField} is absent: ${entry.selector}`,
         )
       }
       skipped.push(entry.selector)
@@ -173,7 +173,7 @@ function normalizeSelector(
   value: unknown,
   fieldName: 'path' | 'glob',
   index: number,
-  manifestPath: string
+  manifestPath: string,
 ): string {
   if (typeof value !== 'string' || value.trim() === '') {
     fail(manifestPath, `entries[${index}].${fieldName} must be a non-empty string`)

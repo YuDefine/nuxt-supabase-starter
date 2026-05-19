@@ -37,7 +37,7 @@ describe('vue component resolution guard', () => {
   it('reports parse errors per file instead of throwing globally', () => {
     const result = analyzeComponentResolution(
       [{ filePath: '/tmp/Broken.vue', content: '<template><KnownCard></template>' }],
-      new Set<string>(['KnownCard'])
+      new Set<string>(['KnownCard']),
     )
     expect(result.unresolved).toEqual([])
     expect(result.parseErrors).toHaveLength(1)
@@ -58,7 +58,7 @@ import ShipmentDocumentButtons from '~/components/shipment/DocumentButtons.vue'
 `
     const result = analyzeComponentResolution(
       [{ filePath: '/tmp/LocalImport.vue', content }],
-      new Set<string>()
+      new Set<string>(),
     )
     expect(result.parseErrors).toEqual([])
     expect(result.unresolved).toEqual([])
@@ -77,7 +77,7 @@ import { Bar, Line } from 'vue-chartjs'
 `
     const result = analyzeComponentResolution(
       [{ filePath: '/tmp/MultipleNamedImports.vue', content }],
-      new Set<string>()
+      new Set<string>(),
     )
     expect(result.parseErrors).toEqual([])
     expect(result.unresolved).toEqual([])

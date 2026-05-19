@@ -32,7 +32,7 @@ function scaffold(projectName: string, evlogPreset: string) {
     projectName,
     selections.agentTargets,
     selections.evlogPreset,
-    selections.dbStack
+    selections.dbStack,
   )
 
   return targetDir

@@ -74,12 +74,12 @@ describe('createAuditLog', () => {
         action: 'delete',
         entityType: 'comment',
         entityId: 'comment-999',
-      })
+      }),
     ).resolves.toBeUndefined()
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       '[audit] Failed to create audit log:',
-      expect.any(Error)
+      expect.any(Error),
     )
 
     consoleErrorSpy.mockRestore()
@@ -96,7 +96,7 @@ describe('createAuditLog', () => {
       expect.objectContaining({
         user_id: undefined,
         action: 'system_cleanup',
-      })
+      }),
     )
   })
 })

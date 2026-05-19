@@ -168,7 +168,7 @@ function parseArgs(argv: string[]): CliOptions {
       console.log(
         'Usage: roadmap-sync.mts [--check] [--json]\n' +
           '  --check   Validate only; do not write. Exit 1 if roadmap is stale.\n' +
-          '  --json    Emit report as JSON instead of the normal summary.'
+          '  --json    Emit report as JSON instead of the normal summary.',
       )
       process.exit(0)
     } else {
@@ -388,7 +388,7 @@ function extractBlockedReason(content: string): string | null {
 function classifyStage(
   tasks: { done: number; total: number },
   hasTasksFile: boolean,
-  blockedReason: string | null
+  blockedReason: string | null,
 ): Stage {
   if (blockedReason) return 'blocked'
   if (!hasTasksFile || tasks.total === 0) return 'draft'
@@ -552,7 +552,7 @@ function collectParkedChanges(): {
     // we don't write a mangled version, but the exit code reflects the bug.
     console.warn(
       `roadmap-sync: spectra CLI call failed — parked block will be preserved but ` +
-        `\`--check\` will fail until fixed (${(err as Error).message})`
+        `\`--check\` will fail until fixed (${(err as Error).message})`,
     )
     return { parked: [], source: 'cli-error' }
   }
@@ -876,7 +876,7 @@ function renderParallelismBlock(report: ParallelismReport): string {
     ? report.mutex
         .map(
           (m) =>
-            `- **${m.spec}** — conflict between: ${m.changes.map((c) => `\`${c}\``).join(', ')}`
+            `- **${m.spec}** — conflict between: ${m.changes.map((c) => `\`${c}\``).join(', ')}`,
         )
         .join('\n')
     : ''
@@ -902,7 +902,7 @@ function renderParallelismBlock(report: ParallelismReport): string {
 
 function renderParkedBlock(
   parked: ParkedChange[],
-  source: 'cli' | 'unavailable' | 'cli-error'
+  source: 'cli' | 'unavailable' | 'cli-error',
 ): string {
   const intro = [
     '## Parked Changes',
@@ -962,7 +962,7 @@ function replaceBetween(
   startMarker: string,
   endMarker: string,
   body: string,
-  insertBefore?: string
+  insertBefore?: string,
 ): string {
   const startIdx = content.indexOf(startMarker)
   const endIdx = content.indexOf(endMarker)
@@ -1119,13 +1119,13 @@ function syncRoadmap(): SyncReport {
     MARKERS.claimsStart,
     MARKERS.claimsEnd,
     claimsBody,
-    MARKERS.parallelismStart
+    MARKERS.parallelismStart,
   )
   content = replaceBetween(
     content,
     MARKERS.parallelismStart,
     MARKERS.parallelismEnd,
-    parallelismBody
+    parallelismBody,
   )
   // First-time installs land the parked block right above the MANUAL backlog
   // so the rendering order is: active → parallelism → parked → backlog.
@@ -1135,7 +1135,7 @@ function syncRoadmap(): SyncReport {
       MARKERS.parkedStart,
       MARKERS.parkedEnd,
       parkedBody,
-      MARKERS.backlogStart
+      MARKERS.backlogStart,
     )
   }
 
@@ -1207,8 +1207,8 @@ function emitJson(report: SyncReport): void {
         manualDrift: report.manualDrift,
       },
       null,
-      2
-    )
+      2,
+    ),
   )
 }
 
@@ -1226,7 +1226,7 @@ function manualDriftLabel(t: ManualDriftType): string {
 function emitManualDrift(drifts: ManualDrift[]): void {
   if (drifts.length === 0) return
   console.error(
-    `⚠ roadmap-sync: MANUAL block drift detected (${drifts.length} item${drifts.length === 1 ? '' : 's'})`
+    `⚠ roadmap-sync: MANUAL block drift detected (${drifts.length} item${drifts.length === 1 ? '' : 's'})`,
   )
   for (const drift of drifts) {
     console.error(`  [line ${drift.lineNumber}] [${manualDriftLabel(drift.type)}]`)
@@ -1240,7 +1240,7 @@ function emitManualDrift(drifts: ManualDrift[]): void {
 function emitText(report: SyncReport): void {
   if (report.skipped === 'check-skipped-no-cli') {
     console.error(
-      'roadmap-sync: spectra CLI unavailable, skipping --check parked drift detection (graceful)'
+      'roadmap-sync: spectra CLI unavailable, skipping --check parked drift detection (graceful)',
     )
     console.log('✓ roadmap-sync: check skipped (spectra CLI unavailable)')
     return
@@ -1280,14 +1280,14 @@ function emitText(report: SyncReport): void {
       ? ` · ${activeClaims} claimed${staleClaims > 0 ? ` · ${staleClaims} stale claim${staleClaims === 1 ? '' : 's'}` : ''}`
       : ''
   console.log(
-    `✓ roadmap-sync: ${verb} (${active} change${active === 1 ? '' : 's'}: ${ready} ready · ${wip} wip · ${draft} draft · ${blocked} blocked${claimsSegment}${parkedSegment})`
+    `✓ roadmap-sync: ${verb} (${active} change${active === 1 ? '' : 's'}: ${ready} ready · ${wip} wip · ${draft} draft · ${blocked} blocked${claimsSegment}${parkedSegment})`,
   )
   if (mutex > 0) {
     console.log(`  ⚠ ${mutex} spec collision${mutex === 1 ? '' : 's'} — check Parallel Tracks`)
   }
   if (staleClaims > 0) {
     console.log(
-      `  ⚠ ${staleClaims} stale claim${staleClaims === 1 ? '' : 's'} — review Active Claims before takeover`
+      `  ⚠ ${staleClaims} stale claim${staleClaims === 1 ? '' : 's'} — review Active Claims before takeover`,
     )
   }
   emitManualDrift(report.manualDrift)

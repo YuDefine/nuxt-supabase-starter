@@ -16,12 +16,12 @@
   const loading = ref(false)
 
   const passwordMismatch = computed(
-    () => form.confirmPassword !== '' && form.password !== form.confirmPassword
+    () => form.confirmPassword !== '' && form.password !== form.confirmPassword,
   )
 
   const canSubmit = computed(
     () =>
-      form.name && form.email && form.password && form.confirmPassword && !passwordMismatch.value
+      form.name && form.email && form.password && form.confirmPassword && !passwordMismatch.value,
   )
 
   async function handleRegister() {
@@ -42,7 +42,7 @@
             await navigateTo('/')
           },
           onError: (ctx: any) => setError(ctx.error),
-        }
+        },
       )
     } catch (err) {
       setError(err)

@@ -29,7 +29,7 @@ function throwOnVueUnresolvedComponent(level: 'warn' | 'error', args: ConsoleArg
 
   if (isVueUnresolvedComponentWarn) {
     throw new Error(
-      `[test-guard] Vue unresolved component detected via console.${level}: ${message}`
+      `[test-guard] Vue unresolved component detected via console.${level}: ${message}`,
     )
   }
 }

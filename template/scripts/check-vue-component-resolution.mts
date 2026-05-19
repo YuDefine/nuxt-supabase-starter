@@ -95,7 +95,7 @@ function printUnresolvedReport(projectRoot, unresolved) {
   console.error('')
   console.error(`Total ${unresolved.length} unresolved component usages.`)
   console.error(
-    'Hint: if you just added a component, verify the file name and path, then run nuxt prepare / typecheck.'
+    'Hint: if you just added a component, verify the file name and path, then run nuxt prepare / typecheck.',
   )
 }
 
@@ -121,7 +121,7 @@ async function run() {
     registeredComponents = await loadRegisteredComponents(projectRoot)
   } catch (error) {
     console.error(
-      'Cannot read .nuxt/components.d.ts. Please run nuxt prepare or pnpm typecheck first.'
+      'Cannot read .nuxt/components.d.ts. Please run nuxt prepare or pnpm typecheck first.',
     )
     if (error instanceof Error) {
       console.error(error.message)

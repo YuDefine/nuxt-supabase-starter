@@ -40,7 +40,7 @@ setup('authenticate as default member', async ({ page, goto }) => {
   })
 
   expect(response.ok(), `dev-login failed: ${response.status()} ${await response.text()}`).toBe(
-    true
+    true,
   )
 
   await goto('/')

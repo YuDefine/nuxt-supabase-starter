@@ -110,7 +110,7 @@ export function handleDbError(error: { code?: string; message?: string }): DbErr
  */
 export function mapConstraintMessage(
   constraintName: string,
-  customMap?: Record<string, string>
+  customMap?: Record<string, string>,
 ): string | undefined {
   if (!customMap) {
     return undefined

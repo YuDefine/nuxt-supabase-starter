@@ -25,7 +25,7 @@ function scaffoldNuxthubAi(projectName = 'nuxthub-ai-app') {
     projectName,
     selections.agentTargets,
     selections.evlogPreset,
-    selections.dbStack
+    selections.dbStack,
   )
 
   return targetDir
@@ -41,7 +41,7 @@ describe('nuxthub-ai yes-mode fresh scaffold', () => {
     const wranglerTemplate = readFileSync(join(targetDir, 'wrangler.jsonc.template'), 'utf-8')
 
     expect(existsSync(join(targetDir, 'server/database/migrations/0002_evlog_events.sql'))).toBe(
-      true
+      true,
     )
     expect(existsSync(join(targetDir, 'server/db'))).toBe(false)
 

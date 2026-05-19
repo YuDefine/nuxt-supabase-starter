@@ -113,7 +113,7 @@ function inferCladeModules(features: string[]): CladeModules {
     // Fall back to the lightest cookie-based option; the user can later
     // change .claude/hub.json if they actually integrate auth.
     consola.warn(
-      '[clade] 未選 auth feature；hub.json 暫填 nuxt-auth-utils。實際接認證後請改 .claude/hub.json + 跑 pnpm hub:sync。'
+      '[clade] 未選 auth feature；hub.json 暫填 nuxt-auth-utils。實際接認證後請改 .claude/hub.json + 跑 pnpm hub:sync。',
     )
     auth = 'nuxt-auth-utils'
   }
@@ -179,8 +179,8 @@ export function validateAuthDbStackCompatibility(auth: CliAuth, dbStack: DbStack
 
   failValidation(
     `dbStack nuxthub-d1 只支援 auth=${NUXTHUB_D1_ALLOWED_AUTH.join(
-      ' | '
-    )}；不支援 auth=nuxt-auth-utils`
+      ' | ',
+    )}；不支援 auth=nuxt-auth-utils`,
   )
 }
 
@@ -217,7 +217,7 @@ export function buildSelectionsFromArgs(args: {
     failValidation(
       `未知的 feature id：${unknown.join(', ')}\n可用 feature id：\n${featureModules
         .map((mod) => `  - ${mod.id}`)
-        .join('\n')}`
+        .join('\n')}`,
     )
   }
 
@@ -239,12 +239,12 @@ export function buildSelectionsFromArgs(args: {
   const presetArgRaw = args.preset as string | undefined
   if (presetArgRaw === 'default') {
     failValidation(
-      `--preset default 已移除。請改用 --preset cloudflare-supabase（功能等價）。\n可用 preset：${PRESET_IDS.join(' | ')}`
+      `--preset default 已移除。請改用 --preset cloudflare-supabase（功能等價）。\n可用 preset：${PRESET_IDS.join(' | ')}`,
     )
   }
   if (presetArgRaw === 'fast') {
     failValidation(
-      `--preset fast 已移除。請改用 --preset cloudflare-supabase --without testing-full,testing-vitest。\n可用 preset：${PRESET_IDS.join(' | ')}`
+      `--preset fast 已移除。請改用 --preset cloudflare-supabase --without testing-full,testing-vitest。\n可用 preset：${PRESET_IDS.join(' | ')}`,
     )
   }
   if (presetArgRaw && !isPresetId(presetArgRaw)) {
@@ -444,7 +444,7 @@ const main = defineCommand({
       args.fast ||
       args.agents ||
       args.db ||
-      args['evlog-preset']
+      args['evlog-preset'],
     )
 
     // Validate directory
@@ -517,7 +517,7 @@ const main = defineCommand({
         pkgName,
         selections.agentTargets,
         selections.evlogPreset,
-        selections.dbStack
+        selections.dbStack,
       )
       consola.success('專案檔案建立完成！')
     } catch (error) {

@@ -63,7 +63,7 @@ describe('CLI dbStack selection', () => {
         projectName: 'mixed-app',
         db: 'supabase',
         evlogPreset: 'nuxthub-ai',
-      })
+      }),
     ).toThrow(/nuxthub-ai.*--db supabase/)
   })
 
@@ -73,7 +73,7 @@ describe('CLI dbStack selection', () => {
         projectName: 'invalid-auth-app',
         auth: 'nuxt-auth-utils',
         db: 'nuxthub-d1',
-      })
+      }),
     ).toThrow(/better-auth.*none.*nuxt-auth-utils/)
   })
 
@@ -111,7 +111,7 @@ describe('CLI dbStack selection', () => {
       'assembled-d1',
       selections.agentTargets,
       selections.evlogPreset,
-      selections.dbStack
+      selections.dbStack,
     )
 
     const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf-8'))
@@ -264,25 +264,25 @@ describe('--preset stack values', () => {
 
   it('--preset default 已移除，提示改用 cloudflare-supabase', () => {
     expect(() =>
-      buildSelectionsFromArgs({ projectName: 'legacy-default', preset: 'default' })
+      buildSelectionsFromArgs({ projectName: 'legacy-default', preset: 'default' }),
     ).toThrow(/--preset default 已移除.*cloudflare-supabase/s)
   })
 
   it('--preset fast 已移除，提示改用 --without testing-*', () => {
     expect(() => buildSelectionsFromArgs({ projectName: 'legacy-fast', preset: 'fast' })).toThrow(
-      /--preset fast 已移除.*--without testing-full,testing-vitest/s
+      /--preset fast 已移除.*--without testing-full,testing-vitest/s,
     )
   })
 
   it('--fast flag 已移除，提示改用 --without testing-*', () => {
     expect(() => buildSelectionsFromArgs({ projectName: 'legacy-fast-flag', fast: true })).toThrow(
-      /--fast 已移除/
+      /--fast 已移除/,
     )
   })
 
   it('未知 preset id 顯示可用值清單', () => {
     expect(() =>
-      buildSelectionsFromArgs({ projectName: 'unknown', preset: 'unknown-preset' })
+      buildSelectionsFromArgs({ projectName: 'unknown', preset: 'unknown-preset' }),
     ).toThrow(/cloudflare-supabase.*cloudflare-nuxthub-ai/s)
   })
 })

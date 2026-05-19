@@ -8,7 +8,7 @@ export interface ListQueryStateConfig<T extends Record<string, string>> {
 }
 
 export function useListQueryState<T extends Record<string, string>>(
-  config: ListQueryStateConfig<T>
+  config: ListQueryStateConfig<T>,
 ) {
   const {
     filters: defaults,
@@ -25,7 +25,7 @@ export function useListQueryState<T extends Record<string, string>>(
       const k = key as keyof T
       acc[k] = ((route.query[key] as string) || defaults[k]) as T[keyof T]
       return acc
-    }, {} as T)
+    }, {} as T),
   )
 
   const search = ref((route.query.q as string) || '')
@@ -33,7 +33,7 @@ export function useListQueryState<T extends Record<string, string>>(
   const pageSize = ref(Number(route.query.pageSize) || defaultPageSize)
   const sortBy = ref((route.query.sortBy as string) || defaultSortBy)
   const sortDir = ref<'asc' | 'desc'>(
-    ((route.query.sortDir as string) || defaultSortDir) as 'asc' | 'desc'
+    ((route.query.sortDir as string) || defaultSortDir) as 'asc' | 'desc',
   )
 
   const hasActiveFilters = computed(() => {
@@ -94,7 +94,7 @@ export function useListQueryState<T extends Record<string, string>>(
 
       router.replace({ query })
     },
-    { debounce: 300 }
+    { debounce: 300 },
   )
 
   function reset() {

@@ -33,7 +33,7 @@ const DEFAULT_EMAILS: Record<DevLoginRole, string> = {
 async function loginAs(
   context: BrowserContext,
   role: DevLoginRole,
-  email = DEFAULT_EMAILS[role]
+  email = DEFAULT_EMAILS[role],
 ): Promise<void> {
   const response = await context.request.post('/api/_dev/login', {
     data: { email, as: role },
@@ -42,7 +42,7 @@ async function loginAs(
   if (!response.ok()) {
     const body = await response.text().catch(() => '')
     throw new Error(
-      `[fixtures] dev-login failed for role=${role} email=${email} status=${response.status()} body=${body.slice(0, 200)}`
+      `[fixtures] dev-login failed for role=${role} email=${email} status=${response.status()} body=${body.slice(0, 200)}`,
     )
   }
 }

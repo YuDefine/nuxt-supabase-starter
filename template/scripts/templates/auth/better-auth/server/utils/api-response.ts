@@ -25,7 +25,7 @@ export interface PaginatedResponse<T> {
 
 export function createPaginatedResponse<T>(
   data: T[],
-  pagination: PaginationInput
+  pagination: PaginationInput,
 ): PaginatedResponse<T> {
   const { page, perPage, total } = pagination
   const totalPages = total === 0 ? 0 : Math.ceil(total / perPage)

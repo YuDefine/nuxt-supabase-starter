@@ -70,7 +70,7 @@ async function walkTaskFiles(dir: string): Promise<string[]> {
       if (entry.isDirectory()) return walkTaskFiles(full)
       if (entry.isFile() && entry.name === 'tasks.md') return [full]
       return []
-    })
+    }),
   )
   return nested.flat()
 }
@@ -256,8 +256,8 @@ async function main() {
           },
         },
         null,
-        2
-      )
+        2,
+      ),
     )
   } else if (sessionMode) {
     // Condensed form intended for SessionStart hook. Silent if nothing to
@@ -301,7 +301,7 @@ async function main() {
     }
     if (orphaned.length > 0) {
       console.log(
-        `ℹ Orphaned entries: ${orphaned.length} (run \`pnpm spectra:followups\` for list)`
+        `ℹ Orphaned entries: ${orphaned.length} (run \`pnpm spectra:followups\` for list)`,
       )
     }
 
@@ -327,7 +327,7 @@ async function main() {
       console.log('| --- | --- | --- | --- | --- |')
       for (const e of register) {
         console.log(
-          `| ${e.id} | ${e.title} | ${e.priority} | ${e.status} | ${e.discovered ?? '—'} |`
+          `| ${e.id} | ${e.title} | ${e.priority} | ${e.status} | ${e.discovered ?? '—'} |`,
         )
       }
       console.log('')

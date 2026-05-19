@@ -31,7 +31,7 @@ export function createAdminDrizzle() {
 }
 
 export async function withAdminDrizzle<T>(
-  run: (context: ReturnType<typeof createAdminDrizzle>) => Promise<T>
+  run: (context: ReturnType<typeof createAdminDrizzle>) => Promise<T>,
 ): Promise<T> {
   const context = createAdminDrizzle()
 

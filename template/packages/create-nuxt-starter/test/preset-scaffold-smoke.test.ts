@@ -25,7 +25,7 @@ function scaffold(presetId: PresetId, projectName: string) {
     projectName,
     selections.agentTargets,
     selections.evlogPreset,
-    selections.dbStack
+    selections.dbStack,
   )
   return { targetDir, selections }
 }

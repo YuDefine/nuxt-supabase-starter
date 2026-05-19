@@ -145,7 +145,7 @@ export default defineNuxtConfig({
       // 因為 sentry.client.config.ts 在 Nuxt 初始化前執行，需要使用 import.meta.env
       // Vite 只會自動注入 VITE_* 前綴的環境變數，所以需要手動處理
       'import.meta.env.NUXT_PUBLIC_SENTRY_DSN': JSON.stringify(
-        process.env.NUXT_PUBLIC_SENTRY_DSN || ''
+        process.env.NUXT_PUBLIC_SENTRY_DSN || '',
       ),
     },
     esbuild: {

@@ -13,7 +13,7 @@ const SKIP_FILES = new Set(['PRESET.md'])
 export function applyEvlogPreset(
   targetDir: string,
   preset: EvlogPreset,
-  starterRoot: string
+  starterRoot: string,
 ): { applied: number; skipped: number } {
   if (preset === 'none') return { applied: 0, skipped: 0 }
 

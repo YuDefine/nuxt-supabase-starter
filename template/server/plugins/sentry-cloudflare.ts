@@ -14,5 +14,5 @@ export default defineNitroPlugin(
     release: process.env.SENTRY_RELEASE || pkg.version,
     // Server 端的 transaction 取樣率
     tracesSampleRate: 0.2,
-  })
+  }),
 )

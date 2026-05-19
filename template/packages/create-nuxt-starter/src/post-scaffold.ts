@@ -35,7 +35,7 @@ export async function postScaffold(
   projectName: string,
   invocationCwd: string,
   cladeModules: CladeModules,
-  opts: PostScaffoldOptions
+  opts: PostScaffoldOptions,
 ): Promise<void> {
   // Use the user's actual cwd for the cd hint, not invocationCwd
   // (which may differ when running inside the monorepo)
@@ -134,12 +134,12 @@ export async function postScaffold(
       '  npx nuxthub link        # 連結 NuxtHub project',
       '  pnpm hub:db:migrations:apply --local',
       '  pnpm dev                # 啟動本機開發伺服器',
-      '  pnpm verify:starter     # 檢查 scaffold 狀態'
+      '  pnpm verify:starter     # 檢查 scaffold 狀態',
     )
   } else {
     nextSteps.push(
       '  pnpm run setup           # 檢查環境 → 啟動 Supabase → 產生型別',
-      '  pnpm dev                 # 啟動開發伺服器'
+      '  pnpm dev                 # 啟動開發伺服器',
     )
   }
 
@@ -147,7 +147,7 @@ export async function postScaffold(
     nextSteps.push(
       '',
       '選用 — 把專案登記到 clade 中央倉，未來 propagate 才會推到這裡：',
-      `  echo "${targetDir} flow=main" >> ${cladeRoot}/consumers.local`
+      `  echo "${targetDir} flow=main" >> ${cladeRoot}/consumers.local`,
     )
   }
 
@@ -156,7 +156,7 @@ export async function postScaffold(
       '',
       '選用 — wire pre-commit hook（擋掉 clade-managed 檔的本地誤改）：',
       `  cp ${cladeRoot}/vendor/git-pre-commit.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit`,
-      '  # 或（已用 husky）：echo "pnpm hub:check" >> .husky/pre-commit'
+      '  # 或（已用 husky）：echo "pnpm hub:check" >> .husky/pre-commit',
     )
   }
 
@@ -167,7 +167,7 @@ export async function postScaffold(
 async function maybeRegisterConsumer(
   cladeRoot: string,
   targetDir: string,
-  nonInteractive: boolean
+  nonInteractive: boolean,
 ): Promise<boolean> {
   // consumers.local 是空白分隔格式 (`<path> flow=main`)，路徑含 whitespace /
   // newline 會破壞解析。此處屬於 trust boundary 邊界——`targetDir` 來自
@@ -175,7 +175,7 @@ async function maybeRegisterConsumer(
   // 顯式擋掉，避免日後重構時靜默壞掉。
   if (/[\n\r\t ]/.test(targetDir)) {
     consola.warn(
-      `專案路徑含空白或控制字元，無法登記到 consumers.local（會破壞解析格式）：${targetDir}`
+      `專案路徑含空白或控制字元，無法登記到 consumers.local（會破壞解析格式）：${targetDir}`,
     )
     consola.log('  之後可改用無空白的路徑，或手動編輯 consumers.local')
     return false
@@ -199,7 +199,7 @@ async function maybeRegisterConsumer(
   if (!nonInteractive) {
     const confirmed = await consola.prompt(
       '登記到 clade consumers.local？未來 publish 新版時 propagate 會自動推到此專案',
-      { type: 'confirm', initial: true }
+      { type: 'confirm', initial: true },
     )
     if (!confirmed) {
       consola.info('已跳過 consumers.local 登記（之後可手動 echo append）')
@@ -221,7 +221,7 @@ async function maybeRegisterConsumer(
 async function maybeWirePreCommit(
   cladeRoot: string,
   targetDir: string,
-  nonInteractive: boolean
+  nonInteractive: boolean,
 ): Promise<boolean> {
   const huskyHook = join(targetDir, '.husky', 'pre-commit')
   const gitHook = join(targetDir, '.git', 'hooks', 'pre-commit')
@@ -241,7 +241,7 @@ async function maybeWirePreCommit(
   if (!nonInteractive) {
     const confirmed = await consola.prompt(
       'wire pre-commit hook？（commit 前自動跑 hub:check 擋掉 clade-managed 檔的本地誤改）',
-      { type: 'confirm', initial: true }
+      { type: 'confirm', initial: true },
     )
     if (!confirmed) {
       consola.info('已跳過 pre-commit wire（之後可手動）')
@@ -329,7 +329,7 @@ async function tryCloneClade(nonInteractive: boolean): Promise<string | undefine
   if (!nonInteractive) {
     const ok = await consola.prompt(
       `找不到 clade，要 git clone 到 ${target}？（需要對 YuDefine/clade 的 read access）`,
-      { type: 'confirm', initial: true }
+      { type: 'confirm', initial: true },
     )
     if (!ok) {
       consola.info('已跳過 clade auto-clone')
@@ -405,7 +405,7 @@ function runSyncToAgents(targetDir: string): void {
   const script = join(homedir(), '.claude', 'scripts', 'sync-to-agents.mjs')
   if (!existsSync(script)) {
     consola.warn(
-      '找不到 ~/.claude/scripts/sync-to-agents.mjs，略過 .codex/.agents/AGENTS.md 重投影'
+      '找不到 ~/.claude/scripts/sync-to-agents.mjs，略過 .codex/.agents/AGENTS.md 重投影',
     )
     return
   }
@@ -422,7 +422,7 @@ function runSyncToAgents(targetDir: string): void {
 async function runInitConsumer(
   targetDir: string,
   mods: CladeModules,
-  opts: PostScaffoldOptions
+  opts: PostScaffoldOptions,
 ): Promise<string | undefined> {
   let cladeRoot = findCladeRoot()
   if (!cladeRoot && opts.cloneClade) {

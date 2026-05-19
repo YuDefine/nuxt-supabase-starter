@@ -57,7 +57,7 @@ export class OverlayCompatibilityError extends Error {
 
 export function validateOverlayCompatibility(
   manifest: OverlayManifest,
-  selections: OverlaySelections
+  selections: OverlaySelections,
 ): void {
   const overlayName = manifest.name || '(unnamed overlay)'
 
@@ -66,8 +66,8 @@ export function validateOverlayCompatibility(
     if (!selectionMatches(actualValue, allowedValues)) {
       throw new OverlayCompatibilityError(
         `Overlay ${overlayName} requires ${key} to be one of ${allowedValues.join(
-          ', '
-        )}, got ${formatSelectionValue(actualValue)}`
+          ', ',
+        )}, got ${formatSelectionValue(actualValue)}`,
       )
     }
   }
@@ -83,7 +83,7 @@ export function validateOverlayCompatibility(
     const actualValue = selections[conflict.key]
     if (selectionMatches(actualValue, conflict.values)) {
       throw new OverlayCompatibilityError(
-        `Overlay ${overlayName} conflicts with ${conflict.key}=${formatSelectionValue(actualValue)}`
+        `Overlay ${overlayName} conflicts with ${conflict.key}=${formatSelectionValue(actualValue)}`,
       )
     }
   }
@@ -93,7 +93,7 @@ export function applyOverlay(
   targetDir: string,
   overlayName: string,
   selections: OverlaySelections,
-  options: ApplyOverlayOptions = {}
+  options: ApplyOverlayOptions = {},
 ): ApplyOverlayResult {
   const overlaysDir = options.overlaysDir || DEFAULT_OVERLAYS_DIR
   const overlayDir = join(overlaysDir, overlayName)
@@ -141,7 +141,7 @@ export function applyOverlay(
 
 function applyPackageJsonDelta(
   targetDir: string,
-  delta: OverlayPackageJsonDelta | undefined
+  delta: OverlayPackageJsonDelta | undefined,
 ): boolean {
   if (!delta) return false
 
@@ -204,7 +204,7 @@ function matchesWhen(spec: OverlayFileSpec, selections: OverlaySelections): bool
   if (typeof spec === 'string' || !spec.when) return true
 
   return Object.entries(spec.when).every(([key, allowedValues]) =>
-    selectionMatches(selections[key], allowedValues)
+    selectionMatches(selections[key], allowedValues),
   )
 }
 
