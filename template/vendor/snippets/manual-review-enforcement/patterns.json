@@ -1,7 +1,7 @@
 {
   "$schema": "./patterns.schema.json",
-  "version": "1.2.1",
-  "description": "Single source-of-truth regex patterns for Pre-Review Data Readiness enforcement. Consumed by post-propose-manual-review-check.sh (via jq) and vendor/scripts/review-gui.mts (via import).",
+  "version": "1.2.2",
+  "description": "Single source-of-truth regex patterns for Pre-Review Data Readiness enforcement. Consumed by post-propose-manual-review-check.sh (via jq) and vendor/scripts/review-gui.mts (via import). v1.2.2: both consumers strip `(verified-*: ...)` annotations + trailing markers (@followup / @no-screenshot / @no-manual-review-check) before applying primary regex — jargon / multi-step / abstract-reference in verified evidence reflects DOM truth at verify time and MUST NOT trigger pattern hits.",
   "patterns": [
     {
       "code": "ABSTRACT_REFERENCE",
