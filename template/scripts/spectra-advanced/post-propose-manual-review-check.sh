@@ -268,8 +268,20 @@ for i in $(seq 0 $((PATTERN_COUNT - 1))); do
       continue
     fi
 
-    # Primary regex match.
-    if ! printf '%s\n' "$line" | grep $grep_flags -q -- "$REGEX"; then
+    # Strip (verified-*: ...) annotations + trailing markers before primary regex.
+    # Verified annotations are evidence/metadata recorded during verification —
+    # jargon there reflects DOM truth at verify time (e.g., `dom=weekly_target
+    # 尚未設定 visible` is the real screen state), not authoring drift in the
+    # description. Trailing markers (@followup, @no-screenshot, @no-manual-
+    # review-check) are metadata too. Patterns evaluate item description only.
+    stripped_line=$(printf '%s\n' "$line" | sed -E \
+      -e 's/\(verified-[a-z]+:[^)]*\)//g' \
+      -e 's/@followup\[[^]]*\]//g' \
+      -e 's/@no-screenshot//g' \
+      -e 's/@no-manual-review-check(\[[^]]*\])?//g')
+
+    # Primary regex match (on stripped line so annotation jargon doesn't fire).
+    if ! printf '%s\n' "$stripped_line" | grep $grep_flags -q -- "$REGEX"; then
       continue
     fi
 
