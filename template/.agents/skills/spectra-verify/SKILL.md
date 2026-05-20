@@ -107,6 +107,20 @@ Verify that an implementation matches the change artifacts (specs, tasks, design
        - Add CRITICAL issue: "Requirement not found: <requirement name>"
        - Recommendation: "Implement requirement X: <description>"
 
+5.5. **Manual-Review Pattern Re-check** (clade fork addition — advisory; verify is read-only)
+
+   `/spectra-verify` runs with `disallowedTools: [Edit, Write]` (see frontmatter), so this step **does not fix** `## 人工檢查` pattern hits — it surfaces them as Completeness WARNING issues. The actual interactive fix path is `/spectra-archive` Step 3.3 (Fix now / @followup / @no-manual-review-check) or `/spectra-ingest` Check 7 if more context update needed first.
+
+   ```bash
+   bash scripts/spectra-advanced/post-propose-manual-review-check.sh <change-name>
+   ```
+
+   Exit 2 = pattern findings (any of `ABSTRACT_REFERENCE` / `CARD_WITHOUT_UID` / `UI_ITEM_NO_URL` / `MULTI_STEP_NOT_SCOPED` / `REVIEW_UI_BACKEND_ROUNDTRIP` / `INTERNAL_JARGON_LEAKAGE`). For each finding parsed from hook stderr:
+   - Add a Completeness WARNING: `Manual-review pattern hit: <pattern> at tasks.md:<line>`
+   - Recommendation: `Run /spectra-archive Step 3.3 to fix interactively (or Edit tasks.md per hook remediation guidance), then re-run /spectra-verify`
+
+   Hook exits 0 → no Completeness manual-review issues added; proceed to Step 6 silently. Reference: `vendor/snippets/manual-review-enforcement/patterns.json` + `rules/core/manual-review.data-readiness.md`.
+
 6. **Verify Correctness**
 
    **Requirement Implementation Mapping**:

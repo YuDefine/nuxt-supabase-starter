@@ -628,6 +628,20 @@ If there is no request_user_input 工具 available, present options as plain tex
    - **NEVER** 在沒有成功 evidence 時寫 `(verified-<channel>:)` annotation。
    - **NEVER** 派 screenshot-review agent 負責 mutation / form fill / multi-role login；改用 `verify:e2e` 或 `verify:api`。
 
+8a.5. **Manual-Review Pattern Re-check** (clade fork addition — pre-handoff `## 人工檢查` hygiene gate before Step 8b)
+
+   `## 人工檢查` items can drift during Step 7 implementation phases — impl-phase tasks may surface new manual-review items, edit existing ones inline, or paste internal jargon (DB column names / capability flag names / spec heading slugs) into descriptions while the impl context is fresh. Re-run the same enforcement hook that `/spectra-propose` Step 3a uses, so jargon leakage / abstract reference / missing URL etc. doesn't reach the GUI handoff or get baked into the archive history:
+
+   ```bash
+   bash scripts/spectra-advanced/post-propose-manual-review-check.sh <change-name>
+   ```
+
+   Exit 2 = pattern findings (any of `ABSTRACT_REFERENCE` / `CARD_WITHOUT_UID` / `UI_ITEM_NO_URL` / `MULTI_STEP_NOT_SCOPED` / `REVIEW_UI_BACKEND_ROUNDTRIP` / `INTERNAL_JARGON_LEAKAGE`). Main thread **SHALL** Edit `tasks.md` directly to fix findings inline per hook stdout remediation guidance — do NOT round-trip to `codex` (slow). Reference: `vendor/snippets/manual-review-enforcement/patterns.json` + `rules/core/manual-review.data-readiness.md`.
+
+   Legitimate false positive (e.g., 真機掃 SMS 無 dev replay endpoint, sample inline value `weekly_target=5000`) → add `@no-manual-review-check[<reason>]` trailing marker per `manual-review.md`「`@no-manual-review-check` Marker」, re-run hook to confirm bypass recognized, then proceed.
+
+   Hook exits 0 → proceed to Step 8b silently. Defense in depth: primary catches are propose / ingest / archive — apply Step 8a.5 specifically catches drift introduced during impl phases that bypass all three.
+
 8b. **Manual review handoff**
 
    When tasks.md still contains unchecked items in the `## 人工檢查` section (typical at this point — implementation tasks `[x]` but manual-review items `[ ]`), **MUST** hand off to the local manual-review GUI rather than walking through items inline in chat.
