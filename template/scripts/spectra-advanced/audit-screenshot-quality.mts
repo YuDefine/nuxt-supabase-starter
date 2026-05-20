@@ -16,12 +16,45 @@
 
 import { existsSync } from 'node:fs'
 import { readFile, readdir } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
-import {
-  deriveDefaultKindFromProposal,
-  parseManualReviewSections,
-  type ManualReviewItem,
-} from '../review-gui.mts'
+import { pathToFileURL } from 'node:url'
+
+import type { ManualReviewItem } from '../review-gui.mts'
+
+// review-gui.mts 自 2026-05-19 起不再 projection 到 consumer（per
+// `vendor/scripts/lib/vendor-targets.mjs` 註解）。consumer 的 `pnpm review:ui`
+// 走 `${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/review-gui.mts`；本
+// script 同樣需要 review-gui 的 parser，但 audit-screenshot-quality.mts 仍 vendor
+// 到 consumer 的 scripts/spectra-advanced/，相對 `../review-gui.mts` 在 consumer
+// 端 resolve 不到。所以改走相同的 $CLADE_HOME 動態 import。
+interface ReviewGuiModule {
+  deriveDefaultKindFromProposal: (content: string | null) => string
+  parseManualReviewSections: (
+    content: string,
+    options?: { defaultKind?: string; sourcePath?: string },
+  ) => { items: ManualReviewItem[] }
+}
+
+let reviewGuiCache: Promise<ReviewGuiModule> | null = null
+
+function reviewGui(): Promise<ReviewGuiModule> {
+  reviewGuiCache ??= loadReviewGuiModule()
+  return reviewGuiCache
+}
+
+async function loadReviewGuiModule(): Promise<ReviewGuiModule> {
+  const cladeHome = process.env.CLADE_HOME ?? join(homedir(), 'offline', 'clade')
+  const reviewGuiPath = resolve(cladeHome, 'vendor', 'scripts', 'review-gui.mts')
+  if (!existsSync(reviewGuiPath)) {
+    throw new Error(
+      `audit-screenshot-quality: cannot locate review-gui.mts at ${reviewGuiPath}. ` +
+        `Set CLADE_HOME env var to your clade checkout (default: ~/offline/clade).`,
+    )
+  }
+  const mod = (await import(pathToFileURL(reviewGuiPath).href)) as ReviewGuiModule
+  return mod
+}
 
 type Severity = 'warning' | 'critical'
 
@@ -193,9 +226,10 @@ async function auditChange(changeName: string): Promise<{
 
   const proposalContent = await readOptional(proposalPath)
   const tasksContent = await readOptional(tasksPath)
-  const defaultKind = deriveDefaultKindFromProposal(proposalContent)
+  const rg = await reviewGui()
+  const defaultKind = rg.deriveDefaultKindFromProposal(proposalContent)
   const parsed = tasksContent
-    ? parseManualReviewSections(tasksContent, { defaultKind })
+    ? rg.parseManualReviewSections(tasksContent, { defaultKind })
     : { items: [] as ManualReviewItem[] }
   const items = parsed.items
   const itemIds = new Set(items.map((item) => item.id))
