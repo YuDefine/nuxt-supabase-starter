@@ -109,12 +109,12 @@ Local edits will be reverted by the next sync.
 
 正確流程：
 
-1. **首選（DEFAULT）**：tasks.md 仍有 `## 人工檢查` 未勾項 → 主線回「從 **main consumer root**（`~/offline/<consumer>/`）執行 `pnpm review:ui` 開本地 GUI 驗收」（review-gui 跑 `git worktree list --porcelain` 自動聚合 main + 所有 worktree 的 change，每條帶 `wt:<slug>` badge；從 worktree 跑反而只看到該 worktree 那條，main + 其他 worktree 的 change 不見），等使用者跑完 GUI 流程回報後繼續
+1. **首選（DEFAULT）**：tasks.md 仍有 `## 人工檢查` 未勾項 → 主線回「從 **clade home**（`~/offline/clade`）執行 `pnpm review:ui` 開本地 GUI 驗收」（review-gui 讀 `consumers.local` 自動聚合所有 consumer + 各 consumer 的 worktree，每條帶 `<consumer>__<wt-slug>` rootId namespace；consumer 端直接跑 `pnpm review:ui` 會被 clade-only guard 擋下並提示改去 clade home），等使用者跑完 GUI 流程回報後繼續
 2. **Fallback**（GUI 不可用時）：截圖 → 逐項展示 → 使用者回覆 OK / 問題 / skip → 依答覆更新 checkbox
 
 GUI 不可用的具體情境（觸發 fallback 的條件）：
 
-- Consumer 沒有 `pnpm review:ui` script（先建議跑 `pnpm hub:check` 或從 clade propagate 補上）
+- 使用者 clade home 不存在 / 不可達（極少見；clade central repo 是中央倉一定要 clone）
 - 使用者明確說「不要開 GUI，直接在 chat 走」
 - Pure backend change 完全無 UI 證據需求，且只剩 1–2 項 yes/no 確認
 
@@ -136,8 +136,9 @@ http://127.0.0.1:5174/review/<change-name>
 #### 訊息格式（必須照這個 shape）
 
 ```
-請在 main consumer root 執行 `pnpm review:ui` 開本地 GUI 驗收（review-gui 會自動聚合 main + 所有 worktree 的 change，**不必 cd**）：
+請在 clade home（`~/offline/clade`）執行 `pnpm review:ui` 開本地 GUI 驗收（review-gui 會自動聚合所有 consumer + 各自的 worktree change）：
 
+  cd ~/offline/clade
   pnpm review:ui
 
 GUI 啟動後直接打開：
@@ -153,19 +154,21 @@ GUI 會自動：
 完成後回報，我繼續下一步。
 ```
 
-#### cwd：main consumer root（review-gui 自動聚合 worktree）
+#### cwd：clade home（review-gui 集中聚合所有 consumer + worktree）
 
-review-gui (`vendor/scripts/review-gui.mts:1890` `listSourceRoots`) 從啟動 cwd 跑 `git worktree list --porcelain` 列出 main + 所有 worktree，逐一掃描 `openspec/changes/`，把所有 change 聚合到同一個 UI；每條帶 `wt:<slug>` badge、screenshot API 用 `rootId = wt-<slug>` namespace 不撞。從 **main consumer root** 跑一次就涵蓋所有 worktree 的 change。
+review-gui (`vendor/scripts/review-gui.mts` `listSourceRoots`) 從 clade home 啟動時偵測 `vendor/scripts/review-gui.mts` + `consumers.local` 雙標記 → 進 cross-consumer mode：讀 `consumers.local`，對每個 consumer 跑 `git worktree list --porcelain`，把所有 consumer × main + worktree 的 active change 聚合到同一個 UI；每條帶 `<consumer>__<wt-slug>` rootId namespace 不撞、screenshot API 用同 namespace 隔離。從 **clade home** 跑一次就涵蓋所有 consumer 的所有待 review change。
+
+Consumer 端直接跑 `pnpm review:ui` 被 review-gui.mts `preflightCladeOnly` guard 擋下、退出 exit 2 + 提示改去 clade home。
 
 **MUST**：
 
-- 預設使用者從 main consumer root（`~/offline/<consumer>/`）跑 `pnpm review:ui`
-- 訊息**不要**包含 `cd <path>`——增加 user 認知負擔，且 review-gui 從 worktree 跑反而會丟失其他 change
+- 預設使用者從 clade home（`~/offline/clade`）跑 `pnpm review:ui`
+- 訊息**MUST**包含 `cd ~/offline/clade`——consumer 端跑會被 guard 擋下，明確 cd 一次省去誤導
 
 **NEVER**：
 
-- 寫「請在 worktree root 執行」當預設措辭——除非使用者明確只想 review 該 worktree 一條 change，否則從 worktree 跑會少看 change
-- 假設使用者要 cd 到 worktree——review-gui 設計上就是聚合，不需要 cd
+- 寫「請在 consumer root 執行」當預設措辭——consumer 端已被 clade-only guard 擋下
+- 寫「請在 worktree root 執行」——worktree 也屬於 consumer 範圍，會被 guard 擋下；worktree 的 change 從 clade home 啟動的 GUI 已自動聚合
 
 #### 不該列的東西
 
@@ -183,7 +186,7 @@ review-gui (`vendor/scripts/review-gui.mts:1890` `listSourceRoots`) 從啟動 cw
 
 #### 例外：fallback 模式
 
-只有當 `pnpm review:ui` 不可用（consumer 沒這 script / user 明確拒絕 GUI / pure backend 完全無 UI 證據），才轉走 chat-based 逐項展示，那時才會用到 dev server URL 給 user。預設路徑（DEFAULT path）只給 review-gui deep-link。
+只有當 `pnpm review:ui` 不可用（clade home 不存在 / user 明確拒絕 GUI / pure backend 完全無 UI 證據），才轉走 chat-based 逐項展示，那時才會用到 dev server URL 給 user。預設路徑（DEFAULT path）只給 review-gui deep-link。
 
 靜態 screenshot review 是證據，不等同於使用者驗收。詳細 marker / flow / kind 分類見 `manual-review.md` 與其 reference 檔。
 
