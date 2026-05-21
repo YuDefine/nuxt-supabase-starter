@@ -542,12 +542,13 @@ If there is no AskUserQuestion tool available, present options as plain text and
         pnpm test:e2e:verify <change>
         ```
 
-      - Spec pass 後，主線 Edit tasks.md 寫：
+      - Spec pass 後，**MUST** 先確認 Playwright trace zip 真的有產出（`ls -1 test-results/**/trace.zip` 或對應 reporter output 路徑），再 Edit tasks.md 寫：
 
         ```text
         (verified-e2e: <ISO-8601> spec=e2e/verify/<change>/<topic>.spec.ts trace=<trace-path>)
         ```
 
+      - Trace zip 抓不到（playwright.config 沒開 `trace: 'on'` / per-test 沒 `test.use({ trace: 'on' })`）→ **視同 blocker**，保留 `[ ]`，寫 `（issue: trace not captured — enable trace recording in playwright.config or per-test）`；**NEVER** 寫缺 `trace=` 的降級 annotation（archive-gate 會擋住、review-gui 會印 malformed warning）。
       - Spec fail → 保留 `[ ]`，寫 `（issue: <spec failure summary>）` 或回報 blocker；**NEVER** 寫 `(verified-e2e:)`。
 
    3. **`[verify:api]` channel — 主線自己跑 HTTP round-trip**
