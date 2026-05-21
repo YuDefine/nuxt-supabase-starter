@@ -20,6 +20,52 @@ description: 逐套件升級 npm/pnpm dependencies，每個 package 派 codex gp
 - 整個 framework migration（Nuxt / Next / React major bump 需要專屬的 migration plan，不是逐套件 loop 能處理）
 - monorepo 跨 workspace catalog 升版（先用 [[evlog-catalogs]] 派工方式處理 catalog）
 
+**也支援被 [[dep-fleet-upgrade]] 呼叫**（changelog-aware mode）：跳過 Step 1 outdated 偵測，target pkg / version 由 brief 指定、BC clauses 已預先解析、callsites 已預先定位，codex 不用從零 web search。詳見下方 § Changelog-aware mode。
+
+## Changelog-aware mode（被 dep-fleet-upgrade 呼叫時）
+
+當這個 skill 被 [[dep-fleet-upgrade]] orchestrator 在 subagent 內呼叫時，會帶一個 pre-fetched changelog brief。流程**跳過 Step 1**，直接對「一個指定套件 × 一個指定 target version」執行 Step 0、Step 2、Step 3。
+
+**Brief 來源**：orchestrator 寫到 `/tmp/dep-fleet-brief-<pkg-slug>.json`，格式：
+
+```json
+{
+  "pkg": "@nuxt/ui",
+  "from_version": "^4.7.1",
+  "to_version": "4.8.0",
+  "consumer_path": "/Users/charles/offline/perno",
+  "consumer_id": "perno",
+  "workflow_model": "trunk-based",
+  "release_url": "https://github.com/nuxt/ui/releases/tag/v4.8.0",
+  "field": "dependencies",
+  "dep_or_devdep": "dep",
+  "version_gap": "minor",
+  "breaking_changes": [
+    {
+      "category": "rename | removal | signature | config-schema",
+      "description": "<人話描述>",
+      "affected_apis": ["<symbol1>", "<symbol2>"],
+      "before": "<code snippet>",
+      "after": "<code snippet>"
+    }
+  ],
+  "features": [{ "description": "...", "opt_in": true }],
+  "deprecations": [{ "api": "<name>", "replacement": "<name>" }],
+  "callsites": [{ "file": "app/components/Foo.vue", "line": 42, "symbol": "<api>" }]
+}
+```
+
+**Changelog-aware 流程**（subagent 端執行）：
+
+1. **跳過 Step 1**：target pkg / version / install flag 全部從 brief 取（`dep_or_devdep` 決定 `pnpm add` 還是 `pnpm add -D`）；不跑 `pnpm outdated`、不跑使用者確認（orchestrator 已在 fleet 層拿過確認）
+2. **跑 Step 0 worktree gate**（仍 MUST，每個 consumer 各自開 worktree）
+3. **Step 2 codex 派工**：用 § A 模板 + brief 內 BC clauses 填到 `<changelog-block>` substitution，codex 看到具體 BC clauses + callsites 就**不需要**自己 web search 從零開始研究
+4. **失敗時升 high**：仍走 § B research 模板，但 prompt 開頭就把 brief 內 BC clauses + release_url 列出來；high research 只負責「brief 沒涵蓋到的細節」（例：peer dep 衝突 / consumer 自家 workaround）
+5. **Step 3 merge-back + selective stage**：同既有流程
+6. **NEVER push / commit on main**：subagent 結束時把 worktree 留在「main 端 selective staged」狀態，回報給 orchestrator；orchestrator 在 fleet 層集中跟 user 拿一次 push gate
+
+**為什麼 subagent 不自己 push**：fleet sweep 跨多 consumer，若每個 subagent 各自 push，user 失去「全部都 OK 才一起 land」的統一 gate；又若某個 consumer typecheck 過但 prod 跑出來怪，user 想 rollback 也只能逐 consumer revert。orchestrator 集中聚合後一次 gate，bisect / rollback 範圍可控。
+
 ## Step 0 — Worktree gate（[[worktree-default]] §1）
 
 升 deps 會改 tracked code（`package.json` / lockfile / 必要時 source code），per `worktree-default.md` §1 **MUST** 在 session worktree 內跑，不在 main working tree 直接動。
@@ -356,10 +402,11 @@ merge-back + main selective stage 完成。
 
 主線在生 prompt 時用 substitution：
 - `<pkg>` / `<from>` / `<to>` / `<wt-path>` / `<branch>` / `<PM>` / `<lockfile>`：每個 package 不同
-- `<install-flag>`：依 Step 1.3 偵測，`dep` 用空字串、`devDep` 用 `-D`
+- `<install-flag>`：依 Step 1.3 偵測（或 changelog-aware mode 由 brief 的 `dep_or_devdep` 決定），`dep` 用空字串、`devDep` 用 `-D`
 - `<baseline-paths>`：主線跑 `cd <wt-path> && git status --porcelain` 動態抓 unstaged + untracked，過濾掉 codex 應該動的 path 後列入
 - `<plan-first-block>`：patch 升版時填空字串、minor/major 時填下方 Plan-first 區段
 - `<verification-steps>`：依升版類型填 typecheck（patch）/ typecheck + build（minor）/ typecheck + build + test（major）
+- `<changelog-block>`：**changelog-aware mode 才填**，從 brief 的 `breaking_changes` + `callsites` 渲染下方 Changelog-block 區段；非 changelog 模式留空白
 
 模板：
 
@@ -369,6 +416,8 @@ merge-back + main selective stage 完成。
 # Task: 升級 <pkg> 從 <from> 到 <to>
 
 你在 worktree `<wt-path>`（branch `<branch>`）跑。Package manager 是 `<PM>`。
+
+<changelog-block>
 
 <plan-first-block>
 
@@ -440,6 +489,32 @@ Plan 寫完**立刻**繼續執行，不要等確認。
 - Patch：`2. <PM> typecheck → 0 errors`
 - Minor：`2. <PM> typecheck → 0 errors\n3. <PM> build → 成功（若有 build script）`
 - Major：`2. <PM> typecheck → 0 errors\n3. <PM> build → 成功\n4. <PM> test 相關測試 → 全綠`
+
+**`<changelog-block>` 填充**（Changelog-aware mode 才填，非 changelog 模式留空白）：
+
+```markdown
+## Changelog（orchestrator 預先研究，不用再 web search）
+
+Release: <release_url>
+
+### Breaking changes
+
+- **<category>**: <description>
+  Before: `<before>`
+  After: `<after>`
+  Affected APIs: <affected_apis joined>
+
+### Callsites in this consumer（orchestrator 預先掃過）
+
+- `<file>:<line>` 使用 `<symbol>`
+- ...
+
+### 動手範圍
+
+除了 `package.json` + `<lockfile>` 之外，**可以**改上面 callsites 列到的檔案來套用 BC 修正。**NEVER** 改 callsites 清單外的其他 source code（即使「順手很合理」也不行 — 那是 unrelated refactor，會混進這個 commit）。
+```
+
+主線在 changelog-aware mode 下生 prompt 時：對 brief 內每條 BC 渲染一個 bullet、對每個 callsite 渲染一個 bullet；非 changelog mode 整個 `<changelog-block>` 留空白（既有 outdated-loop 行為完全不變）。
 
 ### § B — High research 派工 prompt（escalation）
 
