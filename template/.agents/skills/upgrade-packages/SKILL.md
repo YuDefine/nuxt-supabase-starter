@@ -398,6 +398,8 @@ merge-back + main selective stage 完成。
 
 ## Prompt templates
 
+> **Authoring source**：`~/offline/clade/vendor/snippets/codex-upgrade-prompts/{medium,high}.md`（clade-only，不散播）。下方 § A § B inline 是 plugin cache 副本，**改其中一處時兩邊都要同步**。未來會由 [TD-NNN dispatch script] 機械化渲染。
+
 ### § A — Medium 派工 prompt（per-package）
 
 主線在生 prompt 時用 substitution：
