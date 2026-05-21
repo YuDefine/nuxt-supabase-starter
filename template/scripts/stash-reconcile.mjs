@@ -70,6 +70,7 @@ const NAMESPACED_PREFIXES = [
   'cross-session-block-',
   'clade-propagate-v',
   'clade-publish:',
+  'clade-publish-pre-',
 ]
 
 const NAMESPACED_SUFFIXES = [
@@ -186,6 +187,12 @@ function parseNamespace(message) {
   if (publish) {
     return { kind: 'clade-publish', slug: publish[1].slice(0, 40), iso: null }
   }
+  // clade-publish-pre-<ISO-timestamp>：publish.mjs --stash-untracked 留下；
+  // 並行 session race 沒 pop 回來的常見殘留
+  const publishPre = message.match(/clade-publish-pre-([0-9TZ:-]+)/)
+  if (publishPre) {
+    return { kind: 'clade-publish-pre', slug: publishPre[1], iso: publishPre[1] }
+  }
   // spectra-apply phase suffixes: <slug>-<phase-suffix>
   for (const suf of NAMESPACED_SUFFIXES) {
     if (message.endsWith(suf)) {
@@ -258,6 +265,34 @@ function recommendAction(consumerRoot, ref, files, namespace) {
         action: 'view-diff',
         reason: `change '${namespace.slug}' is archived — inspect before drop`,
       }
+    }
+  }
+
+  // Kind-specific shortcut: clade-publish-pre 是 publish.mjs auto-stash 殘留
+  // （通常因並行 session race / pop conflict）。對每個 stashed file 比較 stash
+  // 內容 vs HEAD 內容：
+  //   - 全部一致 → 內容已被後續 commit 吸收，安全 drop
+  //   - 不一致 → 多半是「舊 snapshot 早於 HEAD 進一步修改」，apply 會 regression；
+  //     強制 view-diff 讓 user 看完再決定（NEVER 自動 apply）
+  if (namespace && namespace.kind === 'clade-publish-pre') {
+    const allFilesAbsorbed = files.every((f) => {
+      try {
+        const stashContent = gitRaw(['show', `${ref}:${f.path}`], { cwd: consumerRoot })
+        const headContent = gitRaw(['show', `HEAD:${f.path}`], { cwd: consumerRoot })
+        return stashContent === headContent
+      } catch {
+        return false
+      }
+    })
+    if (allFilesAbsorbed) {
+      return {
+        action: 'drop',
+        reason: `all ${files.length} stashed file(s) match HEAD content (publish race residue)`,
+      }
+    }
+    return {
+      action: 'view-diff',
+      reason: `publish race residue — stashed file(s) differ from HEAD (may be pre-refinement snapshot; inspect before apply / drop)`,
     }
   }
 
