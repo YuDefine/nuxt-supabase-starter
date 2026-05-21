@@ -164,26 +164,34 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    **For each unchecked `[discuss]` item, the main thread Claude SHALL** (proactively, without prompting):
 
    1. Read the item description and surrounding context (proposal.md User Journeys, related task results, recent diff).
-   2. **Prepare evidence** relevant to the item — pick whichever combination is most informative:
+   2. **Classify the item's trigger condition** (key for next step):
+      - **Internal evidence available now** — code / schema / migration state / cron config / dev DB query result. Claude can collect evidence immediately.
+      - **External signal already occurred** — staging / production already deployed, soak window already elapsed, business decision already made. Claude can query the post-signal state (prod URL `<title>`, prod evlog row, prod migration `\d` output) and collect evidence.
+      - **External signal pending** — required deploy / soak / business authorization has **not yet** occurred. Claude **CANNOT** synthesize evidence by analysis alone; any "based on code, this should work" reasoning is speculation, not walkthrough evidence.
+   3. **Prepare evidence** relevant to the item — pick whichever combination is most informative:
       - `grep` / `rg` results showing the relevant code paths or migrations touched
       - Recent `git diff` excerpts (focused on the area the item references)
       - Command output (if the item asks about deploy / migration / cron / data state, run the relevant query and paste the output)
       - Data summary (e.g., row counts, distribution stats, drift counts)
       - Cross-consumer / cross-environment check results (e.g., per-consumer migration apply status)
-   3. Present to the user, in this format:
+
+      **For "External signal pending" items**: skip evidence collection (there's nothing to collect yet). Move directly to step 4 with the trigger condition stated explicitly.
+   4. Present to the user, in this format:
 
       ```
       ### Discuss item #<id> [discuss] <description>
 
-      **Evidence:**
+      **Trigger condition:** <internal evidence | external signal already occurred | external signal pending — describe>
+
+      **Evidence:** (omit this section if trigger is "external signal pending")
       <grep / diff / command output / summary>
 
-      **My read:** <one or two sentences explaining what the evidence implies>
+      **My read:** <one or two sentences explaining what the evidence implies, OR "waiting on <signal>; no evidence available yet — recommend Issue/Skip or pause archive until signal occurs">
 
       請確認：OK / Issue / Skip
       ```
 
-   4. Wait for the user's response. Branch on the answer:
+   5. Wait for the user's response. Branch on the answer:
 
       - **OK**: Edit `tasks.md` for this line:
         - Set checkbox to `[x]`
@@ -197,8 +205,9 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
       - **Skip**: Edit `tasks.md`:
         - Set checkbox to `[x]`
         - Append `（skip）` annotation (or `（skip: <reason>）` if the user gave a reason)
+      - **Pause archive** (typical when trigger is "external signal pending" and user wants to wait for the signal before deciding): leave checkbox as `[ ]`, do **NOT** add any annotation, and **STOP** the archive flow with a one-line summary to the user — "Archive paused on item #<id> waiting on <signal>. Re-run `/spectra-archive <change>` after <signal> occurs." User retains full control on when to resume; no time-based auto-resume.
 
-   5. Move to the next unchecked `[discuss]` item until all are processed.
+   6. Move to the next unchecked `[discuss]` item until all are processed.
 
    **Skip-condition**: if `## 人工檢查` has no unchecked `[discuss]` items, skip this step silently.
 

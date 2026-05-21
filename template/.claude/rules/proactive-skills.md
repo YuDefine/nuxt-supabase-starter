@@ -118,6 +118,17 @@ GUI 不可用的具體情境（觸發 fallback 的條件）：
 - 使用者明確說「不要開 GUI，直接在 chat 走」
 - Pure backend change 完全無 UI 證據需求，且只剩 1–2 項 yes/no 確認
 
+### `[discuss]` items 不在 review:ui 主流程
+
+`[discuss]` items（production 授權 / 商業判斷 / production 觀察類）**MUST** 由 `/spectra-archive` Step 2.5 walkthrough 接管，**NEVER** 在 review:ui 引導流程內處理。理由：trigger 條件是外部 signal（deploy / soak / 商業決策），Claude 提前分析只能回「等外部 signal」、tasks.md 無更新、change 永遠卡在 review:ui pending state。
+
+review-gui home page 對純 D-only pending（I=0、V=0、evidenceMissing=0、只剩 `[discuss]`）的 change 會自動歸到「🗓 等 archive walkthrough」群、**無**接手 prompt 按鈕。引導使用者的對應動作：
+
+- 該 change 落「🗓 等 archive walkthrough」群 → 直接告知「跑 `/spectra-archive <change>` 觸發 Step 2.5 walkthrough，Claude 會主動準備證據與你討論」
+- 該 change 落「🤖 等 Claude 接手」群（仍含 I 或 V）→ 接手 prompt 仍可用，但 prompt 對 (D) 部分**只列 walkthrough trigger，不分析、不寫 (claude-discussed:) annotation**；(D) 仍由 archive walkthrough 接管
+
+詳細 scope rule 見 [`manual-review.md`](./manual-review.md) § Item Kind Marker `[discuss]` 段。
+
 ### Inline Review-GUI Deep-Link（hard rule）
 
 引導使用者跑 `pnpm review:ui` 時，**MUST** 在 chat 訊息中**直接給出 review-gui 本身的 deep-link URL**，讓使用者啟動 GUI 後可以一鍵跳到該 change 頁面，不必再從左側 list 點選。
