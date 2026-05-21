@@ -243,6 +243,8 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 對本次 working tree 變更跑 `/code-review` skill —— 內部派 3 並行 agent（reuse / quality / efficiency），匯合 finding 後主線一次性修正。
 
+> ℹ️ `/code-review` 是 **AI Agent CLI 內建命令**（bundled in `claude.exe` binary 自 v2.x 起），每個 AI Agent 安裝都有；**非 clade-managed**，不需要 consumer 端 plugin install 或 clade vendor 散播。未來若 CLI 移除此 built-in，本流程需改為 clade-vendored skill。
+
 `/code-review` 修完的版本才是下一步 codex review 應該看的對象 —— 若兩者並行，codex 會挑到 `/code-review` 即將要刪 / 改的 code，浪費一輪修正成本。
 
 跑完輸出 `✅ 0-A.0 完成（/code-review 已 review + 修正）` 後判斷 fast-path：
