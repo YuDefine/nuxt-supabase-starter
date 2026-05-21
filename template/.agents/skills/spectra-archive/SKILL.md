@@ -23,6 +23,57 @@ Archive a completed change.
 
 **Prerequisites**: This skill requires the `spectra` CLI. If any `spectra` command fails with "command not found" or similar, report the error and STOP.
 
+## Change Disposition Decision (clade fork addition)
+
+Before running archive, classify the change into one of four dispositions. Pick the wrong path and you either (a) burn user time on a review that doesn't apply, (b) write spec for a feature that won't ship, or (c) abandon work that's actually still pending.
+
+| Disposition | Trigger | spec sync | manual review | CLI |
+|---|---|---|---|---|
+| **Park** | Change is **postponed but still planned**. Premise still valid. | — | — | `spectra park <name>` (NOT this skill) |
+| **Standard archive** | Implementation `[x]` complete + `## 人工檢查` `[x]` complete | applied | already done | `spectra archive <name>` (default flow) |
+| **Skip-archive (A)** | **Won't be implemented.** Premise dissolved (decision changed / concept removed / change became redundant). | **skipped** | **skipped** | `spectra archive <name> --mark-tasks-complete --skip-specs --no-validate -y` |
+| **In-main-done archive (B)** | Implementation `[x]` complete (built directly on main, no session worktree). Only `## 人工檢查` items remain unchecked. | applied | **skipped** | `spectra archive <name> --mark-tasks-complete --no-validate -y` |
+| **Apply-required (block)** | Non-`## 人工檢查` items still `[ ]` + change is still wanted. | — | — | **STOP** — run `/spectra-apply <name>` first, then re-classify |
+
+### Hard rules
+
+- **NEVER** use Park for "won't implement" — Park's contract is "future work pending"; abandoned changes pollute the parked queue and look like a backlog. Use Skip-archive (A) instead.
+- **NEVER** use Skip-archive (A) when implementation work is actually done — that drops the spec delta and leaves the codebase with shipped behavior that has no spec record. Use In-main-done archive (B) instead.
+- **NEVER** run In-main-done archive (B) without first verifying that non-`## 人工檢查` task sections are fully `[x]`. Use the inspection check below.
+- **NEVER** auto-batch multiple changes into Skip-archive (A) without per-change user confirmation — abandoning work is destructive (spec delta thrown away, future readers lose the why).
+- **MUST** record the disposition reason (1 line) in the archive commit message when using Skip-archive (A) or In-main-done archive (B), so future readers can tell why standard flow was bypassed:
+  - A: `archive: <name>; skip — <reason premise dissolved>`
+  - B: `archive: <name>; in-main-done — <reason no worktree, e.g. built directly on main>`
+
+### Inspection check (before B vs Apply-required)
+
+To distinguish In-main-done archive (B) from Apply-required, parse `openspec/changes/<name>/tasks.md`:
+
+```bash
+awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$0}' \
+  openspec/changes/<name>/tasks.md
+```
+
+- **Empty output** → all non-manual-review items are `[x]` → eligible for In-main-done archive (B)
+- **Non-empty output** → there are unchecked implementation tasks → MUST be either:
+  1. **Apply-required**: run `/spectra-apply <name>` to finish them, then re-classify
+  2. **Skip-archive (A)**: explicit user confirmation that the unchecked work won't be done (premise dissolved)
+  - **NEVER** silently auto-`--mark-tasks-complete` non-manual-review tasks without classifying — that hides incomplete implementation behind a green archive.
+
+### Worktree handling per disposition
+
+- **Skip-archive (A)**: change has no implementation to land. If a session worktree exists (typically with only ingest / sync commits, no real implementation), run `node scripts/wt-helper.mjs cleanup <name> --force --force-discard-unland` to drop branch + worktree; do **NOT** run `merge-back` (nothing meaningful to merge).
+- **In-main-done archive (B)**: change was built on main, no worktree to absorb. Step 0 `wt-helper merge-back ... --noop-if-missing` becomes silent no-op — proceed.
+- **Standard archive**: Step 0 absorbs the matching worktree as documented below.
+
+### When user asks for "skip 人工檢查 and archive"
+
+"Skip 人工檢查 + archive" is ambiguous between A and B. **MUST** disambiguate with the user before running:
+
+- "這條的功能會做嗎？" → No → A
+- "已經在 main 做完了，只是沒走 worktree？" → Yes → B (after passing the Inspection check)
+- Both ambiguous → walk through Inspection check output with the user, then pick.
+
 **Worktree exemption (clade fork addition)**: This skill is exempt from the [[worktree-default]] §1 worktree requirement. Archive is main-bound — every output (delta sync into `openspec/specs/<capability>/spec.md`, move into `openspec/changes/archive/`, screenshot sweep) targets main, so running inside a worktree adds a mandatory merge-back with no isolation benefit. The skill SHALL proceed regardless of whether cwd is on the main worktree or inside a session worktree; the orchestrator (e.g., `/handoff` Mode B Step 2B.5) SHALL dispatch this skill directly without routing through `/wt`. Do NOT add prose instructing the user to "open a worktree first" — that contradicts the §1 exemption.
 
 **Atomic merge-back contract (clade fork addition)**: Per [[worktree-default]] §5.5, worktree branches do NOT squash back to main at `/wt` return time — they wait until archive. Step 0 below absorbs any slug-matching session worktree into main BEFORE the archive gates run, so gates inspect the post-squash state and so main never carries half-done work between sessions.

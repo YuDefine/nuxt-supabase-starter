@@ -16,13 +16,15 @@
 # Usage:
 #   .claude/scripts/codex-review-safe.sh [reasoning_effort] [extra codex args...]
 #
-# Default reasoning_effort = high. Pass `xhigh` for Round 2.
+# Default reasoning_effort = xhigh (commit 0-A flow's only effort level; per
+# rules/core/agent-routing.md, lower effort (high/medium/low) is disallowed for
+# commit review — xhigh is both codex upper bound and the flow's lower bound).
 #
 # Exit code: passes through codex review's exit code.
 
 set -uo pipefail
 
-REASONING="${1:-high}"
+REASONING="${1:-xhigh}"
 shift || true  # tolerate no args after reasoning
 
 REAL_HOME="$HOME/.codex"
