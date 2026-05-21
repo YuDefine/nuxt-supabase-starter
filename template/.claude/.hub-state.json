@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-21T18:08:09.211Z",
+  "syncedAt": "2026-05-21T19:57:48.300Z",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "d2376af13e7ad211",
     "rules/agent-routing.md": "5d14d52c90ab662c",
@@ -24,7 +24,7 @@
     "rules/manual-review.backend.md": "b8c6ad30b954f6f7",
     "rules/manual-review.data-readiness.md": "b0126beffa8a572a",
     "rules/manual-review.evidence.md": "61f88f208d4a006d",
-    "rules/manual-review.md": "6b8b89180051ece9",
+    "rules/manual-review.md": "bff75811fac875a9",
     "rules/output-hygiene.md": "3bf84bfba3cf0e48",
     "rules/proactive-skills.design-checkpoint.md": "5ac504c1a284592b",
     "rules/proactive-skills.ingest-triggers.md": "897e2b6b59bcf05c",
@@ -63,7 +63,7 @@
     "skills/spectra/SKILL.md": "ae7dcf6c23bc22f1",
     "skills/spectra-analyze/SKILL.md": "c833299055df3f76",
     "skills/spectra-apply/SKILL.md": "b27efd1ab0e2670d",
-    "skills/spectra-archive/SKILL.md": "27bbe120ff187b7a",
+    "skills/spectra-archive/SKILL.md": "ef5ff77b54fc8ed5",
     "skills/spectra-ask/SKILL.md": "7e980b60c63029d5",
     "skills/spectra-audit/SKILL.md": "d8001653928db6d0",
     "skills/spectra-commit/SKILL.md": "06afabab495a78bd",
