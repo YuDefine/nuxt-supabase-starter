@@ -5,7 +5,7 @@ paths: ['supabase/migrations/**/*.sql']
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/db-schema/supabase/trigger.md
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 

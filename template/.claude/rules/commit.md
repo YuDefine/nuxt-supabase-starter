@@ -1,7 +1,7 @@
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/commit.md
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 
@@ -142,7 +142,7 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 ### 為何 gate 在這
 
-- main / master 是 trunk 終點（clade / perno 等直接 push main 觸發 deploy / propagate），**沒有 PR review 擋一層**。下一個有意義的人類關卡就是線上 user。
+- main / master 是 trunk 終點（clade / <consumer-a> 等直接 push main 觸發 deploy / propagate），**沒有 PR review 擋一層**。下一個有意義的人類關卡就是線上 user。
 - `## 人工檢查` 區設計就是要擋下「實作完了但 functional round-trip 未驗收」的工作（見 [[manual-review]] §「Screenshot Review ≠ Functional Verification」案例）；commit 進 main 等同跳過該區的保護。
 - 排在最耗時的 0-A/B/C 品質閘門之前，fail-fast 可省 5–15 min 不必要的 codex / screenshot / check 成本。
 

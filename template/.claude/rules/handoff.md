@@ -5,7 +5,7 @@ paths: ['HANDOFF.md', 'openspec/changes/**']
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/handoff.md
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 

@@ -5,7 +5,7 @@ paths: ['openspec/changes/**', 'app/**/*.vue', 'shared/types/**/*.ts', 'supabase
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/ux-completeness.md
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 
@@ -245,7 +245,7 @@ _本 change 為 backend-only，所有驗證由 apply 階段 Claude 自跑（見 
 ### 反面範例（為什麼這條規則存在）
 
 ```markdown
-❌ 不該出現的人工檢查（perno TD-044 原版，且未標 marker）：
+❌ 不該出現的人工檢查（<consumer-a> TD-044 原版，且未標 marker）：
 
 - [ ] #1 Apply the TD-044 migration to dev LXC and verify `audit_signed_chain.signed_business_keys` exists as nullable `jsonb`. @no-screenshot
 - [ ] #2 Trigger or seed controlled drift rows on dev LXC, run `/_cron/audit-chain-diff`, and verify only-business-key drift inserts `business_keys_drift`. @no-screenshot

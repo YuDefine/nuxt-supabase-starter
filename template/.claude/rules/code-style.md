@@ -5,7 +5,7 @@ paths: ['**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts,md,json}', '.*rc*', '.*.config.
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/code-style.md
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 
@@ -123,9 +123,6 @@ catalog:
 
 #### 真實事故參考
 
-<!-- starter:strip-begin -->
-TDMS 2026-05-19：原本走全域 `vite-plus@0.1.19`（含 oxlint 1.60 / oxfmt 0.45），其他 consumer 全域可能各裝不同版（perno 跑 0.1.20、yuntech-usr-sroi 可能更舊）。新人 fork TDMS 不裝 vite-plus → 直接撞 `vp: command not found`，誤以為要全域裝 latest（會升到 oxlint 1.66）→ 撞 10 個既有 test 檔 lint violation。把 vite-plus pin 進 `devDependencies@0.1.21` 解決：(a) 確定工具鏈版本、(b) CI / dev / fork 工作流一致、(c) 未來升級走 upgrade-packages skill。
-<!-- starter:strip-end -->
 
 ### 禁止在 lint-staged / pre-commit / CI 命令中呼叫 eslint / prettier
 
@@ -157,7 +154,7 @@ consumer 端 LOCKED projection 的 ignore 機制設計：
 **MUST** CI workflow 拆 step 跑各別 npm script，每個 script 自帶必要 flag：
 
 ```yaml
-# ✅ 正確 — TDMS 模式（mirror this pattern in all consumers）
+# ✅ 正確 — <consumer-b> 模式（mirror this pattern in all consumers）
 - name: Format check
   run: vp run format:check       # 帶 --ignore-path .oxfmtignore
 
@@ -179,13 +176,6 @@ consumer 端 LOCKED projection 的 ignore 機制設計：
 
 對應 `package.json` `check` script（local dev / pre-push 用）可保留 `vp check` 但 consumer 必須**清楚知道**這個 script 在 LOCKED projection 既有的情況下會撞——dev 端用 `vp staged` (pre-commit) 或拆 step 跑各別 npm script 替代。
 
-<!-- starter:strip-begin -->
-### 真實事故參考
-
-perno consumer v0.40.0（2026-05-13）CI 紅燈：`_ci-reusable.yml` 跑 `vp run check` → vp check 撞 9 個 LOCKED projection format issue → deploy/migrate job 沒跑 → production 沒上線。修法 = 把 `vp run check` 拆成 `vp run format:check` + `vp run typecheck`（對齊 TDMS）。詳見 perno `docs/tech-debt.md` TD-056（CI workflow ignore-path drift）。
-
-`pnpm-lock.yaml` 重生時 oxlint patch 升版可能讓既有 warning 升 error（perno 2026-05-14 觀察到 `vp lint` 對 `scripts/audit-ux-drift.mts` 從「2 warnings + 0 errors」變成「0 warnings + 1 error」）。CI lint baseline 需週期性 audit。
-<!-- starter:strip-end -->
 
 ## 必須事項（MUST）
 
@@ -235,13 +225,6 @@ baseline 內容（自 `vendor/oxc-shared/preset.mjs`）：
 - 直接 inline 寫 `lint:` / `fmt:` 全部欄位而不 import preset — 哪天 preset 升版（例：oxlint patch 升 `no-underscore-dangle` 從 warn 升 error 要在 preset 反制），consumer 就會 silently drift。
 - 在 consumer 端的 `vendor/oxc-shared/preset.mjs` 投影檔直接改 — 下次 propagate 會覆蓋。要改 baseline → cd 到 clade 改 `vendor/oxc-shared/preset.mjs` 再 propagate。
 
-<!-- starter:strip-begin -->
-**真實事故參考**：perno 2026-05-14 觀察 `vp lint scripts/audit-ux-drift.mts`（檔案內容無 git diff）：
-- @ v0.39.2: `Found 2 warnings and 0 errors`
-- @ main (v0.40.0): `Found 0 warnings and 1 error`
-
-`pnpm-lock.yaml` 自 v0.39.2 後重生兩次，oxlint 在 `^0.1.21` 內升 patch，把 `no-underscore-dangle` rule level 從 warn 升 error。perno 5 個 consumer 都吃 clade 同一份 oxlint dep range — preset 已 pin 此 rule 為 `['warn', { allow: ['__dirname', '__filename'] }]`，import 即享 single source of truth。
-<!-- starter:strip-end -->
 
 ### 用 vp 命令做 lint / format
 

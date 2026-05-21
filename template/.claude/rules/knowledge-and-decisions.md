@@ -5,7 +5,7 @@ paths: ['docs/solutions/**', 'docs/decisions/**', 'openspec/**']
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/knowledge-and-decisions.md
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 

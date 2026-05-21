@@ -5,7 +5,7 @@ paths: ['app/**/*.{vue,ts}', 'server/**/*.ts']
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/auth/better-auth/auth.md
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 

@@ -5,7 +5,7 @@ paths: ['server/routes/auth/**/*dev-login*.ts', 'server/routes/auth/**/*test-log
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/auth/better-auth/dev-login.md
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 

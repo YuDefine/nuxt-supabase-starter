@@ -13,7 +13,7 @@ metadata:
 <!--
 🔒 LOCKED — managed by clade
 Source: plugins/hub-core/skills/spectra-discuss/
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 
@@ -266,7 +266,7 @@ Without a plain-language layer, propose may capture the surface motivation (e.g.
 - **NOT a substitute for technical Convergence** — the conclusion summary in "## Convergence" still happens after, with proper capability / spec / artifact names.
 - **NOT triggered for trivial topics** — variable renames and pure refactors don't need synthesis.
 
-### Worked example (TDMS warehouse inventory)
+### Worked example (<consumer-b> warehouse inventory)
 
 Topic: "add 'part' to warehouse_items.item_category enum + integrate vending tool aggregation".
 

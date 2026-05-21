@@ -5,7 +5,7 @@ paths: ['nuxt.config.ts']
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/framework/nuxt/nuxt-security.md
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 
@@ -152,7 +152,7 @@ Consumer `runtime: cf-workers` 時：
 
 每次 nuxt-security 大版升級（major / minor）時：
 
-1. 先在 clade 跑一個 consumer 試水（建議 `nuxt-edge-agentic-rag` 或 `nuxt-supabase-starter`）
+1. 先在 clade 跑一個 consumer 試水（建議 `<consumer-c>` 或 `nuxt-supabase-starter`）
 2. 確認 baseline 11 個欄位仍適用、`routeRules.csurf` 語法未變
 3. 沒 breaking change → 照常 propagate；有 → 同步更新本 rule 並開 ADR
 

@@ -5,7 +5,7 @@ paths: ['server/api/**/*.ts', 'supabase/migrations/**/*.sql']
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/db-runtime/cf-workers/storage.md
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 

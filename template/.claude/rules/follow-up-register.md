@@ -5,7 +5,7 @@ paths: ['openspec/changes/**/tasks.md', 'docs/tech-debt.md']
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/follow-up-register.md
-Edit at: /Users/charles/offline/clade
+Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 
