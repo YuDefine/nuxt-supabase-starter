@@ -12,13 +12,6 @@ Local edits will be reverted by the next sync.
 繁體中文
 
 **核心命題**：multi-session 並行開發共用單一 working tree，staged 區、branch HEAD、partial WIP 都會跨 session 滲漏。
-<!-- starter:strip-begin -->
-最痛的兩次：
-- <consumer-b> `bcfde9c8` — `git add -A` 把另一 session 的 WIP + clade 投影層全 stage 起來一起 commit，22 個檔案被推進 origin/main
-- `clade publish` — 並行 session 的 feature branch 還 checked out 時直接 publish，把 user 還沒準備好的 commit 一起推 + propagate
-
-git worktree 從根本解掉這兩件事（per-session 獨立檔案系統 + 獨立 HEAD + 獨立 staging）。
-<!-- starter:strip-end -->
 
 操作層面由 `/wt` 全自動 orchestrate — user 不需手動 add / merge / cleanup worktree，主線 session cwd 全程不動，subagent 進 worktree 做事完回來 squash merge。
 
@@ -90,7 +83,7 @@ Fork 出 worktree 之前（無論透過 `/wt` ad-hoc 或 `/spectra-apply` Step 0
 - **Clean** → 直接 fork（既有行為）。
 - **Dirty 非空** → 依 caller 路徑：
   - **Spectra workflow 路徑**（有 change context）走 **commit-then-fork**：主線從 `openspec/changes/<change>/` proposal + specs + `.spectra/touched/<change>.json` 萃取 affected paths（scope-in），呼叫 `wt-helper add ... --precheck-baseline <change> --baseline-strategy commit --baseline-scope-paths <comma>`。Helper 內部 selective stage + commit `baseline: <change> pre-fork sync` 上 main 再 fork。Scope-out（跨 session WIP）留在 main 不動。
-  - **Ad-hoc `/wt` 路徑**（無 change context）走 **stash-apply**：`wt-helper add ... --precheck-baseline --baseline-strategy stash`。Helper 內部 `git stash push -u -m wt-baseline/<slug>/<ISO>` 在 main，fork 後 cd 進 worktree `git stash apply` → **pin stash sha 到 `refs/wt-baseline/<slug>/<ISO>` 永久 ref** → `git stash drop`（從 stash list 移除但物件仍 reachable）。Subagent 收到 [[wt]] Step 2 warn 段落，知道哪些檔是 main 的 starting state、不該動。Pin 機制<!-- starter:strip-begin -->是 <consumer-b> 2026-05-17 事故修正<!-- starter:strip-end -->：原本 stash drop 後物件變 unreachable，若 worktree 內 baseline 檔沒被任何 commit 帶走，cleanup 砍 worktree 就**永久消失**；pin 後可用 `wt-helper rescue` 列出救回。
+  - **Ad-hoc `/wt` 路徑**（無 change context）走 **stash-apply**：`wt-helper add ... --precheck-baseline --baseline-strategy stash`。Helper 內部 `git stash push -u -m wt-baseline/<slug>/<ISO>` 在 main，fork 後 cd 進 worktree `git stash apply` → **pin stash sha 到 `refs/wt-baseline/<slug>/<ISO>` 永久 ref** → `git stash drop`（從 stash list 移除但物件仍 reachable）。Subagent 收到 [[wt]] Step 2 warn 段落，知道哪些檔是 main 的 starting state、不該動。Pin 機制：原本 stash drop 後物件變 unreachable，若 worktree 內 baseline 檔沒被任何 commit 帶走，cleanup 砍 worktree 就**永久消失**；pin 後可用 `wt-helper rescue` 列出救回。
   - **Ambiguous**（scope-in 為空但 scope-out 非空、或三來源都對不上）→ **STOP** + 回 user 拍策略。**NEVER** 主線亂猜。
 
 詳細 cookbook（4 種情境 + 完整 trace + scope filter 細節）見 `vendor/snippets/worktree-baseline/`。
@@ -243,15 +236,6 @@ User 顯式呼叫的 script（例如 `scripts/propagate.mjs` 建 `bump/<version>
 
 ### 為什麼從 v2 改 v3
 
-<!-- starter:strip-begin -->
-v2 失敗模式（<consumer-a> 2026-05-17 session 完整暴露）：
-
-- 多 session 平行 fan-out subagent，各自在 worktree commit → 各自在 main squash → main 累積 cross-session unstaged WIP
-- `/commit` 被 `commit.md` 人工檢查 Gate 擋（main/master + 實作 [x] + 人工檢查 [ ]），main 越積越多沒人能 commit
-- 別 session 同樣 squash 進 main 後，第 N+1 個 worktree squash 時撞 13 個 blocker 檔（M tasks.md + M code + untracked），需要 7 條 `cross-session-block-*` stash 才強推進去
-- `wt-helper cleanup` `--force` vs `--force-discard-unland` 訊息互相 deflect，user 要兩次才知道兩個 flag 都得加
-- 5/5 M1 worktree HANDOFF entries stale（branch HEAD 早已 commit P7 但 HANDOFF 還寫「P7 進行中」）
-<!-- starter:strip-end -->
 
 v3 atomic landing 解這些：
 - Main 永遠 deployable — 只有 archive 完整通過（含 archive-gate.sh 5 條 hard rule）的 change 才會進
@@ -393,7 +377,7 @@ node scripts/wt-helper.mjs merge-back <slug> [flags]
 7. 偵測 conflict：若有 unmerged file，`git merge --abort` + pop 回 stash + 保留 worktree + throw with 衝突檔清單。Worktree + branch 保留供 user 手動 reconcile，user 跑修完後再 `merge-back` 一次。
 8. Squash 成功 → 跑 `cmdCleanup(slug, { force: true, forceDiscardUnland: true })` 移除 worktree dir + delete branch。
 
-**為什麼步驟 2 必要**<!-- starter:strip-begin -->（<consumer-b>-1J 2026-05-18 incident）<!-- starter:strip-end -->：worktree 的「helper 在 commit、wiring 在 working tree」切錯型錯誤是無聲 footgun — 沒這道 check 時 squash 只搬 commit，cleanup 把 worktree 砍掉，wiring WIP 永久遺失沒 recovery path（baseline ref 只 cover fork 前 main 的 WIP，沒 cover worktree 內事後新增的 user edit）。
+**為什麼步驟 2 必要**：worktree 的「helper 在 commit、wiring 在 working tree」切錯型錯誤是無聲 footgun — 沒這道 check 時 squash 只搬 commit，cleanup 把 worktree 砍掉，wiring WIP 永久遺失沒 recovery path（baseline ref 只 cover fork 前 main 的 WIP，沒 cover worktree 內事後新增的 user edit）。
 
 ### Stash reconcile（後續清理）
 
@@ -523,9 +507,6 @@ Session 開頭判定要動 code 就 **SHOULD** 立刻打 `/wt <task>`，不要�
 - `spectra list` 從 main 跑會列出 **所有 sibling worktree 內的 active change**（不只 main disk 上看得到的）
 - 「main disk 沒對應 directory + spectra list 顯示 active + spectra park/unpark 回 'does not exist' / 'is not parked'」**不**代表 zombie / DB 髒；多半是別 session 在 sibling worktree 物化內容
 
-<!-- starter:strip-begin -->
-2026-05-18 <consumer-b> session 連續犯兩次：誤判 `single-equipment-kiosk-return` / `consumable-po-warehouse-item-link` 為 zombie，跑 `DELETE FROM in_progress_change` 想 surgical fix，**直接破壞 sibling worktree session 的 in_progress state**（後 mdfind 才發現位置在 `~/offline/<consumer>-wt/<slug>/`，從 `/tmp/spectra-db-backup-*.db` restore 復原）。
-<!-- starter:strip-end -->
 
 ### MUST
 
