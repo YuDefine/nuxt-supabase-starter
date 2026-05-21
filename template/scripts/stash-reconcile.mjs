@@ -54,7 +54,14 @@ const pad2 = (n) => String(n).padStart(2, '0')
  */
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { stdin, stdout } from 'node:process'
 import { createInterface } from 'node:readline/promises'
@@ -255,6 +262,42 @@ function deleteStashSidecar(sidecar) {
   } catch {
     return false
   }
+}
+
+// 反向 orphan detection：sidecar 在但 stash 不在 → stale metadata，可直接清。
+// 成因：publish.mjs autoPopStash 跑了 unlinkSync 但 file system race 沒生效（實證
+// 2026-05-21 v1.4.7 publish 留下 13:31:22.568Z sidecar but stash already popped），
+// 或 stash 被別處 manual drop 但 sidecar 沒一起清。
+function listOrphanSidecars(consumerRoot, allStashes) {
+  const spectraDir = join(consumerRoot, '.spectra')
+  if (!existsSync(spectraDir)) return []
+  let files
+  try {
+    files = readdirSync(spectraDir)
+  } catch {
+    return []
+  }
+  const stashMessages = new Set(allStashes.map((s) => s.message))
+  const orphans = []
+  for (const f of files) {
+    if (!f.startsWith('stash-meta-') || !f.endsWith('.json')) continue
+    const stashTag = f.replace(/^stash-meta-/, '').replace(/\.json$/, '')
+    if (!stashMessages.has(stashTag)) {
+      const fullPath = join(spectraDir, f)
+      let parsed = null
+      try {
+        parsed = JSON.parse(readFileSync(fullPath, 'utf8'))
+      } catch {
+        parsed = null
+      }
+      orphans.push({
+        sidecarPath: fullPath,
+        stashTag,
+        metadata: parsed,
+      })
+    }
+  }
+  return orphans
 }
 
 function inspectStashShape(consumerRoot, ref) {
@@ -550,6 +593,7 @@ function parseArgs(argv) {
     staleDays: null,
     slug: null,
     sweepOrphans: false,
+    sweepOrphanSidecars: false,
     handoffFormat: false,
   }
   for (let i = 0; i < argv.length; i++) {
@@ -558,6 +602,7 @@ function parseArgs(argv) {
     else if (a === '--json') opts.json = true
     else if (a === '--include-all') opts.includeAll = true
     else if (a === '--sweep-orphans') opts.sweepOrphans = true
+    else if (a === '--sweep-orphan-sidecars') opts.sweepOrphanSidecars = true
     else if (a === '--handoff-format') opts.handoffFormat = true
     else if (a === '--stale-days') {
       const n = Number(argv[++i])
@@ -581,6 +626,71 @@ async function main() {
 
   const consumerRoot = findConsumerRoot()
   const all = listStashes(consumerRoot)
+
+  // 反向 sweep：scan sidecar files，回報「sidecar 在 stash 不在」的孤兒。
+  // 此 mode 跟 stash-side scan 分離 — 不走 stash filter / namespace / staleDays。
+  if (opts.sweepOrphanSidecars) {
+    const orphans = listOrphanSidecars(consumerRoot, all)
+    if (opts.json) {
+      console.log(JSON.stringify({ orphanSidecars: orphans }, null, 2))
+      return
+    }
+    if (orphans.length === 0) {
+      console.log('✓ no orphan sidecars — all .spectra/stash-meta-*.json have backing stashes')
+      process.exit(0)
+    }
+    console.log(`Found ${orphans.length} orphan sidecar(s) (no backing stash):`)
+    for (const o of orphans) {
+      const rel = relative(consumerRoot, o.sidecarPath)
+      console.log(`  ${rel}`)
+      console.log(`    stashTag: ${o.stashTag}`)
+      if (o.metadata) {
+        console.log(`    pid: ${o.metadata.pid ?? '(none)'}`)
+        console.log(`    cwd: ${o.metadata.cwd ?? '(none)'}`)
+        console.log(`    createdAt: ${o.metadata.createdAt ?? '(none)'}`)
+        if (o.metadata.filesTracked || o.metadata.filesUntracked) {
+          const fileList = [
+            ...(o.metadata.filesTracked || []),
+            ...(o.metadata.filesUntracked || []),
+          ]
+          console.log(
+            `    files (${fileList.length}): ${fileList.slice(0, 3).join(', ')}${fileList.length > 3 ? '...' : ''}`,
+          )
+        }
+      } else {
+        console.log(`    metadata: (unparseable)`)
+      }
+    }
+    console.log('')
+    console.log('Sidecar without stash = stale metadata，可直接刪：')
+    console.log(`  rm ${orphans.map((o) => relative(consumerRoot, o.sidecarPath)).join(' ')}`)
+    if (opts.interactive) {
+      const rl = createInterface({ input: stdin, output: stdout })
+      try {
+        const ans = (await rl.question('Delete all listed orphan sidecars? [y/N]: '))
+          .trim()
+          .toLowerCase()
+        if (ans === 'y' || ans === 'yes') {
+          let deleted = 0
+          for (const o of orphans) {
+            try {
+              unlinkSync(o.sidecarPath)
+              deleted++
+            } catch (e) {
+              console.error(`  failed to delete ${o.sidecarPath}: ${e.message ?? e}`)
+            }
+          }
+          console.log(`✓ deleted ${deleted}/${orphans.length} sidecar(s)`)
+        } else {
+          console.log('Aborted (no files touched).')
+        }
+      } finally {
+        rl.close()
+      }
+    }
+    return
+  }
+
   let filtered = opts.includeAll ? all : filterNamespaced(all)
   if (opts.staleDays !== null) {
     filtered = filterByStaleDays(filtered, opts.staleDays)
