@@ -351,9 +351,18 @@ if [ -f "$TASKS_FILE" ]; then
       fi
 
       HAS_VERIFIED_E2E_ANNOTATION=false
+      VERIFIED_E2E_MALFORMED=false
       VERIFIED_E2E_RE='\(verified-e2e:[^)]*\)'
       if [[ "$line" =~ $VERIFIED_E2E_RE ]]; then
-        HAS_VERIFIED_E2E_ANNOTATION=true
+        VERIFIED_E2E_BODY="${BASH_REMATCH[0]}"
+        # Require both spec= and trace= tokens inside the annotation body.
+        # Without this the gate accepts spec-only annotations that silently
+        # degrade the evidence trail (replayable Playwright trace missing).
+        if [[ "$VERIFIED_E2E_BODY" == *"spec="* && "$VERIFIED_E2E_BODY" == *"trace="* ]]; then
+          HAS_VERIFIED_E2E_ANNOTATION=true
+        else
+          VERIFIED_E2E_MALFORMED=true
+        fi
       fi
 
       HAS_VERIFIED_API_ANNOTATION=false
@@ -388,7 +397,11 @@ if [ -f "$TASKS_FILE" ]; then
 
       if has_kind 'verify:e2e' && [ "$HAS_VERIFIED_E2E_ANNOTATION" = false ]; then
         MANUAL_GATE_BLOCKED=true
-        echo "[UX Gate] $KIND_LABEL item lacks (verified-e2e: ...) annotation: $ID — run pnpm test:e2e:verify $CHANGE_NAME to produce the evidence" >&2
+        if [ "$VERIFIED_E2E_MALFORMED" = true ]; then
+          echo "[UX Gate] $KIND_LABEL item has malformed (verified-e2e: ...) — must contain both spec=<path> and trace=<path>: $ID" >&2
+        else
+          echo "[UX Gate] $KIND_LABEL item lacks (verified-e2e: ...) annotation: $ID — run pnpm test:e2e:verify $CHANGE_NAME to produce the evidence" >&2
+        fi
       fi
 
       if has_kind 'verify:api' && [ "$HAS_VERIFIED_API_ANNOTATION" = false ]; then

@@ -17,7 +17,7 @@ Local edits will be reverted by the next sync.
 - **0-B** UI Design Review（條件觸發）— 含 `.vue` 模板變動 + 屬於頁面/元件/佈局/互動/樣式變更時派 screenshot-review agent
 - **0-C** **format / lint / typecheck / test 全綠**：跑 `pnpm check`（多數專案含 format/lint/typecheck）**並且**確認 test 也有跑。**若 `package.json` 的 `scripts.check` 不含 `test` / `vitest`，必須額外跑 `pnpm test`（或 `vp test run` / `pnpm test:unit`），否則 CI 抓到的測試失敗（hook timeout、flake、新增測試壞掉）會在 commit 後才暴露**
 
-**並行執行**：0-A.0 simplify 序跑完後，**0-A.1（codex high 背景）/ 0-B（screenshot subagent）/ 0-C（主線 foreground check）三軸 MUST 並行**——序跑會浪費 5–10 分鐘閘門時間。`codex review --uncommitted` 啟動時讀 working tree snapshot，後續變動不影響它正在進行的 review，所以三軸並行安全。詳細啟動順序與大改動 fallback 見 `.claude/commands/commit.md` 的「0-A/B/C 並行策略」。
+**並行執行**：0-A.0 simplify 序跑完後，**0-A.1（codex high 背景）/ 0-B（screenshot subagent）/ 0-C（主線 foreground check）三軸 MUST 並行**——序跑會浪費 5–10 分鐘閘門時間。`codex review --uncommitted` 啟動時讀 working tree snapshot，後續變動不影響它正在進行的 review，所以三軸並行安全。詳細啟動順序與大改動 fallback 見 `.claude/skills/commit/SKILL.md` 的「0-A/B/C 並行策略」。
 - **Step 1** Schema 同步檢查 — `database.types.ts` 與 migration 對齊
 - **Step 5** 版本號升級 + tag push — `feat` → minor、其他 → patch
 
@@ -138,7 +138,7 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 1. 該 change 的 `tasks.md` **非** `## 人工檢查` 段落含任一 `- [x]` → 已開始 / 完成實作
 2. 該 change 的 `## 人工檢查` 段落含任一 `- [ ]` → 人工檢查未完成
 
-只滿足其一不擋（純 propose 未動工的 change、或實作完且人工檢查全綠的 change，都允許 commit）。判定流程、fail-fast 位置（Step 0-Scope 之後、Step 0 品質檢查之前）見 `.claude/commands/commit.md` Step 0-MR。
+只滿足其一不擋（純 propose 未動工的 change、或實作完且人工檢查全綠的 change，都允許 commit）。判定流程、fail-fast 位置（Step 0-Scope 之後、Step 0 品質檢查之前）見 `.claude/skills/commit/SKILL.md` Step 0-MR。
 
 ### 為何 gate 在這
 
@@ -248,7 +248,7 @@ En：`revert` / `undo` / `rollback` / `roll back` / `reset` / `discard` / `drop`
 
 ## 搭配
 
-- Command 本體：`.claude/commands/commit.md` — 定義「怎麼做」（procedure）
+- Skill 本體：`.claude/skills/commit/SKILL.md` — 定義「怎麼做」（procedure）
 - 本規則：定義「要不要做」— 政策、閘門、強制入口
 
 > 本檔為 starter template 的預設規則，複製出去後依專案實際使用調整。
