@@ -1,11 +1,11 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-21T16:15:47.650Z",
+  "syncedAt": "2026-05-21T18:08:09.211Z",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "d2376af13e7ad211",
     "rules/agent-routing.md": "5d14d52c90ab662c",
     "rules/audit-pattern.md": "572c64e997f83746",
-    "rules/code-style.md": "1686b7acd5d22fb8",
+    "rules/code-style.md": "b24532b558d9b138",
     "rules/commit.md": "ca69d13b09795419",
     "rules/consumer-meta.md": "22db23fd090b3e94",
     "rules/data-layer-d1.md": "34ec385579907b66",
@@ -41,7 +41,7 @@
     "rules/ux-completeness.md": "ec5c9860e46f131a",
     "rules/verification-lease.md": "ea61ba2e7db75c86",
     "rules/work-claims.md": "576bc2e77022aef1",
-    "rules/worktree-default.md": "e7588f43bc31d04c",
+    "rules/worktree-default.md": "9facc39fba427471",
     "rules/auth.md": "ab77589f04fe8509",
     "rules/dev-login.md": "1763194d8cb31302",
     "rules/audit-schema.md": "e3d9db4baaf89d0b",

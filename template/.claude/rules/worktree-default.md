@@ -314,7 +314,7 @@ node scripts/wt-helper.mjs merge-back <slug> --auto-stash
 
 **典型符合**（自主 land 必為）：
 
-- `/upgrade-packages` — 跑完所有 package codex 派工就是終點，沒下游 skill
+- `/dep-upgrade` § Outdated mode — 跑完所有 package codex 派工就是終點，沒下游 skill
 - 任何未來「fork worktree 做機械化工作（migration、codemod、bulk rename、批次重構）→ 跑完就收工」的 skill
 
 **典型不符合**（保留 deferred-landing 例外）：

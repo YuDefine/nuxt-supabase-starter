@@ -101,7 +101,7 @@ catalog:
 
 - 全域版本是 user 機器狀態，跨機器、跨 CI runner 不一致 → `vp lint` / `vp fmt` 行為漂移。CI 跟 dev 抓到不同 lint violation 是常見實證踩坑（user 升全域 → 突然某條 rule 變嚴 → dev 過 / CI 紅）。
 - vp bundle 的 oxlint / oxfmt 版本由 vp `dependencies` 嚴格 pin（`=1.63.0` / `=0.48.0` 之類），等同 vp 版本 = 工具鏈確定版本。vp 沒釘 = 工具鏈沒釘。
-- consumer 端升 vp **MUST** 走 [`upgrade-packages`](../../plugins/hub-core/skills/upgrade-packages/SKILL.md) skill（per-package commit + bisect-friendly + 走品質閘門），不是 user 跑 `pnpm add -g vite-plus@latest` 偷偷升所有 consumer。
+- consumer 端升 vp **MUST** 走 [`dep-upgrade`](../../plugins/hub-core/skills/dep-upgrade/SKILL.md) skill 的 § Outdated mode（per-package commit + bisect-friendly + 走品質閘門），不是 user 跑 `pnpm add -g vite-plus@latest` 偷偷升所有 consumer。
 - 跨 consumer 工具鏈 lockstep 是 clade governance 的前提（[`code-style.md`](./code-style.md) § Governance），全域裝法繞過了這層治理。
 
 #### MUST
