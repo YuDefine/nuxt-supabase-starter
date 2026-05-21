@@ -5,7 +5,7 @@ paths: ["server/api/**/*.ts"]
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/runtime/cf-workers/api-patterns.md
-Edit at: <clade-central-repo>
+Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
@@ -160,8 +160,8 @@ Template 預設部署到 **Cloudflare Workers**（`nitro.preset: 'cloudflare_mod
 
 Audit table 命名、欄位、hash chain、RLS、helper 統一規約見：
 
-- **通用 D-pattern**：`db-schema/supabase/audit-schema.md`（<consumer-a> / yuntech / agentic-rag 用 `audit_logs` 表）
-- **<consumer-b> legacy**：`db-schema/supabase-self-hosted/audit-schema.md`（<consumer-b> 用 `tdms.operation_logs`）
+- **通用 D-pattern**：`db-schema/supabase/audit-schema.md`（perno / yuntech / agentic-rag 用 `audit_logs` 表）
+- **TDMS legacy**：`db-schema/supabase-self-hosted/audit-schema.md`（TDMS 用 `tdms.operation_logs`）
 
 Runtime module 不重複定義 schema；session agent 從 `db-schema/<variant>/audit-schema.md` 找完整規約。
 

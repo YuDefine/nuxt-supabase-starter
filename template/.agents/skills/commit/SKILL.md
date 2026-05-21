@@ -1,9 +1,11 @@
 ---
+name: commit
 description: 依功能分類變更並逐步完成 commit，遵循 commitlint 規範
+effort: high
 ---
 <!--
 🔒 LOCKED — managed by clade
-Source: plugins/hub-core/commands/commit.md
+Source: plugins/hub-core/skills/commit/
 Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->

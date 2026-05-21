@@ -5,7 +5,7 @@ paths: ['package.json', 'vitest.config.ts', 'vitest.config.mts', 'vite.config.ts
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/test-scripts.md
-Edit at: <clade-central-repo>
+Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 

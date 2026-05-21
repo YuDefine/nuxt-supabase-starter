@@ -5,7 +5,7 @@ paths: ['docs/FIXTURES.md', 'docs/fixtures.md']
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/fixtures-reference.md
-Edit at: <clade-central-repo>
+Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
@@ -39,7 +39,7 @@ Local edits will be reverted by the next sync.
 
 Clade 中央倉 **不**規定 `docs/FIXTURES.md` 內容 schema — per-consumer 業務差異大（kiosk UID 結構、staff role 命名、business key 命名規約都不同）。Clade 只規定該檔 **必須** 存在、必須含「測試身分」section、必須與 seed cross-link。
 
-範例（<consumer-b> 風格，可參考但非強制）：
+範例（TDMS 風格，可參考但非強制）：
 
 ```markdown
 # Fixtures Reference
@@ -58,8 +58,8 @@ Clade 中央倉 **不**規定 `docs/FIXTURES.md` 內容 schema — per-consumer 
 
 | Email | Role | Org |
 | --- | --- | --- |
-| `admin@example.com` | admin | <consumer-b>-DEV |
-| `staff@example.com` | staff | <consumer-b>-DEV |
+| `admin@example.com` | admin | TDMS-DEV |
+| `staff@example.com` | staff | TDMS-DEV |
 
 ## Work Report 範例
 

@@ -4,7 +4,7 @@ description: 建立 Supabase migration，確保符合安全規範
 <!--
 🔒 LOCKED — managed by clade
 Source: plugins/hub-core/commands/db-migration.md
-Edit at: <clade-central-repo>
+Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 

@@ -1,7 +1,7 @@
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/verification-lease.md
-Edit at: <clade-central-repo>
+Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
@@ -36,7 +36,7 @@ Local edits will be reverted by the next sync.
 ```jsonc
 {
   "schemaVersion": "1",
-  "consumerId": "<consumer-b>",
+  "consumerId": "TDMS",
   "claimedAt": "2026-05-19T12:18:00Z",
   "holder": {
     "kind": "claude",                 // claude | codex | human | subagent
@@ -45,18 +45,18 @@ Local edits will be reverted by the next sync.
   },
   "devServer": {
     "pid": 78363,
-    "cwd": "<home>/offline/<consumer-b>-wt/fix-vending-part-name-display",
+    "cwd": "/Users/charles/offline/TDMS-wt/fix-vending-part-name-display",
     "port": 3000,
     "url": "http://127.0.0.1:3000"
   },
   "browserProfile": {
     "buName": "default",
     "cdpUrl": "http://127.0.0.1:9333",
-    "userDataDir": "~/Library/Application Support/Google/Chrome-BH"
+    "userDataDir": "/Users/charles/Library/Application Support/Google/Chrome-BH"
   },
   "cookieNamespace": "tdms-fix-vending-part-name-display",
   "envFile": {
-    "path": "<home>/offline/<consumer-b>-wt/fix-vending-part-name-display/.env.local",
+    "path": "/Users/charles/offline/TDMS-wt/fix-vending-part-name-display/.env.local",
     "sha256": "e3b0c44..."
   },
   "auditLog": [
@@ -116,7 +116,7 @@ human        固定字串 "human"                             不可缺，至少
 ```
 [lease:<consumer>] cannot claim — already held by <holder.kind>:<holder.sessionId>
   since:        2026-05-19T12:18:00Z (8m 32s ago)
-  dev server:   PID 78363, cwd=<home>/offline/<consumer-b>-wt/fix-vending-part-name-display, port=3000
+  dev server:   PID 78363, cwd=/Users/charles/offline/TDMS-wt/fix-vending-part-name-display, port=3000
   browser:      BU_NAME=default
   cookie ns:    tdms-fix-vending-part-name-display
   env file:     .env.local (sha256:e3b0c44...)

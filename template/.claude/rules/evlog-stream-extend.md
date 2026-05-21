@@ -1,7 +1,7 @@
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/evlog-stream-extend.md
-Edit at: <clade-central-repo>
+Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
@@ -119,9 +119,9 @@ for await (const e of tailFsLogs({ pollIntervalMs: 500, signal: ac.signal })) {
 
 預設 5 件套 enricher（UA / Geo / RequestSize / TraceContext / Tenant — 見 `vendor/snippets/evlog-enrichers-stack/`）覆蓋通用情境。當 consumer 需要把**自家業務 metadata**附到每個 wide event 時，才寫自家 enricher：
 
-- **<consumer-a>**: multi-tenant `tenant.id` / `tenant.org` 已是 production 需求
-- **<consumer-b>**: 製造業 `station.id` / `workstation.kind` / `inspection.batch_id`
-- **<consumer-c>**: AI agent `agent.id` / `agent.run_id` / `retrieval.scope`
+- **perno**: multi-tenant `tenant.id` / `tenant.org` 已是 production 需求
+- **TDMS**: 製造業 `station.id` / `workstation.kind` / `inspection.batch_id`
+- **edge-rag**: AI agent `agent.id` / `agent.run_id` / `retrieval.scope`
 
 ### API surface
 
@@ -180,9 +180,9 @@ export default defineNitroPlugin((nitroApp) => {
 
 典型 use case：
 
-- **<consumer-a>**: enterprise tier user 的 5xx 全留（debug critical customer）
-- **<consumer-b>**: 製造端 `inspection.failed` 全留 + `duration > 2000ms` 全留
-- **<consumer-c>**: AI agent `policy.deny` / `tool.invoke.failed` 全留
+- **perno**: enterprise tier user 的 5xx 全留（debug critical customer）
+- **TDMS**: 製造端 `inspection.failed` 全留 + `duration > 2000ms` 全留
+- **edge-rag**: AI agent `policy.deny` / `tool.invoke.failed` 全留
 
 ### API surface
 

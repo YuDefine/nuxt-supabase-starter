@@ -5,7 +5,7 @@ paths: ['screenshots/**', 'tests/e2e/**', 'openspec/changes/**/design-review.md'
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/screenshot-strategy.md
-Edit at: <clade-central-repo>
+Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 

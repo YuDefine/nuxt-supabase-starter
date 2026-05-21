@@ -5,7 +5,7 @@ paths: ['**/*']
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/review-tiers.md
-Edit at: <clade-central-repo>
+Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 

@@ -1,7 +1,7 @@
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/goal-mode.md
-Edit at: <clade-central-repo>
+Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 

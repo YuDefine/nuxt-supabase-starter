@@ -5,7 +5,7 @@ paths: ['docs/tech-debt.md', '**/docs/tech-debt.md']
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/tech-debt-routing.md
-Edit at: <clade-central-repo>
+Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
@@ -59,13 +59,13 @@ Consumer 端的 `.claude/` / `scripts/spectra-advanced/` / vendor 副本是 clad
 - 散播：propagate 後 5 consumer 的 `scripts/evlog-adoption-audit.mjs` 副本同步收到
 - → **登 clade TD**
 
-### 範例 2：<consumer-a> staging app 廣布 500
+### 範例 2：perno staging app 廣布 500
 
 - 問題：staging worker `/api/v1/employees/me`、`/api/v1/leave/types` 都 500
-- 修法：<consumer-a> 自家 worker secret / module load / supabase tunnel 排查
-- 修在哪：<consumer-a> 自家 `server/` / `wrangler.jsonc` / GitHub Secrets
+- 修法：perno 自家 worker secret / module load / supabase tunnel 排查
+- 修在哪：perno 自家 `server/` / `wrangler.jsonc` / GitHub Secrets
 - 散播：clade 不參與
-- → **登 <consumer-a> TD**
+- → **登 perno TD**
 
 ### 範例 3：scaffolder `nuxthub-ai` 缺 D1 migrations:create
 

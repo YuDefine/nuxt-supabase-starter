@@ -5,7 +5,7 @@ paths: ['server/api/**/*.ts', 'server/utils/audit.ts', 'supabase/migrations/**/*
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/audit-pattern.md
-Edit at: <clade-central-repo>
+Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 

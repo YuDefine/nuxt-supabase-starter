@@ -7,7 +7,7 @@ model: haiku
 <!--
 🔒 LOCKED — managed by clade
 Source: plugins/hub-core/agents/check-runner.md
-Edit at: <clade-central-repo>
+Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 

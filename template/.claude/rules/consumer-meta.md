@@ -5,7 +5,7 @@ paths: ['.claude/consumer-meta.json', 'registry/consumers-meta.json', 'registry/
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/consumer-meta.md
-Edit at: <clade-central-repo>
+Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
@@ -16,7 +16,7 @@ Local edits will be reverted by the next sync.
 
 過去這些知識散在：
 
-- memory entries（「<consumer-a> 是 trunk-based」「<consumer-b> OAuth port pin」）
+- memory entries（「perno 是 trunk-based」「TDMS OAuth port pin」）
 - 規則內 hardcoded（`proactive-skills.md § Dev Server Auto-Spawn` 寫死 3001-3050）
 - audit script 內 grep 推測
 - 各 consumer 自家 local rule 自己重述
@@ -52,8 +52,8 @@ Local edits will be reverted by the next sync.
   vendor/snippets/
     consumer-meta/
       README.md
-      <consumer-b>.consumer-meta.json        # 範例（fully filled）
-      <consumer-a>.consumer-meta.json       # 範例（fully filled）
+      TDMS.consumer-meta.json        # 範例（fully filled）
+      perno.consumer-meta.json       # 範例（fully filled）
 
 ~/offline/<each-consumer>/
   .claude/
@@ -82,8 +82,8 @@ Local edits will be reverted by the next sync.
   "generatedAt": "2026-05-19T12:30:00Z",
   "generator": "sync-consumer-meta.mjs@<version>",
   "consumers": {
-    "<consumer-b>": {
-      "declared": { /* full content of <consumer-b>/.claude/consumer-meta.json */ },
+    "TDMS": {
+      "declared": { /* full content of TDMS/.claude/consumer-meta.json */ },
       "derived": {
         "framework": {
           "name": "nuxt",

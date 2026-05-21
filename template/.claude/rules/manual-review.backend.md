@@ -5,7 +5,7 @@ paths: ['server/**/*.ts', 'test/**/*.ts', 'e2e/**/*.ts', 'supabase/**']
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/manual-review.backend.md
-Edit at: <clade-central-repo>
+Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 

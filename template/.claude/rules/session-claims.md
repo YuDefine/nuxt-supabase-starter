@@ -1,7 +1,7 @@
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/session-claims.md
-Edit at: <clade-central-repo>
+Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
@@ -18,7 +18,7 @@ Local edits will be reverted by the next sync.
   "session_id": "...",
   "agent": "claude-code|codex",
   "started_at": "<iso>",
-  "consumer": "<consumer-b>",
+  "consumer": "TDMS",
   "worktree_path": "/Users/.../<consumer>-wt/<slug>",
   "branch": "session/<date>-<slug>",
   "change_id": "<slug>",

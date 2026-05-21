@@ -7,7 +7,7 @@ model: sonnet
 <!--
 🔒 LOCKED — managed by clade
 Source: plugins/hub-core/agents/screenshot-review.md
-Edit at: <clade-central-repo>
+Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
@@ -251,9 +251,9 @@ Project-specific mapping:
 
 | Project shape | GET `_dev-login` param | Legacy `__test-login` param | POST `_dev/login` body |
 | --- | --- | --- | --- |
-| <consumer-a> | `as=admin` for `/admin/*`，否則 `as=employee`，brief 有指定就用 `ehr_hr_manager` / `trac_manager` 等 | N/A | N/A |
-| <consumer-d> | `as=admin` for `/admin/users`、`/admin/reports`、school-window/budget admin surfaces；否則 `as=executor` | N/A | N/A |
-| <consumer-b> | 若 `_dev-login` alias 存在則 `as=admin\|manager\|staff\|unauthorized` | `role=admin\|manager\|staff\|unauthorized` | N/A |
+| perno | `as=admin` for `/admin/*`，否則 `as=employee`，brief 有指定就用 `ehr_hr_manager` / `trac_manager` 等 | N/A | N/A |
+| yuntech-usr-sroi | `as=admin` for `/admin/users`、`/admin/reports`、school-window/budget admin surfaces；否則 `as=executor` | N/A | N/A |
+| TDMS | 若 `_dev-login` alias 存在則 `as=admin\|manager\|staff\|unauthorized` | `role=admin\|manager\|staff\|unauthorized` | N/A |
 | better-auth / RAG | N/A | N/A | `as=admin` for `/admin/*`，否則 `as=member`；admin email 必須在 ALLOWLIST |
 
 #### GET dev-login 呼叫
@@ -278,7 +278,7 @@ assert f"localhost:{port}" in url_seen, f"unexpected host: {url_seen}"
 PY
 ```
 
-Legacy <consumer-b>:
+Legacy TDMS:
 
 ```bash
 export BU_CDP_URL="${BU_CDP_URL:-http://127.0.0.1:9333}"
@@ -599,7 +599,7 @@ node -e 'const s=require("./package.json").scripts||{}; for (const k of ["db:res
 
 **Step 3.5 — Multi-client backend gate（重要）**：
 
-`pnpm db:reset` 在 multi-client repo（同一 codebase 服務多個 client，如 <consumer-a> 的 `<client-a>` / `shared`）通常**只指向預設 client 的 backend**，跑下去會打到錯的 DB。截圖 host 與 db:reset target 不一致時**MUST** 停下回報，不要硬跑：
+`pnpm db:reset` 在 multi-client repo（同一 codebase 服務多個 client，如 perno 的 `bigbyte` / `shared`）通常**只指向預設 client 的 backend**，跑下去會打到錯的 DB。截圖 host 與 db:reset target 不一致時**MUST** 停下回報，不要硬跑：
 
 ```bash
 # 偵測 multi-client：package.json 有 dev:<client> 多項時視為 multi-client
@@ -614,8 +614,8 @@ console.log("clients:", clientScripts.map(k=>k.replace(/^dev:/,"")).join(","));
 判斷規則：
 
 - **single-client repo** → 安全，直接跑 reset 命令
-- **multi-client repo + 截圖 host port 對應 default client**（通常 `dev:<client-a>` / `dev` alias / `dev:default`）→ 安全，直接跑
-- **multi-client repo + host port 對應非 default client**（如 <consumer-a> `:3045` 是 shared，`:3040` 是 <client-a> default）→ **MUST** 停下回報主 session：「`<URL>` 對應非 default client `<client>`，db:reset 預設指向 BigByte LXC 不會處理 `<client>` backend；請手動補對應 seed 後 retry。」**NEVER** 自動跑
+- **multi-client repo + 截圖 host port 對應 default client**（通常 `dev:bigbyte` / `dev` alias / `dev:default`）→ 安全，直接跑
+- **multi-client repo + host port 對應非 default client**（如 perno `:3045` 是 shared，`:3040` 是 bigbyte default）→ **MUST** 停下回報主 session：「`<URL>` 對應非 default client `<client>`，db:reset 預設指向 BigByte LXC 不會處理 `<client>` backend；請手動補對應 seed 後 retry。」**NEVER** 自動跑
 
 **Step 4 — 補 mock + 跑 reset**（通過 Step 3.5 gate 後）：
 

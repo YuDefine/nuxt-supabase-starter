@@ -5,7 +5,7 @@ paths: ['app/**/*.vue', 'app/**/*.ts', 'components/**', 'pages/**', 'layouts/**'
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/proactive-skills.design-checkpoint.md
-Edit at: <clade-central-repo>
+Edit at: /Users/charles/offline/clade
 Local edits will be reverted by the next sync.
 -->
 
