@@ -88,7 +88,7 @@ propose / ingest 階段命中即視為違反，**MUST** 改寫。
 1. **明確 URL** — 寫出要打開的具體頁面（含必要 query string / route param），不要只說「kiosk 頁」「dashboard」「設定頁」
 2. **逐步動作 sub-items** — 用 `#N.M` scoped 拆，每條 sub-item 一個原子動作（開 X → 輸入 Y / 點 Z → 確認 W）。**禁止**流程式描述（例「刷卡 → 進入毛刺 → 操作完成 → 自動回 standby」整條塞在 parent line）
 3. **預期觀察具體化** — 每步寫清楚「應看到什麼 / 不應看到什麼」（具體 toast 文字、badge 狀態、欄位值、route 變化），**禁止**寫「畫面正常」「狀態正確」「操作完成」這類模糊驗收
-4. **UI 元素 MUST 用使用者可見文字指代** — 引用 button / tab / card / region / selector / input / link / dialog / toast 等 UI 元素時，**MUST** 用使用者畫面上實際看得到的文字（i18n string、button label、tab 名稱、卡片標題 / region heading、placeholder、aria-label fallback），**NEVER** 用 codebase 內部識別符（component name、檔名、CSS class、test-id、store action、API endpoint name、fixture id、**DB 欄位名 / capability flag（例 `total_quantity` / `has_vending_location` / snake_case schema 欄位）**、**spec template heading（例 `Resolved Questions` / `Why` / `Impact`）**）。User 看 UI 找不到 codebase 內部識別符對應的位置，整條 item 失去可執行性。寫作者**MUST** 先打開頁面確認該元素 user 實際看到的文字是什麼，再寫進 item。若需 cross-reference schema-level concept（例強調 boolean flag 對應的業務語義），**MUST** 用 backtick + 中文 gloss 形式（例 「取料機位置 (`vending_location`)」），不要裸寫識別符
+4. **UI 元素 MUST 用使用者可見文字指代** — 引用 button / tab / card / region / selector / input / link / dialog / toast 等 UI 元素時，**MUST** 用使用者畫面上實際看得到的文字（i18n string、button label、tab 名稱、卡片標題 / region heading、placeholder、aria-label fallback），**NEVER** 用 codebase 內部識別符（component name、檔名、CSS class、test-id、store action、API endpoint name、fixture id、**DB 欄位名 / capability flag（例 `total_quantity` / `has_vending_location` / snake_case schema 欄位）**、**spec template heading（例 `Resolved Questions` / `Open Questions` / `Why` / `Impact` / `Decision <N>`）**、**propose 寫作 process 內部詞（例 `actual <noun>` / `zero-location copy` / `null-state copy` / `verified annotation`）**、**半中半英 mixed term（例「未設 vending 位置」「vending 庫存」「slot 位置」「tool body 規劃」）**）。User 看 UI 找不到 codebase 內部識別符對應的位置，整條 item 失去可執行性。寫作者**MUST** 先打開頁面確認該元素 user 實際看到的文字是什麼，再寫進 item。若需 cross-reference schema-level concept（例強調 boolean flag 對應的業務語義），**MUST** 用 backtick + 中文 gloss 形式（例 「取料機位置 (`vending_location`)」），不要裸寫識別符
 
 ### 反例：multi-card UI selector
 
@@ -110,6 +110,38 @@ propose / ingest 階段命中即視為違反，**MUST** 改寫。
 - 對動態 / runtime label，引用既有 i18n key 對應的 zh-TW 翻譯，**NEVER** 引用 i18n key 本身（user 看到的是翻譯後的字）
 - 無可見文字的純圖示 button（icon-only）— 用「該卡片右上角的 ❌ 關閉圖示」「sidebar 最下面的齒輪圖示」等位置 + 圖示語義描述
 - 同時引用 codebase 路徑只在「期望結果是改檔」時可用（極罕見，通常 `[review:ui]` 不該動 codebase）
+
+### 反例：propose-process term 與半中半英 mixed term
+
+❌ 不夠（含 propose-process term `Resolved Questions` + half-Chinese-half-English `vending 位置` + propose-process phrase `zero-location copy`）：
+
+```markdown
+- [ ] #4.2 [verify:ui] 確認 row 顯示 `total_quantity = 0` 與「未設 vending 位置」或 Resolved Questions 指定的 zero-location copy
+```
+
+✅ 好（純使用者語言 + 直接寫對應 UI 文字）：
+
+```markdown
+- [ ] #4.2 [verify:ui] 該列「總庫存」欄位顯示「0」；「位置」欄位顯示「尚未配置販賣機格位」灰色提示文字（不顯示任何位置 chip）
+```
+
+❌ 不夠（含 `actual total_quantity` + `Decision <N>` 引用 + `E 機格位` 半英半中）：
+
+```markdown
+- [ ] #5.2 [verify:ui] 在「刀具」tab 搜尋 X，確認 E 機格位顯示為「規劃中（未啟用）」徽章、且該品項的 actual total_quantity 顯示 `0`（per Decision 7 不計入庫存）
+```
+
+✅ 好（直接寫使用者觀察到的視覺結果）：
+
+```markdown
+- [ ] #5.2 [verify:ui] 在「刀具」tab 搜尋框輸入 X，該列「位置」欄位看到「E04（規劃中）」「E05（規劃中）」兩個橘色（warning）chip；「總庫存」欄位顯示「0」（E 機格位不算入總量）
+```
+
+判斷準則（寫前自問）：
+
+- 「我有沒有用 spec template 的標題（Resolved Questions / Open Questions / Decision <N> / Why / Impact）？」是 → 刪掉，直接寫具體期望觀察
+- 「我有沒有用 `actual <noun>` / `zero-location copy` / `null-state copy` 這類 propose 寫作時生成的形容詞 / phrase？」是 → 替換成具體中文（例 `actual quantity` → 「實際數量」）或直接寫 UI 文字
+- 「我有沒有把英文 schema 詞嵌進中文句子？（例「未設 vending 位置」「vending 庫存」「slot 位置」）」是 → 改全中文匹配 UI label（先 grep 找實際 i18n string）
 
 ### 實體裝置 / 規格外輸入的替代路徑
 

@@ -1,7 +1,7 @@
 {
   "$schema": "./patterns.schema.json",
-  "version": "1.2.2",
-  "description": "Single source-of-truth regex patterns for Pre-Review Data Readiness enforcement. Consumed by post-propose-manual-review-check.sh (via jq) and vendor/scripts/review-gui.mts (via import). v1.2.2: both consumers strip `(verified-*: ...)` annotations + trailing markers (@followup / @no-screenshot / @no-manual-review-check) before applying primary regex — jargon / multi-step / abstract-reference in verified evidence reflects DOM truth at verify time and MUST NOT trigger pattern hits.",
+  "version": "1.3.0",
+  "description": "Single source-of-truth regex patterns for Pre-Review Data Readiness enforcement. Consumed by post-propose-manual-review-check.sh (via jq) and vendor/scripts/review-gui.mts (via import). v1.3.0: INTERNAL_JARGON_LEAKAGE 擴充 propose-process terms (Open Questions / Decision N / actual <noun> / *-copy)；新增 MIXED_CN_EN_TERM 偵測半中半英 schema 詞（例「未設 vending 位置」「vending 庫存」）。v1.2.2: both consumers strip `(verified-*: ...)` annotations + trailing markers (@followup / @no-screenshot / @no-manual-review-check) before applying primary regex — jargon / multi-step / abstract-reference in verified evidence reflects DOM truth at verify time and MUST NOT trigger pattern hits.",
   "patterns": [
     {
       "code": "ABSTRACT_REFERENCE",
@@ -43,12 +43,21 @@
     },
     {
       "code": "INTERNAL_JARGON_LEAKAGE",
-      "description": "[review:ui] / [verify:ui] item 描述洩漏 spec internal jargon（DB 欄位名 / capability flag / spec template heading / 表名）— 違反「UI 元素 MUST 用使用者可見文字指代」hard rule，user/QA 不該被迫讀資料庫 schema",
-      "regex": "\\b(Resolved Questions|total_quantity|has_vending_location|ok_rate|ng_count|total_count|weekly_target|responsibility_total|tool_change_score|form_data|form_type|line_member|work_report)\\b",
+      "description": "[review:ui] / [verify:ui] item 描述洩漏 spec internal jargon（DB 欄位名 / capability flag / spec template heading / propose-process term / 表名）— 違反「UI 元素 MUST 用使用者可見文字指代」hard rule，user/QA 不該被迫讀資料庫 schema 或 propose 寫作 process internal 詞",
+      "regex": "\\b(Resolved Questions|Open Questions|Decision [0-9]+|actual [a-z_]+|zero-location copy|null-state copy|total_quantity|has_vending_location|ok_rate|ng_count|total_count|weekly_target|responsibility_total|tool_change_score|form_data|form_type|line_member|work_report)\\b",
       "regexFlags": "",
       "requiresKindIn": ["review:ui", "verify:ui"],
-      "anchor": "manual-review.md#通則",
-      "remediation": "Replace internal jargon with user-facing description matching what user sees on screen. 替代用詞範例（→ 後是建議中文）：`Resolved Questions` → 刪掉（spec 起草階段內部 heading）；`total_quantity` → 「總數量」/「庫存總和」；`has_vending_location` → 「在取料機已上架」；`ok_rate` → 「合格率」/「OK 率」；`ng_count` → 「不合格數」/「NG 數量」；`total_count` → 「總筆數」；`weekly_target` → 「週目標」/「週產量目標」；`responsibility_total` → 「責任總額」；`tool_change_score` → 「換刀分數」；`form_data` → 「表單內容」/「表單欄位值」；`form_type` → 「表單類型」；`line_member` → 「LINE 會員」/「LINE 好友紀錄」；`work_report` → 「工作報告」。Per manual-review.data-readiness.md「UI 元素 MUST 用使用者可見文字指代」hard rule，**禁止**用 codebase 內部識別符（DB 欄位名 / capability flag / API endpoint name / fixture id / spec template heading / 表名）寫 user-facing item。需 cross-reference schema-level concept 時用 backtick + 中文 gloss 形式（例「取料機位置 (`vending_location`)」）。Sample inline（例 `weekly_target=5000`）會命中（POSIX ERE 不支 negative lookahead）— 加 `@no-manual-review-check[sample inline]` 繞開或重寫成「`inspection_standards.id` = 2179」分離格式。新增禁詞由 audit signal 命中後 user-curated 加入。"
+      "anchor": "manual-review.data-readiness.md#ui-元素-must-用使用者可見文字指代",
+      "remediation": "Replace internal jargon with user-facing description matching what user sees on screen. 替代用詞範例（→ 後是建議中文）：`Resolved Questions` / `Open Questions` → 刪掉（spec 起草階段內部 heading）；`Decision <N>` → 不在 review item 引用 spec decision 編號，改寫具體期望觀察；`actual <noun>`（例 `actual total_quantity`）→ 「實際 <具體中文詞>」；`zero-location copy` / `null-state copy` → 直接寫對應 UI 文字；`total_quantity` → 「總數量」/「庫存總和」；`has_vending_location` → 「在取料機已上架」；`ok_rate` → 「合格率」/「OK 率」；`ng_count` → 「不合格數」/「NG 數量」；`total_count` → 「總筆數」；`weekly_target` → 「週目標」/「週產量目標」；`responsibility_total` → 「責任總額」；`tool_change_score` → 「換刀分數」；`form_data` → 「表單內容」/「表單欄位值」；`form_type` → 「表單類型」；`line_member` → 「LINE 會員」/「LINE 好友紀錄」；`work_report` → 「工作報告」。Per manual-review.data-readiness.md「UI 元素 MUST 用使用者可見文字指代」hard rule，**禁止**用 codebase 內部識別符（DB 欄位名 / capability flag / API endpoint name / fixture id / spec template heading / propose-process term / 表名）寫 user-facing item。需 cross-reference schema-level concept 時用 backtick + 中文 gloss 形式（例「取料機位置 (`vending_location`)」）。Sample inline（例 `weekly_target=5000`）會命中（POSIX ERE 不支 negative lookahead）— 加 `@no-manual-review-check[sample inline]` 繞開或重寫成「`inspection_standards.id` = 2179」分離格式。新增禁詞由 audit signal 命中後 user-curated 加入。"
+    },
+    {
+      "code": "MIXED_CN_EN_TERM",
+      "description": "半中半英 propose-internal 術語洩漏（例「未設 vending 位置」「vending 庫存」「slot 位置」「tool body 規劃」）— user 在中文 UI 上看不到英文 schema 詞，必須切換語言 frame 來理解，破壞 [review:ui] 自帶導覽性。違反「UI 元素 MUST 用使用者可見文字指代」hard rule 的另一形式",
+      "regex": "(未設|尚未|沒|沒有|無|有|該|此)[[:space:]]*(vending|VENDING|slot|SLOT|inventory|INVENTORY|kiosk|KIOSK|tool[[:space:]]+(body|insert))",
+      "regexFlags": "",
+      "requiresKindIn": ["review:ui", "verify:ui"],
+      "anchor": "manual-review.data-readiness.md#ui-元素-must-用使用者可見文字指代",
+      "remediation": "Replace mixed Chinese-English terms with full Chinese matching the actual UI label. Examples: 「未設 vending 位置」→「尚未配置販賣機格位」(grep code for actual i18n string / UI label); 「vending 庫存」→「販賣機庫存」or「販賣機格位數量」; 「slot 位置」→「販賣機格位」; 「tool body 規劃」→「刀具本體規劃」; 「kiosk 頁」→「平板操作頁」or 寫具體 URL。寫前先用 grep 確認該元素在 .vue / i18n 檔的實際中文 label。Backtick + 中文 gloss 形式（例「取料機位置 (`vending_location`)」）仍可接受，因 backtick 標明 codebase 詞屬 cross-reference 用途。"
     },
     {
       "code": "REVIEW_UI_BACKEND_ROUNDTRIP",
