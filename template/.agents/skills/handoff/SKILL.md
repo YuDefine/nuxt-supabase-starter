@@ -128,6 +128,7 @@ fi
 | 重複條目（同一事在 HANDOFF / tech-debt / ROADMAP 都有） | 留最該的位置，其他刪 |
 | 寫法違反當前專案規則（如 clade 自治區內 `consumer 自治區工作` violation） | 依規則重寫或刪除 |
 | 仍 valid 的稽核 baseline 表 / outstanding follow-up | 保留 |
+| `## Deferred discuss items` 段（含 `<!-- deferred-begin:...:... -->` markers） | **保留、禁動**：由 `/spectra-archive` Resume mode 獨自 maintain（依 marker 增刪 entry），`/handoff` 不可改寫、reorder、合併或刪除任何 entry |
 
 **MUST** 載入 `.claude/rules/local/*.md` 內所有自治區規則。若有 `clade-role-and-todo-discipline.md` 之類 local rule 限定 HANDOFF 寫法，整理時必須遵守。
 

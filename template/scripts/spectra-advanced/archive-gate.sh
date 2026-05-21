@@ -156,7 +156,9 @@ fi
 # Decision matrix:
 #   review:ui      [x]                 -> pass
 #   review:ui      [ ]                 -> block (must be human-checked)
-#   discuss        [x]                 -> pass (claude-discussed annotation optional)
+#   discuss        [x] +claude-discussed -> pass (walkthrough evidence trail)
+#   discuss        [x] +deferred-to-handoff -> pass (External signal pending; entry in HANDOFF.md)
+#   discuss        [x] no-annotation   -> warn (legacy / pre-rule check)
 #   discuss        [ ] +annotation     -> warn (issue path; user's call)
 #   discuss        [ ] no-annotation   -> block (run /spectra-archive Step 2.5)
 #   verify:e2e     any +annotation     -> pass (automatic channel self-completes)
@@ -350,6 +352,12 @@ if [ -f "$TASKS_FILE" ]; then
         HAS_DISCUSSED_ANNOTATION=true
       fi
 
+      HAS_DEFERRED_ANNOTATION=false
+      DEFERRED_RE='\(deferred-to-handoff:[^)]*\)'
+      if [[ "$line" =~ $DEFERRED_RE ]]; then
+        HAS_DEFERRED_ANNOTATION=true
+      fi
+
       HAS_VERIFIED_E2E_ANNOTATION=false
       VERIFIED_E2E_MALFORMED=false
       VERIFIED_E2E_RE='\(verified-e2e:[^)]*\)'
@@ -383,15 +391,24 @@ if [ -f "$TASKS_FILE" ]; then
       fi
 
       if has_kind 'discuss'; then
-        if [ "$HAS_DISCUSSED_ANNOTATION" = false ]; then
+        # Valid evidence trail: (claude-discussed:) OR (deferred-to-handoff:) — either counts.
+        # deferred path means External signal pending; entry lives in HANDOFF.md awaiting signal,
+        # archive proceeds. Resume mode (re-run /spectra-archive after signal occurs) will
+        # translate (deferred-to-handoff:) → (claude-discussed:) / (issue) / (skip).
+        HAS_VALID_DISCUSS_ANNOTATION=false
+        if [ "$HAS_DISCUSSED_ANNOTATION" = true ] || [ "$HAS_DEFERRED_ANNOTATION" = true ]; then
+          HAS_VALID_DISCUSS_ANNOTATION=true
+        fi
+
+        if [ "$HAS_VALID_DISCUSS_ANNOTATION" = false ]; then
           if [ "$CHECKED" = false ]; then
             MANUAL_GATE_BLOCKED=true
-            echo "[UX Gate] discuss item lacks (claude-discussed: ...) annotation: $ID — run /spectra-archive to invoke Step 2.5 walkthrough" >&2
+            echo "[UX Gate] discuss item lacks (claude-discussed: ...) or (deferred-to-handoff: ...) annotation: $ID — run /spectra-archive to invoke Step 2.5 walkthrough" >&2
           else
-            echo "[UX Gate] warn — discuss item checked without (claude-discussed: ...) annotation: $ID" >&2
+            echo "[UX Gate] warn — discuss item checked without (claude-discussed: ...) or (deferred-to-handoff: ...) annotation: $ID" >&2
           fi
         elif [ "$CHECKED" = false ]; then
-          echo "[UX Gate] warn — discuss item has (claude-discussed: ...) annotation but checkbox unchecked (issue path): $ID" >&2
+          echo "[UX Gate] warn — discuss item has evidence annotation but checkbox unchecked (issue path): $ID" >&2
         fi
       fi
 

@@ -98,6 +98,27 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    - `merge-back: <change-name> absorbed into main` — proceed to Step 1
    - `merge-back: <change-name> absorbed into main (blockers stashed as wt-merge-block/<name>/<ISO>) + worktree cleaned` — proceed; remind user in Step 8 summary that stash entry needs reconciliation
 
+0.5. **Resume-mode detection** (clade fork addition — fires only when explicit change-name given)
+
+   If a `<change-name>` was provided and `openspec/changes/<change-name>/` does NOT exist:
+
+   ```bash
+   if [ ! -d "openspec/changes/<change-name>" ] && [ -d "openspec/changes/archive/<change-name>" ]; then
+     if grep -q '(deferred-to-handoff:' "openspec/changes/archive/<change-name>/tasks.md" 2>/dev/null; then
+       # Resume mode candidate
+       ...
+     fi
+   fi
+   ```
+
+   - **No active dir + no archived dir** → STOP with error: "change `<name>` not found in active or archived"
+   - **No active dir + archived dir but no `(deferred-to-handoff:` annotation in archived tasks.md** → STOP with note: "change `<name>` already fully archived; nothing to resume"
+   - **No active dir + archived dir with `(deferred-to-handoff:` annotations** → enter **Resume mode**: skip Step 0 (merge-back), skip Step 1 (selection prompt), skip Steps 2 / 3 / 3.3 / 3.5 / 4 / 5 / 6 / 7 / 8 entirely. Jump to **Step 2.5b — Resume walkthrough** below; that step is the only work performed in Resume mode.
+
+   Standard archive runs (active change directory exists) **MUST NOT** trigger Resume mode even if a homonymous archived change has deferred items — Step 0.5 only fires when active dir is missing.
+
+   **Skip Step 0.5 entirely** when no change-name was provided (Step 1 still handles selection from active changes).
+
 1. **If no change name provided, prompt for selection**
 
    Run `spectra list --json` to get available changes. Use the **AskUserQuestion tool** to let the user select.
@@ -186,10 +207,12 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
       **Evidence:** (omit this section if trigger is "external signal pending")
       <grep / diff / command output / summary>
 
-      **My read:** <one or two sentences explaining what the evidence implies, OR "waiting on <signal>; no evidence available yet — recommend Issue/Skip or pause archive until signal occurs">
+      **My read:** <one or two sentences explaining what the evidence implies, OR "waiting on <signal>; no evidence available yet — recommend Defer to HANDOFF so archive can proceed">
 
-      請確認：OK / Issue / Skip
+      請確認：OK / Issue / Skip[ / Defer]
       ```
+
+      The **Defer** option is shown **only** when trigger is "external signal pending". For the other two trigger classes, only OK / Issue / Skip are valid — Claude has evidence available and there is nothing legitimate to wait on.
 
    5. Wait for the user's response. Branch on the answer:
 
@@ -205,9 +228,30 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
       - **Skip**: Edit `tasks.md`:
         - Set checkbox to `[x]`
         - Append `（skip）` annotation (or `（skip: <reason>）` if the user gave a reason)
-      - **Pause archive** (typical when trigger is "external signal pending" and user wants to wait for the signal before deciding): leave checkbox as `[ ]`, do **NOT** add any annotation, and **STOP** the archive flow with a one-line summary to the user — "Archive paused on item #<id> waiting on <signal>. Re-run `/spectra-archive <change>` after <signal> occurs." User retains full control on when to resume; no time-based auto-resume.
+      - **Defer** (only valid when trigger is "external signal pending"): Edit `tasks.md`:
+        - Set checkbox to `[x]`
+        - Insert `(deferred-to-handoff: <ISO-8601-timestamp>) (awaiting-signal: <signal-desc>)` between description and trailing markers (canonical ordering: kind marker → annotations → `@followup` / `@no-screenshot`)
+        - Example after: `- [x] #2 [discuss] Confirm rollout (deferred-to-handoff: 2026-05-22T03:14:00Z) (awaiting-signal: prod deploy) @no-screenshot`
+        - **AND** write a HANDOFF entry (see "HANDOFF write" subsection below). Archive flow **continues** — do NOT stop.
 
    6. Move to the next unchecked `[discuss]` item until all are processed.
+
+   **HANDOFF write** (only fires when at least one item took the Defer path in this archive run):
+
+   - Resolve target path: `$MAIN_WT_PATH/HANDOFF.md` (use `git rev-parse --path-format=absolute --git-common-dir` to find the main worktree even from a linked worktree; same idiom as `handoff` skill Step 1.5).
+   - Locate `## Deferred discuss items` heading. If missing, append the heading + an empty body at the end of HANDOFF.md.
+   - For each deferred item, append an entry block (preserving any pre-existing entries in deferred-at ascending order):
+
+     ```md
+     <!-- deferred-begin:<change-name>:<item-id> -->
+     - **<change-name>** #<item-id> — <one-line description copied from tasks.md, stripped of kind marker and annotations>
+       - Awaiting signal: <signal-desc same as awaiting-signal annotation>
+       - Resume: `/spectra-archive <change-name>`
+       - Deferred at: <ISO-8601-timestamp same as deferred-to-handoff annotation>
+     <!-- deferred-end:<change-name>:<item-id> -->
+     ```
+
+   - The HTML markers are load-bearing — Resume mode (Step 1 path resolution) uses them for `sed`-based entry removal. Do **NOT** drop or rename them.
 
    **Skip-condition**: if `## 人工檢查` has no unchecked `[discuss]` items, skip this step silently.
 
@@ -215,10 +259,74 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
 
    **Restrictions** (hard rules from `manual-review.md`):
 
-   - **NEVER** mark a `[discuss]` item `[x]` without showing the user evidence first AND receiving an explicit OK
+   - **NEVER** mark a `[discuss]` item `[x]` without showing the user evidence first AND receiving an explicit OK / Skip / Defer
    - **NEVER** write `(claude-discussed: <ISO>)` annotation without an actual discussion taking place
+   - **NEVER** offer the Defer option when trigger is "internal evidence available" or "external signal already occurred" — Defer is reserved for "external signal pending"
+   - **NEVER** write `(deferred-to-handoff: <ISO>)` annotation without also writing the matching HANDOFF entry in the same archive run
    - **NEVER** batch-process multiple `[discuss]` items in one user prompt — present them one at a time so the user can give a focused answer per item
    - **NEVER** touch `[review:ui]` items during this step
+
+3.5b. **Resume walkthrough** (clade fork addition — only runs when Step 0.5 detected Resume mode; skip otherwise)
+
+   For each line in `openspec/changes/archive/<change-name>/tasks.md` containing `(deferred-to-handoff:`:
+
+   1. Read item description + extract the `awaiting-signal:` annotation text.
+   2. Re-classify trigger condition. The originally-pending signal typically has occurred by now; collect post-signal evidence (prod URL `<title>`, prod evlog row, prod migration `\d` output, etc.). If the signal **still** has not occurred, that's a legitimate "still pending" outcome.
+   3. Present to user identical to Step 2.5 walkthrough format, but with header:
+
+      ```
+      ### Resume discuss item #<id> [discuss] <description>
+
+      **Originally deferred at:** <ISO from deferred-to-handoff annotation>
+      **Awaiting signal:** <signal-desc from awaiting-signal annotation>
+      **Trigger condition now:** <internal evidence | external signal already occurred | external signal still pending>
+
+      **Evidence:** (omit if signal still pending)
+      <grep / diff / command output / summary>
+
+      **My read:** <one or two sentences>
+
+      請確認：OK / Issue / Skip / Still pending
+      ```
+
+      "Defer" is **NOT** offered in Resume mode — that would re-defer the same item indefinitely. The user picks a terminal outcome (OK / Issue / Skip) or signals the item still needs more time (Still pending).
+
+   4. Branch on user response, editing `openspec/changes/archive/<change-name>/tasks.md`:
+      - **OK**: Remove `(deferred-to-handoff: ...)` and `(awaiting-signal: ...)` annotations from the line. Insert `(claude-discussed: <new-ISO>)` between description and trailing markers. Keep checkbox `[x]`.
+      - **Issue**: Remove `(deferred-to-handoff: ...)` and `(awaiting-signal: ...)`. Change checkbox `[x]` → `[ ]`. Append `（issue: <user note>）` between description and trailing markers.
+      - **Skip**: Remove `(deferred-to-handoff: ...)` and `(awaiting-signal: ...)`. Append `（skip[: reason]）`. Keep checkbox `[x]`.
+      - **Still pending**: Leave line completely unchanged (annotations + checkbox both stay). HANDOFF entry also stays.
+
+   5. For each item resolved (OK / Issue / Skip) — i.e. NOT "Still pending" — remove the corresponding HANDOFF entry. Resolve `$MAIN_WT_PATH` first (same idiom as `handoff` skill Step 1.5):
+
+      ```bash
+      GIT_COMMON_DIR="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+      MAIN_WT_PATH="$(dirname "$GIT_COMMON_DIR")"
+      HANDOFF_FILE="$MAIN_WT_PATH/HANDOFF.md"
+
+      # Delete the block between deferred-begin / deferred-end markers for this change/item.
+      # Use sed; if markers not found (user manually edited), leave HANDOFF alone and report.
+      if grep -q "<!-- deferred-begin:<change-name>:<item-id> -->" "$HANDOFF_FILE"; then
+        sed -i.bak "/<!-- deferred-begin:<change-name>:<item-id> -->/,/<!-- deferred-end:<change-name>:<item-id> -->/d" "$HANDOFF_FILE"
+        rm "$HANDOFF_FILE.bak"
+      else
+        echo "warn: HANDOFF entry for <change-name>:<item-id> not found (markers missing); user should clean manually"
+      fi
+      ```
+
+   6. After all deferred items processed:
+      - If `## Deferred discuss items` section body is now empty (no `<!-- deferred-begin:` markers remain anywhere under that heading), best-effort remove the heading too. If removal would risk corrupting surrounding markdown (heading is wedged between other sections), leave heading + empty body and tell user to clean manually.
+      - Print one-line summary: `Resume walkthrough complete: X resolved (Y OK / Z Issue / W Skip) / V still pending`
+
+   7. Resume mode does **NOT** run any spectra CLI command. The archived change directory stays in place; only `tasks.md` (and `HANDOFF.md` entries) get edited. User stages + commits the resulting diff manually with a message like `archive: <change-name>; resume — deferred items: X resolved, Y still pending`.
+
+   **Restrictions** (Resume mode):
+
+   - **NEVER** run `spectra archive` CLI in Resume mode (change is already archived — archive flow is a no-op)
+   - **NEVER** delete or move the archived change directory
+   - **NEVER** re-run gates (archive-gate / manual-review pattern check) / delta sync / screenshot sweep in Resume mode — Step 0.5 explicitly skips those
+   - **NEVER** add new `(deferred-to-handoff: ...)` annotations in Resume mode — Defer is forbidden here (would re-defer indefinitely)
+   - **NEVER** touch items that lack `(deferred-to-handoff:)` annotation, even in the same `## 人工檢查` section — Resume mode is scoped to deferred items only
 
 4. **Assess delta spec sync state**
 
