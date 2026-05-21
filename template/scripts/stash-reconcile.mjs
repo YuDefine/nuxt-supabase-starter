@@ -54,8 +54,8 @@ const pad2 = (n) => String(n).padStart(2, '0')
  */
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { dirname, join, relative, resolve } from 'node:path'
 import { stdin, stdout } from 'node:process'
 import { createInterface } from 'node:readline/promises'
 
@@ -226,6 +226,37 @@ function isArchivedChange(consumerRoot, slug) {
   }
 }
 
+// Sidecar metadata 由 publish.mjs Phase 1 auto-stash flow 寫入：
+// .spectra/stash-meta-<stashTag>.json 含 pid / cwd / gitUser / fileList / mtimes /
+// suspectedTasksFile / sessionLabel — 解決「stash 無人認領要 grep 猜內容」根因。
+// 沒 sidecar 的 stash 視為 orphan（pre-Phase-1 創建 或 第三方 git stash 留下）。
+function loadStashSidecar(consumerRoot, stashMessage) {
+  const spectraDir = join(consumerRoot, '.spectra')
+  if (!existsSync(spectraDir)) return null
+  // sidecar 檔名取 stashTag（== stash message）對應 .json
+  // publish.mjs 用 `clade-publish-pre-<ISO-FILESAFE>` 作 tag，message 直接等於 tag
+  const candidate = join(spectraDir, `stash-meta-${stashMessage}.json`)
+  if (!existsSync(candidate)) return null
+  try {
+    const raw = readFileSync(candidate, 'utf8')
+    const parsed = JSON.parse(raw)
+    return { ...parsed, sidecarPath: candidate }
+  } catch (e) {
+    return { sidecarPath: candidate, parseError: e.message ?? String(e) }
+  }
+}
+
+function deleteStashSidecar(sidecar) {
+  if (!sidecar || !sidecar.sidecarPath) return false
+  if (!existsSync(sidecar.sidecarPath)) return false
+  try {
+    unlinkSync(sidecar.sidecarPath)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function inspectStashShape(consumerRoot, ref) {
   let stat = ''
   try {
@@ -362,6 +393,25 @@ function formatMarkdown(consumerRoot, entries) {
     if (e.namespace.iso) lines.push(`- **ISO**: ${e.namespace.iso}`)
     lines.push(`- **Message**: \`${e.message}\``)
     lines.push(`- **Files**: ${e.shape.totalLines}`)
+    if (e.sidecar) {
+      const sc = e.sidecar
+      if (sc.parseError) {
+        lines.push(`- **Sidecar**: ⚠️ parse error — \`${sc.sidecarPath}\` (${sc.parseError})`)
+      } else {
+        lines.push(`- **Owner (sidecar)**:`)
+        lines.push(`  - pid: ${sc.pid ?? '(none)'}${sc.ppid ? ` (ppid ${sc.ppid})` : ''}`)
+        if (sc.cwd) lines.push(`  - cwd: \`${sc.cwd}\``)
+        if (sc.gitUser) lines.push(`  - git user: ${sc.gitUser}`)
+        if (sc.suspectedTasksFile)
+          lines.push(`  - suspected tasks file: \`${sc.suspectedTasksFile}\``)
+        if (sc.sessionLabel) lines.push(`  - session label: \`${sc.sessionLabel}\``)
+        if (sc.createdAt) lines.push(`  - sidecar createdAt: ${sc.createdAt}`)
+      }
+    } else {
+      lines.push(
+        `- **Owner**: ⚠️ no sidecar metadata (anonymous stash — created pre-Phase-1 or by third-party git stash)`,
+      )
+    }
     lines.push(`- **Recommendation**: \`${e.recommendation.action}\` — ${e.recommendation.reason}`)
     if (e.recommendation.conflictingFiles) {
       lines.push(`- **Conflicts in main working tree**:`)
@@ -396,6 +446,32 @@ function formatMarkdown(consumerRoot, entries) {
   return lines.join('\n') + '\n'
 }
 
+function formatHandoffSection(consumerRoot, entries) {
+  const lines = []
+  lines.push(`## Orphan Stashes (no sidecar metadata)`, '')
+  lines.push(
+    `> Generated ${new Date().toISOString()} by stash-reconcile.mjs --sweep-orphans --handoff-format`,
+  )
+  lines.push(
+    `> 這些 stash 沒對應 .spectra/stash-meta-<tag>.json sidecar，owner 未知。`,
+    `> 逐筆判斷 → apply / drop（**禁止盲 drop**，先 \`git stash show -p <ref>\` 確認）。`,
+    '',
+  )
+  for (const e of entries) {
+    lines.push(`- **${e.ref}** — ${e.namespace.kind} · ${e.namespace.slug ?? '(unknown slug)'}`)
+    lines.push(`  - created: ${e.createdAt}`)
+    lines.push(`  - message: \`${e.message}\``)
+    lines.push(`  - files: ${e.shape.totalLines}`)
+    lines.push(`  - recommend: ${e.recommendation.action} — ${e.recommendation.reason}`)
+    lines.push(`  - inspect: \`git stash show -p ${e.ref} | less\``)
+    lines.push('')
+  }
+  lines.push(
+    `處理流程：跑 \`node vendor/scripts/stash-reconcile.mjs --include-all --sweep-orphans --interactive\` 逐筆對話處理。`,
+  )
+  return lines.join('\n')
+}
+
 async function prompt(question) {
   const rl = createInterface({ input: stdin, output: stdout })
   try {
@@ -416,6 +492,17 @@ async function interactiveLoop(consumerRoot, entries) {
     console.log(`  Kind:    ${e.namespace.kind}`)
     console.log(`  Created: ${e.createdAt}`)
     console.log(`  Files:   ${e.shape.totalLines}`)
+    if (e.sidecar && !e.sidecar.parseError) {
+      const sc = e.sidecar
+      console.log(`  Owner:   pid=${sc.pid ?? '(none)'} cwd=${sc.cwd ?? '(none)'}`)
+      if (sc.gitUser) console.log(`           git=${sc.gitUser}`)
+      if (sc.suspectedTasksFile)
+        console.log(`           suspectedTasksFile=${sc.suspectedTasksFile}`)
+    } else if (e.sidecar && e.sidecar.parseError) {
+      console.log(`  Owner:   ⚠️ sidecar parse error (${e.sidecar.sidecarPath})`)
+    } else {
+      console.log(`  Owner:   ⚠️ no sidecar (anonymous stash — orphan candidate)`)
+    }
     console.log(`  Recommendation: ${e.recommendation.action} — ${e.recommendation.reason}`)
     const ans = (await prompt(`[a]pply / [d]rop / [v]iew diff / [s]kip / [q]uit: `))
       .trim()
@@ -431,6 +518,9 @@ async function interactiveLoop(consumerRoot, entries) {
       try {
         gitRaw(['stash', 'drop', e.ref], { cwd: consumerRoot, stdio: 'inherit' })
         console.log('  dropped')
+        if (deleteStashSidecar(e.sidecar)) {
+          console.log(`  sidecar cleaned: ${relative(consumerRoot, e.sidecar.sidecarPath)}`)
+        }
       } catch (err) {
         console.error(`  drop failed: ${err.message ?? err}`)
       }
@@ -459,12 +549,16 @@ function parseArgs(argv) {
     includeAll: false,
     staleDays: null,
     slug: null,
+    sweepOrphans: false,
+    handoffFormat: false,
   }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--interactive') opts.interactive = true
     else if (a === '--json') opts.json = true
     else if (a === '--include-all') opts.includeAll = true
+    else if (a === '--sweep-orphans') opts.sweepOrphans = true
+    else if (a === '--handoff-format') opts.handoffFormat = true
     else if (a === '--stale-days') {
       const n = Number(argv[++i])
       if (!Number.isFinite(n) || n < 0) {
@@ -505,7 +599,8 @@ async function main() {
     if (opts.staleDays !== null) {
       recommendation.reason = `[STALE >${opts.staleDays}d] ${recommendation.reason}`
     }
-    return { ...s, namespace, shape, recommendation }
+    const sidecar = loadStashSidecar(consumerRoot, s.message)
+    return { ...s, namespace, shape, recommendation, sidecar }
   })
   if (opts.slug !== null) {
     entries = filterBySlug(entries, opts.slug)
@@ -516,8 +611,31 @@ async function main() {
     }
   }
 
+  // 治根 + 預防方案 Phase 3：--sweep-orphans 只列無 sidecar 的 anonymous stash，
+  // 給 user 一份「待認領 / 處理」清單。Recommendation 強制 view-diff（不知 owner
+  // 不敢自動推薦 drop）。配 --handoff-format 輸出可貼進 HANDOFF.md ## Orphan Stashes 段。
+  if (opts.sweepOrphans) {
+    entries = entries.filter((e) => !e.sidecar)
+    for (const e of entries) {
+      e.recommendation = {
+        action: 'view-diff',
+        reason: `orphan (no sidecar metadata; pre-Phase-1 or third-party stash — owner unknown, manual triage required)`,
+      }
+    }
+    if (entries.length === 0) {
+      if (opts.json) console.log(JSON.stringify({ entries: [] }, null, 2))
+      else console.log('✓ no orphan stashes — all publish/propagate stashes have sidecar metadata')
+      process.exit(0)
+    }
+  }
+
   if (opts.json) {
     console.log(JSON.stringify({ entries }, null, 2))
+    return
+  }
+
+  if (opts.handoffFormat) {
+    console.log(formatHandoffSection(consumerRoot, entries))
     return
   }
 
