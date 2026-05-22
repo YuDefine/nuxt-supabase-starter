@@ -234,17 +234,58 @@ Update an existing Spectra change — from a plan file or conversation context.
 
    Fix every failure inline using the existing context and the new plan/conversation source before running the CLI analyzer. Update incomplete design and task content so behavior contracts, verification criteria, and scope boundaries stay current with the new context. Preserve completed tasks unchanged.
 
-   **Check 7: Manual-Review Pattern Enforcement** (clade fork addition — `## 人工檢查` re-check after retro-update)
+   **Check 7: Manual Review Marker Hygiene** (clade fork — applies whenever ingest modifies `## 人工檢查` items)
 
-   `/spectra-ingest` retro-updates a change after impl / verify, which can introduce **new** `## 人工檢查` items or modify existing ones — bypassing `/spectra-propose`'s post-propose-manual-review-check.sh. Re-run the same check at ingest time to catch jargon leakage / abstract reference / missing URL / etc. introduced by the update.
+   `/spectra-ingest` retro-updates a change after impl / verify, which can introduce **new** `## 人工檢查` items or modify existing ones — bypassing `/spectra-propose` Step 5.5. The same hygiene rules **MUST** be enforced here. Apply Rule 1-4 mirroring `spectra-propose` Step 5.5 (Manual Review Marker Hygiene Check). Violations → main thread Edits `tasks.md` directly (do **NOT** round-trip to codex; too slow):
+
+   **Rule 1: Every item line MUST carry a leading marker**
+
+   - Each `- [ ] #N ...` / `- [ ] #N.M ...` line **MUST** have a legal marker immediately after the id: `[review:ui]` / `[discuss]` / `[verify:e2e]` / `[verify:api]` / `[verify:ui]` / verify multi-marker `[verify:<a>+<b>]` or `[verify:<a>+<b>+<c>]`
+   - Verify multi-marker channels limited to `e2e` / `api` / `ui`, canonical order `e2e → api → ui`
+   - Multi-marker **MUST NOT** mix with `[review:ui]` / `[discuss]`; `[verify:api+review:ui]` / `[verify:api+discuss]` are illegal
+   - Missing marker → classify per Rule 2 / 3 / 4 content and add explicit marker; **DO NOT** rely on Default Kind Derivation Rule (fallback is for legacy in-flight items only, and silently falls back to the most strict `review:ui` — the root cause of repeated `[review:ui]` mis-tagging)
+   - Ingest-modified items **MUST** carry explicit marker even if the original (legacy) item did not. Ingest is the boundary where Default Kind Derivation grandfathering ends.
+
+   **Rule 2: Evidence-collection items → `[discuss]` or `[verify:api]`**
+
+   Items containing `Apply migration` / `SSH` / `docker exec` / `psql` / `\d <table>` / `SELECT ... FROM` / `curl` / `Trigger ... cron` / `SET session_replication_role` / 「合理性檢查」/「商業判斷」:
+
+   - SSH / psql / `\d` / `SELECT` / controlled drift / migration existence / 商業判斷 → `[discuss]`
+   - `curl` / HTTP endpoint round-trip reproducible by apply main thread → `[verify:api]`
+   - Misclassified `[review:ui]` / `[verify:ui]` / deprecated `[verify:auto]` → change to `[discuss]` or `[verify:api]`
+
+   **Rule 3: Real user round-trip items → channel per evidence shape**
+
+   - persistence / reload / full journey → `[verify:e2e]`
+   - HTTP status / backend contract → `[verify:api]`
+   - final-state visual only → `[verify:ui]`
+   - mutation response + visual state → `[verify:api+ui]`
+   - journey + extra screenshot evidence → `[verify:e2e+ui]`
+   - real-person-required (Rule 4 whitelist) → `[review:ui]`
+
+   **Rule 4: `[review:ui]` whitelist**
+
+   `[review:ui]` only when description contains one of:
+
+   - email inbox / webhook (agent inbox unreachable)
+   - 「視覺主觀」/「美感」/「a11y 主觀判斷」
+   - 「實體裝置」/「真機」/「手機」/「平板」/「kiosk QR」/「印表機」/「條碼槍」
+   - 「跨機器」/「跨 session」/ production-authorized operation
+   - 「電話」/「SMS」 or spec-external non-UI environment
+
+   Otherwise → explicit `verify:*` per Rule 3. Misclassified items flagged and rewritten by main thread.
+
+   **Then re-run the hook**:
 
    ```bash
    bash scripts/spectra-advanced/post-propose-manual-review-check.sh <change-name>
    ```
 
-   Exit 2 = pattern findings (any of `ABSTRACT_REFERENCE` / `CARD_WITHOUT_UID` / `UI_ITEM_NO_URL` / `MULTI_STEP_NOT_SCOPED` / `REVIEW_UI_BACKEND_ROUNDTRIP` / `INTERNAL_JARGON_LEAKAGE`). Main thread **SHALL** Edit `tasks.md` directly fix findings inline per hook stdout remediation guidance — do NOT round-trip to `codex` (slow). Reference: `vendor/snippets/manual-review-enforcement/patterns.json` + `rules/core/manual-review.data-readiness.md`.
+   Exit 2 = pattern findings (any of `MISSING_KIND_MARKER` / `ABSTRACT_REFERENCE` / `CARD_WITHOUT_UID` / `UI_ITEM_NO_URL` / `MULTI_STEP_NOT_SCOPED` / `REVIEW_UI_BACKEND_ROUNDTRIP` / `INTERNAL_JARGON_LEAKAGE` / `MIXED_CN_EN_TERM`). Main thread **SHALL** Edit `tasks.md` directly per hook stdout remediation guidance. Reference: `vendor/snippets/manual-review-enforcement/patterns.json` + `rules/core/manual-review.data-readiness.md`.
 
    Legitimate false positive (e.g., 真機掃 SMS 無 dev replay endpoint) → add `@no-manual-review-check[<reason>]` trailing marker per `manual-review.md`「`@no-manual-review-check` Marker」.
+
+   **Why this exists**: Without ingest-time enforcement, items modified or added after the original propose cycle can land with `Default Kind Derivation Rule` silently falling back to `[review:ui]`. The review-gui displays the fallback identically to an explicit marker, so the user only discovers the mismatch when they reach the item in review (e.g., 「為何叫我打 API」 / 「這違反 review:ui 收斂原則」). This loop has repeated across multiple changes — ingest **MUST** be the gate that catches it.
 
 ---
 
