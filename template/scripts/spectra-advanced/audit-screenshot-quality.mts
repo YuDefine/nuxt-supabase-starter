@@ -17,11 +17,23 @@
 import { existsSync } from 'node:fs'
 import { readFile, readdir } from 'node:fs/promises'
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
-import {
-  deriveDefaultKindFromProposal,
-  parseManualReviewSections,
-  type ManualReviewItem,
-} from '../review-gui.mts'
+
+// review-gui.mts is hosted in clade central (per propagate manifest @ 76a202a, 2026-05-19);
+// consumer doesn't have a local copy. Resolve dynamically: prefer co-located (clade self),
+// fall back to ${CLADE_HOME}/vendor/scripts/review-gui.mts (consumer).
+const REVIEW_GUI_PATH = (() => {
+  const localPath = new URL('../review-gui.mts', import.meta.url).pathname
+  if (existsSync(localPath)) return localPath
+  const cladeHome = process.env.CLADE_HOME ?? `${process.env.HOME}/offline/clade`
+  return `${cladeHome}/vendor/scripts/review-gui.mts`
+})()
+// Dynamic import → types are `any`-typed at this boundary. Audit consumes items as
+// opaque dictionaries accessing canonical fields (id, kind, checked, raw, scoped, ...);
+// canonical schema lives in clade/vendor/scripts/review-gui.mts (ManualReviewItem).
+const reviewGuiModule = await import(REVIEW_GUI_PATH)
+const deriveDefaultKindFromProposal = reviewGuiModule.deriveDefaultKindFromProposal
+const parseManualReviewSections = reviewGuiModule.parseManualReviewSections
+type ManualReviewItem = any
 
 type Severity = 'warning' | 'critical'
 
