@@ -41,8 +41,11 @@ grep -q '"@cloudflare/vite-plugin"' package.json && echo "Workers project"
 1. Domain 是否**掛在 Cloudflare DNS**（nameserver 切過去；不只 zone delegated）
 2. `cloudflared` CLI 已裝（`brew install cloudflared`）
 3. 已登入：`cloudflared tunnel login`（看 `~/.cloudflared/cert.pem` 存在）
+4. **同時管多 Cloudflare account 的話**：跑 `cloudflared tunnel list` 確認當前 cert.pem 對應的是預期 account（看 tunnel 名稱判：`yudefine-*` / `perno-dev` / `rental-scout-*` 屬 YuDefine；`ehr-*` / `justech-*` / `ms2-*` 屬 BigByte）。綁錯會踩 multi-account silent CNAME misdirection — `route dns` exit 0 但 hostname 被附加到別 account 內第一個 zone。詳見 cookbook `## 多 Cloudflare account 使用情境` 段 + `docs/pitfalls/2026-05-21-cloudflared-multi-account-cname-misdirection.md`
 
 任一缺失就停下來提示使用者補齊，不要硬推進。
+
+`dev-tunnel-setup.sh` 跑時也會自動驗 zone-in-account（用 `CLOUDFLARE_API_KEY`）：命中印確認訊息繼續、0 命中 fail-loud 列三條出路、token 未設則 skip + warn。雙保險（文件層 + 程式層）。
 
 ## Step 3: 取得 API token
 
