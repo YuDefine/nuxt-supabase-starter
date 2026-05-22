@@ -20,13 +20,36 @@
 # Step 0 first is a recipe for false positives on worktree-implemented changes.
 #
 # Usage:
-#   archive-gate.sh <change-name>
+#   archive-gate.sh [--pre-skill] <change-name>
+#
+# Flags:
+#   --pre-skill   Skip Check 4 (Manual Review Kind Validation). Use when the
+#                 gate runs as a PreToolUse:Skill hook for spectra-archive
+#                 BEFORE the skill's Step 3.5 Discuss Items Walkthrough has
+#                 populated `(claude-discussed: ...)` annotations. Without
+#                 this flag, an unchecked `[discuss]` item with no annotation
+#                 would block the very skill that populates the annotation
+#                 (chicken-and-egg). Post-walkthrough validation runs the
+#                 gate again without this flag at SKILL.md Step 5.5.
+#                 Checks 1/2/3/5 (real pre-conditions) always run.
 #
 # Exit:
 #   0 = pass
 #   2 = block (one or more checks failed)
 
 set -euo pipefail
+
+PRE_SKILL=false
+POSITIONAL=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --pre-skill) PRE_SKILL=true; shift ;;
+    --) shift; while [ $# -gt 0 ]; do POSITIONAL+=("$1"); shift; done ;;
+    -*) echo "[UX Gate] unknown flag: $1" >&2; exit 2 ;;
+    *) POSITIONAL+=("$1"); shift ;;
+  esac
+done
+set -- "${POSITIONAL[@]+"${POSITIONAL[@]}"}"
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=lib/common.sh
@@ -151,6 +174,10 @@ if command -v node >/dev/null 2>&1 && [ -f "$AUDIT_SCRIPT" ]; then
 fi
 
 # --- Check 4: Manual Review Kind Validation ---
+# Skipped under --pre-skill (see header comment): annotations are populated by
+# spectra-archive SKILL.md Step 3.5 walkthrough, which runs AFTER this hook.
+# Post-walkthrough validation re-runs the gate without --pre-skill at Step 5.5.
+if [ "$PRE_SKILL" != "true" ]; then
 # Spec: clade docs/archives/openspec-specs/manual-review-item-kind/spec.md "Archive Gate Validation By Kind"
 #
 # Decision matrix:
@@ -444,6 +471,7 @@ if [ -f "$TASKS_FILE" ]; then
     fi
   fi
 fi
+fi  # end Check 4 PRE_SKILL guard
 
 # --- Check 5: Screenshot Quality Audit ---
 SCREENSHOT_AUDIT_SCRIPT="$REPO_ROOT/${SUX_SCRIPTS_DIR}/spectra-advanced/audit-screenshot-quality.mts"
