@@ -17,25 +17,48 @@ metadata:
 ## Step 1 — 跑 headless scan
 
 ```bash
-node scripts/review-gui.mts --scan
+cd ~/offline/clade
+node vendor/scripts/review-gui.mts --scan
 ```
 
-輸出 JSON（schema: `review-readiness-scan/v1`）到 stdout，結構：
+預設從 clade home 掃，輸出會聚合 `consumers.local` 內所有 consumer + worktree。若是 CI / debug 要只掃單一 consumer，才改用 `node vendor/scripts/review-gui.mts --repo <consumer-path> --scan`。
+
+`reviewPort` 會用跟 GUI server 相同的 fallback 規則計算：若 5174 已被占用，scan 會輸出下一個可用 port（例如 5175），後續 handoff **MUST** 使用 entry 內的 `reviewUrl`，不要硬寫 5174。
+
+輸出 JSON（schema: `review-readiness-scan/v2`）到 stdout，結構：
 
 ```jsonc
 {
-  "schema": "review-readiness-scan/v1",
+  "schema": "review-readiness-scan/v2",
   "generatedAt": "<ISO8601>",
   "repoRoot": "<abs>",
-  "counts": { "ready": N, "notReady": M },
-  "ready":    [ { "name": "<change>", "pending": N, "issued": N, "total": N } ],
-  "notReady": [ { "name": "<change>", "pending": N, "issued": N, "total": N,
+  "reviewHost": "127.0.0.1",
+  "reviewPort": 5174,
+  "counts": {
+    "ready": N,
+    "notReady": M,
+    "buckets": { "ready": N, "readyForEvidence": N, "applyInProgress": N }
+  },
+  "ready":    [ { "name": "<change>", "consumerId": "perno",
+                  "changeKey": "perno:<change>", "reviewUrl": "http://127.0.0.1:5174/review/perno:<change>",
+                  "bucket": "ready", "pending": N, "issued": N, "total": N } ],
+  "notReady": [ { "name": "<change>", "consumerId": "perno",
+                  "changeKey": "perno:<change>", "reviewUrl": "http://127.0.0.1:5174/review/perno:<change>",
+                  "bucket": "readyForEvidence", "pending": N, "issued": N, "total": N,
                   "readinessHits": N, "malformed": N,
                   "hitsByCode": { "UI_ITEM_NO_URL": 2, "REVIEW_UI_BACKEND_ROUNDTRIP": 1 },
                   // evidenceMissing：item 標了 [verify:e2e/api/ui] 但缺對應 (verified-*:) annotation。
                   // 落 notReady 群的另一條觸發路徑（與 readinessHits / malformed 並列），各 entry 一個 item。
                   "evidenceMissing": [ { "itemId": "#3", "description": "...",
-                                          "kinds": ["e2e", "api", "ui"] } ] } ]
+                                          "kinds": ["e2e", "api", "ui"] } ] } ],
+  "buckets": {
+    "ready": [ /* 可直接開 reviewUrl 給 user 做 GUI review */ ],
+    "readyForEvidence": [ /* apply 已接近完成，先跑 /spectra-apply Step 8a 補 evidence */ ],
+    "applyInProgress": [ /* implementation 還沒完成，不該補 evidence */ ],
+    "healthCheckNeeded": [ /* manual-review pattern hits，先 ingest/fix tasks.md */ ],
+    "awaitArchiveWalkthrough": [ /* 只剩 [discuss]，跑 /spectra-archive Step 2.5 */ ],
+    "feedbackGiven": [ /* user 已標 issue 或 verify pending，交回 Claude 處理 */ ]
+  }
 }
 ```
 
@@ -49,13 +72,13 @@ HANDOFF.md 用 marker 包夾，每次重跑**覆蓋同一段**（不累積垃圾
 <!-- BEGIN: review-readiness-scan -->
 ## Manual Review Readiness（auto-scan）
 
-> 最後掃描：<generatedAt>　|　ready: N　not-ready: M
+> 最後掃描：<generatedAt>　|　ready: N　not-ready: M　|　review: http://127.0.0.1:<port>
 
 ### ✅ 可以開始檢查（N changes）
 
-可批次跑 `pnpm review:ui` 處理：
+可批次跑 `pnpm review:ui` 處理；每行直接列 `reviewUrl`，不要重新手組 URL：
 
-- `<change>` — pending N/total
+- `<changeKey>` — pending N/total — `<reviewUrl>`
 - ...
 
 ### ⚠ 尚未準備好，需先補強（M changes）
@@ -64,13 +87,20 @@ HANDOFF.md 用 marker 包夾，每次重跑**覆蓋同一段**（不累積垃圾
 
 **(A) Pre-Review Data Readiness alert** — `readinessHits > 0`，**先補資料再 review**（patterns 詳見 `vendor/snippets/manual-review-enforcement/patterns.json`）：
 
-- `<change>` — pending N · ⚠ N hits: UI_ITEM_NO_URL ×2, REVIEW_UI_BACKEND_ROUNDTRIP ×1
+- `<changeKey>` — pending N · ⚠ N hits: UI_ITEM_NO_URL ×2, REVIEW_UI_BACKEND_ROUNDTRIP ×1 — `<reviewUrl>`
 - ...
 
 **(B) Verify-channel evidence missing** — `evidenceMissing.length > 0`，**跑 `/spectra-apply` Step 8a 補 evidence**：
 
-- `<change>` — pending N · ⚠ N item 缺 evidence (e2e ×2, api ×1, ui ×1)
+- `<changeKey>` — pending N · ⚠ N item 缺 evidence (e2e ×2, api ×1, ui ×1) — `<reviewUrl>`
 - ...
+
+**(C) Apply 尚未完成 / feedback / archive walkthrough** — 依 `bucket` 分組列在同一 section 下，不要把這些 change 放進「可以開始檢查」：
+
+- `applyInProgress` → 繼續 `/spectra-apply <change>`，不要補 Step 8a evidence
+- `feedbackGiven` → user 已在 GUI 留 issue 或 verify pending，交回 Claude 針對 issue 處理
+- `awaitArchiveWalkthrough` → 跑 `/spectra-archive <change>` 觸發 Step 2.5 discuss walkthrough
+- `crossWtDirty` / `malformed` → 先修 worktree routing 或 tasks.md 格式
 <!-- END: review-readiness-scan -->
 ```
 
@@ -93,11 +123,11 @@ HANDOFF.md 用 marker 包夾，每次重跑**覆蓋同一段**（不累積垃圾
 
 ```
 Scanned at <generatedAt>:
-  ✅ Ready  (N): change-a, change-b
-  ⚠  Need fix (M): change-c (3 hits), change-d (1 hit)
+  ✅ Ready  (N): consumer:change-a, consumer:change-b
+  ⚠  Need fix (M): consumer:change-c (3 hits), consumer:change-d (1 evidence missing)
 
 HANDOFF.md updated（section: Manual Review Readiness）。
-建議：對 ready 那群跑 `pnpm review:ui` 批次處理；需要 fix 的先看 hitsByCode 補資料再 rescan。
+Ready deep-links 已寫入 HANDOFF.md；需要 fix 的先看 bucket / hitsByCode 處理後再 rescan。
 ```
 
 **不要**主動跑 `/spectra-ingest`、不要主動修 tasks.md、不要推薦 schedule。User 拍板下一步。

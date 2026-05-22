@@ -133,16 +133,21 @@ review-gui home page 對純 D-only pending（I=0、V=0、evidenceMissing=0、只
 
 引導使用者跑 `pnpm review:ui` 時，**MUST** 在 chat 訊息中**直接給出 review-gui 本身的 deep-link URL**，讓使用者啟動 GUI 後可以一鍵跳到該 change 頁面，不必再從左側 list 點選。
 
-review-gui SPA 路由規約：
+review-gui SPA 路由規約（依 mode 不同；clade-home flow 為預設）：
 
 ```
+# cross-consumer mode（從 clade home 跑 `pnpm review:ui` — 預設、本檔下方規範路徑）
+http://127.0.0.1:5174/review/<consumer-id>:<change-name>
+
+# single mode（從單一 consumer 跑，已被 review-gui.mts `preflightCladeOnly` guard 擋下；fallback only）
 http://127.0.0.1:5174/review/<change-name>
 ```
 
 - port `5174` 是 `vendor/scripts/review-gui.mts` `DEFAULT_PORT` (見 review-gui.mts:21)；找不到 port 時會 fallback 到 5174-5194 之間
 - host 預設 bind `127.0.0.1`（見 review-gui.mts:4452）。**MUST** 用 `127.0.0.1` 不要用 `localhost` — 某些 user 端 `/etc/hosts` / DNS 配置 `localhost` 不解析到 `127.0.0.1`，會出現「無法存取」
+- **Cross-consumer mode 必要 `<consumer-id>:` prefix**（hard rule）：review-gui.mts `decodeChangeKeyParam(param, 'cross')` 期待 URL `:change` segment 為 `<consumer-id>:<change-name>` 複合 key（見 review-gui.mts:2041）；沒 prefix 時 `ensureChangeRoute` fallback 到 clade mainEntry（line 2622），clade 自己沒對應 change → API 回 404。`<consumer-id>` 從 `~/offline/clade/registry/consumers.json` 對應 entry 的 `consumer_id` 欄位（如 `<consumer-a>` / `<consumer-b>` / `co-purchase` — 跟 directory name 通常一致但以 registry 為準）
 - `<change-name>` 一字不差等於 `openspec/changes/<change-name>/` 的目錄名
-- 例：`http://localhost:5174/review/ehr-performance-evaluation-m1`
+- 例（cross mode）：`http://127.0.0.1:5174/review/<consumer-a>:ehr-performance-evaluation-m1`
 
 #### 訊息格式（必須照這個 shape）
 
@@ -154,7 +159,9 @@ http://127.0.0.1:5174/review/<change-name>
 
 GUI 啟動後直接打開：
 
-  http://127.0.0.1:5174/review/<change-name>
+  http://127.0.0.1:5174/review/<consumer-id>:<change-name>
+  # 例 co-purchase 的 mvp-financial-layer-bootstrap：
+  # http://127.0.0.1:5174/review/co-purchase:mvp-financial-layer-bootstrap
 
 GUI 會自動：
 - 配對 `screenshots/local/<change-name>/#<N>-*.png` 到對應 item
@@ -184,7 +191,7 @@ Consumer 端直接跑 `pnpm review:ui` 被 review-gui.mts `preflightCladeOnly` g
 #### 不該列的東西
 
 - **NEVER** 列 dev server URL（`http://localhost:3040/admin/...`）當「先 sanity check 用」—— review-gui 內部已經自帶 final-state screenshot + evidence，user 不需要自己再開分頁去看 dev server；列那一堆 URL 反而把 chat 變成 dev server route 列表，模糊掉 review-gui 是真正的驗收入口
-- **NEVER** 把 review-gui deep-link 寫成 `/review/<change-name>` 不加 host — 使用者拿到 path 還要自己 prepend `http://localhost:5174` 才能用
+- **NEVER** 把 review-gui deep-link 寫成 `/review/<change-name>` 不加 host — 使用者拿到 path 還要自己 prepend `http://127.0.0.1:5174` 才能用
 - **NEVER** 把 port 寫成 placeholder `<port>` — 直接寫 `5174`（fallback 由 GUI startup banner 告知 user，主線不負責猜）
 - **NEVER** 在訊息末尾加「需要的話可以參考」「也可以打開 dev server 看」這類弱措辭——review-gui 就是入口，不需要替代方案
 
@@ -193,7 +200,7 @@ Consumer 端直接跑 `pnpm review:ui` 被 review-gui.mts `preflightCladeOnly` g
 - ❌ 「請跑 `pnpm review:ui`」結束（沒給 deep-link，user 要從 GUI list 自己找 change）
 - ❌ 「URL 在 GUI 裡」推給 GUI 顯示
 - ❌ 列一堆 `http://localhost:3040/admin/X` dev server URL（user 要看的是 review-gui，不是 dev server）
-- ❌ 寫 `/review/<change-name>` 不加 `http://localhost:5174`
+- ❌ 寫 `/review/<change-name>` 不加 `http://127.0.0.1:5174`
 
 #### 例外：fallback 模式
 
