@@ -1,7 +1,7 @@
 {
   "$schema": "./patterns.schema.json",
-  "version": "1.3.0",
-  "description": "Single source-of-truth regex patterns for Pre-Review Data Readiness enforcement. Consumed by post-propose-manual-review-check.sh (via jq) and vendor/scripts/review-gui.mts (via import). v1.3.0: INTERNAL_JARGON_LEAKAGE 擴充 propose-process terms (Open Questions / Decision N / actual <noun> / *-copy)；新增 MIXED_CN_EN_TERM 偵測半中半英 schema 詞（例「未設 vending 位置」「vending 庫存」）。v1.2.2: both consumers strip `(verified-*: ...)` annotations + trailing markers (@followup / @no-screenshot / @no-manual-review-check) before applying primary regex — jargon / multi-step / abstract-reference in verified evidence reflects DOM truth at verify time and MUST NOT trigger pattern hits.",
+  "version": "1.4.0",
+  "description": "Single source-of-truth regex patterns for Pre-Review Data Readiness enforcement. Consumed by post-propose-manual-review-check.sh (via jq) and vendor/scripts/review-gui.mts (via import). v1.4.0: 新增 MISSING_KIND_MARKER pattern 擋 scoped sub-item 缺 leading kind marker（封堵 Default Kind Derivation silent fallback 滲漏）；REVIEW_UI_BACKEND_ROUNDTRIP regex 擴充也 cover 「missing marker + API content」變體（避免 fallback derived review:ui 漏網）。v1.3.0: INTERNAL_JARGON_LEAKAGE 擴充 propose-process terms (Open Questions / Decision N / actual <noun> / *-copy)；新增 MIXED_CN_EN_TERM 偵測半中半英 schema 詞（例「未設 vending 位置」「vending 庫存」）。v1.2.2: both consumers strip `(verified-*: ...)` annotations + trailing markers (@followup / @no-screenshot / @no-manual-review-check) before applying primary regex — jargon / multi-step / abstract-reference in verified evidence reflects DOM truth at verify time and MUST NOT trigger pattern hits.",
   "patterns": [
     {
       "code": "ABSTRACT_REFERENCE",
@@ -61,11 +61,20 @@
     },
     {
       "code": "REVIEW_UI_BACKEND_ROUNDTRIP",
-      "description": "[review:ui] item 描述含 HTTP method + /api path 或 → status code（明顯為 backend round-trip）— 違反 [review:ui] 收斂原則 hard rule，MUST 改 [verify:api] / [verify:e2e] / [verify:api+ui]",
-      "regex": "^\\s*-\\s*\\[[ x]\\]\\s*#[0-9.]+\\s*\\[review:ui\\].*((GET|POST|PATCH|PUT|DELETE)\\s+/[a-zA-Z_]|→\\s*[2-5][0-9][0-9])",
+      "description": "item 描述含 HTTP method + /api path 或 → status code（明顯為 backend round-trip）且 marker 為 [review:ui] 或缺 marker（fallback 也 derives 成 review:ui）— 違反 [review:ui] 收斂原則 hard rule，MUST 改 [verify:api] / [verify:e2e] / [verify:api+ui]。v1.4.0 起 regex 同時 cover 「[review:ui] explicit + API」與「無 marker + API」兩種變體（後者透過 Default Kind Derivation silent fallback 成 review:ui，behavior 等價但更隱密，必須一併擋）",
+      "regex": "^\\s*-\\s*\\[[ x]\\]\\s*#[0-9.]+\\s+(\\[review:ui\\]\\s+)?[^\\[].*((GET|POST|PATCH|PUT|DELETE)\\s+/[a-zA-Z_]|→\\s*[2-5][0-9][0-9])",
       "regexFlags": "",
       "anchor": "manual-review.md#review-ui-收斂原則hard-rule",
-      "remediation": "HTTP method + path 或 → status code 是定義上的 agent-verifiable evidence（curl / ofetch / Playwright 可重現）。把這類 backend round-trip 標 [review:ui] 等於把該由 agent 自驗的工作丟回 user，違反 propose 階段對 user 時間的尊重。Replace `[review:ui]` with: (a) `[verify:api]` for pure HTTP round-trip（主線跑 curl，寫 (verified-api: <ISO> <METHOD> <URL> <STATUS>) annotation）, (b) `[verify:e2e]` for persistence / multi-role journey requiring Playwright spec, (c) `[verify:api+ui]` for mutation + final-state visual confirmation. See manual-review.md「[review:ui] 收斂原則 hard rule」+「Kind 分類指引」反面範例。"
+      "remediation": "HTTP method + path 或 → status code 是定義上的 agent-verifiable evidence（curl / ofetch / Playwright 可重現）。把這類 backend round-trip 標 [review:ui]（或不標 marker 讓 Default Kind Derivation silent fallback 成 review:ui）等於把該由 agent 自驗的工作丟回 user，違反 propose 階段對 user 時間的尊重。Replace `[review:ui]` / 缺 marker with: (a) `[verify:api]` for pure HTTP round-trip（主線跑 curl，寫 (verified-api: <ISO> <METHOD> <URL> <STATUS>) annotation）, (b) `[verify:e2e]` for persistence / multi-role journey requiring Playwright spec, (c) `[verify:api+ui]` for mutation + final-state visual confirmation. See manual-review.md「[review:ui] 收斂原則 hard rule」+「Kind 分類指引」反面範例。"
+    },
+    {
+      "code": "MISSING_KIND_MARKER",
+      "description": "scoped sub-item (#N.M) 缺 leading kind marker — 違反 manual-review.md「Item Kind Marker」規約。Default Kind Derivation Rule（fallback）只給 legacy in-flight item 過渡用，新寫或 ingest 修改的 sub-item MUST 顯式標 marker（[review:ui] / [discuss] / [verify:e2e/api/ui] 或 verify multi-marker）。Silent fallback 是「為何 [review:ui] 誤標反覆出現」的 root cause — fallback 永遠走最 strict 的 review:ui，把該由 agent 自驗的工作 silently 推給 user。",
+      "regex": "^\\s+-\\s+\\[[ xX]\\]\\s+#[0-9]+\\.[0-9]+",
+      "regexFlags": "",
+      "requiresAbsenceOf": "\\[(review:ui|discuss|verify:[a-z+:]+)\\]",
+      "anchor": "manual-review.md#default-kind-derivation-rulefallback",
+      "remediation": "Inspect item content + decide kind per manual-review.md「Kind 分類指引」: (a) HTTP method + URL + status → [verify:api]; (b) reload / final-state visual / screenshot evidence → [verify:ui]; (c) persistence across reload / multi-role journey → [verify:e2e]; (d) mutation + visual confirmation → [verify:api+ui]; (e) SSH / psql / `\\d <table>` / curl-cron / production observation / 商業判斷 → [discuss]; (f) 真的需要人（email inbox / webhook / 實體裝置 / 主觀美感 / 真機 / SMS）→ [review:ui]. Add the marker as the first token after the #N.M id with one space: `- [ ] #N.M [verify:api] ...`. For legitimate exceptions (e.g., legacy item awaiting ingest rewrite) add `@no-manual-review-check[<reason>]` trailing marker."
     }
   ],
   "bypass": {
