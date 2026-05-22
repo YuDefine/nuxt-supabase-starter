@@ -285,6 +285,19 @@ Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由
 
 **Fallback ≠ 允許省略**：所有**新寫**或**ingest 修改**的 `## 人工檢查` items **MUST** 顯式標 marker。Default 只給既有 in-flight change 過渡用。spectra-propose / spectra-ingest 的 Manual Review Marker Hygiene Check 會擋下未標 marker 的新內容。
 
+> **ADR (2026-05-22) — Default Kind Flip 未採用，勿再提案**
+>
+> 曾被提出的修案：「把 user-facing fallback default 從 `[review:ui]` 改成 `[verify:ui]`」（理由：`[review:ui]` 是最 strict 的「真的需要人」白名單，silent fallback 到 strict kind 等於把 agent 該做的工作推給 user）。
+>
+> **未採用**，理由：
+>
+> 1. **Root cause 已被 explicit marker enforcement 取代**：`MISSING_KIND_MARKER` pattern（`patterns.json` v1.4.0）在 propose / ingest 階段透過 hook fail-fast 強制每條 sub-item 標 explicit marker。Fallback 只剩 legacy in-flight item 在用，新 case 不會再進。
+> 2. **任何 default 都猜不對**：`[review:ui]` / `[verify:ui]` / `[verify:api]` 三種 kind 走不同 review flow，default 選哪個都會在某類內容上錯。改 default 從「猜成 review:ui」變「猜成 verify:ui」，PATCH /api/... 這種 backend roundtrip 還是錯（正解是 `[verify:api]`）。只有 explicit marker 是正解，default 永遠是「猜」。
+> 3. **會 break legacy review-gui flow**：fallback derived item 從「user 在 GUI 點 OK 過」變成「需 final-state screenshot evidence (`verified-ui` annotation) + 點 OK」，可能在 review-gui 觸發 evidence missing red banner、卡住既有 archive flow。
+> 4. **review-gui chip 已視覺化**：`hasExplicitKind: false` 的 item 顯示 `(fallback)` amber chip，user 看得到、知道要跑 `/spectra-ingest` 補。漸進清 legacy 即可，不需大爆改。
+>
+> **Future agent**：看到 missing marker 問題的反射性建議**不該**是「改 default」，應該是「補 explicit marker（或 hook 已擋）」。本 ADR 防止 default flip 提案反覆出現。
+
 ### 與 `@no-screenshot` / `@followup[TD-NNN]` 共存 ordering
 
 ```
