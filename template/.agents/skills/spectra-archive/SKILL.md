@@ -353,6 +353,26 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
 
    If the file does not exist, silently continue.
 
+5.5. **Post-walkthrough gate re-check** (clade fork addition — paired with `--pre-skill` PreToolUse hook)
+
+   The PreToolUse hook `pre-archive-ux-gate.sh` runs `archive-gate.sh --pre-skill <name>` before this skill starts, which skips Check 4 (Manual Review Kind Validation) because annotations are populated by Step 3.5 above. Now that Step 3.5 has run, validate the post-walkthrough state by re-running the gate **without** `--pre-skill`:
+
+   ```bash
+   bash scripts/spectra-advanced/archive-gate.sh "<change-name>"
+   ```
+
+   **Branch on exit code:**
+
+   - **Exit 0** → All checks pass. Proceed to Step 6.
+   - **Exit 2** → A check failed. Most common cause: Step 3.5 walkthrough was interrupted / skipped / produced incomplete annotations. Other checks (1/2/3/5) already passed pre-skill, so a failure here is almost certainly Check 4.
+     - Display the gate stderr to the user.
+     - **MUST** prompt via `request_user_input`:
+       - **Fix now** — go back to Step 3.5 and finish walkthrough for the items the gate flagged
+       - **Abort archive** — stop the skill, leave change in-flight; user investigates manually
+     - **NEVER** silently bypass exit 2 — Check 4 is the only post-walkthrough validation that the pre-skill path defers.
+
+   **Skip condition**: if the gate script does not exist (consumer pre-propagation state), warn and proceed (fail-open, matches existing Check 5 fail-open behavior).
+
 6. **Perform the archive**
 
    Use the `spectra archive` CLI command which handles the full archive workflow
