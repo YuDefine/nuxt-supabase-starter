@@ -253,12 +253,21 @@ sux_extract_journey_urls() {
     | tr -d '`'
 }
 
-# Test whether a URL maps to a touched UI path in current git diff.
-# Reuses SUX_TOUCHED_FILES cache. Returns 0 if touched, 1 if untouched.
+# Test whether a URL maps to a touched UI path. Uses sux_change_touched_files
+# (broad — includes commits since the change directory was first introduced +
+# working tree diff) when a change directory is known via $CHANGE_DIR, so
+# atomic-landing model (worktree squash → main) doesn't mis-report 0 touched
+# files when UI was committed before the worktree was forked. Falls back to
+# sux_touched_files (narrow — working tree + index only) when no change context.
+# See: docs/pitfalls/2026-05-23-archive-gate-journey-touch-narrow-diff.md (TD-140)
 sux_check_url_touched() {
   local url=$1
   local ui_dir ext touched
-  touched=$(sux_touched_files)
+  if [ -n "${CHANGE_DIR:-}" ]; then
+    touched=$(sux_change_touched_files "$CHANGE_DIR")
+  else
+    touched=$(sux_touched_files)
+  fi
 
   for ui_dir in $SUX_UI_DIRS; do
     for ext in $SUX_UI_EXTS; do
