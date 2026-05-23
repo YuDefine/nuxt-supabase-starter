@@ -112,6 +112,86 @@ git for-each-ref "refs/wt-baseline/<slug>/" --format='%(refname)'
 
 2026-05-23 實證：HANDOFF outstanding 寫「page-titles-baseline 收尾（最快 deliverable，wt 32/33 done）」 → 下一 session `/handoff` dispatch `/spectra-archive` → merge-back 撞 793 staged blockers + 無 baseline ref → 連續 3 輪 AskUserQuestion 才退回 Defer。3 輪 round-trip 全可在 outstanding 寫作階段跑 1 條 dry-run 避免。
 
+## Outstanding actionability hygiene (v1.15+)
+
+**核心命題**：HANDOFF.md `## Outstanding` / `## Next Steps` / handoff Mode B § 2B.4 推薦下一 session（含 remote-control session、並行 Codex / Cursor session、人類 user）動工時，**MUST** inline 必要 actionable detail；禁止「by reference」handoff（只列 candidate 名稱 + 1-line summary + 指向 audit/scan/decision doc，要 receiver 自己 grep 還原 context）。
+
+### 適用範圍
+
+| 動工類型 | 是否適用 |
+| --- | --- |
+| 推薦下一 session 跑 `/spectra-propose <new-slug>`（新 change） | ✅ 適用 — 需 inline pattern / scope / target API |
+| 推薦 `/spectra-apply <existing-change>` / `/spectra-archive <existing-change>` | ❌ 不適用 — change directory 自帶 spec / tasks，receiver 直接讀 |
+| 推薦跑 `wt-helper merge-back <slug>` / `/commit` 等 mechanical action | ❌ 不適用 — slug 已自帶 context |
+| 推薦下一 session 接手某 in-progress wt | ✅ 適用 — 需 inline 當前狀態（done / blocker / next step）+ 主要檔案路徑 |
+| 推薦從 audit / scan / decision doc 撈 candidate 開新工作 | ✅ 適用 — 需 inline 必要細節讓 receiver 不必重 grep |
+
+### 寫法要求（refactor / extraction / migration 類 propose target）
+
+**MUST** inline 4 件事（或提供完整 pasteable prompt 含這 4 件事）：
+
+1. **Audit / scan / decision 來源 + 行號**：`docs/audit/<file>.md` 哪一段或 `docs/decisions/<file>.md` 哪一節
+2. **Pattern + 涉及檔案 list**：具體 file path 列表 + 識別 token（callsite shape / class / function name / migration timestamp）
+3. **Target API / 結構**：抽出 / 重構 / 遷移後的 component / function / module / schema signature
+4. **Scope boundary**：要動哪些檔、不動哪些檔（per scope-discipline）；同 file 內哪些 callsite 在 scope 哪些不在
+
+### 禁止寫作 anti-pattern
+
+- ❌ 「Candidate X — 取代 N callsites，詳見 docs/audit/Y.md」— 指向 doc 但不 inline，receiver 必須 round-trip
+- ❌ 「跑 `/spectra-propose <slug>`」— bare argument，propose skill 收到要自己 investigate；如有 9 條 candidate 還要 receiver 挑哪一條
+- ❌ 「從 high impact 第一條開始」— 不指定 candidate identifier
+- ❌ 「Audit 結論詳見 `docs/audit/X.md`」當作 HANDOFF 唯一指引 — implicit pointer 不算 inline
+
+### 範例
+
+❌ 不夠（2026-05-24 <consumer-a> HANDOFF Next Steps #4 實證問題寫法）：
+
+```markdown
+### 4. Nuxt UI v4 audit refactor candidates（9 條，本次稽核產出）
+
+`docs/audit/nuxt-ui-audit-2026-05-23.md` 末段「Phase 4」整理：
+
+- **高 impact 3 條**: C1 `<AppStatusBadge>` (44 callsites) / C2 `<AppPanelCard>` (12+) / C3 `<AppOverlayShell>` (~26)
+- **中 impact 3 條**: ...
+
+建議路徑：對任一 candidate 開 `/spectra-propose <candidate-slug>`，從 high impact 開始。
+```
+
+→ 結果：remote session 收 `/spectra-propose app-status-badge-extraction` argument 後立刻問「scope 不夠 — 是哪種 badge？目前散落在哪？要抽到哪？」前 5-10 分鐘全在重做 investigation。
+
+✅ 夠（inline 4 件事）：
+
+```markdown
+### 4. C1 `<AppStatusBadge>` extraction（high signal × low complexity）
+
+- **Audit 來源**：`docs/audit/nuxt-ui-audit-2026-05-23.md` line 162-181 + 869-881
+- **Pattern**：`<UBadge :color="statusBadgeColor[row.status] ?? 'neutral'" variant="subtle" size="sm">{{ statusLabel[row.status] }}</UBadge>` + 各檔自己 declare 的 `statusBadgeColor` / `statusLabel` constant
+- **涉及 8 files**：
+  - `packages/ehr/app/pages/admin/attendance/index.vue`
+  - `packages/ehr/app/pages/admin/attendance/amendments.vue`
+  - `packages/ehr/app/pages/admin/salary/index.vue`
+  - `packages/ehr/app/pages/admin/schedules/index.vue`
+  - `packages/ehr/app/pages/admin/overtime/index.vue`
+  - `packages/ehr/app/pages/admin/overtime/backpay.vue`
+  - `packages/ehr/app/pages/admin/petition/index.vue`
+  - `packages/ehr/app/pages/admin/contracts/index.vue`
+- **Target API**：`<AppStatusBadge :status :color-map :label-map />`
+- **Target location**：`packages/core/app/components/AppStatusBadge.vue`
+- **Scope boundary**：
+  - 動：8 files 的 Pattern A status badge callsite + 新增 1 個 component
+  - 不動：其他 UBadge usage（Pattern B count badge / Pattern C `<AppDetailPage>` header pill 不在 scope；另開 candidate C4 / C5 處理）
+
+**Dispatch**：`/spectra-propose app-status-badge-extraction`（上面 5 項當 propose context 貼入）
+```
+
+### 為什麼這條 rule 存在
+
+2026-05-24 實證：<consumer-a> HANDOFF Next Steps #4 列 9 條 Nuxt UI audit candidate，只給 1-line summary + 指向 audit doc。當天另開 remote-control session 嘗試接 C1 → `/spectra-propose app-status-badge-extraction` 後第一句就是「argument 看起來像在說『把 app 內的 status badge 抽出來』，但細節不夠 — 是哪種 badge？目前散落在哪？要抽到哪？」，開始重跑 grep / glob 探索。
+
+Root cause = HANDOFF writer（包含 Mode B § 2B.4 推薦階段）把 audit doc 當「receiver 自己會 grep」的 implicit context，沒 inline 必要細節。Receiver 重做 investigation = 重複 main session 已 sunk 的 token，且容易 scope drift（receiver 可能對「44 callsites」「8 files」「Pattern A vs B vs C」的邊界判斷不同）。
+
+「治根」修法 = 在 outstanding 寫作層強制 inline，不靠 audit doc 當 indirection。
+
 ## Drift detection (v1.13+)
 
 每次 session start 時，`session-start-roadmap-sync.sh` hook 會跑 `scripts/handoff-drift-scan.mjs`，自動掃所有 `session/*` worktree 跟 `HANDOFF.md` 內容比對，把 drift 寫到 stderr：
