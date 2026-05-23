@@ -26,6 +26,8 @@ Local edits will be reverted by the next sync.
 
 **`[verify:e2e]` / `[verify:api]` automatic channel 例外**：spectra-apply Step 8a 寫入對應 `(verified-e2e: ...)` / `(verified-api: ...)` annotation 後，review-gui auto-check helper 可自動勾 `[x]`；這些 channel 不需要使用者在 GUI 再確認。`[verify:ui]` 仍需使用者在 GUI 確認 visual evidence。
 
+**`(claude-analyzed: route=E)` annotation 不勾 checkbox**：當 review-gui 「🤖 等 Claude 接手」群「接手分析」prompt 路由結論為 **(E) false positive / 等 user 重新評估** 時，Claude 可在帶 `（issue:）` 的 item 同行寫入 `(claude-analyzed: <ISO> route=E[ note=<...>])` annotation，但 **NEVER** 翻 checkbox。語意：「Claude 已對此 issue 分析、路由結論=ball in user's court」。User 在 GUI 對該 item 點 OK / Issue / Skip 時 stripAnnotations 自動清掉 `（issue:）` 與 `(claude-analyzed:)` 兩條 annotation。詳見下方「Item Kind Marker」章節的 `(claude-analyzed: ...)` annotation 段。
+
 ## 人工檢查與靜態 QA 的差別
 
 | 類型 | 目的 | 能否直接勾選人工檢查 |
@@ -266,13 +268,85 @@ Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由
 ### Canonical line format
 
 ```
-- [ ] #N [<kind>] <description> [(verified-<channel>: ...)]... [@followup[TD-NNN]] [@no-screenshot]
+- [ ] #N [<kind>] <description> [(verified-<channel>: ...)]... [(claude-analyzed: ...)] [@followup[TD-NNN]] [@no-screenshot]
 ```
 
 - Marker **MUST** 是 `#N` / `#N.M` 後第一個 token，與 id 之間僅一個空白。
 - Marker 出現在 description 中間（例：`Click the [discuss] button`）視為 plain text，**MUST NOT** 被解析成 marker。
 - `[review:ui]` / `[discuss]` 不得與 verify multi-marker 混用。`[verify:api+review:ui]`、`[verify:api+discuss]` 都是非法 marker。
 - Verify multi-marker 的 channel canonical order 是 `e2e → api → ui`；annotation 寫回也 **MUST** 依此順序。
+
+### `(claude-analyzed: ...)` annotation（Claude-writable）
+
+當 review-gui 「🤖 等 Claude 接手」群 → 「接手分析」prompt 走完後，Claude 路由結論為 **(E) false positive / item 應改回 OK 或翻 [x] / 需 user 重新評估** 時（典型情境：修法已落地 + 新 evidence 已收集，等 user 重看新截圖決定 OK / Issue），**MAY** 在帶 `（issue:）` 的 item 同行寫入此 annotation 作為 evidence trail，告訴 GUI「我已分析過、ball in user's court」。
+
+#### Schema
+
+```text
+(claude-analyzed: <ISO-8601> route=<code>[ note=<sanitized one-liner>])
+```
+
+- **Half-width parens**（machine annotation，與 `(claude-discussed:)` / `(verified-*:)` 同類）
+- `<ISO-8601>` **required**（UTC，秒級精度，與其他 annotation 共用 timestamp 慣例）
+- `route=<code>` **required**：目前只支援 `E`。Schema 預留為自由 `string` 給未來擴展，但 hard rule 限 `E`
+- `note=<one-liner>` optional：剝半形括號、上限 240 chars。**Single hyphen-joined token**（write 時 `sanitizeNote` 後 whitespace 折成 `-`）— 與 `verified-ui` 的 `dom=<obs>` 同 convention，避免解析端 `findKeyValue` whitespace split 只拿到第一個 word
+- 落點：description 後、所有 trailing markers (`@followup` / `@no-manual-review-check` / `@no-screenshot`) 前
+- 與 `（issue: ...）` co-exist：issue **MUST** 已存在（沒 issue 就不該寫 claude-analyzed）；兩者並存表達「Claude 已分析此 issue，路由結論=等 user 重新評估」
+
+#### Claude 可寫條件（hard rule）
+
+- **MUST** 在路由 **(E)** 結論時寫
+- **MUST** 在 item 已帶 `（issue:）` annotation 時才寫
+- **MUST NOT** 翻 checkbox（保留原 `[ ]`，user 在 GUI 點 OK / Issue / Skip 才翻）
+- **MUST NOT** strip 既有 `（issue:）` annotation（兩者語意正交：issue 是 user 回饋，claude-analyzed 是 Claude 分析證跡）
+- **MUST NOT** 在路由 (A) / (B) / (C) / (D) 結論時寫 — 那些情境 user 仍需要 Claude 動作（改 proposal / 開 TD / 改 code / 切 clade session），不是「等 user 重新評估」
+
+#### Strip semantics
+
+User 在 GUI 對該 item 點 **OK / Issue / Skip** 時，`stripAnnotations`（in `vendor/scripts/review-gui.mts`）會 **同時** 清掉：
+
+- `（issue: ...）` 與 `（skip[: ...]）` / `（note: ...）` / `（finding: ...）` 等 action annotation（既有行為）
+- `(claude-analyzed: ...)` annotation（新增 strip 規則）
+
+設計 rationale：claude-analyzed 的語意一旦 user 動了該 item = 評估已完成，annotation 失效；保留會讓下次 GUI re-render 把 item 錯誤地仍歸到 `awaitingUserReEval` bucket。verified-* 與 claude-discussed annotation **不**受此 strip 影響（它們是 archive evidence trail，需要永久保留）。
+
+#### 與 `(claude-discussed:)` 的差異
+
+| 維度 | `(claude-discussed:)` | `(claude-analyzed:)` |
+| --- | --- | --- |
+| 適用 kind | `[discuss]` | `[review:ui]` / `[verify:ui]`（帶 `（issue:）` 的 item） |
+| 觸發流程 | `/spectra-archive` Step 2.5 walkthrough | review-gui 「等 Claude 接手」prompt 路由 (E) |
+| Checkbox 行為 | 翻 `[x]` | **不翻**（保 `[ ]`） |
+| Strip on user action | 不 strip（archive evidence trail） | strip（user 點 OK / Issue / Skip 即清） |
+| User 主動性 | user 必須先看 evidence 才允許 Claude 寫 | Claude 自己分析後寫，user 之後重整 GUI 看到 |
+
+#### Home page 影響
+
+當 change 的所有 issued items 都已被 Claude 寫 `(claude-analyzed: route=E)`、且 user-actionable / verify pending / evidence missing / readiness hits 都是 0 → change 落入 **「✋ Claude 已分析、等 user 重新評估」** bucket（review-gui home page），不再被 「🤖 等 Claude 接手」群 prompt 抓走重複分析。User 點 card 進 detail，重看 final-state evidence 後在 GUI 點 OK / Issue / Skip 結束流程。
+
+詳見 `vendor/scripts/review-gui.mts` 內 `analyzedIssuedCount` field、`awaitingUserReEval` bucket dispatch、`stripAnnotations` claude-analyzed strip 段。
+
+#### 範例
+
+寫入前（user 點 issue 後 Claude 收到「接手分析」prompt、走完分析路由 (E)）：
+
+```markdown
+- [ ] #4.1 [verify:ui] /vending/inventory final-state visual review （issue: 整體 UI 設計難以理解 不好看也不好用 改進方案已實作完成 待重拍新版 screenshot 後 user 重新評估）
+```
+
+寫入後（Claude 在路由 (E) 結論時加 annotation）：
+
+```markdown
+- [ ] #4.1 [verify:ui] /vending/inventory final-state visual review （issue: 整體 UI 設計難以理解 不好看也不好用 改進方案已實作完成 待重拍新版 screenshot 後 user 重新評估） (claude-analyzed: 2026-05-24T13:00:00Z route=E note=Re-Design)
+```
+
+User 在 GUI 對 #4.1 點「✓ 通過」後：
+
+```markdown
+- [x] #4.1 [verify:ui] /vending/inventory final-state visual review
+```
+
+`（issue:）` 與 `(claude-analyzed:)` 兩條 annotation 同時被 strip，change 進入下一輪流轉。
 
 ### Default Kind Derivation Rule（fallback）
 
@@ -304,7 +378,7 @@ Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由
 - [ ] #N [<kind>] <description> [(verified-<channel>: ...)]... [@followup[TD-NNN]] [@no-screenshot]
 ```
 
-`[<kind>]` 永遠在最前（緊接 `#N`），`@no-screenshot` 永遠在最後；`@followup[TD-NNN]` 若存在須夾在 description 與 `@no-screenshot` 之間。寫回 annotation（`（issue: ...）` / `（skip）` / `（note: ...）` / `（finding: ...）` / `(claude-discussed: <ISO>)` / `(verified-e2e: ...)` / `(verified-api: ...)` / `(verified-ui: ...)`）**MUST** 插在 description 後、所有 trailing markers (`@followup` / `@no-screenshot`) 前。`（finding: ...）` 與 `（issue: ...）` / `（skip）` / `（note: ...）` 正交（可共存於同一行），其餘 action annotation 之間仍互斥。
+`[<kind>]` 永遠在最前（緊接 `#N`），`@no-screenshot` 永遠在最後；`@followup[TD-NNN]` 若存在須夾在 description 與 `@no-screenshot` 之間。寫回 annotation（`（issue: ...）` / `（skip）` / `（note: ...）` / `（finding: ...）` / `(claude-discussed: <ISO>)` / `(claude-analyzed: <ISO> route=<code>[ note=<...>])` / `(verified-e2e: ...)` / `(verified-api: ...)` / `(verified-ui: ...)`）**MUST** 插在 description 後、所有 trailing markers (`@followup` / `@no-screenshot`) 前。`（finding: ...）` 與 `（issue: ...）` / `（skip）` / `（note: ...）` 正交（可共存於同一行），其餘 action annotation 之間仍互斥。`(claude-analyzed:)` 與 `（issue:）` 必須共存（路由 (E) 時 Claude 寫入 claude-analyzed，issue 保留為 user 原始回饋），user 在 GUI 動作時兩者同時被 strip — 詳見「`(claude-analyzed: ...)` annotation」段。
 
 ### Kind 分類指引（給 propose / spec 寫作者）
 
@@ -843,6 +917,10 @@ Session worktree fork 在 clade hook 升版前時，worktree 內 `scripts/spectr
 - **NEVER** 對 `[discuss]` items 寫入 `(claude-discussed: ...)` annotation 而沒有實際與使用者討論並取得 OK
 - **NEVER** 對非「External signal pending」trigger 分類的 `[discuss]` item 走 Defer-to-HANDOFF 路徑 — `(deferred-to-handoff: ...)` 只給真的等不到 signal 的 item，把 Internal evidence / signal already occurred 的 item 也 defer 等於規避 walkthrough
 - **NEVER** 在 Resume mode 外（archived change directory）寫 `(deferred-to-handoff: ...)` annotation — 只有 archive 階段 Step 2.5 才產生這個 annotation，Resume mode 是把它翻成終態（claude-discussed / issue / skip）或保留
+- **NEVER** 對沒帶 `（issue: ...）` 的 item 寫 `(claude-analyzed: ...)` annotation — 此 annotation 語意是「Claude 已分析此 issue、路由結論=等 user 重評」，沒 issue 就沒有對象可分析
+- **NEVER** 用 `route` 值不為 `E` 的 claude-analyzed — schema 預留未來擴展，但目前 hard rule 限 `E`（false positive / item 應改回 OK 或翻 [x] / 需 user 重新評估）。其他路由結論 (A) / (B) / (C) / (D) 表示 user 仍需要 Claude 動作，**不該**寫 claude-analyzed annotation
+- **NEVER** 在寫 `(claude-analyzed: ...)` 時翻 checkbox — 此 annotation 保 `[ ]`，user 在 GUI 點 OK / Issue / Skip 才翻；翻了會打破 GUI bucket 分類（awaitingUserReEval 條件要求 issued > 0、checkbox `[ ]`）
+- **NEVER** 在 GUI 寫回 user action（OK / Issue / Skip）時遺漏 strip `(claude-analyzed: ...)` annotation — 保留 stale annotation 會讓下次 GUI re-render 把已動過的 item 仍歸到「✋ Claude 已分析、等 user 重新評估」bucket，造成 user 困惑
 - **NEVER** dispatch verify channels 前不檢查 per-channel baseline — 撞 baseline 缺後升 UNCERTAIN 是浪費 budget；主線預先 grep / read 確認，缺則停下回報 user 補齊
 - **NEVER** 在 verify dispatch 當下才問 user「dev-login / seed 準備好了嗎」— baseline 是 codebase 層長期狀態，不該每次派工都驚動 user
 - **NEVER** 修完 `## 人工檢查` 區後直接 commit 而沒重跑 `post-propose-manual-review-check.sh` 驗 0 violation — 見「Post-Edit Validation Gate」。實證會在 ingest 過程引入新 pattern hit（如寫範例 step 時用「任一筆」），目測抓不到
