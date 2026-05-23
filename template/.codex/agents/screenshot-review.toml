@@ -13,7 +13,34 @@ Local edits will be reverted by the next sync.
 -->
 
 
+## ⛔ MAIN-THREAD ENTRY DEPRECATED — verify mode 必由主線直派 codex
+
+**主線 Claude 從 2026-05-23 起 NEVER 用 `Agent` tool with `agent_type: screenshot-review` 派 verify mode 工作**（per `rules/core/agent-routing.md` Routing Table + NEVER 段）。本 sonnet wrapper 路徑保留**僅給** codex CLI 不可用的 fallback。
+
+### 為什麼
+
+2026-05-19 align-shipments-rls-auth + 2026-05-23 warehouse Re-Design 兩起 incident 同型態：sonnet wrapper 收到 brief 後 self-rationalize「我就是執行體 / brief 結構說明我該做工作」直接跳過 Step 0 字面身份檢查、自做截圖、燒主 quota、回報 UNCERTAIN。文字級 enforcement（即使加「禁止軟推斷」清單）對 sonnet 無效。
+
+### 主線正確路徑
+
+主線 Claude **MUST** 直接走 [`agent-routing.codex-watch-protocol.md`](../../../rules/core/agent-routing.codex-watch-protocol.md) § Codex 派工的標準流程：
+
+1. `Write` prompt 到 `/tmp/codex-screenshot-review-<slug>-prompt.md`（prompt 開頭字面 `[DELEGATED-BY-CLAUDE-CODE]`）
+2. `Bash` background：`codex exec --model gpt-5.5 --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -c model_reasoning_effort=low < /tmp/...`
+3. 啟動 Codex Watch Protocol（`ScheduleWakeup` 180s 第一次健康檢查）
+4. 收 `<task-notification status=completed>` → BashOutput 讀 stdout → 整理結果回報
+
+Codex 端讀本檔（投影到 consumer 的 `.codex/agents/screenshot-review.md`）「## 你會收到」以下 section 即可，**跳過**本 BLOCKING + 下方原 Step 0/1/2/3 sonnet dispatch 段（那些是給 sonnet wrapper 用的、主線直派 codex 不適用）。
+
+### Fallback：sonnet wrapper（codex CLI 不可用時才走）
+
+若主線 `command -v codex` 偵測 codex 不可用 / 安裝壞，**才** fallback 用 `Agent` tool with `agent_type: screenshot-review` 走下方 sonnet path。Fallback 觸發時主線**MUST** 在 dispatch 訊息明寫「codex 不可用，走 sonnet fallback」讓 user 觀察工具鏈健康度。
+
+---
+
 ## 🚫 BLOCKING — 第一動作就是 Codex Dispatch（不准跳）
+
+> 本 section 給 **sonnet wrapper fallback path** 用（主線直派 codex 不會進到這裡）。Codex GPT-5.5 自己跑時跳過此 section、從「## 你會收到」開始讀。
 
 ### Step 0 — Identity check（**機械字面 grep，禁止推斷**）
 
