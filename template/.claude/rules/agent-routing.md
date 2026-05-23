@@ -25,6 +25,7 @@ Local edits will be reverted by the next sync.
 | **Spectra `apply` UI view phase（component / page / view / layout / styling）** | **主線 Claude Opus 4.7 xhigh，永不派 codex** | UI view 層的視覺 / 互動 / a11y 細節需要與 Design skill 緊耦合，Codex 在此領域 tooling 弱。Frontend 但非 view 的工作（store / hook / API client / type / util）不在此範圍，仍走 codex。 |
 | **Spectra `apply` Section 7（Design Review）** | **主線 Claude Opus 4.7 xhigh，永不派 codex** | Design skill（`/impeccable *` / `/design improve` / `/impeccable audit` / review-screenshot）是 Claude Code 一等公民，Codex 在此領域 tooling 弱。 |
 | **`screenshot-review` verify mode**（spectra-apply Step 8a `[verify:ui]` channel、`/spectra-archive` 前視覺 QA、verify-channel 補拍 screenshot） | **主線 Claude 直派 Codex GPT-5.5 low**（用 Bash 走 `agent-routing.codex-watch-protocol.md` § Codex 派工的標準流程；**禁止** `Agent` tool with `subagent_type: screenshot-review` — sonnet wrapper 已多次驗證自做工作繞過 codex dispatch） | sonnet wrapper 反覆無法 enforce Step 0 字面身份檢查（2026-05-19 align-shipments-rls-auth + 2026-05-23 warehouse Re-Design 兩起 incident），主線直派 codex 是唯一可靠路徑。詳見 [`agent-routing.codex-watch-protocol.md`](./agent-routing.codex-watch-protocol.md) § screenshot-review Verify Mode Dispatch + [[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]。 |
+| **Dev/test admin session cookie 取得**（verify channel evidence collection 階段 agent 需要 admin / fixture / per-role session cookie 跑 `[verify:api]` curl 或 `[verify:ui]` browser auth） | **主線自己 scaffold `_dev-login` route via clade cookbook + curl mint session**（**禁止**要求 user 走 Google OAuth + DevTools 複製 cookie） | Cookie 取得是 agent autonomy 範圍內可解的事；clade 已備 canonical pattern（`rules/modules/auth/<auth-module>/dev-login.md` + `vendor/snippets/dev-auth/templates/`）+ 3 個 consumer reference impl (<consumer-a> / <consumer-b> / <consumer-d> / rental-scout)。詳見 [[manual-review]] § Dev-login route missing → scaffold-first + [[pitfall-agent-asks-user-cookie-skipping-dev-login-scaffold]]。 |
 
 ## Spectra Propose Handoff（決策層）
 
@@ -78,6 +79,7 @@ Claude Code session 內偵測到「需要 WebSearch」時：
 
 ## 必禁事項
 
+- **NEVER** 在 verify channel evidence collection 階段問 user 手動取 session cookie / 走 Google OAuth + DevTools 複製貼回（per [[manual-review]] § Dev-login route missing → scaffold-first + [[pitfall-agent-asks-user-cookie-skipping-dev-login-scaffold]]）— agent **MUST** 第一動作 = scaffold `_dev-login` route via clade cookbook (`rules/modules/auth/<auth-module>/dev-login.md` + `vendor/snippets/dev-auth/templates/`)，自己 mint session
 - **NEVER** 在 Claude Code session 直接呼叫 `WebSearch` 工具（改派背景 codex GPT-5.5 medium）
 - **NEVER** 印「請開啟 Codex CLI」「Stop here」「請貼 prompt」這類純文字 handoff 訊息要使用者手動切 — 主線必須自己派背景 codex
 - **NEVER** 嘗試 `codex:rescue` / `codex:setup` plugin 路線（已驗證無法使用，2026-04-29 已 uninstall + 全清；`/assign` skill 也已於 2026-05-02 移除）
