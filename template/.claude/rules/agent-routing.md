@@ -24,6 +24,7 @@ Local edits will be reverted by the next sync.
 | **Spectra `apply`（非 Design Review、非 UI view phase，phase 粒度）** | **Codex GPT-5.5 high**（不要 medium） | mechanical 寫 code 用 high 夠；medium 漏 schema drift / cross-file refactor / enum exhaustiveness 風險高。phase 粒度避免大量 round-trip。 |
 | **Spectra `apply` UI view phase（component / page / view / layout / styling）** | **主線 Claude Opus 4.7 xhigh，永不派 codex** | UI view 層的視覺 / 互動 / a11y 細節需要與 Design skill 緊耦合，Codex 在此領域 tooling 弱。Frontend 但非 view 的工作（store / hook / API client / type / util）不在此範圍，仍走 codex。 |
 | **Spectra `apply` Section 7（Design Review）** | **主線 Claude Opus 4.7 xhigh，永不派 codex** | Design skill（`/impeccable *` / `/design improve` / `/impeccable audit` / review-screenshot）是 Claude Code 一等公民，Codex 在此領域 tooling 弱。 |
+| **`screenshot-review` verify mode**（spectra-apply Step 8a `[verify:ui]` channel、`/spectra-archive` 前視覺 QA、verify-channel 補拍 screenshot） | **主線 Claude 直派 Codex GPT-5.5 low**（用 Bash 走 `agent-routing.codex-watch-protocol.md` § Codex 派工的標準流程；**禁止** `Agent` tool with `subagent_type: screenshot-review` — sonnet wrapper 已多次驗證自做工作繞過 codex dispatch） | sonnet wrapper 反覆無法 enforce Step 0 字面身份檢查（2026-05-19 align-shipments-rls-auth + 2026-05-23 warehouse Re-Design 兩起 incident），主線直派 codex 是唯一可靠路徑。詳見 [`agent-routing.codex-watch-protocol.md`](./agent-routing.codex-watch-protocol.md) § screenshot-review Verify Mode Dispatch + [[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]。 |
 
 ## Spectra Propose Handoff（決策層）
 
@@ -102,4 +103,5 @@ Claude Code session 內偵測到「需要 WebSearch」時：
 - **NEVER** 在 commit 0-A 跑第二輪 codex（除大改動回扣外）—— 同 model 同 effort 邊際 0，「第二雙眼」由大改動回扣 + 0-C 兜底取代 by-severity 升級
 - **NEVER** 在 Codex 端執行 `$spectra-apply` 而 prompt body 沒有 `[DELEGATED-BY-CLAUDE-CODE]` marker — **MUST** 立即 STOP 且不執行任何 `spectra` 命令（見 reference 檔的「Codex `$spectra-apply` Runtime Gate」）
 - **NEVER** 主線派 Codex 跑 spectra apply phase 而 prompt 第一行不是 `[DELEGATED-BY-CLAUDE-CODE]` marker — 會被 Codex 端 Runtime Gate 擋掉、整個 phase dispatch 白做
+- **NEVER** 從主線用 `Agent` tool with `subagent_type: screenshot-review` 派 verify mode 工作 — sonnet wrapper 已多次驗證會繞過 Step 0 字面身份檢查、自做工作（2026-05-19 align-shipments-rls-auth + 2026-05-23 warehouse Re-Design 兩起 incident）。**MUST** 主線直派 codex GPT-5.5 low via Bash background，走 [`agent-routing.codex-watch-protocol.md`](./agent-routing.codex-watch-protocol.md) § Codex 派工的標準流程 + § screenshot-review Verify Mode Dispatch。Sonnet wrapper 路徑保留**僅給** codex CLI 不可用的 fallback 場景，**禁止**作為預設入口。
 - **NEVER** 把 routing 例外寫死在個別 skill；要加例外請改本檔的 Routing Table
