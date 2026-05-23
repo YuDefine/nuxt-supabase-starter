@@ -121,6 +121,10 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 - **NEVER** 嘗試自動 `rm .git/index.lock` 或清掉 sidecar — 那是別 session 的 SoT，誤刪比繼續跑風險更高
 - **NEVER** 跳過 request_user_input 自行決定繼續 — 命中時 user 必須親自選 A/B
 
+## Step 0-Codex: 派 codex 跑 commit 工作時的路由規約
+
+主線從 commit SKILL 派 codex 跑 commit 工作時（例如 `/wt` worktree 內派 codex commit phase），**MUST** 走 [`rules/core/agent-routing.codex-watch-protocol.md`](../../../../rules/core/agent-routing.codex-watch-protocol.md) § Codex 派工的標準流程 + Codex Watch Protocol。**禁止** `Agent` tool with `agent_type: screenshot-review` 派視覺 QA — sonnet wrapper 派工已多次驗證 self-rationalize（per [[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]）。
+
 ## Step 0-Scope: WIP 預設全部納入（果斷，不徵詢）
 
 **預設行為**：所有 `git status` 顯示的 uncommitted 變更（含與本次工作無關、其他 session 並行的 WIP、不認得的檔案）**一律無條件**列入本次 `/commit` 流程，照常跑 0-A review、在 Step 3 依功能分組成獨立 commit。
@@ -438,7 +442,7 @@ pnpm test          # 或 vp test run / pnpm test:unit，依 consumer 設定
 
 失敗時進入 loop：修復 → `pnpm format`（裸打 `vp fmt` 必須加 `--ignore-path .oxfmtignore`） → 重跑上述兩步 → 直到全綠。
 
-> ⚠️ **oxfmt batched false-positive workaround**（vite-plus 0.1.21 已知 bug）：第一次 `pnpm format:check` 紅時，**先**跑 `pnpm format`（vp fmt --write）一次再重跑 check；仍紅就重複，**最多 3 輪通常會收斂**。若想確認是 batched bug 而非真 format issue，對命中 file 跑 single-file `vp fmt --check <path>` — 通過 = 確認 vite-plus batched 互動 bug，可安心進下步。**NEVER** 動 `.oxfmtignore` 或 LOCKED projection（`.claude/rules/` / `AGENTS.md` / `AGENTS.md` / spectra change markdown）試圖讓 oxfmt 滿意 — 那是 governance violation。詳見 `docs/pitfalls/2026-05-18-oxfmt-batched-check-false-positive.md`。
+> ⚠️ **oxfmt batched false-positive**（vite-plus 0.1.21 已知 bug）：第一次 `pnpm format:check` 紅但 single-file `vp fmt --check <path>` 通過，是 batched bug 不是 format issue — **先**跑一次 `pnpm format`（vp fmt --write）再重跑 check 通常就過。**NEVER** 動 `.oxfmtignore` 或 LOCKED projection（`.claude/rules/` / `AGENTS.md` / `AGENTS.md` / spectra change markdown）試圖讓 oxfmt 滿意 — 那是 governance violation。clade 中央倉 release flow 已在 `scripts/publish.mjs` 主流程加 stable fmt pre-stage（兩輪 `vp fmt --write` + `vp fmt --check`），consumer 端 commit 流程不需再背 workaround SOP。詳見 `docs/pitfalls/2026-05-18-oxfmt-batched-check-false-positive.md`。
 
 **禁止**用 `npx vitest run` / `npx eslint` 等個別工具替代 `pnpm check` / `pnpm test`。若 `.claude/worktrees/` 干擾結果，先清理再跑。
 

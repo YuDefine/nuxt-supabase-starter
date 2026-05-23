@@ -21,6 +21,8 @@ Systematically debug a problem using a four-phase workflow.
 
 **This skill enforces debugging discipline.** No guessing, no random changes, no "let me try this." Every step is deliberate and evidence-based.
 
+**Agent routing**: 若 debug 過程需派 codex 跑診斷 / repro，**MUST** 走 [`rules/core/agent-routing.codex-watch-protocol.md`](../../../../rules/core/agent-routing.codex-watch-protocol.md) § Codex 派工的標準流程 + Codex Watch Protocol；**禁止** `Agent` tool with `subagent_type: screenshot-review` 派視覺 QA（per `rules/core/agent-routing.md` Routing Table — sonnet wrapper 已多次驗證 self-rationalize）。
+
 **Input**: The argument after `/spectra-debug` describes the bug or unexpected behavior. Examples:
 
 - `/spectra-debug the search returns duplicate results`

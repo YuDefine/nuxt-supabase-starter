@@ -40,7 +40,7 @@
  * or already inside a session worktree.
  */
 
-import { execFileSync, spawnSync } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { stdin, stdout } from 'node:process'
@@ -295,6 +295,58 @@ function isFormatOnlyDrift(wtPath, filePath) {
 }
 
 const stripTrailingNewlines = (s) => s.replace(/\n+$/, '')
+
+// Fire-and-forget trigger for codebase-memory-mcp `index_repository` (fast mode)
+// against a freshly-created worktree. Per pitfall-consumer-mcp-codebase-memory-missing
+// (2026-05-18, severity high): without auto-index, every new worktree starts
+// as "project not indexed" → search_graph / trace_path / get_code_snippet all
+// fail, downstream spectra-apply / debug flows degrade to grep fallback.
+//
+// Design constraints:
+//   - **Silent skip on any error**: mcp binary may be missing (consumer hasn't
+//     run `codebase-memory-mcp install`), CLI may be incompatible, indexing may
+//     fail mid-run. None of these should block worktree creation success.
+//   - **Non-blocking**: spawn detached + unref so the index job runs in the
+//     background and `cmdAdd` returns immediately. A 160 MB binary loading
+//     8 GB mem budget for a fresh repo can take 30 s+; awaiting would defeat
+//     the purpose of a fast worktree fork.
+//   - **Test hook**: WT_HELPER_SKIP_INDEX=1 (set in fixtures.test) disables the
+//     spawn entirely. WT_HELPER_INDEX_BIN overrides the binary path for stub
+//     injection if/when end-to-end test coverage is needed.
+//
+// Returns a Promise that resolves with `{ skipped, reason? }` once the child
+// is launched (or skip decision is made) — never rejects. Caller can `.catch`
+// defensively but no error path is actually reachable.
+export function maybeIndexRepository(worktreePath) {
+  return new Promise((resolveOuter) => {
+    try {
+      if (process.env.WT_HELPER_SKIP_INDEX === '1') {
+        resolveOuter({ skipped: true, reason: 'WT_HELPER_SKIP_INDEX=1' })
+        return
+      }
+      const binPath =
+        process.env.WT_HELPER_INDEX_BIN ||
+        join(process.env.HOME || '', '.local/bin/codebase-memory-mcp')
+      if (!existsSync(binPath)) {
+        resolveOuter({ skipped: true, reason: `binary missing: ${binPath}` })
+        return
+      }
+      const payload = JSON.stringify({ repo_path: worktreePath, mode: 'fast' })
+      const child = spawn(binPath, ['cli', 'index_repository', payload], {
+        detached: true,
+        stdio: 'ignore',
+      })
+      child.on('error', () => {
+        /* silent — pitfall says graceful degrade */
+      })
+      child.unref()
+      resolveOuter({ skipped: false })
+    } catch {
+      // Defensive: spawn throw on EACCES / ENOENT race — silent skip.
+      resolveOuter({ skipped: true, reason: 'spawn threw' })
+    }
+  })
+}
 
 async function cmdAdd(slug, opts = {}) {
   if (!slug) {
@@ -682,6 +734,14 @@ async function cmdAdd(slug, opts = {}) {
   console.log(
     'Open a new Claude Code or Codex session in the worktree path to continue work isolated from main.',
   )
+
+  // Auto-trigger codebase-memory index_repository (fast mode, detached) so
+  // search_graph / trace_path / get_code_snippet work immediately in the new
+  // worktree. Failures (missing binary, mcp unreachable) are silently swallowed
+  // per pitfall-consumer-mcp-codebase-memory-missing.
+  await maybeIndexRepository(wtPath).catch(() => {
+    // Unreachable — helper never rejects — but defend against future contract drift.
+  })
 }
 
 async function cmdDetectMainDirty(opts) {
