@@ -195,6 +195,43 @@ Detect the project's UI tech stack to ensure all design skills produce compatibl
 
 **Block 條件**：未通過 Copy Tone Check 的 plan **不得**進 ship phase — Exit Criteria 不算完成。例外需在 plan 顯式標註 `Copy Tone Exception` 區塊（理由必引 PRODUCT.md Users 欄位佐證），詳見 copy-tone.md「Exception 機制」。
 
+### Step 1.8: Modern Web Baseline Query（強制）
+
+對應規約：`~/.claude/rules/modern-web-mcp.md`（user-level rule）+ cookbook：`~/offline/clade/vendor/snippets/modern-web-guidance/README.md`。
+
+**所有** plan target 若涉及以下任一主題，plan 起手 **MUST** 先 query `GoogleChrome/modern-web-guidance` skill，把 query 結果 inline 寫進 plan：
+
+- **UI / Layout**：modal / dialog、popover / tooltip、dropdown / menu、tab bar、accordion、form 驗證 UX、container queries、`:has()`、scrollbar 樣式
+- **Scroll / Motion**：View Transitions、scroll-driven animations、parallax、scroll-snap
+- **Performance**：LCP / INP / CLS、`content-visibility`、`fetchpriority`、image / font 優化、long task 拆分、speculation rules
+- **Security**：CSP、WebAuthn / Passkey、Trusted Types、COOP/COEP
+- **Legacy migration**：把既有 `<div role="dialog">` / portal-tooltip / JS-driven carousel / IntersectionObserver 視差**升級到** modern API
+
+**Plan 寫入格式**：
+
+```markdown
+### Modern Web Baseline Check
+
+涉及主題：modal / popover  ← 從上面清單挑命中項目
+
+Query 結果摘要：
+- `dialog` use case：`<dialog>` element + `showModal()` / `close()`，Widely available，無需 polyfill
+- `popover` use case：Popover API (`popover` attr) + Anchor Positioning，Newly available，舊瀏覽器 fallback 用 `position-try`
+
+Baseline 決策：
+- Modal 用 `<dialog>`（Widely → 無 fallback）
+- Popover 用 Popover API + Anchor Positioning（Newly → 含 fallback positioning）
+
+若改既有 anti-pattern：
+- 既有 `<div role="dialog">` modal 同步升級到 `<dialog>`（trade-off：略增 migration cost，但獲 native focus trap + ESC + a11y）
+```
+
+**Block 條件**：plan 涉及上述主題但缺 Modern Web Baseline Check 區塊 → **不得**進 craft / ship phase。例外需在 plan 顯式標註 `Modern Web Exception` 區塊（理由：例如「目標瀏覽器矩陣含 IE11，必須降級」），但極少數情況才會用到。
+
+**為什麼是強制 step**：模型訓練資料對 modern web API 的記憶幾乎一定過時，憑記憶寫 modal / popover / animation / vitals optimization 看起來合理但 runtime 偏差或低於現代基線。query skill 是**plan 階段的強制動作**，不是「想到才查」的 advisory — 對應 user 偏好「不是想到的時候才主動調用」。
+
+cookbook 內有 4 大類典型場景 → query keyword → baseline 對照表，省去你重 derive。
+
 ---
 
 ## Mode: `new` — Build New Interface
