@@ -32,7 +32,7 @@ Local edits will be reverted by the next sync.
 ### MUST NOT
 
 - **MUST NOT** 同時把 `@nuxthub/core` 列在 `package.json dependencies` 但**未**登記為 module（這是「冗餘 dep」反模式，目前 fleet 內 4 個 consumer 命中此反例：<consumer-a> / <consumer-d> / <consumer-b> / nuxt-supabase-starter — 已由 2026-05-23 cloudflare-workers 標準化 sweep 修正）
-- **MUST NOT** 在 NuxtHub 派 consumer 把 D1/KV/R2 bindings **同時**寫進 `wrangler.jsonc` 的 `d1_databases` / `kv_namespaces` / `r2_buckets` **與** `nuxt.config.ts` 的 `hub: {}` — 兩處宣告會造成 deploy time duplicate binding error。NuxtHub 派 bindings 來源 SoT 在 `nuxt.config.ts hub: {}`；wrangler.jsonc 只放 `name` / `compatibility_date` / `routes` / `vars` / `triggers` 等 NuxtHub 不管的欄位
+- **MUST NOT** 把同一個 binding 同時宣告在兩處 — 例如 `hub.db.connection.databaseId` 已指定的 binding 又出現在 `wrangler.jsonc d1_databases`。**詳見 § 4 § 4.3 衝突偵測**
 
 ### Why
 
@@ -82,23 +82,89 @@ Local edits will be reverted by the next sync.
   - Fleet 內 0 consumer 用此模式，引入會破壞 deploy uniformity
 - **MUST NOT** 在 CI 直接 invoke `npx wrangler deploy`（沒 wrangler-action 包裝 → 失去 retry / log 結構化 / API token 自動注入）
 
-## § 4 — Binding declaration（依派別分流）
+## § 4 — Binding declaration（NuxtHub 派內部分 Pattern A / Pattern B）
 
-### NuxtHub 派（D1 / KV / R2 / AI）
+NuxtHub 派內部依 binding 複雜度有兩個合法 pattern：
 
-- **MUST** bindings 全在 `nuxt.config.ts` 的 `hub: {}` 宣告：
-  ```ts
-  hub: {
-    db: 'sqlite',          // D1
-    kv: true,              // KV
-    blob: true,            // R2
-    ai: true,              // Workers AI
-  }
-  ```
-- **MUST NOT** 在 wrangler.jsonc 重複宣告 `d1_databases` / `kv_namespaces` / `r2_buckets` / `ai` — NuxtHub 會在 build 時自動補進 `.output/server/wrangler.json`，wrangler.jsonc 重複會造成 deploy error
-- 例外：**`durable_objects` 必須**寫在 wrangler.jsonc（NuxtHub 沒 abstraction，必須走 raw），且配對的 `migrations` 也寫在 wrangler.jsonc
+### § 4.1 Pattern A — hub.db 內含 connection（**default**）
 
-### raw 派（Supabase / 外部 DB）
+binding ID 寫進 `nuxt.config.ts` 的 `hub.db.connection`，**禁**寫進 wrangler.jsonc。適合 D1 only 或 D1 + 少量 binding 的 consumer。
+
+```ts
+// nuxt.config.ts
+hub: {
+  db: {
+    dialect: 'sqlite',
+    ...(process.env.NITRO_PRESET?.includes('cloudflare')
+      ? {
+          driver: 'd1' as const,
+          connection: { databaseId: '<d1-database-id>' },
+        }
+      : {}), // dev 走 local sqlite/libsql（dev binding fallback，見 d1-drizzle cookbook）
+  },
+}
+```
+
+```jsonc
+// wrangler.jsonc — 完全不寫 d1_databases
+{
+  "name": "<consumer>",
+  "compatibility_date": "...",
+  "routes": [...]
+}
+```
+
+**Pattern A 優勢**：
+- Single SoT — 改 binding 一次，整套生效
+- **dev binding fallback**：用 `process.env.NITRO_PRESET` 條件切換 local sqlite / prod D1（wrangler.jsonc 沒法寫 conditional），dev 不用 wrangler dev 就能跑
+- 對齊 `vendor/snippets/d1-drizzle/nuxthub-dev-binding-fallback.ts` cookbook
+
+**Fleet 採用**：rental-scout、co-purchase
+
+### § 4.2 Pattern B — wrangler.jsonc 完整宣告 + hub: 啟用 helper（**例外**）
+
+binding ID 寫進 `wrangler.jsonc`（標準 Cloudflare 格式），`hub: {}` 只啟用 runtime helper。適合 binding 複雜（Durable Objects + AI Gateway 自訂 + multi-binding）的 consumer。
+
+```ts
+// nuxt.config.ts
+hub: {
+  db: 'sqlite',  // ← 簡形：只啟用 hubDatabase() helper，binding 細節走 wrangler
+  kv: true,
+  blob: true,
+}
+```
+
+```jsonc
+// wrangler.jsonc — 完整宣告所有 binding ID
+{
+  "d1_databases": [{ "binding": "DB", "database_id": "..." }],
+  "kv_namespaces": [{ "binding": "KV", "id": "..." }],
+  "r2_buckets": [{ "binding": "BLOB", "bucket_name": "..." }],
+  "ai": { "binding": "AI" },
+  "durable_objects": { "bindings": [...] }
+}
+```
+
+**Pattern B 適用場景**：
+- 有 **Durable Objects**（NuxtHub 無 abstraction，**必須**寫 wrangler.jsonc，那其他 binding 一起寫也合理保持 SoT 一致）
+- 有 **AI Gateway 自訂 routing / cache config**（hub.ai: true 不夠用）
+- 多 binding（D1 + KV + R2 + AI + DO + custom migrations）
+
+**Fleet 採用**：<consumer-c>（有 DO + AI + 5 種 binding + custom DO migrations）
+
+### § 4.3 衝突偵測（hard rule）
+
+**MUST NOT** 把同一 binding 同時宣告在兩處 — audit 偵測：
+
+| 反例 | 說明 |
+|---|---|
+| `hub.db.connection.databaseId` 已設 **且** wrangler.jsonc 有 `d1_databases` | Pattern A + B 混用，deploy 時 duplicate binding error |
+| `hub.kv` 為物件含 `id` **且** wrangler.jsonc 有 `kv_namespaces` | 同上 |
+| `hub.blob` 為物件含 `bucketName` **且** wrangler.jsonc 有 `r2_buckets` | 同上 |
+
+純 `hub.db: 'sqlite'`（簡形）配 wrangler.jsonc `d1_databases` 是 Pattern B 正常用法，**不**算衝突。
+
+### § 4.4 raw 派（Supabase / 外部 DB）
 
 - 若該 consumer 仍需要少量 Cloudflare binding（罕見），**直接**在 wrangler.jsonc 宣告：
   ```jsonc
@@ -117,7 +183,7 @@ Local edits will be reverted by the next sync.
 3. wrangler.jsonc 缺 `$schema` / `name` / `compatibility_date` → `wrangler.missing_required_field`
 4. Supabase consumer 帶 `@nuxthub/core` dep → `nuxthub.redundant_dep`
 5. D1 consumer 缺 `@nuxthub/core` module 登記 → `nuxthub.missing_required`
-6. NuxtHub 派 wrangler.jsonc 重複宣告 D1/KV/R2 bindings → `binding.duplicate_declaration`
+6. NuxtHub 派 binding 同時宣告在 hub.* connection + wrangler.jsonc → `binding.duplicate_declaration`（per § 4.3）
 7. CI workflow 用 `nuxthub deploy` 或直接 `wrangler deploy` → `deploy.non_standard_command`
 
 每個 violation 帶 `consumer_id` + `path` + `rule_section` reference，per [[improvement-loop]] 五項分層 metric report。
