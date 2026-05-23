@@ -68,7 +68,6 @@
     "@nuxt/hints": "^1.1.0",
     "@nuxt/image": "^2.0.0",
     "@nuxt/ui": "^4.6.0",
-    "@nuxthub/core": "^0.10.7",
     "@nuxtjs/supabase": "^2.0.4",
     "@onmax/nuxt-better-auth": "0.0.2-alpha.15",
     "@pinia/colada": "^1.0.0",
