@@ -334,6 +334,7 @@ Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由
 - 純 final-state 視覺狀態：toast / banner / badge / sort order / readonly hint / counter
 - 已有 seed / URL，可直接開頁後截 final-state screenshot
 - 不需要 agent 執行 mutation / 填表 / 多角色切換
+- compound assertion（多狀態 / paired-state / before-after）→ 參見下方 § Compound assertion handling
 
 **Multi-marker（多 channel evidence）**
 
@@ -534,6 +535,34 @@ pnpm test:e2e:verify <change>
 ```
 
 **Archive-gate 結果**：`verify:ui` 是 semi-automatic channel；annotation present 只是 visual evidence，使用者仍 **MUST** 在 review GUI 點 OK 才能 flip `[x]`。缺 annotation 時 GUI 顯示 evidence missing；未勾 `[x]` 時 archive-gate **MUST** block。
+
+#### Compound assertion handling
+
+當 `[verify:ui]` item 描述含**多狀態觀察**（paired-state、before-after、A-then-B、default filter / 切換 filter 對照、互斥狀態並列等）時，單一 screenshot 不足以 cover 全部 assertion → evidence trail 不完整還能通過 archive。Compound item **MUST** 走以下兩條路徑之一：
+
+**Path A（推薦）— 拆 scoped sub-items**
+
+拆成 `#N.1` / `#N.2`，各自 `[verify:ui]` 各自 annotation 各自 screenshot；parent 不再標 `[verify:ui]`，parent state 由 children AND derive（per § Parent State Derivation hard rule）。
+
+**Path B（暫權變）— Multi-screenshot annotation**
+
+同一行掛**多個** `(verified-ui:)` annotation，各引用一張 screenshot；review-gui parser 寬容支持，待正式 schema 升級。Path A 永遠優先；Path B 限「拆 sub-items 會造成 description 重複到不可讀」的少數情境。
+
+**NEVER**：對 compound item 用**單一** `(verified-ui: ... screenshot=...)` + 單張 screenshot 完成 evidence trail — 即使該張 screenshot 同時看得到兩個狀態，schema 上仍視為 single-state evidence，archive-gate 無法驗證 compound 假設。
+
+**範例**（<consumer-b> `archive-test-work-reports-and-fix-sort-order` #8「預設 filter 隱藏 archived / 切到 archived filter 顯示 archived」對照）：
+
+```markdown
+❌ - [ ] #8 [verify:ui] /work-reports 列表預設 filter 隱藏 archived；切到 archived filter 顯示 archived 樣本 (verified-ui: 2026-05-23T08:00:00Z screenshot=screenshots/local/<change>/#8.png)
+
+✅ - [ ] #8 列表狀態 filter 互斥驗證
+  - [ ] #8.1 [verify:ui] /work-reports 預設 filter 不含 archived 樣本（screenshot 顯示無 archived row）
+  - [ ] #8.2 [verify:ui] /work-reports 切到 archived filter 後顯示 archived 樣本 `WR-9002`
+
+✅ - [ ] #8 [verify:ui] /work-reports 列表預設 filter 隱藏 archived；切到 archived filter 顯示 archived (verified-ui: 2026-05-23T08:00:00Z screenshot=screenshots/local/<change>/#8a-default.png) (verified-ui: 2026-05-23T08:00:30Z screenshot=screenshots/local/<change>/#8b-archived.png)
+```
+
+Screenshot 檔名 **MUST** 符合 `screenshot-strategy.md` § 檔名強制規範（hard rule）— Path A 沿用 `#<sub-item-id>-<descriptor>.<ext>`（例 `#8.1-default.png`、`#8.2-archived.png`）；Path B 用 `#<item-id><variant>-<descriptor>.<ext>`（例 `#8a-default.png`、`#8b-archived.png`），多張 screenshot 之間靠 `<variant>` 區分。
 
 #### Multi-marker items
 
