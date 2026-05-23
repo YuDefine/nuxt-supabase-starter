@@ -1248,6 +1248,15 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
     lines.push('')
   }
 
+  // Modern Web Guidance — universal（所有 frontend project 都裝）
+  // 對應 clade ~/.claude/rules/modern-web-mcp.md + vendor/snippets/modern-web-guidance/README.md
+  lines.push('# Modern Web Guidance（Chrome team / Baseline-aware）')
+  lines.push('echo "📦 Modern Web Guidance Skill..."')
+  lines.push('npx skills add GoogleChrome/modern-web-guidance $COPY_FLAGS')
+  lines.push('echo "  ✓ Modern Web Guidance 完成"')
+  lines.push('echo ""')
+  lines.push('')
+
   // Footer
   lines.push('echo "✅ 所有 skills 安裝完成！"')
   lines.push('echo ""')
