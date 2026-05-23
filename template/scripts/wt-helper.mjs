@@ -41,7 +41,7 @@
  */
 
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync, unlinkSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { stdin, stdout } from 'node:process'
 import { createInterface } from 'node:readline/promises'
@@ -349,6 +349,93 @@ export function maybeIndexRepository(worktreePath) {
   })
 }
 
+// Pin a pre-fork baseline snapshot under `refs/wt-baseline/<slug>/<iso>`.
+//
+// TD-144 fix: cmdAdd has three fork paths (main-clean, main-dirty + commit
+// strategy, main-dirty + stash strategy) but historically only the stash
+// strategy pinned a baseline ref. PTB-unsafe (Path X reset, abandon, etc.)
+// worktrees on the other two paths permanently lost user WIP because there
+// was nothing reachable to rescue from.
+//
+// This helper unifies the three paths. Behavior:
+//   • main clean → pin HEAD sha directly as marker (single-parent ref).
+//     `wt-helper rescue --show <ref>` returns "Empty stash" (no diff vs HEAD),
+//     but the ref still exists for `git show <ref>` / `git log <ref>` rescue.
+//   • main dirty → snapshot staged + unstaged + untracked via a temporary
+//     index (GIT_INDEX_FILE) so the real working tree / real index are NEVER
+//     touched. Build a stash-format 2-parent commit (HEAD + index-commit) so
+//     `git stash show -p <ref>` produces a clean diff against HEAD.
+//
+// Returns { baselineRef, type, sha }. type ∈ 'clean-main' | 'snapshot'.
+// Caller decides whether to use the returned ref (e.g. stash strategy skips
+// this because its existing post-stash pin already covers all three layers).
+function pinPreForkBaseline(consumerRoot, cleanSlug, iso, opts = {}) {
+  const baselineRef = `refs/wt-baseline/${cleanSlug}/${iso}`
+  const headSha = git(['rev-parse', 'HEAD'], { cwd: consumerRoot })
+  const headTree = git(['rev-parse', 'HEAD^{tree}'], { cwd: consumerRoot })
+  const dirty = detectMainDirty(consumerRoot)
+  const dirtyCount = dirty.modified.length + dirty.untracked.length
+
+  if (dirtyCount === 0) {
+    // Clean main: pin a 2-parent stash-format marker (tree == HEAD's tree,
+    // parent[0] == HEAD, parent[1] == fresh index commit with same tree).
+    // This guarantees `rescue --show <ref>` exits 0 (empty diff vs HEAD)
+    // instead of erroring out with "not a stash-like commit". Without the
+    // 2nd parent, `git stash show -p` rejects the ref entirely.
+    const indexCommit = git(
+      ['commit-tree', headTree, '-p', headSha, '-m', `index on main: ${headSha.slice(0, 7)}`],
+      { cwd: consumerRoot },
+    )
+    const markerMessage = `On main: wt-baseline/${cleanSlug}/${iso} (clean-main marker; no diff vs HEAD)`
+    const markerSha = git(
+      ['commit-tree', headTree, '-p', headSha, '-p', indexCommit, '-m', markerMessage],
+      { cwd: consumerRoot },
+    )
+    git(['update-ref', baselineRef, markerSha], { cwd: consumerRoot })
+    return { baselineRef, type: 'clean-main', sha: markerSha }
+  }
+
+  // Dirty main: snapshot staged + unstaged + untracked into a stash-format
+  // commit using a temporary index. `git stash create -u` is unreliable
+  // across git versions (some omit untracked entirely; others add a ^3
+  // parent), so we build the commit manually for deterministic behavior.
+  const tmpIndex = join(consumerRoot, '.git', `wt-baseline-index-${cleanSlug}-${process.pid}`)
+  const label = opts.label || cleanSlug
+  const message = `On main: wt-baseline/${cleanSlug}/${iso} (pre-fork snapshot for ${label})`
+  try {
+    // Use a fresh temp index so we don't touch the real index.
+    const env = { ...process.env, GIT_INDEX_FILE: tmpIndex }
+    // Seed the temp index with HEAD's tree, then stage everything (tracked
+    // modifications + untracked) on top. This collapses all three layers
+    // (HEAD vs staged vs unstaged vs untracked) into one tree.
+    git(['read-tree', 'HEAD'], { cwd: consumerRoot, env })
+    git(['add', '-A'], { cwd: consumerRoot, env, stdio: 'pipe' })
+    const fullTree = git(['write-tree'], { cwd: consumerRoot, env })
+    // Build an "index commit" parent so the resulting commit is a valid
+    // 2-parent stash entry (parent[0]=HEAD, parent[1]=index). This is what
+    // `git stash show -p` requires — a single-parent commit looks like
+    // "Empty stash" to that command.
+    const indexCommit = git(
+      ['commit-tree', fullTree, '-p', headSha, '-m', `index on main: ${headSha.slice(0, 7)}`],
+      { cwd: consumerRoot },
+    )
+    const snapshotSha = git(
+      ['commit-tree', fullTree, '-p', headSha, '-p', indexCommit, '-m', message],
+      { cwd: consumerRoot },
+    )
+    git(['update-ref', baselineRef, snapshotSha], { cwd: consumerRoot })
+    return { baselineRef, type: 'snapshot', sha: snapshotSha }
+  } finally {
+    // Always delete the temp index to avoid leaving artifacts under .git/.
+    try {
+      if (existsSync(tmpIndex)) unlinkSync(tmpIndex)
+    } catch {
+      // Non-fatal: leftover temp index file in .git/ is harmless and
+      // overwritten by next pin run (same pid + slug + ISO combo unlikely).
+    }
+  }
+}
+
 async function cmdAdd(slug, opts = {}) {
   if (!slug) {
     throw new Error(
@@ -390,6 +477,15 @@ async function cmdAdd(slug, opts = {}) {
   const preGenSessionId = genSessionId()
   let pendingStashName = null
   let pendingBaselineRef = null
+  // TD-144: single ISO timestamp shared across all baseline ref pins for this
+  // cmdAdd invocation. Computed once so commit-strategy pre-fork snapshot,
+  // stash-strategy post-stash pin, and clean-main marker all land at the same
+  // ref name when relevant.
+  const baselineIso = new Date().toISOString().replace(/[:.]/g, '-')
+  // Tracks whether any code path already pinned `refs/wt-baseline/<slug>/<iso>`
+  // so the trailing "always pin" safety net doesn't double-pin (and overwrite
+  // a richer snapshot with a HEAD marker).
+  let baselineRefPinned = false
   if (opts.precheckBaseline !== undefined) {
     let dirty = detectMainDirty(consumerRoot)
     if (dirty.conflicted.length > 0) {
@@ -525,12 +621,27 @@ async function cmdAdd(slug, opts = {}) {
         }
         const changeLabel = opts.precheckBaseline || cleanSlug
         const message = `🧹 chore: baseline pre-fork sync for ${changeLabel}`
+        // TD-144: snapshot full dirty state (including non-scoped paths and
+        // untracked) BEFORE the selective commit consumes the scoped paths.
+        // Without this, any non-scoped path that gets `worktree add`'d into
+        // the new wt is unrecoverable if user later runs PTB-unsafe ops.
+        try {
+          const pin = pinPreForkBaseline(consumerRoot, cleanSlug, baselineIso, {
+            label: changeLabel,
+          })
+          baselineRefPinned = true
+          console.log(
+            `Pre-fork baseline: pinned ${pin.type} snapshot as '${pin.baselineRef}' (rescue via 'wt-helper rescue --show').`,
+          )
+        } catch (e) {
+          console.error(`warn: pre-fork baseline pin failed (proceeding): ${e?.message ?? e}`)
+        }
         console.log(
           `Pre-fork baseline: selective commit ${scopePaths.length} path(s) → "${message}"`,
         )
         gitSelectiveCommit(consumerRoot, scopePaths, message)
       } else if (strategy === 'stash') {
-        const iso = new Date().toISOString().replace(/[:.]/g, '-')
+        const iso = baselineIso
         const stashName =
           opts.baselineStashName || `wt-baseline/${cleanSlug}/${preGenSessionId}/${iso}`
         const baselineRef = `refs/wt-baseline/${cleanSlug}/${iso}`
@@ -604,6 +715,9 @@ async function cmdAdd(slug, opts = {}) {
       git(['reset', 'HEAD', '--'], { cwd: wtPath, stdio: 'inherit' })
       const stashSha = git(['rev-parse', 'stash@{0}'], { cwd: consumerRoot })
       git(['update-ref', pendingBaselineRef, stashSha], { cwd: consumerRoot })
+      // TD-144: mark baseline ref as pinned so the trailing safety net (below)
+      // doesn't overwrite this richer stash-format commit with a HEAD marker.
+      baselineRefPinned = true
       git(['stash', 'drop', 'stash@{0}'], { cwd: consumerRoot, stdio: 'inherit' })
       console.log(
         `Pre-fork baseline: stash '${pendingStashName}' applied to worktree; pinned as '${pendingBaselineRef}' (permanently reachable — use 'wt-helper rescue' to inspect/restore).`,
@@ -706,6 +820,25 @@ async function cmdAdd(slug, opts = {}) {
         `warn: stash apply to worktree failed; stash '${pendingStashName}' preserved in 'git stash list' for manual recovery.`,
       )
       console.error(`error detail: ${e?.message ?? e}`)
+    }
+  }
+
+  // TD-144 safety net: guarantee EVERY fork path leaves at least one pinned
+  // `refs/wt-baseline/<slug>/<iso>` ref. The commit-strategy and stash-strategy
+  // branches pin earlier (and set baselineRefPinned). For the remaining paths
+  // (main-clean fork, no --precheck-baseline at all, or a strategy that didn't
+  // pin), call the helper now — it detects clean vs dirty and pins HEAD or a
+  // snapshot accordingly. Without this, PTB-unsafe ops on the new wt have no
+  // rescue anchor.
+  if (!baselineRefPinned) {
+    try {
+      const pin = pinPreForkBaseline(consumerRoot, cleanSlug, baselineIso, { label: cleanSlug })
+      baselineRefPinned = true
+      console.log(
+        `Pre-fork baseline: pinned ${pin.type} marker as '${pin.baselineRef}' (rescue via 'wt-helper rescue --show').`,
+      )
+    } catch (e) {
+      console.error(`warn: pre-fork baseline pin (safety net) failed: ${e?.message ?? e}`)
     }
   }
 
