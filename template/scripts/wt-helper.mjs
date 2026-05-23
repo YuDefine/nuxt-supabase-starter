@@ -1459,6 +1459,17 @@ async function cmdMergeBack(slug, opts = {}) {
       )
     }
     const stashMsg = `wt-merge-block/${cleanSlug}${sessionPart}/${isoTs}`
+    // Snapshot refs/stash before push so we can verify a new entry was actually created.
+    // See pitfall-wt-helper-merge-back-silent-stash-miss: `git stash push -u` on a
+    // clean working tree exits 0 with "No local changes to save" and creates no
+    // entry, which made the success log misleading when a concurrent session
+    // cleared main between blocker detection and stash push.
+    let stashHeadBefore = null
+    try {
+      stashHeadBefore = git(['rev-parse', '--verify', 'refs/stash'], { cwd: consumerRoot })
+    } catch {
+      stashHeadBefore = null
+    }
     try {
       // Bulk stash (no pathspec) — matches cmdAdd's baseline-stash strategy.
       // Previously this used `git stash push -u -m <msg> -- <blocker-paths>`,
@@ -1469,12 +1480,34 @@ async function cmdMergeBack(slug, opts = {}) {
       // user reconciles via stash-reconcile.mjs". See pitfall-git-stash-
       // pathspec-scope-leak (merge-back surface).
       git(['stash', 'push', '-u', '-m', stashMsg], { cwd: consumerRoot })
+    } catch (e) {
+      throw new Error(`merge-back: failed to stash blockers: ${e.message ?? e}`, { cause: e })
+    }
+    let stashHeadAfter = null
+    try {
+      stashHeadAfter = git(['rev-parse', '--verify', 'refs/stash'], { cwd: consumerRoot })
+    } catch {
+      stashHeadAfter = null
+    }
+    if (stashHeadAfter && stashHeadAfter !== stashHeadBefore) {
       stashRef = stashMsg
       console.log(
         `merge-back: bulk-stashed main's dirty state as '${stashMsg}' (covers ${blockers.length} blocker(s) + any unrelated dirty paths)`,
       )
-    } catch (e) {
-      throw new Error(`merge-back: failed to stash blockers: ${e.message ?? e}`, { cause: e })
+    } else {
+      stashRef = null
+      console.warn(
+        `merge-back: warning — bulk stash command exited clean but no new stash entry created.`,
+      )
+      console.warn(
+        `             main working tree was already clean when stash ran (likely a concurrent`,
+      )
+      console.warn(
+        `             session cleared it between blocker detection and stash push). Skipping`,
+      )
+      console.warn(
+        `             stashRef assignment; squash will proceed against current main state.`,
+      )
     }
   }
 

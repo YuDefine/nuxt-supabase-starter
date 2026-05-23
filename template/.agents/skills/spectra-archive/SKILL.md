@@ -355,6 +355,14 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
 
 5.5. **Post-walkthrough gate re-check** (clade fork addition — paired with `--pre-skill` PreToolUse hook)
 
+   **Journey URL Touch (Check 1) bypass marker** — if Check 1 reports `Journey URL Touch 未通過` for a URL whose `.vue` was committed in main **before this worktree was forked** (typical: earlier propose iteration impl'd the UI, current worktree only carries verify evidence / tasks.md annotations / screenshot sweep), this is the expected atomic-landing edge case. Drop a bypass marker into the relevant `tasks.md` block:
+
+   ```markdown
+   <!-- journey-touch: intentional, reason: UI already committed in <commit-sha> (earlier propose iteration); this worktree only carries verify evidence -->
+   ```
+
+   The gate honours the marker per-URL. Use only when commit history actually contains the touched UI (verify via `git log -- <ui-path>`); never use to silence a missing implementation.
+
    The PreToolUse hook `pre-archive-ux-gate.sh` runs `archive-gate.sh --pre-skill <name>` before this skill starts, which skips Check 4 (Manual Review Kind Validation) because annotations are populated by Step 3.5 above. Now that Step 3.5 has run, validate the post-walkthrough state by re-running the gate **without** `--pre-skill`:
 
    ```bash
