@@ -52,6 +52,7 @@ import {
   readActiveClaims,
   writeClaim,
 } from './claim-helper.mjs'
+import { ensureNoStaleIndexLock } from './_git-lock-detect.mjs'
 import { isLockedProjectionPath } from './locked-projection.mjs'
 
 function git(args, opts = {}) {
@@ -356,6 +357,11 @@ async function cmdAdd(slug, opts = {}) {
   }
   const cleanSlug = makeSlugSafe(slug)
   const consumerRoot = findConsumerRoot()
+  // Pre-clean stale .git/index.lock if any — see docs/tech-debt.md TD-145.
+  const lockStatus = ensureNoStaleIndexLock(consumerRoot)
+  if (lockStatus.cleaned) {
+    console.error(`⚠ rm'd stale .git/index.lock — proceeding`)
+  }
   const name = basename(consumerRoot)
   const branch = `session/${timestampPrefix()}-${cleanSlug}`
   const wtPath = join(dirname(consumerRoot), `${name}-wt`, cleanSlug)
@@ -1262,6 +1268,11 @@ async function cmdMergeBack(slug, opts = {}) {
   }
   const cleanSlug = makeSlugSafe(slug)
   const consumerRoot = findConsumerRoot()
+  // Pre-clean stale .git/index.lock if any — see docs/tech-debt.md TD-145.
+  const lockStatus = ensureNoStaleIndexLock(consumerRoot)
+  if (lockStatus.cleaned) {
+    console.error(`⚠ rm'd stale .git/index.lock — proceeding`)
+  }
   const wts = sessionWorktrees(consumerRoot)
   const target = wts.find(
     (w) => w.path.endsWith(`/${cleanSlug}`) && w.branch && w.branch.endsWith(`-${cleanSlug}`),
