@@ -299,7 +299,7 @@ const stripTrailingNewlines = (s) => s.replace(/\n+$/, '')
 async function cmdAdd(slug, opts = {}) {
   if (!slug) {
     throw new Error(
-      'Usage: wt-helper add <slug> [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>]',
+      'Usage: wt-helper add <slug> [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>] [--skip-prefork-audit]',
     )
   }
   const cleanSlug = makeSlugSafe(slug)
@@ -363,6 +363,57 @@ async function cmdAdd(slug, opts = {}) {
         dirty = detectMainDirty(consumerRoot)
       }
     }
+    // Pre-fork in-flight feature audit (warn-only, first pass).
+    // See pitfall-pre-fork-baseline-hides-in-flight-feature: when main has a
+    // large number of tracked modifications before fork, baseline strategy
+    // (especially `stash`) can sweep an in-flight feature stack into the
+    // pinned `refs/wt-baseline/*` ref. If merge-back later fails and the
+    // agent goes "Path X" (reset worktree branch + squash + cleanup), the
+    // baseline files vanish from main silently.
+    //
+    // Threshold default 50 staged+unstaged tracked changes; override via
+    // WT_PREFORK_AUDIT_THRESHOLD env var. Opt-out via --skip-prefork-audit
+    // flag (for tests). Never blocks — only emits a warning + mitigation hint.
+    if (!opts.skipPreforkAudit) {
+      const thresholdRaw = process.env.WT_PREFORK_AUDIT_THRESHOLD
+      const threshold = thresholdRaw !== undefined ? Number(thresholdRaw) : 50
+      const safeThreshold = Number.isFinite(threshold) && threshold >= 0 ? threshold : 50
+      const trackedCount = dirty.modified.length
+      if (trackedCount >= safeThreshold) {
+        const sample = dirty.modified
+          .slice(0, 20)
+          .map((m) => `  ${m.status}  ${m.path}`)
+          .join('\n')
+        const more = trackedCount > 20 ? `\n  ... and ${trackedCount - 20} more` : ''
+        console.warn('')
+        console.warn(
+          `⚠️  Pre-fork audit: main has ${trackedCount} staged+unstaged tracked change(s) (threshold ${safeThreshold}).`,
+        )
+        console.warn(
+          `    These may be in-flight feature code; baseline strategy (especially 'stash') could`,
+        )
+        console.warn(
+          `    sweep them into refs/wt-baseline/*, where they vanish from main permanently if`,
+        )
+        console.warn(`    merge-back later fails and you 'reset --hard' the worktree branch.`)
+        console.warn(`    Risky paths (sample, up to 20):`)
+        console.warn(sample + more)
+        console.warn(`    Mitigation:`)
+        console.warn(`      • Commit in-flight feature work to main BEFORE forking, OR`)
+        console.warn(
+          `      • Note the pinned ref printed below (refs/wt-baseline/<slug>/<ISO>) and use`,
+        )
+        console.warn(`        'wt-helper rescue --show <ref>' to inspect/recover if needed.`)
+        console.warn(
+          `    See pitfall-pre-fork-baseline-hides-in-flight-feature for full root cause.`,
+        )
+        console.warn(
+          `    Override threshold via WT_PREFORK_AUDIT_THRESHOLD; silence via --skip-prefork-audit.`,
+        )
+        console.warn('')
+      }
+    }
+
     const dirtyCount = dirty.modified.length + dirty.untracked.length
     if (dirtyCount > 0) {
       // Phase 3 (Q5) audit: classify dirty paths so user sees ownership
@@ -1751,6 +1802,7 @@ async function main() {
     cleanup: !flags.has('--no-cleanup'),
     noopIfMissing: flags.has('--noop-if-missing'),
     skipPreSync: flags.has('--skip-pre-sync'),
+    skipPreforkAudit: flags.has('--skip-prefork-audit'),
     precheckBaseline: Object.prototype.hasOwnProperty.call(values, '--precheck-baseline')
       ? values['--precheck-baseline']
       : undefined,
@@ -1810,6 +1862,11 @@ async function main() {
       console.error(
         '    --baseline-stash-name <name>     Override default `wt-baseline/<slug>/<ISO>` stash name.',
       )
+      console.error(
+        '    --skip-prefork-audit             Silence the in-flight feature audit warning',
+      )
+      console.error('                            (default threshold: 50 tracked changes;')
+      console.error('                            override via WT_PREFORK_AUDIT_THRESHOLD env var).')
       console.error("  detect-main-dirty         Report main's dirty paths; pairs with --json.")
       console.error('  list [--json]             Enumerate session worktrees with staleness')
       console.error('  prune                     Interactively remove merged session worktrees')

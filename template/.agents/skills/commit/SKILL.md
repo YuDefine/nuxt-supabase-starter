@@ -29,6 +29,98 @@ node .claude/scripts/commit-lock.mjs acquire
 
 成功後此 session 取得獨占權，直到最後一步釋放。**中斷處理**：若 `/commit` 流程中途失敗 / 使用者中斷，仍**必須**在終止前呼叫 `node .claude/scripts/commit-lock.mjs release`；漏釋放的鎖會在 30 分鐘後被下次 acquire 自動清除（可用 `COMMIT_LOCK_STALE_MINUTES` 調整）。
 
+## Step 0-Coord: cross-session staged pollution detection（warn-only first pass）
+
+`commit-lock` 只擋同時兩個 `/commit`；**不**擋「commit 跑時別 session 在跑 publish / propagate / wt-helper add / rescue-consumer」造成 staged 區意外污染（已實證 3 條 incident，見 `docs/pitfalls/2026-05-{14,18,22}-*.md`）。Step 0-Coord 跑 3 個 detection signal **warn-only**，命中再用 `request_user_input` 讓 user 決定等候還是強制繼續。
+
+### Signal 1: `.git/index.lock` mtime < 60 秒
+
+別 session 正在 staging（git add / git commit / git checkout 過程中會建這個 lock，正常結束會自動移除）。
+
+```bash
+GIT_DIR=$(git rev-parse --git-dir)
+LOCK="$GIT_DIR/index.lock"
+if [[ -f "$LOCK" ]]; then
+  NOW=$(date +%s)
+  LOCK_MTIME=$(stat -f %m "$LOCK" 2>/dev/null || stat -c %Y "$LOCK" 2>/dev/null)
+  AGE=$((NOW - LOCK_MTIME))
+  if (( AGE < 60 )); then
+    echo "SIGNAL_1_HIT: index.lock age=${AGE}s path=$LOCK"
+  fi
+fi
+```
+
+**解讀**：`AGE < 60` → 別 session 大機率仍活著正在 staging；`AGE >= 60` → stale lock（崩潰殘留，建議手動 `rm "$LOCK"` 但不在 Step 0-Coord 處理，留給 user 自決）。
+
+### Signal 2: publish.mjs untracked stash sidecar
+
+`scripts/publish.mjs` 的 `--stash-untracked` flow 跑時會在 `.spectra/stash-meta-<tag>.json` 落 sidecar（含 pid / cwd / fileList），publish 完成才 cleanup。看到 sidecar 代表 publish 流程**還在跑或崩潰未收尾**。
+
+```bash
+REPO_ROOT=$(git rev-parse --show-toplevel)
+SIDECARS=("$REPO_ROOT"/.spectra/stash-meta-*.json)
+if [[ -f "${SIDECARS[0]}" ]]; then
+  for f in "${SIDECARS[@]}"; do
+    [[ -f "$f" ]] || continue
+    echo "SIGNAL_2_HIT: publish stash sidecar=$f"
+  done
+fi
+```
+
+**解讀**：任一 sidecar 存在 → 別 session 的 publish flow 仍未收尾；commit 時若擴大 staging 範圍可能跟 publish 的 auto-stash pop 撞 conflict。
+
+### Signal 3: wt-helper baseline stash 在 60 秒內建立
+
+`vendor/scripts/wt-helper.mjs cmdAdd --baseline-strategy stash` 會建 `wt-baseline/<slug>/<session-id>/<iso>` stash entry，建完立刻 apply + drop。stash list 裡看到 `wt-baseline/` 命名且 reflog timestamp < 60s → wt-helper add 可能還在跑。
+
+```bash
+git stash list --format='%gd %ct %gs' 2>/dev/null \
+  | awk -v now=$(date +%s) '
+    /wt-baseline\// {
+      age = now - $2
+      if (age < 60) {
+        printf "SIGNAL_3_HIT: wt-baseline stash age=%ds entry=%s\n", age, $1
+      }
+    }'
+```
+
+**解讀**：命中 → wt-helper add 流程未結束；此時 commit 跑下去可能撞 wt-helper 中段的 stash apply / index reset 序列。
+
+### 命中處置
+
+**全部 silent**（三條 signal 都沒命中）→ 直接輸出 `✅ 0-Coord 通過（無 cross-session 污染信號）`，進入 Step 0-Scope。
+
+**任一 signal 命中** → stderr 印 warn block：
+
+```text
+⚠️ 0-Coord: 偵測到 cross-session 活動信號
+
+  <列出命中的 SIGNAL_N_HIT 行>
+
+可能後果：
+  - 別 session 正在 staging → 你的 git add 可能跟它的 index 寫入互踩
+  - publish flow 未收尾 → 你的 commit 可能跟 auto-stash pop 撞 conflict
+  - wt-helper add 中途 → baseline staged index 可能污染你的 selective stage
+
+建議處置（mitigation hint）：
+  1. 等 60 秒後重跑 /commit（最常見：別 session 馬上結束就乾淨了）
+  2. 跑 git status / git stash list / ls .spectra/ 確認別 session 真實狀態
+  3. 確認別 session 沒在跑後再繼續
+```
+
+接著用 **request_user_input** 二擇一：
+
+- **選項 A**：`label: "等候重試"`, `description: "退出 /commit，等 60 秒後重跑（推薦：避開 staged 污染風險）"`
+- **選項 B**：`label: "強制繼續"`, `description: "接受 staged 污染風險繼續跑 Step 0-Scope（user 確認別 session 已結束時用）"`
+
+選 A → 釋放 commit-lock 後 STOP；選 B → 輸出 `⚠️ 0-Coord 強制繼續（user 接受風險）`，進入 Step 0-Scope。
+
+### 禁止項
+
+- **NEVER** 把 Step 0-Coord 升級為 hard block；偽陽性 / 別 session 剛好結束的場景太多，warn-and-ask 是當前正解
+- **NEVER** 嘗試自動 `rm .git/index.lock` 或清掉 sidecar — 那是別 session 的 SoT，誤刪比繼續跑風險更高
+- **NEVER** 跳過 request_user_input 自行決定繼續 — 命中時 user 必須親自選 A/B
+
 ## Step 0-Scope: WIP 預設全部納入（果斷，不徵詢）
 
 **預設行為**：所有 `git status` 顯示的 uncommitted 變更（含與本次工作無關、其他 session 並行的 WIP、不認得的檔案）**一律無條件**列入本次 `/commit` 流程，照常跑 0-A review、在 Step 3 依功能分組成獨立 commit。
