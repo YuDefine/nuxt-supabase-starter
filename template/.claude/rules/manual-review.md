@@ -762,6 +762,28 @@ Verify channel baseline 是 consumer 端**已預先 ready** 的 codebase 層長�
 - Dispatch `verify:ui` 前 **MUST** 確認 dev-login route + seed file 存在。
 - Baseline 不完整時，將缺口登記到 consumer 的 `ROADMAP.md` / `docs/tech-debt.md` / dedicated infra change，而不是降低 verification channel。
 
+#### Dev-login route missing → scaffold-first（hard rule，per pitfall-agent-asks-user-cookie-skipping-dev-login-scaffold）
+
+當 verify channel baseline 缺 dev-login route（`_dev-login.get.ts` / `__test-login.get.ts` / `dev-signin.{get,post}.ts` 都不在 consumer）時，主線端 **MUST**：
+
+1. **第一動作 = scaffold dev-login route via clade cookbook**，**NEVER** 把「請 user 手動 Google OAuth + DevTools 複製 cookie 貼回 chat」當作預設方案
+2. 偵測 consumer 用的 auth module（`grep modules nuxt.config.ts` → `nuxt-auth-utils` / `supabase-self-hosted` / `better-auth`）
+3. 對應 cookbook 路徑：
+   - Canonical rule: `~/offline/clade/rules/modules/auth/<auth-module>/dev-login.md`
+   - Cookbook templates: `~/offline/clade/vendor/snippets/dev-auth/templates/`
+   - Reference impl: <consumer-a> `packages/core/server/routes/auth/_dev-login.get.ts` / <consumer-b> `server/routes/auth/__test-login.get.ts` / <consumer-d> `server/routes/auth/_dev-login.get.ts` / <consumer-k> `server/routes/auth/_dev-login.get.ts` (commit f9f8930)
+4. **MUST** AskUserQuestion 給 user：「baseline 缺 dev-login route，agent 即將依 cookbook scaffold 到 `server/routes/auth/_dev-login.get.ts`（屬 TD-015 partial landing）— 同意 / 改別的路徑？」
+5. user 同意 → agent 自己 scaffold + typecheck + smoke curl 自驗 + 進 verify channel evidence collection；**禁止**「請 user 補完再回來」這條 pseudo-blocking handoff
+6. user 拒絕（罕見）→ 才回到原本「stop + 登 TD」路徑
+
+**Why scaffold first**：cookie 取得是 agent autonomy 範圍內可解的事，不該成為 user-bound blocker。clade 已備整套 canonical pattern（rule + cookbook + 3 個 consumer reference impl），agent 不應再「翻譯」rule 模糊處成 user-interactive workaround。
+
+**Anti-pattern**（agent 看到自己這樣寫立刻停手）：
+
+- ❌ 「請取 ADMIN_COOKIE：開瀏覽器 → Google login → DevTools → Application → Cookies → 複製 nuxt-session=... 貼回我」
+- ❌ 「需要 user 在 ~/offline/<consumer> 跑 Google OAuth 拿到 cookie 後設定 ADMIN_COOKIE env var」
+- ❌ 「ADMIN_COOKIE_ADMIN_B 跳過 — fixture.admin-b@example.com 不是真 Google 帳號無法 OAuth」← 真實事件 anti-pattern；正解是 scaffold dev-login + agent 自己 mint 任意 fixture session
+
 ### `[review:ui]` flow（真的需要人）
 
 tasks.md 仍有未勾 `[review:ui]` 項時，第一動作 **MUST** 是引導使用者跑 `pnpm review:ui` — 本地 GUI 自動依 `#N` / `#N.M` schema 配對截圖、可鍵盤完成 OK / Issue / SKIP、conflict-aware 寫回 tasks.md，不在 chat 內燒 token。完整工具行為見 `vendor/scripts/review-gui.mts`。
