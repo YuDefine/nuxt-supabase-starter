@@ -138,6 +138,52 @@ fi
 
 跑 **Step 3 共用 audit block**（見下文）。Mode B 完成 audit 後，在 chat 訊息加一行摘要：「Audit: N 個 worktree / M 個 stash 寫進 HANDOFF.md `## Worktree & Stash Audit` 段」。具體判定邏輯不在此重複，避免兩處規約走 drift。
 
+### 2B.1.7 Review-gui readiness scan（hard rule）
+
+跑 review-gui `--scan` 拿即時 bucket 資訊；outstanding 推薦（§2B.2 / §2B.3 / §2B.4 / §2B.5）**MUST** 引用 scan 結果而非從 `HANDOFF.md` 既有 narrative 或 `tasks.md` leaf count 推測 review-gui bucket 與 ready 狀態。
+
+```bash
+cd ~/offline/clade && node vendor/scripts/review-gui.mts --scan 2>/dev/null > "/tmp/review-gui-scan-$$.json"
+```
+
+把對應 consumer 的 active changes（filter `consumerId` = 當前 consumer）依 bucket 寫入 `$MAIN_WT_PATH/HANDOFF.md` 新段：
+
+```markdown
+## Review-gui Readiness
+
+_Updated: <YYYY-MM-DD> /hub-core:handoff Mode B — clade <version> scan_
+
+### ✅ Ready (N)
+
+- `<changeKey>` | pending=N/total | userActionPending=K
+- (空時寫 `_(none)_`)
+
+### ⚠ notReady (M)
+
+- `<changeKey>` | bucket=`<bucket>` | pending=N/total | userActionPending=K
+  - bucket meaning hint：
+    - `feedbackGiven` → 有 verify pending / issued feedback，需 agent 處理 evidence
+    - `awaitArchiveWalkthrough` → 純 `[discuss]` 待 `/spectra-archive` Step 2.5 walkthrough
+    - `readyForEvidence` → apply 已完成但 evidence missing
+    - `applyInProgress` → impl 未達 APPLY_COMPLETE_THRESHOLD
+    - `healthCheckNeeded` → Pre-Review Data Readiness pattern 命中
+    - `malformed` → tasks.md 解析失敗
+```
+
+每跑一次 audit **整段覆寫**（不是 append）— scan 是 snapshot，stale audit content 應該被新 snapshot 替換。
+
+**判定 review-gui readiness 的 SoT**：scan output `output.ready` / `output.notReady` 與 `output.buckets`。tasks.md leaf count / spectra DB `<done>/<total>` 數字 / HANDOFF.md 既有 narrative 都**不是** SoT — 它們是不同維度的真相（leaf count 不解析 evidence annotation / kind marker；spectra DB 不考慮 cross-wt 與 evidence；既有 narrative 是上次 session 的 stale snapshot）。
+
+**Mode A 跑時不執行本 sub-step** — Mode A 是「靜默寫入交接」，scan 為 outstanding 推薦服務，Mode A 沒推薦階段。
+
+**scan 失敗 fallback**：
+
+| 失敗情境 | 處理 |
+| --- | --- |
+| clade home 不存在 / 不可達 | 寫 `## Review-gui Readiness` 段含 `_(scan unavailable: <reason>)_`，並警告主線「outstanding 推薦無 review:ui 即時資訊，請避免推薦 review:ui flow」 |
+| `review-gui.mts` 報 error（type checked node version etc.） | 同上，把 stderr 前 5 行貼進該段 |
+| scan 跑成功但回空 list | 寫 `_(scan returned 0 changes — repo possibly fresh)_` |
+
 ### 2B.2 盤點剩餘 outstanding
 
 從以下來源蒐集 outstanding 工作：
@@ -200,6 +246,8 @@ Outstanding（N 條）：
 - 推薦的 Option 1 不該是「都不做」（除非真的盤點為空）
 - **`mergeBackSafety: ptb-unsafe` wt 不可列為 Option 1 (Recommended)**；可列為 Option 但 label 強制標 `⚠ PTB unsafe`、描述明列 PTB 風險，**禁止**包裝為「最快 deliverable」「safe to land」「ready to merge」這類沒 signal 支撐的斷言
 - 對任何 wt 推薦 next move 時，描述 **MUST** 含 dry-run signal（blocker / uncommitted / baseline ref）— Step 3.1 audit 已記錄，照搬即可
+- **NEVER** 推薦「review:ui」/「ready 區可點 OK」/「最快 deliverable 用 review:ui 收尾」相關 next move 而未先跑 §2B.1.7 review-gui --scan + 引用 `## Review-gui Readiness` 段的 scan 結果。Scan 後 change 落 `feedbackGiven` / `awaitArchiveWalkthrough` / `readyForEvidence` 等 bucket 時，描述 **MUST** 反映該 bucket 的真實 user action（不是「點 OK 收尾」） — 例：`feedbackGiven` 推薦語應為「補 evidence annotation 後 user 在 review GUI 點 OK」、`awaitArchiveWalkthrough` 推薦語應為「跑 `/spectra-archive <change>` 觸發 Step 2.5 walkthrough」
+- **NEVER** 從 `HANDOFF.md` 既有「Outstanding」段、`tasks.md` leaf `[x]` / `[ ]` count、或 `spectra list` CLI 進度數字推測 review-gui bucket 或 ready 狀態 — 三類資料維度都跟 `reviewBucketForChange()` 不同，scan output 才是 SoT
 
 ### 2B.4.5 PTB-unsafe wt 的快速分流（v1.14+）
 
@@ -236,6 +284,18 @@ User 透過 `request_user_input` 選定下一步 outstanding（含明確的 next
 **Slug 解析**：`/wt <slug>: /<next-skill> <change-name>` 的 `<slug>` 由 change-name 直接帶入（wt-helper 自動 normalize per [[worktree-default]] §3）。
 
 **Parent cwd 不動 invariant**：`/wt` Form 3 內部用 subagent 進 worktree 跑 next-skill，主線（當前 chat session）cwd 全程在 main worktree，per [[worktree-default]] §1。先前 `wt-relax-for-archive-and-handoff` change 引入的 `--dispatch-from-handoff` flag 已**移除**，**禁止**在 args 內帶此 flag。
+
+**Review:ui dispatch scope rule**：`pnpm review:ui` flow dispatch 前 **MUST** 引用 §2B.1.7 scan 結果確認該 change 落 `ready` bucket 或對應 user-actionable bucket。三類非 ready bucket 走不同入口（**NEVER** 一律推 review:ui）：
+
+| Scan bucket | 真實下一步 | 入口 |
+| --- | --- | --- |
+| `ready` | user 在 review GUI 點 OK / Issue / Skip | `cd ~/offline/clade && pnpm review:ui` + deep-link |
+| `feedbackGiven` | agent 先補 verify-* annotation evidence；user 後續在 review GUI 點 OK | 主線跑 verify channel（per `manual-review.md` Step 8a），補 annotation 後 → review GUI |
+| `awaitArchiveWalkthrough` | 跑 `/spectra-archive` Step 2.5 walkthrough，純 `[discuss]` items 由 Claude evidence-based 討論後勾 | `/spectra-archive <change-name>` |
+| `readyForEvidence` | agent 補 verify-* annotation（同 `feedbackGiven`）；scan 顯示 evidenceMissing list 含具體 item | 主線跑 verify channel |
+| `applyInProgress` | 繼續 `/spectra-apply` 完成 impl phase | `/spectra-apply <change-name>`（per §2B.5 dispatch table 走 `/wt`） |
+| `healthCheckNeeded` | 修 Pre-Review Data Readiness violation（模糊指代 / 缺 sample / 缺 step）；通常走 `/spectra-ingest` | `/spectra-ingest <change-name>` |
+| `malformed` | 修 tasks.md 解析問題（kind marker / `#N` schema）；通常 grep + 手動修 | 主線直接 Edit |
 
 ## Step 3 — Worktree & Stash 稽核（共用 block，Mode A / B 都會 invoke）
 
