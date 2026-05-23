@@ -33,6 +33,34 @@ Local edits will be reverted by the next sync.
 - **MUST** consumer `nuxt.config.ts` 若使用 `vite-plugin-cloudflare-tunnel`，plugin 的 `port:` 必須等於 registry `dev_ports.nuxt`
 - 寫法可為 hard-code number 或 `Number(process.env.NUXT_DEV_PORT ?? <registry-value>)`，audit 兩種都接受
 
+### 2.5. Dev tunnel zone & token convention（vite-plugin-cloudflare-tunnel）
+
+凡 consumer 用 `vite-plugin-cloudflare-tunnel` 開 dev tunnel：
+
+- **MUST** Hostname 走 `<consumer-id>-dev.<maintainer-domain>`（org convention；既有對齊：`rental-scout-dev` / `tdms-dev` / `<consumer-a>-shared-dev` / `co-purchase-dev`）
+- **NEVER** 自由發揮挑其他 zone（如 `bigbyteedu.com` / 個人域名）— 即使 DNS / tunnel 建得起來，plugin 仍會因 token-zone account 不匹配 403 crash Nuxt
+- **MUST** `.env.local` 設三件套：
+
+  ```env
+  TUNNEL_HOSTNAME=<consumer-id>-dev.<maintainer-domain>
+  TUNNEL_NAME=<consumer-id>-dev
+  CLOUDFLARE_API_KEY=<cfat_*-token>
+  ```
+
+- **MUST** Token 用 `cfat_*` account API token，**絕非** `cfut_*`（Worker token）或 `r_*`（cert.pem 簽發的 tunnel-scoped token）
+  - 來源 1：rental-scout `.env.local` 的 `CLOUDFLARE_API_KEY`（既有可用）
+  - 來源 2：Notion `Scrects` → Cloudflare → YuDefine（待補；目前只列 cfut_）
+  - 必備權限：`Cloudflare Tunnel:Edit`（account）+ `SSL and Certificates:Edit`（zone）+ `DNS:Edit`（zone）
+  - **必要**：`SSL and Certificates:Edit` — plugin `dist/index.mjs:617` 必跑 `/zones/<id>/ssl/certificate_packs` GET 確認 edge cert，403 會 re-throw crash Nuxt（即使 Cloudflare Universal SSL 已涵蓋）
+
+#### 三種錯誤 token 來源 + 為什麼不能用
+
+| Token 來源 | 為什麼不行 |
+| --- | --- |
+| `~/.cloudflared/cert.pem`（`cloudflared tunnel login` 簽發的 `r_*` token） | 只有 Tunnel + DNS scope，無 SSL；且綁定登入時選的 account zone（多數情況不是 yudefine） |
+| Notion `Scrects` 的 `cfut_*`「YuDefine - for Worker 通用」 | 設計給 wrangler deploy / Worker 用，無 SSL:Edit |
+| user 自行透過 dashboard 建的 limited-scope token | 多半漏 SSL 或漏 Tunnel；要建 token 一定要對齊上面 3 條權限 |
+
 ### 3. Registry 唯一性
 
 - **MUST** 新 consumer 進 `registry/consumers.json` 必須認領未用的 +10 號 port（3000, 3010, 3020, …）
@@ -52,7 +80,7 @@ Local edits will be reverted by the next sync.
 
 | 情境 | 動作 |
 | --- | --- |
-| 新 consumer 進 registry | 取下一個未用 +10 號（目前 3000–3060 已用，下一個是 3070） |
+| 新 consumer 進 registry | 取下一個未用 +10 號（目前 3000–3070 已用，下一個是 3080） |
 | 既有 consumer 改 port | 先改 clade registry → publish patch → propagate → 改 consumer 自家 dev script + tunnel port |
 | Audit 報 DRIFT | consumer user 在 consumer 自家 session 改 dev script / tunnel port 對齊 registry；clade 主線不替 consumer 執行 |
 | Audit 報 CONFLICT（兩 consumer 同 port） | clade 主線立即解：選一個 consumer 改用未用 +10 號，registry commit + publish + propagate |
@@ -67,9 +95,10 @@ Local edits will be reverted by the next sync.
 | <consumer-d> | 3060 |
 | <consumer-b> | 3000 |
 | rental-scout | 3050 |
+| co-purchase | 3070 |
 | clade | — (source-of-truth，非 Nuxt consumer) |
 
-下一個可用：**3070**。
+下一個可用：**3080**。
 
 ## Anti-pattern
 
