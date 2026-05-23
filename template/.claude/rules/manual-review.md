@@ -474,6 +474,86 @@ GUI 端在診斷 console 寫同樣訊息。archive 後保留在 `docs/manual-rev
 
 完整 pattern 定義見 `vendor/snippets/manual-review-enforcement/patterns.json`。Hook 與 review-gui 共用同一份 patterns.json（single source-of-truth），改 pattern 時兩端同步生效（per `Shared Regex Pattern Source` design decision）。Hook 與 review-gui 共用同一份 bypass parser，behavior 保持一致。
 
+## `@evidence-via-manual-review` Marker（hard rule）
+
+針對「impl 已做、verification evidence 必須在 review-gui `## 人工檢查` 區蒐集」的 phase task，加 `@evidence-via-manual-review` marker 把該 task 從 review-gui 90% implementation-progress threshold 計數中排除。**這條 marker 用在 phase task line（regex `^- \[([ x])\] N.M `），不用在 `## 人工檢查` `#N` / `#N.M` items**。
+
+### 解決什麼問題
+
+某些 phase task 的「驗證」clause 寫法依賴 review-gui evidence（典型：「驗證：review-screenshot evidence 覆蓋 …」、「驗證：screenshots 路徑寫入 design-review evidence」、「驗證：`[verify:ui]` evidence 覆蓋 …」）。這類 task 的 `[ ]`/`[x]` 狀態跟 review-gui 互相依賴形成 deadlock：
+
+- phase task 卡 `[ ]`（等 evidence）
+- review-gui 偵測 < 90% threshold → 暫停 manual review
+- manual review 暫停 → 沒法蒐 `[verify:ui]` / `[review:ui]` evidence
+- phase task 永遠卡 `[ ]`
+
+`@evidence-via-manual-review` marker 切開這個循環：bearing marker 的 phase task **不計入** threshold，author 可放心讓它停 `[ ]`，evidence 由對應 `## 人工檢查` items 在 review-gui 階段蒐集。
+
+### Schema
+
+```text
+@evidence-via-manual-review
+```
+
+- **MUST** 是 trailing token（位於 phase task line 行尾）
+- 沒有 brackets / 沒有 reason 欄位（語意已固定 — 不像 `@no-manual-review-check` 是 case-by-case exception）
+- 同一行 **MUST NOT** 出現多個 marker
+- Marker 出現在 description 中間（例：documenting the marker syntax inside backticks）視為 plain text，**MUST NOT** 被解析成 marker
+
+### Canonical line format
+
+```text
+- [ ] N.M <description>；驗證：<verification clause referencing review-gui evidence> @evidence-via-manual-review
+```
+
+範例：
+
+```markdown
+- [ ] 4.5 完成 design `Responsive / Spatial Spec` 對帳：admin pages desktop + 390px mobile 無文字重疊；驗證：review-screenshot / verify:ui evidence 覆蓋 `/admin/users`、`/admin/groups` @evidence-via-manual-review
+- [ ] 6.6 執行 review-screenshot 視覺 QA，截 admin pages desktop + 390px mobile；驗證：screenshots 路徑寫入 design-review evidence @evidence-via-manual-review
+```
+
+### Marker 與 checkbox 狀態語意
+
+- Marker bearing task 的 `[ ]` / `[x]` 由 author 決定，**不**受 review-gui 強制
+- 通常 author 在 impl 寫完後可直接勾 `[x]`，因為 marker 已宣告「verification 在 manual review，不擋 phase task 完成」
+- 留 `[ ]` 也合法 — 表示「等待 manual review 完成後再回頭勾」
+- Archive gate 是另一道閘門，依 `## 人工檢查` items 完成度判斷，不依 phase task `[x]` 狀態
+
+### 何時該用 marker
+
+寫 phase task 時，「驗證」clause 出現以下任一字眼 **SHOULD** 加 marker：
+
+- `review-screenshot`
+- `[verify:ui]` evidence / screenshot evidence / `verify:ui` 評估
+- `screenshots 路徑寫入 ...`
+- `截圖 ... evidence`
+- `review-gui` / `pnpm review:ui`
+- 任何把 verification responsibility 推到 manual review 階段的 phrasing
+
+### 何時 **不該** 用 marker
+
+- Phase task 驗證可由 `pnpm typecheck` / `pnpm lint` / `rg` static check 完成 → **不要**加 marker（這類 task 本來就 agent-self-verifiable，計入 threshold 才有意義）
+- Phase task 是純 implementation work（寫 endpoint / 抽 composable / 加 schema 欄位）且驗證是 grep static check → **不要**加 marker
+
+### Review-gui 行為
+
+- `countImplementationProgress(content)` 掃 phase task line，bearing marker 的 task 進 `excluded` 計數，不計入 `implTotal` / `implDone`
+- `implTotal` / `implDone` 計算 threshold ratio，bearing marker 的 task 完全不影響
+- Manual review gate 訊息（`Implementation 未完成 ...`）會附帶 `(+ N 項 @evidence-via-manual-review 已排除)` transparency note 讓 user 看到 marker 生效
+
+### Audit trail
+
+Marker bearing task 不寫額外 audit log（與 `@no-manual-review-check` 不同 — 那條因為是 case-by-case bypass 需要 audit）。`@evidence-via-manual-review` 是 design-time decision，author 寫進 tasks.md 時就明說「這條走 manual review」，archive 階段 tasks.md 進 `docs/manual-review-archive.md` 自然保留語意。
+
+### 與其他 marker 共存
+
+`@evidence-via-manual-review` 只用在 **phase task line**（id 是 `N.M` 格式）；不會跟 `## 人工檢查` 用的 `@no-screenshot` / `@no-manual-review-check` / `@followup[TD-NNN]` 撞，因為那些用在 `#N` / `#N.M` items。phase task line 本身不接其他 trailing marker，所以 canonical ordering 簡單：
+
+```text
+- [ ] N.M <description>；<驗證 clause> @evidence-via-manual-review
+```
+
 ## 截圖檔名與 item id 配對（hard rule）
 
 `pnpm review:ui` 設計成自動把截圖配到正確的 item，使用者不需要手動挑選。為此截圖檔名
