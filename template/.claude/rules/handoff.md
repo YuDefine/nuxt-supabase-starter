@@ -80,6 +80,38 @@ Local edits will be reverted by the next sync.
 
 **與 `session-tasks.md` 的銜接**：tasks 檔內未完項在 session 結束時若需下一 session 立刻接手，**MUST** 升到 `HANDOFF.md` 的 `## In Progress`，不能只留在 tasks 檔等下一 session 自己 grep。
 
+## Outstanding writing hygiene (v1.14+)
+
+**核心命題**：HANDOFF.md `## Outstanding` / `## In Progress` 推薦 next move 前，**MUST** 跑當次 ground-truth signal 確認；禁止把 task 進度當 land 安全度寫。
+
+### 禁止寫作 anti-pattern
+
+- ❌ 「wt N/M done，**最快 deliverable**」— task 進度跟 merge-back 安全度不同維度。撞 PTB（pre-fork baseline hides in-flight feature）的 wt 即使 task 100% 也不快
+- ❌ 「safe to land」/「clean merge」/「ready to archive」— 沒跑 dry-run 確認前不該下這些斷言
+- ❌ 「只剩 archive」— 只說工作 phase，不說執行風險
+
+### 推薦寫法
+
+- ✅ 「wt N/M done，⚠ merge-back unsafe（PTB: 無 baseline ref + K uncommitted），需 user 拍板 commit-all/abandon/defer」
+- ✅ 「wt clean，可直接 merge-back → /spectra-archive」（**前提：已跑 dry-run 確認 0 blocker + 有 baseline ref**）
+- ✅ 「剩 #X [discuss] 等 prod deploy signal」（user-bound 明確）
+
+### 寫 outstanding 前必跑 signal（hard rule）
+
+對涉及的每個 wt：
+
+```bash
+node vendor/scripts/wt-helper.mjs merge-back <slug> --dry-run 2>&1
+git -C <wt-path> status --porcelain | wc -l
+git for-each-ref "refs/wt-baseline/<slug>/" --format='%(refname)'
+```
+
+把結果（blocker count、uncommitted count、baseline ref present/absent）反映在 outstanding 描述。不跑 = 寫的是上次 session 的樂觀推測，不是 ground truth。
+
+### 為什麼這條 rule 存在
+
+2026-05-23 實證：HANDOFF outstanding 寫「page-titles-baseline 收尾（最快 deliverable，wt 32/33 done）」 → 下一 session `/handoff` dispatch `/spectra-archive` → merge-back 撞 793 staged blockers + 無 baseline ref → 連續 3 輪 AskUserQuestion 才退回 Defer。3 輪 round-trip 全可在 outstanding 寫作階段跑 1 條 dry-run 避免。
+
 ## Drift detection (v1.13+)
 
 每次 session start 時，`session-start-roadmap-sync.sh` hook 會跑 `scripts/handoff-drift-scan.mjs`，自動掃所有 `session/*` worktree 跟 `HANDOFF.md` 內容比對，把 drift 寫到 stderr：

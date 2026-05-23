@@ -193,11 +193,27 @@ Outstanding（N 條）：
 - Option 2-3: 替代方案（如「先做 outstanding #2」/「mixed: 先 serial #1 再 parallel #2-#3」）
 - Option 4（optional）: 「都先不做，session 收工」
 
-**禁止行為**（依 user AGENTS.md「不要把工作往後放」+ `clade-role-and-todo-discipline.md`「Session 結尾自查」）：
+**禁止行為**（依 user AGENTS.md「不要把工作往後放」+ `clade-role-and-todo-discipline.md`「Session 結尾自查」+ `rules/core/handoff.md` § Outstanding writing hygiene）：
 - 推薦清單裡放「N 週後再回頭做」/「排程 /schedule 在 X 天後」
 - 推薦清單裡放當前主線「無法完整 own」的工作（consumer 自治區工作 / user 必須親自操作的外部系統指令）
 - 用「block production」「最高優先」包裝其他自治區工作
 - 推薦的 Option 1 不該是「都不做」（除非真的盤點為空）
+- **`mergeBackSafety: ptb-unsafe` wt 不可列為 Option 1 (Recommended)**；可列為 Option 但 label 強制標 `⚠ PTB unsafe`、描述明列 PTB 風險，**禁止**包裝為「最快 deliverable」「safe to land」「ready to merge」這類沒 signal 支撐的斷言
+- 對任何 wt 推薦 next move 時，描述 **MUST** 含 dry-run signal（blocker / uncommitted / baseline ref）— Step 3.1 audit 已記錄，照搬即可
+
+### 2B.4.5 PTB-unsafe wt 的快速分流（v1.14+）
+
+對 Step 3.1 audit 判為 `mergeBackSafety: ptb-unsafe` 的 wt，**MUST** request_user_input 直接給 3 個 terminal 選項，**禁止** inspect 子選項作為主推薦：
+
+| 選項 | 動作 | 風險 |
+| --- | --- | --- |
+| **Commit baseline 全收 → merge-back** | `cd <wt> && git commit -m "baseline: <slug> pre-fork drift catch-up (N paths)"` 後 `wt-helper merge-back` | 可能把跨 session WIP 一起 commit 進 main；commit message 含混 |
+| **Abandon wt** | `wt-helper cleanup <slug> --force --force-discard-unland --force-discard-uncommitted` | **永久遺失**所有 wt 工作（commits + uncommitted）；user **MUST** 明確接受風險 |
+| **Defer** | 不動 wt 原狀，記進 HANDOFF.md outstanding，下次 session 或專門 chat 處理 | 工作仍卡在 wt，main 看不到 |
+
+**Inspect 路徑**只作為**附加可選**（Option 4），描述需強調「inspect 不會新增可行動方案，3 個 terminal 解仍是這 3 個」，避免 user 誤選後燒 token 跑完 inspect 還是回到 commit / abandon / defer。
+
+**為什麼**：PTB-unsafe 的本質是「無 baseline ref + 大量 uncommitted」，任何 deep inspect 都無法把這轉成 safe-to-merge 狀態 — 解路就是 3 條 terminal 選擇。預先固化選項 = 把分支變成 reflex，省 user 多輪 round-trip。
 
 ### 2B.5 接續 dispatch（user 選定 outstanding 後）
 
@@ -232,17 +248,42 @@ node "$MAIN_WT_PATH/vendor/scripts/wt-helper.mjs" list --json 2>/dev/null
 git -C "$MAIN_WT_PATH" worktree list --porcelain 2>/dev/null
 ```
 
-對每條 wt-helper 列出的 linked worktree，套以下判定表：
+#### 3.1a 每條 wt 跑 merge-back safety signal（v1.14+ hard rule）
+
+對 wt-helper list 回的每條 `mergedToMain: false` worktree，**MUST** 跑 3 條 signal command 才能判定 kind：
+
+```bash
+# blocker count（dry-run merge-back 偵測 main blockers）
+BLOCKERS=$(node "$MAIN_WT_PATH/vendor/scripts/wt-helper.mjs" merge-back <slug> --dry-run 2>&1 | grep -cE "blocked|conflict")
+
+# uncommitted count（wt working tree + staged）
+UNCOMMITTED=$(git -C <wt-path> status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+
+# pinned baseline ref present?
+BASELINE_REF=$(git -C "$MAIN_WT_PATH" for-each-ref "refs/wt-baseline/<slug>/" --format='%(refname)' 2>/dev/null | head -1)
+```
+
+由這 3 條 signal 推導 `mergeBackSafety`：
+
+| 條件 | mergeBackSafety | 對應動作 |
+| --- | --- | --- |
+| `BLOCKERS == 0` + `UNCOMMITTED == 0` | `landable` | safe to merge-back |
+| `BLOCKERS > 0` 或 `UNCOMMITTED > 0`，且 `BASELINE_REF` 存在 | `ptb-recoverable` | merge-back / rescue path 都 OK（pinned ref 是救援保險絲） |
+| `BLOCKERS > 0` 或 `UNCOMMITTED ≥ 100`，且 `BASELINE_REF` 不存在 | `ptb-unsafe` | **禁止 dispatch /spectra-archive**；走 Step 2B.4.5 PTB-unsafe 快速分流 |
+
+#### 3.1b Kind 判定表（與 mergeBackSafety 正交）
 
 | 條件 | kind | 下一步建議 |
 | --- | --- | --- |
 | `mergedToMain: true` | `merged` | `cleanup` — `node vendor/scripts/wt-helper.mjs cleanup <slug>` |
 | `mergedToMain: false` + `openspec/changes/archive/<slug>/` 存在 | `archived-change` | `verify-then-cleanup` — change 已 archive 但 branch 未 merged-into-main，先 `git log -1 <branch>` 檢視 commits 是否已含在 archive squash；若是 → `wt-helper cleanup <slug>` |
-| `mergedToMain: false` + `openspec/changes/<slug>/` 仍 active + `daysOld > 7` | `active-stale` | `merge-back-or-resume` — `node vendor/scripts/wt-helper.mjs merge-back <slug>` 或 dispatch `/spectra-apply <slug>` 續攻 |
-| `mergedToMain: false` + change 仍 active + `daysOld <= 7` | `active-fresh` | `keep` — 在用中 |
+| `mergedToMain: false` + `openspec/changes/<slug>/` 仍 active + `daysOld > 7` | `active-stale` | `merge-back-or-resume` — 依 mergeBackSafety 分流（`landable` → 直接 merge-back；`ptb-*` → Step 2B.4.5） |
+| `mergedToMain: false` + change 仍 active + `daysOld <= 7` | `active-fresh` | `keep` — 在用中；若需 land 仍依 mergeBackSafety 分流 |
 | `mergedToMain: false` + `openspec/changes/<slug>/` 跟 `archive/<slug>/` 都不在 | `orphan` | `verify-then-cleanup` — 孤兒 worktree，`git log <branch>` 檢視內容再決定 cleanup |
 
 額外掃 `git worktree list --porcelain`：若有 linked worktree 不在 wt-helper list 結果裡（即不在 `~/offline/<consumer>-wt/<slug>/` 規約路徑），加 `unmanaged` 條目 → `manual review`（非規約 worktree，user 自管，audit 只記不建議動）。
+
+audit 寫進 HANDOFF.md 時每條 wt 後綴 `(mergeBackSafety: <landable|ptb-recoverable|ptb-unsafe>, blockers=N, uncommitted=K, baselineRef=<yes|no>)`，讓下次 /handoff 不用重跑 signal 就看得到 ground truth。
 
 ### 3.2 Stash audit
 
