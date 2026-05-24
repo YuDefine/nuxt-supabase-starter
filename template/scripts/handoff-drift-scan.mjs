@@ -20,6 +20,20 @@
  *      → "HANDOFF mention stale: branch progressed since last entry"
  *   3. Worktree branch is fully merged to main but worktree still exists
  *      → "ready to absorb via /spectra-archive or wt-helper merge-back"
+ *   4. Branch HEAD is far behind main (≥ threshold commits) AND no other trigger fires
+ *      → "wt drift > N commits, merge-back will likely conflict; sync soon"
+ *
+ * Trigger 4 fires only when other triggers don't (priority: merged >
+ * unmentioned-progress > mention-stale > far-behind-main). Threshold default
+ * 50; override via env var CLADE_HANDOFF_DRIFT_COMMIT_THRESHOLD=<N>.
+ * Rationale: wt branches ≥ 50 commits behind main dramatically increase the
+ * mechanical-conflict surface for merge-back pre-sync. Early signal lets users
+ * sync proactively instead of discovering 95 conflicts at merge-back time
+ * (TDMS 2026-05-24 warehouse-items-tool-aggregation incident).
+ *
+ * The `commitDistanceBehind` field is always emitted in JSON output (regardless
+ * of trigger) so external monitors can track distribution without parsing
+ * warning strings.
  *
  * Exit code is always 0 (informational only — does NOT block sessions).
  *
@@ -30,6 +44,8 @@
  *   --json      machine-readable output (suppresses stderr text)
  *   --quiet     suppress all output (still useful as exit-code health check)
  */
+
+const COMMIT_DISTANCE_THRESHOLD_DEFAULT = 50
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, statSync, readFileSync } from 'node:fs'
@@ -117,6 +133,24 @@ function branchCommitsAheadOfMain(consumerRoot, branchName) {
   }
 }
 
+// How many commits is the wt branch behind main? Uses `git rev-list --count
+// <branch>..main` — same semantics as wt-helper.mjs cmdMergeBack's preSyncBehind.
+function branchCommitsBehindMain(consumerRoot, branchName) {
+  try {
+    const out = gitTrim(['rev-list', '--count', `${branchName}..main`], { cwd: consumerRoot })
+    return parseInt(out, 10) || 0
+  } catch {
+    return 0
+  }
+}
+
+function commitDistanceThreshold() {
+  const raw = process.env.CLADE_HANDOFF_DRIFT_COMMIT_THRESHOLD
+  if (raw == null || raw === '') return COMMIT_DISTANCE_THRESHOLD_DEFAULT
+  const n = parseInt(raw, 10)
+  return Number.isFinite(n) && n > 0 ? n : COMMIT_DISTANCE_THRESHOLD_DEFAULT
+}
+
 function lastCommitTimestamp(consumerRoot, branchName) {
   try {
     const sec = parseInt(
@@ -132,7 +166,7 @@ function lastCommitTimestamp(consumerRoot, branchName) {
 function checkDrift(consumerRoot, worktree) {
   const slug = extractSlugFromBranch(worktree.branch)
   if (!slug) {
-    return { worktree, slug: null, drift: null, message: null }
+    return { worktree, slug: null, drift: null, message: null, commitDistanceBehind: 0 }
   }
 
   const handoffPath = join(consumerRoot, 'HANDOFF.md')
@@ -144,6 +178,10 @@ function checkDrift(consumerRoot, worktree) {
   const commits = branchCommitsAheadOfMain(consumerRoot, worktree.branch)
   const lastCommitMs = lastCommitTimestamp(consumerRoot, worktree.branch)
   const merged = mergedBranches(consumerRoot).has(worktree.branch)
+  // Always compute commit-distance-behind: external monitors / JSON consumers
+  // want the raw number even when no trigger fires (track distribution).
+  const commitDistanceBehind = branchCommitsBehindMain(consumerRoot, worktree.branch)
+  const threshold = commitDistanceThreshold()
 
   // Trigger 3: branch fully merged, worktree still exists
   if (merged) {
@@ -152,11 +190,22 @@ function checkDrift(consumerRoot, worktree) {
       slug,
       drift: 'merged-but-not-cleaned',
       message: `worktree branch is fully merged to main; run \`wt-helper cleanup ${slug} --force --force-discard-unland\` or absorb via /spectra-archive`,
+      commitDistanceBehind,
     }
   }
 
   if (commits.length === 0) {
-    return { worktree, slug, drift: null, message: null }
+    // No ahead-of-main commits → triggers 1/2 don't apply. Trigger 4 still can.
+    if (commitDistanceBehind >= threshold) {
+      return {
+        worktree,
+        slug,
+        drift: 'far-behind-main',
+        message: `wt branch is ${commitDistanceBehind} commit(s) behind main (threshold ${threshold}); merge-back pre-sync will likely conflict — sync proactively`,
+        commitDistanceBehind,
+      }
+    }
+    return { worktree, slug, drift: null, message: null, commitDistanceBehind }
   }
 
   // Trigger 1: branch ahead AND slug not in HANDOFF (work invisible)
@@ -166,6 +215,7 @@ function checkDrift(consumerRoot, worktree) {
       slug,
       drift: 'unmentioned-progress',
       message: `branch has ${commits.length} commit(s) past main but slug not in HANDOFF.md — next session will not see this work`,
+      commitDistanceBehind,
     }
   }
 
@@ -177,10 +227,25 @@ function checkDrift(consumerRoot, worktree) {
       slug,
       drift: 'mention-stale',
       message: `branch HEAD commit is ${ageMin} min newer than HANDOFF.md mtime — mention may not reflect current state`,
+      commitDistanceBehind,
     }
   }
 
-  return { worktree, slug, drift: null, message: null }
+  // Trigger 4 (lowest priority): wt branch far behind main even though HANDOFF
+  // is in good shape. Surfaces early before merge-back blows up with N conflicts
+  // (TDMS 2026-05-24 warehouse-items-tool-aggregation: 184 commits behind → 95
+  // pre-sync conflicts at merge-back).
+  if (commitDistanceBehind >= threshold) {
+    return {
+      worktree,
+      slug,
+      drift: 'far-behind-main',
+      message: `wt branch is ${commitDistanceBehind} commit(s) behind main (threshold ${threshold}); merge-back pre-sync will likely conflict — sync proactively`,
+      commitDistanceBehind,
+    }
+  }
+
+  return { worktree, slug, drift: null, message: null, commitDistanceBehind }
 }
 
 async function main() {

@@ -85,7 +85,12 @@ propose / ingest 階段命中即視為違反，**MUST** 改寫。
 
 每條 `[review:ui]` item **MUST** 滿足「自帶導覽」標準：
 
-1. **明確 URL** — 寫出要打開的具體頁面（含必要 query string / route param），不要只說「kiosk 頁」「dashboard」「設定頁」
+1. **明確 URL** — 寫出要打開的具體頁面（含必要 query string / route param），不要只說「kiosk 頁」「dashboard」「設定頁」。**Host 部分 MUST 優先用 consumer 的 Cloudflare tunnel hostname**：
+   - 該 consumer 對應 `.env*` 有 `TUNNEL_HOSTNAME=<host>` → 寫 `https://<host>/<path>`（HTTPS / 真實 cookie domain / 跨裝置可開；webauthn / OAuth callback / camera permission 等 HTTPS-only feature 也只能用 tunnel 驗）
+   - 沒設 `TUNNEL_HOSTNAME`（如 `<consumer-d>`）→ fallback `http://localhost:<port>/<path>`，`<port>` 取自 `registry/consumers.json` 的 `dev_ports.nuxt`
+   - Multi-app consumer（如 <consumer-a>: <client-a> 3040 / shared 3045）→ 依 change 觸碰的 app 反推 `.env.<app>` 找對應 `TUNNEL_HOSTNAME`；找不到 app hint **MUST** 在 propose 階段問清楚，不要靜默挑一個
+   - 完整解析 SOP、反向 mapping 演算法、fallback decision table、tunnel lifecycle 規約：見 `vendor/snippets/tunnel-url-for-review/README.md`
+   - **NEVER** 在同一 item 同時列 tunnel URL 跟 localhost URL（「試試這個或那個」），擇一寫即可
 2. **逐步動作 sub-items** — 用 `#N.M` scoped 拆，每條 sub-item 一個原子動作（開 X → 輸入 Y / 點 Z → 確認 W）。**禁止**流程式描述（例「刷卡 → 進入毛刺 → 操作完成 → 自動回 standby」整條塞在 parent line）
 3. **預期觀察具體化** — 每步寫清楚「應看到什麼 / 不應看到什麼」（具體 toast 文字、badge 狀態、欄位值、route 變化），**禁止**寫「畫面正常」「狀態正確」「操作完成」這類模糊驗收
 4. **UI 元素 MUST 用使用者可見文字指代** — 引用 button / tab / card / region / selector / input / link / dialog / toast 等 UI 元素時，**MUST** 用使用者畫面上實際看得到的文字（i18n string、button label、tab 名稱、卡片標題 / region heading、placeholder、aria-label fallback），**NEVER** 用 codebase 內部識別符（component name、檔名、CSS class、test-id、store action、API endpoint name、fixture id、**DB 欄位名 / capability flag（例 `total_quantity` / `has_vending_location` / snake_case schema 欄位）**、**spec template heading（例 `Resolved Questions` / `Open Questions` / `Why` / `Impact` / `Decision <N>`）**、**propose 寫作 process 內部詞（例 `actual <noun>` / `zero-location copy` / `null-state copy` / `verified annotation`）**、**半中半英 mixed term（例「未設 vending 位置」「vending 庫存」「slot 位置」「tool body 規劃」）**）。User 看 UI 找不到 codebase 內部識別符對應的位置，整條 item 失去可執行性。寫作者**MUST** 先打開頁面確認該元素 user 實際看到的文字是什麼，再寫進 item。若需 cross-reference schema-level concept（例強調 boolean flag 對應的業務語義），**MUST** 用 backtick + 中文 gloss 形式（例 「取料機位置 (`vending_location`)」），不要裸寫識別符

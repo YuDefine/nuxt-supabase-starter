@@ -29,7 +29,7 @@
       "requiresAbsenceOf": "https?://|/[a-z][a-z0-9-]*(/|\\s|`|：|。|，|；|$)",
       "requiresAbsenceOfScope": "group",
       "anchor": "manual-review.md#通則",
-      "remediation": "Add a specific URL (e.g., http://localhost:8787/kiosk/workstation or /admin/kiosk-tokens?card_uid=...) somewhere in the item group (parent line OR any scoped sub-item) so the reviewer can navigate directly. Continuation sub-items that share the sibling's URL context (e.g., 「接續 #1.1 環境，輸入 ...」) automatically satisfy the rule. Generic labels like『kiosk page』『dashboard』『設定頁』are insufficient."
+      "remediation": "Add a specific URL somewhere in the item group (parent line OR any scoped sub-item). Host MUST be the consumer's Cloudflare tunnel hostname when available (e.g., https://perno-bigbyte-dev.yudefine.com.tw/admin/kiosk-tokens?card_uid=...); fall back to http://localhost:<port>/<path> only when the consumer has no TUNNEL_HOSTNAME in its .env*. Resolution SOP: vendor/snippets/tunnel-url-for-review/README.md. Relative paths (e.g., /admin/kiosk-tokens?card_uid=...) also satisfy the regex when host is implied by surrounding context. Continuation sub-items that share the sibling's URL context (e.g., 「接續 #1.1 環境，輸入 ...」) automatically satisfy the rule. Generic labels like『kiosk page』『dashboard』『設定頁』are insufficient."
     },
     {
       "code": "MULTI_STEP_NOT_SCOPED",

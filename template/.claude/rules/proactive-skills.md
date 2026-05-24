@@ -235,10 +235,10 @@ Consumer 端直接跑 `pnpm review:ui` 被 review-gui.mts `preflightCladeOnly` g
 - **解析 sourceRoot**：review-gui `/api/changes` response 已帶該 change 對應的 working tree absolute path（main 或 `wt/<slug>`）；直接用作 `Bash(cwd=...)`
 - **掃 free port**：`lsof -iTCP:<port> -sTCP:LISTEN -t` 從 3001 掃到 3050 找第一個 free 的；**禁止**用 3000（使用者慣用，留給 user 自己的 dev server）
 - **背景啟動**：`Bash(cwd=<sourceRoot>, run_in_background=true)` 跑 `pnpm dev --port <N>`；stderr/stdout 自然導向 background output（不必額外 redirect）
-- **回報 user**：URL（`http://127.0.0.1:<N>`）、background shell ID、以及一條 kill 指令（`lsof -ti:<N> | xargs kill`）
-- **Lifecycle**：一個 worktree 同時只開 1 個 dev server（spawn 前先 `lsof` 該 worktree 對應 port 是否已被自己開過）；不同 worktree 可並行（各自選不同 free port）；session 結束或 user 喊停時主動 kill
+- **回報 user**：localhost URL（`http://127.0.0.1:<N>`）、background shell ID、以及一條 kill 指令（`lsof -ti:<N> | xargs kill`）。**若 consumer 有 `TUNNEL_HOSTNAME`（解析 SOP 見 [`vendor/snippets/tunnel-url-for-review/README.md`](../../vendor/snippets/tunnel-url-for-review/README.md)），MUST 額外列 tunnel URL 並標註「tunnel 未啟動先跑 `pnpm tunnel:<app>`」**——user 真要在外部裝置 / HTTPS-only 環境驗收，localhost 不夠用
+- **Lifecycle**：一個 worktree 同時只開 1 個 dev server（spawn 前先 `lsof` 該 worktree 對應 port 是否已被自己開過）；不同 worktree 可並行（各自選不同 free port）；session 結束或 user 喊停時主動 kill。**Agent NEVER 自起 `pnpm tunnel:*`** —— tunnel process 由 user 控制（owns Cloudflare cert、tunnel ID、DNS routing），agent 只負責列 URL + 提示
 
-##### 訊息格式
+##### 訊息格式（無 tunnel 的 consumer）
 
 ```
 Dev server 已啟動於 worktree `<slug>` (port <N>)：
@@ -248,6 +248,23 @@ Dev server 已啟動於 worktree `<slug>` (port <N>)：
 shellId: <bg-id>
 停止：`lsof -ti:<N> | xargs kill`
 ```
+
+##### 訊息格式（有 tunnel 的 consumer）
+
+```
+Dev server 已啟動於 worktree `<slug>` (port <N>)：
+
+  https://<TUNNEL_HOSTNAME>           # ← 優先用這條（HTTPS / 跨裝置 / OAuth callback / webauthn 等都需要）
+  http://127.0.0.1:<N>                # ← 本機 fallback
+
+shellId: <bg-id>
+若 tunnel 尚未啟動，另開 terminal 跑：
+  cd ~/offline/<consumer> && pnpm tunnel:<app>    # multi-app：<client-a> / shared 各自獨立
+  # 單一 app consumer 通常是 `pnpm tunnel`
+停止 dev server：`lsof -ti:<N> | xargs kill`
+```
+
+Multi-app consumer（如 <consumer-a>）`<TUNNEL_HOSTNAME>` 依 change 觸碰的 app 反推（見 cookbook § Multi-app reverse mapping）。
 
 #### Consumer 政策參照
 
