@@ -228,7 +228,7 @@ DEST="openspec/changes/archive/${DATE}-<X>"
 
 # 1. 建 archive dir 結構
 mkdir -p "$DEST/specs"
-git ls-tree -d --name-only HEAD "$SRC/specs" 2>/dev/null \
+git ls-tree -d --name-only HEAD "$SRC/specs/" 2>/dev/null \
   | xargs -n1 basename \
   | xargs -I{} mkdir -p "$DEST/specs/{}"
 

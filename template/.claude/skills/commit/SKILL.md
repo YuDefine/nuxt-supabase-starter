@@ -300,17 +300,21 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
    **條件 B — Spec delta-sync 完整**（僅對 HEAD 內 `changes/<X>/specs/<cap>/` 存在的 cap 套用）：
    ```bash
-   for cap in $(git ls-tree -d --name-only HEAD "openspec/changes/<X>/specs" 2>/dev/null | xargs -n1 basename); do
+   # 注意 trailing / — 沒加會回該目錄本身（一個 entry "specs"），加了才列子目錄
+   for cap_path in $(git ls-tree -d --name-only HEAD "openspec/changes/<X>/specs/" 2>/dev/null); do
+     cap=$(basename "$cap_path")
      # 該 cap 的 spec.md 在 openspec/specs/ 必須有 staged modification
      if ! git diff --cached --name-only -- "openspec/specs/$cap/spec.md" | grep -q . ; then
        # 例外：若 openspec/specs/$cap/ 不存在於 HEAD（純新 cap），untracked staging 也算（git status --porcelain）
-       if ! git status --porcelain "openspec/specs/$cap/spec.md" 2>/dev/null | grep -qE '^A |^M '; then
+       if ! git status --porcelain "openspec/specs/$cap/spec.md" 2>/dev/null | grep -qE '^A |^M |^\?\?'; then
          echo "BLOCKER: $X cap=$cap spec delta-sync missing"
        fi
      fi
    done
    ```
    任一 cap 失敗 → blocker `MISSING_SPEC_DELTA`，記下 `<X>` + cap list。
+
+   **trailing slash hard rule**：`git ls-tree -d --name-only HEAD <dir-path>` 不加 trailing `/` 時返回該 dir 本身（一個 entry，等同 `ls -ld`）；加 `/` 才會列出子目錄（等同 `ls -d <dir>/*`）。沒加 → `cap_path="openspec/changes/<X>/specs"` → `cap="specs"` → 查 `openspec/specs/specs/spec.md` 永遠 missing → 任何 change 永遠 BLOCK（false positive）。詳見 `docs/pitfalls/2026-05-24-spectra-archive-interrupted-leaves-partial-state.md` § Why slipped past tests。
 
 4. **blocker list 非空時**：
 
@@ -336,7 +340,7 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
         SRC="openspec/changes/<X>"
         DEST="openspec/changes/archive/${DATE}-<X>"
         mkdir -p "$DEST/specs"
-        git ls-tree -d --name-only HEAD "$SRC/specs" 2>/dev/null \
+        git ls-tree -d --name-only HEAD "$SRC/specs/" 2>/dev/null \
           | xargs -n1 basename \
           | xargs -I{} mkdir -p "$DEST/specs/{}"
         for f in $(git ls-tree -r --name-only HEAD "$SRC" | sed "s|^$SRC/||"); do
