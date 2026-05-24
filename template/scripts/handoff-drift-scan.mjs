@@ -146,7 +146,7 @@ function branchCommitsBehindMain(consumerRoot, branchName) {
 
 function commitDistanceThreshold() {
   const raw = process.env.CLADE_HANDOFF_DRIFT_COMMIT_THRESHOLD
-  if (raw == null || raw === '') return COMMIT_DISTANCE_THRESHOLD_DEFAULT
+  if (raw === undefined || raw === '') return COMMIT_DISTANCE_THRESHOLD_DEFAULT
   const n = parseInt(raw, 10)
   return Number.isFinite(n) && n > 0 ? n : COMMIT_DISTANCE_THRESHOLD_DEFAULT
 }

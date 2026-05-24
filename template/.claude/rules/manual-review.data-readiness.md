@@ -89,7 +89,7 @@ propose / ingest 階段命中即視為違反，**MUST** 改寫。
    - 該 consumer 對應 `.env*` 有 `TUNNEL_HOSTNAME=<host>` → 寫 `https://<host>/<path>`（HTTPS / 真實 cookie domain / 跨裝置可開；webauthn / OAuth callback / camera permission 等 HTTPS-only feature 也只能用 tunnel 驗）
    - 沒設 `TUNNEL_HOSTNAME`（如 `<consumer-d>`）→ fallback `http://localhost:<port>/<path>`，`<port>` 取自 `registry/consumers.json` 的 `dev_ports.nuxt`
    - Multi-app consumer（如 <consumer-a>: <client-a> 3040 / shared 3045）→ 依 change 觸碰的 app 反推 `.env.<app>` 找對應 `TUNNEL_HOSTNAME`；找不到 app hint **MUST** 在 propose 階段問清楚，不要靜默挑一個
-   - 完整解析 SOP、反向 mapping 演算法、fallback decision table、tunnel lifecycle 規約：見 `vendor/snippets/tunnel-url-for-review/README.md`
+   - 完整解析 SOP、反向 mapping 演算法、fallback decision table、tunnel lifecycle 規約：見 `~/offline/clade/vendor/snippets/tunnel-url-for-review/README.md`（cookbook 只在 clade home，agent 從絕對 path 讀）
    - **NEVER** 在同一 item 同時列 tunnel URL 跟 localhost URL（「試試這個或那個」），擇一寫即可
 2. **逐步動作 sub-items** — 用 `#N.M` scoped 拆，每條 sub-item 一個原子動作（開 X → 輸入 Y / 點 Z → 確認 W）。**禁止**流程式描述（例「刷卡 → 進入毛刺 → 操作完成 → 自動回 standby」整條塞在 parent line）
 3. **預期觀察具體化** — 每步寫清楚「應看到什麼 / 不應看到什麼」（具體 toast 文字、badge 狀態、欄位值、route 變化），**禁止**寫「畫面正常」「狀態正確」「操作完成」這類模糊驗收
