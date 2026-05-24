@@ -121,6 +121,8 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 - **NEVER** 嘗試自動 `rm .git/index.lock` 或清掉 sidecar — 那是別 session 的 SoT，誤刪比繼續跑風險更高
 - **NEVER** 跳過 AskUserQuestion 自行決定繼續 — 命中時 user 必須親自選 A/B
 
+> 同類 race 也存在於 **ad-hoc commit**（不走本 skill 的單檔 commit、HANDOFF 補一行就 commit、修 typo 就 commit 等）。預防規約見 `rules/core/commit.md` § Ad-hoc commit 必走 `git commit --only -- <paths>`。
+
 ## Step 0-Codex: 派 codex 跑 commit 工作時的路由規約
 
 主線從 commit SKILL 派 codex 跑 commit 工作時（例如 `/wt` worktree 內派 codex commit phase），**MUST** 走 [`rules/core/agent-routing.codex-watch-protocol.md`](../../../../rules/core/agent-routing.codex-watch-protocol.md) § Codex 派工的標準流程 + Codex Watch Protocol。**禁止** `Agent` tool with `subagent_type: screenshot-review` 派視覺 QA — sonnet wrapper 派工已多次驗證 self-rationalize（per [[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]）。
@@ -522,18 +524,20 @@ git diff --stat
 
 ## Step 4: 逐一執行 Commit
 
-對每個分組：
+對每個分組（用 `git commit --only -- <files>` 強制 limit scope，防別 session staged race — 詳見 `rules/core/commit.md` § Ad-hoc commit 必走 `git commit --only -- <paths>`）：
 
 ```bash
-git add <files>
-git commit -m "$(cat <<'EOF'
+git commit --only -m "$(cat <<'EOF'
 ✨ feat: 功能描述
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 EOF
-)"
+)" -- <files>
 git log -1 --oneline
+git show --stat HEAD | tail -3   # MUST verify scope == expected files
 ```
+
+Untracked file 例外：須先 `git add <untracked>` 再 `git commit --only -- <both-paths>` — scope 仍受 `--only` 過濾。
 
 ## Step 5: 版本號升級與 Deploy Commit
 
