@@ -215,6 +215,37 @@ group_block_for() {
   item_block_content "$parent_idx"
 }
 
+# Layer A page-display enrichment (v1.5.0). For VERIFY_UI_SAMPLE_KEY_DISPLAY_CHECK
+# hits, reverse-grep the target .vue page so the remediation carries concrete
+# evidence (which identifier columns / literal key are present). Returns a
+# single-line evidence string (no pipe / newline) on stdout, or empty if node /
+# the helper is unavailable (degrade gracefully — the static remediation stands).
+DISPLAY_CHECK_HELPER="$SCRIPT_DIR/page-display-check.mjs"
+run_page_display_check() {
+  local line="$1"
+  command -v node >/dev/null 2>&1 || return 0
+  [ -f "$DISPLAY_CHECK_HELPER" ] || return 0
+  local url key json resolved keyFound hintsFound searched literal
+  url=$(printf '%s\n' "$line" | grep -oE 'https?://[^ ]+|/[a-zA-Z0-9/_-]+' | head -1)
+  [ -z "$url" ] && return 0
+  key=$(printf '%s\n' "$line" | grep -oiE 'EMP-[0-9]+|contract-[a-z-]+[0-9]+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
+  json=$(node "$DISPLAY_CHECK_HELPER" --consumer-path "$REPO_ROOT" --url "$url" --key "$key" 2>/dev/null) || return 0
+  [ -z "$json" ] && return 0
+  resolved=$(printf '%s' "$json" | jq -r '.resolvedFile // ""')
+  keyFound=$(printf '%s' "$json" | jq -r '.keyLiteralFound')
+  hintsFound=$(printf '%s' "$json" | jq -r '.columnHintsFound | join(", ")')
+  searched=$(printf '%s' "$json" | jq -r '.columnHintsSearched | join(", ")')
+  if [ -z "$resolved" ]; then
+    printf '[page-grep] 找不到對應 page 檔（試過 app/pages、pages 標準路徑）；請手動確認 %s 是否在某 column 顯示，否則改 [review:ui]' "${key:-sample key}"
+  elif [ -z "$hintsFound" ] && [ "$keyFound" != "true" ]; then
+    printf '[page-grep] grep %s：無 identifier column（%s）亦無 literal %s → 該 key 很可能非直接顯示的 column，改 [review:ui] 或改指向實際顯示的 column' "$resolved" "${searched:-無 hint}" "${key:-key}"
+  else
+    literal=""
+    [ "$keyFound" = "true" ] && literal=" + literal ${key}"
+    printf '[page-grep] grep %s：找到 %s%s；若 page-load screenshot 真在該 column 顯示 %s 則保 [verify:ui]，否則改 [review:ui]' "$resolved" "${hintsFound:-}" "$literal" "${key:-key}"
+  fi
+}
+
 # Load pattern count.
 PATTERN_COUNT=$(jq '.patterns | length' "$PATTERNS_FILE")
 
@@ -336,7 +367,19 @@ for i in $(seq 0 $((PATTERN_COUNT - 1))); do
       continue
     fi
 
-    findings+=("${CODE}|${real_lineno}|${DESC}|${REMEDIATION}|${ANCHOR}|${line}")
+    # Layer A: enrich VERIFY_UI_SAMPLE_KEY_DISPLAY_CHECK remediation with concrete
+    # reverse page-grep evidence. Enrich-only — never suppress the hit (the
+    # incident's column key lives in <script> UTable config, so a whole-file grep
+    # match is not proof of render; the author decides using the grep evidence).
+    eff_remediation="$REMEDIATION"
+    if [ "$CODE" = "VERIFY_UI_SAMPLE_KEY_DISPLAY_CHECK" ]; then
+      page_evidence=$(run_page_display_check "$line")
+      if [ -n "$page_evidence" ]; then
+        eff_remediation="${REMEDIATION} — ${page_evidence}"
+      fi
+    fi
+
+    findings+=("${CODE}|${real_lineno}|${DESC}|${eff_remediation}|${ANCHOR}|${line}")
   done
 done
 

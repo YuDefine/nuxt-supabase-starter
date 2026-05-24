@@ -223,10 +223,25 @@ Consumer 端直接跑 `pnpm review:ui` 被 review-gui.mts `preflightCladeOnly` g
 
 #### Pinned consumer path（`auth.portPinned = true`）
 
-- **MUST** 用 `node vendor/scripts/dev-singleton.mjs --consumer-meta .claude/consumer-meta.json --label "<purpose>" -- pnpm dev`
+- **MUST** 用 `node scripts/dev-singleton.mjs --consumer-meta .claude/consumer-meta.json --label "<purpose>" -- pnpm dev`（clade vendor-targets 散播後落在 consumer `scripts/dev-singleton.mjs`）
 - **NEVER** 直接 `nuxt dev` / `pnpm dev` 不經 wrapper（會繞過 lease + cwd 檢查）
 - spawn 前先讀 `/tmp/<consumer_id>-verification-lease.json`，若有別人 hold → wrapper 自動印衝突訊息 + exit 1，agent **MUST** 把訊息原樣呈給 user，**NEVER** 自行 `--takeover`
 - 若 consumer 採用 [`vendor/snippets/dev-auth/`](../../vendor/snippets/dev-auth/) cookbook（dev-only signin endpoint，繞過 OAuth），manifest 的 `auth.devSigninEnabled` 變 `true` → port-pin 約束放寬，可改走下方 scan-free-port 邏輯
+
+**Missing manifest fallback**（consumer 尚未採用 `.claude/consumer-meta.json`）：
+
+當 agent 從 consumer cwd 跑 dev-singleton 卻看到 `--consumer-meta` path 不存在時：
+
+1. **STOP** spawn — 不要 silently fallback 到 legacy reuse-or-spawn（會繞過 lease 安全性）
+2. **回報 user**：「`<consumer>` 缺 `.claude/consumer-meta.json`；走 fallback scan-free-port 模式無 lease 保護，撞 cross-consumer port 衝突時無法自動分辨」
+3. **提示採用路徑**：
+   ```bash
+   cd ~/offline/clade
+   node scripts/scaffold-consumer-meta.mjs ~/offline/<consumer>
+   # 看 proposed JSON → 在 consumer session 抄進 .claude/consumer-meta.json + commit
+   ```
+4. 也可同時跑 `node scripts/audit-consumer-meta-adoption.mjs` 看跨 consumer 採用度
+5. **NEVER** 替 consumer 直接寫 manifest（per `consumer-meta.md § Adoption gap detection`）— consumer-self 決策
 
 #### Non-pinned consumer path（`auth.portPinned = false` 或未採用 manifest）
 

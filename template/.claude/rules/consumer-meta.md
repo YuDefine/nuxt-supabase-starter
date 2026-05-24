@@ -162,3 +162,48 @@ aggregator 對這些交叉約束做 cross-check，不一致寫進 `validation.er
 4. **規則 / skill 開始讀**：依賴 manifest 的規則改寫，從 hardcode 改成讀 snapshot
 
 未採用 manifest 的 consumer 在 snapshot 內顯示為 `{ "declared": null, "derived": {...}, "validation": { "warnings": ["no .claude/consumer-meta.json found"] } }`，aggregator 不 fail，只 warn。
+
+## Adoption gap detection
+
+兩個 clade-home script 用來偵測 + 協助 consumer 採用 manifest：
+
+### `scripts/audit-consumer-meta-adoption.mjs` — 跨 consumer 採用度報告
+
+```bash
+cd ~/offline/clade
+node scripts/audit-consumer-meta-adoption.mjs              # markdown report (default)
+node scripts/audit-consumer-meta-adoption.mjs --json       # machine-readable
+node scripts/audit-consumer-meta-adoption.mjs --consumer <abs-path>   # single
+```
+
+對每個 consumer 報 **FULL / PARTIAL / MISSING**：
+
+- **FULL** — 含 manifest + 所有 required top-level fields populated + `dev.ports` 非空 + `auth.{provider,portPinned}` 都有值
+- **PARTIAL** — 含 manifest 但 missing required fields / null core slots / unparseable JSON
+- **MISSING** — 沒 `.claude/consumer-meta.json`
+
+Diagnostic-only（exit code 0 always）。**不**自動 wire 進 `propagate.mjs` post-audit hook — consumer 自己跑 / clade session 用，不強制散播時跑。
+
+### `scripts/scaffold-consumer-meta.mjs` — 提議單一 consumer 的 manifest 內容
+
+```bash
+cd ~/offline/clade
+node scripts/scaffold-consumer-meta.mjs ~/offline/<consumer>            # markdown report + JSON block
+node scripts/scaffold-consumer-meta.mjs ~/offline/<consumer> --json     # JSON only (pipeable)
+```
+
+偵測 derivable facts（framework / auth provider / dev ports / OAuth redirect URIs / database backend / commands / deploy platform）並 emit proposed manifest JSON。**Dry-run only** — `--write` 預設拒絕（per `clade-role-and-todo-discipline.md § clade 主線不替 consumer 規劃實作`，consumer session 自己決定 manifest 內容）。
+
+Confidence 標示：
+- **high** — deterministic（package.json deps、--port flag）
+- **medium** — heuristic（OAuth env var、redirect URI scan）
+- **low** — fallback default（建議 user 手動確認）
+
+### 採用工作流
+
+1. **clade session** 跑 audit script 看當前 adoption gap
+2. **consumer session**（per session-discipline）跑 scaffold script + 拿 proposed manifest + 對 low-confidence 欄位手動 review + copy 進 `.claude/consumer-meta.json` + commit
+3. **clade session** 跑 `node scripts/sync-consumer-meta.mjs` 更新 snapshot
+4. 規則 / skill 開始能 reliably 讀到該 consumer 的真實狀態
+
+**NEVER** clade 主線替 consumer 直接寫 `.claude/consumer-meta.json`（manifest 內容含商業判斷如 prod URL / OAuth redirect_uri / 是否啟用 devSignin，是 consumer-self 決策）。

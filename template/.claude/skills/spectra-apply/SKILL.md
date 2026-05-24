@@ -518,6 +518,36 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    6. After ALL C 類 phases complete → **主線自己**執行所有 A、B 類 phases（Design Review / UI view），用 `/design improve`, /impeccable skills, /impeccable audit, review-screenshot 等 Claude Code first-class 工具
 
+6c. **Refactor Invariant Check**（clade fork addition；Layer B of pre-handoff quality gates；not in upstream spectra）
+
+   **理由**：a UI-view refactor MUST NOT change observable behavior. <consumer-a> `app-status-badge-extraction`（2026-05-24）做 `UBadge → AppStatusBadge` refactor，但 `attendance/amendments.vue` 的 `useEmployeeListQuery({ perPage: 200 })` 違反 schema `max(100)` → API 400 → `employeeNameMap` empty → 員工 column 整列「-」。Refactor「component substitute + typecheck pass」判定通過，但 page runtime 已壞 — design review / verify:ui / manual review 全沒攔，user 親眼才抓到。Step 6c 是針對這條失效鏈的 mechanical gate。
+
+   **觸發範圍**：每個 **Class B（UI view）phase** 由主線在 Step 7 實作完成後、該 phase commit / 標 tasks done **之前**，跑一次。Class A / Class C phase 不觸發（Class C 已由 codex view-layer guard 擋住 view 改動；Class A 是純設計審查）。Phase 內 touched files 沒有 `.vue` list/table page → script 自動 skip（exit 0），不需主線預判。
+
+   **執行流程**：
+
+   1. **取得 dev server**（per `rules/core/proactive-skills.md` § Dev Server Auto-Spawn）：若本 session 尚未起 dev server，scan free port 3001–3050（避開 3000）`run_in_background` 起，記下 URL；已起則重用。
+   2. **收集本 phase touched view files**：`git -C <worktree> diff main..HEAD --name-only -- '*.vue'`（或本 phase commit 的 `.vue` 變更），組成 comma-separated list。
+   3. **跑 check**（從 clade central 呼叫，`<clade-vendor>` 解析為 `~/offline/clade/vendor`，與 Step 8a.4 codex-dispatch 同慣例）：
+
+      ```bash
+      node <clade-vendor>/scripts/refactor-invariant-check.mjs \
+        --consumer-path . \
+        --dev-server-url http://localhost:<port> \
+        --files <comma-separated-touched-vue-paths> \
+        --change <change-name> \
+        --json
+      ```
+
+   4. **解析 exit code + JSON**：
+      - **exit 0 `status: "pass"` / `"skip"`** → 通過，繼續該 phase 的 commit / 標 done。
+      - **exit 1 `status: "fail"`**（含 `uniform-column` 或 `network` finding）→ **MUST block phase complete**：主線**自己** root-cause（典型：client query param literal 違反 server zod schema `max/min` → 4xx → lookup map empty → column 全 fallback）。**NEVER** 標 phase done、**NEVER** 寫「等 user 在 manual review 抓」、**NEVER** 把整列 fallback rationalize 成「sample-bearing verification deferred」。修完 re-run 至 pass 才繼續。
+      - **`harness-error` finding**（browser-harness 起不來 / dev server 連不上）→ **advisory，不 block**（exit 仍 0）。主線一行告知 user「refactor-invariant-check 因 <reason> 未能驗證 <page>，建議手動 sanity check」，繼續流程。
+
+   5. **False positive 出口**：某 column 真的 intentionally 全空（例「備註」大多 row 空）→ 在該 `.vue` template 加 `<!-- @ui-invariant-allow-empty[<column-header>] -->` 註解，re-run 確認 suppressed。**NEVER** 用 marker 掩蓋真壞掉的 column（lookup-resolved column 全 fallback 是 bug，不是 optional）。
+
+   Phase 1 為 model-driven（SKILL.md 指示）；Phase 3 會把本 check 升級成 `archive-gate.sh` hard gate（master plan 3.1）。
+
 7. **Implement tasks (loop until done or blocked)**
 
    **Reminder: Track progress by editing checkboxes in the tasks file only. Do not use any built-in task tracker.**
@@ -525,7 +555,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
    **Dispatch reminder**: For each phase, follow Step 6b's three-way classification:
    - Class C（Other）→ dispatch codex GPT-5.5 high (phase granularity)
    - Class A（Design Review）→ 主線 self-execute (NEVER dispatch)
-   - Class B（UI view: component / page / view / layout / styling）→ 主線 self-execute (NEVER dispatch)
+   - Class B（UI view: component / page / view / layout / styling）→ 主線 self-execute (NEVER dispatch)；該 phase 實作完成、commit / 標 done **之前** MUST 跑 **Step 6c Refactor Invariant Check**
    - Mixed phase（UI view + 非 view 摻同 phase）→ 已開工主線吸收、未開工 STOP 提示 `/spectra-ingest`
 
    For each pending task:
@@ -734,6 +764,25 @@ If there is no AskUserQuestion tool available, present options as plain text and
    Legitimate false positive (e.g., 真機掃 SMS 無 dev replay endpoint, sample inline value `weekly_target=5000`) → add `@no-manual-review-check[<reason>]` trailing marker per `manual-review.md`「`@no-manual-review-check` Marker」, re-run hook to confirm bypass recognized, then proceed.
 
    Hook exits 0 → proceed to Step 8b silently. Defense in depth: primary catches are propose / ingest / archive — apply Step 8a.5 specifically catches drift introduced during impl phases that bypass all three.
+
+8a.6. **Pre-Manual-Review Self-Analysis** (clade fork addition — Layer E.1 of pre-handoff quality gates; not in upstream spectra)
+
+   The user must not be the **first** to discover trivial UX/data defects in the GUI. <consumer-a> `app-status-badge-extraction`（2026-05-24）handed 9 fabricated `(verified-ui:)` annotations + an all-「-」員工 column straight to the user because nothing between Step 8a and the GUI re-checked the change. Step 8a.6 is that re-check.
+
+   **MUST** before Step 8b handoff, the **main thread** (NOT a subagent — only the main thread has the full change set in view) runs the 5-dimension self-analysis:
+
+   ```
+   ~/offline/clade/vendor/snippets/pre-handoff-cross-check/main-self-analysis.template.md
+   ```
+
+   1. Read the template, walk all **5 dimensions** (D1 task↔render / D2 evidence↔dom fab guard / D3 list↔fallback / D4 api contract boundary / D5 error tail).
+   2. Write the **finding report** (template's bottom block) — every dimension gets explicit `PASS` / `FAIL` / `N/A` + evidence. **No dimension silently skipped.**
+   3. For each `FAIL`: edit the relevant `## 人工檢查` item to append `（issue: <summary + where>）`; D2 fabrication findings additionally strip the bad `(verified-ui:)` annotation and restore `[ ]`.
+   4. **No finding report written → NO Step 8b handoff.** This is the gate.
+
+   **Level**: Phase 1 is **warning level** — it surfaces findings + annotates them so the user sees them flagged in the GUI; it does **not** hard-block archive. (Phase 2 adds the codex GPT-5.5 cross-check as Layer E.2; Phase 3.1 integrates the hard gate into `archive-gate.sh`.) Collect false-positive rate over the soak window before tightening.
+
+   **Reuse Step 6c**: D3 / D5 are exactly what `refactor-invariant-check.mjs` detects. If Step 6c ran for the touched UI phases, cite its result rather than re-running the browser drive.
 
 8b. **Manual review handoff**
 

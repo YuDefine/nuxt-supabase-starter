@@ -29,7 +29,7 @@ Reference：
 ## 三層治理結構
 
 1. **Cookbook**：`docs/evlog-master-plan.md` 是跨 consumer SoT，決策 + 失敗模式 + per-consumer plan
-2. **Ready-to-apply templates**：`~/offline/clade/openspec/templates/evlog-*/`（M2 階段建立）— consumer 端 `cp -r` 進 `openspec/changes/` 即可 `spectra-apply`
+2. **Ready-to-apply templates**：`~/offline/clade/vendor/evlog-templates/evlog-*/`（M2 階段建立）— consumer 端 `cp -r` 進 `openspec/changes/` 即可 `spectra-apply`
 3. **Starter preset library**：`~/offline/nuxt-supabase-starter/template/presets/evlog-*/`（M3b 階段建立）— 新 consumer 透過 scaffolder `--evlog-preset` flag 一次拿到
 
 任何 evlog 採用問題先查這三層；consumer 自家 fork 出去的 wiring 是反模式（見最後一節）。
@@ -58,7 +58,7 @@ Reference：
 
 ## 5 個 spectra change template overview
 
-對應 `openspec/templates/evlog-<id>/`（M2 後可用），每個 template 含 `proposal.md` / `tasks.md` / `design.md` / `README.md`。
+對應 `vendor/evlog-templates/evlog-<id>/`（M2 後可用），每個 template 含 `proposal.md` / `tasks.md` / `design.md` / `README.md`。
 
 ### T1 — `evlog-adopt-cfworkers-supabase-baseline`
 
@@ -302,7 +302,7 @@ rg -nE "code:\\s*['\"][a-z][a-z0-9._]*\\.[A-Z_]+['\"]" "**/*.test.ts" "**/*.spec
 
 | 反模式 | 為什麼壞 | 怎麼改 |
 | --- | --- | --- |
-| consumer 自家寫 drain（不引用 vendor snippet） | drift；clade 升版 snippet 時 consumer 不會跟上 | `cp -r ~/offline/clade/openspec/templates/evlog-*` 或裝對應 plugin |
+| consumer 自家寫 drain（不引用 vendor snippet） | drift；clade 升版 snippet 時 consumer 不會跟上 | `cp -r ~/offline/clade/vendor/evlog-templates/evlog-*` 或裝對應 plugin |
 | 把 raw drain 直接接 Sentry | Workers 50 subrequest 用光 | 套 `createDrainPipeline(opts)(drain)` 包覆 |
 | sampling rate 用 0.1 全 level（含 error） | evlog rates 是 0-100；error 會被誤 sample，告警失效 | `rates.error: 100`，audit consumer 另 wire `evlog:emit:keep` |
 | `redact` 只列 paths 沒 patterns / builtins | API key（無共通名稱）漏 redact | 加 `patterns` regex（sk- / Bearer / JWT）或直接 `redact: true` |
