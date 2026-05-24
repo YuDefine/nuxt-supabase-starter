@@ -97,7 +97,7 @@ Consumer 端的 `.claude/` / `scripts/spectra-advanced/` / vendor 副本是 clad
 
 ```
 看到 TD 候選 → 問：「修法是改 X？」
-  X ∈ {scripts/, vendor/, rules/, plugins/hub-core/, claude-md/core-snippets/, openspec/templates/, docs/} (clade)
+  X ∈ {scripts/, vendor/, rules/, plugins/hub-core/, claude-md/core-snippets/, vendor/evlog-templates/, docs/} (clade)
     → 登 clade
   X ∈ {scaffolder, template/} (starter)
     → 登 starter

@@ -202,7 +202,7 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 - (b) **改成 `[review:ui]`**：user 親自在 browser 對 sample（用 domain 知識 + filter / search 互動）
 - (c) **拆 multi-marker**：若涉及 mutation + visual，拆 `[verify:api]` 自驗 mutation + `[review:ui]` user 親驗 visual
 
-**Pre-Review Data Readiness hook `VERIFY_UI_SAMPLE_KEY_BOUND`**（patterns.json v1.4.2+）會在 propose / ingest 時自動掃 description regex 命中 + 建議 reclassify，避免 mid-flight 才撞牆。
+**Pre-Review Data Readiness hook `VERIFY_UI_SAMPLE_KEY_DISPLAY_CHECK`**（patterns.json v1.5.0+；前身 `VERIFY_UI_SAMPLE_KEY_BOUND` v1.4.2）會在 propose / ingest 時自動掃 description regex 命中後，額外跑 reverse page-grep（解析 item URL → 反推 `.vue` page → grep identifier-column token + literal key），把具體 grep 結果 enrich 進 remediation，建議保 `[verify:ui]` 或 reclassify `[review:ui]`，避免 mid-flight 才撞牆。
 
 ## `@no-screenshot` Marker（hard rule）
 
