@@ -19,6 +19,8 @@ Local edits will be reverted by the next sync.
 
 Archive a completed change.
 
+> **Ownership**（clade fork；cross-phase matrix in `rules/core/spectra-workflow.md`）：archive gate-check 負責 archive 前再跑 Layer C data-sanity + `archive-gate.sh` Check 1–5（journey / schema-types / exhaustiveness / manual-review kind / screenshot quality）。**不**負責上游 phase 已 own 的 checkpoint（propose Layer A、apply Step 6c/Layer B、pre-handoff Step 8a.6/Layer E 各在自己 phase 抓）。
+
 **Input**: Optionally specify a change name after `/spectra-archive` (e.g., `/spectra-archive add-auth`). If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
 
 **Prerequisites**: This skill requires the `spectra` CLI. If any `spectra` command fails with "command not found" or similar, report the error and STOP.
