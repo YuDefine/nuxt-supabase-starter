@@ -19,6 +19,8 @@ Local edits will be reverted by the next sync.
 
 Create a complete Spectra change proposal — from requirement to validated artifacts — in a single workflow.
 
+> **Ownership**（clade fork；cross-phase matrix in `rules/core/spectra-workflow.md`）：propose 負責 manual-review item data-readiness — sample key inline + **該 key 是否真的會在 target UI render**（Layer A `VERIFY_UI_SAMPLE_KEY_DISPLAY_CHECK` + reverse page-grep）。**不**負責 runtime 正確性 / 視覺 / 資料形狀（apply Step 6c/Layer B、Design Review/Layer C、verify、manual review 各自接棒）。
+
 **Input**: The argument after `/spectra-propose` is the requirement description. Examples:
 
 - `/spectra-propose add dark mode`

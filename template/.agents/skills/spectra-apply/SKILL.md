@@ -19,6 +19,8 @@ Local edits will be reverted by the next sync.
 
 Implement tasks from a Spectra change.
 
+> **Ownership**（clade fork；cross-phase matrix in `rules/core/spectra-workflow.md`）：apply 負責 code 正確性 + Class B UI view phase refactor invariant（Step 6c / Layer B：無 column 整欄 fallback + 0 個 4xx/5xx）+ Design Review data-sanity（Layer C：client param vs server schema bound）+ pre-handoff 5-維度 cross-check（Step 8a.6 / Layer E.1 主線 + E.2 codex）。**不**負責 user 主觀視覺 / UX 真人驗收（manual review / review-gui 管）。
+
 **Input**: Optionally specify a change name (e.g., `/spectra-apply add-auth`). If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
 
 **Task tracking is file-based only.** The tasks file's markdown checkboxes (`- [ ]` / `- [x]`) are the single source of truth for progress. Do NOT use any external task management system, built-in task tracker, or todo tool. When a task is done, edit the checkbox in the tasks file — that is the only way to record progress.
