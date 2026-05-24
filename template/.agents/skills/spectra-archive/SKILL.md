@@ -87,11 +87,11 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    **Sidecar init (TD-155)** — before running merge-back, create the in-flight sidecar so that subsequent steps record progress and an interrupted run leaves a detectable orphan:
 
    ```bash
-   node vendor/scripts/spectra-archive-sidecar.mjs init <change-name>
+   node scripts/spectra-archive-sidecar.mjs init <change-name>
    ```
 
    - Sidecar is always written to main worktree `.spectra/in-flight-archive/<change-name>.json` (helper resolves via `git rev-parse --git-common-dir`), so a linked worktree's archive is visible from main on the next session start (cross-session detection per `plugins/hub-core/hooks/session-start-spectra-resume-check.sh`).
-   - If `vendor/scripts/spectra-archive-sidecar.mjs` does not exist (consumer pre-propagation), skip silently with a one-line note: `Sidecar: skipped — helper not available (consumer pre-propagate)`.
+   - If `scripts/spectra-archive-sidecar.mjs` does not exist (consumer pre-propagation), skip silently with a one-line note: `Sidecar: skipped — helper not available (consumer pre-propagate)`.
    - **Skip in resume mode**: when Step 0.5 has dispatched into mid-flight resume (sidecar already exists with `phase=merge-back`), do NOT re-init — proceed directly to the merge-back command below.
 
    ```bash
@@ -107,7 +107,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    **Sidecar advance (TD-155)** — after merge-back returns (whether absorbed, no-op, or skipped), advance phase:
 
    ```bash
-   node vendor/scripts/spectra-archive-sidecar.mjs update <change-name> --phase gate-check --last-completed merge-back
+   node scripts/spectra-archive-sidecar.mjs update <change-name> --phase gate-check --last-completed merge-back
    ```
 
    (silent fail-safe: if sidecar helper or sidecar file is missing, ignore — sidecar lifecycle is best-effort visibility, not a hard dependency of archive correctness.)
@@ -127,7 +127,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    Before anything else, check for an in-flight sidecar:
 
    ```bash
-   node vendor/scripts/spectra-archive-sidecar.mjs read <change-name> 2>/dev/null
+   node scripts/spectra-archive-sidecar.mjs read <change-name> 2>/dev/null
    ```
 
    Branch:
@@ -136,21 +136,21 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    - **Sidecar exists + user did NOT pass `--resume`** → STOP. Prompt the user:
      > Previous /spectra-archive for `<X>` interrupted at phase `<phase>` (sidecar started `<ISO>`). Options:
      >  a) Resume — re-run as `/spectra-archive <X> --resume`
-     >  b) Discard previous run and start fresh — `node vendor/scripts/spectra-archive-sidecar.mjs delete <X>` then re-invoke without `--resume`
+     >  b) Discard previous run and start fresh — `node scripts/spectra-archive-sidecar.mjs delete <X>` then re-invoke without `--resume`
      >
      > Choose a / b. Standard archive cannot proceed while a sidecar exists.
    - **No sidecar** → fall through to discuss-deferred resume detection below.
 
    #### Resume Dispatch Table (mid-flight)
 
-   Read sidecar via `node vendor/scripts/spectra-archive-sidecar.mjs read <change-name>` (parse JSON `.phase`):
+   Read sidecar via `node scripts/spectra-archive-sidecar.mjs read <change-name>` (parse JSON `.phase`):
 
    | `phase` value | Action on `--resume` |
    | --- | --- |
    | `merge-back` | re-run **Step 0** from the top. `wt-helper merge-back --noop-if-missing` is idempotent — if the worktree was already absorbed in the prior run, it silently no-ops. |
    | `gate-check` | jump to **Step 2** and re-run gates (2 / 3 / 3.3 / 3.5 / 5.5). All gates are idempotent: status / task / pattern checks are read-only; the `[discuss]` walkthrough in Step 3.5 only re-prompts items still unchecked. |
    | `spec-sync` | jump to **Step 4** and re-run delta spec assessment. Comparison is idempotent. |
-   | `folder-mv` | **STOP — manual fixup required**. Reason: Step 6 invokes `spectra archive` CLI which is a black box from clade's POV; mid-flight interrupt may leave `openspec/changes/<X>/` partially renamed and `openspec/specs/<cap>/spec.md` deltas partially applied. Show the user: <br/> *"phase=folder-mv means `spectra archive` CLI was mid-flight when interrupted. Cannot safely retry — reality is unknown. Manual fixup: (a) inspect `openspec/changes/<X>/` and `openspec/changes/archive/YYYY-MM-DD-<X>/` directory states; (b) inspect `git status` for partial spec delta writes; (c) reconcile by hand (either complete the move or roll back), then `node vendor/scripts/spectra-archive-sidecar.mjs delete <X>` and re-invoke from a clean state."* |
+   | `folder-mv` | **STOP — manual fixup required**. Reason: Step 6 invokes `spectra archive` CLI which is a black box from clade's POV; mid-flight interrupt may leave `openspec/changes/<X>/` partially renamed and `openspec/specs/<cap>/spec.md` deltas partially applied. Show the user: <br/> *"phase=folder-mv means `spectra archive` CLI was mid-flight when interrupted. Cannot safely retry — reality is unknown. Manual fixup: (a) inspect `openspec/changes/<X>/` and `openspec/changes/archive/YYYY-MM-DD-<X>/` directory states; (b) inspect `git status` for partial spec delta writes; (c) reconcile by hand (either complete the move or roll back), then `node scripts/spectra-archive-sidecar.mjs delete <X>` and re-invoke from a clean state."* |
    | `screenshot-sweep` | jump to **Step 7** and re-run screenshot sweep. `screenshots-archive` Mode B is idempotent on re-copy (existing destination files are silently kept). |
    | `cleanup` | jump to **Step 7.5** and re-run stash reconcile + Step 8 summary. Both are near no-ops on re-run. |
 
@@ -440,7 +440,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    **Sidecar advance (TD-155)** — once gates pass (exit 0 or user explicitly bypassed), advance phase before entering spec-sync / archive CLI:
 
    ```bash
-   node vendor/scripts/spectra-archive-sidecar.mjs update <change-name> --phase spec-sync --last-completed gate-check
+   node scripts/spectra-archive-sidecar.mjs update <change-name> --phase spec-sync --last-completed gate-check
    ```
 
    (silent fail-safe if helper / sidecar missing.)
@@ -464,7 +464,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    **Sidecar advance (TD-155)** — **only after `spectra archive` exits 0**, advance phase:
 
    ```bash
-   node vendor/scripts/spectra-archive-sidecar.mjs update <change-name> --phase folder-mv --last-completed spec-sync
+   node scripts/spectra-archive-sidecar.mjs update <change-name> --phase folder-mv --last-completed spec-sync
    ```
 
    **NEVER** advance the sidecar to `folder-mv` if the CLI failed or was interrupted — leaving `phase=spec-sync` is the trigger that lets Step 0.5 detect the dangerous mid-CLI state and force manual fixup on next `--resume`. (silent fail-safe if helper / sidecar missing.)
@@ -480,7 +480,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    **Sidecar advance (TD-155)** — after sweep completes (success, skipped, or failed — all three count as "Step 7 phase reached"):
 
    ```bash
-   node vendor/scripts/spectra-archive-sidecar.mjs update <change-name> --phase screenshot-sweep --last-completed folder-mv
+   node scripts/spectra-archive-sidecar.mjs update <change-name> --phase screenshot-sweep --last-completed folder-mv
    ```
 
    (silent fail-safe if helper / sidecar missing.)
@@ -503,7 +503,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    **Sidecar advance (TD-155)** — after stash reconcile completes (any outcome), advance to final phase:
 
    ```bash
-   node vendor/scripts/spectra-archive-sidecar.mjs update <change-name> --phase cleanup --last-completed screenshot-sweep
+   node scripts/spectra-archive-sidecar.mjs update <change-name> --phase cleanup --last-completed screenshot-sweep
    ```
 
    (silent fail-safe if helper / sidecar missing.)
@@ -520,7 +520,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    **Sidecar cleanup (TD-155)** — after the summary is displayed (archive considered complete from the user's perspective), delete the sidecar:
 
    ```bash
-   node vendor/scripts/spectra-archive-sidecar.mjs delete <change-name>
+   node scripts/spectra-archive-sidecar.mjs delete <change-name>
    ```
 
    (silent fail-safe: if sidecar is already missing — e.g., consumer pre-propagate — the helper is a no-op.)
