@@ -195,6 +195,58 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 - stash 仍保留變更可恢復、handoff 留下 paper trail，等同「延後處理」而非「丟棄」；但分組納入比 stash 更直接、更省下次 `/commit` 的閘門成本。
 - 任何形式的 `git restore` / `git checkout --` / `git reset` / `git revert` 都會**永久毀掉使用者的 WIP**，這是不可接受的成本（見下節嚴格禁令）。
 
+## Partial Archive Gate（main / master 限定，**hard rule**）
+
+當前 branch 為 `main` / `master` 且本次 `/commit` 含**任一** `openspec/changes/<X>/**` staged-delete（任何 path under 該 change，**排除** `openspec/changes/archive/`）時，**MUST** 對該 change 同時驗證：
+
+1. **archive directory 存在** — `openspec/changes/archive/YYYY-MM-DD-<X>/` 必須存在於 working tree（staged 或 untracked 皆可），且至少含 `tasks.md` + `proposal.md`
+2. **spec delta-sync 完整** — 若 HEAD 內 `openspec/changes/<X>/specs/<cap>/spec.md` 存在，則 `openspec/specs/<cap>/spec.md` 必須有對應 staged modification（spectra delta-sync output）
+
+任一條件不成立 → **中止 commit**，release lock，列出殘缺項 + 印出 recovery hint（含具體 `git show HEAD:<src> > <dst>` 命令模板）。
+
+### 為何 gate 在這
+
+- `/spectra-archive` 是多 step 非 atomic flow（staged-delete → spec sync → folder mv）。任一步驟中斷會留下 staged-delete + 缺 archive dir 的 partial state。
+- 直接 commit 該 partial state = `openspec/changes/<X>/**` 完全消失於 history（HEAD 內容只在 git history reachable via SHA，使用者要 archeology 才找得回）；spec delta 若卡在 wt-merge-block stash 也會永久遺失。
+- 跟人工檢查 Gate 並列：兩條都是 main / master 限定的 hard rule，都在 0-A/B/C 之前 fail-fast。
+
+### 無 override
+
+**NEVER** 接受 `--skip-archive-coupling` / `--ignore-archive` / `$ARGUMENTS` 旗標。Gate 過 = archive flow 真的跑完。
+
+- **NEVER** 用 `git restore --staged` 把 staged-deletes 退掉「敷衍 gate」— 那會掩蓋 in-flight archive state，下次又會撞同樣問題
+- **NEVER** `mv archive/YYYY-MM-DD-<X>/ <somewhere-else>` 後重 stage 假裝 archive 存在
+- **NEVER** 自行決定「也許那個 change 不該 archive」直接 unstage deletes — partial state 一律由 user 拍板
+
+### Recovery hint（gate trigger 後印給 user）
+
+```bash
+# 對每個失敗 change <X>:
+DATE=$(date +%Y-%m-%d)
+SRC="openspec/changes/<X>"
+DEST="openspec/changes/archive/${DATE}-<X>"
+
+# 1. 建 archive dir 結構
+mkdir -p "$DEST/specs"
+git ls-tree -d --name-only HEAD "$SRC/specs" 2>/dev/null \
+  | xargs -n1 basename \
+  | xargs -I{} mkdir -p "$DEST/specs/{}"
+
+# 2. 從 HEAD 還原 8 個 change 檔到 archive dir
+for f in $(git ls-tree -r --name-only HEAD "$SRC" | sed "s|^$SRC/||"); do
+  git show "HEAD:$SRC/$f" > "$DEST/$f"
+done
+
+# 3. 若 spec delta 在某 wt-merge-block stash 內，extract（NEVER pop 整個 stash）
+git stash list | grep wt-merge-block
+git stash show 'stash@{N}' --name-only | grep '^openspec/specs/'
+git checkout 'stash@{N}' -- openspec/specs/<cap>/spec.md
+
+# 4. 重跑 /commit
+```
+
+詳見 [[pitfall-spectra-archive-interrupted-leaves-partial-state]] § Fix Recipe。
+
 ## 人工檢查 Gate（main / master 限定，**hard rule**）
 
 當前 branch 為 `main` / `master` 且本次 `/commit` 觸及的 spectra change（`openspec/changes/<name>/**` 路徑，archive 子目錄除外）滿足下列**兩條件同時成立**時，**MUST** 中止 commit：

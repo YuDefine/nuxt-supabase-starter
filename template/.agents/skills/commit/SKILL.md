@@ -263,6 +263,108 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 - **NEVER** 把 `tasks.md` / change 目錄 stash / mv / rm 走讓 step 2 / 3 抓不到 — 等同繞過 hard rule
 - **NEVER** 把「人工檢查未完」包裝成「審查條件已滿足」「等同 OK」「之後再勾」說服 user 繼續
 
+## Step 0-Archive-Coupling: Partial Archive Gate（main / master 限定，**硬擋無 override**）
+
+`.claude/rules/commit.md` § Partial Archive Gate 的執行點。**MUST** 在 0-MR 之後、0-A/B/C 之前 fail-fast，避免 partial `/spectra-archive` state 默默 commit 進 main 導致 change artifact 永久遺失（per [[pitfall-spectra-archive-interrupted-leaves-partial-state]]）。
+
+### 判定流程
+
+1. 確認當前 branch：
+
+   ```bash
+   git rev-parse --abbrev-ref HEAD
+   ```
+
+   輸出 ∉ {`main`, `master`} → 輸出 `⏭️ 0-Archive-Coupling 跳過（branch=<name>）`，進入 Step 0。
+
+2. 萃取本次 commit 有 staged-delete 的 spectra change（**排除** archive 子目錄）：
+
+   ```bash
+   git diff --cached --name-only --diff-filter=D \
+     | grep -E '^openspec/changes/[^/]+/' \
+     | grep -v '^openspec/changes/archive/' \
+     | sed -E 's|^openspec/changes/([^/]+)/.*|\1|' \
+     | sort -u
+   ```
+
+   結果為空 → 輸出 `⏭️ 0-Archive-Coupling 跳過（無 spectra change staged-delete）`，進入 Step 0。
+
+3. 對每個 change `<X>` 驗證**兩條件**：
+
+   **條件 A — Archive directory 存在**：
+   ```bash
+   ARCH=$(find openspec/changes/archive -maxdepth 1 -type d -name "*${X}" 2>/dev/null | head -1)
+   [ -n "$ARCH" ] && [ -f "$ARCH/tasks.md" ] && [ -f "$ARCH/proposal.md" ]
+   ```
+   失敗 → blocker `MISSING_ARCHIVE_DIR`，記下 `<X>`。
+
+   **條件 B — Spec delta-sync 完整**（僅對 HEAD 內 `changes/<X>/specs/<cap>/` 存在的 cap 套用）：
+   ```bash
+   for cap in $(git ls-tree -d --name-only HEAD "openspec/changes/<X>/specs" 2>/dev/null | xargs -n1 basename); do
+     # 該 cap 的 spec.md 在 openspec/specs/ 必須有 staged modification
+     if ! git diff --cached --name-only -- "openspec/specs/$cap/spec.md" | grep -q . ; then
+       # 例外：若 openspec/specs/$cap/ 不存在於 HEAD（純新 cap），untracked staging 也算（git status --porcelain）
+       if ! git status --porcelain "openspec/specs/$cap/spec.md" 2>/dev/null | grep -qE '^A |^M '; then
+         echo "BLOCKER: $X cap=$cap spec delta-sync missing"
+       fi
+     fi
+   done
+   ```
+   任一 cap 失敗 → blocker `MISSING_SPEC_DELTA`，記下 `<X>` + cap list。
+
+4. **blocker list 非空時**：
+
+   1. **MUST** 立即釋放 lock：
+      ```bash
+      node .claude/scripts/commit-lock.mjs release
+      ```
+
+   2. 印出 blocker 報告（每條 change 列 `MISSING_ARCHIVE_DIR` / `MISSING_SPEC_DELTA <cap list>`）+ recovery hint：
+
+      ```text
+      ⛔ 0-Archive-Coupling 失敗 — partial /spectra-archive state detected
+
+        <X>: MISSING_ARCHIVE_DIR (archive/YYYY-MM-DD-<X>/ 不存在)
+        <Y>: MISSING_SPEC_DELTA (caps: burr-removal-workflow, focused-measurement-ui)
+
+      可能成因：
+        - /spectra-archive 跑到一半中斷（context out / shell bomb / user 切到別 task）
+        - wt-helper merge-back stash 把 spec delta 收進 wt-merge-block/* stash 後沒人 reconcile
+
+      Recovery（對每個失敗 change <X>）：
+        DATE=$(date +%Y-%m-%d)
+        SRC="openspec/changes/<X>"
+        DEST="openspec/changes/archive/${DATE}-<X>"
+        mkdir -p "$DEST/specs"
+        git ls-tree -d --name-only HEAD "$SRC/specs" 2>/dev/null \
+          | xargs -n1 basename \
+          | xargs -I{} mkdir -p "$DEST/specs/{}"
+        for f in $(git ls-tree -r --name-only HEAD "$SRC" | sed "s|^$SRC/||"); do
+          git show "HEAD:$SRC/$f" > "$DEST/$f"
+        done
+
+      若 spec delta 在 stash 內：
+        git stash list | grep wt-merge-block
+        git stash show 'stash@{N}' --name-only | grep '^openspec/specs/'
+        git checkout 'stash@{N}' -- openspec/specs/<cap>/spec.md
+        # 確認後 git stash drop 'stash@{N}'
+
+      Recovery 完成後重跑 /commit。
+      ```
+
+   3. **NEVER** 自動修補（任何 mkdir / git show / stash extract 操作）— recovery 必須由 user 看完訊息決定（避免主線誤判 partial state、做出錯誤恢復）
+
+5. blocker list 空 → 輸出 `✅ 0-Archive-Coupling 通過`，進入 Step 0。
+
+### 禁止項
+
+- **NEVER** 把 `main` / `master` 以外的 branch 判進 gate 範圍
+- **NEVER** 接受 `$ARGUMENTS` skip / ignore / override 旗標
+- **NEVER** 自行 `git restore --staged` 把 staged-deletes 退掉「敷衍 gate」— 那會掩蓋 in-flight archive state
+- **NEVER** 自行 `mkdir + git show > file` 補建 archive dir — recovery 必由 user 決定（archive dir naming 含日期、是否該補 / partial 是否該 abort 都是判斷題）
+- **NEVER** 把缺 archive dir 包裝成「user 早就 archive 過了，只是 archive dir 被別 session 清掉」— 沒 evidence 不要編造解釋
+- **NEVER** 把整批 `openspec/changes/<X>/**` staged-deletes 用 `git rm` 重來 — 不解決問題，且會多一輪 staging churn
+
 ## Step 0: 品質檢查
 
 ### 0-A/B/C 並行策略（**重要：總時長省 ~45% 的關鍵**）
