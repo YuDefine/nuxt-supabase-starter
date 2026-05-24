@@ -120,6 +120,19 @@ vitest 會依 `vitest.config.ts` 內各 project 的 `include` / `exclude` 自動
 - **`testing-anti-patterns.md`**：本規則處理 test **執行入口**；anti-patterns 處理 test **內容**反模式。兩者並存
 - **`commit.md`**：commit 0-C 跑 `pnpm test`（無 filter），不受本規則影響；本規則只規範 dev / debug 跑單檔的入口
 
+## Advisory：包 clade-gate 收 signal（improvement-loop enabled consumer）
+
+Consumer 在 `registry/consumers.json` 標 `improvement_loop_enabled: true` 時，`.clade/bin/clade-gate` 會由 propagate 寫入。本檔規範的 `test` / `test:<project>` / `test:file` 等 script 建議 wrap 一層 `.clade/bin/clade-gate run test --` 讓 dev cycle 進 signal ledger（不只是 git pre-commit 那一次）。
+
+```diff
+-"test": "vp test run --coverage",
++"test": ".clade/bin/clade-gate run test -- vp test run --coverage",
+```
+
+`lint` / `typecheck` 同理。詳細採用收益 + 快速 diff + anti-pattern：見 `vendor/snippets/clade-gate-package-scripts/README.md`。
+
+採用屬 consumer 自治區（per [[clade-role-and-todo-discipline]]），clade 主線不替 consumer 拆步驟；本 § 僅 advisory pointer 讓 consumer agent 在改 test scripts 時看到該 cookbook。
+
 ## 違反時的回報方式
 
 ```
