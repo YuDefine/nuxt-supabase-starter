@@ -96,7 +96,7 @@ Verify channel baseline 是 consumer 端**已預先 ready** 的 codebase 層長�
 
 | Channel | Baseline |
 | --- | --- |
-| all `verify:*` | env-gated dev-login route 已就緒：`server/routes/auth/_dev-login.get.ts` 或 `server/routes/auth/__test-login.get.ts`（含 packages equivalent） |
+| all `verify:*` | env-gated dev-login route 已就緒（用 audit script / detection helper 偵測，詳見下方 § Dev-login route missing → scaffold-first hard rule） |
 | `verify:e2e` | Playwright config + `e2e/fixtures/index.ts` style three-role fixture（`adminPage` / `managerPage` / `staffPage`） |
 | `verify:api` | `__test-login` 或等價 session bypass route，可讓 curl / ofetch 建立 role session |
 | `verify:ui` | canonical seed data（`supabase/seed.sql` 或專案等價 seed 檔）覆蓋 final-state URL 所需 entity |
@@ -111,6 +111,61 @@ Verify channel baseline 是 consumer 端**已預先 ready** 的 codebase 層長�
 - Dispatch `verify:api` 前 **MUST** 確認可用 session bypass route。
 - Dispatch `verify:ui` 前 **MUST** 確認 dev-login route + seed file 存在。
 - Baseline 不完整時，將缺口登記到 consumer 的 `ROADMAP.md` / `docs/tech-debt.md` / dedicated infra change，而不是降低 verification channel。
+
+#### Dev-login route missing → scaffold-first hard rule
+
+##### Detection（hard rule）
+
+判斷 consumer 是否有 dev-login route 前，**MUST** 使用以下兩種路徑之一，**NEVER** lazy grep literal `_dev-login*` pattern：
+
+1. **CLI**（一次性 / cross-consumer 全景）：
+   ```bash
+   node scripts/audit-dev-login-adoption.mjs --consumer .         # 單 consumer
+   node scripts/audit-dev-login-adoption.mjs --json               # 全 consumer JSON
+   ```
+2. **Programmatic**（dispatcher / 自家 tool 內 inline）：
+   ```js
+   import { detectDevLoginRoute, detectAuthModule } from 'vendor/snippets/dev-auth/lib/detect-dev-login-route.mjs'
+   const route = detectDevLoginRoute(consumerPath)  // { kind, path, monorepoSubpath }
+   const auth = detectAuthModule(consumerPath)      // { module, source, stackHint }
+   ```
+
+**Why hard rule**：lazy grep 在 2026-05-24 <consumer-b> session 實證**漏判 4/6 consumer**（legacy `__test-login.*` / monorepo subpath / better-auth POST shape 全沒命中），誤升級「結構性 adoption gap」task，浪費一輪 subagent + publish + 主線 token。Audit script + helper module 是清掉這類錯誤推理的單一 SoT。
+
+##### Canonical route shapes by auth-module（detection 真相層）
+
+下表跟 helper module 共用 SoT（`vendor/snippets/dev-auth/lib/detect-dev-login-route.mjs`）。新增 route shape 時 **MUST** 同步改 helper + 這張表 + 對應 helper unit test。
+
+| Auth module | Route shape | Helper `kind` |
+| --- | --- | --- |
+| nuxt-auth-utils canonical | `server/routes/auth/_dev-login.get.ts` / `.post.ts` | `canonical` |
+| nuxt-auth-utils legacy | `server/routes/auth/__test-login.get.ts` / `.post.ts` | `legacy` |
+| Supabase canonical (API) | `server/api/_dev-login.{get,post}.ts` / `server/api/_dev-signin.{get,post}.ts` | `canonical` |
+| better-auth POST | `server/api/_dev/login.post.ts` / `server/routes/_dev/login.post.ts` | `better-auth-post` |
+| Monorepo subpath（任 auth-module） | `packages/<x>/server/...`、`clients/<y>/server/...`、`apps/<z>/server/...` 下任一上述 shape | 對應 kind + `monorepoSubpath` 非 null |
+
+Helper 掃描 priority：**repo root canonical → repo root legacy → repo root better-auth → monorepo canonical → monorepo legacy → monorepo better-auth → `none`**。第一個 existsSync 命中即 return；`.output/` / `node_modules/` / hidden dirs 排除。
+
+##### False-negative case study（2026-05-24）
+
+<consumer-b> HANDOFF.md 跑 lazy grep `_dev-login*` → 報「5/6 missing」要求 clade 結構性 scaffold-everywhere。實際 audit:
+
+| Consumer | 實際狀態 | Lazy grep 結果 |
+| --- | --- | --- |
+| <consumer-b> | ✅ `server/routes/auth/__test-login.get.ts` (legacy, 166 行) | ❌ false-negative |
+| <consumer-a> | ✅ `packages/core/server/routes/auth/_dev-login.get.ts` (monorepo) | ❌ false-negative |
+| <consumer-d> | ✅ `server/routes/auth/_dev-login.get.ts` | ✅ |
+| <consumer-c> | ✅ `server/api/_dev/login.post.ts` (better-auth POST) | ❌ false-negative |
+| <consumer-k> | ❌ MISSING (nuxt-auth-utils + libsql-drizzle, no cookbook template) | ✅ |
+| co-purchase | ❌ MISSING (同上) | ✅ |
+
+**真實 adoption 4/6 + 1 monorepo misdetected + 2 真缺**（不是 1/6）。修法源頭 clade 2026-05-24 land：audit script + helper module + dispatcher fix（`scripts/audit-dev-login-adoption.mjs` + `vendor/snippets/dev-auth/lib/detect-dev-login-route.mjs` + `vendor/scripts/codex-dispatch-screenshot-verify.mjs` 對齊）。下次 agent / 主線撞「is dev-login present？」即走上述 detection 路徑，**NEVER** 再 lazy grep。
+
+##### Scaffold 行為
+
+Detection 確認 missing **且** consumer 對應 auth-module 有 cookbook template 時，agent **MUST** scaffold（per `agent-routing.md` Routing Table § Dev/test admin session cookie 取得 row）— **NEVER** 要求 user 走 Google OAuth + DevTools 複製 cookie。
+
+Cookbook template 不存在的情境（如 nuxt-auth-utils + libsql-drizzle，當前 cookbook 只有 supabase-flavored template）：留給對應 consumer session opt-in，**不**機械 scaffold（per `clade-role-and-todo-discipline.md § clade 主線不替 consumer 規劃實作`）。Track via `docs/tech-debt.md`（當前 entry: TD-158）。
 
 ### `[review:ui]` flow（真的需要人）
 
