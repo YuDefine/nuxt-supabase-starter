@@ -1393,7 +1393,7 @@ export function syncWorktreeWithMain(wtPath, branchName, slug) {
 //   - Archive is a content domain written by spectra-archive flow
 //   - The reasons "main is SoT" differ; conflating obscures intent
 export function isArchivePathConflict(p) {
-  return /^openspec\/changes\/archive\//.test(p)
+  return p.startsWith('openspec/changes/archive/')
 }
 
 async function cmdCleanup(slug, opts) {
