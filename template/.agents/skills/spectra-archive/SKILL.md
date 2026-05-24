@@ -437,6 +437,17 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
 
    **Skip condition**: if the gate script does not exist (consumer pre-propagation state), warn and proceed (fail-open, matches existing Check 5 fail-open behavior).
 
+   **Layer C — data-sanity audit**（clade fork addition; pre-handoff quality gates; not in upstream spectra）：archive-gate 過後、spec-sync 前，對本 change 跑 static data-shape audit，擋住「client query param literal 違反 server zod bound → silent 4xx → lookup map empty → admin list column 整列 fallback」這類 typecheck/lint/視覺都抓不到的資料形狀問題（<consumer-a> `app-status-badge-extraction` root cause）：
+
+   ```bash
+   node <clade-vendor>/scripts/audit-data-sanity.mjs --consumer-path . --json
+   ```
+
+   - **exit 0 `status: "pass"`** → 通過（advisory lookupRisks 印 stderr 供參考，不 block）；進 sidecar advance。
+   - **exit 1 `status: "fail"`**（PARAM_BOUNDARY，Critical）→ **MUST block archive**：顯示 violations 給 user，root-cause 修 client literal 到 bound 內（典型 `perPage: 200`→`100`）或調 server schema 後 re-run。**NEVER** silently bypass、**NEVER** 標 archive done 留給 user manual review 抓。
+   - **Skip condition**: `audit-data-sanity.mjs` 不存在（consumer pre-propagation）→ warn + 跳過（fail-open，與 Check 5 一致）。
+   - 完整偵測 / 限制（heuristic param-name 跨檔對應）見 `/data-sanity` skill。
+
    **Sidecar advance (TD-155)** — once gates pass (exit 0 or user explicitly bypassed), advance phase before entering spec-sync / archive CLI:
 
    ```bash

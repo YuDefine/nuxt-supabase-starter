@@ -179,6 +179,56 @@ Read-only session（grep、看 log、解釋 code 不寫檔）可留在 main work
 詳見 `.claude/rules/worktree-default.md`。
 <!-- CLADE:SNIPPET:worktree-default:END -->
 
+<!-- CLADE:SNIPPET:ui-invariants.template:START -->
+# UI Invariants — <consumer-name>
+
+> **這是 clade baseline template。** Consumer 複製到自家 `docs/UI-INVARIANTS.md` 後
+> 在「## Consumer-specific invariants」section 追加業務專屬條目。clade 維護
+> 「## Universal invariants」5 條最小基線（散播時保持對齊），consumer **不要**
+> 改 universal 條目，只 extend consumer-specific。
+>
+> 解析順序（Layer B/C/E 的 resolver）：consumer `docs/UI-INVARIANTS.md` →
+> consumer `.claude/ui-invariants.md` → 此 clade template（fallback）。
+
+## Universal invariants（clade baseline；5 條）
+
+| ID | Invariant | Detection method | Severity |
+| --- | --- | --- | --- |
+| UI-INV-1 | list/table 任一 data column 不可整欄塌縮成 fallback（`-` / `—` / 空 / `null` / `undefined` / `N/A`），rows ≥ 2 時 | `refactor-invariant-check.mjs` column-uniformity heuristic（Layer B），或 final-state screenshot 逐欄目視 | **Critical** |
+| UI-INV-2 | lookup-resolved column（如 `employeeNameMap` 類 id→name 對照）解析率 100% — 不可因 lookup map empty 而整欄 fallback | Layer B（整欄 fallback 即命中）+ Layer C data-sanity（lookup-map-empty-risk）+ D4 self-analysis（來源 query 是否 4xx） | **Critical** |
+| UI-INV-3 | page load 期間 0 個非預期 4xx/5xx network error（auth redirect 除外） | `refactor-invariant-check.mjs` network capture（`Network.enable` + drain；Layer B）+ D5 self-analysis | **Critical** |
+| UI-INV-4 | 渲染 row count 需匹配 seed 預期（空列表頁不可在有 seed 資料時顯示 0 列） | final-state screenshot row count vs `supabase/seed.sql`（或等價 seed）預期 | **High** |
+| UI-INV-5 | admin business-critical action（刪除 / 作廢 / 大量異動 / 不可逆）必有確認對話框 | `[review:ui]` 人工驗 + design review | **High** |
+
+## Consumer-specific invariants（consumer 自行 extend）
+
+> 在此追加業務專屬 invariant。每條 **MUST** 含 ID（建議 `<CONSUMER>-INV-N`）、Invariant 敘述、
+> Detection method、Severity（Critical / High / Medium）。
+
+| ID | Invariant | Detection method | Severity |
+| --- | --- | --- | --- |
+| _(例)_ PERNO-INV-1 | 出勤補登列表「員工」欄需顯示員工姓名（非編號、非空） | screenshot 目視 + Layer B | Critical |
+
+## Allow-empty columns（per-page fallback 例外）
+
+> 某些 column 業務上本來就可整欄空（如選填「備註」）。在此列出**全域**允許整欄空的
+> column header，避免 Layer B uniform-column heuristic false positive。Per-page 例外
+> 則用 `.vue` template 內 `<!-- @ui-invariant-allow-empty[<column-header>] -->` 註解。
+>
+> 格式（resolver 解析）：每行一條 `@ui-invariant-allow-empty[<column-header>]`，或逗號分隔。
+
+<!-- 範例（取消註解並改成實際 column）：
+@ui-invariant-allow-empty[備註]
+@ui-invariant-allow-empty[內部代號]
+-->
+
+## 與其他層的關係
+
+- **Layer B**（`refactor-invariant-check.mjs`）：UI-INV-1 / UI-INV-3 的 mechanical 偵測點；讀本檔的 allow-empty columns 合併進 per-page marker。
+- **Layer C**（`/impeccable data-sanity`）：UI-INV-2 的 lookup-map-empty-risk + query-param boundary 偵測。
+- **Layer E.1**（pre-handoff self-analysis）：D3 維度引用本檔逐條 cross-check。
+<!-- CLADE:SNIPPET:ui-invariants.template:END -->
+
 # RTK Instructions
 
 Use RTK (Rust Token Killer) to reduce token-heavy shell output when running commands through an AI coding assistant.

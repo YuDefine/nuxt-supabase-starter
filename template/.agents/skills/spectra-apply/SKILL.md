@@ -518,6 +518,8 @@ If there is no request_user_input 工具 available, present options as plain tex
 
    6. After ALL C 類 phases complete → **主線自己**執行所有 A、B 類 phases（Design Review / UI view），用 `/design improve`, /impeccable skills, /impeccable audit, review-screenshot 等 AI Agent first-class 工具
 
+      **Design Review 期間 MUST 跑 Layer C data-sanity**（clade fork addition）：對本 change 觸及的 paginated query + lookup-resolved column 跑 `node <clade-vendor>/scripts/audit-data-sanity.mjs --consumer-path . --files <touched> --json`。exit 1 `status:"fail"`（PARAM_BOUNDARY，Critical）→ 主線 root-cause 修（client literal 超 server zod bound，如 `perPage:200` vs `max(100)`），**NEVER** 帶病進 handoff。詳見 `/data-sanity` skill。
+
 6c. **Refactor Invariant Check**（clade fork addition；Layer B of pre-handoff quality gates；not in upstream spectra）
 
    **理由**：a UI-view refactor MUST NOT change observable behavior. <consumer-a> `app-status-badge-extraction`（2026-05-24）做 `UBadge → AppStatusBadge` refactor，但 `attendance/amendments.vue` 的 `useEmployeeListQuery({ perPage: 200 })` 違反 schema `max(100)` → API 400 → `employeeNameMap` empty → 員工 column 整列「-」。Refactor「component substitute + typecheck pass」判定通過，但 page runtime 已壞 — design review / verify:ui / manual review 全沒攔，user 親眼才抓到。Step 6c 是針對這條失效鏈的 mechanical gate。
@@ -780,9 +782,22 @@ If there is no request_user_input 工具 available, present options as plain tex
    3. For each `FAIL`: edit the relevant `## 人工檢查` item to append `（issue: <summary + where>）`; D2 fabrication findings additionally strip the bad `(verified-ui:)` annotation and restore `[ ]`.
    4. **No finding report written → NO Step 8b handoff.** This is the gate.
 
-   **Level**: Phase 1 is **warning level** — it surfaces findings + annotates them so the user sees them flagged in the GUI; it does **not** hard-block archive. (Phase 2 adds the codex GPT-5.5 cross-check as Layer E.2; Phase 3.1 integrates the hard gate into `archive-gate.sh`.) Collect false-positive rate over the soak window before tightening.
+   **Layer E.2 — codex cross-model second opinion**（clade fork addition；Phase 2）：E.1 是主線（Claude）自己審；E.1 之後 **MUST** 再派 **codex GPT-5.5** 對同 5 dimension 做獨立 cross-check（per `rules/core/agent-routing.md` 「跨模型」原則 — author model 會 rationalize 過自己的盲點，換個 model 才抓得到）：
 
-   **Reuse Step 6c**: D3 / D5 are exactly what `refactor-invariant-check.mjs` detects. If Step 6c ran for the touched UI phases, cite its result rather than re-running the browser drive.
+   ```bash
+   node <clade-vendor>/scripts/codex-dispatch-pre-handoff-check.mjs \
+     --change <change-name> --consumer-path . \
+     --tasks-file openspec/changes/<change-name>/tasks.md \
+     --screenshots-dir screenshots/local/<change-name>
+   ```
+
+   - Dispatcher stdout 印 JSON：`{"layer":"E.2","runtime":"codex","status":"pass"|"fail","findings":[{dimension,severity,evidence,suggested_fix}]}`。
+   - **merge E.1 + E.2 findings**：兩方任一 `FAIL` → 對應 item 寫 `（issue: <dimension>: <evidence>）` annotation（去重；D2 fabrication 同樣 strip 假 `(verified-ui:)` + restore `[ ]`）。
+   - **Fallback**：dispatcher 回 `status:"error"` + `fallback:"claude-subagent"`（codex 不在 / 無 parseable JSON）→ 改派一個 Claude subagent 用 `main-self-analysis.template.md` 同 5 dimension 做 cross-check（**NEVER** 憑記憶補；**NEVER** 跳過 cross-check 直接 handoff）。
+
+   **Level**: Phase 2 仍為 **warning / soft-gate** — E.1 + E.2 都跑、findings 必寫成 `（issue:）`annotation 讓 user 在 review-gui 看到，但**不**hard-block workflow（user 在 GUI 拍板）。Phase 3.1 才把「zero unresolved findings」整進 `archive-gate.sh` 成 hard gate。Soak window（master plan）原為收 false-positive rate；user 拍板跳過 soak 直接上 E.2。
+
+   **Reuse Step 6c / Layer C**: D3 / D5 是 `refactor-invariant-check.mjs`（Layer B）偵測的；D4 是 `audit-data-sanity.mjs`（Layer C）偵測的。已跑過就 cite 結果，不必重跑。
 
 8b. **Manual review handoff**
 
