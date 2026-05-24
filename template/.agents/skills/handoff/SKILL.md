@@ -241,7 +241,7 @@ Outstanding（N 條）：
 
 **禁止行為**（依 user AGENTS.md「不要把工作往後放」+ `clade-role-and-todo-discipline.md`「Session 結尾自查」+ `rules/core/handoff.md` § Outstanding writing hygiene）：
 - 推薦清單裡放「N 週後再回頭做」/「排程 /schedule 在 X 天後」
-- 推薦清單裡放當前主線「無法完整 own」的工作（consumer 自治區工作 / user 必須親自操作的外部系統指令）
+- 推薦清單裡放當前主線「無法完整 own」的工作（consumer 自治區工作 / user 必須親自操作的外部系統指令）— 此 ban **不**因 `clade-role-and-todo-discipline.md § user-explicit cross-boundary authorization` carve-out 而鬆綁；該 carve-out 只解鎖「user 已明確發起」的當下跨界行為，不解鎖 session 結尾**主動推薦** consumer 動作
 - 用「block production」「最高優先」包裝其他自治區工作
 - 推薦的 Option 1 不該是「都不做」（除非真的盤點為空）
 - **`mergeBackSafety: ptb-unsafe` wt 不可列為 Option 1 (Recommended)**；可列為 Option 但 label 強制標 `⚠ PTB unsafe`、描述明列 PTB 風險，**禁止**包裝為「最快 deliverable」「safe to land」「ready to merge」這類沒 signal 支撐的斷言
