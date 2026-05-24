@@ -92,6 +92,70 @@ claude "/commit"
 - **NEVER** 用 `git stash push` 不加 `-u` — 漏掉 untracked 新檔
 - **NEVER** stash pop 撞 conflict 時用 `git checkout --` / `git restore` 「清理」 — 會永久毀掉 main 既有 WIP
 
+## Ad-hoc commit 必走 `git commit --only -- <paths>`
+
+走完整 `/commit` 流程的 commit 因有 `Step 0-Lock` 防呆 + selective per-group commit 已有保護。本 § 規範的是 **ad-hoc commit**：不走 `/commit` 的單檔 / 少數檔 commit、`HANDOFF.md` 補一行就 commit、修個 typo 就 commit、`/spectra-commit` 以外的小型 git ceremony 等。
+
+### Hard rule
+
+Ad-hoc commit **MUST** 用 `git commit --only -m "..." -- <paths>`，**NEVER** 用 `git add + git commit` 兩段操作。
+
+```bash
+# Edit file (Edit / Write tool 或手動)
+# NEVER:
+git add scripts/my-file.sh && git commit -m "..."
+
+# ALWAYS:
+git commit --only -m "..." -- scripts/my-file.sh
+git push
+git show --stat HEAD | tail -3   # MUST verify scope == expected paths
+```
+
+### Why
+
+working tree 是 **process-wide shared state**。多 session 並行（spectra apply / codex / vibe coding / publish auto-stash / 別 agent 跑工作）很常見，別 session 可能在另一 process **預 stage 但未 commit** 的 WIP 殘留在 git index。
+
+`git add <my-file>` **疊加**到既有 staged 上（不是 replace） → `git commit` 把整個 staged 區一起吞 → commit 含跨 session 混合內容並 push 出去（已實證 incident，見 [[pitfall-consumer-ad-hoc-commit-eats-other-session-staged]]）。
+
+`git commit --only -- <paths>` 機制：
+
+1. 暫存當前 staged 區到 cache
+2. 用 `--only` paths 重建 staged 區（**忽略**既有 staged 內容；對 modified file 從 worktree 拿 fresh content）
+3. Run pre-commit hook（hook 看到的 staged 只含 `--only` paths）
+4. Commit
+5. 還原原 staged 區 — 別 session 預 staged 內容**不受影響**，他們繼續做
+
+副作用：**零**。
+
+### Untracked file 例外
+
+`--only` 不接受 untracked pathspec（git design）。新增檔須先 `git add <untracked>` 再 `git commit --only -- <both-paths>`，**scope 仍受 `--only` 過濾**，別人的 staged 不會進 commit。
+
+```bash
+git add docs/new-file.md                         # untracked → 進 staged
+git commit --only -m "..." -- docs/new-file.md scripts/existing-file.sh
+```
+
+### Verify hard rule
+
+Commit 後 **MUST**：
+
+```bash
+git show --stat HEAD | tail -3
+```
+
+Changed files 數量 / 路徑 vs 預期不符 → **STOP** + revert（`git reset --soft HEAD~1` 把改動退回 staged；**NEVER** `git reset --hard`，per 本檔 § WIP 處置禁令）+ 用 `git commit --only` 重做。
+
+### Fleet sweep 升級規約
+
+跨多檔工作（fleet sweep / dep migration / 跨檔 refactor）**SHOULD** 走 worktree（per [[worktree-default]]），main working tree 完全不動 — 從機制上避開 staged race，每 worktree 各自獨立 index。
+
+### Cross-link
+
+- 同 session 內 cross-session staged pollution 的偵測層：`plugins/hub-core/skills/commit/SKILL.md § Step 0-Coord`
+- WIP 預設範圍 + 分組規約：本檔 § WIP 預設範圍 / § Commit 分組與訊息規範
+- Fleet sweep + worktree：[[worktree-default]]
+
 ## WIP 阻礙處理（**極少數例外**，預設一律靠分組納入）
 
 **預設一律靠 Step 3 分組納入處理 WIP**，stash 是**極少數例外**。「主題不同 / 看起來不相關 / 不認得來源」**全部**透過拆獨立 commit group 解決，**NEVER** 因此啟動 stash —— Step 3 分組就是設計來把多主題、跨 session 的 WIP 自然拆成多個 commit group 的。
