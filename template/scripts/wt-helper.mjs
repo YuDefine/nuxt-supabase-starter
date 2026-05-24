@@ -1259,37 +1259,141 @@ export function syncWorktreeWithMain(wtPath, branchName, slug) {
     mergeError = e
   }
 
-  const statusRaw = git(['status', '--porcelain'], { cwd: wtPath })
-  const conflicted = statusRaw
-    .split('\n')
-    .filter((line) => /^(UU|AA|DD|AU|UA|UD|DU) /.test(line))
-    .map((line) => line.slice(3).trim())
-
-  if (conflicted.length > 0 || mergeError) {
-    const preview = conflicted
-      .slice(0, 10)
-      .map((f) => `  ${f}`)
-      .join('\n')
-    const more = conflicted.length > 10 ? `\n  ... and ${conflicted.length - 10} more` : ''
-    const detail =
-      conflicted.length > 0
-        ? `${conflicted.length} file(s) hit conflict during pre-sync:\n${preview}${more}`
-        : `pre-sync merge failed: ${mergeError?.message ?? mergeError}`
-    throw new Error(
-      `merge-back pre-sync blocked: ${detail}\n\n` +
-        `Worktree '${wtPath}' is left in unmerged state — main's working tree was NOT touched.\n` +
-        `Resolution — resolve in worktree, then re-run merge-back:\n` +
-        `  cd ${wtPath}\n` +
-        `  # resolve conflict markers, git add <files>\n` +
-        `  git commit --no-edit       # finalize the pre-sync merge\n` +
-        `  cd -\n` +
-        `  node scripts/wt-helper.mjs merge-back ${slug}\n\n` +
-        `Override (NOT recommended): re-run with --skip-pre-sync to attempt squash directly\n` +
-        `(legacy path — conflicts would surface in main's working tree).`,
-    )
+  const readConflicted = () => {
+    const raw = git(['status', '--porcelain'], { cwd: wtPath })
+    return raw
+      .split('\n')
+      .filter((line) => /^(UU|AA|DD|AU|UA|UD|DU) /.test(line))
+      .map((line) => line.slice(3).trim())
   }
 
-  return { synced: true, behind }
+  let conflicted = readConflicted()
+
+  // ── Auto-resolve passes ────────────────────────────────────────────────
+  // Stale-fork conflicts on long-lived wt branches (e.g. wt behind main by
+  // 180+ commits) are dominated by two mechanical patterns that wt-helper
+  // can resolve safely without user judgement:
+  //
+  //   1. LOCKED projection paths (`.claude/`, `.agents/`, `.codex/`,
+  //      `.claude/hub.json`, etc. — see locked-projection.mjs):
+  //      main is SoT. Wt-side edits are propagate residue, never user
+  //      intent. Take main version.
+  //
+  //   2. `openspec/changes/archive/**` paths: spectra-archive flow moves
+  //      change folders INTO archive (one-way). Wt has no legitimate
+  //      reason to disagree with main about archive contents. Take main.
+  //
+  // Both cases use the same mechanic: `git checkout --theirs <path>` (wt
+  // runs `git merge main`, so theirs == main) + `git add <path>`. The
+  // resolve pass logs counts and returns autoResolved metadata so callers
+  // (and tests) can verify behavior.
+  //
+  // Conservative: any conflict outside these two predicates falls through
+  // to the original throw — real content conflicts (docs/tech-debt.md,
+  // active spec.md edits) still get user attention.
+  const autoResolved = { locked: 0, archive: 0 }
+
+  const runResolvePass = (predicate, label, counterKey) => {
+    if (conflicted.length === 0) return
+    const matched = conflicted.filter(predicate)
+    if (matched.length === 0) return
+    for (const path of matched) {
+      try {
+        git(['checkout', '--theirs', '--', path], { cwd: wtPath })
+        git(['add', '--', path], { cwd: wtPath })
+      } catch (e) {
+        // Swallow per-path failure — fall through and let the residual
+        // conflict surface in the final throw with full context. Log so
+        // the user sees what auto-resolve attempted.
+        console.error(
+          `warn: auto-resolve ${label} failed for '${path}': ${e?.message ?? e} — left for manual resolution`,
+        )
+      }
+    }
+    autoResolved[counterKey] += matched.length
+    console.log(
+      `merge-back: auto-resolved ${matched.length} ${label} pre-sync conflict(s) (took theirs from main)`,
+    )
+    conflicted = readConflicted()
+  }
+
+  runResolvePass(isLockedProjectionPath, 'LOCKED projection', 'locked')
+  runResolvePass(isArchivePathConflict, 'openspec archive', 'archive')
+
+  // If auto-resolve cleared every conflict, finalize the merge commit.
+  // mergeError may still be set even though `git status` is clean (e.g.
+  // `git merge` exited non-zero due to conflicts that we then resolved).
+  if (conflicted.length === 0) {
+    if (autoResolved.locked + autoResolved.archive > 0) {
+      try {
+        git(['commit', '--no-edit'], { cwd: wtPath, stdio: 'inherit' })
+      } catch (e) {
+        // commit can fail if e.g. pre-commit hook rejects — surface as throw
+        throw new Error(
+          `merge-back pre-sync auto-resolve succeeded but commit failed: ${e?.message ?? e}\n` +
+            `Worktree '${wtPath}' is in mid-merge state with all conflicts staged.\n` +
+            `Resolution — inspect, then finalize manually:\n` +
+            `  cd ${wtPath}\n` +
+            `  git status\n` +
+            `  git commit --no-edit\n` +
+            `  cd -\n` +
+            `  node scripts/wt-helper.mjs merge-back ${slug}\n`,
+          { cause: e },
+        )
+      }
+      return { synced: true, behind, autoResolved }
+    }
+    if (mergeError) {
+      // No conflicts and no auto-resolve happened, but merge errored — odd
+      // state. Surface as throw rather than silently claim success.
+      throw new Error(`pre-sync merge failed: ${mergeError?.message ?? mergeError}`, {
+        cause: mergeError,
+      })
+    }
+    return { synced: true, behind, autoResolved }
+  }
+
+  // ── Residual conflict path: surface with auto-resolve summary ─────────
+  const preview = conflicted
+    .slice(0, 10)
+    .map((f) => `  ${f}`)
+    .join('\n')
+  const more = conflicted.length > 10 ? `\n  ... and ${conflicted.length - 10} more` : ''
+  const autoResolvedTotal = autoResolved.locked + autoResolved.archive
+  const autoResolvedSummary =
+    autoResolvedTotal > 0
+      ? `\n(auto-resolved ${autoResolvedTotal}: LOCKED=${autoResolved.locked}, archive=${autoResolved.archive}; ${conflicted.length} remain)`
+      : ''
+  const detail =
+    conflicted.length > 0
+      ? `${conflicted.length} file(s) hit conflict during pre-sync${autoResolvedSummary}:\n${preview}${more}`
+      : `pre-sync merge failed: ${mergeError?.message ?? mergeError}`
+  throw new Error(
+    `merge-back pre-sync blocked: ${detail}\n\n` +
+      `Worktree '${wtPath}' is left in unmerged state — main's working tree was NOT touched.\n` +
+      `Resolution — resolve in worktree, then re-run merge-back:\n` +
+      `  cd ${wtPath}\n` +
+      `  # resolve conflict markers, git add <files>\n` +
+      `  git commit --no-edit       # finalize the pre-sync merge\n` +
+      `  cd -\n` +
+      `  node scripts/wt-helper.mjs merge-back ${slug}\n\n` +
+      `Override (NOT recommended): re-run with --skip-pre-sync to attempt squash directly\n` +
+      `(legacy path — conflicts would surface in main's working tree).`,
+  )
+}
+
+// Predicate for F2 auto-resolve: paths under `openspec/changes/archive/**`
+// are spectra-archive flow output. Main is SoT for archive contents — wt
+// branches should never claim authority over an archived change folder.
+// Match is path-prefix based (no date-format gating) so future archive
+// naming changes don't silently regress this predicate.
+//
+// Kept separate from locked-projection.mjs because:
+//   - LOCKED is a fixed projection set written by sync-rules / sync-vendor
+//   - Archive is a content domain written by spectra-archive flow
+//   - The reasons "main is SoT" differ; conflating obscures intent
+export function isArchivePathConflict(p) {
+  return /^openspec\/changes\/archive\//.test(p)
 }
 
 async function cmdCleanup(slug, opts) {

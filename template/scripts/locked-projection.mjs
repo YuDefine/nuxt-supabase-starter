@@ -44,7 +44,7 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // Improvement-loop infra (.clade/)
       String.raw`\.clade/(bin|signals)/`,
       // Vendored script entry points (scripts/)
-      String.raw`scripts/(wt-helper|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|handoff-drift-scan|git-merge-clade-regenerate|locked-projection|_git-lock-detect)\.(mjs|mts)$`,
+      String.raw`scripts/(wt-helper|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|handoff-drift-scan|git-merge-clade-regenerate|locked-projection|_git-lock-detect|spectra-archive-sidecar)\.(mjs|mts)$`,
       // Recursive vendored script trees
       String.raw`scripts/(spectra-advanced|pre-commit|pre-push)/`,
       // Snippets / shared presets

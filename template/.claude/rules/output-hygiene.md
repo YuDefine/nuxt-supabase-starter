@@ -65,3 +65,59 @@ Local edits will be reverted by the next sync.
 - **HANDOFF.md / 技術債登記**：未來接手者需要知道走過的死路
 
 判別：讀者場域**主動需要**這些資訊，而不是 Claude 主動塞給沒問的人。
+
+---
+
+## Tool-derived 宣稱：quote 還是 synthesis（2026-05-24 補強）
+
+對「X 工具 / 文件 / API 是這樣規範的」這類 attribution claim，必須能對應到工具回傳的**直接字句**。多條 fact 推論出來的 pattern claim **不能**用 `documented` / `canonical` / `規範` / `官方建議` / `recommended` / `the way to` 等修飾——那些 label 只能由 verbatim 引文支撐。
+
+### 為何加這層
+
+`rules/core/code-discovery` + 各 MCP 規約（[[nuxt-ui-mcp]] / [[modern-web-mcp]] 等）已擋下「亂湊 API surface」，但沒擋「拿合法 MCP fact 合成 prescriptive pattern claim」。實證：2026-05-24 <consumer-a> 撞到一次——主線把 `placeholder` prop（MCP fact）+ `modelValue` 型別接受 `null`（MCP fact）+ `resetModelValueOnClear` 預設 `null`（MCP fact）三條 synth 成「Nuxt UI v3 規範 pattern」貼上 doc 背書 label，被 user 標為**重大錯誤**。MCP 從沒明文宣告這個 pattern。
+
+### Hard rule
+
+寫含下列措辭的句子前，**MUST** 自查能否找到 verbatim MCP / docs / API 引文：
+
+- 中：`官方 / 規範 / 文件規定 / 官方建議 / canonical / 推薦做法 / 標準寫法 / 規範路徑 / 規範 pattern`
+- En: `canonical` / `the canonical way` / `officially / official approach` / `documented as` / `recommended` / `prescribed` / `the way to do X` / `the right way`
+
+找得到 → **MUST** 標出處（`[per <tool> <command> §<section>]` 或直接貼引文 ≤2 行）
+找不到 → **MUST** 改用以下任一非 prescriptive 措辭：
+
+- `per type signature ...` — 型別簽名允許
+- `one demonstrated usage shows ...` — example 段示範但無 prescriptive label
+- `empirical observation: ...` — 從 runtime 行為觀察
+- `inferred from <facts 列舉>` — 明說是 synthesis 不假裝 doc 背書
+
+### 適用範圍
+
+不限 Nuxt UI——同樣適用於 modern-web-guidance、codebase-memory-mcp、任何 MCP / docs 抓資料後的二手宣稱：
+
+- **codebase-memory-mcp**：「`search_graph` 顯示 X 函式被 5 個 caller 呼叫」(✅ MCP 直接 fact) vs 「這個函式是 hot path 應該優化」(❌ synth + prescriptive)
+- **modern-web-guidance**：「CSS Anchor Positioning Baseline Widely 2024」(✅ skill 回傳 fact) vs 「Modern web 規範 popover 應該用 Anchor Positioning」(❌ synth + prescriptive)
+- **Reka UI / Headless UI / shadcn-vue**：API surface fact OK，「the recommended pattern」synth 禁止
+- **WebFetch 抓的 third-party blog**：作者意見 ≠ official spec，引用時 **MUST** 標 source URL + 「per <author>」不要寫「規範」
+
+### Counter-examples
+
+| ❌ Bad | ✅ Good |
+| --- | --- |
+| 「Vue 3 規範用 `<script setup>` 不用 Options API」 | 「Vue 3 docs 兩種都示範；本 repo CLAUDE.md `vue-best-practices` 要求 `<script setup>`」 |
+| 「Tailwind 規範用 utility class 不用 `@apply`」 | 「Tailwind docs 兩種都列；本 repo `code-style.md` 偏好 utility class（[link]）」 |
+| 「Better Auth 規範用 server-side session」 | 「per Better Auth getting-started example 用 server-side session；本 repo `auth.md` 對齊此 example」 |
+| 「Pinia 規範 store 用 composition API setup function」 | 「per Pinia docs `defineStore` 第二參數可傳 options 或 setup function；本 repo `pinia-store.md` 強制 setup function（[link]）」 |
+
+### 何時可以寫 prescriptive
+
+- 引用**本 repo 內部規約**（CLAUDE.md / `.claude/rules/`）：「本 repo 規範 X」 ✅（這條 rule 本身就是內部規約，不需 verbatim 外部引文）
+- 引用**有 verbatim 字句 MCP / docs**：必標出處
+- 引用**業界 RFC / W3C spec / ECMAScript 規範**：必標 spec 編號或 section
+
+### 何時不可以
+
+- 從多條 MCP fact synth 出來的 pattern：**禁** prescriptive
+- 從訓練記憶寫的「業界慣例」：**禁** prescriptive（記憶不可信）
+- 從 GitHub stars / community blog 推論的「主流寫法」：**禁** prescriptive
+

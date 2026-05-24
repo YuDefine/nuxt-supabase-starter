@@ -33,9 +33,10 @@ security: {
       'script-src-attr': ["'none'"],
       'style-src': ["'self'", "'unsafe-inline'"],
       'upgrade-insecure-requests': true,
-      // ⬇ 以下三條 per-consumer 必填或選填，見下節
-      'connect-src': [...],
-      // 'script-src': [...],   // 選填
+      // ⬇ 以下四條 per-consumer 必填或選填，見下節
+      // baseline 預設含 'self' + 'https://cloudflareinsights.com'（CF Web Analytics beacon report endpoint）
+      'connect-src': ["'self'", 'https://cloudflareinsights.com', /* per-consumer extend */],
+      // 'script-src': [...],   // 選填；若啟用 MUST 同時含 'https://static.cloudflareinsights.com'（CF beacon CDN）
       // 'frame-src': [...],    // 選填
       // 'worker-src': [...],   // 選填（用到 Web Worker / blob worker 時）
     },
@@ -54,6 +55,7 @@ security: {
 ```ts
 'connect-src': [
   "'self'",
+  'https://cloudflareinsights.com',     // baseline — CF Web Analytics beacon report endpoint（見 § Cloudflare Web Analytics beacon）
   // 視 consumer 額外加：
   // 'https://api.iconify.design',         // 用 @nuxt/icon 且未切 server-bundle 時 dev mode 會打 iconify CDN
   // 'https://accounts.google.com',        // Google OAuth / Google Identity Services
@@ -66,6 +68,7 @@ security: {
 ```
 
 **規則**：
+- **MUST** 含 baseline 的 `https://cloudflareinsights.com`（即使本 consumer 不部署到 CF；非 CF 環境只是多一條沒生效的白名單，零安全影響）
 - **MUST** 列入所有 production 用到的外部 API host
 - **MUST** dev mode 會 fetch 的 CDN（`api.iconify.design` 等）也要列；想消除 dev 警告又不想 prod 暴露，可改用 `@nuxt/icon` 的 `provider: 'server'`（bundle 本地 icon，根本不打網路）
 - **NEVER** 用 `https:` 全開
@@ -73,10 +76,15 @@ security: {
 
 ### `script-src` / `frame-src`（選填）
 
-只在用到第三方 widget 時加：
+只在用到第三方 widget 時加。若 enable `script-src`，**MUST** 含 `https://static.cloudflareinsights.com`（CF Web Analytics beacon CDN — 所有部署到 CF 的 site 都會被 zone-level Web Analytics auto-inject `beacon.min.js`）：
 
 ```ts
-'script-src': ["'self'", "'unsafe-inline'", 'https://accounts.google.com/gsi/client'],
+'script-src': [
+  "'self'",
+  "'unsafe-inline'",
+  'https://accounts.google.com/gsi/client',
+  'https://static.cloudflareinsights.com', // baseline — CF beacon CDN（見 § Cloudflare Web Analytics beacon）
+],
 'frame-src': ["'self'", 'https://accounts.google.com'],
 ```
 
@@ -139,6 +147,28 @@ rg -nP "(csurf|security:\\s*\\{\\s*csrf)" nuxt.config.ts
 ```
 
 對應不上 = 該 endpoint 對外 POST **必定** HTTP 403。建議部署後立刻 `curl -X POST` 一次驗收。
+
+## Cloudflare Web Analytics beacon
+
+部署到 Cloudflare（Workers / Pages / 一般 zone proxy）的 site，若該 zone 開啟 Web Analytics 的 **Automatic Setup**（dashboard → Analytics & Logs → Web Analytics → "Add automatically" toggle，default 開），Cloudflare 會在所有 HTML response 注入：
+
+```html
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v<hash>"
+        data-cf-beacon='{"token":"..."}'></script>
+```
+
+該 script 載入後會 POST 一筆 RUM event 到 `https://cloudflareinsights.com/cdn-cgi/rum`。任何啟用 `script-src` / `connect-src` CSP 而**未白名單**這兩個 host 的 site，瀏覽器 console 會持續報：
+
+```
+Refused to load the script 'https://static.cloudflareinsights.com/beacon.min.js/...' 
+because it violates the following Content Security Policy directive: "script-src 'self' ..."
+```
+
+**baseline 解法**：本 rule baseline `connect-src` 已含 `https://cloudflareinsights.com`，`script-src`（若 enable）**MUST** 含 `https://static.cloudflareinsights.com`。每個用 nuxt-security 的 consumer 都對齊，不論當前部署平台 — 換 CDN 不重設 CSP、之後切 CF 也不會踩這坑。
+
+**替代方案**（不對齊 baseline）：去 Cloudflare Dashboard 該 zone → Web Analytics → 關 Automatic Setup。但這會影響整 zone 所有 site（多個 project 共享同 zone 時不適用），且 production analytics 也一併消失。**不推薦**作為長期方案。
+
+對應 pitfall：`docs/pitfalls/2026-05-24-cloudflareinsights-beacon-csp-blocked.md`。
 
 ## CF Workers 相容性
 
