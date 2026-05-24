@@ -133,6 +133,77 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 
 把這些誤標 `[review:ui]` = 把該由 agent 自驗的工作丟回 user，違反 propose 階段對 user 時間的尊重。
 
+### `[verify:ui]` 對 sample-key-bound item 的反例（hard rule，2026-05-24 補強）
+
+`[verify:ui]` 預設 agent 可在 no-click scope（open URL → wait load → final-state screenshot → DOM observation）內驗完。但**當 item 描述要求 agent「找到某個特定 sample」**且 sample identifier 無法被 agent 從 page-load screenshot 直接 unambiguously 對應到 row 時，agent 在 scope 內**就是 fab 風險區**——這類**MUST** 標 `[review:ui]`。
+
+判別方法：item 描述含「找到 / 定位 / 搜尋 / locate / find / search」+ business-key 識別符（`EMP-\d+` / `contract-[a-z\-]+\d+` / 8-4-4-4-12 UUID），**且**該 key 不會 natively 顯示在 target URL 載入後的 viewport 內，則 agent 無法 truthfully bridge `sample-key → UI row` 對應。
+
+**實證**：2026-05-24 <consumer-a> `app-status-badge-extraction`：
+
+- task 寫「找到周怡君 `EMP-009` 補打下班卡」
+- target `/admin/attendance/amendments` 員工 column 因 API 400 fallback 全顯示「-」
+- agent screenshot 看不到「EMP-009 / 周怡君」字樣
+- agent 仍寫 `(verified-ui: ... dom=EMP-009-pending-row-...)` annotation
+- user 抓 9 個 annotation 全 fab，要求 strip + promote rule
+
+**反例**：
+
+```markdown
+❌ - [ ] #2.1 [verify:ui] /admin/attendance/amendments 狀態 filter 選「待審核」，
+        找到周怡君 `EMP-009` 補打下班卡；status badge 文字為「待審核」、warning、sm
+   理由：(a) 需 click filter（verify:ui 禁 click）；(b) `EMP-009` 不在 UI 任何 column
+         直接顯示（員工 column 是 `employee_id → employeeNameMap` lookup，可能因 API 400
+         全 fallback「-」）；agent screenshot 無法 unambiguously identify 該 row
+         → MUST 標 [review:ui]
+
+❌ - [ ] #4.1 [verify:ui] /admin/schedules 搜尋或定位 `contract-intern-001` 對應班表
+   理由：合約 ID column 只顯示 truncated UUID 前幾碼（`15f4562e...`），無 business key
+         `contract-intern-001` 字樣；agent 在 no-type scope 無法 search
+         → MUST 標 [review:ui]
+
+❌ - [ ] #7.1 [verify:ui] /admin/petition 找到 petition `11111111-1111-1111-1111-111111111111`
+   理由：petition uuid 不在 displayed column（申請人 column 顯示不同 uuid `9d408709-...`）
+         → MUST 標 [review:ui]
+```
+
+**正例 1**：sample identifier 本身**就會**顯示在 page-load viewport（page natively displays the key）：
+
+```markdown
+✅ - [ ] #1 [verify:ui] /admin/employees 列表第一行 employee_no `EMP-001` row
+        顯示「在職」success badge
+   理由：employee_no `EMP-001` 是 list page 第一個 column（`<EmployeeColumn employee_no="...">`），
+         agent page-load screenshot 直接看到字串，可 unambiguously 對應 row。
+```
+
+**正例 2**：description 同時 inline display name + business key（agent 用 display name 對 row）：
+
+```markdown
+✅ - [ ] #8.1 [verify:ui] /admin/contracts 列表 row「Charles Yu 開發管理員合約」(對應
+        seed contract-perm-001) 顯示「生效中」success badge
+   理由：合約名稱 column 直接顯示「Charles Yu 開發管理員合約」字串，agent 可由 display
+         name 對 row；business key contract-perm-001 在括號內僅為 cross-reference 不
+         依賴 UI 顯示。
+```
+
+**正例 3**：item 完全不依賴 sample identification，只看 page-load aggregate visual：
+
+```markdown
+✅ - [ ] #4 [verify:ui] /admin/schedules 載入後，列表所有 row 的「狀態」column
+        顯示「生效中」success badge（aggregate 視覺對齊：所有 active schedule 都 success tone，
+        無 raw English status key 漏網）
+   理由：assertion 是「all rows 都 success」aggregate property，agent screenshot 看
+         pixel column 即可驗，不需要 identify 個別 row 對應哪 sample。
+```
+
+**修正路徑（命中反例時）**：
+
+- (a) **重寫 description 用 display name + verify page 真的顯示**：grep `.vue` template 確認 column 真的 render employee_no / contract_id / petition_id；若是，重寫 description 用該 column 顯示的字串（display name OR business key），保持 `[verify:ui]`
+- (b) **改成 `[review:ui]`**：user 親自在 browser 對 sample（用 domain 知識 + filter / search 互動）
+- (c) **拆 multi-marker**：若涉及 mutation + visual，拆 `[verify:api]` 自驗 mutation + `[review:ui]` user 親驗 visual
+
+**Pre-Review Data Readiness hook `VERIFY_UI_SAMPLE_KEY_BOUND`**（patterns.json v1.4.2+）會在 propose / ingest 時自動掃 description regex 命中 + 建議 reclassify，避免 mid-flight 才撞牆。
+
 ## `@no-screenshot` Marker（hard rule）
 
 當人工檢查項目是純 functional round-trip，且 screenshot review 無法提供有效視覺證據時，可在該 checkbox line 行尾加上 `@no-screenshot` marker。這個 marker 表示 `pnpm review:ui` 應把該 item 視為 round-trip-only manual-review item：使用者親自操作後可直接勾 OK，不需要截圖，viewer 顯示 round-trip-only UI，且不顯示「複製 handoff prompt」。
