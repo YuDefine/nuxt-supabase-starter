@@ -90,7 +90,7 @@ Implementer subagents report one of four statuses:
 
 ### Stage 2: Code Quality Review
 
-- Dispatch code quality review using the project's `code-review` agent (`.codex/agents/code-review.md`)
+- Dispatch code quality review using the project's `code-review` agent (`.codex/agents/code-review.toml`)
 - Pass review scope via git diff:
   ```bash
   BASE_SHA=$(git rev-parse HEAD~N)  # commits before this task
@@ -183,7 +183,7 @@ Task 2: Add UI component
 **Works with:**
 
 - **Spectra SDD workflow** — `/spectra-propose` creates the plan, this skill executes it
-- **`code-review` agent** (`.codex/agents/code-review.md`) — used for code quality review stage
+- **`code-review` agent** (`.codex/agents/code-review.toml`) — used for code quality review stage
 - **test-driven-development skill** — subagents follow TDD for each task
 - **testing-anti-patterns rule** — auto-loaded when editing test files
 

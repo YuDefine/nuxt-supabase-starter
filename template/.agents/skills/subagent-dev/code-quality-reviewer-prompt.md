@@ -8,7 +8,7 @@ Use this template when dispatching a code quality reviewer subagent.
 **Only dispatch after spec compliance review passes.**
 
 ````
-Dispatch the project's code-review agent (.codex/agents/code-review.md):
+Dispatch the project's code-review agent (.codex/agents/code-review.toml):
 
   spawn_agent 工具:
     description: "Code quality review for Task N"
@@ -28,7 +28,7 @@ Dispatch the project's code-review agent (.codex/agents/code-review.md):
       ## Task Context
       [task summary and plan reference]
 
-      Follow the review process defined in .codex/agents/code-review.md.
+      Follow the review process defined in .codex/agents/code-review.toml.
       Also load .codex/agents/references/clade-review-rules.md (clade-wide shared baseline)
       and .codex/agents/references/project-review-rules.md (if present, project-specific rules).
 
