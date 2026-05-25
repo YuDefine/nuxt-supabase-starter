@@ -22,7 +22,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { statSync, unlinkSync } from 'node:fs'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 
 const DEFAULT_THRESHOLD_MS = 60_000
 
@@ -39,8 +39,36 @@ const DEFAULT_THRESHOLD_MS = 60_000
  * NEVER throws on I/O — wraps everything in try/catch so caller can be a one-liner.
  */
 export function detectAndCleanStaleIndexLock(repoRoot, opts = {}) {
+  return detectAndCleanStaleIndexLockAtPath(join(repoRoot, '.git', 'index.lock'), opts)
+}
+
+/**
+ * Worktree/submodule-safe variant. Resolves the real index.lock path via
+ * `git rev-parse --git-path index.lock` (honors `.git` being a file in a linked
+ * worktree / submodule) instead of assuming `<cwd>/.git/index.lock`, then
+ * applies the identical stale criteria. `cwd` is any path inside the repo.
+ *
+ * Added 2026-05-25 (codex review): consumer repos may be worktrees; a dead
+ * propagate left stale locks that the repoRoot-relative variant could miss.
+ */
+export function ensureNoStaleIndexLockForRepo(cwd, opts = {}) {
+  let lockPath
+  try {
+    const out = execFileSync('git', ['rev-parse', '--git-path', 'index.lock'], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+    if (!out) return { cleaned: false, reason: 'io-error', err: 'empty git-path' }
+    lockPath = isAbsolute(out) ? out : join(cwd, out)
+  } catch {
+    return { cleaned: false, reason: 'io-error', err: 'git rev-parse --git-path failed' }
+  }
+  return detectAndCleanStaleIndexLockAtPath(lockPath, opts)
+}
+
+function detectAndCleanStaleIndexLockAtPath(lockPath, opts = {}) {
   const thresholdMs = typeof opts.thresholdMs === 'number' ? opts.thresholdMs : DEFAULT_THRESHOLD_MS
-  const lockPath = join(repoRoot, '.git', 'index.lock')
 
   let st
   try {
