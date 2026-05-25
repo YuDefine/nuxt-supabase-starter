@@ -1,6 +1,6 @@
 ---
 name: wt
-description: Orchestrate a coding task inside a fresh git worktree end-to-end. `/wt <task>` builds a worktree, dispatches a subagent into it with the task, and reports back — the worktree is preserved with its committed work until `/spectra-archive` absorbs it (per [[worktree-default]] §5.5). Supports parallel multi-task via `/wt A: ... B: ...`. The parent session's cwd never moves; the user never opens a new terminal or runs `git worktree` commands manually. Implements [[worktree-default]] §1 + §5 + §6.
+description: "Orchestrate a coding task inside a fresh git worktree end-to-end. `/wt <task>` builds a worktree, dispatches a subagent into it with the task, and reports back — the worktree is preserved with its committed work until `/spectra-archive` absorbs it (per [[worktree-default]] §5.5). Supports parallel multi-task via `/wt A: ... B: ...`. The parent session's cwd never moves; the user never opens a new terminal or runs `git worktree` commands manually. Implements [[worktree-default]] §1 + §5 + §6."
 license: MIT
 metadata:
   author: clade
