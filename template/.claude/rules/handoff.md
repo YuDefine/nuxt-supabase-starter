@@ -51,7 +51,8 @@ Local edits will be reverted by the next sync.
 ## 生命週期
 
 - `HANDOFF.md` 是 **session-scoped**
-- `HANDOFF.md` 只保留**尚未被接手**的項目
+- `HANDOFF.md` 只保留**尚未被接手**的項目，以及**當前 baseline snapshot blocks**（如 `## Worktree & Stash Audit` / `## Review-gui Readiness` / `## Parked changes` / `## Deferred discuss`）；snapshot block **MUST** 以覆寫式更新，**不**累積歷史版本
+- **不得**保留已完成 chronological session narrative（`## YYYY-MM-DD ...` 形式的 session log）；完成的 dated section **MUST** rotate 到 `docs/archives/<YYYY-MM>-handoff-narrative.md`（per § 歷史段路由）
 - 新 session 接手後：**先建立 claim** → 移除已接手項目 → 繼續執行
 - 所有項目都接完後：刪除 `HANDOFF.md`
 - **允許 commit 進 git**，因為跨機器、跨 agent 交接時很有價值
@@ -71,14 +72,37 @@ Local edits will be reverted by the next sync.
 
 | 文件 | 用途 | 生命週期 |
 | --- | --- | --- |
-| `HANDOFF.md` | 尚未被接手的 WIP、blocker、next steps | 短期、用完即清 |
+| `HANDOFF.md` | 尚未被接手的 WIP、blocker、next steps、當前 baseline snapshot blocks | 短期、用完即清 |
 | `tasks/<id>.md` | 本 session 工作記憶（per-session 一檔） | 短期、session 結束升級或刪 |
 | `.spectra/claims/**` | 即時 ownership / heartbeat | 短期、機器維護 |
+| `docs/archives/<YYYY-MM>-handoff-narrative.md` | 從 HANDOFF rotate 過來的已完成 dated session narrative | 長期、month-bucket append-only |
+| `docs/archives/<YYYY-MM>-<topic>.md` | 一次性 wave / 主題盤點成果（既有用途） | 長期 |
 | `docs/solutions/**` | 非直覺問題的解法沉澱 | 長期 |
 | `docs/decisions/**` | 架構決策與取捨 | 長期 |
 | `openspec/ROADMAP.md` | 進行中 change、active claims、未來工作排序 | 持續維護 |
 
 **與 `session-tasks.md` 的銜接**：tasks 檔內未完項在 session 結束時若需下一 session 立刻接手，**MUST** 升到 `HANDOFF.md` 的 `## In Progress`，不能只留在 tasks 檔等下一 session 自己 grep。
+
+## 歷史段路由（Mode B 2B.1 Health Gate 用）
+
+對 `HANDOFF.md` 每個 `## ` section 依下表分類處置：
+
+| 類型 | 判定規則 | 處置 |
+| --- | --- | --- |
+| **active** | section 含 `- [ ]` unchecked checkbox / `Outstanding` / `Next session` / `下次 session` / `待後續` / `待客戶` / `等客戶` / `等 prod` / `[discuss]` / `尚未` / `未完` / `TODO` / `awaiting` 等 keyword | 留 `HANDOFF.md` |
+| **baseline-snapshot** | section title 含 `Worktree Audit` / `Review-gui Readiness` / `Parked` / `Deferred discuss` / `跨 repo` / `並行 session` / `In Progress` / `Blocked` / `Next Steps` 等基準關鍵字；或 section title 無 `YYYY-MM-DD` 前綴 | 留 `HANDOFF.md`（**覆寫式**更新，不累積歷史版本） |
+| **completed-narrative** | `## YYYY-MM-DD ...` 且**不**符 active / baseline 條件（純已完成 prose + checked checkbox） | rotate 到 `docs/archives/<YYYY-MM>-handoff-narrative.md`（month-bucket，append-only） |
+| **ambiguous** | 介於上述之間、無法穩定判定 | 保守保留 `HANDOFF.md` + 標 review-pending（等下次 Mode B 重判） |
+
+> **baseline 過度累積**：若 `HANDOFF.md` 大多為 baseline section 但仍超 size / lines threshold（clade 自家常見情境），表示 baseline 已過度膨脹，**MUST** 評估是否該把某些 baseline 段拆出成 `docs/archives/<YYYY-MM>-<topic>.md` 或 `docs/solutions/<topic>.md`、`docs/decisions/<topic>.md`。HANDOFF 不是長期 KB。
+
+審計訊號（`vendor/scripts/handoff-drift-scan.mjs`）對應的觸發點：
+
+- `handoff-size-exceeded` / `handoff-lines-exceeded`：HANDOFF.md 超過 size / lines threshold（default 30 KB / 400 lines；env / registry override 可調）
+- `narrative-section-stale`：completed-narrative dated section 超過 narrative_age_days（default 3 天）
+- `active-section-stale`：active dated section 超過 active_age_days（default 14 天）→ 提醒「outstanding work 可能 silently 卡住」
+
+審計只 warn 不阻擋；實際 rotate 由 `/handoff` Mode B Health Gate 執行（per `plugins/hub-core/skills/handoff/SKILL.md § 2B.1`）。
 
 ## Outstanding writing hygiene (v1.14+)
 
@@ -209,5 +233,7 @@ Root cause = HANDOFF writer（包含 Mode B § 2B.4 推薦階段）把 audit doc
 - **NEVER** 把需要交接的資訊只留在對話裡
 - **NEVER** 用含糊句子如「差不多好了」「剩下一點點」
 - **NEVER** 把 `HANDOFF.md` 當成長期知識庫，結案後不清理
+- **NEVER** 在 `HANDOFF.md` 累積 `## YYYY-MM-DD` chronological session log；已完成 dated section **MUST** rotate 到 `docs/archives/<YYYY-MM>-handoff-narrative.md`
+- **NEVER** 在 baseline snapshot block（Worktree Audit / Review-gui Readiness / Parked / Deferred discuss）累積歷史版本；snapshot 必須**覆寫式**更新
 - **NEVER** 在 handoff 裡省略 change 名稱、task 編號、關鍵檔案路徑
 - **NEVER** 接手之後還把同一項目留在 `HANDOFF.md`
