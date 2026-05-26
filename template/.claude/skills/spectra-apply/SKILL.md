@@ -650,6 +650,47 @@ If there is no AskUserQuestion tool available, present options as plain text and
       - `[verify:ui]`：`supabase/seed.sql` 或專案等價 seed file 必須存在
    3. 缺 baseline → **STOP**，回報 user 補齊 baseline；**NEVER** 降級 channel、派 agent 撞錯、或讓 screenshot-review 補 seed。
 
+   **Baseline-exists-but-functional-gap 自接路徑（hard rule，clade fork addition — per [[pitfall-verify-evidence-handoff-instead-of-self-collect]]）**：
+
+   Baseline 確認存在但**功能性缺**（dev-login route 不接 fixture user UUID / 受測 endpoint 需要 role 不符 / seed identifier 對應不到 dev-login allow-list / curl 401 因 cookie missing 等），主線 / subagent **MUST** 依序嘗試以下 self-collect path，**全部失敗才**寫 `deferred` annotation：
+
+   **(a) 擴 dev-login route allow-list**（首選；最持久的治根）：
+
+   - Read consumer 端 `server/routes/auth/_dev-login.get.ts`（或 `__test-login.get.ts`、其他等價 dev-only signin endpoint）
+   - 加 fixture user UUID 進 allow-list（env var allow-list / query param verified UUID / `dev_user_id` query 接受）
+   - 改完跑 `curl -i 'http://localhost:<port>/auth/_dev-login?user_id=<fixture-uuid>'` 驗證 session cookie 可 mint
+   - 後續 verify channel 直接重用該 cookie → 成功則 self-collect 路徑收斂在此
+
+   **(b) service_role direct DB query 證 data shape**（escape hatch；HTTP 路徑無法搭起時）：
+
+   - 用 `@supabase/supabase-js` service_role client（或對應 server 端 service_role 連線）直連 DB 跑 `SELECT` 證明 endpoint 期待回傳的 data shape 正確
+   - annotation 寫法 **MUST** 標明走 DB 而非 HTTP（避免後續 audit 誤判 round-trip 已完成）：
+     ```text
+     (verified-api: <ISO-8601> direct-db-shape table=<table> rows=<n> sha=<sha256-12chars>)
+     ```
+   - 限制：不能驗證 endpoint 的 authz / RLS / response transform 邏輯；只驗 data shape。authz / transform 必須走 (a)(c)(d) 任一
+
+   **(c) 主線自起 dev server + browser-harness self-login**（OAuth 已設好時）：
+
+   - scan free port（3001-3050，避開 3000）`run_in_background` 起 dev server
+   - browser-harness 走 OAuth flow 自手 login（user 已預先在系統 Chrome 登入）
+   - final-state screenshot + DOM 觀察
+   - 適用：OAuth provider 在 dev 環境可達 + user 已登入過
+
+   **(d) 派 screenshot-review codex（mode: verify）**：
+
+   - 給 codex 完整 brief（含 dev server URL + known route + expected DOM observation + screenshot path）
+   - codex 跑 final-state screenshot capture
+   - 適用：純 final-state visual evidence、不涉及 mutation / multi-role / form fill
+
+   **四層全失敗才寫 deferred** + handoff user。Annotation **MUST** 註明已嘗試 path 與失敗原因（避免 user 重複試同樣 path）：
+
+   ```text
+   （deferred: tried (a) dev-login route 不接 fixture UUID（route 限 E2E test user only）/ (b) service_role 不適用（需驗 RLS）/ (c) OAuth provider unreachable in dev / (d) screenshot-review fail with <reason>。剩需 user 親自跑）
+   ```
+
+   完整 recipe + 適用 / 不適用情境見 `vendor/snippets/verify-channels/main-self-collect-fallback-chain.md`。
+
    **執行流程**：
 
    1. **解析未勾 verify items 並依 `kinds` 分類**
@@ -804,6 +845,20 @@ If there is no AskUserQuestion tool available, present options as plain text and
 8b. **Manual review handoff**
 
    When tasks.md still contains unchecked items in the `## 人工檢查` section (typical at this point — implementation tasks `[x]` but manual-review items `[ ]`), **MUST** hand off to the local manual-review GUI rather than walking through items inline in chat.
+
+   **Pre-handoff evidence-missing self-collect**（hard rule，clade fork addition — per [[pitfall-verify-evidence-handoff-instead-of-self-collect]]）：
+
+   走 review-gui handoff message **之前**，**MUST** 對每個 `## 人工檢查` 未勾且帶 `[verify:*]` marker 的 item（含 `[verify:e2e]` / `[verify:api]` / `[verify:ui]` / verify multi-marker）跑：
+
+   1. **解析 item 描述抽 URL + expected observation + screenshot path**（若 description 模糊到無法抽 → 標 `（issue: pre-handoff self-collect 無法解析 item description；need clarification）`，跳該 item）
+   2. **依 Step 8a Baseline-exists-but-functional-gap 自接路徑 (a)(b)(c)(d) 順序嘗試 self-collect**（subagent 寫 `deferred` 回來時若沒附「已嘗試 (a)(b)(c)(d)」紀錄 → 主線 **MUST** 自己再跑一輪 (a)(b)(c)(d)，**NEVER** 把 subagent 的 deferred 直接 forward 給 user）
+   3. **成功** → 寫對應 `(verified-e2e:)` / `(verified-api:)` / `(verified-ui:)` annotation（review-gui auto-check helper 會自動勾 `[x]`）
+   4. **失敗** → 保留 `[ ]` + 寫 `（deferred: tried (a)(b)(c)(d), <reason>; 需 user 親自跑）` annotation，註明已嘗試 path 避免 user 重複試
+
+   跑完一輪後**仍有** evidence-missing items → 才走以下 DEFAULT path review-gui handoff message。
+
+   **Default flow** = 「主線已自跑一輪 self-collect、剩下真需要 user 拍板（真機 / 視覺主觀 / production 授權 / OAuth-only path 不可達）的才 surface」。
+   **NEVER** 在主線未嘗試 self-collect 一輪的情況下丟整批 evidence-missing 給 user 自己點 review-gui「📋 補 evidence prompt」按鈕（per [[manual-review]] § review-gui 補 evidence prompt 路徑分類：補 prompt 是 fallback 不是 default）。
 
    - **DEFAULT path**: Reply to the user with something like:
      > Implementation 完成。Step 8a 已處理 verify channels：automatic `[verify:e2e]` / `[verify:api]` items 已寫 annotation 並自動完成；含 `[verify:ui]` / `[review:ui]` 的 `<N>` 項仍待你確認。請在 **clade home**（`~/offline/clade`）執行 `pnpm review:ui` 開本地 GUI 驗收（review-gui 從 clade home 跑會自動聚合所有 consumer + worktree change；consumer 端直接跑會被 clade-only guard 擋下）：
