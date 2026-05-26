@@ -41,7 +41,7 @@
  */
 
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, realpathSync, unlinkSync } from 'node:fs'
+import { cpSync, existsSync, readFileSync, readdirSync, realpathSync, unlinkSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { stdin, stdout } from 'node:process'
 import { createInterface } from 'node:readline/promises'
@@ -1396,6 +1396,68 @@ export function isArchivePathConflict(p) {
   return p.startsWith('openspec/changes/archive/')
 }
 
+// Preserve gitignored review artifacts from worktree before cleanup destroys
+// them. `screenshots/<env>/<topic>/` is the review-gui / verify:ui screenshot
+// convention; gitignored by spectra cookbook so they don't bloat git history.
+// `git merge --squash` carries no gitignored content, so without this sync,
+// `git worktree remove --force` permanently deletes screenshots and downstream
+// `spectra-archive` Step 7 sweep finds no files in main. See TD-160.
+//
+// Behavior: for each `screenshots/<env>/<topic>/` in the worktree (env subdir,
+// excluding `_archive`), if main lacks the same `<env>/<topic>/` path, recursively
+// copy it. If main already has it (rare — user manually pre-copied), skip and
+// warn. Errors are best-effort: log but never block merge-back / cleanup.
+function preserveWorktreeScreenshots(wtPath, mainPath) {
+  const src = join(wtPath, 'screenshots')
+  if (!existsSync(src)) return { moves: [] }
+  const moves = []
+  let envDirs
+  try {
+    envDirs = readdirSync(src, { withFileTypes: true })
+  } catch (e) {
+    return { moves: [], error: e.message ?? String(e) }
+  }
+  for (const envDir of envDirs) {
+    if (!envDir.isDirectory()) continue
+    const envName = envDir.name
+    const envSrcPath = join(src, envName)
+    const envDstPath = join(mainPath, 'screenshots', envName)
+    let topicDirs
+    try {
+      topicDirs = readdirSync(envSrcPath, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const topicDir of topicDirs) {
+      if (!topicDir.isDirectory()) continue
+      if (topicDir.name === '_archive') continue
+      const topicSrcPath = join(envSrcPath, topicDir.name)
+      const topicDstPath = join(envDstPath, topicDir.name)
+      if (existsSync(topicDstPath)) {
+        moves.push({
+          env: envName,
+          topic: topicDir.name,
+          skipped: true,
+          reason: 'destination exists',
+        })
+        continue
+      }
+      try {
+        cpSync(topicSrcPath, topicDstPath, { recursive: true })
+        moves.push({ env: envName, topic: topicDir.name, copied: true })
+      } catch (e) {
+        moves.push({
+          env: envName,
+          topic: topicDir.name,
+          failed: true,
+          error: e.message ?? String(e),
+        })
+      }
+    }
+  }
+  return { moves }
+}
+
 async function cmdCleanup(slug, opts) {
   if (!slug)
     throw new Error(
@@ -1939,6 +2001,38 @@ async function cmdMergeBack(slug, opts = {}) {
         `Worktree '${target.path}' + branch '${branchName}' preserved.\n` +
         `Resolve conflicts manually then re-run \`wt-helper merge-back ${cleanSlug}\`.`,
     )
+  }
+
+  // Preserve gitignored review artifacts (screenshots) before cleanup destroys
+  // the worktree dir. `git merge --squash` carries nothing under `screenshots/`
+  // because it's gitignored; without this sync downstream `spectra-archive`
+  // Step 7 sweep finds no files in main. See TD-160.
+  let screenshotSync = { moves: [] }
+  if (opts.cleanup !== false) {
+    try {
+      screenshotSync = preserveWorktreeScreenshots(target.path, consumerRoot)
+      const copied = screenshotSync.moves.filter((m) => m.copied)
+      const skipped = screenshotSync.moves.filter((m) => m.skipped)
+      const failed = screenshotSync.moves.filter((m) => m.failed)
+      if (copied.length > 0) {
+        const list = copied.map((m) => `${m.env}/${m.topic}`).join(', ')
+        console.log(
+          `merge-back: synced ${copied.length} screenshot folder(s) from worktree to main before cleanup (${list})`,
+        )
+      }
+      if (skipped.length > 0) {
+        const list = skipped.map((m) => `${m.env}/${m.topic}`).join(', ')
+        console.warn(
+          `merge-back: ${skipped.length} screenshot folder(s) skipped — destination exists in main (${list})`,
+        )
+      }
+      if (failed.length > 0) {
+        const list = failed.map((m) => `${m.env}/${m.topic} (${m.error})`).join('; ')
+        console.warn(`merge-back: ${failed.length} screenshot folder(s) failed to copy: ${list}`)
+      }
+    } catch (e) {
+      console.warn(`merge-back: warn — preserve screenshots failed: ${e.message ?? e}`)
+    }
   }
 
   let cleanupDone = false

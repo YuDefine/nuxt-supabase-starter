@@ -490,6 +490,8 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    - **Skip condition**: if user explicitly passed `--no-sweep` (or said "不要 sweep 截圖") when invoking spectra-archive, skip this step and note in Step 8 summary: `Screenshots: sweep skipped (user --no-sweep)`.
    - **Failure handling**: if `screenshots-archive` errors (e.g., disk write failure), do NOT fail the overall archive — log the error and note in Step 8 summary: `Screenshots: sweep failed — see error above`. The change is already archived; sweep is best-effort cleanup.
 
+   **Note (TD-160 preserve)**: when Step 0 ran `wt-helper merge-back`, gitignored worktree screenshots at `screenshots/<env>/<topic>/` are automatically copied to main before cleanup destroys the worktree (see `preserveWorktreeScreenshots` in `vendor/scripts/wt-helper.mjs`). Step 7 sweep therefore finds the files in main as expected. Without this preserve, cleanup would delete them and sweep would be a no-op.
+
    **Sidecar advance (TD-155)** — after sweep completes (success, skipped, or failed — all three count as "Step 7 phase reached"):
 
    ```bash
