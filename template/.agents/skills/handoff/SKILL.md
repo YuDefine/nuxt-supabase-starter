@@ -117,13 +117,79 @@ fi
 - ❌ 把 candidate 暫存到 HANDOFF.md `outstanding` 段 — sweep 是 session 內 cleanup，不該變成跨 session 待辦
 - ❌ 強推 candidate 升級到 pitfall — 不符四條件就降級或跳過，不硬塞
 
-### 2B.1 整理現有 HANDOFF.md
+### 2B.1 HANDOFF.md Health Gate（hard step）
 
-讀 HANDOFF.md，逐段判斷：
+跑 audit → 若超標走 rotate plan → 再走既有 reorganize。三 sub-step 都跑完才能進 2B.1.5。
+
+#### 2B.1a Audit
+
+```bash
+node ~/offline/clade/vendor/scripts/handoff-drift-scan.mjs --json 2>/dev/null
+```
+
+讀回的 JSON `handoffHealth` 欄位：
+
+- `warnings` array 為空 → HANDOFF 健康，跳 2B.1c
+- `warnings` 非空 → **MUST** 進 2B.1b
+
+JSON 範例：
+
+```json
+{
+  "handoffHealth": {
+    "sizeKb": 64.2,
+    "lines": 707,
+    "thresholds": { "max_kb": 30, "max_lines": 400, "narrative_age_days": 3, "active_age_days": 14 },
+    "sectionStats": [
+      { "title": "...", "kind": "active|baseline|narrative", "date": "2026-05-22", "ageDays": 4, "startLine": 8 }
+    ],
+    "warnings": [
+      { "drift": "handoff-size-exceeded", "message": "HANDOFF.md is 64.2 KB ..." }
+    ]
+  }
+}
+```
+
+#### 2B.1b Rotate plan（超標時必跑）
+
+依 `sectionStats[].kind` 分組：
+
+| kind | 處置 |
+| --- | --- |
+| `active` | 留 HANDOFF |
+| `baseline` | 留 HANDOFF（標記為覆寫式段，下次 audit 同位置應仍存在但內容已更新） |
+| `narrative` | rotate candidate — 按 `date` 的 `YYYY-MM` 分桶，搬到 `docs/archives/<YYYY-MM>-handoff-narrative.md`（append-only） |
+
+**例外情境**：
+
+- **0 narrative 但 size/lines 仍超標**（clade 自家常見：baseline section 過度累積到 30+ 條）→ rotate plan **不**自動搬，改產出「baseline 拆檔建議清單」：哪幾個 baseline section 該拆到 `docs/archives/<YYYY-MM>-<topic>.md` / `docs/decisions/<topic>.md` / `docs/solutions/<topic>.md`，依 baseline section 主題判斷。user 拍板後手動執行。
+- **narrative dated section 跨多月** → 按月 group，每月一個 archive bucket。
+- **ambiguous section**（kind = baseline 但 title 是 dated；或 active/narrative 邊界不清）→ 保守留 HANDOFF + 在 chat 訊息列出，等下次 Mode B 重判。
+
+用 `request_user_input` 把 plan 呈給 user（terminal options）：
+
+- (A) 套用 rotate plan：把 N narrative section（共 K KB）搬到 `docs/archives/<YYYY-MM>-handoff-narrative.md`，HANDOFF.md 移除對應段
+- (B) 跳過此次 rotate（next session 再判，warning 仍會在 SessionStart surface）
+- (C) 手動編輯 HANDOFF.md，跳過自動 rotate（user 自己接手）
+
+**寫入規約**（A 路線執行時）：
+
+- Archive 檔開頭沿用 clade `docs/archives/` 既有 pattern：
+  ```markdown
+  # <YYYY-MM> Handoff Narrative
+
+  > 來源：`HANDOFF.md`（rotate by /handoff Mode B 2B.1）
+  > 本檔保留已完成 dated session narrative，月 bucket append-only
+  ```
+- 同月 archive 已存在 → append 新 section（不重建檔頭）
+- HANDOFF.md 同步刪除對應 section（**MUST** 在 Edit / Write 前 verify section title + startLine 對得上 audit 報的 stats）
+
+#### 2B.1c Reorganize（既有 2B.1 行為，保留）
+
+讀整理過的 HANDOFF.md，逐段再判一輪：
 
 | 內容類型 | 動作 |
 | --- | --- |
-| 已完成的 wave / 歷史 narrative | 移到 `docs/archives/<yyyy-mm>-<topic>.md` |
 | 與當前 SoT 矛盾（版本過時、檔案已不存在） | 修正或刪除 |
 | 重複條目（同一事在 HANDOFF / tech-debt / ROADMAP 都有） | 留最該的位置，其他刪 |
 | 寫法違反當前專案規則（如 clade 自治區內 `consumer 自治區工作` violation） | 依規則重寫或刪除 |
@@ -132,7 +198,7 @@ fi
 
 **MUST** 載入 `.claude/rules/local/*.md` 內所有自治區規則。若有 `clade-role-and-todo-discipline.md` 之類 local rule 限定 HANDOFF 寫法，整理時必須遵守。
 
-寫入 `HANDOFF.md` 與 archive 檔的路徑 **MUST** 用 Step 1.5 解析出的 `$MAIN_WT_PATH/HANDOFF.md` / `$MAIN_WT_PATH/docs/archives/<yyyy-mm>-<topic>.md`，不用 cwd 相對。
+寫入 `HANDOFF.md` 與 archive 檔的路徑 **MUST** 用 Step 1.5 解析出的 `$MAIN_WT_PATH/HANDOFF.md` / `$MAIN_WT_PATH/docs/archives/<YYYY-MM>-handoff-narrative.md` / `$MAIN_WT_PATH/docs/archives/<YYYY-MM>-<topic>.md`，不用 cwd 相對。
 
 ### 2B.1.5 Worktree & Stash 稽核
 
