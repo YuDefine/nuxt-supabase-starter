@@ -100,6 +100,8 @@ Local edits will be reverted by the next sync.
 
 #### MUST
 
+- **MUST** 跑 `npx void init --agents` 取得 official void skill + MCP — 這會 symlink `.claude/skills/void/` + `.claude/skills/migrate-vite-cloudflare-to-void/`（跟 `void` npm package version lockstep）、寫 `void mcp` 進 `.claude/settings.json`、patch `CLAUDE.md` + `.gitignore` + `nuxt.config.ts`（voidPlugin auto-patch）
+- **MUST** 後續 void CLI / config / runtime helper / `env.ts` / migration 等通用知識**走 official `void` skill 或 `void mcp`** (`search_docs` / `get_page docs/<path>.md`)；**NEVER** 從 consumer-side rule / project-specific note 複製 void CLI 命令當權威 — 那些 cache 容易跟 void 升版 drift
 - **MUST** 在根目錄存在 `void.json`，至少含 `target: "cloudflare"` + `worker.compatibility_date` + `worker.compatibility_flags`
 - **MUST** `void.json` 的 `worker.compatibility_flags` 在 `void@^0.8.x`（現行新 SDK）走以下**兩種配置擇一**：
   - **配置 2（純 v2）**：`["nodejs_compat_v2", "nodejs_als"]` — 走 workerd 原生 v2 process（無 unenv polyfill 衝突）
@@ -108,6 +110,8 @@ Local edits will be reverted by the next sync.
 - **MUST** CI workflow 走 `pnpm run deploy`（內部 `NITRO_PRESET=cloudflare-module void deploy`），帶 `VOID_TOKEN` GitHub secret
 - **MUST** package.json 帶 `void@^0.8.11`（**不是** legacy `@void-sdk/void@^0.6.x`，後者僅 quotation-generator main 過渡狀態）
 - **MUST** 在 `pnpm-workspace.yaml` 把 `vite` / `vitest` override 成 VoidZero fork（voidPlugin 需要 `parseSync` export，純 vite 沒有）
+- **MUST** `package.json scripts` 內 void deploy 命令**不可命名** `deploy` — pnpm 把 `deploy` 當保留字（workspace deploy 命令），跑 `pnpm deploy` 撞 `ERR_PNPM_NOTHING_TO_DEPLOY` 不會觸發 script。改用 `void:deploy`（或其他帶 prefix 的 name）；CI workflow / chat 引用走 `pnpm run void:deploy`。詳見 `docs/pitfalls/2026-05-27-pnpm-deploy-reserved-word.md`
+- **MUST** `void.json` + `wrangler.jsonc` 的 `compatibility_date` 對齊 official void Nuxt example（`.claude/skills/void/docs/integrations/frameworks/nuxt.md`；當前 2026-05 範例為 `2026-02-24`）— 保持跟 official 已驗證範例同步，避免不必要的 baseline drift
 
 #### MUST NOT
 
