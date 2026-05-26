@@ -215,6 +215,43 @@ group_block_for() {
   item_block_content "$parent_idx"
 }
 
+# v1.6.0 cross-file enrichment. For UI_URL_LOCALHOST_WITH_TUNNEL_AVAILABLE hits,
+# grep the consumer's `.env*` for TUNNEL_HOSTNAME so the remediation carries the
+# concrete tunnel host the author should swap in. Different model from
+# run_page_display_check: this one can also SUPPRESS the hit when the consumer
+# has no tunnel configured (e.g. yuntech-usr-sroi) — return exit 1 → main loop
+# `continue`s past the hit. Returns evidence string on stdout + exit 0 when the
+# hit should fire; exits 1 when the hit should be suppressed.
+run_tunnel_check() {
+  local line="$1"
+  local host=""
+  local source_env=""
+  # Scan common env file names + any `.env.<app>` for multi-app consumers (perno).
+  local candidates=("$REPO_ROOT/.env.local" "$REPO_ROOT/.env" "$REPO_ROOT/.env.development" "$REPO_ROOT/.env.dev")
+  while IFS= read -r ef; do
+    candidates+=("$ef")
+  done < <(find "$REPO_ROOT" -maxdepth 2 -type f -name '.env.*' 2>/dev/null)
+  for ef in "${candidates[@]}"; do
+    [ -f "$ef" ] || continue
+    local v
+    v=$(grep -E '^TUNNEL_HOSTNAME=' "$ef" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")
+    if [ -n "$v" ]; then
+      host="$v"
+      source_env="$ef"
+      break
+    fi
+  done
+  if [ -z "$host" ]; then
+    # No tunnel configured — suppress hit. The author legitimately needs localhost.
+    return 1
+  fi
+  # Strip absolute path prefix from source_env for readability.
+  local rel_env="${source_env#$REPO_ROOT/}"
+  printf '[tunnel-check] %s 有 TUNNEL_HOSTNAME=%s → 改寫 item URL 為 `https://%s/<path>?<query>`（保留原 path + query string）' \
+    "$rel_env" "$host" "$host"
+  return 0
+}
+
 # Layer A page-display enrichment (v1.5.0). For VERIFY_UI_SAMPLE_KEY_DISPLAY_CHECK
 # hits, reverse-grep the target .vue page so the remediation carries concrete
 # evidence (which identifier columns / literal key are present). Returns a
@@ -376,6 +413,18 @@ for i in $(seq 0 $((PATTERN_COUNT - 1))); do
       page_evidence=$(run_page_display_check "$line")
       if [ -n "$page_evidence" ]; then
         eff_remediation="${REMEDIATION} — ${page_evidence}"
+      fi
+    fi
+
+    # v1.6.0: UI_URL_LOCALHOST_WITH_TUNNEL_AVAILABLE — cross-file env check.
+    # Suppress when consumer has no TUNNEL_HOSTNAME (legitimate localhost-only
+    # consumers like yuntech-usr-sroi); enrich when tunnel exists.
+    if [ "$CODE" = "UI_URL_LOCALHOST_WITH_TUNNEL_AVAILABLE" ]; then
+      if ! tunnel_evidence=$(run_tunnel_check "$line"); then
+        continue
+      fi
+      if [ -n "$tunnel_evidence" ]; then
+        eff_remediation="${REMEDIATION} — ${tunnel_evidence}"
       fi
     fi
 

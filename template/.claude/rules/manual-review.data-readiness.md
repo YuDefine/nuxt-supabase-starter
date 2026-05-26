@@ -95,6 +95,31 @@ propose / ingest 階段命中即視為違反，**MUST** 改寫。
 3. **預期觀察具體化** — 每步寫清楚「應看到什麼 / 不應看到什麼」（具體 toast 文字、badge 狀態、欄位值、route 變化），**禁止**寫「畫面正常」「狀態正確」「操作完成」這類模糊驗收
 4. **UI 元素 MUST 用使用者可見文字指代** — 引用 button / tab / card / region / selector / input / link / dialog / toast 等 UI 元素時，**MUST** 用使用者畫面上實際看得到的文字（i18n string、button label、tab 名稱、卡片標題 / region heading、placeholder、aria-label fallback），**NEVER** 用 codebase 內部識別符（component name、檔名、CSS class、test-id、store action、API endpoint name、fixture id、**DB 欄位名 / capability flag（例 `total_quantity` / `has_vending_location` / snake_case schema 欄位）**、**spec template heading（例 `Resolved Questions` / `Open Questions` / `Why` / `Impact` / `Decision <N>`）**、**propose 寫作 process 內部詞（例 `actual <noun>` / `zero-location copy` / `null-state copy` / `verified annotation`）**、**半中半英 mixed term（例「未設 vending 位置」「vending 庫存」「slot 位置」「tool body 規劃」）**）。User 看 UI 找不到 codebase 內部識別符對應的位置，整條 item 失去可執行性。寫作者**MUST** 先打開頁面確認該元素 user 實際看到的文字是什麼，再寫進 item。若需 cross-reference schema-level concept（例強調 boolean flag 對應的業務語義），**MUST** 用 backtick + 中文 gloss 形式（例 「取料機位置 (`vending_location`)」），不要裸寫識別符
 
+### 反例：URL host 走 localhost 而非 tunnel
+
+該 consumer 有設 `TUNNEL_HOSTNAME` 卻在 item 寫 `http://localhost:<port>`：違反通則 § 1，user 開不了（手機 / iPad / 別台電腦無 localhost）、HTTPS-only feature（OAuth / WebAuthn / camera permission / `SameSite=None` cookie）也驗不到。`UI_URL_LOCALHOST_WITH_TUNNEL_AVAILABLE` audit pattern 會命中。
+
+❌ 不夠（<consumer-b> `.env.local` 有 `TUNNEL_HOSTNAME=tdms-dev.<maintainer-domain>` 卻寫 localhost）：
+
+```markdown
+- [ ] #2 [verify:ui] 首頁 `http://localhost:3000/?machine=9001` 監控表格 inline 顯示建議壽命與 info icon
+  - [ ] #2.1 [verify:ui] 以 admin session 開 `http://localhost:3000/?machine=9001`，normal table 中 `<consumer-b>-SEED-SUGGESTED-LIFE-HEAD-IQM-001` 這列的「壽命狀態」欄位同時顯示既有本輪壽命資訊與建議壽命 `143 秒`。
+```
+
+✅ 好（改用 tunnel host，保留原 path + query string）：
+
+```markdown
+- [ ] #2 [verify:ui] 首頁 `https://tdms-dev.<maintainer-domain>/?machine=9001` 監控表格 inline 顯示建議壽命與 info icon
+  - [ ] #2.1 [verify:ui] 以 admin session 開 `https://tdms-dev.<maintainer-domain>/?machine=9001`，normal table 中 `<consumer-b>-SEED-SUGGESTED-LIFE-HEAD-IQM-001` 這列的「壽命狀態」欄位同時顯示既有本輪壽命資訊與建議壽命 `143 秒`。
+```
+
+判斷準則（寫前自問）：
+
+- 「我寫 URL 前有沒有先 grep 該 consumer `.env*` 找 `TUNNEL_HOSTNAME`？」否 → 補做，依結果決定 host
+- Multi-app consumer（<consumer-a>: <client-a> 3040 / shared 3045）→ 依 change 觸碰的 app 反推 `.env.<app>`；無 app hint 在 propose 階段就問清楚
+- 該 consumer 真的沒設 tunnel（如 `<consumer-d>`）→ fallback `http://localhost:<port>/<path>` 是合法的；hook 會自動 suppress 此 pattern 不 fire
+- 完整解析 SOP、反向 mapping、fallback decision table：`~/offline/clade/vendor/snippets/tunnel-url-for-review/README.md`
+
 ### 反例：multi-card UI selector
 
 ❌ 不夠（用 Vue component 檔名指代區塊，user 看 UI 找不到「`SupplierComparison`」在哪）：
