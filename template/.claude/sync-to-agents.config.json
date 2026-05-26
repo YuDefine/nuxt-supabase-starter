@@ -294,6 +294,11 @@
       "mode": "source-pointer",
       "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
       "verify": []
+    },
+    "review-gui-surface.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
     }
   },
   "verification": {
