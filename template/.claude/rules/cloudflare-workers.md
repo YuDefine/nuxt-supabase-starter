@@ -103,19 +103,22 @@ Local edits will be reverted by the next sync.
 - **MUST** 跑 `npx void init --agents` 取得 official void skill + MCP — 這會 symlink `.claude/skills/void/` + `.claude/skills/migrate-vite-cloudflare-to-void/`（跟 `void` npm package version lockstep）、寫 `void mcp` 進 `.claude/settings.json`、patch `CLAUDE.md` + `.gitignore` + `nuxt.config.ts`（voidPlugin auto-patch）
 - **MUST** 後續 void CLI / config / runtime helper / `env.ts` / migration 等通用知識**走 official `void` skill 或 `void mcp`** (`search_docs` / `get_page docs/<path>.md`)；**NEVER** 從 consumer-side rule / project-specific note 複製 void CLI 命令當權威 — 那些 cache 容易跟 void 升版 drift
 - **MUST** 在根目錄存在 `void.json`，至少含 `target: "cloudflare"` + `worker.compatibility_date` + `worker.compatibility_flags`
-- **MUST** `void.json` 的 `worker.compatibility_flags` 在 `void@^0.8.x`（現行新 SDK）走以下**兩種配置擇一**：
-  - **配置 2（純 v2）**：`["nodejs_compat_v2", "nodejs_als"]` — 走 workerd 原生 v2 process（無 unenv polyfill 衝突）
-  - **配置 3（v1 + no_v2）**：`["nodejs_compat", "nodejs_als", "no_nodejs_compat_v2"]` — 顯式停 workerd 原生 v2，unenv polyfill 獨佔
+- **MUST** `void.json` 的 `worker.compatibility_flags` 在 `void@^0.8.x`（現行新 SDK）依 `inference.appType` 分流：
+  - **`appType: "framework"` (Nuxt / SvelteKit / Astro 等)**：**MUST** 走**配置 3**（`["nodejs_compat", "nodejs_als", "no_nodejs_compat_v2"]`）— 顯式停 workerd 原生 v2，unenv v1 polyfill 獨佔。配置 2（純 v2）對 Nitro `cloudflare-module` preset **不可用** — Nitro build 主動 warn「`Please consider replacing nodejs_compat_v2 with nodejs_compat ... or USE IT AT YOUR OWN RISK as it can cause issues with nitro`」+ deploy 撞 `Cannot read private member #t in get stdout`（yudefine-blog 2026-05-27 first-ever CI deploy 實證；blog 之前 prod live 是 user 本機 manual deploy 沒踩到）
+  - **`appType: "void"` (pure Vite+ void app，無 meta framework)**：**MUST** 走**配置 2**（`["nodejs_compat_v2", "nodejs_als"]`）— 直接吃 workerd 原生 v2，無 Nitro 中間層 polyfill 衝突
 - **MUST** `wrangler.jsonc` 的 `compatibility_flags` 與 `void.json` **對齊**（IDE schema / dev binding consistency；deploy 仍只看 void.json，但對齊避免 dev / prod 行為漂移）
 - **MUST** CI workflow 走 `pnpm run deploy`（內部 `NITRO_PRESET=cloudflare-module void deploy`），帶 `VOID_TOKEN` GitHub secret
 - **MUST** package.json 帶 `void@^0.8.11`（**不是** legacy `@void-sdk/void@^0.6.x`，後者僅 quotation-generator main 過渡狀態）
 - **MUST** 在 `pnpm-workspace.yaml` 把 `vite` / `vitest` override 成 VoidZero fork（voidPlugin 需要 `parseSync` export，純 vite 沒有）
 - **MUST** `package.json scripts` 內 void deploy 命令**不可命名** `deploy` — pnpm 把 `deploy` 當保留字（workspace deploy 命令），跑 `pnpm deploy` 撞 `ERR_PNPM_NOTHING_TO_DEPLOY` 不會觸發 script。改用 `void:deploy`（或其他帶 prefix 的 name）；CI workflow / chat 引用走 `pnpm run void:deploy`。詳見 `docs/pitfalls/2026-05-27-pnpm-deploy-reserved-word.md`
 - **MUST** `void.json` + `wrangler.jsonc` 的 `compatibility_date` 對齊 official void Nuxt example（`.claude/skills/void/docs/integrations/frameworks/nuxt.md`；當前 2026-05 範例為 `2026-02-24`）— 保持跟 official 已驗證範例同步，避免不必要的 baseline drift
+- **MUST** 對使用 `void/schema-d1` drizzle schema 的 consumer 安裝 `patch-void-deploy.mjs` postinstall hook — `void@0.8.x` 的 SQLite migration handler 走 `copyFileSync` 不 bundle deps（`deploy-OPo_tSWl.mjs:1994`，對比 postgres handler 走 `bundlePgMigrationHandler` rollup bundle），handler 內 `import "../canonical-json-XXX.mjs"` 指向沒被 emit + 也不在 worker upload set 的 path → CF Workers 撞 10021 internal error。範本見 `vendor/snippets/cloudflare-workers/patch-void-deploy.mjs`，wire 進 `package.json` postinstall：`"postinstall": "nuxt prepare && node scripts/patch-void-deploy.mjs"`。Upstream issue [void-sdk/void#52](https://github.com/void-sdk/void/issues/52) 修了後可移除
 
 #### MUST NOT
 
 - **MUST NOT** `void@^0.8.x` 用配置 1（`["nodejs_compat", "nodejs_als"]` 不含 `no_nodejs_compat_v2`）— **必撞** worker upload err 10021 (`Cannot read private member #t ... in get stdout`)，**重 deploy 不會好**。Root cause：unenv polyfill + workerd 原生 v2 雙跑 → `Process` class private field receiver mismatch → top-level eval crash。詳見 [pitfall doc](../../docs/pitfalls/2026-05-25-void-cloud-voidjson-compat-flags-10021.md)
+- **MUST NOT** `appType: "framework"` consumer 用配置 2（純 v2）— 同樣撞 `#t` error（per yudefine-blog 2026-05-27 first-ever CI deploy 經驗），且 Nitro 主動 warn「USE AT YOUR OWN RISK as it can cause issues with nitro」。framework type **MUST** 走配置 3，per 上文 MUST 區塊分流規則
+- **MUST NOT** 對使用 drizzle schema 的 consumer 跳過 `patch-void-deploy.mjs` postinstall hook — 沒 patch 必撞 10021（SQLite handler 引用沒 emit 的 `canonical-json-XXX.mjs`）。即使 consumer 目前 `void.json inference.bindings.db: false` 或暫無 schema，**建議**先裝 patch script 作 future-proof（hook idempotent，no-op when target line not present）
 - **MUST NOT** 假設 nitro `cloudflare.nodeCompat: true/false` 能影響 void.cloud deploy 的 compat flags — 完全無效，flag 來源是 void.json，**不是** `.output/server/wrangler.json`
 - **MUST NOT** 把 void.cloud 必要 secrets（`VOID_TOKEN`、runtime secrets）放在 wrangler-action 派的 GitHub secret 流程裡 — void 有自家 `void secret set` CLI 與 token 機制（user-bound interactive step）
 
@@ -319,7 +322,9 @@ export function getDb(event: H3Event) {
 8. **（新增 2026-05-27）** Track B 偵測 — 根目錄存在 `void.json` 且 `package.json` 含 `void@^0.8.x`（不是 `@void-sdk/void`），但 `void.json` `worker.compatibility_flags`：
    - 含 `nodejs_compat` 但**不含** `nodejs_compat_v2` 且**不含** `no_nodejs_compat_v2` → `void.compat_flags_unsafe`（配置 1 in void@^0.8 = 必撞 10021）
    - `wrangler.jsonc` `compatibility_flags` ≠ `void.json` `worker.compatibility_flags` → `void.compat_flags_drift`（IDE / dev parity gap）
+   - **（新增 2026-05-27 PM）** `inference.appType: "framework"` + `compatibility_flags` 為配置 2（純 `["nodejs_compat_v2", "nodejs_als"]`，無 `no_nodejs_compat_v2`）→ `void.compat_flags_unsafe_framework`（framework type 用配置 2 撞 Nitro polyfill 衝突 + `#t` error）
 9. **（新增 2026-05-27）** Track B + 帶 `@nuxthub/core` dep → `void.redundant_nuxthub_dep`（per § 1 矩陣第三/四列）
+10. **（新增 2026-05-27 PM）** Track B + `void.json inference.bindings.db: true`（或 `db/schema.ts` 含 `void/schema-d1` import）但 `package.json scripts.postinstall` 不含 `patch-void-deploy.mjs` 呼叫 → `void.missing_handler_emit_patch`（per void-sdk/void#52）
 
 每個 violation 帶 `consumer_id` + `path` + `rule_section` reference，per [[improvement-loop]] 五項分層 metric report。
 
@@ -335,8 +340,8 @@ export function getDb(event: H3Event) {
 | <consumer-d> | Supabase | A (wrangler-action) | ❌ | n/a |
 | <consumer-b> | Supabase | A (wrangler-action) | ❌ | n/a |
 | nuxt-supabase-starter | Supabase | A (wrangler-action) | ❌ | n/a |
-| **co-purchase** | Cloudflare D1（void 自管）| **B (void.cloud)** | ❌ | 配置 3（v1 + no_v2）|
-| yudefine-blog（非 registry）| Cloudflare D1（void 自管）| B (void.cloud) | ❌ | 配置 2（純 v2）|
+| **co-purchase** | Cloudflare D1（void 自管）| **B (void.cloud)** | ❌ | 配置 3（v1 + no_v2）+ patch-void-deploy postinstall hook |
+| yudefine-blog（非 registry）| Cloudflare D1（void 自管，via @nuxt/content adapter）| B (void.cloud) | ❌ | 配置 3（v1 + no_v2）+ patch-void-deploy postinstall hook（2026-05-27 PM 從配置 2 修到 3：framework type 配置 2 撞 `#t` error，配置 3 才過 CI first-ever deploy）|
 | quotation-generator（非 registry）| Cloudflare D1（void 自管）| B (void.cloud) | ❌ | main：配置 1 + `@void-sdk/void@^0.6.x` 舊 SDK；vp-void-migration worktree：配置 3 + `void@^0.8.x` |
 
 未來新 consumer 加入時，依此表決定派別 + 跟 cookbook 對齊。改派（例：某 consumer 從 Supabase 遷 D1、從 wrangler-action 遷 void.cloud）必須同步：
