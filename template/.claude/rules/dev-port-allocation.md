@@ -65,9 +65,10 @@ Local edits will be reverted by the next sync.
 
 凡 consumer 用 `vite-plugin-cloudflare-tunnel` 開 dev tunnel：
 
-- **MUST** 透過 **pre-flight token verify + try-catch wrapper** 呼叫 `viteCloudflareTunnel`，token verify 失敗 / network 失敗 / hostname 缺漏時 fallback 純 localhost、**NEVER** 讓 plugin throw 進 Nuxt
-- **NEVER** 在 `nuxt.config.ts` 內**裸呼叫** `viteCloudflareTunnel({...})`（即 plugin call 不在 try-catch / async fn / pre-flight verify 之內）— 此寫法視為 anti-pattern
-- **MUST** pre-flight verify 用 `AbortController` 設 ≤ 3s timeout，避免 Cloudflare 10502 lockout 期 API 阻塞拉長 dev startup time
+- **MUST** 透過 **pre-flight token probe + try-catch wrapper** 呼叫 `viteCloudflareTunnel`，probe 失敗 / network 失敗 / hostname 缺漏時 fallback 純 localhost、**NEVER** 讓 plugin throw 進 Nuxt
+- **NEVER** 在 `nuxt.config.ts` 內**裸呼叫** `viteCloudflareTunnel({...})`（即 plugin call 不在 try-catch / async fn / pre-flight probe 之內）— 此寫法視為 anti-pattern
+- **MUST** pre-flight probe 用 `AbortController` 設 ≤ 3s timeout，避免 Cloudflare 10502 lockout 期 API 阻塞拉長 dev startup time
+- **MUST** probe endpoint 用 `GET /accounts`（plugin 真正會跑的第一支 call），**NEVER** 用 `/user/tokens/verify`（後者需 token 含 `User Details:Read` permission，多數 Tunnel-only token 沒給 → 會把好 token 誤判 invalid，wrapper 永遠 fallback localhost、tunnel 永遠起不來）
 
 範本 + verify helper 見 [`vendor/snippets/dev-tunnel-resilient/`](../../vendor/snippets/dev-tunnel-resilient/)。直接抄 `nuxt.config.ts.template` 改少數 placeholder（port、env key name）即可。
 
