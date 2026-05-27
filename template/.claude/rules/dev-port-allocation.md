@@ -61,6 +61,30 @@ Local edits will be reverted by the next sync.
 | Notion `Scrects` 的 `cfut_*`「YuDefine - for Worker 通用」 | 設計給 wrangler deploy / Worker 用，無 SSL:Edit |
 | user 自行透過 dashboard 建的 limited-scope token | 多半漏 SSL 或漏 Tunnel；要建 token 一定要對齊上面 3 條權限 |
 
+### 2.6. Dev tunnel resilient pattern（防 Nuxt restart loop → CF 10502 lockout）
+
+凡 consumer 用 `vite-plugin-cloudflare-tunnel` 開 dev tunnel：
+
+- **MUST** 透過 **pre-flight token verify + try-catch wrapper** 呼叫 `viteCloudflareTunnel`，token verify 失敗 / network 失敗 / hostname 缺漏時 fallback 純 localhost、**NEVER** 讓 plugin throw 進 Nuxt
+- **NEVER** 在 `nuxt.config.ts` 內**裸呼叫** `viteCloudflareTunnel({...})`（即 plugin call 不在 try-catch / async fn / pre-flight verify 之內）— 此寫法視為 anti-pattern
+- **MUST** pre-flight verify 用 `AbortController` 設 ≤ 3s timeout，避免 Cloudflare 10502 lockout 期 API 阻塞拉長 dev startup time
+
+範本 + verify helper 見 [`vendor/snippets/dev-tunnel-resilient/`](../../vendor/snippets/dev-tunnel-resilient/)。直接抄 `nuxt.config.ts.template` 改少數 placeholder（port、env key name）即可。
+
+#### 為什麼需要這層 wrapper
+
+`vite-plugin-cloudflare-tunnel@1.0.12` 的 `retryWithBackoff`（`dist/index.mjs:286-304`）**只包 SSL cert 端點**，第一支 auth API call `GET /accounts`（line 520）裸跑無 retry。token invalid 時：
+
+1. Plugin throw `Error("[cloudflare-tunnel] API request failed: ...")`
+2. Nuxt dev 把 plugin throw 當 fatal → auto-restart
+3. 重啟 → plugin 重新 setup → 又打 `/accounts` → 又 throw → 無延遲 spin loop
+4. 十幾秒內可累積數十次 auth attempt → 觸發 Cloudflare `code 10502 Too many authentication failures` lockout（經驗值 15–60 分鐘）
+5. Lockout 期內**任何** token verify（含貼有效新 token）都回 `code 1000 Invalid API Token`（防 enumeration）— 誤導 user 以為「新 token 也壞」
+
+Wrapper 把這條鏈在第一步切斷：token verify 失敗 → log warn → 回 `plugins: []` → Nuxt 走純 localhost、不 throw、不 restart。
+
+詳見 [[pitfall-vite-plugin-cloudflare-tunnel-restart-loop-lockout]]。
+
 ### 3. Registry 唯一性
 
 - **MUST** 新 consumer 進 `registry/consumers.json` 必須認領未用的 +10 號 port（3000, 3010, 3020, …）
