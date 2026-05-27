@@ -861,10 +861,10 @@ If there is no AskUserQuestion tool available, present options as plain text and
    **NEVER** 在主線未嘗試 self-collect 一輪的情況下丟整批 evidence-missing 給 user 自己點 review-gui「📋 補 evidence prompt」按鈕（per [[manual-review]] § review-gui 補 evidence prompt 路徑分類：補 prompt 是 fallback 不是 default）。
 
    - **DEFAULT path**: Reply to the user with something like:
-     > Implementation 完成。Step 8a 已處理 verify channels：automatic `[verify:e2e]` / `[verify:api]` items 已寫 annotation 並自動完成；含 `[verify:ui]` / `[review:ui]` 的 `<N>` 項仍待你確認。請在 **clade home**（`~/offline/clade`）執行 `pnpm review:ui` 開本地 GUI 驗收（review-gui 從 clade home 跑會自動聚合所有 consumer + worktree change；consumer 端直接跑會被 clade-only guard 擋下）：
+     > Implementation 完成。Step 8a 已處理 verify channels：automatic `[verify:e2e]` / `[verify:api]` items 已寫 annotation 並自動完成；含 `[verify:ui]` / `[review:ui]` 的 `<N>` 項仍待你確認。請在 **clade home**（`~/offline/clade`）執行 `pnpm review` 開本地 GUI 驗收（review-gui 從 clade home 跑會自動聚合所有 consumer + worktree change；consumer 端直接跑會被 clade-only guard 擋下；`pnpm review` dev mode default ON，改 review-gui source 自動 reload）：
      >
      >   cd ~/offline/clade
-     >   pnpm review:ui
+     >   pnpm review
      >
      > GUI 啟動後直接打開：
      >

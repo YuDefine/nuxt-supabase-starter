@@ -1,6 +1,6 @@
 ---
 name: review-readiness-scan
-description: 掃描 openspec/changes/ 各 change 的 manual-review 區塊，判斷哪些已 ready for 人工檢查、哪些被 Pre-Review Data Readiness pattern 命中（alert）尚未 ready，並把結果登記到 HANDOFF.md。Use when 使用者說「掃 review readiness」「review:ui 哪些 ready」「scan manual review alerts」「批次人工檢查前先看哪些 ready」「找出 review:ui 的 alert」。不適用於單一 change 內逐項 review（那走 `pnpm review:ui` GUI）。
+description: 掃描 openspec/changes/ 各 change 的 manual-review 區塊，判斷哪些已 ready for 人工檢查、哪些被 Pre-Review Data Readiness pattern 命中（alert）尚未 ready，並把結果登記到 HANDOFF.md。Use when 使用者說「掃 review readiness」「review:ui 哪些 ready」「scan manual review alerts」「批次人工檢查前先看哪些 ready」「找出 review:ui 的 alert」。不適用於單一 change 內逐項 review（那走 `pnpm review` GUI，從 clade home 跑）。
 license: MIT
 metadata:
   author: clade
@@ -10,7 +10,7 @@ metadata:
 
 # review-readiness-scan
 
-主動掃描 consumer 端所有 active change 的 `## 人工檢查` 區塊，把「已 ready / 尚未 ready」分組寫入 `HANDOFF.md`，讓使用者能在合適時機**批次**跑 `pnpm review:ui`，而不是每條 change 個別開 GUI 才知道沒準備好。
+主動掃描 consumer 端所有 active change 的 `## 人工檢查` 區塊，把「已 ready / 尚未 ready」分組寫入 `HANDOFF.md`，讓使用者能在合適時機**批次**跑 `pnpm review`（從 clade home），而不是每條 change 個別開 GUI 才知道沒準備好。
 
 **前置**：consumer 必須已從 clade 散播到 `scripts/review-gui.mts`（5 consumer 預設都有；若沒有，跑 `pnpm hub:check` 確認）。
 
@@ -76,7 +76,7 @@ HANDOFF.md 用 marker 包夾，每次重跑**覆蓋同一段**（不累積垃圾
 
 ### ✅ 可以開始檢查（N changes）
 
-可批次跑 `pnpm review:ui` 處理；每行直接列 `reviewUrl`，不要重新手組 URL：
+可批次跑 `pnpm review`（從 clade home）處理；每行直接列 `reviewUrl`，不要重新手組 URL：
 
 - `<changeKey>` — pending N/total — `<reviewUrl>`
 - ...
@@ -134,7 +134,7 @@ Ready deep-links 已寫入 HANDOFF.md；需要 fix 的先看 bucket / hitsByCode
 
 ## 何時 NOT 觸發
 
-- 使用者只想跑單一 change 的人工檢查 → 直接 `pnpm review:ui`，不需要 scan
+- 使用者只想跑單一 change 的人工檢查 → 直接 `cd ~/offline/clade && pnpm review`，不需要 scan
 - 使用者問「現在有哪些 active change」這類純列表 → 用 `spectra list`，scan 是 readiness 評估不是 change 列表
 - consumer 沒有 `openspec/changes/` 目錄（非 spectra 專案）→ scan 會輸出空，回 user 「此專案沒有 openspec/changes/，跳過」
 
