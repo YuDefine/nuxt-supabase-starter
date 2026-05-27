@@ -144,7 +144,44 @@ Commit 後 **MUST**：
 git show --stat HEAD | tail -3
 ```
 
-Changed files 數量 / 路徑 vs 預期不符 → **STOP** + revert（`git reset --soft HEAD~1` 把改動退回 staged；**NEVER** `git reset --hard`，per 本檔 § WIP 處置禁令）+ 用 `git commit --only` 重做。
+Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery from mixed commit (multi-session safety)（**NEVER** 反射性 `git reset --soft HEAD~1` — multi-session 環境下 HEAD 可能不是你預期的 HEAD，反射性 reset 會吃掉別 session 的 commit）。
+
+### Recovery from mixed commit (multi-session safety) — hard rule
+
+撞到 mixed commit / commit scope drift（`git show --stat HEAD` 含預期外 file）後，agent **MUST**：
+
+1. **STOP + 列現狀**（**禁止**動 git history 之前先看清楚）：
+
+   ```bash
+   git log --oneline -5
+   git reflog HEAD | head -10
+   ps aux | grep -E "codex|claude" | grep -v grep   # 偵測活躍別 session
+   git stash list                                    # 別 session 的 stash 是否仍持有 WIP
+   ```
+
+2. **AskUserQuestion 給 user 拍板**，選項至少含：
+   - (A) **接受 mixed commit + 登記 cleanup** — commit 留 history，push 前處理（最安全）
+   - (B) **立即 reset/rebase 修復** — user **MUST** 對 multi-session race risk 知情同意
+   - (C) **等並行 session 收斂再評估** — 短期不動 history
+
+3. **NEVER** 自行跑 `git reset --soft HEAD~N` / `git rebase -i HEAD~N`（**任何 relative reference**）— `HEAD~N` 在 race window 內可能指到別 session 的 commit（多次實證）：
+   - 第一次 reset 可能吃 race window 內別 session 已 commit 的東西
+   - 第二次 reset 可能再吃下一條別 session commit
+   - `git rebase -i HEAD~N` 鎖目標時若別 session 同期 commit，rebase 鎖錯目標
+   - 從 1 個 mixed commit 升級成 4+ 個破壞性 git operation 是已實證 incident
+
+4. 若 user 選 (B) → **MUST** 用 **specific SHA reference**（不是 `HEAD~N` / `HEAD^`），且**先**建 backup tag 保險：
+
+   ```bash
+   git tag backup-before-recovery-$(date +%s) <current-HEAD-SHA>
+   git rebase -i <specific-parent-SHA>  # 不用 HEAD~N
+   ```
+
+5. **NEVER** 在 multi-session 並行活躍時跑 `git rebase` split mixed commit — 後續 commit 跟 mixed 內容 overlap 機率高，rebase replay 會撞 conflict（已實證：spectra-archive 把某目錄 mv 到 archive 跟 mixed commit 內同目錄 staged change overlap → `git rebase --continue` 撞 `file not found` conflict）。等並行 session 收斂後再評估 history rewrite。
+
+6. **撞坑後**亦 **MUST** 在 [`docs/pitfalls/`](../../docs/pitfalls/) 對應 entry 加 regression evidence section（per `plugins/hub-maintenance-full/skills/oops/SKILL.md` Mode B Step 1 dedupe 命中既有 pitfall 時的 update 路徑）；reflexive recovery 不只是當下的災害，是 prevention coverage gap 的 signal。
+
+Cross-ref：[[pitfall-consumer-ad-hoc-commit-eats-other-session-staged]] § Regression Evidence — 2026-05-28 <consumer-b> session（完整 incident timeline + recovery 多層坑教訓）。
 
 ### Fleet sweep 升級規約
 
