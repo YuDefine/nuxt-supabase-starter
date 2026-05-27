@@ -417,7 +417,7 @@ PY
 
 | 類別 | 用途 | 資料夾 | 檔名 | review GUI 是否會自動載入 |
 | --- | --- | --- | --- | --- |
-| **A. 人工檢查截圖** | 對應 spectra change tasks.md `## 人工檢查` 各 item | **MUST** `screenshots/<env>/<change-name>/`（資料夾名 == change name，不是 phase / section / 自由語義） | **MUST** `#<item-id>[<variant>]-<descriptor>.png`（id 與 tasks.md `## 人工檢查` 的 `#N` / `#N.M` 完全相等） | ✅ 是，`pnpm review:ui` 自動配對 |
+| **A. 人工檢查截圖** | 對應 spectra change tasks.md `## 人工檢查` 各 item | **MUST** `screenshots/<env>/<change-name>/`（資料夾名 == change name，不是 phase / section / 自由語義） | **MUST** `#<item-id>[<variant>]-<descriptor>.png`（id 與 tasks.md `## 人工檢查` 的 `#N` / `#N.M` 完全相等） | ✅ 是，`pnpm review`（從 clade home）自動配對 |
 | **B. Ad-hoc / debug 截圖** | 探索、debug、screenshot review 視覺 QA、其他驗證 | `screenshots/<env>/<semantic-topic>/`（自由語義） | 自由命名 | ❌ 否 |
 
 **兩類混在同一資料夾 = review GUI 配對失敗**。截圖前**MUST** 先確定這次拍的是 A 還是 B：
@@ -1093,7 +1093,7 @@ export default defineEventHandler(async (event) => {
 node scripts/spectra-advanced/audit-screenshot-quality.mts <change-name> --fail-on-issues
 ```
 
-若有 warning / critical，先整理 `_exploration/`、補拍 final-state、或回報主 session 補 `@no-screenshot`，不要把問題留給使用者在 `pnpm review:ui` 裡猜。
+若有 warning / critical，先整理 `_exploration/`、補拍 final-state、或回報主 session 補 `@no-screenshot`，不要把問題留給使用者在 `pnpm review` 裡猜。
 
 > Vendor script 直接呼叫，不依賴 consumer 端 `package.json` 是否有 `spectra:audit-screenshots` npm script — sync-vendor 會把 `audit-screenshot-quality.mts` 散播到每個 consumer 的 `scripts/spectra-advanced/`。
 

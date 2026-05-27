@@ -351,11 +351,11 @@ User 透過 `request_user_input` 選定下一步 outstanding（含明確的 next
 
 **Parent cwd 不動 invariant**：`/wt` Form 3 內部用 subagent 進 worktree 跑 next-skill，主線（當前 chat session）cwd 全程在 main worktree，per [[worktree-default]] §1。先前 `wt-relax-for-archive-and-handoff` change 引入的 `--dispatch-from-handoff` flag 已**移除**，**禁止**在 args 內帶此 flag。
 
-**Review:ui dispatch scope rule**：`pnpm review:ui` flow dispatch 前 **MUST** 引用 §2B.1.7 scan 結果確認該 change 落 `ready` bucket 或對應 user-actionable bucket。三類非 ready bucket 走不同入口（**NEVER** 一律推 review:ui）：
+**Review:ui dispatch scope rule**：`pnpm review` flow dispatch 前 **MUST** 引用 §2B.1.7 scan 結果確認該 change 落 `ready` bucket 或對應 user-actionable bucket。三類非 ready bucket 走不同入口（**NEVER** 一律推 review:ui）：
 
 | Scan bucket | 真實下一步 | 入口 |
 | --- | --- | --- |
-| `ready` | user 在 review GUI 點 OK / Issue / Skip | `cd ~/offline/clade && pnpm review:ui` + deep-link |
+| `ready` | user 在 review GUI 點 OK / Issue / Skip | `cd ~/offline/clade && pnpm review` + deep-link |
 | `feedbackGiven` | agent 先補 verify-* annotation evidence；user 後續在 review GUI 點 OK | 主線跑 verify channel（per `manual-review.md` Step 8a），補 annotation 後 → review GUI |
 | `awaitArchiveWalkthrough` | 跑 `/spectra-archive` Step 2.5 walkthrough，純 `[discuss]` items 由 Claude evidence-based 討論後勾 | `/spectra-archive <change-name>` |
 | `readyForEvidence` | agent 補 verify-* annotation（同 `feedbackGiven`）；scan 顯示 evidenceMissing list 含具體 item | 主線跑 verify channel |
