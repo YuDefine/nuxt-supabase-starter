@@ -58,6 +58,12 @@ Apply 階段中偵測到以下任一信號 → 必須立即處理：
 
 **心智模型**：ingest 是「這個 change 自己要改」；tech-debt / handoff / roadmap 是「這個 change 之外的事」。分不清時預設走 ingest，不要為了維持原 proposal 敘述而把應補項偽裝成 follow-up。
 
+### review:ui 觸發 ingest 的後續順序（hard rule）
+
+當 review:ui round N 留下的 issue triage 路由到 (C) Spec gap → `/spectra-ingest`，**MUST** 完成 ingest **與**後續 `/spectra-apply` 落 code（含新增 verify item 的 evidence collection）全部之後，才回到 review-gui 做最終 OK/Issue/Skip 人工檢查。**禁止**在 ingest 完、apply 還沒跑、就引導 user 中段評估，**禁止**「fix → commit → ingest → apply → commit」分兩段 commit ceremony 跑。
+
+理由：ingest 會新增 verify items，這些 item 在 apply 落地前無 evidence；user 對中間態評估會誤判「change 全完成」、Claude 接 archive trigger 提前歸檔；兩段 commit 也讓 spec 跟 code 暫時不同步。詳見 [[manual-review]] § 人工檢查時機。
+
 ## UX Completeness Gate（補充 Design Gate）
 
 **Design Gate 檢查 UI 視覺品質；UX Completeness Gate 檢查 UI 功能覆蓋**。
