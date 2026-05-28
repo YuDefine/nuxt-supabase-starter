@@ -20,10 +20,10 @@ Local edits will be reverted by the next sync.
 | **Web search**（網頁搜尋、即時資料、外部資訊查詢） | **Codex（GPT-5.5 medium）** | 搜尋型查詢適合中等思考預算 + Codex 的搜尋整合；不浪費 Claude Code 的 context 與 token。 |
 | **Code review（commit 0-A）** | **(1) `/code-review`（claude 3 並行 agent：reuse / quality / efficiency） + (2) `codex review --uncommitted` xhigh（GPT-5.5）** | claude 多角度覆蓋廣度 + codex 跨模型 + xhigh 深思補 bug / 邏輯 / 安全盲點；單輪即可，「第二雙眼」由大改動回扣 + 0-C 兜底。詳見 `.claude/skills/commit/SKILL.md` Step 0-A。 |
 | **Spectra `propose` 階段（draft）** | **預設 Codex GPT-5.5 xhigh draft，無 A/B 詢問**（除非使用者明確要求純 Claude） | propose 是抽象決策 + 高思考預算工作；codex xhigh draft + 主線 cross-check 比擇一執行更穩。詳見 `spectra-propose` Step 0。 |
-| **Spectra `propose` cross-check** | **主線 Claude Opus 4.7 xhigh** | codex 回後主線必跑：post-propose-check + design-inject + 主線補 Design Review 7 步 template + spectra analyze。主線 = quality gate，不只是 dispatcher。 |
+| **Spectra `propose` cross-check** | **主線 Claude Opus 4.8 xhigh** | codex 回後主線必跑：post-propose-check + design-inject + 主線補 Design Review 7 步 template + spectra analyze。主線 = quality gate，不只是 dispatcher。 |
 | **Spectra `apply`（非 Design Review、非 UI view phase，phase 粒度）** | **Codex GPT-5.5 high**（不要 medium） | mechanical 寫 code 用 high 夠；medium 漏 schema drift / cross-file refactor / enum exhaustiveness 風險高。phase 粒度避免大量 round-trip。 |
-| **Spectra `apply` UI view phase（component / page / view / layout / styling）** | **主線 Claude Opus 4.7 xhigh，永不派 codex** | UI view 層的視覺 / 互動 / a11y 細節需要與 Design skill 緊耦合，Codex 在此領域 tooling 弱。Frontend 但非 view 的工作（store / hook / API client / type / util）不在此範圍，仍走 codex。 |
-| **Spectra `apply` Section 7（Design Review）** | **主線 Claude Opus 4.7 xhigh，永不派 codex** | Design skill（`/impeccable *` / `/design improve` / `/impeccable audit` / review-screenshot）是 Claude Code 一等公民，Codex 在此領域 tooling 弱。 |
+| **Spectra `apply` UI view phase（component / page / view / layout / styling）** | **主線 Claude Opus 4.8 xhigh，永不派 codex** | UI view 層的視覺 / 互動 / a11y 細節需要與 Design skill 緊耦合，Codex 在此領域 tooling 弱。Frontend 但非 view 的工作（store / hook / API client / type / util）不在此範圍，仍走 codex。 |
+| **Spectra `apply` Section 7（Design Review）** | **主線 Claude Opus 4.8 xhigh，永不派 codex** | Design skill（`/impeccable *` / `/design improve` / `/impeccable audit` / review-screenshot）是 Claude Code 一等公民，Codex 在此領域 tooling 弱。 |
 | **`screenshot-review` verify mode**（spectra-apply Step 8a `[verify:ui]` channel、`/spectra-archive` 前視覺 QA、verify-channel 補拍 screenshot） | **主線 Claude 直派 Codex GPT-5.5 low**（用 Bash 走 `agent-routing.codex-watch-protocol.md` § Codex 派工的標準流程；**禁止** `Agent` tool with `subagent_type: screenshot-review` — sonnet wrapper 已多次驗證自做工作繞過 codex dispatch） | sonnet wrapper 反覆無法 enforce Step 0 字面身份檢查（2026-05-19 align-shipments-rls-auth + 2026-05-23 warehouse Re-Design 兩起 incident），主線直派 codex 是唯一可靠路徑。詳見 [`agent-routing.codex-watch-protocol.md`](./agent-routing.codex-watch-protocol.md) § screenshot-review Verify Mode Dispatch + [[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]。 |
 | **Dev/test admin session cookie 取得**（verify channel evidence collection 階段 agent 需要 admin / fixture / per-role session cookie 跑 `[verify:api]` curl 或 `[verify:ui]` browser auth） | **主線自己 scaffold `_dev-login` route via clade cookbook + curl mint session**（**禁止**要求 user 走 Google OAuth + DevTools 複製 cookie；scaffold 前**MUST**先用 detection helper 確認真的 missing — 別走 lazy grep） | Cookie 取得是 agent autonomy 範圍內可解的事；clade 已備 canonical pattern（`rules/modules/auth/<auth-module>/dev-login.md` + `vendor/snippets/dev-auth/templates/` + `vendor/snippets/dev-auth/lib/detect-dev-login-route.mjs` detection helper + `scripts/audit-dev-login-adoption.mjs` audit signal）+ 4/6 consumer reference impl (<consumer-b> legacy / <consumer-a> monorepo / <consumer-d> canonical / <consumer-c> better-auth-post)。詳見 [[manual-review.backend]] § Dev-login route missing → scaffold-first hard rule + [[pitfall-agent-asks-user-cookie-skipping-dev-login-scaffold]]。 |
 
@@ -44,9 +44,9 @@ Claude Code session 收到 spectra propose 請求時：
 1. Read tasks.md，按 `## N.` 切分 phase
 2. **每個 phase 三類分類**（依序判定，命中即停）：
    - **A. Design Review phase**：標題含 "Design Review" 或內容含 `/design improve` / `/impeccable audit` / `/impeccable *` / `review-screenshot`
-     → **主線 Claude Opus 4.7 xhigh 自己做，永不派 codex**
+     → **主線 Claude Opus 4.8 xhigh 自己做，永不派 codex**
    - **B. UI view phase**：phase 內任一 task 描述/路徑指涉 view 層檔案——`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且該 phase 沒有摻入非 view 的 frontend / backend 工作**（store / hook / API client / type / util / migration / API server）
-     → **主線 Claude Opus 4.7 xhigh 自己做，永不派 codex**
+     → **主線 Claude Opus 4.8 xhigh 自己做，永不派 codex**
    - **C. 其他 phase**：上述兩類以外（schema、migration、API server、CLI、純 backend、frontend 但非 view 的 store / hook / API client / type / util、unit test、docs）
      → **派 background codex GPT-5.5 high 做完整 phase**
 3. **混雜 phase fallback**（A、B 都不是純 view、又混雜 view 與非 view 工作）：
