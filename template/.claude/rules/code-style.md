@@ -67,9 +67,10 @@ oxfmt 不會自動 fallback 讀 `.oxfmtignore`（只有 `.prettierignore` / `.gi
 **NEVER** 在 `package.json` `dependencies` / `devDependencies` 安裝：
 
 - `eslint`、`@typescript-eslint/*`、任何 `eslint-config-*` / `eslint-plugin-*`
+- `@nuxt/eslint`、`@nuxt/eslint-config`、`@nuxt/eslint-module`（Nuxt 的 ESLint 整合 module — Vite+ 已內建 oxlint，裝它等於並存兩套 linter）
 - `prettier`、`@trivago/prettier-plugin-*`、任何 `prettier-plugin-*`
 
-例外：當第三方套件（如 husky / lint-staged / Nuxt module）的 peer dependency 強制要求時，可保留，但**不該被 user code 直接呼叫**。
+例外：當第三方套件（如 husky / lint-staged）的 peer dependency 強制要求時，可保留，但**不該被 user code 直接呼叫**。`@nuxt/eslint` 是 opt-in module（不是任何套件的強制 peer dep），不適用此例外 — 直接移除。
 
 ### 禁止依賴全域 vite-plus（hard rule）
 
