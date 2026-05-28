@@ -398,7 +398,7 @@ Agent 端的對應規範（hard budget、checkpoint、fail-fast、progress.json 
 - **NEVER** 自決定 TaskStop verify agent — 必須先 AskUserQuestion(除非 agent 已自我宣告 time-budget-exhausted)
 - **NEVER** 把 progress.json read 想成 poll agent — 它是 read static file，agent 在另一條 loop 寫盤；不違反 polling 規則
 - **NEVER** brief 漏掉 Hard budget / Checkpoint cadence / Fail-fast / 單 call ≤ 1 語義動作 — 缺任一條都會把 agent 推向歷史失控模式
-- **NEVER** 把多個 verify item round-trip 包進同一 `browser-harness -c '...'` call 後派出去 — agent 端 SKILL 已明訂禁止，但 brief 內提供的範例 / 模板也不能違反
+- **NEVER** 把多個 verify item round-trip 包進同一 `browser-harness <<'PY' … PY` heredoc call 後派出去 — agent 端 SKILL 已明訂禁止，但 brief 內提供的範例 / 模板也不能違反
 
 ## Codex `$spectra-apply` Runtime Gate
 
