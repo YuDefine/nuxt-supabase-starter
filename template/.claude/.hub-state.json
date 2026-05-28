@@ -1,8 +1,8 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-28T10:35:34.939Z",
+  "syncedAt": "2026-05-28T16:32:19.899Z",
   "checksums": {
-    "rules/agent-routing.codex-watch-protocol.md": "d2376af13e7ad211",
+    "rules/agent-routing.codex-watch-protocol.md": "2160f70da5a1be75",
     "rules/agent-routing.md": "5781bfef233436c0",
     "rules/agent-self-verification.md": "299f5e4be6874724",
     "rules/audit-pattern.md": "572c64e997f83746",
@@ -12,7 +12,7 @@
     "rules/consumer-meta.md": "aa9d328b8e543a31",
     "rules/data-layer-d1.md": "b3abb61c929b138e",
     "rules/db-preview-env.md": "4ce4afc51827d12b",
-    "rules/dev-port-allocation.md": "fc1d971406bcf027",
+    "rules/dev-port-allocation.md": "87e8ded55398e0ca",
     "rules/error-handling.md": "87538d9aad2fba14",
     "rules/evlog-adoption.md": "c84eda884a718c4e",
     "rules/evlog-stream-extend.md": "a1a49a1653a07728",
@@ -36,7 +36,7 @@
     "rules/review-gui-surface.md": "8585cc8bd6a0bfab",
     "rules/review-tiers.md": "8c8ec7801aeb2714",
     "rules/scope-discipline.md": "a69d1cbc923c89a0",
-    "rules/screenshot-strategy.md": "5659097e32488577",
+    "rules/screenshot-strategy.md": "d363fafef5a5539a",
     "rules/session-claims.md": "d39a2a158486ed89",
     "rules/session-tasks.md": "992eaea717971157",
     "rules/spectra-workflow.md": "1b10f01072f99df5",
