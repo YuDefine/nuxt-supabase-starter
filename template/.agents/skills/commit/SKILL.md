@@ -433,7 +433,7 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 **審查策略**：
 
-1. 主線先跑 `/code-review` skill —— 它分 3 並行 agent 看 reuse / quality / efficiency 三個角度，覆蓋 claude 強項；issue 全部修完才進 codex
+1. 主線先跑 `/code-review --fix` skill —— 它分 3 並行 agent 看 reuse / quality / efficiency 三個角度，覆蓋 claude 強項；review 後自動把修正套用到 working tree，全部修完才進 codex
 2. 接著（若 fast-path 不命中）以背景方式跑 codex review xhigh（GPT-5.5）—— 跨模型抓 bug / 邏輯 / 安全，盲點與 claude 不同。**啟動後立即進入並行階段（見「0-A/B/C 並行策略」）**，主線同步推進 0-C 並派 0-B subagent
 3. 修正一律由 AI Agent 主線執行；所有並行軸的 finding 匯合後一次性修正
 
@@ -445,7 +445,7 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 #### 0-A.0 — /code-review（主線，永遠跑、永遠先跑）
 
-對本次 working tree 變更跑 `/code-review` skill —— 內部派 3 並行 agent（reuse / quality / efficiency），匯合 finding 後主線一次性修正。
+對本次 working tree 變更跑 `/code-review --fix` skill —— 內部派 3 並行 agent（reuse / quality / efficiency），匯合 finding 後 `--fix` 自動把修正套用到 working tree。
 
 > ℹ️ `/code-review` 是 **AI Agent CLI 內建命令**（bundled in `claude.exe` binary 自 v2.x 起），每個 AI Agent 安裝都有；**非 clade-managed**，不需要 consumer 端 plugin install 或 clade vendor 散播。未來若 CLI 移除此 built-in，本流程需改為 clade-vendored skill。
 

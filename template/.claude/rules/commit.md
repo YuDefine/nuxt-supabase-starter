@@ -13,7 +13,7 @@ Local edits will be reverted by the next sync.
 
 `/commit` 封裝了品質閘門，繞過等於讓壞 code / 壞版本號 / 壞 tag 進 repo：
 
-- **0-A** 兩階段 review：(1) `/code-review`（claude 3 並行 agent：reuse / quality / efficiency），(2) `codex review --uncommitted` xhigh（GPT-5.5，跨模型抓 bug / 邏輯 / 安全；fast-path 命中時跳過）；修正一律由 Claude Code 主線執行
+- **0-A** 兩階段 review：(1) `/code-review --fix`（claude 3 並行 agent：reuse / quality / efficiency），(2) `codex review --uncommitted` xhigh（GPT-5.5，跨模型抓 bug / 邏輯 / 安全；fast-path 命中時跳過）；修正一律由 Claude Code 主線執行
 - **0-B** UI Design Review（條件觸發）— 含 `.vue` 模板變動 + 屬於頁面/元件/佈局/互動/樣式變更時派 screenshot-review agent
 - **0-C** **format / lint / typecheck / test 全綠**：跑 `pnpm check`（多數專案含 format/lint/typecheck）**並且**確認 test 也有跑。**若 `package.json` 的 `scripts.check` 不含 `test` / `vitest`，必須額外跑 `pnpm test`（或 `vp test run` / `pnpm test:unit`），否則 CI 抓到的測試失敗（hook timeout、flake、新增測試壞掉）會在 commit 後才暴露**
 

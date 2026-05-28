@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-27T19:43:58.842Z",
+  "syncedAt": "2026-05-28T03:55:57.129Z",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "d2376af13e7ad211",
     "rules/agent-routing.md": "5781bfef233436c0",
@@ -8,7 +8,7 @@
     "rules/audit-pattern.md": "572c64e997f83746",
     "rules/cloudflare-workers.md": "4ec819bb9d2c3c27",
     "rules/code-style.md": "b24532b558d9b138",
-    "rules/commit.md": "3b4f1a775a5f363b",
+    "rules/commit.md": "01615ac8cae216d9",
     "rules/consumer-meta.md": "aa9d328b8e543a31",
     "rules/data-layer-d1.md": "b3abb61c929b138e",
     "rules/db-preview-env.md": "4ce4afc51827d12b",
@@ -66,7 +66,7 @@
     "rules/nuxt-ui-mcp.md": "8ab29a6d7c2b0791",
     "scripts/codex-review-safe.sh": "78cbe2e389ab3cbe",
     "scripts/commit-lock.mjs": "f81c79df484ce5db",
-    "skills/commit/SKILL.md": "aadea6fc65d9ef5b",
+    "skills/commit/SKILL.md": "dc80de43872e57a2",
     "skills/spectra/SKILL.md": "ae7dcf6c23bc22f1",
     "skills/spectra-analyze/SKILL.md": "c833299055df3f76",
     "skills/spectra-apply/SKILL.md": "26fa45cdde003469",
