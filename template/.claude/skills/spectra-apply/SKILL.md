@@ -401,10 +401,10 @@ If there is no AskUserQuestion tool available, present options as plain text and
    1. **Read tasks.md** and identify all `## N.` phase sections
    2. **For each phase, classify into one of three categories**（依序判定，命中即停）:
       - **A. Design Review phase** — title contains "Design Review" OR phase body references `/design improve` / `/impeccable audit` / `/impeccable *` / `review-screenshot` / `/design *`
-        → **主線 Claude Opus 4.7 xhigh 自己做**，**永不**派 codex
+        → **主線 Claude Opus 4.8 xhigh 自己做**，**永不**派 codex
         → Design skill is Claude Code first-class; codex tooling weak in this domain
       - **B. UI view phase** — phase 內任一 task 描述/路徑指涉 view 層檔案：`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且**該 phase 沒有摻入非 view 的 frontend / backend 工作（store / hook / API client / type / util / migration / API server）
-        → **主線 Claude Opus 4.7 xhigh 自己做**，**永不**派 codex
+        → **主線 Claude Opus 4.8 xhigh 自己做**，**永不**派 codex
         → UI view 層的視覺 / 互動 / a11y 細節需要與 Design skill 緊耦合；frontend 但非 view 的工作（store / hook / API client / type / util）不在此範圍，走 C 類
       - **C. Other phase** — 上述兩類以外（schema / migration / API server / CLI / 純 backend / frontend 但非 view 的 store / hook / API client / type / util / unit test / docs）
         → **派 background codex GPT-5.5 high**（**不要** medium）
