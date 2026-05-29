@@ -32,10 +32,11 @@ echo ""
 | **copy** | `--agent claude-code --copy -y` | 真實目錄 | 想把 skill 進 git tracking、不跨 agent 共用 |
 | **symlink** (default) | `--agent claude-code -y` | symlink → `.agents/skills/impeccable/`（universal agents directory） | 多 AI agent（Claude / Codex / Cursor）共用同一份 |
 
-兩種模式都會被 design orchestrator 認到。當前 5 個 consumer 配置（2026-05-04）：
+兩種模式都會被 design orchestrator 認到。當前各 consumer 配置（2026-05-30，registry 共 8 consumer）：
 
-- copy mode: perno、nuxt-supabase-starter/template、nuxt-edge-agentic-rag
-- symlink mode: yuntech-usr-sroi、TDMS（無 install-skills.sh，預設 symlink）
+- **copy mode**: perno、nuxt-supabase-starter/template、nuxt-edge-agentic-rag、yuntech-usr-sroi（皆 `install-skills.sh` 用 `$COPY_FLAGS`）、TDMS（無 install-skills.sh，但 `.agents/skills/impeccable` 目錄 git-tracked = 等效 copy）
+- **symlink mode**: 目前無
+- **未安裝 impeccable**: rental-scout、co-purchase、yudefine-blog（無 install-skills.sh、無 `.agents/skills/impeccable`；這 3 個是 deploy-focused consumer，需要 design orchestrator 時再依本檔標準 snippet 加裝）
 
 ## 升降版流程
 
@@ -92,4 +93,4 @@ vp 0.1.20 仍有此 bug（驗證過）。**繞法**：transform function 0 targe
 - `perno/scripts/install-skills.sh` — copy mode 標準範本
 - `nuxt-edge-agentic-rag/scripts/install-skills.sh` — copy mode + simple `*.md` lint-staged
 - `nuxt-supabase-starter/template/scripts/install-skills.sh` — copy mode + transform `*.md` + noop fallback
-- `yuntech-usr-sroi/scripts/install-skills.sh` — symlink mode 範本
+- `yuntech-usr-sroi/scripts/install-skills.sh` — copy mode（同 perno；目前無 symlink-mode consumer 可當範本，需 symlink 時用標準 snippet 的 `--agent claude-code -y` 變體）
