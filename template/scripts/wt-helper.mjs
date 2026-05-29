@@ -1850,6 +1850,63 @@ async function cmdMergeBack(slug, opts = {}) {
       )
     }
 
+    // claim guard scope MUST ⊇ bulk-stash scope. The bulk-stash below (line
+    // ~1903 `git stash push -u`, no pathspec) snapshots ALL of main's dirty
+    // state — not just `blockers` (= branch changeset ∩ main dirty). The above
+    // `cls` check only classifies blockers, so the difference set
+    // (allDirty \ blockers) — unrelated dirty that ISN'T part of this branch's
+    // changeset — was never checked against claims and got silently swept into
+    // the wt-merge-block stash. When that difference contains another active
+    // session's claimed WIP, the bulk-stash swallows it. Match the guard scope
+    // to the stash scope: classify the difference set and refuse if it overlaps
+    // another session. Only runs under --auto-stash (the only path that reaches
+    // bulk-stash; without it the blocker-only gate below already refuses).
+    // See pitfall-merge-back-autostash-bulk-captures-other-session-wip.
+    if (opts.autoStash) {
+      const blockerPathSet = new Set(blockers.map((b) => b.path))
+      const mainDirty = detectMainDirty(consumerRoot)
+      const allDirtyPaths = [
+        ...mainDirty.modified.map((m) => m.path),
+        ...mainDirty.untracked.map((u) => u.path),
+      ]
+      const nonBlockerDirty = allDirtyPaths.filter((p) => !blockerPathSet.has(p))
+      const diffCls = classifyDirtyPaths(consumerRoot, nonBlockerDirty, { excludeClaim: myClaim })
+      if (diffCls.otherSession.length > 0) {
+        const preview = diffCls.otherSession
+          .slice(0, 10)
+          .map(
+            (o) =>
+              `  ${o.path}  ← session ${o.session_id} / change ${o.change_id ?? '(none)'} / branch ${o.branch ?? '(none)'}`,
+          )
+          .join('\n')
+        const more =
+          diffCls.otherSession.length > 10
+            ? `\n  ... and ${diffCls.otherSession.length - 10} more`
+            : ''
+        const claims = readActiveClaims(consumerRoot).filter(
+          (c) => !myClaim || c.session_id !== myClaim.session_id,
+        )
+        throw new Error(
+          `merge-back STOP: --auto-stash would bulk-stash ${diffCls.otherSession.length} dirty path(s) belonging to another active session's claim:\n` +
+            preview +
+            more +
+            `\n\n` +
+            `These paths are NOT part of this branch's changeset (not blockers), but ` +
+            `--auto-stash bulk-stashes ALL of main's dirty state — including unrelated ` +
+            `WIP — so it would silently swallow that session's work into the ` +
+            `wt-merge-block stash. wt-helper refuses.\n\n` +
+            `Active sessions on this consumer (excluding self):\n` +
+            formatActiveSessionsForError(claims) +
+            `\n\nResolution paths:\n` +
+            `  1. Let the other session finish (merge-back / commit its own work) first, then re-run.\n` +
+            `  2. If the other claim is stale (session no longer running):\n` +
+            `       node scripts/claim-helper.mjs drop <session-id>\n` +
+            `     then re-run merge-back --auto-stash.\n` +
+            `  3. Have the other session commit or stash its WIP so main is clean of it before re-running.`,
+        )
+      }
+    }
+
     if (!opts.autoStash) {
       const preview = blockers
         .slice(0, 10)
