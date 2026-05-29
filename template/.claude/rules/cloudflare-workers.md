@@ -350,3 +350,64 @@ export function getDb(event: H3Event) {
 - 改 Track A → B：移除 `@nuxthub/core` + 建 void.json + 加 voidPlugin + 寫 `server/utils/db.ts` + `blob.ts` helper + 改 deploy.yml 走 `pnpm run deploy`（詳見 `/yudefine-deploy` Phase 1-10 runbook）+ void.json compat flags 必走配置 2 或 3
 - 改 Supabase → D1（Track A）：補 `@nuxthub/core` + 改 `hub: {}` config + 跑 audit 重驗
 - 跑 audit script 重驗（`scripts/audit-wrangler-config.mjs`）必須 0 violation 才算改派完成
+
+## § 7 — Self-hosted runner CI 反 pattern
+
+YuDefine fleet 多個 consumer（rental-scout / co-purchase / yudefine-blog）的 CI / deploy workflow 跑在自架 runner `runs-on: [self-hosted, gh-runner-lxc]`（YuDefine LXC，省 GitHub-hosted minutes）。Self-hosted runner 跟 GitHub-hosted runner 有兩個關鍵差異，沿用 GitHub-hosted 的 workflow 寫法會踩坑：
+
+### § 7.1 — NEVER `cache: pnpm`（用 LXC 本地 persistent store）
+
+`actions/setup-node` 的 `cache: pnpm`（與 `actions/cache`）走 **GitHub Actions cache backend**（cross-Atlantic object store）。GitHub-hosted runner 每次 fresh VM、cache restore 划算；但 self-hosted LXC runner **檔案系統 persistent**（跨 job 留存），改走 GHA cache backend 反而把本地已有的 store 換成跨洋下載 227MB tarball（實測 ~37s），純損失。
+
+- **NEVER** 在 self-hosted runner 的 `actions/setup-node` 加 `cache: pnpm`（或任何 `actions/cache` step 快取 pnpm store）
+- **MUST** 改用 LXC 本地 persistent store：
+
+  ```yaml
+  - name: Install node
+    uses: actions/setup-node@v6
+    with:
+      node-version: 24
+      # 不用 cache: pnpm — GHA cache backend 對 self-hosted runner 反 pattern
+      # （cross-Atlantic 227MB tarball ~37s）。改用 LXC 本地 persistent store。
+
+  - name: Configure pnpm store
+    run: pnpm config set store-dir /home/runner/.pnpm-store
+
+  - name: Install dependencies
+    run: pnpm install --frozen-lockfile
+  ```
+
+- store 路徑（`/home/runner/.pnpm-store`）在 LXC 跨 job 留存 → 第二次 install 直接命中本地，毋須任何 cache action
+
+### § 7.2 — CI 看不到 gitignored env / 本機 link state
+
+Self-hosted runner 的 working dir 是 `actions/checkout` clone 的乾淨 repo，**只含 tracked file**。`.env` / `.env.local` / void link state（`.void/project.json`）/ NuxtHub link state 都 gitignored，CI **拿不到**。
+
+- **NEVER** 在 workflow 假設 `.env*` / 本機 link state 存在（self-hosted runner 不繼承開發者本機檔案，跟 GitHub-hosted 一樣乾淨）
+- **MUST** runtime secret 走 `secrets.*` 顯式注入到 step `env:`：
+
+  ```yaml
+  - name: Deploy via void
+    run: pnpm run void:deploy
+    env:
+      VOID_TOKEN: ${{ secrets.VOID_TOKEN }}
+      # VOID_PROJECT 對應本機 .void/project.json 的 slug；CI 拿不到本機 link state，
+      # 必須 env 顯式給（slug 從 `void project list` 取）。
+      VOID_PROJECT: <consumer-slug>
+  ```
+
+  - Track A（wrangler-action）：CF token 走 `cloudflare/wrangler-action@v3` 的 `apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}`
+  - Track B（void.cloud）：`VOID_TOKEN` + `VOID_PROJECT`（link state 不在 CI，slug 必顯式給）
+- **MUST** runtime app secret（DB URL / session secret 等）由 user 在平台端預設一次（Track B：`void secret set <NAME>`；wrangler：`wrangler secret put`），**不**從 GH Actions 注入 runtime secret（CI 只需 deploy-time credential）
+
+完整 workflow 範本見 `~/offline/clade/vendor/snippets/cloudflare-workers/self-hosted-runner-ci.workflow.yml.template`。
+
+### § 7.3 — Fleet 現況
+
+| Consumer | runs-on | `cache: pnpm` 已移除 | LXC store-dir | env via secrets |
+| --- | --- | --- | --- | --- |
+| co-purchase | self-hosted, gh-runner-lxc | ✅ | ✅ | ✅（VOID_TOKEN / VOID_PROJECT） |
+| rental-scout | self-hosted, gh-runner-lxc | ❌（仍 `cache: pnpm`） | ❌ | — |
+| yudefine-blog | self-hosted, gh-runner-lxc | ❌（仍 `cache: pnpm`） | ❌ | — |
+
+co-purchase 是 canonical reference（`.github/workflows/{ci,deploy}.yml`）；rental-scout / yudefine-blog 對齊本 § 屬 consumer 自家 session 工作（clade 只散播標準 + 稽核，不替 consumer 改 workflow）。

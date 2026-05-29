@@ -64,6 +64,16 @@ Apply 階段中偵測到以下任一信號 → 必須立即處理：
 
 理由：ingest 會新增 verify items，這些 item 在 apply 落地前無 evidence；user 對中間態評估會誤判「change 全完成」、Claude 接 archive trigger 提前歸檔；兩段 commit 也讓 spec 跟 code 暫時不同步。詳見 [[manual-review]] § 人工檢查時機。
 
+### verify:ui / verify:api 前缺 session cookie → 先 scaffold dev-login，NEVER 問 user 貼 cookie
+
+進入 `verify:ui` / `verify:api` channel 的 evidence collection（典型：spectra-apply Step 8a / `/handoff` verify-channel completion / archive 前 evidence sweep）時，若偵測到需要 admin / per-role session cookie 但 consumer **缺 dev-login route**（`server/routes/auth/_dev-login*` / `__test-login*` / `dev-signin*` 不存在）：
+
+- **NEVER** 直接打字要 user 手動取 cookie（「請取 ADMIN_COOKIE / 開 Chrome → Google OAuth → DevTools 翻 Cookies → 複製 `nuxt-session=...` 貼回給我」）— 這把 baseline 缺誤翻成「user 自己手動 OAuth」，消耗 user 30+ min 介入、且對 fixture 第二位 admin（非真 Google 帳號）這條路完全無解
+- **MUST** 第一動作走 scaffold-first：辨識 consumer auth module（`nuxt-auth-utils` / `supabase-self-hosted` / `better-auth`）→ 依 clade cookbook（`~/offline/clade/rules/modules/auth/<auth-module>/dev-login.md` + `~/offline/clade/vendor/snippets/dev-auth/templates/`）scaffold `_dev-login.get.ts`（gated by `import.meta.dev` + loopback）→ typecheck + smoke curl 自驗 → 才進 evidence collection
+- reference impl：<consumer-a> / <consumer-b> / <consumer-d> / rental-scout 既有 dev-login route
+
+完整 hard rule（含 scaffold gate template、AskUserQuestion 兩選項）見 [[manual-review]] § Pre-verify baseline 假設 + Dev-login route missing → scaffold-first。對應 [[pitfall-agent-asks-user-cookie-skipping-dev-login-scaffold]]。
+
 ## UX Completeness Gate（補充 Design Gate）
 
 **Design Gate 檢查 UI 視覺品質；UX Completeness Gate 檢查 UI 功能覆蓋**。

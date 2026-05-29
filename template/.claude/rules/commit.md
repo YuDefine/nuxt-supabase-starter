@@ -16,6 +16,7 @@ Local edits will be reverted by the next sync.
 - **0-A** review：(1) `simplify`（reuse / 精簡 / efficiency / altitude），(2) `codex review --uncommitted` high（GPT-5.5，跨模型抓 bug / 邏輯 / 安全；fast-path 命中時跳過），(3) 0-A.1 出 Critical / Major 時條件升 `codex` xhigh 驗證；修正一律由 Claude Code 主線執行
 - **0-B** UI Design Review（條件觸發）— 含 `.vue` 模板變動 + 屬於頁面/元件/佈局/互動/樣式變更時派 screenshot-review agent
 - **0-C** **format / lint / typecheck / test 全綠**：跑 `pnpm check`（多數專案含 format/lint/typecheck）**並且**確認 test 也有跑。**若 `package.json` 的 `scripts.check` 不含 `test` / `vitest`，必須額外跑 `pnpm test`（或 `vp test run` / `pnpm test:unit`），否則 CI 抓到的測試失敗（hook timeout、flake、新增測試壞掉）會在 commit 後才暴露**
+  - **oxfmt callout**：oxfmt batched `--check`（一次掃多檔）可能 false-positive 報未預期 diff。commit 前若 `vp fmt --check` 報未預期 diff，先對該檔單獨 `vp fmt --write` 再 `vp fmt --check` 確認——單檔重跑為準，不要憑 batched check 結果就判定 0-C 紅燈。詳見 [[pitfall-oxfmt-batched-check-false-positive]]
 
 **並行執行**：0-A.0 `simplify` 序跑完後，**0-A.1（codex high 背景）/ 0-B（screenshot subagent）/ 0-C（主線 foreground check）三軸 MUST 並行**（除非 fast-path 跳過 0-A.1）——序跑會浪費 5–10 分鐘閘門時間。`codex review --uncommitted` 啟動時讀 working tree snapshot，後續變動不影響它正在進行的 review，所以三軸並行安全。詳細啟動順序、fast-path 判定、大改動回扣見 `.claude/skills/commit/SKILL.md` 的「0-A/B/C 並行策略」。
 - **Step 1** Schema 同步檢查 — `database.types.ts` 與 migration 對齊
@@ -192,6 +193,26 @@ Cross-ref：[[pitfall-consumer-ad-hoc-commit-eats-other-session-staged]] § Regr
 - 同 session 內 cross-session staged pollution 的偵測層：`plugins/hub-core/skills/commit/SKILL.md § Step 0-Coord`
 - WIP 預設範圍 + 分組規約：本檔 § WIP 預設範圍 / § Commit 分組與訊息規範
 - Fleet sweep + worktree：[[worktree-default]]
+
+## Multi-session shared working-tree 的 git hazard 地圖
+
+Working tree 是 **process-wide shared state**——多 session 並行（spectra apply / codex / vibe coding / publish auto-stash / 別 agent 跑工作 / fleet sweep）是常態。`git add` / `git stash` / auto-stash / cleanup 這類「全 working tree scope」操作會 silently 吃進別 session 的 staged WIP、untracked 新檔、或 stash 內容，造成 mixed commit、WIP 永久遺失、deploy commit 內容跟 message 不符等災害。這類事故 root cause 同一條，但表現分散在不同 git ceremony——下表把已實證的危害點串起來，每條指向既有規約與 pitfall。
+
+### 系統性根因
+
+任何**不帶 path scope** 的 git index / stash 操作（`git add -A`、`git add .`、`git stash push`（不帶 `-- <paths>`）、`publish.mjs --stash-untracked`、merge-back auto-stash、`git clean`）在多 session 環境下都會把「別 session 正在做但尚未 commit 的東西」一起捲進來。防法統一是：**用 path-scoped 操作隔離自己的改動**（`git commit --only -- <paths>`）、或**從機制上避開共用 index**（per-session worktree，各自獨立 index）。
+
+### 交叉索引
+
+| 危害點 | 既有規約 | Pitfall |
+| --- | --- | --- |
+| Ad-hoc `git add + git commit` 吃別 session staged WIP | 本檔 § Ad-hoc commit 必走 `git commit --only -- <paths>` | [[pitfall-consumer-ad-hoc-commit-eats-other-session-staged]] |
+| `git stash push` 不帶 pathspec → scope leak | [[worktree-default]] §1（Stash strategy 隱性風險 / Anti-pattern 手動 selective baseline sync） | [[pitfall-git-stash-pathspec-scope-leak]] |
+| `publish.mjs` auto-stash 把 tracked file 捲進 deploy commit | [[worktree-default]] §1 + [[clade-publish]] § Step 3（分組 commit，禁 `--stash-untracked` 對 tracked dirty） | [[pitfall-publish-auto-stash-bundles-tracked-into-deploy-commit]] |
+| `publish.mjs` flow 清掉別 session 的 parallel untracked file | [[worktree-default]] §1（Pre-fork baseline guard） | [[pitfall-publish-flow-cleans-parallel-untracked]] |
+| Merge-back auto-stash 整批捲走別 session WIP | [[worktree-default]] §5.5（Merge-back ceremony / Stash reconcile） | [[pitfall-merge-back-autostash-bulk-captures-other-session-wip]] |
+
+從機制避開（最強防線）：跨多檔工作走 per-session worktree（per [[worktree-default]] §1），main working tree 完全不動。Recovery（已撞 mixed commit）：本檔 § Recovery from mixed commit (multi-session safety)。Cross-session staged 偵測層：`plugins/hub-core/skills/commit/SKILL.md § Step 0-Coord`。
 
 ## WIP 阻礙處理（**極少數例外**，預設一律靠分組納入）
 
