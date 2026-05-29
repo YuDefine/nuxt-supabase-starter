@@ -212,6 +212,9 @@ Consumer 端直接跑 `pnpm review:ui` 被 review-gui.mts `preflightCladeOnly` g
 
 當 review-gui 顯示某 item 的 screenshot 不存在 / outdated，或 user 想開瀏覽器親自操作 sanity check 時，**agent 自己起 dev server**，禁止叫使用者「請 cd 到 worktree 跑 `pnpm dev`」。
 
+> **多 worktree 反覆切換 → 用 [`vendor/scripts/dev-router.mjs`](../../vendor/scripts/dev-router.mjs)（散播到 consumer `scripts/dev-router.mjs`）。**
+> 當需要在多個 worktree backend 之間反覆切換驗收（典型：review 不同 change 的 worktree、避免「cd worktree + 重啟 nuxt + 重啟 tunnel」的手動切換），**SHOULD** 用 dev-router：常駐 L4 TCP proxy 佔住公開 port（+ tunnel，若 dev script 有），`node scripts/dev-router.mjs use <slug>` 即切 active backend、瀏覽器 reload 乾淨 cutover，免 cd / 免重啟。它從 package.json dev script auto-detect（零設定，consumer-agnostic）。dev-router 與下方 dev-singleton 互補：dev-singleton 管「單一 dev server + lease」，dev-router 管「一個公開 port 後面多 worktree backend 切換」。單次起一個 server（非多 worktree 切換）走下方 dev-singleton / scan-free-port 分流。
+
 行為依該 consumer 的 OAuth port-pin 屬性分流（讀 [`consumer-meta.md`](./consumer-meta.md) snapshot 的 `auth.portPinned` 欄位）：
 
 | Consumer 屬性 | 啟動方式 | 衝突處理 |
