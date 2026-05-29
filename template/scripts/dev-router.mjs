@@ -200,11 +200,18 @@ const { values, positionals } = parseArgs({
     // 跨裝置（Tailscale）+ 跨 origin（review-gui bookmarklet）打到 control API。
     // 只影響 control server listen 端；CLI client 與 proxy bind 都維持 127.0.0.1。
     'control-host': { type: 'string', default: '127.0.0.1' },
+    // --no-tunnel：不 spawn tunnel（review 走 localhost 即可，且避開 CF token 403）。
+    'no-tunnel': { type: 'boolean', default: false },
+    // --lazy：啟動不 spawn main backend，第一次 use / control UI Activate 才 spawn。
+    // 多 consumer launcher 一次起多個 router 時用，避免一次 spawn N 個 nuxt。
+    lazy: { type: 'boolean', default: false },
   },
   allowPositionals: true,
 })
 
 const controlHost = values['control-host']
+const NO_TUNNEL = values['no-tunnel']
+const LAZY = values.lazy
 const mainRepoRootForDetect = resolveMainRepoRoot()
 const detectPathSegments = mainRepoRootForDetect.split('/').filter(Boolean)
 const consumerId = detectPathSegments[detectPathSegments.length - 1] || 'app'
@@ -833,19 +840,21 @@ async function runDaemon() {
   // ── 啟動序列 ──
   await new Promise((res) => proxy.listen(publicPort, '127.0.0.1', res))
   await new Promise((res) => control.listen(controlPort, controlHost, res))
-  spawnTunnel()
+  if (!NO_TUNNEL) spawnTunnel()
 
-  // spawn main backend + 設 active
-  console.log('[dev-router] starting main backend...')
-  try {
-    await activate('main')
-  } catch (err) {
-    console.error(
-      '[dev-router] failed to start main backend:',
-      err instanceof Error ? err.message : err,
-    )
-    shutdown()
-    return
+  // spawn main backend + 設 active（--lazy 時跳過，第一次 use / control UI Activate 才 spawn）
+  if (!LAZY) {
+    console.log('[dev-router] starting main backend...')
+    try {
+      await activate('main')
+    } catch (err) {
+      console.error(
+        '[dev-router] failed to start main backend:',
+        err instanceof Error ? err.message : err,
+      )
+      shutdown()
+      return
+    }
   }
 
   // banner
@@ -860,8 +869,12 @@ async function runDaemon() {
     lines.push(`                   (control bound on ${controlHost} — reachable cross-device)`)
   }
   lines.push(
-    `  tunnel:          → :${publicPort}`,
-    `  active backend:  "main" (:${activePort})`,
+    NO_TUNNEL
+      ? `  tunnel:          (disabled — --no-tunnel)`
+      : `  tunnel:          → :${publicPort}`,
+    activeSlug
+      ? `  active backend:  "${activeSlug}" (:${activePort})`
+      : `  active backend:  (lazy — 第一次 use / control UI Activate 才 spawn)`,
     '',
     `  切換 backend：control UI 或 \`node scripts/dev-router.mjs use <slug> --app ${appName}\``,
     '━'.repeat(64),
