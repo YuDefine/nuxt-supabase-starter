@@ -203,7 +203,8 @@ const { values, positionals } = parseArgs({
 
 const controlHost = values['control-host']
 const mainRepoRootForDetect = resolveMainRepoRoot()
-const consumerId = mainRepoRootForDetect.split('/').filter(Boolean).pop() || 'app'
+const detectPathSegments = mainRepoRootForDetect.split('/').filter(Boolean)
+const consumerId = detectPathSegments[detectPathSegments.length - 1] || 'app'
 const APPS = detectApps(mainRepoRootForDetect)
 const appNames = Object.keys(APPS)
 if (!appNames.length) {
@@ -503,6 +504,18 @@ function printState(state, daemonRunning) {
   console.log('')
 }
 
+// ── kill 整個 process group（負 pid）──
+// backend / tunnel 都用 detached:true spawn，child.pid 是 group leader pid；
+// 送負 pid 收整串（pnpm→sh→nuxt / node→cloudflared），避免 orphan。
+function killGroup(pid, signal = 'SIGTERM') {
+  if (!pid) return
+  try {
+    process.kill(-pid, signal)
+  } catch {
+    /* group already gone */
+  }
+}
+
 // ════════════════════════════════════════════════════════════════════════
 // 常駐 daemon 模式
 // ════════════════════════════════════════════════════════════════════════
@@ -536,7 +549,7 @@ async function runDaemon() {
         .filter(Boolean),
     )
     const port = await scanFreePort(taken)
-    state.backends[slug] = { ...(state.backends[slug] ?? {}), port, pid: null }
+    state.backends[slug] = { ...state.backends[slug], port, pid: null }
     writeState(state)
     return port
   }
@@ -566,14 +579,14 @@ async function runDaemon() {
     const child = spawn('pnpm', argv, {
       cwd: worktreePath,
       stdio: 'inherit',
-      env: { ...process.env, ...(appConfig.backendEnv ?? {}) },
+      env: { ...process.env, ...appConfig.backendEnv },
       // process group leader：kill 時送負 pid 收整串 pnpm→sh→nuxt，避免 orphan nuxt
       // 還 listen 在 backend port。stdio:'inherit' 仍保留（看得到 nuxt log）。
       detached: true,
     })
     children.set(slug, child)
     state.backends[slug] = {
-      ...(state.backends[slug] ?? {}),
+      ...state.backends[slug],
       port: backendPort,
       pid: child.pid ?? null,
     }
@@ -625,18 +638,6 @@ async function runDaemon() {
     console.log(`[dev-router] active backend → "${slug}" (:${backendPort})`)
   }
 
-  // ── kill 整個 process group（負 pid）──
-  // backend / tunnel 都用 detached:true spawn，child.pid 是 group leader pid；
-  // 送負 pid 收整串（pnpm→sh→nuxt / node→cloudflared），避免 orphan。
-  function killGroup(pid, signal = 'SIGTERM') {
-    if (!pid) return
-    try {
-      process.kill(-pid, signal)
-    } catch {
-      /* group already gone */
-    }
-  }
-
   // ── stop：kill backend（active 拒絕）──
   function stopBackend(slug) {
     if (slug === activeSlug) {
@@ -675,7 +676,7 @@ async function runDaemon() {
 
   // ── TCP proxy ──
   const proxy = net.createServer((client) => {
-    if (activePort == null) {
+    if (activePort === null) {
       // 尚無 active backend，安靜 destroy（瀏覽器自動 retry）
       client.destroy()
       return
