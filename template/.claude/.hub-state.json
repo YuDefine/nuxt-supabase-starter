@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-29T08:58:09.516Z",
+  "syncedAt": "2026-05-29T17:18:50.579Z",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "fcaf936fbd0e31bc",
     "rules/agent-routing.md": "0230466c12f260a2",
@@ -9,9 +9,9 @@
     "rules/cloudflare-workers.md": "8ddbb11225b5cd52",
     "rules/code-style.md": "242ddfe1f8a307d5",
     "rules/commit.md": "3af80adfa0a1fdd6",
-    "rules/consumer-meta.md": "aa9d328b8e543a31",
+    "rules/consumer-meta.md": "2765e7d632dd0d02",
     "rules/data-layer-d1.md": "b3abb61c929b138e",
-    "rules/db-preview-env.md": "4ce4afc51827d12b",
+    "rules/db-preview-env.md": "6c126e4ea6b97c5a",
     "rules/dev-port-allocation.md": "87e8ded55398e0ca",
     "rules/dev-tunnel-convention.md": "1cd453fd80ffdbbe",
     "rules/error-handling.md": "87538d9aad2fba14",
@@ -41,7 +41,7 @@
     "rules/session-claims.md": "d39a2a158486ed89",
     "rules/session-tasks.md": "992eaea717971157",
     "rules/spectra-workflow.md": "1b10f01072f99df5",
-    "rules/tech-debt-routing.md": "7eebb01817e29038",
+    "rules/tech-debt-routing.md": "bb037e8902b012db",
     "rules/test-scripts.md": "6146d14bcf8d2170",
     "rules/testing-anti-patterns.md": "29ebd030a5b4855e",
     "rules/truth-layers.md": "33af82bfd3a70e5e",
