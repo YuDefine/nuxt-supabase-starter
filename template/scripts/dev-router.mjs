@@ -297,15 +297,17 @@ function parseWorktrees() {
 
 // branch → slug
 // main worktree 的 slug 固定 'main'（由 caller 判斷）。
-// session/<YYYY-MM-DD-HHMM>-<slug> → 剝 session/ 前綴 + 開頭 \d{4}-\d{2}-\d{2}-\d{4}-。
+// session/<YYYY-MM-DD-HHMM>-<slug>（或舊/非標準格式 session/<YYYY-MM-DD>-<slug>，無 HHMM）
+//   → 剝 session/ 前綴 + 開頭日期戳（HHMM 段 optional），對齊 review-gui worktreeSlug。
 // branch 不符此格式 → branch basename。
 function branchToSlug(branch) {
   if (!branch) return null
   let name = branch.replace(/^refs\/heads\//, '')
   if (name.startsWith('session/')) {
     name = name.slice('session/'.length)
-    // 剝開頭時間戳 YYYY-MM-DD-HHMM-
-    name = name.replace(/^\d{4}-\d{2}-\d{2}-\d{4}-/, '')
+    // 剝開頭時間戳 YYYY-MM-DD[-HHMM]-（HHMM 段 optional：handle 舊/非標準格式無 HHMM 的 session branch，
+    // 否則日期前綴殘留會與 review-gui/wt-helper slug drift → `use <slug>` unknown slug）
+    name = name.replace(/^\d{4}-\d{2}-\d{2}(-\d{4})?-/, '')
     return name
   }
   // branch basename
