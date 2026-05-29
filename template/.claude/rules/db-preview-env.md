@@ -45,7 +45,7 @@ clade 規約管 capability，consumer 在 `registry/consumers.json` 宣告自家
 
 | Consumer `workflow_model` | Schema-gate trigger | 評論去處 | 阻擋方式 |
 | --- | --- | --- | --- |
-| `trunk-based`（目前 5 個 consumer 全部）| `on: push: [main]`，pre-deploy step | commit comment | deploy-staging.yml migrate `needs: schema-gate` |
+| `trunk-based`（目前所有 consumer）| `on: push: [main]`，pre-deploy step | commit comment | deploy-staging.yml migrate `needs: schema-gate` |
 | `pr-merge-based`（rare，目前無）| `on: pull_request:` | PR comment | required status check |
 
 **有 PR-CI infra 的 trunk-based consumer** 可同時跑 pr-based template 當早期 gate — 兩個並存無衝突。範本：`vendor/snippets/db-preview-env/schema-migration-gate/{trunk-based,pr-based}.workflow.yml.template`。

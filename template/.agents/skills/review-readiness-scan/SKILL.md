@@ -12,7 +12,7 @@ metadata:
 
 主動掃描 consumer 端所有 active change 的 `## 人工檢查` 區塊，把「已 ready / 尚未 ready」分組寫入 `HANDOFF.md`，讓使用者能在合適時機**批次**跑 `pnpm review`（從 clade home），而不是每條 change 個別開 GUI 才知道沒準備好。
 
-**前置**：consumer 必須已從 clade 散播到 `scripts/review-gui.mts`（5 consumer 預設都有；若沒有，跑 `pnpm hub:check` 確認）。
+**前置**：consumer 必須已從 clade 散播到 `scripts/review-gui.mts`（各 consumer 預設都有；若沒有，跑 `pnpm hub:check` 確認）。
 
 ## Step 1 — 跑 headless scan
 

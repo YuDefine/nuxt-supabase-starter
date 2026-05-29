@@ -24,7 +24,7 @@ Local edits will be reverted by the next sync.
 收口辦法：
 
 1. **每個 consumer** 在自家 repo 加 `.claude/consumer-meta.json`，**git tracked**，依 `registry/consumer-meta.schema.json` schema
-2. **clade aggregator**（`scripts/sync-consumer-meta.mjs`）從 5 個 consumer 拉 meta，cross-validate 對應 `package.json` / `wrangler.toml` / `nuxt.config.ts`，generated fields 帶 `source: <file>` provenance
+2. **clade aggregator**（`scripts/sync-consumer-meta.mjs`）從各 consumer 拉 meta，cross-validate 對應 `package.json` / `wrangler.toml` / `nuxt.config.ts`，generated fields 帶 `source: <file>` provenance
 3. **clade 聚合 snapshot** 寫到 `registry/consumers-meta.json`，給規則 / skill / audit 讀
 
 ## 設計原則
@@ -64,7 +64,7 @@ Local edits will be reverted by the next sync.
 
 `node scripts/sync-consumer-meta.mjs`：
 
-1. 讀 `registry/consumers.json` 取得 5 個 consumer 的 path（透過 `registry/consumers.local.json` 解析本機 absolute path，方式同 propagate.mjs）
+1. 讀 `registry/consumers.json` 取得各 consumer 的 path（透過 `registry/consumers.local.json` 解析本機 absolute path，方式同 propagate.mjs）
 2. 對每個 consumer：
    - 讀 `<consumer>/.claude/consumer-meta.json`
    - JSON Schema 驗證（依 `registry/consumer-meta.schema.json`）
