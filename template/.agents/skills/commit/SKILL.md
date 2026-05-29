@@ -373,35 +373,35 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 ### 0-A/B/C 並行策略（**重要：總時長省 ~45% 的關鍵**）
 
-0-A.0 `/code-review` **必序跑且永遠第一**（claude 3 並行 agent 跑 reuse / quality / efficiency 修完即將被改 / 刪的 code，否則後續 codex 白檢）。**`/code-review` 完成後，0-A.1 / 0-B / 0-C 三軸 MUST 並行**（除非 fast-path 跳過 0-A.1），不可串行：
+0-A.0 `simplify` **必序跑且永遠第一**（會刪死碼 / 精簡，否則後續 codex 白檢即將刪除 / 改寫的 code）。**simplify 完成後，0-A.1 / 0-B / 0-C 三軸 MUST 並行**（除非 fast-path 跳過 0-A.1），不可串行：
 
 ```
-0-A.0 /code-review（claude 3 並行 agent，序跑）
+0-A.0 simplify（序跑、主線）
       │
       ▼
  [Fast-path: diff <20 行 + 限 doc/config + 無敏感路徑?]
       │
-      ├─ YES → skip 0-A.1，0-B/0-C 並行收尾
+      ├─ YES → skip 0-A.1/0-A.2，0-B/0-C 並行收尾
       │
       └─ NO ↓
   ┌─ 並行 fan-out（同一輪 tool call 內啟動） ─┐
-  ├─ 軸 A：0-A.1 codex xhigh（背景 bash，~8–18 min）
+  ├─ 軸 A：0-A.1 codex high（背景 bash，~5–15 min）
   ├─ 軸 B：0-B screenshot-review（subagent，條件觸發時派；~3–5 min）
   └─ 軸 C：0-C pnpm check + pnpm test（主線 foreground；~2–5 min）
                             │
                             ▼
-              匯合 → 合併所有修正
+              匯合 → 合併所有修正 → 條件觸發 0-A.2 xhigh
                             │
                             ▼
-              [大改動回扣：累計修正 >50 行 or >5 檔 → 重跑 0-A.1 codex xhigh]
+              [大改動回扣：累計修正 >50 行 or >5 檔 → 重跑 codex high]
 ```
 
 **啟動順序（在同一個 assistant 回合內完成）**：
 
-1. `/code-review` 完成後判斷 fast-path：
-   - **命中** → 跳過 0-A.1，0-B/0-C 並行（同回合 fan-out）
+1. simplify 完成後判斷 fast-path：
+   - **命中** → 跳過 0-A.1/0-A.2，0-B/0-C 並行（同回合 fan-out）
    - **不命中** → **MUST** 用單一回合的多個 tool call 並行啟動：
-     - Bash `codex-review-safe.sh xhigh`（`run_in_background: true`）→ 拿到 background bash id
+     - Bash `codex-review-safe.sh high`（`run_in_background: true`）→ 拿到 background bash id
      - Agent `screenshot-review`（若 0-B 觸發條件成立）
      - Bash `pnpm check`（foreground，主線同步跑）
 2. 主線 foreground 0-C 完成後 → poll 軸 A、等軸 B 回收
@@ -420,45 +420,43 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 **安全性保證**：
 
 - `codex review --uncommitted` 在啟動時讀 working tree diff snapshot，後續 working tree 變動**不影響** codex 已啟動的 review（codex 看的是啟動時的 v1）
-- 0-A / 0-B / 0-C 修正後若**累計超過 50 行或跨 5 檔以上** → **MUST** 在匯合階段重跑一次 `codex-review-safe.sh xhigh` 確認新引入的程式碼也過 codex 眼睛
+- 0-A / 0-B / 0-C 修正後若**累計超過 50 行或跨 5 檔以上** → **MUST** 在匯合階段重跑一次 `codex-review-safe.sh high` 確認新引入的程式碼也過 codex 眼睛
 - 0-B / 0-A.1 / 0-C 抓到的問題**全部匯合一次修**，避免反覆 review
 
 **禁止**：
 
-- **NEVER** 把 0-A.1 / 0-B / 0-C 串行跑（除非 fast-path 跳過 0-A.1、或 0-B 跳過）—— 沒並行 = 浪費 5–10 分鐘閘門時間
+- **NEVER** 把 0-A.1 / 0-B / 0-C 串行跑（除非 fast-path 跳過 0-A.1/0-A.2、或 0-B 跳過）—— 沒並行 = 浪費 5–10 分鐘閘門時間
 - **NEVER** 在 0-A.1 背景跑的時候，主線只 poll 不做事 —— 必須同步推進 0-C，0-B 觸發時派 subagent
 - **NEVER** 因為「擔心 0-C 修改影響 codex」而退回串行 —— codex 看的是 snapshot，不受後續 working tree 變動影響；大改動的 fallback 已寫在「安全性保證」
 
-### 0-A. 程式碼審查（/code-review → codex xhigh）
+### 0-A. 程式碼審查（simplify → codex high/xhigh 兩輪）
 
 **審查策略**：
 
-1. 主線先跑 `/code-review --fix` skill —— 它分 3 並行 agent 看 reuse / quality / efficiency 三個角度，覆蓋 claude 強項；review 後自動把修正套用到 working tree，全部修完才進 codex
-2. 接著（若 fast-path 不命中）以背景方式跑 codex review xhigh（GPT-5.5）—— 跨模型抓 bug / 邏輯 / 安全，盲點與 claude 不同。**啟動後立即進入並行階段（見「0-A/B/C 並行策略」）**，主線同步推進 0-C 並派 0-B subagent
+1. 主線先跑 `simplify` skill —— 它看 reuse / 精簡 / 過度設計 / altitude 這條軸，codex review 不會抓。先處理掉避免後續 codex 重複指出
+2. 接著（若 fast-path 不命中）以背景方式跑 codex review high（GPT-5.5）—— 跨模型抓 bug / 邏輯 / 安全，盲點與 simplify / Claude 主線不同。**啟動後立即進入並行階段（見「0-A/B/C 並行策略」）**，主線同步推進 0-C 並派 0-B subagent
 3. 修正一律由 AI Agent 主線執行；所有並行軸的 finding 匯合後一次性修正
 
 **已棄用**：
 
-- `simplify` skill —— 職責已被 `/code-review` 的 reuse / quality 軸覆蓋
-- `code-review` agent（Opus subagent）—— 同為 Anthropic 模型盲點，跨模型才有意義
-- by-severity 條件觸發第二輪 codex —— `/code-review` 多角度 + codex xhigh 一輪深思已是「廣 + 深」配對，「第二雙眼」改由**大改動回扣**機制（見匯合段）+ 0-C 兜底取代
+- `code-review` agent（Opus subagent）—— 職責與 codex review 高度重疊且同為 Anthropic 模型盲點，砍掉省一輪 subagent 成本
 
-#### 0-A.0 — /code-review（主線，永遠跑、永遠先跑）
+#### 0-A.0 — simplify（主線，永遠跑、永遠先跑）
 
-對本次 working tree 變更跑 `/code-review --fix` skill —— 內部派 3 並行 agent（reuse / quality / efficiency），匯合 finding 後 `--fix` 自動把修正套用到 working tree。
+對本次 working tree 變更跑 `simplify` skill（review + 自動修）—— 它聚焦 reuse / 精簡 / efficiency / altitude，跑完自動把修正套用到 working tree。
 
-> ℹ️ `/code-review` 是 **AI Agent CLI 內建命令**（bundled in `claude.exe` binary 自 v2.x 起），每個 AI Agent 安裝都有；**非 clade-managed**，不需要 consumer 端 plugin install 或 clade vendor 散播。未來若 CLI 移除此 built-in，本流程需改為 clade-vendored skill。
+> ℹ️ `simplify` 是 **AI Agent CLI 內建命令**，每個 AI Agent 安裝都有；**非 clade-managed**，不需要 consumer 端 plugin install 或 clade vendor 散播。（曾在 CLI 數個版本間被棄用，自 2.1.154 重新可用；屆時若 CLI 再移除，本流程需改為 clade-vendored skill 或退回 `/code-review`。）
 
-`/code-review` 修完的版本才是下一步 codex review 應該看的對象 —— 若兩者並行，codex 會挑到 `/code-review` 即將要刪 / 改的 code，浪費一輪修正成本。
+simplify 修完的版本才是下一步 codex review 應該看的對象 —— 若兩者並行，codex 會挑到 simplify 即將刪 / 改的 code，浪費一輪修正成本。
 
-跑完輸出 `✅ 0-A.0 完成（/code-review 已 review + 修正）` 後判斷 fast-path：
+跑完輸出 `✅ 0-A.0 完成（simplify 已 review + 修正）` 後判斷 fast-path：
 
-- **命中** → 輸出 `⏭️ 0-A.1 跳過（fast-path: diff <20 行、限 doc/config、無敏感路徑）`，進入 0-B/0-C 並行
+- **命中** → 輸出 `⏭️ 0-A.1/0-A.2 跳過（fast-path: diff <20 行、限 doc/config、無敏感路徑）`，進入 0-B/0-C 並行
 - **不命中** → 進入 0-A.1
 
-#### 0-A.1 — codex review (xhigh)，背景（**並行軸 A**）
+#### 0-A.1 — codex review (high)，背景（**並行軸 A**）
 
-`codex review` 在 `xhigh` 推理下常需 8–18 分鐘。**MUST** 用 Bash `run_in_background: true` 啟動，並**每 3 分鐘**讀一次背景輸出確認進度（process 還活著、有沒有錯訊、跑到哪一檔）。建議用 `ScheduleWakeup({delaySeconds: 180})` 排隔——3 分鐘穩穩落在 prompt cache 5 分鐘 TTL 內（300s 是 cache miss 最差解），又是使用者明定的上限，不可拉長。
+`codex review` 在 `high` 推理下常需 5–15 分鐘。**MUST** 用 Bash `run_in_background: true` 啟動，並**每 3 分鐘**讀一次背景輸出確認進度（process 還活著、有沒有錯訊、跑到哪一檔）。建議用 `ScheduleWakeup({delaySeconds: 180})` 排隔——3 分鐘穩穩落在 prompt cache 5 分鐘 TTL 內（300s 是 cache miss 最差解），又是使用者明定的上限，不可拉長。
 
 **啟動背景 process 後 MUST 立即進入並行階段**（同一個 assistant 回合內），啟動 0-B（條件觸發）與 0-C —— 不要乾等 codex 完成才推進其他軸，那等同放棄並行收益。詳見上方「0-A/B/C 並行策略」。
 
@@ -469,45 +467,61 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 - 結束條件：背景 process 結束、輸出含完成標記、或使用者叫停 — 才進入後續判斷
 
 ```bash
-.codex/scripts/codex-review-safe.sh xhigh
+.codex/scripts/codex-review-safe.sh high
 ```
 
 > ℹ️ wrapper 暫時把 `~/.codex/config.toml` 移開避開 MCP server hang（codex CLI 對 nested TOML override 是 merge 不是 replace；MCP 載入 + 卡死是已知問題）。`trap EXIT` 確保不論 codex 怎麼結束 config 都會還原。**不要**改回 `codex review --uncommitted` 直接跑 — 在配 codebase-memory-mcp 的環境會卡 70 秒 fetch failed 死掉。
 
-讀完 codex 輸出後（**此時 0-B / 0-C 應已並行完成或在收尾**）：
+讀完 codex 輸出後依 **codex 自己輸出的 severity 標記**分情境處理（**此時 0-B / 0-C 應已並行完成或在收尾**）：
 
-- **無 issue** → 輸出 `✅ 0-A.1 通過（codex xhigh 無 issue）`，進入「並行匯合」
-- **有 issue（任何 severity）** → 主線逐一修完，輸出 `✅ 0-A.1 通過（codex xhigh 已修 N 條 issue）`，進入「並行匯合」
+- **無 issue** → 輸出 `✅ 0-A.1 通過（codex high 無 issue）`，**跳過 0-A.2**，進入「並行匯合」
+- **僅 Minor / Info 級 issue** → 主線逐一修完，輸出 `✅ 0-A.1 通過（codex high 僅 Minor/Info 已修）`，**跳過 0-A.2**，進入「並行匯合」
+- **出現 Critical / Major 級 issue** → 主線逐一修完，**MUST** 進入 0-A.2 用 xhigh 驗證
 
-codex 標的 Critical / Major / Minor / Info 全部都修；**不再有 by-severity 升級到二輪 codex 的機制** —— xhigh 已是 codex 上限，再跑一輪同 model 同 effort 邊際 0。「第二雙眼」由大改動回扣 + 0-C tests 兜底。
+**Severity 來源**：以 codex 自己輸出的 severity 標記為準（Critical / Major / Minor / Info）。**NEVER** 由主線自行判定降級「這個其實沒那麼嚴重」—— codex 標 Major 就照 Major 處理，否則 0-A.2 條件觸發機制等於形同虛設。
+
+#### 0-A.2 — codex review (xhigh)，條件觸發
+
+**僅在 0-A.1 出現 Critical / Major 級 issue 時執行**，其他情況一律跳過。
+
+```bash
+.codex/scripts/codex-review-safe.sh xhigh
+```
+
+讀完輸出後判斷：
+
+- **無問題** → 輸出 `✅ 0-A.2 通過（codex xhigh 無 issue）`，進入「並行匯合」
+- **仍有問題** → 主線再次修正所有問題，修完**直接進入「並行匯合」**（最多到 0-A.2，不做第 3 輪）
 
 #### 0-A/B/C 並行匯合（**收口檢查**）
 
 三軸完成後合併狀態檢查：
 
-1. 0-A（codex xhigh，or fast-path skipped）：通過
+1. 0-A（codex high，or 條件升 xhigh，or fast-path skipped）：通過
 2. 0-B（screenshot review）：通過或跳過
 3. 0-C（pnpm check + pnpm test）：全綠
 
-**大改動回扣**：若 0-A / 0-B / 0-C 累計的修正**超過 50 行或跨 5 檔以上**，**MUST** 在此處重跑一次 `codex-review-safe.sh xhigh` 確認新引入的程式碼也過 codex 眼睛（codex 看的是啟動時 snapshot，後續大改動不在它覆蓋範圍）。小改動（< 50 行 / < 5 檔）視同安全跳過。
+**大改動回扣**：若 0-A / 0-B / 0-C 累計的修正**超過 50 行或跨 5 檔以上**，**MUST** 在此處重跑一次 `codex-review-safe.sh high` 確認新引入的程式碼也過 codex 眼睛（codex 看的是啟動時 snapshot，後續大改動不在它覆蓋範圍）。小改動（< 50 行 / < 5 檔）視同安全跳過。
 
 完成匯合後輸出：
 
 ```text
-✅ 0-A/B/C 並行匯合通過（codex {pass|skip|re-run}、screenshot {pass|skip}、check 全綠）
+✅ 0-A/B/C 並行匯合通過（codex {1|2} 輪、screenshot {pass|skip}、check 全綠）
 ```
 
 **禁止**：
 
-- **NEVER** 跳過 0-A.0（`/code-review` 是常駐第一步，不視變更大小例外）
-- **NEVER** 把 `/code-review` 跟 codex 並行 —— `/code-review` 必須在 codex 之前序跑完
-- **NEVER** 把 0-A.1 / 0-B / 0-C 退回串行 —— `/code-review` 完成後三軸必並行（除非 fast-path 跳過 0-A.1）
-- **NEVER** 改用其他模型（codex 必須 `gpt-5.5`、effort 必為 `xhigh`）
-- **NEVER** 改用更低 effort（`high` / `medium` / `low` 一律不允許 —— `xhigh` 是 codex 上限、本流程下限）
+- **NEVER** 跳過 0-A.0（simplify 是常駐第一步，不視變更大小例外）
+- **NEVER** 把 simplify 跟 codex 並行 —— simplify 必須在 codex 之前序跑完
+- **NEVER** 把 0-A.1 / 0-B / 0-C 退回串行 —— simplify 完成後三軸必並行（除非 fast-path 跳過 0-A.1/0-A.2）
+- **NEVER** 改用其他模型（codex 必須 `gpt-5.5`）
+- **NEVER** 顛倒 codex 兩輪的 reasoning effort（0-A.1 必為 `high`、0-A.2 必為 `xhigh`）
 - **NEVER** 把 codex 列出的問題判定為「建議性質」「不在本次範圍」而跳過 —— 一律修
 - **NEVER** 在 fast-path 條件未完全滿足時提早跳過 codex —— 三條件 AND，任一不滿足都跑
-- **NEVER** 跑第二輪 codex（除大改動回扣外）—— 同 model 同 effort 邊際 0、無條件升級會無限拖長 commit 流程
-- **NEVER** 重新啟用已棄用的 `simplify` skill 或 `code-review` agent —— 職責已被 `/code-review` 取代
+- **NEVER** 做第 3 輪 codex review（會無限拖長 commit 流程；2 輪內處理不完代表變更太大，應先 split）
+- **NEVER** 因 0-A.1 抓到 Critical/Major 後跳過 0-A.2 —— 一律用 xhigh 驗證
+- **NEVER** 用主線自判把 codex 標的 Major / Critical 降級成 Minor 來跳過 0-A.2 —— severity 以 codex 輸出為準
+- **NEVER** 重新啟用 `code-review` agent（職責已被 codex 兩輪取代）
 
 ### 0-B. UI Design Review（條件觸發、**並行軸 B**）
 

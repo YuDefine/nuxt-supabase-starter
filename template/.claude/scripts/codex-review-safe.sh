@@ -16,9 +16,10 @@
 # Usage:
 #   .claude/scripts/codex-review-safe.sh [reasoning_effort] [extra codex args...]
 #
-# Default reasoning_effort = xhigh (commit 0-A flow's only effort level; per
-# rules/core/agent-routing.md, lower effort (high/medium/low) is disallowed for
-# commit review — xhigh is both codex upper bound and the flow's lower bound).
+# Default reasoning_effort = xhigh. The commit 0-A flow calls this twice:
+# 0-A.1 with `high` (always, unless fast-path skips), and 0-A.2 with `xhigh`
+# (conditional — only when 0-A.1 surfaces Critical/Major). Other contexts
+# (Spectra propose/apply) use xhigh. See .claude/skills/commit/SKILL.md Step 0-A.
 #
 # Exit code: passes through codex review's exit code.
 

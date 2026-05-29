@@ -18,7 +18,7 @@ Local edits will be reverted by the next sync.
 | 工作類別 | 由誰執行 | 為什麼 |
 | --- | --- | --- |
 | **Web search**（網頁搜尋、即時資料、外部資訊查詢） | **Codex（GPT-5.5 medium）** | 搜尋型查詢適合中等思考預算 + Codex 的搜尋整合；不浪費 Claude Code 的 context 與 token。 |
-| **Code review（commit 0-A）** | **(1) `/code-review`（claude 3 並行 agent：reuse / quality / efficiency） + (2) `codex review --uncommitted` xhigh（GPT-5.5）** | claude 多角度覆蓋廣度 + codex 跨模型 + xhigh 深思補 bug / 邏輯 / 安全盲點；單輪即可，「第二雙眼」由大改動回扣 + 0-C 兜底。詳見 `.claude/skills/commit/SKILL.md` Step 0-A。 |
+| **Code review（commit 0-A）** | **(1) `simplify`（reuse / 精簡 / efficiency / altitude） + (2) `codex review --uncommitted` high（GPT-5.5），(3) 0-A.1 出 Critical / Major 時條件升 codex xhigh** | simplify 補 reuse / 精簡盲點 + codex 跨模型抓 bug / 邏輯 / 安全；high 一輪覆蓋多數情境，Critical / Major 才升 xhigh 深驗。詳見 `.claude/skills/commit/SKILL.md` Step 0-A。 |
 | **Spectra `propose` 階段（draft）** | **預設 Codex GPT-5.5 xhigh draft，無 A/B 詢問**（除非使用者明確要求純 Claude） | propose 是抽象決策 + 高思考預算工作；codex xhigh draft + 主線 cross-check 比擇一執行更穩。詳見 `spectra-propose` Step 0。 |
 | **Spectra `propose` cross-check** | **主線 Claude Opus 4.8 xhigh** | codex 回後主線必跑：post-propose-check + design-inject + 主線補 Design Review 7 步 template + spectra analyze。主線 = quality gate，不只是 dispatcher。 |
 | **Spectra `apply`（非 Design Review、非 UI view phase，phase 粒度）** | **Codex GPT-5.5 high**（不要 medium） | mechanical 寫 code 用 high 夠；medium 漏 schema drift / cross-file refactor / enum exhaustiveness 風險高。phase 粒度避免大量 round-trip。 |
@@ -98,11 +98,11 @@ Claude Code session 內偵測到「需要 WebSearch」時：
 - **NEVER** task 粒度派 codex — 一律 phase 粒度，避免大量 round-trip
 - **NEVER** 派 codex 跑 spectra-apply phase 而 prompt 內漏 Commit Authorization 段（一 phase 一 commit / `🧹 chore: wt <change>-phase-<N>` format / hook 必跑禁 `--no-verify` / commit 前自驗 view-layer + scope）— 缺這段 codex 不知道格式、會混 commit 或撞 commitlint hook，主線難對齊 phase 邊界
 - **NEVER** 派 Codex 寫 code（spectra-propose draft / spectra-apply phase）而 prompt 漏掉 Plan-first 硬指令 — 沒有 plan 主線只能從 diff 反推 codex 意圖，cross-check 成本高且容易漏掉「codex 漏做某檔」。Plan 是事前公開思路，不是 review gate（codex 寫完 plan 必須立刻續跑，不停下來）
-- **NEVER** 在 commit 0-A 跳過 0-A.0 `/code-review` skill —— /code-review 是 claude 3 並行 agent 覆蓋廣度的入口，必須序跑在 codex 之前
-- **NEVER** 在 commit 0-A 把 `/code-review` 跟 codex 並行 —— /code-review 修完才是 codex 應該看的版本
-- **NEVER** 在 commit 0-A 啟用已棄用的 `code-review` agent（Opus subagent）或 `simplify` skill —— 職責已由 `/code-review` skill + codex xhigh 取代（claude 廣度 + 跨模型深度）
-- **NEVER** 改用其他模型或更低 effort（codex 必為 `gpt-5.5`、effort 必為 `xhigh`；`high` / `medium` / `low` 一律不允許）
-- **NEVER** 在 commit 0-A 跑第二輪 codex（除大改動回扣外）—— 同 model 同 effort 邊際 0，「第二雙眼」由大改動回扣 + 0-C 兜底取代 by-severity 升級
+- **NEVER** 在 commit 0-A 跳過 0-A.0 `simplify` skill —— simplify 是 reuse / 精簡 / efficiency / altitude 盲點的入口，必須序跑在 codex 之前
+- **NEVER** 在 commit 0-A 把 `simplify` 跟 codex 並行 —— simplify 修完才是 codex 應該看的版本
+- **NEVER** 在 commit 0-A 啟用已棄用的 `code-review` agent（Opus subagent）—— 職責與 codex review 高度重疊且同為 Anthropic 模型盲點
+- **NEVER** 改用其他模型或顛倒 codex 兩輪 effort（codex 必為 `gpt-5.5`；0-A.1 必為 `high`、0-A.2 必為 `xhigh`）
+- **NEVER** 在 commit 0-A 跑第 3 輪 codex —— 2 輪內處理不完代表變更太大，應先 split；0-A.2 由 0-A.1 的 Critical / Major 條件觸發，不可無條件升級也不可因抓到 Critical / Major 而跳過
 - **NEVER** 在 Codex 端執行 `$spectra-apply` 而 prompt body 沒有 `[DELEGATED-BY-CLAUDE-CODE]` marker — **MUST** 立即 STOP 且不執行任何 `spectra` 命令（見 reference 檔的「Codex `$spectra-apply` Runtime Gate」）
 - **NEVER** 主線派 Codex 跑 spectra apply phase 而 prompt 第一行不是 `[DELEGATED-BY-CLAUDE-CODE]` marker — 會被 Codex 端 Runtime Gate 擋掉、整個 phase dispatch 白做
 - **NEVER** 從主線用 `Agent` tool with `subagent_type: screenshot-review` 派 verify mode 工作 — sonnet wrapper 已多次驗證會繞過 Step 0 字面身份檢查、自做工作（2026-05-19 align-shipments-rls-auth + 2026-05-23 warehouse Re-Design 兩起 incident）。**MUST** 主線直派 codex GPT-5.5 low via Bash background，走 [`agent-routing.codex-watch-protocol.md`](./agent-routing.codex-watch-protocol.md) § Codex 派工的標準流程 + § screenshot-review Verify Mode Dispatch。Sonnet wrapper 路徑保留**僅給** codex CLI 不可用的 fallback 場景，**禁止**作為預設入口。
