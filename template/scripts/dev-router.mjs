@@ -21,7 +21,7 @@
 //   node scripts/dev-router.mjs use <slug>       # 切 active backend
 //   node scripts/dev-router.mjs stop <slug>      # 停某 backend（active 拒絕）
 //
-// control UI：http://127.0.0.1:<controlPort>（bigbyte=3340 / shared=3440）
+// control UI：http://127.0.0.1:<controlPort>（controlPort = publicPort + 300；perno bigbyte 3040→3340）
 
 import { parseArgs } from 'node:util'
 import net from 'node:net'
@@ -38,7 +38,10 @@ import { resolve, join } from 'node:path'
 //   - --port（publicPort；缺則用 framework 預設 3000 並注入 --port 供 router 換 port）
 //   - --dotenv basename（envFile；缺則 backend 不額外 copy env）
 //   - 是否含 tunnel 子命令（缺則 router 不起 tunnel）
-// controlPort = 3340 + index*100；backendBand = [controlPort+1, controlPort+99]。
+// controlPort = publicPort + 300（consumer-namespaced：publicPort 各 consumer 唯一 = registry
+//   dev_ports 3000-3080，+300 落 3300-3380，與 proxy band 不重疊且跨 consumer 不撞 → 避免
+//   多 consumer dev-router daemon 共撞同一 control port 互相劫持 state）；
+//   backendBand = [controlPort+1, controlPort+99]（findFreePort 掃空閒，容忍跨 consumer 重疊）。
 // 支援：純 framework dev / concurrently(framework+tunnel) / vite / next / astro 等。
 // 偵測不到任何 app → fail-loud（見下方 CLI）。
 
@@ -163,14 +166,15 @@ function detectApps(mainRepoRoot) {
     (n) => (n === 'dev' || n.startsWith('dev:')) && !n.startsWith('dev:router'),
   )
   const apps = {}
-  let idx = 0
   for (const name of names) {
     if (typeof scripts[name] !== 'string') continue
     const parsed = parseDevScript(scripts[name])
     if (!parsed) continue
     const appName = name === 'dev' ? 'default' : name.slice('dev:'.length)
     if (apps[appName]) continue
-    const controlPort = 3340 + idx * 100
+    // consumer-namespaced control port：用 app 自己的 publicPort（registry dev_ports 各
+    // consumer 唯一）+ 300，避免不同 consumer 的 dev-router daemon 共撞 3340 互相劫持。
+    const controlPort = parsed.publicPort + 300
     apps[appName] = {
       publicPort: parsed.publicPort,
       controlPort,
@@ -181,7 +185,6 @@ function detectApps(mainRepoRoot) {
       tunnel: parsed.tunnel,
       backendEnv: parsed.backendEnv,
     }
-    idx++
   }
   return apps
 }
