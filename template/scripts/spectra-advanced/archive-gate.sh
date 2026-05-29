@@ -8,7 +8,10 @@
 #   Check 4: Manual Review Kind Validation — `## 人工檢查` items must be checked or
 #            (for `[discuss]` kind) carry a `(claude-discussed: <ISO>)` evidence trail
 #   Check 5: Screenshot Quality Audit — review screenshots must be final-state,
-#            schema-valid, and free of exploration/debug spillover
+#            schema-valid, and free of exploration/debug spillover.
+#            When verify-channel annotations are missing, emits [AUTO-REMEDIATE]
+#            directive telling Claude to self-collect evidence per Step 8a
+#            fallback chain, NOT ask the user.
 #
 # Precondition (per worktree-default.md §5.5 atomic landing): spectra-archive
 # Step 0 MUST run `wt-helper merge-back <change-name>` first so any session
@@ -497,8 +500,24 @@ else
     if [ -n "$SCREENSHOT_AUDIT_OUTPUT" ]; then
       echo "$SCREENSHOT_AUDIT_OUTPUT" >&2
     fi
-    MESSAGES+=("[UX Gate] Screenshot Quality Audit 未通過 — review pipeline 截圖存在 warning / critical 或 audit script error。
+    # Extract verify-channel-specific missing annotations from audit output for auto-remediation hint
+    VERIFY_MISSING=""
+    if echo "$SCREENSHOT_AUDIT_OUTPUT" | grep -qE 'missing_verify_(api|ui|e2e)_annotation'; then
+      VERIFY_MISSING=$(echo "$SCREENSHOT_AUDIT_OUTPUT" | grep -E 'missing_verify_(api|ui|e2e)_annotation' | sed 's/^- \[critical\] /  /')
+    fi
+
+    if [ -n "$VERIFY_MISSING" ]; then
+      MESSAGES+=("[UX Gate] Screenshot Quality Audit 未通過 — verify channel evidence 缺失。
+
+[AUTO-REMEDIATE] Claude MUST 自己補 evidence，不要問 user：
+依 spectra-apply Step 8a Verify Channel Pass + main-self-collect-fallback-chain (a)(b)(c)(d) 對以下 items 收集 evidence，全失敗才寫 deferred annotation：
+$VERIFY_MISSING
+
+完成後重跑 archive。per [[agent-self-verification]] + [[pitfall-verify-evidence-handoff-instead-of-self-collect]]：evidence collection 是 agent 預設職責，review-gui 補 evidence prompt 是 fallback 不是 default。")
+    else
+      MESSAGES+=("[UX Gate] Screenshot Quality Audit 未通過 — review pipeline 截圖存在 warning / critical 或 audit script error。
 跑 \`node --experimental-strip-types scripts/spectra-advanced/audit-screenshot-quality.mts $CHANGE_NAME\` 查看完整報告；整理 final-state 截圖、移動探索圖到 _exploration/，或為 round-trip-only item 加上 @no-screenshot 後再 archive。")
+    fi
   fi
 fi
 
