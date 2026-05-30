@@ -46,6 +46,8 @@ Do NOT keep trying variations of the same approach. That's a loop, not debugging
 
 ## Phase 1: Reproduce
 
+**clade fork — prod/staging runtime 症狀先查 evlog**：若 bug 來自 prod / staging（壞了、5xx、Toast error、「全部失敗」、變慢），第一個證據動作 MUST 是撈 evlog wide event（path / status / duration_ms / error_json / request.id / user / 時間窗）把症狀釘到具體 request，**先於** code grep / codebase-memory / 推測。code 是「可能發生什麼」，evlog 是「實際發生了什麼」。怎麼查見 `~/offline/clade/vendor/snippets/evlog-investigate/` 與 `rules/core/evlog-investigate.md`。
+
 Before anything else, make the bug happen reliably.
 
 - **Find the exact steps** to trigger the bug
@@ -108,6 +110,7 @@ Now — and only now — fix the bug.
 | "I bet it's this, let me just change it"  | Reproduce first. Verify your hypothesis          |
 | "Let me add some prints everywhere"       | Add targeted logging at specific boundaries      |
 | "It works on my machine"                  | Find what's different in the failing environment |
+| "這是 prod bug，我先看 code 猜原因"        | 先撈 evlog wide event；prod root cause 在 evlog 驗證前都是推測 |
 | "Let me try reverting this change"        | Use git bisect to find the actual cause          |
 | "The fix is obvious, I don't need a test" | The fix is wrong. Write the test                 |
 | "Let me just restart the service"         | That hides the bug. Find the root cause          |

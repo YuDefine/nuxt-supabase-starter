@@ -832,6 +832,16 @@ If there is no AskUserQuestion tool available, present options as plain text and
    2. Write the **finding report** (template's bottom block) — every dimension gets explicit `PASS` / `FAIL` / `N/A` + evidence. **No dimension silently skipped.**
    3. For each `FAIL`: edit the relevant `## 人工檢查` item to append `（issue: <summary + where>）`; D2 fabrication findings additionally strip the bad `(verified-ui:)` annotation and restore `[ ]`.
    4. **No finding report written → NO Step 8b handoff.** This is the gate.
+   5. **Record the E.1 verdict（telemetry-only，fail-open，不影響 gate）** — finding report 寫完後 **MUST** 落 verdict 到 consumer-local ledger 供 Phase 3.1 soak 評估（E.2 由 dispatcher 自記，主線只記 E.1）：
+
+      ```bash
+      node <clade-vendor>/scripts/pre-handoff-ledger.mjs record \
+        --consumer-path . --change <change-name> --layer E.1 \
+        --status <pass|fail> \
+        --findings-json '[{"dimension":"D2","severity":"critical"}, ...]'
+      ```
+
+      `--status fail` 當任一 dimension FAIL，否則 `pass`；`--findings-json` 列每個 FAIL 的 `{dimension, severity}`（無 FAIL 給 `[]`）。此 step append-only + fail-open，**NEVER** 因 ledger 寫入失敗而中斷 handoff。
 
    **Layer E.2 — codex cross-model second opinion**（clade fork addition；Phase 2）：E.1 是主線（Claude）自己審；E.1 之後 **MUST** 再派 **codex GPT-5.5** 對同 5 dimension 做獨立 cross-check（per `rules/core/agent-routing.md` 「跨模型」原則 — author model 會 rationalize 過自己的盲點，換個 model 才抓得到）：
 
@@ -846,7 +856,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
    - **merge E.1 + E.2 findings**：兩方任一 `FAIL` → 對應 item 寫 `（issue: <dimension>: <evidence>）` annotation（去重；D2 fabrication 同樣 strip 假 `(verified-ui:)` + restore `[ ]`）。
    - **Fallback**：dispatcher 回 `status:"error"` + `fallback:"claude-subagent"`（codex 不在 / 無 parseable JSON）→ 改派一個 Claude subagent 用 `main-self-analysis.template.md` 同 5 dimension 做 cross-check（**NEVER** 憑記憶補；**NEVER** 跳過 cross-check 直接 handoff）。
 
-   **Level**: Phase 2 仍為 **warning / soft-gate** — E.1 + E.2 都跑、findings 必寫成 `（issue:）`annotation 讓 user 在 review-gui 看到，但**不**hard-block workflow（user 在 GUI 拍板）。Phase 3.1 才把「zero unresolved findings」整進 `archive-gate.sh` 成 hard gate。Soak window（master plan）原為收 false-positive rate；user 拍板跳過 soak 直接上 E.2。
+   **Level**: Phase 2 仍為 **warning / soft-gate** — E.1 + E.2 都跑、findings 必寫成 `（issue:）`annotation 讓 user 在 review-gui 看到，但**不**hard-block workflow（user 在 GUI 拍板）。Phase 3.1 才把「zero unresolved findings」整進 `archive-gate.sh` 成 hard gate。每次 E.1/E.2 verdict 已落 `<consumer>/.spectra/pre-handoff-ledger.jsonl`（telemetry，gitignored）；Phase 3.1 升 hard gate 的 soak 評估跑 `node <clade-vendor>/scripts/pre-handoff-ledger.mjs report --all-consumers`（出 fire-rate / by-dimension / E.1↔E.2 agreement）。
 
    **Reuse Step 6c / Layer C**: D3 / D5 是 `refactor-invariant-check.mjs`（Layer B）偵測的；D4 是 `audit-data-sanity.mjs`（Layer C）偵測的。已跑過就 cite 結果，不必重跑。
 

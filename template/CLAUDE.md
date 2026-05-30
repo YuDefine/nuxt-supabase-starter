@@ -228,3 +228,22 @@ Read-only session（grep、看 log、解釋 code 不寫檔）可留在 main work
 - **Layer C**（`/impeccable data-sanity`）：UI-INV-2 的 lookup-map-empty-risk + query-param boundary 偵測。
 - **Layer E.1**（pre-handoff self-analysis）：D3 維度引用本檔逐條 cross-check。
 <!-- CLADE:SNIPPET:ui-invariants.template:END -->
+
+<!-- CLADE:SNIPPET:evlog-prod-triage:START -->
+## Prod 問題 → 先查 evlog（runtime triage 反射）
+
+當訊息描述的是 **prod / staging 的 runtime 症狀**（壞了、報錯、500/503/5xx、Toast 出現 error、「全部失敗」、特定 user/request 行為異常、變慢、間歇）而**不是**「改 code / 加 feature」時：
+
+**第一個證據動作 MUST 是查 evlog wide event** —— 撈實際發生過的 request（path / status / duration_ms / error_json / request.id / user / 時間窗），**先於** grep code、codebase-memory-mcp、或派 Explore agent 推測 root cause。
+
+> code 告訴你「**可能**發生什麼」（假設）；evlog 告訴你「**實際**發生了什麼」（ground truth）。prod 症狀不要從 code 猜原因 —— 先用 evlog 把症狀釘到具體 request，再回 code 對因。從 code 推出的 root cause 在驗證前一律視為**未證實的推測**。
+
+這條反射**僅對 runtime 症狀**優先於 codebase-memory-mcp 的 code-first 順序；純 code 探索（找 function、理解架構）仍走 codebase-memory-mcp。
+
+怎麼查（per-backend recipe，含可直接貼的 query）：
+
+- 協定與邊界：`.claude/rules/evlog-investigate.md`
+- Cookbook：`~/offline/clade/vendor/snippets/evlog-investigate/`（Supabase drain SQL / Sentry·Axiom query / stream replay）
+
+**NEVER** 在沒撈過 evlog 前就向 user 宣稱 prod root cause，**NEVER** 把「查 prod log」當成等 user 開口才做的事 —— runtime 症狀進來時它就是你的第一步。
+<!-- CLADE:SNIPPET:evlog-prod-triage:END -->
