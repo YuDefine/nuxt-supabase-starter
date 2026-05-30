@@ -23,6 +23,38 @@ Local edits will be reverted by the next sync.
 | `browser-harness`（CDP 連使用者 Chrome） | 一次性驗收、探索、debug、人工檢查 | 快、互動成本低、繼承使用者登入 cookie |
 | Playwright CLI / spec | 響應式、多 viewport、跨瀏覽器、多分頁、CI 回歸 | 可重現、可沉澱 |
 
+## Browser automation 工具路由（四條線別混）
+
+「截圖 / 瀏覽器自動化」實際有四條獨立的線，**MUST** 先確定自己在哪條，再往下走 browser-harness vs Playwright 的細部決策（見「決策樹」）。混淆會導致 agent 走錯 port、接到 daily Chrome、把 remote cloud browser 當成本機登入狀態、或拿 Codex plugin 行為推論 Claude fork 行為。
+
+| 線 | 是什麼 | 角色 | 切換 / 注意 |
+| --- | --- | --- | --- |
+| **① local fork `browser-harness`@9333** | clade-managed fork，CDP 連使用者已登入的 dedicated BH Chrome（`BU_CDP_URL=http://127.0.0.1:9333`） | **primary** — screenshot-review / verify / design review 預設走這條 | 連線設定見 `screenshot-review` agent §0；本檔下方所有 browser-harness 規範都指這條 |
+| **② upstream `browser-use` CLI / local MCP** | 官方 package 的 CLI（`--cdp-url` / `--connect` / `--mcp` / `cloud connect` / `tunnel`） | **fallback only** — 線 ① 掛掉、或需要 cloud / tunnel 能力時 | 接本機 **MUST** 顯式 `--cdp-url http://127.0.0.1:9333`，**NEVER** 用 `--connect` auto-discover（會接到 daily Chrome / 錯 port）；cloud 用法見下節 |
+| **③ Codex `browser-use@openai-bundled` plugin** | Codex runtime 內建的另一條 browser 整合，跟 ①② 是不同東西 | **Codex-only** | **NEVER** 拿它的行為推論線 ① fork 行為；兩者設定不互通 |
+| **④ Playwright CLI / spec** | 可重現、可沉澱的 spec | responsive / 多 viewport / 跨瀏覽器 / 多分頁 / CI 回歸 | 見下方「決策樹」「場景對照」 |
+
+- **workflow-use（record/replay RPA）目前不在任何一條 production 線上** — 只允許 no-fork PoC，**NEVER** 進 screenshot-review default flow。
+- 同理 `terminal` / `desktop` / `browsercode` / `qa-use` / `vibetest-use` 等 browser-use org 的上層 runtime / app / QA 平台**都不採用**（會與 Claude Code + Codex runtime 競爭）；評估紀錄見 `docs/discussions/2026-05-30-browser-use-org-efficiency.md`。
+
+## Cloud fallback（disabled-by-default）
+
+local Chrome-BH（線 ①）掛掉、或目標本質需要 clean browser / anti-bot / CAPTCHA / proxy / 並發多 browser 時，可走 Browser Use Cloud（線 ② 的 `browser-use cloud connect` 或 Cloud MCP `https://api.browser-use.com/v3/mcp`）作 **opt-in fallback**。預設關閉，agent 啟用前 **MUST** 先回報 user。
+
+### 啟用條件（全部滿足才走）
+
+- local 線 ① 確實不可用（`curl -m 5 http://127.0.0.1:9333/json/version` connection refused，且 `chrome-bh` 重啟仍失敗），**或** 目標明確需要 cloud 專屬能力（anti-bot / CAPTCHA / proxy / clean profile / 並發）
+- 目標是 public URL，或可用 `browser-use tunnel <port>` 暴露 localhost
+- **不需要**使用者私有登入狀態（cloud browser 不繼承本機 Chrome cookie）
+- 並發 browser 數 ≤ free tier（3 concurrent）
+
+### Hard rule
+
+- **NEVER** 自動 profile sync 把本機 Chrome cookie / private state 上傳 cloud — 這是隱私 / 安全決策，只在 user 明確 opt-in 才做
+- **NEVER** 把 cloud browser 的截圖當成「使用者已登入本機」的 review evidence — 兩者不等價
+- **NEVER** 把 `BROWSER_USE_API_KEY` 寫進 repo / clade source — 留 user-level env
+- **MUST** 啟用前回報 user「local Chrome-BH 不可用，建議改走 cloud fallback（限非私有登入頁）」，等 user 同意才繼續
+
 ## 決策樹
 
 1. 需要多 viewport / responsive？→ Playwright

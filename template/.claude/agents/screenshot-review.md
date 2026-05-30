@@ -217,6 +217,8 @@ pkill -f browser_harness.daemon && rm -f /tmp/bu-default.sock /tmp/bu-default.pi
 ```
 然後重新走 defensive prefix。
 
+若 `chrome-bh` 重啟後 `curl -m 5 http://127.0.0.1:9333/json/version` 仍 connection refused（local Chrome-BH 確實不可用），且目標頁面**不需私有登入** → **MUST** 停下回報主 session，建議改走 Cloud fallback（見 `.claude/rules/screenshot-strategy.md` §Cloud fallback），**NEVER** 自動啟用 cloud、**NEVER** 自動 profile sync。
+
 ### 1. 找到 dev server
 
 ```bash
@@ -694,7 +696,9 @@ console.log("clients:", clientScripts.map(k=>k.replace(/^dev:/,"")).join(","));
    info = page_info()
    url_seen = info["url"]
    assert "localhost:<port>" in url_seen, f"unexpected host: {url_seen}"
-   wait_for_element("text=目標文字", timeout=10) if False else wait_for_load()  # 視需要等
+   # MUST 等到 final-state 內容真的渲染才拍（wait_for_load 只代表 navigation 完成，
+   # data-driven 頁面的 async query 資料在 load 之後才填）。poll 目標 signal，最多 ~15s：
+   wait_for_element("text=目標文字", timeout=15)  # 換成該畫面確實會出現的具體 text / selector
    capture_screenshot("screenshots/<env>/<folder-name>/#<N>-<brief-desc>.png", max_dim=1800)
    PY
    ```
@@ -771,9 +775,18 @@ Verify Mode **MUST NOT** 執行 mutation、form fill、click sequence、multi-ro
    - 若 brief 未提供可判斷 URL，標 `UNCERTAIN(missing-known-url)`。
    - 可使用既有 dev-login route 進入指定 URL，但不得在同一 item 內切換多角色或測 multi-role matrix。
 
-2. **等待 final state 載入**
-   - `wait_for_load()` 後用 DOM text / selector 觀察目標狀態。
-   - 可等待 static final-state element；不得 click / fill / submit 來製造狀態。
+2. **Final-state readiness gate（MUST，在 capture 之前）**
+
+   `wait_for_load()` 只代表 navigation 完成，**不**代表 async query 的資料已渲染。對 data-driven 頁面（list / table / dashboard / 任何 fetch-after-mount 內容），load 後立刻拍 = 拍到空殼（placeholder / `0` / `-` / 尚未填值的 cell）。capture 前 **MUST** poll 到 final-state 內容真的出現：
+
+   - **有 structured `ready_signal`（brief 提供）** → poll 直到命中：`text` / `text_all` 全部出現、`text_any` 任一出現、`selector` 存在、`regex` 命中、`min_rows` 達標（多個欄位則 AND）。上限 **15s**、每 ~1.5s 一次。命中才往 step 3 capture。
+   - **無 `ready_signal`（capture-only / legacy item）** → 走 generic settle fallback：至少 **3 個 sample、跨 ≥3s**，`body innerText` hash + list row count + loading-indicator 數（skeleton / spinner / `[aria-busy=true]`）三者都連續穩定才視為 settled。**此 fallback 只降低「太早拍」機率，NEVER 作為 assertion PASS 的充分條件**（穩定 ≠ 資料到齊；async query 未回時 placeholder 也會穩定）。
+
+   poll 期間 **NEVER** click / fill / submit 製造狀態；只是等渲染。
+
+   逾時（15s）signal 仍未命中 → **MUST NOT** 把空殼當 final 拍。標 `UNCERTAIN(content-not-rendered)`，拍一張 **diagnostic** 到 `screenshots/<env>/<change-name>/_exploration/#<N>-content-not-rendered.png`（**非** final path、**不**寫 `(verified-ui:)`），progress 記：waited 15s / expected signal / 最後 DOM observation / loading-busy-row-text samples / diagnostic path，讓主線判斷是 seed / query / auth / UI-fallback 哪一類。
+
+   與 **Emptiness Preflight 正交**：emptiness = 整頁 / 資料集缺 baseline（硬拍無效）；readiness = 頁面不空但 item 要驗的**局部 final-state 內容**是否到。執行順序：host / login check → `wait_for_load()` → **readiness gate（本步）** → Emptiness Preflight → capture or UNCERTAIN。
 
 3. **截 final-state screenshot**
 
@@ -783,7 +796,8 @@ Verify Mode **MUST NOT** 執行 mutation、form fill、click sequence、multi-ro
 
    未指定 color mode 時，沿用一般截圖規則拍 light / dark 子目錄。
 
-4. **記錄 DOM observation**
+4. **記錄 DOM observation + post-capture cross-check（MUST）**
+   - 截圖後 **MUST** 再跑一次 DOM observation。若 item 有 structured `ready_signal`，**MUST** 確認截圖當下 DOM 仍含該 signal；不含 → 標 **FAIL**（或 UNCERTAIN），**NEVER** 回報 PASS / 寫 `(verified-ui:)`。「等待（step 2）」與「觀察（本步）」兩段都要 — 不能只靠等，也不能只靠拍後比對。
    - 只記錄畫面上已存在的狀態，例如 `badge-overdue-visible`、`sort-order-desc`、`readonly-hint-visible`。
    - 不記錄 network mutation status；那是 `verify:api` evidence。
 
@@ -791,9 +805,10 @@ Verify Mode **MUST NOT** 執行 mutation、form fill、click sequence、multi-ro
 
 | 結果 | 條件 | 主 session 處置 |
 | --- | --- | --- |
-| **PASS** | known URL 載入成功 + final-state screenshot 已截 + DOM observation 可描述 | 主 session 寫 `(verified-ui: <ISO> screenshot=<path> dom=<obs>)` annotation；checkbox 保持 `[ ]` 等 user GUI 確認 |
-| **FAIL** | URL 載入成功但 final state 明確不符合 item description | 主 session 寫 `（issue: <details>）` 並回報 user |
+| **PASS** | known URL 載入成功 + readiness gate 命中（有 `ready_signal` 則 signal present + post-capture cross-check 截圖 DOM 仍含）+ final-state screenshot 已截 + DOM observation 可描述 | 主 session 寫 `(verified-ui: <ISO> screenshot=<path> dom=<obs>)` annotation；checkbox 保持 `[ ]` 等 user GUI 確認 |
+| **FAIL** | URL 載入成功但 final state 明確不符合 item description；或 post-capture cross-check 發現 `ready_signal` 不在截圖當下 DOM 內 | 主 session 寫 `（issue: <details>）` 並回報 user |
 | **UNCERTAIN** | 撞登入頁、缺 seed、known URL 不足、需要 mutation / form fill / 多角色切換才能驗 | 主 session 不寫 annotation，改補 baseline 或改派 `verify:e2e` / `verify:api` |
+| **UNCERTAIN(content-not-rendered)** | readiness gate 逾時 15s 仍未見 `ready_signal`（async 資料未到 / query error 被 UI fallback 成合法外觀 / seed 缺局部資料）| 主 session 不寫 `(verified-ui:)`；讀 `_exploration/#<N>-content-not-rendered.png` diagnostic + progress samples 判斷 seed / query / auth / UI-fallback 哪一類，補對應 baseline 後重派 |
 
 ### 完成後 MUST
 

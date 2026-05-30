@@ -59,6 +59,24 @@ propose / ingest 階段命中即視為違反，**MUST** 改寫。
 - [ ] N.M `work_reports` — voided 樣本 `WR-9001`（`void_reason='測試誤輸入'`）+ archived 樣本 `WR-9002`（`archive_reason='系統結構修正'`）→ 寫進 `supabase/seed.sql`
 ```
 
+### `[verify:ui]` ready_signal 契約（分階段強制）
+
+assertion-bearing `[verify:ui]` item（要驗「某具體內容有出現」而非純主觀視覺）**MUST** 能對應到一個**機械可判的 `ready_signal`**——screenshot agent capture 前 poll 它命中才拍、拍後 cross-check 它仍在才算 PASS（執行細節見 screenshot-review agent Verify Mode「必做動作」step 2-4 + `vendor/snippets/verify-channels/ui-final-state-brief*.template.md`）。
+
+`ready_signal` 來源：主線在 `spectra-apply` Step 8a dispatch verify:ui 時，從 item 描述的**具體可斷言短語**建 structured signal（`text` / `text_all` / `text_any` / `selector` / `regex` / `min_rows`）。因此 item 描述本身 **MUST** 含一個具體、唯一、會出現在畫面上的斷言點（例「建議刀位壽命 143 秒」「逾期 badge」「`data-testid=suggested-baseline-row-T990201` 這列」），**NEVER** 只寫「畫面正常」「顯示資料」「狀態正確」這類無法 poll 的模糊語。
+
+**分階段強制**：
+
+- **新寫 / `ingest` 修改的 `[verify:ui]` item** → 描述 **MUST** 含可建 `ready_signal` 的具體斷言點；建不出 signal 的走下方「signal-less 分流」。
+- **既有（已 archived 或本輪未 re-touch）item** → grandfather，screenshot agent 走 generic-settle fallback（不阻擋 archive；但 fallback **不能**當 assertion PASS 的充分條件，per brief template）。
+
+**signal-less 分流**（描述無法產出具體斷言點時，二選一，**NEVER** 硬留 `[verify:ui]`）：
+
+- **純主觀視覺**（spacing / 配色 / visual balance /「好不好看」）→ reclassify `[review:ui]`，user 親驗（見 `manual-review.evidence.md` § `[review:ui]` 收斂原則）。
+- **需要互動才出現的狀態**（click / submit / multi-role 才能到的畫面）→ 該斷言屬 `[verify:e2e]` / `[verify:api]`，不是 final-state screenshot 能驗。
+
+**為什麼**：<consumer-b> `monitoring-slot-suggested-life-and-cleanup`（2026-05-30）—— `[verify:ui]` item 驗「建議刀位壽命 inline 顯示 143 秒」，但該頁逐列建議值來自 async query，在 `wait_for_load()` **之後**才填；screenshot agent load 後立刻拍 → 拍到只有「0 秒 / 1,000 秒」的空殼，evidence 失真、user 無法作業。根因是「capture 前要等什麼」沒被宣告成機械可判 signal，agent 只能 `wait_for_load()` 後盲拍。把 `ready_signal` 變 item 契約 = agent 有明確 poll 目標、拍到真 final state。
+
 ### 適用範圍
 
 - **適用**：所有 `[review:ui]` / `[verify:ui]` items
