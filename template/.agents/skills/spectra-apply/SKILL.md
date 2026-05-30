@@ -645,10 +645,13 @@ If there is no request_user_input 工具 available, present options as plain tex
       ```
 
    2. 依 channel 補查：
-      - `[verify:e2e]`：Playwright config + `e2e/fixtures/index.ts` style three-role fixture 必須存在
+      - `[verify:e2e]`：Playwright config + `e2e/fixtures/index.ts` style three-role fixture 必須存在（propose 階段 `post-propose-manual-review-check.sh` 已對「標 verify:e2e 但 repo 無 e2e infra」印 warn-only advisory；apply 此處為 hard baseline gate，defense in depth）
       - `[verify:api]`：`__test-login` 或等價 session bypass route 必須存在
       - `[verify:ui]`：`supabase/seed.sql` 或專案等價 seed file 必須存在
-   3. 缺 baseline → **STOP**，回報 user 補齊 baseline；**NEVER** 降級 channel、派 agent 撞錯、或讓 screenshot-review 補 seed。
+   3. 缺 baseline → 先判別**該 item 是否真的需要此 channel**（per TD-176）：
+      - **Legitimately 需該 channel**（真 persistence journey 需 e2e / 真需 session round-trip）但 infra 缺 → **STOP**，回報 user 補齊 baseline。
+      - **Mis-marked**（描述其實是 final-state 顯示 → `[verify:ui]` / API round-trip → `[verify:api]` / 使用者互動 round-trip「建立/編輯/輸入/點/存」→ `[review:ui]`）→ **MUST reclassify marker**（不是補 infra）；判別依 `manual-review.evidence.md` Kind 分類指引。
+      - 兩 case 皆 **NEVER**：派 agent 撞錯、或讓 screenshot-review 補 seed。
 
    **Baseline-exists-but-functional-gap 自接路徑（hard rule，clade fork addition — per [[pitfall-verify-evidence-handoff-instead-of-self-collect]]）**：
 
