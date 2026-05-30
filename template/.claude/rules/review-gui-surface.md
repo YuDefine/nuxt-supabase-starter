@@ -99,6 +99,16 @@ Local edits will be reverted by the next sync.
 
 對應 TD: TD-142 / TD-143（accepted, pending implementation）。
 
+`vendor/scripts/audit-screenshot-staleness.mts` 擴 signal `stale_screenshot_after_ui_change`：
+
+- worktree-aware：對每個 active change 解析對應 `session/*` worktree 為 baseDir
+- 比對 `screenshots/local/<change>/*.png` 的 mtime 與該 change 最後一筆 `app/**` | `shared/**` | `server/**` commit（`main..HEAD`）時序
+- screenshot mtime < last UI commit → emit warning signal「stale screenshot（疑似 issue fix 只重拍部分 item）」；無 `#N` 前綴的檔 → LEGACY（建議刪）
+- change-level proxy，有 false positive（同 change 內與 fix 無關的 item 也被標 stale），human triage required
+- Signal 落入 improvement-digest 候選清單
+
+對應 TD: TD-178（accepted）。詳見 `docs/pitfalls/2026-05-30-issue-fix-refreshes-only-flagged-screenshot-leaves-batch-stale.md` + [[manual-review.evidence]] § Issue fix 後重拍範圍。
+
 **Performance 實測（MUST 5）升級路徑**：目前為 review mandatory step（advisory，靠主線執行偵測 + 實測）。若日後 perf 漏驗頻繁，升級候選為 (a) archive 前 hard gate（仿 `vendor/scripts/spectra-advanced/design-gate.sh`，無 perf trace 證據 → exit 2 擋 archive）；(b) `review-gui.mts` 程式化在 perf 命中時自動生成 `verify:ui` perf-trace sub-item。兩者都動 review-gui 本體 → 須走 [[review-gui-change-discipline]] fixtures gate，故不在本次最小落地。
 
 ## 違反時的回報方式

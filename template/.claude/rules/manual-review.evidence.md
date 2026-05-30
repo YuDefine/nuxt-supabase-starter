@@ -78,6 +78,19 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 - 已有 seed / URL，可直接開頁後截 final-state screenshot
 - 不需要 agent 執行 mutation / 填表 / 多角色切換
 
+### Issue fix 後重拍範圍（hard rule，2026-05-30 補強）
+
+當 user 對某個 `[verify:ui]` / `[review:ui]` item 留 `（issue: ...）`、agent fix code 後要交回 user 重驗時：
+
+- **MUST** 重拍「受該次 code 改動影響的**所有** `[verify:ui]` / `[review:ui]` item」的 screenshot，**NEVER** 只重拍被標 issue 那一張。Issue 範圍是 item-scoped，但 code 改動常是 view-scoped（一次改動橫跨整批 item / 整個頁面）— 重拍範圍 **MUST** 對齊 code 改動影響範圍，不是 issue 標記範圍。
+- **MUST** 刪掉同 change 截圖目錄內所有無 `#N` 前綴的 legacy 舊圖（`#N` / `#N.M` 命名規約前的初版殘留）— 它們不再配對任何 item，留著只會被 review-gui filename-matching 誤補位。
+- **MUST** 在交回 user 重驗前跑 `audit-screenshot-staleness.mts`（或人工比對 mtime vs 最後 UI commit）確認 0 stale（在影響範圍內的）。
+- **NEVER** 倚賴 review-gui filename-matching 把舊圖補位當作 evidence 完整 — 舊圖配對的是改動前狀態，user 會對非最新狀態 OK。
+
+判別測試：「這次 fix 改的是哪些檔？這些檔 render 出哪些 item 的畫面？」凡命中的 item 都 **MUST** 重拍，與 issue 標在哪一張無關。
+
+偵測：`vendor/scripts/audit-screenshot-staleness.mts` 的 `stale_screenshot_after_ui_change` signal（screenshot mtime < change 最後 UI commit → STALE）；詳見 `docs/pitfalls/2026-05-30-issue-fix-refreshes-only-flagged-screenshot-leaves-batch-stale.md`。
+
 **Multi-marker（多 channel evidence）**
 
 - mutation + visual confirmation → `[verify:api+ui]`
