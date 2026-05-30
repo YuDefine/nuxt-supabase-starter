@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-29T18:21:16.036Z",
+  "syncedAt": "2026-05-30T06:46:41.850Z",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "fcaf936fbd0e31bc",
     "rules/agent-routing.md": "0230466c12f260a2",
@@ -25,7 +25,7 @@
     "rules/local-rule-override.md": "5795cb5d59f9456f",
     "rules/logging.md": "982bcf4f402f7fea",
     "rules/manual-review.backend.md": "7967bf245457fd63",
-    "rules/manual-review.data-readiness.md": "2b6e94a6c53c03bd",
+    "rules/manual-review.data-readiness.md": "0ddcd123614f9873",
     "rules/manual-review.discuss.md": "93f4f6c4dbce80d2",
     "rules/manual-review.evidence.md": "040d69696dcca9fa",
     "rules/manual-review.md": "c12bb85c278373d2",
@@ -37,7 +37,7 @@
     "rules/review-gui-surface.md": "8585cc8bd6a0bfab",
     "rules/review-tiers.md": "8c8ec7801aeb2714",
     "rules/scope-discipline.md": "a69d1cbc923c89a0",
-    "rules/screenshot-strategy.md": "d363fafef5a5539a",
+    "rules/screenshot-strategy.md": "3edcf5c6c67c1c86",
     "rules/session-claims.md": "d39a2a158486ed89",
     "rules/session-tasks.md": "992eaea717971157",
     "rules/spectra-workflow.md": "1b10f01072f99df5",
@@ -48,7 +48,7 @@
     "rules/ux-completeness.md": "ec5c9860e46f131a",
     "rules/verification-lease.md": "ea61ba2e7db75c86",
     "rules/work-claims.md": "576bc2e77022aef1",
-    "rules/worktree-default.md": "a66b79866964a76e",
+    "rules/worktree-default.md": "6d5a1c18bf26d731",
     "rules/auth.md": "ab77589f04fe8509",
     "rules/dev-login.md": "1763194d8cb31302",
     "rules/audit-schema.md": "e3d9db4baaf89d0b",
@@ -70,7 +70,7 @@
     "skills/commit/SKILL.md": "dc5932bd0870409c",
     "skills/spectra/SKILL.md": "ae7dcf6c23bc22f1",
     "skills/spectra-analyze/SKILL.md": "c833299055df3f76",
-    "skills/spectra-apply/SKILL.md": "5e6f749eddc465bd",
+    "skills/spectra-apply/SKILL.md": "32cf087c00fe1840",
     "skills/spectra-archive/SKILL.md": "3cfa3ffcc181b163",
     "skills/spectra-ask/SKILL.md": "7e980b60c63029d5",
     "skills/spectra-audit/SKILL.md": "d8001653928db6d0",
@@ -87,6 +87,6 @@
     "agents/code-review.md": "57c964c2feb73668",
     "agents/db-backup.md": "5f4d05642f47e5ff",
     "agents/references/clade-review-rules.md": "bbdd26a25a6abf71",
-    "agents/screenshot-review.md": "3e50a8d91f803973"
+    "agents/screenshot-review.md": "6fc9363374adee31"
   }
 }

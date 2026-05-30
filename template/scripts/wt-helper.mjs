@@ -1095,8 +1095,16 @@ export function classifyUnmergedSafety(consumerRoot, conflicted) {
   return { safe, unsafe }
 }
 
-// Stage a specific path list + commit — never `git add -A`, which would catch
-// cross-session WIP. Used by pre-fork baseline guard's `commit` strategy.
+// Stage a specific path list + commit ONLY those paths. `git add -- <paths>`
+// first so untracked scope-in files get included (commit --only rejects bare
+// untracked pathspecs); then `git commit --only -- <paths>` commits exactly
+// those paths and restores the prior index afterward. Crucially the bare
+// `git commit -m` previously used here committed the WHOLE index, so any
+// OTHER-session WIP already pre-staged in main's index got folded into the
+// pre-fork baseline commit (perno per-client-module-isolation hit this: main's
+// index had badge-wt salary/overtime staged). `--only` isolates exactly
+// scopePaths, aligning with rules/core/commit.md «Ad-hoc commit 必走
+// git commit --only». Used by pre-fork baseline guard's `commit` strategy.
 //
 // Caller responsibility: pass a commitlint-compliant message (the baseline
 // caller in this file emits `🧹 chore(baseline): pre-fork sync for <change>`,
@@ -1108,7 +1116,14 @@ function gitSelectiveCommit(consumerRoot, scopePaths, message) {
     throw new Error('gitSelectiveCommit: scopePaths must be a non-empty array')
   }
   git(['add', '--', ...scopePaths], { cwd: consumerRoot, stdio: 'inherit' })
-  git(['commit', '-m', message], { cwd: consumerRoot, stdio: 'inherit' })
+  // `-m message` MUST precede the `--` separator. Anything after `--` is a
+  // pathspec, so `commit --only -- <paths> -m <msg>` makes git treat `-m` and
+  // the message as filenames ("pathspec '-m' did not match"). Order: flags →
+  // `--` → paths.
+  git(['commit', '--only', '-m', message, '--', ...scopePaths], {
+    cwd: consumerRoot,
+    stdio: 'inherit',
+  })
 }
 
 // Detect files in main's working tree that would block `git merge --squash <branch>`:

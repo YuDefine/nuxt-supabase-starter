@@ -742,8 +742,10 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
       共用規約：
 
-      - Brief **MUST** 提供 change name、dev server URL、每個 item 的 known URL、expected DOM observation、預期 screenshot path。
-      - Agent scope **MUST** 限於 open known URL + wait for load + final-state screenshot + DOM observation。
+      - Brief **MUST** 提供 change name、dev server URL、每個 item 的 known URL、**`ready_signal`（structured，見下）**、預期 screenshot path。
+      - **主線 MUST 為每個 assertion-bearing verify:ui item 建 `ready_signal`**：從 item 描述的具體可斷言短語抽機械可判 signal（`text` / `text_all` / `text_any` / `selector` / `regex` / `min_rows`），放進 `--items-json` 的 `ready_signal` 欄。agent capture 前 poll 它命中才拍、拍後 cross-check 它仍在才算 PASS（見 `manual-review.data-readiness.md` § `[verify:ui]` ready_signal 契約 + screenshot-review Verify Mode step 2-4）。**理由**：頁面 async query 資料在 `wait_for_load()` 之後才填，無 signal 時 agent 只能盲拍 → 拍到空殼（per <consumer-b> monitoring-slot 2026-05-30 incident）。
+      - **建不出 `ready_signal`**（描述只有「畫面正常」「顯示資料」等模糊語、無具體斷言點）→ **NEVER** 硬 dispatch；依 `manual-review.data-readiness.md` § signal-less 分流 reclassify（純主觀視覺 → `[review:ui]`；需互動才出現 → `[verify:e2e]` / `[verify:api]`）。既有未帶 signal 的 grandfather item → agent 走 generic-settle fallback（**不可**當 PASS 充分條件）。
+      - Agent scope **MUST** 限於 open known URL + readiness gate poll（≤15s 等 ready_signal）+ final-state screenshot + post-capture cross-check + DOM observation。
       - Agent **NEVER** 做 mutation / form fill / click sequences / multi-role login switching / seed repair。
       - PASS 後，主線 Edit tasks.md 寫：
 
@@ -765,11 +767,14 @@ If there is no AskUserQuestion tool available, present options as plain text and
       - #3 [verify:ui]
         Description: /asset-loans 顯示 overdue badge + top-sort
         Known URL: http://localhost:<port>/asset-loans
-        Expected DOM observation: overdue badge visible, overdue rows sorted first
+        ready_signal:
+          text_any: ["逾期", "overdue"]
+          selector: "[data-testid=asset-loan-overdue-badge]"
+          min_rows: 1
         Screenshot path: screenshots/local/<change-name>/#3-final.png
 
       Scope:
-      - Open the known URL, wait for load, capture final-state screenshot, record DOM observation.
+      - Open the known URL, wait for load, **poll ready_signal until present (≤15s)**, capture final-state screenshot, **post-capture cross-check ready_signal still present**, record DOM observation.
       - Do NOT click, fill forms, submit mutations, switch roles, repair seed, or patch network.
       ```
 
