@@ -12,6 +12,10 @@
 #            When verify-channel annotations are missing, emits [AUTO-REMEDIATE]
 #            directive telling Claude to self-collect evidence per Step 8a
 #            fallback chain, NOT ask the user.
+#   Check 6: Stale Verified-UI Screenshot — verified-ui annotation timestamp
+#            must be AFTER the last commit on the depicted .vue file.
+#            Catches: ingest adds UI polish → old screenshots survive → user
+#            sees pre-polish UI in review GUI.
 #
 # Precondition (per worktree-default.md §5.5 atomic landing): spectra-archive
 # Step 0 MUST run `wt-helper merge-back <change-name>` first so any session
@@ -518,6 +522,118 @@ $VERIFY_MISSING
       MESSAGES+=("[UX Gate] Screenshot Quality Audit 未通過 — review pipeline 截圖存在 warning / critical 或 audit script error。
 跑 \`node --experimental-strip-types scripts/spectra-advanced/audit-screenshot-quality.mts $CHANGE_NAME\` 查看完整報告；整理 final-state 截圖、移動探索圖到 _exploration/，或為 round-trip-only item 加上 @no-screenshot 後再 archive。")
     fi
+  fi
+fi
+
+# --- Check 6: Stale Verified-UI Screenshot Detection ---
+# Screenshots taken before the latest code change to the depicted page are stale.
+# Catches the recurring pattern: ingest adds UI polish → old verified-ui annotations
+# and screenshots survive → user sees pre-polish screenshots in review GUI.
+if [ -f "$TASKS_FILE" ]; then
+  STALE_ITEMS=()
+
+  # Helper: resolve URL path to on-disk .vue file, echo path or empty
+  _resolve_url_to_vue() {
+    local url_path="$1" root ui_dir ext candidate
+    root=$(sux_repo_root)
+    # strip leading slash for path join
+    url_path="${url_path#/}"
+    for ui_dir in $SUX_UI_DIRS; do
+      for ext in $SUX_UI_EXTS; do
+        candidate="$root/${ui_dir}/${url_path}${ext}"
+        [ -f "$candidate" ] && { echo "${ui_dir}/${url_path}${ext}"; return 0; }
+        candidate="$root/${ui_dir}/${url_path}/index${ext}"
+        [ -f "$candidate" ] && { echo "${ui_dir}/${url_path}/index${ext}"; return 0; }
+      done
+    done
+    # Try dynamic route segments: /admin/foo/mock-emp-1 → /admin/foo/[employee].vue
+    local parent dir_candidate
+    parent=$(dirname "$url_path")
+    for ui_dir in $SUX_UI_DIRS; do
+      for ext in $SUX_UI_EXTS; do
+        # glob for [param].ext in the parent dir
+        for dir_candidate in "$root/${ui_dir}/${parent}/"[*]"${ext}"; do
+          [ -f "$dir_candidate" ] && {
+            echo "${dir_candidate#$root/}"
+            return 0
+          }
+        done
+      done
+    done
+    return 1
+  }
+
+  # Extract manual-review section and scan for verified-ui annotations
+  IN_MR=false
+  LINE_NUM=0
+  while IFS= read -r line; do
+    LINE_NUM=$((LINE_NUM + 1))
+    # Enter manual review section
+    if [[ "$line" =~ ^##[[:space:]]+人工檢查 ]]; then
+      IN_MR=true
+      continue
+    fi
+    # Exit on next H2
+    if [ "$IN_MR" = true ] && [[ "$line" =~ ^##[[:space:]] ]] && ! [[ "$line" =~ ^##[[:space:]]+人工檢查 ]]; then
+      break
+    fi
+    [ "$IN_MR" = true ] || continue
+
+    # Only process lines with verified-ui annotation
+    [[ "$line" =~ \(verified-ui:[[:space:]]*([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+Z?) ]] || continue
+    local_annotation_ts="${BASH_REMATCH[1]}"
+
+    # Extract item id (#N or #N.M)
+    item_id=""
+    if [[ "$line" =~ \#([0-9]+(\.[0-9]+)?) ]]; then
+      item_id="#${BASH_REMATCH[1]}"
+    fi
+
+    # Extract URL from description (strip host, keep path before query/backtick)
+    url_path=""
+    if [[ "$line" =~ https?://[^/]+(/[^\`\?[:space:]]+) ]]; then
+      url_path="${BASH_REMATCH[1]}"
+      # strip trailing backtick/quote artifacts
+      url_path="${url_path%\`}"
+      url_path="${url_path%\"}"
+      url_path="${url_path%\'}"
+    fi
+
+    [ -n "$url_path" ] || continue
+
+    # Resolve URL to .vue file
+    vue_file=$(_resolve_url_to_vue "$url_path") || continue
+    [ -n "$vue_file" ] || continue
+
+    # Get last commit time of the .vue file
+    vue_commit_ts=$(cd "$REPO_ROOT" && git log -1 --format='%aI' -- "$vue_file" 2>/dev/null)
+    [ -n "$vue_commit_ts" ] || continue
+
+    # Compare timestamps (convert to epoch for reliable comparison)
+    # Use date -j on macOS, date -d on Linux
+    if date -j -f '%Y-%m-%dT%H:%M:%S' "$(echo "$local_annotation_ts" | sed 's/Z$//' | sed 's/+.*//')" '+%s' >/dev/null 2>&1; then
+      ann_epoch=$(date -j -f '%Y-%m-%dT%H:%M:%S' "$(echo "$local_annotation_ts" | sed 's/Z$//' | sed 's/+.*//')" '+%s' 2>/dev/null)
+      vue_epoch=$(date -j -f '%Y-%m-%dT%H:%M:%S' "$(echo "$vue_commit_ts" | sed 's/+.*//' | sed 's/Z$//')" '+%s' 2>/dev/null)
+    else
+      ann_epoch=$(date -d "$(echo "$local_annotation_ts" | sed 's/Z$//' | sed 's/+.*//')" '+%s' 2>/dev/null)
+      vue_epoch=$(date -d "$(echo "$vue_commit_ts" | sed 's/+.*//' | sed 's/Z$//')" '+%s' 2>/dev/null)
+    fi
+
+    [ -n "$ann_epoch" ] && [ -n "$vue_epoch" ] || continue
+
+    if [ "$ann_epoch" -lt "$vue_epoch" ]; then
+      STALE_ITEMS+=("${item_id:-?} — screenshot ${local_annotation_ts} < code ${vue_commit_ts} (${vue_file})")
+    fi
+  done < "$TASKS_FILE"
+
+  if [ "${#STALE_ITEMS[@]}" -gt 0 ]; then
+    BLOCKED=true
+    MESSAGES+=("[UX Gate] Stale Screenshot Detection 未通過 — ${#STALE_ITEMS[@]} 張 verified-ui 截圖早於對應 .vue 檔的最後 commit，可能顯示舊版 UI。
+
+需重拍的項目：
+$(printf '  - %s\n' "${STALE_ITEMS[@]}")
+
+修正方式：重跑 verify:ui channel 對這些 items 拍 fresh screenshot（從 worktree 起 dev server + 重新截圖），更新 (verified-ui: <新 ISO>) annotation timestamp。完成後重跑 archive。")
   fi
 fi
 
