@@ -51,6 +51,16 @@ Local edits will be reverted by the next sync.
    單 screenshot 對應多 state 是**反模式**，annotation present 但實際只 cover 部分 state，archive-gate 會把 item 翻 `[x]` 造成 silent miss。
 3. **Impl gate（已 enforced）**：review-gui detail page mutation handler (`persistReviewAction` / `applyReviewActionToContent` / `invokeReviewArchive`) 已 gate impl 完成率 < `APPLY_COMPLETE_THRESHOLD` (0.90) 時 422 拒收。Surface agent **MUST** 依賴此 gate，**禁止**在 detail page client-side 繞過或重刻 mutation。
 4. **review-gui scan result trust**：對 scan 回傳的 `bucket / pending / userActionPending` 視為 truth source；**不**從 HANDOFF.md 或 tasks.md 重推。Scan 結果與 HANDOFF.md 對不上 → 跑 `node vendor/scripts/review-gui.mts --scan --refresh` 重 build 並更新 HANDOFF.md，**不**手動編輯 HANDOFF.md 對齊。
+5. **Performance 實測自動檢測**：review / verify **每一個** web UI change 時，**MUST** 先對該 change 的改動檔機械 grep perf keyword（不靠主觀判斷「這個有沒有影響效能」）：
+   ```bash
+   git diff --name-only <base>..<head> -- '*.vue' '*.tsx' '*.jsx' '*.css' '*.scss' '*.html' \
+     | xargs -r grep -lE 'fetchpriority|content-visibility|scheduler\.(yield|postTask)|requestIdleCallback|speculationrules|web-vitals|onLCP|onINP|onCLS'
+   ```
+   完整 keyword 清單以 `scripts/audit-modern-web-skill.mjs` `TOPIC_KEYWORDS.performance` 為真相源。
+   - **命中** → **MUST** 在 clade home 跑 chrome-devtools-mcp 實測（`navigate_page` → `performance_start_trace` → `performance_analyze_insight` → `lighthouse_audit`），把 LCP / INP / CLS + 關鍵 insight **inline 寫進 review report**；改善前後**各**跑一次寫前後對比。how 見 `~/.claude/rules/modern-web-mcp.md` § Performance 主題：實測閉環，recipe 見 `~/offline/clade/vendor/snippets/modern-web-guidance/README.md` § 實測閉環。
+   - **沒命中** → silent skip；但若改動觸及 hero image / above-the-fold layout / 字體載入，即使 keyword 未命中也 **SHOULD** 實測（keyword 偵測是下界，不是上界）。
+
+   chrome-devtools-mcp 採中央自用，**只在 clade home session 可用**（local scope）；consumer session 內無此工具 → 此偵測與實測**僅在 clade home review 流程執行**，不要在 consumer session 假裝能跑或硬找工具。
 
 ### NEVER
 
@@ -58,6 +68,7 @@ Local edits will be reverted by the next sync.
 - ❌ 對 compound item 只收一張截圖代表多 state；annotation 寫 `screenshot=path` 但 description 含 `預設 → filter`、`before/after`、`A→B`、`step1→step2`、`hover`、`focus` 等 paired-state marker
 - ❌ 在 detail page 試圖重刻或繞過 impl gate — server-side gate 是 final guard，client-side 繞過會被 422 拒收
 - ❌ `/handoff` Mode B 推薦 `pnpm review:ui` 後就放手，**不**先跑 `--scan` 預備 HANDOFF.md state — 那等於把「review-gui 該顯示什麼」交給 user 自己探索
+- ❌ review web UI change 時 skip perf keyword 偵測、或偵測命中後不實測就讓 review pass — Performance 是 review surface 的 mandatory 維度（per MUST 5），不是「想到才量」的 optional
 
 ## 界線（不在本 rule 範圍）
 
