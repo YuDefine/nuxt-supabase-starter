@@ -432,6 +432,56 @@ for i in $(seq 0 $((PATTERN_COUNT - 1))); do
   done
 done
 
+# ---------------------------------------------------------------------------
+# TD-176 Item A: verify:e2e feasibility advisory (warn-only — NEVER alters exit).
+# review-gui correctly flags mis-marked verify items as "evidence missing", but
+# the root is verify-channel markers authored at propose time without checking
+# the channel is actually runnable. Here we catch the most mechanical case:
+# a [verify:e2e] item in a consumer repo that has no e2e infrastructure. The
+# proposing agent should reclassify (→ verify:api / verify:ui for assertions,
+# → review:ui for interaction round-trips) or add Playwright infra before apply.
+# Soft gate by design (per 5-Layer Phase 3.1 zero-soak hard-gate deferral): we
+# print an advisory and leave the exit code untouched. This is a repo-state probe,
+# deliberately NOT a patterns.json regex (that schema is text-only, no filesystem).
+# ---------------------------------------------------------------------------
+e2e_items=()
+for idx in "${!manual_block_lines[@]}"; do
+  line="${manual_block_lines[$idx]}"
+  # Unchecked checkbox whose [verify:...] kind marker lists e2e as a channel
+  # (covers [verify:e2e], [verify:e2e+ui], [verify:api+e2e], [verify:e2e+api+ui]).
+  if printf '%s\n' "$line" | grep -qE '^[[:space:]]*-[[:space:]]*\[ \].*\[verify:([a-z0-9]+\+)*e2e(\+[a-z0-9]+)*\]'; then
+    e2e_items+=("tasks.md:${manual_block_lineno[$idx]}")
+  fi
+done
+
+if [ "${#e2e_items[@]}" -gt 0 ]; then
+  # e2e infra present if ANY signal hits (lenient — avoid false-warn on consumers
+  # that genuinely have e2e set up). template/ path covers monorepo consumers (starter).
+  has_e2e_infra=false
+  if find "$REPO_ROOT" -maxdepth 3 -name 'playwright.config.*' -not -path '*/node_modules/*' 2>/dev/null | grep -q .; then
+    has_e2e_infra=true
+  elif [ -f "$REPO_ROOT/package.json" ] && jq -e '(.scripts // {}) | (has("test:e2e") or has("test:e2e:verify"))' "$REPO_ROOT/package.json" >/dev/null 2>&1; then
+    has_e2e_infra=true
+  elif [ -f "$REPO_ROOT/e2e/fixtures/index.ts" ] || [ -f "$REPO_ROOT/template/e2e/fixtures/index.ts" ]; then
+    has_e2e_infra=true
+  fi
+
+  if [ "$has_e2e_infra" = false ]; then
+    echo "⚠ post-propose-manual-review-check [TD-176 verify:e2e feasibility]: ${#e2e_items[@]} item(s) marked [verify:e2e] but this repo has no e2e infra" >&2
+    echo "    (no playwright.config.*, no test:e2e / test:e2e:verify script, no e2e/fixtures/index.ts)" >&2
+    for it in "${e2e_items[@]}"; do
+      echo "    - ${it}" >&2
+    done
+    echo "    Advisory (warn-only, does NOT block apply): reclassify the marker, or add Playwright infra." >&2
+    echo "      · final-state visual assertion → [verify:ui]" >&2
+    echo "      · API round-trip assertion     → [verify:api]" >&2
+    echo "      · interaction round-trip (建立/編輯/輸入/點/存) → [review:ui]" >&2
+    echo "      · genuinely needs Playwright journey → add e2e infra (playwright.config + e2e/fixtures)" >&2
+    echo "    See .claude/rules/manual-review.evidence.md Kind 分類指引." >&2
+    echo "" >&2
+  fi
+fi
+
 # Output.
 if [ "${#findings[@]}" -eq 0 ]; then
   echo "✓ post-propose-manual-review-check passed (${#manual_block_lines[@]} items in ## 人工檢查 block)"

@@ -204,6 +204,28 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 
 **Pre-Review Data Readiness hook `VERIFY_UI_SAMPLE_KEY_DISPLAY_CHECK`**（patterns.json v1.5.0+；前身 `VERIFY_UI_SAMPLE_KEY_BOUND` v1.4.2）會在 propose / ingest 時自動掃 description regex 命中後，額外跑 reverse page-grep（解析 item URL → 反推 `.vue` page → grep identifier-column token + literal key），把具體 grep 結果 enrich 進 remediation，建議保 `[verify:ui]` 或 reclassify `[review:ui]`，避免 mid-flight 才撞牆。
 
+### `[verify:*]` 編輯/狀態變更類動作對 fixture 可編輯性的要求（hard rule，2026-05-30 TD-176）
+
+`[verify:*]` item 描述含**編輯/狀態變更類動作**（編輯 / 修改 / 更新 / 作廢 / 封存 / 送出 / 核准 / 取消 / 刪除）且引用**具體 sample**（business key / UID / 單號）時，該 sample **MUST** 處於可執行該動作的狀態（editable / not-completed / not-readonly / 未結案）。
+
+引用 completed / readonly / 已結案 / 已鎖定 的 sample 做編輯類動作 → **fixture 狀態與動作不相容**：agent 無法 truthfully 完成 round-trip（按鈕 disabled / 路徑 422 / 表單唯讀），evidence sweep 會正確判「缺證據」逼 user 當 relay channel。**MUST** 二擇一修正：
+
+- **改引用可編輯狀態的 sample**（同 fixture 集合內挑一筆 draft / pending / 進行中的單），保持原 channel；或
+- 若該動作**本質需真人親自操作**（白名單情境）→ 改 `[review:ui]`。
+
+**實證**（TD-176，<consumer-b> `tool-usage-count-cost-formula` #3.1）：
+
+```markdown
+❌ - [ ] #3.1 [verify:ui] /purchase 編輯 PO `991510` 的數量 → 存 → 顯示更新後數量
+   理由：PO 991510 是 completed（唯讀）採購單，編輯按鈕 disabled / 路徑唯讀；
+         (a) 「編輯 → 存」本就是互動 round-trip（verify:ui 禁 mutation）；
+         (b) fixture 狀態（completed）與動作（編輯）不相容
+         → 改引用一筆 draft/pending 狀態的 PO sample 並標 [verify:e2e]/[verify:api]（persistence/round-trip），
+           或若必須真人操作 → [review:ui]
+```
+
+判別與本檔 §「`[review:ui]` 收斂原則」（form submit / persistence → verify:api/e2e）+ `manual-review.data-readiness.md` § signal-less 分流（需互動才出現的狀態 → verify:e2e/api；純主觀視覺 → review:ui）一致。**目前無機械 gate**（fixture runtime 狀態無法從 tasks.md 文字機械判斷）— 靠本 guidance 在 propose 寫作時導正。
+
 ## `@no-screenshot` Marker（hard rule）
 
 當人工檢查項目是純 functional round-trip，且 screenshot review 無法提供有效視覺證據時，可在該 checkbox line 行尾加上 `@no-screenshot` marker。這個 marker 表示 `pnpm review:ui` 應把該 item 視為 round-trip-only manual-review item：使用者親自操作後可直接勾 OK，不需要截圖，viewer 顯示 round-trip-only UI，且不顯示「複製 handoff prompt」。
