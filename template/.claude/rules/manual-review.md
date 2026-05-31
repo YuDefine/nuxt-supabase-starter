@@ -287,6 +287,61 @@ User 在 GUI 對 #4.1 點「✓ 通過」後：
 
 `（issue:）` 與 `(claude-analyzed:)` 兩條 annotation 同時被 strip，change 進入下一輪流轉。
 
+### `(awaiting-user-decision: ...)` annotation（Claude-writable）
+
+當 Claude 判定某 pending item 是**純 user 商業決策**（production 授權 / 商業判斷），自己推不動、已準備好 decision packet 呈 user 時，**MAY** 在該 item 同行寫入此 annotation 把球交還 user。與 `(claude-analyzed:)` 對稱，但語意是「等 user 商業拍板」而非「等 user 重新評估 UI」。寫入後 change 落 **`awaitingUserDecision`** bucket（review-gui home page「🧑‍⚖️ 等 user 決策」群），master button 排除、不再抓回硬做。
+
+#### Schema
+
+```text
+(awaiting-user-decision: <ISO-8601>[ packet=<path>])
+```
+
+- **Half-width parens**（machine annotation，與 `(claude-analyzed:)` 同類）
+- `<ISO-8601>` **required**（UTC，秒級精度）
+- `packet=<path>` optional：decision packet（給 user 拍板的證據 / 摘要）相對路徑。**Single hyphen-joined token**（write 時 `sanitizeNote` 後 whitespace 折成 `-`），與 `verified-ui` 的 `screenshot=<path>` 同 convention
+- 落點：description 後、所有 trailing markers 前
+- **不**要求 item 已帶 `（issue:）`（D-only / review:ui pending 都可標 — 跟 claude-analyzed 的差別）
+
+#### Claude 可寫條件（hard rule）
+
+- **MUST** 在判定該 item 是純 user 商業決策、且已準備 decision packet 後才寫
+- **MUST NOT** 翻 checkbox（保留原 `[ ]`，user 在 GUI 點 OK / Issue / Skip 才翻）
+- **MUST NOT** 用此 annotation 規避該 item 其實 actionable 的情況 — 若 issue 可走 (A) UX/copy / (B) behavior / (C) spec gap，**MUST** 走那些路徑，不可標 awaiting-user-decision 推給 user
+
+#### Strip semantics
+
+User 在 GUI 對該 item 點 **OK / Issue / Skip** 時，`stripAnnotations` 一併清掉 `(awaiting-user-decision: ...)`（與 `(claude-analyzed:)` 同 — ball 一旦回到 user 動作即失效）。verified-* / claude-discussed annotation 不受此 strip 影響。
+
+#### CLI 寫入入口
+
+除手寫外，可用 helper 一鍵寫入並驗證 re-bucket：
+
+```bash
+node vendor/scripts/mark-claude-analyzed.mjs --change <name> [--consumer <id>] --item '#N' \
+     --awaiting-user-decision [--packet <path>]
+```
+
+helper 寫入後用 `listPendingChanges` 重算 bucket，印 `oldBucket → newBucket`（典型 `feedbackGiven → awaitingUserDecision` 或 `awaitArchiveWalkthrough → awaitingUserDecision`）。同一 helper 預設模式（不帶 `--awaiting-user-decision`）寫 `(claude-analyzed: route=E)`（item MUST 已帶 `（issue:）`）。
+
+#### Home page 影響
+
+帶 `(awaiting-user-decision:)` 的 item 從 Claude-ball 計數（`userActionPending` / `issued` / `verifyPendingCount` / `discussPendingCount`）排除，計入 `awaitingUserDecisionCount`。當 Claude-ball 全清（無 readiness / evidence missing / 未分析 issue / verify pending / D-only walkthrough）、`userActionPending=0` 且 `awaitingUserDecisionCount>0` → change 落 **`awaitingUserDecision`** bucket。詳見 `vendor/scripts/review-gui.mts` 內 `awaitingUserDecisionCount` field + `reviewBucketForChange` 的 awaitingUserDecision 分支。
+
+### `@apply-blocked[<reason>]` marker（impl 卡外部 blocker）
+
+當 change 的 implementation 卡在**外部 blocker**（等決策 / 等別 change / 缺資源），Claude 推不動、不該被 master button 反覆抓回硬做時，在 **tasks.md 任意處獨立一行**加：
+
+```text
+@apply-blocked[<reason>]
+```
+
+- 與 `@evidence-via-manual-review` / `@no-screenshot` 同 marker 詞彙，但用在 tasks.md 檔層級（非 `## 人工檢查` item 行）
+- `<reason>` 簡述卡點（如 `等 PM 決策金流串接範圍`）
+- impl 未完成（< 90% threshold）**且**含此 marker → change 從 `applyInProgress` 分到 **`applyBlocked`** bucket（review-gui「⏸ applyBlocked（交還 user）」群），master button 排除
+- 解 blocker 後**移除** marker → change 自動回 `applyInProgress` 繼續
+- 同時**SHOULD** 寫 HANDOFF blocker entry 給 paper trail（marker 是 machine-readable source、HANDOFF 是人讀說明）
+
 ### Default Kind Derivation Rule（fallback）
 
 當 item 行無 leading marker（典型情境：legacy in-flight change），parser 依 `proposal.md` 推導 default kind：
@@ -317,7 +372,7 @@ User 在 GUI 對 #4.1 點「✓ 通過」後：
 - [ ] #N [<kind>] <description> [(verified-<channel>: ...)]... [@followup[TD-NNN]] [@no-screenshot]
 ```
 
-`[<kind>]` 永遠在最前（緊接 `#N`），`@no-screenshot` 永遠在最後；`@followup[TD-NNN]` 若存在須夾在 description 與 `@no-screenshot` 之間。寫回 annotation（`（issue: ...）` / `（skip）` / `（note: ...）` / `（finding: ...）` / `(claude-discussed: <ISO>)` / `(claude-analyzed: <ISO> route=<code>[ note=<...>])` / `(verified-e2e: ...)` / `(verified-api: ...)` / `(verified-ui: ...)`）**MUST** 插在 description 後、所有 trailing markers (`@followup` / `@no-screenshot`) 前。`（finding: ...）` 與 `（issue: ...）` / `（skip）` / `（note: ...）` 正交（可共存於同一行），其餘 action annotation 之間仍互斥。`(claude-analyzed:)` 與 `（issue:）` 必須共存（路由 (E) 時 Claude 寫入 claude-analyzed，issue 保留為 user 原始回饋），user 在 GUI 動作時兩者同時被 strip — 詳見「`(claude-analyzed: ...)` annotation」段。
+`[<kind>]` 永遠在最前（緊接 `#N`），`@no-screenshot` 永遠在最後；`@followup[TD-NNN]` 若存在須夾在 description 與 `@no-screenshot` 之間。寫回 annotation（`（issue: ...）` / `（skip）` / `（note: ...）` / `（finding: ...）` / `(claude-discussed: <ISO>)` / `(claude-analyzed: <ISO> route=<code>[ note=<...>])` / `(awaiting-user-decision: <ISO>[ packet=<path>])` / `(verified-e2e: ...)` / `(verified-api: ...)` / `(verified-ui: ...)`）**MUST** 插在 description 後、所有 trailing markers (`@followup` / `@no-screenshot`) 前。`（finding: ...）` 與 `（issue: ...）` / `（skip）` / `（note: ...）` 正交（可共存於同一行），其餘 action annotation 之間仍互斥。`(claude-analyzed:)` 與 `（issue:）` 必須共存（路由 (E) 時 Claude 寫入 claude-analyzed，issue 保留為 user 原始回饋），user 在 GUI 動作時兩者同時被 strip — 詳見「`(claude-analyzed: ...)` annotation」段。
 
 ### Kind 分類指引（摘要）
 
@@ -521,6 +576,9 @@ Session worktree fork 在 clade hook 升版前時，worktree 內 `scripts/spectr
 - **NEVER** 用 `route` 值不為 `E` 的 claude-analyzed — schema 預留未來擴展，但目前 hard rule 限 `E`（false positive / item 應改回 OK 或翻 [x] / 需 user 重新評估）。其他路由結論 (A) / (B) / (C) / (D) 表示 user 仍需要 Claude 動作，**不該**寫 claude-analyzed annotation
 - **NEVER** 在寫 `(claude-analyzed: ...)` 時翻 checkbox — 此 annotation 保 `[ ]`，user 在 GUI 點 OK / Issue / Skip 才翻；翻了會打破 GUI bucket 分類（awaitingUserReEval 條件要求 issued > 0、checkbox `[ ]`）
 - **NEVER** 在 GUI 寫回 user action（OK / Issue / Skip）時遺漏 strip `(claude-analyzed: ...)` annotation — 保留 stale annotation 會讓下次 GUI re-render 把已動過的 item 仍歸到「✋ Claude 已分析、等 user 重新評估」bucket，造成 user 困惑
+- **NEVER** 用 `(awaiting-user-decision: ...)` annotation 規避該 item 其實 actionable 的情況 — 若 issue 可走 (A) UX/copy / (B) behavior / (C) spec gap 就**MUST** 走那些路徑，不可標 awaiting-user-decision 把可做的事推給 user
+- **NEVER** 在寫 `(awaiting-user-decision: ...)` 時翻 checkbox — 此 annotation 保 `[ ]`，user 在 GUI 動作才翻
+- **NEVER** 把 `@apply-blocked[<reason>]` 當「不想做就標一下」的逃生口 — 只在真正卡外部 blocker（等決策 / 等別 change / 缺資源）時用；解 blocker 後**MUST** 移除 marker 讓 change 回 applyInProgress
 - **NEVER** dispatch verify channels 前不檢查 per-channel baseline — 撞 baseline 缺後升 UNCERTAIN 是浪費 budget；主線預先 grep / read 確認，缺則停下回報 user 補齊
 - **NEVER** 在 verify dispatch 當下才問 user「dev-login / seed 準備好了嗎」— baseline 是 codebase 層長期狀態，不該每次派工都驚動 user
 - **NEVER** 修完 `## 人工檢查` 區後直接 commit 而沒重跑 `post-propose-manual-review-check.sh` 驗 0 violation — 見「Post-Edit Validation Gate」。實證會在 ingest 過程引入新 pattern hit（如寫範例 step 時用「任一筆」），目測抓不到
