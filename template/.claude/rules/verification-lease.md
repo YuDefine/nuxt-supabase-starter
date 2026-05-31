@@ -55,6 +55,10 @@ Local edits will be reverted by the next sync.
     "userDataDir": "~/Library/Application Support/Google/Chrome-BH"
   },
   "cookieNamespace": "tdms-fix-vending-part-name-display",
+  "devSession": {                     // dev-session.mjs 寫入：dev process 實際掛在哪個 zellij session
+    "multiplexer": "zellij",
+    "name": "dev-tdms-<client-a>"
+  },
   "envFile": {
     "path": "<home>/offline/<consumer-b>-wt/fix-vending-part-name-display/.env.local",
     "sha256": "e3b0c44..."
@@ -66,7 +70,9 @@ Local edits will be reverted by the next sync.
 }
 ```
 
-部分 slot 可缺（如未啟瀏覽器 → `browserProfile: null`），但 `devServer` + `holder` + `claimedAt` 必填。
+部分 slot 可缺（如未啟瀏覽器 → `browserProfile: null`），但 `devServer` + `holder` + `claimedAt` 必填。`devSession` 由 `dev-session.mjs` 寫入，缺則代表非 dev-session 起的（legacy / 手動）。
+
+**Durability 層（為什麼 dev process 要掛在 zellij）**：agent harness 會回收 Bash 衍生的整個 process tree —— 連 `spawn(detached:true)` / setsid / nohup 都逃不掉（2026-06-01 <consumer-a> 實證）。`dev-session.mjs` 把 dev 命令交給獨立於 agent session 的常駐 **zellij server**，dev process 不在 agent spawn tree 裡 → 跨 tool-call / 跨 session 存活。lease 的 `devServer.pid` 是 zellij 內那個 nuxt/vite process，kill lease 時連帶收掉 zellij session（`dev-session.mjs stop`）。見 [`proactive-skills.md`](./proactive-skills.md) § Dev Server Auto-Spawn。
 
 ## Operations
 
@@ -100,7 +106,8 @@ human        固定字串 "human"                             不可缺，至少
 
 | 工具 | 何時 claim | 何時 release |
 |---|---|---|
-| `vendor/scripts/dev-singleton.mjs` | spawn 前；reuse 前讀 lease 對 cwd | dev server 被 kill 時 |
+| `vendor/scripts/dev-session.mjs`（**durable 主入口**；durability=zellij，取代 dev-singleton 的 spawn 層） | launch 前讀 lease 對 cwd（strict 衝突 refuse）；ready 後寫 lease + `devSession` 欄 | `stop` 時 |
+| `vendor/scripts/dev-singleton.mjs`（legacy spawn(detached) wrapper；其 spawn 層會被 agent harness reap，新工作走 dev-session） | spawn 前；reuse 前讀 lease 對 cwd | dev server 被 kill 時 |
 | `vendor/snippets/dev-auth/templates/server-api-dev-signin.ts.template` | endpoint 第一次被打時 | lease 有 holder 才允許簽 cookie（防 CSRF） |
 | `vendor/snippets/wt-helper/`（建立 worktree） | bootstrap .env.local 前 | env file 寫完後 |
 | `browser-harness` daemon wrapper（future） | 開瀏覽器 + load profile 前 | daemon shutdown 時 |
@@ -132,7 +139,7 @@ To inspect, run: dev:status
 Claude / Codex 在這條規則之下：
 
 - **NEVER** 用 raw `nuxt dev` / `node server.mjs` / `playwright start` 之類 bypass lease 的方式啟動 dev server
-- **NEVER** 直接 `lsof + kill` 別 holder 的 PID（即使它是另一個自己的 session）；要殺一律走 `dev-singleton.mjs --takeover` 或 `release` op
+- **NEVER** 直接 `lsof + kill` 別 holder 的 PID（即使它是另一個自己的 session）；要殺一律走 `dev-session.mjs stop` / `--takeover`（或 legacy `dev-singleton.mjs`）的 op
 - **NEVER** 在 lease 衝突訊息出來時自行決定 `--takeover`，**MUST** 把 message 原樣呈給 user 讓 user 決定
 - **NEVER** 在 autonomous mode（background subagent、scheduled task、/loop）下執行 `--takeover`，autonomous = 永遠 refuse + 在 chat 報告
 - **MUST** 在 claim 時帶可辨識的 `--label`（如「verifying #178」「reproducing TD-099」）

@@ -213,27 +213,37 @@ Consumer 端直接跑 `pnpm review:ui` 被 review-gui.mts `preflightCladeOnly` g
 當 review-gui 顯示某 item 的 screenshot 不存在 / outdated，或 user 想開瀏覽器親自操作 sanity check 時，**agent 自己起 dev server**，禁止叫使用者「請 cd 到 worktree 跑 `pnpm dev`」。
 
 > **多 worktree 反覆切換 → 用 [`vendor/scripts/dev-router.mjs`](../../vendor/scripts/dev-router.mjs)（散播到 consumer `scripts/dev-router.mjs`）。**
-> 當需要在多個 worktree backend 之間反覆切換驗收（典型：review 不同 change 的 worktree、避免「cd worktree + 重啟 nuxt + 重啟 tunnel」的手動切換），**SHOULD** 用 dev-router：常駐 L4 TCP proxy 佔住公開 port（+ tunnel，若 dev script 有），`node scripts/dev-router.mjs use <slug>` 即切 active backend、瀏覽器 reload 乾淨 cutover，免 cd / 免重啟。它從 package.json dev script auto-detect（零設定，consumer-agnostic）。dev-router 與下方 dev-singleton 互補：dev-singleton 管「單一 dev server + lease」，dev-router 管「一個公開 port 後面多 worktree backend 切換」。單次起一個 server（非多 worktree 切換）走下方 dev-singleton / scan-free-port 分流。
+> 當需要在多個 worktree backend 之間反覆切換驗收（典型：review 不同 change 的 worktree、避免「cd worktree + 重啟 nuxt + 重啟 tunnel」的手動切換），**SHOULD** 用 dev-router：常駐 L4 TCP proxy 佔住公開 port（+ tunnel，若 dev script 有），`node scripts/dev-router.mjs use <slug>` 即切 active backend、瀏覽器 reload 乾淨 cutover，免 cd / 免重啟。它從 package.json dev script auto-detect（零設定，consumer-agnostic）。dev-router 與下方 dev-session 互補：dev-session 管「一 consumer(-app) 一個 durable dev server（zellij）+ lease」，dev-router 管「一個公開 port 後面多 worktree backend 切換」。單次起一個 server（非多 worktree 切換）走下方 dev-session（durability + lease + 反累積）。
 
-行為依該 consumer 的 OAuth port-pin 屬性分流（讀 [`consumer-meta.md`](./consumer-meta.md) snapshot 的 `auth.portPinned` 欄位）：
+> **持久層（durability）— ALL agent 自起的長駐 dev server MUST 走 [`vendor/scripts/dev-session.mjs`](../../vendor/scripts/dev-session.mjs)（散播到 consumer `scripts/dev-session.mjs`）。**
+>
+> root cause：agent（Claude Code / Codex）的 harness 會在 tool-call 生命週期結束時回收 Bash 衍生的**整個 process tree** —— **連 `Bash(run_in_background=true)` / `spawn(detached:true)+unref()` / `setsid` / `nohup` 都逃不掉**（2026-06-01 <consumer-a> 實證：三種起法的 nuxt dev 都被 reap，唯獨掛在 zellij/tmux server daemon 下的存活）。dev-session 把 dev 命令交給**獨立於 agent session 的常駐 zellij server**（`zellij attach --create-background <name>` + `zellij --session <name> run --cwd <dir> -- <cmd>`），dev process 變成 zellij 的子孫、不在 agent spawn tree 裡 → 跨 tool-call / 跨 session 存活。
+>
+> - **NEVER** 再用 `Bash(run_in_background=true)` / 裸 `nuxt dev` / `spawn(detached)` / setsid / nohup 起長駐 dev server（會被 reap，user 看到 502 / 530）
+> - **反累積**：dev-session 一 consumer(-app) 一個 durable session（名 `dev-<consumer_id>[-<app>]`），起前先 `zellij list-sessions` 查、有就 **reuse 不重起第二台**；`node scripts/dev-session.mjs sweep` 清 EXITED / 死掉的 session；多 worktree 切換仍走上面的 **dev-router**（一個公開 port 切 backend），**禁止**對每個 worktree 各起一個 dev-session
+> - **關係**：dev-session **取代** dev-singleton 的 `spawn(detached)` 層（lease schema 相容、durability 改靠 zellij）；dev-router 不變（多 worktree backend 切換）
+> - **前提**：consumer 端需有 zellij（本倉標準多工器）。zellij 不在 PATH → dev-session 報錯停下，回報 user 安裝，**NEVER** 退回 `run_in_background`
+> - **看畫面 / 停止**：`zellij attach dev-<consumer>[-<app>]`（detach `Ctrl-o d`）；`node scripts/dev-session.mjs stop --session <name>`
+
+行為依該 consumer 的 OAuth port-pin 屬性分流（讀 [`consumer-meta.md`](./consumer-meta.md) snapshot 的 `auth.portPinned` 欄位；**所有分流的實際啟動一律經 dev-session，下表決定的是 lease 嚴格度與 port 來源，不是繞過 dev-session**）：
 
 | Consumer 屬性 | 啟動方式 | 衝突處理 |
 |---|---|---|
-| `auth.portPinned = true` + `dev.leaseMode = strict` | **MUST** 走 [`vendor/scripts/dev-singleton.mjs`](../../vendor/scripts/dev-singleton.mjs) wrapper，鎖在 manifest 宣告的固定 port | cwd-mismatch → **refuse**（需 user 顯式 `--takeover`），參照 [`verification-lease.md`](./verification-lease.md) |
+| `auth.portPinned = true` + `dev.leaseMode = strict` | **MUST** 走 [`vendor/scripts/dev-session.mjs`](../../vendor/scripts/dev-session.mjs)（durability=zellij），鎖在 manifest 宣告的固定 port | cwd-mismatch → **refuse**（需 user 顯式 `--takeover`），參照 [`verification-lease.md`](./verification-lease.md) |
 | `auth.portPinned = true` + `dev.leaseMode = advisory` | 同上，但 advisory | cwd-mismatch → warn + reuse |
 | `auth.portPinned = false`（無 OAuth pin） | 走 scan-free-port 邏輯（下方 MUST） | 一 worktree 一 port，不互搶 |
 | 無 `.claude/consumer-meta.json`（未採用 manifest） | 沿用既有 scan-free-port 邏輯 | 一 worktree 一 port |
 
 #### Pinned consumer path（`auth.portPinned = true`）
 
-- **MUST** 用 `node scripts/dev-singleton.mjs --consumer-meta .claude/consumer-meta.json --label "<purpose>" -- pnpm dev`（clade vendor-targets 散播後落在 consumer `scripts/dev-singleton.mjs`）
-- **NEVER** 直接 `nuxt dev` / `pnpm dev` 不經 wrapper（會繞過 lease + cwd 檢查）
-- spawn 前先讀 `/tmp/<consumer_id>-verification-lease.json`，若有別人 hold → wrapper 自動印衝突訊息 + exit 1，agent **MUST** 把訊息原樣呈給 user，**NEVER** 自行 `--takeover`
+- **MUST** 用 `node scripts/dev-session.mjs --consumer-meta .claude/consumer-meta.json --app <app> --port <N> --label "<purpose>" -- pnpm dev:<app>`（clade vendor-targets 散播後落在 consumer `scripts/dev-session.mjs`；durability 靠 zellij、lease 沿用 consumer-meta 的 `dev.leaseMode` / `auth.portPinned`）
+- **NEVER** 直接 `nuxt dev` / `pnpm dev` 不經 wrapper（會繞過 lease + cwd 檢查 + durability，且會被 harness reap）
+- claim 前先讀 `/tmp/<consumer_id>-verification-lease.json`，若有別人 hold（其 dev pid 還活 + cwd 不同）且 `dev.leaseMode = strict` → dev-session 印衝突訊息 + exit 1，agent **MUST** 把訊息原樣呈給 user，**NEVER** 自行 `--takeover`
 - 若 consumer 採用 [`vendor/snippets/dev-auth/`](../../vendor/snippets/dev-auth/) cookbook（dev-only signin endpoint，繞過 OAuth），manifest 的 `auth.devSigninEnabled` 變 `true` → port-pin 約束放寬，可改走下方 scan-free-port 邏輯
 
 **Missing manifest fallback**（consumer 尚未採用 `.claude/consumer-meta.json`）：
 
-當 agent 從 consumer cwd 跑 dev-singleton 卻看到 `--consumer-meta` path 不存在時：
+當 agent 從 consumer cwd 跑 dev-session 卻看到 `--consumer-meta` path 不存在時（dev-session 無 consumer-meta 時走無 lease 純 durability + 反累積，但無 cross-consumer port 衝突保護）：
 
 1. **STOP** spawn — 不要 silently fallback 到 legacy reuse-or-spawn（會繞過 lease 安全性）
 2. **回報 user**：「`<consumer>` 缺 `.claude/consumer-meta.json`；走 fallback scan-free-port 模式無 lease 保護，撞 cross-consumer port 衝突時無法自動分辨」
@@ -252,34 +262,33 @@ Consumer 端直接跑 `pnpm review:ui` 被 review-gui.mts `preflightCladeOnly` g
 
 - **解析 sourceRoot**：review-gui `/api/changes` response 已帶該 change 對應的 working tree absolute path（main 或 `wt/<slug>`）；直接用作 `Bash(cwd=...)`
 - **掃 free port**：`lsof -iTCP:<port> -sTCP:LISTEN -t` 從 3001 掃到 3050 找第一個 free 的；**禁止**用 3000（使用者慣用，留給 user 自己的 dev server）
-- **背景啟動**：`Bash(cwd=<sourceRoot>, run_in_background=true)` 跑 `pnpm dev --port <N>`；stderr/stdout 自然導向 background output（不必額外 redirect）
-- **回報 user**：localhost URL（`http://127.0.0.1:<N>`）、background shell ID、以及一條 kill 指令（`lsof -ti:<N> | xargs kill`）。**若 consumer 有 `TUNNEL_HOSTNAME`（解析 SOP 見 `~/offline/clade/vendor/snippets/tunnel-url-for-review/README.md`；cookbook 只在 clade home，agent 從絕對 path 讀），MUST 額外列 tunnel URL 並標註「tunnel 未啟動先跑 `pnpm tunnel:<app>`」**——user 真要在外部裝置 / HTTPS-only 環境驗收，localhost 不夠用
+- **durable 啟動**：`node scripts/dev-session.mjs --cwd <sourceRoot> --port <N> -- pnpm dev --port <N>`（dev-session 把它丟進 zellij session `dev-<consumer_id>`，**NEVER** 用 `Bash(run_in_background=true)`／裸 spawn —— 會被 harness reap、user 看到 502/530）。非 pinned 的 lease 為 best-effort（無 consumer-meta 時走無 lease 純 durability + 反累積）
+- **回報 user**：localhost URL（`http://127.0.0.1:<N>`）、zellij session 名（`zellij attach <name>` 看畫面）、以及停止指令（`node scripts/dev-session.mjs stop --session <name>`）。**若 consumer 有 `TUNNEL_HOSTNAME`（解析 SOP 見 `~/offline/clade/vendor/snippets/tunnel-url-for-review/README.md`；cookbook 只在 clade home，agent 從絕對 path 讀），MUST 額外列 tunnel URL 並標註「tunnel 未啟動先跑 `pnpm tunnel:<app>`」**——user 真要在外部裝置 / HTTPS-only 環境驗收，localhost 不夠用
 - **Lifecycle**：一個 worktree 同時只開 1 個 dev server（spawn 前先 `lsof` 該 worktree 對應 port 是否已被自己開過）；不同 worktree 可並行（各自選不同 free port）；session 結束或 user 喊停時主動 kill。**Agent NEVER 自起 `pnpm tunnel:*`** —— tunnel process 由 user 控制（owns Cloudflare cert、tunnel ID、DNS routing），agent 只負責列 URL + 提示
 
 ##### 訊息格式（無 tunnel 的 consumer）
 
 ```
-Dev server 已啟動於 worktree `<slug>` (port <N>)：
+Dev server 已啟動（durable，zellij session `dev-<consumer>[-<app>]`，port <N>）：
 
   http://127.0.0.1:<N>
 
-shellId: <bg-id>
-停止：`lsof -ti:<N> | xargs kill`
+看畫面：`zellij attach dev-<consumer>[-<app>]`（detach Ctrl-o d）
+停止：  `node scripts/dev-session.mjs stop --session dev-<consumer>[-<app>]`
 ```
 
 ##### 訊息格式（有 tunnel 的 consumer）
 
 ```
-Dev server 已啟動於 worktree `<slug>` (port <N>)：
+Dev server 已啟動（durable，zellij session `dev-<consumer>[-<app>]`，port <N>）：
 
   https://<TUNNEL_HOSTNAME>           # ← 優先用這條（HTTPS / 跨裝置 / OAuth callback / webauthn 等都需要）
   http://127.0.0.1:<N>                # ← 本機 fallback
 
-shellId: <bg-id>
-若 tunnel 尚未啟動，另開 terminal 跑：
+看畫面：`zellij attach dev-<consumer>[-<app>]`（detach Ctrl-o d）
+若 tunnel 尚未啟動（dev script 未含 tunnel 子命令時）：
   cd ~/offline/<consumer> && pnpm tunnel:<app>    # multi-app：<client-a> / shared 各自獨立
-  # 單一 app consumer 通常是 `pnpm tunnel`
-停止 dev server：`lsof -ti:<N> | xargs kill`
+停止 dev server：`node scripts/dev-session.mjs stop --session dev-<consumer>[-<app>]`
 ```
 
 Multi-app consumer（如 <consumer-a>）`<TUNNEL_HOSTNAME>` 依 change 觸碰的 app 反推（見 `~/offline/clade/vendor/snippets/tunnel-url-for-review/README.md` § Multi-app reverse mapping）。

@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-31T17:09:14.417Z",
+  "syncedAt": "2026-05-31T19:14:36.778Z",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "fcaf936fbd0e31bc",
     "rules/agent-routing.md": "0230466c12f260a2",
@@ -34,7 +34,7 @@
     "rules/output-hygiene.md": "ebefa098925363a7",
     "rules/proactive-skills.design-checkpoint.md": "5ac504c1a284592b",
     "rules/proactive-skills.ingest-triggers.md": "71a04d0a19b9dabf",
-    "rules/proactive-skills.md": "6019e4aea283bc12",
+    "rules/proactive-skills.md": "e8386f1f3c643890",
     "rules/review-gui-surface.md": "57aba750e54921d7",
     "rules/review-tiers.md": "8c8ec7801aeb2714",
     "rules/scope-discipline.md": "a69d1cbc923c89a0",
@@ -47,7 +47,7 @@
     "rules/testing-anti-patterns.md": "29ebd030a5b4855e",
     "rules/truth-layers.md": "33af82bfd3a70e5e",
     "rules/ux-completeness.md": "ec5c9860e46f131a",
-    "rules/verification-lease.md": "ea61ba2e7db75c86",
+    "rules/verification-lease.md": "3af8caec6c931bab",
     "rules/vite-doctor.md": "7606d51634314d13",
     "rules/work-claims.md": "576bc2e77022aef1",
     "rules/worktree-default.md": "6d5a1c18bf26d731",
