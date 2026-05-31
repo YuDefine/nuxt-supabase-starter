@@ -61,6 +61,8 @@ Local edits will be reverted by the next sync.
    - **沒命中** → silent skip；但若改動觸及 hero image / above-the-fold layout / 字體載入，即使 keyword 未命中也 **SHOULD** 實測（keyword 偵測是下界，不是上界）。
 
    chrome-devtools-mcp 採中央自用，**只在 clade home session 可用**（local scope）；consumer session 內無此工具 → 此偵測與實測**僅在 clade home review 流程執行**，不要在 consumer session 假裝能跑或硬找工具。
+6. **Ball-ownership 答案依 bucket 判讀（single source）**：回答任何 change 狀態問題（「等你還是等我」/「卡在誰」/「ready 了沒」）**MUST** 依 `reviewBucketForChange()` 算出的 bucket 判讀 —— GUI 端讀 `change.bucket`、headless 讀 `--scan` 輸出 bucket。`bucket` 是 server canonical single source（review-gui.mts；2026-05-31 起 GUI / scan / test 共用同一函式）。**禁止**從 tasks.md 散文、checkbox leaf count、或自己對 item 的印象推測 ball-ownership —— 那正是「口頭講『等你』、GUI 卻顯示『等 Claude』」矛盾的來源。bucket 對照：`awaitingUserReEval` = 等 user 重評、`feedbackGiven` = 等 Claude、`readyForEvidence` = 等 Claude 補 evidence、`applyInProgress` = impl 未完、`awaitArchiveWalkthrough` = 等 archive walkthrough、`ready` = 可開始檢查。
+7. **route E 結論 MUST 同步寫 annotation（不留散文 orphan）**：triage 一個帶 `（issue:）` 的 item，路由結論為 **(E)**（out-of-scope / false-positive / 修法已落地等 user 重評）時，**MUST 在同一動作**寫 `(claude-analyzed: <ISO> route=E[ note=...])` annotation（per [[manual-review]] § `(claude-analyzed: ...)` annotation）。**禁止**只留散文分析 / 只開 `@followup[TD-NNN]` 卻漏寫 machine annotation —— 因為 `analyzedIssuedCount` 只認 annotation，漏寫會讓 bucket 仍判 `feedbackGiven`（等 Claude），與你已得出的「等 user」結論矛盾（2026-05-31 employee-name-map #2.6 incident 根因）。「我已分析完」與「machine 看得到我已分析完」是同一件事的兩面，必須一起發生。
 
 ### NEVER
 
@@ -69,6 +71,8 @@ Local edits will be reverted by the next sync.
 - ❌ 在 detail page 試圖重刻或繞過 impl gate — server-side gate 是 final guard，client-side 繞過會被 422 拒收
 - ❌ `/handoff` Mode B 推薦 `pnpm review:ui` 後就放手，**不**先跑 `--scan` 預備 HANDOFF.md state — 那等於把「review-gui 該顯示什麼」交給 user 自己探索
 - ❌ review web UI change 時 skip perf keyword 偵測、或偵測命中後不實測就讓 review pass — Performance 是 review surface 的 mandatory 維度（per MUST 5），不是「想到才量」的 optional
+- ❌ 回答 change「卡在誰 / ready 了沒」時從 tasks.md 散文或 checkbox leaf count 推測，而非讀 `change.bucket` / `--scan` bucket（per MUST 6）— bucket 是 single source，口頭結論必須與它一致
+- ❌ 對 route E 結論的 issue 只寫散文分析或只開 `@followup[TD]`、卻漏寫 `(claude-analyzed: route=E)` annotation（per MUST 7）— bucket 會卡在 `feedbackGiven`，你的「等 user」結論與 GUI 顯示對不上
 
 ## 界線（不在本 rule 範圍）
 
@@ -108,6 +112,15 @@ Local edits will be reverted by the next sync.
 - Signal 落入 improvement-digest 候選清單
 
 對應 TD: TD-178（accepted）。詳見 `docs/pitfalls/2026-05-30-issue-fix-refreshes-only-flagged-screenshot-leaves-batch-stale.md` + [[manual-review.evidence]] § Issue fix 後重拍範圍。
+
+`vendor/scripts/audit-claude-analyzed-drift.mjs` signal `claude-analyzed-drift`（**已落地** standalone detector + 6 fixtures tests）：
+
+- 掃 `## 人工檢查` items，flag「帶 `（issue:）` + 命中 resolved/out-of-scope prose marker（`@followup[TD-]` / `不在本…scope` / `非本 change` / `out-of-scope` / `pre-existing` / `修法已落地` / `待 user 重評` 等）+ **無** `(claude-analyzed:)` annotation」的 item
+- 命中 → 該 issue 已被 Claude 在散文裡判結論（out-of-scope / 修法已落地）卻漏寫 machine annotation → `analyzedIssuedCount` 沒認到 → bucket 卡 `feedbackGiven`（等 Claude），與「等 user」實況矛盾（MUST 7 違反偵測）
+- human triage required（有 false positive：少數 issue 雖命中 marker 但仍真需 Claude 動作）
+- `--repo` / `--change` / `--json` / `--markdown`；pending：接進 improvement-digest + cross-consumer `--all-consumers`
+
+對應 TD: TD-179（standalone done，digest 收集 pending）。詳見 `rules/core/review-gui-surface.md § Hard rule MUST 6/7`。
 
 **Performance 實測（MUST 5）升級路徑**：目前為 review mandatory step（advisory，靠主線執行偵測 + 實測）。若日後 perf 漏驗頻繁，升級候選為 (a) archive 前 hard gate（仿 `vendor/scripts/spectra-advanced/design-gate.sh`，無 perf trace 證據 → exit 2 擋 archive）；(b) `review-gui.mts` 程式化在 perf 命中時自動生成 `verify:ui` perf-trace sub-item。兩者都動 review-gui 本體 → 須走 [[review-gui-change-discipline]] fixtures gate，故不在本次最小落地。
 
