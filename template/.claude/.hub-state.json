@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-31T19:14:36.778Z",
+  "syncedAt": "2026-05-31T20:03:25.863Z",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "fcaf936fbd0e31bc",
     "rules/agent-routing.md": "0230466c12f260a2",
@@ -29,12 +29,12 @@
     "rules/manual-review.data-readiness.md": "0ddcd123614f9873",
     "rules/manual-review.discuss.md": "93f4f6c4dbce80d2",
     "rules/manual-review.evidence.md": "a961d31119c7bccd",
-    "rules/manual-review.md": "b6b29b4f23e0b514",
+    "rules/manual-review.md": "5433fd2b6b52d0e3",
     "rules/nuxt-dev-watch.md": "3dcadecb24e11c83",
     "rules/output-hygiene.md": "ebefa098925363a7",
     "rules/proactive-skills.design-checkpoint.md": "5ac504c1a284592b",
     "rules/proactive-skills.ingest-triggers.md": "71a04d0a19b9dabf",
-    "rules/proactive-skills.md": "e8386f1f3c643890",
+    "rules/proactive-skills.md": "f54697f916306c64",
     "rules/review-gui-surface.md": "57aba750e54921d7",
     "rules/review-tiers.md": "8c8ec7801aeb2714",
     "rules/scope-discipline.md": "a69d1cbc923c89a0",

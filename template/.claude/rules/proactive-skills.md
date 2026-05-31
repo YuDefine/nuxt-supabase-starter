@@ -213,7 +213,9 @@ Consumer 端直接跑 `pnpm review:ui` 被 review-gui.mts `preflightCladeOnly` g
 當 review-gui 顯示某 item 的 screenshot 不存在 / outdated，或 user 想開瀏覽器親自操作 sanity check 時，**agent 自己起 dev server**，禁止叫使用者「請 cd 到 worktree 跑 `pnpm dev`」。
 
 > **多 worktree 反覆切換 → 用 [`vendor/scripts/dev-router.mjs`](../../vendor/scripts/dev-router.mjs)（散播到 consumer `scripts/dev-router.mjs`）。**
-> 當需要在多個 worktree backend 之間反覆切換驗收（典型：review 不同 change 的 worktree、避免「cd worktree + 重啟 nuxt + 重啟 tunnel」的手動切換），**SHOULD** 用 dev-router：常駐 L4 TCP proxy 佔住公開 port（+ tunnel，若 dev script 有），`node scripts/dev-router.mjs use <slug>` 即切 active backend、瀏覽器 reload 乾淨 cutover，免 cd / 免重啟。它從 package.json dev script auto-detect（零設定，consumer-agnostic）。dev-router 與下方 dev-session 互補：dev-session 管「一 consumer(-app) 一個 durable dev server（zellij）+ lease」，dev-router 管「一個公開 port 後面多 worktree backend 切換」。單次起一個 server（非多 worktree 切換）走下方 dev-session（durability + lease + 反累積）。
+> 當需要在多個 worktree backend 之間反覆切換驗收（典型：review 不同 change 的 worktree、避免「cd worktree + 重啟 nuxt + 重啟 tunnel」的手動切換），**SHOULD** 用 dev-router：常駐 L4 TCP proxy 佔住公開 port（+ tunnel，若 dev script 有獨立 tunnel 子命令），`node scripts/dev-router.mjs use <slug>` 即切 active backend、瀏覽器 reload 乾淨 cutover，免 cd / 免重啟。它從 package.json dev script auto-detect（零設定，consumer-agnostic）。dev-router 與下方 dev-session 互補：dev-session 管「一 consumer(-app) 一個 durable dev server（zellij）+ lease」，dev-router 管「一個公開 port 後面多 worktree backend 切換」。單次起一個 server（非多 worktree 切換）走下方 dev-session（durability + lease + 反累積）。
+>
+> **dev-router 只適用 A 型（獨立 tunnel）consumer。** dev-router 偵測 dev script 內的獨立 tunnel 子命令（`/(dev-tunnel|cloudflared|ngrok|\btunnel\b)/`），把它原樣保留指向 proxy 佔的公開 port。**in-process tunnel 型 consumer**（tunnel 是 `nuxt.config.ts` 內的 `vite-plugin-cloudflare-tunnel` plugin、跟 nuxt dev process 綁死，典型 <consumer-b> / co-purchase）**沒有**「獨立公開 port 後面切 backend」的層可佔 → **NEVER 套 dev-router**。這型要 review 未 merge 的 worktree change 走下方 § In-process tunnel consumer（`dev-session --cwd <wt>`，一次一 worktree）。
 
 > **持久層（durability）— ALL agent 自起的長駐 dev server MUST 走 [`vendor/scripts/dev-session.mjs`](../../vendor/scripts/dev-session.mjs)（散播到 consumer `scripts/dev-session.mjs`）。**
 >
@@ -314,6 +316,44 @@ node vendor/scripts/wt-env-bootstrap.mjs --consumer-meta .claude/consumer-meta.j
 ```
 
 它會依 `dev.envSyncPolicy.filesToCopy` 從 main worktree 拷貝必要檔。Consumer 自家 wt-helper 應該在 `worktree add` 後自動 invoke 一次。
+
+#### In-process tunnel consumer：review 未 merge 的 worktree change（hard rule）
+
+部分 consumer 的 dev tunnel 是 **in-process plugin**（`vite-plugin-cloudflare-tunnel` 寫在 `nuxt.config.ts`，只在 `process.env.TUNNEL_HOSTNAME` 存在時啟動，`port` 寫死），tunnel 跟 nuxt dev process **綁死** —— 起 `pnpm dev` 連帶把 tunnel 拉起、停 dev server 連帶收掉 tunnel。**典型：<consumer-b> / co-purchase**。
+
+判別「我是哪型」（grep dev script + nuxt.config）：
+
+```bash
+# A 型（<consumer-a> 型）：dev script 有獨立 tunnel 子命令（concurrently 包 dev-tunnel.mjs / cloudflared）
+node -e "console.log(require('./package.json').scripts.dev)" | grep -E 'dev-tunnel|cloudflared|concurrently.*tunnel'
+# B 型（in-process 型）：tunnel 在 nuxt.config，dev script 無獨立 tunnel 子命令
+grep -l 'cloudflareTunnel\|vite-plugin-cloudflare-tunnel' nuxt.config.* 2>/dev/null
+```
+
+要 review 一個**還沒 merge 回 main** 的 worktree change，正解 = 把唯一的 dev-session 指向**那個 worktree 的 cwd**（named tunnel hostname 不變，一次只能 review 一個 worktree）：
+
+```bash
+node <main>/scripts/dev-session.mjs --consumer-meta <wt>/.claude/consumer-meta.json \
+     --cwd <wt> --port <N> -- pnpm dev
+# 切到另一個 worktree review：先 stop，再從另一個 worktree cwd 起
+```
+
+`<main>` 是 consumer 主 worktree 路徑（`~/offline/<consumer>`），`<wt>` 是要 review 的 worktree 路徑（`~/offline/<consumer>-wt/<slug>`）。
+
+##### MUST
+
+- **MUST** 用 `--cwd <wt>` 指向 worktree —— route 只活在 worktree branch、還沒進 main
+- **MUST** 用 **main 的** `scripts/dev-session.mjs` 絕對路徑：早期 fork 的 worktree 可能缺這支（vendor 投影漂移，fork 時還沒散播到）
+- **MUST** 起前確認 worktree `.env.local` 含 tunnel keys（`CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_API_KEY` / `TUNNEL_HOSTNAME` / `TUNNEL_NAME`）：早期 fork 的 worktree env file 可能 fork 在 main 加入 tunnel keys 之前 → 依 consumer-meta `dev.envSyncPolicy.filesToCopy` 跑 `node <main>/vendor/scripts/wt-env-bootstrap.mjs --consumer-meta <wt>/.claude/consumer-meta.json` sync，或手動把 main `.env.local` 的 tunnel keys 補進 worktree
+- **單一 named tunnel 一次一 worktree**：要切 worktree 必 `dev-session.mjs stop` 再從另一個 worktree cwd 起，**禁止**對 in-process tunnel 型同時開兩個指向同 hostname 的 dev-session
+
+##### NEVER
+
+- **NEVER** 從 **main** 起 dev server 想 review worktree change —— route 在 worktree 還沒 merge 進 main → 404
+- **NEVER** 對 in-process tunnel 型套 **dev-router**（`scripts/dev-router.mjs`）—— dev-router 假設 tunnel 指向一個固定公開 port、背後可切多 backend；in-process tunnel 跟 nuxt dev process 綁死，沒有「獨立公開 port 後面切 backend」的層可佔，套了不會生效
+- **NEVER** 把 worktree nuxt.config 架構級 drift（如 worktree 是舊 framework 時代 fork、main 已遷新架構，vite 回 403「host not allowed」）誤判成 tunnel 問題 —— 那是 change-level 架構 reconcile 問題，review 前先 reconcile，不要在 tunnel / dev-session 層找原因
+
+完整判別表 + 4 個坑速查 + 跟其他 tunnel cookbook 分工：見 `~/offline/clade/vendor/snippets/inprocess-tunnel-worktree-review/README.md`。
 
 ## Review Tiers
 
