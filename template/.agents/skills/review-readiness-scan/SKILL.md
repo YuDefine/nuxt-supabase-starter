@@ -55,8 +55,10 @@ node vendor/scripts/review-gui.mts --scan
     "ready": [ /* 可直接開 reviewUrl 給 user 做 GUI review */ ],
     "readyForEvidence": [ /* apply 已接近完成，先跑 /spectra-apply Step 8a 補 evidence */ ],
     "applyInProgress": [ /* implementation 還沒完成，不該補 evidence */ ],
+    "applyBlocked": [ /* impl 卡外部 blocker（@apply-blocked marker），交還 user，不要硬推 */ ],
     "healthCheckNeeded": [ /* manual-review pattern hits，先 ingest/fix tasks.md */ ],
     "awaitArchiveWalkthrough": [ /* 只剩 [discuss]，跑 /spectra-archive Step 2.5 */ ],
+    "awaitingUserDecision": [ /* Claude 已標 (awaiting-user-decision:)，等 user 商業拍板，不要硬推 */ ],
     "feedbackGiven": [ /* user 已標 issue 或 verify pending，交回 Claude 處理 */ ]
   }
 }
@@ -98,7 +100,9 @@ HANDOFF.md 用 marker 包夾，每次重跑**覆蓋同一段**（不累積垃圾
 **(C) Apply 尚未完成 / feedback / archive walkthrough** — 依 `bucket` 分組列在同一 section 下，不要把這些 change 放進「可以開始檢查」：
 
 - `applyInProgress` → 繼續 `/spectra-apply <change>`，不要補 Step 8a evidence
+- `applyBlocked` → impl 卡外部 blocker（`@apply-blocked` marker），ball in user，**不要**硬推；解 blocker 後移除 marker 回 applyInProgress
 - `feedbackGiven` → user 已在 GUI 留 issue 或 verify pending，交回 Claude 針對 issue 處理
+- `awaitingUserDecision` → Claude 已標 `(awaiting-user-decision:)`，等 user 商業拍板，ball in user，**不要**硬推
 - `awaitArchiveWalkthrough` → 跑 `/spectra-archive <change>` 觸發 Step 2.5 discuss walkthrough
 - `crossWtDirty` / `malformed` → 先修 worktree routing 或 tasks.md 格式
 <!-- END: review-readiness-scan -->
