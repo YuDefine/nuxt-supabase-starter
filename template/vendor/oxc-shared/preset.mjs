@@ -95,6 +95,7 @@ export const lintBase = {
     '.agents/',
     '.codex/',
     '.clade/',
+    '.vite-doctor/',
     '*.d.ts',
   ],
 }
@@ -127,5 +128,6 @@ export const fmtBase = {
     // consumers don't have to re-inline these in fmt.ignorePatterns.
     '.agents/**',
     '.codex/**',
+    '.vite-doctor/**',
   ],
 }

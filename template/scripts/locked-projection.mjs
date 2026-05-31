@@ -49,7 +49,7 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // Recursive vendored script trees
       String.raw`scripts/(spectra-advanced|pre-commit|pre-push)/`,
       // Snippets / shared presets
-      String.raw`vendor/(snippets|oxc-shared)/`,
+      String.raw`vendor/(snippets|oxc-shared|doctor-shared)/`,
       // GitHub vendored actions
       String.raw`\.github/actions/`,
       // Utility files

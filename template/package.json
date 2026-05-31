@@ -24,6 +24,7 @@
     "docs:build": "vitepress build docs",
     "docs:dev": "vitepress dev docs --open",
     "docs:preview": "vitepress preview docs",
+    "doctor": "vite-doctor scan . --max-warnings 0",
     "format": "vp fmt --write --ignore-path .oxfmtignore",
     "format:check": "vp fmt --check --ignore-path .oxfmtignore",
     "hub:bootstrap": "node ${CLADE_HOME:-$HOME/offline/clade}/scripts/bootstrap-hub.mjs",
