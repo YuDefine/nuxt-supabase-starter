@@ -36,6 +36,8 @@ Local edits will be reverted by the next sync.
 
 **`[verify:e2e]` / `[verify:api]` automatic channel 例外**：spectra-apply Step 8a 寫入對應 `(verified-e2e: ...)` / `(verified-api: ...)` annotation 後，review-gui auto-check helper 可自動勾 `[x]`；這些 channel 不需要使用者在 GUI 再確認。`[verify:ui]` 仍需使用者在 GUI 確認 visual evidence。
 
+**前提不成立直接 skip 例外**：當 item 的前提**可由程式碼 / 架構事實驗證為不成立**（例：auth middleware 擋住該 role 進入該 route、目標 route 不存在、目標 column 被 migration 移除、功能 flag 永久關閉），Claude **MAY** 直接標 `[x]` + `（skip: <一行事實原因>）`，不走 `(awaiting-user-decision:)` 也不走 review-gui 迴圈。判定條件（**全部**成立才適用）：(1) 前提不成立是**可程式碼驗證的事實**（grep auth middleware / route config / schema / feature flag），不是主觀商業判斷；(2) Claude 已實際跑驗證（grep / read / curl）確認事實成立；(3) annotation 內寫明事實根據（哪個檔 / 哪行 / 什麼機制）。**不適用**：「要不要改 auth 讓 staff 進」「要不要加這功能」等涉及商業取捨的判斷 — 那些仍走 `(awaiting-user-decision:)` 或 AskUserQuestion。
+
 **`(claude-analyzed: route=E)` annotation 不勾 checkbox**：當 review-gui 「🤖 等 Claude 接手」群「接手分析」prompt 路由結論為 **(E) false positive / 等 user 重新評估** 時，Claude 可在帶 `（issue:）` 的 item 同行寫入 `(claude-analyzed: <ISO> route=E[ note=<...>])` annotation，但 **NEVER** 翻 checkbox。語意：「Claude 已對此 issue 分析、路由結論=ball in user's court」。User 在 GUI 對該 item 點 OK / Issue / Skip 時 stripAnnotations 自動清掉 `（issue:）` 與 `(claude-analyzed:)` 兩條 annotation。詳見下方「Item Kind Marker」章節的 `(claude-analyzed: ...)` annotation 段。
 
 ## 人工檢查時機（Hard rule）
@@ -577,6 +579,7 @@ Session worktree fork 在 clade hook 升版前時，worktree 內 `scripts/spectr
 - **NEVER** 在寫 `(claude-analyzed: ...)` 時翻 checkbox — 此 annotation 保 `[ ]`，user 在 GUI 點 OK / Issue / Skip 才翻；翻了會打破 GUI bucket 分類（awaitingUserReEval 條件要求 issued > 0、checkbox `[ ]`）
 - **NEVER** 在 GUI 寫回 user action（OK / Issue / Skip）時遺漏 strip `(claude-analyzed: ...)` annotation — 保留 stale annotation 會讓下次 GUI re-render 把已動過的 item 仍歸到「✋ Claude 已分析、等 user 重新評估」bucket，造成 user 困惑
 - **NEVER** 用 `(awaiting-user-decision: ...)` annotation 規避該 item 其實 actionable 的情況 — 若 issue 可走 (A) UX/copy / (B) behavior / (C) spec gap 就**MUST** 走那些路徑，不可標 awaiting-user-decision 把可做的事推給 user
+- **NEVER** 用 `(awaiting-user-decision: ...)` 標註前提事實上不成立的 item — 那不是商業決策，是可驗證的事實。走「前提不成立直接 skip 例外」（核心規則段）直接 `[x]` + `（skip: <事實原因>）`
 - **NEVER** 在寫 `(awaiting-user-decision: ...)` 時翻 checkbox — 此 annotation 保 `[ ]`，user 在 GUI 動作才翻
 - **NEVER** 把 `@apply-blocked[<reason>]` 當「不想做就標一下」的逃生口 — 只在真正卡外部 blocker（等決策 / 等別 change / 缺資源）時用；解 blocker 後**MUST** 移除 marker 讓 change 回 applyInProgress
 - **NEVER** dispatch verify channels 前不檢查 per-channel baseline — 撞 baseline 缺後升 UNCERTAIN 是浪費 budget；主線預先 grep / read 確認，缺則停下回報 user 補齊
