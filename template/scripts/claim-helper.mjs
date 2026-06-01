@@ -72,7 +72,7 @@ export function genSessionId() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}-${hostname().slice(0, 8)}`
 }
 
-function isExpired(claim, atIso = nowIso()) {
+export function isExpired(claim, atIso = nowIso()) {
   if (!claim?.expires_at) return true
   return new Date(claim.expires_at).getTime() < new Date(atIso).getTime()
 }
