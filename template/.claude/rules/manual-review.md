@@ -62,30 +62,35 @@ Claude triage 每條 issue 到 (A) UX/copy / (B) Behavior / (C) Spec gap
   ↓
 (A)/(B) fix 落 code；(C) Spec gap → /spectra-ingest 補 spec → /spectra-apply 落 code（含新 verify item evidence）
   ↓ ALL DONE
-/commit 一次包所有改動（fix + ingest 產出 spec + apply phase code）
-  ↓
 review:ui (round N+1, FINAL) — user 對既有 + 新增 verify item 一次性評估
+  ↓ 全綠
+/spectra-archive（worktree merge-back + archive bookkeeping：mv folder + spec delta-sync）
   ↓
-全綠 → /spectra-archive
+單一 /commit — 一次包 fix + ingest 產出 spec + apply phase code + archive rename + spec snapshot
 ```
+
+> **收尾順序對齊 `archive-commit-order`（CLAUDE.md「Spectra Change 收尾：先 archive 再 /commit」段，source `claude-md/core-snippets/archive-commit-order.md`）**：commit **MUST** 在 `/spectra-archive` 之後。理由：archive 本身會產出 directory rename + spec delta 等**新的未 commit 改動**，若先 commit fix、archive 之後勢必還要第二個 commit 收 bookkeeping —— 那正是本 § 想避免的「雙 commit / 雙 0-A/B/C 慢路徑」。唯一達成單一 commit 的順序是 **archive 先、commit 後**。worktree v3 模型同此：`/spectra-archive` Step 0 先 atomic merge-back，user 再在 main 跑 `/commit`（見 [[worktree-default]] §5）。
 
 ### 禁止事項
 
 - **NEVER** 在 ingest 完、apply 還沒跑時引導 user 回 review-gui 評估 OK/Issue/Skip
-- **NEVER** 在 (C) 路徑中段（ingest 跟 apply 之間、或 fix 跟 ingest 之間）跑 `/commit` — 等所有改動落地後一次 commit
+- **NEVER** 在 (C) 路徑中段（ingest 跟 apply 之間、或 fix 跟 ingest 之間）跑 `/commit` — 等所有改動落地 + final review 綠 + `/spectra-archive` 後再一次 commit
+- **NEVER** 在 `/spectra-archive` **之前**跑 `/commit` 收 fix — archive 會產出 directory rename + spec delta 等新改動，先 commit 必逼出第二個 commit 收 bookkeeping（雙 0-A/B/C 慢路徑）。對齊 `archive-commit-order`：先 archive 再單一 commit
 - **NEVER** 把 round N 評估結果當作「change 整體驗收完成」訊號 — 那只反映本輪 fix，不包含 (C) 路徑後續 ingest 新增的 verify items
 - **NEVER** 在 round N OK 後直接 archive；archive trigger 必須是「round N+1（含 ingest 新增 verify item 與 (A)/(B) fix）全綠」
 - **NEVER** 用「先 fix 後 ingest」順序跑 commit — 同一輪 review:ui 觸發的改動 spec 跟 code 必須同 commit 出現
 
 ### 例外
 
-- **(A) / (B) only**（不涉及 ingest 的純 code fix）：fix → commit → review:ui 最終評估 → archive。本段不限制此 happy path
+- **(A) / (B) only**（不涉及 ingest 的純 code fix）：fix → review:ui 最終評估 → archive → 單一 commit。本段不限制此 happy path（commit 仍在 archive 之後，對齊 `archive-commit-order`）
 - **`[discuss]` items** spectra-archive Step 2.5 walkthrough：另有獨立規約（[[manual-review.discuss]]）
 - **跨 session handoff**：若 user 主動切到別 session 處理 apply，本 session 視為 handoff 完成；新 session 接手後仍須遵守此規則
 - **獨立外部 trigger 撞進來**（與本輪 review:ui issue 無關的緊急 bug fix）：可在中段獨立 commit，但**不**觸發 review-gui 評估 round；本輪人工檢查仍延後到 apply 全部完成後一次做
 
 ### Cross-ref
 
+- `archive-commit-order`（CLAUDE.md「Spectra Change 收尾：先 archive 再 /commit」段，source `claude-md/core-snippets/archive-commit-order.md`）— 收尾順序唯一真相：先 archive 再單一 commit；本 § sequence 對齊此
+- [[worktree-default]] §5 — worktree v3 atomic landing：`/spectra-archive` Step 0 merge-back → user 在 main `/commit`
 - [[proactive-skills.ingest-triggers]] § review:ui 觸發 ingest 的後續順序
 - `plugins/hub-core/skills/spectra-ingest/SKILL.md` Step 9 Summary
 - `plugins/hub-core/skills/spectra-apply/SKILL.md` 末段「apply 完成後 review:ui」
