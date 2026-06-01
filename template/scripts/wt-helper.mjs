@@ -230,6 +230,38 @@ function classifyDirtyPaths(consumerRoot, paths, { excludeClaim = null } = {}) {
   return { locked, otherSession, other }
 }
 
+// P1/P2 prevention (pitfall 2026-06-01-prefork-baseline-stash-sweeps-unclaimed-main-work):
+// the stash strategy bulk-captures ALL main dirty via `git stash push -u`.
+// Unclaimed dirty is invisible to the otherSession STOP (main sessions never
+// write a claim; claims expire after 24h), so an unrelated in-flight batch — the
+// main session's live work, or a verified-but-uncommitted archive batch — can be
+// swept into refs/wt-baseline/* without its owner knowing. Flag unclaimed dirty
+// that looks like a real in-flight batch so the stash strategy STOPs instead.
+const INFLIGHT_BATCH_MARKERS = [
+  {
+    re: /^openspec\/changes\/archive\//,
+    label: 'untracked spectra archive dir (in-flight archive batch)',
+  },
+  // Matches both an individual migration file (existing tracked dir) and a
+  // collapsed untracked `…/migrations/` dir (git status --porcelain default).
+  { re: /(?:^|\/)migrations\//, label: 'migration path (in-flight schema change)' },
+]
+// High-signal markers only (archive dir / migrations). The fuzzy "many tracked
+// changes" signal is handled separately by the pre-fork audit (count-based) so
+// the two layers do not overlap or double-fire.
+function detectInflightBatchMarkers(otherPaths) {
+  const hits = []
+  for (const o of otherPaths) {
+    for (const m of INFLIGHT_BATCH_MARKERS) {
+      if (m.re.test(o.path)) {
+        hits.push({ path: o.path, reason: m.label })
+        break
+      }
+    }
+  }
+  return hits
+}
+
 // Whitelist of consumer-local paths where merge-back may auto-commit oxfmt
 // drift without user confirmation. These files are NOT in LOCKED_PROJECTION_RE
 // (they are consumer-managed, not clade-projection), but they receive
@@ -439,7 +471,7 @@ function pinPreForkBaseline(consumerRoot, cleanSlug, iso, opts = {}) {
 async function cmdAdd(slug, opts = {}) {
   if (!slug) {
     throw new Error(
-      'Usage: wt-helper add <slug> [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>] [--skip-prefork-audit]',
+      'Usage: wt-helper add <slug> [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>] [--skip-prefork-audit] [--include-unrelated-dirty]',
     )
   }
   const cleanSlug = makeSlugSafe(slug)
@@ -532,16 +564,24 @@ async function cmdAdd(slug, opts = {}) {
       const thresholdRaw = process.env.WT_PREFORK_AUDIT_THRESHOLD
       const threshold = thresholdRaw !== undefined ? Number(thresholdRaw) : 50
       const safeThreshold = Number.isFinite(threshold) && threshold >= 0 ? threshold : 50
+      // P2 (pitfall 2026-06-01): count untracked too. An in-flight batch is
+      // often mostly untracked (new migration / archive dir / new files), which
+      // a tracked-only count misses. Block policy stays warn-only by design
+      // (see pitfall-pre-fork-baseline-hides-in-flight-feature 'audit must not
+      // block'); the unambiguous archive/migration markers handle the hard STOP.
       const trackedCount = dirty.modified.length
-      if (trackedCount >= safeThreshold) {
+      const untrackedCount = dirty.untracked.length
+      const totalDirtyCount = trackedCount + untrackedCount
+      if (totalDirtyCount >= safeThreshold) {
         const sample = dirty.modified
           .slice(0, 20)
           .map((m) => `  ${m.status}  ${m.path}`)
           .join('\n')
-        const more = trackedCount > 20 ? `\n  ... and ${trackedCount - 20} more` : ''
+        const more = totalDirtyCount > 20 ? `\n  ... and ${totalDirtyCount - 20} more` : ''
         console.warn('')
         console.warn(
-          `⚠️  Pre-fork audit: main has ${trackedCount} staged+unstaged tracked change(s) (threshold ${safeThreshold}).`,
+          `⚠️  Pre-fork audit: main has ${totalDirtyCount} staged+unstaged+untracked change(s) ` +
+            `(${trackedCount} tracked, ${untrackedCount} untracked; threshold ${safeThreshold}).`,
         )
         console.warn(
           `    These may be in-flight feature code; baseline strategy (especially 'stash') could`,
@@ -641,6 +681,60 @@ async function cmdAdd(slug, opts = {}) {
         )
         gitSelectiveCommit(consumerRoot, scopePaths, message)
       } else if (strategy === 'stash') {
+        // P1/P2 (pitfall 2026-06-01): `git stash push -u` captures ALL main dirty.
+        // Refuse when unclaimed dirty looks like an unrelated in-flight batch
+        // (archive dir / migrations / oversize) — sweeping it into
+        // refs/wt-baseline/* would silently remove another worker's live work
+        // from main. Opt in with --include-unrelated-dirty only when the dirty
+        // genuinely belongs to this fork.
+        if (!opts.includeUnrelatedDirty) {
+          const inflight = detectInflightBatchMarkers(preForkCls.other)
+          if (inflight.length > 0) {
+            const preview = inflight
+              .slice(0, 10)
+              .map((h) => `  ${h.path}  ← ${h.reason}`)
+              .join('\n')
+            const more = inflight.length > 10 ? `\n  ... and ${inflight.length - 10} more` : ''
+            throw new Error(
+              `Pre-fork baseline STOP: the stash strategy would 'git stash push -u' ALL ${dirtyCount} ` +
+                `main dirty file(s), but some unclaimed dirty looks like an unrelated in-flight batch:\n` +
+                preview +
+                more +
+                `\n\nMain sessions never write a claim and claims expire after 24h, so this dirty is ` +
+                `invisible to the active-claim guard. Bulk-stashing it would sweep another worker's live ` +
+                `work (or a verified-but-uncommitted archive batch) into refs/wt-baseline/* silently.\n` +
+                `Resolve first:\n` +
+                `  • Commit / land the in-flight batch on main, OR\n` +
+                `  • The ad-hoc worktree forks clean from HEAD and does not need main's WIP — leave it in main, OR\n` +
+                `  • If this dirty really is all yours and you want it in the new worktree, re-run with ` +
+                `--include-unrelated-dirty.`,
+            )
+          }
+          // P2: even without archive/migration markers, a large unclaimed dirty
+          // set is likely an in-flight batch. The --include-unrelated-dirty
+          // opt-in (added with P1) gives legitimate large same-change forks a
+          // clean escape, so blocking here no longer reverses the audit's
+          // "must not block" contract — that contract predates the opt-in and
+          // still holds for the warn-only audit (which runs for all strategies).
+          const stopThresholdRaw = process.env.WT_PREFORK_AUDIT_THRESHOLD
+          const stopThreshold =
+            stopThresholdRaw !== undefined && Number.isFinite(Number(stopThresholdRaw))
+              ? Number(stopThresholdRaw)
+              : 50
+          const unclaimedCount = preForkCls.other.length
+          if (unclaimedCount >= stopThreshold) {
+            throw new Error(
+              `Pre-fork baseline STOP: the stash strategy would 'git stash push -u' ALL ${dirtyCount} ` +
+                `main dirty file(s), and ${unclaimedCount} of them are unclaimed (>= ${stopThreshold} ` +
+                `threshold) — likely an in-flight batch not owned by this fork.\n` +
+                `Bulk-stashing it would sweep another worker's live work into refs/wt-baseline/* silently.\n` +
+                `Resolve first:\n` +
+                `  • Commit / land the in-flight batch on main, OR\n` +
+                `  • Leave main's WIP in place (the ad-hoc worktree forks clean from HEAD), OR\n` +
+                `  • If this dirty really is all yours, re-run with --include-unrelated-dirty.`,
+            )
+          }
+        }
         const iso = baselineIso
         const stashName =
           opts.baselineStashName || `wt-baseline/${cleanSlug}/${preGenSessionId}/${iso}`
@@ -2277,6 +2371,7 @@ async function main() {
     noopIfMissing: flags.has('--noop-if-missing'),
     skipPreSync: flags.has('--skip-pre-sync'),
     skipPreforkAudit: flags.has('--skip-prefork-audit'),
+    includeUnrelatedDirty: flags.has('--include-unrelated-dirty'),
     precheckBaseline: Object.prototype.hasOwnProperty.call(values, '--precheck-baseline')
       ? values['--precheck-baseline']
       : undefined,

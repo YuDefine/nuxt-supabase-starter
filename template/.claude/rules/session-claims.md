@@ -44,6 +44,22 @@ Local edits will be reverted by the next sync.
 
 主線 session（**非** worktree）目前**不自動寫** claim — 主線預設可動全部，是 worktree session 需要宣告「我擁有這條 branch + 這些 paths」。
 
+### ⚠️ 主線無 claim 的保護缺口（pitfall 2026-06-01）
+
+主線不寫 claim 有一個**已實證的危害**：主線在 main working tree 累積的 dirty（典型：archive batch 等 commit、跨多步的 in-flight 工作）對**別 session 的 `wt-helper add --baseline-strategy stash`** 是「unclaimed」→ pre-fork claim guard 的 `otherSession` STOP **看不到** → 被 bulk-stash 捲走（見 `docs/pitfalls/2026-06-01-prefork-baseline-stash-sweeps-unclaimed-main-work.md`）。
+
+**現有緩解（已落地）**：`wt-helper.mjs` cmdAdd 的 stash strategy 對 unclaimed dirty 帶**高訊號 in-flight marker**（untracked archive dir / migration）會 STOP（`--include-unrelated-dirty` opt-in 繞過）。但這只覆蓋帶 marker 的批次，純 code 的大批 in-flight 工作仍是缺口。
+
+**SHOULD（治本，pending 自動化）**：主線 / 長駐 session 在 main 累積 dirty（尤其是會跨多個 tool-call 才 commit 的 batch）時，**SHOULD** 寫一個 coarse claim 涵蓋當前 dirty paths，讓既有 `otherSession` guard 直接保護：
+
+```bash
+node scripts/claim-helper.mjs add --change-id main-session-wip \
+  --branch main --worktree-path "$(pwd)" \
+  --expected-paths "$(git status --porcelain | awk '{print $2}' | paste -sd, -)"
+```
+
+完成 / commit 後 `claim-helper.mjs drop <session-id>`。**自動觸發機制**（main session 累積 dirty 時自動 claim + commit 後自動 drop）為 follow-up（見對應 TD）；在自動化前，跨多步在 main 累積 batch 時手動 claim 是當前最佳實踐。
+
 ## 3. 誰讀 claim
 
 | 讀者 | 用途 |

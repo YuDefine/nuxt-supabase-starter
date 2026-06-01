@@ -21,12 +21,17 @@
 //     modules: [
 //       ['vite-doctor/nuxt', {
 //         config: {
-//           rules: { ...doctorRules, 'nuxt/ui/prefer-u-button': 'off' },
+//           rules: { ...doctorRules, 'nuxt-ui/prefer-u-button': 'off' },
 //         },
 //       }],
 //     ],
 //   })
 
+// Rule IDs MUST match vite-doctor's registered plugin namespaces (verified against
+// vite-doctor@0.0.1). vite-doctor silently ignores unknown keys, so a mis-namespaced
+// id leaves the rule at its built-in default instead of the severity set here. The
+// namespaces are NOT uniformly `nuxt/<category>/<rule>`: image / scripts / ui / content
+// / better-auth / nuxthub / vueuse rules live under their own top-level namespace.
 export const doctorRules = {
   // === Hydration (critical — SSR/CSR mismatch = white screen) ===
   'nuxt/hydration/no-browser-global-in-universal-code': 'error',
@@ -34,8 +39,8 @@ export const doctorRules = {
   'nuxt/hydration/no-client-conditional-in-template': 'error',
   'nuxt/hydration/no-time-dependent-render-without-nuxttime-or-clientonly': 'error',
   'nuxt/hydration/prefer-usecookie-for-initial-client-state': 'error',
-  'nuxt/hydration/prefer-usebreakpoints': 'warn',
-  'nuxt/hydration/prefer-usewindow-size': 'warn',
+  'vueuse/prefer-usebreakpoints': 'warn',
+  'vueuse/prefer-usewindow-size': 'warn',
 
   // === Fetch / Data fetching (common source of bugs) ===
   'nuxt/fetch/no-raw-fetch-in-setup': 'error',
@@ -45,14 +50,14 @@ export const doctorRules = {
   'nuxt/fetch/no-await-inside-custom-wrapper': 'error',
   'nuxt/fetch/create-usefetch-must-be-exported-in-scanned-dir': 'warn',
   'nuxt/fetch/keyed-composable-registration-required': 'warn',
-  'nuxt/fetching/async-data-explicit-key-for-refreshable': 'error',
-  'nuxt/fetching/async-data-handler-pure': 'error',
-  'nuxt/fetching/async-data-no-mutation-methods': 'error',
-  'nuxt/fetching/no-global-refresh-without-justification': 'warn',
-  'nuxt/fetching/no-manual-action-usefetch': 'warn',
-  'nuxt/fetching/no-mutation-toast-in-usefetch-callback': 'error',
-  'nuxt/fetching/post-fetch-requires-readonly-marker': 'warn',
-  'nuxt/fetching/preview-mode-global-refresh': 'warn',
+  'nuxt/async-data-explicit-key-for-refreshable': 'error',
+  'nuxt/async-data-handler-pure': 'error',
+  'nuxt/async-data-no-mutation-methods': 'error',
+  'nuxt/no-global-refresh-without-justification': 'warn',
+  'nuxt/no-manual-action-usefetch': 'warn',
+  'nuxt/no-mutation-toast-in-usefetch-callback': 'error',
+  'nuxt/post-fetch-requires-readonly-marker': 'warn',
+  'nuxt/preview-mode-global-refresh': 'warn',
 
   // === Routing ===
   'nuxt/routing/prefer-nuxt-useroute': 'error',
@@ -74,7 +79,7 @@ export const doctorRules = {
   // === Context / Lifecycle ===
   'nuxt/context/no-composable-after-await': 'error',
   'nuxt/context/no-legacy-process-client-server': 'error',
-  'nuxt/lifecycle/prefer-use-timers': 'warn',
+  'vueuse/prefer-use-timers': 'warn',
 
   // === State ===
   'nuxt/state/no-nonserializable-usestate': 'error',
@@ -84,38 +89,36 @@ export const doctorRules = {
   'nuxt/imports/no-auto-import-collision': 'error',
   'nuxt/imports/no-conflicting-usefetch-import': 'error',
   'nuxt/imports/no-explicit-auto-import': 'warn',
-  'nuxt/imports/no-nuxt-auto-import-collision': 'error',
+  'vueuse/no-nuxt-auto-import-collision': 'error',
 
-  // === Composables / Plugins / Layers ===
+  // === Composables / Plugins ===
   'nuxt/composables/no-nested-autoimport-assumption': 'error',
   'nuxt/plugins/no-subdir-auto-registration-assumption': 'error',
-  'nuxt/layers/no-empty-app-vue-shadow': 'error',
 
   // === Images ===
-  'nuxt/images/prefer-nuxtimg': 'warn',
-  'nuxt/images/prefer-nuxtpicture-for-formats': 'warn',
-  'nuxt/images/prefer-responsive-dimensions': 'warn',
-  'nuxt/images/require-alt': 'error',
+  'nuxt-image/prefer-nuxtimg': 'warn',
+  'nuxt-image/prefer-nuxtpicture-for-formats': 'warn',
+  'nuxt-image/prefer-responsive-dimensions': 'warn',
+  'nuxt-image/require-alt': 'error',
 
   // === Scripts (third-party) ===
-  'nuxt/scripts/no-raw-third-party-script-tag': 'error',
-  'nuxt/scripts/no-third-party-config-script': 'warn',
-  'nuxt/scripts/no-third-party-usehead-script': 'warn',
+  'nuxt-scripts/no-raw-third-party-script-tag': 'error',
+  'nuxt-scripts/no-third-party-config-script': 'warn',
+  'nuxt-scripts/no-third-party-usehead-script': 'warn',
 
   // === SEO ===
   'nuxt/seo/prefer-seo-composables': 'warn',
 
   // === Auth ===
-  'nuxt/auth/require-standard-auth-handler-mount': 'error',
+  'nuxt-better-auth/require-standard-auth-handler-mount': 'error',
 
-  // === Links / Content / AppConfig ===
-  'nuxt/links/no-broken-internal-to-link': 'error',
-  'nuxt/content/no-querycontent-legacy-api': 'error',
-  'nuxt/appconfig/no-unknown-key': 'warn',
+  // === Content / Links ===
+  'nuxt-content/links/no-broken-internal-to-link': 'error',
+  'nuxt-content/no-querycontent-legacy-api': 'error',
 
-  // === Caching ===
-  'nuxt/cache/no-personalized-cached-handler': 'error',
-  'nuxt/cache/prefer-cached-event-handler': 'warn',
+  // === Caching (NuxtHub) ===
+  'nuxthub/no-personalized-cached-handler': 'error',
+  'nuxthub/prefer-cached-event-handler': 'warn',
 
   // === Shared code ===
   'nuxt/shared/no-vue-or-nitro-context-in-shared': 'error',
@@ -125,16 +128,16 @@ export const doctorRules = {
   'nuxt/project/prefer-app-directory-placement': 'warn',
 
   // === Browser API composables ===
-  'nuxt/browser-api/prefer-use-observers': 'warn',
-  'nuxt/browser-api/prefer-use-scroll-and-element': 'warn',
-  'nuxt/browser-api/prefer-use-storage': 'warn',
-  'nuxt/browser-api/prefer-useclipboard': 'warn',
-  'nuxt/browser-api/prefer-useevent-listener': 'warn',
+  'vueuse/prefer-use-observers': 'warn',
+  'vueuse/prefer-use-scroll-and-element': 'warn',
+  'vueuse/prefer-use-storage': 'warn',
+  'vueuse/prefer-useclipboard': 'warn',
+  'vueuse/prefer-useevent-listener': 'warn',
 
   // === UI (Nuxt UI consumers only — override to 'off' if not using @nuxt/ui) ===
-  'nuxt/ui/prefer-u-button': 'warn',
-  'nuxt/ui/prefer-u-form-controls': 'warn',
-  'nuxt/ui/require-uapp-root': 'warn',
+  'nuxt-ui/prefer-u-button': 'warn',
+  'nuxt-ui/prefer-u-form-controls': 'warn',
+  'nuxt-ui/require-uapp-root': 'warn',
 
   // === Vue rules ===
   'vue/style/prefer-props-destructure-defaults': 'warn',

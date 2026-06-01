@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-05-31T21:15:32.278Z",
+  "syncedAt": "2026-06-01T02:34:27.318Z",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "fcaf936fbd0e31bc",
     "rules/agent-routing.md": "0230466c12f260a2",
@@ -39,7 +39,7 @@
     "rules/review-tiers.md": "8c8ec7801aeb2714",
     "rules/scope-discipline.md": "a69d1cbc923c89a0",
     "rules/screenshot-strategy.md": "3edcf5c6c67c1c86",
-    "rules/session-claims.md": "d39a2a158486ed89",
+    "rules/session-claims.md": "49f785330c834ff7",
     "rules/session-tasks.md": "992eaea717971157",
     "rules/spectra-workflow.md": "1b10f01072f99df5",
     "rules/tech-debt-routing.md": "bb037e8902b012db",
@@ -50,7 +50,7 @@
     "rules/verification-lease.md": "3af8caec6c931bab",
     "rules/vite-doctor.md": "7606d51634314d13",
     "rules/work-claims.md": "576bc2e77022aef1",
-    "rules/worktree-default.md": "6d5a1c18bf26d731",
+    "rules/worktree-default.md": "863f334856415ef4",
     "rules/auth.md": "ab77589f04fe8509",
     "rules/dev-login.md": "1763194d8cb31302",
     "rules/audit-schema.md": "e3d9db4baaf89d0b",
