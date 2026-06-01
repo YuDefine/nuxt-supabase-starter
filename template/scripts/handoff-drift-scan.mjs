@@ -121,6 +121,8 @@ const BASELINE_TITLE_KEYWORDS = [
 import { execFileSync } from 'node:child_process'
 import { existsSync, statSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve, basename } from 'node:path'
+import { userDirtyPaths } from './wip-dirty.mjs'
+import { findClaimByWorktree, isExpired } from './claim-helper.mjs'
 
 function gitRaw(args, opts = {}) {
   return execFileSync('git', args, {
@@ -394,6 +396,29 @@ function checkHandoffHealth(consumerRoot, thresholds, now = Date.now()) {
 
 // --- worktree drift ----------------------------------------------------------
 
+// Trigger 5 (lowest priority): worktree has user WIP (non-projection dirty) AND no
+// active claim (session dead/expired) → orphan uncommitted WIP that branch-HEAD-based
+// triggers 1-4 can't see. Active-claim dirty worktrees are NOT reported (don't disturb
+// a live session mid-edit). See rules/core/wip-orphan-recovery.md for the handoff SOP.
+function orphanWipDrift(consumerRoot, worktree, slug, commitDistanceBehind) {
+  const wip = userDirtyPaths(worktree.path)
+  if (wip.length === 0) {
+    return { worktree, slug, drift: null, message: null, commitDistanceBehind }
+  }
+  const claim = findClaimByWorktree(consumerRoot, worktree.path)
+  if (claim && !isExpired(claim)) {
+    // active session owns this dirty worktree → not orphan
+    return { worktree, slug, drift: null, message: null, commitDistanceBehind }
+  }
+  return {
+    worktree,
+    slug,
+    drift: 'orphan-uncommitted-wip',
+    message: `worktree has ${wip.length} uncommitted user file(s) but no active claim (session dead/expired) — orphan WIP; see rules/core/wip-orphan-recovery.md to assess + land or discard`,
+    commitDistanceBehind,
+  }
+}
+
 function checkDrift(consumerRoot, worktree) {
   const slug = extractSlugFromBranch(worktree.branch)
   if (!slug) {
@@ -436,7 +461,7 @@ function checkDrift(consumerRoot, worktree) {
         commitDistanceBehind,
       }
     }
-    return { worktree, slug, drift: null, message: null, commitDistanceBehind }
+    return orphanWipDrift(consumerRoot, worktree, slug, commitDistanceBehind)
   }
 
   // Trigger 1: branch ahead AND slug not in HANDOFF (work invisible)
@@ -476,7 +501,7 @@ function checkDrift(consumerRoot, worktree) {
     }
   }
 
-  return { worktree, slug, drift: null, message: null, commitDistanceBehind }
+  return orphanWipDrift(consumerRoot, worktree, slug, commitDistanceBehind)
 }
 
 async function main() {
