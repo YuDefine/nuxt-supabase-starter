@@ -33,6 +33,16 @@ Local edits will be reverted by the next sync.
 
 **判定「已在 worktree」**：`git rev-parse --git-dir` 結果若包含 `/worktrees/` 子路徑，則 cwd 已在某個 worktree，**不要**疊建新 worktree。User 應直接在當前 worktree 做事。
 
+### §1 archive-on-main 的 clobber 窗口（pitfall 2026-06-01）
+
+archive-on-main 例外讓「已驗證但未 commit 的 archive batch」躺在 **shared main working tree**；若 `/commit` 因 gate（0-C / codex / 人工檢查）halt，這批 dirty 會**長期**留在 main。多 session 並行時，**別 session 的 `wt-helper add --baseline-strategy stash`** 會把它當 unclaimed dirty bulk-stash 捲走（已實證：archive batch + 收尾 follow-up 36 檔被別 session fork 捲進 `refs/wt-baseline/*`，working tree 清空 — 見 `docs/pitfalls/2026-06-01-prefork-baseline-stash-sweeps-unclaimed-main-work.md`）。
+
+**MUST**（縮短 / 消除窗口）：
+
+- **archive 收尾的 follow-up fix（修測試 / 補 code / 加 migration）走 `/wt` 進隔離 worktree**，**NEVER** 在 main working tree 累積多步 in-flight 工作等 commit。archive bookkeeping 本身（mv folder / delta sync）才 MAY 在 main 跑，後續 code fix 不是。
+- `/commit` 因可恢復的 gate 失敗 halt 時，若 batch 需要進一步 code 改動才能過 gate，**SHOULD** 立即把 batch 移進隔離 worktree（restore + 從那邊修 + commit），不要留在 shared main 邊修邊等。
+- 跨多步在 main 累積 batch 且無法立刻 commit 時，**SHOULD** 寫 coarse claim 保護（見 [[session-claims]] § 主線無 claim 的保護缺口）。
+
 ### §1 invariant：parent session cwd 不動
 
 `/wt` 的所有 invocation form **SHALL NOT** 遷移 parent session 的 cwd。worktree 內的操作由 subagent（cwd = worktree path）執行，主線（cwd = main）負責 dispatch + squash merge + cleanup。
