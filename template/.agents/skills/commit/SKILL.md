@@ -680,9 +680,10 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 EOF
 )"
 pnpm tag
+git push origin main --tags
 ```
 
-`pnpm tag` 會建立 `v{版本號}` tag 並推送到 origin。
+`pnpm tag` 建立 `v{版本號}` local tag。接著 **`git push origin main --tags` 一步推 commits + tag**。**NEVER** 分兩步 `git push && git push --tags` — 分步推時 GitHub 先收到 main commit SHA，再收到指向同 SHA 的 tag，有機率不觸發 `push:tags` workflow（2026-06-03 v1.185.1 實證）。
 
 ## Step 6: 完成報告
 
@@ -790,10 +791,11 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 EOF
 )"
   git log -1 --oneline
+  git push origin main
 fi
 ```
 
-> 注意：這個 commit **不**重新 bump 版本（不是 deploy），只是把 HANDOFF/ROADMAP 落入 history。Tag 仍指向 Step 5 的 deploy commit；後續 fresh clone 想拉最新交接資訊時，看 main 即可。
+> 注意：這個 commit **不**重新 bump 版本（不是 deploy），只是把 HANDOFF/ROADMAP 落入 history。Tag 仍指向 Step 5 的 deploy commit。因為 Step 5 已經 push 過 main，此處需要再 push 一次把 docs commit 送上去。
 
 ### 7-F. 報告
 

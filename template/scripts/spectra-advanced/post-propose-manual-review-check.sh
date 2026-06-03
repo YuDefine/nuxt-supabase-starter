@@ -358,7 +358,12 @@ for i in $(seq 0 $((PATTERN_COUNT - 1))); do
     # on [verify:api] / [verify:api+ui] / [verify:e2e] items (verify channels — agent runs the
     # round-trip itself, not the user; arrow chains there describe agent-verifiable evidence).
     if [ -n "$KIND_FILTER" ]; then
-      ITEM_KIND=$(printf '%s\n' "$line" | grep -oE '\[(review|verify|discuss):[a-z+]+\]' | head -1 | tr -d '[]')
+      # Match all legal markers: review:ui / verify:api / verify:e2e (digit) /
+      # verify:e2e+ui (multi-channel) / bare discuss (no colon). The `:[a-z0-9+]+`
+      # group is optional so `[discuss]` matches; `0-9` covers `e2e`. `|| true`
+      # keeps an unmatched/malformed line from tripping `set -e` before the
+      # `-z "$ITEM_KIND"` continue-guard below can handle it.
+      ITEM_KIND=$(printf '%s\n' "$line" | grep -oE '\[(review|verify|discuss)(:[a-z0-9+]+)?\]' | head -1 | tr -d '[]' || true)
       if [ -z "$ITEM_KIND" ] || ! printf '%s\n' "$ITEM_KIND" | grep -qE "^(${KIND_FILTER})$"; then
         continue
       fi
