@@ -1,0 +1,68 @@
+{
+  "$schema": "../../../clade/registry/consumer-meta.schema.json",
+  "$comment": "Fleet sweep TD-159, scaffolded by clade scripts/scaffold-consumer-meta.mjs 2026-06-04. Template project — no auth, no DB, no deploy. Port 3000 is default fallback.",
+  "schemaVersion": "1",
+  "consumerId": "nuxt-supabase-starter",
+
+  "dev": {
+    "ports": [
+      {
+        "port": 3000,
+        "alias": "main",
+        "purpose": "template dev fallback"
+      }
+    ],
+    "leaseMode": "advisory",
+    "commands": {
+      "spawn": "pnpm dev",
+      "status": null,
+      "kill": null
+    },
+    "singleton": null,
+    "worktreePattern": "../nuxt-supabase-starter-wt/<branch>",
+    "envSyncPolicy": {
+      "filesToCopy": [],
+      "filesToGenerate": [],
+      "source": "main"
+    }
+  },
+
+  "auth": {
+    "provider": "none",
+    "portPinned": false,
+    "oauthRedirectUris": [],
+    "devSigninEnabled": false,
+    "devSigninEndpoint": null,
+    "devSigninFlag": null,
+    "cookieNamespace": null
+  },
+
+  "browser": {
+    "cdpPort": 9333,
+    "profileMode": "dedicated-bh-chrome",
+    "loginRequired": false
+  },
+
+  "database": {
+    "kind": "none",
+    "instances": {},
+    "envVarNames": {},
+    "seedCommand": null,
+    "previewEnvCapability": null
+  },
+
+  "commands": {},
+
+  "deploy": {
+    "platform": "none",
+    "prodUrl": null,
+    "previewUrlShape": null,
+    "deployTrigger": null
+  },
+
+  "verification": {
+    "healthEndpoints": [],
+    "smokePaths": [],
+    "manualGates": []
+  }
+}
