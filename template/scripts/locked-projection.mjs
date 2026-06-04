@@ -16,10 +16,10 @@
  *   - Derived agent projections at `.agents/`, `.codex/`
  *   - Plumbing JSON: `.claude/hub.json`, `.claude/.hub-state.json`,
  *     `.claude/sync-to-agents.config.json`
- *   - Improvement-loop infra: `.clade/bin/`, `.clade/signals/`
+ *   - Improvement-loop infra: `.clade/bin/`, `.clade/signals/`, `.clade/vendor/`
  *   - Vendored scripts at `scripts/` (wt-helper, claim-helper, stash-reconcile,
- *     review-gui, audit-test-scripts, handoff-drift-scan, git-merge-clade-regenerate,
- *     spectra-archive-sidecar, dev-singleton)
+ *     review-gui, audit-test-scripts, handoff-drift-scan, wip-dirty,
+ *     git-merge-clade-regenerate, spectra-archive-sidecar, dev-singleton)
  *   - Recursive vendored script trees: `scripts/spectra-advanced/`,
  *     `scripts/pre-commit/`, `scripts/pre-push/`
  *   - Snippets / shared presets: `vendor/snippets/`, `vendor/oxc-shared/`
@@ -43,9 +43,9 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // Plumbing JSON files
       String.raw`\.claude/(hub\.json|\.hub-state\.json|sync-to-agents\.config\.json)$`,
       // Improvement-loop infra (.clade/)
-      String.raw`\.clade/(bin|signals)/`,
+      String.raw`\.clade/(bin|signals|vendor)/`,
       // Vendored script entry points (scripts/)
-      String.raw`scripts/(wt-helper|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|handoff-drift-scan|git-merge-clade-regenerate|locked-projection|_git-lock-detect|spectra-archive-sidecar|dev-singleton|dev-router|dev-session)\.(mjs|mts)$`,
+      String.raw`scripts/(wt-helper|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|spectra-archive-sidecar|dev-singleton|dev-router|dev-session)\.(mjs|mts)$`,
       // Recursive vendored script trees
       String.raw`scripts/(spectra-advanced|pre-commit|pre-push)/`,
       // Snippets / shared presets

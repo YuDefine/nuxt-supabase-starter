@@ -449,7 +449,9 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 simplify 修完的版本才是下一步 codex review 應該看的對象 —— 若兩者並行，codex 會挑到 simplify 即將刪 / 改的 code，浪費一輪修正成本。
 
-跑完輸出 `✅ 0-A.0 完成（simplify 已 review + 修正）` 後判斷 fast-path：
+**Deferred items → HANDOFF（自動，不停住）**：simplify 有時會指出「現在可以不做但未來值得做」的改善項（例如：可抽共用 util 但本次 diff 只碰到一處、某段 code 有更優雅寫法但不影響正確性、altitude 建議但改動範圍超出本次 commit scope）。這些項目 **MUST** 自動寫入 `HANDOFF.md` 的 `Next Steps` 區塊（一行一項，前綴 `[simplify]`），然後**立即繼續** fast-path 判斷。**NEVER** 為這些 deferred items 停住等使用者確認或詢問「要不要現在處理」。
+
+跑完輸出 `✅ 0-A.0 完成（simplify 已 review + 修正{，N 項 deferred → HANDOFF}）` 後判斷 fast-path：
 
 - **命中** → 輸出 `⏭️ 0-A.1/0-A.2 跳過（fast-path: diff <20 行、限 doc/config、無敏感路徑）`，進入 0-B/0-C 並行
 - **不命中** → 進入 0-A.1
