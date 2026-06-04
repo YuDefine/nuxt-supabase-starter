@@ -443,13 +443,27 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 #### 0-A.0 — simplify（主線，永遠跑、永遠先跑）
 
-對本次 working tree 變更跑 `simplify` skill（review + 自動修）—— 它聚焦 reuse / 精簡 / efficiency / altitude，跑完自動把修正套用到 working tree。
+對本次 working tree 變更跑 simplify review + 自動修 —— 聚焦 reuse / 精簡 / efficiency / altitude，codex review 不會抓這條軸。simplify 修完的版本才是下一步 codex review 應該看的對象。
 
-> ℹ️ `simplify` 是 **Claude Code CLI 內建命令**，每個 Claude Code 安裝都有；**非 clade-managed**，不需要 consumer 端 plugin install 或 clade vendor 散播。（曾在 CLI 數個版本間被棄用，自 2.1.154 重新可用；屆時若 CLI 再移除，本流程需改為 clade-vendored skill 或退回 `/code-review`。）
+**執行方式：MUST 用 foreground `Agent` tool（`mode: "auto"`）**，**NEVER 用 `Skill(simplify)` 嵌套呼叫**。
 
-simplify 修完的版本才是下一步 codex review 應該看的對象 —— 若兩者並行，codex 會挑到 simplify 即將刪 / 改的 code，浪費一輪修正成本。
+理由：`Skill(simplify)` inline 載入 simplify SKILL.md + 4-agent 編排 + 修正報告，大量 output 會把外層 commit flow 的 continuation 指令推出 working memory。Agent tool 把 simplify 隔離在 subagent context，主線只收到 compact 結果，commit flow 的 fast-path 判斷指令仍在 working memory 頂端。
 
-**Deferred items → HANDOFF（自動，不停住）**：simplify 有時會指出「現在可以不做但未來值得做」的改善項（例如：可抽共用 util 但本次 diff 只碰到一處、某段 code 有更優雅寫法但不影響正確性、altitude 建議但改動範圍超出本次 commit scope）。這些項目 **MUST** 自動寫入 `HANDOFF.md` 的 `Next Steps` 區塊（一行一項，前綴 `[simplify]`），然後**立即繼續** fast-path 判斷。**NEVER** 為這些 deferred items 停住等使用者確認或詢問「要不要現在處理」。
+Agent prompt 範本（**照搬，不自由發揮**）：
+
+```
+Review the current uncommitted changes (git diff HEAD) for reuse, simplification, efficiency, and altitude issues — not correctness bugs. Launch 4 parallel review agents (Reuse / Simplification / Efficiency / Altitude), dedup findings, fix each one directly. Skip findings that change behavior or require changes outside the diff. Report: what was fixed, what was skipped (or confirm clean). Keep the final summary under 200 words.
+```
+
+Agent 回傳後主線處理：
+
+- **有修正** → 一句話摘要（「simplify 修了 N 處：<列舉>」），deferred items 寫 `HANDOFF.md`（`[simplify]` prefix），**立即** fast-path 判斷
+- **無修正** → 輸出 `✅ 0-A.0 完成（simplify 無修正）`，**立即** fast-path 判斷
+- **NEVER** 把 Agent 回傳的完整報告原文轉貼給 user —— 那正是造成 context 膨脹 + 停頓的根因
+
+**Deferred items → HANDOFF（自動，不停住）**：simplify 指出「現在不做但值得做」的改善項 **MUST** 自動寫入 `HANDOFF.md` 的 `Next Steps` 區塊（一行一項，前綴 `[simplify]`），然後**立即繼續** fast-path 判斷。**NEVER** 停住等使用者確認。
+
+**0-A.0 完成 ≠ 停頓點（hard rule）**：simplify Agent 回傳後，主線 **MUST 在同一個 assistant turn 內** 輸出一行摘要 → 判斷 fast-path → 啟動 0-A.1/0-B/0-C。**NEVER** 在 simplify 完成後等 user 回應 — commit 流程是單一連續執行，中間不停。
 
 跑完輸出 `✅ 0-A.0 完成（simplify 已 review + 修正{，N 項 deferred → HANDOFF}）` 後判斷 fast-path：
 
