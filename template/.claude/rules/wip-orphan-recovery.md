@@ -12,7 +12,7 @@ Local edits will be reverted by the next sync.
 
 # WIP Orphan Recovery
 
-> Reference 檔。被 Stop hook（`stop-wip-guard.sh`）block message 與 `handoff-drift-scan.mjs` Trigger 5（`orphan-uncommitted-wip`）指向。預防層見 [[worktree-default]] §5、claim 機制見 [[session-claims]]、升級出口見 [[handoff]] / [[session-tasks]]。
+> Reference 檔。被 Stop hook（`stop-wip-guard.sh`）warn message 與 `handoff-drift-scan.mjs` Trigger 5（`orphan-uncommitted-wip`）指向。預防層見 [[worktree-default]] §5、claim 機制見 [[session-claims]]、升級出口見 [[handoff]] / [[session-tasks]]。
 
 ## 什麼是 orphan WIP
 
@@ -24,7 +24,7 @@ worktree working tree 有**未 commit 的 user 改動**（`git status --porcelai
 
 | 層 | 機制 | 時機 |
 | --- | --- | --- |
-| 預防（Layer 0） | Stop hook `stop-wip-guard.sh` | session 結束前 working tree 有 user WIP → **block** 要求當前 session 先 checkpoint commit（`🧹 chore: [WIP] <完成度自評>`）或寫 HANDOFF entry。從源頭減少 orphan 產生 |
+| 提醒（Layer 0） | Stop hook `stop-wip-guard.sh` | session 結束前 working tree 有 user WIP → **warn**（不阻擋），提醒有未 commit 改動。多 session 並行共用 working tree 是常態，dirty file 可能屬於別的 active session，不應 block |
 | 事後（Layer 2） | `handoff-drift-scan.mjs` Trigger 5 `orphan-uncommitted-wip` | session-start drift scan 偵測「worktree dirty + claim 無效/過期」→ 列出待接手。**有 active claim 的 dirty worktree 不報**（不擾動 live session） |
 
 兩層共用 `wip-dirty.mjs` 的 `userDirtyPaths()`（single-source projection filter，與 `wt-helper merge-back` 同源，避免重刻 `LOCKED_PROJECTION_RE` 漂移）。

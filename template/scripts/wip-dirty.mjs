@@ -10,7 +10,7 @@
 //   import { userDirtyPaths } from './wip-dirty.mjs'
 //   const wip = userDirtyPaths(worktreePath)  // → string[]（porcelain path，已剝 XY 狀態碼）
 //
-// CLI 用法（stop-wip-guard.sh Layer 0）：
+// CLI 用法（stop-wip-guard.sh Layer 0 warn）：
 //   node wip-dirty.mjs [repoRoot]
 //   - stdout：每行一個 user WIP path（無則空）
 //   - exit 1：有 user WIP；exit 0：乾淨 / 全 projection / 非 git repo（fail-open）
