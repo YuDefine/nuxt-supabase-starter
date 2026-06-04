@@ -212,6 +212,8 @@ export default defineNuxtConfig({
           'https://*.ingest.us.sentry.io',
           // Iconify CDN（@nuxt/icon dev mode；prod 已 bundle）
           'https://api.iconify.design',
+          // Cloudflare Web Analytics beacon
+          'https://cloudflareinsights.com',
         ],
         'upgrade-insecure-requests': true,
       },
