@@ -13,7 +13,7 @@ Local edits will be reverted by the next sync.
 
 `/commit` 封裝了品質閘門，繞過等於讓壞 code / 壞版本號 / 壞 tag 進 repo：
 
-- **0-A** review：(1) `simplify`（reuse / 精簡 / efficiency / altitude），(2) `codex review --uncommitted` high（GPT-5.5，跨模型抓 bug / 邏輯 / 安全；fast-path 命中時跳過），(3) 0-A.1 出 Critical / Major 時條件升 `codex` xhigh 驗證；修正一律由 Claude Code 主線執行
+- **0-A** review：(1) `simplify`（reuse / 精簡 / efficiency / altitude；deferred items 自動登 HANDOFF.md 後繼續，不停住），(2) `codex review --uncommitted` high（GPT-5.5，跨模型抓 bug / 邏輯 / 安全；fast-path 命中時跳過），(3) 0-A.1 出 Critical / Major 時條件升 `codex` xhigh 驗證；修正一律由 Claude Code 主線執行
 - **0-B** UI Design Review（條件觸發）— 含 `.vue` 模板變動 + 屬於頁面/元件/佈局/互動/樣式變更時派 screenshot-review agent
 - **0-C** **format / lint / typecheck / test 全綠**：跑 `pnpm check`（多數專案含 format/lint/typecheck）**並且**確認 test 也有跑。**若 `package.json` 的 `scripts.check` 不含 `test` / `vitest`，必須額外跑 `pnpm test`（或 `vp test run` / `pnpm test:unit`），否則 CI 抓到的測試失敗（hook timeout、flake、新增測試壞掉）會在 commit 後才暴露**
   - **oxfmt callout**：oxfmt batched `--check`（一次掃多檔）可能 false-positive 報未預期 diff。commit 前若 `vp fmt --check` 報未預期 diff，先對該檔單獨 `vp fmt --write` 再 `vp fmt --check` 確認——單檔重跑為準，不要憑 batched check 結果就判定 0-C 紅燈。詳見 [[pitfall-oxfmt-batched-check-false-positive]]
