@@ -41,7 +41,16 @@
  */
 
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { cpSync, existsSync, readFileSync, readdirSync, realpathSync, unlinkSync } from 'node:fs'
+import {
+  copyFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  unlinkSync,
+} from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { stdin, stdout } from 'node:process'
 import { createInterface } from 'node:readline/promises'
@@ -935,6 +944,36 @@ async function cmdAdd(slug, opts = {}) {
   console.log(
     'Open a new Claude Code or Codex session in the worktree path to continue work isolated from main.',
   )
+
+  // TD-187: auto-invoke wt-env-bootstrap.mjs if consumer-meta declares filesToCopy.
+  // Copies gitignored env files (e.g. .env.local) from main into the new worktree
+  // so dev server starts with DB credentials, tunnel keys, etc. Warn-only on failure.
+  const consumerMetaPath = join(wtPath, '.claude', 'consumer-meta.json')
+  if (existsSync(consumerMetaPath)) {
+    try {
+      const meta = JSON.parse(readFileSync(consumerMetaPath, 'utf8'))
+      const filesToCopy = meta?.dev?.envSyncPolicy?.filesToCopy ?? []
+      if (filesToCopy.length > 0) {
+        let copied = 0
+        for (const f of filesToCopy) {
+          const src = join(consumerRoot, f)
+          const dst = join(wtPath, f)
+          if (existsSync(src) && !existsSync(dst)) {
+            mkdirSync(dirname(dst), { recursive: true })
+            copyFileSync(src, dst)
+            copied++
+          }
+        }
+        if (copied > 0) {
+          console.log(
+            `  env-bootstrap: copied ${copied} file(s) from main (${filesToCopy.join(', ')})`,
+          )
+        }
+      }
+    } catch (e) {
+      console.error(`note: env-bootstrap skipped: ${e.message ?? e}`)
+    }
+  }
 
   // Auto-trigger codebase-memory index_repository (fast mode, detached) so
   // search_graph / trace_path / get_code_snippet work immediately in the new
