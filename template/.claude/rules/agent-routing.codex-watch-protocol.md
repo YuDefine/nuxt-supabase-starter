@@ -37,7 +37,7 @@ Local edits will be reverted by the next sync.
    > ⚠️ `--dangerously-bypass-approvals-and-sandbox` 在背景非互動 codex 是**必要**的，不是偷懶 — codex `exec` 沒人可批准時，sandbox 為非 `danger-full-access` 的 MCP tool call 全部會被自動回 `user cancelled`（codebase-memory-mcp 等都會死）。Codex 官方文檔 `agent-approvals-security` 把這個 flag 與 `-s danger-full-access` 並列為「非互動信任環境」的標準寫法。**禁止**把它換回 `-s read-only` / `-s workspace-write` — 那會讓 codex 失去 MCP 能力（`approval_mode = "auto"` 在 `mcp_servers.*` 不是合法 codex config key，無法作為替代）。
 
 3. 立刻簡短回報 bash job ID 給使用者
-4. 立刻啟動 **Codex Watch Protocol**（見下節）— **MUST** `ScheduleWakeup` 第一次進度檢查，**禁止**只乾等 `<task-notification>`
+4. 立刻啟動 **Codex Watch Protocol**（見下節 § 監看排程）— **依 dispatch 路徑分模式**：**主線直接 Bash 派** = notification-only（主線 idle 等通知，只下**一個** ~1500s 安全網 fallback 防罕見 hang-type 失敗）；**subagent 中介派** = 每 ~3 分鐘 FS poll（cross-sandbox 通知可能 silent miss）。**禁止**對直接 dispatch 啟動每 3 分鐘短輪詢（無謂 turn 重燒 context）
 5. 收到 `<task-notification> status=completed` → 立刻 BashOutput 讀 stdout → 整理結果回報；watch loop 自然終止
 6. **NEVER** 沉默等使用者來問進度
 
@@ -228,10 +228,30 @@ cd <worktree> && \
 
 ### 監看排程
 
+**先分 dispatch 路徑**（決定 watch 模式）：
+
+| Dispatch 路徑 | Watch 模式 | 為什麼 |
+| --- | --- | --- |
+| **主線直接 Bash 派 codex**（`codex exec` 在主線 sandbox 背景跑） | **notification-only（預設）** | `<task-notification>` 與 BashOutput 都在主線 sandbox 內可靠；常見失敗（`fetch failed` / auth）= codex **exit** → background bash 完成 → 通知**立刻**觸發。等通知期間主線 idle = 零 turn = 零 cache_read |
+| **subagent 中介派 codex**（Agent tool → subagent → codex，cross-sandbox） | **每 ~3 分鐘 FS poll**（per § 跨 sandbox 可見度約束 失敗模式 2） | cross-sandbox `<task-notification>` 可能 silent miss（已驗證 incident）；FS poll 是兜底，不可省 |
+
+#### A. 主線直接 Bash 派（notification-only）
+
+| 時機 | 動作 |
+| --- | --- |
+| 派出後**立刻** | **不**下短輪詢。只下**一個**安全網 fallback：`ScheduleWakeup(1500, "codex <topic> <slug> 安全網檢查 — 預期靠 task-notification 收尾")`（~25 分） |
+| 收到 `<task-notification status=completed>` | 立刻 BashOutput 讀 stdout → cross-check → 回報；後續 fallback 自然作廢（**不再** wakeup） |
+| 安全網 fallback 觸發（仍沒收到通知） | BashOutput 讀 tail → 套「健康判斷」：健康/即將完成 → 再下一個 ~1500s fallback；阻塞/卡住 → 跳「介入觸發」 |
+| 任何時點累計 ≥ 30 min 未完成 | **MUST** `AskUserQuestion` [繼續等 / kill 重派 / 中止] |
+
+> **為什麼安全網用長間隔而非 180s**：notification-only 的常態是「主線 idle 等通知」= 零 turn。短輪詢（180s）會強制主線每 3 分鐘醒來重讀整段 context（重倉 ~270K/turn）——那正是要消除的負擔來源。直接 dispatch 的**常見失敗是 exit-type**（`fetch failed` / auth fail → codex 退出 → bash 完成 → 通知即時觸發，主線馬上讀錯誤 tail）；安全網 fallback 只防罕見的 **hang-type**（codex 卡住 never exit、never notify），25 分鐘醒一次足夠（一次 cache miss vs 每 3 分鐘一次 cache read，便宜得多）。
+
+#### B. subagent 中介派（每 ~3 分鐘 FS poll）
+
 | 時機 | 動作 |
 | --- | --- |
 | 派出 background bash 後**立刻** | `ScheduleWakeup(180, "codex <topic> <slug> 首次進度檢查")` |
-| 每次 wakeup（系統自動觸發） | 1) 若已收到 `<task-notification status=completed>` → 走既有結束流程，**不再 wakeup**；2) 否則 BashOutput 讀 tail（≤200 行） → 套用「健康判斷」 → 決定下次 wakeup 間隔 |
+| 每次 wakeup（系統自動觸發） | 1) 若已收到 `<task-notification status=completed>` → 走既有結束流程，**不再 wakeup**；2) 否則跑 § 跨 sandbox 可見度約束 的 FS poll（git log / tasks.md / stdout log，≤200 行） → 套用「健康判斷」 → 決定下次 wakeup 間隔（≤180s） |
 | 累計 wakeup ≥ 30 min 仍未完成 | **MUST** 用 `AskUserQuestion` 給使用者 [1] 繼續等 N 分 / [2] kill jobId 重派 / [3] 中止 — **禁止**自行決定 |
 
 ### 健康判斷（每次 wakeup 必跑）
@@ -267,15 +287,16 @@ codex 跑了 N 分鐘，目前狀態：<一句話卡點>
 
 ### `ScheduleWakeup` 用法守則
 
-`delaySeconds` 一律落在 prompt cache 5 分鐘 TTL 內（< 300）：
+**active watch（subagent 中介 FS poll 路徑）** 的 `delaySeconds` 一律落在 prompt cache 5 分鐘 TTL 內（< 300）：
 
 | 情境 | 建議值 |
 | --- | --- |
 | 健康（預設、上限） | `180`（3 分，cache 內、使用者明定上限） |
 | 即將完成 / 等通知收尾 | `60`–`120`（cache 內） |
 | 輕度可疑、要近距離觀察 | `120`–`180` |
+| **notification-only 安全網 fallback（主線直接 Bash 派）** | **`1200`–`1800`**（超 cache TTL；這是「codex 死了卻沒發通知」的兜底，**不是** active watch） |
 
-**禁止** `< 60`（runtime clamp 也會擋）或 `> 180`（使用者要求每 3 分鐘必檢查；更長偵測太遲）。
+**禁止** `< 60`（runtime clamp 也會擋）。**active watch（subagent 中介路徑）禁止 `> 180`**（每 3 分鐘必檢查；更長偵測太遲）。**例外**：notification-only 路徑的安全網 fallback 用 `1200`–`1800` 是正確的——它不是 active watch，是 hang-type 失敗的兜底；對它用 180s 短輪詢反而把要消除的 per-turn 重讀加回來。
 
 `reason` 欄位**必須**具體：例如「kiosk-multilingual codex 進度檢查（已派出 3 分）」，**NEVER** 寫「waiting」「monitoring codex」這種空泛字眼。
 

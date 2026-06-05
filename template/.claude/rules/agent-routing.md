@@ -27,6 +27,42 @@ Local edits will be reverted by the next sync.
 | **`screenshot-review` verify mode**（spectra-apply Step 8a `[verify:ui]` channel、`/spectra-archive` 前視覺 QA、verify-channel 補拍 screenshot） | **主線 Claude 直派 Codex GPT-5.5 low**（用 Bash 走 `agent-routing.codex-watch-protocol.md` § Codex 派工的標準流程；**禁止** `Agent` tool with `subagent_type: screenshot-review` — sonnet wrapper 已多次驗證自做工作繞過 codex dispatch） | sonnet wrapper 反覆無法 enforce Step 0 字面身份檢查（2026-05-19 align-shipments-rls-auth + 2026-05-23 warehouse Re-Design 兩起 incident），主線直派 codex 是唯一可靠路徑。詳見 [`agent-routing.codex-watch-protocol.md`](./agent-routing.codex-watch-protocol.md) § screenshot-review Verify Mode Dispatch + [[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]。 |
 | **Dev/test admin session cookie 取得**（verify channel evidence collection 階段 agent 需要 admin / fixture / per-role session cookie 跑 `[verify:api]` curl 或 `[verify:ui]` browser auth） | **主線自己 scaffold `_dev-login` route via clade cookbook + curl mint session**（**禁止**要求 user 走 Google OAuth + DevTools 複製 cookie；scaffold 前**MUST**先用 detection helper 確認真的 missing — 別走 lazy grep） | Cookie 取得是 agent autonomy 範圍內可解的事；clade 已備 canonical pattern（`rules/modules/auth/<auth-module>/dev-login.md` + `vendor/snippets/dev-auth/templates/` + `vendor/snippets/dev-auth/lib/detect-dev-login-route.mjs` detection helper + `scripts/audit-dev-login-adoption.mjs` audit signal）+ 4/6 consumer reference impl (<consumer-b> legacy / <consumer-a> monorepo / <consumer-d> canonical / <consumer-c> better-auth-post)。詳見 [[manual-review.backend]] § Dev-login route missing → scaffold-first hard rule + [[pitfall-agent-asks-user-cookie-skipping-dev-login-scaffold]]。 |
 
+## Orchestration Residency（誰持有長 session — 決定層）
+
+**核心命題**：上面 Routing Table 決定誰**寫** code，但沒決定誰**持有那條長 session**。實測負擔的大頭不是 output（一個月才 ~300M），是**主線 turn 數 × 每 turn 重讀的 context**——重倉每個 tool call 平均重讀 250-270K context，dispatch 後逐 phase live-watch + cross-check 會讓主線整段 codex 工作期間 context 全程燒著（光「每 3 分鐘強制 poll」一個月就製造 ~4,700 個主線 turn）。所以除了「誰寫」，必須再決定「誰扛 session 殘留」。
+
+依 change 特性二選一：
+
+### Codex-primary（Codex 扛整條執行 session，主線只在邊界把關）
+
+**進入條件**（A 或 B 命中即走）：
+
+- **A. 純非-view change**：整條 change **沒有任何 UI view phase**（無 `.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss`）**且** tasks.md 已定稿（post-ingest / post-propose，phase 切分清楚）——工作性質是「執行已知計畫」。
+- **B. 機械式 sweep**：lint fix / dep upgrade / rename / cross-file refactor / test 修復 / codemod，即使無正式 tasks.md。
+
+**做法（change 粒度，不是 phase 粒度）**：
+
+1. 主線**一次** dispatch 整條 change 的**所有**非 view phase 給單一 background codex（prompt 列全部 phase + 各自 acceptance + Plan-first + Commit Authorization；codex 逐 phase 自 commit，per reference § Commit Authorization）。**NEVER** 一個一個 phase 派（phase 粒度是 Claude-primary 才用）。
+2. Dispatch 後走 **notification-only watch**（見 reference § 監看排程「主線直接 Bash 派」路徑）——主線 idle 等通知，**不**逐 phase cross-check、**不**每 3 分鐘短輪詢。
+3. 收到 `<task-notification status=completed>` 後，主線**一次**做 change 粒度 cross-check：
+   - `git -C <wt> log main..HEAD --oneline` —— phase 數 = dispatch 的 phase 數、每條 commit format 合規
+   - View-layer drift double-check + Scope discipline cross-check（同 reference § Spectra Apply Phase Dispatch Step 5）
+   - typecheck + 相關 test
+4. 主線**自己**跑 Section 7 Design Review（永不派 codex）。
+5. 進 `/commit` 0-A gate（simplify + codex review + 主線 cross-check）。
+
+**把關沒被拿掉，只是從「全程貼身監看」移到「邊界檢視最終產物」**——對齊 staff engineer review PR（review 成品，不是盯打字）。真正的兩道 gate（`/commit` 0-A + archive 時 Design Review）作用在最終 squashed diff 上，與誰 orchestrate 無關。
+
+### Claude-primary（主線持有 session — 以下任一命中即留主線）
+
+- **UI view 工作**（視覺 / 互動 / a11y，per Routing Table 永不派 codex）
+- **架構 / 設計決策、需求模糊**——先 plan mode 釐清，不是「執行已知計畫」
+- **安全敏感**、需要 tight review loop 的 change
+- **clade routing / 規則知識**的編輯（主線才有 routing context）
+- **路徑未知的探索式 debug**（不知道要改哪、邊查邊改）
+
+Claude-primary 下若個別 phase 仍要派 codex，走下面 § Spectra Apply Phase Dispatch（phase 粒度 + watch）；watch 規範見 reference 檔。
+
 ## Spectra Propose Handoff（決策層）
 
 Claude Code session 收到 spectra propose 請求時：
@@ -39,7 +75,9 @@ Claude Code session 收到 spectra propose 請求時：
 
 ## Spectra Apply Phase Dispatch（決策層）
 
-執行 `spectra-apply` 時，phase 粒度派 codex：
+> **先判 residency**（見 § Orchestration Residency）：若整條 change 符合 Codex-primary 進入條件（純非-view + tasks.md 定稿，或機械 sweep），優先走 Codex-primary 的 **change 粒度單次 dispatch + notification-only**，**不要**落到下面逐 phase 派工。下面的 phase 粒度 dispatch 是 **Claude-primary** 場景（change 含 view phase、需逐 phase 把關、或混雜）才用。
+
+執行 `spectra-apply` 時（Claude-primary 場景），phase 粒度派 codex：
 
 1. Read tasks.md，按 `## N.` 切分 phase
 2. **每個 phase 三類分類**（依序判定，命中即停）：
@@ -95,7 +133,9 @@ Claude Code session 內偵測到「需要 WebSearch」時：
 - **NEVER** 收到 codex 完工通知後跳過 view-layer drift 檢查（`git diff --name-only` 過濾 view 路徑） — 是主要的回收 quality gate
 - **NEVER** 在 spectra-apply 偵測到「混雜 phase（UI view + 非 view 摻在同 phase）且未開工」時自行修改 tasks.md 拆 phase — 該交給 `/spectra-ingest` 處理（apply / propose / ingest 邊界要清楚）
 - **NEVER** 在 spectra-apply 派 codex 用 medium effort — 一律用 high（medium 漏 schema drift 風險高）
-- **NEVER** task 粒度派 codex — 一律 phase 粒度，避免大量 round-trip
+- **NEVER** task 粒度派 codex（過細 round-trip）。粒度依 residency 決定：**Codex-primary 走 change 粒度**（一次派整條 change 全部非 view phase）、**Claude-primary 走 phase 粒度**——兩者都不在 task 粒度（見 § Orchestration Residency）
+- **NEVER** 把符合 Codex-primary 進入條件（純非-view + tasks.md 定稿，或機械 sweep）的 change 落到逐 phase live-watch — 那是 Claude-primary 才用的模式；純非-view change 應 change 粒度單次 dispatch + notification-only（見 § Orchestration Residency）。把關移到收尾 cross-check + `/commit` 0-A，不在過程貼身監看
+- **NEVER** 對主線直接 Bash 派的 codex 啟動每 3 分鐘強制 poll — 直接 dispatch 路徑預設 **notification-only**（`<task-notification>` + BashOutput 在主線 sandbox 可靠，`fetch failed` 等常見失敗會讓 codex exit → 立刻觸發通知）。每 3 分鐘 FS poll **只**用於 subagent 中介 dispatch（cross-sandbox 通知可能 silent miss，見 reference § 跨 sandbox 可見度約束 失敗模式 2）
 - **NEVER** 派 codex 跑 spectra-apply phase 而 prompt 內漏 Commit Authorization 段（一 phase 一 commit / `🧹 chore: wt <change>-phase-<N>` format / hook 必跑禁 `--no-verify` / commit 前自驗 view-layer + scope）— 缺這段 codex 不知道格式、會混 commit 或撞 commitlint hook，主線難對齊 phase 邊界
 - **NEVER** 派 Codex 寫 code（spectra-propose draft / spectra-apply phase）而 prompt 漏掉 Plan-first 硬指令 — 沒有 plan 主線只能從 diff 反推 codex 意圖，cross-check 成本高且容易漏掉「codex 漏做某檔」。Plan 是事前公開思路，不是 review gate（codex 寫完 plan 必須立刻續跑，不停下來）
 - **NEVER** 在 commit 0-A 跳過 0-A.0 `simplify` skill —— simplify 是 reuse / 精簡 / efficiency / altitude 盲點的入口，必須序跑在 codex 之前
