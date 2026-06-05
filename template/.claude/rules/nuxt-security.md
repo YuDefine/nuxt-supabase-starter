@@ -96,6 +96,122 @@ security: {
 'worker-src': ["'self'", 'blob:'],
 ```
 
+## Integration Recipes（按 integration 組合 CSP）
+
+Consumer 的 CSP 設定 = **baseline**（上方 11 欄位）+ **所有用到的 integration recipes 聯集**。每個 recipe 列出該 integration 需要的 CSP directives 與偵測方式。Audit script `scripts/audit-nuxt-security.mjs` 自動偵測 consumer 用了哪些 integration 並 cross-check CSP 是否對齊。
+
+### Cloudflare Web Analytics
+
+已含在 baseline（見 § Cloudflare Web Analytics beacon），不需額外動作。
+
+- 偵測：所有部署到 Cloudflare 的 consumer（預設全部）
+- `connect-src`: `https://cloudflareinsights.com`（baseline 已含）
+- `script-src`（若啟用）: `https://static.cloudflareinsights.com`（baseline 已含）
+
+### Nuxt UI / Iconify
+
+- 偵測：`@nuxt/ui` in package.json dependencies
+- `connect-src`: `https://api.iconify.design`
+
+```ts
+'connect-src': [
+  "'self'",
+  'https://cloudflareinsights.com',
+  'https://api.iconify.design',  // Nuxt UI icon CDN
+],
+```
+
+備註：改用 `@nuxt/icon` 的 `provider: 'server'`（server-bundle mode）可消除此需求，icon 會 bundle 到 server 端不再打 CDN。
+
+### Sentry
+
+- 偵測：`@sentry/nuxt` in package.json dependencies
+- `connect-src`: `https://*.ingest.sentry.io`, `https://*.ingest.us.sentry.io`
+
+```ts
+'connect-src': [
+  // ... baseline + 其他 ...
+  'https://*.ingest.sentry.io',
+  'https://*.ingest.us.sentry.io',  // US region
+],
+```
+
+### Supabase（client-side）
+
+- 偵測：`@nuxtjs/supabase` in package.json dependencies 且 client-side 有 `useSupabaseClient()` 呼叫
+- `connect-src`: `https://*.supabase.co`（Supabase managed）或明列 self-hosted host
+
+```ts
+'connect-src': [
+  // ... baseline + 其他 ...
+  'https://*.supabase.co',  // Supabase managed platform
+],
+```
+
+備註：若 consumer 只在 server-side 透過 `serverSupabaseServiceRole` 存取 Supabase（不走 browser），可不加此條。
+
+### Google OAuth / Identity Services
+
+- 偵測：`vue3-google-login` 或 Google Identity Services 相關套件 in package.json
+- `script-src`: `https://accounts.google.com/gsi/client`
+- `connect-src`: `https://accounts.google.com`
+- `frame-src`: `https://accounts.google.com`
+
+```ts
+'script-src': [
+  "'self'", "'unsafe-inline'",
+  'https://accounts.google.com/gsi/client',
+  'https://static.cloudflareinsights.com',
+],
+'connect-src': [
+  // ... baseline + 其他 ...
+  'https://accounts.google.com',
+],
+'frame-src': ["'self'", 'https://accounts.google.com'],
+```
+
+### LINE OAuth / LIFF
+
+- 偵測：LINE Login / LIFF SDK 相關套件或 `line.me` 出現在 nuxt.config
+- `connect-src`: `https://*.line.me`, `https://*.line-scdn.net`, `https://*.line-apps.com`
+
+```ts
+'connect-src': [
+  // ... baseline + 其他 ...
+  'https://*.line.me',
+  'https://*.line-scdn.net',
+  'https://*.line-apps.com',
+],
+```
+
+### @nuxt/content v3（WASM）
+
+- 偵測：`@nuxt/content` v3+ in package.json dependencies
+- `script-src`: `'wasm-unsafe-eval'`（permits WebAssembly.instantiate for client-side SQLite）
+
+```ts
+'script-src': [
+  "'self'", "'unsafe-inline'", "'wasm-unsafe-eval'",
+  'https://static.cloudflareinsights.com',
+],
+```
+
+備註：此 directive 擴大了 XSS 攻擊面（允許 WASM 執行），**MUST** 記錄 ADR（`docs/decisions/YYYY-MM-DD-csp-wasm-unsafe-eval.md`）說明為什麼需要。
+
+### Dev HMR（tunnel 環境）
+
+- 偵測：`.env` / `.env.development` 有 `TUNNEL_HOSTNAME`
+- `connect-src`（dev-only）: `ws:`, `wss:`
+
+```ts
+'connect-src': [
+  // ... baseline + 其他 ...
+  ...(process.dev ? ['ws:', 'wss:'] : []),  // dev-only：tunnel HMR
+],
+```
+
+完整 cookbook：`~/offline/clade/vendor/snippets/nuxt-security-dev-csp/`。
+
 ## CSRF 例外（`routeRules.csurf`）
 
 `csrf: true` 預設啟用，但以下路徑**MUST** 透過 `routeRules` 顯式關閉，否則會被擋（HTTP 403 CSRF Token Mismatch）：
