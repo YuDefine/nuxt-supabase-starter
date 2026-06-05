@@ -511,18 +511,21 @@ Agent 回傳後主線處理：
 
 #### 0-A/B/C 並行匯合（**收口檢查**）
 
-三軸完成後合併狀態檢查：
+三軸完成後合併狀態檢查 + 條件觸發 0-D：
 
 1. 0-A（codex high，or 條件升 xhigh，or fast-path skipped）：通過
 2. 0-B（screenshot review）：通過或跳過
-3. 0-C（pnpm check + pnpm test）：全綠
+3. 0-C（pnpm check + pnpm test + pnpm doctor）：全綠
+4. 0-D（doc alignment）：通過或跳過
 
-**大改動回扣**：若 0-A / 0-B / 0-C 累計的修正**超過 50 行或跨 5 檔以上**，**MUST** 在此處重跑一次 `codex-review-safe.sh high` 確認新引入的程式碼也過 codex 眼睛（codex 看的是啟動時 snapshot，後續大改動不在它覆蓋範圍）。小改動（< 50 行 / < 5 檔）視同安全跳過。
+**0-D 執行時機**：三軸匯合後、大改動回扣之前。0-D 條件觸發（見下方 § 0-D. Doc Alignment 檢查），觸發時在主線 foreground 跑，修完再評估大改動回扣。
+
+**大改動回扣**：若 0-A / 0-B / 0-C / 0-D 累計的修正**超過 50 行或跨 5 檔以上**，**MUST** 在此處重跑一次 `codex-review-safe.sh high` 確認新引入的程式碼也過 codex 眼睛（codex 看的是啟動時 snapshot，後續大改動不在它覆蓋範圍）。小改動（< 50 行 / < 5 檔）視同安全跳過。
 
 完成匯合後輸出：
 
 ```text
-✅ 0-A/B/C 並行匯合通過（codex {1|2} 輪、screenshot {pass|skip}、check 全綠）
+✅ 0-A/B/C/D 並行匯合通過（codex {1|2} 輪、screenshot {pass|skip}、check 全綠、doc {aligned|skip}）
 ```
 
 **禁止**：
@@ -560,7 +563,7 @@ git diff --name-only
 
 **並行啟動**：MUST 在 0-A.1 codex 背景 process 啟動的**同一個 assistant 回合**內，主線 foreground 開跑 `pnpm check` —— 跟 codex 並行不阻塞。0-C 完成（含 fix loop 通過）後再 poll 0-A.1 與回收 0-B subagent。
 
-跑下列指令確保 **format / lint / typecheck / test 全部 0 errors + 0 warnings + 0 test failures**：
+跑下列指令確保 **format / lint / typecheck / test / doctor 全部 0 errors + 0 warnings + 0 test failures**：
 
 ```bash
 pnpm check
@@ -578,13 +581,144 @@ node -e "const s=require('./package.json').scripts.check||''; console.log(/test|
 pnpm test          # 或 vp test run / pnpm test:unit，依 consumer 設定
 ```
 
-失敗時進入 loop：修復 → `pnpm format`（裸打 `vp fmt` 必須加 `--ignore-path .oxfmtignore`） → 重跑上述兩步 → 直到全綠。
+**檢查是否有 `pnpm doctor`**（vite-doctor import graph 健康度檢查：cycles、broken imports/exports、phantom deps）：
+
+```bash
+node -e "const s=require('./package.json').scripts; console.log(s.doctor?'has-doctor':'no-doctor')"
+```
+
+若輸出 `has-doctor`，**必須**額外跑：
+
+```bash
+pnpm doctor
+```
+
+Doctor 報出 blockers / errors / warnings → **必須**修復後重跑直到 health score 100/100 + 0 warnings。典型修法：移除 dead imports、修正 re-export 路徑、打斷 import cycles。
+
+失敗時進入 loop：修復 → `pnpm format`（裸打 `vp fmt` 必須加 `--ignore-path .oxfmtignore`） → 重跑上述步驟 → 直到全綠。
 
 > ⚠️ **oxfmt batched false-positive**（vite-plus 0.1.21 已知 bug）：第一次 `pnpm format:check` 紅但 single-file `vp fmt --check <path>` 通過，是 batched bug 不是 format issue — **先**跑一次 `pnpm format`（vp fmt --write）再重跑 check 通常就過。**NEVER** 動 `.oxfmtignore` 或 LOCKED projection（`.claude/rules/` / `AGENTS.md` / `AGENTS.md` / spectra change markdown）試圖讓 oxfmt 滿意 — 那是 governance violation。clade 中央倉 release flow 已在 `scripts/publish.mjs` 主流程加 stable fmt pre-stage（兩輪 `vp fmt --write` + `vp fmt --check`），consumer 端 commit 流程不需再背 workaround SOP。詳見 `docs/pitfalls/2026-05-18-oxfmt-batched-check-false-positive.md`。
 
-**禁止**用 `npx vitest run` / `npx eslint` 等個別工具替代 `pnpm check` / `pnpm test`。若 `.claude/worktrees/` 干擾結果，先清理再跑。
+**禁止**用 `npx vitest run` / `npx eslint` 等個別工具替代 `pnpm check` / `pnpm test` / `pnpm doctor`。若 `.claude/worktrees/` 干擾結果，先清理再跑。
 
-通過後輸出 `✅ 0-C 通過（format/lint/typecheck/test 全綠）`。
+通過後輸出 `✅ 0-C 通過（format/lint/typecheck/test/doctor 全綠）`。
+
+### 0-D. Doc Alignment 檢查（條件觸發、主線 foreground）
+
+本次 diff 觸及的變更若涉及 docs/ 相關面向，**MUST** 在 0-C 完成後跑 doc alignment 檢查。0-D 不阻塞 0-A/0-B/0-C 並行（在三軸匯合後跑）。
+
+#### 觸發條件
+
+以下**任一**成立即觸發（全不成立 → 輸出 `⏭️ 0-D 跳過（diff 無 doc-relevant 變更）`，進入匯合）：
+
+1. diff 觸及 `docs/**` 本身
+2. diff 觸及 `rules/core/**` / `rules/modules/**` / `vendor/snippets/**`（標準層有變 → docs 可能需同步）
+3. diff 觸及 `scripts/*-audit.mjs`（audit signal 變更 → `docs/rule-enforcement-matrix.md` 或 `docs/dev-guide.md` 可能需更新）
+4. diff 觸及 `server/api/**` / `app/components/**` / `app/pages/**` / `composables/**`（業務碼有變 → consumer docs/ 可能需對齊）
+5. diff 含 bug fix（commit message 含 `fix` type）→ pitfall 覆蓋檢查
+
+```bash
+DIFF_FILES=$(git diff --name-only HEAD)
+HAS_DOC=$(echo "$DIFF_FILES" | grep -E '^docs/' | head -1)
+HAS_RULES=$(echo "$DIFF_FILES" | grep -E '^rules/(core|modules)/' | head -1)
+HAS_SNIPPETS=$(echo "$DIFF_FILES" | grep -E '^vendor/snippets/' | head -1)
+HAS_AUDIT=$(echo "$DIFF_FILES" | grep -E '^scripts/.*-audit\.mjs$' | head -1)
+HAS_BIZ=$(echo "$DIFF_FILES" | grep -E '^(server/api|app/components|app/pages|composables)/' | head -1)
+# fix type 在 Step 3 分組後才能判，0-D 先用 diff 中有無 pitfall-related file 近似
+HAS_PITFALL_REF=$(echo "$DIFF_FILES" | grep -E '^docs/pitfalls/' | head -1)
+
+if [[ -z "$HAS_DOC$HAS_RULES$HAS_SNIPPETS$HAS_AUDIT$HAS_BIZ$HAS_PITFALL_REF" ]]; then
+  echo "⏭️ 0-D 跳過（diff 無 doc-relevant 變更）"
+else
+  echo "0-D 觸發：需要 doc alignment 檢查"
+fi
+```
+
+#### 檢查 A — Cross-reference 驗證（機械化）
+
+掃 `docs/` 中所有 `[[...]]` cross-ref，驗證 target 存在（rules/core/ 檔名、pitfall id、memory name）：
+
+```bash
+grep -rn '\[\[' docs/ --include="*.md" 2>/dev/null \
+  | sed -E 's/.*\[\[([^]]+)\]\].*/\1/' \
+  | sort -u \
+  | while read ref; do
+    # 嘗試 match rules/core/<ref>.md、docs/pitfalls/*<ref>*.md、或 memory
+    found=0
+    [[ -f "rules/core/${ref}.md" ]] && found=1
+    [[ -f "rules/modules/${ref}.md" ]] && found=1
+    ls docs/pitfalls/*"${ref}"*.md 2>/dev/null | head -1 | grep -q . && found=1
+    [[ $found -eq 0 ]] && echo "BROKEN_REF: [[${ref}]]"
+  done
+```
+
+任何 `BROKEN_REF` → **MUST** 修復（更新引用或移除過時 cross-ref）。
+
+#### 檢查 B — docs/ 內路徑引用驗證（機械化）
+
+掃 `docs/` 中引用的檔案路徑（backtick 包裹的相對路徑），驗證 target 仍存在：
+
+```bash
+grep -rnoE '`[a-zA-Z][a-zA-Z0-9._/-]+\.(md|mjs|ts|mts|sh|json|yml|yaml)`' docs/ --include="*.md" 2>/dev/null \
+  | sed -E 's/.*`([^`]+)`.*/\1/' \
+  | sort -u \
+  | while read fpath; do
+    # 嘗試以 repo root 解析
+    [[ -f "$fpath" ]] || echo "STALE_PATH: $fpath"
+  done
+```
+
+`STALE_PATH` → 修正路徑（檔案已搬/改名）或移除引用。
+
+#### 檢查 C — Pitfall 覆蓋對齊（diff 含 bug fix 時）
+
+若 diff 觸及了某 pitfall 的 `prevention.ref` 指向的檔案：
+
+```bash
+for pit in docs/pitfalls/*.md; do
+  refs=$(grep -A1 'ref:' "$pit" 2>/dev/null | grep -v '^--$' | sed -E 's/.*ref: *"?([^"]+)"?.*/\1/' | head -5)
+  for r in $refs; do
+    base=$(echo "$r" | sed 's/#.*//')
+    if echo "$DIFF_FILES" | grep -qF "$base"; then
+      echo "PITFALL_TOUCH: $(basename $pit) ref=$base — 檢查 prevention.status 是否需更新"
+    fi
+  done
+done
+```
+
+命中 `PITFALL_TOUCH` → **MUST** 讀該 pitfall 的 `prevention:` 段，確認 status 是否因本次修改需更新（`open` → `implemented`、或 `implemented` 但行為已改需補 regression-evidence）。
+
+#### 檢查 D — 受眾文件忠實度（review-level，非機械化）
+
+**適用場景**：diff 觸及業務碼（`server/api/`、`app/components/`、`app/pages/`、`composables/`）、或新增 rules/snippets、或 docs/ 本身有大範圍改動。
+
+**三方受眾檢查清單**（主線自行 review，不開 subagent）：
+
+| 受眾 | docs 位置（典型） | 檢查項 |
+| --- | --- | --- |
+| **非技術人員**（客戶 / PM） | `docs/user-guide/`、`docs/business/`、VitePress 首頁 hero | 新功能是否有使用說明？既有說明是否因 UI/流程變更過時？截圖是否對齊當前版本？ |
+| **開發者** | `docs/solutions/`、`docs/decisions/`、`docs/guides/`、`docs/modules/`、`docs/dev-guide.md` | API 改動 → 對應 solution/guide 是否更新？新模組 → 有沒有 module doc？架構決策 → decision record 是否需更新？ |
+| **維運者** | `docs/operations/`、`docs/ops/`、`docs/runbooks/` | config/env 變更 → runbook 是否更新？deploy 流程變更 → ops doc 是否對齊？新 migration → rollback SOP 是否存在？ |
+
+**VitePress 場景額外檢查**：若專案有 `docs/.vitepress/config.{ts,mts}`：
+- 新增的 docs/*.md 是否已加入 sidebar config？
+- 被刪/搬移的 page 是否還殘留在 sidebar/nav？
+
+**執行方式**：主線列出 diff 涉及的受眾面向 → 逐條對 docs/ 檢查 → 有缺失就當場補、修路徑、更新內容。
+
+#### 修復 loop
+
+檢查 A/B 的 `BROKEN_REF` / `STALE_PATH` → 修 → 重跑驗證 → 直到 0 issues。
+檢查 C 的 `PITFALL_TOUCH` → 更新 status/evidence → 不需重跑（人工判斷）。
+檢查 D 的受眾缺口 → 補 doc → format（`pnpm format`）→ 確認。
+
+通過後輸出 `✅ 0-D 通過（doc alignment: N ref OK, M path OK, pitfall K/K 對齊{, 受眾文件已補齊}）`。
+
+#### 禁止
+
+- **NEVER** 跳過檢查 A/B 的機械化驗證（「只改了一行 docs 不用掃」不成立 — 一行改動可能 break 交叉引用）
+- **NEVER** 把檢查 D 當「可選建議」而不修 — diff 觸及業務碼卻不更新對應 docs = 下一個接手者看到的文件不忠實
+- **NEVER** 在 docs/ 補新頁面但漏更新 VitePress sidebar config（新頁面沒出現在 nav = 等於沒寫）
 
 ## Step 1: Schema 同步檢查（條件觸發）
 

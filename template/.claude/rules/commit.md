@@ -15,10 +15,11 @@ Local edits will be reverted by the next sync.
 
 - **0-A** review：(1) `simplify`（reuse / 精簡 / efficiency / altitude；deferred items 自動登 HANDOFF.md 後繼續，不停住），(2) `codex review --uncommitted` high（GPT-5.5，跨模型抓 bug / 邏輯 / 安全；fast-path 命中時跳過），(3) 0-A.1 出 Critical / Major 時條件升 `codex` xhigh 驗證；修正一律由 Claude Code 主線執行
 - **0-B** UI Design Review（條件觸發）— 含 `.vue` 模板變動 + 屬於頁面/元件/佈局/互動/樣式變更時派 screenshot-review agent
-- **0-C** **format / lint / typecheck / test 全綠**：跑 `pnpm check`（多數專案含 format/lint/typecheck）**並且**確認 test 也有跑。**若 `package.json` 的 `scripts.check` 不含 `test` / `vitest`，必須額外跑 `pnpm test`（或 `vp test run` / `pnpm test:unit`），否則 CI 抓到的測試失敗（hook timeout、flake、新增測試壞掉）會在 commit 後才暴露**
+- **0-C** **format / lint / typecheck / test / doctor 全綠**：跑 `pnpm check`（多數專案含 format/lint/typecheck）**並且**確認 test 也有跑。**若 `package.json` 的 `scripts.check` 不含 `test` / `vitest`，必須額外跑 `pnpm test`（或 `vp test run` / `pnpm test:unit`），否則 CI 抓到的測試失敗（hook timeout、flake、新增測試壞掉）會在 commit 後才暴露**。另外，**若 `package.json` 有 `scripts.doctor`，MUST 額外跑 `pnpm doctor`**（vite-doctor import graph 健康度：cycles、broken imports/exports、phantom deps），有問題必須在 commit 前修復
   - **oxfmt callout**：oxfmt batched `--check`（一次掃多檔）可能 false-positive 報未預期 diff。commit 前若 `vp fmt --check` 報未預期 diff，先對該檔單獨 `vp fmt --write` 再 `vp fmt --check` 確認——單檔重跑為準，不要憑 batched check 結果就判定 0-C 紅燈。詳見 [[pitfall-oxfmt-batched-check-false-positive]]
+- **0-D** **Doc Alignment 檢查**（條件觸發）— diff 觸及 `docs/`、`rules/`、`vendor/snippets/`、`scripts/*-audit.mjs`、業務碼（`server/api/`、`app/components/`、`app/pages/`、`composables/`）、或含 bug fix 時，MUST 跑 docs/ 對齊檢查。四個面向：(1) `[[cross-ref]]` 驗證（機械化）、(2) docs 內路徑引用驗證（機械化）、(3) pitfall prevention status 對齊、(4) 三方受眾（非技術人員/開發者/維運者）文件忠實度 review — 含 VitePress sidebar config 對齊。**docs/ 必須忠實呈現專案現況**，diff 動了碼卻不更新對應文件 = 下一個接手者讀到過時資訊
 
-**並行執行**：0-A.0 `simplify` 序跑完後，**0-A.1（codex high 背景）/ 0-B（screenshot subagent）/ 0-C（主線 foreground check）三軸 MUST 並行**（除非 fast-path 跳過 0-A.1）——序跑會浪費 5–10 分鐘閘門時間。`codex review --uncommitted` 啟動時讀 working tree snapshot，後續變動不影響它正在進行的 review，所以三軸並行安全。詳細啟動順序、fast-path 判定、大改動回扣見 `.claude/skills/commit/SKILL.md` 的「0-A/B/C 並行策略」。
+**並行執行**：0-A.0 `simplify` 序跑完後，**0-A.1（codex high 背景）/ 0-B（screenshot subagent）/ 0-C（主線 foreground check）三軸 MUST 並行**（除非 fast-path 跳過 0-A.1）。0-D 在三軸匯合後條件觸發跑。序跑會浪費 5–10 分鐘閘門時間。`codex review --uncommitted` 啟動時讀 working tree snapshot，後續變動不影響它正在進行的 review，所以三軸並行安全。詳細啟動順序、fast-path 判定、大改動回扣見 `.claude/skills/commit/SKILL.md` 的「0-A/B/C/D 並行策略」。
 - **Step 1** Schema 同步檢查 — `database.types.ts` 與 migration 對齊
 - **Step 5** 版本號升級 + tag push — `feat` → minor、其他 → patch
 
@@ -340,6 +341,8 @@ git checkout 'stash@{N}' -- openspec/specs/<cap>/spec.md
 - **NEVER** 在 lock 被佔用時自行 `rm .claude/.commit.lock` — 必須回報使用者由其判斷對方是否真的卡住
 - **NEVER** 漏跑 Final Step `release` — 即使前面失敗也要釋放，避免下次 session 卡在 stale lock
 - **NEVER** 把 `pnpm check` 當作完整 0-C；**MUST** 先 grep 確認 `scripts.check` 含 `test` / `vitest`，不含就額外跑 `pnpm test`。許多 consumer 的 `pnpm check` 只跑 format/lint/typecheck（CI 才跑完整 test），漏跑會讓 hook timeout / flake / 新增測試破壞在 commit 後才暴露
+- **NEVER** 跳過 `pnpm doctor`（若 `scripts.doctor` 存在）；import graph cycles / broken exports 不會被 lint 或 typecheck 抓到，卻會讓 runtime 炸
+- **NEVER** 跳過 0-D doc alignment（觸發條件成立時）；diff 動了碼 / 標準 / audit 卻不更新 docs = 文件對三方受眾（非技術人員/開發者/維運者）不忠實，下一個接手者讀到過時資訊。**NEVER** 在 docs/ 補新頁面但漏更新 VitePress sidebar config
 
 ### WIP 處置禁令（嚴格）
 
