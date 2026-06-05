@@ -262,6 +262,16 @@ node scripts/wt-helper.mjs merge-back <slug> --auto-stash
 
 wt-helper 內部已 abort + 救 stash + 保留 worktree。主線 STOP 整個流程 + request_user_input 三選項：手動解 conflict / 放棄 upgrade / user 自己看狀態。
 
+### O.3.2.c Sync node_modules on main
+
+merge-back 只搬 tracked 檔（`package.json` / lockfile / `pnpm-workspace.yaml`）；`node_modules/` 是 gitignored，main 端仍停留在升版前的舊狀態。**MUST** 跑 `pnpm install`（或對應 PM 的 install）同步，否則後續 `pnpm outdated` / typecheck / test 都看到 stale 版本。
+
+```bash
+<PM> install
+```
+
+這不違反「NEVER 主線自己跑 `pnpm install`」禁令 — 該禁令指的是升版階段（Step O.2）不該由主線做 `pnpm add`；這裡是 post-merge-back setup chore（per [[worktree-default]] §1.x 的 `pnpm install` 自動代勞清單）。
+
 ### O.3.3 Selective stage on main
 
 ```bash
@@ -927,7 +937,7 @@ WHY_STUCK: <一句話為什麼即使查到資訊也卡住>
 **通用**：
 
 - **NEVER** 在 main working tree 跑（無 worktree gate）— 兩個 mode 都受此規約
-- **NEVER** 主線自己改 `package.json` 或跑 `pnpm install`（升 deps 全程委派給 codex / subagent）
+- **NEVER** 主線自己改 `package.json` 或在升版階段（Step O.2）跑 `pnpm add` / `pnpm install`（升版全程委派給 codex / subagent）。**例外**：Step O.3.2.c post-merge-back `pnpm install` 是 setup chore，不是升版動作
 - **NEVER** medium 失敗就直接問使用者 — 必須先自動升 high research
 - **NEVER** high 也失敗就主線自己接手 — 必須 request_user_input 讓使用者選
 - **NEVER** 把 merge-back 當「下一步」丟給 user 自己跑（per [[worktree-default]] §5）
