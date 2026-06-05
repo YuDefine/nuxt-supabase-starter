@@ -63,11 +63,12 @@ Reference：
 ### T1 — `evlog-adopt-cfworkers-supabase-baseline`
 
 depth 1 → 5。target：<consumer-d>。內含：
-- Sentry drain + drain pipeline（batch + retry + overflow handling）
+- **queryable durable drain + drain pipeline**（Supabase 系 = Postgres drain；見 § Drain 選擇指引）
 - 5 件套 enricher（UA / RequestSize / Geo / TraceContext / tenant）
 - sampling + redaction policy
 - structured errors guard
 - **client transport**（5 consumer 共同 gap，必補）
+- Sentry drain（選配；需要 alerting/triage 時加）
 
 ### T2 — `evlog-adopt-cfworkers-supabase-hardening`
 
@@ -75,7 +76,6 @@ depth 5 → 6+。targets：starter（template 自身）、<consumer-b>、<consum
 - typed fields schema（5 個跨 endpoint 共用核心欄位）
 - source location enricher（vite plugin）
 - **client transport**
-- Postgres drain（optional 自家 `evlog_events` table）
 - `nuxt-auth-utils` identity 整合
 
 ### T3 — `evlog-adopt-cfworkers-nuxthub-ai`
@@ -236,17 +236,39 @@ rg -nE "code:\\s*['\"][a-z][a-z0-9._]*\\.[A-Z_]+['\"]" "**/*.test.ts" "**/*.spec
 
 完整 audit signal 在 `scripts/evlog-adoption-audit.mjs`：`catalog.errorCatalogs` / `catalog.auditCatalogs` / `catalog.declareModuleBlocks` / `catalog.adhocServerErrors`（warn）/ `catalog.testHardcodedCode`（block）/ `catalog.consumerNamespacedPrefix`（block）/ `catalog.missingDeclareModule`（warn）/ `catalog.keyNotUpperSnake`（block）/ `catalog.prefixNotLowerDot`（block）/ `catalog.codeOverrideAtCallSite`（block）。
 
+## Drain 選擇指引
+
+evlog 用於 production 的 consumer **MUST** 配一個 queryable durable drain 作為 investigation 基礎。Sentry drain 為選配的 alerting/triage 補充層。
+
+| Stack | 必配 drain（queryable durable） | 選配 drain（alerting/triage） |
+| --- | --- | --- |
+| cf-workers + Supabase | Postgres drain（`evlog_events` table，見 `vendor/snippets/evlog-postgres-drain/`） | Sentry drain（見 `vendor/snippets/evlog-sentry-drain/`） |
+| cf-workers + NuxtHub D1 | `@evlog/nuxthub`（auto-wired D1 drain） | Sentry drain |
+
+**為什麼 durable drain 必配**：
+
+- Postgres / D1 是 SQL 可查的 durable store，investigation 時可直接 `SELECT ... FROM evlog_events WHERE ...` 撈 wide event
+- Sentry 雖然也可查（Explore → Logs），但受 Sentry retention / quota / rate limit 限制，不適合作為唯一的 investigation 基礎
+- audit script `drain.noDurableDrain` 偵測違反（block level）
+
+**為什麼 Sentry 選配**：
+
+- Sentry 的價值在 alerting（Issues）、triage（Performance / Tracing）、release tracking — 這些是加值能力
+- 量 < 100 events/min 或 internal tool 可只走 durable drain 不加 Sentry
+- 需要 Sentry 的 consumer 加上去即可，不影響 investigation baseline
+
 ## Migration 順序建議
 
 ### 從 depth 0/1 → 5（T1）
 
 1. 先裝 evlog 套件 + 改 `useLogger(event)`
 2. 加 drain pipeline（batch + retry + overflow handling）
-3. 套 Sentry drain
-4. 加 5 件套 enricher
-5. 加 sampling + redaction policy
-6. 加 structured error guard（review createError 必帶 why）
-7. 加 client transport + setIdentity / clearIdentity wiring
+3. 套 queryable durable drain（Supabase 系 = Postgres drain；NuxtHub 系 = @evlog/nuxthub）
+4. （選配）套 Sentry drain（需要 alerting/triage 時加）
+5. 加 5 件套 enricher
+6. 加 sampling + redaction policy
+7. 加 structured error guard（review createError 必帶 why）
+8. 加 client transport + setIdentity / clearIdentity wiring
 
 不可跳：drain 沒 pipeline 包覆 = Workers subrequest budget 用光 → 其他 fetch 失敗。
 
@@ -255,7 +277,6 @@ rg -nE "code:\\s*['\"][a-z][a-z0-9._]*\\.[A-Z_]+['\"]" "**/*.test.ts" "**/*.spec
 1. 加 typed fields schema（5 個核心欄位）
 2. 加 source location vite plugin + sourceMaps upload
 3. 加 client transport（若 T1 沒含）
-4. （optional）加 Postgres drain（自家 `evlog_events`）
 
 ### 從 depth 6 → 6+O1（<consumer-a>）
 
@@ -275,6 +296,7 @@ rg -nE "code:\\s*['\"][a-z][a-z0-9._]*\\.[A-Z_]+['\"]" "**/*.test.ts" "**/*.spec
 ## MUST
 
 - evlog 採用 **MUST** 走 cookbook + spectra template + starter preset 三層治理；**MUST NOT** consumer 自家從零摸索 wiring
+- 每個使用 evlog 的 consumer **MUST** 配一個 queryable durable drain（Supabase 系 = Postgres drain；NuxtHub 系 = @evlog/nuxthub），見 § Drain 選擇指引
 - 任何自家 drain **MUST** 經 `createDrainPipeline(opts)(drain)` 包覆（見 `rules/core/logging.md` Drain pipeline 規範）
 - production sampling **MUST** 滿足 error 100% / audit forceKeep 100% / warn ≥ 50% / info ≥ 10%
 - production **MUST** 開 `evlog.redact`，至少涵蓋 password 與 token / authorization（見 logging.md）
