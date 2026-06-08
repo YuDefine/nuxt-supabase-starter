@@ -334,6 +334,16 @@
       "mode": "source-pointer",
       "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
       "verify": []
+    },
+    "nuxt-ui-conventions.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "nuxt-ui-native-picker-ban.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
     }
   },
   "verification": {

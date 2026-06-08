@@ -49,6 +49,18 @@ worktree working tree 有**未 commit 的 user 改動**（`git status --porcelai
 - **NEVER** discard / `git checkout --` user WIP 而未回報 user（per [[commit]] WIP 處置禁令）
 - **NEVER** 對 active-claim 的 dirty worktree 當 orphan 處理 — 那是 live session 正在做（drift-scan Trigger 5 已排除，手動接手時也 MUST 先查 claim）
 - **NEVER** 假設 orphan WIP 是完成態 — 沒 commit message 的完成度自評，預設視為「待驗證」
+- **NEVER** 為了消掉 stop hook / drift-scan 的 orphan WIP warn，反射性把該檔加進 `.gitignore`（詳見下節）
+
+## 反射性 gitignore 禁令（stop hook 攔 orphan WIP 時）
+
+Stop hook `stop-wip-guard.sh` warn「working tree 有未 commit 改動」時，**正確反射只有兩個**：
+
+1. **commit 它**（完成 + 驗過 + 無危險項 → selective commit per 上方 SOP 步驟 6）
+2. **寫 HANDOFF**（半成品 / 不確定 → 升 `HANDOFF.md` 或 `tasks/<id>.md` 留接手脈絡）
+
+**NEVER** 把 untracked WIP 檔（典型：`tasks/todo.md`、新建 doc）加進 `.gitignore` 來「消掉 warn 噪音」——那是把**該入庫的東西藏起來**，方向完全反了。warn 的目的是提醒「有東西還沒收尾」，加 gitignore 等於拔掉警報器而非處理火源。
+
+> **判斷準則**：想加 `.gitignore` 時 STOP 自問「這個檔本來就該 ignore（build artifact / runtime state / secret），還是我只是想讓 warn 閉嘴？」後者一律走 commit 或 HANDOFF。對應 [[commit]] § Step 3（untracked 非 ignored 一律納入分組）+ Step 2 `.gitignore` 變更處置（只允許 clade 管理的 artifact ignore 條目）。
 
 ## 為什麼這條 rule 存在
 

@@ -772,9 +772,11 @@ diff /tmp/types-before-reset.ts "$TYPES"
 ## Step 2: 檢查變更狀態
 
 ```bash
-git status
-git diff --stat
+git status --porcelain          # 分組輸入的權威來源（含 tracked modified + untracked）
+git diff --stat                 # 僅輔助看 tracked 改動規模；NEVER 當分組輸入唯一來源
 ```
+
+> **分組輸入 MUST 用 `git status --porcelain`，不是 `git diff --stat`**：`git diff --stat` **只列 tracked modified**，會漏掉 untracked 非 ignored 檔（`??` 開頭，如新建的 `tasks/todo.md` / `docs/<new>.md`）。只憑 `git diff --stat` 分組 → untracked 檔被 silently 丟掉、never commit。每次分組前自問：「`git status` 有沒有 `??` 開頭的行？沒被 `.gitignore` 覆蓋 = 必須納入分組。」
 
 若 `.gitignore` 有變更：
 
@@ -791,6 +793,11 @@ git diff --stat
 檔案:
 - path/to/file.ts
 ```
+
+**分組輸入 = Step 2 的 `git status --porcelain` 完整輸出**（tracked modified + untracked 非 ignored），**NEVER** 只用 `git diff --stat`。
+
+- **Untracked 非 ignored 檔（`??`）一律納入分組**，通常自成獨立 `🧹 chore` group（除非語義明確屬於某 feat / fix group）
+- 看到 `??` 開頭的檔想加 `.gitignore` 消掉時 **STOP**：先問「這本來就該 ignore（build artifact / runtime state），還是我在逃避 commit？」逃避 commit 而 gitignore = 把該入庫的東西藏掉，方向反了（詳見 [[wip-orphan-recovery]] § 反射性 gitignore 禁令）
 
 ## Step 4: 逐一執行 Commit
 
