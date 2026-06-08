@@ -19,7 +19,7 @@ Local edits will be reverted by the next sync.
 
 Archive a completed change.
 
-> **Ownership**（clade fork；cross-phase matrix in `rules/core/spectra-workflow.md`）：archive gate-check 負責 archive 前再跑 Layer C data-sanity + `archive-gate.sh` Check 1–5（journey / schema-types / exhaustiveness / manual-review kind / screenshot quality）。**不**負責上游 phase 已 own 的 checkpoint（propose Layer A、apply Step 6c/Layer B、pre-handoff Step 8a.6/Layer E 各在自己 phase 抓）。
+> **Ownership**（clade fork；cross-phase matrix in `rules/core/spectra-workflow.md`）：archive gate-check 負責 archive 前再跑 Layer C data-sanity + `archive-gate.sh` Check 1–7（journey / schema-types / exhaustiveness / manual-review kind / screenshot quality / stale verified-ui / pre-handoff-verdict）。**不**負責上游 phase 已 own 的 checkpoint（propose Layer A、apply Step 6c/Layer B、pre-handoff Step 8a.6/Layer E 各在自己 phase 抓）；Check 7 只是機械驗證 Step 8a.6 的 E.1 verdict record 已存在（缺則擋 archive），不重跑 self-analysis 本身。
 
 **Input**: Optionally specify a change name after `/spectra-archive` (e.g., `/spectra-archive add-auth`). If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
 
@@ -430,7 +430,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    **Branch on exit code:**
 
    - **Exit 0** → All checks pass. Proceed to Step 6.
-   - **Exit 2** → A check failed. Most common cause: Step 3.5 walkthrough was interrupted / skipped / produced incomplete annotations. Other checks (1/2/3/5) already passed pre-skill, so a failure here is almost certainly Check 4.
+   - **Exit 2** → A check failed. Most common cause: Step 3.5 walkthrough was interrupted / skipped / produced incomplete annotations. Other checks (1/2/3/5/6) already passed pre-skill, so a failure here is almost certainly Check 4 — **or Check 7（缺 Step 8a.6 的 E.1 verdict record；補跑 `pre-handoff-ledger.mjs record --layer E.1 ...` 後重試，或對非適用 change 加 `<!-- pre-handoff-verdict: intentional, reason: ... -->` 到 tasks.md）**。
      - Display the gate stderr to the user.
      - **MUST** prompt via `request_user_input`:
        - **Fix now** — go back to Step 3.5 and finish walkthrough for the items the gate flagged

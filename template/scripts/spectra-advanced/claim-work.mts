@@ -140,7 +140,7 @@ function main(): void {
 
   const config = loadClaimsRuntimeConfig()
   if (!config.enabled) {
-    console.log('✓ spectra:claim: disabled in spectra-ux.config.json')
+    console.log('✓ spectra:claim: disabled in spectra-advanced.config.json')
     return
   }
 

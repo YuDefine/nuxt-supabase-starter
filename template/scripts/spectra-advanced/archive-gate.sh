@@ -16,6 +16,11 @@
 #            must be AFTER the last commit on the depicted .vue file.
 #            Catches: ingest adds UI polish → old screenshots survive → user
 #            sees pre-polish UI in review GUI.
+#   Check 7: Pre-handoff Verdict Presence — the Layer E.1 self-analysis verdict
+#            (spectra-apply Step 8a.6) must be recorded to the pre-handoff
+#            ledger before archive. Mechanical backstop so the soft self-record
+#            step actually fires (it landed 0 rows in 9 days of soak); fail-open
+#            when the ledger file is absent (pre-propagation / no soak history).
 #
 # Precondition (per worktree-default.md §5.5 atomic landing): spectra-archive
 # Step 0 MUST run `wt-helper merge-back <change-name>` first so any session
@@ -38,7 +43,7 @@
 #                 would block the very skill that populates the annotation
 #                 (chicken-and-egg). Post-walkthrough validation runs the
 #                 gate again without this flag at SKILL.md Step 5.5.
-#                 Checks 1/2/3/5 (real pre-conditions) always run.
+#                 Checks 1/2/3/5/6/7 (real pre-conditions) always run.
 #
 # Exit:
 #   0 = pass
@@ -634,6 +639,43 @@ if [ -f "$TASKS_FILE" ]; then
 $(printf '  - %s\n' "${STALE_ITEMS[@]}")
 
 修正方式：重跑 verify:ui channel 對這些 items 拍 fresh screenshot（從 worktree 起 dev server + 重新截圖），更新 (verified-ui: <新 ISO>) annotation timestamp。完成後重跑 archive。")
+  fi
+fi
+
+# --- Check 7: Pre-handoff Verdict Presence ---
+# Mechanical backstop for the Layer E.1 self-analysis verdict (spectra-apply
+# Step 8a.6). E.1/E.2 records are agent-self-recorded; the soft step landed 0
+# rows in 9 days of soak, so this gate makes "an E.1 verdict was recorded" a
+# mechanical precondition of archive — otherwise Phase 3.1 hard-gate evaluation
+# never accumulates data. The ledger is written by pre-handoff-ledger.mjs to the
+# MAIN consumer root's .spectra/ (worktree cwd normalized via git-common-dir);
+# archive-gate runs post-merge-back from that same main root, so
+# $REPO_ROOT/.spectra is the exact read path. Records are single-line JSON with
+# fixed field order ("change":"X"..."layer":"E.1"), so an ordered two-literal
+# grep is exact. Fail-open when the ledger file is absent (pre-propagation
+# consumer / no soak history) so a freshly-propagated gate never flag-day-blocks.
+PREHANDOFF_LEDGER="$REPO_ROOT/.spectra/pre-handoff-ledger.jsonl"
+if [ ! -f "$PREHANDOFF_LEDGER" ]; then
+  echo "[UX Gate] warn — pre-handoff ledger 不存在 ($PREHANDOFF_LEDGER)；跳過 Check 7 (fail-open，無 soak 歷史)。" >&2
+else
+  BYPASS_PREHANDOFF=$(sux_count_marker "$TASKS_FILE" 'pre-handoff-verdict: intentional')
+  # Escape regex metachars in the change name before embedding in the grep pattern.
+  ESC_CHANGE=$(printf '%s' "$CHANGE_NAME" | sed 's/[][\\.*^$()|?+{}/]/\\&/g')
+  E1_PATTERN="\"change\":\"${ESC_CHANGE}\".*\"layer\":\"E\\.1\""
+  if [ "$BYPASS_PREHANDOFF" -eq 0 ] && ! grep -qE "$E1_PATTERN" "$PREHANDOFF_LEDGER" 2>/dev/null; then
+    BLOCKED=true
+    MESSAGES+=("[UX Gate] Pre-handoff Verdict Presence 未通過 — 找不到 change '$CHANGE_NAME' 的 Layer E.1 verdict record。
+
+spectra-apply Step 8a.6 的 5-dimension self-analysis verdict 從未落到 ledger
+（${PREHANDOFF_LEDGER}）。沒有 record → Phase 3.1 soak 無資料 → hard-gate 無法評估。
+
+補救（擇一）：
+  1. 跑 Step 8a.6 self-analysis，然後執行：
+     node <clade-vendor>/scripts/pre-handoff-ledger.mjs record \\
+       --consumer-path . --change $CHANGE_NAME --layer E.1 \\
+       --status <pass|fail> --findings-json '[...]'
+  2. backend-only / 無 pre-handoff 適用情境 → 加
+     <!-- pre-handoff-verdict: intentional, reason: ... --> 到 tasks.md 繞過")
   fi
 fi
 
