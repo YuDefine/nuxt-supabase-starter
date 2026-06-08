@@ -40,7 +40,7 @@ function main(): void {
     if (cli.json) {
       console.log(JSON.stringify({ enabled: false, claims: [] }, null, 2))
     } else if (!cli.sessionSummary) {
-      console.log('✓ spectra:claims: disabled in spectra-ux.config.json')
+      console.log('✓ spectra:claims: disabled in spectra-advanced.config.json')
     }
     return
   }

@@ -45,10 +45,22 @@ export interface Identity {
   sessionId: string | null
 }
 
+// Prefer the current name; keep legacy name as fallback (matches lib/common.sh
+// dual-name resolution after the spectra-ux → spectra-advanced rename).
+const CONFIG_NAMES = ['spectra-advanced.config.json', 'spectra-ux.config.json'] as const
+
+function resolveConfigPath(dir: string): string | null {
+  for (const name of CONFIG_NAMES) {
+    const candidate = resolve(dir, name)
+    if (existsSync(candidate)) return candidate
+  }
+  return null
+}
+
 function findRepoRoot(): string {
   let dir = dirname(fileURLToPath(import.meta.url))
   for (let i = 0; i < MAX_WALK_DEPTH; i++) {
-    if (existsSync(resolve(dir, 'spectra-ux.config.json'))) return dir
+    if (resolveConfigPath(dir)) return dir
     const parent = dirname(dir)
     if (parent === dir) break
     dir = parent
@@ -74,8 +86,8 @@ export function loadClaimsRuntimeConfig(): ClaimsRuntimeConfig {
     staleSeconds: DEFAULT_STALE_SECONDS,
     enabled: true,
   }
-  const path = resolve(repoRoot, 'spectra-ux.config.json')
-  if (!existsSync(path)) return defaults
+  const path = resolveConfigPath(repoRoot)
+  if (!path) return defaults
 
   try {
     const raw = JSON.parse(readFileSync(path, 'utf8')) as {

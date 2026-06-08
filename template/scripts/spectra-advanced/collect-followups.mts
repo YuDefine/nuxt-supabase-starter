@@ -3,10 +3,10 @@
  * spectra-ux v1.5+: Collect follow-up markers from tasks.md + validate against register.
  *
  * Usage:
- *   node scripts/spectra-ux/collect-followups.mts                  # human report
- *   node scripts/spectra-ux/collect-followups.mts --json           # machine-readable
- *   node scripts/spectra-ux/collect-followups.mts --fail-on-drift  # CI gate
- *   node scripts/spectra-ux/collect-followups.mts --session-summary  # condensed surfacing
+ *   node scripts/spectra-advanced/collect-followups.mts                  # human report
+ *   node scripts/spectra-advanced/collect-followups.mts --json           # machine-readable
+ *   node scripts/spectra-advanced/collect-followups.mts --fail-on-drift  # CI gate
+ *   node scripts/spectra-advanced/collect-followups.mts --session-summary  # condensed surfacing
  *
  * Inputs:
  *   - openspec/changes/** /tasks.md  (active + archived; marker scan)

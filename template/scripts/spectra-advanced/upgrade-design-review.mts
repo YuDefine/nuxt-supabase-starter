@@ -4,9 +4,9 @@
  * template to the canonical 7-step template (N.1~N.7).
  *
  * Usage:
- *   node scripts/spectra-ux/upgrade-design-review.mts             # report + upgrade in place
- *   node scripts/spectra-ux/upgrade-design-review.mts --dry-run   # report only
- *   node scripts/spectra-ux/upgrade-design-review.mts --json      # machine-readable report
+ *   node scripts/spectra-advanced/upgrade-design-review.mts             # report + upgrade in place
+ *   node scripts/spectra-advanced/upgrade-design-review.mts --dry-run   # report only
+ *   node scripts/spectra-advanced/upgrade-design-review.mts --json      # machine-readable report
  *
  * Scope:
  *   - openspec/changes/<name>/tasks.md (active changes, NOT archive)
@@ -426,7 +426,7 @@ async function main() {
   const alreadyOk = reports.filter((r) => r.reason === 'already-canonical')
   const errored = reports.filter((r) => r.reason?.startsWith('error:'))
 
-  console.log(`spectra-ux: upgrade-design-review ${DRY_RUN ? '(dry-run)' : ''}`)
+  console.log(`spectra-advanced: upgrade-design-review ${DRY_RUN ? '(dry-run)' : ''}`)
   console.log(`scanned: ${reports.length} active changes`)
   console.log('')
 
