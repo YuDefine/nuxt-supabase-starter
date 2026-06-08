@@ -445,9 +445,11 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 對本次 working tree 變更跑 simplify review + 自動修 —— 聚焦 reuse / 精簡 / efficiency / altitude，codex review 不會抓這條軸。simplify 修完的版本才是下一步 codex review 應該看的對象。
 
-**執行方式：MUST 用 foreground `Agent` tool（`mode: "auto"`）**，**NEVER 用 `Skill(simplify)` 嵌套呼叫**。
+**執行方式：MUST 用 foreground `Agent` tool 開一個**通用 subagent**（`subagent_type: "general-purpose"`、`mode: "auto"`）跑下方 prompt 範本**，**NEVER 用 `Skill(simplify)` 嵌套呼叫**。
 
-理由：`Skill(simplify)` inline 載入 simplify SKILL.md + 4-agent 編排 + 修正報告，大量 output 會把外層 commit flow 的 continuation 指令推出 working memory。Agent tool 把 simplify 隔離在 subagent context，主線只收到 compact 結果，commit flow 的 fast-path 判斷指令仍在 working memory 頂端。
+> ⚠️ **`subagent_type` MUST 是 `"general-purpose"`，NEVER 設成 `"simplify"`**：`/simplify` 是 Claude Code **內建 skill**，**不是** agent type，也不存在「simplify agent type」這種東西。這裡的意圖是「用通用 subagent 在**隔離 context** 跑下方那段 simplify review *工作*」，不是去叫一個名為 simplify 的 agent。若誤把 `subagent_type` 設成 `"simplify"` 會得到 `Agent type 'simplify' not found` 並可能誤導你 fallback 去 `Skill(simplify)`（本段明文 NEVER 的路徑）。
+
+理由：`Skill(simplify)` inline 載入 simplify SKILL.md + 4-agent 編排 + 修正報告，大量 output 會把外層 commit flow 的 continuation 指令推出 working memory。用通用 subagent（`general-purpose`）跑這段 prompt 把 simplify 隔離在 subagent context，主線只收到 compact 結果，commit flow 的 fast-path 判斷指令仍在 working memory 頂端。
 
 Agent prompt 範本（**照搬，不自由發揮**）：
 
