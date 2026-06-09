@@ -1,6 +1,6 @@
 ---
 description: 專案目前未使用的 Supabase 功能 — 引入前的決策與規約
-paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts', 'app/**/*.{ts,vue}']
+paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'template/server/**/*.ts', 'app/**/*.{ts,vue}', 'packages/*/app/**/*.{ts,vue}', 'template/app/**/*.{ts,vue}']
 ---
 <!--
 🔒 LOCKED — managed by clade

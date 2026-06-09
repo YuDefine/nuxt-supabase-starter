@@ -1,6 +1,6 @@
 ---
 description: UI / design 工作的 Design Checkpoint、design skill 觸發順序、Design Review template、Design Gate、Cross-Change holistic review 與非 UI exception；動 UI 檔或寫 design artifact 時 path-scoped 載入
-paths: ['app/**/*.vue', 'app/**/*.ts', 'components/**', 'pages/**', 'layouts/**', 'openspec/changes/**/design.md', 'docs/specs/**/spec.md']
+paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'template/app/**/*.vue', 'app/**/*.ts', 'packages/*/app/**/*.ts', 'template/app/**/*.ts', 'components/**', 'packages/*/components/**', 'template/components/**', 'pages/**', 'packages/*/pages/**', 'template/pages/**', 'layouts/**', 'packages/*/layouts/**', 'template/layouts/**', 'openspec/changes/**/design.md', 'docs/specs/**/spec.md']
 ---
 <!--
 🔒 LOCKED — managed by clade

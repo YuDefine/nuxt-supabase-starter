@@ -1,6 +1,6 @@
 ---
 description: 遠端 Supabase MCP 使用限制
-paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts']
+paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'template/server/**/*.ts']
 ---
 <!--
 🔒 LOCKED — managed by clade

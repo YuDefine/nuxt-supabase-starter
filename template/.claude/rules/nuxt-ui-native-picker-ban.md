@@ -1,6 +1,6 @@
 ---
 description: 禁止原生 / 第三方 date / time / calendar picker，改用 Nuxt UI 元件；實作階段強制（不等 /commit review 才抓）
-paths: ['app/**/*.{vue,ts}', 'pages/**/*.vue', 'components/**/*.vue', 'layouts/**/*.vue']
+paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'template/app/**/*.{vue,ts}', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'template/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'template/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'template/layouts/**/*.vue']
 ---
 <!--
 🔒 LOCKED — managed by clade

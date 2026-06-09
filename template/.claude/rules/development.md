@@ -1,6 +1,6 @@
 ---
 description: 開發規範（TDD, coding style, UI reuse）
-paths: ['app/**/*.{vue,ts}', 'server/**/*.ts', 'test/**/*.ts', 'shared/**/*.ts', 'package.json']
+paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'template/app/**/*.{vue,ts}', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'template/server/**/*.ts', 'test/**/*.ts', 'packages/*/test/**/*.ts', 'template/test/**/*.ts', 'shared/**/*.ts', 'packages/*/shared/**/*.ts', 'template/shared/**/*.ts', 'package.json']
 ---
 <!--
 🔒 LOCKED — managed by clade

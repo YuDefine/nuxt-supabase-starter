@@ -1,6 +1,6 @@
 ---
 description: Testing anti-patterns to avoid — mock 濫用、test-only production methods、不完整 mock
-paths: ['test/**/*.ts']
+paths: ['test/**/*.ts', 'packages/*/test/**/*.ts', 'template/test/**/*.ts']
 ---
 <!--
 🔒 LOCKED — managed by clade

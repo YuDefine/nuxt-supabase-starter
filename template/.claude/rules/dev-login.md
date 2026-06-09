@@ -1,6 +1,6 @@
 ---
 description: Dev-login routes must stay local-only while giving screenshot review and E2E a canonical way to mint test sessions.
-paths: ['server/routes/auth/**/*dev-login*.ts', 'server/routes/auth/**/*test-login*.ts', 'server/api/_dev/**/*.ts', 'packages/*/server/routes/auth/**/*dev-login*.ts', 'packages/*/server/routes/auth/**/*test-login*.ts', 'e2e/**/*.ts', 'test/e2e/**/*.ts', 'tests/e2e/**/*.ts']
+paths: ['server/routes/auth/**/*dev-login*.ts', 'server/routes/auth/**/*test-login*.ts', 'server/api/_dev/**/*.ts', 'packages/*/server/routes/auth/**/*dev-login*.ts', 'packages/*/server/routes/auth/**/*test-login*.ts', 'packages/*/server/api/_dev/**/*.ts', 'template/server/routes/auth/**/*dev-login*.ts', 'template/server/routes/auth/**/*test-login*.ts', 'template/server/api/_dev/**/*.ts', 'e2e/**/*.ts', 'packages/*/e2e/**/*.ts', 'template/e2e/**/*.ts', 'test/e2e/**/*.ts', 'packages/*/test/e2e/**/*.ts', 'template/test/e2e/**/*.ts', 'tests/e2e/**/*.ts', 'packages/*/tests/e2e/**/*.ts', 'template/tests/e2e/**/*.ts']
 ---
 <!--
 🔒 LOCKED — managed by clade

@@ -1,6 +1,6 @@
 ---
 description: UX 完整性規則——定義 "feature complete"、強制列舉 user-facing surface、防止 DB+API 完成但 UI 缺失
-paths: ['openspec/changes/**', 'app/**/*.vue', 'shared/types/**/*.ts', 'supabase/migrations/**']
+paths: ['openspec/changes/**', 'app/**/*.vue', 'packages/*/app/**/*.vue', 'template/app/**/*.vue', 'shared/types/**/*.ts', 'packages/*/shared/types/**/*.ts', 'template/shared/types/**/*.ts', 'supabase/migrations/**']
 ---
 <!--
 🔒 LOCKED — managed by clade
