@@ -371,13 +371,13 @@ YuDefine fleet 多個 consumer（<consumer-k> / co-purchase / <consumer-l>）的
       # （cross-Atlantic 227MB tarball ~37s）。改用 LXC 本地 persistent store。
 
   - name: Configure pnpm store
-    run: pnpm config set store-dir /home/runner/.pnpm-store
+    run: pnpm config set store-dir "$HOME/.pnpm-store"
 
   - name: Install dependencies
     run: pnpm install --frozen-lockfile
   ```
 
-- store 路徑（`/home/runner/.pnpm-store`）在 LXC 跨 job 留存 → 第二次 install 直接命中本地，毋須任何 cache action
+- store 路徑（`$HOME/.pnpm-store`）在 LXC 跨 job 留存 → 第二次 install 直接命中本地，毋須任何 cache action
 
 ### § 7.2 — CI 看不到 gitignored env / 本機 link state
 
