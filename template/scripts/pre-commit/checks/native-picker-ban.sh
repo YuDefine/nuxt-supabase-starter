@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # CLADE:VENDOR-SCRIPT
 #
-# native-picker-ban — 禁止 staged .vue 使用原生 / 第三方 date / time / calendar picker
+# native-picker-ban (pre-commit, staged) — 禁止 staged .vue 使用原生 / 第三方 date / time / calendar picker
+#
+# 跟 pre-push 同名 check 的分工：
+#   - pre-commit checks/native-picker-ban.sh : 只掃本次 staged *.vue（快擋，最接近犯錯時點）
+#   - pre-push  checks/native-picker-ban.sh  : 掃全 repo *.vue（回溯型，擋住歷史既有違規與
+#                                              --no-verify 繞過 pre-commit 進來的違規）
 #
 # Auto-detect：只掃本次 commit staged 的 *.vue / *.ts；無 staged 對應檔直接跳過。
 # 非 Nuxt / 無 .vue 的 consumer 與不碰 picker 的 commit 自動 no-op（exit 0）。
