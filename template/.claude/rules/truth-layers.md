@@ -1,6 +1,6 @@
 ---
 description: Optional truth-layers 規則——適用於有明確 persistence / contract / API / UI 分層的專案，定義每一層的真相來源
-paths: ['openspec/**', 'docs/decisions/**', 'server/**/*.ts', 'shared/**/*.ts', 'src/**/*.ts', 'app/**/*.vue']
+paths: ['openspec/**', 'docs/decisions/**', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'template/server/**/*.ts', 'shared/**/*.ts', 'packages/*/shared/**/*.ts', 'template/shared/**/*.ts', 'src/**/*.ts', 'app/**/*.vue', 'packages/*/app/**/*.vue', 'template/app/**/*.vue']
 ---
 <!--
 🔒 LOCKED — managed by clade

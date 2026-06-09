@@ -1,6 +1,6 @@
 ---
 description: 錯誤處理規範（Server 驗證 + Client 顯示）
-paths: ['app/**/*.{vue,ts}', 'server/**/*.ts']
+paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'template/app/**/*.{vue,ts}', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'template/server/**/*.ts']
 ---
 <!--
 🔒 LOCKED — managed by clade

@@ -1,6 +1,6 @@
 ---
 description: User lifecycle 規範（soft-delete / suspend / hard-delete 的 FK 策略與 guard pattern）
-paths: ['server/api/**/user*', 'server/api/**/admin/user*', 'supabase/migrations/**/*.sql', 'server/database/migrations/**/*.sql']
+paths: ['server/api/**/user*', 'packages/*/server/api/**/user*', 'template/server/api/**/user*', 'server/api/**/admin/user*', 'packages/*/server/api/**/admin/user*', 'template/server/api/**/admin/user*', 'supabase/migrations/**/*.sql', 'server/database/migrations/**/*.sql', 'packages/*/server/database/migrations/**/*.sql', 'template/server/database/migrations/**/*.sql']
 ---
 <!--
 🔒 LOCKED — managed by clade

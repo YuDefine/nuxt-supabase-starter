@@ -1,6 +1,6 @@
 ---
 description: Supabase Migration 操作規範
-paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts']
+paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'template/server/**/*.ts']
 ---
 <!--
 🔒 LOCKED — managed by clade

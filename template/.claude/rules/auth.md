@@ -1,6 +1,6 @@
 ---
 description: 認證相關程式碼（login, session, user, auth）
-paths: ['app/**/*.{vue,ts}', 'server/**/*.ts']
+paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'template/app/**/*.{vue,ts}', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'template/server/**/*.ts']
 ---
 <!--
 🔒 LOCKED — managed by clade

@@ -1,6 +1,6 @@
 ---
 description: Manual Review backend 規約——backend-only change 特別規約 + 標準流程（含 verify channel baseline）；動 server / test / e2e / supabase 時 path-scoped 載入
-paths: ['server/**/*.ts', 'test/**/*.ts', 'e2e/**/*.ts', 'supabase/**']
+paths: ['server/**/*.ts', 'packages/*/server/**/*.ts', 'template/server/**/*.ts', 'test/**/*.ts', 'packages/*/test/**/*.ts', 'template/test/**/*.ts', 'e2e/**/*.ts', 'packages/*/e2e/**/*.ts', 'template/e2e/**/*.ts', 'supabase/**']
 ---
 <!--
 🔒 LOCKED — managed by clade

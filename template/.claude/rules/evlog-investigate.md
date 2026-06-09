@@ -3,10 +3,15 @@ description: prod runtime 問題用 evlog wide event 調查的協定（消費側
 paths:
   - 'server/**'
   - 'packages/**/server/**'
+  - 'template/server/**'
   - 'clients/**/server/**'
   - 'layers/**/server/**'
   - 'server/plugins/evlog-*.ts'
+  - 'packages/*/server/plugins/evlog-*.ts'
+  - 'template/server/plugins/evlog-*.ts'
   - 'app/plugins/evlog-*.ts'
+  - 'packages/*/app/plugins/evlog-*.ts'
+  - 'template/app/plugins/evlog-*.ts'
 ---
 <!--
 🔒 LOCKED — managed by clade

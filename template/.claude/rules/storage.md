@@ -1,6 +1,6 @@
 ---
 description: Supabase Storage 使用規範（上傳、signed URL、policy、清理）
-paths: ['server/api/**/*.ts', 'supabase/migrations/**/*.sql']
+paths: ['server/api/**/*.ts', 'packages/*/server/api/**/*.ts', 'template/server/api/**/*.ts', 'supabase/migrations/**/*.sql']
 ---
 <!--
 🔒 LOCKED — managed by clade

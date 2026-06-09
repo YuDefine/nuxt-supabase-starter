@@ -1,6 +1,6 @@
 ---
 description: Supabase audit table schema 慣例（audit_logs）
-paths: ["supabase/migrations/**/*.sql", "server/utils/audit*.ts", "server/api/**/*.ts"]
+paths: ["supabase/migrations/**/*.sql", "server/utils/audit*.ts", "packages/*/server/utils/audit*.ts", "template/server/utils/audit*.ts", "server/api/**/*.ts", "packages/*/server/api/**/*.ts", "template/server/api/**/*.ts"]
 ---
 <!--
 🔒 LOCKED — managed by clade

@@ -1,6 +1,6 @@
 ---
 description: Server API 設計規範
-paths: ["server/api/**/*.ts"]
+paths: ["server/api/**/*.ts", "packages/*/server/api/**/*.ts", "template/server/api/**/*.ts"]
 ---
 <!--
 🔒 LOCKED — managed by clade

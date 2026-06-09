@@ -8,6 +8,9 @@ paths:
   - 'packages/**/server/api/**/*.ts'
   - 'packages/**/server/plugins/evlog-*.ts'
   - 'packages/**/app/plugins/evlog-*.ts'
+  - 'template/server/api/**/*.ts'
+  - 'template/server/plugins/evlog-*.ts'
+  - 'template/app/plugins/evlog-*.ts'
 ---
 <!--
 🔒 LOCKED — managed by clade

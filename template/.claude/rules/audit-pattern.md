@@ -1,6 +1,6 @@
 ---
 description: D-pattern audit 規範（DB outbox canonical + evlog derived stream + hash anchor）
-paths: ['server/api/**/*.ts', 'server/utils/audit.ts', 'supabase/migrations/**/*.sql']
+paths: ['server/api/**/*.ts', 'packages/*/server/api/**/*.ts', 'template/server/api/**/*.ts', 'server/utils/audit.ts', 'packages/*/server/utils/audit.ts', 'template/server/utils/audit.ts', 'supabase/migrations/**/*.sql']
 ---
 <!--
 🔒 LOCKED — managed by clade
