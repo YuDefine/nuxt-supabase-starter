@@ -455,8 +455,11 @@ gh release view v<target_version> --repo <owner>/<repo> --json body,name,tagName
 - ✅ Sweep 不夾帶 clade 自行發想的 refactor
 - ✅ Sweep 不夾帶 unrelated 套件升版
 - ✅ Worktree gate 由 § Outdated mode Step O.0 保證
+- ✅ 若 sweep 會重寫 hit consumer `package.json` 的 `test` / `lint` / `typecheck` script（換工具 / 改命令）：原本有 `.clade/bin/clade-gate run <gate> --` 前綴的，**MUST** 只換 `--` 後面的內層命令、保留前綴（per [[test-scripts]] § MUST：重寫已包 clade-gate 的 script 時保留前綴）。主線在 land 前 `git -C <consumer-path> show <commit_sha> -- package.json` 抽查前綴沒被整行覆蓋
 
 任一條不滿足 → STOP，回 user 解釋哪條沒過。
+
+> **實證**：2026-06-09 一次 `migrate lint from oxlint to vp lint across consumers` sweep 對 6 consumer 整行覆蓋 lint script，把 clade-gate 前綴全弄掉（TD-152 5 天前才採用）→ instrumentation 退化。此條 + [[test-scripts]] 的 MUST 是補這個缺口。
 
 ## Step F.3 — Fleet scan 命中 consumer
 
