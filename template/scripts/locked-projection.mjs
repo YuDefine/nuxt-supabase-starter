@@ -27,6 +27,13 @@
  *   - Top-level injected files: `AGENTS.md`, `CLAUDE.md`
  *   - utility: `utils/assert-never.ts`
  *
+ * Symlink 模式決策（2026-06-11）：consumer `.claude/rules/*.md` 改為絕對路徑
+ * symlink 指向 `<cladeRoot>/dist/<consumer_id>/rules/<name>.md` 後，**仍歸
+ * LOCKED_PROJECTION_RE 管** — symlink blob 本身就是 clade-managed 產物，
+ * 且 wt-helper merge-back auto-resolve take-theirs(main) 對 mode 120000 blob
+ * 行為正確（取 main 側 symlink blob 即還原正確 target）。regex 本體與程式邏輯
+ * 零改動；symlink-aware guard 在 propagate.mjs（isCladeDistSymlink）處理。
+ *
  * NEVER widen this without (a) ensuring propagate.mjs actually writes the new
  * category, AND (b) confirming consumer auto-reset / wt-helper merge-back
  * classification both honor it.
