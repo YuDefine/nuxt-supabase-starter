@@ -33,10 +33,10 @@
 
   // Assets（Nuxt build 產出的靜態資源）
   "assets": {
-    "directory": ".output/public"
+    "directory": ".output/public",
   },
 
   "observability": {
-    "enabled": true
-  }
+    "enabled": true,
+  },
 }
