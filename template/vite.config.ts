@@ -11,13 +11,8 @@ export default defineConfig({
       '#shared': resolve(__dirname, 'shared'),
     },
   },
-  test: {
-    exclude: ['e2e/**', 'node_modules/**', '.nuxt/**', '.output/**'],
-    setupFiles: ['./test/setup-env.ts'],
-    coverage: {
-      provider: 'v8',
-    },
-  },
+  // Test config lives in `vitest.config.ts` (vp test reads it first); keeping a
+  // `test` block here too would be a dead second source of truth.
   lint: {
     ...lintBase,
     ignorePatterns: [...(lintBase.ignorePatterns ?? []), '.agent/'],
