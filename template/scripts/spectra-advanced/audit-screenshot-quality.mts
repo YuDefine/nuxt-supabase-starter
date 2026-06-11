@@ -389,6 +389,11 @@ function applyMissingEvidenceRule(
     // Parent-with-scoped-children: leaf-only check — evidence 在 children 行上
     if (parentIdsWithScopedChildren.has(item.id)) continue
 
+    // （skip[: reason]）action annotation — user/Claude 在 review GUI 按 Skip 的
+    // 合法判斷，evidence 要求整體豁免。必須在 verify:* 檢查之前 — 否則帶 skip 的
+    // verify:ui item 仍被要求補 (verified-ui: ...) annotation（TD-190）
+    if (hasSkipAnnotation(item)) continue
+
     if (hasDeprecatedVerifyAutoMarker(item)) {
       issues.push({
         severity: 'warning',
@@ -428,7 +433,10 @@ function applyMissingEvidenceRule(
       })
     }
 
-    if (item.kinds.includes('verify:ui') && !item.annotations.verifiedUi) {
+    // @no-screenshot 豁免 screenshot-based evidence — verify:ui 的 evidence 就是
+    // screenshot，round-trip-only item 的 @no-screenshot 對它必須同樣有效（TD-190；
+    // 原本此豁免在 verify:* continue 之後，對 verify:ui 完全無效）
+    if (item.kinds.includes('verify:ui') && !item.annotations.verifiedUi && !item.noScreenshot) {
       issues.push({
         severity: 'warning',
         code: 'missing_verify_ui_annotation',
@@ -464,6 +472,12 @@ function applyMissingEvidenceRule(
 
 function hasDeprecatedVerifyAutoMarker(item: ManualReviewItem): boolean {
   return /^\s*- \[[ xX]\]\s+#[1-9][0-9]*(?:\.[1-9][0-9]*)?\s+\[verify:auto\]\s/.test(item.raw)
+}
+
+// 對齊 review-gui.mts applyActionToLine / stripAnnotations 的 skip annotation
+// 格式：`（skip）` 或 `（skip: <note>）`（fullwidth parens，GUI Skip 按鈕寫入）
+function hasSkipAnnotation(item: ManualReviewItem): boolean {
+  return /（skip(?::[^）]*)?）/.test(item.raw)
 }
 
 function formatKinds(kinds: ReadonlyArray<string>): string {

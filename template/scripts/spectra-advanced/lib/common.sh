@@ -101,6 +101,21 @@ sux_load_config() {
   SUX_TYPES_PRIMARY="${SUX_TYPES_DIRS%% *}"
   SUX_UI_EXT="${SUX_UI_EXTS%% *}"
 
+  # Monorepo broadening (TD-190): monorepo consumer 的 types 住在
+  # packages/*/shared/types（或 packages/*/shared/schemas），repo-root 的
+  # shared/types 可能只是指過去的 symlink — 只認 repo-root 路徑會讓
+  # Check 2 (Schema-Types Drift) 對已同步的 types false positive。
+  # 只 append 實際存在的目錄，避免比對範圍無謂變寬。
+  local pkg_types_dir pkg_rel
+  for pkg_types_dir in "$root"/packages/*/shared/types "$root"/packages/*/shared/schemas; do
+    [ -d "$pkg_types_dir" ] || continue
+    pkg_rel="${pkg_types_dir#"$root"/}"
+    case " $SUX_TYPES_DIRS " in
+      *" $pkg_rel "*) ;;
+      *) SUX_TYPES_DIRS="$SUX_TYPES_DIRS $pkg_rel" ;;
+    esac
+  done
+
   # Regex-safe form of each UI extension — escape `.` so grep -E uses them
   # as literals. Without this, `.vue$` would also match `avue`, `xvue`.
   # For multi-extension configs, join with `|` to produce an alternation:
@@ -116,7 +131,21 @@ sux_load_config() {
   done
   SUX_UI_EXT_RE="$parts"
 
-  export SUX_TYPES_DIRS SUX_TYPES_PRIMARY SUX_UI_DIRS SUX_UI_EXTS SUX_UI_EXT SUX_UI_EXT_RE SUX_MIGRATIONS_DIR SUX_NAV_FILES SUX_SCRIPTS_DIR SUX_OPENSPEC_DIR
+  # Regex-safe alternation of every types dir（含上面 monorepo 加廣的路徑）—
+  # Check 2 (Schema-Types Drift) 等用它比對 touched 檔案路徑：
+  # `^(shared/types|packages/core/shared/types)/.*\.ts$`
+  local types_dir types_parts=""
+  for types_dir in $SUX_TYPES_DIRS; do
+    escaped=$(printf '%s' "$types_dir" | sed 's/[][\\.*^$()|?+{}]/\\&/g')
+    if [ -z "$types_parts" ]; then
+      types_parts=$escaped
+    else
+      types_parts="${types_parts}|${escaped}"
+    fi
+  done
+  SUX_TYPES_DIRS_RE="$types_parts"
+
+  export SUX_TYPES_DIRS SUX_TYPES_DIRS_RE SUX_TYPES_PRIMARY SUX_UI_DIRS SUX_UI_EXTS SUX_UI_EXT SUX_UI_EXT_RE SUX_MIGRATIONS_DIR SUX_NAV_FILES SUX_SCRIPTS_DIR SUX_OPENSPEC_DIR
 }
 
 # Find the most recently modified active change directory.

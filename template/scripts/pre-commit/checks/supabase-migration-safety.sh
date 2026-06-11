@@ -88,6 +88,24 @@ while IFS= read -r -d '' file; do
   out_of_order+=("$file")
 done < <(git diff --cached --name-only --diff-filter=AR -z -- 'supabase/migrations/*.sql')
 
+# Merge commit false-positive 防護（TD-190）：merge in progress（MERGE_HEAD 存在）
+# 時，staged diff（vs HEAD）含 merge 帶進來的 origin/main 既有 migration，
+# --diff-filter=AR 會把它們當「新增」→ 全判 out-of-order（含 latest 自己）。
+# 把已存在於 origin/main 的路徑從候選集合 exclude，只檢查真正本地新增 / rename 的檔案。
+if ((${#out_of_order[@]} > 0)) \
+  && git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1 \
+  && git rev-parse --verify origin/main >/dev/null 2>&1; then
+  main_migration_paths=$(git ls-tree -r --name-only origin/main -- 'supabase/migrations/' 2>/dev/null || true)
+  filtered=()
+  for f in "${out_of_order[@]}"; do
+    if grep -qxF "$f" <<<"$main_migration_paths"; then
+      continue
+    fi
+    filtered+=("$f")
+  done
+  out_of_order=("${filtered[@]+"${filtered[@]}"}")
+fi
+
 if ((${#out_of_order[@]} > 0)); then
   # origin/main 上 supabase/migrations/*.sql 的 latest timestamp
   # 不主動 fetch（避免拖慢 commit），用 local cached origin/main ref
