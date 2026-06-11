@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-06-09T10:37:22.106Z",
+  "syncedAt": "2026-06-11T04:48:32.602Z",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "73f6756b4ec42435",
     "rules/agent-routing.md": "561d9fda75bc8955",
@@ -71,6 +71,7 @@
     "rules/nuxt-ui-conventions.md": "0e385ce74766da60",
     "rules/nuxt-ui-mcp.md": "a6bcf9954f77d463",
     "rules/nuxt-ui-native-picker-ban.md": "779e7d4aa48be983",
+    "rules/page-loading-golden-path.md": "654b2399da2e45f9",
     "scripts/codex-review-safe.sh": "02b730f9dbd504a3",
     "scripts/commit-lock.mjs": "f81c79df484ce5db",
     "skills/commit/SKILL.md": "9c27ebd2ed7a404e",
