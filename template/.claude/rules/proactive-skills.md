@@ -25,49 +25,44 @@ Local edits will be reverted by the next sync.
 
 ### Intake 階段
 
-| 情境                                           | 觸發                                    | 說明                             |
-| ---------------------------------------------- | --------------------------------------- | -------------------------------- |
-| 收到需求，需求模糊或有多種解讀                 | `spectra-discuss`                       | 先討論釐清，再 propose           |
-| 收到需求，需求明確                             | `spectra-propose`                       | 直接建立 change                  |
-| 需求來源是外部文件（Notion URL、PDF、貼文）    | 先讀取內容 → `spectra-propose`          | 提取結構化需求後建立 change      |
-| Proposal 建立完成                              | `spectra-analyze`                       | 自動檢查一致性（不等使用者要求） |
-| Analyze 發現 Critical/Warning                  | 修復 → 再 `spectra-analyze`（max 2 輪） | 迴圈直到通過                     |
-| Artifacts 有模糊用詞（TBD、矛盾、缺 scenario） | `spectra-clarify`                       | 逐項澄清                         |
+| 情境 | 觸發 | 說明 |
+|---|---|---|
+| 收到需求，需求模糊或有多種解讀 | `spectra-discuss` | 先討論釐清，再 propose |
+| 收到需求，需求明確 | `spectra-propose` | 直接建立 change |
+| 需求來源是外部文件（Notion URL、PDF、貼文） | 先讀取內容 → `spectra-propose` | 提取結構化需求後建立 change |
+| Proposal 建立完成 | `spectra-analyze` | 自動檢查一致性（不等使用者要求） |
+| Analyze 發現 Critical/Warning | 修復 → 再 `spectra-analyze`（max 2 輪） | 迴圈直到通過 |
+| Artifacts 有模糊用詞（TBD、矛盾、缺 scenario） | `spectra-clarify` | 逐項澄清 |
 
 ### Implementation 階段
 
-| 情境                         | 觸發              | 說明                       |
-| ---------------------------- | ----------------- | -------------------------- |
-| 準備開始或繼續實作           | `spectra-apply`   | 按 tasks 執行              |
-| 實作中遇到非預期錯誤         | `spectra-debug`   | 四階段系統性排查           |
-| 實作中發現 spec 有誤或過時   | `spectra-ingest`  | 更新 artifacts，不停下實作 |
-| 架構決策點（多種做法都可行） | `spectra-discuss` | 記錄決策到 artifacts       |
-| 需要確認現有規格內容         | `spectra-ask`     | 查詢而非猜測               |
+| 情境 | 觸發 | 說明 |
+|---|---|---|
+| 準備開始或繼續實作 | `spectra-apply` | 按 tasks 執行 |
+| 實作中遇到非預期錯誤 | `spectra-debug` | 四階段系統性排查 |
+| 實作中發現 spec 有誤或過時 | `spectra-ingest` | 更新 artifacts，不停下實作 |
+| 架構決策點（多種做法都可行） | `spectra-discuss` | 記錄決策到 artifacts |
+| 需要確認現有規格內容 | `spectra-ask` | 查詢而非猜測 |
 
 ### Completion 階段
 
-| 情境                                                  | 觸發              | 說明                                  |
-| ----------------------------------------------------- | ----------------- | ------------------------------------- |
-| 所有 tasks 完成 + 人工檢查通過                        | `spectra-archive` | 最終歸檔                              |
-| Archive 完成 + change 有 UI（design review findings） | `design-retro`    | 分析 findings、識別重複模式、建議改善 |
-| Findings 累積達 5 的倍數（5、10、15…）                | `design-retro`    | 週期性全量分析                        |
+| 情境 | 觸發 | 說明 |
+|---|---|---|
+| 所有 tasks 完成 + 人工檢查通過 | `spectra-archive` | 最終歸檔 |
+| Archive 完成 + change 有 UI（design review findings） | `design-retro` | 分析 findings、識別重複模式、建議改善 |
+| Findings 累積達 5 的倍數（5、10、15…） | `design-retro` | 週期性全量分析 |
 
 ### Sub-skill 禁用清單（永不觸發）
 
-| Sub-skill        | 規則                | 替代方式                                                              |
-| ---------------- | ------------------- | --------------------------------------------------------------------- |
-| `spectra-commit` | **NEVER** 主動觸發  | 走 `rules/core/commit.md` 規範的標準 commit 工序（含 hooks / 訊息格式） |
+| Sub-skill | 規則 | 替代方式 |
+|---|---|---|
+| `spectra-commit` | **NEVER** 主動觸發 | 走 `rules/core/commit.md` 規範的標準 commit 工序（含 hooks / 訊息格式） |
 
 **原因**：spectra-commit 是 spectra CLI 上游帶來的薄殼，本治理範圍下 commit 必須統一走 `rules/core/commit.md`。Claude 偵測到使用者要 commit Spectra change 的相關檔案時，**MUST** 直接走標準 git / `/commit` 流程，**NEVER** 改派 spectra-commit。
 
 ## Scope Discipline
 
-所有 spectra / design workflow 都受以下規則約束：
-
-- 範圍外檔案不要順手改
-- 途中發現其他問題：**不修，但必登記**
-- 未知變更先回報，不得自行清場
-- 不得在 subagent 內執行 `git reset --hard` / `git checkout --` / `git clean`
+所有 spectra / design workflow 都受 [`scope-discipline.md`](./scope-discipline.md) 約束：範圍外檔案不順手改、途中發現其他問題**不修但必登記**、未知變更先回報不自行清場、不得在 subagent 內執行 `git reset --hard` / `git checkout --` / `git clean`。
 
 登記出口：
 
@@ -79,25 +74,12 @@ Local edits will be reverted by the next sync.
 
 ## Handoff Hygiene
 
-符合以下情況，**MUST** 建立或更新 `HANDOFF.md`：
+符合以下情況，**MUST** 建立或更新 `HANDOFF.md`（內容要求與接手流程見 [`handoff.md`](./handoff.md)）：
 
 - session 結束時仍有 active change
 - 有未 commit 的 WIP
 - 有 blocker 需要下一個 session 接手
 - 工作移交給其他 agent / runtime
-
-`HANDOFF.md` 應至少記錄：
-
-- 正在做什麼（change / task / 檔案）
-- 卡在哪裡
-- 下一步按優先序怎麼走
-- 哪些項目仍**尚未被接手**
-
-一旦下一個 session 接手：
-
-1. 先建立 claim
-2. 再從 `HANDOFF.md` 移除對應項目
-3. 若已空，刪除 `HANDOFF.md`
 
 ## Manual Review
 
@@ -109,24 +91,13 @@ Local edits will be reverted by the next sync.
 
 正確流程：
 
-1. **首選（DEFAULT）**：tasks.md 仍有 `## 人工檢查` 未勾項 → 主線回「從 **clade home**（`~/offline/clade`）執行 `pnpm review:ui` 開本地 GUI 驗收」（review-gui 讀 `consumers.local` 自動聚合所有 consumer + 各 consumer 的 worktree，每條帶 `<consumer>__<wt-slug>` rootId namespace；consumer 端直接跑 `pnpm review:ui` 會被 clade-only guard 擋下並提示改去 clade home），等使用者跑完 GUI 流程回報後繼續
-2. **Fallback**（GUI 不可用時）：截圖 → 逐項展示 → 使用者回覆 OK / 問題 / skip → 依答覆更新 checkbox
-
-GUI 不可用的具體情境（觸發 fallback 的條件）：
-
-- 使用者 clade home 不存在 / 不可達（極少見；clade central repo 是中央倉一定要 clone）
-- 使用者明確說「不要開 GUI，直接在 chat 走」
-- Pure backend change 完全無 UI 證據需求，且只剩 1–2 項 yes/no 確認
+1. **首選（DEFAULT）**：tasks.md 仍有 `## 人工檢查` 未勾項 → 主線回「從 **clade home**（`~/offline/clade`）執行 `pnpm review:ui` 開本地 GUI 驗收」（聚合機制與 cwd 規約見下方 § cwd），等使用者跑完 GUI 流程回報後繼續
+2. **Fallback**（GUI 不可用時）：截圖 → 逐項展示 → 使用者回覆 OK / 問題 / skip → 依答覆更新 checkbox。GUI 不可用的具體情境見下方 § 例外：fallback 模式
 
 ### `[discuss]` items 不在 review:ui 主流程
 
-`[discuss]` items（production 授權 / 商業判斷 / production 觀察類）**MUST** 由 `/spectra-archive` Step 2.5 walkthrough 接管，**NEVER** 在 review:ui 引導流程內處理。理由：trigger 條件是外部 signal（deploy / soak / 商業決策），Claude 提前分析只能回「等外部 signal」、tasks.md 無更新、change 永遠卡在 review:ui pending state。
-
-review-gui home page 對純 D-only pending（I=0、V=0、evidenceMissing=0、只剩 `[discuss]`）的 change 會自動歸到「🗓 等 archive walkthrough」群、**無**接手 prompt 按鈕。引導使用者的對應動作：
-
-- 該 change 落「🗓 等 archive walkthrough」群 → 直接告知「跑 `/spectra-archive <change>` 觸發 Step 2.5 walkthrough，Claude 會主動準備證據與你討論」
-- 該 change 落「🤖 等 Claude 接手」群（仍含 I 或 V）→ 接手 prompt 仍可用，但 prompt 對 (D) 部分**只列 walkthrough trigger，不分析、不寫 (claude-discussed:) annotation**；(D) 仍由 archive walkthrough 接管
-
+`[discuss]` items（production 授權 / 商業判斷 / production 觀察類）**MUST** 由 `/spectra-archive` Step 2.5 walkthrough 接管，**NEVER** 在 review:ui 引導流程內處理——trigger 是外部 signal，提前分析只會讓 change 永遠卡在 review:ui pending state。
+review-gui 對純 D-only pending 的 change 自動歸「🗓 等 archive walkthrough」群（無接手 prompt）→ 告知 user「跑 `/spectra-archive <change>` 觸發 Step 2.5 walkthrough」；落「🤖 等 Claude 接手」群（仍含 I / V）→ 接手 prompt 對 (D) 只列 walkthrough trigger，不分析、不寫 (claude-discussed:) annotation。
 詳細 scope rule 見 [`manual-review.md`](./manual-review.md) § Item Kind Marker `[discuss]` 段。
 
 ### Inline Review-GUI Deep-Link（hard rule）
@@ -136,16 +107,16 @@ review-gui home page 對純 D-only pending（I=0、V=0、evidenceMissing=0、只
 review-gui SPA 路由規約（依 mode 不同；clade-home flow 為預設）：
 
 ```
-# cross-consumer mode（從 clade home 跑 `pnpm review:ui` — 預設、本檔下方規範路徑）
+# cross-consumer mode（預設；從 clade home 跑）
 http://127.0.0.1:5174/review/<consumer-id>:<change-name>
 
-# single mode（從單一 consumer 跑，已被 review-gui.mts `preflightCladeOnly` guard 擋下；fallback only）
+# single mode（fallback only；consumer 端已被 preflightCladeOnly guard 擋下）
 http://127.0.0.1:5174/review/<change-name>
 ```
 
-- port `5174` 是 `vendor/scripts/review-gui.mts` `DEFAULT_PORT` (見 review-gui.mts:21)；找不到 port 時會 fallback 到 5174-5194 之間
-- host 預設 bind `127.0.0.1`（見 review-gui.mts:4452）。**MUST** 用 `127.0.0.1` 不要用 `localhost` — 某些 user 端 `/etc/hosts` / DNS 配置 `localhost` 不解析到 `127.0.0.1`，會出現「無法存取」
-- **Cross-consumer mode 必要 `<consumer-id>:` prefix**（hard rule）：review-gui.mts `decodeChangeKeyParam(param, 'cross')` 期待 URL `:change` segment 為 `<consumer-id>:<change-name>` 複合 key（見 review-gui.mts:2041）；沒 prefix 時 `ensureChangeRoute` fallback 到 clade mainEntry（line 2622），clade 自己沒對應 change → API 回 404。`<consumer-id>` 從 `~/offline/clade/registry/consumers.json` 對應 entry 的 `consumer_id` 欄位（如 `<consumer-a>` / `<consumer-b>` / `co-purchase` — 跟 directory name 通常一致但以 registry 為準）
+- port `5174` 是 review-gui.mts `DEFAULT_PORT`；找不到 port 時會 fallback 到 5174-5194 之間
+- host 預設 bind `127.0.0.1`。**MUST** 用 `127.0.0.1` 不要用 `localhost` — 某些 user 端 `/etc/hosts` / DNS 配置 `localhost` 不解析到 `127.0.0.1`，會出現「無法存取」
+- **Cross-consumer mode 必要 `<consumer-id>:` prefix**（hard rule）：沒 prefix 時 review-gui fallback 到 clade mainEntry，clade 自己沒對應 change → API 回 404。`<consumer-id>` 以 `~/offline/clade/registry/consumers.json` 對應 entry 的 `consumer_id` 欄位為準（跟 directory name 通常一致）
 - `<change-name>` 一字不差等於 `openspec/changes/<change-name>/` 的目錄名
 - 例（cross mode）：`http://127.0.0.1:5174/review/<consumer-a>:ehr-performance-evaluation-m1`
 
@@ -172,60 +143,47 @@ GUI 會自動：
 完成後回報，我繼續下一步。
 ```
 
+此 template **純對話 session 也要產出**（不限 spectra flow）。
+
 #### cwd：clade home（review-gui 集中聚合所有 consumer + worktree）
 
-review-gui (`vendor/scripts/review-gui.mts` `listSourceRoots`) 從 clade home 啟動時偵測 `vendor/scripts/review-gui.mts` + `consumers.local` 雙標記 → 進 cross-consumer mode：讀 `consumers.local`，對每個 consumer 跑 `git worktree list --porcelain`，把所有 consumer × main + worktree 的 active change 聚合到同一個 UI；每條帶 `<consumer>__<wt-slug>` rootId namespace 不撞、screenshot API 用同 namespace 隔離。從 **clade home** 跑一次就涵蓋所有 consumer 的所有待 review change。
+review-gui 從 clade home 啟動進 cross-consumer mode，聚合所有 consumer × main + worktree 的 active change（每條帶 `<consumer>__<wt-slug>` rootId namespace）；consumer 端直接跑被 `preflightCladeOnly` guard 擋下（exit 2）。
 
-Consumer 端直接跑 `pnpm review:ui` 被 review-gui.mts `preflightCladeOnly` guard 擋下、退出 exit 2 + 提示改去 clade home。
-
-**MUST**：
-
-- 預設使用者從 clade home（`~/offline/clade`）跑 `pnpm review:ui`
-- 訊息**MUST**包含 `cd ~/offline/clade`——consumer 端跑會被 guard 擋下，明確 cd 一次省去誤導
-
-**NEVER**：
-
-- 寫「請在 consumer root 執行」當預設措辭——consumer 端已被 clade-only guard 擋下
-- 寫「請在 worktree root 執行」——worktree 也屬於 consumer 範圍，會被 guard 擋下；worktree 的 change 從 clade home 啟動的 GUI 已自動聚合
+- **MUST** 預設使用者從 clade home（`~/offline/clade`）跑 `pnpm review:ui`；訊息**MUST**包含 `cd ~/offline/clade`
+- **NEVER** 寫「請在 consumer root 執行」或「請在 worktree root 執行」當預設措辭——兩者都被 clade-only guard 擋下；worktree 的 change 從 clade home 啟動的 GUI 已自動聚合
 
 #### 不該列的東西
 
-- **NEVER** 列 dev server URL（`http://localhost:3040/admin/...`）當「先 sanity check 用」—— review-gui 內部已經自帶 final-state screenshot + evidence，user 不需要自己再開分頁去看 dev server；列那一堆 URL 反而把 chat 變成 dev server route 列表，模糊掉 review-gui 是真正的驗收入口
-- **NEVER** 把 review-gui deep-link 寫成 `/review/<change-name>` 不加 host — 使用者拿到 path 還要自己 prepend `http://127.0.0.1:5174` 才能用
-- **NEVER** 把 port 寫成 placeholder `<port>` — 直接寫 `5174`（fallback 由 GUI startup banner 告知 user，主線不負責猜）
+- **NEVER** 列 dev server URL（`http://localhost:3040/admin/...`）當「先 sanity check 用」—— review-gui 自帶 evidence，就是真正的驗收入口
+- **NEVER** 把 review-gui deep-link 寫成 `/review/<change-name>` 不加 host
+- **NEVER** 把 port 寫成 placeholder `<port>` — 直接寫 `5174`（fallback 由 GUI startup banner 告知 user）
 - **NEVER** 在訊息末尾加「需要的話可以參考」「也可以打開 dev server 看」這類弱措辭——review-gui 就是入口，不需要替代方案
 
 #### Counter-examples
 
 - ❌ 「請跑 `pnpm review:ui`」結束（沒給 deep-link，user 要從 GUI list 自己找 change）
-- ❌ 「URL 在 GUI 裡」推給 GUI 顯示
-- ❌ 列一堆 `http://localhost:3040/admin/X` dev server URL（user 要看的是 review-gui，不是 dev server）
-- ❌ 寫 `/review/<change-name>` 不加 `http://127.0.0.1:5174`
 
 #### 例外：fallback 模式
 
-只有當 `pnpm review:ui` 不可用（clade home 不存在 / user 明確拒絕 GUI / pure backend 完全無 UI 證據），才轉走 chat-based 逐項展示，那時才會用到 dev server URL 給 user。預設路徑（DEFAULT path）只給 review-gui deep-link。
-
-靜態 screenshot review 是證據，不等同於使用者驗收。詳細 marker / flow / kind 分類見 `manual-review.md` 與其 reference 檔。
+只有當 `pnpm review:ui` 不可用（clade home 不存在 / user 明確拒絕 GUI / pure backend 完全無 UI 證據），才轉走 chat-based 逐項展示，那時才會用到 dev server URL。靜態 screenshot review 是證據，不等同於使用者驗收；詳細 marker / flow / kind 分類見 `manual-review.md` 與其 reference 檔。
 
 ### Dev Server Auto-Spawn（agent 自起，不要叫 user cd）
 
-當 review-gui 顯示某 item 的 screenshot 不存在 / outdated，或 user 想開瀏覽器親自操作 sanity check 時，**agent 自己起 dev server**，禁止叫使用者「請 cd 到 worktree 跑 `pnpm dev`」。
+當 review-gui 顯示某 item 的 screenshot 不存在 / outdated，或 user 想開瀏覽器親自操作 sanity check 時，**agent 自己起 dev server**，禁止叫使用者「請 cd 到 worktree 跑 `pnpm dev`」。完整 recipe（命令、fallback 步驟、回報訊息 template、env bootstrap）：`~/offline/clade/vendor/snippets/dev-session/README.md`。
 
-> **多 worktree 反覆切換 → 用 [`vendor/scripts/dev-router.mjs`](../../vendor/scripts/dev-router.mjs)（散播到 consumer `scripts/dev-router.mjs`）。**
-> 當需要在多個 worktree backend 之間反覆切換驗收（典型：review 不同 change 的 worktree、避免「cd worktree + 重啟 nuxt + 重啟 tunnel」的手動切換），**SHOULD** 用 dev-router：常駐 L4 TCP proxy 佔住公開 port（+ tunnel，若 dev script 有獨立 tunnel 子命令），`node scripts/dev-router.mjs use <slug>` 即切 active backend、瀏覽器 reload 乾淨 cutover，免 cd / 免重啟。它從 package.json dev script auto-detect（零設定，consumer-agnostic）。dev-router 與下方 dev-session 互補：dev-session 管「一 consumer(-app) 一個 durable dev server（zellij）+ lease」，dev-router 管「一個公開 port 後面多 worktree backend 切換」。單次起一個 server（非多 worktree 切換）走下方 dev-session（durability + lease + 反累積）。
->
-> **dev-router 只適用 A 型（獨立 tunnel）consumer。** dev-router 偵測 dev script 內的獨立 tunnel 子命令（`/(dev-tunnel|cloudflared|ngrok|\btunnel\b)/`），把它原樣保留指向 proxy 佔的公開 port。**in-process tunnel 型 consumer**（tunnel 是 `nuxt.config.ts` 內的 `vite-plugin-cloudflare-tunnel` plugin、跟 nuxt dev process 綁死，典型 <consumer-b> / co-purchase）**沒有**「獨立公開 port 後面切 backend」的層可佔 → **NEVER 套 dev-router**。這型要 review 未 merge 的 worktree change 走下方 § In-process tunnel consumer（`dev-session --cwd <wt>`，一次一 worktree）。
+**持久層（durability）— ALL agent 自起的長駐 dev server MUST 走 [`vendor/scripts/dev-session.mjs`](../../vendor/scripts/dev-session.mjs)（散播到 consumer `scripts/dev-session.mjs`）。** agent harness 會在 tool-call 結束時回收 Bash 衍生的整個 process tree；dev-session 把 dev 命令掛到獨立常駐 zellij server 下，才能跨 tool-call / 跨 session 存活（root cause 實證見 cookbook）。
 
-> **持久層（durability）— ALL agent 自起的長駐 dev server MUST 走 [`vendor/scripts/dev-session.mjs`](../../vendor/scripts/dev-session.mjs)（散播到 consumer `scripts/dev-session.mjs`）。**
->
-> root cause：agent（Claude Code / Codex）的 harness 會在 tool-call 生命週期結束時回收 Bash 衍生的**整個 process tree** —— **連 `Bash(run_in_background=true)` / `spawn(detached:true)+unref()` / `setsid` / `nohup` 都逃不掉**（2026-06-01 <consumer-a> 實證：三種起法的 nuxt dev 都被 reap，唯獨掛在 zellij/tmux server daemon 下的存活）。dev-session 把 dev 命令交給**獨立於 agent session 的常駐 zellij server**（`zellij attach --create-background <name>` + `zellij --session <name> run --cwd <dir> -- <cmd>`），dev process 變成 zellij 的子孫、不在 agent spawn tree 裡 → 跨 tool-call / 跨 session 存活。
->
-> - **NEVER** 再用 `Bash(run_in_background=true)` / 裸 `nuxt dev` / `spawn(detached)` / setsid / nohup 起長駐 dev server（會被 reap，user 看到 502 / 530）
-> - **反累積**：dev-session 一 consumer(-app) 一個 durable session（名 `dev-<consumer_id>[-<app>]`），起前先 `zellij list-sessions` 查、有就 **reuse 不重起第二台**；`node scripts/dev-session.mjs sweep` 清 EXITED / 死掉的 session；多 worktree 切換仍走上面的 **dev-router**（一個公開 port 切 backend），**禁止**對每個 worktree 各起一個 dev-session
-> - **關係**：dev-session **取代** dev-singleton 的 `spawn(detached)` 層（lease schema 相容、durability 改靠 zellij）；dev-router 不變（多 worktree backend 切換）
-> - **前提**：consumer 端需有 zellij（本倉標準多工器）。zellij 不在 PATH → dev-session 報錯停下，回報 user 安裝，**NEVER** 退回 `run_in_background`
-> - **看畫面 / 停止**：`zellij attach dev-<consumer>[-<app>]`（detach `Ctrl-o d`）；`node scripts/dev-session.mjs stop --session <name>`
+- **NEVER** 再用 `Bash(run_in_background=true)` / 裸 `nuxt dev` / `spawn(detached)` / setsid / nohup 起長駐 dev server（會被 reap，user 看到 502 / 530）
+- **NEVER** 直接 `nuxt dev` / `pnpm dev` 不經 wrapper（會繞過 lease + cwd 檢查 + durability，且會被 harness reap）
+- **反累積**：dev-session 一 consumer(-app) 一個 durable session（名 `dev-<consumer_id>[-<app>]`），起前先 `zellij list-sessions` 查、有就 **reuse 不重起第二台**；`node scripts/dev-session.mjs sweep` 清 EXITED / 死掉的 session；多 worktree 切換仍走 **dev-router**（一個公開 port 切 backend），**禁止**對每個 worktree 各起一個 dev-session
+- **前提**：consumer 端需有 zellij（本倉標準多工器）。zellij 不在 PATH → dev-session 報錯停下，回報 user 安裝，**NEVER** 退回 `run_in_background`
+- **Lease 衝突**：`dev.leaseMode = strict` 且 cwd-mismatch → dev-session 印衝突訊息 + exit 1，agent **MUST** 把訊息原樣呈給 user，**NEVER** 自行 `--takeover`（參照 [`verification-lease.md`](./verification-lease.md)）
+- **掃 free port（non-pinned）**：scan 3001-3050 找第一個 free port；**禁止**用 3000（留給 user 自己的 dev server）
+- **Tunnel URL**：回報 user 時，**若 consumer 有 `TUNNEL_HOSTNAME`，MUST 額外列 tunnel URL 並標註「tunnel 未啟動先跑 `pnpm tunnel:<app>`」**——外部裝置 / HTTPS-only 驗收 localhost 不夠用。**Agent NEVER 自起 `pnpm tunnel:*`** —— tunnel process 由 user 控制，agent 只負責列 URL + 提示
+- **Worktree env bootstrap**：開新 worktree 後 **MUST** 在啟動前跑 `node vendor/scripts/wt-env-bootstrap.mjs --consumer-meta .claude/consumer-meta.json` 補 gitignored env file
+- **Missing manifest**（consumer 無 `.claude/consumer-meta.json`）：**STOP** spawn → 回報 user 無 lease 保護 → 提示 scaffold 採用路徑（5 步見 cookbook）；**NEVER** 替 consumer 直接寫 manifest（consumer-self 決策）
+- **多 worktree 反覆切換驗收** → SHOULD 用 `scripts/dev-router.mjs`（常駐 L4 proxy 佔公開 port、`use <slug>` 切 active backend、免 cd 免重啟；只適用 A 型獨立 tunnel consumer）。單次起一個 server 走 dev-session
+- consumer local rule（`.claude/rules/local/no-auto-dev-server*.md` / `dev-server-policy*.md`）明確禁止 agent 自起時 → 不自起，fallback 給 user 一條一行指令（template 見 cookbook）；啟動前先讀過
 
 行為依該 consumer 的 OAuth port-pin 屬性分流（讀 [`consumer-meta.md`](./consumer-meta.md) snapshot 的 `auth.portPinned` 欄位；**所有分流的實際啟動一律經 dev-session，下表決定的是 lease 嚴格度與 port 來源，不是繞過 dev-session**）：
 
@@ -233,93 +191,14 @@ Consumer 端直接跑 `pnpm review:ui` 被 review-gui.mts `preflightCladeOnly` g
 |---|---|---|
 | `auth.portPinned = true` + `dev.leaseMode = strict` | **MUST** 走 [`vendor/scripts/dev-session.mjs`](../../vendor/scripts/dev-session.mjs)（durability=zellij），鎖在 manifest 宣告的固定 port | cwd-mismatch → **refuse**（需 user 顯式 `--takeover`），參照 [`verification-lease.md`](./verification-lease.md) |
 | `auth.portPinned = true` + `dev.leaseMode = advisory` | 同上，但 advisory | cwd-mismatch → warn + reuse |
-| `auth.portPinned = false`（無 OAuth pin） | 走 scan-free-port 邏輯（下方 MUST） | 一 worktree 一 port，不互搶 |
+| `auth.portPinned = false`（無 OAuth pin） | 走 scan-free-port 邏輯（3001-3050；MUST 細則見 cookbook） | 一 worktree 一 port，不互搶 |
 | 無 `.claude/consumer-meta.json`（未採用 manifest） | 沿用既有 scan-free-port 邏輯 | 一 worktree 一 port |
 
-#### Pinned consumer path（`auth.portPinned = true`）
-
-- **MUST** 用 `node scripts/dev-session.mjs --consumer-meta .claude/consumer-meta.json --app <app> --port <N> --label "<purpose>" -- pnpm dev:<app>`（clade vendor-targets 散播後落在 consumer `scripts/dev-session.mjs`；durability 靠 zellij、lease 沿用 consumer-meta 的 `dev.leaseMode` / `auth.portPinned`）
-- **NEVER** 直接 `nuxt dev` / `pnpm dev` 不經 wrapper（會繞過 lease + cwd 檢查 + durability，且會被 harness reap）
-- claim 前先讀 `/tmp/<consumer_id>-verification-lease.json`，若有別人 hold（其 dev pid 還活 + cwd 不同）且 `dev.leaseMode = strict` → dev-session 印衝突訊息 + exit 1，agent **MUST** 把訊息原樣呈給 user，**NEVER** 自行 `--takeover`
-- 若 consumer 採用 [`vendor/snippets/dev-auth/`](../../vendor/snippets/dev-auth/) cookbook（dev-only signin endpoint，繞過 OAuth），manifest 的 `auth.devSigninEnabled` 變 `true` → port-pin 約束放寬，可改走下方 scan-free-port 邏輯
-
-**Missing manifest fallback**（consumer 尚未採用 `.claude/consumer-meta.json`）：
-
-當 agent 從 consumer cwd 跑 dev-session 卻看到 `--consumer-meta` path 不存在時（dev-session 無 consumer-meta 時走無 lease 純 durability + 反累積，但無 cross-consumer port 衝突保護）：
-
-1. **STOP** spawn — 不要 silently fallback 到 legacy reuse-or-spawn（會繞過 lease 安全性）
-2. **回報 user**：「`<consumer>` 缺 `.claude/consumer-meta.json`；走 fallback scan-free-port 模式無 lease 保護，撞 cross-consumer port 衝突時無法自動分辨」
-3. **提示採用路徑**：
-   ```bash
-   cd ~/offline/clade
-   node scripts/scaffold-consumer-meta.mjs ~/offline/<consumer>
-   # 看 proposed JSON → 在 consumer session 抄進 .claude/consumer-meta.json + commit
-   ```
-4. 也可同時跑 `node scripts/audit-consumer-meta-adoption.mjs` 看跨 consumer 採用度
-5. **NEVER** 替 consumer 直接寫 manifest（per `consumer-meta.md § Adoption gap detection`）— consumer-self 決策
-
-#### Non-pinned consumer path（`auth.portPinned = false` 或未採用 manifest）
-
-##### MUST
-
-- **解析 sourceRoot**：review-gui `/api/changes` response 已帶該 change 對應的 working tree absolute path（main 或 `wt/<slug>`）；直接用作 `Bash(cwd=...)`
-- **掃 free port**：`lsof -iTCP:<port> -sTCP:LISTEN -t` 從 3001 掃到 3050 找第一個 free 的；**禁止**用 3000（使用者慣用，留給 user 自己的 dev server）
-- **durable 啟動**：`node scripts/dev-session.mjs --cwd <sourceRoot> --port <N> -- pnpm dev --port <N>`（dev-session 把它丟進 zellij session `dev-<consumer_id>`，**NEVER** 用 `Bash(run_in_background=true)`／裸 spawn —— 會被 harness reap、user 看到 502/530）。非 pinned 的 lease 為 best-effort（無 consumer-meta 時走無 lease 純 durability + 反累積）
-- **回報 user**：localhost URL（`http://127.0.0.1:<N>`）、zellij session 名（`zellij attach <name>` 看畫面）、以及停止指令（`node scripts/dev-session.mjs stop --session <name>`）。**若 consumer 有 `TUNNEL_HOSTNAME`（解析 SOP 見 `~/offline/clade/vendor/snippets/tunnel-url-for-review/README.md`；cookbook 只在 clade home，agent 從絕對 path 讀），MUST 額外列 tunnel URL 並標註「tunnel 未啟動先跑 `pnpm tunnel:<app>`」**——user 真要在外部裝置 / HTTPS-only 環境驗收，localhost 不夠用
-- **Lifecycle**：一個 worktree 同時只開 1 個 dev server（spawn 前先 `lsof` 該 worktree 對應 port 是否已被自己開過）；不同 worktree 可並行（各自選不同 free port）；session 結束或 user 喊停時主動 kill。**Agent NEVER 自起 `pnpm tunnel:*`** —— tunnel process 由 user 控制（owns Cloudflare cert、tunnel ID、DNS routing），agent 只負責列 URL + 提示
-
-##### 訊息格式（無 tunnel 的 consumer）
-
-```
-Dev server 已啟動（durable，zellij session `dev-<consumer>[-<app>]`，port <N>）：
-
-  http://127.0.0.1:<N>
-
-看畫面：`zellij attach dev-<consumer>[-<app>]`（detach Ctrl-o d）
-停止：  `node scripts/dev-session.mjs stop --session dev-<consumer>[-<app>]`
-```
-
-##### 訊息格式（有 tunnel 的 consumer）
-
-```
-Dev server 已啟動（durable，zellij session `dev-<consumer>[-<app>]`，port <N>）：
-
-  https://<TUNNEL_HOSTNAME>           # ← 優先用這條（HTTPS / 跨裝置 / OAuth callback / webauthn 等都需要）
-  http://127.0.0.1:<N>                # ← 本機 fallback
-
-看畫面：`zellij attach dev-<consumer>[-<app>]`（detach Ctrl-o d）
-若 tunnel 尚未啟動（dev script 未含 tunnel 子命令時）：
-  cd ~/offline/<consumer> && pnpm tunnel:<app>    # multi-app：<client-a> / shared 各自獨立
-停止 dev server：`node scripts/dev-session.mjs stop --session dev-<consumer>[-<app>]`
-```
-
-Multi-app consumer（如 <consumer-a>）`<TUNNEL_HOSTNAME>` 依 change 觸碰的 app 反推（見 `~/offline/clade/vendor/snippets/tunnel-url-for-review/README.md` § Multi-app reverse mapping）。
-
-#### Consumer 政策參照
-
-consumer 若有 local rule 明確禁止 agent 自起（base infra 共享風險、上游頻寬限制等），fallback 給 user 一條一行指令：
-
-```
-請執行（agent 因 `<local-rule-path>` 不能自起）：
-
-  ( cd <sourceRoot> && pnpm dev --port <N> )
-```
-
-例外查詢：consumer `.claude/rules/local/` 下若有 `no-auto-dev-server*.md` / `dev-server-policy*.md` 之類檔案，啟動前先讀過。
-
-#### Worktree 環境檔 bootstrap
-
-開新 worktree 後，第一次 `dev:agent` 通常會因 gitignored env file（`.env.local`、`.env.<client-a>` 等）缺漏失敗。**MUST** 在 worktree 啟動前跑：
-
-```bash
-node vendor/scripts/wt-env-bootstrap.mjs --consumer-meta .claude/consumer-meta.json
-```
-
-它會依 `dev.envSyncPolicy.filesToCopy` 從 main worktree 拷貝必要檔。Consumer 自家 wt-helper 應該在 `worktree add` 後自動 invoke 一次。
+`auth.devSigninEnabled = true`（採用 dev-auth cookbook 的 dev-only signin endpoint）→ port-pin 約束放寬，可改走 scan-free-port 邏輯。
 
 #### In-process tunnel consumer：review 未 merge 的 worktree change（hard rule）
 
-部分 consumer 的 dev tunnel 是 **in-process plugin**（`vite-plugin-cloudflare-tunnel` 寫在 `nuxt.config.ts`，只在 `process.env.TUNNEL_HOSTNAME` 存在時啟動，`port` 寫死），tunnel 跟 nuxt dev process **綁死** —— 起 `pnpm dev` 連帶把 tunnel 拉起、停 dev server 連帶收掉 tunnel。**典型：<consumer-b> / co-purchase**。
+部分 consumer 的 dev tunnel 是 **in-process plugin**（`vite-plugin-cloudflare-tunnel` 寫在 `nuxt.config.ts`，tunnel 跟 nuxt dev process **綁死**；典型：<consumer-b> / co-purchase）。review 未 merge 的 worktree change 正解 = 把唯一的 dev-session 指向**那個 worktree 的 cwd**（`dev-session --cwd <wt>`，一次一 worktree）；完整 SOP：`~/offline/clade/vendor/snippets/inprocess-tunnel-worktree-review/README.md`。
 
 判別「我是哪型」（grep dev script + nuxt.config）：
 
@@ -330,30 +209,10 @@ node -e "console.log(require('./package.json').scripts.dev)" | grep -E 'dev-tunn
 grep -l 'cloudflareTunnel\|vite-plugin-cloudflare-tunnel' nuxt.config.* 2>/dev/null
 ```
 
-要 review 一個**還沒 merge 回 main** 的 worktree change，正解 = 把唯一的 dev-session 指向**那個 worktree 的 cwd**（named tunnel hostname 不變，一次只能 review 一個 worktree）：
-
-```bash
-node <main>/scripts/dev-session.mjs --consumer-meta <wt>/.claude/consumer-meta.json \
-     --cwd <wt> --port <N> -- pnpm dev
-# 切到另一個 worktree review：先 stop，再從另一個 worktree cwd 起
-```
-
-`<main>` 是 consumer 主 worktree 路徑（`~/offline/<consumer>`），`<wt>` 是要 review 的 worktree 路徑（`~/offline/<consumer>-wt/<slug>`）。
-
-##### MUST
-
-- **MUST** 用 `--cwd <wt>` 指向 worktree —— route 只活在 worktree branch、還沒進 main
-- **MUST** 用 **main 的** `scripts/dev-session.mjs` 絕對路徑：早期 fork 的 worktree 可能缺這支（vendor 投影漂移，fork 時還沒散播到）
-- **MUST** 起前確認 worktree `.env.local` 含 tunnel keys（`CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_API_KEY` / `TUNNEL_HOSTNAME` / `TUNNEL_NAME`）：早期 fork 的 worktree env file 可能 fork 在 main 加入 tunnel keys 之前 → 依 consumer-meta `dev.envSyncPolicy.filesToCopy` 跑 `node <main>/vendor/scripts/wt-env-bootstrap.mjs --consumer-meta <wt>/.claude/consumer-meta.json` sync，或手動把 main `.env.local` 的 tunnel keys 補進 worktree
-- **單一 named tunnel 一次一 worktree**：要切 worktree 必 `dev-session.mjs stop` 再從另一個 worktree cwd 起，**禁止**對 in-process tunnel 型同時開兩個指向同 hostname 的 dev-session
-
-##### NEVER
-
 - **NEVER** 從 **main** 起 dev server 想 review worktree change —— route 在 worktree 還沒 merge 進 main → 404
 - **NEVER** 對 in-process tunnel 型套 **dev-router**（`scripts/dev-router.mjs`）—— dev-router 假設 tunnel 指向一個固定公開 port、背後可切多 backend；in-process tunnel 跟 nuxt dev process 綁死，沒有「獨立公開 port 後面切 backend」的層可佔，套了不會生效
 - **NEVER** 把 worktree nuxt.config 架構級 drift（如 worktree 是舊 framework 時代 fork、main 已遷新架構，vite 回 403「host not allowed」）誤判成 tunnel 問題 —— 那是 change-level 架構 reconcile 問題，review 前先 reconcile，不要在 tunnel / dev-session 層找原因
-
-完整判別表 + 4 個坑速查 + 跟其他 tunnel cookbook 分工：見 `~/offline/clade/vendor/snippets/inprocess-tunnel-worktree-review/README.md`。
+- **單一 named tunnel 一次一 worktree**：切 worktree 必 `dev-session.mjs stop` 再從另一個 worktree cwd 起，**禁止**對 in-process tunnel 型同時開兩個指向同 hostname 的 dev-session
 
 ## Review Tiers
 

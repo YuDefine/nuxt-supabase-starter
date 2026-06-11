@@ -9,8 +9,6 @@ Local edits will be reverted by the next sync.
 
 **核心命題**：dev server + browser profile + cookie namespace + env file + session identity 是一組**綁定資源**，任意時刻只能由一個 holder 持有。把這組綁定收成一個明確物件叫 **verification lease**，任何要動其中之一的工具/規則都先 claim、衝突就 refuse。
 
-> 為什麼這條獨立成 rule：dev server contention、browser profile pollution、cookie cross-port leakage、env file drift 看似各自獨立，實際是同一個「驗證資源所有權」問題。散落處理 → 工具各自實作 → 容易誤判。收成一等概念後 [`rules/core/proactive-skills.md`](./proactive-skills.md) § Dev Server Auto-Spawn、`vendor/scripts/dev-singleton.mjs`、`vendor/snippets/dev-auth/`、`vendor/snippets/wt-helper/` 都引用同一份語意。
-
 ## Lease 的五元組
 
 一份 lease 綁定下列五項，動其中任何一項都要先 claim：
@@ -27,52 +25,17 @@ Local edits will be reverted by the next sync.
 
 `/tmp/<consumer_id>-verification-lease.json`
 
-- 路徑用 consumer_id（見 [`rules/core/consumer-meta.md`](./consumer-meta.md)），不用任意字串
+- 路徑用 consumer_id（見 [`consumer-meta.md`](./consumer-meta.md)），不用任意字串
 - `/tmp` reboot 清空，跨 session 可讀，不被 git track
-- 任何 user / agent 都能讀（沒 ACL）；寫入要走 `vendor/scripts/dev-singleton.mjs` 之類 lease-aware 工具，不要直接 `echo > /tmp/...`
+- 任何 user / agent 都能讀（沒 ACL）；寫入要走 lease-aware 工具（dev-session / dev-singleton），不要直接 `echo > /tmp/...`
 
 ## Lease 檔 schema
 
-```jsonc
-{
-  "schemaVersion": "1",
-  "consumerId": "<consumer-b>",
-  "claimedAt": "2026-05-19T12:18:00Z",
-  "holder": {
-    "kind": "claude",                 // claude | codex | human | subagent
-    "sessionId": "abc-123",           // 來自 CLAUDE_SESSION_ID / CODEX_SESSION_ID / 或 "human"
-    "label": "verifying #178 fix"     // 自由文字，給人看
-  },
-  "devServer": {
-    "pid": 78363,
-    "cwd": "<home>/offline/<consumer-b>-wt/fix-vending-part-name-display",
-    "port": 3000,
-    "url": "http://127.0.0.1:3000"
-  },
-  "browserProfile": {
-    "buName": "default",
-    "cdpUrl": "http://127.0.0.1:9333",
-    "userDataDir": "~/Library/Application Support/Google/Chrome-BH"
-  },
-  "cookieNamespace": "tdms-fix-vending-part-name-display",
-  "devSession": {                     // dev-session.mjs 寫入：dev process 實際掛在哪個 zellij session
-    "multiplexer": "zellij",
-    "name": "dev-tdms-<client-a>"
-  },
-  "envFile": {
-    "path": "<home>/offline/<consumer-b>-wt/fix-vending-part-name-display/.env.local",
-    "sha256": "e3b0c44..."
-  },
-  "auditLog": [
-    { "at": "2026-05-19T12:18:00Z", "event": "claimed", "by": "claude:abc-123" },
-    { "at": "2026-05-19T13:05:14Z", "event": "takeover", "by": "human", "prev": "claude:abc-123", "reason": "manual override" }
-  ]
-}
-```
+schema 全例見 `~/offline/clade/vendor/snippets/dev-session/lease-schema.jsonc`。欄位必填規則：
 
-部分 slot 可缺（如未啟瀏覽器 → `browserProfile: null`），但 `devServer` + `holder` + `claimedAt` 必填。`devSession` 由 `dev-session.mjs` 寫入，缺則代表非 dev-session 起的（legacy / 手動）。
-
-**Durability 層（為什麼 dev process 要掛在 zellij）**：agent harness 會回收 Bash 衍生的整個 process tree —— 連 `spawn(detached:true)` / setsid / nohup 都逃不掉（2026-06-01 <consumer-a> 實證）。`dev-session.mjs` 把 dev 命令交給獨立於 agent session 的常駐 **zellij server**，dev process 不在 agent spawn tree 裡 → 跨 tool-call / 跨 session 存活。lease 的 `devServer.pid` 是 zellij 內那個 nuxt/vite process，kill lease 時連帶收掉 zellij session（`dev-session.mjs stop`）。見 [`proactive-skills.md`](./proactive-skills.md) § Dev Server Auto-Spawn。
+- `devServer` + `holder` + `claimedAt` 必填；其餘 slot 可缺（如未啟瀏覽器 → `browserProfile: null`）
+- `devSession` 由 `dev-session.mjs` 寫入（dev process 掛哪個 zellij session）；缺 = 非 dev-session 起（legacy / 手動）
+- Durability：dev process 掛獨立 zellij server 下才不被 agent harness reap；`devServer.pid` 是 zellij 內的 nuxt/vite process，kill lease 連帶收掉 zellij session（見 [`proactive-skills.md`](./proactive-skills.md) § Dev Server Auto-Spawn）
 
 ## Operations
 
@@ -83,19 +46,18 @@ Local edits will be reverted by the next sync.
 | **release** | 持有者 | 刪 lease 檔；非持有者呼叫 = no-op + warn |
 | **force-takeover** | 任何 lease-aware 工具，需顯式 flag（`--takeover`） | 不管現有 holder，覆寫 lease；prev holder 寫進 auditLog；同步 kill 對方 dev server PID（如可達） |
 
-**Stale 偵測**：claim 時若現有 lease 的 `devServer.pid` 死了（`kill -0 <pid>` fail）→ 自動視為 stale，silent overwrite。不要要求 `--takeover`。
-
-**並行 race**：兩個工具同時 claim，靠 `fs.writeFile` with `O_EXCL` flag（`{ flag: 'wx' }`）做檔案級 atomic check，後到者 fail → 視為 conflict → 跑 status + refuse。
+**Stale 偵測**：claim 時現有 lease 的 `devServer.pid` 死了（`kill -0` fail）→ 視為 stale，silent overwrite，不要求 `--takeover`。
+**並行 race**：同時 claim 靠 `fs.writeFile({ flag: 'wx' })` 檔案級 atomic check，後到者 fail → conflict → 跑 status + refuse。
 
 ## Holder identity
 
 ```
-kind         sessionId source                            label
-─────────────────────────────────────────────────────────────────────────────────
-claude       process.env.CLAUDE_SESSION_ID 或 cwd hash    --label flag
-codex        process.env.CODEX_SESSION_ID 或 cwd hash     --label flag
-subagent     parent claude session + agent name           Agent tool prompt
-human        固定字串 "human"                             不可缺，至少傳「what for」
+kind      sessionId source                      label
+----------------------------------------------------------------
+claude    process.env.CLAUDE_SESSION_ID 或 cwd hash  --label flag
+codex     process.env.CODEX_SESSION_ID 或 cwd hash   --label flag
+subagent  parent claude session + agent name         Agent tool prompt
+human     固定字串 "human"                           不可缺，至少傳「what for」
 ```
 
 `sessionId` 拿不到時 fallback 到 cwd-derived hash（不同 worktree 至少能分），但記 warning 到 auditLog。
@@ -107,8 +69,8 @@ human        固定字串 "human"                             不可缺，至少
 | 工具 | 何時 claim | 何時 release |
 |---|---|---|
 | `vendor/scripts/dev-session.mjs`（**durable 主入口**；durability=zellij，取代 dev-singleton 的 spawn 層） | launch 前讀 lease 對 cwd（strict 衝突 refuse）；ready 後寫 lease + `devSession` 欄 | `stop` 時 |
-| `vendor/scripts/dev-singleton.mjs`（legacy spawn(detached) wrapper；其 spawn 層會被 agent harness reap，新工作走 dev-session） | spawn 前；reuse 前讀 lease 對 cwd | dev server 被 kill 時 |
-| `vendor/snippets/dev-auth/templates/server-api-dev-signin.ts.template` | endpoint 第一次被打時 | lease 有 holder 才允許簽 cookie（防 CSRF） |
+| `vendor/scripts/dev-singleton.mjs`（legacy；spawn 層會被 harness reap，新工作走 dev-session） | spawn 前；reuse 前讀 lease 對 cwd | dev server 被 kill 時 |
+| `dev-auth` cookbook `server-api-dev-signin.ts.template` | endpoint 第一次被打時 | lease 有 holder 才允許簽 cookie（防 CSRF） |
 | `vendor/snippets/wt-helper/`（建立 worktree） | bootstrap .env.local 前 | env file 寫完後 |
 | `browser-harness` daemon wrapper（future） | 開瀏覽器 + load profile 前 | daemon shutdown 時 |
 
@@ -120,19 +82,7 @@ human        固定字串 "human"                             不可缺，至少
 
 ## Claim 衝突的標準訊息
 
-```
-[lease:<consumer>] cannot claim — already held by <holder.kind>:<holder.sessionId>
-  since:        2026-05-19T12:18:00Z (8m 32s ago)
-  dev server:   PID 78363, cwd=<home>/offline/<consumer-b>-wt/fix-vending-part-name-display, port=3000
-  browser:      BU_NAME=default
-  cookie ns:    tdms-fix-vending-part-name-display
-  env file:     .env.local (sha256:e3b0c44...)
-
-To force takeover, re-run with --takeover (logs previous holder + reason).
-To inspect, run: dev:status
-```
-
-訊息要含 holder 識別 + 五元組摘要，讓使用者**不必再額外 dev:status** 就能判斷要不要搶。
+訊息要含 holder 識別 + 五元組摘要，讓使用者**不必再額外 dev:status** 就能判斷要不要搶。標準訊息 block 範例見 `~/offline/clade/vendor/snippets/dev-session/README.md`。
 
 ## Agent 行為契約
 
@@ -151,16 +101,8 @@ Lease 的「該不該強制走 singleton wrapper」由 consumer 自宣告：
 
 ```jsonc
 // .claude/consumer-meta.json 片段
-{
-  "auth": {
-    "provider": "supabase-google",
-    "portPinned": true                  // OAuth pin 該 consumer 到固定 port
-  },
-  "dev": {
-    "ports": [{ "port": 3000, "alias": "main" }],
-    "leaseMode": "strict"               // strict | advisory
-  }
-}
+{ "auth": { "provider": "supabase-google", "portPinned": true },   // OAuth pin 到固定 port
+  "dev": { "ports": [{ "port": 3000, "alias": "main" }], "leaseMode": "strict" } }  // strict | advisory
 ```
 
 - `leaseMode: strict` + `portPinned: true` → singleton wrapper **必須**用，cwd-mismatch 預設 refuse
@@ -169,17 +111,10 @@ Lease 的「該不該強制走 singleton wrapper」由 consumer 自宣告：
 
 ## Audit log retention
 
-`auditLog` 保留最多 50 條，FIFO。長期紀錄需求走 `vendor/scripts/improvement-digest.mjs` 拉 lease 檔的 snapshot 進 digest，本檔不負責長期持久。
+`auditLog` 保留最多 50 條，FIFO。長期紀錄走 `improvement-digest.mjs` 拉 snapshot 進 digest。
 
 ## Why（root cause）
 
-過去（2026-05 之前）四個資源各自獨立規範：
-
-- dev server port → `proactive-skills.md § Dev Server Auto-Spawn`（scan 3001-3050）
-- browser profile → `browser-harness` skill（隱性，沒文件化）
-- cookie namespace → 沒人規範（撞了才知道）
-- env file → consumer wt-helper（每家自己寫）
-
-問題：四個資源**實際是綁定的**（解一個會影響其他三個），但散規範散實作 → 兩個 session 同時驗證時不同層各自 hold 對方資源 → 出現「dev server 是 A 的，cookie 是 B 的，瀏覽器 profile 是 C 的」這種 inconsistent state。
-
-把它變一等概念後：claim 一次拿一組、release 一次釋一組，atomicity 由 lease 檔保證。
+2026-05 之前 dev server port / browser profile / cookie namespace / env file 四個資源散規範散實作，但實際是綁定的。
+兩個 session 同時驗證 → 不同層各自 hold 對方資源 → inconsistent state。
+收成一等概念後：claim 一次拿一組、release 一次釋一組，atomicity 由 lease 檔保證。

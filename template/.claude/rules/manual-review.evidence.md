@@ -271,3 +271,217 @@ Scoped sub-item 範例：
 ```
 
 `@no-screenshot` 永遠是最後一個 trailing token；`@followup[TD-NNN]` 必須放在它前面。若寫成 `... @no-screenshot @followup[TD-001]`，就不是 canonical format，tooling 不保證可穩定解析。
+
+## Parent State Derivation — 真相層責任分工
+
+> 自主檔 [[manual-review]] § Parent State Derivation 移入；parent AND-derive hard rule 與禁止項仍在主檔。
+
+| 真相層 | 責任 |
+| --- | --- |
+| Review GUI (`applyReviewActionToContent`) | 每次寫回 child line 後 **MUST** 重 derive parent state 並寫回 parent line（auto-rollup / un-rollup） |
+| commit Step 0-MR awk gate | **MUST** leaf-only count — parent-with-scoped-children 不計 pending |
+| `spectra-advanced/archive-gate.sh` | **MUST** leaf-only count（已正確 — semantic fully aggregated from scoped children） |
+| 未來新加的 tooling | **MUST** 沿用 leaf-only count；禁止 naive `grep '- \[ \]'` 或同義 awk 計 pending |
+
+## `(claude-analyzed: ...)` annotation 細節
+
+> 自主檔 [[manual-review]] § `(claude-analyzed: ...)` annotation 移入；Schema 與 Claude 可寫條件仍在主檔。典型寫入情境：修法已落地 + 新 evidence 已收集，等 user 重看新截圖決定 OK / Issue。
+
+### Strip semantics
+
+User 在 GUI 對該 item 點 **OK / Issue / Skip** 時，`stripAnnotations`（in `vendor/scripts/review-gui.mts`）會 **同時** 清掉：
+
+- `（issue: ...）` 與 `（skip[: ...]）` / `（note: ...）` / `（finding: ...）` 等 action annotation（既有行為）
+- `(claude-analyzed: ...)` annotation（新增 strip 規則）
+
+設計 rationale：claude-analyzed 的語意一旦 user 動了該 item = 評估已完成，annotation 失效；保留會讓下次 GUI re-render 把 item 錯誤地仍歸到 `awaitingUserReEval` bucket。verified-* 與 claude-discussed annotation **不**受此 strip 影響（它們是 archive evidence trail，需要永久保留）。
+
+### 與 `(claude-discussed:)` 的差異
+
+| 維度 | `(claude-discussed:)` | `(claude-analyzed:)` |
+| --- | --- | --- |
+| 適用 kind | `[discuss]` | `[review:ui]` / `[verify:ui]`（帶 `（issue:）` 的 item） |
+| 觸發流程 | `/spectra-archive` Step 2.5 walkthrough | review-gui 「等 Claude 接手」prompt 路由 (E) |
+| Checkbox 行為 | 翻 `[x]` | **不翻**（保 `[ ]`） |
+| Strip on user action | 不 strip（archive evidence trail） | strip（user 點 OK / Issue / Skip 即清） |
+| User 主動性 | user 必須先看 evidence 才允許 Claude 寫 | Claude 自己分析後寫，user 之後重整 GUI 看到 |
+
+### Home page 影響
+
+當 change 的所有 issued items 都已被 Claude 寫 `(claude-analyzed: route=E)`、且 user-actionable / verify pending / evidence missing / readiness hits 都是 0 → change 落入 **「✋ Claude 已分析、等 user 重新評估」** bucket（review-gui home page），不再被 「🤖 等 Claude 接手」群 prompt 抓走重複分析。User 點 card 進 detail，重看 final-state evidence 後在 GUI 點 OK / Issue / Skip 結束流程。
+
+詳見 `vendor/scripts/review-gui.mts` 內 `analyzedIssuedCount` field、`awaitingUserReEval` bucket dispatch、`stripAnnotations` claude-analyzed strip 段。
+
+### 範例
+
+寫入前（user 點 issue 後 Claude 收到「接手分析」prompt、走完分析路由 (E)）：
+
+```markdown
+- [ ] #4.1 [verify:ui] /vending/inventory final-state visual review （issue: 整體 UI 設計難以理解 不好看也不好用 改進方案已實作完成 待重拍新版 screenshot 後 user 重新評估）
+```
+
+寫入後（Claude 在路由 (E) 結論時加 annotation）：
+
+```markdown
+- [ ] #4.1 [verify:ui] /vending/inventory final-state visual review （issue: 整體 UI 設計難以理解 不好看也不好用 改進方案已實作完成 待重拍新版 screenshot 後 user 重新評估） (claude-analyzed: 2026-05-24T13:00:00Z route=E note=Re-Design)
+```
+
+User 在 GUI 對 #4.1 點「✓ 通過」後：
+
+```markdown
+- [x] #4.1 [verify:ui] /vending/inventory final-state visual review
+```
+
+`（issue:）` 與 `(claude-analyzed:)` 兩條 annotation 同時被 strip，change 進入下一輪流轉。
+
+## `(awaiting-user-decision: ...)` annotation 細節
+
+> 自主檔 [[manual-review]] § `(awaiting-user-decision: ...)` annotation 移入；Schema 與 Claude 可寫條件仍在主檔。
+
+### Strip semantics
+
+User 在 GUI 對該 item 點 **OK / Issue / Skip** 時，`stripAnnotations` 一併清掉 `(awaiting-user-decision: ...)`（與 `(claude-analyzed:)` 同 — ball 一旦回到 user 動作即失效）。verified-* / claude-discussed annotation 不受此 strip 影響。
+
+### CLI 寫入入口
+
+除手寫外，可用 helper 一鍵寫入並驗證 re-bucket：
+
+```bash
+node vendor/scripts/mark-claude-analyzed.mjs --change <name> [--consumer <id>] --item '#N' \
+     --awaiting-user-decision [--packet <path>]
+```
+
+helper 寫入後用 `listPendingChanges` 重算 bucket，印 `oldBucket → newBucket`（典型 `feedbackGiven → awaitingUserDecision` 或 `awaitArchiveWalkthrough → awaitingUserDecision`）。同一 helper 預設模式（不帶 `--awaiting-user-decision`）寫 `(claude-analyzed: route=E)`（item MUST 已帶 `（issue:）`）。
+
+### Home page 影響
+
+帶 `(awaiting-user-decision:)` 的 item 從 Claude-ball 計數（`userActionPending` / `issued` / `verifyPendingCount` / `discussPendingCount`）排除，計入 `awaitingUserDecisionCount`。當 Claude-ball 全清（無 readiness / evidence missing / 未分析 issue / verify pending / D-only walkthrough）、`userActionPending=0` 且 `awaitingUserDecisionCount>0` → change 落 **`awaitingUserDecision`** bucket。詳見 `vendor/scripts/review-gui.mts` 內 `awaitingUserDecisionCount` field + `reviewBucketForChange` 的 awaitingUserDecision 分支。
+
+## ADR (2026-05-22) — Default Kind Flip 未採用，勿再提案
+
+> 自主檔 [[manual-review]] § Default Kind Derivation Rule 移入。
+
+曾被提出的修案：「把 user-facing fallback default 從 `[review:ui]` 改成 `[verify:ui]`」（理由：`[review:ui]` 是最 strict 的「真的需要人」白名單，silent fallback 到 strict kind 等於把 agent 該做的工作推給 user）。
+
+**未採用**，理由：
+
+1. **Root cause 已被 explicit marker enforcement 取代**：`MISSING_KIND_MARKER` pattern（`patterns.json` v1.4.0）在 propose / ingest 階段透過 hook fail-fast 強制每條 sub-item 標 explicit marker。Fallback 只剩 legacy in-flight item 在用，新 case 不會再進。
+2. **任何 default 都猜不對**：`[review:ui]` / `[verify:ui]` / `[verify:api]` 三種 kind 走不同 review flow，default 選哪個都會在某類內容上錯。改 default 從「猜成 review:ui」變「猜成 verify:ui」，PATCH /api/... 這種 backend roundtrip 還是錯（正解是 `[verify:api]`）。只有 explicit marker 是正解，default 永遠是「猜」。
+3. **會 break legacy review-gui flow**：fallback derived item 從「user 在 GUI 點 OK 過」變成「需 final-state screenshot evidence (`verified-ui` annotation) + 點 OK」，可能在 review-gui 觸發 evidence missing red banner、卡住既有 archive flow。
+4. **review-gui chip 已視覺化**：`hasExplicitKind: false` 的 item 顯示 `(fallback)` amber chip，user 看得到、知道要跑 `/spectra-ingest` 補。漸進清 legacy 即可，不需大爆改。
+
+**Future agent**：看到 missing marker 問題的反射性建議**不該**是「改 default」，應該是「補 explicit marker（或 hook 已擋）」。本 ADR 防止 default flip 提案反覆出現。
+
+## `@evidence-via-manual-review` Marker 細節
+
+> 自主檔 [[manual-review]] § `@evidence-via-manual-review` Marker 移入；Marker 核心 schema（trailing token / 不計 threshold / phase task line only）仍在主檔。
+
+### 解決什麼問題
+
+某些 phase task 的「驗證」clause 寫法依賴 review-gui evidence（典型：「驗證：review-screenshot evidence 覆蓋 …」、「驗證：screenshots 路徑寫入 design-review evidence」、「驗證：`[verify:ui]` evidence 覆蓋 …」）。這類 task 的 `[ ]`/`[x]` 狀態跟 review-gui 互相依賴形成 deadlock：
+
+- phase task 卡 `[ ]`（等 evidence）
+- review-gui 偵測 < 90% threshold → 暫停 manual review
+- manual review 暫停 → 沒法蒐 `[verify:ui]` / `[review:ui]` evidence
+- phase task 永遠卡 `[ ]`
+
+`@evidence-via-manual-review` marker 切開這個循環：bearing marker 的 phase task **不計入** threshold，author 可放心讓它停 `[ ]`，evidence 由對應 `## 人工檢查` items 在 review-gui 階段蒐集。
+
+### Canonical line format
+
+```text
+- [ ] N.M <description>；驗證：<verification clause referencing review-gui evidence> @evidence-via-manual-review
+```
+
+範例：
+
+```markdown
+- [ ] 4.5 完成 design `Responsive / Spatial Spec` 對帳：admin pages desktop + 390px mobile 無文字重疊；驗證：review-screenshot / verify:ui evidence 覆蓋 `/admin/users`、`/admin/groups` @evidence-via-manual-review
+- [ ] 6.6 執行 review-screenshot 視覺 QA，截 admin pages desktop + 390px mobile；驗證：screenshots 路徑寫入 design-review evidence @evidence-via-manual-review
+```
+
+### Marker 與 checkbox 狀態語意
+
+- Marker bearing task 的 `[ ]` / `[x]` 由 author 決定，**不**受 review-gui 強制
+- 通常 author 在 impl 寫完後可直接勾 `[x]`，因為 marker 已宣告「verification 在 manual review，不擋 phase task 完成」
+- 留 `[ ]` 也合法 — 表示「等待 manual review 完成後再回頭勾」
+- Archive gate 是另一道閘門，依 `## 人工檢查` items 完成度判斷，不依 phase task `[x]` 狀態
+
+### 何時該用 marker
+
+寫 phase task 時，「驗證」clause 出現以下任一字眼 **SHOULD** 加 marker：
+
+- `review-screenshot`
+- `[verify:ui]` evidence / screenshot evidence / `verify:ui` 評估
+- `screenshots 路徑寫入 ...`
+- `截圖 ... evidence`
+- `review-gui` / `pnpm review`
+- 任何把 verification responsibility 推到 manual review 階段的 phrasing
+
+### 何時 **不該** 用 marker
+
+- Phase task 驗證可由 `pnpm typecheck` / `pnpm lint` / `rg` static check 完成 → **不要**加 marker（這類 task 本來就 agent-self-verifiable，計入 threshold 才有意義）
+- Phase task 是純 implementation work（寫 endpoint / 抽 composable / 加 schema 欄位）且驗證是 grep static check → **不要**加 marker
+
+### Review-gui 行為
+
+- `countImplementationProgress(content)` 掃 phase task line，bearing marker 的 task 進 `excluded` 計數，不計入 `implTotal` / `implDone`
+- `implTotal` / `implDone` 計算 threshold ratio，bearing marker 的 task 完全不影響
+- Manual review gate 訊息（`Implementation 未完成 ...`）會附帶 `(+ N 項 @evidence-via-manual-review 已排除)` transparency note 讓 user 看到 marker 生效
+
+### Audit trail
+
+Marker bearing task 不寫額外 audit log（與 `@no-manual-review-check` 不同 — 那條因為是 case-by-case bypass 需要 audit）。`@evidence-via-manual-review` 是 design-time decision，author 寫進 tasks.md 時就明說「這條走 manual review」，archive 階段 tasks.md 進 `docs/manual-review-archive.md` 自然保留語意。
+
+### 與其他 marker 共存
+
+`@evidence-via-manual-review` 只用在 **phase task line**（id 是 `N.M` 格式）；不會跟 `## 人工檢查` 用的 `@no-screenshot` / `@no-manual-review-check` / `@followup[TD-NNN]` 撞，因為那些用在 `#N` / `#N.M` items。phase task line 本身不接其他 trailing marker，所以 canonical ordering 簡單：
+
+```text
+- [ ] N.M <description>；<驗證 clause> @evidence-via-manual-review
+```
+
+## `(claude-analyzed:)` / `(awaiting-user-decision:)` Schema 欄位與可寫條件（hard rule）
+
+> 自主檔 [[manual-review]] 對應 annotation 段移入；annotation 格式一行版與「不勾 checkbox」核心規則仍在主檔。
+
+### `(claude-analyzed: <ISO-8601> route=<code>[ note=<...>])` 欄位
+
+- **Half-width parens**（machine annotation，與 `(claude-discussed:)` / `(verified-*:)` 同類）
+- `<ISO-8601>` **required**（UTC，秒級精度，與其他 annotation 共用 timestamp 慣例）
+- `route=<code>` **required**：目前只支援 `E`。Schema 預留為自由 `string` 給未來擴展，但 hard rule 限 `E`
+- `note=<one-liner>` optional：剝半形括號、上限 240 chars、**single hyphen-joined token**（`sanitizeNote` 把 whitespace 折成 `-`；與 `verified-ui` 的 `dom=<obs>` 同 convention，避免解析端 `findKeyValue` whitespace split 只拿到第一個 word）
+- 落點：description 後、所有 trailing markers (`@followup` / `@no-manual-review-check` / `@no-screenshot`) 前
+- 與 `（issue: ...）` co-exist：issue **MUST** 已存在（沒 issue 就不該寫 claude-analyzed）；兩者並存表達「Claude 已分析此 issue，路由結論=等 user 重新評估」
+
+### `(claude-analyzed:)` Claude 可寫條件
+
+- **MUST** 在路由 **(E)** 結論時寫
+- **MUST** 在 item 已帶 `（issue:）` annotation 時才寫
+- **MUST NOT** 翻 checkbox（保留原 `[ ]`，user 在 GUI 點 OK / Issue / Skip 才翻）
+- **MUST NOT** strip 既有 `（issue:）` annotation（兩者語意正交：issue 是 user 回饋，claude-analyzed 是 Claude 分析證跡）
+- **MUST NOT** 在路由 (A) / (B) / (C) / (D) 結論時寫 — 那些情境 user 仍需要 Claude 動作（改 proposal / 開 TD / 改 code / 切 clade session），不是「等 user 重新評估」
+
+### `(awaiting-user-decision: <ISO-8601>[ packet=<path>])` 欄位
+
+- **Half-width parens**（machine annotation，與 `(claude-analyzed:)` 同類）
+- `<ISO-8601>` **required**（UTC，秒級精度）
+- `packet=<path>` optional：decision packet（給 user 拍板的證據 / 摘要）相對路徑。**Single hyphen-joined token**（write 時 `sanitizeNote` 後 whitespace 折成 `-`），與 `verified-ui` 的 `screenshot=<path>` 同 convention
+- 落點：description 後、所有 trailing markers 前
+- **不**要求 item 已帶 `（issue:）`（D-only / review:ui pending 都可標 — 跟 claude-analyzed 的差別）
+
+### `(awaiting-user-decision:)` Claude 可寫條件
+
+- **MUST** 在判定該 item 是純 user 商業決策、且已準備 decision packet 後才寫
+- **MUST NOT** 翻 checkbox（保留原 `[ ]`，user 在 GUI 點 OK / Issue / Skip 才翻）
+- **MUST NOT** 用此 annotation 規避該 item 其實 actionable 的情況 — 若 issue 可走 (A) UX/copy / (B) behavior / (C) spec gap，**MUST** 走那些路徑，不可標 awaiting-user-decision 推給 user
+
+## `@apply-blocked[<reason>]` marker 細節
+
+> 自主檔 [[manual-review]] § `@apply-blocked[<reason>]` marker 移入；marker 核心定義與「解 blocker 後 MUST 移除」仍在主檔。
+
+- 與 `@evidence-via-manual-review` / `@no-screenshot` 同 marker 詞彙，但用在 tasks.md 檔層級（非 `## 人工檢查` item 行）
+- `<reason>` 簡述卡點（如 `等 PM 決策金流串接範圍`）
+- impl 未完成（< 90% threshold）**且**含此 marker → change 從 `applyInProgress` 分到 **`applyBlocked`** bucket（review-gui「⏸ applyBlocked（交還 user）」群），master button 排除
+- 解 blocker 後 **MUST** 移除 marker → change 自動回 `applyInProgress` 繼續
+- 同時**SHOULD** 寫 HANDOFF blocker entry 給 paper trail（marker 是 machine-readable source、HANDOFF 是人讀說明）

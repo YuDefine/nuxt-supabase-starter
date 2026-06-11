@@ -394,6 +394,34 @@ If there is no AskUserQuestion tool available, present options as plain text and
    - Remaining tasks overview
    - Dynamic instruction from CLI
 
+6a. **Residency Classify + Record（機械前置，MUST — 任何 phase dispatch 決策前）**
+
+   Per `agent-routing.md` § Orchestration Residency。Residency 規則上線 6 天 audit 實證：eligible（純非-view + tasks.md 定稿）change 採用率 1/3 — 2 條被主線自做、0 dispatch。「主線自行判斷 residency」已證實不可靠，classify + record 改為機械步驟。**每一條** change 開工都要 classify + record，不是只有看起來像純後端的那條。
+
+   1. **MUST** 跑 classifier 拿 verdict（開工後、動任何 phase 之前）：
+
+      ```bash
+      node ~/offline/clade/vendor/scripts/residency-classify.mjs classify --change openspec/changes/<change>
+      ```
+
+      stdout JSON：`{verdict: "codex-primary" | "claude-primary", phases: [...]}`。
+
+   2. **MUST 立刻** record decision（決定實際 executor 後、第一個 dispatch / 第一個 Edit 之前）：
+
+      ```bash
+      node ~/offline/clade/vendor/scripts/residency-classify.mjs record \
+        --consumer-path . --change <change> \
+        --verdict <classifier verdict> --executor <codex|claude> [--reason <text>]
+      ```
+
+      - verdict=`codex-primary` 而決定 executor=`claude` → `--reason` **必填**（record 入口會擋）
+      - 機械 sweep（無正式 tasks.md，residency 進入條件 B）→ classifier 用不上，直接 `record --verdict codex-primary --executor codex`
+      - Record 落 `<consumer>/.spectra/residency-ledger.jsonl`
+
+   3. **依 verdict 走對應路徑**：verdict=`codex-primary` 且 executor=codex → 走 `agent-routing.md` § Orchestration Residency 的 **change 粒度單次 dispatch + notification-only**，**不要**落到 Step 6b 逐 phase 派工；verdict=`claude-primary`（或帶正當 `--reason` 留主線）→ 續走 Step 6b Phase Dispatch。
+
+   **後果（機械強制，同 Check 7 / E.1 先例）**：`archive-gate.sh` **Check 8** 會機械驗 residency record 存在 — 缺 record → archive 被擋 exit 2。正當例外（user 明確指示主線自做等）在 tasks.md 加 bypass marker `<!-- residency-decision: intentional, reason: ... -->`。
+
 6b. **Phase Dispatch Decision**（per `agent-routing.md`）
 
    Before implementing tasks, decide dispatch model **per phase**（`## N. <phase>` section in tasks.md）:
@@ -657,6 +685,23 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    Baseline 確認存在但**功能性缺**（dev-login route 不接 fixture user UUID / 受測 endpoint 需要 role 不符 / seed identifier 對應不到 dev-login allow-list / curl 401 因 cookie missing 等），主線 / subagent **MUST** 依序嘗試以下 self-collect path，**全部失敗才**寫 `deferred` annotation：
 
+   **(a)(b) 執行者 — 預設派背景 codex**：
+
+   (a)(b) 兩層**預設**派背景 codex 執行，主線不 foreground 自跑：
+
+   ```bash
+   node ~/offline/clade/vendor/scripts/codex-dispatch.mjs \
+     --template ~/offline/clade/vendor/snippets/codex-offload/templates/self-collect-evidence.template.md \
+     --var <key>=<value> ...（依 template 變數表填：change name、dev-login route 路徑、fixture UUID、port、table 等） \
+     --label 8a-self-collect-<change> --effort medium
+   ```
+
+   （背景跑、stdout 單一 JSON evidence；exit 0=ok / 2=(a)(b) 皆業務 fail / 3=機械故障 / 4=quota。exit 2 → 主線依序降到 (c)(d)，**不**重派同一 brief；exit 3/4 → 機械故障，主線 fallback foreground 自跑 (a)(b) 再續 chain。）
+
+   - **(c)(d) 既有路徑不動**：(c) 維持主線自起 dev server + browser-harness；(d) 已走 `codex-dispatch-screenshot-verify.mjs`，**不**改走本 dispatcher
+   - **Evidence annotation 寫回 tasks.md 維持主線**（多 session 共用 working tree 的寫入紀律）— codex 只回報 JSON evidence，**NEVER** 讓 codex 直接 Edit tasks.md
+   - 主線收到 codex JSON evidence 後 **MUST 抽查至少一項**（重跑一條 curl / SELECT 比對回報值）再寫 annotation — **不信 codex 自報**
+
    **(a) 擴 dev-login route allow-list**（首選；最持久的治根）：
 
    - Read consumer 端 `server/routes/auth/_dev-login.get.ts`（或 `__test-login.get.ts`、其他等價 dev-only signin endpoint）
@@ -742,6 +787,11 @@ If there is no AskUserQuestion tool available, present options as plain text and
         - env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 強制退場（debug / 退場用）
         - Dispatcher exit 非 0 **且** stdout 沒印出可 parse 的 JSON 摘要（機械故障，例如 codex auth 失效、subprocess crash）
       - 兩 runtime 走相同的 brief contract（change name、dev server URL、items、Scope）；codex runtime 多了 self-contained guardrails（codex 不會 auto-load `screenshot-review.md`）
+
+      **反 bypass（hard rule — 2026-06-11 audit 實證）**：
+
+      - **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / browser-harness 收 `verify:ui` evidence 來取代本步 dispatcher — 2026-06-11 audit 實證：05-29 dispatcher 修復後 147 條 `(verified-ui:)` annotation **0 次走 codex**、92 個 session 全部走此 bypass 形狀（從未進入本分支）、0 次機械故障 fallback 記錄。需要 `verify:ui` evidence 的**唯一**入口是 `node ~/offline/clade/vendor/scripts/codex-dispatch-screenshot-verify.mjs`
+      - **Claude fallback 僅限機械故障**（`command -v codex` 不存在 / dispatcher exit≠0 且 stdout 無 parseable JSON；env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 為 user 明確設定的 debug 退場，不在此限），且 **MUST** 在 tasks.md 對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡 — **無此痕跡的 Claude 自拍 evidence 視為違規**（audit 以 annotation × dispatcher 記錄比對抓）
 
       共用規約：
 

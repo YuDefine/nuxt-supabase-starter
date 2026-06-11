@@ -124,35 +124,46 @@ fi
 #### 2B.1a Audit
 
 ```bash
-node ~/offline/clade/vendor/scripts/handoff-drift-scan.mjs --json 2>/dev/null
+node ~/offline/clade/vendor/scripts/handoff-scan.mjs --json 2>/dev/null
 ```
 
-讀回的 JSON `handoffHealth` 欄位：
+一次涵蓋三段機械掃描：Health Gate（本 sub-step）+ review-gui readiness（§2B.1.7）+ worktree/stash audit（Step 3）。輸出三個 section（`healthGate` / `reviewGuiReadiness` / `worktreeStash`），每 section 含 `checks`（`{name, status: pass|warn|fail|n/a, detail}`）與 `raw`（原始事實）。**同一次輸出三處共用，不必重跑**；對 status=warn/fail/n/a 的項目做判讀與後續動作。
 
-- `warnings` array 為空 → HANDOFF 健康，跳 2B.1c
-- `warnings` 非空 → **MUST** 進 2B.1b
+本 sub-step 讀 `healthGate` 段：
 
-JSON 範例：
+- `checks` 全部 status=pass → HANDOFF 健康，跳 2B.1c
+- 有 warn / n/a（含 `rotate-plan` 標 `n/a` needs-judgment）→ **MUST** 進 2B.1b
+- 有 fail（scanner 自身炸掉，detail 含原因）→ 對 user 回報卡點，不假裝 audit 已過
+
+JSON 範例（節錄）：
 
 ```json
 {
-  "handoffHealth": {
-    "sizeKb": 64.2,
-    "lines": 707,
-    "thresholds": { "max_kb": 30, "max_lines": 400, "narrative_age_days": 3, "active_age_days": 14 },
-    "sectionStats": [
-      { "title": "...", "kind": "active|baseline|narrative", "date": "2026-05-22", "ageDays": 4, "startLine": 8 }
+  "healthGate": {
+    "checks": [
+      { "name": "handoff-size", "status": "warn", "detail": "64.2 KB (threshold 30 KB)" },
+      { "name": "rotate-plan", "status": "n/a", "detail": "needs-judgment: 2 warning(s) → 進 2B.1b rotate plan ..." }
     ],
-    "warnings": [
-      { "drift": "handoff-size-exceeded", "message": "HANDOFF.md is 64.2 KB ..." }
-    ]
-  }
+    "raw": {
+      "sizeKb": 64.2,
+      "lines": 707,
+      "thresholds": { "max_kb": 30, "max_lines": 400, "narrative_age_days": 3, "active_age_days": 14 },
+      "sectionStats": [
+        { "title": "...", "kind": "active|baseline|narrative", "date": "2026-05-22", "ageDays": 4, "startLine": 8 }
+      ],
+      "warnings": [
+        { "drift": "handoff-size-exceeded", "message": "HANDOFF.md is 64.2 KB ..." }
+      ]
+    }
+  },
+  "reviewGuiReadiness": { "checks": ["..."], "raw": { "counts": {}, "entries": ["..."] } },
+  "worktreeStash": { "checks": ["..."], "raw": { "worktrees": ["..."], "stashes": ["..."], "orphanSidecars": ["..."] } }
 }
 ```
 
 #### 2B.1b Rotate plan（超標時必跑）
 
-依 `sectionStats[].kind` 分組：
+依 `healthGate.raw.sectionStats[].kind` 分組：
 
 | kind | 處置 |
 | --- | --- |
@@ -206,13 +217,15 @@ JSON 範例：
 
 ### 2B.1.7 Review-gui readiness scan（hard rule）
 
-跑 review-gui `--scan` 拿即時 bucket 資訊；outstanding 推薦（§2B.2 / §2B.3 / §2B.4 / §2B.5）**MUST** 引用 scan 結果而非從 `HANDOFF.md` 既有 narrative 或 `tasks.md` leaf count 推測 review-gui bucket 與 ready 狀態。
+讀 §2B.1a 那次 `handoff-scan.mjs --json` 輸出的 `reviewGuiReadiness` 段（script 內部已從 clade home 代跑 headless `review-gui.mts --scan` 並 filter `consumerId` = 當前 consumer，`raw.entries` 即當前 consumer 的 active changes）。本 sub-step 前尚未跑過 scan 時補跑：
 
 ```bash
-cd ~/offline/clade && node vendor/scripts/review-gui.mts --scan 2>/dev/null > "/tmp/review-gui-scan-$$.json"
+node ~/offline/clade/vendor/scripts/handoff-scan.mjs --json 2>/dev/null
 ```
 
-把對應 consumer 的 active changes（filter `consumerId` = 當前 consumer）依 bucket 寫入 `$MAIN_WT_PATH/HANDOFF.md` 新段：
+Outstanding 推薦（§2B.2 / §2B.3 / §2B.4 / §2B.5）**MUST** 引用 scan 結果而非從 `HANDOFF.md` 既有 narrative 或 `tasks.md` leaf count 推測 review-gui bucket 與 ready 狀態。
+
+把 `raw.entries` 依 bucket 寫入 `$MAIN_WT_PATH/HANDOFF.md` 新段：
 
 ```markdown
 ## Review-gui Readiness
@@ -238,17 +251,17 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff Mode B — clade <version> scan_
 
 每跑一次 audit **整段覆寫**（不是 append）— scan 是 snapshot，stale audit content 應該被新 snapshot 替換。
 
-**判定 review-gui readiness 的 SoT**：scan output `output.ready` / `output.notReady` 與 `output.buckets`。tasks.md leaf count / spectra DB `<done>/<total>` 數字 / HANDOFF.md 既有 narrative 都**不是** SoT — 它們是不同維度的真相（leaf count 不解析 evidence annotation / kind marker；spectra DB 不考慮 cross-wt 與 evidence；既有 narrative 是上次 session 的 stale snapshot）。
+**判定 review-gui readiness 的 SoT**：handoff-scan 輸出 `reviewGuiReadiness.raw`（`counts` + `entries[].bucket`；底層即 review-gui `--scan` 的 `ready` / `notReady` / `buckets`）。tasks.md leaf count / spectra DB `<done>/<total>` 數字 / HANDOFF.md 既有 narrative 都**不是** SoT — 它們是不同維度的真相（leaf count 不解析 evidence annotation / kind marker；spectra DB 不考慮 cross-wt 與 evidence；既有 narrative 是上次 session 的 stale snapshot）。
 
 **Mode A 跑時不執行本 sub-step** — Mode A 是「靜默寫入交接」，scan 為 outstanding 推薦服務，Mode A 沒推薦階段。
 
-**scan 失敗 fallback**：
+**scan 失敗 fallback**（`reviewGuiReadiness.checks` 的 `review-gui-scan` check status=fail 時，detail 已含失敗原因 + stderr 前 5 行）：
 
 | 失敗情境 | 處理 |
 | --- | --- |
 | clade home 不存在 / 不可達 | 寫 `## Review-gui Readiness` 段含 `_(scan unavailable: <reason>)_`，並警告主線「outstanding 推薦無 review:ui 即時資訊，請避免推薦 review:ui flow」 |
-| `review-gui.mts` 報 error（type checked node version etc.） | 同上，把 stderr 前 5 行貼進該段 |
-| scan 跑成功但回空 list | 寫 `_(scan returned 0 changes — repo possibly fresh)_` |
+| `review-gui.mts` 報 error（type checked node version etc.） | 同上，把 check detail 內的 stderr 行貼進該段 |
+| scan 跑成功但回空 list（`review-gui-changes` check detail 標 0 changes） | 寫 `_(scan returned 0 changes — repo possibly fresh)_` |
 
 ### 2B.2 盤點剩餘 outstanding
 
@@ -311,8 +324,8 @@ Outstanding（N 條）：
 - 用「block production」「最高優先」包裝其他自治區工作
 - 推薦的 Option 1 不該是「都不做」（除非真的盤點為空）
 - **`mergeBackSafety: ptb-unsafe` wt 不可列為 Option 1 (Recommended)**；可列為 Option 但 label 強制標 `⚠ PTB unsafe`、描述明列 PTB 風險，**禁止**包裝為「最快 deliverable」「safe to land」「ready to merge」這類沒 signal 支撐的斷言
-- 對任何 wt 推薦 next move 時，描述 **MUST** 含 dry-run signal（blocker / uncommitted / baseline ref）— Step 3.1 audit 已記錄，照搬即可
-- **NEVER** 推薦「review:ui」/「ready 區可點 OK」/「最快 deliverable 用 review:ui 收尾」相關 next move 而未先跑 §2B.1.7 review-gui --scan + 引用 `## Review-gui Readiness` 段的 scan 結果。Scan 後 change 落 `feedbackGiven` / `awaitArchiveWalkthrough` / `readyForEvidence` 等 bucket 時，描述 **MUST** 反映該 bucket 的真實 user action（不是「點 OK 收尾」） — 例：`feedbackGiven` 推薦語應為「補 evidence annotation 後 user 在 review GUI 點 OK」、`awaitArchiveWalkthrough` 推薦語應為「跑 `/spectra-archive <change>` 觸發 Step 2.5 walkthrough」
+- 對任何 wt 推薦 next move 時，描述 **MUST** 含 safety signal（blocker / uncommitted / baseline ref）— Step 3.1 audit（handoff-scan `worktreeStash`）已記錄，照搬即可
+- **NEVER** 推薦「review:ui」/「ready 區可點 OK」/「最快 deliverable 用 review:ui 收尾」相關 next move 而未先跑 §2B.1.7 readiness scan（handoff-scan 內含 review-gui `--scan`）+ 引用 `## Review-gui Readiness` 段的 scan 結果。Scan 後 change 落 `feedbackGiven` / `awaitArchiveWalkthrough` / `readyForEvidence` 等 bucket 時，描述 **MUST** 反映該 bucket 的真實 user action（不是「點 OK 收尾」） — 例：`feedbackGiven` 推薦語應為「補 evidence annotation 後 user 在 review GUI 點 OK」、`awaitArchiveWalkthrough` 推薦語應為「跑 `/spectra-archive <change>` 觸發 Step 2.5 walkthrough」
 - **NEVER** 從 `HANDOFF.md` 既有「Outstanding」段、`tasks.md` leaf `[x]` / `[ ]` count、或 `spectra list` CLI 進度數字推測 review-gui bucket 或 ready 狀態 — 三類資料維度都跟 `reviewBucketForChange()` 不同，scan output 才是 SoT
 
 ### 2B.4.5 PTB-unsafe wt 的快速分流（v1.14+）
@@ -369,33 +382,30 @@ User 透過 `request_user_input` 選定下一步 outstanding（含明確的 next
 
 ### 3.1 Worktree audit
 
-```bash
-node "$MAIN_WT_PATH/vendor/scripts/wt-helper.mjs" list --json 2>/dev/null
-git -C "$MAIN_WT_PATH" worktree list --porcelain 2>/dev/null
-```
-
-#### 3.1a 每條 wt 跑 merge-back safety signal（v1.14+ hard rule）
-
-對 wt-helper list 回的每條 `mergedToMain: false` worktree，**MUST** 跑 3 條 signal command 才能判定 kind：
+讀 `handoff-scan.mjs --json` 輸出的 `worktreeStash` 段（Mode B 在 §2B.1a 已跑過 → 直接共用該輸出；Mode A 沒經過 2B.1 → 在此跑）：
 
 ```bash
-# blocker count（dry-run merge-back 偵測 main blockers）
-BLOCKERS=$(node "$MAIN_WT_PATH/vendor/scripts/wt-helper.mjs" merge-back <slug> --dry-run 2>&1 | grep -cE "blocked|conflict")
-
-# uncommitted count（wt working tree + staged）
-UNCOMMITTED=$(git -C <wt-path> status --porcelain 2>/dev/null | wc -l | tr -d ' ')
-
-# pinned baseline ref present?
-BASELINE_REF=$(git -C "$MAIN_WT_PATH" for-each-ref "refs/wt-baseline/<slug>/" --format='%(refname)' 2>/dev/null | head -1)
+node ~/offline/clade/vendor/scripts/handoff-scan.mjs --json 2>/dev/null
 ```
 
-由這 3 條 signal 推導 `mergeBackSafety`：
+`worktreeStash.raw.worktrees[]` 每條已含 wt-helper list 欄位（`slug` / `branch` / `path` / `daysOld` / `mergedToMain`）+ kind 判定（`kind` / `nextStep`）；script 另掃 `git worktree list --porcelain`，非 `session/*` branch 的 worktree 列進 `raw.unmanagedWorktrees`。
+
+#### 3.1a 每條 wt 的 merge-back safety signal（v1.14+ hard rule）
+
+對每條 `mergedToMain: false` worktree，script 已以**純讀**方式蒐集 3 條 signal（不跑 `merge-back --dry-run` — 該入口會清 index.lock 屬寫入；blockers 改用等價唯讀邏輯：branch diff files ∩ main dirty paths，即 wt-helper `detectMergeBlockers` 演算法）：
+
+- `blockers` — main 端會被 merge-back 踩到的檔案數
+- `uncommitted` — wt working tree + staged 的 dirty 行數
+- `baselineRef` — `refs/wt-baseline/<slug>/` pinned ref（無則 null）
+
+並由 3 條 signal 推導 `mergeBackSafety`（判讀與處置仍照下表）：
 
 | 條件 | mergeBackSafety | 對應動作 |
 | --- | --- | --- |
-| `BLOCKERS == 0` + `UNCOMMITTED == 0` | `landable` | safe to merge-back |
-| `BLOCKERS > 0` 或 `UNCOMMITTED > 0`，且 `BASELINE_REF` 存在 | `ptb-recoverable` | merge-back / rescue path 都 OK（pinned ref 是救援保險絲） |
-| `BLOCKERS > 0` 或 `UNCOMMITTED ≥ 100`，且 `BASELINE_REF` 不存在 | `ptb-unsafe` | **禁止 dispatch /spectra-archive**；走 Step 2B.4.5 PTB-unsafe 快速分流 |
+| `blockers == 0` + `uncommitted == 0` | `landable` | safe to merge-back |
+| `blockers > 0` 或 `uncommitted > 0`，且 `baselineRef` 存在 | `ptb-recoverable` | merge-back / rescue path 都 OK（pinned ref 是救援保險絲） |
+| `blockers > 0` 或 `uncommitted ≥ 100`，且 `baselineRef` 不存在 | `ptb-unsafe` | **禁止 dispatch /spectra-archive**；走 Step 2B.4.5 PTB-unsafe 快速分流 |
+| 表未覆蓋區（`blockers == 0`、`uncommitted` 1–99、無 `baselineRef`） | `unclassified`（check 標 `n/a` needs-judgment） | LLM 看 `raw.worktrees[]` 的 signal 自行判讀（小量 WIP 通常先 commit 進 wt 再 merge-back） |
 
 #### 3.1b Kind 判定表（與 mergeBackSafety 正交）
 
@@ -407,24 +417,24 @@ BASELINE_REF=$(git -C "$MAIN_WT_PATH" for-each-ref "refs/wt-baseline/<slug>/" --
 | `mergedToMain: false` + change 仍 active + `daysOld <= 7` | `active-fresh` | `keep` — 在用中；若需 land 仍依 mergeBackSafety 分流 |
 | `mergedToMain: false` + `openspec/changes/<slug>/` 跟 `archive/<slug>/` 都不在 | `orphan` | `verify-then-cleanup` — 孤兒 worktree，`git log <branch>` 檢視內容再決定 cleanup |
 
-額外掃 `git worktree list --porcelain`：若有 linked worktree 不在 wt-helper list 結果裡（即不在 `~/offline/<consumer>-wt/<slug>/` 規約路徑），加 `unmanaged` 條目 → `manual review`（非規約 worktree，user 自管，audit 只記不建議動）。
+script 已額外掃 `git worktree list --porcelain`：linked worktree 不在 wt-helper list 結果裡（即不在 `~/offline/<consumer>-wt/<slug>/` 規約路徑）→ 列進 `raw.unmanagedWorktrees`，對應 check 標 `n/a` → `manual review`（非規約 worktree，user 自管，audit 只記不建議動）。
 
 audit 寫進 HANDOFF.md 時每條 wt 後綴 `(mergeBackSafety: <landable|ptb-recoverable|ptb-unsafe>, blockers=N, uncommitted=K, baselineRef=<yes|no>)`，讓下次 /handoff 不用重跑 signal 就看得到 ground truth。
 
 ### 3.2 Stash audit
 
-```bash
-node "$MAIN_WT_PATH/vendor/scripts/stash-reconcile.mjs" --include-all --json 2>/dev/null
-```
+讀同一次 handoff-scan 輸出的 `worktreeStash.raw.stashes[]`（script 內部代跑 `stash-reconcile.mjs --include-all --json`，並對 `.spectra/stash-meta-*.json` sidecar 做雙向比對）。
 
-對 `entries[*]` **每一筆**寫入 audit 段（不再過濾 archived-only 或 stale>7d；user 要求「所有 stash 都有狀況與下一步建議」）：
+對 `raw.stashes[*]` **每一筆**寫入 audit 段（不過濾 archived-only 或 stale>7d；user 要求「所有 stash 都有狀況與下一步建議」）：
 - ref（`stash@{N}`）
-- kind（`namespace.kind`，無 namespace 時為 `unknown`）
-- slug（`namespace.slug` 或 `(unknown)`）
-- 下一步建議（`recommendation.action` — `apply` / `view diff first` / `drop` / `manual review`）
-- 理由（`recommendation.reason`）
+- kind（無 namespace 時為 `unknown`）
+- slug（無則 `(unknown)`）
+- 下一步建議（`action` — `apply` / `view-diff` / `drop` / `manual review`；`apply` / `drop` 的 check 標 warn，其餘標 `n/a` needs-judgment）
+- 理由（`reason`；無 sidecar 的 stash detail 已標 owner unknown）
 
-若 `stash-reconcile` 回傳 `{ "entries": [] }`，audit 段 stash 子節寫 `No stashes.`（仍保留節標題）。
+`raw.orphanSidecars[*]`（sidecar 在、stash 不在 = stale metadata）也逐筆寫入 stash 子節（check 已標 warn + 可刪指令）。
+
+若 `raw.stashes` 為空，audit 段 stash 子節寫 `No stashes.`（仍保留節標題）。
 
 ### 3.3 寫入 HANDOFF.md
 
