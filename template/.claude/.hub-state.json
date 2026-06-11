@@ -1,6 +1,7 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
   "syncedAt": "2026-06-11T04:48:32.602Z",
+  "rulesProjection": "copy",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "73f6756b4ec42435",
     "rules/agent-routing.md": "561d9fda75bc8955",
