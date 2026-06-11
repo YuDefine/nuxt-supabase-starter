@@ -500,20 +500,54 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
 
    (silent fail-safe if helper / sidecar missing.)
 
-7.5. **Reconcile stale stash (clade fork; not in upstream spectra)**
+7.5. **Auto-reconcile merge-back stash (clade fork; auto-善後 — no tail)**
 
-   After successful archive, the change directory has moved to `openspec/changes/archive/<change-name>/`. `stash-reconcile.mjs` will now mark any stash matching this slug as **stale** via `isArchivedChange()` — housekeeping moment to drop stash entries that exist solely because this change was active.
+   merge-back (`--auto-stash`, Step 0) sets aside main's pre-merge dirty as `wt-merge-block/<change>/...` so the squash can land cleanly. **This is main's OWN work, NOT stale change residue** — typically HANDOFF entries from parallel sessions, ROADMAP/spec regen, telemetry appends. It **MUST be restored** to main's working tree (so it lands with the user's eventual `/commit`); the archive **auto-善後** it here and **NEVER leaves a stash tail for the user** (the only exception is a genuine per-file divergence, which is surfaced, not buried).
 
-   - Run: `node scripts/stash-reconcile.mjs --slug "<change-name>" --json`
-   - Parse stdout JSON. If `entries.length === 0`, continue silently to Step 8 (note `Reconcile: 0 entries` in summary).
-   - If hits: print summary `⚠ Archive cleanup: N stash entries for archived slug '<change>'`, then use **request_user_input**:
-     - **Show full report** — print each entry's `ref`, `namespace.kind`, `createdAt`, file list, and `recommendation.action`/`recommendation.reason` (recommendation will typically be `drop` for archived-slug entries, or `view-diff` for unknown shapes); then re-ask
-     - **Drop stale** — for every entry where `recommendation.action === "drop"`, run `git stash drop <ref>`. Safety: ONLY drop entries the script explicitly flagged as `drop`; never blanket-drop based on slug match alone.
-     - **Per-entry prompt** — for each entry, ask `drop / view-diff / keep` individually (use request_user_input per entry)
-     - **Keep all** — leave stash untouched (default when uncertain)
-   - **Skip condition**: same `--no-reconcile` semantics as spectra-apply / spectra-verify; if skipped, note in Step 8 summary `Reconcile: skipped (user --no-reconcile)`.
-   - **Failure handling**: script error → print error but do NOT fail the archive. The change is already archived; reconcile is best-effort cleanup. Note in Step 8 summary: `Reconcile: failed — see error above`.
-   - **Note in Step 8 summary**: append `Reconcile: N entries dropped` / `Reconcile: N entries kept` / `Reconcile: 0 entries` / `Reconcile: skipped` / `Reconcile: failed` according to outcome.
+   > **NEVER blanket-drop a `wt-merge-block` stash.** Proven incident (2026-06-11): a `wt-merge-block` stash held a *parallel session's* `receiving-material-map` HANDOFF entry (blocked-status handoff for another in-flight change); the old "drop archived-slug" guidance would have destroyed it. `wt-merge-block` = main's blockers, not change residue. (`stash-reconcile.mjs` itself already recommends `apply` for clean merge-block entries — the old request_user_input+keep default was the bug, not the script.)
+
+   ```bash
+   node scripts/stash-reconcile.mjs --slug "<change-name>" --json
+   ```
+
+   Parse JSON `entries`. If empty → `Reconcile: 0 entries`, proceed. For each entry, branch on `namespace.kind` (main thread runs the git ops directly — **no request_user_input** in the common path):
+
+   - **`wt-merge-block`** → **auto-restore per-file**:
+
+     ```bash
+     REF="<entry.ref e.g. stash@{0}>"
+     # archive already produced the authoritative version of these → keep current, do NOT restore the stale stash copy
+     REGEN_RE='^(openspec/ROADMAP\.md|openspec/specs/)'
+     surfaced=()
+     for f in $(git stash show --include-untracked --name-only "$REF"); do
+       echo "$f" | grep -qE "$REGEN_RE" && continue   # keep current post-archive version
+       # restore only when main has NOT independently changed f since the stash
+       # (current working file === stash base → no divergence → safe to restore stash content)
+       if diff -q <(git show "$REF^1:$f" 2>/dev/null) "$f" >/dev/null 2>&1; then
+         git checkout "$REF" -- "$f"                  # restore main's set-aside work
+       else
+         surfaced+=("$f")                             # diverged since stash — do NOT auto-overwrite
+       fi
+     done
+     if [ ${#surfaced[@]} -eq 0 ]; then
+       git stash drop "$REF"                          # fully reconciled — no tail
+     fi   # else: keep stash, report surfaced[] for manual handling (rare)
+     ```
+
+     Report `Reconcile: restored N file(s) from merge-block, dropped stash` (or, if surfaced) `Reconcile: M file(s) diverged — stash kept, see <list>`.
+
+   - **`wt-baseline` / `wt-final-baseline`** → pre-fork pin, stale post-archive (content pinned as `refs/wt-baseline/...`): `git stash drop <entry.ref>`. Report `Reconcile: dropped baseline pin`.
+
+   - **other / unknown kind** → do NOT auto-touch; print `ref` + file list, note `Reconcile: 1 unknown-shape entry kept (manual)`.
+
+   **Restrictions**:
+   - **NEVER** drop a `wt-merge-block` stash without first restoring its non-regenerated files — that loses main's real work (e.g. parallel-session HANDOFF entries).
+   - **NEVER** auto-overwrite a file that diverged from the stash base (`surfaced[]`) — surface it instead; this is the *only* path that leaves a tail, and it is warranted (a genuine conflict needs human eyes).
+   - **NEVER** restore archive-regenerated paths (`openspec/ROADMAP.md`, `openspec/specs/**`) from the stash — the archive's freshly-applied version is authoritative; the stash holds the pre-archive snapshot, which would revert the archive.
+   - **NEVER** fall back to request_user_input + "keep all" for a clean `wt-merge-block` entry — that is the old tail-leaving behavior this step replaces.
+   - **Skip condition**: `--no-reconcile` → note `Reconcile: skipped (user --no-reconcile)`.
+   - **Failure handling**: any git op error → do NOT fail the archive (already done); note `Reconcile: failed — see error above` + leave the stash intact for the user.
+   - **Note in Step 8 summary**: `Reconcile: restored N / dropped` / `Reconcile: M diverged — stash kept` / `Reconcile: dropped baseline pin` / `Reconcile: 0 entries` / `Reconcile: skipped` / `Reconcile: failed`.
 
    **Sidecar advance (TD-155)** — after stash reconcile completes (any outcome), advance to final phase:
 
