@@ -15,11 +15,13 @@ applies-to: post-scaffold
 | Component | Vitest + `@nuxt/test-utils`                | `test/nuxt/**/*.nuxt.test.ts` | Nuxt runtime     | 1–3s              |
 | E2E       | Playwright (`@nuxt/test-utils/playwright`) | `e2e/**/*.spec.ts`            | 真實 Nuxt build  | 5–30s             |
 
-跑法：
+Unit 與 Component 兩層由 `vitest.config.ts` 切成兩個 Vitest project（`unit` 跑 Node、`nuxt` 跑 `@nuxt/test-utils` Nuxt runtime）。跑法：
 
-- `pnpm test`：整套（unit + component；E2E 走 `pnpm test:e2e`）
-- `pnpm test:unit`：只跑 `test/unit/`，最快回饋
+- `pnpm test`：整套（`unit` + `nuxt` 兩個 project；E2E 走 `pnpm test:e2e`）
+- `pnpm test:unit`：只跑 `unit` project（`--project=unit`），最快回饋
+- `pnpm test:nuxt`：只跑 `nuxt`（Component）project（`--project=nuxt`）
 - `pnpm test:e2e`：Playwright 端對端
+- `pnpm test:file <path>`：跑單一檔案，Vitest 依 project `include` 自動路由（**不要**用 `pnpm test:unit -- <path>`，跨 project 會被靜默過濾）
 
 ## 決策樹：寫測試前先回答兩個問題
 
