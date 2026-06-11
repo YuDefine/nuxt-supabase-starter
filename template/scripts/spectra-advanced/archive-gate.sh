@@ -21,6 +21,12 @@
 #            ledger before archive. Mechanical backstop so the soft self-record
 #            step actually fires (it landed 0 rows in 9 days of soak); fail-open
 #            when the ledger file is absent (pre-propagation / no soak history).
+#   Check 8: Residency Decision Presence — an Orchestration Residency decision
+#            (codex-primary vs claude-primary, agent-routing § Orchestration
+#            Residency) must be recorded to the residency ledger before archive.
+#            Mechanical backstop for the soft classify-before-apply step
+#            (adoption audit: 1/3 fire rate); fail-open when the ledger file is
+#            absent (gradual onset).
 #
 # Precondition (per worktree-default.md §5.5 atomic landing): spectra-archive
 # Step 0 MUST run `wt-helper merge-back <change-name>` first so any session
@@ -43,7 +49,7 @@
 #                 would block the very skill that populates the annotation
 #                 (chicken-and-egg). Post-walkthrough validation runs the
 #                 gate again without this flag at SKILL.md Step 5.5.
-#                 Checks 1/2/3/5/6/7 (real pre-conditions) always run.
+#                 Checks 1/2/3/5/6/7/8 (real pre-conditions) always run.
 #
 # Exit:
 #   0 = pass
@@ -676,6 +682,47 @@ spectra-apply Step 8a.6 的 5-dimension self-analysis verdict 從未落到 ledge
        --status <pass|fail> --findings-json '[...]'
   2. backend-only / 無 pre-handoff 適用情境 → 加
      <!-- pre-handoff-verdict: intentional, reason: ... --> 到 tasks.md 繞過")
+  fi
+fi
+
+# --- Check 8: Residency Decision Presence ---
+# Mechanical backstop for the Orchestration Residency decision (agent-routing
+# § Orchestration Residency: classify the change codex-primary vs claude-primary
+# BEFORE spectra-apply dispatches). The soft step is agent-self-fired and the
+# adoption audit measured a 1/3 fire rate, so this gate makes "a residency
+# decision was recorded" a mechanical precondition of archive. The ledger is
+# written by residency-classify.mjs `record` to the MAIN consumer root's
+# .spectra/ (worktree cwd normalized via git-common-dir); archive-gate runs
+# post-merge-back from that same main root, so $REPO_ROOT/.spectra is the exact
+# read path. Records are single-line JSON with fixed field order
+# ("change":"X"..."verdict":"..."), so an ordered two-literal grep is exact.
+# Fail-open when the ledger file is absent (pre-propagation consumer / gradual
+# onset) so a freshly-propagated gate never flag-day-blocks.
+RESIDENCY_LEDGER="$REPO_ROOT/.spectra/residency-ledger.jsonl"
+if [ ! -f "$RESIDENCY_LEDGER" ]; then
+  echo "[UX Gate] warn — residency ledger 不存在 ($RESIDENCY_LEDGER)；跳過 Check 8 (fail-open，gradual onset)。" >&2
+else
+  BYPASS_RESIDENCY=$(sux_count_marker "$TASKS_FILE" 'residency-decision: intentional')
+  # Escape regex metachars in the change name before embedding in the grep pattern.
+  ESC_CHANGE_RES=$(printf '%s' "$CHANGE_NAME" | sed 's/[][\\.*^$()|?+{}/]/\\&/g')
+  RES_PATTERN="\"change\":\"${ESC_CHANGE_RES}\".*\"verdict\""
+  if [ "$BYPASS_RESIDENCY" -eq 0 ] && ! grep -qE "$RES_PATTERN" "$RESIDENCY_LEDGER" 2>/dev/null; then
+    BLOCKED=true
+    MESSAGES+=("[UX Gate] Residency Decision Presence 未通過 — 找不到 change '$CHANGE_NAME' 的 residency decision record。
+
+Orchestration Residency 判定（codex-primary vs claude-primary）從未落到 ledger
+（${RESIDENCY_LEDGER}）。沒有 record → residency adoption 無資料 → enforcement 無法評估。
+
+補救（擇一）：
+  1. 跑 classifier 取得 verdict，然後記錄決策：
+     node <clade-vendor>/scripts/residency-classify.mjs classify \\
+       --change openspec/changes/$CHANGE_NAME
+     node <clade-vendor>/scripts/residency-classify.mjs record \\
+       --consumer-path . --change $CHANGE_NAME \\
+       --verdict <codex-primary|claude-primary> --executor <codex|claude> \\
+       [--reason <verdict 與 executor 不一致時必填>]
+  2. 不適用 residency 判定的情境 → 加
+     <!-- residency-decision: intentional, reason: ... --> 到 tasks.md 繞過")
   fi
 fi
 

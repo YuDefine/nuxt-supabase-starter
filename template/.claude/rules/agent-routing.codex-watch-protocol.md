@@ -179,6 +179,42 @@ Commit 完直接停手回報，**NEVER** 自己跑下一 phase。主線會在 co
 - `codex review --uncommitted` 與 WebSearch 不寫檔，本節不適用
 - 對 `claude` type subagent（如 `/spectra-ingest` 在 /wt 內派出的 wt subagent）規約相同（`🧹 chore: wt …` 前綴 + selective stage + self-check + hook 必跑），per worktree-default.md §5
 
+## 泛用 Dispatcher（codex-dispatch.mjs）
+
+**定位**：對已有 cookbook template 的派工場景，用 `~/offline/clade/vendor/scripts/codex-dispatch.mjs` 取代手組 prompt — 它把上面標準流程的固定成分（marker / flag 組 / stdin 餵 prompt / 無 pipe redirect / last-message JSON 解析）機械化成一個 node 呼叫，並內建手組 prompt 沒有的 quota check 與 telemetry。**template 已覆蓋的場景一律走 dispatcher；手寫 prompt 僅限 template 未覆蓋的新場景**（寫完若會重複用，回 clade 補 template）。
+
+```bash
+node ~/offline/clade/vendor/scripts/codex-dispatch.mjs \
+  --template ~/offline/clade/vendor/snippets/codex-offload/templates/<name>.template.md \
+  --var task='...' --var acceptance='...' --var git_baseline="$(git status --porcelain | head -20)" \
+  --var allowed_paths='...' \
+  --label <topic-slug> --effort <low|medium|high|xhigh> [--cwd <dir>] [--budget <分鐘>] \
+  [--output-schema <schema.json>]
+```
+
+**Template registry**（對照表與各 template 的必填 var 見 `~/offline/clade/vendor/snippets/codex-offload/README.md`）：
+
+| Template | 場景 | 建議 effort |
+| --- | --- | --- |
+| `fanout-collect` | mechanical 收集 / 掃描 / 驗證型 fan-out（取代 Claude subagent fan-out） | medium |
+| `read-heavy-scan` | 長文件 / fleet 多 repo 掃描摘要 | medium |
+| `debug-evidence` | debug 拆段：log capture / repro / hypothesis 驗證矩陣 | high |
+| `fix-verify-loop` | commit 0-C：跑 check → 機械修 → loop 到全綠 | high |
+| `self-collect-evidence` | spectra-apply Step 8a (a)(b)：dev-login allow-list + DB query evidence | medium |
+
+**Exit code 契約**（caller 必須分流，不可一律 fallback）：
+
+- `0` — 跑完且 result 可解析：讀 stdout JSON 的 `result` 續流程
+- `2` — codex 跑完但業務 fail（`result.status === 'fail'`）：**NEVER** 換 Claude 重做同 brief（同 brief 同樣會撞）、**NEVER** 原樣重派；依 result 內容決定修補或上報
+- `3` — 機械故障（codex 不存在 / spawn error / timeout / 無 parseable JSON）：唯一允許 Claude fallback 的情形，且 MUST 留下可審計痕跡（per 各 skill 對應段）
+- `4` — quota 擋（5h window primary used_percent > 85）：非急件延後到下一個 window；急件 `AskUserQuestion` 讓 user 拍板（`--no-quota-check` 強派）
+
+**內建行為**：`--ephemeral --disable memories`（memories 91MB 死循環地雷，恆關）、quota check（預設開）、telemetry append 到 `~/.codex/dispatch-ledger.jsonl`（fail-open；`scripts/audit-codex-adoption.mjs` 靠它量 adoption）。
+
+**`--output-schema`**：codex 0.138+ 支援以 JSON Schema 約束最終回覆。新 dispatch 場景**預設提供 schema 檔**，取代脆弱的「stdout 結尾 JSON 摘要」約定；既有 dispatcher（screenshot-verify / pre-handoff-check）維持現行契約不回頭改。
+
+**Watch**：dispatcher 屬「主線直接 Bash 派」路徑 → notification-only + 單一 ScheduleWakeup(1500-1800) 安全網（見下方 § 監看排程），**禁止** 180s 短輪詢。
+
 ## Codex Watch Protocol（防止主線乾等與卡住盲區）
 
 **核心命題**：派出 codex 後**主線不能單純等 `<task-notification>`**。codex 中途可能 `fetch failed`、sandbox 拒絕、互動 prompt、或長時間靜默；若沒有監看，主線完全不知道進度，使用者也只能空等。

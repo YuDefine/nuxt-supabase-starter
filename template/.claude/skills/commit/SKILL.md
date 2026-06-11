@@ -597,9 +597,34 @@ pnpm doctor
 
 Doctor 報出 blockers / errors / warnings → **必須**修復後重跑直到 health score 100/100 + 0 warnings。典型修法：移除 dead imports、修正 re-export 路徑、打斷 import cycles。
 
-失敗時進入 loop：修復 → `pnpm format`（裸打 `vp fmt` 必須加 `--ignore-path .oxfmtignore`） → 重跑上述步驟 → 直到全綠。
+失敗時進入 loop：修復 → `pnpm format`（裸打 `vp fmt` 必須加 `--ignore-path .oxfmtignore`） → 重跑上述步驟 → 直到全綠。loop 的執行者依下方「fix loop 的 codex offload」規則決定（**預設背景 codex**；例外才主線直修）。
 
 > ⚠️ **oxfmt batched false-positive**（vite-plus 0.1.21 已知 bug）：第一次 `pnpm format:check` 紅但 single-file `vp fmt --check <path>` 通過，是 batched bug 不是 format issue — **先**跑一次 `pnpm format`（vp fmt --write）再重跑 check 通常就過。**NEVER** 動 `.oxfmtignore` 或 LOCKED projection（`.claude/rules/` / `AGENTS.md` / `CLAUDE.md` / spectra change markdown）試圖讓 oxfmt 滿意 — 那是 governance violation。clade 中央倉 release flow 已在 `scripts/publish.mjs` 主流程加 stable fmt pre-stage（兩輪 `vp fmt --write` + `vp fmt --check`），consumer 端 commit 流程不需再背 workaround SOP。詳見 `docs/pitfalls/2026-05-18-oxfmt-batched-check-false-positive.md`。
+
+**Fix loop 的 codex offload（預設派背景 codex，主線不留在 foreground 修）**：
+
+0-C 檢查發現失敗需要修補時，**預設**派背景 codex 跑 fix-verify loop，主線同回合繼續既有並行收尾（poll 軸 A、回收軸 B）— 三軸並行結構不變，軸 C 只是從「主線 foreground 修」換成「codex 背景修」：
+
+```bash
+node ~/offline/clade/vendor/scripts/codex-dispatch.mjs \
+  --template ~/offline/clade/vendor/snippets/codex-offload/templates/fix-verify-loop.template.md \
+  --var <key>=<value> ...（依 template 變數表填：check 命令、失敗摘要 / log 等） \
+  --label commit-0c-<slug> --effort high
+```
+
+（背景跑、stdout 單一 JSON；exit 0=全綠 / 2=修不到全綠（業務 fail）/ 3=機械故障 / 4=quota。exit 3/4 → 主線 fallback foreground 自跑 fix loop；exit 2 → 失敗摘要回主線判斷，**不**重派同一 brief。）
+
+**4.8-aware 範圍明寫**：**每一輪** 0-C 失敗都先做 dispatch 評估（含匯合修正 / 大改動回扣後重跑 0-C 又紅的輪次），不是只有第一輪。
+
+**例外（主線直修，不派）**：
+
+1. trivial 單點修 — 單檔 ≤5 行、typo / import 級
+2. 失敗根因明顯涉及本次 commit 的設計判斷（修法本身要決策）— codex 只能猜，主線自修
+
+**codex 完工後主線 MUST**：
+
+1. 重跑 `pnpm check`（+ 條件觸發的 `pnpm test` / `pnpm doctor`）確認全綠 — **不信 codex 自報**
+2. `git diff` 確認 codex 改動 scope 只在修錯相關檔；scope 外 substantive change → revert 該段改動 + 主線自修（注意 working tree 含本次 commit 的 uncommitted 變更，**NEVER** `git checkout HEAD -- <file>` 整檔回退 — 會把本次 commit 的原始變更一起砍掉；用 Edit 撤掉 codex 引入的段落即可）
 
 **禁止**用 `npx vitest run` / `npx eslint` 等個別工具替代 `pnpm check` / `pnpm test` / `pnpm doctor`。若 `.claude/worktrees/` 干擾結果，先清理再跑。
 
