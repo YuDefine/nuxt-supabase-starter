@@ -151,19 +151,22 @@ if [ "${#ALL_MIGS_ARR[@]}" -gt 0 ]; then
   done
 
   if [ "$HAS_ENUM_OR_COL" = true ]; then
-    TYPES_MATCH=$(echo "$MIG_TOUCHED" | grep -cE "^${SUX_TYPES_PRIMARY}/.*\.ts$" || true)
+    # TD-190: 用 SUX_TYPES_DIRS_RE（含 monorepo packages/*/shared/{types,schemas}
+    # 加廣路徑）比對，不只 repo-root 的 SUX_TYPES_PRIMARY — monorepo consumer 的
+    # types 同步在 packages/ 下時不該 false positive。
+    TYPES_MATCH=$(echo "$MIG_TOUCHED" | grep -cE "^(${SUX_TYPES_DIRS_RE})/.*\.ts$" || true)
     TYPES_MATCH=${TYPES_MATCH:-0}
     BYPASS_DRIFT=$(sux_count_marker "$TASKS_FILE" 'schema-drift: intentional')
 
     if [ "$TYPES_MATCH" -eq 0 ] && [ "$BYPASS_DRIFT" -eq 0 ]; then
       BLOCKED=true
-      MESSAGES+=("[UX Gate] Schema-Types Drift 未通過 — migration 新增了欄位/enum，但 ${SUX_TYPES_PRIMARY}/ 沒同步更新。
+      MESSAGES+=("[UX Gate] Schema-Types Drift 未通過 — migration 新增了欄位/enum，但 types 目錄（${SUX_TYPES_DIRS}）沒同步更新。
 
 涉及的 migration：
 $(printf '  - %s\n' "${ALL_MIGS_ARR[@]}")
 
 選項：
-  1. 同步更新 ${SUX_TYPES_PRIMARY}/*.ts 對應的 enum / schema / interface
+  1. 同步更新 types 目錄（${SUX_TYPES_DIRS}）內對應的 enum / schema / interface
   2. 純 DB 操作不需 app 層變動 → 加 <!-- schema-drift: intentional, reason: ... --> 到 tasks.md")
     fi
   fi
