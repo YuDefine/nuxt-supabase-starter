@@ -557,6 +557,19 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
 
    (silent fail-safe if helper / sidecar missing.)
 
+7.7. **Notion ticket status — ensure 進行中 + surface pending 驗收中**（clade fork addition — per [[spectra-notion-coupling]]）
+
+   **Skip-condition**（任一成立即 silent skip）：consumer-meta `notion.ticketWorkflow !== true`；或本 change 的 `proposal.md`（已搬到 `openspec/changes/archive/<date>-<name>/proposal.md`）頂部無 `> **Notion ticket**:` 連結。不適用時**不要**硬湊 ticket。
+
+   兩條件都成立時，**MUST**：
+
+   1. 抓 ticket `page_id`（proposal.md 頂部）+ consumer-meta `notion.dataSourceId`。
+   2. `notion-fetch collection://<dataSourceId>` 重撈 schema 校對 property key（中文 + 全形空格 + `>=`，憑記憶必錯）。
+   3. **Ensure 進行中**：ticket 若還停在 `未開始` / `需確認` → 補轉 `→ 進行中`（per `~/.claude/skills/_notion-tdms-board/REFERENCE.md §3`）。
+   4. **Pending 驗收中**：archive 是 bookkeeping，**此刻尚無本次發版 git tag**（標準順序「先 archive 再 `/commit`」，tag 在 `/commit` Step 5 才生）→ **NEVER 在此推 `驗收中`**；改在 Step 8 summary 明文列 pending 動作（見下），由緊接的 `/commit` 發版後**同一主線**完成 `進行中 → 驗收中` + 填 `修復版本 >= <tag>`。
+
+   **NEVER** 在 archive 當下標 `驗收中`（無 tag）或填 `修復版本 >=`。**NEVER** 碰客戶側轉移（`驗收中→完成` 等）或 `發布日期` / `驗收日期` / `名稱` / `驗收完成` 欄位。
+
 8. **Display summary**
 
    Show archive completion summary including:
@@ -565,6 +578,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    - Archive location
    - Spec sync status (synced / sync skipped / no delta specs)
    - Note about any warnings (incomplete artifacts/tasks)
+   - **Notion ticket pending**（only when Step 7.7 applied — consumer-meta `notion.ticketWorkflow` + change 有連結）：一行明文 `📌 Notion ticket <page_id>：已 ensure 進行中；待 /commit 發版產 git tag 後 → 轉 驗收中 + 填 修復版本 >= <tag>（同一主線跑完 /commit 立即執行，NEVER 留到下次想起來）`（per [[spectra-notion-coupling]]）
 
    **Sidecar cleanup (TD-155)** — after the summary is displayed (archive considered complete from the user's perspective), delete the sidecar:
 

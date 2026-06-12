@@ -656,6 +656,20 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    Confirm `state: "all_done"`. If not, review remaining tasks and complete them.
 
+8.5. **Notion ticket status sync — 進行中**（clade fork addition — per [[spectra-notion-coupling]]）
+
+   **Skip-condition**（任一成立即 silent skip）：consumer-meta `notion.ticketWorkflow !== true`；或本 change 的 `proposal.md` 頂部無 `> **Notion ticket**:` 連結。不適用時**不要**硬湊 ticket。
+
+   兩條件都成立時，**MUST**（impl 已 all_done = `/spectra-apply` 真的開工過，符合 REFERENCE.md §3 `→ 進行中` 觸發）：
+
+   1. 從 `proposal.md` 頂部抓 ticket `page_id`，從 consumer-meta `notion.dataSourceId` 抓 data source。
+   2. `notion-fetch collection://<dataSourceId>` 重撈 schema 校對 property key（中文 + 全形空格 + `>=`，憑記憶必錯）。
+   3. 確認該 change 有 active claim（per [[work-claims]]）。
+   4. ticket 狀態若停在 `未開始` / `需確認` → 依 `~/.claude/skills/_notion-tdms-board/REFERENCE.md §3` 授權表推 `→ 進行中`；已是 `進行中` / `驗收中` → no-op。
+
+   - **NEVER** 在此推 `驗收中`（需 git tag，archive → `/commit` 發版後才有；見 spectra-archive Step 8 + [[spectra-notion-coupling]]）。
+   - **NEVER** 碰客戶側轉移（`驗收中→完成` 等）或 `發布日期` / `驗收日期` / `名稱` / `驗收完成` 欄位。
+
 8a. **Verify Channel Pass**（Step 8b 前 hard gate）
 
    Read `tasks.md` `## 人工檢查` 找未勾 `[verify:e2e]` / `[verify:api]` / `[verify:ui]` / `[verify:<a>+<b>]` / deprecated `[verify:auto]` items。**MUST** 先處理完所有 verify channels 才進 Step 8b。

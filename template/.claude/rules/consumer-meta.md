@@ -134,6 +134,7 @@ Local edits will be reverted by the next sync.
 | `rules/core/db-preview-env.md` audit | `database.previewEnvCapability` vs `registry/consumers.json capabilities.preview_db` |
 | `vendor/snippets/dev-auth/` cookbook 是否該推薦 | `auth.devSigninEnabled === false && auth.portPinned === true` |
 | `audit-ux-drift.mts` 截圖驗證 | `dev.ports[].port` + `verification.smokePaths` |
+| `spectra-notion-coupling.md` 判斷 change 生命週期該不該推 Notion ticket 狀態 | `notion.ticketWorkflow` + `notion.dataSourceId` + `notion.referenceSkill` |
 
 讀者**MUST** 從 `registry/consumers-meta.json` snapshot 讀，**NEVER** 直接讀 consumer repo 的 `.claude/consumer-meta.json`（避免每個工具都 path-resolve consumer absolute path）。
 
