@@ -268,7 +268,7 @@ cd <worktree> && \
 
 | Dispatch 路徑 | Watch 模式 | 為什麼 |
 | --- | --- | --- |
-| **主線直接 Bash 派 codex**（`codex exec` 在主線 sandbox 背景跑） | **notification-only（預設）** | `<task-notification>` 與 BashOutput 都在主線 sandbox 內可靠；常見失敗（`fetch failed` / auth）= codex **exit** → background bash 完成 → 通知**立刻**觸發。等通知期間主線 idle = 零 turn = 零 cache_read |
+| **主線直接 Bash 派**（`codex exec` 或 `claude -p` headless 在主線 sandbox 背景跑） | **notification-only（預設）** | `<task-notification>` 與 BashOutput 都在主線 sandbox 內可靠；常見失敗（`fetch failed` / auth）= job **exit** → background bash 完成 → 通知**立刻**觸發。等通知期間主線 idle = 零 turn = 零 cache_read。涵蓋 spectra-propose 選項 B 的 Fable headless draft job |
 | **subagent 中介派 codex**（Agent tool → subagent → codex，cross-sandbox） | **每 ~3 分鐘 FS poll**（per § 跨 sandbox 可見度約束 失敗模式 2） | cross-sandbox `<task-notification>` 可能 silent miss（已驗證 incident）；FS poll 是兜底，不可省 |
 
 #### A. 主線直接 Bash 派（notification-only）
