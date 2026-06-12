@@ -39,7 +39,7 @@ export default defineNuxtConfig({
 ## CLI
 
 ```bash
-pnpm doctor                    # 跑全部規則（hub-scripts 注入）
+pnpm run doctor                # 跑全部規則（run 必要；裸 pnpm doctor 撞 pnpm 內建子命令）
 vite-doctor scan . --changed   # 只掃改動檔
 vite-doctor scan . --fix       # 自動修 safe fixes
 ```

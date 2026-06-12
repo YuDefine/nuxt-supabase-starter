@@ -206,7 +206,7 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 - **NEVER** 讓 subagent 自主執行 `git commit` — commit **必須在主線執行**；使用者觸發 `/commit` 即代表授權整批分組，主線**不需**在分組後另行徵詢確認（commit 流程預設無互動）
 - **NEVER** 在 lock 被佔用時自行 `rm .claude/.commit.lock`、**NEVER** 漏跑 Final Step `release`（見 § Single Session Lock）
 - **NEVER** 把 `pnpm check` 當作完整 0-C；**MUST** 先 grep 確認 `scripts.check` 含 `test` / `vitest`，不含就額外跑 `pnpm test`
-- **NEVER** 跳過 `pnpm doctor`（若 `scripts.doctor` 存在）— import graph 問題 lint / typecheck 抓不到
+- **NEVER** 跳過 `pnpm run doctor`（若 `scripts.doctor` 存在）— import graph 問題 lint / typecheck 抓不到；**MUST** 帶 `run`，裸 `pnpm doctor` 撞 pnpm 內建子命令會 silent exit 0、根本沒跑 vite-doctor
 - **NEVER** 跳過 0-D doc alignment（觸發條件成立時）；**NEVER** 在 docs/ 補新頁面但漏更新 VitePress sidebar config
 
 ### WIP 處置禁令（嚴格）

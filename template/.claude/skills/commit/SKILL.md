@@ -517,7 +517,7 @@ Agent 回傳後主線處理：
 
 1. 0-A（codex high，or 條件升 xhigh，or fast-path skipped）：通過
 2. 0-B（screenshot review）：通過或跳過
-3. 0-C（pnpm check + pnpm test + pnpm doctor）：全綠
+3. 0-C（pnpm check + pnpm test + pnpm run doctor）：全綠
 4. 0-D（doc alignment）：通過或跳過
 
 **0-D 執行時機**：三軸匯合後、大改動回扣之前。0-D 條件觸發（見下方 § 0-D. Doc Alignment 檢查），觸發時在主線 foreground 跑，修完再評估大改動回扣。
@@ -583,16 +583,16 @@ node -e "const s=require('./package.json').scripts.check||''; console.log(/test|
 pnpm test          # 或 vp test run / pnpm test:unit，依 consumer 設定
 ```
 
-**檢查是否有 `pnpm doctor`**（vite-doctor import graph 健康度檢查：cycles、broken imports/exports、phantom deps）：
+**檢查是否有 `scripts.doctor`**（vite-doctor import graph 健康度檢查：cycles、broken imports/exports、phantom deps）：
 
 ```bash
 node -e "const s=require('./package.json').scripts; console.log(s.doctor?'has-doctor':'no-doctor')"
 ```
 
-若輸出 `has-doctor`，**必須**額外跑：
+若輸出 `has-doctor`，**必須**額外跑（**MUST** `pnpm run doctor`，**NEVER** 裸打 `pnpm doctor` — `doctor` 撞 pnpm 內建子命令，裸打跑的是 pnpm 自家 doctor 並 silent exit 0，`scripts.doctor` 的 vite-doctor scan 永遠不執行）：
 
 ```bash
-pnpm doctor
+pnpm run doctor
 ```
 
 Doctor 報出 blockers / errors / warnings → **必須**修復後重跑直到 health score 100/100 + 0 warnings。典型修法：移除 dead imports、修正 re-export 路徑、打斷 import cycles。
@@ -623,10 +623,10 @@ node ~/offline/clade/vendor/scripts/codex-dispatch.mjs \
 
 **codex 完工後主線 MUST**：
 
-1. 重跑 `pnpm check`（+ 條件觸發的 `pnpm test` / `pnpm doctor`）確認全綠 — **不信 codex 自報**
+1. 重跑 `pnpm check`（+ 條件觸發的 `pnpm test` / `pnpm run doctor`）確認全綠 — **不信 codex 自報**
 2. `git diff` 確認 codex 改動 scope 只在修錯相關檔；scope 外 substantive change → revert 該段改動 + 主線自修（注意 working tree 含本次 commit 的 uncommitted 變更，**NEVER** `git checkout HEAD -- <file>` 整檔回退 — 會把本次 commit 的原始變更一起砍掉；用 Edit 撤掉 codex 引入的段落即可）
 
-**禁止**用 `npx vitest run` / `npx eslint` 等個別工具替代 `pnpm check` / `pnpm test` / `pnpm doctor`。若 `.claude/worktrees/` 干擾結果，先清理再跑。
+**禁止**用 `npx vitest run` / `npx eslint` 等個別工具替代 `pnpm check` / `pnpm test` / `pnpm run doctor`。若 `.claude/worktrees/` 干擾結果，先清理再跑。
 
 通過後輸出 `✅ 0-C 通過（format/lint/typecheck/test/doctor 全綠）`。
 
