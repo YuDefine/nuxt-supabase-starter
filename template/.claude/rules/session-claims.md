@@ -48,7 +48,7 @@ Local edits will be reverted by the next sync.
 
 主線不寫 claim 有一個**已實證的危害**：主線在 main working tree 累積的 dirty（典型：archive batch 等 commit、跨多步的 in-flight 工作）對**別 session 的 `wt-helper add --baseline-strategy stash`** 是「unclaimed」→ pre-fork claim guard 的 `otherSession` STOP **看不到** → 被 bulk-stash 捲走（見 `docs/pitfalls/2026-06-01-prefork-baseline-stash-sweeps-unclaimed-main-work.md`）。
 
-**現有緩解（已落地）**：`wt-helper.mjs` cmdAdd 的 stash strategy 對 unclaimed dirty 帶**高訊號 in-flight marker**（untracked archive dir / migration）會 STOP（`--include-unrelated-dirty` opt-in 繞過）。但這只覆蓋帶 marker 的批次，純 code 的大批 in-flight 工作仍是缺口。
+**現有緩解（已落地，P1 / TD-181，commit `b75667fb`）**：`wt-helper.mjs` cmdAdd 的 stash strategy **預設完全不 capture** main dirty（留 main 原封不動、worktree fork clean from HEAD）。要把 main WIP 帶進 worktree 必須**顯式** `--include-unrelated-dirty`（bulk 全帶）或 `--baseline-scope-paths`（scoped，走 commit strategy）。原 incident 路徑（stash strategy silent bulk-capture）已從**工具層**消除。
 
 **SHOULD（治本，pending 自動化）**：主線 / 長駐 session 在 main 累積 dirty（尤其是會跨多個 tool-call 才 commit 的 batch）時，**SHOULD** 寫一個 coarse claim 涵蓋當前 dirty paths，讓既有 `otherSession` guard 直接保護：
 
@@ -58,7 +58,7 @@ node scripts/claim-helper.mjs add --change-id main-session-wip \
   --expected-paths "$(git status --porcelain | awk '{print $2}' | paste -sd, -)"
 ```
 
-完成 / commit 後 `claim-helper.mjs drop <session-id>`。**自動觸發機制**（main session 累積 dirty 時自動 claim + commit 後自動 drop）為 follow-up（見對應 TD）；在自動化前，跨多步在 main 累積 batch 時手動 claim 是當前最佳實踐。
+完成 / commit 後 `claim-helper.mjs drop <session-id>`。**自動觸發機制**（main session 累積 dirty 時自動 claim + commit 後自動 drop）經評估 **reject-by-design**（2026-06-12）：clade home main tree 經常 dirty（多 session / propagate 投影寫入 / 跨 tool-call WIP），auto-claim 整個 `git status` 快照會讓**每個**別 session 的 `wt-helper add --precheck-baseline` / `merge-back --auto-stash` 在任何路徑重疊時 `otherSession` STOP → 持續誤擋合法 fork；對 shared trunk 而言過度封鎖比偶發 WIP loss 更糟。主要 incident vector 已被機制層覆蓋（P1 default-no-capture / merge-back TD-175 claim-guard / `scripts/audit-shared-tree-safety.mjs`）。**手動 coarse claim 是「主線跨多步累積大 batch」這種刻意、罕見場景的標準逃生口**，其非自動化是可接受的。
 
 ## 3. 誰讀 claim
 
