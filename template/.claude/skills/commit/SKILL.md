@@ -595,7 +595,7 @@ node -e "const s=require('./package.json').scripts; console.log(s.doctor?'has-do
 pnpm run doctor
 ```
 
-Doctor 報出 blockers / errors / warnings → **必須**修復後重跑直到 health score 100/100 + 0 warnings。典型修法：移除 dead imports、修正 re-export 路徑、打斷 import cycles。
+Doctor health score < 100 或 exit code ≠ 0 → **MUST block commit**，修復後重跑直到 health score 100/100 + 0 warnings + exit 0。**即使 warning 是既有、非本次 diff 引入**也必須修——每次 /commit 順手把既有 doctor warning 修掉，保持零警告 baseline。典型修法：移除 dead imports、修正 re-export 路徑、打斷 import cycles、套用 `readValidatedBody` 取代 raw body read。**NEVER** 以「非我引入」「既有 debt」為由跳過 doctor warning — 0-C gate 不區分新舊，一律全綠。
 
 失敗時進入 loop：修復 → `pnpm format`（裸打 `vp fmt` 必須加 `--ignore-path .oxfmtignore`） → 重跑上述步驟 → 直到全綠。loop 的執行者依下方「fix loop 的 codex offload」規則決定（**預設背景 codex**；例外才主線直修）。
 
