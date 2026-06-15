@@ -1,10 +1,10 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-06-12T15:10:42.567Z",
+  "syncedAt": "2026-06-15T20:48:53.000Z",
   "rulesProjection": "copy",
   "checksums": {
-    "rules/agent-routing.codex-watch-protocol.md": "d1ae10e830c51ef1",
-    "rules/agent-routing.md": "60289e3ca707fad9",
+    "rules/agent-routing.codex-watch-protocol.md": "f009935d5c7ad94c",
+    "rules/agent-routing.md": "ab240fcc5022cbc4",
     "rules/agent-self-verification.md": "b18e811836a4d3f9",
     "rules/audit-pattern.md": "a93b1ae01dea12c6",
     "rules/cloudflare-workers.md": "46657dea4c3342b1",
@@ -89,7 +89,7 @@
     "skills/spectra-discuss/SKILL.md": "0972557842a69fcb",
     "skills/spectra-drift/SKILL.md": "998e5c1a0b4144c2",
     "skills/spectra-ingest/SKILL.md": "b0996a79d7535469",
-    "skills/spectra-propose/SKILL.md": "8b8e0f9f736f1b9f",
+    "skills/spectra-propose/SKILL.md": "e4cbb1d5d6159fe2",
     "skills/spectra-verify/SKILL.md": "c8e1471b2eabc324",
     "commands/db-migration.md": "c786e3433192a196",
     "commands/doc-sync.md": "1dc03819c4fe6647",
