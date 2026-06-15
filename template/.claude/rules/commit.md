@@ -207,6 +207,7 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 - **NEVER** 在 lock 被佔用時自行 `rm .claude/.commit.lock`、**NEVER** 漏跑 Final Step `release`（見 § Single Session Lock）
 - **NEVER** 把 `pnpm check` 當作完整 0-C；**MUST** 先 grep 確認 `scripts.check` 含 `test` / `vitest`，不含就額外跑 `pnpm test`
 - **NEVER** 跳過 `pnpm run doctor`（若 `scripts.doctor` 存在）— import graph 問題 lint / typecheck 抓不到；**MUST** 帶 `run`，裸 `pnpm doctor` 撞 pnpm 內建子命令會 silent exit 0、根本沒跑 vite-doctor
+- **NEVER** 在 doctor health score < 100 或 exit ≠ 0 時視為通過 — 即使 warning 是既有非本次 diff 引入，每次 `/commit` **MUST** 修到 100/100 + 0 warnings 才繼續（保持零警告 baseline，避免 debt 累積）
 - **NEVER** 跳過 0-D doc alignment（觸發條件成立時）；**NEVER** 在 docs/ 補新頁面但漏更新 VitePress sidebar config
 
 ### WIP 處置禁令（嚴格）
