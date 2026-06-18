@@ -1,0 +1,46 @@
+{
+  "$schema": "review-rules/v1",
+  "description": "clade 統一管理的共用 review 清單 — 機械可檢規則。由 pre-commit hook + audit script 消費。",
+  "rules": [
+    {
+      "id": "ubadge-size-ban",
+      "section": 3,
+      "severity": "error",
+      "fileGlob": "*.vue",
+      "pattern": "<(Lazy)?UBadge[^>]*size=\"(xs|sm)\"",
+      "message": "UBadge size 只允許 md / lg / xl（或省略吃預設 md）。xs / sm 在密集表格字級過小、可讀性不足。",
+      "fix": "移除 size prop（吃預設 md），或顯式寫 size=\"md\" / \"lg\" / \"xl\"。"
+    },
+    {
+      "id": "client-side-mutation",
+      "section": 4,
+      "severity": "error",
+      "fileGlob": "*.vue",
+      "scanPaths": ["app/", "packages/*/app/"],
+      "pattern": "\\.(insert|update|delete|upsert)\\s*\\(",
+      "excludePattern": "\\.select\\(",
+      "message": "Client 端禁止直接寫入 DB。所有 mutation 必須透過 server/api/v1/* 的 Server API。",
+      "fix": "把 .insert() / .update() / .delete() / .upsert() 移到 server/api/ endpoint。"
+    },
+    {
+      "id": "dark-mode-hardcoded-color",
+      "section": 5,
+      "severity": "warning",
+      "fileGlob": "*.vue",
+      "pattern": "(bg|text|border)-(white|black|gray-[0-9]+|slate-[0-9]+|zinc-[0-9]+|neutral-[0-9]+)",
+      "excludePattern": "dark:",
+      "message": "hardcoded 灰階色 class 在 dark mode 不會自動反轉。用 Nuxt UI semantic token（bg-default / text-muted 等）或配對 dark: variant。",
+      "fix": "改用 Nuxt UI semantic color class（bg-default、text-default、text-muted、bg-elevated 等），或加對應 dark: variant。"
+    },
+    {
+      "id": "raw-img-tag",
+      "section": 1,
+      "severity": "warning",
+      "fileGlob": "*.vue",
+      "pattern": "<img\\s",
+      "excludePattern": "<!-- raw-img -->",
+      "message": "<img> 應改用 <NuxtImg>（自動優化 + responsive）。真需原生 <img> 在同行加 <!-- raw-img --> 標記。",
+      "fix": "改用 <NuxtImg src=\"...\" /> 或在 <img> 同行加 <!-- raw-img --> exemption marker。"
+    }
+  ]
+}
