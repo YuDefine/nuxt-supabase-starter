@@ -10,6 +10,7 @@
 #   - vp-staged                 永遠跑（vite-plus 官方推薦的 staged-file 工作流）
 #   - supabase-migration-safety 偵測 supabase/migrations/*.sql 才跑
 #   - native-picker-ban         偵測 staged *.vue 才跑（無 .vue 自動 no-op）
+#   - review-rules-ban          偵測 staged *.vue 才跑（patterns.json 驅動，無 .vue 自動 no-op）
 #
 # 重型檢查（nuxt typecheck、test tsconfig）放 pre-push runner，不在 pre-commit 跑。
 # 來源：vue-tsc / nuxi typecheck 不支援單檔 typecheck（issue #407），
@@ -43,3 +44,6 @@ run_check supabase-migration-safety
 
 # 3) native picker ban — 由 check 內部 auto-detect（無 staged *.vue 直接跳）
 run_check native-picker-ban
+
+# 4) review rules ban — patterns.json 驅動（無 staged *.vue 或無 patterns.json 直接跳）
+run_check review-rules-ban
