@@ -41,6 +41,34 @@
       "excludePattern": "<!-- raw-img -->",
       "message": "<img> 應改用 <NuxtImg>（自動優化 + responsive）。真需原生 <img> 在同行加 <!-- raw-img --> 標記。",
       "fix": "改用 <NuxtImg src=\"...\" /> 或在 <img> 同行加 <!-- raw-img --> exemption marker。"
+    },
+    {
+      "id": "overlay-width-class",
+      "section": 2,
+      "severity": "error",
+      "fileGlob": "*.vue",
+      "pattern": "<(UModal|USlideover|UDrawer)[^>]*class=\"[^\"]*max-w-",
+      "message": "Overlay 寬度必須用 :ui prop 覆寫，不可寫在 root class。class=\"max-w-*\" 不會覆蓋 content slot 的寬度約束。",
+      "fix": "改用 :ui=\"{ content: 'sm:max-w-2xl' }\" 覆寫 content slot。"
+    },
+    {
+      "id": "dark-mode-dark-prefix",
+      "section": 5,
+      "severity": "warning",
+      "fileGlob": "*.vue",
+      "pattern": "dark:(text|bg|border)-",
+      "excludePattern": "--ui-",
+      "message": "Nuxt UI color mode 會根據 semantic token 自動切色，手寫 dark: variant 會與系統衝突造成不一致。",
+      "fix": "改用 Nuxt UI semantic token（text-default / bg-default / border-default 等），由 color mode 自動處理。"
+    },
+    {
+      "id": "dark-mode-semantic-color",
+      "section": 5,
+      "severity": "warning",
+      "fileGlob": "*.vue",
+      "pattern": "(bg|text)-(blue|green|red|yellow|orange|purple|pink)-(50|100|500|600|700)",
+      "message": "語意色應用 Nuxt UI color token + opacity，不可 hardcode Tailwind 色彩值。",
+      "fix": "改用 bg-info/10 / text-error / text-success / text-warning 等 Nuxt UI semantic token。"
     }
   ]
 }

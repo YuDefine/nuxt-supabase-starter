@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-06-18T19:20:09.434Z",
+  "syncedAt": "2026-06-18T20:37:05.365Z",
   "rulesProjection": "copy",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "f009935d5c7ad94c",
@@ -70,6 +70,9 @@
     "rules/api-patterns.md": "aa97d279b574d0bd",
     "rules/secrets.md": "0610d9034550aa5c",
     "rules/development.md": "c5a6c84e3cdc3cf0",
+    "rules/nuxt-error-localization.md": "add9805cc39db3d5",
+    "rules/nuxt-form-validation.md": "cff39ee9ac7ec3f9",
+    "rules/nuxt-overlay-slot.md": "546db9308661b36f",
     "rules/nuxt-security.md": "871fff129d37a037",
     "rules/nuxt-ui-conventions.md": "0e385ce74766da60",
     "rules/nuxt-ui-mcp.md": "a6bcf9954f77d463",
@@ -96,7 +99,7 @@
     "agents/check-runner.md": "e520ed3d6bef63cd",
     "agents/code-review.md": "57c964c2feb73668",
     "agents/db-backup.md": "5f4d05642f47e5ff",
-    "agents/references/clade-review-rules.md": "81d8b1932f7a9d12",
+    "agents/references/clade-review-rules.md": "b4e03ba631256308",
     "agents/screenshot-review.md": "6fc9363374adee31"
   }
 }
