@@ -359,6 +359,21 @@
       "mode": "source-pointer",
       "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
       "verify": []
+    },
+    "nuxt-error-localization.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "nuxt-form-validation.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "nuxt-overlay-slot.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
     }
   },
   "verification": {
