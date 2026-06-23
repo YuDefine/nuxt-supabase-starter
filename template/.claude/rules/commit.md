@@ -15,7 +15,7 @@ Local edits will be reverted by the next sync.
 
 - **0-A** 程式碼審查：simplify（序跑第一）→ `codex review --uncommitted` high（GPT-5.5 跨模型）→ Critical / Major 條件升 xhigh；修正一律由主線執行
 - **0-B** UI Design Review（條件觸發）：`.vue` 模板 + 頁面/元件/佈局/互動/樣式變更時派 screenshot-review
-- **0-C** format / lint / typecheck / test / doctor 全綠：`scripts.check` 不含 test → 額外跑 `pnpm test`；有 `scripts.doctor` → 額外跑。oxfmt batched `--check` 報未預期 diff 以單檔重跑為準（[[pitfall-oxfmt-batched-check-false-positive]]）
+- **0-C** format / lint / typecheck / test / doctor 全綠：`scripts.check` 不含 test → 額外跑 `pnpm test`；`scripts.doctor` **必裝**（缺裝 = block commit，要求先安裝 vite-doctor）。oxfmt batched `--check` 報未預期 diff 以單檔重跑為準（[[pitfall-oxfmt-batched-check-false-positive]]）
 - **0-D** Doc Alignment（條件觸發）：diff 觸及 docs / rules / snippets / audit script / 業務碼 / bug fix 時，檢查 cross-ref / 路徑引用 / pitfall status / 三方受眾文件忠實度（含 VitePress sidebar）四面向
 - **並行**：simplify 序跑完後 **0-A.1 / 0-B / 0-C 三軸 MUST 並行**（除非 fast-path 跳過 0-A.1）；0-D 在匯合後條件觸發
 - **Step 1** Schema 同步檢查 — `database.types.ts` 與 migration 對齊
@@ -206,7 +206,8 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 - **NEVER** 讓 subagent 自主執行 `git commit` — commit **必須在主線執行**；使用者觸發 `/commit` 即代表授權整批分組，主線**不需**在分組後另行徵詢確認（commit 流程預設無互動）
 - **NEVER** 在 lock 被佔用時自行 `rm .claude/.commit.lock`、**NEVER** 漏跑 Final Step `release`（見 § Single Session Lock）
 - **NEVER** 把 `pnpm check` 當作完整 0-C；**MUST** 先 grep 確認 `scripts.check` 含 `test` / `vitest`，不含就額外跑 `pnpm test`
-- **NEVER** 跳過 `pnpm run doctor`（若 `scripts.doctor` 存在）— import graph 問題 lint / typecheck 抓不到；**MUST** 帶 `run`，裸 `pnpm doctor` 撞 pnpm 內建子命令會 silent exit 0、根本沒跑 vite-doctor
+- **NEVER** 在沒有 `scripts.doctor` 的專案跑 `/commit` — vite-doctor 是必裝組件，缺裝 **MUST block commit** 並要求先安裝（`pnpm add -D vite-doctor` + 加 `scripts.doctor`），詳見 `rules/core/vite-doctor.md`
+- **NEVER** 跳過 `pnpm run doctor` — import graph 問題 lint / typecheck 抓不到；**MUST** 帶 `run`，裸 `pnpm doctor` 撞 pnpm 內建子命令會 silent exit 0、根本沒跑 vite-doctor
 - **NEVER** 在 doctor health score < 100 或 exit ≠ 0 時視為通過 — 即使 warning 是既有非本次 diff 引入，每次 `/commit` **MUST** 修到 100/100 + 0 warnings 才繼續（保持零警告 baseline，避免 debt 累積）
 - **NEVER** 跳過 0-D doc alignment（觸發條件成立時）；**NEVER** 在 docs/ 補新頁面但漏更新 VitePress sidebar config
 
