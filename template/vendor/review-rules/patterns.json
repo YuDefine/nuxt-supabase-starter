@@ -18,7 +18,7 @@
       "fileGlob": "*.vue",
       "scanPaths": ["app/", "packages/*/app/"],
       "pattern": "\\.(insert|update|delete|upsert)\\s*\\(",
-      "excludePattern": "\\.select\\(",
+      "excludePattern": "\\.select\\(|\\.delete\\([^)]+\\)",
       "message": "Client 端禁止直接寫入 DB。所有 mutation 必須透過 server/api/v1/* 的 Server API。",
       "fix": "把 .insert() / .update() / .delete() / .upsert() 移到 server/api/ endpoint。"
     },

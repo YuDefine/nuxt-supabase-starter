@@ -89,6 +89,7 @@ export function writeClaim(consumerPath, partial) {
     branch: partial.branch ?? null,
     change_id: partial.change_id ?? null,
     expected_paths: partial.expected_paths ?? [],
+    task_summary: partial.task_summary ?? null,
     last_heartbeat: now,
     expires_at: expiresFromNow(),
   }
@@ -187,7 +188,8 @@ export function formatClaimsSummary(claims) {
       const age = Math.round((Date.now() - new Date(c.started_at).getTime()) / 60000)
       const paths = (c.expected_paths ?? []).slice(0, 3).join(', ')
       const more = (c.expected_paths?.length ?? 0) > 3 ? ` +${c.expected_paths.length - 3}` : ''
-      return `  - ${c.session_id} [${c.agent}] ${c.change_id ?? '(no change_id)'} — ${age}min — paths: ${paths}${more}`
+      const task = c.task_summary ? ` — ${c.task_summary}` : ''
+      return `  - ${c.session_id} [${c.agent}] ${c.change_id ?? '(no change_id)'} — ${age}min — paths: ${paths}${more}${task}`
     })
     .join('\n')
 }
@@ -215,6 +217,7 @@ if (INVOKED_PATH === SCRIPT_PATH) {
         branch: flags.branch ?? null,
         change_id: flags['change-id'] ?? null,
         expected_paths: flags['expected-paths']?.split(',').filter(Boolean) ?? [],
+        task_summary: flags['task-summary'] ?? null,
       })
       console.log(`claim written: ${claim.session_id}`)
       console.log(JSON.stringify(claim, null, 2))

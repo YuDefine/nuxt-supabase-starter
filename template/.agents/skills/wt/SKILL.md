@@ -79,9 +79,37 @@ This form is invoked by `/handoff` Mode B (per [[worktree-default]] §1 and [[ha
 
 Direct user invocation of this form is allowed but uncommon — usually the user just types `/wt <task>` and lets the subagent figure out the work.
 
+### Form 4 — Resume interrupted worktree
+
+```
+/wt resume <slug>
+```
+
+Dispatches a new subagent into an existing worktree whose previous session was interrupted. The subagent reads `WORKTREE-BRIEF.md` at the worktree root for full task context (description, thin brief, progress checklist) and continues from the next unchecked Progress item.
+
+If no worktree exists at the expected path for `<slug>`, error with guidance: "No worktree found for slug `<slug>`. Use `/wt <task>` to create a new one."
+
+To discover available worktrees for resume, run `node scripts/wt-helper.mjs list` — the output shows task summary and status for worktrees that have a brief.
+
 ## Per-task lifecycle
 
-For each task in the invocation, `/wt` SHALL execute the following sequence. With parallel tasks, steps 2–3 run concurrently across tasks; step 1 runs sequentially (one `wt-helper add` at a time). **There is no squash or cleanup at `/wt` return** — those happen at archive time via `wt-helper merge-back` (per [[worktree-default]] §5.5).
+For each task in the invocation, `/wt` SHALL execute the following sequence. With parallel tasks, steps 2–4 run concurrently across tasks; step 1 runs sequentially (one `wt-helper add` at a time). **There is no squash or cleanup at `/wt` return** — those happen at archive time via `wt-helper merge-back` (per [[worktree-default]] §5.5).
+
+### Step 0 — Resume detection
+
+Before creating a new worktree, check if one already exists at the expected path:
+
+1. Derive the slug from the task description (or from the explicit `resume <slug>` form).
+2. Compute the expected worktree path: `<consumer-parent>/<consumer-name>-wt/<slug>/`.
+3. If the path exists AND contains `WORKTREE-BRIEF.md`:
+   - Read the brief file.
+   - Run `git -C <worktree-path> log main..HEAD --oneline` to see completed commits.
+   - Run `git -C <worktree-path> status --short` to see uncommitted work.
+   - **Skip Step 1 entirely** — do NOT call `wt-helper add`.
+   - Proceed to Step 1.5 (update the brief's `last_updated` timestamp) and Step 2 (dispatch a resume subagent with the brief content + git status as context).
+4. If the path exists but has no brief, the worktree was created before this feature. Fall through to the existing "already exists" error from `wt-helper add`.
+5. If the path does not exist and the invocation is Form 4 (`/wt resume <slug>`), error: "No worktree found for slug `<slug>`."
+6. If the path does not exist, proceed to Step 1 normally.
 
 ### Step 1 — Build the worktree (with pre-fork baseline guard)
 
@@ -108,6 +136,54 @@ Run from the main worktree's cwd. The helper:
 
 Capture the worktree absolute path (the helper prints `cd <path>` and `Branch: <branch>` — parse them, or derive them from the consumer-root + slug convention).
 
+### Step 1.5 — Write WORKTREE-BRIEF.md
+
+After the worktree is created (Step 1) and before dispatching the subagent (Step 2), write `WORKTREE-BRIEF.md` at the worktree root using the Write tool. This persists the full task context so interrupted sessions can seamlessly resume.
+
+The file is already excluded from git tracking via `wt-helper`'s per-worktree `$GIT_DIR/info/exclude` setup.
+
+Template:
+
+```markdown
+---
+slug: <slug>
+branch: <session-branch-name>
+consumer: <consumer-name>
+created: <current ISO date>
+base_sha: <output of git -C <worktree-path> rev-parse HEAD>
+status: in-progress
+last_updated: <current ISO date>
+---
+
+# Task
+
+<original task description verbatim from the /wt invocation>
+
+# Context
+
+<thin brief prepared by the parent session: file paths to touch, rules to
+follow, acceptance criteria. This is the same context that goes into the
+subagent prompt — duplicated here for persistence across session boundaries.>
+
+# Progress
+
+- [ ] <planned step 1>
+- [ ] <planned step 2>
+...
+
+# Recovery
+
+If you are a new session resuming this worktree:
+1. Run `git log main..HEAD --oneline` to see completed commits
+2. Run `git status` to see uncommitted work
+3. Continue from the next unchecked Progress item above
+4. Follow the subagent contract: selective `git add -- <files>`, no `git add -A`, no `git push`
+```
+
+**Progress section**: Decompose the task into concrete steps if possible. If the task is too vague to decompose upfront, write a single item `- [ ] Complete task` — the subagent will refine the checklist as it works.
+
+**For resume (Step 0 detected existing worktree)**: Do NOT overwrite the existing brief. Instead, update only the `last_updated` frontmatter field via Edit tool.
+
 ### Step 2 — Dispatch a subagent into the worktree
 
 Use the spawn_agent 工具 with:
@@ -131,6 +207,14 @@ mentioned in your task description below is main's starting state, **NOT
 yours to deal with**. They came from main and will be handled by main's own
 commit flow. Touching them in this worktree mixes scopes and bleeds them
 into your session branch's commits.
+
+WORKTREE-BRIEF.md exists at the worktree root with the full task context,
+acceptance criteria, and a Progress checklist. As you work:
+- Check off completed Progress items: change `- [ ]` to `- [x]`
+- Add new items if you discover additional steps needed
+- On completion: update frontmatter `status: done` and `last_updated` to now
+- On being blocked: update `status: blocked` and add a note explaining why
+- On failure: update `status: failed` and explain in the Progress section
 
 Task:
 <task description verbatim, or the next-skill invocation in form 3>
@@ -163,6 +247,35 @@ For form 3 (dispatch a next-skill), the "Task" section is replaced with:
 Task:
 Invoke the Skill tool with skill="<next-skill-name>" and args="<args>".
 Run that skill to completion inside this worktree. Report back per the contract above.
+```
+
+For resume (Step 0 detected existing worktree), the prompt is:
+
+```
+Your working directory is <worktree-absolute-path>. All file reads, writes,
+and shell commands MUST run there. Do NOT cd out of this directory.
+
+You are RESUMING an interrupted task in this worktree. The previous session
+was interrupted before completing.
+
+Read WORKTREE-BRIEF.md at the worktree root — it contains the original task
+description, context, and a Progress checklist showing what was done and what
+remains.
+
+Git state:
+<output of git log main..HEAD --oneline>
+<output of git status --short>
+
+Continue from the next unchecked Progress item in WORKTREE-BRIEF.md. Do NOT
+start over or re-read the entire codebase cold — the brief already contains
+the digested context.
+
+Update WORKTREE-BRIEF.md Progress as you work (check off items, add new ones).
+On completion: set frontmatter `status: done`.
+
+Contract: same as a fresh task — selective `git add`, no `git add -A`,
+no `git push`, no `/commit`. Report back with done/fail per the standard
+contract above.
 ```
 
 ### Step 3 — Wait for subagent completion
