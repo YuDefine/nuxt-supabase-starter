@@ -1,5 +1,6 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import pkg from './package.json'
+import { doctorConfig } from './vendor/doctor-shared/preset.mjs'
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-05-15',
@@ -20,6 +21,7 @@ export default defineNuxtConfig({
     'nuxt-charts',
     'nuxt-security',
     'evlog/nuxt',
+    ['vite-doctor/nuxt', doctorConfig],
   ],
 
   // @nuxt/hints: dev-time real-time feedback
