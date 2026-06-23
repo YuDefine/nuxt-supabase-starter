@@ -127,7 +127,7 @@ fi
 node ~/offline/clade/vendor/scripts/handoff-scan.mjs --json 2>/dev/null
 ```
 
-一次涵蓋三段機械掃描：Health Gate（本 sub-step）+ review-gui readiness（§2B.1.7）+ worktree/stash audit（Step 3）。輸出三個 section（`healthGate` / `reviewGuiReadiness` / `worktreeStash`），每 section 含 `checks`（`{name, status: pass|warn|fail|n/a, detail}`）與 `raw`（原始事實）。**同一次輸出三處共用，不必重跑**；對 status=warn/fail/n/a 的項目做判讀與後續動作。
+一次涵蓋四段機械掃描：Health Gate（本 sub-step）+ review-gui readiness（§2B.1.7）+ worktree/stash audit（Step 3）+ tech-debt hygiene（§2B.1.8）。輸出四個 section（`healthGate` / `reviewGuiReadiness` / `worktreeStash` / `techDebtHygiene`），每 section 含 `checks`（`{name, status: pass|warn|fail|n/a, detail}`）與 `raw`（原始事實）。**同一次輸出四處共用，不必重跑**；對 status=warn/fail/n/a 的項目做判讀與後續動作。
 
 本 sub-step 讀 `healthGate` 段：
 
@@ -157,7 +157,8 @@ JSON 範例（節錄）：
     }
   },
   "reviewGuiReadiness": { "checks": ["..."], "raw": { "counts": {}, "entries": ["..."] } },
-  "worktreeStash": { "checks": ["..."], "raw": { "worktrees": ["..."], "stashes": ["..."], "orphanSidecars": ["..."] } }
+  "worktreeStash": { "checks": ["..."], "raw": { "worktrees": ["..."], "stashes": ["..."], "orphanSidecars": ["..."] } },
+  "techDebtHygiene": { "checks": ["..."], "raw": { "total": 0, "openCount": 0, "closedCount": 0, "closedLines": 0, "stale": ["..."], "closed": ["..."] } }
 }
 ```
 
@@ -268,7 +269,7 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff Mode B — clade <version> scan_
 從以下來源蒐集 outstanding 工作：
 
 - 整理後的 `HANDOFF.md`
-- `docs/tech-debt.md` 未解決的 TD-NNN
+- `docs/tech-debt.md` 未解決的 TD-NNN — **優先序以 §2B.1.8 `techDebtHygiene.raw.stale[]` 為準**：staleOpen（>60d）的 TD **MUST** 排到清單前段（`discAge` 越大越前），不可跟剛開的 TD 平鋪混在一起（這是「堆積然後忘記」的根因）
 - `openspec/ROADMAP.md` `## Next Moves`
 - 任何已 archive 但留下 follow-up 註記的 change
 
@@ -376,6 +377,23 @@ User 透過 `request_user_input` 選定下一步 outstanding（含明確的 next
 | `healthCheckNeeded` | 修 Pre-Review Data Readiness violation（模糊指代 / 缺 sample / 缺 step）；通常走 `/spectra-ingest` | `/spectra-ingest <change-name>` |
 | `malformed` | 修 tasks.md 解析問題（kind marker / `#N` schema）；通常 grep + 手動修 | 主線直接 Edit |
 
+### 2B.1.8 Tech-debt hygiene scan（hard rule — 防 tech-debt.md 堆積）
+
+讀 §2B.1a 那次 `handoff-scan.mjs --json` 輸出的 `techDebtHygiene` 段（掃當前 consumer 自家 `docs/tech-debt.md`，與 clade SoT 無關）。本 sub-step 前未跑過 scan 時補跑同一指令。
+
+兩條訊號 **MUST** 各自處置，**NEVER** 只看一條：
+
+| 訊號 | check | 意義 | 處置 |
+| --- | --- | --- | --- |
+| **staleOpen** | `tech-debt-stale:<TD-NNN>`（warn） | open/pending TD 的 `Discovered` > 60d 且無 `### Resolution` / 近期 `Last reviewed` — 「開了就忘」候選 | 列進 §2B.2 outstanding **並標記為優先**（age 越大越前）。推薦 user 三選一：做掉 + 補 `### Resolution` / 改 `Status: wontfix` + 理由 / 加 `**Last reviewed**: <today>` 重置 SLA。**NEVER** 默默放回清單尾巴 |
+| **closedBloat** | `tech-debt-closed-bloat`（warn，closed TD ≥ 門檻時觸發） | done/resolved/wontfix 的 closed TD 仍躺 `docs/tech-debt.md` 主檔，每次讀檔佔 token | 產出 rotate 建議：把 closed TD 搬到 `$MAIN_WT_PATH/docs/archives/tech-debt-closed-<YYYY-MM>.md`（append-only，編號不重用 — `audit-tech-debt-hygiene.mjs` Invariant 1 archive-aware），主檔移除對應段。**用 `request_user_input` 讓 user 拍板**（同 §2B.1b rotate plan 模式：A 套用 rotate / B 跳過 / C 手動），user 選 A 才動檔。**例外保留**：`raw.closed[]` 內 status 帶 re-activation 條件的（如 `wontfix-until-signal`、`*-until-*`）**MUST** 從 rotate 候選排除並在訊息標註「保留主檔以維持 trigger 可見性」— 這類項雖被 `isClosedStatus`（clade 共用 SoT）歸 closed，但搬到 archive 會丟失等訊號再啟動的 trigger |
+
+**判定 SoT**：`techDebtHygiene.raw`（`stale[]` 含 `discAge` / `lineNo`；`closed[]` 含 `status` / `lines`；`closedCount` / `closedLines`）。**NEVER** 從 `docs/tech-debt.md` 既有 narrative 或目測推測 — scan output 才是 SoT。
+
+**Mode A 跑時不執行本 sub-step** — Mode A 是「靜默寫入交接」，本 scan 為 §2B.2 outstanding 盤點與 rotate 推薦服務，Mode A 無推薦階段。
+
+**scan 失敗 / 無檔 fallback**：`techDebtHygiene.checks` 出現 `tech-debt` check status=pass detail=「docs/tech-debt.md 不存在」→ 該 consumer 無 tech-debt 追蹤，跳過本段不報錯。
+
 ## Step 3 — Worktree & Stash 稽核（共用 block，Mode A / B 都會 invoke）
 
 目的：把所有 linked worktree + stash 的當前狀態 + 下一步建議寫進 HANDOFF.md `## Worktree & Stash Audit` 段，避免歷史包袱累積。**讀取 + 寫入摘要**，不執行 drop / cleanup / merge-back。
@@ -469,7 +487,7 @@ _Updated: <YYYY-MM-DD>_
 ## Output contract
 
 - Mode A：成功 = HANDOFF.md / tech-debt / ROADMAP 有對應寫入 + tasks 檔已清 + Step 3 audit 已靜默寫入 HANDOFF.md `## Worktree & Stash Audit` 段；訊息只含升級摘要（不含 audit）
-- Mode B：成功 = 2B.0 pitfall sweep 已執行（dispatch `/oops` 或宣告「無 missed lesson」）+ HANDOFF.md 已整理 + 2B.1.5 → Step 3 audit 已寫入並在訊息摘要一行 + 盤點訊息 + `request_user_input` 已發出讓 user 選 + user 選定後 2B.5 dispatch 已完成（直接 dispatch 或內呼 `/wt <slug>: /<next-skill> <change-name>`）
+- Mode B：成功 = 2B.0 pitfall sweep 已執行（dispatch `/oops` 或宣告「無 missed lesson」）+ HANDOFF.md 已整理 + 2B.1.5 → Step 3 audit 已寫入並在訊息摘要一行 + 2B.1.8 tech-debt hygiene 已讀（staleOpen 排進 outstanding 優先序 + closedBloat 達門檻時走 `request_user_input` rotate 拍板）+ 盤點訊息 + `request_user_input` 已發出讓 user 選 + user 選定後 2B.5 dispatch 已完成（直接 dispatch 或內呼 `/wt <slug>: /<next-skill> <change-name>`）
 - 失敗 / blocked：明確說明卡點，不假裝完成
 
 ## 與其他 skill 的銜接
