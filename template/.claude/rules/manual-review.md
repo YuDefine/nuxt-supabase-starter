@@ -309,6 +309,8 @@ Worktree-local hook / patterns.json 是 pre-update stale 版本撞 false positiv
 - **NEVER** 新增 `[verify:auto]` marker 給新 item
 - **NEVER** 在 `verify:ui` agent dispatch 時讓 agent 同時負責 mutation / form fill / multi-role login（那些屬 api / e2e channel）
 - **NEVER** 對任何 `verify:*` channel 在 evidence 沒成功產出時寫 `(verified-<channel>:)` annotation
+- **NEVER** 寫 `screenshots=`（複數 key）— 唯一合法 key 是 `screenshot=`（單數）；review-gui parser 不認複數，直接 malformed → user 被迫手動排查
+- **NEVER** 在 scoped sub-item `#N.M` 的 `(verified-ui:)` annotation 引用 parent `#N` 的截圖檔名 — screenshot path basename **MUST** 以 `#<this-item-id>-` 開頭（例：`#4.1` → `#4.1-*.png`，**NEVER** `#4-*.png`）；review-gui 按 item ID 配對，ID 不符 → evidence missing
 - **NEVER** 把 screenshot review 當成等同於人工功能驗證
 - **NEVER** 為了通過 gate 而批次勾選未確認的項目
 - **NEVER** 對 `[discuss]` items 寫入 `(claude-discussed: ...)` annotation 而沒有實際與使用者討論並取得 OK
