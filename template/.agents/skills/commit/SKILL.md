@@ -589,6 +589,27 @@ pnpm test          # 或 vp test run / pnpm test:unit，依 consumer 設定
 node -e "const s=require('./package.json').scripts; console.log(s.doctor?'has-doctor':'no-doctor')"
 ```
 
+若輸出 `no-doctor` → **MUST block commit**，印出安裝指引後中止：
+
+```text
+⛔ 0-C 失敗 — vite-doctor 未安裝
+
+vite-doctor 是 commit 品質閘門的必要組件（import graph 健康度：cycles、broken imports/exports、phantom deps）。
+
+安裝步驟：
+  1. pnpm add -D vite-doctor
+  2. 在 package.json scripts 加入：
+       "doctor": "vite-doctor scan . --max-warnings 0"
+  3. Nuxt 專案：在 nuxt.config.ts 加入 module：
+       import { doctorConfig } from './vendor/doctor-shared/preset.mjs'
+       modules: [['vite-doctor/nuxt', doctorConfig]]
+  4. 安裝完成後重跑 /commit
+
+詳見 .claude/rules/vite-doctor.md
+```
+
+隨後 **MUST** 釋放 commit-lock（`node .claude/scripts/commit-lock.mjs release`）並 STOP。**NEVER** 跳過此 gate 繼續跑後續步驟。
+
 若輸出 `has-doctor`，**必須**額外跑（**MUST** `pnpm run doctor`，**NEVER** 裸打 `pnpm doctor` — `doctor` 撞 pnpm 內建子命令，裸打跑的是 pnpm 自家 doctor 並 silent exit 0，`scripts.doctor` 的 vite-doctor scan 永遠不執行）：
 
 ```bash
