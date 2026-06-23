@@ -66,6 +66,12 @@ pnpm test:e2e:verify <change>
 (verified-ui: <ISO-8601> screenshot=<repo-relative-path>[ dom=<short-observation>])
 ```
 
+**Annotation 格式 hard rule**（反覆違反，per `pitfall-verified-ui-annotation-format-drift`）：
+
+- **NEVER** 寫 `screenshots=`（複數）— review-gui parser 只認 `screenshot=`（單數），複數直接 malformed。即使引用多張圖也用單數 key + 單一 path；多張圖 → 拆 scoped sub-items `#N.M` 各帶獨立 annotation
+- **NEVER** 在 scoped sub-item `#N.M` 的 annotation 引用 parent `#N` 的截圖檔名 — 例：`#4.1` 的 `screenshot=` 路徑 **MUST** 含 `#4.1-` 前綴，**NEVER** 引用 `#4-*.png`。review-gui 按 `#<item-id>-*` pattern 配對截圖到 item；ID 不符 → evidence missing，user 被迫手動排查
+- **MUST** 寫完 `(verified-ui:)` annotation 後立即 self-check：`grep -oP 'screenshot=[^ )]+' <tasks.md line>` 抽 path → 確認 (a) key 是 `screenshot=`（單數）(b) path basename 以 `#<this-item-id>-` 開頭 (c) 檔案存在。任一不符 → 立即修正，**NEVER** 帶病 handoff
+
 **Archive-gate 結果**：`verify:ui` 是 semi-automatic channel；annotation present 只是 visual evidence，使用者仍 **MUST** 在 review GUI 點 OK 才能 flip `[x]`。缺 annotation 時 GUI 顯示 evidence missing；未勾 `[x]` 時 archive-gate **MUST** block。
 
 #### Multi-marker items
