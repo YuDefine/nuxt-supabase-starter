@@ -40,6 +40,42 @@ Local edits will be reverted by the next sync.
 
 In-content skeleton **MUST** 用 `<USkeleton>`（theme-aware）或語意色 token（`bg-elevated` / `bg-muted`），**NEVER** 硬編碼 `bg-gray-*` + `dark:` prefix（違反 [[development]] § Nuxt UI Color Mode）。skeleton 容器標 `aria-hidden="true"`，配一個 sr-only `role="status"` 告知「載入中」即可（per modern-web-guidance accessibility：別對每個 interstitial 過度播報）。
 
+#### Tier 2.5（MUST）— Pinia Colada loading 欄位推導（query ≠ mutation）
+
+`@pinia/colada` 的 `useQuery` / `useMutation` 各回傳兩個狀態欄位，語意**不同**，混用會造成「按鈕 / spinner 一進頁面就永久 loading」的靜默 bug（typecheck 全綠、無 network request、查 log 也查不到）：
+
+| 欄位 | 型別 | 語意 |
+| --- | --- | --- |
+| `status` | `'pending' \| 'success' \| 'error'` | **data-state**：`'pending'` = 還沒有資料 |
+| `asyncStatus` | `'idle' \| 'loading'` | **execution-state**：`'loading'` = 正在抓取 |
+| `isLoading` | `boolean`（computed） | = `asyncStatus === 'loading'`，mutation loading 的最短寫法 |
+
+關鍵差異：**`useMutation()` 在 component mount 當下就建立 entry，初始 `status` 寫死為 `'pending'`**（data-state「還沒被呼叫過、沒有 data」），**與有沒有觸發 mutation 無關**。因此把 `mutation.status === 'pending'` 當 loading → 按鈕從進頁面就 `:loading="true"`，要等第一次成功呼叫後 `status` 翻 `'success'` 才停。
+
+**Canonical pattern（對齊 <consumer-b> reference）**：
+
+```ts
+// ✅ query loading：兩段都要（status 首載無資料、asyncStatus refetch 中）
+const { data, status, asyncStatus } = useFooListQuery(params)
+const isLoading = computed(() => status.value === 'pending' || asyncStatus.value === 'loading')
+
+// ✅ mutation loading：一律 asyncStatus / isLoading；SHOULD 不解構 mutation 物件（可讀 + 可 grep）
+const deleteMutation = useDeleteFooMutation()
+const deleting = computed(() => deleteMutation.asyncStatus.value === 'loading')
+//   或 template 直接：:loading="deleteMutation.isLoading.value"
+
+// ✅ status 仍可用於成功 / 失敗判斷（watch 或 onSuccess/onError），那才是它的用途
+watch(() => acceptMutation.status.value, (s) => { if (s === 'success') toast.success('已核准') })
+```
+
+```ts
+// ❌ mutation loading 用 status === 'pending'：mount 後恆為 true → 永久 spinner
+const { mutate: accept, status: acceptStatus } = useAcceptMutation(id)
+const acceptLoading = computed(() => acceptStatus.value === 'pending')  // BUG
+```
+
+> ⚠️ **不要反向誤修**：query 的 `status === 'pending'` 是**對的**（首載無資料就是要顯示 loading）。本規約只禁 **mutation** 的 `status === 'pending'` 當 loading；query 維持不動。
+
 ### Tier 3（OPTIONAL）— 全域 overlay + 逾時 toast（重頁 / in-page 長操作）
 
 給「沒有 in-content skeleton 的頁」或「in-page 長操作（匯出 / 批次 mutation）需要 blocking overlay + 逾時處理」用。cookbook 提供 UI store slice + `usePageLoading` composable（`withLoading(fn)` + timeout 預設 + 最小顯示 300ms 防閃 + 逾時 toast 重試）+ theme-compliant `GlobalLoadingSpinner` / `GlobalLoadingSkeleton`。
@@ -52,6 +88,7 @@ In-content skeleton **MUST** 用 `<USkeleton>`（theme-aware）或語意色 toke
 
 - **MUST** `app.vue` 掛 `<NuxtLoadingIndicator />`（Tier 1）。
 - **MUST** 頁面主資料走非阻塞 fetch（`useLazyFetch` / `useAsyncData {lazy}` / Pinia Colada `useQuery`），並把 loading 狀態接到 in-content skeleton（Tier 2）。
+- **MUST** Pinia Colada **mutation** 的 loading / disabled 狀態用 `mutation.isLoading` 或 `asyncStatus === 'loading'` 推導（Tier 2.5）。
 - **MUST** skeleton 用 `<USkeleton>` 或語意色 token；overlay 用 `bg-default`/`bg-elevated`/`text-muted` + backdrop，**不**硬編碼黑白灰。
 - **MUST** Tier 3 overlay 標 `role="status"` + `aria-live="polite"` + 可存取 label；spinner 動畫尊重 `prefers-reduced-motion`；逾時用 toast（assertive 等級的 API-timeout 訊息 + 重試）。
 
@@ -61,6 +98,7 @@ In-content skeleton **MUST** 用 `<USkeleton>`（theme-aware）或語意色 toke
 - **MUST NOT** 自刻 top progress bar 跟 `<NuxtLoadingIndicator>` 功能重複（<consumer-b> 的 `GlobalLoadingBar` 是反例；NuxtLoadingIndicator 已涵蓋）。
 - **MUST NOT** 在 skeleton / overlay 用硬編碼 `bg-gray-*` / `bg-white` / `bg-black` + `dark:` prefix。
 - **MUST NOT** 對「已有 in-content skeleton 的列表頁」再疊 Tier 3 全域 overlay。
+- **MUST NOT** 用 Pinia Colada **mutation** 的 `status === 'pending'` 當 loading（data-state，mount 後恆為 true → 按鈕永久 spinner）；query 的 `status === 'pending'` 不在此限（首載無資料是對的）。
 
 ## Anti-pattern
 
@@ -72,6 +110,8 @@ In-content skeleton **MUST** 用 `<USkeleton>`（theme-aware）或語意色 toke
 | 自刻 setInterval 假進度條 | 跟 NuxtLoadingIndicator 重複、維護成本 | 刪掉，用 NuxtLoadingIndicator |
 | overlay spinner 無 `prefers-reduced-motion` | a11y：暈眩使用者 | reduced-motion 時停動畫 / 降透明度 |
 | 真慢 API 只加 skeleton | skeleton 治標不治本，仍轉很久 | skeleton（感知）+ 查 [[query-optimization]] 修實際延遲 + Tier 3 逾時 toast 給出路 |
+| mutation `status === 'pending'` 當 loading | mutation 的 `status` 是 data-state，mount 後第一次呼叫前恆為 `'pending'` → 按鈕永久 spinner、不發 request | `mutation.isLoading` 或 `asyncStatus === 'loading'`；`status` 留給 success/error 判斷 |
+| 為了「修」按鈕順手改掉 query 的 `status === 'pending'` | query 的 `'pending'` = 首載無資料，本來就該顯示 loading | 只動 mutation；query 維持 `status === 'pending' \|\| asyncStatus === 'loading'` |
 
 ## Reference signal（不 block）
 
@@ -82,6 +122,8 @@ nuxtLoadingIndicator      app.vue 是否掛 <NuxtLoadingIndicator>（Y/—）
 blockingAwaitUseFetch     pages 內頂層 await useFetch 命中數（越低越好）
 usePageLoadingPresent     是否有 Tier 3 usePageLoading composable（Y/—）
 ```
+
+Tier 2.5（mutation loading 欄位誤用）另由 `scripts/audit-pinia-mutation-loading.mjs` 偵測（diagnostic-only，exit 0）：偵測從 `use*Mutation()` 解構出的 `status` alias、又拿 `alias === 'pending'` 當 loading 的命中數（query 的 `status === 'pending'` 不算）。
 
 各 consumer 落地由自家 session 處理（per clade-role-and-todo-discipline）；clade 主線只散播標準 + 出表。
 

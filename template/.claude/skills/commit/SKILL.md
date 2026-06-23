@@ -454,7 +454,7 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 Agent prompt 範本（**照搬，不自由發揮**）：
 
 ```
-Review the current uncommitted changes (git diff HEAD) for reuse, simplification, efficiency, and altitude issues — not correctness bugs. Launch 4 parallel review agents (Reuse / Simplification / Efficiency / Altitude), dedup findings, fix each one directly. Skip findings that change behavior or require changes outside the diff. Report: what was fixed, what was skipped (or confirm clean). Keep the final summary under 200 words.
+Review the current uncommitted changes (git diff HEAD) for reuse, simplification, efficiency, and altitude issues — not correctness bugs. Launch 4 parallel review agents (Reuse / Simplification / Efficiency / Altitude), dedup findings, fix each one directly. Skip findings that change behavior or require changes outside the diff. After applying all fixes, run `vp lint --deny-warnings` and revert any fix that introduces a lint violation. Report: what was fixed, what was reverted due to lint, what was skipped (or confirm clean). Keep the final summary under 200 words.
 ```
 
 Agent 回傳後主線處理：

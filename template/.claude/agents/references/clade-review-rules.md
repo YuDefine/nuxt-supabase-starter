@@ -45,6 +45,31 @@ Reviewer **額外**需人工判斷：
 1. **controlled mode default slot 非空**：overlay 用 `:open` prop + 無 trigger → default slot 應為空；非空 = 內容放錯 slot（grep 查 `<USlideover|<UModal|<UDrawer` 後逐個看）
 2. **`#header` 內手寫 close button**：`<UButton icon="i-lucide-x"` → 優先改用 `title` prop + 內建 close，減少冗餘
 
+## Pinia Colada mutation loading 欄位（機械層難抓的靜默 bug）
+
+`@pinia/colada` 的 `useMutation()` 回傳的 `status`（`'pending' | 'success' | 'error'`）是 **data-state**，mount 當下就是 `'pending'`（還沒呼叫過、沒 data），**與有沒有執行無關**。拿它當 loading → 按鈕 / spinner 一進頁面就永久 loading，且 typecheck 全綠（`status` 是合法欄位、`'pending'` 是合法值）、不發任何 request、查 log 也查不到。實證：<consumer-a> 23 處、<consumer-b> 1 處（連 reference impl 都漂）。
+
+Reviewer **MUST** 檢查 diff 內 Pinia Colada loading 推導：
+
+| 違規 | 正解 |
+| --- | --- |
+| **mutation** 的 `status === 'pending'` 當 loading / disabled | `mutation.isLoading` 或 `asyncStatus === 'loading'`；`status` 留給 success/error 判斷 |
+| 為了「修」按鈕順手把 **query** 的 `status === 'pending'` 也改掉 | query 的 `'pending'` = 首載無資料，本來就該 loading，**維持不動** |
+
+**Reviewer 檢查方式**：
+
+```bash
+# 找從 *Mutation() 解構出的 status alias、又拿 alias === 'pending' 當 loading（= bug）
+for f in $(grep -rl "Status.value === 'pending'" app packages --include='*.vue'); do
+  grep -oE "status:[[:space:]]*[a-zA-Z]+Status" "$f" | grep -oE "[a-zA-Z]+Status$" | sort -u | while read -r a; do
+    grep -nE "status:[[:space:]]*${a}\b" "$f" | head -1 | grep -q "Mutation(" \
+      && grep -nE "\b${a}\.value === 'pending'" "$f" | sed "s|^|$f:|"
+  done
+done
+```
+
+正向 canonical pattern 與 query/mutation 欄位語意對照見 golden path [[page-loading-golden-path]] Tier 2.5；機械盤點走 `scripts/audit-pinia-mutation-loading.mjs`。
+
 ## MCP / DDL 存取限制
 
 | 禁止使用 | 說明 |
