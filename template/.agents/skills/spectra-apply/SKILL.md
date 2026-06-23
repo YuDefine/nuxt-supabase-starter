@@ -574,7 +574,7 @@ If there is no request_user_input 工具 available, present options as plain tex
    4. **解析 exit code + JSON**：
       - **exit 0 `status: "pass"` / `"skip"`** → 通過，繼續該 phase 的 commit / 標 done。
       - **exit 1 `status: "fail"`**（含 `uniform-column` 或 `network` finding）→ **MUST block phase complete**：主線**自己** root-cause（典型：client query param literal 違反 server zod schema `max/min` → 4xx → lookup map empty → column 全 fallback）。**NEVER** 標 phase done、**NEVER** 寫「等 user 在 manual review 抓」、**NEVER** 把整列 fallback rationalize 成「sample-bearing verification deferred」。修完 re-run 至 pass 才繼續。
-      - **`harness-error` finding**（browser-harness 起不來 / dev server 連不上）→ **advisory，不 block**（exit 仍 0）。主線一行告知 user「refactor-invariant-check 因 <reason> 未能驗證 <page>，建議手動 sanity check」，繼續流程。
+      - **`harness-error` finding**（agent-browser 起不來 / dev server 連不上）→ **advisory，不 block**（exit 仍 0）。主線一行告知 user「refactor-invariant-check 因 <reason> 未能驗證 <page>，建議手動 sanity check」，繼續流程。
 
    5. **False positive 出口**：某 column 真的 intentionally 全空（例「備註」大多 row 空）→ 在該 `.vue` template 加 `<!-- @ui-invariant-allow-empty[<column-header>] -->` 註解，re-run 確認 suppressed。**NEVER** 用 marker 掩蓋真壞掉的 column（lookup-resolved column 全 fallback 是 bug，不是 optional）。
 
@@ -712,7 +712,7 @@ If there is no request_user_input 工具 available, present options as plain tex
 
    （背景跑、stdout 單一 JSON evidence；exit 0=ok / 2=(a)(b) 皆業務 fail / 3=機械故障 / 4=quota。exit 2 → 主線依序降到 (c)(d)，**不**重派同一 brief；exit 3/4 → 機械故障，主線 fallback foreground 自跑 (a)(b) 再續 chain。）
 
-   - **(c)(d) 既有路徑不動**：(c) 維持主線自起 dev server + browser-harness；(d) 已走 `codex-dispatch-screenshot-verify.mjs`，**不**改走本 dispatcher
+   - **(c)(d) 既有路徑不動**：(c) 維持主線自起 dev server + agent-browser；(d) 已走 `codex-dispatch-screenshot-verify.mjs`，**不**改走本 dispatcher
    - **Evidence annotation 寫回 tasks.md 維持主線**（多 session 共用 working tree 的寫入紀律）— codex 只回報 JSON evidence，**NEVER** 讓 codex 直接 Edit tasks.md
    - 主線收到 codex JSON evidence 後 **MUST 抽查至少一項**（重跑一條 curl / SELECT 比對回報值）再寫 annotation — **不信 codex 自報**
 
@@ -732,10 +732,10 @@ If there is no request_user_input 工具 available, present options as plain tex
      ```
    - 限制：不能驗證 endpoint 的 authz / RLS / response transform 邏輯；只驗 data shape。authz / transform 必須走 (a)(c)(d) 任一
 
-   **(c) 主線自起 dev server + browser-harness self-login**（OAuth 已設好時）：
+   **(c) 主線自起 dev server + agent-browser self-login**（OAuth 已設好時）：
 
    - scan free port（3001-3050，避開 3000）`run_in_background` 起 dev server
-   - browser-harness 走 OAuth flow 自手 login（user 已預先在系統 Chrome 登入）
+   - agent-browser 走 OAuth flow 自手 login（agent-browser persistent profile 已登入）
    - final-state screenshot + DOM 觀察
    - 適用：OAuth provider 在 dev 環境可達 + user 已登入過
 
@@ -804,7 +804,7 @@ If there is no request_user_input 工具 available, present options as plain tex
 
       **反 bypass（hard rule — 2026-06-11 audit 實證）**：
 
-      - **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / browser-harness 收 `verify:ui` evidence 來取代本步 dispatcher — 2026-06-11 audit 實證：05-29 dispatcher 修復後 147 條 `(verified-ui:)` annotation **0 次走 codex**、92 個 session 全部走此 bypass 形狀（從未進入本分支）、0 次機械故障 fallback 記錄。需要 `verify:ui` evidence 的**唯一**入口是 `node ~/offline/clade/vendor/scripts/codex-dispatch-screenshot-verify.mjs`
+      - **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 `verify:ui` evidence 來取代本步 dispatcher — 2026-06-11 audit 實證：05-29 dispatcher 修復後 147 條 `(verified-ui:)` annotation **0 次走 codex**、92 個 session 全部走此 bypass 形狀（從未進入本分支）、0 次機械故障 fallback 記錄。需要 `verify:ui` evidence 的**唯一**入口是 `node ~/offline/clade/vendor/scripts/codex-dispatch-screenshot-verify.mjs`
       - **Claude fallback 僅限機械故障**（`command -v codex` 不存在 / dispatcher exit≠0 且 stdout 無 parseable JSON；env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 為 user 明確設定的 debug 退場，不在此限），且 **MUST** 在 tasks.md 對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡 — **無此痕跡的 Claude 自拍 evidence 視為違規**（audit 以 annotation × dispatcher 記錄比對抓）
 
       共用規約：
@@ -945,7 +945,7 @@ If there is no request_user_input 工具 available, present options as plain tex
 
    3. **STALE 重拍**：對 `stale` array 內每個 item：
       - 從 tasks.md `## 人工檢查` 找到對應 `#N` item 的 URL + ready_signal
-      - 用 browser-harness（或 codex-dispatch-screenshot-verify.mjs，視 codex 可用性）重拍該張截圖
+      - 用 agent-browser（或 codex-dispatch-screenshot-verify.mjs，視 codex 可用性）重拍該張截圖
       - 覆蓋原檔（mtime 自然 > last UI commit）
 
    4. **重跑 audit 確認 0 stale**：

@@ -319,7 +319,7 @@ cd <worktree-path> && codex exec \
 
 - `[DELEGATED-BY-CLAUDE-CODE]` marker
 - Medium 派工的失敗 tail（≤ 50 行）+ codex 自報的失敗原因
-- 明確指示走研究模式：先 **github** plugin 查 `<pkg>` repo 的 issues / releases / changelog，再 **browser-use** / web search 查官方 migration guide
+- 明確指示走研究模式：先 **github** plugin 查 `<pkg>` repo 的 issues / releases / changelog，再 **agent-browser** / web search 查官方 migration guide
 - 研究完才動手改檔
 - 一樣的 Git Baseline / Commit Authorization 硬指令
 - Commit message format `🧹 chore: wt upgrade-<pkg>-<from>→<to> (researched <issue-url-slug>)`
@@ -1045,7 +1045,7 @@ Codex 自報原因：<medium-hypothesis>
    - releases / tags / changelog → 找 `<from>` → `<to>` 之間的 breaking changes
    - issues 用關鍵字搜失敗的 error message
    - migration guide / upgrade guide pull request
-2. 用 **browser-use** 或 web search：
+2. 用 **agent-browser** 或 web search：
    - `<pkg> migration guide <to>` / `<pkg> breaking changes <to>`
    - 套件官方 docs site
 3. 把研究結果濃縮成 `## Research Findings` section 輸出（≤ 20 行）

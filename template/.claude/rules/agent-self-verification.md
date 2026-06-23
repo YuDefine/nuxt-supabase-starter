@@ -35,10 +35,10 @@ Local edits will be reverted by the next sync.
 
 下列句型出現在 output 即違反本 rule，必須改寫：
 
-- 「我現在缺 X，請你...」（X 可 mint / scaffold / browser-harness 取得時）
+- 「我現在缺 X，請你...」（X 可 mint / scaffold / agent-browser 取得時）
 - 「請取 ADMIN_COOKIE」「請手動 OAuth」「DevTools 複製 cookie」「請貼回 cookie」
 - 「截圖無法驗證 X，所以跳過 / 標 deferred」（未走 fallback chain）
-- 「user 可能需要在 chrome://inspect 點 Allow」（原文 forward 工具 error message，未先驗 CLI contract）
+- 原文 forward 瀏覽器工具的 error message 當待辦（未先驗 CLI contract / 未跑 `agent-browser doctor --fix` 自救）
 
 ### MUST
 
@@ -46,7 +46,7 @@ Local edits will be reverted by the next sync.
 2. **撞 baseline functional gap** → 走 [[main-self-collect-fallback-chain]] 四層：
    - (a) 擴 dev-login route allow-list
    - (b) service_role direct DB query 證 data shape（annotation 標 `direct-db-shape`）
-   - (c) 主線自起 dev server + browser-harness self-login
+   - (c) 主線自起 dev server + agent-browser self-login
    - (d) 派 screenshot-review codex `mode: verify`
 3. **寫 `(deferred: ...)` annotation MUST 含 failure trail**：列出 (a)(b)(c)(d) 每層嘗試結果。範例：
    ```text
