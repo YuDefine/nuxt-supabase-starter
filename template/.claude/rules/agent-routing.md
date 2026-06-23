@@ -136,7 +136,7 @@ Codex 配額兩層：primary = 5h rolling window（burst 瓶頸）、secondary =
 | **NEVER** 派 codex 跑 spectra-apply phase 而 prompt 內漏 Commit Authorization 段（一 phase 一 commit / `🧹 chore: wt <change>-phase-<N>` format / hook 必跑禁 `--no-verify` / commit 前自驗 view-layer + scope） | 缺這段 codex 會混 commit、撞 commitlint hook |
 | **NEVER** 派 Codex 寫 code（spectra-propose draft / spectra-apply phase）而 prompt 漏掉 Plan-first 硬指令 | 沒 plan 主線只能從 diff 反推；codex 寫完 plan 必須立刻續跑 |
 | **NEVER** 從主線用 `Agent` tool with `subagent_type: screenshot-review` 派 verify mode 工作 | sonnet wrapper 會繞過 Step 0 自做工作（pitfall 同 Routing Table）；**MUST** 主線直派 codex GPT-5.5 low via Bash；wrapper 僅留 codex CLI 不可用 fallback，**禁止**作為預設入口 |
-| **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / browser-harness 收 verify:ui evidence 來取代 Step 8a codex dispatcher | verify:ui evidence 的**唯一**入口是 `codex-dispatch-screenshot-verify.mjs`；Claude fallback 僅限機械故障且 MUST 在對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡。2026-06-11 audit 實證：dispatcher 修復後 147 條 (verified-ui:) annotation 0 次走 codex、92 個 session 全走此 bypass 形狀 |
+| **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 verify:ui evidence 來取代 Step 8a codex dispatcher | verify:ui evidence 的**唯一**入口是 `codex-dispatch-screenshot-verify.mjs`；Claude fallback 僅限機械故障且 MUST 在對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡。2026-06-11 audit 實證：dispatcher 修復後 147 條 (verified-ui:) annotation 0 次走 codex、92 個 session 全走此 bypass 形狀 |
 | **NEVER** 對 mechanical 收集 / 掃描 / 驗證型工作開 Claude subagent fan-out | 預設走泛用 dispatcher + `fanout-collect` template（例外：claude.ai-connected MCP 依賴、判讀型分析、user 明確要求 Claude） |
 
 ### Watch 行為

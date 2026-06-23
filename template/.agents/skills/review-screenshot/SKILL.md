@@ -6,7 +6,7 @@ description: '截圖、看畫面、確認 UI、看一下頁面、幫我看 UI、
 
 # 截圖（統一入口）
 
-所有截圖工作派遣 `screenshot-review` agent（sonnet wrapper）。**MUST** 使用 spawn_agent 工具 派遣，**NEVER** 在主 session 直接跑 `browser-harness` / `curl dev server` / `mkdir screenshots/` 等截圖命令。
+所有截圖工作派遣 `screenshot-review` agent（sonnet wrapper）。**MUST** 使用 spawn_agent 工具 派遣，**NEVER** 在主 session 直接跑 `agent-browser` / `curl dev server` / `mkdir screenshots/` 等截圖命令。
 
 工具選擇規則見 `.claude/rules/screenshot-strategy.md` — agent 會自行判斷，主 session 不需指定。
 
@@ -15,7 +15,7 @@ description: '截圖、看畫面、確認 UI、看一下頁面、幫我看 UI、
 `screenshot-review` agent 是**雙層 dispatch**：
 
 1. **Sonnet wrapper（agent body 第一段 § BLOCKING）**：收到 brief 後 Step 0 機械字面 grep 確認自己是 sonnet → Step 1 偵測 codex → Step 2 把 brief 包成 `[DELEGATED-BY-CLAUDE-CODE]` prompt 派給 codex GPT-5.5 low。**Sonnet 自己不跑 screenshot 工作**。
-2. **Codex 執行（GPT-5.5 low）**：實際 `browser-harness` / `new_tab` / `capture_screenshot` 在 codex 跑，每張 screenshot ~1500 vision + 3K planning tokens，成本是 sonnet 自己跑的 1/3–1/5。
+2. **Codex 執行（GPT-5.5 low）**：實際 `agent-browser open` / `snapshot` / `screenshot` 在 codex 跑，每張 screenshot ~1500 vision + 3K planning tokens，成本是 sonnet 自己跑的 1/3–1/5。
 3. **Sonnet fallback（agent body Step 4）**：codex 不可用 / 派工失敗 / user 選 fallback 時，sonnet 才自己跑。
 
 主 session 派 Agent 後**期望看到**的 subagent 第一段回報：
@@ -25,7 +25,7 @@ description: '截圖、看畫面、確認 UI、看一下頁面、幫我看 UI、
 > codex 偵測：codex-ok
 > 已派工：jobId=<…>，sched wakeup 180s
 
-**警訊**（subagent 跳過 Step 0 / Step 1 直接做工作）：subagent 第一個 tool call 不是 `command -v codex` 而是 `browser-harness` / `curl` / `mkdir screenshots/` → 違反 agent body § BLOCKING hard rule，**MUST** 立刻打斷讓 agent 重來。**Incident（2026-05-19 align-shipments-rls-auth verify:ui）**：sonnet 直接做工作燒 115k tokens 卡 Chrome hydration debug，整次 dispatch 白做。
+**警訊**（subagent 跳過 Step 0 / Step 1 直接做工作）：subagent 第一個 tool call 不是 `command -v codex` 而是 `agent-browser` / `curl` / `mkdir screenshots/` → 違反 agent body § BLOCKING hard rule，**MUST** 立刻打斷讓 agent 重來。**Incident（2026-05-19 align-shipments-rls-auth verify:ui）**：sonnet 直接做工作燒 115k tokens 卡 Chrome hydration debug，整次 dispatch 白做。
 
 ## Brief 注意事項
 

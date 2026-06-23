@@ -228,7 +228,7 @@ grep -l 'cloudflareTunnel\|vite-plugin-cloudflare-tunnel' nuxt.config.* 2>/dev/n
 
 截圖工具選擇原則：
 
-- 一次性探索、人工檢查、設計驗收 → `browser-harness` 優先（CDP 連使用者已開的 Chrome，繼承登入 cookie）
+- 一次性探索、人工檢查、設計驗收 → `agent-browser` 優先（自管 persistent-profile Chromium，繼承登入 cookie、平行 `--session` 隔離）
 - 響應式、多 viewport、跨瀏覽器、多分頁、要沉澱回歸 → Playwright
 
 同一組截圖重拍到第 3 次，應考慮沉澱為 Playwright spec。

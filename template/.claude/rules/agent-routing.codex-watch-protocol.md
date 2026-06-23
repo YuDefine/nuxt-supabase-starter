@@ -407,7 +407,7 @@ Claude Code session 收到 spectra propose 請求時：
 
 ## screenshot-review Verify Mode Dispatch & Watch Protocol
 
-**核心命題**：派出 `screenshot-review` agent 用 `mode: verify` 後**主線不能單純等回報**。Agent 在 browser-harness 內可能：撞 emptiness preflight、卡 selector、無限 retry、單一 long bash call 期間 SendMessage 叫不動。歷史案例（add-pass-fail-inspection-type）verify agent 跑 7 小時無回報 — 「乾等盲區」對 verify mode 跟對 codex 一樣致命。
+**核心命題**：派出 `screenshot-review` agent 用 `mode: verify` 後**主線不能單純等回報**。Agent 在 agent-browser 內可能：撞 emptiness preflight、卡 selector、無限 retry、單一 long bash call 期間 SendMessage 叫不動。歷史案例（add-pass-fail-inspection-type）verify agent 跑 7 小時無回報 — 「乾等盲區」對 verify mode 跟對 codex 一樣致命。
 
 Agent 端的對應規範（hard budget、checkpoint、fail-fast、progress.json schema）寫在 `plugins/hub-core/agents/screenshot-review.md` § Verify Mode；本節定義**主線派工 + 監看**規範。
 
@@ -422,7 +422,7 @@ Agent 端的對應規範（hard budget、checkpoint、fail-fast、progress.json 
 5. **Hard budget: 60 min**（明示寫進 brief，agent 端 SKILL.md 也有但 brief 仍須提醒）
 6. **Checkpoint cadence**：每完成 item 或每 15 min（取較短者）寫 `progress.json` + 跑一個 cheap tool call return main loop
 7. **Fail-fast 條件**：登入失敗 / fixture 缺且無 plan / DOM selector 3 次找不到 / 單 item > 5min / click 後 DOM 連續 2 次無預期變化（詳見 `screenshot-review.md` § Fail-Fast 條件）
-8. **單 browser-harness call ≤ 1 語義動作**（詳見 `screenshot-review.md` § 為什麼單一 long browser-harness call 會 break SendMessage）
+8. **單 Bash call ≤ 1 語義動作**（詳見 `screenshot-review.md` § 為什麼單一 long Bash call 會 break SendMessage）
 9. **progress.json 路徑**：`screenshots/<env>/<change-name>/progress.json`
 10. **回報格式**：每 item PASS / FAIL / UNCERTAIN + evidence（network / dom / screenshot path）
 
@@ -464,7 +464,7 @@ Agent 端的對應規範（hard budget、checkpoint、fail-fast、progress.json 
 - **NEVER** 自決定 TaskStop verify agent — 必須先 AskUserQuestion(除非 agent 已自我宣告 time-budget-exhausted)
 - **NEVER** 把 progress.json read 想成 poll agent — 它是 read static file，agent 在另一條 loop 寫盤；不違反 polling 規則
 - **NEVER** brief 漏掉 Hard budget / Checkpoint cadence / Fail-fast / 單 call ≤ 1 語義動作 — 缺任一條都會把 agent 推向歷史失控模式
-- **NEVER** 把多個 verify item round-trip 包進同一 `browser-harness <<'PY' … PY` heredoc call 後派出去 — agent 端 SKILL 已明訂禁止，但 brief 內提供的範例 / 模板也不能違反
+- **NEVER** 把多個 verify item round-trip 包進同一個 Bash call（多個 `agent-browser` 命令串 `&&`）後派出去 — agent 端 SKILL 已明訂禁止，但 brief 內提供的範例 / 模板也不能違反
 
 ## Codex `$spectra-apply` Runtime Gate
 
