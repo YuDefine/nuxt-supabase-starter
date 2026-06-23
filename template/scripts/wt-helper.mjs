@@ -388,6 +388,24 @@ export function maybeIndexRepository(worktreePath) {
   })
 }
 
+function cleanupCodebaseMemoryIndex(worktreePath) {
+  try {
+    const dbName = worktreePath.replace(/^\//, '').replace(/\//g, '-')
+    const cacheDir = join(process.env.HOME || '', '.cache/codebase-memory-mcp')
+    let cleaned = false
+    for (const ext of ['.db', '.db-wal', '.db-shm']) {
+      const f = join(cacheDir, dbName + ext)
+      if (existsSync(f)) {
+        rmSync(f)
+        cleaned = true
+      }
+    }
+    if (cleaned) console.log(`Cleaned codebase-memory-mcp index for ${dbName}`)
+  } catch {
+    // best-effort; never block worktree removal
+  }
+}
+
 // Pin a pre-fork baseline snapshot under `refs/wt-baseline/<slug>/<iso>`.
 //
 // TD-144 fix: cmdAdd has three fork paths (main-clean, main-dirty + commit
@@ -1120,6 +1138,7 @@ async function cmdPrune() {
       .toLowerCase()
     if (ans === 'y' || ans === 'yes') {
       git(['worktree', 'remove', c.path], { cwd: consumerRoot })
+      cleanupCodebaseMemoryIndex(c.path)
       try {
         git(['branch', '-d', branchName], { cwd: consumerRoot })
       } catch {
@@ -1716,6 +1735,7 @@ async function cmdCleanup(slug, opts) {
       console.error(`warn: could not remove residual dir ${target.path}: ${e.message ?? e}`)
     }
   }
+  cleanupCodebaseMemoryIndex(target.path)
   try {
     git(['branch', opts.force ? '-D' : '-d', branchName], { cwd: consumerRoot })
   } catch {
