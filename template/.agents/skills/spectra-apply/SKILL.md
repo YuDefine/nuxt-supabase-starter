@@ -924,6 +924,50 @@ If there is no request_user_input 工具 available, present options as plain tex
 
    **Reuse Step 6c / Layer C**: D3 / D5 是 `refactor-invariant-check.mjs`（Layer B）偵測的；D4 是 `audit-data-sanity.mjs`（Layer C）偵測的。已跑過就 cite 結果，不必重跑。
 
+8a.7. **Screenshot Staleness Sweep + Auto-reshoot** (clade fork addition — mechanical gate before Step 8b handoff)
+
+   **理由**：Step 8a verify:ui 拍完截圖後，後續步驟（seed fix、allow-empty marker、pattern re-check fix、E.2 finding fix 等）常產生新 commit 碰到 `.vue` / seed / config 檔。這些 commit 讓先前的截圖 mtime < last UI commit → review-gui 顯示 ⚠ 截圖過時。User 必須手動告訴 Claude session 重拍 — 這個 relay 不該是 user 的事。本 step 把「重拍 stale」從 behavioral rule 升級成 mechanical gate。
+
+   **觸發條件**：`## 人工檢查` 含至少一個 `[verify:ui]` item 且 `screenshots/local/<change>/` 目錄存在。否則 silent skip。
+
+   **執行流程**：
+
+   1. **跑 audit**：
+
+      ```bash
+      node --experimental-strip-types ~/offline/clade/vendor/scripts/audit-screenshot-staleness.mts \
+        --repo <consumer-or-worktree-path> --change <change-name> --json
+      ```
+
+      解析 JSON output 的 `stale` 和 `legacy` arrays。
+
+   2. **LEGACY 清理**：刪掉 `legacy` array 內所有無 `#N` 前綴的舊圖（`rm` 即可；它們不配對任何 item）。
+
+   3. **STALE 重拍**：對 `stale` array 內每個 item：
+      - 從 tasks.md `## 人工檢查` 找到對應 `#N` item 的 URL + ready_signal
+      - 用 browser-harness（或 codex-dispatch-screenshot-verify.mjs，視 codex 可用性）重拍該張截圖
+      - 覆蓋原檔（mtime 自然 > last UI commit）
+
+   4. **重跑 audit 確認 0 stale**：
+
+      ```bash
+      node --experimental-strip-types ~/offline/clade/vendor/scripts/audit-screenshot-staleness.mts \
+        --repo <consumer-or-worktree-path> --change <change-name> --json
+      ```
+
+      `stale` array 長度 **MUST** 為 0 才進 Step 8b。若仍有 stale → 重拍對應項（最多 2 輪）。
+
+   5. **Commit 更新截圖**：selective `git add -f` 重拍的檔案 + `git commit`。
+
+   **Skip 條件**：
+   - 無 `screenshots/local/<change>/` 目錄（純 backend change）
+   - `## 人工檢查` 無 `[verify:ui]` item
+   - audit 回傳 0 stale + 0 legacy（首次就乾淨）
+
+   **NEVER**：
+   - 跳過本 step 直接進 8b — stale 截圖到 review-gui 是已驗證的 user-friction 源
+   - 讓 user 在 review-gui 看到 stale warning 後手動 relay 回 Claude session 重拍
+
 8b. **Manual review handoff**
 
    When tasks.md still contains unchecked items in the `## 人工檢查` section (typical at this point — implementation tasks `[x]` but manual-review items `[ ]`), **MUST** hand off to the local manual-review GUI rather than walking through items inline in chat.
