@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-06-23T15:33:36.169Z",
+  "syncedAt": "2026-06-23T16:07:37.113Z",
   "rulesProjection": "copy",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "f009935d5c7ad94c",
@@ -31,6 +31,7 @@
     "rules/manual-review.discuss.md": "1b4ec25cecb34134",
     "rules/manual-review.evidence.md": "74822321f7654166",
     "rules/manual-review.md": "638fff895fd0e841",
+    "rules/nuxt-data-perf.md": "2200f5d64befae36",
     "rules/nuxt-dev-watch.md": "3dcadecb24e11c83",
     "rules/output-hygiene.md": "8b5b462963da7734",
     "rules/playwright-webserver.md": "0641196e7a8b81ce",
@@ -40,7 +41,7 @@
     "rules/review-gui-surface.md": "c710604f362ed200",
     "rules/review-tiers.md": "8c8ec7801aeb2714",
     "rules/scope-discipline.md": "a69d1cbc923c89a0",
-    "rules/screenshot-strategy.md": "36603091a85868bc",
+    "rules/screenshot-strategy.md": "c18fbd63af361229",
     "rules/session-claims.md": "7df886e284a98665",
     "rules/session-tasks.md": "992eaea717971157",
     "rules/spectra-notion-coupling.md": "555209a1cff1b5d8",
@@ -85,7 +86,7 @@
     "skills/commit/SKILL.md": "4f2fe8ef6207579c",
     "skills/spectra/SKILL.md": "ae7dcf6c23bc22f1",
     "skills/spectra-analyze/SKILL.md": "c833299055df3f76",
-    "skills/spectra-apply/SKILL.md": "3438e72ec42548b1",
+    "skills/spectra-apply/SKILL.md": "a4b18248f3a8b000",
     "skills/spectra-archive/SKILL.md": "22f8ae78ecb52d18",
     "skills/spectra-ask/SKILL.md": "7e980b60c63029d5",
     "skills/spectra-audit/SKILL.md": "d8001653928db6d0",

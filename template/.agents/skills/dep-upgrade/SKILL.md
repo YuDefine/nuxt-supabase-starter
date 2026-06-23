@@ -61,7 +61,9 @@ skill 開頭依輸入分流，**不要記兩個 skill 名**。
 - 整個 framework migration（Nuxt / Next / React major bump 需要專屬的 migration plan，不是逐套件 loop 能處理）
 - monorepo 跨 workspace catalog 升版（先用 [[evlog-catalogs]] 派工方式處理 catalog）
 
-**Changelog-aware sub-mode**：被 § Fleet mode subagent 呼叫時，會跳過 Step O.1（target / version 由 fleet brief 指定）、Step O.2.1 的 prompt 內嵌 BC clauses + callsites。詳見 § Codex prompt templates · Changelog-block 填充。
+**Changelog-aware sub-mode**：兩種觸發路徑：
+- **Outdated pre-scan**（Step O.1.5）：主線用 `dep-fleet-discover.mjs` + `gh release view` 拿 changelog → 分類為 `bugfix` / `adaptation` / `feature` → 依分類決定 codex prompt 是否帶 `<changelog-block>`。
+- **Fleet brief**：被 § Fleet mode subagent 呼叫時，跳過 Step O.1（target / version 由 fleet brief 指定）、Step O.2.1 的 prompt 內嵌 BC clauses + callsites。詳見 § Codex prompt templates · Changelog-block 填充。
 
 ## Step O.0 — Worktree gate（[[worktree-default]] §1）
 
@@ -118,30 +120,148 @@ skill 開頭依輸入分流，**不要記兩個 skill 名**。
    - `@types/react` → ≤ `dependencies.react` 的 major
    - 其餘 `@types/<lib>` 同理跟 `<lib>` 自身 major
 
-   若 `outdated` 給的 Latest 超過上限，target 改成「上限 major 內最新」（例：Node 20 環境 + `@types/node` Latest 是 22.x → target 鎖 `^20.x` 最新 minor/patch，**不**升 22）。Step O.1.6 回報給 user 的計畫表 **MUST** 在這些 `@types/*` 條目後標註「(capped to Node N / react N)」讓 user 看到封頂邏輯有作用。
+   若 `outdated` 給的 Latest 超過上限，target 改成「上限 major 內最新」（例：Node 20 環境 + `@types/node` Latest 是 22.x → target 鎖 `^20.x` 最新 minor/patch，**不**升 22）。Step O.1.5.5 回報給 user 的計畫表 **MUST** 在這些 `@types/*` 條目後標註「(capped to Node N / react N)」讓 user 看到封頂邏輯有作用。
 
    **NEVER** 為了「升到最新」把 `@types/*` 推超過對應 runtime / lib — 型別會漂移：typecheck 用的是 newer types，但 runtime 跑的是舊版 API，bug 表現是「TS 說沒問題、prod 卻炸」這種最難 debug 的型別。
 
-6. **回報計畫給使用者**並等確認：
+6. **進入 Step O.1.5 Changelog pre-scan**（見下方）。pre-scan 完成後才回報增強版計畫給使用者。
 
-   ```
-   偵測到 <PM>，outdated 共 <N> 個：
-   - patch <a> 個：foo, bar, ...
-   - minor <b> 個：baz, qux, ...
-   - major <c> 個：quux, corge, ...
+## Step O.1.5 — Changelog pre-scan（主線直接做）
 
-   建議升級順序：patch → minor → major（風險遞增、容易在崩潰點停下 bisect）
+在 O.1 收完 outdated 清單 + deps 分類 + 版號差距 + `@types/*` 封頂後，**升版前**先理解每個 package 的 release 性質，依此決定升版策略。主線直接完成（不派 codex），零額外 overhead。
 
-   要排除任何套件不升嗎？
-   ```
+### O.1.5.1 — Batch discover release URLs
 
-   使用者可指定排除清單（如 `vue` lockstep with `nuxt`，先不動）。**MUST 等使用者確認**才進 Step O.2 — 不要自決定。
+對每個 outdated package，跑 `dep-fleet-discover.mjs` 拿 release URL：
 
-   > Smoke test 建議：第一次跑這個 mode on 一個新 consumer 時，先挑 1 個最低風險 patch 跑 smoke，驗證 worktree fork + codex dispatch + commit boundary 都對，再批次推剩下的（實證：TDMS 第一次 run 就用這方式發現 prompt builder `-D` bug）。
+```bash
+node ~/offline/clade/vendor/scripts/dep-fleet-discover.mjs --pkg "<pkg>" --version "<to>"
+```
 
-## Step O.2 — 逐套件 codex 派工 loop
+- 可並行跑（獨立、唯讀）— 多個 Bash tool call 同一 message
+- 記錄每個 package 的 `release_url` + `source` + `repo_url`
+- `source: "none"` 的 package 標記分類為 `unknown`，skip O.1.5.2–O.1.5.4
+- **Skip `@types/*`**：型別定義的 changelog 對分類無意義 → 直接標 `bugfix`
 
-每個 package 走以下子流程，**一個 package 一個 codex 派工**、**一個 commit**：
+### O.1.5.2 — Batch fetch release bodies
+
+對 `source != "none"` 的 package，fetch release body：
+
+```bash
+gh release view v<to> --repo <owner>/<repo> --json body -q .body > /tmp/dep-prescan-<pkg-slug>.md
+```
+
+- `gh` 失敗（private repo / rate limit / 無 release）→ 若 `source: "changelog_md"`，用 WebFetch 拿 changelog URL → 否則標 `unknown`
+- 寫出的檔可在 O.2.1 codex prompt builder 復用
+
+### O.1.5.3 — 主線分類（三類 + 混合）
+
+主線讀所有 fetch 到的 release body，對每個 package 判定分類標籤：
+
+| 訊號 | 標籤 |
+| --- | --- |
+| release body 全是 bug fix / patch notes / perf / internal refactor，無 user-facing API 變更 | `bugfix` |
+| 有 breaking changes / deprecations / renamed APIs / 移除的 API / signature 變更 / config schema 變更 | `adaptation` |
+| 有重大新 feature（新 component / 新 API / 新 capability），consumer 可能受益 | `feature` |
+| changelog 不可得（O.1.5.1 `source: "none"` 或 O.1.5.2 fetch 失敗） | `unknown` |
+
+**混合判定**（一個 release 可有多個標籤）：
+- BC + feature → 同時標 `adaptation` + `feature`（升版時修 BC，完成後 HANDOFF 記 feature）
+- 只有 deprecation（尚未 remove）→ `adaptation`（趁這次改掉，不等到 remove 才爆）
+- 小 feature（如新增一個 option、default off、不影響現有行為）→ 仍歸 `bugfix`（不值得 HANDOFF entry）
+- 重大 feature 但無 BC → 純 `feature`（升版走 bugfix 路徑，HANDOFF 記 feature）
+
+**`adaptation` 時提取 BC 結構化資料**（復用 Fleet mode F.2.2 schema）：
+
+```jsonc
+{
+  "breaking_changes": [
+    {
+      "category": "rename | removal | signature | config-schema | peer-bump",
+      "description": "<一句話人話>",
+      "affected_apis": ["<symbol>"],
+      "before": "<code snippet>",
+      "after": "<code snippet>"
+    }
+  ],
+  "deprecations": [{ "api": "<name>", "replacement": "<name>" }]
+}
+```
+
+- `affected_apis` 必須是**可搜尋符號**（函式名 / component 名 / config key），不要寫人話
+- `before` / `after` 是可貼上的 code snippet，給 codex 看
+
+**`feature` 時提取 feature 摘要**：
+
+```jsonc
+{
+  "notable_features": [
+    { "description": "<feature 描述>", "opt_in": true }
+  ]
+}
+```
+
+### O.1.5.4 — Callsite quick-scan（`adaptation` only）
+
+對標記 `adaptation` 的 package，用 `rg` 快掃每個 BC 的 `affected_apis`：
+
+```bash
+rg -n "<symbol>" --type-add 'vue:*.vue' --type vue --type ts .
+```
+
+- 記錄 `file:line` 組合，後續 O.2.1 填入 `<changelog-block>` 的 callsites 段
+- 過濾 docs-only 命中（`.md` / `README` / `docs/`）— 不是 runtime callsite
+- 比 Fleet mode 的 codebase-memory-mcp 輕量（單 consumer、不需 index）
+- **callsite = 0**：不刪該 BC（仍可能 transitive 影響），prompt 內提示 `callsites: 0（codex 自行 grep 確認）`
+
+### O.1.5.5 — 增強版計畫回報
+
+```
+偵測到 <PM>，outdated 共 <N> 個（changelog pre-scan 完成）：
+
+### 🟢 Bug fix only — <a> 個（順升）
+
+| Package | from → to | 摘要 |
+| --- | --- | --- |
+
+### 🟡 需要適配 — <b> 個（有 BC / deprecation）
+
+| Package | from → to | BC 摘要 | callsite 數 |
+| --- | --- | --- | --- |
+
+### 🔵 有新 Feature — <c> 個（升版 + HANDOFF 記 feature 適配計畫）
+
+| Package | from → to | Feature 摘要 |
+| --- | --- | --- |
+
+### ⚪ Changelog 不可得 — <d> 個（走現有 medium → high fallback）
+
+| Package | from → to |
+| --- | --- |
+
+建議升級順序：🟢 → ⚪ → 🟡 → 🔵（先簡單的、再需要適配的、最後有 feature 的）
+
+要排除任何套件不升嗎？要調整任何分類嗎？
+```
+
+使用者可：
+- 指定排除清單（如 `vue` lockstep with `nuxt`，先不動）
+- 調整分類（如「bar 不用 adaptation，降成 bugfix」）
+- **MUST 等使用者確認**才進 Step O.2 — 不要自決定
+
+> Smoke test 建議：第一次跑這個 mode on 一個新 consumer 時，先挑 1 個最低風險 🟢 patch 跑 smoke，驗證 worktree fork + codex dispatch + commit boundary 都對，再批次推剩下的。
+
+## Step O.2 — 逐套件 codex 派工 loop（category-aware）
+
+每個 package 走以下子流程，**一個 package 一個 codex 派工**、**一個 commit**。Step O.1.5 的分類決定 prompt 填充策略：
+
+| 分類 | `<changelog-block>` | `<plan-first-block>` | 工作範圍 | 驗證 |
+| --- | --- | --- | --- | --- |
+| `bugfix` | 空（現有行為） | patch 空 / minor 填 | `package.json` + lockfile only | typecheck（patch）/ +build（minor） |
+| `adaptation` | **填入** BC + callsites（復用 Fleet 的 changelog-block 格式） | 必填 | `package.json` + lockfile + callsite 檔 | typecheck + build + 相關 test |
+| `feature`（無 BC） | 填入 feature 摘要（informational） | 依版號差距 | `package.json` + lockfile only | 同 bugfix |
+| `feature` + `adaptation` | **填入** BC + callsites + feature 摘要 | 必填 | 同 adaptation | 同 adaptation |
+| `unknown` | 空（現有行為） | 依版號差距 | `package.json` + lockfile | 同 bugfix |
 
 ### O.2.1 寫 prompt 到 `/tmp/codex-upgrade-<pkg>-prompt.md`
 
@@ -152,14 +272,20 @@ skill 開頭依輸入分流，**不要記兩個 skill 名**。
 - Commit Authorization 段（per codex-watch-protocol § Commit Authorization；message format `🧹 chore: wt upgrade-<pkg>-<from>→<to>`，subagent 端需讀 commitlint config 調整）
 - 失敗時的回報格式
 
-**Plan-first 條件化**（DRY + 降 token）：
-- Patch 升版：**MAY 省略** Plan-first 硬指令，prompt 直接列「install → typecheck → commit」固定三步
-- Minor / Major：**MUST** 加 Plan-first
+**`<changelog-block>` 填充**（`adaptation` / `feature+adaptation` 才填，其他留空）：完全復用 § Codex prompt templates · Changelog-block 填充格式，callsites 來源為 O.1.5.4 的 `rg` 結果（而非 Fleet mode 的 codebase-memory-mcp）。`adaptation` 的 codex 工作範圍擴大到 callsite 檔：Commit Authorization 加 `git add <callsite-files>`。
 
-**驗證步驟**（依升版類型）：
-- Patch：`pnpm install`（隱式跑） + `pnpm typecheck` 0 errors
-- Minor：typecheck + 如有 build script 跑一次 + 相關 test
-- Major：typecheck + build + 全 test + codex 自己決定要不要 smoke test
+**`feature`（無 BC）的 `<changelog-block>` 填充**：只含 feature 摘要段（informational），**不**含 callsites 或「動手範圍」段 — 告知 codex 這個版本有新功能但升版只需 bump，不必改 source code。
+
+**Plan-first 條件化**（DRY + 降 token）：
+- `bugfix` + patch：**MAY 省略** Plan-first 硬指令，prompt 直接列「install → typecheck → commit」固定三步
+- `bugfix` + minor / `unknown` + minor：**MUST** 加 Plan-first
+- `adaptation` / `feature+adaptation` / major（任何分類）：**MUST** 加 Plan-first
+
+**驗證步驟**（依分類 + 升版類型，取嚴格者）：
+- `bugfix` + patch：`pnpm install`（隱式跑） + `pnpm typecheck` 0 errors
+- `bugfix` + minor / `unknown`：typecheck + 如有 build script 跑一次 + 相關 test
+- `adaptation`（任何版號差距）：typecheck + build + 相關 test
+- major（任何分類）：typecheck + build + 全 test + codex 自己決定要不要 smoke test
 
 ### O.2.2 Dispatch background bash（medium）
 
@@ -281,11 +407,33 @@ git add package.json <lockfile-path>                  # 只 stage upgrade 真的
 
 `<lockfile-path>` 對應 PM：`pnpm-lock.yaml` / `package-lock.json` / `yarn.lock` / `bun.lockb`。
 
-**罕見情況**：codex high-research 派工有 commit 過非 dep 檔（import path 重寫），那些檔也在 squash 後落在 main working tree。摘要 O.3.4 ⚠️ 區應列出，**MUST** 也加進 `git add`，但 stage 前 `git status` 印給 user。
-
 **NEVER** `git add -A` / `git add .`。
 
-### O.3.4 摘要彙報
+**`adaptation` 額外 stage**：codex 有改 callsite 檔時（import path 重寫 / API rename），那些檔也在 squash 後落在 main working tree。**MUST** 也加進 `git add`，但 stage 前 `git status` 印給 user。
+
+### O.3.5 — Feature HANDOFF entries（`feature` 分類 only）
+
+對每個在 Step O.1.5 分類含 `feature` 標籤的 package，append entry 到 consumer 的 `HANDOFF.md`：
+
+```markdown
+## <pkg> <to> 新 feature 適配
+
+**Discovered**: <YYYY-MM-DD>
+**Source**: <release_url>
+**Upgraded in**: dep-upgrade session <date>
+
+新增功能：
+- <feature description 1>
+- <feature description 2>
+
+建議適配方式：（待規劃）
+```
+
+- **MUST** 把 `HANDOFF.md` 加進 selective stage：`git add HANDOFF.md`
+- 若 consumer 沒有 `HANDOFF.md` → skip（不替 consumer 建檔）
+- O.3.6 摘要的 🔵 區段列出寫了哪些 HANDOFF entries
+
+### O.3.6 摘要彙報
 
 ```markdown
 ## dep-upgrade · outdated 摘要（<YYYY-MM-DD HH:MM>）
@@ -295,10 +443,20 @@ git add package.json <lockfile-path>                  # 只 stage upgrade 真的
 **Package manager**：`<PM>`
 **總計**：N 套件（M 成功、K 升 high 後成功、S 跳過、F 失敗）
 
-### ✅ Medium 一次成功（M）
+### 🟢 Bug fix — 一次成功
 
 | Package | <from> | <to> | Commit |
 | --- | --- | --- | --- |
+
+### 🟡 Adaptation — 成功套用 BC
+
+| Package | <from> | <to> | BC 摘要 | callsite 改動 | Commit |
+| --- | --- | --- | --- | --- | --- |
+
+### 🔵 Feature — 已升版 + HANDOFF 已記
+
+| Package | <from> | <to> | Feature 摘要 | HANDOFF entry |
+| --- | --- | --- | --- | --- |
 
 ### ⚠️ 升 high research 後成功（K）
 
@@ -312,7 +470,7 @@ git add package.json <lockfile-path>                  # 只 stage upgrade 真的
 
 ### 📦 Main 端狀態
 
-- Staged：`package.json`、`<lockfile-path>`
+- Staged：`package.json`、`<lockfile-path>`（+ callsite 檔 + `HANDOFF.md` 若有）
 - Unstaged：並行 session 原有 WIP 保留
 - 並行 session 的 staged WIP（若有）已退回 unstaged
 
