@@ -16,6 +16,11 @@
 #            must be AFTER the last commit on the depicted .vue file.
 #            Catches: ingest adds UI polish → old screenshots survive → user
 #            sees pre-polish UI in review GUI.
+#   Check 6b: Seed Baseline Advisory — verify annotations may reference entity
+#            IDs (UUIDs, integers in API paths) created ephemerally via API for
+#            evidence screenshots. After `supabase db reset` those entities vanish
+#            and screenshots become stale. Cross-checks IDs against seed.sql;
+#            advisory-only (never blocks). TD-196.
 #   Check 7: Pre-handoff Verdict Presence — the Layer E.1 self-analysis verdict
 #            (spectra-apply Step 8a.6) must be recorded to the pre-handoff
 #            ledger before archive. Mechanical backstop so the soft self-record
@@ -648,6 +653,71 @@ if [ -f "$TASKS_FILE" ]; then
 $(printf '  - %s\n' "${STALE_ITEMS[@]}")
 
 修正方式：重跑 verify:ui channel 對這些 items 拍 fresh screenshot（從 worktree 起 dev server + 重新截圖），更新 (verified-ui: <新 ISO>) annotation timestamp。完成後重跑 archive。")
+  fi
+fi
+
+# --- Check 6b: Seed Baseline Advisory (TD-196) ---
+# Advisory-only: never sets BLOCKED=true.
+# Runs independently of --pre-skill (not gated by PRE_SKILL).
+if [ -f "$TASKS_FILE" ]; then
+  _SEED_FILE=""
+  for _seed_candidate in "supabase/seed.sql" "db/seed.sql" "server/database/seed.sql" "prisma/seed.sql"; do
+    if [ -f "$REPO_ROOT/$_seed_candidate" ]; then
+      _SEED_FILE="$REPO_ROOT/$_seed_candidate"
+      break
+    fi
+  done
+
+  if [ -z "$_SEED_FILE" ]; then
+    echo "[UX Gate] info — no seed.sql found; skipping Check 6b seed baseline advisory." >&2
+  else
+    _SEED_CONTENT=$(cat "$_SEED_FILE")
+    _EPHEMERAL_ITEMS=()
+
+    _IN_MR_6B=false
+    while IFS= read -r _line_6b; do
+      if [[ "$_line_6b" =~ ^##[[:space:]]+人工檢查 ]]; then
+        _IN_MR_6B=true
+        continue
+      fi
+      if [ "$_IN_MR_6B" = true ] && [[ "$_line_6b" =~ ^##[[:space:]] ]] && ! [[ "$_line_6b" =~ ^##[[:space:]]+人工檢查 ]]; then
+        break
+      fi
+      [ "$_IN_MR_6B" = true ] || continue
+
+      _item_id_6b=""
+      if [[ "$_line_6b" =~ \#([0-9]+(\.[0-9]+)?) ]]; then
+        _item_id_6b="#${BASH_REMATCH[1]}"
+      fi
+
+      # Extract integers from verified-api URL path segments
+      _VAPI_RE='\(verified-api:[[:space:]]*[^ ]+[[:space:]]+[A-Z-]+[[:space:]]+(/[^[:space:]]+)[[:space:]]'
+      if [[ "$_line_6b" =~ $_VAPI_RE ]]; then
+        _api_url="${BASH_REMATCH[1]}"
+        _api_ids=$(echo "$_api_url" | grep -oE '/[0-9]+' | grep -oE '[0-9]+' || true)
+        for _aid in $_api_ids; do
+          [ "${#_aid}" -ge 1 ] || continue
+          if ! echo "$_SEED_CONTENT" | grep -qF "$_aid"; then
+            _EPHEMERAL_ITEMS+=("${_item_id_6b:-?} — API path ID ${_aid} (${_api_url}) not in $(basename "$_SEED_FILE")")
+          fi
+        done
+      fi
+
+      # Extract UUIDs from any verify annotation
+      _uuids=$(echo "$_line_6b" | grep -oE '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}' || true)
+      for _uuid in $_uuids; do
+        [ -n "$_uuid" ] || continue
+        if ! echo "$_SEED_CONTENT" | grep -qiF "$_uuid"; then
+          _EPHEMERAL_ITEMS+=("${_item_id_6b:-?} — UUID ${_uuid} not in $(basename "$_SEED_FILE")")
+        fi
+      done
+    done < "$TASKS_FILE"
+
+    if [ "${#_EPHEMERAL_ITEMS[@]}" -gt 0 ]; then
+      echo "[UX Gate] advisory — ${#_EPHEMERAL_ITEMS[@]} entity ID(s) in verify annotations not found in $(basename "$_SEED_FILE"). These may be ephemeral (created via API, lost after db:reset):" >&2
+      printf '  - %s\n' "${_EPHEMERAL_ITEMS[@]}" >&2
+      echo "修正方式：把 fixture INSERT 寫進 $(basename "$_SEED_FILE") → db:reset → 重拍 screenshot。若 ID 確為非 seed 資料（runtime-generated），可忽略。" >&2
+    fi
   fi
 fi
 
