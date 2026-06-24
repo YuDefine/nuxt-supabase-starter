@@ -137,6 +137,42 @@ Cookbook 範本：`~/offline/clade/vendor/snippets/nuxt-data-perf/stale-time.ts`
 
 Cookbook 範本：`~/offline/clade/vendor/snippets/nuxt-data-perf/query-file-example.ts`
 
+## Mechanical Enforcement（4 層）
+
+此規約有**四層** enforcement，對齊 [[nuxt-ui-native-picker-ban]] 同一架構：
+
+| 層 | scope | 何時跑 | 偵測項 | 行為 |
+| --- | --- | --- | --- | --- |
+| **impl-time rule** | 當次 session 寫的 `.vue`（path-scoped 自動 load） | 寫 code 當下 | Self-check Gate 5 項（下方 § Self-check Gate） | agent 自查 |
+| **pre-commit gate** | staged `.vue` | `git commit` | file-level：有 `$fetch` 但無 `useFetch`/`useQuery`/`useAsyncData`（HR-1） | **blocking** |
+| **pre-push gate** | **全 repo** `.vue` | `git push` | 同上，回溯型 | **warn-only**（既有 codebase 違規量大，暫不阻擋） |
+| **review 層** | PR diff | code-review agent / `/commit` 0-A | 全 5 條 HR 語意 check | agent review |
+
+偵測 heuristic（file-level）：`.vue` 檔含 `$fetch` 但**不含** `useFetch` / `useQuery` / `useAsyncData` → 代表所有 data-fetching 都走 raw `$fetch`。含 composable 的 `.vue` 檔有 `$fetch` 不被標記（通常是 event handler mutation）。
+
+> **為何 pre-push 是 warn-only**：既有 Nuxt consumer（如 <consumer-b>）通常有 30-50 個 `.vue` 檔只用 `$fetch`。全部阻擋會讓 push 完全停擺。等主要 consumer 逐步遷移到 composable 後 promote 為 blocking。
+
+### 合法例外（file-level ignore）
+
+純 mutation component（只有 POST/PUT/DELETE、無 data-fetching 需求）在檔案內任何位置加 `data-perf-ignore-file` 標記即跳過：
+
+```vue
+<!-- data-perf-ignore-file: pure mutation component, no data fetching -->
+<script setup>
+async function handleSubmit() {
+  await $fetch('/api/items', { method: 'POST', body })
+}
+</script>
+```
+
+仍**MUST** 在 commit message 註明位置與理由，讓 review 層核實。
+
+### 規約來源
+
+- **pre-commit gate**：`vendor/scripts/pre-commit/checks/data-perf-check.sh`（掃 staged `.vue`）
+- **pre-push gate**：`vendor/scripts/pre-push/checks/data-perf-check.sh`（掃**全 repo** `.vue`，warn-only 回溯型）
+- **review-layer**：`plugins/hub-core/agents/references/clade-review-rules.md`
+
 ## Self-check Gate（Enforcement Layer 1）
 
 **每次**寫完新的 `useFetch` / `useQuery` / `useAsyncData` / `$fetch` 呼叫後，**MUST** 暫停並逐條自查：
