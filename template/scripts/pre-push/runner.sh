@@ -10,6 +10,7 @@
 #   - nuxt-typecheck     偵測 nuxt.config.* 才跑
 #   - native-picker-ban  偵測 nuxt.config.* 才跑（全站掃 .vue，回溯型；
 #                        補 pre-commit staged 版的盲區——歷史既有違規）
+#   - data-perf-check   偵測 nuxt.config.* 才跑（全站掃 .vue setup context raw $fetch）
 #
 # 為什麼 typecheck 放 pre-push 不放 pre-commit：
 #   vue-tsc / nuxi typecheck 不支援單檔 typecheck（nuxt/cli #407），
@@ -47,3 +48,6 @@ run_check nuxt-typecheck
 
 # native picker ban — 全站掃描（auto-detect nuxt.config；非 Nuxt repo 自動 no-op）
 run_check native-picker-ban
+
+# data-perf check — 全站掃描 .vue setup context raw $fetch（auto-detect nuxt.config）
+run_check data-perf-check

@@ -11,6 +11,7 @@
 #   - supabase-migration-safety 偵測 supabase/migrations/*.sql 才跑
 #   - native-picker-ban         偵測 staged *.vue 才跑（無 .vue 自動 no-op）
 #   - review-rules-ban          偵測 staged *.vue 才跑（patterns.json 驅動，無 .vue 自動 no-op）
+#   - data-perf-check           偵測 staged *.vue 才跑（setup context raw $fetch anti-pattern）
 #
 # 重型檢查（nuxt typecheck、test tsconfig）放 pre-push runner，不在 pre-commit 跑。
 # 來源：vue-tsc / nuxi typecheck 不支援單檔 typecheck（issue #407），
@@ -47,3 +48,6 @@ run_check native-picker-ban
 
 # 4) review rules ban — patterns.json 驅動（無 staged *.vue 或無 patterns.json 直接跳）
 run_check review-rules-ban
+
+# 5) data-perf check — 偵測 staged .vue 中 setup context raw $fetch（無 staged .vue 直接跳）
+run_check data-perf-check
