@@ -70,6 +70,42 @@ Local edits will be reverted by the next sync.
 - ❌ 回答 change「卡在誰 / ready 了沒」時從 tasks.md 散文或 checkbox leaf count 推測，而非讀 `change.bucket` / `--scan` bucket（per MUST 6）
 - ❌ 對 route E 結論的 issue 只寫散文分析或只開 `@followup[TD]`、卻漏寫 `(claude-analyzed: route=E)` annotation（per MUST 7）
 
+## Annotation Format Contract
+
+review-gui parser 對 annotation key 和 status tag **嚴格字面匹配**。寫錯 = silent malformed（item 卡 `evidenceMissing`、bucket 不收斂）。
+
+### Canonical annotation keys
+
+| Key | 格式 | Parser 行為 |
+| --- | --- | --- |
+| `screenshot=<path>` | **單數**，value 是單一 relative path | `findKeyValue('screenshot')` strict match |
+| `screenshots=<p1>,<p2>` | **複數**，逗號分隔多 path | review-gui parser **不認**（fallback null）— 待 parser 支援前**禁用** |
+| `(verified-ui: <ISO>)` | 括號內、冒號後空格 | `hasEvidenceFor` 認為 evidence 已收集 |
+| `(issue: <description>)` | 括號內、冒號後空格 | `evidenceMissing` 排除此 item（視為 handled） |
+| `(claude-analyzed: <ISO> route=<X>[ note=...])` | 括號內、space-separated KV | `analyzedIssuedCount` 計數；bucket 從 `feedbackGiven` 翻為 `awaitingUserReEval` |
+| `(awaiting-user-decision: <description>)` | 括號內 | bucket 翻為 `awaitingUserDecision`（master 排除） |
+
+### Status tags parser 不認的常見錯誤
+
+| 錯誤寫法 | 為什麼不認 | 正確寫法 |
+| --- | --- | --- |
+| `(deferred: ...)` | parser 只認 `issue` / `verified-*` / `claude-analyzed` / `awaiting-user-decision`；`deferred` 不在辭典 → item 卡 `evidenceMissing` | `(issue: self-collect failed — <reason>)` |
+| `screenshots=a,b` | `findKeyValue('screenshot')` 只配 singular key | 拆成 sub-items 各帶 `screenshot=<path>` |
+| `screenshot = <path>`（等號前後空格） | KV parser 不 trim 等號兩側 | `screenshot=<path>`（無空格） |
+| `#4-xxx.png` 配 item `#4.1` | filename prefix match `#4-` 只配 `#4`，不配 `#4.1` | sub-item `#4.1` 用 `#4.1-xxx.png` |
+
+### MUST（annotation 寫入時）
+
+1. evidence collection 完成寫 annotation 時，**MUST** 用上表 canonical key（singular `screenshot=`）
+2. self-collect fallback chain 全失敗 → **MUST** 寫 `(issue: self-collect failed after (a)(b)(c)(d): <reason>)`，**NEVER** `(deferred: ...)`
+3. sub-item `#N.M` 的 screenshot 檔名 **MUST** 用 `#N.M-` prefix，**NEVER** 複用 parent `#N-` prefix
+4. route E 結論 **MUST** 同步寫 `(claude-analyzed: <ISO> route=E)` annotation（per MUST 7）
+
+### Cross-ref
+
+- [[pitfall-verified-ui-annotation-format-drift]] — plural key + sub-item ID mismatch
+- [[pitfall-deferred-vs-issue-annotation-contract-conflict-review-gui]] — `(deferred:)` vs `(issue:)` 辭典衝突
+
 ## 界線（不在本 rule 範圍）
 
 下列**不**屬本 rule：
