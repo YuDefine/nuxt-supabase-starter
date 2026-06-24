@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-06-23T16:44:52.316Z",
+  "syncedAt": "2026-06-24T03:57:53.486Z",
   "rulesProjection": "copy",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "cf7f41e210925ba6",
@@ -12,6 +12,7 @@
     "rules/commit.md": "ed3d39228ebd2aed",
     "rules/consumer-meta.md": "291d1355a37c8f8e",
     "rules/data-layer-d1.md": "b3abb61c929b138e",
+    "rules/database.md": "feaaad7ca9d7f091",
     "rules/db-preview-env.md": "6c126e4ea6b97c5a",
     "rules/dev-port-allocation.md": "87e8ded55398e0ca",
     "rules/dev-tunnel-convention.md": "1cd453fd80ffdbbe",
@@ -41,7 +42,7 @@
     "rules/review-gui-surface.md": "c710604f362ed200",
     "rules/review-tiers.md": "8c8ec7801aeb2714",
     "rules/scope-discipline.md": "a69d1cbc923c89a0",
-    "rules/screenshot-strategy.md": "76ad50bed1f90d88",
+    "rules/screenshot-strategy.md": "7a24c8afd8499bfa",
     "rules/session-claims.md": "7df886e284a98665",
     "rules/session-tasks.md": "992eaea717971157",
     "rules/spectra-notion-coupling.md": "555209a1cff1b5d8",
