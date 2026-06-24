@@ -970,6 +970,8 @@ If there is no request_user_input 工具 available, present options as plain tex
 
 8b. **Manual review handoff**
 
+   **MUST** 先跑 `bash scripts/spectra-advanced/pre-handoff-readiness-check.sh <change-name>`。Exit 2 = NOT READY — 修完 blockers 再重跑直到 exit 0。Exit 0 才進 handoff message。
+
    When tasks.md still contains unchecked items in the `## 人工檢查` section (typical at this point — implementation tasks `[x]` but manual-review items `[ ]`), **MUST** hand off to the local manual-review GUI rather than walking through items inline in chat.
 
    **Pre-handoff evidence-missing self-collect**（hard rule，clade fork addition — per [[pitfall-verify-evidence-handoff-instead-of-self-collect]]）：

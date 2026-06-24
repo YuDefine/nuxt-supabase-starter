@@ -122,3 +122,11 @@ $$;
 4. `ALTER DEFAULT PRIVILEGES ...` 確保新表自動繼承權限
 
 **NEVER** 暴露 `core` / `internal` / `audit` 這類 helper schema。
+
+## DML Data Fix Checklist
+
+寫 DML `UPDATE` / `DELETE` migration 修 prod 髒資料時：
+
+1. **MUST** 同一 commit 內更新 `seed.sql` 對應 row — migration 修了 prod，seed.sql 仍帶舊值 → `db:reset` 重新引入髒資料
+2. 若無法立即 commit，**MUST** 在 `HANDOFF.md` 登記「seed.sql 待同步 — migration `<name>` 修了 `<table>.<column>`，seed.sql L`<lines>` 待改」
+3. **NEVER** 只寫 migration 就當作完成
