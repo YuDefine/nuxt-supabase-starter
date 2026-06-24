@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-06-24T03:57:53.486Z",
+  "syncedAt": "2026-06-24T04:02:50.712Z",
   "rulesProjection": "copy",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "cf7f41e210925ba6",
@@ -12,7 +12,6 @@
     "rules/commit.md": "ed3d39228ebd2aed",
     "rules/consumer-meta.md": "291d1355a37c8f8e",
     "rules/data-layer-d1.md": "b3abb61c929b138e",
-    "rules/database.md": "feaaad7ca9d7f091",
     "rules/db-preview-env.md": "6c126e4ea6b97c5a",
     "rules/dev-port-allocation.md": "87e8ded55398e0ca",
     "rules/dev-tunnel-convention.md": "1cd453fd80ffdbbe",
@@ -39,6 +38,7 @@
     "rules/proactive-skills.design-checkpoint.md": "e930b956b96b102e",
     "rules/proactive-skills.ingest-triggers.md": "71a04d0a19b9dabf",
     "rules/proactive-skills.md": "f47adeb81f6041b7",
+    "rules/prod-mcp-safety.md": "db779a000333934a",
     "rules/review-gui-surface.md": "c710604f362ed200",
     "rules/review-tiers.md": "8c8ec7801aeb2714",
     "rules/scope-discipline.md": "a69d1cbc923c89a0",
