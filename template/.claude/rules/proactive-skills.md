@@ -233,6 +233,49 @@ grep -l 'cloudflareTunnel\|vite-plugin-cloudflare-tunnel' nuxt.config.* 2>/dev/n
 
 同一組截圖重拍到第 3 次，應考慮沉澱為 Playwright spec。
 
+### agent-browser Worktree Verify Auth（hard rule）
+
+agent-browser 開 auth-protected URL 前 **MUST** 完成 pre-auth，**NEVER** 截到空白頁後才開始診斷 auth。
+
+#### MUST — Worktree verify 走 port 3000 singleton
+
+驗 worktree UI 改動 **MUST** 把 port 3000 singleton 切到 worktree cwd，**NEVER** 在 alt port（3001+）起第二台 dev server。
+
+```bash
+pnpm dev:kill                           # 停 main
+cd <consumer>-wt/<slug> && pnpm dev:agent  # 從 worktree 起 singleton（port 3000）
+# 驗完：
+pnpm dev:kill
+cd <consumer> && pnpm dev:agent         # 切回 main
+```
+
+理由：OAuth redirect URI 綁 port 3000；agent-browser persistent profile 已有 port 3000 的有效 session cookie；alt port 上 OAuth 不通 + `__test-login` 常缺 `email` + HttpOnly cookie 不可 JS 注入 = 100% 失敗率。
+
+#### MUST — 每次開 auth-protected URL 前跑 pre-auth
+
+即使用 port 3000、persistent profile cookie 也會過期。**每次** `agent_browser_open` 到 auth-protected URL 前 **MUST** 先跑 pre-auth：
+
+```
+agent_browser_open({ url: "http://127.0.0.1:3000/auth/__test-login?role=admin&email=admin@example.com&redirect=<target-path>", session: "<consumer>" })
+agent_browser_wait_for_load({ state: "networkidle", session: "<consumer>" })
+# redirect 會自動導到 target-path；若 __test-login 不支援 redirect，再 navigate 一次
+agent_browser_wait_ms({ ms: 2000, session: "<consumer>" })  # Vue hydration buffer
+```
+
+`email` 參數 **MUST** 填（`__test-login` 沒帶 email 會 400，拿到空 session cookie → 後續 API 全 401）。各 consumer 的合法 email / role 見 consumer 的 `agent-browser-session.md` § Auth Pre-flight 或 `docs/FIXTURES.md`。
+
+#### NEVER
+
+- ❌ 在 alt port（3001+）起 dev server 驗 worktree UI（OAuth / cookie / session 全部壞）
+- ❌ `agent_browser_open` auth-protected URL 不先 pre-auth（persistent cookie 不保證有效）
+- ❌ `__test-login?role=admin` 不帶 `email`（400 → 空 session → 後續全白）
+- ❌ `eval document.cookie = "nuxt-session=..."` 設 HttpOnly cookie（SecurityError）
+- ❌ 截到空白頁後反覆 retry 同一條壞路徑（浪費 token；先確認 dev server port + pre-auth）
+
+完整 cookbook 見 `~/offline/clade/vendor/snippets/agent-browser-auth/README.md`。
+
+Pitfall ref: `docs/pitfalls/2026-06-24-agent-browser-auth-blank-page-on-alt-port.md`
+
 ## Knowledge And Decisions
 
 碰到非直覺問題或 workaround，任務結束時應評估沉澱到 `docs/solutions/**`。
