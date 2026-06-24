@@ -53,6 +53,62 @@ Local edits will be reverted by the next sync.
 - **NEVER** 把 provider API key（`BROWSERBASE_API_KEY` / `KERNEL_API_KEY` / `BROWSER_USE_API_KEY` 等）寫進 repo / clade source — 留 user-level env
 - **MUST** 啟用前回報 user「本機 agent-browser 不可用，建議改走遠端 provider fallback（限非私有登入頁）」，等 user 同意才繼續
 
+## 給 user 開瀏覽器看頁面（hard rule）
+
+兩條線分工明確：
+
+| 用途 | 工具 | 模式 |
+| --- | --- | --- |
+| **Agent 自己驗證** | agent-browser（線 ①） | headless 截圖，inline 顯示在對話 |
+| **給 user 看可見 Chrome** | chrome-devtools-mcp（線 ②） | headed Chrome，user 螢幕可見 |
+
+### agent-browser = 永遠 headless
+
+MCP daemon 在 session 啟動時以 `--headless=new` 開 Chrome。`headed: true`（MCP flag）和 CLI `--headed` 都不可靠（daemon auto-reconnect 搶回 headless → Chrome 閃退）。agent-browser **只**用於 headless 截圖 / snapshot / DOM 檢查。
+
+### 給 user 看頁面：chrome-devtools-mcp `navigate_page`
+
+chrome-devtools-mcp 會開一個 **headed Chrome** 並導航到指定 URL，user 可在螢幕上看到。
+
+```
+# 1. 先登入（dev-login 設 cookie）
+mcp__chrome-devtools-mcp__navigate_page({
+  url: "http://127.0.0.1:<port>/auth/<dev-login-route>?role=admin"
+})
+
+# 2. 再導到目標頁
+mcp__chrome-devtools-mcp__navigate_page({
+  url: "http://127.0.0.1:<port>/reports/vending-dispatch"
+})
+```
+
+或用 dev-login 的 `redirect` 參數一步到位：
+
+```
+mcp__chrome-devtools-mcp__navigate_page({
+  url: "http://127.0.0.1:<port>/auth/<dev-login-route>?role=admin&redirect=/reports/vending-dispatch"
+})
+```
+
+**前提**：每個 consumer 的 `.mcp.json` **MUST** 含 `chrome-devtools-mcp` entry（clade propagate 已涵蓋）。
+
+### Fallback（chrome-devtools-mcp 不可用時）
+
+macOS `open` 開 user 預設瀏覽器：
+
+```bash
+open "http://127.0.0.1:<port>/auth/<dev-login-route>?role=admin&redirect=<target-path>"
+```
+
+### NEVER
+
+- **NEVER** 用 agent-browser MCP `headed: true` — daemon 忽略
+- **NEVER** 用 agent-browser CLI `--headed` — daemon auto-reconnect 搶回 headless
+- **NEVER** `close --all` / `pkill` agent-browser 再重開 — 殺 MCP daemon
+- **NEVER** 反覆 open → 黑畫面 → close → open 試錯迴圈
+
+---
+
 ## 決策樹
 
 1. 需要多 viewport / responsive？→ Playwright
