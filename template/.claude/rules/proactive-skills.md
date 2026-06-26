@@ -233,6 +233,8 @@ grep -l 'cloudflareTunnel\|vite-plugin-cloudflare-tunnel' nuxt.config.* 2>/dev/n
 
 同一組截圖重拍到第 3 次，應考慮沉澱為 Playwright spec。
 
+**NEVER** 用 `chrome-devtools-mcp` 開頁面、截圖、填表單、互動式驗收 — 它是效能量測工具（Lighthouse audit / performance trace / heap snapshot），不是瀏覽器操控工具。互動式頁面操作一律走 `agent-browser`。
+
 ### agent-browser Worktree Verify Auth（hard rule）
 
 agent-browser 開 auth-protected URL 前 **MUST** 完成 pre-auth，**NEVER** 截到空白頁後才開始診斷 auth。
