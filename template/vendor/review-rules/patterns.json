@@ -62,6 +62,16 @@
       "fix": "改用 Nuxt UI semantic token（text-default / bg-default / border-default 等），由 color mode 自動處理。"
     },
     {
+      "id": "calendar-popover-min-width",
+      "section": 3,
+      "severity": "warning",
+      "fileGlob": "*.vue",
+      "pattern": "<UCalendar[^>]*class=\"[^\"]*(?!min-w-)",
+      "excludePattern": "min-w-",
+      "message": "UCalendar 在 UPopover 內使用時 MUST 設 min-w-[280px]（或透過 app.config.ts calendar.slots.root 全域設定）。CJK locale 的年份標籤（如「2020年」）在預設寬度下會擠成一塊。",
+      "fix": "在 UCalendar 加 class=\"min-w-[280px]\"，或在 app.config.ts 加 ui.calendar.slots.root: 'min-w-[280px]'。"
+    },
+    {
       "id": "dark-mode-semantic-color",
       "section": 5,
       "severity": "warning",
