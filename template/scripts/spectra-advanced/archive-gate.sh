@@ -628,15 +628,11 @@ if [ -f "$TASKS_FILE" ]; then
     vue_commit_ts=$(cd "$REPO_ROOT" && git log -1 --format='%aI' -- "$vue_file" 2>/dev/null)
     [ -n "$vue_commit_ts" ] || continue
 
-    # Compare timestamps (convert to epoch for reliable comparison)
-    # Use date -j on macOS, date -d on Linux
-    if date -j -f '%Y-%m-%dT%H:%M:%S' "$(echo "$local_annotation_ts" | sed 's/Z$//' | sed 's/+.*//')" '+%s' >/dev/null 2>&1; then
-      ann_epoch=$(date -j -f '%Y-%m-%dT%H:%M:%S' "$(echo "$local_annotation_ts" | sed 's/Z$//' | sed 's/+.*//')" '+%s' 2>/dev/null)
-      vue_epoch=$(date -j -f '%Y-%m-%dT%H:%M:%S' "$(echo "$vue_commit_ts" | sed 's/+.*//' | sed 's/Z$//')" '+%s' 2>/dev/null)
-    else
-      ann_epoch=$(date -d "$(echo "$local_annotation_ts" | sed 's/Z$//' | sed 's/+.*//')" '+%s' 2>/dev/null)
-      vue_epoch=$(date -d "$(echo "$vue_commit_ts" | sed 's/+.*//' | sed 's/Z$//')" '+%s' 2>/dev/null)
-    fi
+    # Compare timestamps — use node for reliable timezone-aware epoch conversion.
+    # macOS `date -j` cannot parse ISO 8601 with timezone offset (+08:00);
+    # stripping the offset (old approach) compares local time against UTC → false positive.
+    ann_epoch=$(node -e "const d=Date.parse(process.argv[1]);isNaN(d)||process.stdout.write(String(d/1000))" "$local_annotation_ts" 2>/dev/null)
+    vue_epoch=$(node -e "const d=Date.parse(process.argv[1]);isNaN(d)||process.stdout.write(String(d/1000))" "$vue_commit_ts" 2>/dev/null)
 
     [ -n "$ann_epoch" ] && [ -n "$vue_epoch" ] || continue
 
