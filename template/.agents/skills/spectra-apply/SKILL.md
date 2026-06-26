@@ -19,7 +19,7 @@ Local edits will be reverted by the next sync.
 
 Implement tasks from a Spectra change.
 
-> **Ownership**（clade fork；cross-phase matrix in `rules/core/spectra-workflow.md`）：apply 負責 code 正確性 + Class B UI view phase refactor invariant（Step 6c / Layer B：無 column 整欄 fallback + 0 個 4xx/5xx）+ Design Review data-sanity（Layer C：client param vs server schema bound）+ pre-handoff 5-維度 cross-check（Step 8a.6 / Layer E.1 主線 + E.2 codex）。**不**負責 user 主觀視覺 / UX 真人驗收（manual review / review-gui 管）。
+> **Ownership**（clade fork；cross-phase matrix in `rules/core/spectra-workflow.md`）：apply 負責 code 正確性 + Class B UI view phase refactor invariant（Step 6c / Layer B：無 column 整欄 fallback + 0 個 4xx/5xx）+ review-rules 機械規則掃描（Step 6d：`patterns.json` multi-line match，補 pre-commit hook 逐行 grep 漏抓的跨行 Vue props）+ Design Review data-sanity（Layer C：client param vs server schema bound）+ pre-handoff 5-維度 cross-check（Step 8a.6 / Layer E.1 主線 + E.2 codex）。**不**負責 user 主觀視覺 / UX 真人驗收（manual review / review-gui 管）。
 
 **Input**: Optionally specify a change name (e.g., `/spectra-apply add-auth`). If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
 
@@ -580,6 +580,60 @@ If there is no request_user_input 工具 available, present options as plain tex
 
    Phase 1 為 model-driven（SKILL.md 指示）；Phase 3 會把本 check 升級成 `archive-gate.sh` hard gate（master plan 3.1）。
 
+6d. **Review Rules Check**（clade fork addition；not in upstream spectra）
+
+   **理由**：`vendor/review-rules/patterns.json` 定義的機械可檢規則（如 `ubadge-size-ban`、`overlay-width-class`）在 pre-commit hook 有逐行 grep 的 fallback，但跨行 Vue template props（如 `<UBadge\n  size="xs"\n/>`）在 hook 首次落地前會漏抓。在 apply 階段加 multi-line 整檔掃描是 defense-in-depth。<consumer-a> `line-notification-system`（2026-06-26）的 `UBadge size="xs"` 穿過 pre-commit hook 上線即為實證。
+
+   **觸發範圍**：每個 **Class B（UI view）phase** 由主線在 Step 6c 之後、該 phase commit / 標 tasks done **之前**，跑一次。Class A / Class C phase 不觸發。Phase 內 touched files 沒有 `.vue` → skip。
+
+   **執行流程**：
+
+   1. **收集本 phase touched `.vue` files**：`git -C <worktree> diff main..HEAD --name-only -- '*.vue'`，若空 → skip。
+   2. **跑 review-rules multi-line scan**：
+
+      ```bash
+      node -e "
+      const fs = require('fs');
+      const data = JSON.parse(fs.readFileSync('<consumer>/vendor/review-rules/patterns.json', 'utf8'));
+      const rules = data.rules.filter(r => r.fileGlob === '*.vue');
+      const files = process.argv.slice(1);
+      const tagRe = /<[A-Z][A-Za-z]*(?:\s|\n)(?:[^>]|\n)*?\/?>/g;
+      let hasError = false;
+      for (const rule of rules) {
+        const re = new RegExp(rule.pattern);
+        const exRe = rule.excludePattern ? new RegExp(rule.excludePattern) : null;
+        for (const file of files) {
+          const content = fs.readFileSync(file, 'utf8');
+          // multi-line: 展平 Vue tag 區塊再 match
+          let m; tagRe.lastIndex = 0;
+          while ((m = tagRe.exec(content)) !== null) {
+            const flat = m[0].replace(/\n\s*/g, ' ');
+            if (re.test(flat) && !(exRe && exRe.test(flat))) {
+              const line = content.slice(0, m.index).split('\n').length;
+              process.stderr.write('[' + rule.id + '] ' + file + ':' + line + ' ' + rule.message + '\n');
+              if (rule.severity === 'error') hasError = true;
+            }
+          }
+          // single-line fallback for non-tag patterns
+          const lines = content.split('\n');
+          for (let i = 0; i < lines.length; i++) {
+            if (re.test(lines[i]) && !(exRe && exRe.test(lines[i]))) {
+              // 避免 tag-extracted 重複命中
+              if (/<[A-Z]/.test(lines[i])) continue;
+              process.stderr.write('[' + rule.id + '] ' + file + ':' + (i+1) + ' ' + rule.message + '\n');
+              if (rule.severity === 'error') hasError = true;
+            }
+          }
+        }
+      }
+      process.exit(hasError ? 1 : 0);
+      " <touched-vue-files...>
+      ```
+
+   3. **解析 exit code**：
+      - **exit 0** → 通過，繼續 commit / 標 done。
+      - **exit 1** → **MUST block phase complete**：主線依 stderr 的 `[rule-id]` 修正（如 `size="xs"` → 移除 size prop）。修完 re-run 至 exit 0 才繼續。
+
 7. **Implement tasks (loop until done or blocked)**
 
    **Reminder: Track progress by editing checkboxes in the tasks file only. Do not use any built-in task tracker.**
@@ -587,7 +641,7 @@ If there is no request_user_input 工具 available, present options as plain tex
    **Dispatch reminder**: For each phase, follow Step 6b's three-way classification:
    - Class C（Other）→ dispatch codex GPT-5.5 high (phase granularity)
    - Class A（Design Review）→ 主線 self-execute (NEVER dispatch)
-   - Class B（UI view: component / page / view / layout / styling）→ 主線 self-execute (NEVER dispatch)；該 phase 實作完成、commit / 標 done **之前** MUST 跑 **Step 6c Refactor Invariant Check**
+   - Class B（UI view: component / page / view / layout / styling）→ 主線 self-execute (NEVER dispatch)；該 phase 實作完成、commit / 標 done **之前** MUST 跑 **Step 6c Refactor Invariant Check** + **Step 6d Review Rules Check**
    - Mixed phase（UI view + 非 view 摻同 phase）→ 已開工主線吸收、未開工 STOP 提示 `/spectra-ingest`
 
    For each pending task:
