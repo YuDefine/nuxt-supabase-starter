@@ -25,9 +25,15 @@ STAGED=$(git diff --cached --name-only --diff-filter=ACM -- '*.vue' 2>/dev/null 
 [[ -z "$STAGED" ]] && exit 0
 
 # Node 做全部邏輯
+# 兩種 matching 模式：
+#   multiLine: false (default) — 逐行 grep（適合單行 pattern）
+#   multiLine: true            — 整檔 multi-line match（適合跨行 Vue template props）
+#
+# pattern 含 `<ComponentName[^>]*prop=` 形式時自動升級成 multiLine。
+# multiLine 模式把每個 `<Tag ... >` / `<Tag ... />` 區塊展平成單行再 match，
+# 回報的行號是 tag 起始行。
 exec node -e "
 const fs = require('fs');
-const { execSync } = require('child_process');
 const patternsFile = process.argv[1];
 const stagedFiles = process.argv[2].split('\n').filter(Boolean);
 
@@ -35,9 +41,30 @@ const data = JSON.parse(fs.readFileSync(patternsFile, 'utf8'));
 const rules = data.rules.filter(r => r.fileGlob === '*.vue');
 let hasError = false;
 
+// 從 template 抽出每個 HTML/Vue tag 區塊（含起始行號）
+// 把 <Tag\n  prop=\"val\"\n  prop2=\"val2\"\n/> 展平成單行
+function extractTags(content) {
+  const tags = [];
+  const re = /<[A-Z][A-Za-z]*(?:\s|\n)(?:[^>]|\n)*?\/?>/g;
+  let m;
+  while ((m = re.exec(content)) !== null) {
+    const before = content.slice(0, m.index);
+    const line = before.split('\n').length;
+    const flat = m[0].replace(/\n\s*/g, ' ');
+    tags.push({ line, flat, raw: m[0] });
+  }
+  return tags;
+}
+
+// 判斷 pattern 是否需要 multiLine（含 <ComponentName[^>]* 跨屬性匹配）
+function needsMultiLine(pattern) {
+  return /^<[\[(]?[A-Z].*\[\^>\]/.test(pattern);
+}
+
 for (const rule of rules) {
   const re = new RegExp(rule.pattern);
   const excludeRe = rule.excludePattern ? new RegExp(rule.excludePattern) : null;
+  const multiLine = rule.multiLine === true || needsMultiLine(rule.pattern);
 
   let filesToScan = stagedFiles;
   if (rule.scanPaths && rule.scanPaths.length > 0) {
@@ -49,11 +76,22 @@ for (const rule of rules) {
   for (const file of filesToScan) {
     try {
       const content = fs.readFileSync(file, 'utf8');
-      const lines = content.split('\n');
-      for (let i = 0; i < lines.length; i++) {
-        if (re.test(lines[i])) {
-          if (excludeRe && excludeRe.test(lines[i])) continue;
-          hits.push({ file, line: i + 1, text: lines[i].trim() });
+
+      if (multiLine) {
+        const tags = extractTags(content);
+        for (const tag of tags) {
+          if (re.test(tag.flat)) {
+            if (excludeRe && excludeRe.test(tag.flat)) continue;
+            hits.push({ file, line: tag.line, text: tag.flat.slice(0, 120) });
+          }
+        }
+      } else {
+        const lines = content.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+          if (re.test(lines[i])) {
+            if (excludeRe && excludeRe.test(lines[i])) continue;
+            hits.push({ file, line: i + 1, text: lines[i].trim() });
+          }
         }
       }
     } catch {}
