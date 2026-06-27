@@ -184,6 +184,19 @@ v3 atomic landing：`/wt` 跑完 subagent 在 worktree commit、worktree+branch 
 
 > 詳見 [[worktree-default.troubleshooting]] § artifact 活在 git。
 
+## §9.7 Artifact Reading SOP — 讀進度前先查 active worktree
+
+讀 spectra change 進度（`tasks.md` / `openspec/changes/<slug>/` artifacts / WORKTREE-BRIEF.md）時 **MUST** 先查有沒有 active worktree：
+
+```bash
+ls ~/offline/<consumer>-wt/<change-slug>/ 2>/dev/null || git worktree list
+```
+
+- **有 active worktree** → 讀 worktree 內的 `tasks.md`（working truth）；main 的 `tasks.md` 是 fork-time snapshot，不代表當前進度
+- **無 active worktree** → 讀 main（change 尚未 `/wt` 物化，或已 merge-back）
+
+只讀 main 會誤判「還沒開始實作」— 實際可能 worktree 已推進數個 phase。`/handoff` scan、`/spectra-ask` status check、主線 cross-check 都適用本 SOP。
+
 ## §10 review-gui 與 worktree 互動的已知坑
 
 > 3 條已記坑（home list silent skip / source aggregation collision / apply-pending 按前 spot check）詳見 [[worktree-default.troubleshooting]] § review-gui 坑。改 review-gui.mts 後 consumer 端 `pnpm review:ui:kill && pnpm review:ui` 重啟才吃新版。
