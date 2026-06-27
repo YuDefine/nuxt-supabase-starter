@@ -94,14 +94,11 @@ mcp__chrome-devtools-mcp__navigate_page({
 
 ### Fallback（chrome-devtools-mcp 不可用時）
 
-macOS `open` 開 user 預設瀏覽器：
-
-```bash
-open "http://127.0.0.1:<port>/auth/<dev-login-route>?role=admin&redirect=<target-path>"
-```
+回報 user 說明卡點（chrome-devtools-mcp page closed / timeout / 連線失敗），由 user 自行決定開瀏覽器。**NEVER** 用 `open` / `xdg-open` 替 user 開瀏覽器。
 
 ### NEVER
 
+- **NEVER** 用 `open` / `xdg-open` 開 URL — agent 完全無法控制預設瀏覽器（無 CDP），等於把工作踢回 user（per [[pitfall-open-command-launches-uncontrolled-browser]]）
 - **NEVER** 用 agent-browser MCP `headed: true` — daemon 忽略
 - **NEVER** 用 agent-browser CLI `--headed` — daemon auto-reconnect 搶回 headless
 - **NEVER** `close --all` / `pkill` agent-browser 再重開 — 殺 MCP daemon
