@@ -79,6 +79,15 @@
       "pattern": "(bg|text)-(blue|green|red|yellow|orange|purple|pink)-(50|100|500|600|700)",
       "message": "語意色應用 Nuxt UI color token + opacity，不可 hardcode Tailwind 色彩值。",
       "fix": "改用 bg-info/10 / text-error / text-success / text-warning 等 Nuxt UI semantic token。"
+    },
+    {
+      "id": "ubadge-size-ban-config",
+      "section": 3,
+      "severity": "error",
+      "fileGlob": "app.config.*",
+      "pattern": "size\\s*:\\s*['\"](?:xs|sm)['\"]",
+      "message": "app.config 的 badge defaultVariants.size 只允許 md / lg / xl。xs / sm 在密集表格字級過小、可讀性不足。透過 config 設定跟直接在 template 寫效果相同，一律禁止。",
+      "fix": "移除 size 欄位（吃預設 md），或改為 'md' / 'lg' / 'xl'。"
     }
   ]
 }

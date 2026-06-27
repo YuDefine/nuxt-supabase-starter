@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # CLADE:VENDOR-SCRIPT
 #
-# review-rules-ban (pre-commit, staged) — 掃 staged .vue 檔，擋住 patterns.json 定義的機械規則違規
+# review-rules-ban (pre-commit, staged) — 掃 staged 檔，擋住 patterns.json 定義的機械規則違規
 #
-# 讀 vendor/review-rules/patterns.json，對本次 staged *.vue 跑 grep。
+# 讀 vendor/review-rules/patterns.json，對本次 staged 檔案（依 rule.fileGlob 過濾）跑 grep。
 # severity=error 命中 → exit 1 擋 commit；severity=warning → 印但不擋。
 #
 # 由 ~/clade vendor/scripts/pre-commit/ 散播，請勿直接編輯 consumer 副本。
@@ -18,10 +18,12 @@ PATTERNS_FILE="$PROJECT_ROOT/vendor/review-rules/patterns.json"
 # patterns.json 不存在 → 跳過（consumer 尚未 propagate）
 [[ -f "$PATTERNS_FILE" ]] || exit 0
 
-# 蒐集本次 staged 的 .vue（NUL-separated → newline for node）
-STAGED=$(git diff --cached --name-only --diff-filter=ACM -- '*.vue' 2>/dev/null || true)
+# 蒐集本次 staged 的 .vue + app.config.*
+STAGED_VUE=$(git diff --cached --name-only --diff-filter=ACM -- '*.vue' 2>/dev/null || true)
+STAGED_CONFIG=$(git diff --cached --name-only --diff-filter=ACM -- 'app.config.ts' 'app.config.js' 2>/dev/null || true)
+STAGED=$(printf '%s\n%s' "$STAGED_VUE" "$STAGED_CONFIG" | sed '/^$/d' | sort -u)
 
-# 無 staged .vue → 跳過
+# 無 staged 檔 → 跳過
 [[ -z "$STAGED" ]] && exit 0
 
 # Node 做全部邏輯
@@ -38,7 +40,7 @@ const patternsFile = process.argv[1];
 const stagedFiles = process.argv[2].split('\n').filter(Boolean);
 
 const data = JSON.parse(fs.readFileSync(patternsFile, 'utf8'));
-const rules = data.rules.filter(r => r.fileGlob === '*.vue');
+const rules = data.rules;
 let hasError = false;
 
 // 從 template 抽出每個 HTML/Vue tag 區塊（含起始行號）
@@ -61,14 +63,20 @@ function needsMultiLine(pattern) {
   return /^<[\[(]?[A-Z].*\[\^>\]/.test(pattern);
 }
 
+function matchGlob(file, glob) {
+  if (glob === '*.vue') return file.endsWith('.vue');
+  if (glob === 'app.config.*') return /(?:^|[/])app\.config\.[^/]+$/.test(file);
+  return file.endsWith(glob.replace('*', ''));
+}
+
 for (const rule of rules) {
   const re = new RegExp(rule.pattern);
   const excludeRe = rule.excludePattern ? new RegExp(rule.excludePattern) : null;
   const multiLine = rule.multiLine === true || needsMultiLine(rule.pattern);
 
-  let filesToScan = stagedFiles;
+  let filesToScan = stagedFiles.filter(f => matchGlob(f, rule.fileGlob || '*.vue'));
   if (rule.scanPaths && rule.scanPaths.length > 0) {
-    filesToScan = stagedFiles.filter(f => rule.scanPaths.some(p => f.startsWith(p)));
+    filesToScan = filesToScan.filter(f => rule.scanPaths.some(p => f.startsWith(p)));
   }
   if (filesToScan.length === 0) continue;
 
