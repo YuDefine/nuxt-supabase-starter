@@ -156,6 +156,63 @@ Implement tasks from a Spectra change.
       - **NEVER** 用 `git add -A` / `git add .` stage artifacts — 會把 main 上其他 user WIP 一起 commit
       - **NEVER** 透過 `Skill` tool 或 `Agent` tool 委派此步給 subagent — 必須主線自己跑（subagent 的 cwd 不可信）
 
+   c.6. **Environment Readiness Check**（clade fork addition；per `docs/pitfalls/2026-06-28-spectra-apply-dispatches-unready-change.md`）：
+
+      **理由**：dispatch subagent 後到 e2e / verify 階段才發現 DB 未 sync / dev server 指向 main / auth route 壞掉，每道牆浪費 5-15 分鐘。三項全在 dispatch 前 30 秒可驗出。
+
+      **MUST** 在 dispatch 前依序跑以下三項。任一紅燈 → 自動修（不問 user）或 STOP 回報：
+
+      1. **DB migration sync**（self-hosted Supabase consumer only — 讀 consumer-meta `db-runtime`）：
+
+         ```bash
+         # 比較 worktree migration 數量 vs dev LXC
+         LOCAL_COUNT=$(ls <worktree>/supabase/migrations/*.sql 2>/dev/null | wc -l)
+         REMOTE_COUNT=$(cd <worktree> && pnpm supabase:sync --dry-run 2>&1 | grep -oP '\d+ local' | grep -oP '\d+')
+         ```
+
+         - 數量不一致（worktree 有新 migration）→ **自動** `cd <worktree> && pnpm supabase:sync && pnpm db:reset`
+         - 一致 → pass
+         - `supabase:sync --dry-run` 不支援 → fallback 直接跑 `pnpm supabase:sync`（idempotent）
+         - **Per `db-topology-invariant` 規則**：dev DB 是共享實例，reset 前 **SHOULD** 檢查沒有其他 active session 在用（`node scripts/claim-helper.mjs list`）；若有其他 claim → warn user 但仍 proceed（apply 的 DB sync 優先於 claim collision 的低機率風險）
+
+      2. **Dev server cwd alignment**（有 singleton dev server 的 consumer — 讀 `scripts/singleton.mjs` 存在性）：
+
+         ```bash
+         # 檢查 port 3000 上的 process cwd 是否對齊 worktree
+         DEV_PID=$(lsof -i :3000 -t 2>/dev/null | head -1)
+         if [ -n "$DEV_PID" ]; then
+           DEV_CWD=$(lsof -p "$DEV_PID" -a -d cwd -F n 2>/dev/null | grep ^n | cut -c2-)
+           if [ "$DEV_CWD" != "<worktree-absolute-path>" ]; then
+             echo "dev server cwd mismatch: $DEV_CWD != <worktree>"
+             # 自動修：kill + 從 worktree 重啟
+             cd <worktree> && pnpm dev:kill && pnpm dev:agent
+           fi
+         fi
+         ```
+
+         - cwd 不對齊 → **自動** `pnpm dev:kill && cd <wt> && pnpm dev:agent`
+         - 無 dev server 跑 → skip（subagent 自己會起）
+         - cwd 對齊 → pass
+
+      3. **Auth route smoke test**（有 `__test-login` / `_dev-login` route 的 consumer）：
+
+         ```bash
+         HTTP_CODE=$(curl -sS -o /dev/null -w '%{http_code}' \
+           "http://127.0.0.1:3000/auth/__test-login?role=admin&email=admin@example.com" 2>/dev/null)
+         ```
+
+         - `302` → pass（auth works）
+         - `404` → dev server 可能從 main 跑（code 沒 fix）或 route 不存在 → 已在 Step c.6.2 修正 dev server cwd；若仍 404 → STOP 回報「auth route broken, check isLoopbackRequest」
+         - 無回應（dev server 沒跑）→ skip（Step c.6.2 已確認沒跑）
+         - **NEVER** 帶 `x-dev-login-token` header 跑 smoke test — 這樣會繞過 loopback detection，隱藏底層問題
+
+      **全綠**：印一行 `✅ Environment readiness: DB synced / dev server aligned / auth OK` 繼續 Step 0d。
+
+      **NEVER**：
+      - 跳過此步直接 dispatch — 任何一道紅燈在 subagent 內撞到都比現在 30 秒驗出來貴 10 倍
+      - 在 smoke test 帶 token header — 會把 isLoopbackRequest bug 藏起來
+      - 把 DB sync 結果不報 user — sync + reset 改了共享 dev DB，user 需要知道
+
    d. **Internally dispatch via `/wt` Form 3**：
 
       Invoke the Skill tool with `/wt <change-name>: /spectra-apply <change-name>` (Form 3 per `plugins/hub-core/skills/wt/SKILL.md`). `/wt` orchestrates the worktree lifecycle (reuses the one prepared in Step 0c) and spawns a subagent that runs Step 1+ inside it. Subagent reports completion or structured failure back through `/wt`'s normal channel; parent cwd stays on main throughout.
