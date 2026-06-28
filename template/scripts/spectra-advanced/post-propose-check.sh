@@ -548,6 +548,46 @@ Expected:
   done < <(sux_manual_review_schema_violations "$TASKS_FILE")
 fi
 
+# --- Check 8: Route Coverage — write action ↔ User Journey ---
+if grep -q '^## Affected Entity Matrix' "$PROPOSAL_FILE" 2>/dev/null \
+  && grep -q '^## User Journeys' "$PROPOSAL_FILE" 2>/dev/null; then
+
+  JOURNEY_BLOCK=$(sux_extract_section "$PROPOSAL_FILE" 'User Journeys')
+
+  UNCOVERED_ACTIONS=()
+  while IFS= read -r entity_line; do
+    [ -z "$entity_line" ] && continue
+    entity_name=$(printf '%s' "$entity_line" | sed 's/^### Entity: *//' | tr -d '[:space:]')
+
+    actions_line=$(awk -v e="$entity_line" '
+      found && /^\| Actions/ { print; exit }
+      $0 == e { found=1 }
+      found && /^### / && $0 != e { exit }
+    ' "$PROPOSAL_FILE" 2>/dev/null || true)
+
+    [ -z "$actions_line" ] && continue
+
+    actions_raw=$(printf '%s' "$actions_line" | sed 's/.*| *//' | sed 's/ *|.*//')
+
+    for action in create update delete archive; do
+      if printf '%s' "$actions_raw" | grep -qiw "$action"; then
+        if ! printf '%s\n' "$JOURNEY_BLOCK" | grep -qiE "${entity_name}|$(printf '%s' "$entity_name" | tr '_' ' ')" 2>/dev/null; then
+          UNCOVERED_ACTIONS+=("${entity_name}:${action}")
+        fi
+      fi
+    done
+  done < <(grep '^### Entity:' "$PROPOSAL_FILE" 2>/dev/null)
+
+  if [ "${#UNCOVERED_ACTIONS[@]}" -gt 0 ]; then
+    FINDINGS+=("Route Coverage 缺口 — 以下 write action 在 \`Affected Entity Matrix\` 但 \`User Journeys\` 沒有對應 UI 入口：
+$(printf '  - %s\n' "${UNCOVERED_ACTIONS[@]}")
+
+每個 write action（create / update / delete / archive）MUST 在 User Journeys 有至少一個 UI 入口。
+若 endpoint 不需 UI（cron / webhook / MCP / external API），在 Affected Entity Matrix 的 action 旁標 \`server-only: <reason>\`。
+完整規則見 \`ux-completeness.md\` § Route Coverage。")
+  fi
+fi
+
 # --- Output ---
 if [ "${#FINDINGS[@]}" -eq 0 ]; then
   exit 0
