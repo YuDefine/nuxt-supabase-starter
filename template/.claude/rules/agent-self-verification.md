@@ -57,7 +57,27 @@ Local edits will be reverted by the next sync.
 4. **工具呼叫前 verify CLI contract**：對 vendor script / external CLI，呼叫前 grep `Usage:` / `--help` / source 確認 flag / stdin / env var。`Usage:` 出現在 stderr = argv 錯，root cause 在 dispatcher source，**不**是 user 端設定。
 5. **verify:ui / verify:e2e evidence 的 fixture MUST 在 seed.sql**：Step 8a evidence collection 發現 seed 缺 fixture（verify item 引用的 entity ID 在 `seed.sql` 不存在）時，**MUST** 先把 fixture INSERT 寫進 `seed.sql` → `pnpm supabase:sync` → `pnpm db:reset` → 再拍截圖。**NEVER** 用 `curl POST` / `$fetch` / browser form submit 臨時建 ephemeral data 拍截圖 — ephemeral data 在任何 db:reset 後消失，截圖全部 stale，被迫重建 + 重拍（per [[pitfall-verify-evidence-ephemeral-fixture-washed-by-db-reset]]）。
 6. **Worktree .env 驗證（hard rule）**：在 worktree 做 verify channel evidence collection 時，若 item 依賴特定 env var（API key / token / secret），**MUST** 先 `grep -i '<VAR_NAME>' .env.local` 確認存在且有值。**NEVER** 假設 worktree env 缺失而寫 `blocked on <VAR>` — worktree 透過 `wt-env-bootstrap.mjs` 或 stash-apply baseline 繼承 main 的 `.env.local`，env var 幾乎一定存在。驗證成本 = 一行 grep，假設成本 = 把 actionable item 降級為 blocker + 浪費 user 時間糾正。（per [[pitfall-worktree-env-assumption-and-unverified-evidence]]）
-7. **截圖 / evidence 產出後 MUST 驗證內容**：拍截圖後 **MUST** 至少做以下一種驗證再寫 `(verified-ui:)` annotation：(a) 檢查截圖檔案大小 > 50KB（白畫面 / 登入頁通常 < 30KB）；(b) 用 Playwright `expect(page).not.toHaveURL(/\/auth\//)` 斷言不在登入頁；(c) 用 `page.title()` 或 DOM 存在性驗證頁面已載入預期內容。**NEVER** 拍完不看就寫 annotation 交給 user — 這等於把驗證成本轉嫁 user 且浪費整個 review-gui 來回。（per [[pitfall-worktree-env-assumption-and-unverified-evidence]]）
+7. **截圖 + 驗證不可分割（atomic screenshot-then-verify，hard rule）**：`agent-browser screenshot` / Playwright screenshot **MUST** 在同一個 Bash 呼叫內緊接驗證，**NEVER** 分成兩個獨立 tool call（分開 = 中間可被跳過）。驗證失敗 = 截圖作廢，**MUST** 修根因後重拍，**NEVER** 帶著失敗截圖寫 annotation。
+
+   **Canonical pattern（agent-browser，直接複製）**：
+   ```bash
+   SS=<screenshot-dir>
+   agent-browser --session <s> screenshot "$SS/<item-id>-<name>.png"
+   # --- 以下驗證 MUST 在同一 Bash call ---
+   SIZE=$(stat -f%z "$SS/<item-id>-<name>.png" 2>/dev/null || stat -c%s "$SS/<item-id>-<name>.png" 2>/dev/null)
+   if [ "${SIZE:-0}" -lt 35000 ]; then echo "FAIL: screenshot ${SIZE} bytes — likely login/blank page"; exit 1; fi
+   agent-browser --session <s> snapshot -i 2>&1 | grep -qE '<expected-heading-or-keyword>' || { echo "FAIL: DOM mismatch"; exit 1; }
+   echo "PASS: ${SIZE} bytes + DOM verified"
+   ```
+
+   **三層驗證（至少做前兩層）**：
+   - **(a) 檔案大小 ≥ 35KB**（白畫面 / 登入頁通常 < 30KB）— 最低門檻
+   - **(b) DOM / snapshot 關鍵字**（`snapshot -i | grep '<heading>'`）— 確認頁面是預期內容
+   - **(c) URL 不含 `/auth/`**（`eval "location.href"` 確認未被 redirect）— 防 auth redirect
+
+   **auth 回傳非 200 = 立即停手**：browser 內 `fetch __test-login` / cookie injection 的 HTTP status **MUST** 檢查，非 200（含 500）→ **STOP 截圖流程**，先修 auth，**NEVER** 忽略 status 繼續拍。
+
+   **NEVER** 拍完不驗就寫 annotation — 這等於把驗證成本轉嫁 user 且浪費整個 review-gui 來回。（per [[pitfall-worktree-env-assumption-and-unverified-evidence]]，2026-06-29 <consumer-b> 再犯：auth fetch 回 500 被忽略，3 張 login page 當 evidence 交出）
 
 ## 派工前的主線預檢責任
 
