@@ -60,8 +60,11 @@ Local edits will be reverted by the next sync.
 6. **Ball-ownership 答案依 bucket 判讀（single source）**：回答任何 change 狀態問題（「等你還是等我」/「ready 了沒」）**MUST** 依 `reviewBucketForChange()` 算出的 bucket 判讀 —— GUI 端讀 `change.bucket`、headless 讀 `--scan` 輸出 bucket。`bucket` 是 server canonical single source（review-gui.mts）。**禁止**從 tasks.md 散文、checkbox leaf count、或自己對 item 的印象推測 ball-ownership。bucket 對照：`awaitingUserReEval` = 等 user 重評、`awaitingUserDecision` = 等 user 商業決策（Claude 已標 `(awaiting-user-decision:)` 交還 user，master 排除）、`feedbackGiven` = 等 Claude、`readyForEvidence` = 等 Claude 補 evidence、`applyInProgress` = impl 未完、`applyBlocked` = impl 卡外部 blocker（`@apply-blocked` marker，交還 user，master 排除）、`awaitArchiveWalkthrough` = 等 archive walkthrough、`ready` = 可開始檢查。
 7. **route E 結論 MUST 同步寫 annotation（不留散文 orphan）**：triage 一個帶 `（issue:）` 的 item，路由結論為 **(E)**（out-of-scope / false-positive / 修法已落地等 user 重評）時，**MUST 在同一動作**寫 `(claude-analyzed: <ISO> route=E[ note=...])` annotation（per [[manual-review]] § `(claude-analyzed: ...)` annotation）。**禁止**只留散文分析 / 只開 `@followup[TD-NNN]` 卻漏寫 machine annotation —— `analyzedIssuedCount` 只認 annotation，漏寫會讓 bucket 仍判 `feedbackGiven`（等 Claude），與「等 user」結論矛盾。
 
+8. **Post-work scan 回報 MUST 逐條標 bucket（hard rule）**：完成 evidence collection / annotation 修正 / issue triage 等批次工作後向 user 回報 scan 結果時，**MUST** 對每條 change 個別標示實際 `bucket`。只有 `bucket=ready` 的 change 才能寫「可以在 review-gui 驗收」或列 review-gui URL 引導 user 開始檢查。非 `ready` 的 change **MUST** 如實報告實際 bucket + 卡住原因（例：「`readyForEvidence` — evidence 已收齊但有 2 條 `（issue:）` 待 user 重評」），**NEVER** 混入「可以驗收」的清單。反模式：3 條 change 中 1 條 `ready`、2 條 `readyForEvidence`，結尾寫「三條都可以在 review-gui 做最後驗收」— 這直接誤導 user。
+
 ### NEVER
 
+- ❌ 把非 `bucket=ready` 的 change 寫進「可以在 review-gui 驗收」的清單或引導訊息 — `readyForEvidence` / `feedbackGiven` / `applyInProgress` 等 bucket 都**不是** ready，**禁止**混報（per MUST 8）
 - ❌ 推 review-gui URL 給 user 自看（除非已耗盡 [[agent-self-verification]] § fallback chain）— review-gui「📋 補 evidence prompt」按鈕是 **fallback**，**不是 default**（per [[manual-review]] § review-gui 補 evidence prompt 路徑分類）
 - ❌ 對 compound item 只收一張截圖代表多 state；annotation 寫 `screenshot=path` 但 description 含 paired-state marker（`before/after` / `A→B` / `hover` / `focus` 等）
 - ❌ 在 detail page 試圖重刻或繞過 impl gate — server-side gate 是 final guard
