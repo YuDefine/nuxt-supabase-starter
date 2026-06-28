@@ -39,6 +39,8 @@ Local edits will be reverted by the next sync.
 - 「請取 ADMIN_COOKIE」「請手動 OAuth」「DevTools 複製 cookie」「請貼回 cookie」
 - 「截圖無法驗證 X，所以跳過 / 標 deferred」（未走 fallback chain）
 - 原文 forward 瀏覽器工具的 error message 當待辦（未先驗 CLI contract / 未跑 `agent-browser doctor --fix` 自救）
+- 「blocked on `<ENV_VAR>` — dev 環境未配」（未 grep .env.local 確認就假設缺失）
+- 「截圖已拍 / evidence 已補」但未驗證截圖內容是否為預期頁面（拍到登入頁 / 白畫面即違反）
 
 ### MUST
 
@@ -54,6 +56,8 @@ Local edits will be reverted by the next sync.
    ```
 4. **工具呼叫前 verify CLI contract**：對 vendor script / external CLI，呼叫前 grep `Usage:` / `--help` / source 確認 flag / stdin / env var。`Usage:` 出現在 stderr = argv 錯，root cause 在 dispatcher source，**不**是 user 端設定。
 5. **verify:ui / verify:e2e evidence 的 fixture MUST 在 seed.sql**：Step 8a evidence collection 發現 seed 缺 fixture（verify item 引用的 entity ID 在 `seed.sql` 不存在）時，**MUST** 先把 fixture INSERT 寫進 `seed.sql` → `pnpm supabase:sync` → `pnpm db:reset` → 再拍截圖。**NEVER** 用 `curl POST` / `$fetch` / browser form submit 臨時建 ephemeral data 拍截圖 — ephemeral data 在任何 db:reset 後消失，截圖全部 stale，被迫重建 + 重拍（per [[pitfall-verify-evidence-ephemeral-fixture-washed-by-db-reset]]）。
+6. **Worktree .env 驗證（hard rule）**：在 worktree 做 verify channel evidence collection 時，若 item 依賴特定 env var（API key / token / secret），**MUST** 先 `grep -i '<VAR_NAME>' .env.local` 確認存在且有值。**NEVER** 假設 worktree env 缺失而寫 `blocked on <VAR>` — worktree 透過 `wt-env-bootstrap.mjs` 或 stash-apply baseline 繼承 main 的 `.env.local`，env var 幾乎一定存在。驗證成本 = 一行 grep，假設成本 = 把 actionable item 降級為 blocker + 浪費 user 時間糾正。（per [[pitfall-worktree-env-assumption-and-unverified-evidence]]）
+7. **截圖 / evidence 產出後 MUST 驗證內容**：拍截圖後 **MUST** 至少做以下一種驗證再寫 `(verified-ui:)` annotation：(a) 檢查截圖檔案大小 > 50KB（白畫面 / 登入頁通常 < 30KB）；(b) 用 Playwright `expect(page).not.toHaveURL(/\/auth\//)` 斷言不在登入頁；(c) 用 `page.title()` 或 DOM 存在性驗證頁面已載入預期內容。**NEVER** 拍完不看就寫 annotation 交給 user — 這等於把驗證成本轉嫁 user 且浪費整個 review-gui 來回。（per [[pitfall-worktree-env-assumption-and-unverified-evidence]]）
 
 ## 派工前的主線預檢責任
 
