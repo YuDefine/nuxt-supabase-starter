@@ -164,18 +164,32 @@ Review 通過但有些項目需 user 目視確認。
 
 ### 3f. applyInProgress
 
-實作未完成，推進 phases。
+實作未完成，**MUST** 推進 — 不論 change 大小、不論進度 0% 或 50%。
 
-1. 在 worktree 跑 apply：
+1. **Unpark guard**（在 main 跑；worktree 內 unpark 有 data loss 風險，per spectra-apply Step 0c.5）：
+
+   ```bash
+   spectra list --parked --json | jq -r '.parked[]?' | grep -Fx "<change-name>"
+   ```
+
+   命中 → `spectra unpark "<change>"` + `git add openspec/changes/<change>/ && git commit --only -m "📝 docs(spectra): unpark <change>" -- openspec/changes/<change>/`。未命中 → skip。
+
+2. **Dispatch spectra-apply**（worktree 內跑，spectra-apply 從 Step 1 接手全流程）：
+
    ```
    Skill invoke: /wt <change-name>: /spectra-apply <change-name>
    ```
 
-2. Apply 內部自然推進 phases，progress 累積在 tasks.md。
+3. spectra-apply 推進 phases + 收 evidence，progress 累積在 tasks.md。loop-engineer 不介入 spectra-apply 內部流程。
 
-3. 完成後 typecheck + test + lint。
+4. 完成 / pause 回報後，重跑 scan 看 bucket：readyForEvidence / ready → 本 iteration 繼續處理。pause → attended: surface 給 user；unattended: log 到 HANDOFF + skip to next。
 
-4. 重跑 scan 看是否進到新 bucket。若進到 readyForEvidence / ready → 本 iteration 繼續處理（不等下次 invocation）。
+**Timing**：一個 applyInProgress dispatch 可能耗時數十分鐘至數小時（取決於 change 規模 + phase 數量）。在 unattended mode 計為 1 個 item（3-item cap 照常適用）。
+
+**NEVER**：
+- ❌ 因「change 太大」「0% 進度」「需要完整 session」「不適合 loop-engineer」跳過 — spectra-apply 自管步驟粒度、phase dispatch、pause 與 blocker
+- ❌ Defer 到「另一個 session」「下次 invocation」「user 手動跑」
+- ❌ 報告「剩餘 N 個 applyInProgress 不適合推進」然後收工 — scan 回傳 applyInProgress 就 dispatch，無例外
 
 ### 3g. healthCheckNeeded
 
@@ -271,6 +285,7 @@ Unattended mode 額外 `git push`。
 7. **重複 invocation safe** — scan-based priority，已 shipped 的 change 不會出現在 scan 中
 8. **不碰 user 的 stash** — worktree / stash audit 只讀不寫
 9. **Error isolation** — 單一 item 失敗不停整個 loop，skip + log 後繼續
+10. **不因 size/progress 跳過 dispatch** — applyInProgress item 不管進度 0% 或 change 看起來多大，MUST invoke `/spectra-apply`；dispatch 後 spectra-apply 自管 pause / blocker / timeout。「需要完整 session」「不適合 loop-engineer」等判斷 = 違反本條
 
 ## Routine 設定指引
 
