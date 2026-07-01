@@ -1,10 +1,10 @@
 ---
 name: loop-engineer
-description: "自動推進 consumer 待辦 spectra change 到「可驗收」或「已 shipped」狀態的 autonomous loop。讀 HANDOFF.md + ROADMAP + review-gui scan 找最值得推的 change，依 bucket 執行對應動作（apply / evidence / archive / commit），做完標 🟢 ready-for-review 或 ✅ shipped。支援 attended（手動跑）與 unattended（routine fire）雙模。Use when 使用者說「自動推」「loop」「幫我把 change 推到 ready」「不在的時候繼續做」、或 routine fire 自動觸發。"
+description: "自動推進 consumer 待辦 spectra change 到「可驗收」或「已 shipped」狀態的 autonomous loop。讀 HANDOFF.md + ROADMAP + review-gui scan 找最值得推的 change，依 bucket 執行對應動作（apply / evidence / archive / commit），做完標 🟢 ready-for-review 或 ✅ shipped。完全自主，NEVER 停下問 user。Use when 使用者說「自動推」「loop」「幫我把 change 推到 ready」「不在的時候繼續做」、或 routine fire 自動觸發。"
 effort: xhigh
 metadata:
   author: clade
-  version: "1.0"
+  version: "1.1"
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -16,7 +16,7 @@ Local edits will be reverted by the next sync.
 
 # /loop-engineer — Autonomous Change Progression Loop
 
-核心 contract：**每次被叫起來，把待辦清單裡的 change 盡可能推到「可驗收」或「已 shipped」狀態。NEVER 留半成品等 user 來推。**
+核心 contract：**每次被叫起來，把待辦清單裡的 change 盡可能推到「可驗收」或「已 shipped」狀態。NEVER 留半成品等 user 來推。NEVER 停下問 user — 所有決策自主完成。**
 
 ## Step 0 — Mode Detection
 
@@ -24,16 +24,9 @@ Local edits will be reverted by the next sync.
 $ARGUMENTS
 ```
 
-偵測 attended / unattended：
+**單一自主模式** — 所有決策自主完成，卡點 log 到 HANDOFF + skip，archive 後一律 auto `git push`。
 
-- **`--unattended` 在 $ARGUMENTS 中**（routine fire 帶）→ **unattended mode**
-- **否則** → **attended mode**
-
-| 差異 | attended | unattended |
-| --- | --- | --- |
-| 卡點處理 | request_user_input 問 user | log 原因到 HANDOFF + skip to next |
-| archive 後 push | 問 user 確認 | 自動 `git push` |
-| 最大 items/invocation | 不限（user 在線可控） | 3（避免 runaway） |
+`--unattended` flag（routine fire 帶）唯一差異：**保留 3-item cap**（避免 runaway）。不帶 flag 時無 item cap。
 
 宣布模式一句話後進 Step 1。
 
@@ -45,7 +38,7 @@ $ARGUMENTS
 SCAN_JSON=$(node ~/offline/clade/vendor/scripts/handoff-scan.mjs --json 2>/dev/null)
 ```
 
-**失敗 fallback**：handoff-scan.mjs 不存在或回傳 error → **STOP**，對 user 回報（attended）或寫 HANDOFF 一行 `loop-engineer: scan failed at <ISO>` 後結束（unattended）。不要憑記憶或 HANDOFF 既有 narrative 猜工作狀態。
+**失敗 fallback**：handoff-scan.mjs 不存在或回傳 error → **STOP**，寫 HANDOFF 一行 `loop-engineer: scan failed at <ISO>` 後結束。不要憑記憶或 HANDOFF 既有 narrative 猜工作狀態。
 
 從 JSON 取：
 
@@ -68,6 +61,7 @@ basename "$(git rev-parse --show-toplevel)"
 
 | 優先 | Bucket | 理由 | 動作 |
 | --- | --- | --- | --- |
+| 0 | `done` | review 全通過，零工作量 | archive → merge-back → commit + push |
 | 1 | `feedbackGiven` | user 已留 review feedback，ball in Claude | 處理 feedback → 補 evidence |
 | 2 | `readyForEvidence` | apply 完成，只缺 evidence annotation | 補 evidence |
 | 3 | `awaitArchiveWalkthrough` | 只剩 `[discuss]`，可完成 archive | 跑 archive Step 2.5 |
@@ -81,11 +75,28 @@ basename "$(git rev-parse --show-toplevel)"
 
 同 bucket 內依 `pending/total` 比率排序（完成度高的優先，更快 ship）。
 
-輸出排序清單一句話摘要：「Prioritized N items: feedbackGiven ×A, readyForEvidence ×B, ...」
+輸出排序清單一句話摘要：「Prioritized N items: done ×A, feedbackGiven ×B, ...」
 
 ## Step 3 — Execute
 
 對 priority list 從頭取 item，依 bucket dispatch。每完成一個 item，**立即** commit progress + 重跑 scan 更新狀態，再取下一個。
+
+### 3z. done
+
+Review 全部通過（pending=0, issued=0），可直接 ship。
+
+1. 直接 archive：
+   ```
+   Skill invoke: /spectra-archive <change-name>
+   ```
+
+2. Archive → merge-back → commit：
+   ```bash
+   git commit --only -m "✅ archive <change-name>" -- openspec/changes/archive/
+   git push
+   ```
+
+3. 標 ✅ shipped。
 
 ### 3a. feedbackGiven
 
@@ -132,7 +143,11 @@ Apply 完成，只缺 verify evidence annotation。
 
 2. Archive 完成 → merge-back 已包含在 archive Step 0。
 
-3. 跑 `/commit`（attended）或 `git commit --only` + `git push`（unattended）。
+3. commit + push：
+   ```bash
+   git commit --only -m "✅ archive <change-name>" -- openspec/
+   git push
+   ```
 
 4. 標 ✅ shipped。
 
@@ -182,13 +197,13 @@ Review 通過但有些項目需 user 目視確認。
 
 3. spectra-apply 推進 phases + 收 evidence，progress 累積在 tasks.md。loop-engineer 不介入 spectra-apply 內部流程。
 
-4. 完成 / pause 回報後，重跑 scan 看 bucket：readyForEvidence / ready → 本 iteration 繼續處理。pause → attended: surface 給 user；unattended: log 到 HANDOFF + skip to next。
+4. 完成 / pause 回報後，重跑 scan 看 bucket：readyForEvidence / ready → 本 iteration 繼續處理。pause → log 到 HANDOFF + skip to next。
 
-**Timing**：一個 applyInProgress dispatch 可能耗時數十分鐘至數小時（取決於 change 規模 + phase 數量）。在 unattended mode 計為 1 個 item（3-item cap 照常適用）。
+**Timing**：一個 applyInProgress dispatch 可能耗時數十分鐘至數小時（取決於 change 規模 + phase 數量）。在 `--unattended` mode 計為 1 個 item（3-item cap 照常適用）。
 
 **NEVER**：
 - ❌ 因「change 太大」「0% 進度」「需要完整 session」「不適合 loop-engineer」跳過 — spectra-apply 自管步驟粒度、phase dispatch、pause 與 blocker
-- ❌ Defer 到「另一個 session」「下次 invocation」「user 手動跑」
+- ❌ Defer 到「另一個 session」「user 手動跑」
 - ❌ 報告「剩餘 N 個 applyInProgress 不適合推進」然後收工 — scan 回傳 applyInProgress 就 dispatch，無例外
 
 ### 3g. healthCheckNeeded
@@ -203,10 +218,10 @@ Tasks.md 格式問題或 Pre-Review Data Readiness violation。
 
 ### Dispatch 共通規則
 
-- **Worktree 路由**：涉及 tracked code 修改的 dispatch（3a/3b/3f）一律走 `/wt` worktree 隔離。Archive（3c/3d）免 worktree（per spectra-archive worktree exemption）。
-- **Commit 紀律**：每個 item 完成後獨立 commit。Unattended mode 用 `git commit --only -- <paths>` 避免 cross-session staged pollution。Attended mode 可走 `/commit` skill。
+- **Worktree 路由**：涉及 tracked code 修改的 dispatch（3a/3b/3f）一律走 `/wt` worktree 隔離。Archive（3z/3c/3d）免 worktree（per spectra-archive worktree exemption）。
+- **Commit 紀律**：每個 item 完成後獨立 commit。用 `git commit --only -- <paths>` 避免 cross-session staged pollution。
 - **Error handling**：任何 dispatch 失敗（skill 報錯 / typecheck 紅燈 / merge conflict）→ log 失敗原因到 HANDOFF `## Loop Engineer Status` → skip to next item。**NEVER** 在單一 item 卡住時停止整個 loop。
-- **Unattended guard**：unattended mode 最多處理 3 個 items。超過 3 個 → 停止，剩餘寫進 HANDOFF。
+- **Unattended guard**：`--unattended` mode 最多處理 3 個 items。超過 3 個 → 停止，剩餘寫進 HANDOFF。
 
 ## Step 4 — Loop
 
@@ -219,7 +234,7 @@ Tasks.md 格式問題或 Pre-Review Data Readiness violation。
 **停止條件**（任一成立即停）：
 
 - Priority list 為空（全部 shipped / blocked / ready-for-review）
-- Unattended mode 已處理 3 個 items
+- `--unattended` mode 已處理 3 個 items
 - 連續 2 個 item dispatch 失敗（可能系統性問題，避免 loop 空轉）
 
 ## Step 5 — Update HANDOFF
@@ -230,19 +245,19 @@ Tasks.md 格式問題或 Pre-Review Data Readiness violation。
 <!-- BEGIN: loop-engineer-status -->
 ## Loop Engineer Status
 
-_Updated: <YYYY-MM-DD HH:MM> by loop-engineer (<attended|unattended>)_
+_Updated: <YYYY-MM-DD HH:MM> by loop-engineer_
+
+### ✅ Shipped (本輪)
+
+- `<change-name>` — archived + committed as `<short-hash>` (<commit-message>)
+
+_(空時寫 `_(none)_`)_
 
 ### 🟢 Ready for Review
 
 - `<change-name>` — <一句話摘要改了什麼>
   - 驗收方式：<具體描述 user 要看什麼>
   - review-gui: `<reviewUrl>`
-
-_(空時寫 `_(none)_`)_
-
-### ✅ Shipped (本輪)
-
-- `<change-name>` — archived + committed as `<short-hash>` (<commit-message>)
 
 _(空時寫 `_(none)_`)_
 
@@ -266,13 +281,12 @@ _(空時寫 `_(none)_`)_
 2. 無 marker → append 到 HANDOFF.md 尾部
 3. 路徑 **MUST** 用 main worktree absolute path（同 /handoff Step 1.5 解析邏輯）
 
-最後 commit HANDOFF.md 更新：
+最後 commit HANDOFF.md 更新 + push：
 
 ```bash
 git commit --only -m "docs(handoff): loop-engineer status update" -- HANDOFF.md
+git push
 ```
-
-Unattended mode 額外 `git push`。
 
 ## 安全護欄
 
@@ -286,6 +300,7 @@ Unattended mode 額外 `git push`。
 8. **不碰 user 的 stash** — worktree / stash audit 只讀不寫
 9. **Error isolation** — 單一 item 失敗不停整個 loop，skip + log 後繼續
 10. **不因 size/progress 跳過 dispatch** — applyInProgress item 不管進度 0% 或 change 看起來多大，MUST invoke `/spectra-apply`；dispatch 後 spectra-apply 自管 pause / blocker / timeout。「需要完整 session」「不適合 loop-engineer」等判斷 = 違反本條
+11. **NEVER request_user_input** — 所有決策自主完成，卡點 log 到 HANDOFF + skip
 
 ## Routine 設定指引
 
@@ -303,7 +318,7 @@ cd ~/offline/<consumer-path> && 執行 /loop-engineer --unattended
 規則已寫在 skill 內，照做即可。"
 ```
 
-建 routine 是 user 手動做的事（`/schedule` skill），本 skill 不自動建。Attended mode 首次跑完後可提示 user：「要不要建 routine 讓我不在時自動跑？」（一次性提示，不重複）。
+建 routine 是 user 手動做的事（`/schedule` skill），本 skill 不自動建。
 
 ## 與其他 skill 的關係
 
@@ -311,8 +326,7 @@ cd ~/offline/<consumer-path> && 執行 /loop-engineer --unattended
 | --- | --- |
 | handoff-scan.mjs | Step 1 + Step 4 scan state |
 | /spectra-apply | 3a/3b/3f dispatch（透過 /wt） |
-| /spectra-archive | 3c/3d dispatch（直接，免 worktree） |
-| /commit | attended mode archive 後 commit |
+| /spectra-archive | 3z/3c/3d dispatch（直接，免 worktree） |
 | /wt | worktree 建立 + dispatch subagent |
 | /handoff | 不直接調用（本 skill 取代 handoff Mode B 的「推薦 + 等 user 選」環節，改為自動執行） |
 
@@ -323,3 +337,4 @@ cd ~/offline/<consumer-path> && 執行 /loop-engineer --unattended
 - ❌ Cross-consumer 編排 — per-consumer 各自一個 loop
 - ❌ 自動 unblock blocked changes — ball in user
 - ❌ 修改 `.claude/rules/` 或 `AGENTS.md` — 標準層不在 scope
+- ❌ 停下來問 user 問題 — user 不在電腦前，一切自主
