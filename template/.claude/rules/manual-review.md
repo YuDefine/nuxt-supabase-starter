@@ -21,6 +21,8 @@ Local edits will be reverted by the next sync.
 
 **NEVER** 自行標記 `## 人工檢查` 區塊中**屬於 `[review:ui]` kind** 的 `- [ ]` 為 `- [x]`。
 
+**既有 `[x]` ≠ 已驗收**：archive / 收尾前遇到 `[review:ui]` 已是 `[x]` 但無對應 agent 自拍 screenshot evidence（`screenshots/local/<change>/#<id>-*.png`）時，一律視為 **false-green**，主線 **MUST** 無視 checkbox 自起 dev server + agent-browser 自拍自驗（跨 session 也自足），**NEVER** 假設 user 有截圖或信任前 session 代勾 — 自拍動作本身會撞出被 checkbox 掩蓋的 bug。詳見 [[agent-self-verification]] MUST item 8 + [[pitfall-review-ui-checkbox-without-agent-evidence-masks-bug]]。
+
 `[review:ui]` items 的 checkbox 只能在以下流程中勾選：
 
 1. 先派遣 screenshot review 流程截圖

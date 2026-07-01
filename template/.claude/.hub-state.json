@@ -1,11 +1,11 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-07-01T15:24:47.319Z",
+  "syncedAt": "2026-07-01T20:23:14.444Z",
   "rulesProjection": "copy",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "cf7f41e210925ba6",
     "rules/agent-routing.md": "b9bd353c02aec2bd",
-    "rules/agent-self-verification.md": "b271cf9ee8b83ef3",
+    "rules/agent-self-verification.md": "d25c061e677869f1",
     "rules/audit-pattern.md": "a93b1ae01dea12c6",
     "rules/cloudflare-workers.md": "46657dea4c3342b1",
     "rules/code-style.md": "242ddfe1f8a307d5",
@@ -30,7 +30,7 @@
     "rules/manual-review.data-readiness.md": "0ddcd123614f9873",
     "rules/manual-review.discuss.md": "1b4ec25cecb34134",
     "rules/manual-review.evidence.md": "74822321f7654166",
-    "rules/manual-review.md": "638fff895fd0e841",
+    "rules/manual-review.md": "2a1715f74e379008",
     "rules/nuxt-data-perf.md": "6ba22ecf8dd9335b",
     "rules/nuxt-dev-watch.md": "3dcadecb24e11c83",
     "rules/output-hygiene.md": "8b5b462963da7734",
