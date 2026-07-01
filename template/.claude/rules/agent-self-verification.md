@@ -41,6 +41,7 @@ Local edits will be reverted by the next sync.
 - 原文 forward 瀏覽器工具的 error message 當待辦（未先驗 CLI contract / 未跑 `agent-browser doctor --fix` 自救）
 - 「blocked on `<ENV_VAR>` — dev 環境未配」（未 grep .env.local 確認就假設缺失）
 - 「截圖已拍 / evidence 已補」但未驗證截圖內容是否為預期頁面（拍到登入頁 / 白畫面即違反）
+- 「review:ui 項已勾 `[x]`，視為已驗收」但無對應 agent 自拍 evidence 佐證（既有 `[x]` ≠ evidence — 假設 user 有截圖、信任前 session 代勾都算違反；per [[pitfall-review-ui-checkbox-without-agent-evidence-masks-bug]]）
 
 ### MUST
 
@@ -78,6 +79,10 @@ Local edits will be reverted by the next sync.
    **auth 回傳非 200 = 立即停手**：browser 內 `fetch __test-login` / cookie injection 的 HTTP status **MUST** 檢查，非 200（含 500）→ **STOP 截圖流程**，先修 auth，**NEVER** 忽略 status 繼續拍。
 
    **NEVER** 拍完不驗就寫 annotation — 這等於把驗證成本轉嫁 user 且浪費整個 review-gui 來回。（per [[pitfall-worktree-env-assumption-and-unverified-evidence]]，2026-06-29 <consumer-b> 再犯：auth fetch 回 500 被忽略，3 張 login page 當 evidence 交出）
+
+8. **review:ui 既有 `[x]` 需 agent 自拍 evidence 佐證（hard rule）**：archive / 收尾前，任何 `[review:ui]` 的既有 `[x]` 若無對應 agent 自拍 screenshot evidence（`screenshots/local/<change>/#<id>-*.png`）→ 一律視為 **false-green**。主線 **MUST** 無視 checkbox state，自起 dev server + agent-browser 自拍自驗（跨 session 也自足），**NEVER** 假設 user 手上有截圖、**NEVER** 信任前 session 代勾。**「自拍」動作本身是 bug-catcher** — 要拍就得真的開該頁 / 操作該流程，一開就撞出被 checkbox 掩蓋的 bug（route 404 / mapping mismatch / 空狀態）。
+
+   延伸：任何「page route → 內容」mapping（`QUICK_ACTION_MAP` 的 `startsWith('/route')` 類）**MUST** 對照 `app/pages` 實際產生的路由驗證，**NEVER** 憑功能語意臆想 prefix — 臆想 prefix 對不上真實 route 時 silent fallthrough 到預設，typecheck / lint / 靜態視覺都不報。（per [[pitfall-review-ui-checkbox-without-agent-evidence-masks-bug]]）
 
 ## 派工前的主線預檢責任
 
