@@ -11,9 +11,9 @@ Use this table during diagnostic scans to map problems to the right skill.
 
 | Observed Problem                         | Skill               | Notes                                   |
 | ---------------------------------------- | ------------------- | --------------------------------------- |
-| No design context / brand unclear        | `/impeccable teach`   | Run once per project；建立 PRODUCT.md（必要）+ DESIGN.md（建議） |
+| No design context / brand unclear        | `/impeccable init`   | Run once per project；建立 PRODUCT.md（必要）+ DESIGN.md（建議） |
 | No DESIGN.md but code already exists     | `/impeccable document` | 從現有 code 反推 DESIGN.md，省去從零問起 |
-| No design system (colors, fonts, tokens) | `/impeccable teach`   | Gather context and define design system    |
+| No design system (colors, fonts, tokens) | `/impeccable init`   | Gather context and define design system    |
 | Need requirements clarified before code  | `/impeccable shape`   | Shape phase before craft；強制使用者明確確認 brief 才能進 craft |
 | Build a new feature / page               | `/impeccable craft`   | Main build flow                             |
 | Deviates from design system              | `/impeccable polish`             | Aligns to design system, fixes drift       |
@@ -39,8 +39,8 @@ Use this table during diagnostic scans to map problems to the right skill.
 
 ### Foundational (run first)
 
-- **`/impeccable teach`** — Establishes persistent design context. 產出 **PRODUCT.md**（必要：使用者、品牌、語氣、anti-references、strategic principles、register）+ **DESIGN.md**（建議：色彩、字體、層次、元件）。Run once per project. All other design sub-commands read these files.
-- **`/impeccable document`** — 從既有 code 反推 DESIGN.md。已經有 code 的專案用此入門比 `teach` 從零問更省力。
+- **`/impeccable init`** — Establishes persistent design context. 產出 **PRODUCT.md**（必要：使用者、品牌、語氣、anti-references、strategic principles、register）+ **DESIGN.md**（建議：色彩、字體、層次、元件）。Run once per project. All other design sub-commands read these files.
+- **`/impeccable document`** — 從既有 code 反推 DESIGN.md。已經有 code 的專案用此入門比 `init` 從零問更省力。
 - **`/impeccable shape`** — Requirements gathering before code generation. 強制 user 明確確認 brief 才能進 craft，self-authored brief 不算。
 - **`/impeccable craft`** — Main build flow. Produces distinctive, production-grade frontend code. 強制 mock fidelity inventory（如有），把缺 hero objects/imagery 列為 blocking defects。
 - **`/nuxt-ui`** — Nuxt UI v4 component library reference (125+ components). Use when project has `@nuxt/ui`. Provides component APIs, theming via `app.config.ts`, and Tailwind Variants integration.
@@ -115,7 +115,7 @@ Some skills are alternatives, not complements:
 ### Design System Bootstrap
 
 ```
-/impeccable teach → /impeccable polish → /impeccable extract
+/impeccable init → /impeccable polish → /impeccable extract
 ```
 
 ### Visual Iteration on Existing Code
@@ -127,7 +127,7 @@ Some skills are alternatives, not complements:
 ### Nuxt UI Project (auto-detected)
 
 ```
-/impeccable teach → /nuxt-ui (component reference) → build with <UComponent> markup → /impeccable polish
+/impeccable init → /nuxt-ui (component reference) → build with <UComponent> markup → /impeccable polish
 ```
 
 ---
@@ -142,7 +142,7 @@ When recommending skills, also suggest compatible open-source libraries for fast
 
 | Skill               | Recommended Libraries                                                                                 | Notes                                       |
 | ------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `/impeccable teach` | —                                                                                                     | Outputs `PRODUCT.md` + `DESIGN.md`，no library needed |
+| `/impeccable init` | —                                                                                                     | Outputs `PRODUCT.md` + `DESIGN.md`，no library needed |
 | `/impeccable polish`           | [Style Dictionary](https://amzn.github.io/style-dictionary/), [Tokens Studio](https://tokens.studio/) | Token management & sync                            |
 
 #### Structural
