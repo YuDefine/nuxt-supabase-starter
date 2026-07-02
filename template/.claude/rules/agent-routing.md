@@ -28,6 +28,12 @@ Local edits will be reverted by the next sync.
 | **Debug evidence 段**（log 完整 capture / repro script 撰寫執行 / 既定 hypothesis 的驗證迴圈） | **Codex（GPT-5.5 high）via 泛用 dispatcher** | debug 是最大消耗桶；evidence / repro / verify 是機械段，root cause 推斷與修法設計留主線。repro 必在 throwaway worktree（template 內建 guard）。 |
 | **commit 0-C fix-verify loop**（pnpm check / test 修到全綠） | **Codex（GPT-5.5 high）via 泛用 dispatcher** | 機械修 lint / type / test 與 dep-upgrade 已驗證模式同構；主線同回合續跑 0-A / 0-B。詳見 commit SKILL Step 0-C。 |
 | **spectra-apply Step 8a self-collect (a)(b)**（dev-login allow-list 小 mod + service_role DB query 證 data shape） | **Codex（GPT-5.5 medium）via 泛用 dispatcher** | PoC 已實證 codex 能跑完整 evidence chain；annotation 寫回 tasks.md 維持主線。詳見 spectra-apply SKILL Step 8a。 |
+| **Security review**（`/security-review` skill / commit 前安全檢查） | **Codex（GPT-5.5 medium）via 泛用 dispatcher** | structured diff → structured findings 的 pattern matching，零互動。30 天實測佔 72% Claude session 數但僅 15% events — session 啟動成本是主要浪費。`/commit` 0-A gate（high/xhigh）是下游安全網，security review 漏的在那裡接住。 |
+| **Exploration / research pre-scan**（「依賴什麼」「進度如何」「還有什麼要做」「N 張 change 狀態」等 read-heavy 探索） | **Codex（GPT-5.5 medium）via 泛用 dispatcher**，主線消費 structured summary | read-heavy + structured output 是 codex 強項。主線拿 summary 做判斷 / 規劃，不自己逐檔 Read。30 天實測佔 11.5% events。 |
+| **Handoff scan 段**（`/handoff` Mode B 的 scan：讀 HANDOFF.md + git log + openspec + tasks + git status 產出 outstanding 清單） | **Codex（GPT-5.5 medium）via 泛用 dispatcher**，主線消費 scan report 做決策 | scan 是機械讀取 + 格式化，不是判斷。主線只看 report、做 routing / 推薦。30 天實測 29 sessions、4.7% events。 |
+| **Task-planning pre-scan**（「我需要做什麼」「接下來做什麼」「處理 N 張 change」的規劃 session 前置 scan） | **Codex（GPT-5.5 medium）via 泛用 dispatcher**，主線消費 structured report | scan openspec/changes/ + HANDOFF.md + git status + tasks/ 產出 per-change status matrix，主線拿 matrix 做排序 / 決策。 |
+| **Bug-fix evidence 段**（error log capture / stack trace 解析 / repro script 撰寫執行 / hypothesis 驗證迴圈） | **Codex（GPT-5.5 high）via 泛用 dispatcher**（強化：非 Debug evidence 段，而是整個 bug-fix session 的 investigation 段） | 30 天實測 19 個 bug-fix session 全由 Claude 跑（既有 Debug evidence rule 未落實）。investigation / evidence / repro 是機械段；root cause 推斷 + 修法設計留主線。**MUST** 在 bug-fix session 開工時先判斷：可分離的 evidence 段派 Codex，不可分離的留主線但 MUST 在 session 結尾回報未派 Codex 的理由。 |
+| **clade publish/propagate pre-scan**（publish 前 dirty file 分組判斷：讀 `git status` + `git diff` 各 file 內容 + 辨識 logical group） | **Codex（GPT-5.5 medium）via 泛用 dispatcher**，主線消費分組建議後 selective commit | publish SOP 中 `vp check → git commit → publish.mjs → push --tags → propagate.mjs` 是固定序列，但 pre-scan「dirty file 分幾組、每組 commit message 怎麼寫」的 reading 段可以 Codex。 |
 
 ## Orchestration Residency（誰持有長 session — 決定層）
 
@@ -110,6 +116,20 @@ Codex 配額兩層：primary = 5h rolling window（burst 瓶頸）、secondary =
 - 重 fan-out（單回合 ≥5 個 dispatch）把派工分散到 2-3 個 5h window，不要塞同一個 window
 - 收到 exit 4：非急件延後到下一個 window；急件 `AskUserQuestion` 讓 user 拍板
 
+### 最小 dispatch 門檻（避免瑣碎 override）
+
+codex-primary verdict 但 ≤2 個 file 的瑣碎 fix（typo / 單行 bug / config tweak）→ Claude 直接做，**不需要**走 residency 判定 + dispatch 流程。residency-classify 的 verdict 仍照跑（歸檔 Check 8 需要 record），但 executor=claude 的 reason 填 `trivial-threshold`，不算 override 違規。
+
+**判定標準**：`git diff --stat` 影響 ≤2 files **且** 預估改動 ≤20 行 **且** 不涉及 migration / auth / RLS / permission 路徑。超過任一門檻 → 照原 routing 走 Codex。
+
+### 配額耗盡時的 fallback 紀律
+
+配額耗盡（exit 1 / exit 4）導致 codex-primary → claude override 時 **MUST**：
+
+1. record reason 含 `quota-exhausted` + 預估 reset 時間
+2. 如果 reset 時間 ≤ 30 分鐘且工作非急件 → **延後**到 reset 後再派，不要 Claude 接走
+3. 如果 Claude 接走 → session 結尾 **MUST** 回報「本 session 因配額耗盡由 Claude 執行 N 個 codex-primary change，下次應分散 dispatch 到不同 5h window」
+
 ## 為什麼集中寫在這
 
 - 散落各 SKILL.md 會漂移；集中方便加新 rule
@@ -138,6 +158,9 @@ Codex 配額兩層：primary = 5h rolling window（burst 瓶頸）、secondary =
 | **NEVER** 從主線用 `Agent` tool with `subagent_type: screenshot-review` 派 verify mode 工作 | sonnet wrapper 會繞過 Step 0 自做工作（pitfall 同 Routing Table）；**MUST** 主線直派 codex GPT-5.5 low via Bash；wrapper 僅留 codex CLI 不可用 fallback，**禁止**作為預設入口 |
 | **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 verify:ui evidence 來取代 Step 8a codex dispatcher | verify:ui evidence 的**唯一**入口是 `codex-dispatch-screenshot-verify.mjs`；Claude fallback 僅限機械故障且 MUST 在對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡。2026-06-11 audit 實證：dispatcher 修復後 147 條 (verified-ui:) annotation 0 次走 codex、92 個 session 全走此 bypass 形狀 |
 | **NEVER** 對 mechanical 收集 / 掃描 / 驗證型工作開 Claude subagent fan-out | 預設走泛用 dispatcher + `fanout-collect` template（例外：claude.ai-connected MCP 依賴、判讀型分析、user 明確要求 Claude） |
+| **NEVER** 在 Claude Code session 自己跑 `/security-review` 的完整分析 | 改派 Codex GPT-5.5 medium。diff 內容作為 prompt body，output 用 structured findings。`/commit` 0-A 是下游安全網 |
+| **NEVER** 在 exploration / research 型 session 自己逐檔 Read + scan 多個 source（openspec / HANDOFF / git log / docs）超過 3 個 source file | 先派 Codex medium pre-scan 拿 structured summary，再由主線消費 summary 做判斷。例外：user 明確問特定檔案 / 需要 claude.ai-connected MCP |
+| **NEVER** 在 bug-fix session 同時做 evidence capture + root cause 推斷 + 修法而不先判斷 evidence 段是否可分離 | bug-fix 開工 MUST 先判斷：evidence 段可分離 → 派 Codex high；不可分離 → 主線做但 session 結尾 MUST 回報理由 |
 
 ### Watch 行為
 
