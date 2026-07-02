@@ -106,6 +106,12 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
 
    **Skip condition**: if `scripts/wt-helper.mjs` does not exist (consumer hasn't propagated the merge-back subcommand yet), skip this step silently with a one-line note: `Step 0: skipped — wt-helper merge-back not available (consumer pre-propagate)`.
 
+   After merge-back, sweep sibling worktrees that carry fork-time stale copies of the change being archived (prevents spectra CLI cross-worktree existence check from refusing):
+
+   ```bash
+   node scripts/wt-helper.mjs sweep-siblings <change-name>
+   ```
+
    **Sidecar advance (TD-155)** — after merge-back returns (whether absorbed, no-op, or skipped), advance phase:
 
    ```bash

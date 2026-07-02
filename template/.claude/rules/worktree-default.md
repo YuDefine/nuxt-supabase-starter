@@ -184,6 +184,18 @@ v3 atomic landing：`/wt` 跑完 subagent 在 worktree commit、worktree+branch 
 
 > 詳見 [[worktree-default.troubleshooting]] § artifact 活在 git。
 
+### §9.5.1 Phase-tick commit 紀律（TD-216）
+
+worktree subagent 完成每個 tasks.md phase section 的最後一個 `- [ ]` → `- [x]` 後 **MUST** commit tasks.md 到 worktree branch：
+
+```bash
+git commit --only -m "📝 spectra: phase N done (<change-name>)" -- openspec/changes/<change-name>/tasks.md
+```
+
+**Why**：`merge-back --squash` 只帶 committed changes 回 main。未 commit 的 checkbox 更新留在 worktree working tree → merge-back 不帶回 → review-gui 讀 main tasks.md 永遠看到 `[ ]` → impl-gate 誤判 <90%。
+
+**NEVER** 只在 worktree working tree 勾 checkbox 而不 commit — 即使「等做完一起 commit」也 **MUST** 至少在 build 結束前批次 commit 一次。
+
 ## §9.7 Artifact Reading SOP — 讀進度前先查 active worktree
 
 讀 spectra change 進度（`tasks.md` / `openspec/changes/<slug>/` artifacts / WORKTREE-BRIEF.md）時 **MUST** 先查有沒有 active worktree：

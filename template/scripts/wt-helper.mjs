@@ -1390,6 +1390,57 @@ function detectUnlandedFiles(consumerRoot, branchName) {
   return unlanded
 }
 
+function sweepSiblingChangeResidues(consumerRoot, slug) {
+  const out = git(['worktree', 'list', '--porcelain'], { cwd: consumerRoot })
+  const wts = parseWorktreeList(out)
+  const mainPath = consumerRoot
+  const swept = []
+  const skipped = []
+  for (const wt of wts) {
+    if (wt.path === mainPath) continue
+    if (wt.path.endsWith(`/${slug}`)) continue
+    const changeDir = join(wt.path, 'openspec', 'changes', slug)
+    if (!existsSync(changeDir)) continue
+    let dirty = 0
+    try {
+      const status = execFileSync('git', ['status', '--porcelain', `openspec/changes/${slug}/`], {
+        cwd: wt.path,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      dirty = status.split('\n').filter(Boolean).length
+    } catch {
+      dirty = 0
+    }
+    if (dirty === 0) {
+      rmSync(changeDir, { recursive: true, force: true })
+      swept.push(wt.path)
+    } else {
+      skipped.push({ path: wt.path, dirty })
+    }
+  }
+  return { swept, skipped }
+}
+
+async function cmdSweepSiblings(slug) {
+  if (!slug) throw new Error('Usage: wt-helper sweep-siblings <slug>')
+  const cleanSlug = makeSlugSafe(slug)
+  const consumerRoot = findConsumerRoot()
+  const { swept, skipped } = sweepSiblingChangeResidues(consumerRoot, cleanSlug)
+  if (swept.length > 0) {
+    console.log(`sweep-siblings: removed ${swept.length} stale copy(ies) of '${cleanSlug}':`)
+    for (const p of swept) console.log(`  ${p}`)
+  }
+  for (const s of skipped) {
+    console.warn(
+      `sweep-siblings: SKIP ${s.path} — ${s.dirty} uncommitted file(s) in openspec/changes/${cleanSlug}/`,
+    )
+  }
+  if (swept.length === 0 && skipped.length === 0) {
+    console.log(`sweep-siblings: no sibling worktree carries '${cleanSlug}' (clean)`)
+  }
+}
+
 // Merge main into the session worktree branch before merge-back squash, so
 // conflicts (if any) surface in the worktree's working tree rather than main's.
 // Legacy merge-back ran `git merge --squash <branch>` at main, contaminating
@@ -2104,7 +2155,15 @@ async function cmdMergeBack(slug, opts = {}) {
       }
     }
 
-    if (!opts.autoStash) {
+    if (!opts.autoStash && blockers.length <= 3 && blockers.every((b) => b.type === 'modified')) {
+      const isoTs = new Date().toISOString().replace(/[:.]/g, '-')
+      const paths = blockers.map((b) => b.path)
+      const minStashMsg = `wt-merge-block/${cleanSlug}/protect/${isoTs}`
+      git(['stash', 'push', '-m', minStashMsg, '--', ...paths], { cwd: consumerRoot })
+      stashRef = minStashMsg
+      opts.minimalStashPaths = paths
+      console.log(`merge-back: minimal-stashed ${paths.length} blocker(s): ${paths.join(', ')}`)
+    } else if (!opts.autoStash) {
       const preview = blockers
         .slice(0, 10)
         .map((b) => `  ${b.type.padEnd(10)} ${b.path}`)
@@ -2255,6 +2314,20 @@ async function cmdMergeBack(slug, opts = {}) {
         `Worktree '${target.path}' + branch '${branchName}' preserved.\n` +
         `Resolve conflicts manually then re-run \`wt-helper merge-back ${cleanSlug}\`.`,
     )
+  }
+
+  if (opts.minimalStashPaths && stashRef) {
+    try {
+      git(['stash', 'pop'], { cwd: consumerRoot })
+      console.log(
+        `merge-back: auto-restored ${opts.minimalStashPaths.length} minimal-stashed path(s)`,
+      )
+      stashRef = null
+    } catch {
+      console.warn(
+        'merge-back: minimal stash pop conflicted — stash preserved for manual reconcile',
+      )
+    }
   }
 
   // Preserve gitignored review artifacts (screenshots) before cleanup destroys
@@ -2552,9 +2625,12 @@ async function main() {
     case 'orphan-prune':
       await cmdOrphanPrune(opts)
       return
+    case 'sweep-siblings':
+      await cmdSweepSiblings(positional[0])
+      return
     default:
       console.error(
-        'Usage: wt-helper <add|detect-main-dirty|list|prune|cleanup|merge-back|land-pending|rescue|orphan-prune> [args]',
+        'Usage: wt-helper <add|detect-main-dirty|list|prune|cleanup|merge-back|land-pending|rescue|orphan-prune|sweep-siblings> [args]',
       )
       console.error('')
       console.error(
@@ -2641,6 +2717,9 @@ async function main() {
       console.error(
         '                            (leftover gitignored content after worktree removal)',
       )
+      console.error(
+        '  sweep-siblings <slug>     Remove stale fork-time change copies from sibling worktrees',
+      )
       process.exit(1)
   }
 }
@@ -2655,6 +2734,7 @@ export {
   cmdOrphanPrune,
   cmdPrune,
   cmdRescue,
+  cmdSweepSiblings,
   detectMainDirty,
   detectMergeBlockers,
   detectUncommittedWorktreeFiles,
@@ -2666,6 +2746,7 @@ export {
   mergedBranches,
   parseWorktreeList,
   sessionWorktrees,
+  sweepSiblingChangeResidues,
   timestampPrefix,
 }
 // classifyUnmergedSafety is exported via `export function` at definition site.

@@ -327,6 +327,16 @@ Update an existing Spectra change — from a plan file or conversation context.
 
    If validation fails, fix errors and re-validate.
 
+8.5. **Commit artifacts** (post-validation, TD-216 desync prevention)
+
+   After validation passes, **MUST** commit the updated openspec artifacts so `/wt` fork picks up re-scoped tasks.md:
+
+   ```bash
+   git commit --only -m "📝 spectra: ingest <change-name>" -- openspec/changes/<change-name>/
+   ```
+
+   Per worktree-default §9.5, spectra artifacts MUST live in git. Uncommitted re-scoped tasks.md causes review-gui impl-gate desync: `/wt` fork inherits committed (pre-ingest) version → build in worktree uses old phase list → review-gui reads main's re-scoped tasks.md with unchecked phases → impl% falsely low.
+
 9. **Summary and next steps**
 
    Show:
