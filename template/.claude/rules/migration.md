@@ -130,3 +130,17 @@ $$;
 1. **MUST** 同一 commit 內更新 `seed.sql` 對應 row — migration 修了 prod，seed.sql 仍帶舊值 → `db:reset` 重新引入髒資料
 2. 若無法立即 commit，**MUST** 在 `HANDOFF.md` 登記「seed.sql 待同步 — migration `<name>` 修了 `<table>.<column>`，seed.sql L`<lines>` 待改」
 3. **NEVER** 只寫 migration 就當作完成
+
+## Zero-Downtime Migration Checklist（production）
+
+Production migration 在有流量時執行，一個 naive `ALTER TABLE` 就可能拿到 `ACCESS EXCLUSIVE` lock 卡住所有讀寫。對 production DB 的每個 DDL migration **MUST** 逐項過下列 checklist：
+
+1. **`lock_timeout` — 先設短 lock 等待上限**：DDL 前 `SET lock_timeout = '<Ns>'`（如 `3s`），拿不到 lock 時**快速失敗**而不是無限期 block 整張表的請求。**NEVER** 讓 DDL 無 `lock_timeout` 直接跑在有流量的表上。
+2. **`statement_timeout` — 限制單一 statement 執行上限**：長 backfill / 全表 rewrite `SET statement_timeout` 設合理上限，避免單一 statement 佔住連線 + lock 拖垮 pool；backfill 用分批（見第 6 點）而非一條巨大 statement。
+3. **`CREATE INDEX CONCURRENTLY` — 建 index 不鎖寫入**：production 建 index **MUST** 用 `CREATE INDEX CONCURRENTLY`（不拿 write lock）。注意 CONCURRENTLY **不能**在 transaction block 內執行 → 該 migration 檔不可被包在 BEGIN/COMMIT，且失敗會留下 `INVALID` index 需 `DROP` 後重建。
+4. **`DROP INDEX CONCURRENTLY` — 移除 index 不鎖表**：production 刪 index 同理用 `DROP INDEX CONCURRENTLY`，避免 `ACCESS EXCLUSIVE` lock 卡住查詢。
+5. **`ADD CONSTRAINT ... NOT VALID` + `VALIDATE CONSTRAINT` — 兩段式加約束**：加 FK / CHECK constraint **MUST** 先 `ALTER TABLE ... ADD CONSTRAINT ... NOT VALID`（只鎖短暫、不掃全表），再另一步 `ALTER TABLE ... VALIDATE CONSTRAINT ...`（只拿 `SHARE UPDATE EXCLUSIVE`，不鎖寫入）。**NEVER** 一步加 validated constraint — 那會全表掃描期間鎖寫入。
+6. **Nullable → chunked backfill → not-null — 三段式加非空欄**：加 `NOT NULL` 欄 **MUST** 分三步：(a) `ADD COLUMN <c> <type>`（nullable，秒級）；(b) 分批 backfill（每批 `WHERE <c> IS NULL LIMIT <N>` 或依 PK range，批量 ≤ 數千、批間 sleep 讓 autovacuum / replica 跟上）；(c) backfill 完成後 `ADD CONSTRAINT <c>_not_null CHECK (<c> IS NOT NULL) NOT VALID` → `VALIDATE CONSTRAINT`（或 PG12+ `SET NOT NULL` 前已有 validated CHECK 可免全表掃描）。**NEVER** 直接 `ADD COLUMN ... NOT NULL DEFAULT ...` 在大表上做同步 rewrite。
+7. **Expand-contract — rename / drop / type change 分階段**：rename column / drop column / 改型別 **MUST** 走 expand-contract：**expand**（加新欄 / 新 nullable column，app 同時雙寫新舊、讀舊）→ **migrate**（backfill + app 切成讀新）→ **contract**（確認無程式再讀舊後，另一次部署才 drop 舊欄）。**NEVER** 在同一個 migration 內 rename / drop 仍被線上程式引用的欄位 — 舊 instance 會即刻 500。
+
+> 對照 `database.md`（self-hosted 操作面）的 production migration classification（`online_safe` / `expand_contract_required` / `maintenance_required`）與 PostgREST `/ready` gate — 本 checklist 是 SQL 層的 zero-downtime 手法，classification 決定部署流程走哪條。
