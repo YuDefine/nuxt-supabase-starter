@@ -119,7 +119,7 @@ limit 20;
 
 API 變慢時：
 
-1. 先看 log 是否有 `PGRST003`（pool 耗盡）
+1. 先看 log 是否有 `PGRST003`（pool 耗盡）— **這是連線層問題不是 query 問題**，走 connection pool runbook 的 PGRST003 triage SOP（self-hosted 見 `db-runtime/supabase-self-hosted/database.md` § Connection Pool Runbook：pool budget / transaction vs session mode / `connection_limit=1` / prepared statement 限制），**NEVER** 對 pool timeout 盲目 retry
 2. 跑 `pg_stat_activity`（見 `database-access.md`）找 long-running query
 3. 取該 query 跑 `EXPLAIN ANALYZE`
 4. 若是 RLS policy 問題 → 改 policy 或加 index
