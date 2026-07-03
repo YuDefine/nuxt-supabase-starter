@@ -10,26 +10,21 @@ description: '統一截圖入口，派遣 screenshot-review agent（Sonnet）執
 
 工具選擇規則見 `.claude/rules/screenshot-strategy.md` — agent 會自行判斷，主 session 不需指定。
 
-## Runtime 階層（sonnet wrapper → codex 執行）
+## Runtime 分流
 
-`screenshot-review` agent 是**雙層 dispatch**：
+| 模式 | 由誰執行 | Dispatch 方式 |
+| --- | --- | --- |
+| **verify mode**（`[verify:ui]` / archive 前 QA） | **Codex GPT-5.5 low** | 主線直接 Bash `run_in_background`（per `agent-routing.md` Routing Table；**NEVER** 透過 spawn_agent 工具 / sonnet wrapper） |
+| **ad-hoc 截圖**（使用者說「截圖」「看畫面」等） | **Sonnet subagent 自己執行** | 主線用 spawn_agent 工具 派 `screenshot-review` sonnet wrapper；sonnet 直接做工作（**NEVER** 在 subagent 內呼叫 codex CLI） |
+| **sonnet fallback**（codex 不可用的 verify mode） | **Sonnet subagent 自己執行** | 主線偵測 codex 不可用後 fallback 到 spawn_agent 工具 |
 
-1. **Sonnet wrapper（agent body 第一段 § BLOCKING）**：收到 brief 後 Step 0 機械字面 grep 確認自己是 sonnet → Step 1 偵測 codex → Step 2 把 brief 包成 `[DELEGATED-BY-CLAUDE-CODE]` prompt 派給 codex GPT-5.5 low。**Sonnet 自己不跑 screenshot 工作**。
-2. **Codex 執行（GPT-5.5 low）**：實際 `agent-browser open` / `snapshot` / `screenshot` 在 codex 跑，每張 screenshot ~1500 vision + 3K planning tokens，成本是 sonnet 自己跑的 1/3–1/5。
-3. **Sonnet fallback（agent body Step 4）**：codex 不可用 / 派工失敗 / user 選 fallback 時，sonnet 才自己跑。
+**Hard rule**（per `agent-routing.md` § Dispatch 入口）：subagent **NEVER** 在其 sandbox 內呼叫 codex CLI。Codex 一律由主線直接 Bash 派工。
 
-主 session 派 Agent 後**期望看到**的 subagent 第一段回報：
-
-> 我收到的 prompt 第一行原文：`<brief 第一行>`
-> 身份判定：sonnet
-> codex 偵測：codex-ok
-> 已派工：jobId=<…>，sched wakeup 180s
-
-**警訊**（subagent 跳過 Step 0 / Step 1 直接做工作）：subagent 第一個 tool call 不是 `command -v codex` 而是 `agent-browser` / `curl` / `mkdir screenshots/` → 違反 agent body § BLOCKING hard rule，**MUST** 立刻打斷讓 agent 重來。**Incident（2026-05-19 align-shipments-rls-auth verify:ui）**：sonnet 直接做工作燒 115k tokens 卡 Chrome hydration debug，整次 dispatch 白做。
+**警訊**（subagent 跳過 Step 0 直接做工作）：subagent 第一個 tool call 不是 identity check 而是 `agent-browser` / `curl` / `mkdir screenshots/` → 違反 agent body hard rule，**MUST** 立刻打斷讓 agent 重來。
 
 ## Brief 注意事項
 
-- Brief **NEVER** 在第一行寫 `[DELEGATED-BY-CLAUDE-CODE]` — 那是 codex 派工 marker，主線派 Claude subagent 不該帶。寫了會讓 sonnet 誤判身份直接讀 agent body 跳過 dispatch。
+- Brief **NEVER** 在第一行寫 `[DELEGATED-BY-CLAUDE-CODE]` — 那是主線直派 codex 的 marker，派 Claude subagent 不該帶。寫了會讓 sonnet 誤判身份跳過 agent body。
 - Brief 結構（Setup / Items / Output format）跟誰執行**無關** — 結構像 delegated 不代表你應該寫 marker。
 
 ## 觸發時機
@@ -84,6 +79,6 @@ Agent 回傳後，主 session 應：
 
 ## 注意事項
 
-- Agent 是 sonnet wrapper，實際 screenshot 工作派給 codex GPT-5.5 low（成本 1/3–1/5）；sonnet 只負責 dispatch + watch + 結果整理
+- Verify mode 由主線直派 codex GPT-5.5 low；ad-hoc 截圖由 sonnet subagent 自己執行（subagent **NEVER** 呼叫 codex CLI）
 - 主 session **不需要**自己跑截圖命令
 - 主 session **不需要**決定用哪個工具 — agent 依 rule 判斷

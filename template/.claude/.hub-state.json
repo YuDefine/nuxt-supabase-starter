@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-07-03T14:00:37.951Z",
+  "syncedAt": "2026-07-03T14:17:24.343Z",
   "rulesProjection": "copy",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "21e209572e043ece",
@@ -23,7 +23,7 @@
     "rules/follow-up-register.md": "1b3ad99cf76f5cd7",
     "rules/goal-mode.md": "a9dbdc0d500657d0",
     "rules/golden-path-onboarding.md": "85c235df20129be6",
-    "rules/handoff.md": "10b471263171376f",
+    "rules/handoff.md": "6a991d55ab698728",
     "rules/knowledge-and-decisions.md": "1a3dff7903c0e3da",
     "rules/local-rule-override.md": "5795cb5d59f9456f",
     "rules/logging.md": "24dc4dc872751204",
@@ -107,6 +107,6 @@
     "agents/code-review.md": "57c964c2feb73668",
     "agents/db-backup.md": "5f4d05642f47e5ff",
     "agents/references/clade-review-rules.md": "b991470e18f6f932",
-    "agents/screenshot-review.md": "763f130eea372473"
+    "agents/screenshot-review.md": "b8030c140cccfe60"
   }
 }

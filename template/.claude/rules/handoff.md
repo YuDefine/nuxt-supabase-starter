@@ -102,6 +102,8 @@ Local edits will be reverted by the next sync.
 - `narrative-section-stale`：completed-narrative dated section 超過 narrative_age_days（default 3 天）
 - `active-section-stale`：active dated section 超過 active_age_days（default 14 天）→ 提醒「outstanding work 可能 silently 卡住」
 
+> **14 天是 escalation threshold，不是 grace period**。所有 active item 預設都應儘速處理；Mode B 盤點時**一律列入 outstanding 並推薦處理**，不因 age < 14d 而降低優先序或省略。14d threshold 的作用僅是「超過時語氣升級為 warn — 可能 silently 卡住」，不代表「未超過 = 不需關注」。
+
 審計只 warn 不阻擋；實際 rotate 由 `/handoff` Mode B Health Gate 執行（per `plugins/hub-core/skills/handoff/SKILL.md § 2B.1`）。
 
 ## Outstanding writing hygiene (v1.14+)
