@@ -71,10 +71,11 @@ Local edits will be reverted by the next sync.
    echo "PASS: ${SIZE} bytes + DOM verified"
    ```
 
-   **三層驗證（至少做前兩層）**：
+   **四層驗證（至少做前兩層；(d) 條件觸發）**：
    - **(a) 檔案大小 ≥ 35KB**（白畫面 / 登入頁通常 < 30KB）— 最低門檻
    - **(b) DOM / snapshot 關鍵字**（`snapshot -i | grep '<heading>'`）— 確認頁面是預期內容
    - **(c) URL 不含 `/auth/`**（`eval "location.href"` 確認未被 redirect）— 防 auth redirect
+   - **(d) Dialog-aware check**（verify item 描述含「dialog」「明細」「detail」「審核」「進度」等 modal 相關詞時 **MUST** 做）— `snapshot --full | grep 'dialog'` 確認 DOM 含已開啟的 `dialog` 元素。列表頁本身也含 verify keyword（如「待審核」出現在 status badge），只做 (b) 會 false PASS；(d) 確認 modal 真的開了。（per [[pitfall-verify-item-fake-url-no-interaction]]）
 
    **auth 回傳非 200 = 立即停手**：browser 內 `fetch __test-login` / cookie injection 的 HTTP status **MUST** 檢查，非 200（含 500）→ **STOP 截圖流程**，先修 auth，**NEVER** 忽略 status 繼續拍。
 
