@@ -158,7 +158,7 @@ JSON 範例（節錄）：
   },
   "reviewGuiReadiness": { "checks": ["..."], "raw": { "counts": {}, "entries": ["..."] } },
   "worktreeStash": { "checks": ["..."], "raw": { "worktrees": ["..."], "stashes": ["..."], "orphanSidecars": ["..."] } },
-  "techDebtHygiene": { "checks": ["..."], "raw": { "total": 0, "openCount": 0, "closedCount": 0, "closedLines": 0, "stale": ["..."], "closed": ["..."] } }
+  "techDebtHygiene": { "checks": ["..."], "raw": { "total": 0, "openCount": 0, "closedCount": 0, "closedLines": 0, "stale": ["..."], "aging": ["..."], "closed": ["..."] } }
 }
 ```
 
@@ -269,7 +269,10 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff Mode B — clade <version> scan_
 從以下來源蒐集 outstanding 工作：
 
 - 整理後的 `HANDOFF.md`
-- `docs/tech-debt.md` 未解決的 TD-NNN — **優先序以 §2B.1.8 `techDebtHygiene.raw.stale[]` 為準**：staleOpen（>60d）的 TD **MUST** 排到清單前段（`discAge` 越大越前），不可跟剛開的 TD 平鋪混在一起（這是「堆積然後忘記」的根因）
+- `docs/tech-debt.md` 未解決的 TD-NNN — 優先序分三層，**MUST** 依此排序，**NEVER** 平鋪混在一起（這是「堆積然後忘記」的根因）：
+  1. **stale**（`techDebtHygiene.raw.stale[]`，>60d 無 Last reviewed）— 最高優先，`discAge` 越大越前。每條 **MUST** 附三選一（做掉 / wontfix / stamp Last reviewed），但 stamp Last reviewed 列為最後選項，不推薦
+  2. **aging**（`techDebtHygiene.raw.aging[]`，>30d 含被 snooze 的）— 第二優先，`discAge` 越大越前。每條 **MUST** 主動追問 blocker：「什麼卡關？能現在推進嗎？」。對 `snoozed: true` 的項目明確指出「已 stamp Last reviewed 但仍未解決 — 不應再延期」
+  3. **其他 open TD** — 按 `Discovered` 排序，正常列入 outstanding
 - `openspec/ROADMAP.md` `## Next Moves`
 - 任何已 archive 但留下 follow-up 註記的 change
 
@@ -385,10 +388,17 @@ User 透過 `request_user_input` 選定下一步 outstanding（含明確的 next
 
 | 訊號 | check | 意義 | 處置 |
 | --- | --- | --- | --- |
-| **staleOpen** | `tech-debt-stale:<TD-NNN>`（warn） | open/pending TD 的 `Discovered` > 60d 且無 `### Resolution` / 近期 `Last reviewed` — 「開了就忘」候選 | 列進 §2B.2 outstanding **並標記為優先**（age 越大越前）。推薦 user 三選一：做掉 + 補 `### Resolution` / 改 `Status: wontfix` + 理由 / 加 `**Last reviewed**: <today>` 重置 SLA。**NEVER** 默默放回清單尾巴 |
+| **staleOpen** | `tech-debt-stale:<TD-NNN>`（warn） | open/pending TD 的 `Discovered` > 60d 且無 `### Resolution` / 近期 `Last reviewed` — 「開了就忘」候選 | 列進 §2B.2 outstanding **並標記為最高優先**（age 越大越前）。推薦 user 三選一：做掉 + 補 `### Resolution` / 改 `Status: wontfix` + 理由 / 加 `**Last reviewed**: <today>` 重置 SLA。**NEVER** 默默放回清單尾巴 |
+| **aging** | `tech-debt-aging:<TD-NNN>`（warn） | open/pending TD 的 `Discovered` > 30d，含被 `Last reviewed` snooze 的 — 「正在老化」候選 | 列進 §2B.2 outstanding（排在 stale 之後、一般項目之前）。**MUST 主動追問 user 卡關原因**（見 § anti-snooze）。對 `snoozed: true` 的項目**明確指出** `Last reviewed` 不等於解決 — 「已 stamp Last reviewed 但仍無 Resolution，應推進或 wontfix」 |
 | **closedBloat** | `tech-debt-closed-bloat`（warn，closed TD ≥ 門檻時觸發） | done/resolved/wontfix 的 closed TD 仍躺 `docs/tech-debt.md` 主檔，每次讀檔佔 token | 產出 rotate 建議：把 closed TD 搬到 `$MAIN_WT_PATH/docs/archives/tech-debt-closed-<YYYY-MM>.md`（append-only，編號不重用 — `audit-tech-debt-hygiene.mjs` Invariant 1 archive-aware），主檔移除對應段。**用 `request_user_input` 讓 user 拍板**（同 §2B.1b rotate plan 模式：A 套用 rotate / B 跳過 / C 手動），user 選 A 才動檔。**例外保留**：`raw.closed[]` 內 status 帶 re-activation 條件的（如 `wontfix-until-signal`、`*-until-*`）**MUST** 從 rotate 候選排除並在訊息標註「保留主檔以維持 trigger 可見性」— 這類項雖被 `isClosedStatus`（clade 共用 SoT）歸 closed，但搬到 archive 會丟失等訊號再啟動的 trigger |
 
-**判定 SoT**：`techDebtHygiene.raw`（`stale[]` 含 `discAge` / `lineNo`；`closed[]` 含 `status` / `lines`；`closedCount` / `closedLines`）。**NEVER** 從 `docs/tech-debt.md` 既有 narrative 或目測推測 — scan output 才是 SoT。
+**Anti-snooze（防無限延期）**：`Last reviewed` 只是「我知道這條存在」的確認，**不等於**已在推進。以下情境 **MUST** 主動追問 user 而非默許延期：
+
+- aging TD 帶 `snoozed: true`（有 Last reviewed 但無 Resolution）— 「這條 TD 已 N 天，上次 review 是 M 天前但仍未解決。什麼卡關？能現在做掉嗎？還是應該 wontfix？」
+- stale TD（> 60d）— 已超過 SLA，**NEVER** 推薦「加 Last reviewed 重置」作為預設選項（只作為三選一的最後項，前兩項是做掉 / wontfix）
+- 同一條 TD 如果在 `docs/tech-debt.md` body 明確寫了 blocker（如「需人工確認」「等外部 API」「需客戶拍板」），**MUST** 在 outstanding 盤點時引用該 blocker 並問 user：「blocker 解了嗎？能推進嗎？」
+
+**判定 SoT**：`techDebtHygiene.raw`（`stale[]` 含 `discAge` / `lineNo`；`aging[]` 含 `discAge` / `reviewAge` / `snoozed`；`closed[]` 含 `status` / `lines`；`closedCount` / `closedLines`）。**NEVER** 從 `docs/tech-debt.md` 既有 narrative 或目測推測 — scan output 才是 SoT。
 
 **Mode A 跑時不執行本 sub-step** — Mode A 是「靜默寫入交接」，本 scan 為 §2B.2 outstanding 盤點與 rotate 推薦服務，Mode A 無推薦階段。
 
@@ -487,7 +497,7 @@ _Updated: <YYYY-MM-DD>_
 ## Output contract
 
 - Mode A：成功 = HANDOFF.md / tech-debt / ROADMAP 有對應寫入 + tasks 檔已清 + Step 3 audit 已靜默寫入 HANDOFF.md `## Worktree & Stash Audit` 段；訊息只含升級摘要（不含 audit）
-- Mode B：成功 = 2B.0 pitfall sweep 已執行（dispatch `/oops` 或宣告「無 missed lesson」）+ HANDOFF.md 已整理 + 2B.1.5 → Step 3 audit 已寫入並在訊息摘要一行 + 2B.1.8 tech-debt hygiene 已讀（staleOpen 排進 outstanding 優先序 + closedBloat 達門檻時走 `request_user_input` rotate 拍板）+ 盤點訊息 + `request_user_input` 已發出讓 user 選 + user 選定後 2B.5 dispatch 已完成（直接 dispatch 或內呼 `/wt <slug>: /<next-skill> <change-name>`）
+- Mode B：成功 = 2B.0 pitfall sweep 已執行（dispatch `/oops` 或宣告「無 missed lesson」）+ HANDOFF.md 已整理 + 2B.1.5 → Step 3 audit 已寫入並在訊息摘要一行 + 2B.1.8 tech-debt hygiene 已讀（staleOpen 排進 outstanding 最高優先 + aging 排第二優先並主動追問 blocker + closedBloat 達門檻時走 `request_user_input` rotate 拍板）+ 盤點訊息 + `request_user_input` 已發出讓 user 選 + user 選定後 2B.5 dispatch 已完成（直接 dispatch 或內呼 `/wt <slug>: /<next-skill> <change-name>`）
 - 失敗 / blocked：明確說明卡點，不假裝完成
 
 ## 與其他 skill 的銜接
