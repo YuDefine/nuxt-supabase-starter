@@ -1,6 +1,6 @@
 ---
 name: commit
-description: 依功能分類變更並逐步完成 commit，遵循 commitlint 規範
+description: 依功能分類變更並逐步完成 commit，遵循 commitlint 規範。Use when 使用者說「commit」「提交」「分批 commit」，或 working tree 有多組 unrelated 變更需要分門別類提交。
 effort: high
 ---
 <!--
