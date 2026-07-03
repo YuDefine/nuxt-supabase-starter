@@ -37,7 +37,7 @@ Local edits will be reverted by the next sync.
    > ⚠️ `--dangerously-bypass-approvals-and-sandbox` 在背景非互動 codex 是**必要**的，不是偷懶 — codex `exec` 沒人可批准時，sandbox 為非 `danger-full-access` 的 MCP tool call 全部會被自動回 `user cancelled`（codebase-memory-mcp 等都會死）。Codex 官方文檔 `agent-approvals-security` 把這個 flag 與 `-s danger-full-access` 並列為「非互動信任環境」的標準寫法。**禁止**把它換回 `-s read-only` / `-s workspace-write` — 那會讓 codex 失去 MCP 能力（`approval_mode = "auto"` 在 `mcp_servers.*` 不是合法 codex config key，無法作為替代）。
 
 3. 立刻簡短回報 bash job ID 給使用者
-4. 立刻啟動 **Codex Watch Protocol**（見下節 § 監看排程）— **依 dispatch 路徑分模式**：**主線直接 Bash 派** = notification-only（主線 idle 等通知，只下**一個** ~1500s 安全網 fallback 防罕見 hang-type 失敗）；**subagent 中介派** = 每 ~3 分鐘 FS poll（cross-sandbox 通知可能 silent miss）。**禁止**對直接 dispatch 啟動每 3 分鐘短輪詢（無謂 turn 重燒 context）
+4. 立刻啟動 **Codex Watch Protocol**（見下節 § 監看排程）— notification-only（主線 idle 等通知，只下**一個** ~1500s 安全網 fallback 防罕見 hang-type 失敗）。**禁止**啟動每 3 分鐘短輪詢（無謂 turn 重燒 context）。**禁止**任何 subagent 中介 dispatch（per `agent-routing.md` § Dispatch 入口）
 5. 收到 `<task-notification> status=completed` → 立刻 BashOutput 讀 stdout → 整理結果回報；watch loop 自然終止
 6. **NEVER** 沉默等使用者來問進度
 
@@ -219,59 +219,19 @@ node ~/offline/clade/vendor/scripts/codex-dispatch.mjs \
 
 **核心命題**：派出 codex 後**主線不能單純等 `<task-notification>`**。codex 中途可能 `fetch failed`、sandbox 拒絕、互動 prompt、或長時間靜默；若沒有監看，主線完全不知道進度，使用者也只能空等。
 
-### 跨 sandbox 可見度約束（主線 ↔ subagent 中介）
+### ~~跨 sandbox 可見度約束~~ — 已廢除（2026-07-03）
 
-派 codex 透過 subagent 中介（例 `/spectra-apply` Phase Dispatch 用 `Agent` tool 開 subagent，subagent 在自家 sandbox 派 codex）時，主線跟 subagent 是**不同 bash sandbox**（Claude Code Agent tool 的 process namespace isolation）。本約束**不適用**主線直接 Bash 派 codex 的情境 — 那種情況下 BashOutput / ps 都在主線 sandbox 內正常 work。
+**subagent 中介派 codex 已全面禁止**（`agent-routing.md` § Dispatch 入口）。codex 一律由主線直接 Bash `run_in_background` 派工，`<task-notification>` / BashOutput / `ps` 都在同一 sandbox 內可靠。
 
-#### NEVER 用主線 ps 驗 subagent 的 background bash（失敗模式 1：false positive panic）
+本節原先文件化的兩個失敗模式（false positive panic + false negative silent miss）正是禁止 subagent 中介的根據——消除路徑本身就消除了兩個失敗模式。
 
-Subagent 回報「codex PID X running, awaiting notification」後，主線跑 `ps aux | grep codex` **必然**看不到 — 不是 codex 死了，是 sandbox 隔離，subagent sandbox 內的 process 主線看不到屬正常。
+> 歷史 pitfall 保留供考古：`docs/pitfalls/2026-05-18-subagent-background-bash-invisible-from-main-ps.md`
 
-- **NEVER** 用 `ps aux | grep codex` 從主線驗證 subagent 的 background process — 沒輸出**不**代表 codex 死了
-- 要驗證 → `SendMessage({to: <agent-id>, message: "回報 BashOutput shell <id> 進度"})`，由 subagent 自家 sandbox 跑 BashOutput / `ps -p <PID>` 驗
-- 要看實質進展 → 透過**共享 filesystem**（worktree git log、`/tmp/codex-*-stdout.log`、tasks.md checkbox），不透過 process tree
+### 監看排程（notification-only）
 
-#### MUST 每 ~3 分鐘主動 poll 共享 FS，不死等 task-notification（失敗模式 2：false negative silent miss）
+Codex **一律**由主線直接 Bash `run_in_background` 派工（**禁止** subagent 中介 dispatch，per `agent-routing.md` § Dispatch 入口）。因此 watch 只有一條路徑：notification-only。
 
-`<task-notification>` 是 subagent → 主線的理想路徑，但 subagent 可能 yield 在不 resume 狀態 → codex 已 exit、worktree 已長出 phase commit、log 已寫「hook: Stop Completed」「tokens used」，主線**乾等** 5-15 分鐘才發現 codex 早完成。
-
-派 subagent 走 codex 路徑後，主線 **MUST** 每 ~3 分鐘主動跑共享 FS poll（**不**依賴 subagent 主動 surface）：
-
-```bash
-cd <worktree> && \
-  git log main..HEAD --oneline | head -3 && \
-  grep -c '\- \[x\]' openspec/changes/<change>/tasks.md && \
-  /bin/ls -la /tmp/codex-phase-*-stdout.log && \
-  tail -15 /tmp/codex-phase-<N>-stdout.log
-```
-
-訊號判讀：
-
-| 觀察 | 判定 | 動作 |
-| --- | --- | --- |
-| log 末尾含「hook: Stop Completed」/「tokens used:」 | codex 已 exit，subagent 未 surface | **MUST** SendMessage 給 subagent 詢問結果，**不**自行進下一步 |
-| log mtime > 3 min 沒動 + 無「Stop Completed」 | codex 卡住或被殺 | **MUST** SendMessage 給 subagent 詢問 BashOutput 狀態 |
-| log 持續變長 + tasks.md `[x]` count 上升 | codex 跑中健康 | 繼續下次 poll，不打擾 subagent |
-| `git log main..HEAD` commit count 上升 | phase 完成（subagent 端 codex 已 self-commit per § Commit Authorization） | **MUST** SendMessage 給 subagent 進下個 phase |
-
-**`<task-notification>` 與主動 FS poll 並行**，poll 是**兜底**不是冗餘 — notification 路徑健康時 poll 也只是讀靜態檔，成本極低。
-
-#### 為什麼不違反「監看期間紀律」
-
-下方「監看期間的紀律」§ 寫 **NEVER** 在 wakeup loop 跑與監看無關的探索動作（grep / 額外 Read / 開新 subagent）。本節的 FS poll **就是**監看本身（讀 git log / 讀 stdout log / 讀 tasks.md 都是進度信號讀取），不算違反。違反的是趁 poll 順手做別的事（grep 其他模組、讀無關檔）。
-
-> 對應 pitfall（含完整 root cause、Symptom log 樣例、反面範例）：`docs/pitfalls/2026-05-18-subagent-background-bash-invisible-from-main-ps.md`
-
-### 監看排程
-
-**先分 dispatch 路徑**（決定 watch 模式）：
-
-| Dispatch 路徑 | Watch 模式 | 為什麼 |
-| --- | --- | --- |
-| **主線直接 Bash 派**（`codex exec` 或 `claude -p` headless 在主線 sandbox 背景跑） | **notification-only（預設）** | `<task-notification>` 與 BashOutput 都在主線 sandbox 內可靠；常見失敗（`fetch failed` / auth）= job **exit** → background bash 完成 → 通知**立刻**觸發。等通知期間主線 idle = 零 turn = 零 cache_read。涵蓋 spectra-propose 選項 B 的 codex draft + codex review job（原 Fable headless draft，Fable 暫不可用） |
-| **subagent 中介派 codex**（Agent tool → subagent → codex，cross-sandbox） | **每 ~3 分鐘 FS poll**（per § 跨 sandbox 可見度約束 失敗模式 2） | cross-sandbox `<task-notification>` 可能 silent miss（已驗證 incident）；FS poll 是兜底，不可省 |
-
-#### A. 主線直接 Bash 派（notification-only）
+`<task-notification>` 與 BashOutput 都在主線 sandbox 內可靠；常見失敗（`fetch failed` / auth）= job **exit** → background bash 完成 → 通知**立刻**觸發。等通知期間主線 idle = 零 turn = 零 cache_read。
 
 | 時機 | 動作 |
 | --- | --- |
@@ -281,14 +241,6 @@ cd <worktree> && \
 | 任何時點累計 ≥ 30 min 未完成 | **MUST** `AskUserQuestion` [繼續等 / kill 重派 / 中止] |
 
 > **為什麼安全網用長間隔而非 180s**：notification-only 的常態是「主線 idle 等通知」= 零 turn。短輪詢（180s）會強制主線每 3 分鐘醒來重讀整段 context（重倉 ~270K/turn）——那正是要消除的負擔來源。直接 dispatch 的**常見失敗是 exit-type**（`fetch failed` / auth fail → codex 退出 → bash 完成 → 通知即時觸發，主線馬上讀錯誤 tail）；安全網 fallback 只防罕見的 **hang-type**（codex 卡住 never exit、never notify），25 分鐘醒一次足夠（一次 cache miss vs 每 3 分鐘一次 cache read，便宜得多）。
-
-#### B. subagent 中介派（每 ~3 分鐘 FS poll）
-
-| 時機 | 動作 |
-| --- | --- |
-| 派出 background bash 後**立刻** | `ScheduleWakeup(180, "codex <topic> <slug> 首次進度檢查")` |
-| 每次 wakeup（系統自動觸發） | 1) 若已收到 `<task-notification status=completed>` → 走既有結束流程，**不再 wakeup**；2) 否則跑 § 跨 sandbox 可見度約束 的 FS poll（git log / tasks.md / stdout log，≤200 行） → 套用「健康判斷」 → 決定下次 wakeup 間隔（≤180s） |
-| 累計 wakeup ≥ 30 min 仍未完成 | **MUST** 用 `AskUserQuestion` 給使用者 [1] 繼續等 N 分 / [2] kill jobId 重派 / [3] 中止 — **禁止**自行決定 |
 
 ### 健康判斷（每次 wakeup 必跑）
 
@@ -323,16 +275,14 @@ codex 跑了 N 分鐘，目前狀態：<一句話卡點>
 
 ### `ScheduleWakeup` 用法守則
 
-**active watch（subagent 中介 FS poll 路徑）** 的 `delaySeconds` 一律落在 prompt cache 5 分鐘 TTL 內（< 300）：
+Codex 一律由主線直接 Bash 派 → notification-only，`ScheduleWakeup` 只用於安全網 fallback：
 
 | 情境 | 建議值 |
 | --- | --- |
-| 健康（預設、上限） | `180`（3 分，cache 內、使用者明定上限） |
+| **安全網 fallback（預設）** | **`1200`–`1800`**（超 cache TTL；這是「codex 死了卻沒發通知」的兜底，**不是** active watch） |
 | 即將完成 / 等通知收尾 | `60`–`120`（cache 內） |
-| 輕度可疑、要近距離觀察 | `120`–`180` |
-| **notification-only 安全網 fallback（主線直接 Bash 派）** | **`1200`–`1800`**（超 cache TTL；這是「codex 死了卻沒發通知」的兜底，**不是** active watch） |
 
-**禁止** `< 60`（runtime clamp 也會擋）。**active watch（subagent 中介路徑）禁止 `> 180`**（每 3 分鐘必檢查；更長偵測太遲）。**例外**：notification-only 路徑的安全網 fallback 用 `1200`–`1800` 是正確的——它不是 active watch，是 hang-type 失敗的兜底；對它用 180s 短輪詢反而把要消除的 per-turn 重讀加回來。
+**禁止** `< 60`（runtime clamp 也會擋）。安全網 fallback 用 `1200`–`1800` 是正確的——不是 active watch，是 hang-type 失敗的兜底；用 180s 短輪詢反而把要消除的 per-turn 重讀加回來。
 
 `reason` 欄位**必須**具體：例如「kiosk-multilingual codex 進度檢查（已派出 3 分）」，**NEVER** 寫「waiting」「monitoring codex」這種空泛字眼。
 
@@ -351,8 +301,6 @@ codex 跑了 N 分鐘，目前狀態：<一句話卡點>
 - **NEVER** 在 watch 中途自行決定殺掉 / 重派 codex — 必須先 AskUserQuestion
 - **NEVER** 看到健康訊號就提早終止 watch loop（例如「應該快好了」直接放著） — 必須跑到收到 `<task-notification>` 為止
 - **MUST** 收到 `<task-notification>` 後**不再** ScheduleWakeup（否則 wakeup 會在 codex 已結束後重複觸發）
-- **NEVER** 在 subagent dispatch 後用主線 `ps aux | grep codex` 驗證 subagent 的 background process — 屬 sandbox 隔離正常，會誤判 codex 死亡（見 § 跨 sandbox 可見度約束 失敗模式 1）
-- **MUST** 透過 subagent 中介派 codex 時，主線**每 ~3 分鐘**主動 poll 共享 FS（git log / tasks.md / stdout log），不只等 `<task-notification>`（見 § 跨 sandbox 可見度約束 失敗模式 2）
 
 ## Spectra Propose Handoff（具體做法）
 

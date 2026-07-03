@@ -1,6 +1,6 @@
 ---
 name: data-sanity
-description: "Layer C of spectra pre-handoff quality gates. Static audit for the data-shape failure class where a client query param literal violates the server zod schema bound (e.g. perPage: 200 vs max(100)) → silent 4xx → lookup map empties → admin list column collapses to a uniform fallback. Use during /spectra-apply Design Review and before /spectra-archive, or ad-hoc on any change that touches paginated queries + lookup-resolved columns."
+description: "Layer C of spectra pre-handoff quality gates. Static audit for the data-shape failure class where a client query param literal violates the server zod schema bound (e.g. perPage: 200 vs max(100)) → silent 4xx → lookup map empties → admin list column collapses to a uniform fallback. Use when running /spectra-apply Design Review, before /spectra-archive, or ad-hoc on any change that touches paginated queries + lookup-resolved columns."
 effort: medium
 metadata:
   author: clade

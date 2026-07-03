@@ -1,6 +1,6 @@
 ---
 name: nuxt-data-audit
-description: "Audit a Nuxt consumer's data-fetching and performance patterns against the golden path checklist (14 items). Scans .vue/.ts files for useFetch/useAsyncData/$fetch/useQuery/useMutation usage, checks dedupe/cache/key/payload/lazy/routeRules compliance. Outputs a graded report with per-item scores and top-3 actionable improvements."
+description: "Audit a Nuxt consumer's data-fetching and performance patterns against the golden path checklist (14 items). Scans .vue/.ts files for useFetch/useAsyncData/$fetch/useQuery/useMutation usage, checks dedupe/cache/key/payload/lazy/routeRules compliance. Outputs a graded report with per-item scores and top-3 actionable improvements. Use when 要審計 Nuxt 專案的 data-fetching 模式、檢查 useFetch/useAsyncData 最佳實踐、或跑效能 checklist。"
 effort: medium
 metadata:
   author: clade
