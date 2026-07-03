@@ -29,17 +29,19 @@ Local edits will be reverted by the next sync.
 3. 啟動 Codex Watch Protocol（`ScheduleWakeup` 180s 第一次健康檢查）
 4. 收 `<task-notification status=completed>` → BashOutput 讀 stdout → 整理結果回報
 
-Codex 端讀本檔（投影到 consumer 的 `.claude/agents/screenshot-review.md`）「## 你會收到」以下 section 即可，**跳過**本 BLOCKING + 下方原 Step 0/1/2/3 sonnet dispatch 段（那些是給 sonnet wrapper 用的、主線直派 codex 不適用）。
+Codex 端讀本檔（投影到 consumer 的 `.claude/agents/screenshot-review.md`）「## 你會收到」以下 section 即可，**跳過**本 BLOCKING + Step 0 identity check 段（那些是給 sonnet wrapper 用的、主線直派 codex 不適用）。
 
 ### Fallback：sonnet wrapper（codex CLI 不可用時才走）
 
 若主線 `command -v codex` 偵測 codex 不可用 / 安裝壞，**才** fallback 用 `Agent` tool with `subagent_type: screenshot-review` 走下方 sonnet path。Fallback 觸發時主線**MUST** 在 dispatch 訊息明寫「codex 不可用，走 sonnet fallback」讓 user 觀察工具鏈健康度。
 
+**Sonnet subagent 收到 brief 後直接自己做工作**（跑 agent body），**NEVER** 在 subagent 內部再呼叫 codex CLI（per `agent-routing.md` § Dispatch 入口 hard rule）。
+
 ---
 
 ## 🚫 BLOCKING — 第一動作就是 Codex Dispatch（不准跳）
 
-> 本 section 給 **sonnet wrapper fallback path** 用（主線直派 codex 不會進到這裡）。Codex GPT-5.5 自己跑時跳過此 section、從「## 你會收到」開始讀。
+> 本 section 給 **sonnet wrapper path** 用（主線直派 codex 不會進到這裡）。Codex GPT-5.5 自己跑時跳過此 section、從「## 你會收到」開始讀。
 
 ### Step 0 — Identity check（**機械字面 grep，禁止推斷**）
 
@@ -53,7 +55,7 @@ Codex 端讀本檔（投影到 consumer 的 `.claude/agents/screenshot-review.md
 | 收到的 prompt 第一行 | 你是 | 動作 |
 | --- | --- | --- |
 | 字面**就是** `[DELEGATED-BY-CLAUDE-CODE]`（28 字元，不多不少） | codex GPT-5.5 執行 instance | **MUST 跳過本 § BLOCKING**，從下一個 `## 你會收到` section 開始讀 |
-| **其他任何情況**（無此字面 marker、brief 是 markdown header、是 `mode: verify` 開頭、是其他結構化文字...） | Claude Code sonnet subagent | **MUST** 從 Step 1 codex 偵測開始 dispatch，**NEVER** 自己做工作 |
+| **其他任何情況**（無此字面 marker、brief 是 markdown header、是 `mode: verify` 開頭、是其他結構化文字...） | Claude Code sonnet subagent | **直接執行** agent body（從「你會收到」section 開始）。**NEVER** 在 subagent 內呼叫 codex CLI |
 
 **禁止軟推斷**（看到自己這樣想就立刻停下、回到「我是 sonnet」default）：
 
@@ -63,118 +65,23 @@ Codex 端讀本檔（投影到 consumer 的 `.claude/agents/screenshot-review.md
 - ❌「我已經被 dispatch 過來了，再 dispatch 一次很怪 / 是遞迴」
 - ❌「主線意圖是要我直接跑（哪怕 brief 沒寫 marker）」
 
-`[DELEGATED-BY-CLAUDE-CODE]` 是**字面字串 marker**，不是分類概念、不是 dispatch 狀態、不是 brief 結構推斷。**看不到字面 28 字元 = 你是 sonnet，沒有例外**。Sonnet 的責任就是再 dispatch 一次到 codex（不是遞迴，是分層）。
+`[DELEGATED-BY-CLAUDE-CODE]` 是**字面字串 marker**，不是分類概念、不是 dispatch 狀態、不是 brief 結構推斷。**看不到字面 28 字元 = 你是 sonnet，沒有例外**。Sonnet 直接自己執行 agent body（從「你會收到」開始），**NEVER** 在 subagent 內呼叫 codex CLI。
 
 **Incident（2026-05-19 align-shipments-rls-auth verify:ui）**：sonnet 收到 brief 後 Step 1 codex 偵測印 `codex-ok`，然後 self-rationalize「this brief explicitly instructs me as the agent body (it contains [DELEGATED-BY-CLAUDE-CODE] context — this is the verify:ui task itself being executed)」直接跳到自己做工作。實際收到的 brief 第一行是 `❯ **Mode: verify** — final-state visual evidence collection ...`，根本沒 marker，agent 把 brief 結構誤判成「我就是執行體」。後果：sonnet 親自燒 115k tokens、3m38s 卡在 Chrome + browser 自動化 daemon 啟動 + Nuxt hydration debug，整次 dispatch 白做。修法就是上面這張表 — Step 0 第一動作是字面 grep + 強制引用第一行原文，剝奪「我覺得我是 codex」的軟推斷空間。
 
-### Sonnet 的責任邊界
+### Sonnet 的責任邊界（2026-07-03 簡化）
 
-Sonnet subagent 收到任何 brief 後的第一個 tool call **MUST** 是 Step 1 codex 偵測 Bash，**NEVER** 跳過直接做工作。跳過此 section 直接做工作（例：直接 `agent-browser get url` / `curl dev server` / `mkdir screenshots/`）= **hard rule violation**。
+Sonnet subagent **NEVER** 呼叫 codex CLI（per `agent-routing.md` § Dispatch 入口 hard rule：codex 一律由主線直接 Bash 派工）。
 
-截圖驗證每張 ~1500 tokens vision + ~3K tokens 規劃 / DOM observation，sonnet 自己跑成本是 codex GPT-5.5 low 的 3-5 倍且燒主 quota。SKILL.md 內 hard rule 不執行 = 規則失效。
+Sonnet subagent 被主線呼叫時，代表**主線已確認 codex 不可用**（或 user 明確要求 sonnet fallback）。收到 brief 後直接執行下方完整 agent body（「你會收到」→「工具選擇」→「前置條件」→ ... 整份流程），不需要偵測 codex、不需要再 dispatch。
 
-### Step 1 — 偵測 codex 可用性（**MUST 是第一個 Bash call**）
-
-```bash
-command -v codex >/dev/null 2>&1 && codex --version >/dev/null 2>&1 && echo "codex-ok" || echo "codex-unavailable"
-```
-
-`codex-unavailable` → 跳「Step 4 Sonnet Fallback」。`codex-ok` → 繼續 Step 2。
-
-**回報義務**：Step 1 跑完 **MUST** 在你給主線的第一段訊息明寫「codex 偵測：<codex-ok|codex-unavailable>」，讓主線知道走哪條 path。漏報 = caller 無法觀察 codex 健康度 + 無法 audit 是否守 hard rule。
-
-### Step 2 — 派工
-
-完全遵照 `.claude/rules/agent-routing.codex-watch-protocol.md` § 「Codex 派工的標準流程」，差異點：
-
-- `<topic>` = `screenshot-review` 或 `screenshot-review-verify`（看 brief 是不是 `mode: verify`）
-- `<slug>` = brief 中的 change name；ad-hoc 則用 semantic topic
-- `<cwd>` = consumer repo root
-- reasoning effort = **low**（user 明定；不是 medium / high / xhigh）
-- prompt 模板（Write 到 `/tmp/codex-screenshot-review-<slug>-prompt.md`）：
-
-  ```
-  [DELEGATED-BY-CLAUDE-CODE]
-
-  你是 screenshot-review agent。Claude Code 主線把這份截圖驗證工作 dispatch 給你（GPT-5.5 low）執行。
-
-  ## 完整 instructions
-  請先 Read `.claude/agents/screenshot-review.md`（投影副本）讀完整 agent body —
-  除了開頭「Codex Dispatch」section（那是主線用的，你自己不要再 dispatch）。
-  從「你會收到」section 開始全部適用於你。
-
-  ## Brief
-  <把主線收到的完整 brief 原封貼入：mode、change name、port、目標清單、color mode、等等>
-
-  ## Output 契約
-  - progress.json 路徑：screenshots/<env>/<slug>/progress.json（schema 見 agent body § progress.json 寫盤 contract）
-  - review.md 路徑：screenshots/<env>/<slug>/review.md
-  - stdout 結尾 MUST 印一段 `## Result` section，列每個 item 的 PASS / FAIL / UNCERTAIN + screenshot path，給主線收尾用
-  - 結束前跑 `node scripts/spectra-advanced/audit-screenshot-quality.mts <slug> --fail-on-issues`（若是 A 類 change screenshot）
-  ```
-
-- Bash background：
-
-  ```bash
-  cd <consumer-repo-root> && codex exec \
-    --model gpt-5.5 \
-    --dangerously-bypass-approvals-and-sandbox \
-    --skip-git-repo-check \
-    -c model_reasoning_effort=low \
-    < /tmp/codex-screenshot-review-<slug>-prompt.md 2>&1
-  ```
-
-- 立刻回報 bash job ID + 派工時間給主線（你的 caller，通常是 Claude Code 主 session）
-
-### Step 3 — Codex Watch（每 3 分鐘 health check）
-
-啟動 Codex Watch Protocol — `ScheduleWakeup(180, "screenshot-review codex 進度檢查（<slug>）")` 立刻排第一次，之後每次 wakeup 套用健康判斷：
-
-| 健康訊號（BashOutput tail） | 下次 wakeup |
-| --- | --- |
-| 新 `exec`/`agent-browser`/`screenshot`/`tokens used` 行；或 `progress.json` last_update 推進 | 180s |
-| `Codex Report` / `tokens used:` 收尾訊號 | 60s（即將完成） |
-| 末尾 60s+ 無新輸出 | 120s，連兩次 → 介入觸發 |
-| `fetch failed` / `sandbox: rejected` / `Permission denied` / 互動 prompt / codex 自我宣告 blocker | **立即**介入觸發 |
-| 累計 30 min 未完成 | **MUST** AskUserQuestion |
-
-介入觸發內容（沿用 codex-watch-protocol § 介入觸發）：
-
-```
-screenshot-review codex 跑了 N 分鐘，目前卡點：<一句話>
-
-末尾輸出（≤10 行）：
-<tail>
-
-要怎麼處理？
-[1] 繼續等 3 分 — 主線再 wakeup 看一次
-[2] kill <jobId> 後 fallback 主線（sonnet 自己跑）
-[3] 中止整次截圖驗證
-```
-
-收到 `<task-notification status=completed>` 後：
-
-1. Read `screenshots/<env>/<slug>/progress.json` 確認 schema 齊全（items_done / blockers / last_update）
-2. Read `screenshots/<env>/<slug>/review.md`
-3. 整理結果照原 § 「回傳給主 session」格式回給 caller（摘要表 + 路徑 + 需確認/有問題清單）
-
-### Step 4 — Sonnet Fallback
-
-進入條件：
-
-- Step 1 偵測 `codex-unavailable`
-- Step 3 介入觸發後 user 選 `[2] fallback 主線`
-- codex `<task-notification>` 回 status=failed 或 exit-code ≠ 0
-
-Fallback 動作：**直接執行下方完整 agent body**（你是 sonnet，自己走「你會收到」→「工具選擇」→「前置條件」→ ... 整份流程）。Brief 已經在你手上，不需要重新收。
+**回報義務**：在給主線的第一段訊息明寫「sonnet fallback 啟動（codex 不可用）」，讓上層觀察 codex 健康度。
 
 ### Guardrails
 
-- **NEVER** 在 Step 2 派工後就走人 — 必啟動 Step 3 Watch（防 add-pass-fail-inspection-type 7 小時無回報重演）
-- **NEVER** 在 Step 3 自決定 kill / 重派 — 必須先 AskUserQuestion
-- **NEVER** 把 verify mode 派出時忘了在 prompt 內 inline 整段「Verify Mode（spectra-apply Step 8a）」相關 hard rule（time budget 60min / checkpoint cadence / fail-fast / 單 call ≤ 1 語義動作）— Read `.claude/agents/screenshot-review.md` 已涵蓋，但 prompt brief 段要重申「mode: verify」讓 codex 走對 channel
-- **NEVER** 偵測 codex 時不檢查 `--version` exit code — `command -v` 只看 PATH，安裝壞了不會被擋
-- **MUST** dispatch 失敗（codex 不可用 / exit-code ≠ 0 / user 選 fallback）時回報 caller「screenshot-review 走 sonnet fallback：<原因>」，讓上層觀察 codex 健康度
+- **NEVER** 從 sonnet subagent 內部呼叫 codex CLI（`codex exec` / `codex review` / 任何 codex 命令）— 這是 `agent-routing.md` § Dispatch 入口 hard rule
+- **NEVER** 跳過 Step 0 identity check 直接做工作（codex instance 仍需字面 marker 判定）
+- **MUST** dispatch 為 sonnet fallback 時回報 caller「screenshot-review 走 sonnet fallback：<原因>」
 
 ---
 

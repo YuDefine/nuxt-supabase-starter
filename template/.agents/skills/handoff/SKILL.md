@@ -266,7 +266,7 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff Mode B — clade <version> scan_
 
 ### 2B.2 盤點剩餘 outstanding
 
-從以下來源蒐集 outstanding 工作：
+從以下來源蒐集 outstanding 工作。**所有 active item 一律列入盤點並推薦處理** — drift scan 的 `active-section-stale`（14d）是 escalation threshold，不是 grace period；未超過 14d 的 active item **同樣 MUST 列入 outstanding**，不得因「尚未觸發 stale signal」而省略或降低優先序。
 
 - 整理後的 `HANDOFF.md`
 - `docs/tech-debt.md` 未解決的 TD-NNN — 優先序分三層，**MUST** 依此排序，**NEVER** 平鋪混在一起（這是「堆積然後忘記」的根因）：
