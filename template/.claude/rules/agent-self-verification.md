@@ -84,6 +84,21 @@ Local edits will be reverted by the next sync.
 
    延伸：任何「page route → 內容」mapping（`QUICK_ACTION_MAP` 的 `startsWith('/route')` 類）**MUST** 對照 `app/pages` 實際產生的路由驗證，**NEVER** 憑功能語意臆想 prefix — 臆想 prefix 對不上真實 route 時 silent fallthrough 到預設，typecheck / lint / 靜態視覺都不報。（per [[pitfall-review-ui-checkbox-without-agent-evidence-masks-bug]]）
 
+9. **UI 改動後 MUST 重拍所有受影響的 verify:ui 截圖（hard rule）**：commit 觸及 `.vue` / `.tsx` / `.jsx` / `.css` / `.scss` 檔後，該 change 的**全部** `[verify:ui]` / `[review:ui]` items 截圖視為 stale（不只被標 issue 的那張）。**MUST** 跑 `audit-screenshot-staleness.mts` 確認 0 stale，有 stale 全部重拍後才能 hand back user 或嘗試推 review-gui bucket 到 `ready`。此規則**不限 spectra-apply 流程** — 主線直接修 issue / refactor / 任何 UI 改動都適用。
+
+   **Canonical pattern**：
+   ```bash
+   # 1. 跑 staleness audit
+   node --experimental-strip-types vendor/scripts/audit-screenshot-staleness.mts \
+     --repo <consumer-path> --active-only 2>&1
+   # 2. 對每個 STALE item 重拍（Playwright / agent-browser）
+   # 3. 刪 LEGACY 無 #N 前綴舊圖
+   # 4. 重跑 audit 確認 0 STALE
+   # 5. 更新 (verified-ui:) annotation timestamps
+   ```
+
+   **NEVER** 只重拍被標 `（issue:）` 的那張 — 同次 code 改動影響的 sibling items 截圖同樣過時。（per [[pitfall-issue-fix-refreshes-only-flagged-screenshot-leaves-batch-stale]]；<consumer-a> 2026-07-04 regression 實證：timeline 上色改動後只重拍 #1.1，其餘 7 張 stale → bucket 卡 `readyForEvidence`）
+
 ## 派工前的主線預檢責任
 
 派 subagent / codex / screenshot-review 前，主線 **MUST**：
