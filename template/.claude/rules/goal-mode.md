@@ -42,6 +42,36 @@ Local edits will be reverted by the next sync.
 - 「Goal：1. 寫完 spec 2. **等 CI green**」 — CI 通常 agent 不能 poll，等於 user-bound
 - 「Goal：1. 改完檔案 2. **user 確認可以 push**」 — 決策權在 user，不該在 goal
 
+## applyInProgress 不是 user-bound — MUST dispatch 或提供選擇
+
+`applyInProgress` change 是 agent 可推進的工作（寫 code、跑 test），**不是** user-bound。/goal 遇到 applyInProgress **NEVER** 預設 `@apply-blocked` 交還 user — `@apply-blocked` 僅限真正的外部 blocker（等決策 / 等別 change / 缺資源）。
+
+### 正確行為
+
+遇到 applyInProgress change 時 **MUST** 用 `AskUserQuestion` 提供選擇：
+
+| 選項 | 適用情境 |
+| --- | --- |
+| **A. 立刻 dispatch `/wt /spectra-apply <change>`**（推薦） | 預設。跑 residency-classify 判定 codex-primary 或 claude-primary 後 dispatch |
+| **B. 標 `@apply-blocked[<外部原因>]`** | 僅限真正的外部 blocker：等客戶決策 / 等別 change 先完成 / 缺 API key 或權限 |
+| **C. 本輪跳過，繼續處理其他 change** | multi-change goal 中其他 change 優先時 |
+
+「change 太大」「0% 進度」「需要完整 session」**不是** `@apply-blocked` 的合法理由 — 那是 dispatch 後 spectra-apply 自管的事（pause / blocker / phase dispatch）。
+
+### 與 loop-engineer 的差異
+
+loop-engineer（autonomous 模式）一律 dispatch、NEVER AskUserQuestion。/goal（attended 模式）user 在場，**SHOULD** 先讓 user 選擇 dispatch 優先序再動手。
+
+### 反模式（2026-07-04 實證）
+
+/goal prompt 寫「大 feature → HANDOFF + @apply-blocked」→ agent 看到 0/24 的 change 直接標 blocked 交還 user → user 收到時只能自己再開 session 重跑。正確做法是 AskUserQuestion 讓 user 當場選。
+
+### 禁止
+
+- **NEVER** 因「change 太大」「0% 進度」「不適合在 multi-change session 做」預設標 `@apply-blocked`
+- **NEVER** 不提供選擇就直接標 `@apply-blocked` — 那等於替 user 做了「不做這個」的決策
+- **NEVER** 把 /goal prompt 內的「大 feature → @apply-blocked」指示當作免死金牌 — 本規則優先
+
 ## 執行中偵測卡關 → 切換 /handoff
 
 `/goal` 跑進去之後，若觀察到以下任一 signal，**MUST** 立即終止 /goal 並改走 `/handoff`：

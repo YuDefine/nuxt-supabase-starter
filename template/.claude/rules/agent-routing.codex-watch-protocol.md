@@ -51,6 +51,39 @@ Local edits will be reverted by the next sync.
 
 > sandbox flag 統一使用 `--dangerously-bypass-approvals-and-sandbox`，不再分 `-s read-only` / `-s workspace-write`（在背景 codex 會擋 MCP）。「預期動作」由主線在 prompt 內陳述，靠 codex 自律。
 
+### `codex review` 禁用（改用 `codex exec` + review prompt）
+
+**NEVER** 用 `codex review --uncommitted`（或 `--base`、`--commit`）做跨模型 review。
+
+**根因**：`codex review` 硬編碼 `workspace-write` sandbox，無法透過 `-c` 覆寫。此 sandbox 模式會讓 `~/.codex/config.toml` 註冊的 MCP server（如 `codebase-memory-mcp`）在 `list_projects` 呼叫永久 hang — MCP 進程寫回 response 但 sandbox 管線未正確傳遞。`codex exec --dangerously-bypass-approvals-and-sandbox`（`danger-full-access` sandbox）則完全正常。
+
+**替代做法**：用 `codex exec` + review prompt 取代：
+
+```bash
+# 1. 收集 diff
+git diff --cached > /tmp/codex-review-diff.patch
+git diff >> /tmp/codex-review-diff.patch
+git ls-files --others --exclude-standard | while read f; do
+  echo "=== NEW FILE: $f ===" >> /tmp/codex-review-diff.patch
+  head -200 "$f" >> /tmp/codex-review-diff.patch
+done
+
+# 2. 用 codex exec 跑 review
+echo "Review the following uncommitted changes for bugs, security issues, and correctness problems. Output prioritized findings with severity [P1-P3], file path, and line range. If no issues, output 'No issues found.'
+
+$(cat /tmp/codex-review-diff.patch)" | \
+codex exec \
+  --model gpt-5.5 \
+  --dangerously-bypass-approvals-and-sandbox \
+  --skip-git-repo-check \
+  -c model_reasoning_effort=high \
+  --ephemeral \
+  --disable memories 2>&1
+```
+
+- 已驗證 MCP 全部正常（`list_projects`、`get_code_snippet`、`search_graph` 均 completed）
+- `codex review` 的 `--reasoning-effort` flag 不存在（是 `codex exec` 專屬），用 `-c model_reasoning_effort=<level>` 覆蓋
+
 ### Plan-first（寫 code 的派工必加）
 
 派 Codex **寫 code / 改檔**（spectra-propose draft、spectra-apply phase）的 prompt **MUST** 內含以下硬指令（**WebSearch / `codex review` 不需要** — 它們純讀不寫）：
