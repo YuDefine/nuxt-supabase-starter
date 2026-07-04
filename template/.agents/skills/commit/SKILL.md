@@ -256,10 +256,18 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
       | 純 `[review:ui]` user 驗收 | 上述都不符，item 是 `[review:ui]` | **只有這類**才引導 user 到 review-gui |
       | 純 `[discuss]` | 上述都不符，item 是 `[discuss]` | 不在此處處理（archive walkthrough） |
 
-   2. **Claude 可處理的項目全部推進完畢後**，重跑 Step 3 的 awk 判定：
-      - 全部綠燈 → 輸出 `✅ 0-MR 通過（auto-triage 推進 N 項後通過）`，繼續 Step 0
-      - 仍有 pending（只剩 `[review:ui]` 純 user 驗收項）→ 釋放 lock，引導 user 到 review-gui（此時 bucket 已是 `ready`）
-      - 仍有 pending 但 Claude 推進失敗（fix 修不動 / evidence 收不到）→ 釋放 lock，**如實報告**哪些項目卡住 + 卡住原因，**NEVER** 只說「請去 review-gui」
+   2. **Claude 可處理的項目全部推進完畢後**，跑 mechanical readiness gate：
+
+      ```bash
+      node ~/offline/clade/vendor/scripts/check-review-readiness.mjs \
+        --repo . --change <change-name>
+      ```
+
+      - **exit 0** → 輸出 `✅ 0-MR auto-triage 完成，bucket=ready`，釋放 lock，引導 user 到 review-gui
+      - **exit 1** → 讀 stdout JSON 的 `bucket` + blocking 數據，繼續 auto-triage 或釋放 lock + 如實報告卡住原因，**NEVER** 只說「請去 review-gui」
+      - **exit 2** → 釋放 lock，回報 script 執行失敗
+
+      **NEVER** 跳過 readiness gate 自判 bucket — Claude 自判已 9 次證明不可靠（per [[review-gui-surface]] MUST 9）
 
    3. **NEVER** 自動勾任何 `[review:ui]` 的 `- [ ]`、**NEVER** 提議跳過 gate、**NEVER** 提議 stash 走 `tasks.md`
 
