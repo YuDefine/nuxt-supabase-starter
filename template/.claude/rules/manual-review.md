@@ -54,8 +54,13 @@ Local edits will be reverted by the next sync.
 
 細節見 [[manual-review.discuss]] § 人工檢查時機詳解（為什麼 4 點、正確 sequence 全圖、archive-commit-order 對齊理由、例外 4 條、cross-ref）。
 
+### Auto-triage 前置條件（per [[review-gui-surface]] MUST 9）
+
+**NEVER** 在 `bucket ≠ ready` 時引導 user 到 review-gui。引導前 **MUST** auto-triage 所有 pending leaf items：`（fix-requested）` → Claude 修 code；evidence missing → Claude self-collect；`（issue:）` 無分析 → Claude triage。只有 Claude 可處理的項目全部推進完畢、剩下純 `[review:ui]` user 驗收項、`bucket=ready` 時，才引導 user。
+
 ### 禁止事項
 
+- **NEVER** 在 `bucket ≠ ready` 時引導 user 到 review-gui（per [[review-gui-surface]] MUST 9）— 含 `/commit` 0-MR block、spectra-apply Step 8b handoff、session 結尾回報等所有場景
 - **NEVER** 在 ingest 完、apply 還沒跑時引導 user 回 review-gui 評估 OK/Issue/Skip
 - **NEVER** 在 (C) 路徑中段（ingest 跟 apply 之間、或 fix 跟 ingest 之間）跑 `/commit`
 - **NEVER** 在 `/spectra-archive` **之前**跑 `/commit` 收 fix — 先 archive 再單一 commit，對齊 `archive-commit-order`

@@ -85,14 +85,24 @@ Local edits will be reverted by the next sync.
 
 `## 人工檢查` 的 checkbox **不能由 agent 自行代勾**。
 
-**MUST** 進入人工檢查階段（implementation tasks 完成、剩 `## 人工檢查` 區塊）時，**第一動作就是引導使用者跑 `pnpm review:ui`**——本地 GUI、不燒 chat token、自動依 `#N` / `#N.M` 檔名配對截圖、可鍵盤完成 OK / Issue / SKIP，並 conflict-aware 寫回 tasks.md。
+**MUST** 進入人工檢查階段（implementation tasks 完成、剩 `## 人工檢查` 區塊）時，**第一動作是 auto-triage（per [[review-gui-surface]] MUST 9），不是直接引導使用者跑 `pnpm review:ui`**。
+
+Auto-triage 流程：逐條讀 pending leaf item 的 annotation，判斷阻塞原因：
+
+- `（fix-requested）` → Claude dispatch `/wt` 修 code → merge-back → 重拍截圖 → strip annotation
+- evidence missing → Claude 走 [[agent-self-verification]] fallback chain 收 evidence
+- `（issue:）` 無 `(claude-analyzed:)` → Claude triage issue 走 (A)-(E) 路由
+- 上述全部推進完畢後，**只有剩下純 `[review:ui]` user 驗收項且 `bucket=ready`**，才引導使用者跑 `pnpm review:ui`
+
+**NEVER** 在 non-ready bucket 狀態引導 user 到 review-gui — user 到了也做不了任何事，等同把 Claude 可自動化的工作成本轉嫁給 user。
 
 **NEVER** 預設用 `AskUserQuestion` 在 chat 內逐項彈對話框走人工檢查——那是 `pnpm review:ui` 不可用時的 fallback，不是 default path。
 
 正確流程：
 
-1. **首選（DEFAULT）**：tasks.md 仍有 `## 人工檢查` 未勾項 → 主線回「從 **clade home**（`~/offline/clade`）執行 `pnpm review:ui` 開本地 GUI 驗收」（聚合機制與 cwd 規約見下方 § cwd），等使用者跑完 GUI 流程回報後繼續
-2. **Fallback**（GUI 不可用時）：截圖 → 逐項展示 → 使用者回覆 OK / 問題 / skip → 依答覆更新 checkbox。GUI 不可用的具體情境見下方 § 例外：fallback 模式
+1. **Auto-triage first**：推進所有 Claude 可處理的 pending items（fix-requested / evidence missing / issue triage）
+2. **首選（DEFAULT）**：auto-triage 後 `bucket=ready` → 主線回「從 **clade home**（`~/offline/clade`）執行 `pnpm review:ui` 開本地 GUI 驗收」（聚合機制與 cwd 規約見下方 § cwd），等使用者跑完 GUI 流程回報後繼續
+3. **Fallback**（GUI 不可用時）：截圖 → 逐項展示 → 使用者回覆 OK / 問題 / skip → 依答覆更新 checkbox。GUI 不可用的具體情境見下方 § 例外：fallback 模式
 
 ### `[discuss]` items 不在 review:ui 主流程
 

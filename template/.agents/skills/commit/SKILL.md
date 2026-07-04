@@ -242,16 +242,26 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
    - `tasks.md` 不存在 → 視為 `OK`（尚未進入實作階段的 change）
    - 輸出 `BLOCK` → 列入 blocker，順便用同樣 leaf-only 邏輯抓出未勾 leaf 數量（同 awk 改 END 累加 `pending_count` 並 print）
 
-4. **blocker list 非空時**：
+4. **blocker list 非空時 → auto-triage（per [[review-gui-surface]] MUST 9）**：
 
-   1. **MUST** 立即釋放 lock，避免下次 session 被卡：
+   **MUST NOT** 直接停下叫 user 去 review-gui。改走 auto-triage：逐條讀 pending leaf item 的 annotation，判斷阻塞原因並自行推進 Claude 可處理的項目。
 
-      ```bash
-      node .claude/scripts/commit-lock.mjs release
-      ```
+   1. 對每個 blocked change 的每個 pending leaf item，讀 tasks.md 該行判斷：
 
-   2. 印出 blocker 報告（每條 change 一行：路徑 + 未勾項數）+ 明確的「本次 /commit 已中止」結語
-   3. **NEVER** 自動勾任何 `- [ ]`、**NEVER** 提議跳過 gate 的方法、**NEVER** 提議 stash 走 `tasks.md` 讓 step 2 抓空
+      | Item 狀態 | 判斷方式 | Claude 動作 |
+      | --- | --- | --- |
+      | `（fix-requested）` | 行內含 `（fix-requested）` | dispatch `/wt` 修 code → `wt-helper merge-back` → 重拍截圖 → strip `（fix-requested）` + `(claude-analyzed:)` → 更新 `(verified-*:)` annotation |
+      | evidence missing | `[verify:ui]` / `[verify:api]` / `[verify:e2e]` 但無對應 `(verified-*:)` annotation | 走 [[agent-self-verification]] fallback chain 收 evidence |
+      | `（issue:）` 無 `(claude-analyzed:)` | 行內含 `（issue:）` 但無 `(claude-analyzed:)` | triage issue → 走 (A)-(E) 路由 |
+      | 純 `[review:ui]` user 驗收 | 上述都不符，item 是 `[review:ui]` | **只有這類**才引導 user 到 review-gui |
+      | 純 `[discuss]` | 上述都不符，item 是 `[discuss]` | 不在此處處理（archive walkthrough） |
+
+   2. **Claude 可處理的項目全部推進完畢後**，重跑 Step 3 的 awk 判定：
+      - 全部綠燈 → 輸出 `✅ 0-MR 通過（auto-triage 推進 N 項後通過）`，繼續 Step 0
+      - 仍有 pending（只剩 `[review:ui]` 純 user 驗收項）→ 釋放 lock，引導 user 到 review-gui（此時 bucket 已是 `ready`）
+      - 仍有 pending 但 Claude 推進失敗（fix 修不動 / evidence 收不到）→ 釋放 lock，**如實報告**哪些項目卡住 + 卡住原因，**NEVER** 只說「請去 review-gui」
+
+   3. **NEVER** 自動勾任何 `[review:ui]` 的 `- [ ]`、**NEVER** 提議跳過 gate、**NEVER** 提議 stash 走 `tasks.md`
 
 5. blocker list 空 → 輸出 `✅ 0-MR 通過`，進入 Step 0。
 
