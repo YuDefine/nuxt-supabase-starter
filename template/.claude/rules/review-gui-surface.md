@@ -63,7 +63,21 @@ Local edits will be reverted by the next sync.
 
 8. **Post-work scan 回報 MUST 逐條標 bucket（hard rule）**：完成 evidence collection / annotation 修正 / issue triage 等批次工作後向 user 回報 scan 結果時，**MUST** 對每條 change 個別標示實際 `bucket`。只有 `bucket=ready` 的 change 才能寫「可以在 review-gui 驗收」或列 review-gui URL 引導 user 開始檢查。非 `ready` 的 change **MUST** 如實報告實際 bucket + 卡住原因（例：「`readyForEvidence` — evidence 已收齊但有 2 條 `（issue:）` 待 user 重評」），**NEVER** 混入「可以驗收」的清單。反模式：3 條 change 中 1 條 `ready`、2 條 `readyForEvidence`，結尾寫「三條都可以在 review-gui 做最後驗收」— 這直接誤導 user。
 
-9. **引導 user 到 review-gui 前 MUST 自行推進到 ready（hard rule）**：**任何**要把 user 導向 `pnpm review:ui` 的場景（`/commit` 0-MR block、handoff、session 結尾回報），Claude **MUST** 先 triage 每個 pending leaf item 的阻塞原因，對 Claude 可處理的阻塞**自行推進**後再回報 user。User 只需要處理 `bucket=ready` 的 change。
+9. **引導 user 到 review-gui 前 MUST 跑 mechanical gate + 自行推進到 ready（hard rule）**：**任何**要把 user 導向 `pnpm review:ui` 的場景（`/commit` 0-MR block、handoff、spectra-apply Step 8b、session 結尾回報），Claude **MUST** 先跑 mechanical gate script **取得 exit 0** 才能引導：
+
+   ```bash
+   node ~/offline/clade/vendor/scripts/check-review-readiness.mjs \
+     --repo <consumer-path> --change <change-name>
+   ```
+
+   - **exit 0**（`status: "ready"`）→ 可以引導 user 到 review-gui
+   - **exit 1**（`status: "NOT_READY"`）→ **MUST** 讀 stdout JSON 的 `bucket` + blocking 數據，auto-triage 推進後**重跑 script**直到 exit 0
+   - **exit 2**（change not found / script error）→ **STOP**，回報 user 排查
+
+   **NEVER** 自己判斷 bucket、NEVER 從 tasks.md checkbox 推論 ready、NEVER 用「看起來只剩 user 驗收」當 ready 的理由。Script 是唯一 truth source — Claude 的判斷已被 9 條 pitfall（2026-05 至 2026-07）證明不可靠。
+
+   **9 條 pitfall 時間線**（同根因家族：Claude 自判 ready 推 user 去 review-gui 但實際 non-ready）：
+   2026-05-23 sonnet self-rationalize / 05-26 evidence handoff / 06-24 skip Step 8a / 06-25 copy prompt no verify / 06-28 dispatch unready + env assumption / 07-02 checkbox without evidence / 07-04 fix-requested misclassification / 07-05 commit gate non-ready（本 session 建規約後同 session 再犯）。
 
    **Auto-triage 分流**：
 

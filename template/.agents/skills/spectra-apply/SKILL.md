@@ -1099,9 +1099,20 @@ If there is no request_user_input 工具 available, present options as plain tex
    **Default flow** = 「主線已自跑一輪 self-collect、剩下真需要 user 拍板（真機 / 視覺主觀 / production 授權 / OAuth-only path 不可達）的才 surface」。
    **NEVER** 在主線未嘗試 self-collect 一輪的情況下丟整批 evidence-missing 給 user 自己點 review-gui「📋 補 evidence prompt」按鈕（per [[manual-review]] § review-gui 補 evidence prompt 路徑分類：補 prompt 是 fallback 不是 default）。
 
-   **Auto-triage gate（per [[review-gui-surface]] MUST 9）**：handoff message 之前 **MUST** 確認 `bucket=ready`。若 pending items 含 `（fix-requested）` / evidence missing / 未 triage 的 `（issue:）` → Claude **MUST** 先自行推進（dispatch fix / self-collect / triage），推完後重新評估 bucket。**NEVER** 在 `bucket ≠ ready` 時發出下方 DEFAULT path handoff message — user 到 review-gui 看到 non-ready change 做不了任何事。
+   **Mechanical readiness gate（per [[review-gui-surface]] MUST 9）**：handoff message 之前 **MUST** 跑 script 確認 `bucket=ready`：
 
-   - **DEFAULT path**（**MUST `bucket=ready` 才發**）: Reply to the user with something like:
+   ```bash
+   node ~/offline/clade/vendor/scripts/check-review-readiness.mjs \
+     --repo . --change <change-name>
+   ```
+
+   - **exit 0** → 可發 handoff message
+   - **exit 1** → 讀 `bucket` + blocking 數據，auto-triage（dispatch fix / self-collect / triage）後**重跑 script**
+   - **exit 2** → STOP，回報 script 失敗
+
+   **NEVER** 自判 bucket、NEVER 跳過 script — Claude 自判已 9 次證明不可靠。
+
+   - **DEFAULT path**（**MUST script exit 0 才發**）: Reply to the user with something like:
      > Implementation 完成。Step 8a 已處理 verify channels：automatic `[verify:e2e]` / `[verify:api]` items 已寫 annotation 並自動完成；含 `[verify:ui]` / `[review:ui]` 的 `<N>` 項仍待你確認。請在 **clade home**（`~/offline/clade`）執行 `pnpm review` 開本地 GUI 驗收（review-gui 從 clade home 跑會自動聚合所有 consumer + worktree change；consumer 端直接跑會被 clade-only guard 擋下；`pnpm review` dev mode default ON，改 review-gui source 自動 reload）：
      >
      >   cd ~/offline/clade

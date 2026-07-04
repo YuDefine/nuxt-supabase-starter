@@ -87,14 +87,23 @@ Local edits will be reverted by the next sync.
 
 **MUST** 進入人工檢查階段（implementation tasks 完成、剩 `## 人工檢查` 區塊）時，**第一動作是 auto-triage（per [[review-gui-surface]] MUST 9），不是直接引導使用者跑 `pnpm review:ui`**。
 
-Auto-triage 流程：逐條讀 pending leaf item 的 annotation，判斷阻塞原因：
+Auto-triage + mechanical readiness gate 流程：
 
-- `（fix-requested）` → Claude dispatch `/wt` 修 code → merge-back → 重拍截圖 → strip annotation
-- evidence missing → Claude 走 [[agent-self-verification]] fallback chain 收 evidence
-- `（issue:）` 無 `(claude-analyzed:)` → Claude triage issue 走 (A)-(E) 路由
-- 上述全部推進完畢後，**只有剩下純 `[review:ui]` user 驗收項且 `bucket=ready`**，才引導使用者跑 `pnpm review:ui`
+1. 逐條讀 pending leaf item 的 annotation，判斷阻塞原因並自行推進：
+   - `（fix-requested）` → dispatch `/wt` 修 code → merge-back → 重拍截圖 → strip annotation
+   - evidence missing → 走 [[agent-self-verification]] fallback chain 收 evidence
+   - `（issue:）` 無 `(claude-analyzed:)` → triage issue 走 (A)-(E) 路由
 
-**NEVER** 在 non-ready bucket 狀態引導 user 到 review-gui — user 到了也做不了任何事，等同把 Claude 可自動化的工作成本轉嫁給 user。
+2. 推進完畢後 **MUST** 跑 mechanical gate script 確認 bucket：
+   ```bash
+   node ~/offline/clade/vendor/scripts/check-review-readiness.mjs \
+     --repo . --change <change-name>
+   ```
+   - **exit 0** → 可引導 user 到 review-gui
+   - **exit 1** → 繼續 auto-triage 或如實報告卡住原因
+   - **NEVER** 自判 bucket、NEVER 跳過 script
+
+**NEVER** 在 script exit ≠ 0 時引導 user 到 review-gui — Claude 自判已 9 次證明不可靠（per [[review-gui-surface]] MUST 9 時間線）。
 
 **NEVER** 預設用 `AskUserQuestion` 在 chat 內逐項彈對話框走人工檢查——那是 `pnpm review:ui` 不可用時的 fallback，不是 default path。
 
