@@ -25,6 +25,7 @@ Local edits will be reverted by the next sync.
 
 | Surface | 入口 | 預期 contract |
 | --- | --- | --- |
+| `/commit` 0-MR gate block | `plugins/hub-core/skills/commit/SKILL.md` Step 0-MR | block 後 **MUST** auto-triage pending items（MUST 9）；Claude 可處理的先自行推進，只有 `bucket=ready` 才引導 user 到 review-gui |
 | `/handoff` Mode B 2B.0 | `plugins/hub-core/skills/handoff/SKILL.md` Step 2B.0/2B.1.7 | 推薦 user 跑 review:ui **前** MUST 先跑 `review-gui.mts --scan` 寫入 HANDOFF.md |
 | `screenshot-review` verify mode | 主線直派 codex（per [[agent-routing]]） | item 含 compound visual state → 分成 scoped sub-items 或 multi-screenshot annotation |
 | `verified-ui` evidence collection（spectra-apply Step 8a） | `vendor/snippets/verify-channels/ui-final-state-brief*.template.md` | compound state evidence 必拆 / 必標多 screenshot |
@@ -62,6 +63,26 @@ Local edits will be reverted by the next sync.
 
 8. **Post-work scan 回報 MUST 逐條標 bucket（hard rule）**：完成 evidence collection / annotation 修正 / issue triage 等批次工作後向 user 回報 scan 結果時，**MUST** 對每條 change 個別標示實際 `bucket`。只有 `bucket=ready` 的 change 才能寫「可以在 review-gui 驗收」或列 review-gui URL 引導 user 開始檢查。非 `ready` 的 change **MUST** 如實報告實際 bucket + 卡住原因（例：「`readyForEvidence` — evidence 已收齊但有 2 條 `（issue:）` 待 user 重評」），**NEVER** 混入「可以驗收」的清單。反模式：3 條 change 中 1 條 `ready`、2 條 `readyForEvidence`，結尾寫「三條都可以在 review-gui 做最後驗收」— 這直接誤導 user。
 
+9. **引導 user 到 review-gui 前 MUST 自行推進到 ready（hard rule）**：**任何**要把 user 導向 `pnpm review:ui` 的場景（`/commit` 0-MR block、handoff、session 結尾回報），Claude **MUST** 先 triage 每個 pending leaf item 的阻塞原因，對 Claude 可處理的阻塞**自行推進**後再回報 user。User 只需要處理 `bucket=ready` 的 change。
+
+   **Auto-triage 分流**：
+
+   | Pending item 狀態 | 誰處理 | Claude 動作 |
+   | --- | --- | --- |
+   | `（fix-requested）` | Claude | dispatch `/wt` 修 code → merge-back → 重拍截圖 → strip annotation → 重跑 gate |
+   | evidence missing（無 `(verified-*:)` annotation） | Claude | 走 [[agent-self-verification]] fallback chain 收 evidence |
+   | `（issue:）` 無 `(claude-analyzed:)` | Claude | triage issue → 走 (A)-(E) 路由 |
+   | `[review:ui]` 純 user 驗收（無上述阻塞） | User | **只有這類**才引導 user 到 review-gui |
+   | `[discuss]` 等外部 signal | Archive walkthrough | 不在此處處理 |
+
+   **實證（2026-07-05）**：<consumer-b> `/commit` 0-MR 擋下 `sop-case-ux-phase-a1`（2 個 pending leaf），Claude 直接叫 user 去 review-gui，但兩個 item 都帶 `（fix-requested）` — user 去了也做不了任何事。正確做法是 Claude 先 dispatch fix → merge-back → 更新 evidence → 重跑 0-MR，全部自己推完。
+
+   **NEVER**：
+   - ❌ `/commit` 0-MR block 後直接印「請去 review-gui 完成人工檢查」而不 triage pending items 的阻塞原因
+   - ❌ 把帶 `（fix-requested）` 的 item 當「需要 user 驗收」推給 user — 那是 Claude 的工作
+   - ❌ 把 evidence missing 的 item 推給 user 補 — Claude 應先跑 self-collect
+   - ❌ 在任何 non-ready bucket 狀態引導 user 到 review-gui（與 MUST 8 / NEVER 第一條重疊，此處明確擴展到 `/commit` gate 場景）
+
 ### NEVER
 
 - ❌ 把非 `bucket=ready` 的 change 寫進「可以在 review-gui 驗收」的清單或引導訊息 — `readyForEvidence` / `feedbackGiven` / `applyInProgress` 等 bucket 都**不是** ready，**禁止**混報（per MUST 8）
@@ -86,6 +107,7 @@ review-gui parser 對 annotation key 和 status tag **嚴格字面匹配**。寫
 | `(verified-ui: <ISO>)` | 括號內、冒號後空格 | `hasEvidenceFor` 認為 evidence 已收集 |
 | `(issue: <description>)` | 括號內、冒號後空格 | `evidenceMissing` 排除此 item（視為 handled） |
 | `(claude-analyzed: <ISO> route=<X>[ note=...])` | 括號內、space-separated KV | `analyzedIssuedCount` 計數；bucket 從 `feedbackGiven` 翻為 `awaitingUserReEval` |
+| `（fix-requested）` | 全形括號、無 payload | **invalidates** 同行 `(claude-analyzed:)` — user 拒絕 route=E 結論、要求 code fix。`analyzedIssuedCount` 排除帶此 annotation 的 item → bucket 回 `feedbackGiven`（等 Claude 接手修） |
 | `(awaiting-user-decision: <description>)` | 括號內 | bucket 翻為 `awaitingUserDecision`（master 排除） |
 
 ### Status tags parser 不認的常見錯誤
