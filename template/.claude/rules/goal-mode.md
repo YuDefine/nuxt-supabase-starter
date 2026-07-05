@@ -58,9 +58,9 @@ Local edits will be reverted by the next sync.
 
 「change 太大」「0% 進度」「需要完整 session」**不是** `@apply-blocked` 的合法理由 — 那是 dispatch 後 spectra-apply 自管的事（pause / blocker / phase dispatch）。
 
-### 與 loop-engineer 的差異
+### 與 change-loop（前名 loop-engineer）的差異
 
-loop-engineer（autonomous 模式）一律 dispatch、NEVER AskUserQuestion。/goal（attended 模式）user 在場，**SHOULD** 先讓 user 選擇 dispatch 優先序再動手。
+change-loop（autonomous 模式）一律 dispatch、NEVER AskUserQuestion。/goal（attended 模式）user 在場，**SHOULD** 先讓 user 選擇 dispatch 優先序再動手。
 
 ### 反模式（2026-07-04 實證）
 

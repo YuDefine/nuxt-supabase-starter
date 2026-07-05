@@ -59,6 +59,17 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 - 「高風險」判定：紀律型三件套規約、會散播到全 fleet 的 NEVER/MUST 行、歷史上重犯 ≥2 次的主題。
 - 工具：`vendor/scripts/rule-pressure-test.mjs`（baseline / with-rule 對照跑）；情境寫法見 cookbook。
 
+## 可變事實指 SoT，不 inline（MUST）
+
+規約 prose 內**NEVER** 寫死會隨時間變的事實——consumer 數量、版本號、檔案行數、百分比。一律指 SoT（`registry/consumers.json`、audit script 實跑）；歷史快照要標「(YYYY-MM 快照)」。實證：fleet 規模「5」曾同時存在於 6 份文件，registry 實際 12——每份 inline 快照都是一顆漂移地雷（2026-07-05 語料掃描）。
+
+## 反開脫要精準嵌逐字，不散彈列舉
+
+Rationalization 反制的效力來自**逐字命中**真實開脫句（agent 看到自己正要說的那句話被點名，才會停）。同一手法的過度版是「NEVER 牆」——幾十條泛化禁令連發，單條命中率低、閱讀成本高、且多半在用禁止句處理形狀問題（違反 § 先分類失敗型態）。判準：
+
+- ✅ 正例：[[agent-self-verification]] § NEVER 句型黑名單——每條是實際 session 的逐字句（「截圖無法驗證 X 所以跳過」）
+- ❌ 反例：單一 rule 內 20+ 條連續泛化 NEVER——收斂成正向 canonical 契約表 + 少數逐字反制
+
 ## Token 紀律
 
 - 對 always-load rule（frontmatter 無 `paths:`）加段落前，先考慮 conditional-load 或併入既有 §；預算 gate：`scripts/audit-always-load-budget.mjs`（cap 176KB）。

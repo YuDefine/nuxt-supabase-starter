@@ -1,3 +1,7 @@
+---
+description: 人工檢查（Manual Review）主檔——核心 invariant、Item Kind Marker、annotation schema、Parent State Derivation、Post-Edit Gate；有 active spectra change（動 openspec/changes/**）時載入
+paths: ['openspec/changes/**']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/manual-review.md
@@ -5,9 +9,10 @@ Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
 
+
 # 人工檢查（Manual Review）
 
-> **本檔是 always-load 主檔**，只列核心 invariant、Item Kind Marker 一覽、claude-analyzed annotation、@evidence-via-marker、Parent State Derivation、Post-Edit Gate、禁止事項。  
+> **本檔是 path-scoped 主檔**（2026-07-05 起：綁 `openspec/changes/**`——manual-review 內容只在有 active spectra change 時才用得到；原 always-load 佔 30KB 為預算最大單檔），列核心 invariant、Item Kind Marker 一覽、claude-analyzed annotation、@evidence-via-marker、Parent State Derivation、Post-Edit Gate、禁止事項。  
 > 詳細規約依場景 path-scoped 載入：
 >
 > | Sub-file | Path-scoped 觸發 | 內容 |
