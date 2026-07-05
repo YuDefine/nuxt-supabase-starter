@@ -130,6 +130,15 @@ codex-primary verdict 但 ≤2 個 file 的瑣碎 fix（typo / 單行 bug / conf
 2. 如果 reset 時間 ≤ 30 分鐘且工作非急件 → **延後**到 reset 後再派，不要 Claude 接走
 3. 如果 Claude 接走 → session 結尾 **MUST** 回報「本 session 因配額耗盡由 Claude 執行 N 個 codex-primary change，下次應分散 dispatch 到不同 5h window」
 
+## Subagent 回報契約（所有 dispatch 通用）
+
+適用範圍：**每一個** dispatch——Agent tool 開的 Claude subagent、泛用 dispatcher 派的 codex、[[subagent-dev]] 的 implementer / reviewer，全部適用，不是只有長任務才用。
+
+1. **4-status 回報**：brief 內 MUST 要求 subagent 以四值之一收尾——`DONE`／`DONE_WITH_CONCERNS`（完成但對正確性有疑慮，concerns 必列）／`NEEDS_CONTEXT`（缺資訊，列缺什麼）／`BLOCKED`（做不了，列卡點與已試方法）。主線處置：`DONE_WITH_CONCERNS` → 先讀 concerns 再決定收不收；`NEEDS_CONTEXT` → 補 context 重派；`BLOCKED` → 依序考慮補 context／升 model／拆小／上報 user。**NEVER** 對 BLOCKED 原樣重派同一 model 不改任何條件。
+2. **Report 是未驗證主張**：subagent 完成回報（含「no changes outside scope」「tests pass」「已自我 review」）一律當 claim——主線 MUST 用 `git status --short` + `git diff` 核實實際改動範圍 = brief 宣告 scope，scope 外 substantive change 一律 revert。subagent 自報的設計說詞（「per YAGNI 略過」「刻意簡化」）**不得**降級任何 review finding 的嚴重度——那是實作者替自己打分。
+3. **File handoffs**：brief／report／diff 超過 ~30 行的內容走**檔案路徑**傳遞，不貼進 dispatch prompt 或回報訊息——貼文會常駐主線 context、每 turn 重讀。dispatch prompt 五要素：定位一行、brief 檔路徑、跨 task interfaces、歧義裁決、report 檔路徑＋回報契約。實測反例:dispatch prompt 42k chars、99% 是貼上的歷史。
+4. **Model 顯式指定**：Agent tool dispatch MUST 顯式帶 `model`——省略 = 靜默繼承主線（通常最貴檔）。選檔原則「**turn count beats token price**」：多步驟工作用最低檔常花 2-3× turns 反而更貴；brief 內含完整 code 的純轉錄型工作才用最低檔；review 型依 diff 的大小／風險選檔。
+
 ## 為什麼集中寫在這
 
 - 散落各 SKILL.md 會漂移；集中方便加新 rule

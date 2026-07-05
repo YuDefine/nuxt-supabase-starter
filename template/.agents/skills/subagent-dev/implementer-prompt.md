@@ -6,34 +6,35 @@ Use this template when dispatching an implementer subagent.
 ```
 spawn_agent 工具 (general-purpose):
   description: "Implement Task N: [task name]"
+  model: [MODEL — REQUIRED: 依 SKILL.md Model Selection 選檔；省略 = 靜默繼承主線最貴檔]
   prompt: |
     You are implementing Task N: [task name]
 
     ## Task Description
 
-    [FULL TEXT of task from plan - paste it here, don't make subagent read file]
+    Read your task brief first: [BRIEF_FILE]
+    It contains the full task text from the plan — it is your requirements,
+    with the exact values to use verbatim.
 
     ## Context
 
-    [Scene-setting: where this fits, dependencies, architectural context]
+    [Scene-setting 一行：這個 task 在整體的位置、依賴、架構脈絡]
+    [跨 task interfaces：前面 task 已定案、brief 不會知道的 signature / 決策]
+    [歧義裁決：controller 對 brief 內模糊處的決定]
 
     ## Before You Begin
 
-    If you have questions about:
-    - The requirements or acceptance criteria
-    - The approach or implementation strategy
-    - Dependencies or assumptions
-    - Anything unclear in the task description
-
-    **Ask them now.** Raise any concerns before starting work.
+    If you have questions about requirements, approach, dependencies, or
+    anything unclear in the brief — **ask them now.** Raise concerns before
+    starting work.
 
     ## Your Job
 
     Once you're clear on requirements:
-    1. Implement exactly what the task specifies
+    1. Implement exactly what the brief specifies
     2. Write tests following TDD (mandatory — project rule)
     3. Verify implementation works
-    4. Commit your work
+    4. Commit your work（依 repo commit 規約；多 session 共用 tree 一律 `git commit --only -- <paths>`）
     5. Self-review (see below)
     6. Report back
 
@@ -41,6 +42,9 @@ spawn_agent 工具 (general-purpose):
 
     **While you work:** If you encounter something unexpected or unclear, **ask questions**.
     It's always OK to pause and clarify. Don't guess or make assumptions.
+
+    While iterating, run the focused test for what you're changing; run the
+    full suite once before committing, not after every edit.
 
     ## Code Organization
 
@@ -69,46 +73,50 @@ spawn_agent 工具 (general-purpose):
 
     **How to escalate:** Report back with status BLOCKED or NEEDS_CONTEXT. Describe
     specifically what you're stuck on, what you've tried, and what kind of help you need.
-    The controller can provide more context, re-dispatch with a more capable model,
-    or break the task into smaller pieces.
 
     ## Before Reporting Back: Self-Review
 
-    Review your work with fresh eyes. Ask yourself:
+    Review your work with fresh eyes:
 
-    **Completeness:**
-    - Did I fully implement everything in the spec?
-    - Did I miss any requirements?
-    - Are there edge cases I didn't handle?
-
-    **Quality:**
-    - Is this my best work?
-    - Are names clear and accurate (match what things do, not how they work)?
-    - Is the code clean and maintainable?
-
-    **Discipline:**
-    - Did I avoid overbuilding (YAGNI)?
-    - Did I only build what was requested?
-    - Did I follow existing patterns in the codebase?
-
-    **Testing:**
-    - Do tests actually verify behavior (not just mock behavior)?
-    - Did I follow TDD?
-    - Are tests comprehensive?
+    **Completeness:** Did I fully implement everything in the brief? Missed requirements? Unhandled edge cases?
+    **Quality:** Best work? Names clear and accurate? Clean and maintainable?
+    **Discipline:** YAGNI — only built what was requested? Followed existing patterns?
+    **Testing:** Tests verify real behavior (not mock behavior)? TDD followed? Output pristine (no stray warnings)?
 
     If you find issues during self-review, fix them now before reporting.
 
+    ## After Review Findings
+
+    If a reviewer finds issues and you fix them, re-run the tests covering the
+    amended code and append the results to your report file. Reviewers will not
+    re-run tests for you — your report is the test evidence.
+
     ## Report Format
 
-    When done, report:
-    - **Status:** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
-    - What you implemented (or what you attempted, if blocked)
+    Write your full report to [REPORT_FILE]:
+    - What you implemented (or attempted, if blocked)
     - What you tested and test results
+    - **TDD Evidence**: RED（command + 失敗輸出關鍵行 + 為何預期失敗）、GREEN（command + 通過輸出關鍵行）
     - Files changed
     - Self-review findings (if any)
     - Any issues or concerns
 
+    Then report back with ONLY (under 15 lines — detail lives in the report file):
+    - **Status:** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
+    - Commits created (short SHA + subject)
+    - One-line test summary (e.g. "14/14 passing, output pristine")
+    - Your concerns, if any
+    - The report file path
+
+    If BLOCKED or NEEDS_CONTEXT, put the specifics in the final message itself —
+    the controller acts on it directly.
+
     Use DONE_WITH_CONCERNS if you completed the work but have doubts about correctness.
-    Use BLOCKED if you cannot complete the task. Use NEEDS_CONTEXT if you need
-    information that wasn't provided. Never silently produce work you're unsure about.
+    Never silently produce work you're unsure about.
 ```
+
+**Placeholders:**
+- `[MODEL]` — REQUIRED，依 SKILL.md Model Selection
+- `[BRIEF_FILE]` — `scripts/task-brief PLAN N` 印出的路徑
+- `[REPORT_FILE]` — 依 brief 命名（`task-N-brief.md` → `task-N-report.md`，同目錄）
+- `[directory]` — 工作目錄（worktree 路徑）
