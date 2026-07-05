@@ -759,7 +759,7 @@ request_user_input 提供四個選項：
 
 ## Step F.6 — 並行 fan-out 長駐 subagent
 
-per [[parallel-fanout]]，每個 hit consumer 一個**長駐**（name 參數）subagent，**thin brief**（3–5K）只包含：
+per Parallel Subagent Fan-out 紀律（user-global AGENTS.md；回報契約見 [[agent-routing]] § Subagent 回報契約），每個 hit consumer 一個**長駐**（name 參數）subagent，**thin brief**（3–5K）只包含：
 
 - Brief JSON 檔路徑：`/tmp/dep-fleet-brief-<pkg-slug>-<consumer-id>.json`（subagent 自己 Read）
 - Consumer worktree 還沒開時的指令：`cd <consumer_path> && node scripts/wt-helper.mjs add upgrade-<pkg-slug>-<YYYYMMDD> --baseline-strategy stash`
@@ -823,7 +823,7 @@ orchestrator 會用 SendMessage 跟你續跑 phase。請保持 session 狀態、
 
 ### F.6.2 同時送多個 spawn_agent 工具 call
 
-**MUST** 一個 message 內塞所有 hit consumer 的 spawn_agent 工具 call（per [[parallel-fanout]]）；每個有獨立 `name`（建議：`fleet-<consumer-id>`）方便後續 SendMessage。
+**MUST** 一個 message 內塞所有 hit consumer 的 spawn_agent 工具 call（per Parallel Subagent Fan-out 紀律）；每個有獨立 `name`（建議：`fleet-<consumer-id>`）方便後續 SendMessage。
 
 ## Step F.7 — 主線 watch + 聚合
 
@@ -1127,6 +1127,6 @@ WHY_STUCK: <一句話為什麼即使查到資訊也卡住>
 
 - [[clade-role-and-todo-discipline]] § upstream-driven dep migration — Fleet mode carve-out 條件
 - [[worktree-default]] §1, §5 — worktree gate + skill-owned lifecycle
-- [[parallel-fanout]] — Fleet mode 長駐 subagent + thin brief 規約
+- Parallel Subagent Fan-out（user-global AGENTS.md）+ [[agent-routing]] § Subagent 回報契約 — Fleet mode 長駐 subagent + thin brief + 4-status 規約
 - [[agent-routing.codex-watch-protocol]] — codex 派工 + watch + Runtime Gate marker
 - [[commit]] — Outdated mode main 端 selective stage 後的 `/commit` 收尾流程

@@ -24,7 +24,7 @@ clade 對 evlog（https://www.evlog.dev/）的 cross-consumer 採用治理。決
 
 Reference：
 - `docs/evlog-master-plan.md`（SoT，§ 1-§ 13 全細節）
-- `docs/evlog-consumer-stack-matrix.md`（5 consumer 探測結果）
+- `docs/evlog-consumer-stack-matrix.md`（2026-05 探測快照，當時 fleet 為 5 consumer；現況名單以 registry/consumers.json 為準）
 - `rules/core/logging.md`（baseline 規範，本 rule 之上的細部 wiring）
 - `rules/core/audit-pattern.md`（D-pattern audit；本 rule O1 overlay 是其上的 evlog hash chain）
 
@@ -48,7 +48,7 @@ Reference：
 | cf-workers | Supabase（multi-package） | hardening 或 D-pattern | — | T2 + T4（+O1 視需要） | （無；<consumer-a>-specific） |
 | cf-workers | NuxtHub D1 | partial | ✅ | T3 | `evlog-nuxthub-ai` |
 
-對應 5 consumer：
+對應探測當時的 5 consumer（歷史快照；新 consumer 依 registry 補列）：
 
 | Consumer | apply 順序 | 預估工時 |
 | --- | --- | --- |
@@ -69,7 +69,7 @@ depth 1 → 5。target：<consumer-d>。內含：
 - 5 件套 enricher（UA / RequestSize / Geo / TraceContext / tenant）
 - sampling + redaction policy
 - structured errors guard
-- **client transport**（5 consumer 共同 gap，必補）
+- **client transport**（全 fleet 共同 gap，必補）
 - Sentry drain（選配；需要 alerting/triage 時加）
 
 ### T2 — `evlog-adopt-cfworkers-supabase-hardening`
@@ -303,7 +303,7 @@ evlog 用於 production 的 consumer **MUST** 配一個 queryable durable drain 
 - production sampling **MUST** 滿足 error 100% / audit forceKeep 100% / warn ≥ 50% / info ≥ 10%
 - production **MUST** 開 `evlog.redact`，至少涵蓋 password 與 token / authorization（見 logging.md）
 - 5 件套 enricher（UA / RequestSize / Geo / TraceContext + multi-tenant 加 tenant）**MUST** 全裝
-- client transport **MUST** 開（5 consumer 共同 gap），endpoint **MUST** 套 CSRF + rate-limit + redaction
+- client transport **MUST** 開（全 fleet 共同 gap），endpoint **MUST** 套 CSRF + rate-limit + redaction
 - O1 overlay **MUST** 不取代 D-pattern DB canonical truth；evlog signed chain 是 derived stream
 - `signed()` secret **MUST** 與 DB hash secret 分開（避免單點失效）
 - spectra template / starter preset **MUST** 由 clade 治理；consumer fork 出自家版 = drift
