@@ -63,9 +63,7 @@
       "WebFetch(domain:pinia-colada.esm.dev)"
     ]
   },
-  "enabledMcpjsonServers": [
-    "local-supabase"
-  ],
+  "enabledMcpjsonServers": ["local-supabase", "chrome-devtools-mcp"],
   "hooks": {
     "PostToolUse": [
       {
