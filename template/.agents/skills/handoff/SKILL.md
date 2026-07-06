@@ -246,9 +246,13 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff Mode B — clade <version> scan_
     - `awaitArchiveWalkthrough` → 純 `[discuss]` 待 `/spectra-archive` Step 2.5 walkthrough
     - `readyForEvidence` → apply 已完成但 evidence missing
     - `applyInProgress` → impl 未達 APPLY_COMPLETE_THRESHOLD
+    - `applyBlocked` → impl 卡 `@apply-blocked` 外部 blocker（master 統計排除，但 **MUST 走 §2B.2.5 主動 triage**，不可 silently drop）
+    - `awaitingUserDecision` → Claude 已標 `(awaiting-user-decision:)` 交還 user（master 排除，同樣走 §2B.2.5 triage）
     - `healthCheckNeeded` → Pre-Review Data Readiness pattern 命中
     - `malformed` → tasks.md 解析失敗
 ```
+
+> **master 排除 ≠ 不寫入 / 不 triage**：`applyBlocked` / `awaitingUserDecision` 雖不計入 ready/notReady master count，仍 **MUST** 寫進 `### ⚠ notReady` 段（附 bucket），並在 §2B.2.5 主動抽 blocker 原因。**NEVER** 因「master 排除」就從 HANDOFF / outstanding 中省略。
 
 每跑一次 audit **整段覆寫**（不是 append）— scan 是 snapshot，stale audit content 應該被新 snapshot 替換。
 
@@ -280,6 +284,34 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff Mode B — clade <version> scan_
 - 標題（一句話）
 - 涉及檔案 / module / consumer
 - 依賴關係（依賴誰、誰依賴它）
+
+### 2B.2.5 applyBlocked / awaitingUserDecision bucket 主動 triage（hard rule）
+
+**核心命題**：`applyBlocked` / `awaitingUserDecision` 是 master 排除 bucket，但**排除的只是 ready 統計，不是主線的責任**。§2B.1.7 scan 抓到這兩類 change 時，**MUST** 對**每一條**主動 triage，**NEVER** 只寫進 `### ⚠ notReady` 就 silently drop、等 user 主動問才處理。此步對齊 [[goal-mode]] §「applyInProgress 不是 user-bound」的同一 spirit：blocked bucket 不等於「主線無事可做」。
+
+對每條 `applyBlocked` / `awaitingUserDecision` change **MUST** 做三件事：
+
+1. **抽 blocker 原因**：Read 該 change 的 `tasks.md`，grep `@apply-blocked[<reason>]` / `(awaiting-user-decision:<reason>)`，逐條列出**每個** blocked phase 的具體 reason（不是一句「blocked」帶過）。**MUST** 到 change 目錄實抽，**NEVER** 從 bucket 名或 HANDOFF 既有 narrative 推測原因。
+2. **辨識 startable 子集**（最關鍵）：一條 change 落 `applyBlocked` bucket 只代表它**含**至少一個 `@apply-blocked` phase，**不代表整條無事可做**。**MUST** 判斷 tasks.md 是否有**未 blocked、可現在開工的 phase / task**（典型：上游條件已解封但整條仍被 blocked marker 拖著）。有 startable 子集 → 依 [[goal-mode]] 規約**提供 dispatch 選項**（`/wt /spectra-apply <change>` 只做 unblocked phases），**NEVER** 因整條標 applyBlocked 就當 user-bound 擱置。
+3. **端出具體 user 決策**：把 blocker reason 中**真正需 user / owner 拍板**的具體題目（例：「work-order grain 二選一：`receiving_scans+process_tracking` vs `work_reports`」）逐條列進 outstanding，讓 user 當場能答，**NEVER** 只寫「等 owner 拍板」這種無法行動的模糊句。同時分辨哪些 blocker 是**外部依賴**（等 A 端 contract / 等別 change 先完成）— 這類才真的擱置，但仍 **MUST** 明列在等什麼。
+
+triage 結果併入 §2B.2 outstanding 清單（與 HANDOFF / tech-debt / ROADMAP 來源並列），進 §2B.3 serial/parallel 評估、§2B.4 推薦。
+
+**分類對照**：
+
+| blocker 類型 | 判定 | outstanding 處置 |
+| --- | --- | --- |
+| **有 startable 子集** | tasks.md 有未 blocked phase 可現在做 | 列 outstanding + 提供 `/wt /spectra-apply` dispatch 選項（只做 unblocked phases） |
+| **需 user/owner 內部決策** | `@apply-blocked[需 owner 拍板: X]` 類 | 列 outstanding + **端出具體決策題**讓 user 當場答 |
+| **等外部依賴** | 等 A 端 contract / 等別 change 先完成 | 列 outstanding + 明列**在等什麼 signal**（對齊 [[goal-mode]] `@apply-blocked` 僅限真外部 blocker） |
+
+**NEVER**：
+- ❌ scan 抓到 applyBlocked change 卻不 Read 其 tasks.md 抽 blocker 原因
+- ❌ 把「含 blocked phase」等同「整條無 startable 工作」→ 漏掉可現在 dispatch 的子集
+- ❌ 只寫「等 owner 拍板 / 卡外部」而不端出**具體**決策題或**具體**等待 signal
+- ❌ 因 master 統計排除就把這兩類 bucket 從 outstanding / request_user_input 選項中省略
+
+**為什麼這條 rule 存在**（2026-07-06 TDMS 實證）：/handoff Mode B 對 3 條 applyBlocked 的 `ai-*` change 只寫進 notReady 段就結束，未抽 blocker 原因、未辨識 `ai-mcp-server` 其實 Phase 1-7.2 已解封可現在開工、未端出唯一需 user 拍板的 work-order grain 決策。user 被迫主動追問才拿到這些資訊 — 主動 triage 本應是 Mode B 內建職責。
 
 ### 2B.3 Serial vs Parallel 評估
 
@@ -497,7 +529,7 @@ _Updated: <YYYY-MM-DD>_
 ## Output contract
 
 - Mode A：成功 = HANDOFF.md / tech-debt / ROADMAP 有對應寫入 + tasks 檔已清 + Step 3 audit 已靜默寫入 HANDOFF.md `## Worktree & Stash Audit` 段；訊息只含升級摘要（不含 audit）
-- Mode B：成功 = 2B.0 pitfall sweep 已執行（dispatch `/oops` 或宣告「無 missed lesson」）+ HANDOFF.md 已整理 + 2B.1.5 → Step 3 audit 已寫入並在訊息摘要一行 + 2B.1.8 tech-debt hygiene 已讀（staleOpen 排進 outstanding 最高優先 + aging 排第二優先並主動追問 blocker + closedBloat 達門檻時走 `request_user_input` rotate 拍板）+ 盤點訊息 + `request_user_input` 已發出讓 user 選 + user 選定後 2B.5 dispatch 已完成（直接 dispatch 或內呼 `/wt <slug>: /<next-skill> <change-name>`）
+- Mode B：成功 = 2B.0 pitfall sweep 已執行（dispatch `/oops` 或宣告「無 missed lesson」）+ HANDOFF.md 已整理 + 2B.1.5 → Step 3 audit 已寫入並在訊息摘要一行 + 2B.1.7 scan 抓到的 `applyBlocked` / `awaitingUserDecision` change 已走 2B.2.5 主動 triage（抽 blocker 原因 + 辨識 startable 子集 + 端出具體 user 決策，NEVER silently drop）+ 2B.1.8 tech-debt hygiene 已讀（staleOpen 排進 outstanding 最高優先 + aging 排第二優先並主動追問 blocker + closedBloat 達門檻時走 `request_user_input` rotate 拍板）+ 盤點訊息 + `request_user_input` 已發出讓 user 選 + user 選定後 2B.5 dispatch 已完成（直接 dispatch 或內呼 `/wt <slug>: /<next-skill> <change-name>`）
 - 失敗 / blocked：明確說明卡點，不假裝完成
 
 ## 與其他 skill 的銜接
