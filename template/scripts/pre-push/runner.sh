@@ -51,3 +51,6 @@ run_check native-picker-ban
 
 # data-perf check — 全站掃描 .vue setup context raw $fetch（auto-detect nuxt.config）
 run_check data-perf-check
+
+# mutation-loading — 全站掃描 .vue 的 mutation status==='pending' 當 loading（warn-only 回溯型）
+run_check mutation-loading

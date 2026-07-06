@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-07-05T08:00:11.249Z",
+  "syncedAt": "2026-07-06T00:35:49.396Z",
   "rulesProjection": "copy",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "849e805a42644ad7",
@@ -84,7 +84,7 @@
     "rules/nuxt-ui-conventions.md": "0e385ce74766da60",
     "rules/nuxt-ui-mcp.md": "a6bcf9954f77d463",
     "rules/nuxt-ui-native-picker-ban.md": "3cdd454dde788593",
-    "rules/page-loading-golden-path.md": "bb02b1d98ba2b183",
+    "rules/page-loading-golden-path.md": "64dba8e7a4009a41",
     "scripts/codex-review-safe.sh": "02b730f9dbd504a3",
     "scripts/commit-lock.mjs": "f81c79df484ce5db",
     "skills/change-loop/SKILL.md": "d866b53394f78cb4",
@@ -108,7 +108,7 @@
     "agents/check-runner.md": "e520ed3d6bef63cd",
     "agents/code-review.md": "57c964c2feb73668",
     "agents/db-backup.md": "5f4d05642f47e5ff",
-    "agents/references/clade-review-rules.md": "b991470e18f6f932",
+    "agents/references/clade-review-rules.md": "764ac2cc3fc4e4cb",
     "agents/screenshot-review.md": "b8030c140cccfe60"
   }
 }
