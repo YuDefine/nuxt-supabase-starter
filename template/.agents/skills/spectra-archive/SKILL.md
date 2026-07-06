@@ -336,7 +336,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
 
    1. Read item description + extract the `awaiting-signal:` annotation text.
    2. Re-classify trigger condition. The originally-pending signal typically has occurred by now; collect post-signal evidence (prod URL `<title>`, prod evlog row, prod migration `\d` output, etc.). If the signal **still** has not occurred, that's a legitimate "still pending" outcome.
-   3. Present to user identical to Step 2.5 walkthrough format, but with header:
+   3. Present to user identical to Step 3.5 walkthrough format, but with header:
 
       ```
       ### Resume discuss item #<id> [discuss] <description>

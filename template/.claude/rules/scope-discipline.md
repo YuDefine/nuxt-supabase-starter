@@ -12,8 +12,6 @@ Local edits will be reverted by the next sync.
 
 # Scope Discipline
 
-繁體中文 | [English](./scope-discipline.en.md)
-
 **核心命題**：scope discipline 不是「範圍外就裝沒看到」，而是三件事一起成立：
 
 1. **不擴散**

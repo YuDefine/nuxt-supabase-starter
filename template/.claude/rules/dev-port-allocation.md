@@ -118,7 +118,7 @@ Wrapper 把這條鏈在第一步切斷：token verify 失敗 → log warn → �
 
 | 情境 | 動作 |
 | --- | --- |
-| 新 consumer 進 registry | 取下一個未用 +10 號（目前 3000–3070 已用，下一個是 3080） |
+| 新 consumer 進 registry | 取下一個未用 +10 號（目前 3000–3100 已用，下一個是 3110；快照，以 registry/consumers.json dev_ports 為準） |
 | 既有 consumer 改 port | 先改 clade registry → publish patch → propagate → 改 consumer 自家 dev script + tunnel port |
 | Audit 報 DRIFT | consumer user 在 consumer 自家 session 改 dev script / tunnel port 對齊 registry；clade 主線不替 consumer 執行 |
 | Audit 報 CONFLICT（兩 consumer 同 port） | clade 主線立即解：選一個 consumer 改用未用 +10 號，registry commit + publish + propagate |
@@ -134,9 +134,12 @@ Wrapper 把這條鏈在第一步切斷：token verify 失敗 → log warn → �
 | <consumer-b> | 3000 |
 | <consumer-k> | 3050 |
 | co-purchase | 3070 |
+| <consumer-l> | 3080 |
+| <consumer-e> | 3090 |
+| <consumer-g> | 3100 |
 | clade | — (source-of-truth，非 Nuxt consumer) |
 
-下一個可用：**3080**。
+下一個可用：**3110**（快照，以 registry/consumers.json dev_ports 為準）。
 
 ## Anti-pattern
 

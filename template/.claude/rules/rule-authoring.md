@@ -70,6 +70,26 @@ Rationalization 反制的效力來自**逐字命中**真實開脫句（agent 看
 - ✅ 正例：[[agent-self-verification]] § NEVER 句型黑名單——每條是實際 session 的逐字句（「截圖無法驗證 X 所以跳過」）
 - ❌ 反例：單一 rule 內 20+ 條連續泛化 NEVER——收斂成正向 canonical 契約表 + 少數逐字反制
 
+## Leading word 與詞彙鎖定
+
+高頻概念挑一個模型 pretrained 已有語意的緊湊詞（如 ratchet / baseline / claim / absorb）當錨定詞，全文逐字重複使用——用最少 token 綁住一整區行為；比自創詞省，因為自創詞得額外花 token 現場定義，pretrained 詞免費繼承既有語意。
+
+**NEVER 同義詞漂移**——同一概念換著叫（這次「稽核」下次「檢核」下次「盤點」）等於錨定失效，agent 認不出是同一件事。新詞收進 cookbook `vendor/snippets/rule-authoring/GLOSSARY.md`，詞條**MUST**帶 `_Avoid_`：列被拒同義詞＋拒絕理由。
+
+**入表判準**：一個概念在 ≥2 檔重複出現、或存在 ≥1 個危險近義詞（如 claim 同時指 session-claim 與 change-scoped work-claim，字面相關但語意是兩件事）→ 必須入 GLOSSARY。
+
+方法論來源：mattpocock/skills `writing-great-skills`（Leitwort + glossary `_Avoid_` 手法），與 § 先分類失敗型態，再選形式互補——那條管句式層，本條管詞彙層。
+
+## Invocation 成本模型（skill frontmatter）
+
+model-invoked skill（frontmatter 省略 `disable-model-invocation`）付**context 成本**——description 常駐每輪視窗，agent 可自主觸發；user-invoked（設 `disable-model-invocation: true`）付**認知成本**——description 對 model 隱形，人得自己記得它存在、手動呼叫。
+
+**適用 `disable-model-invocation: true`**：高副作用儀式型（publish / deploy 類）、低頻手動流程——這類即使 description 寫得再精準，也不該讓 model 自主觸發引爆副作用。
+
+**選錯邊訊號**：model-invoked 但實測長期沒被自動觸發過（白付 context 成本卻無收益）；user-invoked 但 user 常忘記它存在（該省的認知成本沒省到，還漏用）。Description 字元預算與 `desc-verbose` detector 對應 TD-232 sweep（`scripts/audit-rule-authoring.mjs`）。
+
+出處：mattpocock/skills `.agents/invocation.md` 的 model-invoked／user-invoked 成本二分法。
+
 ## Token 紀律
 
 - 對 always-load rule（frontmatter 無 `paths:`）加段落前，先考慮 conditional-load 或併入既有 §；預算 gate：`scripts/audit-always-load-budget.mjs`（cap 176KB）。

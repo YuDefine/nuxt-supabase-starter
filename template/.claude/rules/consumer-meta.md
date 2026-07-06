@@ -101,7 +101,7 @@ Local edits will be reverted by the next sync.
         "errors": []
       }
     },
-    // ... 其他 4 個 consumer
+    // ... 其餘 consumer（依 registry）
   }
 }
 ```
@@ -157,7 +157,7 @@ aggregator 對這些交叉約束做 cross-check，不一致寫進 `validation.er
 
 新增 consumer-meta.json 不是一次散播事件，是漸進採用：
 
-1. **clade ship D v0**：schema + aggregator + cookbook 範例（**這個 session 做**）
+1. **clade ship D v0**：schema + aggregator + cookbook 範例
 2. **各 consumer 自家 session** 採用：consumer maintainer 抄 `vendor/snippets/consumer-meta/<consumer>.consumer-meta.json` 範例到自家 repo，依實際情況調整，commit
 3. **aggregator run**：consumer 採用後在 clade 跑 sync-consumer-meta.mjs，snapshot 落地
 4. **規則 / skill 開始讀**：依賴 manifest 的規則改寫，從 hardcode 改成讀 snapshot

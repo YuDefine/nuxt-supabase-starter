@@ -61,4 +61,4 @@ Local edits will be reverted by the next sync.
 
 - [[truth-layers]] — 業務數據 truth layers（intent / persistence / contract / API / UI），跟本 rule 是不同維度（規約層 truth source vs 數據層 truth source）
 - `rules/local/clade-role-and-todo-discipline.md`（clade 自治區）— consumer 自治區的 local rule 自管原則
-- `plugins/hub-core/skills/oops/SKILL.md § Mode D` — sweep 偵測到「同 clade core rule 被多 consumer override」會列為 candidate
+- `plugins/hub-maintenance-full/skills/oops/SKILL.md § Mode D` — sweep 偵測到「同 clade core rule 被多 consumer override」會列為 candidate

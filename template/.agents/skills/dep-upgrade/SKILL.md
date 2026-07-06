@@ -27,7 +27,7 @@ skill 開頭依輸入分流，**不要記兩個 skill 名**。
 
 ### Disambiguation（cwd 與 input 不對）
 
-- 在 consumer 給 pkg name → 問「你想 (A) 只對這個 consumer 升 (走 Outdated batch 但鎖單套件)、還是 (B) 跨 6 consumer sweep (要 `cd ~/offline/clade` 再跑)？」
+- 在 consumer 給 pkg name → 問「你想 (A) 只對這個 consumer 升 (走 Outdated batch 但鎖單套件)、還是 (B) 跨 registry 全命中 consumer sweep (要 `cd ~/offline/clade` 再跑)？」
 - 在 clade 無參數 → 問「你想 (A) sweep 哪個 pkg？或 (B) 你其實要進某個 consumer 跑 `pnpm outdated`？」
 - 在 worktree（cwd 含 `-wt/`） + 無參數 → 視為已在 Outdated batch 中段，跳 Step O.0、直接續跑 Step O.2
 
@@ -487,7 +487,7 @@ git add package.json <lockfile-path>                  # 只 stage upgrade 真的
 
 # § Fleet mode — Single pkg, multi-consumer sweep
 
-把「user 貼出一個 release URL → 6 個 consumer 全部升版 + 套用 BC 修正 + 各自 commit」這個工作流全程編排化。Clade 主線負責 fetch / 解析 / 掃描 / 編排 / 聚合；每個命中 consumer 一個長駐 subagent 在自己 worktree 內呼叫 § Outdated mode 的 changelog-aware 子流程。
+把「user 貼出一個 release URL → 命中的 consumer 全部升版（以 registry 為準）+ 套用 BC 修正 + 各自 commit」這個工作流全程編排化。Clade 主線負責 fetch / 解析 / 掃描 / 編排 / 聚合；每個命中 consumer 一個長駐 subagent 在自己 worktree 內呼叫 § Outdated mode 的 changelog-aware 子流程。
 
 ## 何時用 / 不適用（Fleet mode）
 

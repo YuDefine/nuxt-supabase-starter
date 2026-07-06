@@ -45,7 +45,7 @@ Dev-login routes are local/test-only auth bypasses for screenshot automation, E2
 | `hub-auth-nuxt-auth-utils` | `/auth/_dev-login` | GET | Uses `setUserSession()` after DB lookup. |
 | `hub-auth-better-auth` | `/api/_dev/login` | POST | Uses `auth.api.signInEmail()` / `signUpEmail()` and copies `set-cookie`. |
 | `hub-auth-supabase-self-hosted` | `/auth/_dev-login` | GET | May keep legacy `/auth/__test-login` when Playwright already depends on it. |
-| `hub-auth-supabase` | `/auth/_dev-login` | GET | Uses managed Supabase service role and project profile/claims sync. |
+| `hub-auth-supabase` | `/auth/_dev-login` | GET | Uses managed Supabase service role and project profile/claims sync.（planned，plugin 未建） |
 
 ## Decision Reference
 

@@ -12,8 +12,6 @@ Local edits will be reverted by the next sync.
 
 # Screenshot Strategy
 
-繁體中文 | [English](./screenshot-strategy.en.md)
-
 所有截圖工作都應先判斷：這是一次性探索，還是需要可重現的回歸驗證。
 
 ## 工具選擇
@@ -68,7 +66,7 @@ MCP daemon 在 session 啟動時以 `--headless=new` 開 Chrome。`headed: true`
 
 ### 給 user 看頁面：chrome-devtools-mcp `navigate_page`
 
-chrome-devtools-mcp 會開一個 **headed Chrome** 並導航到指定 URL，user 可在螢幕上看到。
+chrome-devtools-mcp 會開一個 **headed Chrome** 並導航到指定 URL，user 可在螢幕上看到（headed 導航給 user 看頁面是明文例外，見 §「給 user 看」hard rule）。
 
 ```
 # 1. 先登入（dev-login 設 cookie）

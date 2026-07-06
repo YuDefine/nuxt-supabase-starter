@@ -67,7 +67,7 @@ node scripts/claim-helper.mjs add --change-id main-session-wip \
 | `scripts/publish.mjs` (clade) | 跨 consumer scan，warn 「別 session 還活著」 |
 | `scripts/propagate.mjs` (clade) | per-consumer warn 同上 |
 | `wt-helper.mjs merge-back` | Phase 3 audit：偵測「main dirty 屬於別 session 路徑」 |
-| `/commit` skill (spectra-commit) | Phase 4 partition：別 session 路徑 fail-closed |
+| `/commit` skill（走 [[commit]]；spectra-commit 是另一條 change-scoped 路徑） | Phase 4 partition：別 session 路徑 fail-closed |
 | `wt-helper.mjs` stash namespace | Phase 7：stash slug 帶 session_id |
 
 ## 4. 儲存與 gitignore

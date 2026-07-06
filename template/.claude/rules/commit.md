@@ -13,7 +13,7 @@ Local edits will be reverted by the next sync.
 
 `/commit` 封裝了品質閘門，繞過等於讓壞 code / 壞版本號 / 壞 tag 進 repo。各 gate 一行定性如下，**MUST 全綠才能 commit**；執行細節一律見 `/commit` skill（`.claude/skills/commit/SKILL.md`）：
 
-- **0-A** 程式碼審查：simplify（序跑第一）→ `codex review --uncommitted` high（GPT-5.5 跨模型）→ Critical / Major 條件升 xhigh；修正一律由主線執行
+- **0-A** 程式碼審查：simplify（序跑第一）→ `codex exec` review high（GPT-5.5 跨模型，經 codex-review-safe.sh）→ Critical / Major 條件升 xhigh；修正一律由主線執行
 - **0-B** UI Design Review（條件觸發）：`.vue` 模板 + 頁面/元件/佈局/互動/樣式變更時派 screenshot-review
 - **0-C** format / lint / typecheck / test / doctor 全綠：`scripts.check` 不含 test → 額外跑 `pnpm test`；`scripts.doctor` **必裝**（缺裝 = block commit，要求先安裝 vite-doctor）。oxfmt batched `--check` 報未預期 diff 以單檔重跑為準（[[pitfall-oxfmt-batched-check-false-positive]]）
 - **0-D** Doc Alignment（條件觸發）：diff 觸及 docs / rules / snippets / audit script / 業務碼 / bug fix 時，檢查 cross-ref / 路徑引用 / pitfall status / 三方受眾文件忠實度（含 VitePress sidebar）四面向
@@ -174,7 +174,7 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 
 ## 人工檢查 Gate（main / master 限定，**hard rule**）
 
-當前 branch 為 `main` / `master` 且本次 `/commit` 觸及的 spectra change（`openspec/changes/<name>/**` 路徑，archive 子目錄除外）滿足下列**兩條件同時成立**時，**MUST** 中止 commit：
+當前 branch 為 `main` / `master` 且本次 `/commit` 觸及的 spectra change（`openspec/changes/<name>/**` 路徑，archive 子目錄除外）滿足下列**兩條件同時成立**時，未 ready 時 MUST 擋下 commit——但不是直接停下，走 /commit skill Step 0-MR 的 auto-triage：先推進 Claude 可自行處理項，再以 `check-review-readiness.mjs` gate 判定放行與否：
 
 1. 該 change 的 `tasks.md` **非** `## 人工檢查` 段落含任一 `- [x]` → 已開始 / 完成實作
 2. 該 change 的 `## 人工檢查` 段落含任一 `- [ ]` → 人工檢查未完成

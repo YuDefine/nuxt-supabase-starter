@@ -61,7 +61,7 @@ mkdir -p "$(dirname "$LOCK")" && printf '%s\n%s\n' "$$" "$(date -u +%FT%TZ)" > "
 SCAN_JSON=$(node ~/offline/clade/vendor/scripts/handoff-scan.mjs --json 2>/dev/null)
 ```
 
-**失敗 fallback**：handoff-scan.mjs 不存在或回傳 error → **STOP**，寫 HANDOFF 一行 `loop-engineer: scan failed at <ISO>` 後結束。不要憑記憶或 HANDOFF 既有 narrative 猜工作狀態。
+**失敗 fallback**：handoff-scan.mjs 不存在或回傳 error → **STOP**，寫 HANDOFF 一行 `change-loop: scan failed at <ISO>` 後結束。不要憑記憶或 HANDOFF 既有 narrative 猜工作狀態。
 
 從 JSON 取：
 
@@ -89,7 +89,7 @@ basename "$(git rev-parse --show-toplevel)"
 | 0 | `done` | review 全通過，零工作量 | archive → merge-back → commit + push |
 | 1 | `feedbackGiven` | user 已留 review feedback，ball in Claude | 處理 feedback → 補 evidence |
 | 2 | `readyForEvidence` | apply 完成，只缺 evidence annotation | 補 evidence |
-| 3 | `awaitArchiveWalkthrough` | 只剩 `[discuss]`，可完成 archive | 跑 archive Step 2.5 |
+| 3 | `awaitArchiveWalkthrough` | 只剩 `[discuss]`，可完成 archive | 跑 archive Step 3.5 |
 | 4 | `ready` + `userActionPending=0` | 全部 OK，可直接 ship | auto-archive + commit |
 | 5 | `ready` + `userActionPending>0` | review 需 user 目視 | 標 🟢 ready-for-review |
 | 6 | `applyInProgress` | 實作未完成，可推進 | 繼續 apply |
@@ -158,13 +158,13 @@ Apply 完成，只缺 verify evidence annotation。
 
 ### 3c. awaitArchiveWalkthrough
 
-只剩 `[discuss]` items 待 Step 2.5 walkthrough。
+只剩 `[discuss]` items 待 Step 3.5 walkthrough。
 
 1. 直接 dispatch archive（archive 免 worktree）：
    ```
    Skill invoke: /spectra-archive <change-name>
    ```
-   Archive 內部 Step 2.5 會處理 discuss walkthrough。
+   Archive 內部 Step 3.5 會處理 discuss walkthrough。
 
 2. Archive 完成 → merge-back 已包含在 archive Step 0。
 
@@ -280,7 +280,7 @@ Tasks.md 格式問題或 Pre-Review Data Readiness violation。
 <!-- BEGIN: loop-engineer-status -->
 ## Loop Engineer Status
 
-_Updated: <YYYY-MM-DD HH:MM> by loop-engineer_
+_Updated: <YYYY-MM-DD HH:MM> by change-loop_
 
 ### ✅ Shipped (本輪)
 

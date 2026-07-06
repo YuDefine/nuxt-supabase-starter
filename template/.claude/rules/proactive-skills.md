@@ -103,7 +103,7 @@ Auto-triage + mechanical readiness gate 流程：
    - **exit 1** → 繼續 auto-triage 或如實報告卡住原因
    - **NEVER** 自判 bucket、NEVER 跳過 script
 
-**NEVER** 在 script exit ≠ 0 時引導 user 到 review-gui — Claude 自判已 9 次證明不可靠（per [[review-gui-surface]] MUST 9 時間線）。
+**NEVER** 在 script exit ≠ 0 時引導 user 到 review-gui — Claude 自判已多次證明不可靠（同根因 pitfall 見 [[review-gui-surface]]）。
 
 **NEVER** 預設用 `AskUserQuestion` 在 chat 內逐項彈對話框走人工檢查——那是 `pnpm review:ui` 不可用時的 fallback，不是 default path。
 
@@ -235,24 +235,11 @@ grep -l 'cloudflareTunnel\|vite-plugin-cloudflare-tunnel' nuxt.config.* 2>/dev/n
 
 ## Review Tiers
 
-依變更風險決定 review 強度：
-
-- Tier 1：小型低風險變更 → self-review
-- Tier 2：中型以上功能變更 → `spectra-audit` + code review
-- Tier 3：migration / auth / permission / raw SQL / security-critical → 更嚴格 review
-
-不要因為 diff 短就把高風險變更降級。
+詳見 [[review-tiers]]。
 
 ## Screenshot Strategy
 
-截圖工具選擇原則：
-
-- 一次性探索、人工檢查、設計驗收 → `agent-browser` 優先（自管 persistent-profile Chromium，繼承登入 cookie、平行 `--session` 隔離）
-- 響應式、多 viewport、跨瀏覽器、多分頁、要沉澱回歸 → Playwright
-
-同一組截圖重拍到第 3 次，應考慮沉澱為 Playwright spec。
-
-**NEVER** 用 `chrome-devtools-mcp` 開頁面、截圖、填表單、互動式驗收 — 它是效能量測工具（Lighthouse audit / performance trace / heap snapshot），不是瀏覽器操控工具。互動式頁面操作一律走 `agent-browser`。
+詳見 [[screenshot-strategy]]。
 
 ### agent-browser Worktree Verify Auth（hard rule）
 

@@ -54,3 +54,9 @@ run_check data-perf-check
 
 # mutation-loading — 全站掃描 .vue 的 mutation status==='pending' 當 loading（warn-only 回溯型）
 run_check mutation-loading
+
+# review-rules ratchet — patterns.json 全站掃 + baseline 比對（只擋新增違規；存量走分批清償）
+run_check review-rules-ratchet
+
+# nuxt-ui-mixed-slot — 全站掃 UDashboardPanel named template + stray 子元素混用（blocking；fleet 基線 0 hit）
+run_check nuxt-ui-mixed-slot

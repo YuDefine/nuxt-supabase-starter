@@ -23,7 +23,7 @@ Local edits will be reverted by the next sync.
 
 ## § 1 — DB × deploy track NuxtHub gating（hard rule）
 
-**NuxtHub (`@nuxthub/core`) 的唯一實質作用是 wrangler-action deploy track 上的 Cloudflare 原生 binding (D1 / KV / R2 / AI / Vectorize / Durable Objects) 的 runtime 抽象**。它**不**提供 deploy 簡化（fleet 內 0 consumer 用 `nuxthub deploy`），而且：
+**NuxtHub (`@nuxthub/core`) 的唯一實質作用是 wrangler-action deploy track 上的 Cloudflare 原生 binding (D1 / KV / R2 / AI / Vectorize / Durable Objects) 的 runtime 抽象**。它**不**提供 deploy 簡化（fleet 內目前無 consumer 用 `nuxthub deploy`，以 registry 為準），而且：
 
 - 不用 D1/KV/R2/AI 的 consumer（Supabase / Postgres / 純外部 DB）帶 `@nuxthub/core` 是純冗餘 dep
 - **void.cloud track**（即使用 D1）帶 `@nuxthub/core` 也是冗餘 — void 提供自家 `void/db` + `void/schema-d1` abstraction，與 NuxtHub helper 同層但獨立
@@ -91,7 +91,7 @@ Local edits will be reverted by the next sync.
 - **MUST NOT** 在 CI 用 `npx nuxthub deploy`（NuxtHub 自家 deploy CLI）
   - 它走 NuxtHub admin pipeline、需要 `npx nuxthub link` 綁定 NuxtHub 帳號
   - 跟 GitHub Actions secrets sync 流程衝突（secrets 走 `wrangler-action` 的 `secrets` field）
-  - Fleet 內 0 consumer 用此模式，引入會破壞 deploy uniformity
+  - Fleet 內目前無 consumer 用此模式（以 registry 為準），引入會破壞 deploy uniformity
 - **MUST NOT** 在 CI 直接 invoke `npx wrangler deploy`（沒 wrangler-action 包裝 → 失去 retry / log 結構化 / API token 自動注入）
 
 ### § 3.2 Track B — void.cloud（**新增**，2026-05-27 promote）
@@ -257,7 +257,7 @@ void.cloud + D1 走第三種 binding pattern — D1 / R2 binding ID 由 void pro
     }
   },
   "worker": {
-    "compatibility_date": "2025-01-15",
+    "compatibility_date": "2026-02-24",
     "compatibility_flags": ["nodejs_compat", "nodejs_als", "no_nodejs_compat_v2"]  // ← per § 3.2
   }
 }
@@ -267,7 +267,7 @@ void.cloud + D1 走第三種 binding pattern — D1 / R2 binding ID 由 void pro
 // wrangler.jsonc — 給 IDE schema + dev binding（不寫死 prod ID）
 {
   "name": "<consumer>",
-  "compatibility_date": "2025-01-15",
+  "compatibility_date": "2026-02-24",
   "compatibility_flags": ["nodejs_compat", "nodejs_als", "no_nodejs_compat_v2"],  // ← 對齊 void.json
   "d1_databases": [{
     "binding": "DB",

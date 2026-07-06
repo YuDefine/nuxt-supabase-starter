@@ -57,6 +57,8 @@ Local edits will be reverted by the next sync.
 
 **根因**：`codex review` 硬編碼 `workspace-write` sandbox，無法透過 `-c` 覆寫。此 sandbox 模式會讓 `~/.codex/config.toml` 註冊的 MCP server（如 `codebase-memory-mcp`）在 `list_projects` 呼叫永久 hang — MCP 進程寫回 response 但 sandbox 管線未正確傳遞。`codex exec --dangerously-bypass-approvals-and-sandbox`（`danger-full-access` sandbox）則完全正常。
 
+commit 0-A 的標準入口是 `plugins/hub-core/scripts/codex-review-safe.sh`（封裝本節替代做法）。
+
 **替代做法**：用 `codex exec` + review prompt 取代：
 
 ```bash
@@ -82,11 +84,11 @@ codex exec \
 ```
 
 - 已驗證 MCP 全部正常（`list_projects`、`get_code_snippet`、`search_graph` 均 completed）
-- `codex review` 的 `--reasoning-effort` flag 不存在（是 `codex exec` 專屬），用 `-c model_reasoning_effort=<level>` 覆蓋
+- review 一律走 `codex exec`；reasoning effort 用 `-c model_reasoning_effort=<level>` 指定
 
 ### Plan-first（寫 code 的派工必加）
 
-派 Codex **寫 code / 改檔**（spectra-propose draft、spectra-apply phase）的 prompt **MUST** 內含以下硬指令（**WebSearch / `codex review` 不需要** — 它們純讀不寫）：
+派 Codex **寫 code / 改檔**（spectra-propose draft、spectra-apply phase）的 prompt **MUST** 內含以下硬指令（**WebSearch / review 用途的 `codex exec`（codex-review-safe.sh）不需要** — 它們純讀不寫）：
 
 ```
 Plan-first（**MUST**）：
@@ -151,12 +153,12 @@ hub:bootstrap 自動同步產生（請完全忽略，與本次工作無關）：
 
 例外：
 
-- `codex review --uncommitted` 與 WebSearch 不需要這段（review 的本質就是讀 dirty diff、WebSearch 純讀不動檔）
+- review 用途的 `codex exec`（codex-review-safe.sh）與 WebSearch 不需要這段（review 的本質就是讀 dirty diff、WebSearch 純讀不動檔）
 - 同一條派工 round-trip ≥ 2 次都因**同類 dirty** 停手（例：hub:bootstrap 反覆觸發 LOCKED projection 更新），且**剩餘工作是純 mechanical**（明確檔案 swap、< 5 行 edit），主線改自己做合理；但同步要 root-cause baseline 為什麼沒穩定（hub:bootstrap 重複跑？missing path？）並修，不是只把當下 task 收掉跳過教訓
 
 ### Commit Authorization（codex 派工 hard rule）
 
-派 Codex **寫 code / 改檔** 時，prompt **MUST** 內含以下硬指令（**WebSearch / `codex review` 不需要** — 它們純讀不寫）：
+派 Codex **寫 code / 改檔** 時，prompt **MUST** 內含以下硬指令（**WebSearch / review 用途的 `codex exec`（codex-review-safe.sh）不需要** — 它們純讀不寫）：
 
 ```
 ## Commit Authorization（**MUST**）
@@ -203,13 +205,13 @@ hub:bootstrap 自動同步產生（請完全忽略，與本次工作無關）：
 Commit 完直接停手回報，**NEVER** 自己跑下一 phase。主線會在 commit 後做 phase boundary 對齊 + view-layer drift 再驗 + scope cross-check，再決定 [接受 / reset 重派 / 中止]。
 ```
 
-理由：worktree 內的 commit 在 archive merge-back 階段會被 `git merge --squash` squash 進 main 的 working tree、再走 `/commit` 0-A codex review + 0-B Design Review + 0-C check 才進 main HEAD。所以 worktree 內 codex 自 commit **沒有跳過 review** 的風險（commit 在 squash 時就消失、不會留在 main history）。
+理由：worktree 內的 commit 在 archive merge-back 階段會被 `git merge --squash` squash 進 main 的 working tree、再走 `/commit` 0-A `codex exec` review + 0-B Design Review + 0-C check 才進 main HEAD。所以 worktree 內 codex 自 commit **沒有跳過 review** 的風險（commit 在 squash 時就消失、不會留在 main history）。
 
 仍 enforce 的 guardrail 純粹是 phase boundary 對齊（一 phase 一 commit、message format 機械化解析）+ drift 早攔截（codex 自驗比主線事後 reset 便宜）。Win：主線收到完工通知後直接 inspect → 派下一 phase，不必停下來做 staging。
 
 例外：
 
-- `codex review --uncommitted` 與 WebSearch 不寫檔，本節不適用
+- review 用途的 `codex exec`（codex-review-safe.sh）與 WebSearch 不寫檔，本節不適用
 - 對 `claude` type subagent（如 `/spectra-ingest` 在 /wt 內派出的 wt subagent）規約相同（`🧹 chore: wt …` 前綴 + selective stage + self-check + hook 必跑），per worktree-default.md §5
 
 ## 泛用 Dispatcher（codex-dispatch.mjs）

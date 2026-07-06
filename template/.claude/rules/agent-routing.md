@@ -16,7 +16,7 @@ Local edits will be reverted by the next sync.
 | 工作類別 | 由誰執行 | 為什麼 |
 | --- | --- | --- |
 | **Web search**（即時資料 / 外部資訊查詢） | **Codex（GPT-5.5 medium）** | 中思考預算 + Codex 搜尋整合。 |
-| **Code review（commit 0-A）** | **(1) `simplify` + (2) `codex review --uncommitted` high（GPT-5.5），(3) 0-A.1 出 Critical / Major 時條件升 xhigh** | 跨模型互補盲點。詳見 `.claude/skills/commit/SKILL.md` Step 0-A。 |
+| **Code review（commit 0-A）** | **(1) `simplify` + (2) `codex exec` review high（GPT-5.5，經 codex-review-safe.sh），(3) 0-A.1 出 Critical / Major 時條件升 xhigh** | 跨模型互補盲點。詳見 `.claude/skills/commit/SKILL.md` Step 0-A。 |
 | **Spectra `propose` 階段（draft）** | **使用者選單三選一**：A Codex GPT-5.5 xhigh draft（預設/推薦）／ B 雙段 codex：Codex GPT-5.5 xhigh draft ＋ Codex GPT-5.5 xhigh review（Fable 暫不可用，原為 Fable 5 High draft，暫以 codex 代）／ C 純 Claude | 預設跳三選一選單；使用者明確指定路徑時跳過。詳見 `spectra-propose` Step 0。 |
 | **Spectra `propose` cross-check / final check** | **主線 Claude Opus 4.8 xhigh** | 主線 = quality gate（A 的 cross-check、B 的 final check 都由主線跑），不只是 dispatcher。 |
 | **Spectra `apply`（非 Design Review、非 UI view phase，phase 粒度）** | **Codex GPT-5.5 high** | medium 漏 schema drift 風險高；phase 粒度避免 round-trip。 |

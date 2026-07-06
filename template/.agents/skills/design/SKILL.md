@@ -649,7 +649,7 @@ After the user completes this phase, suggest writing the Carry-Forward section t
 
 1. **Always read code first** — never plan blind
 2. **Be specific** — name files, components, line ranges
-3. **3-6 skills per plan** — split overflow into "Follow-up" or "Carry-Forward", never dump all 18
+3. **3-6 skills per plan** — split overflow into "Follow-up" or "Carry-Forward", never dump all 23
 4. **Explain exclusions** — "skipping /impeccable animate — this is a data-entry form where motion distracts"
 5. **Check mutual exclusivity** — see `references/skill-map.md` "Mutual Exclusivity" section. Never recommend `/impeccable bolder` + `/impeccable quieter` together; pick one direction. Run `/impeccable distill` before `/impeccable bolder`, not alongside.
 6. **Follow canonical order** — deviations need explicit justification

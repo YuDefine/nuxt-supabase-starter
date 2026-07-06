@@ -12,8 +12,6 @@ Local edits will be reverted by the next sync.
 
 # Follow-up Register
 
-繁體中文 | [English](./follow-up-register.en.md)
-
 **核心命題**：tasks.md 內的「DEFERRED / LOCAL BLOCKED / follow-up」註記在 archive 後會被埋進歸檔目錄，導致未解決項目消失在眾人視野。本規則用 **marker + register + archive gate** 三層結構強制這些項目不會遺漏。
 
 此規則優先於個別 skill 說明與其他規則。

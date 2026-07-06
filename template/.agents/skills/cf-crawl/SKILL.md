@@ -209,6 +209,8 @@ print(f'Saved {total_saved} pages to {outdir}/')
 | `maxAge`        | number  | 86400      | Cache validity in seconds (max 604800)                    |
 | `modifiedSince` | number  | -          | Unix timestamp; only crawl pages modified after this time |
 
+> `limit` 的預設值兩層不同屬設計如此、非筆誤：本表的 `10` 是 Cloudflare `/crawl` REST API 本身省略 `limit` 時的原生預設；`/cf-crawl` 指令的 CLI wrapper 另有自己的預設 `20`（見下方 Argument Parsing 節），給一般文件爬取場景更實用的起始頁數。
+
 ### Options Object
 
 | Parameter              | Type    | Default | Description                                    |
@@ -274,7 +276,7 @@ Merges all pages into a single markdown file for easy context loading.
 When invoked as `/cf-crawl`, parse the arguments as follows:
 
 - First positional argument: the URL to crawl
-- `--limit N` or `-l N`: max pages (default: 20)
+- `--limit N` or `-l N`: max pages (default: 20；CLI wrapper 預設，與上方 Core Parameters 表的 API 原生預設 `10` 刻意不同，兩層各自正確)
 - `--depth N` or `-d N`: max depth (default: 100000)
 - `--include "pattern1,pattern2"`: include URL patterns
 - `--exclude "pattern1,pattern2"`: exclude URL patterns

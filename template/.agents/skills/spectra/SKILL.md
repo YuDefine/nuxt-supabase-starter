@@ -104,12 +104,12 @@ If parked changes exist, mention them: "另外有 N 個暫存的 change：{names
 1. **檢查人工檢查狀態（kind-aware）** — 讀取 tasks artifact 的 `## 人工檢查` 區塊，依每條 item 的 leading kind marker 分流。
    - 解析每條 `- [ ]` / `- [x]` 行的 leading marker：`[review:ui]` 或 `[discuss]`。缺 marker 時依 Default Kind Derivation Rule 推導（proposal 含 `**No user-facing journey (backend-only)**` → `discuss`，其餘 → `review:ui`）。
    - 計算未勾項分組：`unchecked_review_ui` 與 `unchecked_discuss`。
-   - **若 `unchecked_review_ui` > 0 且 `unchecked_discuss` > 0**（混合 kind）：依序執行 — 先跑 spectra-archive 內建 Step 2.5「Discuss Items Walkthrough」（讓 Claude 主動準備 evidence 與使用者討論並寫 `(claude-discussed: <ISO>)` annotation），再用 request_user_input 提示是否跑 `/review-screenshot` 處理 `[review:ui]` items。順序：discuss 先、review:ui 後 — 讓使用者見過所有討論點再進視覺驗收。
+   - **若 `unchecked_review_ui` > 0 且 `unchecked_discuss` > 0**（混合 kind）：依序執行 — 先跑 spectra-archive 內建 Step 3.5「Discuss Items Walkthrough」（讓 Claude 主動準備 evidence 與使用者討論並寫 `(claude-discussed: <ISO>)` annotation），再用 request_user_input 提示是否跑 `/review-screenshot` 處理 `[review:ui]` items。順序：discuss 先、review:ui 後 — 讓使用者見過所有討論點再進視覺驗收。
    - **若只有 `unchecked_review_ui` > 0**：用 request_user_input 詢問：
      - 「先跑檢查」→ invoke `/review-screenshot`
      - 「全部標記完成並歸檔」→ 繼續（archive-gate Check 4 會擋下未勾 `[review:ui]`）
      - 「取消」→ 停止
-   - **若只有 `unchecked_discuss` > 0**：直接進入 spectra-archive Step 2.5 流程（由 spectra-archive skill 內部處理）；orchestrator 不需另外提示。
+   - **若只有 `unchecked_discuss` > 0**：直接進入 spectra-archive Step 3.5 流程（由 spectra-archive skill 內部處理）；orchestrator 不需另外提示。
    - **若全部 `[x]` 或沒有人工檢查區塊** → 繼續。
 
 2. **歸檔人工檢查** — invoke `/review-archive all`
@@ -143,7 +143,7 @@ If parked changes exist, mention them: "另外有 N 個暫存的 change：{names
 
 - `來源` 標註 change name，`Specs` 列出此 change 包含的 spec names
 - `#N` 流水號用於溝通定位（如「#3 有問題」）、截圖命名、歸檔追蹤
-- Kind marker 決定 archive 流程：`[review:ui]` 走 `/review-screenshot`、`[discuss]` 走 spectra-archive Step 2.5 walkthrough
+- Kind marker 決定 archive 流程：`[review:ui]` 走 `/review-screenshot`、`[discuss]` 走 spectra-archive Step 3.5 walkthrough
 - 如果 tasks 已有 `## 人工檢查` 區塊，更新而非重複新增；既有無 marker items 不強制 retrofit（依 Default Kind Derivation Rule 處理）
 - 完成檢查後，用 `/review-archive` 遷移到 `docs/manual-review-archive.md`
 

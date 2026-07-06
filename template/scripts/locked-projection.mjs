@@ -54,7 +54,7 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // Vendored script entry points (scripts/)
       String.raw`scripts/(wt-helper|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|spectra-archive-sidecar|dev-singleton|dev-router|dev-session)\.(mjs|mts)$`,
       // Recursive vendored script trees
-      String.raw`scripts/(spectra-advanced|pre-commit|pre-push)/`,
+      String.raw`scripts/(spectra-advanced|pre-commit|pre-push|checks)/`,
       // Snippets / shared presets
       String.raw`vendor/(snippets|oxc-shared|doctor-shared|review-rules)/`,
       // GitHub vendored actions

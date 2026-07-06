@@ -281,8 +281,10 @@ This is a **utility skill** (not a workflow step). It reads source file tracking
 9. **Commit**
 
    ```bash
-   git commit -m "<message>"
+   git commit --only -m "<message>" -- <file1> <file2> ...
    ```
+
+   `--only` 以 pathspec 過濾 commit 範圍——別 session 預 staged 的檔案不會被捲入（4a partition 的 fail-closed 因此在機制上成立）。
 
 10. **Show result**
 
