@@ -51,3 +51,6 @@ run_check review-rules-ban
 
 # 5) data-perf check — 偵測 staged .vue 中 setup context raw $fetch（無 staged .vue 直接跳）
 run_check data-perf-check
+
+# 6) mutation-loading — 偵測 staged .vue 把 Pinia Colada mutation status==='pending' 當 loading
+run_check mutation-loading
