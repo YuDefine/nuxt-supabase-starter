@@ -58,7 +58,7 @@ C: <task C description>
 
 Or single line: `/wt A: task A B: task B`.
 
-Each labeled task becomes its own worktree + subagent. Subagents run concurrently. As each completes, the parent squash-merges that result and cleans that worktree up. A failure in one task does not block the others.
+Each labeled task becomes its own worktree + subagent. Subagents run concurrently and commit inside their worktrees. There is no squash or cleanup at return — completed worktrees stay parked until archive-time merge-back (see Step 4). A failure in one task does not block the others.
 
 Labels are arbitrary identifiers (A/B/C/feat-x/test-y). The skill normalizes them into slugs.
 

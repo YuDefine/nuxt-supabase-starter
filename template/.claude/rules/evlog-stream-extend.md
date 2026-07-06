@@ -1,9 +1,24 @@
+---
+description: evlog 讀端 opt-in 擴充（stream/fs-reader/enricher/tail-sampling）適用時載入
+paths:
+  - 'server/api/**/*.ts'
+  - 'server/plugins/evlog-*.ts'
+  - 'app/plugins/evlog-*.ts'
+  - 'nuxt.config.ts'
+  - 'packages/**/server/api/**/*.ts'
+  - 'packages/**/server/plugins/evlog-*.ts'
+  - 'packages/**/app/plugins/evlog-*.ts'
+  - 'template/server/api/**/*.ts'
+  - 'template/server/plugins/evlog-*.ts'
+  - 'template/app/plugins/evlog-*.ts'
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/evlog-stream-extend.md
 Edit at: <clade-central-repo>
 Local edits will be reverted by the next sync.
 -->
+
 
 # evlog Extend 標準（讀端 + 進階 hook）
 

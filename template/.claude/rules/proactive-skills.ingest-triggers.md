@@ -77,7 +77,7 @@ Apply 階段中偵測到以下任一信號 → 必須立即處理：
 ## UX Completeness Gate（補充 Design Gate）
 
 **Design Gate 檢查 UI 視覺品質；UX Completeness Gate 檢查 UI 功能覆蓋**。
-兩者並存，都必須通過。完整規則見 [`docs/rules/ux-completeness.md`](docs/rules/ux-completeness.md)。
+兩者並存，都必須通過。完整規則見 [[ux-completeness]]。
 
 ### Propose 階段
 

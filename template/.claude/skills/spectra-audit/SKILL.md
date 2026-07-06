@@ -1,6 +1,7 @@
 ---
 name: spectra-audit
 description: "Audit changed code for security sharp edges — dangerous defaults, type confusion, and silent failures"
+disallowedTools: [Edit, Write]
 effort: xhigh
 license: MIT
 compatibility: Requires spectra CLI.
@@ -84,15 +85,15 @@ Search the diff for:
 - Configuration cliffs: one wrong value = catastrophe with no warning (e.g., `verify_ssl: fasle`)
 - Stringly-typed security: permissions as comma-separated strings instead of enums
 
-### Phase 3: Consolidate and Fix
+### Phase 3: Consolidate and Report
 
 Merge findings from all 3 agents. For each finding:
 
-- If fixable: apply the fix directly
+- If fixable: report the finding with a concrete suggested fix (file, line, patch sketch). NEVER apply fixes during an audit — fixes go through the normal apply/commit flow after user review.
 - If false positive or not worth changing: skip without debate
 - Classify severity: Critical / High / Medium / Low
 
-End with a brief summary of what was fixed (or confirm the code is clean).
+End with a brief summary of findings (or confirm the code is clean).
 
 ---
 

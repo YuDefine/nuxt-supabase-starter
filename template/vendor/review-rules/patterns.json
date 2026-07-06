@@ -88,6 +88,90 @@
       "pattern": "size\\s*:\\s*['\"](?:xs|sm)['\"]",
       "message": "app.config 的 badge defaultVariants.size 只允許 md / lg / xl。xs / sm 在密集表格字級過小、可讀性不足。透過 config 設定跟直接在 template 寫效果相同，一律禁止。",
       "fix": "移除 size 欄位（吃預設 md），或改為 'md' / 'lg' / 'xl'。"
+    },
+    {
+      "id": "app-imports-server-internals",
+      "section": 6,
+      "severity": "error",
+      "layer": "ratchet",
+      "fileGlob": "app/**",
+      "pattern": "^(?!\\s*import\\s+type\\b).*from\\s+['\"]~{1,2}\\/server\\/",
+      "message": "app 層禁 import server 內部模組（type-only import 除外）——分層真相見 clade-review-rules §6。",
+      "fix": "改從 shared/schemas/** 或 shared/types/** 取型別／契約；真需 server 端邏輯，改走 server/api/** 的 HTTP endpoint，不要直接 import server 內部模組。"
+    },
+    {
+      "id": "server-console-logging",
+      "section": 8,
+      "severity": "error",
+      "layer": "ratchet",
+      "fileGlob": "server/**",
+      "exclude": ["**/*.test.*", "**/*.spec.*"],
+      "pattern": "\\bconsole\\.(log|warn|error|info|debug)\\(",
+      "message": "server 端一律走 evlog logger，禁裸 console——見 clade-review-rules §8。",
+      "fix": "API handler 用 useLogger(event) 取得的 log.*；job/cron 用 createLogger()。純 build/CLI script（scripts/**）例外，不受此規則約束。"
+    },
+    {
+      "id": "server-raw-throw-error",
+      "section": 8,
+      "severity": "error",
+      "layer": "ratchet",
+      "fileGlob": "server/api/**",
+      "pattern": "throw\\s+new\\s+Error\\(",
+      "message": "API handler 用 createError 帶 statusCode，禁裸 throw new Error——見 clade-review-rules §8。",
+      "fix": "改用 throw createError({ statusCode, statusMessage, message })，讓 client 拿到結構化 HTTP 錯誤而非未分類 500。"
+    },
+    {
+      "id": "audit-table-direct-insert",
+      "section": 9,
+      "severity": "error",
+      "layer": "ratchet",
+      "fileGlob": "server/**",
+      "exclude": ["**/audit/**"],
+      "pattern": "\\.from\\((['\"])(audit_logs|operation_logs)\\1\\)\\s*\\.insert|INSERT\\s+INTO\\s+(audit_logs|operation_logs)",
+      "message": "禁直插 audit 表，走 audit() helper——D-pattern 見 clade-review-rules §9。",
+      "fix": "改用 server/utils/audit.ts 的 audit() helper 寫入稽核紀錄，不要直接 .from('audit_logs').insert(...) 或裸 SQL INSERT INTO。"
+    }
+  ],
+  "semantic": [
+    {
+      "id": "overlay-body-slot",
+      "title": "Overlay 內容須放 #body slot",
+      "guidance": "USlideover/UModal/UDrawer 用 :open 且無 trigger 時 default slot 應為空，內容須放 #body slot；#header 內手寫 close button 應優先改用 title prop（clade-review-rules.md § Overlay 元件語意補充）。"
+    },
+    {
+      "id": "layered-truth",
+      "title": "分層真相／API 契約單一來源",
+      "guidance": "request/response contract 真相須在 shared/schemas/**，shared/types/** 只能相容轉發或做 UI view-model；handler 預設用 getSupabaseWithContext(event)，回傳前須經 response schema parse() 做 drift guard（clade-review-rules.md § 分層真相 / API 契約）。"
+    },
+    {
+      "id": "error-localization",
+      "title": "錯誤訊息本地化與 unknown-code 顯示",
+      "guidance": "UI 錯誤訊息須本地化且 unknown code 須有 fallback 顯示；機械可檢部分已收斂進 nuxt-error-localization.md path-scoped rule，clade-review-rules.md 本節僅留 hot-zone pointer。"
+    },
+    {
+      "id": "evlog-consistency",
+      "title": "evlog 採用一致性（缺 logger 的檔）",
+      "guidance": "已採用 evlog 的專案，新寫/大改的 server 程式碼須套用 evlog pattern；機械層已擋 console.* / no-why createError，本 verdict 補判斷『handler 缺第一行 const log = useLogger(event)』這類需逐檔讀的缺 logger 情形（clade-review-rules.md § evlog 採用一致性）。"
+    },
+    {
+      "id": "d-pattern-audit",
+      "title": "D-pattern：mutation 缺 audit() 呼叫",
+      "guidance": "已採用 D-pattern 的專案，新寫/大改 mutation handler 須套用；機械層已擋 helper bypass / PII in migration，本 verdict 補判斷『該 audit 的 mutation 是否缺對應 audit() 呼叫』（clade-review-rules.md § D-pattern audit 一致性）。"
+    },
+    {
+      "id": "form-validation",
+      "title": "UForm + Zod 驗證採用",
+      "guidance": "表單驗證應採用 UForm + Zod schema 一致模式；機械可檢的 maxlength 缺漏已收斂進 nuxt-form-validation.md path-scoped rule，clade-review-rules.md 本節僅留 hot-zone pointer，本 verdict 補判斷整體 UForm 採用是否到位。"
+    },
+    {
+      "id": "a11y-adoption",
+      "title": "a11y 採用一致性（focus trap／heading 層級）",
+      "guidance": "已採用 @nuxt/a11y 的專案，新寫/大改 UI 元件須套用 a11y 規則；機械層已擋 img 缺 alt / icon 缺 aria-label / 正數 tabindex 等 10 條 grep signal，本 verdict 補判斷『自製 modal 缺 focus trap』與『heading 跳級（h1 後直接 h3）』這類需語意判斷的項目（clade-review-rules.md § Nuxt a11y 採用一致性）。"
+    },
+    {
+      "id": "doc-sync",
+      "title": "Bug 修正／行為變更的文件同步",
+      "guidance": "行為變更的 diff 要檢查對應文件（README / docs/ / rules / cookbook / CHANGELOG 慣例）是否同步更新；有行為變更但文件未動 → fail 並指名該補哪份"
     }
   ]
 }

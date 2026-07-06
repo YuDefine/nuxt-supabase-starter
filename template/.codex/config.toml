@@ -1,6 +1,6 @@
 # 🔒 LOCKED — managed by clade · auto-generated from .claude/settings.json
 includeGitInstructions = false
-enabledMcpjsonServers = ["local-supabase"]
+enabledMcpjsonServers = ["local-supabase", "chrome-devtools-mcp"]
 
 [enabledPlugins]
 "hub-core@clade" = true

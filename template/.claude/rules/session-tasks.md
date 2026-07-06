@@ -12,8 +12,6 @@ Local edits will be reverted by the next sync.
 
 # Session Tasks
 
-繁體中文 | [English](./session-tasks.en.md)
-
 **核心命題**：spectra change 流程（propose → apply → archive）適合大型結構化變更；ad-hoc 小工作（debug、配置調整、單檔 fix、勘查）需要更輕量的 todo 機制。但若用全域單檔（如 `tasks/todo.md`）作為共享 working memory，multi-session 並行時會 lost update 或互相覆蓋清理結果。本規則以 **per-session 分檔** 解決，並強制升級路徑避免長期堆積。
 
 此規則優先於全域 `~/.claude/CLAUDE.md`「任務管理」段落（若存在）。

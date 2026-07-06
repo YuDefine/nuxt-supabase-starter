@@ -30,6 +30,8 @@ Local edits will be reverted by the next sync.
 
 > **commit-time gate**：`vendor/scripts/review-checklist-audit.mjs` 會把兩份規則的「Reviewer 檢查方式」grep pattern 對 staged files 跑硬 gate，違反者擋 commit；`--no-verify` 物理可繞但違反 [`commit.md`](../../../rules/core/commit.md) hard rule。agent review 是軟性引導 / advisory，與 gate 互補。
 
+**Semantic Verdict 契約（W5-6）**：`clade-review-rules.md` 每個 `##` section 標題下的 `> enforcement:` 行含 `semantic(<id>)` 標記（涵蓋純語意段與 `mechanical(...) + semantic(...)` 混合段的語意部分）。Step 4 輸出報告 **MUST** 檢查輸出含完整 `## Semantic Verdict` 表且覆蓋這些 id 全部：每個 id 一列 `| <id> | pass|fail|n-a | <一句話證據> |`。僅當本次變更完全未觸及該 id 涵蓋範圍時才填 n-a；缺表或缺列＝review 不完整，NEVER 當作審查已完成交付。
+
 ### Step 1: 取得變更範圍
 
 ```bash

@@ -437,7 +437,7 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 **安全性保證**：
 
-- `codex review --uncommitted` 在啟動時讀 working tree diff snapshot，後續 working tree 變動**不影響** codex 已啟動的 review（codex 看的是啟動時的 v1）
+- review prompt 讓 codex 在自己 turn 開頭讀 working tree diff——snapshot 語義不變：啟動後 working tree 變動不影響已啟動的 review
 - 0-A / 0-B / 0-C 修正後若**累計超過 50 行或跨 5 檔以上** → **MUST** 在匯合階段重跑一次 `codex-review-safe.sh high` 確認新引入的程式碼也過 codex 眼睛
 - 0-B / 0-A.1 / 0-C 抓到的問題**全部匯合一次修**，避免反覆 review
 
@@ -451,17 +451,17 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 **審查策略**：
 
-1. 主線先跑 `simplify` skill —— 它看 reuse / 精簡 / 過度設計 / altitude 這條軸，codex review 不會抓。先處理掉避免後續 codex 重複指出
-2. 接著（若 fast-path 不命中）以背景方式跑 codex review high（GPT-5.5）—— 跨模型抓 bug / 邏輯 / 安全，盲點與 simplify / Claude 主線不同。**啟動後立即進入並行階段（見「0-A/B/C 並行策略」）**，主線同步推進 0-C 並派 0-B subagent
+1. 主線先跑 `simplify` skill —— 它看 reuse / 精簡 / 過度設計 / altitude 這條軸，codex exec review 不會抓。先處理掉避免後續 codex 重複指出
+2. 接著（若 fast-path 不命中）以背景方式跑 codex exec review high（GPT-5.5）—— 跨模型抓 bug / 邏輯 / 安全，盲點與 simplify / Claude 主線不同。**啟動後立即進入並行階段（見「0-A/B/C 並行策略」）**，主線同步推進 0-C 並派 0-B subagent
 3. 修正一律由 Claude Code 主線執行；所有並行軸的 finding 匯合後一次性修正
 
 **已棄用**：
 
-- `code-review` agent（Opus subagent）—— 職責與 codex review 高度重疊且同為 Anthropic 模型盲點，砍掉省一輪 subagent 成本
+- `code-review` agent（Opus subagent）—— 職責與 codex exec review 高度重疊且同為 Anthropic 模型盲點，砍掉省一輪 subagent 成本
 
 #### 0-A.0 — simplify（主線，永遠跑、永遠先跑）
 
-對本次 working tree 變更跑 simplify review + 自動修 —— 聚焦 reuse / 精簡 / efficiency / altitude，codex review 不會抓這條軸。simplify 修完的版本才是下一步 codex review 應該看的對象。
+對本次 working tree 變更跑 simplify review + 自動修 —— 聚焦 reuse / 精簡 / efficiency / altitude，codex exec review 不會抓這條軸。simplify 修完的版本才是下一步 codex exec review 應該看的對象。
 
 **執行方式：MUST 用 foreground `Agent` tool 開一個**通用 subagent**（`subagent_type: "general-purpose"`、`mode: "auto"`）跑下方 prompt 範本**，**NEVER 用 `Skill(simplify)` 嵌套呼叫**。
 
@@ -490,13 +490,13 @@ Agent 回傳後主線處理：
 - **命中** → 輸出 `⏭️ 0-A.1/0-A.2 跳過（fast-path: diff <20 行、限 doc/config、無敏感路徑）`，進入 0-B/0-C 並行
 - **不命中** → 進入 0-A.1
 
-#### 0-A.1 — codex review (high)，背景（**並行軸 A**）
+#### 0-A.1 — codex exec review (high)，背景（**並行軸 A**）
 
-`codex review` 在 `high` 推理下常需 5–15 分鐘。**MUST** 用 Bash `run_in_background: true` 啟動，並**每 3 分鐘**讀一次背景輸出確認進度（process 還活著、有沒有錯訊、跑到哪一檔）。建議用 `ScheduleWakeup({delaySeconds: 180})` 排隔——3 分鐘穩穩落在 prompt cache 5 分鐘 TTL 內（300s 是 cache miss 最差解），又是使用者明定的上限，不可拉長。
+`codex exec review` 在 `high` 推理下常需 5–15 分鐘。**MUST** 用 Bash `run_in_background: true` 啟動，並**每 3 分鐘**讀一次背景輸出確認進度（process 還活著、有沒有錯訊、跑到哪一檔）。建議用 `ScheduleWakeup({delaySeconds: 180})` 排隔——3 分鐘穩穩落在 prompt cache 5 分鐘 TTL 內（300s 是 cache miss 最差解），又是使用者明定的上限，不可拉長。
 
 **啟動背景 process 後 MUST 立即進入並行階段**（同一個 assistant 回合內），啟動 0-B（條件觸發）與 0-C —— 不要乾等 codex 完成才推進其他軸，那等同放棄並行收益。詳見上方「0-A/B/C 並行策略」。
 
-- **NEVER** 把 codex review 用 foreground 同步阻塞主線 — 等下去什麼事都做不了
+- **NEVER** 把 codex exec review 用 foreground 同步阻塞主線 — 等下去什麼事都做不了
 - **NEVER** 連續多次 sleep <60s 短輪詢 — 會把 cache 燒光也吵
 - **NEVER** 就乾等到 codex 自己結束才看一眼 — 中途卡住（codex auth 過期、context 超量、模型拒答）會白等
 - **NEVER** wake 起來只回報「還在跑」— 每次 poll **MUST** 讀實際輸出有具體狀態（哪一步、哪個檔、有沒有 issue 浮現）才算數
@@ -506,17 +506,18 @@ Agent 回傳後主線處理：
 .claude/scripts/codex-review-safe.sh high
 ```
 
-> ℹ️ wrapper 暫時把 `~/.codex/config.toml` 移開避開 MCP server hang（codex CLI 對 nested TOML override 是 merge 不是 replace；MCP 載入 + 卡死是已知問題）。`trap EXIT` 確保不論 codex 怎麼結束 config 都會還原。**不要**改回 `codex review --uncommitted` 直接跑 — 在配 codebase-memory-mcp 的環境會卡 70 秒 fetch failed 死掉。
+> ℹ️ codex-review-safe.sh 以 `codex exec`＋內嵌 review prompt 執行——`codex review` 子命令已禁用（硬編碼 workspace-write sandbox 會卡死 MCP，見 agent-routing.codex-watch-protocol.md）。MCP（含 codebase-memory）在 review 期間可用。已知 trade-off：`--dangerously-bypass-approvals-and-sandbox` 下 prompt injection 理論上可繞過唯讀指示——本 script 僅用於 review 自家 fleet 的 diff，NEVER 拿去 review 不可信第三方 code。
 
 讀完 codex 輸出後依 **codex 自己輸出的 severity 標記**分情境處理（**此時 0-B / 0-C 應已並行完成或在收尾**）：
 
+- **MUST** 檢查輸出含完整 `## Semantic Verdict` 表且覆蓋 patterns.json semantic 全部 id——缺表或缺列＝review 不完整，重跑 0-A.1，NEVER 當作通過
 - **無 issue** → 輸出 `✅ 0-A.1 通過（codex high 無 issue）`，**跳過 0-A.2**，進入「並行匯合」
 - **僅 Minor / Info 級 issue** → 主線逐一修完，輸出 `✅ 0-A.1 通過（codex high 僅 Minor/Info 已修）`，**跳過 0-A.2**，進入「並行匯合」
 - **出現 Critical / Major 級 issue** → 主線逐一修完，**MUST** 進入 0-A.2 用 xhigh 驗證
 
 **Severity 來源**：以 codex 自己輸出的 severity 標記為準（Critical / Major / Minor / Info）。**NEVER** 由主線自行判定降級「這個其實沒那麼嚴重」—— codex 標 Major 就照 Major 處理，否則 0-A.2 條件觸發機制等於形同虛設。
 
-#### 0-A.2 — codex review (xhigh)，條件觸發
+#### 0-A.2 — codex exec review (xhigh)，條件觸發
 
 **僅在 0-A.1 出現 Critical / Major 級 issue 時執行**，其他情況一律跳過。
 
@@ -557,7 +558,7 @@ Agent 回傳後主線處理：
 - **NEVER** 顛倒 codex 兩輪的 reasoning effort（0-A.1 必為 `high`、0-A.2 必為 `xhigh`）
 - **NEVER** 把 codex 列出的問題判定為「建議性質」「不在本次範圍」而跳過 —— 一律修
 - **NEVER** 在 fast-path 條件未完全滿足時提早跳過 codex —— 三條件 AND，任一不滿足都跑
-- **NEVER** 做第 3 輪 codex review（會無限拖長 commit 流程；2 輪內處理不完代表變更太大，應先 split）
+- **NEVER** 做第 3 輪 codex exec review（會無限拖長 commit 流程；2 輪內處理不完代表變更太大，應先 split）
 - **NEVER** 因 0-A.1 抓到 Critical/Major 後跳過 0-A.2 —— 一律用 xhigh 驗證
 - **NEVER** 用主線自判把 codex 標的 Major / Critical 降級成 Minor 來跳過 0-A.2 —— severity 以 codex 輸出為準
 - **NEVER** 重新啟用 `code-review` agent（職責已被 codex 兩輪取代）

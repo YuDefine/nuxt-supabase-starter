@@ -12,8 +12,6 @@ Local edits will be reverted by the next sync.
 
 # Work Claims
 
-繁體中文 | [English](./work-claims.en.md)
-
 **核心命題**：`HANDOFF.md` 與 `openspec/ROADMAP.md` 都是可讀狀態，但真正避免撞工的是**可機器寫入的 claim**。只要 session / agent 要開始做某個 active change，就必須先 claim。
 
 ## 什麼時候 claim

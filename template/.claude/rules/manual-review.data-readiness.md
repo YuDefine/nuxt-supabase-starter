@@ -344,12 +344,4 @@ GUI 端在診斷 console 寫同樣訊息。archive 後保留在 `docs/manual-rev
 
 ## 截圖檔名與 item id 配對（hard rule）
 
-`pnpm review:ui` 設計成自動把截圖配到正確的 item，使用者不需要手動挑選。為此截圖檔名 **MUST** 以 item id 開頭：
-
-```text
-#<item-id>[<variant>]-<descriptor>.<ext>
-```
-
-例：item `#1` 的截圖命名為 `#1-clock-light.png`、`#1a-clock-dark.png`；scoped item `#3.1` 命名為 `#3.1-mobile.png`。
-
-完整命名規範（含變體、legacy fallback、違反處理）見 `screenshot-strategy.md`。
+`pnpm review:ui` 設計成自動把截圖配到正確的 item，使用者不需要手動挑選。檔名格式見 [[screenshot-strategy]]（canonical SoT）。

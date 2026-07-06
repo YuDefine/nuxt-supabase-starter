@@ -250,17 +250,9 @@ Marker schema、`<reason>` 必填規約、canonical ordering、audit trail、跟
 
 細節見 [[manual-review.evidence]] § `@evidence-via-manual-review` Marker 細節（threshold deadlock 圖、canonical line format 與範例、「驗證」clause 字眼清單、excluded 計數行為）。
 
-## 截圖檔名與 item id 配對（hard rule，摘要）
+## 截圖檔名與 item id 配對（hard rule）
 
-`pnpm review` 自動把截圖配到 item，**MUST** 用：
-
-```text
-#<item-id>[<variant>]-<descriptor>.<ext>
-```
-
-例：item `#1` → `#1-clock-light.png`、`#1a-clock-dark.png`；scoped item `#3.1` → `#3.1-mobile.png`。
-
-完整命名規範（含變體、legacy fallback、違反處理）：詳見 [[screenshot-strategy]] + [[manual-review.data-readiness]] § 截圖檔名與 item id 配對。
+`pnpm review` 自動把截圖配到 item。檔名格式見 [[screenshot-strategy]]（canonical SoT）。
 
 ## review-gui 補 evidence prompt 路徑分類（hard rule）
 

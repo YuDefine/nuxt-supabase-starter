@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 # CLADE:VENDOR-SCRIPT
 #
-# review-rules-ban (pre-commit, staged) — 掃 staged 檔，擋住 patterns.json 定義的機械規則違規
+# review-rules-ban (pre-commit, staged) — 擋住 patterns.json 定義的機械規則違規（pre-commit layer）
 #
-# 讀 vendor/review-rules/patterns.json，對本次 staged 檔案（依 rule.fileGlob 過濾）跑 grep。
-# severity=error 命中 → exit 1 擋 commit；severity=warning → 印但不擋。
+# 薄殼呼叫統一掃描引擎 vendor/review-rules/scan.mjs（pre-commit / pre-push / CI / audit
+# 四入口共用，見 scan.mjs 檔頭）。掃描邏輯 / glob matching / multiLine tag 展平全部收斂
+# 在 scan.mjs，本檔只負責：
+#   - 無 patterns.json / scan.mjs（consumer 尚未 propagate）→ 跳過
+#   - 無 staged .vue / app.config.*（pre-commit layer 目前只覆蓋這兩種 glob）→ 跳過，
+#     避免每次 commit 都 spawn node
+#   - 呼叫 scan.mjs --staged --layer pre-commit，轉發 exit code
+#     （severity=error 命中 → exit 1 擋 commit；severity=warning 只印不擋）
 #
 # 由 ~/clade vendor/scripts/pre-commit/ 散播，請勿直接編輯 consumer 副本。
 
@@ -14,11 +20,13 @@ PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 cd "$PROJECT_ROOT"
 
 PATTERNS_FILE="$PROJECT_ROOT/vendor/review-rules/patterns.json"
+SCAN_ENGINE="$PROJECT_ROOT/vendor/review-rules/scan.mjs"
 
-# patterns.json 不存在 → 跳過（consumer 尚未 propagate）
+# patterns.json / scan.mjs 不存在 → 跳過（consumer 尚未 propagate）
 [[ -f "$PATTERNS_FILE" ]] || exit 0
+[[ -f "$SCAN_ENGINE" ]] || exit 0
 
-# 蒐集本次 staged 的 .vue + app.config.*
+# 蒐集本次 staged 的 .vue + app.config.*（pre-commit layer 目前只覆蓋這兩種 glob）
 STAGED_VUE=$(git diff --cached --name-only --diff-filter=ACM -- '*.vue' 2>/dev/null || true)
 STAGED_CONFIG=$(git diff --cached --name-only --diff-filter=ACM -- 'app.config.ts' 'app.config.js' 2>/dev/null || true)
 STAGED=$(printf '%s\n%s' "$STAGED_VUE" "$STAGED_CONFIG" | sed '/^$/d' | sort -u)
@@ -26,96 +34,4 @@ STAGED=$(printf '%s\n%s' "$STAGED_VUE" "$STAGED_CONFIG" | sed '/^$/d' | sort -u)
 # 無 staged 檔 → 跳過
 [[ -z "$STAGED" ]] && exit 0
 
-# Node 做全部邏輯
-# 兩種 matching 模式：
-#   multiLine: false (default) — 逐行 grep（適合單行 pattern）
-#   multiLine: true            — 整檔 multi-line match（適合跨行 Vue template props）
-#
-# pattern 含 `<ComponentName[^>]*prop=` 形式時自動升級成 multiLine。
-# multiLine 模式把每個 `<Tag ... >` / `<Tag ... />` 區塊展平成單行再 match，
-# 回報的行號是 tag 起始行。
-exec node -e "
-const fs = require('fs');
-const patternsFile = process.argv[1];
-const stagedFiles = process.argv[2].split('\n').filter(Boolean);
-
-const data = JSON.parse(fs.readFileSync(patternsFile, 'utf8'));
-const rules = data.rules;
-let hasError = false;
-
-// 從 template 抽出每個 HTML/Vue tag 區塊（含起始行號）
-// 把 <Tag\n  prop=\"val\"\n  prop2=\"val2\"\n/> 展平成單行
-function extractTags(content) {
-  const tags = [];
-  const re = /<[A-Z][A-Za-z]*(?:\s|\n)(?:[^>]|\n)*?\/?>/g;
-  let m;
-  while ((m = re.exec(content)) !== null) {
-    const before = content.slice(0, m.index);
-    const line = before.split('\n').length;
-    const flat = m[0].replace(/\n\s*/g, ' ');
-    tags.push({ line, flat, raw: m[0] });
-  }
-  return tags;
-}
-
-// 判斷 pattern 是否需要 multiLine（含 <ComponentName[^>]* 跨屬性匹配）
-function needsMultiLine(pattern) {
-  return /^<[\[(]?[A-Z].*\[\^>\]/.test(pattern);
-}
-
-function matchGlob(file, glob) {
-  if (glob === '*.vue') return file.endsWith('.vue');
-  if (glob === 'app.config.*') return /(?:^|[/])app\.config\.[^/]+$/.test(file);
-  return file.endsWith(glob.replace('*', ''));
-}
-
-for (const rule of rules) {
-  const re = new RegExp(rule.pattern);
-  const excludeRe = rule.excludePattern ? new RegExp(rule.excludePattern) : null;
-  const multiLine = rule.multiLine === true || needsMultiLine(rule.pattern);
-
-  let filesToScan = stagedFiles.filter(f => matchGlob(f, rule.fileGlob || '*.vue'));
-  if (rule.scanPaths && rule.scanPaths.length > 0) {
-    filesToScan = filesToScan.filter(f => rule.scanPaths.some(p => f.startsWith(p)));
-  }
-  if (filesToScan.length === 0) continue;
-
-  const hits = [];
-  for (const file of filesToScan) {
-    try {
-      const content = fs.readFileSync(file, 'utf8');
-
-      if (multiLine) {
-        const tags = extractTags(content);
-        for (const tag of tags) {
-          if (re.test(tag.flat)) {
-            if (excludeRe && excludeRe.test(tag.flat)) continue;
-            hits.push({ file, line: tag.line, text: tag.flat.slice(0, 120) });
-          }
-        }
-      } else {
-        const lines = content.split('\n');
-        for (let i = 0; i < lines.length; i++) {
-          if (re.test(lines[i])) {
-            if (excludeRe && excludeRe.test(lines[i])) continue;
-            hits.push({ file, line: i + 1, text: lines[i].trim() });
-          }
-        }
-      }
-    } catch {}
-  }
-
-  if (hits.length === 0) continue;
-
-  const icon = rule.severity === 'error' ? '❌' : '⚠️';
-  process.stderr.write(icon + ' [' + rule.id + '] ' + rule.message + '\n');
-  for (const h of hits) {
-    process.stderr.write('  ' + h.file + ':' + h.line + ': ' + h.text + '\n');
-  }
-  process.stderr.write('  Fix: ' + rule.fix + '\n\n');
-
-  if (rule.severity === 'error') hasError = true;
-}
-
-process.exit(hasError ? 1 : 0);
-" "$PATTERNS_FILE" "$STAGED"
+exec node "$SCAN_ENGINE" --staged --layer pre-commit

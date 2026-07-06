@@ -38,6 +38,8 @@ echo ""
 - **symlink mode**: 目前無
 - **未安裝 impeccable**: rental-scout、co-purchase、yudefine-blog（無 install-skills.sh、無 `.agents/skills/impeccable`；這 3 個是 deploy-focused consumer，需要 design orchestrator 時再依本檔標準 snippet 加裝）
 
+（快照；清單以 registry 為準）
+
 ## 升降版流程
 
 只動 clade，consumer 自動跟齊：

@@ -57,7 +57,7 @@ Local edits will be reverted by the next sync.
    - **命中** → **MUST** 在 clade home 跑 chrome-devtools-mcp 實測，把 LCP / INP / CLS + 關鍵 insight **inline 寫進 review report**；改善前後**各**跑一次寫前後對比。how 見 `~/.claude/rules/modern-web-mcp.md` § Performance 主題：實測閉環 + `~/offline/clade/vendor/snippets/modern-web-guidance/README.md`。
    - **沒命中** → silent skip；但若改動觸及 hero image / above-the-fold layout / 字體載入，即使 keyword 未命中也 **SHOULD** 實測（keyword 偵測是下界）。
 
-   chrome-devtools-mcp **只在 clade home session 可用** → 此偵測與實測**僅在 clade home review 流程執行**。
+   chrome-devtools-mcp entry 已散播至所有 consumer `.mcp.json` 並全 fleet 啟用（enabledMcpjsonServers）；perf-trace review 建議仍在 clade home 集中跑（profile/量測環境一致）。
 6. **Ball-ownership 答案依 bucket 判讀（single source）**：回答任何 change 狀態問題（「等你還是等我」/「ready 了沒」）**MUST** 依 `reviewBucketForChange()` 算出的 bucket 判讀 —— GUI 端讀 `change.bucket`、headless 讀 `--scan` 輸出 bucket。`bucket` 是 server canonical single source（review-gui.mts）。**禁止**從 tasks.md 散文、checkbox leaf count、或自己對 item 的印象推測 ball-ownership。bucket 對照：`awaitingUserReEval` = 等 user 重評、`awaitingUserDecision` = 等 user 商業決策（Claude 已標 `(awaiting-user-decision:)` 交還 user，master 排除）、`feedbackGiven` = 等 Claude、`readyForEvidence` = 等 Claude 補 evidence、`applyInProgress` = impl 未完、`applyBlocked` = impl 卡外部 blocker（`@apply-blocked` marker，交還 user，master 排除）、`awaitArchiveWalkthrough` = 等 archive walkthrough、`ready` = 可開始檢查。
 7. **route E 結論 MUST 同步寫 annotation（不留散文 orphan）**：triage 一個帶 `（issue:）` 的 item，路由結論為 **(E)**（out-of-scope / false-positive / 修法已落地等 user 重評）時，**MUST 在同一動作**寫 `(claude-analyzed: <ISO> route=E[ note=...])` annotation（per [[manual-review]] § `(claude-analyzed: ...)` annotation）。**禁止**只留散文分析 / 只開 `@followup[TD-NNN]` 卻漏寫 machine annotation —— `analyzedIssuedCount` 只認 annotation，漏寫會讓 bucket 仍判 `feedbackGiven`（等 Claude），與「等 user」結論矛盾。
 
@@ -74,9 +74,9 @@ Local edits will be reverted by the next sync.
    - **exit 1**（`status: "NOT_READY"`）→ **MUST** 讀 stdout JSON 的 `bucket` + blocking 數據，auto-triage 推進後**重跑 script**直到 exit 0
    - **exit 2**（change not found / script error）→ **STOP**，回報 user 排查
 
-   **NEVER** 自己判斷 bucket、NEVER 從 tasks.md checkbox 推論 ready、NEVER 用「看起來只剩 user 驗收」當 ready 的理由。Script 是唯一 truth source — Claude 的判斷已被 9 條 pitfall（2026-05 至 2026-07）證明不可靠。
+   **NEVER** 自己判斷 bucket、NEVER 從 tasks.md checkbox 推論 ready、NEVER 用「看起來只剩 user 驗收」當 ready 的理由。Script 是唯一 truth source — Claude 的判斷已被多條同根因 pitfall 證明不可靠。
 
-   **9 條 pitfall 時間線**（同根因家族：Claude 自判 ready 推 user 去 review-gui 但實際 non-ready）：
+   **時間線**（同根因家族：Claude 自判 ready 推 user 去 review-gui 但實際 non-ready）：
    2026-05-23 sonnet self-rationalize / 05-26 evidence handoff / 06-24 skip Step 8a / 06-25 copy prompt no verify / 06-28 dispatch unready + env assumption / 07-02 checkbox without evidence / 07-04 fix-requested misclassification / 07-05 commit gate non-ready（本 session 建規約後同 session 再犯）。
 
    **Auto-triage 分流**：

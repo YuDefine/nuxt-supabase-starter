@@ -1,0 +1,21 @@
+name: 'Review Rules Scan (Ratchet)'
+description: 'Run the clade review-rules ratchet scan against the full repo (pre-commit + ratchet layer entries) via vendor/review-rules/scan.mjs, failing only on violations that exceed review-rules-baseline.json. Assumes the caller has already checked out the repo.'
+author: 'YuDefine/clade'
+
+runs:
+  using: composite
+  steps:
+    - name: Run review-rules ratchet scan
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        PATTERNS_FILE="vendor/review-rules/patterns.json"
+        SCAN_ENGINE="vendor/review-rules/scan.mjs"
+
+        if [ ! -f "$PATTERNS_FILE" ] || [ ! -f "$SCAN_ENGINE" ]; then
+          echo "::warning::vendor/review-rules/{patterns.json,scan.mjs} not found — consumer not yet propagated, skipping scan"
+          exit 0
+        fi
+
+        node "$SCAN_ENGINE" --all --layer all --ratchet

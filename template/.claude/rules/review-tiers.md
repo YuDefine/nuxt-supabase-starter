@@ -12,8 +12,6 @@ Local edits will be reverted by the next sync.
 
 # Review Tiers
 
-繁體中文 | [English](./review-tiers.en.md)
-
 變更大小與風險面向，決定 review 的最低強度。
 
 ## Tier 定義

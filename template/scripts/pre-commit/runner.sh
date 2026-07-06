@@ -54,3 +54,6 @@ run_check data-perf-check
 
 # 6) mutation-loading — 偵測 staged .vue 把 Pinia Colada mutation status==='pending' 當 loading
 run_check mutation-loading
+
+# 7) nuxt-ui-mixed-slot — 偵測 staged .vue 在 UDashboardPanel 混用 named template + stray 子元素
+run_check nuxt-ui-mixed-slot

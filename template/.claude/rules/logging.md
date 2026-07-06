@@ -308,7 +308,7 @@ export default defineNuxtConfig({
 })
 ```
 
-evlog 2.16 無內建 `kind === 'audit'` force keep。需要 audit forceKeep 的 consumer **MUST** 在 Nitro plugin 內 wire `evlog:emit:keep`：
+evlog（floor ^2.17.0，見 [[evlog-adoption]]）無內建 `kind === 'audit'` force keep。需要 audit forceKeep 的 consumer **MUST** 在 Nitro plugin 內 wire `evlog:emit:keep`：
 
 ```ts
 nitroApp.hooks.hook('evlog:emit:keep', (ctx) => {
@@ -422,11 +422,11 @@ watch(() => useUserSession().user, (user) => {
 
 ## Typed fields 何時用
 
-evlog typed fields 是「在 build time 確認 wide event 欄位 schema」的機制。evlog 2.16 用 plain TypeScript `interface` + `useLogger<T>(event)` generic 達成；**不**強制全用，但跨 endpoint 共用的 5 個核心欄位**建議**typed：
+evlog typed fields 是「在 build time 確認 wide event 欄位 schema」的機制。evlog（floor ^2.17.0，見 [[evlog-adoption]]）用 plain TypeScript `interface` + `useLogger<T>(event)` generic 達成；**不**強制全用，但跨 endpoint 共用的 5 個核心欄位**建議**typed：
 
 ```ts
 // server/utils/evlog-fields.ts
-// 真實 evlog 2.16 API：plain interface（無 defineFields factory）
+// 真實 evlog API（floor ^2.17.0）：plain interface（無 defineFields factory）
 export interface EvlogFields {
   tenant?: { id: string }
   actor?: { id: string; role?: string }
@@ -441,7 +441,7 @@ export interface EvlogFields {
 // log.info('action.done', { actor: { id }, target: { type, id }, outcome: 'success' })
 ```
 
-> 反模式：`import { defineFields } from 'evlog/typed'` — 該 API 不存在於 evlog 2.16（早期 master plan 誤寫）。
+> 反模式：`import { defineFields } from 'evlog/typed'` — 該 API 不存在於 evlog（floor ^2.17.0，見 [[evlog-adoption]]）（早期 master plan 誤寫）。
 
 ### 採用判斷
 

@@ -12,8 +12,6 @@ Local edits will be reverted by the next sync.
 
 # UX Completeness
 
-繁體中文 | [English](./ux-completeness.en.md)
-
 **核心命題**：feature 的完成度由**使用者結果**定義，不由「tasks 打勾 + tests 綠」定義。DB allow ≠ feature ready；tests pass ≠ UX done。
 
 此規則優先於 spectra skill 內嵌說明與其他規則。
@@ -432,8 +430,8 @@ function getBindingIcon(cardType: NfcCardType): string {
 ## 與既有規則的關係
 
 - **`proactive-skills.md` Design Gate**：本規則**擴充**而非取代。Design Gate 檢查 UI 視覺品質；UX Completeness 檢查 UI 功能覆蓋
-- **`development.md` UI Reuse**：本規則**補充**。Reuse 檢查「是否重複寫了」；UX Completeness 檢查「是否漏改了既有的」
-- **`migration.md`**：本規則**串聯**。migration 只是起點，後面還有 types + API + UI + navigation 四層
+- **`rules/modules/framework/nuxt/development.md`（module 投影）UI Reuse**：本規則**補充**。Reuse 檢查「是否重複寫了」；UX Completeness 檢查「是否漏改了既有的」
+- **`rules/modules/db-schema/supabase/migration.md`（module 投影）**：本規則**串聯**。migration 只是起點，後面還有 types + API + UI + navigation 四層
 
 ## 違反時的回報方式
 
