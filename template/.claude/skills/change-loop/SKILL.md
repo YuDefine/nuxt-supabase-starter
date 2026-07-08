@@ -285,7 +285,7 @@ Tasks.md 格式問題或 Pre-Review Data Readiness violation。
 - `--unattended` mode 已處理 3 個 items
 - 連續 2 個 item dispatch 失敗（可能系統性問題，避免 loop 空轉）。Escalated 項不計入此判定——它們本輪未 dispatch，沒有新失敗事件
 
-**反模式**：有 applyInProgress / feedbackGiven / readyForEvidence item 未處理卻停下來「等 user 驗收」或「列出下一步選項」= 違反核心 contract。ready-for-review 項目寫完 HANDOFF 後 loop **MUST** 繼續 dispatch 剩餘 actionable items。
+**反模式**：有 actionable item 未處理卻停下來「等 user」= 違反核心 contract＋護欄 #11。
 
 ## Step 5 — Update HANDOFF
 
@@ -357,9 +357,7 @@ git push
 8. **不碰 user 的 stash** — worktree / stash audit 只讀不寫
 9. **Error isolation ＋跨輪升級** — 單輪內：單一 item 失敗不停整個 loop，skip + log 後繼續。跨輪：同 item 重複失敗由 fail-streak 承接（≥ 3 → Escalated，不再 dispatch）——同錯重複該產出系統性修正（pitfall / audit signal / eval），不是無限 retry（Ng「同錯重複→建 eval」＋ CC team「system-level fixes」）
 10. **不因 size/progress 跳過 dispatch** — applyInProgress item 不管進度 0% 或 change 看起來多大，MUST invoke `/spectra-apply`；dispatch 後 spectra-apply 自管 pause / blocker / timeout。「需要完整 session」「不適合 loop-engineer」等判斷 = 違反本條
-11. **NEVER AskUserQuestion** — 所有決策自主完成，卡點 log 到 HANDOFF + skip
-12. **NEVER output user call-to-action** — 不在 loop output 寫「待 user 驗收」「請執行 pnpm review:ui」「下一步建議」「下一輪可推進」。ready-for-review 狀態寫 HANDOFF 即完成，loop 繼續 dispatch 其他 item。end-of-loop output 是純進度報告（shipped N / progressed N / skipped N），不是讓 user 做決定的選單
-13. **NEVER 有 actionable item 卻停下** — scan 結果有 applyInProgress / feedbackGiven / readyForEvidence 就 MUST dispatch，即使同時有 ready-for-review 項目。「先等 user 驗收再繼續」= 違反自主 contract
+11. **自主 contract ＋ Output contract** — 所有決策自主完成（NEVER AskUserQuestion，卡點 log 到 HANDOFF + skip）；output 是純進度報告（shipped N / progressed N / skipped N），不是讓 user 做決定的選單——正向定義見開頭 § Output contract（✅ / ❌ 範例表）。scan 結果有 actionable item 就 MUST dispatch，NEVER 停下「先等 user 驗收再繼續」
 
 ## Routine 設定指引
 

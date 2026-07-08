@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-07-08T02:29:07.442Z",
+  "syncedAt": "2026-07-08T03:13:58.812Z",
   "rulesProjection": "copy",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "464155c12006dd8a",
@@ -31,7 +31,7 @@
     "rules/manual-review.data-readiness.md": "cb4be6a0aa71ec5e",
     "rules/manual-review.discuss.md": "1b4ec25cecb34134",
     "rules/manual-review.evidence.md": "74822321f7654166",
-    "rules/manual-review.md": "d1df16b0b5cc46c4",
+    "rules/manual-review.md": "0bf3fbedc44c02e5",
     "rules/nuxt-data-perf.md": "6ba22ecf8dd9335b",
     "rules/nuxt-dev-watch.md": "3dcadecb24e11c83",
     "rules/output-hygiene.md": "8b5b462963da7734",
@@ -85,9 +85,9 @@
     "rules/nuxt-ui-mcp.md": "a6bcf9954f77d463",
     "rules/nuxt-ui-native-picker-ban.md": "3cdd454dde788593",
     "rules/page-loading-golden-path.md": "64dba8e7a4009a41",
-    "scripts/codex-review-safe.sh": "ed31f2cc08b341c8",
+    "scripts/codex-review-safe.sh": "4d58702fbe747411",
     "scripts/commit-lock.mjs": "f81c79df484ce5db",
-    "skills/change-loop/SKILL.md": "49e5b47da1e3fbf9",
+    "skills/change-loop/SKILL.md": "5667c15335df3d7d",
     "skills/commit/SKILL.md": "6eb8e51b3d4f5035",
     "skills/loop-engineer/SKILL.md": "6a9fa3e98f63fb25",
     "skills/spectra/SKILL.md": "bb661777c100537c",
