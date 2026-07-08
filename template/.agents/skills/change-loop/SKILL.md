@@ -4,7 +4,7 @@ description: "Use when 使用者說「自動推」「loop」「幫我把 change 
 effort: xhigh
 metadata:
   author: clade
-  version: "1.3"
+  version: "1.4"
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -17,6 +17,8 @@ Local edits will be reverted by the next sync.
 # /change-loop — Autonomous Change Progression Loop
 
 > 2026-07-05 前名 `/loop-engineer`（銳評改名：舊名指「loop 工程能力」、實為 spectra change 推進的單一 instance；通用方法論在 cookbook `vendor/snippets/loop-engineering/`）。舊名 stub 保留供既有 routine 相容。
+
+本 skill 是 loop 四型分類中的 **proactive loop**——trigger 交給 routine 排程、工作清單交給 scan 自己找（你交出的是 prompt）。四型分類與通用設計方法論見 cookbook `vendor/snippets/loop-engineering/` § Loop 四型分類。
 
 核心 contract：**每次被叫起來，把待辦清單裡的 change 盡可能推到「可驗收」或「已 shipped」狀態。NEVER 留半成品等 user 來推。NEVER 停下問 user — 所有決策自主完成。**
 
@@ -80,6 +82,17 @@ basename "$(git rev-parse --show-toplevel)"
 
 若 scan 回空 list（0 active changes）→ 跳 Step 5 寫「無可推進項目」。
 
+## Step 1.5 — 讀上一輪 fail-streak
+
+從 HANDOFF.md 的 `<!-- BEGIN: loop-engineer-status -->` 段解析上一輪 `⏸ Skipped` 與 `🧯 Escalated` 條目尾端的 `fail-streak: N` 標記，建出 `{change-name: N}` 對照表；條目無標記或整段不存在＝0。
+
+**Escalated 離場規則**（對上一輪每一條 Escalated 條目逐項判定，兩條 predicate 任一成立＝已有人介入，streak 歸零、移出 Escalated）：
+
+- 該 change 不再出現在本輪 scan entries（已 archive / 已刪除）
+- 該 change 本輪 bucket ≠ Escalated 條目記錄的 bucket（狀態已被推動）
+
+兩條都不成立 → 該 change 續留 Escalated（本輪**不 dispatch**），Step 5 原樣 re-emit。
+
 ## Step 2 — Prioritize
 
 對 Step 1 過濾後的 entries 排序。優先序（從高到低）：
@@ -99,6 +112,8 @@ basename "$(git rev-parse --show-toplevel)"
 | — | `crossWtDirty` / `malformed` | 異常狀態 | **跳過**（log 到 HANDOFF） |
 
 同 bucket 內依 `pending/total` 比率排序（完成度高的優先，更快 ship）。
+
+**Escalation filter**：Step 1.5 對照表中 fail-streak ≥ 3 且未離場的 change → 不進 priority list，直接列入 Step 5 `🧯 Escalated` 段。
 
 輸出排序清單一句話摘要：「Prioritized N items: done ×A, feedbackGiven ×B, ...」
 
@@ -253,7 +268,7 @@ Tasks.md 格式問題或 Pre-Review Data Readiness violation。
 
 - **Worktree 路由**：涉及 tracked code 修改的 dispatch（3a/3b/3f）一律走 `/wt` worktree 隔離。Archive（3z/3c/3d）免 worktree（per spectra-archive worktree exemption）。
 - **Commit 紀律**：每個 item 完成後獨立 commit。用 `git commit --only -- <paths>` 避免 cross-session staged pollution。
-- **Error handling**：任何 dispatch 失敗（skill 報錯 / typecheck 紅燈 / merge conflict）→ log 失敗原因到 HANDOFF `## Loop Engineer Status` → skip to next item。**NEVER** 在單一 item 卡住時停止整個 loop。
+- **Error handling**：任何 dispatch 失敗（skill 報錯 / typecheck 紅燈 / merge conflict）→ log 失敗原因到 HANDOFF `## Loop Engineer Status` → skip to next item。**NEVER** 在單一 item 卡住時停止整個 loop。失敗時記 `fail-streak = Step 1.5 對照表值 + 1`（首次失敗＝1），寫進 Step 5 Skipped 條目尾端 `— fail-streak: N`；fail-streak ≥ 3 → 該 item 移入 `🧯 Escalated` 段，下一輪起不再 dispatch（見 Step 2 Escalation filter）。
 - **Unattended guard**：`--unattended` mode 最多處理 3 個 items。超過 3 個 → 停止，剩餘寫進 HANDOFF。
 
 ## Step 4 — Loop
@@ -266,9 +281,9 @@ Tasks.md 格式問題或 Pre-Review Data Readiness violation。
 
 **停止條件**（任一成立即停；**每一條**停止路徑都 MUST `rm -f .spectra/change-loop.lock`）：
 
-- Priority list 為空（全部 shipped / blocked / ready-for-review / skipped / in-flight — **0 個 actionable item 剩餘**）
+- Priority list 為空（全部 shipped / blocked / ready-for-review / skipped / in-flight / escalated — **0 個 actionable item 剩餘**）
 - `--unattended` mode 已處理 3 個 items
-- 連續 2 個 item dispatch 失敗（可能系統性問題，避免 loop 空轉）
+- 連續 2 個 item dispatch 失敗（可能系統性問題，避免 loop 空轉）。Escalated 項不計入此判定——它們本輪未 dispatch，沒有新失敗事件
 
 **反模式**：有 applyInProgress / feedbackGiven / readyForEvidence item 未處理卻停下來「等 user 驗收」或「列出下一步選項」= 違反核心 contract。ready-for-review 項目寫完 HANDOFF 後 loop **MUST** 繼續 dispatch 剩餘 actionable items。
 
@@ -298,9 +313,16 @@ _(空時寫 `_(none)_`)_
 
 ### ⏸ Skipped
 
-- `<change-name>` — bucket=`<bucket>` — <跳過原因>
+- `<change-name>` — bucket=`<bucket>` — <跳過原因>（dispatch 失敗的條目加 ` — fail-streak: N`）
 
 _(空時寫 `_(none)_`)_
+
+### 🧯 Escalated (fail-streak ≥ 3，已停止自動 retry)
+
+- `<change-name>` — bucket=`<bucket>` — <最近一次失敗原因一句話> — fail-streak: N
+  - 候選系統性修正：走 /oops 登 pitfall、或補 audit signal / eval，讓失敗可被 deterministic check 捕捉
+
+_(空時寫 `_(none)_`；條目每輪原樣 re-emit，直到 Step 1.5 離場規則成立)_
 
 ### 📊 Progress (本輪推進但未完成)
 
@@ -333,7 +355,7 @@ git push
 6. **每個 item 獨立 commit** — 不混合多個 change 的修改進同一 commit
 7. **重複 invocation safe（shipped + in-flight 雙層）** — 已 shipped 的 change 不會出現在 scan；in-flight change（有 active worktree）由 Step 1 in-flight filter 排除；整輪重疊由 Step 0 互斥鎖擋。三層合起來才算 idempotent——只靠「shipped 不再出現」不夠（2026-07-05 銳評：舊版對 applyInProgress 無防護，2h routine 會疊派）
 8. **不碰 user 的 stash** — worktree / stash audit 只讀不寫
-9. **Error isolation** — 單一 item 失敗不停整個 loop，skip + log 後繼續
+9. **Error isolation ＋跨輪升級** — 單輪內：單一 item 失敗不停整個 loop，skip + log 後繼續。跨輪：同 item 重複失敗由 fail-streak 承接（≥ 3 → Escalated，不再 dispatch）——同錯重複該產出系統性修正（pitfall / audit signal / eval），不是無限 retry（Ng「同錯重複→建 eval」＋ CC team「system-level fixes」）
 10. **不因 size/progress 跳過 dispatch** — applyInProgress item 不管進度 0% 或 change 看起來多大，MUST invoke `/spectra-apply`；dispatch 後 spectra-apply 自管 pause / blocker / timeout。「需要完整 session」「不適合 loop-engineer」等判斷 = 違反本條
 11. **NEVER request_user_input** — 所有決策自主完成，卡點 log 到 HANDOFF + skip
 12. **NEVER output user call-to-action** — 不在 loop output 寫「待 user 驗收」「請執行 pnpm review:ui」「下一步建議」「下一輪可推進」。ready-for-review 狀態寫 HANDOFF 即完成，loop 繼續 dispatch 其他 item。end-of-loop output 是純進度報告（shipped N / progressed N / skipped N），不是讓 user 做決定的選單
