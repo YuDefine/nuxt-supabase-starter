@@ -303,28 +303,39 @@ bash scripts/spectra-advanced/post-propose-manual-review-check.sh <change-name>
 
 Worktree-local hook / patterns.json 是 pre-update stale 版本撞 false positive 時的 recovery 三路徑：見 `~/offline/clade/vendor/snippets/manual-review-enforcement/README.md` § Stale-hook recovery。
 
-## 禁止事項
+## Checkbox ownership（誰可勾什麼——紀律型，有 pitfall 實證）
 
-- **NEVER** 問「要不要我直接幫你勾完」
-- **NEVER** 在未展示證據的情況下代勾任何 item（含 `[discuss]` items — Step 2.5 walkthrough 的 evidence 展示是強制前提）
-- **NEVER** 對 `[review:ui]` items 在使用者尚未親自 round-trip 的情況下代勾，即使 Claude 已分析過程式碼
-- **NEVER** 對 `[verify:e2e]` / `[verify:api]` items 在 annotation 寫入後仍要求 user 在 GUI 確認（automatic channel 自動 done）
-- **NEVER** 對 `[verify:ui]` items 在使用者尚未於 review GUI 確認 visual evidence 前代勾 `[x]`
-- **NEVER** 新增 `[verify:auto]` marker 給新 item
-- **NEVER** 在 `verify:ui` agent dispatch 時讓 agent 同時負責 mutation / form fill / multi-role login（那些屬 api / e2e channel）
-- **NEVER** 對任何 `verify:*` channel 在 evidence 沒成功產出時寫 `(verified-<channel>:)` annotation
-- **NEVER** 寫 `screenshots=`（複數 key）— 唯一合法 key 是 `screenshot=`（單數）；review-gui parser 不認複數，直接 malformed → user 被迫手動排查
-- **NEVER** 在 scoped sub-item `#N.M` 的 `(verified-ui:)` annotation 引用 parent `#N` 的截圖檔名 — screenshot path basename **MUST** 以 `#<this-item-id>-` 開頭（例：`#4.1` → `#4.1-*.png`，**NEVER** `#4-*.png`）；review-gui 按 item ID 配對，ID 不符 → evidence missing
-- **NEVER** 把 screenshot review 當成等同於人工功能驗證
-- **NEVER** 為了通過 gate 而批次勾選未確認的項目
-- **NEVER** 對 `[discuss]` items 寫入 `(claude-discussed: ...)` annotation 而沒有實際與使用者討論並取得 OK
-- **NEVER** 對非「External signal pending」trigger 分類的 `[discuss]` item 走 Defer-to-HANDOFF 路徑
-- **NEVER** 在 Resume mode 外（archived change directory）寫 `(deferred-to-handoff: ...)` annotation
-- **NEVER** 對沒帶 `（issue: ...）` 的 item 寫 `(claude-analyzed: ...)` annotation
-- **NEVER** 用 `route` 值不為 `E` 的 claude-analyzed（目前 hard rule 限 `E`）
-- **NEVER** 在寫 `(claude-analyzed: ...)` 時翻 checkbox
-- **NEVER** 在 GUI 寫回 user action（OK / Issue / Skip）時遺漏 strip `(claude-analyzed: ...)` annotation
-- **NEVER** 用 `(awaiting-user-decision: ...)` annotation 規避該 item 其實 actionable 的情況 — 可走 (A)/(B)/(C) 路徑就 **MUST** 走，不可推給 user
+| Kind | 誰勾 `[x]` | 前置條件 |
+| --- | --- | --- |
+| `[review:ui]` | **僅 user** 在 review GUI 親自 round-trip 後 | agent NEVER 代勾，即使已分析程式碼 |
+| `[verify:e2e]` / `[verify:api]` | **agent** annotation 寫入後自動完成 | annotation 必須含成功 evidence；寫完不再要求 user 在 GUI 確認 |
+| `[verify:ui]` | **user** 在 review GUI 確認 visual evidence 後 | agent NEVER 代勾 |
+| `[discuss]` | **agent** 在 archive Step 2.5 walkthrough 展示 evidence 並取得 user OK 後 | 未實際討論＋未取得 OK → NEVER 勾 |
+
+- Screenshot review ≠ functional verification——截圖看到按鈕存在不等於 round-trip 已驗
+- 為了通過 gate 而批次勾選未確認項目 = 違反本表
+
+## Annotation 寫入契約（正向 canonical——形狀問題）
+
+每條 annotation 的合法寫入條件與格式限制：
+
+| Annotation | 合法條件 | 格式 |
+| --- | --- | --- |
+| `(verified-<channel>: ...)` | evidence 成功產出 | key = `screenshot=`（單數，NEVER `screenshots=`） |
+| `(verified-ui: ...)` sub-item | — | screenshot basename 以 `#<this-item-id>-` 開頭（`#4.1` → `#4.1-*.png`，不用 parent `#4`）；review-gui 按 item ID 配對 |
+| `(claude-analyzed: ...)` | item 帶 `（issue: ...）` | `route` 限 `E`；寫入時 NEVER 翻 checkbox |
+| `(claude-discussed: ...)` | archive Step 2.5 walkthrough 實際討論並取得 OK | — |
+| `(deferred-to-handoff: ...)` | 僅 Resume mode（archived change directory） | — |
+| `(awaiting-user-decision: ...)` | item 真的不 actionable（(A)/(B)/(C) 路徑都不可走才用） | — |
+
+GUI 寫回 user action（OK / Issue / Skip）時 MUST strip `(claude-analyzed: ...)` annotation。
+
+## Routing guard（何時走哪條路——條件句）
+
+- `[verify:auto]` — **DEPRECATED**；新 item NEVER 使用，既有 item 解析為 `[verify:api+ui]`
+- `[verify:ui]` agent dispatch — agent 只負責 screenshot capture，NEVER 同時負責 mutation / form fill / multi-role login（那些屬 api / e2e channel）
+- `[discuss]` items — trigger 分類非「External signal pending」→ NEVER 走 Defer-to-HANDOFF 路徑
+- 問「要不要我直接幫你勾完」= NEVER（這句話在 session transcript 實際出現過，直接反制）
 - **NEVER** 用 `(awaiting-user-decision: ...)` 標註前提事實上不成立的 item — 那是可驗證事實，走「前提不成立直接 skip 例外」（核心規則段）
 - **NEVER** 在寫 `(awaiting-user-decision: ...)` 時翻 checkbox
 - **NEVER** 把 `@apply-blocked[<reason>]` 當「不想做就標一下」的逃生口 — 只在真正卡外部 blocker 時用

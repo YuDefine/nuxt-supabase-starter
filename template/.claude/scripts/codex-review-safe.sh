@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 # codex-review-safe.sh — cross-model code review via `codex exec`
 #
-# Engine: `codex exec --dangerously-bypass-approvals-and-sandbox` with an
-# embedded review prompt — not `codex review`, which hardcodes a
-# `workspace-write` sandbox that permanently hangs any MCP server registered
-# in ~/.codex/config.toml on its first tool call (see
-# rules/core/agent-routing.codex-watch-protocol.md § "`codex review` 禁用").
-# `codex exec`'s `danger-full-access` sandbox does not have this problem, so
-# MCP (including codebase-memory-mcp) stays usable during review — the main
-# dividend of this migration. ~/.codex/config.toml is never read, copied, or
-# moved by this script.
+# Engine: `codex exec -s read-only` with an embedded review prompt — not
+# `codex review`, which hardcodes a `workspace-write` sandbox that permanently
+# hangs any MCP server registered in ~/.codex/config.toml on its first tool
+# call (see rules/core/agent-routing.codex-watch-protocol.md § "`codex review`
+# 禁用"). read-only sandbox allows shell commands (git diff, cat) but rejects
+# write operations and MCP tool calls (fail-fast, not hang) — matches review's
+# read-only intent and blocks prompt-injection escape to write/MCP side-effects.
+# ~/.codex/config.toml is never read, copied, or moved by this script.
 #
 # Usage:
 #   .claude/scripts/codex-review-safe.sh [reasoning_effort] [extra codex args...]
@@ -25,8 +24,9 @@
 # working-tree edits don't retroactively affect an already-running review"
 # semantics.
 #
-# Known trade-off: --dangerously-bypass-approvals-and-sandbox means a prompt-injected
-# diff could theoretically escape the read-only prompt. Fleet-own diffs only.
+# TD-235 resolved: migrated from --dangerously-bypass-approvals-and-sandbox to
+# -s read-only (2026-07-08). Prompt injection can no longer escape to writes or
+# MCP side-effects; "fleet-own diffs only" constraint remains as defense-in-depth.
 #
 # Semantic Verdict injection (W5-6): the prompt is assembled from two literal
 # (single-quoted) heredocs sandwiching a runtime-generated block that lists
@@ -103,7 +103,7 @@ PROMPT_VERDICT
   fi
 } | codex exec \
   --model gpt-5.5 \
-  --dangerously-bypass-approvals-and-sandbox \
+  -s read-only \
   --skip-git-repo-check \
   -c model_reasoning_effort="$REASONING" \
   --ephemeral \
