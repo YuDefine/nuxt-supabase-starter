@@ -200,6 +200,8 @@ Verify that an implementation matches the change artifacts (specs, tasks, design
    - If only warnings: "No critical issues. Y warning(s) to consider. Ready for archive (with noted improvements)."
    - If all clear: "All checks passed. Ready for archive."
 
+   **Assessment evidence gate**（clade fork addition — 寫「All checks passed / Ready for archive」前 MUST）：report 附 `### Evidence` 段，每個 dimension 一行「實際執行的檢查＋結果」——Completeness 貼 tasks.md checkbox 計數的實跑輸出、Correctness 貼 requirement 關鍵詞搜尋的命中檔案清單（或「searched X, found in Y」摘要）、Coherence 貼 design 決策比對的 code refs。貼不出某 dimension 的證據＝該 dimension 在 scorecard 標「not verified」，不得計入 pass。
+
 **Verification Heuristics**
 
 - **Completeness**: Focus on objective checklist items (checkboxes, requirements list)
