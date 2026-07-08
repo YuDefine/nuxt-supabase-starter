@@ -52,6 +52,8 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 
 三件套的既有範本：[[testing-anti-patterns]]、`~/.claude/skills/receiving-code-review`。
 
+**可選第四件——completion checkbox＋證據 gate**：完成宣告本身是高違規點的流程型 skill（apply / verify / commit 類），把 completion criterion 寫成 checkbox 清單，每格綁「貼出實跑 invocation 與 output」——宣告完成前逐格附證據，只宣稱 done 不算完成。這是 § 資訊架構與拆分 sequence-cut 順序裡「先 sharpen criterion」的實作形式（便宜且局部，先於拆步驟）。出處：mattpocock/skills `diagnosing-bugs` completion checklist。落地實例：spectra-apply「Completion evidence gate」、spectra-verify Step 8、commit Step 6。
+
 ## 發佈前驗證
 
 - **新規約 / 改措辭前先跑 baseline（SHOULD）**：無規約下用誘發情境跑一次，確認失敗真的存在。對照組沒失敗 → 不要寫這條規約（沒有要修的東西，寫了只燒 token）。

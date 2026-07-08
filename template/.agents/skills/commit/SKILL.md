@@ -911,6 +911,14 @@ git push origin main --tags
 
 ## Step 6: 完成報告
 
+**Completion evidence gate**（輸出「✅ Commit 完成」前 MUST 逐格自查；每格附「實跑命令＋輸出摘尾」，貼不出證據＝該格未完成，不准宣告完成）：
+
+- [ ] 每個 commit scope 驗證：貼各 commit 的 `git show --stat <hash> | tail -3` 輸出（changed files 數 vs 預期不符 → 回 Step 4 處置，不出報告）
+- [ ] Step 0 品質檢查結論：貼 0-A / 0-C 的結論行（條件未觸發的軸標明「未觸發＋原因」）
+- [ ] push / tag 結果：貼 `git push` 輸出（本次不 push 則標明原因）
+
+三格證據放進完成報告的 `Evidence` 段。
+
 ```text
 ✅ Commit 完成！
 
@@ -921,6 +929,11 @@ git push origin main --tags
 
 版本：1.7.1 → 1.8.0 (minor)
 Tag：v1.8.0 已建立並推送
+
+Evidence:
+- scope: <各 git show --stat 摘尾>
+- checks: <0-A/0-C 結論行或未觸發原因>
+- push: <git push 輸出摘尾>
 ```
 
 ## Step 7: 更新 HANDOFF.md 與 ROADMAP

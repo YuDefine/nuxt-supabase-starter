@@ -1158,6 +1158,14 @@ Working on task 4/7: <task description>
 ✓ Task complete
 ```
 
+**Completion evidence gate**（clade fork addition — 輸出「Implementation Complete」前 MUST 逐格自查；每格附「實跑命令＋輸出摘尾」，貼不出證據＝該格未完成，不准宣告完成）：
+
+- [ ] `spectra instructions apply --change "<name>" --json` 回傳 `state: "all_done"`（貼該欄位輸出行）
+- [ ] typecheck / test / lint 全綠（貼各命令與最後幾行輸出；worktree 內實跑，不引用歷史結果）
+- [ ] Step 8a verify-channel annotations 已寫入 tasks.md（貼其中一條 annotation 行）
+
+三格證據放進下方 Output On Completion 的 `### Evidence` 段。
+
 **Output On Completion**
 
 ```
@@ -1171,6 +1179,11 @@ Working on task 4/7: <task description>
 - [x] Task 1
 - [x] Task 2
 ...
+
+### Evidence
+- spectra state: `"state": "all_done"`（<實跑輸出行>）
+- checks: <typecheck/test/lint 命令＋輸出摘尾>
+- annotations: <tasks.md 其中一條 (verified-*) annotation 行>
 
 All tasks complete! You can archive this change with `/spectra-archive`.
 ```
