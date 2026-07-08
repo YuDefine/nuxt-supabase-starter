@@ -1,6 +1,6 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-07-06T04:38:25.787Z",
+  "syncedAt": "2026-07-08T01:40:21.290Z",
   "rulesProjection": "copy",
   "checksums": {
     "rules/agent-routing.codex-watch-protocol.md": "464155c12006dd8a",
@@ -42,7 +42,7 @@
     "rules/prod-mcp-safety.md": "db779a000333934a",
     "rules/review-gui-surface.md": "45b7319d3af9afce",
     "rules/review-tiers.md": "02738ec7c910573e",
-    "rules/rule-authoring.md": "2373bb1e3f870b09",
+    "rules/rule-authoring.md": "5c2c2aaa858e309c",
     "rules/scope-discipline.md": "0e72569dd879cebf",
     "rules/screenshot-strategy.md": "d31c145c8d41b438",
     "rules/session-claims.md": "205a7772f7bcf099",
@@ -87,7 +87,7 @@
     "rules/page-loading-golden-path.md": "64dba8e7a4009a41",
     "scripts/codex-review-safe.sh": "ed31f2cc08b341c8",
     "scripts/commit-lock.mjs": "f81c79df484ce5db",
-    "skills/change-loop/SKILL.md": "f5ffb0726eee8982",
+    "skills/change-loop/SKILL.md": "49e5b47da1e3fbf9",
     "skills/commit/SKILL.md": "fec6872816d8e835",
     "skills/loop-engineer/SKILL.md": "6a9fa3e98f63fb25",
     "skills/spectra/SKILL.md": "bb661777c100537c",
