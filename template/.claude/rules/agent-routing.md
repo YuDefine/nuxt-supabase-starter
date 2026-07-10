@@ -15,25 +15,25 @@ Local edits will be reverted by the next sync.
 
 | 工作類別 | 由誰執行 | 為什麼 |
 | --- | --- | --- |
-| **Web search**（即時資料 / 外部資訊查詢） | **Codex（GPT-5.5 medium）** | 中思考預算 + Codex 搜尋整合。 |
-| **Code review（commit 0-A）** | **(1) `simplify` + (2) `codex exec` review high（GPT-5.5，經 codex-review-safe.sh），(3) 0-A.1 出 Critical / Major 時條件升 xhigh** | 跨模型互補盲點。詳見 `.claude/skills/commit/SKILL.md` Step 0-A。 |
-| **Spectra `propose` 階段（draft）** | **使用者選單三選一**：A Codex GPT-5.5 xhigh draft（預設/推薦）／ B 雙段 codex：Codex GPT-5.5 xhigh draft ＋ Codex GPT-5.5 xhigh review（Fable 暫不可用，原為 Fable 5 High draft，暫以 codex 代）／ C 純 Claude | 預設跳三選一選單；使用者明確指定路徑時跳過。詳見 `spectra-propose` Step 0。 |
+| **Web search**（即時資料 / 外部資訊查詢） | **Codex（GPT-5.6-sol medium）** | 中思考預算 + Codex 搜尋整合。 |
+| **Code review（commit 0-A）** | **(1) `simplify` + (2) `codex exec` review high（GPT-5.6-sol，經 codex-review-safe.sh），(3) 0-A.1 出 Critical / Major 時條件升 xhigh** | 跨模型互補盲點。詳見 `.claude/skills/commit/SKILL.md` Step 0-A。 |
+| **Spectra `propose` 階段（draft）** | **使用者選單三選一**：A Codex GPT-5.6-sol xhigh draft（預設/推薦）／ B 雙段 codex：Codex GPT-5.6-sol xhigh draft ＋ Codex GPT-5.6-sol xhigh review（Fable 暫不可用，原為 Fable 5 High draft，暫以 codex 代）／ C 純 Claude | 預設跳三選一選單；使用者明確指定路徑時跳過。詳見 `spectra-propose` Step 0。 |
 | **Spectra `propose` cross-check / final check** | **主線 Claude Opus 4.8 xhigh** | 主線 = quality gate（A 的 cross-check、B 的 final check 都由主線跑），不只是 dispatcher。 |
-| **Spectra `apply`（非 Design Review、非 UI view phase，phase 粒度）** | **Codex GPT-5.5 high** | medium 漏 schema drift 風險高；phase 粒度避免 round-trip。 |
+| **Spectra `apply`（非 Design Review、非 UI view phase，phase 粒度）** | **Codex GPT-5.6-sol high** | medium 漏 schema drift 風險高；phase 粒度避免 round-trip。 |
 | **Spectra `apply` UI view phase（component / page / view / layout / styling）+ Section 7（Design Review）** | **主線 Claude Opus 4.8 xhigh，永不派 codex** | 視覺 / 互動 / a11y 與 Design skill 緊耦合，Codex tooling 弱。非 view 的 frontend 不在此範圍，仍走 codex（範圍同 § Phase Dispatch C 類）。 |
-| **`screenshot-review` verify mode**（`[verify:ui]` channel / archive 前視覺 QA） | **主線 Claude 直派 Codex GPT-5.5 low**（Bash 走 reference § Codex 派工的標準流程；**禁止** `Agent` tool with `subagent_type: screenshot-review`） | sonnet wrapper 會繞過 Step 0 自做工作（[[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]）。詳見 reference § screenshot-review Verify Mode Dispatch。 |
+| **`screenshot-review` verify mode**（`[verify:ui]` channel / archive 前視覺 QA） | **主線 Claude 直派 Codex GPT-5.6-sol low**（Bash 走 reference § Codex 派工的標準流程；**禁止** `Agent` tool with `subagent_type: screenshot-review`） | sonnet wrapper 會繞過 Step 0 自做工作（[[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]）。詳見 reference § screenshot-review Verify Mode Dispatch。 |
 | **Dev/test admin session cookie 取得**（verify channel evidence collection 階段） | **主線自己 scaffold `_dev-login` route + curl mint session**（**禁止**要 user 手動取 cookie；scaffold 前**MUST**先用 detection helper 確認真的 missing） | 詳見 [[manual-review.backend]] § Dev-login route missing → scaffold-first + [[pitfall-agent-asks-user-cookie-skipping-dev-login-scaffold]]。 |
-| **Mechanical fan-out**（收集 / 掃描 / 跑指令驗證型 subagent 工作：grep 掃描、收 evidence、驗證矩陣、fleet 多 repo 盤點） | **Codex（GPT-5.5 medium~high）via 泛用 dispatcher** | Claude subagent fan-out 實測佔 CC 等價成本 17-21%/日，codex 同工作 ~1/10 成本且 fidelity 100%（PoC 實證）。dispatcher 與 template 見 reference § 泛用 Dispatcher。例外留 Claude：需要 claude.ai-connected MCP（Notion 等）、判讀 / 治理型分析（如 /oops Mode D 判讀段）、user 明確要求。 |
-| **Read-heavy 長文件 / fleet 掃描**（上游 release notes 解析、跨 consumer reality matrix、pitfall 全量掃描、大 rule 改版前 baseline 重讀） | **Codex（GPT-5.5 medium）via 泛用 dispatcher** | read-heavy + structured output 是 codex 強項（中文 brief fidelity 100% 已驗證）。摘要僅作輸入，規約措辭與拍板必回主線。 |
-| **Debug evidence 段**（log 完整 capture / repro script 撰寫執行 / 既定 hypothesis 的驗證迴圈） | **Codex（GPT-5.5 high）via 泛用 dispatcher** | debug 是最大消耗桶；evidence / repro / verify 是機械段，root cause 推斷與修法設計留主線。repro 必在 throwaway worktree（template 內建 guard）。 |
-| **commit 0-C fix-verify loop**（pnpm check / test 修到全綠） | **Codex（GPT-5.5 high）via 泛用 dispatcher** | 機械修 lint / type / test 與 dep-upgrade 已驗證模式同構；主線同回合續跑 0-A / 0-B。詳見 commit SKILL Step 0-C。 |
-| **spectra-apply Step 8a self-collect (a)(b)**（dev-login allow-list 小 mod + service_role DB query 證 data shape） | **Codex（GPT-5.5 medium）via 泛用 dispatcher** | PoC 已實證 codex 能跑完整 evidence chain；annotation 寫回 tasks.md 維持主線。詳見 spectra-apply SKILL Step 8a。 |
-| **Security review**（`/security-review` skill / commit 前安全檢查） | **Codex（GPT-5.5 medium）via 泛用 dispatcher** | structured diff → structured findings 的 pattern matching，零互動。30 天實測佔 72% Claude session 數但僅 15% events — session 啟動成本是主要浪費。`/commit` 0-A gate（high/xhigh）是下游安全網，security review 漏的在那裡接住。 |
-| **Exploration / research pre-scan**（「依賴什麼」「進度如何」「還有什麼要做」「N 張 change 狀態」等 read-heavy 探索） | **Codex（GPT-5.5 medium）via 泛用 dispatcher**，主線消費 structured summary | read-heavy + structured output 是 codex 強項。主線拿 summary 做判斷 / 規劃，不自己逐檔 Read。30 天實測佔 11.5% events。 |
-| **Handoff scan 段**（`/handoff` Mode B 的 scan：讀 HANDOFF.md + git log + openspec + tasks + git status 產出 outstanding 清單） | **Codex（GPT-5.5 medium）via 泛用 dispatcher**，主線消費 scan report 做決策 | scan 是機械讀取 + 格式化，不是判斷。主線只看 report、做 routing / 推薦。30 天實測 29 sessions、4.7% events。 |
-| **Task-planning pre-scan**（「我需要做什麼」「接下來做什麼」「處理 N 張 change」的規劃 session 前置 scan） | **Codex（GPT-5.5 medium）via 泛用 dispatcher**，主線消費 structured report | scan openspec/changes/ + HANDOFF.md + git status + tasks/ 產出 per-change status matrix，主線拿 matrix 做排序 / 決策。 |
-| **Bug-fix evidence 段**（error log capture / stack trace 解析 / repro script 撰寫執行 / hypothesis 驗證迴圈） | **Codex（GPT-5.5 high）via 泛用 dispatcher**（強化：非 Debug evidence 段，而是整個 bug-fix session 的 investigation 段） | 30 天實測 19 個 bug-fix session 全由 Claude 跑（既有 Debug evidence rule 未落實）。investigation / evidence / repro 是機械段；root cause 推斷 + 修法設計留主線。**MUST** 在 bug-fix session 開工時先判斷：可分離的 evidence 段派 Codex，不可分離的留主線但 MUST 在 session 結尾回報未派 Codex 的理由。 |
-| **clade publish/propagate pre-scan**（publish 前 dirty file 分組判斷：讀 `git status` + `git diff` 各 file 內容 + 辨識 logical group） | **Codex（GPT-5.5 medium）via 泛用 dispatcher**，主線消費分組建議後 selective commit | publish SOP 中 `vp check → git commit → publish.mjs → push --tags → propagate.mjs` 是固定序列，但 pre-scan「dirty file 分幾組、每組 commit message 怎麼寫」的 reading 段可以 Codex。 |
+| **Mechanical fan-out**（收集 / 掃描 / 跑指令驗證型 subagent 工作：grep 掃描、收 evidence、驗證矩陣、fleet 多 repo 盤點） | **Codex（GPT-5.6-sol medium~high）via 泛用 dispatcher** | Claude subagent fan-out 實測佔 CC 等價成本 17-21%/日，codex 同工作 ~1/10 成本且 fidelity 100%（PoC 實證）。dispatcher 與 template 見 reference § 泛用 Dispatcher。例外留 Claude：需要 claude.ai-connected MCP（Notion 等）、判讀 / 治理型分析（如 /oops Mode D 判讀段）、user 明確要求。 |
+| **Read-heavy 長文件 / fleet 掃描**（上游 release notes 解析、跨 consumer reality matrix、pitfall 全量掃描、大 rule 改版前 baseline 重讀） | **Codex（GPT-5.6-sol medium）via 泛用 dispatcher** | read-heavy + structured output 是 codex 強項（中文 brief fidelity 100% 已驗證）。摘要僅作輸入，規約措辭與拍板必回主線。 |
+| **Debug evidence 段**（log 完整 capture / repro script 撰寫執行 / 既定 hypothesis 的驗證迴圈） | **Codex（GPT-5.6-sol high）via 泛用 dispatcher** | debug 是最大消耗桶；evidence / repro / verify 是機械段，root cause 推斷與修法設計留主線。repro 必在 throwaway worktree（template 內建 guard）。 |
+| **commit 0-C fix-verify loop**（pnpm check / test 修到全綠） | **Codex（GPT-5.6-sol high）via 泛用 dispatcher** | 機械修 lint / type / test 與 dep-upgrade 已驗證模式同構；主線同回合續跑 0-A / 0-B。詳見 commit SKILL Step 0-C。 |
+| **spectra-apply Step 8a self-collect (a)(b)**（dev-login allow-list 小 mod + service_role DB query 證 data shape） | **Codex（GPT-5.6-sol medium）via 泛用 dispatcher** | PoC 已實證 codex 能跑完整 evidence chain；annotation 寫回 tasks.md 維持主線。詳見 spectra-apply SKILL Step 8a。 |
+| **Security review**（`/security-review` skill / commit 前安全檢查） | **Codex（GPT-5.6-sol medium）via 泛用 dispatcher** | structured diff → structured findings 的 pattern matching，零互動。30 天實測佔 72% Claude session 數但僅 15% events — session 啟動成本是主要浪費。`/commit` 0-A gate（high/xhigh）是下游安全網，security review 漏的在那裡接住。 |
+| **Exploration / research pre-scan**（「依賴什麼」「進度如何」「還有什麼要做」「N 張 change 狀態」等 read-heavy 探索） | **Codex（GPT-5.6-sol medium）via 泛用 dispatcher**，主線消費 structured summary | read-heavy + structured output 是 codex 強項。主線拿 summary 做判斷 / 規劃，不自己逐檔 Read。30 天實測佔 11.5% events。 |
+| **Handoff scan 段**（`/handoff` Mode B 的 scan：讀 HANDOFF.md + git log + openspec + tasks + git status 產出 outstanding 清單） | **Codex（GPT-5.6-sol medium）via 泛用 dispatcher**，主線消費 scan report 做決策 | scan 是機械讀取 + 格式化，不是判斷。主線只看 report、做 routing / 推薦。30 天實測 29 sessions、4.7% events。 |
+| **Task-planning pre-scan**（「我需要做什麼」「接下來做什麼」「處理 N 張 change」的規劃 session 前置 scan） | **Codex（GPT-5.6-sol medium）via 泛用 dispatcher**，主線消費 structured report | scan openspec/changes/ + HANDOFF.md + git status + tasks/ 產出 per-change status matrix，主線拿 matrix 做排序 / 決策。 |
+| **Bug-fix evidence 段**（error log capture / stack trace 解析 / repro script 撰寫執行 / hypothesis 驗證迴圈） | **Codex（GPT-5.6-sol high）via 泛用 dispatcher**（強化：非 Debug evidence 段，而是整個 bug-fix session 的 investigation 段） | 30 天實測 19 個 bug-fix session 全由 Claude 跑（既有 Debug evidence rule 未落實）。investigation / evidence / repro 是機械段；root cause 推斷 + 修法設計留主線。**MUST** 在 bug-fix session 開工時先判斷：可分離的 evidence 段派 Codex，不可分離的留主線但 MUST 在 session 結尾回報未派 Codex 的理由。 |
+| **clade publish/propagate pre-scan**（publish 前 dirty file 分組判斷：讀 `git status` + `git diff` 各 file 內容 + 辨識 logical group） | **Codex（GPT-5.6-sol medium）via 泛用 dispatcher**，主線消費分組建議後 selective commit | publish SOP 中 `vp check → git commit → publish.mjs → push --tags → propagate.mjs` 是固定序列，但 pre-scan「dirty file 分幾組、每組 commit message 怎麼寫」的 reading 段可以 Codex。 |
 
 ## Orchestration Residency（誰持有長 session — 決定層）
 
@@ -95,7 +95,7 @@ Local edits will be reverted by the next sync.
    - **B. UI view phase**：phase 內任一 task 描述/路徑指涉 view 層檔案——`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且該 phase 沒有摻入非 view 的 frontend / backend 工作**（store / hook / API client / type / util / migration / API server）
      → **主線 Claude Opus 4.8 xhigh 自己做，永不派 codex**
    - **C. 其他 phase**：上述兩類以外（schema、migration、API server、CLI、純 backend、frontend 但非 view 的 store / hook / API client / type / util、unit test、docs）
-     → **派 background codex GPT-5.5 high 做完整 phase**
+     → **派 background codex GPT-5.6-sol high 做完整 phase**
 3. **混雜 phase fallback**（混雜 view 與非 view 工作）：**已開工**（任一 task `[x]` 或 git history 顯示已改）→ 主線整個 phase 自己做（不重切，不派 codex）。**未開工** → **STOP**，請使用者跑 `/spectra-ingest <change>` 把 UI view tasks 切成獨立 phase；**禁止**主線自行修改 tasks.md phase 結構（屬 ingest 範圍）
 
 C 類派工細節（prompt、marker、watch、drift 檢查、收尾驗證）見 reference § Spectra Apply Phase Dispatch（具體做法）。
@@ -151,7 +151,7 @@ codex-primary verdict 但 ≤2 個 file 的瑣碎 fix（typo / 單行 bug / conf
 | NEVER | 說明 |
 | --- | --- |
 | **NEVER** 在 verify channel evidence collection 階段問 user 手動取 session cookie / 走 Google OAuth + DevTools 複製貼回（per [[manual-review]] § Dev-login route missing → scaffold-first + [[pitfall-agent-asks-user-cookie-skipping-dev-login-scaffold]]） | agent **MUST** 第一動作 = scaffold `_dev-login` route via clade cookbook，自己 mint session |
-| **NEVER** 在 Claude Code session 直接呼叫 `WebSearch` 工具 | 改派背景 codex GPT-5.5 medium |
+| **NEVER** 在 Claude Code session 直接呼叫 `WebSearch` 工具 | 改派背景 codex GPT-5.6-sol medium |
 | **NEVER** 印「請開啟 Codex CLI」「Stop here」「請貼 prompt」這類純文字 handoff 訊息要使用者手動切 | 主線必須自己派背景 codex |
 | **NEVER** 嘗試 `codex:rescue` / `codex:setup` plugin 路線 | 已驗證無法使用、已全清（含 `/assign`） |
 | **NEVER** 在 Spectra propose 階段問 A/B（已預設 codex draft） | 除非使用者**明確**要求純 Claude propose |
@@ -164,11 +164,11 @@ codex-primary verdict 但 ≤2 個 file 的瑣碎 fix（typo / 單行 bug / conf
 | **NEVER** 把符合 Codex-primary 進入條件（純非-view + tasks.md 定稿，或機械 sweep）的 change 落到逐 phase live-watch | 應 change 粒度單次 dispatch + notification-only；把關移到收尾 cross-check + `/commit` 0-A |
 | **NEVER** 派 codex 跑 spectra-apply phase 而 prompt 內漏 Commit Authorization 段（一 phase 一 commit / `🧹 chore: wt <change>-phase-<N>` format / hook 必跑禁 `--no-verify` / commit 前自驗 view-layer + scope） | 缺這段 codex 會混 commit、撞 commitlint hook |
 | **NEVER** 派 Codex 寫 code（spectra-propose draft / spectra-apply phase）而 prompt 漏掉 Plan-first 硬指令 | 沒 plan 主線只能從 diff 反推；codex 寫完 plan 必須立刻續跑 |
-| **NEVER** 從主線用 `Agent` tool with `subagent_type: screenshot-review` 派 verify mode 工作 | sonnet wrapper 會繞過 Step 0 自做工作（pitfall 同 Routing Table）；**MUST** 主線直派 codex GPT-5.5 low via Bash；wrapper 僅留 codex CLI 不可用 fallback，**禁止**作為預設入口 |
+| **NEVER** 從主線用 `Agent` tool with `subagent_type: screenshot-review` 派 verify mode 工作 | sonnet wrapper 會繞過 Step 0 自做工作（pitfall 同 Routing Table）；**MUST** 主線直派 codex GPT-5.6-sol low via Bash；wrapper 僅留 codex CLI 不可用 fallback，**禁止**作為預設入口 |
 | **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 verify:ui evidence 來取代 Step 8a codex dispatcher | verify:ui evidence 的**唯一**入口是 `codex-dispatch-screenshot-verify.mjs`；Claude fallback 僅限機械故障且 MUST 在對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡。2026-06-11 audit 實證：dispatcher 修復後 147 條 (verified-ui:) annotation 0 次走 codex、92 個 session 全走此 bypass 形狀 |
 | **NEVER** 讓任何 Claude subagent（Agent tool 開出的子代理）在其 sandbox 內呼叫 codex CLI | Codex **一律**由主線直接 Bash `run_in_background` 派工（含泛用 dispatcher）。subagent 中介有兩個已驗證失敗模式：(1) false positive panic — 主線 `ps aux` 看不到 cross-sandbox process 誤判死亡；(2) false negative silent miss — codex 完成但 subagent 未 surface 通知，主線乾等 5-15 分鐘。直接 Bash：通知可靠（同 sandbox）、context 消耗零、失敗診斷同 sandbox。 |
 | **NEVER** 對 mechanical 收集 / 掃描 / 驗證型工作開 Claude subagent fan-out | 預設走泛用 dispatcher + `fanout-collect` template（例外：claude.ai-connected MCP 依賴、判讀型分析、user 明確要求 Claude） |
-| **NEVER** 在 Claude Code session 自己跑 `/security-review` 的完整分析 | 改派 Codex GPT-5.5 medium。diff 內容作為 prompt body，output 用 structured findings。`/commit` 0-A 是下游安全網 |
+| **NEVER** 在 Claude Code session 自己跑 `/security-review` 的完整分析 | 改派 Codex GPT-5.6-sol medium。diff 內容作為 prompt body，output 用 structured findings。`/commit` 0-A 是下游安全網 |
 | **NEVER** 在 exploration / research 型 session 自己逐檔 Read + scan 多個 source（openspec / HANDOFF / git log / docs）超過 3 個 source file | 先派 Codex medium pre-scan 拿 structured summary，再由主線消費 summary 做判斷。例外：user 明確問特定檔案 / 需要 claude.ai-connected MCP |
 | **NEVER** 在 bug-fix session 同時做 evidence capture + root cause 推斷 + 修法而不先判斷 evidence 段是否可分離 | bug-fix 開工 MUST 先判斷：evidence 段可分離 → 派 Codex high；不可分離 → 主線做但 session 結尾 MUST 回報理由 |
 
@@ -191,7 +191,7 @@ codex-primary verdict 但 ≤2 個 file 的瑣碎 fix（typo / 單行 bug / conf
 | **NEVER** 在 commit 0-A 跳過 0-A.0 `simplify` skill | reuse / 精簡盲點入口；序跑在 codex 之前 |
 | **NEVER** 在 commit 0-A 把 `simplify` 跟 codex 並行 | simplify 修完才是 codex 該看的版本 |
 | **NEVER** 在 commit 0-A 啟用已棄用的 `code-review` agent（Opus subagent） | 與 codex review 重疊且同為 Anthropic 模型盲點 |
-| **NEVER** 改用其他模型或顛倒 codex 兩輪 effort（codex 必為 `gpt-5.5`；0-A.1 必為 `high`、0-A.2 必為 `xhigh`） | — |
+| **NEVER** 改用其他模型或顛倒 codex 兩輪 effort（codex 必為 `gpt-5.6-sol`；0-A.1 必為 `high`、0-A.2 必為 `xhigh`） | — |
 | **NEVER** 在 commit 0-A 跑第 3 輪 codex | 2 輪內處理不完先 split；0-A.2 由 0-A.1 Critical / Major 條件觸發，不可無條件升級也不可跳過 |
 
 ### Runtime gate

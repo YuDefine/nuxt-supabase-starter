@@ -25,7 +25,7 @@ Local edits will be reverted by the next sync.
 主線 Claude **MUST** 直接走 [`agent-routing.codex-watch-protocol.md`](../../../rules/core/agent-routing.codex-watch-protocol.md) § Codex 派工的標準流程：
 
 1. `Write` prompt 到 `/tmp/codex-screenshot-review-<slug>-prompt.md`（prompt 開頭字面 `[DELEGATED-BY-CLAUDE-CODE]`）
-2. `Bash` background：`codex exec --model gpt-5.5 --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -c model_reasoning_effort=low < /tmp/...`
+2. `Bash` background：`codex exec --model gpt-5.6-sol --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -c model_reasoning_effort=low < /tmp/...`
 3. 啟動 Codex Watch Protocol（`ScheduleWakeup` 180s 第一次健康檢查）
 4. 收 `<task-notification status=completed>` → BashOutput 讀 stdout → 整理結果回報
 

@@ -583,7 +583,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
       ```bash
       cd <consumer-repo-root> && codex exec \
-        --model gpt-5.5 \
+        --model gpt-5.6-sol \
         --dangerously-bypass-approvals-and-sandbox \
         --skip-git-repo-check \
         -c model_reasoning_effort=high \
@@ -1018,7 +1018,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
       `--status fail` 當任一 dimension FAIL，否則 `pass`；`--findings-json` 列每個 FAIL 的 `{dimension, severity}`（無 FAIL 給 `[]`）。此 step append-only + fail-open，**NEVER** 因 ledger 寫入失敗而中斷 handoff。此 E.1 record 現由 `archive-gate.sh` **Check 7（Pre-handoff Verdict Presence）機械強制存在** — 缺 E.1 record → archive 被擋 exit 2（fail-open 僅限 ledger 檔尚不存在的 pre-propagation consumer）；soft step 不再可被靜默跳過，soak 才累積得到資料。
 
-   **Layer E.2 — codex cross-model second opinion**（clade fork addition；Phase 2）：E.1 是主線（Claude）自己審；E.1 之後 **MUST** 再派 **codex GPT-5.5** 對同 5 dimension 做獨立 cross-check（per `rules/core/agent-routing.md` 「跨模型」原則 — author model 會 rationalize 過自己的盲點，換個 model 才抓得到）：
+   **Layer E.2 — codex cross-model second opinion**（clade fork addition；Phase 2）：E.1 是主線（Claude）自己審；E.1 之後 **MUST** 再派 **codex GPT-5.6-sol extra_high** 對同 5 dimension 做獨立 cross-check（per `rules/core/agent-routing.md` 「跨模型」原則 — author model 會 rationalize 過自己的盲點，換個 model 才抓得到）：
 
    ```bash
    node <clade-vendor>/scripts/codex-dispatch-pre-handoff-check.mjs \

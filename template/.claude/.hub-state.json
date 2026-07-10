@@ -1,10 +1,10 @@
 {
   "cladeRoot": "/Users/charles/offline/clade",
-  "syncedAt": "2026-07-08T03:13:58.812Z",
+  "syncedAt": "2026-07-10T01:40:51.218Z",
   "rulesProjection": "copy",
   "checksums": {
-    "rules/agent-routing.codex-watch-protocol.md": "464155c12006dd8a",
-    "rules/agent-routing.md": "b3b0a52ba5255d51",
+    "rules/agent-routing.codex-watch-protocol.md": "0d0a242a8ac3ed43",
+    "rules/agent-routing.md": "ddeb650e2514b3fe",
     "rules/agent-self-verification.md": "2a8a0b8aa72634cf",
     "rules/audit-pattern.md": "c7acfbda11eeb1bd",
     "rules/cloudflare-workers.md": "52377cbce2de5cbd",
@@ -85,14 +85,14 @@
     "rules/nuxt-ui-mcp.md": "a6bcf9954f77d463",
     "rules/nuxt-ui-native-picker-ban.md": "3cdd454dde788593",
     "rules/page-loading-golden-path.md": "64dba8e7a4009a41",
-    "scripts/codex-review-safe.sh": "4d58702fbe747411",
+    "scripts/codex-review-safe.sh": "76b703cd80ccb33b",
     "scripts/commit-lock.mjs": "f81c79df484ce5db",
     "skills/change-loop/SKILL.md": "5667c15335df3d7d",
-    "skills/commit/SKILL.md": "6eb8e51b3d4f5035",
+    "skills/commit/SKILL.md": "cb8386c23680946a",
     "skills/loop-engineer/SKILL.md": "6a9fa3e98f63fb25",
     "skills/spectra/SKILL.md": "bb661777c100537c",
     "skills/spectra-analyze/SKILL.md": "c833299055df3f76",
-    "skills/spectra-apply/SKILL.md": "31338c4fbf485e96",
+    "skills/spectra-apply/SKILL.md": "2ef3d5de9ba3c666",
     "skills/spectra-archive/SKILL.md": "78717b310b9157c6",
     "skills/spectra-ask/SKILL.md": "7e980b60c63029d5",
     "skills/spectra-audit/SKILL.md": "26402503beec25c8",
@@ -101,7 +101,7 @@
     "skills/spectra-discuss/SKILL.md": "0972557842a69fcb",
     "skills/spectra-drift/SKILL.md": "998e5c1a0b4144c2",
     "skills/spectra-ingest/SKILL.md": "d3d3161a4c7a5326",
-    "skills/spectra-propose/SKILL.md": "7b7d4b0eebe9b81f",
+    "skills/spectra-propose/SKILL.md": "9a2c0fad5b3e3c2b",
     "skills/spectra-verify/SKILL.md": "3aa566e08157aee3",
     "commands/db-migration.md": "c786e3433192a196",
     "commands/doc-sync.md": "1dc03819c4fe6647",
@@ -109,6 +109,6 @@
     "agents/code-review.md": "d23a0fed3baf5a9a",
     "agents/db-backup.md": "5f4d05642f47e5ff",
     "agents/references/clade-review-rules.md": "40d9d0a41cc866d9",
-    "agents/screenshot-review.md": "b8030c140cccfe60"
+    "agents/screenshot-review.md": "95682dd5ee4cd073"
   }
 }
