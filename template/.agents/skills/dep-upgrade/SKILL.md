@@ -287,14 +287,14 @@ rg -n "<symbol>" --type-add 'vue:*.vue' --type vue --type ts .
 - `adaptation`（任何版號差距）：typecheck + build + 相關 test
 - major（任何分類）：typecheck + build + 全 test + codex 自己決定要不要 smoke test
 
-### O.2.2 Dispatch background bash（medium）
+### O.2.2 Dispatch background bash（low）
 
 ```bash
 cd <worktree-path> && codex exec \
-  --model gpt-5.5 \
+  --model gpt-5.6-sol \
   --dangerously-bypass-approvals-and-sandbox \
   --skip-git-repo-check \
-  -c model_reasoning_effort=medium \
+  -c model_reasoning_effort=low \
   < /tmp/codex-upgrade-<pkg>-prompt.md 2>&1
 ```
 

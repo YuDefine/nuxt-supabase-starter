@@ -554,7 +554,7 @@ Agent 回傳後主線處理：
 - **NEVER** 跳過 0-A.0（simplify 是常駐第一步，不視變更大小例外）
 - **NEVER** 把 simplify 跟 codex 並行 —— simplify 必須在 codex 之前序跑完
 - **NEVER** 把 0-A.1 / 0-B / 0-C 退回串行 —— simplify 完成後三軸必並行（除非 fast-path 跳過 0-A.1/0-A.2）
-- **NEVER** 改用其他模型（codex 必須 `gpt-5.5`）
+- **NEVER** 改用其他模型（codex 必須 `gpt-5.6-sol`）
 - **NEVER** 顛倒 codex 兩輪的 reasoning effort（0-A.1 必為 `high`、0-A.2 必為 `xhigh`）
 - **NEVER** 把 codex 列出的問題判定為「建議性質」「不在本次範圍」而跳過 —— 一律修
 - **NEVER** 在 fast-path 條件未完全滿足時提早跳過 codex —— 三條件 AND，任一不滿足都跑

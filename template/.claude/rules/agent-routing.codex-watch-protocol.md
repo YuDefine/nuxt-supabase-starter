@@ -27,7 +27,7 @@ Local edits will be reverted by the next sync.
 
    ```bash
    cd <cwd> && codex exec \
-     --model gpt-5.5 \
+     --model gpt-5.6-sol \
      --dangerously-bypass-approvals-and-sandbox \
      --skip-git-repo-check \
      -c model_reasoning_effort=<medium|high|xhigh> \
@@ -75,7 +75,7 @@ echo "Review the following uncommitted changes for bugs, security issues, and co
 
 $(cat /tmp/codex-review-diff.patch)" | \
 codex exec \
-  --model gpt-5.5 \
+  --model gpt-5.6-sol \
   --dangerously-bypass-approvals-and-sandbox \
   --skip-git-repo-check \
   -c model_reasoning_effort=high \

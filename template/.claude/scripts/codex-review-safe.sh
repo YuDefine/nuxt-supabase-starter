@@ -102,7 +102,7 @@ Additionally, for EACH semantic rule listed above, output a `## Semantic Verdict
 PROMPT_VERDICT
   fi
 } | codex exec \
-  --model gpt-5.5 \
+  --model gpt-5.6-sol \
   -s read-only \
   --skip-git-repo-check \
   -c model_reasoning_effort="$REASONING" \
