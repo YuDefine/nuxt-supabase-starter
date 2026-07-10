@@ -107,6 +107,9 @@ Local edits will be reverted by the next sync.
 - ❌ review web UI change 時 skip perf keyword 偵測、或偵測命中後不實測就讓 review pass（per MUST 5）
 - ❌ 回答 change「卡在誰 / ready 了沒」時從 tasks.md 散文或 checkbox leaf count 推測，而非讀 `change.bucket` / `--scan` bucket（per MUST 6）
 - ❌ 對 route E 結論的 issue 只寫散文分析或只開 `@followup[TD]`、卻漏寫 `(claude-analyzed: route=E)` annotation（per MUST 7）
+- ❌ `(verified-api:)` annotation 只寫 ISO timestamp 不帶 `<METHOD> <URL> <STATUS>`（parser 要求四段 space-separated）（per Annotation Format Contract）
+- ❌ annotation 寫在 `- [ ] #N` 下一行（即使 indent 正確）而非 inline 同行末尾（per Annotation MUST 5）
+- ❌ scan 結果 non-ready 時直接回報 user「bucket=readyForEvidence」/「healthCheckNeeded」而不先自己讀 blocking reason + 修正（per Annotation MUST 6）
 
 ## Annotation Format Contract
 
@@ -119,6 +122,7 @@ review-gui parser 對 annotation key 和 status tag **嚴格字面匹配**。寫
 | `screenshot=<path>` | **單數**，value 是單一 relative path | `findKeyValue('screenshot')` strict match |
 | `screenshots=<p1>,<p2>` | **複數**，逗號分隔多 path | review-gui parser **不認**（fallback null）— 待 parser 支援前**禁用** |
 | `(verified-ui: <ISO>)` | 括號內、冒號後空格 | `hasEvidenceFor` 認為 evidence 已收集 |
+| `(verified-api: <ISO> <METHOD> <URL> <STATUS>)` | 括號內、四段 space-separated | `hasEvidenceFor` 認為 evidence 已收集。**MUST** 含 HTTP method + URL path + status code |
 | `(issue: <description>)` | 括號內、冒號後空格 | `evidenceMissing` 排除此 item（視為 handled） |
 | `(claude-analyzed: <ISO> route=<X>[ note=...])` | 括號內、space-separated KV | `analyzedIssuedCount` 計數；bucket 從 `feedbackGiven` 翻為 `awaitingUserReEval` |
 | `（fix-requested）` | 全形括號、無 payload | **invalidates** 同行 `(claude-analyzed:)` — user 拒絕 route=E 結論、要求 code fix。`analyzedIssuedCount` 排除帶此 annotation 的 item → bucket 回 `feedbackGiven`（等 Claude 接手修） |
@@ -139,6 +143,18 @@ review-gui parser 對 annotation key 和 status tag **嚴格字面匹配**。寫
 2. self-collect fallback chain 全失敗 → **MUST** 寫 `(issue: self-collect failed after (a)(b)(c)(d): <reason>)`，**NEVER** `(deferred: ...)`
 3. sub-item `#N.M` 的 screenshot 檔名 **MUST** 用 `#N.M-` prefix，**NEVER** 複用 parent `#N-` prefix
 4. route E 結論 **MUST** 同步寫 `(claude-analyzed: <ISO> route=E)` annotation（per MUST 7）
+5. **annotation MUST inline（同一行）**：`(verified-*:)` / `(issue:)` / `(claude-discussed:)` 等 annotation **MUST** 寫在 `- [ ] #N ...` marker 的**同一行末尾**，**NEVER** 寫在下一行（即使 indent 正確）。Parser 只解析 item marker 行內的 annotation token；獨立行 annotation = silent miss → `evidenceMissing` → bucket 不收斂。（per [[pitfall-scan-non-ready-passive-report-instead-of-self-fix]]）
+6. **write-scan-fix convergence loop（hard rule）**：annotation 寫完後 **MUST** 立刻跑 `review-gui.mts --scan`，讀 scan output 的 `bucket` + `evidenceMissing` + `hitsByCode` + `malformed` + `readinessHits`。若 bucket ≠ `ready`（且非純 user-dependent items），**MUST** 自行 root-cause（讀 scan 的 blocking 原因）→ 修正 annotation / item 描述 → 重新 scan → **loop 直到 bucket=ready 或確認剩餘全是 user-dependent**。**NEVER** 在 non-ready 時回報 user「bucket=readyForEvidence」或「healthCheckNeeded」讓 user 問為什麼 — 那是把 Claude 該做的 root-cause 工作轉嫁給 user。（per [[pitfall-scan-non-ready-passive-report-instead-of-self-fix]]）
+
+   常見 blocking reason 自修表：
+
+   | hitsByCode | 原因 | 自修方式 |
+   | --- | --- | --- |
+   | `UI_ITEM_NO_URL` | `[review:ui]` / `[verify:ui]` item 描述缺 URL path | 補具體 `/admin/...` path 到 item 描述 |
+   | `ABSTRACT_REFERENCE` | item 描述含 `{any}` / `{id}` 等 placeholder | 改成具體 fixture UUID / employee_no |
+   | `malformed > 0` | annotation 格式不符 parser 預期 | 讀 scan stderr 的 `malformed ... expected ...` 訊息，照格式修 |
+   | `evidenceMissing` 含某 item | 該 item 缺 `(verified-*:)` 或 annotation 不在同行 | 補 annotation 或移到 inline |
+   | `readinessHits > 0` | 有 readiness check 未通過 | 讀 `hitsByCode` 對照上表修 |
 
 ### Cross-ref
 
