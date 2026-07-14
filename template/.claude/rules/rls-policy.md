@@ -21,6 +21,25 @@ Local edits will be reverted by the next sync.
 
 > 本檔為 starter template 的預設規則，複製出去後依專案實際使用調整。
 
+## GRANT 先於 RLS——table privilege 驗證
+
+PostgreSQL 先檢查 table-level privilege（`GRANT`）再評估 RLS policy。只建 `CREATE POLICY ... TO authenticated` 但沒有對應的 `GRANT SELECT ON <table> TO authenticated`，結果是 `42501`（permission denied），RLS policy **完全不被評估**。
+
+Migration 新增 RLS policy 時 **MUST**：
+
+1. 同一支 migration 內顯式 `GRANT <privilege> ON <table> TO <role>`，或
+2. 註明 table 已有既存 GRANT（引用授予 GRANT 的 migration 編號）
+
+驗證方式——在 dev DB 查 `pg_catalog`：
+
+```sql
+SELECT grantee, privilege_type
+FROM information_schema.role_table_grants
+WHERE table_schema = '<schema>' AND table_name = '<table>';
+```
+
+若目標 role 不在結果中，RLS policy 寫再多都是死的。
+
 ## 靜默失敗陷阱
 
 - **`auth.uid() IS NULL` 陷阱** — 未認證時 `auth.uid()` 回傳 null，`null = user_id` 永遠 false，policy 靜默拒絕。要明確區分「沒登入」與「沒權限」，在 policy 開頭寫 `auth.uid() IS NOT NULL AND ...`
