@@ -4,7 +4,7 @@ description: 新 consumer 首次開 session 時 MUST 跑 golden-path-adoption au
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/golden-path-onboarding.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 

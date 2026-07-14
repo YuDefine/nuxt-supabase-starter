@@ -5,7 +5,7 @@ paths: ['openspec/changes/**', 'openspec/ROADMAP.md', 'HANDOFF.md', 'docs/tech-d
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/proactive-skills.ingest-triggers.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 

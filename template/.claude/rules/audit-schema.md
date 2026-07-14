@@ -5,7 +5,7 @@ paths: ["supabase/migrations/**/*.sql", "server/utils/audit*.ts", "packages/*/se
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/db-schema/supabase/audit-schema.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 

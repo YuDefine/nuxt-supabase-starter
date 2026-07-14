@@ -5,7 +5,7 @@ paths: ['package.json', 'nuxt.config.ts', 'registry/consumers.json', 'registry/c
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/dev-port-allocation.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 

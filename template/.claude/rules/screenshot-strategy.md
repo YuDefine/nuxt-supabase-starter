@@ -5,7 +5,7 @@ paths: ['screenshots/**', 'tests/e2e/**', 'packages/*/tests/e2e/**', 'template/t
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/screenshot-strategy.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 

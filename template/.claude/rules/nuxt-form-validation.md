@@ -5,7 +5,7 @@ paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'components/**/*.vue', 'packa
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/framework/nuxt/nuxt-form-validation.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 

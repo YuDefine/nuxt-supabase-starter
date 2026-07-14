@@ -5,7 +5,7 @@ paths: ['openspec/changes/**/tasks.md', '.claude/skills/spectra-archive/**', 'HA
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/manual-review.discuss.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 

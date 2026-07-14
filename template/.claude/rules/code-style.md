@@ -5,7 +5,7 @@ paths: ['**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts,md,json}', '.*rc*', '.*.config.
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/code-style.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 

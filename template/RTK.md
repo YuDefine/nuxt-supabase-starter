@@ -17,5 +17,5 @@ RTK tracking must use a Codex-writable database path:
 
 ```toml
 [tracking]
-database_path = "/Users/charles/.codex/memories/rtk/history.db"
+database_path = "~/.codex/memories/rtk/history.db"
 ```

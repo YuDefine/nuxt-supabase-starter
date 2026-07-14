@@ -5,7 +5,7 @@ paths: ['**/*.{ts,vue,sql}', 'drizzle.config.*', 'wrangler.{toml,jsonc}', 'nuxt.
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/data-layer-d1.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 

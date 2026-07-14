@@ -5,7 +5,7 @@ paths: ['**/*.vue', '**/*.ts', 'nuxt.config.*', 'app.config.*', 'composables/**'
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/nuxt-data-perf.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
