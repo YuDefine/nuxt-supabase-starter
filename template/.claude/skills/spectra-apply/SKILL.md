@@ -1,7 +1,7 @@
 ---
 name: spectra-apply
 description: "Implement or resume tasks from a Spectra change"
-effort: xhigh
+effort: high
 license: MIT
 compatibility: Requires spectra CLI.
 metadata:
@@ -12,7 +12,7 @@ metadata:
 <!--
 🔒 LOCKED — managed by clade
 Source: plugins/hub-core/skills/spectra-apply/
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
@@ -486,13 +486,13 @@ If there is no AskUserQuestion tool available, present options as plain text and
    1. **Read tasks.md** and identify all `## N.` phase sections
    2. **For each phase, classify into one of three categories**（依序判定，命中即停）:
       - **A. Design Review phase** — title contains "Design Review" OR phase body references `/design improve` / `/impeccable audit` / `/impeccable *` / `review-screenshot` / `/design *`
-        → **主線 Claude Opus 4.8 xhigh 自己做**，**永不**派 codex
+        → **主線 Claude Opus 4.6 high 自己做**，**永不**派 codex
         → Design skill is Claude Code first-class; codex tooling weak in this domain
       - **B. UI view phase** — phase 內任一 task 描述/路徑指涉 view 層檔案：`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且**該 phase 沒有摻入非 view 的 frontend / backend 工作（store / hook / API client / type / util / migration / API server）
-        → **主線 Claude Opus 4.8 xhigh 自己做**，**永不**派 codex
+        → **主線 Claude Opus 4.6 high 自己做**，**永不**派 codex
         → UI view 層的視覺 / 互動 / a11y 細節需要與 Design skill 緊耦合；frontend 但非 view 的工作（store / hook / API client / type / util）不在此範圍，走 C 類
       - **C. Other phase** — 上述兩類以外（schema / migration / API server / CLI / 純 backend / frontend 但非 view 的 store / hook / API client / type / util / unit test / docs）
-        → **派 background codex GPT-5.5 high**（**不要** medium）
+        → **派 background codex GPT-5.6-sol high**
         → Phase 粒度避免大量 codex round-trip
    3. **Mixed-phase fallback**（A、B 都不是純 view、又混雜 view 與非 view 工作）:
       - **看該 phase 是否已開工**（任一 task `[x]`，或 git history 顯示 phase 內檔案已被改）:
@@ -503,7 +503,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
           請改跑 `/spectra-ingest <change-name>` 把 UI view tasks 與其他 tasks 切成獨立 phase 後再 `/spectra-apply`。
           ```
           **NEVER** 主線自行修改 tasks.md phase 結構 — 該交給 `/spectra-ingest`，避免 propose / apply / ingest 邊界混淆
-   4. **NEVER** dispatch with `medium` effort — schema drift / cross-file refactor / enum exhaustiveness require `high` minimum
+   4. **NEVER** dispatch Phase Dispatch（Step 6b）with `medium` effort — schema drift / cross-file refactor / enum exhaustiveness require `high` minimum。Step 8a 系列收集工作允許 `medium`
    5. **NEVER** dispatch task-by-task — phase-level only
 
    **Codex phase dispatch template**（C 類專用，per `agent-routing.md` 「Codex 派工的標準流程」+「Spectra Apply Phase Dispatch」）:
@@ -696,9 +696,9 @@ If there is no AskUserQuestion tool available, present options as plain text and
    **Reminder: Track progress by editing checkboxes in the tasks file only. Do not use any built-in task tracker.**
 
    **Dispatch reminder**: For each phase, follow Step 6b's three-way classification:
-   - Class C（Other）→ dispatch codex GPT-5.5 high (phase granularity)
-   - Class A（Design Review）→ 主線 self-execute (NEVER dispatch)
-   - Class B（UI view: component / page / view / layout / styling）→ 主線 self-execute (NEVER dispatch)；該 phase 實作完成、commit / 標 done **之前** MUST 跑 **Step 6c Refactor Invariant Check** + **Step 6d Review Rules Check**
+   - Class C（Other）→ dispatch codex GPT-5.6-sol high (phase granularity)
+   - Class A（Design Review）→ 主線 Opus 4.6 high self-execute (NEVER dispatch)
+   - Class B（UI view: component / page / view / layout / styling）→ 主線 Opus 4.6 high self-execute (NEVER dispatch)；該 phase 實作完成、commit / 標 done **之前** MUST 跑 **Step 6c Refactor Invariant Check** + **Step 6d Review Rules Check**
    - Mixed phase（UI view + 非 view 摻同 phase）→ 已開工主線吸收、未開工 STOP 提示 `/spectra-ingest`
 
    For each pending task:
@@ -782,6 +782,8 @@ If there is no AskUserQuestion tool available, present options as plain text and
    - **NEVER** 碰客戶側轉移（`驗收中→完成` 等）或 `發布日期` / `驗收日期` / `名稱` / `驗收完成` 欄位。
 
 8a. **Verify Channel Pass**（Step 8b 前 hard gate）
+
+   **Model allocation**：Step 8a 全部（含 8a.5 / 8a.6 / 8a.7）的**收集**工作（跑 verify channel、截圖、hook、sweep）由 **codex GPT-5.6-sol medium** 執行；截圖收集完成後，由 **codex GPT-5.6-sol xhigh** 分析每張截圖是否匹配對應要求（防止亂截圖搪塞）。
 
    Read `tasks.md` `## 人工檢查` 找未勾 `[verify:e2e]` / `[verify:api]` / `[verify:ui]` / `[verify:<a>+<b>]` / deprecated `[verify:auto]` items。**MUST** 先處理完所有 verify channels 才進 Step 8b。
 
@@ -904,9 +906,11 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    4. **`[verify:ui]` channel — 派 verify mode（UI only）**
 
+      **Model allocation**：截圖收集由 **codex GPT-5.6-sol medium** 執行；收集完成後由 **codex GPT-5.6-sol xhigh** 分析每張截圖是否匹配對應 item 要求（防止亂截圖搪塞——收集與判斷分開、同 model 不同 effort，收集便宜跑快、判斷用最高推理力）。
+
       **Runtime 選擇**（default codex；Claude subagent fallback）：
 
-      - **Default — codex**：偵測 `command -v codex` 存在且 env `CLADE_FORCE_CLAUDE_SCREENSHOT` 未設 → 呼叫 `node <clade-vendor>/scripts/codex-dispatch-screenshot-verify.mjs --change <name> --consumer-path . --dev-server-url <url> --items-json <items.json>`。Dispatcher 跑完 stdout 印 JSON 摘要（`{"runtime":"codex","change":...,"items":[...],"audit_exit_code":N,"progress_json":"...","review_md":"..."}`），主線解析該 JSON 後對 `items[].status === "PASS"` 的 item 寫 `(verified-ui:)` annotation。Codex 任一 item `status` 不是 `PASS` 時 → 保留 `[ ]` + 寫 issue / blocker（業務結果，**NEVER** fallback Claude — 同一 brief 在 Claude 也會撞同樣業務問題）
+      - **Default — codex**：偵測 `command -v codex` 存在且 env `CLADE_FORCE_CLAUDE_SCREENSHOT` 未設 → 呼叫 `node <clade-vendor>/scripts/codex-dispatch-screenshot-verify.mjs --change <name> --consumer-path . --dev-server-url <url> --items-json <items.json>`（dispatcher 內部以 **medium** effort 收集截圖）。Dispatcher 跑完 stdout 印 JSON 摘要（`{"runtime":"codex","change":...,"items":[...],"audit_exit_code":N,"progress_json":"...","review_md":"..."}`），主線解析該 JSON 後進入 **Screenshot Match Analysis gate**（見下方 §）。Codex 任一 item `status` 不是 `PASS` 時 → 保留 `[ ]` + 寫 issue / blocker（業務結果，**NEVER** fallback Claude — 同一 brief 在 Claude 也會撞同樣業務問題）
       - **Fallback — Claude subagent**：以下任一情境**才** fallback 到 `screenshot-review` subagent（brief copy/adapt 自 `vendor/snippets/verify-channels/ui-final-state-brief.template.md`）：
         - `command -v codex` 不存在
         - env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 強制退場（debug / 退場用）
@@ -932,6 +936,60 @@ If there is no AskUserQuestion tool available, present options as plain text and
         ```
 
       - FAIL / UNCERTAIN → 保留 `[ ]`，寫 issue 或回報 blocker；**NEVER** 寫 `(verified-ui:)`。
+
+      **Screenshot Match Analysis gate**（截圖收集完成後 xhigh 分析）：
+
+      Dispatcher 收集完所有截圖後（JSON 摘要已拿到），**MUST** 對每個 `status === "PASS"` 的 item 派 **codex GPT-5.6-sol xhigh** 做截圖 vs 要求匹配分析：
+
+      ```bash
+      codex exec \
+        --model gpt-5.6-sol \
+        --dangerously-bypass-approvals-and-sandbox \
+        --skip-git-repo-check \
+        -c model_reasoning_effort=xhigh \
+        < /tmp/codex-screenshot-match-analysis-<change>-prompt.md 2>&1
+      ```
+
+      Prompt 內容固定包含：
+
+      ```text
+      [DELEGATED-BY-CLAUDE-CODE]
+
+      你是截圖匹配分析器。對以下每張截圖，判斷它是否真正匹配對應的 verify:ui item 要求。
+
+      Change: <change-name>
+
+      Items to analyze:
+      <對每個 PASS item 列出>
+      - #<id>
+        要求描述: <item description from tasks.md>
+        ready_signal: <the ready_signal that was used>
+        截圖路徑: screenshots/local/<change>/#<id>-final.png
+        DOM observation: <from dispatcher JSON>
+
+      請逐一分析每張截圖：
+      1. 讀取截圖檔案
+      2. 比對 item 描述的具體要求（預期看到的 UI 元素、文字、排序、badge、狀態）
+      3. 比對 ready_signal 宣告的條件是否在截圖中可見
+      4. 判定 MATCH / MISMATCH / UNCERTAIN
+
+      輸出 JSON：
+      {"items": [{"id": <N>, "verdict": "MATCH"|"MISMATCH"|"UNCERTAIN", "reason": "<一句話>"}]}
+
+      判定標準：
+      - MATCH: 截圖明確顯示 item 描述要求的 UI 元素 / 文字 / 狀態
+      - MISMATCH: 截圖是空白頁 / 錯誤頁 / 顯示內容與要求無關 / 關鍵元素缺失
+      - UNCERTAIN: 無法確定（截圖模糊 / 部分匹配）
+
+      MISMATCH 和 UNCERTAIN 都視為需要重新處理。
+      ```
+
+      **分析結果處理**：
+      - **全部 MATCH** → 對每個 item 寫 `(verified-ui:)` annotation
+      - **任一 MISMATCH / UNCERTAIN** → 該 item 保留 `[ ]`，寫 `（issue: screenshot-match-analysis: <reason>）`；主線重派 codex medium 重拍該 item（最多 2 輪），重拍後再跑一次 xhigh 分析
+      - **Codex xhigh 不可用 / 機械故障** → 主線自己讀截圖檔做 visual sanity check（主線是 Opus 4.6，可讀圖），判定 MATCH 才寫 annotation
+
+      **NEVER** 跳過 Screenshot Match Analysis 直接寫 `(verified-ui:)` annotation — 收集與判斷分離是防搪塞的核心機制。
 
       Brief 範例：
 
@@ -997,17 +1055,41 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    The user must not be the **first** to discover trivial UX/data defects in the GUI. <consumer-a> `app-status-badge-extraction`（2026-05-24）handed 9 fabricated `(verified-ui:)` annotations + an all-「-」員工 column straight to the user because nothing between Step 8a and the GUI re-checked the change. Step 8a.6 is that re-check.
 
-   **MUST** before Step 8b handoff, the **main thread** (NOT a subagent — only the main thread has the full change set in view) runs the 5-dimension self-analysis:
+   **Model allocation**：E.1 五維分析由 **codex GPT-5.6-sol medium** 收集 + **codex GPT-5.6-sol xhigh** 判定。E.2 cross-model opinion 由 **codex GPT-5.6-sol xhigh** 執行。
 
-   ```
-   ~/offline/clade/vendor/snippets/pre-handoff-cross-check/main-self-analysis.template.md
+   **MUST** before Step 8b handoff, 派 **codex GPT-5.6-sol medium** 跑 5-dimension 收集（template 見下），再由 **codex GPT-5.6-sol xhigh** 對收集結果做 5-dimension 判定：
+
+   **E.1 收集階段**（codex GPT-5.6-sol medium）：
+
+   ```bash
+   codex exec \
+     --model gpt-5.6-sol \
+     --dangerously-bypass-approvals-and-sandbox \
+     --skip-git-repo-check \
+     -c model_reasoning_effort=medium \
+     < /tmp/codex-8a6-e1-collect-<change>-prompt.md 2>&1
    ```
 
-   1. Read the template, walk all **5 dimensions** (D1 task↔render / D2 evidence↔dom fab guard / D3 list↔fallback / D4 api contract boundary / D5 error tail).
-   2. Write the **finding report** (template's bottom block) — every dimension gets explicit `PASS` / `FAIL` / `N/A` + evidence. **No dimension silently skipped.**
-   3. For each `FAIL`: edit the relevant `## 人工檢查` item to append `（issue: <summary + where>）`; D2 fabrication findings additionally strip the bad `(verified-ui:)` annotation and restore `[ ]`.
-   4. **No finding report written → NO Step 8b handoff.** This is the gate.
-   5. **Record the E.1 verdict（telemetry-only，fail-open，不影響 gate）** — finding report 寫完後 **MUST** 落 verdict 到 consumer-local ledger 供 Phase 3.1 soak 評估（E.2 由 dispatcher 自記，主線只記 E.1）：
+   Prompt 基於 `~/offline/clade/vendor/snippets/pre-handoff-cross-check/main-self-analysis.template.md`，要求 codex 走全 **5 dimensions**（D1 task↔render / D2 evidence↔dom fab guard / D3 list↔fallback / D4 api contract boundary / D5 error tail），對每個 dimension 收集**客觀 evidence**（讀截圖、讀 DOM observation、讀 annotation、讀 git diff、讀 API response），輸出 JSON：`{"dimensions": [{"id":"D1","evidence":"...","raw_data":"..."}, ...]}` — 收集階段**不做** PASS/FAIL 判定。
+
+   **E.1 判定階段**（codex GPT-5.6-sol xhigh）：
+
+   ```bash
+   codex exec \
+     --model gpt-5.6-sol \
+     --dangerously-bypass-approvals-and-sandbox \
+     --skip-git-repo-check \
+     -c model_reasoning_effort=xhigh \
+     < /tmp/codex-8a6-e1-judge-<change>-prompt.md 2>&1
+   ```
+
+   Prompt 給上一階段收集的 5-dimension evidence JSON，要求對每個 dimension 判定 `PASS` / `FAIL` / `N/A` + 判定理由。輸出 JSON：`{"dimensions": [{"id":"D1","verdict":"PASS"|"FAIL"|"N/A","reason":"..."}, ...]}` 。
+
+   **E.1 結果處理**（主線）：
+   1. 解析判定 JSON，寫 **finding report**（每個 dimension explicit verdict + evidence）。
+   2. For each `FAIL`: edit `## 人工檢查` item to append `（issue: <summary + where>）`; D2 fabrication findings additionally strip the bad `(verified-ui:)` annotation and restore `[ ]`.
+   3. **No finding report written → NO Step 8b handoff.** This is the gate.
+   4. **Record the E.1 verdict（telemetry-only，fail-open）**：
 
       ```bash
       node <clade-vendor>/scripts/pre-handoff-ledger.mjs record \
@@ -1016,9 +1098,9 @@ If there is no AskUserQuestion tool available, present options as plain text and
         --findings-json '[{"dimension":"D2","severity":"critical"}, ...]'
       ```
 
-      `--status fail` 當任一 dimension FAIL，否則 `pass`；`--findings-json` 列每個 FAIL 的 `{dimension, severity}`（無 FAIL 給 `[]`）。此 step append-only + fail-open，**NEVER** 因 ledger 寫入失敗而中斷 handoff。此 E.1 record 現由 `archive-gate.sh` **Check 7（Pre-handoff Verdict Presence）機械強制存在** — 缺 E.1 record → archive 被擋 exit 2（fail-open 僅限 ledger 檔尚不存在的 pre-propagation consumer）；soft step 不再可被靜默跳過，soak 才累積得到資料。
+      `--status fail` 當任一 dimension FAIL，否則 `pass`；`--findings-json` 列每個 FAIL 的 `{dimension, severity}`（無 FAIL 給 `[]`）。此 step append-only + fail-open，**NEVER** 因 ledger 寫入失敗而中斷 handoff。此 E.1 record 現由 `archive-gate.sh` **Check 7（Pre-handoff Verdict Presence）機械強制存在** — 缺 E.1 record → archive 被擋 exit 2（fail-open 僅限 ledger 檔尚不存在的 pre-propagation consumer）。
 
-   **Layer E.2 — codex cross-model second opinion**（clade fork addition；Phase 2）：E.1 是主線（Claude）自己審；E.1 之後 **MUST** 再派 **codex GPT-5.6-sol extra_high** 對同 5 dimension 做獨立 cross-check（per `rules/core/agent-routing.md` 「跨模型」原則 — author model 會 rationalize 過自己的盲點，換個 model 才抓得到）：
+   **Layer E.2 — codex cross-model second opinion**（clade fork addition；Phase 2）：E.1 之後 **MUST** 再派 **codex GPT-5.6-sol xhigh** 對同 5 dimension 做獨立 cross-check（E.1 收集 + 判定都是同 model 同 session，E.2 另起一個 session 獨立審——不同 session 各自推理，防止 E.1 session 內的 rationalization 傳染）：
 
    ```bash
    node <clade-vendor>/scripts/codex-dispatch-pre-handoff-check.mjs \
@@ -1054,10 +1136,11 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    2. **LEGACY 清理**：刪掉 `legacy` array 內所有無 `#N` 前綴的舊圖（`rm` 即可；它們不配對任何 item）。
 
-   3. **STALE 重拍**：對 `stale` array 內每個 item：
+   3. **STALE 重拍**（**codex GPT-5.6-sol medium**）：對 `stale` array 內每個 item：
       - 從 tasks.md `## 人工檢查` 找到對應 `#N` item 的 URL + ready_signal
-      - 用 agent-browser（或 codex-dispatch-screenshot-verify.mjs，視 codex 可用性）重拍該張截圖
+      - 派 codex GPT-5.6-sol medium 透過 `codex-dispatch-screenshot-verify.mjs` 重拍該張截圖
       - 覆蓋原檔（mtime 自然 > last UI commit）
+      - 重拍完成後，對重拍的截圖跑 **Screenshot Match Analysis gate**（同 Step 8a § 4 的 codex GPT-5.6-sol xhigh 分析），確認重拍截圖匹配要求
 
    4. **重跑 audit 確認 0 stale**：
 
@@ -1223,7 +1306,7 @@ What would you like to do?
 - **Phase dispatch discipline**（per `agent-routing.md`）:
   - **NEVER** dispatch Design Review phase to codex — Design skill is Claude Code first-class
   - **NEVER** dispatch UI view phase（component / page / view / layout / styling）to codex — UI view 層的視覺 / 互動 / a11y 細節必須跟 Design skill 緊耦合，主線自己做。Frontend 但非 view 的（store / hook / API client / type / util）仍走 codex
-  - **NEVER** dispatch with `medium` effort — use `high` minimum
+  - **NEVER** dispatch **Phase Dispatch（Step 6b）** with `medium` effort — use `high` minimum。Step 8a 系列的收集工作允許 `medium`（見 Step 8a Model allocation）
   - **NEVER** dispatch task-by-task — phase granularity only
   - **NEVER** dispatch a codex phase without including the「view-layer guard」instruction in the prompt — without it, codex tends to incidentally touch `.vue` / `.tsx` files
   - **NEVER** dispatch a codex phase without including the「Plan-first」instruction in the prompt — without it, 主線只能從 `git diff` 反推 codex 意圖，cross-check 易漏「漏做的 task」與「踩到 view 層」這類 drift（per `agent-routing.md` Plan-first 條目）

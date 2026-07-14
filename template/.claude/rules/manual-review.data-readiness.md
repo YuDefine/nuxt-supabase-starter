@@ -5,7 +5,7 @@ paths: ['openspec/changes/**/proposal.md', 'openspec/changes/**/tasks.md']
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/manual-review.data-readiness.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 

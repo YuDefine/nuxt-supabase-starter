@@ -5,7 +5,7 @@ paths: ['openspec/**', 'docs/tech-debt.md', 'docs/decisions/**', 'HANDOFF.md']
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/scope-discipline.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 

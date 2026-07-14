@@ -7,7 +7,7 @@ model: haiku
 <!--
 🔒 LOCKED — managed by clade
 Source: plugins/hub-core/agents/db-backup.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 

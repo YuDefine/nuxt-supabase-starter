@@ -4,7 +4,7 @@ description: 跨 consumer prod MCP 安全 hard rule（prod-supabase tool permiss
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/prod-mcp-safety.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 

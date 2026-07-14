@@ -5,7 +5,7 @@ paths: ['server/api/**/*.ts', 'packages/*/server/api/**/*.ts', 'template/server/
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/audit-pattern.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 

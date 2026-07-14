@@ -5,7 +5,7 @@ paths: ['openspec/changes/**/tasks.md', 'docs/manual-review-archive.md']
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/manual-review.evidence.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 

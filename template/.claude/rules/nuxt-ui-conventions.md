@@ -5,7 +5,7 @@ paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'template/app/**/*.vue', 'pag
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/framework/nuxt/nuxt-ui-conventions.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 

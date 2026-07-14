@@ -4,7 +4,7 @@ description: vite-doctor framework diagnostic scanner 配置與使用
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/vite-doctor.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 

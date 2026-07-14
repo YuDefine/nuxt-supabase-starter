@@ -5,7 +5,7 @@ paths: ['HANDOFF.md', 'openspec/ROADMAP.md', 'openspec/changes/**', '.spectra/cl
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/work-claims.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 

@@ -5,7 +5,7 @@ paths: ['app/app.vue', 'packages/*/app/app.vue', 'template/app/app.vue', 'app/pa
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/framework/nuxt/page-loading-golden-path.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 

@@ -5,7 +5,7 @@ paths: ['supabase/migrations/**/*.sql', 'server/**/*.ts', 'packages/*/server/**/
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/modules/db-runtime/cf-workers/unused-features.md
-Edit at: <clade-central-repo>
+Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
