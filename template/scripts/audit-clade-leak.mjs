@@ -56,6 +56,12 @@ const FALLBACK_FORBIDDEN_TOKENS = [
 ]
 
 const FALLBACK_PERSONAL_NEEDLES = [
+  // macOS home layout
+  '<HOME>/.local/bin/',
+  '<clade-central-repo>',
+  '<home>/offline/',
+  '~/',
+  // Linux home layout — 逐字比對，缺一邊等於該平台上完全偵測不到洩漏
   '<HOME>/.local/bin/',
   '<clade-central-repo>',
   '<home>/offline/',

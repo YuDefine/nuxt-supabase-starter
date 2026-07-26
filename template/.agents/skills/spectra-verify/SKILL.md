@@ -121,6 +121,23 @@ Verify that an implementation matches the change artifacts (specs, tasks, design
 
    Hook exits 0 → no Completeness manual-review issues added; proceed to Step 6 silently. Reference: `vendor/snippets/manual-review-enforcement/patterns.json` + `rules/core/manual-review.data-readiness.md`.
 
+5.7. **Gate Chain Pre-check**（clade fork addition — per [[verify-gate-chain]]）
+
+   `/spectra-verify` is read-only（`disallowedTools: [Edit, Write]`），所以 gate chain FAIL **不在 verify 內修正**——回報 CRITICAL 並建議回 `/spectra-apply` 跑 iterate-until-green。
+
+   讀 consumer 的 `.claude/rules/local/verify-commands.md`。若不存在 → skip（note "No verify-commands.md, gate chain skipped"）。
+
+   若存在，依序跑 L0–L2：
+
+   ```bash
+   vp check && pnpm typecheck && pnpm test --run
+   ```
+
+   - **全 PASS** → 在 Completeness dimension 加 `PASS: gate chain (L0–L2) all green`，進 Step 6
+   - **任一 FAIL** → 加 CRITICAL issue：`Gate chain FAIL at L<N>: <error summary>`
+     - Recommendation: `Run /spectra-apply to iterate-until-green, then re-run /spectra-verify`
+     - **MUST** 仍繼續 Step 6–8 跑完 spec/design verification——gate chain FAIL 不 short-circuit 其他維度的檢查，但 Final Assessment **MUST** 標 CRITICAL 不可 archive
+
 6. **Verify Correctness**
 
    **Requirement Implementation Mapping**:

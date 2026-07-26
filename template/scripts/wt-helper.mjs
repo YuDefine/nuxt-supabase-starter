@@ -46,14 +46,21 @@
  */
 
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import {
   appendFileSync,
+  closeSync,
+  constants as fsConstants,
   copyFileSync,
-  cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
+  openSync,
   readFileSync,
+  readSync,
   readdirSync,
+  statSync,
+  writeFileSync,
   realpathSync,
   rmSync,
   unlinkSync,
@@ -78,6 +85,42 @@ function git(args, opts = {}) {
     ...opts,
   })
   return out ? out.trim() : ''
+}
+
+/**
+ * Optional per-worktree resource bootstrap.
+ *
+ * Consumers that provision per-worktree resources (typically an isolated dev
+ * database clone plus its sidecar) ship `scripts/wt-env-bootstrap.mjs` exposing
+ * `ensure` / `destroy`. Consumers without that script are unaffected: this
+ * returns null and callers skip the step.
+ *
+ * Fails closed when the script exists but the command errors or emits invalid
+ * JSON — a half-provisioned remote resource must surface, not be swallowed.
+ */
+export function runWtEnvBootstrap(worktreePath, command, opts = {}) {
+  const script = join(worktreePath, 'scripts', 'wt-env-bootstrap.mjs')
+  if (!existsSync(script)) return null
+
+  const args = [script, command, '--worktree', worktreePath, '--json']
+  if (opts.allowOrphanRecord) args.push('--allow-orphan-record')
+
+  const run = opts.spawnSyncImpl ?? spawnSync
+  const result = run(process.execPath, args, {
+    cwd: worktreePath,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  if (result.status !== 0) {
+    throw new Error(
+      `Worktree env bootstrap ${command} failed: ${result.stderr?.trim() || 'unknown error'}`,
+    )
+  }
+  try {
+    return JSON.parse(result.stdout?.trim())
+  } catch {
+    throw new Error(`Worktree env bootstrap ${command} returned invalid JSON`)
+  }
 }
 
 function findConsumerRoot(start = process.cwd()) {
@@ -277,6 +320,61 @@ function runOxfmtStdin(text, filePath, cwd) {
     } catch {}
   }
   return null
+}
+
+// Tool-managed drift gate: drift that **wt-helper itself created** and that
+// **must never land on main**. Excluded from the WIP gate entirely — neither
+// blocked nor auto-committed.
+//
+// Today this is exactly one case: cmdAdd flips the worktree's `.npmrc`
+// `verify-deps-before-run` from `warn` to `install` (see the "Flip
+// verify-deps-before-run" block in cmdAdd — main deliberately keeps `warn` to
+// avoid postinstall on ctrl+c, worktrees take `install` so dep desync
+// auto-repairs). That leaves every worktree permanently showing ` M .npmrc`,
+// which the pre-flight then reports as user WIP and refuses to merge-back on
+// — i.e. wt-helper's own bootstrap blocks wt-helper's own landing path
+// (<consumer-a> TD-252, hit by all 4 lanes on 2026-07-26).
+//
+// It must NOT go through the auto-commit branch either: committing it would
+// carry `install` into main, silently flipping main's pnpm behaviour. Since
+// merge-back squashes **commits** only, leaving it uncommitted is correct —
+// it simply must stop being counted as a blocker.
+//
+// Narrow by construction: returns true only when normalising that single line
+// makes HEAD and the working tree byte-identical. Any other edit to `.npmrc`
+// (a real user change) still falls through to the WIP gate.
+function isToolManagedDrift(wtPath, filePath) {
+  if (filePath !== '.npmrc') return false
+  let headText
+  try {
+    headText = execFileSync('git', ['show', `HEAD:${filePath}`], {
+      cwd: wtPath,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch {
+    return false
+  }
+  let currentText
+  try {
+    currentText = readFileSync(join(wtPath, filePath), 'utf8')
+  } catch {
+    return false
+  }
+  if (headText === currentText) return false
+
+  // **方向敏感**：只認 cmdAdd bootstrap 造成的 `warn` → `install`。
+  // 反方向（HEAD 是 `install`、working tree 是 `warn`）是 user 手動把它改回來——那是**真的
+  // user WIP**。若把兩個方向都當 tool-managed 放行，等於繞過 WIP 保護，cleanup 會靜默刪掉它。
+  const LINE = /^verify-deps-before-run=(warn|install)$/m
+  const headMatch = headText.match(LINE)
+  const currentMatch = currentText.match(LINE)
+  if (!headMatch || !currentMatch) return false
+  if (headMatch[1] !== 'warn' || currentMatch[1] !== 'install') return false
+
+  // 該行以外的內容必須逐位元組相同——同一次編輯若還動了別的行，整份就當 user WIP。
+  const blank = (s) => s.replace(LINE, 'verify-deps-before-run=<tool-managed>')
+  return blank(headText) === blank(currentText)
 }
 
 // Whitelist gate for the auto-commit branch in cmdMergeBack. Returns true iff:
@@ -987,15 +1085,6 @@ async function cmdAdd(slug, opts = {}) {
 
   setupBriefExclude(wtPath)
 
-  console.log('')
-  console.log('Worktree ready.')
-  console.log(`  cd ${wtPath}`)
-  console.log(`  Branch: ${branch}`)
-  console.log('')
-  console.log(
-    'Open a new Claude Code or Codex session in the worktree path to continue work isolated from main.',
-  )
-
   // TD-187: auto-invoke wt-env-bootstrap.mjs if consumer-meta declares filesToCopy.
   // Copies gitignored env files (e.g. .env.local) from main into the new worktree
   // so dev server starts with DB credentials, tunnel keys, etc. Warn-only on failure.
@@ -1024,6 +1113,74 @@ async function cmdAdd(slug, opts = {}) {
     } catch (e) {
       console.error(`note: env-bootstrap skipped: ${e.message ?? e}`)
     }
+  }
+
+  // Per-worktree resource provisioning (isolated dev DB clone + sidecar).
+  // Runs after the env-file copy above so the bootstrap script can read the
+  // credentials it needs. No-op for consumers without wt-env-bootstrap.mjs.
+  const envBootstrap = runWtEnvBootstrap(wtPath, 'ensure')
+  if (envBootstrap?.dbName) {
+    console.log(`  env-bootstrap: ${envBootstrap.dbName} → ${envBootstrap.supabaseUrl}`)
+  }
+
+  // announce only after env files + per-worktree resources are in place —
+  // "ready" must not print while the worktree still lacks its database.
+  console.log('')
+  console.log('Worktree ready.')
+  console.log(`  cd ${wtPath}`)
+  console.log(`  Branch: ${branch}`)
+  console.log('')
+  console.log(
+    'Open a new Claude Code or Codex session in the worktree path to continue work isolated from main.',
+  )
+
+  // Auto-install deps + set verify-deps-before-run=install in worktree .npmrc.
+  //
+  // git worktree doesn't share node_modules. Without install here, the first
+  // `pnpm dev` sees "node_modules out of sync" (warn) or crashes on missing
+  // modules. Additionally, worktree package.json diverges from main over time
+  // (version bumps, script additions) — pnpm 10 verify-deps-before-run treats
+  // ANY package.json change as "structure changed" and warns on every script.
+  //
+  // Two-pronged fix:
+  //   1. Install deps now (initial sync)
+  //   2. Set verify-deps-before-run=install in worktree .npmrc so future
+  //      desync auto-repairs instead of warning. Main keeps =warn (avoids
+  //      postinstall on ctrl+c). Worktree accepts the occasional ~14s
+  //      auto-install as better UX than persistent WARN on every command.
+  if (existsSync(join(wtPath, 'package.json'))) {
+    try {
+      console.log('  deps: pnpm install --prefer-offline …')
+      const inst = spawnSync('pnpm', ['install', '--prefer-offline', '--frozen-lockfile'], {
+        cwd: wtPath,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 120_000,
+      })
+      if (inst.status === 0) {
+        console.log('  deps: done')
+      } else {
+        const stderr = inst.stderr?.toString().trim().split('\n')[0] ?? ''
+        console.error(`  deps: pnpm install exited ${inst.status} — ${stderr}`)
+        console.error('  deps: worktree may need manual `pnpm install` before dev server works')
+      }
+    } catch (e) {
+      console.error(`  deps: skipped (${e.message ?? e})`)
+    }
+
+    // Flip verify-deps-before-run to install in worktree .npmrc
+    try {
+      const npmrcPath = join(wtPath, '.npmrc')
+      if (existsSync(npmrcPath)) {
+        const content = readFileSync(npmrcPath, 'utf8')
+        if (content.includes('verify-deps-before-run=warn')) {
+          writeFileSync(
+            npmrcPath,
+            content.replace('verify-deps-before-run=warn', 'verify-deps-before-run=install'),
+          )
+          console.log('  deps: .npmrc verify-deps-before-run → install (worktree-only)')
+        }
+      }
+    } catch {}
   }
 
   // Auto-trigger codebase-memory index_repository (fast mode, detached) so
@@ -1640,65 +1797,191 @@ export function isArchivePathConflict(p) {
 // `git worktree remove --force` permanently deletes screenshots and downstream
 // `spectra-archive` Step 7 sweep finds no files in main. See TD-160.
 //
-// Behavior: for each `screenshots/<env>/<topic>/` in the worktree (env subdir,
-// excluding `_archive`), if main lacks the same `<env>/<topic>/` path, recursively
-// copy it. If main already has it (rare — user manually pre-copied), skip and
-// warn. Errors are best-effort: log but never block merge-back / cleanup.
-function preserveWorktreeScreenshots(wtPath, mainPath) {
-  const src = join(wtPath, 'screenshots')
-  if (!existsSync(src)) return { moves: [] }
-  const moves = []
-  let envDirs
+// Behavior: for every entry under `screenshots/` in the worktree (including
+// `_archive`, which is just as gitignored as the rest), merge **per file** into
+// main's same relative path:
+//   - destination file missing            → copy
+//   - destination file byte-identical     → skip (silent, already preserved)
+//   - destination file exists, differs    → copy as `<stem>.wt-<slug><ext>`
+//                                           (`-2`, `-3`, … if taken), created
+//                                           exclusively; NEVER overwrite
+// Directory-level skip is forbidden: gitignored screenshots exist only in the
+// worktree's working tree, so anything not copied here is destroyed by the
+// subsequent `git worktree remove --force` with no git object to recover from.
+//
+// Invariant: cleanup must not run until every gitignored artifact has been
+// individually accounted for — so this is **fail-closed**. Any scan error, copy
+// error, or entry type we cannot faithfully preserve (symlink, FIFO, socket,
+// device) is recorded as a failure, and `cmdMergeBack` MUST skip cleanup and
+// retain the worktree when any failure is present. Reporting a warning and
+// deleting the worktree anyway is the exact failure mode this function exists
+// to prevent.
+const DIGEST_CHUNK = 1 << 20
+
+// Chunked so a single large screenshot cannot blow the heap. Reads through one
+// descriptor and re-stats it afterwards, so a file mutated mid-read is reported
+// as a failure rather than silently digesting a torn snapshot.
+function fileDigest(p) {
+  const fd = openSync(p, 'r')
   try {
-    envDirs = readdirSync(src, { withFileTypes: true })
-  } catch (e) {
-    return { moves: [], error: e.message ?? String(e) }
+    const { size, mtimeMs } = statSync(p)
+    const hash = createHash('sha256')
+    const buf = Buffer.allocUnsafe(DIGEST_CHUNK)
+    let read
+    while ((read = readSync(fd, buf, 0, DIGEST_CHUNK, null)) > 0) hash.update(buf.subarray(0, read))
+    const after = statSync(p)
+    if (after.size !== size || after.mtimeMs !== mtimeMs) {
+      throw new Error(`file changed while hashing: ${p}`)
+    }
+    return hash.digest('hex')
+  } finally {
+    closeSync(fd)
   }
-  for (const envDir of envDirs) {
-    if (!envDir.isDirectory()) continue
-    const envName = envDir.name
-    const envSrcPath = join(src, envName)
-    const envDstPath = join(mainPath, 'screenshots', envName)
-    let topicDirs
-    try {
-      topicDirs = readdirSync(envSrcPath, { withFileTypes: true })
-    } catch {
+}
+
+// Refuse to write through a symlink (or any non-directory masquerading as a
+// parent): following one would let a dangling/hostile link redirect the copy
+// outside main's screenshots tree.
+function assertPlainDestination(dstPath, rootReal) {
+  let cur = dirname(dstPath)
+  const seen = []
+  while (!existsSync(cur)) {
+    seen.push(cur)
+    const parent = dirname(cur)
+    if (parent === cur) break
+    cur = parent
+  }
+  const st = lstatSync(cur, { throwIfNoEntry: false })
+  if (!st) throw new Error(`destination root missing: ${cur}`)
+  if (st.isSymbolicLink()) throw new Error(`destination parent is a symlink: ${cur}`)
+  if (!st.isDirectory()) throw new Error(`destination parent is not a directory: ${cur}`)
+  const real = realpathSync(cur)
+  if (real !== rootReal && !real.startsWith(`${rootReal}/`)) {
+    throw new Error(`destination escapes screenshots root: ${real}`)
+  }
+  for (const p of seen) void p
+  const existing = lstatSync(dstPath, { throwIfNoEntry: false })
+  if (existing && existing.isSymbolicLink()) {
+    throw new Error(`destination file is a symlink: ${dstPath}`)
+  }
+  return existing
+}
+
+// Exclusive create; returns the name actually used. Never truncates an existing
+// candidate — a byte-identical one counts as already preserved, a differing one
+// pushes to the next suffix.
+function copyToFreeConflictName(srcPath, dstDir, name, slug, rootReal) {
+  const dot = name.lastIndexOf('.')
+  const stem = dot > 0 ? name.slice(0, dot) : name
+  const ext = dot > 0 ? name.slice(dot) : ''
+  for (let n = 1; n <= 100; n++) {
+    const candidate = `${stem}.wt-${slug}${n === 1 ? '' : `-${n}`}${ext}`
+    const candidatePath = join(dstDir, candidate)
+    const existing = assertPlainDestination(candidatePath, rootReal)
+    if (existing) {
+      if (
+        existing.size === statSync(srcPath).size &&
+        fileDigest(srcPath) === fileDigest(candidatePath)
+      ) {
+        return { name: candidate, identical: true }
+      }
       continue
     }
-    for (const topicDir of topicDirs) {
-      if (!topicDir.isDirectory()) continue
-      if (topicDir.name === '_archive') continue
-      const topicSrcPath = join(envSrcPath, topicDir.name)
-      const topicDstPath = join(envDstPath, topicDir.name)
-      if (existsSync(topicDstPath)) {
-        moves.push({
-          env: envName,
-          topic: topicDir.name,
-          skipped: true,
-          reason: 'destination exists',
-        })
+    mkdirSync(dstDir, { recursive: true })
+    copyFileSync(srcPath, candidatePath, fsConstants.COPYFILE_EXCL)
+    return { name: candidate, identical: false }
+  }
+  throw new Error(`no free conflict name for ${name} after 100 attempts`)
+}
+
+function mergeScreenshotDir(srcDir, dstDir, ctx, out) {
+  let entries
+  try {
+    entries = readdirSync(srcDir, { withFileTypes: true })
+  } catch (e) {
+    out.push({
+      ...ctx,
+      rel: ctx.rel || '.',
+      failed: true,
+      scanFailure: true,
+      error: e.message ?? String(e),
+    })
+    return
+  }
+  for (const entry of entries) {
+    const rel = ctx.rel ? `${ctx.rel}/${entry.name}` : entry.name
+    const srcPath = join(srcDir, entry.name)
+    const dstPath = join(dstDir, entry.name)
+    if (entry.isSymbolicLink() || (!entry.isDirectory() && !entry.isFile())) {
+      // Cannot faithfully preserve; must not be silently dropped by cleanup.
+      out.push({
+        ...ctx,
+        rel,
+        failed: true,
+        unsupported: true,
+        error: `unsupported entry type (symlink/special file): ${srcPath}`,
+      })
+      continue
+    }
+    if (entry.isDirectory()) {
+      mergeScreenshotDir(srcPath, dstPath, { ...ctx, rel }, out)
+      continue
+    }
+    try {
+      const existing = assertPlainDestination(dstPath, ctx.rootReal)
+      if (!existing) {
+        mkdirSync(dstDir, { recursive: true })
+        copyFileSync(srcPath, dstPath, fsConstants.COPYFILE_EXCL)
+        out.push({ ...ctx, rel, copied: true })
         continue
       }
-      try {
-        cpSync(topicSrcPath, topicDstPath, { recursive: true })
-        moves.push({ env: envName, topic: topicDir.name, copied: true })
-      } catch (e) {
-        moves.push({
-          env: envName,
-          topic: topicDir.name,
-          failed: true,
-          error: e.message ?? String(e),
-        })
+      if (existing.size === statSync(srcPath).size && fileDigest(srcPath) === fileDigest(dstPath)) {
+        out.push({ ...ctx, rel, identical: true })
+        continue
       }
+      const { name: conflictName, identical } = copyToFreeConflictName(
+        srcPath,
+        dstDir,
+        entry.name,
+        ctx.slug,
+        ctx.rootReal,
+      )
+      out.push({
+        ...ctx,
+        rel,
+        renamed: true,
+        alreadyPreserved: identical,
+        as: ctx.rel ? `${ctx.rel}/${conflictName}` : conflictName,
+      })
+    } catch (e) {
+      out.push({ ...ctx, rel, failed: true, error: e.message ?? String(e) })
     }
   }
-  return { moves }
+}
+
+function preserveWorktreeScreenshots(wtPath, mainPath, slug = 'worktree') {
+  const src = join(wtPath, 'screenshots')
+  if (!existsSync(src)) return { files: [], ok: true }
+  const dstRoot = join(mainPath, 'screenshots')
+  mkdirSync(dstRoot, { recursive: true })
+  const files = []
+  // Walk the whole tree — including `_archive` and any loose files at the
+  // `screenshots/` or `<env>/` level. Everything here is gitignored, so an
+  // entry we decline to walk is an entry cleanup deletes forever.
+  mergeScreenshotDir(
+    src,
+    dstRoot,
+    { env: '.', topic: '.', rel: '', slug: makeSlugSafe(slug), rootReal: realpathSync(dstRoot) },
+    files,
+  )
+  const failed = files.filter((f) => f.failed)
+  return { files, ok: failed.length === 0 }
 }
 
 async function cmdCleanup(slug, opts) {
   if (!slug)
     throw new Error(
-      'Usage: wt-helper cleanup <slug> [--force] [--force-discard-unland] [--force-discard-uncommitted]',
+      'Usage: wt-helper cleanup <slug> [--force] [--force-discard-unland] [--force-discard-uncommitted] [--allow-orphan-record]',
     )
   const cleanSlug = makeSlugSafe(slug)
   const consumerRoot = findConsumerRoot()
@@ -1718,8 +2001,24 @@ async function cmdCleanup(slug, opts) {
   // (applied from stash, never committed) and vanished on cleanup.
   const branchMerged = mergedBranches(consumerRoot).has(branchName)
   const unlanded = detectUnlandedFiles(consumerRoot, branchName)
-  const uncommitted = detectUncommittedWorktreeFiles(target.path)
+  // Tool-managed drift MUST be excluded here for the same reason merge-back's WIP gate
+  // excludes it (see isToolManagedDrift) — and the two gates MUST agree, or atomic
+  // merge-back breaks in half: cmdMergeBack squashes successfully, then calls cmdCleanup,
+  // which still counts `.npmrc` as uncommitted and refuses. Result is
+  // "absorbed into main (cleanup skipped/failed)" on **every** lane, each needing a manual
+  // --force-discard-uncommitted to finish (<consumer-a>'s 4 lanes, 2026-07-26).
+  //
+  // Only `modified` is filtered: isToolManagedDrift compares against HEAD, which an
+  // untracked file has no version of.
+  const uncommittedRaw = detectUncommittedWorktreeFiles(target.path)
+  const uncommitted = {
+    modified: uncommittedRaw.modified.filter((m) => !isToolManagedDrift(target.path, m.path)),
+    untracked: uncommittedRaw.untracked,
+  }
   const uncommittedCount = uncommitted.modified.length + uncommitted.untracked.length
+  // git 不知道我們決定忽略這些檔，`git worktree remove` 照樣會因 dirty 而拒絕。
+  // 只放行 gate 而不讓 remove 帶 --force，等於把同一個失敗從 gate 挪到 remove。
+  const toolManagedCount = uncommittedRaw.modified.length - uncommitted.modified.length
   const needsForce = !branchMerged && !opts.force
   const needsDiscardUnland = unlanded.length > 0 && !opts.forceDiscardUnland
   const needsDiscardUncommitted = uncommittedCount > 0 && !opts.forceDiscardUncommitted
@@ -1772,8 +2071,23 @@ async function cmdCleanup(slug, opts) {
     )
   }
 
+  // Release per-worktree resources before the directory disappears — the
+  // bootstrap script lives inside the worktree. No-op for consumers without it.
+  const envCleanup = runWtEnvBootstrap(target.path, 'destroy', {
+    allowOrphanRecord: opts.allowOrphanRecord,
+  })
+  if (envCleanup?.status === 'orphan-recorded' && !opts.allowOrphanRecord) {
+    throw new Error(
+      `Worktree env cleanup did not complete for ${cleanSlug}; ` +
+        `re-run with --allow-orphan-record to record it as an orphan and continue.`,
+    )
+  }
+
   const removeArgs = ['worktree', 'remove']
-  if (opts.force) removeArgs.push('--force')
+  // toolManagedCount > 0：gate 已判定這些 drift 可忽略（見上方），但 git 仍視之為 dirty
+  // 而拒絕移除，所以這裡必須補 --force。它只涵蓋 isToolManagedDrift 認可的檔——真的
+  // user WIP 早在 gate 就攔下了，不會走到這裡。
+  if (opts.force || toolManagedCount > 0) removeArgs.push('--force')
   removeArgs.push(target.path)
   git(removeArgs, { cwd: consumerRoot })
   // Post-remove verification: git worktree remove may leave gitignored dirs
@@ -1860,13 +2174,25 @@ async function cmdMergeBack(slug, opts = {}) {
   // prompt). Everything else stays as semantic user WIP and falls through to
   // the existing STOP gate.
   const wtFmtDrift = []
+  const wtToolManaged = []
   const wtUserDirty = []
   for (const d of wtUserDirtyAll) {
-    if (d.kind === 'modified' && isFormatOnlyDrift(target.path, d.path)) {
+    if (d.kind === 'modified' && isToolManagedDrift(target.path, d.path)) {
+      // wt-helper 自己 bootstrap 造成、且刻意不該 land 的差異 → 兩邊都不進
+      // （不擋 merge-back，也不 auto-commit）。見 isToolManagedDrift 註解。
+      wtToolManaged.push(d)
+    } else if (d.kind === 'modified' && isFormatOnlyDrift(target.path, d.path)) {
       wtFmtDrift.push(d)
     } else {
       wtUserDirty.push(d)
     }
+  }
+  if (wtToolManaged.length > 0) {
+    console.log(
+      `merge-back: ignoring ${wtToolManaged.length} tool-managed drift file(s) ` +
+        `(${wtToolManaged.map((d) => d.path).join(', ')}) — created by wt-helper bootstrap, ` +
+        `intentionally not landed on main`,
+    )
   }
 
   // Surface pinned pre-fork baselines for this slug so the user knows what's
@@ -2334,36 +2660,60 @@ async function cmdMergeBack(slug, opts = {}) {
   // the worktree dir. `git merge --squash` carries nothing under `screenshots/`
   // because it's gitignored; without this sync downstream `spectra-archive`
   // Step 7 sweep finds no files in main. See TD-160.
-  let screenshotSync = { moves: [] }
+  let screenshotSync = { files: [], ok: true }
   if (opts.cleanup !== false) {
     try {
-      screenshotSync = preserveWorktreeScreenshots(target.path, consumerRoot)
-      const copied = screenshotSync.moves.filter((m) => m.copied)
-      const skipped = screenshotSync.moves.filter((m) => m.skipped)
-      const failed = screenshotSync.moves.filter((m) => m.failed)
-      if (copied.length > 0) {
-        const list = copied.map((m) => `${m.env}/${m.topic}`).join(', ')
-        console.log(
-          `merge-back: synced ${copied.length} screenshot folder(s) from worktree to main before cleanup (${list})`,
-        )
-      }
-      if (skipped.length > 0) {
-        const list = skipped.map((m) => `${m.env}/${m.topic}`).join(', ')
-        console.warn(
-          `merge-back: ${skipped.length} screenshot folder(s) skipped — destination exists in main (${list})`,
-        )
-      }
-      if (failed.length > 0) {
-        const list = failed.map((m) => `${m.env}/${m.topic} (${m.error})`).join('; ')
-        console.warn(`merge-back: ${failed.length} screenshot folder(s) failed to copy: ${list}`)
-      }
+      screenshotSync = preserveWorktreeScreenshots(target.path, consumerRoot, cleanSlug)
     } catch (e) {
-      console.warn(`merge-back: warn — preserve screenshots failed: ${e.message ?? e}`)
+      screenshotSync = {
+        files: [{ env: '.', topic: '.', rel: '.', failed: true, error: e.message ?? String(e) }],
+        ok: false,
+      }
+    }
+    const copied = screenshotSync.files.filter((f) => f.copied)
+    const identical = screenshotSync.files.filter((f) => f.identical)
+    const renamed = screenshotSync.files.filter((f) => f.renamed)
+    const failed = screenshotSync.files.filter((f) => f.failed)
+    const scanFailed = failed.filter((f) => f.scanFailure)
+    if (copied.length + identical.length + renamed.length + failed.length > 0) {
+      console.log(
+        `merge-back: screenshot preserve — copied ${copied.length}, skipped-identical ${identical.length}, renamed-conflict ${renamed.length}, failed ${failed.length}` +
+          (scanFailed.length > 0
+            ? ` (incl. ${scanFailed.length} directory scan failure(s) — unknown number of files left unexamined)`
+            : ''),
+      )
+    }
+    if (copied.length > 0) {
+      const list = copied.map((f) => f.rel).join(', ')
+      console.log(`merge-back: screenshot copied: ${list}`)
+    }
+    if (renamed.length > 0) {
+      const list = renamed.map((f) => `${f.rel} → ${f.as}`).join('; ')
+      console.warn(
+        `merge-back: ${renamed.length} screenshot file(s) differed from main and were kept side-by-side (review and delete the redundant copy): ${list}`,
+      )
+    }
+    if (failed.length > 0) {
+      const list = failed.map((f) => `${f.rel} (${f.error})`).join('; ')
+      console.error(
+        `merge-back: ${failed.length} screenshot artifact(s) could not be preserved: ${list}`,
+      )
     }
   }
 
+  // Fail-closed: gitignored artifacts have no git object to recover from, so a
+  // worktree may only be destroyed once every one of them is accounted for.
+  if (opts.cleanup !== false && !screenshotSync.ok) {
+    console.error(
+      `merge-back: cleanup skipped; worktree retained at ${target.path}\n` +
+        `  Reason: screenshot preserve did not account for every gitignored artifact (see errors above).\n` +
+        `  Resolve the listed paths (copy them out manually if needed), then re-run:\n` +
+        `    node scripts/wt-helper.mjs cleanup ${cleanSlug} --force --force-discard-unland`,
+    )
+  }
+
   let cleanupDone = false
-  if (opts.cleanup !== false) {
+  if (opts.cleanup !== false && screenshotSync.ok) {
     try {
       await cmdCleanup(cleanSlug, { force: true, forceDiscardUnland: true })
       cleanupDone = true
@@ -2587,6 +2937,7 @@ async function main() {
     skipPreSync: flags.has('--skip-pre-sync'),
     skipPreforkAudit: flags.has('--skip-prefork-audit'),
     includeUnrelatedDirty: flags.has('--include-unrelated-dirty'),
+    allowOrphanRecord: flags.has('--allow-orphan-record'),
     precheckBaseline: Object.prototype.hasOwnProperty.call(values, '--precheck-baseline')
       ? values['--precheck-baseline']
       : undefined,
@@ -2745,6 +3096,7 @@ export {
   makeSlugSafe,
   mergedBranches,
   parseWorktreeList,
+  preserveWorktreeScreenshots,
   sessionWorktrees,
   sweepSiblingChangeResidues,
   timestampPrefix,

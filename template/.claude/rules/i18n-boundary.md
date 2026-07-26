@@ -1,0 +1,37 @@
+---
+description: 有 UI 的 consumer 定義或變更 i18n 涵蓋範圍、硬編碼語言 surface、翻譯 lint 與 server error localization 邊界時適用
+paths: ['DESIGN.md', 'docs/decisions/**', 'app/**/*.{vue,ts,tsx,jsx}', 'packages/*/app/**/*.{vue,ts,tsx,jsx}', 'template/app/**/*.{vue,ts,tsx,jsx}', 'components/**/*.{vue,ts,tsx,jsx}', 'packages/*/components/**/*.{vue,ts,tsx,jsx}', 'template/components/**/*.{vue,ts,tsx,jsx}', 'src/**/*.{vue,ts,tsx,jsx}', 'packages/*/src/**/*.{vue,ts,tsx,jsx}', 'template/src/**/*.{vue,ts,tsx,jsx}', 'i18n/**', 'locales/**', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'template/server/**/*.ts']
+---
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/core/i18n-boundary.md
+Edit at: $CLADE_HOME
+Local edits will be reverted by the next sync.
+-->
+
+
+# i18n Scope Boundary
+
+本規約適用於**每一個**有 UI 的 consumer，不論目前採多語系、單一語言，或只有部分 surface 使用 i18n。
+
+## Boundary 是架構決策
+
+當 i18n 覆蓋範圍是刻意決策時，consumer **MUST** 同時留下兩層記錄：
+
+1. `docs/decisions/YYYY-MM-DD-i18n-scope-boundary.md` ADR：記錄決策背景、取捨、翻譯責任與重評條件。
+2. `DESIGN.md` 的 `## i18n Scope Boundary` 專節：讓日常 UI 實作可直接查到目前邊界。
+
+兩層記錄都 **MUST** 明列：
+
+- 哪些 product surface／route／package 使用 i18n。
+- 哪些 surface 刻意硬編碼單一語言，以及該語言與理由。
+- server error、client UI、email／通知等 surface 各自由哪一層負責翻譯。
+- 哪些可觀察條件會觸發重評，例如新增 locale、公開新的 customer-facing surface 或進入新市場。
+
+關閉 `no-untranslated`、`no-raw-text` 或同類 lint 規則時，**MUST** 在同一份 i18n scope ADR 記錄 rule 名稱、受影響路徑、關閉理由與恢復／重評條件。Lint 設定本身的註解不能取代 ADR。
+
+## Error Localization Boundary
+
+- **每一個** server error 都 **MUST** 回傳 stable code 或等價的 error catalog identity；可讀 `message` 不得成為 client 分支或翻譯 key。
+- 翻譯責任 **MUST** 留在 ADR／`DESIGN.md` 宣告的 client layer，由該層把 stable code 轉成使用者可見文字。
+- 既有硬編碼字串依宣告的 surface boundary 漸進收斂。**NEVER** 只靠 grep 找字串後一次性搬進 locale 檔；這會漏掉動態文案、破壞刻意硬編碼的 surface，且無法驗證翻譯責任。

@@ -7,6 +7,8 @@ Local edits will be reverted by the next sync.
 
 # Commit
 
+<!-- never-density-reviewed: 2026-07-25 — 38 條列舉式 NEVER 逐條覆核過：人工檢查 gate 7 條各封一條具體繞道路徑、檔案系統等效動作 6 條是非顯然洞察、其餘多為逐字反開脫。本檔是紀律型規約（已有多條對應 pitfall），依 rule-authoring § 紀律型規約三件套，反開脫清單就是正確形式。已刪的 3 條純複述見 git history。 -->
+
 所有 commit **MUST** 透過 `/commit` command 執行。**NEVER** 直接 `git commit`（例外見下）。
 
 ## 理由
@@ -130,6 +132,10 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 
 跨多檔工作（fleet sweep / dep migration / 跨檔 refactor）**SHOULD** 走 worktree（per [[worktree-default]]），main working tree 完全不動 — 從機制上避開 staged race，每 worktree 各自獨立 index。
 
+### 隔離 worktree ≠ 繞過 /commit（hard rule）
+
+main 髒 / 有別 session WIP 不能直接跑 `/commit`（會吃別人 staged）→ 正解是**在乾淨隔離 worktree 內跑 `/commit`**，**NEVER** 用「隔離 worktree + raw `git commit` + `git push origin main`」把 substantive change 繞過 0-A review 推上 origin/main。隔離 worktree 是多 session 安全手段、不是 review 豁免。判別：「這批在乾淨 main 會走 `/commit` 還是 `--only`？」答 `/commit` → 隔離 worktree 內也**必須** `/commit`。`git commit --only` 僅限小型 ceremony（HANDOFF 一行 / typo / TD），**NEVER** land 整批 feature / 硬化；`\do-all` / 時間壓力 **NEVER** 是跳 gate 的理由。實證：[[pitfall-isolated-worktree-raw-commit-push-bypasses-commit-gate]]
+
 ## Multi-session shared working-tree 的 git hazard 地圖
 
 多 session 並行是常態，「全 working tree scope」的 git 操作會 silently 吃進別 session 的 staged WIP / untracked 新檔 / stash 內容 → mixed commit、WIP 永久遺失、deploy commit 內容跟 message 不符。
@@ -199,17 +205,14 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 
 ## 禁止事項
 
-- **NEVER** `git commit` / `git commit -m` — 繞過 0-A / 0-B / 0-C 品質閘門
 - **NEVER** `git commit --amend` 修改已 push 的 commit — 會破壞遠端 history
 - **NEVER** `git commit --no-verify` — 繞過 pre-commit hook
 - **NEVER** 以「變更很小」「只是 typo」「趕時間」為由跳過 `/commit`
+- **NEVER** 以「dev server 需要這個 fix」「E2E 測試要通過」「unblock 驗證」為由直接 `git commit` 跳過 `/commit` — 修 main code 讓 dev server 生效是 OK 的（hot reload），但 **commit 必須等到 `/commit` 時統一走閘門**。正確做法：Edit 修好 → dev server hot reload 自動生效 → 改動留在 working tree 不 commit → 驗證完後統一 `/commit`
 - **NEVER** 讓 subagent 自主執行 `git commit` — commit **必須在主線執行**；使用者觸發 `/commit` 即代表授權整批分組，主線**不需**在分組後另行徵詢確認（commit 流程預設無互動）
-- **NEVER** 在 lock 被佔用時自行 `rm .claude/.commit.lock`、**NEVER** 漏跑 Final Step `release`（見 § Single Session Lock）
-- **NEVER** 把 `pnpm check` 當作完整 0-C；**MUST** 先 grep 確認 `scripts.check` 含 `test` / `vitest`，不含就額外跑 `pnpm test`
-- **NEVER** 在沒有 `scripts.doctor` 的專案跑 `/commit` — vite-doctor 是必裝組件，缺裝 **MUST block commit** 並要求先安裝（`pnpm add -D vite-doctor` + 加 `scripts.doctor`），詳見 `rules/core/vite-doctor.md`
 - **NEVER** 跳過 `pnpm run doctor` — import graph 問題 lint / typecheck 抓不到；**MUST** 帶 `run`，裸 `pnpm doctor` 撞 pnpm 內建子命令會 silent exit 0、根本沒跑 vite-doctor
 - **NEVER** 在 doctor health score < 100 或 exit ≠ 0 時視為通過 — 即使 warning 是既有非本次 diff 引入，每次 `/commit` **MUST** 修到 100/100 + 0 warnings 才繼續（保持零警告 baseline，避免 debt 累積）
-- **NEVER** 跳過 0-D doc alignment（觸發條件成立時）；**NEVER** 在 docs/ 補新頁面但漏更新 VitePress sidebar config
+- **NEVER** 在 `docs/` 補新頁面但漏更新 VitePress sidebar config（0-D 觸發條件本身見 § 理由）
 
 ### WIP 處置禁令（嚴格）
 
@@ -242,13 +245,13 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 
 #### 話術關鍵詞 = 立即停手訊號
 
-chat / thinking / tool call description 中出現以下任一關鍵詞，**MUST** 立即停手（不下任何命令，AskUserQuestion 給使用者拍板）：
+chat / thinking / tool call description 中出現以下任一關鍵詞，**MUST** 立即停手（不下任何命令，`AskUserQuestion` 給使用者拍板）：
 
-中：`revert` / `還原` / `回退` / `退回` / `撤回` / `復原` / `恢復` / `清除` / `清掉` / `重置` / `回到乾淨狀態` / `丟掉` / `刪掉` / `修正狀態` / `對齊狀態` / `把 X 還回 Y` / `把 X 搬回 Y` / `先還原再 …`
+中：`revert` / `還原` / `回退` / `退回` / `撤回` / `復原` / `恢復` / `清除` / `清掉` / `重置` / `回到乾淨狀態` / `丟掉` / `刪掉` / `修正狀態` / `對齊狀態` / `把 X 還回 Y` / `把 X 搬回 Y` / `先還原再 …` / `先 revert 再 …`
 
 En：`revert` / `undo` / `rollback` / `roll back` / `reset` / `discard` / `drop` / `restore` / `clean up` / `go back` / `undo this` / `fix the state` / `align with` / `move X back to Y` / `restore X to original`
 
-詳細停手定義 + 為什麼話術即訊號，見 `scope-discipline.md`「話術關鍵詞 = 立即停手訊號」。
+> **本節是關鍵詞表的 SoT**，因為 `commit.md` 是 always-load——破壞性動作在任何 session 都可能發生，這張表必須每一輪都在視窗內。[[scope-discipline]] § 話術關鍵詞 是 conditional-load（`paths:` 只涵蓋 openspec / HANDOFF / tech-debt / decisions），它引用本表而不自帶副本。停手定義四步與「為什麼話術 = 思考表徵」在該檔。
 
 #### 唯一例外
 
@@ -271,7 +274,11 @@ En：`revert` / `undo` / `rollback` / `roll back` / `reset` / `discard` / `drop`
 - **所有 uncommitted 變更都必須入庫**，**NEVER** 以「不在本次範圍」「影響不大」為由跳過任何檔案
 - **`.gitignore` 變更**：只允許保留 Clade 管理的 installation artifact / runtime state ignore 條目（例如 `.claude/.commit.lock`、`codex/`）；其他變更**MUST** `git stash push -- .gitignore` 並寫入 `HANDOFF.md`（**NEVER** `git checkout .gitignore` 直接還原）
 - **`.env` / 敏感檔案**：警告使用者但仍由使用者決定是否 commit，**NEVER** 自行跳過
-- **修正所有發現的問題**：review / lint / typecheck / test 發現的問題都**MUST**修正，**NEVER** 以「建議性質」「不在本次範圍」為由跳過。**例外**：修法會動到別 session in-flight WIP（典型：`HANDOFF.md`、別 session 的 `tasks/<...>.md`）時，**MUST** 走 `scope-discipline.md`「Rule 衝突解法」具體分支模板（A. 馬上修續 flow / B. 登 TD 中止 flow）由 user 拍板，**NEVER** 自行二選一
+- **修正所有發現的問題（含既有 codebase 問題）**：review / lint / typecheck / test / codex review 發現的問題都**MUST**修正，**包含不在本次 diff scope 內的既有 codebase 問題**。codex review 掃到的 finding 不論是本次改動引入還是既有存在，處置路徑一律：
+  - **可立即修**（< 30 分鐘、不涉及架構決策）→ 當場修、納入本次 commit 分組
+  - **不可立即修**（架構級、跨多檔、需要更多 context）→ **MUST** 登記到 `docs/tech-debt.md` 開 TD-NNN，**NEVER** 靜默跳過
+  - **NEVER** 以「既有問題」「不在本次 scope」「建議性質」「影響不大」為由跳過任何 finding — 跳過等於讓已知問題長期留存
+  - **例外**：修法會動到別 session in-flight WIP（典型：`HANDOFF.md`、別 session 的 `tasks/<...>.md`）時，**MUST** 走 `scope-discipline.md`「Rule 衝突解法」具體分支模板（A. 馬上修續 flow / B. 登 TD 中止 flow）由 user 拍板，**NEVER** 自行二選一
 
 ## Commit 類型（commitlint.config.js）
 

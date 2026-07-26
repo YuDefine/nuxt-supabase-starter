@@ -9,7 +9,8 @@
 #                                             既有 codebase 違規量大，暫不阻擋）
 #
 # 偵測 heuristic（file-level）：
-#   .vue 檔含 `$fetch` 但不含 `useFetch` / `useQuery` / `useAsyncData`
+#   .vue 檔含 `$fetch` 但不含 `useFetch` / `useLazyFetch` / `useAsyncData` /
+#   `useLazyAsyncData` / `useQuery`
 #   → 代表所有 data-fetching 都走 raw $fetch，違反 HR-1。
 #   含 composable 的 .vue 檔可以安全有 $fetch（event handler mutation），不被標記。
 #
@@ -54,15 +55,21 @@ for file in "${vue_files[@]}"; do
   # file-level escape hatch
   grep -q 'data-perf-ignore-file' "$file" 2>/dev/null && continue
 
-  # 檢查：有 $fetch 但沒有 useFetch / useQuery / useAsyncData
+  # 檢查：有 $fetch 但沒有任何 data-fetching composable
+  #
+  # regex 放寬的兩個理由（都來自實證誤判）：
+  #   use(Lazy)?  — useLazyFetch / useLazyAsyncData 是 Nuxt 官方 composable
+  #   use*Query   — Pinia Colada 的 domain wrapper 慣例是 use<Entity>Query
+  #
+  # 寧可放寬也不收窄：假陽性會逼出全檔豁免，掏空該檔的整體監控。
   if grep -q '\$fetch' "$file" 2>/dev/null && \
-     ! grep -qE 'useFetch|useQuery|useAsyncData' "$file" 2>/dev/null; then
+     ! grep -qE 'use(Lazy)?(Fetch|AsyncData)|use[A-Za-z]*Query' "$file" 2>/dev/null; then
     VIOLATIONS+=("$file")
   fi
 done
 
 if ((${#VIOLATIONS[@]} > 0)); then
-  echo "⚠️  [warn] ${#VIOLATIONS[@]} 個 .vue 檔使用 raw \$fetch 但無 useFetch / useQuery / useAsyncData（HR-1）：" >&2
+  echo "⚠️  [warn] ${#VIOLATIONS[@]} 個 .vue 檔使用 raw \$fetch 但無 useFetch / useLazyFetch / useAsyncData / useLazyAsyncData / useQuery（HR-1）：" >&2
   for v in "${VIOLATIONS[@]}"; do
     echo "  $v" >&2
   done

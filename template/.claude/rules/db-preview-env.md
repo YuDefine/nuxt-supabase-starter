@@ -29,8 +29,26 @@ Self-host Supabase 在 platform-only Branching 之外的選項地景已收斂：
 - ✅ **schema-migration-gate**（CI throwaway-DB replay + diff）：最便宜、立即解 reviewer 漏看，**MUST 第一階段必備**
 - ✅ **compose-per-PR**（docker-compose per PR，unique JWT/port/volume）：完整 preview，**可選**升級路徑
 - ⏸️ **LXC-per-PR**：LXC 同構在錯的層（OS/Tailscale/DNS/secret 不該每 PR 重建）；rare high-fidelity lane、不自動化
+- ⚠️ **clone + PostgREST sidecar**：PG TEMPLATE 死路的**窄例外**，且**只適用 worktree-level dev 隔離、不是 PR preview**；六個前提全滿足才開，見下節
 
 clade 規約管 capability，consumer 在 `registry/consumers.json` 宣告自家當前能力。
+
+### 窄例外：clone + PostgREST sidecar（worktree-level dev 隔離）
+
+上面「PG TEMPLATE clone 是 dead-end」的判定**針對 PR preview** —— 那個場景要的是完整 per-branch service stack（Auth / Storage / Realtime），補齊就等於 compose-per-PR，所以 clone 沒有中間態價值。
+
+但**同一台 dev 主機上多個 git worktree 各自要一份可 reset 的 DB** 是不同問題：不需要 per-branch Auth／Realtime（開發者共用一組 dev 身分即可），只需要「資料互不覆蓋 + 各自可 `db:reset`」。此時 clone + 每 clone 一個 PostgREST sidecar 是成立的，**但六個前提 MUST 全部滿足**：
+
+1. **Dedicated zero-connection template** —— 專用 template DB（`datistemplate=true`、`datallowconn=false`、0 active connection），**NEVER** 拿正在服務的 DB 當 template
+2. **小 DB** —— `CREATE DATABASE ... TEMPLATE` 是實體 copy 不是 CoW；DB 大到 clone 時間／磁碟不可接受就不適用
+3. **無 GoTrue / Realtime per-clone 需求** —— 只要 REST；需要 per-clone Auth／Realtime 就退回 compose-per-PR
+4. **Storage 明確 gate** —— 預設 `storageEnabled=false`；要 Storage 而無 verified strategy 時 **MUST** fail closed，**NEVER** 讓 clone 去動 shared storage bucket
+5. **完整 lifecycle 與 destructive target guard** —— deterministic 命名、ownership marker、`reconcile` 預設 report-only、drop 前驗 ownership；**NEVER** 讓 target 解析到 `postgres` / template 本身 / 非本工具建立的 DB
+6. **Connection pool 預算控管** —— 每 sidecar 固定 pool size，start 前依 `max_connections` 與現有用量估算，超過 headroom 即拒絕
+
+任一條不滿足 → 回到既有路徑（schema-migration-gate 必備、compose-per-PR 可選），**NEVER** 把本例外當成「PG TEMPLATE 其實可以用」的一般結論。
+
+Cookbook（naming / ownership / template refresh / path adapter / pool / cleanup 的 contract 與範例）：`vendor/snippets/worktree-db-isolation/`。
 
 ## MUST
 
@@ -123,7 +141,7 @@ clade 規約管 capability，consumer 在 `registry/consumers.json` 宣告自家
 
 ```jsonc
 "capabilities": {
-  "preview_db": "none | diff-only | compose-stack | lxc-stack",
+  "preview_db": "none | diff-only | compose-stack | lxc-stack | clone-sidecar",
   "data_branching": "none | synthetic | sanitized-subset"
 }
 ```

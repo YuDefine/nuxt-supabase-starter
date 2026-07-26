@@ -60,3 +60,6 @@ run_check review-rules-ratchet
 
 # nuxt-ui-mixed-slot — 全站掃 UDashboardPanel named template + stray 子元素混用（blocking；fleet 基線 0 hit）
 run_check nuxt-ui-mixed-slot
+
+# utable-slots — 全站掃 UTable 內漏掉 -cell 後綴的 cell slot（blocking；fleet 基線 0 hit）
+run_check utable-slots

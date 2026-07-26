@@ -17,7 +17,6 @@ Local edits will be reverted by the next sync.
 
 - [[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]
 - [[pitfall-verify-evidence-handoff-instead-of-self-collect]]
-- [[pitfall-codex-dispatch-screenshot-verify-prewarm-wrong-cli]]
 - [[pitfall-agent-asks-user-cookie-skipping-dev-login-scaffold]]
 
 ## Hard rule
@@ -42,6 +41,7 @@ Local edits will be reverted by the next sync.
 - 「blocked on `<ENV_VAR>` — dev 環境未配」（未 grep .env.local 確認就假設缺失）
 - 「截圖已拍 / evidence 已補」但未驗證截圖內容是否為預期頁面（拍到登入頁 / 白畫面即違反）
 - 「review:ui 項已勾 `[x]`，視為已驗收」但無對應 agent 自拍 evidence 佐證（既有 `[x]` ≠ evidence — 假設 user 有截圖、信任前 session 代勾都算違反；per [[pitfall-review-ui-checkbox-without-agent-evidence-masks-bug]]）
+- 「grep 不到 X，所以 X 不存在」「零命中，確認沒有」「只有 N 個」「無任何 / 沒有任何 X」（未附 known-positive control 就把 negative search 當證據；per 下方 MUST 11）
 
 ### MUST
 
@@ -76,6 +76,26 @@ Local edits will be reverted by the next sync.
    - **(b) DOM / snapshot 關鍵字**（`snapshot -i | grep '<heading>'`）— 確認頁面是預期內容
    - **(c) URL 不含 `/auth/`**（`eval "location.href"` 確認未被 redirect）— 防 auth redirect
    - **(d) Dialog-aware check**（verify item 描述含「dialog」「明細」「detail」「審核」「進度」等 modal 相關詞時 **MUST** 做）— `snapshot --full | grep 'dialog'` 確認 DOM 含已開啟的 `dialog` 元素。列表頁本身也含 verify keyword（如「待審核」出現在 status badge），只做 (b) 會 false PASS；(d) 確認 modal 真的開了。（per [[pitfall-verify-item-fake-url-no-interaction]]）
+   - **(e) Item-description cross-check（MUST，所有 verify:ui 截圖）**：截圖後 **MUST** 從 item 描述抽取具體狀態條件，用 DOM / CSS 驗一致性。不一致 = 截圖作廢 + 修根因 + 重拍，**NEVER** 帶不符截圖寫 annotation。常見條件與驗法：
+
+     | Item 描述條件 | 驗法 |
+     | --- | --- |
+     | `light mode` / `dark mode` | `eval "document.documentElement.classList.contains('dark') ? 'dark' : 'light'"` 比對 item 要求 |
+     | 特定 badge 文字（如「待審核」「在職」） | `snapshot -i \| grep '<badge-text>'` |
+     | 特定數值（如「143 秒」「8 小時」） | `snapshot -i \| grep '<value>'` |
+     | 特定 tab / 分群 active | `snapshot -i \| grep -E 'aria-selected.*true.*<tab-name>\|active.*<tab-name>'` |
+     | 特定元素存在 / 不存在 | `snapshot -i \| grep '<element-text>'` 或 `! grep` |
+
+     **Canonical pattern（加在 (a)-(d) 驗證之後）**：
+     ```bash
+     # (e) item-description cross-check — 從 item 描述抽條件
+     # 例：item 要求 "light mode final-state"
+     ACTUAL_MODE=$(agent-browser --session <s> eval "document.documentElement.classList.contains('dark') ? 'dark' : 'light'" 2>&1)
+     [ "$ACTUAL_MODE" = "light" ] || { echo "FAIL: item requires light mode but page is $ACTUAL_MODE"; exit 1; }
+     echo "PASS: (e) item-description cross-check — mode=$ACTUAL_MODE matches item requirement"
+     ```
+
+     （per [[pitfall-verified-ui-screenshot-content-mismatch-passes-review]]：<consumer-a> 2026-07-20 #3.1 要驗 light mode，截圖卻是 dark mode；#3.2 要驗 color mode 切換，截圖卻是 command palette 搜尋——四層 (a)-(d) 全過但圖文完全不符）
 
    **auth 回傳非 200 = 立即停手**：browser 內 `fetch __test-login` / cookie injection 的 HTTP status **MUST** 檢查，非 200（含 500）→ **STOP 截圖流程**，先修 auth，**NEVER** 忽略 status 繼續拍。
 
@@ -99,6 +119,10 @@ Local edits will be reverted by the next sync.
    ```
 
    **NEVER** 只重拍被標 `（issue:）` 的那張 — 同次 code 改動影響的 sibling items 截圖同樣過時。（per [[pitfall-issue-fix-refreshes-only-flagged-screenshot-leaves-batch-stale]]；<consumer-a> 2026-07-04 regression 實證：timeline 上色改動後只重拍 #1.1，其餘 7 張 stale → bucket 卡 `readyForEvidence`）
+
+10. **部署宣稱需交叉核對**：宣稱部署平台 / runtime 時，**MUST** 核對 `.github/workflows/` deploy job + deploy config（`wrangler.toml` / `Dockerfile`）+ `package.json` scripts。**NEVER** 只引單一 `docs/` 文件。
+
+11. **Negative search 不成立為證據（hard rule）**：下「零命中 / 不存在 / 只有 N 個」的結論前，**MUST** 先用一個已知會命中的樣本驗過 pattern（known-positive control），並在結論裡寫出「此 pattern 對 `<已知樣本>` 命中」——寫不出來，零命中就不是證據。**NEVER** 把「我 grep 過了」當成 absence 的證明：pattern 寫錯、資料形狀誤判（表格儲存格繼承 / 多種寫法 / 跨行屬性 / 別名 import）、未言明的假設偷偷收窄範圍，三者的輸出**都是零命中**，跟真的不存在外觀完全相同，而換一個工具重跑同一個 pattern 驗不到任何一項。有 structured output（`--json` / `--format json`）時優先用它取代文字 grep；更前一步是先問「有沒有不需要數的判準」（例：gate 已設 `severity: CRITICAL,HIGH`，則輸出的每一條依定義都是 HIGH，根本不必數）。（per [[pitfall-narrow-grep-absence-treated-as-proof]]）
 
 ## 派工前的主線預檢責任
 

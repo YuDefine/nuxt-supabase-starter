@@ -135,11 +135,9 @@ Local edits will be reverted by the next sync.
 
 ### 關鍵詞清單
 
-中文：
-`revert` / `還原` / `回退` / `退回` / `撤回` / `復原` / `恢復` / `清除` / `清掉` / `重置` / `回到乾淨狀態` / `丟掉` / `刪掉` / `先還原再...` / `先 revert 再...` / `修正狀態` / `對齊狀態` / `把 X 還回 Y` / `把 X 搬回 Y`
+中英全表見 [[commit]] § 話術關鍵詞 = 立即停手訊號——**該表是 SoT，本檔不複製**。
 
-English：
-`revert` / `undo` / `rollback` / `roll back` / `reset` / `discard` / `drop` / `restore` / `clean up` / `go back` / `undo this` / `fix the state` / `align with` / `move X back to Y` / `restore X to original`
+方向不可顛倒：`commit.md` 是 always-load、本檔是 conditional-load（`paths:` 只涵蓋 openspec / HANDOFF / tech-debt / decisions）。**指標一律 conditional → always**；反過來會讓本檔沒載入的 session 完全失去這層保護。
 
 ### 停手定義
 
@@ -179,6 +177,33 @@ English：
 - `knowledge-and-decisions.md`：提供長期知識與 ADR 出口
 - `ux-completeness.md`：補上「發現未登記 = 未完成」的完成度觀點
 
+## 已決 scope 不可重開
+
+當專案內存在**明確記錄的 scope 決策**（`docs/decisions/`、discussion artifact、lessons.md、或後續 supersede 紀錄），agent **MUST** 視為已定案。後續 session 只討論「怎麼做」，**NEVER** 把「是否要做」重新當開放問題。
+
+**可觀察 predicate**：agent 正在產出的文字含「是否需要」「要不要做」「可以考慮排除」「scope 可能不包含」等措辭，且對象是已有 decision artifact 的 feature → 停，讀 decision artifact 確認。
+
+**為什麼**：已決 scope 被重開 = user 花時間再次說明同一件事。Agent 查舊決策的成本（grep `docs/decisions/` + lessons.md）遠低於 user 重新解釋的成本。
+
+## 交付物必須是可追蹤檔案
+
+User 要求報告、分析、比較、盤點等輸出時，交付物 **MUST** 是一個有路徑的檔案（`.md` / `.json` / `.csv`），**NEVER** 是 chat 訊息裡的 inline 文字。
+
+正確 recipe：
+1. 寫檔（`Write` tool）到 `docs/` 或 `tasks/` 或 user 指定位置
+2. 在 chat 回報路徑 + 一句話摘要
+3. 需要跨 repo 共享時，指定單一 owner repo + 用 diff 或 snapshot 機械比對
+
+**為什麼**：chat inline 的分析無法被後續 session 引用、搜尋、或 version control。「聊天摘要不算交付」。
+
+## 開放式策略問題不過早路由到 spectra
+
+User 提出**跨產品、商業模式、系統邊界**的大範圍策略題時，**MUST** 先獨立分析再決定是否進 spectra 流程。
+
+**可觀察 predicate**：user 的問題未指名任何具體 module / file / endpoint，而是問「我們能提供什麼」「這兩個產品的關係」「商業模式怎麼切」等探索性問題 → 先做分析（寫成檔案，per § 交付物），分析完 user 明確說「開 spectra change」時才進 spectra。
+
+**NEVER** 對策略題直接跑 `/spectra-propose` 或 `/spectra-discuss` — spectra 是實作工具，不是策略分析框架。
+
 ## 禁止事項
 
 - **NEVER** 把「超出 scope」當成忽略發現的理由
@@ -187,6 +212,5 @@ English：
 - **NEVER** 用 `mv` / `rm -rf` / `cp -f` / `sed -i` / `echo >` / `tee` 等檔案系統等效動作反向 hook 工作、刪除 archive directory、覆蓋 working tree 內容（同樣受破壞性指令 guardrails 限制）
 - **NEVER** 看到 hook / automation 自動產出時，自行判定「該保留 / 該還原 / 該修正」— **MUST** AskUserQuestion
 - **NEVER** 拿 rule A 當理由 revert rule B 的產出（含 hook 自動產出）— rule 衝突一律保留現狀 + AskUserQuestion
-- **NEVER** 在 chat / thinking / tool call description 中出現 `revert` / `還原` / `清掉` / `重置` / `undo` / `rollback` / 「對齊規約」「修正狀態」等話術關鍵詞後繼續動手 — 話術 = 停手訊號
-- **NEVER** 把破壞性動作包裝成「清理」「重置」「回到乾淨狀態」「對齊規約」「修正一下」等委婉說法繞過上述禁令
+- **NEVER** 在出現話術關鍵詞後繼續動手，含把破壞性動作包裝成委婉說法規避 — 關鍵詞全表與停手定義見本檔 § 話術關鍵詞 = 立即停手訊號（單一 SoT，不在他處複製）
 - **NEVER** 寫只有「不擴散」沒有「必登記」的 brief

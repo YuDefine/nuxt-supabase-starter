@@ -26,6 +26,8 @@ Local edits will be reverted by the next sync.
 
 **禁止**：`<UBadge size="xs">` / `<UBadge size="sm">`
 
+**也禁止動態元件形式**（`ubadge-size-ban-dynamic`）：`<component :is="UBadge" size="xs">` — tag name 不是 `UBadge` 但 runtime 等效。
+
 **也禁止**：在 `app.config.ts` 的 `badge.defaultVariants` 設 `size: 'xs'` 或 `size: 'sm'` — 效果等同 inline prop 但繞過 `.vue` 掃描。
 
 **理由**：xs / sm 在密集表格字級過小、可讀性不足。

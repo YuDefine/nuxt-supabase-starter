@@ -48,7 +48,7 @@ Source-of-truth 規則：任何 audit 問題先查 DB row，evlog 是衍生視�
 - Handler **MUST NOT** 直接操作 hash 欄位；`prev_hash` / `hash` 必須由 DB trigger 或 canonical SQL helper 產生。
 - Handler **MUST NOT** 把 `log.audit()` 當 canonical audit 完成條件；fire-and-forget 不算 audit 完成。
 - DB migration **MUST NOT** 新增 `audit_logs.ip_address` / `audit_logs.user_agent`。
-- Multi-tenant audit table **MUST NOT** 使用共用 global chain，除非 consumer 本身確定 single-tenant。
+- Multi-tenant audit table **MUST NOT** 使用共用 global chain。Single-tenant consumer 可以用 global chain（tenant isolation 不適用）。
 - `server/utils/audit.ts` 以外的檔案 **MUST NOT** 直接寫 audit 表；一次性 migration script 例外，但 PR 必須註明。
 
 ## Tamper Resistance（防竄改與保留）

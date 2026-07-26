@@ -121,7 +121,7 @@ Local edits will be reverted by the next sync.
 
 - **MUST NOT** `void@^0.8.x` 用配置 1（`["nodejs_compat", "nodejs_als"]` 不含 `no_nodejs_compat_v2`）— legacy SDK 會撞 worker upload err 10021。這是 0.8 限定 workaround，**不得**套用成 current void 0.10 的通則。詳見 [pitfall doc](../../docs/pitfalls/2026-05-25-void-cloud-voidjson-compat-flags-10021.md)
 - **MUST NOT** legacy `void@0.8.x` 的 `appType: "framework"` consumer 用配置 2（純 v2）— 同樣撞 `#t` error。這條限制不得無版本區分地套到 current void
-- **MUST NOT** 在 current void 0.10 consumer 保留 `patch-void-deploy.mjs` 或 unenv patch；這些 workaround 只屬 legacy void 0.8
+- **MUST NOT** 在 void SDK ≥0.10 的 consumer 保留 `patch-void-deploy.mjs` 或 unenv patch；這些 workaround 只屬 legacy void 0.8
 - **MUST NOT** 用 nitro `cloudflare.nodeCompat` 取代平台 compatibility config；legacy 0.8 以 void.json 為準，current void 依 official integration 的 wrangler / void config 契約
 - **MUST NOT** 在 GitHub Actions 保存 `VOID_TOKEN`；deploy 身分走 GitHub OIDC。runtime secrets 走 `void secret put`，不得混入 wrangler-action 的 Cloudflare secret 流程
 

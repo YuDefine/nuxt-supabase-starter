@@ -49,15 +49,15 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
 
    本 skill 的 draft 階段有三條可選路徑。**Step 0 開頭 MUST 用 AskUserQuestion 跳三選一選單**讓使用者選（除非使用者已明確指定路徑，見下方捷徑）：
 
-   - **A. Codex flow（預設 / 推薦，選單第一項）** — Codex GPT-5.6-sol max draft + 主線 Claude Opus 4.8 xhigh cross-check。draft + cross-check 比擇一穩，wall-clock 最短。
-   - **B. 雙段 codex pipeline**（Fable 暫不可用期間的 fallback）— Codex GPT-5.6-sol xhigh draft → Codex GPT-5.6-sol high review（fresh session、只出 findings、不改檔）→ 主線 Claude Opus 4.8 xhigh final check。比選項 A 多一道 codex 自我審查關卡，wall-clock 較長（多一層背景等待）。原設計為 Claude Fable 5 High draft（三模型交叉）；Fable 回歸後把 Phase B-0a draft 改回 `claude -p --model claude-fable-5`。
-   - **C. 純 Claude** — 主線 Claude Opus 4.8 直接走 Step 1~11（含 Step 8 補 7 步 Design Review check）。
+   - **A. Codex flow（預設 / 推薦，選單第一項）** — Codex GPT-5.6-sol max draft + 主線 Claude Fable 5 xhigh cross-check。draft + cross-check 比擇一穩，wall-clock 最短。
+   - **B. 三模型交叉 pipeline** — Claude Fable 5 xhigh draft → Codex GPT-5.6-sol max review（fresh session、只出 findings、不改檔）→ 主線 Claude Fable 5 xhigh final check。三模型交叉（Fable draft + Codex review + Fable final）比擇一穩，wall-clock 較長（多一層背景等待）。
+   - **C. 純 Claude** — 主線 Claude Fable 5 xhigh 直接走 Step 1~11（含 Step 8 補 7 步 Design Review check）。
 
    選單寫法：option A label 標「(預設/推薦)」並排第一（使用者按 Enter 即走現狀）。
 
    **明確指定捷徑（跳過選單，直接走對應選項）**：使用者訊息已明確指定路徑時**不問選單**：
    - 「不要派 codex」「我要純 Claude propose」「直接你做」→ **選項 C**
-   - 「用 Fable」「走 Fable pipeline」「Fable 起草」「雙段 codex」「codex draft+review」→ **選項 B**（Fable 暫不可用，B 現走 codex draft → codex review → Opus final）
+   - 「用 Fable」「走 Fable pipeline」「Fable 起草」「三模型交叉」「Fable draft+review」→ **選項 B**
    - 「用 codex」「現有流程」「照舊」→ **選項 A**
 
    選定後依對應選項段落執行。**選項 A / B 在 Step 0 內完成整個 draft + check，本 session 不再執行 Step 1~11**；只有**選項 C** 才往下跑 Step 1~11。
@@ -203,6 +203,16 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
       Exit 2 = 有 findings（ABSTRACT_REFERENCE / CARD_WITHOUT_UID / UI_ITEM_NO_URL / MULTI_STEP_NOT_SCOPED 任一）→ 主線**自己**直接 Edit tasks.md 改寫 ## 人工檢查 items：拆 `#N.M` scoped sub-items、inline 具體 sample UID（從 `docs/FIXTURES.md` 抓）、加具體 URL、模糊驗收動詞改為 falsifiable observation。完整修正指引見 hook stdout + `.claude/rules/manual-review.md`「`[review:ui]` 純功能驗證 step actionability」。
 
       Legitimate false positive（e.g., 真機掃 SMS 無 dev replay endpoint）→ 在該 item 加 `@no-manual-review-check[<reason>]` trailing marker。
+
+   3b. **Check 7 hard gate — `## 人工檢查` canonical `#N` / `#N.M` 格式驗證**（per TD-242）：
+
+      ```bash
+      bash scripts/spectra-advanced/post-propose-check.sh --check7-only <change-name>
+      ```
+
+      Exit 1 = `## 人工檢查` items 不符合 canonical `#N` parent / `#N.M` scoped item 格式（缺 `#` ID、用 section 編號如 `6.1`、或完全沒 ID）→ 主線**自己**直接 Edit tasks.md 修正為 canonical 格式（`- [ ] #1 ...`、`  - [ ] #1.1 ...`），重跑直到 exit 0。
+
+      **MUST** exit 0 才能繼續 step 4。Exit 1 時 **NEVER** 跳過 — malformed items 會讓 review-gui 無法寫回 checkbox state，整個人工檢查 workflow 卡死。
 
    4. **跑 design-inject.sh**（若 UI scope，提醒 7 步 template）：
 
@@ -375,38 +385,34 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
 
    ---
 
-   ### 選項 B：雙段 codex pipeline（codex draft → codex review → 主線 final check）
+   ### 選項 B：三模型交叉 pipeline（Fable draft → Codex review → 主線 Fable final check）
 
-   > **NOTE（Fable 暫代）**：本選項原設計為 Claude Fable 5 High draft（三模型交叉）。Fable 暫不可用，draft 階段暫以 codex gpt-5.6-sol xhigh 代替；review 與 final check 不變。Fable 回歸後把 Phase B-0a 的 draft 命令改回 `claude -p --model claude-fable-5 --effort high`，並還原本段描述即可。
+   三段序列：Claude Fable 5 xhigh 在背景起草 → Codex GPT-5.6-sol max（fresh session）檢查出 findings → 主線 Claude Fable 5 xhigh 整合 findings 並完成全套 cross-check。三段皆背景派工 + notification-only watch（per `.claude/rules/agent-routing.codex-watch-protocol.md` § 監看排程 A）。draft 與 review 是兩個不同 model 的獨立 session（Fable draft + Codex review 交叉視角，比同 model 更能抓到盲點）。
 
-   三段序列：Codex GPT-5.6-sol xhigh 在背景起草 → Codex GPT-5.6-sol high（fresh session）檢查出 findings → 主線 Claude Opus 4.8 xhigh 整合 findings 並完成全套 cross-check。三段皆背景派工 + notification-only watch（per `.claude/rules/agent-routing.codex-watch-protocol.md` § 監看排程 A）。draft 與 review 是兩個獨立 codex session（即使同 model，fresh context 仍能抓到 draft 時的遺漏）。
-
-   #### Phase B-0a：背景 codex draft
+   #### Phase B-0a：背景 Fable draft
 
    1. **解析 change name + requirement**（同 Phase 0a step 1）。
-   2. **Write prompt 檔到 `/tmp/codex-spectra-propose-<change-name>-draft-prompt.md`** — 內容**完全沿用 Phase 0a step 2 的 draft prompt 範本**（Plan-first / Phase Purity / Manual Review Kind Marker / Backend-only 規約 / `docs/FIXTURES.md` sample / 語言遵循 / `spectra park` 完成標準全部照搬）。檔名用 `-draft-prompt` 與 Phase B-0b 的 `-review-prompt` 區隔，避免兩個 codex job 混用 prompt。
-   3. **背景啟動 codex exec**（**Bash** tool 加 `run_in_background=true`）：
+   2. **Write prompt 檔到 `/tmp/fable-spectra-propose-<change-name>-draft-prompt.md`** — 內容**完全沿用 Phase 0a step 2 的 draft prompt 範本**（Plan-first / Phase Purity / Manual Review Kind Marker / Backend-only 規約 / `docs/FIXTURES.md` sample / 語言遵循 / `spectra park` 完成標準全部照搬）。檔名用 `-draft-prompt` 與 Phase B-0b 的 `-review-prompt` 區隔，避免兩個背景 job 混用 prompt。
+   3. **背景啟動 claude**（**Bash** tool 加 `run_in_background=true`）：
 
       ```bash
-      cd <consumer-repo-root> && codex exec \
-        --model gpt-5.6-sol \
-        --dangerously-bypass-approvals-and-sandbox \
-        --skip-git-repo-check \
-        -c model_reasoning_effort=xhigh \
-        < /tmp/codex-spectra-propose-<change-name>-draft-prompt.md 2>&1
+      cd <consumer-repo-root> && claude -p \
+        --model claude-fable-5 \
+        --effort xhigh \
+        < /tmp/fable-spectra-propose-<change-name>-draft-prompt.md 2>&1
       ```
 
-      預設 text 輸出，不加 `--output-format json`（主線讀 tail）。
-   4. **立刻**簡短回報：「已派 Codex GPT-5.6-sol xhigh 在背景 draft `<change-name>`（bash job `<id>`）；完成後派 codex review，再由主線 Opus final check」。
-   5. 啟動 **Watch Protocol**（同 Phase 0a step 5）— **notification-only**：`codex exec` 背景 job 屬「主線直接 Bash 派」路徑，主線 idle 等 `<task-notification>`，只下**一個**安全網 fallback `ScheduleWakeup(1500, "codex spectra-propose <change-name> draft 安全網檢查 — 預期靠 task-notification 收尾")`。**NEVER** 短輪詢。
+      預設 text 輸出（主線讀 tail）。
+   4. **立刻**簡短回報：「已派 Claude Fable 5 xhigh 在背景 draft `<change-name>`（bash job `<id>`）；完成後派 Codex review，再由主線 Fable final check」。
+   5. 啟動 **Watch Protocol**（同 Phase 0a step 5）— **notification-only**：`claude -p` 背景 job 屬「主線直接 Bash 派」路徑，主線 idle 等 `<task-notification>`，只下**一個**安全網 fallback `ScheduleWakeup(1500, "fable spectra-propose <change-name> draft 安全網檢查 — 預期靠 task-notification 收尾")`。**NEVER** 短輪詢。
 
-   #### Phase B-0b：codex draft 完成 → 派 codex review
+   #### Phase B-0b：Fable draft 完成 → 派 Codex review
 
-   收到 codex draft `<task-notification status=completed>` 時**立刻**：
+   收到 Fable draft `<task-notification status=completed>` 時**立刻**：
 
-   1. **Read codex draft stdout** 摘要：BashOutput 讀完整 stdout，回報 artifacts list / `spectra validate` 結果。
-   2. **若 codex draft 已 `spectra park <change-name>`：先 `spectra unpark <change-name>`** — park 後 artifacts 只存 `.git/spectra-app/spectra.db` SQLite blob、不在 git tracked file，review codex 要讀必須先 unpark 回檔案系統（同 Phase 0b step 2 + park pitfall）。
-   3. **Write codex review prompt 到 `/tmp/codex-spectra-propose-<change-name>-review-prompt.md`**：
+   1. **Read Fable draft stdout** 摘要：BashOutput 讀完整 stdout，回報 artifacts list / `spectra validate` 結果。
+   2. **若 Fable draft 已 `spectra park <change-name>`：先 `spectra unpark <change-name>`** — park 後 artifacts 只存 `.git/spectra-app/spectra.db` SQLite blob、不在 git tracked file，review Codex 要讀必須先 unpark 回檔案系統（同 Phase 0b step 2 + park pitfall）。
+   3. **Write Codex review prompt 到 `/tmp/codex-spectra-propose-<change-name>-review-prompt.md`**：
 
       ```
       請檢查（review）本 repo 已 draft 的 change `<change-name>`，**不要修改任何檔案**，只輸出 findings。
@@ -423,20 +429,20 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
         --model gpt-5.6-sol \
         --dangerously-bypass-approvals-and-sandbox \
         --skip-git-repo-check \
-        -c model_reasoning_effort=high \
+        -c model_reasoning_effort=max \
         < /tmp/codex-spectra-propose-<change-name>-review-prompt.md 2>&1
       ```
 
-   5. **立刻**回報：「codex draft 完成，已派 codex GPT-5.6-sol high review（bash job `<id>`）；完成後主線 Opus final check」+ 啟動 notification-only watch（同 Phase B-0a step 5）。
+   5. **立刻**回報：「Fable draft 完成，已派 Codex GPT-5.6-sol max review（bash job `<id>`）；完成後主線 Fable final check」+ 啟動 notification-only watch（同 Phase B-0a step 5）。
 
-   #### Phase B-0c：Codex 檢查完 → 主線 Opus final check
+   #### Phase B-0c：Codex 檢查完 → 主線 Fable final check
 
-   收到 codex `<task-notification status=completed>` 時**立刻**：
+   收到 Codex `<task-notification status=completed>` 時**立刻**：
 
-   1. **Read codex findings**：BashOutput 讀 codex stdout，整理 findings 摘要。
-   2. **主線整合 findings + 跑完整 cross-check** — 執行 Phase 0b step 3 ~ 9 全套（`post-propose-check.sh` / `post-propose-manual-review-check.sh` / `design-inject.sh` / 補 Design Review 7 步 / Manual Review Marker Hygiene / `[verify:auto]`→explicit marker / Backend Verification Evidence 搬移 / Open Questions→AskUserQuestion / `spectra analyze` / `spectra validate` / `spectra park`），並把 codex findings 一併納入修補依據。
+   1. **Read Codex findings**：BashOutput 讀 codex stdout，整理 findings 摘要。
+   2. **主線整合 findings + 跑完整 cross-check** — 執行 Phase 0b step 3 ~ 9 全套（`post-propose-check.sh` / `post-propose-manual-review-check.sh` / **`--check7-only` hard gate** / `design-inject.sh` / 補 Design Review 7 步 / Manual Review Marker Hygiene / `[verify:auto]`→explicit marker / Backend Verification Evidence 搬移 / Open Questions→AskUserQuestion / `spectra analyze` / `spectra validate` / `spectra park`），並把 Codex findings 一併納入修補依據。
    3. **主線自己 Edit 修**（**NEVER** 把修補丟回 codex，太慢、來回成本高）。
-   4. 回報使用者：artifacts list + codex draft 摘要 + **codex review findings 摘要** + 主線補了什麼（Design Review 7 步 OK 與否、analyze/validate 結果）+ `/spectra-apply <change-name>` 提示。
+   4. 回報使用者：artifacts list + Fable draft 摘要 + **Codex review findings 摘要** + 主線補了什麼（Design Review 7 步 OK 與否、analyze/validate 結果）+ `/spectra-apply <change-name>` 提示。
 
    ---
 
@@ -451,8 +457,8 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
    **選項 B 專屬 NEVER**：
 
    - **NEVER** 把 Phase B-0a 的 draft prompt（`-draft-prompt.md`）與 Phase B-0b 的 review prompt（`-review-prompt.md`）混用 — draft 會寫檔 + park，review 只出 findings、禁止改檔
-   - **NEVER** 在 Phase B-0b 派 codex review 前忘了 `spectra unpark`（park 後 artifacts 在 SQLite blob，codex 讀不到）
-   - **NEVER** 讓 codex review 階段改檔 — review prompt 必含「禁止 Edit / Write、只輸出 findings」；實際修補由主線 Phase B-0c 做
+   - **NEVER** 在 Phase B-0b 派 Codex review 前忘了 `spectra unpark`（park 後 artifacts 在 SQLite blob，Codex 讀不到）
+   - **NEVER** 讓 Codex review 階段改檔 — review prompt 必含「禁止 Edit / Write、只輸出 findings」；實際修補由主線 Phase B-0c 做
 
    **選 A / B 時本 session 不再執行任何 Step 1 ~ 11**（避免雙重生產）— Step 0 結束本 skill。
 

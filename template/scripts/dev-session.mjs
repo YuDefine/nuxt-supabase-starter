@@ -50,9 +50,9 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, unlinkSync, realpathSync } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { basename, join } from 'node:path'
+import { basename, join, resolve, isAbsolute } from 'node:path'
 import { tmpdir } from 'node:os'
 
 const LEASE_DIR = tmpdir()
@@ -170,7 +170,32 @@ function readConsumerMeta(p) {
 
 function resolveConsumerId(o, meta) {
   if (meta?.consumer_id) return meta.consumer_id
-  // git toplevel basename
+
+  // **MUST 解析 main worktree 的名字，不是當前 worktree 的目錄名。**
+  //
+  // `git rev-parse --show-toplevel` 在 linked worktree 內回的是**該 worktree 的路徑**
+  // （例：.../<consumer-a>-wt/td-279-280-submit-chain），basename 就變成 slug 而不是 consumer 名。
+  // 後果：lease 檔路徑算成 /tmp/<slug>-verification-lease.json —— 跟 main 用的
+  // /tmp/<consumer>-verification-lease.json 是**不同檔案**。於是從 worktree 跑、又沒帶
+  // --consumer-meta 的指令會靜默操作錯的 lease：release 釋放不到、conflict 偵測不到，
+  // 跨 worktree 的 lease 隔離形同虛設（2026-07-26 <consumer-a> 實證：worktree 內 `stop` 後
+  // /tmp/<consumer-a>-verification-lease.json 原封不動殘留）。
+  //
+  // `--git-common-dir` 在 main 回 `<repo>/.git`、在 linked worktree 回
+  // `<main-repo>/.git/worktrees/<slug>`；兩者的 dirname 往上找到 `.git` 的父層即 main worktree。
+  const commonDir = sh('git', [
+    '-C',
+    o.cwd,
+    'rev-parse',
+    '--path-format=absolute',
+    '--git-common-dir',
+  ])
+  if (commonDir) {
+    // 去掉結尾的 /.git（linked worktree 會是 .../.git/worktrees/<slug>，先截到 .git）
+    const gitIdx = commonDir.lastIndexOf('/.git')
+    if (gitIdx > 0) return basename(commonDir.slice(0, gitIdx))
+  }
+
   const top = sh('git', ['-C', o.cwd, 'rev-parse', '--show-toplevel'])
   if (top) return basename(top)
   return basename(o.cwd)
@@ -311,7 +336,9 @@ function writeLease(o, consumerId, sessionName, port) {
       },
       devServer: {
         pid: port ? Number(portPid(port)) || null : null,
-        cwd: o.cwd,
+        // MUST 存正規化的絕對路徑：canonicalLeaseCwd() 讀回時不做 resolve()，
+        // 相對路徑會被判為「無法確認」→ 保守 mismatch。
+        cwd: canonicalCwd(o.cwd),
         port: port || null,
         url: port ? `http://127.0.0.1:${port}` : null,
       },
@@ -334,6 +361,36 @@ function releaseLease(o, consumerId) {
   }
 }
 
+// cwd 比對 MUST 正規化後再比。lease 內的 cwd 是寫入當下的 `o.cwd`，而 `--cwd` 由 caller 傳，
+// 可能是相對路徑（`.` / `../<consumer-a>`）、帶結尾斜線、或走 symlink 的等價路徑。裸字串比對把這些
+// 等價形式判成「不同 worktree」，兩個方向都會出錯：strict 模式對自己那台 refuse（擋掉合法
+// 操作），或 --takeover 誤殺自己剛起的 dev server。
+function canonicalCwd(p) {
+  if (!p) return ''
+  const abs = resolve(p) // 絕對化 + 去結尾斜線 + 收斂 `.` / `..`
+  try {
+    return realpathSync(abs) // 解 symlink（worktree 常經 symlink 路徑進入）
+  } catch {
+    return abs // 路徑已不存在（worktree 已移除）→ 至少 abs 比裸字串可靠
+  }
+}
+
+// lease 檔內存的 cwd 專用。**NEVER 對它用 `resolve()`** —— resolve 會拿**當前** process
+// 的 cwd 去解相對路徑，於是兩個不同 worktree 各自存 `.` 的 lease 都會被解析成「自己的」
+// cwd、比對後相等，mismatch 檢查靜默失效並回報 reuse 成功。那比不檢查更危險：caller 拿到
+// exit 0 就往下收 evidence，實際服務的是另一份 code。
+//
+// 寫入端（claim）存的一律是 canonicalCwd() 的絕對路徑；讀到非絕對路徑代表 lease 是舊格式
+// 或被手改過 → 回 null，caller MUST 當成「無法確認」而非「相同」。
+function canonicalLeaseCwd(p) {
+  if (!p || !isAbsolute(p)) return null
+  try {
+    return realpathSync(p)
+  } catch {
+    return p
+  }
+}
+
 // strict lease 衝突判定：別人持有 + 其 dev pid 還活 + cwd 不同 → refuse（除非 takeover）
 function leaseConflict(o, consumerId) {
   const lease = readLease(consumerId)
@@ -341,8 +398,91 @@ function leaseConflict(o, consumerId) {
   const mine = lease.holder?.sessionId === holderSessionId(o)
   if (mine) return null
   if (!pidAlive(lease.devServer?.pid)) return null // stale → 不算衝突
-  if (lease.devServer?.cwd === o.cwd) return null // 同 cwd → 視為同工作
+  const leaseCwd = canonicalLeaseCwd(lease.devServer?.cwd)
+  if (leaseCwd && leaseCwd === canonicalCwd(o.cwd)) return null // 同 cwd → 同工作
   return lease
+}
+
+// 服務的 code 對不對 —— **與 holder 是誰無關**。
+//
+// 這跟 leaseConflict() 是兩件事：leaseConflict 問「lease 被別人持有嗎」（ownership），
+// 這裡問「正在跑的 dev server 服務的是不是我要的那份 code」（served code）。同一個 holder
+// 在別的 worktree 起的 dev server，服務的仍然是別的 code —— 一樣危險。
+//
+// 必須拆開的實證原因：holderSessionId() 在沒有 CLAUDE_SESSION_ID / CODEX_SESSION_ID 時
+// 一律回 'human'，於是所有這類 caller 的身分**塌縮成同一個**，leaseConflict() 開頭的
+// `if (mine) return null` 會先短路，cwd 比對永遠走不到。
+function servedCwdMismatch(o, consumerId) {
+  const lease = readLease(consumerId)
+  if (!lease) return null
+  if (!pidAlive(lease.devServer?.pid)) return null // stale → 不算
+  if (!lease.devServer?.cwd) return null // 無紀錄 → 由 caller 端 warn
+  const leaseCwd = canonicalLeaseCwd(lease.devServer.cwd)
+  if (leaseCwd && leaseCwd === canonicalCwd(o.cwd)) return null
+  return lease // 含 leaseCwd === null（非絕對路徑，無法確認）→ 保守判為 mismatch
+}
+
+// launch / reuse 共用的 lease gate。
+//
+// **NEVER 讓 reuse 路徑跳過這道檢查。** 曾經的 bug：cmdLaunch 的「反累積 reuse」分支在
+// 確認 port 有人聽之後就直接 return，從來走不到後面的 lease 衝突判定 —— 於是 caller 傳的
+// `--cwd` 被靜默忽略，指令回 exit 0 + 「✓ reuse」，但實際服務的是**別的 working tree 的
+// code**。任何 agent 照這個成功訊號往下收 evidence（截圖 / round-trip），拍到的都是錯的
+// 版本，且外觀與成功無異 —— 比直接失敗危險得多。
+function enforceLeaseOrExit(o, meta, consumerId) {
+  if (o.noLease) return null
+  const strict = meta?.dev?.leaseMode === 'strict' || meta?.auth?.portPinned === true
+
+  // (1) served-code mismatch — 優先於 ownership 判定，因為它跟持有者是誰無關
+  const mismatch = servedCwdMismatch(o, consumerId)
+  if (mismatch && !o.takeover) {
+    if (strict) {
+      err(`[lease:${consumerId}] refuse — 既有 dev server 服務的不是你要的 working tree`)
+      err(`  serving: ${mismatch.devServer?.cwd}`)
+      err(`  你要的:  ${o.cwd}`)
+      err(
+        `  holder:  ${mismatch.holder?.kind}:${mismatch.holder?.sessionId}（since ${mismatch.claimedAt}）`,
+      )
+      err(`  dev:     PID ${mismatch.devServer?.pid}, port=${mismatch.devServer?.port}`)
+      err(`  ⚠ 照這個 session 收 evidence 會拍到**錯的 code**。`)
+      err(`  要接管請加 --takeover（會 kill 現有 dev process 後重建）。`)
+      process.exit(1)
+    }
+    err(`[lease:${consumerId}] ⚠ served cwd 不符（advisory 模式，不阻擋）`)
+    err(`  serving: ${mismatch.devServer?.cwd}`)
+    err(`  你要的:  ${o.cwd}`)
+    err(`  你看到的畫面來自另一個 working tree，收 evidence 前請自行確認。`)
+    return mismatch
+  }
+  if (mismatch && o.takeover) return mismatch
+
+  // (2) ownership conflict — lease 被別人持有
+  const conflict = leaseConflict(o, consumerId)
+  if (!conflict) return null
+
+  // takeover 由 caller 端處理（kill 前 holder），這裡只把 conflict 交回去
+  if (o.takeover) return conflict
+
+  if (strict) {
+    err(
+      `[lease:${consumerId}] 無法 claim — 已被 ${conflict.holder?.kind}:${conflict.holder?.sessionId} 持有`,
+    )
+    err(`  since:   ${conflict.claimedAt}`)
+    err(
+      `  dev:     PID ${conflict.devServer?.pid}, cwd=${conflict.devServer?.cwd}, port=${conflict.devServer?.port}`,
+    )
+    err(`  你要的:  cwd=${o.cwd}`)
+    err(`  ⚠ cwd 不符代表既有 dev server 服務的是另一個 working tree 的 code。`)
+    err(`  要強制接管請加 --takeover（會 log 前 holder 並 kill 其 dev process）。`)
+    process.exit(1)
+  }
+
+  // advisory 模式不阻擋，但 cwd 不符 MUST 大聲 warn —— 沉默是本 bug 的危害來源。
+  err(`[lease:${consumerId}] ⚠ cwd 不符（advisory 模式，不阻擋）`)
+  err(`  既有 dev server 服務： ${conflict.devServer?.cwd}`)
+  err(`  你要的：              ${o.cwd}`)
+  err(`  你看到的畫面來自另一個 working tree，收 evidence 前請自行確認。`)
+  return conflict
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -369,11 +509,31 @@ async function cmdLaunch(o) {
   const existing = findSession(sessionName)
   if (existing && !existing.exited) {
     if (!port || portListening(port)) {
-      out(`✓ reuse 既有 durable dev session（反累積，不重起）`)
-      out(`  session: ${sessionName}  ｜  ${urlHint}`)
-      out(`  看畫面：zellij attach ${sessionName}（離開 Ctrl-q 或 detach Ctrl-o d）`)
-      out(`  停止：  node scripts/dev-session.mjs stop --session ${sessionName}`)
-      return
+      // reuse 前 MUST 過 lease gate — cwd 不符時 strict 模式直接 refuse。
+      // 這裡曾是靜默漏洞：直接 return 導致 --cwd 被忽略、caller 在錯的 code 上收 evidence。
+      const conflict = enforceLeaseOrExit(o, meta, consumerId)
+
+      // --takeover + cwd 不符：caller 明確要接管，reuse 別人那台等於沒接管 → 改重建
+      if (conflict && o.takeover) {
+        err(
+          `[lease:${consumerId}] --takeover：既有 session 服務 ${conflict.devServer?.cwd}，不 reuse，改重建`,
+        )
+        if (pidAlive(conflict.devServer?.pid)) sh('kill', [String(conflict.devServer.pid)])
+        killSession(sessionName)
+      } else {
+        const servedCwd = readLease(consumerId)?.devServer?.cwd
+        out(`✓ reuse 既有 durable dev session（反累積，不重起）`)
+        out(`  session: ${sessionName}  ｜  ${urlHint}`)
+        if (servedCwd) {
+          out(`  serving: ${servedCwd}`)
+        } else {
+          err(`  ⚠ 無 lease 紀錄，無法確認此 session 服務哪個 working tree。`)
+          err(`    收 evidence 前請自行驗：ls -l /proc/<dev-pid>/cwd`)
+        }
+        out(`  看畫面：zellij attach ${sessionName}（離開 Ctrl-q 或 detach Ctrl-o d）`)
+        out(`  停止：  node scripts/dev-session.mjs stop --session ${sessionName}`)
+        return
+      }
     }
     // session 活著但 dev port 沒在聽 → 裡面的 dev 死了，重建
     err(`session ${sessionName} 存在但 port ${port} 沒在聽 → 視為內部 dev 已死，重建`)
@@ -382,21 +542,9 @@ async function cmdLaunch(o) {
     killSession(sessionName) // 清 EXITED 殘骸
   }
 
-  // 2) lease（strict 衝突 refuse）
+  // 2) lease（strict 衝突 refuse）— 與 reuse 路徑共用同一個 gate，避免兩處邏輯漂移
   if (!o.noLease) {
-    const strict = meta?.dev?.leaseMode === 'strict' || meta?.auth?.portPinned === true
-    const conflict = leaseConflict(o, consumerId)
-    if (conflict && strict && !o.takeover) {
-      err(
-        `[lease:${consumerId}] 無法 claim — 已被 ${conflict.holder?.kind}:${conflict.holder?.sessionId} 持有`,
-      )
-      err(`  since:   ${conflict.claimedAt}`)
-      err(
-        `  dev:     PID ${conflict.devServer?.pid}, cwd=${conflict.devServer?.cwd}, port=${conflict.devServer?.port}`,
-      )
-      err(`  要強制接管請加 --takeover（會 log 前 holder）。`)
-      process.exit(1)
-    }
+    const conflict = enforceLeaseOrExit(o, meta, consumerId)
     if (conflict && o.takeover) {
       err(
         `[lease:${consumerId}] --takeover：接管 ${conflict.holder?.kind}:${conflict.holder?.sessionId} 的 lease`,

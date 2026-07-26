@@ -487,6 +487,44 @@ if [ "${#e2e_items[@]}" -gt 0 ]; then
   fi
 fi
 
+# TD-220: URL 機械驗證（pitfall-verify-item-fake-url-no-interaction prevention #4）。
+# 每條含 URL 的 item：(1) path 對照 app/pages / pages route tree（dynamic segment
+# aware）必須存在；(2) query param 必須出現在 resolved page source（page 沒讀的
+# param = 臆想 URL）。/api/ 路徑跳過；consumer 無 pages 目錄（pagesRoot null）
+# 整段跳過；false positive 走既有 @no-manual-review-check[<reason>] bypass。
+URL_CHECK_HELPER="$SCRIPT_DIR/verify-url-check.mjs"
+if command -v node >/dev/null 2>&1 && [ -f "$URL_CHECK_HELPER" ]; then
+  url_check_enabled=true
+  for idx in "${!manual_block_lines[@]}"; do
+    [ "$url_check_enabled" = true ] || break
+    line="${manual_block_lines[$idx]}"
+    real_lineno="${manual_block_lineno[$idx]}"
+    printf '%s\n' "$line" | grep -qE '^[[:space:]]*-[[:space:]]*\[[ xX]\]' || continue
+    [ -n "$(extract_bypass_reason "$line")" ] && continue
+    item_url=$(printf '%s\n' "$line" | grep -oE 'https?://[^ )]+|/[a-zA-Z0-9][a-zA-Z0-9/_-]*(\?[^ )]*)?' | head -1 || true)
+    [ -z "$item_url" ] && continue
+    case "$item_url" in */api/*) continue ;; esac
+    url_json=$(node "$URL_CHECK_HELPER" --consumer-path "$REPO_ROOT" --url "$item_url" 2>/dev/null || true)
+    [ -z "$url_json" ] && continue
+    pages_root=$(printf '%s' "$url_json" | jq -r '.pagesRoot // ""' 2>/dev/null || echo "")
+    if [ -z "$pages_root" ]; then
+      # 非 Nuxt page 專案 — route tree 不存在，整段檢查不適用。
+      url_check_enabled=false
+      continue
+    fi
+    route_exists=$(printf '%s' "$url_json" | jq -r '.routeExists' 2>/dev/null || echo "")
+    if [ "$route_exists" = "false" ]; then
+      findings+=("VERIFY_URL_ROUTE_MISSING|${real_lineno}|item URL path 在 ${pages_root}/ route tree 找不到對應 page 檔（含 dynamic segment 比對）|把 URL 改成實際存在的 route（對照 ${pages_root}/），或該畫面在 modal/dialog 內時改寫互動步驟（導航 → 觸發 → 驗證）；誤判走 @no-manual-review-check[<reason>]|manual-review.evidence.md § verify item URL|${line}")
+      continue
+    fi
+    unused=$(printf '%s' "$url_json" | jq -r '.unusedParams | join(", ")' 2>/dev/null || echo "")
+    if [ -n "$unused" ]; then
+      resolved_file=$(printf '%s' "$url_json" | jq -r '.resolvedFile // ""' 2>/dev/null || echo "")
+      findings+=("VERIFY_URL_QUERY_PARAM_UNUSED|${real_lineno}|URL query param（${unused}）未出現在 ${resolved_file} source — page 不讀的 param 無法影響頁面狀態，疑似臆想 URL|移除該 query param，或改指向真正消費它的 route；page 確實透過 layout/composable 讀取時走 @no-manual-review-check[<reason>]|manual-review.evidence.md § verify item URL query param|${line}")
+    fi
+  done
+fi
+
 # Output.
 if [ "${#findings[@]}" -eq 0 ]; then
   echo "✓ post-propose-manual-review-check passed (${#manual_block_lines[@]} items in ## 人工檢查 block)"

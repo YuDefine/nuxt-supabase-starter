@@ -31,24 +31,23 @@ Local edits will be reverted by the next sync.
 | **② `chrome-devtools-mcp`** | 純量測 MCP：`lighthouse_audit` / `performance_start_trace` + `performance_analyze_insight`（LCP/CLS/INP breakdown + culprit）/ `take_heapsnapshot` | **measurement only** | **NEVER** 拿來做日常截圖 / 互動 — 那是線 ①；agent-browser `vitals` 只給表層數字，要 breakdown / culprit 才走這條（見 `modern-web-mcp` § 實測閉環） |
 | **③ Playwright CLI / spec** | 可重現、可沉澱的 spec | responsive / 多 viewport / 跨瀏覽器 / 多分頁 / CI 回歸 | 見下方「決策樹」「場景對照」 |
 
-- **Codex runtime 自帶的 `browser-use@openai-bundled` plugin 與本框架無關** — 派 Codex 做 screenshot-review 時用 **agent-browser CLI**（已全域安裝、在 PATH），**NEVER** 依賴 Codex bundled plugin、也 **NEVER** 拿它的行為推論 agent-browser 行為。
-- workflow-use / `terminal` / `desktop` / `browsercode` / `qa-use` / `vibetest-use` 等上層 runtime / app / QA 平台**都不採用**（會與 Claude Code + Codex runtime 競爭）；採用 agent-browser 取代 browser-use/harness 的決策紀錄見 `docs/discussions/2026-06-24-agent-browser-adoption.md`。
+- workflow-use / `terminal` / `desktop` / `browsercode` / `qa-use` / `vibetest-use` 等上層 runtime / app / QA 平台**都不採用**（會與 Claude Code + Codex runtime 競爭）；採用 agent-browser 的決策紀錄見 `docs/discussions/2026-06-24-agent-browser-adoption.md`。
 
 ## Cloud / clean-browser fallback（disabled-by-default）
 
-本機 agent-browser（線 ①）掛掉、或目標本質需要 clean browser / anti-bot / CAPTCHA / proxy / 並發多 browser 時，可走 agent-browser 的遠端 provider（`-p browserbase` / `-p kernel` / `-p browseruse`）或 `--proxy` 作 **opt-in fallback**。預設關閉，agent 啟用前 **MUST** 先回報 user。
+本機 agent-browser（線 ①）掛掉、或目標本質需要 clean browser / anti-bot / CAPTCHA / proxy / 並發多 browser 時，可走 agent-browser 的遠端 provider（`-p browserbase` / `-p kernel`）或 `--proxy` 作 **opt-in fallback**。預設關閉，agent 啟用前 **MUST** 先回報 user。
 
 ### 啟用條件（全部滿足才走）
 
 - local 線 ① 確實不可用（`agent-browser doctor` 報 fail 且 `--fix` 無效），**或** 目標明確需要 provider 專屬能力（anti-bot / CAPTCHA / proxy / clean profile / 並發）
-- 目標是 public URL（暴露 localhost 用 `cloudflared tunnel --url http://localhost:<port>` 直用，不再走 browser-use tunnel）
+- 目標是 public URL（暴露 localhost 時用 `cloudflared tunnel --url http://localhost:<port>`）
 - **不需要**使用者私有登入狀態（遠端 provider browser 不繼承本機 profile cookie）
 
 ### Hard rule
 
 - **NEVER** 把本機 profile cookie / private state 上傳遠端 provider — 這是隱私 / 安全決策，只在 user 明確 opt-in 才做
 - **NEVER** 把遠端 provider 的截圖當成「使用者已登入本機」的 review evidence — 兩者不等價
-- **NEVER** 把 provider API key（`BROWSERBASE_API_KEY` / `KERNEL_API_KEY` / `BROWSER_USE_API_KEY` 等）寫進 repo / clade source — 留 user-level env
+- **NEVER** 把 provider API key（`BROWSERBASE_API_KEY` / `KERNEL_API_KEY` 等）寫進 repo / clade source — 留 user-level env
 - **MUST** 啟用前回報 user「本機 agent-browser 不可用，建議改走遠端 provider fallback（限非私有登入頁）」，等 user 同意才繼續
 
 ## 給 user 開瀏覽器看頁面（hard rule）
@@ -258,7 +257,7 @@ node scripts/safe-screenshot.mjs \
 
 ## 平行 session 隔離（agent-browser）
 
-agent-browser 的 `--session <name>` 是**原生**隔離——每個 session 各自的 daemon + 各自的 tab，互不搶（已實證：兩條平行 session 各守自己的 URL）。這跟舊 browser-harness「local 模式單一 target_id 綁定、BU_NAME 只在 cloud 有效」的模型完全不同，不再需要手動 `switch_tab(target_id)` 重綁。
+agent-browser 的 `--session <name>` 是**原生**隔離——每個 session 各自的 daemon + 各自的 tab，互不搶（已實證：兩條平行 session 各守自己的 URL），不需要手動重綁 tab。
 
 ### 隔離規則
 

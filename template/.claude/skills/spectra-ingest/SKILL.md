@@ -1,7 +1,7 @@
 ---
 name: spectra-ingest
 description: "Update an existing Spectra change from external context"
-effort: xhigh
+effort: high
 license: MIT
 compatibility: Requires spectra CLI.
 metadata:
@@ -138,6 +138,72 @@ Update an existing Spectra change — from a plan file or conversation context.
    **NEVER** apply structural artifact changes without this confirmation step. The cost of a misread ingest is high — completed `[x]` tasks may need rework, design.md may need recapture, capability boundaries may shift.
 
    See `/spectra-discuss` SKILL.md § Plain-Language Synthesis for full structure, examples, and trigger details.
+
+   ---
+
+4b. **Dispatch 路徑選擇（三選一選單）**
+
+   **Step 4b 開頭 MUST 用 AskUserQuestion 跳三選一選單**讓使用者選（除非使用者已明確指定路徑，見下方捷徑）：
+
+   - **A. Codex flow（預設 / 推薦，選單第一項）** — Codex GPT-5.6-sol max 在背景更新 artifacts + 主線 Claude Fable 5 xhigh cross-check。
+   - **B. Fable flow** — Claude Fable 5 xhigh 在背景更新 artifacts + 主線 Claude Fable 5 xhigh cross-check。
+   - **C. 純 Claude** — 主線 Claude Fable 5 xhigh 直接走 Step 5~9。
+
+   **明確指定捷徑（跳過選單）**：
+   - 「用 codex」「照舊」→ **選項 A**
+   - 「用 Fable」「Fable 做」→ **選項 B**
+   - 「不要派」「純 Claude」「直接你做」→ **選項 C**
+
+   **選項 A / B 流程**：
+
+   1. **萃取 brief**：從 Step 1~4 取得的 requirement source（plan file / conversation context）+ 既有 artifacts 現況，寫 prompt 檔到 `/tmp/<runtime>-spectra-ingest-<change-name>-prompt.md`，內容包含：
+      - change name + requirement source 全文
+      - 既有 artifacts 路徑與現況摘要
+      - Step 5 的 artifact 更新規約（Plan-to-Artifact Mapping / Context-to-Artifact Mapping / 保留 `[x]` / 保留 `[P]` / locale 規約）
+      - Step 6 的 Inline Self-Review 全部 7 項 Check（No Placeholders / Internal Consistency / Scope / Ambiguity / Preservation / Durable Handoff / Manual Review Marker Hygiene）
+      - Step 7 的 Analyze-Fix Loop（`spectra analyze` 最多 2 輪）
+      - Step 8 的 `spectra validate`
+      - 完成標準：`spectra validate` 通過 + `spectra park <change-name>`
+      - 語言遵循：artifacts 依 `spectra instructions` 的 `locale` 欄位寫；spec 一律英文
+
+   2. **背景啟動**（**Bash** tool 加 `run_in_background=true`）：
+
+      選項 A：
+      ```bash
+      cd <consumer-repo-root> && codex exec \
+        --model gpt-5.6-sol \
+        --dangerously-bypass-approvals-and-sandbox \
+        --skip-git-repo-check \
+        -c model_reasoning_effort=max \
+        < /tmp/codex-spectra-ingest-<change-name>-prompt.md 2>&1
+      ```
+
+      選項 B：
+      ```bash
+      cd <consumer-repo-root> && claude -p \
+        --model claude-fable-5 \
+        --effort xhigh \
+        < /tmp/fable-spectra-ingest-<change-name>-prompt.md 2>&1
+      ```
+
+   3. **立刻**簡短回報：「已派 <runtime> 在背景 ingest `<change-name>`（bash job `<id>`），完成後主線會 cross-check」。
+   4. 啟動 **notification-only watch**：主線 idle 等 `<task-notification>`，只下**一個**安全網 fallback `ScheduleWakeup(1500, "<runtime> spectra-ingest <change-name> 安全網檢查")`。**NEVER** 短輪詢。
+
+   **Cross-check（A / B 共用，收到 `<task-notification status=completed>` 後立刻）**：
+
+   1. Read draft stdout，確認 artifacts 已更新 + `spectra validate` 通過。
+   2. 若 draft 已 `spectra park <change-name>`：先 `spectra unpark <change-name>`。
+   3. 主線跑 Step 6 全套 Inline Self-Review（7 項 Check）— 對 draft 產出做 cross-check，發現問題主線自己 Edit 修。
+   4. 主線跑 Step 7 Analyze-Fix Loop + Step 8 Validation。
+   5. 主線跑 Step 8.5 commit artifacts + Step 9 Summary。
+   6. 回報使用者：artifacts list + cross-check 結果 + `/spectra-apply <change-name>` 提示。
+
+   **選 A / B 時本 session 不再執行 Step 5**（draft 已做）；**只有選項 C** 才往下跑 Step 5。
+
+   **禁止事項（A / B / C 通用）**：
+   - **NEVER** 派 draft 後不跑 cross-check — 主線 MUST 跑 Inline Self-Review 全套
+   - **NEVER** 把 cross-check 修補丟回 draft runtime — 主線自己 Edit 修
+   - **NEVER** 派 draft 而 prompt 漏掉保留 `[x]` / `[P]` 規約 — ingest 最重要的 invariant 是不丟進度
 
    ---
 

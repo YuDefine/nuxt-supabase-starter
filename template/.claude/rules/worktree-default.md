@@ -152,6 +152,20 @@ v3 atomic landing：`/wt` 跑完 subagent 在 worktree commit、worktree+branch 
 
 > 完整 Codex 派工規約、auto merge-back contract、禁止項詳見 [[worktree-default.commit-ceremony]]（path-scoped：動 `openspec/changes/**` / `HANDOFF.md` / wt-helper 時載入）。
 
+### §5.1 Visibility before landing（hard rule）
+
+User 報告看不到 worktree 改動（「看不到變化」「沒反映」「dev server 沒更新」）時，正確做法是**把 dev server 切到 worktree**，**NEVER** merge-back。
+
+- **MUST**：切 dev server 到 worktree cwd — 走 `dev-session.mjs --cwd <worktree-path>` 或等效方式，讓 user 在 worktree 內驗收
+- **NEVER**：用 `wt-helper merge-back` / `git merge --squash` / 任何把 worktree 改動帶回 main 的動作來「讓 user 看到」— 那是繞過驗收的捷徑
+
+**話術關鍵詞停手信號**：主線 thinking / tool call description 中出現以下任一詞彙且 worktree 改動尚未經 user 驗收（無 `/spectra-archive` 完成紀錄），**MUST** 立即停手，改走「切 dev server」路徑：
+
+- 中：`合進 main` / `帶回 main` / `merge-back` / `讓你看到` / `讓改動可見`
+- En：`merge back` / `squash to main` / `land on main` / `make visible`
+
+**為什麼**：merge-back 是 `/spectra-archive` Step 0 的事（§5），不是「user 有需求」時的快捷鍵。Agent 把「解決 user 眼前不便」偷換成任務目標，繞過驗證流程，是反覆出現的 workflow-discipline 違反模式（pitfall ref: [[pitfall-reflexive-merge-back-before-worktree-verification]]）。
+
 ## §5.5 Merge-back ceremony
 
 `wt-helper merge-back <slug>` 是 atomic landing 核心命令。`--auto-stash` 實為 **bulk-stash**（捲走 main **全部** dirty，不只 blockers）→ claim guard 檢查範圍 **MUST ⊇** 全部將被捲走的 dirty，撞別 session 認領 → **fail-loud STOP**。`git stash push` 必 verify create（乾淨 tree 不丟 exception）。

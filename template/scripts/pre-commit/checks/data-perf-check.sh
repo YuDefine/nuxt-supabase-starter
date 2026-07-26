@@ -8,7 +8,8 @@
 #   - pre-push  checks/data-perf-check.sh  : 掃全 repo *.vue（warn-only 回溯型，不阻擋）
 #
 # 偵測 heuristic（file-level）：
-#   staged .vue 檔含 `$fetch` 但不含 `useFetch` / `useQuery` / `useAsyncData`
+#   staged .vue 檔含 `$fetch` 但不含 `useFetch` / `useLazyFetch` / `useAsyncData` /
+#   `useLazyAsyncData` / `useQuery`
 #   → 代表所有 data-fetching 都走 raw $fetch，違反 HR-1（setup context 應用 composable）。
 #   含 composable 的 .vue 檔可以安全有 $fetch（event handler mutation），不被標記。
 #
@@ -45,11 +46,28 @@ for file in "${staged_vue[@]}"; do
   content=$(git show :"$file" 2>/dev/null) || continue
 
   # file-level escape hatch
-  echo "$content" | grep -q 'data-perf-ignore-file' && continue
+  #
+  # herestring 而非 pipe：`grep -q` 命中即提前退出，pipe 上游的 echo 會收到 SIGPIPE(141)，
+  # 在上面的 `set -o pipefail` 下讓整條 pipeline 回非零 → `&& continue` 不執行 →
+  # 掛了豁免標記的檔仍被檢查。只在 .vue 超過 pipe buffer（~64KB）且標記在前段時觸發。
+  # pre-push 版讀檔案路徑不經 pipe，本來就沒這個問題；這裡因為要讀 index 版而必須用變數。
+  grep -q 'data-perf-ignore-file' <<< "$content" && continue
 
-  # 檢查：有 $fetch 但沒有 useFetch / useQuery / useAsyncData
-  if echo "$content" | grep -q '\$fetch' && \
-     ! echo "$content" | grep -qE 'useFetch|useQuery|useAsyncData'; then
+  # 檢查：有 $fetch 但沒有任何 data-fetching composable
+  #
+  # regex 放寬的兩個理由（都來自實證誤判）：
+  #   use(Lazy)?  — useLazyFetch / useLazyAsyncData 是 Nuxt 官方 composable，
+  #                 字面上不含 "useFetch" / "useAsyncData"
+  #   use*Query   — Pinia Colada 的 domain wrapper 慣例是 use<Entity>Query
+  #                 （如 useProcessMasterListQuery），字面上不含 "useQuery"
+  #
+  # 寧可放寬也不收窄：假陽性會逼開發者掛全檔 data-perf-ignore-file 豁免，
+  # 該檔此後所有真違規都不再被偵測（gate 被自己掏空）；假陰性只是少抓一個，
+  # review 層仍會看到。
+  # herestring 同上——這兩條走 pipe 的話，大檔會讓 gate 靜默失效（$fetch 命中卻回非零 →
+  # if 條件 false → 整個違規檢查被跳過，該擋沒擋）。
+  if grep -q '\$fetch' <<< "$content" && \
+     ! grep -qE 'use(Lazy)?(Fetch|AsyncData)|use[A-Za-z]*Query' <<< "$content"; then
     VIOLATIONS+=("$file")
   fi
 done

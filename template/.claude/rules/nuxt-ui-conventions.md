@@ -41,4 +41,17 @@ Local edits will be reverted by the next sync.
 - **API 正確性（props 存在 / 未過時）**：[[nuxt-ui-mcp]]
 - **原生 picker ban（同 impl-time enforcement spirit）**：[[nuxt-ui-native-picker-ban]]
 
+## 靜默失效偵測（mechanical）
+
+兩個靜默失效：`UDashboardPanel` 混用 named slot 與 stray default child 會讓 named slots 整組不 render；`UTable` cell slot 漏掉 `-cell` 後綴則不會成為 cell renderer，該欄靜默回退成預設渲染。兩者 typecheck、lint、console 都全綠。
+
+兩條都由 clade 散播的 git hook gate 承載，consumer 端**不需要**做任何接線：
+
+| 偵測器 | pre-commit（staged） | pre-push（全 repo） |
+| --- | --- | --- |
+| `scripts/checks/nuxt-ui-mixed-slot-detect.mjs` | `scripts/pre-commit/checks/nuxt-ui-mixed-slot.sh` | `scripts/pre-push/checks/nuxt-ui-mixed-slot.sh` |
+| `scripts/checks/utable-slot-detect.mjs` | `scripts/pre-commit/checks/utable-slots.sh` | `scripts/pre-push/checks/utable-slots.sh` |
+
+四支 wrapper 都由 `.husky/{pre-commit,pre-push}` 的 clade runner 自動呼叫，命中即 blocking。非 Nuxt repo、無 staged `.vue`、或偵測器尚未散播時自動 no-op。
+
 > 本規約是「慣例一致性」baseline，各 consumer 的具體語義角色 × props 對照表是 project-specific 知識，**SHOULD** 在 consumer 自家 `.claude/rules/local/` 維護對照表（clade 只規範「寫前必 grep 既有」這條跨 consumer 通則）。

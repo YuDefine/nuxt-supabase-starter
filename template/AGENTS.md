@@ -16,7 +16,7 @@ clade（~/offline/clade）         ← 跨專案共用中央倉
 
 - 上游：`rules/`、`skills/`、部分 `hooks/`、`scripts/` 由 clade 治理（見 `.claude/.hub-state.json` 的 checksum 清單）。要改這些**先改 clade 中央倉**，跑 `pnpm hub:sync` 投到本專案；直接在 `.claude/rules/` 等改 → SessionStart `_bootstrap-check.sh` 會自動還原 + commit hook 會擋。
 - 本層：`.claude/` 是本專案唯一 source（settings.json、hub.json、本地 commands/agents、business-specific hooks）。
-- 下游：`.codex/`、`.agents/`、`AGENTS.md` 全是 sync-to-agents 從 `.claude/` 投影出來。**禁止**直接編輯，要改先回 `.claude/` 改、再跑 `node ~/.claude/scripts/sync-to-agents.mjs` 重投影。
+- 下游：`.codex/`、`.agents/`、`AGENTS.md` 全是 sync-to-agents 從 `.claude/` 投影出來。**禁止**直接編輯，要改先回 `.claude/` 改、再跑 `node ~/.codex/scripts/sync-to-agents.mjs` 重投影。
 
 常用命令：
 
@@ -24,7 +24,7 @@ clade（~/offline/clade）         ← 跨專案共用中央倉
 | ----------------------------------- | ------------------------------------------- |
 | 從 clade 拉新版到本專案             | `pnpm hub:sync`                             |
 | 檢查本專案 vs clade drift           | `pnpm hub:check`                            |
-| 從 `.claude/` 重投影到 codex/agents | `node ~/.claude/scripts/sync-to-agents.mjs` |
+| 從 `.claude/` 重投影到 codex/agents | `node ~/.codex/scripts/sync-to-agents.mjs` |
 | 完整 bootstrap（首次）              | `pnpm hub:bootstrap`                        |
 
 <!-- SPECTRA:START v1.0.2 -->
@@ -71,7 +71,7 @@ Changes can be parked（暫存）— temporarily moved out of `openspec/changes/
 
 ## Codex Projection
 
-- 定期執行 `node ~/.claude/scripts/sync-to-agents.mjs`，讓 Codex surface 與 `.claude/` 保持一致。
+- 定期執行 `node ~/.codex/scripts/sync-to-agents.mjs`，讓 Codex surface 與 `.claude/` 保持一致。
 - 專案特化 promotion 規則放在 `.claude/sync-to-agents.config.json`。
 - 若 source 與投影不一致，以 `.claude/` 為準，之後再同步生成。
 
@@ -81,28 +81,26 @@ Changes can be parked（暫存）— temporarily moved out of `openspec/changes/
 
 當主線執行 `git push --tags`（或推單一 tag、或 push commit 觸發發版 workflow）**成功**後，**若**該 repo 含 `.github/workflows/*.yml` 且 `gh` CLI 可用：
 
-**MUST** 立刻用 `Agent(run_in_background=true)` 開 watcher subagent 監看 GitHub Actions 結果，**NEVER** 自己同步 block 等待 — 主線繼續對話，watcher 完成時系統會自動通知主線。
+**MUST** 立刻用 **`Bash(run_in_background=true)`** 派出 CI watcher script（唯一入口，用法與樣板見 `/gh-ci-watch` skill）：
 
-### Watcher subagent prompt 模板
+```bash
+bash .codex/scripts/gh-ci-watch.sh workflow "<workflow 名稱>" --commit "$(git rev-parse HEAD)"
+```
 
-Subagent 任務應包含（cwd 設為 push 發生的 repo path）：
-
-1. `gh run list --limit 1 --json databaseId,name,status,conclusion,url,headBranch,event,createdAt`
-   - 若 list 空 / `gh` 未登入 / 無權限 → 回報 `status: unavailable` + 原因，結束
-   - 若最新 run 的 `createdAt` 早於 push 時間（不是這次 push 觸發的） → 同上回報 unavailable
-2. `timeout 900 gh run watch <databaseId> --exit-status`
-   - exit 0 → `status: success`
-   - exit 124 → `status: timeout`（15 min 上限）
-   - 其他非 0 → `status: fail`；補跑 `gh run view <databaseId> --log-failed` 截前 200 行作 `logExcerpt`
-3. 結構化回報（≤200 字）：
-   - `status`、`runUrl`、`version`（由 `git describe --tags --abbrev=0` 抓；無 tag 則填 commit short sha）
-   - 若 fail：`failedJob`、`logExcerpt`（節錄前 30 行）
+- **用 `--commit` 不用 `--branch main`**：tag 觸發的 run，其 `headBranch` 是 **tag 名**不是 `main`，`--branch main` 對它永遠篩不到 run → watcher 一路 pending 到 `WATCH_TIMEOUT` exit 3，即使該 run 其實是綠的（2026-07-25 <consumer-b> v1.250.0 實證）。`--commit` 對 tag 與 branch 兩種觸發都成立
+- 每個要監看的 workflow（如 Deploy Staging / Deploy Production）各派一條
+- run 尚未建立沒關係——script 把「查無 run」視為 pending 繼續等；被 concurrency 取消也會自動改追 superseding run
+- 派出後主線繼續對話，script 達 terminal state 才 exit、系統自動通知主線
+- **NEVER** 用 `Agent(run_in_background=true)` 開 watcher subagent 監看 CI——LLM watcher 已實證會反覆中途回報燒 token（單次事故 235k+）、盯死被取代的 run、且不可預測（詳見 `/gh-ci-watch` skill § 機制選擇）
+- **NEVER** 自己同步 block 等待（前景 `gh run watch` / 主線 sleep 輪詢）
 
 ### Watcher 完成後主線必做
 
-- **success** → 一行報 `v<version> CI 綠燈 — <runUrl>` 後結束本話題，**NEVER** 多嘴
-- **fail / timeout** → **MUST** 用 `request_user_input` 給使用者二選一：
-  - `[1] 立刻 root-cause + 修` — 讀 `logExcerpt` 找根因，進除錯流程；修完前 **NEVER** 主動 push
+讀該 background bash 輸出尾段的 `RESULT:` 行分流：
+
+- **`success`**（exit 0）→ 一行報 `v<version> CI 綠燈 — <runUrl>`（version 由 `git describe --tags --abbrev=0` 抓；無 tag 填 commit short sha）後結束本話題，**NEVER** 多嘴
+- **`failure` / `timed_out` / `cancelled` 等（exit 1）或 `WATCH_TIMEOUT`（exit 3）** → **MUST** 用 `request_user_input` 給使用者二選一：
+  - `[1] 立刻 root-cause + 修` — 讀輸出內的 `--log-failed` 節錄找根因，進除錯流程；修完前 **NEVER** 主動 push
   - `[2] 登記 HANDOFF.md` — 在 repo root 的 `HANDOFF.md` 末尾 append：
 
     ```
@@ -119,14 +117,14 @@ Subagent 任務應包含（cwd 設為 push 發生的 repo path）：
     ## CI 紅燈待辦
     ```
 
-- **unavailable** → 一行報「watcher 無法啟動（<原因>），略過」結束，**NEVER** 追問使用者
+- **`UNAVAILABLE`**（exit 2）→ 一行報「watcher 無法啟動（<原因>），略過」結束，**NEVER** 追問使用者
 
 ### 禁忌
 
 - **NEVER** 在 watcher 回報前主動結束話題或叫 user 自己看
 - **NEVER** 在 user 未選 `[1]` 前替他改 code / push commit 修 CI
 - **NEVER** 對沒有 `.github/workflows/` 的 repo 套用這條規則（直接跳過 watcher）
-- **NEVER** 重開新 watcher 取代尚在跑的 watcher（避免重複監看同一個 run）
+- **NEVER** 對同一條 run 重複派 watcher；要改監看目標 = kill 舊 background bash + 重派（**NEVER** 對跑一半的 watcher 下改派指令）
 <!-- CLADE:SNIPPET:post-push-ci-watch:END -->
 
 <!-- CLADE:SNIPPET:archive-commit-order:START -->

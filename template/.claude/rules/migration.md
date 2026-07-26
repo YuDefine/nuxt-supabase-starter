@@ -69,6 +69,26 @@ rename 解單次紅燈；hook 防再犯。兩者都不可繞過：
 - **NEVER** 用 `git commit --no-verify` 跳過 hook
 - **NEVER** 把 hook 的 fail 當 false positive 直接強推 — 先確認 `origin/main` 是否同步
 
+## Pending Migration 分類
+
+**每一個**尚未套用到目標環境的 migration 都 **MUST** 在 deploy 前通過 canonical 分類器：
+
+```bash
+node vendor/scripts/classify-migrations.mjs --migrations-dir supabase/migrations
+```
+
+分類器輸出 `online_safe`、`expand_contract_required`、`maintenance_required` 或 `review_required`。CI／deploy pipeline **MUST** 以目標環境的 applied migration versions 判定 pending 集合，並逐一讀取分類器輸出的對應 migration 結果；既有已套用 migration 的分類不得掩蓋 pending migration。
+
+分類為 `expand_contract_required`、`maintenance_required` 或 `review_required` 的高風險 migration，SQL 檔頭 **MUST** 註記：
+
+```sql
+-- Migration risk: maintenance_required
+-- Root cause: <觸發高風險分類的 DDL／資料量／相容性原因>
+-- Lock strategy: <lock_timeout、concurrent／分階段做法、maintenance window 或無鎖理由>
+```
+
+Header 是部署決策證據，不能覆寫分類器結果。`maintenance_required` 仍 **MUST** hard stop，完成 rollback／maintenance decision 後才可核准。
+
 ## Schema 暴露策略
 
 Template 預設只使用 `public` schema，並被 PostgREST 自動暴露為 Data API。
@@ -144,3 +164,62 @@ Production migration 在有流量時執行，一個 naive `ALTER TABLE` 就可�
 7. **Expand-contract — rename / drop / type change 分階段**：rename column / drop column / 改型別 **MUST** 走 expand-contract：**expand**（加新欄 / 新 nullable column，app 同時雙寫新舊、讀舊）→ **migrate**（backfill + app 切成讀新）→ **contract**（確認無程式再讀舊後，另一次部署才 drop 舊欄）。**NEVER** 在同一個 migration 內 rename / drop 仍被線上程式引用的欄位 — 舊 instance 會即刻 500。
 
 > 對照 `database.md`（self-hosted 操作面）的 production migration classification（`online_safe` / `expand_contract_required` / `maintenance_required`）與 PostgREST `/ready` gate — 本 checklist 是 SQL 層的 zero-downtime 手法，classification 決定部署流程走哪條。
+
+## Data-Transform Migration Disposition
+
+含 `UPDATE` / `INSERT ... SELECT` / `ALTER ... USING` 的資料轉換 migration，既有資料的每種狀態都**MUST**被顯式考慮。漏掉某類資料 = silent data corruption 或 migration 中途 crash。
+
+### MUST
+
+每個資料轉換 migration 的 SQL 檔頭 **MUST** 宣告 per-class disposition comment block，列出既有資料的每種預期狀態與對應處置：
+
+```sql
+-- Disposition:
+--   valid_rows (status IN ('active','resigned')): UPDATE SET new_col = derived_value
+--   null_source (old_col IS NULL): SET new_col = 'default_fallback'
+--   unexpected_format (old_col !~ pattern): SKIP (WHERE clause excludes)
+--   orphan_fk (ref table missing): SET new_col = NULL, log warning
+```
+
+每條 disposition 包含三要素：
+
+1. **Class label**（如 `valid_rows`、`null_source`）— 人可讀的分類名稱
+2. **Predicate**（如 `status IN ('active','resigned')`）— 識別該類資料的 SQL 條件
+3. **Action**（如 `UPDATE SET ...` / `SKIP` / `SET NULL`）— 對該類資料的處置
+
+### 判定「是否為資料轉換 migration」
+
+SQL 內含下列任一 pattern 即視為資料轉換 migration，MUST 附 disposition：
+
+- `UPDATE <table> SET` — 批次修改既有欄位值
+- `INSERT INTO <table> SELECT` — 從既有資料衍生新 row
+- `ALTER TABLE ... ALTER COLUMN ... USING` — 改型別時的值轉換
+- `ALTER TABLE ... ADD COLUMN ... DEFAULT <expression>` 且 expression 非 literal（依賴既有欄位）
+
+純 DDL（`ADD COLUMN ... DEFAULT 'literal'` / `CREATE TABLE` / `CREATE INDEX`）不算，不需 disposition。
+
+### NEVER
+
+- **NEVER** 在資料轉換 migration 漏列任何可預見的資料狀態（尤其 NULL / 空字串 / 外鍵孤兒）
+- **NEVER** 假設「全部 row 都符合 valid_rows 條件」不寫 fallback — prod 資料永遠有例外
+
+## Staging Rehearsal
+
+### SHOULD
+
+資料轉換 migration 在 merge 前 **SHOULD** 在 staging-like 資料上跑過一次驗證。
+
+`pnpm db:reset` 只用乾淨 seed — seed 是理想資料，缺乏 prod 常見的髒資料殘留（NULL / orphan FK / 格式不一致 / 歷史遺留）。staging 或 prod snapshot 才能暴露 disposition 漏列的 class。
+
+### 驗證步驟
+
+1. 在 staging DB 上 `supabase migration up`（或等效命令）跑該 migration
+2. 檢查 migration 輸出有無 error / warning
+3. 抽查每個 disposition class 至少一筆 row 的結果
+4. 確認未被 disposition 涵蓋的 row 數量為 0（`SELECT count(*) WHERE <negation of all predicates>`）
+
+### 何時從 SHOULD 升級為 MUST
+
+- 目標表 row 數 > 10,000
+- migration 含 `ALTER COLUMN ... USING`（型別轉換不可逆）
+- migration 含 `DELETE` 或 `TRUNCATE`（資料不可逆）

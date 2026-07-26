@@ -2,7 +2,7 @@
 name: spectra-audit
 description: "Audit changed code for security sharp edges — dangerous defaults, type confusion, and silent failures"
 disallowedTools: [Edit, Write]
-effort: xhigh
+effort: high
 license: MIT
 compatibility: Requires spectra CLI.
 metadata:

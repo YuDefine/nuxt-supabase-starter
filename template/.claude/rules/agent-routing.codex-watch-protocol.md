@@ -30,6 +30,8 @@ Local edits will be reverted by the next sync.
      --model gpt-5.6-sol \
      --dangerously-bypass-approvals-and-sandbox \
      --skip-git-repo-check \
+     --enable default_mode_request_user_input \
+     --json \
      -c model_reasoning_effort=<medium|high|xhigh> \
      < /tmp/codex-<topic>-<slug>-prompt.md 2>&1
    ```
@@ -38,7 +40,7 @@ Local edits will be reverted by the next sync.
 
 3. 立刻簡短回報 bash job ID 給使用者
 4. 立刻啟動 **Codex Watch Protocol**（見下節 § 監看排程）— notification-only（主線 idle 等通知，只下**一個** ~1500s 安全網 fallback 防罕見 hang-type 失敗）。**禁止**啟動每 3 分鐘短輪詢（無謂 turn 重燒 context）。**禁止**任何 subagent 中介 dispatch（per `agent-routing.md` § Dispatch 入口）
-5. 收到 `<task-notification> status=completed` → 立刻 BashOutput 讀 stdout → 整理結果回報；watch loop 自然終止
+5. 收到 `<task-notification> status=completed` → 立刻 BashOutput 讀 stdout → **先跑 Input Intercept 偵測**（per [[agent-routing.codex-input-intercept]] § 問題偵測）→ 無問題則整理結果回報；有問題則走攔截→評估→代答/升級流程；watch loop 自然終止
 6. **NEVER** 沉默等使用者來問進度
 
 各 routing 的參數差異：
@@ -118,7 +120,7 @@ GPT-5.5 與 Claude 4.8 都**字面遵守指令、不外推**（Anthropic prompt 
 Dirty working tree 有兩種來源，**兩種都要列進 baseline**：
 
 1. **主線操作型**：主線剛跑 `/spectra-ingest` 完成的 artifacts、剛寫進 `docs/tech-debt.md` 的 TD-NNN entry、未 commit 的 ROADMAP/HANDOFF 更新
-2. **自動 hook 型**：`pnpm install` postinstall hook 觸發 `hub:bootstrap` → `sync-to-agents` 自動把 main branch 的 clade 更新同步進 worktree，產生 LOCKED projection diff（`.claude/` / `.agents/` / `AGENTS.md` / `CLAUDE.md` / `.claude/scripts/`，檔頭有 `🔒 LOCKED — managed by clade` banner）。主線沒主動操作但 working tree 仍 dirty
+2. **自動 hook 型**：`pnpm install` postinstall hook 觸發 `hub:bootstrap` → `sync-to-codex` 自動把 main branch 的 clade 更新同步進 worktree，產生 LOCKED projection diff（`.claude/` / `.agents/` / `AGENTS.md` / `CLAUDE.md` / `.claude/scripts/`，檔頭有 `🔒 LOCKED — managed by clade` banner）。主線沒主動操作但 working tree 仍 dirty
 
 派工前**MUST 跑**：
 
@@ -279,16 +281,16 @@ Codex **一律**由主線直接 Bash `run_in_background` 派工（**禁止** sub
 
 ### 健康判斷（每次 wakeup 必跑）
 
-讀 BashOutput tail，依末尾訊號決定下一步：
+讀 BashOutput tail，依末尾訊號決定下一步。**`--json` 模式**下 stdout 是 JSONL 事件，stderr 保持原格式：
 
 | 訊號 | 判定 | 下次 wakeup |
 | --- | --- | --- |
-| 末尾持續有新 `exec` 行、`succeeded in`、`tokens used` 或 diff 輸出 | 健康 | `180` 秒（3 分，cache 內；使用者要求上限） |
-| 末尾出現 `Codex Report` 或 `tokens used:` 後無新行 | 即將完成 | `60` 秒（cache 內，便宜） |
+| JSONL 有新 `"type":"item.completed"` 事件（tool_call / shell / agent_message） | 健康 | `180` 秒（3 分，cache 內；使用者要求上限） |
+| JSONL 出現 `"type":"turn.completed"` 含 `usage` 後無新事件 | 即將完成 | `60` 秒（cache 內，便宜） |
 | 末尾 60s+ 無新輸出（看 BashOutput timestamp） | 輕度可疑 | `120` 秒；連續兩次無輸出 → 視為卡住，跳「介入觸發」 |
-| 末尾出現 `fetch failed` / `sandbox: rejected` / `Permission denied` / `EACCES` / 認證失敗 | 阻塞 | **立刻**跳「介入觸發」，不再 wakeup |
-| 末尾出現互動 prompt（`Continue?`、`y/N`、`Press Enter`、`waiting for input`） | 異常（codex sandbox 不該有） | **立刻**跳「介入觸發」 |
-| codex 自我宣告 blocker（「無法繼續」「需要使用者決定」「missing context」等） | 阻塞 | **立刻**跳「介入觸發」 |
+| stderr 出現 `fetch failed` / `sandbox: rejected` / `Permission denied` / `EACCES` / 認證失敗 | 阻塞 | **立刻**跳「介入觸發」，不再 wakeup |
+| stderr 出現 `request_user_input is not supported in exec mode` | codex 在問問題 | turn 將結束 → 等 notification 走 [[agent-routing.codex-input-intercept]] 流程 |
+| JSONL 最後 `agent_message` 含 blocker 語意（「無法繼續」「需要使用者決定」「missing context」） | 阻塞 | **立刻**跳「介入觸發」 |
 
 ### 介入觸發（用 AskUserQuestion）
 
@@ -458,7 +460,7 @@ Agent 端的對應規範（hard budget、checkpoint、fail-fast、progress.json 
 | 風險 | 說明 |
 | --- | --- |
 | 跳過 claim | Codex 直接跑容易略過 `work-claims.md` 規定的「先 claim 再做 active change」流程 |
-| 跳過 Design Review 回收 | spectra-apply 的 Design Review phase 必須由主線 Claude Opus 4.8 自己做（見 `agent-routing.md` § Routing Table）；Codex 直接跑會把 Design Review phase 一起做掉，Design 品質降級 |
+| 跳過 Design Review 回收 | spectra-apply 的 Design Review phase 必須由主線 Claude Opus 5 自己做（見 `agent-routing.md` § Routing Table）；Codex 直接跑會把 Design Review phase 一起做掉，Design 品質降級 |
 | 失去 cross-check | 主線是 quality gate（typecheck / git diff / tasks.md checkbox 確認）；Codex 直接跑沒人 cross-check |
 
 ### Marker 機制

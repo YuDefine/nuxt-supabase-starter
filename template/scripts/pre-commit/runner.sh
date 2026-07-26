@@ -57,3 +57,6 @@ run_check mutation-loading
 
 # 7) nuxt-ui-mixed-slot — 偵測 staged .vue 在 UDashboardPanel 混用 named template + stray 子元素
 run_check nuxt-ui-mixed-slot
+
+# 8) utable-slots — 偵測 staged .vue 在 UTable 內漏掉 cell slot 的 -cell 後綴
+run_check utable-slots

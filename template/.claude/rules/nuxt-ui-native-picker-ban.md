@@ -55,17 +55,9 @@ Local edits will be reverted by the next sync.
 
 仍**MUST** 在 commit message / PR description 註明位置與理由，讓 review 層核實。`<input type="color">` 等非日期 / 時間類 picker 不在本條範圍。
 
-## CI gate（採用範本，consumer 自治）
+## CI gate
 
-pre-push hook 可被 `--no-verify` / web 編輯介面繞過。要 PR merge 級無法繞過的強制，consumer 在自家 CI workflow 加一個 step 直接重用已 vendored 的 script：
-
-```yaml
-# .github/workflows/ci.yml
-- name: Native picker ban (repo-wide)
-  run: bash scripts/pre-push/checks/native-picker-ban.sh
-```
-
-clade 不替 consumer 改 workflow（各自治），只提供範本。clade 待辦稽核段追蹤全 registry consumer 的採用狀況。
+pre-push hook 可被 `--no-verify` / web 編輯介面繞過。本 check 的 PR merge 級載體與其他 clade-managed gate 合在同一個 `clade-gates` job，範本與接線時機見 [[golden-path-onboarding]] § Golden Path Checklist（範本本體 `docs/golden-paths/clade-gate-ci.md`）。
 
 ## 規約來源
 

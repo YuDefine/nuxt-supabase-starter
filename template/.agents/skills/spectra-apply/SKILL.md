@@ -1,7 +1,7 @@
 ---
 name: spectra-apply
 description: "Implement or resume tasks from a Spectra change"
-effort: high
+effort: xhigh
 license: MIT
 compatibility: Requires spectra CLI.
 metadata:
@@ -173,7 +173,12 @@ Implement tasks from a Spectra change.
          - 數量不一致（worktree 有新 migration）→ **自動** `cd <worktree> && pnpm supabase:sync && pnpm db:reset`
          - 一致 → pass
          - `supabase:sync --dry-run` 不支援 → fallback 直接跑 `pnpm supabase:sync`（idempotent）
-         - **Per `db-topology-invariant` 規則**：dev DB 是共享實例，reset 前 **SHOULD** 檢查沒有其他 active session 在用（`node scripts/claim-helper.mjs list`）；若有其他 claim → warn user 但仍 proceed（apply 的 DB sync 優先於 claim collision 的低機率風險）
+         - **Per `db-topology-invariant` 規則**：dev DB 是共享實例，reset 前 **MUST** 自主協調（不問 user）：
+           1. `node scripts/claim-helper.mjs list` 列 active claims
+           2. 分類：`lastActivity > 2h` = stale（殭屍 claim，忽略）；`lastActivity < 30min` 且 claim 的 change 有 DB-dependent work（migration / seed / e2e） = 真 active
+           3. 真 active claim = 0 → 直接 proceed，log 一行「dev DB reset — N stale claims ignored」
+           4. 真 active claim > 0 → 仍 proceed（apply 的 DB sync 優先於 claim collision），但 log「dev DB reset — warning: N active claims: <names>」
+           5. **NEVER** 因為有 stale claims 或甚至 active claims 就停下來問 user — dev DB reset 是 evidence collection 的前置條件，阻斷 reset = 阻斷整條 change 的推進。log 足矣
 
       2. **Dev server cwd alignment**（有 singleton dev server 的 consumer — 讀 `scripts/singleton.mjs` 存在性）：
 
@@ -211,7 +216,7 @@ Implement tasks from a Spectra change.
       **NEVER**：
       - 跳過此步直接 dispatch — 任何一道紅燈在 subagent 內撞到都比現在 30 秒驗出來貴 10 倍
       - 在 smoke test 帶 token header — 會把 isLoopbackRequest bug 藏起來
-      - 把 DB sync 結果不報 user — sync + reset 改了共享 dev DB，user 需要知道
+      - 把 DB sync 結果完全不留紀錄 — sync + reset 改了共享 dev DB，log 到 HANDOFF 或 task output 讓 user 可回溯（但不是停下來問 user 要不要跑）
 
    d. **Internally dispatch via `/wt` Form 3**：
 
@@ -486,10 +491,10 @@ If there is no request_user_input 工具 available, present options as plain tex
    1. **Read tasks.md** and identify all `## N.` phase sections
    2. **For each phase, classify into one of three categories**（依序判定，命中即停）:
       - **A. Design Review phase** — title contains "Design Review" OR phase body references `/design improve` / `/impeccable audit` / `/impeccable *` / `review-screenshot` / `/design *`
-        → **主線 Claude Opus 4.6 high 自己做**，**永不**派 codex
+        → **主線 Claude Opus 5 xhigh 自己做**，**永不**派 codex
         → Design skill is AI Agent first-class; codex tooling weak in this domain
       - **B. UI view phase** — phase 內任一 task 描述/路徑指涉 view 層檔案：`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且**該 phase 沒有摻入非 view 的 frontend / backend 工作（store / hook / API client / type / util / migration / API server）
-        → **主線 Claude Opus 4.6 high 自己做**，**永不**派 codex
+        → **主線 Claude Opus 5 xhigh 自己做**，**永不**派 codex
         → UI view 層的視覺 / 互動 / a11y 細節需要與 Design skill 緊耦合；frontend 但非 view 的工作（store / hook / API client / type / util）不在此範圍，走 C 類
       - **C. Other phase** — 上述兩類以外（schema / migration / API server / CLI / 純 backend / frontend 但非 view 的 store / hook / API client / type / util / unit test / docs）
         → **派 background codex GPT-5.6-sol high**
@@ -574,7 +579,8 @@ If there is no request_user_input 工具 available, present options as plain tex
 
       仍禁止：`git push` / `git stash`（中途）/ `git commit --amend` / `/commit` / `/spectra-commit` / 跨 phase 混 commit。
 
-      Acceptance：所有 phase <N> 的 tasks 完成、checkbox 已勾、相關 typecheck / unit test 通過、phase commit 已在 worktree 內成立、`git log main..HEAD` 顯示 `🧹 chore: wt <change>-phase-<N> — ...`。
+      Acceptance：所有 phase <N> 的 tasks 完成、checkbox 已勾、**gate chain（L0–L2）全 PASS**（per [[verify-gate-chain]]）、phase commit 已在 worktree 內成立、`git log main..HEAD` 顯示 `🧹 chore: wt <change>-phase-<N> — ...`。
+      Gate chain FAIL 時：解析 error output → 修正 → 重跑 gate chain，最多 5 輪（per [[verify-gate-chain]] § Iterate-until-green）。超過 5 輪仍 FAIL → 回報 main thread "gate chain not converging after 5 iterations: <last error summary>"。
       不要動 phase <N> 以外的 tasks。不要碰 ## Design Review 區塊（主線會自己做）。
       不要呼叫 /spectra-archive。
       ```
@@ -603,7 +609,14 @@ If there is no request_user_input 工具 available, present options as plain tex
 
    5. Move to next phase (re-classify and dispatch or self-execute)
 
-   6. After ALL C 類 phases complete → **主線自己**執行所有 A、B 類 phases（Design Review / UI view），用 `/design improve`, /impeccable skills, /impeccable audit, review-screenshot 等 AI Agent first-class 工具
+   6. After ALL C 類 phases complete → **主線 MUST 在本次 apply session 內完成**所有 A、B 類 phases（Design Review / UI view）。具體做法：**直接 invoke Skill tool** 跑 `/design improve`、`/impeccable audit`、`review-screenshot` 等 AI Agent first-class skill，完整跑完該 phase 所有 tasks 並標 `[x]`。
+
+      **Hard rule — Design Review 內含完成義務**：
+      - **MUST** 在 apply flow 內自行 invoke 並完成 Design Review phase 的全部工作（`/design improve` → `/impeccable audit` → screenshot），**不是**停下來告訴 user「接手 session 請跑 /design improve」
+      - **MUST** 完成後才進 Step 8（Final check）— Design Review 是 apply 的一部分，不是 apply 之外的獨立步驟
+      - **NEVER** 在 Output On Completion 或 status 中把 Design Review 列為「待做」或「下一步由 user 跑」
+      - **NEVER** 因為 Design Review 需要 dev server / screenshot 而停下 — 主線有 proactive dev server spawn 能力（per `rules/core/proactive-skills.md`），自己起 server、自己截圖、自己完成
+      - **例外**：user 明確說「Design Review 我自己做」「跳過 design」才可不做
 
       **Design Review 期間 MUST 跑 Layer C data-sanity**（clade fork addition）：對本 change 觸及的 paginated query + lookup-resolved column 跑 `node <clade-vendor>/scripts/audit-data-sanity.mjs --consumer-path . --files <touched> --json`。exit 1 `status:"fail"`（PARAM_BOUNDARY，Critical）→ 主線 root-cause 修（client literal 超 server zod bound，如 `perPage:200` vs `max(100)`），**NEVER** 帶病進 handoff。詳見 `/data-sanity` skill。
 
@@ -697,8 +710,8 @@ If there is no request_user_input 工具 available, present options as plain tex
 
    **Dispatch reminder**: For each phase, follow Step 6b's three-way classification:
    - Class C（Other）→ dispatch codex GPT-5.6-sol high (phase granularity)
-   - Class A（Design Review）→ 主線 Opus 4.6 high self-execute (NEVER dispatch)
-   - Class B（UI view: component / page / view / layout / styling）→ 主線 Opus 4.6 high self-execute (NEVER dispatch)；該 phase 實作完成、commit / 標 done **之前** MUST 跑 **Step 6c Refactor Invariant Check** + **Step 6d Review Rules Check**
+   - Class A（Design Review）→ 主線 Opus 5 xhigh self-execute：**MUST invoke Skill tool** 跑 `/design improve` + `/impeccable audit` 完成全部 tasks（per Step 6b §6 hard rule；NEVER 停下叫 user 自己跑）
+   - Class B（UI view: component / page / view / layout / styling）→ 主線 Opus 5 xhigh self-execute (NEVER dispatch)；該 phase 實作完成、commit / 標 done **之前** MUST 跑 **Step 6c Refactor Invariant Check** + **Step 6d Review Rules Check**
    - Mixed phase（UI view + 非 view 摻同 phase）→ 已開工主線吸收、未開工 STOP 提示 `/spectra-ingest`
 
    For each pending task:
@@ -757,9 +770,36 @@ If there is no request_user_input 工具 available, present options as plain tex
 
 ---
 
+7.5. **Gate Chain Pass — iterate-until-green**（clade fork addition — per [[verify-gate-chain]]）
+
+   **觸發**：ALL phases（A + B + C）完成後、Step 8 Final check 之前。
+
+   跑 consumer 的 gate chain（`.claude/rules/local/verify-commands.md` 定義的 L0–L2 指令）：
+
+   ```bash
+   # 依序跑。任一 non-zero 即 FAIL
+   vp check          # L0 — 或 consumer 定義的替代
+   pnpm typecheck    # L1
+   pnpm test --run   # L2
+   ```
+
+   **全 PASS** → 進 Step 8。
+
+   **任一 FAIL** → iterate-until-green 迴圈（max 5 輪）：
+
+   1. 讀 error output 全文
+   2. 分類 error（確定性 / 環境 / 不確定——定義見 [[verify-gate-chain]]）
+   3. 修正確定性 error（Edit/Write）
+   4. 重跑 gate chain
+   5. 同一 error 連續 2 輪不收斂 → 提前 escalation
+
+   **5 輪仍 FAIL** → Output On Pause，附最後一輪 error 全文，escalation_action = ASK。
+
+   **Skip-condition**：consumer 的 `verify-commands.md` 不存在 → 退回既有行為（只跑 `spectra instructions apply --json` 確認 state）。不 block apply 流程。
+
 8. **Final check**
 
-   After completing all tasks, re-run:
+   After completing all tasks AND Step 7.5 gate chain PASS, re-run:
 
    ```bash
    spectra instructions apply --change "<name>" --json
@@ -987,7 +1027,7 @@ If there is no request_user_input 工具 available, present options as plain tex
       **分析結果處理**：
       - **全部 MATCH** → 對每個 item 寫 `(verified-ui:)` annotation
       - **任一 MISMATCH / UNCERTAIN** → 該 item 保留 `[ ]`，寫 `（issue: screenshot-match-analysis: <reason>）`；主線重派 codex medium 重拍該 item（最多 2 輪），重拍後再跑一次 xhigh 分析
-      - **Codex xhigh 不可用 / 機械故障** → 主線自己讀截圖檔做 visual sanity check（主線是 Opus 4.6，可讀圖），判定 MATCH 才寫 annotation
+      - **Codex xhigh 不可用 / 機械故障** → fallback 派 Sonnet 5 讀截圖檔做 visual sanity check（Sonnet 5 可讀圖、速度快），判定 MATCH 才寫 annotation
 
       **NEVER** 跳過 Screenshot Match Analysis 直接寫 `(verified-ui:)` annotation — 收集與判斷分離是防搪塞的核心機制。
 
@@ -1265,7 +1305,8 @@ Working on task 4/7: <task description>
 
 ### Evidence
 - spectra state: `"state": "all_done"`（<實跑輸出行>）
-- checks: <typecheck/test/lint 命令＋輸出摘尾>
+- gate chain: L0 `vp check` PASS / L1 `pnpm typecheck` PASS / L2 `pnpm test --run` PASS（<每項指令的最後一行 output>）
+- iterations: <gate chain 跑了幾輪，首輪即 PASS 則寫 "1/5 (first-pass green)">
 - annotations: <tasks.md 其中一條 (verified-*) annotation 行>
 
 All tasks complete! You can archive this change with `/spectra-archive`.

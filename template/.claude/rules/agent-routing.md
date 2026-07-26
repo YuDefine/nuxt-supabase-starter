@@ -17,13 +17,13 @@ Local edits will be reverted by the next sync.
 | --- | --- | --- |
 | **Web search**（即時資料 / 外部資訊查詢） | **Codex（GPT-5.6-sol medium）** | 中思考預算 + Codex 搜尋整合。 |
 | **Code review（commit 0-A）** | **(1) `simplify` + (2) `codex exec` review high（GPT-5.6-sol，經 codex-review-safe.sh），(3) 0-A.1 出 Critical / Major 時條件升 xhigh** | 跨模型互補盲點。詳見 `.claude/skills/commit/SKILL.md` Step 0-A。 |
-| **Spectra `propose` 階段（draft）** | **使用者選單三選一**：A Codex GPT-5.6-sol xhigh draft（預設/推薦）／ B 雙段 codex：Codex GPT-5.6-sol xhigh draft ＋ Codex GPT-5.6-sol xhigh review（Fable 暫不可用，原為 Fable 5 High draft，暫以 codex 代）／ C 純 Claude | 預設跳三選一選單；使用者明確指定路徑時跳過。詳見 `spectra-propose` Step 0。 |
-| **Spectra `propose` cross-check / final check** | **主線 Claude Opus 4.8 xhigh** | 主線 = quality gate（A 的 cross-check、B 的 final check 都由主線跑），不只是 dispatcher。 |
+| **Spectra `propose` 階段（draft）** | **使用者選單三選一**：A Codex GPT-5.6-sol max draft（預設/推薦）／ B 三模型交叉：Claude Fable 5 xhigh draft ＋ Codex GPT-5.6-sol max review／ C 純 Claude | 預設跳三選一選單；使用者明確指定路徑時跳過。詳見 `spectra-propose` Step 0。 |
+| **Spectra `propose` cross-check / final check** | **主線 Claude Fable 5 xhigh** | 主線 = quality gate（A 的 cross-check、B 的 final check 都由主線跑），不只是 dispatcher。 |
 | **Spectra `apply`（非 Design Review、非 UI view phase，phase 粒度）** | **Codex GPT-5.6-sol high** | medium 漏 schema drift 風險高；phase 粒度避免 round-trip。 |
-| **Spectra `apply` UI view phase（component / page / view / layout / styling）+ Section 7（Design Review）** | **主線 Claude Opus 4.8 xhigh，永不派 codex** | 視覺 / 互動 / a11y 與 Design skill 緊耦合，Codex tooling 弱。非 view 的 frontend 不在此範圍，仍走 codex（範圍同 § Phase Dispatch C 類）。 |
-| **`screenshot-review` verify mode**（`[verify:ui]` channel / archive 前視覺 QA） | **主線 Claude 直派 Codex GPT-5.6-sol low**（Bash 走 reference § Codex 派工的標準流程；**禁止** `Agent` tool with `subagent_type: screenshot-review`） | sonnet wrapper 會繞過 Step 0 自做工作（[[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]）。詳見 reference § screenshot-review Verify Mode Dispatch。 |
+| **Spectra `apply` UI view phase（component / page / view / layout / styling）+ Section 7（Design Review）** | **主線 Claude Opus 5 xhigh，永不派 codex** | 視覺 / 互動 / a11y 與 Design skill 緊耦合，Codex tooling 弱。非 view 的 frontend 不在此範圍，仍走 codex（範圍同 § Phase Dispatch C 類）。 |
+| **`screenshot-review` verify mode**（`[verify:ui]` channel / archive 前視覺 QA） | **主線 Claude 直派 Codex GPT-5.6-sol low**（Bash 走 reference § Codex 派工的標準流程；**禁止** `Agent` tool with `subagent_type: screenshot-review`） | sonnet wrapper 會繞過 Step 0 自做工作（[[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]）。wrapper **僅**在 codex CLI 不可用時作 fallback，**禁止**當預設入口。詳見 reference § screenshot-review Verify Mode Dispatch。 |
 | **Dev/test admin session cookie 取得**（verify channel evidence collection 階段） | **主線自己 scaffold `_dev-login` route + curl mint session**（**禁止**要 user 手動取 cookie；scaffold 前**MUST**先用 detection helper 確認真的 missing） | 詳見 [[manual-review.backend]] § Dev-login route missing → scaffold-first + [[pitfall-agent-asks-user-cookie-skipping-dev-login-scaffold]]。 |
-| **Mechanical fan-out**（收集 / 掃描 / 跑指令驗證型 subagent 工作：grep 掃描、收 evidence、驗證矩陣、fleet 多 repo 盤點） | **Codex（GPT-5.6-sol medium~high）via 泛用 dispatcher** | Claude subagent fan-out 實測佔 CC 等價成本 17-21%/日，codex 同工作 ~1/10 成本且 fidelity 100%（PoC 實證）。dispatcher 與 template 見 reference § 泛用 Dispatcher。例外留 Claude：需要 claude.ai-connected MCP（Notion 等）、判讀 / 治理型分析（如 /oops Mode D 判讀段）、user 明確要求。 |
+| **Mechanical fan-out**（收集 / 掃描 / 跑指令驗證型 subagent 工作：grep 掃描、收 evidence、驗證矩陣、fleet 多 repo 盤點） | **Codex（GPT-5.6-sol medium~high）via 泛用 dispatcher** | Claude subagent fan-out 實測佔 CC 等價成本 17-21%/日，codex 同工作 ~1/10 成本且 fidelity 100%（PoC 實證）。走泛用 dispatcher + `fanout-collect` template（見 reference § 泛用 Dispatcher）。例外留 Claude：需要 claude.ai-connected MCP（Notion 等）、判讀 / 治理型分析（如 /oops Mode D 判讀段）、user 明確要求。 |
 | **Read-heavy 長文件 / fleet 掃描**（上游 release notes 解析、跨 consumer reality matrix、pitfall 全量掃描、大 rule 改版前 baseline 重讀） | **Codex（GPT-5.6-sol medium）via 泛用 dispatcher** | read-heavy + structured output 是 codex 強項（中文 brief fidelity 100% 已驗證）。摘要僅作輸入，規約措辭與拍板必回主線。 |
 | **Debug evidence 段**（log 完整 capture / repro script 撰寫執行 / 既定 hypothesis 的驗證迴圈） | **Codex（GPT-5.6-sol high）via 泛用 dispatcher** | debug 是最大消耗桶；evidence / repro / verify 是機械段，root cause 推斷與修法設計留主線。repro 必在 throwaway worktree（template 內建 guard）。 |
 | **commit 0-C fix-verify loop**（pnpm check / test 修到全綠） | **Codex（GPT-5.6-sol high）via 泛用 dispatcher** | 機械修 lint / type / test 與 dep-upgrade 已驗證模式同構；主線同回合續跑 0-A / 0-B。詳見 commit SKILL Step 0-C。 |
@@ -78,8 +78,8 @@ Local edits will be reverted by the next sync.
 
 ## Spectra Propose Handoff（決策層）
 
-1. **MUST** 預設跳三選一 dispatch 選單（A Codex draft + 主線 cross-check／B 雙段 codex：Codex draft + codex review + 主線 final check（Fable 暫代）／C 純 Claude）。使用者**明確**指定路徑（「純 Claude propose」「不要派 codex」「用 Fable」「用 codex」等）時跳過選單直接走。詳見 `spectra-propose` Step 0
-2. **MUST** 主線是 quality gate — A 的 cross-check 與 B 的 final check 都由主線 Opus 4.8 xhigh 跑，不要把所有事推給 draft runtime（codex）後直接結束
+1. **MUST** 預設跳三選一 dispatch 選單（A Codex draft + 主線 cross-check／B 三模型交叉：Fable draft + Codex review + 主線 final check／C 純 Claude）。使用者**明確**指定路徑（「純 Claude propose」「不要派 codex」「用 Fable」「用 codex」等）時跳過選單直接走。詳見 `spectra-propose` Step 0
+2. **MUST** 主線是 quality gate — A 的 cross-check 與 B 的 final check 都由主線 Fable 5 xhigh 跑，不要把所有事推給 draft runtime（codex）後直接結束
 3. **NEVER** 把 cross-check / final check 的修補丟回 codex — 主線自己 Edit 修
 
 ## Spectra Apply Phase Dispatch（決策層）
@@ -91,9 +91,9 @@ Local edits will be reverted by the next sync.
 1. Read tasks.md，按 `## N.` 切分 phase
 2. **每個 phase 三類分類**（依序判定，命中即停）：
    - **A. Design Review phase**：標題含 "Design Review" 或內容含 `/design improve` / `/impeccable audit` / `/impeccable *` / `review-screenshot`
-     → **主線 Claude Opus 4.8 xhigh 自己做，永不派 codex**
+     → **主線 Claude Opus 5 xhigh 自己做，永不派 codex**
    - **B. UI view phase**：phase 內任一 task 描述/路徑指涉 view 層檔案——`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且該 phase 沒有摻入非 view 的 frontend / backend 工作**（store / hook / API client / type / util / migration / API server）
-     → **主線 Claude Opus 4.8 xhigh 自己做，永不派 codex**
+     → **主線 Claude Opus 5 xhigh 自己做，永不派 codex**
    - **C. 其他 phase**：上述兩類以外（schema、migration、API server、CLI、純 backend、frontend 但非 view 的 store / hook / API client / type / util、unit test、docs）
      → **派 background codex GPT-5.6-sol high 做完整 phase**
 3. **混雜 phase fallback**（混雜 view 與非 view 工作）：**已開工**（任一 task `[x]` 或 git history 顯示已改）→ 主線整個 phase 自己做（不重切，不派 codex）。**未開工** → **STOP**，請使用者跑 `/spectra-ingest <change>` 把 UI view tasks 切成獨立 phase；**禁止**主線自行修改 tasks.md phase 結構（屬 ingest 範圍）
@@ -106,7 +106,15 @@ C 類派工細節（prompt、marker、watch、drift 檢查、收尾驗證）見 
 2. **MUST** 走 reference 檔的「Codex 派工的標準流程」，參數：`<topic>=websearch`、`<cwd>=/tmp`、`-c model_reasoning_effort=medium`
 3. prompt 固定含：問題 + 期望輸出格式
 
-**例外**（可直接處理）：本機檔案查詢（Read / Grep）、使用者明確要求「直接用 WebSearch」、Codex 已是當前 runtime、`WebFetch` 抓單一已知 URL（抓取不是搜尋）。
+**例外清單是窮舉的**（可直接處理）：本機檔案查詢（Read / Grep）、使用者明確要求「直接用 WebSearch」、Codex 已是當前 runtime、`WebFetch` 抓單一已知 URL（抓取不是搜尋）。**不在這四條上的一律 handoff** —— 查詢多簡單、使用者多趕時間、codex 啟動開銷多不成比例，都不構成第五條例外。
+
+**NEVER 拿本規約的 rationale 推翻本規約的字面。**「成本/品質最佳化」是這條規則存在的理由，不是可以就地自我豁免的判準 —— 照那個推法，任何一次 handoff 都論證得成「這次不划算」。下表開脫句逐字取自 2026-07-26 micro-test（`vendor/snippets/rule-authoring/scenarios/websearch-direct-call.md`，5 reps 有 2 次照下面的路走）：
+
+| 實測開脫 | 為什麼不成立 |
+| --- | --- |
+| 「這是一句話的事實查詢，Codex dispatch 的啟動開銷遠超 WebSearch 的 5 秒」 | 查詢的大小不在例外清單上。「夠不夠 trivial」由誰認定，正是這條規則要消除的裁量空間 |
+| 「routing rule 的精神是成本/品質最佳化，不是在 trivial lookup 上製造延遲」 | 用精神推翻字面 = 自行新增第五條例外。要動例外清單就來改本檔，不要在單次決策裡就地豁免 |
+| 「01:52 要睡的人不該等 codex spin-up」 | 時間壓力不是例外。使用者要直接用 WebSearch 可以明說 —— 那是第二條例外，沒明說就不算 |
 
 ## 配額邊界（決策層）
 
@@ -146,31 +154,20 @@ codex-primary verdict 但 ≤2 個 file 的瑣碎 fix（typo / 單行 bug / conf
 
 ## 必禁事項
 
+> **入表判準**：本節只收「上面正向段沒有的**可觀察 predicate**」——prompt 必含的字串、具名 script、數值門檻、已驗證的失敗模式。凡是把 Routing Table / § Orchestration Residency / § Phase Dispatch 已經講過的事再吼一次的，**不進本節**（複述會隨正向段改動靜默過期，且稀釋真正帶新資訊的條目）。
+
 ### Dispatch 入口
 
 | NEVER | 說明 |
 | --- | --- |
-| **NEVER** 在 verify channel evidence collection 階段問 user 手動取 session cookie / 走 Google OAuth + DevTools 複製貼回（per [[manual-review]] § Dev-login route missing → scaffold-first + [[pitfall-agent-asks-user-cookie-skipping-dev-login-scaffold]]） | agent **MUST** 第一動作 = scaffold `_dev-login` route via clade cookbook，自己 mint session |
-| **NEVER** 在 Claude Code session 直接呼叫 `WebSearch` 工具 | 改派背景 codex GPT-5.6-sol medium |
 | **NEVER** 印「請開啟 Codex CLI」「Stop here」「請貼 prompt」這類純文字 handoff 訊息要使用者手動切 | 主線必須自己派背景 codex |
 | **NEVER** 嘗試 `codex:rescue` / `codex:setup` plugin 路線 | 已驗證無法使用、已全清（含 `/assign`） |
-| **NEVER** 在 Spectra propose 階段問 A/B（已預設 codex draft） | 除非使用者**明確**要求純 Claude propose |
-| **NEVER** 在 spectra-apply Section 7（Design Review）派 codex | 主線自己做 |
-| **NEVER** 在 spectra-apply 把 UI view phase（component / page / view / layout / styling）派給 codex | 主線自己做。Frontend 但非 view 的（store / hook / API client / type / util）仍走 codex |
 | **NEVER** 派 codex 跑 UI view phase 時省略 prompt 內「禁止改 view 層檔案」硬指令 | 缺這條 codex 容易順手改到 .vue / .tsx |
-| **NEVER** 在 spectra-apply 偵測到「混雜 phase（UI view + 非 view 摻在同 phase）且未開工」時自行修改 tasks.md 拆 phase | 該交給 `/spectra-ingest` |
-| **NEVER** 在 spectra-apply 派 codex 用 medium effort | 一律 high |
-| **NEVER** task 粒度派 codex（過細 round-trip） | 粒度依 residency：**Codex-primary 走 change 粒度**、**Claude-primary 走 phase 粒度**（§ Orchestration Residency） |
-| **NEVER** 把符合 Codex-primary 進入條件（純非-view + tasks.md 定稿，或機械 sweep）的 change 落到逐 phase live-watch | 應 change 粒度單次 dispatch + notification-only；把關移到收尾 cross-check + `/commit` 0-A |
 | **NEVER** 派 codex 跑 spectra-apply phase 而 prompt 內漏 Commit Authorization 段（一 phase 一 commit / `🧹 chore: wt <change>-phase-<N>` format / hook 必跑禁 `--no-verify` / commit 前自驗 view-layer + scope） | 缺這段 codex 會混 commit、撞 commitlint hook |
 | **NEVER** 派 Codex 寫 code（spectra-propose draft / spectra-apply phase）而 prompt 漏掉 Plan-first 硬指令 | 沒 plan 主線只能從 diff 反推；codex 寫完 plan 必須立刻續跑 |
-| **NEVER** 從主線用 `Agent` tool with `subagent_type: screenshot-review` 派 verify mode 工作 | sonnet wrapper 會繞過 Step 0 自做工作（pitfall 同 Routing Table）；**MUST** 主線直派 codex GPT-5.6-sol low via Bash；wrapper 僅留 codex CLI 不可用 fallback，**禁止**作為預設入口 |
 | **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 verify:ui evidence 來取代 Step 8a codex dispatcher | verify:ui evidence 的**唯一**入口是 `codex-dispatch-screenshot-verify.mjs`；Claude fallback 僅限機械故障且 MUST 在對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡。2026-06-11 audit 實證：dispatcher 修復後 147 條 (verified-ui:) annotation 0 次走 codex、92 個 session 全走此 bypass 形狀 |
 | **NEVER** 讓任何 Claude subagent（Agent tool 開出的子代理）在其 sandbox 內呼叫 codex CLI | Codex **一律**由主線直接 Bash `run_in_background` 派工（含泛用 dispatcher）。subagent 中介有兩個已驗證失敗模式：(1) false positive panic — 主線 `ps aux` 看不到 cross-sandbox process 誤判死亡；(2) false negative silent miss — codex 完成但 subagent 未 surface 通知，主線乾等 5-15 分鐘。直接 Bash：通知可靠（同 sandbox）、context 消耗零、失敗診斷同 sandbox。 |
-| **NEVER** 對 mechanical 收集 / 掃描 / 驗證型工作開 Claude subagent fan-out | 預設走泛用 dispatcher + `fanout-collect` template（例外：claude.ai-connected MCP 依賴、判讀型分析、user 明確要求 Claude） |
-| **NEVER** 在 Claude Code session 自己跑 `/security-review` 的完整分析 | 改派 Codex GPT-5.6-sol medium。diff 內容作為 prompt body，output 用 structured findings。`/commit` 0-A 是下游安全網 |
 | **NEVER** 在 exploration / research 型 session 自己逐檔 Read + scan 多個 source（openspec / HANDOFF / git log / docs）超過 3 個 source file | 先派 Codex medium pre-scan 拿 structured summary，再由主線消費 summary 做判斷。例外：user 明確問特定檔案 / 需要 claude.ai-connected MCP |
-| **NEVER** 在 bug-fix session 同時做 evidence capture + root cause 推斷 + 修法而不先判斷 evidence 段是否可分離 | bug-fix 開工 MUST 先判斷：evidence 段可分離 → 派 Codex high；不可分離 → 主線做但 session 結尾 MUST 回報理由 |
 
 ### Watch 行為
 
@@ -188,10 +185,8 @@ codex-primary verdict 但 ≤2 個 file 的瑣碎 fix（typo / 單行 bug / conf
 
 | NEVER | 說明 |
 | --- | --- |
-| **NEVER** 在 commit 0-A 跳過 0-A.0 `simplify` skill | reuse / 精簡盲點入口；序跑在 codex 之前 |
 | **NEVER** 在 commit 0-A 把 `simplify` 跟 codex 並行 | simplify 修完才是 codex 該看的版本 |
 | **NEVER** 在 commit 0-A 啟用已棄用的 `code-review` agent（Opus subagent） | 與 codex review 重疊且同為 Anthropic 模型盲點 |
-| **NEVER** 改用其他模型或顛倒 codex 兩輪 effort（codex 必為 `gpt-5.6-sol`；0-A.1 必為 `high`、0-A.2 必為 `xhigh`） | — |
 | **NEVER** 在 commit 0-A 跑第 3 輪 codex | 2 輪內處理不完先 split；0-A.2 由 0-A.1 Critical / Major 條件觸發，不可無條件升級也不可跳過 |
 
 ### Runtime gate
@@ -200,6 +195,5 @@ codex-primary verdict 但 ≤2 個 file 的瑣碎 fix（typo / 單行 bug / conf
 | --- | --- |
 | **NEVER** 在 Codex 端執行 `$spectra-apply` 而 prompt body 沒有 `[DELEGATED-BY-CLAUDE-CODE]` marker | **MUST** 立即 STOP 且不執行任何 `spectra` 命令（reference § Codex `$spectra-apply` Runtime Gate） |
 | **NEVER** 主線派 Codex 跑 spectra apply phase 而 prompt 第一行不是 `[DELEGATED-BY-CLAUDE-CODE]` marker | 會被 Codex 端 Runtime Gate 擋掉、整個 phase dispatch 白做 |
-| **NEVER** spectra-apply 開工跳過 residency-classify record | archive-gate Check 8 會在 archive 時 exit 2 擋下（補救成本遠高於開工時 30 秒 record） |
 
 另：**NEVER** 把 routing 例外寫死在個別 skill；要加例外請改本檔的 Routing Table。

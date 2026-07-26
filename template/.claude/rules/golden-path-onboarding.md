@@ -30,6 +30,14 @@ Local edits will be reverted by the next sync.
 
 3. **`self-hosted-runner` 是 informational**：wrangler / Cloudflare 型 consumer 用 `ubuntu-latest` 合理，不因此判 drift。只有走 Docker self-hosted deploy 型（<consumer-a> / <consumer-b> / <consumer-d> / <consumer-h>-*）才 MUST 用 `[self-hosted, ...]` runner。
 
+4. **同一時機 MUST 一併跑 CI gate 接線稽核**（clade 散播的 blocking gate 只跑在 `.husky/pre-push`，`--no-verify` 與 web 編輯介面都能繞過）：
+
+   ```bash
+   node ~/offline/clade/scripts/audit-gate-coverage.mjs
+   ```
+
+   § 2「CI composite action 載體」報「已散播但沒有任何 workflow 引用 → 從未執行」的，**MUST** 依 `docs/golden-paths/clade-gate-ci.md` 的範本補上 `clade-gates` job，同樣不等 user 開口要求。**每一個**有 `.github/workflows/` 的 consumer 都適用；沒有 workflow 目錄的是 `N/A`，但該 consumer 一旦開始建 CI 就 MUST 一併補。
+
 ## Golden Path Checklist（目前項目）
 
 | 項目 | 偵測 | 適用範圍 |
@@ -38,6 +46,7 @@ Local edits will be reverted by the next sync.
 | CI notify job | workflow 有 `uses: ./.github/actions/discord-deploy-notify` | 同上 |
 | Discord webhook secret | workflow 引用 `secrets.DISCORD_WEBHOOK_URL` / `DISCORD_SENTRY_WEBHOOK_URL` | 同上（值需 user 在 GitHub 設定） |
 | self-hosted runner | `runs-on: [self-hosted, ...]` | 只限 Docker self-hosted deploy 型 |
+| clade-managed CI gate 接線 | workflow 有 `uses: ./.github/actions/review-rules-scan` 與 `scripts/pre-push/checks/` 的 blocking 全站 check step（`node scripts/audit-gate-coverage.mjs` § 2 驗；範本 `docs/golden-paths/clade-gate-ci.md`） | **每一個**有 `.github/workflows/` 的 consumer |
 
 ## NEVER
 
@@ -47,6 +56,7 @@ Local edits will be reverted by the next sync.
 
 ## 與其他機制的關係
 
-- 完整 golden path 規格見 `docs/golden-paths/docker-self-hosted-deploy.md` 與 `docs/golden-paths/new-consumer-onboarding.md`
-- audit script：`scripts/audit-golden-path-adoption.mjs`（diagnostic-only，exit 0）
+- 完整 golden path 規格見 `docs/golden-paths/docker-self-hosted-deploy.md`、`docs/golden-paths/new-consumer-onboarding.md` 與 `docs/golden-paths/clade-gate-ci.md`
+- audit script：`scripts/audit-golden-path-adoption.mjs`（discord deploy-notify，diagnostic-only，exit 0）、`scripts/audit-gate-coverage.mjs`（gate 執行載體三段，warn-only）
+- 各 gate 的強制力 / fail-open 條件 / 繞過方式對照 `docs/enforcement-matrix.md`
 - vendored action 的投影走既有 `sync-vendor.mjs` / propagate 流程，本 rule 不新增 propagate 機制

@@ -44,9 +44,10 @@ Reference: `docs/api/API_DESIGN_GUIDE.md` — 完整 API 設計指南含進階�
 ### Abuse-control 層
 
 - **Rate limit**：**MUST** 對敏感 / 昂貴 / 可濫用端點（登入、OTP、密碼重設、匯出、寫入類）設 rate limit（per-user + per-IP），**NEVER** 讓 auth / mutation 端點無限呼叫（暴力破解 / 資源耗盡）。可用 `nuxt-security` rateLimiter 或自管 counter。
+- **Quota 分母 MUST 可回落**：**每一個**以「目前有幾個 X」當上限的配額（storage 前綴物件數、DB row count、KV key 數），設定前 **MUST** 回答「被計數的 X，在使用者走完正常流程之後會不會消失或被排除？」——會（session 過期 / 暫存 row 被刪 / job 完成出隊）才可直接計數；不會（被業務 row 引用後留在原地 / audit row 永久保留 / 已完成訂單）**MUST** 改用時間窗、狀態排除、或在正常流程結束時回收該資源。分母只增不減的配額，量到的是**累計使用量**而非濫用強度，正常使用者用到第 N 次就永久 429 —— 加了這種配額比不加更糟（不加只是累積 orphan，加了是功能在正常路徑上壞掉）。**MUST** 補 regression test 釘住「正常流程結束後仍可繼續操作」。三種修法與實作細節（Storage `list()` 的 `sortBy` 必須顯式、`limit` 要放大於配額）見 `~/offline/clade/docs/pitfalls/2026-07-26-quota-counts-unreclaimed-resource.md`。
 - **CSRF protection**：對 **browser-origin 的 state-changing 請求**（cookie/session 認證的 POST/PATCH/DELETE）**MUST** 有 CSRF 防護（`nuxt-csurf` double-submit token、或 SameSite=strict/lax cookie + origin 檢查），**NEVER** 只靠 session cookie 就信任跨站來的 mutation。純 token（Authorization header）認證的 API 不受 CSRF 影響，但 cookie-based 一定要防。
 
-**判斷準則**：寫任何 state-changing endpoint 時逐條問 — 「這個 id 是**這個** user 的嗎（BOLA）？」「body 有沒有不該讓 client 設的欄位（BOPLA）？」「body 會不會太大（size）？」「這端點會不會被刷（rate limit）？」「是 cookie 認證的 browser mutation 嗎（CSRF）？」
+**判斷準則**：寫任何 state-changing endpoint 時逐條問 — 「這個 id 是**這個** user 的嗎（BOLA）？」「body 有沒有不該讓 client 設的欄位（BOPLA）？」「body 會不會太大（size）？」「這端點會不會被刷（rate limit）？」「設了配額的話，分母會不會回落（quota）？」「是 cookie 認證的 browser mutation 嗎（CSRF）？」
 
 ## OpenAPI Metadata Convention
 

@@ -12,6 +12,16 @@
       "fix": "移除 size prop（吃預設 md），或顯式寫 size=\"md\" / \"lg\" / \"xl\"。"
     },
     {
+      "id": "ubadge-size-ban-dynamic",
+      "section": 3,
+      "severity": "error",
+      "fileGlob": "*.vue",
+      "multiLine": true,
+      "pattern": ":is=\"UBadge\"[^>]*size=\"(xs|sm)\"",
+      "message": "動態元件 :is=\"UBadge\" 的 size 只允許 md / lg / xl（或省略吃預設 md）。xs / sm 在密集表格字級過小、可讀性不足。",
+      "fix": "移除 size prop（吃預設 md），或顯式寫 size=\"md\" / \"lg\" / \"xl\"。"
+    },
+    {
       "id": "client-side-mutation",
       "section": 4,
       "severity": "error",
@@ -130,9 +140,63 @@
       "pattern": "\\.from\\((['\"])(audit_logs|operation_logs)\\1\\)\\s*\\.insert|INSERT\\s+INTO\\s+(audit_logs|operation_logs)",
       "message": "禁直插 audit 表，走 audit() helper——D-pattern 見 clade-review-rules §9。",
       "fix": "改用 server/utils/audit.ts 的 audit() helper 寫入稽核紀錄，不要直接 .from('audit_logs').insert(...) 或裸 SQL INSERT INTO。"
+    },
+    {
+      "id": "fontsource-bare-import",
+      "section": 10,
+      "severity": "error",
+      "fileGlob": "**/*.css",
+      "pattern": "^\\s*@import\\s+['\"]@fontsource/[^/'\"]+['\"]",
+      "message": "@fontsource 靜態字型 bare import 只載入 weight 400（Fontsource 官方預設值），font-medium / font-semibold / font-bold 因此退化成瀏覽器合成粗體；CJK 字型的 faux bold 會讓筆畫糊化，是視覺正確性缺陷而非單純效能問題。",
+      "fix": "改為明列實際用到的 weight subpath：@import '@fontsource/<name>/400.css'; @import '@fontsource/<name>/600.css';。或改由 @nuxt/fonts 單一來源管理——但 NEVER 與 CSS @import 併存，兩者同時宣告同一字型會造成雙重載入。@fontsource-variable/* 是可變字型、bare import 即涵蓋全 weight，不受本規則約束。",
+      "excludePattern": "fontsource-bare-ok"
+    },
+    {
+      "id": "nuxtimg-missing-sizes",
+      "section": 10,
+      "severity": "warning",
+      "layer": "ratchet",
+      "fileGlob": "*.vue",
+      "multiLine": true,
+      "pattern": "<(Lazy)?Nuxt(Img|Picture)(?![^>]*\\bsizes=)[^>]*>",
+      "excludePattern": "data-no-srcset|src=[\"']data:",
+      "message": "NuxtImg / NuxtPicture 缺 sizes：沒有 sizes 就產生不出 responsive srcset，@nuxt/image 只做了格式轉換、沒做尺寸協商，手機也會下載桌機尺寸的原圖。",
+      "fix": "補 sizes（例：sizes=\"(max-width: 640px) 50vw, 200px\"），並搭配明確 width / height 消 CLS。非首屏圖另加 loading=\"lazy\"；LCP 圖反過來用 loading=\"eager\" + preload + fetchpriority=\"high\"。固定像素尺寸的 logo / avatar / QR code 這類不需要 srcset 的，在 tag 上加 data-no-srcset=\"<理由>\" 豁免。"
+    },
+    {
+      "id": "heavy-lib-client-static-import",
+      "section": 10,
+      "severity": "warning",
+      "layer": "ratchet",
+      "fileGlob": "*.vue",
+      "pattern": "^\\s*import\\s+(?!type\\s)[^;\\n]*from\\s+['\"](exceljs|jspdf|xlsx|pdfmake|html2canvas|monaco-editor|echarts(/[\\w-]+)?|@unovis/[\\w-]+)['\"]",
+      "excludePattern": "heavy-lib-ok",
+      "message": "重函式庫在元件層靜態 import 會整包綁進該 route 的同步 chunk（exceljs ~909KiB / jspdf ~424KiB / unovis ~910KiB / echarts ~507KB 級），使用者即使沒用到該功能也得先下載完才能互動。",
+      "fix": "依用途二選一：(1) **按需觸發**的功能（Excel 匯出 / PDF 產生 / 截圖）改成 handler 內 await import('exceljs')，只有真的點下去才下載；(2) **渲染必需**的函式庫（圖表）維持 import，但把用到它的元件本身改 <LazyXxxChart />，讓整個元件連同函式庫一起切成 async chunk——注意改 import 形式對這類無效，因為元件一渲染就需要它。確有理由必須同步載入的個案在該行加 heavy-lib-ok 標記豁免。"
+    },
+    {
+      "id": "lazy-atomic-component",
+      "section": 10,
+      "severity": "warning",
+      "layer": "ratchet",
+      "fileGlob": "*.vue",
+      "pattern": "<Lazy(UButton|UBadge|UIcon|USeparator|USkeleton|UFormField|UInput|UTextarea|UAlert|UTooltip|UKbd|UAvatar|UChip)\\b",
+      "excludePattern": "lazy-atomic-ok",
+      "message": "首屏輕量原子元件加 Lazy 前綴是淨負面：拆出獨立 async chunk 卻換不到 hydration 節省（Nuxt 官方明載 Avoid delayed hydration for critical, above-the-fold content）。LazyUSkeleton 尤其本末倒置——loading 指示器自己得先等 chunk 下載完才顯示。",
+      "fix": "移除 Lazy 前綴，改用一般元件。只有真正該延後載入的重元件（chart / editor / map / 大型 modal）才用 Lazy。ssr: true 的專案另 MUST 搭 hydration strategy（hydrate-on-visible / hydrate-on-idle / hydrate-on-interaction）；ssr: false 的 SPA 沒有 hydration 階段，NEVER 補這些屬性（無效程式碼），<Lazy*> 的 code-split 效果本身仍有效。確有正當理由的個案在該行加 lazy-atomic-ok 標記豁免。"
     }
   ],
   "semantic": [
+    {
+      "id": "lazy-hydration-strategy",
+      "title": "Lazy 元件須搭 hydration strategy，且不得用於首屏",
+      "guidance": "每個新增的 <Lazy*> 元件都須判斷：(1) 它是否真的非首屏或條件渲染——首屏元件用 Lazy 只多切一個必定被下載的 chunk 卻無收益，應移除前綴（全部 consumer 適用）；(2) 僅當本專案 ssr: true 時才檢查有無 hydration strategy。ssr: false（SPA）沒有 hydration 階段——Vue 的 hydrateStrategy 只在 __asyncHydrate() 路徑被讀取，SPA 走一般 mount 完全不經過，要求補 hydrate-on-* 等於要求寫無效程式碼，須判 n/a 而非 fail。SSR 專案另注意三個讓 strategy 靜默失效的限制：任何 prop 變更會立即觸發 hydration 繞過 strategy；lazy hydration 僅在 SFC 有效；prop 必須寫在 template 上（不可用 v-bind 展開物件）。複合 verdict 規則：只要**有任一適用的檢查不通過**就判 fail；只有在**全部**檢查都不適用時才判 n/a。SPA 專案的 (2) 不適用不會讓整條規則變 n/a——(1) 對全部 consumer 都適用，diff 內有首屏原子元件加 Lazy 就是 fail，即使機械層 lazy-atomic-component 也會擋同一行。 機械層 lazy-atomic-component 只擋最明確的原子元件濫用，本 verdict 補判斷需讀 context 的部分（clade-review-rules.md § Nuxt 效能規約）。"
+    },
+    {
+      "id": "nitro-cache-auth-safety",
+      "title": "Nitro 快取不得套用於帶認證的 endpoint",
+      "guidance": "defineCachedEventHandler / cachedEventHandler / defineCachedFunction 的 diff 須逐一檢查認證邊界。Nitro 官方明載 Request headers are dropped when handling cached responses——對帶 auth 的 endpoint 套用會把 A 使用者的回應快取後回給 B 使用者，屬跨使用者資料外洩。僅允許用於「回應內容與呼叫者身分完全無關」的 public endpoint；若 endpoint 確實依身分而變又需要快取，MUST 用 getKey() 把使用者識別納入快取鍵、並用 varies 保留必要 header。另檢查部署目標：Nitro production 預設 memory storage，在 Cloudflare Workers 上不跨 isolate 持久，等同快取未生效，須顯式設定 storage driver（如 cloudflare-kv-binding）（clade-review-rules.md § Nuxt 效能規約）。"
+    },
     {
       "id": "overlay-body-slot",
       "title": "Overlay 內容須放 #body slot",

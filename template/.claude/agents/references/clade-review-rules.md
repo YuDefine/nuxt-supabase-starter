@@ -34,8 +34,9 @@ Local edits will be reverted by the next sync.
 | `shared/schemas/**`、`shared/types/**` | 分層真相 / API 契約 |
 | `server/utils/drizzle.ts`、`server/db/schema/**`、`drizzle.config.ts` | Drizzle 邊界 |
 | `supabase/migrations/**`、`scripts/**`、`package.json`、`docs/**` | Drizzle 邊界 |
-| `app/**/*.vue`、`packages/*/app/**/*.vue`、`components/**/*.vue`、`layouts/**/*.vue`、`pages/**/*.vue` | Nuxt a11y、Overlay slot 語意（機械段已由 hook/rule 覆蓋，reviewer 補語意段） |
-| `server/**` | evlog 採用一致性、D-pattern audit |
+| `app/**/*.vue`、`packages/*/app/**/*.vue`、`components/**/*.vue`、`layouts/**/*.vue`、`pages/**/*.vue` | Nuxt a11y、Overlay slot 語意、**Nuxt 效能（Lazy 該不該 lazy＋有無 hydration strategy）**（機械段已由 hook/rule 覆蓋，reviewer 補語意段） |
+| `server/**` | evlog 採用一致性、D-pattern audit、**Nitro 快取認證邊界** |
+| `**/*.css`、`nuxt.config.*`、`app.config.*` | **字型宣告單一來源**（`@fontsource` weight subpath；`fonts.families` 與 CSS `@import` 不得雙重宣告） |
 
 > **已由機械層覆蓋（本檔不再重複）**：元件替代規則（native-picker-ban.sh + patterns.json `raw-img-tag`）、UBadge size（`ubadge-size-ban`）、client-side mutation（`client-side-mutation`）、Dark Mode hardcoded color / `dark:` prefix / semantic color（3 patterns）、Overlay 寬度 `max-w-` on class（`overlay-width-class`）、Form 驗證（`nuxt-form-validation.md`）、錯誤本地化（`nuxt-error-localization.md`）、Overlay #body slot（`nuxt-overlay-slot.md`）。
 
@@ -169,3 +170,59 @@ node vendor/scripts/checks/mutation-loading-detect.mjs $(git diff --name-only <b
 | 互動元素尺寸 < 24×24 px（mobile） | 命中區域 ≥ 24×24 px | 2.5.8 |
 
 例外：純後端 / admin debug / prototype branch 可豁免（PR 註明）。
+
+## Nuxt 效能規約
+
+> enforcement: mechanical(fontsource-bare-import, lazy-atomic-component, nuxtimg-missing-sizes, heavy-lib-client-static-import) + semantic(lazy-hydration-strategy, nitro-cache-auth-safety)
+
+規約本體見 [[nuxt-data-perf]]（HR-\* 高頻 / SR-\* 渲染兩組，條號以該檔為準）。本節只列**機械層抓不到、需 reviewer 讀 context 判斷**的三類，機械可檢部分已由 `patterns.json` 承擔。
+
+### 1. Lazy 元件：先問該不該 lazy，再問有沒有 strategy
+
+`<Lazy*>` 只做 **code-split**。Reviewer 對 diff 內**每一個**新增的 `<Lazy*>` 判斷：
+
+| 判斷 | 不通過時的正解 | 適用 |
+| --- | --- | --- |
+| ① 它真的非首屏 / 條件渲染嗎？ | 首屏元件**移除** `Lazy` 前綴——多一個必定會被下載的 async chunk 卻無收益，是淨負面 | 全部 |
+| ② 有搭 hydration strategy 嗎？ | 補 `hydrate-on-visible` / `hydrate-on-idle` / `hydrate-on-interaction` / `hydrate-on-media-query` / `:hydrate-after` / `:hydrate-when` / `hydrate-never` | **僅 `ssr: true`** |
+
+> **先看 `nuxt.config` 的 `ssr` 值再判 ②**。`ssr: false`（SPA）沒有 hydration 階段——Vue 的 `hydrateStrategy` 只在 `__asyncHydrate()` 路徑被讀取，SPA 走一般 mount 完全不經過。對 SPA 專案要求補 `hydrate-on-*` 是**要求寫無效程式碼**，②**這一項** MUST 判 n/a 而非 fail。
+
+> **複合 verdict**：只要**有任一適用的檢查不通過**就判 `fail`；只有在**全部**檢查都不適用時才判 `n/a`。SPA 專案的 ② 不適用**不會**讓整條規則變 n/a——① 對全部 consumer 都適用，diff 內有首屏原子元件加 `Lazy` 就是 `fail`，即使機械層 `lazy-atomic-component` 會擋同一行也一樣（機械層擋不擋是另一層的事，不改變本 verdict）。
+
+Nuxt 官方立場：**Avoid delayed hydration for critical, above-the-fold content.**
+
+**SSR 專案另檢查三個會讓 strategy 靜默失效的限制**：
+
+1. **任何 prop 變更會立即觸發 hydration**，繞過設定的 strategy——綁了頻繁變動 prop 的元件，strategy 形同虛設
+2. lazy hydration **僅在 SFC 內有效**，且 prop **MUST 寫在 template 上**；用 `v-bind="props"` 展開物件不生效
+3. 從 `#components` 直接 import 的元件不適用
+
+機械層 `lazy-atomic-component` 只擋最明確的原子元件濫用（`LazyUButton` / `LazyUBadge` / `LazyUSkeleton` 等），且為 `ratchet` 只擋新增；其餘交本 verdict。
+
+### 2. Nitro 快取：先過認證邊界，再談效能
+
+`defineCachedEventHandler` / `cachedEventHandler` / `defineCachedFunction` 出現在 diff 時，**MUST** 逐個確認：
+
+| 檢查 | 理由 |
+| --- | --- |
+| 該 endpoint 回應內容**與呼叫者身分無關**嗎？ | Nitro 官方：**Request headers are dropped when handling cached responses**。帶 auth 的 endpoint 套快取＝把 A 使用者的回應發給 B 使用者，屬跨使用者資料外洩 |
+| 若依身分而變仍要快取，`getKey()` 有把使用者識別納入快取鍵嗎？ | 否則所有使用者共用同一份快取 |
+| 部署目標是 Cloudflare Workers / edge 嗎？ | Nitro production 預設 **memory storage**，在 Workers 上不跨 isolate 持久＝快取實質未生效，須顯式設 `storage.cache` driver（如 `cloudflare-kv-binding`） |
+
+只有「public、與身分無關」的 endpoint 才可直接套用。**有疑慮一律不快取**——效能收益遠小於資料外洩成本。
+
+### 3. 重函式庫的載入時機
+
+機械層 `heavy-lib-client-static-import` 擋 client 層靜態 import（exceljs / jspdf / echarts / unovis 等）。Reviewer 補判斷**正解走哪一條**——兩者不可互換：
+
+| 用途 | 正解 |
+| --- | --- |
+| 按需觸發（Excel 匯出 / PDF 產生 / 截圖） | handler 內 `await import('exceljs')`，點下去才下載 |
+| 渲染必需（圖表） | 維持 import，改把**用到它的元件**寫成 `<LazyXxxChart />`；改 import 形式對這類無效，元件一渲染就需要它 |
+
+另檢查 **零使用模組**：註冊在 `modules` / 列在 `dependencies` 但全 repo 0 處使用的套件仍會進 build（實證：一個死模組可拖 MB 級 artifact）。diff 若新增 module，MUST 確認確實有使用。
+
+### 4. 字型宣告單一來源
+
+`@fontsource/*` bare import 只給 weight 400（Fontsource 官方預設）；用到 `font-medium` / `font-semibold` / `font-bold` 卻沒載對應 weight，瀏覽器會合成粗體，CJK faux bold 筆畫糊化。機械層 `fontsource-bare-import` 已擋 CSS `@import`；reviewer 補判斷**跨檔的雙重宣告**——`nuxt.config` 的 `fonts.families` 與 CSS `@import` 同時宣告同一字型，機械層看單行看不出來。

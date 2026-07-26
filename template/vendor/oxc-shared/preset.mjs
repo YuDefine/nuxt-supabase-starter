@@ -124,7 +124,7 @@ export const fmtBase = {
     'pnpm-lock.yaml',
     '.claude/plugins/cache/**',
     '.spectra/**',
-    // Derived projections (LOCKED) by sync-to-agents; mirror lintBase so
+    // Derived projections (LOCKED) by sync-to-codex; mirror lintBase so
     // consumers don't have to re-inline these in fmt.ignorePatterns.
     '.agents/**',
     '.codex/**',

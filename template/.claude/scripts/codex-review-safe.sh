@@ -14,9 +14,11 @@
 #   .claude/scripts/codex-review-safe.sh [reasoning_effort] [extra codex args...]
 #
 # Default reasoning_effort = xhigh. The commit 0-A flow calls this twice:
-# 0-A.1 with `high` (always, unless fast-path skips), and 0-A.2 with `xhigh`
-# (conditional — only when 0-A.1 surfaces Critical/Major). Other contexts
-# (Spectra propose/apply) use xhigh. See .claude/skills/commit/SKILL.md Step 0-A.
+# 0-A.1 with `xhigh` (always, unless fast-path skips), and 0-A.2 Step 1 with
+# `max` (conditional — only when 0-A.1 surfaces Critical/Major; 0-A.2 Step 2
+# then hands Codex output to Fable code-review agent for final verdict).
+# Other contexts (Spectra propose/apply) use xhigh.
+# See .claude/skills/commit/SKILL.md Step 0-A.
 #
 # The embedded prompt tells codex to collect the uncommitted diff itself
 # (staged + unstaged + untracked) as the first thing it does in its own
@@ -27,6 +29,11 @@
 # TD-235 resolved: migrated from --dangerously-bypass-approvals-and-sandbox to
 # -s read-only (2026-07-08). Prompt injection can no longer escape to writes or
 # MCP side-effects; "fleet-own diffs only" constraint remains as defense-in-depth.
+#
+# TD-247 resolved: added --disable skills (2026-07-24). Codex review sessions
+# were self-invoking second-opinion skills (~6000 lines clade-review-rules.md),
+# consuming ~38% context budget and starving max-effort reviews of diff+verdict
+# space.
 #
 # Semantic Verdict injection (W5-6): the prompt is assembled from two literal
 # (single-quoted) heredocs sandwiching a runtime-generated block that lists

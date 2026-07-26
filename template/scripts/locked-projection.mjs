@@ -15,7 +15,7 @@
  *     into `.claude/<dir>/`
  *   - Derived agent projections at `.agents/`, `.codex/`
  *   - Plumbing JSON: `.claude/hub.json`, `.claude/.hub-state.json`,
- *     `.claude/sync-to-agents.config.json`
+ *     `.claude/sync-to-codex.config.json`
  *   - Improvement-loop infra: `.clade/bin/`, `.clade/signals/`, `.clade/vendor/`
  *   - Vendored scripts at `scripts/` (wt-helper, claim-helper, stash-reconcile,
  *     review-gui, audit-test-scripts, handoff-drift-scan, wip-dirty,
@@ -48,7 +48,7 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       String.raw`\.agents/`,
       String.raw`\.codex/`,
       // Plumbing JSON files
-      String.raw`\.claude/(hub\.json|\.hub-state\.json|sync-to-agents\.config\.json)$`,
+      String.raw`\.claude/(hub\.json|\.hub-state\.json|sync-to-codex\.config\.json)$`,
       // Improvement-loop infra (.clade/)
       String.raw`\.clade/(bin|signals|vendor)/`,
       // Vendored script entry points (scripts/)
@@ -64,6 +64,7 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // Top-level injected files
       String.raw`AGENTS\.md$`,
       String.raw`CLAUDE\.md$`,
+      String.raw`commitlint\.config\.ts$`,
     ].join('|') +
     ')',
 )

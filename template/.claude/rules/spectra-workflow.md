@@ -1,4 +1,5 @@
 ---
+description: 對 user 可見的 functional data display 正確性的跨 phase ownership 歸屬——當某類缺陷穿過多層檢查都沒被攔下、或不確定某個檢查點該由誰負責時適用
 paths: ['openspec/changes/**']
 ---
 <!--

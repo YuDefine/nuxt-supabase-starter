@@ -28,6 +28,13 @@ Local edits will be reverted by the next sync.
 - 路徑用 consumer_id（見 [`consumer-meta.md`](./consumer-meta.md)），不用任意字串
 - `/tmp` reboot 清空，跨 session 可讀，不被 git track
 - 任何 user / agent 都能讀（沒 ACL）；寫入要走 lease-aware 工具（dev-session / dev-singleton），不要直接 `echo > /tmp/...`
+- **consumer_id MUST 解析自 main worktree，不是當前 worktree 的目錄名**。在 linked worktree 內
+  `git rev-parse --show-toplevel` 回的是該 worktree 路徑，basename 會變成 slug（`td-279-...`）而非
+  consumer 名 → 算出 `/tmp/<slug>-verification-lease.json`，跟 main 用的檔**不是同一個**。後果是
+  從 worktree 跑又沒帶 `--consumer-meta` 的指令靜默操作錯的 lease：release 釋放不到、conflict
+  偵測不到，跨 worktree 隔離形同虛設。正解是 `git rev-parse --git-common-dir`（main 回
+  `<repo>/.git`、linked worktree 回 `<main-repo>/.git/worktrees/<slug>`），截到 `.git` 的父層即
+  main worktree（2026-07-26 <consumer-a> 實證：worktree 內 `stop` 後 main 的 lease 檔原封不動殘留）
 
 ## Lease 檔 schema
 
@@ -48,6 +55,31 @@ schema 全例見 `~/offline/clade/vendor/snippets/dev-session/lease-schema.jsonc
 
 **Stale 偵測**：claim 時現有 lease 的 `devServer.pid` 死了（`kill -0` fail）→ 視為 stale，silent overwrite，不要求 `--takeover`。
 **並行 race**：同時 claim 靠 `fs.writeFile({ flag: 'wx' })` 檔案級 atomic check，後到者 fail → conflict → 跑 status + refuse。
+
+### Ownership 與 served code 是兩個獨立判準
+
+lease gate **MUST** 分開問兩件事，**NEVER** 讓其中一個短路掉另一個：
+
+| 判準 | 問題 | 依據 |
+|---|---|---|
+| **ownership conflict** | lease 被**別人**持有嗎 | `holder.sessionId` |
+| **served-cwd mismatch** | 正在跑的 dev server 服務的是**我要的那份 code** 嗎 | `devServer.cwd` vs 請求的 cwd |
+
+served-cwd 檢查 **MUST 無條件執行、與 holder 是誰無關** —— 同一個 holder 在別的 worktree 起的
+dev server，服務的仍然是別的 code，一樣會讓 evidence 拍到錯的版本。
+
+實證：`holderSessionId()` 在沒有 `CLAUDE_SESSION_ID` / `CODEX_SESSION_ID` 時一律回 `'human'`，
+所有這類 caller 的身分**塌縮成同一個**；若把 cwd 比對寫在 ownership 判定之後，`if (mine) return null`
+會先短路，cwd 比對**永遠走不到**。
+
+兩個配套硬規則：
+
+- **cwd 比對 MUST 正規化後再比**（`resolve()` + `realpathSync()`）。lease 內的 cwd 是寫入當下的值，
+  請求端的 `--cwd` 可能是相對路徑、帶結尾斜線、或走 symlink 的等價路徑；裸字串比對兩個方向都會
+  出錯 —— strict 模式對自己那台 refuse，或 `--takeover` 誤殺自己剛起的 dev server
+- **reuse 路徑 NEVER 跳過 lease gate**。「port 有人聽 → 直接 reuse」的捷徑會讓 caller 傳的 `--cwd`
+  被靜默忽略，指令回 exit 0 +「✓ reuse」但服務的是別的 working tree 的 code。任何 agent 照這個
+  成功訊號往下收 evidence，拍到的都是錯的版本，且**外觀與成功無異** —— 比直接失敗危險得多
 
 ## Holder identity
 

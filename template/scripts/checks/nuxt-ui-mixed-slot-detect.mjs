@@ -24,10 +24,16 @@
  *
  * CLI:
  *   node nuxt-ui-mixed-slot-detect.mjs <file.vue> [file2.vue ...]   # 指定檔案
- *   node nuxt-ui-mixed-slot-detect.mjs --all [--root <dir>]         # 走訪 app roots
+ *   node nuxt-ui-mixed-slot-detect.mjs --all [--root <dir>]         # 走訪預設 app roots
+ *   node nuxt-ui-mixed-slot-detect.mjs --all --roots <dir>...       # 覆寫掃描 root
+ *   node nuxt-ui-mixed-slot-detect.mjs --mode staged <files...>     # 標註呼叫端的取檔模式
  *   node nuxt-ui-mixed-slot-detect.mjs --warn-only <files...>       # 命中不 exit 1
  *
- * Exit code：命中且非 --warn-only → 1；否則 0。
+ * `--roots` 是**覆寫**用；不傳時預設 root 涵蓋 monorepo（`packages` 遞迴）——
+ * NEVER 把預設縮回 `app` / `layers`，那會讓 monorepo consumer 一個檔都沒掃卻報 pass。
+ *
+ * Exit code：命中且非 --warn-only → 1；讀檔失敗 → 2（infrastructure error）；否則 0。
+ * 輸出契約見 rules/core/checker-contract.md § REQUIRED output contract。
  *
  * Pitfall: docs/pitfalls/2026-07-06-nuxt-ui-named-slot-default-fallback-shadowing.md（TD-236）
  * 由 ~/clade vendor/scripts/checks/ 散播，請勿直接編輯 consumer 副本。
@@ -40,7 +46,12 @@ import { join } from 'node:path'
 const FALLBACK_SLOT_COMPONENTS = ['UDashboardPanel']
 
 const VOID_TAGS = new Set(['input', 'img', 'br', 'hr'])
-const APP_ROOTS = ['app', 'layers', 'template/app', 'packages']
+
+/** 預設掃描 root。`packages` 為遞迴走訪，涵蓋 monorepo 的 packages/<pkg>/app。 */
+const DEFAULT_APP_ROOTS = ['app', 'layers', 'template/app', 'packages']
+
+const SKIPPED_DESC = 'node_modules, dot-directories, non-.vue files'
+const CHECKER = 'nuxt-ui-mixed-slot'
 
 /**
  * 抽出某段 template 內容在深度 0 的直接子 tag。
@@ -104,41 +115,101 @@ function* walkVueFiles(dir) {
   }
 }
 
+/** 讀 `--roots a b c` 形式的多值選項（讀到下一個 `--` 開頭為止）。 */
+function readOptionValues(argv, name) {
+  const index = argv.indexOf(name)
+  if (index === -1) return []
+  const values = []
+  for (let i = index + 1; i < argv.length && !argv[i].startsWith('--'); i++) values.push(argv[i])
+  return values
+}
+
+/** 讀 `--root <dir>` 形式的單值選項——多吃一個值會把後面的檔案參數當成選項值吞掉。 */
+function readOptionValue(argv, name) {
+  const index = argv.indexOf(name)
+  if (index === -1) return undefined
+  const value = argv[index + 1]
+  return value === undefined || value.startsWith('--') ? undefined : value
+}
+
+/**
+ * 依 checker-contract § REQUIRED output contract 印三行標頭。
+ * @param {'pass'|'finding'|'N/A'|'infrastructure-error'} status
+ * @param {{ roots: string, mode: string }} meta
+ */
+function report(status, { roots, mode }) {
+  process.stderr.write(
+    `${CHECKER}: ${status}\n` +
+      `scope: roots=${roots}; patterns=${FALLBACK_SLOT_COMPONENTS.join(', ')}; mode=${mode}\n` +
+      `skipped: ${SKIPPED_DESC}\n`,
+  )
+}
+
 function main() {
   const argv = process.argv.slice(2)
   const warnOnly = argv.includes('--warn-only')
   const all = argv.includes('--all')
-  const rootIdx = argv.indexOf('--root')
-  const root = rootIdx !== -1 ? argv[rootIdx + 1] : process.cwd()
+  const rootFlag = readOptionValue(argv, '--root')
+  const base = rootFlag ?? process.cwd()
+  const modeFlag = readOptionValue(argv, '--mode')
+
+  const optionValues = new Set(
+    [rootFlag, modeFlag, ...readOptionValues(argv, '--roots')].filter(Boolean),
+  )
 
   let files = []
+  let roots
+  let mode
   if (all) {
-    for (const r of APP_ROOTS) {
-      const base = join(root, r)
-      if (!existsSync(base) || !statSync(base).isDirectory()) continue
-      files.push(...walkVueFiles(base))
+    const overrides = readOptionValues(argv, '--roots')
+    const scanRoots = overrides.length > 0 ? overrides : DEFAULT_APP_ROOTS
+    const present = []
+    for (const rel of scanRoots) {
+      const path = join(base, rel)
+      if (!existsSync(path) || !statSync(path).isDirectory()) continue
+      present.push(path)
+      files.push(...walkVueFiles(path))
+    }
+    roots = present.length > 0 ? present.join(', ') : `(none of: ${scanRoots.join(', ')})`
+    mode = modeFlag ?? 'filesystem'
+    if (present.length === 0) {
+      report('N/A', { roots, mode })
+      return
     }
   } else {
-    files = argv.filter((a) => a.endsWith('.vue'))
+    files = argv.filter((a) => a.endsWith('.vue') && !optionValues.has(a))
+    roots = `explicit file list (${files.length} file${files.length === 1 ? '' : 's'})`
+    mode = modeFlag ?? 'filesystem'
+    if (files.length === 0) {
+      report('N/A', { roots, mode })
+      return
+    }
   }
 
-  let hits = 0
-  for (const f of files) {
+  const findings = []
+  for (const file of files) {
     let src
     try {
-      src = readFileSync(f, 'utf8')
-    } catch {
-      continue
+      src = readFileSync(file, 'utf8')
+    } catch (err) {
+      // checker-contract § Fail-closed Iron Law：讀不到就報 infrastructure error，
+      // NEVER 靜默 continue 當成「沒有 finding」。
+      report('infrastructure-error', { roots, mode })
+      process.stderr.write(`[${CHECKER}] 讀取失敗：${file} — ${err.message}\n`)
+      process.exit(2)
     }
-    for (const finding of detectMixedSlot(src)) {
-      hits += 1
-      console.error(
-        `[nuxt-ui-mixed-slot] ${f}: <${finding.component}> 混用 named <template #...> 與 stray 直接子元素 [${finding.stray.join(', ')}] — named slots 是 default slot 的 fallback，stray 元素會讓 header/body/footer 整組靜默不 render。修法：把 stray 元素移進 <template #body>（pitfall: 2026-07-06-nuxt-ui-named-slot-default-fallback-shadowing）`,
-      )
-    }
+    for (const finding of detectMixedSlot(src)) findings.push({ file, ...finding })
   }
 
-  if (hits > 0 && !warnOnly) process.exit(1)
+  report(findings.length > 0 ? 'finding' : 'pass', { roots, mode })
+
+  for (const f of findings) {
+    process.stderr.write(
+      `[${CHECKER}] ${f.file}: <${f.component}> 混用 named <template #...> 與 stray 直接子元素 [${f.stray.join(', ')}] — named slots 是 default slot 的 fallback，stray 元素會讓 header/body/footer 整組靜默不 render。修法：把 stray 元素移進 <template #body>（pitfall: 2026-07-06-nuxt-ui-named-slot-default-fallback-shadowing）\n`,
+    )
+  }
+
+  if (findings.length > 0 && !warnOnly) process.exit(1)
 }
 
 main()

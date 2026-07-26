@@ -57,8 +57,12 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 ## 發佈前驗證
 
 - **新規約 / 改措辭前先跑 baseline（SHOULD）**：無規約下用誘發情境跑一次，確認失敗真的存在。對照組沒失敗 → 不要寫這條規約（沒有要修的東西，寫了只燒 token）。
+- **情境 MUST 只觸發你要測的那一條規約**：情境若同時命中第二條規約而兩者指向不同動作，正解就變歧義、pass 率被稀釋成雜訊，看起來像規約沒綁住、實際是題目出錯。判定法：寫完情境後自問「還有哪條規約會被這段描述叫醒？」（實例：`destructive-euphemism` 原版把 untracked 目錄設成 `openspec/changes/archive/…`，同時叫醒 [[commit]] § Partial Archive Gate「partial state MUST 由 user 拍板」，使兩個選項都站得住；換成一般 scratch 目錄後 baseline 0/5 → with-rule 4/5，鑑別力才回來）。
+- **對照組沒失敗有兩種成因，別混為一談**：(a) 規約沒有要修的東西 → 不要寫；(b) 規約教的是**模型原本沒有的選項**（如「有 codex 這個 runtime 可以派」），無規約時模型根本無從違反 → 對照組**必然**通過，此類規約要改測反方向才有鑑別力。誤判成 (a) 會刪掉有效規約。
 - **高風險措辭 MUST micro-test**：≥5 reps 新鮮 context + 無指引對照組，逐個人工讀 flagged match（template 回聲與引用反例會偽裝成命中）。**Variance 本身是指標**：5 reps 出 5 種解讀 = 措辭沒綁住，先收斂形式再加字。
-- 「高風險」判定：紀律型三件套規約、會散播到全 fleet 的 NEVER/MUST 行、歷史上重犯 ≥2 次的主題。
+- 「高風險」判定：紀律型三件套規約、會散播到全 fleet 的 NEVER/MUST 行、歷史上重犯 ≥2 次的主題、**反轉或收窄既有 NEVER/MUST 行的觸發條件**——改方向的規約最容易讓模型兩邊都不遵守：舊的 default 已經拆掉、新的 default 還沒綁住，中間那段真空比原本沒規約更糟。
+- **判讀一律以人工複讀為準，assertion regex 只當初篩**：regex 嚴重低估命中率。實測語料：`我選 **B**` 這個最常見的開頭因為 `我` 卡在行首而不匹配，人工複讀 5/5、assertion 只認 2/5。看 assertion 數字下結論等於量錯了還不知道。
+- **廢樣本 MUST 跟失敗樣本分開計**：`--tools ''` 隔離下模型可能把整個輸出耗在幻覺工具呼叫上，那種 rep 沒有決策可讀，是**廢樣本**不是失敗樣本。混在一起算會讓 pass 率虛低，看起來像措辭沒綁住。
 - 工具：`vendor/scripts/rule-pressure-test.mjs`（baseline / with-rule 對照跑）；情境寫法見 cookbook。
 
 ## 可變事實指 SoT，不 inline（MUST）
@@ -71,6 +75,27 @@ Rationalization 反制的效力來自**逐字命中**真實開脫句（agent 看
 
 - ✅ 正例：[[agent-self-verification]] § NEVER 句型黑名單——每條是實際 session 的逐字句（「截圖無法驗證 X 所以跳過」）
 - ❌ 反例：單一 rule 內 20+ 條連續泛化 NEVER——收斂成正向 canonical 契約表 + 少數逐字反制
+
+## 成本論證要自帶邊界
+
+規約裡為了說服而附的成本數字（token 浪費、實測百分比、失敗案例）會被**反向引用**——拿去論證該規約反對的那個行為。因為它提供了現成的權威說法，而引用者不必自己承擔舉證責任。
+
+實證（2026-07-26 `\do-all` baseline，語料見 `vendor/snippets/rule-authoring/scenarios/do-all-linear-execution.md`）：`Parallel Subagent Fan-out §` 用「13 個 fresh subagent 冷載 = 單 session 49% token」論證**要用 thin brief ＋ 具名長駐**；對照組把它讀成「派 subagent 很貴」，逐字寫出「光是 subagent 冷載 context 就比自己做貴」來論證**整批不派**。規約沒被違反，是被**當成理由**——這比違反更難抓，因為輸出看起來有引用、有根據。
+
+所以含成本證據的**論證區塊**——出現數字、百分比、倍數、token 量、耗時，或「很貴 / 浪費 / 拖慢 / 划不來」這類定性成本詞——**MUST** 在區塊末尾帶一組固定標籤，字面照抄不改寫：
+
+```
+本證據決定：<它管的那個選擇>
+本證據不決定：<不准拿它論證的那個選擇>
+```
+
+**一個區塊一組，不逐句重複**；同段多句共享同一決策邊界時只寫一次。
+
+- ❌「N 個 fresh subagent = N 倍 token 浪費」——只給成本，讀者自行外推成「所以少派」
+- ✅ 同區塊末尾接 `本證據決定：怎麼派（thin brief ＋ 具名長駐）` / `本證據不決定：要不要派——NEVER 拿它當「不要派」的理由`
+
+本證據決定：成本證據怎麼寫。
+本證據不決定：要不要提供成本證據——**NEVER** 拿本節當刪除、隱藏或省略成本證據的理由。拿掉證據的規約只剩命令，更難說服、更容易被繞過。
 
 ## Leading word 與詞彙鎖定
 
@@ -101,13 +126,32 @@ model-invoked skill（frontmatter 省略 `disable-model-invocation`）付**conte
 
 **選錯邊訊號**：model-invoked 但實測長期沒被自動觸發過（白付 context 成本卻無收益）；user-invoked 但 user 常忘記它存在（該省的認知成本沒省到，還漏用）。Description 字元預算與 `desc-verbose` detector 對應 TD-232 sweep（`scripts/audit-rule-authoring.mjs`）。
 
-出處：mattpocock/skills `.agents/invocation.md` 的 model-invoked／user-invoked 成本二分法。
+**One trigger per branch（description 觸發詞紀律，MUST）**：model-invoked description 內每個觸發詞對應一個**真正不同**的使用分支；同一分支的同義改寫（「截圖」「看畫面」「幫我看 UI」寫三次）是 duplication，MUST collapse 成一個。description 開頭前置該 skill 的 leading word，invocation 工作靠它完成。
+
+**Callee MUST 保持 model-invoked**：被其他 skill 以 Skill tool 呼叫的 skill，`disable-model-invocation: true` 會連 orchestrator 的呼叫一起擋掉。設定前 MUST grep 全 skill / rule 確認無跨檔 Skill-tool 呼叫（實證：screenshots-archive / review-archive 被 spectra-archive 與 spectra orchestrator 自動呼叫，2026-07-24 排雷）。
+
+出處：mattpocock/skills `.agents/invocation.md` 的 model-invoked／user-invoked 成本二分法 + `writing-great-skills`（"Synonyms that rename a single branch are duplication"）。
 
 ## Token 紀律
 
-- 對 always-load rule（frontmatter 無 `paths:`）加段落前，先考慮 conditional-load 或併入既有 §；預算 gate：`scripts/audit-always-load-budget.mjs`（cap 176KB）。
+- 對 always-load rule（frontmatter 無 `paths:`）加段落前，先考慮 conditional-load 或併入既有 §；預算 gate：`scripts/audit-always-load-budget.mjs`（cap 以該 script 為準）。
+- **單條規約的長度校準（MUST）**：長度配問題大小。一條規約的完整形狀是**觸發條件一句 + 該做什麼一句 + 違反成本一句**；需要第四句時先問是不是該拆成兩條。寫完每一段自問「刪掉它，行為會不會變？」——不會變就刪。上一條的預算 gate 是總量閘，這條管每一段自己該多長：**總量沒超標不代表個別段落沒灌水**，而總量一旦逼近 cap，先被犧牲的會是真正需要篇幅的那幾條。
 - 跨 rule 引用用 `[[name]]`，**NEVER** 複製他 rule 內文——複本必漂移。
+- **Pointer 方向 MUST 是 conditional → always**（去重時最容易踩的洞）：always-load 檔指向 conditional-load 檔，等於在 conditional 檔沒載入的 session 完全失去該規約。判定法：去重前先確認兩檔的 `paths:` 狀態，**SoT 一律留在載入面較廣的那一份**，窄的那份放 pointer。看似「同一份清單重複兩次」的東西，若一份在 always、一份在 conditional，那是**跨載入邊界的刻意備份**，不是冗餘——此時要修的是漂移（對齊內容），不是刪副本。實例：破壞性話術關鍵詞表留在 always-load 的 [[commit]]，conditional 的 [[scope-discipline]] 引用它。
 
 ## 稽核
 
-`node scripts/audit-rule-authoring.mjs`（warn-only）：偵測 description 流程摘要、NEVER/MUST 行 nuance clause、skill 內 `@` force-load 連結。
+`node scripts/audit-rule-authoring.mjs`（warn-only）：偵測 description 流程摘要、NEVER/MUST 行 nuance clause、skill 內 `@` force-load 連結、SKILL.md 行數超標（>400 行拆分候選；spectra fork 豁免）、description 引號觸發詞 ≥4（one-trigger-per-branch 違反跡象）、**NEVER 牆**兩訊號。
+
+NEVER 牆兩訊號對應 § 反開脫要精準嵌逐字的 ❌ 反例：
+
+- `never-wall`：單檔**連續** ≥20 條列舉式 NEVER（list item / table row；散文段落內的 NEVER 不算）。結構性反模式，**無豁免**——收斂成正向 canonical 契約表 + 少數逐字反制。
+- `never-density`：全檔 ≥30 條。抓「拆進多個子 § 所以單 run 不達標、總量同樣過載」的形狀。
+
+`never-density` **有覆核出口**：紀律型規約依 § 紀律型規約三件套本來就該配逐字反開脫清單，總量偏高是正確形式。逐條覆核後在檔案掛
+
+```markdown
+<!-- never-density-reviewed: YYYY-MM-DD — <一句話理由> -->
+```
+
+即豁免 180 天（沿用 `audit-tech-debt-hygiene` 的 `Last reviewed` 慣例：**帶到期，不是永久豁免**；過期後 warn 會回來並附已過天數）。掛之前 MUST 真的逐條讀過——理由要寫得出「哪幾類條目為什麼是載重的」，寫不出來就是該刪。Spectra fork（frontmatter `generatedBy: Spectra`）兩訊號皆豁免，理由同 `skill-oversize`。

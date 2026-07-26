@@ -1,8 +1,8 @@
 ---
 name: code-review
-description: Code review a pull request
+description: Code review — PR review 或 commit 0-A.2 裁決（Fable max，拿 Codex 回饋做最終判定）
 tools: Bash, Read, Grep, Glob
-model: opus
+model: fable
 ---
 <!--
 🔒 LOCKED — managed by clade
