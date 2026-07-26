@@ -1,0 +1,448 @@
+{
+  "promotionRules": {
+    "agent-routing.codex-input-intercept.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "agent-routing.codex-watch-protocol.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "agent-routing.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "agent-self-verification.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "audit-pattern.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "auth-data-path-consistency.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "checker-contract.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "checker-subagent.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "cloudflare-workers.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "code-style.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "commit.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "consumer-meta.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "data-layer-d1.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "db-preview-env.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "dev-port-allocation.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "dev-tunnel-convention.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "error-handling.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "evlog-adoption.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "evlog-investigate.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "evlog-stream-extend.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "fixtures-reference.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "follow-up-register.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "goal-mode.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "golden-path-onboarding.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "handoff.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "i18n-boundary.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "knowledge-and-decisions.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "local-rule-override.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "logging.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "manual-review.backend.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "manual-review.data-readiness.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "manual-review.discuss.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "manual-review.evidence.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "manual-review.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "nuxt-data-perf.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "nuxt-dev-watch.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "output-hygiene.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "playwright-webserver.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "proactive-skills.dev-server-spawn.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "proactive-skills.ingest-triggers.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "proactive-skills.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "prod-mcp-safety.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "review-gui-surface.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "review-tiers.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "rule-authoring.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "scope-discipline.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "screenshot-strategy.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "session-tasks.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "spectra-notion-coupling.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "spectra-workflow.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "tech-debt-routing.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "test-scripts.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "testing-anti-patterns.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "timezone.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "truth-layers.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "user-lifecycle.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "ux-completeness.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "verification-lease.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "verify-gate-chain.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "vite-doctor.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "wip-orphan-recovery.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "work-claims.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "worktree-default.commit-ceremony.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "worktree-default.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "worktree-default.troubleshooting.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "auth.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "dev-login.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "audit-schema.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "migration.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "query-optimization.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "rls-policy.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "trigger.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "database-access.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "mcp-remote.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "storage.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "unused-features.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "api-patterns.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "secrets.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "development.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "nuxt-error-localization.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "nuxt-form-validation.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "nuxt-overlay-slot.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "nuxt-review-bans.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "nuxt-security.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "nuxt-ui-conventions.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "nuxt-ui-mcp.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "nuxt-ui-native-picker-ban.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    },
+    "page-loading-golden-path.md": {
+      "mode": "source-pointer",
+      "summary": "Keep the canonical rule in .claude/rules and expose only the source entry point in CLAUDE.md",
+      "verify": []
+    }
+  },
+  "verification": {
+    "subdirs": [],
+    "execPolicyTests": []
+  }
+}
