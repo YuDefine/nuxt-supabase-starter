@@ -13,30 +13,42 @@
  * 任何 forbidden token / maintainer-only skill 殘留 → exit 1。
  *
  * Scope:
- *   1. `template/.claude/` checksums 列出的所有檔：grep forbidden tokens
- *      （consumer name 別名 + personal redactions needles）
- *   2. `template/.agents/skills/{oops,improvement-loop,review-rules}/` 殘留：
- *      若任一存在 → exit 1（maintainer-only skill 不該散播到 starter）
+ *   1. `template/.agents/skills/{oops,improvement-loop,review-rules}/` 殘留：
+ *      若任一存在 → violation（maintainer-only skill 不該散播到公開 repo）
+ *   2. `template/.claude/` checksums 列出的所有檔：grep forbidden tokens
+ *      （consumer name 別名 + personal redactions needles + home-path regex）
+ *   3. 已退役 generator 的 `{,template/}.{agents,codex}/.sync-manifest.json`：
+ *      **從 git object 讀**（該檔已不在 worktree，leak 只存在於 index/HEAD）
  *
  * Output:
  *   - 0 violations → exit 0
  *   - 1+ violations → 列每條 `<path>: <token>` 後 exit 1
  *
  * Usage:
- *   node scripts/audit-clade-leak.mjs                 # 預設 cwd = repo root
- *   node scripts/audit-clade-leak.mjs --root <path>   # 指定 starter repo root
- *   node scripts/audit-clade-leak.mjs --json          # CI-friendly 機器輸出
+ *   node vendor/scripts/audit-clade-leak.mjs                    # 預設 cwd = repo root
+ *   node vendor/scripts/audit-clade-leak.mjs --root <path>      # 指定 consumer repo root
+ *   node vendor/scripts/audit-clade-leak.mjs --all-consumers    # 掃 registry 內所有帶
+ *                                                              # sanitization_profile 的
+ *                                                              # consumer（只在 clade home 可用）
+ *   node vendor/scripts/audit-clade-leak.mjs --json             # 機器輸出
  *
- * 觸發點：starter CI（GitHub Actions）作 mandatory job + maintainer 本機散播
- * 後手動跑驗證。
+ * 觸發點：**手動**（`pnpm audit:manual`）。
+ *   ⚠️ 本檔曾聲稱「starter CI（GitHub Actions）作 mandatory job」——2026-07-26 查證
+ *   為不實：starter 的 `.github/workflows/` 與 `package.json` 皆無此 job，
+ *   `propagate.mjs` 也沒有呼叫它（只有一句註解）。宣告已改為 on-demand，
+ *   接上真實消費端要走 TD-273。
+ *
+ *   另注意判準是為**公開** repo 設計的：forbidden tokens 含 consumer 自己的名字，
+ *   所以對私有 consumer 會回報約 100 條「violation」，那是類別錯誤不是洩漏。
+ *   `--all-consumers` 因此只掃帶 `sanitization_profile` 的 consumer。
  *
  * 對應 governance：clade `scripts/lib/sanitization-governance.mjs`。
  */
 
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { lstat, readFile } from 'node:fs/promises'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
@@ -105,7 +117,7 @@ const RETIRED_MANIFEST_RELS = [
 ]
 
 function parseArgs(argv) {
-  const out = { root: null, json: false }
+  const out = { root: null, json: false, allConsumers: false }
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i]
     if (a === '--root') {
@@ -113,9 +125,44 @@ function parseArgs(argv) {
       i += 1
     } else if (a === '--json') {
       out.json = true
+    } else if (a === '--all-consumers') {
+      out.allConsumers = true
     }
   }
   return out
+}
+
+// registry 只在 clade home 存在（本檔會被散播到 consumer，那邊沒有 registry），
+// 所以 --all-consumers 找不到 registry 時要明講而不是靜默掃 0 個。
+// 只回傳帶 sanitization_profile 的 consumer —— 判準是為公開 repo 設計的，
+// 對私有 consumer 跑會得到約 100 條類別錯誤的「violation」（見檔頭）。
+// 兩個 SoT 要對起來：`registry/consumers.json` 說「誰帶 sanitization_profile」（宣告層，
+// 不含路徑），`consumers.local` 說「本機路徑」（每行一條，可帶 `flow=` 後綴）。
+async function resolveSanitizedConsumers(cladeRoot) {
+  const registryPath = join(cladeRoot, 'registry', 'consumers.json')
+  const localPath = join(cladeRoot, 'consumers.local')
+  if (!existsSync(registryPath) || !existsSync(localPath)) {
+    return {
+      error: `--all-consumers 需要 registry/consumers.json 與 consumers.local（在 ${cladeRoot} 找不到）`,
+    }
+  }
+
+  const parsed = JSON.parse(await readFile(registryPath, 'utf8'))
+  const sanitizedIds = (parsed.consumers || parsed)
+    .filter((entry) => entry?.sanitization_profile)
+    .map((entry) => entry.consumer_id)
+    .filter(Boolean)
+
+  const localRoots = (await readFile(localPath, 'utf8'))
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith('#'))
+    .map((line) => line.split(/\s+/)[0])
+
+  const roots = localRoots.filter(
+    (p) => existsSync(p) && sanitizedIds.some((id) => p.includes(`/${id}`)),
+  )
+  return { roots }
 }
 
 async function findRepoRoot(start) {
@@ -194,12 +241,7 @@ async function readTrackedBlob(repoRoot, rel) {
   }
 }
 
-async function main() {
-  const __dirname = dirname(fileURLToPath(import.meta.url))
-  const opts = parseArgs(process.argv.slice(2))
-  const startRoot = resolveStarterRoot(opts)
-  const repoRoot = (await findRepoRoot(startRoot)) || startRoot
-
+async function auditOneRoot(repoRoot) {
   const violations = []
   const errors = []
 
@@ -227,6 +269,21 @@ async function main() {
     for (const rel of Object.keys(state.checksums)) {
       const abs = join(state.claudeRoot, rel)
       if (!existsSync(abs)) continue
+      // symlink 模式的 consumer（`.claude/rules/*.md` → `.clade/runtime/rules/`）：
+      // git 裡存的是 mode 120000 的 53-byte 路徑字串，**target 未 tracked**，所以那些
+      // 內容根本沒有被公開。readFile 會跟隨 symlink 讀到本機檔案，於是把「本機有」
+      // 誤報成「已洩漏」——2026-07-26 實測讓 <consumer-c> 虛報 39 處 <consumer-a> / 32 處
+      // <consumer-b> / 5 處 <client-a>，全部來自未 tracked 的 symlink target。
+      // 公開洩漏的判準是「git 裡有什麼」，不是「檔案系統上有什麼」。
+      let stats
+      try {
+        stats = await lstat(abs)
+      } catch (err) {
+        errors.push(`${rel}: lstat failed (${err.message.split('\n')[0]})`)
+        continue
+      }
+      if (stats.isSymbolicLink()) continue
+
       let text
       try {
         text = await readFile(abs, 'utf8')
@@ -269,6 +326,40 @@ async function main() {
         for (const token of hits) violations.push({ path: `${rel} (worktree)`, token })
       }
     }
+  }
+
+  return { violations, errors }
+}
+
+async function main() {
+  const scriptDir = dirname(fileURLToPath(import.meta.url))
+  const opts = parseArgs(process.argv.slice(2))
+
+  let roots
+  if (opts.allConsumers) {
+    const resolved = await resolveSanitizedConsumers(resolve(scriptDir, '..', '..'))
+    if (resolved.error) {
+      process.stderr.write(`${resolved.error}\n`)
+      process.exit(2)
+    }
+    roots = resolved.roots
+    if (roots.length === 0) {
+      process.stderr.write('registry 內沒有帶 sanitization_profile 的 consumer\n')
+      process.exit(2)
+    }
+  } else {
+    const startRoot = resolveStarterRoot(opts)
+    roots = [(await findRepoRoot(startRoot)) || startRoot]
+  }
+
+  const violations = []
+  const errors = []
+  for (const root of roots) {
+    const res = await auditOneRoot(root)
+    // 多 root 時在 path 前綴 repo 名，否則兩個 consumer 的同名路徑會混在一起讀不出來。
+    const label = roots.length > 1 ? `${basename(root)}/` : ''
+    for (const v of res.violations) violations.push({ ...v, path: `${label}${v.path}` })
+    for (const e of res.errors) errors.push(`${label}${e}`)
   }
 
   // Output
