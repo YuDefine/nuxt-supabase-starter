@@ -16,7 +16,7 @@
     "rules/commit.trunk-gates.md": "49af51202d7ec369",
     "rules/consumer-meta.md": "ed1b7127766726ad",
     "rules/data-layer-d1.md": "d4522ba8f83b8544",
-    "rules/db-preview-env.md": "4a042e8c896523de",
+    "rules/db-preview-env.md": "f7b3aedc1017907b",
     "rules/dev-port-allocation.md": "ab500b791f8c6f17",
     "rules/dev-tunnel-convention.md": "15a26a4529117b38",
     "rules/error-handling.md": "06df35ac72810246",
