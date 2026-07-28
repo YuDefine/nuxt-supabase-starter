@@ -63,6 +63,7 @@ scan_placeholders() {
       --glob '!README.md' \
       --glob '!.scaffold-cleanup' \
       --glob '!verify-starter.mjs' \
+      --glob '!scripts/audit-clade-leak.mjs' \
       || true
   else
     grep -RInE "$pattern" "$target" \
@@ -75,6 +76,7 @@ scan_placeholders() {
       --exclude=README.md \
       --exclude=.scaffold-cleanup \
       --exclude=verify-starter.mjs \
+      --exclude=audit-clade-leak.mjs \
       || true
   fi
 }
