@@ -31,6 +31,13 @@ CLADE_MANAGED_PREFIXES=(
   'codex/'
   '.agents/'
   'AGENTS.md'
+  # vendor/ 與 scripts/ 同樣是 clade 投影（chmod 444），只是不在 .claude/ 底下。
+  # 漏掉它們的後果跟漏掉 .claude/ 一樣：fmt 想改就撞 Permission denied，整個
+  # commit 掛掉。實證：clade 對 vendor/snippets/**/patterns.json 做 sanitize 改寫
+  # 後，consumer 端每次 propagate commit 都失敗（v1.4.349）。
+  'vendor/'
+  'scripts/'
+  '.clade/'
 )
 
 is_clade_managed() {
