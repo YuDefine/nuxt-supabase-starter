@@ -153,6 +153,34 @@ Local edits will be reverted by the next sync.
 
 aggregator 對這些交叉約束做 cross-check，不一致寫進 `validation.errors`。
 
+## Deployment type（`deploymentType`）
+
+fleet 的部署形態**只有兩種**。新專案 **MUST** 貼齊其中一型，不自創第三種形狀——第三種形狀會讓每一條依 type 分流的自動化（preview 環境、e2e、deploy gate）都要多一個分支。
+
+| | **Type A** | **Type B** |
+| --- | --- | --- |
+| Runtime | `nitro.preset: 'node-server'` | NuxtHub 或 `cloudflare-module` |
+| DB | Supabase（Postgres） | D1 |
+| 部署 | self-hosted runner / VM | wrangler |
+| Preview 途徑 | per-PR compose / LXC（見 [[db-preview-env]]） | Cloudflare 原生 per-version preview URL + D1 preview binding |
+
+`deploymentType: null` = 尚未定型，合法但**不該長期停在這**——沒有 type 的 consumer 拿不到任何 type-scoped 的能力。
+
+### 宣告 vs 實際 MUST 一致
+
+`deploymentType`、`deploy.platform`、`database.kind` 是 consumer 自宣告，但**宣告不是偏好，是事實主張**。`scripts/audit-consumer-meta-adoption.mjs` 從實際檔案推導後比對：
+
+- `nuxt.config.ts` 的 `preset`
+- `wrangler.*` 的存在，以及裡面有無 `d1_databases`
+- `package.json` 的 `@nuxthub/core` / supabase 依賴
+- `.github/workflows` 有無任何 deploy workflow
+
+不符即列進 audit 的「宣告 vs 實際」段。**audit 只報事實、不自動改**——改宣告還是改實作是 consumer 的決定，但**放著不處理不是選項**：任何依宣告分流的自動化都會對它走錯分支。
+
+> 為什麼宣告與稽核要綁在一起：`deploy.previewUrlShape` 與 `database.previewEnvCapability` 兩個欄位早就在 schema 裡，全 fleet **無一填寫**。沒有 audit 的宣告欄位就只是一段沒人負責的 JSON。
+
+`<consumer>/template` 這類 scaffold 範本**不驗部署形態**——它本身不部署，宣告 `none` 是正確的。
+
 ## Adoption 順序
 
 新增 consumer-meta.json 不是一次散播事件，是漸進採用：
