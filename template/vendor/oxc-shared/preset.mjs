@@ -97,6 +97,18 @@ export const lintBase = {
     '.clade/',
     '.vite-doctor/',
     '*.d.ts',
+    // clade-projected paths (LOCKED, chmod 444). A consumer cannot fix a lint
+    // hit in these files — the fix has to land in clade and propagate — so the
+    // baseline must exclude them here rather than leaving each consumer to
+    // re-inline the list. Snippet corpora in particular carry deliberate
+    // anti-pattern examples that exist to be linted *against*, not linted.
+    '.claude/plugins/cache/**',
+    '.spectra/**',
+    'vendor/snippets/audit-pattern/**',
+    'vendor/snippets/dev-port/**',
+    'vendor/snippets/nuxt-data-perf/**',
+    'vendor/snippets/nuxt-page-loading/**',
+    'vendor/scripts/review-gui.mts',
   ],
 }
 
@@ -129,5 +141,11 @@ export const fmtBase = {
     '.agents/**',
     '.codex/**',
     '.vite-doctor/**',
+    // clade-projected paths (LOCKED, chmod 444) — same reasoning as lintBase.
+    // clade itself never formats vendor/snippets/**, so the projected copies
+    // land unformatted in every consumer; a consumer running `vp fmt --check`
+    // over them fails a gate it has no way to fix locally.
+    'vendor/snippets/**',
+    'vendor/scripts/review-gui.mts',
   ],
 }
