@@ -1,5 +1,12 @@
 ---
-description: 新 consumer 首次開 session 時 MUST 跑 golden-path-adoption audit，缺項主動補齊
+description: 新 consumer 首次開 session 時 MUST 跑 golden-path-adoption audit，缺項主動補齊；onboarding 必動的 manifest / meta / 入口檔上 path-scoped 載入
+paths:
+  - '.claude/hub.json'
+  - '.claude/consumer-meta.json'
+  - 'package.json'
+  - 'README.md'
+  - 'CLAUDE.md'
+  - 'scripts/init-consumer.mjs'
 ---
 <!--
 🔒 LOCKED — managed by clade

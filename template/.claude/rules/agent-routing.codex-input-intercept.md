@@ -1,5 +1,6 @@
 ---
-description: Codex 派工觸發 request_user_input 時的攔截→評估→代答/升級 protocol；所有 codex exec 派工適用
+description: Codex 派工觸發 request_user_input 時的攔截→評估→代答/升級 protocol；派 codex 時 path-scoped 載入
+paths: ['openspec/changes/**/tasks.md', 'openspec/changes/**/design.md', 'scripts/spectra-advanced/**', '.claude/agents/**', '.claude/skills/spectra-*/**', '.claude/skills/commit/SKILL.md', 'screenshots/**/progress.json']
 ---
 <!--
 🔒 LOCKED — managed by clade

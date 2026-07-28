@@ -27,9 +27,46 @@ status=$?
 set -e
 
 if [ -s "$stdout_file" ] && jq empty "$stdout_file" >/dev/null 2>&1; then
-  cat "$stdout_file"
+  normalized_native_approval=0
+  if [ "$HOOK_EVENT" = "PreToolUse" ] &&
+    jq -e '.hookSpecificOutput | type == "object" and has("updatedInput")'       "$stdout_file" >/dev/null 2>&1; then
+    # Codex only accepts updatedInput together with an explicit allow decision.
+    # Preserve rewrites that the source hook already allowed. Missing/ask/deny
+    # decisions keep their approval semantics by dropping the rewrite; Codex
+    # does not support Claude's permissionDecision: "ask".
+    if [ "$status" -eq 3 ] &&
+      jq -e '
+        (
+          (.hookSpecificOutput | has("permissionDecision") | not) or
+          .hookSpecificOutput.permissionDecision == "ask"
+        ) and
+        ((.decision // "allow") == "allow")
+      ' "$stdout_file" >/dev/null 2>&1; then
+      normalized_native_approval=1
+    fi
+
+    if jq -e '
+      .hookSpecificOutput.permissionDecision == "allow" and
+      ((.decision // "allow") == "allow")
+    ' "$stdout_file" >/dev/null 2>&1; then
+      cat "$stdout_file"
+    elif jq -e '.hookSpecificOutput.permissionDecision == "ask"'       "$stdout_file" >/dev/null 2>&1; then
+      jq 'del(
+        .hookSpecificOutput.updatedInput,
+        .hookSpecificOutput.permissionDecision,
+        .hookSpecificOutput.permissionDecisionReason
+      )' "$stdout_file"
+    else
+      jq 'del(.hookSpecificOutput.updatedInput)' "$stdout_file"
+    fi
+  else
+    cat "$stdout_file"
+  fi
   if [ -s "$stderr_file" ]; then
     cat "$stderr_file" >&2
+  fi
+  if [ "$normalized_native_approval" -eq 1 ]; then
+    exit 0
   fi
   exit "$status"
 fi

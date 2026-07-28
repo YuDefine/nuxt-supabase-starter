@@ -1,9 +1,23 @@
+---
+description: 所有呼叫 review-gui 的外圍 agent surface 統一 SoP——入口 scan、compound item 拆解、multi-screenshot annotation、self-rationalize 禁令、annotation format contract；跑 review / handoff / verify 流程時 path-scoped 載入
+paths:
+  - 'screenshots/**'
+  - 'openspec/changes/**'
+  - 'HANDOFF.md'
+  - 'vendor/scripts/review-gui.mts'
+  - 'scripts/spectra-advanced/**'
+  - '.claude/skills/spectra-verify/**'
+  - '.claude/skills/spectra-apply/**'
+  - '.claude/skills/handoff/**'
+  - '.claude/agents/**'
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/review-gui-surface.md
 Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
+
 
 # Review-GUI Surface SoP
 

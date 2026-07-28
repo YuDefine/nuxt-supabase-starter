@@ -1,9 +1,19 @@
+---
+description: Nuxt dev server chokidar watch baseline ignore（clade 4 套投影導致 fd 爆衝 → nitropack esbuild worker EBADF cascade）；動 nuxt / vite config 或起 dev server 時 path-scoped 載入
+paths:
+  - 'nuxt.config.*'
+  - 'vite.config.*'
+  - 'package.json'
+  - 'scripts/dev-session*'
+  - 'vendor/scripts/dev-session*'
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/nuxt-dev-watch.md
 Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
+
 
 # Nuxt Dev Watch
 

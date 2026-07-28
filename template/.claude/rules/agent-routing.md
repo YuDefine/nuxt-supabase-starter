@@ -13,9 +13,25 @@ Local edits will be reverted by the next sync.
 
 ## Routing Table
 
+> **Codex 派工是 (model, effort) 二維**，不是只選 effort。三檔共用同一個 7 天配額池，選檔位看下列六維，**NEVER** 只看「這個工作重不重要」或「迴圈長不長」：
+>
+> 規格清晰度／搜尋空間與分支度／語意跨度（跨檔・矛盾來源）／錯誤成本不對稱性／可驗證性／mutation blast radius
+>
+> | 檔位 | 何時用 |
+> | --- | --- |
+> | `--model terra` | **預設檔**。一般工具協調、read-heavy synthesis、有限探索、小型可驗證修改 |
+> | `--model sol` | 命中任一即用，**即使迴圈很短**：高模糊度／高漏報成本／跨域衝突裁決／廣泛 mutation／結果本身就是最終品質或安全 gate |
+> | `--model luna` | 規格完全明確 **且** 來源已正規化 **且** 低風險 **且** 輸出可機械驗證 **且** 錯誤能被後續獨立 gate 接住——**五條全中**才用 |
+>
+> **NEVER** 拿「輸出會被下游機械消費」當降檔理由：下游若只驗 JSON schema 而不驗語意，降檔引入的錯誤會被自動放大。只有下游具備**獨立且夠強的語意 gate** 才可降檔。
+>
+> **跑分**（官方值，經 Codex Sol 覆核）：Terminal-Bench 2.1 Sol 88.8 / Terra 87.4 / Luna 84.7；SWE-bench Pro Sol 64.6 / Terra 63.4 / Luna 62.7。**兩者都是 agentic benchmark**（SWE-bench Pro 用 SWE-Agent scaffold，不是單次產碼），所以 aggregate 差距（Sol–Terra 僅 1.4pp）**不足以**單獨推導 routing boundary——要看 class-conditional 差距：SEC-Bench Pro Sol 71.2 vs Terra 57.7、ExploitBench 73.5 vs 52.9，安全類差距是通用類的 10 倍以上。
+>
+> ⚠️ **配額權重 UNKNOWN**：5:2.5:1 已確認是 API 價格與 purchased-credit rate card，但**訂閱內含配額**的 per-model debit multiplier 官方未公布，且官方列的每 5h 訊息估算範圍（Sol 75–450 / Terra 100–550 / Luna 250–1400）不呈現乾淨反比。**降檔究竟省多少配額目前無法量化**——`NEVER` 把 5:2.5:1 當成已證實的配額比寫進任何計算。
+
 | 工作類別 | 由誰執行 | 為什麼 |
 | --- | --- | --- |
-| **Web search**（即時資料 / 外部資訊查詢） | **Codex（GPT-5.6-sol medium）** | 中思考預算 + Codex 搜尋整合。 |
+| **Web search**（即時資料 / 外部資訊查詢） | **Codex `--model terra --effort medium`** | 搜尋 + 整合，非長迴圈。 |
 | **Code review（commit 0-A）** | **(1) `simplify` + (2) `codex exec` review high（GPT-5.6-sol，經 codex-review-safe.sh），(3) 0-A.1 出 Critical / Major 時條件升 xhigh** | 跨模型互補盲點。詳見 `.claude/skills/commit/SKILL.md` Step 0-A。 |
 | **Spectra `propose` 階段（draft）** | **使用者選單三選一**：A Codex GPT-5.6-sol max draft（預設/推薦）／ B 三模型交叉：Claude Fable 5 xhigh draft ＋ Codex GPT-5.6-sol max review／ C 純 Claude | 預設跳三選一選單；使用者明確指定路徑時跳過。詳見 `spectra-propose` Step 0。 |
 | **Spectra `propose` cross-check / final check** | **主線 Claude Fable 5 xhigh** | 主線 = quality gate（A 的 cross-check、B 的 final check 都由主線跑），不只是 dispatcher。 |
@@ -23,17 +39,17 @@ Local edits will be reverted by the next sync.
 | **Spectra `apply` UI view phase（component / page / view / layout / styling）+ Section 7（Design Review）** | **主線 Claude Opus 5 xhigh，永不派 codex** | 視覺 / 互動 / a11y 與 Design skill 緊耦合，Codex tooling 弱。非 view 的 frontend 不在此範圍，仍走 codex（範圍同 § Phase Dispatch C 類）。 |
 | **`screenshot-review` verify mode**（`[verify:ui]` channel / archive 前視覺 QA） | **主線 Claude 直派 Codex GPT-5.6-sol low**（Bash 走 reference § Codex 派工的標準流程；**禁止** `Agent` tool with `subagent_type: screenshot-review`） | sonnet wrapper 會繞過 Step 0 自做工作（[[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]）。wrapper **僅**在 codex CLI 不可用時作 fallback，**禁止**當預設入口。詳見 reference § screenshot-review Verify Mode Dispatch。 |
 | **Dev/test admin session cookie 取得**（verify channel evidence collection 階段） | **主線自己 scaffold `_dev-login` route + curl mint session**（**禁止**要 user 手動取 cookie；scaffold 前**MUST**先用 detection helper 確認真的 missing） | 詳見 [[manual-review.backend]] § Dev-login route missing → scaffold-first + [[pitfall-agent-asks-user-cookie-skipping-dev-login-scaffold]]。 |
-| **Mechanical fan-out**（收集 / 掃描 / 跑指令驗證型 subagent 工作：grep 掃描、收 evidence、驗證矩陣、fleet 多 repo 盤點） | **Codex（GPT-5.6-sol medium~high）via 泛用 dispatcher** | Claude subagent fan-out 實測佔 CC 等價成本 17-21%/日，codex 同工作 ~1/10 成本且 fidelity 100%（PoC 實證）。走泛用 dispatcher + `fanout-collect` template（見 reference § 泛用 Dispatcher）。例外留 Claude：需要 claude.ai-connected MCP（Notion 等）、判讀 / 治理型分析（如 /oops Mode D 判讀段）、user 明確要求。 |
-| **Read-heavy 長文件 / fleet 掃描**（上游 release notes 解析、跨 consumer reality matrix、pitfall 全量掃描、大 rule 改版前 baseline 重讀） | **Codex（GPT-5.6-sol medium）via 泛用 dispatcher** | read-heavy + structured output 是 codex 強項（中文 brief fidelity 100% 已驗證）。摘要僅作輸入，規約措辭與拍板必回主線。 |
-| **Debug evidence 段**（log 完整 capture / repro script 撰寫執行 / 既定 hypothesis 的驗證迴圈） | **Codex（GPT-5.6-sol high）via 泛用 dispatcher** | debug 是最大消耗桶；evidence / repro / verify 是機械段，root cause 推斷與修法設計留主線。repro 必在 throwaway worktree（template 內建 guard）。 |
-| **commit 0-C fix-verify loop**（pnpm check / test 修到全綠） | **Codex（GPT-5.6-sol high）via 泛用 dispatcher** | 機械修 lint / type / test 與 dep-upgrade 已驗證模式同構；主線同回合續跑 0-A / 0-B。詳見 commit SKILL Step 0-C。 |
-| **spectra-apply Step 8a self-collect (a)(b)**（dev-login allow-list 小 mod + service_role DB query 證 data shape） | **Codex（GPT-5.6-sol medium）via 泛用 dispatcher** | PoC 已實證 codex 能跑完整 evidence chain；annotation 寫回 tasks.md 維持主線。詳見 spectra-apply SKILL Step 8a。 |
-| **Security review**（`/security-review` skill / commit 前安全檢查） | **Codex（GPT-5.6-sol medium）via 泛用 dispatcher** | structured diff → structured findings 的 pattern matching，零互動。30 天實測佔 72% Claude session 數但僅 15% events — session 啟動成本是主要浪費。`/commit` 0-A gate（high/xhigh）是下游安全網，security review 漏的在那裡接住。 |
-| **Exploration / research pre-scan**（「依賴什麼」「進度如何」「還有什麼要做」「N 張 change 狀態」等 read-heavy 探索） | **Codex（GPT-5.6-sol medium）via 泛用 dispatcher**，主線消費 structured summary | read-heavy + structured output 是 codex 強項。主線拿 summary 做判斷 / 規劃，不自己逐檔 Read。30 天實測佔 11.5% events。 |
-| **Handoff scan 段**（`/handoff` Mode B 的 scan：讀 HANDOFF.md + git log + openspec + tasks + git status 產出 outstanding 清單） | **Codex（GPT-5.6-sol medium）via 泛用 dispatcher**，主線消費 scan report 做決策 | scan 是機械讀取 + 格式化，不是判斷。主線只看 report、做 routing / 推薦。30 天實測 29 sessions、4.7% events。 |
-| **Task-planning pre-scan**（「我需要做什麼」「接下來做什麼」「處理 N 張 change」的規劃 session 前置 scan） | **Codex（GPT-5.6-sol medium）via 泛用 dispatcher**，主線消費 structured report | scan openspec/changes/ + HANDOFF.md + git status + tasks/ 產出 per-change status matrix，主線拿 matrix 做排序 / 決策。 |
-| **Bug-fix evidence 段**（error log capture / stack trace 解析 / repro script 撰寫執行 / hypothesis 驗證迴圈） | **Codex（GPT-5.6-sol high）via 泛用 dispatcher**（強化：非 Debug evidence 段，而是整個 bug-fix session 的 investigation 段） | 30 天實測 19 個 bug-fix session 全由 Claude 跑（既有 Debug evidence rule 未落實）。investigation / evidence / repro 是機械段；root cause 推斷 + 修法設計留主線。**MUST** 在 bug-fix session 開工時先判斷：可分離的 evidence 段派 Codex，不可分離的留主線但 MUST 在 session 結尾回報未派 Codex 的理由。 |
-| **clade publish/propagate pre-scan**（publish 前 dirty file 分組判斷：讀 `git status` + `git diff` 各 file 內容 + 辨識 logical group） | **Codex（GPT-5.6-sol medium）via 泛用 dispatcher**，主線消費分組建議後 selective commit | publish SOP 中 `vp check → git commit → publish.mjs → push --tags → propagate.mjs` 是固定序列，但 pre-scan「dirty file 分幾組、每組 commit message 怎麼寫」的 reading 段可以 Codex。 |
+| **Mechanical fan-out**（收集 / 掃描 / 跑指令驗證型 subagent 工作：grep 掃描、收 evidence、驗證矩陣、fleet 多 repo 盤點） | **Codex `--model terra --effort medium` via 泛用 dispatcher** | Claude subagent fan-out 實測佔 CC 等價成本 17-21%/日，codex 同工作 ~1/10 成本且 fidelity 100%（PoC 實證）。走泛用 dispatcher + `fanout-collect` template（見 reference § 泛用 Dispatcher）。例外留 Claude：需要 claude.ai-connected MCP（Notion 等）、判讀 / 治理型分析（如 /oops Mode D 判讀段）、user 明確要求。 |
+| **Read-heavy 長文件 / fleet 掃描**（上游 release notes 解析、跨 consumer reality matrix、pitfall 全量掃描、大 rule 改版前 baseline 重讀） | **Codex `--model terra --effort medium` via 泛用 dispatcher** | read-heavy + structured output 是 codex 強項（中文 brief fidelity 100% 已驗證）。摘要僅作輸入，規約措辭與拍板必回主線。 |
+| **Debug evidence 段**（log 完整 capture / repro script 撰寫執行 / 既定 hypothesis 的驗證迴圈） | **Codex `--model sol --effort high` via 泛用 dispatcher** | debug 是最大消耗桶；evidence / repro / verify 是機械段，root cause 推斷與修法設計留主線。repro 必在 throwaway worktree（template 內建 guard）。 |
+| **commit 0-C fix-verify loop**（pnpm check / test 修到全綠） | **Codex `--model sol --effort high` via 泛用 dispatcher** | 機械修 lint / type / test 與 dep-upgrade 已驗證模式同構；主線同回合續跑 0-A / 0-B。詳見 commit SKILL Step 0-C。 |
+| **spectra-apply Step 8a self-collect (a)(b)**（dev-login allow-list 小 mod + service_role DB query 證 data shape） | **Codex `--model terra --effort medium` via 泛用 dispatcher** | PoC 已實證 codex 能跑完整 evidence chain；annotation 寫回 tasks.md 維持主線。詳見 spectra-apply SKILL Step 8a。 |
+| **Security review**（`/security-review` skill / commit 前安全檢查） | **最終 gate：Codex `--model sol --effort medium`**。候選 finding 的 pre-triage 可先跑 `--model terra`，但**收斂判定 MUST 回 Sol** | **NEVER** 因為「零互動 / structured diff → structured findings」就把安全 gate 當 pattern matching 降檔——漏報成本不對稱，且 class-conditional 差距遠大於通用 benchmark：SEC-Bench Pro Sol 71.2 vs Terra 57.7、ExploitBench 73.5 vs 52.9（通用類 Sol–Terra 只差 1.4pp）。30 天實測佔 72% Claude session 數但僅 15% events — session 啟動成本是主要浪費。 |
+| **Exploration / research pre-scan**（「依賴什麼」「進度如何」「還有什麼要做」「N 張 change 狀態」等 read-heavy 探索） | **Codex `--model terra --effort medium` via 泛用 dispatcher**，主線消費 structured summary | 「依賴什麼」要探索未知路徑、跨檔追蹤、裁決哪些 evidence 相關——是有限探索，不是 extraction，所以是 Terra 不是 Luna。主線拿 summary 做判斷 / 規劃，不自己逐檔 Read。30 天實測佔 11.5% events。 |
+| **Handoff scan 段**（`/handoff` Mode B 的 scan：讀 HANDOFF.md + git log + openspec + tasks + git status 產出 outstanding 清單） | **Codex `--model terra --effort medium` via 泛用 dispatcher**，主線消費 scan report 做決策 | 四個來源（HANDOFF / git log / tasks / git status）可能互相矛盾，判斷某條 task 是否已 commit、部分完成或被工作樹取代是**狀態 reconciliation**，不是格式化——這是它不能降 Luna 的原因。主線只看 report、做 routing / 推薦。30 天實測 29 sessions、4.7% events。 |
+| **Task-planning pre-scan**（「我需要做什麼」「接下來做什麼」「處理 N 張 change」的規劃 session 前置 scan） | **Codex `--model terra --effort medium` via 泛用 dispatcher**，主線消費 structured report | scan openspec/changes/ + HANDOFF.md + git status + tasks/ 產出 per-change status matrix。矩陣格式固定**不代表**語意判定是機械式的——identity matching、partial completion、衝突證據裁決都在裡面，故 Terra 不 Luna。主線拿 matrix 做排序 / 決策。 |
+| **Bug-fix evidence 段**（error log capture / stack trace 解析 / repro script 撰寫執行 / hypothesis 驗證迴圈） | **Codex `--model sol --effort high` via 泛用 dispatcher**（強化：非 Debug evidence 段，而是整個 bug-fix session 的 investigation 段） | 30 天實測 19 個 bug-fix session 全由 Claude 跑（既有 Debug evidence rule 未落實）。investigation / evidence / repro 是機械段；root cause 推斷 + 修法設計留主線。**MUST** 在 bug-fix session 開工時先判斷：可分離的 evidence 段派 Codex，不可分離的留主線但 MUST 在 session 結尾回報未派 Codex 的理由。 |
+| **clade publish/propagate pre-scan**（publish 前 dirty file 分組判斷：讀 `git status` + `git diff` 各 file 內容 + 辨識 logical group） | **Codex `--model terra --effort medium` via 泛用 dispatcher**，主線消費分組建議後 selective commit | commit grouping 要推斷修改意圖、耦合、依賴順序與可獨立回退性——讀取命令少不等於決策機械化。publish SOP 中 `vp check → git commit → publish.mjs → push --tags → propagate.mjs` 是固定序列，但 pre-scan「dirty file 分幾組、每組 commit message 怎麼寫」的 reading 段可以 Codex。 |
 
 ## Orchestration Residency（誰持有長 session — 決定層）
 
@@ -118,11 +134,16 @@ C 類派工細節（prompt、marker、watch、drift 檢查、收尾驗證）見 
 
 ## 配額邊界（決策層）
 
-Codex 配額兩層：primary = 5h rolling window（burst 瓶頸）、secondary = 週 window（實測 headroom 充足，非瓶頸）。
+Codex 配額**只有一層**：primary = **7 天 rolling window**（`window_minutes: 10080`），secondary 實測為 `null`（不存在，**不要**指望第二層緩衝）。
+
+> 本節數值於 2026-07-28 對 `~/.codex/sessions/**/rollout-*.jsonl` 的 `rate_limits` payload 實測校正。先前寫「primary = 5h rolling window」是錯的，連帶使「分散到多個 window」與「reset ≤30 分鐘則延後」兩條策略從未可能生效。改本節數值前 MUST 重新實測，不要憑印象改回。
 
 - 泛用 dispatcher 內建 quota check：primary used_percent > 85 → exit 4 不派（`--no-quota-check` 強派）
-- 重 fan-out（單回合 ≥5 個 dispatch）把派工分散到 2-3 個 5h window，不要塞同一個 window
-- 收到 exit 4：非急件延後到下一個 window；急件 `AskUserQuestion` 讓 user 拍板
+- **一週只有一個池**——`NEVER` 規劃「把派工分散到不同 window」，7 天內沒有第二個 window 可分散。要降配額壓力只能降 model 檔位（§ Routing Table 的 model 欄）或減少 dispatch 次數
+- quota check 讀的是**最近一次 codex session 的最後記錄值**，不是即時查詢。session 檔數天沒更新時，`used_percent` 是舊快照——判讀前先看 `resets_at` 是否已過期
+- 收到 exit 4：**先讀 `resets_at`**（`date -d @<ts>`）。reset 距今通常是**天**級，不是分鐘級
+  - 工作可延後到 reset 後 → 延後，並明確告知 user 確切 reset 時間
+  - 不可延後 → 走 § 配額耗盡時的 fallback 紀律的降級鏈，**不要**直接讓 Opus 主線接走
 
 ### 最小 dispatch 門檻（避免瑣碎 override）
 
@@ -132,11 +153,19 @@ codex-primary verdict 但 ≤2 個 file 的瑣碎 fix（typo / 單行 bug / conf
 
 ### 配額耗盡時的 fallback 紀律
 
-配額耗盡（exit 1 / exit 4）導致 codex-primary → claude override 時 **MUST**：
+配額耗盡（exit 1 / exit 4）**NEVER** 直接跳到 Opus 主線接走——那是拿最貴的檔位接最便宜的活。**MUST** 依序試降級鏈，命中即停：
 
-1. record reason 含 `quota-exhausted` + 預估 reset 時間
-2. 如果 reset 時間 ≤ 30 分鐘且工作非急件 → **延後**到 reset 後再派，不要 Claude 接走
-3. 如果 Claude 接走 → session 結尾 **MUST** 回報「本 session 因配額耗盡由 Claude 執行 N 個 codex-primary change，下次應分散 dispatch 到不同 5h window」
+```
+Sol → Terra → Luna → Claude Sonnet subagent → Claude Haiku subagent → Opus 主線
+      └─ 同一個 Codex 池，但權重較低 ─┘   └─ 換池，吃 Claude 額度 ─┘
+```
+
+1. **先降 Codex 檔位**：`--model terra` 重試，再不行 `--model luna`。三檔共用同一個 7 天池但按權重扣，低檔位在高檔位耗盡後**通常仍可派**
+2. **再換池**：Codex 三檔全滿才動 Claude subagent（`model` 顯式帶 `sonnet` / `haiku`，per § Subagent 回報契約第 4 條）
+3. **最後才是主線**：上述全不可行時 Opus 主線接走，且 record reason 含 `quota-exhausted` + `date -d @<resets_at>` 換算出的確切 reset 時間
+4. Claude 接走時 session 結尾 **MUST** 回報「本 session 因配額耗盡由 Claude 執行 N 個 codex-primary change，reset 時間 `<YYYY-MM-DD HH:MM>`」
+
+**NEVER** 把「工作性質適合 Sol」當作跳過降級鏈的理由——配額耗盡時的選擇不是「Sol vs Terra」，是「Terra vs 完全做不了」。品質顧慮寫進 report 交 user 判讀，不是拒絕降級的依據。
 
 ## Subagent 回報契約（所有 dispatch 通用）
 
