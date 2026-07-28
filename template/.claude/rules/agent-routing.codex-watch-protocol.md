@@ -233,7 +233,8 @@ node ~/offline/clade/vendor/scripts/codex-dispatch.mjs \
 
 | Template | 場景 | 建議 effort |
 | --- | --- | --- |
-| `fanout-collect` | mechanical 收集 / 掃描 / 驗證型 fan-out（取代 Claude subagent fan-out） | medium |
+| `fanout-analyze` | 蒐集命令清單派工前能列全時的 fan-out：主線跑完命令，只派分析（必填 `evidence`） | medium |
+| `fanout-collect` | 蒐集命令清單派工前**無法**列全（命令 N 的對象取決於 N-1 輸出）的掃描 / 驗證型 fan-out | medium |
 | `read-heavy-scan` | 長文件 / fleet 多 repo 掃描摘要 | medium |
 | `debug-evidence` | debug 拆段：log capture / repro / hypothesis 驗證矩陣 | high |
 | `fix-verify-loop` | commit 0-C：跑 check → 機械修 → loop 到全綠 | high |

@@ -116,7 +116,9 @@ When Step 1.8 routes to analysis/debug, use `codex-dispatch.mjs` with the approp
 1. **Classify the investigation type**:
    - **Debug** (error/bug/crash/failure/unexpected behavior/timeout/leak/exception/500) → `debug-evidence.template.md`, effort default `high`
    - **Analysis** (everything else: scan/audit/compare/survey/impact/coverage/why) → choose:
-     - grep/command-collect/verify-matrix → `fanout-collect.template.md`, effort default `medium`
+     - grep/command-collect/verify-matrix → can the full command list be written out **before** dispatch (no command's target depends on a prior command's output)?
+       - **Yes** → run the commands yourself, redirect each output to `/tmp/`, then dispatch `fanout-analyze.template.md` with `--var evidence=...`, effort default `medium`
+       - **No** → `fanout-collect.template.md`, effort default `medium`
      - long-doc/cross-repo/release-notes/architecture → `read-heavy-scan.template.md`, effort default `medium`
 
 2. **Assemble `--var` parameters**:

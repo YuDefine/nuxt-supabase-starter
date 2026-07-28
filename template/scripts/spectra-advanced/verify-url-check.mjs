@@ -54,8 +54,9 @@ function listVueEntries(dir) {
 
 // 遞迴比對 route segments 對 pages 目錄：exact match 優先，其次 [param]，
 // 最後 [...slug] catch-all。回傳 pagesRoot 相對檔案路徑或 null。
-function matchSegments(dir, segments) {
-  const { files, dirs } = listVueEntries(dir)
+// list 可換成 in-memory lister，讓「本 change 宣告要新建的 page」共用同一套比對。
+function matchSegments(dir, segments, list = listVueEntries) {
+  const { files, dirs } = list(dir)
   if (segments.length === 0) {
     if (files.includes('index.vue')) return 'index.vue'
     return null
@@ -65,7 +66,7 @@ function matchSegments(dir, segments) {
   if (rest.length === 0 && files.includes(`${seg}.vue`)) return `${seg}.vue`
   // exact dir
   if (dirs.includes(seg)) {
-    const sub = matchSegments(join(dir, seg), rest)
+    const sub = matchSegments(join(dir, seg), rest, list)
     if (sub) return join(seg, sub)
   }
   // dynamic [param]
@@ -74,7 +75,7 @@ function matchSegments(dir, segments) {
   }
   for (const d of dirs) {
     if (/^\[[^.\]]+\]$/.test(d)) {
-      const sub = matchSegments(join(dir, d), rest)
+      const sub = matchSegments(join(dir, d), rest, list)
       if (sub) return join(d, sub)
     }
   }
@@ -100,6 +101,79 @@ export function resolveRoute(consumerPath, path) {
   return { pagesRoot, resolvedFile: matched ? join(pagesRoot, matched) : null }
 }
 
+// ── 本 change 宣告要新建的 page ────────────────────────────────────────────
+// propose 階段跑這支檢查時，change 尚未 apply — 「本 change 才要建的 page」在
+// route tree 當然找不到，那不是臆想 URL。從 change 的 md 文字抽出所有
+// `(app/)?pages/<...>.vue` 提及，當成一棵 virtual route tree 用同一套 segment
+// 比對，命中即代表該 URL 有對應的實作 task 撐著。
+
+export function extractDeclaredPages(text) {
+  const re = /(?:app\/)?pages\/([A-Za-z0-9_\-./[\]]*\.vue)/g
+  const out = []
+  let m
+  while ((m = re.exec(String(text ?? '')))) {
+    if (!out.includes(m[1])) out.push(m[1])
+  }
+  return out
+}
+
+function makeDeclaredLister(files) {
+  const index = new Map()
+  const ensure = (d) => {
+    if (!index.has(d)) index.set(d, { files: [], dirs: [] })
+    return index.get(d)
+  }
+  ensure('.')
+  for (const rel of files) {
+    const parts = rel.split('/').filter(Boolean)
+    let cur = '.'
+    for (const seg of parts.slice(0, -1)) {
+      const node = ensure(cur)
+      if (!node.dirs.includes(seg)) node.dirs.push(seg)
+      cur = join(cur, seg)
+      ensure(cur)
+    }
+    const node = ensure(cur)
+    const file = parts[parts.length - 1]
+    if (file && !node.files.includes(file)) node.files.push(file)
+  }
+  return (d) => index.get(d) ?? { files: [], dirs: [] }
+}
+
+// 回傳命中的 declared page 相對路徑，或 null（沒宣告 / 對不上）。
+export function matchDeclaredRoute(changeText, path) {
+  const declared = extractDeclaredPages(changeText)
+  if (declared.length === 0) return null
+  const segments = String(path ?? '')
+    .split('/')
+    .filter(Boolean)
+  return matchSegments('.', segments, makeDeclaredLister(declared))
+}
+
+function readChangeText(changeDir) {
+  const chunks = []
+  const walk = (dir, depth) => {
+    if (depth > 3) return
+    let entries
+    try {
+      entries = readdirSync(dir)
+    } catch {
+      return
+    }
+    for (const e of entries) {
+      const full = join(dir, e)
+      try {
+        if (statSync(full).isDirectory()) walk(full, depth + 1)
+        else if (e.endsWith('.md')) chunks.push(readFileSync(full, 'utf8'))
+      } catch {
+        // unreadable entry — skip
+      }
+    }
+  }
+  walk(changeDir, 0)
+  return chunks.join('\n')
+}
+
 // param「有被使用」的判準：param 名以 word boundary 出現在 page source 任一處
 // （route.query.foo / useRouteQuery('foo') / 解構 { foo } 都會命中）。故意放寬 —
 // 這裡要抓的是「page 根本不認識這個 param」的臆想 URL，不是精確 data-flow 分析。
@@ -110,7 +184,7 @@ export function findUnusedParams(source, queryParams) {
   })
 }
 
-export function checkUrl({ consumerPath, url }) {
+export function checkUrl({ consumerPath, url, changeDir = null }) {
   const { path, queryParams } = parseUrl(url)
   const { pagesRoot, resolvedFile } = resolveRoute(consumerPath, path)
   if (!pagesRoot) {
@@ -121,9 +195,12 @@ export function checkUrl({ consumerPath, url }) {
       resolvedFile: null,
       queryParams,
       unusedParams: [],
+      declaredInChange: null,
     }
   }
   if (!resolvedFile) {
+    // route 不存在時再問一次：本 change 有沒有宣告要建這個 page？
+    const declaredInChange = changeDir ? matchDeclaredRoute(readChangeText(changeDir), path) : null
     return {
       path,
       pagesRoot,
@@ -131,6 +208,7 @@ export function checkUrl({ consumerPath, url }) {
       resolvedFile: null,
       queryParams,
       unusedParams: [],
+      declaredInChange,
     }
   }
   let unusedParams = []
@@ -142,7 +220,15 @@ export function checkUrl({ consumerPath, url }) {
       unusedParams = []
     }
   }
-  return { path, pagesRoot, routeExists: true, resolvedFile, queryParams, unusedParams }
+  return {
+    path,
+    pagesRoot,
+    routeExists: true,
+    resolvedFile,
+    queryParams,
+    unusedParams,
+    declaredInChange: null,
+  }
 }
 
 const isMain = process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop())
@@ -152,9 +238,14 @@ if (isMain) {
       options: {
         'consumer-path': { type: 'string' },
         url: { type: 'string' },
+        'change-dir': { type: 'string' },
       },
     })
-    const result = checkUrl({ consumerPath: values['consumer-path'] ?? '.', url: values.url ?? '' })
+    const result = checkUrl({
+      consumerPath: values['consumer-path'] ?? '.',
+      url: values.url ?? '',
+      changeDir: values['change-dir'] ?? null,
+    })
     process.stdout.write(JSON.stringify(result) + '\n')
   } catch {
     process.stdout.write(
@@ -165,6 +256,7 @@ if (isMain) {
         resolvedFile: null,
         queryParams: [],
         unusedParams: [],
+        declaredInChange: null,
       }) + '\n',
     )
   }

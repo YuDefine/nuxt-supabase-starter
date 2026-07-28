@@ -501,10 +501,17 @@ if command -v node >/dev/null 2>&1 && [ -f "$URL_CHECK_HELPER" ]; then
     real_lineno="${manual_block_lineno[$idx]}"
     printf '%s\n' "$line" | grep -qE '^[[:space:]]*-[[:space:]]*\[[ xX]\]' || continue
     [ -n "$(extract_bypass_reason "$line")" ] && continue
-    item_url=$(printf '%s\n' "$line" | grep -oE 'https?://[^ )]+|/[a-zA-Z0-9][a-zA-Z0-9/_-]*(\?[^ )]*)?' | head -1 || true)
+    # root-relative path 必須落在 word boundary（行首 / 空白 / backtick / 左括號）
+    # 之後才算 URL。少了這條約束，中文技術描述裡的斜線列舉
+    # （loading/disabled、visual/a11y、ids/counts/policyVersion-like）與相對檔案
+    # 路徑（`scripts/verify-admin-mvp.sh` → /verify-admin-mvp）都會被當成 route
+    # 誤報，且 head -1 讓這些假 path 蓋掉同一行後面真正的 URL。
+    item_url=$(printf '%s\n' "$line" \
+      | grep -oE 'https?://[^ )`]+|(^|[[:space:]`(])/[a-zA-Z0-9][a-zA-Z0-9/_-]*(\?[^ )`]*)?' \
+      | head -1 | sed -E 's/^[[:space:]`(]+//' || true)
     [ -z "$item_url" ] && continue
     case "$item_url" in */api/*) continue ;; esac
-    url_json=$(node "$URL_CHECK_HELPER" --consumer-path "$REPO_ROOT" --url "$item_url" 2>/dev/null || true)
+    url_json=$(node "$URL_CHECK_HELPER" --consumer-path "$REPO_ROOT" --url "$item_url" --change-dir "$CHANGE_DIR" 2>/dev/null || true)
     [ -z "$url_json" ] && continue
     pages_root=$(printf '%s' "$url_json" | jq -r '.pagesRoot // ""' 2>/dev/null || echo "")
     if [ -z "$pages_root" ]; then
@@ -514,6 +521,10 @@ if command -v node >/dev/null 2>&1 && [ -f "$URL_CHECK_HELPER" ]; then
     fi
     route_exists=$(printf '%s' "$url_json" | jq -r '.routeExists' 2>/dev/null || echo "")
     if [ "$route_exists" = "false" ]; then
+      # propose 階段 route 還沒建是常態 — 本 change 的實作 task 若已宣告要新增
+      # 對應的 page 檔（app/pages/... .vue），該 URL 有實作撐著，不是臆想路徑。
+      declared_in_change=$(printf '%s' "$url_json" | jq -r '.declaredInChange // ""' 2>/dev/null || echo "")
+      [ -n "$declared_in_change" ] && continue
       findings+=("VERIFY_URL_ROUTE_MISSING|${real_lineno}|item URL path 在 ${pages_root}/ route tree 找不到對應 page 檔（含 dynamic segment 比對）|把 URL 改成實際存在的 route（對照 ${pages_root}/），或該畫面在 modal/dialog 內時改寫互動步驟（導航 → 觸發 → 驗證）；誤判走 @no-manual-review-check[<reason>]|manual-review.evidence.md § verify item URL|${line}")
       continue
     fi
