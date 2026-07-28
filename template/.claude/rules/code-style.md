@@ -32,6 +32,20 @@ Local edits will be reverted by the next sync.
    - 否，只有單一 consumer 需要 → 該 consumer 自家 `vite.config.ts` override block
 2. 不確定 → 預設放 clade baseline（過鬆比過嚴容易補；先散播再個別 override 比反向收斂容易）
 
+### 投影層排除清單集中在 preset
+
+clade 投影進 consumer 的路徑（`vendor/**`、`.claude/**`、`.clade/**`、`.spectra/**`）在 consumer 端是 `chmod 444` 的 LOCKED 副本。**consumer 修不了裡面的 lint / fmt 違規** —— 修法只能回 clade 改源檔再 propagate。
+
+所以「這些路徑要不要送進 lint / fmt」**MUST** 由 `vendor/oxc-shared/preset.mjs` 的 `PROJECTION_EXCLUDES` 一處決定。
+
+- **NEVER** 在任何 consumer 的 `vite.config.ts` 自行 inline 投影層排除路徑（`'vendor/**'`、`'.claude/rules/**'` …）。那不是 override，是在補 preset 的洞 —— 補了的 consumer 看起來沒事，沒補的那個下次就是 CI red，而且它自己解不掉
+- **NEVER** 用「加一個 `.oxfmtignore` 就好」代替修 preset。同一個洞多一種擋法，只會讓 fleet 更難看出源頭少了什麼
+- 撞到投影層檔案被 lint / fmt 報錯時的**唯一**正解：回 clade 把該路徑加進 `PROJECTION_EXCLUDES`，publish + propagate
+
+唯一例外是 clade 自己 —— `vendor/` 在那裡是原始碼而非投影，clade 的 `vite.config.ts` 因此把 `vendor/**` 濾回來。這個例外只有一處、有註解，且由 audit 認得。
+
+機械檢查：`node scripts/audit-governance-drift.mjs` check 10 掃 clade + 全 consumer 的 `vite.config.ts`，preset 未涵蓋的 inline 排除路徑會 fail。對應 [[pitfall-projection-excludes-not-in-shared-preset]]。
+
 ## 禁止事項（NEVER）
 
 ### 禁止建立 eslint 設定檔
@@ -244,7 +258,9 @@ pnpm format:check  # 等同 vp fmt --check --ignore-path .oxfmtignore
 bash scripts/pre-commit/runner.sh
 ```
 
-`vp` 內部呼叫 oxc，行為一致。**裸打 `vp fmt` 時遺漏 `--ignore-path .oxfmtignore` 就會掃到 LOCKED 投影檔**（chmod 444）並報 format issue。
+`vp` 內部呼叫 oxc，行為一致。
+
+> `--ignore-path .oxfmtignore` 對投影層而言已是**歷史包袱** —— preset 的 `PROJECTION_EXCLUDES` 已經排除 `vendor/**` / `.claude/**` / `.clade/**` / `.spectra/**`，裸打 `vp fmt` 不會再掃到 LOCKED 檔（per § 投影層排除清單集中在 preset）。`.oxfmtignore` 只保留給該 consumer 自家、與投影層無關的路徑；沒有這種路徑就不必有這個檔。
 
 ### lint-staged 配置（若用 husky）
 

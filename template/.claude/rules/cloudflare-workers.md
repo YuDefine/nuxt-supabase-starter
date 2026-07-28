@@ -358,6 +358,8 @@ export function getDb(event: H3Event) {
 
 ## § 7 — Self-hosted runner CI 反 pattern
 
+> **Runner 本身的標籤設計、job 路由契約與三類 runner 職責分工見 [[self-hosted-runner]]**。本節只講 CI **step 寫法**（cache / secrets）的差異；「這個 job 會落在哪台機器」由標籤決定，屬該規約範圍。
+
 YuDefine fleet 多個 consumer（<consumer-h> / <consumer-e> / <consumer-i>）的 CI / deploy workflow 跑在自架 runner `runs-on: [self-hosted, gh-runner-lxc]`（YuDefine LXC，省 GitHub-hosted minutes）。Self-hosted runner 跟 GitHub-hosted runner 有兩個關鍵差異，沿用 GitHub-hosted 的 workflow 寫法會踩坑：
 
 ### § 7.1 — NEVER `cache: pnpm`（用 LXC 本地 persistent store）

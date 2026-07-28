@@ -30,6 +30,35 @@
 //   This preset turns the rule into an importable artifact; changing the
 //   baseline = edit this file in clade + propagate.
 
+/**
+ * clade-projected paths. In a consumer these are LOCKED copies (chmod 444)
+ * written by `scripts/propagate.mjs` — a consumer *cannot* fix a lint or fmt
+ * hit inside them, because the fix has to land in clade and propagate back.
+ * So whether these paths get checked is a decision the shared baseline has to
+ * make; leaving it to each consumer means whichever consumer forgets to
+ * re-inline the list gets a red CI it has no way to resolve locally.
+ *
+ * 2026-07-28: that is exactly how `nuxt-supabase-starter` Template CI broke on
+ * `vp fmt --check` over `vendor/snippets/manual-review-enforcement/patterns.json`
+ * — <consumer-h> and <consumer-e> had each independently patched `vendor/**`
+ * into their own vite.config.ts, which hid the gap instead of closing it.
+ * `scripts/audit-governance-drift.mjs` check 10 now fails on any config that
+ * re-inlines one of these, so the next gap surfaces before a consumer does.
+ *
+ * clade itself is the source of truth for `vendor/`, so its own vite.config.ts
+ * filters `vendor/**` back out — that one exception is deliberate and local.
+ */
+export const PROJECTION_EXCLUDES = ['.claude/**', '.clade/**', '.spectra/**', 'vendor/**']
+
+/**
+ * The slice of `vendor/` that stays excluded even in clade, where `vendor/` is
+ * real source rather than a projection: snippet corpora are cookbook examples
+ * (several deliberately demonstrate the anti-pattern a rule exists to ban), and
+ * review-gui.mts embeds an HTML template oxfmt/oxlint both mangle.
+ * clade's own vite.config.ts drops `vendor/**` and adds these back.
+ */
+export const CLADE_VENDOR_EXCLUDES = ['vendor/snippets/**', 'vendor/scripts/review-gui.mts']
+
 /** @type {import('oxlint').OxlintConfig} */
 export const lintBase = {
   categories: {
@@ -97,18 +126,7 @@ export const lintBase = {
     '.clade/',
     '.vite-doctor/',
     '*.d.ts',
-    // clade-projected paths (LOCKED, chmod 444). A consumer cannot fix a lint
-    // hit in these files — the fix has to land in clade and propagate — so the
-    // baseline must exclude them here rather than leaving each consumer to
-    // re-inline the list. Snippet corpora in particular carry deliberate
-    // anti-pattern examples that exist to be linted *against*, not linted.
-    '.claude/plugins/cache/**',
-    '.spectra/**',
-    'vendor/snippets/audit-pattern/**',
-    'vendor/snippets/dev-port/**',
-    'vendor/snippets/nuxt-data-perf/**',
-    'vendor/snippets/nuxt-page-loading/**',
-    'vendor/scripts/review-gui.mts',
+    ...PROJECTION_EXCLUDES,
   ],
 }
 
@@ -141,11 +159,6 @@ export const fmtBase = {
     '.agents/**',
     '.codex/**',
     '.vite-doctor/**',
-    // clade-projected paths (LOCKED, chmod 444) — same reasoning as lintBase.
-    // clade itself never formats vendor/snippets/**, so the projected copies
-    // land unformatted in every consumer; a consumer running `vp fmt --check`
-    // over them fails a gate it has no way to fix locally.
-    'vendor/snippets/**',
-    'vendor/scripts/review-gui.mts',
+    ...PROJECTION_EXCLUDES,
   ],
 }
