@@ -155,21 +155,31 @@ aggregator 對這些交叉約束做 cross-check，不一致寫進 `validation.er
 
 ## Deployment type（`deploymentType`）
 
-fleet 的部署形態**只有兩種**。新專案 **MUST** 貼齊其中一型，不自創第三種形狀——第三種形狀會讓每一條依 type 分流的自動化（preview 環境、e2e、deploy gate）都要多一個分支。
+fleet 的部署形態收斂成**三型**。新專案 **MUST** 貼齊其中一型，不自創第四種——每多一種形狀，所有依 type 分流的自動化（preview 環境、e2e、deploy gate）都多一條分支要維護。
 
-| | **Type A** | **Type B** |
-| --- | --- | --- |
-| Runtime | `nitro.preset: 'node-server'` | NuxtHub 或 `cloudflare-module` |
-| DB | Supabase（Postgres） | D1 |
-| 部署 | self-hosted runner / VM | wrangler |
-| Preview 途徑 | per-PR compose / LXC（見 [[db-preview-env]]） | Cloudflare 原生 per-version preview URL + D1 preview binding |
+| | `node-server` | `workers-d1` | `void-cloud` |
+| --- | --- | --- | --- |
+| Runtime | nitro `node-server` preset | NuxtHub 或 `cloudflare-module` | 同左（由平台代管） |
+| DB | Supabase（Postgres） | D1 | D1（由平台 provision） |
+| 部署動作 | rsync/SSH + systemd 或 `docker compose` | `cloudflare/wrangler-action` | `pnpm void:deploy` |
+| Migration | **獨立 job + 風險分類 gate** | `deploy` job 內的一個 step | **不存在** |
+| Deploy pipeline | 4-job（`ci → migrate → deploy → notify`） | 4-job | **3-job**（`ci → deploy → notify`） |
+| Preview 途徑 | per-PR compose / LXC（見 [[db-preview-env]]） | Cloudflare 原生 per-version preview URL + D1 preview binding | 依平台能力，**不可假設等同 Cloudflare 原生** |
 
-`deploymentType: null` 有兩種完全不同的意思，**MUST** 用 `$comment` 寫明是哪一種：
+### `void-cloud` 為什麼是獨立一型而不是 `workers-d1` 的變體
+
+`pnpm void:deploy` 是**單一不透明指令**，內部自己做 build → R2 上傳 → D1 provisioning → worker 上傳。**沒有任何一步能讓 workflow 作者插入 migration SQL**。硬塞一個 `migrate` job 進去，要嘛是空殼（看起來有 gate、實際什麼都沒驗），要嘛技術上塞不進去。
+
+所以它的 pipeline 是 3-job，不是「4-job 拿掉內容」。把它併進 `workers-d1` 會讓任何「這型該有 migrate job」的稽核對它產生假陰性或假陽性。
+
+### `null` 的兩種意思
+
+**MUST** 用 `$comment` 寫明是哪一種：
 
 - **尚未定型** — 合法但不該長期停在這，沒有 type 的 consumer 拿不到任何 type-scoped 的能力
-- **不適用** — 該 consumer 不是 Nuxt app，A/B 的定義（nitro preset + Supabase/D1）對它是物種不符。實例：`<consumer-d>` 是 5 個 Go service 的 matrix build，無 preset、無 D1/Supabase 概念
+- **不適用** — 該 consumer 不是 Nuxt app。實例：`<consumer-d>` 是 5 個 Go service 的 matrix build，無 preset、無 D1/Supabase 概念
 
-**NEVER** 為了「讓每個 consumer 都有 type」而開第三個 enum 值——每多一個值，所有依 A/B 分流的自動化都多一條分支要維護，而 fleet 內目前只有一個這種形狀。`null` + 明寫不適用的成本低得多。
+**NEVER** 為了「讓每個 consumer 都有 type」而多開一個 enum 值容納單一特例——`null` + 明寫不適用的成本低得多。
 
 ### 宣告 vs 實際 MUST 一致
 
@@ -179,6 +189,8 @@ fleet 的部署形態**只有兩種**。新專案 **MUST** 貼齊其中一型，
 - `wrangler.*` 的存在，以及裡面有無 `d1_databases`
 - `package.json` 的 `@nuxthub/core` / supabase 依賴
 - `.github/workflows` 有無任何 deploy workflow
+
+`deploymentType` 的值域**刻意與偵測器 `detectDeployMechanism()` 的回傳值相同** —— 讓「宣告 vs 實際」是直接比對，不必再維護一張對照表（對照表會過期，比對不會）。
 
 不符即列進 audit 的「宣告 vs 實際」段。**audit 只報事實、不自動改**——改宣告還是改實作是 consumer 的決定，但**放著不處理不是選項**：任何依宣告分流的自動化都會對它走錯分支。
 
