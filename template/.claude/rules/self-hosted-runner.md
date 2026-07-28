@@ -100,6 +100,32 @@ Persistent runner（LXC / VM，跨 job 保留檔案系統）與 GitHub-hosted ru
 - **MUST** 升任何「會在 runner 上安裝/更新工具」的 action 大版之前，先問「這個 action 有沒有自我更新行為？persistent runner 上它留下什麼？」——GitHub-hosted 綠燈**不是** self-hosted 也會綠的證據
 - 範本與完整 CI workflow 見 `vendor/snippets/cloudflare-workers/self-hosted-runner-ci.workflow.yml.template`
 
+### 7. 同一台機器上的 runner 共享 home，NEVER 在 job 執行中動共用目錄
+
+多個 ephemeral runner 跑在同一台機器、同一個 user 底下時，`~/setup-pnpm/`、`~/.pnpm-store/`、`~/.cache/` 都是**共享可變狀態**。對它們做 `rm -rf` / 搬移 / 重寫，會直接抽掉其他 runner 正在使用的檔案。
+
+- **NEVER** 在 job 執行期間清理共用目錄。清理只能放在 wrapper 裡、`./run.sh` **之前**（該 runner 的 job 尚未開始），而且要意識到那仍然影響**其他** runner 正在跑的 job
+- **MUST** 需要「乾淨環境」時改用 per-runner 的獨立路徑（`~/<repo>-runner/...`），而不是清共用的
+- **NEVER** 把「清一下 stale state 應該沒差」當成安全操作
+
+實證（2026-07-28）：為了清 pnpm 的 stale global store，在四個 runner 的 wrapper 各加了一行 `rm -rf ~/setup-pnpm/node_modules`。四個 runner 共用同一個 `~/setup-pnpm/`，propagate 觸發全 fleet 同時跑 workflow 時，A 的 wrapper 清掉目錄、B 正在用的 pnpm 就消失 —— 症狀是 `sh: 1: pnpm: not found`，發生在**巢狀 npm script** 裡（外層還跑得動，內層 `sh -c` 才炸），且時好時壞。原本已經修好的 repo 因此整批回紅。
+
+### 8. Runner auto-update 會破壞 node externals 的 symlink
+
+Actions runner 自我升級時解壓 `externals.*/node*/`，會把 `bin/npm`、`bin/npx`、`bin/corepack` 從 symlink 變成一般檔案（tar 解壓不保留 symlink）。內容一模一樣，但相對路徑解析基準變了：`npm-cli.js` 裡的 `require('../lib/cli.js')` 原本從 `lib/node_modules/npm/bin/` 解析，變成從 `bin/` 解析 —— 於是
+
+```
+Error: Cannot find module '../lib/cli.js'
+Require stack:
+- /home/runner/<repo>-runner/externals.<ver>/node24/bin/npm
+```
+
+runner 內建的 npm 就此壞掉，任何**經由它**安裝工具的 action 一起壞。
+
+- **MUST** persistent runner 的 baseline setup 內含 symlink 修復機制（修復腳本 + 定時器 + wrapper 在 `./run.sh` 前呼叫），因為 auto-update 隨時會再發生一次，一次性手修撐不過下次升級
+- **MUST** 新增 runner 時把該機制一併裝上，不要只裝在撞到問題的那台
+- 判準：runner 內建 npm 是否可用，用 `<runner>/externals.*/node*/bin/npm --version` 直接驗，**不要**靠「workflow 這次過了」推斷 —— 只有走 npm 路徑的 workflow 才會暴露它
+
 ## NEVER
 
 - **NEVER** 用 runner 的**名字**判斷它會不會接某個 job——排程只看標籤，名字純粹給人看
