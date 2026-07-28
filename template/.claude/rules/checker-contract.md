@@ -102,6 +102,33 @@ Gate、checker、composite action 的檔案落在 repo 裡，**不代表**有任
 clade drift gate 因 `core.hooksPath` 在全部 consumer 失效、`review-rules-scan` composite action
 散播到全 fleet 但零 workflow 引用。三者的 audit 當時全部報綠。
 
+## 判準綁事實，不綁命名或結構慣例
+
+Checker 的每一條判準 **MUST** 綁在**可觀察的行為事實**上。命名慣例、目錄結構、檔名前綴這類「通常是這樣」的規律**不是事實**——它們在寫 checker 的當下看起來成立，實際上只是樣本剛好都符合。
+
+下筆前對**每一條**判準問一次：**「這條綁的是事實，還是我以為大家都會遵守的慣例？」** 答案是後者就換一條。
+
+### 判準替換對照
+
+| 想判斷的 | ❌ 綁慣例 | ✅ 綁事實 |
+| --- | --- | --- |
+| 這個 repo 有沒有部署流程 | workflow 檔名含 `deploy` | 讀 workflow 的 `name:` 與 job key |
+| 這個 worktree 是不是在做這個 change | 路徑不是 main | tasks.md 的實際勾選數（fork-time snapshot 必然 ≤ 真實進度） |
+| 這筆記錄是否已存在 | 標題字串比對 | 業務唯一鍵的組合 |
+| 這個 phase 是不是 UI 層 | 標題含 `view` | 該格式自帶的顯式標記（`（非 view）` / `（view-only phase）`） |
+
+前兩列都是實證：`audit-consumer-meta-adoption.mjs` 曾用檔名判準誤報「<consumer-b> 沒有部署流程」——它的 deploy job 住在 `ci.yml` 裡（`name: CI / Deploy` + `jobs.deploy` 做 rsync + SSH）；`notion-sync.mjs` 曾用「非 main」選 worktree，選到鄰居 change 的 worktree，因為**每個 worktree 都帶著 fork 當下的全部 change 目錄**。第四列是「`（非 view）`含 view」的反向誤判。
+
+### 慣例判準的失敗形狀
+
+它不會噴錯，它會**安靜地給出看起來合理的錯答案**——這比 crash 難發現得多。三個實證裡有兩個是靠人看到結果不對才抓到，不是靠測試。
+
+### Red Flags
+
+- 「檔名是 `deploy.yml` 所以這是部署流程」← 檔名不是契約，`name:` 和 `on:` 才是
+- 「大家都把 X 放在 Y 目錄」← 「大家都」是樣本觀察，不是保證
+- 「不如要求所有 consumer 改成 <某個命名> 這樣好判斷」← **方向反了**。工具遷就既有架構，不是架構遷就工具。真要求對齊，先確認那個對齊本身在架構上站得住（例如拆 workflow 會不會逼人把 `needs:` 改成 `workflow_run`）
+
 ## Canonical check entry
 
 Consumer 的 canonical check entry 是 `package.json` 的 `scripts.check`。**每一條** CI workflow 都 **MUST** 執行 canonical entry（通常為 `pnpm check`）；workspace 內的子 package check 由 root canonical entry 統一 dispatch。

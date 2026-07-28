@@ -164,7 +164,12 @@ fleet 的部署形態**只有兩種**。新專案 **MUST** 貼齊其中一型，
 | 部署 | self-hosted runner / VM | wrangler |
 | Preview 途徑 | per-PR compose / LXC（見 [[db-preview-env]]） | Cloudflare 原生 per-version preview URL + D1 preview binding |
 
-`deploymentType: null` = 尚未定型，合法但**不該長期停在這**——沒有 type 的 consumer 拿不到任何 type-scoped 的能力。
+`deploymentType: null` 有兩種完全不同的意思，**MUST** 用 `$comment` 寫明是哪一種：
+
+- **尚未定型** — 合法但不該長期停在這，沒有 type 的 consumer 拿不到任何 type-scoped 的能力
+- **不適用** — 該 consumer 不是 Nuxt app，A/B 的定義（nitro preset + Supabase/D1）對它是物種不符。實例：`<consumer-d>` 是 5 個 Go service 的 matrix build，無 preset、無 D1/Supabase 概念
+
+**NEVER** 為了「讓每個 consumer 都有 type」而開第三個 enum 值——每多一個值，所有依 A/B 分流的自動化都多一條分支要維護，而 fleet 內目前只有一個這種形狀。`null` + 明寫不適用的成本低得多。
 
 ### 宣告 vs 實際 MUST 一致
 
