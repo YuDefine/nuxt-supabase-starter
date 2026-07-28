@@ -241,6 +241,25 @@ async function readTrackedBlob(repoRoot, rel) {
   }
 }
 
+const TEXTUAL_REL_RE = /\.(md|mjs|cjs|js|mts|cts|ts|json|jsonc|sh|bash|zsh|yml|yaml|txt)$/i
+
+// git tracked 檔案清單（限定前綴）。用 git 而非 readdir：未 tracked 的東西不算
+// 洩漏，掃它只會製造假陽性。
+async function listTrackedUnder(repoRoot, prefixes) {
+  try {
+    const { stdout } = await execFileAsync('git', ['ls-files', '--', ...prefixes], {
+      cwd: repoRoot,
+      maxBuffer: 64 * 1024 * 1024,
+    })
+    return stdout
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
 async function auditOneRoot(repoRoot) {
   const violations = []
   const errors = []
@@ -295,6 +314,22 @@ async function auditOneRoot(repoRoot) {
       for (const token of hits) {
         violations.push({ path: rel, token })
       }
+    }
+  }
+
+  // (2b) `.clade/**` —— clade 投影出去、但不在 hub-state checksums 內的那一層。
+  // 這裡曾是完全的盲區：`.clade/registry/consumers.json` 放著整份 fleet 名冊
+  // （每個 consumer_id + repo_id，含客戶 org 名），是 TD-274 裡單項最嚴重的洩漏，
+  // 而 audit 從頭到尾沒掃過它——清完 checksums 那層會以為已經乾淨。
+  //
+  // 判準一律是「git 裡有什麼」：symlink 在 git 裡只是路徑字串，讀 blob 天然不會
+  // 把未 tracked 的 target 內容誤報成已洩漏（TD-274 § 兩個量測錯誤）。
+  for (const rel of await listTrackedUnder(repoRoot, ['.clade', 'template/.clade'])) {
+    if (!TEXTUAL_REL_RE.test(rel)) continue
+    const blob = await readTrackedBlob(repoRoot, rel)
+    if (blob === null) continue
+    for (const token of scanForbiddenTokens(blob)) {
+      violations.push({ path: rel, token })
     }
   }
 

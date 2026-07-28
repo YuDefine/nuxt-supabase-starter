@@ -917,7 +917,7 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
 
     **Post-park commit reminder**（clade fork addition；not in upstream spectra）
 
-    Park 之後 artifacts 只存在 `.git/spectra-app/spectra.db` SQLite blob（**不在 git tracked file**）。若後續 `/spectra-apply` 的 unpark 步驟在錯誤 cwd 跑（例如 Claude Code `Agent` tool dispatched subagent 的 ephemeral `.claude/worktrees/agent-*/`），unpark 寫的 artifacts 會落在 session-GC 路徑 → SQLite parked 條目同時被 unpark 刪除 → **artifacts 在 git / SQLite / 任何活著的 worktree 都不存在 = 永久遺失**（已在 co-purchase 撞過：99 tasks + 5 specs + proposal 蒸發，僅 design.md 從 git history 復原但缺最後 3 個決策）。完整 root cause 見 `docs/pitfalls/2026-05-22-agent-tool-subagent-worktree-bypass.md`。
+    Park 之後 artifacts 只存在 `.git/spectra-app/spectra.db` SQLite blob（**不在 git tracked file**）。若後續 `/spectra-apply` 的 unpark 步驟在錯誤 cwd 跑（例如 Claude Code `Agent` tool dispatched subagent 的 ephemeral `.claude/worktrees/agent-*/`），unpark 寫的 artifacts 會落在 session-GC 路徑 → SQLite parked 條目同時被 unpark 刪除 → **artifacts 在 git / SQLite / 任何活著的 worktree 都不存在 = 永久遺失**（已在 <consumer-e> 撞過：99 tasks + 5 specs + proposal 蒸發，僅 design.md 從 git history 復原但缺最後 3 個決策）。完整 root cause 見 `docs/pitfalls/2026-05-22-agent-tool-subagent-worktree-bypass.md`。
 
     Park 跑完並輸出 Handoff message 之後，**MUST** 用 **AskUserQuestion** 給 user 二擇一（這條問題是「commit-to-git for data-loss safety」，跟前段「do NOT call AskUserQuestion to ask whether to park or apply」是不同議題；本 AskUserQuestion 必跑）：
 
@@ -935,7 +935,7 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
 
       Commit 之後 artifacts 落 git 永久保留；後續 `/spectra-apply` 從 main fork 的 worktree 看得到 artifacts，**不再依賴 SQLite blob**。Apply 完成 archive 階段會由 `/spectra-archive` 把 artifacts 搬進 `openspec/changes/archive/<date>-<change>/`。
 
-      Option description 必含風險揭露：`park 後 artifacts 只存 SQLite blob，後續 subagent dispatch 跑 unpark 寫進 ephemeral worktree → session GC → artifacts 永久遺失（co-purchase 已踩；見 pitfall）`。
+      Option description 必含風險揭露：`park 後 artifacts 只存 SQLite blob，後續 subagent dispatch 跑 unpark 寫進 ephemeral worktree → session GC → artifacts 永久遺失（<consumer-e> 已踩；見 pitfall）`。
 
     - **Option B — 維持 parked（接受風險）**：保留 SQLite blob 狀態，artifacts 不寫 disk、不上 git。**僅當** user 明確知道下一步 `/spectra-apply` 不會經過 `Agent` tool dispatched subagent（例如直接在 main 跑 `/spectra-apply` 而非 `/wt` Form 3）才安全。
 

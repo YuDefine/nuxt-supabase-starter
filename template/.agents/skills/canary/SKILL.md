@@ -20,12 +20,12 @@ curl -sf -o /dev/null -w '%{http_code}' <URL>
 
 ## Step 3: 視覺驗證（可選）
 
-如果 `agent-browser` 可用：
+如果 `browser-use` 可用：
 
-1. `agent-browser open <URL>`
-2. `agent-browser screenshot temp/canary-$(date +%Y%m%d-%H%M%S).png`
+1. `browser-use navigate <URL>`
+2. `browser-use screenshot temp/canary-$(date +%Y%m%d-%H%M%S).png`
 3. 檢查截圖是否正常
-4. `agent-browser close`
+4. `browser-use close`
 
 ## Step 4: 報告
 

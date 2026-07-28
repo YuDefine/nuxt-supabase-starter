@@ -12,7 +12,7 @@ Local edits will be reverted by the next sync.
 
 # Data Layer — Cloudflare D1 / Drizzle / NuxtHub / cloudflared
 
-> 觸發於任何涉及 D1 / Drizzle / wrangler / Nuxt 設定的 session。五條 hard rule 源自 2026-05-21 / 2026-05-22 <consumer-k> + clade vite-tunnel 第一手踩坑（pitfall 全文見 `docs/pitfalls/2026-05-2*`）。
+> 觸發於任何涉及 D1 / Drizzle / wrangler / Nuxt 設定的 session。五條 hard rule 源自 2026-05-21 / 2026-05-22 <consumer-h> + clade vite-tunnel 第一手踩坑（pitfall 全文見 `docs/pitfalls/2026-05-2*`）。
 >
 > Cookbook 範本：`~/offline/clade/vendor/snippets/d1-drizzle/`。
 
@@ -34,7 +34,7 @@ Reference：`docs/pitfalls/2026-05-21-drizzle-d1-subquery-column-alias-collision
 2. **Outer SELECT MUST 用顯式 qualified reference**：`sql\`coalesce("<sub>"."<col>", 0)\``，不依賴 Drizzle column resolution 自動補 prefix
 3. **MUST 對 D1 prod 跑等價 SQL 驗證**：`wrangler d1 execute <db> --remote --json --command "<生成的 SELECT>"`，不靠 `pnpm dev` 過就 ship
 
-### 反例（<consumer-k> `server/api/admin/groups/index.get.ts` 修法前，2026-05-21 prod 500）
+### 反例（<consumer-h> `server/api/admin/groups/index.get.ts` 修法前，2026-05-21 prod 500）
 
 ```ts
 const memberCounts = db.select({
@@ -106,7 +106,7 @@ Reference：`docs/pitfalls/2026-05-21-nuxthub-d1-driver-dev-binding-not-found.md
 3. **MUST** dev startup log 觀察點：`[nuxt:hub] ℹ hub:db using sqlite database with libsql driver`（**不是** `with d1 driver`）+ 後續 migration apply log
 4. **NEVER** 在 dev 階段「手動 sqlite3 apply migration」當 known startup quirk 跳過 — 這只繞過 startup migration check，runtime 同 root cause 沒解，下次 OAuth / endpoint 仍會炸
 
-### 反例（<consumer-k> 修法前）
+### 反例（<consumer-h> 修法前）
 
 ```ts
 // nuxt.config.ts
@@ -148,7 +148,7 @@ find . -name nuxt.config.ts -not -path "*/node_modules/*" \
 
 Reference：`docs/pitfalls/2026-05-21-cloudflared-multi-account-cname-misdirection.md`
 
-**`cloudflared tunnel route dns <tunnel> <hostname>` 在多 Cloudflare account 情境下會 silent 把 CNAME 寫到錯 zone。** `~/.cloudflared/cert.pem` 是 account-level binding；當 hostname 對應 zone 不在 cert account 內，cloudflared 不報 `zone not found`，而是把整段 hostname 當 subdomain prefix 附加到該 account 內第一個 zone（例請求 `<consumer-k>-dev.<maintainer-domain>` → 寫成 `<consumer-k>-dev.<maintainer-domain>.bigbyteedu.com`）。CLI exit 0、INF level log，完全不像錯誤。
+**`cloudflared tunnel route dns <tunnel> <hostname>` 在多 Cloudflare account 情境下會 silent 把 CNAME 寫到錯 zone。** `~/.cloudflared/cert.pem` 是 account-level binding；當 hostname 對應 zone 不在 cert account 內，cloudflared 不報 `zone not found`，而是把整段 hostname 當 subdomain prefix 附加到該 account 內第一個 zone（例請求 `<consumer-h>-dev.<maintainer-domain>` → 寫成 `<consumer-h>-dev.<maintainer-domain>.bigbyteedu.com`）。CLI exit 0、INF level log，完全不像錯誤。
 
 ### MUST
 
@@ -209,7 +209,7 @@ Reference：`docs/pitfalls/2026-05-22-d1-nuxthub-table-rebuild-cascade-children.
 
 **Drizzle 對 SQLite parent table 加 `NOT NULL` column 會自動生成 `DROP TABLE + CREATE TABLE __new_* + RENAME` table-rebuild recipe。** Migration 內顯式 `PRAGMA foreign_keys=OFF` 在 standard SQLite 能擋住 children cascade，但 **D1 + NuxtHub auto-migration 組合下失效** — 觀察行為是 NuxtHub 在 `--> statement-breakpoint` 處把 migration 拆成獨立 D1 batch / binding `prepare()` call，`PRAGMA foreign_keys=OFF` 只在第一個 session 生效，後面 `DROP TABLE` 觸發 children cascade。Local sqlite3 cli 跑同樣 SQL 完全沒事（standard SQLite：DROP TABLE 不觸發 ON DELETE CASCADE）→ 純 dev-prod parity gap。
 
-<consumer-k> 2026-05-21 prod incident：92 個 `checklist_items` row + 35 個 `listing_assets` row + 3 個 listing 的 `lifestyle_stars` 一次全失（R2 blob 還在但 DB 紀錄消失）。
+<consumer-h> 2026-05-21 prod incident：92 個 `checklist_items` row + 35 個 `listing_assets` row + 3 個 listing 的 `lifestyle_stars` 一次全失（R2 blob 還在但 DB 紀錄消失）。
 
 ### MUST
 
@@ -224,7 +224,7 @@ Reference：`docs/pitfalls/2026-05-22-d1-nuxthub-table-rebuild-cascade-children.
    - migration N+M：`ALTER TABLE DROP <old_column>`（SQLite 3.35+ 支援，D1 支援）
 5. drizzle-kit 預設 generate destructive rebuild recipe **MUST** 在 migration 檔 review 階段攔下並手改成 ALTER TABLE 形式；**禁止**「drizzle 自動生成的應該沒問題」推理
 
-### 反例（<consumer-k> `server/db/migrations/sqlite/0004_listings_group_id.sql`，2026-05-21 prod 砍光 children）
+### 反例（<consumer-h> `server/db/migrations/sqlite/0004_listings_group_id.sql`，2026-05-21 prod 砍光 children）
 
 ```sql
 PRAGMA foreign_keys=OFF;

@@ -75,6 +75,10 @@ yarn-error.log*
 .claude/.commit.lock
 
 # Clade local runtime state
-codex/
 .spectra/
 openspec/.vector-search.db*
+
+.codex/
+.clade/runtime/
+.clade/vendor/ledger/*.jsonl
+.clade/vendor/ledger/*.jsonl.lock
