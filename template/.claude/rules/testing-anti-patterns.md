@@ -7,6 +7,7 @@ paths:
     'template/test/**/*.ts',
     'e2e/**/*.ts',
     'template/e2e/**/*.ts',
+    '.github/workflows/**',
   ]
 ---
 <!--
@@ -503,3 +504,13 @@ seedConversation({ updatedAt: daysAgo(60) })  // 更早
 實證（2026-07-28 <consumer-c>）：4 個 spec 的 seeded conversation 用 2026 年 4 月的固定日期，7 月起全部落入預設收合的「更早」bucket，sidebar 看不到對話 —— 單一 anti-pattern 造成 8 條失敗，且與同批其他 7 條無關的失敗混在一起，掩蓋了彼此的根因。
 
 > 相關但不同：[[timezone]] 管的是「日期怎麼被格式化 / 存取」，本節管的是「fixture 的時間錨點怎麼選」。同一份 fixture 兩條都要過。
+
+## 跑測試的 workflow，其 paths filter MUST 含測試檔本身
+
+`on.push.paths` / `on.pull_request.paths` 的清單若漏掉測試檔所在目錄，**只改測試的 commit 不會觸發任何 workflow** —— 修 E2E 的那次 push 驗證不了自己，紅燈也不會因為修好而轉綠，得等下一次剛好碰到清單內路徑的 commit 才一起跑。
+
+- **MUST** 把 workflow 實際會執行到的測試目錄（`e2e/**`、`test/**`、`packages/*/test/**`）列進 paths filter
+- **MUST** 順帶檢查 `workflow_run` 鏈：下游 workflow 的觸發條件是上游**跑了**，上游沒被觸發時下游同樣不動
+- **NEVER** 只憑「我 push 了而且沒看到紅燈」判定修好 —— 先確認**真的有 run 被建立**（`gh run list --limit 3` 看 SHA 對不對）
+
+實證（2026-07-28 nuxt-supabase-starter）：`Template CI` 的 paths 有 `template/app/**`、`template/server/**`、`template/scripts/**` … 就是沒有 `template/e2e/**`；`Template E2E` 又是 `workflow_run: [Template CI]` 觸發。結果修 `e2e/fixtures/index.ts` 的 commit 既不跑 CI、也不跑 E2E，得手動 `gh workflow run` 才驗得到。同一份清單也漏了 `template/packages/**`，單元測試的修正一樣不觸發。
