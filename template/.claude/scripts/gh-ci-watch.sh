@@ -97,7 +97,18 @@ bump_err() { # $1 = context, $2 = raw output
 
 # ---- Phase 1: resolve run id（workflow mode；「查無 run」= pending 繼續等） ----
 if [[ "$MODE" == "workflow" ]]; then
-  [[ -z "$SINCE" ]] && SINCE=$(default_since)
+  # --commit 模式：SHA 本身已唯一識別 run，不疊 createdAt 下界 —— caller 常見模式是
+  # 「push 完才派 watcher」，run 早於 script 啟動時間建立，若仍套用預設 120s-ago 下界
+  # 會把已存在的 run 過濾掉，watcher 誤判「run 尚未建立」永遠 pending 到 WATCH_TIMEOUT
+  # （2026-07-28 <consumer-b> v1.252.9 實證：run 建立於 20:05:57Z，SINCE=20:06:01Z，晚 4 秒即被擋）。
+  # --since 顯式傳入時仍尊重使用者指定值；--branch 或無 commit 的模式維持既有時間窗。
+  if [[ -z "$SINCE" ]]; then
+    if [[ -n "$COMMIT" ]]; then
+      SINCE="1970-01-01T00:00:00Z"
+    else
+      SINCE=$(default_since)
+    fi
+  fi
   echo "[watch] resolving run: workflow='$TARGET' branch='${BRANCH:-*}' commit='${COMMIT:-*}' createdAt>=$SINCE"
   while [[ -z "$RUN_ID" ]]; do
     check_deadline
