@@ -20,7 +20,7 @@
  *   ADMIN_EMAIL_ALLOWLIST=e2e-admin@test.local
  *   NUXT_DEV_LOGIN_PASSWORD=<any password >= 8 chars>
  */
-import { test as base, type Page, type BrowserContext } from '@playwright/test'
+import { test as base, type Browser, type BrowserContext, type Page } from '@playwright/test'
 
 type DevLoginRole = 'admin' | 'member' | 'guest'
 
@@ -54,36 +54,45 @@ interface RoleFixtures {
   unauthPage: Page
 }
 
+// `browser.newContext()` does NOT inherit `use.baseURL` the way the built-in
+// `page` / `context` fixtures do — a hand-rolled context starts with no base,
+// so `page.goto('/profile')` throws `Cannot navigate to invalid URL`. Under
+// @nuxt/test-utils the base is assigned at runtime (the dev/preview server
+// picks a free port), so it has to be threaded through from the `baseURL`
+// fixture rather than hard-coded.
+const freshContext = (browser: Browser, baseURL: string | undefined) =>
+  browser.newContext({ baseURL, storageState: { cookies: [], origins: [] } })
+
 export const test = base.extend<RoleFixtures>({
-  adminPage: async ({ browser }, use) => {
-    const context = await browser.newContext({ storageState: { cookies: [], origins: [] } })
+  adminPage: async ({ browser, baseURL }, use) => {
+    const context = await freshContext(browser, baseURL)
     const page = await context.newPage()
     await loginAs(context, 'admin')
     await use(page)
     await context.close()
   },
 
-  memberPage: async ({ browser }, use) => {
-    const context = await browser.newContext({ storageState: { cookies: [], origins: [] } })
+  memberPage: async ({ browser, baseURL }, use) => {
+    const context = await freshContext(browser, baseURL)
     const page = await context.newPage()
     await loginAs(context, 'member')
     await use(page)
     await context.close()
   },
 
-  guestPage: async ({ browser }, use) => {
-    const context = await browser.newContext({ storageState: { cookies: [], origins: [] } })
+  guestPage: async ({ browser, baseURL }, use) => {
+    const context = await freshContext(browser, baseURL)
     const page = await context.newPage()
     await loginAs(context, 'guest')
     await use(page)
     await context.close()
   },
 
-  unauthPage: async ({ browser }, use) => {
+  unauthPage: async ({ browser, baseURL }, use) => {
     // Explicitly empty storage state — the default `chromium` project may load
     // a shared storage state file; tests that need an unauthenticated context
     // must start clean.
-    const context = await browser.newContext({ storageState: { cookies: [], origins: [] } })
+    const context = await freshContext(browser, baseURL)
     const page = await context.newPage()
     await use(page)
     await context.close()
