@@ -1,6 +1,13 @@
 ---
-description: Testing anti-patterns to avoid — mock 濫用、test-only production methods、不完整 mock
-paths: ['test/**/*.ts', 'packages/*/test/**/*.ts', 'template/test/**/*.ts']
+description: Testing anti-patterns to avoid — mock 濫用、test-only production methods、不完整 mock、E2E fixture 寫死絕對日期
+paths:
+  [
+    'test/**/*.ts',
+    'packages/*/test/**/*.ts',
+    'template/test/**/*.ts',
+    'e2e/**/*.ts',
+    'template/e2e/**/*.ts',
+  ]
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -471,3 +478,28 @@ E2E test coverage 不該用「跑了幾條」當 KPI，也不該用「按鈕能�
 - 資料 deletion / soft-delete logic
 
 其他 change 為**建議**而非強制。違反靠 reviewer 在 manual-review tier 1/2 攔截，不靠 CI gate（會誤殺 typo fix）。
+
+## E2E fixture 的時間錨點 MUST 相對於執行當下
+
+E2E seed 出來的資料若帶**絕對日期**，測試就綁在寫它的那個月。UI 只要有任何 recency 分群（今天 / 昨天 / 本週 / 本月 / 更早）、保留期、或「N 天內」的篩選，同一份 fixture 過幾週後就會落進不同的桶 —— 元素預設收合、或根本不 render，於是所有依賴它可見的斷言一起 timeout。
+
+**MUST** 用相對於執行當下的時間錨點：
+
+```ts
+// e2e/helpers.ts
+export const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
+
+// spec
+seedConversation({ updatedAt: daysAgo(0) })   // 今天
+seedConversation({ updatedAt: daysAgo(1) })   // 昨天
+seedConversation({ updatedAt: daysAgo(60) })  // 更早
+```
+
+- **NEVER** 在 fixture / mock / seed 寫死 `'2026-04-12T09:00:00Z'` 這類絕對時刻，除非該測試**驗的就是**某個特定日期的行為（跨年、閏日、DST 邊界）—— 那種情況要在測試名稱或註解寫明為什麼日期必須固定
+- **NEVER** 用「先前跑過都綠」當作沒問題的證據
+
+**為什麼值得單獨列一條**：這是最難察覺的一類失效 —— 寫的當下全綠、review 時全綠、CI 連續數週全綠，然後在沒有任何人改動的情況下自己變紅。定位成本高（第一反應永遠是「誰動了什麼」，而答案是沒有人），而且會整批發作。
+
+實證（2026-07-28 <consumer-c>）：4 個 spec 的 seeded conversation 用 2026 年 4 月的固定日期，7 月起全部落入預設收合的「更早」bucket，sidebar 看不到對話 —— 單一 anti-pattern 造成 8 條失敗，且與同批其他 7 條無關的失敗混在一起，掩蓋了彼此的根因。
+
+> 相關但不同：[[timezone]] 管的是「日期怎麼被格式化 / 存取」，本節管的是「fixture 的時間錨點怎麼選」。同一份 fixture 兩條都要過。
