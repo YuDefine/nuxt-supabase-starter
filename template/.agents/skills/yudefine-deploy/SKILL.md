@@ -284,11 +284,19 @@ jobs:
     runs-on: [self-hosted, gh-runner-lxc]    # 或 ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v6
+      # self-hosted runner 釘 v5：v6 的 pnpm 自我更新會壞掉 persistent runner 上的既有安裝
+      - uses: pnpm/action-setup@v5
       - uses: actions/setup-node@v6
         with:
           node-version: 24
       - run: pnpm config set store-dir /home/runner/.pnpm-store
+      # wrangler-action@v4 找 $PNPM_HOME/bin/pnpm（v11 layout），pnpm v10 的版面是
+      # $PNPM_HOME/pnpm。MUST 用 cp，NEVER `ln -sf "$(which pnpm)"`（會 self-link）。
+      - run: |
+          if [ -f "$PNPM_HOME/pnpm" ]; then
+            mkdir -p "$PNPM_HOME/bin"
+            cp -f "$PNPM_HOME/pnpm" "$PNPM_HOME/bin/pnpm"
+          fi
       - run: pnpm install --frozen-lockfile
       - name: Build
         run: pnpm build

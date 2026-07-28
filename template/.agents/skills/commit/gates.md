@@ -384,6 +384,15 @@ Agent 回傳後主線處理：
 - **僅 Minor / Info 級 issue** → 主線逐一修完，輸出 `✅ 0-A.1 通過（Codex xhigh 僅 Minor/Info 已修）`，**跳過 0-A.2**，進入「並行匯合」
 - **出現 Critical / Major 級 issue** → 主線逐一修完，**MUST** 進入 0-A.2
 
+> **0-A.2 審的是「修正本身」，不是「還沒修的 finding」。** 修完 Critical / Major 之後 0-A.2 **仍然 MUST 跑**——0-A.1 的修法是全新、未經任何跨模型審查的 code，**NEVER** 假設它比原本的版本安全。
+>
+> | 開脫 | 現實 |
+> | --- | --- |
+> | 「finding 都修完了，0-A.2 沒東西可看」 | 0-A.2 要看的正是那批修法。修完才是它的輸入齊備，不是它失去對象 |
+> | 「修法很小，不值得再跑一輪」 | 引入 regression 的修法通常都很小——大改動反而會被自己重讀 |
+>
+> 實證（<consumer-a> 2026-07-26）：0-A.1 的修法引入了一條 quota regression，正常使用者累積滿額後永久 429，由 0-A.2 的 Fable 裁決抓到。當時若因「finding 都修完了」跳過 0-A.2，會直接把功能壞掉的版本推上 production。
+
 **Severity 來源**：以 codex 自己輸出的 severity 標記為準（Critical / Major / Minor / Info）。**NEVER** 由主線自行判定降級「這個其實沒那麼嚴重」—— codex 標 Major 就照 Major 處理，否則 0-A.2 條件觸發機制等於形同虛設。
 
 ### 0-A.2 — Codex max + Fable code-review max（兩步驟，條件觸發）

@@ -92,6 +92,14 @@ fi
 - **MUST** 部署步驟的順序是「先讓新版本生效，再做清理」，或讓清理獨立成不影響結果的 step
 - **MUST** 部署產物目錄的 ownership 一致（都屬部署 user）；換部署機制時 **MUST** 一併處理既有目錄的 ownership
 
+### 6. Action 版本釘選要考慮 runner 的 persistence
+
+Persistent runner（LXC / VM，跨 job 保留檔案系統）與 GitHub-hosted runner（每次全新容器）對「會自我更新的 action」反應不同：GitHub-hosted 上自我更新的副作用隨容器一起消失，persistent runner 上會留下來污染下一個 job。
+
+- **MUST** `pnpm/action-setup` 在 self-hosted runner 釘 **v5**。v6 會自我更新 pnpm，在 persistent runner 上把既有安裝改壞。實證：<consumer-h> `5213e8f` 與 <consumer-e> 同日各自從 v6 回退 v5
+- **MUST** 升任何「會在 runner 上安裝/更新工具」的 action 大版之前，先問「這個 action 有沒有自我更新行為？persistent runner 上它留下什麼？」——GitHub-hosted 綠燈**不是** self-hosted 也會綠的證據
+- 範本與完整 CI workflow 見 `vendor/snippets/cloudflare-workers/self-hosted-runner-ci.workflow.yml.template`
+
 ## NEVER
 
 - **NEVER** 用 runner 的**名字**判斷它會不會接某個 job——排程只看標籤，名字純粹給人看
