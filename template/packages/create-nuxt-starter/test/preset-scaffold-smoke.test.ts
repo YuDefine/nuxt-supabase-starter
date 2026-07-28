@@ -98,7 +98,9 @@ describe('preset smoke: 5 個 stack preset 各跑 assembleProject', () => {
     expect(config).not.toContain('@nuxt/ui')
   })
 
-  it('每個 preset 都產出基本必要檔', () => {
+  // 這條在單一 test body 內連跑 5 次完整 scaffold（每次都是實際 file I/O），
+  // 預設的 5s timeout 在 CI 機器慢一點時就不夠 —— 它不是卡住，是真的要這麼久。
+  it('每個 preset 都產出基本必要檔', { timeout: 30_000 }, () => {
     for (const preset of PRESETS) {
       const { targetDir } = scaffold(preset.id, `req-${preset.id}`)
       expect(existsSync(join(targetDir, 'package.json'))).toBe(true)
