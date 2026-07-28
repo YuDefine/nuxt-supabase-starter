@@ -1206,6 +1206,14 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    **MUST** 先跑 `bash scripts/spectra-advanced/pre-handoff-readiness-check.sh <change-name>`。Exit 2 = NOT READY — 修完 blockers 再重跑直到 exit 0。Exit 0 才進 handoff message。
 
+   **Notion 專案層同步**（clade fork addition；per [[spectra-notion-coupling]] § 專案層）：readiness check 通過後、送出 handoff message **之前**，consumer 的 `.claude/consumer-meta.json` 若有 `notion.projectWorkflow: true` 則 **MUST** 執行：
+
+   ```bash
+   node ~/offline/clade/vendor/scripts/notion-sync.mjs handoff --consumer-path . --change <change-name> --json
+   ```
+
+   本指令會依 tasks.md 現況**補正全部** Task 狀態——Step 7 的實作期間 phase 勾選會漂移，這是唯一一次全面對齊的機會。`needsDecision` 非空 → **MUST** 逐條 `AskUserQuestion` 後帶答案重跑；**NEVER** 因為判定不了就略過不提。未啟用 `projectWorkflow` → script 自行 exit 0。
+
    When tasks.md still contains unchecked items in the `## 人工檢查` section (typical at this point — implementation tasks `[x]` but manual-review items `[ ]`), **MUST** hand off to the local manual-review GUI rather than walking through items inline in chat.
 
    **Pre-handoff evidence-missing self-collect**（hard rule，clade fork addition — per [[pitfall-verify-evidence-handoff-instead-of-self-collect]]）：

@@ -1,5 +1,5 @@
 ---
-description: consumer 若採用 Notion ticket 制度（consumer-meta notion.ticketWorkflow=true），spectra change 生命週期 MUST 主動把對應 ticket 狀態跟著推進，避免「change 做完 / 發版了但 Notion ticket 沒更新」；狀態轉移授權沿用全域 _notion-<consumer-b>-board/REFERENCE.md §3 表，不另造 state machine
+description: consumer 採用 Notion 制度時（consumer-meta 的 notion.ticketWorkflow 或 notion.projectWorkflow）適用。症狀：change 做完或發版了但 Notion 狀態還停在舊值、不知道某個 change 對應哪張 ticket 或哪個 User Story、Notion 現況與 git 實況對不上、拿不準該不該去碰 Notion。狀態轉移授權沿用全域 _notion-<consumer-b>-board/REFERENCE.md §3 表，不另造 state machine
 paths: ['openspec/changes/**', '.claude/consumer-meta.json', '.claude/skills/spectra-*/**', '.claude/skills/commit/SKILL.md']
 ---
 <!--
@@ -116,6 +116,92 @@ clade / 全域行為準則：對外發訊息 / 改工單屬 outbound，預設要
 - **NEVER** 無 git tag 就標 `驗收中` 或亂填 `修復版本 >=`。
 - **NEVER** 把連結存進 `.spectra/`（unpark 覆蓋）或只存 HANDOFF.md（session-scoped）。
 - **NEVER** 憑記憶拼 Notion property key（中文 + 全形空格 + `>=`，憑記憶必錯）。
+
+---
+
+# 專案層（Milestone / Epic / User Story / Task）
+
+**與上面 Issue Ticket 層的預設相反。** Ticket 層「無連結 → silent skip」是對的：客戶工單本來就不是每個 change 都有。專案層不同——**每一個** change 都對應到某個 User Story，所以「找不到對應」不是正常狀態，是需要處理的訊號。
+
+> **本層預設**：判定不了 → **問**（AskUserQuestion）。**NEVER** silent skip，**NEVER** 用猜的值寫入。
+
+## 觸發條件
+
+consumer 的 `.claude/consumer-meta.json` 宣告 `notion.projectWorkflow: true` 且 `notion.databases.story.dataSourceId` 有值。未宣告 → 本層完全不生效。
+
+座標一律從 consumer-meta 讀（`notion.databases.{milestone,epic,story,task,ticket}`），**NEVER** 寫死在 skill 或 reference doc 裡。
+
+## 層級對應（一次講清楚，避免各處各自解讀）
+
+| Notion | git | 基數 |
+| --- | --- | --- |
+| User Story | `openspec/changes/<slug>/` 的 proposal.md **每一條** Capability | **N:1** — 一個 change 常對應多個客戶語言的 Story |
+| Task | tasks.md 的 `## N. <phase>` | 1:1 per phase |
+| — | tasks.md 的 `- [ ] N.M` | **不上 Notion**（那是 agent 執行單位，不是溝通單位）|
+
+Story 的 idempotent key 是 **(`Change`, `Capability`) 兩個欄位的組合**，不是標題——標題是客戶語言的中文描述，拿 capability slug 去比對永遠比不中。
+
+## 三級判定式
+
+### Class 3 — MUST 問，命中任一即停止寫入
+
+問的觸發是**有限枚舉的可觀察 predicate**，不是「覺得不確定就問」。以下六條都不命中 → 一律走 Class 1 或 2 自動處理。
+
+| | Predicate（可機械判定） | 為什麼不能自動 |
+| --- | --- | --- |
+| **(a)** | Milestone 的 Story 完成率達 100% **且** 該 Milestone 有連結報價單 | 財務／請款後果 |
+| **(b)** | Story `待驗收 → 已完成`、Ticket `驗收中 → 完成`、Ticket `完成 → 封存` | 客戶／你的驗收側轉移（沿用 §3 授權表的 ❌ 列）|
+| **(c)** | proposal.md 的 Impact 同時命中兩個 client 路徑，或指名某個尚未上線的租戶 | 目標頁面歧義 |
+| **(d)** | 新 Story 找不到**唯一**相符的 Epic（0 個或 ≥2 個候選）| 自動猜會生出重複／垃圾 Epic |
+| **(e)** | Notion 現況的狀態在生命週期順序中**晚於**即將寫入的值 | 有人手動動過，意圖不明——不靜默覆寫也不靜默放棄 |
+| **(f)** | 目標 track 的 Notion 結構尚未建立 | 「現在要不要生出這套結構」是商業決策 |
+
+問完之後，把答案回填給同一支 script 重跑：`--epic <id>` / `--create-epic "<name>"` / `--force-overwrite`。
+
+### Class 2 — 自動寫，但輸出標記待覆核（不阻塞）
+
+有損翻譯或推論，且猜錯成本低、不擋任何不可逆動作。目前只有一條：**Story 標題**從 proposal.md 的 Capability 描述草擬成客戶語言。
+
+### Class 1 — 自動寫，不打擾
+
+其餘全部。來源事實是二元可查的（`git describe --tags` 有沒有值、active claim 存不存在、tasks.md 子項是否全勾），且轉移在 §3 授權表的 ✅ 列。
+
+## 生命週期觸發點
+
+**每一個** 走 spectra 流程的 change 都適用，不是只有「看起來跟客戶有關」的那些。
+
+| 事件 | 掛載點 | 寫入 |
+| --- | --- | --- |
+| propose 完成 | `/spectra-propose` 收尾 | 建 Story（每個 Capability 一則）+ Task（每個 phase 一則）|
+| apply 真開工 | `/spectra-apply` 開工判定點 | Story → `開發中` + `拍板日` |
+| manual review handoff | `/spectra-apply` Step 8b | Story → `待驗收`；依 tasks.md 現況**補正全部** Task 狀態 |
+| archive | `/spectra-archive` Step 8 | Story → `待驗收` |
+| 發版（版本 bump + tag） | `/commit` **Step 6** | Story `上線日`；重算所屬 Milestone 進度；100% 時觸發 Class 3 (a) |
+
+執行一律透過 `vendor/scripts/notion-sync.mjs`，**NEVER** 在各 SKILL.md 各寫一份寫入邏輯——四個掛載點呼叫同一支，避免四份實作彼此漂移。
+
+## Milestone 進度為什麼由 script 算而不是 rollup
+
+Notion **不支援 rollup of rollup**：`Epic.進度` 已經是 rollup(Story)，Milestone 無法再 rollup 它。所以：
+
+1. Story 除了 `Epic` 之外**另有一條直接連到 Milestone 的 relation**（跳過 Epic 層，純粹讓 Notion 能對 Milestone 做原生 rollup）
+2. `Milestone.進度` 由 script 在發版時親自算（完成 Story 數 / 總數）並 PATCH，**不賭 Notion rollup 引擎**
+3. 100% 時**只做一件事：問**（Class 3 (a)）。**NEVER** 自動轉「已交付」或勾「可請款」
+
+## 失敗模式契約
+
+- **所有寫入 MUST 是絕對值 SET**（狀態＝X、欄位＝Y），**NEVER** 用 delta／increment。這讓任何重試都 idempotent，是下面兩條得以成立的前提。
+- **讀失敗**（抓不到 schema 或現況）→ **中止整個寫入**，**NEVER** 用猜的值硬寫。
+- **寫入 timeout**（不確定有沒有落地）→ 一律當失敗、留 pending marker，**NEVER** 自動重試（已經等了 45s，疊上去只是把單次延遲變兩倍）。marker 落在 `<consumer>/.spectra/notion-sync-pending/`，下一個自然觸發點或人工 reconcile 處理。
+- **找不到目標 property** → 訊息 MUST 標「疑似 schema drift」，不可回報成泛用的「寫入失敗」——讓人一眼看出不是網路問題。
+
+## 本層的 NEVER
+
+- **NEVER** 因為判定不了就 silent skip（那是 Ticket 層的規則，不是本層）
+- **NEVER** 自動執行 Class 3 的任一條，即使底層訊號看起來很明確
+- **NEVER** 把座標寫死在 skill / reference doc（一律讀 consumer-meta）
+- **NEVER** 用 delta 寫入，或對 timeout 自動重試
+- **NEVER** 把 `- [ ] N.M` 那層 task 同步到 Notion
 
 ## Cross-ref
 

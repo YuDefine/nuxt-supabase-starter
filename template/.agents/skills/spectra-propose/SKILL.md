@@ -889,6 +889,18 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
     - List of artifacts created
     - Validation result
 
+    **Notion 專案層同步**（clade fork addition；per [[spectra-notion-coupling]] § 專案層）
+
+    consumer 的 `.claude/consumer-meta.json` 若有 `notion.projectWorkflow: true`，park 之前 **MUST** 執行：
+
+    ```bash
+    node ~/offline/clade/vendor/scripts/notion-sync.mjs propose --consumer-path . --change "<name>" --json
+    ```
+
+    - `needsDecision` 非空 → **MUST** 逐條用 `request_user_input` 問使用者（典型是 Class 3 (d)：新 Story 找不到唯一相符的 Epic），拿到答案後帶 `--epic <id>` 或 `--create-epic "<name>"` 重跑同一指令。**NEVER** 因為判定不了就略過不提。
+    - 建出的 Story 標題是從 Capability 描述草擬的客戶語言（Class 2），**MUST** 在 summary 標明「標題為草擬，可直接在 Notion 改」。
+    - consumer 未啟用 `projectWorkflow` → script 自行 exit 0，不需另外判斷。
+
     Then unconditionally execute:
 
     ```bash

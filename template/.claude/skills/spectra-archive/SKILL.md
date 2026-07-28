@@ -576,6 +576,18 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
 
    **NEVER** 在 archive 當下標 `驗收中`（無 tag）或填 `修復版本 >=`。**NEVER** 碰客戶側轉移（`驗收中→完成` 等）或 `發布日期` / `驗收日期` / `名稱` / `驗收完成` 欄位。
 
+   **Notion 專案層同步**（clade fork addition；per [[spectra-notion-coupling]] § 專案層）
+
+   consumer 的 `.claude/consumer-meta.json` 若有 `notion.projectWorkflow: true`，**MUST** 執行：
+
+   ```bash
+   node ~/offline/clade/vendor/scripts/notion-sync.mjs archive --consumer-path . --change <change-name> --json
+   ```
+
+   - `needsDecision` 非空 → **MUST** 逐條用 `AskUserQuestion` 問，帶 `--force-overwrite` 等答案重跑。**NEVER** silent skip。
+   - `pending` 非空 → 寫入未確認落地，**MUST** 列進下面的 summary。
+   - Story 在此只推到 `待驗收`；`上線日` 與 Milestone 進度要等 `/commit` Step 6 出 tag 後才寫（同 ticket 的 `驗收中` tag 依賴）。
+
 8. **Display summary**
 
    Show archive completion summary including:

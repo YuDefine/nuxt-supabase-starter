@@ -402,6 +402,22 @@ git push origin main
 
 > 這跟 2026-06-03 v1.185.1 那次的問題方向不同：當時是「main 先、tags 後」分兩步推送，GitHub 先收到 main commit SHA、再收到指向同 SHA 的 tag，有機率不觸發 `push:tags` workflow。本步驟採用的 tags-first 順序不落入那個情境，是刻意設計。
 
+## Step 6b: Notion 專案層同步（條件觸發）
+
+per [[spectra-notion-coupling]] § 專案層。consumer 的 `.claude/consumer-meta.json` 若有 `notion.projectWorkflow: true`，Step 6 的 tag 已推出後 **MUST** 執行：
+
+```bash
+node ~/offline/clade/vendor/scripts/notion-sync.mjs release \
+  --consumer-path . --change <change-name> --tag "$(git describe --tags --abbrev=0)" --json
+```
+
+本步驟寫 Story 的 `上線日`、並**重算所屬 Milestone 的進度**（Notion 不支援 rollup of rollup，進度由 script 親自算後 PATCH）。
+
+- Milestone 進度達 100% 且有連結報價單 → script 回 Class 3 (a)，**MUST** 用 `AskUserQuestion` 問使用者是否標「已交付」/ 勾「可請款」。**NEVER** 自動推——那是請款後果。
+- Story `待驗收 → 已完成` 是驗收側轉移，script 一律回 Class 3 (b) 不自動寫。
+- `pending` 非空 → 寫入未確認落地，**MUST** 列進 Step 7 完成報告。
+- 未啟用 `projectWorkflow` → script 自行 exit 0，不需另外判斷。
+
 ## Step 7: 完成報告
 
 **Completion evidence gate**（輸出「✅ Commit 完成」前 MUST 逐格自查；每格附「實跑命令＋輸出摘尾」，貼不出證據＝該格未完成，不准宣告完成）：
