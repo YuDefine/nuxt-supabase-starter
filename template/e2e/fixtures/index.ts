@@ -20,7 +20,11 @@
  *   ADMIN_EMAIL_ALLOWLIST=e2e-admin@test.local
  *   NUXT_DEV_LOGIN_PASSWORD=<any password >= 8 chars>
  */
-import { test as base, type Browser, type BrowserContext, type Page } from '@playwright/test'
+// 從 @nuxt/test-utils 的 test 延伸，而不是 @playwright/test 的 —— 前者才帶
+// 啟動 Nuxt server 的 worker fixture，`url()` 也才有值可回。
+import { url } from '@nuxt/test-utils/e2e'
+import { test as base } from '@nuxt/test-utils/playwright'
+import type { Browser, BrowserContext, Page } from '@playwright/test'
 
 type DevLoginRole = 'admin' | 'member' | 'guest'
 
@@ -54,45 +58,44 @@ interface RoleFixtures {
   unauthPage: Page
 }
 
-// `browser.newContext()` does NOT inherit `use.baseURL` the way the built-in
-// `page` / `context` fixtures do — a hand-rolled context starts with no base,
-// so `page.goto('/profile')` throws `Cannot navigate to invalid URL`. Under
-// @nuxt/test-utils the base is assigned at runtime (the dev/preview server
-// picks a free port), so it has to be threaded through from the `baseURL`
-// fixture rather than hard-coded.
-const freshContext = (browser: Browser, baseURL: string | undefined) =>
-  browser.newContext({ baseURL, storageState: { cookies: [], origins: [] } })
+// `browser.newContext()` 不像內建的 `page` / `context` fixture 會帶上 base URL：
+// 手動建的 context 沒有 base，於是 `context.request.post('/api/_dev/login')` 丟
+// `Invalid URL`、`page.goto('/profile')` 丟 `Cannot navigate to invalid URL`。
+// @nuxt/test-utils 的 server 是執行期才挑 port，位址只能跟它要，不能寫死也不能
+// 從 config 讀。
+const freshContext = (browser: Browser) =>
+  browser.newContext({ baseURL: url('/'), storageState: { cookies: [], origins: [] } })
 
 export const test = base.extend<RoleFixtures>({
-  adminPage: async ({ browser, baseURL }, use) => {
-    const context = await freshContext(browser, baseURL)
+  adminPage: async ({ browser }, use) => {
+    const context = await freshContext(browser)
     const page = await context.newPage()
     await loginAs(context, 'admin')
     await use(page)
     await context.close()
   },
 
-  memberPage: async ({ browser, baseURL }, use) => {
-    const context = await freshContext(browser, baseURL)
+  memberPage: async ({ browser }, use) => {
+    const context = await freshContext(browser)
     const page = await context.newPage()
     await loginAs(context, 'member')
     await use(page)
     await context.close()
   },
 
-  guestPage: async ({ browser, baseURL }, use) => {
-    const context = await freshContext(browser, baseURL)
+  guestPage: async ({ browser }, use) => {
+    const context = await freshContext(browser)
     const page = await context.newPage()
     await loginAs(context, 'guest')
     await use(page)
     await context.close()
   },
 
-  unauthPage: async ({ browser, baseURL }, use) => {
+  unauthPage: async ({ browser }, use) => {
     // Explicitly empty storage state — the default `chromium` project may load
     // a shared storage state file; tests that need an unauthenticated context
     // must start clean.
-    const context = await freshContext(browser, baseURL)
+    const context = await freshContext(browser)
     const page = await context.newPage()
     await use(page)
     await context.close()
