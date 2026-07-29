@@ -270,10 +270,32 @@ Query 來源：nuxt-ui-remote `search-components: select`, `get-component: UComm
 
 **Block 條件**：plan 涉及 UI surface 但缺 Component Candidates 區塊、或該區塊只列一個候選 → **不得**進 craft / ship phase。
 
-**兩個補強工具**（有 dev server 時優先用，比紙上比較準）：
+**兩個補強工具**（能跑就跑，比紙上比較準）：
 
 - `/impeccable live` — 在瀏覽器當下生成多個視覺變體並挑選，正是「難以言述時」的候選比較工具
 - `/impeccable critique` — 對候選做 persona testing 與 cognitive load 評估，**在選定之前跑**，不要等實作完
+
+#### live 在 Nuxt 專案的正確接法
+
+live 的 prerequisite 是「dev server with HMR **或一個靜態 HTML 檔**」。**Nuxt 專案走靜態 HTML 那條**，理由是硬的：live 注入的是 `<script src="http://localhost:PORT/live.js">`，而 Nuxt 4 的 `app/app.vue` 是 Vue SFC——template 內沒有 `</body>` 可當 anchor，也不接受 `<script>` 標籤。改寫 HTML shell 只為了掛 live，是拿 SSR 輸出去換一個設計階段工具，不划算。
+
+讓 live 作用在 mockup 目錄，實測可行（<consumer-b> 2026-07-29）：
+
+```jsonc
+// .impeccable/live/config.json
+{
+  "files": ["design/mockups/**/*.html"],
+  "insertBefore": "</body>",
+  "commentSyntax": "html",
+  "cspChecked": true
+}
+```
+
+mockup 用 Tailwind CDN 寫近似版即可——這個階段要比的是版面與互動模式，不是像素級的元件還原。真元件的 API 細節由上面的 query 負責、實作時驗。
+
+啟動：`node .agents/skills/impeccable/scripts/live.mjs`（回 `ok: true` + `serverPort` 即成功）。AI Agent 的 poll **MUST** 走 background task，不要用短 timeout 阻塞 shell。
+
+> `.mjs` 投影曾因 LOCKED banner 用錯註解語法而全數 SyntaxError，live 因此長期不可用；v1.4.369 已修（見 `sync-to-codex` § injectLockedBanner）。若 `live.mjs` 第一行報 `Invalid or unexpected token`，代表該 consumer 的投影還沒更新到該版本。
 
 **為什麼是強制 step**：實作後才發現「另一個組合體驗更好」，代價是整段重做（fleet 實證：`ai-chat-ui` → `ai-ui-rebuild` → `0b-ai-chat-rework`，同一塊 UI 跨三週六個 change）。候選比較在 plan 階段做，成本是幾分鐘；在實作後做，成本是重寫。
 
