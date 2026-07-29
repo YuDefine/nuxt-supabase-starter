@@ -7,6 +7,8 @@ Local edits will be reverted by the next sync.
 
 # Agent Routing
 
+<!-- never-density-reviewed: 2026-07-29 — 23 條全部落在 § 必禁事項 的 4 張 `| NEVER | 說明 |` 表（Dispatch 入口 8 / Watch 行為 7 / Commit 0-A 3 / Runtime gate 2），逐條覆核過：每列都配具體失效模式與可觀察 predicate（prompt 是否含該硬指令段 / 是否啟動 watch / marker 是否在第一行），多條帶 dated 實證（2026-06-11 dispatcher audit：147 條 annotation 0 次走 codex）。這是紀律型規約的逐字反制清單，非泛化牆——依 rule-authoring § 紀律型規約三件套，總量偏高是正確形式。 -->
+
 **核心命題**：當工作交給另一個 runtime + model 組合的成本/品質明顯更好時，必須 handoff 而不是硬幹。但派工的預設是**不派**——先過 § 派不派，命中外派條件才進 Routing Table。本規則優先於個別 skill 內嵌的工具呼叫指示。
 
 > 本檔是 routing 主規則（每 session 必載入）。派工模板、Watch Protocol、Plan-first / Git baseline、Runtime Gate 詳述見 [`agent-routing.codex-watch-protocol.md`](./agent-routing.codex-watch-protocol.md)（下稱 reference）。
@@ -22,7 +24,7 @@ Local edits will be reverted by the next sync.
 - **長時間 background job**——跑得久且主線不必盯著（build / 大量 test / 長 migration）
 - **需要隔離環境**——worktree 平行改動、會互相踩檔或搶 port 的工作
 
-**不外派**（命中就自己做，即使同時有好幾條）：3 個 tool call 以內就結束的事；路徑已知且檔案 ≤5 個的讀取；規約 / 契約 / 對外文件的**措辭**；安全敏感或不可逆的動作（憑證 / 刪檔 / force push / 對外發佈）；**複驗自己剛做完的東西**——模型會自行捕捉並修正自己的錯誤，派 agent 複驗是把同一份判斷跑第二次（判準見 [[checker-subagent]] § 過度派）。
+**不外派**（命中就自己做，即使同時有好幾條）：3 個 tool call 以內就結束的事；路徑已知且檔案 ≤5 個的讀取；規約 / 契約 / 對外文件的**措辭**；UI view 與視覺判讀；需要 claude.ai-connected MCP（Notion 等）的工作；安全敏感或不可逆的動作（憑證 / 刪檔 / force push / 對外發佈）；**複驗自己剛做完的東西**——模型會自行捕捉並修正自己的錯誤，派 agent 複驗是把同一份判斷跑第二次（判準見 [[checker-subagent]] § 過度派）。
 
 **命中多條外派條件時先問「一個 subagent 能不能全部做完」**——能就派**一個**，**NEVER** 一條 task 配一個 agent 地拆。
 
@@ -192,6 +194,7 @@ Sol → Terra → Luna → Claude Sonnet subagent → Claude Haiku subagent → 
 2. **Report 是未驗證主張**：subagent 完成回報（含「no changes outside scope」「tests pass」「已自我 review」）一律當 claim——主線 MUST 用 `git status --short` + `git diff` 核實實際改動範圍 = brief 宣告 scope，scope 外 substantive change 一律 revert。subagent 自報的設計說詞（「per YAGNI 略過」「刻意簡化」）**不得**降級任何 review finding 的嚴重度——那是實作者替自己打分。
 3. **File handoffs**：brief／report／diff 超過 ~30 行的內容走**檔案路徑**傳遞，不貼進 dispatch prompt 或回報訊息——貼文會常駐主線 context、每 turn 重讀。dispatch prompt 五要素：定位一行、brief 檔路徑、跨 task interfaces、歧義裁決、report 檔路徑＋回報契約。實測反例:dispatch prompt 42k chars、99% 是貼上的歷史。
 4. **Model 顯式指定**：Agent tool dispatch MUST 顯式帶 `model`——省略 = 靜默繼承主線（通常最貴檔）。選檔原則「**turn count beats token price**」：多步驟工作用最低檔常花 2-3× turns 反而更貴；brief 內含完整 code 的純轉錄型工作才用最低檔；review 型依 diff 的大小／風險選檔。
+5. **中間產物不進主線**：外派出去的 task，主線只讀對方寫回的 report 檔，**NEVER** 為了「確認它做對」把該 task 碰過的原始檔重讀一遍——那把省下來的 context 原封不動加回來，而且重讀的是同一批事實，換不到新判斷。第 2 條的 scope verify 照舊 MUST 跑：看**改了哪些檔**（`git status --short` / `git diff --stat`）跟重讀檔案內容是兩件事。
 
 ## 為什麼集中寫在這
 

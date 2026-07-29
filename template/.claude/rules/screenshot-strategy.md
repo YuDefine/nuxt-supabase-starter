@@ -333,20 +333,4 @@ screenshots/local/
 
 完整流程見 `screenshot-review` agent 的「拍前 Emptiness Preflight」與「空資料解決流程」段落。
 
-## 禁止事項
-
-- **NEVER** 在需要多 viewport / 跨瀏覽器時硬用一次性工具
-- **NEVER** 把「有截圖」誤當成「已完成人工檢查」
-- **NEVER** 把截圖散落在 repo 各處，不留語義化路徑
-- **NEVER** 把探索 / debug / attempt 截圖留在 `screenshots/<env>/<change-name>/` review pipeline 根目錄；一律移到 `_exploration/`
-- **NEVER** 讓同一個人工檢查 item 在 review pipeline 中累積超過 4 張 final-state variant
-- **NEVER** `agent-browser screenshot` 不帶 path 用於人工檢查交付（路徑強制規範）
-- **NEVER** 對 `agent-browser screenshot` 印出的確認字串做 decode / re-write — 檔案已寫好（截圖落檔）
-- **NEVER** 把已歸檔 change 的截圖資料夾留在 `screenshots/<env>/` 頂層 — sweep 到 `_archive/YYYY-MM/` 才算完整收尾
-- **NEVER** 對偵測到空狀態的頁面硬拍交付 — 走 Empty Data Handling 流程
-- **NEVER** 改 component 加 fallback 假資料來填空 UI — 治標不治本
-- **NEVER** 在 dev 用 ad-hoc UI / API 補資料而不沉澱進 seed 檔 — 不持久化
-- **NEVER** 在 staging 未授權前自動寫資料
-- **NEVER** 平行作業共用同一 `--session` — 各給不同 `--session <name>` 才有原生隔離（平行 session 隔離）
-- **NEVER** 頁面變動後沿用舊 `@eN` ref — 必須重新 `snapshot -i`
-- **NEVER** 拿 `agent-browser vitals` 表層數字當 performance breakdown — LCP/CLS/INP 下鑽 culprit 走 chrome-devtools-mcp（線 ②）
+**NEVER 改 component 加 fallback 假資料來填空 UI** — 空狀態的成因是資料沒進 seed，改 component 讓畫面看起來有東西是把 review 的判斷依據換成假的。三條解法都在上面：dev 補 seed 檔、staging 停下問授權、production 改用 dev。
