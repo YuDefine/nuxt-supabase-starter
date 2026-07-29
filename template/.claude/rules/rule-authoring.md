@@ -1,6 +1,6 @@
 ---
-description: 撰寫或修改 rule / SKILL.md / subagent brief / snippet 的措辭工程——先分類失敗型態再選形式、觸發條件不寫流程、高違規規約配反開脫三件套、發佈前驗證
-paths: ['.claude/rules/**/*.md', '.claude/skills/**/*.md', 'tasks/lessons.md', 'rules/**/*.md', 'plugins/hub-core/skills/**/*.md', 'claude-md/**/*.md', 'vendor/snippets/**/*.md']
+description: 撰寫或修改 rule / SKILL.md / subagent brief / snippet / 落盤文件（pitfall、HANDOFF、TD、digest）的措辭工程——先分類失敗型態再選形式、觸發條件不寫流程、高違規規約配反開脫三件套、長度配讀者要做的決定、發佈前驗證
+paths: ['.claude/rules/**/*.md', '.claude/skills/**/*.md', 'tasks/lessons.md', 'rules/**/*.md', 'plugins/hub-core/skills/**/*.md', 'claude-md/**/*.md', 'vendor/snippets/**/*.md', 'docs/pitfalls/**/*.md', 'docs/digests/**/*.md', 'docs/tech-debt.md', 'HANDOFF.md']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -52,7 +52,9 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 
 三件套的既有範本：[[testing-anti-patterns]]、`~/.claude/skills/receiving-code-review`。
 
-**可選第四件——completion checkbox＋證據 gate**：完成宣告本身是高違規點的流程型 skill（apply / verify / commit 類），把 completion criterion 寫成 checkbox 清單，每格綁「貼出實跑 invocation 與 output」——宣告完成前逐格附證據，只宣稱 done 不算完成。這是 § 資訊架構與拆分 sequence-cut 順序裡「先 sharpen criterion」的實作形式（便宜且局部，先於拆步驟）。出處：mattpocock/skills `diagnosing-bugs` completion checklist。落地實例：spectra-apply「Completion evidence gate」、spectra-verify Step 8、commit Step 6。
+**可選第四件——completion checkbox＋證據 gate**：兩條**同時**成立才加——(1) 完成宣告本身是高違規點的流程型 skill（apply / verify / commit 類），且 (2) 該步驟的完成**有外部可取事實可查**（實跑輸出 / 截圖 / API 回應 / DB 狀態 / exit code）。兩條都中，把 completion criterion 寫成 checkbox 清單，每格綁「貼出實跑 invocation 與 output」——宣告完成前逐格附證據，只宣稱 done 不算完成。這是 § 資訊架構與拆分 sequence-cut 順序裡「先 sharpen criterion」的實作形式（便宜且局部，先於拆步驟）。出處：mattpocock/skills `diagnosing-bugs` completion checklist。落地實例：spectra-apply「Completion evidence gate」、spectra-verify Step 8、commit Step 6。
+
+**(2) 不成立就 NEVER 加**：完成與否只能靠重讀自己的推理判定的步驟（判斷寫得對不對、措辭合不合適、方案選得好不好），加 gate 買不到東西——模型會自行捕捉並修正自己的錯誤，gate 只是把同一份判斷跑第二次，燒 token 不提升品質。判別法：寫得出「勾這格要貼哪一條命令的哪一段輸出」才算 (2) 成立，寫不出來就是純推理步驟。同一條界線的另一半見 [[checker-subagent]] § 為什麼——fresh context 買到的是「沒看過實作過程」，不是「更嚴格」。
 
 ## 發佈前驗證
 
@@ -136,6 +138,16 @@ model-invoked skill（frontmatter 省略 `disable-model-invocation`）付**conte
 
 - 對 always-load rule（frontmatter 無 `paths:`）加段落前，先考慮 conditional-load 或併入既有 §；預算 gate：`scripts/audit-always-load-budget.mjs`（cap 以該 script 為準）。
 - **單條規約的長度校準（MUST）**：長度配問題大小。一條規約的完整形狀是**觸發條件一句 + 該做什麼一句 + 違反成本一句**；需要第四句時先問是不是該拆成兩條。寫完每一段自問「刪掉它，行為會不會變？」——不會變就刪。上一條的預算 gate 是總量閘，這條管每一段自己該多長：**總量沒超標不代表個別段落沒灌水**，而總量一旦逼近 cap，先被犧牲的會是真正需要篇幅的那幾條。
+- **落盤文件的長度校準（MUST）**：規約以外、由 agent 寫進 repo 的文件同樣配長度，判準是**下一個讀它的人要拿它做什麼決定**。寫完每一段自問「刪掉它，讀者的決定會不會變？」——不會變就刪。
+
+  | 文件 | 讀者要做的決定 | 收斂形狀 |
+  | --- | --- | --- |
+  | pitfall | 認出自己正踩同一個坑並修掉 | Symptom / Root cause / Detection（可執行命令）/ Prevention 各自收斂；重現敘事只留能導出 detection 的那幾步 |
+  | `HANDOFF.md` entry | 接手 | 現況 + 下一個動作 + 卡在哪，各一到兩句 |
+  | `docs/tech-debt.md` TD entry | 判斷該不該做 | Class / Location + 一句話問題 + 一句話代價 |
+  | subagent brief | 開工 | 具體路徑 + 相關規約條目 + 驗收標準 |
+
+  Opus 5 的落盤文件比前代長是已知偏差（官方 prompting guide § Written deliverable length）。**NEVER** 拿「內容都是真的」當保留篇幅的理由——真但不改變任何決定的段落，成本由每一個讀者付。
 - 跨 rule 引用用 `[[name]]`，**NEVER** 複製他 rule 內文——複本必漂移。
 - **Pointer 方向 MUST 是 conditional → always**（去重時最容易踩的洞）：always-load 檔指向 conditional-load 檔，等於在 conditional 檔沒載入的 session 完全失去該規約。判定法：去重前先確認兩檔的 `paths:` 狀態，**SoT 一律留在載入面較廣的那一份**，窄的那份放 pointer。看似「同一份清單重複兩次」的東西，若一份在 always、一份在 conditional，那是**跨載入邊界的刻意備份**，不是冗餘——此時要修的是漂移（對齊內容），不是刪副本。實例：破壞性話術關鍵詞表留在 always-load 的 [[commit]]，conditional 的 [[scope-discipline]] 引用它。
 
@@ -145,8 +157,10 @@ model-invoked skill（frontmatter 省略 `disable-model-invocation`）付**conte
 
 NEVER 牆兩訊號對應 § 反開脫要精準嵌逐字的 ❌ 反例：
 
-- `never-wall`：單檔**連續** ≥20 條列舉式 NEVER（list item / table row；散文段落內的 NEVER 不算）。結構性反模式，**無豁免**——收斂成正向 canonical 契約表 + 少數逐字反制。
-- `never-density`：全檔 ≥30 條。抓「拆進多個子 § 所以單 run 不達標、總量同樣過載」的形狀。
+- `never-wall`：單檔**連續**列舉式 NEVER 超標（list item / table row；散文段落內的 NEVER 不算）。結構性反模式，**無豁免**——收斂成正向 canonical 契約表 + 少數逐字反制。
+- `never-density`：全檔總量超標。抓「拆進多個子 § 所以單 run 不達標、總量同樣過載」的形狀。
+
+兩個門檻值**依實測分位數定，SoT 在 `scripts/audit-rule-authoring.mjs` 的常數**（連同取值依據寫在該處註解）。這裡 **NEVER** inline 數字——2026-07 實測發現舊門檻雙雙高於語料上限、兩訊號都是永不觸發的死碼，而 rule prose 抄著同一組數字讓它看起來仍在把關。**0 命中要先當「量不到」處理，不是「語料乾淨」**：確認門檻落在實測分佈之內，再下乾淨的結論。
 
 `never-density` **有覆核出口**：紀律型規約依 § 紀律型規約三件套本來就該配逐字反開脫清單，總量偏高是正確形式。逐條覆核後在檔案掛
 

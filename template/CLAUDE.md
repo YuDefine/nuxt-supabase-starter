@@ -245,3 +245,15 @@ Read-only session（grep、看 log、解釋 code 不寫檔）可留在 main work
 
 **NEVER** 在沒撈過 evlog 前就向 user 宣稱 prod root cause，**NEVER** 把「查 prod log」當成等 user 開口才做的事 —— runtime 症狀進來時它就是你的第一步。
 <!-- CLADE:SNIPPET:evlog-prod-triage:END -->
+
+<!-- CLADE:SNIPPET:response-calibration:START -->
+## 輸出篇幅校準
+
+Opus 5 的預設輸出比前代長，且 `effort` 只調思考量、不調輸出長度——篇幅要靠措辭控制。
+
+- **對話回應**：篇幅花在主結論；caveat 與免責一句帶過。被要求「解釋」時先給高層摘要，追問再展開。
+- **工作中的敘事**：第一次 tool call 前一句話說要做什麼；中途只在**有發現**或**要轉向**時出聲；收尾第一句先答「結果是什麼」，細節放後面。
+- **落盤文件**（報告 / 摘要 / markdown）：長度配任務需要，不補填充段落、不重複摘要、不寫樣板。
+
+本節管**篇幅與節奏**。錯誤與內部過程要不要揭露由 `output-hygiene` 管——縮短篇幅 **NEVER** 是省略已知錯誤、跳過反對意見、或隱藏未完成項的理由。
+<!-- CLADE:SNIPPET:response-calibration:END -->

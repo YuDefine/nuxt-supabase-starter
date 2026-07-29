@@ -7,9 +7,26 @@ Local edits will be reverted by the next sync.
 
 # Agent Routing
 
-**核心命題**：當工作交給另一個 runtime + model 組合的成本/品質明顯更好時，必須 handoff 而不是硬幹。本規則優先於個別 skill 內嵌的工具呼叫指示。
+**核心命題**：當工作交給另一個 runtime + model 組合的成本/品質明顯更好時，必須 handoff 而不是硬幹。但派工的預設是**不派**——先過 § 派不派，命中外派條件才進 Routing Table。本規則優先於個別 skill 內嵌的工具呼叫指示。
 
 > 本檔是 routing 主規則（每 session 必載入）。派工模板、Watch Protocol、Plan-first / Git baseline、Runtime Gate 詳述見 [`agent-routing.codex-watch-protocol.md`](./agent-routing.codex-watch-protocol.md)（下稱 reference）。
+
+## 派不派（先於派給誰）
+
+**主線自己做是預設。違反字面就是違反精神**——「反正派了比較快」「一件一個 agent 比較整齊」都不算遵守。下面的 Routing Table 決定**派給誰**，本節決定**派不派**：講不出命中哪一條外派條件，就是主線自己做。
+
+**外派條件**（命中任一才派）：
+
+- **寬掃**——要讀 5 個以上檔案或整棵目錄樹才答得出的問題。派 scout 回結構化事實表（檔名 / 行號 / 現值 / 判準命中與否），原文不進主線
+- **有份量的獨立平行軌**——兩條以上彼此不讀對方產出的工作，且**每一條**都要 10+ tool call 才做得完
+- **長時間 background job**——跑得久且主線不必盯著（build / 大量 test / 長 migration）
+- **需要隔離環境**——worktree 平行改動、會互相踩檔或搶 port 的工作
+
+**不外派**（命中就自己做，即使同時有好幾條）：3 個 tool call 以內就結束的事；路徑已知且檔案 ≤5 個的讀取；規約 / 契約 / 對外文件的**措辭**；安全敏感或不可逆的動作（憑證 / 刪檔 / force push / 對外發佈）；**複驗自己剛做完的東西**——模型會自行捕捉並修正自己的錯誤，派 agent 複驗是把同一份判斷跑第二次（判準見 [[checker-subagent]] § 過度派）。
+
+**命中多條外派條件時先問「一個 subagent 能不能全部做完」**——能就派**一個**，**NEVER** 一條 task 配一個 agent 地拆。
+
+**同時像寬掃又像措辭時看產出形狀**：產出是事實表 / 清單 / 統計 → 派（寬掃的價值在把原文壓成結論）；產出是要寫進規約、契約或對外文件的**措辭** → 留。措辭的語氣與抽象層級一致性外包不了，派出去的典型結果是回頭逐條重寫，付兩次成本。
 
 ## Routing Table
 
