@@ -239,6 +239,44 @@ Baseline 決策：
 
 cookbook 內有 4 大類典型場景 → query keyword → baseline 對照表，省去你重 derive。
 
+### Step 1.9: Component Candidates（強制，偵測到 Nuxt UI stack 時）
+
+對應規約：[[nuxt-ui-mcp]]（必走 `nuxt-ui-remote` MCP、ban prescriptive synthesis）。
+
+Step 1.8 管的是 platform API 基線，這一步管的是**元件選擇**。兩者都是 plan 階段的強制動作，理由相同：憑訓練記憶寫出來的東西看起來合理，實際偏離當前版本。
+
+**MUST** 對 plan 內每一個 UI surface 走完以下三件事，缺一不可：
+
+1. **Query** — 用 `nuxt-ui-remote` MCP（`search-components` / `get-component` / `list-examples` / `search-composables`）取得該場景可用的元件與其真實 slot / variant / prop。**NEVER** 憑記憶列元件。
+2. **列出 ≥2 個候選組合** — 不是「找到一個能做的就寫進 plan」。單一元件能達成的需求，往往組合起來體驗更好（例：`USelect` 可以，但 `UInput` + `UCommandPalette` 支援搜尋與鍵盤操作）。
+3. **寫明選擇理由與被淘汰的候選** — 讓「為什麼不是另一個」留在 plan 裡，而不是只留結論。
+
+**Plan 寫入格式**：
+
+```markdown
+### Component Candidates
+Surface：管理後台的刀具選擇欄位
+Query 來源：nuxt-ui-remote `search-components: select`, `get-component: UCommandPalette`
+
+| 候選 | 組成 | 適合 | 不適合 |
+| --- | --- | --- | --- |
+| A | `USelect` | 選項 < 20、純點選 | 無搜尋、長清單難用 |
+| B | `UInput` + `UCommandPalette` | 選項多、需搜尋與鍵盤操作 | 首次使用者不知道可以打字 |
+| C | `UModal` + `UTable` | 需要同時看多欄資訊再選 | 開關 modal 打斷流程 |
+
+選擇：**B**。刀具編號有數百筆且使用者記得部分編號，搜尋是主要入口。
+淘汰：A 選項數量撐不住；C 的資訊量在這個欄位用不到。
+```
+
+**Block 條件**：plan 涉及 UI surface 但缺 Component Candidates 區塊、或該區塊只列一個候選 → **不得**進 craft / ship phase。
+
+**兩個補強工具**（有 dev server 時優先用，比紙上比較準）：
+
+- `/impeccable live` — 在瀏覽器當下生成多個視覺變體並挑選，正是「難以言述時」的候選比較工具
+- `/impeccable critique` — 對候選做 persona testing 與 cognitive load 評估，**在選定之前跑**，不要等實作完
+
+**為什麼是強制 step**：實作後才發現「另一個組合體驗更好」，代價是整段重做（fleet 實證：`ai-chat-ui` → `ai-ui-rebuild` → `0b-ai-chat-rework`，同一塊 UI 跨三週六個 change）。候選比較在 plan 階段做，成本是幾分鐘；在實作後做，成本是重寫。
+
 ---
 
 ## Mode-Specific Procedures
@@ -267,6 +305,7 @@ cookbook 內有 4 大類典型場景 → query keyword → baseline 對照表，
 9. **Proactive plan execution** — After outputting the diagnosis report and action plan for `/design new|improve|iterate`, ALWAYS ask the user: "要進入 Plan Mode 逐步執行這些改進嗎？" If the user agrees, enter plan mode and create a structured implementation plan that walks through each skill/step sequentially, waiting for user approval at each phase before proceeding to the next. **Skip this prompt** when answering meta/strategy questions that don't match the three canonical modes (e.g. "should we adopt X", "what's the difference between Y and Z") — give a direct answer instead.
 10. **Cite references** — When recommending design systems or patterns, cite specific examples from `references/design-systems.md`. Include industry-specific benchmarks and maturity assessments from `references/diagnosis.md`.
 11. **Copy tone enforcement** — 任何 plan 涉及 user-facing string 時，**MUST** 套用 Step 1.7 Copy Tone Lock 規則：(a) Core Plan 排 `/impeccable clarify` 並 brief 引用 `references/copy-tone.md`；(b) Exit Criteria 必含「Copy Tone Check passed」；(c) 例外保留的開發英文必有 `Copy Tone Exception` 標註並引 PRODUCT.md Users 佐證。違反 = plan 無效。
+12. **Component candidate enforcement** — 偵測到 Nuxt UI stack 且 plan 涉及 UI surface 時，**MUST** 套用 Step 1.9：(a) 每個 surface 有 Component Candidates 區塊；(b) **候選 ≥2 個**，單一候選視同未做比較；(c) 每個候選的元件與 slot / variant 出自 `nuxt-ui-remote` query 而非記憶；(d) 寫明選擇理由與淘汰理由。違反 = plan 無效。
 
 ## Diagnostic Skills (assess without changing code)
 

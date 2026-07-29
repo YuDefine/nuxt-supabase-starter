@@ -22,6 +22,23 @@ Local edits will be reverted by the next sync.
 > | [[manual-review.evidence]] | `openspec/changes/**/tasks.md`、`docs/manual-review-archive.md` | 給 propose/spec 寫作者 + Kind 分類指引 + 反例 + `@no-screenshot` marker + annotation / marker 細節（claude-analyzed、awaiting-user-decision、@evidence-via-manual-review、@apply-blocked、ADR、真相層責任分工） |
 > | [[manual-review.discuss]] | `openspec/changes/**/tasks.md`、`plugins/hub-core/skills/spectra-archive/**`、`HANDOFF.md` | `[discuss]` flow + Defer-to-HANDOFF + Resume mode + HANDOFF.md schema + 混合 kind change + 人工檢查時機詳解 |
 
+## 這套機制在解什麼問題（先讀，決定你該不該用它）
+
+截圖證據是**防偽**——證明 agent 真的做了、成品真的長那樣。它擋的是 `[x]` 但沒做的 false-green，不是「這個設計好不好」。
+
+兩件事對證據的要求剛好相反，混用會兩邊都做不好：
+
+| | 防偽（本檔管的） | 美學判斷（**不是**本檔管的） |
+| --- | --- | --- |
+| 要什麼 | 每項都有、不可偽造、可追溯 | 可互動、看得到動態、能並排比較 |
+| 時機 | 實作後留存 | **實作前** |
+| 成本容忍 | 高（防作弊值得付） | 低（每輪都要付） |
+| 靜態截圖 | ✅ 剛好適合 | ❌ 完全不適合 |
+
+**美學判斷 MUST 在設計階段做完**——`design` skill § Step 1.9 Component Candidates 要求 plan 內每個 UI surface 列 ≥2 個候選組合、寫明淘汰理由，並在有 dev server 時用 `/impeccable live` 當場比較變體。等實作完才用截圖問「這樣好嗎」，是拿防偽工具做設計決策，代價是整段重寫。
+
+因此 `[review:ui]` 的驗收問題只有一個：**有沒有做到設計階段說好的樣子**。若 review 時才冒出「其實另一個組合更好」，那是 Step 1.9 沒做確實，回設計階段補，**NEVER** 在 review 迴圈裡迭代設計。
+
 ## 核心規則
 
 **NEVER** 自行標記 `## 人工檢查` 區塊中**屬於 `[review:ui]` kind** 的 `- [ ]` 為 `- [x]`。

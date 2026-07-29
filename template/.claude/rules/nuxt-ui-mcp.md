@@ -1,6 +1,6 @@
 ---
 description: Nuxt UI v3/v4 component / composable / theming / icon 必走 nuxt-ui-remote MCP；ban prescriptive synthesis
-paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'template/app/**/*.{vue,ts}', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'template/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'template/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'template/layouts/**/*.vue', 'app.config.ts', 'nuxt.config.ts']
+paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'template/app/**/*.{vue,ts}', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'template/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'template/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'template/layouts/**/*.vue', 'app.config.ts', 'nuxt.config.ts', 'openspec/changes/**/proposal.md', 'openspec/changes/**/design.md', 'openspec/changes/**/design-review.md']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -28,6 +28,19 @@ Local edits will be reverted by the next sync.
 - Nuxt UI 官方 templates（starter / dashboard / saas 等結構與配置）
 
 判斷標準：**任何**會寫進 `.vue` / `.ts` / `app.config.ts` / `nuxt.config.ts` 且觸及 `U*` component、`use*` composable（Nuxt UI 自家）、`ui.*` theming key、`@nuxt/ui*` import 的內容，都算 Nuxt UI 實做。
+
+### 設計階段同樣在範圍內
+
+path scope 含 `openspec/changes/**/{proposal,design,design-review}.md`，**不是**只有實作檔。因為這條規則要擋的有兩層，而它們發生在不同階段：
+
+| 層 | 問的問題 | 發生階段 | 寫錯的代價 |
+| --- | --- | --- | --- |
+| API surface | 這個 prop / slot 存在嗎、叫什麼 | 寫 `.vue` 時 | 改幾行 |
+| **元件選擇** | **這個場景該用哪些元件、怎麼組** | **寫 proposal / design 時** | **整段重寫** |
+
+只在實作階段載入這條規則，等於只擋住便宜的那一層。元件選擇在設計文件寫下「用 USlideover 400px」的當下就定了，到實作階段才想起要查 MCP，能修的只剩 prop 名稱——架構已經不能動。
+
+設計階段的具體要求（候選 ≥2、寫明淘汰理由）見 `design` skill § Step 1.9 Component Candidates。
 
 ---
 
