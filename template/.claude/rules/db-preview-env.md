@@ -170,6 +170,18 @@ Managed platform（Cloudflare Workers 等）自帶 per-version preview URL，缺
 | `preview_urls` 是 **non-versioned setting** | `versions upload` 不會套用它。首次啟用需要一次 `deploy`／`versions deploy`，或直接打 account API |
 | `versions upload` 不支援 per-version env vars／secrets | secret 是 Worker 層級、由 production deploy 設定，preview version 直接繼承 —— 這也代表**preview 流程 NEVER 重設 secret**，那會動到 production 狀態 |
 
+### 平台沒有這個能力時：宣告 `none`，不要繞
+
+不是每個部署平台都做得出 per-change preview。**MUST** 先確認平台原生支援，再決定要不要投；平台沒有就宣告 `preview_db: none` 收工，**NEVER** 自己拼一個假的。
+
+已查證的死路（2026-07-29，實跑 `void deploy --help` 對 `void@^0.8.11` 與 `void@0.10.10` 兩版）：
+
+| 平台 | 結論 | 依據 |
+| --- | --- | --- |
+| **void.cloud** | **無 per-change preview**。兩版 flag 完全相同——`--project` / `--dir` / `--spa` / `--skip-build` / `--debug`，無 preview / staging / branch / alias | 唯一的多目標機制是 `--project <name>` 另開一個 project，那是「第二個 production」不是 per-change。**NEVER** 拿它假裝 preview——兩個 project 各自累積狀態，用完不會消失 |
+
+Cloudflare Workers 的能力邊界另見 § Cloudflare Workers trip-wires（含 Durable Object 會讓 preview URL 完全不產生這條 hard block）。
+
 ## Capability declaration
 
 `registry/consumers.json` 每個有 DB 的 consumer **MUST** 宣告（不限 self-host Supabase —— managed platform 走 `shared-preview-db` 的一樣要宣告）：
