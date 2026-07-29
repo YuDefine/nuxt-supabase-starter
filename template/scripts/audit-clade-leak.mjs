@@ -8,9 +8,16 @@
  * personal email (`<maintainer-email>`)、客戶名 (<client-a> / <client-b>)、
  * 以及未該對外曝光的 maintainer skill (`oops` / `improvement-loop` / `review-rules`)。
  *
- * Sanitization 應在 clade 端 propagate 時自動處理；本 audit script 是 CI gate
- * 兜底，直接 grep `template/.claude/` 內 clade-managed checksums 列出的所有檔，
+ * Sanitization 在 clade 端 propagate 時自動處理（v1.4.349 起依 repo visibility
+ * 套用 registry 生成的 fleet profile）；本 script 是**成果驗證用的手動工具**，
+ * 直接 grep `template/.claude/` 內 clade-managed checksums 列出的所有檔，
  * 任何 forbidden token / maintainer-only skill 殘留 → exit 1。
+ *
+ * 執行載體（per `rules/core/checker-contract.md` § 執行載體）：**沒有**自動觸發點。
+ * 唯一消費端是 `pnpm audit:manual`（registry/audits.json 宣告 cadence `on-demand`
+ * / consumers `["npm-script"]` / blocking false）。**不要**把檔頭寫成「CI gate」——
+ * starter CI 從未跑過它，那是願望不是現況（TD-273）。若要升 blocking，先解決
+ * 「forbidden token 含 consumer 自己的名字，對私有 repo 是類別錯誤」的 scope 問題。
  *
  * Scope:
  *   1. `template/.agents/skills/{oops,improvement-loop,review-rules}/` 殘留：

@@ -86,6 +86,33 @@ Fork 出 worktree 之前，`wt-helper add` **MUST** 先跑 `detect-main-dirty` �
 
 完整 audit script / conflict diagnostic / recovery 命令見 [[pitfall-pre-fork-baseline-hides-in-flight-feature]]。
 
+#### `--include-unrelated-dirty`：顯式 bulk-capture（hard rule）
+
+預設行為是**完全不 capture** main dirty——main 原封不動、worktree 從 HEAD fork clean。要把 main WIP 帶進 worktree 必須顯式傳 flag，這是 [[pitfall-prefork-baseline-stash-sweeps-unclaimed-main-work]] 的修法刻意建立的 opt-in 閘門。
+
+`--include-unrelated-dirty`（stash strategy 專用）語意是 **bulk-capture main 上全部 dirty**——不分主題、不分歸屬、不管是不是別 session 的 WIP，一律搬進新 worktree，main 端變乾淨。
+
+**NEVER** 在傳了這個 flag 之後，對 user 宣稱「main working tree 不變」/「main 沒被動到」/「你的 WIP 還在 main」。傳了它，那三句話**必然**是假的。記得「wt-helper 預設不碰 main dirty」這條結論、卻沒把「我這次傳了 flag」納入判斷，正是 [[pitfall-include-unrelated-dirty-claimed-main-untouched]] 的實證失敗路徑（<consumer-i> 2026-07-15）。
+
+**MUST** 在傳了它之後，明確告訴 user：main 上原有的 N 個 dirty 檔已搬進 worktree `<path>`，main 端現在是乾淨的。
+
+**還原三步驟**（把 bulk-capture 的內容拿回 main）：
+
+```bash
+# 1. 找 pinned baseline ref（cleanup 過後仍在）
+git for-each-ref --format='%(refname) %(objectname)' 'refs/wt-baseline/<slug>/*'
+
+# 2. 在 main 還原（--index 保留原本的 staged / unstaged 分界）
+git stash apply --index <objectname>
+
+# 3. 實核，NEVER 憑 apply 沒報錯就宣告成功
+git status --short
+```
+
+Scoped 替代方案：只帶某幾條路徑用 `--baseline-scope-paths <comma>`（走 commit strategy），scope 外的跨 session WIP 留在 main 不動——這才是有 change context 時的正解，`--include-unrelated-dirty` 是無從 scope 時的鈍器。
+
+可直接貼的完整 recipe 見 `~/offline/clade/vendor/snippets/worktree-baseline/restore-main-after-bulk-capture.md`。
+
 > Rationale (2026-05-18)：原「unmerged 永遠 STOP」過嚴 — helper 兩條 safety check 對 stale UU false-positive 極低、對真衝突仍 fail-safe。
 
 **為什麼**：worktree 從 main HEAD 分出，看不到 working tree 的 untracked / modified — 沒這道 guard 時 subagent 進 worktree 看 baseline 全缺 fail-fast，每次 fork 都得回頭打擾 user 拍策略。

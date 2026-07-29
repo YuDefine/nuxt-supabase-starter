@@ -38,11 +38,28 @@ skill 開頭依輸入分流，**不要記兩個 skill 名**。
 
 | 基礎 | 出處 |
 | --- | --- |
-| Worktree gate | [[worktree-default]] §1，wt-helper 開 / merge-back |
+| Worktree gate | [[worktree-default]] §1，wt-helper 開 / merge-back。**機械檢查點見下方 § Worktree gate（fail-closed）** |
 | Codex 派工模板 | `vendor/snippets/codex-upgrade-prompts/{medium,high}.md`（authoring source），SKILL.md § Codex prompt templates 是 plugin cache 副本 |
 | Codex watch protocol | [[agent-routing.codex-watch-protocol]] |
 | Selective stage on main | 一律 `git add package.json <lockfile>` + 額外指定檔，**NEVER** `git add -A` |
 | Commit msg（commitlint-aware） | subagent / codex 端讀 consumer commitlint config 後生 compliant msg |
+
+### Worktree gate（fail-closed）
+
+Mode 分流拍板後、跑**任何** `pnpm add` / `git add` / `git commit` 之前，**MUST** 先跑：
+
+```bash
+node ~/offline/clade/vendor/scripts/wt-gate.mjs --for dep-upgrade
+```
+
+exit 0 才可繼續。exit 2（cwd 在 main working tree）**MUST** 停下開 worktree 再重跑，
+**NEVER** 加 `|| true`、**NEVER** 改判成 warning、**NEVER** 因為「這次只改兩個檔」跳過。
+gate 沒有 `--allow-main` escape hatch，這是刻意的。
+
+> 這條在 2026-07-29 之前只是文字規約，實測擋不住：<consumer-b> 的 sweep 在 main 生出 per-package
+> 迴圈跑起來，`git add package.json` 撈走另一個 session 未 commit 的 `pnpm version patch`，
+> 同時 `.git/index.lock` 讓對方的 `git commit` 直接失敗（TD-277）。commit message 的
+> `wt ` 前綴當時**不**保證真的在 worktree——接上 gate 之後才保證。
 
 ---
 
@@ -245,7 +262,7 @@ WHY_STUCK: <一句話為什麼即使查到資訊也卡住>
 
 # 禁止事項（通用，兩個 mode 都受約束）
 
-- **NEVER** 在 main working tree 跑（無 worktree gate）— 兩個 mode 都受此規約
+- **NEVER** 在 main working tree 跑 — 兩個 mode 都受此規約，由 `wt-gate.mjs` fail-closed 強制（見 § Worktree gate）
 - **NEVER** 主線自己改 `package.json` 或在升版階段（Step O.2）跑 `pnpm add` / `pnpm install`（升版全程委派給 codex / subagent）。**例外**：Step O.3.2.c post-merge-back `pnpm install` 是 setup chore，不是升版動作
 - **NEVER** medium 失敗就直接問使用者 — 必須先自動升 high research
 - **NEVER** high 也失敗就主線自己接手 — 必須 request_user_input 讓使用者選
