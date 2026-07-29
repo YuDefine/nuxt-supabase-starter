@@ -105,6 +105,27 @@ Local edits will be reverted by the next sync.
 
    **實證（2026-07-05）**：<consumer-b> `/commit` 0-MR 擋下 `sop-case-ux-phase-a1`（2 個 pending leaf），Claude 直接叫 user 去 review-gui，但兩個 item 都帶 `（fix-requested）` — user 去了也做不了任何事。正確做法是 Claude 先 dispatch fix → merge-back → 更新 evidence → 重跑 0-MR，全部自己推完。
 
+### 狀態時效與檔案同步（MUST 10–12）
+
+Review-gui 的狀態全部落在 `tasks.md` 這個**雙寫**檔上——user 在 GUI 點按鈕會寫，Claude 改 annotation 也會寫。兩邊都在寫的檔案，任何「上一次看到的樣子」都只是快照。以下三條各綁一個可觀察 predicate。
+
+10. **陳述狀態前，本 turn 內 MUST 有一次 scan**：回答任何 change / item 的狀態問題（「還剩幾條」「ready 了沒」「這條過了嗎」「現在輪到誰」）之前，若**本 turn 尚未**跑過 `review-gui.mts --scan`，**MUST** 先跑再答。
+
+    Predicate 就是字面的「本 turn 有沒有跑過」：跑過 → 直接引用該次輸出；沒跑過 → 先跑。**上一則訊息跑過不算**——user 在兩則訊息之間點按鈕正是最常見的情形。**NEVER** 引用本 turn 之前取得的 scan 輸出、`/api/changes` 回應、或 `tasks.md` 讀取結果來陳述現況。
+
+11. **user 說「我點了 X」→ MUST 立刻重掃驗證，檔案沒反映就自己處理**：user 陳述自己在 GUI 做過動作（點了 OK / 標了有問題 / 勾了某條）時，**MUST** 立即重跑 `--scan`（或直接讀該 change 的 `tasks.md`）驗證，再回應。
+
+    - 檔案已反映 → 照新狀態繼續
+    - 檔案**未**反映 → **MUST** 回報「你的動作沒寫進檔案（可能撞 409），我直接處理」，並**當場**把該動作寫進 `tasks.md`。**NEVER** 要求 user 重點一次
+
+    **NEVER** 回「你還沒點」「我這邊看到還是未勾」「請你再點一次確認」。`persistReviewAction()` 帶樂觀鎖（`version.hash` / `mtimeMs`）：檔案在該分頁載入之後被改過，user 的點擊就回 409 並 silently 失敗。**「沒寫進檔案」是系統的失敗，不是 user 的疏漏**——把它講成 user 沒做，是拿自己的 stale 讀取去反駁 user 的第一手事實。
+
+12. **改寫過 tasks.md MUST 主動說**：Claude 改寫過某 change 的 `tasks.md`（寫 annotation / 改 checkbox / 加 marker）之後，同一次回報 **MUST** 含這句：
+
+    > 我改了 `<change>` 的 tasks.md，你開著的 review-gui 分頁請 reload，否則按鈕會撞 409。
+
+    對**每一張**被改過的 change 都要說，不是只說最後一張。這句話的觸發條件是「**你改了檔**」，不是「你確定 user 開著分頁」——不確定時照樣說。
+
    **NEVER**：
    - ❌ `/commit` 0-MR block 後直接印「請去 review-gui 完成人工檢查」而不 triage pending items 的阻塞原因
    - ❌ 把帶 `（fix-requested）` 的 item 當「需要 user 驗收」推給 user — 那是 Claude 的工作
@@ -124,6 +145,7 @@ Local edits will be reverted by the next sync.
 - ❌ `(verified-api:)` annotation 只寫 ISO timestamp 不帶 `<METHOD> <URL> <STATUS>`（parser 要求四段 space-separated）（per Annotation Format Contract）
 - ❌ annotation 寫在 `- [ ] #N` 下一行（即使 indent 正確）而非 inline 同行末尾（per Annotation MUST 5）
 - ❌ scan 結果 non-ready 時直接回報 user「bucket=readyForEvidence」/「healthCheckNeeded」而不先自己讀 blocking reason + 修正（per Annotation MUST 6）
+- ❌ user 說「我點了 X」時，拿自己本 turn 之前的 scan / tasks.md 讀取回「你還沒點」——那是用 stale 快照反駁 user 的第一手事實（per MUST 10 / 11）
 
 ## Annotation Format Contract
 
@@ -215,5 +237,7 @@ review-gui parser 對 annotation key 和 status tag **嚴格字面匹配**。寫
   - compound 單截圖 → 拆 sub-items 或補 multi-screenshot annotation
   - 繞 impl gate → 等 impl ≥ 90% 再做 manual review
   - 推 URL 給 user → 先跑 [[agent-self-verification]] fallback chain
+  - 引用舊快照答狀態 → 本 turn 先重跑 `--scan` 再答
+  - 回「你還沒點」→ 重掃驗證；檔案沒反映就當場代寫，並告知可能撞 409
 繞過：無 escape hatch — review-gui contract 是真相層
 ```

@@ -29,6 +29,21 @@ if [ ! -f "$TASKS" ]; then
   exit 2
 fi
 
+# T7: evidence-store CLI — sidecar-first dual-track resolver
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+EVIDENCE_STORE="$SCRIPT_DIR/../lib/evidence-store.mjs"
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+
+has_sidecar_evidence() {
+  local item_id="$1" kind="$2"
+  if [ -f "$EVIDENCE_STORE" ]; then
+    node "$EVIDENCE_STORE" --repo "$REPO_ROOT" --change "$CHANGE" \
+      --has-evidence --kind "$kind" --item "$item_id" 2>/dev/null
+    return $?
+  fi
+  return 1
+}
+
 # Extract ## 人工檢查 section
 SECTION=$(awk '/^## 人工檢查/{found=1; next} /^## /{if(found) exit} found{print}' "$TASKS")
 if [ -z "$SECTION" ]; then
@@ -76,38 +91,50 @@ while IFS= read -r line; do
   # --- Check 1: Automatic channel annotation exists but checkbox not flipped ---
   # verify:e2e without +ui
   if echo "$line" | grep -q '\[verify:e2e\]' && ! echo "$line" | grep -q '+ui'; then
-    if echo "$line" | grep -q '(verified-e2e:'; then
+    if echo "$line" | grep -q '(verified-e2e:' || has_sidecar_evidence "#$item_id" 'verified-e2e'; then
       echo "❌ Check 1: [verify:e2e] #$item_id has annotation but checkbox [ ] — auto-flip missing" >&2
       FAILS=$((FAILS + 1))
     fi
   fi
   # verify:api without +ui
   if echo "$line" | grep -q '\[verify:api\]' && ! echo "$line" | grep -q '+ui'; then
-    if echo "$line" | grep -q '(verified-api:'; then
+    if echo "$line" | grep -q '(verified-api:' || has_sidecar_evidence "#$item_id" 'verified-api'; then
       echo "❌ Check 1: [verify:api] #$item_id has annotation but checkbox [ ] — auto-flip missing" >&2
       FAILS=$((FAILS + 1))
     fi
   fi
 
-  # --- Check 2: Verify items without evidence annotation ---
+  # --- Check 2: Verify items without evidence annotation (inline OR sidecar) ---
   if echo "$line" | grep -q '\[verify:e2e\]' && ! echo "$line" | grep -q '(verified-e2e:'; then
-    echo "❌ Check 2: [verify:e2e] #$item_id missing evidence — run Step 8a e2e channel" >&2
-    FAILS=$((FAILS + 1))
+    if ! has_sidecar_evidence "#$item_id" 'verified-e2e'; then
+      echo "❌ Check 2: [verify:e2e] #$item_id missing evidence — run Step 8a e2e channel" >&2
+      FAILS=$((FAILS + 1))
+    fi
   fi
   if echo "$line" | grep -q '\[verify:api\]' && ! echo "$line" | grep -q '(verified-api:'; then
-    echo "❌ Check 2: [verify:api] #$item_id missing evidence — run Step 8a api channel" >&2
-    FAILS=$((FAILS + 1))
+    if ! has_sidecar_evidence "#$item_id" 'verified-api'; then
+      echo "❌ Check 2: [verify:api] #$item_id missing evidence — run Step 8a api channel" >&2
+      FAILS=$((FAILS + 1))
+    fi
   fi
   if echo "$line" | grep -q '\[verify:ui\]' && ! echo "$line" | grep -q '(verified-ui:'; then
-    echo "❌ Check 2: [verify:ui] #$item_id missing evidence — run Step 8a ui channel" >&2
-    FAILS=$((FAILS + 1))
+    if ! has_sidecar_evidence "#$item_id" 'verified-ui'; then
+      echo "❌ Check 2: [verify:ui] #$item_id missing evidence — run Step 8a ui channel" >&2
+      FAILS=$((FAILS + 1))
+    fi
   fi
 
-  # --- Check 3: Unresolved issues ---
+  # --- Check 3: Unresolved issues (inline OR sidecar) ---
   if echo "$line" | grep -qE '（issue:|（issue：|\(issue:'; then
-    if ! echo "$line" | grep -q '(claude-analyzed:' && ! echo "$line" | grep -q '(awaiting-user-decision:'; then
-      echo "⚠ Check 3: #$item_id has unresolved issue — triage before handoff" >&2
-      WARNS=$((WARNS + 1))
+    has_inline_triage=false
+    if echo "$line" | grep -q '(claude-analyzed:' || echo "$line" | grep -q '(awaiting-user-decision:'; then
+      has_inline_triage=true
+    fi
+    if [ "$has_inline_triage" = false ]; then
+      if ! has_sidecar_evidence "#$item_id" 'claude-analyzed' && ! has_sidecar_evidence "#$item_id" 'awaiting-user-decision'; then
+        echo "⚠ Check 3: #$item_id has unresolved issue — triage before handoff" >&2
+        WARNS=$((WARNS + 1))
+      fi
     fi
   fi
 

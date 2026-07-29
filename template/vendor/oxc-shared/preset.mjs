@@ -57,7 +57,10 @@ export const PROJECTION_EXCLUDES = ['.claude/**', '.clade/**', '.spectra/**', 'v
  * review-gui.mts embeds an HTML template oxfmt/oxlint both mangle.
  * clade's own vite.config.ts drops `vendor/**` and adds these back.
  */
-export const CLADE_VENDOR_EXCLUDES = ['vendor/snippets/**', 'vendor/scripts/review-gui.mts']
+// review-gui 本體與其 sibling 全部排除：SPA 的 HTML/CSS/前端 JS 是一整個 template
+// string，oxfmt 會重排字串內容、oxlint 會對字串裡的 client-side JS 誤報。用 glob 而非
+// 逐一列名 —— 拆檔後新增 sibling 若忘了加，格式化會直接改壞 embedded template。
+export const CLADE_VENDOR_EXCLUDES = ['vendor/snippets/**', 'vendor/scripts/review-gui*.mts']
 
 /** @type {import('oxlint').OxlintConfig} */
 export const lintBase = {

@@ -98,6 +98,22 @@ REPO_ROOT=$(sux_repo_root)
 # Prime the cache once so all subsequent git-diff consumers reuse it.
 sux_touched_files --refresh >/dev/null
 
+# T7: evidence-store CLI path — dual-track resolver (sidecar-first, inline fallback).
+# Shell gates cannot parse JSONL; this CLI bridge returns exit 0 if evidence exists.
+EVIDENCE_STORE="$SCRIPT_DIR/../lib/evidence-store.mjs"
+
+# has_sidecar_evidence <item-id> <kind>
+# Returns 0 if evidence of the given kind exists in the sidecar for this change.
+has_sidecar_evidence() {
+  local item_id="$1" kind="$2"
+  if [ -f "$EVIDENCE_STORE" ]; then
+    node "$EVIDENCE_STORE" --repo "$REPO_ROOT" --change "$CHANGE_NAME" \
+      --has-evidence --kind "$kind" --item "$item_id" 2>/dev/null
+    return $?
+  fi
+  return 1
+}
+
 BLOCKED=false
 MESSAGES=()
 
@@ -404,6 +420,9 @@ if [ -f "$TASKS_FILE" ]; then
       if [[ "$line" =~ $DISCUSSED_RE ]]; then
         HAS_DISCUSSED_ANNOTATION=true
       fi
+      if [ "$HAS_DISCUSSED_ANNOTATION" = false ] && has_sidecar_evidence "$ID" 'claude-discussed'; then
+        HAS_DISCUSSED_ANNOTATION=true
+      fi
 
       HAS_DEFERRED_ANNOTATION=false
       DEFERRED_RE='\(deferred-to-handoff:[^)]*\)'
@@ -425,16 +444,26 @@ if [ -f "$TASKS_FILE" ]; then
           VERIFIED_E2E_MALFORMED=true
         fi
       fi
+      # T7: sidecar fallback — evidence may live outside tasks.md
+      if [ "$HAS_VERIFIED_E2E_ANNOTATION" = false ] && has_sidecar_evidence "$ID" 'verified-e2e'; then
+        HAS_VERIFIED_E2E_ANNOTATION=true
+      fi
 
       HAS_VERIFIED_API_ANNOTATION=false
       VERIFIED_API_RE='\(verified-api:[^)]*\)'
       if [[ "$line" =~ $VERIFIED_API_RE ]]; then
         HAS_VERIFIED_API_ANNOTATION=true
       fi
+      if [ "$HAS_VERIFIED_API_ANNOTATION" = false ] && has_sidecar_evidence "$ID" 'verified-api'; then
+        HAS_VERIFIED_API_ANNOTATION=true
+      fi
 
       HAS_VERIFIED_UI_ANNOTATION=false
       VERIFIED_UI_RE='\(verified-ui:[^)]*\)'
       if [[ "$line" =~ $VERIFIED_UI_RE ]]; then
+        HAS_VERIFIED_UI_ANNOTATION=true
+      fi
+      if [ "$HAS_VERIFIED_UI_ANNOTATION" = false ] && has_sidecar_evidence "$ID" 'verified-ui'; then
         HAS_VERIFIED_UI_ANNOTATION=true
       fi
 
