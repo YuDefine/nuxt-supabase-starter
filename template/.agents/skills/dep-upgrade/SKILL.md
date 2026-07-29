@@ -20,7 +20,8 @@ skill 開頭依輸入分流，**不要記兩個 skill 名**。
 
 | 觸發 | cwd 預期 | Mode | 跳到 |
 | --- | --- | --- | --- |
-| 純命令 `/dep-upgrade`（無參數） | consumer root（有 `package.json` + lockfile） | **Outdated batch** | § Outdated · Step O.1 |
+| 純命令 `/dep-upgrade`（無參數） | consumer root（有 `package.json` + lockfile 或 `.github/workflows/`） | **Outdated batch** | § Outdated · Step O.1 |
+| `/dep-upgrade actions` | consumer root（有 `.github/workflows/`） | **Outdated batch（only actions）** | § Outdated · Step O.1（skip O.1-npm） |
 | 給 GitHub release URL（`https://github.com/.../releases/tag/v<ver>`） | clade home | **Fleet** | § Fleet · Step F.1 |
 | 給 `<pkg>@<ver>` / `<pkg> v<ver>` / `<pkg> <ver>` | clade home | **Fleet** | § Fleet · Step F.1 |
 | 給純 pkg name（「升 @nuxt/ui」、「無腦升 X」） | clade home | **Fleet + Discovery** | § Fleet · Step F.1 |

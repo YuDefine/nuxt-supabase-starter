@@ -55,6 +55,11 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       String.raw`scripts/(wt-helper|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|spectra-archive-sidecar|dev-singleton|dev-router|dev-session)\.(mjs|mts)$`,
       // Recursive vendored script trees
       String.raw`scripts/(spectra-advanced|pre-commit|pre-push|checks)/`,
+      // Vendored helpers under scripts/lib/ — MUST stay an explicit filename list.
+      // NEVER widen to `scripts/lib/`: consumers author their own files there
+      // (<consumer-a> `common.sh` / `read-infra-manifest.mjs`, <consumer-d> `vue-component-resolution.mts`),
+      // and matching the whole dir would mark those clade-managed → auto-reset clobbers them.
+      String.raw`scripts/lib/(evidence-store)\.(mjs|mts)$`,
       // Snippets / shared presets
       String.raw`vendor/(snippets|oxc-shared|doctor-shared|review-rules)/`,
       // GitHub vendored actions
