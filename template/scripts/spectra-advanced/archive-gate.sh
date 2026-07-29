@@ -627,8 +627,16 @@ if [ -f "$TASKS_FILE" ]; then
     fi
     [ "$IN_MR" = true ] || continue
 
-    # Only process lines with verified-ui annotation
-    [[ "$line" =~ \(verified-ui:[[:space:]]*([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+Z?) ]] || continue
+    # Only process lines with verified-ui annotation.
+    #
+    # The fractional-seconds branch is required, not cosmetic: `evidence-store.mjs
+    # --write` stamps with `toISOString()`, which always carries `.mmm`. A
+    # `[0-9:]+Z?` pattern stops at the `.`, so `Z?` never matches and the capture
+    # comes back WITHOUT an offset — and `Date.parse` reads an offset-less ISO
+    # datetime as LOCAL time per spec. In UTC+8 that silently backdates every
+    # sidecar-written annotation by 8h and reports fresh screenshots as stale.
+    _VUI_TS_RE='\(verified-ui:[[:space:]]*([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+(\.[0-9]+)?(Z|[+-][0-9]{2}:?[0-9]{2})?)'
+    [[ "$line" =~ $_VUI_TS_RE ]] || continue
     local_annotation_ts="${BASH_REMATCH[1]}"
 
     # Extract item id (#N or #N.M)
