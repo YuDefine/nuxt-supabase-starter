@@ -100,7 +100,20 @@ git show --stat HEAD | tail -3   # MUST verify scope == expected paths
 
 working tree / git index 是 **process-wide shared state**——多 session 並行下，別 session **預 stage 但未 commit** 的 WIP 殘留在 index；`git add` **疊加**到既有 staged 上（不是 replace），`git commit` 把整個 staged 區一起吞並 push 出去（實證：[[pitfall-consumer-ad-hoc-commit-eats-other-session-staged]]）。
 
-`git commit --only -- <paths>` 機制：暫存原 staged → 以 `--only` paths 重建 staged（hook 只看到這些 paths）→ commit → 還原原 staged 區，別 session 預 staged 內容**不受影響**，副作用零。
+`git commit --only -- <paths>` 機制：暫存原 staged → 以 `--only` paths 重建 staged（hook 只看到這些 paths）→ commit → 還原原 staged 區。**對 `<paths>` 以外的路徑副作用為零**，別 session 預 staged 在別的檔案的內容不受影響。
+
+### `--only` 限的是路徑，不是內容（hard rule）
+
+`--only` 重建 staged 時，對每個列出的路徑是從 **worktree** 拿該檔**完整**的當前內容——包含別 session 寫在同一個檔案裡、還沒 commit 的部分。共用檔（`docs/tech-debt.md` / `HANDOFF.md` / `openspec/ROADMAP.md` / `CLAUDE.md` / i18n locale）正是最常被多 session 同時寫的那幾個。
+
+- **MUST** commit 前跑 `git diff -- <paths>` 看實際會帶走什麼；出現不是自己寫的段落 → 依 § Recovery from mixed commit 處置，**NEVER** 直接 commit 下去
+- **NEVER** 用裸 `git commit --amend` 改 message——`--amend` 重新 commit **當前 staged index**，等於把 `--only` 的保護整個放掉（實測：同一情境下 commit 從 1 檔變 26 檔）。要改 message **MUST** 帶 `--only`：
+
+  ```bash
+  git commit --amend --only -m "<new message>" -- <same paths as the original commit>
+  ```
+
+實證與最小可重現：[[pitfall-consumer-ad-hoc-commit-eats-other-session-staged]] § Occurrence 4。
 
 ### Untracked file 例外
 
