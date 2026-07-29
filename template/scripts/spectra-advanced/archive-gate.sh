@@ -668,8 +668,12 @@ if [ -f "$TASKS_FILE" ]; then
     # Compare timestamps — use node for reliable timezone-aware epoch conversion.
     # macOS `date -j` cannot parse ISO 8601 with timezone offset (+08:00);
     # stripping the offset (old approach) compares local time against UTC → false positive.
-    ann_epoch=$(node -e "const d=Date.parse(process.argv[1]);isNaN(d)||process.stdout.write(String(d/1000))" "$local_annotation_ts" 2>/dev/null)
-    vue_epoch=$(node -e "const d=Date.parse(process.argv[1]);isNaN(d)||process.stdout.write(String(d/1000))" "$vue_commit_ts" 2>/dev/null)
+    # Math.floor is required: bash `[ -lt ]` only accepts integers. A timestamp
+    # carrying milliseconds makes d/1000 fractional, `[` errors out, and the
+    # non-zero status reads as false — the staleness check silently becomes a
+    # no-op instead of failing loudly.
+    ann_epoch=$(node -e "const d=Date.parse(process.argv[1]);isNaN(d)||process.stdout.write(String(Math.floor(d/1000)))" "$local_annotation_ts" 2>/dev/null)
+    vue_epoch=$(node -e "const d=Date.parse(process.argv[1]);isNaN(d)||process.stdout.write(String(Math.floor(d/1000)))" "$vue_commit_ts" 2>/dev/null)
 
     [ -n "$ann_epoch" ] && [ -n "$vue_epoch" ] || continue
 
