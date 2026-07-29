@@ -879,7 +879,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
    **(b) service_role direct DB query 證 data shape**（escape hatch；HTTP 路徑無法搭起時）：
 
    - 用 `@supabase/supabase-js` service_role client（或對應 server 端 service_role 連線）直連 DB 跑 `SELECT` 證明 endpoint 期待回傳的 data shape 正確
-   - annotation 寫法 **MUST** 標明走 DB 而非 HTTP（避免後續 audit 誤判 round-trip 已完成）：
+   - annotation 寫法 **MUST** 標明走 DB 而非 HTTP（避免後續 audit 誤判 round-trip 已完成）。此 escape hatch **維持 legacy 行內格式**——`direct-db-shape` 這個記號本身就是要讓後續 audit 一眼看到，搬進 sidecar 反而藏起來：
      ```text
      (verified-api: <ISO-8601> direct-db-shape table=<table> rows=<n> sha=<sha256-12chars>)
      ```
@@ -924,22 +924,28 @@ If there is no AskUserQuestion tool available, present options as plain text and
         pnpm test:e2e:verify <change>
         ```
 
-      - Spec pass 後，**MUST** 先確認 Playwright trace zip 真的有產出（`ls -1 test-results/**/trace.zip` 或對應 reporter output 路徑），再 Edit tasks.md 寫：
+      - Spec pass 後，**MUST** 先確認 Playwright trace zip 真的有產出（`ls -1 test-results/**/trace.zip` 或對應 reporter output 路徑），再寫 evidence（payload 進 sidecar，stdout 印出的短 marker 原樣貼進 tasks.md 該 item 行末）：
 
-        ```text
-        (verified-e2e: <ISO-8601> spec=e2e/verify/<change>/<topic>.spec.ts trace=<trace-path>)
+        ```bash
+        node ~/offline/clade/vendor/scripts/lib/evidence-store.mjs \
+          --repo . --change <change> --write --item '#<id>' --kind verified-e2e \
+          --spec 'e2e/verify/<change>/<topic>.spec.ts' --trace '<trace-path>'
+        # stdout: (verified-e2e: <ISO-8601>)
         ```
 
-      - Trace zip 抓不到（playwright.config 沒開 `trace: 'on'` / per-test 沒 `test.use({ trace: 'on' })`）→ **視同 blocker**，保留 `[ ]`，寫 `（issue: trace not captured — enable trace recording in playwright.config or per-test）`；**NEVER** 寫缺 `trace=` 的降級 annotation（archive-gate 會擋住、review-gui 會印 malformed warning）。
+      - Trace zip 抓不到（playwright.config 沒開 `trace: 'on'` / per-test 沒 `test.use({ trace: 'on' })`）→ **視同 blocker**，保留 `[ ]`，寫 `（issue: trace not captured — enable trace recording in playwright.config or per-test）`；**NEVER** 省略 `--trace` 硬寫降級 evidence（CLI 會 exit 2，archive-gate 也會擋）。
       - Spec fail → 保留 `[ ]`，寫 `（issue: <spec failure summary>）` 或回報 blocker；**NEVER** 寫 `(verified-e2e:)`。
 
    3. **`[verify:api]` channel — 主線自己跑 HTTP round-trip**
 
       - Copy/adapt `vendor/snippets/verify-channels/api-roundtrip.template.sh` 或直接用 curl / ofetch 跑等價 request。
-      - 通過後，主線 Edit tasks.md 寫：
+      - 通過後，主線寫 evidence（payload 進 sidecar，stdout 印出的短 marker 原樣貼進 tasks.md 該 item 行末）：
 
-        ```text
-        (verified-api: <ISO-8601> <METHOD> <URL> <STATUS>[ body=<sha256-12chars>])
+        ```bash
+        node ~/offline/clade/vendor/scripts/lib/evidence-store.mjs \
+          --repo . --change <change> --write --item '#<id>' --kind verified-api \
+          --method '<METHOD>' --url '<URL>' --status '<STATUS>' [--body '<sha256-12chars>']
+        # stdout: (verified-api: <ISO-8601>)
         ```
 
       - Request fail / status 不符 → 保留 `[ ]`，寫 `（issue: <METHOD URL expected/actual>）` 或回報 blocker；**NEVER** 寫 `(verified-api:)`。
@@ -969,10 +975,13 @@ If there is no AskUserQuestion tool available, present options as plain text and
       - **建不出 `ready_signal`**（描述只有「畫面正常」「顯示資料」等模糊語、無具體斷言點）→ **NEVER** 硬 dispatch；依 `manual-review.data-readiness.md` § signal-less 分流 reclassify（純主觀視覺 → `[review:ui]`；需互動才出現 → `[verify:e2e]` / `[verify:api]`）。既有未帶 signal 的 grandfather item → agent 走 generic-settle fallback（**不可**當 PASS 充分條件）。
       - Agent scope **MUST** 限於 open known URL + readiness gate poll（≤15s 等 ready_signal）+ final-state screenshot + post-capture cross-check + DOM observation。
       - Agent **NEVER** 做 mutation / form fill / click sequences / multi-role login switching / seed repair。
-      - PASS 後，主線 Edit tasks.md 寫：
+      - PASS 後，主線寫 evidence（payload 進 sidecar，stdout 印出的短 marker 原樣貼進 tasks.md 該 item 行末）：
 
-        ```text
-        (verified-ui: <ISO-8601> screenshot=screenshots/local/<change>/#<id>-final.png[ dom=<obs>])
+        ```bash
+        node ~/offline/clade/vendor/scripts/lib/evidence-store.mjs \
+          --repo . --change <change> --write --item '#<id>' --kind verified-ui \
+          --screenshot 'screenshots/local/<change>/#<id>-final.png' [--dom '<obs>']
+        # stdout: (verified-ui: <ISO-8601>)
         ```
 
       - FAIL / UNCERTAIN → 保留 `[ ]`，寫 issue 或回報 blocker；**NEVER** 寫 `(verified-ui:)`。

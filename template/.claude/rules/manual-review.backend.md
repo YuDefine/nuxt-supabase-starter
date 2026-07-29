@@ -36,11 +36,7 @@ tasks.md 有未勾 `[verify:e2e]` / `[verify:api]` / `[verify:ui]` / multi-marke
 pnpm test:e2e:verify <change>
 ```
 
-**Evidence trail**：spec pass 後，主線在 item line 寫：
-
-```text
-(verified-e2e: <ISO-8601> spec=<repo-relative-path> trace=<repo-relative-path>)
-```
+**Evidence trail**：spec pass 後，主線跑 `evidence-store.mjs --write --kind verified-e2e --spec <path> --trace <path>`，把印出的 `(verified-e2e: <ISO-8601>)` 貼到 item line 末尾（payload 進 sidecar，per [[review-gui-surface]] § Evidence 寫入路徑）。
 
 **Archive-gate 結果**：`verify:e2e` 是 automatic channel；annotation present 即通過，可由 `autoCheckCompletedAutomaticItems(...)` 自動 flip `[x]`。缺 annotation 時 archive-gate **MUST** block。
 
@@ -48,11 +44,7 @@ pnpm test:e2e:verify <change>
 
 **Dispatch**：主線 Claude **自己跑** curl / ofetch HTTP round-trip（參考 `vendor/snippets/verify-channels/api-roundtrip.template.sh`），不得派 screenshot-review agent 代跑 API mutation。
 
-**Evidence trail**：request 通過後，主線在 item line 寫：
-
-```text
-(verified-api: <ISO-8601> <METHOD> <URL> <STATUS>[ body=<sha256-12chars>])
-```
+**Evidence trail**：request 通過後，主線跑 `evidence-store.mjs --write --kind verified-api --method <M> --url <U> --status <S> [--body <sha256-12chars>]`，把印出的 `(verified-api: <ISO-8601>)` 貼到 item line 末尾。
 
 **Archive-gate 結果**：`verify:api` 是 automatic channel；annotation present 即通過，可由 `autoCheckCompletedAutomaticItems(...)` 自動 flip `[x]`。缺 annotation 時 archive-gate **MUST** block。
 
@@ -60,17 +52,13 @@ pnpm test:e2e:verify <change>
 
 **Dispatch**：主線 Claude 派 screenshot-review agent `mode: verify`，但 scope **只限** open known URL + wait for load + capture final-state screenshot + DOM observation（參考 `vendor/snippets/verify-channels/ui-final-state-brief.template.md`）。agent **NEVER** 負責 mutation / form fill / multi-role login；那些屬於 `verify:api` 或 `verify:e2e` channel。
 
-**Evidence trail**：agent 回報 final-state screenshot 與 DOM 觀察後，主線在 item line 寫：
-
-```text
-(verified-ui: <ISO-8601> screenshot=<repo-relative-path>[ dom=<short-observation>])
-```
+**Evidence trail**：agent 回報 final-state screenshot 與 DOM 觀察後，主線跑 `evidence-store.mjs --write --kind verified-ui --screenshot <path> [--dom <obs>]`，把印出的 `(verified-ui: <ISO-8601>)` 貼到 item line 末尾。
 
 **Annotation 格式 hard rule**（反覆違反，per `pitfall-verified-ui-annotation-format-drift`）：
 
-- **NEVER** 寫 `screenshots=`（複數）— review-gui parser 只認 `screenshot=`（單數），複數直接 malformed。即使引用多張圖也用單數 key + 單一 path；多張圖 → 拆 scoped sub-items `#N.M` 各帶獨立 annotation
-- **NEVER** 在 scoped sub-item `#N.M` 的 annotation 引用 parent `#N` 的截圖檔名 — 例：`#4.1` 的 `screenshot=` 路徑 **MUST** 含 `#4.1-` 前綴，**NEVER** 引用 `#4-*.png`。review-gui 按 `#<item-id>-*` pattern 配對截圖到 item；ID 不符 → evidence missing，user 被迫手動排查
-- **MUST** 寫完 `(verified-ui:)` annotation 後立即 self-check：`grep -oP 'screenshot=[^ )]+' <tasks.md line>` 抽 path → 確認 (a) key 是 `screenshot=`（單數）(b) path basename 以 `#<this-item-id>-` 開頭 (c) 檔案存在。任一不符 → 立即修正，**NEVER** 帶病 handoff
+- **NEVER** 一次 `--screenshot` 傳多個逗號分隔 path。多張圖 → 對同一 `(itemId, kind)` 跑多次 `--write`（sidecar append-only），或拆 scoped sub-items `#N.M` 各自 `--write`
+- **NEVER** 在 scoped sub-item `#N.M` 的 evidence 引用 parent `#N` 的截圖檔名 — 例：`#4.1` 的 `--screenshot` 路徑 **MUST** 含 `#4.1-` 前綴，**NEVER** 引用 `#4-*.png`。review-gui 按 `#<item-id>-*` pattern 配對截圖到 item；ID 不符 → evidence missing，user 被迫手動排查
+- **MUST** 寫完立即 self-check：`node <clade>/vendor/scripts/lib/evidence-store.mjs --repo . --change <change> --item '#N' --kind verified-ui --json` 讀回剛寫的記錄 → 確認 (a) 有這筆 (b) `screenshot` basename 以 `#<this-item-id>-` 開頭 (c) 檔案存在。任一不符 → 立即修正，**NEVER** 帶病 handoff
 
 **Archive-gate 結果**：`verify:ui` 是 semi-automatic channel；annotation present 只是 visual evidence，使用者仍 **MUST** 在 review GUI 點 OK 才能 flip `[x]`。缺 annotation 時 GUI 顯示 evidence missing；未勾 `[x]` 時 archive-gate **MUST** block。
 
@@ -79,7 +67,7 @@ pnpm test:e2e:verify <change>
 Multi-marker item **MUST** 由主線依 channel order `e2e → api → ui` 逐一執行，每完成一個 channel 就寫對應 annotation。例：
 
 ```markdown
-- [ ] #1 [verify:api+ui] admin 改 offset → 200 + grid 顯示更新 (verified-api: 2026-05-11T08:00:00Z PATCH /api/v1/machines/4/slots/403 200) (verified-ui: 2026-05-11T08:00:30Z screenshot=screenshots/local/<change>/#1-final.png dom=grid-updated)
+- [ ] #1 [verify:api+ui] admin 改 offset → 200 + grid 顯示更新 (verified-api: 2026-05-11T08:00:00Z) (verified-ui: 2026-05-11T08:00:30Z)
 ```
 
 - 若 item 只含 automatic channels（`verify:e2e` / `verify:api`），最後一個 channel annotation 寫入後 `autoCheckCompletedAutomaticItems(...)` 可自動 flip `[x]`。

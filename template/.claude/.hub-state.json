@@ -32,11 +32,11 @@
     "rules/knowledge-and-decisions.md": "cba5f94fda4fa74c",
     "rules/local-rule-override.md": "7276e313aa04c274",
     "rules/logging.md": "5998053645bb22da",
-    "rules/manual-review.backend.md": "a787c3cfe61be302",
+    "rules/manual-review.backend.md": "e5b107fa9ff4717b",
     "rules/manual-review.data-readiness.md": "807ab5966d3e4807",
     "rules/manual-review.discuss.md": "1e7e654508b7f711",
-    "rules/manual-review.evidence.md": "2b271f691e7b61b7",
-    "rules/manual-review.md": "e8df6638533d8fb3",
+    "rules/manual-review.evidence.md": "3df131393283e7e1",
+    "rules/manual-review.md": "4c7c161bcef06e11",
     "rules/nuxt-data-perf.md": "d12f0534d754b732",
     "rules/nuxt-dev-watch.md": "12f95634dfb525a7",
     "rules/output-hygiene.md": "163200ac020b74a0",
@@ -46,7 +46,7 @@
     "rules/proactive-skills.ingest-triggers.md": "bbd6929c67255a8c",
     "rules/proactive-skills.md": "52f11e31ba112845",
     "rules/prod-mcp-safety.md": "27304cd40c271fa5",
-    "rules/review-gui-surface.md": "10533b1a77b6531e",
+    "rules/review-gui-surface.md": "54e7875ef5b9fc87",
     "rules/review-tiers.md": "e74bf5bca84d7178",
     "rules/rule-authoring.md": "85bcab1bc848aab0",
     "rules/scope-discipline.md": "a9be76be7d812dc0",
@@ -110,7 +110,7 @@
     "skills/commit/handoff-steps.md": "5e51fcdbab1cedb6",
     "skills/spectra/SKILL.md": "dd995d8aab141c9d",
     "skills/spectra-analyze/SKILL.md": "05bde6a59505cd88",
-    "skills/spectra-apply/SKILL.md": "c0d69df1aca4f695",
+    "skills/spectra-apply/SKILL.md": "5bf2d758a90acdf0",
     "skills/spectra-archive/SKILL.md": "e29e2d652c05be42",
     "skills/spectra-ask/SKILL.md": "469e4cf2e62fcd14",
     "skills/spectra-audit/SKILL.md": "d753a8163ac6209f",
@@ -128,6 +128,6 @@
     "agents/codex-fallback.md": "8749ebc1311ba8f0",
     "agents/db-backup.md": "6cb8d7d93e01642d",
     "agents/references/clade-review-rules.md": "76f818508cc68ebf",
-    "agents/screenshot-review.md": "a4666330b6212e52"
+    "agents/screenshot-review.md": "7f86ba60a8481dfe"
   }
 }

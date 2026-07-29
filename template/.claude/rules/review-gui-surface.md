@@ -4,7 +4,8 @@ paths:
   - 'screenshots/**'
   - 'openspec/changes/**'
   - 'HANDOFF.md'
-  - 'vendor/scripts/review-gui.mts'
+  - 'vendor/scripts/review-gui*.mts'
+  - 'vendor/scripts/lib/evidence-store.mjs'
   - 'scripts/spectra-advanced/**'
   - '.claude/skills/spectra-verify/**'
   - '.claude/skills/spectra-apply/**'
@@ -142,7 +143,8 @@ Review-gui 的狀態全部落在 `tasks.md` 這個**雙寫**檔上——user 在
 - ❌ review web UI change 時 skip perf keyword 偵測、或偵測命中後不實測就讓 review pass（per MUST 5）
 - ❌ 回答 change「卡在誰 / ready 了沒」時從 tasks.md 散文或 checkbox leaf count 推測，而非讀 `change.bucket` / `--scan` bucket（per MUST 6）
 - ❌ 對 route E 結論的 issue 只寫散文分析或只開 `@followup[TD]`、卻漏寫 `(claude-analyzed: route=E)` annotation（per MUST 7）
-- ❌ `(verified-api:)` annotation 只寫 ISO timestamp 不帶 `<METHOD> <URL> <STATUS>`（parser 要求四段 space-separated）（per Annotation Format Contract）
+- ❌ 寫 `(verified-*:)` 短 marker 卻沒先跑 `evidence-store.mjs --write` 把 payload 進 sidecar — 兩邊都沒有 payload 時 parser 仍計 `malformed`，item 卡 `evidenceMissing`（per Annotation Format Contract § Evidence 寫入路徑）
+- ❌ 為了套用新契約去改寫**既有**行內 payload annotation — 那是 rewrite 當時的 evidence，本契約只管新寫入（per 同上）
 - ❌ annotation 寫在 `- [ ] #N` 下一行（即使 indent 正確）而非 inline 同行末尾（per Annotation MUST 5）
 - ❌ scan 結果 non-ready 時直接回報 user「bucket=readyForEvidence」/「healthCheckNeeded」而不先自己讀 blocking reason + 修正（per Annotation MUST 6）
 - ❌ user 說「我點了 X」時，拿自己本 turn 之前的 scan / tasks.md 讀取回「你還沒點」——那是用 stale 快照反駁 user 的第一手事實（per MUST 10 / 11）
@@ -151,14 +153,46 @@ Review-gui 的狀態全部落在 `tasks.md` 這個**雙寫**檔上——user 在
 
 review-gui parser 對 annotation key 和 status tag **嚴格字面匹配**。寫錯 = silent malformed（item 卡 `evidenceMissing`、bucket 不收斂）。
 
+### Evidence 寫入路徑（行內只到時間戳，payload 走 sidecar）
+
+**寫新 evidence 時，payload MUST 進 sidecar（`.spectra/evidence/<change>.jsonl`），行內 MUST 只留短 marker。** 對 **每一個** kind、**每一條** 新寫的 evidence 都適用，不是只有 `verified-ui`。
+
+一條命令做完兩件事——寫 sidecar，並印出要貼進 `tasks.md` 的行內 marker：
+
+```bash
+node ~/offline/clade/vendor/scripts/lib/evidence-store.mjs \
+  --repo <consumer-path> --change <change-name> --write \
+  --item '#3' --kind verified-ui \
+  --screenshot 'screenshots/local/<change-name>/#3-final.png' \
+  --dom '<one-liner-observation>'
+# stdout: (verified-ui: 2026-07-30T09:12:33.421Z)
+```
+
+把 stdout **原樣**貼到該 item 行末（inline 位置照 § MUST（annotation 寫入時）第 5 條）。**NEVER** 自己另外編一個時間戳——sidecar 記的與行內貼的必須是同一個，CLI 印出來的就是它剛寫進去的那一個。
+
+| kind | 必填 flag | 選填 flag |
+| --- | --- | --- |
+| `verified-ui` | `--screenshot` | `--dom` |
+| `verified-e2e` | `--spec --trace` | — |
+| `verified-api` | `--method --url --status` | `--body` |
+| `claude-analyzed` | `--route` | `--note` |
+| `awaiting-user-decision` | — | `--packet` |
+| `claude-discussed` | — | — |
+
+**MUST 保留短 marker，NEVER 整條拿掉**：consumer 端仍有 legacy 讀取者用 `grep '\(verified-ui:[^)]*\)'` 做粗判斷，行內完全沒有 marker 會讓它們全部誤判成缺 evidence。
+
+**Parser 對短 marker 的接受條件**：無 payload 的 `(verified-e2e:)` / `(verified-api:)` / `(verified-ui:)` 只在 **sidecar 已有對應 `(itemId, kind)` 記錄**時合法；sidecar 也沒有 → 仍計 `malformed`，行為與本契約之前完全一致。所以「先跑 `--write`、再貼 marker」的順序不可顛倒。
+
+**既有行內 payload annotation 一律不動**：`(verified-ui: <ISO> screenshot=...)` 這種舊格式**仍然合法**、仍照舊解析。**NEVER** 為了套用本契約去改寫既有 annotation 把 payload 搬進 sidecar——那是 rewrite 別人當時記下的 evidence，而且對行長沒有收益：本契約只管**新寫入**。
+
 ### Canonical annotation keys
 
 | Key | 格式 | Parser 行為 |
 | --- | --- | --- |
-| `screenshot=<path>` | **單數**，value 是單一 relative path | `findKeyValue('screenshot')` strict match |
-| `screenshots=<p1>,<p2>` | **複數**，逗號分隔多 path | review-gui parser **不認**（fallback null）— 待 parser 支援前**禁用** |
-| `(verified-ui: <ISO>)` | 括號內、冒號後空格 | `hasEvidenceFor` 認為 evidence 已收集 |
-| `(verified-api: <ISO> <METHOD> <URL> <STATUS>)` | 括號內、四段 space-separated | `hasEvidenceFor` 認為 evidence 已收集。**MUST** 含 HTTP method + URL path + status code |
+| `screenshot=<path>` | **單數**，value 是單一 relative path | `findKeyValue('screenshot')` strict match。**僅 legacy 行內格式**；新寫入走 `--screenshot` 進 sidecar |
+| `screenshots=<p1>,<p2>` | **複數**，逗號分隔多 path | review-gui parser **不認**（fallback null）— 待 parser 支援前**禁用**。多 screenshot 走 sidecar：同 `(itemId, kind)` 跑多次 `--write`（append-only），或拆 sub-items |
+| `(verified-ui: <ISO>)` | 括號內、冒號後空格 | **新契約 canonical 形式**。`hasEvidenceFor` 認為 evidence 已收集；screenshot 路徑從 sidecar 取 |
+| `(verified-api: <ISO> <METHOD> <URL> <STATUS>)` | 括號內、四段 space-separated | **legacy 行內格式**，仍合法。新寫入用 `(verified-api: <ISO>)` + `--method --url --status` 進 sidecar |
 | `(issue: <description>)` | 括號內、冒號後空格 | `evidenceMissing` 排除此 item（視為 handled） |
 | `(claude-analyzed: <ISO> route=<X>[ note=...])` | 括號內、space-separated KV | `analyzedIssuedCount` 計數；bucket 從 `feedbackGiven` 翻為 `awaitingUserReEval` |
 | `（fix-requested）` | 全形括號、無 payload | **invalidates** 同行 `(claude-analyzed:)` — user 拒絕 route=E 結論、要求 code fix。`analyzedIssuedCount` 排除帶此 annotation 的 item → bucket 回 `feedbackGiven`（等 Claude 接手修） |
@@ -169,13 +203,13 @@ review-gui parser 對 annotation key 和 status tag **嚴格字面匹配**。寫
 | 錯誤寫法 | 為什麼不認 | 正確寫法 |
 | --- | --- | --- |
 | `(deferred: ...)` | parser 只認 `issue` / `verified-*` / `claude-analyzed` / `awaiting-user-decision`；`deferred` 不在辭典 → item 卡 `evidenceMissing` | `(issue: self-collect failed — <reason>)` |
-| `screenshots=a,b` | `findKeyValue('screenshot')` 只配 singular key | 拆成 sub-items 各帶 `screenshot=<path>` |
+| `screenshots=a,b` | `findKeyValue('screenshot')` 只配 singular key | 對同一 `(itemId, kind)` 跑多次 `--write`（sidecar append-only），或拆成 sub-items 各自 `--write` |
 | `screenshot = <path>`（等號前後空格） | KV parser 不 trim 等號兩側 | `screenshot=<path>`（無空格） |
 | `#4-xxx.png` 配 item `#4.1` | filename prefix match `#4-` 只配 `#4`，不配 `#4.1` | sub-item `#4.1` 用 `#4.1-xxx.png` |
 
 ### MUST（annotation 寫入時）
 
-1. evidence collection 完成寫 annotation 時，**MUST** 用上表 canonical key（singular `screenshot=`）
+1. evidence collection 完成時，**MUST** 先跑 `evidence-store.mjs --write` 寫 sidecar，再把它印出的短 marker 原樣貼進行內（per § Evidence 寫入路徑）。讀既有 legacy 行內 payload 時照上表 canonical key（singular `screenshot=`）
 2. self-collect fallback chain 全失敗 → **MUST** 寫 `(issue: self-collect failed after (a)(b)(c)(d): <reason>)`，**NEVER** `(deferred: ...)`
 3. sub-item `#N.M` 的 screenshot 檔名 **MUST** 用 `#N.M-` prefix，**NEVER** 複用 parent `#N-` prefix
 4. route E 結論 **MUST** 同步寫 `(claude-analyzed: <ISO> route=E)` annotation（per MUST 7）

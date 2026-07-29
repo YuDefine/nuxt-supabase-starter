@@ -165,9 +165,9 @@ Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由
 
 - `[review:ui]` — 需要使用者親自確認的 UI / UX 驗收。例：收 email / 收 webhook / 實體裝置 / 視覺主觀美感 / 真機跨機器。**MUST** 由使用者完成，agent 禁止代勾。
 - `[discuss]` — Claude 主導的 evidence-based 討論項目。例：production 授權、商業判斷、production 觀察、後端 evidence 查驗。spectra-archive Step 2.5 walkthrough 流程下，Claude 主動準備證據與使用者討論、取得 OK 後可代勾並寫入 `(claude-discussed: <ISO-8601-timestamp>)` annotation。**`[discuss]` items MUST 由 `/spectra-archive` Step 2.5 walkthrough 觸發推進，NEVER 由 review:ui home page handoff prompt（含「等 Claude 接手」群「接手分析 prompt」按鈕）dispatch 給接手 Claude**。理由：production-observation / production 授權 / 商業判斷類 item 的勾選 trigger 是外部 signal（deploy / soak / 商業決策），Claude 提前分析只會回「等外部 signal」、tasks.md 無更新、change 永遠卡在 review:ui pending state、archive 不了。對應 review-gui 行為：純 D-only pending（I=0、V=0、evidenceMissing=0）的 change MUST 進「🗓 等 archive walkthrough」群、無接手 prompt 按鈕。
-- `[verify:e2e]` — Playwright spec-based automated round-trip。主線在 `e2e/verify/<change>/<topic>.spec.ts` 寫 spec、跑 `pnpm test:e2e:verify <change>`，通過後寫 `(verified-e2e: <ISO> spec=<path> trace=<path>)` annotation。
-- `[verify:api]` — 純 HTTP round-trip（curl / ofetch / fetch）。主線跑 request，通過後寫 `(verified-api: <ISO> <METHOD> <URL> <STATUS>[ body=<hash>])` annotation。**裝 `nuxt-csurf` 的 consumer** MUST 走 dual-token recipe（否則 POST 第一次就撞 403）— 見 `~/offline/clade/vendor/snippets/verify-channels/api-roundtrip.template.sh`。
-- `[verify:ui]` — final-state screenshot + DOM observation。主線派 screenshot-review agent `mode: verify` 只開已知 URL、等待載入、截 final-state screenshot、記錄 DOM 觀察，回來後寫 `(verified-ui: <ISO> screenshot=<path>[ dom=<obs>])` annotation；使用者仍需在 review GUI 點 OK 才勾 `[x]`。
+- `[verify:e2e]` — Playwright spec-based automated round-trip。主線在 `e2e/verify/<change>/<topic>.spec.ts` 寫 spec、跑 `pnpm test:e2e:verify <change>`，通過後寫 `(verified-e2e: <ISO>)` annotation（`spec` / `trace` payload 進 sidecar，見下方 § Evidence payload 走 sidecar）。
+- `[verify:api]` — 純 HTTP round-trip（curl / ofetch / fetch）。主線跑 request，通過後寫 `(verified-api: <ISO>)` annotation（`method` / `url` / `status` payload 進 sidecar）。**裝 `nuxt-csurf` 的 consumer** MUST 走 dual-token recipe（否則 POST 第一次就撞 403）— 見 `~/offline/clade/vendor/snippets/verify-channels/api-roundtrip.template.sh`。
+- `[verify:ui]` — final-state screenshot + DOM observation。主線派 screenshot-review agent `mode: verify` 只開已知 URL、等待載入、截 final-state screenshot、記錄 DOM 觀察，回來後寫 `(verified-ui: <ISO>)` annotation（`screenshot` / `dom` payload 進 sidecar）；使用者仍需在 review GUI 點 OK 才勾 `[x]`。
 - `[verify:<a>+<b>]` / `[verify:<a>+<b>+<c>]` — multi-marker，僅允許組合 `e2e` / `api` / `ui` verify channels，例如 `[verify:api+ui]` 或 `[verify:e2e+ui]`。
 - `[verify:auto]` — **DEPRECATED alias**，僅為既有 consumer tasks.md 相容保留；解析時視為 synthetic `[verify:api+ui]` 並 emit deprecation warning。新項目 **NEVER** 使用 `[verify:auto]`。
 
@@ -182,6 +182,14 @@ Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由
 - `[review:ui]` / `[discuss]` 不得與 verify multi-marker 混用。`[verify:api+review:ui]`、`[verify:api+discuss]` 都是非法 marker。
 - Verify multi-marker 的 channel canonical order 是 `e2e → api → ui`；annotation 寫回也 **MUST** 依此順序。
 
+### Evidence payload 走 sidecar（hard rule）
+
+寫**任何一條**新 evidence annotation 時：payload **MUST** 進 sidecar（`.spectra/evidence/<change>.jsonl`），行內 **MUST** 只留 `(<kind>: <ISO>)` 短 marker。適用 **每一個** annotation kind，不是只有 `verified-ui`。
+
+寫入一律用 `vendor/scripts/lib/evidence-store.mjs --write`——它寫完 sidecar 會把該貼進行內的短 marker 印到 stdout，**原樣**貼上即可。**NEVER** 自己另編時間戳，**NEVER** 先貼 marker 再補 sidecar（順序顛倒時 parser 計 `malformed`）。
+
+完整 flag 對照表、parser 對短 marker 的接受條件、以及「既有行內 payload annotation 一律不動」的理由：見 [[review-gui-surface]] § Annotation Format Contract § Evidence 寫入路徑。
+
 ### `(claude-analyzed: ...)` annotation（Claude-writable）
 
 當 review-gui 「🤖 等 Claude 接手」群 → 「接手分析」prompt 走完後，Claude 路由結論為 **(E) false positive / item 應改回 OK 或翻 [x] / 需 user 重新評估** 時，**MAY** 在帶 `（issue:）` 的 item 同行寫入此 annotation 作為 evidence trail，告訴 GUI「我已分析過、ball in user's court」。
@@ -189,7 +197,7 @@ Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由
 #### Schema / Claude 可寫條件（hard rule）
 
 ```text
-(claude-analyzed: <ISO-8601> route=E[ note=<sanitized one-liner>])
+(claude-analyzed: <ISO-8601>)          ← 行內；route / note 走 sidecar --route / --note
 ```
 
 核心可寫條件：**MUST** 路由 **(E)** 結論 + item 已帶 `（issue:）` 時才寫；**MUST NOT** 翻 checkbox、**MUST NOT** strip 既有 `（issue:）`、**MUST NOT** 在路由 (A)–(D) 結論時寫（那些情境 user 仍需要 Claude 動作）。
@@ -205,7 +213,7 @@ Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由
 #### Schema / Claude 可寫條件（hard rule）
 
 ```text
-(awaiting-user-decision: <ISO-8601>[ packet=<path>])
+(awaiting-user-decision: <ISO-8601>)   ← 行內；packet 走 sidecar --packet
 ```
 
 核心可寫條件：**MUST** 在判定該 item 是純 user 商業決策、且已準備 decision packet 後才寫（**不**要求 item 已帶 `（issue:）`）；**MUST NOT** 翻 checkbox；**MUST NOT** 用此 annotation 規避該 item 其實 actionable 的情況 — 可走 (A)/(B)/(C) 路徑就 **MUST** 走。

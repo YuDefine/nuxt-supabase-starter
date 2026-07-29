@@ -17,6 +17,7 @@
 import { existsSync } from 'node:fs'
 import { readFile, readdir } from 'node:fs/promises'
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
+import { resolveEvidence } from '../lib/evidence-store.mjs'
 
 // review-gui.mts is hosted in clade central (per propagate manifest @ 76a202a, 2026-05-19);
 // consumer doesn't have a local copy. Resolve dynamically: prefer co-located (clade self),
@@ -408,35 +409,44 @@ function applyMissingEvidenceRule(
     }
 
     if (item.kinds.includes('verify:e2e') && !item.annotations.verifiedE2e) {
-      issues.push({
-        severity: 'critical',
-        code: 'missing_verify_e2e_annotation',
-        change: changeName,
-        itemId: item.id,
-        file: `openspec/changes/${changeName}/tasks.md:${item.lineNumber}`,
-        message: `${item.id} is [${formatKinds(item.kinds)}] but lacks (verified-e2e: ...) evidence`,
-        suggestion:
-          'run the verify:e2e channel and write (verified-e2e: <ISO> spec=<path> trace=<path>) before archive',
-      })
+      // TD-286: inline may have short marker — check sidecar for payload.
+      const resolved = resolveEvidence(ROOT, changeName, item.id, 'verified-e2e')
+      if (!resolved.present) {
+        issues.push({
+          severity: 'critical',
+          code: 'missing_verify_e2e_annotation',
+          change: changeName,
+          itemId: item.id,
+          file: `openspec/changes/${changeName}/tasks.md:${item.lineNumber}`,
+          message: `${item.id} is [${formatKinds(item.kinds)}] but lacks (verified-e2e: ...) evidence`,
+          suggestion:
+            'run the verify:e2e channel and write (verified-e2e: <ISO> spec=<path> trace=<path>) before archive',
+        })
+      }
     }
 
     if (item.kinds.includes('verify:api') && !item.annotations.verifiedApi) {
-      issues.push({
-        severity: 'critical',
-        code: 'missing_verify_api_annotation',
-        change: changeName,
-        itemId: item.id,
-        file: `openspec/changes/${changeName}/tasks.md:${item.lineNumber}`,
-        message: `${item.id} is [${formatKinds(item.kinds)}] but lacks (verified-api: ...) evidence`,
-        suggestion:
-          'run the verify:api channel and write (verified-api: <ISO> <METHOD> <URL> <STATUS>[ body=<digest>]) before archive',
-      })
+      const resolved = resolveEvidence(ROOT, changeName, item.id, 'verified-api')
+      if (!resolved.present) {
+        issues.push({
+          severity: 'critical',
+          code: 'missing_verify_api_annotation',
+          change: changeName,
+          itemId: item.id,
+          file: `openspec/changes/${changeName}/tasks.md:${item.lineNumber}`,
+          message: `${item.id} is [${formatKinds(item.kinds)}] but lacks (verified-api: ...) evidence`,
+          suggestion:
+            'run the verify:api channel and write (verified-api: <ISO> <METHOD> <URL> <STATUS>[ body=<digest>]) before archive',
+        })
+      }
     }
 
     // @no-screenshot 豁免 screenshot-based evidence — verify:ui 的 evidence 就是
     // screenshot，round-trip-only item 的 @no-screenshot 對它必須同樣有效（TD-190；
     // 原本此豁免在 verify:* continue 之後，對 verify:ui 完全無效）
     if (item.kinds.includes('verify:ui') && !item.annotations.verifiedUi && !item.noScreenshot) {
+      const resolved = resolveEvidence(ROOT, changeName, item.id, 'verified-ui')
+      if (resolved.present) continue
       issues.push({
         severity: 'warning',
         code: 'missing_verify_ui_annotation',

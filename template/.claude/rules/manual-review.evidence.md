@@ -450,7 +450,7 @@ Marker bearing task 不寫額外 audit log（與 `@no-manual-review-check` 不�
 - **Half-width parens**（machine annotation，與 `(claude-discussed:)` / `(verified-*:)` 同類）
 - `<ISO-8601>` **required**（UTC，秒級精度，與其他 annotation 共用 timestamp 慣例）
 - `route=<code>` **required**：目前只支援 `E`。Schema 預留為自由 `string` 給未來擴展，但 hard rule 限 `E`
-- `note=<one-liner>` optional：剝半形括號、上限 240 chars、**single hyphen-joined token**（`sanitizeNote` 把 whitespace 折成 `-`；與 `verified-ui` 的 `dom=<obs>` 同 convention，避免解析端 `findKeyValue` whitespace split 只拿到第一個 word）
+- `note=<one-liner>` optional：新寫入走 `evidence-store.mjs --write --note`，值進 sidecar JSON，**不需要** hyphen-join（JSON 保得住空白）。既有**行內** legacy 值仍受 inline 限制：剝半形括號、上限 240 chars、**single hyphen-joined token**（`sanitizeNote` 把 whitespace 折成 `-`，避免解析端 `findKeyValue` whitespace split 只拿到第一個 word）
 - 落點：description 後、所有 trailing markers (`@followup` / `@no-manual-review-check` / `@no-screenshot`) 前
 - 與 `（issue: ...）` co-exist：issue **MUST** 已存在（沒 issue 就不該寫 claude-analyzed）；兩者並存表達「Claude 已分析此 issue，路由結論=等 user 重新評估」
 
@@ -466,7 +466,7 @@ Marker bearing task 不寫額外 audit log（與 `@no-manual-review-check` 不�
 
 - **Half-width parens**（machine annotation，與 `(claude-analyzed:)` 同類）
 - `<ISO-8601>` **required**（UTC，秒級精度）
-- `packet=<path>` optional：decision packet（給 user 拍板的證據 / 摘要）相對路徑。**Single hyphen-joined token**（write 時 `sanitizeNote` 後 whitespace 折成 `-`），與 `verified-ui` 的 `screenshot=<path>` 同 convention
+- `packet=<path>` optional：decision packet（給 user 拍板的證據 / 摘要）相對路徑。新寫入走 `evidence-store.mjs --write --packet`，值進 sidecar；既有行內 legacy 值仍是 **single hyphen-joined token**（write 時 `sanitizeNote` 後 whitespace 折成 `-`）
 - 落點：description 後、所有 trailing markers 前
 - **不**要求 item 已帶 `（issue:）`（D-only / review:ui pending 都可標 — 跟 claude-analyzed 的差別）
 

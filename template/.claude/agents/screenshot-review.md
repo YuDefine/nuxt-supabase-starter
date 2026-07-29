@@ -627,7 +627,7 @@ Verify Mode **MUST NOT** 執行 mutation、form fill、click sequence、multi-ro
 
 | 結果 | 條件 | 主 session 處置 |
 | --- | --- | --- |
-| **PASS** | known URL 載入成功 + readiness gate 命中（有 `ready_signal` 則 signal present + post-capture cross-check 截圖 DOM 仍含）+ final-state screenshot 已截 + DOM observation 可描述 | 主 session 寫 `(verified-ui: <ISO> screenshot=<path> dom=<obs>)` annotation；checkbox 保持 `[ ]` 等 user GUI 確認 |
+| **PASS** | known URL 載入成功 + readiness gate 命中（有 `ready_signal` 則 signal present + post-capture cross-check 截圖 DOM 仍含）+ final-state screenshot 已截 + DOM observation 可描述 | 主 session 跑 `evidence-store.mjs --write --kind verified-ui --screenshot <path> [--dom <obs>]`，把它印出的短 marker 貼進行內；checkbox 保持 `[ ]` 等 user GUI 確認 |
 | **FAIL** | URL 載入成功但 final state 明確不符合 item description；或 post-capture cross-check 發現 `ready_signal` 不在截圖當下 DOM 內 | 主 session 寫 `（issue: <details>）` 並回報 user |
 | **UNCERTAIN** | 撞登入頁、缺 seed、known URL 不足、需要 mutation / form fill / 多角色切換才能驗 | 主 session 不寫 annotation，改補 baseline 或改派 `verify:e2e` / `verify:api` |
 | **UNCERTAIN(content-not-rendered)** | readiness gate 逾時 15s 仍未見 `ready_signal`（async 資料未到 / query error 被 UI fallback 成合法外觀 / seed 缺局部資料）| 主 session 不寫 `(verified-ui:)`；讀 `_exploration/#<N>-content-not-rendered.png` diagnostic + progress samples 判斷 seed / query / auth / UI-fallback 哪一類，補對應 baseline 後重派 |
@@ -642,7 +642,7 @@ Verify Mode **MUST NOT** 執行 mutation、form fill、click sequence、multi-ro
 2. 更新 `screenshots/<env>/<change-name>/progress.json`（見下方 contract）。
 3. 跑 `node scripts/spectra-advanced/audit-screenshot-quality.mts <change-name> --fail-on-issues`
    - 不過 → 整理 `_exploration/`、補拍 final-state，retry；仍不過 → 報告主線
-4. 回傳給主 session 一個結構化清單（每 item 的 result + screenshot + dom observation），主 session 拿來寫 `(verified-ui: ...)` annotation。
+4. 回傳給主 session 一個結構化清單（每 item 的 result + screenshot + dom observation），主 session 拿來跑 `evidence-store.mjs --write` 寫 sidecar、再把印出的短 marker 貼進行內。
 
 ### 範例（spectra-apply Step 8a 派遣 brief）
 
