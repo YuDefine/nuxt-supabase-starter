@@ -514,3 +514,36 @@ seedConversation({ updatedAt: daysAgo(60) })  // 更早
 - **NEVER** 只憑「我 push 了而且沒看到紅燈」判定修好 —— 先確認**真的有 run 被建立**（`gh run list --limit 3` 看 SHA 對不對）
 
 實證（2026-07-28 nuxt-supabase-starter）：`Template CI` 的 paths 有 `template/app/**`、`template/server/**`、`template/scripts/**` … 就是沒有 `template/e2e/**`；`Template E2E` 又是 `workflow_run: [Template CI]` 觸發。結果修 `e2e/fixtures/index.ts` 的 commit 既不跑 CI、也不跑 E2E，得手動 `gh workflow run` 才驗得到。同一份清單也漏了 `template/packages/**`，單元測試的修正一樣不觸發。
+
+## 對設定檔原文的斷言，標的是行為本身
+
+測 `.github/workflows/*.yml`、`docker-compose.yml`、`Dockerfile` 這類設定檔時，斷言的標的**MUST** 是可執行的那幾行，不是含註解的整段原文。註解為了解釋實作會逐字引用實作 —— 一旦斷言看得到註解，「實作存在」與「有人寫過關於實作的說明」就變成同一件事，把實作刪掉，斷言仍被註解滿足。
+
+**兩條 MUST**：
+
+1. **先取行為 view，再斷言**。有 parser 就 parse 後對節點斷言；純文字比對則先剝一層註解，之後所有行為斷言都走這個 view：
+
+   ```sh
+   GATE_STEP=$(awk '/<step marker>/ { inside = 1; next } inside && /^      - / { exit } inside { print }' "$WORKFLOW")
+   GATE_CODE=$(printf '%s\n' "$GATE_STEP" | grep -v '^ *#')   # ← 行為 view
+   code_grep() { printf '%s\n' "$GATE_CODE" | grep "$@"; }
+
+   code_grep -qF 'select(.status != "completed")' || fail "..."
+   ```
+
+2. **每條新斷言附一次 mutation 證明**。把它要鎖的實作改壞、確認轉紅、再改回來。受保護路徑（`.github/workflows/` 等）在 repo 外的複本上跑：
+
+   ```bash
+   T=$(mktemp -d); mkdir -p "$T/.github/workflows" "$T/test/scripts"
+   cp .github/workflows/<file>.yml "$T/.github/workflows/"
+   cp test/scripts/<test>.sh "$T/test/scripts/"
+   # 改壞 $T 內的 workflow → bash "$T/test/scripts/<test>.sh" 預期 FAIL → 還原 → 預期 PASS
+   ```
+
+   寫不出「改哪一行會讓它紅」，這條斷言就還沒被驗證過。
+
+負向斷言（`not.toContain(X)`）是鏡像形態：註解命中造成**誤報失敗**，逼作者去改一段正確的註解。同樣靠行為 view 解決。
+
+**為什麼值得單獨列一條**：這類斷言的失效方式是**恆綠**，而綠燈正是它被信任的理由 —— 沒有人會對綠燈測試問「它會不會永遠綠」。註解寫得越忠實越危險：一段逐字引用運算式的說明，就是一份能永久滿足該斷言的複本。
+
+實證（2026-07-29 <consumer-a>）：staging-gate 回歸腳本斷言 `status != "completed"` 這個 jq filter 存在，但同一個 step 的註解解釋了這個 filter 並逐字引用它。把整段 `--jq` filter 刪成 `.workflow_runs[].head_sha`，測試照樣 PASS —— 被鎖住的是 production deploy gate 的 fail-fast 判準。詳見 [[pitfall-config-assertion-satisfied-by-own-comment]]。
