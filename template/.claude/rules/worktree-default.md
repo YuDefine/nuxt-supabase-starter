@@ -237,6 +237,8 @@ git commit --only -m "📝 spectra: phase N done (<change-name>)" -- openspec/ch
 
 **NEVER** 只在 worktree working tree 勾 checkbox 而不 commit — 即使「等做完一起 commit」也 **MUST** 至少在 build 結束前批次 commit 一次。
 
+**NEVER** 把 `openspec/changes/<change-name>/tasks.md` 以外的路徑加進這個 commit。契約 SoT 在 [[commit]] § worktree 內唯一合法的 commit：artifact-tick —— 那裡的 `git commit` 禁令對 worktree 內**其他任何**改動仍然成立，本節是它唯一的例外。
+
 ## §9.7 Artifact Reading SOP — 讀進度前先查 active worktree
 
 讀 spectra change 進度（`tasks.md` / `openspec/changes/<slug>/` artifacts / WORKTREE-BRIEF.md）時 **MUST** 先查有沒有 active worktree：
