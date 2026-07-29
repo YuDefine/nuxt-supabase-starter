@@ -284,89 +284,11 @@ Untracked file 例外：須先 `git add <untracked>` 再 `git commit --only -- <
 
 全部不成立（真正什麼都沒得做了）→ 跳到 5-D：若 `HANDOFF.md` 存在且內容已過時，清空或刪除。
 
-### 5-B. 收集下一步資訊
+### 5-B ~ 5-F：收集 → 寫 HANDOFF → 同步 ROADMAP → 納入 commit → 報告
 
-從本次 session 脈絡、`git log`、`docs/tech-debt.md`、`openspec/ROADMAP.md` 的 Next Moves 萃取（涵蓋 spectra change 與自由任務，不限 openspec）：
+5-A 判定**需要 handoff** → **MUST 讀 [`handoff-steps.md`](handoff-steps.md) § 5-B~5-F 並逐步執行**，五個子步驟一個都不能跳（5-E 的「HANDOFF/ROADMAP 變更 MUST 在此 commit、但不 push」是 Step 6 單次 push 設計的前提，漏掉會讓 working tree dirty 進 deploy commit）。
 
-- **In Progress**：正在進行但未完結的工作（spectra change / 自由任務皆可，含進度描述）
-- **Blocked**：被什麼擋住、需要什麼才能繼續（無則省略此區塊）
-- **Next Steps**（不分來源，一律收齊，按優先序排列）：
-  - commit 後的驗證動作：人工檢查、截圖 review、deploy smoke test
-  - follow-up marker：`@followup[TD-NNN]` 指向的 tech debt
-  - session 中浮現但刻意未處理的機會：refactor、抽共用元件、補測試
-  - 跨 session backlog：使用者提過的待辦、roadmap 的 near-term 項目
-  - 注意事項 / 陷阱：下一人接手前需要知道的隱性脈絡
-
-### 5-C. 寫入 `HANDOFF.md`
-
-依 `.claude/rules/handoff.md` 格式覆寫：
-
-```markdown
-# Handoff
-
-## In Progress
-
-- [ ] <任務描述（spectra change 名稱 / 自由任務 / WIP）>
-- <做到哪、關鍵檔案或決策點>
-
-## Blocked
-
-- <blocker 描述；無則省略整個區塊>
-
-## Next Steps
-
-1. <下一步，按優先序>
-2. <...>
-```
-
-**禁止**：
-
-- 編造不存在的 in-progress / blocker
-- 為了「填滿」區塊灌水 —— 真沒有就省略該區塊
-
-### 5-D. 同步 Spectra ROADMAP
-
-```bash
-pnpm spectra:roadmap
-```
-
-重算 `openspec/ROADMAP.md` 的 AUTO 區塊（Active Changes / Active Claims / Parallel Tracks / Parked Changes）。AUTO 區塊由此命令生成，手動編輯會被下次 sync 覆寫。
-
-若 5-B 收集到的 **Next Steps** 中包含跨 session backlog（不只是「commit 後立刻要做」的驗證動作），依 `.claude/rules/proactive-skills.md` 的「Spectra Roadmap Maintenance」**手動**更新 MANUAL 區塊的 `## Next Moves`，格式：
-
-```text
-- [priority] 描述 — 依賴：xxx / 獨立 / 互斥：yyy
-```
-
-### 5-E. 把 HANDOFF/ROADMAP 變更納入 commit（不 push）
-
-5-C/5-D 修改的是 tracked 檔（`HANDOFF.md`、`openspec/ROADMAP.md`），**MUST** 在此處 commit 進去，否則 working tree 會 dirty、Step 6 的 deploy commit 也不含這次的交接狀態。
-
-```bash
-# 只 stage 5-C/5-D 動到的檔，避免誤包其他 WIP（commit 流程預設不該再撿東西）
-git add HANDOFF.md openspec/ROADMAP.md 2>/dev/null || true
-
-# 若沒實際變動（HANDOFF 不需更新、ROADMAP 已 current），跳過 commit
-if ! git diff --cached --quiet -- HANDOFF.md openspec/ROADMAP.md 2>/dev/null; then
-  git commit -m "$(cat <<'EOF'
-docs(handoff): 更新 commit 後交接狀態
-
-Co-Authored-By: Claude <noreply@anthropic.com>
-EOF
-)"
-  git log -1 --oneline
-fi
-```
-
-> 注意：這個 commit **不** push。它**不**重新 bump 版本（不是 deploy），只是把 HANDOFF/ROADMAP 落入 history。它會跟 Step 6 的 bump/deploy commit 一起在同一次 `git push origin main` 送出——刻意延後 push 是為了讓發版 commit（HANDOFF commit + deploy commit）只觸發**一次** main push，不讓第二次 push 取消掉第一次 push 已排入佇列的 staging run（見 `~/offline/clade/vendor/snippets/deploy-gate/README.md`）。
-
-### 5-F. 報告
-
-```text
-✅ HANDOFF.md 已更新（已入 commit / 無變更略過）
-✅ ROADMAP 已同步（已入 commit / 無變更略過）
-（或：無可延續工作，HANDOFF.md 已清空 / 未建立）
-```
+5-A 判定**不需要** → 跳到 5-D 的清理路徑（同檔）。
 
 ## Step 6: 版本號升級與 Deploy Commit
 
@@ -452,16 +374,7 @@ Evidence:
 git branch --show-current
 ```
 
-**觸發條件**：當前**不在 main / master 分支**，且 consumer 提供 `/ship` skill（會 push branch 並開 PR）。
-
-```text
-Commit 完成！要繼續執行 /ship 推送並建立 PR 嗎？
-```
-
-- 同意 → 執行 `/ship` skill
-- 拒絕或已在 main / master → 跳過
-
-**不觸發**：在 main / master 分支，或 consumer 沒有 `/ship` skill。
+**不在 main / master 分支** 且 consumer 提供 `/ship` skill → **MUST 讀 [`handoff-steps.md`](handoff-steps.md) § Step 8** 走詢問與銜接流程。在 main / master、或 consumer 沒有 `/ship` → 不觸發，直接進 Final Step。
 
 ## Final Step: 釋放 /commit lock（**必做最後一步**）
 

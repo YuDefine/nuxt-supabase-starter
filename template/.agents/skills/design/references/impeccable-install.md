@@ -96,3 +96,25 @@ vp 0.1.20 仍有此 bug（驗證過）。**繞法**：transform function 0 targe
 - `<consumer-c>/scripts/install-skills.sh` — copy mode + simple `*.md` lint-staged
 - `nuxt-supabase-starter/template/scripts/install-skills.sh` — copy mode + transform `*.md` + noop fallback
 - `<consumer-d>/scripts/install-skills.sh` — copy mode（同 <consumer-a>；目前無 symlink-mode consumer 可當範本，需 symlink 時用標準 snippet 的 `--agent claude-code -y` 變體）
+
+## v3.1.0 → v3.9.1 累積 user-facing 行為（orchestrator 對齊項）
+
+**何時讀**：升降版對齊、或要查 `../SKILL.md` 某條規範的上游出處時。跑一次 design pass 不需要讀這節。
+
+**sub-command 集唯一變動：`teach` → `init`**（v3.5.0 rename；`teach` 保留為 deprecated alias，user 打 `teach` 仍 route 到 `init`）。clade plan 一律輸出 `/impeccable init`。
+
+1. **`teach` → `init`**（v3.5.0）：一個指令 set up 專案 context（PRODUCT.md + DESIGN.md + Live Mode config + 推薦下一步），從單次 codebase scan 產出。舊名 `teach` 仍可用（alias）。
+2. **新 management command `hooks`**（v3.6.0+）：`$impeccable hooks <on|off|status|ignore-rule|ignore-file|ignore-value|reset>` 安裝 / 修復 project-local detector hook（Claude / Codex / Cursor / Copilot），edit UI 檔後自動跑 detector 把 findings 回饋成 system reminder。**非 clade plan 的 orchestration 對象**（是 user 選裝的專案級 hook），plan 不主動排；user 問起才引導。
+3. **Absolute bans 擴增**（v3.5 / v3.9）：跨 register 硬拒清單新增 — tiny all-caps tracked eyebrow（每段上方的 kicker）、numbered section markers（`01 · About / 02 · Process` 當 scaffold）、text-overflow（heading 在 breakpoint 溢出容器）、**decorative grid backgrounds（v3.9：`linear-gradient(...1px, transparent 1px)` + `background-size` 雙軸格線，除非是真的 canvas/map/blueprint）**、cream / sand / beige body bg（整個 warm-neutral band OKLCH L 0.84-0.97, C < 0.06, hue 40-100 都是 2026 AI default tell）。已折進 SKILL.md Step 2.5 Fidelity Check bans 清單。
+4. **Detector 29 → 41 deterministic rules**（v3.5 加 14 條：`cream-palette` / `em-dash-overuse` / `marketing-buzzword` / `numbered-section-markers` / `oversized-h1` / `extreme-negative-tracking` / `gpt-thin-border-wide-shadow` / `repeating-stripes-gradient` / `image-hover-transform` / `broken-image` / `text-overflow` / `clipped-overflow-container` 等），引擎從 jsdom 換 `htmlparser2`（~20x 快、可 inline bundle）。對 clade plan 無影響，audit 報告更準更乾淨。
+5. **`/impeccable bolder` 留在既有 design system 內**（v3.9）：專案有 DESIGN.md / token / 既有 component style 時，bolder pass 改用 hierarchy / proportion / density / copy 讓既有語言更果斷，**不**新造 color / gradient / effect；系統真的表達不出方向時才點名需要的新增並先問。→ 對應 SKILL.md Step 1.6 Matrix bolder 列。
+6. **Critique persistence**（v3.1+）：`/impeccable critique` 每次跑會寫 `.impeccable/critique/<timestamp>__<slug>.md` 快照（score、P0/P1 計數、完整報告）；`/impeccable polish` 跑同 target 時自動讀最新快照當 input。同目錄 `ignore.md` 是 user-curated，列出項目不再 raise。v3.9 在非 Claude/Codex harness 上更常把 critique pass 丟到獨立 sub-agent 跑（fresh eyes）。**與 clade `openspec/changes/<name>/design-review.md` 不同檔、不同用途** — 兩者並存，邊界見 SKILL.md Step 6。
+7. **Shape → craft 4 named gates with STOP markers**（僅 Codex harness 啟用 native image_gen 時生效）：(a) Shape brief confirmed (b) Direction questions answered (c) Palette confirmed (d) One mock direction approved/delegated。**AI Agent 不是 native image-gen harness**，gates b-d collapse 進 shape brief，clade 既有 Phase 1 Gate + Phase 2 Pre-condition 仍適用；只在使用者跨到 Codex 時參照 4 gates。
+8. **Bare `/impeccable` context-aware 推薦 + monorepo-aware context + 每日 self-update check**（v3.5 / v3.8）：無參數 `/impeccable` 讀專案 + dirty git tree + 最新 critique 後推薦 2-3 個最高價值指令（不自動跑）；monorepo 下 PRODUCT.md / DESIGN.md 逐 app 解析。clade plan 一律輸出完整 `/impeccable <subcommand>` 形式，不受這些互動行為影響。
+
+## pin / unpin / hooks 三個 management command（user 問起才需要）
+
+- `pin` / `unpin`：`node .agents/skills/impeccable/scripts/pin.mjs pin <command>` 把 sub-command 轉成獨立 slash command（如 `/colorize` → `/impeccable colorize`），`unpin` 還原。clade design 文件**不依賴**這個機制；只在你個人偏好短名打字時自行 pin 常用幾個。
+- `hooks`：`$impeccable hooks <on|off|status|...>` 安裝 / 修復專案級 detector hook（見上節第 2 條）。**clade plan 不主動排**；純 user 選裝的專案設定，問起才引導。
+
+**標準回答**：這三個是 v3 的 management command（不是 sub-command），clade design plan 一律輸出完整 `/impeccable <subcommand>` 形式，沒 pin 也能直接執行。pin 後的 alias 與 hooks 設定只在 user 自己專案 / 機器有效，不在 clade 治理範圍。

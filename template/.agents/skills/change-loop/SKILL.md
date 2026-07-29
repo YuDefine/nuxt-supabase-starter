@@ -201,22 +201,11 @@ Dispatch 前 **MUST** 先完整讀 [dispatch-topology.md](reference/dispatch-top
 
 同一個 change 的 item 之間仍然序列（bucket 位移要看上一步結果）；**不同 change 之間沒有依賴**，NEVER 讓 B 等 A 完成。
 
-### 3z. done
+### 3z / 3c / 3d / 3h / 3g — 固定步驟 bucket
 
-Review 全部通過（pending=0, issued=0），可直接 ship。
+這五個步驟固定、無分支判斷：`3z` done、`3c` awaitArchiveWalkthrough、`3d` ready(userActionPending=0) 是 archive→ship 三條路徑；`3h` parked 是 unpark 後轉 § 3f（parked 是 actionable 狀態，不是「永遠跳過」）；`3g` healthCheckNeeded 是 Edit tasks.md 修格式後 re-scan。
 
-1. 直接 archive：
-   ```
-   Skill invoke: /spectra-archive <change-name>
-   ```
-
-2. Archive → merge-back → commit：
-   ```bash
-   git commit --only -m "✅ archive <change-name>" -- openspec/changes/archive/
-   git push
-   ```
-
-3. 標 ✅ shipped。
+命中任一 → **MUST 讀 [simple-buckets.md](reference/simple-buckets.md) § 對應 bucket** 照步驟走。**NEVER** 憑印象跑三條 ship 路徑——它們的 commit pathspec 不同（`openspec/changes/archive/` vs `openspec/`），弄錯會漏 commit 或誤納其他 change 的檔案。
 
 ### 3a. feedbackGiven
 
@@ -250,39 +239,6 @@ Apply 完成，只缺 verify evidence annotation。
    Brief：「只做 Step 8a evidence annotation 補強，不做新 implementation。」
 
 2. 重跑 scan 確認 bucket → ready。
-
-### 3c. awaitArchiveWalkthrough
-
-只剩 `[discuss]` items 待 Step 3.5 walkthrough。
-
-1. 直接 dispatch archive（archive 免 worktree）：
-   ```
-   Skill invoke: /spectra-archive <change-name>
-   ```
-   Archive 內部 Step 3.5 會處理 discuss walkthrough。
-
-2. Archive 完成 → merge-back 已包含在 archive Step 0。
-
-3. commit + push：
-   ```bash
-   git commit --only -m "✅ archive <change-name>" -- openspec/
-   git push
-   ```
-
-4. 標 ✅ shipped。
-
-### 3d. ready (userActionPending=0)
-
-Review 全部 OK，可直接 ship。
-
-1. 直接 archive：
-   ```
-   Skill invoke: /spectra-archive <change-name>
-   ```
-
-2. Archive → merge-back → commit + push。
-
-3. 標 ✅ shipped。
 
 ### 3e. ready (userActionPending>0)
 
@@ -329,40 +285,9 @@ Review 全部 OK，可直接 ship。
 - ❌ Defer 到「另一個 session」「user 手動跑」
 - ❌ 報告「剩餘 N 個 applyInProgress 不適合推進」然後收工 — scan 回傳 applyInProgress 就 dispatch，無例外
 
-### 3h. parked
-
-暫存的 change，unpark 後推進。
-
-1. **Unpark**（在 main worktree 跑）：
-
-   ```bash
-   spectra unpark "<change-name>"
-   git commit --only -m "📝 docs(spectra): unpark <change-name>" -- openspec/changes/<change-name>/
-   ```
-
-2. **Dispatch spectra-apply**（同 3f）：
-
-   ```
-   Skill invoke: /wt <change-name>: /spectra-apply <change-name>
-   ```
-
-3. 完成後重跑 scan 確認 bucket。
-
-Parked 是 actionable 狀態——unpark 後走 3f dispatch，與 applyInProgress 等價。只有 `applyBlocked` / `awaitingUserDecision` 需要先評估（見 § 3i / 3j）。
-
 ### 3i. applyBlocked / 3j. awaitingUserDecision
 
 Bucket 為 `applyBlocked` 或 `awaitingUserDecision` 時 **MUST** 先完整讀 [blocker-evaluation.md](reference/blocker-evaluation.md) 取得完整評估流程（blocker 鮮度判定表、自主解決嘗試表、impl blocked ≠ review items blocked hard rule）再執行。
-
-### 3g. healthCheckNeeded
-
-Tasks.md 格式問題或 Pre-Review Data Readiness violation。
-
-1. 讀 scan 的 `hitsByCode` 確認具體問題。
-
-2. 直接 Edit tasks.md 修格式（不需 worktree，tasks.md 是 openspec metadata）。
-
-3. 重跑 scan 確認修復。
 
 ### 3t. Turbo dispatch
 
