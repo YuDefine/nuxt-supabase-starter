@@ -311,6 +311,13 @@ check_maintenance_script_misplacement() {
 
   [[ "${path}" == template/scripts/* ]] || return 0
 
+  # template/scripts/templates/ 依定義就是「scaffold 後專案會用到的檔案」的樣板，
+  # 不適用下面的路徑分類啟發式。不豁免的話該子樹永遠不可 commit：路徑 regex 含
+  # `commit` / `pre-commit`，於是 templates/vite-hooks/pre-commit 這種正當檔案
+  # **在任何內容下**都會被判成維護腳本誤放。內容類檢查（secret / email / tenant /
+  # dogfood）不受本豁免影響，照常對這些檔案執行。
+  [[ "${path}" == template/scripts/templates/* ]] && return 0
+
   if [[ "${path}" =~ (audit|validate|release|scaffold|create-clean|hub|spectra|commit|pre-commit|post-scaffold) ]] || grep -Eiq -- '(starter hygiene|hub:sync|sync-to-agents|spectra archive|release workflow|validate-starter|create-clean|scaffolder)' <<< "${blob}"; then
     report_failure \
       "maintenance-script-misplacement" \

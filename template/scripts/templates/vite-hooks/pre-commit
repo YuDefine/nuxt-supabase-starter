@@ -1,4 +1,18 @@
 #!/usr/bin/env sh
+# 這個 repo 的根目錄有一份自家的洩密 / dogfood 掃描（8 項檢查，見根目錄
+# scripts/audit-template-hygiene.sh），掛在根的 .husky/pre-commit。但 core.hooksPath
+# 指向 template/.vite-hooks/_，git 永遠不會去呼叫它——那份防護形同不存在。
+# 這裡把它明確帶起來。
+#
+# MUST 在下面的 cd 之前算路徑（cd 之後 $0 的相對基準就變了）。
+# 判定用「根目錄有那支 audit script」而不是 hook 的內容：scaffold 出去的專案沒有
+# 那支 script，條件不成立自動跳過，不會把本 repo 自家的檢查漏進使用者專案。
+_REPO_ROOT="$(cd "$(dirname "$0")/../.." 2>/dev/null && pwd)"
+if [ -n "$_REPO_ROOT" ] && [ -f "$_REPO_ROOT/scripts/audit-template-hygiene.sh" ] &&
+  [ -f "$_REPO_ROOT/.husky/pre-commit" ]; then
+  (cd "$_REPO_ROOT" && bash .husky/pre-commit) || exit 1
+fi
+
 # 切到 vite.config.ts 所在目錄（template/），以支援 monorepo 與獨立專案兩種結構
 # vp config 重新生成此檔時會把這個 cd 拿掉，要記得補回來
 cd "$(dirname "$0")/.." || exit 1
