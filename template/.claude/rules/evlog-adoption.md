@@ -162,6 +162,48 @@ rg -n "interface .*EvlogFields" server/utils packages/**/server/utils
 rg -n "signed\\(\\{|auditEnricher\\(|auditOnly\\(" server/plugins packages/**/server/plugins
 ```
 
+## Coverage 維度（evlog map）
+
+Depth 表量**裝了什麼**，`evlog map` 量**每個 entry point 用了沒有**。兩者互補，都要看：depth 6 但 map 40 分是常見狀態 —— pipeline / enricher / sampling 全部 wire 好了，但多數 handler 從沒呼叫過 `useLogger`。出事時撈不撈得到，取決於後者。
+
+工具是 `@evlog/cli`（獨立於 `evlog` core 套件），AST-based 靜態掃描，六個 check：`wide-event` / `context` / `structured-errors` / `audit` / `error-handling` / `page-error-handling`。安裝、check 滿足方式、CI 接法見 `vendor/snippets/evlog-map/`。
+
+### MUST
+
+- **每一個**新增或修改的 entry point（`server/{api,routes,middleware,tasks}/`、pages、Next route handler）都 MUST 通過 map 的全部 check。**不是**「entry point 應該要有 log」——是本次 diff 動到的每一個都要滿分
+- `evlog.map.json` MUST track 進 git，且 MUST 與 code 在同一個 commit 內更新（`npx evlog map` 重新產生，**NEVER** 手改數字）
+- 無法插樁的 entry point MUST 留 `// evlog-map-disable-next-line <check> — <理由>`，理由 MUST 寫「為什麼這個 entry point 不可插樁」
+- money / auth / PII 路由 MUST 通過 `audit` check（`log.audit({ action, actor, target })`）—— 這類路由在 map 的計分權重加倍
+
+### MUST NOT
+
+- **NEVER** 用 disable 註解讓 gate 轉綠而不寫理由 —— map 把 disabled check 從分母移除，全部 disable 掉就是 100 分；ratchet 的第三條判定（suppressed 不得增加）存在的唯一理由就是堵這條路
+- **NEVER** 以「這個 gap 是既有的、非本次 diff 引入」跳過 —— gate 只在你動到的檔上要求滿分，動了就要補
+- **NEVER** 把 map 分數當成 depth 表的替代品 —— map 100 分的專案仍可能沒有 durable drain，撈不出 wide event
+- **NEVER** 在 map 回報 `0 個 entry point` 卻 score 100 時視為滿分 —— 那是掃不到，不是全覆蓋（見 `vendor/snippets/evlog-map/monorepo-layers.md`）
+
+### Gate（兩道，都走 ratchet）
+
+既有 gap 不強制補，但分數只進不退、且本次 diff 觸及的每一個 entry point 必須滿分：
+
+| 位置 | 實作 | 時機 |
+| --- | --- | --- |
+| commit | `/commit` 0-E gate | 補一行 `log.set` 是 5 秒 |
+| CI | `.github/actions/evlog-map-gate` | push 後被擋是一輪來回 |
+
+收斂到 100 後把 CI gate 切成 `mode: min-score`，ratchet 退場。
+
+### Review 檢查
+
+```bash
+# 覆蓋率現況（沒裝 CLI 時讀 committed baseline）
+npx evlog map --all | head -30
+node -e "const j=require('./evlog.map.json');console.log('score',j.map.score,'routes',j.map.routes.length,'suppressed',j.summary.suppressedChecks)"
+
+# 豁免登記是否帶理由（每一條命中都要能答出「為什麼不可插樁」）
+rg -n "evlog-map-disable-next-line" server app | rg -v "—|--"
+```
+
 ## Catalogs 採用（evlog 2.17+）
 
 `defineErrorCatalog` / `defineAuditCatalog` / `defineError` / `defineAuditAction` 把散落的 ad-hoc error code + audit action 集中宣告，配 `declare module 'evlog'` augment `ErrorCode` / `AuditAction` 聯合型別。詳見 `docs/evlog-master-plan.md` § 15 + `vendor/snippets/evlog-catalogs/` cookbook 範本 + 官方文件 <https://www.evlog.dev/learn/catalogs>。

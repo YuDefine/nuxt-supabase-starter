@@ -83,45 +83,13 @@ Local edits will be reverted by the next sync.
 
 ## Manual Review
 
-`## 人工檢查` 的 checkbox **不能由 agent 自行代勾**。
+`## 人工檢查` 的 checkbox **不能由 agent 自行代勾**。三條契約：
 
-**MUST** 進入人工檢查階段（implementation tasks 完成、剩 `## 人工檢查` 區塊）時，**第一動作是 auto-triage（per [[review-gui-surface]] MUST 9），不是直接引導使用者跑 `pnpm review:ui`**。
+1. 進入人工檢查階段（implementation tasks 完成、剩 `## 人工檢查` 區塊）時，**第一動作是 auto-triage**（per [[review-gui-surface]] MUST 9），不是直接引導使用者跑 `pnpm review:ui`
+2. 推進完畢後 **MUST** 跑 `node ~/offline/clade/vendor/scripts/check-review-readiness.mjs --repo . --change <change-name>` 確認 bucket；**exit 0 才可引導 user 到 review-gui**
+3. **NEVER** 自判 bucket、**NEVER** 跳過 script、**NEVER** 在 exit ≠ 0 時引導 user 到 review-gui —— Claude 自判已多次證明不可靠
 
-Auto-triage + mechanical readiness gate 流程：
-
-1. 逐條讀 pending leaf item 的 annotation，判斷阻塞原因並自行推進：
-   - `（fix-requested）` → dispatch `/wt` 修 code → merge-back → 重拍截圖 → strip annotation
-   - evidence missing → 走 [[agent-self-verification]] fallback chain 收 evidence
-   - `（issue:）` 無 `(claude-analyzed:)` → triage issue 走 (A)-(E) 路由
-
-2. 推進完畢後 **MUST** 跑 mechanical gate script 確認 bucket：
-   ```bash
-   node ~/offline/clade/vendor/scripts/check-review-readiness.mjs \
-     --repo . --change <change-name>
-   ```
-   - **exit 0** → 可引導 user 到 review-gui
-   - **exit 1** → 繼續 auto-triage 或如實報告卡住原因
-   - **NEVER** 自判 bucket、NEVER 跳過 script
-
-**NEVER** 在 script exit ≠ 0 時引導 user 到 review-gui — Claude 自判已多次證明不可靠（同根因 pitfall 見 [[review-gui-surface]]）。
-
-**NEVER** 預設用 `AskUserQuestion` 在 chat 內逐項彈對話框走人工檢查——那是 `pnpm review:ui` 不可用時的 fallback，不是 default path。
-
-正確流程：
-
-1. **Auto-triage first**：推進所有 Claude 可處理的 pending items（fix-requested / evidence missing / issue triage）
-2. **首選（DEFAULT）**：auto-triage 後 `bucket=ready` → 主線回「從 **clade home**（`~/offline/clade`）執行 `pnpm review:ui` 開本地 GUI 驗收」（聚合機制與 cwd 規約見下方 § cwd），等使用者跑完 GUI 流程回報後繼續
-3. **Fallback**（GUI 不可用時）：截圖 → 逐項展示 → 使用者回覆 OK / 問題 / skip → 依答覆更新 checkbox。GUI 不可用的具體情境見下方 § 例外：fallback 模式
-
-### `[discuss]` items 不在 review:ui 主流程
-
-`[discuss]` items（production 授權 / 商業判斷 / production 觀察類）**MUST** 由 `/spectra-archive` Step 2.5 walkthrough 接管，**NEVER** 在 review:ui 引導流程內處理——trigger 是外部 signal，提前分析只會讓 change 永遠卡在 review:ui pending state。
-review-gui 對純 D-only pending 的 change 自動歸「🗓 等 archive walkthrough」群（無接手 prompt）→ 告知 user「跑 `/spectra-archive <change>` 觸發 Step 2.5 walkthrough」；落「🤖 等 Claude 接手」群（仍含 I / V）→ 接手 prompt 對 (D) 只列 walkthrough trigger，不分析、不寫 (claude-discussed:) annotation。
-詳細 scope rule 見 [`manual-review.md`](./manual-review.md) § Item Kind Marker `[discuss]` 段。
-
-### Inline Review-GUI Deep-Link（hard rule）
-
-完整 deep-link 規約（URL 格式、cross-consumer prefix、訊息 template、cwd、NEVER 清單）詳見 [[review-gui-surface]] § Inline Review-GUI Deep-Link。本段只保留核心 one-liner：引導使用者跑 `pnpm review:ui` 時，**MUST** 在 chat 訊息中給出 `http://127.0.0.1:5174/review/<consumer-id>:<change-name>` deep-link。
+Auto-triage 的三類 pending item 路由、`[discuss]` item 的歸屬、review-gui deep-link 格式與 fallback 模式見 [[proactive-skills.manual-review-entry]]（path-scoped：碰 `openspec/changes/**` 時載入）。
 
 ### Dev Server Auto-Spawn（agent 自起，不要叫 user cd）
 

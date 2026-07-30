@@ -7,11 +7,13 @@ Local edits will be reverted by the next sync.
 
 # Agent Routing
 
-<!-- never-density-reviewed: 2026-07-29 — 23 條全部落在 § 必禁事項 的 4 張 `| NEVER | 說明 |` 表（Dispatch 入口 8 / Watch 行為 7 / Commit 0-A 3 / Runtime gate 2），逐條覆核過：每列都配具體失效模式與可觀察 predicate（prompt 是否含該硬指令段 / 是否啟動 watch / marker 是否在第一行），多條帶 dated 實證（2026-06-11 dispatcher audit：147 條 annotation 0 次走 codex）。這是紀律型規約的逐字反制清單，非泛化牆——依 rule-authoring § 紀律型規約三件套，總量偏高是正確形式。 -->
+<!-- never-density-reviewed: 2026-07-29 — 覆核紀錄見 docs/rule-rationale/agent-routing.md § never-density 覆核 -->
 
 **核心命題**：當工作交給另一個 runtime + model 組合的成本/品質明顯更好時，必須 handoff 而不是硬幹。但派工的預設是**不派**——先過 § 派不派，命中外派條件才進 Routing Table。本規則優先於個別 skill 內嵌的工具呼叫指示。
 
-> 本檔是 routing 主規則（每 session 必載入）。派工模板、Watch Protocol、Plan-first / Git baseline、Runtime Gate 詳述見 [`agent-routing.codex-watch-protocol.md`](./agent-routing.codex-watch-protocol.md)（下稱 reference）。
+> 本檔是 routing 主規則（每 session 必載入）。派工模板、Watch Protocol、Plan-first / Git baseline、Runtime Gate 在 [`agent-routing.codex-watch-protocol.md`](./agent-routing.codex-watch-protocol.md)（下稱 reference）。
+>
+> **決定要派 codex 之後、送出 dispatch 之前，MUST 先 Read reference 的 § Codex 派工的標準流程。** reference 的 `paths:` 綁的是 spectra / screenshot 情境，「單純要派 codex」的 session **不會**自動載入它——靠 auto-load 會讀不到（成因與實測見 `docs/rule-rationale/agent-routing.md`）。
 
 ## 派不派（先於派給誰）
 

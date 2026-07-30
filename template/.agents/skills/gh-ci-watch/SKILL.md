@@ -47,7 +47,7 @@ bash .codex/scripts/gh-ci-watch.sh workflow "Deploy Staging" --branch main
 
 - **run 尚未建立也可以直接派**：`/commit` 是 `git push --tags` 先、`git push main` 後，staging run 可能還不存在——script 把「查無 run」視為 pending 繼續等（預設只認腳本啟動前 120s 之後建立的 run，可用 `--since <ISO8601>` 調整）
 - run 被 concurrency `cancel-in-progress` 取代 → script 自動改追 superseding run（同 workflow + 同 branch、createdAt 較新者）
-- tag 觸發的 workflow：headBranch 是 tag 名，改用 `--branch v1.2.3` 或省略 `--branch` 改 `--commit <sha>`
+- **tag 觸發的 workflow MUST 用 `--commit "$(git rev-parse HEAD)"`，NEVER 用 `--branch main`**：tag 觸發的 run 其 `headBranch` 是 **tag 名**不是 `main`，`--branch main` 對它永遠篩不到 run → watcher 一路 pending 到 `WATCH_TIMEOUT` exit 3，即使該 run 其實是綠的（2026-07-25 <consumer-b> v1.250.0 實證）。`--commit` 對 tag 與 branch 兩種觸發都成立，post-push 場景一律用它；`--branch v1.2.3` 只在明確要盯單一 tag 時用
 
 ### 場景 C — 等某 SHA 的某 workflow 出結果
 

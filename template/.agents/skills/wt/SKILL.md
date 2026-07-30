@@ -115,7 +115,9 @@ Before creating a new worktree, check if one already exists at the expected path
 
 ### Step 1 — Build the worktree (with pre-fork baseline guard)
 
-`/wt` ad-hoc invocation 沒有 spectra change context，所以**不能**做 scope-aware baseline commit（會撞 cross-session WIP）。預設走 **stash-apply** 策略 — 把 main 的 dirty（modified + untracked）一律 stash 起來、fork 後在新 worktree 內 `git stash apply` 把全部 baseline 帶過去，再 drop stash。Subagent 進 worktree 看 baseline 但收到 Step 2 的 warn 段落知道哪些檔不該動（[[worktree-default]] §1 Pre-fork baseline guard）。
+**MUST Read [baseline-guard.md](baseline-guard.md) before running `wt-helper add`** — 含 unmerged / clean / dirty 三路策略分流、`--baseline-scope-paths` 的對齊要求、stash strategy 的隱性風險與 `rescue` 救援、`--include-unrelated-dirty` 的 bulk-capture 語意與還原三步驟。四條契約（預設不 capture / 帶 WIP 要顯式 flag / 傳了 flag 不准宣稱 main 沒被動到 / 不准手寫 pathspec stash）在 [[worktree-default]] §1。
+
+`/wt` ad-hoc invocation 沒有 spectra change context，所以**不能**做 scope-aware baseline commit（會撞 cross-session WIP）。預設走 **stash-apply** 策略 — 把 main 的 dirty（modified + untracked）一律 stash 起來、fork 後在新 worktree 內 `git stash apply` 把全部 baseline 帶過去，再 drop stash。Subagent 進 worktree 看 baseline 但收到 Step 2 的 warn 段落知道哪些檔不該動。
 
 ```bash
 node scripts/wt-helper.mjs add <slug> \

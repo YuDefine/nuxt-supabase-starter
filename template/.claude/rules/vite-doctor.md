@@ -1,5 +1,6 @@
 ---
-description: vite-doctor framework diagnostic scanner 配置與使用
+description: 動到 nuxt.config / vite.config / package.json scripts / doctor preset 時的 vite-doctor 配置判準（devDependency 必裝、module 必啟用、`pnpm run doctor` 的 run 不可省）
+paths: ['nuxt.config.*', 'vite.config.*', 'package.json', 'vendor/doctor-shared/**', 'packages/**/nuxt.config.*', 'packages/**/package.json']
 ---
 <!--
 🔒 LOCKED — managed by clade

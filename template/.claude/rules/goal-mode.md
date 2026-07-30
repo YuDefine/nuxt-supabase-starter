@@ -62,10 +62,6 @@ Local edits will be reverted by the next sync.
 
 change-loop（autonomous 模式）一律 dispatch、NEVER AskUserQuestion。/goal（attended 模式）user 在場，**SHOULD** 先讓 user 選擇 dispatch 優先序再動手。
 
-### 反模式（2026-07-04 實證）
-
-/goal prompt 寫「大 feature → HANDOFF + @apply-blocked」→ agent 看到 0/24 的 change 直接標 blocked 交還 user → user 收到時只能自己再開 session 重跑。正確做法是 AskUserQuestion 讓 user 當場選。
-
 ### 禁止
 
 - **NEVER** 因「change 太大」「0% 進度」「不適合在 multi-change session 做」預設標 `@apply-blocked`
@@ -87,38 +83,7 @@ change-loop（autonomous 模式）一律 dispatch、NEVER AskUserQuestion。/goa
 3. 跑 `/handoff` skill 把未完項升級到 `HANDOFF.md` / `docs/tech-debt.md` / `openspec/changes/`
 4. 由 user 決定是否關掉 /goal 模式
 
-**為什麼一定要切換 /handoff，不能讓 user 自行手動關 /goal**：
-
-- 卡關期間每次 stop-hook 反彈都在燒 token + cache miss
-- Agent 反覆吐「等 user」是雜訊，會把真正該登記的 follow-up 淹沒
-- `/handoff` skill 已有現成的「未完項升級到 HANDOFF/tech-debt/ROADMAP」流程，比 agent 自由發揮乾淨
-
-## 為什麼這條規則跟 global CLAUDE.md「不要把工作往後放」不衝突
-
-Global CLAUDE.md 規定**不**主動推薦 `/schedule` / `/loop` / 「N 週後再做」這類「往未來推」的 follow-up。
-
-本 rule 講的是**反向**情境：goal 條件已經包含 agent 不能達成的 user-bound 工作 → 必須把它們**從 goal 中拿掉**並登記到 HANDOFF/tech-debt。這不是「往未來推」，是「歸還給正確的 truth layer」。
-
-兩者方向一致：agent 主線該做的事**現在**做掉，不該做的事**現在**登記，不要假裝「再跑一輪 stop-hook 也許就能達成」。
-
-## 範例：撞到使用者經驗中的卡關場景
-
-User 用 /goal 設了 4 項目，#1 archive、#2 TD-061 commit 是 user-bound（需 user 親跑 dev server 驗證 + 親自 commit）。Agent 達成 #3 #4 後，#1 #2 反彈：
-
-❌ **錯誤行為**（實測會出現 N 輪「等 user」迴圈）：
-
-```
-⏺ Agent 端 #3/#4 達成；#1/#2 政策保留 user 親跑。等待 user 操作。
-◯ Goal not yet met… continuing
-⏺ #1 #2 user-bound 待 user 操作；agent 工作上限已達。
-◯ Goal not yet met… continuing
-⏺ 等 user。
-◯ Goal not yet met… continuing
-⏺ 等 user。
-...
-```
-
-✅ **正確行為**（第 2 次反彈就要切換）：
+**正確的切換輸出長這樣**（第 2 次反彈就要出現）：
 
 ```
 ⏺ Agent 端 #3/#4 達成。#1（archive）#2（TD-061 commit）需 user 親跑 dev server
@@ -127,6 +92,8 @@ User 用 /goal 設了 4 項目，#1 archive、#2 TD-061 commit 是 user-bound（
    偵測到 /goal 卡關。建議現在跑 /handoff 把 #1 #2 登記到 HANDOFF.md，
    並關閉 /goal 模式。我直接幫你跑 /handoff？
 ```
+
+> 卡關迴圈的實測形狀、與 global CLAUDE.md「不要把工作往後放」為何不衝突、applyInProgress carve-out 的成因，見 `docs/rule-rationale/goal-mode.md` —— 維護者材料，不是每個 session 的操作依據。
 
 ## 禁止事項
 

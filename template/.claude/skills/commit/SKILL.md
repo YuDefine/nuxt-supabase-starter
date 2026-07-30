@@ -122,7 +122,7 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
                            軸 A: 0-A.1 Codex xhigh（背景）
                            軸 B: 0-B screenshot-review（條件觸發）
                            軸 C: 0-C pnpm check（主線 foreground）
-                         -> 匯合 -> 0-D -> 條件觸發 0-A.2
+                         -> 匯合 -> 0-D -> 0-E -> 條件觸發 0-A.2
                          -> [累計修正 >50 行 or >5 檔 -> 重跑 Codex xhigh]
 ```
 
@@ -159,6 +159,7 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 - **0-B UI Design Review**：條件觸發（`.vue` template 變更 + 視覺影響）。詳見 [gates.md](gates.md) § 0-B。
 - **0-C CI 等效檢查**：`pnpm check` + `pnpm test` + `pnpm run doctor`，全綠才過。詳見 [gates.md](gates.md) § 0-C。
 - **0-D Doc Alignment**：條件觸發（diff 觸及 docs / rules / snippets / audit / 業務碼 / pitfall）。詳見 [gates.md](gates.md) § 0-D。
+- **0-E evlog map 覆蓋率**：條件觸發（diff 觸及 entry point：`server/{api,routes,middleware,tasks}/` / pages / Next route handler）。`@evlog/cli` **必裝**（缺裝 = block commit，比照 0-C 的 doctor）；本次 diff 觸及的**每一個** entry point 都 MUST 滿分。詳見 [gates.md](gates.md) § 0-E。
 
 ### 紀律禁止項
 

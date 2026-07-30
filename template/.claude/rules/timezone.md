@@ -1,9 +1,14 @@
+---
+description: 動到 instant 欄位、SQL 日期計算、Intl / toLocaleString 格式化、timestamp→timestamptz migration、或設定固定牆鐘時間排程時的 timezone 判準（DB 存 UTC、顯示層轉 local、AT TIME ZONE 方向）
+paths: ['**/*.sql', 'supabase/**', 'server/**', 'app/**', 'packages/**/server/**', 'packages/**/app/**', 'scripts/**', 'infrastructure/**']
+---
 <!--
 🔒 LOCKED — managed by clade
 Source: rules/core/timezone.md
 Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
+
 
 # Timezone 規約
 

@@ -19,7 +19,8 @@ Local edits will be reverted by the next sync.
 - **0-B** UI Design Review（條件觸發）：`.vue` 模板 + 頁面/元件/佈局/互動/樣式變更時派 screenshot-review
 - **0-C** format / lint / typecheck / test / doctor 全綠：`scripts.check` 不含 test → 額外跑 `pnpm test`；`scripts.doctor` **必裝**（缺裝 = block commit，要求先安裝 vite-doctor）。oxfmt batched `--check` 報未預期 diff 以單檔重跑為準（[[pitfall-oxfmt-batched-check-false-positive]]）
 - **0-D** Doc Alignment（條件觸發）：diff 觸及 docs / rules / snippets / audit script / 業務碼 / bug fix 時，檢查 cross-ref / 路徑引用 / pitfall status / 三方受眾文件忠實度（含 VitePress sidebar）四面向
-- **並行**：simplify 序跑完後 **0-A.1 / 0-B / 0-C 三軸 MUST 並行**（除非 fast-path 跳過 0-A.1）；0-D 在匯合後條件觸發
+- **0-E** evlog map 覆蓋率（條件觸發）：diff 觸及 entry point（`server/{api,routes,middleware,tasks}/` / pages / Next route handler）時跑 ratchet gate；`@evlog/cli` **必裝**（缺裝 = block commit，比照 doctor），本次 diff 觸及的**每一個** entry point MUST 滿分，既有 gap 不強制補
+- **並行**：simplify 序跑完後 **0-A.1 / 0-B / 0-C 三軸 MUST 並行**（除非 fast-path 跳過 0-A.1）；0-D / 0-E 在匯合後條件觸發
 - **Step 1** Schema 同步檢查 — `database.types.ts` 與 migration 對齊
 - **Step 5** 版本號升級 + tag push — `feat` → minor、其他 → patch
 
@@ -266,7 +267,7 @@ En：`revert` / `undo` / `rollback` / `roll back` / `reset` / `discard` / `drop`
   - **NEVER** 以「既有問題」「不在本次 scope」「建議性質」「影響不大」為由跳過任何 finding — 跳過等於讓已知問題長期留存
   - **例外**：修法會動到別 session in-flight WIP（典型：`HANDOFF.md`、別 session 的 `tasks/<...>.md`）時，**MUST** 走 `scope-discipline.md`「Rule 衝突解法」具體分支模板（A. 馬上修續 flow / B. 登 TD 中止 flow）由 user 拍板，**NEVER** 自行二選一
 
-## Commit 類型（commitlint.config.js）
+## Commit 類型（commitlint.config.ts）
 
 | Emoji | Type     | 用途     |
 | ----- | -------- | -------- |

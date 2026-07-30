@@ -710,3 +710,133 @@ done
 
 - **NEVER** 跳過檢查 A/B 的機械化驗證（「只改了一行 docs 不用掃」不成立 — 一行改動可能 break 交叉引用）
 - **NEVER** 把檢查 D 當「可選建議」而不修 — diff 觸及業務碼卻不更新對應 docs = 下一個接手者看到的文件不忠實
+
+---
+
+## § 0-E: evlog map 覆蓋率 Gate（條件觸發、主線 foreground）
+
+CI 的 `evlog-map-gate` action 是最後一道；0-E 是第一道。差別在成本：commit 當下補一行 `log.set` 是 5 秒，push 後被 CI 擋是一輪來回。
+
+### 觸發條件
+
+本次 diff（tracked modified + untracked 新增）含**任一** entry point 檔案：
+
+```bash
+git status --porcelain | awk '{print $NF}' | grep -E \
+  '(server/(api|routes|middleware|tasks)/|app/pages/|pages/|app/.*/route\.ts$|app/.*/page\.tsx$|middleware\.ts$)'
+```
+
+無命中 → 0-E 未觸發，在完成報告標明「未觸發＋原因」。
+
+### Step 1 — 專案是否採用 evlog
+
+```bash
+node -e "const p=require('./package.json');const d={...p.dependencies,...p.devDependencies};console.log(d.evlog?'has-evlog':'no-evlog')"
+```
+
+`no-evlog` → 0-E **N/A**（evlog map 只量 evlog 插樁，沒裝 evlog 的專案不適用）。標明 N/A 後跳過。
+
+### Step 1.5 — 這個 repo 的佈局掃得到嗎（先於必裝判定）
+
+```bash
+npx evlog map --no-write --json 2>/dev/null \
+  | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).map.routes.length?'scannable':'zero-routes')}catch{console.log('no-cli')}})"
+```
+
+`no-cli`（CLI 還沒裝，量不出來）→ 往下走 Step 2 的必裝判定。
+
+`scannable` → 往下走 Step 2、Step 3。
+
+`zero-routes` → **不是滿分，是什麼都沒掃到**。CLI 這時會回報 score 100，那個 100 是假的。**MUST block commit**，除非 repo 內有有效的明文放行單（Step 3 的 gate 會自己判定，見下）。
+
+**Nuxt layer monorepo 的正解**（<consumer-a> 型：各 layer 有 `nuxt.config.ts` + `server/api/`，但沒有 `package.json`）—— `@evlog/cli` 靠 `package.json` 定位 project root，補上去就掃得到：
+
+```bash
+# 1. 每個 layer 補一份 private package.json
+cat > packages/<layer>/package.json <<'JSON'
+{ "name": "@<scope>/<layer>", "version": "0.0.0", "private": true }
+JSON
+
+# 2. 在 pnpm-workspace.yaml 明確排除，維持 install 拓撲不變
+#    packages:
+#      - 'packages/*'
+#      - '!packages/<layer>'
+
+# 3. 驗證 workspace 拓撲沒變（數量 MUST 與補之前相同）
+pnpm -r list --depth -1
+
+# 4. 逐 layer 產 baseline，gate 用可重複的 --cwd 一次掃完
+npx evlog map --cwd packages/<layer>
+```
+
+**NEVER** 只補 `package.json` 而不加 workspace 排除 —— `packages/*` 這類 glob 會把它們變成真的 workspace package，install 拓撲與依賴解析都會改變。
+
+### Step 2 — `@evlog/cli` 必裝（比照 0-C 的 doctor）
+
+```bash
+node -e "const p=require('./package.json');const d={...p.dependencies,...p.devDependencies};console.log(d['@evlog/cli']?'has-map-cli':'no-map-cli')"
+```
+
+`no-map-cli` → **MUST block commit**，印出安裝指引後中止：
+
+```text
+⛔ 0-E 失敗 — @evlog/cli 未安裝
+
+evlog map 是 commit 品質閘門的必要組件（entry point 觀測性覆蓋率：wide-event、context、
+structured-errors、audit、error-handling 五類 check）。本次 diff 動到 entry point，
+但沒有工具能判斷這些 handler 出事時說不說得出原因。
+
+安裝步驟：
+  1. pnpm add -D @evlog/cli
+  2. 產生 baseline 並 commit：
+       npx evlog map            # 寫出 evlog.map.json
+       git add evlog.map.json
+  3. 安裝完成後重跑 /commit
+
+詳見 .claude/rules/evlog-adoption.md § Coverage 維度（evlog map）
+     與 ~/offline/clade/vendor/snippets/evlog-map/README.md
+```
+
+隨後 **MUST** 釋放 commit-lock（`node .claude/scripts/commit-lock.mjs release`）並 STOP。**NEVER** 跳過此 gate 繼續跑後續步驟。
+
+### Step 3 — 跑 ratchet gate
+
+```bash
+git status --porcelain | awk '{print $NF}' > /tmp/evlog-map-changed.txt
+node .github/actions/evlog-map-gate/gate.mjs \
+  --baseline evlog.map.json \
+  --changed-files /tmp/evlog-map-changed.txt
+
+# layer monorepo：--cwd 可重複，每個 layer 各自帶 <layer>/evlog.map.json baseline
+node .github/actions/evlog-map-gate/gate.mjs \
+  --cwd packages/core --cwd packages/ehr --cwd packages/trac \
+  --changed-files /tmp/evlog-map-changed.txt
+```
+
+三條判定，任一違反即 exit 1：全域分不得低於 baseline、**本次 diff 觸及的每一個 entry point 都必須滿分**、suppressed check 不得增加。
+
+另有一條 false-green 硬擋：掃出 0 個 entry point 直接 fail。**唯一出路**是 repo 根的 `evlog.map.waiver.json`，四個欄位（`reason` / `tracking` / `approved_by` / `expires`）全部必填、`expires` 過期即自動恢復硬擋。缺檔、缺欄位、日期格式錯、已過期一律擋。格式見 `vendor/snippets/evlog-map/monorepo-layers.md`。
+
+### Step 4 — 修復 loop
+
+gate 紅燈時，對它列出的**每一個** entry point 逐個處理，二選一：
+
+1. **補插樁**（預設）：`npx evlog map <該檔路徑>` 拿單點報告，照 `Suggested shape` 補 `useLogger(event)` + `log.set({...})`；`structured-errors` 失敗就給 `createError` 補 `why` / `fix`
+2. **登記豁免**（例外）：留 `// evlog-map-disable-next-line <check> — <理由>`，理由 MUST 寫「為什麼這個 entry point 不可插樁」，不是「趕著 commit」
+
+修完重跑 Step 3 直到綠燈，然後更新 baseline 並納入本次 commit：
+
+```bash
+npx evlog map              # 重寫 evlog.map.json
+git add evlog.map.json
+```
+
+### 紀律禁止項
+
+- **NEVER** 用 `// evlog-map-disable-next-line` 讓 gate 轉綠而不寫理由 —— disable 是登記豁免，不是過 gate 的手段；gate 的第三條判定就是為了擋這個
+- **NEVER** 以「這個 gap 是既有的、非本次 diff 引入」跳過 —— 判定 2 只看**本次 diff 觸及的** entry point，會被擋到就代表你這次動了它，動了就要補到滿分
+- **NEVER** 手改 `evlog.map.json` 讓分數對得上 —— baseline MUST 由 `npx evlog map` 重新產生
+- **NEVER** 把 `zero-routes` 報成「0-E 通過」或「覆蓋率 100」—— 它的語義是**量不到**。放行單放行時完成報告 MUST 寫「0-E 已放行（掃不到，追蹤：<tracking>）」，**NEVER** 寫成 ✅
+- **NEVER** 為了讓 commit 過去而現寫一張放行單 —— 放行單是「這個佈局技術上量不到」的登記，不是「這次趕時間」的出口。Nuxt layer monorepo 已有正解（Step 1.5），先照做
+
+通過後輸出 `✅ 0-E 通過（evlog map: score N，觸及 M 個 entry point 全滿分）`。

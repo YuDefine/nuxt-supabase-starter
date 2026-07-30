@@ -76,32 +76,22 @@ Changes can be parked（暫存）— temporarily moved out of `openspec/changes/
 - 若 source 與投影不一致，以 `.claude/` 為準，之後再同步生成。
 
 <!-- CLADE:SNIPPET:post-push-ci-watch:START -->
-
 ## Post-Push CI Watcher
 
 當主線執行 `git push --tags`（或推單一 tag、或 push commit 觸發發版 workflow）**成功**後，**若**該 repo 含 `.github/workflows/*.yml` 且 `gh` CLI 可用：
 
-**MUST** 立刻用 **`Bash(run_in_background=true)`** 派出 CI watcher script（唯一入口，用法與樣板見 `/gh-ci-watch` skill）：
+**MUST** 立刻用 **`Bash(run_in_background=true)`** 派出 CI watcher script，每個要監看的 workflow（如 Deploy Staging / Deploy Production）各派一條。指令樣板、flags、exit code 對照表、以及「為什麼不是 Agent watcher」都在 `/gh-ci-watch` skill — **NEVER** 在這裡憑記憶拼指令。
 
-```bash
-bash .codex/scripts/gh-ci-watch.sh workflow "<workflow 名稱>" --commit "$(git rev-parse HEAD)"
-```
-
-- **用 `--commit` 不用 `--branch main`**：tag 觸發的 run，其 `headBranch` 是 **tag 名**不是 `main`，`--branch main` 對它永遠篩不到 run → watcher 一路 pending 到 `WATCH_TIMEOUT` exit 3，即使該 run 其實是綠的（2026-07-25 <consumer-b> v1.250.0 實證）。`--commit` 對 tag 與 branch 兩種觸發都成立
-- 每個要監看的 workflow（如 Deploy Staging / Deploy Production）各派一條
-- run 尚未建立沒關係——script 把「查無 run」視為 pending 繼續等；被 concurrency 取消也會自動改追 superseding run
-- 派出後主線繼續對話，script 達 terminal state 才 exit、系統自動通知主線
-- **NEVER** 用 `Agent(run_in_background=true)` 開 watcher subagent 監看 CI——LLM watcher 已實證會反覆中途回報燒 token（單次事故 235k+）、盯死被取代的 run、且不可預測（詳見 `/gh-ci-watch` skill § 機制選擇）
-- **NEVER** 自己同步 block 等待（前景 `gh run watch` / 主線 sleep 輪詢）
+**NEVER** 對沒有 `.github/workflows/` 的 repo 套用這條規則（直接跳過 watcher）。
 
 ### Watcher 完成後主線必做
 
-讀該 background bash 輸出尾段的 `RESULT:` 行分流：
+讀該 background bash 輸出尾段的 `RESULT:` 行分流（完整對照表見 `/gh-ci-watch` § Exit codes / RESULT 分流）：
 
-- **`success`**（exit 0）→ 一行報 `v<version> CI 綠燈 — <runUrl>`（version 由 `git describe --tags --abbrev=0` 抓；無 tag 填 commit short sha）後結束本話題，**NEVER** 多嘴
-- **`failure` / `timed_out` / `cancelled` 等（exit 1）或 `WATCH_TIMEOUT`（exit 3）** → **MUST** 用 `request_user_input` 給使用者二選一：
+- **`success`** → 一行報 `v<version> CI 綠燈 — <runUrl>`（version 由 `git describe --tags --abbrev=0` 抓；無 tag 填 commit short sha）後結束本話題，**NEVER** 多嘴
+- **失敗類**（`failure` / `timed_out` / `cancelled` / `WATCH_TIMEOUT`）→ **MUST** 用 `request_user_input` 給使用者二選一：
   - `[1] 立刻 root-cause + 修` — 讀輸出內的 `--log-failed` 節錄找根因，進除錯流程；修完前 **NEVER** 主動 push
-  - `[2] 登記 HANDOFF.md` — 在 repo root 的 `HANDOFF.md` 末尾 append：
+  - `[2] 登記 HANDOFF.md` — 在 repo root 的 `HANDOFF.md` 末尾 append（檔案不存在就先開 `# HANDOFF` + `## CI 紅燈待辦` 骨架）：
 
     ```
     - [ ] [<YYYY-MM-DD>] v<version> CI <fail|timeout> — <failedJob>
@@ -109,26 +99,17 @@ bash .codex/scripts/gh-ci-watch.sh workflow "<workflow 名稱>" --commit "$(git 
       - 根因猜測: <一行>
     ```
 
-    若 `HANDOFF.md` 不存在 → 先建立骨架：
-
-    ```
-    # HANDOFF
-
-    ## CI 紅燈待辦
-    ```
-
-- **`UNAVAILABLE`**（exit 2）→ 一行報「watcher 無法啟動（<原因>），略過」結束，**NEVER** 追問使用者
+- **`UNAVAILABLE`** → 一行報「watcher 無法啟動（<原因>），略過」結束，**NEVER** 追問使用者
 
 ### 禁忌
 
 - **NEVER** 在 watcher 回報前主動結束話題或叫 user 自己看
 - **NEVER** 在 user 未選 `[1]` 前替他改 code / push commit 修 CI
-- **NEVER** 對沒有 `.github/workflows/` 的 repo 套用這條規則（直接跳過 watcher）
-- **NEVER** 對同一條 run 重複派 watcher；要改監看目標 = kill 舊 background bash + 重派（**NEVER** 對跑一半的 watcher 下改派指令）
+
+（watcher 機制本身的禁忌 — Agent watcher、前景 block、重複派工、輪詢間隔 — 由 `/gh-ci-watch` § NEVER 管，那份是超集，不在此複述。）
 <!-- CLADE:SNIPPET:post-push-ci-watch:END -->
 
 <!-- CLADE:SNIPPET:archive-commit-order:START -->
-
 ## Spectra Change 收尾：先 archive 再 /commit
 
 當 Spectra change 的 M.1-M.8 + archive gate 全綠、要收尾時，**MUST** 走以下順序：
@@ -150,82 +131,14 @@ bash .codex/scripts/gh-ci-watch.sh workflow "<workflow 名稱>" --commit "$(git 
 <!-- CLADE:SNIPPET:worktree-default:START -->
 ## Session-level Worktree
 
-要動 code 的工作（implement / fix / refactor / migration）**MUST** 在獨立 git worktree 內執行，**NEVER** 直接在 main 改。操作上由 `/wt <task>` 全自動 orchestrate — `/wt` 建 worktree、dispatch subagent 進去做事、subagent commit 完回來主線 squash-merge 進 main 的 working tree、cleanup worktree。主線 chat session cwd 全程不動，user 不必開新 terminal、不必複製 oneliner、不必手動 `git worktree` 任何子命令。
+要動 code 的工作（implement / fix / refactor / migration）**MUST** 在獨立 git worktree 內執行，**NEVER** 直接在 main 改。操作走 `/wt <task>`：`/wt` 建 worktree、dispatch subagent 進去做事、主線 squash-merge 回 main 的 working tree、cleanup worktree。主線 chat session cwd 全程不動 — user 不必開新 terminal、不必手動跑任何 `git worktree` 子命令。
 
-Read-only session（grep、看 log、解釋 code 不寫檔）可留在 main worktree。
+- **Read-only session**（grep / 看 log / 解釋 code，不寫檔）**MAY** 留在 main worktree。
+- **Silent branch 禁令**：**NEVER** 跑 `git checkout -b` / `git branch <name>` 或任何會建新 ref 的指令，**除非**先取得 user 明確同意。`/wt` 用的 `session/<date-slug>` 是唯一例外（`/wt` 呼叫本身就是授權）。
+- **階段間 setup chore 主線自己跑**：subagent 兩個階段之間若要在 worktree 跑 local-only setup（`pnpm install` / `db:*` / `lint` / `test`），主線 **MUST** 用 Bash `cd <worktree-path> && <cmd>` 一行式跑掉（獨立子 shell，不動 session cwd），**NEVER** 把指令清單貼給 user 叫他切過去跑。真 destructive 操作（prod migration / `git push --force` / secrets / outbound 訊息 / shared infra）仍需 user 拍板。
 
-**例外：`/spectra-archive` 在 main 跑**。Archive 語意是「把 change 合併進 main」（mv folder、delta sync 進 specs、screenshot sweep），全部寫入 main，走 worktree 反而多一道 merge-back。其他 spectra-* skill（`/spectra-apply` / `/spectra-ingest` / `/spectra-debug`）仍須走 `/wt` 進 worktree。
-
-**Parent cwd 不動 invariant**：`/wt` **SHALL NOT** 遷移 parent session 的 cwd — 所有 worktree 內的操作由 subagent 執行（subagent cwd = worktree path），主線（cwd = main）負責 dispatch + squash + cleanup。先前 `--dispatch-from-handoff` flag 機制已移除；新 orchestration model 透過 subagent 隔離 cwd 達到同樣的「不切 terminal」UX，且更嚴格地保留 parent cwd invariant。
-
-**階段間 setup chore 由主線自動代勞**：subagent 完成階段性 commit 後、下一階段 dispatch 之前若需要在 worktree 跑 local-only setup（`pnpm install` / `db:reset` / `db:types` / `supabase:sync` / `lint` / `test`），主線 **MUST** 自己用 Bash `cd <worktree-path> && <cmd>` 一行式跑掉，**NEVER** 把指令清單貼給 user 叫他切 cd 去跑。Bash 每次呼叫是獨立子 shell，`cd` 只在 subshell 內、session cwd 不變、不違反 invariant。真 destructive 操作（prod migration / `git push --force` / secrets / outbound 訊息 / shared infra）仍需 user 拍板。
-
-**`/wt` invocation forms**：
-
-- `/wt <task description>` — 單條 ad-hoc。
-- `/wt A: ... B: ...` — 平行多 task，每 task 一 worktree + subagent。
-- `/wt <slug>: /<next-skill> <args>` — `/handoff` Mode B 內部 dispatch（subagent 在 worktree 跑指定 skill）。
-
-**Silent branch 禁令**：Claude **MUST NOT** 跑 `git checkout -b` / `git branch <name>` 或任何會建新 ref 的指令，**除非**先取得 user 明確同意。`/wt` 用的 `session/<date-slug>` 規約命名是唯一例外（`/wt` 呼叫本身就是 user 對該 branch 的授權）。
-
-**Commit 階段：subagent commit in worktree → 主線 squash 進 main → user 跑 `/commit`**。subagent 在 worktree 做 `git add + commit -m "wt: <slug>"`（可多 commit、**禁止** push / `/commit`）；主線跑 `git -C <main> merge --squash <session-branch>` 把改動 land 到 main 的 working tree（**不** commit on main）+ `wt-helper cleanup <slug> --force` 清 worktree；user 累積夠了在 main 主動 `/commit` 走 ceremony（lint / type / test / selective stage / push）。
-
-**Atomic-landing 自包約束**：subagent 在 worktree 內的 edit **MUST** 全部 commit 到 session branch 才能 merge-back — `git merge --squash` 只搬 commit，uncommitted WIP 會被後續 cleanup 永久砍掉。`wt-helper merge-back` 預設會 pre-flight 偵測 worktree 內 user-WIP（filter clade-managed projection 後）並 refuse，除非加 `--include-worktree-wip` 強制 auto-amend（不建議）。
-
-**Failure fallback**：subagent fail（test 不過、沒 commit）→ 保留 worktree + branch，主線回報路徑，user 從 main 跑 `git -C <wt> diff/log` 檢查；squash conflict（平行 task 改同檔）→ 保留該 worktree，main 維持上一個成功 squash 的狀態；cleanup 失敗 → 改動已在 main，報告 worktree 殘留路徑由 user 手動 `wt-helper cleanup --force`。
-
-詳見 `.claude/rules/worktree-default.md`。
+哪些 skill 例外在 main 跑、`/wt` 全部 invocation forms、merge-back 的 atomic-landing 約束、squash conflict 與 cleanup 失敗的 fallback，見 `.claude/rules/worktree-default.md` — 那份是 always-load，同一個 session 內已經在你的 context 裡，**不要**在這裡複述。
 <!-- CLADE:SNIPPET:worktree-default:END -->
-
-<!-- CLADE:SNIPPET:ui-invariants.template:START -->
-# UI Invariants — <consumer-name>
-
-> **這是 clade baseline template。** Consumer 複製到自家 `docs/UI-INVARIANTS.md` 後
-> 在「## Consumer-specific invariants」section 追加業務專屬條目。clade 維護
-> 「## Universal invariants」5 條最小基線（散播時保持對齊），consumer **不要**
-> 改 universal 條目，只 extend consumer-specific。
->
-> 解析順序（Layer B/C/E 的 resolver）：consumer `docs/UI-INVARIANTS.md` →
-> consumer `.claude/ui-invariants.md` → 此 clade template（fallback）。
-
-## Universal invariants（clade baseline；5 條）
-
-| ID | Invariant | Detection method | Severity |
-| --- | --- | --- | --- |
-| UI-INV-1 | list/table 任一 data column 不可整欄塌縮成 fallback（`-` / `—` / 空 / `null` / `undefined` / `N/A`），rows ≥ 2 時 | `refactor-invariant-check.mjs` column-uniformity heuristic（Layer B），或 final-state screenshot 逐欄目視 | **Critical** |
-| UI-INV-2 | lookup-resolved column（如 `employeeNameMap` 類 id→name 對照）解析率 100% — 不可因 lookup map empty 而整欄 fallback | Layer B（整欄 fallback 即命中）+ Layer C data-sanity（lookup-map-empty-risk）+ D4 self-analysis（來源 query 是否 4xx） | **Critical** |
-| UI-INV-3 | page load 期間 0 個非預期 4xx/5xx network error（auth redirect 除外） | `refactor-invariant-check.mjs` network capture（`Network.enable` + drain；Layer B）+ D5 self-analysis | **Critical** |
-| UI-INV-4 | 渲染 row count 需匹配 seed 預期（空列表頁不可在有 seed 資料時顯示 0 列） | final-state screenshot row count vs `supabase/seed.sql`（或等價 seed）預期 | **High** |
-| UI-INV-5 | admin business-critical action（刪除 / 作廢 / 大量異動 / 不可逆）必有確認對話框 | `[review:ui]` 人工驗 + design review | **High** |
-
-## Consumer-specific invariants（consumer 自行 extend）
-
-> 在此追加業務專屬 invariant。每條 **MUST** 含 ID（建議 `<CONSUMER>-INV-N`）、Invariant 敘述、
-> Detection method、Severity（Critical / High / Medium）。
-
-| ID | Invariant | Detection method | Severity |
-| --- | --- | --- | --- |
-| _(例)_ <consumer-a>-INV-1 | 出勤補登列表「員工」欄需顯示員工姓名（非編號、非空） | screenshot 目視 + Layer B | Critical |
-
-## Allow-empty columns（per-page fallback 例外）
-
-> 某些 column 業務上本來就可整欄空（如選填「備註」）。在此列出**全域**允許整欄空的
-> column header，避免 Layer B uniform-column heuristic false positive。Per-page 例外
-> 則用 `.vue` template 內 `<!-- @ui-invariant-allow-empty[<column-header>] -->` 註解。
->
-> 格式（resolver 解析）：每行一條 `@ui-invariant-allow-empty[<column-header>]`，或逗號分隔。
-
-<!-- 範例（取消註解並改成實際 column）：
-@ui-invariant-allow-empty[備註]
-@ui-invariant-allow-empty[內部代號]
--->
-
-## 與其他層的關係
-
-- **Layer B**（`refactor-invariant-check.mjs`）：UI-INV-1 / UI-INV-3 的 mechanical 偵測點；讀本檔的 allow-empty columns 合併進 per-page marker。
-- **Layer C**（`/impeccable data-sanity`）：UI-INV-2 的 lookup-map-empty-risk + query-param boundary 偵測。
-- **Layer E.1**（pre-handoff self-analysis）：D3 維度引用本檔逐條 cross-check。
-<!-- CLADE:SNIPPET:ui-invariants.template:END -->
 
 <!-- CLADE:SNIPPET:evlog-prod-triage:START -->
 ## Prod 問題 → 先查 evlog（runtime triage 反射）
@@ -257,6 +170,14 @@ Opus 5 的預設輸出比前代長，且 `effort` 只調思考量、不調輸出
 
 本節管**篇幅與節奏**。錯誤與內部過程要不要揭露由 `output-hygiene` 管——縮短篇幅 **NEVER** 是省略已知錯誤、跳過反對意見、或隱藏未完成項的理由。
 <!-- CLADE:SNIPPET:response-calibration:END -->
+
+<!-- CLADE:SNIPPET:ui-invariants:START -->
+## UI Invariants
+
+UI 不變式的生效檔由 resolver 依序找：consumer `docs/UI-INVARIANTS.md` → `docs/ui-invariants.md` → `.claude/ui-invariants.md` → clade baseline template（`~/offline/clade/claude-md/core-snippets/ui-invariants.template.md`）。查目前生效的是哪一份：`node vendor/scripts/ui-invariants-resolve.mjs`。
+
+clade baseline 維護 5 條 universal invariant（整欄塌縮 / lookup 解析率 / page load 4xx-5xx / row count vs seed / 不可逆操作要確認框）。要加業務專屬條目，**MUST** 先把 template 複製成自家 `docs/UI-INVARIANTS.md` 再於 `## Consumer-specific invariants` 追加，**NEVER** 改 universal 那 5 條 —— 它們由 clade 散播時保持對齊。
+<!-- CLADE:SNIPPET:ui-invariants:END -->
 
 # RTK Instructions
 
