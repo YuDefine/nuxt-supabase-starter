@@ -200,14 +200,25 @@ check_secret_like_content() {
 check_email_identifiers() {
   local path="$1"
   local blob="$2"
-  local email domain
+  local email domain localpart
 
   while IFS= read -r email; do
     [[ -z "${email}" ]] && continue
     domain="$(printf '%s' "${email##*@}" | tr '[:upper:]' '[:lower:]')"
+    localpart="$(printf '%s' "${email%@*}" | tr '[:upper:]' '[:lower:]')"
 
     case "${domain}" in
       example.com|example.org|example.net|example.test|localhost|localhost.local|test.local|invalid.test)
+        continue
+        ;;
+    esac
+
+    # 不可投遞位址在構造上就不是可識別個資，即使 domain 是真的。
+    # 本檢查要擋的是「把某個真人的信箱帶進 starter」，noreply@<real-domain>
+    # 不屬於該類（實例：clade commit skill 的 Co-Authored-By: Claude
+    # <noreply@anthropic.com> trailer，2026-07-31 連兩次擋掉 clade 投影散播）。
+    case "${localpart}" in
+      noreply|no-reply|donotreply|do-not-reply|nobody)
         continue
         ;;
     esac
