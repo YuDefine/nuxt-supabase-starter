@@ -46,7 +46,7 @@ Implement tasks from a Spectra change.
 
    c. **Pre-fork baseline guard + 自動建 worktree**（idempotent）：
 
-      Spectra-apply 走 **commit-then-fork** — 有 change context，把屬於這條 change 的 baseline 自動 commit 上 main 再 fork，避免 worktree 看不到 main 的 untracked / modified baseline（契約見 [[worktree-default]] §1；`--baseline-scope-paths` 的對齊要求與三路分流見 `.agents/skills/wt/baseline-guard.md`）。
+      Spectra-apply 走 **commit-then-fork** — 有 change context，把屬於這條 change 的 baseline 自動 commit 上 main 再 fork，避免 worktree 看不到 main 的 untracked / modified baseline（契約見 [[worktree-default]] §1；`--baseline-scope-paths` 的對齊要求與三路分流見 [[wt]] skill 的 `baseline-guard.md`）。
 
       **c.1 — 偵測 main dirty**：
 

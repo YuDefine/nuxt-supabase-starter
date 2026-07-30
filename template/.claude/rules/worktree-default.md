@@ -78,7 +78,7 @@ Phase 切換之間若需在 worktree 跑 **local-only** setup chore，主線 **M
 3. **傳了 `--include-unrelated-dirty` 之後，NEVER 對 user 宣稱「main working tree 不變」/「main 沒被動到」/「你的 WIP 還在 main」** —— 傳了它，那三句話**必然**是假的。**MUST** 明確告訴 user：main 上原有的 N 個 dirty 檔已搬進 worktree `<path>`，main 端現在是乾淨的。（per [[pitfall-include-unrelated-dirty-claimed-main-untouched]]）
 4. **NEVER 主線自己跑 `git stash push -u -m "<msg>" -- <pathspec>`** 做 selective baseline sync —— git 2.50.1 pathspec stash 有 scope leak，stash commit 會包整個 tracked tree 的 modifications。任何「想把 X、Y、Z 三個檔搬去別 worktree」的場景，第一反應是 wt-helper 或 patch route。（per [[pitfall-git-stash-pathspec-scope-leak]]）
 
-> **決定要 fork worktree 之後、送出 `wt-helper add` 之前，MUST 先讀 `plugins/hub-core/skills/wt/baseline-guard.md`**（consumer 端：`.claude/skills/wt/baseline-guard.md`）—— unmerged / clean / dirty 三路分流、`--baseline-scope-paths` 的對齊要求、stash strategy 的隱性風險與 `rescue` 救援、bulk-capture 的還原三步驟都在那裡。
+> **決定要 fork worktree 之後、送出 `wt-helper add` 之前，MUST 先讀 [[wt]] skill 的 `baseline-guard.md`**（SKILL.md Step 1 帶 MUST Read 指示；該 skill 由 hub-core plugin 提供，不在 consumer 的 `.claude/skills/` 下）—— unmerged / clean / dirty 三路分流、`--baseline-scope-paths` 的對齊要求、stash strategy 的隱性風險與 `rescue` 救援、bulk-capture 的還原三步驟都在那裡。
 
 ### Pre-flight guard 不適用範圍：spectra-propose
 
