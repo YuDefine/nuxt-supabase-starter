@@ -97,9 +97,7 @@
       "suggestions": {},
       "sensitivity": {
         "level": "high",
-        "reasons": [
-          "auth: path says \"login\""
-        ]
+        "reasons": ["auth: path says \"login\""]
       },
       "score": 0
     },
@@ -257,9 +255,7 @@
       "suggestions": {},
       "sensitivity": {
         "level": "high",
-        "reasons": [
-          "auth: path says \"auth\""
-        ]
+        "reasons": ["auth: path says \"auth\""]
       },
       "score": 100
     },
@@ -279,9 +275,7 @@
       "suggestions": {},
       "sensitivity": {
         "level": "high",
-        "reasons": [
-          "auth: path says \"auth\""
-        ]
+        "reasons": ["auth: path says \"auth\""]
       },
       "score": 100
     },
@@ -301,9 +295,7 @@
       "suggestions": {},
       "sensitivity": {
         "level": "high",
-        "reasons": [
-          "auth: path says \"auth\""
-        ]
+        "reasons": ["auth: path says \"auth\""]
       },
       "score": 100
     },
@@ -323,9 +315,7 @@
       "suggestions": {},
       "sensitivity": {
         "level": "high",
-        "reasons": [
-          "auth: path says \"auth\""
-        ]
+        "reasons": ["auth: path says \"auth\""]
       },
       "score": 100
     },
