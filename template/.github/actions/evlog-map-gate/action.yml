@@ -45,8 +45,22 @@ runs:
           exit 0
         fi
 
-        if ! node -e "const p=require('./package.json');const d={...p.dependencies,...p.devDependencies};process.exit(d['@evlog/cli']?0:1)" 2>/dev/null; then
-          echo "::warning::@evlog/cli not in package.json — evlog map not yet adopted here, skipping gate. See vendor/snippets/evlog-map/README.md"
+        # @evlog/cli 宣告在哪個 package.json 取決於 app 根在哪：app 根 ≠ repo 根時
+        # （starter 的 template/、monorepo 的 apps/web）依賴跟著 app 走，而 repo 根
+        # 可能根本沒有 package.json。只看 repo 根會靜默 skip 掉整個 gate。
+        FIRST_CWD="$(printf '%s' "$INPUT_CWD" | head -1 | tr -d '[:space:]')"
+        [ -z "$FIRST_CWD" ] && FIRST_CWD=.
+        HAS_CLI=0
+        for candidate in "$FIRST_CWD/package.json" "./package.json"; do
+          [ -f "$candidate" ] || continue
+          if node -e "const d={...require('$candidate').dependencies,...require('$candidate').devDependencies};process.exit(d['@evlog/cli']?0:1)" 2>/dev/null; then
+            HAS_CLI=1
+            break
+          fi
+        done
+
+        if [ "$HAS_CLI" -eq 0 ]; then
+          echo "::warning::@evlog/cli not declared in $FIRST_CWD/package.json or ./package.json — evlog map not yet adopted here, skipping gate. See vendor/snippets/evlog-map/README.md"
           exit 0
         fi
 

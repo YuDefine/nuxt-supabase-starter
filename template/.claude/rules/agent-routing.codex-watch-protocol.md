@@ -340,6 +340,30 @@ Codex 一律由主線直接 Bash 派 → notification-only，`ScheduleWakeup` �
 - **NEVER** 看到健康訊號就提早終止 watch loop（例如「應該快好了」直接放著） — 必須跑到收到 `<task-notification>` 為止
 - **MUST** 收到 `<task-notification>` 後**不再** ScheduleWakeup（否則 wakeup 會在 codex 已結束後重複觸發）
 
+## Spectra Routing Table
+
+從 [[agent-routing]] § Routing Table 移出（2026-07-31）——這五列只在 spectra flow 內成立，主檔留一列 stub 指這裡。**UI view phase 與 Design Review 永不派 codex**、**propose 的 cross-check / final check 一律主線跑**這兩條契約主檔仍帶著。
+
+| 工作類別 | 由誰執行 | 為什麼 |
+| --- | --- | --- |
+| **Spectra `propose` 階段（draft）** | **使用者選單三選一**：A Codex GPT-5.6-sol max draft（預設/推薦）／ B 三模型交叉：Claude Fable 5 xhigh draft ＋ Codex GPT-5.6-sol max review／ C 純 Claude | 預設跳三選一選單；使用者明確指定路徑時跳過。詳見 `spectra-propose` Step 0。 |
+| **Spectra `propose` cross-check / final check** | **主線 Claude Fable 5 xhigh** | 主線 = quality gate（A 的 cross-check、B 的 final check 都由主線跑），不只是 dispatcher。 |
+| **Spectra `apply`（非 Design Review、非 UI view phase，phase 粒度）** | **Codex GPT-5.6-sol high** | medium 漏 schema drift 風險高；phase 粒度避免 round-trip。 |
+| **Spectra `apply` UI view phase（component / page / view / layout / styling）+ Section 7（Design Review）** | **主線 Claude Opus 5 xhigh，永不派 codex** | 視覺 / 互動 / a11y 與 Design skill 緊耦合，Codex tooling 弱。非 view 的 frontend 不在此範圍，仍走 codex（範圍同 § Spectra Apply Phase Dispatch C 類）。 |
+| **spectra-apply Step 8a self-collect (a)(b)**（dev-login allow-list 小 mod + service_role DB query 證 data shape） | **Codex `--model terra --effort medium` via 泛用 dispatcher** | PoC 已實證 codex 能跑完整 evidence chain；annotation 寫回 tasks.md 維持主線。詳見 spectra-apply SKILL Step 8a。 |
+
+## Orchestration Residency — 機械 Enforcement（residency-classify + archive-gate Check 8）
+
+從 [[agent-routing]] § Orchestration Residency 移出（2026-07-31）。Residency 的**判定條件**（Codex-primary A/B 進入條件、Claude-primary 五條）留在主檔；本節是它的機械強制步驟，只在 spectra-apply 開工時用得到。
+
+**為什麼**：該節上線 6 天實測（2026-06-11 audit），eligible change 採用率僅 1/3 — 兩條純非-view change 仍由主線自做、0 dispatch。文字規約對 routing 自律無效，故比照 Check 7 / E.1 先例補機械強制點。
+
+- spectra-apply 開工後、任何 dispatch 決策前，**MUST** 跑 `node ~/offline/clade/vendor/scripts/residency-classify.mjs classify --change openspec/changes/<change>` 拿機械 verdict
+- **MUST** 立刻 record decision：`node ~/offline/clade/vendor/scripts/residency-classify.mjs record --consumer-path . --change <change> --verdict <v> --executor <codex|claude> [--reason ...]` → 落 `.spectra/residency-ledger.jsonl`
+- verdict=`codex-primary` 而決定 executor=`claude` → `--reason` 必填（record 入口會擋）
+- archive-gate **Check 8** 機械驗 record 存在：缺 record → archive exit 2；正當例外加 `<!-- residency-decision: intentional, reason: ... -->` 到 tasks.md 繞過
+- adoption 量測：`node ~/offline/clade/scripts/audit-codex-adoption.mjs`（clade home 稽核：verdict × executor 表 + dispatch ledger 分桶）
+
 ## Spectra Propose Handoff（具體做法）
 
 Claude Code session 收到 spectra propose 請求時：
@@ -364,7 +388,13 @@ Claude Code session 收到 spectra propose 請求時：
 執行 `spectra-apply` 時，phase 粒度派 codex 的具體 dispatch 步驟：
 
 1. Read tasks.md，按 `## N.` 切分 phase
-2. **每個 phase 三類分類**（依序判定，命中即停 — 詳見 `agent-routing.md` § Spectra Apply Phase Dispatch 決策層 A/B/C 三類定義）
+2. **每個 phase 三類分類**（依序判定，命中即停）：
+   - **A. Design Review phase**：標題含 "Design Review" 或內容含 `/design improve` / `/impeccable audit` / `/impeccable *` / `review-screenshot`
+     → **主線 Claude Opus 5 xhigh 自己做，永不派 codex**
+   - **B. UI view phase**：phase 內任一 task 描述/路徑指涉 view 層檔案——`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且該 phase 沒有摻入非 view 的 frontend / backend 工作**（store / hook / API client / type / util / migration / API server）
+     → **主線 Claude Opus 5 xhigh 自己做，永不派 codex**
+   - **C. 其他 phase**：上述兩類以外（schema、migration、API server、CLI、純 backend、frontend 但非 view 的 store / hook / API client / type / util、unit test、docs）
+     → **派 background codex GPT-5.6-sol high 做完整 phase**
 3. **混雜 phase fallback**（A、B 都不是純 view、又混雜 view 與非 view 工作）：
    - **看該 phase 是否已開工**（任一 task `[x]` 或 git history 顯示 phase 內檔案已被改）：
      - **已開工** → **主線整個 phase 自己做**（safety fallback；不重切，不派 codex）

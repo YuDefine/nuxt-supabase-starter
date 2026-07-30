@@ -11,6 +11,7 @@ metadata:
   author: spectra
   version: "1.0"
   generatedBy: "Spectra"
+permission_tier: action
 ---
 <!--
 🔒 LOCKED — managed by clade

@@ -5,6 +5,7 @@ effort: xhigh
 metadata:
   author: clade
   version: "2.0"
+permission_tier: action
 ---
 <!--
 🔒 LOCKED — managed by clade

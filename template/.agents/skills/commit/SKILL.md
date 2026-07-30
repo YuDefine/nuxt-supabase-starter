@@ -1,7 +1,8 @@
 ---
 name: commit
-description: Use when 使用者要求 commit，或 working tree 有多組 unrelated 變更需分批提交。
+description: Use when 使用者要求把工作區的變更寫進版本歷史，不論用詞是 commit、提交、送進 git 還是「整理一下」；需要拆成多筆時同樣適用。
 effort: high
+permission_tier: action
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -17,7 +18,7 @@ Local edits will be reverted by the next sync.
 $ARGUMENTS
 ```
 
-政策、禁止事項、commit 類型表見 `.claude/rules/commit.md`。本檔只定義執行流程。
+政策與禁止事項見 `.claude/rules/commit.md`。本檔定義執行流程，commit 類型 / emoji 對照表在 Step 3。
 
 ## Step 0-Lock: 單一 session 防呆（**必做第一步**）
 
@@ -241,6 +242,23 @@ git diff --stat                 # 僅輔助看 tracked 改動規模；NEVER 當�
 檔案:
 - path/to/file.ts
 ```
+
+`類型` 取值與 Step 4 訊息開頭的 emoji（`commitlint.config.ts`）：
+
+| Emoji | Type     | 用途     |
+| ----- | -------- | -------- |
+| ✨    | feat     | 新功能   |
+| 🐛    | fix      | Bug 修復 |
+| 🧹    | chore    | 維護     |
+| 🔨    | refactor | 重構     |
+| 🧪    | test     | 測試     |
+| 🎨    | style    | 樣式     |
+| 📝    | docs     | 文件     |
+| 📦    | build    | 建置     |
+| 👷    | ci       | CI/CD    |
+| ⏪    | revert   | 還原     |
+| 🚀    | deploy   | 部署     |
+| 🎉    | init     | 初始化   |
 
 **分組輸入 = Step 2 的 `git status --porcelain` 完整輸出**（tracked modified + untracked 非 ignored），**NEVER** 只用 `git diff --stat`。
 

@@ -2,6 +2,7 @@
 name: spectra
 description: 'Spectra orchestrator — auto-detect which spectra sub-skill to invoke based on project state and user intent'
 effort: low
+permission_tier: draft
 ---
 <!--
 🔒 LOCKED — managed by clade

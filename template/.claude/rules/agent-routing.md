@@ -46,25 +46,23 @@ Local edits will be reverted by the next sync.
 >
 > **NEVER** 拿「輸出會被下游機械消費」當降檔理由：下游若只驗 JSON schema 而不驗語意，降檔引入的錯誤會被自動放大。只有下游具備**獨立且夠強的語意 gate** 才可降檔。
 >
-> **跑分**（官方值，經 Codex Sol 覆核）：Terminal-Bench 2.1 Sol 88.8 / Terra 87.4 / Luna 84.7；SWE-bench Pro Sol 64.6 / Terra 63.4 / Luna 62.7。**兩者都是 agentic benchmark**（SWE-bench Pro 用 SWE-Agent scaffold，不是單次產碼），所以 aggregate 差距（Sol–Terra 僅 1.4pp）**不足以**單獨推導 routing boundary——要看 class-conditional 差距：SEC-Bench Pro Sol 71.2 vs Terra 57.7、ExploitBench 73.5 vs 52.9，安全類差距是通用類的 10 倍以上。
+> **NEVER 拿 aggregate 跑分推導 routing boundary**：通用 agentic benchmark 上 Sol–Terra 只差 1.4pp，但 class-conditional 差距是它的 10 倍以上（安全類 SEC-Bench Pro Sol 71.2 vs Terra 57.7）。要看的是**這一類工作**的差距，不是總分。
 >
-> ⚠️ **配額權重 UNKNOWN**：5:2.5:1 已確認是 API 價格與 purchased-credit rate card，但**訂閱內含配額**的 per-model debit multiplier 官方未公布，且官方列的每 5h 訊息估算範圍（Sol 75–450 / Terra 100–550 / Luna 250–1400）不呈現乾淨反比。**降檔究竟省多少配額目前無法量化**——`NEVER` 把 5:2.5:1 當成已證實的配額比寫進任何計算。
+> ⚠️ **配額權重 UNKNOWN**：`NEVER` 把 5:2.5:1 當成已證實的配額比寫進任何計算——那是 API 價格與 purchased-credit rate card，**訂閱內含配額**的 per-model debit multiplier 官方未公布。**降檔究竟省多少配額目前無法量化**。
+>
+> 完整跑分數字組、兩個 benchmark 的 scaffold 性質、配額估算範圍為何不呈現乾淨反比，見 `docs/rule-rationale/agent-routing.md` § model 檔位的量測依據。
 
 | 工作類別 | 由誰執行 | 為什麼 |
 | --- | --- | --- |
 | **Web search**（即時資料 / 外部資訊查詢） | **Codex `--model terra --effort medium`** | 搜尋 + 整合，非長迴圈。 |
 | **Code review（commit 0-A）** | **(1) `simplify` + (2) `codex exec` review high（GPT-5.6-sol，經 codex-review-safe.sh），(3) 0-A.1 出 Critical / Major 時條件升 xhigh** | 跨模型互補盲點。詳見 `.claude/skills/commit/SKILL.md` Step 0-A。 |
-| **Spectra `propose` 階段（draft）** | **使用者選單三選一**：A Codex GPT-5.6-sol max draft（預設/推薦）／ B 三模型交叉：Claude Fable 5 xhigh draft ＋ Codex GPT-5.6-sol max review／ C 純 Claude | 預設跳三選一選單；使用者明確指定路徑時跳過。詳見 `spectra-propose` Step 0。 |
-| **Spectra `propose` cross-check / final check** | **主線 Claude Fable 5 xhigh** | 主線 = quality gate（A 的 cross-check、B 的 final check 都由主線跑），不只是 dispatcher。 |
-| **Spectra `apply`（非 Design Review、非 UI view phase，phase 粒度）** | **Codex GPT-5.6-sol high** | medium 漏 schema drift 風險高；phase 粒度避免 round-trip。 |
-| **Spectra `apply` UI view phase（component / page / view / layout / styling）+ Section 7（Design Review）** | **主線 Claude Opus 5 xhigh，永不派 codex** | 視覺 / 互動 / a11y 與 Design skill 緊耦合，Codex tooling 弱。非 view 的 frontend 不在此範圍，仍走 codex（範圍同 § Phase Dispatch C 類）。 |
+| **Spectra `propose` / `apply` 各階段（draft / cross-check / phase 粒度 / UI view phase）** | 見 reference § Spectra Routing Table | 五列 spectra 專屬 routing 移到 path-scoped reference（碰 `openspec/changes/**` 時載入）。**不變的契約**：UI view phase 與 Design Review **永不派 codex**；propose 的 cross-check / final check **一律主線跑**。 |
 | **`screenshot-review` verify mode**（`[verify:ui]` channel / archive 前視覺 QA） | **主線 Claude 直派 Codex GPT-5.6-sol low**（Bash 走 reference § Codex 派工的標準流程；**禁止** `Agent` tool with `subagent_type: screenshot-review`） | sonnet wrapper 會繞過 Step 0 自做工作（[[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]）。wrapper **僅**在 codex CLI 不可用時作 fallback，**禁止**當預設入口。詳見 reference § screenshot-review Verify Mode Dispatch。 |
 | **Dev/test admin session cookie 取得**（verify channel evidence collection 階段） | **主線自己 scaffold `_dev-login` route + curl mint session**（**禁止**要 user 手動取 cookie；scaffold 前**MUST**先用 detection helper 確認真的 missing） | 詳見 [[manual-review.backend]] § Dev-login route missing → scaffold-first + [[pitfall-agent-asks-user-cookie-skipping-dev-login-scaffold]]。 |
 | **Mechanical fan-out**（收集 / 掃描 / 跑指令驗證型 subagent 工作：grep 掃描、收 evidence、驗證矩陣、fleet 多 repo 盤點） | **Codex `--model terra --effort medium` via 泛用 dispatcher** | Claude subagent fan-out 實測佔 CC 等價成本 17-21%/日，codex 同工作 ~1/10 成本且 fidelity 100%（PoC 實證）。走泛用 dispatcher（見 reference § 泛用 Dispatcher）：蒐集命令清單派工前列得全 → 主線跑完再派 `fanout-analyze`，列不全 → `fanout-collect`。例外留 Claude：需要 claude.ai-connected MCP（Notion 等）、判讀 / 治理型分析（如 /oops Mode D 判讀段）、user 明確要求。 |
 | **Read-heavy 長文件 / fleet 掃描**（上游 release notes 解析、跨 consumer reality matrix、pitfall 全量掃描、大 rule 改版前 baseline 重讀） | **Codex `--model terra --effort medium` via 泛用 dispatcher** | read-heavy + structured output 是 codex 強項（中文 brief fidelity 100% 已驗證）。摘要僅作輸入，規約措辭與拍板必回主線。 |
 | **Debug evidence 段**（log 完整 capture / repro script 撰寫執行 / 既定 hypothesis 的驗證迴圈） | **Codex `--model sol --effort high` via 泛用 dispatcher** | debug 是最大消耗桶；evidence / repro / verify 是機械段，root cause 推斷與修法設計留主線。repro 必在 throwaway worktree（template 內建 guard）。 |
 | **commit 0-C fix-verify loop**（pnpm check / test 修到全綠） | **Codex `--model sol --effort high` via 泛用 dispatcher** | 機械修 lint / type / test 與 dep-upgrade 已驗證模式同構；主線同回合續跑 0-A / 0-B。詳見 commit SKILL Step 0-C。 |
-| **spectra-apply Step 8a self-collect (a)(b)**（dev-login allow-list 小 mod + service_role DB query 證 data shape） | **Codex `--model terra --effort medium` via 泛用 dispatcher** | PoC 已實證 codex 能跑完整 evidence chain；annotation 寫回 tasks.md 維持主線。詳見 spectra-apply SKILL Step 8a。 |
 | **Security review**（`/security-review` skill / commit 前安全檢查） | **最終 gate：Codex `--model sol --effort medium`**。候選 finding 的 pre-triage 可先跑 `--model terra`，但**收斂判定 MUST 回 Sol** | **NEVER** 因為「零互動 / structured diff → structured findings」就把安全 gate 當 pattern matching 降檔——漏報成本不對稱，且 class-conditional 差距遠大於通用 benchmark：SEC-Bench Pro Sol 71.2 vs Terra 57.7、ExploitBench 73.5 vs 52.9（通用類 Sol–Terra 只差 1.4pp）。30 天實測佔 72% Claude session 數但僅 15% events — session 啟動成本是主要浪費。 |
 | **Exploration / research pre-scan**（「依賴什麼」「進度如何」「還有什麼要做」「N 張 change 狀態」等 read-heavy 探索） | **Codex `--model terra --effort medium` via 泛用 dispatcher**，主線消費 structured summary | 「依賴什麼」要探索未知路徑、跨檔追蹤、裁決哪些 evidence 相關——是有限探索，不是 extraction，所以是 Terra 不是 Luna。主線拿 summary 做判斷 / 規劃，不自己逐檔 Read。30 天實測佔 11.5% events。 |
 | **Handoff scan 段**（`/handoff` Mode B 的 scan：讀 HANDOFF.md + git log + openspec + tasks + git status 產出 outstanding 清單） | **Codex `--model terra --effort medium` via 泛用 dispatcher**，主線消費 scan report 做決策 | 四個來源（HANDOFF / git log / tasks / git status）可能互相矛盾，判斷某條 task 是否已 commit、部分完成或被工作樹取代是**狀態 reconciliation**，不是格式化——這是它不能降 Luna 的原因。主線只看 report、做 routing / 推薦。30 天實測 29 sessions、4.7% events。 |
@@ -103,15 +101,9 @@ Local edits will be reverted by the next sync.
 
 個別 phase 仍可派 codex → 走 § Spectra Apply Phase Dispatch。
 
-### 機械 Enforcement（residency-classify + archive-gate Check 8）
+### 機械 Enforcement
 
-**為什麼**：本節上線 6 天實測（2026-06-11 audit），eligible change 採用率僅 1/3 — 兩條純非-view change 仍由主線自做、0 dispatch。文字規約對 routing 自律無效，故比照 Check 7 / E.1 先例補機械強制點。
-
-- spectra-apply 開工後、任何 dispatch 決策前，**MUST** 跑 `node ~/offline/clade/vendor/scripts/residency-classify.mjs classify --change openspec/changes/<change>` 拿機械 verdict
-- **MUST** 立刻 record decision：`node ~/offline/clade/vendor/scripts/residency-classify.mjs record --consumer-path . --change <change> --verdict <v> --executor <codex|claude> [--reason ...]` → 落 `.spectra/residency-ledger.jsonl`
-- verdict=`codex-primary` 而決定 executor=`claude` → `--reason` 必填（record 入口會擋）
-- archive-gate **Check 8** 機械驗 record 存在：缺 record → archive exit 2；正當例外加 `<!-- residency-decision: intentional, reason: ... -->` 到 tasks.md 繞過
-- adoption 量測：`node ~/offline/clade/scripts/audit-codex-adoption.mjs`（clade home 稽核：verdict × executor 表 + dispatch ledger 分桶）
+**每一條** change 開工都 **MUST** 跑 `residency-classify.mjs classify` 拿機械 verdict 並立刻 `record`，不是只有看起來像純後端的那條——「主線自行判斷 residency」已實證不可靠。缺 record 會被 archive-gate Check 8 擋（exit 2）。完整命令、`--reason` 必填條件、繞過 marker、adoption 量測見 reference § Orchestration Residency — 機械 Enforcement。
 
 ## Spectra Propose Handoff（決策層）
 
@@ -123,19 +115,13 @@ Local edits will be reverted by the next sync.
 
 > **先判 residency**（§ Orchestration Residency）：符合 Codex-primary 進入條件 → change 粒度單次 dispatch + notification-only，**不要**逐 phase 派工；以下限 **Claude-primary** 場景。
 
-執行 `spectra-apply` 時，phase 粒度派 codex：
+執行 `spectra-apply` 時 phase 粒度派 codex。**三條契約**：
 
-1. Read tasks.md，按 `## N.` 切分 phase
-2. **每個 phase 三類分類**（依序判定，命中即停）：
-   - **A. Design Review phase**：標題含 "Design Review" 或內容含 `/design improve` / `/impeccable audit` / `/impeccable *` / `review-screenshot`
-     → **主線 Claude Opus 5 xhigh 自己做，永不派 codex**
-   - **B. UI view phase**：phase 內任一 task 描述/路徑指涉 view 層檔案——`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且該 phase 沒有摻入非 view 的 frontend / backend 工作**（store / hook / API client / type / util / migration / API server）
-     → **主線 Claude Opus 5 xhigh 自己做，永不派 codex**
-   - **C. 其他 phase**：上述兩類以外（schema、migration、API server、CLI、純 backend、frontend 但非 view 的 store / hook / API client / type / util、unit test、docs）
-     → **派 background codex GPT-5.6-sol high 做完整 phase**
-3. **混雜 phase fallback**（混雜 view 與非 view 工作）：**已開工**（任一 task `[x]` 或 git history 顯示已改）→ 主線整個 phase 自己做（不重切，不派 codex）。**未開工** → **STOP**，請使用者跑 `/spectra-ingest <change>` 把 UI view tasks 切成獨立 phase；**禁止**主線自行修改 tasks.md phase 結構（屬 ingest 範圍）
+1. **Design Review phase 與 UI view phase 一律主線 Claude Opus 5 xhigh 自己做，永不派 codex**；其他 phase（schema / migration / API server / CLI / 純 backend / 非 view 的 frontend / unit test / docs）派 background codex GPT-5.6-sol high
+2. **混雜 phase**（同一 phase 摻了 view 與非 view）：**已開工** → 主線整個 phase 自己做，不重切、不派 codex；**未開工** → **STOP** 請使用者跑 `/spectra-ingest <change>` 重切
+3. **禁止**主線自行修改 tasks.md 的 phase 結構（屬 ingest 範圍）
 
-C 類派工細節（prompt、marker、watch、drift 檢查、收尾驗證）見 reference § Spectra Apply Phase Dispatch（具體做法）。
+A/B/C 三類的完整判定條件（含 view 層檔案路徑清單）與 C 類派工細節（prompt、marker、watch、drift 檢查、收尾驗證）見 reference § Spectra Apply Phase Dispatch（具體做法）。
 
 ## WebSearch Handoff（決策層）
 
@@ -157,7 +143,7 @@ C 類派工細節（prompt、marker、watch、drift 檢查、收尾驗證）見 
 
 Codex 配額**只有一層**：primary = **7 天 rolling window**（`window_minutes: 10080`），secondary 實測為 `null`（不存在，**不要**指望第二層緩衝）。
 
-> 本節數值於 2026-07-28 對 `~/.codex/sessions/**/rollout-*.jsonl` 的 `rate_limits` payload 實測校正。先前寫「primary = 5h rolling window」是錯的，連帶使「分散到多個 window」與「reset ≤30 分鐘則延後」兩條策略從未可能生效。改本節數值前 MUST 重新實測，不要憑印象改回。
+> **改本節數值前 MUST 重新實測**（`~/.codex/sessions/**/rollout-*.jsonl` 的 `rate_limits` payload），不要憑印象改回。校正經過見 `docs/rule-rationale/agent-routing.md` § 配額 window 的實測校正。
 
 - 泛用 dispatcher 內建 quota check：primary used_percent > 85 → exit 4 不派（`--no-quota-check` 強派）
 - **一週只有一個池**——`NEVER` 規劃「把派工分散到不同 window」，7 天內沒有第二個 window 可分散。要降配額壓力只能降 model 檔位（§ Routing Table 的 model 欄）或減少 dispatch 次數

@@ -8,6 +8,7 @@ metadata:
   author: spectra
   version: "1.0"
   generatedBy: "Spectra"
+permission_tier: draft
 ---
 <!--
 🔒 LOCKED — managed by clade

@@ -267,23 +267,6 @@ En：`revert` / `undo` / `rollback` / `roll back` / `reset` / `discard` / `drop`
   - **NEVER** 以「既有問題」「不在本次 scope」「建議性質」「影響不大」為由跳過任何 finding — 跳過等於讓已知問題長期留存
   - **例外**：修法會動到別 session in-flight WIP（典型：`HANDOFF.md`、別 session 的 `tasks/<...>.md`）時，**MUST** 走 `scope-discipline.md`「Rule 衝突解法」具體分支模板（A. 馬上修續 flow / B. 登 TD 中止 flow）由 user 拍板，**NEVER** 自行二選一
 
-## Commit 類型（commitlint.config.ts）
-
-| Emoji | Type     | 用途     |
-| ----- | -------- | -------- |
-| ✨    | feat     | 新功能   |
-| 🐛    | fix      | Bug 修復 |
-| 🧹    | chore    | 維護     |
-| 🔨    | refactor | 重構     |
-| 🧪    | test     | 測試     |
-| 🎨    | style    | 樣式     |
-| 📝    | docs     | 文件     |
-| 📦    | build    | 建置     |
-| 👷    | ci       | CI/CD    |
-| ⏪    | revert   | 還原     |
-| 🚀    | deploy   | 部署     |
-| 🎉    | init     | 初始化   |
-
 ## 搭配
 
 Skill 本體 `.claude/skills/commit/SKILL.md` 定義「怎麼做」（procedure）；本規則定義「要不要做」（政策、閘門、強制入口）。

@@ -97,6 +97,21 @@ bump_err() { # $1 = context, $2 = raw output
 
 # ---- Phase 1: resolve run id（workflow mode；「查無 run」= pending 繼續等） ----
 if [[ "$MODE" == "workflow" ]]; then
+  # gh run list -c 只認**完整 40 碼 SHA**：傳縮寫 SHA 會靜默回空陣列（rc=0、不報錯），
+  # 於是上面「查無 run = pending 繼續等」的設計把它當成 run 尚未建立，一路等到
+  # WATCH_TIMEOUT。2026-07-31 <consumer-a> 實證：`--commit e1738305`（8 碼）等滿 3600s 回
+  # run=unresolved，同一條 run 換完整 SHA 立刻查得到、而且早在 watcher 啟動後一分鐘
+  # 內就 success。展不開就 fail fast，NEVER 讓 caller 白等一小時。
+  if [[ -n "$COMMIT" && ! "$COMMIT" =~ ^[0-9a-fA-F]{40}$ ]]; then
+    FULL_SHA=$(git rev-parse --verify "${COMMIT}^{commit}" 2>/dev/null || true)
+    if [[ "$FULL_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+      echo "[watch] --commit '$COMMIT' → $FULL_SHA（gh run list -c 不接受縮寫 SHA）"
+      COMMIT="$FULL_SHA"
+    else
+      echo "RESULT: UNAVAILABLE (--commit '$COMMIT' 展不開成完整 40 碼 SHA；gh run list -c 只認完整 SHA)"
+      exit 2
+    fi
+  fi
   # --commit 模式：SHA 本身已唯一識別 run，不疊 createdAt 下界 —— caller 常見模式是
   # 「push 完才派 watcher」，run 早於 script 啟動時間建立，若仍套用預設 120s-ago 下界
   # 會把已存在的 run 過濾掉，watcher 誤判「run 尚未建立」永遠 pending 到 WATCH_TIMEOUT
