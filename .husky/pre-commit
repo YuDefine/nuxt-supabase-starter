@@ -373,6 +373,17 @@ fi
 for path in "${staged_paths[@]}"; do
   blob=""
 
+  # Lockfile 豁免——與 scripts/audit-template-hygiene.sh 的 scan_file 對齊。
+  # lockfile 內的 email 是上游套件維護者的中繼資料（實例：裝 @evlog/cli 帶進
+  # i@izs.me），不是「把某個真人的信箱帶進 starter」，內容檢查一律不適用。
+  # 這條先前只存在於 audit script，hook 沒有，於是任何一次 pnpm add 都可能
+  # 擋住 commit（2026-07-31 實犯）。
+  case "${path}" in
+    template/pnpm-lock.yaml|template/package-lock.json|template/yarn.lock|template/bun.lockb)
+      continue
+      ;;
+  esac
+
   check_private_env_path "${path}"
 
   if ! blob="$(git show ":${path}" 2>/dev/null)"; then

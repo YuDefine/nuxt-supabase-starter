@@ -12,6 +12,7 @@ on:
       - 'template/e2e/**'
       - 'template/nuxt.config.ts'
       - 'template/package.json'
+      - 'template/evlog.map.json'
       - 'template/pnpm-lock.yaml'
       - 'template/tsconfig*.json'
       - 'template/.claude/hub.json'
@@ -28,6 +29,7 @@ on:
       - 'template/e2e/**'
       - 'template/nuxt.config.ts'
       - 'template/package.json'
+      - 'template/evlog.map.json'
       - 'template/pnpm-lock.yaml'
       - 'template/tsconfig*.json'
       - 'template/.claude/hub.json'
@@ -52,6 +54,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          # evlog map gate 要跟 base ref 比對，才判斷得出「本次 diff 觸及哪些
+          # entry point」。shallow clone 會讓那條判定退化成 warning。
+          fetch-depth: 0
 
       - name: Install ripgrep
         run: sudo apt-get install -y ripgrep
@@ -79,6 +85,15 @@ jobs:
 
       - name: UX drift audit
         run: vp run audit:ux-drift
+
+      # app 根是 template/，所以 cwd 指過去；baseline 在 template/evlog.map.json。
+      # composite action 的步驟不吃 job 的 defaults.working-directory，它跑在
+      # workspace 根，因此這裡不需要（也不能）依賴上面的 working-directory。
+      - name: evlog map coverage gate
+        uses: ./template/.github/actions/evlog-map-gate
+        with:
+          base-ref: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'origin/main' }}
+          cwd: template
 
       # NOTE: Spectra roadmap drift check 在 CI 環境經常 false positive
       # （spectra CLI 不在 ubuntu PATH、.spectra/spectra.db 不存在等），

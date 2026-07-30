@@ -1,0 +1,393 @@
+{
+  "version": 1,
+  "generatedAt": "2026-07-30T23:32:14.582Z",
+  "framework": "nuxt",
+  "projectName": "nuxt-supabase-starter",
+  "score": 39,
+  "routes": [
+    {
+      "framework": "nuxt",
+      "kind": "page",
+      "method": null,
+      "path": "/",
+      "file": "app/pages/(home).vue",
+      "handler": null,
+      "id": "8e327f197322",
+      "checks": {
+        "page-error-handling": {
+          "status": "n/a"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
+      },
+      "score": 100
+    },
+    {
+      "framework": "nuxt",
+      "kind": "page",
+      "method": null,
+      "path": "/admin/users",
+      "file": "app/pages/admin/users.vue",
+      "handler": null,
+      "id": "930370d51304",
+      "checks": {
+        "page-error-handling": {
+          "status": "n/a"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
+      },
+      "score": 100
+    },
+    {
+      "framework": "nuxt",
+      "kind": "api",
+      "method": "POST",
+      "path": "/api/_dev/login",
+      "file": "server/api/_dev/login.post.ts",
+      "handler": {
+        "line": 139,
+        "column": 0
+      },
+      "id": "7dbdefa0e7eb",
+      "checks": {
+        "error-handling": {
+          "status": "n/a"
+        },
+        "wide-event": {
+          "status": "fail",
+          "message": "handler adds nothing to its request event — only method, path and status are recorded",
+          "evidence": {
+            "file": "server/api/_dev/login.post.ts",
+            "line": 139
+          }
+        },
+        "context": {
+          "status": "fail",
+          "message": "no log.set() context accumulation",
+          "evidence": {
+            "file": "server/api/_dev/login.post.ts",
+            "line": 139
+          }
+        },
+        "structured-errors": {
+          "status": "fail",
+          "message": "createError() missing why and fix",
+          "evidence": {
+            "file": "server/api/_dev/login.post.ts",
+            "line": 72,
+            "snippet": "throw createError({"
+          }
+        },
+        "audit": {
+          "status": "fail",
+          "message": "has logger + context but no log.audit() — sensitive route needs audit trail",
+          "evidence": {
+            "file": "server/api/_dev/login.post.ts",
+            "line": 139
+          }
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "high",
+        "reasons": [
+          "auth: path says \"login\""
+        ]
+      },
+      "score": 0
+    },
+    {
+      "framework": "nuxt",
+      "kind": "api",
+      "method": "GET",
+      "path": "/api/v1/profiles",
+      "file": "server/api/v1/profiles/index.get.ts",
+      "handler": {
+        "line": 20,
+        "column": 0
+      },
+      "id": "fbfac6897eab",
+      "checks": {
+        "audit": {
+          "status": "n/a"
+        },
+        "error-handling": {
+          "status": "n/a"
+        },
+        "wide-event": {
+          "status": "pass"
+        },
+        "context": {
+          "status": "fail",
+          "message": "no log.set() context accumulation",
+          "evidence": {
+            "file": "server/api/v1/profiles/index.get.ts",
+            "line": 20
+          }
+        },
+        "structured-errors": {
+          "status": "fail",
+          "message": "createError() missing why and fix",
+          "evidence": {
+            "file": "server/api/v1/profiles/index.get.ts",
+            "line": 53,
+            "snippet": "throw createError({"
+          }
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
+      },
+      "score": 65
+    },
+    {
+      "framework": "nuxt",
+      "kind": "api",
+      "method": "GET",
+      "path": "/api/v1/profiles/:id",
+      "file": "server/api/v1/profiles/[id].get.ts",
+      "handler": {
+        "line": 21,
+        "column": 0
+      },
+      "id": "25daaac68e3d",
+      "checks": {
+        "audit": {
+          "status": "n/a"
+        },
+        "error-handling": {
+          "status": "n/a"
+        },
+        "wide-event": {
+          "status": "pass"
+        },
+        "context": {
+          "status": "fail",
+          "message": "no log.set() context accumulation",
+          "evidence": {
+            "file": "server/api/v1/profiles/[id].get.ts",
+            "line": 21
+          }
+        },
+        "structured-errors": {
+          "status": "fail",
+          "message": "createError() missing why and fix",
+          "evidence": {
+            "file": "server/api/v1/profiles/[id].get.ts",
+            "line": 42,
+            "snippet": "throw createError({"
+          }
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
+      },
+      "score": 65
+    },
+    {
+      "framework": "nuxt",
+      "kind": "api",
+      "method": "GET",
+      "path": "/api/v1/profiles/me",
+      "file": "server/api/v1/profiles/me.get.ts",
+      "handler": {
+        "line": 16,
+        "column": 0
+      },
+      "id": "f7057100c89d",
+      "checks": {
+        "audit": {
+          "status": "n/a"
+        },
+        "error-handling": {
+          "status": "n/a"
+        },
+        "wide-event": {
+          "status": "pass"
+        },
+        "context": {
+          "status": "fail",
+          "message": "no log.set() context accumulation",
+          "evidence": {
+            "file": "server/api/v1/profiles/me.get.ts",
+            "line": 16
+          }
+        },
+        "structured-errors": {
+          "status": "fail",
+          "message": "createError() missing why and fix",
+          "evidence": {
+            "file": "server/api/v1/profiles/me.get.ts",
+            "line": 33,
+            "snippet": "throw createError({"
+          }
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
+      },
+      "score": 65
+    },
+    {
+      "framework": "nuxt",
+      "kind": "page",
+      "method": null,
+      "path": "/auth/callback",
+      "file": "app/pages/auth/callback.vue",
+      "handler": null,
+      "id": "20b5b9326b43",
+      "checks": {
+        "page-error-handling": {
+          "status": "n/a"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "high",
+        "reasons": [
+          "auth: path says \"auth\""
+        ]
+      },
+      "score": 100
+    },
+    {
+      "framework": "nuxt",
+      "kind": "page",
+      "method": null,
+      "path": "/auth/forgot-password",
+      "file": "app/pages/auth/forgot-password.vue",
+      "handler": null,
+      "id": "b6e976836131",
+      "checks": {
+        "page-error-handling": {
+          "status": "n/a"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "high",
+        "reasons": [
+          "auth: path says \"auth\""
+        ]
+      },
+      "score": 100
+    },
+    {
+      "framework": "nuxt",
+      "kind": "page",
+      "method": null,
+      "path": "/auth/login",
+      "file": "app/pages/auth/login.vue",
+      "handler": null,
+      "id": "d039f5fce9ff",
+      "checks": {
+        "page-error-handling": {
+          "status": "n/a"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "high",
+        "reasons": [
+          "auth: path says \"auth\""
+        ]
+      },
+      "score": 100
+    },
+    {
+      "framework": "nuxt",
+      "kind": "page",
+      "method": null,
+      "path": "/auth/register",
+      "file": "app/pages/auth/register.vue",
+      "handler": null,
+      "id": "fba27b8beca0",
+      "checks": {
+        "page-error-handling": {
+          "status": "n/a"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "high",
+        "reasons": [
+          "auth: path says \"auth\""
+        ]
+      },
+      "score": 100
+    },
+    {
+      "framework": "nuxt",
+      "kind": "page",
+      "method": null,
+      "path": "/demo",
+      "file": "app/pages/demo.vue",
+      "handler": null,
+      "id": "62123a6d4f0e",
+      "checks": {
+        "page-error-handling": {
+          "status": "n/a"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
+      },
+      "score": 100
+    },
+    {
+      "framework": "nuxt",
+      "kind": "page",
+      "method": null,
+      "path": "/profile",
+      "file": "app/pages/profile/index.vue",
+      "handler": null,
+      "id": "4458d91def04",
+      "checks": {
+        "page-error-handling": {
+          "status": "n/a"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
+      },
+      "score": 100
+    },
+    {
+      "framework": "nuxt",
+      "kind": "page",
+      "method": null,
+      "path": "/walkthrough",
+      "file": "app/pages/walkthrough.vue",
+      "handler": null,
+      "id": "6c4e43e2eb3d",
+      "checks": {
+        "page-error-handling": {
+          "status": "n/a"
+        }
+      },
+      "suggestions": {},
+      "sensitivity": {
+        "level": "none",
+        "reasons": []
+      },
+      "score": 100
+    }
+  ]
+}
