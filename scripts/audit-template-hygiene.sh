@@ -522,4 +522,8 @@ main() {
   return 0
 }
 
-main "$@"
+# 被 source 時只定義函式，不執行 main —— .husky/pre-commit 從這裡取用 check 函式，
+# 兩份實作漂移過一次（12 個共用函式有 8 個不一致），不再各自維護副本。
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi
