@@ -211,6 +211,9 @@ Node 的 type stripping 只抹除型別，不做語法轉換：
 - **NEVER** 用 `enum`、`namespace`、constructor parameter properties、legacy decorators
 - type-only import **MUST** 寫成 `import type { X } from '...'`
 - import specifier **MUST** 帶**真實**副檔名（`import './foo.ts'`）。stripping 不做副檔名改寫，寫 `.mjs` 指向 `.ts` 檔會在 runtime 炸 `ERR_MODULE_NOT_FOUND`
+  - **例外：`nuxt.config.ts` 的相對 import 一律 extensionless**（`from './vendor/doctor-shared/preset'`）。判準是**誰載這個檔**，不是風格偏好：`nuxt.config.ts` 由 Nuxt 的 config loader 載（解析得了 extensionless）**且**在 `nuxi typecheck` 的 program 內，而 TS 只有在 `allowImportingTsExtensions: true` 時才允許 `.ts` 結尾的 import——那個 flag Nuxt 4.5.x 的生成 tsconfig 有、**4.4.x 沒有**。帶副檔名在 4.4.x 上就是 `TS5097`，pre-push 的 typecheck gate 直接擋死所有 push
+  - **`vite.config.ts` 反過來，MUST 保留 `.ts`**：`vp` 走 Node 原生 ESM loader 載它，extensionless 會 `ERR_MODULE_NOT_FOUND`；而它不在 `nuxi typecheck` 的 program 內，所以不觸發 `TS5097`
+  - 兩個 config 檔寫法不同**不是**不一致，是各自的載入器決定的。改任何一邊之前先問「誰載它、它在不在 typecheck program 內」，**NEVER** 為了看起來整齊把兩邊統一
 
 tsconfig **MUST** 開 `"erasableSyntaxOnly": true`，讓前兩條由 tsc 擋掉，而不是靠寫的人記得。
 

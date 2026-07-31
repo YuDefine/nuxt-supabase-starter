@@ -1,11 +1,15 @@
 // vendor/doctor-shared/preset.ts — clade-governed vite-doctor rule baseline
 //
+// ⚠️ 下面 usage 範例的 import 是 extensionless，那是刻意的：nuxt.config.ts 在 nuxi
+//    typecheck 的 program 內，帶 .ts 副檔名在沒有 allowImportingTsExtensions 的
+//    tsconfig（Nuxt 4.4.x）上會 TS5097。判準見 rules/core/code-style.md § 三條語法限制。
+//
 // Single source of truth for Nuxt consumer vite-doctor rule severity.
 // Follows the same import+override pattern as vendor/oxc-shared/preset.ts.
 //
 // Consumer usage (nuxt.config.ts):
 //
-//   import { doctorConfig } from './vendor/doctor-shared/preset.ts'
+//   import { doctorConfig } from './vendor/doctor-shared/preset'
 //
 //   export default defineNuxtConfig({
 //     modules: [
@@ -15,7 +19,7 @@
 //
 // To override a rule per-consumer:
 //
-//   import { doctorConfig, doctorRules } from './vendor/doctor-shared/preset.ts'
+//   import { doctorConfig, doctorRules } from './vendor/doctor-shared/preset'
 //
 //   export default defineNuxtConfig({
 //     modules: [
