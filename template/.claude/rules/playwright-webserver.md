@@ -92,6 +92,41 @@ CI workflow **不需**獨立 `nuxt build` step（test-utils `dev:false` 自行 b
 
 權威 golden ref：`~/offline/nuxt-supabase-starter/template/playwright.config.ts`。
 
+#### ⚠️ A 的適用邊界：build 必須在 60 秒內完成
+
+`dev: false` 讓**完整 production build 發生在 playwright 的 fixture setup 裡**，而該 fixture 的
+timeout 寫死在 test-utils，**外部無法覆寫**：
+
+```js
+// node_modules/@nuxt/test-utils/dist/playwright.mjs
+const FIXTURE_TIMEOUT = isWindows ? 12e4 : 6e4   // 非 Windows = 60_000
+```
+
+playwright config 的 `timeout` / `expect.timeout` **管不到它**。build 超過 60s 就是：
+
+```
+Fixture "_nuxtHooks" timeout of 60000ms exceeded during setup.
+```
+
+而且**預先 build 也救不了** —— test-utils 的 buildDir 是
+`ctx.options.buildDir || resolve(rootDir, '.nuxt', 'test', <randomId>)`，每次隨機新目錄，
+不會重用 workflow 先 build 好的產物。
+
+**MUST 在採用 A 之前確認 build 時間**（別假設）：
+
+```bash
+time pnpm build     # 在**目標 runner 規格**上量，不是開發者機器
+```
+
+- 明顯低於 60s（留足餘裕）→ A 可用
+- 接近或超過 60s → **MUST 用 B**。持久型自架 runner 通常比 GitHub-hosted 慢，且 app 會隨時間長大，
+  這條邊界是會被跨過去的
+- 已經在跑 A 才發現超時 → 遷 B（見下方 § Fleet pattern 決策 的遷移方向說明）
+
+實證：<consumer-d> 2026-07-31 —— 自架 runner 上 E2E 逐層排除 runner / deps / Supabase port
+之後，最終卡在這條 fixture timeout；同 fleet 的 <consumer-b> 與 <consumer-a> 因為走 B（CI 先 build、playwright
+只 preview）而從未遇到。
+
 ### B. CI-conditional `nuxt preview --port`（合法替代，既有專案）
 
 手動 webServer，但用 `process.env.CI ?` 三元把 CI 導向 `nuxt preview`：
@@ -124,6 +159,20 @@ export default defineConfig({
 fleet 內 **test-utils golden（A）與 CI-conditional preview（B）並存皆合法**，兩者都 CI-safe。
 A 為推薦 golden（新專案 default），B 為合法替代（既有專案）。**既有 consumer 不強制從 B 遷
 到 A** —— 遷不遷是 consumer 自治區決定，clade 不替 consumer 規劃此類 config 重寫。
+
+**反方向（A → B）則可能是必要的，不是偏好問題**：A 撞上 § A 的適用邊界（build > 60s fixture
+timeout）時，B 是唯一解 —— 那不是「換個寫法比較好看」，是 A 在該環境下無法運作。判準用實測
+build 時間，不是主觀感覺。
+
+遷移三步（A → B）：
+
+1. CI workflow 加 build step（<consumer-b> 在 `ci.yml` 與 `e2e.yml` 各有一個；<consumer-a> 在 `e2e.yml`）
+2. `playwright.config.ts` 從 `use.nuxt` 改成 § B 的 `webServer` + `process.env.CI ?` 分支
+3. spec 從 `@nuxt/test-utils/playwright` 的 `{ page, goto }` fixture 改回 `@playwright/test`
+   的 `page` + `baseURL`（B 不提供 `goto` fixture 與 `waitUntil: 'hydration'`）
+
+第 3 步是 A→B 最容易漏的：兩者的 spec 匯入來源與可用 fixture**不同**，只改 config 會讓 spec
+在 import 層就掛掉。
 
 Workers runtime（如 <consumer-c> 用 `wrangler dev --local`）不適用本 pattern 表，
 但同一條 MUST 仍成立：webServer CI 路徑不可依賴本地 `.env` / creds。

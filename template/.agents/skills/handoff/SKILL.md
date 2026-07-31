@@ -317,17 +317,20 @@ node ~/offline/clade/vendor/scripts/handoff-scan.mjs --json 2>/dev/null
 
 #### 3.1b Kind 判定表（與 mergeBackSafety 正交）
 
+**`mergedToMain` 為真不足以推出可 cleanup。** branch 已 land 但 working tree 還留著後續 WIP 是常見形狀（land 完一批後在同一個 worktree 繼續做下一批），而 `wt-helper cleanup` 對未 commit 內容**無 pinned ref 保護**——照 `cleanup` 建議做就是永久遺失。script 因此對每條 wt 都算 `userWip`（`git status --porcelain` 扣掉 clade-managed 投影層，filter 走 `locked-projection.mjs` 共用 SoT），`userWip > 0` 時 kind 降級。
+
 | 條件 | kind | 下一步建議 |
 | --- | --- | --- |
-| `mergedToMain: true` | `merged` | `cleanup` — `node vendor/scripts/wt-helper.mjs cleanup <slug>` |
+| `mergedToMain: true` + `userWip: 0` | `merged` | `cleanup` — `node vendor/scripts/wt-helper.mjs cleanup <slug>` |
+| `mergedToMain: true` + `userWip > 0` | `merged-with-wip` | `verify-then-cleanup` — **NEVER 直接 cleanup**。先走 [[wip-orphan-recovery]] 的 SOP（git status 攤平 → 半成品痕跡掃描 → 完成度硬驗 → git log 脈絡 → 危險項識別 → 收尾分流），確認 WIP 去留後才 cleanup |
 | `mergedToMain: false` + `openspec/changes/archive/<slug>/` 存在 | `archived-change` | `verify-then-cleanup` — change 已 archive 但 branch 未 merged-into-main，先 `git log -1 <branch>` 檢視 commits 是否已含在 archive squash；若是 → `wt-helper cleanup <slug>` |
 | `mergedToMain: false` + `openspec/changes/<slug>/` 仍 active + `daysOld > 7` | `active-stale` | `merge-back-or-resume` — 依 mergeBackSafety 分流（`landable` → 直接 merge-back；`ptb-*` → Step 2B.4.5） |
 | `mergedToMain: false` + change 仍 active + `daysOld <= 7` | `active-fresh` | `keep` — 在用中；若需 land 仍依 mergeBackSafety 分流 |
-| `mergedToMain: false` + `openspec/changes/<slug>/` 跟 `archive/<slug>/` 都不在 | `orphan` | `verify-then-cleanup` — 孤兒 worktree，`git log <branch>` 檢視內容再決定 cleanup |
+| `mergedToMain: false` + `openspec/changes/<slug>/` 跟 `archive/<slug>/` 都不在 | `orphan` | `verify-then-cleanup` — 孤兒 worktree，`git log <branch>` 檢視內容再決定 cleanup。`userWip > 0` 時 detail 會點出未 commit 檔數，同樣 **MUST** 先走 [[wip-orphan-recovery]] SOP |
 
 script 已額外掃 `git worktree list --porcelain`：linked worktree 不在 wt-helper list 結果裡（即不在 `~/offline/<consumer>-wt/<slug>/` 規約路徑）→ 列進 `raw.unmanagedWorktrees`，對應 check 標 `n/a` → `manual review`（非規約 worktree，user 自管，audit 只記不建議動）。
 
-audit 寫進 HANDOFF.md 時每條 wt 後綴 `(mergeBackSafety: <landable|ptb-recoverable|ptb-unsafe>, blockers=N, uncommitted=K, baselineRef=<yes|no>)`，讓下次 /handoff 不用重跑 signal 就看得到 ground truth。
+audit 寫進 HANDOFF.md 時每條 wt 後綴 `(mergeBackSafety: <landable|ptb-recoverable|ptb-unsafe>, blockers=N, uncommitted=K, baselineRef=<yes|no>)`，讓下次 /handoff 不用重跑 signal 就看得到 ground truth。`merged-with-wip` 的條目另 **MUST** 記 `userWip=N`。
 
 ### 3.2 Stash audit
 

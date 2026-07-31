@@ -194,6 +194,38 @@ consumer 端 LOCKED projection 的 ignore 機制設計：
 
 ## 必須事項（MUST）
 
+### 新增腳本一律 TypeScript
+
+**每一個**新增的 Node 腳本都 MUST 用 TypeScript 寫，不是只有「看起來比較複雜的那幾支」。既有 `.mjs` / `.js` 不強制回頭改寫——動到它的時候順手遷移，不動就留著。
+
+副檔名由**這個檔會不會被散播**決定：
+
+| 可觀察 predicate | 副檔名 |
+| --- | --- |
+| 檔案落在 clade 的 `vendor/**`（會被 `sync-vendor.mjs` / `propagate.mjs` 寫進 consumer） | `.mts` |
+| 其他一切（clade 的 `scripts/**`、`test/**`、consumer 自家 script） | `.ts` |
+
+`.ts` 的模組系統由**最近的 package.json `type`** 決定，`.mts` 則永遠是 ESM。散播檔會落在別人的 repo、別人的子目錄，那裡的 `type` 欄位不是我們控制得了的。
+
+#### 三條語法限制
+
+Node 的 type stripping 只抹除型別，不做語法轉換：
+
+- **NEVER** 用 `enum`、`namespace`、constructor parameter properties、legacy decorators
+- type-only import **MUST** 寫成 `import type { X } from '...'`
+- import specifier **MUST** 帶**真實**副檔名（`import './foo.ts'`）。stripping 不做副檔名改寫，寫 `.mjs` 指向 `.ts` 檔會在 runtime 炸 `ERR_MODULE_NOT_FOUND`
+
+tsconfig **MUST** 開 `"erasableSyntaxOnly": true`，讓前兩條由 tsc 擋掉，而不是靠寫的人記得。
+
+**NEVER** 在命令列補 `--experimental-strip-types`。Node 22.18 起 type stripping 預設開啟，這個 flag 已是 no-op；留著會讓後來的人以為跑 TS 需要特殊 flag。
+
+#### 兩個涵蓋 gate（新增或改名成 TS 時逐項確認）
+
+這兩層都是**靜默**失效——沒接上時不會報錯，只會安靜地什麼都不做：
+
+1. **typecheck 涵蓋**：跑 `npx tsc -p <tsconfig> --listFiles | grep <你的檔案>` 確認它真的在編譯清單裡。**NEVER** 因為 `include` 的 glob 看起來會涵蓋就當它涵蓋
+2. **test runner 涵蓋**：測試檔改副檔名後，**MUST** 比對測試**數量**與改名前相同。test glob 沒接上時 `node --test` 回報的是「0 個測試通過」，不是失敗
+
 ### `vite.config.ts` 必備欄位（跨 consumer 統一，避免 propagate drift）
 
 clade 散播檔（`vendor/scripts/*.mts`、`scripts/spectra-advanced/*`、`.github/actions/*`）會進到每個 consumer 的 `vp fmt` 掃描範圍。若 clade 與 consumer 的 `vite.config.ts` fmt 設定不一致，consumer 端 `vp fmt --check` 會把 clade 寫出的程式重排成 consumer 風格 → 形成 LOCKED 檔被改動 → CI 紅燈或下次 propagate 出現 drift commit。

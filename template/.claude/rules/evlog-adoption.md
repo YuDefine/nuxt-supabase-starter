@@ -173,7 +173,10 @@ Depth 表量**裝了什麼**，`evlog map` 量**每個 entry point 用了沒有*
 - **每一個**新增或修改的 entry point（`server/{api,routes,middleware,tasks}/`、pages、Next route handler）都 MUST 通過 map 的全部 check。**不是**「entry point 應該要有 log」——是本次 diff 動到的每一個都要滿分
 - `evlog.map.json` MUST track 進 git，且 MUST 與 code 在同一個 commit 內更新（`npx evlog map` 重新產生，**NEVER** 手改數字）。它是**產生物**：已排除在 formatter 之外（`vendor/oxc-shared/preset.mjs`），**NEVER** 把它加回任何 format run
 - 查看報告 MUST 帶 `--no-write`。**NEVER** 用不帶 flag 的 `evlog map --all` / `evlog map <file>` 當 read-only 指令 —— 它們會改寫 tracked 檔
-- 無法插樁的 entry point MUST 留 `// evlog-map-disable-next-line <check> — <理由>`，理由 MUST 寫「為什麼這個 entry point 不可插樁」
+- 無法插樁的 entry point MUST 留 `// evlog-map-disable-next-line <check> — <理由>`，理由 MUST 寫「為什麼這個 entry point 不可插樁」。收斂到 strict 之後 **零豁免**——strict 判定拒絕任何 `suppressedChecks > 0`
+- catalog 的 `why` MUST 寫**技術根因**，`fix` MUST 寫**呼叫端能執行的動作**。**NEVER** 把 `why` 寫成 message 的複述（「文件查詢在後端失敗」）或把 `fix` 寫成泛化的「稍後重試」——那是用文案換分數，而分數本來就不檢查 catalog 內容
+- 實作細節（table 名 / 查詢函式 / provider code / runbook）MUST 走 `internal:`，**NEVER** 放進 `why` / `fix`。實測：`EvlogError.data` 含 `{code, why, fix}` 且 h3 `sendError` 會序列化 `data`，所以那兩個欄位**會送到瀏覽器**；`internal` 不會（但它會進 drain，仍受 PII / 保存期限規範）
+- catalog call site MUST 帶 `cause: error`，否則原始 stack 在轉拋時遺失
 - money / auth / PII 路由 MUST 通過 `audit` check（`log.audit({ action, actor, target })`）—— 這類路由在 map 的計分權重加倍
 
 ### MUST NOT
@@ -181,7 +184,21 @@ Depth 表量**裝了什麼**，`evlog map` 量**每個 entry point 用了沒有*
 - **NEVER** 用 disable 註解讓 gate 轉綠而不寫理由 —— map 把 disabled check 從分母移除，全部 disable 掉就是 100 分；ratchet 的第三條判定（suppressed 不得增加）存在的唯一理由就是堵這條路
 - **NEVER** 以「這個 gap 是既有的、非本次 diff 引入」跳過 —— gate 只在你動到的檔上要求滿分，動了就要補
 - **NEVER** 把 map 分數當成 depth 表的替代品 —— map 100 分的專案仍可能沒有 durable drain，撈不出 wide event
+- **NEVER** 為了拿分而把所有 `createError` 轉成 catalog。catalog 的用途是「穩定、重複、值得成為公開錯誤契約」的 domain error——`code` 會進 HTTP response、wide event 與 drain，等於公共 API，日後 rename 就是 breaking change。一次性的錯誤留在 `createError`
+- **NEVER** 用機械方式滿足 `audit` check。map 只確認 AST 裡存在某個 `log.audit()`（optional chaining 都算），完全不驗 actor / target / outcome / 拒絕路徑；敏感度判定也只是 path 與 import 的 heuristic。這條 MUST 人工分類
 - **NEVER** 在 map 回報 `0 個 entry point` 卻 score 100 時視為滿分 —— 那是掃不到，不是全覆蓋（見 `vendor/snippets/evlog-map/monorepo-layers.md`）
+
+### 分數不是品質證明（實測，2026-07-31）
+
+`evlog map` 的分數有三條已驗證的 false green，**NEVER** 把「100 分」當成「覆蓋率正確」的證據：
+
+| False green | 實測 | 後果 |
+| --- | --- | --- |
+| **catalog 不受內容檢查** | 建一個**沒有** why/fix 的 `defineErrorCatalog` → 該 entry point **100/100**，CLI 還印「✓ errors carry why and fix」 | `structured-errors` 只檢查直接 `createError()` 的 object keys；`throw someErrors.X()` 被歸為 `other` 不檢查。**全面 catalog 化是最有效的洗分手段** |
+| **分數會四捨五入** | 201 個 route（200 滿分 + 1 個 80 分）→ CLI 回報 **score 100** | 分數是 `Math.round(加權平均)`。大 repo 裡新增失敗完全反映不到整數分上 |
+| **suppression 不扣分** | 把 check 全部 `disable` 掉 → **score 100** / suppressed 2 | disabled check 轉成 `n/a`，從分母移除 |
+
+因此 gate 的判定 **MUST** 用 **route 級零失敗 + 零 suppression**，**NEVER** 用全域分數當 boolean（`vendor/actions/evlog-map-gate/gate.mjs` 的 `strict` 模式已如此實作）。分數只能當 dashboard。
 
 ### Gate（兩道，都走 ratchet）
 

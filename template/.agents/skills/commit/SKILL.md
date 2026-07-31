@@ -230,6 +230,21 @@ git diff --stat                 # 僅輔助看 tracked 改動規模；NEVER 當�
 
 - **Untracked 非 ignored 檔（`??`）一律納入分組**，通常自成獨立 `chore` group（除非語義明確屬於某 feat / fix group）
 - 看到 `??` 開頭的檔想加 `.gitignore` 消掉時 **STOP**：先問「這本來就該 ignore（build artifact / runtime state），還是我在逃避 commit？」逃避 commit 而 gitignore = 把該入庫的東西藏掉，方向反了（詳見 [[wip-orphan-recovery]] § 反射性 gitignore 禁令）
+- **parked change 的 deletion 一律排除，不進任何 group**（這是「全部變更都要入庫」的唯一機械例外）：
+
+  ```bash
+  PARKED=$(pnpm exec spectra list --parked --json 2>/dev/null \
+    | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' | sort -u)
+  # 分組時對每個 parked <name>，跳過所有 `openspec/changes/<name>/` 底下的 D 條目
+  ```
+
+  `spectra park` 把 artifacts 從 disk 移進 `.git/spectra-app/spectra.db` blob，所以整批檔案會顯示成
+  deletion。那些檔**已經在 git 裡**（propose 收尾先 commit 才 park），把 deletion commit 出去等於
+  把剛落庫的 artifacts 從版本庫移除。`/spectra-apply` 會自行 unpark 還原它們。
+
+  **NEVER** 把 parked change 的 deletion 當成「使用者刪掉了不要的檔」納入 group；**NEVER** 拿
+  「全部變更都要入庫」當理由收它們 —— 那條規則的目的是不遺漏 user WIP，而這批不是 WIP，是
+  工具的暫存搬移。判別方式是機械的：名字在 `spectra list --parked` 裡就是。
 
 ## Step 4: 逐一執行 Commit
 

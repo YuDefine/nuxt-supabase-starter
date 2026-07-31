@@ -230,9 +230,26 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
    done | sort -u)
 
    CHANGES=$(echo -e "${STAGED_DEL}\n${PARTIAL}" | sort -u | sed '/^$/d')
+
+   # C: 減掉 parked change。`spectra park` 把 artifacts 從 disk 移進 SQLite blob，所以一個
+   #    parked change 的整批檔案都會顯示成 deletion —— 那是 park 的預期副作用，不是 partial
+   #    archive 殘骸。不減掉的話 gate 會對它報 MISSING_ARCHIVE_DIR，叫使用者去修一個從來
+   #    不存在的 archive（<consumer-a> 2026-07-31 實證：propose 收尾 commit-to-git 後 park，兩張
+   #    change 各 7 個檔全被判成殘骸）。
+   PARKED=$(pnpm exec spectra list --parked --json 2>/dev/null \
+     | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' | sort -u)
+   if [ -n "$PARKED" ]; then
+     EXCLUDED=$(comm -12 <(echo "$CHANGES") <(echo "$PARKED"))
+     CHANGES=$(comm -23 <(echo "$CHANGES") <(echo "$PARKED"))
+     [ -n "$EXCLUDED" ] && echo "⏭️ 0-Archive-Coupling 排除 parked change：$(echo "$EXCLUDED" | tr '\n' ' ')（deletion 是 spectra park 副作用）"
+   fi
    ```
 
    結果為空 → 輸出 `⏭️ 0-Archive-Coupling 跳過（無 spectra change staged-delete 或殘留）`，進入 Step 0。
+
+   > **parked ≠ 殘骸（hard rule）**：本 gate 只抓 partial `/spectra-archive` state。一個 change
+   > 同時出現在 deletion 清單與 `spectra list --parked` 時，**MUST** 判為 park 副作用並排除，
+   > **NEVER** 對它報 `MISSING_ARCHIVE_DIR` —— parked change 本來就不該有 archive dir。
 
 3. 對每個 change `<X>` 驗證**兩條件**：
 

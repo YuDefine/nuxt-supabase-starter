@@ -162,7 +162,8 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
       **Artifact 語言遵循**：
       開工前先 `grep -lE "繁體|繁中|不要使用簡體" CLAUDE.md .claude/rules/*.md 2>/dev/null`。若命中（consumer 規定繁體中文），**全部** artifact（proposal.md / design.md / tasks.md / spec.md）**MUST** 用繁體中文撰寫，**禁止**英文 artifact。code 識別字、技術名詞（如 `audit_signed_chain`、`business_keys_drift`）、SQL/code block 不譯。若 grep 未命中視為無語言規定。
 
-      完成標準：`spectra park <change-name>` 執行成功。
+      完成標準：`spectra validate <change-name>` 通過。**NEVER 執行 `spectra park`** —— change 維持
+      active，artifacts 留在 disk（決策見 `docs/decisions/2026-07-31-propose-does-not-park.md`）。
       不要呼叫 /spectra-apply。產出後在 stdout 摘要 artifacts 列表 + `spectra validate` 結果。
       ```
    3. **背景啟動 codex exec**（**Bash** tool 加 `run_in_background=true`）：
@@ -185,7 +186,8 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
 
    1. **Read codex stdout** 摘要：BashOutput 讀完整 stdout，回報 artifacts list / `spectra validate` 結果
 
-   2. **若 codex 已 `spectra park <change-name>`**：先 `spectra unpark <change-name>` 才能繼續 cross-check
+   2. **若 codex 仍 `spectra park` 了**（不該發生，draft prompt 已明令禁止）：先
+      `spectra unpark <change-name>` 把 artifacts 還原到 disk 才能繼續 cross-check
 
    3. **跑 post-propose-check.sh**（檢查 User Journeys / Affected Entity Matrix / Implementation Risk Plan / Design Review 7 步）：
 
@@ -380,7 +382,7 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
 
    8. **`spectra validate <change-name>`** 確認 artifacts 結構合法
 
-   9. **`spectra park <change-name>`** 結束流程
+   9. **commit artifacts 進 git** 後結束流程（**不 park**，見 Step 11）
 
    10. 回報使用者：artifacts list + cross-check 結果（補了什麼、Design Review 7 步 OK 與否、analyze/validate 結果）+ `/spectra-apply <change-name>` 提示
 
@@ -393,7 +395,7 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
    #### Phase B-0a：背景 Fable draft
 
    1. **解析 change name + requirement**（同 Phase 0a step 1）。
-   2. **Write prompt 檔到 `/tmp/fable-spectra-propose-<change-name>-draft-prompt.md`** — 內容**完全沿用 Phase 0a step 2 的 draft prompt 範本**（Plan-first / Phase Purity / Manual Review Kind Marker / Backend-only 規約 / `docs/FIXTURES.md` sample / 語言遵循 / `spectra park` 完成標準全部照搬）。檔名用 `-draft-prompt` 與 Phase B-0b 的 `-review-prompt` 區隔，避免兩個背景 job 混用 prompt。
+   2. **Write prompt 檔到 `/tmp/fable-spectra-propose-<change-name>-draft-prompt.md`** — 內容**完全沿用 Phase 0a step 2 的 draft prompt 範本**（Plan-first / Phase Purity / Manual Review Kind Marker / Backend-only 規約 / `docs/FIXTURES.md` sample / 語言遵循 / `spectra validate` 完成標準與 **NEVER park** 禁令全部照搬）。檔名用 `-draft-prompt` 與 Phase B-0b 的 `-review-prompt` 區隔，避免兩個背景 job 混用 prompt。
    3. **背景啟動 claude**（**Bash** tool 加 `run_in_background=true`）：
 
       ```bash
@@ -412,7 +414,9 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
    收到 Fable draft `<task-notification status=completed>` 時**立刻**：
 
    1. **Read Fable draft stdout** 摘要：BashOutput 讀完整 stdout，回報 artifacts list / `spectra validate` 結果。
-   2. **若 Fable draft 已 `spectra park <change-name>`：先 `spectra unpark <change-name>`** — park 後 artifacts 只存 `.git/spectra-app/spectra.db` SQLite blob、不在 git tracked file，review Codex 要讀必須先 unpark 回檔案系統（同 Phase 0b step 2 + park pitfall）。
+   2. **若 Fable draft 仍 `spectra park` 了**（不該發生，draft prompt 已明令禁止）：先
+      `spectra unpark <change-name>` —— park 後 artifacts 只存 `.git/spectra-app/spectra.db` SQLite
+      blob、不在 disk，review Codex 讀不到。
    3. **Write Codex review prompt 到 `/tmp/codex-spectra-propose-<change-name>-review-prompt.md`**：
 
       ```
@@ -441,7 +445,7 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
    收到 Codex `<task-notification status=completed>` 時**立刻**：
 
    1. **Read Codex findings**：BashOutput 讀 codex stdout，整理 findings 摘要。
-   2. **主線整合 findings + 跑完整 cross-check** — 執行 Phase 0b step 3 ~ 9 全套（`post-propose-check.sh` / `post-propose-manual-review-check.sh` / **`--check7-only` hard gate** / `design-inject.sh` / 補 Design Review 7 步 / Manual Review Marker Hygiene / `[verify:auto]`→explicit marker / Backend Verification Evidence 搬移 / Open Questions→AskUserQuestion / `spectra analyze` / `spectra validate` / `spectra park`），並把 Codex findings 一併納入修補依據。
+   2. **主線整合 findings + 跑完整 cross-check** — 執行 Phase 0b step 3 ~ 9 全套（`post-propose-check.sh` / `post-propose-manual-review-check.sh` / **`--check7-only` hard gate** / `design-inject.sh` / 補 Design Review 7 步 / Manual Review Marker Hygiene / `[verify:auto]`→explicit marker / Backend Verification Evidence 搬移 / Open Questions→AskUserQuestion / `spectra analyze` / `spectra validate` / commit artifacts 進 git），並把 Codex findings 一併納入修補依據。
    3. **主線自己 Edit 修**（**NEVER** 把修補丟回 codex，太慢、來回成本高）。
    4. 回報使用者：artifacts list + Fable draft 摘要 + **Codex review findings 摘要** + 主線補了什麼（Design Review 7 步 OK 與否、analyze/validate 結果）+ `/spectra-apply <change-name>` 提示。
 
@@ -457,8 +461,8 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
 
    **選項 B 專屬 NEVER**：
 
-   - **NEVER** 把 Phase B-0a 的 draft prompt（`-draft-prompt.md`）與 Phase B-0b 的 review prompt（`-review-prompt.md`）混用 — draft 會寫檔 + park，review 只出 findings、禁止改檔
-   - **NEVER** 在 Phase B-0b 派 Codex review 前忘了 `spectra unpark`（park 後 artifacts 在 SQLite blob，Codex 讀不到）
+   - **NEVER** 把 Phase B-0a 的 draft prompt（`-draft-prompt.md`）與 Phase B-0b 的 review prompt（`-review-prompt.md`）混用 — draft 會寫檔，review 只出 findings、禁止改檔
+   - **NEVER** 在 Phase B-0b 派 Codex review 前，讓 artifacts 處於 parked 狀態（artifacts 在 SQLite blob、不在 disk，Codex 讀不到）。正常流程不會 park；若 draft 違規 park 了，先 `spectra unpark`
    - **NEVER** 讓 Codex review 階段改檔 — review prompt 必含「禁止 Edit / Write、只輸出 findings」；實際修補由主線 Phase B-0c 做
 
    **選 A / B 時本 session 不再執行任何 Step 1 ~ 11**（避免雙重生產）— Step 0 結束本 skill。
@@ -883,7 +887,7 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
 
     If validation fails, fix errors and re-validate.
 
-11. **Park the change and end the workflow**
+11. **Commit artifacts and end the workflow**（clade fork：不 park，見 `docs/decisions/2026-07-31-propose-does-not-park.md`）
 
     Show summary:
     - Change name and location
@@ -892,7 +896,7 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
 
     **Notion 專案層同步**（clade fork addition；per [[spectra-notion-coupling]] § 專案層）
 
-    consumer 的 `.claude/consumer-meta.json` 若有 `notion.projectWorkflow: true`，park 之前 **MUST** 執行：
+    consumer 的 `.claude/consumer-meta.json` 若有 `notion.projectWorkflow: true`，commit artifacts 之前 **MUST** 執行：
 
     ```bash
     node ~/offline/clade/vendor/scripts/notion-sync.mjs propose --consumer-path . --change "<name>" --json
@@ -902,11 +906,19 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
     - 建出的 Story 標題是從 Capability 描述草擬的客戶語言（Class 2），**MUST** 在 summary 標明「標題為草擬，可直接在 Notion 改」。
     - consumer 未啟用 `projectWorkflow` → script 自行 exit 0，不需另外判斷。
 
-    Then unconditionally execute:
+    **NEVER 執行 `spectra park`**（2026-07-31 起；決策見 `docs/decisions/2026-07-31-propose-does-not-park.md`）
 
-    ```bash
-    spectra park "<name>"
-    ```
+    Change 在 propose 完成後**維持 active**。Park 的成文契約是「future work pending」
+    （per `spectra-archive/SKILL.md` Hard rules），與「剛 propose 完、apply worktree 已備妥、
+    下一步就是開工」是不同狀態；由 **user 在決定擱置某張 change 時顯式** `spectra park <name>`。
+
+    移除的理由（完整論證見 decision）：propose→park→apply→unpark 是一趟沒有成文目的的往返，
+    而為了讓它安全，clade 累積了 pitfall + `audit-ghost-park.mts` + commit-to-git 緩解 +
+    main-side unpark 規則四項機制 —— 全部只在「有 unpark」時才需要。不 park 就沒有 unpark，
+    artifacts 留在 disk 且已進 git，整類 ghost-park 永久遺失在主路徑上消失。
+
+    **NEVER** 因為「保持 active list 乾淨」自行加回 park —— 一張 apply worktree 已備妥的 change
+    出現在 `spectra list` / ROADMAP / review-gui scan 是**準確**的，它確實是 pending work。
 
     **Pre-handoff: 自動準備 apply 用 worktree**（clade fork addition；not in upstream spectra）
 
@@ -923,46 +935,42 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
     Output a single status line:
 
     ```
-    Change `<change-name>` parked. Apply worktree ready at `<worktree-absolute-path>`. Run `/spectra-apply <change-name>` from any session to begin — apply skill handles worktree dispatch internally.
+    Change `<change-name>` ready (active, artifacts committed). Apply worktree ready at `<worktree-absolute-path>`. Run `/spectra-apply <change-name>` from any session to begin — apply skill handles worktree dispatch internally.
     ```
 
-    `<worktree-absolute-path>` 從 wt-helper 輸出抓。Auto-unpark 與 worktree dispatch 都由 `/spectra-apply` 內部處理；user 不需 `cd`，從 main 直接跑 `/spectra-apply` 即可。
+    `<worktree-absolute-path>` 從 wt-helper 輸出抓。Worktree dispatch 由 `/spectra-apply` 內部處理；user 不需 `cd`，從 main 直接跑 `/spectra-apply` 即可。
 
-    **Post-park commit reminder**（clade fork addition；not in upstream spectra）
+    **Commit artifacts 到 git（clade fork addition；無條件執行，不問）**
 
-    Park 之後 artifacts 只存在 `.git/spectra-app/spectra.db` SQLite blob（**不在 git tracked file**）。若後續 `/spectra-apply` 的 unpark 步驟在錯誤 cwd 跑（例如 Claude Code `Agent` tool dispatched subagent 的 ephemeral `.claude/worktrees/agent-*/`），unpark 寫的 artifacts 會落在 session-GC 路徑 → SQLite parked 條目同時被 unpark 刪除 → **artifacts 在 git / SQLite / 任何活著的 worktree 都不存在 = 永久遺失**（已在 <consumer-e> 撞過：99 tasks + 5 specs + proposal 蒸發，僅 design.md 從 git history 復原但缺最後 3 個決策）。完整 root cause 見 `docs/pitfalls/2026-05-22-agent-tool-subagent-worktree-bypass.md`。
+    Artifacts 在 disk 上（本 skill 不 park），**MUST** 在 main worktree（**禁止**在 subagent /
+    ephemeral worktree）把它們 commit 進 git：
 
-    Park 跑完並輸出 Handoff message 之後，**MUST** 用 **AskUserQuestion** 給 user 二擇一（這條問題是「commit-to-git for data-loss safety」，跟前段「do NOT call AskUserQuestion to ask whether to park or apply」是不同議題；本 AskUserQuestion 必跑）：
+    ```bash
+    # 目錄是 untracked，`--only` 不吃 untracked pathspec，所以先 add 再 --only commit
+    # （per rules/core/commit.md § Untracked file 例外）
+    git add openspec/changes/<change-name>/
+    # MUST 用 git commit --only -- <paths>，per rules/core/commit.md § Ad-hoc commit hard rule
+    # NEVER 用裸 git add + git commit 兩段法（multi-session 共用 working tree 會吞別 session 已 staged 的內容；
+    # 見 docs/pitfalls/2026-05-24-consumer-ad-hoc-commit-eats-other-session-staged.md）
+    git commit --only -m "📝 docs(spectra): propose artifacts for <change-name>" -- openspec/changes/<change-name>/
+    ```
 
-    - **Option A — 立刻 commit artifacts 到 git（recommended）**：先 `spectra unpark "<change-name>"` 把 artifacts 還原到 disk，然後在 main worktree（**禁止**在 subagent / ephemeral worktree）用 `git commit --only -- <paths>` 落 commit：
+    Commit 後 **MUST** verify scope：`git show --stat HEAD | tail -3` 確認 changed files 都在
+    `openspec/changes/<change-name>/` 路徑底下；若含其他路徑（代表撞 multi-session staged race 或
+    `--only` 沒生效）→ **STOP** + 走 [`rules/core/commit.md`](../../../../rules/core/commit.md)
+    § Recovery from mixed commit。
 
-      ```bash
-      spectra unpark "<change-name>"
-      # MUST 用 git commit --only -- <paths>，per rules/core/commit.md § Ad-hoc commit hard rule
-      # NEVER 用 git add + git commit 兩段法（在 multi-session 共用 working tree 會吞別 session 已 staged 的內容；
-      # 見 docs/pitfalls/2026-05-24-consumer-ad-hoc-commit-eats-other-session-staged.md）
-      git commit --only -m "📝 docs(spectra): propose artifacts for <change-name>" -- openspec/changes/<change-name>/
-      ```
+    **為什麼無條件、不問**：舊版把它做成 AskUserQuestion 二擇一（commit vs 維持 parked），是因為
+    park 會把 artifacts 移進 SQLite blob、產生遺失窗口，所以要 user 對風險知情。**現在不 park，
+    那個窗口不存在**，commit 純粹是「把工作產出落庫」的常規動作，沒有需要 user 權衡的取捨。
 
-      Commit 後 **MUST** verify scope：`git show --stat HEAD | tail -3` 確認 changed files 都在 `openspec/changes/<change-name>/` 路徑底下；若含其他路徑（代表撞 multi-session staged race 或 commit --only 沒生效）→ **STOP** + 走 [`rules/core/commit.md`](../../../../rules/core/commit.md) § Recovery from mixed commit。
-
-      Commit 之後 artifacts 落 git 永久保留；後續 `/spectra-apply` 從 main fork 的 worktree 看得到 artifacts，**不再依賴 SQLite blob**。Apply 完成 archive 階段會由 `/spectra-archive` 把 artifacts 搬進 `openspec/changes/archive/<date>-<change>/`。
-
-      Option description 必含風險揭露：`park 後 artifacts 只存 SQLite blob，後續 subagent dispatch 跑 unpark 寫進 ephemeral worktree → session GC → artifacts 永久遺失（<consumer-e> 已踩；見 pitfall）`。
-
-    - **Option B — 維持 parked（接受風險）**：保留 SQLite blob 狀態，artifacts 不寫 disk、不上 git。**僅當** user 明確知道下一步 `/spectra-apply` 不會經過 `Agent` tool dispatched subagent（例如直接在 main 跑 `/spectra-apply` 而非 `/wt` Form 3）才安全。
-
-      Option description 必含風險揭露：`若下一步 /spectra-apply 透過 Agent tool dispatch subagent（含 /wt Form 3）→ subagent cwd 是 .claude/worktrees/agent-*/，unpark 寫進去後 session GC = artifacts 永久遺失`。
-
-    User 選 Option A → 主線執行上述 unpark + commit 動作。User 選 Option B → 跳過 commit，**MUST** 額外輸出一行警告：`⚠ Parked artifacts only exist in SQLite blob; if /spectra-apply runs through Agent tool dispatch, artifacts may be lost. Consider committing now.`
-
-    若 **AskUserQuestion** tool 不可用 → 以純文字列出 A / B 兩選項 + 上述風險揭露，等 user 回答後執行對應動作。
-
-    **NEVER** 跳過此 AskUserQuestion（理由：本 prompt 不是「要不要 park / apply」的決策問題，是「park 之後 commit-to-git for data-loss safety」的問題；前段禁止的是前者）。
+    **NEVER** 因為「artifacts 還在 disk 上不會丟」就跳過 commit —— disk 不是版本控制，
+    worktree cleanup / `db:reset` / 誤刪都會帶走它們，而 `/spectra-apply` 從 main fork 的 worktree
+    看得到的只有 committed 內容。
 
     If you are currently in Codex Plan Mode, also remind the user to switch the session to normal mode before running `/spectra-apply`. This is only a reminder: do NOT try to use ExitPlanMode or EnterPlanMode, do NOT ask whether to switch modes, and do NOT invoke apply.
 
-    The propose workflow ENDS here. Do NOT invoke `/spectra-apply`. Do NOT call **AskUserQuestion** to ask whether to park or apply (the post-park commit reminder above is a separate data-safety question and **MUST** still be asked). This behavior is identical across Auto Mode, interactive mode, and any other agent mode — parking is unconditional and does not depend on `AskUserQuestion` availability or UI auto-accept settings.
+    The propose workflow ENDS here. Do NOT invoke `/spectra-apply`. Do NOT call **AskUserQuestion** to ask whether to park, commit, or apply — none of the three is a user decision at this point: park is not executed at all (per `docs/decisions/2026-07-31-propose-does-not-park.md`), the artifact commit is unconditional, and apply is the user's next explicit invocation. This behavior is identical across Auto Mode, interactive mode, and any other agent mode, and does not depend on `AskUserQuestion` availability or UI auto-accept settings.
 
 **Artifact Creation Guidelines**
 

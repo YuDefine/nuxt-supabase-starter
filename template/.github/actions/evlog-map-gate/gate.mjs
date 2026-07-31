@@ -57,8 +57,11 @@ function parseArgs(argv) {
     }
   }
   if (out.cwds.length === 0) out.cwds.push('.')
-  if (out.mode !== 'ratchet' && out.mode !== 'min-score') {
-    process.stderr.write(`--mode must be ratchet | min-score (got: ${out.mode})\n`)
+  // min-score 是 deprecated 別名：它原本比對全域整數分，已實測證明會被
+  // Math.round 與 suppression 兩路稀釋，一律當 strict 處理。
+  if (out.mode === 'min-score') out.mode = 'strict'
+  if (out.mode !== 'ratchet' && out.mode !== 'strict') {
+    process.stderr.write(`--mode must be ratchet | strict (got: ${out.mode})\n`)
     process.exit(2)
   }
   return out
@@ -269,13 +272,52 @@ async function evaluateRoot({ repoRoot, cwd, label, opts, changed }) {
     return false
   }
 
-  // ── min-score 模式（收斂到 100 後的終局形態）──────────────────────────────
-  if (opts.mode === 'min-score') {
-    if (score < opts.minScore) {
-      annotate('error', `${label}evlog map score ${score} 低於門檻 ${opts.minScore} — 見 ${DOC}`)
+  // ── strict 模式（收斂完成後的終局形態）────────────────────────────────────
+  // 判定用「每個 route 零 failed check」，**NEVER** 用全域分數。三個實測理由：
+  //
+  //   1. 分數是 Math.round(加權平均)。531 個 route 裡有一個掉到 80 分，全域是
+  //      99.96 → 顯示 100。分數當 boolean 用，大 repo 必然放行真實失敗。
+  //   2. suppression 會把 fail 轉成不扣分的 `n/a`。只看分數的話，把整份專案
+  //      disable 掉就是滿分。
+  //   3. `structured-errors` 不檢查 catalog 定義的內容——`throw someErrors.X()`
+  //      一律當 pass。分數高不代表 why/fix 有價值（見 rules/core/evlog-adoption.md
+  //      § Coverage 維度 的 false-green 警示）。這條 gate 擋不掉，但至少不該再
+  //      被四捨五入與 suppression 二次稀釋。
+  if (opts.mode === 'strict') {
+    const failedRoutes = routes.filter((r) => routeFailures(r).length > 0)
+    const violations = []
+
+    if (failedRoutes.length > 0) {
+      const sample = failedRoutes
+        .slice(0, 10)
+        .map((r) => {
+          const names = routeFailures(r)
+            .map((f) => f.name)
+            .join(', ')
+          return `      · ${describeRoute(r)} (${r.score}/100) — ${names}`
+        })
+        .join('\n')
+      const more = failedRoutes.length > 10 ? `\n      …另外 ${failedRoutes.length - 10} 個` : ''
+      violations.push(
+        `${failedRoutes.length}/${routes.length} 個 entry point 仍有失敗的 check：\n${sample}${more}`,
+      )
+    }
+
+    if (suppressed > 0) {
+      violations.push(
+        `${suppressed} 個 check 被 disable 註解豁免。strict 模式不接受任何豁免——` +
+          `evlog map 會把 disabled check 轉成不扣分的 n/a，留著它們等於分數是洗出來的。`,
+      )
+    }
+
+    if (violations.length > 0) {
+      for (const v of violations) annotate('error', label + v)
       return false
     }
-    process.stdout.write(`${label}✓ score ${score} >= ${opts.minScore}\n`)
+
+    process.stdout.write(
+      `${label}✓ strict 通過（${routes.length} 個 entry point 全數零失敗，零豁免）\n`,
+    )
     return true
   }
 
@@ -295,14 +337,22 @@ async function evaluateRoot({ repoRoot, cwd, label, opts, changed }) {
     process.exit(2)
   }
 
-  const { score: baseScore, suppressed: baseSuppressed } = normalizeMap(baseline)
+  const {
+    score: baseScore,
+    suppressed: baseSuppressed,
+    routes: baselineRoutes,
+  } = normalizeMap(baseline)
   const violations = []
 
-  // 判定 1：全域分不得下降
-  if (score < baseScore) {
+  // 判定 1：失敗的 entry point 數不得增加。
+  // **NEVER** 改回比較 score——那是 Math.round(加權平均)，大 repo 裡新增一兩個
+  // 失敗 route 完全反映不到整數分上（531 個 route 掉一個到 80 分 → 99.96 → 100）。
+  const baseFailed = baselineRoutes.filter((r) => routeFailures(r).length > 0).length
+  const curFailed = routes.filter((r) => routeFailures(r).length > 0).length
+  if (curFailed > baseFailed) {
     violations.push(
-      `全域分下降：${baseScore} → ${score}。evlog map 的覆蓋率只進不退；` +
-        `把新增的 gap 補起來，或說明為何 baseline 該降。`,
+      `失敗的 entry point 增加：${baseFailed} → ${curFailed}（全域分 ${baseScore} → ${score}）。` +
+        `evlog map 的覆蓋率只進不退；把新增的 gap 補起來，或說明為何 baseline 該降。`,
     )
   }
 

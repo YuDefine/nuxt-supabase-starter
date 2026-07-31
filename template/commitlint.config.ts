@@ -29,7 +29,26 @@ export default {
     },
   },
 
+  plugins: [
+    {
+      rules: {
+        // headerPattern 不匹配時 parser 對 type/scope/subject 三者全回 null，
+        // 於是每條 subject-* 規則都拿到空字串各自報錯，卻沒有任何一條說出真因
+        // （見 pitfall-commitlint-emoji-type-mismatch-reports-subject-empty）。
+        // 用「type 解析不出來」當 predicate 補一條會說實話的診斷。
+        'header-emoji-type-match': ({ type, header }) => [
+          type !== null && type !== undefined,
+          `header 不符合 "<emoji> <type>[(<scope>)]: <subject>" 格式（實際收到：${header}）。\n` +
+            'emoji 與 type 是一對一綁定，配錯（📝 chore）、用未列出的 emoji（🗃️ docs）或漏 emoji（chore:）\n' +
+            '都會讓 header 整個解析失敗，連帶讓 subject-* 規則誤報 subject 為空——那不是 subject 的問題。\n' +
+            '合法配對：✨ feat / 🐛 fix / 🧹 chore / 🔨 refactor / 🧪 test / 🎨 style / 📝 docs / 📦 build / 👷 ci / ⏪ revert / 🚀 deploy / 🎉 init',
+        ],
+      },
+    },
+  ],
+
   rules: {
+    'header-emoji-type-match': [2, 'always'],
     // 允許的 commit 類型（emoji 為型別的一部分，不可省略）
     'type-enum': [
       2,
