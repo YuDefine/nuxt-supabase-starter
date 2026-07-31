@@ -20,6 +20,7 @@
 
 import { readFile, readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import type { Dirent } from 'node:fs'
 
 interface MarkerOccurrence {
   id: string
@@ -58,7 +59,7 @@ const PRIORITY_WEIGHT: Record<string, number> = {
 }
 
 async function walkTaskFiles(dir: string): Promise<string[]> {
-  let entries: Awaited<ReturnType<typeof readdir>>
+  let entries: Dirent<string>[]
   try {
     entries = await readdir(dir, { withFileTypes: true })
   } catch {

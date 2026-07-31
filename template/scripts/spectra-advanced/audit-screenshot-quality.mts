@@ -18,6 +18,7 @@ import { existsSync } from 'node:fs'
 import { readFile, readdir } from 'node:fs/promises'
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { resolveEvidence } from '../lib/evidence-store.mjs'
+import type { ManualReviewItem } from '../review-gui.types.mts'
 
 // review-gui.mts is hosted in clade central (per propagate manifest @ 76a202a, 2026-05-19);
 // consumer doesn't have a local copy. Resolve dynamically: prefer co-located (clade self),
@@ -28,13 +29,12 @@ const REVIEW_GUI_PATH = (() => {
   const cladeHome = process.env.CLADE_HOME ?? `${process.env.HOME}/offline/clade`
   return `${cladeHome}/vendor/scripts/review-gui.mts`
 })()
-// Dynamic import → types are `any`-typed at this boundary. Audit consumes items as
+// Dynamic import remains runtime-resolved at this boundary. Audit consumes items as
 // opaque dictionaries accessing canonical fields (id, kind, checked, raw, scoped, ...);
 // canonical schema lives in clade/vendor/scripts/review-gui.mts (ManualReviewItem).
 const reviewGuiModule = await import(REVIEW_GUI_PATH)
 const deriveDefaultKindFromProposal = reviewGuiModule.deriveDefaultKindFromProposal
 const parseManualReviewSections = reviewGuiModule.parseManualReviewSections
-type ManualReviewItem = any
 
 type Severity = 'warning' | 'critical'
 
@@ -207,9 +207,9 @@ async function auditChange(changeName: string): Promise<{
   const proposalContent = await readOptional(proposalPath)
   const tasksContent = await readOptional(tasksPath)
   const defaultKind = deriveDefaultKindFromProposal(proposalContent)
-  const parsed = tasksContent
-    ? parseManualReviewSections(tasksContent, { defaultKind })
-    : { items: [] as ManualReviewItem[] }
+  const parsed = (
+    tasksContent ? parseManualReviewSections(tasksContent, { defaultKind }) : { items: [] }
+  ) as { items: ManualReviewItem[] }
   const items = parsed.items
   const itemIds = new Set(items.map((item) => item.id))
 
