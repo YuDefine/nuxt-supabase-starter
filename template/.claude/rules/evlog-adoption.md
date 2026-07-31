@@ -184,6 +184,7 @@ Depth 表量**裝了什麼**，`evlog map` 量**每個 entry point 用了沒有*
 - **NEVER** 用 disable 註解讓 gate 轉綠而不寫理由 —— map 把 disabled check 從分母移除，全部 disable 掉就是 100 分；ratchet 的第三條判定（suppressed 不得增加）存在的唯一理由就是堵這條路
 - **NEVER** 以「這個 gap 是既有的、非本次 diff 引入」跳過 —— gate 只在你動到的檔上要求滿分，動了就要補
 - **NEVER** 把 map 分數當成 depth 表的替代品 —— map 100 分的專案仍可能沒有 durable drain，撈不出 wide event
+- **NEVER** 把帶 custom `data` 的 `createError` 遷移到 catalog——`EvlogError.data` 是固定形狀 `{ code, why, fix, link }`，傳進去的 custom data 會被**靜默丟棄**（不報錯、不警告、typecheck 也過），依賴 `error.data.<field>` 分支的 client 就此壞在 runtime。遷移前先跑 `grep -rn -A6 "createError({" server/ | grep "data: {"` 列出不遷移清單（見 [[pitfall-evlog-catalog-silently-drops-custom-data]]，全 fleet 145 個站點命中）
 - **NEVER** 為了拿分而把所有 `createError` 轉成 catalog。catalog 的用途是「穩定、重複、值得成為公開錯誤契約」的 domain error——`code` 會進 HTTP response、wide event 與 drain，等於公共 API，日後 rename 就是 breaking change。一次性的錯誤留在 `createError`
 - **NEVER** 用機械方式滿足 `audit` check。map 只確認 AST 裡存在某個 `log.audit()`（optional chaining 都算），完全不驗 actor / target / outcome / 拒絕路徑；敏感度判定也只是 path 與 import 的 heuristic。這條 MUST 人工分類
 - **NEVER** 在 map 回報 `0 個 entry point` 卻 score 100 時視為滿分 —— 那是掃不到，不是全覆蓋（見 `vendor/snippets/evlog-map/monorepo-layers.md`）

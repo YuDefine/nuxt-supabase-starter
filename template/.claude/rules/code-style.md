@@ -207,6 +207,8 @@ consumer 端 LOCKED projection 的 ignore 機制設計：
 
 `.ts` 的模組系統由**最近的 package.json `type`** 決定，`.mts` 則永遠是 ESM。散播檔會落在別人的 repo、別人的子目錄，那裡的 `type` 欄位不是我們控制得了的。
 
+**`.mts` 是傳染性的**：散播面的檔案 import 到的**每一個**相依也 MUST 是 `.mts`，不是只有入口檔。在 `"type": "commonjs"` 的目錄下，`.mts` 入口 import 一個 `.ts` 相依會直接失敗——入口選對了副檔名並不會救到相依。實測見 `docs/discussions/2026-07-31-ts-migration-extension-choice.md`。
+
 #### 三條語法限制
 
 Node 的 type stripping 只抹除型別，不做語法轉換：

@@ -117,6 +117,7 @@ Skill / rule 內容擺哪一層，決定 agent 讀不讀得到。三層資訊梯
 - **Pointer 措辭準則**：必讀材料擺在弱措辭 pointer 後（「詳見 X」「參考 Y」）＝variance bug——有時讀有時不讀。修法**先改 pointer 措辭**（明寫「何時 MUST 讀、讀哪一段」），措辭修不動才把內容 inline 回來。
 - **Sequence-cut 順序**（防 premature completion——agent 看得到後續步驟時提前宣告完成）：先 sharpen completion criterion（可勾稽、含證據要求；便宜且局部）；criterion 已收斂到底**且實際觀察到 rush** 才拆步驟；拆分只有跨**真 context boundary**（subagent dispatch，後續步驟真的不可見）才有效——inline Skill invoke 擋不住，後續步驟仍在同一 context。
 - **Hard / soft dependency**：缺了會產出**錯誤結果**的前置才放 explicit setup pointer；缺了只是變鈍的用一般 prose 帶過，保持 token-light。
+- **橫向落點是另一個軸**：本節管的是同一份資產**內部**的深度（哪一段擺主層、哪一段推到 pointer 後）。「這份資產本身該放哪個目錄」——rule / skill / snippet / rationale doc / conventions entry 之間怎麼選——**MUST** 走 `/bp` skill，讀它的 `references/placement-routing.md`；那份帶 7 個落點的散播機制與載入時機對照，以及縱向下推三分法（留原處 / `docs/rule-rationale/` / 新建帶 `paths:` 的 conditional rule）。憑印象挑目錄是既有的 variance 來源。
 
 出處：mattpocock/skills `writing-great-skills`（information hierarchy / premature completion）＋ `.agents/adr/0001`。
 

@@ -531,6 +531,8 @@ Agent prompt 範本：
 pnpm check
 ```
 
+**同一次 commit 已經被 CI-only 失敗打回過第二次**時，別再逐發修——**MUST** 讀 `~/offline/clade/vendor/snippets/ci-parity/`，它有本機重現 CI 條件的 checklist 與兩個 consumer 的實際 churn 案例（<consumer-b> 曾為此連發六個修復 commit）。
+
 **檢查 `pnpm check` 是否真的包含 test**（多數 consumer 的 `check` 只有 format/lint/typecheck，**CI 才跑完整 test**，本地不補跑就會在 push 後才看到測試失敗）：
 
 ```bash
@@ -857,3 +859,40 @@ git add evlog.map.json
 - **NEVER** 為了讓 commit 過去而現寫一張放行單 —— 放行單是「這個佈局技術上量不到」的登記，不是「這次趕時間」的出口。Nuxt layer monorepo 已有正解（Step 1.5），先照做
 
 通過後輸出 `✅ 0-E 通過（evlog map: score N，觸及 M 個 entry point 全滿分）`。
+
+## § 0-F: 最佳實踐交叉比對（條件觸發、主線 foreground）
+
+clade 有 13 條登記在 `registry/conventions.json` 的最佳實踐、58 個 cookbook。0-F 問的是「這次新增的東西，是不是既有資產已經涵蓋 / 該不該登記進去」——不問就會出現「登記了一大堆，實作還是各做各的」。
+
+### 觸發條件
+
+diff 觸及下列**任一**（全不成立 → 輸出 `⏭️ 0-F 跳過（diff 無新資產）`）：
+
+1. 新增 `vendor/snippets/<topic>/` 目錄
+2. 新增 `scripts/*audit*.mjs` / `vendor/scripts/*audit*.mjs`
+3. 新增 `plugins/*/skills/<name>/SKILL.md`
+4. 新增 `rules/core/**` / `rules/modules/**`
+
+```bash
+node "${CLADE_HOME:-$HOME/offline/clade}/scripts/bp-scan.mjs" --changed-only
+```
+
+### 判讀（兩類可靠度不同，NEVER 混為一談）
+
+| 類別 | 可靠度 | 處理 |
+| --- | --- | --- |
+| **A 類**（新資產沒接上管道） | 機械精確、無偽陽性 | commit 前補掉。三種缺口各有明確修法，script 輸出已寫在每條後面 |
+| **B 類**（主題詞命中的既有 convention） | **有偽陽性** | 人工看一眼「這條是不是已經涵蓋我要做的事」。是 → 改用既有的；不是 → 忽略 |
+
+A 類的三種缺口：snippet 無入向 pointer、新 audit 未登記 `registry/audits.json`、新 skill 缺 `evals/skills/<name>/cases.json`（EDD）。
+
+### 反過來的情況：這次做的東西**該**被登記
+
+script 抓不到「這是一條新的最佳實踐」——那是語意判斷。若本次改動確立了一條之後每個專案都該照做的做法，走 `/bp` 登記，**NEVER** 讓它只活在這次 commit 的 diff 裡。
+
+- **NEVER** 把 B 類命中講成「確定重複」再據此砍掉自己的改動 —— 它是詞彙比對，不是語意重複偵測
+- **NEVER** 為了消 A 類的 snippet 警告補一條沒人會走到的假 pointer；真正的選項是補真 pointer 或刪掉該 snippet
+
+0-F 是 **advisory**：`bp-scan.mjs` 永遠 exit 0，不擋 commit。A 類有命中卻選擇不處理時，完成報告 MUST 寫明哪一條、為什麼。
+
+通過後輸出 `✅ 0-F 通過（A 類 N 條已處理／B 類 M 條已判讀）`。
