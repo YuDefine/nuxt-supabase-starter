@@ -23,6 +23,19 @@
 //     },
 //   })
 //
+// lint-staged / `staged` hook 的排除清單 MUST 讀 `PROJECTION_EXCLUDES`，NEVER 手寫一份平行的：
+//
+//   import { fmtBase, lintBase, PROJECTION_EXCLUDES } from './vendor/oxc-shared/preset.ts'
+//   const projectionPrefixes = PROJECTION_EXCLUDES.map((p) => p.replace(/\/\*\*$/, '/'))
+//   const isProjection = (f) => projectionPrefixes.some((d) => f.includes(`/${d}`))
+//
+//   `vp lint` / `vp fmt` 對「輸入路徑全被 ignore」回 **exit 1**，而投影層本來就在上面兩個
+//   ignorePatterns 內。所以只要 staged 檔裡有一個投影檔、而 hook 沒把它濾掉，整個
+//   pre-commit 就掛 —— 症狀是 `No files found to lint`，看起來像路徑打錯，不像被 ignore。
+//   手寫平行清單必然漂移：nuxt-supabase-starter 的 staged filter 排了 `.claude/skills/`
+//   `.agents/` `.codex/` 卻漏掉 `vendor/`，連續擋掉 clade v1.4.388 / v1.4.389 / v1.4.409
+//   三次交付（TD-310）。這裡的 `PROJECTION_EXCLUDES` 一改，所有讀它的 consumer 自動跟上。
+//
 // Why a preset (not inline rule duplication):
 //   `rules/core/code-style.md` § MUST documents these fields as required, but
 //   text-only governance does not lock structure — 5 consumers had drifted
