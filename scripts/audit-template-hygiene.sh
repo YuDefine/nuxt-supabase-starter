@@ -371,6 +371,13 @@ check_maintenance_script_misplacement() {
 
   [[ "${path}" == template/scripts/* ]] || return 0
 
+  # clade vendor 投影不是 starter 自己誤放的維護腳本——它落在哪由 propagate 決定，
+  # 且 smoke-scaffold.sh 已明確把它排除在 scaffold 產物之外，不會流進使用者專案。
+  # 判準用源檔自帶的標記，不用路徑或檔名猜。
+  if grep -Fq -- "CLADE:VENDOR-SCRIPT" <<< "${blob}"; then
+    return 0
+  fi
+
   if grep -Eiq -- '(starter hygiene|sync-to-agents|create-clean|scaffolder maintenance)' <<< "${blob}"; then
     add_finding \
       "maintenance-script-misplacement" \
@@ -435,39 +442,63 @@ scan_file() {
 scan_template_tree() {
   local root="$1"
   local template_dir="${root}/template"
-  local path
+  local path candidates ignored
 
   if [[ ! -d "${template_dir}" ]]; then
     scanner_error "找不到 template/ 目錄，無法執行 full-tree hygiene audit。" "${template_dir}"
     return 1
   fi
 
+  candidates="$(mktemp "${TMPDIR:-/tmp}/starter-hygiene-cand.XXXXXX")" || {
+    scanner_error "無法建立暫存檔，full-tree audit 採 fail-closed。" "mktemp candidates"
+    return 1
+  }
+  ignored="$(mktemp "${TMPDIR:-/tmp}/starter-hygiene-ignored.XXXXXX")" || {
+    rm -f "${candidates}"
+    scanner_error "無法建立暫存檔，full-tree audit 採 fail-closed。" "mktemp ignored"
+    return 1
+  }
+
+  find "${template_dir}" \
+    \( -path "${template_dir}/.git" \
+      -o -path "${template_dir}/.agent" \
+      -o -path "${template_dir}/.clade" \
+      -o -path "${template_dir}/.claude" \
+      -o -path "${template_dir}/.agents" \
+      -o -path "${template_dir}/.codex" \
+      -o -path "${template_dir}/.cursor" \
+      -o -path "${template_dir}/.husky" \
+      -o -path "${template_dir}/.spectra" \
+      -o -path "${template_dir}/.vite-hooks" \
+      -o -path "${template_dir}/.wrangler" \
+      -o -path "${template_dir}/openspec" \
+      -o -path "${template_dir}/node_modules" \
+      -o -path "${template_dir}/.nuxt" \
+      -o -path "${template_dir}/.output" \
+      -o -path "${template_dir}/docs/.vitepress/dist" \
+      -o -path "${template_dir}/packages/create-nuxt-starter/dist" \
+      -o -path "${template_dir}/packages/create-nuxt-starter/templates/*/node_modules" \
+      -o -path "${template_dir}/dist" \
+      -o -path "${template_dir}/coverage" \) -prune \
+    -o -type f -print0 2>/dev/null > "${candidates}"
+
+  # gitignored 的檔永遠進不了 git，也就永遠不可能洩漏進 starter seed——掃它們只會
+  # 產生假陽性。實測 29 個 finding 有 28 個落在 template/temp/validate-starter/
+  # （validate-starter 跑完留下的 scaffold 產物，.gitignore 已排除），把報告淹掉。
+  #
+  # 用 .gitignore 當判準，而不是繼續往上面的 prune 清單加路徑：prune 清單要人記得
+  # 維護，而 .gitignore 本來就是「這些不進 repo」的單一真相層。
+  # git check-ignore 無命中時 exit 1，那不是錯誤。
+  (cd "${root}" && git check-ignore -z --stdin < "${candidates}" > "${ignored}") || true
+
   while IFS= read -r -d '' path; do
+    if [[ -s "${ignored}" ]] && grep -qzxF -- "${path}" "${ignored}"; then
+      continue
+    fi
     scan_file "${root}" "${path}"
-  done < <(
-    find "${template_dir}" \
-      \( -path "${template_dir}/.git" \
-        -o -path "${template_dir}/.agent" \
-        -o -path "${template_dir}/.clade" \
-        -o -path "${template_dir}/.claude" \
-        -o -path "${template_dir}/.agents" \
-        -o -path "${template_dir}/.codex" \
-        -o -path "${template_dir}/.cursor" \
-        -o -path "${template_dir}/.husky" \
-        -o -path "${template_dir}/.spectra" \
-        -o -path "${template_dir}/.vite-hooks" \
-        -o -path "${template_dir}/.wrangler" \
-        -o -path "${template_dir}/openspec" \
-        -o -path "${template_dir}/node_modules" \
-        -o -path "${template_dir}/.nuxt" \
-        -o -path "${template_dir}/.output" \
-        -o -path "${template_dir}/docs/.vitepress/dist" \
-        -o -path "${template_dir}/packages/create-nuxt-starter/dist" \
-        -o -path "${template_dir}/packages/create-nuxt-starter/templates/*/node_modules" \
-        -o -path "${template_dir}/dist" \
-        -o -path "${template_dir}/coverage" \) -prune \
-      -o -type f -print0 2>/dev/null
-  )
+  done < "${candidates}"
+
+  rm -f "${candidates}" "${ignored}"
 }
 
 print_report() {
