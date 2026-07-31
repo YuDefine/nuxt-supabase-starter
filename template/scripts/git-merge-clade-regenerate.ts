@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * git-merge-clade-regenerate.mjs — custom git merge driver for clade
+ * git-merge-clade-regenerate.ts — custom git merge driver for clade
  * LOCKED projection files (.claude/hub.json, .claude/.hub-state.json).
  *
  * Invoked by git on 3-way merge conflicts when .gitattributes maps a path to
