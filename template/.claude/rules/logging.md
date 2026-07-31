@@ -527,4 +527,4 @@ rg -n "createUserAgentEnricher\\(|createGeoEnricher\\(|createTraceContextEnriche
 rg -nP "hooks\.hook\(['\"]request['\"][\s\S]{0,200}?waitUntil\(drain\.flush" server/plugins packages/**/server/plugins
 ```
 
-完整 review automation 在 M2 階段補：`scripts/evlog-adoption-audit.mjs`（spec 見 `docs/evlog-master-plan.md` § 10）。
+完整 review automation 在 M2 階段補：`scripts/evlog-adoption-audit.ts`（spec 見 `docs/evlog-master-plan.md` § 10）。

@@ -78,7 +78,7 @@ Clade 中央倉 **不**規定 `docs/FIXTURES.md` 內容 schema — per-consumer 
 
 ## Propagate 行為
 
-`scripts/propagate.mjs` 對缺 `docs/FIXTURES.md` 的 consumer emit **warning**（不 block）：
+`scripts/propagate.ts` 對缺 `docs/FIXTURES.md` 的 consumer emit **warning**（不 block）：
 
 ```
 ⚠ propagate: <consumer-name> missing docs/FIXTURES.md

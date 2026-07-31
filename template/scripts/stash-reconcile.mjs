@@ -14,8 +14,8 @@ const pad2 = (n) => String(n).padStart(2, '0')
  *     stash entries with a matching ref are safe to drop)
  *   - `cross-session-block-*` — legacy ad-hoc prefix from the pre-atomic
  *     pain era (<consumer-a> 2026-05-17 session); included for migration coverage
- *   - `clade-propagate-v<ver>-<ts>` — auto-stash from `propagate.mjs` dirty
- *     consumer flow when stash pop fails post-write (scripts/propagate.mjs)
+ *   - `clade-propagate-v<ver>-<ts>` — auto-stash from `propagate.ts` dirty
+ *     consumer flow when stash pop fails post-write (scripts/propagate.ts)
  *   - `clade-publish: <free-form>` — manual stash from clade-publish skill
  *     when stashing parallel-session WIP before publish
  *   - spectra-apply phase suffixes (`-baseline-drift`, `-p7-wip`,
@@ -194,7 +194,7 @@ function parseNamespace(message) {
   if (publish) {
     return { kind: 'clade-publish', slug: publish[1].slice(0, 40), iso: null }
   }
-  // clade-publish-pre-<ISO-timestamp>：publish.mjs --stash-untracked 留下；
+  // clade-publish-pre-<ISO-timestamp>：publish.ts --stash-untracked 留下；
   // 並行 session race 沒 pop 回來的常見殘留
   const publishPre = message.match(/clade-publish-pre-([0-9TZ:-]+)/)
   if (publishPre) {
@@ -233,7 +233,7 @@ function isArchivedChange(consumerRoot, slug) {
   }
 }
 
-// Sidecar metadata 由 publish.mjs Phase 1 auto-stash flow 寫入：
+// Sidecar metadata 由 publish.ts Phase 1 auto-stash flow 寫入：
 // .spectra/stash-meta-<stashTag>.json 含 pid / cwd / gitUser / fileList / mtimes /
 // suspectedTasksFile / sessionLabel — 解決「stash 無人認領要 grep 猜內容」根因。
 // 沒 sidecar 的 stash 視為 orphan（pre-Phase-1 創建 或 第三方 git stash 留下）。
@@ -241,7 +241,7 @@ function loadStashSidecar(consumerRoot, stashMessage) {
   const spectraDir = join(consumerRoot, '.spectra')
   if (!existsSync(spectraDir)) return null
   // sidecar 檔名取 stashTag（== stash message）對應 .json
-  // publish.mjs 用 `clade-publish-pre-<ISO-FILESAFE>` 作 tag，message 直接等於 tag
+  // publish.ts 用 `clade-publish-pre-<ISO-FILESAFE>` 作 tag，message 直接等於 tag
   const candidate = join(spectraDir, `stash-meta-${stashMessage}.json`)
   if (!existsSync(candidate)) return null
   try {
@@ -265,7 +265,7 @@ function deleteStashSidecar(sidecar) {
 }
 
 // 反向 orphan detection：sidecar 在但 stash 不在 → stale metadata，可直接清。
-// 成因：publish.mjs autoPopStash 跑了 unlinkSync 但 file system race 沒生效（實證
+// 成因：publish.ts autoPopStash 跑了 unlinkSync 但 file system race 沒生效（實證
 // 2026-05-21 v1.4.7 publish 留下 13:31:22.568Z sidecar but stash already popped），
 // 或 stash 被別處 manual drop 但 sidecar 沒一起清。
 function listOrphanSidecars(consumerRoot, allStashes) {
@@ -342,7 +342,7 @@ function recommendAction(consumerRoot, ref, files, namespace) {
     }
   }
 
-  // Kind-specific shortcut: clade-publish-pre 是 publish.mjs auto-stash 殘留
+  // Kind-specific shortcut: clade-publish-pre 是 publish.ts auto-stash 殘留
   // （通常因並行 session race / pop conflict）。對每個 stashed file 比較 stash
   // 內容 vs HEAD 內容：
   //   - 全部一致 → 內容已被後續 commit 吸收，安全 drop

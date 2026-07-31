@@ -21,7 +21,7 @@ Local edits will be reverted by the next sync.
 
 > Cookbook 範本：`vendor/snippets/nuxt-dev-watch/`。
 >
-> Audit signal：`scripts/audit-nuxt-dev-watch.mjs`。
+> Audit signal：`scripts/audit-nuxt-dev-watch.ts`。
 >
 > Pitfall：`docs/pitfalls/2026-05-28-nuxt-chokidar-watch-fd-exhaustion-ebadf.md`。
 
@@ -61,7 +61,7 @@ Local edits will be reverted by the next sync.
 ### 4. 套用步驟
 
 1. cp `vendor/snippets/nuxt-dev-watch/baseline.template.ts` 對應段落進 consumer `nuxt.config.ts`
-2. 跑 `cd ~/offline/clade && node scripts/audit-nuxt-dev-watch.mjs` 驗 status 為 OK
+2. 跑 `cd ~/offline/clade && node scripts/audit-nuxt-dev-watch.ts` 驗 status 為 OK
 3. 重起 dev server，採樣 fd 用量（`lsof -p $(pgrep -f 'nuxt.mjs dev') | wc -l`）應 < 5000
 
 ## NEVER
@@ -82,7 +82,7 @@ Local edits will be reverted by the next sync.
 
 ## 違反偵測
 
-`scripts/audit-nuxt-dev-watch.mjs` 對每個 consumer 偵測：
+`scripts/audit-nuxt-dev-watch.ts` 對每個 consumer 偵測：
 
 | Signal | 條件 |
 | --- | --- |
@@ -110,7 +110,7 @@ Diagnostic-only（exit 0）；consumer 端落地由 consumer 自家 session 處�
 
 修正：
   - 套 vendor/snippets/nuxt-dev-watch/baseline.template.ts 兩段 snippet
-  - 重跑 audit-nuxt-dev-watch.mjs 確認 OK
+  - 重跑 audit-nuxt-dev-watch.ts 確認 OK
   - 採樣 fd 用量驗修法生效（< 5000）
 
 若有充分理由偏離 baseline，記錄到 docs/decisions/YYYY-MM-DD-<topic>.md

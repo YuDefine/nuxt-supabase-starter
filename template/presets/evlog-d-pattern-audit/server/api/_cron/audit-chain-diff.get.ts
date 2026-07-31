@@ -1,5 +1,5 @@
 /**
- * 🔒 LOCKED — managed by clade sync-evlog-presets.mjs
+ * 🔒 LOCKED — managed by clade sync-evlog-presets.ts
  * preset: evlog-d-pattern-audit
  * source: vendor/snippets/evlog-audit-signed/diff-cron.ts
  * to: presets/evlog-d-pattern-audit/server/api/_cron/audit-chain-diff.get.ts

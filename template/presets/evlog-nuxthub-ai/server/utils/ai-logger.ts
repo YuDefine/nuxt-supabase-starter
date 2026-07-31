@@ -1,5 +1,5 @@
 /**
- * 🔒 LOCKED — managed by clade sync-evlog-presets.mjs
+ * 🔒 LOCKED — managed by clade sync-evlog-presets.ts
  * preset: evlog-nuxthub-ai
  * source: vendor/snippets/evlog-ai-sdk-logger/ai-logger.ts
  * to: presets/evlog-nuxthub-ai/server/utils/ai-logger.ts

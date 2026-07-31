@@ -43,14 +43,14 @@
  * 觸發點：**手動**（`pnpm audit:manual`）。
  *   ⚠️ 本檔曾聲稱「starter CI（GitHub Actions）作 mandatory job」——2026-07-26 查證
  *   為不實：starter 的 `.github/workflows/` 與 `package.json` 皆無此 job，
- *   `propagate.mjs` 也沒有呼叫它（只有一句註解）。宣告已改為 on-demand，
+ *   `propagate.ts` 也沒有呼叫它（只有一句註解）。宣告已改為 on-demand，
  *   接上真實消費端要走 TD-273。
  *
  *   另注意判準是為**公開** repo 設計的：forbidden tokens 含 consumer 自己的名字，
  *   所以對私有 consumer 會回報約 100 條「violation」，那是類別錯誤不是洩漏。
  *   `--all-consumers` 因此只掃帶 `sanitization_profile` 的 consumer。
  *
- * 對應 governance：clade `scripts/lib/sanitization-governance.mjs`。
+ * 對應 governance：clade `scripts/lib/sanitization-governance.ts`。
  */
 
 import { execFile } from 'node:child_process'
@@ -109,7 +109,7 @@ const MAINTAINER_ONLY_SKILLS = ['oops', 'improvement-loop', 'review-rules']
 
 // 已退役 generator 留下的 metadata 檔。`sync-to-agents` 於 v1.4.315 更名為
 // `sync-to-codex`（commit b05efa9a）時 writer 被一併移除但沒人發現，而
-// `sync-to-codex.mjs` 的 cleanup() 每輪 `rm -rf .agents/` 除 skills 外全部 ——
+// `sync-to-codex.ts` 的 cleanup() 每輪 `rm -rf .agents/` 除 skills 外全部 ——
 // 於是檔案在 worktree 消失、在 index/HEAD/remote 永存（propagate 的 selective
 // `--only` 永遠不會撿起這條 deletion）。內容是投影來源的**絕對路徑**，918–982 條
 // `~/...`，含全套 skill 名稱清單，已 push 進兩個 public repo。

@@ -1,5 +1,5 @@
 /**
- * 🔒 LOCKED — managed by clade sync-evlog-presets.mjs
+ * 🔒 LOCKED — managed by clade sync-evlog-presets.ts
  * preset: evlog-baseline
  * source: vendor/snippets/evlog-drain-pipeline/pipeline.ts
  * to: presets/evlog-baseline/server/plugins/evlog-drain.ts

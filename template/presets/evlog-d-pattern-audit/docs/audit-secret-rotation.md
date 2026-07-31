@@ -1,4 +1,4 @@
-<!-- 🔒 LOCKED — managed by clade sync-evlog-presets.mjs -->
+<!-- 🔒 LOCKED — managed by clade sync-evlog-presets.ts -->
 <!-- preset: evlog-d-pattern-audit -->
 <!-- source: vendor/snippets/evlog-audit-signed/rotation-runbook.md -->
 <!-- to: presets/evlog-d-pattern-audit/docs/audit-secret-rotation.md -->
@@ -92,8 +92,8 @@ EVLOG_AUDIT_SECRET_V2=0xdef...     # = 新（同 EVLOG_AUDIT_SECRET）
 ```bash
 # clade 端先 publish 含新 secret env schema 的版本
 cd ~/offline/clade
-node scripts/publish.mjs patch
-node scripts/propagate.mjs
+node scripts/publish.ts patch
+node scripts/propagate.ts
 
 # <consumer-a>（O1 適用）：
 cd ~/offline/<consumer-a>

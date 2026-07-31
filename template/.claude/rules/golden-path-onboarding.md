@@ -6,7 +6,7 @@ paths:
   - 'package.json'
   - 'README.md'
   - 'CLAUDE.md'
-  - 'scripts/init-consumer.mjs'
+  - 'scripts/init-consumer.ts'
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -27,11 +27,11 @@ Local edits will be reverted by the next sync.
 1. **首次在某 consumer 開 session 且該工作觸及 CI/CD / deploy / `.github/`** 時，**MUST** 先跑：
 
    ```bash
-   node ~/offline/clade/scripts/audit-golden-path-adoption.mjs --consumer <consumer_id>
+   node ~/offline/clade/scripts/audit-golden-path-adoption.ts --consumer <consumer_id>
    ```
 
 2. **status 非 `OK` 且非 `N/A`（DRIFT / MISSING）→ 主動補齊缺項，不等 user 開口要求**。補法對照 `docs/golden-paths/docker-self-hosted-deploy.md`：
-   - `discord-action` 缺 → 該 vendored action 由 clade `sync-vendor.mjs` 投影，跑 propagate 補上 `.github/actions/discord-deploy-notify/`
+   - `discord-action` 缺 → 該 vendored action 由 clade `sync-vendor.ts` 投影，跑 propagate 補上 `.github/actions/discord-deploy-notify/`
    - `ci-notify-job` 缺 → 在 deploy / CI workflow 尾端加 `notify` job（`if: always()`，`uses: ./.github/actions/discord-deploy-notify`）
    - `webhook-secret` 未引用 → notify job 傳入 `webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}`，並提醒 user 在 GitHub repo Actions secrets 設定該值（值本身 audit 查不到，標 `set=?`）
 
@@ -40,7 +40,7 @@ Local edits will be reverted by the next sync.
 4. **同一時機 MUST 一併跑 CI gate 接線稽核**（clade 散播的 blocking gate 只跑在 `.husky/pre-push`，`--no-verify` 與 web 編輯介面都能繞過）：
 
    ```bash
-   node ~/offline/clade/scripts/audit-gate-coverage.mjs
+   node ~/offline/clade/scripts/audit-gate-coverage.ts
    ```
 
    § 2「CI composite action 載體」報「已散播但沒有任何 workflow 引用 → 從未執行」的，**MUST** 依 `docs/golden-paths/clade-gate-ci.md` 的範本補上 `clade-gates` job，同樣不等 user 開口要求。**每一個**有 `.github/workflows/` 的 consumer 都適用；沒有 workflow 目錄的是 `N/A`，但該 consumer 一旦開始建 CI 就 MUST 一併補。
@@ -53,7 +53,7 @@ Local edits will be reverted by the next sync.
 | CI notify job | workflow 有 `uses: ./.github/actions/discord-deploy-notify` | 同上 |
 | Discord webhook secret | workflow 引用 `secrets.DISCORD_WEBHOOK_URL` / `DISCORD_SENTRY_WEBHOOK_URL` | 同上（值需 user 在 GitHub 設定） |
 | self-hosted runner | `runs-on: [self-hosted, ...]` | 只限 Docker self-hosted deploy 型 |
-| clade-managed CI gate 接線 | workflow 有 `uses: ./.github/actions/review-rules-scan` 與 `scripts/pre-push/checks/` 的 blocking 全站 check step（`node scripts/audit-gate-coverage.mjs` § 2 驗；範本 `docs/golden-paths/clade-gate-ci.md`） | **每一個**有 `.github/workflows/` 的 consumer |
+| clade-managed CI gate 接線 | workflow 有 `uses: ./.github/actions/review-rules-scan` 與 `scripts/pre-push/checks/` 的 blocking 全站 check step（`node scripts/audit-gate-coverage.ts` § 2 驗；範本 `docs/golden-paths/clade-gate-ci.md`） | **每一個**有 `.github/workflows/` 的 consumer |
 
 ## NEVER
 
@@ -64,6 +64,6 @@ Local edits will be reverted by the next sync.
 ## 與其他機制的關係
 
 - 完整 golden path 規格見 `docs/golden-paths/docker-self-hosted-deploy.md`、`docs/golden-paths/new-consumer-onboarding.md` 與 `docs/golden-paths/clade-gate-ci.md`
-- audit script：`scripts/audit-golden-path-adoption.mjs`（discord deploy-notify，diagnostic-only，exit 0）、`scripts/audit-gate-coverage.mjs`（gate 執行載體三段，warn-only）
+- audit script：`scripts/audit-golden-path-adoption.ts`（discord deploy-notify，diagnostic-only，exit 0）、`scripts/audit-gate-coverage.ts`（gate 執行載體三段，warn-only）
 - 各 gate 的強制力 / fail-open 條件 / 繞過方式對照 `docs/enforcement-matrix.md`
-- vendored action 的投影走既有 `sync-vendor.mjs` / propagate 流程，本 rule 不新增 propagate 機制
+- vendored action 的投影走既有 `sync-vendor.ts` / propagate 流程，本 rule 不新增 propagate 機制

@@ -1,5 +1,5 @@
 /**
- * 🔒 LOCKED — managed by clade sync-evlog-presets.mjs
+ * 🔒 LOCKED — managed by clade sync-evlog-presets.ts
  * preset: evlog-baseline
  * source: vendor/snippets/evlog-enrichers-stack/enrichers.ts
  * to: presets/evlog-baseline/server/plugins/evlog-enrich.ts

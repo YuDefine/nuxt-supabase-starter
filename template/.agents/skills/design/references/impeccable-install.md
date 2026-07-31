@@ -45,7 +45,7 @@ echo ""
 只動 clade，consumer 自動跟齊：
 
 1. 在 clade 改 `plugins/hub-core/skills/design/SKILL.md` Prerequisites 區塊的鎖定版本（含 GitHub release 連結）
-2. `node scripts/publish.mjs patch && node scripts/propagate.mjs` 散播
+2. `node scripts/publish.ts patch && node scripts/propagate.ts` 散播
 3. consumer 跑 `pnpm skills:install`（執行 install-skills.sh）pull latest
 
 **不要在 consumer 端自行升降版**：clade design orchestrator 與 impeccable sub-command 形態強耦合，version drift 會導致 plan 內指令不存在。

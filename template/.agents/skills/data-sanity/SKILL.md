@@ -40,7 +40,7 @@ node <clade-vendor>/scripts/audit-data-sanity.mjs \
 1. **PARAM_BOUNDARY（Critical — blocks archive）**：client 端 pagination-ish param literal（`perPage` / `per_page` / `pageSize` / `limit` / `take` / `first` / `count` / `top` / `size`）超過（max）或低於（min）同名 server zod bound（`.max(N)` / `.min(N)` / `.length(N)`）。對應 UI-INV-2（lookup-resolved column 解析率 100%）。
 2. **LOOKUP_MAP_RISK（advisory / warn）**：偵測 `xxxMap` / `xxxLookup` / `xxxById` 從 query data（`.reduce(` / `Object.fromEntries(` / `new Map(`）建的 lookup map。提醒：來源 query 若失敗，此 map empty → 對應 column uniform fallback。確認來源 query param 在 schema bound 內。
 
-> **限制（heuristic，非真 AST）**：clade home 無 oxc-parser / @vue/compiler-sfc，本 audit 是 dependency-free regex 掃描（與 `d-pattern-audit.mjs` / `manual-review-audit.mjs` 同慣例），靠 **param 名跨檔對應** 連結 client literal ↔ server bound。同名 param 出現在不相關 schema 時可能 false-link；PARAM_BOUNDARY 命中後請人工確認該 client query 真打到該 server endpoint。
+> **限制（heuristic，非真 AST）**：clade home 無 oxc-parser / @vue/compiler-sfc，本 audit 是 dependency-free regex 掃描（與 `d-pattern-audit.ts` / `manual-review-audit.ts` 同慣例），靠 **param 名跨檔對應** 連結 client literal ↔ server bound。同名 param 出現在不相關 schema 時可能 false-link；PARAM_BOUNDARY 命中後請人工確認該 client query 真打到該 server endpoint。
 
 ## 結果處置
 

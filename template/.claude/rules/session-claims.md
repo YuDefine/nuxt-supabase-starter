@@ -63,14 +63,14 @@ node scripts/claim-helper.mjs add --change-id main-session-wip \
   --expected-paths "$(git status --porcelain | awk '{print $2}' | paste -sd, -)"
 ```
 
-完成 / commit 後 `claim-helper.mjs drop <session-id>`。**自動觸發機制**（main session 累積 dirty 時自動 claim + commit 後自動 drop）經評估 **reject-by-design**（2026-06-12）：clade home main tree 經常 dirty（多 session / propagate 投影寫入 / 跨 tool-call WIP），auto-claim 整個 `git status` 快照會讓**每個**別 session 的 `wt-helper add --precheck-baseline` / `merge-back --auto-stash` 在任何路徑重疊時 `otherSession` STOP → 持續誤擋合法 fork；對 shared trunk 而言過度封鎖比偶發 WIP loss 更糟。主要 incident vector 已被機制層覆蓋（P1 default-no-capture / merge-back TD-175 claim-guard / `scripts/audit-shared-tree-safety.mjs`）。**手動 coarse claim 是「主線跨多步累積大 batch」這種刻意、罕見場景的標準逃生口**，其非自動化是可接受的。
+完成 / commit 後 `claim-helper.mjs drop <session-id>`。**自動觸發機制**（main session 累積 dirty 時自動 claim + commit 後自動 drop）經評估 **reject-by-design**（2026-06-12）：clade home main tree 經常 dirty（多 session / propagate 投影寫入 / 跨 tool-call WIP），auto-claim 整個 `git status` 快照會讓**每個**別 session 的 `wt-helper add --precheck-baseline` / `merge-back --auto-stash` 在任何路徑重疊時 `otherSession` STOP → 持續誤擋合法 fork；對 shared trunk 而言過度封鎖比偶發 WIP loss 更糟。主要 incident vector 已被機制層覆蓋（P1 default-no-capture / merge-back TD-175 claim-guard / `scripts/audit-shared-tree-safety.ts`）。**手動 coarse claim 是「主線跨多步累積大 batch」這種刻意、罕見場景的標準逃生口**，其非自動化是可接受的。
 
 ## 3. 誰讀 claim
 
 | 讀者 | 用途 |
 |---|---|
-| `scripts/publish.mjs` (clade) | 跨 consumer scan，warn 「別 session 還活著」 |
-| `scripts/propagate.mjs` (clade) | per-consumer warn 同上 |
+| `scripts/publish.ts` (clade) | 跨 consumer scan，warn 「別 session 還活著」 |
+| `scripts/propagate.ts` (clade) | per-consumer warn 同上 |
 | `wt-helper.mjs merge-back` | Phase 3 audit：偵測「main dirty 屬於別 session 路徑」 |
 | `/commit` skill（走 [[commit]]；spectra-commit 是另一條 change-scoped 路徑） | Phase 4 partition：別 session 路徑 fail-closed |
 | `wt-helper.mjs` stash namespace | Phase 7：stash slug 帶 session_id |

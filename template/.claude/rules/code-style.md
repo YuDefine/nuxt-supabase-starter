@@ -21,7 +21,7 @@ Local edits will be reverted by the next sync.
 
 ## Governance — lint / fmt 設定改在哪
 
-**跨 consumer 統一的 baseline**（oxlint rules / oxfmt 風格 / 共用 ignore patterns）**MUST** 改在 clade 中央倉 `vendor/oxc-shared/preset.mjs`，再 `node scripts/publish.mjs <bump> && node scripts/propagate.mjs` 散播到所有 consumer。**NEVER** 在 consumer 端的 `vendor/oxc-shared/preset.mjs` 投影副本直接改 — 下次 propagate 會覆蓋，且各 consumer 會 silently drift。
+**跨 consumer 統一的 baseline**（oxlint rules / oxfmt 風格 / 共用 ignore patterns）**MUST** 改在 clade 中央倉 `vendor/oxc-shared/preset.mjs`，再 `node scripts/publish.ts <bump> && node scripts/propagate.ts` 散播到所有 consumer。**NEVER** 在 consumer 端的 `vendor/oxc-shared/preset.mjs` 投影副本直接改 — 下次 propagate 會覆蓋，且各 consumer 會 silently drift。
 
 **consumer 自家業務 override**（單一 consumer 因第三方套件需要關掉某條 rule、或自家業務需要加 ignore path）寫在該 consumer 的 `vite.config.ts` 內、`spread baseline 之後`的 override block，**禁止**整段 inline 重寫 baseline（會 silently drift）。範例見下方 § `vite.config.ts` 必備欄位。
 
@@ -44,7 +44,7 @@ clade 投影進 consumer 的路徑（`vendor/**`、`.claude/**`、`.clade/**`、
 
 唯一例外是 clade 自己 —— `vendor/` 在那裡是原始碼而非投影，clade 的 `vite.config.ts` 因此把 `vendor/**` 濾回來。這個例外只有一處、有註解，且由 audit 認得。
 
-機械檢查：`node scripts/audit-governance-drift.mjs` check 10 掃 clade + 全 consumer 的 `vite.config.ts`，preset 未涵蓋的 inline 排除路徑會 fail。對應 [[pitfall-projection-excludes-not-in-shared-preset]]。
+機械檢查：`node scripts/audit-governance-drift.ts` check 10 掃 clade + 全 consumer 的 `vite.config.ts`，preset 未涵蓋的 inline 排除路徑會 fail。對應 [[pitfall-projection-excludes-not-in-shared-preset]]。
 
 ## 禁止事項（NEVER）
 
@@ -70,7 +70,7 @@ clade 投影進 consumer 的路徑（`vendor/**`、`.claude/**`、`.clade/**`、
 
 #### `.oxfmtignore`（clade-managed，承接原 `.prettierignore` 用途）
 
-`.oxfmtignore` 由 clade 治理（`scripts/lib/oxfmtignore-governance.mjs`），**只能**保留 clade-managed LOCKED projections（`.claude/rules/`、`.claude/skills/`、`.claude/hooks/`、`.claude/agents/`、`.claude/commands/`、`.agents/`、`.codex/`）的 ignore 條目。**禁止**手動加任何其他條目，也**禁止**整個刪除——刪掉之後 `pnpm hub:bootstrap` 會自動重建。
+`.oxfmtignore` 由 clade 治理（`scripts/lib/oxfmtignore-governance.ts`），**只能**保留 clade-managed LOCKED projections（`.claude/rules/`、`.claude/skills/`、`.claude/hooks/`、`.claude/agents/`、`.claude/commands/`、`.agents/`、`.codex/`）的 ignore 條目。**禁止**手動加任何其他條目，也**禁止**整個刪除——刪掉之後 `pnpm hub:bootstrap` 會自動重建。
 
 oxfmt 不會自動 fallback 讀 `.oxfmtignore`（只有 `.prettierignore` / `.gitignore` 是 fallback），所以**所有 `vp fmt` 調用入口都必須顯式帶 `--ignore-path .oxfmtignore`**。clade 散播的 `package.json` `format` / `format:check` script 已預先帶 flag，consumer 端走 `pnpm format` / `pnpm format:check` 即可；裸打 `vp fmt` 必須手動加 flag。
 
@@ -134,7 +134,7 @@ catalog:
 
 #### 對應偵測
 
-`scripts/audit-tooling-drift.mjs` 提供 `viteplusLocal` signal（diagnostic-only，exit code 永遠 0），對每個 consumer 讀 `package.json` 看 `vite-plus` 是否 pinned-local。
+`scripts/audit-tooling-drift.ts` 提供 `viteplusLocal` signal（diagnostic-only，exit code 永遠 0），對每個 consumer 讀 `package.json` 看 `vite-plus` 是否 pinned-local。
 
 #### 真實事故參考
 
@@ -157,7 +157,7 @@ catalog:
 理由：`vp check` 內部 fmt step **不支援 `--ignore-path` flag**（CLI 沒這 option，pass-through 也不一定生效），意思是 CI 環境下 `vp check` 會掃描整 working tree 包括 LOCKED projection（`.claude/agents/`、`.claude/commands/` 等 chmod 444 檔），撞 oxfmt format issue → CI 紅燈。
 
 consumer 端 LOCKED projection 的 ignore 機制設計：
-- `.oxfmtignore` 由 clade `scripts/lib/oxfmtignore-governance.mjs` 在 `pnpm hub:bootstrap` 時生成
+- `.oxfmtignore` 由 clade `scripts/lib/oxfmtignore-governance.ts` 在 `pnpm hub:bootstrap` 時生成
 - oxfmt **不會自動 fallback** 讀 `.oxfmtignore`（只認 `.prettierignore` / `.gitignore` 是 fallback，但 `.prettierignore` 已 v0.4.x 黑名單）
 - 所有 `vp fmt` 調用入口**必須**顯式帶 `--ignore-path .oxfmtignore`
 - clade 散播的 `package.json` `format` / `format:check` script 預埋此 flag：
@@ -202,7 +202,7 @@ consumer 端 LOCKED projection 的 ignore 機制設計：
 
 | 可觀察 predicate | 副檔名 |
 | --- | --- |
-| 檔案落在 clade 的 `vendor/**`（會被 `sync-vendor.mjs` / `propagate.mjs` 寫進 consumer） | `.mts` |
+| 檔案落在 clade 的 `vendor/**`（會被 `sync-vendor.ts` / `propagate.ts` 寫進 consumer） | `.mts` |
 | 其他一切（clade 的 `scripts/**`、`test/**`、consumer 自家 script） | `.ts` |
 
 `.ts` 的模組系統由**最近的 package.json `type`** 決定，`.mts` 則永遠是 ESM。散播檔會落在別人的 repo、別人的子目錄，那裡的 `type` 欄位不是我們控制得了的。
@@ -358,7 +358,7 @@ fmt: {
 
 **(B) Clade-managed LOCKED projections ignore（用 `.oxfmtignore` + `--ignore-path` 顯式 flag，clade 治理）**
 
-`.claude/rules/`、`.claude/skills/`、`.claude/hooks/`、`.claude/agents/`、`.claude/commands/`、`.agents/`、`.codex/` 這些 clade 投影目錄是 chmod 444，oxfmt 不能寫入但會走訪到，會被報 format issue。clade 透過 `scripts/lib/oxfmtignore-governance.mjs` 在 `pnpm hub:bootstrap` 時自動寫 `.oxfmtignore`，並由 clade 散播的 `package.json` `format` / `format:check` script 預埋 `--ignore-path .oxfmtignore` flag。
+`.claude/rules/`、`.claude/skills/`、`.claude/hooks/`、`.claude/agents/`、`.claude/commands/`、`.agents/`、`.codex/` 這些 clade 投影目錄是 chmod 444，oxfmt 不能寫入但會走訪到，會被報 format issue。clade 透過 `scripts/lib/oxfmtignore-governance.ts` 在 `pnpm hub:bootstrap` 時自動寫 `.oxfmtignore`，並由 clade 散播的 `package.json` `format` / `format:check` script 預埋 `--ignore-path .oxfmtignore` flag。
 
 **consumer 不要手動編輯 `.oxfmtignore`**（內容由 governance 治理；可以加自家條目，但 LOCKED 那幾條由 governance 維持）。
 
@@ -397,19 +397,19 @@ pnpm exec vp fmt --migrate=prettier  # 從既有 prettier config 遷移（若有
 
 ### 已實作（v0.4.x+）
 
-- `scripts/sync-rules.mjs --check` 在跑 drift report 時偵測 consumer 端 `.prettierignore` 存在 → 列為 drift
-- `scripts/lib/oxfmtignore-governance.mjs` 在 `pnpm hub:bootstrap` 時主動刪除舊 `.prettierignore`（self-healing）
+- `scripts/sync-rules.ts --check` 在跑 drift report 時偵測 consumer 端 `.prettierignore` 存在 → 列為 drift
+- `scripts/lib/oxfmtignore-governance.ts` 在 `pnpm hub:bootstrap` 時主動刪除舊 `.prettierignore`（self-healing）
 - `pnpm hub:check` 包含上述 drift signal，consumer 端 CI 應啟用此 job
-- `scripts/audit-tooling-drift.mjs`（v1.3.19）：掃每個 consumer 的 `vite.config.ts` 對齊狀態。報兩個 signal：
+- `scripts/audit-tooling-drift.ts`（v1.3.19）：掃每個 consumer 的 `vite.config.ts` 對齊狀態。報兩個 signal：
   1. **presetImport** — 是否從 `./vendor/oxc-shared/preset.mjs` import `lintBase` + `fmtBase`
   2. **inlineDrift** — 未 import preset 時，inline 寫死的 fmt baseline 欄位（`trailingComma`、`semi`、`singleQuote`、`printWidth` 等 11 項）與 baseline 不一致的 entries
-  - 用法：`node scripts/audit-tooling-drift.mjs [--markdown|--json]`；diagnostic-only，exit code 永遠 0；HANDOFF §4 baseline 由此 script 維護
+  - 用法：`node scripts/audit-tooling-drift.ts [--markdown|--json]`；diagnostic-only，exit code 永遠 0；HANDOFF §4 baseline 由此 script 維護
   - 後續擴充至 7 個 signal（`structuralDrift` / `strayDotfiles` / `viteplusLocal` / `pnpmOrphans` / `eslintDeps`）
-- `scripts/audit-tooling-drift.mjs` `eslintDeps` signal：掃每個 consumer `package.json` deps/devDeps 是否含本節禁用的 eslint / prettier 套件（`eslint` / `@nuxt/eslint*` / `@typescript-eslint/*` / `eslint-config-*` / `eslint-plugin-*` / `prettier` / `prettier-plugin-*`）→ 列為 `forbidden-deps-present`。warn-only，源於 <consumer-h> + <consumer-e> 採 Vite+ 後移除 `@nuxt/eslint`
+- `scripts/audit-tooling-drift.ts` `eslintDeps` signal：掃每個 consumer `package.json` deps/devDeps 是否含本節禁用的 eslint / prettier 套件（`eslint` / `@nuxt/eslint*` / `@typescript-eslint/*` / `eslint-config-*` / `eslint-plugin-*` / `prettier` / `prettier-plugin-*`）→ 列為 `forbidden-deps-present`。warn-only，源於 <consumer-h> + <consumer-e> 採 Vite+ 後移除 `@nuxt/eslint`
 
 ### 建議擴充（尚未實作）
 
-- `scripts/audit-tooling-drift.mjs` Phase 2：併入 `.eslintrc*` / `.prettierrc*` / `eslint.config.*` / `prettier.config.*` 等禁用 **config 檔**的存在性掃描（dep 層已由 `eslintDeps` signal 涵蓋；config 檔層目前 sync-rules.mjs 只認 `.prettierignore` 一條）
+- `scripts/audit-tooling-drift.ts` Phase 2：併入 `.eslintrc*` / `.prettierrc*` / `eslint.config.*` / `prettier.config.*` 等禁用 **config 檔**的存在性掃描（dep 層已由 `eslintDeps` signal 涵蓋；config 檔層目前 sync-rules.ts 只認 `.prettierignore` 一條）
 - pre-commit hook 加 check：偵測到 eslint/prettier config 進 staging 直接擋
 - CI workflow 同步檢查
 

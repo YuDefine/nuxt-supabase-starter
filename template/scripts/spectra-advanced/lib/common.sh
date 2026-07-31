@@ -46,7 +46,7 @@ sux_repo_root() {
 # Load spectra-advanced.config.json paths into SUX_* env vars.
 # Legacy fallback: if the new file is absent, read spectra-ux.config.json
 # (the pre-rename filename). Consumers migrate naturally on the next propagate
-# (propagate.mjs renames the file) so the fallback can be removed in a future
+# (propagate.ts renames the file) so the fallback can be removed in a future
 # major bump.
 # Falls back to sensible defaults (Nuxt convention) for any missing field.
 sux_load_config() {

@@ -12,7 +12,7 @@
  *    「alias 來源自 use*Mutation()」或「物件名帶 Mutation」的 status === 'pending'。
  *
  * 被三處共用（single source of truth）：
- *   - scripts/audit-pinia-mutation-loading.mjs（clade-home cross-consumer 盤點）
+ *   - scripts/audit-pinia-mutation-loading.ts（clade-home cross-consumer 盤點）
  *   - vendor/scripts/pre-commit/checks/mutation-loading.sh（staged，blocking）
  *   - vendor/scripts/pre-push/checks/mutation-loading.sh（全 repo，warn-only）
  *

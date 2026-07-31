@@ -3,7 +3,7 @@
  *
  * Background (docs/tech-debt.md TD-145):
  *   Parallel sweep mid-flight 撞到 0-byte `.git/index.lock` 沒 active git process。
- *   手動 `rm` 解，但 SWEEP-V2-002 audit 漏掉。共用 helper 給 wt-helper / publish.mjs
+ *   手動 `rm` 解，但 SWEEP-V2-002 audit 漏掉。共用 helper 給 wt-helper / publish.ts
  *   入口 idempotent 預清，避免 stale lock 沿著流程往下傳。
  *
  * Stale criteria — ALL must hold:

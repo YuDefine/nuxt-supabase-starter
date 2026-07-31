@@ -32,7 +32,7 @@
 
 /**
  * clade-projected paths. In a consumer these are LOCKED copies (chmod 444)
- * written by `scripts/propagate.mjs` — a consumer *cannot* fix a lint or fmt
+ * written by `scripts/propagate.ts` — a consumer *cannot* fix a lint or fmt
  * hit inside them, because the fix has to land in clade and propagate back.
  * So whether these paths get checked is a decision the shared baseline has to
  * make; leaving it to each consumer means whichever consumer forgets to
@@ -42,7 +42,7 @@
  * `vp fmt --check` over `vendor/snippets/manual-review-enforcement/patterns.json`
  * — <consumer-h> and <consumer-e> had each independently patched `vendor/**`
  * into their own vite.config.ts, which hid the gap instead of closing it.
- * `scripts/audit-governance-drift.mjs` check 10 now fails on any config that
+ * `scripts/audit-governance-drift.ts` check 10 now fails on any config that
  * re-inlines one of these, so the next gap surfaces before a consumer does.
  *
  * clade itself is the source of truth for `vendor/`, so its own vite.config.ts
@@ -84,7 +84,7 @@ export const lintBase = {
     // 2026-05-31: newer oxlint (CI via unpinned setup-vp@v1) surfaces
     // unicorn/consistent-function-scoping in an on-category; local oxlint 1.63.0
     // does not yet. clade/consumer scripts use nested helpers by design
-    // (e.g. `function git` in publish.mjs / wt-helper.mjs) — this rule is
+    // (e.g. `function git` in publish.ts / wt-helper.mjs) — this rule is
     // stylistic noise here. Explicit pin off prevents CI lint drift on oxlint
     // version bumps (same pattern as no-underscore-dangle below).
     'unicorn/consistent-function-scoping': 'off',

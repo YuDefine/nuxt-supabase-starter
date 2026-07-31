@@ -1,4 +1,4 @@
-<!-- 🔒 LOCKED — managed by clade sync-evlog-presets.mjs -->
+<!-- 🔒 LOCKED — managed by clade sync-evlog-presets.ts -->
 <!-- preset: evlog-d-pattern-audit -->
 <!-- source: vendor/snippets/evlog-drain-pipeline/README.md -->
 <!-- to: presets/evlog-d-pattern-audit/server/plugins/_evlog-drain.README.md -->

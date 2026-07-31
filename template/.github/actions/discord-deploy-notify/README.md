@@ -1,6 +1,6 @@
 # discord-deploy-notify (clade vendored)
 
-Shared GitHub Composite Action that posts a Discord embed summarizing a deploy workflow run. **Vendored** into each consumer repo via clade's `sync-vendor.mjs` propagation — every consumer keeps its own self-contained `.github/actions/discord-deploy-notify/` copy with no runtime dependency on any external repo.
+Shared GitHub Composite Action that posts a Discord embed summarizing a deploy workflow run. **Vendored** into each consumer repo via clade's `sync-vendor.ts` propagation — every consumer keeps its own self-contained `.github/actions/discord-deploy-notify/` copy with no runtime dependency on any external repo.
 
 ## Source of truth
 
@@ -14,7 +14,7 @@ consumer/.github/actions/discord-deploy-notify/  ← committed in each consumer'
 consumer's deploy.yml notify step
 ```
 
-To update the action: edit in clade, bump clade version (`node scripts/publish.mjs <bump>`), then `node scripts/propagate.mjs` — every consumer in `consumers.local` receives the new copy in their next propagate cycle.
+To update the action: edit in clade, bump clade version (`node scripts/publish.ts <bump>`), then `node scripts/propagate.ts` — every consumer in `consumers.local` receives the new copy in their next propagate cycle.
 
 ## Usage in a consumer workflow
 
@@ -46,10 +46,10 @@ The leading `./` is critical — it tells GitHub Actions to resolve the action f
 
 ### Why this README warning isn't the only safeguard
 
-In v1.157~v1.159 this exact rule was violated three times across 4 consumer repos despite the warning above. Documentation-level reminders proved unreliable, so the rule is now **machine-enforced** by `scripts/audit-vendor-checkout.mjs` (run from clade's repo root):
+In v1.157~v1.159 this exact rule was violated three times across 4 consumer repos despite the warning above. Documentation-level reminders proved unreliable, so the rule is now **machine-enforced** by `scripts/audit-vendor-checkout.ts` (run from clade's repo root):
 
 - `pnpm audit:vendor-checkout` — standalone CLI; scans every consumer in `consumers.local`, exits 1 on any finding
-- `node scripts/propagate.mjs` — automatically calls `auditConsumerWorkflows()` per consumer **before** writing any files; missing checkout → that consumer's propagate is **aborted** (returns `failed`, others continue)
+- `node scripts/propagate.ts` — automatically calls `auditConsumerWorkflows()` per consumer **before** writing any files; missing checkout → that consumer's propagate is **aborted** (returns `failed`, others continue)
 
 If you add a new vendored action under `vendor/actions/<name>/`, the audit covers it automatically — `listVendoredActionNames()` enumerates the directory.
 
@@ -108,7 +108,7 @@ Earlier iteration of this action lived at `YuDefine/discord-deploy-notify` (publ
 Vendoring eliminates that failure mode:
 - Each consumer's action.yml is a regular tracked file in their main branch.
 - Workflows resolve `./` against the consumer's checked-out tree — no network call to a remote repo.
-- A clade upgrade is required to receive a new version; consumers stay frozen on whatever they have until the next `propagate.mjs` cycle.
+- A clade upgrade is required to receive a new version; consumers stay frozen on whatever they have until the next `propagate.ts` cycle.
 - Even if clade itself disappears, consumers keep working — they have their own copies.
 
 The trade-off is mild: a 5–10 line action file × 5+ consumer repos = ~30 lines of formal "duplication". Acceptable cost for full isolation.

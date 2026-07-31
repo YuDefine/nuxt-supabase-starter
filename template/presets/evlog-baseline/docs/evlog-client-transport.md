@@ -1,4 +1,4 @@
-<!-- 🔒 LOCKED — managed by clade sync-evlog-presets.mjs -->
+<!-- 🔒 LOCKED — managed by clade sync-evlog-presets.ts -->
 <!-- preset: evlog-baseline -->
 <!-- source: vendor/snippets/evlog-client-transport/README.md -->
 <!-- to: presets/evlog-baseline/docs/evlog-client-transport.md -->

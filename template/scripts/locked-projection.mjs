@@ -5,7 +5,7 @@
  * Shared between:
  *   - wt-helper.mjs (merge-back blocker classification, baseline audit)
  *   - claim-helper / classifyDirtyPaths in wt-helper (Phase 3)
- *   - _validate-manifests.mjs (Phase 6: cross-check against vendor-targets)
+ *   - _validate-manifests.ts (Phase 6: cross-check against vendor-targets)
  *
  * Closes TD-018: the previous wt-helper-local hardcoded RE drifted from
  * actual sync targets (7 prefixes vs 12+ kinds of files written by propagate).
@@ -32,9 +32,9 @@
  * LOCKED_PROJECTION_RE 管** — symlink blob 本身就是 clade-managed 產物，
  * 且 wt-helper merge-back auto-resolve take-theirs(main) 對 mode 120000 blob
  * 行為正確（取 main 側 symlink blob 即還原正確 target）。regex 本體與程式邏輯
- * 零改動；symlink-aware guard 在 propagate.mjs（isCladeDistSymlink）處理。
+ * 零改動；symlink-aware guard 在 propagate.ts（isCladeDistSymlink）處理。
  *
- * NEVER widen this without (a) ensuring propagate.mjs actually writes the new
+ * NEVER widen this without (a) ensuring propagate.ts actually writes the new
  * category, AND (b) confirming consumer auto-reset / wt-helper merge-back
  * classification both honor it.
  */

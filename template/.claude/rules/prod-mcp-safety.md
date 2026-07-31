@@ -19,4 +19,4 @@ Local edits will be reverted by the next sync.
 
 違反後果：<consumer-d> prod DB 被建立孤兒表 `public.sutekh`（2026-06-22）。
 
-偵測：`scripts/audit-tooling-drift.mjs` `prodMcpPermission` signal。
+偵測：`scripts/audit-tooling-drift.ts` `prodMcpPermission` signal。

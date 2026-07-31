@@ -127,7 +127,7 @@ model-invoked skill（frontmatter 省略 `disable-model-invocation`）付**conte
 
 **適用 `disable-model-invocation: true`**：高副作用儀式型（publish / deploy 類）、低頻手動流程——這類即使 description 寫得再精準，也不該讓 model 自主觸發引爆副作用。
 
-**選錯邊訊號**：model-invoked 但實測長期沒被自動觸發過（白付 context 成本卻無收益）；user-invoked 但 user 常忘記它存在（該省的認知成本沒省到，還漏用）。Description 字元預算與 `desc-verbose` detector 對應 TD-232 sweep（`scripts/audit-rule-authoring.mjs`）。
+**選錯邊訊號**：model-invoked 但實測長期沒被自動觸發過（白付 context 成本卻無收益）；user-invoked 但 user 常忘記它存在（該省的認知成本沒省到，還漏用）。Description 字元預算與 `desc-verbose` detector 對應 TD-232 sweep（`scripts/audit-rule-authoring.ts`）。
 
 **One trigger per branch（description 觸發詞紀律，MUST）**：model-invoked description 內每個觸發詞對應一個**真正不同**的使用分支；同一分支的同義改寫（「截圖」「看畫面」「幫我看 UI」寫三次）是 duplication，MUST collapse 成一個。description 開頭前置該 skill 的 leading word，invocation 工作靠它完成。
 
@@ -137,7 +137,7 @@ model-invoked skill（frontmatter 省略 `disable-model-invocation`）付**conte
 
 ## Token 紀律
 
-- 對 always-load rule（frontmatter 無 `paths:`）加段落前，先考慮 conditional-load 或併入既有 §；預算 gate：`scripts/audit-always-load-budget.mjs`（cap 以該 script 為準）。
+- 對 always-load rule（frontmatter 無 `paths:`）加段落前，先考慮 conditional-load 或併入既有 §；預算 gate：`scripts/audit-always-load-budget.ts`（cap 以該 script 為準）。
 - **單條規約的長度校準（MUST）**：長度配問題大小。一條規約的完整形狀是**觸發條件一句 + 該做什麼一句 + 違反成本一句**；需要第四句時先問是不是該拆成兩條。寫完每一段自問「刪掉它，行為會不會變？」——不會變就刪。上一條的預算 gate 是總量閘，這條管每一段自己該多長：**總量沒超標不代表個別段落沒灌水**，而總量一旦逼近 cap，先被犧牲的會是真正需要篇幅的那幾條。
 - **落盤文件的長度校準（MUST）**：規約以外、由 agent 寫進 repo 的文件同樣配長度，判準是**下一個讀它的人要拿它做什麼決定**。寫完每一段自問「刪掉它，讀者的決定會不會變？」——不會變就刪。
 
@@ -154,14 +154,14 @@ model-invoked skill（frontmatter 省略 `disable-model-invocation`）付**conte
 
 ## 稽核
 
-`node scripts/audit-rule-authoring.mjs`（warn-only）：偵測 description 流程摘要、NEVER/MUST 行 nuance clause、skill 內 `@` force-load 連結、SKILL.md 行數超標（>400 行拆分候選；spectra fork 豁免）、description 引號觸發詞 ≥4（one-trigger-per-branch 違反跡象）、**NEVER 牆**兩訊號。
+`node scripts/audit-rule-authoring.ts`（warn-only）：偵測 description 流程摘要、NEVER/MUST 行 nuance clause、skill 內 `@` force-load 連結、SKILL.md 行數超標（>400 行拆分候選；spectra fork 豁免）、description 引號觸發詞 ≥4（one-trigger-per-branch 違反跡象）、**NEVER 牆**兩訊號。
 
 NEVER 牆兩訊號對應 § 反開脫要精準嵌逐字的 ❌ 反例：
 
 - `never-wall`：單檔**連續**列舉式 NEVER 超標（list item / table row；散文段落內的 NEVER 不算）。結構性反模式，**無豁免**——收斂成正向 canonical 契約表 + 少數逐字反制。
 - `never-density`：全檔總量超標。抓「拆進多個子 § 所以單 run 不達標、總量同樣過載」的形狀。
 
-兩個門檻值**依實測分位數定，SoT 在 `scripts/audit-rule-authoring.mjs` 的常數**（連同取值依據寫在該處註解）。這裡 **NEVER** inline 數字——2026-07 實測發現舊門檻雙雙高於語料上限、兩訊號都是永不觸發的死碼，而 rule prose 抄著同一組數字讓它看起來仍在把關。**0 命中要先當「量不到」處理，不是「語料乾淨」**：確認門檻落在實測分佈之內，再下乾淨的結論。
+兩個門檻值**依實測分位數定，SoT 在 `scripts/audit-rule-authoring.ts` 的常數**（連同取值依據寫在該處註解）。這裡 **NEVER** inline 數字——2026-07 實測發現舊門檻雙雙高於語料上限、兩訊號都是永不觸發的死碼，而 rule prose 抄著同一組數字讓它看起來仍在把關。**0 命中要先當「量不到」處理，不是「語料乾淨」**：確認門檻落在實測分佈之內，再下乾淨的結論。
 
 `never-density` **有覆核出口**：紀律型規約依 § 紀律型規約三件套本來就該配逐字反開脫清單，總量偏高是正確形式。逐條覆核後在檔案掛
 
@@ -190,7 +190,7 @@ variance；把需要語境的丟給 regex = 系統性漏判。
 | NEVER 未成牆、總量未過載 | Code | `never-wall` / `never-density`（後者有 180 天覆核出口） |
 | 可變事實指 SoT 而非 inline | Code | `fleet-count-inline` |
 | skill 內無 `@` force-load 連結 | Code | `force-load-link` |
-| pointer 指得到的檔在本 repo 載得進來 | Code | `audit-rule-paths.mjs` 的 `dangling-pointer-target`（diagnostic） |
+| pointer 指得到的檔在本 repo 載得進來 | Code | `audit-rule-paths.ts` 的 `dangling-pointer-target`（diagnostic） |
 | pressure scenario 有實測紀錄且 target 解析得到 | Code | `scenario-unmeasured` / `scenario-no-target` / `scenario-dangling-target` |
 | 失敗型態分類正確（形狀問題沒被寫成禁止句） | **Model** | **未校準** |
 | 反開脫逐字取自真實語料，不是虛構藉口 | **Model** | **未校準** |

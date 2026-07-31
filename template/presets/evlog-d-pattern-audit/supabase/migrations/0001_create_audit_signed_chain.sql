@@ -1,4 +1,4 @@
--- 🔒 LOCKED — managed by clade sync-evlog-presets.mjs
+-- 🔒 LOCKED — managed by clade sync-evlog-presets.ts
 -- preset: evlog-d-pattern-audit
 -- source: vendor/snippets/evlog-audit-signed/migration.sql
 -- to: presets/evlog-d-pattern-audit/supabase/migrations/0001_create_audit_signed_chain.sql

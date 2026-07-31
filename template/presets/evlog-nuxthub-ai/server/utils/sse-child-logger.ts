@@ -1,5 +1,5 @@
 /**
- * 🔒 LOCKED — managed by clade sync-evlog-presets.mjs
+ * 🔒 LOCKED — managed by clade sync-evlog-presets.ts
  * preset: evlog-nuxthub-ai
  * source: vendor/snippets/evlog-mcp-sse-child-logger/child-logger.ts
  * to: presets/evlog-nuxthub-ai/server/utils/sse-child-logger.ts

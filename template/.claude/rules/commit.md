@@ -182,7 +182,7 @@ main 髒 / 有別 session WIP 不能直接跑 `/commit`（會吃別人 staged）
 
 ## Multi-session shared working-tree 的 git hazard
 
-多 session 並行是常態。任何**不帶 path scope** 的 git index / stash 操作（`git add -A` / `git add .` / `git stash push` 不帶 pathspec / `publish.mjs --stash-untracked` / merge-back auto-stash / `git clean`）都會把別 session 未 commit 的東西捲進來 → mixed commit、WIP 永久遺失、deploy commit 內容跟 message 不符。防法統一：**path-scoped 隔離**（`git commit --only -- <paths>`）或**避開共用 index**（per-session worktree）。
+多 session 並行是常態。任何**不帶 path scope** 的 git index / stash 操作（`git add -A` / `git add .` / `git stash push` 不帶 pathspec / `publish.ts --stash-untracked` / merge-back auto-stash / `git clean`）都會把別 session 未 commit 的東西捲進來 → mixed commit、WIP 永久遺失、deploy commit 內容跟 message 不符。防法統一：**path-scoped 隔離**（`git commit --only -- <paths>`）或**避開共用 index**（per-session worktree）。
 
 > 完整危害點 × 規約 × pitfall 交叉索引，見 [[commit.trunk-gates]]。
 

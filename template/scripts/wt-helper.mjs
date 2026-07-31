@@ -214,7 +214,7 @@ async function prompt(question) {
 // Paths under clade-managed projection control are matched by
 // LOCKED_PROJECTION_RE / isLockedProjectionPath imported from
 // `./locked-projection.mjs` (single source of truth shared with the clade
-// _validate-manifests.mjs cross-check — see Phase 6 / closes TD-018).
+// _validate-manifests.ts cross-check — see Phase 6 / closes TD-018).
 
 /**
  * Simple glob matcher for claim expected_paths. Supports:

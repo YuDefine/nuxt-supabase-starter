@@ -28,11 +28,11 @@
 #   7 個 check 彼此獨立（typecheck 寫 .nuxt/，其餘皆唯讀掃描，無共享寫入），
 #   序列跑等於把每個 check 的耗時相加。<consumer-b> 實測序列 ≈ 98s，其中
 #   nuxt-typecheck 57.9s + review-rules-ratchet 39.2s 佔 99%，其餘五項合計
-#   < 0.6s。propagate.mjs 的 push timeout 是 120s，序列跑的餘裕薄到會被機器
+#   < 0.6s。propagate.ts 的 push timeout 是 120s，序列跑的餘裕薄到會被機器
 #   負載變異衝破（v1.4.340 / .341 / .342 連續三版在 propagate 內 timeout，
 #   每次都要事後手動補跑）。並行後 wall time 由最慢的單一 check 決定。
 #
-#   設計對齊 scripts/lib/gate-runner.mjs：**全部跑完**才報告，不第一個失敗
+#   設計對齊 scripts/lib/gate-runner.ts：**全部跑完**才報告，不第一個失敗
 #   就中止——一次 push 就看到所有問題，不必修一條重跑一次。7 個 check 全數
 #   保留、全數仍 blocking，並行只改執行順序，不改任何判定。
 #   CLADE_PREPUSH_SERIAL=1 可退回序列（debug 用；輸出即時不緩衝）。

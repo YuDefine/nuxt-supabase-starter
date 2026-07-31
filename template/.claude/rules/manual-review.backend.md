@@ -140,8 +140,8 @@ Step 8a evidence collection 發現 seed 缺 fixture 時，**MUST** 先補 seed �
 1. **CLI**（一次性 / cross-consumer 全景；**MUST 從 clade home 跑**，script 不散播到 consumer）：
    ```bash
    cd ~/offline/clade
-   node scripts/audit-dev-login-adoption.mjs --consumer <consumer-abs-path>  # 單 consumer
-   node scripts/audit-dev-login-adoption.mjs --json                          # 全 consumer JSON
+   node scripts/audit-dev-login-adoption.ts --consumer <consumer-abs-path>  # 單 consumer
+   node scripts/audit-dev-login-adoption.ts --json                          # 全 consumer JSON
    ```
 2. **Programmatic**（dispatcher / 自家 tool 內 inline；helper 住 clade 中央倉）：
    ```js
@@ -184,7 +184,7 @@ Helper 掃描 priority：**repo root canonical → repo root legacy → repo roo
 | <consumer-h> | ❌ MISSING (nuxt-auth-utils + libsql-drizzle, no cookbook template) | ✅ |
 | <consumer-e> | ❌ MISSING (同上) | ✅ |
 
-**真實 adoption 4/6 + 1 monorepo misdetected + 2 真缺**（不是 1/6）。修法源頭 clade 2026-05-24 land：audit script + helper module + dispatcher fix（`scripts/audit-dev-login-adoption.mjs` + `vendor/snippets/dev-auth/lib/detect-dev-login-route.mjs` + `vendor/scripts/codex-dispatch-screenshot-verify.mjs` 對齊）。下次 agent / 主線撞「is dev-login present？」即走上述 detection 路徑，**NEVER** 再 lazy grep。
+**真實 adoption 4/6 + 1 monorepo misdetected + 2 真缺**（不是 1/6）。修法源頭 clade 2026-05-24 land：audit script + helper module + dispatcher fix（`scripts/audit-dev-login-adoption.ts` + `vendor/snippets/dev-auth/lib/detect-dev-login-route.mjs` + `vendor/scripts/codex-dispatch-screenshot-verify.mjs` 對齊）。下次 agent / 主線撞「is dev-login present？」即走上述 detection 路徑，**NEVER** 再 lazy grep。
 
 ##### Scaffold 行為
 

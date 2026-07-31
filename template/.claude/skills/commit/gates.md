@@ -32,9 +32,9 @@ fi
 
 **解讀**：`AGE < 60` → 別 session 大機率仍活著正在 staging；`AGE >= 60` → stale lock（崩潰殘留，建議手動 `rm "$LOCK"` 但不在 Step 0-Coord 處理，留給 user 自決）。
 
-### Signal 2: publish.mjs untracked stash sidecar
+### Signal 2: publish.ts untracked stash sidecar
 
-`scripts/publish.mjs` 的 `--stash-untracked` flow 跑時會在 `.spectra/stash-meta-<tag>.json` 落 sidecar（含 pid / cwd / fileList），publish 完成才 cleanup。看到 sidecar 代表 publish 流程**還在跑或崩潰未收尾**。
+`scripts/publish.ts` 的 `--stash-untracked` flow 跑時會在 `.spectra/stash-meta-<tag>.json` 落 sidecar（含 pid / cwd / fileList），publish 完成才 cleanup。看到 sidecar 代表 publish 流程**還在跑或崩潰未收尾**。
 
 ```bash
 REPO_ROOT=$(git rev-parse --show-toplevel)
@@ -580,7 +580,7 @@ pnpm run doctor
 
 Doctor health score < 100 或 exit code ≠ 0 → **MUST block commit**，修復後重跑直到 health score 100/100 + 0 warnings + exit 0。**即使 warning 是既有、非本次 diff 引入**也必須修——每次 /commit 順手把既有 doctor warning 修掉，保持零警告 baseline。典型修法：移除 dead imports、修正 re-export 路徑、打斷 import cycles、套用 `readValidatedBody` 取代 raw body read。**NEVER** 以「非我引入」「既有 debt」為由跳過 doctor warning — 0-C gate 不區分新舊，一律全綠。
 
-> **oxfmt batched false-positive**（vite-plus 0.1.21 已知 bug）：第一次 `pnpm format:check` 紅但 single-file `vp fmt --check <path>` 通過，是 batched bug 不是 format issue — **先**跑一次 `pnpm format`（vp fmt --write）再重跑 check 通常就過。**NEVER** 動 `.oxfmtignore` 或 LOCKED projection（`.claude/rules/` / `AGENTS.md` / `CLAUDE.md` / spectra change markdown）試圖讓 oxfmt 滿意 — 那是 governance violation。clade 中央倉 release flow 已在 `scripts/publish.mjs` 主流程加 stable fmt pre-stage（兩輪 `vp fmt --write` + `vp fmt --check`），consumer 端 commit 流程不需再背 workaround SOP。詳見 `docs/pitfalls/2026-05-18-oxfmt-batched-check-false-positive.md`。
+> **oxfmt batched false-positive**（vite-plus 0.1.21 已知 bug）：第一次 `pnpm format:check` 紅但 single-file `vp fmt --check <path>` 通過，是 batched bug 不是 format issue — **先**跑一次 `pnpm format`（vp fmt --write）再重跑 check 通常就過。**NEVER** 動 `.oxfmtignore` 或 LOCKED projection（`.claude/rules/` / `AGENTS.md` / `CLAUDE.md` / spectra change markdown）試圖讓 oxfmt 滿意 — 那是 governance violation。clade 中央倉 release flow 已在 `scripts/publish.ts` 主流程加 stable fmt pre-stage（兩輪 `vp fmt --write` + `vp fmt --check`），consumer 端 commit 流程不需再背 workaround SOP。詳見 `docs/pitfalls/2026-05-18-oxfmt-batched-check-false-positive.md`。
 
 失敗時進入 loop：修復 → `pnpm format`（裸打 `vp fmt` 必須加 `--ignore-path .oxfmtignore`） → 重跑上述步驟 → 直到全綠。loop 的執行者依下方「fix loop 的 codex offload」規則決定（**預設背景 codex**；例外才主線直修）。
 
@@ -874,7 +874,7 @@ diff 觸及下列**任一**（全不成立 → 輸出 `⏭️ 0-F 跳過（diff 
 4. 新增 `rules/core/**` / `rules/modules/**`
 
 ```bash
-node "${CLADE_HOME:-$HOME/offline/clade}/scripts/bp-scan.mjs" --changed-only
+node "${CLADE_HOME:-$HOME/offline/clade}/scripts/bp-scan.ts" --changed-only
 ```
 
 ### 判讀（兩類可靠度不同，NEVER 混為一談）
@@ -893,6 +893,6 @@ script 抓不到「這是一條新的最佳實踐」——那是語意判斷。�
 - **NEVER** 把 B 類命中講成「確定重複」再據此砍掉自己的改動 —— 它是詞彙比對，不是語意重複偵測
 - **NEVER** 為了消 A 類的 snippet 警告補一條沒人會走到的假 pointer；真正的選項是補真 pointer 或刪掉該 snippet
 
-0-F 是 **advisory**：`bp-scan.mjs` 永遠 exit 0，不擋 commit。A 類有命中卻選擇不處理時，完成報告 MUST 寫明哪一條、為什麼。
+0-F 是 **advisory**：`bp-scan.ts` 永遠 exit 0，不擋 commit。A 類有命中卻選擇不處理時，完成報告 MUST 寫明哪一條、為什麼。
 
 通過後輸出 `✅ 0-F 通過（A 類 N 條已處理／B 類 M 條已判讀）`。

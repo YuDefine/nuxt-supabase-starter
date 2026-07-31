@@ -313,7 +313,7 @@ export function getDb(event: H3Event) {
 
 ## § 5 — 違反偵測
 
-`scripts/audit-wrangler-config.mjs` 偵測：
+`scripts/audit-wrangler-config.ts` 偵測：
 
 1. 根目錄存在 `wrangler.toml`（應改 jsonc）→ `wrangler.format_drift`
 2. 根目錄完全缺 wrangler 檔 → `wrangler.missing`
@@ -354,7 +354,7 @@ export function getDb(event: H3Event) {
 
 - 改 Track A → B：移除 `@nuxthub/core` + 建 void.json + 加 voidPlugin + 寫 `server/utils/db.ts` + `blob.ts` helper + 改 deploy.yml 走 `pnpm run void:deploy` + GitHub OIDC（詳見 `/yudefine-deploy` Phase 1-10 runbook）
 - 改 Supabase → D1（Track A）：補 `@nuxthub/core` + 改 `hub: {}` config + 跑 audit 重驗
-- 跑 audit script 重驗（`scripts/audit-wrangler-config.mjs`）必須 0 violation 才算改派完成
+- 跑 audit script 重驗（`scripts/audit-wrangler-config.ts`）必須 0 violation 才算改派完成
 
 ## § 7 — Self-hosted runner CI 反 pattern
 

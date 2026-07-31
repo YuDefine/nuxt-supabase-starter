@@ -68,7 +68,7 @@ Local edits will be reverted by the next sync.
    git diff --name-only <base>..<head> -- '*.vue' '*.tsx' '*.jsx' '*.css' '*.scss' '*.html' \
      | xargs -r grep -lE 'fetchpriority|content-visibility|scheduler\.(yield|postTask)|requestIdleCallback|speculationrules|web-vitals|onLCP|onINP|onCLS'
    ```
-   完整 keyword 清單以 `scripts/audit-modern-web-skill.mjs` `TOPIC_KEYWORDS.performance` 為真相源。
+   完整 keyword 清單以 `scripts/audit-modern-web-skill.ts` `TOPIC_KEYWORDS.performance` 為真相源。
    - **命中** → **MUST** 在 clade home 跑 chrome-devtools-mcp 實測，把 LCP / INP / CLS + 關鍵 insight **inline 寫進 review report**；改善前後**各**跑一次寫前後對比。how 見 `~/.claude/rules/modern-web-mcp.md` § Performance 主題：實測閉環 + `~/offline/clade/vendor/snippets/modern-web-guidance/README.md`。
    - **沒命中** → silent skip；但若改動觸及 hero image / above-the-fold layout / 字體載入，即使 keyword 未命中也 **SHOULD** 實測（keyword 偵測是下界）。
 

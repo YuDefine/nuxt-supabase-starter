@@ -28,8 +28,8 @@ Local edits will be reverted by the next sync.
 | --- | --- | --- |
 | Ad-hoc `git add + git commit` 吃別 session staged WIP | [[commit]] § Ad-hoc commit 必走 `git commit --only -- <paths>` | [[pitfall-consumer-ad-hoc-commit-eats-other-session-staged]] |
 | `git stash push` 不帶 pathspec → scope leak | [[worktree-default]] §1（Stash strategy 隱性風險 / Anti-pattern 手動 selective baseline sync） | [[pitfall-git-stash-pathspec-scope-leak]] |
-| `publish.mjs` auto-stash 把 tracked file 捲進 deploy commit | [[worktree-default]] §1 + [[clade-publish]] § Step 3（分組 commit，禁 `--stash-untracked` 對 tracked dirty） | [[pitfall-publish-auto-stash-bundles-tracked-into-deploy-commit]] |
-| `publish.mjs` flow 清掉別 session 的 parallel untracked file | [[worktree-default]] §1（Pre-fork baseline guard） | [[pitfall-publish-flow-cleans-parallel-untracked]] |
+| `publish.ts` auto-stash 把 tracked file 捲進 deploy commit | [[worktree-default]] §1 + [[clade-publish]] § Step 3（分組 commit，禁 `--stash-untracked` 對 tracked dirty） | [[pitfall-publish-auto-stash-bundles-tracked-into-deploy-commit]] |
+| `publish.ts` flow 清掉別 session 的 parallel untracked file | [[worktree-default]] §1（Pre-fork baseline guard） | [[pitfall-publish-flow-cleans-parallel-untracked]] |
 | Merge-back auto-stash 整批捲走別 session WIP | [[worktree-default]] §5.5（Merge-back ceremony / Stash reconcile） | [[pitfall-merge-back-autostash-bulk-captures-other-session-wip]] |
 
 已撞 mixed commit → [[commit]] § Recovery from mixed commit (multi-session safety)；cross-session staged 偵測層 → commit SKILL `Step 0-Coord`。

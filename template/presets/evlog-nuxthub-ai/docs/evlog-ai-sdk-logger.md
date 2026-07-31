@@ -1,4 +1,4 @@
-<!-- 🔒 LOCKED — managed by clade sync-evlog-presets.mjs -->
+<!-- 🔒 LOCKED — managed by clade sync-evlog-presets.ts -->
 <!-- preset: evlog-nuxthub-ai -->
 <!-- source: vendor/snippets/evlog-ai-sdk-logger/README.md -->
 <!-- to: presets/evlog-nuxthub-ai/docs/evlog-ai-sdk-logger.md -->

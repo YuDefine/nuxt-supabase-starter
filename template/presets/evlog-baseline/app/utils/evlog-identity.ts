@@ -1,5 +1,5 @@
 /**
- * 🔒 LOCKED — managed by clade sync-evlog-presets.mjs
+ * 🔒 LOCKED — managed by clade sync-evlog-presets.ts
  * preset: evlog-baseline
  * source: vendor/snippets/evlog-client-transport/identity-helper.ts
  * to: presets/evlog-baseline/app/utils/evlog-identity.ts

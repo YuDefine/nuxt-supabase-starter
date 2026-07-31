@@ -312,7 +312,7 @@ review-gui 主頁卡片上的「📋 補 evidence prompt」按鈕是 **fallback*
 - `[verify:e2e]` / `[verify:api]` annotation 寫入後可自動 flip `[x]`；`[verify:ui]` annotation 後仍 **MUST** 使用者在 review GUI 點 OK
 - `[review:ui]` **NEVER** 由 agent 代勾；`[discuss]` 由主線在 archive Step 2.5 主動準備 evidence 走 walkthrough，OK → 勾 `[x]` + `(claude-discussed: <ISO>)`
 
-Verify channel pre-baseline 假設（all `verify:*` channel 都依賴 codebase-level baseline，**MUST** 主線預檢、缺則停下回報，**NEVER** 派 agent 撞 baseline 缺）、dev-login route missing → scaffold-first hard rule、Detection helper（`vendor/snippets/dev-auth/lib/detect-dev-login-route.mjs`）+ audit script（`scripts/audit-dev-login-adoption.mjs`）為 detection SoT、cookbook 範本（`vendor/snippets/verify-channels/`）：詳見 [[manual-review.backend]] § `[verify:*]` flow + Pre-verify baseline 假設 + Dev-login route missing → scaffold-first hard rule。
+Verify channel pre-baseline 假設（all `verify:*` channel 都依賴 codebase-level baseline，**MUST** 主線預檢、缺則停下回報，**NEVER** 派 agent 撞 baseline 缺）、dev-login route missing → scaffold-first hard rule、Detection helper（`vendor/snippets/dev-auth/lib/detect-dev-login-route.mjs`）+ audit script（`scripts/audit-dev-login-adoption.ts`）為 detection SoT、cookbook 範本（`vendor/snippets/verify-channels/`）：詳見 [[manual-review.backend]] § `[verify:*]` flow + Pre-verify baseline 假設 + Dev-login route missing → scaffold-first hard rule。
 
 ## Post-Edit Validation Gate（hard rule）
 

@@ -99,7 +99,7 @@ Agent **MUST NOT** 跑 `git checkout -b`、`git branch <name>`、或任何會產
 
 ### 工具內部 branch 建立不受此規約限制
 
-User 顯式呼叫的 script（如 `propagate.mjs` 建 `bump/<version>`）有 documented behavior，屬於 user authorized invocation。判定原則：「branch 是不是 user 透過工具 invocation 隱含授權的？」是 → 通過；不是 → 必須先問。
+User 顯式呼叫的 script（如 `propagate.ts` 建 `bump/<version>`）有 documented behavior，屬於 user authorized invocation。判定原則：「branch 是不是 user 透過工具 invocation 隱含授權的？」是 → 通過；不是 → 必須先問。
 
 ### Agent 想自由發揮命名（如 `feature/x` / `fix-bug-y`）
 
@@ -122,7 +122,7 @@ User 顯式呼叫的 script（如 `propagate.mjs` 建 `bump/<version>`）有 doc
 
 ## §4 與 propagate 的互動
 
-`scripts/propagate.mjs` 的 worktree-aware preflight 偵測 cwd 在非 main worktree 即 exit non-zero — **publish + propagate 必須在 clade 主 worktree 跑**（先 `cd ~/offline/clade`）。理由：跨 worktree 寫投影層在 file watcher / staging 區會撞，refuse-and-guide 比悄悄出錯安全。
+`scripts/propagate.ts` 的 worktree-aware preflight 偵測 cwd 在非 main worktree 即 exit non-zero — **publish + propagate 必須在 clade 主 worktree 跑**（先 `cd ~/offline/clade`）。理由：跨 worktree 寫投影層在 file watcher / staging 區會撞，refuse-and-guide 比悄悄出錯安全。
 
 `/wt` 建 worktree 時已由 `wt-helper add` 跑 `git merge --ff-only origin/main` 拉最新投影層，一般不需再手動 sync。
 

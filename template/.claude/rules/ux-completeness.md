@@ -143,7 +143,7 @@ propose 階段的 `## Affected Entity Matrix` 每個 **write action**（create /
 ### 機械檢查
 
 - **Post-propose gate**：`post-propose-check.sh` Check 8 會自動掃 `Affected Entity Matrix` action 列 vs `User Journeys` URL path，不匹配印 warning
-- **Fleet audit**（advisory）：`node scripts/audit-route-coverage.mjs --all-consumers` 掃既有 codebase write endpoint × UI caller 覆蓋率
+- **Fleet audit**（advisory）：`node scripts/audit-route-coverage.ts --all-consumers` 掃既有 codebase write endpoint × UI caller 覆蓋率
 
 ### 為什麼在 propose 階段
 

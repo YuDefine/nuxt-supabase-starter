@@ -53,10 +53,10 @@ Consumer 端的 `.claude/` / `scripts/spectra-advanced/` / vendor 副本是 clad
 
 ### 範例 1：audit script glob 對 macOS symlink 路徑失敗
 
-- 問題：`evlog-adoption-audit.mjs` 用 `-g "server/plugins/**"` 對 `/tmp/scaffold` (`/tmp` 是 `/private/tmp` symlink) 不命中
+- 問題：`evlog-adoption-audit.ts` 用 `-g "server/plugins/**"` 對 `/tmp/scaffold` (`/tmp` 是 `/private/tmp` symlink) 不命中
 - 修法：改 `**/server/plugins/**`
-- 修在哪：`~/offline/clade/scripts/evlog-adoption-audit.mjs`（clade 真相層）
-- 散播：propagate 後各 consumer 的 `scripts/evlog-adoption-audit.mjs` 副本同步收到
+- 修在哪：`~/offline/clade/scripts/evlog-adoption-audit.ts`（clade 真相層）
+- 散播：propagate 後各 consumer 的 `scripts/evlog-adoption-audit.ts` 副本同步收到
 - → **登 clade TD**
 
 ### 範例 2：<consumer-a> staging app 廣布 500

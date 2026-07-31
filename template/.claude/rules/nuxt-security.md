@@ -98,7 +98,7 @@ security: {
 
 ## Integration Recipes（按 integration 組合 CSP）
 
-Consumer 的 CSP 設定 = **baseline**（上方 11 欄位）+ **所有用到的 integration recipes 聯集**。每個 recipe 列出該 integration 需要的 CSP directives 與偵測方式。Audit script `scripts/audit-nuxt-security.mjs` 自動偵測 consumer 用了哪些 integration 並 cross-check CSP 是否對齊。
+Consumer 的 CSP 設定 = **baseline**（上方 11 欄位）+ **所有用到的 integration recipes 聯集**。每個 recipe 列出該 integration 需要的 CSP directives 與偵測方式。Audit script `scripts/audit-nuxt-security.ts` 自動偵測 consumer 用了哪些 integration 並 cross-check CSP 是否對齊。
 
 ### Cloudflare Web Analytics
 

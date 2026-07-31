@@ -188,7 +188,7 @@ creds、port 可能不同的乾淨 CI 機器上，會起來嗎？」**
 
 ## Audit signal
 
-`~/offline/clade/scripts/playwright-webserver-audit.mjs`（cross-consumer，diagnostic-only，
+`~/offline/clade/scripts/playwright-webserver-audit.ts`（cross-consumer，diagnostic-only，
 exit 0）掃每個 consumer 的 playwright config，語意感知 CI 條件分支：`webServer.command` 含
 dev-server 反模式關鍵字（`pnpm dev` / `concurrently` / `dev-tunnel` / `tunnel`）**且無
 `process.env.CI ?` 分支** → 報 `playwright.webserver_ci_unsafe`；`reuseExistingServer: true`

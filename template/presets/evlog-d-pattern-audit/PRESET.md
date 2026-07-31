@@ -1,4 +1,4 @@
-<!-- 🔒 LOCKED — managed by clade sync-evlog-presets.mjs -->
+<!-- 🔒 LOCKED — managed by clade sync-evlog-presets.ts -->
 <!-- preset: evlog-d-pattern-audit (auto-generated) -->
 
 # Preset: evlog-d-pattern-audit
@@ -87,5 +87,5 @@ export default defineNuxtConfig({
 
 ## 來源
 
-clade `~/offline/clade/scripts/sync-evlog-presets.mjs` 自動同步。
+clade `~/offline/clade/scripts/sync-evlog-presets.ts` 自動同步。
 consumer 端 fork 修改 = drift；改回 clade vendor snippets 並 propagate。

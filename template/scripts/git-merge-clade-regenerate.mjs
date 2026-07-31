@@ -22,7 +22,7 @@
  *     state.
  *
  * Scope: this driver does NOT regenerate from external sources; it trusts
- * propagate.mjs to have written a valid %A before the merge ran. The
+ * propagate.ts to have written a valid %A before the merge ran. The
  * "regenerate" in the script name refers to propagate's role; the driver only
  * validates.
  *

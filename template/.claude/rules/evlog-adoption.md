@@ -299,7 +299,7 @@ rg -n "defineErrorCatalog\\(['\"](?:<consumer-b>|<consumer-a>|<consumer-d>|rag|s
 rg -nE "code:\\s*['\"][a-z][a-z0-9._]*\\.[A-Z_]+['\"]" "**/*.test.ts" "**/*.spec.ts"
 ```
 
-完整 audit signal 在 `scripts/evlog-adoption-audit.mjs`：`catalog.errorCatalogs` / `catalog.auditCatalogs` / `catalog.declareModuleBlocks` / `catalog.adhocServerErrors`（warn）/ `catalog.testHardcodedCode`（block）/ `catalog.consumerNamespacedPrefix`（block）/ `catalog.missingDeclareModule`（warn）/ `catalog.keyNotUpperSnake`（block）/ `catalog.prefixNotLowerDot`（block）/ `catalog.codeOverrideAtCallSite`（block）。
+完整 audit signal 在 `scripts/evlog-adoption-audit.ts`：`catalog.errorCatalogs` / `catalog.auditCatalogs` / `catalog.declareModuleBlocks` / `catalog.adhocServerErrors`（warn）/ `catalog.testHardcodedCode`（block）/ `catalog.consumerNamespacedPrefix`（block）/ `catalog.missingDeclareModule`（warn）/ `catalog.keyNotUpperSnake`（block）/ `catalog.prefixNotLowerDot`（block）/ `catalog.codeOverrideAtCallSite`（block）。
 
 ## Drain 選擇指引
 
@@ -416,4 +416,4 @@ rg -n "error:\\s*[0-9]+" nuxt.config.ts packages/**/nuxt.config.ts # 檢查 erro
 rg -n "consola" server package.json packages/**/server packages/**/package.json # consola 遷移漏網
 ```
 
-完整 static audit script 已落地在 `scripts/evlog-adoption-audit.mjs`。
+完整 static audit script 已落地在 `scripts/evlog-adoption-audit.ts`。

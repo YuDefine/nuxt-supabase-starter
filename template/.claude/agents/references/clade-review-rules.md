@@ -16,11 +16,11 @@ Local edits will be reverted by the next sync.
 > | 層 | 位置 | 職責 |
 > | --- | --- | --- |
 > | **pre-commit / pre-push / CI** | `vendor/review-rules/patterns.json` + `vendor/review-rules/scan.mjs` | 純 grep pattern，三層自動執行（fail-fast，不靠 agent 自律） |
-> | **audit script** | `scripts/audit-review-rules.mjs --all-consumers` | 半機械 grep fleet scanner，reference signal |
+> | **audit script** | `scripts/audit-review-rules.ts --all-consumers` | 半機械 grep fleet scanner，reference signal |
 > | **path-scoped rule** | `rules/modules/framework/nuxt/nuxt-overlay-slot.md` / `nuxt-form-validation.md` / `nuxt-error-localization.md` | 語意規則，改 `.vue` 時 session 自動載入 |
 > | **本檔（語意段）** | commit 0-A review prompt 的 Semantic Verdict 契約 | 複雜語意規則（需讀 context 判斷），機械層抓不到的；review prompt 逐 verdict-id 輸出 pass/fail/n-a |
 >
-> 每個 `##` section 標題下的 `> enforcement:` 行標明其機械 / 語意歸屬；`scripts/audit-review-rules.mjs --alignment` 對照 `patterns.json` 驗證一致性，為 publish blocking gate。
+> 每個 `##` section 標題下的 `> enforcement:` 行標明其機械 / 語意歸屬；`scripts/audit-review-rules.ts --alignment` 對照 `patterns.json` 驗證一致性，為 publish blocking gate。
 
 ## 自定義 Review 清單熱區
 
@@ -53,7 +53,7 @@ Reviewer **額外**需人工判斷：
 
 ## Pinia Colada mutation loading 欄位（機械層難抓的靜默 bug）
 
-> enforcement: audit(audit-pinia-mutation-loading.mjs)（單檔偵測器另見 `vendor/scripts/checks/mutation-loading-detect.mjs`；無對應 patterns.json semantic id）
+> enforcement: audit(audit-pinia-mutation-loading.ts)（單檔偵測器另見 `vendor/scripts/checks/mutation-loading-detect.mjs`；無對應 patterns.json semantic id）
 
 `@pinia/colada` 的 `useMutation()` 回傳的 `status`（`'pending' | 'success' | 'error'`）是 **data-state**，mount 當下就是 `'pending'`（還沒呼叫過、沒 data），**與有沒有執行無關**。拿它當 loading → 按鈕 / spinner 一進頁面就永久 loading，且 typecheck 全綠（`status` 是合法欄位、`'pending'` 是合法值）、不發任何 request、查 log 也查不到。實證：<consumer-a> 30+ 處、<consumer-b> 3 處（含**跨行 destructuring** 寫法，舊單行 grep heuristic 會漏抓）。
 
@@ -73,7 +73,7 @@ node vendor/scripts/checks/mutation-loading-detect.mjs --all --warn-only --root 
 node vendor/scripts/checks/mutation-loading-detect.mjs $(git diff --name-only <base>..<head> -- '*.vue')
 ```
 
-同一偵測器由 pre-commit（blocking）/ pre-push（warn-only）gate 共用，reviewer 看到 gate 已綠時可略過手動掃。正向 canonical pattern 與 query/mutation 欄位語意對照見 golden path [[page-loading-golden-path]] Tier 2.5（含 4 層 enforcement 表）；cross-consumer 盤點走 `scripts/audit-pinia-mutation-loading.mjs`。
+同一偵測器由 pre-commit（blocking）/ pre-push（warn-only）gate 共用，reviewer 看到 gate 已綠時可略過手動掃。正向 canonical pattern 與 query/mutation 欄位語意對照見 golden path [[page-loading-golden-path]] Tier 2.5（含 4 層 enforcement 表）；cross-consumer 盤點走 `scripts/audit-pinia-mutation-loading.ts`。
 
 ## MCP / DDL 存取限制
 
@@ -110,11 +110,11 @@ node vendor/scripts/checks/mutation-loading-detect.mjs $(git diff --name-only <b
 
 ## evlog 採用一致性
 
-> enforcement: mechanical(server-console-logging, server-raw-throw-error) + semantic(evlog-consistency) + audit(evlog-adoption-audit.mjs)
+> enforcement: mechanical(server-console-logging, server-raw-throw-error) + semantic(evlog-consistency) + audit(evlog-adoption-audit.ts)
 
 若專案已採用 evlog（`package.json` 列了 `evlog` 依賴），新寫或大改的程式碼 **MUST** 套用 evlog 模式。
 
-> **機械層已覆蓋**：`evlog-adoption-audit.mjs` 掃 `console.*` in server、consola import、createError no-why 等 block signal。本段是 reviewer 補語意判斷。
+> **機械層已覆蓋**：`evlog-adoption-audit.ts` 掃 `console.*` in server、consola import、createError no-why 等 block signal。本段是 reviewer 補語意判斷。
 
 | 禁止 pattern | 應改為 | 說明 |
 | --- | --- | --- |
@@ -129,11 +129,11 @@ node vendor/scripts/checks/mutation-loading-detect.mjs $(git diff --name-only <b
 
 ## D-pattern audit 一致性
 
-> enforcement: mechanical(audit-table-direct-insert) + semantic(d-pattern-audit) + audit(d-pattern-audit.mjs)
+> enforcement: mechanical(audit-table-direct-insert) + semantic(d-pattern-audit) + audit(d-pattern-audit.ts)
 
 若專案已採用 D-pattern（`server/utils/audit.ts` 存在），新寫或大改的 mutation handler **MUST** 套用。
 
-> **機械層已覆蓋**：`d-pattern-audit.mjs` 掃 helper bypass / PII in migration / createError no-why / log.audit missing eventId。本段是 reviewer 補語意判斷。
+> **機械層已覆蓋**：`d-pattern-audit.ts` 掃 helper bypass / PII in migration / createError no-why / log.audit missing eventId。本段是 reviewer 補語意判斷。
 
 | 禁止 pattern | 應改為 | 說明 |
 | --- | --- | --- |
@@ -149,11 +149,11 @@ node vendor/scripts/checks/mutation-loading-detect.mjs $(git diff --name-only <b
 
 ## Nuxt a11y 採用一致性
 
-> enforcement: semantic(a11y-adoption) + audit(audit-review-rules.mjs)
+> enforcement: semantic(a11y-adoption) + audit(audit-review-rules.ts)
 
 若專案已採用 `@nuxt/a11y`，新寫或大改的 UI 元件 **MUST** 套用 a11y 規則。
 
-> **機械層已覆蓋**：`audit-review-rules.mjs` 掃 img 缺 alt / icon-only 缺 aria-label / div @click / 正數 tabindex。本段是 reviewer 補需 AI 語意判斷的項目。
+> **機械層已覆蓋**：`audit-review-rules.ts` 掃 img 缺 alt / icon-only 缺 aria-label / div @click / 正數 tabindex。本段是 reviewer 補需 AI 語意判斷的項目。
 
 | 禁止 pattern | 應改為 | WCAG |
 | --- | --- | --- |

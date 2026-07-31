@@ -1,5 +1,5 @@
 /**
- * 🔒 LOCKED — managed by clade sync-evlog-presets.mjs
+ * 🔒 LOCKED — managed by clade sync-evlog-presets.ts
  * preset: evlog-d-pattern-audit
  * source: vendor/snippets/audit-pattern/drain.ts
  * to: presets/evlog-d-pattern-audit/server/plugins/evlog-audit-drain.ts

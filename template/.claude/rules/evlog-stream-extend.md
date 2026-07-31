@@ -104,7 +104,7 @@ evlog 預設只「寫」wide event 出去（FS / Sentry / Postgres / 自家 drai
 └─ 是 → 過「反採用條件」→ 導入對應 template
 ```
 
-`scripts/evlog-adoption-audit.mjs` 4 條 reference signal（純度量不 block；>0 即採用，不設目標值）：
+`scripts/evlog-adoption-audit.ts` 4 條 reference signal（純度量不 block；>0 即採用，不設目標值）：
 
 ```
 extend.streamConsumer    useEvlogStream / EventSource _evlog stream 命中數（/extend/stream）

@@ -247,7 +247,7 @@ node ~/offline/clade/vendor/scripts/codex-dispatch.mjs \
 - `3` — 機械故障（codex 不存在 / spawn error / timeout / 無 parseable JSON）：唯一允許 Claude fallback 的情形，且 MUST 留下可審計痕跡（per 各 skill 對應段）
 - `4` — quota 擋（5h window primary used_percent > 85）：非急件延後到下一個 window；急件 `AskUserQuestion` 讓 user 拍板（`--no-quota-check` 強派）
 
-**內建行為**：`--ephemeral --disable memories`（memories 91MB 死循環地雷，恆關）、quota check（預設開）、telemetry append 到 `~/.codex/dispatch-ledger.jsonl`（fail-open；`scripts/audit-codex-adoption.mjs` 靠它量 adoption）。
+**內建行為**：`--ephemeral --disable memories`（memories 91MB 死循環地雷，恆關）、quota check（預設開）、telemetry append 到 `~/.codex/dispatch-ledger.jsonl`（fail-open；`scripts/audit-codex-adoption.ts` 靠它量 adoption）。
 
 **`--output-schema`**：codex 0.138+ 支援以 JSON Schema 約束最終回覆。新 dispatch 場景**預設提供 schema 檔**，取代脆弱的「stdout 結尾 JSON 摘要」約定；既有 dispatcher（screenshot-verify / pre-handoff-check）維持現行契約不回頭改。
 
@@ -362,7 +362,7 @@ Codex 一律由主線直接 Bash 派 → notification-only，`ScheduleWakeup` �
 - **MUST** 立刻 record decision：`node ~/offline/clade/vendor/scripts/residency-classify.mjs record --consumer-path . --change <change> --verdict <v> --executor <codex|claude> [--reason ...]` → 落 `.spectra/residency-ledger.jsonl`
 - verdict=`codex-primary` 而決定 executor=`claude` → `--reason` 必填（record 入口會擋）
 - archive-gate **Check 8** 機械驗 record 存在：缺 record → archive exit 2；正當例外加 `<!-- residency-decision: intentional, reason: ... -->` 到 tasks.md 繞過
-- adoption 量測：`node ~/offline/clade/scripts/audit-codex-adoption.mjs`（clade home 稽核：verdict × executor 表 + dispatch ledger 分桶）
+- adoption 量測：`node ~/offline/clade/scripts/audit-codex-adoption.ts`（clade home 稽核：verdict × executor 表 + dispatch ledger 分桶）
 
 ## Spectra Propose Handoff（具體做法）
 

@@ -47,7 +47,7 @@ DB 存 UTC instant，顯示層轉 local。所有中間層不做隱式轉換，�
 
 ## 偵測 signal
 
-對應 `scripts/audit-timezone.mjs`：
+對應 `scripts/audit-timezone.ts`：
 
 | Signal | 說明 |
 |---|---|

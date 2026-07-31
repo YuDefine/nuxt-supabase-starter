@@ -3,3 +3,8 @@
 .claude/hub.json merge=clade-regenerate
 .claude/.hub-state.json merge=clade-regenerate
 # end clade-managed merge drivers
+
+# clade-managed merge drivers — managed by propagate.ts (do not edit between markers)
+.claude/hub.json merge=clade-regenerate
+.claude/.hub-state.json merge=clade-regenerate
+# end clade-managed merge drivers

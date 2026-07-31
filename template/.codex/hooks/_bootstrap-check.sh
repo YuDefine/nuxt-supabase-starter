@@ -8,7 +8,7 @@
 #   1. 確認 clade repo 找得到
 #   2. 確認 .claude/hub.json 存在
 #   3. 跑 sync-rules --check 偵測 drift / orphan
-#   4. drift 存在 → 嘗試自動修復（跑 bootstrap-hub.mjs）
+#   4. drift 存在 → 嘗試自動修復（跑 bootstrap-hub.ts）
 #   5. 仍失敗 → 印 blocking warning（讓使用者明確看到）
 #
 # Vendor 在 consumer 的 .codex/hooks/_bootstrap-check.sh，由 clade vendor 維護。
@@ -113,7 +113,7 @@ export CLADE_HOME="$CLADE_ROOT"
 # 4. sync-rules --check：偵測 drift / orphan
 # ─────────────────────────────────────────────────────────
 
-CHECK_OUTPUT=$(node "$CLADE_ROOT/scripts/sync-rules.mjs" --check 2>&1)
+CHECK_OUTPUT=$(node "$CLADE_ROOT/scripts/sync-rules.ts" --check 2>&1)
 CHECK_EXIT=$?
 
 if [[ $CHECK_EXIT -eq 0 ]]; then
@@ -126,10 +126,10 @@ echo "[clade] 偵測到 drift / orphan，自動修復中..." >&2
 echo "$CHECK_OUTPUT" >&2
 echo "" >&2
 
-if node "$CLADE_ROOT/scripts/bootstrap-hub.mjs" >&2 \
-   && node "$CLADE_ROOT/scripts/sync-rules.mjs" --prune >/dev/null 2>&1; then
+if node "$CLADE_ROOT/scripts/bootstrap-hub.ts" >&2 \
+   && node "$CLADE_ROOT/scripts/sync-rules.ts" --prune >/dev/null 2>&1; then
   # 再 check 一次確認修好了
-  if node "$CLADE_ROOT/scripts/sync-rules.mjs" --check >/dev/null 2>&1; then
+  if node "$CLADE_ROOT/scripts/sync-rules.ts" --check >/dev/null 2>&1; then
     echo "[clade] ✓ 自動修復成功" >&2
     exit 0
   fi

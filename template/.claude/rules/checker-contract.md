@@ -60,7 +60,7 @@ skipped: <排除目錄/pattern/原因；沒有就寫 none>
 
 下游命中即 `exit 0`，上游收到 SIGPIPE(141)，`pipefail` 讓整條 pipeline 回非零 → 條件式走**相反**分支，命中被判成沒命中。這是 fail-open：gate 有執行、有 exit code，只是判斷反了。只在上游輸出超過 pipe buffer（~64KB）且命中行在前段時發生，小樣本測試永遠正常——而那正是「大批量變更」這個 gate 最該啟動的形狀。
 
-存量掃 `node ~/offline/clade/scripts/audit-gate-coverage.mjs` § 4。實證見 `~/offline/clade/docs/pitfalls/2026-07-25-grep-q-pipefail-sigpipe-false-negative.md`。
+存量掃 `node ~/offline/clade/scripts/audit-gate-coverage.ts` § 4。實證見 `~/offline/clade/docs/pitfalls/2026-07-25-grep-q-pipefail-sigpipe-false-negative.md`。
 
 ## 執行載體（檔案存在 ≠ 有東西會執行它）
 
@@ -117,7 +117,7 @@ Checker 的每一條判準 **MUST** 綁在**可觀察的行為事實**上。命�
 | 這筆記錄是否已存在 | 標題字串比對 | 業務唯一鍵的組合 |
 | 這個 phase 是不是 UI 層 | 標題含 `view` | 該格式自帶的顯式標記（`（非 view）` / `（view-only phase）`） |
 
-前兩列都是實證：`audit-consumer-meta-adoption.mjs` 曾用檔名判準誤報「<consumer-b> 沒有部署流程」——它的 deploy job 住在 `ci.yml` 裡（`name: CI / Deploy` + `jobs.deploy` 做 rsync + SSH）；`notion-sync.mjs` 曾用「非 main」選 worktree，選到鄰居 change 的 worktree，因為**每個 worktree 都帶著 fork 當下的全部 change 目錄**。第四列是「`（非 view）`含 view」的反向誤判。
+前兩列都是實證：`audit-consumer-meta-adoption.ts` 曾用檔名判準誤報「<consumer-b> 沒有部署流程」——它的 deploy job 住在 `ci.yml` 裡（`name: CI / Deploy` + `jobs.deploy` 做 rsync + SSH）；`notion-sync.mjs` 曾用「非 main」選 worktree，選到鄰居 change 的 worktree，因為**每個 worktree 都帶著 fork 當下的全部 change 目錄**。第四列是「`（非 view）`含 view」的反向誤判。
 
 ### 慣例判準的失敗形狀
 

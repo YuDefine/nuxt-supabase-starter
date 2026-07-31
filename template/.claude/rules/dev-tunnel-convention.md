@@ -51,7 +51,7 @@ Local edits will be reverted by the next sync.
 **權威來源**：
 - 規約（含 anti-pattern 判定）：[[dev-port-allocation]] § 2.6
 - 範本（`nuxt.config.ts.template` + verify helper）：`~/offline/clade/vendor/snippets/dev-tunnel-resilient/`
-- Audit signal：`scripts/dev-port-audit.mjs` § 2.6 `readTunnelResilientWrapper`（裸呼叫報 BARE，diagnostic-only）
+- Audit signal：`scripts/dev-port-audit.ts` § 2.6 `readTunnelResilientWrapper`（裸呼叫報 BARE，diagnostic-only）
 
 **Pitfall**：[[pitfall-vite-plugin-cloudflare-tunnel-restart-loop-lockout]]
 

@@ -73,7 +73,7 @@ Q3 最後一支最常被漏掉：**一條實踐若存在「推薦做法 vs 過�
 ## plan
 
 ```bash
-node ~/offline/clade/scripts/bp-scan.mjs --plan --repo <目標 repo 絕對路徑>
+node ~/offline/clade/scripts/bp-scan.ts --plan --repo <目標 repo 絕對路徑>
 ```
 
 讀該 repo `.claude/hub.json` 的 `modules` + clade `registry/conventions.json`，輸出這個 stack 該套用的 convention、各自的 `rule_refs` / `snippet_refs` / `doc_ref`，與現況 adoption。
@@ -83,7 +83,7 @@ node ~/offline/clade/scripts/bp-scan.mjs --plan --repo <目標 repo 絕對路徑
 ## check
 
 ```bash
-node ~/offline/clade/scripts/bp-scan.mjs --changed-only
+node ~/offline/clade/scripts/bp-scan.ts --changed-only
 ```
 
 對 staged diff 比對既有資產索引。輸出分兩類，**判讀方式不同**：

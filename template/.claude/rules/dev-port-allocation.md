@@ -16,7 +16,7 @@ Local edits will be reverted by the next sync.
 
 > SoT：`registry/consumers.json` 每個 consumer entry 的 `dev_ports` object。
 >
-> Audit signal：`scripts/dev-port-audit.mjs`。
+> Audit signal：`scripts/dev-port-audit.ts`。
 >
 > Cookbook 範本：`vendor/snippets/dev-port/`。
 

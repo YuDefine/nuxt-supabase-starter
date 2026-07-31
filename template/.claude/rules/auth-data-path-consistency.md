@@ -50,7 +50,7 @@ Local edits will be reverted by the next sync.
 
 ## 偵測
 
-`scripts/audit-auth-data-path.mjs` 偵測各 consumer 的 client-side Supabase table query 與 auth 策略對齊狀態。已接入 `convention-conformance-audit.mjs`，`/clade-health live` 可檢測。
+`scripts/audit-auth-data-path.ts` 偵測各 consumer 的 client-side Supabase table query 與 auth 策略對齊狀態。已接入 `convention-conformance-audit.ts`，`/clade-health live` 可檢測。
 
 ## 相關規則
 

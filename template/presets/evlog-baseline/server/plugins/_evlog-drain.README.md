@@ -1,4 +1,4 @@
-<!-- 🔒 LOCKED — managed by clade sync-evlog-presets.mjs -->
+<!-- 🔒 LOCKED — managed by clade sync-evlog-presets.ts -->
 <!-- preset: evlog-baseline -->
 <!-- source: vendor/snippets/evlog-drain-pipeline/README.md -->
 <!-- to: presets/evlog-baseline/server/plugins/_evlog-drain.README.md -->
