@@ -8,11 +8,11 @@
 
 | # | 落點 | 到達 consumer 的機制 | 載入時機 |
 | --- | --- | --- | --- |
-| 1 | `rules/core/*.md` | `sync-rules.mjs` → `.claude/rules/<name>.md`，無條件收 | 無 `paths:` → always-load；有 `paths:` → 命中才載 |
+| 1 | `rules/core/*.md` | `sync-rules.ts` → `.claude/rules/<name>.md`，無條件收 | 無 `paths:` → always-load；有 `paths:` → 命中才載 |
 | 2 | `rules/modules/<group>/<variant>/*.md` | 同上，但只在 consumer `.claude/hub.json` 的 `modules[group]` 選了該 variant 才收 | 同上 |
 | 3 | `plugins/hub-core/{skills,commands,agents,hooks}/` | plugin cache（`claude plugin update`）；**consumer 需重啟 session 才生效** | skill / command 被呼叫時 |
-| 4 | `claude-md/core-snippets/*.md` | `sync-rules.mjs` → consumer `AGENTS.md` 的 managed 區塊 | always-load |
-| 5 | `vendor/{scripts,actions,git-hooks,oxc-shared,ci,...}` | `sync-vendor.mjs`（targets 定義在 `scripts/lib/vendor-targets.mjs`） | 被執行時 |
+| 4 | `claude-md/core-snippets/*.md` | `sync-rules.ts` → consumer `AGENTS.md` 的 managed 區塊 | always-load |
+| 5 | `vendor/{scripts,actions,git-hooks,oxc-shared,ci,...}` | `sync-vendor.ts`（targets 定義在 `scripts/lib/vendor-targets.ts`） | 被執行時 |
 | 6 | `vendor/snippets/<topic>/` | **不散播**（唯一例外：`manual-review-enforcement/patterns.json`） | 由 rule / skill 用絕對路徑指過去，讀的當下 |
 | 7 | `docs/`（`pitfalls/`、`rule-rationale/`、`golden-paths/`、`conventions/`、`decisions/`、`sweeps/`） | **不散播** | 同上 |
 
@@ -29,7 +29,7 @@
 
 判不出 1 還是 2：問「一個沒有這個 stack 的 consumer 讀到這條，會不會覺得莫名其妙」。會 → 2。
 
-判不出 1 還是自治區：問「consumer session 有沒有可能真的執行這條」。沒有（例如「改 propagate.mjs 前先答三問」）→ 自治區。
+判不出 1 還是自治區：問「consumer session 有沒有可能真的執行這條」。沒有（例如「改 propagate.ts 前先答三問」）→ 自治區。
 
 ## Q2 — 何時需要知道
 

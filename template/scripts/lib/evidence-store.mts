@@ -450,7 +450,7 @@ export function recordsToAnnotations(records: EvidenceRecord[]): ManualReviewIte
 // ── CLI entry point ──
 const isMain =
   process.argv[1] &&
-  (process.argv[1].endsWith('evidence-store.mjs') || process.argv[1].endsWith('evidence-store.mts'))
+  (process.argv[1].endsWith('evidence-store.mts') || process.argv[1].endsWith('evidence-store.mts'))
 
 if (isMain) {
   const VALID_KINDS = [

@@ -169,6 +169,11 @@ function readConsumerMeta(p) {
 }
 
 function resolveConsumerId(o, meta) {
+  // key 名以 registry/consumer-meta.schema.json 為準：`consumerId`（camelCase）。
+  // 曾經只讀 snake_case，對每一份符合 schema 的 manifest 都恆為 undefined，於是靜默
+  // fallback 到目錄名推導 —— 目錄名剛好等於 consumerId 的 consumer 看不出異狀，改名或
+  // clone 過的則拿到錯的 session 名與 lease 路徑。舊 key 保留作相容 fallback。
+  if (meta?.consumerId) return meta.consumerId
   if (meta?.consumer_id) return meta.consumer_id
 
   // **MUST 解析 main worktree 的名字，不是當前 worktree 的目錄名。**
@@ -508,7 +513,24 @@ async function cmdLaunch(o) {
   // 1) 反累積：起前先查 existing session
   const existing = findSession(sessionName)
   if (existing && !existing.exited) {
-    if (!port || portListening(port)) {
+    // 「有人在聽 port」不等於「聽的是我們這個 session 的 dev」。zellij session 還活著、
+    // 但裡面的 dev 已死、port 隨即被別的程序接手時，只驗 portListening 會走進 reuse 分支
+    // 宣告成功（lease 也還在且 cwd 相符），caller 於是在**外來程序**上收 evidence，
+    // 而外觀與正常成功完全相同。lease 的 devServer.pid 記的就是當初的 port listener pid
+    // （見 writeLease），拿它跟現況比對即可辨識。
+    const leasePid = readLease(consumerId)?.devServer?.pid
+    const listenerPid = port ? portPid(port) : null
+    const portHijacked =
+      Boolean(port) &&
+      Boolean(listenerPid) &&
+      Boolean(leasePid) &&
+      Number(listenerPid) !== Number(leasePid)
+
+    if (portHijacked) {
+      err(`session ${sessionName} 存在，但 port ${port} 的 listener 已換人`)
+      err(`  lease 記錄 PID ${leasePid}，實際在聽的是 PID ${listenerPid}`)
+      err(`  不 reuse（會在外來程序上收 evidence），改重建`)
+    } else if (!port || portListening(port)) {
       // reuse 前 MUST 過 lease gate — cwd 不符時 strict 模式直接 refuse。
       // 這裡曾是靜默漏洞：直接 return 導致 --cwd 被忽略、caller 在錯的 code 上收 evidence。
       const conflict = enforceLeaseOrExit(o, meta, consumerId)
@@ -535,8 +557,11 @@ async function cmdLaunch(o) {
         return
       }
     }
-    // session 活著但 dev port 沒在聽 → 裡面的 dev 死了，重建
-    err(`session ${sessionName} 存在但 port ${port} 沒在聽 → 視為內部 dev 已死，重建`)
+    // 走到這裡代表不 reuse：port 沒在聽（內部 dev 已死）、listener 換人、或 --takeover 要重建。
+    // 前兩者的原因已在上面各自印過，這裡只補「port 沒在聽」那條。
+    if (!portHijacked) {
+      err(`session ${sessionName} 存在但 port ${port} 沒在聽 → 視為內部 dev 已死，重建`)
+    }
     killSession(sessionName)
   } else if (existing && existing.exited) {
     killSession(sessionName) // 清 EXITED 殘骸
@@ -551,6 +576,20 @@ async function cmdLaunch(o) {
       )
       if (pidAlive(conflict.devServer?.pid)) sh('kill', [String(conflict.devServer.pid)])
     }
+  }
+
+  // 2.5) 外來占用檢查。走到這裡代表沒有可 reuse 的活 session，所以 port 若已經有人在聽，
+  // 那個 listener 一定不是我們起的。不擋的話：新 session 內的 dev 撞 EADDRINUSE 立刻死，
+  // 但 step 4 的 ready loop 第一次 poll 就看到 listener → 宣告 ready + 寫 lease，
+  // caller 於是在別的程序上收 evidence，而 lease 指向一個我們並不擁有的 dev server。
+  if (port && portListening(port)) {
+    const squatter = portPid(port)
+    err(`[dev-session] port ${port} 已被非本 session 的程序占用（PID ${squatter}）`)
+    err(`  同名 zellij session 不存在或已 EXITED，因此這不是可 reuse 的 durable session。`)
+    err(`  先確認該程序是什麼，再擇一處理：`)
+    err(`    - 若是舊的 dev server：node scripts/dev-session.mjs stop --session ${sessionName}`)
+    err(`    - 若是別的服務：換 port（--port <n>）或自行停掉該程序`)
+    process.exit(1)
   }
 
   // 3) 起 detached zellij session + 把 dev 命令丟進去

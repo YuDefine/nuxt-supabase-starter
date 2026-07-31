@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * gate.mjs — evlog map ratchet gate
+ * gate.mts — evlog map ratchet gate
  *
  * 對照 committed `evlog.map.json` baseline 與當前 `evlog map --json` 結果，跑三條判定：
  *

@@ -1,4 +1,4 @@
-// vendor/oxc-shared/preset.mjs — clade-governed oxlint + oxfmt baseline preset
+// vendor/oxc-shared/preset.mts — clade-governed oxlint + oxfmt baseline preset
 //
 // Single source of truth for `vite.config.ts` lint/fmt rules across:
 //   - clade itself
@@ -7,7 +7,7 @@
 // Consumer usage:
 //
 //   import { defineConfig } from 'vite-plus'
-//   import { lintBase, fmtBase } from './vendor/oxc-shared/preset.mjs'
+//   import { lintBase, fmtBase } from './vendor/oxc-shared/preset.mts'
 //
 //   export default defineConfig({
 //     resolve: { alias: [...] },                         // consumer build config

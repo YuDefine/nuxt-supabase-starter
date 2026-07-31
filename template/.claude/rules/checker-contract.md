@@ -62,6 +62,28 @@ skipped: <排除目錄/pattern/原因；沒有就寫 none>
 
 存量掃 `node ~/offline/clade/scripts/audit-gate-coverage.ts` § 4。實證見 `~/offline/clade/docs/pitfalls/2026-07-25-grep-q-pipefail-sigpipe-false-negative.md`。
 
+### 上游具副作用時，提前退出命令會把它腰斬
+
+上一節管的是**判斷被反轉**。同一個 SIGPIPE 還有第二種形狀：上游不是純讀取，而是**會寫檔、刪檔、改遠端狀態的多步驟流程**。這時下游提前退出把它殺在中途，資料停在「舊的刪了、新的還沒建」的狀態。
+
+這個形狀**不需要** `set -o pipefail`、**不需要**回傳值被任何條件式消費，而且 **exit code 是 0**、沒有任何錯誤訊息。上一節的 Detection 第二層（「候選必須位在 `if` / `&&` / `$?` 消費回傳值的地方」）**抓不到它**。
+
+```bash
+# ❌ 上游是會刪檔再重建的同步流程，head 讀滿 5 行就退出 → 上游被 SIGPIPE 殺在「刪完、還沒建」
+node scripts/sync-something.ts | head -5
+
+# ✅ 先落檔再讀，是「想看輸出」與「不截斷上游」唯一相容的寫法
+node scripts/sync-something.ts > /tmp/out.log 2>&1; echo "EXIT=$?"
+head -20 /tmp/out.log
+```
+
+兩條紀律：
+
+- **想限制輸出量 MUST 先重導向到檔案再讀**，**NEVER** 對可能具副作用的命令直接 `| head` / `| sed q` / `| grep -m1`
+- **寫先刪後建的流程時，把刪除延後到重建材料備妥之後**（或先寫 staging 再 atomic rename），讓中斷點不落在「舊的沒了、新的沒來」
+
+實證見 `~/offline/clade/docs/pitfalls/2026-07-31-sigpipe-truncates-side-effecting-script.md`。
+
 ## 執行載體（檔案存在 ≠ 有東西會執行它）
 
 Gate、checker、composite action 的檔案落在 repo 裡，**不代表**有任何東西會呼叫它。這兩件事之間

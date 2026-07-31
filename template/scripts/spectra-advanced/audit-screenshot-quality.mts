@@ -17,7 +17,7 @@
 import { existsSync } from 'node:fs'
 import { readFile, readdir } from 'node:fs/promises'
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path'
-import { resolveEvidence } from '../lib/evidence-store.mjs'
+import { resolveEvidence } from '../lib/evidence-store.mts'
 import type { ManualReviewItem } from '../review-gui.types.mts'
 
 // review-gui.mts is hosted in clade central (per propagate manifest @ 76a202a, 2026-05-19);

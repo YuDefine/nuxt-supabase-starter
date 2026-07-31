@@ -1,11 +1,11 @@
-// vendor/doctor-shared/preset.mjs — clade-governed vite-doctor rule baseline
+// vendor/doctor-shared/preset.mts — clade-governed vite-doctor rule baseline
 //
 // Single source of truth for Nuxt consumer vite-doctor rule severity.
-// Follows the same import+override pattern as vendor/oxc-shared/preset.mjs.
+// Follows the same import+override pattern as vendor/oxc-shared/preset.mts.
 //
 // Consumer usage (nuxt.config.ts):
 //
-//   import { doctorConfig } from './vendor/doctor-shared/preset.mjs'
+//   import { doctorConfig } from './vendor/doctor-shared/preset.mts'
 //
 //   export default defineNuxtConfig({
 //     modules: [
@@ -15,7 +15,7 @@
 //
 // To override a rule per-consumer:
 //
-//   import { doctorConfig, doctorRules } from './vendor/doctor-shared/preset.mjs'
+//   import { doctorConfig, doctorRules } from './vendor/doctor-shared/preset.mts'
 //
 //   export default defineNuxtConfig({
 //     modules: [
