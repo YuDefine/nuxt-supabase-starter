@@ -20,7 +20,10 @@
 
 set -u
 
-PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+# 專案根目錄。下面這個變數只有 Claude 端會帶進來；Codex 端沒有對應的 env，會落到
+# fallback。fallback 取 git toplevel 而非 pwd：session cwd 可能是 repo 的子目錄，
+# 用 pwd 會讓 hub.json 找不到，也會讓 auto-index 把子目錄當成獨立 project 建 index。
+PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 HUB_JSON="$PROJECT_ROOT/.claude/hub.json"
 STATE_JSON="$PROJECT_ROOT/.claude/.hub-state.json"
 
@@ -31,7 +34,11 @@ STATE_JSON="$PROJECT_ROOT/.claude/.hub-state.json"
 # Silent skip on any error — 不阻擋 session 啟動。
 
 maybe_auto_index() {
-  local bin="${HOME}/.local/bin/codebase-memory-mcp"
+  # 安裝位置是 machine-local state：PATH 優先（homebrew / npm -g / mise 各有落點），
+  # ~/.local/bin 只是最後的 fallback。寫死單機路徑正是本 hook 要避免的 config drift，
+  # 見 docs/pitfalls/2026-05-18-consumer-mcp-codebase-memory-missing.md。
+  local bin
+  bin=$(command -v codebase-memory-mcp 2>/dev/null) || bin="${HOME}/.local/bin/codebase-memory-mcp"
   [[ -x "$bin" ]] || return 0
 
   local project_id

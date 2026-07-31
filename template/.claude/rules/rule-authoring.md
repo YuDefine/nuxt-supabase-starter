@@ -169,3 +169,48 @@ NEVER 牆兩訊號對應 § 反開脫要精準嵌逐字的 ❌ 反例：
 ```
 
 即豁免 180 天（沿用 `audit-tech-debt-hygiene` 的 `Last reviewed` 慣例：**帶到期，不是永久豁免**；過期後 warn 會回來並附已過天數）。掛之前 MUST 真的逐條讀過——理由要寫得出「哪幾類條目為什麼是載重的」，寫不出來就是該刪。Spectra fork（frontmatter `generatedBy: Spectra`）兩訊號皆豁免，理由同 `skill-oversize`。
+
+## Taste Rubric（品質判定的分工與校準）
+
+上面各節管**怎麼寫**；本節管**誰來判寫得好不好**，以及那個判斷憑什麼可信。
+
+判定一律**二元 pass / fail**，不用 1-5 分。理由：分數會被當成可加總的量（「3 分還行」），
+而規約措辭沒有「還行」——一條範圍沒明寫全稱量詞的 MUST，在字面遵守的主線上就是失效的，
+給它 3 分不會讓它半有效。
+
+每條準則標**歸誰判**。Grader 選錯比沒有 Grader 更糟：把可機械判的丟給模型 = 引入不必要的
+variance；把需要語境的丟給 regex = 系統性漏判。
+
+| 準則（pass 條件） | Grader | 現況 |
+| --- | --- | --- |
+| description 不是流程摘要、不含 ≥4 個引號觸發詞 | Code | `desc-flow-summary` / `desc-trigger-dup` / `desc-verbose` / `desc-too-long` |
+| SKILL.md ≤ 400 行 | Code | `skill-oversize`（Spectra fork 豁免） |
+| 跨 skill 觸發詞無碰撞 | Code | `skill-trigger-collision` |
+| NEVER 未成牆、總量未過載 | Code | `never-wall` / `never-density`（後者有 180 天覆核出口） |
+| 可變事實指 SoT 而非 inline | Code | `fleet-count-inline` |
+| skill 內無 `@` force-load 連結 | Code | `force-load-link` |
+| pointer 指得到的檔在本 repo 載得進來 | Code | `audit-rule-paths.mjs` 的 `dangling-pointer-target`（diagnostic） |
+| pressure scenario 有實測紀錄且 target 解析得到 | Code | `scenario-unmeasured` / `scenario-no-target` / `scenario-dangling-target` |
+| 失敗型態分類正確（形狀問題沒被寫成禁止句） | **Model** | **未校準** |
+| 反開脫逐字取自真實語料，不是虛構藉口 | **Model** | **未校準** |
+| 規約意圖廣泛套用時，措辭明寫了全稱量詞 | **Model** | **未校準** |
+| 長度配得上讀者要做的決定 | **Model** | **未校準** |
+| 這條規約該不該存在（vs 該退場 / 該歸到別層） | **Human** | steward 判 |
+
+### Model Grader 未校準時的措辭紀律
+
+標 **未校準** 的四條，目前沒有任何數字支持 Model Grader 的判斷跟 steward 一致。因此：
+
+**NEVER** 用「codex review 過了」「checker 判 pass」當成品質已驗證的憑據 —— 那句話目前的
+資訊量是零，因為沒人量過它跟人的同意率。可以寫「codex review 未提出問題」（陳述事實），
+**NEVER** 寫「已通過品質檢驗」（宣稱效力）。
+
+校準的答案卷在 `vendor/snippets/rule-authoring/critique-shadowing-corpus.md`（含取樣方法、
+標註規則、與達標判準）。**同意率達 90% 之前，上表四條 Model 列一律維持「未校準」字樣** ——
+改掉那三個字 MUST 附同意率數字。
+
+### 第一版預期是錯的
+
+Rubric 不是一次寫死。比照本檔 § 發佈前驗證 的 baseline / with-rule 迭代邏輯，Rubric 也要跑過
+幾輪真實產出才會收斂（Criteria Drift）。**第一版準則被實測推翻不是失敗，是這個機制在運作**
+—— 推翻時把「原本這樣寫、實測發現什麼」留在 corpus 檔，不要靜默改掉。

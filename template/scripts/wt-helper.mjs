@@ -783,7 +783,7 @@ async function cmdAdd(slug, opts = {}) {
           )
         }
         const changeLabel = opts.precheckBaseline || cleanSlug
-        const message = `🧹 chore: baseline pre-fork sync for ${changeLabel}`
+        const message = preForkBaselineCommitMessage(changeLabel)
         // TD-144: snapshot full dirty state (including non-scoped paths and
         // untracked) BEFORE the selective commit consumes the scoped paths.
         // Without this, any non-scoped path that gets `worktree add`'d into
@@ -1598,6 +1598,48 @@ async function cmdSweepSiblings(slug) {
   }
 }
 
+// Auto-generated commit messages MUST clear the fleet commitlint config
+// (`vendor/commitlint/commitlint.config.ts`) **and** clade's superset, which adds
+// `subject-has-chinese`. A subject that fails either one aborts the commit mid-flow
+// and leaves merge-back half-done (unfinished merge in the worktree, or fmt drift
+// still uncommitted) — the user then has to finish it by hand.
+//
+// Two constraints beyond the emoji-conventional header shape:
+//   1. subject MUST contain a Han character (clade-only rule, harmless elsewhere)
+//   2. header MUST stay within config-conventional's 100-char `header-max-length`,
+//      so anything unbounded (branch names, path lists) belongs in the body
+// Clamping the *assembled* subject is wrong: a long enough variable segment pushes
+// the Han characters past the cut and the result fails `subject-has-chinese`. Clamp
+// each unbounded segment instead, and keep the header's fixed part short enough that
+// the total can't reach 100 regardless.
+const COMMIT_SEGMENT_MAX = 40
+// config-conventional caps body lines at 100 too, so moving an unbounded value out
+// of the header is not enough on its own — every body line needs clamping as well.
+const COMMIT_BODY_LINE_MAX = 100
+
+function clampTo(value, max) {
+  const text = String(value ?? '')
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`
+}
+
+const clampCommitSegment = (value) => clampTo(value, COMMIT_SEGMENT_MAX)
+const clampCommitBodyLine = (value) => clampTo(value, COMMIT_BODY_LINE_MAX)
+
+export function preSyncCommitMessage(branchName) {
+  // Branch name is unbounded — body only.
+  return `🧹 chore: 合併 main 進 worktree 分支以在此解衝突\n\n${clampCommitBodyLine(branchName)}\n`
+}
+
+export function preForkBaselineCommitMessage(changeLabel) {
+  return `🧹 chore: fork worktree 前把 ${clampCommitSegment(changeLabel)} 的 baseline 落地`
+}
+
+export function fmtDriftCommitMessage(slug, paths) {
+  // Path list is unbounded — body only.
+  const body = paths.map(clampCommitBodyLine).join('\n')
+  return `🧹 chore: wt ${clampCommitSegment(slug)} 自動落地 ${paths.length} 個純格式漂移檔\n\n${body}\n`
+}
+
 // Merge main into the session worktree branch before merge-back squash, so
 // conflicts (if any) surface in the worktree's working tree rather than main's.
 // Legacy merge-back ran `git merge --squash <branch>` at main, contaminating
@@ -1645,7 +1687,7 @@ export function syncWorktreeWithMain(wtPath, branchName, slug) {
     return { synced: false, behind: 0 }
   }
 
-  const commitMsg = `🧹 chore: wt pre-sync main into ${branchName}`
+  const commitMsg = preSyncCommitMessage(branchName)
   let mergeError = null
   try {
     git(['merge', '--no-ff', '-m', commitMsg, targetRef], { cwd: wtPath, stdio: 'inherit' })
@@ -2293,13 +2335,13 @@ async function cmdMergeBack(slug, opts = {}) {
   // pre-commit / commit-msg hooks run normally. oxfmt is idempotent — re-running
   // fmt on already-formatted content produces zero further drift. OXFMT_AUTO_PATHS
   // are config files (settings.json, .editorconfig, etc.) which oxlint doesn't
-  // touch, so lint won't false-positive either. The `🧹 chore: wt ...` format
-  // clears emoji-conventional commitlint (consumer headerPattern bans scope).
+  // touch, so lint won't false-positive either. Message shape comes from
+  // fmtDriftCommitMessage() so it clears commitlint on clade and consumers alike.
   if (wtFmtDrift.length > 0) {
     const paths = wtFmtDrift.map((d) => d.path)
     try {
       git(['add', '--', ...paths], { cwd: target.path })
-      const msg = `🧹 chore: wt ${cleanSlug} oxfmt drift on ${paths.join(', ')}`
+      const msg = fmtDriftCommitMessage(cleanSlug, paths)
       git(['commit', '-m', msg], { cwd: target.path, stdio: 'inherit' })
       console.log(
         `merge-back: auto-committed ${paths.length} format-only drift file(s) on ${branchName} (oxfmt(HEAD) === current)`,
@@ -2373,7 +2415,7 @@ async function cmdMergeBack(slug, opts = {}) {
     const syncResult = syncWorktreeWithMain(target.path, branchName, cleanSlug)
     if (syncResult.synced) {
       console.log(
-        `merge-back: pre-synced wt with main (${syncResult.behind} commit(s) behind, merge commit: '🧹 chore: wt pre-sync main into ${branchName}')`,
+        `merge-back: pre-synced wt with main (${syncResult.behind} commit(s) behind, merge commit: '${preSyncCommitMessage(branchName).split('\n')[0]}')`,
       )
     }
   }
@@ -3046,7 +3088,7 @@ async function main() {
         '                            reproduces from oxfmt(HEAD) are auto-committed as a',
       )
       console.error(
-        '                            separate "🧹 chore: wt <slug> oxfmt drift on ..." commit',
+        '                            separate "🧹 chore: wt <slug> 自動落地 N 個純格式漂移檔" commit',
       )
       console.error(
         '                            with no prompt (no flag needed; semantic drift still STOPs).',
