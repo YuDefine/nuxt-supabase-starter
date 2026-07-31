@@ -1,6 +1,6 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import pkg from './package.json'
-import { doctorConfig } from './vendor/doctor-shared/preset.mts'
+import { doctorConfig } from './vendor/doctor-shared/preset'
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-05-15',
