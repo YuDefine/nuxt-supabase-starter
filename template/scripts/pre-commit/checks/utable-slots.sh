@@ -11,7 +11,7 @@
 #   - pre-push  checks/utable-slots.sh  : 掃全 repo *.vue（blocking 回溯型；fleet 基線 0 hit）
 #
 # Auto-detect：只掃本次 commit staged 的 *.vue；無 staged .vue 直接跳過（no-op exit 0）。
-# 偵測邏輯共用 vendor/scripts/checks/utable-slot-detect.mjs。
+# 偵測邏輯共用 vendor/scripts/checks/utable-slot-detect.mts。
 #
 # 規約來源：rules/modules/framework/nuxt/nuxt-ui-conventions.md § 靜默失效檢查
 #
@@ -22,8 +22,8 @@ set -euo pipefail
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 cd "$PROJECT_ROOT"
 
-DETECTOR="scripts/checks/utable-slot-detect.mjs"
-[[ -f "$DETECTOR" ]] || DETECTOR="vendor/scripts/checks/utable-slot-detect.mjs"
+DETECTOR="scripts/checks/utable-slot-detect.mts"
+[[ -f "$DETECTOR" ]] || DETECTOR="vendor/scripts/checks/utable-slot-detect.mts"
 [[ -f "$DETECTOR" ]] || exit 0 # detector 未散播到此 consumer → no-op
 
 # 蒐集本次 staged 的 .vue

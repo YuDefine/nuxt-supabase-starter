@@ -32,8 +32,8 @@ for ext in ts mts js mjs; do
 done
 [[ -n "$nuxt_config" ]] || exit 0
 
-DETECTOR="scripts/checks/nuxt-ui-mixed-slot-detect.mjs"
-[[ -f "$DETECTOR" ]] || DETECTOR="vendor/scripts/checks/nuxt-ui-mixed-slot-detect.mjs"
+DETECTOR="scripts/checks/nuxt-ui-mixed-slot-detect.mts"
+[[ -f "$DETECTOR" ]] || DETECTOR="vendor/scripts/checks/nuxt-ui-mixed-slot-detect.mts"
 [[ -f "$DETECTOR" ]] || exit 0 # detector 未散播到此 consumer → no-op
 
 exec node "$DETECTOR" --all

@@ -257,7 +257,7 @@ run_tunnel_check() {
 # evidence (which identifier columns / literal key are present). Returns a
 # single-line evidence string (no pipe / newline) on stdout, or empty if node /
 # the helper is unavailable (degrade gracefully — the static remediation stands).
-DISPLAY_CHECK_HELPER="$SCRIPT_DIR/page-display-check.mjs"
+DISPLAY_CHECK_HELPER="$SCRIPT_DIR/page-display-check.mts"
 run_page_display_check() {
   local line="$1"
   command -v node >/dev/null 2>&1 || return 0
@@ -492,7 +492,7 @@ fi
 # aware）必須存在；(2) query param 必須出現在 resolved page source（page 沒讀的
 # param = 臆想 URL）。/api/ 路徑跳過；consumer 無 pages 目錄（pagesRoot null）
 # 整段跳過；false positive 走既有 @no-manual-review-check[<reason>] bypass。
-URL_CHECK_HELPER="$SCRIPT_DIR/verify-url-check.mjs"
+URL_CHECK_HELPER="$SCRIPT_DIR/verify-url-check.mts"
 if command -v node >/dev/null 2>&1 && [ -f "$URL_CHECK_HELPER" ]; then
   url_check_enabled=true
   for idx in "${!manual_block_lines[@]}"; do

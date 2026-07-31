@@ -52,7 +52,7 @@ Implement tasks from a Spectra change.
       **c.1 — 偵測 main dirty**：
 
       ```bash
-      node scripts/wt-helper.mjs detect-main-dirty --json
+      node scripts/wt-helper.mts detect-main-dirty --json
       ```
 
       解析回傳 `{ modified, untracked, conflicted }`：
@@ -83,18 +83,18 @@ Implement tasks from a Spectra change.
 
       ```bash
       # 有 scope-in baseline 要 commit
-      node scripts/wt-helper.mjs add <change-name> \
+      node scripts/wt-helper.mts add <change-name> \
         --precheck-baseline <change-name> \
         --baseline-strategy commit \
         --baseline-scope-paths <comma-separated-scope-in-paths>
 
       # 或：main clean / user 選 (b) cross-session 不動 dirty
-      node scripts/wt-helper.mjs add <change-name>
+      node scripts/wt-helper.mts add <change-name>
       ```
 
       Helper 用 change name 當 slug，內部 normalize（lowercase / 空白轉 `-` / collapse 重複 `-`）。commit 策略時 helper 跑 selective stage（`git add -- <scope-paths>`，**禁** `git add -A`）+ commit `baseline: <change-name> pre-fork sync` + fork。Helper 行為與失敗處理見 `plugins/hub-core/skills/wt/SKILL.md`。
 
-      若 helper fail with `Worktree path already exists` → slug 對應 worktree 已存在（前次 session 建過、未清掉），**沿用即可**，視為成功；用 `node scripts/wt-helper.mjs list --json` 抓既有 path。**注意**：既有 worktree 不會再跑 baseline guard，若 main 仍有屬於本 change 的 dirty baseline，必須 user 自己 commit 後 worktree 內 `git pull` 或 cherry-pick。
+      若 helper fail with `Worktree path already exists` → slug 對應 worktree 已存在（前次 session 建過、未清掉），**沿用即可**，視為成功；用 `node scripts/wt-helper.mts list --json` 抓既有 path。**注意**：既有 worktree 不會再跑 baseline guard，若 main 仍有屬於本 change 的 dirty baseline，必須 user 自己 commit 後 worktree 內 `git pull` 或 cherry-pick。
 
       其他 helper 錯誤 → 報錯並 STOP，**不要**降級回「在 main 跑」。
 
@@ -175,7 +175,7 @@ Implement tasks from a Spectra change.
          - 一致 → pass
          - `supabase:sync --dry-run` 不支援 → fallback 直接跑 `pnpm supabase:sync`（idempotent）
          - **Per `db-topology-invariant` 規則**：dev DB 是共享實例，reset 前 **MUST** 自主協調（不問 user）：
-           1. `node scripts/claim-helper.mjs list` 列 active claims
+           1. `node scripts/claim-helper.mts list` 列 active claims
            2. 分類：`lastActivity > 2h` = stale（殭屍 claim，忽略）；`lastActivity < 30min` 且 claim 的 change 有 DB-dependent work（migration / seed / e2e） = 真 active
            3. 真 active claim = 0 → 直接 proceed，log 一行「dev DB reset — N stale claims ignored」
            4. 真 active claim > 0 → 仍 proceed（apply 的 DB sync 優先於 claim collision），但 log「dev DB reset — warning: N active claims: <names>」
@@ -337,7 +337,7 @@ Implement tasks from a Spectra change.
 
    Scan namespaced stashes related to this change before starting work. Catches resume scenarios where the previous session's WIP got auto-stashed by wt-helper / propagate / clade-publish and never reapplied — without this, apply will run on a clean baseline while real WIP rots in stash.
 
-   - Run: `node scripts/stash-reconcile.mjs --slug "<change-name>" --json`
+   - Run: `node scripts/stash-reconcile.mts --slug "<change-name>" --json`
    - Parse stdout JSON. If `entries.length === 0`, continue silently to Step 3.
    - If hits: print one-line summary `⚠ Stash Reconcile: N entries match slug '<change>'`, then use **AskUserQuestion**:
      - **Show full report** — print each entry's `ref`, `namespace.kind`, `createdAt`, file list, and `recommendation.action`/`recommendation.reason`; then re-ask the same question
@@ -928,7 +928,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
       - Spec pass 後，**MUST** 先確認 Playwright trace zip 真的有產出（`ls -1 test-results/**/trace.zip` 或對應 reporter output 路徑），再寫 evidence（payload 進 sidecar，stdout 印出的短 marker 原樣貼進 tasks.md 該 item 行末）：
 
         ```bash
-        node ~/offline/clade/vendor/scripts/lib/evidence-store.mjs \
+        node ~/offline/clade/vendor/scripts/lib/evidence-store.mts \
           --repo . --change <change> --write --item '#<id>' --kind verified-e2e \
           --spec 'e2e/verify/<change>/<topic>.spec.ts' --trace '<trace-path>'
         # stdout: (verified-e2e: <ISO-8601>)
@@ -943,7 +943,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
       - 通過後，主線寫 evidence（payload 進 sidecar，stdout 印出的短 marker 原樣貼進 tasks.md 該 item 行末）：
 
         ```bash
-        node ~/offline/clade/vendor/scripts/lib/evidence-store.mjs \
+        node ~/offline/clade/vendor/scripts/lib/evidence-store.mts \
           --repo . --change <change> --write --item '#<id>' --kind verified-api \
           --method '<METHOD>' --url '<URL>' --status '<STATUS>' [--body '<sha256-12chars>']
         # stdout: (verified-api: <ISO-8601>)
@@ -979,7 +979,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
       - PASS 後，主線寫 evidence（payload 進 sidecar，stdout 印出的短 marker 原樣貼進 tasks.md 該 item 行末）：
 
         ```bash
-        node ~/offline/clade/vendor/scripts/lib/evidence-store.mjs \
+        node ~/offline/clade/vendor/scripts/lib/evidence-store.mts \
           --repo . --change <change> --write --item '#<id>' --kind verified-ui \
           --screenshot 'screenshots/local/<change>/#<id>-final.png' [--dom '<obs>']
         # stdout: (verified-ui: <ISO-8601>)

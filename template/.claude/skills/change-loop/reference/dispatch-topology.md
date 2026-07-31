@@ -52,7 +52,7 @@ Step 2 產出的**不是**一條佇列，是**四組**併發特性不同的工�
 
 dev port 的互斥**沿用既有機制**，不自建配額：
 
-- lease 由 `vendor/scripts/dev-session.mjs`（durable 主入口）讀寫，`dev-singleton.mjs` 是 legacy spawn 層；語義與衝突訊息見 [[verification-lease.spec]] § 工具行為契約
+- lease 由 `vendor/scripts/dev-session.mts`（durable 主入口）讀寫，`dev-singleton.mjs` 是 legacy spawn 層；語義與衝突訊息見 [[verification-lease.spec]] § 工具行為契約
 - dispatch 一個 dev-port 組 item 前先確認 lease 可取得
 - **lease 被別的 live session 持有** → 該 item 留在 dev-port 佇列，主線改做扇出組回填 / main 組 / 主線即時組，下一輪再試。**NEVER** takeover 別人的 live lease
 - **無 lease 檔 + session 已離場的 stale dev server** → 這不是衝突，主線自行清理 + 重起（三層判定 SOP 見 SKILL.md § Dispatch 共通規則「Dev server 協調」）

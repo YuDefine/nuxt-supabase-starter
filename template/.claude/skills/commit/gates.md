@@ -51,7 +51,7 @@ fi
 
 ### Signal 3: wt-helper baseline stash 在 60 秒內建立
 
-`vendor/scripts/wt-helper.mjs cmdAdd --baseline-strategy stash` 會建 `wt-baseline/<slug>/<session-id>/<iso>` stash entry，建完立刻 apply + drop。stash list 裡看到 `wt-baseline/` 命名且 reflog timestamp < 60s → wt-helper add 可能還在跑。
+`vendor/scripts/wt-helper.mts cmdAdd --baseline-strategy stash` 會建 `wt-baseline/<slug>/<session-id>/<iso>` stash entry，建完立刻 apply + drop。stash list 裡看到 `wt-baseline/` 命名且 reflog timestamp < 60s → wt-helper add 可能還在跑。
 
 ```bash
 git stash list --format='%gd %ct %gs' 2>/dev/null \
@@ -563,7 +563,7 @@ vite-doctor 是 commit 品質閘門的必要組件（import graph 健康度：cy
   2. 在 package.json scripts 加入：
        "doctor": "vite-doctor scan . --max-warnings 0"
   3. Nuxt 專案：在 nuxt.config.ts 加入 module：
-       import { doctorConfig } from './vendor/doctor-shared/preset.mjs'
+       import { doctorConfig } from './vendor/doctor-shared/preset.mts'
        modules: [['vite-doctor/nuxt', doctorConfig]]
   4. 安裝完成後重跑 /commit
 
@@ -822,12 +822,12 @@ structured-errors、audit、error-handling 五類 check）。本次 diff 動到 
 
 ```bash
 git status --porcelain | awk '{print $NF}' > /tmp/evlog-map-changed.txt
-node .github/actions/evlog-map-gate/gate.mjs \
+node .github/actions/evlog-map-gate/gate.mts \
   --baseline evlog.map.json \
   --changed-files /tmp/evlog-map-changed.txt
 
 # layer monorepo：--cwd 可重複，每個 layer 各自帶 <layer>/evlog.map.json baseline
-node .github/actions/evlog-map-gate/gate.mjs \
+node .github/actions/evlog-map-gate/gate.mts \
   --cwd packages/core --cwd packages/ehr --cwd packages/trac \
   --changed-files /tmp/evlog-map-changed.txt
 ```

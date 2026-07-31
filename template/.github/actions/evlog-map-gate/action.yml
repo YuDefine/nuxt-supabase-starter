@@ -38,10 +38,10 @@ runs:
       run: |
         set -euo pipefail
 
-        GATE_ENGINE="$GITHUB_ACTION_PATH/gate.mjs"
+        GATE_ENGINE="$GITHUB_ACTION_PATH/gate.mts"
 
         if [ ! -f "$GATE_ENGINE" ]; then
-          echo "::warning::gate.mjs not found next to action.yml — consumer not yet propagated, skipping gate"
+          echo "::warning::gate.mts not found next to action.yml — consumer not yet propagated, skipping gate"
           exit 0
         fi
 
@@ -65,7 +65,7 @@ runs:
         fi
 
         # 取本次變更檔清單。base-ref 抓不到（shallow clone / 首次 push）時退化成
-        # 空清單 —— gate.mjs 會警告並跳過「觸及的 entry point 必須滿分」那條判定，
+        # 空清單 —— gate.mts 會警告並跳過「觸及的 entry point 必須滿分」那條判定，
         # 但全域分與 suppressed 兩條仍照跑。
         CHANGED_FILES="$RUNNER_TEMP/evlog-map-changed.txt"
         if git rev-parse --verify "$INPUT_BASE_REF" >/dev/null 2>&1; then

@@ -16,7 +16,7 @@ baseline is one edit + `propagate`, not five hand-syncs.
 ```ts
 // <consumer>/vite.config.ts
 import { defineConfig } from 'vite-plus'
-import { lintBase, fmtBase } from './vendor/oxc-shared/preset.mjs'
+import { lintBase, fmtBase } from './vendor/oxc-shared/preset.mts'
 
 export default defineConfig({
   resolve: { alias: [/* consumer build config */] },

@@ -100,7 +100,7 @@ sux_touched_files --refresh >/dev/null
 
 # T7: evidence-store CLI path — dual-track resolver (sidecar-first, inline fallback).
 # Shell gates cannot parse JSONL; this CLI bridge returns exit 0 if evidence exists.
-EVIDENCE_STORE="$SCRIPT_DIR/../lib/evidence-store.mjs"
+EVIDENCE_STORE="$SCRIPT_DIR/../lib/evidence-store.mts"
 
 # has_sidecar_evidence <item-id> <kind>
 # Returns 0 if evidence of the given kind exists in the sidecar for this change.
@@ -629,7 +629,7 @@ if [ -f "$TASKS_FILE" ]; then
 
     # Only process lines with verified-ui annotation.
     #
-    # The fractional-seconds branch is required, not cosmetic: `evidence-store.mjs
+    # The fractional-seconds branch is required, not cosmetic: `evidence-store.mts
     # --write` stamps with `toISOString()`, which always carries `.mmm`. A
     # `[0-9:]+Z?` pattern stops at the `.`, so `Z?` never matches and the capture
     # comes back WITHOUT an offset — and `Date.parse` reads an offset-less ISO

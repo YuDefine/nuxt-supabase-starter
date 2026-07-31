@@ -286,7 +286,7 @@ request_user_input 提供四個選項：
 per Parallel Subagent Fan-out 紀律（user-global AGENTS.md；回報契約見 [[agent-routing]] § Subagent 回報契約），每個 hit consumer 一個**長駐**（name 參數）subagent，**thin brief**（3–5K）只包含：
 
 - Brief JSON 檔路徑：`/tmp/dep-fleet-brief-<pkg-slug>-<consumer-id>.json`（subagent 自己 Read）
-- Consumer worktree 還沒開時的指令：`cd <consumer_path> && node scripts/wt-helper.mjs add upgrade-<pkg-slug>-<YYYYMMDD> --baseline-strategy stash`
+- Consumer worktree 還沒開時的指令：`cd <consumer_path> && node scripts/wt-helper.mts add upgrade-<pkg-slug>-<YYYYMMDD> --baseline-strategy stash`
 - 跑 § Outdated mode changelog-aware 子流程的指示
 - 回報格式
 
@@ -305,7 +305,7 @@ Brief JSON：`/tmp/dep-fleet-brief-<pkg-slug>-<consumer-id>.json`
 ## 工作流程
 
 1. `cd <consumer_path>`
-2. 開 worktree：`node scripts/wt-helper.mjs add upgrade-<pkg-slug>-<YYYYMMDD> --baseline-strategy stash`
+2. 開 worktree：`node scripts/wt-helper.mts add upgrade-<pkg-slug>-<YYYYMMDD> --baseline-strategy stash`
 3. 跑 dep-upgrade § Outdated mode changelog-aware 子流程：
    - 讀 `~/offline/clade/plugins/hub-core/skills/dep-upgrade/outdated-mode.md`（Outdated mode 步驟）+ `~/offline/clade/plugins/hub-core/skills/dep-upgrade/SKILL.md` § Codex prompt templates
    - 跳過 Step O.1（target / version 由 brief 取）

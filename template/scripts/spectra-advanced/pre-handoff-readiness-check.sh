@@ -31,7 +31,7 @@ fi
 
 # T7: evidence-store CLI — sidecar-first dual-track resolver
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-EVIDENCE_STORE="$SCRIPT_DIR/../lib/evidence-store.mjs"
+EVIDENCE_STORE="$SCRIPT_DIR/../lib/evidence-store.mts"
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 
 has_sidecar_evidence() {

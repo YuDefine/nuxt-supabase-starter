@@ -61,7 +61,7 @@ Verify that an implementation matches the change artifacts (specs, tasks, design
 
    Scan namespaced stashes related to this change before verifying. Prevents false-positive pass when WIP fixes are stuck in stash (auto-stashed by wt-helper / propagate / clade-publish) and never reapplied to the tree under verification — without this, verify on a clean tree reports green but real fixes haven't landed.
 
-   - Run: `node scripts/stash-reconcile.mjs --slug "<change-name>" --json`
+   - Run: `node scripts/stash-reconcile.mts --slug "<change-name>" --json`
    - Parse stdout JSON. If `entries.length === 0`, continue silently to Step 3.
    - If hits: print one-line summary `⚠ Stash Reconcile: N entries match slug '<change>'`, then use **request_user_input**:
      - **Show full report** — print each entry's `ref`, `namespace.kind`, `createdAt`, file list, and `recommendation.action`/`recommendation.reason`; then re-ask the same question
