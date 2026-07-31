@@ -122,21 +122,21 @@ peerDependencyRules:
 
 void.cloud + D1 **MUST NOT** 帶 `@nuxthub/core`（per `cloudflare-workers.md` § 1 矩陣第三列）— 用 `void/db` + `void/storage` 不用 NuxtHub helper。
 
-### A.3.6 legacy `patch-void-deploy.mjs` 退役規則
+### A.3.6 legacy `patch-void-deploy.ts` 退役規則
 
 `void@0.8.x` 的 SQLite migration handler 走 `copyFileSync` 不 bundle deps（`deploy-OPo_tSWl.mjs:1994`，對比 postgres handler 走 `bundlePgMigrationHandler` rollup bundle），handler 內 `import "../canonical-json-XXX.mjs"` 指向沒被 emit + 也不在 worker upload set 的 path → CF Workers 撞 10021 internal error（per [void-sdk/void#52](https://github.com/void-sdk/void/issues/52)）。
 
 只有仍停在 legacy `void@0.8.x` 的 consumer 可暫時安裝 monkey-patch 繞掉：
 
 ```bash
-cp ~/offline/clade/vendor/snippets/cloudflare-workers/patch-void-deploy.mjs scripts/patch-void-deploy.mjs
+cp ~/offline/clade/vendor/snippets/cloudflare-workers/patch-void-deploy.ts scripts/patch-void-deploy.ts
 ```
 
 `package.json` postinstall：
 
 ```jsonc
 "scripts": {
-  "postinstall": "nuxt prepare && node scripts/patch-void-deploy.mjs"
+  "postinstall": "nuxt prepare && node scripts/patch-void-deploy.ts"
 }
 ```
 

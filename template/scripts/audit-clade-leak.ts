@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // CLADE:VENDOR-SCRIPT
 /**
- * audit-clade-leak.mjs — starter consumer 公開倉 0-leak audit
+ * audit-clade-leak.ts — starter consumer 公開倉 0-leak audit
  *
  * 用途：`nuxt-supabase-starter` 是公開 GitHub repo。clade 中央倉的 rule /
  * skill / commands / agents 內含 consumer 名稱（<consumer-a> / <consumer-b> / <consumer-c> /
@@ -33,12 +33,12 @@
  *   - 1+ violations → 列每條 `<path>: <token>` 後 exit 1
  *
  * Usage:
- *   node vendor/scripts/audit-clade-leak.mjs                    # 預設 cwd = repo root
- *   node vendor/scripts/audit-clade-leak.mjs --root <path>      # 指定 consumer repo root
- *   node vendor/scripts/audit-clade-leak.mjs --all-consumers    # 掃 registry 內所有帶
+ *   node vendor/scripts/audit-clade-leak.ts                    # 預設 cwd = repo root
+ *   node vendor/scripts/audit-clade-leak.ts --root <path>      # 指定 consumer repo root
+ *   node vendor/scripts/audit-clade-leak.ts --all-consumers    # 掃 registry 內所有帶
  *                                                              # sanitization_profile 的
  *                                                              # consumer（只在 clade home 可用）
- *   node vendor/scripts/audit-clade-leak.mjs --json             # 機器輸出
+ *   node vendor/scripts/audit-clade-leak.ts --json             # 機器輸出
  *
  * 觸發點：**手動**（`pnpm audit:manual`）。
  *   ⚠️ 本檔曾聲稱「starter CI（GitHub Actions）作 mandatory job」——2026-07-26 查證

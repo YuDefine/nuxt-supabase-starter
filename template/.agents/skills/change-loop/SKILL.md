@@ -76,13 +76,13 @@ mkdir -p "$(dirname "$LOCK")" && printf '%s\n%s\n' "$$" "$(date -u +%FT%TZ)" > "
 
 ## Step 1 — Scan
 
-複用 handoff-scan.mjs 一次掃四段：
+複用 handoff-scan.ts 一次掃四段：
 
 ```bash
-SCAN_JSON=$(node ~/offline/clade/vendor/scripts/handoff-scan.mjs --json 2>/dev/null)
+SCAN_JSON=$(node ~/offline/clade/vendor/scripts/handoff-scan.ts --json 2>/dev/null)
 ```
 
-**失敗 fallback**：handoff-scan.mjs 不存在或回傳 error → **STOP**，寫 HANDOFF 一行 `change-loop: scan failed at <ISO>` 後結束。不要憑記憶或 HANDOFF 既有 narrative 猜工作狀態。
+**失敗 fallback**：handoff-scan.ts 不存在或回傳 error → **STOP**，寫 HANDOFF 一行 `change-loop: scan failed at <ISO>` 後結束。不要憑記憶或 HANDOFF 既有 narrative 猜工作狀態。
 
 從 JSON 取：
 
@@ -337,7 +337,7 @@ Bucket 為 `applyBlocked` 或 `awaitingUserDecision` 時 **MUST** 先完整讀 [
 
 每完成一個 item 後：
 
-1. 重跑 `handoff-scan.mjs --json`（輕量 scan，確保狀態即時）
+1. 重跑 `handoff-scan.ts --json`（輕量 scan，確保狀態即時）
 2. 重新跑 Step 2 排序 + 分組
 3. 回 Step 3 的執行模型（補滿扇出組 → 主線做序列組）
 

@@ -105,8 +105,8 @@ human     固定字串 "human"                           不可缺，至少傳�
 
 | 工具 | 何時 claim | 何時 release |
 |---|---|---|
-| `vendor/scripts/dev-session.mjs`（**durable 主入口**；durability=zellij，取代 dev-singleton 的 spawn 層） | launch 前讀 lease 對 cwd（strict 衝突 refuse）；ready 後寫 lease + `devSession` 欄 | `stop` 時 |
-| `vendor/scripts/dev-singleton.mjs`（legacy；spawn 層會被 harness reap，新工作走 dev-session） | spawn 前；reuse 前讀 lease 對 cwd | dev server 被 kill 時 |
+| `vendor/scripts/dev-session.ts`（**durable 主入口**；durability=zellij，取代 dev-singleton 的 spawn 層） | launch 前讀 lease 對 cwd（strict 衝突 refuse）；ready 後寫 lease + `devSession` 欄 | `stop` 時 |
+| `vendor/scripts/dev-singleton.ts`（legacy；spawn 層會被 harness reap，新工作走 dev-session） | spawn 前；reuse 前讀 lease 對 cwd | dev server 被 kill 時 |
 | `dev-auth` cookbook `server-api-dev-signin.ts.template` | endpoint 第一次被打時 | lease 有 holder 才允許簽 cookie（防 CSRF） |
 | `vendor/snippets/wt-helper/`（建立 worktree） | bootstrap .env.local 前 | env file 寫完後 |
 | `agent-browser` daemon wrapper（future） | 開瀏覽器 + load profile 前 | daemon shutdown 時 |

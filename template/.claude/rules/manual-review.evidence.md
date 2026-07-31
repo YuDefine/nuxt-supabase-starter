@@ -347,7 +347,7 @@ User 在 GUI 對該 item 點 **OK / Issue / Skip** 時，`stripAnnotations` 一�
 除手寫外，可用 helper 一鍵寫入並驗證 re-bucket：
 
 ```bash
-node vendor/scripts/mark-claude-analyzed.mjs --change <name> [--consumer <id>] --item '#N' \
+node vendor/scripts/mark-claude-analyzed.ts --change <name> [--consumer <id>] --item '#N' \
      --awaiting-user-decision [--packet <path>]
 ```
 

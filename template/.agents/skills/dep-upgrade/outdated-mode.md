@@ -34,7 +34,7 @@ Dependabot 唯一的更新途徑是**開 PR**。不走 PR 流程的 consumer（�
 **Consumer 端配套**：接手的 consumer **MUST** 刪掉 `.github/dependabot.yml`（留著會繼續開 PR）並關掉既有的 dependabot PR。`.github/dependabot.yml` 存在 = 本 mode 的 actions 段沒被採用。
 
 **Changelog-aware sub-mode**：兩種觸發路徑：
-- **Outdated pre-scan**（Step O.1.5）：主線用 `dep-fleet-discover.mjs` + `gh release view` 拿 changelog → 分類為 `bugfix` / `adaptation` / `feature` → 依分類決定 codex prompt 是否帶 `<changelog-block>`。
+- **Outdated pre-scan**（Step O.1.5）：主線用 `dep-fleet-discover.ts` + `gh release view` 拿 changelog → 分類為 `bugfix` / `adaptation` / `feature` → 依分類決定 codex prompt 是否帶 `<changelog-block>`。
 - **Fleet brief**：被 § Fleet mode subagent 呼叫時，跳過 Step O.1（target / version 由 fleet brief 指定）、Step O.2.1 的 prompt 內嵌 BC clauses + callsites。詳見 § Codex prompt templates · Changelog-block 填充。
 
 ## Step O.0 — Worktree gate（[[worktree-default]] §1）
@@ -155,10 +155,10 @@ Dependabot 唯一的更新途徑是**開 PR**。不走 PR 流程的 consumer（�
 
 ### O.1.5.1 — Batch discover release URLs
 
-**npm items**：對每個 outdated package，跑 `dep-fleet-discover.mjs` 拿 release URL：
+**npm items**：對每個 outdated package，跑 `dep-fleet-discover.ts` 拿 release URL：
 
 ```bash
-node ~/offline/clade/vendor/scripts/dep-fleet-discover.mjs --pkg "<pkg>" --version "<to>"
+node ~/offline/clade/vendor/scripts/dep-fleet-discover.ts --pkg "<pkg>" --version "<to>"
 ```
 
 - 可並行跑（獨立、唯讀）— 多個 Bash tool call 同一 message

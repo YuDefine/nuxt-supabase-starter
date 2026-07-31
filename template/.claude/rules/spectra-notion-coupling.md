@@ -178,7 +178,7 @@ Story 的 idempotent key 是 **(`Change`, `Capability`) 兩個欄位的組合**�
 | archive | `/spectra-archive` Step 8 | Story → `待驗收` |
 | 發版（版本 bump + tag） | `/commit` **Step 6** | Story `上線日`；重算所屬 Milestone 進度；100% 時觸發 Class 3 (a) |
 
-執行一律透過 `vendor/scripts/notion-sync.mjs`，**NEVER** 在各 SKILL.md 各寫一份寫入邏輯——四個掛載點呼叫同一支，避免四份實作彼此漂移。
+執行一律透過 `vendor/scripts/notion-sync.ts`，**NEVER** 在各 SKILL.md 各寫一份寫入邏輯——四個掛載點呼叫同一支，避免四份實作彼此漂移。
 
 ## Milestone 進度為什麼由 script 算而不是 rollup
 

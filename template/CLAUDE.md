@@ -174,7 +174,7 @@ Opus 5 的預設輸出比前代長，且 `effort` 只調思考量、不調輸出
 <!-- CLADE:SNIPPET:ui-invariants:START -->
 ## UI Invariants
 
-UI 不變式的生效檔由 resolver 依序找：consumer `docs/UI-INVARIANTS.md` → `docs/ui-invariants.md` → `.claude/ui-invariants.md` → clade baseline template（`~/offline/clade/claude-md/core-snippets/ui-invariants.template.md`）。查目前生效的是哪一份：`node vendor/scripts/ui-invariants-resolve.mjs`。
+UI 不變式的生效檔由 resolver 依序找：consumer `docs/UI-INVARIANTS.md` → `docs/ui-invariants.md` → `.claude/ui-invariants.md` → clade baseline template（`~/offline/clade/claude-md/core-snippets/ui-invariants.template.md`）。查目前生效的是哪一份：`node vendor/scripts/ui-invariants-resolve.ts`。
 
 clade baseline 維護 5 條 universal invariant（整欄塌縮 / lookup 解析率 / page load 4xx-5xx / row count vs seed / 不可逆操作要確認框）。要加業務專屬條目，**MUST** 先把 template 複製成自家 `docs/UI-INVARIANTS.md` 再於 `## Consumer-specific invariants` 追加，**NEVER** 改 universal 那 5 條 —— 它們由 clade 散播時保持對齊。
 <!-- CLADE:SNIPPET:ui-invariants:END -->

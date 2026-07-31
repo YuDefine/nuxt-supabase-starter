@@ -899,7 +899,7 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
     consumer 的 `.claude/consumer-meta.json` 若有 `notion.projectWorkflow: true`，commit artifacts 之前 **MUST** 執行：
 
     ```bash
-    node ~/offline/clade/vendor/scripts/notion-sync.mjs propose --consumer-path . --change "<name>" --json
+    node ~/offline/clade/vendor/scripts/notion-sync.ts propose --consumer-path . --change "<name>" --json
     ```
 
     - `needsDecision` 非空 → **MUST** 逐條用 `request_user_input` 問使用者（典型是 Class 3 (d)：新 Story 找不到唯一相符的 Epic），拿到答案後帶 `--epic <id>` 或 `--create-epic "<name>"` 重跑同一指令。**NEVER** 因為判定不了就略過不提。

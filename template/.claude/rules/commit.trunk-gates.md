@@ -58,7 +58,7 @@ Local edits will be reverted by the next sync.
 
 ## 人工檢查 Gate（main / master 限定，**hard rule**）
 
-當前 branch 為 `main` / `master` 且本次 `/commit` 觸及的 spectra change（`openspec/changes/<name>/**` 路徑，archive 子目錄除外）滿足下列**兩條件同時成立**時，未 ready 時 MUST 擋下 commit——但不是直接停下，走 /commit skill Step 0-MR 的 auto-triage：先推進 Claude 可自行處理項，再以 `check-review-readiness.mjs` gate 判定放行與否：
+當前 branch 為 `main` / `master` 且本次 `/commit` 觸及的 spectra change（`openspec/changes/<name>/**` 路徑，archive 子目錄除外）滿足下列**兩條件同時成立**時，未 ready 時 MUST 擋下 commit——但不是直接停下，走 /commit skill Step 0-MR 的 auto-triage：先推進 Claude 可自行處理項，再以 `check-review-readiness.ts` gate 判定放行與否：
 
 1. 該 change 的 `tasks.md` **非** `## 人工檢查` 段落含任一 `- [x]` → 已開始 / 完成實作
 2. 該 change 的 `## 人工檢查` 段落含任一 `- [ ]` → 人工檢查未完成

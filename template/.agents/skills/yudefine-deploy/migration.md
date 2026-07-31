@@ -40,7 +40,7 @@ npx void init --agents   # 自動建 void.json + patch nuxt.config.ts + 裝 offi
 - `void.json` + `wrangler.jsonc` `compatibility_date`：對齊 official Nuxt example（per A.3.2）
 - `nuxt.config.ts` 的 `hub: {}` block：**移除**（per A.3.5）
 - `.gitignore` 已被 init 加 `.void/` 排除
-- **移除** legacy `patch-void-deploy.mjs`、postinstall hook 與 unenv `patchedDependencies`（per A.3.6）
+- **移除** legacy `patch-void-deploy.ts`、postinstall hook 與 unenv `patchedDependencies`（per A.3.6）
 
 ### Phase 4 — Schema 搬位置 + import 換
 

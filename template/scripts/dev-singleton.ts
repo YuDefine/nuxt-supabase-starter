@@ -6,9 +6,9 @@
  * Generalized from <consumer-b> scripts/singleton.mjs. Propagated into each consumer's
  * vendor/scripts/ by clade sync-vendor. Consumer wires up via package.json:
  *
- *   "dev:agent":  "node vendor/scripts/dev-singleton.mjs --consumer-meta .claude/consumer-meta.json -- pnpm dev"
- *   "dev:status": "node vendor/scripts/dev-singleton.mjs --consumer-meta .claude/consumer-meta.json --status"
- *   "dev:kill":   "node vendor/scripts/dev-singleton.mjs --consumer-meta .claude/consumer-meta.json --kill"
+ *   "dev:agent":  "node vendor/scripts/dev-singleton.ts --consumer-meta .claude/consumer-meta.json -- pnpm dev"
+ *   "dev:status": "node vendor/scripts/dev-singleton.ts --consumer-meta .claude/consumer-meta.json --status"
+ *   "dev:kill":   "node vendor/scripts/dev-singleton.ts --consumer-meta .claude/consumer-meta.json --kill"
  *
  * Behavior depends on consumer-meta.json:
  *   - auth.portPinned=true + dev.leaseMode=strict → cwd-mismatch refuse (must --takeover)

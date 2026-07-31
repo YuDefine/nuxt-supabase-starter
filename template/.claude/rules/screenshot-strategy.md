@@ -236,14 +236,14 @@ manual-review.md 規定 item id 一律 `#N` / `#N.M`；本檔規定截圖檔名�
 - 全頁截圖 `--full`；JPEG 品質 `--screenshot-quality <n>`；vision model 標號版 `--annotate`
 - 預設輸出目錄可用 `--screenshot-dir <path>` 或 `AGENT_BROWSER_SCREENSHOT_DIR` 固定
 
-### Review evidence：`safe-screenshot.mjs`（非破壞性，review/verify:ui 推薦入口）
+### Review evidence：`safe-screenshot.ts`（非破壞性，review/verify:ui 推薦入口）
 
 `screenshots/local/**` 是 **gitignored、無 git 歷史 / 無備份**。直接 `agent-browser screenshot <canonical>` 若拍出 blank / 錯頁，會**覆蓋掉**先前有效截圖且**永久遺失**（2026-06-24 <consumer-a> ehr-salary：一張空白 re-capture 砍掉有效 `#2` admin-list，無從還原）。加上 agent-browser daemon 會被 agent harness 在 tool-call 之間 reap → 跨 call 的 capture 各自 spawn 競爭 Chromium、撞 profile `SingletonLock` → Chrome abort → 整頁 blank。
 
-因此 **review / verify:ui 的 canonical 截圖 MUST 走 `scripts/safe-screenshot.mjs`（clade source `vendor/scripts/safe-screenshot.mjs`），NEVER 對 canonical 路徑裸跑 `agent-browser screenshot`**：
+因此 **review / verify:ui 的 canonical 截圖 MUST 走 `scripts/safe-screenshot.ts`（clade source `vendor/scripts/safe-screenshot.ts`），NEVER 對 canonical 路徑裸跑 `agent-browser screenshot`**：
 
 ```bash
-node scripts/safe-screenshot.mjs \
+node scripts/safe-screenshot.ts \
   --url "http://localhost:3040/admin/salary" \
   --out "screenshots/local/<change>/#2-admin-list-final.png" \
   --login-url "http://localhost:3040/auth/_dev-login?email=<admin>" \
@@ -270,7 +270,7 @@ agent-browser 的 `--session <name>` 是**原生**隔離——每個 session 各
 
 - 拍出來不是預期頁面 → `agent-browser --session <name> get url` + `snapshot -i` 對比；多半是漏了 re-snapshot 用了 stale ref
 - session 壞掉：`agent-browser --session <name> close` 後重開
-- **整頁 blank + log 出現 `Failed to create ... SingletonLock: File exists` / `ProcessSingleton ... Aborting`** → daemon 被 harness reap 後留下 orphan profile lock，新 launch 撞鎖 abort。救援：`agent-browser close --all` → `rm -f ~/.agent-browser/profile-default/Singleton*` → 重試。`doctor --fix` **不**清這些 orphan lock（已實證）；review evidence 走 `safe-screenshot.mjs` 內建此清理，免手動
+- **整頁 blank + log 出現 `Failed to create ... SingletonLock: File exists` / `ProcessSingleton ... Aborting`** → daemon 被 harness reap 後留下 orphan profile lock，新 launch 撞鎖 abort。救援：`agent-browser close --all` → `rm -f ~/.agent-browser/profile-default/Singleton*` → 重試。`doctor --fix` **不**清這些 orphan lock（已實證）；review evidence 走 `safe-screenshot.ts` 內建此清理，免手動
 - 整體診斷：`agent-browser doctor`（`--fix` 自動清 stale daemon / socket，但**不**含 profile `Singleton*` orphan lock）
 
 ## 歸檔機制

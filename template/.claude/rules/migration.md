@@ -74,7 +74,7 @@ rename 解單次紅燈；hook 防再犯。兩者都不可繞過：
 **每一個**尚未套用到目標環境的 migration 都 **MUST** 在 deploy 前通過 canonical 分類器：
 
 ```bash
-node vendor/scripts/classify-migrations.mjs --migrations-dir supabase/migrations
+node vendor/scripts/classify-migrations.ts --migrations-dir supabase/migrations
 ```
 
 分類器輸出 `online_safe`、`expand_contract_required`、`maintenance_required` 或 `review_required`。CI／deploy pipeline **MUST** 以目標環境的 applied migration versions 判定 pending 集合，並逐一讀取分類器輸出的對應 migration 結果；既有已套用 migration 的分類不得掩蓋 pending migration。

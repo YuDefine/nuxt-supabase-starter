@@ -49,8 +49,8 @@ Local edits will be reverted by the next sync.
 
 | 偵測器 | pre-commit（staged） | pre-push（全 repo） |
 | --- | --- | --- |
-| `scripts/checks/nuxt-ui-mixed-slot-detect.mjs` | `scripts/pre-commit/checks/nuxt-ui-mixed-slot.sh` | `scripts/pre-push/checks/nuxt-ui-mixed-slot.sh` |
-| `scripts/checks/utable-slot-detect.mjs` | `scripts/pre-commit/checks/utable-slots.sh` | `scripts/pre-push/checks/utable-slots.sh` |
+| `scripts/checks/nuxt-ui-mixed-slot-detect.ts` | `scripts/pre-commit/checks/nuxt-ui-mixed-slot.sh` | `scripts/pre-push/checks/nuxt-ui-mixed-slot.sh` |
+| `scripts/checks/utable-slot-detect.ts` | `scripts/pre-commit/checks/utable-slots.sh` | `scripts/pre-push/checks/utable-slots.sh` |
 
 四支 wrapper 都由 `.husky/{pre-commit,pre-push}` 的 clade runner 自動呼叫，命中即 blocking。非 Nuxt repo、無 staged `.vue`、或偵測器尚未散播時自動 no-op。
 

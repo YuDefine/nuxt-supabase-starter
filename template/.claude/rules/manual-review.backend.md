@@ -58,7 +58,7 @@ pnpm test:e2e:verify <change>
 
 - **NEVER** 一次 `--screenshot` 傳多個逗號分隔 path。多張圖 → 對同一 `(itemId, kind)` 跑多次 `--write`（sidecar append-only），或拆 scoped sub-items `#N.M` 各自 `--write`
 - **NEVER** 在 scoped sub-item `#N.M` 的 evidence 引用 parent `#N` 的截圖檔名 — 例：`#4.1` 的 `--screenshot` 路徑 **MUST** 含 `#4.1-` 前綴，**NEVER** 引用 `#4-*.png`。review-gui 按 `#<item-id>-*` pattern 配對截圖到 item；ID 不符 → evidence missing，user 被迫手動排查
-- **MUST** 寫完立即 self-check：`node <clade>/vendor/scripts/lib/evidence-store.mjs --repo . --change <change> --item '#N' --kind verified-ui --json` 讀回剛寫的記錄 → 確認 (a) 有這筆 (b) `screenshot` basename 以 `#<this-item-id>-` 開頭 (c) 檔案存在。任一不符 → 立即修正，**NEVER** 帶病 handoff
+- **MUST** 寫完立即 self-check：`node <clade>/vendor/scripts/lib/evidence-store.ts --repo . --change <change> --item '#N' --kind verified-ui --json` 讀回剛寫的記錄 → 確認 (a) 有這筆 (b) `screenshot` basename 以 `#<this-item-id>-` 開頭 (c) 檔案存在。任一不符 → 立即修正，**NEVER** 帶病 handoff
 
 **Archive-gate 結果**：`verify:ui` 是 semi-automatic channel；annotation present 只是 visual evidence，使用者仍 **MUST** 在 review GUI 點 OK 才能 flip `[x]`。缺 annotation 時 GUI 顯示 evidence missing；未勾 `[x]` 時 archive-gate **MUST** block。
 
@@ -146,9 +146,9 @@ Step 8a evidence collection 發現 seed 缺 fixture 時，**MUST** 先補 seed �
 2. **Programmatic**（dispatcher / 自家 tool 內 inline；helper 住 clade 中央倉）：
    ```js
    // dispatcher / clade-side tool 用 relative import
-   import { detectDevLoginRoute, detectAuthModule } from '../snippets/dev-auth/lib/detect-dev-login-route.mjs'
+   import { detectDevLoginRoute, detectAuthModule } from '../snippets/dev-auth/lib/detect-dev-login-route.ts'
    // consumer-side ad-hoc 用 absolute path
-   const helper = require('/Users/<you>/offline/clade/vendor/snippets/dev-auth/lib/detect-dev-login-route.mjs')
+   const helper = require('/Users/<you>/offline/clade/vendor/snippets/dev-auth/lib/detect-dev-login-route.ts')
    const route = helper.detectDevLoginRoute(consumerPath)  // { kind, path, monorepoSubpath }
    const auth = helper.detectAuthModule(consumerPath)      // { module, source, stackHint }
    ```
@@ -159,7 +159,7 @@ Step 8a evidence collection 發現 seed 缺 fixture 時，**MUST** 先補 seed �
 
 ##### Canonical route shapes by auth-module（detection 真相層）
 
-下表跟 helper module 共用 SoT（`vendor/snippets/dev-auth/lib/detect-dev-login-route.mjs`）。新增 route shape 時 **MUST** 同步改 helper + 這張表 + 對應 helper unit test。
+下表跟 helper module 共用 SoT（`vendor/snippets/dev-auth/lib/detect-dev-login-route.ts`）。新增 route shape 時 **MUST** 同步改 helper + 這張表 + 對應 helper unit test。
 
 | Auth module | Route shape | Helper `kind` |
 | --- | --- | --- |
@@ -184,7 +184,7 @@ Helper 掃描 priority：**repo root canonical → repo root legacy → repo roo
 | <consumer-h> | ❌ MISSING (nuxt-auth-utils + libsql-drizzle, no cookbook template) | ✅ |
 | <consumer-e> | ❌ MISSING (同上) | ✅ |
 
-**真實 adoption 4/6 + 1 monorepo misdetected + 2 真缺**（不是 1/6）。修法源頭 clade 2026-05-24 land：audit script + helper module + dispatcher fix（`scripts/audit-dev-login-adoption.ts` + `vendor/snippets/dev-auth/lib/detect-dev-login-route.mjs` + `vendor/scripts/codex-dispatch-screenshot-verify.mjs` 對齊）。下次 agent / 主線撞「is dev-login present？」即走上述 detection 路徑，**NEVER** 再 lazy grep。
+**真實 adoption 4/6 + 1 monorepo misdetected + 2 真缺**（不是 1/6）。修法源頭 clade 2026-05-24 land：audit script + helper module + dispatcher fix（`scripts/audit-dev-login-adoption.ts` + `vendor/snippets/dev-auth/lib/detect-dev-login-route.ts` + `vendor/scripts/codex-dispatch-screenshot-verify.ts` 對齊）。下次 agent / 主線撞「is dev-login present？」即走上述 detection 路徑，**NEVER** 再 lazy grep。
 
 ##### Scaffold 行為
 

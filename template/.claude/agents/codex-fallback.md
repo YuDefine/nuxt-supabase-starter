@@ -16,7 +16,7 @@ Local edits will be reverted by the next sync.
 
 ## 你被叫到的前提
 
-主線已經確認：`codex-dispatch.mjs` 對 `--model sol`、`--model terra`、`--model luna` **三檔都回 exit 4**。你是降級鏈的下一階（見 `rules/core/agent-routing.md § 配額耗盡時的 fallback 紀律`）。
+主線已經確認：`codex-dispatch.ts` 對 `--model sol`、`--model terra`、`--model luna` **三檔都回 exit 4**。你是降級鏈的下一階（見 `rules/core/agent-routing.md § 配額耗盡時的 fallback 紀律`）。
 
 如果 brief 沒有說明配額狀態，**先問**，不要假設自己該接手——配額還有時用 Codex 比用你便宜。
 

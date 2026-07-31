@@ -44,11 +44,11 @@ archive-on-main 例外讓未 commit 的 archive batch 躺在 **shared main**；`
 - 跨多步在 main 累積 batch 且無法立刻 commit 時，**SHOULD** 寫 coarse claim 讓別 session 的 `otherSession` guard 看得到這批 dirty，commit 後 `drop`：
 
   ```bash
-  node scripts/claim-helper.mjs add --change-id main-session-wip \
+  node scripts/claim-helper.ts add --change-id main-session-wip \
     --branch main --worktree-path "$(pwd)" \
     --expected-paths "$(git status --porcelain | awk '{print $2}' | paste -sd, -)"
   # 完成 / commit 後：
-  node scripts/claim-helper.mjs drop <session-id>
+  node scripts/claim-helper.ts drop <session-id>
   ```
 
   claim 檔 schema、誰讀、stale 處理見 [[session-claims]]（path-scoped）。

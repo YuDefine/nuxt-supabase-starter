@@ -763,7 +763,7 @@ fi
 # Step 8a.6). E.1/E.2 records are agent-self-recorded; the soft step landed 0
 # rows in 9 days of soak, so this gate makes "an E.1 verdict was recorded" a
 # mechanical precondition of archive — otherwise Phase 3.1 hard-gate evaluation
-# never accumulates data. The ledger is written by pre-handoff-ledger.mjs to the
+# never accumulates data. The ledger is written by pre-handoff-ledger.ts to the
 # MAIN consumer root's .spectra/ (worktree cwd normalized via git-common-dir);
 # archive-gate runs post-merge-back from that same main root, so
 # $REPO_ROOT/.spectra is the exact read path. Records are single-line JSON with
@@ -787,7 +787,7 @@ spectra-apply Step 8a.6 的 5-dimension self-analysis verdict 從未落到 ledge
 
 補救（擇一）：
   1. 跑 Step 8a.6 self-analysis，然後執行：
-     node <clade-vendor>/scripts/pre-handoff-ledger.mjs record \\
+     node <clade-vendor>/scripts/pre-handoff-ledger.ts record \\
        --consumer-path . --change $CHANGE_NAME --layer E.1 \\
        --status <pass|fail> --findings-json '[...]'
   2. backend-only / 無 pre-handoff 適用情境 → 加
@@ -801,7 +801,7 @@ fi
 # BEFORE spectra-apply dispatches). The soft step is agent-self-fired and the
 # adoption audit measured a 1/3 fire rate, so this gate makes "a residency
 # decision was recorded" a mechanical precondition of archive. The ledger is
-# written by residency-classify.mjs `record` to the MAIN consumer root's
+# written by residency-classify.ts `record` to the MAIN consumer root's
 # .spectra/ (worktree cwd normalized via git-common-dir); archive-gate runs
 # post-merge-back from that same main root, so $REPO_ROOT/.spectra is the exact
 # read path. Records are single-line JSON with fixed field order
@@ -825,9 +825,9 @@ Orchestration Residency 判定（codex-primary vs claude-primary）從未落到 
 
 補救（擇一）：
   1. 跑 classifier 取得 verdict，然後記錄決策：
-     node <clade-vendor>/scripts/residency-classify.mjs classify \\
+     node <clade-vendor>/scripts/residency-classify.ts classify \\
        --change openspec/changes/$CHANGE_NAME
-     node <clade-vendor>/scripts/residency-classify.mjs record \\
+     node <clade-vendor>/scripts/residency-classify.ts record \\
        --consumer-path . --change $CHANGE_NAME \\
        --verdict <codex-primary|claude-primary> --executor <codex|claude> \\
        [--reason <verdict 與 executor 不一致時必填>]

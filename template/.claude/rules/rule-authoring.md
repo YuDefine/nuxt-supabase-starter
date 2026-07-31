@@ -65,7 +65,7 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 - 「高風險」判定：紀律型三件套規約、會散播到全 fleet 的 NEVER/MUST 行、歷史上重犯 ≥2 次的主題、**反轉或收窄既有 NEVER/MUST 行的觸發條件**——改方向的規約最容易讓模型兩邊都不遵守：舊的 default 已經拆掉、新的 default 還沒綁住，中間那段真空比原本沒規約更糟。
 - **判讀一律以人工複讀為準，assertion regex 只當初篩**：regex 嚴重低估命中率。實測語料：`我選 **B**` 這個最常見的開頭因為 `我` 卡在行首而不匹配，人工複讀 5/5、assertion 只認 2/5。看 assertion 數字下結論等於量錯了還不知道。
 - **廢樣本 MUST 跟失敗樣本分開計**：`--tools ''` 隔離下模型可能把整個輸出耗在幻覺工具呼叫上，那種 rep 沒有決策可讀，是**廢樣本**不是失敗樣本。混在一起算會讓 pass 率虛低，看起來像措辭沒綁住。
-- 工具：`vendor/scripts/rule-pressure-test.mjs`（baseline / with-rule 對照跑）；情境寫法見 cookbook。
+- 工具：`vendor/scripts/rule-pressure-test.ts`（baseline / with-rule 對照跑）；情境寫法見 cookbook。
 
 ## 可變事實指 SoT，不 inline（MUST）
 

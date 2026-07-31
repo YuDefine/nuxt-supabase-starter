@@ -33,7 +33,7 @@ cd ~/offline/<consumer-path> && 執行 /change-loop --unattended
 
 | Skill | 本 skill 如何用它 / 邊界 |
 | --- | --- |
-| handoff-scan.mjs | Step 1 + Step 4 scan state |
+| handoff-scan.ts | Step 1 + Step 4 scan state |
 | /spectra-apply | 3a/3b/3f dispatch（透過 /wt） |
 | /spectra-archive | 3z/3c/3d dispatch（直接，免 worktree） |
 | /wt | worktree 建立 + dispatch subagent |

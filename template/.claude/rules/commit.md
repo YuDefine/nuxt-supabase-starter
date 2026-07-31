@@ -188,7 +188,7 @@ main 髒 / 有別 session WIP 不能直接跑 `/commit`（會吃別人 staged）
 
 ## main / master 限定的兩條 hard gate
 
-**Partial Archive Gate**（含 `openspec/changes/<X>/**` staged-delete 時驗 archive dir + spec delta-sync）與**人工檢查 Gate**（實作已開始且 `## 人工檢查` 有未勾項時擋 commit）都是 main / master 限定 hard rule，**無 override**。判定條件、fail-fast 位置、完整反開脫 NEVER 清單見 [[commit.trunk-gates]]；執行層在 `.claude/skills/commit/SKILL.md` Step 0-Archive-Coupling / Step 0-MR 與 `check-review-readiness.mjs`。
+**Partial Archive Gate**（含 `openspec/changes/<X>/**` staged-delete 時驗 archive dir + spec delta-sync）與**人工檢查 Gate**（實作已開始且 `## 人工檢查` 有未勾項時擋 commit）都是 main / master 限定 hard rule，**無 override**。判定條件、fail-fast 位置、完整反開脫 NEVER 清單見 [[commit.trunk-gates]]；執行層在 `.claude/skills/commit/SKILL.md` Step 0-Archive-Coupling / Step 0-MR 與 `check-review-readiness.ts`。
 
 ## 禁止事項
 

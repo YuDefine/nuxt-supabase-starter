@@ -51,7 +51,7 @@ skill 開頭依輸入分流，**不要記兩個 skill 名**。
 Mode 分流拍板後、跑**任何** `pnpm add` / `git add` / `git commit` 之前，**MUST** 先跑：
 
 ```bash
-node ~/offline/clade/vendor/scripts/wt-gate.mjs --for dep-upgrade
+node ~/offline/clade/vendor/scripts/wt-gate.ts --for dep-upgrade
 ```
 
 exit 0 才可繼續。exit 2（cwd 在 main working tree）**MUST** 停下開 worktree 再重跑，
@@ -264,7 +264,7 @@ WHY_STUCK: <一句話為什麼即使查到資訊也卡住>
 
 # 禁止事項（通用，兩個 mode 都受約束）
 
-- **NEVER** 在 main working tree 跑 — 兩個 mode 都受此規約，由 `wt-gate.mjs` fail-closed 強制（見 § Worktree gate）
+- **NEVER** 在 main working tree 跑 — 兩個 mode 都受此規約，由 `wt-gate.ts` fail-closed 強制（見 § Worktree gate）
 - **NEVER** 主線自己改 `package.json` 或在升版階段（Step O.2）跑 `pnpm add` / `pnpm install`（升版全程委派給 codex / subagent）。**例外**：Step O.3.2.c post-merge-back `pnpm install` 是 setup chore，不是升版動作
 - **NEVER** medium 失敗就直接問使用者 — 必須先自動升 high research
 - **NEVER** high 也失敗就主線自己接手 — 必須 request_user_input 讓使用者選

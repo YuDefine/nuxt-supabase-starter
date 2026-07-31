@@ -114,14 +114,14 @@ Local edits will be reverted by the next sync.
 - **MUST** 在 `pnpm-workspace.yaml` 把 `vite` / `vitest` override 成 VoidZero fork（voidPlugin 需要 `parseSync` export，純 vite 沒有）
 - **MUST** `package.json scripts` 內 void deploy 命令**不可命名** `deploy` — pnpm 把 `deploy` 當保留字（workspace deploy 命令），跑 `pnpm deploy` 撞 `ERR_PNPM_NOTHING_TO_DEPLOY` 不會觸發 script。改用 `void:deploy`（或其他帶 prefix 的 name）；CI workflow / chat 引用走 `pnpm run void:deploy`。詳見 `docs/pitfalls/2026-05-27-pnpm-deploy-reserved-word.md`
 - **MUST** `void.json` + `wrangler.jsonc` 的 `compatibility_date` 對齊 official void Nuxt example（`.claude/skills/void/docs/integrations/frameworks/nuxt.md`；2026-07-14 驗證的範例為 `2026-02-24`）— 保持跟 official 已驗證範例同步，避免不必要的 baseline drift
-- **MUST** 只有仍停在 legacy `void@0.8.x` 且使用 `void/schema-d1` 的 consumer 暫時保留 `patch-void-deploy.mjs`；上游 issue [void-sdk/void#52](https://github.com/void-sdk/void/issues/52) 已於 2026-05-27 關閉並在當日 release 修正，升到 current void 後**必須移除** patch、postinstall hook 與 `patchedDependencies`
+- **MUST** 只有仍停在 legacy `void@0.8.x` 且使用 `void/schema-d1` 的 consumer 暫時保留 `patch-void-deploy.ts`；上游 issue [void-sdk/void#52](https://github.com/void-sdk/void/issues/52) 已於 2026-05-27 關閉並在當日 release 修正，升到 current void 後**必須移除** patch、postinstall hook 與 `patchedDependencies`
 - **MUST** deploy 走 `pnpm run void:deploy`（pnpm script，PATH 把 `node_modules/.bin` 放最前 → 用 **local** void）— deploy-time Drizzle drift-check spawn 的 drizzle-kit 由 `import.meta.resolve("drizzle-kit")` 從 **void module 自己位置**解析；local void 解析到 consumer node_modules 的 drizzle-kit（能 resolve peer drizzle-orm），global void（PATH 直跑 `void`，pnpm global bin）解析到 global store 的 drizzle-kit → 找不到 consumer peer drizzle-orm → drift-check 撞 `Please install latest version of drizzle-orm`。**與 node-linker 無關**（isolated + local void 已實測通過，**NEVER** 為此改 `.npmrc` `node-linker=hoisted`）。詳見 [pitfall](../../docs/pitfalls/2026-05-28-void-deploy-drift-check-global-vs-local-void.md)
 
 #### MUST NOT
 
 - **MUST NOT** `void@^0.8.x` 用配置 1（`["nodejs_compat", "nodejs_als"]` 不含 `no_nodejs_compat_v2`）— legacy SDK 會撞 worker upload err 10021。這是 0.8 限定 workaround，**不得**套用成 current void 0.10 的通則。詳見 [pitfall doc](../../docs/pitfalls/2026-05-25-void-cloud-voidjson-compat-flags-10021.md)
 - **MUST NOT** legacy `void@0.8.x` 的 `appType: "framework"` consumer 用配置 2（純 v2）— 同樣撞 `#t` error。這條限制不得無版本區分地套到 current void
-- **MUST NOT** 在 void SDK ≥0.10 的 consumer 保留 `patch-void-deploy.mjs` 或 unenv patch；這些 workaround 只屬 legacy void 0.8
+- **MUST NOT** 在 void SDK ≥0.10 的 consumer 保留 `patch-void-deploy.ts` 或 unenv patch；這些 workaround 只屬 legacy void 0.8
 - **MUST NOT** 用 nitro `cloudflare.nodeCompat` 取代平台 compatibility config；legacy 0.8 以 void.json 為準，current void 依 official integration 的 wrangler / void config 契約
 - **MUST NOT** 在 GitHub Actions 保存 `VOID_TOKEN`；deploy 身分走 GitHub OIDC。runtime secrets 走 `void secret put`，不得混入 wrangler-action 的 Cloudflare secret 流程
 
@@ -327,7 +327,7 @@ export function getDb(event: H3Event) {
    - `wrangler.jsonc` `compatibility_flags` ≠ `void.json` `worker.compatibility_flags` → `void.compat_flags_drift`（IDE / dev parity gap）
    - **（新增 2026-05-27 PM）** `inference.appType: "framework"` + `compatibility_flags` 為配置 2（純 `["nodejs_compat_v2", "nodejs_als"]`，無 `no_nodejs_compat_v2`）→ `void.compat_flags_unsafe_framework`（framework type 用配置 2 撞 Nitro polyfill 衝突 + `#t` error）
 9. **（新增 2026-05-27）** Track B + 帶 `@nuxthub/core` dep → `void.redundant_nuxthub_dep`（per § 1 矩陣第三/四列）
-10. Legacy `void@0.8.x` + `void.json inference.bindings.db: true`（或 `db/schema.ts` 含 `void/schema-d1` import）但 `package.json scripts.postinstall` 不含 `patch-void-deploy.mjs` 呼叫 → `void.missing_handler_emit_patch`；current void 不檢查此已修正 workaround
+10. Legacy `void@0.8.x` + `void.json inference.bindings.db: true`（或 `db/schema.ts` 含 `void/schema-d1` import）但 `package.json scripts.postinstall` 不含 `patch-void-deploy.ts` 呼叫 → `void.missing_handler_emit_patch`；current void 不檢查此已修正 workaround
 11. Track B npm scripts 使用 pnpm 保留字（例如 `deploy`）→ `pnpm.reserved_script_name`
 12. Current void workflow 仍使用 `VOID_TOKEN` 或缺 `permissions.id-token: write` → `void.legacy_token_auth` / `void.missing_oidc_permission`
 13. self-hosted runner 使用 `cache: pnpm` → `ci.self_hosted_pnpm_cache`

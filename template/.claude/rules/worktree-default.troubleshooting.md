@@ -2,10 +2,10 @@
 description: Worktree 升級路徑 / Stop hook 死鎖 / spectra DB 跨 wt 共享 / artifact git / review-gui 坑 / WORKTREE-BRIEF（worktree-default §7–§11 detail）
 paths:
   - 'openspec/changes/**'
-  - 'vendor/scripts/wt-helper.mjs'
-  - 'vendor/scripts/stash-reconcile.mjs'
+  - 'vendor/scripts/wt-helper.ts'
+  - 'vendor/scripts/stash-reconcile.ts'
   - 'vendor/scripts/review-gui.ts'
-  - 'scripts/wt-helper.mjs'
+  - 'scripts/wt-helper.ts'
   - 'scripts/review-gui.ts'
 ---
 <!--
@@ -94,7 +94,7 @@ Session worktree 在 worktree root 攜帶 `WORKTREE-BRIEF.md`，內含原始任�
 ```bash
 git stash push -m "protect-main-<file>-during-mergeback" -- <blocker-path>
 git status --porcelain          # 確認只有該檔消失、其他 main dirty 完整（此 git 版本無 pathspec scope-leak）
-node scripts/wt-helper.mjs merge-back <change>   # 不帶 --auto-stash
+node scripts/wt-helper.ts merge-back <change>   # 不帶 --auto-stash
 git stash pop                   # 立即還原別 session WIP
 git diff <blocker-path>         # 確認還原 == 原 WIP
 ```

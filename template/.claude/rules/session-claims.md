@@ -1,6 +1,6 @@
 ---
 description: 多 session 並行下「哪些路徑屬於別 session 還活著的工作」的 claim 機制規格——claim 檔 schema、寫 / refresh / drop 時機、誰讀、stale 處理、claim-helper CLI
-paths: ['.clade/claims/**', 'scripts/claim-helper.mjs', 'scripts/spectra-advanced/claim*.ts', 'scripts/spectra-advanced/claims-lib.ts', 'scripts/spectra-advanced/release-work.ts']
+paths: ['.clade/claims/**', 'scripts/claim-helper.ts', 'scripts/spectra-advanced/claim*.ts', 'scripts/spectra-advanced/claims-lib.ts', 'scripts/spectra-advanced/release-work.ts']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -58,7 +58,7 @@ Local edits will be reverted by the next sync.
 **SHOULD（治本，pending 自動化）**：主線 / 長駐 session 在 main 累積 dirty（尤其是會跨多個 tool-call 才 commit 的 batch）時，**SHOULD** 寫一個 coarse claim 涵蓋當前 dirty paths，讓既有 `otherSession` guard 直接保護：
 
 ```bash
-node scripts/claim-helper.mjs add --change-id main-session-wip \
+node scripts/claim-helper.ts add --change-id main-session-wip \
   --branch main --worktree-path "$(pwd)" \
   --expected-paths "$(git status --porcelain | awk '{print $2}' | paste -sd, -)"
 ```
@@ -100,11 +100,11 @@ node scripts/claim-helper.mjs add --change-id main-session-wip \
 ## 8. CLI
 
 ```
-node scripts/claim-helper.mjs list               # 列當前 consumer 活躍 claim
-node scripts/claim-helper.mjs list --all         # 含過期
-node scripts/claim-helper.mjs add --change-id <slug> --branch <branch> --worktree-path <path> --expected-paths "a/**,b/**"
-node scripts/claim-helper.mjs refresh <session-id>
-node scripts/claim-helper.mjs refresh-by-cwd     # 由 SessionStart hook 跑
-node scripts/claim-helper.mjs drop <session-id>
-node scripts/claim-helper.mjs prune              # 清過期
+node scripts/claim-helper.ts list               # 列當前 consumer 活躍 claim
+node scripts/claim-helper.ts list --all         # 含過期
+node scripts/claim-helper.ts add --change-id <slug> --branch <branch> --worktree-path <path> --expected-paths "a/**,b/**"
+node scripts/claim-helper.ts refresh <session-id>
+node scripts/claim-helper.ts refresh-by-cwd     # 由 SessionStart hook 跑
+node scripts/claim-helper.ts drop <session-id>
+node scripts/claim-helper.ts prune              # 清過期
 ```

@@ -330,7 +330,7 @@ git push origin main
 per [[spectra-notion-coupling]] § 專案層。consumer 的 `.claude/consumer-meta.json` 若有 `notion.projectWorkflow: true`，Step 6 的 tag 已推出後 **MUST** 執行：
 
 ```bash
-node ~/offline/clade/vendor/scripts/notion-sync.mjs release \
+node ~/offline/clade/vendor/scripts/notion-sync.ts release \
   --consumer-path . --change <change-name> --tag "$(git describe --tags --abbrev=0)" --json
 ```
 

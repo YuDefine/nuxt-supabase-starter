@@ -122,7 +122,7 @@ fi
 
 **MUST Read [scan-steps.md](scan-steps.md) § 2B.1 before proceeding** — 含 audit 指令、JSON schema、rotate plan 規約、reorganize 表、寫入規約。
 
-摘要：`node ~/offline/clade/vendor/scripts/handoff-scan.mjs --json` → 讀 `healthGate` 段 → pass 跳 2B.1c / warn 進 2B.1b rotate plan / fail 回報 user → 2B.1c reorganize HANDOFF.md。三 sub-step 完才進 2B.1.5。
+摘要：`node ~/offline/clade/vendor/scripts/handoff-scan.ts --json` → 讀 `healthGate` 段 → pass 跳 2B.1c / warn 進 2B.1b rotate plan / fail 回報 user → 2B.1c reorganize HANDOFF.md。三 sub-step 完才進 2B.1.5。
 
 ### 2B.1.5 Worktree & Stash 稽核
 
@@ -290,10 +290,10 @@ User 透過 `request_user_input` 選定下一步 outstanding（含明確的 next
 
 ### 3.1 Worktree audit
 
-讀 `handoff-scan.mjs --json` 輸出的 `worktreeStash` 段（Mode B 在 §2B.1a 已跑過 → 直接共用該輸出；Mode A 沒經過 2B.1 → 在此跑）：
+讀 `handoff-scan.ts --json` 輸出的 `worktreeStash` 段（Mode B 在 §2B.1a 已跑過 → 直接共用該輸出；Mode A 沒經過 2B.1 → 在此跑）：
 
 ```bash
-node ~/offline/clade/vendor/scripts/handoff-scan.mjs --json 2>/dev/null
+node ~/offline/clade/vendor/scripts/handoff-scan.ts --json 2>/dev/null
 ```
 
 `worktreeStash.raw.worktrees[]` 每條已含 wt-helper list 欄位（`slug` / `branch` / `path` / `daysOld` / `mergedToMain`）+ kind 判定（`kind` / `nextStep`）；script 另掃 `git worktree list --porcelain`，非 `session/*` branch 的 worktree 列進 `raw.unmanagedWorktrees`。

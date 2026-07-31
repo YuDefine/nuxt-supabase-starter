@@ -201,9 +201,9 @@ dispatch (run_in_background)
 
 Watch Protocol 安全網 fallback 觸發時（codex 仍在跑），若 BashOutput tail 含 `request_user_input is not supported` error → codex 正在等 input 但 exec mode 拒絕了。此時 codex 會 fallback 輸出文字問題後結束 turn → background bash 很快就會完成 → notification 觸發 → 走正常 Input Intercept 流程。**不需要在安全網 fallback 階段提前介入**。
 
-## codex-dispatch.mjs 整合
+## codex-dispatch.ts 整合
 
-`vendor/scripts/codex-dispatch.mjs`（泛用 Dispatcher）**MUST** 同步更新：
+`vendor/scripts/codex-dispatch.ts`（泛用 Dispatcher）**MUST** 同步更新：
 
 - 加入 `--enable default_mode_request_user_input` + `--json` 為預設 flag
 - Exit code `0` 的後處理增加問題偵測步驟

@@ -20,11 +20,11 @@
  *                     多 worktree 切換走 dev-router 不要 N 個 dev+tunnel；sweep 清死 session
  *
  * 用法：
- *   node scripts/dev-session.mjs [opts] -- <cmd...>   # 起/reuse durable dev session
- *   node scripts/dev-session.mjs status [opts]        # 查 session + port + lease
- *   node scripts/dev-session.mjs stop [opts]          # kill+delete session + 釋放 lease
- *   node scripts/dev-session.mjs list                 # 列所有 dev-* session + health
- *   node scripts/dev-session.mjs sweep [--dry-run]    # 清掉 EXITED / 死掉的 dev-* session（反累積）
+ *   node scripts/dev-session.ts [opts] -- <cmd...>   # 起/reuse durable dev session
+ *   node scripts/dev-session.ts status [opts]        # 查 session + port + lease
+ *   node scripts/dev-session.ts stop [opts]          # kill+delete session + 釋放 lease
+ *   node scripts/dev-session.ts list                 # 列所有 dev-* session + health
+ *   node scripts/dev-session.ts sweep [--dry-run]    # 清掉 EXITED / 死掉的 dev-* session（反累積）
  *
  * 常用 opts：
  *   --consumer-meta <path>   讀 consumer_id / dev.ports / auth.portPinned / dev.leaseMode
@@ -553,7 +553,7 @@ async function cmdLaunch(o) {
           err(`    收 evidence 前請自行驗：ls -l /proc/<dev-pid>/cwd`)
         }
         out(`  看畫面：zellij attach ${sessionName}（離開 Ctrl-q 或 detach Ctrl-o d）`)
-        out(`  停止：  node scripts/dev-session.mjs stop --session ${sessionName}`)
+        out(`  停止：  node scripts/dev-session.ts stop --session ${sessionName}`)
         return
       }
     }
@@ -587,7 +587,7 @@ async function cmdLaunch(o) {
     err(`[dev-session] port ${port} 已被非本 session 的程序占用（PID ${squatter}）`)
     err(`  同名 zellij session 不存在或已 EXITED，因此這不是可 reuse 的 durable session。`)
     err(`  先確認該程序是什麼，再擇一處理：`)
-    err(`    - 若是舊的 dev server：node scripts/dev-session.mjs stop --session ${sessionName}`)
+    err(`    - 若是舊的 dev server：node scripts/dev-session.ts stop --session ${sessionName}`)
     err(`    - 若是別的服務：換 port（--port <n>）或自行停掉該程序`)
     process.exit(1)
   }
@@ -614,7 +614,7 @@ async function cmdLaunch(o) {
         `✓ durable dev ready：${urlHint}（session ${sessionName}，掛在 zellij server 不會被 harness reap）`,
       )
       out(`  看畫面：zellij attach ${sessionName}（detach Ctrl-o d）`)
-      out(`  停止：  node scripts/dev-session.mjs stop --session ${sessionName}`)
+      out(`  停止：  node scripts/dev-session.ts stop --session ${sessionName}`)
       return
     }
   }

@@ -437,7 +437,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    **Branch on exit code:**
 
    - **Exit 0** → All checks pass. Proceed to Step 6.
-   - **Exit 2** → A check failed. Most common cause: Step 3.5 walkthrough was interrupted / skipped / produced incomplete annotations. Other checks (1/2/3/5/6) already passed pre-skill, so a failure here is almost certainly Check 4 — **or Check 7（缺 Step 8a.6 的 E.1 verdict record；補跑 `pre-handoff-ledger.mjs record --layer E.1 ...` 後重試，或對非適用 change 加 `<!-- pre-handoff-verdict: intentional, reason: ... -->` 到 tasks.md）**。
+   - **Exit 2** → A check failed. Most common cause: Step 3.5 walkthrough was interrupted / skipped / produced incomplete annotations. Other checks (1/2/3/5/6) already passed pre-skill, so a failure here is almost certainly Check 4 — **or Check 7（缺 Step 8a.6 的 E.1 verdict record；補跑 `pre-handoff-ledger.ts record --layer E.1 ...` 後重試，或對非適用 change 加 `<!-- pre-handoff-verdict: intentional, reason: ... -->` 到 tasks.md）**。
      - Display the gate stderr to the user.
      - **MUST** prompt via `AskUserQuestion`:
        - **Fix now** — go back to Step 3.5 and finish walkthrough for the items the gate flagged
@@ -449,12 +449,12 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    **Layer C — data-sanity audit**（clade fork addition; pre-handoff quality gates; not in upstream spectra）：archive-gate 過後、spec-sync 前，對本 change 跑 static data-shape audit，擋住「client query param literal 違反 server zod bound → silent 4xx → lookup map empty → admin list column 整列 fallback」這類 typecheck/lint/視覺都抓不到的資料形狀問題（<consumer-a> `app-status-badge-extraction` root cause）：
 
    ```bash
-   node <clade-vendor>/scripts/audit-data-sanity.mjs --consumer-path . --json
+   node <clade-vendor>/scripts/audit-data-sanity.ts --consumer-path . --json
    ```
 
    - **exit 0 `status: "pass"`** → 通過（advisory lookupRisks 印 stderr 供參考，不 block）；進 sidecar advance。
    - **exit 1 `status: "fail"`**（PARAM_BOUNDARY，Critical）→ **MUST block archive**：顯示 violations 給 user，root-cause 修 client literal 到 bound 內（典型 `perPage: 200`→`100`）或調 server schema 後 re-run。**NEVER** silently bypass、**NEVER** 標 archive done 留給 user manual review 抓。
-   - **Skip condition**: `audit-data-sanity.mjs` 不存在（consumer pre-propagation）→ warn + 跳過（fail-open，與 Check 5 一致）。
+   - **Skip condition**: `audit-data-sanity.ts` 不存在（consumer pre-propagation）→ warn + 跳過（fail-open，與 Check 5 一致）。
    - 完整偵測 / 限制（heuristic param-name 跨檔對應）見 `/data-sanity` skill。
 
    **Sidecar advance (TD-155)** — once gates pass (exit 0 or user explicitly bypassed), advance phase before entering spec-sync / archive CLI:
@@ -582,7 +582,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    consumer 的 `.claude/consumer-meta.json` 若有 `notion.projectWorkflow: true`，**MUST** 執行：
 
    ```bash
-   node ~/offline/clade/vendor/scripts/notion-sync.mjs archive --consumer-path . --change <change-name> --json
+   node ~/offline/clade/vendor/scripts/notion-sync.ts archive --consumer-path . --change <change-name> --json
    ```
 
    - `needsDecision` 非空 → **MUST** 逐條用 `AskUserQuestion` 問，帶 `--force-overwrite` 等答案重跑。**NEVER** silent skip。

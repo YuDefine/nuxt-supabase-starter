@@ -26,7 +26,7 @@ Born from <consumer-a> `app-status-badge-extraction`（2026-05-24）: `attendanc
 從 clade central 呼叫（`<clade-vendor>` = `~/offline/clade/vendor`，與其他 vendor script 同慣例）：
 
 ```bash
-node <clade-vendor>/scripts/audit-data-sanity.mjs \
+node <clade-vendor>/scripts/audit-data-sanity.ts \
   --consumer-path . \
   [--files <comma-separated-touched-files>] \
   --json
@@ -50,6 +50,6 @@ node <clade-vendor>/scripts/audit-data-sanity.mjs \
 
 ## 與其他 Layer 的關係
 
-- **Layer B**（`refactor-invariant-check.mjs`）：runtime 偵測「column 整欄 fallback」（症狀）。Layer C 是 static 偵測「param 超界」（root cause）。兩者互補。
+- **Layer B**（`refactor-invariant-check.ts`）：runtime 偵測「column 整欄 fallback」（症狀）。Layer C 是 static 偵測「param 超界」（root cause）。兩者互補。
 - **Layer D**（`UI-INVARIANTS.md`）：UI-INV-2 是本 skill 的契約來源。
 - **Layer E.1**（pre-handoff self-analysis）：D4 維度（API contract boundary）可直接引用本 audit 結果。

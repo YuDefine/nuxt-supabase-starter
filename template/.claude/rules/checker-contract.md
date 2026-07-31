@@ -139,7 +139,7 @@ Checker 的每一條判準 **MUST** 綁在**可觀察的行為事實**上。命�
 | 這筆記錄是否已存在 | 標題字串比對 | 業務唯一鍵的組合 |
 | 這個 phase 是不是 UI 層 | 標題含 `view` | 該格式自帶的顯式標記（`（非 view）` / `（view-only phase）`） |
 
-前兩列都是實證：`audit-consumer-meta-adoption.ts` 曾用檔名判準誤報「<consumer-b> 沒有部署流程」——它的 deploy job 住在 `ci.yml` 裡（`name: CI / Deploy` + `jobs.deploy` 做 rsync + SSH）；`notion-sync.mjs` 曾用「非 main」選 worktree，選到鄰居 change 的 worktree，因為**每個 worktree 都帶著 fork 當下的全部 change 目錄**。第四列是「`（非 view）`含 view」的反向誤判。
+前兩列都是實證：`audit-consumer-meta-adoption.ts` 曾用檔名判準誤報「<consumer-b> 沒有部署流程」——它的 deploy job 住在 `ci.yml` 裡（`name: CI / Deploy` + `jobs.deploy` 做 rsync + SSH）；`notion-sync.ts` 曾用「非 main」選 worktree，選到鄰居 change 的 worktree，因為**每個 worktree 都帶著 fork 當下的全部 change 目錄**。第四列是「`（非 view）`含 view」的反向誤判。
 
 ### 慣例判準的失敗形狀
 

@@ -40,7 +40,7 @@ evlog 預設只「寫」wide event 出去（FS / Sentry / Postgres / 自家 drai
 
 1. `import { createStreamDrain } from 'evlog/stream'` — in-process ring buffer，event 不出 process（`startStreamServer` 內部用，無獨立 template）
 2. `import { startStreamServer } from 'evlog/stream'` — SSE bridge 暴露 stream；envelope 表見 README。Templates：`nuxt-stream-{server,info,client}.template.ts`
-3. `import { readFsLogs, tailFsLogs } from 'evlog/fs'` — `.evlog/logs/*.jsonl` NDJSON replay / tail。Template：`fs-replay.template.mjs`
+3. `import { readFsLogs, tailFsLogs } from 'evlog/fs'` — `.evlog/logs/*.jsonl` NDJSON replay / tail。Template：`fs-replay.template.ts`
 
 ## 設計原則
 

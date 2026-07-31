@@ -216,12 +216,12 @@ Commit 完直接停手回報，**NEVER** 自己跑下一 phase。主線會在 co
 - review 用途的 `codex exec`（codex-review-safe.sh）與 WebSearch 不寫檔，本節不適用
 - 對 `claude` type subagent（如 `/spectra-ingest` 在 /wt 內派出的 wt subagent）規約相同（`🧹 chore: wt …` 前綴 + selective stage + self-check + hook 必跑），per worktree-default.md §5
 
-## 泛用 Dispatcher（codex-dispatch.mjs）
+## 泛用 Dispatcher（codex-dispatch.ts）
 
-**定位**：對已有 cookbook template 的派工場景，用 `~/offline/clade/vendor/scripts/codex-dispatch.mjs` 取代手組 prompt — 它把上面標準流程的固定成分（marker / flag 組 / stdin 餵 prompt / 無 pipe redirect / last-message JSON 解析）機械化成一個 node 呼叫，並內建手組 prompt 沒有的 quota check 與 telemetry。**template 已覆蓋的場景一律走 dispatcher；手寫 prompt 僅限 template 未覆蓋的新場景**（寫完若會重複用，回 clade 補 template）。
+**定位**：對已有 cookbook template 的派工場景，用 `~/offline/clade/vendor/scripts/codex-dispatch.ts` 取代手組 prompt — 它把上面標準流程的固定成分（marker / flag 組 / stdin 餵 prompt / 無 pipe redirect / last-message JSON 解析）機械化成一個 node 呼叫，並內建手組 prompt 沒有的 quota check 與 telemetry。**template 已覆蓋的場景一律走 dispatcher；手寫 prompt 僅限 template 未覆蓋的新場景**（寫完若會重複用，回 clade 補 template）。
 
 ```bash
-node ~/offline/clade/vendor/scripts/codex-dispatch.mjs \
+node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
   --template ~/offline/clade/vendor/snippets/codex-offload/templates/<name>.template.md \
   --var task='...' --var acceptance='...' --var git_baseline="$(git status --porcelain | head -20)" \
   --var allowed_paths='...' \
@@ -358,8 +358,8 @@ Codex 一律由主線直接 Bash 派 → notification-only，`ScheduleWakeup` �
 
 **為什麼**：該節上線 6 天實測（2026-06-11 audit），eligible change 採用率僅 1/3 — 兩條純非-view change 仍由主線自做、0 dispatch。文字規約對 routing 自律無效，故比照 Check 7 / E.1 先例補機械強制點。
 
-- spectra-apply 開工後、任何 dispatch 決策前，**MUST** 跑 `node ~/offline/clade/vendor/scripts/residency-classify.mjs classify --change openspec/changes/<change>` 拿機械 verdict
-- **MUST** 立刻 record decision：`node ~/offline/clade/vendor/scripts/residency-classify.mjs record --consumer-path . --change <change> --verdict <v> --executor <codex|claude> [--reason ...]` → 落 `.spectra/residency-ledger.jsonl`
+- spectra-apply 開工後、任何 dispatch 決策前，**MUST** 跑 `node ~/offline/clade/vendor/scripts/residency-classify.ts classify --change openspec/changes/<change>` 拿機械 verdict
+- **MUST** 立刻 record decision：`node ~/offline/clade/vendor/scripts/residency-classify.ts record --consumer-path . --change <change> --verdict <v> --executor <codex|claude> [--reason ...]` → 落 `.spectra/residency-ledger.jsonl`
 - verdict=`codex-primary` 而決定 executor=`claude` → `--reason` 必填（record 入口會擋）
 - archive-gate **Check 8** 機械驗 record 存在：缺 record → archive exit 2；正當例外加 `<!-- residency-decision: intentional, reason: ... -->` 到 tasks.md 繞過
 - adoption 量測：`node ~/offline/clade/scripts/audit-codex-adoption.ts`（clade home 稽核：verdict × executor 表 + dispatch ledger 分桶）

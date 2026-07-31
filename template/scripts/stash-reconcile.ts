@@ -510,7 +510,7 @@ function formatHandoffSection(consumerRoot, entries) {
     lines.push('')
   }
   lines.push(
-    `處理流程：跑 \`node vendor/scripts/stash-reconcile.mjs --include-all --sweep-orphans --interactive\` 逐筆對話處理。`,
+    `處理流程：跑 \`node vendor/scripts/stash-reconcile.ts --include-all --sweep-orphans --interactive\` 逐筆對話處理。`,
   )
   return lines.join('\n')
 }
@@ -770,7 +770,7 @@ main().catch((e) => {
   const usage = [
     '',
     'Usage:',
-    '  node scripts/stash-reconcile.mjs [--interactive|--json] [--include-all]',
+    '  node scripts/stash-reconcile.ts [--interactive|--json] [--include-all]',
     '                                   [--stale-days <N>] [--slug <substring>]',
     '',
     'See file header for full flag reference.',

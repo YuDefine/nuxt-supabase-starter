@@ -42,13 +42,13 @@ Layer A       Layer B               Layer C                   Layer E.1 + E.2   
 | --- | --- | --- | --- |
 | **Propose**（`/spectra-propose`） | manual-review item data-readiness：sample key inline + **該 key 是否真的會在 target UI render**（reverse page-grep） | runtime 正確性、視覺 | **Layer A** `VERIFY_UI_SAMPLE_KEY_DISPLAY_CHECK` + `page-display-check.mjs` |
 | **Apply — impl phases** | code 正確性、contract 遵循、typecheck/lint/unit | UI render 結果、視覺、跨檔資料形狀 | typecheck / lint / tests |
-| **Apply — Class B UI view phase**（Step 6c） | refactor invariant：admin list/table **無 column 整欄塌縮成 fallback** + page load 0 個 4xx/5xx | static 資料形狀、主觀視覺 | **Layer B** `refactor-invariant-check.mjs` |
-| **Apply — Design Review**（Step 7） | 資料形狀 sanity：client query param literal vs server zod bound + lookup-map empty risk | runtime render（B 管）、視覺 | **Layer C** `audit-data-sanity.mjs`（`/data-sanity`） |
+| **Apply — Class B UI view phase**（Step 6c） | refactor invariant：admin list/table **無 column 整欄塌縮成 fallback** + page load 0 個 4xx/5xx | static 資料形狀、主觀視覺 | **Layer B** `refactor-invariant-check.ts` |
+| **Apply — Design Review**（Step 7） | 資料形狀 sanity：client query param literal vs server zod bound + lookup-map empty risk | runtime render（B 管）、視覺 | **Layer C** `audit-data-sanity.ts`（`/data-sanity`） |
 | **Apply — Step 8a verify:ui** | DOM observation evidence：screenshot 真的支撐 `dom=` 宣稱（誠實，不 fab） | 跨維度 batch 檢查（E 管） | verify channel；fab 由 E.2 D2 batch 擋（write-time guard = 未來 3.2） |
 | **Apply — Step 8a.6 pre-handoff** | 5 維度跨檢（task↔render / evidence↔dom fab / list↔fallback / api boundary / error tail），主線 + codex 跨模型 | — | **Layer E.1**（主線 self-analysis）+ **E.2**（codex cross-check） |
 | **Archive**（`/spectra-archive` gate-check） | archive 前再跑 Layer C data-sanity + archive-gate Check 1–5 | — | `archive-gate.sh` + **Layer C** re-run |
 | **Manual review**（review-gui） | user 對**主觀視覺 / UX / 真人判斷**做最終驗收 | mechanical defect（應在上游被抓，user 不該當 last-line defense for trivial defect） | review-gui |
-| **UI-INVARIANTS**（Layer D） | 宣告式 baseline：list/table 不可整欄 fallback、lookup 解析率 100%、0 個 4xx/5xx、row count 匹配 seed、critical action 有確認框 | （不執行偵測，被 B/C/E 引用） | **Layer D** `ui-invariants.template.md` + `ui-invariants-resolve.mjs` |
+| **UI-INVARIANTS**（Layer D） | 宣告式 baseline：list/table 不可整欄 fallback、lookup 解析率 100%、0 個 4xx/5xx、row count 匹配 seed、critical action 有確認框 | （不執行偵測，被 B/C/E 引用） | **Layer D** `ui-invariants.template.md` + `ui-invariants-resolve.ts` |
 
 ## 事故失效鏈 case study（<consumer-a> `app-status-badge-extraction`）
 

@@ -129,8 +129,8 @@ Local edits will be reverted by the next sync.
 | 場景 | 該讀哪個欄位 |
 |---|---|
 | `proactive-skills.md § Dev Server Auto-Spawn` 判斷該不該 scan port | `auth.portPinned` + `dev.leaseMode` |
-| `vendor/scripts/dev-singleton.mjs` 起 dev server | `dev.ports[0].port` + `dev.singleton` path |
-| `vendor/scripts/wt-env-bootstrap.mjs` 拉 env file | `dev.envSyncPolicy.filesToCopy` |
+| `vendor/scripts/dev-singleton.ts` 起 dev server | `dev.ports[0].port` + `dev.singleton` path |
+| `vendor/scripts/wt-env-bootstrap.ts` 拉 env file | `dev.envSyncPolicy.filesToCopy` |
 | `rules/core/db-preview-env.md` audit | `database.previewEnvCapability` vs `registry/consumers.json capabilities.preview_db` |
 | `vendor/snippets/dev-auth/` cookbook 是否該推薦 | `auth.devSigninEnabled === false && auth.portPinned === true` |
 | `audit-ux-drift.ts` 截圖驗證 | `dev.ports[].port` + `verification.smokePaths` |

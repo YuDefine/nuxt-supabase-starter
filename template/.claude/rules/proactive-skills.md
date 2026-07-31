@@ -86,14 +86,14 @@ Local edits will be reverted by the next sync.
 `## 人工檢查` 的 checkbox **不能由 agent 自行代勾**。三條契約：
 
 1. 進入人工檢查階段（implementation tasks 完成、剩 `## 人工檢查` 區塊）時，**第一動作是 auto-triage**（per [[review-gui-surface]] MUST 9），不是直接引導使用者跑 `pnpm review:ui`
-2. 推進完畢後 **MUST** 跑 `node ~/offline/clade/vendor/scripts/check-review-readiness.mjs --repo . --change <change-name>` 確認 bucket；**exit 0 才可引導 user 到 review-gui**
+2. 推進完畢後 **MUST** 跑 `node ~/offline/clade/vendor/scripts/check-review-readiness.ts --repo . --change <change-name>` 確認 bucket；**exit 0 才可引導 user 到 review-gui**
 3. **NEVER** 自判 bucket、**NEVER** 跳過 script、**NEVER** 在 exit ≠ 0 時引導 user 到 review-gui —— Claude 自判已多次證明不可靠
 
 Auto-triage 的三類 pending item 路由、`[discuss]` item 的歸屬、review-gui deep-link 格式與 fallback 模式見 [[proactive-skills.manual-review-entry]]（path-scoped：碰 `openspec/changes/**` 時載入）。
 
 ### Dev Server Auto-Spawn（agent 自起，不要叫 user cd）
 
-詳見 [[proactive-skills.dev-server-spawn]]（path-scoped，碰 `scripts/dev-session*` / `consumer-meta.json` / `nuxt.config.*` 時載入）。核心 one-liner：agent 自己起 dev server，**MUST** 經 `vendor/scripts/dev-session.mjs`（durability=zellij），**NEVER** 裸 `nuxt dev` / `pnpm dev` / `run_in_background`。
+詳見 [[proactive-skills.dev-server-spawn]]（path-scoped，碰 `scripts/dev-session*` / `consumer-meta.json` / `nuxt.config.*` 時載入）。核心 one-liner：agent 自己起 dev server，**MUST** 經 `vendor/scripts/dev-session.ts`（durability=zellij），**NEVER** 裸 `nuxt dev` / `pnpm dev` / `run_in_background`。
 
 ## Review Tiers
 

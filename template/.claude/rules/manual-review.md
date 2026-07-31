@@ -186,7 +186,7 @@ Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由
 
 寫**任何一條**新 evidence annotation 時：payload **MUST** 進 sidecar（`.spectra/evidence/<change>.jsonl`），行內 **MUST** 只留 `(<kind>: <ISO>)` 短 marker。適用 **每一個** annotation kind，不是只有 `verified-ui`。
 
-寫入一律用 `vendor/scripts/lib/evidence-store.mjs --write`——它寫完 sidecar 會把該貼進行內的短 marker 印到 stdout，**原樣**貼上即可。**NEVER** 自己另編時間戳，**NEVER** 先貼 marker 再補 sidecar（順序顛倒時 parser 計 `malformed`）。
+寫入一律用 `vendor/scripts/lib/evidence-store.ts --write`——它寫完 sidecar 會把該貼進行內的短 marker 印到 stdout，**原樣**貼上即可。**NEVER** 自己另編時間戳，**NEVER** 先貼 marker 再補 sidecar（順序顛倒時 parser 計 `malformed`）。
 
 完整 flag 對照表、parser 對短 marker 的接受條件、以及「既有行內 payload annotation 一律不動」的理由：見 [[review-gui-surface]] § Annotation Format Contract § Evidence 寫入路徑。
 
@@ -220,7 +220,7 @@ Parent item `#N` 若有 scoped sub-items（`#N.M`），parent state **MUST** 由
 
 #### 欄位細節 / Strip semantics / CLI 寫入入口 / Home page 影響
 
-見 [[manual-review.evidence]] § `(claude-analyzed:)` / `(awaiting-user-decision:)` Schema 欄位與可寫條件、§ `(awaiting-user-decision: ...)` annotation 細節（含 `mark-claude-analyzed.mjs` CLI helper）。
+見 [[manual-review.evidence]] § `(claude-analyzed:)` / `(awaiting-user-decision:)` Schema 欄位與可寫條件、§ `(awaiting-user-decision: ...)` annotation 細節（含 `mark-claude-analyzed.ts` CLI helper）。
 
 ### `@apply-blocked[<reason>]` marker（impl 卡外部 blocker）
 
@@ -312,7 +312,7 @@ review-gui 主頁卡片上的「📋 補 evidence prompt」按鈕是 **fallback*
 - `[verify:e2e]` / `[verify:api]` annotation 寫入後可自動 flip `[x]`；`[verify:ui]` annotation 後仍 **MUST** 使用者在 review GUI 點 OK
 - `[review:ui]` **NEVER** 由 agent 代勾；`[discuss]` 由主線在 archive Step 2.5 主動準備 evidence 走 walkthrough，OK → 勾 `[x]` + `(claude-discussed: <ISO>)`
 
-Verify channel pre-baseline 假設（all `verify:*` channel 都依賴 codebase-level baseline，**MUST** 主線預檢、缺則停下回報，**NEVER** 派 agent 撞 baseline 缺）、dev-login route missing → scaffold-first hard rule、Detection helper（`vendor/snippets/dev-auth/lib/detect-dev-login-route.mjs`）+ audit script（`scripts/audit-dev-login-adoption.ts`）為 detection SoT、cookbook 範本（`vendor/snippets/verify-channels/`）：詳見 [[manual-review.backend]] § `[verify:*]` flow + Pre-verify baseline 假設 + Dev-login route missing → scaffold-first hard rule。
+Verify channel pre-baseline 假設（all `verify:*` channel 都依賴 codebase-level baseline，**MUST** 主線預檢、缺則停下回報，**NEVER** 派 agent 撞 baseline 缺）、dev-login route missing → scaffold-first hard rule、Detection helper（`vendor/snippets/dev-auth/lib/detect-dev-login-route.ts`）+ audit script（`scripts/audit-dev-login-adoption.ts`）為 detection SoT、cookbook 範本（`vendor/snippets/verify-channels/`）：詳見 [[manual-review.backend]] § `[verify:*]` flow + Pre-verify baseline 假設 + Dev-login route missing → scaffold-first hard rule。
 
 ## Post-Edit Validation Gate（hard rule）
 

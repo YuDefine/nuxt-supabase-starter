@@ -96,7 +96,7 @@ Local edits will be reverted by the next sync.
 
 > **baseline 過度累積**：若 `HANDOFF.md` 大多為 baseline section 但仍超 size / lines threshold（clade 自家常見情境），表示 baseline 已過度膨脹，**MUST** 評估是否該把某些 baseline 段拆出成 `docs/archives/<YYYY-MM>-<topic>.md` 或 `docs/solutions/<topic>.md`、`docs/decisions/<topic>.md`。HANDOFF 不是長期 KB。
 
-審計訊號（`vendor/scripts/handoff-drift-scan.mjs`）對應的觸發點：
+審計訊號（`vendor/scripts/handoff-drift-scan.ts`）對應的觸發點：
 
 - `handoff-size-exceeded` / `handoff-lines-exceeded`：HANDOFF.md 超過 size / lines threshold（default 30 KB / 400 lines；env / registry override 可調）
 - `narrative-section-stale`：completed-narrative dated section 超過 narrative_age_days（default 3 天）
@@ -127,7 +127,7 @@ Local edits will be reverted by the next sync.
 對涉及的每個 wt：
 
 ```bash
-node vendor/scripts/wt-helper.mjs merge-back <slug> --dry-run 2>&1
+node vendor/scripts/wt-helper.ts merge-back <slug> --dry-run 2>&1
 git -C <wt-path> status --porcelain | wc -l
 git for-each-ref "refs/wt-baseline/<slug>/" --format='%(refname)'
 ```
@@ -220,7 +220,7 @@ Root cause = HANDOFF writer（包含 Mode B § 2B.4 推薦階段）把 audit doc
 
 ## Drift detection (v1.13+)
 
-每次 session start 時，`session-start-roadmap-sync.sh` hook 會跑 `scripts/handoff-drift-scan.mjs`，自動掃所有 `session/*` worktree 跟 `HANDOFF.md` 內容比對，把 drift 寫到 stderr：
+每次 session start 時，`session-start-roadmap-sync.sh` hook 會跑 `scripts/handoff-drift-scan.ts`，自動掃所有 `session/*` worktree 跟 `HANDOFF.md` 內容比對，把 drift 寫到 stderr：
 
 - **unmentioned-progress** — branch HEAD 已 commit 但 slug 沒在 HANDOFF 出現 → 下個 session 看不到這個工作
 - **mention-stale** — branch 最新 commit 時間晚於 HANDOFF mtime → HANDOFF 描述可能過時

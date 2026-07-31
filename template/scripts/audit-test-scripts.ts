@@ -13,8 +13,8 @@
  *   - 缺少 `test:file` 或等價無 filter 的 escape hatch
  *
  * Usage:
- *   node scripts/audit-test-scripts.mjs            # 友善輸出
- *   node scripts/audit-test-scripts.mjs --json     # 機器可讀
+ *   node scripts/audit-test-scripts.ts            # 友善輸出
+ *   node scripts/audit-test-scripts.ts --json     # 機器可讀
  *
  * Exit: 0 clean / not-applicable · 1 drift found · 2 script error
  *

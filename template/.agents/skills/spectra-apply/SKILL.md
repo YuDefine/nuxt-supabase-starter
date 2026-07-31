@@ -464,7 +464,7 @@ If there is no request_user_input 工具 available, present options as plain tex
    1. **MUST** 跑 classifier 拿 verdict（開工後、動任何 phase 之前）：
 
       ```bash
-      node ~/offline/clade/vendor/scripts/residency-classify.mjs classify --change openspec/changes/<change>
+      node ~/offline/clade/vendor/scripts/residency-classify.ts classify --change openspec/changes/<change>
       ```
 
       stdout JSON：`{verdict: "codex-primary" | "claude-primary", phases: [...]}`。
@@ -472,7 +472,7 @@ If there is no request_user_input 工具 available, present options as plain tex
    2. **MUST 立刻** record decision（決定實際 executor 後、第一個 dispatch / 第一個 Edit 之前）：
 
       ```bash
-      node ~/offline/clade/vendor/scripts/residency-classify.mjs record \
+      node ~/offline/clade/vendor/scripts/residency-classify.ts record \
         --consumer-path . --change <change> \
         --verdict <classifier verdict> --executor <codex|claude> [--reason <text>]
       ```
@@ -619,7 +619,7 @@ If there is no request_user_input 工具 available, present options as plain tex
       - **NEVER** 因為 Design Review 需要 dev server / screenshot 而停下 — 主線有 proactive dev server spawn 能力（per `rules/core/proactive-skills.md`），自己起 server、自己截圖、自己完成
       - **例外**：user 明確說「Design Review 我自己做」「跳過 design」才可不做
 
-      **Design Review 期間 MUST 跑 Layer C data-sanity**（clade fork addition）：對本 change 觸及的 paginated query + lookup-resolved column 跑 `node <clade-vendor>/scripts/audit-data-sanity.mjs --consumer-path . --files <touched> --json`。exit 1 `status:"fail"`（PARAM_BOUNDARY，Critical）→ 主線 root-cause 修（client literal 超 server zod bound，如 `perPage:200` vs `max(100)`），**NEVER** 帶病進 handoff。詳見 `/data-sanity` skill。
+      **Design Review 期間 MUST 跑 Layer C data-sanity**（clade fork addition）：對本 change 觸及的 paginated query + lookup-resolved column 跑 `node <clade-vendor>/scripts/audit-data-sanity.ts --consumer-path . --files <touched> --json`。exit 1 `status:"fail"`（PARAM_BOUNDARY，Critical）→ 主線 root-cause 修（client literal 超 server zod bound，如 `perPage:200` vs `max(100)`），**NEVER** 帶病進 handoff。詳見 `/data-sanity` skill。
 
 6c. **Refactor Invariant Check**（clade fork addition；Layer B of pre-handoff quality gates；not in upstream spectra）
 
@@ -634,7 +634,7 @@ If there is no request_user_input 工具 available, present options as plain tex
    3. **跑 check**（從 clade central 呼叫，`<clade-vendor>` 解析為 `~/offline/clade/vendor`，與 Step 8a.4 codex-dispatch 同慣例）：
 
       ```bash
-      node <clade-vendor>/scripts/refactor-invariant-check.mjs \
+      node <clade-vendor>/scripts/refactor-invariant-check.ts \
         --consumer-path . \
         --dev-server-url http://localhost:<port> \
         --files <comma-separated-touched-vue-paths> \
@@ -858,7 +858,7 @@ If there is no request_user_input 工具 available, present options as plain tex
    (a)(b) 兩層**預設**派背景 codex 執行，主線不 foreground 自跑：
 
    ```bash
-   node ~/offline/clade/vendor/scripts/codex-dispatch.mjs \
+   node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
      --template ~/offline/clade/vendor/snippets/codex-offload/templates/self-collect-evidence.template.md \
      --var <key>=<value> ...（依 template 變數表填：change name、dev-login route 路徑、fixture UUID、port、table 等） \
      --label 8a-self-collect-<change> --effort medium
@@ -866,7 +866,7 @@ If there is no request_user_input 工具 available, present options as plain tex
 
    （背景跑、stdout 單一 JSON evidence；exit 0=ok / 2=(a)(b) 皆業務 fail / 3=機械故障 / 4=quota。exit 2 → 主線依序降到 (c)(d)，**不**重派同一 brief；exit 3/4 → 機械故障，主線 fallback foreground 自跑 (a)(b) 再續 chain。）
 
-   - **(c)(d) 既有路徑不動**：(c) 維持主線自起 dev server + agent-browser；(d) 已走 `codex-dispatch-screenshot-verify.mjs`，**不**改走本 dispatcher
+   - **(c)(d) 既有路徑不動**：(c) 維持主線自起 dev server + agent-browser；(d) 已走 `codex-dispatch-screenshot-verify.ts`，**不**改走本 dispatcher
    - **Evidence annotation 寫回 tasks.md 維持主線**（多 session 共用 working tree 的寫入紀律）— codex 只回報 JSON evidence，**NEVER** 讓 codex 直接 Edit tasks.md
    - 主線收到 codex JSON evidence 後 **MUST 抽查至少一項**（重跑一條 curl / SELECT 比對回報值）再寫 annotation — **不信 codex 自報**
 
@@ -957,7 +957,7 @@ If there is no request_user_input 工具 available, present options as plain tex
 
       **Runtime 選擇**（default codex；Claude subagent fallback）：
 
-      - **Default — codex**：偵測 `command -v codex` 存在且 env `CLADE_FORCE_CLAUDE_SCREENSHOT` 未設 → 呼叫 `node <clade-vendor>/scripts/codex-dispatch-screenshot-verify.mjs --change <name> --consumer-path . --dev-server-url <url> --items-json <items.json>`（dispatcher 內部以 **medium** effort 收集截圖）。Dispatcher 跑完 stdout 印 JSON 摘要（`{"runtime":"codex","change":...,"items":[...],"audit_exit_code":N,"progress_json":"...","review_md":"..."}`），主線解析該 JSON 後進入 **Screenshot Match Analysis gate**（見下方 §）。Codex 任一 item `status` 不是 `PASS` 時 → 保留 `[ ]` + 寫 issue / blocker（業務結果，**NEVER** fallback Claude — 同一 brief 在 Claude 也會撞同樣業務問題）
+      - **Default — codex**：偵測 `command -v codex` 存在且 env `CLADE_FORCE_CLAUDE_SCREENSHOT` 未設 → 呼叫 `node <clade-vendor>/scripts/codex-dispatch-screenshot-verify.ts --change <name> --consumer-path . --dev-server-url <url> --items-json <items.json>`（dispatcher 內部以 **medium** effort 收集截圖）。Dispatcher 跑完 stdout 印 JSON 摘要（`{"runtime":"codex","change":...,"items":[...],"audit_exit_code":N,"progress_json":"...","review_md":"..."}`），主線解析該 JSON 後進入 **Screenshot Match Analysis gate**（見下方 §）。Codex 任一 item `status` 不是 `PASS` 時 → 保留 `[ ]` + 寫 issue / blocker（業務結果，**NEVER** fallback Claude — 同一 brief 在 Claude 也會撞同樣業務問題）
       - **Fallback — Claude subagent**：以下任一情境**才** fallback 到 `screenshot-review` subagent（brief copy/adapt 自 `vendor/snippets/verify-channels/ui-final-state-brief.template.md`）：
         - `command -v codex` 不存在
         - env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 強制退場（debug / 退場用）
@@ -966,7 +966,7 @@ If there is no request_user_input 工具 available, present options as plain tex
 
       **反 bypass（hard rule — 2026-06-11 audit 實證）**：
 
-      - **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 `verify:ui` evidence 來取代本步 dispatcher — 2026-06-11 audit 實證：05-29 dispatcher 修復後 147 條 `(verified-ui:)` annotation **0 次走 codex**、92 個 session 全部走此 bypass 形狀（從未進入本分支）、0 次機械故障 fallback 記錄。需要 `verify:ui` evidence 的**唯一**入口是 `node ~/offline/clade/vendor/scripts/codex-dispatch-screenshot-verify.mjs`
+      - **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 `verify:ui` evidence 來取代本步 dispatcher — 2026-06-11 audit 實證：05-29 dispatcher 修復後 147 條 `(verified-ui:)` annotation **0 次走 codex**、92 個 session 全部走此 bypass 形狀（從未進入本分支）、0 次機械故障 fallback 記錄。需要 `verify:ui` evidence 的**唯一**入口是 `node ~/offline/clade/vendor/scripts/codex-dispatch-screenshot-verify.ts`
       - **Claude fallback 僅限機械故障**（`command -v codex` 不存在 / dispatcher exit≠0 且 stdout 無 parseable JSON；env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 為 user 明確設定的 debug 退場，不在此限），且 **MUST** 在 tasks.md 對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡 — **無此痕跡的 Claude 自拍 evidence 視為違規**（audit 以 annotation × dispatcher 記錄比對抓）
 
       共用規約：
@@ -1142,7 +1142,7 @@ If there is no request_user_input 工具 available, present options as plain tex
    4. **Record the E.1 verdict（telemetry-only，fail-open）**：
 
       ```bash
-      node <clade-vendor>/scripts/pre-handoff-ledger.mjs record \
+      node <clade-vendor>/scripts/pre-handoff-ledger.ts record \
         --consumer-path . --change <change-name> --layer E.1 \
         --status <pass|fail> \
         --findings-json '[{"dimension":"D2","severity":"critical"}, ...]'
@@ -1153,7 +1153,7 @@ If there is no request_user_input 工具 available, present options as plain tex
    **Layer E.2 — codex cross-model second opinion**（clade fork addition；Phase 2）：E.1 之後 **MUST** 再派 **codex GPT-5.6-sol xhigh** 對同 5 dimension 做獨立 cross-check（E.1 收集 + 判定都是同 model 同 session，E.2 另起一個 session 獨立審——不同 session 各自推理，防止 E.1 session 內的 rationalization 傳染）：
 
    ```bash
-   node <clade-vendor>/scripts/codex-dispatch-pre-handoff-check.mjs \
+   node <clade-vendor>/scripts/codex-dispatch-pre-handoff-check.ts \
      --change <change-name> --consumer-path . \
      --tasks-file openspec/changes/<change-name>/tasks.md \
      --screenshots-dir screenshots/local/<change-name>
@@ -1163,9 +1163,9 @@ If there is no request_user_input 工具 available, present options as plain tex
    - **merge E.1 + E.2 findings**：兩方任一 `FAIL` → 對應 item 寫 `（issue: <dimension>: <evidence>）` annotation（去重；D2 fabrication 同樣 strip 假 `(verified-ui:)` + restore `[ ]`）。
    - **Fallback**：dispatcher 回 `status:"error"` + `fallback:"claude-subagent"`（codex 不在 / 無 parseable JSON）→ 改派一個 Claude subagent 用 `main-self-analysis.template.md` 同 5 dimension 做 cross-check（**NEVER** 憑記憶補；**NEVER** 跳過 cross-check 直接 handoff）。
 
-   **Level**: Phase 2 仍為 **warning / soft-gate** — E.1 + E.2 都跑、findings 必寫成 `（issue:）`annotation 讓 user 在 review-gui 看到，但**不**hard-block workflow（user 在 GUI 拍板）。Phase 3.1 才把「zero unresolved findings」整進 `archive-gate.sh` 成 hard gate。每次 E.1/E.2 verdict 已落 `<consumer>/.spectra/pre-handoff-ledger.jsonl`（telemetry，gitignored）；Phase 3.1 升 hard gate 的 soak 評估跑 `node <clade-vendor>/scripts/pre-handoff-ledger.mjs report --all-consumers`（出 fire-rate / by-dimension / E.1↔E.2 agreement）。
+   **Level**: Phase 2 仍為 **warning / soft-gate** — E.1 + E.2 都跑、findings 必寫成 `（issue:）`annotation 讓 user 在 review-gui 看到，但**不**hard-block workflow（user 在 GUI 拍板）。Phase 3.1 才把「zero unresolved findings」整進 `archive-gate.sh` 成 hard gate。每次 E.1/E.2 verdict 已落 `<consumer>/.spectra/pre-handoff-ledger.jsonl`（telemetry，gitignored）；Phase 3.1 升 hard gate 的 soak 評估跑 `node <clade-vendor>/scripts/pre-handoff-ledger.ts report --all-consumers`（出 fire-rate / by-dimension / E.1↔E.2 agreement）。
 
-   **Reuse Step 6c / Layer C**: D3 / D5 是 `refactor-invariant-check.mjs`（Layer B）偵測的；D4 是 `audit-data-sanity.mjs`（Layer C）偵測的。已跑過就 cite 結果，不必重跑。
+   **Reuse Step 6c / Layer C**: D3 / D5 是 `refactor-invariant-check.ts`（Layer B）偵測的；D4 是 `audit-data-sanity.ts`（Layer C）偵測的。已跑過就 cite 結果，不必重跑。
 
 8a.7. **Screenshot Staleness Sweep + Auto-reshoot** (clade fork addition — mechanical gate before Step 8b handoff)
 
@@ -1188,7 +1188,7 @@ If there is no request_user_input 工具 available, present options as plain tex
 
    3. **STALE 重拍**（**codex GPT-5.6-sol medium**）：對 `stale` array 內每個 item：
       - 從 tasks.md `## 人工檢查` 找到對應 `#N` item 的 URL + ready_signal
-      - 派 codex GPT-5.6-sol medium 透過 `codex-dispatch-screenshot-verify.mjs` 重拍該張截圖
+      - 派 codex GPT-5.6-sol medium 透過 `codex-dispatch-screenshot-verify.ts` 重拍該張截圖
       - 覆蓋原檔（mtime 自然 > last UI commit）
       - 重拍完成後，對重拍的截圖跑 **Screenshot Match Analysis gate**（同 Step 8a § 4 的 codex GPT-5.6-sol xhigh 分析），確認重拍截圖匹配要求
 
@@ -1219,7 +1219,7 @@ If there is no request_user_input 工具 available, present options as plain tex
    **Notion 專案層同步**（clade fork addition；per [[spectra-notion-coupling]] § 專案層）：readiness check 通過後、送出 handoff message **之前**，consumer 的 `.claude/consumer-meta.json` 若有 `notion.projectWorkflow: true` 則 **MUST** 執行：
 
    ```bash
-   node ~/offline/clade/vendor/scripts/notion-sync.mjs handoff --consumer-path . --change <change-name> --json
+   node ~/offline/clade/vendor/scripts/notion-sync.ts handoff --consumer-path . --change <change-name> --json
    ```
 
    本指令會依 tasks.md 現況**補正全部** Task 狀態——Step 7 的實作期間 phase 勾選會漂移，這是唯一一次全面對齊的機會。`needsDecision` 非空 → **MUST** 逐條 `request_user_input` 後帶答案重跑；**NEVER** 因為判定不了就略過不提。未啟用 `projectWorkflow` → script 自行 exit 0。
@@ -1243,7 +1243,7 @@ If there is no request_user_input 工具 available, present options as plain tex
    **Mechanical readiness gate（per [[review-gui-surface]] MUST 9）**：handoff message 之前 **MUST** 跑 script 確認 `bucket=ready`：
 
    ```bash
-   node ~/offline/clade/vendor/scripts/check-review-readiness.mjs \
+   node ~/offline/clade/vendor/scripts/check-review-readiness.ts \
      --repo . --change <change-name>
    ```
 

@@ -46,7 +46,7 @@ test -f registry/consumers.json -a -f consumers.local
 當缺 `target_version` 或缺 `release_url` 時，跑：
 
 ```bash
-node vendor/scripts/dep-fleet-discover.mjs --pkg "<pkg>" [--version <ver>]
+node vendor/scripts/dep-fleet-discover.ts --pkg "<pkg>" [--version <ver>]
 ```
 
 輸出 JSON：
@@ -136,7 +136,7 @@ gh release view v<target_version> --repo <owner>/<repo> --json body,name,tagName
 ## Step F.3 — Fleet scan 命中 consumer
 
 ```bash
-node vendor/scripts/dep-fleet-scan.mjs --pkg "<pkg>" --target "<target_version>" > /tmp/dep-fleet-scan-<pkg-slug>.json
+node vendor/scripts/dep-fleet-scan.ts --pkg "<pkg>" --target "<target_version>" > /tmp/dep-fleet-scan-<pkg-slug>.json
 ```
 
 挑出 `found: true` 的當作 hit consumer 名單。

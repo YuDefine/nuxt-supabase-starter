@@ -136,7 +136,7 @@ mutation `status === 'pending'` 當 loading 是**真 functional bug**（永久 s
 | **pre-push gate** | 全 repo `.vue`（回溯型） | `git push` | **warn-only**（fleet 有大量歷史命中，全擋會癱瘓 push；`vendor/scripts/pre-push/checks/mutation-loading.sh`） |
 | **review 層** | PR diff | code-review agent / `/commit` 0-A | `clade-review-rules.md` § Pinia Colada mutation loading |
 
-三層 mechanical gate 共用同一偵測器 `vendor/scripts/checks/mutation-loading-detect.mjs`（**支援跨行 destructuring** — 舊 audit heuristic 要求 `status:` 與 `Mutation(` 同行，會漏抓多行寫法，已修）。cross-consumer 盤點另有 `scripts/audit-pinia-mutation-loading.ts`（diagnostic-only，exit 0，import 同一偵測器）。
+三層 mechanical gate 共用同一偵測器 `vendor/scripts/checks/mutation-loading-detect.ts`（**支援跨行 destructuring** — 舊 audit heuristic 要求 `status:` 與 `Mutation(` 同行，會漏抓多行寫法，已修）。cross-consumer 盤點另有 `scripts/audit-pinia-mutation-loading.ts`（diagnostic-only，exit 0，import 同一偵測器）。
 
 - **pre-commit blocking**：新違規在源頭就擋，`git diff --cached` 的 `.vue` 有命中 → commit 失敗。
 - **pre-push warn-only**：全站掃描回溯提醒既有違規，不阻擋 push。某 consumer 清到 0 後可在自家 `pre-push/runner.sh` 把本 check 改 blocking。

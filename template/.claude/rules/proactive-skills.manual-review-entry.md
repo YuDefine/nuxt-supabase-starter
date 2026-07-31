@@ -28,7 +28,7 @@ Local edits will be reverted by the next sync.
 2. 推進完畢後 **MUST** 跑 mechanical gate script 確認 bucket：
 
    ```bash
-   node ~/offline/clade/vendor/scripts/check-review-readiness.mjs \
+   node ~/offline/clade/vendor/scripts/check-review-readiness.ts \
      --repo . --change <change-name>
    ```
 

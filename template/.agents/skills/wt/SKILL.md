@@ -206,7 +206,7 @@ Classify the task to choose the executor. The default routing is automatic; user
    - OR thin brief lists files matching: `*.vue`, `*.tsx`, `*.jsx`, `*.css`, `*.scss`, `pages/`, `components/`, `layouts/`, `views/`
    - Rationale: UI work requires Claude's visual reasoning + nuxt-ui-mcp / modern-web-guidance skill access. Codex has a hard view-layer guard.
 
-2. **Analysis/debug work** → **Codex via codex-dispatch.mjs** (Step 2-codex-investigate)
+2. **Analysis/debug work** → **Codex via codex-dispatch.ts** (Step 2-codex-investigate)
    - Task description contains investigation keywords: `analyze`, `analysis`, `debug`, `investigate`, `audit`, `scan`, `trace`, `why`, `root cause`, `分析`, `除錯`, `調查`, `掃描`, `追蹤`, `為什麼`
    - Rationale: analysis/debug tasks benefit from Codex's structured evidence collection (codex-offload templates). These tasks typically don't need worktree commits — they produce JSON reports.
 
@@ -239,9 +239,9 @@ Routing: <task> → [codex|claude|codex:analyze|codex:debug] (<reason>)
 
 ### Step 2-codex-investigate — Codex analysis/debug into worktree
 
-**MUST Read [dispatch-codex.md](dispatch-codex.md) § Step 2-codex-investigate before dispatching** — 含 investigation 分類（debug/analysis）、`codex-dispatch.mjs` 參數、template 選擇、JSON evidence 解析。
+**MUST Read [dispatch-codex.md](dispatch-codex.md) § Step 2-codex-investigate before dispatching** — 含 investigation 分類（debug/analysis）、`codex-dispatch.ts` 參數、template 選擇、JSON evidence 解析。
 
-摘要：`codex-dispatch.mjs --template <template>` 走 codex-offload，產出 structured JSON evidence → 寫入 WORKTREE-BRIEF.md `# Findings`。
+摘要：`codex-dispatch.ts --template <template>` 走 codex-offload，產出 structured JSON evidence → 寫入 WORKTREE-BRIEF.md `# Findings`。
 
 ### Step 3 — Wait for completion
 

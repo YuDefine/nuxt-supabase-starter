@@ -111,7 +111,7 @@ When Step 1.8 routes to Codex for coding work, use `Bash run_in_background=true`
 
 # Step 2-codex-investigate — Codex analysis/debug into worktree
 
-When Step 1.8 routes to analysis/debug, use `codex-dispatch.mjs` with the appropriate codex-offload template. These tasks produce structured JSON evidence — typically no commits needed.
+When Step 1.8 routes to analysis/debug, use `codex-dispatch.ts` with the appropriate codex-offload template. These tasks produce structured JSON evidence — typically no commits needed.
 
 1. **Classify the investigation type**:
    - **Debug** (error/bug/crash/failure/unexpected behavior/timeout/leak/exception/500) → `debug-evidence.template.md`, effort default `high`
@@ -130,7 +130,7 @@ When Step 1.8 routes to analysis/debug, use `codex-dispatch.mjs` with the approp
 3. **Dispatch** via background Bash:
 
    ```bash
-   node ~/offline/clade/vendor/scripts/codex-dispatch.mjs \
+   node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
      --template ~/offline/clade/vendor/snippets/codex-offload/templates/<template>.template.md \
      --var "task=<task>" \
      --var "acceptance=<acceptance>" \
@@ -148,7 +148,7 @@ When Step 1.8 routes to analysis/debug, use `codex-dispatch.mjs` with the approp
    ```
    🚀 Codex dispatched [<debug|analyze>]
      worktree: <worktree-absolute-path>
-     model:    gpt-5.6-sol (via codex-dispatch.mjs)
+     model:    gpt-5.6-sol (via codex-dispatch.ts)
      effort:   <effort level chosen>
      template: <template-filename>.template.md
      bash job: <job-id>

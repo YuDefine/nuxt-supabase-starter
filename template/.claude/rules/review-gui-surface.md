@@ -5,7 +5,7 @@ paths:
   - 'openspec/changes/**'
   - 'HANDOFF.md'
   - 'vendor/scripts/review-gui*.ts'
-  - 'vendor/scripts/lib/evidence-store.mjs'
+  - 'vendor/scripts/lib/evidence-store.ts'
   - 'scripts/spectra-advanced/**'
   - '.claude/skills/spectra-verify/**'
   - '.claude/skills/spectra-apply/**'
@@ -44,7 +44,7 @@ Local edits will be reverted by the next sync.
 | `/handoff` Mode B 2B.0 | `plugins/hub-core/skills/handoff/SKILL.md` Step 2B.0/2B.1.7 | 推薦 user 跑 review:ui **前** MUST 先跑 `review-gui.ts --scan` 寫入 HANDOFF.md |
 | `screenshot-review` verify mode | 主線直派 codex（per [[agent-routing]]） | item 含 compound visual state → 分成 scoped sub-items 或 multi-screenshot annotation |
 | `verified-ui` evidence collection（spectra-apply Step 8a） | `vendor/snippets/verify-channels/ui-final-state-brief*.template.md` | compound state evidence 必拆 / 必標多 screenshot |
-| `codex-dispatch-screenshot-verify.mjs` dispatcher | clade vendor script | dispatcher 內 invoke external CLI 前 verify CLI contract（per [[agent-self-verification]] § MUST 4） |
+| `codex-dispatch-screenshot-verify.ts` dispatcher | clade vendor script | dispatcher 內 invoke external CLI 前 verify CLI contract（per [[agent-self-verification]] § MUST 4） |
 | review-gui detail page 互動 | `vendor/scripts/review-gui.ts` server-side handlers | impl 完成率 < threshold → manual review block readonly + amber banner（已 implemented v1.4.30+） |
 
 ## Hard rule
@@ -81,7 +81,7 @@ Local edits will be reverted by the next sync.
 9. **引導 user 到 review-gui 前 MUST 跑 mechanical gate + 自行推進到 ready（hard rule）**：**任何**要把 user 導向 `pnpm review:ui` 的場景（`/commit` 0-MR block、handoff、spectra-apply Step 8b、session 結尾回報），Claude **MUST** 先跑 mechanical gate script **取得 exit 0** 才能引導：
 
    ```bash
-   node ~/offline/clade/vendor/scripts/check-review-readiness.mjs \
+   node ~/offline/clade/vendor/scripts/check-review-readiness.ts \
      --repo <consumer-path> --change <change-name>
    ```
 
@@ -160,7 +160,7 @@ review-gui parser 對 annotation key 和 status tag **嚴格字面匹配**。寫
 一條命令做完兩件事——寫 sidecar，並印出要貼進 `tasks.md` 的行內 marker：
 
 ```bash
-node ~/offline/clade/vendor/scripts/lib/evidence-store.mjs \
+node ~/offline/clade/vendor/scripts/lib/evidence-store.ts \
   --repo <consumer-path> --change <change-name> --write \
   --item '#3' --kind verified-ui \
   --screenshot 'screenshots/local/<change-name>/#3-final.png' \
@@ -258,7 +258,7 @@ node ~/offline/clade/vendor/scripts/lib/evidence-store.mjs \
 | --- | --- | --- | --- |
 | `compound_verify_ui_single_screenshot` | TD-142 / TD-143 | done | `vendor/scripts/audit-screenshot-quality.ts` |
 | `stale_screenshot_after_ui_change` | TD-178 | done | `vendor/scripts/audit-screenshot-staleness.ts` |
-| `claude-analyzed-drift`（MUST 6/7 違反偵測） | TD-179 | done | `vendor/scripts/audit-claude-analyzed-drift.mjs` |
+| `claude-analyzed-drift`（MUST 6/7 違反偵測） | TD-179 | done | `vendor/scripts/audit-claude-analyzed-drift.ts` |
 
 **Performance 實測（MUST 5）升級路徑**：目前 advisory；若漏驗頻繁 → archive 前 hard gate 或 review-gui 自動生成 perf-trace sub-item（動本體，須走 [[review-gui-change-discipline]] fixtures gate）。
 

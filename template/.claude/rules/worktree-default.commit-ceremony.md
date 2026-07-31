@@ -3,10 +3,10 @@ description: Worktree v3 commit 階段 — subagent commit → archive 吸收 �
 paths:
   - 'openspec/changes/**'
   - 'HANDOFF.md'
-  - 'vendor/scripts/wt-helper.mjs'
-  - 'vendor/scripts/stash-reconcile.mjs'
-  - 'scripts/wt-helper.mjs'
-  - 'scripts/stash-reconcile.mjs'
+  - 'vendor/scripts/wt-helper.ts'
+  - 'vendor/scripts/stash-reconcile.ts'
+  - 'scripts/wt-helper.ts'
+  - 'scripts/stash-reconcile.ts'
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -39,7 +39,7 @@ v3 atomic landing 解這些：main 永遠 deployable；多 session 平行不污�
 
 1. **Subagent 在 worktree 內 commit**（`/wt` prompt template 強制）：`git add -- <scoped file>` selective stage（**禁止** `git add -A`） + `git commit -m "🧹 chore: wt <slug> — <short>"`，可多 commit，pre-commit / commit-msg hook 必跑。**NEVER**：`git push` / `/commit` / `/spectra-commit`。
 2. **`/wt` 返回時**：**不** squash，**不** cleanup。worktree + branch 保留，主線只報告 status。
-3. **`/spectra-archive <name>` Step 0 — atomic merge-back**：跑 `node scripts/wt-helper.mjs merge-back <name> --auto-stash --noop-if-missing`（細節見 §5.5）。
+3. **`/spectra-archive <name>` Step 0 — atomic merge-back**：跑 `node scripts/wt-helper.ts merge-back <name> --auto-stash --noop-if-missing`（細節見 §5.5）。
 4. **Archive 後續 step**（gates / spec sync / screenshot sweep / folder mv）跑於 post-squash main，gate 檢查看到 merge 後結果。
 5. **User 在 main 跑 `/commit`**（時機 user 決定，可累積多 archive 再一次 commit）：selective stage + 0-A/B/C 品質閘門 + commit + push。Archive 後 tasks.md 已 mv 進 archive 子目錄，人工檢查 Gate 不擋。
 
@@ -68,7 +68,7 @@ Skill 自己 fork worktree、有**清楚 end-of-skill 完成點**、**無下游 
 
 ## §5.5 Merge-back ceremony
 
-`wt-helper merge-back <slug>` 是 atomic landing 的核心命令，由 `/spectra-archive` Step 0 自動呼叫，或 user 手動呼叫。完整 flags 表與預設行為 7 步見 `~/offline/clade/vendor/snippets/worktree-baseline/merge-back-ceremony.md`；flags 詳見 `node vendor/scripts/wt-helper.mjs merge-back --help`。
+`wt-helper merge-back <slug>` 是 atomic landing 的核心命令，由 `/spectra-archive` Step 0 自動呼叫，或 user 手動呼叫。完整 flags 表與預設行為 7 步見 `~/offline/clade/vendor/snippets/worktree-baseline/merge-back-ceremony.md`；flags 詳見 `node vendor/scripts/wt-helper.ts merge-back --help`。
 
 ### Claim guard scope ⊇ bulk-stash scope（hard rule）
 
@@ -86,7 +86,7 @@ Skill 自己 fork worktree、有**清楚 end-of-skill 完成點**、**無下游 
 
 ### Stash reconcile（後續清理）
 
-`node scripts/stash-reconcile.mjs`（`--interactive` / `--json` / `--slug <slug>` / `--stale-days N` / `--include-all`）列每條 namespaced stash + 建議命令；merge-back 成功收尾會自動印帶 `--slug` 的 reconcile hint。**永遠不 auto-pop / auto-stage / auto-commit**：apply 後 user WIP 在 working tree，必須走 `/spectra-commit` 或 `/commit` 的 selective stage（**禁止** `git add -A`）。
+`node scripts/stash-reconcile.ts`（`--interactive` / `--json` / `--slug <slug>` / `--stale-days N` / `--include-all`）列每條 namespaced stash + 建議命令；merge-back 成功收尾會自動印帶 `--slug` 的 reconcile hint。**永遠不 auto-pop / auto-stage / auto-commit**：apply 後 user WIP 在 working tree，必須走 `/spectra-commit` 或 `/commit` 的 selective stage（**禁止** `git add -A`）。
 
 完整命令清單、Stash 命名空間表與失敗 fallback 表見 `~/offline/clade/vendor/snippets/worktree-baseline/merge-back-ceremony.md`。其中 `cleanup` 拒絕 uncommitted 時 **NEVER** 急加 `--force-discard-uncommitted` — 先 `wt-helper rescue --show <ref>` 看 patch、救完再 cleanup。
 
@@ -97,11 +97,11 @@ Skill 自己 fork worktree、有**清楚 end-of-skill 完成點**、**無下游 
 | 動作 | 指令 | 說明 |
 | --- | --- | --- |
 | 開始 worktree task（推薦入口） | `/wt <task description>` | `/wt` orchestrate build + dispatch + report；不 squash 不 cleanup（v3） |
-| 列出 session worktree | `node scripts/wt-helper.mjs list` 或 `--json` | 看 pending worktrees |
-| Atomic merge-back | `node scripts/wt-helper.mjs merge-back <slug>` | 把 worktree atomic land 進 main（squash + cleanup） |
-| Merge-back 預覽 | `node scripts/wt-helper.mjs merge-back <slug> --dry-run` | 列 blockers 不執行 |
-| List pre-fork baseline 救援候選 | `node scripts/wt-helper.mjs rescue` | 列 `refs/wt-baseline/*` pinned ref + fsck dangling stash；`--show <ref\|sha>` 看 patch（read-only） |
-| Stash reconcile 互動 | `node scripts/stash-reconcile.mjs --interactive` | 一條一條 apply / drop / view（never auto-pop） |
+| 列出 session worktree | `node scripts/wt-helper.ts list` 或 `--json` | 看 pending worktrees |
+| Atomic merge-back | `node scripts/wt-helper.ts merge-back <slug>` | 把 worktree atomic land 進 main（squash + cleanup） |
+| Merge-back 預覽 | `node scripts/wt-helper.ts merge-back <slug> --dry-run` | 列 blockers 不執行 |
+| List pre-fork baseline 救援候選 | `node scripts/wt-helper.ts rescue` | 列 `refs/wt-baseline/*` pinned ref + fsck dangling stash；`--show <ref\|sha>` 看 patch（read-only） |
+| Stash reconcile 互動 | `node scripts/stash-reconcile.ts --interactive` | 一條一條 apply / drop / view（never auto-pop） |
 
 完整工具表（含 `cleanup --force`（**丟工作**，必先 merge-back + rescue 撈 baseline）、`land-pending`、`prune`、reconcile 各模式、`handoff-drift-scan.mjs`）見 `~/offline/clade/vendor/snippets/wt-helper/README.md` § 工具速查表。
 

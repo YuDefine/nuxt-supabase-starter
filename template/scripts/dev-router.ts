@@ -17,9 +17,9 @@
 // 用法：
 //   pnpm dev:router:<client-a>           # 啟動常駐 router（proxy + control UI + tunnel + main backend）
 //   pnpm dev:router:shared
-//   node scripts/dev-router.mjs list             # 列當前 state
-//   node scripts/dev-router.mjs use <slug>       # 切 active backend
-//   node scripts/dev-router.mjs stop <slug>      # 停某 backend（active 拒絕）
+//   node scripts/dev-router.ts list             # 列當前 state
+//   node scripts/dev-router.ts use <slug>       # 切 active backend
+//   node scripts/dev-router.ts stop <slug>      # 停某 backend（active 拒絕）
 //
 // control UI：http://127.0.0.1:<controlPort>（controlPort = publicPort + 300；<consumer-a> <client-a> 3040→3340）
 
@@ -465,7 +465,7 @@ async function runSubcommand(cmd, arg) {
 
   if (cmd === 'use') {
     if (!arg) {
-      console.error('[dev-router] usage: node scripts/dev-router.mjs use <slug>')
+      console.error('[dev-router] usage: node scripts/dev-router.ts use <slug>')
       process.exit(1)
     }
     const res = await daemonFetch(`/api/activate?slug=${encodeURIComponent(arg)}`, {
@@ -486,7 +486,7 @@ async function runSubcommand(cmd, arg) {
 
   if (cmd === 'stop') {
     if (!arg) {
-      console.error('[dev-router] usage: node scripts/dev-router.mjs stop <slug>')
+      console.error('[dev-router] usage: node scripts/dev-router.ts stop <slug>')
       process.exit(1)
     }
     const res = await daemonFetch(`/api/stop?slug=${encodeURIComponent(arg)}`, { method: 'POST' })
@@ -888,7 +888,7 @@ async function runDaemon() {
       ? `  active backend:  "${activeSlug}" (:${activePort})`
       : `  active backend:  (lazy — 第一次 use / control UI Activate 才 spawn)`,
     '',
-    `  切換 backend：control UI 或 \`node scripts/dev-router.mjs use <slug> --app ${appName}\``,
+    `  切換 backend：control UI 或 \`node scripts/dev-router.ts use <slug> --app ${appName}\``,
     '━'.repeat(64),
     '',
   )

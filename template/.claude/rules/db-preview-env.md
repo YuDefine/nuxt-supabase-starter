@@ -18,7 +18,7 @@ Local edits will be reverted by the next sync.
 >
 > Cookbook 範本：`~/offline/clade/vendor/snippets/db-preview-env/`。
 >
-> Audit signal：`vendor/scripts/db-preview-env-audit.mjs`。
+> Audit signal：`vendor/scripts/db-preview-env-audit.ts`。
 
 ## 為什麼不規定 topology
 
@@ -195,7 +195,7 @@ Cloudflare Workers 的能力邊界另見 § Cloudflare Workers trip-wires（含 
 
 同一個值域也適用 `.claude/consumer-meta.json` 的 `database.previewEnvCapability`；兩處**MUST** 一致。URL 形狀另外宣告在 `deploy.previewUrlShape`（自由字串，填實際模板如 `https://<branch-slug>-<worker>.<subdomain>.workers.dev`）。
 
-`db-preview-env-audit.mjs` 比對宣告 vs 現實 — drift 進 `improvement-digest`，由人判斷是否該升 capability。
+`db-preview-env-audit.ts` 比對宣告 vs 現實 — drift 進 `improvement-digest`，由人判斷是否該升 capability。
 
 ## 反模式
 

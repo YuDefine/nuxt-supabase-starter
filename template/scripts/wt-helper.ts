@@ -133,7 +133,7 @@ function git(args, opts = {}) {
  * Optional per-worktree resource bootstrap.
  *
  * Consumers that provision per-worktree resources (typically an isolated dev
- * database clone plus its sidecar) ship `scripts/wt-env-bootstrap.mjs` exposing
+ * database clone plus its sidecar) ship `scripts/wt-env-bootstrap.ts` exposing
  * `ensure` / `destroy`. Consumers without that script are unaffected: this
  * returns null and callers skip the step.
  *
@@ -141,7 +141,7 @@ function git(args, opts = {}) {
  * JSON — a half-provisioned remote resource must surface, not be swallowed.
  */
 export function runWtEnvBootstrap(worktreePath, command, opts: WtEnvBootstrapOptions = {}) {
-  const script = join(worktreePath, 'scripts', 'wt-env-bootstrap.mjs')
+  const script = join(worktreePath, 'scripts', 'wt-env-bootstrap.ts')
   if (!existsSync(script)) return null
 
   const args = [script, command, '--worktree', worktreePath, '--json']
@@ -802,8 +802,8 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
             `\n\nForking on top of another session's WIP would mix unrelated work into the new branch's baseline. ` +
             `Wait for the other session to merge-back or coordinate before re-running.\n\n` +
             `Override only if the other claim is stale:\n` +
-            `  node scripts/claim-helper.mjs drop <session-id>\n` +
-            `  node scripts/wt-helper.mjs add ${cleanSlug} ...`,
+            `  node scripts/claim-helper.ts drop <session-id>\n` +
+            `  node scripts/wt-helper.ts add ${cleanSlug} ...`,
         )
       }
       const strategy = opts.baselineStrategy || 'warn'
@@ -869,7 +869,7 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
               `(git stash -u ignores pathspec and would leak the full tracked tree — see ` +
               `pitfall-git-stash-pathspec-scope-leak; there is no safe scoped stash).\n` +
               `For scoped capture, re-run with the commit strategy (selectively commits only the scoped paths):\n` +
-              `  node scripts/wt-helper.mjs add ${cleanSlug} --precheck-baseline${opts.precheckBaseline ? ` ${opts.precheckBaseline}` : ''} --baseline-strategy commit --baseline-scope-paths ${scopePaths.join(',')}\n` +
+              `  node scripts/wt-helper.ts add ${cleanSlug} --precheck-baseline${opts.precheckBaseline ? ` ${opts.precheckBaseline}` : ''} --baseline-strategy commit --baseline-scope-paths ${scopePaths.join(',')}\n` +
               `To carry ALL main dirty into the worktree instead, re-run stash with --include-unrelated-dirty.`,
           )
         }
@@ -1127,7 +1127,7 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
 
   setupBriefExclude(wtPath)
 
-  // TD-187: auto-invoke wt-env-bootstrap.mjs if consumer-meta declares filesToCopy.
+  // TD-187: auto-invoke wt-env-bootstrap.ts if consumer-meta declares filesToCopy.
   // Copies gitignored env files (e.g. .env.local) from main into the new worktree
   // so dev server starts with DB credentials, tunnel keys, etc. Warn-only on failure.
   const consumerMetaPath = join(wtPath, '.claude', 'consumer-meta.json')
@@ -1159,7 +1159,7 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
 
   // Per-worktree resource provisioning (isolated dev DB clone + sidecar).
   // Runs after the env-file copy above so the bootstrap script can read the
-  // credentials it needs. No-op for consumers without wt-env-bootstrap.mjs.
+  // credentials it needs. No-op for consumers without wt-env-bootstrap.ts.
   const envBootstrap = runWtEnvBootstrap(wtPath, 'ensure')
   if (envBootstrap?.dbName) {
     console.log(`  env-bootstrap: ${envBootstrap.dbName} → ${envBootstrap.supabaseUrl}`)
@@ -1815,7 +1815,7 @@ export function syncWorktreeWithMain(wtPath, branchName, slug) {
             `  git status\n` +
             `  git commit --no-edit\n` +
             `  cd -\n` +
-            `  node scripts/wt-helper.mjs merge-back ${slug}\n`,
+            `  node scripts/wt-helper.ts merge-back ${slug}\n`,
           { cause: e },
         )
       }
@@ -1854,7 +1854,7 @@ export function syncWorktreeWithMain(wtPath, branchName, slug) {
       `  # resolve conflict markers, git add <files>\n` +
       `  git commit --no-edit       # finalize the pre-sync merge\n` +
       `  cd -\n` +
-      `  node scripts/wt-helper.mjs merge-back ${slug}\n\n` +
+      `  node scripts/wt-helper.ts merge-back ${slug}\n\n` +
       `Override (NOT recommended): re-run with --skip-pre-sync to attempt squash directly\n` +
       `(legacy path — conflicts would surface in main's working tree).`,
   )
@@ -2142,7 +2142,7 @@ async function cmdCleanup(slug, opts) {
       `Cleanup blocked by ${issues.length} gate(s):\n` +
         issues.join('\n') +
         `\n\nResolution — re-run with the full flag combo:\n` +
-        `  node scripts/wt-helper.mjs cleanup ${cleanSlug} ${flagsNeeded.join(' ')}\n` +
+        `  node scripts/wt-helper.ts cleanup ${cleanSlug} ${flagsNeeded.join(' ')}\n` +
         `\nWhy each gate:\n` +
         `  --force                       discards the unmerged branch ref\n` +
         `  --force-discard-unland        acknowledges branch's commits will be lost\n` +
@@ -2364,7 +2364,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
       `  → if cleanup later detects uncommitted files, inspect via 'wt-helper rescue --show <ref>'.`,
     )
     console.log(
-      `  → redundant 'wt-baseline/${cleanSlug}/<ISO>' stash entries are safe to drop via 'node scripts/stash-reconcile.mjs --slug ${cleanSlug} --interactive'.`,
+      `  → redundant 'wt-baseline/${cleanSlug}/<ISO>' stash entries are safe to drop via 'node scripts/stash-reconcile.ts --slug ${cleanSlug} --interactive'.`,
     )
     console.log('')
   }
@@ -2501,7 +2501,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
           `\n\nResolution paths:\n` +
           `  1. Let the other session finish (merge-back its own work) first, then re-run.\n` +
           `  2. If the other claim is stale (session no longer running):\n` +
-          `       node scripts/claim-helper.mjs drop <session-id>\n` +
+          `       node scripts/claim-helper.ts drop <session-id>\n` +
           `     then re-run merge-back.\n` +
           `  3. If the path overlap is intentional cross-session collaboration:\n` +
           `     coordinate manually (commit / stash by the other session) before re-running.`,
@@ -2558,7 +2558,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
             `\n\nResolution paths:\n` +
             `  1. Let the other session finish (merge-back / commit its own work) first, then re-run.\n` +
             `  2. If the other claim is stale (session no longer running):\n` +
-            `       node scripts/claim-helper.mjs drop <session-id>\n` +
+            `       node scripts/claim-helper.ts drop <session-id>\n` +
             `     then re-run merge-back --auto-stash.\n` +
             `  3. Have the other session commit or stash its WIP so main is clean of it before re-running.`,
         )
@@ -2584,7 +2584,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
           preview +
           more +
           `\n\nRe-run with --auto-stash to bulk-stash main's dirty state as 'wt-merge-block/${cleanSlug}/<ISO>'\n` +
-          `(blockers + any unrelated dirty paths); reconcile later via \`node scripts/stash-reconcile.mjs\`.`,
+          `(blockers + any unrelated dirty paths); reconcile later via \`node scripts/stash-reconcile.ts\`.`,
       )
     }
     const isoTs = new Date().toISOString().replace(/[:.]/g, '-')
@@ -2792,7 +2792,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
       `merge-back: cleanup skipped; worktree retained at ${target.path}\n` +
         `  Reason: screenshot preserve did not account for every gitignored artifact (see errors above).\n` +
         `  Resolve the listed paths (copy them out manually if needed), then re-run:\n` +
-        `    node scripts/wt-helper.mjs cleanup ${cleanSlug} --force --force-discard-unland`,
+        `    node scripts/wt-helper.ts cleanup ${cleanSlug} --force --force-discard-unland`,
     )
   }
 
@@ -2814,7 +2814,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   if (stashRef) {
     console.log('')
     console.log(`Reconcile blocker stash for '${cleanSlug}':`)
-    console.log(`  node scripts/stash-reconcile.mjs --slug ${cleanSlug} --interactive`)
+    console.log(`  node scripts/stash-reconcile.ts --slug ${cleanSlug} --interactive`)
     console.log(`(Stash preserved in 'git stash list' — apply/drop is user's call.)`)
   }
   return { absorbed: true, slug: cleanSlug, stashRef, cleanupDone, blockers, baselineRefs }
@@ -2914,7 +2914,7 @@ async function cmdRescue(opts) {
     console.log('')
   }
   console.log('To inspect a candidate (read-only patch view):')
-  console.log('  node scripts/wt-helper.mjs rescue --show <ref-or-sha>')
+  console.log('  node scripts/wt-helper.ts rescue --show <ref-or-sha>')
   console.log('To restore to current branch:')
   console.log('  git stash apply <ref-or-sha>          # may conflict; resolve before committing')
   console.log('  git checkout <ref-or-sha> -- <paths>  # selective restore by path')
@@ -2969,7 +2969,7 @@ async function cmdOrphanPrune(opts) {
     }
   } else {
     console.log(`\nRe-run with --force to remove all orphaned directories:`)
-    console.log(`  node scripts/wt-helper.mjs orphan-prune --force`)
+    console.log(`  node scripts/wt-helper.ts orphan-prune --force`)
   }
 }
 
