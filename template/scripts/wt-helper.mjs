@@ -1653,7 +1653,7 @@ export function fmtDriftCommitMessage(slug, paths) {
 //
 // Returns { synced: false, behind: 0 } if wt is up-to-date with target.
 // Returns { synced: true, behind: N } on clean merge (creates a discrete
-// `wt: pre-sync main into <branch>` commit on the wt branch).
+// discrete pre-sync commit on the wt branch — see preSyncCommitMessage()).
 // Throws with structured guidance on conflict — does NOT auto-abort; leaves wt
 // in unmerged state so user can inspect markers, resolve, commit, re-run.
 export function syncWorktreeWithMain(wtPath, branchName, slug) {

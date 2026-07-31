@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// CLADE:VENDOR-SCRIPT
 /**
  * audit-clade-leak.mjs — starter consumer 公開倉 0-leak audit
  *

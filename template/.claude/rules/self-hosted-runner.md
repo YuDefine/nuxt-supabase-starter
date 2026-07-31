@@ -126,6 +126,36 @@ runner 內建的 npm 就此壞掉，任何**經由它**安裝工具的 action �
 - **MUST** 新增 runner 時把該機制一併裝上，不要只裝在撞到問題的那台
 - 判準：runner 內建 npm 是否可用，用 `<runner>/externals.*/node*/bin/npm --version` 直接驗，**不要**靠「workflow 這次過了」推斷 —— 只有走 npm 路徑的 workflow 才會暴露它
 
+### 9. GitHub-hosted 的「跳過下載」建議 NEVER 直接套到 self-hosted
+
+GitHub-hosted runner 每個 job 都是全新容器，所以官方與工具鏈的效能提示預設是「用 runner 預裝的瀏覽器」「用 `actions/cache` 存下載物」。Persistent runner（LXC / VM，per § 6）的前提相反：`$HOME` 跨 job 存活，而 `playwright install`、pnpm store、`hostedtoolcache` 都是**版本目錄命中即 no-op**——第二次之後本來就不下載。把 GitHub-hosted 的建議照搬過來，等於為一個不存在的問題付出成本。
+
+**MUST 先量再改。** 「安裝步驟看起來很慢」的印象不算證據，實際 step 耗時要從 API 取：
+
+```bash
+gh api repos/<owner>/<repo>/actions/runs/<run-id>/jobs \
+  --jq '.jobs[] | .name as $j | .steps[] | "\($j) | \(.name) | \(.started_at) -> \(.completed_at)"'
+```
+
+量到數字之後按 predicate 決定，**每一個**有下載型安裝步驟的 job 各判一次，不是整個 repo 判一次：
+
+| 可觀察 predicate | MUST |
+| --- | --- |
+| 安裝步驟實測 ≤ 10s | 什麼都不做——快取已在生效 |
+| job 帶 `container:`（每 job 全新 rootfs） | 設 `PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright`，並把該路徑從 host mount 進 container |
+| runner 每 job 重建檔案系統（K8s pod / 每次重灌的 VM） | 同上；或整個 job 改跑 `mcr.microsoft.com/playwright:v<x.y.z>-noble` image，該 tag **MUST** 逐版對齊 `package.json` 的 `@playwright/test`，否則 Playwright 判定版本不符會再下載一次 |
+| 安裝步驟實測 > 30s 但 runner 是 persistent | 先查**快取為何沒命中**（換過 service user、清過 `~/.cache`、Playwright 剛升版），修那個原因 |
+
+- **MUST** 只裝實際會跑的 browser（`npx playwright install chromium`），**NEVER** 裸 `npx playwright install`——三套的首次下載量與耗時都是單套的約三倍，而 CI 通常只跑一個 project
+- **NEVER** 為了跳過下載改用 `channel: 'chrome'` / `'msedge'`：自架機沒有預裝瀏覽器，這只是把「命中本機快取」換成「每次現裝系統套件」，且測試用的瀏覽器版本不再跟 Playwright 綁定
+- **NEVER** 用 `actions/cache` 存瀏覽器 binary：self-hosted 的 cache 走網路往返，比本機命中慢；persistent runner 上它要保護的東西本來就沒丟
+- **NEVER** 為了「乾淨」在 job 裡清 `~/.cache/ms-playwright`——那是共享可變狀態，per § 7
+
+Fleet 實測（2026-07-31 快照，重量方式見上方指令）：<consumer-a> 2s、<consumer-b> 8s（含 `--with-deps`）、<consumer-d> 1s，三者皆 persistent runner 且**未**做任何快取設定；同期 GitHub-hosted 的 <consumer-c> 為 20s。
+
+本證據決定：persistent self-hosted runner 上要不要替下載型工具加一層快取機制——不要加。
+本證據不決定：GitHub-hosted runner 上要不要優化——**NEVER** 拿這組數字論證 `ubuntu-latest` 的 job 也不必量、不必改。
+
 ## NEVER
 
 - **NEVER** 用 runner 的**名字**判斷它會不會接某個 job——排程只看標籤，名字純粹給人看
