@@ -1,9 +1,9 @@
 /**
- * locked-projection.mjs — canonical regex for clade-managed projection paths.
+ * locked-projection.ts — canonical regex for clade-managed projection paths.
  *
  * Single source of truth for "is this consumer path a clade-projection file?"
  * Shared between:
- *   - wt-helper.mjs (merge-back blocker classification, baseline audit)
+ *   - wt-helper.ts (merge-back blocker classification, baseline audit)
  *   - claim-helper / classifyDirtyPaths in wt-helper (Phase 3)
  *   - _validate-manifests.ts (Phase 6: cross-check against vendor-targets)
  *

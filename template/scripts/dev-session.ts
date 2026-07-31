@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * dev-session.mjs — durable dev-server 單一入口（zellij detached + lease + 反累積）.
+ * dev-session.ts — durable dev-server 單一入口（zellij detached + lease + 反累積）.
  *
  * 為什麼存在（root cause）：
  *   agent（Claude Code / Codex）的 harness 會在 tool-call 生命週期結束時回收
  *   Bash 衍生的整個 process tree —— **連 `spawn(detached:true)+unref()` / setsid /
  *   nohup 都逃不掉**（實測 2026-06-01 <consumer-a>：run_in_background 與 setsid 起的 nuxt
- *   dev 都被 reap，唯獨掛在 tmux/zellij server daemon 下的存活）。dev-singleton.mjs
+ *   dev 都被 reap，唯獨掛在 tmux/zellij server daemon 下的存活）。dev-singleton.ts
  *   的 `spawn(detached:true)` 同樣會被回收。
  *
  *   唯一可靠的持久化 = 把 dev process 交給一個**獨立於 agent session 的常駐
@@ -15,7 +15,7 @@
  *
  * 三層職責（本 script 是單一入口，收斂三者）：
  *   1. durability   → zellij detached session（`attach --create-background` + `run --cwd`）
- *   2. ownership    → verification-lease（相容 dev-singleton.mjs 的 /tmp/<id>-verification-lease.json schema v1）
+ *   2. ownership    → verification-lease（相容 dev-singleton.ts 的 /tmp/<id>-verification-lease.json schema v1）
  *   3. 反累積       → 一 consumer(-app) 一個 durable session（起前先查、有就 reuse）；
  *                     多 worktree 切換走 dev-router 不要 N 個 dev+tunnel；sweep 清死 session
  *
@@ -40,9 +40,9 @@
  * 退出碼：0 成功（起 / reuse / status / stop / sweep）；1 lease 衝突 refuse / 啟動逾時 / 用法錯
  *
  * 與 dev-singleton / dev-router 的關係：
- *   - dev-singleton.mjs 是舊的「lease + spawn(detached)」wrapper —— spawn 層會被 reap，
+ *   - dev-singleton.ts 是舊的「lease + spawn(detached)」wrapper —— spawn 層會被 reap，
  *     dev-session 取而代之（durability 靠 zellij，lease schema 相容）。
- *   - dev-router.mjs 管「一個公開 port 後面多 worktree backend 切換」；dev-session 起的
+ *   - dev-router.ts 管「一個公開 port 後面多 worktree backend 切換」；dev-session 起的
  *     是「一 consumer 一個 durable backend」。多 worktree 驗收走 dev-router，不要對每個
  *     worktree 各起一個 dev-session（那就是反累積要防的）。
  *
@@ -287,7 +287,7 @@ function killSession(name) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// lease（相容 dev-singleton.mjs schema v1；fail-open per verification-lease.md §7）
+// lease（相容 dev-singleton.ts schema v1；fail-open per verification-lease.md §7）
 // ─────────────────────────────────────────────────────────────────────────
 
 function leasePath(consumerId) {
@@ -496,7 +496,7 @@ function enforceLeaseOrExit(o, meta, consumerId) {
 
 async function cmdLaunch(o) {
   if (!o.cmd || !o.cmd.length) {
-    err('用法：dev-session.mjs [opts] -- <cmd...>（缺少 `-- <cmd>`）')
+    err('用法：dev-session.ts [opts] -- <cmd...>（缺少 `-- <cmd>`）')
     process.exit(1)
   }
   if (!zellijAvailable()) {

@@ -345,7 +345,7 @@ Implement tasks from a Spectra change.
      - **Ignore and continue** — proceed with apply on current tree without touching stash
      - **Stop cycle** — abort spectra-apply (user will reconcile manually)
    - **Skip condition**: if user passed `--no-reconcile` (or said "不要掃 stash" / "skip reconcile" when invoking the skill), skip this step and print `Stash reconcile: skipped (user --no-reconcile)`.
-   - **Failure handling**: if `stash-reconcile.mjs` exits non-zero or JSON parse fails, print the error and continue to Step 3 (reconcile is advisory — do NOT block apply).
+   - **Failure handling**: if `stash-reconcile.ts` exits non-zero or JSON parse fails, print the error and continue to Step 3 (reconcile is advisory — do NOT block apply).
 
 3. **Get apply instructions**
 

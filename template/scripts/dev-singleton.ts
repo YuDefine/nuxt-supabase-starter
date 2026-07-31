@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * dev-singleton.mjs — clade-managed dev server singleton wrapper
+ * dev-singleton.ts — clade-managed dev server singleton wrapper
  *
  * Generalized from <consumer-b> scripts/singleton.mjs. Propagated into each consumer's
  * vendor/scripts/ by clade sync-vendor. Consumer wires up via package.json:
@@ -122,7 +122,7 @@ function parseArgs(argv) {
 }
 
 function usage() {
-  return `dev-singleton.mjs — clade dev server singleton wrapper
+  return `dev-singleton.ts — clade dev server singleton wrapper
   --consumer-meta <path>  Read port + leaseMode from .claude/consumer-meta.json
   --port <N>              Override port
   --label <text>          Lease holder label

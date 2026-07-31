@@ -84,7 +84,7 @@ export const lintBase = {
     // 2026-05-31: newer oxlint (CI via unpinned setup-vp@v1) surfaces
     // unicorn/consistent-function-scoping in an on-category; local oxlint 1.63.0
     // does not yet. clade/consumer scripts use nested helpers by design
-    // (e.g. `function git` in publish.ts / wt-helper.mjs) — this rule is
+    // (e.g. `function git` in publish.ts / wt-helper.ts) — this rule is
     // stylistic noise here. Explicit pin off prevents CI lint drift on oxlint
     // version bumps (same pattern as no-underscore-dangle below).
     'unicorn/consistent-function-scoping': 'off',

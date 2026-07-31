@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// spectra-archive-sidecar.mjs — lifecycle helper for /spectra-archive in-flight checkpoint
+// spectra-archive-sidecar.ts — lifecycle helper for /spectra-archive in-flight checkpoint
 //
 // Sidecar path: $MAIN_WT_PATH/.spectra/in-flight-archive/<change-name>.json
 //   - MAIN_WT_PATH = dirname(git rev-parse --path-format=absolute --git-common-dir)
@@ -289,7 +289,7 @@ function cmdDetect(mainWt, args) {
 function usage() {
   process.stderr.write(
     [
-      'usage: spectra-archive-sidecar.mjs <subcommand> [args]',
+      'usage: spectra-archive-sidecar.ts <subcommand> [args]',
       '',
       'subcommands:',
       '  init <change-name>                         create sidecar (phase=merge-back)',

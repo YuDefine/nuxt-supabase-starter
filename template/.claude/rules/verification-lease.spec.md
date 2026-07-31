@@ -46,7 +46,7 @@ Local edits will be reverted by the next sync.
 schema 全例見 `~/offline/clade/vendor/snippets/dev-session/lease-schema.jsonc`。欄位必填規則：
 
 - `devServer` + `holder` + `claimedAt` 必填；其餘 slot 可缺（如未啟瀏覽器 → `browserProfile: null`）
-- `devSession` 由 `dev-session.mjs` 寫入（dev process 掛哪個 zellij session）；缺 = 非 dev-session 起（legacy / 手動）
+- `devSession` 由 `dev-session.ts` 寫入（dev process 掛哪個 zellij session）；缺 = 非 dev-session 起（legacy / 手動）
 - Durability：dev process 掛獨立 zellij server 下才不被 agent harness reap；`devServer.pid` 是 zellij 內的 nuxt/vite process，kill lease 連帶收掉 zellij session（見 [`proactive-skills.md`](./proactive-skills.md) § Dev Server Auto-Spawn）
 
 ## Operations
@@ -137,7 +137,7 @@ Lease 的「該不該強制走 singleton wrapper」由 consumer 自宣告：
 
 ## Audit log retention
 
-`auditLog` 保留最多 50 條，FIFO。長期紀錄走 `improvement-digest.mjs` 拉 snapshot 進 digest。
+`auditLog` 保留最多 50 條，FIFO。長期紀錄走 `improvement-digest.ts` 拉 snapshot 進 digest。
 
 ## Why（root cause）
 

@@ -22,7 +22,7 @@ Local edits will be reverted by the next sync.
 
 ## §7 升級路徑與 grandfathered worktree
 
-命名不符 `session/*` 的舊 worktree **grandfathered**，不強制重命名；`wt-helper list` / `prune` 只認 `session/` 前綴，新建一律走 `/wt`。V2 → V3 in-flight worktree 處置：ready archive → `/spectra-archive <name>`（Step 0 自動 merge-back）；還在 implementation → 不動，archive 時吸收；ad-hoc Form-1 → `wt-helper land-pending <slug>`（alias of merge-back，容忍 multi-commit branch）；過時不要 → `cleanup --force --force-discard-unland`（**永久砍 commit**）。Legacy `cross-session-block-*` stash 走 `stash-reconcile.mjs`；HANDOFF drift 由 session-start `handoff-drift-scan.mjs` 偵測，drift → `/handoff` refresh。
+命名不符 `session/*` 的舊 worktree **grandfathered**，不強制重命名；`wt-helper list` / `prune` 只認 `session/` 前綴，新建一律走 `/wt`。V2 → V3 in-flight worktree 處置：ready archive → `/spectra-archive <name>`（Step 0 自動 merge-back）；還在 implementation → 不動，archive 時吸收；ad-hoc Form-1 → `wt-helper land-pending <slug>`（alias of merge-back，容忍 multi-commit branch）；過時不要 → `cleanup --force --force-discard-unland`（**永久砍 commit**）。Legacy `cross-session-block-*` stash 走 `stash-reconcile.ts`；HANDOFF drift 由 session-start `handoff-drift-scan.ts` 偵測，drift → `/handoff` refresh。
 
 ## §8 Stop hook 死鎖 fallback
 

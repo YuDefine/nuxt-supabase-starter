@@ -1,17 +1,17 @@
 #!/usr/bin/env node
-// wip-dirty.mjs — 列出一個 repo working tree 內「user WIP」dirty paths，
+// wip-dirty.ts — 列出一個 repo working tree 內「user WIP」dirty paths，
 // 即 git status --porcelain 過濾掉 clade-managed projection 後剩下的檔。
 //
-// Single source of projection filter: isLockedProjectionPath（locked-projection.mjs），
+// Single source of projection filter: isLockedProjectionPath（locked-projection.ts），
 // 與 wt-helper merge-back 共用，避免 Stop hook / drift-scan 各自重刻 projection pattern 漂移
-// （2026-06-01 dev-session.mjs 漏進 LOCKED_PROJECTION_RE 即此類 drift）。
+// （2026-06-01 dev-session.ts 漏進 LOCKED_PROJECTION_RE 即此類 drift）。
 //
 // 程式用法（drift-scan Layer 2a）：
 //   import { userDirtyPaths } from './wip-dirty.ts'
 //   const wip = userDirtyPaths(worktreePath)  // → string[]（porcelain path，已剝 XY 狀態碼）
 //
 // CLI 用法（stop-wip-guard.sh Layer 0 warn）：
-//   node wip-dirty.mjs [repoRoot]
+//   node wip-dirty.ts [repoRoot]
 //   - stdout：每行一個 user WIP path（無則空）
 //   - exit 1：有 user WIP；exit 0：乾淨 / 全 projection / 非 git repo（fail-open）
 

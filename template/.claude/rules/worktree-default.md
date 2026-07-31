@@ -136,7 +136,7 @@ v3 atomic landing：`/wt` 跑完 subagent 在 worktree commit、worktree+branch 
 
 User 報告看不到 worktree 改動（「看不到變化」「沒反映」「dev server 沒更新」）時，正確做法是**把 dev server 切到 worktree**，**NEVER** merge-back。
 
-- **MUST**：切 dev server 到 worktree cwd — 走 `dev-session.mjs --cwd <worktree-path>` 或等效方式，讓 user 在 worktree 內驗收
+- **MUST**：切 dev server 到 worktree cwd — 走 `dev-session.ts --cwd <worktree-path>` 或等效方式，讓 user 在 worktree 內驗收
 - **NEVER**：用 `wt-helper merge-back` / `git merge --squash` / 任何把 worktree 改動帶回 main 的動作來「讓 user 看到」— 那是繞過驗收的捷徑
 
 **話術關鍵詞停手信號**：主線 thinking / tool call description 中出現以下任一詞彙且 worktree 改動尚未經 user 驗收（無 `/spectra-archive` 完成紀錄），**MUST** 立即停手，改走「切 dev server」路徑：
@@ -152,7 +152,7 @@ User 報告看不到 worktree 改動（「看不到變化」「沒反映」「de
 
 > 完整 flags / claim guard scope / stash reconcile 詳見 [[worktree-default.commit-ceremony]] § Merge-back ceremony。
 
-## §6 操作工具：`/wt`、`wt-helper.mjs`、`stash-reconcile.mjs`
+## §6 操作工具：`/wt`、`wt-helper.ts`、`stash-reconcile.ts`
 
 > 工具速查（list / merge-back / rescue / stash-reconcile）詳見 [[worktree-default.commit-ceremony]] § 操作工具；完整表見 `~/offline/clade/vendor/snippets/wt-helper/README.md`。
 

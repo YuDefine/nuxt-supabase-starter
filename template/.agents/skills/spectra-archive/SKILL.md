@@ -511,7 +511,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
 
    merge-back (`--auto-stash`, Step 0) sets aside main's pre-merge dirty as `wt-merge-block/<change>/...` so the squash can land cleanly. **This is main's OWN work, NOT stale change residue** — typically HANDOFF entries from parallel sessions, ROADMAP/spec regen, telemetry appends. It **MUST be restored** to main's working tree (so it lands with the user's eventual `/commit`); the archive **auto-善後** it here and **NEVER leaves a stash tail for the user** (the only exception is a genuine per-file divergence, which is surfaced, not buried).
 
-   > **NEVER blanket-drop a `wt-merge-block` stash.** Proven incident (2026-06-11): a `wt-merge-block` stash held a *parallel session's* `receiving-material-map` HANDOFF entry (blocked-status handoff for another in-flight change); the old "drop archived-slug" guidance would have destroyed it. `wt-merge-block` = main's blockers, not change residue. (`stash-reconcile.mjs` itself already recommends `apply` for clean merge-block entries — the old request_user_input+keep default was the bug, not the script.)
+   > **NEVER blanket-drop a `wt-merge-block` stash.** Proven incident (2026-06-11): a `wt-merge-block` stash held a *parallel session's* `receiving-material-map` HANDOFF entry (blocked-status handoff for another in-flight change); the old "drop archived-slug" guidance would have destroyed it. `wt-merge-block` = main's blockers, not change residue. (`stash-reconcile.ts` itself already recommends `apply` for clean merge-block entries — the old request_user_input+keep default was the bug, not the script.)
 
    ```bash
    node scripts/stash-reconcile.ts --slug "<change-name>" --json

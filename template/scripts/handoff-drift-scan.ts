@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * handoff-drift-scan.mjs — surface stale HANDOFF.md entries
+ * handoff-drift-scan.ts — surface stale HANDOFF.md entries
  *
  * Per the worktree atomicity flow (worktree-default.md §5.5), worktree
  * branches accumulate commits until `/spectra-archive` runs `wt-helper
@@ -207,7 +207,7 @@ function branchCommitsAheadOfMain(consumerRoot, branchName) {
 }
 
 // How many commits is the wt branch behind main? Uses `git rev-list --count
-// <branch>..main` — same semantics as wt-helper.mjs cmdMergeBack's preSyncBehind.
+// <branch>..main` — same semantics as wt-helper.ts cmdMergeBack's preSyncBehind.
 function branchCommitsBehindMain(consumerRoot, branchName) {
   try {
     const out = gitTrim(['rev-list', '--count', `${branchName}..main`], { cwd: consumerRoot })

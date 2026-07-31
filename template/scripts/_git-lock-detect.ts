@@ -1,5 +1,5 @@
 /**
- * _git-lock-detect.mjs — stale `.git/index.lock` detection + auto-cleanup.
+ * _git-lock-detect.ts — stale `.git/index.lock` detection + auto-cleanup.
  *
  * Background (docs/tech-debt.md TD-145):
  *   Parallel sweep mid-flight 撞到 0-byte `.git/index.lock` 沒 active git process。

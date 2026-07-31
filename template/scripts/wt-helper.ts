@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * wt-helper.mjs — session worktree management
+ * wt-helper.ts — session worktree management
  *
  * Subcommands:
  *   add <slug>       Create worktree at ~/offline/<consumer>-wt/<slug>/
@@ -1753,7 +1753,7 @@ export function syncWorktreeWithMain(wtPath, branchName, slug) {
   // can resolve safely without user judgement:
   //
   //   1. LOCKED projection paths (`.claude/`, `.agents/`, `.codex/`,
-  //      `.claude/hub.json`, etc. — see locked-projection.mjs):
+  //      `.claude/hub.json`, etc. — see locked-projection.ts):
   //      main is SoT. Wt-side edits are propagate residue, never user
   //      intent. Take main version.
   //
@@ -1866,7 +1866,7 @@ export function syncWorktreeWithMain(wtPath, branchName, slug) {
 // Match is path-prefix based (no date-format gating) so future archive
 // naming changes don't silently regress this predicate.
 //
-// Kept separate from locked-projection.mjs because:
+// Kept separate from locked-projection.ts because:
 //   - LOCKED is a fixed projection set written by sync-rules / sync-vendor
 //   - Archive is a content domain written by spectra-archive flow
 //   - The reasons "main is SoT" differ; conflating obscures intent
@@ -2621,7 +2621,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
       // git 2.50.1 (<consumer-b> 2026-05-18: 22 blockers requested → 74 files stashed
       // including unrelated main tracked-tree mods). Bulk stash makes the
       // semantics explicit: "snapshot main's dirty state so squash can land,
-      // user reconciles via stash-reconcile.mjs". See pitfall-git-stash-
+      // user reconciles via stash-reconcile.ts". See pitfall-git-stash-
       // pathspec-scope-leak (merge-back surface).
       git(['stash', 'push', '-u', '-m', stashMsg], { cwd: consumerRoot })
     } catch (e) {

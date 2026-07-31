@@ -3,7 +3,7 @@
 const pad2 = (n) => String(n).padStart(2, '0')
 
 /**
- * stash-reconcile.mjs — list + suggest actions for namespaced stash entries
+ * stash-reconcile.ts — list + suggest actions for namespaced stash entries
  *
  * Surfaces git stash entries created by clade workflows:
  *   - `wt-merge-block/<slug>/<ISO>` — main-worktree blockers stashed by
@@ -493,7 +493,7 @@ function formatHandoffSection(consumerRoot, entries) {
   const lines = []
   lines.push(`## Orphan Stashes (no sidecar metadata)`, '')
   lines.push(
-    `> Generated ${new Date().toISOString()} by stash-reconcile.mjs --sweep-orphans --handoff-format`,
+    `> Generated ${new Date().toISOString()} by stash-reconcile.ts --sweep-orphans --handoff-format`,
   )
   lines.push(
     `> 這些 stash 沒對應 .spectra/stash-meta-<tag>.json sidecar，owner 未知。`,

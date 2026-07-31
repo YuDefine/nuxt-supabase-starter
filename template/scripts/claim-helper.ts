@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * claim-helper.mjs — session-id claim 機制
+ * claim-helper.ts — session-id claim 機制
  *
  * 多 session AI 並行開發時，clade publish / propagate / wt-helper merge-back /
  * `/commit` 需要知道「哪些路徑屬於別 session 還活著的工作」，避免誤殺別 session WIP

@@ -116,7 +116,7 @@ CLAIMS=$(find "$(git rev-parse --show-toplevel)/.clade/claims/" -name '*.json' 2
 判定：
 - **Session claim 存在且 lastActivity < 30 min** → 別 session 正在推，**跳過**（log `in-flight (active session)`）
 - **Session claim 存在但 lastActivity > 2h** → session 可能已離場，**AskUserQuestion**：「`<change>` 有 worktree 但 session 已 >2h 無活動，要接手推進還是跳過？」
-- **Session claim 不存在但 worktree 存在** → 孤兒 worktree，**直接接手**（先 `wt-helper.mjs cleanup` 清理再重新 dispatch）
+- **Session claim 不存在但 worktree 存在** → 孤兒 worktree，**直接接手**（先 `wt-helper.ts cleanup` 清理再重新 dispatch）
 - **HANDOFF 有「designated to X session」標記** → **不自動跳過**。讀 HANDOFF 標記的 session 是否仍 active（同上查 claim）；不 active 則接手。真 active 的才跳過
 
 **每一個** dispatch 前都要對照，不是只在開場檢查一次。
@@ -309,7 +309,7 @@ Bucket 為 `applyBlocked` 或 `awaitingUserDecision` 時 **MUST** 先完整讀 [
   1. 檢查 `zellij list-sessions | grep dev-`，列出所有 dev session
   2. 對每個 dev session 判定：
      - 對應 change 已 archived / merged → **stale，直接 `zellij delete-session <name> --force`**（安全：change 已不需要 dev server）
-     - 對應 change 仍 active 但 session claim lastActivity > 2h → **可能 stale，`dev-session.mjs stop` 停掉**
+     - 對應 change 仍 active 但 session claim lastActivity > 2h → **可能 stale，`dev-session.ts stop` 停掉**
      - 對應 change 有 active claim < 30min → **真 conflict，此時才 AskUserQuestion 讓 user 拍板 takeover**
   3. 清掉 stale session 後，用 `node scripts/dev-session.ts --cwd <需要的 worktree path>` 起新 dev server（per [[proactive-skills]] § Dev Server Auto-Spawn）
   4. Dev server ready 後繼續 dispatch evidence collection / Design Review

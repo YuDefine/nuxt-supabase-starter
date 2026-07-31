@@ -317,7 +317,7 @@ node ~/offline/clade/vendor/scripts/handoff-scan.ts --json 2>/dev/null
 
 #### 3.1b Kind 判定表（與 mergeBackSafety 正交）
 
-**`mergedToMain` 為真不足以推出可 cleanup。** branch 已 land 但 working tree 還留著後續 WIP 是常見形狀（land 完一批後在同一個 worktree 繼續做下一批），而 `wt-helper cleanup` 對未 commit 內容**無 pinned ref 保護**——照 `cleanup` 建議做就是永久遺失。script 因此對每條 wt 都算 `userWip`（`git status --porcelain` 扣掉 clade-managed 投影層，filter 走 `locked-projection.mjs` 共用 SoT），`userWip > 0` 時 kind 降級。
+**`mergedToMain` 為真不足以推出可 cleanup。** branch 已 land 但 working tree 還留著後續 WIP 是常見形狀（land 完一批後在同一個 worktree 繼續做下一批），而 `wt-helper cleanup` 對未 commit 內容**無 pinned ref 保護**——照 `cleanup` 建議做就是永久遺失。script 因此對每條 wt 都算 `userWip`（`git status --porcelain` 扣掉 clade-managed 投影層，filter 走 `locked-projection.ts` 共用 SoT），`userWip > 0` 時 kind 降級。
 
 | 條件 | kind | 下一步建議 |
 | --- | --- | --- |
@@ -334,7 +334,7 @@ audit 寫進 HANDOFF.md 時每條 wt 後綴 `(mergeBackSafety: <landable|ptb-rec
 
 ### 3.2 Stash audit
 
-讀同一次 handoff-scan 輸出的 `worktreeStash.raw.stashes[]`（script 內部代跑 `stash-reconcile.mjs --include-all --json`，並對 `.spectra/stash-meta-*.json` sidecar 做雙向比對）。
+讀同一次 handoff-scan 輸出的 `worktreeStash.raw.stashes[]`（script 內部代跑 `stash-reconcile.ts --include-all --json`，並對 `.spectra/stash-meta-*.json` sidecar 做雙向比對）。
 
 對 `raw.stashes[*]` **每一筆**寫入 audit 段（不過濾 archived-only 或 stale>7d；user 要求「所有 stash 都有狀況與下一步建議」）：
 - ref（`stash@{N}`）

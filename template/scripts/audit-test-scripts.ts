@@ -29,7 +29,7 @@ const asJson = args.has('--json')
 
 if (args.has('--help') || args.has('-h')) {
   console.log(
-    'Usage: audit-test-scripts.mjs [--json]\n' +
+    'Usage: audit-test-scripts.ts [--json]\n' +
       '  --json   Emit machine-readable JSON on stdout\n' +
       '\n' +
       'Exit codes: 0 clean / not-applicable, 1 drift, 2 error',

@@ -90,7 +90,7 @@ Skill 自己 fork worktree、有**清楚 end-of-skill 完成點**、**無下游 
 
 完整命令清單、Stash 命名空間表與失敗 fallback 表見 `~/offline/clade/vendor/snippets/worktree-baseline/merge-back-ceremony.md`。其中 `cleanup` 拒絕 uncommitted 時 **NEVER** 急加 `--force-discard-uncommitted` — 先 `wt-helper rescue --show <ref>` 看 patch、救完再 cleanup。
 
-## §6 操作工具：`/wt`、`wt-helper.mjs`、`stash-reconcile.mjs`
+## §6 操作工具：`/wt`、`wt-helper.ts`、`stash-reconcile.ts`
 
 常用 6 列：
 
@@ -103,6 +103,6 @@ Skill 自己 fork worktree、有**清楚 end-of-skill 完成點**、**無下游 
 | List pre-fork baseline 救援候選 | `node scripts/wt-helper.ts rescue` | 列 `refs/wt-baseline/*` pinned ref + fsck dangling stash；`--show <ref\|sha>` 看 patch（read-only） |
 | Stash reconcile 互動 | `node scripts/stash-reconcile.ts --interactive` | 一條一條 apply / drop / view（never auto-pop） |
 
-完整工具表（含 `cleanup --force`（**丟工作**，必先 merge-back + rescue 撈 baseline）、`land-pending`、`prune`、reconcile 各模式、`handoff-drift-scan.mjs`）見 `~/offline/clade/vendor/snippets/wt-helper/README.md` § 工具速查表。
+完整工具表（含 `cleanup --force`（**丟工作**，必先 merge-back + rescue 撈 baseline）、`land-pending`、`prune`、reconcile 各模式、`handoff-drift-scan.ts`）見 `~/offline/clade/vendor/snippets/wt-helper/README.md` § 工具速查表。
 
-`/wt` skill source：`~/offline/clade/plugins/hub-core/skills/wt/SKILL.md`；`wt-helper.mjs` / `stash-reconcile.mjs` / `handoff-drift-scan.mjs` source：`~/offline/clade/vendor/scripts/`（散播投影到 consumer 的 `scripts/`）。
+`/wt` skill source：`~/offline/clade/plugins/hub-core/skills/wt/SKILL.md`；`wt-helper.ts` / `stash-reconcile.ts` / `handoff-drift-scan.ts` source：`~/offline/clade/vendor/scripts/`（散播投影到 consumer 的 `scripts/`）。
