@@ -168,6 +168,7 @@ Sol → Terra → Luna → Claude Sonnet subagent → Claude Haiku subagent → 
 ```
 
 1. **先降 Codex 檔位**：`--model terra` 重試，再不行 `--model luna`。三檔共用同一個 7 天池但按權重扣，低檔位在高檔位耗盡後**通常仍可派**
+   - ⚠️ **ChatGPT 帳號登入的 codex CLI 上這一步不存在**：`terra` / `luna` 一律回 `400 invalid_request_error: The '<model>' model is not supported when using Codex with a ChatGPT account`（2026-07-31 實測）。該帳號型態只有 `gpt-5.6-sol` 可用，池耗盡就是**整個 codex 不可用**，直接跳第 2 步換池。**NEVER** 在收到那個 400 之後反覆換檔位重試——三檔在這裡不是三個選項，是一個
 2. **再換池**：Codex 三檔全滿才動 Claude subagent（`model` 顯式帶 `sonnet` / `haiku`，per § Subagent 回報契約第 4 條）
 3. **最後才是主線**：上述全不可行時 Opus 主線接走，且 record reason 含 `quota-exhausted` + `date -d @<resets_at>` 換算出的確切 reset 時間
 4. Claude 接走時 session 結尾 **MUST** 回報「本 session 因配額耗盡由 Claude 執行 N 個 codex-primary change，reset 時間 `<YYYY-MM-DD HH:MM>`」
