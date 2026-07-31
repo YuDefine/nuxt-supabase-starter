@@ -53,6 +53,8 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       String.raw`\.clade/(bin|signals|vendor)/`,
       // Vendored script entry points (scripts/)
       String.raw`scripts/(wt-helper|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|spectra-archive-sidecar|dev-singleton|dev-router|dev-session)\.(mjs|mts)$`,
+      // Heavy-gate 併發閘門（bash helper，非 .mjs/.mts 家族，故單列一條）
+      String.raw`scripts/gate-slot\.sh$`,
       // Recursive vendored script trees
       String.raw`scripts/(spectra-advanced|pre-commit|pre-push|checks)/`,
       // Vendored helpers under scripts/lib/ — MUST stay an explicit filename list.
