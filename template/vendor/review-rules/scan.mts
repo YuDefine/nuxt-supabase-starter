@@ -70,21 +70,59 @@ import { join } from 'node:path'
 
 class UsageError extends Error {}
 
+// 本檔會落在 consumer repo 的 `vendor/` 下，被對方的 `noImplicitAny` typecheck 涵蓋。
+// 參數與資料結構 **MUST** 各自帶 inline 結構型別，否則散播後直接讓 consumer 的
+// typecheck 紅燈（<consumer-a> 2026-07-31 實證，同 commitlint.config.ts 的既有註記）。
+// clade 中央倉自己沒有 typecheck script，這類缺陷只會在 consumer 端才炸。
+type Rule = {
+  id: string
+  pattern: string
+  severity?: string
+  section?: string
+  layer?: string
+  message?: string
+  fix?: string
+  fileGlob?: string
+  scanPaths?: string[]
+  exclude?: string[]
+  excludePattern?: string
+  multiLine?: boolean
+}
+
+type Hit = { file: string; line: number; text: string }
+
+type Violation = {
+  ruleId: string
+  severity?: string
+  section?: string
+  layer: string
+  file: string
+  line: number
+  text: string
+  message?: string
+  fix?: string
+}
+
+/** `{ ruleId: { file: 命中數 } }` */
+type Baseline = Record<string, Record<string, number>>
+
+type ReadFile = (file: string) => string
+
 const LEGACY_VUE_GLOB = '*.vue'
 const LEGACY_CONFIG_GLOB = 'app.config.*'
 const REGEX_SPECIAL = /[.+^${}()|[\]\\]/
 
 // ---------- glob matching ----------
 
-function escapeRegExpChar(ch) {
+function escapeRegExpChar(ch: string) {
   return REGEX_SPECIAL.test(ch) ? `\\${ch}` : ch
 }
 
 /** 把泛化 glob（`**`＝任意路徑深度、`*`＝單一路徑段）轉成錨定 RegExp。 */
-function globToRegExp(glob) {
+function globToRegExp(glob: string) {
   let src = ''
   for (let i = 0; i < glob.length; i++) {
-    const ch = glob[i]
+    const ch = glob[i] ?? ''
     if (ch === '*' && glob[i + 1] === '*') {
       if (glob[i + 2] === '/') {
         src += '(?:.*/)?'
@@ -107,7 +145,7 @@ function globToRegExp(glob) {
  * `*.vue` / `app.config.*` 保留既有 review-rules-ban.sh 精確語意；其餘走泛化引擎，
  * 並自動嘗試剝除 packages/<name>/、template/ 前綴（monorepo / starter 變體）。
  */
-function matchFileGlob(file, glob) {
+function matchFileGlob(file: string, glob: string) {
   if (glob === LEGACY_VUE_GLOB) return file.endsWith('.vue')
   if (glob === LEGACY_CONFIG_GLOB) return /(?:^|\/)app\.config\.[^/]+$/.test(file)
 
@@ -115,20 +153,20 @@ function matchFileGlob(file, glob) {
   if (regex.test(file)) return true
 
   const packagesMatch = file.match(/^packages\/[^/]+\/(.*)$/)
-  if (packagesMatch && regex.test(packagesMatch[1])) return true
+  if (packagesMatch?.[1] !== undefined && regex.test(packagesMatch[1])) return true
 
   const templateMatch = file.match(/^template\/(.*)$/)
-  if (templateMatch && regex.test(templateMatch[1])) return true
+  if (templateMatch?.[1] !== undefined && regex.test(templateMatch[1])) return true
 
   return false
 }
 
-function matchAnyGlob(file, globs) {
+function matchAnyGlob(file: string, globs: string[]) {
   return globs.some((g) => matchFileGlob(file, g))
 }
 
 /** scanPaths 用的前綴 RegExp（`*` = 單一路徑段萬用字元，不錨定結尾，只錨定開頭）。 */
-function scanPathToRegExp(prefix) {
+function scanPathToRegExp(prefix: string) {
   let src = '^'
   for (const ch of prefix) {
     src += ch === '*' ? '[^/]*' : escapeRegExpChar(ch)
@@ -136,21 +174,21 @@ function scanPathToRegExp(prefix) {
   return new RegExp(src)
 }
 
-function matchesAnyScanPath(file, scanPaths) {
+function matchesAnyScanPath(file: string, scanPaths: string[]) {
   return scanPaths.some((p) => scanPathToRegExp(p).test(file))
 }
 
 // ---------- multiLine tag 展平（既有 review-rules-ban.sh heuristic，逐字沿用） ----------
 
 /** pattern 是否為 `<Tag[^>]*...` 形式（跨屬性匹配），需要先把 tag 展平成單行。 */
-function needsMultiLine(pattern) {
+function needsMultiLine(pattern: string) {
   return /^<[[(]?[A-Z].*\[\^>\]/.test(pattern)
 }
 
 /** 從內容抽出每個 HTML/Vue tag 區塊（含起始行號），並把跨行屬性展平成單行。
  *  抓兩類：(1) PascalCase 元件 `<UBadge ...>` (2) 含 `:is=` 的動態元件 `<component :is="UBadge" ...>` */
-function extractTags(content) {
-  const tags = []
+function extractTags(content: string) {
+  const tags: { line: number; flat: string }[] = []
   const re = /<(?:[A-Z][A-Za-z]*|[a-z][a-z-]*(?=[\s\n](?:[^>]|\n)*:is=))(?:\s|\n)(?:[^>]|\n)*?\/?>/g
   let m
   while ((m = re.exec(content)) !== null) {
@@ -165,23 +203,25 @@ function extractTags(content) {
 // ---------- 核心掃描 ----------
 
 /** 單一 rule 對候選檔案清單跑比對，回傳 hit 陣列（不含 rule 中繼資料）。 */
-function scanRuleOnFiles(rule, files, readFile) {
+function scanRuleOnFiles(rule: Rule, files: string[], readFile: ReadFile): Hit[] {
   const re = new RegExp(rule.pattern)
   const excludeContentRe = rule.excludePattern ? new RegExp(rule.excludePattern) : null
   const multiLine = rule.multiLine === true || needsMultiLine(rule.pattern)
 
   let candidates = files.filter((f) => matchFileGlob(f, rule.fileGlob || LEGACY_VUE_GLOB))
-  if (rule.scanPaths && rule.scanPaths.length > 0) {
-    candidates = candidates.filter((f) => matchesAnyScanPath(f, rule.scanPaths))
+  const scanPaths = rule.scanPaths
+  if (scanPaths && scanPaths.length > 0) {
+    candidates = candidates.filter((f) => matchesAnyScanPath(f, scanPaths))
   }
-  if (rule.exclude && rule.exclude.length > 0) {
-    candidates = candidates.filter((f) => !matchAnyGlob(f, rule.exclude))
+  const exclude = rule.exclude
+  if (exclude && exclude.length > 0) {
+    candidates = candidates.filter((f) => !matchAnyGlob(f, exclude))
   }
   if (candidates.length === 0) return []
 
-  const hits = []
+  const hits: Hit[] = []
   for (const file of candidates) {
-    let content
+    let content: string
     try {
       content = readFile(file)
     } catch {
@@ -197,9 +237,10 @@ function scanRuleOnFiles(rule, files, readFile) {
     } else {
       const lines = content.split('\n')
       for (let i = 0; i < lines.length; i++) {
-        if (!re.test(lines[i])) continue
-        if (excludeContentRe && excludeContentRe.test(lines[i])) continue
-        hits.push({ file, line: i + 1, text: lines[i].trim().slice(0, 200) })
+        const line = lines[i] ?? ''
+        if (!re.test(line)) continue
+        if (excludeContentRe && excludeContentRe.test(line)) continue
+        hits.push({ file, line: i + 1, text: line.trim().slice(0, 200) })
       }
     }
   }
@@ -207,8 +248,8 @@ function scanRuleOnFiles(rule, files, readFile) {
 }
 
 /** 對整批 rules 跑掃描，回傳攤平後的 violation 陣列。 */
-function scan(rules, files, readFile) {
-  const violations = []
+function scan(rules: Rule[], files: string[], readFile: ReadFile): Violation[] {
+  const violations: Violation[] = []
   for (const rule of rules) {
     const hits = scanRuleOnFiles(rule, files, readFile)
     for (const h of hits) {
@@ -230,29 +271,33 @@ function scan(rules, files, readFile) {
 
 // ---------- ratchet baseline ----------
 
-function loadBaseline(baselinePath) {
+function loadBaseline(baselinePath: string): Baseline {
   if (!existsSync(baselinePath)) return {}
   try {
-    const parsed = JSON.parse(readFileSync(baselinePath, 'utf8'))
-    return parsed && typeof parsed === 'object' ? parsed : {}
+    const parsed = JSON.parse(readFileSync(baselinePath, 'utf8')) as unknown
+    return parsed && typeof parsed === 'object' ? (parsed as Baseline) : {}
   } catch (err) {
     process.stderr.write(
-      `⚠️  review-rules-baseline.json 解析失敗，視為空 baseline（等同零容忍）：${err.message}\n`,
+      `⚠️  review-rules-baseline.json 解析失敗，視為空 baseline（等同零容忍）：${(err as Error).message}\n`,
     )
     return {}
   }
 }
 
-function buildBaselineFromViolations(violations) {
-  const baseline = {}
+function buildBaselineFromViolations(violations: Violation[]): Baseline {
+  const baseline: Baseline = {}
   for (const v of violations) {
-    baseline[v.ruleId] ??= {}
-    baseline[v.ruleId][v.file] = (baseline[v.ruleId][v.file] || 0) + 1
+    const byFile = (baseline[v.ruleId] ??= {})
+    byFile[v.file] = (byFile[v.file] || 0) + 1
   }
   return baseline
 }
 
-function writeBaselineFile(baselinePath, baseline, scope) {
+function writeBaselineFile(
+  baselinePath: string,
+  baseline: Baseline,
+  scope: { fileset: string; layer: string },
+) {
   // 空 baseline 也寫入 {}——「檔案存在」= ratchet 武裝訊號（零容忍）；
   // 檔案不存在 = bootstrap warn-only（見 main 的 ratchet 分支）。
   //
@@ -264,9 +309,9 @@ function writeBaselineFile(baselinePath, baseline, scope) {
 }
 
 /** 只回報「實際命中數 > baseline」的 (ruleId, file) — 既有存量違規（≤ baseline）不報。 */
-function compareRatchet(baseline, violations) {
+function compareRatchet(baseline: Baseline | null, violations: Violation[]) {
   const actual = buildBaselineFromViolations(violations)
-  const overages = []
+  const overages: { ruleId: string; file: string; baseline: number; actual: number }[] = []
   for (const [ruleId, fileCounts] of Object.entries(actual)) {
     for (const [file, count] of Object.entries(fileCounts)) {
       const baselineCount = baseline?.[ruleId]?.[file] ?? 0
@@ -288,7 +333,7 @@ function gitRevParseShowToplevel() {
 // 業務碼——全域排除，防 cookbook 註解文字誤觸規則（如 dark-mode 規則咬到範例說明）。
 const DEFAULT_EXCLUDE_RE = /^(vendor|node_modules)\//
 
-function gitStagedFiles(repoRoot) {
+function gitStagedFiles(repoRoot: string) {
   const out = execFileSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACM'], {
     cwd: repoRoot,
     encoding: 'utf8',
@@ -300,7 +345,7 @@ function gitStagedFiles(repoRoot) {
     .filter((f) => !DEFAULT_EXCLUDE_RE.test(f))
 }
 
-function gitAllFiles(repoRoot) {
+function gitAllFiles(repoRoot: string) {
   const out = execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8' })
   return out
     .split('\n')
@@ -311,28 +356,33 @@ function gitAllFiles(repoRoot) {
 
 // ---------- output ----------
 
-function printHuman(violations) {
+function printHuman(violations: Violation[]) {
   if (violations.length === 0) {
     process.stderr.write('✅ 未發現違規\n')
     return
   }
-  const byRule = new Map()
+  const byRule = new Map<string, Violation[]>()
   for (const v of violations) {
-    if (!byRule.has(v.ruleId)) byRule.set(v.ruleId, [])
-    byRule.get(v.ruleId).push(v)
+    const bucket = byRule.get(v.ruleId)
+    if (bucket) bucket.push(v)
+    else byRule.set(v.ruleId, [v])
   }
   for (const [ruleId, vs] of byRule) {
-    const icon = vs[0].severity === 'error' ? '❌' : '⚠️'
-    process.stderr.write(`${icon} [${ruleId}] ${vs[0].message}\n`)
+    const head = vs[0]
+    if (!head) continue
+    const icon = head.severity === 'error' ? '❌' : '⚠️'
+    process.stderr.write(`${icon} [${ruleId}] ${head.message}\n`)
     for (const v of vs) {
       process.stderr.write(`  ${v.file}:${v.line}: ${v.text}\n`)
     }
-    if (vs[0].fix) process.stderr.write(`  Fix: ${vs[0].fix}\n`)
+    if (head.fix) process.stderr.write(`  Fix: ${head.fix}\n`)
     process.stderr.write('\n')
   }
 }
 
-function printRatchetReport(overages) {
+function printRatchetReport(
+  overages: { ruleId: string; file: string; baseline: number; actual: number }[],
+) {
   if (overages.length === 0) {
     process.stderr.write('✅ ratchet baseline 通過（無新增違規）\n')
     return
@@ -379,7 +429,7 @@ function main() {
   const fileset = wantStaged ? 'staged' : 'all'
 
   const layerIdx = argv.indexOf('--layer')
-  const layer = layerIdx >= 0 ? argv[layerIdx + 1] : 'all'
+  const layer = (layerIdx >= 0 ? argv[layerIdx + 1] : 'all') ?? ''
   if (!['pre-commit', 'ratchet', 'all'].includes(layer)) {
     throw new UsageError(`--layer 值不合法：${layer}（合法值：pre-commit | ratchet | all）`)
   }
@@ -400,12 +450,12 @@ function main() {
     process.exit(0)
   }
 
-  const data = JSON.parse(readFileSync(patternsPath, 'utf8'))
-  const allRules = Array.isArray(data.rules) ? data.rules : []
+  const data = JSON.parse(readFileSync(patternsPath, 'utf8')) as { rules?: unknown }
+  const allRules: Rule[] = Array.isArray(data.rules) ? (data.rules as Rule[]) : []
   const rules = allRules.filter((r) => layer === 'all' || (r.layer || 'pre-commit') === layer)
 
   const files = fileset === 'staged' ? gitStagedFiles(repoRoot) : gitAllFiles(repoRoot)
-  const readFile = (f) => readFileSync(join(repoRoot, f), 'utf8')
+  const readFile: ReadFile = (f) => readFileSync(join(repoRoot, f), 'utf8')
   const violations = files.length > 0 ? scan(rules, files, readFile) : []
 
   const baselinePath = join(repoRoot, 'review-rules-baseline.json')
@@ -499,6 +549,7 @@ try {
     process.stderr.write(`[scan.mjs] 用法錯誤：${err.message}\n\n${usage()}`)
     process.exit(3)
   }
-  process.stderr.write(`[scan.mjs] ${err.stack || err.message}\n`)
+  const e = err as Error
+  process.stderr.write(`[scan.mjs] ${e.stack || e.message}\n`)
   process.exit(3)
 }
