@@ -155,6 +155,10 @@ export const fmtBase = {
     '.nuxt/**',
     '.output/**',
     'pnpm-lock.yaml',
+    // evlog map 的產出（tracked 是為了當 ratchet baseline）。工具每次重生都會寫出
+    // 非 canonical 形式，不排除的話每次更新 baseline 都要多跑一次 fmt，且 lint-staged
+    // 會在 commit 當下偷改內容並 re-stage。與上面的 lockfile 同類：tracked 的產生物。
+    '**/evlog.map.json',
     '.claude/plugins/cache/**',
     '.spectra/**',
     // Derived projections (LOCKED) by sync-to-codex; mirror lintBase so

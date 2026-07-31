@@ -4,6 +4,7 @@
 # clade — bootstrap-check.sh
 #
 # 由 SessionStart hook 觸發。職責：
+#   0. codebase-memory-mcp auto-index（fire-and-forget，不阻擋）
 #   1. 確認 clade repo 找得到
 #   2. 確認 .claude/hub.json 存在
 #   3. 跑 sync-rules --check 偵測 drift / orphan
@@ -23,6 +24,34 @@ set -u
 PROJECT_ROOT="${PROJECT_DIR:-$(pwd)}"
 HUB_JSON="$PROJECT_ROOT/.claude/hub.json"
 STATE_JSON="$PROJECT_ROOT/.claude/.hub-state.json"
+
+# ─────────────────────────────────────────────────────────
+# 0. codebase-memory-mcp auto-index（fire-and-forget）
+# ─────────────────────────────────────────────────────────
+# 若 binary 存在且當前 repo 尚未 index，背景跑 fast index。
+# Silent skip on any error — 不阻擋 session 啟動。
+
+maybe_auto_index() {
+  local bin="${HOME}/.local/bin/codebase-memory-mcp"
+  [[ -x "$bin" ]] || return 0
+
+  local project_id
+  project_id=$(echo "$PROJECT_ROOT" | sed 's|^/||; s|/|-|g')
+
+  local status_json
+  status_json=$("$bin" cli index_status "{\"project\":\"$project_id\"}" 2>/dev/null) || status_json=""
+
+  if echo "$status_json" | grep -q '"status":"ready"'; then
+    return 0
+  fi
+
+  local payload
+  payload="{\"repo_path\":\"$PROJECT_ROOT\",\"mode\":\"fast\"}"
+  nohup "$bin" cli index_repository "$payload" >/dev/null 2>&1 &
+  disown
+}
+
+maybe_auto_index
 
 # ─────────────────────────────────────────────────────────
 # 1. 找 clade repo

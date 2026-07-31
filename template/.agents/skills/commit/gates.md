@@ -821,7 +821,7 @@ node .github/actions/evlog-map-gate/gate.mjs \
 
 gate 紅燈時，對它列出的**每一個** entry point 逐個處理，二選一：
 
-1. **補插樁**（預設）：`npx evlog map <該檔路徑>` 拿單點報告，照 `Suggested shape` 補 `useLogger(event)` + `log.set({...})`；`structured-errors` 失敗就給 `createError` 補 `why` / `fix`
+1. **補插樁**（預設）：`npx evlog map <該檔路徑> --no-write` 拿單點報告（**MUST** 帶 `--no-write`，不帶會改寫 tracked 的 `evlog.map.json`），照 `Suggested shape` 補 `useLogger(event)` + `log.set({...})`；`structured-errors` 失敗就給 `createError` 補 `why` / `fix`
 2. **登記豁免**（例外）：留 `// evlog-map-disable-next-line <check> — <理由>`，理由 MUST 寫「為什麼這個 entry point 不可插樁」，不是「趕著 commit」
 
 修完重跑 Step 3 直到綠燈，然後更新 baseline 並納入本次 commit：

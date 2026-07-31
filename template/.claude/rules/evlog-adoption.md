@@ -171,7 +171,8 @@ Depth 表量**裝了什麼**，`evlog map` 量**每個 entry point 用了沒有*
 ### MUST
 
 - **每一個**新增或修改的 entry point（`server/{api,routes,middleware,tasks}/`、pages、Next route handler）都 MUST 通過 map 的全部 check。**不是**「entry point 應該要有 log」——是本次 diff 動到的每一個都要滿分
-- `evlog.map.json` MUST track 進 git，且 MUST 與 code 在同一個 commit 內更新（`npx evlog map` 重新產生，**NEVER** 手改數字）
+- `evlog.map.json` MUST track 進 git，且 MUST 與 code 在同一個 commit 內更新（`npx evlog map` 重新產生，**NEVER** 手改數字）。它是**產生物**：已排除在 formatter 之外（`vendor/oxc-shared/preset.mjs`），**NEVER** 把它加回任何 format run
+- 查看報告 MUST 帶 `--no-write`。**NEVER** 用不帶 flag 的 `evlog map --all` / `evlog map <file>` 當 read-only 指令 —— 它們會改寫 tracked 檔
 - 無法插樁的 entry point MUST 留 `// evlog-map-disable-next-line <check> — <理由>`，理由 MUST 寫「為什麼這個 entry point 不可插樁」
 - money / auth / PII 路由 MUST 通過 `audit` check（`log.audit({ action, actor, target })`）—— 這類路由在 map 的計分權重加倍
 
@@ -196,8 +197,10 @@ Depth 表量**裝了什麼**，`evlog map` 量**每個 entry point 用了沒有*
 ### Review 檢查
 
 ```bash
-# 覆蓋率現況（沒裝 CLI 時讀 committed baseline）
-npx evlog map --all | head -30
+# 覆蓋率現況。MUST 帶 --no-write：不帶的話連「只是看報告」都會改寫 tracked 的
+# evlog.map.json（實測 --all 與單檔 inspect 都會寫），在多 session 共用的 working
+# tree 留下別人要花時間判讀的髒檔。
+npx evlog map --all --no-write | head -30
 node -e "const j=require('./evlog.map.json');console.log('score',j.map.score,'routes',j.map.routes.length,'suppressed',j.summary.suppressedChecks)"
 
 # 豁免登記是否帶理由（每一條命中都要能答出「為什麼不可插樁」）

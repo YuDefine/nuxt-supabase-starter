@@ -171,52 +171,18 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 ## Step 1: Schema 同步檢查（條件觸發）
 
-**觸發條件**：types 檔或任一 migration 有變更（含 staged + unstaged）。
+**每一次** `/commit` 都 MUST 跑這一步的觸發判定 —— 判定本身無條件，判定**結果**才決定要不要做事：
 
 ```bash
-# 從 package.json 讀 types 路徑（若有自訂路徑）；fallback 到 conventional locations
-# 避開頂層 return（Node script 不允許）— 用 if/else 與 .find()
-TYPES=$(node -e "
-  const fs = require('fs');
-  const pkg = require('./package.json');
-  const custom = pkg.config && pkg.config.dbTypesPath;
-  const candidates = [
-    'packages/core/app/types/database.types.ts',
-    'app/types/database.types.ts',
-    'shared/types/database.types.ts',
-    'src/types/database.types.ts',
-  ];
-  const path = custom || candidates.find(function(p) { return fs.existsSync(p); }) || 'app/types/database.types.ts';
-  console.log(path);
-")
-
-# 檢查 types 或 migrations 是否變更（HEAD diff 含 staged）
-git diff --name-only HEAD -- "$TYPES" supabase/migrations/ | grep -q . && echo HAS || echo NO
+git status --porcelain | grep -Eq 'supabase/migrations/|\.types\.ts' && echo HAS || echo NO
 ```
 
-若 HAS（types 檔或 migrations 有變更）：
+- `NO` → 本 repo 這次沒動到 migrations 或 types，**直接進 Step 2**，不需要讀任何東西。
+- `HAS` → **MUST** 先完整讀 [schema-sync.md](schema-sync.md) 並照其中 Step 1.1–1.3 走完，再進 Step 2。
 
-```bash
-# 1. 先把 working tree 的版本（含 staged + unstaged）拷一份備查
-cp "$TYPES" /tmp/types-before-reset.ts
-
-# 2. 重置 DB + 從 migrations 重新生成 types（自動偵測 LXC/Docker 模式）
-if node -e "process.exit(require('./package.json').scripts?.['db:reset'] ? 0 : 1)" 2>/dev/null; then
-  # LXC / 遠端 Supabase 模式：consumer 提供 pnpm db:reset wrapper（會 reset DB + 跑 db:types 寫到 $TYPES）
-  pnpm db:reset
-else
-  # 本機 Docker Supabase 模式
-  supabase db reset
-  supabase gen types typescript --local > "$TYPES"
-fi
-
-# 3. 比對：working tree 版本 vs migrations 推導版本
-diff /tmp/types-before-reset.ts "$TYPES"
-```
-
-有差異 → **停止 commit**，提示使用者依差異建立對應 migration 或還原 `$TYPES`。
-
-> **遠端 LXC 模式注意**：`pnpm db:types` 通常**直接寫入** `$TYPES` 不輸出 stdout，所以**不能**用 `> /tmp/...` 重導向取值（一定要先 `cp` 備份再 `pnpm db:reset`）。
+上面這條判定刻意寬鬆（寧可誤送進 reference 也不漏），精確判定與完整流程都在 reference 檔裡。
+**NEVER** 憑印象自行重建重置 / 比對流程 —— `pnpm db:reset` 與 `supabase db reset` 的分支、
+`cp` 備份先於重置的順序、自訂 `config.dbTypesPath` 的解析，寫錯任一條都會靜默放行不一致的 schema。
 
 ## Step 2: 檢查變更狀態
 
