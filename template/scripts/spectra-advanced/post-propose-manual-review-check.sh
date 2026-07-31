@@ -7,7 +7,7 @@
 #
 # Validates ## 人工檢查 items against 4 regex patterns sourced from
 # vendor/snippets/manual-review-enforcement/patterns.json (single source-of-truth
-# shared with vendor/scripts/review-gui.mts).
+# shared with vendor/scripts/review-gui.ts).
 #
 # Usage:
 #   post-propose-manual-review-check.sh                  → finds latest active change
@@ -34,7 +34,7 @@ PATTERNS_FILE="${REPO_ROOT}/vendor/snippets/manual-review-enforcement/patterns.j
 
 if [ ! -f "$PATTERNS_FILE" ]; then
   echo "✗ post-propose-manual-review-check: patterns.json not found at $PATTERNS_FILE" >&2
-  echo "  This file is the single source-of-truth shared with review-gui.mts." >&2
+  echo "  This file is the single source-of-truth shared with review-gui.ts." >&2
   echo "  See vendor/snippets/manual-review-enforcement/README.md" >&2
   exit 1
 fi
@@ -257,7 +257,7 @@ run_tunnel_check() {
 # evidence (which identifier columns / literal key are present). Returns a
 # single-line evidence string (no pipe / newline) on stdout, or empty if node /
 # the helper is unavailable (degrade gracefully — the static remediation stands).
-DISPLAY_CHECK_HELPER="$SCRIPT_DIR/page-display-check.mts"
+DISPLAY_CHECK_HELPER="$SCRIPT_DIR/page-display-check.ts"
 run_page_display_check() {
   local line="$1"
   command -v node >/dev/null 2>&1 || return 0
@@ -492,7 +492,7 @@ fi
 # aware）必須存在；(2) query param 必須出現在 resolved page source（page 沒讀的
 # param = 臆想 URL）。/api/ 路徑跳過；consumer 無 pages 目錄（pagesRoot null）
 # 整段跳過；false positive 走既有 @no-manual-review-check[<reason>] bypass。
-URL_CHECK_HELPER="$SCRIPT_DIR/verify-url-check.mts"
+URL_CHECK_HELPER="$SCRIPT_DIR/verify-url-check.ts"
 if command -v node >/dev/null 2>&1 && [ -f "$URL_CHECK_HELPER" ]; then
   url_check_enabled=true
   for idx in "${!manual_block_lines[@]}"; do

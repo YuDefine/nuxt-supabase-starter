@@ -11,7 +11,7 @@ pnpm add -D vite-doctor@0.0.1
 ## Consumer 使用（nuxt.config.ts）
 
 ```typescript
-import { doctorConfig } from './vendor/doctor-shared/preset.mts'
+import { doctorConfig } from './vendor/doctor-shared/preset.ts'
 
 export default defineNuxtConfig({
   modules: [
@@ -23,7 +23,7 @@ export default defineNuxtConfig({
 ### 覆寫單一規則
 
 ```typescript
-import { doctorRules } from './vendor/doctor-shared/preset.mts'
+import { doctorRules } from './vendor/doctor-shared/preset.ts'
 
 export default defineNuxtConfig({
   modules: [
@@ -46,4 +46,4 @@ vite-doctor scan . --fix       # 自動修 safe fixes
 
 ## 編輯 baseline
 
-改 `~/offline/clade/vendor/doctor-shared/preset.mts`，走標準 publish + propagate 流程。
+改 `~/offline/clade/vendor/doctor-shared/preset.ts`，走標準 publish + propagate 流程。

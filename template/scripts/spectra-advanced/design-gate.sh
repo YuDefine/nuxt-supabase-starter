@@ -121,7 +121,7 @@ UI 變更（觸動 .vue / pages / components / layouts）必須包含完整 7 �
   - [ ] N.6 執行 review-screenshot，補 design-review.md / 視覺 QA 證據
   - [ ] N.7 Fidelity 確認 — design-review.md 中無 DRIFT 項
 
-完整規格見 \`ux-completeness.md\` Design Review Task Template。可跑 \`pnpm spectra:upgrade-design-review\` 自動補齊（若 consumer 未 wire 此 script，改跑 \`node scripts/spectra-advanced/upgrade-design-review.mts\`）。")
+完整規格見 \`ux-completeness.md\` Design Review Task Template。可跑 \`pnpm spectra:upgrade-design-review\` 自動補齊（若 consumer 未 wire 此 script，改跑 \`node scripts/spectra-advanced/upgrade-design-review.ts\`）。")
   fi
 
   # Block if Design Review section structure is incomplete (independent of completion)
@@ -141,7 +141,7 @@ $(printf '  - %s\n' "${STRUCTURAL_DRIFT[@]}")
   - [ ] N.6 執行 review-screenshot，補 design-review.md / 視覺 QA 證據
   - [ ] N.7 Fidelity 確認 — design-review.md 中無 DRIFT 項
 
-可跑 \`pnpm spectra:upgrade-design-review\` 自動補齊既有 change（若 consumer 未 wire 此 script，改跑 \`node scripts/spectra-advanced/upgrade-design-review.mts\`）。")
+可跑 \`pnpm spectra:upgrade-design-review\` 自動補齊既有 change（若 consumer 未 wire 此 script，改跑 \`node scripts/spectra-advanced/upgrade-design-review.ts\`）。")
   fi
 
   if [ "$DESIGN_PASSED" = false ]; then

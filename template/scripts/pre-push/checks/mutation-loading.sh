@@ -9,7 +9,7 @@
 # 讓既有違規逐步清償。等某 consumer 清到 0 後，可在自家 runner 把本 check 改成 blocking。
 #
 # 跟 pre-commit 同名 check 的分工見 pre-commit/checks/mutation-loading.sh 檔頭。
-# 偵測邏輯共用 vendor/scripts/checks/mutation-loading-detect.mts（支援跨行 destructuring）。
+# 偵測邏輯共用 vendor/scripts/checks/mutation-loading-detect.ts（支援跨行 destructuring）。
 #
 # Auto-detect：無 nuxt.config.* → no-op（非 Nuxt repo 不掃）。
 #
@@ -25,8 +25,8 @@ cd "$PROJECT_ROOT"
 # 非 Nuxt repo → 跳過
 ls nuxt.config.* >/dev/null 2>&1 || exit 0
 
-DETECTOR="scripts/checks/mutation-loading-detect.mts"
-[[ -f "$DETECTOR" ]] || DETECTOR="vendor/scripts/checks/mutation-loading-detect.mts"
+DETECTOR="scripts/checks/mutation-loading-detect.ts"
+[[ -f "$DETECTOR" ]] || DETECTOR="vendor/scripts/checks/mutation-loading-detect.ts"
 [[ -f "$DETECTOR" ]] || exit 0
 
 # 全站掃描（--all 走 app root + monorepo packages/*/app）；--warn-only 命中不 exit 1

@@ -4,9 +4,9 @@ paths:
   - 'openspec/changes/**'
   - 'vendor/scripts/wt-helper.mjs'
   - 'vendor/scripts/stash-reconcile.mjs'
-  - 'vendor/scripts/review-gui.mts'
+  - 'vendor/scripts/review-gui.ts'
   - 'scripts/wt-helper.mjs'
-  - 'scripts/review-gui.mts'
+  - 'scripts/review-gui.ts'
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -60,9 +60,9 @@ Session 開頭判定要動 code 就 **SHOULD** 立刻打 `/wt <task>`，不要�
 
 ## §10 review-gui 與 worktree 互動的已知坑
 
-`vendor/scripts/review-gui.mts` 從多 worktree aggregate `openspec/changes/`，3 條已記坑：home list silent skip main change（[[pitfall-review-gui-collision-typo-and-worktree-startup]]）、source aggregation collision（[[pitfall-review-gui-source-aggregation-collision]]）、apply-pending batch button 按前 **MUST** spot check 每張 change impl 完成度（[[pitfall-review-gui-apply-pending-mid-apply-changes]]）。
+`vendor/scripts/review-gui.ts` 從多 worktree aggregate `openspec/changes/`，3 條已記坑：home list silent skip main change（[[pitfall-review-gui-collision-typo-and-worktree-startup]]）、source aggregation collision（[[pitfall-review-gui-source-aggregation-collision]]）、apply-pending batch button 按前 **MUST** spot check 每張 change impl 完成度（[[pitfall-review-gui-apply-pending-mid-apply-changes]]）。
 
-改 review-gui.mts 後 consumer 端 `pnpm review:ui:kill && pnpm review:ui` 重啟才吃到新版。
+改 review-gui.ts 後 consumer 端 `pnpm review:ui:kill && pnpm review:ui` 重啟才吃到新版。
 
 ## §11 WORKTREE-BRIEF.md — 持久化任務交接上下文
 

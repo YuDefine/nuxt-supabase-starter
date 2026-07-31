@@ -4,7 +4,7 @@ paths:
   - 'screenshots/**'
   - 'openspec/changes/**'
   - 'HANDOFF.md'
-  - 'vendor/scripts/review-gui*.mts'
+  - 'vendor/scripts/review-gui*.ts'
   - 'vendor/scripts/lib/evidence-store.mjs'
   - 'scripts/spectra-advanced/**'
   - '.claude/skills/spectra-verify/**'
@@ -22,7 +22,7 @@ Local edits will be reverted by the next sync.
 
 # Review-GUI Surface SoP
 
-**核心命題**：`vendor/scripts/review-gui.mts` 本體經 fixtures gate hardened 後，incident 漂移到**外圍 agent surface**。本 rule 對所有**呼叫** review-gui 的 surface 統一規約。
+**核心命題**：`vendor/scripts/review-gui.ts` 本體經 fixtures gate hardened 後，incident 漂移到**外圍 agent surface**。本 rule 對所有**呼叫** review-gui 的 surface 統一規約。
 
 本 rule 是 [[agent-self-verification]] 的特例化（review-gui 是其中一個 evidence collection surface），同時延伸 [[manual-review]] 對 review-gui 互動的規約。
 
@@ -41,11 +41,11 @@ Local edits will be reverted by the next sync.
 | Surface | 入口 | 預期 contract |
 | --- | --- | --- |
 | `/commit` 0-MR gate block | `plugins/hub-core/skills/commit/SKILL.md` Step 0-MR | block 後 **MUST** auto-triage pending items（MUST 9）；Claude 可處理的先自行推進，只有 `bucket=ready` 才引導 user 到 review-gui |
-| `/handoff` Mode B 2B.0 | `plugins/hub-core/skills/handoff/SKILL.md` Step 2B.0/2B.1.7 | 推薦 user 跑 review:ui **前** MUST 先跑 `review-gui.mts --scan` 寫入 HANDOFF.md |
+| `/handoff` Mode B 2B.0 | `plugins/hub-core/skills/handoff/SKILL.md` Step 2B.0/2B.1.7 | 推薦 user 跑 review:ui **前** MUST 先跑 `review-gui.ts --scan` 寫入 HANDOFF.md |
 | `screenshot-review` verify mode | 主線直派 codex（per [[agent-routing]]） | item 含 compound visual state → 分成 scoped sub-items 或 multi-screenshot annotation |
 | `verified-ui` evidence collection（spectra-apply Step 8a） | `vendor/snippets/verify-channels/ui-final-state-brief*.template.md` | compound state evidence 必拆 / 必標多 screenshot |
 | `codex-dispatch-screenshot-verify.mjs` dispatcher | clade vendor script | dispatcher 內 invoke external CLI 前 verify CLI contract（per [[agent-self-verification]] § MUST 4） |
-| review-gui detail page 互動 | `vendor/scripts/review-gui.mts` server-side handlers | impl 完成率 < threshold → manual review block readonly + amber banner（已 implemented v1.4.30+） |
+| review-gui detail page 互動 | `vendor/scripts/review-gui.ts` server-side handlers | impl 完成率 < threshold → manual review block readonly + amber banner（已 implemented v1.4.30+） |
 
 ## Hard rule
 
@@ -53,7 +53,7 @@ Local edits will be reverted by the next sync.
 
 1. **入口 SoP scan**：`/handoff` Mode B 在推薦 user 跑 `pnpm review:ui` **前**，主線 **MUST**：
    ```bash
-   cd ~/offline/clade && node vendor/scripts/review-gui.mts --scan
+   cd ~/offline/clade && node vendor/scripts/review-gui.ts --scan
    ```
    把 active changes 的 `bucket` / `pending` / `userActionPending` 寫進 HANDOFF.md `## Review-gui Readiness` §。Outstanding steps（2B.2–2B.4）**MUST** 引用 scan result，**禁止**從 HANDOFF.md narrative 或 tasks.md leaf count 推測 review-gui bucket。
 2. **Compound item evidence**：一個 `[verify:ui]` / `[review:ui]` item 含多 visual state（hover / focus / before-after / step1→step2）→ **MUST** 採以下之一：
@@ -73,7 +73,7 @@ Local edits will be reverted by the next sync.
    - **沒命中** → silent skip；但若改動觸及 hero image / above-the-fold layout / 字體載入，即使 keyword 未命中也 **SHOULD** 實測（keyword 偵測是下界）。
 
    chrome-devtools-mcp entry 已散播至所有 consumer `.mcp.json` 並全 fleet 啟用（enabledMcpjsonServers）；perf-trace review 建議仍在 clade home 集中跑（profile/量測環境一致）。
-6. **Ball-ownership 答案依 bucket 判讀（single source）**：回答任何 change 狀態問題（「等你還是等我」/「ready 了沒」）**MUST** 依 `reviewBucketForChange()` 算出的 bucket 判讀 —— GUI 端讀 `change.bucket`、headless 讀 `--scan` 輸出 bucket。`bucket` 是 server canonical single source（review-gui.mts）。**禁止**從 tasks.md 散文、checkbox leaf count、或自己對 item 的印象推測 ball-ownership。bucket 對照：`awaitingUserReEval` = 等 user 重評、`awaitingUserDecision` = 等 user 商業決策（Claude 已標 `(awaiting-user-decision:)` 交還 user，master 排除）、`feedbackGiven` = 等 Claude、`readyForEvidence` = 等 Claude 補 evidence、`applyInProgress` = impl 未完、`applyBlocked` = impl 卡外部 blocker（`@apply-blocked` marker，交還 user，master 排除）、`awaitArchiveWalkthrough` = 等 archive walkthrough、`ready` = 可開始檢查。
+6. **Ball-ownership 答案依 bucket 判讀（single source）**：回答任何 change 狀態問題（「等你還是等我」/「ready 了沒」）**MUST** 依 `reviewBucketForChange()` 算出的 bucket 判讀 —— GUI 端讀 `change.bucket`、headless 讀 `--scan` 輸出 bucket。`bucket` 是 server canonical single source（review-gui.ts）。**禁止**從 tasks.md 散文、checkbox leaf count、或自己對 item 的印象推測 ball-ownership。bucket 對照：`awaitingUserReEval` = 等 user 重評、`awaitingUserDecision` = 等 user 商業決策（Claude 已標 `(awaiting-user-decision:)` 交還 user，master 排除）、`feedbackGiven` = 等 Claude、`readyForEvidence` = 等 Claude 補 evidence、`applyInProgress` = impl 未完、`applyBlocked` = impl 卡外部 blocker（`@apply-blocked` marker，交還 user，master 排除）、`awaitArchiveWalkthrough` = 等 archive walkthrough、`ready` = 可開始檢查。
 7. **route E 結論 MUST 同步寫 annotation（不留散文 orphan）**：triage 一個帶 `（issue:）` 的 item，路由結論為 **(E)**（out-of-scope / false-positive / 修法已落地等 user 重評）時，**MUST 在同一動作**寫 `(claude-analyzed: <ISO> route=E[ note=...])` annotation（per [[manual-review]] § `(claude-analyzed: ...)` annotation）。**禁止**只留散文分析 / 只開 `@followup[TD-NNN]` 卻漏寫 machine annotation —— `analyzedIssuedCount` 只認 annotation，漏寫會讓 bucket 仍判 `feedbackGiven`（等 Claude），與「等 user」結論矛盾。
 
 8. **Post-work scan 回報 MUST 逐條標 bucket（hard rule）**：完成 evidence collection / annotation 修正 / issue triage 等批次工作後向 user 回報 scan 結果時，**MUST** 對每條 change 個別標示實際 `bucket`。只有 `bucket=ready` 的 change 才能寫「可以在 review-gui 驗收」或列 review-gui URL 引導 user 開始檢查。非 `ready` 的 change **MUST** 如實報告實際 bucket + 卡住原因（例：「`readyForEvidence` — evidence 已收齊但有 2 條 `（issue:）` 待 user 重評」），**NEVER** 混入「可以驗收」的清單。反模式：3 條 change 中 1 條 `ready`、2 條 `readyForEvidence`，結尾寫「三條都可以在 review-gui 做最後驗收」— 這直接誤導 user。
@@ -110,7 +110,7 @@ Local edits will be reverted by the next sync.
 
 Review-gui 的狀態全部落在 `tasks.md` 這個**雙寫**檔上——user 在 GUI 點按鈕會寫，Claude 改 annotation 也會寫。兩邊都在寫的檔案，任何「上一次看到的樣子」都只是快照。以下三條各綁一個可觀察 predicate。
 
-10. **陳述狀態前，本 turn 內 MUST 有一次 scan**：回答任何 change / item 的狀態問題（「還剩幾條」「ready 了沒」「這條過了嗎」「現在輪到誰」）之前，若**本 turn 尚未**跑過 `review-gui.mts --scan`，**MUST** 先跑再答。
+10. **陳述狀態前，本 turn 內 MUST 有一次 scan**：回答任何 change / item 的狀態問題（「還剩幾條」「ready 了沒」「這條過了嗎」「現在輪到誰」）之前，若**本 turn 尚未**跑過 `review-gui.ts --scan`，**MUST** 先跑再答。
 
     Predicate 就是字面的「本 turn 有沒有跑過」：跑過 → 直接引用該次輸出；沒跑過 → 先跑。**上一則訊息跑過不算**——user 在兩則訊息之間點按鈕正是最常見的情形。**NEVER** 引用本 turn 之前取得的 scan 輸出、`/api/changes` 回應、或 `tasks.md` 讀取結果來陳述現況。
 
@@ -214,7 +214,7 @@ node ~/offline/clade/vendor/scripts/lib/evidence-store.mjs \
 3. sub-item `#N.M` 的 screenshot 檔名 **MUST** 用 `#N.M-` prefix，**NEVER** 複用 parent `#N-` prefix
 4. route E 結論 **MUST** 同步寫 `(claude-analyzed: <ISO> route=E)` annotation（per MUST 7）
 5. **annotation MUST inline（同一行）**：`(verified-*:)` / `(issue:)` / `(claude-discussed:)` 等 annotation **MUST** 寫在 `- [ ] #N ...` marker 的**同一行末尾**，**NEVER** 寫在下一行（即使 indent 正確）。Parser 只解析 item marker 行內的 annotation token；獨立行 annotation = silent miss → `evidenceMissing` → bucket 不收斂。（per [[pitfall-scan-non-ready-passive-report-instead-of-self-fix]]）
-6. **write-scan-fix convergence loop（hard rule）**：annotation 寫完後 **MUST** 立刻跑 `review-gui.mts --scan`，讀 scan output 的 `bucket` + `evidenceMissing` + `hitsByCode` + `malformed` + `readinessHits`。若 bucket ≠ `ready`（且非純 user-dependent items），**MUST** 自行 root-cause（讀 scan 的 blocking 原因）→ 修正 annotation / item 描述 → 重新 scan → **loop 直到 bucket=ready 或確認剩餘全是 user-dependent**。**NEVER** 在 non-ready 時回報 user「bucket=readyForEvidence」或「healthCheckNeeded」讓 user 問為什麼 — 那是把 Claude 該做的 root-cause 工作轉嫁給 user。（per [[pitfall-scan-non-ready-passive-report-instead-of-self-fix]]）
+6. **write-scan-fix convergence loop（hard rule）**：annotation 寫完後 **MUST** 立刻跑 `review-gui.ts --scan`，讀 scan output 的 `bucket` + `evidenceMissing` + `hitsByCode` + `malformed` + `readinessHits`。若 bucket ≠ `ready`（且非純 user-dependent items），**MUST** 自行 root-cause（讀 scan 的 blocking 原因）→ 修正 annotation / item 描述 → 重新 scan → **loop 直到 bucket=ready 或確認剩餘全是 user-dependent**。**NEVER** 在 non-ready 時回報 user「bucket=readyForEvidence」或「healthCheckNeeded」讓 user 問為什麼 — 那是把 Claude 該做的 root-cause 工作轉嫁給 user。（per [[pitfall-scan-non-ready-passive-report-instead-of-self-fix]]）
 
    常見 blocking reason 自修表：
 
@@ -235,7 +235,7 @@ node ~/offline/clade/vendor/scripts/lib/evidence-store.mjs \
 
 下列**不**屬本 rule：
 
-- **review-gui.mts 本體 bug**（endpoint、SPA、aggregation logic）→ 由 [[review-gui-change-discipline]] § Hard rule (fixtures gate) 管
+- **review-gui.ts 本體 bug**（endpoint、SPA、aggregation logic）→ 由 [[review-gui-change-discipline]] § Hard rule (fixtures gate) 管
 - **review-gui server-side gate 實作細節**（impl gate threshold、422 response shape）→ vendor script 本體 source-of-truth，本 rule 只規約 surface 該遵守的 contract
 - **跨 consumer 觀感 bug**（review-gui CSS / 字級 / 字色）→ audit-ux-drift 管
 
@@ -248,7 +248,7 @@ node ~/offline/clade/vendor/scripts/lib/evidence-store.mjs \
 | Verify channel annotation 格式（含 verified-ui screenshot=） | [[manual-review.backend]] § 標準流程 § `[verify:ui]` channel |
 | Compound item 拆分 / multi-screenshot annotation 規約 | [[manual-review.evidence]] § Item Kind Marker `verify:ui` |
 | Handoff Mode B Step 2B.0 / 2B.1.7 review-gui readiness scan | `plugins/hub-core/skills/handoff/SKILL.md`（pending TD-151 implementation） |
-| review-gui detail page impl gate（已 implemented） | `vendor/scripts/review-gui.mts` `countImplementationProgress` / `persistReviewAction` |
+| review-gui detail page impl gate（已 implemented） | `vendor/scripts/review-gui.ts` `countImplementationProgress` / `persistReviewAction` |
 
 ## Audit signal
 
@@ -256,8 +256,8 @@ node ~/offline/clade/vendor/scripts/lib/evidence-store.mjs \
 
 | Signal | TD | 狀態 | SoT |
 | --- | --- | --- | --- |
-| `compound_verify_ui_single_screenshot` | TD-142 / TD-143 | done | `vendor/scripts/audit-screenshot-quality.mts` |
-| `stale_screenshot_after_ui_change` | TD-178 | done | `vendor/scripts/audit-screenshot-staleness.mts` |
+| `compound_verify_ui_single_screenshot` | TD-142 / TD-143 | done | `vendor/scripts/audit-screenshot-quality.ts` |
+| `stale_screenshot_after_ui_change` | TD-178 | done | `vendor/scripts/audit-screenshot-staleness.ts` |
 | `claude-analyzed-drift`（MUST 6/7 違反偵測） | TD-179 | done | `vendor/scripts/audit-claude-analyzed-drift.mjs` |
 
 **Performance 實測（MUST 5）升級路徑**：目前 advisory；若漏驗頻繁 → archive 前 hard gate 或 review-gui 自動生成 perf-trace sub-item（動本體，須走 [[review-gui-change-discipline]] fixtures gate）。

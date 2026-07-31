@@ -3,13 +3,13 @@
 #
 # review-rules-ban (pre-commit, staged) — 擋住 patterns.json 定義的機械規則違規（pre-commit layer）
 #
-# 薄殼呼叫統一掃描引擎 vendor/review-rules/scan.mts（pre-commit / pre-push / CI / audit
-# 四入口共用，見 scan.mts 檔頭）。掃描邏輯 / glob matching / multiLine tag 展平全部收斂
-# 在 scan.mts，本檔只負責：
-#   - 無 patterns.json / scan.mts（consumer 尚未 propagate）→ 跳過
+# 薄殼呼叫統一掃描引擎 vendor/review-rules/scan.ts（pre-commit / pre-push / CI / audit
+# 四入口共用，見 scan.ts 檔頭）。掃描邏輯 / glob matching / multiLine tag 展平全部收斂
+# 在 scan.ts，本檔只負責：
+#   - 無 patterns.json / scan.ts（consumer 尚未 propagate）→ 跳過
 #   - 無 staged .vue / app.config.*（pre-commit layer 目前只覆蓋這兩種 glob）→ 跳過，
 #     避免每次 commit 都 spawn node
-#   - 呼叫 scan.mts --staged --layer pre-commit，轉發 exit code
+#   - 呼叫 scan.ts --staged --layer pre-commit，轉發 exit code
 #     （severity=error 命中 → exit 1 擋 commit；severity=warning 只印不擋）
 #
 # 由 ~/clade vendor/scripts/pre-commit/ 散播，請勿直接編輯 consumer 副本。
@@ -20,9 +20,9 @@ PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 cd "$PROJECT_ROOT"
 
 PATTERNS_FILE="$PROJECT_ROOT/vendor/review-rules/patterns.json"
-SCAN_ENGINE="$PROJECT_ROOT/vendor/review-rules/scan.mts"
+SCAN_ENGINE="$PROJECT_ROOT/vendor/review-rules/scan.ts"
 
-# patterns.json / scan.mts 不存在 → 跳過（consumer 尚未 propagate）
+# patterns.json / scan.ts 不存在 → 跳過（consumer 尚未 propagate）
 [[ -f "$PATTERNS_FILE" ]] || exit 0
 [[ -f "$SCAN_ENGINE" ]] || exit 0
 

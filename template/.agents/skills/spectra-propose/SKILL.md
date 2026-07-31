@@ -913,7 +913,7 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
     下一步就是開工」是不同狀態；由 **user 在決定擱置某張 change 時顯式** `spectra park <name>`。
 
     移除的理由（完整論證見 decision）：propose→park→apply→unpark 是一趟沒有成文目的的往返，
-    而為了讓它安全，clade 累積了 pitfall + `audit-ghost-park.mts` + commit-to-git 緩解 +
+    而為了讓它安全，clade 累積了 pitfall + `audit-ghost-park.ts` + commit-to-git 緩解 +
     main-side unpark 規則四項機制 —— 全部只在「有 unpark」時才需要。不 park 就沒有 unpark，
     artifacts 留在 disk 且已進 git，整類 ghost-park 永久遺失在主路徑上消失。
 
@@ -925,10 +925,10 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
     Per [[worktree-default]] §1, spectra-apply 必須在 isolated session worktree 跑（會寫 tracked product code）。Propose 結束時主動建好對應 worktree，user 才能一鍵接續 apply，不必再手動 `/wt`。
 
     ```bash
-    node scripts/wt-helper.mts add "<change-name>"
+    node scripts/wt-helper.ts add "<change-name>"
     ```
 
-    Helper 行為與失敗處理見 `plugins/hub-core/skills/wt/SKILL.md`。若 helper fail with `Worktree path already exists`（slug 已存在，例如同名 change 之前建過、user 重跑 propose）→ 沿用既有 worktree 即可，視為成功；用 `node scripts/wt-helper.mts list --json` 抓既有 path。其他 helper 錯誤 → 報錯但**仍**繼續吐下方 handoff message，附上錯誤摘要讓 user 手動處理。
+    Helper 行為與失敗處理見 `plugins/hub-core/skills/wt/SKILL.md`。若 helper fail with `Worktree path already exists`（slug 已存在，例如同名 change 之前建過、user 重跑 propose）→ 沿用既有 worktree 即可，視為成功；用 `node scripts/wt-helper.ts list --json` 抓既有 path。其他 helper 錯誤 → 報錯但**仍**繼續吐下方 handoff message，附上錯誤摘要讓 user 手動處理。
 
     **Handoff message**：
 

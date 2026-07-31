@@ -75,8 +75,8 @@ This is a **utility skill** (not a workflow step). It reads source file tracking
     session's WIP. This step adds session-ownership classification.
 
     Detection:
-    - Check whether `scripts/claim-helper.mts` exists in the repo root.
-    - If yes, run `node scripts/claim-helper.mts list` to enumerate active
+    - Check whether `scripts/claim-helper.ts` exists in the repo root.
+    - If yes, run `node scripts/claim-helper.ts list` to enumerate active
       session claims on this consumer.
     - If no claim infra is present, skip 4a entirely — fall through to
       upstream behavior (step 5).

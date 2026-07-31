@@ -64,7 +64,7 @@ Local edits will be reverted by the next sync.
 
 8. **review:ui 既有 `[x]` 需 agent 自拍 evidence 佐證（hard rule）**：archive / 收尾前，任何 `[review:ui]` 的既有 `[x]` 若無對應 agent 自拍 screenshot evidence（`screenshots/local/<change>/#<id>-*.png`）→ 一律視為 **false-green**。主線 **MUST** 無視 checkbox state 自拍自驗，**NEVER** 假設 user 手上有截圖、**NEVER** 信任前 session 代勾。「自拍」動作本身是 bug-catcher —— 要拍就得真的開該頁，一開就撞出被 checkbox 掩蓋的 bug。route mapping 的延伸規約見 [[agent-self-verification.screenshot-evidence]] MUST 8。（per [[pitfall-review-ui-checkbox-without-agent-evidence-masks-bug]]）
 
-9. **UI 改動後 MUST 重拍所有受影響的 verify:ui 截圖（hard rule）**：commit 觸及 `.vue` / `.tsx` / `.jsx` / `.css` / `.scss` 檔後，該 change 的**全部** `[verify:ui]` / `[review:ui]` items 截圖視為 stale（**不只**被標 issue 的那張）。**MUST** 跑 `audit-screenshot-staleness.mts` 確認 0 stale 才能 hand back user 或推 bucket 到 `ready`。此規則**不限 spectra-apply 流程** —— 主線直接修 issue / refactor / 任何 UI 改動都適用。五步重拍流程見 [[agent-self-verification.screenshot-evidence]] MUST 9。（per [[pitfall-issue-fix-refreshes-only-flagged-screenshot-leaves-batch-stale]]）
+9. **UI 改動後 MUST 重拍所有受影響的 verify:ui 截圖（hard rule）**：commit 觸及 `.vue` / `.tsx` / `.jsx` / `.css` / `.scss` 檔後，該 change 的**全部** `[verify:ui]` / `[review:ui]` items 截圖視為 stale（**不只**被標 issue 的那張）。**MUST** 跑 `audit-screenshot-staleness.ts` 確認 0 stale 才能 hand back user 或推 bucket 到 `ready`。此規則**不限 spectra-apply 流程** —— 主線直接修 issue / refactor / 任何 UI 改動都適用。五步重拍流程見 [[agent-self-verification.screenshot-evidence]] MUST 9。（per [[pitfall-issue-fix-refreshes-only-flagged-screenshot-leaves-batch-stale]]）
 
 10. **部署宣稱需交叉核對**：宣稱部署平台 / runtime 時，**MUST** 核對 `.github/workflows/` deploy job + deploy config（`wrangler.toml` / `Dockerfile`）+ `package.json` scripts。**NEVER** 只引單一 `docs/` 文件。
 

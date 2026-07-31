@@ -100,7 +100,7 @@ sux_touched_files --refresh >/dev/null
 
 # T7: evidence-store CLI path — dual-track resolver (sidecar-first, inline fallback).
 # Shell gates cannot parse JSONL; this CLI bridge returns exit 0 if evidence exists.
-EVIDENCE_STORE="$SCRIPT_DIR/../lib/evidence-store.mts"
+EVIDENCE_STORE="$SCRIPT_DIR/../lib/evidence-store.ts"
 
 # has_sidecar_evidence <item-id> <kind>
 # Returns 0 if evidence of the given kind exists in the sidecar for this change.
@@ -194,7 +194,7 @@ $(printf '  - %s\n' "${ALL_MIGS_ARR[@]}")
 fi
 
 # --- Check 3: Exhaustiveness Drift (warn only) ---
-AUDIT_SCRIPT="$REPO_ROOT/${SUX_SCRIPTS_DIR}/audit-ux-drift.mts"
+AUDIT_SCRIPT="$REPO_ROOT/${SUX_SCRIPTS_DIR}/audit-ux-drift.ts"
 if command -v node >/dev/null 2>&1 && [ -f "$AUDIT_SCRIPT" ]; then
   TOUCHED_TYPES=$(echo "$MIG_TOUCHED" | grep -cE "^${SUX_TYPES_PRIMARY}/.*\.ts$" || true)
   TOUCHED_TYPES=${TOUCHED_TYPES:-0}
@@ -362,7 +362,7 @@ if [ -f "$TASKS_FILE" ]; then
 
   if [ -n "$KIND_SECTION" ]; then
     # Pre-pass: collect parent IDs that own at least one scoped child (`#N.M`).
-    # Mirrors `buildParentsWithScopedChildren` in review-gui.mts so this hook
+    # Mirrors `buildParentsWithScopedChildren` in review-gui.ts so this hook
     # shares the same notion of "parent-with-children" as the GUI's
     # `requiresUserConfirmation()` carve-out. Parents whose semantic is fully
     # aggregated from scoped children MUST NOT be flagged for unchecked-checkbox
@@ -392,7 +392,7 @@ if [ -f "$TASKS_FILE" ]; then
       fi
 
       # Skip parent-with-children: semantic fully aggregated from scoped children.
-      # Aligns with review-gui.mts `requiresUserConfirmation()` returning false
+      # Aligns with review-gui.ts `requiresUserConfirmation()` returning false
       # for these parents so users cannot OK / Issue / Skip them directly.
       if [ -z "$SCOPED_SUFFIX" ]; then
         _parent_num="${ID#\#}"
@@ -529,10 +529,10 @@ fi
 fi  # end Check 4 PRE_SKILL guard
 
 # --- Check 5: Screenshot Quality Audit ---
-SCREENSHOT_AUDIT_SCRIPT="$REPO_ROOT/${SUX_SCRIPTS_DIR}/spectra-advanced/audit-screenshot-quality.mts"
-if [ ! -f "$SCREENSHOT_AUDIT_SCRIPT" ] && [ -f "$REPO_ROOT/vendor/scripts/spectra-advanced/audit-screenshot-quality.mts" ]; then
+SCREENSHOT_AUDIT_SCRIPT="$REPO_ROOT/${SUX_SCRIPTS_DIR}/spectra-advanced/audit-screenshot-quality.ts"
+if [ ! -f "$SCREENSHOT_AUDIT_SCRIPT" ] && [ -f "$REPO_ROOT/vendor/scripts/spectra-advanced/audit-screenshot-quality.ts" ]; then
   # clade source checkout verification path; consumers use scripts/spectra-advanced.
-  SCREENSHOT_AUDIT_SCRIPT="$REPO_ROOT/vendor/scripts/spectra-advanced/audit-screenshot-quality.mts"
+  SCREENSHOT_AUDIT_SCRIPT="$REPO_ROOT/vendor/scripts/spectra-advanced/audit-screenshot-quality.ts"
 fi
 
 if [ ! -f "$SCREENSHOT_AUDIT_SCRIPT" ]; then
@@ -568,7 +568,7 @@ $VERIFY_MISSING
 完成後重跑 archive。per [[agent-self-verification]] + [[pitfall-verify-evidence-handoff-instead-of-self-collect]]：evidence collection 是 agent 預設職責，review-gui 補 evidence prompt 是 fallback 不是 default。")
     else
       MESSAGES+=("[UX Gate] Screenshot Quality Audit 未通過 — review pipeline 截圖存在 warning / critical 或 audit script error。
-跑 \`node --experimental-strip-types scripts/spectra-advanced/audit-screenshot-quality.mts $CHANGE_NAME\` 查看完整報告；整理 final-state 截圖、移動探索圖到 _exploration/，或為 round-trip-only item 加上 @no-screenshot 後再 archive。")
+跑 \`node --experimental-strip-types scripts/spectra-advanced/audit-screenshot-quality.ts $CHANGE_NAME\` 查看完整報告；整理 final-state 截圖、移動探索圖到 _exploration/，或為 round-trip-only item 加上 @no-screenshot 後再 archive。")
     fi
   fi
 fi
@@ -629,7 +629,7 @@ if [ -f "$TASKS_FILE" ]; then
 
     # Only process lines with verified-ui annotation.
     #
-    # The fractional-seconds branch is required, not cosmetic: `evidence-store.mts
+    # The fractional-seconds branch is required, not cosmetic: `evidence-store.ts
     # --write` stamps with `toISOString()`, which always carries `.mmm`. A
     # `[0-9:]+Z?` pattern stops at the `.`, so `Z?` never matches and the capture
     # comes back WITHOUT an offset — and `Date.parse` reads an offset-less ISO

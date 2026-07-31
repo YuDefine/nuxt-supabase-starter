@@ -52,7 +52,7 @@ Implement tasks from a Spectra change.
       **c.1 — 偵測 main dirty**：
 
       ```bash
-      node scripts/wt-helper.mts detect-main-dirty --json
+      node scripts/wt-helper.ts detect-main-dirty --json
       ```
 
       解析回傳 `{ modified, untracked, conflicted }`：
@@ -83,18 +83,18 @@ Implement tasks from a Spectra change.
 
       ```bash
       # 有 scope-in baseline 要 commit
-      node scripts/wt-helper.mts add <change-name> \
+      node scripts/wt-helper.ts add <change-name> \
         --precheck-baseline <change-name> \
         --baseline-strategy commit \
         --baseline-scope-paths <comma-separated-scope-in-paths>
 
       # 或：main clean / user 選 (b) cross-session 不動 dirty
-      node scripts/wt-helper.mts add <change-name>
+      node scripts/wt-helper.ts add <change-name>
       ```
 
       Helper 用 change name 當 slug，內部 normalize（lowercase / 空白轉 `-` / collapse 重複 `-`）。commit 策略時 helper 跑 selective stage（`git add -- <scope-paths>`，**禁** `git add -A`）+ commit `baseline: <change-name> pre-fork sync` + fork。Helper 行為與失敗處理見 `plugins/hub-core/skills/wt/SKILL.md`。
 
-      若 helper fail with `Worktree path already exists` → slug 對應 worktree 已存在（前次 session 建過、未清掉），**沿用即可**，視為成功；用 `node scripts/wt-helper.mts list --json` 抓既有 path。**注意**：既有 worktree 不會再跑 baseline guard，若 main 仍有屬於本 change 的 dirty baseline，必須 user 自己 commit 後 worktree 內 `git pull` 或 cherry-pick。
+      若 helper fail with `Worktree path already exists` → slug 對應 worktree 已存在（前次 session 建過、未清掉），**沿用即可**，視為成功；用 `node scripts/wt-helper.ts list --json` 抓既有 path。**注意**：既有 worktree 不會再跑 baseline guard，若 main 仍有屬於本 change 的 dirty baseline，必須 user 自己 commit 後 worktree 內 `git pull` 或 cherry-pick。
 
       其他 helper 錯誤 → 報錯並 STOP，**不要**降級回「在 main 跑」。
 
@@ -175,7 +175,7 @@ Implement tasks from a Spectra change.
          - 一致 → pass
          - `supabase:sync --dry-run` 不支援 → fallback 直接跑 `pnpm supabase:sync`（idempotent）
          - **Per `db-topology-invariant` 規則**：dev DB 是共享實例，reset 前 **MUST** 自主協調（不問 user）：
-           1. `node scripts/claim-helper.mts list` 列 active claims
+           1. `node scripts/claim-helper.ts list` 列 active claims
            2. 分類：`lastActivity > 2h` = stale（殭屍 claim，忽略）；`lastActivity < 30min` 且 claim 的 change 有 DB-dependent work（migration / seed / e2e） = 真 active
            3. 真 active claim = 0 → 直接 proceed，log 一行「dev DB reset — N stale claims ignored」
            4. 真 active claim > 0 → 仍 proceed（apply 的 DB sync 優先於 claim collision），但 log「dev DB reset — warning: N active claims: <names>」
@@ -337,7 +337,7 @@ Implement tasks from a Spectra change.
 
    Scan namespaced stashes related to this change before starting work. Catches resume scenarios where the previous session's WIP got auto-stashed by wt-helper / propagate / clade-publish and never reapplied — without this, apply will run on a clean baseline while real WIP rots in stash.
 
-   - Run: `node scripts/stash-reconcile.mts --slug "<change-name>" --json`
+   - Run: `node scripts/stash-reconcile.ts --slug "<change-name>" --json`
    - Parse stdout JSON. If `entries.length === 0`, continue silently to Step 3.
    - If hits: print one-line summary `⚠ Stash Reconcile: N entries match slug '<change>'`, then use **request_user_input**:
      - **Show full report** — print each entry's `ref`, `namespace.kind`, `createdAt`, file list, and `recommendation.action`/`recommendation.reason`; then re-ask the same question
@@ -928,7 +928,7 @@ If there is no request_user_input 工具 available, present options as plain tex
       - Spec pass 後，**MUST** 先確認 Playwright trace zip 真的有產出（`ls -1 test-results/**/trace.zip` 或對應 reporter output 路徑），再寫 evidence（payload 進 sidecar，stdout 印出的短 marker 原樣貼進 tasks.md 該 item 行末）：
 
         ```bash
-        node ~/offline/clade/vendor/scripts/lib/evidence-store.mts \
+        node ~/offline/clade/vendor/scripts/lib/evidence-store.ts \
           --repo . --change <change> --write --item '#<id>' --kind verified-e2e \
           --spec 'e2e/verify/<change>/<topic>.spec.ts' --trace '<trace-path>'
         # stdout: (verified-e2e: <ISO-8601>)
@@ -943,7 +943,7 @@ If there is no request_user_input 工具 available, present options as plain tex
       - 通過後，主線寫 evidence（payload 進 sidecar，stdout 印出的短 marker 原樣貼進 tasks.md 該 item 行末）：
 
         ```bash
-        node ~/offline/clade/vendor/scripts/lib/evidence-store.mts \
+        node ~/offline/clade/vendor/scripts/lib/evidence-store.ts \
           --repo . --change <change> --write --item '#<id>' --kind verified-api \
           --method '<METHOD>' --url '<URL>' --status '<STATUS>' [--body '<sha256-12chars>']
         # stdout: (verified-api: <ISO-8601>)
@@ -979,7 +979,7 @@ If there is no request_user_input 工具 available, present options as plain tex
       - PASS 後，主線寫 evidence（payload 進 sidecar，stdout 印出的短 marker 原樣貼進 tasks.md 該 item 行末）：
 
         ```bash
-        node ~/offline/clade/vendor/scripts/lib/evidence-store.mts \
+        node ~/offline/clade/vendor/scripts/lib/evidence-store.ts \
           --repo . --change <change> --write --item '#<id>' --kind verified-ui \
           --screenshot 'screenshots/local/<change>/#<id>-final.png' [--dom '<obs>']
         # stdout: (verified-ui: <ISO-8601>)
@@ -1178,7 +1178,7 @@ If there is no request_user_input 工具 available, present options as plain tex
    1. **跑 audit**：
 
       ```bash
-      node --experimental-strip-types ~/offline/clade/vendor/scripts/audit-screenshot-staleness.mts \
+      node --experimental-strip-types ~/offline/clade/vendor/scripts/audit-screenshot-staleness.ts \
         --repo <consumer-or-worktree-path> --change <change-name> --json
       ```
 
@@ -1195,7 +1195,7 @@ If there is no request_user_input 工具 available, present options as plain tex
    4. **重跑 audit 確認 0 stale**：
 
       ```bash
-      node --experimental-strip-types ~/offline/clade/vendor/scripts/audit-screenshot-staleness.mts \
+      node --experimental-strip-types ~/offline/clade/vendor/scripts/audit-screenshot-staleness.ts \
         --repo <consumer-or-worktree-path> --change <change-name> --json
       ```
 
@@ -1266,7 +1266,7 @@ If there is no request_user_input 工具 available, present options as plain tex
      >   # http://127.0.0.1:5174/review/<consumer-e>:mvp-financial-layer-bootstrap
      >
      > GUI 會自動配對 `screenshots/local/<change-name>/#<N>-*.png`、conflict-aware 寫回 tasks.md、對 `[verify:e2e]` / `[verify:api]` automatic-only items 自動勾 `[x]`、對 `[verify:ui]` / `[review:ui]` items 顯示 evidence 等你 OK / Issue / Skip。完成後回報，我繼續 Step 9 status。
-   - **MUST 直接給 review-gui deep-link**（per `rules/core/proactive-skills.md` § Inline Review-GUI Deep-Link）：訊息 **MUST** 含 `http://127.0.0.1:5174/review/<consumer-id>:<change-name>` 完整 URL（cross-consumer mode 預設啟用，沒 `<consumer-id>:` prefix 會 fallback 到 clade mainEntry → API 404；`<consumer-id>` 從 `~/offline/clade/registry/consumers.json` 對應 entry 抓）。**NEVER** 寫「請在 worktree root 執行」或「請在 main consumer root 執行」當預設措辭——review-gui (`vendor/scripts/review-gui.mts` `listSourceRoots`) 從 clade home 跑時偵測 `vendor/scripts/review-gui.mts` + `consumers.local` 雙標記 → 進 cross-consumer mode，自動聚合所有 consumer + worktree change；consumer 端跑會被 `preflightCladeOnly` guard 擋下、退出 exit 2。**NEVER** 列 dev server URL（`http://localhost:3040/admin/...`）當替代——review-gui 內部已有 final-state screenshot + evidence。若 review 過程發現需要 fresh screenshot 或 user 想 sanity check，**MUST** 由 agent 自起 dev server（per `rules/core/proactive-skills.md` § Dev Server Auto-Spawn：scan free port 3001–3050、避開 3000、`run_in_background`、回報 URL + shellId），**NEVER** 叫 user cd worktree 跑 `pnpm dev`。`5174` 是 `vendor/scripts/review-gui.mts` `DEFAULT_PORT`，找不到時會 fallback 到 5174-5194，由 GUI startup banner 告知 user，主線不必猜。
+   - **MUST 直接給 review-gui deep-link**（per `rules/core/proactive-skills.md` § Inline Review-GUI Deep-Link）：訊息 **MUST** 含 `http://127.0.0.1:5174/review/<consumer-id>:<change-name>` 完整 URL（cross-consumer mode 預設啟用，沒 `<consumer-id>:` prefix 會 fallback 到 clade mainEntry → API 404；`<consumer-id>` 從 `~/offline/clade/registry/consumers.json` 對應 entry 抓）。**NEVER** 寫「請在 worktree root 執行」或「請在 main consumer root 執行」當預設措辭——review-gui (`vendor/scripts/review-gui.ts` `listSourceRoots`) 從 clade home 跑時偵測 `vendor/scripts/review-gui.ts` + `consumers.local` 雙標記 → 進 cross-consumer mode，自動聚合所有 consumer + worktree change；consumer 端跑會被 `preflightCladeOnly` guard 擋下、退出 exit 2。**NEVER** 列 dev server URL（`http://localhost:3040/admin/...`）當替代——review-gui 內部已有 final-state screenshot + evidence。若 review 過程發現需要 fresh screenshot 或 user 想 sanity check，**MUST** 由 agent 自起 dev server（per `rules/core/proactive-skills.md` § Dev Server Auto-Spawn：scan free port 3001–3050、避開 3000、`run_in_background`、回報 URL + shellId），**NEVER** 叫 user cd worktree 跑 `pnpm dev`。`5174` 是 `vendor/scripts/review-gui.ts` `DEFAULT_PORT`，找不到時會 fallback 到 5174-5194，由 GUI startup banner 告知 user，主線不必猜。
    - Wait for the user to complete the GUI flow and report back. Do NOT proceed to Step 9 / propose archive until the user signals manual review is done.
    - **NEVER** default to `request_user_input` chat dialog walking items one-by-one — it burns tokens, ignores the screenshot pool, and contradicts `rules/core/manual-review.md` 標準流程.
 

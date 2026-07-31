@@ -480,13 +480,13 @@ cd "$MAIN_PATH"
 ### O.3.2 Merge-back（含 baseline blocker 自動處理）
 
 ```bash
-node scripts/wt-helper.mts merge-back <slug> --auto-stash
+node scripts/wt-helper.ts merge-back <slug> --auto-stash
 ```
 
 | 訊號 | 處理 |
 | --- | --- |
 | `merge-back: <slug> absorbed into main` | 成功 → 進 O.3.3 |
-| `merge-back: <slug> absorbed into main (blockers stashed as wt-merge-block/<slug>/<ISO>)` | 成功 + main 端有 stash 紀錄 → 進 O.3.3，O.3.4 摘要末段提醒 user 用 `node scripts/stash-reconcile.mts --slug <slug> --interactive` 收尾 |
+| `merge-back: <slug> absorbed into main (blockers stashed as wt-merge-block/<slug>/<ISO>)` | 成功 + main 端有 stash 紀錄 → 進 O.3.3，O.3.4 摘要末段提醒 user 用 `node scripts/stash-reconcile.ts --slug <slug> --interactive` 收尾 |
 | `merge-back blocked: worktree '<wt-path>' has N uncommitted edit(s)` | Pre-fork baseline 殘留 → 進 O.3.2.a 自動清理 |
 | `merge-back blocked: <N> file(s) in main's working tree would be overwritten` | 上面 `--auto-stash` 應已涵蓋；若仍出現是 race condition → STOP + 報 user |
 | `error: merge conflict in <files>` / `pre-sync` / `squash` conflict | Worktree 保留，wt-helper 內部已 abort + 救 stash → STOP + 報 user（不主線自決） |
@@ -498,7 +498,7 @@ WT_PATH="$(dirname "$MAIN_PATH")/$(basename "$MAIN_PATH")-wt/<slug>"
 for path in <parsed-blocker-paths>; do
   git -C "$WT_PATH" checkout HEAD -- "$path"
 done
-node scripts/wt-helper.mts merge-back <slug> --auto-stash
+node scripts/wt-helper.ts merge-back <slug> --auto-stash
 ```
 
 **安全性論證**：IDENTICAL baseline → data 在 main HEAD 還在；DIVERGED baseline → `refs/wt-baseline/<slug>/<ISO>` pinned ref 是安全網（per [[worktree-default]] §1）；merge-back 只搬「branch commits 的 diff」，main 上別 session 的 dirty 完全不會被踩。

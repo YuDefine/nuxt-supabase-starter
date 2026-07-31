@@ -92,7 +92,7 @@ Dispatches a new subagent into an existing worktree whose previous session was i
 
 If no worktree exists at the expected path for `<slug>`, error with guidance: "No worktree found for slug `<slug>`. Use `/wt <task>` to create a new one."
 
-To discover available worktrees for resume, run `node scripts/wt-helper.mts list` — the output shows task summary and status for worktrees that have a brief.
+To discover available worktrees for resume, run `node scripts/wt-helper.ts list` — the output shows task summary and status for worktrees that have a brief.
 
 ## Per-task lifecycle
 
@@ -121,7 +121,7 @@ Before creating a new worktree, check if one already exists at the expected path
 `/wt` ad-hoc invocation 沒有 spectra change context，所以**不能**做 scope-aware baseline commit（會撞 cross-session WIP）。預設走 **stash-apply** 策略 — 把 main 的 dirty（modified + untracked）一律 stash 起來、fork 後在新 worktree 內 `git stash apply` 把全部 baseline 帶過去，再 drop stash。Subagent 進 worktree 看 baseline 但收到 Step 2 的 warn 段落知道哪些檔不該動。
 
 ```bash
-node scripts/wt-helper.mts add <slug> \
+node scripts/wt-helper.ts add <slug> \
   --precheck-baseline \
   --baseline-strategy stash
 ```
@@ -326,7 +326,7 @@ Worktree(s) hold committed work on their session branches. Main's working tree i
 The user's next moves:
 
 1. (Spectra change worktree) When the change is ready to archive, run `/spectra-archive <change-name>`. Step 0 absorbs the worktree via `wt-helper merge-back --auto-stash --noop-if-missing`. Subsequent archive gates inspect the post-squash state.
-2. (Ad-hoc Form-1 worktree) When ready to land, run `node scripts/wt-helper.mts merge-back <slug> --auto-stash`. The diff lands on main's working tree; main commit ceremony via `/commit`.
+2. (Ad-hoc Form-1 worktree) When ready to land, run `node scripts/wt-helper.ts merge-back <slug> --auto-stash`. The diff lands on main's working tree; main commit ceremony via `/commit`.
 3. Once one or more worktrees have been absorbed and main has accumulated diff, run `/commit` on main.
 
 `/wt` does NOT:
@@ -345,7 +345,7 @@ These remain explicit later actions (archive + commit).
 If the user types just `/wt fix-auth` (no description, no `:`-prefixed next-skill), prompt the user to clarify whether they want:
 
 - An ad-hoc task in a new worktree (ask for the task description).
-- A long-lived worktree session (deprecated via `/wt`; suggest `node scripts/wt-helper.mts add fix-auth` + opening a fresh session in the resulting path).
+- A long-lived worktree session (deprecated via `/wt`; suggest `node scripts/wt-helper.ts add fix-auth` + opening a fresh session in the resulting path).
 
 Do NOT silently build a worktree with no task — that's the deprecated v1 behavior and is gone.
 
@@ -373,14 +373,14 @@ The subagent's reported status is the authority. If it says "done", proceed to s
 ## Maintenance commands
 
 ```bash
-node scripts/wt-helper.mts list                              # list session worktrees
-node scripts/wt-helper.mts merge-back <slug>                 # atomically land worktree → main
-node scripts/wt-helper.mts merge-back <slug> --dry-run       # preview blockers
-node scripts/wt-helper.mts merge-back <slug> --auto-stash    # stash main blockers
-node scripts/wt-helper.mts land-pending <slug>               # alias for grandfathered worktrees
-node scripts/wt-helper.mts prune                             # remove merged ones interactively
-node scripts/wt-helper.mts cleanup <slug> --force --force-discard-unland  # discard worktree + commits
-node scripts/stash-reconcile.mts                             # plan recovery for wt-merge-block/* stashes
+node scripts/wt-helper.ts list                              # list session worktrees
+node scripts/wt-helper.ts merge-back <slug>                 # atomically land worktree → main
+node scripts/wt-helper.ts merge-back <slug> --dry-run       # preview blockers
+node scripts/wt-helper.ts merge-back <slug> --auto-stash    # stash main blockers
+node scripts/wt-helper.ts land-pending <slug>               # alias for grandfathered worktrees
+node scripts/wt-helper.ts prune                             # remove merged ones interactively
+node scripts/wt-helper.ts cleanup <slug> --force --force-discard-unland  # discard worktree + commits
+node scripts/stash-reconcile.ts                             # plan recovery for wt-merge-block/* stashes
 ```
 
 `merge-back` is the primary post-`/wt` action for ad-hoc Form-1 worktrees and for early-landing when needed. `/spectra-archive` calls it automatically as Step 0; users invoke it manually for non-spectra work.

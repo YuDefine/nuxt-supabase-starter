@@ -13,7 +13,7 @@
 # 但留一個 slideover 在 template 外）。typecheck / lint / console 全綠。
 #
 # Auto-detect：只掃本次 commit staged 的 *.vue；無 staged .vue 直接跳過（no-op exit 0）。
-# 偵測邏輯共用 vendor/scripts/checks/nuxt-ui-mixed-slot-detect.mts。
+# 偵測邏輯共用 vendor/scripts/checks/nuxt-ui-mixed-slot-detect.ts。
 #
 # 規約來源：
 #   - pitfall : docs/pitfalls/2026-07-06-nuxt-ui-named-slot-default-fallback-shadowing.md（TD-236）
@@ -25,8 +25,8 @@ set -euo pipefail
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 cd "$PROJECT_ROOT"
 
-DETECTOR="scripts/checks/nuxt-ui-mixed-slot-detect.mts"
-[[ -f "$DETECTOR" ]] || DETECTOR="vendor/scripts/checks/nuxt-ui-mixed-slot-detect.mts"
+DETECTOR="scripts/checks/nuxt-ui-mixed-slot-detect.ts"
+[[ -f "$DETECTOR" ]] || DETECTOR="vendor/scripts/checks/nuxt-ui-mixed-slot-detect.ts"
 [[ -f "$DETECTOR" ]] || exit 0 # detector 未散播到此 consumer → no-op
 
 # 蒐集本次 staged 的 .vue

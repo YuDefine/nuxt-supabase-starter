@@ -215,7 +215,7 @@ User 已在 review-gui 留 issue feedback。
 1. 讀 review-gui feedback：
    ```bash
    cd ~/offline/clade
-   node vendor/scripts/review-gui.mts --feedback <changeKey> 2>/dev/null
+   node vendor/scripts/review-gui.ts --feedback <changeKey> 2>/dev/null
    ```
    若無 `--feedback` 子命令，fallback：從 `openspec/changes/<name>/tasks.md` 搜尋 `(issued:` / `(verify-pending:` annotation 定位 feedback 項目。
 
@@ -311,7 +311,7 @@ Bucket 為 `applyBlocked` 或 `awaitingUserDecision` 時 **MUST** 先完整讀 [
      - 對應 change 已 archived / merged → **stale，直接 `zellij delete-session <name> --force`**（安全：change 已不需要 dev server）
      - 對應 change 仍 active 但 session claim lastActivity > 2h → **可能 stale，`dev-session.mjs stop` 停掉**
      - 對應 change 有 active claim < 30min → **真 conflict，此時才 AskUserQuestion 讓 user 拍板 takeover**
-  3. 清掉 stale session 後，用 `node scripts/dev-session.mts --cwd <需要的 worktree path>` 起新 dev server（per [[proactive-skills]] § Dev Server Auto-Spawn）
+  3. 清掉 stale session 後，用 `node scripts/dev-session.ts --cwd <需要的 worktree path>` 起新 dev server（per [[proactive-skills]] § Dev Server Auto-Spawn）
   4. Dev server ready 後繼續 dispatch evidence collection / Design Review
   - **判定 key**：`verification-lease.md` 的「NEVER 自行 takeover」只在**有 active lease conflict**（另一個 live session 正在用）時生效。**無 lease 檔 + stale session = 不是 conflict**，主線 MUST 自行清理 + 重起，**NEVER** 包裝成「需 user 協調」跳過
   - **NEVER** 因為 port 被佔就跳過 evidence collection — 先清 stale、再起 dev server、最後才 dispatch

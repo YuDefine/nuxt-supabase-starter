@@ -58,7 +58,7 @@ while IFS= read -r -d '' file; do
   is_clade_managed "$file" && continue
 
   case "$file" in
-    *.js|*.ts|*.tsx|*.mts|*.cts|*.vue|*.svelte)
+    *.js|*.ts|*.tsx|*.ts|*.cts|*.vue|*.svelte)
       lint_targets+=("$file")
       fmt_targets+=("$file")
       ;;

@@ -102,7 +102,7 @@ JSON 範例（節錄）：
 
 ## 2B.1.7 Review-gui readiness scan（hard rule）
 
-讀 §2B.1a 那次 `handoff-scan.mjs --json` 輸出的 `reviewGuiReadiness` 段（script 內部已從 clade home 代跑 headless `review-gui.mts --scan` 並 filter `consumerId` = 當前 consumer，`raw.entries` 即當前 consumer 的 active changes）。本 sub-step 前尚未跑過 scan 時補跑：
+讀 §2B.1a 那次 `handoff-scan.mjs --json` 輸出的 `reviewGuiReadiness` 段（script 內部已從 clade home 代跑 headless `review-gui.ts --scan` 並 filter `consumerId` = 當前 consumer，`raw.entries` 即當前 consumer 的 active changes）。本 sub-step 前尚未跑過 scan 時補跑：
 
 ```bash
 node ~/offline/clade/vendor/scripts/handoff-scan.mjs --json 2>/dev/null
@@ -149,7 +149,7 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff Mode B — clade <version> scan_
 | 失敗情境 | 處理 |
 | --- | --- |
 | clade home 不存在 / 不可達 | 寫 `## Review-gui Readiness` 段含 `_(scan unavailable: <reason>)_`，並警告主線「outstanding 推薦無 review:ui 即時資訊，請避免推薦 review:ui flow」 |
-| `review-gui.mts` 報 error（type checked node version etc.） | 同上，把 check detail 內的 stderr 行貼進該段 |
+| `review-gui.ts` 報 error（type checked node version etc.） | 同上，把 check detail 內的 stderr 行貼進該段 |
 | scan 跑成功但回空 list（`review-gui-changes` check detail 標 0 changes） | 寫 `_(scan returned 0 changes — repo possibly fresh)_` |
 
 ---

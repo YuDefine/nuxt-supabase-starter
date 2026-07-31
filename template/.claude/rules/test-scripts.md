@@ -1,6 +1,6 @@
 ---
 description: Vitest multi-project test script 設計規範——禁止寫死 path filter 導致單檔測試靜默跳過
-paths: ['package.json', 'vitest.config.ts', 'vitest.config.mts', 'vite.config.ts']
+paths: ['package.json', 'vitest.config.ts', 'vitest.config.ts', 'vite.config.ts']
 ---
 <!--
 🔒 LOCKED — managed by clade

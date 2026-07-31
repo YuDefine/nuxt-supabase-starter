@@ -114,7 +114,7 @@ human     固定字串 "human"                           不可缺，至少傳�
 下列工具**只讀**：
 
 - `vendor/scripts/audit-*.mjs`（稽核）
-- `vendor/scripts/review-gui.mts`（UI 看 lease 狀態）
+- `vendor/scripts/review-gui.ts`（UI 看 lease 狀態）
 - `scripts/sync-consumer-meta.ts`（aggregate snapshot）
 
 ## Claim 衝突的標準訊息

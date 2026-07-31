@@ -15,7 +15,7 @@
 #       ⚠️ query 的 status === 'pending'（首載無資料）是對的，detector 不會誤報。
 #
 # Auto-detect：只掃本次 commit staged 的 *.vue；無 staged .vue 直接跳過（no-op exit 0）。
-# 偵測邏輯共用 vendor/scripts/checks/mutation-loading-detect.mts（支援跨行 destructuring）。
+# 偵測邏輯共用 vendor/scripts/checks/mutation-loading-detect.ts（支援跨行 destructuring）。
 #
 # 規約來源：
 #   - impl-time rule : rules/modules/framework/nuxt/page-loading-golden-path.md Tier 2.5
@@ -28,8 +28,8 @@ set -euo pipefail
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 cd "$PROJECT_ROOT"
 
-DETECTOR="scripts/checks/mutation-loading-detect.mts"
-[[ -f "$DETECTOR" ]] || DETECTOR="vendor/scripts/checks/mutation-loading-detect.mts"
+DETECTOR="scripts/checks/mutation-loading-detect.ts"
+[[ -f "$DETECTOR" ]] || DETECTOR="vendor/scripts/checks/mutation-loading-detect.ts"
 [[ -f "$DETECTOR" ]] || exit 0 # detector 未散播到此 consumer → no-op
 
 # 蒐集本次 staged 的 .vue

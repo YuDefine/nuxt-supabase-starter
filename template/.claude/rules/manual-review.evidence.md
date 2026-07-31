@@ -84,12 +84,12 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 
 - **MUST** 重拍「受該次 code 改動影響的**所有** `[verify:ui]` / `[review:ui]` item」的 screenshot，**NEVER** 只重拍被標 issue 那一張。Issue 範圍是 item-scoped，但 code 改動常是 view-scoped（一次改動橫跨整批 item / 整個頁面）— 重拍範圍 **MUST** 對齊 code 改動影響範圍，不是 issue 標記範圍。
 - **MUST** 刪掉同 change 截圖目錄內所有無 `#N` 前綴的 legacy 舊圖（`#N` / `#N.M` 命名規約前的初版殘留）— 它們不再配對任何 item，留著只會被 review-gui filename-matching 誤補位。
-- **MUST** 在交回 user 重驗前跑 `audit-screenshot-staleness.mts`（或人工比對 mtime vs 最後 UI commit）確認 0 stale（在影響範圍內的）。
+- **MUST** 在交回 user 重驗前跑 `audit-screenshot-staleness.ts`（或人工比對 mtime vs 最後 UI commit）確認 0 stale（在影響範圍內的）。
 - **NEVER** 倚賴 review-gui filename-matching 把舊圖補位當作 evidence 完整 — 舊圖配對的是改動前狀態，user 會對非最新狀態 OK。
 
 判別測試：「這次 fix 改的是哪些檔？這些檔 render 出哪些 item 的畫面？」凡命中的 item 都 **MUST** 重拍，與 issue 標在哪一張無關。
 
-偵測：`vendor/scripts/audit-screenshot-staleness.mts` 的 `stale_screenshot_after_ui_change` signal（screenshot mtime < change 最後 UI commit → STALE）；詳見 `docs/pitfalls/2026-05-30-issue-fix-refreshes-only-flagged-screenshot-leaves-batch-stale.md`。
+偵測：`vendor/scripts/audit-screenshot-staleness.ts` 的 `stale_screenshot_after_ui_change` signal（screenshot mtime < change 最後 UI commit → STALE）；詳見 `docs/pitfalls/2026-05-30-issue-fix-refreshes-only-flagged-screenshot-leaves-batch-stale.md`。
 
 **Multi-marker（多 channel evidence）**
 
@@ -289,7 +289,7 @@ Scoped sub-item 範例：
 
 ### Strip semantics
 
-User 在 GUI 對該 item 點 **OK / Issue / Skip** 時，`stripAnnotations`（in `vendor/scripts/review-gui.mts`）會 **同時** 清掉：
+User 在 GUI 對該 item 點 **OK / Issue / Skip** 時，`stripAnnotations`（in `vendor/scripts/review-gui.ts`）會 **同時** 清掉：
 
 - `（issue: ...）` 與 `（skip[: ...]）` / `（note: ...）` / `（finding: ...）` 等 action annotation（既有行為）
 - `(claude-analyzed: ...)` annotation（新增 strip 規則）
@@ -310,7 +310,7 @@ User 在 GUI 對該 item 點 **OK / Issue / Skip** 時，`stripAnnotations`（in
 
 當 change 的所有 issued items 都已被 Claude 寫 `(claude-analyzed: route=E)`、且 user-actionable / verify pending / evidence missing / readiness hits 都是 0 → change 落入 **「✋ Claude 已分析、等 user 重新評估」** bucket（review-gui home page），不再被 「🤖 等 Claude 接手」群 prompt 抓走重複分析。User 點 card 進 detail，重看 final-state evidence 後在 GUI 點 OK / Issue / Skip 結束流程。
 
-詳見 `vendor/scripts/review-gui.mts` 內 `analyzedIssuedCount` field、`awaitingUserReEval` bucket dispatch、`stripAnnotations` claude-analyzed strip 段。
+詳見 `vendor/scripts/review-gui.ts` 內 `analyzedIssuedCount` field、`awaitingUserReEval` bucket dispatch、`stripAnnotations` claude-analyzed strip 段。
 
 ### 範例
 
@@ -355,7 +355,7 @@ helper 寫入後用 `listPendingChanges` 重算 bucket，印 `oldBucket → newB
 
 ### Home page 影響
 
-帶 `(awaiting-user-decision:)` 的 item 從 Claude-ball 計數（`userActionPending` / `issued` / `verifyPendingCount` / `discussPendingCount`）排除，計入 `awaitingUserDecisionCount`。當 Claude-ball 全清（無 readiness / evidence missing / 未分析 issue / verify pending / D-only walkthrough）、`userActionPending=0` 且 `awaitingUserDecisionCount>0` → change 落 **`awaitingUserDecision`** bucket。詳見 `vendor/scripts/review-gui.mts` 內 `awaitingUserDecisionCount` field + `reviewBucketForChange` 的 awaitingUserDecision 分支。
+帶 `(awaiting-user-decision:)` 的 item 從 Claude-ball 計數（`userActionPending` / `issued` / `verifyPendingCount` / `discussPendingCount`）排除，計入 `awaitingUserDecisionCount`。當 Claude-ball 全清（無 readiness / evidence missing / 未分析 issue / verify pending / D-only walkthrough）、`userActionPending=0` 且 `awaitingUserDecisionCount>0` → change 落 **`awaitingUserDecision`** bucket。詳見 `vendor/scripts/review-gui.ts` 內 `awaitingUserDecisionCount` field + `reviewBucketForChange` 的 awaitingUserDecision 分支。
 
 ## ADR (2026-05-22) — Default Kind Flip 未採用，勿再提案
 

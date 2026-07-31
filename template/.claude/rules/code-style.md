@@ -198,16 +198,11 @@ consumer 端 LOCKED projection 的 ignore 機制設計：
 
 **每一個**新增的 Node 腳本都 MUST 用 TypeScript 寫，不是只有「看起來比較複雜的那幾支」。既有 `.mjs` / `.js` 不強制回頭改寫——動到它的時候順手遷移，不動就留著。
 
-副檔名由**這個檔會不會被散播**決定：
+副檔名一律用 `.ts`，**不要**用 `.mts`。
 
-| 可觀察 predicate | 副檔名 |
-| --- | --- |
-| 檔案落在 clade 的 `vendor/**`（會被 `sync-vendor.ts` / `propagate.ts` 寫進 consumer） | `.mts` |
-| 其他一切（clade 的 `scripts/**`、`test/**`、consumer 自家 script） | `.ts` |
+`.mts` 看起來更安全（它永遠是 ESM，而 `.ts` 的模組系統由最近的 package.json `type` 決定），但實測下來那個保證換不到東西、還會壞掉：**Vite 的 config loader 無法 resolve `.mts`**。consumer 的 `vite.config.ts` 一 import 散播進去的 `.mts`，`vp check` / build 就整個掛掉（`UNRESOLVED_IMPORT`，檔案明明存在）。2026-07-31 全 fleet 實測，10 個 consumer 同時中。
 
-`.ts` 的模組系統由**最近的 package.json `type`** 決定，`.mts` 則永遠是 ESM。散播檔會落在別人的 repo、別人的子目錄，那裡的 `type` 欄位不是我們控制得了的。
-
-**`.mts` 是傳染性的**：散播面的檔案 import 到的**每一個**相依也 MUST 是 `.mts`，不是只有入口檔。在 `"type": "commonjs"` 的目錄下，`.mts` 入口 import 一個 `.ts` 相依會直接失敗——入口選對了副檔名並不會救到相依。實測見 `docs/discussions/2026-07-31-ts-migration-extension-choice.md`。
+`.ts` 的前提是**散播落點所在目錄的最近 package.json 必須是 `"type": "module"`**。這個前提由 `scripts/audit-governance-drift.ts` 的 consumer-module-type check 機械驗，不是靠「現在剛好都是」。
 
 #### 三條語法限制
 
@@ -230,7 +225,7 @@ tsconfig **MUST** 開 `"erasableSyntaxOnly": true`，讓前兩條由 tsc 擋掉�
 
 ### `vite.config.ts` 必備欄位（跨 consumer 統一，避免 propagate drift）
 
-clade 散播檔（`vendor/scripts/*.mts`、`scripts/spectra-advanced/*`、`.github/actions/*`）會進到每個 consumer 的 `vp fmt` 掃描範圍。若 clade 與 consumer 的 `vite.config.ts` fmt 設定不一致，consumer 端 `vp fmt --check` 會把 clade 寫出的程式重排成 consumer 風格 → 形成 LOCKED 檔被改動 → CI 紅燈或下次 propagate 出現 drift commit。
+clade 散播檔（`vendor/scripts/*.ts`、`scripts/spectra-advanced/*`、`.github/actions/*`）會進到每個 consumer 的 `vp fmt` 掃描範圍。若 clade 與 consumer 的 `vite.config.ts` fmt 設定不一致，consumer 端 `vp fmt --check` 會把 clade 寫出的程式重排成 consumer 風格 → 形成 LOCKED 檔被改動 → CI 紅燈或下次 propagate 出現 drift commit。
 
 **MUST** 從 clade 散播的 `vendor/oxc-shared/preset.mjs` import baseline 並 spread merge：
 

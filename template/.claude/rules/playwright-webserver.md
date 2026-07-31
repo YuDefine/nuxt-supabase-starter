@@ -1,6 +1,6 @@
 ---
 description: Playwright E2E webServer MUST CI-safe — 優先 @nuxt/test-utils golden 或 CI-conditional nuxt preview，NEVER 讓 CI 路徑跑依賴本地 .env / tunnel / 多程序的 dev script
-paths: ['playwright.config.ts', 'playwright.config.mts', 'playwright.config.js', '**/playwright.config.ts', '**/playwright.config.mts']
+paths: ['playwright.config.ts', 'playwright.config.ts', 'playwright.config.js', '**/playwright.config.ts', '**/playwright.config.ts']
 ---
 <!--
 🔒 LOCKED — managed by clade

@@ -65,7 +65,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
 
 ### Worktree handling per disposition
 
-- **Skip-archive (A)**: change has no implementation to land. If a session worktree exists (typically with only ingest / sync commits, no real implementation), run `node scripts/wt-helper.mts cleanup <name> --force --force-discard-unland` to drop branch + worktree; do **NOT** run `merge-back` (nothing meaningful to merge).
+- **Skip-archive (A)**: change has no implementation to land. If a session worktree exists (typically with only ingest / sync commits, no real implementation), run `node scripts/wt-helper.ts cleanup <name> --force --force-discard-unland` to drop branch + worktree; do **NOT** run `merge-back` (nothing meaningful to merge).
 - **In-main-done archive (B)**: change was built on main, no worktree to absorb. Step 0 `wt-helper merge-back ... --noop-if-missing` becomes silent no-op — proceed.
 - **Standard archive**: Step 0 absorbs the matching worktree as documented below.
 
@@ -90,33 +90,33 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    **Sidecar init (TD-155)** — before running merge-back, create the in-flight sidecar so that subsequent steps record progress and an interrupted run leaves a detectable orphan:
 
    ```bash
-   node scripts/spectra-archive-sidecar.mts init <change-name>
+   node scripts/spectra-archive-sidecar.ts init <change-name>
    ```
 
    - Sidecar is always written to main worktree `.spectra/in-flight-archive/<change-name>.json` (helper resolves via `git rev-parse --git-common-dir`), so a linked worktree's archive is visible from main on the next session start (cross-session detection per `plugins/hub-core/hooks/session-start-spectra-resume-check.sh`).
-   - If `scripts/spectra-archive-sidecar.mts` does not exist (consumer pre-propagation), skip silently with a one-line note: `Sidecar: skipped — helper not available (consumer pre-propagate)`.
+   - If `scripts/spectra-archive-sidecar.ts` does not exist (consumer pre-propagation), skip silently with a one-line note: `Sidecar: skipped — helper not available (consumer pre-propagate)`.
    - **Skip in resume mode**: when Step 0.5 has dispatched into mid-flight resume (sidecar already exists with `phase=merge-back`), do NOT re-init — proceed directly to the merge-back command below.
 
    ```bash
-   node scripts/wt-helper.mts merge-back <change-name> --auto-stash --noop-if-missing
+   node scripts/wt-helper.ts merge-back <change-name> --auto-stash --noop-if-missing
    ```
 
    - `--noop-if-missing` makes this a silent no-op when no matching worktree exists (solo archive path — change implemented directly on main).
-   - `--auto-stash` stashes any main-worktree blockers as `wt-merge-block/<change-name>/<ISO>` for later reconciliation via `node scripts/stash-reconcile.mts`.
+   - `--auto-stash` stashes any main-worktree blockers as `wt-merge-block/<change-name>/<ISO>` for later reconciliation via `node scripts/stash-reconcile.ts`.
    - On conflict, the squash aborts, the worktree + branch are preserved, and the stash is popped back. Surface the error and **STOP** the archive — the change cannot be archived until the conflict is resolved.
 
-   **Skip condition**: if `scripts/wt-helper.mts` does not exist (consumer hasn't propagated the merge-back subcommand yet), skip this step silently with a one-line note: `Step 0: skipped — wt-helper merge-back not available (consumer pre-propagate)`.
+   **Skip condition**: if `scripts/wt-helper.ts` does not exist (consumer hasn't propagated the merge-back subcommand yet), skip this step silently with a one-line note: `Step 0: skipped — wt-helper merge-back not available (consumer pre-propagate)`.
 
    After merge-back, sweep sibling worktrees that carry fork-time stale copies of the change being archived (prevents spectra CLI cross-worktree existence check from refusing):
 
    ```bash
-   node scripts/wt-helper.mts sweep-siblings <change-name>
+   node scripts/wt-helper.ts sweep-siblings <change-name>
    ```
 
    **Sidecar advance (TD-155)** — after merge-back returns (whether absorbed, no-op, or skipped), advance phase:
 
    ```bash
-   node scripts/spectra-archive-sidecar.mts update <change-name> --phase gate-check --last-completed merge-back
+   node scripts/spectra-archive-sidecar.ts update <change-name> --phase gate-check --last-completed merge-back
    ```
 
    (silent fail-safe: if sidecar helper or sidecar file is missing, ignore — sidecar lifecycle is best-effort visibility, not a hard dependency of archive correctness.)
@@ -136,7 +136,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    Before anything else, check for an in-flight sidecar:
 
    ```bash
-   node scripts/spectra-archive-sidecar.mts read <change-name> 2>/dev/null
+   node scripts/spectra-archive-sidecar.ts read <change-name> 2>/dev/null
    ```
 
    Branch:
@@ -145,21 +145,21 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    - **Sidecar exists + user did NOT pass `--resume`** → STOP. Prompt the user:
      > Previous /spectra-archive for `<X>` interrupted at phase `<phase>` (sidecar started `<ISO>`). Options:
      >  a) Resume — re-run as `/spectra-archive <X> --resume`
-     >  b) Discard previous run and start fresh — `node scripts/spectra-archive-sidecar.mts delete <X>` then re-invoke without `--resume`
+     >  b) Discard previous run and start fresh — `node scripts/spectra-archive-sidecar.ts delete <X>` then re-invoke without `--resume`
      >
      > Choose a / b. Standard archive cannot proceed while a sidecar exists.
    - **No sidecar** → fall through to discuss-deferred resume detection below.
 
    #### Resume Dispatch Table (mid-flight)
 
-   Read sidecar via `node scripts/spectra-archive-sidecar.mts read <change-name>` (parse JSON `.phase`):
+   Read sidecar via `node scripts/spectra-archive-sidecar.ts read <change-name>` (parse JSON `.phase`):
 
    | `phase` value | Action on `--resume` |
    | --- | --- |
    | `merge-back` | re-run **Step 0** from the top. `wt-helper merge-back --noop-if-missing` is idempotent — if the worktree was already absorbed in the prior run, it silently no-ops. |
    | `gate-check` | jump to **Step 2** and re-run gates (2 / 3 / 3.3 / 3.5 / 5.5). All gates are idempotent: status / task / pattern checks are read-only; the `[discuss]` walkthrough in Step 3.5 only re-prompts items still unchecked. |
    | `spec-sync` | jump to **Step 4** and re-run delta spec assessment. Comparison is idempotent. |
-   | `folder-mv` | **STOP — manual fixup required**. Reason: Step 6 invokes `spectra archive` CLI which is a black box from clade's POV; mid-flight interrupt may leave `openspec/changes/<X>/` partially renamed and `openspec/specs/<cap>/spec.md` deltas partially applied. Show the user: <br/> *"phase=folder-mv means `spectra archive` CLI was mid-flight when interrupted. Cannot safely retry — reality is unknown. Manual fixup: (a) inspect `openspec/changes/<X>/` and `openspec/changes/archive/YYYY-MM-DD-<X>/` directory states; (b) inspect `git status` for partial spec delta writes; (c) reconcile by hand (either complete the move or roll back), then `node scripts/spectra-archive-sidecar.mts delete <X>` and re-invoke from a clean state."* |
+   | `folder-mv` | **STOP — manual fixup required**. Reason: Step 6 invokes `spectra archive` CLI which is a black box from clade's POV; mid-flight interrupt may leave `openspec/changes/<X>/` partially renamed and `openspec/specs/<cap>/spec.md` deltas partially applied. Show the user: <br/> *"phase=folder-mv means `spectra archive` CLI was mid-flight when interrupted. Cannot safely retry — reality is unknown. Manual fixup: (a) inspect `openspec/changes/<X>/` and `openspec/changes/archive/YYYY-MM-DD-<X>/` directory states; (b) inspect `git status` for partial spec delta writes; (c) reconcile by hand (either complete the move or roll back), then `node scripts/spectra-archive-sidecar.ts delete <X>` and re-invoke from a clean state."* |
    | `screenshot-sweep` | jump to **Step 7** and re-run screenshot sweep. `screenshots-archive` Mode B is idempotent on re-copy (existing destination files are silently kept). |
    | `cleanup` | jump to **Step 7.5** and re-run stash reconcile + Step 8 summary. Both are near no-ops on re-run. |
 
@@ -460,7 +460,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    **Sidecar advance (TD-155)** — once gates pass (exit 0 or user explicitly bypassed), advance phase before entering spec-sync / archive CLI:
 
    ```bash
-   node scripts/spectra-archive-sidecar.mts update <change-name> --phase spec-sync --last-completed gate-check
+   node scripts/spectra-archive-sidecar.ts update <change-name> --phase spec-sync --last-completed gate-check
    ```
 
    (silent fail-safe if helper / sidecar missing.)
@@ -484,7 +484,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    **Sidecar advance (TD-155)** — **only after `spectra archive` exits 0**, advance phase:
 
    ```bash
-   node scripts/spectra-archive-sidecar.mts update <change-name> --phase folder-mv --last-completed spec-sync
+   node scripts/spectra-archive-sidecar.ts update <change-name> --phase folder-mv --last-completed spec-sync
    ```
 
    **NEVER** advance the sidecar to `folder-mv` if the CLI failed or was interrupted — leaving `phase=spec-sync` is the trigger that lets Step 0.5 detect the dangerous mid-CLI state and force manual fixup on next `--resume`. (silent fail-safe if helper / sidecar missing.)
@@ -497,12 +497,12 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    - **Skip condition**: if user explicitly passed `--no-sweep` (or said "不要 sweep 截圖") when invoking spectra-archive, skip this step and note in Step 8 summary: `Screenshots: sweep skipped (user --no-sweep)`.
    - **Failure handling**: if `screenshots-archive` errors (e.g., disk write failure), do NOT fail the overall archive — log the error and note in Step 8 summary: `Screenshots: sweep failed — see error above`. The change is already archived; sweep is best-effort cleanup.
 
-   **Note (TD-160 preserve)**: when Step 0 ran `wt-helper merge-back`, gitignored worktree screenshots at `screenshots/<env>/<topic>/` are automatically copied to main before cleanup destroys the worktree (see `preserveWorktreeScreenshots` in `vendor/scripts/wt-helper.mts`). Step 7 sweep therefore finds the files in main as expected. Without this preserve, cleanup would delete them and sweep would be a no-op.
+   **Note (TD-160 preserve)**: when Step 0 ran `wt-helper merge-back`, gitignored worktree screenshots at `screenshots/<env>/<topic>/` are automatically copied to main before cleanup destroys the worktree (see `preserveWorktreeScreenshots` in `vendor/scripts/wt-helper.ts`). Step 7 sweep therefore finds the files in main as expected. Without this preserve, cleanup would delete them and sweep would be a no-op.
 
    **Sidecar advance (TD-155)** — after sweep completes (success, skipped, or failed — all three count as "Step 7 phase reached"):
 
    ```bash
-   node scripts/spectra-archive-sidecar.mts update <change-name> --phase screenshot-sweep --last-completed folder-mv
+   node scripts/spectra-archive-sidecar.ts update <change-name> --phase screenshot-sweep --last-completed folder-mv
    ```
 
    (silent fail-safe if helper / sidecar missing.)
@@ -514,7 +514,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    > **NEVER blanket-drop a `wt-merge-block` stash.** Proven incident (2026-06-11): a `wt-merge-block` stash held a *parallel session's* `receiving-material-map` HANDOFF entry (blocked-status handoff for another in-flight change); the old "drop archived-slug" guidance would have destroyed it. `wt-merge-block` = main's blockers, not change residue. (`stash-reconcile.mjs` itself already recommends `apply` for clean merge-block entries — the old request_user_input+keep default was the bug, not the script.)
 
    ```bash
-   node scripts/stash-reconcile.mts --slug "<change-name>" --json
+   node scripts/stash-reconcile.ts --slug "<change-name>" --json
    ```
 
    Parse JSON `entries`. If empty → `Reconcile: 0 entries`, proceed. For each entry, branch on `namespace.kind` (main thread runs the git ops directly — **no request_user_input** in the common path):
@@ -559,7 +559,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    **Sidecar advance (TD-155)** — after stash reconcile completes (any outcome), advance to final phase:
 
    ```bash
-   node scripts/spectra-archive-sidecar.mts update <change-name> --phase cleanup --last-completed screenshot-sweep
+   node scripts/spectra-archive-sidecar.ts update <change-name> --phase cleanup --last-completed screenshot-sweep
    ```
 
    (silent fail-safe if helper / sidecar missing.)
@@ -602,7 +602,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    **Sidecar cleanup (TD-155)** — after the summary is displayed (archive considered complete from the user's perspective), delete the sidecar:
 
    ```bash
-   node scripts/spectra-archive-sidecar.mts delete <change-name>
+   node scripts/spectra-archive-sidecar.ts delete <change-name>
    ```
 
    (silent fail-safe: if sidecar is already missing — e.g., consumer pre-propagate — the helper is a no-op.)
@@ -624,7 +624,7 @@ All artifacts complete. All tasks complete.
 
 If Step 0 stashed blockers, append a line under **Worktree**:
 ```
-**Stash to reconcile:** wt-merge-block/<change-name>/<ISO> (run `node scripts/stash-reconcile.mts` to plan)
+**Stash to reconcile:** wt-merge-block/<change-name>/<ISO> (run `node scripts/stash-reconcile.ts` to plan)
 ```
 
 **Output On Success (No Delta Specs)**

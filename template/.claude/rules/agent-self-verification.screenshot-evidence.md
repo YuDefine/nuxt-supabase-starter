@@ -80,13 +80,13 @@ archive / 收尾前，任何 `[review:ui]` 的既有 `[x]` 若無對應 agent �
 
 ## MUST 9 — UI 改動後 MUST 重拍所有受影響的 verify:ui 截圖
 
-commit 觸及 `.vue` / `.tsx` / `.jsx` / `.css` / `.scss` 檔後，該 change 的**全部** `[verify:ui]` / `[review:ui]` items 截圖視為 stale（不只被標 issue 的那張）。**MUST** 跑 `audit-screenshot-staleness.mts` 確認 0 stale，有 stale 全部重拍後才能 hand back user 或嘗試推 review-gui bucket 到 `ready`。此規則**不限 spectra-apply 流程** — 主線直接修 issue / refactor / 任何 UI 改動都適用。
+commit 觸及 `.vue` / `.tsx` / `.jsx` / `.css` / `.scss` 檔後，該 change 的**全部** `[verify:ui]` / `[review:ui]` items 截圖視為 stale（不只被標 issue 的那張）。**MUST** 跑 `audit-screenshot-staleness.ts` 確認 0 stale，有 stale 全部重拍後才能 hand back user 或嘗試推 review-gui bucket 到 `ready`。此規則**不限 spectra-apply 流程** — 主線直接修 issue / refactor / 任何 UI 改動都適用。
 
 **Canonical pattern**：
 
 ```bash
 # 1. 跑 staleness audit
-node --experimental-strip-types vendor/scripts/audit-screenshot-staleness.mts \
+node --experimental-strip-types vendor/scripts/audit-screenshot-staleness.ts \
   --repo <consumer-path> --active-only 2>&1
 # 2. 對每個 STALE item 重拍（Playwright / agent-browser）
 # 3. 刪 LEGACY 無 #N 前綴舊圖
