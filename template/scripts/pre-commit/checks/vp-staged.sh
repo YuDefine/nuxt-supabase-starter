@@ -91,5 +91,9 @@ fi
 if ((${#fmt_targets[@]} > 0)); then
   echo "🎨 vp fmt (${#fmt_targets[@]} files)..."
   run_vp_with_empty_tolerance vp fmt "${fmt_targets[@]}"
-  git add -- "${fmt_targets[@]}"
+  # -f：fmt_targets 全部來自「已 staged」清單，這一步只是把 formatter 剛改過的內容收回 staged
+  # 區，不會憑空 stage 使用者沒選的路徑。不帶 -f 時，只要清單裡有「已 tracked 但同時被
+  # .gitignore 命中」的檔（ignore 規則在檔案進版控之後才加就會這樣，git status 看不出來），
+  # git add 就整個 fail、pre-commit exit 1，該 consumer 的 commit 永久做不成（TD-313）。
+  git add -f -- "${fmt_targets[@]}"
 fi

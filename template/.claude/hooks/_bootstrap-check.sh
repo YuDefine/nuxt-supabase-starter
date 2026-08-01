@@ -76,6 +76,32 @@ find_clade_root() {
 }
 
 # ─────────────────────────────────────────────────────────
+# 1.5 clade home 專用：上次 publish / propagate 有沒有跑完
+# ─────────────────────────────────────────────────────────
+#
+# 位置很重要：必須在下面第 2 段的 early exit **之前**。clade home 沒有
+# .claude/hub.json（它是散播的源頭，不是 consumer），會在那裡靜默 exit 0。
+#
+# consumer 端天然跳過：兩個 guard 檔案只有 clade 中央倉有，shell test 不 spawn
+# node，成本是零。輸出走 stderr（SessionStart 只有 stderr 會注入 session context），
+# 且只在有事可報時才出聲（--quiet）。任何失敗都不影響 session 啟動。
+#
+# 成本：clade home 每次 SessionStart 約 1.1s，其中 ~0.97s 是 `git ls-remote`。
+# 那一趟網路換到的是「bumped 但沒 push」這一級（既有 audit-governance-drift
+# check1 只比本地 tag，抓不到）。要省掉它就得放棄那一級，**不要**為了啟動快
+# 個一秒把它拿掉。離線 / 逾時會自動降級跳過該級，不會誤報。
+
+maybe_publish_status() {
+  [[ -f "$PROJECT_ROOT/registry/consumers.json" ]] || return 0
+  [[ -f "$PROJECT_ROOT/scripts/publish-status.ts" ]] || return 0
+  node "$PROJECT_ROOT/scripts/publish-status.ts" --quiet --repo "$PROJECT_ROOT" 2>&1 \
+    | head -c 4000 >&2
+  return 0
+}
+
+maybe_publish_status
+
+# ─────────────────────────────────────────────────────────
 # 2. 沒 manifest = 此 repo 不是 clade consumer，靜默退出
 # ─────────────────────────────────────────────────────────
 

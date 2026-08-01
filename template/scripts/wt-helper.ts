@@ -1570,7 +1570,45 @@ function detectUncommittedWorktreeFiles(wtPath) {
   return { modified, untracked }
 }
 
+/**
+ * `main..<branch>` 的 commit 數。查不到（branch 不存在 / git 失敗）回 `null` —— 呼叫端
+ * 只在**嚴格等於 0** 時才放行 gate，錯誤絕不 fail-open。
+ */
+function branchAheadCount(consumerRoot, branchName) {
+  try {
+    const out = git(['rev-list', '--count', `main..${branchName}`], { cwd: consumerRoot }).trim()
+    const n = Number.parseInt(out, 10)
+    return Number.isNaN(n) ? null : n
+  } catch {
+    return null
+  }
+}
+
+/** 未進 main 的 commit（`<sha> <subject>` 一行一條）。 */
+function unlandedCommits(consumerRoot, branchName) {
+  try {
+    return git(['log', '--oneline', '--no-decorate', `main..${branchName}`], { cwd: consumerRoot })
+      .split('\n')
+      .filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
 function detectUnlandedFiles(consumerRoot, branchName) {
+  // 0 ahead ⇒ branch 的每一個 commit 都已在 main 的 history 裡，cleanup 不可能讓任何
+  // commit 遺失。這是**可證的**，不是啟發式，所以整個 gate 直接跳過。
+  //
+  // 底下的判準是「branch 版本的檔案內容 vs main **工作區**」，它回答不了「會不會遺失
+  // commit」這題：main 之後只要往前走，那些被 main 改新的檔一律被報成「內容不在 main」，
+  // branch 是無辜的——它只是舊。實測 `mts-to-ts` / `round3` / `ts-migration` 三個 `0 ahead
+  // / userWip=0` 的 branch 全被擋，點名的 11 個檔正是同一 session 幾分鐘前在 main 改新的。
+  //
+  // 危害不是擋錯本身，是**訓練使用者對 `--force-discard-unland` 脫敏**：這個 flag 的語義
+  // 是「我接受 branch 的 commit 會永久遺失」，若每次收乾淨的 wt 都要打它，真正該被它擋下
+  // 的那次就不會有人停下來看。TD-302，同家族 TD-291 / TD-297。
+  if (branchAheadCount(consumerRoot, branchName) === 0) return []
+
   let branchFiles = []
   try {
     const out = git(['diff', '--name-only', `main..${branchName}`], { cwd: consumerRoot })
@@ -2113,13 +2151,21 @@ async function cmdCleanup(slug, opts) {
       issues.push(`- Branch ${branchName} is not merged into main (gated by --force)`)
     }
     if (needsDiscardUnland) {
-      const preview = unlanded
+      // 列**未進 main 的 commit**，不是檔名清單 —— 使用者要判的是「這些 commit 我還要
+      // 不要」，檔名答不了那題（TD-302）。取不到 commit 時才退回檔名。
+      const commits = unlandedCommits(consumerRoot, branchName)
+      const items = commits.length > 0 ? commits : unlanded
+      const label =
+        commits.length > 0
+          ? `${commits.length} commit(s) not in main`
+          : `${unlanded.length} file(s) whose content is NOT present in main's working tree`
+      const preview = items
         .slice(0, 10)
         .map((f) => `    - ${f}`)
         .join('\n')
-      const more = unlanded.length > 10 ? `\n    ... and ${unlanded.length - 10} more` : ''
+      const more = items.length > 10 ? `\n    ... and ${items.length - 10} more` : ''
       issues.push(
-        `- Branch ${branchName} has ${unlanded.length} file(s) whose content is NOT present in main's working tree (gated by --force-discard-unland):\n${preview}${more}`,
+        `- Branch ${branchName} has ${label} (gated by --force-discard-unland):\n${preview}${more}`,
       )
     }
     if (needsDiscardUncommitted) {

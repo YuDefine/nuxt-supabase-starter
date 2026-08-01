@@ -326,7 +326,12 @@ node ~/offline/clade/vendor/scripts/handoff-scan.ts --json 2>/dev/null
 | `mergedToMain: false` + `openspec/changes/archive/<slug>/` 存在 | `archived-change` | `verify-then-cleanup` — change 已 archive 但 branch 未 merged-into-main，先 `git log -1 <branch>` 檢視 commits 是否已含在 archive squash；若是 → `wt-helper cleanup <slug>` |
 | `mergedToMain: false` + `openspec/changes/<slug>/` 仍 active + `daysOld > 7` | `active-stale` | `merge-back-or-resume` — 依 mergeBackSafety 分流（`landable` → 直接 merge-back；`ptb-*` → Step 2B.4.5） |
 | `mergedToMain: false` + change 仍 active + `daysOld <= 7` | `active-fresh` | `keep` — 在用中；若需 land 仍依 mergeBackSafety 分流 |
-| `mergedToMain: false` + `openspec/changes/<slug>/` 跟 `archive/<slug>/` 都不在 | `orphan` | `verify-then-cleanup` — 孤兒 worktree，`git log <branch>` 檢視內容再決定 cleanup。`userWip > 0` 時 detail 會點出未 commit 檔數，同樣 **MUST** 先走 [[wip-orphan-recovery]] SOP |
+| `mergedToMain: false` + 兩個 change 目錄都不在 + `aheadCount > 0` | `unlanded` | `merge-back-or-resume` — branch 有未進 main 的 commit，`git log --oneline main..<branch>` 檢視後決定 merge-back 或續做 |
+| `mergedToMain: false` + 兩個 change 目錄都不在 + `aheadCount === 0` + `userWip > 0` | `orphan-with-wip` | `verify-then-cleanup` — 沒有 commit 會遺失，但未 commit 檔會。**MUST** 先走 [[wip-orphan-recovery]] SOP |
+| `mergedToMain: false` + 兩個 change 目錄都不在 + `aheadCount === 0` + `userWip === 0` | `orphan` | `cleanup` — 0 ahead + 0 WIP，無 commit 可遺失（可證，非啟發式） |
+| `mergedToMain: false` + 兩個 change 目錄都不在 + `aheadCount` 取不到 | `unlanded-unknown` | `verify-then-cleanup` — 取值失敗，**NEVER** 當成空 branch；先手動 `git log --oneline main..<branch>` 確認 |
+
+**`openspec/` 不存在的 repo（clade 自己、任何走 plan mode 的 consumer）：上表 `active-*` 與 `archived-change` 三列不適用** —— 那三列的判準是 `openspec/changes/<slug>/` 與 `archive/<slug>/` 的 `existsSync`，目錄整個不在時恆為 false。這不是判定漏了，是 `aheadCount` 那四列接手。TD-297 之前這四種狀態全部塌縮成單一個 `orphan`，而 `orphan` 讀起來是「沒人要的殘骸」，實際可能是別 session 正在做的活躍工作。
 
 script 已額外掃 `git worktree list --porcelain`：linked worktree 不在 wt-helper list 結果裡（即不在 `~/offline/<consumer>-wt/<slug>/` 規約路徑）→ 列進 `raw.unmanagedWorktrees`，對應 check 標 `n/a` → `manual review`（非規約 worktree，user 自管，audit 只記不建議動）。
 
