@@ -25,3 +25,7 @@ template/.wrangler/
 
 # 本地 MCP server 設定（含個人 absolute path，不適合共享）
 .mcp.json
+
+# Codex 投影層（sync-to-codex.ts 從 .claude/ 產生，可重生 → 不進版控）
+.agents/
+.codex/
