@@ -1,6 +1,6 @@
 ---
-description: Codex 派工觸發 request_user_input 時的攔截→評估→代答/升級 protocol；派 codex 時 path-scoped 載入
-paths: ['openspec/changes/**/tasks.md', 'openspec/changes/**/design.md', 'scripts/spectra-advanced/**', '.claude/agents/**', '.claude/skills/spectra-*/**', '.claude/skills/commit/SKILL.md', 'screenshots/**/progress.json']
+description: Codex 派工觸發 request_user_input 時的攔截→評估→代答/升級 protocol；觸及 spectra change / screenshot 情境時 path-scoped 載入——單純「要派 codex」不會自動載入本檔，MUST 依 [[agent-routing]] 的強制指針主動 Read
+paths: ['openspec/changes/**/tasks.md', 'openspec/changes/**/design.md', 'scripts/spectra-advanced/**', '.claude/agents/**', 'screenshots/**/progress.json']
 ---
 <!--
 🔒 LOCKED — managed by clade

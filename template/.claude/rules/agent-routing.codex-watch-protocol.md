@@ -1,6 +1,6 @@
 ---
-description: Codex 派工的標準流程模板、Codex Watch Protocol、Plan-first / Git baseline declaration、$spectra-apply Runtime Gate、screenshot-review verify mode 派工與監看；apply 階段或派 codex 時 path-scoped 載入
-paths: ['openspec/changes/**/tasks.md', 'openspec/changes/**/design.md', 'scripts/spectra-advanced/**', '.claude/agents/**', '.claude/skills/spectra-*/**', '.claude/skills/commit/SKILL.md', 'screenshots/**/progress.json']
+description: Codex 派工的標準流程模板、Codex Watch Protocol、Plan-first / Git baseline declaration、$spectra-apply Runtime Gate、screenshot-review verify mode 派工與監看；apply 階段 / 觸及 spectra change 時 path-scoped 載入——單純「要派 codex」不會自動載入本檔，MUST 依 [[agent-routing]] 的強制指針主動 Read
+paths: ['openspec/changes/**/tasks.md', 'openspec/changes/**/design.md', 'scripts/spectra-advanced/**', '.claude/agents/**', 'screenshots/**/progress.json']
 ---
 <!--
 🔒 LOCKED — managed by clade

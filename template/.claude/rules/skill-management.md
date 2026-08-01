@@ -1,6 +1,6 @@
 ---
 description: skill 真相層與投影層的版控形態——.claude/skills/ 是 canonical 且內容 MUST 進版控，.agents/ 與 .codex/ 是 sync-to-codex 投影 MUST gitignore，symlink 形態的 skill 其 target 內容也必須 tracked
-paths: ['.gitignore', '.claude/skills/**', 'scripts/install-skills.sh', 'skills-lock.json']
+paths: ['.gitignore', '.claude/skills/**', 'plugins/hub-core/skills/**', 'scripts/install-skills.sh', 'skills-lock.json']
 ---
 <!--
 🔒 LOCKED — managed by clade

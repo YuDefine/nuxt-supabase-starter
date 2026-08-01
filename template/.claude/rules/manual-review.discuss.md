@@ -1,6 +1,6 @@
 ---
-description: Manual Review discuss flow——[discuss] items walkthrough、Defer-to-HANDOFF、Resume mode、HANDOFF.md ## Deferred discuss items schema、混合 kind change 順序；寫含 [discuss] item 的 tasks.md 或跑 /spectra-archive 時 path-scoped 載入
-paths: ['openspec/changes/**/tasks.md', '.claude/skills/spectra-archive/**', 'HANDOFF.md']
+description: Manual Review discuss flow——[discuss] items walkthrough、Defer-to-HANDOFF、Resume mode、HANDOFF.md ## Deferred discuss items schema、混合 kind change 順序；寫含 [discuss] item 的 tasks.md 或觸及 HANDOFF.md 時 path-scoped 載入
+paths: ['openspec/changes/**/tasks.md', 'HANDOFF.md']
 ---
 <!--
 🔒 LOCKED — managed by clade

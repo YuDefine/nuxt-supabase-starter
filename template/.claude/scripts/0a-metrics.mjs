@@ -1,0 +1,226 @@
+#!/usr/bin/env node
+/* eslint-disable no-console */
+/* oxlint-disable no-console */
+
+/**
+ * 0-A gate metrics recorder
+ *
+ * 用途：讓 0-A 的閾值調參有實測分佈可依，而不是拍腦袋。回答的問題是
+ * 「diff 規模 vs finding 數長什麼樣」「0-A.2 觸發率多少」「dismiss 有多少是
+ * 沒附反證被翻回 real issue 的」「TD-246 fallback 多常發生」。
+ *
+ * 用法：
+ *   node .claude/scripts/0a-metrics.mjs record --diff-lines 120 --diff-files 3 \
+ *     --codex xhigh --critical 0 --major 1 --minor 2 --info 0 \
+ *     --a2 true --dismissed 1 --dismissed-unsubstantiated 0 \
+ *     --screenshot skip --doc skip [--anomaly td246-fallback]
+ *
+ *   node .claude/scripts/0a-metrics.mjs summary [--last 20]
+ *
+ * `record` 會印出 0-A/B/C/D 的匯合行——這是刻意的結構耦合：匯合行只能由本
+ * script 產出，漏跑就沒有那行輸出，比「規約寫 MUST 呼叫」更難靜默漏掉。
+ *
+ * 落點 `.clade/0a-metrics.jsonl`（gitignored，本地 telemetry）。**不**寫進
+ * `vendor/signals/` 的 ledger：那條路是 failure-event → threshold → digest
+ * candidate 的機制，schema 為 closed（14 個 required 欄位全是錯誤導向），把常態
+ * 成功事件灌進去會重演 improvement-digest.ts 註解記載的 occurrences 灌水。
+ * 異常事件（anomaly 欄位非 null）留在同一份檔——需要的是「率」，算得出來就夠，
+ * 產 digest 候選對這類異常沒有增值，處置早已寫在 gates.md 的 fallback 路徑。
+ */
+
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { execFileSync } from 'node:child_process'
+
+const PROJECT_DIR = process.env.CLAUDE_PROJECT_DIR || process.cwd()
+const LEDGER = resolve(PROJECT_DIR, '.clade', '0a-metrics.jsonl')
+
+const ANOMALY_KINDS = ['td246-fallback', 'verdict-missing', 'large-change-rerun']
+const CODEX_MODES = ['xhigh', 'xhigh+max+fable', 'fast-path-skip']
+
+function parseArgs(argv) {
+  const out = {}
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]
+    if (!a.startsWith('--')) continue
+    const key = a.slice(2)
+    const next = argv[i + 1]
+    if (next === undefined || next.startsWith('--')) {
+      out[key] = 'true'
+    } else {
+      out[key] = next
+      i++
+    }
+  }
+  return out
+}
+
+function git(args, fallback) {
+  try {
+    return execFileSync('git', args, { cwd: PROJECT_DIR, encoding: 'utf-8' }).trim() || fallback
+  } catch {
+    return fallback
+  }
+}
+
+// worktree 內 `--show-toplevel` 回的是 worktree 目錄名（如 clade-wt/<slug>），不是 repo
+// 名——0-A 常在 worktree 跑，用它會讓同一個 repo 的紀錄散成好幾個名字。remote URL 不受
+// worktree 影響，是這裡唯一穩定的來源。
+function repoName() {
+  const url = git(['config', '--get', 'remote.origin.url'], '')
+  const m = url.match(/([^/:]+?)(?:\.git)?$/)
+  if (m) return m[1]
+  return git(['rev-parse', '--path-format=absolute', '--git-common-dir'], PROJECT_DIR)
+    .replace(/\/\.git\/?$/, '')
+    .split('/')
+    .pop()
+}
+
+function num(v, field) {
+  if (v === undefined) die(`record 缺 --${field}`)
+  const n = Number.parseInt(v, 10)
+  if (!Number.isFinite(n) || n < 0) die(`--${field} 必須是非負整數，收到 ${JSON.stringify(v)}`)
+  return n
+}
+
+function die(msg) {
+  console.error(`[0a-metrics] ${msg}`)
+  process.exit(2)
+}
+
+function record(args) {
+  const codex = args.codex ?? die('record 缺 --codex')
+  if (!CODEX_MODES.includes(codex)) {
+    die(`--codex 只接受 ${CODEX_MODES.join(' | ')}，收到 ${JSON.stringify(codex)}`)
+  }
+  if (args.anomaly && !ANOMALY_KINDS.includes(args.anomaly)) {
+    die(`--anomaly 只接受 ${ANOMALY_KINDS.join(' | ')}，收到 ${JSON.stringify(args.anomaly)}`)
+  }
+
+  const findings = {
+    critical: num(args.critical, 'critical'),
+    major: num(args.major, 'major'),
+    minor: num(args.minor, 'minor'),
+    info: num(args.info, 'info'),
+  }
+  const a2 = args.a2 === 'true'
+  const dismissed = num(args.dismissed ?? '0', 'dismissed')
+  const unsubstantiated = num(args['dismissed-unsubstantiated'] ?? '0', 'dismissed-unsubstantiated')
+  if (unsubstantiated > dismissed) {
+    die(`--dismissed-unsubstantiated (${unsubstantiated}) 不能大於 --dismissed (${dismissed})`)
+  }
+
+  // 0-A.2 只在 Critical/Major 出現時觸發（gates.md § 0-A.1）。宣告不一致代表
+  // 呼叫端把流程走錯了或參數填錯，兩者都該當場停，不該靜默記一筆假資料。
+  const hadCriticalOrMajor = findings.critical > 0 || findings.major > 0
+  if (a2 && !hadCriticalOrMajor && codex !== 'xhigh+max+fable') {
+    die('--a2 true 但 critical/major 皆為 0——0-A.2 的觸發條件不成立，檢查參數')
+  }
+  if (hadCriticalOrMajor && !a2 && codex !== 'fast-path-skip') {
+    die('critical/major 非 0 卻 --a2 false——gates.md § 0-A.1 規定此時 MUST 進 0-A.2')
+  }
+
+  const row = {
+    ts: new Date().toISOString(),
+    repo: repoName(),
+    branch: git(['rev-parse', '--abbrev-ref', 'HEAD'], 'unknown'),
+    base_sha: git(['rev-parse', '--short', 'HEAD'], 'unknown'),
+    diff_lines: num(args['diff-lines'], 'diff-lines'),
+    diff_files: num(args['diff-files'], 'diff-files'),
+    fast_path: codex === 'fast-path-skip',
+    codex,
+    findings,
+    a2_triggered: a2,
+    dismissed,
+    dismissed_unsubstantiated: unsubstantiated,
+    screenshot: args.screenshot ?? 'skip',
+    doc: args.doc ?? 'skip',
+    anomaly: args.anomaly ?? null,
+  }
+
+  mkdirSync(dirname(LEDGER), { recursive: true })
+  appendFileSync(LEDGER, `${JSON.stringify(row)}\n`, 'utf-8')
+
+  const codexLabel =
+    codex === 'fast-path-skip'
+      ? 'Codex 跳過（fast-path）'
+      : codex === 'xhigh+max+fable'
+        ? 'Codex xhigh+max+Fable'
+        : 'Codex xhigh'
+  console.log(
+    `✅ 0-A/B/C/D 並行匯合通過（${codexLabel}、screenshot ${row.screenshot}、check 全綠、doc ${row.doc}）`,
+  )
+  if (row.anomaly) console.log(`⚠ 本次記錄 anomaly: ${row.anomaly}`)
+}
+
+function readRows() {
+  if (!existsSync(LEDGER)) return []
+  return readFileSync(LEDGER, 'utf-8')
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => {
+      try {
+        return JSON.parse(l)
+      } catch {
+        return null
+      }
+    })
+    .filter(Boolean)
+}
+
+function summary(args) {
+  const all = readRows()
+  if (all.length === 0) {
+    console.log(`[0a-metrics] ${LEDGER} 尚無紀錄`)
+    return
+  }
+  const last = args.last ? Number.parseInt(args.last, 10) : all.length
+  const rows = all.slice(-last)
+
+  const tot = (f) => rows.reduce((s, r) => s + f(r), 0)
+  const pct = (n) => `${Math.round((n / rows.length) * 100)}%`
+  const findingsTotal = tot(
+    (r) => r.findings.critical + r.findings.major + r.findings.minor + r.findings.info,
+  )
+  const dismissed = tot((r) => r.dismissed)
+  const unsub = tot((r) => r.dismissed_unsubstantiated)
+
+  console.log(`## 0-A metrics — 最近 ${rows.length} 次（全檔 ${all.length} 筆）`)
+  console.log('')
+  console.log(`fast-path 命中     ${pct(rows.filter((r) => r.fast_path).length)}`)
+  console.log(`0-A.2 觸發        ${pct(rows.filter((r) => r.a2_triggered).length)}`)
+  console.log(`anomaly 出現       ${pct(rows.filter((r) => r.anomaly).length)}`)
+  for (const k of ANOMALY_KINDS) {
+    const n = rows.filter((r) => r.anomaly === k).length
+    if (n > 0) console.log(`  └ ${k}: ${n} 次`)
+  }
+  console.log('')
+  console.log(
+    `finding 總數       ${findingsTotal}（Critical ${tot((r) => r.findings.critical)} / Major ${tot((r) => r.findings.major)} / Minor ${tot((r) => r.findings.minor)} / Info ${tot((r) => r.findings.info)}）`,
+  )
+  console.log(
+    `dismissed          ${dismissed}，其中無反證被翻回 ${unsub}${dismissed > 0 ? `（${Math.round((unsub / dismissed) * 100)}%）` : ''}`,
+  )
+  console.log('')
+  console.log('diff 規模 vs finding 數（每列一次 0-A）：')
+  console.log('  lines  files  findings  a2')
+  for (const r of rows.slice(-20)) {
+    const f = r.findings.critical + r.findings.major + r.findings.minor + r.findings.info
+    console.log(
+      `  ${String(r.diff_lines).padStart(5)}  ${String(r.diff_files).padStart(5)}  ${String(f).padStart(8)}  ${r.a2_triggered ? '✓' : ' '}`,
+    )
+  }
+}
+
+const [cmd, ...rest] = process.argv.slice(2)
+const args = parseArgs(rest)
+
+if (cmd === 'record') record(args)
+else if (cmd === 'summary') summary(args)
+else {
+  console.error(
+    '用法: 0a-metrics.mjs record --diff-lines N --diff-files N --codex <mode> --critical N --major N --minor N --info N [...]',
+  )
+  console.error('      0a-metrics.mjs summary [--last N]')
+  process.exit(2)
+}

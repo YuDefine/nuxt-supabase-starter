@@ -1,10 +1,7 @@
 ---
-description: main / master 限定的兩條 commit hard gate（Partial Archive Gate / 人工檢查 Gate）與 multi-session git hazard 交叉索引；跑 /commit 或觸及 spectra change 時 path-scoped 載入
+description: main / master 限定的兩條 commit hard gate（Partial Archive Gate / 人工檢查 Gate）與 multi-session git hazard 交叉索引；觸及 spectra change 時 path-scoped 載入
 paths:
   - 'openspec/changes/**'
-  - '.claude/skills/commit/**'
-  - '.claude/skills/spectra-archive/**'
-  - '.claude/skills/spectra-verify/**'
 ---
 <!--
 🔒 LOCKED — managed by clade

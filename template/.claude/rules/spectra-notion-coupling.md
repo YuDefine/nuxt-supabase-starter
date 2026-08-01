@@ -1,6 +1,6 @@
 ---
 description: consumer 採用 Notion 制度時（consumer-meta 的 notion.ticketWorkflow 或 notion.projectWorkflow）適用。症狀：change 做完或發版了但 Notion 狀態還停在舊值、不知道某個 change 對應哪張 ticket 或哪個 User Story、Notion 現況與 git 實況對不上、拿不準該不該去碰 Notion。狀態轉移授權沿用全域 _notion-<consumer-b>-board/REFERENCE.md §3 表，不另造 state machine
-paths: ['openspec/changes/**', '.claude/consumer-meta.json', '.claude/skills/spectra-*/**', '.claude/skills/commit/SKILL.md']
+paths: ['openspec/changes/**', '.claude/consumer-meta.json']
 ---
 <!--
 🔒 LOCKED — managed by clade

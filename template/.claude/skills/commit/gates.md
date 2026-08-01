@@ -439,7 +439,7 @@ Codex max 完成後 **MUST** 檢查輸出是否含 `## Review Verdict` heading�
 
 1. 本次 working tree diff（`git diff HEAD` 摘要）
 2. **0-A.2 Step 1 Codex 的完整 review 輸出**
-3. 明確指示：「你的職責是**裁決**——對 Codex 列出的每個 finding 判定：(a) real issue → 標 severity + 建議修法；(b) false positive → 標 dismissed + 一句話理由；(c) severity 不準確 → 重標。同時掃一遍 diff 找 Codex 漏掉的問題。輸出格式照 code-review agent 標準報告。」
+3. 明確指示：「你的職責是**裁決**——對 Codex 列出的每個 finding 判定：(a) real issue → 標 severity + 建議修法；(b) false positive → 標 dismissed **並附具體反證**；(c) severity 不準確 → 重標。同時掃一遍 diff 找 Codex 漏掉的問題。輸出格式照 code-review agent 標準報告。」
 
 Agent prompt 範本：
 
@@ -452,19 +452,32 @@ Agent prompt 範本：
 
 ## 你的任務
 
-1. 對 Codex 列出的每個 finding 逐一判定：
+1. 對 Codex 列出的**每一個** finding 逐一判定：
    - real issue → 保留，確認或重標 severity（Critical/Major/Minor/Info），給具體修法建議
-   - false positive → 標 `DISMISSED`，一句話理由
+   - false positive → 標 `DISMISSED`，**MUST** 照下列格式輸出，`反證：` 欄不得留白：
+
+     ```
+     DISMISSED — 反證：<file>:<line> ／ <契約或規則條文的具體出處>
+     說明：<一句話>
+     ```
+
    - severity 不準確 → 重標並說明
-2. 獨立掃一遍 diff，找 Codex 漏掉的問題（Codex 跨模型盲點互補是你存在的原因）
-3. 輸出標準 code-review 報告格式（含 Semantic Verdict 表）
+2. **反證立不出來就不是 DISMISSED**：查證之後仍無法指出具體反證位置的 finding，**一律保留為 real issue**。你有完整 repo 讀取權，「判不出來」是查證還沒做完的訊號，不是終局狀態——先去讀 code、追呼叫端、必要時跑 test，讀完仍立不出反證就保留。
+3. 獨立掃一遍 diff，找 Codex 漏掉的問題（Codex 跨模型盲點互補是你存在的原因）
+4. 輸出標準 code-review 報告格式（含 Semantic Verdict 表）
 
 對 real issue 不做修正——只判定 + 建議修法，修正由主線執行。
 ```
 
-讀完 Fable 輸出後判斷：
+> **為什麼 dismiss 要舉證，而不是「判不出就放行」**：「無法確認為錯就放行」是給**只看得到 diff** 的裁決者的規則——那種裁決者對 repo 無知，放行是它誠實的預設。Fable 有完整 repo 讀取權，同一句話套到它身上就變成偷懶的授權。0-A 是 recall-first 設計，§ 0-A.1 的「NEVER 由主線自行降級 severity」是同一條軸的另一端：主線那邊已經堵住降級，裁決層這邊若沒有舉證門檻，洞只是從主線移到 Fable 身上。
 
-- **無 real issue**（全部 dismissed 或無新發現）→ 輸出 `✅ 0-A.2 通過（Codex max + Fable max 無 real issue）`，進入「並行匯合」
+讀完 Fable 輸出後，**先驗收 DISMISSED 的舉證，再判斷通過與否**：
+
+**舉證驗收**：對 Fable 標 `DISMISSED` 的**每一條** finding，檢查它有沒有附具體反證（`<file>:<line>` 的 code、契約、或文件/規則條文）。**沒附反證的 DISMISSED 一律視同 real issue 處理**，照 Codex 原本標的 severity 走——**NEVER** 因為「Fable 是 max effort，它說 dismiss 應該有它的道理」就放行。裁決者省略舉證跟主線自行降級 severity 是同一種失效，`gates.md` § 0-A.1 已禁止後者。
+
+驗收完才判斷：
+
+- **無 real issue**（全部 dismissed **且逐條附反證**，或無新發現）→ 輸出 `✅ 0-A.2 通過（Codex max + Fable max 無 real issue）`，進入「並行匯合」
 - **有 real issue** → 主線依 Fable 的裁決逐一修正，修完**直接進入「並行匯合」**（最多到 0-A.2，不做第 3 輪）
 
 **為什麼兩步驟**：Codex（GPT-5.6-sol）和 Fable（claude-fable-5）模型盲點不同。Codex max 負責深度搜尋——用最高推理深度翻出所有可能問題；Fable max 負責裁決——以不同模型族的視角判定哪些是 real issue，過濾 false positive，並找 Codex 漏掉的問題。這比同一模型跑兩輪更有效。
@@ -482,11 +495,29 @@ Agent prompt 範本：
 
 **大改動回扣**：若 0-A / 0-B / 0-C / 0-D 累計的修正**超過 50 行或跨 5 檔以上**，**MUST** 在此處重跑一次 `codex-review-safe.sh xhigh` 確認新引入的程式碼也過 codex 眼睛（codex 看的是啟動時 snapshot，後續大改動不在它覆蓋範圍）。小改動（< 50 行 / < 5 檔）視同安全跳過。
 
-完成匯合後輸出：
+完成匯合後 **MUST** 用 metrics recorder 產生匯合行，**NEVER** 自己手打那行：
+
+```bash
+node .claude/scripts/0a-metrics.mjs record \
+  --diff-lines <本次 diff 總行數> --diff-files <檔數> \
+  --codex <xhigh|xhigh+max+fable|fast-path-skip> \
+  --critical N --major N --minor N --info N \
+  --a2 <true|false> --dismissed N --dismissed-unsubstantiated N \
+  --screenshot <pass|skip> --doc <aligned|skip> \
+  [--anomaly <td246-fallback|verdict-missing|large-change-rerun>]
+```
+
+它落一筆進 `.clade/0a-metrics.jsonl`（gitignored 的本地 telemetry）並印出匯合行：
 
 ```text
-✅ 0-A/B/C/D 並行匯合通過（Codex xhigh{+max+Fable}、screenshot {pass|skip}、check 全綠、doc {aligned|skip}）
+✅ 0-A/B/C/D 並行匯合通過（Codex xhigh、screenshot skip、check 全綠、doc skip）
 ```
+
+**匯合行只能由本 script 產出**是刻意的結構耦合——漏跑就沒有那行輸出，比規約寫「MUST 記錄」更難靜默漏掉。
+
+- `--dismissed-unsubstantiated` 填 § 0-A.2「舉證驗收」翻回 real issue 的條數（沒有就填 0）
+- script 對流程矛盾會 exit 2 擋下（如 critical/major 非 0 卻 `--a2 false`）。那代表 0-A.2 該跑沒跑，**NEVER** 改參數繞過——回去補跑 0-A.2
+- 累積後 `node .claude/scripts/0a-metrics.mjs summary` 看分佈。**這是 0-A 唯一的閾值調參依據**：fast-path 三條件、「大改動回扣」的 50 行／5 檔、pre-flight 規模 gate 要不要升 hard gate，都等這份分佈說話，NEVER 憑單次觀感調
 
 **紀律禁止項**（每條皆對應壓力下違規模式或已知 rationalization）：
 

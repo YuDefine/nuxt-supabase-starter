@@ -1,5 +1,5 @@
 ---
-description: 所有呼叫 review-gui 的外圍 agent surface 統一 SoP——入口 scan、compound item 拆解、multi-screenshot annotation、self-rationalize 禁令、annotation format contract；跑 review / handoff / verify 流程時 path-scoped 載入
+description: 所有呼叫 review-gui 的外圍 agent surface 統一 SoP——入口 scan、compound item 拆解、multi-screenshot annotation、self-rationalize 禁令、annotation format contract；觸及 screenshots / spectra change / HANDOFF 時 path-scoped 載入
 paths:
   - 'screenshots/**'
   - 'openspec/changes/**'
@@ -7,9 +7,6 @@ paths:
   - 'vendor/scripts/review-gui*.ts'
   - 'vendor/scripts/lib/evidence-store.ts'
   - 'scripts/spectra-advanced/**'
-  - '.claude/skills/spectra-verify/**'
-  - '.claude/skills/spectra-apply/**'
-  - '.claude/skills/handoff/**'
   - '.claude/agents/**'
 ---
 <!--
