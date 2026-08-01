@@ -95,6 +95,8 @@ Auto-triage 的三類 pending item 路由、`[discuss]` item 的歸屬、review-
 
 詳見 [[proactive-skills.dev-server-spawn]]（path-scoped，碰 `scripts/dev-session*` / `consumer-meta.json` / `nuxt.config.*` 時載入）。核心 one-liner：agent 自己起 dev server，**MUST** 經 `vendor/scripts/dev-session.ts`（durability=zellij），**NEVER** 裸 `nuxt dev` / `pnpm dev` / `run_in_background`。
 
+**採用 per-worktree backing service（DB clone / PostgREST sidecar）的 consumer**：起 dev server **MUST** 先驗那些服務存在，缺席時 fail-loud 並點名是哪個服務、修復指令是什麼。launcher 的「port 有沒有 LISTENING」對這個問題恆為真，所以它擋不住 —— 第一個發現異常的會是瀏覽器，而它只會顯示 app 為「後端抖動」寫的 503/500，完全指不到 DB。同一條要求適用於任何預期 backing service 在的入口（integration test、收 verify evidence），不只 dev server。條款全文見 [[db-preview-env]] § 缺席側。
+
 ## Review Tiers
 
 詳見 [[review-tiers]]。

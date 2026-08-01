@@ -1,6 +1,6 @@
 ---
 description: PR-isolated DB preview environment capability + safety contract（不限工具、不限 topology）
-paths: ['supabase/migrations/**/*.sql', '.github/workflows/**/*.yml', 'docker-compose*.yml', 'infra/**/*']
+paths: ['supabase/migrations/**/*.sql', '.github/workflows/**/*.yml', 'docker-compose*.yml', 'infra/**/*', 'scripts/dev-session*', 'scripts/worktree-*', 'scripts/singleton*', '.claude/consumer-meta.json']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -47,6 +47,21 @@ clade 規約管 capability，consumer 在 `registry/consumers.json` 宣告自家
 6. **Connection pool 預算控管** —— 每 sidecar 固定 pool size，start 前依 `max_connections` 與現有用量估算，超過 headroom 即拒絕
 
 任一條不滿足 → 回到既有路徑（schema-migration-gate 必備、compose-per-PR 可選），**NEVER** 把本例外當成「PG TEMPLATE 其實可以用」的一般結論。
+
+#### 缺席側：存在性檢查綁在「起 dev server」，不是「建 worktree」
+
+前提 5 規範的是**銷毀**側。缺席側同樣 MUST 有把關：
+
+> 凡 worktree 專屬的 backing service（DB clone、PostgREST sidecar、任何 per-worktree daemon），其**存在性檢查 MUST 綁在「起 dev server」這個動作上**，不能只綁在「建 worktree」那一刻 —— 後者是一次性的，服務會在之後消失（`reconcile` 清掉、手動清理、主機重啟）。缺席時 **MUST** fail-loud 或自動補建，**NEVER** 讓它留到 runtime 由 app 層錯誤代言。
+
+Fail-loud 的訊息 **MUST 點名 backing service 本身與修復指令**（例：`DB clone <consumer-b>_wt_<slug> 不存在 → node scripts/worktree-db.mjs create --slug <slug>`）。**NEVER** 只說「後端連線失敗」——那正是要避免的那層代言。
+
+**為什麼非綁在 dev server 啟動不可**：dev-session 這類 launcher 的成功判準通常是「port 有沒有 LISTENING」，而它對本問題**恆為真** —— app 起得來、只是打不到 DB。於是第一個發現異常的是瀏覽器，拿到的又是 app 為「後端暫時抖動」寫的 503/500 文案，完全指不到 DB。實測（<consumer-b> 2026-07-31）：修復只要兩個指令、數十秒，診斷卻花十幾輪，中途還跟兩個無關的 dev server 症狀混淆。**修復成本 ≈ 0，發現成本極高** —— 這個不對稱就是把檢查前移的全部理由。
+
+本證據決定：檢查該綁在哪個動作上（起 dev server，而非建 worktree）。
+本證據不決定：要不要做這個檢查——**NEVER** 拿「修復很便宜」當省略檢查的理由，便宜的是修復，貴的是發現。
+
+同一形狀會在**非 dev-server 的入口**復發：跑 integration test、收 verify evidence、任何預期 backing service 在的動作。這些路徑同樣適用本條款。
 
 Cookbook（naming / ownership / template refresh / path adapter / pool / cleanup 的 contract 與範例）：`vendor/snippets/worktree-db-isolation/`。
 
