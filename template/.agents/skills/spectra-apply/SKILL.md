@@ -45,58 +45,7 @@ Implement tasks from a Spectra change.
       - 若 output 路徑含 `/worktrees/`（或 `git rev-parse --git-common-dir` ≠ `git rev-parse --git-dir`）→ cwd 已在某個 session worktree，**通過**，繼續 Step 1
       - 否則 cwd 在 main，繼續 step c
 
-   c. **Pre-fork baseline guard + 自動建 worktree**（idempotent）：
-
-      Spectra-apply 走 **commit-then-fork** — 有 change context，把屬於這條 change 的 baseline 自動 commit 上 main 再 fork，避免 worktree 看不到 main 的 untracked / modified baseline（契約見 [[worktree-default]] §1；`--baseline-scope-paths` 的對齊要求與三路分流見 [[wt]] skill 的 `baseline-guard.md`）。
-
-      **c.1 — 偵測 main dirty**：
-
-      ```bash
-      node scripts/wt-helper.ts detect-main-dirty --json
-      ```
-
-      解析回傳 `{ modified, untracked, conflicted }`：
-
-      - **conflicted 非空** → STOP，回報 user 解 conflict 再重試（wt-helper 拒絕自動處理 unmerged）
-      - **modified + untracked 為空**（clean）→ 跳到 c.4 直接 fork
-      - **modified + untracked 非空** → 進 c.2 做 scope filter
-
-      **c.2 — Scope filter（主線自己做，不靠 wt-helper）**：
-
-      把 dirty paths 分成 **scope-in**（屬於這條 change 的 baseline）vs **scope-out**（其他）。三來源 union：
-
-      1. 讀 `.spectra/touched/<change-name>.json`（若存在；spectra-commit 上次 sync 寫入）— 列出的 path 為 scope-in
-      2. Grep `openspec/changes/<change-name>/proposal.md` + `openspec/changes/<change-name>/specs/**/*.md`，找 `packages/` / `server/` / `app/` / `supabase/` / `scripts/` 等 module path 提及；任一 dirty path 是它們的子路徑或開頭命中 → scope-in
-      3. Fallback：dirty path basename 或開頭跟 change name slug 的 word 命中 → scope-in
-
-      其餘 dirty → scope-out。
-
-      **c.3 — 三情境決策**：
-
-      | 情境 | 行為 |
-      | --- | --- |
-      | scope-in 非空 + scope-out 為空 | 直接走 c.4，commit-then-fork |
-      | scope-in 非空 + scope-out 非空 | 印分類報告給 user（scope-in N 條 / scope-out N 條）後走 c.4，commit **只**包 scope-in；scope-out 留在 main 不動 |
-      | scope-in 為空（無論 scope-out 為空或非空、無論三來源是否對得上）| 直接走 c.4 **clean fork**；若 scope-out 非空，印一行通知：`main 有 <N> 條 dirty 不屬於本 change，已留在 main 不動，worktree 從 HEAD fork`。**NEVER** STOP / request_user_input / 要求 user 先 commit/stash —— worktree 隔離已處理 main WIP 對 apply 的影響；同檔衝突是 merge-back 時的事，不在 apply 範圍 |
-
-      **c.4 — Fork（commit-then-fork 或 clean fork）**：
-
-      ```bash
-      # 有 scope-in baseline 要 commit
-      node scripts/wt-helper.ts add <change-name> \
-        --precheck-baseline <change-name> \
-        --baseline-strategy commit \
-        --baseline-scope-paths <comma-separated-scope-in-paths>
-
-      # 或：main clean / user 選 (b) cross-session 不動 dirty
-      node scripts/wt-helper.ts add <change-name>
-      ```
-
-      Helper 用 change name 當 slug，內部 normalize（lowercase / 空白轉 `-` / collapse 重複 `-`）。commit 策略時 helper 跑 selective stage（`git add -- <scope-paths>`，**禁** `git add -A`）+ commit `baseline: <change-name> pre-fork sync` + fork。Helper 行為與失敗處理見 `plugins/hub-core/skills/wt/SKILL.md`。
-
-      若 helper fail with `Worktree path already exists` → slug 對應 worktree 已存在（前次 session 建過、未清掉），**沿用即可**，視為成功；用 `node scripts/wt-helper.ts list --json` 抓既有 path。**注意**：既有 worktree 不會再跑 baseline guard，若 main 仍有屬於本 change 的 dirty baseline，必須 user 自己 commit 後 worktree 內 `git pull` 或 cherry-pick。
-
-      其他 helper 錯誤 → 報錯並 STOP，**不要**降級回「在 main 跑」。
+   c. **Pre-fork baseline guard + 自動建 worktree**（idempotent）：cwd 在 main 時 **MUST** 先完整讀 `references/worktree-setup.md` § Step 0c，依 c.1（detect-main-dirty）→ c.2（scope filter 三來源）→ c.3（三情境決策，scope-in 為空時 **NEVER** STOP / request_user_input / 要求先 commit-stash）→ c.4（wt-helper fork）執行；helper 錯誤（非 already-exists）→ STOP，**不要**降級回「在 main 跑」。
 
    c.5. **Main-side unpark + commit-to-git**（clade fork addition；critical data-safety guardrail，per `docs/pitfalls/2026-05-22-agent-tool-subagent-worktree-bypass.md`）：
 
@@ -157,67 +106,7 @@ Implement tasks from a Spectra change.
       - **NEVER** 用 `git add -A` / `git add .` stage artifacts — 會把 main 上其他 user WIP 一起 commit
       - **NEVER** 透過 `Skill` tool 或 `Agent` tool 委派此步給 subagent — 必須主線自己跑（subagent 的 cwd 不可信）
 
-   c.6. **Environment Readiness Check**（clade fork addition；per `docs/pitfalls/2026-06-28-spectra-apply-dispatches-unready-change.md`）：
-
-      **理由**：dispatch subagent 後到 e2e / verify 階段才發現 DB 未 sync / dev server 指向 main / auth route 壞掉，每道牆浪費 5-15 分鐘。三項全在 dispatch 前 30 秒可驗出。
-
-      **MUST** 在 dispatch 前依序跑以下三項。任一紅燈 → 自動修（不問 user）或 STOP 回報：
-
-      1. **DB migration sync**（self-hosted Supabase consumer only — 讀 consumer-meta `db-runtime`）：
-
-         ```bash
-         # 比較 worktree migration 數量 vs dev LXC
-         LOCAL_COUNT=$(ls <worktree>/supabase/migrations/*.sql 2>/dev/null | wc -l)
-         REMOTE_COUNT=$(cd <worktree> && pnpm supabase:sync --dry-run 2>&1 | grep -oP '\d+ local' | grep -oP '\d+')
-         ```
-
-         - 數量不一致（worktree 有新 migration）→ **自動** `cd <worktree> && pnpm supabase:sync && pnpm db:reset`
-         - 一致 → pass
-         - `supabase:sync --dry-run` 不支援 → fallback 直接跑 `pnpm supabase:sync`（idempotent）
-         - **Per `db-topology-invariant` 規則**：dev DB 是共享實例，reset 前 **MUST** 自主協調（不問 user）：
-           1. `node scripts/claim-helper.ts list` 列 active claims
-           2. 分類：`lastActivity > 2h` = stale（殭屍 claim，忽略）；`lastActivity < 30min` 且 claim 的 change 有 DB-dependent work（migration / seed / e2e） = 真 active
-           3. 真 active claim = 0 → 直接 proceed，log 一行「dev DB reset — N stale claims ignored」
-           4. 真 active claim > 0 → 仍 proceed（apply 的 DB sync 優先於 claim collision），但 log「dev DB reset — warning: N active claims: <names>」
-           5. **NEVER** 因為有 stale claims 或甚至 active claims 就停下來問 user — dev DB reset 是 evidence collection 的前置條件，阻斷 reset = 阻斷整條 change 的推進。log 足矣
-
-      2. **Dev server cwd alignment**（有 singleton dev server 的 consumer — 讀 `scripts/singleton.mjs` 存在性）：
-
-         ```bash
-         # 檢查 port 3000 上的 process cwd 是否對齊 worktree
-         DEV_PID=$(lsof -i :3000 -t 2>/dev/null | head -1)
-         if [ -n "$DEV_PID" ]; then
-           DEV_CWD=$(lsof -p "$DEV_PID" -a -d cwd -F n 2>/dev/null | grep ^n | cut -c2-)
-           if [ "$DEV_CWD" != "<worktree-absolute-path>" ]; then
-             echo "dev server cwd mismatch: $DEV_CWD != <worktree>"
-             # 自動修：kill + 從 worktree 重啟
-             cd <worktree> && pnpm dev:kill && pnpm dev:agent
-           fi
-         fi
-         ```
-
-         - cwd 不對齊 → **自動** `pnpm dev:kill && cd <wt> && pnpm dev:agent`
-         - 無 dev server 跑 → skip（subagent 自己會起）
-         - cwd 對齊 → pass
-
-      3. **Auth route smoke test**（有 `__test-login` / `_dev-login` route 的 consumer）：
-
-         ```bash
-         HTTP_CODE=$(curl -sS -o /dev/null -w '%{http_code}' \
-           "http://127.0.0.1:3000/auth/__test-login?role=admin&email=admin@example.com" 2>/dev/null)
-         ```
-
-         - `302` → pass（auth works）
-         - `404` → dev server 可能從 main 跑（code 沒 fix）或 route 不存在 → 已在 Step c.6.2 修正 dev server cwd；若仍 404 → STOP 回報「auth route broken, check isLoopbackRequest」
-         - 無回應（dev server 沒跑）→ skip（Step c.6.2 已確認沒跑）
-         - **NEVER** 帶 `x-dev-login-token` header 跑 smoke test — 這樣會繞過 loopback detection，隱藏底層問題
-
-      **全綠**：印一行 `✅ Environment readiness: DB synced / dev server aligned / auth OK` 繼續 Step 0d。
-
-      **NEVER**：
-      - 跳過此步直接 dispatch — 任何一道紅燈在 subagent 內撞到都比現在 30 秒驗出來貴 10 倍
-      - 在 smoke test 帶 token header — 會把 isLoopbackRequest bug 藏起來
-      - 把 DB sync 結果完全不留紀錄 — sync + reset 改了共享 dev DB，log 到 HANDOFF 或 task output 讓 user 可回溯（但不是停下來問 user 要不要跑）
+   c.6. **Environment Readiness Check**（clade fork addition；per `docs/pitfalls/2026-06-28-spectra-apply-dispatches-unready-change.md`）：dispatch 前 **MUST** 依 `references/worktree-setup.md` § Step 0c.6 依序跑三項檢查（DB migration sync（含 dev DB reset 自主協調，**NEVER** 停下問 user）/ dev server cwd 對齊 / auth route smoke test，**NEVER** 帶 token header）——任一紅燈自動修或 STOP；**NEVER** 跳過此步直接 dispatch。全綠印一行 `✅ Environment readiness` 繼續 Step 0d。
 
    d. **Internally dispatch via `/wt` Form 3**：
 
@@ -512,103 +401,7 @@ If there is no request_user_input 工具 available, present options as plain tex
    4. **NEVER** dispatch Phase Dispatch（Step 6b）with `medium` effort — schema drift / cross-file refactor / enum exhaustiveness require `high` minimum。Step 8a 系列收集工作允許 `medium`
    5. **NEVER** dispatch task-by-task — phase-level only
 
-   **Codex phase dispatch template**（C 類專用，per `agent-routing.md` 「Codex 派工的標準流程」+「Spectra Apply Phase Dispatch」）:
-
-   1. Write prompt to `/tmp/codex-spectra-apply-<change>-phase-<N>-prompt.md`，內容固定包含：
-
-      ```
-      [DELEGATED-BY-CLAUDE-CODE]
-
-      請執行本 repo 的 spectra-apply phase <N>（<phase-title>）的全部 tasks。
-
-      Change: <change-name>
-      Phase: <N>. <phase-title>
-      Tasks（請依序完成並用 `spectra task done <change> <task-id>` 標記）：
-
-      <每個 task 的編號 + 描述，從 tasks.md 抓>
-
-      Worktree workaround（clade TD-015 / spectra ≤2.3.1）：
-      你在 session worktree 內跑 `spectra task done` 時，`.spectra/touched/` 會正確寫到當前 worktree ✅，
-      但 tasks.md 的 `[ ] → [x]` 翻轉可能寫到 AI Agent system-managed agent worktree（`<consumer>/.claude/worktrees/agent-*/`），
-      導致**當前 worktree 的 tasks.md 沒翻**。每跑完一次 `spectra task done`：
-      1. `git -C $(pwd) diff -- openspec/changes/<change>/tasks.md` 確認當前 worktree 看得到 `[ ] → [x]`
-      2. 若 diff 空 → 手動 Edit tasks.md 把對應行 `- [ ] <task-id>` 改成 `- [x] <task-id>`
-      3. **NEVER** 動 `<consumer>/.claude/worktrees/agent-*/` 內任何檔（harness 自管，session 結束會 GC）
-
-      Plan-first（**MUST**，per `.claude/rules/agent-routing.md` Plan-first 條目）：
-      在動任何 Edit / Write / Bash 寫入動作之前，先在 stdout 最開頭輸出一段 `## Plan` section，包含：
-      - **要動的具體檔案**（每條一行的相對路徑；對應到 phase <N> 內每個 task 的預期落點）
-      - **每個檔案打算做什麼變動**（一句話 — 例如 schema 加哪欄 / API 加哪 endpoint / store 加哪個 action / migration 寫什麼）
-      - **預期影響範圍**（typecheck / 哪些 unit test 會被觸發 / 是否需要 migration / runtime 行為改變）
-      - **task → 檔案對應表**（每個 task ID 對應到哪些檔案，若某 task 不需要改檔請標 `(no file change — verification only)`）
-      Plan 寫完後**立刻**繼續執行，**不要**停下來等確認。Plan 是事前公開思路給主線 cross-check，不是 review gate；主線會用 plan vs. `git diff` 對齊抓「漏做的 task」與「踩到 view 層」這類 drift。
-
-      讀取以下檔案了解上下文：
-      - openspec/changes/<change-name>/proposal.md
-      - openspec/changes/<change-name>/design.md
-      - openspec/changes/<change-name>/specs/*/spec.md
-      - openspec/changes/<change-name>/tasks.md
-      - .claude/rules/（相關 rule，例如 server-api / pinia-store / supabase-* / development）
-
-      View-layer guard（**MUST**）：
-      禁止修改 view 層檔案：
-      - 副檔名：`.vue` / `.tsx` / `.jsx` / `.css` / `.scss`
-      - 目錄：`app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/`
-      若 task 需要 view 層改動，回報 "view layer change required, defer to main thread" 並跳過該 task（不要勾 checkbox），主線會自己處理。
-
-      Commit Authorization（**MUST**，per `.claude/rules/agent-routing.codex-watch-protocol.md` § Commit Authorization）：
-      完成 phase <N> 全部 tasks 後，**MUST** 在 worktree 內 commit 一次（一 phase 一 commit）：
-
-      1. **Commit 前 self-check（任一條命中即 abort、NEVER commit）**：
-         - View-layer drift：
-
-           git diff --staged --name-only | grep -E '\.vue$|\.tsx$|\.jsx$|\.css$|\.scss$|app/(pages|components|layouts)/|^(pages|components|layouts|views)/'
-
-           命中 → 回報 "view layer drift: <files>" 並中止
-         - Scope discipline：
-
-           git diff --staged --name-only
-
-           對比本 phase 預期落點 — 超出範圍 → 回報 "scope drift: <files>" 並中止
-      2. **Selective stage**：`git add -- <each scoped file path>` — **禁止** `git add -A` / `git add .`（會撈到 baseline）
-      3. **Commit**：
-
-         git commit -m "🧹 chore: wt <change-name>-phase-<N> — <一行說明>"
-
-         - **MUST** 用 `🧹 chore: wt <change-name>-phase-<N>` format（emoji-conventional commitlint 合規；主線用 `git log main..HEAD` 對齊 phase）
-         - **禁止** `--no-verify`（per `rules/core/commit.md` hard rule，hook 擋住代表 phase 內容有問題，必須修而非繞）
-
-      仍禁止：`git push` / `git stash`（中途）/ `git commit --amend` / `/commit` / `/spectra-commit` / 跨 phase 混 commit。
-
-      Acceptance：所有 phase <N> 的 tasks 完成、checkbox 已勾、**gate chain（L0–L2）全 PASS**（per [[verify-gate-chain]]）、phase commit 已在 worktree 內成立、`git log main..HEAD` 顯示 `🧹 chore: wt <change>-phase-<N> — ...`。
-      Gate chain FAIL 時：解析 error output → 修正 → 重跑 gate chain，最多 5 輪（per [[verify-gate-chain]] § Iterate-until-green）。超過 5 輪仍 FAIL → 回報 main thread "gate chain not converging after 5 iterations: <last error summary>"。
-      不要動 phase <N> 以外的 tasks。不要碰 ## Design Review 區塊（主線會自己做）。
-      不要呼叫 /spectra-archive。
-      ```
-
-   2. Background bash:
-
-      ```bash
-      cd <consumer-repo-root> && codex exec \
-        --model gpt-5.6-sol \
-        --dangerously-bypass-approvals-and-sandbox \
-        --skip-git-repo-check \
-        -c model_reasoning_effort=high \
-        < /tmp/codex-spectra-apply-<change>-phase-<N>-prompt.md 2>&1
-      ```
-
-   3. Inform user briefly + start Codex Watch Protocol（見 `agent-routing.md`）
-
-   4. After `<task-notification status=completed>` — codex 已在 worktree 自 commit per § Commit Authorization：
-      - BashOutput → read full stdout
-      - Read tasks.md → confirm phase <N> all checkboxes are `[x]`
-      - **MUST commit boundary check**: `git -C <wt> log main..HEAD --oneline` — confirm exactly one new commit per dispatched phase, format `🧹 chore: wt <change>-phase-<N> — ...`. Multiple commits per phase / missing commit / format mismatch → request_user_input: [1] 主線 squash codex 的 multiple commits / [2] `git -C <wt> reset --soft main` 退 staging 重派 / [3] 中止
-      - **MUST view-layer drift double-check**: `git -C <wt> diff main..HEAD --name-only -- '*.vue' '*.tsx' '*.jsx' '*.css' '*.scss' 'app/pages/**' 'app/components/**' 'app/layouts/**' 'pages/**' 'components/**' 'layouts/**' 'views/**'`（codex 自驗應已 abort，此處再驗保險）。**若有任何 view 層檔案被 codex 動過** → request_user_input: [1] `git -C <wt> reset --soft main` 退 staging + 主線剔除 view 改動 + 重派 codex / [2] 接受並由主線自己重跑該 view phase / [3] 中止
-      - **Scope discipline cross-check**: `git -C <wt> diff main..HEAD --name-only` vs prompt 內 phase scope 宣告。超出範圍 → request_user_input 處理
-      - Sanity check: `pnpm typecheck` (or equivalent), relevant tests
-      - **If gaps detected** → request_user_input: [1] 主線在 worktree 內 commit 補丁 / [2] reset 重派 codex / [3] 中止
-
-   5. Move to next phase (re-classify and dispatch or self-execute)
+   **C 類 phase dispatch 執行**：**每一個** C 類 phase 派工前 **MUST** 完整讀 `references/codex-phase-dispatch.md`——prompt 範本（Plan-first / worktree workaround / view-layer guard / Commit Authorization）、background codex exec、Codex Watch Protocol、以及 notification 後的 **MUST checks**（commit boundary / view-layer drift double-check / scope cross-check / sanity check）。**NEVER** 憑記憶派工或跳過 post-notification checks；主線收報後 re-classify 下一個 phase。
 
    6. After ALL C 類 phases complete → **主線 MUST 在本次 apply session 內完成**所有 A、B 類 phases（Design Review / UI view）。具體做法：**直接 invoke Skill tool** 跑 `/design improve`、`/impeccable audit`、`review-screenshot` 等 AI Agent first-class skill，完整跑完該 phase 所有 tasks 並標 `[x]`。
 
@@ -623,7 +416,7 @@ If there is no request_user_input 工具 available, present options as plain tex
 
 6c. **Refactor Invariant Check**（clade fork addition；Layer B of pre-handoff quality gates；not in upstream spectra）
 
-   **理由**：a UI-view refactor MUST NOT change observable behavior. <consumer-a> `app-status-badge-extraction`（2026-05-24）做 `UBadge → AppStatusBadge` refactor，但 `attendance/amendments.vue` 的 `useEmployeeListQuery({ perPage: 200 })` 違反 schema `max(100)` → API 400 → `employeeNameMap` empty → 員工 column 整列「-」。Refactor「component substitute + typecheck pass」判定通過，但 page runtime 已壞 — design review / verify:ui / manual review 全沒攔，user 親眼才抓到。Step 6c 是針對這條失效鏈的 mechanical gate。
+   **理由**：refactor 不得改變 observable behavior；失效鏈實證見 `references/ui-phase-gates.md` § Step 6c 理由。
 
    **觸發範圍**：每個 **Class B（UI view）phase** 由主線在 Step 7 實作完成後、該 phase commit / 標 tasks done **之前**，跑一次。Class A / Class C phase 不觸發（Class C 已由 codex view-layer guard 擋住 view 改動；Class A 是純設計審查）。Phase 內 touched files 沒有 `.vue` list/table page → script 自動 skip（exit 0），不需主線預判。
 
@@ -653,53 +446,14 @@ If there is no request_user_input 工具 available, present options as plain tex
 
 6d. **Review Rules Check**（clade fork addition；not in upstream spectra）
 
-   **理由**：`vendor/review-rules/patterns.json` 定義的機械可檢規則（如 `ubadge-size-ban`、`overlay-width-class`）在 pre-commit hook 有逐行 grep 的 fallback，但跨行 Vue template props（如 `<UBadge\n  size="xs"\n/>`）在 hook 首次落地前會漏抓。在 apply 階段加 multi-line 整檔掃描是 defense-in-depth。<consumer-a> `line-notification-system`（2026-06-26）的 `UBadge size="xs"` 穿過 pre-commit hook 上線即為實證。
+   **理由**：pre-commit hook 逐行 grep 漏抓跨行 Vue props；實證見 `references/ui-phase-gates.md` § Step 6d 理由。
 
    **觸發範圍**：每個 **Class B（UI view）phase** 由主線在 Step 6c 之後、該 phase commit / 標 tasks done **之前**，跑一次。Class A / Class C phase 不觸發。Phase 內 touched files 沒有 `.vue` → skip。
 
    **執行流程**：
 
    1. **收集本 phase touched `.vue` files**：`git -C <worktree> diff main..HEAD --name-only -- '*.vue'`，若空 → skip。
-   2. **跑 review-rules multi-line scan**：
-
-      ```bash
-      node -e "
-      const fs = require('fs');
-      const data = JSON.parse(fs.readFileSync('<consumer>/vendor/review-rules/patterns.json', 'utf8'));
-      const rules = data.rules.filter(r => r.fileGlob === '*.vue');
-      const files = process.argv.slice(1);
-      const tagRe = /<[A-Z][A-Za-z]*(?:\s|\n)(?:[^>]|\n)*?\/?>/g;
-      let hasError = false;
-      for (const rule of rules) {
-        const re = new RegExp(rule.pattern);
-        const exRe = rule.excludePattern ? new RegExp(rule.excludePattern) : null;
-        for (const file of files) {
-          const content = fs.readFileSync(file, 'utf8');
-          // multi-line: 展平 Vue tag 區塊再 match
-          let m; tagRe.lastIndex = 0;
-          while ((m = tagRe.exec(content)) !== null) {
-            const flat = m[0].replace(/\n\s*/g, ' ');
-            if (re.test(flat) && !(exRe && exRe.test(flat))) {
-              const line = content.slice(0, m.index).split('\n').length;
-              process.stderr.write('[' + rule.id + '] ' + file + ':' + line + ' ' + rule.message + '\n');
-              if (rule.severity === 'error') hasError = true;
-            }
-          }
-          // single-line fallback for non-tag patterns
-          const lines = content.split('\n');
-          for (let i = 0; i < lines.length; i++) {
-            if (re.test(lines[i]) && !(exRe && exRe.test(lines[i]))) {
-              // 避免 tag-extracted 重複命中
-              if (/<[A-Z]/.test(lines[i])) continue;
-              process.stderr.write('[' + rule.id + '] ' + file + ':' + (i+1) + ' ' + rule.message + '\n');
-              if (rule.severity === 'error') hasError = true;
-            }
-          }
-        }
-      }
-      process.exit(hasError ? 1 : 0);
-      " <touched-vue-files...>
-      ```
+   2. **跑 review-rules multi-line scan**：內嵌 node 腳本全文見 `references/ui-phase-gates.md` § Step 6d multi-line scan（讀 `vendor/review-rules/patterns.json`，展平 Vue tag 後 match，stderr 印 `[rule-id] file:line`）。
 
    3. **解析 exit code**：
       - **exit 0** → 通過，繼續 commit / 標 done。
@@ -832,254 +586,15 @@ If there is no request_user_input 工具 available, present options as plain tex
 
    Cookbook 與範本入口：`vendor/snippets/verify-channels/README.md`。
 
-   **Pre-verify baseline check（dispatch 前必做）**：
+   **Pre-verify baseline check + 自接路徑**：dispatch 任何 verify channel 前 **MUST** 完整讀 `references/verify-channels.md` § Pre-verify——per-channel baseline 檢查、mis-marked item reclassify（TD-176）、以及 baseline 存在但功能性缺時的 (a)(b)(c)(d) self-collect chain（預設派背景 codex，per [[pitfall-verify-evidence-handoff-instead-of-self-collect]]）。**四層全失敗才**寫 `deferred` annotation 且 MUST 註明已嘗試 path；主線收 codex JSON evidence 後 **MUST 抽查至少一項**再寫 annotation。
 
-   1. 主線先 grep / read dev-login route：
+   **執行流程**：**MUST** 完整讀 `references/verify-channels.md` § 執行流程，逐 channel 執行——`[verify:e2e]` 主線寫 Playwright spec、`[verify:api]` 主線跑 HTTP round-trip、`[verify:ui]` 走 codex dispatcher + **Screenshot Match Analysis gate**（收集 medium / 判斷 xhigh 分離）、multi-marker 依 `e2e → api → ui`、deprecated `[verify:auto]` 視為 `[verify:api+ui]`。evidence 一律走 `evidence-store.ts` 寫入（payload 進 sidecar，短 marker 貼 tasks.md）。
 
-      ```bash
-      find server packages -path '*/server/routes/auth/_dev-login.get.ts' -o -path '*/server/routes/auth/__test-login.get.ts' 2>/dev/null
-      ```
+   **反 bypass（hard rule — 2026-06-11 audit 實證）**：
 
-   2. 依 channel 補查：
-      - `[verify:e2e]`：Playwright config + `e2e/fixtures/index.ts` style three-role fixture 必須存在（propose 階段 `post-propose-manual-review-check.sh` 已對「標 verify:e2e 但 repo 無 e2e infra」印 warn-only advisory；apply 此處為 hard baseline gate，defense in depth）
-      - `[verify:api]`：`__test-login` 或等價 session bypass route 必須存在
-      - `[verify:ui]`：`supabase/seed.sql` 或專案等價 seed file 必須存在
-   3. 缺 baseline → 先判別**該 item 是否真的需要此 channel**（per TD-176）：
-      - **Legitimately 需該 channel**（真 persistence journey 需 e2e / 真需 session round-trip）但 infra 缺 → **STOP**，回報 user 補齊 baseline。
-      - **Mis-marked**（描述其實是 final-state 顯示 → `[verify:ui]` / API round-trip → `[verify:api]` / 使用者互動 round-trip「建立/編輯/輸入/點/存」→ `[review:ui]`）→ **MUST reclassify marker**（不是補 infra）；判別依 `manual-review.evidence.md` Kind 分類指引。
-      - 兩 case 皆 **NEVER**：派 agent 撞錯、或讓 screenshot-review 補 seed。
-
-   **Baseline-exists-but-functional-gap 自接路徑（hard rule，clade fork addition — per [[pitfall-verify-evidence-handoff-instead-of-self-collect]]）**：
-
-   Baseline 確認存在但**功能性缺**（dev-login route 不接 fixture user UUID / 受測 endpoint 需要 role 不符 / seed identifier 對應不到 dev-login allow-list / curl 401 因 cookie missing 等），主線 / subagent **MUST** 依序嘗試以下 self-collect path，**全部失敗才**寫 `deferred` annotation：
-
-   **(a)(b) 執行者 — 預設派背景 codex**：
-
-   (a)(b) 兩層**預設**派背景 codex 執行，主線不 foreground 自跑：
-
-   ```bash
-   node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
-     --template ~/offline/clade/vendor/snippets/codex-offload/templates/self-collect-evidence.template.md \
-     --var <key>=<value> ...（依 template 變數表填：change name、dev-login route 路徑、fixture UUID、port、table 等） \
-     --label 8a-self-collect-<change> --effort medium
-   ```
-
-   （背景跑、stdout 單一 JSON evidence；exit 0=ok / 2=(a)(b) 皆業務 fail / 3=機械故障 / 4=quota。exit 2 → 主線依序降到 (c)(d)，**不**重派同一 brief；exit 3/4 → 機械故障，主線 fallback foreground 自跑 (a)(b) 再續 chain。）
-
-   - **(c)(d) 既有路徑不動**：(c) 維持主線自起 dev server + agent-browser；(d) 已走 `codex-dispatch-screenshot-verify.ts`，**不**改走本 dispatcher
-   - **Evidence annotation 寫回 tasks.md 維持主線**（多 session 共用 working tree 的寫入紀律）— codex 只回報 JSON evidence，**NEVER** 讓 codex 直接 Edit tasks.md
-   - 主線收到 codex JSON evidence 後 **MUST 抽查至少一項**（重跑一條 curl / SELECT 比對回報值）再寫 annotation — **不信 codex 自報**
-
-   **(a) 擴 dev-login route allow-list**（首選；最持久的治根）：
-
-   - Read consumer 端 `server/routes/auth/_dev-login.get.ts`（或 `__test-login.get.ts`、其他等價 dev-only signin endpoint）
-   - 加 fixture user UUID 進 allow-list（env var allow-list / query param verified UUID / `dev_user_id` query 接受）
-   - 改完跑 `curl -i 'http://localhost:<port>/auth/_dev-login?user_id=<fixture-uuid>'` 驗證 session cookie 可 mint
-   - 後續 verify channel 直接重用該 cookie → 成功則 self-collect 路徑收斂在此
-
-   **(b) service_role direct DB query 證 data shape**（escape hatch；HTTP 路徑無法搭起時）：
-
-   - 用 `@supabase/supabase-js` service_role client（或對應 server 端 service_role 連線）直連 DB 跑 `SELECT` 證明 endpoint 期待回傳的 data shape 正確
-   - annotation 寫法 **MUST** 標明走 DB 而非 HTTP（避免後續 audit 誤判 round-trip 已完成）。此 escape hatch **維持 legacy 行內格式**——`direct-db-shape` 這個記號本身就是要讓後續 audit 一眼看到，搬進 sidecar 反而藏起來：
-     ```text
-     (verified-api: <ISO-8601> direct-db-shape table=<table> rows=<n> sha=<sha256-12chars>)
-     ```
-   - 限制：不能驗證 endpoint 的 authz / RLS / response transform 邏輯；只驗 data shape。authz / transform 必須走 (a)(c)(d) 任一
-
-   **(c) 主線自起 dev server + agent-browser self-login**（OAuth 已設好時）：
-
-   - scan free port（3001-3050，避開 3000）`run_in_background` 起 dev server
-   - agent-browser 走 OAuth flow 自手 login（agent-browser persistent profile 已登入）
-   - final-state screenshot + DOM 觀察
-   - 適用：OAuth provider 在 dev 環境可達 + user 已登入過
-
-   **(d) 派 screenshot-review codex（mode: verify）**：
-
-   - 給 codex 完整 brief（含 dev server URL + known route + expected DOM observation + screenshot path）
-   - codex 跑 final-state screenshot capture
-   - 適用：純 final-state visual evidence、不涉及 mutation / multi-role / form fill
-
-   **四層全失敗才寫 deferred** + handoff user。Annotation **MUST** 註明已嘗試 path 與失敗原因（避免 user 重複試同樣 path）：
-
-   ```text
-   （deferred: tried (a) dev-login route 不接 fixture UUID（route 限 E2E test user only）/ (b) service_role 不適用（需驗 RLS）/ (c) OAuth provider unreachable in dev / (d) screenshot-review fail with <reason>。剩需 user 親自跑）
-   ```
-
-   完整 recipe + 適用 / 不適用情境見 `vendor/snippets/verify-channels/main-self-collect-fallback-chain.md`。
-
-   **執行流程**：
-
-   1. **解析未勾 verify items 並依 `kinds` 分類**
-
-      - 單一 `[verify:e2e]` / `[verify:api]` / `[verify:ui]` 依該 channel 執行。
-      - Multi-marker 依 `e2e → api → ui` 順序逐 channel 執行。
-      - Deprecated `[verify:auto]` **MUST** resolution as `[verify:api+ui]`；同時記錄 deprecation warning，後續 archive-gate 也會 warn。
-
-   2. **`[verify:e2e]` channel — 主線自己寫 Playwright spec**
-
-      - Copy/adapt `vendor/snippets/verify-channels/e2e-spec.template.ts`。
-      - Spec path **MUST** 是 `e2e/verify/<change>/<topic>.spec.ts`。
-      - 跑：
-
-        ```bash
-        pnpm test:e2e:verify <change>
-        ```
-
-      - Spec pass 後，**MUST** 先確認 Playwright trace zip 真的有產出（`ls -1 test-results/**/trace.zip` 或對應 reporter output 路徑），再寫 evidence（payload 進 sidecar，stdout 印出的短 marker 原樣貼進 tasks.md 該 item 行末）：
-
-        ```bash
-        node ~/offline/clade/vendor/scripts/lib/evidence-store.ts \
-          --repo . --change <change> --write --item '#<id>' --kind verified-e2e \
-          --spec 'e2e/verify/<change>/<topic>.spec.ts' --trace '<trace-path>'
-        # stdout: (verified-e2e: <ISO-8601>)
-        ```
-
-      - Trace zip 抓不到（playwright.config 沒開 `trace: 'on'` / per-test 沒 `test.use({ trace: 'on' })`）→ **視同 blocker**，保留 `[ ]`，寫 `（issue: trace not captured — enable trace recording in playwright.config or per-test）`；**NEVER** 省略 `--trace` 硬寫降級 evidence（CLI 會 exit 2，archive-gate 也會擋）。
-      - Spec fail → 保留 `[ ]`，寫 `（issue: <spec failure summary>）` 或回報 blocker；**NEVER** 寫 `(verified-e2e:)`。
-
-   3. **`[verify:api]` channel — 主線自己跑 HTTP round-trip**
-
-      - Copy/adapt `vendor/snippets/verify-channels/api-roundtrip.template.sh` 或直接用 curl / ofetch 跑等價 request。
-      - 通過後，主線寫 evidence（payload 進 sidecar，stdout 印出的短 marker 原樣貼進 tasks.md 該 item 行末）：
-
-        ```bash
-        node ~/offline/clade/vendor/scripts/lib/evidence-store.ts \
-          --repo . --change <change> --write --item '#<id>' --kind verified-api \
-          --method '<METHOD>' --url '<URL>' --status '<STATUS>' [--body '<sha256-12chars>']
-        # stdout: (verified-api: <ISO-8601>)
-        ```
-
-      - Request fail / status 不符 → 保留 `[ ]`，寫 `（issue: <METHOD URL expected/actual>）` 或回報 blocker；**NEVER** 寫 `(verified-api:)`。
-
-   4. **`[verify:ui]` channel — 派 verify mode（UI only）**
-
-      **Model allocation**：截圖收集由 **codex GPT-5.6-sol medium** 執行；收集完成後由 **codex GPT-5.6-sol xhigh** 分析每張截圖是否匹配對應 item 要求（防止亂截圖搪塞——收集與判斷分開、同 model 不同 effort，收集便宜跑快、判斷用最高推理力）。
-
-      **Runtime 選擇**（default codex；Claude subagent fallback）：
-
-      - **Default — codex**：偵測 `command -v codex` 存在且 env `CLADE_FORCE_CLAUDE_SCREENSHOT` 未設 → 呼叫 `node <clade-vendor>/scripts/codex-dispatch-screenshot-verify.ts --change <name> --consumer-path . --dev-server-url <url> --items-json <items.json>`（dispatcher 內部以 **medium** effort 收集截圖）。Dispatcher 跑完 stdout 印 JSON 摘要（`{"runtime":"codex","change":...,"items":[...],"audit_exit_code":N,"progress_json":"...","review_md":"..."}`），主線解析該 JSON 後進入 **Screenshot Match Analysis gate**（見下方 §）。Codex 任一 item `status` 不是 `PASS` 時 → 保留 `[ ]` + 寫 issue / blocker（業務結果，**NEVER** fallback Claude — 同一 brief 在 Claude 也會撞同樣業務問題）
-      - **Fallback — Claude subagent**：以下任一情境**才** fallback 到 `screenshot-review` subagent（brief copy/adapt 自 `vendor/snippets/verify-channels/ui-final-state-brief.template.md`）：
-        - `command -v codex` 不存在
-        - env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 強制退場（debug / 退場用）
-        - Dispatcher exit 非 0 **且** stdout 沒印出可 parse 的 JSON 摘要（機械故障，例如 codex auth 失效、subprocess crash）
-      - 兩 runtime 走相同的 brief contract（change name、dev server URL、items、Scope）；codex runtime 多了 self-contained guardrails（codex 不會 auto-load `screenshot-review.md`）
-
-      **反 bypass（hard rule — 2026-06-11 audit 實證）**：
-
-      - **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 `verify:ui` evidence 來取代本步 dispatcher — 2026-06-11 audit 實證：05-29 dispatcher 修復後 147 條 `(verified-ui:)` annotation **0 次走 codex**、92 個 session 全部走此 bypass 形狀（從未進入本分支）、0 次機械故障 fallback 記錄。需要 `verify:ui` evidence 的**唯一**入口是 `node ~/offline/clade/vendor/scripts/codex-dispatch-screenshot-verify.ts`
-      - **Claude fallback 僅限機械故障**（`command -v codex` 不存在 / dispatcher exit≠0 且 stdout 無 parseable JSON；env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 為 user 明確設定的 debug 退場，不在此限），且 **MUST** 在 tasks.md 對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡 — **無此痕跡的 Claude 自拍 evidence 視為違規**（audit 以 annotation × dispatcher 記錄比對抓）
-
-      共用規約：
-
-      - Brief **MUST** 提供 change name、dev server URL、每個 item 的 known URL、**`ready_signal`（structured，見下）**、預期 screenshot path。
-      - **主線 MUST 為每個 assertion-bearing verify:ui item 建 `ready_signal`**：從 item 描述的具體可斷言短語抽機械可判 signal（`text` / `text_all` / `text_any` / `selector` / `regex` / `min_rows`），放進 `--items-json` 的 `ready_signal` 欄。agent capture 前 poll 它命中才拍、拍後 cross-check 它仍在才算 PASS（見 `manual-review.data-readiness.md` § `[verify:ui]` ready_signal 契約 + screenshot-review Verify Mode step 2-4）。**理由**：頁面 async query 資料在 `wait_for_load()` 之後才填，無 signal 時 agent 只能盲拍 → 拍到空殼（per <consumer-b> monitoring-slot 2026-05-30 incident）。
-      - **建不出 `ready_signal`**（描述只有「畫面正常」「顯示資料」等模糊語、無具體斷言點）→ **NEVER** 硬 dispatch；依 `manual-review.data-readiness.md` § signal-less 分流 reclassify（純主觀視覺 → `[review:ui]`；需互動才出現 → `[verify:e2e]` / `[verify:api]`）。既有未帶 signal 的 grandfather item → agent 走 generic-settle fallback（**不可**當 PASS 充分條件）。
-      - Agent scope **MUST** 限於 open known URL + readiness gate poll（≤15s 等 ready_signal）+ final-state screenshot + post-capture cross-check + DOM observation。
-      - Agent **NEVER** 做 mutation / form fill / click sequences / multi-role login switching / seed repair。
-      - PASS 後，主線寫 evidence（payload 進 sidecar，stdout 印出的短 marker 原樣貼進 tasks.md 該 item 行末）：
-
-        ```bash
-        node ~/offline/clade/vendor/scripts/lib/evidence-store.ts \
-          --repo . --change <change> --write --item '#<id>' --kind verified-ui \
-          --screenshot 'screenshots/local/<change>/#<id>-final.png' [--dom '<obs>']
-        # stdout: (verified-ui: <ISO-8601>)
-        ```
-
-      - FAIL / UNCERTAIN → 保留 `[ ]`，寫 issue 或回報 blocker；**NEVER** 寫 `(verified-ui:)`。
-
-      **Screenshot Match Analysis gate**（截圖收集完成後 xhigh 分析）：
-
-      Dispatcher 收集完所有截圖後（JSON 摘要已拿到），**MUST** 對每個 `status === "PASS"` 的 item 派 **codex GPT-5.6-sol xhigh** 做截圖 vs 要求匹配分析：
-
-      ```bash
-      codex exec \
-        --model gpt-5.6-sol \
-        --dangerously-bypass-approvals-and-sandbox \
-        --skip-git-repo-check \
-        -c model_reasoning_effort=xhigh \
-        < /tmp/codex-screenshot-match-analysis-<change>-prompt.md 2>&1
-      ```
-
-      Prompt 內容固定包含：
-
-      ```text
-      [DELEGATED-BY-CLAUDE-CODE]
-
-      你是截圖匹配分析器。對以下每張截圖，判斷它是否真正匹配對應的 verify:ui item 要求。
-
-      Change: <change-name>
-
-      Items to analyze:
-      <對每個 PASS item 列出>
-      - #<id>
-        要求描述: <item description from tasks.md>
-        ready_signal: <the ready_signal that was used>
-        截圖路徑: screenshots/local/<change>/#<id>-final.png
-        DOM observation: <from dispatcher JSON>
-
-      請逐一分析每張截圖：
-      1. 讀取截圖檔案
-      2. 比對 item 描述的具體要求（預期看到的 UI 元素、文字、排序、badge、狀態）
-      3. 比對 ready_signal 宣告的條件是否在截圖中可見
-      4. 判定 MATCH / MISMATCH / UNCERTAIN
-
-      輸出 JSON：
-      {"items": [{"id": <N>, "verdict": "MATCH"|"MISMATCH"|"UNCERTAIN", "reason": "<一句話>"}]}
-
-      判定標準：
-      - MATCH: 截圖明確顯示 item 描述要求的 UI 元素 / 文字 / 狀態
-      - MISMATCH: 截圖是空白頁 / 錯誤頁 / 顯示內容與要求無關 / 關鍵元素缺失
-      - UNCERTAIN: 無法確定（截圖模糊 / 部分匹配）
-
-      MISMATCH 和 UNCERTAIN 都視為需要重新處理。
-      ```
-
-      **分析結果處理**：
-      - **全部 MATCH** → 對每個 item 寫 `(verified-ui:)` annotation
-      - **任一 MISMATCH / UNCERTAIN** → 該 item 保留 `[ ]`，寫 `（issue: screenshot-match-analysis: <reason>）`；主線重派 codex medium 重拍該 item（最多 2 輪），重拍後再跑一次 xhigh 分析
-      - **Codex xhigh 不可用 / 機械故障** → fallback 派 Sonnet 5 讀截圖檔做 visual sanity check（Sonnet 5 可讀圖、速度快），判定 MATCH 才寫 annotation
-
-      **NEVER** 跳過 Screenshot Match Analysis 直接寫 `(verified-ui:)` annotation — 收集與判斷分離是防搪塞的核心機制。
-
-      Brief 範例：
-
-      ```text
-      mode: verify
-      Channel: verify:ui
-      Change: <change-name>
-      Dev server URL: http://localhost:<port>
-
-      Items:
-      - #3 [verify:ui]
-        Description: /asset-loans 顯示 overdue badge + top-sort
-        Known URL: http://localhost:<port>/asset-loans
-        ready_signal:
-          text_any: ["逾期", "overdue"]
-          selector: "[data-testid=asset-loan-overdue-badge]"
-          min_rows: 1
-        Screenshot path: screenshots/local/<change-name>/#3-final.png
-
-      Scope:
-      - Open the known URL, wait for load, **poll ready_signal until present (≤15s)**, capture final-state screenshot, **post-capture cross-check ready_signal still present**, record DOM observation.
-      - Do NOT click, fill forms, submit mutations, switch roles, repair seed, or patch network.
-      ```
-
-   5. **Multi-marker completion semantics**
-
-      - 每個 channel 完成就寫對應 annotation；同一 line 可同時有 `(verified-e2e:)` / `(verified-api:)` / `(verified-ui:)`，順序 **MUST** 是 e2e → api → ui。
-      - 最後一個 channel 完成且 item 不含 `verify:ui` / `review:ui` 時，呼叫 review-gui auto-check helper `autoCheckCompletedAutomaticItems(...)`，自動 flip `[x]`。
-      - item 含 `verify:ui` 或 `review:ui` 時，checkbox **MUST** 保持 `[ ]`，等 user 在 review GUI 確認。
-
-   6. **Deprecated `[verify:auto]` alias**
-
-      - Alias resolution：視為 `[verify:api+ui]`。
-      - 主線先跑 API channel，再派 UI channel。
-      - 新 tasks **NEVER** author `[verify:auto]`；若 Step 8a 碰到它，只做 backward-compatible execution 並保留 deprecation warning。
-
-   7. **Exit**
-
-      - 所有 automatic-only items 完成 annotations 後，呼叫 `autoCheckCompletedAutomaticItems(...)` 讓 review-gui helper 自動勾 `[x]`。
-      - 所有含 `verify:ui` 的 items 保持未勾，進 Step 8b 由 user GUI 確認 visual evidence。
+   - **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 `verify:ui` evidence 來取代 dispatcher — 需要 `verify:ui` evidence 的**唯一**入口是 `node ~/offline/clade/vendor/scripts/codex-dispatch-screenshot-verify.ts`
+   - **Claude fallback 僅限機械故障**（`command -v codex` 不存在 / dispatcher exit≠0 且 stdout 無 parseable JSON；env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 為 user 明確設定的 debug 退場），且 **MUST** 在 tasks.md 對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡 — 無此痕跡的 Claude 自拍 evidence 視為違規（audit 以 annotation × dispatcher 記錄比對抓）
+   - **NEVER** 跳過 Screenshot Match Analysis 直接寫 `(verified-ui:)` annotation — 收集與判斷分離是防搪塞的核心機制
 
    **Guardrails**：
    - **NEVER** 要求 user 在 GUI 確認 `[verify:e2e]` / `[verify:api]` automatic-only items；annotation pass 後 helper 自動 done。
@@ -1109,59 +624,7 @@ If there is no request_user_input 工具 available, present options as plain tex
 
    **MUST** before Step 8b handoff, 派 **codex GPT-5.6-sol medium** 跑 5-dimension 收集（template 見下），再由 **codex GPT-5.6-sol xhigh** 對收集結果做 5-dimension 判定：
 
-   **E.1 收集階段**（codex GPT-5.6-sol medium）：
-
-   ```bash
-   codex exec \
-     --model gpt-5.6-sol \
-     --dangerously-bypass-approvals-and-sandbox \
-     --skip-git-repo-check \
-     -c model_reasoning_effort=medium \
-     < /tmp/codex-8a6-e1-collect-<change>-prompt.md 2>&1
-   ```
-
-   Prompt 基於 `~/offline/clade/vendor/snippets/pre-handoff-cross-check/main-self-analysis.template.md`，要求 codex 走全 **5 dimensions**（D1 task↔render / D2 evidence↔dom fab guard / D3 list↔fallback / D4 api contract boundary / D5 error tail），對每個 dimension 收集**客觀 evidence**（讀截圖、讀 DOM observation、讀 annotation、讀 git diff、讀 API response），輸出 JSON：`{"dimensions": [{"id":"D1","evidence":"...","raw_data":"..."}, ...]}` — 收集階段**不做** PASS/FAIL 判定。
-
-   **E.1 判定階段**（codex GPT-5.6-sol xhigh）：
-
-   ```bash
-   codex exec \
-     --model gpt-5.6-sol \
-     --dangerously-bypass-approvals-and-sandbox \
-     --skip-git-repo-check \
-     -c model_reasoning_effort=xhigh \
-     < /tmp/codex-8a6-e1-judge-<change>-prompt.md 2>&1
-   ```
-
-   Prompt 給上一階段收集的 5-dimension evidence JSON，要求對每個 dimension 判定 `PASS` / `FAIL` / `N/A` + 判定理由。輸出 JSON：`{"dimensions": [{"id":"D1","verdict":"PASS"|"FAIL"|"N/A","reason":"..."}, ...]}` 。
-
-   **E.1 結果處理**（主線）：
-   1. 解析判定 JSON，寫 **finding report**（每個 dimension explicit verdict + evidence）。
-   2. For each `FAIL`: edit `## 人工檢查` item to append `（issue: <summary + where>）`; D2 fabrication findings additionally strip the bad `(verified-ui:)` annotation and restore `[ ]`.
-   3. **No finding report written → NO Step 8b handoff.** This is the gate.
-   4. **Record the E.1 verdict（telemetry-only，fail-open）**：
-
-      ```bash
-      node <clade-vendor>/scripts/pre-handoff-ledger.ts record \
-        --consumer-path . --change <change-name> --layer E.1 \
-        --status <pass|fail> \
-        --findings-json '[{"dimension":"D2","severity":"critical"}, ...]'
-      ```
-
-      `--status fail` 當任一 dimension FAIL，否則 `pass`；`--findings-json` 列每個 FAIL 的 `{dimension, severity}`（無 FAIL 給 `[]`）。此 step append-only + fail-open，**NEVER** 因 ledger 寫入失敗而中斷 handoff。此 E.1 record 現由 `archive-gate.sh` **Check 7（Pre-handoff Verdict Presence）機械強制存在** — 缺 E.1 record → archive 被擋 exit 2（fail-open 僅限 ledger 檔尚不存在的 pre-propagation consumer）。
-
-   **Layer E.2 — codex cross-model second opinion**（clade fork addition；Phase 2）：E.1 之後 **MUST** 再派 **codex GPT-5.6-sol xhigh** 對同 5 dimension 做獨立 cross-check（E.1 收集 + 判定都是同 model 同 session，E.2 另起一個 session 獨立審——不同 session 各自推理，防止 E.1 session 內的 rationalization 傳染）：
-
-   ```bash
-   node <clade-vendor>/scripts/codex-dispatch-pre-handoff-check.ts \
-     --change <change-name> --consumer-path . \
-     --tasks-file openspec/changes/<change-name>/tasks.md \
-     --screenshots-dir screenshots/local/<change-name>
-   ```
-
-   - Dispatcher stdout 印 JSON：`{"layer":"E.2","runtime":"codex","status":"pass"|"fail","findings":[{dimension,severity,evidence,suggested_fix}]}`。
-   - **merge E.1 + E.2 findings**：兩方任一 `FAIL` → 對應 item 寫 `（issue: <dimension>: <evidence>）` annotation（去重；D2 fabrication 同樣 strip 假 `(verified-ui:)` + restore `[ ]`）。
-   - **Fallback**：dispatcher 回 `status:"error"` + `fallback:"claude-subagent"`（codex 不在 / 無 parseable JSON）→ 改派一個 Claude subagent 用 `main-self-analysis.template.md` 同 5 dimension 做 cross-check（**NEVER** 憑記憶補；**NEVER** 跳過 cross-check 直接 handoff）。
+   **E.1 + E.2 執行**：**MUST** 完整讀 `references/pre-handoff-checks.md` § Step 8a.6 執行——E.1（codex medium 收集 5-dimension evidence → codex xhigh 判定 → 主線寫 finding report、FAIL 補 `（issue:）` / strip 假 annotation → `pre-handoff-ledger.ts record`）與 E.2（`codex-dispatch-pre-handoff-check.ts` cross-model 獨立審；fallback Claude subagent，**NEVER** 憑記憶補、**NEVER** 跳過 cross-check 直接 handoff）。**No finding report written → NO Step 8b handoff — this is the gate**；E.1 record 由 `archive-gate.sh` Check 7 機械強制。
 
    **Level**: Phase 2 仍為 **warning / soft-gate** — E.1 + E.2 都跑、findings 必寫成 `（issue:）`annotation 讓 user 在 review-gui 看到，但**不**hard-block workflow（user 在 GUI 拍板）。Phase 3.1 才把「zero unresolved findings」整進 `archive-gate.sh` 成 hard gate。每次 E.1/E.2 verdict 已落 `<consumer>/.spectra/pre-handoff-ledger.jsonl`（telemetry，gitignored）；Phase 3.1 升 hard gate 的 soak 評估跑 `node <clade-vendor>/scripts/pre-handoff-ledger.ts report --all-consumers`（出 fire-rate / by-dimension / E.1↔E.2 agreement）。
 
@@ -1173,35 +636,7 @@ If there is no request_user_input 工具 available, present options as plain tex
 
    **觸發條件**：`## 人工檢查` 含至少一個 `[verify:ui]` item 且 `screenshots/local/<change>/` 目錄存在。否則 silent skip。
 
-   **執行流程**：
-
-   1. **跑 audit**：
-
-      ```bash
-      node --experimental-strip-types ~/offline/clade/vendor/scripts/audit-screenshot-staleness.ts \
-        --repo <consumer-or-worktree-path> --change <change-name> --json
-      ```
-
-      解析 JSON output 的 `stale` 和 `legacy` arrays。
-
-   2. **LEGACY 清理**：刪掉 `legacy` array 內所有無 `#N` 前綴的舊圖（`rm` 即可；它們不配對任何 item）。
-
-   3. **STALE 重拍**（**codex GPT-5.6-sol medium**）：對 `stale` array 內每個 item：
-      - 從 tasks.md `## 人工檢查` 找到對應 `#N` item 的 URL + ready_signal
-      - 派 codex GPT-5.6-sol medium 透過 `codex-dispatch-screenshot-verify.ts` 重拍該張截圖
-      - 覆蓋原檔（mtime 自然 > last UI commit）
-      - 重拍完成後，對重拍的截圖跑 **Screenshot Match Analysis gate**（同 Step 8a § 4 的 codex GPT-5.6-sol xhigh 分析），確認重拍截圖匹配要求
-
-   4. **重跑 audit 確認 0 stale**：
-
-      ```bash
-      node --experimental-strip-types ~/offline/clade/vendor/scripts/audit-screenshot-staleness.ts \
-        --repo <consumer-or-worktree-path> --change <change-name> --json
-      ```
-
-      `stale` array 長度 **MUST** 為 0 才進 Step 8b。若仍有 stale → 重拍對應項（最多 2 輪）。
-
-   5. **Commit 更新截圖**：selective `git add -f` 重拍的檔案 + `git commit`。
+   **執行流程**：**MUST** 依 `references/pre-handoff-checks.md` § Step 8a.7 執行——`audit-screenshot-staleness.ts` → LEGACY 清理 → STALE 重拍（codex medium + Screenshot Match Analysis）→ 重跑 audit 至 `stale` 為 0（最多 2 輪）→ selective commit 更新截圖。
 
    **Skip 條件**：
    - 無 `screenshots/local/<change>/` 目錄（純 backend change）
@@ -1253,19 +688,7 @@ If there is no request_user_input 工具 available, present options as plain tex
 
    **NEVER** 自判 bucket、NEVER 跳過 script — Claude 自判已 9 次證明不可靠。
 
-   - **DEFAULT path**（**MUST script exit 0 才發**）: Reply to the user with something like:
-     > Implementation 完成。Step 8a 已處理 verify channels：automatic `[verify:e2e]` / `[verify:api]` items 已寫 annotation 並自動完成；含 `[verify:ui]` / `[review:ui]` 的 `<N>` 項仍待你確認。請在 **clade home**（`~/offline/clade`）執行 `pnpm review` 開本地 GUI 驗收（review-gui 從 clade home 跑會自動聚合所有 consumer + worktree change；consumer 端直接跑會被 clade-only guard 擋下；`pnpm review` dev mode default ON，改 review-gui source 自動 reload）：
-     >
-     >   cd ~/offline/clade
-     >   pnpm review
-     >
-     > GUI 啟動後直接打開：
-     >
-     >   http://127.0.0.1:5174/review/<consumer-id>:<change-name>
-     >   # 例 <consumer-e> 的 mvp-financial-layer-bootstrap：
-     >   # http://127.0.0.1:5174/review/<consumer-e>:mvp-financial-layer-bootstrap
-     >
-     > GUI 會自動配對 `screenshots/local/<change-name>/#<N>-*.png`、conflict-aware 寫回 tasks.md、對 `[verify:e2e]` / `[verify:api]` automatic-only items 自動勾 `[x]`、對 `[verify:ui]` / `[review:ui]` items 顯示 evidence 等你 OK / Issue / Skip。完成後回報，我繼續 Step 9 status。
+   - **DEFAULT path**（**MUST** script exit 0 才發）：handoff message 措辭 **MUST** 照 `references/pre-handoff-checks.md` § Step 8b DEFAULT message 範本（`cd ~/offline/clade && pnpm review` 指引 + review-gui deep-link + GUI 行為說明）。
    - **MUST 直接給 review-gui deep-link**（per `rules/core/proactive-skills.md` § Inline Review-GUI Deep-Link）：訊息 **MUST** 含 `http://127.0.0.1:5174/review/<consumer-id>:<change-name>` 完整 URL（cross-consumer mode 預設啟用，沒 `<consumer-id>:` prefix 會 fallback 到 clade mainEntry → API 404；`<consumer-id>` 從 `~/offline/clade/registry/consumers.json` 對應 entry 抓）。**NEVER** 寫「請在 worktree root 執行」或「請在 main consumer root 執行」當預設措辭——review-gui (`vendor/scripts/review-gui.ts` `listSourceRoots`) 從 clade home 跑時偵測 `vendor/scripts/review-gui.ts` + `consumers.local` 雙標記 → 進 cross-consumer mode，自動聚合所有 consumer + worktree change；consumer 端跑會被 `preflightCladeOnly` guard 擋下、退出 exit 2。**NEVER** 列 dev server URL（`http://localhost:3040/admin/...`）當替代——review-gui 內部已有 final-state screenshot + evidence。若 review 過程發現需要 fresh screenshot 或 user 想 sanity check，**MUST** 由 agent 自起 dev server（per `rules/core/proactive-skills.md` § Dev Server Auto-Spawn：scan free port 3001–3050、避開 3000、`run_in_background`、回報 URL + shellId），**NEVER** 叫 user cd worktree 跑 `pnpm dev`。`5174` 是 `vendor/scripts/review-gui.ts` `DEFAULT_PORT`，找不到時會 fallback 到 5174-5194，由 GUI startup banner 告知 user，主線不必猜。
    - Wait for the user to complete the GUI flow and report back. Do NOT proceed to Step 9 / propose archive until the user signals manual review is done.
    - **NEVER** default to `request_user_input` chat dialog walking items one-by-one — it burns tokens, ignores the screenshot pool, and contradicts `rules/core/manual-review.md` 標準流程.

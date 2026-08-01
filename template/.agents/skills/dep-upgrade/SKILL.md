@@ -73,6 +73,34 @@ gate 沒有 `--allow-main` escape hatch，這是刻意的。
 
 ---
 
+# § Fleet mode carve-out 准入（SoT）
+
+> 本節是 [[clade-role-and-todo-discipline]] § upstream-driven dep migration 的准入條件 SoT（2026-08-02 自該 rule 移入）；rule 端只留觸發判定 stub。Fleet 流程 Step F.2.3 對本節逐條自查。
+
+每次 Fleet sweep **必須**全部滿足：
+
+- ✅ 變動一對一對應上游 release 列出的 BC（rename / removal / signature change / config schema 變更）— 找不到對應 clause 的改動，不准帶進來
+- ✅ 每個 consumer 各自開 worktree（per [[worktree-default]]），不在 main 直接動
+- ✅ 每個 consumer 一個 atomic commit，依該 consumer `registry/consumers.json` 的 `workflow_model` 走（trunk-based 直接 push、pr-merge-based 開 PR）
+- ✅ 一次 sweep 只處理「**一個套件 × 一個 target version**」，不跨多套件 / 多 release 混在同一 sweep
+- ✅ 命中該套件的 consumer 才動；沒命中的 consumer **NEVER** 順便動其他東西
+
+**禁止帶搭**（即使在 Fleet 編排內也禁）：
+
+- ❌ clade 自行發想的 refactor / cleanup（即使「順手很好做」）
+- ❌ 把標準層改動（rules / vendor / skills）混進 dep migration commit
+- ❌ 把 unrelated 套件升版搭便車進來
+
+**這條 carve-out 不適用於**：
+
+- Framework major migration（Nuxt 3→4 / Next 14→15）— 仍需專屬 plan，不走 fleet skill
+- consumer 自家業務 bug fix / feature
+- 「我覺得 N 個 consumer 該統一寫法」這種 clade 發想的改動 — 仍是「替 consumer 規劃實作」反模式
+
+**觸發判定**：能不能在 upstream release notes / changelog 找到「導致這個 mod 的具體 BC clause」。找不到，就不在 carve-out 範圍內，照原規則走（consumer 自家 session 處理）。
+
+---
+
 # § Codex prompt templates（兩 mode 共享）
 
 > **Authoring source**：`~/offline/clade/vendor/snippets/codex-upgrade-prompts/{medium,high}.md`（clade-only，不散播）。下方 § A § B inline 是 plugin cache 副本，**改其中一處時兩邊都要同步**。未來會由 TD-129 dispatch script 機械化渲染。
@@ -277,7 +305,7 @@ Mode-specific 禁止事項見 [outdated-mode.md](outdated-mode.md) 與 [fleet-mo
 
 # 相關規約
 
-- [[clade-role-and-todo-discipline]] § upstream-driven dep migration — Fleet mode carve-out 條件
+- [[clade-role-and-todo-discipline]] § upstream-driven dep migration — carve-out 觸發判定 stub（准入條件 SoT 在本檔 § Fleet mode carve-out 准入）
 - [[worktree-default]] §1, §5 — worktree gate + skill-owned lifecycle
 - Parallel Subagent Fan-out（user-global AGENTS.md）+ [[agent-routing]] § Subagent 回報契約 — Fleet mode 長駐 subagent + thin brief + 4-status 規約
 - [[agent-routing.codex-watch-protocol]] — codex 派工 + watch + Runtime Gate marker

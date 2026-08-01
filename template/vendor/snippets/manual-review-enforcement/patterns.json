@@ -26,7 +26,7 @@
       "description": "[review:ui] / [verify:ui] item group 內無完整 URL（http:// 或 https:// 開頭）— bare path（/admin/...）不再算。Group = parent #N + 所有 #N.M sub-items；任一行含完整 URL 即整 group satisfied",
       "regex": "^\\s*-\\s*\\[[ x]\\]\\s*#[0-9.]+\\s*\\[(review|verify):ui\\]",
       "regexFlags": "",
-      "requiresAbsenceOf": "https?://[^\\s`）)>]+",
+      "requiresAbsenceOf": "https?://[^[:space:]`）)>]+",
       "requiresAbsenceOfScope": "group",
       "anchor": "manual-review.md#通則",
       "remediation": "Add a full URL somewhere in the item group (parent line OR any scoped sub-item). Host MUST be the consumer's Cloudflare tunnel hostname when available (e.g., https://<consumer-a>-<client-a>-dev.<maintainer-domain>/admin/employees); fall back to http://localhost:<port>/<path> only when the consumer has no TUNNEL_HOSTNAME in its .env*. Resolution SOP: vendor/snippets/tunnel-url-for-review/README.md. Bare relative paths (e.g., /admin/employees) are NO LONGER sufficient — they are not clickable and omit the host context needed for cross-device verification. Continuation sub-items that share the sibling's URL context (e.g., 「接續 #1.1 環境，輸入 ...」) automatically satisfy the rule via group scope. Generic labels like『kiosk page』『dashboard』『設定頁』are insufficient."

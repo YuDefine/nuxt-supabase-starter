@@ -14,7 +14,7 @@
 - **單 consumer** ad-hoc 升版（直接在該 consumer 走 § Outdated mode 或 `pnpm add` 更快）
 - **Framework major migration**（Nuxt 3→4、Next 14→15）— 需專屬 migration plan
 - **無 changelog / changelog 不公開**的內部套件升版
-- 一次 sweep 想升**多個套件**（per [[clade-role-and-todo-discipline]] § carve-out「一個套件 × 一個 target version」）
+- 一次 sweep 想升**多個套件**（per SKILL.md § Fleet mode carve-out 准入（SoT）的「一個套件 × 一個 target version」）
 
 ## Step F.1 — Preflight clade-only + 解析觸發 input
 
@@ -120,7 +120,7 @@ gh release view v<target_version> --repo <owner>/<repo> --json body,name,tagName
 
 ### F.2.3 Carve-out 條件自查
 
-**MUST** 自查 [[clade-role-and-todo-discipline]] § upstream-driven dep migration 的 5 條允許條件：
+**MUST** 自查 SKILL.md § Fleet mode carve-out 准入（SoT）的 5 條允許條件（本節 checklist 是自查用，SoT 在 SKILL.md，兩者不一致時以 SKILL.md 為準）：
 
 - ✅ 每條 BC 在 release notes 找得到對應 clause
 - ✅ Sweep 範圍只有「一個套件 × 一個 target version」
