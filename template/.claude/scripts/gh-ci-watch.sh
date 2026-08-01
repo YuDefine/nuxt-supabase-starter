@@ -39,12 +39,13 @@ case "$MODE" in
 esac
 [[ -z "$TARGET" ]] && { echo "RESULT: UNAVAILABLE (missing <run-id> or <workflow>)"; exit 2; }
 
-REPO=""; BRANCH=""; COMMIT=""; SINCE=""; INTERVAL=30; TIMEOUT=3600; EVIDENCE=""; FOLLOW=1
+REPO=""; BRANCH=""; COMMIT=""; TAG=""; SINCE=""; INTERVAL=30; TIMEOUT=3600; EVIDENCE=""; FOLLOW=1
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)          REPO="$2"; shift 2 ;;
     --branch)        BRANCH="$2"; shift 2 ;;
     --commit)        COMMIT="$2"; shift 2 ;;
+    --tag)           TAG="$2"; shift 2 ;;
     --since)         SINCE="$2"; shift 2 ;;
     --interval)      INTERVAL="$2"; shift 2 ;;
     --timeout)       TIMEOUT="$2"; shift 2 ;;
@@ -102,6 +103,24 @@ if [[ "$MODE" == "workflow" ]]; then
   # WATCH_TIMEOUT。2026-07-31 <consumer-a> 實證：`--commit e1738305`（8 碼）等滿 3600s 回
   # run=unresolved，同一條 run 換完整 SHA 立刻查得到、而且早在 watcher 啟動後一分鐘
   # 內就 success。展不開就 fail fast，NEVER 讓 caller 白等一小時。
+  # --tag 是 post-push 場景的正解：發版 tag 是**不可變的 ref**，指向你剛推的那個 commit。
+  # 對照組 `--commit "$(git rev-parse HEAD)"` 在 dispatch 當下才解析 HEAD——多 session 共用
+  # main 時，push 與派 watcher 之間別的 session 可能已經推了新 commit，HEAD 早就不是你的
+  # 發版 commit 了，watcher 於是盯著一個沒有任何 run 的 SHA 等滿 TIMEOUT
+  # （2026-08-02 <consumer-b> v1.258.0 實證：HEAD 已前進 2 個 commit，gh run list -c 回空陣列）。
+  if [[ -n "$TAG" ]]; then
+    if [[ -n "$COMMIT" ]]; then
+      echo "RESULT: UNAVAILABLE (--tag 與 --commit 互斥，兩者都指定目標 commit)"
+      exit 2
+    fi
+    TAG_SHA=$(git rev-parse --verify "${TAG}^{commit}" 2>/dev/null || true)
+    if [[ ! "$TAG_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+      echo "RESULT: UNAVAILABLE (--tag '$TAG' 解不出 commit；tag 打了沒？拼字對嗎？)"
+      exit 2
+    fi
+    COMMIT="$TAG_SHA"
+  fi
+
   if [[ -n "$COMMIT" && ! "$COMMIT" =~ ^[0-9a-fA-F]{40}$ ]]; then
     FULL_SHA=$(git rev-parse --verify "${COMMIT}^{commit}" 2>/dev/null || true)
     if [[ "$FULL_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
@@ -123,6 +142,15 @@ if [[ "$MODE" == "workflow" ]]; then
     else
       SINCE=$(default_since)
     fi
+  fi
+  # 回顯目標 commit 的身分。盯錯 commit 的失敗形狀是「一路 pending 到 TIMEOUT」，
+  # 跟「run 還沒建立」外觀完全一樣——把 subject 與所屬 tag 印在第一行，讓派錯目標
+  # 當場看得出來，而不是一小時後才發現。
+  if [[ -n "$COMMIT" ]]; then
+    SUBJECT=$(git log -1 --format=%s "$COMMIT" 2>/dev/null || echo '<不在本地 repo>')
+    AT_TAGS=$(git tag --points-at "$COMMIT" 2>/dev/null | paste -sd, - || true)
+    IS_HEAD=$([[ "$COMMIT" == "$(git rev-parse HEAD 2>/dev/null)" ]] && echo yes || echo no)
+    echo "[watch] target commit ${COMMIT:0:8} = \"$SUBJECT\" (tags: ${AT_TAGS:--}, is-HEAD: $IS_HEAD)"
   fi
   echo "[watch] resolving run: workflow='$TARGET' branch='${BRANCH:-*}' commit='${COMMIT:-*}' createdAt>=$SINCE"
   while [[ -z "$RUN_ID" ]]; do
