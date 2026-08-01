@@ -32,13 +32,24 @@ echo ""
 | **copy** | `--agent claude-code --copy -y` | 真實目錄 | 想把 skill 進 git tracking、不跨 agent 共用 |
 | **symlink** (default) | `--agent claude-code -y` | symlink → `.agents/skills/impeccable/`（universal agents directory） | 多 AI agent（Claude / Codex / Cursor）共用同一份 |
 
-兩種模式都會被 design orchestrator 認到。當前各 consumer 配置（2026-05-30，registry 共 8 consumer）：
+兩種模式都會被 design orchestrator 認到。**加裝前 MUST 先確認該 repo 走哪一種**——`ls -la .agents/skills/` 看既有 skill 是 symlink 還是真實目錄，照它的慣例裝。
 
-- **copy mode**: <consumer-a>、nuxt-supabase-starter/template、<consumer-c>、<consumer-d>（皆 `install-skills.sh` 用 `$COPY_FLAGS`）、<consumer-b>（無 install-skills.sh，但 `.agents/skills/impeccable` 目錄 git-tracked = 等效 copy）
-- **symlink mode**: 目前無
-- **未安裝 impeccable**: <consumer-k>、co-purchase、<consumer-l>（無 install-skills.sh、無 `.agents/skills/impeccable`；這 3 個是 deploy-focused consumer，需要 design orchestrator 時再依本檔標準 snippet 加裝）
+> 2026-08-02 實證：對 symlink mode 的 repo 跑 `--copy` 會把 tracked 的 symlink（git 物件 `120000`）換成 59 個真實檔案，diff 看起來像整包新增，而該 repo 其餘 skill 仍是 symlink——單方面破壞了它的 skill 管理慣例。當時是 <consumer-l>，已還原。
 
-（快照；清單以 registry 為準）
+當前各處配置（2026-08-02 實查，全部 v4.0.4）：
+
+- **copy mode**: <consumer-a>、nuxt-supabase-starter/template、<consumer-c>、<consumer-d>、<consumer-b>、<consumer-k>、co-purchase、<consumer-h>、<consumer-g>、<consumer-e>
+- **symlink mode**: <consumer-l>（`.agents/skills/*` → `.agents/skills/*`）
+- **clade home**: copy mode，但 `.claude/*` 被 `.gitignore` 排除且白名單只放行自治區 skill 與 hub symlink → 靠 `scripts/install-skills.sh`（`pnpm skills:install`）重現，不進版控
+- **global**（`~/.agents/skills/`）: copy mode，手動安裝
+
+（快照；清單以 registry 為準。驗版本跑 `grep -m1 '^version:' .agents/skills/impeccable/SKILL.md`）
+
+## skills-lock.json 會被一併改寫
+
+`npx skills add` 會重算 **lock 檔內所有 entry** 的 `computedHash`，不只你剛裝的那一個。所以升 impeccable 的 commit 裡出現其他 skill 的 hash 變更是正常的，不是誤 stage。
+
+**commit 時 MUST 帶上 `skills-lock.json`**——漏掉它，lock 記的 hash 與實際安裝內容不一致，下次 `npx skills check` 會報 drift。2026-08-02 的 fleet sweep 第一輪就漏了這個檔，7 個 consumer 得補第二個 commit。
 
 ## 升降版流程
 

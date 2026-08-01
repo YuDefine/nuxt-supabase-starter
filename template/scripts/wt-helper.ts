@@ -130,6 +130,42 @@ function git(args, opts = {}) {
 }
 
 /**
+ * Locate the consumer's per-worktree bootstrap script.
+ *
+ * `.ts` is the documented name; `.mjs` is accepted because consumers migrating
+ * off `.mjs` would otherwise lose the hook **silently** — see the hard rule below.
+ *
+ * Returns null only when the consumer genuinely ships no such script.
+ *
+ * **Any other extension is a hard error, never a skip.** A consumer that ships
+ * `wt-env-bootstrap.<something-else>` clearly intends the hook to run; treating
+ * that as "consumer doesn't have one" makes both `ensure` and `destroy` no-op
+ * with zero signal. Observed cost (<consumer-b> 2026-08-02, TD-315): every new worktree
+ * came up with `.env.local` still pointing at the *main* worktree's database,
+ * and every `cleanup` left its PostgREST sidecar running — each orphan
+ * permanently consuming a connection-admission slot until the ceiling was hit
+ * and no new worktree could be provisioned at all. None of it surfaced, because
+ * the lookup just returned null.
+ */
+function resolveWtEnvBootstrapScript(worktreePath: string): string | null {
+  const dir = join(worktreePath, 'scripts')
+  for (const ext of ['ts', 'mjs']) {
+    const candidate = join(dir, `wt-env-bootstrap.${ext}`)
+    if (existsSync(candidate)) return candidate
+  }
+  if (!existsSync(dir)) return null
+  const stray = readdirSync(dir).find((f) => f.startsWith('wt-env-bootstrap.'))
+  if (stray) {
+    throw new Error(
+      `Found scripts/${stray} but expected wt-env-bootstrap.ts (or .mjs). ` +
+        `Refusing to skip silently — per-worktree resources would be neither provisioned ` +
+        `nor released. Rename it to wt-env-bootstrap.ts.`,
+    )
+  }
+  return null
+}
+
+/**
  * Optional per-worktree resource bootstrap.
  *
  * Consumers that provision per-worktree resources (typically an isolated dev
@@ -141,8 +177,8 @@ function git(args, opts = {}) {
  * JSON — a half-provisioned remote resource must surface, not be swallowed.
  */
 export function runWtEnvBootstrap(worktreePath, command, opts: WtEnvBootstrapOptions = {}) {
-  const script = join(worktreePath, 'scripts', 'wt-env-bootstrap.ts')
-  if (!existsSync(script)) return null
+  const script = resolveWtEnvBootstrapScript(worktreePath)
+  if (!script) return null
 
   const args = [script, command, '--worktree', worktreePath, '--json']
   if (opts.allowOrphanRecord) args.push('--allow-orphan-record')
