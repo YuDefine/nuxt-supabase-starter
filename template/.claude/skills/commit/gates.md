@@ -414,6 +414,30 @@ Agent 回傳後主線處理：
 
 **Severity 來源**：以 codex 自己輸出的 severity 標記為準（Critical / Major / Minor / Info）。**NEVER** 由主線自行判定降級「這個其實沒那麼嚴重」—— codex 標 Major 就照 Major 處理，否則 0-A.2 條件觸發機制等於形同虛設。
 
+#### finding 的三類分流
+
+codex 看的是 working tree diff，但它讀得到整個 repo，因此會評論到**本次沒改的舊碼**。「一律修」對這類 finding 會把 unrelated fix 帶進本次 commit（違反 § Step 3 的分組紀律）；「不在本次範圍」則是本檔明文禁止的跳過藉口。出路是分流，不是二選一。
+
+**每一個** finding **MUST** 落在下表三類之一，依序判定，第一個命中的為準：
+
+| 可觀察 predicate | 類別 | 處置 |
+| --- | --- | --- |
+| finding 指涉的 code 出現在本次 diff 的 `+` 行 | **缺失類** | 照 codex 標的 severity 一律修。**位置無關**——修法要動到同檔別處、別的檔、或 diff 外的呼叫端，照修不誤 |
+| 問題成立，但 finding 給的 `<file>:<line>` 指到本次 diff 以外（codex 的行號對不上 working tree） | **行號漂移** | 先定位到真正的位置，再照 severity 修。**NEVER** 因為「行號指到沒改的地方」就歸純舊碼 |
+| 上兩類都不成立 | **純舊碼** | 不進本次 commit，但 **MUST** 當場登記 + 回報（見下）。**NEVER** silent drop |
+
+判為**純舊碼**的 finding，**MUST** 在給 user 的回報中逐條輸出下列三行，**任一行留白或寫不出來就照 severity 修**：
+
+```
+PRE-EXISTING — 未觸碰：<file>:<line>（舉證本次 diff 不含此檔／此行）
+               無因果：<本次變更為何不會觸發、加劇、或暴露它——一句話，指具體機制>
+               登記：<TD-NNN | HANDOFF.md § …>
+```
+
+兩條舉證缺一不可：只證「沒碰到」不夠——本次變更可能讓一條原本走不到的舊路徑變成熱路徑；只證「無因果」也不夠——那是純舊碼判定的結論，不是它的前提。
+
+登記走 `docs/tech-debt.md` 開 TD（跨 session 要追）或 `HANDOFF.md`（下一 session 就會碰），**NEVER** 只在 chat 講一句。「已經跟 user 說了」不算登記——chat 不是 session 之間的傳遞介面。
+
 ### 0-A.2 — Codex max + Fable code-review max（兩步驟，條件觸發）
 
 **僅在 0-A.1 出現 Critical / Major 級 issue 時執行**，其他情況一律跳過。
@@ -525,7 +549,8 @@ node .claude/scripts/0a-metrics.mjs record \
 
 - **NEVER** 跳過 0-A.0（simplify 是常駐第一步，不視變更大小例外）
 - **NEVER** 改用其他模型（Codex 必須 `gpt-5.6-sol`、Fable 必須 `claude-fable-5`）
-- **NEVER** 把 codex 列出的問題判定為「建議性質」「不在本次範圍」而跳過 —— 一律修
+- **NEVER** 把 codex 列出的問題判定為「建議性質」而跳過 —— 一律修
+- **NEVER** 用「不在本次範圍」跳過 finding —— 該判定只有走 § 0-A.1「finding 的三類分流」判為**純舊碼**、且三行舉證逐行寫齊才成立；缺任一行照 severity 修
 - **NEVER** 在 fast-path 條件未完全滿足時提早跳過 codex —— 三條件 AND，任一不滿足都跑
 - **NEVER** 做第 3 輪 review（會無限拖長 commit 流程；0-A.1 + 0-A.2 兩輪處理不完代表變更太大，應先 split）
 - **NEVER** 因 0-A.1 抓到 Critical/Major 後跳過 0-A.2 —— 一律進入 Codex max + Fable max 驗證

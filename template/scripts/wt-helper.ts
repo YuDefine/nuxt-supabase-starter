@@ -76,7 +76,7 @@ import {
   writeClaim,
 } from './claim-helper.ts'
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
-import { isLockedProjectionPath } from './locked-projection.ts'
+import { isLockedProjectionPath, isLockedProjectionPathFor } from './locked-projection.ts'
 
 interface WtEnvBootstrapRunResult {
   status: number | null
