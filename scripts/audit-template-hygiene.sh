@@ -261,7 +261,9 @@ check_email_identifiers() {
     domain="$(printf '%s' "${email##*@}" | tr '[:upper:]' '[:lower:]')"
 
     case "${domain}" in
-      example.com|example.org|example.net|example.test|*.example.com|localhost|localhost.local|test.local|invalid.test|test.com|email.com)
+      # dev.local：clade 投影規約引用的 dev-login fixture domain（e2e-<role>@dev.local）。
+      # 那是 review-gui `extractDevLoginIdentity` 實際比對的命名慣例，不是真人 email。
+      example.com|example.org|example.net|example.test|*.example.com|localhost|localhost.local|test.local|dev.local|invalid.test|test.com|email.com)
         continue
         ;;
     esac
