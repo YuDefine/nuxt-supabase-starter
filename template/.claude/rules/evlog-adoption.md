@@ -198,8 +198,11 @@ Depth 表量**裝了什麼**，`evlog map` 量**每個 entry point 用了沒有*
 | **catalog 不受內容檢查** | 建一個**沒有** why/fix 的 `defineErrorCatalog` → 該 entry point **100/100**，CLI 還印「✓ errors carry why and fix」 | `structured-errors` 只檢查直接 `createError()` 的 object keys；`throw someErrors.X()` 被歸為 `other` 不檢查。**全面 catalog 化是最有效的洗分手段** |
 | **分數會四捨五入** | 201 個 route（200 滿分 + 1 個 80 分）→ CLI 回報 **score 100** | 分數是 `Math.round(加權平均)`。大 repo 裡新增失敗完全反映不到整數分上 |
 | **suppression 不扣分** | 把 check 全部 `disable` 掉 → **score 100** / suppressed 2 | disabled check 轉成 `n/a`，從分母移除 |
+| **check 不驗欄位有沒有到達 runtime**（實測 2026-08-03，<consumer-b>） | 1259 個 `createError({ …, why, fix })` 全部滿分，但呼叫點解析到的是 **h3 的 `createError`**，它根本不讀這兩個欄位 → 欄位寫了就被丟掉 | `structured-errors` 是 AST 原始碼比對，不解析 callee 實際 resolve 到誰。**route 級零失敗也擋不住這一種**——它連 runtime 都沒碰到 |
 
 因此 gate 的判定 **MUST** 用 **route 級零失敗 + 零 suppression**，**NEVER** 用全域分數當 boolean（`vendor/actions/evlog-map-gate/gate.mjs` 的 `strict` 模式已如此實作）。分數只能當 dashboard。
+
+而第四條 false green 連 route 級判定都擋不住：**gate 全綠不證明欄位到達過任何地方**。要證明只能實跑——斷言 response 與 NDJSON 裡真的看得到。判準與驗證命令見 [[evlog-error-exposure]] § 完成證明。
 
 ### Gate（兩道，都走 strict）
 

@@ -49,6 +49,7 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
   appendFileSync,
+  chmodSync,
   closeSync,
   constants as fsConstants,
   copyFileSync,
@@ -65,8 +66,9 @@ import {
   rmSync,
   unlinkSync,
 } from 'node:fs'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, relative, resolve } from 'node:path'
 import { stdin, stdout } from 'node:process'
+import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline/promises'
 import {
   dropClaim,
@@ -199,6 +201,60 @@ export function runWtEnvBootstrap(worktreePath, command, opts: WtEnvBootstrapOpt
   } catch {
     throw new Error(`Worktree env bootstrap ${command} returned invalid JSON`)
   }
+}
+
+// TD-323: stash-reconcile.ts 與 wt-helper.ts 永遠是同目錄 sibling —— clade home 在
+// `vendor/scripts/`、consumer 在 `scripts/`。寫死任一側只是把 MODULE_NOT_FOUND 搬家，
+// 所以復原指令的路徑一律由本檔自身位置推出。
+const WT_HELPER_DIR = dirname(fileURLToPath(import.meta.url))
+
+// 本檔在自己那棵樹裡的相對位置（clade `vendor/scripts` / consumer `scripts`）。
+// **MUST 在 module load 當下算**，不能等到要印訊息時才算：merge-back 的收尾訊息印在
+// `cmdCleanup` 之後，而本檔若是 worktree 的副本在跑，那時自己的目錄已經被刪了，
+// `git -C <已刪目錄>` 會失敗 → 落回絕對路徑 → 又指向已刪除的目錄。
+const WT_HELPER_SUBDIR = (() => {
+  try {
+    const ownTop = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      cwd: WT_HELPER_DIR,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+    const sub = relative(ownTop, WT_HELPER_DIR)
+    return sub && !sub.startsWith('..') ? sub : ''
+  } catch {
+    return ''
+  }
+})()
+
+/**
+ * 回傳可直接貼給 user 執行的 `node <path>/stash-reconcile.ts`（相對 repo root）。
+ *
+ * 錨點是「**main root 底下的**對應副本」，不是執行中的那一份。`/wt` 的使用模型是在
+ * worktree path 開新 session，各 skill 又都寫相對路徑 `node scripts/wt-helper.ts …`，
+ * 所以本檔常常是 worktree 的副本在跑；直接拿 `WT_HELPER_DIR` 相對 main root 會得到
+ * `..` 開頭而 fallback 成絕對路徑，而這行訊息印在 cmdCleanup 刪掉該 worktree **之後**
+ * —— 使用者會拿到一條指向已刪除目錄的路徑。那是 TD-323 的 MODULE_NOT_FOUND 換個形式。
+ */
+function stashReconcileCmd(baseRoot = undefined) {
+  const abs = join(WT_HELPER_DIR, 'stash-reconcile.ts')
+  // `baseRoot` MUST 由呼叫端傳它早先解好的 consumerRoot。同一個 cleanup 時序問題的
+  // 另一半：訊息印出時 process.cwd() 可能停在已被刪除的 worktree（Node 回快取字串、
+  // 不 throw），`findConsumerRoot()` 於是一路往上走到 `/` 才拋 —— 又落回絕對路徑。
+  let root = baseRoot
+  if (!root) {
+    try {
+      root = findConsumerRoot()
+    } catch {
+      return `node ${abs}`
+    }
+  }
+  // WT_HELPER_SUBDIR 套到 main root 上就是使用者該跑的那一份。
+  if (WT_HELPER_SUBDIR) {
+    const candidate = join(root, WT_HELPER_SUBDIR, 'stash-reconcile.ts')
+    if (existsSync(candidate)) return `node ${relative(root, candidate)}`
+  }
+  const rel = relative(root, abs)
+  return rel && !rel.startsWith('..') ? `node ${rel}` : `node ${abs}`
 }
 
 function findConsumerRoot(start = process.cwd()) {
@@ -1162,6 +1218,44 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
   }
 
   setupBriefExclude(wtPath)
+
+  // TD-321: `.clade/bin/` 整個在 consumer .gitignore 內，而 `git worktree` fork 只帶
+  // tracked 檔案 —— 新 worktree 因此沒有 clade-gate，`pnpm test`（直接呼叫
+  // `.clade/bin/clade-gate`，無 fallback）立刻以 "not found" 失敗，訊息指不到根因。
+  // 寫入者是 propagate.ts，而它只寫 consumer main root，永遠不會碰 worktree，所以在
+  // fork 當下從 main 複製一份（含 exec bit）。Warn-only：consumer 沒有 .clade/bin 就跳過。
+  try {
+    const binSrcDir = join(consumerRoot, '.clade', 'bin')
+    if (existsSync(binSrcDir)) {
+      const binDstDir = join(wtPath, '.clade', 'bin')
+      let copied = 0
+      for (const entry of readdirSync(binSrcDir)) {
+        const src = join(binSrcDir, entry)
+        const dst = join(binDstDir, entry)
+        // 逐檔判 gitignore，不是判整個 `.clade/`：多數 consumer 把 `.clade/bin/*`
+        // **tracked** 進 git（worktree fork 自帶，本來就不缺），只 ignore
+        // `.clade/runtime/` 之類。對非 ignored 的檔照複製會留下使用者從沒寫過的
+        // untracked 檔，接著 merge-back / cleanup 的 uncommitted-files gate 就擋在
+        // 那上面。per-entry try 讓 dangling symlink 只跳過自己，不吃掉其餘檔。
+        try {
+          if (!statSync(src).isFile() || existsSync(dst)) continue
+          const rel = relative(consumerRoot, src)
+          if (spawnSync('git', ['check-ignore', '-q', rel], { cwd: consumerRoot }).status !== 0) {
+            continue
+          }
+          mkdirSync(binDstDir, { recursive: true })
+          copyFileSync(src, dst)
+          chmodSync(dst, statSync(src).mode & 0o777)
+          copied++
+        } catch (entryErr) {
+          console.error(`note: .clade/bin/${entry} copy skipped: ${entryErr?.message ?? entryErr}`)
+        }
+      }
+      if (copied > 0) console.log(`  clade-bin: copied ${copied} executable(s) from main`)
+    }
+  } catch (e) {
+    console.error(`note: .clade/bin copy skipped: ${e?.message ?? e}`)
+  }
 
   // TD-187: auto-invoke wt-env-bootstrap.ts if consumer-meta declares filesToCopy.
   // Copies gitignored env files (e.g. .env.local) from main into the new worktree
@@ -2448,7 +2542,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
       `  → if cleanup later detects uncommitted files, inspect via 'wt-helper rescue --show <ref>'.`,
     )
     console.log(
-      `  → redundant 'wt-baseline/${cleanSlug}/<ISO>' stash entries are safe to drop via 'node scripts/stash-reconcile.ts --slug ${cleanSlug} --interactive'.`,
+      `  → redundant 'wt-baseline/${cleanSlug}/<ISO>' stash entries are safe to drop via '${stashReconcileCmd(consumerRoot)} --slug ${cleanSlug} --interactive'.`,
     )
     console.log('')
   }
@@ -2668,7 +2762,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
           preview +
           more +
           `\n\nRe-run with --auto-stash to bulk-stash main's dirty state as 'wt-merge-block/${cleanSlug}/<ISO>'\n` +
-          `(blockers + any unrelated dirty paths); reconcile later via \`node scripts/stash-reconcile.ts\`.`,
+          `(blockers + any unrelated dirty paths); reconcile later via \`${stashReconcileCmd(consumerRoot)}\`.`,
       )
     }
     const isoTs = new Date().toISOString().replace(/[:.]/g, '-')
@@ -2898,7 +2992,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   if (stashRef) {
     console.log('')
     console.log(`Reconcile blocker stash for '${cleanSlug}':`)
-    console.log(`  node scripts/stash-reconcile.ts --slug ${cleanSlug} --interactive`)
+    console.log(`  ${stashReconcileCmd(consumerRoot)} --slug ${cleanSlug} --interactive`)
     console.log(`(Stash preserved in 'git stash list' — apply/drop is user's call.)`)
   }
   return { absorbed: true, slug: cleanSlug, stashRef, cleanupDone, blockers, baselineRefs }

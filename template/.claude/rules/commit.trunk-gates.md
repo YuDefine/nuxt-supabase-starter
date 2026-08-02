@@ -33,7 +33,16 @@ Local edits will be reverted by the next sync.
 
 ## Partial Archive Gate（main / master 限定，**hard rule**）
 
-當前 branch 為 `main` / `master` 且本次 `/commit` 含**任一** `openspec/changes/<X>/**` staged-delete（**排除** `openspec/changes/archive/`）時，**MUST** 對該 change 同時驗證：
+當前 branch 為 `main` / `master`，且某個 change `<X>`（**排除** `openspec/changes/archive/`）命中下列**任一**觸發路徑時，**MUST** 對該 change 同時驗證：
+
+- **A（staged-delete）** — 本次 `/commit` 含任一 `openspec/changes/<X>/**` staged-delete
+- **B（working tree 殘留）** — `openspec/changes/<X>/` 仍存在但缺 `tasks.md` 或 `proposal.md`，**即使本次 commit 完全沒有 staged-delete**
+
+> B 不是 A 的補充說明，是獨立觸發路徑：中斷的 `/spectra-archive` 可以留下一個殘缺的 change dir 而完全沒有任何 staged 刪除，那種形狀照樣要擋。
+>
+> **`spectra park` 的 change 一律排除**（parked change 的檔案整批顯示為 deletion，那是 park 的預期副作用，不是 archive 殘骸）—— **NEVER** 對 parked change 報 `MISSING_ARCHIVE_DIR`。
+
+驗證項：
 
 1. **archive directory 存在** — `openspec/changes/archive/YYYY-MM-DD-<X>/` 必須存在於 working tree（staged 或 untracked 皆可），且至少含 `tasks.md` + `proposal.md`
 2. **spec delta-sync 完整** — 若 HEAD 內 `openspec/changes/<X>/specs/<cap>/spec.md` 存在，則 `openspec/specs/<cap>/spec.md` 必須有對應 staged modification

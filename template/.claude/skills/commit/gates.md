@@ -107,7 +107,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 ## § 0-MR: 人工檢查 Gate（main / master 限定，硬擋無 override）
 
-`.claude/rules/commit.md` 「人工檢查 Gate」hard rule 的執行點。**MUST** 在 Step 0 品質檢查之前 fail-fast，避免人工檢查未完的 change 浪費 5–15 min codex / screenshot review 時間。
+`.claude/rules/commit.trunk-gates.md` 「人工檢查 Gate」hard rule 的執行點（`commit.md` 只有一句 pointer，判定條件的 SoT 在 `commit.trunk-gates.md`）。**MUST** 在 Step 0 品質檢查之前 fail-fast，避免人工檢查未完的 change 浪費 5–15 min codex / screenshot review 時間。
 
 ### 判定流程
 
@@ -200,7 +200,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 ## § 0-Archive-Coupling: Partial Archive Gate（main / master 限定，硬擋無 override）
 
-`.claude/rules/commit.md` § Partial Archive Gate 的執行點。**MUST** 在 0-MR 之後、0-A/B/C 之前 fail-fast，避免 partial `/spectra-archive` state 默默 commit 進 main 導致 change artifact 永久遺失（per [[pitfall-spectra-archive-interrupted-leaves-partial-state]]）。
+`.claude/rules/commit.trunk-gates.md` § Partial Archive Gate 的執行點（`commit.md` 只有一句 pointer，判定條件的 SoT 在 `commit.trunk-gates.md`）。**MUST** 在 0-MR 之後、0-A/B/C 之前 fail-fast，避免 partial `/spectra-archive` state 默默 commit 進 main 導致 change artifact 永久遺失（per [[pitfall-spectra-archive-interrupted-leaves-partial-state]]）。
 
 ### 判定流程
 

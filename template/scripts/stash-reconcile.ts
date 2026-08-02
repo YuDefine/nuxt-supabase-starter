@@ -770,7 +770,9 @@ main().catch((e) => {
   const usage = [
     '',
     'Usage:',
-    '  node scripts/stash-reconcile.ts [--interactive|--json] [--include-all]',
+    // TD-323 同型：路徑在 consumer 是 `scripts/`、在 clade home 是 `vendor/scripts/`，
+    // 寫死任一側另一側就拿到 MODULE_NOT_FOUND。用 argv[1] 印使用者實際跑的那條。
+    `  node ${relative(process.cwd(), process.argv[1] ?? 'stash-reconcile.ts')} [--interactive|--json] [--include-all]`,
     '                                   [--stale-days <N>] [--slug <substring>]',
     '',
     'See file header for full flag reference.',
