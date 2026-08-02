@@ -28,6 +28,7 @@ Local edits will be reverted by the next sync.
 - **ALWAYS** named functions and named exports
 - **ALWAYS** Composition API + `<script setup>`, NEVER Options API
 - **ALWAYS** `interface` over `type`
+- **ALWAYS** `defineProps<T>()` 的 T 成員用編譯器解析得動的型別（見下方 defineProps 型別約束）— 外部套件的泛型型別會讓該 prop **靜默消失**
 - **ALWAYS** `refetch` (not `refresh`) from Pinia Colada `useQuery` for manual refresh buttons — `refresh` skips when data is within `staleTime`
 - **ALWAYS** `PAGE_SIZE_MAX` from `shared/schemas/pagination` for `pageSize` max validation — NEVER hardcode
 - **ALWAYS** UTable cell slot 命名加 `-cell` 後綴：`#actions-cell="{ row }"`，**NEVER** `#actions="{ row }"`（不加 `-cell` slot 不會生效且無報錯）
@@ -38,6 +39,49 @@ Local edits will be reverted by the next sync.
 
 - **ALWAYS** `switch + assertNever` for enum / const-array / Zod-enum discrimination — **NEVER** `if/else if/else` chains on enum types。加新 enum 值時 compiler 會當場報錯，避免靜默漏 case。utility: `~/utils/assert-never`。離線稽核：`pnpm audit:ux-drift`。規則: [`docs/rules/ux-completeness.md`](docs/rules/ux-completeness.md) Exhaustiveness Rule
 <!-- SPECTRA-UX:END -->
+
+# defineProps 型別約束
+
+`<script setup>` 的 `defineProps<T>()` 是**編譯期**推導：編譯器把 T 的成員轉成 runtime props 宣告。遇到它解析不了的成員型別，**靜默略過該成員、並連帶漏掉其後的成員** — 不報錯、不警告、typecheck 照樣綠。
+
+## 判準（可觀察）
+
+**每一個** `defineProps<T>()` 都適用，不是只有表單元件：T 的成員型別**若**來自外部套件（`import type { X } from '<套件名>'`，非相對路徑），**MUST** 改寫成下列兩種之一。內建型別（`string` / `boolean` / `Record<string, unknown>` / 自家 interface）不受此限。
+
+```ts
+// ✅ 寫法 A：退成編譯器解析得動的型別 + 註解說明為何不寫原型別
+/** 型別寫 `object` 而非 `ZodType`：外部泛型 class 會讓這個 prop 連同其後成員被靜默丟棄。
+ *  實際型別由 submit handler 端的 `FormSubmitEvent<z.output<...>>` 保證。 */
+schema?: object
+
+// ✅ 寫法 B：要保住 prop 型別安全就走 runtime 宣告
+const props = defineProps({
+  schema: { type: Object as PropType<ZodType>, required: false },
+})
+
+// ❌ 這個 prop 不會存在，且其後的成員一起消失
+schema?: ZodType
+```
+
+註解是規約的一部分：沒寫的話下一個人會「順手改回」看起來更正確的型別，把坑原樣裝回去。
+
+## 改完 MUST 驗（兩步都要）
+
+1. **重啟 dev server** — props 是編譯期產物，**HMR 不重建**。不重啟會看到「修法無效」的假象。
+2. **比對 runtime props 與 interface 成員**，只看畫面看不出來：
+
+   ```js
+   const inst = document.querySelector('form').__vueParentComponent  // 換成該元件的根元素
+   console.log(inst.type?.__name, Object.keys(inst.props))
+   ```
+
+   少了誰，誰就是被丟掉的。
+
+## 為什麼值得一條規約
+
+實證（<consumer-a> `AppFormLayout.vue`）：`schema?: ZodType` 讓 `schema` 與其後的 `state` 都沒被宣告，包在外面的 `useValidatedForm` 恆為 false，整個 UForm + Zod 驗證層**從未執行過** — 而 typecheck / lint / test / 視覺四道全綠，唯一症狀是「表單留空送出什麼都沒發生」。
+
+靜態 grep 抓不到這個形狀（能篩的只有「有 `defineProps<` 且有外部 `import type`」，偽陽性極高），所以防線只能放在寫的當下。完整分析、detection 與 cross-consumer 掃描結果見 clade `docs/pitfalls/2026-08-02-vue-defineprops-external-generic-type-silently-drops-props.md`。
 
 # Nuxt UI Color Mode 約束
 
