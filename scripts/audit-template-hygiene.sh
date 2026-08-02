@@ -260,6 +260,14 @@ check_email_identifiers() {
     [[ -z "${email}" ]] && continue
     domain="$(printf '%s' "${email##*@}" | tr '[:upper:]' '[:lower:]')"
 
+    # `name@view.vue` / `child@sidebar.vue`（Nuxt 具名 view）、`pkg@1.2.3` 等寫法都會命中
+    # email regex，但 @ 右側是檔名／副檔名而不是 domain。以副檔名結尾就不是 email。
+    case "${domain}" in
+      *.vue|*.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.md|*.json|*.yml|*.yaml|*.css|*.scss|*.sql|*.sh|*.py|*.toml)
+        continue
+        ;;
+    esac
+
     case "${domain}" in
       # dev.local：clade 投影規約引用的 dev-login fixture domain（e2e-<role>@dev.local）。
       # 那是 review-gui `extractDevLoginIdentity` 實際比對的命名慣例，不是真人 email。
