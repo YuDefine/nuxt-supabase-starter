@@ -2,7 +2,7 @@
  * CLI helper: find an element in source and wrap it in a variant container.
  *
  * Usage:
- *   npx impeccable wrap --id SESSION_ID --count N --query "hero-combined-left" [--file path]
+ *   node <scripts_path>/live-wrap.mjs --id SESSION_ID --count N --query "hero-combined-left" [--file path]
  *
  * Searches project files for the element matching the query (class name, ID, or
  * text snippet), wraps it with the variant scaffolding, and prints the file path
@@ -13,9 +13,17 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { isGeneratedFile } from './is-generated.mjs';
-
-const EXTENSIONS = ['.html', '.jsx', '.tsx', '.vue', '.svelte', '.astro'];
+import { isGeneratedFile } from './lib/is-generated.mjs';
+import { resolveLiveTemplateExtensions } from './lib/template-extensions.mjs';
+import { readBuffer as readManualEditsBuffer } from './live/manual-edits-buffer.mjs';
+import { findSourceFile } from './live/source-search.mjs';
+import { resolveSourceTraits } from './live/frameworks/index.mjs';
+import {
+  buildSvelteComponentCssAuthoring,
+  scaffoldSvelteComponentSession,
+  shouldUseSvelteComponentInjection,
+} from './live/svelte-component.mjs';
+import { enterLiveRoot } from './live/roots.mjs';
 
 export async function wrapCli() {
   const args = process.argv.slice(2);
@@ -31,7 +39,7 @@ Required:
 
 Element identification (at least one required):
   --element-id ID    HTML id attribute of the element
-  --classes A,B,C    Comma-separated CSS class names
+  --classes A,B,C    Comma- or space-separated CSS class names
   --tag TAG          Tag name (div, section, etc.)
   --query TEXT       Fallback: raw text to search for
 
@@ -41,6 +49,9 @@ Optional:
                      classes/tag match multiple sibling elements (e.g. a list
                      of <Card>s with the same className). Pass the first ~80
                      chars of event.element.textContent.
+  --page-url URL     Current page URL. Required when pending manual edits may
+                     affect the picked source block. Pending edits are filtered
+                     to this page so an edit on /a doesn't bleed into /b.
   --help             Show this help message
 
 Output (JSON):
@@ -58,6 +69,14 @@ The agent should insert variant HTML at insertLine.`);
   const query = argVal(args, '--query');
   const filePath = argVal(args, '--file');
   const text = argVal(args, '--text');
+  const pageUrl = argVal(args, '--page-url');
+  // Preflight passes this for source-preview targets. It computes the scaffold
+  // (element location + wrapper text) but does NOT write it into source. The
+  // agent then writes the wrapper + all variants in one atomic edit. The
+  // premature server-side write full-reloaded the framework mid-generate and
+  // stranded the browser at 0/N (live-server.mjs missed-completion note). It is
+  // a no-op on the svelte-component path, which never writes the route source.
+  const deferSourceWrite = args.includes('--defer-source-write');
 
   if (!id) { console.error('Missing --id'); process.exit(1); }
   if (!elementId && !classes && !query) {
@@ -150,11 +169,29 @@ The agent should insert variant HTML at insertLine.`);
       if (filtered.length === 1) {
         match = filtered[0];
       } else if (filtered.length === 0) {
-        // Source uses dynamic content (`<h1>{title}</h1>` etc.) so the
-        // browser-side textContent doesn't appear literally in source. Fall
-        // back to first-match rather than refusing — this is the same
-        // behavior unmodified callers see, just preserved.
-        match = candidates[0];
+        const normalizedText = String(text).replace(/\s+/g, ' ').trim();
+        if (normalizedText.length < 8) {
+          // Very short labels cannot disambiguate siblings reliably. Preserve
+          // the legacy behavior for these low-information picker events.
+          match = candidates[0];
+        } else {
+          // Rendered text that is absent from every candidate usually means
+          // the source uses expressions or component props. Picking the first
+          // same-class sibling silently edits the wrong instance (observed on
+          // Astro result cards), so stop and surface every candidate instead.
+          console.error(JSON.stringify({
+            error: 'element_ambiguous',
+            fallback: 'agent-driven',
+            reason: 'rendered_text_not_in_source',
+            file: path.relative(process.cwd(), targetFile),
+            candidates: candidates.map((c) => ({
+              startLine: c.startLine + 1,
+              endLine: c.endLine + 1,
+            })),
+            hint: 'Rendered text does not occur in any matching source branch. The element may use dynamic props or expressions; inspect the candidates and wrap the intended instance manually.',
+          }));
+          process.exit(1);
+        }
       } else {
         // Multiple candidates ALSO match the text. Truly ambiguous — refuse
         // rather than pick wrong, and hand the agent the candidate locations
@@ -196,12 +233,72 @@ The agent should insert variant HTML at insertLine.`);
   // the inner element at its parent's depth instead of nested inside it.
   // Strip only the COMMON minimum leading whitespace across the picked lines;
   // `deindentContent` on the accept side already mirrors this convention.
-  const originalLines = lines.slice(startLine, endLine + 1);
+  let originalLines = lines.slice(startLine, endLine + 1);
+
+  // Buffer-aware "original" content: if the user has pending manual edits for
+  // this page whose originalText appears in the picked source range, apply
+  // them so the wrap block's "original" variant reflects what the user was
+  // looking at (their edited DOM), not the raw source. Source itself stays
+  // untouched here — only the wrap block's embedded "original" copy is
+  // adjusted. The pending edits remain in the buffer until committed.
+  //
+  // Apply buffered edits only when the browser provided the current page URL.
+  // Without it, fail if pending edits plausibly touch this exact source range;
+  // otherwise skip buffer awareness so unrelated staged edits on another page
+  // do not block normal wrap work.
+  let pendingBuffer = { entries: [] };
+  try { pendingBuffer = readManualEditsBuffer(process.cwd()); } catch {}
+  const pendingEntriesForTarget = pageUrl
+    ? []
+    : pendingEntriesThatMayAffectWrap(pendingBuffer.entries, targetFile, originalLines, startLine, process.cwd());
+  if (pendingEntriesForTarget.length > 0) {
+    console.error(JSON.stringify({
+      error: 'missing_page_url_with_pending_edits',
+      pendingEntries: pendingEntriesForTarget.length,
+      hint: 'Pending manual edits may affect the selected source block. Pass --page-url=$event.pageUrl so the wrap block reflects the user\'s staged DOM.',
+    }));
+    process.exit(1);
+  }
+  if (pageUrl) {
+    const failedBufferedOps = [];
+    for (const entry of pendingBuffer.entries || []) {
+      if (entry.pageUrl !== pageUrl) continue;
+      for (const op of entry.ops || []) {
+        const mayAffectWrap = manualEditMayAffectWrap(op, targetFile, originalLines, startLine, process.cwd());
+        const result = applyBufferedManualEditToLines(originalLines, startLine, op);
+        if (result.changed) {
+          originalLines = result.lines;
+          continue;
+        }
+        if (!mayAffectWrap) continue;
+        failedBufferedOps.push({
+          entryId: entry.id,
+          ref: op?.ref || null,
+          originalText: op?.originalText || null,
+          reason: 'ambiguous_or_unmatched_pending_edit',
+        });
+      }
+    }
+    if (failedBufferedOps.length > 0) {
+      console.error(JSON.stringify({
+        error: 'manual_edit_buffer_apply_failed',
+        pendingOps: failedBufferedOps,
+        hint: 'A staged copy edit appears to affect the selected source block, but could not be applied unambiguously to the wrap original. Apply or discard copy edits first, or write the wrapper manually.',
+      }));
+      process.exit(1);
+    }
+  }
+
   const originalBaseIndent = minLeadingSpaces(originalLines);
   const reindentOriginal = (extra) => originalLines
     .map((l) => (l.trim() === '' ? '' : indent + extra + l.slice(originalBaseIndent)))
     .join('\n');
   const originalIndented = reindentOriginal('    ');
+  const relTargetFile = path.relative(process.cwd(), targetFile).split(path.sep).join('/');
+  // The registry says which files get component preview; the svelte-component
+  // module keeps the env escape hatch that turns it off.
+  const useSvelteComponent = resolveSourceTraits(targetFile).preview === 'component'
+    && shouldUseSvelteComponentInjection(targetFile);
 
   // Wrapper attributes differ by syntax. HTML allows plain string attrs;
   // JSX requires object-literal style and parses string attrs as HTML (which
@@ -221,7 +318,7 @@ The agent should insert variant HTML at insertLine.`);
   // replacement range to include the wrapper's `<div>` open / close lines
   // so the entire scaffold gets removed cleanly.
   const wrapperLines = isJsx ? [
-    indent + '<div data-impeccable-variants="' + id + '" data-impeccable-variant-count="' + count + '" ' + styleContents + '>',
+    indent + '<div data-impeccable-variants="' + id + '" data-impeccable-variant-count="' + count + '"' + ' ' + styleContents + '>',
     indent + '  ' + commentSyntax.open + ' impeccable-variants-start ' + id + ' ' + commentSyntax.close,
     indent + '  ' + commentSyntax.open + ' Original ' + commentSyntax.close,
     indent + '  <div data-impeccable-variant="original">',
@@ -232,7 +329,7 @@ The agent should insert variant HTML at insertLine.`);
     indent + '</div>',
   ] : [
     indent + commentSyntax.open + ' impeccable-variants-start ' + id + ' ' + commentSyntax.close,
-    indent + '<div data-impeccable-variants="' + id + '" data-impeccable-variant-count="' + count + '" ' + styleContents + '>',
+    indent + '<div data-impeccable-variants="' + id + '" data-impeccable-variant-count="' + count + '"' + ' ' + styleContents + '>',
     indent + '  ' + commentSyntax.open + ' Original ' + commentSyntax.close,
     indent + '  <div data-impeccable-variant="original">',
     originalIndented,
@@ -242,38 +339,119 @@ The agent should insert variant HTML at insertLine.`);
     indent + commentSyntax.open + ' impeccable-variants-end ' + id + ' ' + commentSyntax.close,
   ];
 
-  // Replace the original element with the wrapper
-  const newLines = [
-    ...lines.slice(0, startLine),
-    ...wrapperLines,
-    ...lines.slice(endLine + 1),
-  ];
-  fs.writeFileSync(targetFile, newLines.join('\n'), 'utf-8');
+  let outputFile = targetFile;
+  let outputLines;
+  let outputStartLine = startLine + 1;
+  let outputEndLine = startLine + wrapperLines.length + (originalLines.length - 1);
+  let insertLine;
+  let svelteSession = null;
+  let deferredWrapper = null;
 
-  // Calculate insert line (the "insert below this line" comment).
-  // 0-indexed file position. Both HTML and JSX wrappers have 6 lines above
-  // the insert marker (HTML: start-comment + outer-div + Original-comment +
-  // original-div + content + close-original-div; JSX: outer-div +
-  // start-comment + Original-comment + original-div + content +
-  // close-original-div). Multi-line originals push the marker by their
-  // extra line count.
-  const insertLine = startLine + 6 + (originalLines.length - 1);
+  let sveltePreviewFallback = null;
+  if (useSvelteComponent) {
+    // Svelte/SvelteKit resets component-local state on markup HMR updates.
+    // Keep generation source-neutral: agents write real variant components
+    // under the generated componentDir, the browser mounts them into the live
+    // DOM, and live-accept.mjs inlines the accepted variant back into the route.
+    //
+    // The scaffold is AST-based and refuses markup a detached preview cannot
+    // support (component tags, bind:/use:, await blocks, bound nested each).
+    // Refusal falls back to the plain source-preview wrapper below: an
+    // HMR-resetting but CORRECT preview beats a detached wrong one.
+    const scaffolded = scaffoldSvelteComponentSession({
+      id,
+      count,
+      sourceFile: relTargetFile,
+      sourceStartLine: startLine + 1,
+      sourceEndLine: endLine + 1,
+      originalLines,
+      cwd: process.cwd(),
+    });
+    if (scaffolded && scaffolded.fallback === 'source-preview') {
+      sveltePreviewFallback = scaffolded.reason || 'unsupported markup';
+    } else {
+      svelteSession = scaffolded;
+      outputFile = path.resolve(process.cwd(), svelteSession.manifestFile);
+      outputStartLine = 1;
+      outputEndLine = 1;
+      insertLine = 1;
+    }
+  }
+  if (svelteSession) {
+    // component preview: outputs already set above
+  } else if (deferSourceWrite) {
+    // Deferred source write: compute the scaffold text but leave source
+    // untouched. The agent replaces the picked element's source range with
+    // `wrapperBlock` (variants spliced at the marker) in one edit. Writing the
+    // scaffold here first would reload the framework before the agent's write
+    // lands, and a browser caught mid-reload misses the `done` and sits at 0/N.
+    deferredWrapper = {
+      block: wrapperLines.join('\n'),
+      replaceStartLine: startLine + 1, // 1-indexed picked-element range the
+      replaceEndLine: endLine + 1,     // agent's wrapper block replaces
+    };
+    // insertLine matches the final file position the wrapper occupies once the
+    // agent replaces the picked range, so downstream consumers stay consistent.
+    insertLine = startLine + 6 + (originalLines.length - 1) + 1;
+  } else {
+    // Replace the original element with the wrapper
+    const newLines = [
+      ...lines.slice(0, startLine),
+      ...wrapperLines,
+      ...lines.slice(endLine + 1),
+    ];
+    fs.writeFileSync(targetFile, newLines.join('\n'), 'utf-8');
+
+    // Calculate insert line (the "insert below this line" comment).
+    // 0-indexed file position. Both HTML and JSX wrappers have 6 lines above
+    // the insert marker (HTML: start-comment + outer-div + Original-comment +
+    // original-div + content + close-original-div; JSX: outer-div +
+    // start-comment + Original-comment + original-div + content +
+    // close-original-div). Multi-line originals push the marker by their
+    // extra line count.
+    insertLine = startLine + 6 + (originalLines.length - 1) + 1;
+  }
+
+  const outputRelFile = path.relative(process.cwd(), outputFile).split(path.sep).join('/');
+
+  const componentPreviewActive = !!svelteSession;
+  const svelteComponentAuthoring = componentPreviewActive ? buildSvelteComponentCssAuthoring(count) : null;
+  const componentSession = svelteSession;
+  const componentPreviewMode = componentPreviewActive ? 'svelte-component' : undefined;
+  const previewMode = componentPreviewMode;
 
   console.log(JSON.stringify({
-    file: path.relative(process.cwd(), targetFile),
-    startLine: startLine + 1,       // 1-indexed for the agent
+    file: outputRelFile,
+    sourceFile: componentPreviewActive ? relTargetFile : undefined,
+    previewMode,
+    previewFallback: sveltePreviewFallback
+      ? { from: 'svelte-component', reason: sveltePreviewFallback }
+      : undefined,
+    // Deferred source write: the wrapper is NOT yet in source. The agent
+    // replaces [replaceStartLine, replaceEndLine] with `wrapperBlock` (variants
+    // spliced at the "insert below this line" marker) in one atomic edit.
+    sourceWritten: deferredWrapper ? false : undefined,
+    wrapperBlock: deferredWrapper ? deferredWrapper.block : undefined,
+    replaceStartLine: deferredWrapper ? deferredWrapper.replaceStartLine : undefined,
+    replaceEndLine: deferredWrapper ? deferredWrapper.replaceEndLine : undefined,
+    componentDir: componentSession?.componentDir,
+    propContract: componentSession?.propContract,
+    componentStubMarkup: componentSession?.stubMarkup,
+    sourceStartLine: componentPreviewActive ? startLine + 1 : undefined,
+    sourceEndLine: componentPreviewActive ? endLine + 1 : undefined,
+    startLine: outputStartLine,       // 1-indexed for the agent
     // wrapperLines is an array but one element (the original-content slot)
     // is a `\n`-joined multi-line string, so the actual file-row count is
     // wrapperLines.length + (originalLines.length - 1). Without the offset,
     // endLine pointed inside the wrapper for any picked element that
     // spanned more than one source line.
-    endLine: startLine + wrapperLines.length + (originalLines.length - 1), // 1-indexed
-    insertLine: insertLine + 1,     // 1-indexed: where variants go
+    endLine: outputEndLine, // 1-indexed
+    insertLine,            // 1-indexed: where variants go
     commentSyntax: commentSyntax,
-    styleMode: styleMode.mode,
-    styleTag: styleMode.styleTag,
-    cssSelectorPrefixExamples: buildCssSelectorPrefixExamples(styleMode.mode, count),
-    cssAuthoring: buildCssAuthoring(styleMode, count),
+    styleMode: componentPreviewMode || styleMode.mode,
+    styleTag: componentPreviewActive ? null : styleMode.styleTag,
+    cssSelectorPrefixExamples: componentPreviewActive ? [] : buildCssSelectorPrefixExamples(styleMode.mode, count),
+    cssAuthoring: svelteComponentAuthoring || buildCssAuthoring(styleMode, count),
     originalLineCount: originalLines.length,
   }));
 }
@@ -283,8 +461,138 @@ The agent should insert variant HTML at insertLine.`);
 // ---------------------------------------------------------------------------
 
 function argVal(args, flag) {
+  const prefix = flag + '=';
+  for (const arg of args) {
+    if (arg.startsWith(prefix)) return arg.slice(prefix.length);
+  }
   const idx = args.indexOf(flag);
   return idx !== -1 && idx + 1 < args.length ? args[idx + 1] : null;
+}
+
+function pendingEntriesThatMayAffectWrap(entries, targetFile, originalLines, selectionStartLine, cwd) {
+  const targetAbs = path.resolve(cwd, targetFile);
+  return (entries || []).filter((entry) => {
+    return (entry.ops || []).some((op) => {
+      return manualEditMayAffectWrap(op, targetAbs, originalLines, selectionStartLine, cwd);
+    });
+  });
+}
+
+function manualEditMayAffectWrap(op, targetFile, originalLines, selectionStartLine, cwd) {
+  const targetAbs = path.resolve(cwd, targetFile);
+  if (manualEditHintFallsInsideSelection(op, targetAbs, originalLines, selectionStartLine, cwd)) return true;
+  if (manualEditLocatorMatchesSelection(op, originalLines)) return true;
+  if (typeof op?.originalText === 'string' && op.originalText.length > 0) {
+    return originalLines.join('\n').includes(op.originalText);
+  }
+  return false;
+}
+
+function manualEditHintFallsInsideSelection(op, targetAbs, originalLines, selectionStartLine, cwd) {
+  const hintFile = op?.sourceHint?.file;
+  const hintedLine = Number(op?.sourceHint?.line);
+  if (!hintFile || !Number.isFinite(hintedLine)) return false;
+  const hintAbs = path.isAbsolute(hintFile) ? hintFile : path.resolve(cwd, hintFile);
+  if (path.resolve(hintAbs) !== targetAbs) return false;
+  const hintedIndex = hintedLine - 1 - selectionStartLine;
+  return hintedIndex >= 0
+    && hintedIndex < originalLines.length
+    && typeof op?.originalText === 'string'
+    && originalLines[hintedIndex].includes(op.originalText);
+}
+
+function manualEditLocatorMatchesSelection(op, originalLines) {
+  if (!op || typeof op.originalText !== 'string' || op.originalText.length === 0) return false;
+  return originalLines.some((line) => (
+    line.includes(op.originalText) && lineMatchesManualEditLocator(line, op)
+  ));
+}
+
+function applyBufferedManualEditToLines(originalLines, selectionStartLine, op) {
+  if (
+    !op
+    || typeof op.originalText !== 'string'
+    || op.originalText.length === 0
+    || typeof op.newText !== 'string'
+  ) {
+    return { lines: originalLines, changed: false };
+  }
+
+  const replaceLine = (lineIndex) => ({
+    lines: originalLines.map((line, index) => (
+      index === lineIndex ? replaceOnce(line, op.originalText, op.newText) : line
+    )),
+    changed: true,
+  });
+
+  const hintedLine = Number(op.sourceHint?.line);
+  if (Number.isFinite(hintedLine)) {
+    const hintedIndex = hintedLine - 1 - selectionStartLine;
+    if (hintedIndex >= 0 && hintedIndex < originalLines.length && originalLines[hintedIndex].includes(op.originalText)) {
+      return replaceLine(hintedIndex);
+    }
+  }
+
+  const locatorMatches = [];
+  for (let index = 0; index < originalLines.length; index += 1) {
+    const line = originalLines[index];
+    if (!line.includes(op.originalText)) continue;
+    if (!lineMatchesManualEditLocator(line, op)) continue;
+    locatorMatches.push(index);
+  }
+  if (locatorMatches.length === 1) return replaceLine(locatorMatches[0]);
+
+  const originalBlock = originalLines.join('\n');
+  if (countOccurrences(originalBlock, op.originalText) === 1) {
+    return {
+      lines: replaceOnce(originalBlock, op.originalText, op.newText).split('\n'),
+      changed: true,
+    };
+  }
+
+  return { lines: originalLines, changed: false };
+}
+
+function lineMatchesManualEditLocator(line, op) {
+  if (op.tag) {
+    const tagRe = new RegExp('<\\s*' + escapeRegExp(op.tag) + '(?=[\\s>/]|$)', 'i');
+    if (!tagRe.test(line)) return false;
+  }
+
+  if (op.elementId) {
+    const id = escapeRegExp(op.elementId);
+    const idRe = new RegExp('\\bid\\s*=\\s*["\']' + id + '["\']');
+    if (!idRe.test(line)) return false;
+  }
+
+  const classes = Array.isArray(op.classes) ? op.classes.filter(Boolean) : [];
+  for (const className of classes) {
+    if (!line.includes(className)) return false;
+  }
+
+  return true;
+}
+
+function replaceOnce(value, needle, replacement) {
+  const index = value.indexOf(needle);
+  if (index === -1) return value;
+  return value.slice(0, index) + replacement + value.slice(index + needle.length);
+}
+
+function countOccurrences(value, needle) {
+  if (!needle) return 0;
+  let count = 0;
+  let index = 0;
+  while (true) {
+    index = value.indexOf(needle, index);
+    if (index === -1) return count;
+    count += 1;
+    index += needle.length;
+  }
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
@@ -303,13 +611,15 @@ function buildSearchQueries(elementId, classes, tag, query) {
   // Emit both class="..." (HTML) and className="..." (React/JSX) so whichever
   // convention the file uses will match.
   if (classes) {
-    const classList = classes.split(',').map(c => c.trim()).filter(Boolean);
+    const classList = splitClassList(classes);
     if (classList.length > 1) {
       const joined = classList.join(' ');
       const sorted = [...classList].sort((a, b) => b.length - a.length);
       queries.push('class="' + joined + '"');
       queries.push('className="' + joined + '"');
-      queries.push(sorted[0]); // most distinctive single class, fallback
+      for (const className of sorted) {
+        queries.push(className);
+      }
     } else if (classList.length === 1) {
       queries.push(classList[0]);
     }
@@ -318,7 +628,7 @@ function buildSearchQueries(elementId, classes, tag, query) {
   // 3. Tag + class combo (e.g., <section class="hero">).
   // Same dual-emit for JSX compatibility.
   if (tag && classes) {
-    const firstClass = classes.split(',')[0].trim();
+    const firstClass = splitClassList(classes)[0];
     queries.push('<' + tag + ' class="' + firstClass);
     queries.push('<' + tag + ' className="' + firstClass);
   }
@@ -331,27 +641,34 @@ function buildSearchQueries(elementId, classes, tag, query) {
   return queries;
 }
 
+function splitClassList(classes) {
+  return String(classes).split(/[,\s]+/).map(c => c.trim()).filter(Boolean);
+}
+
+function attrEscapeDouble(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * Comment syntax, style mode, and preview strategy all come from the framework
+ * registry, keyed on the target file's extension: `.jsx`/`.tsx` author JSX
+ * comments, `.astro` needs global-prefixed preview CSS because Astro scopes
+ * component styles away from the generated wrappers, `.svelte` gets component
+ * preview. See live/frameworks/index.mjs for why extension and not project.
+ */
 function detectCommentSyntax(filePath) {
-  const ext = path.extname(filePath).toLowerCase();
-  if (ext === '.jsx' || ext === '.tsx') {
-    return { open: '{/*', close: '*/}' };
-  }
-  // HTML, Vue, Svelte, Astro all use HTML comments
-  return { open: '<!--', close: '-->' };
+  return resolveSourceTraits(filePath).commentSyntax === 'jsx'
+    ? { open: '{/*', close: '*/}' }
+    : { open: '<!--', close: '-->' };
 }
 
 function detectStyleMode(filePath) {
-  const ext = path.extname(filePath).toLowerCase();
-  if (ext === '.astro') {
-    return {
-      mode: 'astro-global-prefixed',
-      styleTag: '<style is:inline data-impeccable-css="SESSION_ID">',
-    };
-  }
-  return {
-    mode: 'scoped',
-    styleTag: '<style data-impeccable-css="SESSION_ID">',
-  };
+  const traits = resolveSourceTraits(filePath);
+  return { mode: traits.styleMode, styleTag: traits.styleTag };
 }
 
 function buildCssSelectorPrefixExamples(styleMode, count) {
@@ -370,11 +687,14 @@ function buildCssAuthoring(styleMode, count) {
       selectorExamples: variantNumbers.map((n) => `[data-impeccable-variant="${n}"] > .variant-class`),
       requirements: [
         'Use the styleTag exactly; the is:inline attribute is required for this file.',
+        'Put raw CSS directly between the styleTag opening and a plain </style> close.',
         'Prefix every preview selector with the matching [data-impeccable-variant="N"] selector.',
         'Keep selectors anchored to the generated variant wrapper; do not rely on component CSS scoping for preview rules.',
       ],
       forbidden: [
         'Do not use @scope for this styleMode.',
+        'Do not wrap style content in a JSX/TSX template literal ({` ... `}); that syntax is for .tsx/.jsx only.',
+        'Do not put { immediately after the style opening tag; Astro parses { as expression syntax.',
       ],
     };
   }
@@ -399,56 +719,19 @@ function buildCssAuthoring(styleMode, count) {
 /**
  * Search project files for the query string (class name, ID, etc.)
  * Returns the first matching file path, or null.
+ *
+ * Only `node_modules`, `.git`, and `.impeccable` are skipped outright.
+ * dist/build/out are left to the isGeneratedFile guard so the
+ * `includeGenerated` second pass can still find the element there and report
+ * `generatedMatch`.
  */
 function findFileWithQuery(query, cwd, genOpts = {}) {
-  const searchDirs = ['src', 'app', 'pages', 'components', 'public', 'views', 'templates', '.'];
-  const seen = new Set();
-
-  for (const dir of searchDirs) {
-    const absDir = path.join(cwd, dir);
-    if (!fs.existsSync(absDir)) continue;
-    const result = searchDir(absDir, query, seen, 0, genOpts);
-    if (result) return result;
-  }
-  return null;
-}
-
-function searchDir(dir, query, seen, depth, genOpts) {
-  if (depth > 5) return null; // don't go too deep
-  const realDir = fs.realpathSync(dir);
-  if (seen.has(realDir)) return null;
-  seen.add(realDir);
-
-  let entries;
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
-  catch { return null; }
-
-  // Check files first
-  for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    const ext = path.extname(entry.name).toLowerCase();
-    if (!EXTENSIONS.includes(ext)) continue;
-
-    const filePath = path.join(dir, entry.name);
-    if (!genOpts.includeGenerated && isGeneratedFile(filePath, genOpts)) continue;
-    try {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      if (content.includes(query)) return filePath;
-    } catch { /* skip unreadable files */ }
-  }
-
-  // Then recurse into directories. Always skip node_modules and .git (never
-  // project content). dist/build/out are left to the isGeneratedFile guard so
-  // the includeGenerated second-pass can still find the element there and
-  // report `generatedMatch`.
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    if (entry.name === 'node_modules' || entry.name === '.git') continue;
-    const result = searchDir(path.join(dir, entry.name), query, seen, depth + 1, genOpts);
-    if (result) return result;
-  }
-
-  return null;
+  return findSourceFile({
+    query,
+    cwd,
+    extensions: resolveLiveTemplateExtensions(cwd),
+    fileFilter: (filePath) => genOpts.includeGenerated || !isGeneratedFile(filePath, genOpts),
+  });
 }
 
 /**
@@ -625,8 +908,20 @@ function findClosingLine(lines, start) {
 // Auto-execute when run directly (node live-wrap.mjs ...)
 const _running = process.argv[1];
 if (_running?.endsWith('live-wrap.mjs') || _running?.endsWith('live-wrap.mjs/')) {
+  enterLiveRoot();
   wrapCli();
 }
 
 // Test exports (used by tests/live-wrap.test.mjs)
-export { buildSearchQueries, findElement, findClosingLine, detectCommentSyntax };
+export {
+  buildSearchQueries,
+  findElement,
+  findClosingLine,
+  detectCommentSyntax,
+  findAllElements,
+  filterByText,
+  findFileWithQuery,
+  detectStyleMode,
+  buildCssAuthoring,
+  buildCssSelectorPrefixExamples,
+};

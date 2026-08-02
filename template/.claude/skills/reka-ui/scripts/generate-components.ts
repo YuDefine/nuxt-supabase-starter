@@ -16,545 +16,72 @@ const REPO = 'unovue/reka-ui'
 const BRANCH = 'main'
 const BASE_URL = `https://raw.githubusercontent.com/${REPO}/${BRANCH}`
 
-interface PropMeta {
-  name: string
-  description: string
-  type: string
-  required: boolean
-  default?: string
-}
-interface EmitMeta {
-  name: string
-  description: string
-  type: string
-}
-interface SlotMeta {
-  name: string
-  description: string
-  type: string
-}
+interface PropMeta { name: string, description: string, type: string, required: boolean, default?: string }
+interface EmitMeta { name: string, description: string, type: string }
+interface SlotMeta { name: string, description: string, type: string }
 
-const COMPONENT_GROUPS: Record<
-  string,
-  { category: string; description: string; components: string[] }
-> = {
-  checkbox: {
-    category: 'Form',
-    description: 'Selection control with indeterminate state',
-    components: ['CheckboxGroupRoot', 'CheckboxRoot', 'CheckboxIndicator'],
-  },
-  combobox: {
-    category: 'Form',
-    description: 'Searchable dropdown with filtering',
-    components: [
-      'ComboboxRoot',
-      'ComboboxInput',
-      'ComboboxAnchor',
-      'ComboboxTrigger',
-      'ComboboxContent',
-      'ComboboxViewport',
-      'ComboboxItem',
-      'ComboboxItemIndicator',
-      'ComboboxGroup',
-      'ComboboxLabel',
-      'ComboboxEmpty',
-      'ComboboxSeparator',
-      'ComboboxArrow',
-      'ComboboxPortal',
-      'ComboboxCancel',
-      'ComboboxVirtualizer',
-    ],
-  },
-  editable: {
-    category: 'Form',
-    description: 'Inline text editing with preview/edit modes',
-    components: [
-      'EditableRoot',
-      'EditableArea',
-      'EditableInput',
-      'EditablePreview',
-      'EditableSubmitTrigger',
-      'EditableCancelTrigger',
-      'EditableEditTrigger',
-    ],
-  },
+const COMPONENT_GROUPS: Record<string, { category: string, description: string, components: string[] }> = {
+  checkbox: { category: 'Form', description: 'Selection control with indeterminate state', components: ['CheckboxGroupRoot', 'CheckboxRoot', 'CheckboxIndicator'] },
+  combobox: { category: 'Form', description: 'Searchable dropdown with filtering', components: ['ComboboxRoot', 'ComboboxInput', 'ComboboxAnchor', 'ComboboxTrigger', 'ComboboxContent', 'ComboboxViewport', 'ComboboxItem', 'ComboboxItemIndicator', 'ComboboxGroup', 'ComboboxLabel', 'ComboboxEmpty', 'ComboboxSeparator', 'ComboboxArrow', 'ComboboxPortal', 'ComboboxCancel', 'ComboboxVirtualizer'] },
+  editable: { category: 'Form', description: 'Inline text editing with preview/edit modes', components: ['EditableRoot', 'EditableArea', 'EditableInput', 'EditablePreview', 'EditableSubmitTrigger', 'EditableCancelTrigger', 'EditableEditTrigger'] },
   label: { category: 'Form', description: 'Accessible form label', components: ['Label'] },
-  listbox: {
-    category: 'Form',
-    description: 'Accessible list selection',
-    components: [
-      'ListboxRoot',
-      'ListboxContent',
-      'ListboxFilter',
-      'ListboxItem',
-      'ListboxItemIndicator',
-      'ListboxGroup',
-      'ListboxGroupLabel',
-      'ListboxVirtualizer',
-    ],
-  },
-  numberField: {
-    category: 'Form',
-    description: 'Numeric input with increment/decrement',
-    components: [
-      'NumberFieldRoot',
-      'NumberFieldInput',
-      'NumberFieldIncrement',
-      'NumberFieldDecrement',
-    ],
-  },
-  pinInput: {
-    category: 'Form',
-    description: 'Multi-character code entry (OTP)',
-    components: ['PinInputRoot', 'PinInputInput'],
-  },
-  radioGroup: {
-    category: 'Form',
-    description: 'Mutually exclusive selection',
-    components: ['RadioGroupRoot', 'RadioGroupItem', 'RadioGroupIndicator'],
-  },
-  select: {
-    category: 'Form',
-    description: 'Dropdown selection with grouping',
-    components: [
-      'SelectRoot',
-      'SelectTrigger',
-      'SelectPortal',
-      'SelectContent',
-      'SelectViewport',
-      'SelectItem',
-      'SelectItemText',
-      'SelectItemIndicator',
-      'SelectGroup',
-      'SelectLabel',
-      'SelectSeparator',
-      'SelectArrow',
-      'SelectScrollUpButton',
-      'SelectScrollDownButton',
-      'SelectValue',
-      'SelectIcon',
-    ],
-  },
-  slider: {
-    category: 'Form',
-    description: 'Range input control',
-    components: ['SliderRoot', 'SliderTrack', 'SliderRange', 'SliderThumb'],
-  },
-  switch: {
-    category: 'Form',
-    description: 'Toggle between two states',
-    components: ['SwitchRoot', 'SwitchThumb'],
-  },
-  tagsInput: {
-    category: 'Form',
-    description: 'Multiple tag entry and management',
-    components: [
-      'TagsInputRoot',
-      'TagsInputInput',
-      'TagsInputItem',
-      'TagsInputItemText',
-      'TagsInputItemDelete',
-      'TagsInputClear',
-    ],
-  },
+  listbox: { category: 'Form', description: 'Accessible list selection', components: ['ListboxRoot', 'ListboxContent', 'ListboxFilter', 'ListboxItem', 'ListboxItemIndicator', 'ListboxGroup', 'ListboxGroupLabel', 'ListboxVirtualizer'] },
+  numberField: { category: 'Form', description: 'Numeric input with increment/decrement', components: ['NumberFieldRoot', 'NumberFieldInput', 'NumberFieldIncrement', 'NumberFieldDecrement'] },
+  pinInput: { category: 'Form', description: 'Multi-character code entry (OTP)', components: ['PinInputRoot', 'PinInputInput'] },
+  radioGroup: { category: 'Form', description: 'Mutually exclusive selection', components: ['RadioGroupRoot', 'RadioGroupItem', 'RadioGroupIndicator'] },
+  select: { category: 'Form', description: 'Dropdown selection with grouping', components: ['SelectRoot', 'SelectTrigger', 'SelectPortal', 'SelectContent', 'SelectViewport', 'SelectItem', 'SelectItemText', 'SelectItemIndicator', 'SelectGroup', 'SelectLabel', 'SelectSeparator', 'SelectArrow', 'SelectScrollUpButton', 'SelectScrollDownButton', 'SelectValue', 'SelectIcon'] },
+  slider: { category: 'Form', description: 'Range input control', components: ['SliderRoot', 'SliderTrack', 'SliderRange', 'SliderThumb'] },
+  switch: { category: 'Form', description: 'Toggle between two states', components: ['SwitchRoot', 'SwitchThumb'] },
+  tagsInput: { category: 'Form', description: 'Multiple tag entry and management', components: ['TagsInputRoot', 'TagsInputInput', 'TagsInputItem', 'TagsInputItemText', 'TagsInputItemDelete', 'TagsInputClear'] },
   toggle: { category: 'Form', description: 'Single state button toggle', components: ['Toggle'] },
-  toggleGroup: {
-    category: 'Form',
-    description: 'Multiple toggles with group behavior',
-    components: ['ToggleGroupRoot', 'ToggleGroupItem'],
-  },
+  toggleGroup: { category: 'Form', description: 'Multiple toggles with group behavior', components: ['ToggleGroupRoot', 'ToggleGroupItem'] },
 
-  calendar: {
-    category: 'Date',
-    description: 'Date selection grid (alpha)',
-    components: [
-      'CalendarRoot',
-      'CalendarHeader',
-      'CalendarHeading',
-      'CalendarGrid',
-      'CalendarGridHead',
-      'CalendarGridBody',
-      'CalendarGridRow',
-      'CalendarCell',
-      'CalendarCellTrigger',
-      'CalendarHeadCell',
-      'CalendarNext',
-      'CalendarPrev',
-    ],
-  },
-  dateField: {
-    category: 'Date',
-    description: 'Date input field (alpha)',
-    components: ['DateFieldRoot', 'DateFieldInput'],
-  },
-  datePicker: {
-    category: 'Date',
-    description: 'Date picker with calendar (alpha)',
-    components: [
-      'DatePickerRoot',
-      'DatePickerField',
-      'DatePickerInput',
-      'DatePickerTrigger',
-      'DatePickerContent',
-      'DatePickerCalendar',
-      'DatePickerHeader',
-      'DatePickerHeading',
-      'DatePickerGrid',
-      'DatePickerCell',
-      'DatePickerCellTrigger',
-      'DatePickerNext',
-      'DatePickerPrev',
-      'DatePickerAnchor',
-      'DatePickerArrow',
-      'DatePickerClose',
-    ],
-  },
-  dateRangeField: {
-    category: 'Date',
-    description: 'Date range input (alpha)',
-    components: ['DateRangeFieldRoot', 'DateRangeFieldInput'],
-  },
-  dateRangePicker: {
-    category: 'Date',
-    description: 'Date range picker (alpha)',
-    components: [
-      'DateRangePickerRoot',
-      'DateRangePickerField',
-      'DateRangePickerInput',
-      'DateRangePickerTrigger',
-      'DateRangePickerContent',
-      'DateRangePickerCalendar',
-      'DateRangePickerHeader',
-      'DateRangePickerHeading',
-      'DateRangePickerGrid',
-      'DateRangePickerCell',
-      'DateRangePickerCellTrigger',
-      'DateRangePickerNext',
-      'DateRangePickerPrev',
-    ],
-  },
-  rangeCalendar: {
-    category: 'Date',
-    description: 'Calendar for date ranges (alpha)',
-    components: [
-      'RangeCalendarRoot',
-      'RangeCalendarHeader',
-      'RangeCalendarHeading',
-      'RangeCalendarGrid',
-      'RangeCalendarCell',
-      'RangeCalendarCellTrigger',
-      'RangeCalendarNext',
-      'RangeCalendarPrev',
-    ],
-  },
-  timeField: {
-    category: 'Date',
-    description: 'Time input field (alpha)',
-    components: ['TimeFieldRoot', 'TimeFieldInput'],
-  },
+  calendar: { category: 'Date', description: 'Date selection grid (alpha)', components: ['CalendarRoot', 'CalendarHeader', 'CalendarHeading', 'CalendarGrid', 'CalendarGridHead', 'CalendarGridBody', 'CalendarGridRow', 'CalendarCell', 'CalendarCellTrigger', 'CalendarHeadCell', 'CalendarNext', 'CalendarPrev'] },
+  dateField: { category: 'Date', description: 'Date input field (alpha)', components: ['DateFieldRoot', 'DateFieldInput'] },
+  datePicker: { category: 'Date', description: 'Date picker with calendar (alpha)', components: ['DatePickerRoot', 'DatePickerField', 'DatePickerInput', 'DatePickerTrigger', 'DatePickerContent', 'DatePickerCalendar', 'DatePickerHeader', 'DatePickerHeading', 'DatePickerGrid', 'DatePickerCell', 'DatePickerCellTrigger', 'DatePickerNext', 'DatePickerPrev', 'DatePickerAnchor', 'DatePickerArrow', 'DatePickerClose'] },
+  dateRangeField: { category: 'Date', description: 'Date range input (alpha)', components: ['DateRangeFieldRoot', 'DateRangeFieldInput'] },
+  dateRangePicker: { category: 'Date', description: 'Date range picker (alpha)', components: ['DateRangePickerRoot', 'DateRangePickerField', 'DateRangePickerInput', 'DateRangePickerTrigger', 'DateRangePickerContent', 'DateRangePickerCalendar', 'DateRangePickerHeader', 'DateRangePickerHeading', 'DateRangePickerGrid', 'DateRangePickerCell', 'DateRangePickerCellTrigger', 'DateRangePickerNext', 'DateRangePickerPrev'] },
+  rangeCalendar: { category: 'Date', description: 'Calendar for date ranges (alpha)', components: ['RangeCalendarRoot', 'RangeCalendarHeader', 'RangeCalendarHeading', 'RangeCalendarGrid', 'RangeCalendarCell', 'RangeCalendarCellTrigger', 'RangeCalendarNext', 'RangeCalendarPrev'] },
+  timeField: { category: 'Date', description: 'Time input field (alpha)', components: ['TimeFieldRoot', 'TimeFieldInput'] },
 
-  accordion: {
-    category: 'Disclosure',
-    description: 'Collapsible content sections',
-    components: [
-      'AccordionRoot',
-      'AccordionItem',
-      'AccordionHeader',
-      'AccordionTrigger',
-      'AccordionContent',
-    ],
-  },
-  collapsible: {
-    category: 'Disclosure',
-    description: 'Single collapsible panel',
-    components: ['CollapsibleRoot', 'CollapsibleTrigger', 'CollapsibleContent'],
-  },
+  accordion: { category: 'Disclosure', description: 'Collapsible content sections', components: ['AccordionRoot', 'AccordionItem', 'AccordionHeader', 'AccordionTrigger', 'AccordionContent'] },
+  collapsible: { category: 'Disclosure', description: 'Single collapsible panel', components: ['CollapsibleRoot', 'CollapsibleTrigger', 'CollapsibleContent'] },
 
-  alertDialog: {
-    category: 'Overlay',
-    description: 'Modal dialog requiring action',
-    components: [
-      'AlertDialogRoot',
-      'AlertDialogTrigger',
-      'AlertDialogPortal',
-      'AlertDialogOverlay',
-      'AlertDialogContent',
-      'AlertDialogTitle',
-      'AlertDialogDescription',
-      'AlertDialogCancel',
-      'AlertDialogAction',
-    ],
-  },
-  dialog: {
-    category: 'Overlay',
-    description: 'Modal dialog',
-    components: [
-      'DialogRoot',
-      'DialogTrigger',
-      'DialogPortal',
-      'DialogOverlay',
-      'DialogContent',
-      'DialogTitle',
-      'DialogDescription',
-      'DialogClose',
-    ],
-  },
-  hoverCard: {
-    category: 'Overlay',
-    description: 'Card shown on hover',
-    components: [
-      'HoverCardRoot',
-      'HoverCardTrigger',
-      'HoverCardPortal',
-      'HoverCardContent',
-      'HoverCardArrow',
-    ],
-  },
-  popover: {
-    category: 'Overlay',
-    description: 'Floating content panel',
-    components: [
-      'PopoverRoot',
-      'PopoverTrigger',
-      'PopoverPortal',
-      'PopoverContent',
-      'PopoverArrow',
-      'PopoverClose',
-      'PopoverAnchor',
-    ],
-  },
-  tooltip: {
-    category: 'Overlay',
-    description: 'Informational hover tip',
-    components: [
-      'TooltipProvider',
-      'TooltipRoot',
-      'TooltipTrigger',
-      'TooltipPortal',
-      'TooltipContent',
-      'TooltipArrow',
-    ],
-  },
-  toast: {
-    category: 'Overlay',
-    description: 'Temporary notifications',
-    components: [
-      'ToastProvider',
-      'ToastRoot',
-      'ToastViewport',
-      'ToastTitle',
-      'ToastDescription',
-      'ToastAction',
-      'ToastClose',
-      'ToastPortal',
-    ],
-  },
+  alertDialog: { category: 'Overlay', description: 'Modal dialog requiring action', components: ['AlertDialogRoot', 'AlertDialogTrigger', 'AlertDialogPortal', 'AlertDialogOverlay', 'AlertDialogContent', 'AlertDialogTitle', 'AlertDialogDescription', 'AlertDialogCancel', 'AlertDialogAction'] },
+  dialog: { category: 'Overlay', description: 'Modal dialog', components: ['DialogRoot', 'DialogTrigger', 'DialogPortal', 'DialogOverlay', 'DialogContent', 'DialogTitle', 'DialogDescription', 'DialogClose'] },
+  hoverCard: { category: 'Overlay', description: 'Card shown on hover', components: ['HoverCardRoot', 'HoverCardTrigger', 'HoverCardPortal', 'HoverCardContent', 'HoverCardArrow'] },
+  popover: { category: 'Overlay', description: 'Floating content panel', components: ['PopoverRoot', 'PopoverTrigger', 'PopoverPortal', 'PopoverContent', 'PopoverArrow', 'PopoverClose', 'PopoverAnchor'] },
+  tooltip: { category: 'Overlay', description: 'Informational hover tip', components: ['TooltipProvider', 'TooltipRoot', 'TooltipTrigger', 'TooltipPortal', 'TooltipContent', 'TooltipArrow'] },
+  toast: { category: 'Overlay', description: 'Temporary notifications', components: ['ToastProvider', 'ToastRoot', 'ToastViewport', 'ToastTitle', 'ToastDescription', 'ToastAction', 'ToastClose', 'ToastPortal'] },
 
-  contextMenu: {
-    category: 'Menu',
-    description: 'Right-click context menu',
-    components: [
-      'ContextMenuRoot',
-      'ContextMenuTrigger',
-      'ContextMenuPortal',
-      'ContextMenuContent',
-      'ContextMenuItem',
-      'ContextMenuCheckboxItem',
-      'ContextMenuRadioGroup',
-      'ContextMenuRadioItem',
-      'ContextMenuItemIndicator',
-      'ContextMenuLabel',
-      'ContextMenuGroup',
-      'ContextMenuSeparator',
-      'ContextMenuSub',
-      'ContextMenuSubTrigger',
-      'ContextMenuSubContent',
-      'ContextMenuArrow',
-    ],
-  },
-  dropdownMenu: {
-    category: 'Menu',
-    description: 'Dropdown action menu',
-    components: [
-      'DropdownMenuRoot',
-      'DropdownMenuTrigger',
-      'DropdownMenuPortal',
-      'DropdownMenuContent',
-      'DropdownMenuItem',
-      'DropdownMenuCheckboxItem',
-      'DropdownMenuRadioGroup',
-      'DropdownMenuRadioItem',
-      'DropdownMenuItemIndicator',
-      'DropdownMenuLabel',
-      'DropdownMenuGroup',
-      'DropdownMenuSeparator',
-      'DropdownMenuSub',
-      'DropdownMenuSubTrigger',
-      'DropdownMenuSubContent',
-      'DropdownMenuArrow',
-    ],
-  },
-  menubar: {
-    category: 'Menu',
-    description: 'Horizontal menu bar',
-    components: [
-      'MenubarRoot',
-      'MenubarMenu',
-      'MenubarTrigger',
-      'MenubarPortal',
-      'MenubarContent',
-      'MenubarItem',
-      'MenubarCheckboxItem',
-      'MenubarRadioGroup',
-      'MenubarRadioItem',
-      'MenubarItemIndicator',
-      'MenubarLabel',
-      'MenubarGroup',
-      'MenubarSeparator',
-      'MenubarSub',
-      'MenubarSubTrigger',
-      'MenubarSubContent',
-      'MenubarArrow',
-    ],
-  },
-  navigationMenu: {
-    category: 'Menu',
-    description: 'Site navigation menu',
-    components: [
-      'NavigationMenuRoot',
-      'NavigationMenuList',
-      'NavigationMenuItem',
-      'NavigationMenuTrigger',
-      'NavigationMenuContent',
-      'NavigationMenuLink',
-      'NavigationMenuIndicator',
-      'NavigationMenuViewport',
-      'NavigationMenuSub',
-    ],
-  },
+  contextMenu: { category: 'Menu', description: 'Right-click context menu', components: ['ContextMenuRoot', 'ContextMenuTrigger', 'ContextMenuPortal', 'ContextMenuContent', 'ContextMenuItem', 'ContextMenuCheckboxItem', 'ContextMenuRadioGroup', 'ContextMenuRadioItem', 'ContextMenuItemIndicator', 'ContextMenuLabel', 'ContextMenuGroup', 'ContextMenuSeparator', 'ContextMenuSub', 'ContextMenuSubTrigger', 'ContextMenuSubContent', 'ContextMenuArrow'] },
+  dropdownMenu: { category: 'Menu', description: 'Dropdown action menu', components: ['DropdownMenuRoot', 'DropdownMenuTrigger', 'DropdownMenuPortal', 'DropdownMenuContent', 'DropdownMenuItem', 'DropdownMenuCheckboxItem', 'DropdownMenuRadioGroup', 'DropdownMenuRadioItem', 'DropdownMenuItemIndicator', 'DropdownMenuLabel', 'DropdownMenuGroup', 'DropdownMenuSeparator', 'DropdownMenuSub', 'DropdownMenuSubTrigger', 'DropdownMenuSubContent', 'DropdownMenuArrow'] },
+  menubar: { category: 'Menu', description: 'Horizontal menu bar', components: ['MenubarRoot', 'MenubarMenu', 'MenubarTrigger', 'MenubarPortal', 'MenubarContent', 'MenubarItem', 'MenubarCheckboxItem', 'MenubarRadioGroup', 'MenubarRadioItem', 'MenubarItemIndicator', 'MenubarLabel', 'MenubarGroup', 'MenubarSeparator', 'MenubarSub', 'MenubarSubTrigger', 'MenubarSubContent', 'MenubarArrow'] },
+  navigationMenu: { category: 'Menu', description: 'Site navigation menu', components: ['NavigationMenuRoot', 'NavigationMenuList', 'NavigationMenuItem', 'NavigationMenuTrigger', 'NavigationMenuContent', 'NavigationMenuLink', 'NavigationMenuIndicator', 'NavigationMenuViewport', 'NavigationMenuSub'] },
 
-  avatar: {
-    category: 'Data',
-    description: 'User image with fallback',
-    components: ['AvatarRoot', 'AvatarImage', 'AvatarFallback'],
-  },
-  pagination: {
-    category: 'Data',
-    description: 'Page navigation',
-    components: [
-      'PaginationRoot',
-      'PaginationList',
-      'PaginationListItem',
-      'PaginationFirst',
-      'PaginationPrev',
-      'PaginationNext',
-      'PaginationLast',
-      'PaginationEllipsis',
-    ],
-  },
-  progress: {
-    category: 'Data',
-    description: 'Progress indicator',
-    components: ['ProgressRoot', 'ProgressIndicator'],
-  },
-  scrollArea: {
-    category: 'Data',
-    description: 'Custom scrollbar container',
-    components: [
-      'ScrollAreaRoot',
-      'ScrollAreaViewport',
-      'ScrollAreaScrollbar',
-      'ScrollAreaThumb',
-      'ScrollAreaCorner',
-    ],
-  },
+  avatar: { category: 'Data', description: 'User image with fallback', components: ['AvatarRoot', 'AvatarImage', 'AvatarFallback'] },
+  pagination: { category: 'Data', description: 'Page navigation', components: ['PaginationRoot', 'PaginationList', 'PaginationListItem', 'PaginationFirst', 'PaginationPrev', 'PaginationNext', 'PaginationLast', 'PaginationEllipsis'] },
+  progress: { category: 'Data', description: 'Progress indicator', components: ['ProgressRoot', 'ProgressIndicator'] },
+  scrollArea: { category: 'Data', description: 'Custom scrollbar container', components: ['ScrollAreaRoot', 'ScrollAreaViewport', 'ScrollAreaScrollbar', 'ScrollAreaThumb', 'ScrollAreaCorner'] },
   separator: { category: 'Data', description: 'Visual divider', components: ['Separator'] },
-  splitter: {
-    category: 'Data',
-    description: 'Resizable split panels',
-    components: ['SplitterGroup', 'SplitterPanel', 'SplitterResizeHandle'],
-  },
-  stepper: {
-    category: 'Data',
-    description: 'Multi-step progress indicator',
-    components: [
-      'StepperRoot',
-      'StepperItem',
-      'StepperTrigger',
-      'StepperTitle',
-      'StepperDescription',
-      'StepperIndicator',
-      'StepperSeparator',
-    ],
-  },
-  tabs: {
-    category: 'Data',
-    description: 'Tabbed content panels',
-    components: ['TabsRoot', 'TabsList', 'TabsTrigger', 'TabsContent', 'TabsIndicator'],
-  },
-  tree: {
-    category: 'Data',
-    description: 'Hierarchical tree view',
-    components: ['TreeRoot', 'TreeItem', 'TreeVirtualizer'],
-  },
+  splitter: { category: 'Data', description: 'Resizable split panels', components: ['SplitterGroup', 'SplitterPanel', 'SplitterResizeHandle'] },
+  stepper: { category: 'Data', description: 'Multi-step progress indicator', components: ['StepperRoot', 'StepperItem', 'StepperTrigger', 'StepperTitle', 'StepperDescription', 'StepperIndicator', 'StepperSeparator'] },
+  tabs: { category: 'Data', description: 'Tabbed content panels', components: ['TabsRoot', 'TabsList', 'TabsTrigger', 'TabsContent', 'TabsIndicator'] },
+  tree: { category: 'Data', description: 'Hierarchical tree view', components: ['TreeRoot', 'TreeItem', 'TreeVirtualizer'] },
 
-  aspectRatio: {
-    category: 'Layout',
-    description: 'Maintain aspect ratio',
-    components: ['AspectRatio'],
-  },
-  toolbar: {
-    category: 'Layout',
-    description: 'Toolbar with buttons/toggles',
-    components: [
-      'ToolbarRoot',
-      'ToolbarButton',
-      'ToolbarLink',
-      'ToolbarToggleGroup',
-      'ToolbarToggleItem',
-      'ToolbarSeparator',
-    ],
-  },
-  configProvider: {
-    category: 'Utility',
-    description: 'Global config context',
-    components: ['ConfigProvider'],
-  },
-  focusScope: {
-    category: 'Utility',
-    description: 'Focus trap container',
-    components: ['FocusScope'],
-  },
-  presence: {
-    category: 'Utility',
-    description: 'Animation presence control',
-    components: ['Presence'],
-  },
-  primitive: {
-    category: 'Utility',
-    description: 'Base element wrapper',
-    components: ['Primitive', 'Slot'],
-  },
-  visuallyHidden: {
-    category: 'Utility',
-    description: 'Screen reader only content',
-    components: ['VisuallyHidden'],
-  },
+  aspectRatio: { category: 'Layout', description: 'Maintain aspect ratio', components: ['AspectRatio'] },
+  toolbar: { category: 'Layout', description: 'Toolbar with buttons/toggles', components: ['ToolbarRoot', 'ToolbarButton', 'ToolbarLink', 'ToolbarToggleGroup', 'ToolbarToggleItem', 'ToolbarSeparator'] },
+  configProvider: { category: 'Utility', description: 'Global config context', components: ['ConfigProvider'] },
+  focusScope: { category: 'Utility', description: 'Focus trap container', components: ['FocusScope'] },
+  presence: { category: 'Utility', description: 'Animation presence control', components: ['Presence'] },
+  primitive: { category: 'Utility', description: 'Base element wrapper', components: ['Primitive', 'Slot'] },
+  visuallyHidden: { category: 'Utility', description: 'Screen reader only content', components: ['VisuallyHidden'] },
 }
 
 const COMPOSABLES = [
-  {
-    name: 'useEmitAsProps',
-    description: 'Convert emit functions to props for passing to child components',
-  },
-  {
-    name: 'useFilter',
-    description: 'Filter items based on search query with customizable matching',
-  },
-  {
-    name: 'useForwardProps',
-    description: 'Forward props to child components while filtering out handled ones',
-  },
+  { name: 'useEmitAsProps', description: 'Convert emit functions to props for passing to child components' },
+  { name: 'useFilter', description: 'Filter items based on search query with customizable matching' },
+  { name: 'useForwardProps', description: 'Forward props to child components while filtering out handled ones' },
   { name: 'useForwardPropsEmits', description: 'Combine useForwardProps and useEmitAsProps' },
   { name: 'useForwardExpose', description: 'Forward exposed methods/refs from child components' },
   { name: 'useId', description: 'Generate unique IDs for accessibility attributes' },
@@ -563,21 +90,19 @@ const COMPOSABLES = [
   { name: 'useLocale', description: 'Get/set locale for internationalization' },
 ]
 
-async function fetchMeta(
-  componentName: string
-): Promise<{ props: PropMeta[]; emits: EmitMeta[]; slots: SlotMeta[] }> {
+async function fetchMeta(componentName: string): Promise<{ props: PropMeta[], emits: EmitMeta[], slots: SlotMeta[] }> {
   const url = `${BASE_URL}/docs/content/meta/${componentName}.md`
   try {
     const res = await fetch(url)
-    if (!res.ok) return { props: [], emits: [], slots: [] }
+    if (!res.ok)
+      return { props: [], emits: [], slots: [] }
     const text = await res.text()
     return parseMeta(text)
-  } catch {
-    return { props: [], emits: [], slots: [] }
   }
+  catch { return { props: [], emits: [], slots: [] } }
 }
 
-function parseMeta(content: string): { props: PropMeta[]; emits: EmitMeta[]; slots: SlotMeta[] } {
+function parseMeta(content: string): { props: PropMeta[], emits: EmitMeta[], slots: SlotMeta[] } {
   const props: PropMeta[] = []
   const emits: EmitMeta[] = []
   const slots: SlotMeta[] = []
@@ -587,17 +112,20 @@ function parseMeta(content: string): { props: PropMeta[]; emits: EmitMeta[]; slo
   if (propsMatch) {
     try {
       props.push(...JSON.parse(propsMatch[1].replace(/'/g, '"')))
-    } catch {}
+    }
+    catch {}
   }
   if (emitsMatch) {
     try {
       emits.push(...JSON.parse(emitsMatch[1].replace(/'/g, '"')))
-    } catch {}
+    }
+    catch {}
   }
   if (slotsMatch) {
     try {
       slots.push(...JSON.parse(slotsMatch[1].replace(/'/g, '"')))
-    } catch {}
+    }
+    catch {}
   }
   return { props, emits, slots }
 }
@@ -610,27 +138,20 @@ function truncateType(type: string, max = 50) {
 }
 const toKebab = (str: string) => str.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase()
 
-async function generateGroupFile(
-  groupName: string,
-  group: { category: string; description: string; components: string[] }
-): Promise<string> {
+async function generateGroupFile(groupName: string, group: { category: string, description: string, components: string[] }): Promise<string> {
   const lines: string[] = []
-  const title =
-    groupName.charAt(0).toUpperCase() +
-    groupName
-      .slice(1)
-      .replace(/([A-Z])/g, ' $1')
-      .trim()
+  const title = groupName.charAt(0).toUpperCase() + groupName.slice(1).replace(/([A-Z])/g, ' $1').trim()
   lines.push(`# ${title}`)
   lines.push('')
   lines.push(group.description)
   lines.push('')
-  lines.push(`**Parts:** ${group.components.map((c) => `\`${c}\``).join(', ')}`)
+  lines.push(`**Parts:** ${group.components.map(c => `\`${c}\``).join(', ')}`)
   lines.push('')
 
   for (const comp of group.components) {
     const meta = await fetchMeta(comp)
-    if (meta.props.length === 0 && meta.emits.length === 0 && meta.slots.length === 0) continue
+    if (meta.props.length === 0 && meta.emits.length === 0 && meta.slots.length === 0)
+      continue
 
     lines.push(`## ${comp}`)
     lines.push('')
@@ -682,14 +203,13 @@ async function main() {
   const index: string[] = []
   index.push('# Components')
   index.push('')
-  index.push(
-    '> Auto-generated. Run `npx tsx skills/reka-ui/scripts/generate-components.ts` to update.'
-  )
+  index.push('> Auto-generated. Run `npx tsx skills/reka-ui/scripts/generate-components.ts` to update.')
   index.push('')
 
   const categories: Record<string, string[]> = {}
   for (const [name, group] of Object.entries(COMPONENT_GROUPS)) {
-    if (!categories[group.category]) categories[group.category] = []
+    if (!categories[group.category])
+      categories[group.category] = []
     categories[group.category].push(name)
   }
 

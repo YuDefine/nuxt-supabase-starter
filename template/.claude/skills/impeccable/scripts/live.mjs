@@ -10,7 +10,7 @@
  *
  * After this, the agent's only remaining steps are:
  *   - Open the project's live dev/preview URL in the browser (optional, if browser automation exists)—not `serverPort`; that port is the Impeccable helper for /live.js and /poll
- *   - Enter the poll loop: `node live-poll.mjs`
+ *   - Enter the harness-native poll loop: `node live-poll.mjs`
  *
  * Usage:
  *   node live.mjs                   # Prepare everything, print JSON, exit
@@ -21,14 +21,19 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadContext } from './load-context.mjs';
+import { resolveTargetSelection } from './context.mjs';
 import { resolveFiles } from './live-inject.mjs';
-import { readLiveServerInfo } from './impeccable-paths.mjs';
+import { readLiveServerInfo } from './lib/impeccable-paths.mjs';
+import { resolveSurfaceBrief } from './lib/surface-briefs.mjs';
+import { resolveLiveTarget } from './live-target.mjs';
+import { bootInstructions } from './live/instructions.mjs';
+import { resolveRoots, writeRootsManifest } from './live/roots.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function liveCli() {
   const args = process.argv.slice(2);
+  const liveTarget = resolveLiveTarget(process.cwd(), args);
 
   if (args.includes('--help') || args.includes('-h')) {
     console.log(`Usage: node live.mjs
@@ -38,37 +43,109 @@ Prepare everything for live variant mode in a single command:
   - Starts (or reuses) the live server in the background
   - Injects the browser script tag
   - Reads PRODUCT.md / DESIGN.md for project context
+  - Prepares the harness-native foreground/background poll loop
+  - In monorepos, choose a child app first; --target <path> is the fallback/manual path
 
 On success, prints a JSON blob with:
-  { ok, serverPort, serverToken, pageFile, hasContext, context }
+  { ok, serverPort, serverToken, pageFiles, projectRoot, repoRoot, targetPath, productPath, designPath }
+
+On target_selection_required, prints:
+  { ok: false, error: "target_selection_required", targetCandidates }
 
 On config_missing, prints:
   { ok: false, error: "config_missing", configPath, hint }
 
 The agent should then:
-  1. If config_missing, create the config and re-run this script
-  2. Optionally open the project's dev/preview URL in the browser (see reference/live.md—not serverPort)
-  3. Enter the poll loop: node live-poll.mjs`);
+  1. If target_selection_required, ask which app to use and rerun from that child cwd
+  2. If config_missing, create the config and re-run this script
+  3. Optionally open the project's dev/preview URL in the browser (see reference/live.md—not serverPort)
+  4. Enter the poll loop: node live-poll.mjs`);
     process.exit(0);
   }
 
+  // Legacy workspace-monorepo selection first: it carries richer candidate
+  // metadata (context inheritance status) than the roots scan.
+  const targetSelection = resolveTargetSelection(liveTarget.originalCwd, liveTarget.targetOptions);
+  if (targetSelection) {
+    console.log(JSON.stringify({
+      ok: false,
+      error: 'target_selection_required',
+      ...targetSelection,
+      hint: 'Ask the user which app Impeccable should use, then rerun live from that child app cwd. Use --target <path> only as a fallback or explicit path diagnostic.',
+    }, null, 2));
+    process.exit(0);
+  }
+
+  const rootsResult = resolveRoots({
+    cwd: liveTarget.originalCwd,
+    targetPath: liveTarget.absoluteTargetPath,
+  });
+  if (rootsResult.selection) {
+    console.log(JSON.stringify({
+      ok: false,
+      error: 'target_selection_required',
+      targetCandidates: rootsResult.selection.candidates,
+      hint: 'Several apps with a dev-server config exist. Ask the user which one to use, then rerun with --target <path into that app>.',
+    }, null, 2));
+    process.exit(0);
+  }
+  const roots = rootsResult.manifest;
+  const activeCwd = roots.appRoot;
+  const outputTargetPath = liveTarget.targetPath || null;
+
+  // Gate on readable CONTENT, not path existence, so an empty or unreadable
+  // PRODUCT.md routes to init instead of passing the gate and then reporting
+  // hasProduct: false in the same payload.
+  const product = safeRead(roots.productPath);
+  const design = safeRead(roots.designPath);
+  const missingContext = [];
+  if (!product) missingContext.push('PRODUCT.md');
+  if (!design) missingContext.push('DESIGN.md');
+  if (missingContext.length > 0) {
+    console.log(JSON.stringify({
+      ok: false,
+      error: 'context_missing',
+      missing: missingContext,
+      nextCommand: missingContext.includes('PRODUCT.md') ? 'init' : 'document',
+      targetPath: outputTargetPath,
+      projectRoot: roots.appRoot,
+      repoRoot: roots.repoRoot,
+      productPath: relOrNull(liveTarget.originalCwd, roots.productPath),
+      designPath: relOrNull(liveTarget.originalCwd, roots.designPath),
+    }, null, 2));
+    process.exit(0);
+  }
+
+  // Persist the decision before anything else spawns, so every helper the
+  // agent runs later (from any cwd inside the repo) lands on the same roots.
+  writeRootsManifest(roots);
+
   // 1. Check config (fail fast if missing — no point starting anything else)
-  const checkOut = runScript('live-inject.mjs', ['--check']);
+  const checkOut = runScript('live-inject.mjs', ['--check'], { cwd: activeCwd });
   const checkResult = safeParse(checkOut);
   if (!checkResult || !checkResult.ok) {
-    console.log(JSON.stringify(checkResult || { ok: false, error: 'check_failed', raw: checkOut }));
+    console.log(JSON.stringify({
+      ...(checkResult || { ok: false, error: 'check_failed', raw: checkOut }),
+      targetPath: outputTargetPath,
+      projectRoot: roots.appRoot,
+      repoRoot: roots.repoRoot,
+    }));
     process.exit(0);
   }
 
   // 2. Start server (or reuse existing)
-  const serverInfo = ensureServerRunning();
+  const serverInfo = ensureServerRunning(activeCwd);
   if (!serverInfo) {
     console.log(JSON.stringify({ ok: false, error: 'server_start_failed' }));
     process.exit(1);
   }
 
   // 3. Inject the script tag at the current port
-  const injectOut = runScript('live-inject.mjs', ['--port', String(serverInfo.port)]);
+  const injectOut = runScript(
+    'live-inject.mjs',
+    ['--port', String(serverInfo.port), '--token', String(serverInfo.token)],
+    { cwd: activeCwd },
+  );
   const injectResult = safeParse(injectOut);
   if (!injectResult || !injectResult.ok) {
     console.log(JSON.stringify({
@@ -80,30 +157,65 @@ The agent should then:
     process.exit(1);
   }
 
-  // 4. Load PRODUCT.md + DESIGN.md context (auto-migrates legacy .impeccable.md)
-  const ctx = loadContext(process.cwd());
-
-  // 5. Compute drift-heal: compare resolved inject targets against the
+  // 4. Compute drift-heal: compare resolved inject targets against the
   //    project's HTML files. Orphans are HTML files not covered by config.
   //    Warning only — the agent decides whether to act.
-  const resolvedFiles = resolveFiles(process.cwd(), checkResult.config);
-  const drift = scanForDrift(process.cwd(), resolvedFiles, checkResult.config);
+  const resolvedFiles = resolveFiles(activeCwd, checkResult.config);
+  const drift = scanForDrift(activeCwd, resolvedFiles, checkResult.config);
 
-  // 6. Emit everything the agent needs
+  // 5. Emit everything the agent needs. The surface brief rides along so the
+  //    agent does not spend three more tool calls (and a --help miss) on
+  //    surface-brief.mjs before the first poll.
+  let surfaceBrief = null;
+  let surfaceBriefPath = null;
+  try {
+    // Briefs live under .impeccable/surfaces, which in a nested-app repo sits
+    // at the CONTEXT or repo root, not the app root; context.mjs already finds
+    // them there, and live must not report "no brief" for the same project.
+    const briefRoots = [roots.appRoot, roots.contextRoot, roots.repoRoot]
+      .filter(Boolean)
+      .filter((dir, i, arr) => arr.findIndex((other) => path.resolve(other) === path.resolve(dir)) === i);
+    for (const briefRoot of briefRoots) {
+      const resolvedBrief = resolveSurfaceBrief(briefRoot, liveTarget.absoluteTargetPath || null);
+      if (!resolvedBrief?.brief) continue;
+      surfaceBrief = resolvedBrief.brief.text ?? safeRead(resolvedBrief.brief.path);
+      surfaceBriefPath = resolvedBrief.brief.path
+        ? path.relative(liveTarget.originalCwd, resolvedBrief.brief.path)
+        : null;
+      break;
+    }
+  } catch { /* briefs are optional context */ }
   console.log(JSON.stringify({
     ok: true,
     serverPort: serverInfo.port,
     serverToken: serverInfo.token,
     pageFiles: resolvedFiles,
+    liveConfigPath: checkResult.path,
     configDrift: drift,
-    hasProduct: ctx.hasProduct,
-    product: ctx.product,
-    productPath: ctx.productPath,
-    hasDesign: ctx.hasDesign,
-    design: ctx.design,
-    designPath: ctx.designPath,
-    migrated: ctx.migrated,
+    targetPath: outputTargetPath,
+    projectRoot: roots.appRoot,
+    repoRoot: roots.repoRoot,
+    roots,
+    hasProduct: !!product,
+    product,
+    productPath: relOrNull(liveTarget.originalCwd, roots.productPath),
+    hasDesign: !!design,
+    design,
+    designPath: relOrNull(liveTarget.originalCwd, roots.designPath),
+    hasSurfaceBrief: !!surfaceBrief,
+    surfaceBrief,
+    surfaceBriefPath,
+    _instructions: bootInstructions({ scriptsPath: __dirname }),
   }, null, 2));
+}
+
+function safeRead(p) {
+  if (!p) return null;
+  try { return fs.readFileSync(p, 'utf-8'); } catch { return null; }
+}
+
+function relOrNull(base, p) {
+  return p ? path.relative(base, p) : null;
 }
 
 /**
@@ -202,11 +314,11 @@ function globToRegex(pattern) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function runScript(name, args) {
+function runScript(name, args, options = {}) {
   const scriptPath = path.join(__dirname, name);
   const cmd = `node "${scriptPath}" ${args.map(a => `"${a}"`).join(' ')}`;
   try {
-    return execSync(cmd, { encoding: 'utf-8', cwd: process.cwd(), timeout: 15_000 });
+    return execSync(cmd, { encoding: 'utf-8', cwd: options.cwd || process.cwd(), timeout: 15_000 });
   } catch (err) {
     // execSync throws on non-zero exit; return stdout if any
     return err.stdout || err.message || '';
@@ -220,10 +332,10 @@ function safeParse(out) {
 /**
  * Return { pid, port, token } for the running live server, starting one if needed.
  */
-function ensureServerRunning() {
+function ensureServerRunning(cwd = process.cwd()) {
   // Try to reuse an existing server
   try {
-    const existing = readLiveServerInfo(process.cwd())?.info;
+    const existing = readLiveServerInfo(cwd)?.info;
     if (existing && existing.pid) {
       try {
         process.kill(existing.pid, 0); // throws if dead
@@ -233,7 +345,7 @@ function ensureServerRunning() {
   } catch { /* no PID file */ }
 
   // Start a new server
-  const out = runScript('live-server.mjs', ['--background']);
+  const out = runScript('live-server.mjs', ['--background'], { cwd });
   return safeParse(out);
 }
 

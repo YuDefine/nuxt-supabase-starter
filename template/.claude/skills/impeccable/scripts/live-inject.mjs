@@ -7,21 +7,92 @@
  * every subsequent run, this script handles insert/remove deterministically
  * with zero LLM involvement.
  *
+ * Framework knowledge lives in `live/frameworks/` — detection order, adapters,
+ * the generic tag strategy, and the per-extension authoring traits live-wrap
+ * reads. This file is the CLI around it: resolve config, resolve the
+ * framework, heal orphaned artifacts, apply or remove, record the journal.
+ *
  * Usage:
- *   node live-inject.mjs --port PORT   # Insert the live script tag
- *   node live-inject.mjs --remove      # Remove the live script tag
- *   node live-inject.mjs --check       # Check whether live config exists
+ *   node live-inject.mjs --port PORT [--token TOKEN]  # Insert the live script tag
+ *   node live-inject.mjs --remove                     # Remove the live script tag
+ *   node live-inject.mjs --check                      # Check whether live config exists
+ *
+ * When --token is supplied, it is appended to the /live.js src as `?token=...`
+ * so the server's token-gated /live.js handler will serve the bundle. Omitting
+ * the token yields a bare `/live.js` src (legacy behavior; the server returns
+ * 401 for it under the current gate).
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveLiveConfigPath } from './impeccable-paths.mjs';
+import { resolveLiveConfigPath } from './lib/impeccable-paths.mjs';
+import {
+  describeInjectArtifacts,
+  frameworkIgnorePatterns,
+  resolveFramework,
+  resolveSourceTraits,
+} from './live/frameworks/index.mjs';
+import {
+  clearInjectJournal,
+  healInjectJournal,
+  recordInjection,
+} from './live/frameworks/journal.mjs';
+import {
+  buildTagBlock,
+  insertTag,
+  patchCspMeta,
+  removeTag,
+  revertCspMeta,
+} from './live/frameworks/tag-strategy.mjs';
+import { buildLiveScriptSrc } from './live/frameworks/script-src.mjs';
+import { enterLiveRoot } from './live/roots.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const CONFIG_PATH = resolveLiveConfigPath({ cwd: process.cwd(), scriptsDir: __dirname });
-const MARKER_OPEN_TEXT = 'impeccable-live-start';
-const MARKER_CLOSE_TEXT = 'impeccable-live-end';
+// Resolved lazily so the enterLiveRoot() chdir in the CLI guard below takes
+// effect first; module scope runs before the guard.
+let CONFIG_PATH_CACHED = null;
+function CONFIG_PATH_GET() {
+  if (!CONFIG_PATH_CACHED) {
+    CONFIG_PATH_CACHED = resolveLiveConfigPath({ cwd: process.cwd(), scriptsDir: __dirname });
+  }
+  return CONFIG_PATH_CACHED;
+}
+const IGNORE_MARKER_OPEN = '# impeccable-live-ignore-start';
+const IGNORE_MARKER_CLOSE = '# impeccable-live-ignore-end';
+
+export const LIVE_IGNORE_PATTERNS = Object.freeze([
+  '.impeccable/hook.cache.json',
+  '.impeccable/hook.pending.json',
+  '.impeccable/config.local.json',
+  '.impeccable/live/server.json',
+  '.impeccable/live/roots.json',
+  '.impeccable/live/app-root.json',
+  '.impeccable/live/inject-journal.json',
+  '.impeccable/live/sessions/',
+  '.impeccable/live/previews/',
+  '.impeccable/live/annotations/',
+  '.impeccable/live/artifacts/',
+  '.impeccable/live/accept-receipts/',
+  '.impeccable/live/locks/',
+  '.impeccable/live/cache/',
+  '.impeccable/live/manual-edit-apply-transaction.json',
+  '.impeccable/live/manual-edit-events.jsonl',
+  '.impeccable/live/manual-edit-evidence/',
+  '.impeccable/live/pending-manual-edits.json',
+  '.impeccable/live/deferred-svelte-component-accepts.json',
+  '.impeccable-live.json',
+  '.impeccable-live/',
+  'app/.impeccable-live/',
+  'src/.impeccable-live/',
+  'node_modules/.impeccable-live/',
+  'src/lib/impeccable/ImpeccableLiveRoot.svelte',
+  'src/lib/impeccable/__runtime.js',
+  'src/lib/impeccable/[0-9a-f]*/',
+  'plugins/impeccable-live.client.ts',
+  'app/plugins/impeccable-live.client.ts',
+  'src/plugins/impeccable-live.client.ts',
+]);
 
 /**
  * Hard-excluded directory patterns. These are NEVER user-facing pages and
@@ -53,40 +124,61 @@ Output (JSON):
   }
 
   if (args.includes('--check')) {
-    if (!fs.existsSync(CONFIG_PATH)) {
-      console.log(JSON.stringify({ ok: false, error: 'config_missing', path: CONFIG_PATH }));
+    // Deliberately read-only: --check runs from status paths and must never
+    // mutate the tree. Journal reconciliation happens on the inject run.
+    if (!fs.existsSync(CONFIG_PATH_GET())) {
+      console.log(JSON.stringify({ ok: false, error: 'config_missing', path: CONFIG_PATH_GET() }));
       process.exit(0);
     }
     let cfg;
     try {
-      cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+      cfg = JSON.parse(fs.readFileSync(CONFIG_PATH_GET(), 'utf-8'));
     } catch (err) {
-      console.log(JSON.stringify({ ok: false, error: 'config_invalid', message: err.message, path: CONFIG_PATH }));
+      console.log(JSON.stringify({ ok: false, error: 'config_invalid', message: err.message, path: CONFIG_PATH_GET() }));
       return;
     }
     try {
       validateConfig(cfg);
     } catch (err) {
-      console.log(JSON.stringify({ ok: false, error: 'config_invalid', message: err.message, path: CONFIG_PATH }));
+      console.log(JSON.stringify({ ok: false, error: 'config_invalid', message: err.message, path: CONFIG_PATH_GET() }));
       return;
     }
-    console.log(JSON.stringify({ ok: true, config: cfg, path: CONFIG_PATH }));
+    console.log(JSON.stringify({ ok: true, config: cfg, path: CONFIG_PATH_GET() }));
     return;
   }
 
   // Load config
-  if (!fs.existsSync(CONFIG_PATH)) {
-    console.error(JSON.stringify({ ok: false, error: 'config_missing', path: CONFIG_PATH }));
+  if (!fs.existsSync(CONFIG_PATH_GET())) {
+    console.error(JSON.stringify({ ok: false, error: 'config_missing', path: CONFIG_PATH_GET() }));
     process.exit(1);
   }
-  const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+  const config = JSON.parse(fs.readFileSync(CONFIG_PATH_GET(), 'utf-8'));
   validateConfig(config);
 
-  const resolvedFiles = resolveFiles(process.cwd(), config);
+  const cwd = process.cwd();
+  const resolvedFiles = resolveFiles(cwd, config);
+  const resolved = resolveFramework(cwd, config);
+  const isAdapter = resolved?.framework.inject.kind === 'adapter';
 
   if (args.includes('--remove')) {
+    if (isAdapter) {
+      const adapterResult = resolved.framework.inject.remove({ cwd, config, project: resolved.project });
+      const ok = !(adapterResult && adapterResult.error);
+      // Anything the adapter could not reach (its detection may have shifted
+      // since the session started) is still on the journal.
+      const { healed } = healInjectJournal(cwd);
+      clearInjectJournal(cwd);
+      console.log(JSON.stringify({
+        ok,
+        adapter: resolved.framework.name,
+        results: [adapterResult],
+        healed: healed.length ? healed : undefined,
+      }));
+      if (!ok) process.exitCode = 1;
+      return;
+    }
     const results = resolvedFiles.map((relFile) => {
-      const absFile = path.resolve(process.cwd(), relFile);
+      const absFile = path.resolve(cwd, relFile);
       if (!fs.existsSync(absFile)) return { file: relFile, error: 'file_not_found' };
       const content = fs.readFileSync(absFile, 'utf-8');
       const detagged = removeTag(content, config.commentSyntax);
@@ -99,7 +191,9 @@ Output (JSON):
         cspReverted: updated !== detagged,
       };
     });
-    console.log(JSON.stringify({ ok: true, results }));
+    const { healed } = healInjectJournal(cwd);
+    clearInjectJournal(cwd);
+    console.log(JSON.stringify({ ok: true, results, healed: healed.length ? healed : undefined }));
     return;
   }
 
@@ -110,13 +204,69 @@ Output (JSON):
     console.error(JSON.stringify({ ok: false, error: 'missing_port' }));
     process.exit(1);
   }
+  // Optional server token: appended to the /live.js src so the token-gated
+  // /live.js handler authorizes the browser fetch. `live.mjs` always passes
+  // it; a manual `--port`-only invocation reads the running helper's token
+  // from server.json instead of writing an unauthenticated URL that 401s.
+  const tokenIdx = args.indexOf('--token');
+  let token = tokenIdx !== -1 ? args[tokenIdx + 1] : undefined;
+  if (!token) {
+    try {
+      const info = JSON.parse(fs.readFileSync(path.join(cwd, '.impeccable', 'live', 'server.json'), 'utf-8'));
+      // A record for a DIFFERENT port is a stale or foreign helper; its token
+      // would 401 just the same, so only adopt a matching one.
+      if (info?.token && Number(info.port) === port) token = info.token;
+    } catch { /* no running helper recorded; keep legacy tokenless behavior */ }
+  }
+
+  // Reconcile before writing anything. Artifacts this run is about to own are
+  // kept (so a repeat inject stays byte-idempotent); artifacts left behind by
+  // a session that never got to stop are healed.
+  const plannedArtifacts = describeInjectArtifacts(resolved, { cwd, files: resolvedFiles });
+  const { healed } = healInjectJournal(cwd, { keep: plannedArtifacts.map((a) => a.path) });
+
+  const gitIgnore = ensureLiveGitIgnores(cwd, frameworkIgnorePatterns(resolved));
+  // In a nested-app repo the roots pointer lives at the REPO root, outside the
+  // reach of the appRoot-relative ignore block above; give that directory its
+  // own local excludes so the pointer (absolute host paths) never gets staged.
+  try {
+    const rootsManifest = JSON.parse(fs.readFileSync(path.join(cwd, '.impeccable', 'live', 'roots.json'), 'utf-8'));
+    if (rootsManifest?.repoRoot && path.resolve(rootsManifest.repoRoot) !== path.resolve(cwd)) {
+      ensureLiveGitIgnores(rootsManifest.repoRoot);
+    }
+  } catch { /* no manifest: single-root project */ }
+
+  if (isAdapter) {
+    const adapterResult = resolved.framework.inject.apply({
+      cwd,
+      port,
+      token,
+      config,
+      project: resolved.project,
+    });
+    const ok = !(adapterResult && adapterResult.error);
+    if (ok) recordInjection(cwd, { framework: resolved.framework.name, port, artifacts: plannedArtifacts });
+    console.log(JSON.stringify({
+      ok,
+      port,
+      adapter: resolved.framework.name,
+      gitIgnore,
+      results: [adapterResult],
+      healed: healed.length ? healed : undefined,
+    }));
+    if (!ok) process.exitCode = 1;
+    return;
+  }
 
   const results = resolvedFiles.map((relFile) => {
-    const absFile = path.resolve(process.cwd(), relFile);
+    const absFile = path.resolve(cwd, relFile);
     if (!fs.existsSync(absFile)) return { file: relFile, error: 'file_not_found' };
     const content = fs.readFileSync(absFile, 'utf-8');
     const withoutOld = revertCspMeta(removeTag(content, config.commentSyntax));
-    const withTag = insertTag(withoutOld, config, port);
+    // Per-file, not per-project: a Vite app can hold an .astro partial, and a
+    // framework project's entry template is often plain HTML.
+    const scriptAttrs = resolveSourceTraits(relFile).injectScriptAttrs;
+    const withTag = insertTag(withoutOld, config, port, token, scriptAttrs);
     if (withTag === withoutOld) {
       return { file: relFile, error: 'insertion_point_not_found', anchor: config.insertBefore || config.insertAfter };
     }
@@ -129,8 +279,78 @@ Output (JSON):
     };
   });
   const anyInserted = results.some((r) => r.inserted);
-  console.log(JSON.stringify({ ok: anyInserted, port, results }));
+  const writtenFiles = new Set(results.filter((r) => r.inserted).map((r) => r.file));
+  recordInjection(cwd, {
+    framework: resolved?.framework.name,
+    port,
+    artifacts: plannedArtifacts.filter((a) => writtenFiles.has(a.path)),
+  });
+  console.log(JSON.stringify({
+    ok: anyInserted,
+    port,
+    gitIgnore,
+    results,
+    healed: healed.length ? healed : undefined,
+  }));
   if (!anyInserted) process.exit(1);
+}
+
+export function ensureLiveGitIgnores(cwd = process.cwd(), extraPatterns = []) {
+  const target = resolveIgnoreTarget(cwd);
+  const existing = fs.existsSync(target.path) ? fs.readFileSync(target.path, 'utf-8') : '';
+  const block = [
+    IGNORE_MARKER_OPEN,
+    ...new Set([...LIVE_IGNORE_PATTERNS, ...extraPatterns]),
+    IGNORE_MARKER_CLOSE,
+  ].join('\n');
+  const markerRe = new RegExp(`${escapeRegExp(IGNORE_MARKER_OPEN)}[\\s\\S]*?${escapeRegExp(IGNORE_MARKER_CLOSE)}`);
+
+  let updated;
+  if (markerRe.test(existing)) {
+    updated = existing.replace(markerRe, block);
+  } else {
+    const prefix = existing.length === 0 ? '' : existing.endsWith('\n') ? existing : existing + '\n';
+    updated = `${prefix}${prefix.endsWith('\n\n') || prefix === '' ? '' : '\n'}${block}\n`;
+  }
+
+  if (updated !== existing) {
+    fs.mkdirSync(path.dirname(target.path), { recursive: true });
+    fs.writeFileSync(target.path, updated, 'utf-8');
+  }
+
+  return {
+    file: path.relative(cwd, target.path).split(path.sep).join('/'),
+    mode: target.mode,
+    changed: updated !== existing,
+    patterns: [...new Set([...LIVE_IGNORE_PATTERNS, ...extraPatterns])],
+  };
+}
+
+function resolveIgnoreTarget(cwd) {
+  const gitExcludePath = resolveGitInfoExcludePath(cwd);
+  if (gitExcludePath) {
+    return { path: gitExcludePath, mode: 'git-info-exclude' };
+  }
+  return { path: path.join(cwd, '.gitignore'), mode: 'gitignore' };
+}
+
+function resolveGitInfoExcludePath(cwd) {
+  const dotGit = path.join(cwd, '.git');
+  if (!fs.existsSync(dotGit)) return null;
+
+  const stat = fs.statSync(dotGit);
+  if (stat.isDirectory()) return path.join(dotGit, 'info', 'exclude');
+  if (!stat.isFile()) return null;
+
+  const body = fs.readFileSync(dotGit, 'utf-8').trim();
+  const match = body.match(/^gitdir:\s*(.+)$/i);
+  if (!match) return null;
+  const gitDir = path.isAbsolute(match[1]) ? match[1] : path.resolve(cwd, match[1]);
+  return path.join(gitDir, 'info', 'exclude');
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
@@ -253,194 +473,31 @@ function validateConfig(cfg) {
   }
 }
 
-function commentOpen(syntax) { return syntax === 'jsx' ? '{/*' : '<!--'; }
-function commentClose(syntax) { return syntax === 'jsx' ? '*/}' : '-->'; }
-
-function buildTagBlock(syntax, port) {
-  const open = commentOpen(syntax);
-  const close = commentClose(syntax);
-  return (
-    open + ' ' + MARKER_OPEN_TEXT + ' ' + close + '\n' +
-    '<script src="http://localhost:' + port + '/live.js"></script>\n' +
-    open + ' ' + MARKER_CLOSE_TEXT + ' ' + close + '\n'
-  );
-}
-
-function insertTag(content, config, port) {
-  const block = buildTagBlock(config.commentSyntax, port);
-  // insertBefore: match the LAST occurrence. Anchors like `</body>` naturally
-  // belong at the end, and the same literal can appear earlier in code blocks
-  // within rendered documentation pages.
-  if (config.insertBefore) {
-    const idx = content.lastIndexOf(config.insertBefore);
-    if (idx === -1) return content;
-    return content.slice(0, idx) + block + content.slice(idx);
-  }
-  // insertAfter: match the FIRST occurrence — typical anchors like `<head>` or
-  // `<body>` open near the top of the document.
-  const idx = content.indexOf(config.insertAfter);
-  if (idx === -1) return content;
-  const after = idx + config.insertAfter.length;
-  // Preserve a single trailing newline if the anchor didn't end with one
-  const prefix = content[after] === '\n' ? content.slice(0, after + 1) : content.slice(0, after) + '\n';
-  return prefix + block + content.slice(prefix.length);
-}
-
-/**
- * Remove the live script block. Matches either HTML or JSX comment markers
- * regardless of config (so stale tags from a wrong config can still be cleaned).
- *
- * Indent-preserving: captures any whitespace immediately preceding the opener
- * marker and re-emits it in place of the removed block. `insertTag` inserted
- * the block *after* the original line's indent and *before* the anchor (e.g.
- * `</body>`), which moved the indent onto the opener line and left the anchor
- * unindented. Replacing the whole block (plus its trailing newline) with just
- * the captured indent hands the indent back to the anchor that follows.
- */
-function removeTag(content, _syntax) {
-  const patterns = [
-    /([ \t]*)<!--\s*impeccable-live-start\s*-->[\s\S]*?<!--\s*impeccable-live-end\s*-->[ \t]*\n/,
-    /([ \t]*)\{\/\*\s*impeccable-live-start\s*\*\/\}[\s\S]*?\{\/\*\s*impeccable-live-end\s*\*\/\}[ \t]*\n/,
-  ];
-  for (const pat of patterns) {
-    const next = content.replace(pat, '$1');
-    if (next !== content) return next;
-  }
-  return content;
-}
-
-// ---------------------------------------------------------------------------
-// Content-Security-Policy meta-tag patcher
-//
-// When the user's HTML carries `<meta http-equiv="Content-Security-Policy">`,
-// the cross-origin load of /live.js (and the SSE/POST connection back to
-// localhost:PORT) is blocked unless the CSP explicitly allows that origin.
-//
-// On insert: append `http://localhost:PORT` to `script-src` and `connect-src`,
-// and stash the original `content` value in a `data-impeccable-csp-original`
-// attribute (base64) so revert is exact.
-//
-// On remove: detect the marker attribute, decode it, restore the original
-// content value verbatim, drop the marker.
-//
-// Header-based CSP (Next.js headers, Nuxt routeRules, SvelteKit kit.csp,
-// shared helpers) is NOT patched here — those need framework-specific config
-// edits and are handled via the existing detect-csp.mjs reference output.
-// Only the in-source meta-tag form gets the auto-patch.
-// ---------------------------------------------------------------------------
-
-const CSP_MARKER_ATTR = 'data-impeccable-csp-original';
-
-function findCspMetaTags(content) {
-  const out = [];
-  const tagRe = /<meta\s+([^>]*?)\/?>/gis;
-  let m;
-  while ((m = tagRe.exec(content)) !== null) {
-    const attrs = m[1];
-    if (!/(http-equiv|httpEquiv)\s*=\s*(['"])Content-Security-Policy\2/i.test(attrs)) continue;
-    out.push({ start: m.index, end: m.index + m[0].length, full: m[0], attrs });
-  }
-  return out;
-}
-
-function getAttr(attrs, name) {
-  const re = new RegExp(`\\b${name}\\s*=\\s*(['"])([\\s\\S]*?)\\1`, 'i');
-  const m = attrs.match(re);
-  return m ? { quote: m[1], value: m[2], full: m[0] } : null;
-}
-
-function appendOriginToDirective(csp, directive, origin) {
-  const re = new RegExp(`(^|;)(\\s*)(${directive})\\s+([^;]*)`, 'i');
-  const m = csp.match(re);
-  if (m) {
-    const tokens = m[4].trim().split(/\s+/);
-    if (tokens.includes(origin)) return csp;
-    return csp.replace(re, `${m[1]}${m[2]}${m[3]} ${[...tokens, origin].join(' ')}`);
-  }
-  // Directive missing — add it. Use 'self' + origin so we don't inadvertently
-  // narrow the policy compared to the default-src fallback (most users with
-  // an explicit CSP have 'self' there).
-  return csp.trim().replace(/;?\s*$/, '') + `; ${directive} 'self' ${origin}`;
-}
-
-export function patchCspMeta(content, port) {
-  const tags = findCspMetaTags(content);
-  if (tags.length === 0) return content;
-  const origin = `http://localhost:${port}`;
-
-  // Walk last-to-first so prior splices don't invalidate later indices.
-  let result = content;
-  for (let i = tags.length - 1; i >= 0; i--) {
-    const tag = tags[i];
-    const attrs = tag.attrs;
-    if (getAttr(attrs, CSP_MARKER_ATTR)) continue; // already patched
-    const contentAttr = getAttr(attrs, 'content');
-    if (!contentAttr) continue;
-
-    const original = contentAttr.value;
-    let patched = original;
-    patched = appendOriginToDirective(patched, 'script-src', origin);
-    patched = appendOriginToDirective(patched, 'connect-src', origin);
-    // The shader overlay during 'generating' creates a screenshot via
-    // URL.createObjectURL, producing a `blob:` URL — img-src 'self' rejects
-    // those. Add `blob:` so the overlay doesn't throw a CSP violation.
-    patched = appendOriginToDirective(patched, 'img-src', 'blob:');
-    if (patched === original) continue;
-
-    const newContentAttr = `content=${contentAttr.quote}${patched}${contentAttr.quote}`;
-    const marker = `${CSP_MARKER_ATTR}="${Buffer.from(original, 'utf-8').toString('base64')}"`;
-    // The tagRe captures any whitespace between the last attribute and the
-    // closing `/>` as part of `attrs`. Naively appending ` ${marker}` after
-    // a replace would land it BEFORE that trailing space, leaving a double
-    // space inside attrs and clobbering the space before `/>`. Split off
-    // the trailing whitespace, splice the marker into the attribute body,
-    // and re-append the original trailing whitespace so a self-closing
-    // `<meta … />` round-trips byte-for-byte.
-    const trailingWs = (attrs.match(/[ \t]*$/) || [''])[0];
-    const attrsBody = attrs.slice(0, attrs.length - trailingWs.length);
-    const newAttrs = attrsBody.replace(contentAttr.full, newContentAttr) + ' ' + marker + trailingWs;
-    const newTag = tag.full.replace(attrs, newAttrs);
-
-    result = result.slice(0, tag.start) + newTag + result.slice(tag.end);
-  }
-  return result;
-}
-
-export function revertCspMeta(content) {
-  const tags = findCspMetaTags(content);
-  if (tags.length === 0) return content;
-
-  let result = content;
-  for (let i = tags.length - 1; i >= 0; i--) {
-    const tag = tags[i];
-    const origAttr = getAttr(tag.attrs, CSP_MARKER_ATTR);
-    if (!origAttr) continue;
-    const contentAttr = getAttr(tag.attrs, 'content');
-    if (!contentAttr) continue;
-
-    let originalValue;
-    try { originalValue = Buffer.from(origAttr.value, 'base64').toString('utf-8'); }
-    catch { continue; }
-
-    const newContentAttr = `content=${contentAttr.quote}${originalValue}${contentAttr.quote}`;
-    let newAttrs = tag.attrs.replace(contentAttr.full, newContentAttr);
-    // Drop the marker attribute and any single space immediately preceding it.
-    newAttrs = newAttrs.replace(new RegExp(`\\s*${origAttr.full}`), '');
-    const newTag = tag.full.replace(tag.attrs, newAttrs);
-
-    result = result.slice(0, tag.start) + newTag + result.slice(tag.end);
-  }
-  return result;
-}
-
 // ---------------------------------------------------------------------------
 // Auto-execute
 // ---------------------------------------------------------------------------
 
 const _running = process.argv[1];
 if (_running?.endsWith('live-inject.mjs') || _running?.endsWith('live-inject.mjs/')) {
+  enterLiveRoot();
   injectCli();
 }
 
-export { insertTag, removeTag, validateConfig, buildTagBlock };
-// patchCspMeta + revertCspMeta are exported above where they're defined.
+// Re-exported so long-standing importers (live.mjs, the adapter modules, the
+// test suites) keep their entry points while the implementations live in
+// live/frameworks/.
+export {
+  buildLiveScriptSrc,
+  buildTagBlock,
+  insertTag,
+  patchCspMeta,
+  removeTag,
+  revertCspMeta,
+  validateConfig,
+};
+export {
+  applyNuxtLiveAdapter,
+  buildNuxtPlugin,
+  detectNuxtProject,
+  removeNuxtLiveAdapter,
+} from './live/frameworks/nuxt.mjs';

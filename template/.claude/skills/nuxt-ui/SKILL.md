@@ -1,6 +1,6 @@
 ---
 name: nuxt-ui
-description: Use when building styled UI with @nuxt/ui v4 components — forms, data tables, modals, theming. Use vue for raw patterns, reka-ui for headless.
+description: Build UIs with @nuxt/ui v4 — 125+ accessible Vue components with Tailwind CSS theming. Use when creating interfaces, customizing themes to match a brand, building forms, or composing layouts like dashboards, docs sites, and chat interfaces.
 ---
 
 # Nuxt UI
@@ -83,6 +83,7 @@ Based on the task, load the relevant reference files **before writing any code**
 | Add a modal, slideover, or drawer | conventions, component-selection, overlays |
 | Build site navigation | conventions, component-selection, navigation |
 | Build a documentation site | conventions, docs |
+| Render markdown | component-selection, components, docs |
 | Add a rich text editor | conventions, editor |
 | General UI work | conventions, component-selection |
 
