@@ -1,6 +1,6 @@
 ---
 description: 程式碼格式化與 lint 工具鏈—一律用 vite-plus 的 oxfmt + oxlint，禁止 eslint / prettier
-paths: ['**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts,md,json}', '.*rc*', '.*.config.*']
+paths: ['**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts,json}', '.*rc*', '.*.config.*']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -13,6 +13,8 @@ Local edits will be reverted by the next sync.
 # Code Style — vite-plus / oxc 工具鏈
 
 **核心命題**：本治理範圍下所有 JS/TS 專案**一律使用 `vite-plus`（vp）內建的 oxc 工具鏈**：`oxfmt`（formatter）+ `oxlint`（linter）。禁止任何 eslint / prettier 設定檔。
+
+> **`paths:` 為什麼不含 `md`**（2026-08-02 移除）：本規約全部條文是 eslint/prettier 禁令、vite-plus 安裝、`vite.config.ts` 必備欄位、CI 命令、lint-staged、TS 腳本慣例——沒有一條在編輯 markdown 時適用，而本規約自己的 fmt `ignorePatterns` 就寫著 `'**/*.md'`（formatter 直接忽略 md）。掛上 `md` 的代價是實測的：條件式規約一觸發就是整份約 10k tokens 進 context，之後被該 session 每一個 request 以 cache-read 重讀。**改 `paths:` 前先確認新增的副檔名在本規約內真的有對應條文**，glob 寬一格的成本不是零。
 
 理由：
 - `oxc` 用 Rust 寫的，比 prettier/eslint 快 10–100 倍

@@ -138,6 +138,17 @@ model-invoked skill（frontmatter 省略 `disable-model-invocation`）付**conte
 ## Token 紀律
 
 - 對 always-load rule（frontmatter 無 `paths:`）加段落前，先考慮 conditional-load 或併入既有 §；預算 gate：`scripts/audit-always-load-budget.ts`（cap 以該 script 為準）。
+- **`paths:` 的寬度是成本變數，conditional-load 不等於免費（MUST）**：條件式規約一旦命中就是**整份**進場，之後被該 session 剩下的每一個 request 以 cache-read 重讀。實測（2026-08-02，7 天）：`nested_memory` 注入 2,105 次、8.45M tokens，約佔加權帳單 5.8%——單次注入 8–12.5k tokens。所以「移到 conditional 就不用管長度」是錯的，**上一條的長度校準對 conditional 規約一樣適用**。
+
+  寫或改 `paths:` 時 **MUST** 逐個 glob 問：**這個副檔名 / 目錄底下的編輯，本規約真的有對應條文嗎？** 答不出來就不要放進去。三個實測命中的反例：
+
+  | 反例 | 為什麼錯 |
+  | --- | --- |
+  | `code-style.md` 的 glob 含 `md` | 全部條文是 eslint 禁令 / vite-plus 安裝 / CI 命令 / TS 腳本慣例，沒有一條在編輯 markdown 時適用；而它自己的 fmt `ignorePatterns` 就寫著 `'**/*.md'` |
+  | `data-layer-d1.md` 放在 `rules/core/` + glob `**/*.{ts,vue,sql}` | D1 專用規約卻投影給全部 consumer，`hub.json` 顯示只有 3 個是 `db-schema: cf-d1`；用 supabase 的 consumer 每次改 `.ts` 就吃 8.5k tokens |
+  | `nuxt-data-perf.md` 的 `**/*.ts` | 會在編輯 `scripts/` / `test/` / `e2e/` / `vendor/` 時觸發，那些位置沒有對應條文 |
+
+  **模組化優先於收窄 glob**：規約只對某類 stack 成立時，正解是放進 `rules/modules/<group>/<variant>/` 讓 `hub.json` 決定誰拿，不是留在 `core/` 再把 glob 寫窄——後者仍然投影給每個 consumer，只是少觸發幾次。
 - **單條規約的長度校準（MUST）**：長度配問題大小。一條規約的完整形狀是**觸發條件一句 + 該做什麼一句 + 違反成本一句**；需要第四句時先問是不是該拆成兩條。寫完每一段自問「刪掉它，行為會不會變？」——不會變就刪。上一條的預算 gate 是總量閘，這條管每一段自己該多長：**總量沒超標不代表個別段落沒灌水**，而總量一旦逼近 cap，先被犧牲的會是真正需要篇幅的那幾條。
 - **落盤文件的長度校準（MUST）**：規約以外、由 agent 寫進 repo 的文件同樣配長度，判準是**下一個讀它的人要拿它做什麼決定**。寫完每一段自問「刪掉它，讀者的決定會不會變？」——不會變就刪。
 

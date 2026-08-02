@@ -1,6 +1,6 @@
 ---
 description: Nuxt data fetching 選用決策、Pinia Colada 最佳實踐、dedupe/cache/payload 效能規約；涵蓋 useFetch / useAsyncData / $fetch / useQuery / useMutation 全棧
-paths: ['**/*.vue', '**/*.ts', 'nuxt.config.*', 'app.config.*', 'composables/**', 'queries/**', 'stores/**']
+paths: ['**/*.vue', 'app/**/*.ts', 'packages/*/app/**/*.ts', 'template/app/**/*.ts', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'template/server/**/*.ts', 'composables/**', 'queries/**', 'stores/**', 'nuxt.config.*', 'app.config.*']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -15,6 +15,13 @@ Local edits will be reverted by the next sync.
 > Cookbook 範本：`~/offline/clade/vendor/snippets/nuxt-data-perf/`
 >
 > 稽核 skill：`/nuxt-data-audit`（checklist 自動掃描；項目清單以該 SKILL.md 為準）
+
+> **`paths:` 的 `**/*.ts` 已收窄為 app / server / composables / queries / stores**（2026-08-02，TD-327）。
+> 原本的 `**/*.ts` 會在編輯 `scripts/`、`test/`、`e2e/`、`vendor/` 底下的檔時也觸發，而本規約
+> 沒有任何一條在那些位置適用。`**/*.vue` **刻意保留不動** —— .vue 本來就只存在於 app 端。
+>
+> 條件式規約觸發一次就是整份進場（本檔約 7.1k tokens），之後被該 session 每個 request 以
+> cache-read 重讀。改 `paths:` 前 MUST 確認新增的目錄在本規約內真的有對應條文。
 
 ## Data Fetching 選用決策樹
 

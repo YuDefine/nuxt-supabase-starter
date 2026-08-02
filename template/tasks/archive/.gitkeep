@@ -1,0 +1,2 @@
+# 本目錄由 clade seed，用於 session-tasks 規約的 archive/
+# tasks/ 是 tracked（不要 gitignore）——「刪檔 = git history 留證」的前提
