@@ -1,6 +1,6 @@
 {
   "$schema": "../../../clade/manifest.schema.json",
-  "version": "1.4.442",
+  "version": "1.4.443",
   "modules": {
     "auth": "better-auth",
     "db-schema": "supabase",

@@ -54,14 +54,33 @@ tasks/
 - **timestamp 與 slug**：timestamp 取**開工當下**（HHMM 解析度足夠；同分撞名極罕見，撞到加 `-2` 後綴即可）；slug 用 kebab-case 描述任務本質（如 `imports-warn-fix`、`handoff-cleanup`）
 - **別的 session 的 tasks 檔怎麼處理，看檔名 timestamp 距今幾天**：
 
-  | 檔名 timestamp | 你可以做的 | 你不可以做的 |
+  | 判定 | 你可以做的 | 你不可以做的 |
   | --- | --- | --- |
-  | **≤ 7 天** | 什麼都不做 | `Edit`、`mv`、刪 —— 那個 session 可能還活著 |
-  | **> 7 天（無主）** | 整檔 `mv` 到 `tasks/archive/` | `Edit` 內容、代跑升級路徑 |
+  | 檔名 timestamp **或** mtime 任一 ≤ 7 天 | 什麼都不做 | `Edit`、`mv`、刪 —— 那個 session 可能還活著 |
+  | 兩者**都** > 7 天（無主） | 整檔 `mv` 到 `tasks/archive/` | `Edit` 內容、代跑升級路徑 |
 
-  7 天 = `audit-stale-tasks.ts` 的 stale 門檻（兩處同源，改要一起改）。超過即視為**無主**：原 session 已被 auto-compact／中斷而不存在，「session 結束時清」對它永遠不會發生，不接管就是永遠沒人接管。
+  ```bash
+  find tasks -maxdepth 1 -name '[0-9]*-*.md' -mtime +7 \
+    | while read -r f; do
+        d=$(basename "$f" | grep -oE '^[0-9]{4}-[0-9]{2}-[0-9]{2}')
+        [ $(( ($(date +%s) - $(date -d "$d" +%s)) / 86400 )) -gt 7 ] && echo "$f"
+      done
+  ```
+
+  7 天 = `audit-stale-tasks.ts` 的 stale 門檻（兩處同源，改要一起改）。兩者都超過才算**無主**：原 session 已被 auto-compact／中斷而不存在，「session 結束時清」對它永遠不會發生，不接管就是永遠沒人接管。
+
+  **為什麼要合取——兩個訊號各自都會騙人**（2026-08-02 在 clade 自己的 `tasks/` 上實測，兩者差 11 個檔）：
+
+  | 只看 | 誤判方向 | 實例 |
+  | --- | --- | --- |
+  | 檔名 timestamp | 把**長期活躍**的檔當無主 | 開工 28 天、每天仍在推進的工作會被 mv 走 |
+  | mtime | 真無主檔看起來**很新** | 一次 `.mjs → .ts` 機械改名掃過整個 repo，9 個真無主檔的 mtime 全被推到 2 天前 |
+
+  合取的代價是**漏清**（mtime 被污染的無主檔要等下一次批次操作過後 7 天才浮現），但誤動別人還在用的檔是不可逆的，漏清只是晚一點清。方向選錯的成本不對稱，所以取保守側。
 
   接管**只歸檔**：升級要判斷未完項該進 HANDOFF 還是 TD，那需要原 session 的 context，代判只會產生內容錯誤的條目；內容明顯是長期債時至多在 `docs/tech-debt.md` 一行登記。
+
+  **這個 `mv` 由本規約授權，不必再問使用者**——`tasks/` 是 tracked，而 [[commit]] 對 tracked path 的破壞性動作禁令針對的是**內容消失**（`git restore` / `checkout --` / 刪檔）。整檔 `mv` 到同 repo 的 `archive/` 內容零損失、git 記成 rename、隨時可 `mv` 回來。判定命中就做，**NEVER** 停下來要求拍板——「等使用者決定」對一個原 session 已消失的檔案等於永遠不處理，那正是本條款要解掉的死結。
 
   不設接管條款的代價：無主檔單調累積，2026-08-02 實測全 fleet 38 檔、最舊超過四週。
 
