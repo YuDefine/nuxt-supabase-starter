@@ -88,6 +88,11 @@ Skill 自己 fork worktree、有**清楚 end-of-skill 完成點**、**無下游 
 
 `node scripts/stash-reconcile.ts`（`--interactive` / `--json` / `--slug <slug>` / `--stale-days N` / `--include-all`）列每條 namespaced stash + 建議命令；merge-back 成功收尾會自動印帶 `--slug` 的 reconcile hint。**永遠不 auto-pop / auto-stage / auto-commit**：apply 後 user WIP 在 working tree，必須走 `/spectra-commit` 或 `/commit` 的 selective stage（**禁止** `git add -A`）。
 
+**`drop` 不在上面那條禁令內**（它管的是 pop / stage / commit）：通過 [[commit]] § Stash 自動處置 gate
+全部判準的 stash，agent **MUST** 主動 drop + 留痕，不留給 user —— 詳見該節與 `/handoff` Step 3.2a。
+`--interactive` 仍是 user 想逐條自己看時的入口，但**不再是**清理 stash 的唯一路徑（實證顯示那條路徑
+在 user 不看 stash 時等於沒有出口，stash 只會單調遞增）。
+
 完整命令清單、Stash 命名空間表與失敗 fallback 表見 `~/offline/clade/vendor/snippets/worktree-baseline/merge-back-ceremony.md`。其中 `cleanup` 拒絕 uncommitted 時 **NEVER** 急加 `--force-discard-uncommitted` — 先 `wt-helper rescue --show <ref>` 看 patch、救完再 cleanup。
 
 ## §6 操作工具：`/wt`、`wt-helper.ts`、`stash-reconcile.ts`

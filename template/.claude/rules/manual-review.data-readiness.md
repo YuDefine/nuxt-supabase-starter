@@ -252,6 +252,22 @@ item 只寫「以 `E2E-ADMIN`（`e2e-admin@dev.local`）登入」是**不可執�
 
 機械稽核：`node scripts/audit-manual-executability.ts`（clade 端，`pnpm audit:manual` 批次含它）。它把每個 item 的入口宣稱對照 consumer 實際事實解析，回報 `MISSING-LOGIN-URL` / `ROLE-SPELLING` / `UNKNOWN-ROLE` / `NO-DEV-LOGIN-ROUTE` / `URL-UNRESOLVABLE`。**規約只能要求「要寫」，驗不了「寫的東西存在」**——dangling reference 靠這支 script 擋。
 
+### 入口的 SoT 是結構化 entry，散文只描述「要判斷什麼」
+
+散文裡的入口是**推導來源**，不是事實來源。GUI 用 regex 從中文句子挖出身分與 URL，寫法變體（`E2E-TRAC-PAYROLL` vs `E2E-TRAC_PAYROLL`、具名員工 vs role fixture、帶不帶 `&email=`）永遠追不完，而每個追不到的變體都是一次驗收者卡在畫面前面。
+
+正規路徑是把入口寫成**結構化 entry**，落在既有的 evidence sidecar（`.spectra/evidence/<change>.jsonl`，`kind: "entry"`）：
+
+```bash
+node ~/offline/clade/scripts/manual-entry.ts --repo <consumer> --change <change> \
+  --item '#4' --url 'https://<host>/my/clock/amendment' \
+  --login-as employee --login-email e2e-t3-employee@dev.local
+```
+
+既有 change 一次遷移：`--migrate`（把散文推導的結果落盤，`--dry-run` 先看）。
+
+**有 entry 的 item，GUI 直接讀欄位、完全不解析散文**；沒有 entry 的仍走散文推導（行為不變），但稽核會報 `PROSE-ONLY-ENTRY`。散文照樣要寫得人看得懂——它是給驗收者讀的，只是不再是機器的事實來源。
+
 ### 實體裝置 / 規格外輸入的替代路徑
 
 涉及實體裝置交互（刷卡 / 掃 QR / 條碼槍 / 印表機 / 真機 / 規格外環境）的 item **MUST** 在 step 中寫明「dev 替代輸入路徑」，讓 user 不需要實體裝置也能跑 round-trip：

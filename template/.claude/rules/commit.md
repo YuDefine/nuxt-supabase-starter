@@ -209,7 +209,8 @@ main 髒 / 有別 session WIP 不能直接跑 `/commit`（會吃別人 staged）
 
 - **NEVER** 執行 `git restore` / `git restore --staged` / `git checkout --` / `git checkout <path>` 清場 — 這會永久毀掉 unstaged 變更
 - **NEVER** 執行 `git reset --hard` / `git reset HEAD --hard` / `git clean -fd` — 同上
-- **NEVER** 執行 `git stash drop` / `git stash clear`
+- **NEVER** 執行 `git stash clear`（一次炸掉全部，無法逐條判定）；`git stash drop` **僅**在通過下方
+  § Stash 自動處置 gate 的全部判準時允許，其餘一律禁止
 - **NEVER** 提議 `git revert` 或在輸出中暗示「可以 revert XX」「要不要還原 XX」「這部分先 revert」 — `revert` 在使用者語境通常意指**丟棄變更**，會誤導使用者破壞 WIP；真正需要還原既有 commit 的情境極罕見且應由使用者主動發起
 
 #### 檔案系統等效動作禁令（同樣 destructive）
@@ -243,6 +244,49 @@ En：`revert` / `undo` / `rollback` / `roll back` / `reset` / `discard` / `drop`
 #### 唯一例外
 
 使用者在 `$ARGUMENTS` 中**明確、主動、白紙黑字**寫出 `git restore` / `git checkout --` / `mv <具體路徑> <具體路徑>` / `rm -rf <具體路徑>` / `revert <具體 commit>` 等指令或具體變更名稱，且語意無歧義時才能執行。**NEVER** 從「不在 scope」「看起來壞掉」「違反 X rule」等模糊語氣自行解讀為「使用者想丟棄」。
+
+## Stash 自動處置 gate
+
+**核心命題**：把 stash 的處置權完全綁在 user 身上，前提是 user 會去看。**那個前提對不會人工看 stash 的
+user 不成立**，結果是 stash 單調遞增、owner 資訊隨時間流失，最後沒有任何人有能力判斷能不能刪
+（<consumer-a> 2026-08-02 實證：一個 session 內 6 → 10 條，全由自動化流程建立，10 條裡 9 條無 sidecar metadata）。
+
+因此 `git stash drop` **不是**絕對禁令，而是**綁機械判準的條件動作**。
+
+### 放行判準（三條全中才可 drop）
+
+1. **內容可重生**：`git stash show --stat <ref>` 列出的**每一個**檔都落在可重生投影層 ——
+   `.claude/**`、`.codex/**`、`.clade/**`、`AGENTS.md`、`CLAUDE.md`、`.npmrc`、`skills-lock.json`
+   （這些由 `pnpm hub:bootstrap` 重生）。**有任何一個檔不在此清單就不算命中**
+2. **來源已消失**：stash message 內的 slug 對應的 worktree **已不存在**（`git worktree list` 查不到）。
+   slug 解析不出來時，退回時間門檻：**建立逾 24 小時**
+3. **先留痕再 drop**：把 `<ref>`、`createdAt`、`--stat` 全文、命中的判準 append 進
+   `docs/archives/stash-dropped.md`（append-only），**寫完才 drop**
+
+   ⚠️ **副檔名 MUST 是 `.md` 不是 `.log`** —— 多數 consumer 的 `.gitignore` 有 `*.log`，寫成 `.log`
+   的留痕永遠進不了 git，換機器或重新 clone 就消失，等於沒留（2026-08-02 <consumer-a> 實證）。
+
+### 否決判準（任一命中即 NEVER drop）
+
+- `--stat` 含業務碼路徑：`packages/**`、`server/**`、`app/**`、`src/**`、`supabase/migrations/**`、
+  `test/**`、`e2e/**`
+- 含 `openspec/changes/**` 且該 change **仍 active**（`openspec/changes/<name>/` 還在，未進 `archive/`）
+- 對應 worktree **仍存在**（可能正在用，pre-sync 的 stash 還要 pop 回去）
+- 判準跑不出明確結論（stat 讀不到、slug 歧義）→ **不 drop**，列進 audit 段給 user
+
+### 與話術停手信號的關係
+
+本 gate 的 drop **不觸發** § 話術關鍵詞 = 立即停手訊號。理由：那條攔的是「從模糊語氣自行解讀成該丟棄」
+的推理鏈，而本 gate 的每一條判準都是**可機械檢查的事實**，不經過那條推理鏈。
+
+**但 `git stash clear` 仍然全面禁止** —— 它一次炸掉全部，無法逐條套判準。
+
+### NEVER
+
+- **NEVER** 因為「看起來都是投影漂移」就跳過逐條 `--stat` 檢查 —— 命中率不是憑印象估的
+- **NEVER** 先 drop 再補留痕 —— drop 之後 `--stat` 就取不到了，留痕會變成憑記憶編造
+- **NEVER** 拿本 gate 當理由放寬其他 WIP 處置禁令 —— `git restore` / `reset --hard` / `clean -fd` /
+  `stash clear` 一條都沒鬆綁
 
 ## 例外（極少）
 
