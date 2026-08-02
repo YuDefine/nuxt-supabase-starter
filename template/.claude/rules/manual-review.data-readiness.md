@@ -248,6 +248,10 @@ item 只寫「以 `E2E-ADMIN`（`e2e-admin@dev.local`）登入」是**不可執�
 
 > review-gui 會從 item 文字認出 `E2E-<ROLE>` / `e2e-<role>@dev.local` / 「以 `<email>` … 登入」並自動渲染「🔑 以 &lt;role&gt; 登入並開啟」按鈕（`resolveDevLoginTarget`），所以照上面格式寫的 item 在 GUI 裡是一鍵可執行的。但 GUI 只在該 consumer 真的有 dev-login route 時才掛按鈕——**寫出 URL 仍是 item 的責任**，不是靠 GUI 兜底。
 
+**身分字面 MUST 與 fixture canonical 命名逐字相同**：employee_no 是 `E2E-<ROLE 全大寫>`、email 是 `e2e-<role>@dev.local`，其中 `<role>` 一律 snake_case（`trac_payroll`，**不是** `trac-payroll`）。寫成連字號時 GUI 仍解得出 role，但**照字面到 DB / seed 找會找不到**。role 本身也 MUST 存在於該 consumer dev-login route 的 `DEV_LOGIN_FIXTURE_UUIDS`——寫一個不存在的 role（如 `E2E-T3-EMPLOYEE`）會讓 dev-login 回 400。
+
+機械稽核：`node scripts/audit-manual-executability.ts`（clade 端，`pnpm audit:manual` 批次含它）。它把每個 item 的入口宣稱對照 consumer 實際事實解析，回報 `MISSING-LOGIN-URL` / `ROLE-SPELLING` / `UNKNOWN-ROLE` / `NO-DEV-LOGIN-ROUTE` / `URL-UNRESOLVABLE`。**規約只能要求「要寫」，驗不了「寫的東西存在」**——dangling reference 靠這支 script 擋。
+
 ### 實體裝置 / 規格外輸入的替代路徑
 
 涉及實體裝置交互（刷卡 / 掃 QR / 條碼槍 / 印表機 / 真機 / 規格外環境）的 item **MUST** 在 step 中寫明「dev 替代輸入路徑」，讓 user 不需要實體裝置也能跑 round-trip：
