@@ -27,6 +27,15 @@ Local edits will be reverted by the next sync.
 | 漏掉必要元素（該有的欄位 / 段落沒出現） | 模板裡的 REQUIRED 欄位或占位符（結構解） | 模板旁的散文提醒 |
 | 行為依條件而變 | 綁**可觀察 predicate** 的條件句（「若 `<file>` 存在 → …」） | 無條件規則 + 豁免子句 |
 
+### 選好形式之後，再檢查義務綁在哪個事件上（MUST）
+
+形式對了、措辭對了，規約仍可能整條失效——因為它掛的觸發事件不會發生，或發生時注意力已經被別人拿走。動筆前對每條義務問兩題：
+
+1. **這個觸發事件保證會發生嗎？** 掛在「session 結束時做 X」的義務 **MUST** 同時給一個不依賴 session 正常結束的兜底（時效門檻、或下一 session 的接手條件）——session 被 auto-compact／中斷是常態不是例外，原 session 一旦消失，義務就永遠不會被履行，而**沒有人有權代勞**的規約會讓殘留物單調累積。
+2. **這個時刻有沒有更大聲的機制在搶？** 義務若可被 harness 內建工具「看似滿足」（`TaskCreate` 之於 tasks 檔），**MUST** 明寫兩者邊界，並在**該工具的觸發點**接機械提醒。規約只在冷載時說一次，harness 提醒會反覆出現——單靠文字必輸。以 harness 治 harness：hook 是主要防線，規約那句提供 hook 訊息可引用的 SoT。
+
+兩題的實證都在 [[session-tasks]]：第 1 題對應 `tasks/` 的無主檔接管（2026-08-02 實測全 fleet 38 檔堆積），第 2 題對應 `TaskCreate` 取代建檔（寫規約的那個 session 自己就違反了）。對應 pitfall [[pitfall-end-of-session-obligation-orphaned-by-compact]] 與 [[pitfall-harness-todo-tool-shadows-file-based-tasks]]。
+
 ## 措辭三禁（NEVER）
 
 1. **NEVER 加 nuance clause**——「不要 X，除非真的重要」= 重開協商空間。實測：對贏的 recipe 補一句 nuance clause，輸出從穩定變 noisy。真例外寫成獨立條件句、綁可觀察 predicate。

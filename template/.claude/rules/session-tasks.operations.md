@@ -52,7 +52,18 @@ tasks/
 開工建檔、只 `Edit` 自己那檔、session 結束升級或刪 —— 這三條在 [[session-tasks]]，本檔不複述（主檔是 always-load，子檔載入時它必然也在）。這裡只補兩件主檔放不下的：
 
 - **timestamp 與 slug**：timestamp 取**開工當下**（HHMM 解析度足夠；同分撞名極罕見，撞到加 `-2` 後綴即可）；slug 用 kebab-case 描述任務本質（如 `imports-warn-fix`、`handoff-cleanup`）
-- **NEVER** 動別的 session 的 tasks 檔（即使檔名顯示「已完成」也不要清，那是該 session 的責任）
+- **別的 session 的 tasks 檔怎麼處理，看檔名 timestamp 距今幾天**：
+
+  | 檔名 timestamp | 你可以做的 | 你不可以做的 |
+  | --- | --- | --- |
+  | **≤ 7 天** | 什麼都不做 | `Edit`、`mv`、刪 —— 那個 session 可能還活著 |
+  | **> 7 天（無主）** | 整檔 `mv` 到 `tasks/archive/` | `Edit` 內容、代跑升級路徑 |
+
+  7 天 = `audit-stale-tasks.ts` 的 stale 門檻（兩處同源，改要一起改）。超過即視為**無主**：原 session 已被 auto-compact／中斷而不存在，「session 結束時清」對它永遠不會發生，不接管就是永遠沒人接管。
+
+  接管**只歸檔**：升級要判斷未完項該進 HANDOFF 還是 TD，那需要原 session 的 context，代判只會產生內容錯誤的條目；內容明顯是長期債時至多在 `docs/tech-debt.md` 一行登記。
+
+  不設接管條款的代價：無主檔單調累積，2026-08-02 實測全 fleet 38 檔、最舊超過四週。
 
 **為什麼分檔**：與 `.spectra/claims/*.json`、`openspec/changes/<name>/`、`docs/decisions/YYYY-MM-DD-*.md` 同 pattern——每個 entity 一檔，避免多寫者單檔競態。
 
@@ -98,7 +109,7 @@ tasks/
 
 **升級完成 → 自己的 tasks 檔搬 `archive/` 或直接刪。**
 
-`node scripts/audit-stale-tasks.ts`（clade 端，warn-only）數各 consumer 逾期未歸檔的 task 檔，稽核這條有沒有被跳過。
+`node scripts/audit-stale-tasks.ts`（clade 端，warn-only）數各 consumer 逾期未歸檔的 task 檔，稽核這條有沒有被跳過。它報 STALE 的那一刻**就是**該檔變成無主可接管的那一刻（同一個 7 天門檻），所以那份清單同時是「誰沒收尾」與「誰可以被別人收尾」。
 
 ---
 
@@ -127,7 +138,7 @@ tasks/
 
 ## 必禁事項
 
-- **NEVER** `Edit` 別的 session 的 tasks 檔（即使該檔看起來「已完成」也不要代清，那是原 session 的責任）
+- **NEVER** `Edit` 別的 session 的 tasks 檔——不分幾天、不分看起來完成沒有。>7 天的無主檔唯一被授權的動作是整檔 `mv` 到 `archive/`（判準表在 § 寫入規約補充）
 - **NEVER** 把長期內容（TD、決策、未來計劃）留在 tasks 檔不升級 —— 該升 HANDOFF / ROADMAP / tech-debt / solutions / decisions
 - **NEVER** 用 `tasks/<id>.md` 替代 spectra change 處理大型結構化工作 —— 規模膨脹時改走 `spectra-propose`
 
