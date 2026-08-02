@@ -61,11 +61,52 @@ Local edits will be reverted by the next sync.
 
 **為什麼**：Vite dev 對 `?v=<hash>` node_modules dep 送 `immutable` cache header；一個 Nuxt + @nuxt/ui v4 dev 頁面拆成 ~300–950 個 ES module 請求，cold（清快取）經 tunnel 逐一往返受 cloudflared 並發吞吐限制 → 30–60s 看似 hang。慢 vs 快是 cache-warmth 連續譜，不是 tunnel broken 二元判斷。**NEVER** 因此一路試 CF cache rule `cache:false` / `--protocol http2` / `keepAliveConnections` / 移 plugin / 降版（實證全無效）。
 
+> 本節的「`cache:false` 無效」只針對**冷載慢**這個症狀。§ 5 的 MIME 混用是另一個問題，那裡的 `cache:false` 是唯一有效解 — 判準看症狀：慢但最終會載完 = 本節；白畫面 + strict MIME 錯 = § 5。
+
 **權威來源**：
 - 規約（含無效修法清單）：[[dev-port-allocation]] § 2.7
 - 正確量測法 + @nuxt/ui locale deep-import 減模組數範本：`~/offline/clade/vendor/snippets/dev-tunnel-perf/`
 
 **Pitfall**：[[pitfall-vite-dev-over-tunnel-cold-load-misdiagnosis]]
+
+## § 5 — CDN 不得快取 dev tunnel（否則 Vite 的 CSS 會被當成 module script）
+
+**Convention**：dev tunnel hostname **MUST** 用 `<name>-dev.<zone>` 後綴（§ 1 已規定；這裡是它的第二個理由 — bypass 規則靠這個後綴匹配），且 zone 上 **MUST** 有一條 Cache Rule 讓這批 hostname 完全 bypass CDN 快取。Consumer 端 `nuxt.config.ts` **MUST** 在走 tunnel 時回 `Cache-Control: no-store` + `Vary: Accept`（defence in depth，單靠它擋不住既有 CDN 條目）。
+
+**為什麼**：Vite dev 對**同一個 `.css` URL** 依請求的 `Accept` 回兩種東西 —— `<link rel="stylesheet">`（`Accept: text/css`）拿到真 CSS，module import（`Accept: */*`）拿到注入 style 的 JS wrapper。Vite 自己回的 `Vary` 只有 `Origin`，Cloudflare 又對 `.css` 副檔名套預設 4 小時 Browser Cache TTL（`max-age=14400`，蓋掉 origin 的 `no-cache`）。於是 `<link>` 那份 `text/css` 被存進快取，同一頁的 module import 用 ETag revalidate 命中它（`cf-cache-status: REVALIDATED`），瀏覽器 strict MIME 檢查拒收 → client entry chain 整條斷 → **白畫面**。
+
+**這個坑的診斷特別容易走偏**，三件事都會誤導：
+
+- 所有 network 請求都是 200，沒有任何 failed request
+- `curl` 怎麼打都正確 —— curl 不會像瀏覽器那樣先發 stylesheet 請求再發 module 請求，拿不到被污染的那個條目
+- local dev 永遠正常（沒有 CDN 層），只有走 tunnel 才炸
+
+**規則落地**（zone 層一條規則涵蓋全 fleet）：
+
+```bash
+# ruleset id 從 http_request_cache_settings entrypoint 取，再 POST 一條 rule
+curl -s -X POST -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
+  "https://api.cloudflare.com/client/v4/zones/$ZONE/rulesets/$RULESET/rules" \
+  -d '{"expression":"(ends_with(http.host, \"-dev.<maintainer-domain>\"))","action":"set_cache_settings","action_parameters":{"cache":false},"enabled":true,"description":"Dev tunnels: bypass CDN cache"}'
+```
+
+生效約 10-15 秒，**不需要**先 purge（bypass 的請求不會去讀既有條目；反過來說 purge by URL 對 `@fs` 這種路徑清不乾淨，別把時間花在那）。
+
+**驗證**（**MUST 用瀏覽器驗，curl 不算**）：
+
+```js
+p.on('response', r => {
+  const ct = r.headers()['content-type'] || ''
+  if (r.request().resourceType() === 'script' && !/javascript/i.test(ct))
+    console.log('BAD MIME', ct, r.url())
+})
+```
+
+**權威來源**：
+- Consumer 端 header 範本：`vite.server.headers = { 'Cache-Control': 'no-store', Vary: 'Accept, Origin' }`（只在 `TUNNEL_HOSTNAME` 有值時套用）
+- Hostname convention：§ 1 / [[dev-port-allocation]] § 2.5
+
+**Pitfall**：[[pitfall-cdn-cache-ignores-accept-breaks-vite-css-module-mime]]
 
 ## 與 [[dev-port-allocation]] 的分工
 
@@ -76,5 +117,6 @@ Local edits will be reverted by the next sync.
 | Resilient wrapper | [[dev-port-allocation]] § 2.6 | § 3 索引 + pitfall cross-link |
 | 冷/熱載入量測 | [[dev-port-allocation]] § 2.7 | § 4 索引 + pitfall cross-link |
 | 多 account `route dns` misdirection | vite-tunnel cookbook（非規約 §） | § 1 索引 + pitfall cross-link |
+| CDN 快取 dev tunnel → MIME 混用 | 本檔 § 5（無其他 SoT） | § 5 是規約本體，不只索引 |
 
 本檔是**導航層**：consumer agent 遇到 dev tunnel 任一題時先讀本檔定位，再跳對應權威 § / cookbook 拿完整 MUST/NEVER 與範本。

@@ -228,15 +228,25 @@ grep -cE 'openDetail|openReview|openProgress|reviewOpen|modalOpen|EhrApprovalRev
 
 **NEVER** 只寫「開 `<URL>`；預期 detail 顯示 ...」然後期望 navigate 就能看到 dialog — modal 需要 user/agent 互動才會開。（per [[pitfall-verify-item-fake-url-no-interaction]]）
 
-### /my/ 頁面的 login 切換指示
+### 要求特定身分的 item MUST 寫可點的 dev-login URL
 
-employee-facing 頁面（`/my/**`）顯示的是**登入者自己的**資料。若 verify item 的 fixture 屬於特定員工（非預設 admin），item **MUST** 寫明 login 切換指示：
+item 只寫「以 `E2E-ADMIN`（`e2e-admin@dev.local`）登入」是**不可執行的指示**：那個帳號是 dev-login route 自己 upsert 出來的 fixture，**沒有密碼、沒有登入表單**，照字面去 UI 找登入入口找不到。真實員工 email 同理——驗收者手上沒有那個人的憑證。唯一可走的路是 dev-login route，而它從來不會自己出現在 item 文字裡。
+
+任何要求以特定身分驗收的 item（不分 `[review:ui]` / `[verify:ui]` / `[verify:e2e]`），**MUST** 把登入寫成可直接點的 URL：
 
 ```
-以 `<email>`（<姓名> <employee_no>，fixture owner）登入後，導航到 `/my/<path>` ...
+開 `<base>/auth/_dev-login?as=<role>&redirect=<要驗收的 path>` 以 <role> 身分登入，落在 <頁面> → ...
 ```
 
-**NEVER** 假設 admin 登入就能看到所有員工的 /my/ 資料 — /my/ 頁面只顯示 session user 的紀錄。
+真實員工 fixture（`/my/**` 這類只顯示 session user 資料的頁面）改用 `?email=`：
+
+```
+開 `<base>/auth/_dev-login?email=<email>&redirect=/my/<path>`（<姓名> <employee_no>，fixture owner）→ ...
+```
+
+**NEVER** 只寫帳號 email / employee_no 就當作交代完登入方式。**NEVER** 假設 admin 登入就能看到所有員工的 /my/ 資料 — /my/ 頁面只顯示 session user 的紀錄。
+
+> review-gui 會從 item 文字認出 `E2E-<ROLE>` / `e2e-<role>@dev.local` / 「以 `<email>` … 登入」並自動渲染「🔑 以 &lt;role&gt; 登入並開啟」按鈕（`resolveDevLoginTarget`），所以照上面格式寫的 item 在 GUI 裡是一鍵可執行的。但 GUI 只在該 consumer 真的有 dev-login route 時才掛按鈕——**寫出 URL 仍是 item 的責任**，不是靠 GUI 兜底。
 
 ### 實體裝置 / 規格外輸入的替代路徑
 
