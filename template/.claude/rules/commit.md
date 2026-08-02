@@ -142,6 +142,15 @@ git show --stat HEAD | tail -3
 
 Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery from mixed commit (multi-session safety)（**NEVER** 反射性 `git reset --soft HEAD~1` — HEAD 可能不是你預期的 HEAD，會吃掉別 session 的 commit）。
 
+**行數同樣要對**：`git show --stat` 的 insertions / deletions 與**自己實際寫入的量**明顯不符 → 一樣 STOP。檔案清單正確不代表內容是你的那一份 —— `--only` 提交的是**執行那一刻**的 worktree 內容，從你讀檔到你 commit 之間，別 session 可以整段改寫同一個檔。兩種方向都要看：
+
+| 觀察 | 實際發生的事 |
+| --- | --- |
+| 行數**遠多於**自己寫的 | 別 session 對同一檔的編輯被一起 commit 了（message 從此對不上內容） |
+| 行數**遠少於**自己寫的，或 grep 不到自己的字串 | 自己的寫入已被別 session 覆寫，commit 出去的是對方的版本 |
+
+**NEVER** 用「grep 得到自己寫的字串」當作這一層通過了 —— 那只證明**自己的內容在**，對「**別人的內容也一起進來**」零訊號。行數是唯一同時涵蓋兩個方向的可觀察量。實證（2026-08-02，寫入 7 行、`--stat` 回 `35 insertions, 15 deletions`）：grep 命中 3 處全綠，多出來的 28 行淨變動是別 session 的 HANDOFF 更新，被以「註記某事」的 message 一起 push。
+
 ### Recovery from mixed commit (multi-session safety) — hard rule
 
 撞到 mixed commit / commit scope drift（`git show --stat HEAD` 含預期外 file）後，agent **MUST**：
