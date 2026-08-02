@@ -47,14 +47,12 @@ tasks/
 
 ---
 
-## 寫入規約（4 條，剛好夠用）
+## 寫入規約補充
 
-1. **開工**：用 `Write` 建 `tasks/<YYYY-MM-DD-HHMM>-<slug>.md`
-   - timestamp 取**開工當下**（HHMM 解析度足夠；同分撞名極罕見，撞到加 `-2` 後綴即可）
-   - slug 用 kebab-case 描述任務本質（如 `imports-warn-fix`、`handoff-cleanup`）
-2. **進行中**：只 `Edit` 自己那檔
-3. **session 結束**：對自己那檔的每個未完項做選擇（見下節「升級路徑」），全部處理完後 → `mv` 到 `archive/` 或直接刪
-4. **NEVER** 動別的 session 的 tasks 檔（即使檔名顯示「已完成」也不要清，那是該 session 的責任）
+開工建檔、只 `Edit` 自己那檔、session 結束升級或刪 —— 這三條在 [[session-tasks]]，本檔不複述（主檔是 always-load，子檔載入時它必然也在）。這裡只補兩件主檔放不下的：
+
+- **timestamp 與 slug**：timestamp 取**開工當下**（HHMM 解析度足夠；同分撞名極罕見，撞到加 `-2` 後綴即可）；slug 用 kebab-case 描述任務本質（如 `imports-warn-fix`、`handoff-cleanup`）
+- **NEVER** 動別的 session 的 tasks 檔（即使檔名顯示「已完成」也不要清，那是該 session 的責任）
 
 **為什麼分檔**：與 `.spectra/claims/*.json`、`openspec/changes/<name>/`、`docs/decisions/YYYY-MM-DD-*.md` 同 pattern——每個 entity 一檔，避免多寫者單檔競態。
 
