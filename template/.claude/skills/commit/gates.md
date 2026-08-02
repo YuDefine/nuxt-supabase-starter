@@ -389,7 +389,9 @@ Agent 回傳後主線處理：
 .claude/scripts/codex-review-safe.sh xhigh
 ```
 
-> codex-review-safe.sh 以 `codex exec`＋內嵌 review prompt 執行——`codex review` 子命令已禁用（硬編碼 workspace-write sandbox 會卡死 MCP，見 agent-routing.codex-watch-protocol.md）。MCP（含 codebase-memory）在 review 期間可用。已知 trade-off：`-s read-only` sandbox 下 prompt injection 無法逃逸到 write / MCP side-effects——本 script 僅用於 review 自家 fleet 的 diff，NEVER 拿去 review 不可信第三方 code。
+> codex-review-safe.sh 以 `codex exec`＋內嵌 review prompt 執行——`codex review` 子命令已禁用（硬編碼 workspace-write sandbox 會卡死 MCP，見 agent-routing.codex-watch-protocol.md）。MCP 在 `-s read-only` sandbox 下會被拒（2026-07-22 實證：codex 6 次 `search_graph` 全 cancelled），review 期間**不可用**；同一個 sandbox 也讓 prompt injection 無法逃逸到 write / MCP side-effects——本 script 僅用於 review 自家 fleet 的 diff，NEVER 拿去 review 不可信第三方 code。
+>
+> **changeset 由 script 自己收集後嵌進 prompt**（TD-320），codex 不再自行跑 `git diff`。兩個要判讀的 stderr 訊號：超出 `CODEX_REVIEW_MAX_DIFF_LINES`（預設 6000 行）的檔案會被整塊剔除並具名，**MUST** 當成該檔未被 review、NEVER 當作它通過；**exit 3** ＝ 收不到任何未提交變更（codex 未被呼叫），照 collection bug 處理，NEVER 當作 0-A.1 通過。
 
 - **NEVER** 就乾等到 codex 自己結束才看一眼 — 中途卡住（codex auth 過期、context 超量、模型拒答）會白等
 - 結束條件：背景 process 結束、輸出含完成標記、或使用者叫停 — 才進入後續判斷
