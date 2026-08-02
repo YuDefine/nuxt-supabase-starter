@@ -849,13 +849,14 @@ structured-errors、audit、error-handling 五類 check）。本次 diff 動到 
 
 隨後 **MUST** 釋放 commit-lock（`node .claude/scripts/commit-lock.mjs release`）並 STOP。**NEVER** 跳過此 gate 繼續跑後續步驟。
 
-### Step 3 — 跑 ratchet gate
+### Step 3 — 跑 gate（預設 strict）
 
 ```bash
 git status --porcelain | awk '{print $NF}' > /tmp/evlog-map-changed.txt
 node .github/actions/evlog-map-gate/gate.ts \
   --baseline evlog.map.json \
-  --changed-files /tmp/evlog-map-changed.txt
+  --changed-files /tmp/evlog-map-changed.txt \
+  --mode min-score
 
 # layer monorepo：--cwd 可重複，每個 layer 各自帶 <layer>/evlog.map.json baseline
 node .github/actions/evlog-map-gate/gate.ts \
@@ -863,7 +864,9 @@ node .github/actions/evlog-map-gate/gate.ts \
   --changed-files /tmp/evlog-map-changed.txt
 ```
 
-三條判定，任一違反即 exit 1：全域分不得低於 baseline、**本次 diff 觸及的每一個 entry point 都必須滿分**、suppressed check 不得增加。
+**strict（預設）兩條判定**，任一違反即 exit 1：**整個 repo 的每一個 entry point 零失敗 check**、**零 suppression**。判定不看全域整數分——那個數字被 `Math.round` 與 suppression 稀釋，不能當 boolean。
+
+`--mode ratchet` 是過渡選項（全域分不得低於 baseline、本次 diff 觸及的 entry point 必須滿分、suppressed 不得增加），**只在該 repo 已登記推向 strict 的 TD 時**才可暫時使用。
 
 另有一條 false-green 硬擋：掃出 0 個 entry point 直接 fail。**唯一出路**是 repo 根的 `evlog.map.waiver.json`，四個欄位（`reason` / `tracking` / `approved_by` / `expires`）全部必填、`expires` 過期即自動恢復硬擋。缺檔、缺欄位、日期格式錯、已過期一律擋。格式見 `vendor/snippets/evlog-map/monorepo-layers.md`。
 
@@ -884,12 +887,13 @@ git add evlog.map.json
 ### 紀律禁止項
 
 - **NEVER** 用 `// evlog-map-disable-next-line` 讓 gate 轉綠而不寫理由 —— disable 是登記豁免，不是過 gate 的手段；gate 的第三條判定就是為了擋這個
-- **NEVER** 以「這個 gap 是既有的、非本次 diff 引入」跳過 —— 判定 2 只看**本次 diff 觸及的** entry point，會被擋到就代表你這次動了它，動了就要補到滿分
+- **NEVER** 以「這個 gap 是既有的、非本次 diff 引入」跳過 —— strict 判定看的是**整個 repo**，既有 gap 同樣要補。「不是我引入的」不是出路
+- **NEVER** 為了讓 commit 過去而把 `--mode` 降回 `ratchet` —— 降級是 repo 級決策，MUST 先登記 TD 並讓 user 拍板，不是單次 commit 的逃生門
 - **NEVER** 手改 `evlog.map.json` 讓分數對得上 —— baseline MUST 由 `npx evlog map` 重新產生
 - **NEVER** 把 `zero-routes` 報成「0-E 通過」或「覆蓋率 100」—— 它的語義是**量不到**。放行單放行時完成報告 MUST 寫「0-E 已放行（掃不到，追蹤：<tracking>）」，**NEVER** 寫成 ✅
 - **NEVER** 為了讓 commit 過去而現寫一張放行單 —— 放行單是「這個佈局技術上量不到」的登記，不是「這次趕時間」的出口。Nuxt layer monorepo 已有正解（Step 1.5），先照做
 
-通過後輸出 `✅ 0-E 通過（evlog map: score N，觸及 M 個 entry point 全滿分）`。
+通過後輸出 `✅ 0-E 通過（evlog map strict：N 個 entry point 全數零失敗、零 suppression）`。
 
 ## § 0-F: 最佳實踐交叉比對（條件觸發、主線 foreground）
 

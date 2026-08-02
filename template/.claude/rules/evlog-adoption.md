@@ -201,16 +201,18 @@ Depth 表量**裝了什麼**，`evlog map` 量**每個 entry point 用了沒有*
 
 因此 gate 的判定 **MUST** 用 **route 級零失敗 + 零 suppression**，**NEVER** 用全域分數當 boolean（`vendor/actions/evlog-map-gate/gate.mjs` 的 `strict` 模式已如此實作）。分數只能當 dashboard。
 
-### Gate（兩道，都走 ratchet）
+### Gate（兩道，都走 strict）
 
-既有 gap 不強制補，但分數只進不退、且本次 diff 觸及的每一個 entry point 必須滿分：
+**判定是整個 repo 的每一個 entry point 零失敗 check、零 suppression**，不是只看本次 diff 觸及的那幾個。既有 gap 一律要補。
 
 | 位置 | 實作 | 時機 |
 | --- | --- | --- |
 | commit | `/commit` 0-E gate | 補一行 `log.set` 是 5 秒 |
 | CI | `.github/actions/evlog-map-gate` | push 後被擋是一輪來回 |
 
-收斂到 100 後把 CI gate 切成 `mode: min-score`，ratchet 退場。
+判定**不用全域整數分**——那個數字被 `Math.round` 與 suppression 兩路稀釋（見上表），201 個 route 裡有一個 80 分照樣回報 100。`--mode min-score` 是 `strict` 的別名，實際比對的是 route 級零失敗。
+
+`ratchet`（分數只進不退 + 觸及的 entry point 滿分）**只剩過渡用途**：repo 距離零失敗還遠、要邊補邊出貨時暫時掛上，且 **MUST** 同時登記把它推到 strict 的 TD。**NEVER** 把 ratchet 當長期狀態——它會讓既有 gap 無限期留著，只要沒人碰到那個檔就永遠不會被要求補。
 
 ### Review 檢查
 

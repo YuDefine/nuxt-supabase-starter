@@ -17,7 +17,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { isLockedProjectionPath } from './locked-projection.ts'
+import { isLockedProjectionPathFor } from './locked-projection.ts'
 
 /**
  * git status --porcelain 的一行剝出 path。porcelain v1 格式：
@@ -44,11 +44,14 @@ export function userDirtyPaths(repoRoot) {
   } catch {
     return []
   }
-  return out
-    .split('\n')
-    .filter(Boolean)
-    .map(porcelainPath)
-    .filter((p) => p && !isLockedProjectionPath(p))
+  return (
+    out
+      .split('\n')
+      .filter(Boolean)
+      .map(porcelainPath)
+      // repo-aware：clade home 的 `vendor/snippets/**` 等是源檔不是投影（TD-344）。
+      .filter((p) => p && !isLockedProjectionPathFor(repoRoot, p))
+  )
 }
 
 // CLI mode — 給 bash hook 用（exit code 表示有無 user WIP）。

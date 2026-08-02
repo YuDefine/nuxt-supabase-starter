@@ -1,5 +1,5 @@
-name: 'evlog map Coverage Gate (Ratchet)'
-description: 'Run the clade evlog map ratchet gate: global score must not drop below the committed evlog.map.json baseline, every entry point touched by the diff must score 100, and suppressed checks must not increase. Also fails on the false-green case where evlog map finds 0 entry points but reports score 100. Assumes the caller has already checked out the repo with fetch-depth 0 and installed dependencies.'
+name: 'evlog map Coverage Gate'
+description: 'Run the clade evlog map gate. Default mode is strict: EVERY entry point in the repo must have zero failing checks and zero suppressions — not just the ones this diff touched. Ratchet mode (score must not drop below the committed evlog.map.json baseline, touched entry points must be perfect) remains available for repos still climbing to 100. Also fails on the false-green case where evlog map finds 0 entry points but reports score 100. Assumes the caller has already checked out the repo with fetch-depth 0 and installed dependencies.'
 author: 'YuDefine/clade'
 
 inputs:
@@ -16,9 +16,9 @@ inputs:
     required: false
     default: 'evlog.map.json'
   mode:
-    description: 'ratchet (compare against baseline) or min-score (absolute floor, for repos that already reached 100).'
+    description: 'min-score (default; strict — every entry point zero-failure, zero-suppression) or ratchet (transitional: baseline must not regress and touched entry points must be perfect).'
     required: false
-    default: 'ratchet'
+    default: 'min-score'
   min-score:
     description: 'Score floor used when mode is min-score.'
     required: false
@@ -27,7 +27,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Run evlog map ratchet gate
+    - name: Run evlog map coverage gate
       shell: bash
       env:
         INPUT_BASE_REF: ${{ inputs.base-ref }}

@@ -39,6 +39,10 @@
  * classification both honor it.
  */
 
+import { execFileSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+
 export const LOCKED_PROJECTION_RE = new RegExp(
   '^(' +
     [
@@ -77,3 +81,75 @@ export const LOCKED_PROJECTION_RE = new RegExp(
 )
 
 export const isLockedProjectionPath = (p) => LOCKED_PROJECTION_RE.test(p)
+
+/**
+ * clade home 內「看起來像投影、其實是源檔」的路徑（TD-344）。
+ *
+ * `LOCKED_PROJECTION_RE` 描述的是 **consumer 端**的事實：這些路徑的內容由 clade 產生，
+ * 就地改動會被下次 propagate 覆蓋，所以不算 user WIP。同一條規則搬到 clade home 語義**反轉**
+ * —— `vendor/snippets/**` 在這裡是被 propagate 讀的那一份，是最不該被當成可再生內容的東西。
+ *
+ * 這裡只收「已驗證在 clade home 為源檔」的項，NEVER 直接鏡射整個 `LOCKED_PROJECTION_RE`：
+ * `.claude/**`（clade home 消費自家 hub skill 的 symlink）與 `.github/actions/`
+ * （clade 自己的源在 `vendor/actions/`）在 clade home 仍然是投影，照舊過濾。
+ */
+const CLADE_OWN_SOURCE_RE = new RegExp(
+  '^(' +
+    [
+      String.raw`vendor/(snippets|oxc-shared|doctor-shared|review-rules)/`,
+      String.raw`utils/assert-never\.ts$`,
+      String.raw`AGENTS\.md$`,
+      String.raw`CLAUDE\.md$`,
+      String.raw`commitlint\.config\.ts$`,
+    ].join('|') +
+    ')',
+)
+
+const cladeSourceRepoCache = new Map()
+
+/**
+ * repoRoot 是不是 clade 中央倉本身（含它的 linked worktree）。
+ *
+ * 判定走 **git 回推 + clade-only marker**，NEVER 比對路徑字串 `offline/clade`：worktree 落在
+ * `~/offline/clade-wt/<slug>/`，而 clade 本身可以被 clone 到任何位置——路徑比對兩邊都會錯。
+ *
+ * fail-closed：git 不可用 / 取不到 common dir 時回 false，行為退回加這層之前（照舊過濾）。
+ */
+export function isCladeSourceRepo(repoRoot) {
+  if (!repoRoot) return false
+  const cached = cladeSourceRepoCache.get(repoRoot)
+  if (cached !== undefined) return cached
+
+  let result = false
+  try {
+    const commonDir = execFileSync(
+      'git',
+      ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+      { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+    ).trim()
+    // main worktree 回 `<root>/.git`、linked worktree 回 `<main>/.git/worktrees/<slug>`，
+    // 兩者的 dirname 都是 main worktree 的 root。
+    const mainRoot = dirname(commonDir)
+    result =
+      existsSync(join(mainRoot, 'registry', 'consumers.json')) &&
+      existsSync(join(mainRoot, 'scripts', 'publish.ts')) &&
+      existsSync(join(mainRoot, 'vendor', 'scripts', 'locked-projection.ts'))
+  } catch {
+    result = false
+  }
+
+  cladeSourceRepoCache.set(repoRoot, result)
+  return result
+}
+
+/**
+ * repo-aware 版的 `isLockedProjectionPath`：**判 user WIP 的呼叫端一律用這支**
+ * （stop-wip-guard / drift-scan / handoff-scan userWip / merge-back 的未 commit gate）。
+ *
+ * 純粹問「這個路徑的內容由 clade 產生嗎」的呼叫端（`_validate-manifests` 的 vendor-targets
+ * 交叉檢查）**不該**改用這支——那個問題的答案與 repo 身分無關。
+ */
+export function isLockedProjectionPathFor(repoRoot, p) {
+  if (CLADE_OWN_SOURCE_RE.test(p) && isCladeSourceRepo(repoRoot)) return false
+  return LOCKED_PROJECTION_RE.test(p)
+}

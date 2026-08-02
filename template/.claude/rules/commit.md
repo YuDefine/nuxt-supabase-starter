@@ -19,7 +19,7 @@ Local edits will be reverted by the next sync.
 - **0-B** UI Design Review（條件觸發）：`.vue` 模板 + 頁面/元件/佈局/互動/樣式變更時派 screenshot-review
 - **0-C** format / lint / typecheck / test / doctor 全綠：`scripts.check` 不含 test → 額外跑 `pnpm test`；`scripts.doctor` **必裝**（缺裝 = block commit，要求先安裝 vite-doctor）。oxfmt batched `--check` 報未預期 diff 以單檔重跑為準（[[pitfall-oxfmt-batched-check-false-positive]]）
 - **0-D** Doc Alignment（條件觸發）：diff 觸及 docs / rules / snippets / audit script / 業務碼 / bug fix 時，檢查 cross-ref / 路徑引用 / pitfall status / 三方受眾文件忠實度（含 VitePress sidebar）四面向
-- **0-E** evlog map 覆蓋率（條件觸發）：diff 觸及 entry point（`server/{api,routes,middleware,tasks}/` / pages / Next route handler）時跑 ratchet gate；`@evlog/cli` **必裝**（缺裝 = block commit，比照 doctor），本次 diff 觸及的**每一個** entry point MUST 滿分，既有 gap 不強制補
+- **0-E** evlog map 覆蓋率（條件觸發）：diff 觸及 entry point（`server/{api,routes,middleware,tasks}/` / pages / Next route handler）時跑 gate；`@evlog/cli` **必裝**（缺裝 = block commit，比照 doctor）。判定是 **strict：整個 repo 的每一個 entry point 零失敗 check、零 suppression**，**不是**只看本次 diff 觸及的那幾個 —— 既有 gap 一律要補
 - **並行**：simplify 序跑完後 **0-A.1 / 0-B / 0-C 三軸 MUST 並行**（除非 fast-path 跳過 0-A.1）；0-D / 0-E 在匯合後條件觸發
 - **Step 1** Schema 同步檢查 — `database.types.ts` 與 migration 對齊
 - **Step 5** 版本號升級 + tag push — `feat` → minor、其他 → patch

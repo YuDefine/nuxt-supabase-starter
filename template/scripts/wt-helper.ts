@@ -2328,11 +2328,13 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   // non-projection files are real WIP and must be committed before squash.
   const wtDirty = detectUncommittedWorktreeFiles(target.path)
   const wtUserDirtyAll = [
+    // repo-aware：clade home 的 `vendor/snippets/**` 等是源檔不是投影，過濾掉它們等於讓
+    // 只改 snippet 的 worktree 靜默通過未 commit gate（TD-344）。
     ...wtDirty.modified
-      .filter((m) => !isLockedProjectionPath(m.path))
+      .filter((m) => !isLockedProjectionPathFor(target.path, m.path))
       .map((m) => ({ ...m, kind: 'modified' })),
     ...wtDirty.untracked
-      .filter((u) => !isLockedProjectionPath(u.path))
+      .filter((u) => !isLockedProjectionPathFor(target.path, u.path))
       .map((u) => ({ ...u, status: '??', kind: 'untracked' })),
   ]
   // Partition: OXFMT_AUTO_PATHS entries whose drift is purely oxfmt
