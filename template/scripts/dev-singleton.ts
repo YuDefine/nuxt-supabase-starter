@@ -58,6 +58,10 @@ interface CliOptions {
   consumerId?: string
   leaseMode?: string
   portPinned?: boolean
+  /** consumer-meta `dev.ports[0].port`；決定這次的 port 算不算 primary。 */
+  primaryPort?: number | null
+  /** lease 檔名的 identity（per consumer+port，見 leaseIdFor）。 */
+  leaseId?: string
 }
 
 const cli = parseArgs(process.argv)
@@ -105,6 +109,7 @@ function parseArgs(argv) {
   const meta = loadConsumerMeta(opts.consumerMetaPath)
   if (meta) {
     if (!opts.port) opts.port = meta.dev?.ports?.[0]?.port ?? 0
+    opts.primaryPort = meta.dev?.ports?.[0]?.port ?? null
     opts.consumerId = meta.consumerId
     opts.leaseMode = meta.dev?.leaseMode ?? 'advisory'
     opts.portPinned = meta.auth?.portPinned ?? false
@@ -116,6 +121,9 @@ function parseArgs(argv) {
     process.exit(2)
   }
   if (!opts.consumerId) opts.consumerId = derivePathConsumerId()
+  // lease identity 綁 (consumer, port)，與 dev-session.ts 同一條規則。兩支對 lease 路徑
+  // 的看法必須一致，否則同一台 dev server 在兩支工具眼中是兩個不同的 lease。
+  opts.leaseId = leaseIdFor(opts.consumerId, opts.port, opts.primaryPort ?? null)
   if (!opts.leaseMode) opts.leaseMode = 'advisory'
   if (!opts.kind) opts.kind = detectKind()
   return opts
@@ -166,12 +174,22 @@ function derivePathConsumerId() {
 
 // ── lease helpers ────────────────────────────────────────────────────────
 
-function leasePath(consumerId) {
-  return join(LEASE_DIR, `${consumerId}-verification-lease.json`)
+/**
+ * Lease 檔名的 identity —— **per (consumer, port)**。primary port 沿用舊檔名，
+ * 非 primary 才加 `-<port>` 後綴。語義與理由見 dev-session.ts 的 `leaseId()`
+ * （那支是 canonical，本支為 legacy 相容；兩者 MUST 用同一條規則）。
+ */
+function leaseIdFor(consumerId, port, primaryPort) {
+  if (!port || !primaryPort || port === primaryPort) return consumerId
+  return `${consumerId}-${port}`
 }
 
-function readLease(consumerId) {
-  const p = leasePath(consumerId)
+function leasePath(id) {
+  return join(LEASE_DIR, `${id}-verification-lease.json`)
+}
+
+function readLease(id) {
+  const p = leasePath(id)
   if (!existsSync(p)) return null
   try {
     return JSON.parse(readFileSync(p, 'utf8'))
@@ -180,12 +198,12 @@ function readLease(consumerId) {
   }
 }
 
-function writeLease(consumerId, lease) {
-  writeFileSync(leasePath(consumerId), JSON.stringify(lease, null, 2) + '\n')
+function writeLease(id, lease) {
+  writeFileSync(leasePath(id), JSON.stringify(lease, null, 2) + '\n')
 }
 
-function deleteLease(consumerId) {
-  const p = leasePath(consumerId)
+function deleteLease(id) {
+  const p = leasePath(id)
   if (existsSync(p)) unlinkSync(p)
 }
 
@@ -274,7 +292,7 @@ function logErr(opts, msg) {
 // ── status mode ──────────────────────────────────────────────────────────
 
 async function statusMode(opts) {
-  const lease = readLease(opts.consumerId)
+  const lease = readLease(opts.leaseId)
   const pid = lsofPid(opts.port)
   if (!pid && !lease) {
     log(opts, `not running on port ${opts.port}; no lease`)
@@ -330,15 +348,15 @@ async function killMode(opts) {
   } else {
     log(opts, `no listener on port ${opts.port}`)
   }
-  deleteLease(opts.consumerId)
+  deleteLease(opts.leaseId)
 }
 
 function releaseMode(opts) {
-  if (!existsSync(leasePath(opts.consumerId))) {
+  if (!existsSync(leasePath(opts.leaseId))) {
     log(opts, 'no lease to release')
     return
   }
-  deleteLease(opts.consumerId)
+  deleteLease(opts.leaseId)
   log(opts, 'lease released (dev server NOT killed)')
 }
 
@@ -351,7 +369,7 @@ async function launchMode(opts) {
   }
 
   const existing = lsofPid(opts.port)
-  const lease = readLease(opts.consumerId)
+  const lease = readLease(opts.leaseId)
 
   if (existing) {
     return await handleExistingPort(opts, existing, lease)
@@ -363,7 +381,7 @@ async function launchMode(opts) {
     )
     process.exit(1)
   }
-  if (lease) deleteLease(opts.consumerId)
+  if (lease) deleteLease(opts.leaseId)
 
   await spawnAndClaim(opts)
 }
@@ -422,7 +440,7 @@ async function handleExistingPort(opts, existingPid, lease) {
         reason: opts.label || '(no label)',
       })
     }
-    deleteLease(opts.consumerId)
+    deleteLease(opts.leaseId)
     return await spawnAndClaim(opts)
   }
 
@@ -521,5 +539,5 @@ function writeAndClaim(opts, pid, cwd, reclaim) {
       },
     ],
   }
-  writeLease(opts.consumerId, lease)
+  writeLease(opts.leaseId, lease)
 }

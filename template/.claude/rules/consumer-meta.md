@@ -130,10 +130,11 @@ Local edits will be reverted by the next sync.
 |---|---|
 | `proactive-skills.md § Dev Server Auto-Spawn` 判斷該不該 scan port | `auth.portPinned` + `dev.leaseMode` |
 | `vendor/scripts/dev-singleton.ts` 起 dev server | `dev.ports[0].port` + `dev.singleton` path |
-| `vendor/scripts/wt-env-bootstrap.ts` 拉 env file | `dev.envSyncPolicy.filesToCopy` |
+| `vendor/scripts/wt-env-sync.ts` 拉 env file | `dev.envSyncPolicy.filesToCopy` |
 | `rules/core/db-preview-env.md` audit | `database.previewEnvCapability` vs `registry/consumers.json capabilities.preview_db` |
 | `vendor/snippets/dev-auth/` cookbook 是否該推薦 | `auth.devSigninEnabled === false && auth.portPinned === true` |
 | `audit-ux-drift.ts` 截圖驗證 | `dev.ports[].port` + `verification.smokePaths` |
+| review-gui 常駐狀態列 / 起 review slot | `dev.ports[].role` + `dev.ports[].host`（`role: 'review'` 的那支是人工檢查專用，與開發用的 primary 各持自己的 lease，見 [[verification-lease]]） |
 | `spectra-notion-coupling.md` 判斷 change 生命週期該不該推 Notion ticket 狀態 | `notion.ticketWorkflow` + `notion.dataSourceId` + `notion.referenceSkill` |
 
 讀者**MUST** 從 `registry/consumers-meta.json` snapshot 讀，**NEVER** 直接讀 consumer repo 的 `.claude/consumer-meta.json`（避免每個工具都 path-resolve consumer absolute path）。

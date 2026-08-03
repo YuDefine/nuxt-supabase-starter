@@ -257,19 +257,36 @@ node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
 
 **核心命題**：派出 codex 後**主線不能單純等 `<task-notification>`**。codex 中途可能 `fetch failed`、sandbox 拒絕、互動 prompt、或長時間靜默；若沒有監看，主線完全不知道進度，使用者也只能空等。
 
-### ~~跨 sandbox 可見度約束~~ — 已廢除（2026-07-03）
+### 跨 sandbox 可見度約束 v2
 
-**subagent 中介派 codex 已全面禁止**（`agent-routing.md` § Dispatch 入口）。codex 一律由主線直接 Bash `run_in_background` 派工，`<task-notification>` / BashOutput / `ps` 都在同一 sandbox 內可靠。
+適用於**判定不是自己派出的那些 codex 的死活**——典型是主線想知道 `/wt` Form 3 / Form 4 的 worktree subagent 派出的 codex 跑到哪了。
 
-本節原先文件化的兩個失敗模式（false positive panic + false negative silent miss）正是禁止 subagent 中介的根據——消除路徑本身就消除了兩個失敗模式。
+**NEVER** 用 `ps` / `pgrep` / `/proc` 判定不是自己派出的 codex 的死活。
 
-> 歷史 pitfall 保留供考古：`docs/pitfalls/2026-05-18-subagent-background-bash-invisible-from-main-ps.md`
+理由**不是**「看不到」：**`ps` / `pgrep` / `/proc` 的輸出不承載租戶資訊**——**有**命中不代表目標活著（可能是探針指令自己那行 shell，或別 session 的同名進程），**沒**命中也不代表它死了（取樣截斷）。兩個方向都是零訊號，而三者外觀完全相同。2026-08-03 <consumer-b> `migrate-scrap-entry-into-shipment-form` 實測：主線用同一個 `ps` 探針對同一個目標連續三次判錯。
+
+> 2026-07-03 廢除本節時寫的理由是「sandbox 隔離，主線**必然看不到**」。那句話在當前 harness 已被上述實測推翻（主線與 subagent 共用 `/proc`，看得到），但**結論不變**——看得到而分不出租戶，比看不到更危險：後者會讓人去找別的訊號，前者讓人拿著錯答案繼續走。
+
+**判定死活只認自帶租戶鍵的訊號**：
+
+| 情境 | 唯一合法訊號 |
+| --- | --- |
+| 這個 codex 是**你自己**派的 | 你 `Bash(run_in_background)` 拿到的 **jobId** —— `BashOutput(<jobId>)` 與 `<task-notification>`。**NEVER** 改用 `ps` 文字比對認領：codex 的 argv 不含 tenant 欄位 |
+| 這個 codex 是**別層**派的（主線看 worktree subagent 的 codex） | 訊號本身含**本次 change / phase 的 slug** 才合法：`/tmp/codex-phase-*-stdout.log` 這類含 slug 的落檔、worktree 的 `git log` 是否長出 `🧹 chore: wt <change>-phase-<N>`、`tasks.md` 的 `[x]` count。**process table 不含 slug，故永不合法** |
+
+**判準一句話：訊號合法 ⟺ 訊號本身認得出這是哪一個 change / phase 的 codex。**
+
+問進度要 `SendMessage({to: <agent-id>})` 讓該編排者在自家 sandbox 回報，**NEVER** 自己去掃 process table 替它回答。
+
+上述檔案訊號的讀取節奏對齊下方 § 監看排程 的安全網 fallback（1200–1800s），**NEVER** 回到每 ~3 分鐘的短輪詢——那是薄中介形狀的產物，理由見該節末的成本論證。
+
+> 歷史 pitfall：`docs/pitfalls/2026-05-18-subagent-background-bash-invisible-from-main-ps.md`（v1 的「看不到」形狀）。v2 的「看得到但分不出租戶」形狀見 `pitfall-wt-form3-resurrects-banned-subagent-codex-path`。
 
 ### 監看排程（notification-only）
 
-Codex **一律**由主線直接 Bash `run_in_background` 派工（**禁止** subagent 中介 dispatch，per `agent-routing.md` § Dispatch 入口）。因此 watch 只有一條路徑：notification-only。
+Codex 由**該層編排者**在其自身 sandbox 內直接 Bash `run_in_background` 派出（薄中介仍全面禁止，per `agent-routing.md` § Dispatch 入口）。因此 watch 只有一條路徑：notification-only —— 主線派的由主線 watch，Form 3 / Form 4 worktree subagent 派的由該 subagent watch，**每一個編排者都對自己派出的 codex 跑完整本節流程**。
 
-`<task-notification>` 與 BashOutput 都在主線 sandbox 內可靠；常見失敗（`fetch failed` / auth）= job **exit** → background bash 完成 → 通知**立刻**觸發。等通知期間主線 idle = 零 turn = 零 cache_read。
+`<task-notification>` 與 BashOutput 在**派出它的那個 sandbox** 內可靠；常見失敗（`fetch failed` / auth）= job **exit** → background bash 完成 → 通知**立刻**觸發。等通知期間該編排者 idle = 零 turn = 零 cache_read。
 
 | 時機 | 動作 |
 | --- | --- |
@@ -313,7 +330,7 @@ codex 跑了 N 分鐘，目前狀態：<一句話卡點>
 
 ### `ScheduleWakeup` 用法守則
 
-Codex 一律由主線直接 Bash 派 → notification-only，`ScheduleWakeup` 只用於安全網 fallback：
+Codex 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleWakeup` 只用於安全網 fallback：
 
 | 情境 | 建議值 |
 | --- | --- |

@@ -290,8 +290,34 @@ function killSession(name) {
 // lease（相容 dev-singleton.ts schema v1；fail-open per verification-lease.md §7）
 // ─────────────────────────────────────────────────────────────────────────
 
-function leasePath(consumerId) {
-  return join(LEASE_DIR, `${consumerId}-verification-lease.json`)
+/**
+ * Lease 檔名的 identity。**per (consumer, port)，不是 per consumer。**
+ *
+ * 為什麼不能只用 consumerId：一個 consumer 可以同時有多台合法、互不相干的 dev server ——
+ * <consumer-a> 的 `dev:<client-a>`(3040) 與 `dev:shared`(3045) 是兩個不同的 app；再加上為了「一邊開發
+ * 一邊人工檢查」而開的 review slot，就有三台。它們共用一個 lease 檔時，第二台一律被判成
+ * 衝突（strict → refuse），於是平行變成不可能——而那個衝突是假的：它們根本沒有共用 port。
+ *
+ * **primary port 沿用舊檔名**（`/tmp/<consumer>-verification-lease.json`）。這不是美觀考量：
+ * 規約、snippets、dev-signin template、wt-helper 的殘留清理都寫死這個路徑，改掉等於一次性
+ * 讓所有既有讀者對不上，而它們讀的正是最常用的那一台。非 primary port 才加 `-<port>` 後綴。
+ *
+ * `primaryPort` 解不出來（沒有 consumer-meta）時一律回舊檔名 —— 未知不該製造新的檔名空間。
+ */
+function leaseId(consumerId, port, primaryPort) {
+  if (!port || !primaryPort || port === primaryPort) return consumerId
+  return `${consumerId}-${port}`
+}
+
+function leasePath(id) {
+  return join(LEASE_DIR, `${id}-verification-lease.json`)
+}
+
+/** consumer-meta 的 primary port（`dev.ports[0]`）。解不出回 null。 */
+function resolvePrimaryPort(meta) {
+  const ports = meta?.dev?.ports
+  if (Array.isArray(ports) && ports.length && ports[0]?.port) return ports[0].port
+  return null
 }
 
 function holderKind(o) {
@@ -308,8 +334,8 @@ function holderSessionId(o) {
   return createHash('sha1').update(o.cwd).digest('hex').slice(0, 12)
 }
 
-function readLease(consumerId) {
-  const p = leasePath(consumerId)
+function readLease(id) {
+  const p = leasePath(id)
   if (!existsSync(p)) return null
   try {
     return JSON.parse(readFileSync(p, 'utf8'))
@@ -328,7 +354,7 @@ function pidAlive(pid) {
   }
 }
 
-function writeLease(o, consumerId, sessionName, port) {
+function writeLease(o, consumerId, sessionName, port, id) {
   try {
     const lease = {
       schemaVersion: '1',
@@ -349,18 +375,18 @@ function writeLease(o, consumerId, sessionName, port) {
       },
       devSession: { multiplexer: 'zellij', name: sessionName },
     }
-    writeFileSync(leasePath(consumerId), JSON.stringify(lease, null, 2) + '\n')
+    writeFileSync(leasePath(id), JSON.stringify(lease, null, 2) + '\n')
   } catch {
     /* fail-open */
   }
 }
 
-function releaseLease(o, consumerId) {
+function releaseLease(o, id) {
   try {
-    const lease = readLease(consumerId)
+    const lease = readLease(id)
     if (!lease) return
     const mine = lease.holder?.sessionId === holderSessionId(o)
-    if (mine || !pidAlive(lease.devServer?.pid)) unlinkSync(leasePath(consumerId))
+    if (mine || !pidAlive(lease.devServer?.pid)) unlinkSync(leasePath(id))
   } catch {
     /* fail-open */
   }
@@ -397,8 +423,8 @@ function canonicalLeaseCwd(p) {
 }
 
 // strict lease 衝突判定：別人持有 + 其 dev pid 還活 + cwd 不同 → refuse（除非 takeover）
-function leaseConflict(o, consumerId) {
-  const lease = readLease(consumerId)
+function leaseConflict(o, id) {
+  const lease = readLease(id)
   if (!lease) return null
   const mine = lease.holder?.sessionId === holderSessionId(o)
   if (mine) return null
@@ -417,8 +443,8 @@ function leaseConflict(o, consumerId) {
 // 必須拆開的實證原因：holderSessionId() 在沒有 CLAUDE_SESSION_ID / CODEX_SESSION_ID 時
 // 一律回 'human'，於是所有這類 caller 的身分**塌縮成同一個**，leaseConflict() 開頭的
 // `if (mine) return null` 會先短路，cwd 比對永遠走不到。
-function servedCwdMismatch(o, consumerId) {
-  const lease = readLease(consumerId)
+function servedCwdMismatch(o, id) {
+  const lease = readLease(id)
   if (!lease) return null
   if (!pidAlive(lease.devServer?.pid)) return null // stale → 不算
   if (!lease.devServer?.cwd) return null // 無紀錄 → 由 caller 端 warn
@@ -434,12 +460,12 @@ function servedCwdMismatch(o, consumerId) {
 // `--cwd` 被靜默忽略，指令回 exit 0 + 「✓ reuse」，但實際服務的是**別的 working tree 的
 // code**。任何 agent 照這個成功訊號往下收 evidence（截圖 / round-trip），拍到的都是錯的
 // 版本，且外觀與成功無異 —— 比直接失敗危險得多。
-function enforceLeaseOrExit(o, meta, consumerId) {
+function enforceLeaseOrExit(o, meta, consumerId, lid) {
   if (o.noLease) return null
   const strict = meta?.dev?.leaseMode === 'strict' || meta?.auth?.portPinned === true
 
   // (1) served-code mismatch — 優先於 ownership 判定，因為它跟持有者是誰無關
-  const mismatch = servedCwdMismatch(o, consumerId)
+  const mismatch = servedCwdMismatch(o, lid)
   if (mismatch && !o.takeover) {
     if (strict) {
       err(`[lease:${consumerId}] refuse — 既有 dev server 服務的不是你要的 working tree`)
@@ -462,7 +488,7 @@ function enforceLeaseOrExit(o, meta, consumerId) {
   if (mismatch && o.takeover) return mismatch
 
   // (2) ownership conflict — lease 被別人持有
-  const conflict = leaseConflict(o, consumerId)
+  const conflict = leaseConflict(o, lid)
   if (!conflict) return null
 
   // takeover 由 caller 端處理（kill 前 holder），這裡只把 conflict 交回去
@@ -508,6 +534,8 @@ async function cmdLaunch(o) {
   const consumerId = resolveConsumerId(o, meta)
   const sessionName = resolveSessionName(o, consumerId)
   const port = resolvePort(o, meta)
+  // lease identity 綁 (consumer, port)：同 consumer 的不同 app / review slot 是不同 lease
+  const lid = leaseId(consumerId, port, resolvePrimaryPort(meta))
   const urlHint = port ? `http://127.0.0.1:${port}` : '(port 未知)'
 
   // 1) 反累積：起前先查 existing session
@@ -518,7 +546,7 @@ async function cmdLaunch(o) {
     // 宣告成功（lease 也還在且 cwd 相符），caller 於是在**外來程序**上收 evidence，
     // 而外觀與正常成功完全相同。lease 的 devServer.pid 記的就是當初的 port listener pid
     // （見 writeLease），拿它跟現況比對即可辨識。
-    const leasePid = readLease(consumerId)?.devServer?.pid
+    const leasePid = readLease(lid)?.devServer?.pid
     const listenerPid = port ? portPid(port) : null
     const portHijacked =
       Boolean(port) &&
@@ -533,7 +561,7 @@ async function cmdLaunch(o) {
     } else if (!port || portListening(port)) {
       // reuse 前 MUST 過 lease gate — cwd 不符時 strict 模式直接 refuse。
       // 這裡曾是靜默漏洞：直接 return 導致 --cwd 被忽略、caller 在錯的 code 上收 evidence。
-      const conflict = enforceLeaseOrExit(o, meta, consumerId)
+      const conflict = enforceLeaseOrExit(o, meta, consumerId, lid)
 
       // --takeover + cwd 不符：caller 明確要接管，reuse 別人那台等於沒接管 → 改重建
       if (conflict && o.takeover) {
@@ -543,7 +571,7 @@ async function cmdLaunch(o) {
         if (pidAlive(conflict.devServer?.pid)) sh('kill', [String(conflict.devServer.pid)])
         killSession(sessionName)
       } else {
-        const servedCwd = readLease(consumerId)?.devServer?.cwd
+        const servedCwd = readLease(lid)?.devServer?.cwd
         out(`✓ reuse 既有 durable dev session（反累積，不重起）`)
         out(`  session: ${sessionName}  ｜  ${urlHint}`)
         if (servedCwd) {
@@ -569,7 +597,7 @@ async function cmdLaunch(o) {
 
   // 2) lease（strict 衝突 refuse）— 與 reuse 路徑共用同一個 gate，避免兩處邏輯漂移
   if (!o.noLease) {
-    const conflict = enforceLeaseOrExit(o, meta, consumerId)
+    const conflict = enforceLeaseOrExit(o, meta, consumerId, lid)
     if (conflict && o.takeover) {
       err(
         `[lease:${consumerId}] --takeover：接管 ${conflict.holder?.kind}:${conflict.holder?.sessionId} 的 lease`,
@@ -609,7 +637,7 @@ async function cmdLaunch(o) {
   while (Date.now() - start < READY_TIMEOUT_MS) {
     await sleep(READY_POLL_MS)
     if (portListening(port)) {
-      if (!o.noLease) writeLease(o, consumerId, sessionName, port)
+      if (!o.noLease) writeLease(o, consumerId, sessionName, port, lid)
       out(
         `✓ durable dev ready：${urlHint}（session ${sessionName}，掛在 zellij server 不會被 harness reap）`,
       )
@@ -628,11 +656,12 @@ function cmdStatus(o) {
   const consumerId = resolveConsumerId(o, meta)
   const sessionName = resolveSessionName(o, consumerId)
   const port = resolvePort(o, meta)
+  const lid = leaseId(consumerId, port, resolvePrimaryPort(meta))
   const s = findSession(sessionName)
   out(`dev-session status — ${sessionName}`)
   out(`  zellij session: ${s ? (s.exited ? 'EXITED（死）' : '存在（活）') : '不存在'}`)
   if (port) out(`  port ${port}: ${portListening(port) ? `LISTENING（${urlOf(port)}）` : '沒在聽'}`)
-  const lease = readLease(consumerId)
+  const lease = readLease(lid)
   if (lease)
     out(
       `  lease holder: ${lease.holder?.kind}:${lease.holder?.sessionId}  cwd=${lease.devServer?.cwd}`,
@@ -644,6 +673,8 @@ function cmdStop(o) {
   const meta = readConsumerMeta(o.consumerMeta)
   const consumerId = resolveConsumerId(o, meta)
   const sessionName = resolveSessionName(o, consumerId)
+  // stop 也要解 port —— 否則非 primary port 的 lease 永遠釋放不到，殘留成假衝突
+  const lid = leaseId(consumerId, resolvePort(o, meta), resolvePrimaryPort(meta))
   const s = findSession(sessionName)
   if (!s) {
     out(`session ${sessionName} 不存在，無需停止`)
@@ -651,7 +682,7 @@ function cmdStop(o) {
     killSession(sessionName)
     out(`✓ 已 kill + delete session ${sessionName}`)
   }
-  if (!o.noLease) releaseLease(o, consumerId)
+  if (!o.noLease) releaseLease(o, lid)
 }
 
 function urlOf(port) {

@@ -22,13 +22,26 @@ Local edits will be reverted by the next sync.
 |---|---|---|
 | **dev server** | `{ pid, cwd, port, url }` | port 排他 + cwd 決定 serve 哪 worktree 的 code |
 | **browser profile** | `{ sessionName, userDataDir }` | agent-browser persistent profile（`--session` + profile dir）含登入 cookie，profile 切換 = session 切換 |
-| **cookie namespace** | `string` | localhost cookie 不看 port，跨 port worktree 互相污染 session；namespace 隔離靠 cookie name suffix 或 per-worktree browser profile |
+| **cookie namespace** | `string` | localhost cookie 不看 port，跨 port worktree 互相污染 session。三種隔離手法，由弱到強：(1) **用不同 host 名** —— `localhost` 與 `127.0.0.1` 對瀏覽器是不同 host、不同 cookie jar，開發那台走一個、review slot 走另一個，零改 code；(2) cookie name suffix（要改 consumer 的 session 設定）；(3) per-worktree browser profile |
 | **env file** | `{ path, sha256 }` | dev server 啟動時讀取的 `.env.local` 內容指紋；變動 = 應該重啟才生效 |
 | **holder** | `{ kind, sessionId, label }` | 誰拿到這個 lease（claude / codex / human / subagent） |
 
 ## Lease 檔位置
 
-`/tmp/<consumer_id>-verification-lease.json`
+Lease identity 是 **(consumer_id, port)**，不是 consumer_id 單獨一個：
+
+| 這次的 port | 檔名 |
+| --- | --- |
+| `dev.ports[0].port`（primary），或 port 解不出來 | `/tmp/<consumer_id>-verification-lease.json` |
+| 其他 port（多 app 的第二支 / review slot） | `/tmp/<consumer_id>-<port>-verification-lease.json` |
+
+**為什麼不是 per consumer**：一個 consumer 可以同時有多台合法、互不相干的 dev server —— <consumer-a> 的
+`dev:<client-a>`(3040) 與 `dev:shared`(3045) 是兩個不同 app，再加上為了「一邊開發一邊人工檢查」開的
+review slot 就有三台。共用一個 lease 檔時第二台一律被判衝突（strict → refuse），而那個衝突是**假的**：
+它們根本沒共用 port。
+
+**為什麼 primary 沿用舊檔名**：規約、`vendor/snippets/dev-session/`、dev-signin template、wt-helper
+的殘留清理都寫死那個路徑，而它們讀的正是最常用的那一台。改掉等於一次性讓所有既有讀者對不上。
 
 - 路徑用 consumer_id（見 [`consumer-meta.md`](./consumer-meta.md)），不用任意字串
 - `/tmp` reboot 清空，跨 session 可讀，不被 git track

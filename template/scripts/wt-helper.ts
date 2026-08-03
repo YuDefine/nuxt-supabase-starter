@@ -177,6 +177,17 @@ function resolveWtEnvBootstrapScript(worktreePath: string): string | null {
  *
  * Fails closed when the script exists but the command errors or emits invalid
  * JSON — a half-provisioned remote resource must surface, not be swallowed.
+ *
+ * TD-348: the required CLI is exactly
+ *
+ *     node scripts/wt-env-bootstrap.ts <ensure|destroy> --worktree <path> --json
+ *
+ * A script that parses none of those arguments exits 2 on every invocation, so
+ * `add` degrades to a warning and `cleanup` fails outright, leaving the
+ * worktree undeleted. Anything occupying this filename **MUST** implement that
+ * CLI; a tool with a different CLI belongs under a different name, no matter
+ * how related its purpose sounds (clade's own env-file copier was renamed to
+ * `wt-env-sync.ts` for exactly this reason).
  */
 export function runWtEnvBootstrap(worktreePath, command, opts: WtEnvBootstrapOptions = {}) {
   const script = resolveWtEnvBootstrapScript(worktreePath)
@@ -192,8 +203,18 @@ export function runWtEnvBootstrap(worktreePath, command, opts: WtEnvBootstrapOpt
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   if (result.status !== 0) {
+    const stderr = result.stderr?.trim() || 'unknown error'
+    // exit 2 is the usage-error convention; combined with an "unknown arg"
+    // complaint it means the script does not implement this CLI at all, which
+    // is a different repair than a genuine provisioning failure (TD-348).
+    const contractMismatch = result.status === 2 || /unknown (arg|option|command)/i.test(stderr)
     throw new Error(
-      `Worktree env bootstrap ${command} failed: ${result.stderr?.trim() || 'unknown error'}`,
+      `Worktree env bootstrap ${command} failed: ${stderr}` +
+        (contractMismatch
+          ? `\n  ${script} does not implement the required CLI ` +
+            `\`<ensure|destroy> --worktree <path> --json\`. Either implement it or ` +
+            `rename the file — this filename is reserved for that contract (TD-348).`
+          : ''),
     )
   }
   try {
@@ -563,13 +584,28 @@ const stripTrailingNewlines = (s) => s.replace(/\n+$/, '')
 //     spawn entirely. WT_HELPER_INDEX_BIN overrides the binary path for stub
 //     injection if/when end-to-end test coverage is needed.
 //
-// Set up per-worktree git exclude for WORKTREE-BRIEF.md so it never shows as
-// untracked. Uses $GIT_DIR/info/exclude (per-worktree for linked worktrees),
-// not .gitignore (which would affect main). Idempotent — safe to call multiple
-// times. Warn-only on failure (never blocks worktree creation).
+// Set up git exclude for WORKTREE-BRIEF.md so it never shows as untracked.
+//
+// TD-347: MUST write to the **common** dir (`.git/info/exclude`), not the
+// per-worktree `$GIT_DIR/info/exclude` (`.git/worktrees/<slug>/info/exclude`).
+// git reads only the common dir's copy — the per-worktree one it never opens,
+// so the previous `--git-dir` form was a silent no-op and every worktree that
+// actually produced a brief kept it as `??` forever, tripping the
+// uncommitted-files gate on merge-back / cleanup.
+//
+// The cost of the common dir is that the entry is visible to main and to every
+// other worktree. That is acceptable **for this path only**: `WORKTREE-BRIEF.md`
+// is a tool artifact this script itself writes, never a user file. NEVER widen
+// this helper to arbitrary user-supplied paths — an entry written here cannot be
+// scoped back to one worktree.
+//
+// Idempotent — safe to call multiple times. Warn-only on failure (never blocks
+// worktree creation).
 function setupBriefExclude(wtPath) {
   try {
-    const wtGitDir = git(['rev-parse', '--git-dir'], { cwd: wtPath }).trim()
+    const wtGitDir = git(['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+      cwd: wtPath,
+    }).trim()
     const infoDir = join(wtGitDir, 'info')
     mkdirSync(infoDir, { recursive: true })
     const excludePath = join(infoDir, 'exclude')
@@ -3360,6 +3396,7 @@ export {
   parseWorktreeList,
   preserveWorktreeScreenshots,
   sessionWorktrees,
+  setupBriefExclude,
   sweepSiblingChangeResidues,
   timestampPrefix,
 }

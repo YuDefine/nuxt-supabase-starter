@@ -25,7 +25,7 @@ Local edits will be reverted by the next sync.
 - **Lease 衝突**：`dev.leaseMode = strict` 且 cwd-mismatch → dev-session 印衝突訊息 + exit 1，agent **MUST** 把訊息原樣呈給 user，**NEVER** 自行 `--takeover`（參照 [`verification-lease.md`](./verification-lease.md)）
 - **掃 free port（non-pinned）**：scan 3001-3050 找第一個 free port；**禁止**用 3000（留給 user 自己的 dev server）
 - **Tunnel URL**：回報 user 時，**若 consumer 有 `TUNNEL_HOSTNAME`，MUST 額外列 tunnel URL 並標註「tunnel 未啟動先跑 `pnpm tunnel:<app>`」**——外部裝置 / HTTPS-only 驗收 localhost 不夠用。**Agent NEVER 自起 `pnpm tunnel:*`** —— tunnel process 由 user 控制，agent 只負責列 URL + 提示
-- **Worktree env bootstrap**：開新 worktree 後 **MUST** 在啟動前跑 `node vendor/scripts/wt-env-bootstrap.ts --consumer-meta .claude/consumer-meta.json` 補 gitignored env file
+- **Worktree env bootstrap**：開新 worktree 後 **MUST** 在啟動前跑 `node vendor/scripts/wt-env-sync.ts --consumer-meta .claude/consumer-meta.json` 補 gitignored env file
 - **Missing manifest**（consumer 無 `.claude/consumer-meta.json`）：**STOP** spawn → 回報 user 無 lease 保護 → 提示 scaffold 採用路徑（5 步見 cookbook）；**NEVER** 替 consumer 直接寫 manifest（consumer-self 決策）
 - **多 worktree 反覆切換驗收** → SHOULD 用 `scripts/dev-router.ts`（常駐 L4 proxy 佔公開 port、`use <slug>` 切 active backend、免 cd 免重啟；只適用 A 型獨立 tunnel consumer）。單次起一個 server 走 dev-session
 - consumer local rule（`.claude/rules/local/no-auto-dev-server*.md` / `dev-server-policy*.md`）明確禁止 agent 自起時 → 不自起，fallback 給 user 一條一行指令（template 見 cookbook）；啟動前先讀過

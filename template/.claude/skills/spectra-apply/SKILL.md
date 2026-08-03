@@ -114,6 +114,8 @@ Implement tasks from a Spectra change.
 
       Wait for the dispatched skill to return, surface its report to the user, and STOP — do **not** re-enter Step 1 in the parent session.
 
+      While waiting: the subagent dispatches and watches its own codex processes (Step 6b Class C, Step 8a verify channels, pre-handoff checks). The parent **MUST NOT** probe those with `ps` / `pgrep` / `/proc` — that output carries no tenant information in either direction, so it produces confident wrong answers rather than none (TD-351; `agent-routing.codex-watch-protocol.md` § 跨 sandbox 可見度約束 v2). Ask via `SendMessage`, or read signals that name the change/phase slug.
+
       **Fallback** — if the Skill tool / `/wt` dispatch is unavailable in this environment (rare degradation; e.g., minimal runtime without skill support), emit a status-only message:
 
       ```
@@ -389,6 +391,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
       - **C. Other phase** — 上述兩類以外（schema / migration / API server / CLI / 純 backend / frontend 但非 view 的 store / hook / API client / type / util / unit test / docs）
         → **派 background codex GPT-5.6-sol high**
         → Phase 粒度避免大量 codex round-trip
+        → **在 Form 3 / Form 4 下這一步由 worktree subagent 自己派**，per `agent-routing.md` § Dispatch 入口「codex MUST 由該層編排者在其自身 sandbox 內直接 Bash 派」。准入條件是**該 subagent 自跑完整 Codex Watch Protocol**（notification-only + 安全網 fallback），做不到就退回薄中介禁令。主線對這些 codex **零探針**（TD-351）
    3. **Mixed-phase fallback**（A、B 都不是純 view、又混雜 view 與非 view 工作）:
       - **看該 phase 是否已開工**（任一 task `[x]`，或 git history 顯示 phase 內檔案已被改）:
         - **已開工** → **主線整個 phase 自己做**（safety fallback；不重切、不派 codex；該 phase 內的 codex 工作量由主線吸收）

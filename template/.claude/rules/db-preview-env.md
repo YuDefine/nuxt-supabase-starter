@@ -65,6 +65,8 @@ Fail-loud 的訊息 **MUST 點名 backing service 本身與修復指令**（例�
 
 Cookbook（naming / ownership / template refresh / path adapter / pool / cleanup 的 contract 與範例）：`vendor/snippets/worktree-db-isolation/`。
 
+**in-memory Postgres（PGlite）已評估、不採用**：三條硬阻礙——測試全走 PostgREST 而 PGlite 一次只接一個 client、RLS 是測試標的（改直連 SQL 就繞過去）、`pg_cron` / `pg_net` / `supabase_vault` / `auth.users` 對不上。證據與重啟條件見 `docs/discussions/2026-08-03-pglite-in-memory-db-rejected.md`，**NEVER** 因為「聽起來很快」就重跑一次調查。
+
 ## MUST
 
 ### 1. Schema migration gate（必備）
