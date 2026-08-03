@@ -78,6 +78,16 @@ Local edits will be reverted by the next sync.
 
 14. **判定外部 server / daemon 是否存活 MUST 對齊自己這條連線**：MCP server、dev server、tunnel 這類長駐程序報連線錯誤（`Transport closed` 等）時，**MUST** 用 process tree 確認「當前 session 的 PID 與它的直接子程序」，**NEVER** 因為看到**同名**程序還活著就判定 server 正常——別的 session 開的同名程序跟你這條連線沒有關係。修復時同樣 **MUST** 用不終止其他 session 的方式（版本化安裝 + 隔離 cache dir）。同一個 stdio MCP 的查詢**預設串行**，不要開沒必要的並行 outstanding call。（<consumer-b> 實證）
 
+15. **收尾前 MUST 核對 receipt 齊全，不是逐項查（hard rule）**：change 收尾 / archive / hand back user 前，**MUST** 跑
+
+    ```bash
+    node --experimental-strip-types ~/offline/clade/vendor/scripts/audit-evidence-completeness.ts --repo <repo> --change <change>
+    ```
+
+    並取得 exit 0。exit 1 代表有**已勾**的 item 沒有對應 evidence receipt：**MUST** 補收 evidence（`evidence-store --write`），或在該 item 標 `(deferred: ...)` 附逐層 failure trail（格式同上方 MUST 3）。**NEVER** 為了讓它變綠去改 checkbox——那是把 false-green 從「沒被發現」變成「主動製造」。
+
+    **NEVER** 用逐項 `evidence-store --has-evidence` 查過就當全項齊全。逐項查回答得了「這一項有沒有」，回答不了「哪些項還缺」——而收尾要問的正是後者，漏掉的永遠是沒被查到的那一項。這條與 MUST 8 是同一個 false-green 的兩端：MUST 8 管單項的 checkbox 不可信，本條管整批的「都驗完了」不可信。
+
 ## 派工前的主線預檢責任
 
 派 subagent / codex / screenshot-review 前，主線 **MUST**：
@@ -109,6 +119,8 @@ Local edits will be reverted by the next sync.
 ## Audit signal
 
 `verify-evidence-deferred-without-self-collect-attempt` — TD-161 Resolution 留作 first incident 後再評估，script 未建。
+
+`audit-evidence-completeness`（MUST 15 的機械層）：`vendor/scripts/audit-evidence-completeness.ts`，遵守 [[checker-contract]] § REQUIRED output contract 與 § Exit code 契約——`0` = 全齊或無已勾 item、`1` = 有缺口、`2` = repo / change / tasks.md 讀不到。它只核對**已勾** item；未勾的計入 `skipped`，不算缺口。
 
 ## 違反時的回報方式
 

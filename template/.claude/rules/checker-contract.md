@@ -22,9 +22,34 @@ Mechanical checker 的綠燈是一項可重現的 contract claim：它只證明�
 <checker>: <pass|finding|N/A|infrastructure-error>
 scope: roots=<實際掃描目錄>; patterns=<實際納入 pattern>; mode=<tracked|staged|filesystem>
 skipped: <排除目錄/pattern/原因；沒有就寫 none>
+completeness: <complete|partial|unknown>
 ```
 
 `scope` **MUST** 是本次 invocation 的實際值，不得只在 `--help` 或 source comment 宣告。沒有 applicable target 時可回 N/A；目錄、symlink、env 或執行依賴缺失時不得回 N/A，必須走 infrastructure error。
+
+### completeness 與結果是正交的兩軸
+
+`pass|finding` 回答「掃到的東西合不合格」，`completeness` 回答「宣告的 scope 掃完了沒」。兩軸 **MUST** 分開輸出——`pass` + `partial` 是合法且常見的組合（掃到的部分沒問題，但沒掃完），把它塌縮成單一綠燈就是把「沒掃到」講成「沒問題」。
+
+| 值 | 何時用 |
+| --- | --- |
+| `complete` | 宣告的 scope 全數執行完 |
+| `partial` | scope 內有單元被跳過（逾時、單檔 parse 失敗、明確 deferred）。**MUST** 同時在 `skipped:` 列出被跳過的單元 |
+| `unknown` | checker 無法確定自己掃完沒（glob 展開被上游截斷、列舉命令回傳值不可信） |
+
+### Exit code 契約
+
+**每一支** checker 的 exit code **MUST** 讓消費端分得出「跑完了有問題」與「沒跑成」：
+
+| 結果 | exit code |
+| --- | --- |
+| `pass` / `N/A` | 0 |
+| `finding` | 1 |
+| `infrastructure-error` | 2 |
+
+消費端（CI job、pre-commit hook、gate-runner）收到 2 時 **NEVER** 當成「檢查過了沒問題」，**也 NEVER** 當成一般違規去 retry——它代表這個 gate 這次根本沒有執行。
+
+**鎖的是語義軸，不是數字。** 同一條軸的既有實例：`vendor/scripts/codex-dispatch.ts` 用 `2` = 業務 fail（跑完了，結果不合格）、`3` = mechanical failure（codex 缺失／spawn error／timeout／無可解析 JSON）、`4` = quota gate。它多一個配額態，數字自然往後排，這是**正確的**——**NEVER** 為了對齊數字去改既有 dispatcher 或 checker，要對齊的是「兩類失敗必須是不同 exit code」這件事本身。
 
 ## Fail-closed Iron Law
 
@@ -42,6 +67,8 @@ skipped: <排除目錄/pattern/原因；沒有就寫 none>
 - 預期掃描 root 應存在，但 filesystem 或 Git 無法列舉
 
 「本次 scope 內確實沒有 applicable target」與「checker 沒有能力執行」是不同狀態。前者可 N/A，後者 **MUST** infrastructure error；**NEVER** catch 後回空陣列、印 skip 再 exit 0。
+
+`completeness` 非 `complete` 時同理：**NEVER** 讓消費端只讀 exit code 就下「通過」結論。`pass` + `partial` 的 exit code 是 0，那個 0 只證明「掃到的部分沒問題」，不證明掃完了——把 scope 縮到只剩一個檔也能拿到同一個 0。
 
 ### Red Flags
 
