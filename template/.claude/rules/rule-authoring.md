@@ -76,6 +76,18 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 - **廢樣本 MUST 跟失敗樣本分開計**：`--tools ''` 隔離下模型可能把整個輸出耗在幻覺工具呼叫上，那種 rep 沒有決策可讀，是**廢樣本**不是失敗樣本。混在一起算會讓 pass 率虛低，看起來像措辭沒綁住。
 - 工具：`vendor/scripts/rule-pressure-test.ts`（baseline / with-rule 對照跑）；情境寫法見 cookbook。
 
+## load-bearing 句登記（改寫既有規約時 MUST 查）
+
+`sync-rules.ts` 的 checksum 擋的是**投影被竄改**。它擋不到反方向：**源檔自己在改寫時掉了一條 load-bearing 句**——源檔變了、投影跟著變、`.hub-state.json` 更新，drift / stale / orphan 三態全綠，規約已失去牙齒卻零訊號，然後散播到全 registry consumer。diff 上它看起來像「精簡措辭」。
+
+`registry/rule-invariants.json` 逐條登記「這句話必須**逐字**存在於這個檔」，稽核跑 `node scripts/audit-rule-invariants.ts`（預設 warn-only，`--strict` 給 gate 用）。
+
+- **改寫已登記的句子前 MUST 先查**：`node scripts/audit-rule-invariants.ts --json | jq '.findings'`，或直接 grep registry。動到登記句而不更新 registry，audit 會報 missing
+- **刻意要拿掉某句** → 先從 registry 移除該條目，再改 rule。**NEVER** 為了讓 audit 變綠而刪條目——那正好把「明確決定刪掉」退回成「不小心刪掉」
+- **收錄判準**：安全 carve-out、逐字反開脫句、具名指令禁令、可觀察 predicate 的 gate 句。**純解釋性理由句不收**——那些本來就該隨迭代改寫，登記它們只會製造改寫摩擦
+- **phrase 保留 markdown 強調符號**（`**NEVER**`）：措辭稀釋最常見的形式就是把 `**NEVER**` 降級成「不建議」，保留符號才抓得到降級
+- **registry 不存行號**：行號隨編輯漂移，phrase 不會。phrase MUST 在該檔內唯一（audit 的 `ambiguous` 就是在報這個）
+
 ## 可變事實指 SoT，不 inline（MUST）
 
 規約 prose 內**NEVER** 寫死會隨時間變的事實——consumer 數量、版本號、檔案行數、百分比。一律指 SoT（`registry/consumers.json`、audit script 實跑）；歷史快照要標「(YYYY-MM 快照)」。實證：fleet 規模「5」曾同時存在於 6 份文件，registry 實際 12——每份 inline 快照都是一顆漂移地雷（2026-07-05 語料掃描）。

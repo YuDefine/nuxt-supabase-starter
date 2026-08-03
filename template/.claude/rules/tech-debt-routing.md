@@ -39,6 +39,23 @@ Local edits will be reverted by the next sync.
 
 ---
 
+## 就地標記（發現當下留下來，不靠記憶）
+
+蓄意簡化在當下不登記，事後就只能靠記憶——而記憶不跨 session。在 code 裡就地標記，之後機械收割成候選。
+
+**格式**（`scripts/harvest-td-markers.ts` 認的就是這個）：
+
+```
+// CLADE-TD: <ceiling — 這個做法在什麼條件下會不夠> → <upgrade path — 屆時換成什麼>
+// CLADE-TD(TD-087): <同上；已有 TD entry 時回指編號>
+```
+
+- **MUST 同時寫 ceiling 與 upgrade path**，用 `→` 分隔。只寫「這裡之後要改」的裸 marker 不算——沒有 ceiling 就沒有「何時該動它」的判準，那就是永遠不會被處理的那種 marker
+- **NEVER 用裸 `TODO` / `FIXME` / `XXX` 承載這個角色**：fleet 實測（2026-08-03，12 consumer / 3.3M 行）直接掃 `TODO` 的假陽性約 3:1，四個來源分別是 vendored 第三方 skill、build cache、掃描器自身的字串常數、格式佔位（`F-X-XX-XXX`）——都不是調 regex 能乾淨解決的。獨特前綴一次消掉全部四類
+- **標記不取代登記**：跨 session 或會影響他人的缺口仍 MUST 進 `docs/tech-debt.md` 走本檔的決策流程。marker 承接的是「當下判斷還不值得開一條 TD entry，但忘了就再也找不回來」那一層
+
+**收割**：`node scripts/harvest-td-markers.ts [--repo <path>]` 掃出所有 marker 輸出候選清單。它**只出清單、不寫 `docs/tech-debt.md`**——TD entry 有 hygiene gate（六條 invariant ＋ Class 分類，見 `scripts/audit-tech-debt-hygiene.ts`），機械產出的候選不會自動合格，升級成正式 entry 是人的判斷。同一條哲學見 improvement-digest：候選進 digest，落不落地由人決定。
+
 ## 為什麼一律先問 clade
 
 Consumer 端的 `.claude/` / `scripts/spectra-advanced/` / vendor 副本是 clade **投影**（帶 LOCKED banner、chmod 444、checksum gate）。
