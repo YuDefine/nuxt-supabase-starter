@@ -2940,16 +2940,37 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
     )
   }
 
-  if (opts.minimalStashPaths && stashRef) {
+  // Auto-restore covers BOTH stash paths (minimal-scope and --auto-stash bulk).
+  // Leaving the bulk stash parked for a later stash-reconcile.ts run means the
+  // squash lands on a main that is missing the user's other in-flight work, and
+  // every downstream step (archive gate, /commit grouping) sees a main that does
+  // not reflect reality. Restoring here puts squash result + prior dirty back in
+  // one working tree, which is what "commit everything together" needs.
+  // The bulk stash itself stays bulk on purpose — pathspec stash hits a
+  // scope-leak bug on git 2.50.1 (see the comment above the stash push).
+  if (stashRef) {
+    let stashedFileCount = null
+    try {
+      stashedFileCount = git(['stash', 'show', '--name-only', 'stash@{0}'], { cwd: consumerRoot })
+        .split('\n')
+        .filter(Boolean).length
+    } catch {
+      stashedFileCount = null
+    }
+    const scopeLabel = opts.minimalStashPaths ? 'minimal-stashed' : 'stashed'
+    const countLabel = opts.minimalStashPaths
+      ? `${opts.minimalStashPaths.length}`
+      : (stashedFileCount ?? '?')
     try {
       git(['stash', 'pop'], { cwd: consumerRoot })
-      console.log(
-        `merge-back: auto-restored ${opts.minimalStashPaths.length} minimal-stashed path(s)`,
-      )
+      console.log(`merge-back: auto-restored ${countLabel} ${scopeLabel} path(s) onto main`)
       stashRef = null
     } catch {
       console.warn(
-        'merge-back: minimal stash pop conflicted — stash preserved for manual reconcile',
+        `merge-back: stash pop conflicted — stash '${stashRef}' preserved.\n` +
+          `             Squash HAS landed on main; the stashed changes have NOT been\n` +
+          `             merged back. Resolve with \`git checkout --ours/--theirs <path>\`\n` +
+          `             then \`git stash drop\`, or inspect via \`node scripts/stash-reconcile.ts\`.`,
       )
     }
   }

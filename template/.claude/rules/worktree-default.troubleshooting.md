@@ -85,22 +85,22 @@ Session worktree 在 worktree root 攜帶 `WORKTREE-BRIEF.md`，內含原始任�
 
 ## §12 archive / merge-back 撞平行 worktree fork residue — canonical recovery
 
-多條 change 平行、其中一條要 archive / merge-back 收尾時，會撞兩類 fork-time residue 阻擋。**MUST** 照下列 recovery 直接做，**NEVER** 回頭問 user、**NEVER** 反射性用 bulk `--auto-stash`。完整根因見 pitfall `pitfall-archive-mergeback-parallel-worktree-fork-residue`。
+多條 change 平行、其中一條要 archive / merge-back 收尾時，會撞兩類 fork-time residue 阻擋。**MUST** 照下列 recovery 直接做，**NEVER** 回頭問 user。完整根因見 pitfall `pitfall-archive-mergeback-parallel-worktree-fork-residue`。
 
 ### §12.1 merge-back blocker = 別 session 的 main WIP → 最小範圍 stash
 
-`wt-helper merge-back <change>` pre-sync 後回 `merge-back blocked: N file(s) in main's working tree would be overwritten by squash`（典型 `HANDOFF.md`）——那是**別 session 在 main 的未 commit WIP**。工具建議的 `--auto-stash` 是 **bulk-stash**（捲走 main 全部 dirty，含別 session / 別 archive-in-progress deletions），blast radius 過大。**MUST** 改用最小範圍：
+`wt-helper merge-back <change>` pre-sync 後回 `merge-back blocked: N file(s) in main's working tree would be overwritten by squash`（典型 `HANDOFF.md`）——那是**別 session 在 main 的未 commit WIP**。
+
+**正解就是 `--auto-stash`**（也就是 `/spectra-archive` Step 0 寫的那條命令）。它是 bulk-stash（捲走 main 全部 dirty，不只 blockers，為的是避開 git 2.50.1 的 pathspec scope-leak），但 squash 一落地就**自動 pop 回 main**——squash 結果與原本的 main dirty 併回同一個 working tree，別 session 的 WIP 不會被留在 stash 裡。這正是「所有東西一起走一次 `/commit`」需要的狀態。
 
 ```bash
-git stash push -m "protect-main-<file>-during-mergeback" -- <blocker-path>
-git status --porcelain          # 確認只有該檔消失、其他 main dirty 完整（此 git 版本無 pathspec scope-leak）
-node scripts/wt-helper.ts merge-back <change>   # 不帶 --auto-stash
-git stash pop                   # 立即還原別 session WIP
-git diff <blocker-path>         # 確認還原 == 原 WIP
+node scripts/wt-helper.ts merge-back <change> --auto-stash
+# 成功時印：merge-back: auto-restored N stashed path(s) onto main
 ```
 
-- **NEVER** `--auto-stash`（bulk，擾動別 session / 別 archive-in-progress）。
-- session branch 通常**不動** blocker 檔（是 pre-sync 把 main HEAD 版本帶進 branch 才觸發覆蓋判定）；先 `git log origin/main..HEAD -- <blocker>` 確認 branch 沒真的改它，就能安心 stash-pop round-trip。
+- pop 撞 conflict 時**不會**靜默：stash 保留、印出「squash HAS landed, stashed changes have NOT been merged back」+ 解法。此時才需要人工三方合併，**NEVER** 在沒讀那段警告前就繼續往下走。
+- 只有在**明確要讓 main 其餘 dirty 完全不被碰**時（例：別 session 正在跑 archive，working tree 中途狀態不可擾動）才改走最小範圍 round-trip：`git stash push -m ... -- <blocker-path>` → 不帶 flag 的 `merge-back` → `git stash pop`。這是例外不是預設。
+- session branch 通常**不動** blocker 檔（是 pre-sync 把 main HEAD 版本帶進 branch 才觸發覆蓋判定）；先 `git log origin/main..HEAD -- <blocker>` 確認 branch 沒真的改它，就能安心 round-trip。
 
 ### §12.2 spectra archive 撞 sibling worktree stale 副本 → 逐一 clean-check 後移除
 

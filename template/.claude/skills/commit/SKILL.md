@@ -1,6 +1,6 @@
 ---
 name: commit
-description: Use when 使用者要求把工作區的變更寫進版本歷史，不論用詞是 commit、提交、送進 git 還是「整理一下」；需要拆成多筆時同樣適用。
+description: Use when 使用者要求把工作區的變更寫進版本歷史，不論用詞是 commit、提交、送進 git 還是「整理一下」；需要拆成多筆時同樣適用。NOT for 把 clade 改動散播到 consumer（走 /clade-publish），NOT for 建 / 合併 worktree（走 /wt）。
 effort: high
 permission_tier: action
 ---

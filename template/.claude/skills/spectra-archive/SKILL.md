@@ -102,7 +102,7 @@ awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$
    ```
 
    - `--noop-if-missing` makes this a silent no-op when no matching worktree exists (solo archive path — change implemented directly on main).
-   - `--auto-stash` stashes any main-worktree blockers as `wt-merge-block/<change-name>/<ISO>` for later reconciliation via `node scripts/stash-reconcile.ts`.
+   - `--auto-stash` bulk-stashes main's dirty state as `wt-merge-block/<change-name>/<ISO>` so the squash can land, then **pops it back automatically** once the squash succeeds — main ends up holding squash result + prior dirty together, which is what the eventual single `/commit` needs. A stash tail is left ONLY when the pop hits a genuine conflict, and that case prints an explicit warning (squash landed, stash did not merge back) plus the resolution path; reconcile it via `node scripts/stash-reconcile.ts`.
    - On conflict, the squash aborts, the worktree + branch are preserved, and the stash is popped back. Surface the error and **STOP** the archive — the change cannot be archived until the conflict is resolved.
 
    **Skip condition**: if `scripts/wt-helper.ts` does not exist (consumer hasn't propagated the merge-back subcommand yet), skip this step silently with a one-line note: `Step 0: skipped — wt-helper merge-back not available (consumer pre-propagate)`.

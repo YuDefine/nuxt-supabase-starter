@@ -1,6 +1,6 @@
 ---
 name: spectra
-description: 'Spectra orchestrator — auto-detect which spectra sub-skill to invoke based on project state and user intent'
+description: 'Spectra orchestrator — auto-detect which spectra sub-skill to invoke based on project state and user intent. NOT for clade 中央倉自身（不使用 spectra），NOT for 已知要跑哪一支時（直接呼叫該 skill）。'
 effort: low
 permission_tier: draft
 ---
