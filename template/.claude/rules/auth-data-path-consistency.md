@@ -1,6 +1,6 @@
 ---
 description: Auth 策略與資料存取路徑一致性——防止混合 auth 狀態導致 silent 權限降級
-paths: ['app/**/*.ts', 'app/**/*.vue', 'supabase/migrations/**/*.sql', 'server/api/**/*.ts', 'server/utils/**/*.ts', 'packages/*/server/api/**/*.ts', 'packages/*/server/utils/**/*.ts', 'template/app/**/*.ts', 'template/app/**/*.vue', 'template/supabase/migrations/**/*.sql', 'template/server/api/**/*.ts', 'template/server/utils/**/*.ts']
+paths: ['app/**/*.ts', 'packages/*/app/**/*.ts', 'app/**/*.vue', 'packages/*/app/**/*.vue', 'supabase/migrations/**/*.sql', 'server/api/**/*.ts', 'server/utils/**/*.ts', 'packages/*/server/api/**/*.ts', 'packages/*/server/utils/**/*.ts']
 ---
 <!--
 🔒 LOCKED — managed by clade

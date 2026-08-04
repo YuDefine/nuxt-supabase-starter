@@ -1,6 +1,6 @@
 ---
 description: Overlay 元件（USlideover/UModal/UDrawer）body 必用 #body slot、寬度必用 :ui prop 覆寫
-paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'layouts/**/*.vue', 'pages/**/*.vue']
+paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue']
 ---
 <!--
 🔒 LOCKED — managed by clade

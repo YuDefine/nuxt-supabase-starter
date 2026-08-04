@@ -1,6 +1,6 @@
 ---
 description: 收 verify:ui / review:ui 視覺 evidence 的操作規約——截圖與驗證同一個 Bash call、(a)–(e) 五層驗證的 canonical pattern、seed fixture 必須進 seed.sql、既有 [x] 要自拍佐證、UI 改動後全批重拍
-paths: ['screenshots/**', 'openspec/changes/**/tasks.md', 'app/**/*.vue', 'components/**/*.vue', 'pages/**/*.vue', 'layouts/**/*.vue', 'e2e/**', 'playwright.config.*', 'packages/**/app/**/*.vue']
+paths: ['screenshots/**', 'openspec/changes/**/tasks.md', 'app/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'e2e/**', 'packages/*/e2e/**', 'playwright.config.*', 'packages/**/app/**/*.vue']
 ---
 <!--
 🔒 LOCKED — managed by clade

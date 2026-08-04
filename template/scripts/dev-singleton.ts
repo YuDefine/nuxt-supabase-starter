@@ -40,6 +40,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { detectHolderKind, detectSessionId } from './lib/detect-runtime.ts'
 
 const PING_TIMEOUT_MS = 1500
 const SPAWN_WAIT_MAX_MS = 20000
@@ -162,9 +163,7 @@ function loadConsumerMeta(path) {
 }
 
 function detectKind() {
-  if (process.env.CLAUDE_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID) return 'claude'
-  if (process.env.CODEX_SESSION_ID) return 'codex'
-  return 'human'
+  return detectHolderKind()
 }
 
 function derivePathConsumerId() {
@@ -226,11 +225,8 @@ function cwdHash() {
 }
 
 function sessionId(kind) {
-  if (kind === 'claude')
-    return process.env.CLAUDE_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID || cwdHash()
-  if (kind === 'codex') return process.env.CODEX_SESSION_ID || cwdHash()
   if (kind === 'human') return 'human'
-  return cwdHash()
+  return detectSessionId() || cwdHash()
 }
 
 function appendAudit(lease, event, extra = {}) {

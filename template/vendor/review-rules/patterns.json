@@ -7,6 +7,7 @@
       "section": 3,
       "severity": "error",
       "fileGlob": "*.vue",
+      "multiLine": true,
       "pattern": "<(Lazy)?UBadge[^>]*size=\"(xs|sm)\"",
       "message": "UBadge size 只允許 md / lg / xl（或省略吃預設 md）。xs / sm 在密集表格字級過小、可讀性不足。",
       "fix": "移除 size prop（吃預設 md），或顯式寫 size=\"md\" / \"lg\" / \"xl\"。"

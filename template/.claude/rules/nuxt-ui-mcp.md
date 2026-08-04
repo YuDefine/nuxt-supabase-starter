@@ -1,6 +1,6 @@
 ---
 description: Nuxt UI v3/v4 component / composable / theming / icon 必走 nuxt-ui-remote MCP；ban prescriptive synthesis
-paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'template/app/**/*.{vue,ts}', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'template/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'template/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'template/layouts/**/*.vue', 'app.config.ts', 'nuxt.config.ts', 'openspec/changes/**/proposal.md', 'openspec/changes/**/design.md', 'openspec/changes/**/design-review.md']
+paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'app.config.ts', 'nuxt.config.ts', 'openspec/changes/**/proposal.md', 'openspec/changes/**/design.md', 'openspec/changes/**/design-review.md']
 ---
 <!--
 🔒 LOCKED — managed by clade

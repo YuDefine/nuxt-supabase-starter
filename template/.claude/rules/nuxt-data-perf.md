@@ -1,6 +1,6 @@
 ---
 description: Nuxt data fetching 選用決策、Pinia Colada 最佳實踐、dedupe/cache/payload 效能規約；涵蓋 useFetch / useAsyncData / $fetch / useQuery / useMutation 全棧
-paths: ['**/*.vue', 'app/**/*.ts', 'packages/*/app/**/*.ts', 'template/app/**/*.ts', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'template/server/**/*.ts', 'composables/**', 'queries/**', 'stores/**', 'nuxt.config.*', 'app.config.*']
+paths: ['**/*.vue', 'app/**/*.ts', 'packages/*/app/**/*.ts', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'composables/**', 'packages/*/composables/**', 'queries/**', 'packages/*/queries/**', 'stores/**', 'packages/*/stores/**', 'nuxt.config.*', 'app.config.*']
 ---
 <!--
 🔒 LOCKED — managed by clade

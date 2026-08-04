@@ -218,14 +218,12 @@ export function collectClaims(config: ClaimsRuntimeConfig, now: Date = new Date(
   })
 }
 
-export function detectRuntime(): string {
-  const env = process.env
-  if (env.CLAUDE_PROJECT_DIR || env.CLAUDE_SESSION_ID || env.CLAUDE_CONVERSATION_ID) return 'claude'
-  if (env.CODEX_SESSION_ID || env.CODEX_AGENT_NAME || env.CODEX_HOME) return 'codex'
-  if (env.COPILOT_AGENT_ID || env.GITHUB_COPILOT_CHAT) return 'copilot'
-  if (env.CURSOR_SESSION_ID || env.CURSOR_TRACE_ID) return 'cursor'
-  return 'unknown'
-}
+// 詞彙表與探針 SoT 在 ../lib/detect-runtime.ts —— 本檔只轉出，NEVER 再寫一份。
+// `export { X } from '...'` 不把 X 帶進本模組 scope（下方 resolveIdentity 要呼叫它），
+// 所以要 import 進來再 export，不能只寫 re-export 一行。
+import { detectRuntime } from '../lib/detect-runtime.ts'
+
+export { detectRuntime }
 
 function resolveEnvSessionId(): string | null {
   const env = process.env
@@ -234,6 +232,7 @@ function resolveEnvSessionId(): string | null {
     'CLAUDE_CONVERSATION_ID',
     'CODEX_SESSION_ID',
     'CODEX_CONVERSATION_ID',
+    'OPENCODE_SESSION_ID',
     'COPILOT_AGENT_ID',
     'CURSOR_SESSION_ID',
   ]) {

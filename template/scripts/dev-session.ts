@@ -54,6 +54,7 @@ import { existsSync, readFileSync, writeFileSync, unlinkSync, realpathSync } fro
 import { createHash } from 'node:crypto'
 import { basename, join, resolve, isAbsolute } from 'node:path'
 import { tmpdir } from 'node:os'
+import { detectHolderKind, detectSessionId } from './lib/detect-runtime.ts'
 
 const LEASE_DIR = tmpdir()
 const READY_TIMEOUT_MS = 90_000
@@ -322,13 +323,11 @@ function resolvePrimaryPort(meta) {
 
 function holderKind(o) {
   if (o.kind) return o.kind
-  if (process.env.CLAUDE_SESSION_ID) return 'claude'
-  if (process.env.CODEX_SESSION_ID) return 'codex'
-  return 'human'
+  return detectHolderKind()
 }
 
 function holderSessionId(o) {
-  const id = process.env.CLAUDE_SESSION_ID || process.env.CODEX_SESSION_ID
+  const id = detectSessionId()
   if (id) return id
   if (holderKind(o) === 'human') return 'human'
   return createHash('sha1').update(o.cwd).digest('hex').slice(0, 12)

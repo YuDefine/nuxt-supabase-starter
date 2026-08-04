@@ -1,6 +1,6 @@
 ---
 description: 多欄位表單必用 UForm + Zod；input/textarea 必設 maxlength；placeholder 不代 label
-paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'pages/**/*.vue']
+paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue']
 ---
 <!--
 🔒 LOCKED — managed by clade

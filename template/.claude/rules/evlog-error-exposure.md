@@ -5,6 +5,7 @@ paths:
   - 'server/routes/**'
   - 'server/middleware/**'
   - 'server/utils/**'
+  - 'packages/*/server/utils/**'
   - 'packages/**/server/api/**'
   - 'packages/**/server/routes/**'
   - 'packages/**/server/middleware/**'

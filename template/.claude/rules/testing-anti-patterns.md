@@ -4,9 +4,7 @@ paths:
   [
     'test/**/*.ts',
     'packages/*/test/**/*.ts',
-    'template/test/**/*.ts',
-    'e2e/**/*.ts',
-    'template/e2e/**/*.ts',
+    'e2e/**/*.ts', 'packages/*/e2e/**/*.ts',
     '.github/workflows/**',
   ]
 ---

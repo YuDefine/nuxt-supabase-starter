@@ -6,8 +6,6 @@ paths:
   - 'app/plugins/evlog-*.ts'
   - 'packages/**/server/plugins/evlog-*.ts'
   - 'packages/**/app/plugins/evlog-*.ts'
-  - 'template/server/plugins/evlog-*.ts'
-  - 'template/app/plugins/evlog-*.ts'
   - 'openspec/changes/evlog-*/**'
 ---
 <!--

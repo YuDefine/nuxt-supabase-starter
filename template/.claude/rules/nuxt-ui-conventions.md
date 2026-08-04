@@ -1,6 +1,6 @@
 ---
 description: 實作 Nuxt UI component 前強制 grep 既有同語義用法、複製多數 props 組合；慣例一致性在實作時對齊，不等 review 才抓
-paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'template/app/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'template/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'template/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'template/layouts/**/*.vue']
+paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue']
 ---
 <!--
 🔒 LOCKED — managed by clade

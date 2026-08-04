@@ -1,6 +1,6 @@
 ---
 description: Nuxt 導航 loading 回饋 golden path — app.vue 必掛 NuxtLoadingIndicator、主資料用非阻塞 fetch + in-content skeleton、重頁可選全域 overlay + 逾時 toast；禁止頂層 blocking await useFetch 抓主資料
-paths: ['app/app.vue', 'packages/*/app/app.vue', 'template/app/app.vue', 'app/pages/**/*.vue', 'packages/*/app/pages/**/*.vue', 'template/app/pages/**/*.vue', 'pages/**/*.vue', 'app/plugins/**/*.ts', 'packages/*/app/plugins/**/*.ts', 'app/composables/use*Loading*.ts', 'packages/*/app/composables/use*Loading*.ts', 'app/stores/ui.ts', 'packages/*/app/stores/ui.ts']
+paths: ['app/app.vue', 'packages/*/app/app.vue', 'app/pages/**/*.vue', 'packages/*/app/pages/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'app/plugins/**/*.ts', 'packages/*/app/plugins/**/*.ts', 'app/composables/use*Loading*.ts', 'packages/*/app/composables/use*Loading*.ts', 'app/stores/ui.ts', 'packages/*/app/stores/ui.ts']
 ---
 <!--
 🔒 LOCKED — managed by clade

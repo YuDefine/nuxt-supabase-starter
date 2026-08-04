@@ -9,8 +9,8 @@
  * missing at least one value is flagged as a suspected drift. Files using
  * `switch` + `assertNever` are excluded (TypeScript already enforces them).
  *
- * Configuration: reads `spectra-ux.config.json` from the project root.
- * Falls back to Nuxt-style defaults when no config is present.
+ * Configuration: reads `spectra-advanced.config.json` (or legacy `spectra-ux.config.json`)
+ * from the project root. Falls back to Nuxt-style defaults when no config is present.
  *
  * Usage:
  *   node scripts/audit-ux-drift.ts             # full repo scan (default)
@@ -81,18 +81,30 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 // Maximum directory levels to walk upward when hunting for a project root
-// marker (spectra-ux.config.json or .git). 8 is generous enough for deeply
+// marker (spectra-advanced.config.json or .git). 8 is generous enough for deeply
 // nested scripts/ layouts while still failing fast on malformed installs.
 const MAX_WALK_DEPTH = 8
 
+// Prefer the current name; keep legacy name as fallback (matches claims-lib.ts
+// and roadmap-sync.ts dual-name resolution after the spectra-ux → spectra-advanced rename).
+const CONFIG_NAMES = ['spectra-advanced.config.json', 'spectra-ux.config.json']
+
+function resolveConfigPath(dir: string): string | null {
+  for (const name of CONFIG_NAMES) {
+    const candidate = resolve(dir, name)
+    if (existsSync(candidate)) return candidate
+  }
+  return null
+}
+
 function findRepoRoot(): string {
-  // Prefer spectra-ux.config.json as the root marker — it's the canonical
-  // anchor for "where spectra-ux was installed". This handles nested project
+  // Prefer spectra-advanced.config.json as the root marker — it's the canonical
+  // anchor for "where spectra-advanced was installed". This handles nested project
   // layouts (e.g. starter templates inside a parent monorepo) where .git
   // would walk past the actual project root.
   let dir = __dirname
   for (let i = 0; i < MAX_WALK_DEPTH; i++) {
-    if (existsSync(resolve(dir, 'spectra-ux.config.json'))) return dir
+    if (resolveConfigPath(dir)) return dir
     const parent = dirname(dir)
     if (parent === dir) break
     dir = parent
@@ -111,15 +123,15 @@ function findRepoRoot(): string {
 const repoRoot = findRepoRoot()
 
 const DEFAULT_CONFIG: ScanConfig = {
-  typesDirs: ['shared/types'],
+  typesDirs: ['shared/types', 'packages/*/shared/types'],
   uiDirs: ['app/pages', 'app/components', 'app'],
   uiExtensions: ['.vue', '.ts', '.tsx', '.jsx'],
   serverDirs: ['server', 'shared'],
 }
 
 function loadConfig(): ScanConfig {
-  const configPath = resolve(repoRoot, 'spectra-ux.config.json')
-  if (!existsSync(configPath)) return DEFAULT_CONFIG
+  const configPath = resolveConfigPath(repoRoot)
+  if (!configPath) return DEFAULT_CONFIG
   try {
     const raw = JSON.parse(readFileSync(configPath, 'utf-8')) as {
       paths?: {
@@ -137,7 +149,7 @@ function loadConfig(): ScanConfig {
       serverDirs: asArray(p.server, DEFAULT_CONFIG.serverDirs),
     }
   } catch (err) {
-    console.error(`audit-ux-drift: failed to read spectra-ux.config.json: ${err}`)
+    console.error(`audit-ux-drift: failed to read config: ${err}`)
     return DEFAULT_CONFIG
   }
 }
@@ -149,9 +161,13 @@ function asArray(v: string | string[] | undefined, fallback: string[]): string[]
 
 const config = loadConfig()
 
-/** List files tracked by git under a directory, filtered by extensions. */
+// List files tracked by git under a directory, filtered by extensions.
+// Supports glob patterns in dir (e.g. packages/star/shared/types).
 function gitList(dir: string, exts: string[]): string[] {
-  const result = spawnSync('git', ['ls-files', '--', dir], {
+  // If `dir` contains `*`, use git's :(glob) pathspec magic + /** suffix
+  // to expand wildcard segments. Plain dirs pass through unchanged.
+  const pathspec = dir.includes('*') ? `:(glob)${dir}/**` : dir
+  const result = spawnSync('git', ['ls-files', '--', pathspec], {
     cwd: repoRoot,
     encoding: 'utf-8',
   })
@@ -324,7 +340,12 @@ function emitJson(report: Report): void {
 
 function emitText(report: Report): void {
   if (report.enums.length === 0) {
-    console.log('⊘ No enum-like definitions found in configured types dirs.')
+    console.error(
+      '✗ No enum-like definitions found in configured types dirs.\n' +
+        `  Searched: ${config.typesDirs.join(', ')}\n` +
+        '  This likely means the config is missing or typesDirs points to a wrong path.\n' +
+        '  Fix: create spectra-advanced.config.json with correct paths.types, or verify the default typesDirs match your project layout.',
+    )
     return
   }
 
@@ -374,7 +395,11 @@ function main(): void {
     emitText(report)
   }
 
-  if (report.enums.length === 0) process.exit(0)
+  if (report.enums.length === 0) {
+    // "Found nothing" ≠ "no drift" — config is broken or typesDirs is wrong.
+    // Exit 2 (script error) to fail loud, not silently pass.
+    process.exit(2)
+  }
   if (report.findings.length === 0) process.exit(0)
   process.exit(1)
 }

@@ -1,5 +1,5 @@
 ---
-description: ad-hoc 工作開工前 MUST 先建 per-session task 檔——觸發條件、檔名格式、共享單檔禁令
+description: ad-hoc 工作開工前 MUST 先建 per-session task 檔——觸發條件、檔名格式、共享單檔禁令、session context 預算門檻
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -24,3 +24,38 @@ harness 的 `TaskCreate` / `TaskUpdate` 是**進度呈現**（讓使用者看到
 session 結束時對每個未完項**升級或刪，二擇一**，不留著。
 
 升級路徑、模板、與其他真相層的分工、`lessons.md` 邊界見 [[session-tasks.operations]]（首次觸碰 `tasks/**` 後自動載入）。此規則優先於全域 `~/.claude/CLAUDE.md`「任務管理」段落（若存在）。
+
+## Session context 預算（MUST）
+
+**Iron Law：context 越過門檻就收工，不是「等這件做完再說」。**
+
+本節適用**每一個** session、**所有** consumer——不是只有覺得跑很久的那次。
+
+| 可觀察 predicate | MUST |
+| --- | --- |
+| session context 越過 **250k** | 找下一個可切點收工：未完項寫進 `tasks/<date>-<slug>.md`（或 `HANDOFF.md` / `docs/tech-debt.md`），**NEVER** 開新的工作段 |
+| session context 越過 **400k** | **現在**登記並收工。手上若是不可分割的驗證迴圈，跑完那一輪就切 |
+| 正在跑不可分割的驗證迴圈（單一 test run / 單一 migration） | 跑完再切。**NEVER** 拿「等一下還有事要做」把它延伸成新工作段 |
+
+門檻是 `session-context-budget-warn.sh`（PostToolUse hook）機械報出來的，本節是它引用的 SoT。
+env 可覆寫：`CLADE_CTX_WARN_TIER1` / `CLADE_CTX_WARN_TIER2`。
+
+### 為什麼是硬門檻不是判斷
+
+成本是 **N × C / 2**（N=turns、C=最終 context）——每一 turn 都重讀整個 context，所以
+context 大小是**乘在每一輪上**的係數，不是一次性支出。2026-08-04 對 8 天用量實測：944 個
+主線 session 裡 157 個（17%）平均 context >200k，**吃掉 92% 的 context 讀取量**；67% 的
+session ≤10 turns，合計只佔 0.2%。同樣工作切成 4 段 ≈ 1/4 成本。
+
+「還剩多少工作」與「現在切要付多少重建成本」都判得出來，唯獨「再跑 N turn 會花多少」
+在 context 已經很大時會被系統性低估——因為直覺算的是新增的內容，實際付的是全量重讀。
+
+### 收工前的自我開脫（看到自己這樣說就停下登記）
+
+| 開脫 | 實際 |
+| --- | --- |
+| 「context 還夠，沒有觸發壓縮」 | 沒觸發壓縮不代表便宜。613k 的 session 每跑 100 turn 就是額外 61M token，壓縮與否無關 |
+| 「只差最後一步了」 | 1,463 turn 的那個 session 每一輪都是這樣想的 |
+| 「切了要重建 context，反而更貴」 | 重建成本是**一次**冷載；續跑成本是 context 大小 **× 剩餘 turn 數**。除非剩不到幾輪，續跑必然更貴 |
+| 「這件事登記起來比做完還久」 | 那就是可以現在做完的小事，做完再切——本表擋的是「登記得起來卻不登記」 |
+| 「下個 session 還要重新理解一次」 | 那是 `tasks/<date>-<slug>.md` 沒寫夠，不是切點錯。補齊該檔就是收工動作本身 |

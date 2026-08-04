@@ -1,6 +1,6 @@
 ---
 description: 有 UI 的 consumer 定義或變更 i18n 涵蓋範圍、硬編碼語言 surface、翻譯 lint 與 server error localization 邊界時適用
-paths: ['DESIGN.md', 'docs/decisions/**', 'app/**/*.{vue,ts,tsx,jsx}', 'packages/*/app/**/*.{vue,ts,tsx,jsx}', 'template/app/**/*.{vue,ts,tsx,jsx}', 'components/**/*.{vue,ts,tsx,jsx}', 'packages/*/components/**/*.{vue,ts,tsx,jsx}', 'template/components/**/*.{vue,ts,tsx,jsx}', 'src/**/*.{vue,ts,tsx,jsx}', 'packages/*/src/**/*.{vue,ts,tsx,jsx}', 'template/src/**/*.{vue,ts,tsx,jsx}', 'i18n/**', 'locales/**', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'template/server/**/*.ts']
+paths: ['DESIGN.md', 'docs/decisions/**', 'app/**/*.{vue,ts,tsx,jsx}', 'packages/*/app/**/*.{vue,ts,tsx,jsx}', 'components/**/*.{vue,ts,tsx,jsx}', 'packages/*/components/**/*.{vue,ts,tsx,jsx}', 'src/**/*.{vue,ts,tsx,jsx}', 'packages/*/src/**/*.{vue,ts,tsx,jsx}', 'i18n/**', 'packages/*/i18n/**', 'locales/**', 'packages/*/locales/**', 'server/**/*.ts', 'packages/*/server/**/*.ts']
 ---
 <!--
 🔒 LOCKED — managed by clade

@@ -1,6 +1,6 @@
 ---
 description: patterns.json 機械 ban 清單的實作階段投影 — 寫 .vue / app.config.ts 前必讀；不等 /commit review 才抓
-paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'template/app/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'template/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'template/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'template/layouts/**/*.vue', 'app.config.ts', 'packages/*/app.config.ts', 'template/app.config.ts', 'app/app.config.ts', 'packages/*/app/app.config.ts', 'template/app/app.config.ts']
+paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'app.config.ts', 'packages/*/app.config.ts', 'app/app.config.ts', 'packages/*/app/app.config.ts']
 ---
 <!--
 🔒 LOCKED — managed by clade

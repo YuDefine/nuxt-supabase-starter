@@ -228,6 +228,44 @@ node ~/offline/clade/vendor/scripts/lib/evidence-store.ts \
 - [[pitfall-verified-ui-annotation-format-drift]] — plural key + sub-item ID mismatch
 - [[pitfall-deferred-vs-issue-annotation-contract-conflict-review-gui]] — `(deferred:)` vs `(issue:)` 辭典衝突
 
+## 截圖進主線 context 的成本（MUST）
+
+**Iron Law：主線 `Read` 一張截圖 = 一次約 163k 字元的 context 支出，而且往後每一 turn 都重付。**
+
+本節適用**每一張**截圖、**所有** consumer——不是只有批次審視那次。
+
+| 可觀察 predicate | MUST |
+| --- | --- |
+| 要對 `[verify:ui]` / `[review:ui]` item 收 evidence | 走 `codex-dispatch-screenshot-verify.ts`（唯一入口，見 § Hard rule），主線只消費它回的 JSON 摘要 |
+| 已經拿到 dispatcher 的 JSON 且某 item 判 FAIL / UNCERTAIN | 才准 `Read` **那一張**。**NEVER** 為了「順便看一下其他張」連讀 |
+| 想確認一批截圖是否都拍到東西 | 跑 audit / dispatcher 的 emptiness preflight，**NEVER** 逐張 Read 目視 |
+
+### 實測
+
+2026-08-04 對最重的 30 個主線 session 量 `tool_result` 位元組：
+
+| 成分 | 佔 tool_result | 細節 |
+| --- | --- | --- |
+| `Read` | 63.7% | 630 次，平均 25k 字元 |
+| └ 其中截圖 / 圖片 | **88.8% of Read** | **86 次，平均 163k 字元/次** |
+| `Bash` | 32.3% | 9,640 次，平均僅 830 字元 |
+
+換算：截圖約佔重量級 session 全部 `tool_result` 位元組的 **56%**——單一最大項，且是 96% 全檔讀
+（`Read` 只有 4% 的量帶 `offset` / `limit`）。
+
+這是 § Hard rule 那條 dispatcher 禁令的**成本面證據**：[[agent-routing]] 已記「147 條
+`(verified-ui:)` annotation 0 次走 codex、92 個 session 全部走 bypass 形狀」。bypass 不只
+繞過跨模型驗證，它同時把每張 163k 直接灌進主線 context，並乘上該 session 的剩餘 turn 數
+（成本模型見 [[session-tasks]] § Session context 預算）。
+
+### 自我開脫（看到自己這樣說就停下）
+
+| 開脫 | 實際 |
+| --- | --- |
+| 「我自己看比較快，dispatcher 要跑好幾分鐘」 | 快的是 wall-clock，付的是 context × 剩餘 turn。一張圖等於 200 次 Bash 呼叫的量 |
+| 「只看一張確認一下」 | 86 次的實測平均就是這樣累出來的，沒有任何一次是打算讀 86 張 |
+| 「dispatcher 回的 JSON 看不出細節」 | 那是 items-json 的 `ready_signal` / 判準沒寫夠，補那裡。**NEVER** 用目視補契約的洞 |
+
 ## 界線（不在本 rule 範圍）
 
 下列**不**屬本 rule：

@@ -6,7 +6,6 @@ paths:
     'nuxt.config.*',
     'package.json',
     'packages/*/package.json',
-    'template/package.json',
     'tsconfig*.json',
     '.github/workflows/**',
     '.husky/**',
