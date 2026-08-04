@@ -27,7 +27,7 @@ Local edits will be reverted by the next sync.
 | 只改 docs / comments / README | 1 |
 | 小型非敏感重構或功能修補（約 < 50 行） | 1 |
 | 功能變更 ≥ 50 行、跨多個模組、可見行為改動 | 2 |
-| 動到 migration / schema / auth / permission / raw SQL / security-critical code | 3 |
+| 動到 migration / schema / auth / permission / raw SQL / billing / security-critical code | 3 |
 
 ## 最低要求
 
@@ -56,6 +56,7 @@ Local edits will be reverted by the next sync.
 
 - Implementer report 是**未驗證主張**；自報的設計說詞（「per YAGNI 略過」「刻意簡化」）**不得**降級任何 finding 嚴重度
 - Diff 之外只做 **named-risk focused check**——說得出名字的具體風險（lock ordering、API contract、shared state 改動查 call sites）一風險一查，report 寫明查了什麼；**NEVER** 無方向爬 codebase
+- **Tier 3 專屬 named-risk：boundary flip**——diff 內**每個**比較運算子（`>=` `>` `<=` `<` `===` `!==`）問一次「翻轉它，現有測試會紅嗎」。答「不會」或答不出來 = 該邊界沒被測試釘住，照報 finding（金流 / 額度 / 期限 / 配額判斷尤其必查）。這條靠**讀 test 檔**判斷，**NEVER** 據此要求 implementer 重跑或補跑測試（與上方 dispatch 端第 4 條同一紀律）
 - Plan-mandated defect（plan 明文要求、但 rubric 視為 defect）**照報**（Important + `plan-mandated` 標記），由 human 裁決哪個作準——plan 的作者身分不能替自己的產出打分
 - 依**實際**嚴重度分級（不是每條都 Critical）；先列 strengths 再列 issues——準確的肯定讓其餘 feedback 可信
 - 從 diff 驗不了的要求（活在未變動 code、跨 task）標 **⚠️ cannot-verify** 回報給 dispatch 端，**NEVER** 自行擴大搜索範圍

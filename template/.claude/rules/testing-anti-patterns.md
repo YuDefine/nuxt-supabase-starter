@@ -373,6 +373,24 @@ BEFORE writing the test for any field that crosses a wire (HTTP body, form paylo
     - What does the form / dialog / client code emit when the field is empty?
     - Is it `null`, `undefined`, `''`, or omitted entirely?
     - Read the client code, don't guess.
+
+AFTER writing the tests — mental mutation check:
+  For each comparison operator in the code under test (>=, >, <=, <, ===, !==):
+    Ask: "if I flip this operator, does at least one existing test go red?"
+      YES → the boundary is pinned
+      NO  → the boundary is NOT pinned. The suite proves the happy path and nothing else.
+            Add a test at the exact value where flipping changes behavior.
+
+    IF you cannot answer without running the tests:
+      You do not know what your tests cover. Write the boundary test instead of guessing.
+
+  Why this catches what the enumeration above misses: the enumeration is a checklist of value
+  KINDS (null, empty, max+1). This check is anchored on the actual operators in YOUR code, so it
+  finds the boundary that is specific to this logic — `amount >= threshold` needs a test at
+  exactly `threshold`, and no generic checklist will tell you that.
+
+  Coverage answers "was this line executed". This check answers "would a WRONG version of this
+  line be caught". A line can be 100% covered with every boundary unpinned.
 ```
 
 ### Red flags
@@ -381,6 +399,20 @@ BEFORE writing the test for any field that crosses a wire (HTTP body, form paylo
 - Schema uses `.optional()` for fields the form clears to `null`
 - "It works on my machine" but breaks in another environment that uses different defaults
 - Test passes; manual QA submits the form and 400s
+
+### 機械驗證通道（選用；多數模組不需要）
+
+上面的 Gate Function 與 mental mutation check 靠的是**執行者自律** —— 沒有東西能檢查邊界是否
+真的被枚舉了。需要機械證據的模組（金流 / 額度 / 期限 / 配額這類「算錯會賠錢」的邏輯），可以用
+mutation testing 讓**存活的突變體**直接指出哪個邊界沒被釘住。
+
+- **該不該導入**：`vendor/snippets/mutation-testing/README.md` 的 gate ——
+  **沒有 unit test 的模組一律不導入**（二階指標在一階缺席時輸出恆為 0，不帶資訊）；
+  不含比較運算子的模組（純 CRUD / I/O 轉接）同樣不導入
+- **各 consumer 採用狀態**：`node scripts/audit-mutation-testing.ts`
+  （靜態讀 consumer commit 的 `.clade/mutation-summary.json`，**不執行**任何測試）
+- **NEVER** 把 mutation score 變成常駐 KPI —— 一旦它成為被追的數字，產出就會從
+  「想清楚邊界」退化成「對每個中間值下 assertion」，測試變脆、重構全紅
 
 ## When Mocks Become Too Complex
 

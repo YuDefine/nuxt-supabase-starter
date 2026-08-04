@@ -62,6 +62,8 @@ Local edits will be reverted by the next sync.
 
 change-loop（autonomous 模式）一律 dispatch、NEVER AskUserQuestion。/goal（attended 模式）user 在場，**SHOULD** 先讓 user 選擇 dispatch 優先序再動手。
 
+> 四型 loop（turn / goal / time / proactive）各自交出哪一層控制權、七大零件（trigger / goal / executor / verifier / controller / state / sources）怎麼配、stop condition 與成本怎麼設：`~/offline/clade/vendor/snippets/loop-engineering/README.md` —— **設計新 loop 時**讀，不是每個 session 的操作依據。
+
 ### 禁止
 
 - **NEVER** 因「change 太大」「0% 進度」「不適合在 multi-change session 做」預設標 `@apply-blocked`
