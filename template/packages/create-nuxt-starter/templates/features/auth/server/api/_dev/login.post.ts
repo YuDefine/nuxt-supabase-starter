@@ -55,11 +55,38 @@ function runtimeEnvironment(config: RuntimeConfigWithDevLogin): string {
   return config.devLogin?.environment ?? config.knowledge?.environment ?? 'local'
 }
 
+/** 未設定 DEV_LOGIN_EMAIL_DOMAINS 時，允許自動建帳號的 email domain。 */
+const DEFAULT_DEV_LOGIN_DOMAINS = ['test.local']
+
 function parseCsv(value: string | undefined): string[] {
   return (value ?? '')
     .split(',')
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean)
+}
+
+/**
+ * 判定「signIn 失敗後可否自動建立這個 email 的帳號」。
+ *
+ * 沒有這道檢查時，任何能連到 dev server 的人都能用自選密碼替**任意** email 開帳號
+ * 並拿到 session cookie —— 包含尚未註冊的真實使用者 email。dev 環境判定只保證
+ * 「不是 production build」，不保證「只有你連得到」：dev server 綁 0.0.0.0、開
+ * tunnel 分享預覽、或在共用開發機上跑，都會讓這條路由對外可達。
+ *
+ * 只限制**新建**帳號，不限制既有帳號登入。
+ */
+function assertSignUpAllowed(email: string, allowedDomains: string[]): void {
+  const domain = email.toLowerCase().split('@')[1] ?? ''
+
+  if (!allowedDomains.includes(domain)) {
+    throw createError({
+      statusCode: 401,
+      message:
+        `dev-login refuses to create an account for "${email}": domain not in ` +
+        `DEV_LOGIN_EMAIL_DOMAINS (${allowedDomains.join(', ')}). ` +
+        'Sign-up fallback exists for test fixtures only.',
+    })
+  }
 }
 
 function resolveDevLoginRole(input: {
@@ -186,6 +213,13 @@ export default defineEventHandler(async (event) => {
       action: 'signed_in',
     })
   }
+
+  // signIn 失敗 → 準備自動建帳號。這是唯一會產生持久狀態的分支，先過 domain 白名單。
+  const allowedDomains = parseCsv(process.env.DEV_LOGIN_EMAIL_DOMAINS)
+  assertSignUpAllowed(
+    body.email,
+    allowedDomains.length > 0 ? allowedDomains : DEFAULT_DEV_LOGIN_DOMAINS,
+  )
 
   const displayName = body.name ?? body.email.split('@')[0]
   const signUpResponse = await auth.api.signUpEmail({
