@@ -40,8 +40,15 @@ import { validateParam } from '../../../../../../server/utils/validation'
 import handler from '../../../../../../server/api/v1/profiles/[id].get'
 
 describe('GET /api/v1/profiles/:id', () => {
+  // 被查詢的 profile id，同時也是「擁有者」的 user id — server-mediated 模型下
+  // handler 以 user.id === id 判定 ownership，兩者必須一致才是「查自己」。
+  const TARGET_ID = '550e8400-e29b-41d4-a716-446655440000'
+  const OTHER_USER = { id: 'user-1', role: 'user' }
+  const OWNER = { id: TARGET_ID, role: 'user' }
+  const ADMIN = { id: 'admin-1', role: 'admin' }
+
   const mockProfile = {
-    id: '550e8400-e29b-41d4-a716-446655440000',
+    id: TARGET_ID,
     display_name: 'Alice',
     avatar_url: null,
     role: 'user',
@@ -51,9 +58,21 @@ describe('GET /api/v1/profiles/:id', () => {
 
   const mockEvent = {
     context: {
-      session: { user: { id: 'user-1', role: 'user' } },
+      session: { user: OWNER },
     },
   } as any
+
+  /** 建一個回傳固定 { data, error } 的 supabase client mock，並回傳 from spy 供斷言。 */
+  function mockClientReturning(result: { data: unknown; error: unknown }) {
+    const from = vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue(result),
+        }),
+      }),
+    })
+    return { client: { from } as any, from }
+  }
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -63,29 +82,49 @@ describe('GET /api/v1/profiles/:id', () => {
       info: vi.fn(),
       debug: vi.fn(),
     }))
-    vi.mocked(getRouterParam).mockReturnValue('550e8400-e29b-41d4-a716-446655440000')
-    vi.mocked(validateParam).mockReturnValue({ id: '550e8400-e29b-41d4-a716-446655440000' })
+    vi.mocked(getRouterParam).mockReturnValue(TARGET_ID)
+    vi.mocked(validateParam).mockReturnValue({ id: TARGET_ID })
+    vi.mocked(requireAuth).mockReturnValue(OWNER)
   })
 
-  it('should return profile by id', async () => {
-    const mockClient = {
-      from: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: mockProfile, error: null }),
-          }),
-        }),
-      }),
-    }
-    vi.mocked(getSupabaseWithContext).mockResolvedValue({
-      client: mockClient as any,
-      user: { id: 'user-1', role: 'user' },
-    })
+  it('should return own profile', async () => {
+    const { client } = mockClientReturning({ data: mockProfile, error: null })
+    vi.mocked(getSupabaseWithContext).mockResolvedValue({ client, user: OWNER })
 
     const result = await handler(mockEvent)
 
     expect(result).toEqual({ data: mockProfile })
     expect(profileResponseSchema.parse).toHaveBeenCalledWith({ data: mockProfile })
+  })
+
+  it('should allow admin to read any profile', async () => {
+    vi.mocked(requireAuth).mockReturnValue(ADMIN)
+    const { client } = mockClientReturning({ data: mockProfile, error: null })
+    vi.mocked(getSupabaseWithContext).mockResolvedValue({ client, user: ADMIN })
+
+    const result = await handler(mockEvent)
+
+    expect(result).toEqual({ data: mockProfile })
+  })
+
+  it("should throw 404 when reading another user's profile", async () => {
+    vi.mocked(requireAuth).mockReturnValue(OTHER_USER)
+    const { client } = mockClientReturning({ data: mockProfile, error: null })
+    vi.mocked(getSupabaseWithContext).mockResolvedValue({ client, user: OTHER_USER })
+
+    // 404 而非 403：403 會洩漏「這個 id 存在」，讓任何登入者可枚舉 profile 是否存在。
+    await expect(handler(mockEvent)).rejects.toMatchObject({ statusCode: 404 })
+  })
+
+  it('should not query the database when ownership check fails', async () => {
+    vi.mocked(requireAuth).mockReturnValue(OTHER_USER)
+    const { client, from } = mockClientReturning({ data: mockProfile, error: null })
+    vi.mocked(getSupabaseWithContext).mockResolvedValue({ client, user: OTHER_USER })
+
+    await expect(handler(mockEvent)).rejects.toMatchObject({ statusCode: 404 })
+    // 授權失敗必須在打 DB 之前就擋掉 — 否則 service-role client 已經把資料撈出來了，
+    // 只是沒回給呼叫端，任何後續的 log / error path 都可能把它洩出去。
+    expect(from).not.toHaveBeenCalled()
   })
 
   it('should throw 401 when not logged in', async () => {

@@ -1,7 +1,12 @@
 /**
  * GET /api/v1/profiles/:id — 取得單筆 Profile
  *
- * 需要登入。
+ * 需要登入，且只能讀自己的 profile（admin 例外）。
+ *
+ * 授權在 handler 層完成，不依賴 RLS：本專案的 auth 是 Better Auth，Supabase 從未
+ * 對使用者簽發 JWT，`auth.uid()` 恆為 null，server 端的 client 也是 service-role
+ * 連線 — RLS 在這個架構下只是「非 server 一律拒絕」的 deny-all 防線，無法承擔
+ * row-level 授權。詳見 server/utils/supabase.ts 的 module JSDoc。
  *
  * @module server/api/v1/profiles/[id].get
  */
@@ -20,11 +25,21 @@ import { getSupabaseWithContext } from '../../../utils/supabase'
 
 export default defineEventHandler(async (event): Promise<ProfileResponse> => {
   const log = useLogger(event)
-  requireAuth(event)
+  const user = requireAuth(event)
 
   // 驗證 ID 參數
   const rawId = getRouterParam(event, 'id')
   const { id } = validateParam({ id: rawId }, profileIdParamSchema)
+
+  // 只能讀自己的 profile；admin 可讀任意。
+  // 回 404 而非 403 — 403 會告訴呼叫端「這個 id 存在」，讓任何登入者能枚舉
+  // profile 是否存在。404 與「查無此人」對外不可區分。
+  if (user.id !== id && user.role !== 'admin') {
+    throw createError({
+      statusCode: 404,
+      statusMessage: '找不到指定的 Profile',
+    })
+  }
 
   const { client } = await getSupabaseWithContext(event)
 
