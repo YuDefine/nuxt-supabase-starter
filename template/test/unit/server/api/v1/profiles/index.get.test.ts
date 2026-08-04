@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vite-plus/test'
 
 // Mock server utils
 vi.mock('../../../../../../server/utils/supabase', () => ({
-  getSupabaseWithContext: vi.fn(),
+  getAuthedSupabase: vi.fn(),
 }))
 
 vi.mock('../../../../../../server/utils/validation', () => ({
@@ -35,7 +35,7 @@ vi.mock('h3', () => ({
 
 import { getQuery } from 'h3'
 import { profileListResponseSchema } from '../../../../../../shared/schemas/profiles'
-import { getSupabaseWithContext } from '../../../../../../server/utils/supabase'
+import { getAuthedSupabase } from '../../../../../../server/utils/supabase'
 import { validateQuery } from '../../../../../../server/utils/validation'
 import { requireRole, createPaginatedResponse } from '../../../../../../server/utils/api-response'
 
@@ -97,7 +97,7 @@ describe('GET /api/v1/profiles', () => {
       from: vi.fn().mockReturnValueOnce(mockSelectCount).mockReturnValueOnce(mockSelect),
     }
 
-    vi.mocked(getSupabaseWithContext).mockResolvedValue({
+    vi.mocked(getAuthedSupabase).mockReturnValue({
       client: mockClient as any,
       user: { id: 'user-1', role: 'admin' },
     })

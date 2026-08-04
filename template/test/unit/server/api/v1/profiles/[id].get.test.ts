@@ -14,7 +14,7 @@ vi.mock('h3', () => ({
 
 // Mock server utils
 vi.mock('../../../../../../server/utils/supabase', () => ({
-  getSupabaseWithContext: vi.fn(),
+  getAuthedSupabase: vi.fn(),
 }))
 
 vi.mock('../../../../../../server/utils/api-response', () => ({
@@ -35,7 +35,7 @@ vi.mock('../../../../../../shared/schemas/profiles', () => ({
 import { getRouterParam } from 'h3'
 import { profileResponseSchema } from '../../../../../../shared/schemas/profiles'
 import { requireAuth } from '../../../../../../server/utils/api-response'
-import { getSupabaseWithContext } from '../../../../../../server/utils/supabase'
+import { getAuthedSupabase } from '../../../../../../server/utils/supabase'
 import { validateParam } from '../../../../../../server/utils/validation'
 import handler from '../../../../../../server/api/v1/profiles/[id].get'
 
@@ -89,7 +89,7 @@ describe('GET /api/v1/profiles/:id', () => {
 
   it('should return own profile', async () => {
     const { client } = mockClientReturning({ data: mockProfile, error: null })
-    vi.mocked(getSupabaseWithContext).mockResolvedValue({ client, user: OWNER })
+    vi.mocked(getAuthedSupabase).mockReturnValue({ client, user: OWNER })
 
     const result = await handler(mockEvent)
 
@@ -100,7 +100,7 @@ describe('GET /api/v1/profiles/:id', () => {
   it('should allow admin to read any profile', async () => {
     vi.mocked(requireAuth).mockReturnValue(ADMIN)
     const { client } = mockClientReturning({ data: mockProfile, error: null })
-    vi.mocked(getSupabaseWithContext).mockResolvedValue({ client, user: ADMIN })
+    vi.mocked(getAuthedSupabase).mockReturnValue({ client, user: ADMIN })
 
     const result = await handler(mockEvent)
 
@@ -110,7 +110,7 @@ describe('GET /api/v1/profiles/:id', () => {
   it("should throw 404 when reading another user's profile", async () => {
     vi.mocked(requireAuth).mockReturnValue(OTHER_USER)
     const { client } = mockClientReturning({ data: mockProfile, error: null })
-    vi.mocked(getSupabaseWithContext).mockResolvedValue({ client, user: OTHER_USER })
+    vi.mocked(getAuthedSupabase).mockReturnValue({ client, user: OTHER_USER })
 
     // 404 而非 403：403 會洩漏「這個 id 存在」，讓任何登入者可枚舉 profile 是否存在。
     await expect(handler(mockEvent)).rejects.toMatchObject({ statusCode: 404 })
@@ -119,7 +119,7 @@ describe('GET /api/v1/profiles/:id', () => {
   it('should not query the database when ownership check fails', async () => {
     vi.mocked(requireAuth).mockReturnValue(OTHER_USER)
     const { client, from } = mockClientReturning({ data: mockProfile, error: null })
-    vi.mocked(getSupabaseWithContext).mockResolvedValue({ client, user: OTHER_USER })
+    vi.mocked(getAuthedSupabase).mockReturnValue({ client, user: OTHER_USER })
 
     await expect(handler(mockEvent)).rejects.toMatchObject({ statusCode: 404 })
     // 授權失敗必須在打 DB 之前就擋掉 — 否則 service-role client 已經把資料撈出來了，
@@ -154,7 +154,7 @@ describe('GET /api/v1/profiles/:id', () => {
         }),
       }),
     }
-    vi.mocked(getSupabaseWithContext).mockResolvedValue({
+    vi.mocked(getAuthedSupabase).mockReturnValue({
       client: mockClient as any,
       user: { id: 'user-1', role: 'user' },
     })
@@ -177,7 +177,7 @@ describe('GET /api/v1/profiles/:id', () => {
         }),
       }),
     }
-    vi.mocked(getSupabaseWithContext).mockResolvedValue({
+    vi.mocked(getAuthedSupabase).mockReturnValue({
       client: mockClient as any,
       user: { id: 'user-1', role: 'user' },
     })

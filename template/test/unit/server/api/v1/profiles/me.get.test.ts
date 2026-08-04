@@ -17,7 +17,7 @@ vi.mock('../../../../../../server/utils/api-response', () => ({
 }))
 
 vi.mock('../../../../../../server/utils/supabase', () => ({
-  getSupabaseWithContext: vi.fn(),
+  getAuthedSupabase: vi.fn(),
 }))
 
 vi.mock('../../../../../../shared/schemas/profiles', () => ({
@@ -28,7 +28,7 @@ vi.mock('../../../../../../shared/schemas/profiles', () => ({
 
 import { requireAuth } from '../../../../../../server/utils/api-response'
 import { profileResponseSchema } from '../../../../../../shared/schemas/profiles'
-import { getSupabaseWithContext } from '../../../../../../server/utils/supabase'
+import { getAuthedSupabase } from '../../../../../../server/utils/supabase'
 import handler from '../../../../../../server/api/v1/profiles/me.get'
 
 describe('GET /api/v1/profiles/me', () => {
@@ -61,7 +61,7 @@ describe('GET /api/v1/profiles/me', () => {
         }),
       }),
     }
-    vi.mocked(getSupabaseWithContext).mockResolvedValue({
+    vi.mocked(getAuthedSupabase).mockReturnValue({
       client: mockClient as any,
       user: { id: 'user-1', role: 'user' },
     })
@@ -106,7 +106,7 @@ describe('GET /api/v1/profiles/me', () => {
         }),
       }),
     }
-    vi.mocked(getSupabaseWithContext).mockResolvedValue({
+    vi.mocked(getAuthedSupabase).mockReturnValue({
       client: mockClient as any,
       user: { id: 'user-999', role: 'user' },
     })

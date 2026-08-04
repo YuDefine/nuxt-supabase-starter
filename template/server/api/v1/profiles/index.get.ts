@@ -15,7 +15,7 @@ import {
 import { requireRole, createPaginatedResponse } from '../../../utils/api-response'
 import { PROFILE_SELECT_FIELDS } from '../../../utils/profile-fields'
 import { validateQuery } from '../../../utils/validation'
-import { getSupabaseWithContext } from '../../../utils/supabase'
+import { getAuthedSupabase } from '../../../utils/supabase'
 
 export default defineEventHandler(async (event): Promise<ProfileListResponse> => {
   const log = useLogger(event)
@@ -26,7 +26,7 @@ export default defineEventHandler(async (event): Promise<ProfileListResponse> =>
   const query = validateQuery(getQuery(event), profileListQuerySchema)
   const { page, perPage, search } = query
 
-  const { client } = await getSupabaseWithContext(event)
+  const { client } = getAuthedSupabase(event)
 
   // 建立查詢
   let countQuery = client.from('profiles').select('id', { count: 'exact', head: true })

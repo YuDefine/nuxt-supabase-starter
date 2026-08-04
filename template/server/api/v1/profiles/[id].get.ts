@@ -21,7 +21,7 @@ import { requireAuth } from '../../../utils/api-response'
 import { PGRST_NOT_FOUND } from '../../../utils/db-errors'
 import { PROFILE_SELECT_FIELDS } from '../../../utils/profile-fields'
 import { validateParam } from '../../../utils/validation'
-import { getSupabaseWithContext } from '../../../utils/supabase'
+import { getAuthedSupabase } from '../../../utils/supabase'
 
 export default defineEventHandler(async (event): Promise<ProfileResponse> => {
   const log = useLogger(event)
@@ -41,7 +41,7 @@ export default defineEventHandler(async (event): Promise<ProfileResponse> => {
     })
   }
 
-  const { client } = await getSupabaseWithContext(event)
+  const { client } = getAuthedSupabase(event)
 
   const { data, error } = await client
     .from('profiles')
