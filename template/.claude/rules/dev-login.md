@@ -27,6 +27,8 @@ Dev-login routes are local/test-only auth bypasses for screenshot automation, E2
 - **MUST** mark any persistent rows created by dev-login with a dev/test provider marker such as `provider='dev-login'`, `provider='test'`, or `provider_id='e2e-*'`.
 - **MUST** add or update focused tests for the guard, role resolution, email handling, session payload, and open-redirect rejection.
 - **MUST** normalize IPv6 zone-id before comparing against any loopback allowlist (e.g. `Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])`). On macOS, h3 `getRequestIP(event)` returns IPv6 with zone-id (`::1%lo0`); strict Set comparison fails and the gate falls through to 404. Use `ip.replace(/%.*$/, '')` (or equivalent normalization) before the lookup. See `docs/pitfalls/2026-05-18-macos-ipv6-zone-id-loopback-gate.md`.
+- **MUST** keep the loopback allowlist greppable (`isLoopbackRequest` / `LOOPBACK_IPS` or equivalent named constant) when the gate restricts request origin. `resolveDevLoginContract()` derives the `loopbackOnly` flag from exactly these source signals, and review-gui / dispatchers use it to decide whether a one-click login link can exist at all. An inlined, unnamed IP comparison reads as "no gate" to tooling, which then renders a link that always 404s.
+- **MUST** treat a loopback gate as a deliberate trade-off, not a free hardening step: it makes every dev-login link on a public dev tunnel unusable, because the tunnel reaches the route as an external source IP. Local screenshot review and E2E still work; tunnel-based review must switch to `http://127.0.0.1:<port>`. Choose the gate knowing that, or use an env/token gate instead.
 
 ## NEVER
 

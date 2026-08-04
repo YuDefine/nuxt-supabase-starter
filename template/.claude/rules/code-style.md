@@ -50,6 +50,32 @@ tsconfig **MUST** 開 `"erasableSyntaxOnly": true`，讓前兩條由 tsc 擋掉�
 
 **NEVER** 在命令列補 `--experimental-strip-types`。Node 22.18 起 type stripping 預設開啟，這個 flag 已是 no-op；留著會讓後來的人以為跑 TS 需要特殊 flag。
 
+#### `strict: false` 覆蓋範圍內：union 判定用 equality，不用 truthiness
+
+在 `"strict": false`（連帶 `strictNullChecks: false`）的 tsconfig 覆蓋下，TypeScript 的
+**truthiness narrowing 對 discriminated union 不生效**——`if (!x.ok)` 之後 `x` 仍是整個 union，
+存取只在某一分支上的欄位就報 `TS2339 Property 'error' does not exist on type '{ ok: true }'`。
+equality narrowing 不受影響。
+
+**該範圍內的每一處 union 判定**都 MUST 用 equality，不是只有「報錯的那一行」：
+
+```ts
+if (x.ok === false) { … }   // ✅ literal 比較，strictNullChecks 開關不影響
+if (!x.ok) { … }            // ❌ strict:false 下不 narrow
+if (x.ok) { … }             // ❌ 正向分支同樣不 narrow，用 x.ok === true
+```
+
+**NEVER** 用 `as` 斷言或替 `{ ok: true }` 分支補 optional 欄位繞過——前者丟掉檢查，後者讓兩個
+分支不再互斥，都是把型別系統關掉而不是用對它。
+
+clade 端的覆蓋範圍是 `tsconfig.vendor.json` 的 `include`（`vendor/scripts/**`、`vendor/signals/*`、
+`vendor/actions/**`、`vendor/oxc-shared/*`、`vendor/doctor-shared/*`、`vendor/review-rules/*`）。
+**判準是「這個檔落在哪份 tsconfig 底下」，不是目錄名**——改動前不確定就跑
+`npx tsc -p <tsconfig> --listFiles | grep <你的檔案>`（同下節 gate 1）。
+
+本機 `node` 跑 `.ts` 只做 type stripping、**完全不檢查型別**，所以功能測試全綠不代表寫法正確；
+這類錯誤只在 typecheck 才現形。成因與實測見 [[pitfall-strict-false-disables-truthiness-narrowing]]。
+
 #### 兩個涵蓋 gate（新增或改名成 TS 時逐項確認）
 
 這兩層都是**靜默**失效——沒接上時不會報錯，只會安靜地什麼都不做：

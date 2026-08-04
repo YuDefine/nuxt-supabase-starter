@@ -235,14 +235,22 @@ item 只寫「以 `E2E-ADMIN`（`e2e-admin@dev.local`）登入」是**不可執�
 任何要求以特定身分驗收的 item（不分 `[review:ui]` / `[verify:ui]` / `[verify:e2e]`），**MUST** 把登入寫成可直接點的 URL：
 
 ```
-開 `<base>/auth/_dev-login?as=<role>&redirect=<要驗收的 path>` 以 <role> 身分登入，落在 <頁面> → ...
+開 `<base><dev-login-path>?as=<role>&redirect=<要驗收的 path>` 以 <role> 身分登入，落在 <頁面> → ...
 ```
 
 真實員工 fixture（`/my/**` 這類只顯示 session user 資料的頁面）改用 `?email=`：
 
 ```
-開 `<base>/auth/_dev-login?email=<email>&redirect=/my/<path>`（<姓名> <employee_no>，fixture owner）→ ...
+開 `<base><dev-login-path>?email=<email>&redirect=/my/<path>`（<姓名> <employee_no>，fixture owner）→ ...
 ```
+
+`<dev-login-path>` **MUST** 照該 consumer 實際的 route 檔寫，**NEVER** 假設是 canonical `/auth/_dev-login`——legacy consumer 是 `/auth/__test-login`、better-auth 是 `/api/_dev/login`。SoT 是 `resolveDevLoginContract()`（`vendor/snippets/dev-auth/lib/detect-dev-login-route.ts`）算出的 `urlPath`，查法：
+
+```bash
+node -e "import('~/offline/clade/vendor/snippets/dev-auth/lib/detect-dev-login-route.ts').then(m => console.log(m.resolveDevLoginContract(process.cwd())))"
+```
+
+`<base>` 的選擇綁一個可觀察 predicate：**上面那個 contract 的 `loopbackOnly` 為 true 時，`<base>` MUST 是 `http://127.0.0.1:<port>`，NEVER 寫公開 dev tunnel URL。** 這類 route 的 gate 看的是 request IP，tunnel 來源在它眼中是外部請求，回的是 404——畫面上看起來只是「頁面不存在」，沒有任何線索指向 gate，驗收者會去查 route 存不存在而不是查來源 IP。
 
 **NEVER** 只寫帳號 email / employee_no 就當作交代完登入方式。**NEVER** 假設 admin 登入就能看到所有員工的 /my/ 資料 — /my/ 頁面只顯示 session user 的紀錄。
 
