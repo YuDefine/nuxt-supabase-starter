@@ -23,7 +23,7 @@ Local edits will be reverted by the next sync.
 寫它的 agent NEVER 是唯一判定它可以散播的人。
 ```
 
-**動跨 consumer 共用 SoT**（`rules/core/` 本體、`vendor/scripts/` 散播層、`plugins/hub-core/` skill、`claude-md/` 注入段落）或**高擴散半徑 consumer 資產**（DB migration、auth 路徑、多處 import 的共用 util、對外 API contract）時，主線在 publish / propagate / commit 之前 **MUST** 派一個 fresh-context checker subagent。checker **MUST** 是新開的 subagent（`Agent` tool，非續跑 maker）。
+**動跨 consumer 共用 SoT**（`rules/core/` 本體、`vendor/scripts/` 散播層、`plugins/hub-core/` skill、`claude-md/` 注入段落）或**高擴散半徑 consumer 資產**（DB migration、auth 路徑、多處 import 的共用 util、對外 API contract）時，主線在 publish / propagate / commit 之前 **MUST** 派一個 fresh-context checker subagent。checker **MUST** 是新開的 subagent（`Agent` tool，非續跑 maker）。**NEVER** 用**繼承主線對話**的 fork 型 subagent 當 checker——user 打的 `/subtask`、以及 `subagent_type: 'fork'`（該 rollout 開啟時）繼承主線完整 message history，等同把 maker 的實作敘事整份附給 checker，fresh context 當場失效（per § Checker brief 模板）。「它字面上也是新開的 subagent」不構成例外。
 
 **其餘任務 NEVER 派 checker。** 這包含 ≥3 phase 的 change、`effort: high`+ 的單一任務、新 endpoint、新邏輯分支，以及任何「我想確認一下自己有沒有做對」的場景——模型會自行捕捉並修正自己的錯誤，額外派 agent 複驗只是把同一份判斷跑第二次，燒 token 不提升品質。
 
