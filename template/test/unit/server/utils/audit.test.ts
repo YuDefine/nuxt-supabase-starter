@@ -65,7 +65,7 @@ describe('createAuditLog', () => {
     })
   })
 
-  it('should not throw when insert fails (fire-and-forget)', async () => {
+  it('should not throw when insert rejects (fire-and-forget)', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     mockInsert.mockRejectedValueOnce(new Error('DB connection lost'))
 
@@ -80,6 +80,31 @@ describe('createAuditLog', () => {
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       '[audit] Failed to create audit log:',
       expect.any(Error),
+    )
+
+    consoleErrorSpy.mockRestore()
+  })
+
+  it('should report a resolved { error } instead of silently succeeding', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    // PostgREST 的 DB 層錯誤（RLS 拒絕、table 不存在、欄位不符、constraint 違反）
+    // 走的是 resolve 而非 reject — 上面那條 rejects 測試完全覆蓋不到這條路徑，
+    // 而這才是實務上最常發生的失敗形態。稽核記錄無聲丟失正是從這裡開始。
+    mockInsert.mockResolvedValueOnce({
+      error: { code: '42P01', message: 'relation "audit_logs" does not exist' },
+    })
+
+    await expect(
+      createAuditLog({
+        action: 'delete',
+        entityType: 'comment',
+        entityId: 'comment-999',
+      }),
+    ).resolves.toBeUndefined()
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '[audit] Failed to create audit log:',
+      expect.objectContaining({ code: '42P01' }),
     )
 
     consoleErrorSpy.mockRestore()
