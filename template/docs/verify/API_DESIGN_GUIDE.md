@@ -116,11 +116,11 @@ export default defineEventHandler(async (event) => {
 ### 取得 Supabase Client
 
 ```typescript
-import { getSupabaseWithContext } from '~~/server/utils/supabase'
+import { getAuthedSupabase } from '~~/server/utils/supabase'
 
 export default defineEventHandler(async (event) => {
   // 取得 Supabase Client
-  const { client } = await getSupabaseWithContext(event)
+  const { client } = getAuthedSupabase(event)
 
   // 使用特定 schema
   const db = client.schema('your_schema')
@@ -304,7 +304,7 @@ const { data, count, error } = await dbQuery.range(from, to)
 
 ```typescript
 // server/api/v1/resources/index.get.ts
-import { getSupabaseWithContext } from '~~/server/utils/supabase'
+import { getAuthedSupabase } from '~~/server/utils/supabase'
 import { resourceListQuerySchema } from '~~/shared/types/resources'
 
 export default defineEventHandler(async (event) => {
@@ -315,7 +315,7 @@ export default defineEventHandler(async (event) => {
   const query = await getValidatedQuery(event, resourceListQuerySchema.parse)
 
   // 3. 取得 Supabase Client
-  const { client } = await getSupabaseWithContext(event)
+  const { client } = getAuthedSupabase(event)
   const db = client.schema('your_schema')
 
   // 4. 建立查詢
@@ -362,7 +362,7 @@ export default defineEventHandler(async (event) => {
 - [ ] 在 `shared/types/` 定義 Zod Schema 和 TypeScript 型別
 - [ ] 在最開頭進行權限檢查
 - [ ] 使用 `getValidatedQuery` 或 `readValidatedBody` 驗證輸入
-- [ ] 使用 `getSupabaseWithContext` 取得資料庫連線
+- [ ] 使用 `getAuthedSupabase` 取得資料庫連線
 - [ ] 正確處理資料庫錯誤（唯一約束、資源不存在等）
 - [ ] 回傳統一格式（`{ data, pagination? }`）
 - [ ] 異動操作記錄操作日誌

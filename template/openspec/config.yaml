@@ -7,7 +7,7 @@ context: |
   Critical constraints:
   - Auth uses @onmax/nuxt-better-auth, NEVER Supabase Auth APIs
   - Client-side: SELECT only via useSupabaseClient()
-  - Server-side: request handlers use /api/v1/* + getSupabaseWithContext(event)
+  - Server-side: request handlers use /api/v1/* + getAuthedSupabase(event)
   - Shared request/response contracts live in shared/schemas/*
   - API handlers MUST parse outgoing payloads with shared response schemas
   - RLS policies MUST include service_role bypass for API writes
@@ -26,7 +26,7 @@ rules:
     - Follow Data Access Pattern (client reads, server writes)
     - Keep truth layers aligned: intent in openspec/docs/decisions, persistence in migrations, contracts in shared/schemas
     - RLS policies must include service_role bypass
-    - Request handlers should prefer getSupabaseWithContext(event); getServerSupabaseClient() is for privileged system tasks
+    - Request handlers should prefer getAuthedSupabase(event); getServerSupabaseClient() is for privileged system tasks
     - UI changes MUST use Nuxt UI components (UButton, UCard, UTable, etc.)
     - All color/spacing MUST use design system tokens, never hardcoded values
     - Read .impeccable.md for design direction before making UI decisions

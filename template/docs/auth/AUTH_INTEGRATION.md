@@ -30,7 +30,7 @@ applies-to: post-scaffold
 │  setUserSession(event, data) → 設定 Session                      │
 │  clearUserSession(event) → 清除 Session                          │
 │                                                                  │
-│  getSupabaseWithContext(event) → 設定 Application Context        │
+│  getAuthedSupabase(event) → 驗登入 + 回傳 client（不做授權）     │
 │  requireAuth(event) → 驗證登入                                   │
 │  requireRole(event, roles) → 驗證角色                            │
 └─────────────────────────────────────────────────────────────────┘
@@ -40,7 +40,7 @@ applies-to: post-scaffold
 ├─────────────────────────────────────────────────────────────────┤
 │  app.user_roles → 使用者資料（非 auth.users）                    │
 │  app.allowed_emails → Email 白名單                               │
-│  app.set_app_context() → 設定 RLS Context                        │
+│  RLS：deny-all（啟用但零 policy），授權在 handler 層             │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -123,18 +123,26 @@ export default defineEventHandler(async (event) => {
 })
 ```
 
-### 3.3. 設定 Application Context
+### 3.3. 取得已驗證的 Supabase Client
 
 ```ts
-// 取得設定 RLS Context 的 Supabase Client
+// 驗過 session 的 client + user。client 是 service-role，能讀寫整個資料庫 —
+// 「這個 user 可以動哪些 row」必須由 handler 自己判定。
 export default defineEventHandler(async (event) => {
-  const { client } = await getSupabaseWithContext(event)
-  // client 已呼叫 app.set_app_context(user_id, role)
+  const { client, user } = getAuthedSupabase(event)
 
-  const { data } = await client.schema('app').from('user_roles').select('*')
-  // RLS 會根據 app.user_id 和 app.user_role 過濾
+  // 授權在這裡，不在 RLS：查詢條件用 user.id 夾住，或先比對 ownership。
+  const { data } = await client.from('profiles').select('*').eq('id', user.id)
 })
 ```
+
+> **RLS 不會替你過濾。** 本專案的 auth 是 Better Auth，Supabase 沒有對使用者簽發 JWT，
+> `auth.uid()` 恆為 null；server 端的連線又是 service-role（具 BYPASSRLS）。資料表一律
+> 採「啟用 RLS + 零 policy」的 deny-all，擋的是非 server 的連線，不是越權的 handler。
+>
+> 先前這裡描述的 `set_app_context` / `app.user_id` GUC 機制已於 2026-08 移除：那是
+> transaction-local 設定，而 PostgREST 每個 request 是獨立 transaction，GUC 在 RPC
+> 回傳當下就失效，從未真正生效過。
 
 ---
 

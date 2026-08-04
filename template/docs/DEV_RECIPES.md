@@ -133,7 +133,7 @@ review-screenshot
 Implementation Risk Plan:
   - Contract: 定義 shared/schemas/<resource>.ts 的 request/response Zod schema
   - Auth: requireAuth() / requireRole() 在所有業務邏輯前
-  - Database: getSupabaseWithContext(event) — 不用 service role bypass 除非明確系統任務
+  - Database: getAuthedSupabase(event) — 它回的就是 service-role client，所以授權必須自己做（ownership 比對 / requireRole）；RLS 是 deny-all，不會替你過濾
   - Logging: const log = useLogger(event) 第一行
   - Error: handleDbError() 包裝後 throw createError()，禁止 raw error 給 client
   - Response: response schema parse() 後 return

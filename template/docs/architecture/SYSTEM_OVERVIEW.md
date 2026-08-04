@@ -88,7 +88,7 @@ base/           ← 共用：API routes、composables、types、utils
 │  └────┬────┘ │
 └───────┼──────┘
         │
-        │ request-scoped client（`getSupabaseWithContext`）
+        │ service-role client（`getAuthedSupabase`；授權已在上一層完成）
         │
 ┌───────▼──────┐
 │   Supabase   │
@@ -106,16 +106,17 @@ base/           ← 共用：API routes、composables、types、utils
 1. **Browser** → 發送請求，cookie 自動附帶
 2. **Nuxt Server** → `getUserSession(event)` 解析 cookie，取得使用者身份
 3. **API Route** → `requireRole()` 檢查權限 → Zod schema 驗證輸入
-4. **Supabase** → 透過 request-scoped client 執行查詢；只有 audit、backfill、修復腳本等系統任務才直接用 `service_role`
+4. **Supabase** → 以 service-role client 執行查詢（`getAuthedSupabase` 與 `getServerSupabaseClient` 回的是同一顆，權限相同）；查詢範圍必須由 handler 用 `user.id` 夾住，RLS 是 deny-all 不會過濾
 5. **Response** → 統一格式 `{ data, pagination? }` 回傳
 
-### Client 直讀路徑（SELECT only）
+### Client 直讀路徑（預設關閉）
 
-```
-Browser → useSupabaseClient → Supabase（anon key + RLS TO public）
-```
+Starter **預設不啟用** client 端直讀：既有資料表一律「啟用 RLS + 零 policy」，`anon` 與
+`authenticated` 都讀不到任何 row。`app/` 目前也沒有任何直接查詢 Supabase 的 code。
 
-僅用於不需要認證的公開資料讀取。`anon` 角色只能存取 `TO public` 的 RLS policy。
+要開放某張表給前端直讀，必須明確替它建 `TO anon` / `TO authenticated` 的 SELECT policy，
+並且清楚知道那條 policy 是唯一的防線——**不能**依賴 `auth.uid()`（本專案的 auth 是 Better
+Auth，Supabase 未簽發 JWT，該函式恆為 null），所以只適合真正的公開資料。
 
 ## 目錄結構
 

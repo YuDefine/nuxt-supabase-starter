@@ -96,8 +96,8 @@ NUXT_PUBLIC_SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
 // 要求登入
 const { user } = await requireUserSession(event)
 
-// 取得 Supabase Client
-const client = await getSupabaseWithContext(event)
+// 取得 Supabase Client（同步，回傳 { client, user }）
+const { client } = getAuthedSupabase(event)
 ```
 
 ### 4.3. Client 端使用

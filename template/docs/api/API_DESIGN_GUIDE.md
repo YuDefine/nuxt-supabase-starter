@@ -160,11 +160,11 @@ await requireRole(event, { exclude: ['pending'] })
 ### 取得 Supabase Client
 
 ```typescript
-import { getSupabaseWithContext } from '~~/server/utils/supabase'
+import { getAuthedSupabase } from '~~/server/utils/supabase'
 
 export default defineEventHandler(async (event) => {
   // 取得帶有 RLS Context 的 Client
-  const { client } = await getSupabaseWithContext(event)
+  const { client } = getAuthedSupabase(event)
 
   // 使用特定 schema
   const app = client.schema('app')
@@ -383,7 +383,7 @@ const { data, count, error } = await itemsQuery.range(from, to)
 
 ```typescript
 // server/api/v1/items/index.get.ts
-import { getSupabaseWithContext, requireRole } from '~~/server/utils/supabase'
+import { getAuthedSupabase, requireRole } from '~~/server/utils/supabase'
 import { itemListQuerySchema, type ItemListResponse } from '~~/shared/schemas/items'
 
 export default defineEventHandler(async (event): Promise<ItemListResponse> => {
@@ -394,7 +394,7 @@ export default defineEventHandler(async (event): Promise<ItemListResponse> => {
   const query = await getValidatedQuery(event, itemListQuerySchema.parse)
 
   // 3. 取得 Supabase Client
-  const { client } = await getSupabaseWithContext(event)
+  const { client } = getAuthedSupabase(event)
   const app = client.schema('app')
 
   // 4. 建立查詢
@@ -436,7 +436,7 @@ export default defineEventHandler(async (event): Promise<ItemListResponse> => {
 
 ```typescript
 // server/api/v1/items/index.post.ts
-import { getSupabaseWithContext, requireRole } from '~~/server/utils/supabase'
+import { getAuthedSupabase, requireRole } from '~~/server/utils/supabase'
 import { createItemSchema, type CreateItemResponse } from '~~/shared/schemas/items'
 
 export default defineEventHandler(async (event): Promise<CreateItemResponse> => {
@@ -447,7 +447,7 @@ export default defineEventHandler(async (event): Promise<CreateItemResponse> => 
   const body = await readValidatedBody(event, createItemSchema.parse)
 
   // 3. 取得 Supabase Client
-  const { client } = await getSupabaseWithContext(event)
+  const { client } = getAuthedSupabase(event)
   const app = client.schema('app')
 
   // 4. 新增資料
@@ -534,7 +534,7 @@ interface CompleteItemResponse {
 - [ ] 在 `shared/schemas/` 定義 request/response schema 與衍生型別
 - [ ] 在最開頭進行權限檢查（`requireRole`）
 - [ ] 使用 `getValidatedQuery` 或 `readValidatedBody` 驗證輸入
-- [ ] 使用 `getSupabaseWithContext` 取得資料庫連線
+- [ ] 使用 `getAuthedSupabase` 取得資料庫連線
 - [ ] 正確處理資料庫錯誤（唯一約束、資源不存在等）
 - [ ] 回傳統一格式（`{ data, pagination? }`）
 - [ ] 異動操作記錄稽核日誌（選用）

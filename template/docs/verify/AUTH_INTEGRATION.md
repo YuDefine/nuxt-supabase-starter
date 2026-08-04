@@ -180,11 +180,11 @@ export default defineEventHandler(async (event) => {
 ### 3.3. 結合 Supabase（共用）
 
 ```typescript
-import { getSupabaseWithContext } from '~~/server/utils/supabase'
+import { getAuthedSupabase } from '~~/server/utils/supabase'
 
 export default defineEventHandler(async (event) => {
   const { user } = await requireUserSession(event)
-  const { client } = await getSupabaseWithContext(event)
+  const { client } = getAuthedSupabase(event)
   const { data } = await client.from('resources').select('*')
   return { data }
 })

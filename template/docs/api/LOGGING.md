@@ -173,7 +173,7 @@ export default defineEventHandler(async (event) => {
   log.set({ user: { id: user.id }, operation: 'update', table: 'items' })
 
   const body = await readValidatedBody(event, updateItemSchema.parse)
-  const supabase = getSupabaseWithContext(event)
+  const { client: supabase } = getAuthedSupabase(event)
 
   const { data, error } = await supabase
     .schema('app')

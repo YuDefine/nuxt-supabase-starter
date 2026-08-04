@@ -9,10 +9,18 @@ applies-to: post-scaffold
 
 ## 概覽
 
-本專案採用「Client 讀、Server 寫」的架構：
+本專案採用 **server-mediated** 架構：讀寫一律經過 Server API，Client 端不直接查詢 Supabase。
 
-- **讀取操作**：Client 端直接查詢 Supabase（RLS 保護）
-- **寫入操作**：透過 Server API（集中管理邏輯）
+- **讀取 / 寫入**：都走 Server API，授權在 handler 層完成（`requireAuth` + ownership 比對 / `requireRole`）
+- **RLS 的角色**：deny-all 防線，不是授權機制
+
+為什麼 RLS 不能當授權層：本專案的 auth 是 **Better Auth**，不是 Supabase Auth——Supabase
+從未對使用者簽發 JWT，policy 裡的 `auth.uid()` 恆為 null；server 端也只有 service-role 連線
+（具 BYPASSRLS）。所以資料表一律「啟用 RLS + 零 policy」，任何非 server 的連線都讀不到 row，
+而 row-level 的「誰能看誰」由 handler 判定。
+
+> 若日後改用 Supabase Auth（或替 Better Auth session 換發 Supabase JWT），才有條件把
+> 授權下推回 RLS，並讓 client 端直查成為選項。
 
 這章說明如何設計 Server API。
 
@@ -48,7 +56,7 @@ server/
 
 ```typescript
 // server/api/v1/todos/index.get.ts
-import { getSupabaseWithContext, requireAuth } from '~~/server/utils/supabase'
+import { getAuthedSupabase, requireAuth } from '~~/server/utils/supabase'
 
 export default defineEventHandler(async (event) => {
   // 確認使用者已登入
@@ -62,7 +70,7 @@ export default defineEventHandler(async (event) => {
   const sortOrder = query.sortOrder === 'asc' ? true : false
 
   // 取得 Supabase client
-  const { client } = await getSupabaseWithContext(event)
+  const { client } = getAuthedSupabase(event)
 
   // 計算 offset
   const from = (page - 1) * pageSize
@@ -99,10 +107,10 @@ export default defineEventHandler(async (event) => {
 
 ```typescript
 // server/api/v1/todos/[id]/index.get.ts
-import { getSupabaseWithContext, requireAuth } from '~~/server/utils/supabase'
+import { getAuthedSupabase, requireAuth } from '~~/server/utils/supabase'
 
 export default defineEventHandler(async (event) => {
-  await requireAuth(event)
+  const user = await requireAuth(event)
 
   const id = getRouterParam(event, 'id')
   if (!id) {
@@ -112,9 +120,17 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const { client } = await getSupabaseWithContext(event)
+  const { client } = getAuthedSupabase(event)
 
-  const { data, error } = await client.schema('app').from('todos').select('*').eq('id', id).single()
+  // 用 user_id 夾住查詢範圍 — RLS 是 deny-all，不會替你過濾。
+  // 少了這個條件，任何登入者都能用別人的 id 讀到別人的資料。
+  const { data, error } = await client
+    .schema('app')
+    .from('todos')
+    .select('*')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .single()
 
   if (error) {
     throw createError({
@@ -132,7 +148,7 @@ export default defineEventHandler(async (event) => {
 ```typescript
 // server/api/v1/todos/index.post.ts
 import { z } from 'zod'
-import { getSupabaseWithContext, requireAuth } from '~~/server/utils/supabase'
+import { getAuthedSupabase, requireAuth } from '~~/server/utils/supabase'
 
 // 定義驗證 schema
 const createTodoSchema = z.object({
@@ -150,7 +166,7 @@ export default defineEventHandler(async (event) => {
   const body = await readValidatedBody(event, createTodoSchema.parse)
 
   // 3. 取得 Supabase client
-  const { client } = await getSupabaseWithContext(event)
+  const { client } = getAuthedSupabase(event)
 
   // 4. 新增資料
   const { data, error } = await client
@@ -182,7 +198,7 @@ export default defineEventHandler(async (event) => {
 ```typescript
 // server/api/v1/todos/[id]/index.patch.ts
 import { z } from 'zod'
-import { getSupabaseWithContext, requireAuth } from '~~/server/utils/supabase'
+import { getAuthedSupabase, requireAuth } from '~~/server/utils/supabase'
 
 const updateTodoSchema = z.object({
   title: z.string().min(1).max(200).optional(),
@@ -213,7 +229,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const { client } = await getSupabaseWithContext(event)
+  const { client } = getAuthedSupabase(event)
 
   // 如果是標記完成，順便記錄完成時間
   const updateData = {
@@ -227,6 +243,7 @@ export default defineEventHandler(async (event) => {
     .from('todos')
     .update(updateData)
     .eq('id', id)
+    .eq('user_id', user.id) // 同上：授權條件寫進查詢，別指望 RLS
     .select()
     .single()
 
@@ -245,10 +262,10 @@ export default defineEventHandler(async (event) => {
 
 ```typescript
 // server/api/v1/todos/[id]/index.delete.ts
-import { getSupabaseWithContext, requireAuth } from '~~/server/utils/supabase'
+import { getAuthedSupabase, requireAuth } from '~~/server/utils/supabase'
 
 export default defineEventHandler(async (event) => {
-  await requireAuth(event)
+  const user = await requireAuth(event)
 
   const id = getRouterParam(event, 'id')
   if (!id) {
@@ -258,9 +275,15 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const { client } = await getSupabaseWithContext(event)
+  const { client } = getAuthedSupabase(event)
 
-  const { error } = await client.schema('app').from('todos').delete().eq('id', id)
+  // 同上：授權條件寫進查詢。刪除少了它，等於任何登入者可刪任何人的資料。
+  const { error } = await client
+    .schema('app')
+    .from('todos')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', user.id)
 
   if (error) {
     throw createError({
@@ -297,18 +320,15 @@ export function getServerSupabaseClient(): SupabaseClient<Database> {
   })
 }
 
-// 取得 request-scoped Client
-export async function getSupabaseWithContext(event: H3Event): Promise<{
+// 驗過 session 的 client + user。
+// 注意：回傳的 client 與上面的 service-role client 是同一顆，權限完全相同 —
+// 這個 helper 不做任何授權，只保證「有登入」。授權是 handler 的責任。
+export function getAuthedSupabase(event: H3Event): {
   client: SupabaseClient<Database>
   user: Awaited<ReturnType<typeof requireAuth>>
-}> {
-  const user = await requireAuth(event)
+} {
+  const user = requireAuth(event)
   const client = getServerSupabaseClient()
-
-  await client.rpc('set_app_context', {
-    p_user_id: user.id,
-    p_user_role: user.role,
-  } as never)
 
   return { client, user }
 }
@@ -351,7 +371,7 @@ export async function requireRole(event: H3Event, allowedRoles: string[]) {
 ```typescript
 // server/api/v1/todos/batch.post.ts
 import { z } from 'zod'
-import { getSupabaseWithContext, requireAuth } from '~~/server/utils/supabase'
+import { getAuthedSupabase, requireAuth } from '~~/server/utils/supabase'
 
 const batchCreateSchema = z.object({
   items: z
@@ -369,7 +389,7 @@ export default defineEventHandler(async (event) => {
   const user = await requireAuth(event)
   const body = await readValidatedBody(event, batchCreateSchema.parse)
 
-  const { client } = await getSupabaseWithContext(event)
+  const { client } = getAuthedSupabase(event)
 
   const itemsWithUserId = body.items.map((item) => ({
     ...item,
@@ -407,7 +427,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const { client } = await getSupabaseWithContext(event)
+  const { client } = getAuthedSupabase(event)
 
   const { data, error } = await client
     .schema('app')
@@ -436,7 +456,7 @@ export default defineEventHandler(async (event) => {
   const user = await requireAuth(event)
   const body = await readValidatedBody(event, createTodoSchema.parse)
 
-  const { client } = await getSupabaseWithContext(event)
+  const { client } = getAuthedSupabase(event)
 
   // 新增資料
   const { data, error } = await client
@@ -480,7 +500,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '缺少 Todo ID' })
   }
 
-  const { client } = await getSupabaseWithContext(event)
+  const { client } = getAuthedSupabase(event)
 
   // 先確認 todo 存在
   const { data: todo, error: todoError } = await client
@@ -663,10 +683,14 @@ export default defineEventHandler(async (event) => {
   // ...
 })
 
-// ✅ 安全：確認使用者已登入，並使用 request-scoped client
+// ✅ 安全：驗登入 + 把授權條件寫進查詢
 export default defineEventHandler(async (event) => {
-  await requireAuth(event)
-  const { client } = await getSupabaseWithContext(event)
+  const user = await requireAuth(event)
+  const { client } = getAuthedSupabase(event)
+
+  // 光是「有登入」不夠 — client 是 service-role，看得到所有人的資料。
+  // 範圍要嘛用 user.id 夾住，要嘛先比對 ownership 再查。
+  const { data } = await client.from('todos').select('*').eq('user_id', user.id)
   // ...
 })
 ```

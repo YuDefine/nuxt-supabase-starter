@@ -5,6 +5,18 @@ applies-to: architecture
 
 # <consumer-b> Layered Truth for Starter
 
+> **2026-08-04 補註（分層真相本身仍有效，其中一層的內容已變）**
+>
+> 本 ADR 的 Context 記載「規則要求 API 用 request-scoped client，範例 handler 卻直接取
+> service-role client」這個矛盾。該矛盾已解決，但方向與當時的預期相反：不是讓範例改用
+> request-scoped client，而是確認**本專案不存在** request-scoped client——auth 是 Better
+> Auth，Supabase 未簽發 JWT，`auth.uid()` 恆為 null，而原本用來傳遞身分的
+> `set_app_context` GUC 是 transaction-local，在 PostgREST 的 per-request transaction
+> 模型下從未生效。
+>
+> 因此「持久化層」那條的 RLS 語意改變：RLS 不再承擔 row-level 授權，改為 deny-all 防線，
+> 授權移到服務/API 層。詳見 `docs/API_PATTERNS.md` 與 `server/utils/supabase.ts`。
+
 ## Decision
 
 Starter 預設採用「分層真相」而非單一 SSOT：
@@ -12,14 +24,14 @@ Starter 預設採用「分層真相」而非單一 SSOT：
 - **意圖層**：需求、限制、跨功能設計意圖放在 `openspec/project.md`、`openspec/specs/`、`docs/decisions/`
 - **持久化層**：schema、constraint、RLS、trigger、function 只放在 `supabase/migrations/`
 - **契約層**：request/response schema 與衍生型別以 `shared/schemas/*.ts` 為準；`shared/types/*.ts` 僅保留相容轉發或 view-model 型別
-- **服務/API 層**：`server/api/**/*.ts` 先驗證輸入，再使用 `getSupabaseWithContext(event)` 進行 request-scoped 存取，回傳前必須用 response schema `parse()`
+- **服務/API 層**：`server/api/**/*.ts` 先驗證輸入，再使用 `getAuthedSupabase(event)` 取得 client，回傳前必須用 response schema `parse()`
 - **UI 狀態層**：`app/` 只消費契約，不重新定義業務規則或持久化限制
 
 ## Context
 
 Starter 原本已經有 Zod、Supabase migration、Spectra 與 `.claude/rules/`，但幾個真相來源之間並未完全對齊：
 
-- 規則要求 API 用 `getSupabaseWithContext(event)`，範例 handler 卻直接取 service-role client
+- 規則要求 API 用 `getAuthedSupabase(event)`，範例 handler 卻直接取 service-role client
 - 文件同時把 `shared/types/` 與 `shared/schemas/` 都描述成 schema 來源，容易產生雙重維護
 - 驗證步驟偏向型別與流程檢查，對 response contract drift 的保護不足
 

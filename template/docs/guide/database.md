@@ -10,7 +10,7 @@ applies-to: post-scaffold
 | Context | Read                                     | Write                 |
 | ------- | ---------------------------------------- | --------------------- |
 | Client  | `useSupabaseClient<Database>().select()` | Never                 |
-| Server  | `getSupabaseWithContext(event)`          | `/api/v1/*` endpoints |
+| Server  | `getAuthedSupabase(event)`          | `/api/v1/*` endpoints |
 | Service | `server/utils/drizzle.ts`（選用）        | Transactional logic   |
 
 **Client-side reads only.** Request-scoped reads/writes go through server API endpoints. `getServerSupabaseClient()` 與 Drizzle 只留給系統任務或需要 transaction/query builder 的服務層。
