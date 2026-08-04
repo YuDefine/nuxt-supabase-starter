@@ -3046,6 +3046,38 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
     (stashRef ? ` (blockers stashed as ${stashRef})` : '') +
     (cleanupDone ? ' + worktree cleaned' : ' (cleanup skipped/failed)')
   console.log(summary)
+
+  // `git merge --squash` stages the changeset but deliberately does NOT commit:
+  // landing is finished by the caller in main (worktree-default.md § v3 atomic
+  // landing — "user 再在 main 跑 /commit"). That contract is correct, but the
+  // summary above reads as "done" while the worktree and branch are already
+  // gone, so the staged index is the only remaining copy. Say the remaining
+  // step out loud. (2026-08-04: two clade-home sessions in one afternoon each
+  // read "absorbed into main + worktree cleaned" as committed; the second only
+  // caught it because a rule told it to grep HEAD for its own content.)
+  let stagedPaths = []
+  try {
+    stagedPaths = git(['diff', '--cached', '--name-only'], { cwd: consumerRoot })
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+  } catch {}
+  if (stagedPaths.length > 0) {
+    const shown = stagedPaths
+      .slice(0, 4)
+      .map((p) => `'${p}'`)
+      .join(' ')
+    console.log('')
+    console.log(
+      `⚠ Staged into main, NOT committed (${stagedPaths.length} file(s)) — the worktree and branch are already removed, so this index is the only copy.`,
+    )
+    console.log(`  Finish landing now:`)
+    console.log(`  git commit --only -m "<msg>" -- ${shown}${stagedPaths.length > 4 ? ' ...' : ''}`)
+    console.log(
+      `  Then verify: git show HEAD:<file> | grep -c '<a plain-text string you just wrote>'`,
+    )
+  }
+
   if (stashRef) {
     console.log('')
     console.log(`Reconcile blocker stash for '${cleanSlug}':`)
