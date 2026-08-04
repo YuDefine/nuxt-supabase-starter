@@ -406,11 +406,14 @@ AFTER writing the tests — mental mutation check:
 真的被枚舉了。需要機械證據的模組（金流 / 額度 / 期限 / 配額這類「算錯會賠錢」的邏輯），可以用
 mutation testing 讓**存活的突變體**直接指出哪個邊界沒被釘住。
 
-- **該不該導入**：`vendor/snippets/mutation-testing/README.md` 的 gate ——
+- **該不該導入**：`~/offline/clade/vendor/snippets/mutation-testing/README.md` 的 gate ——
   **沒有 unit test 的模組一律不導入**（二階指標在一階缺席時輸出恆為 0，不帶資訊）；
   不含比較運算子的模組（純 CRUD / I/O 轉接）同樣不導入
-- **各 consumer 採用狀態**：`node scripts/audit-mutation-testing.ts`
+- **各 consumer 採用狀態**：`node ~/offline/clade/scripts/audit-mutation-testing.ts --repo .`
   （靜態讀 consumer commit 的 `.clade/mutation-summary.json`，**不執行**任何測試）
+
+> 兩條都是**絕對路徑**：cookbook 與 audit script 只存在於 clade，不散播副本到 consumer，
+> 相對路徑在 consumer session 會解到自己的 repo 而落空（同 [[evlog-investigate]] 的理由）。
 - **NEVER** 把 mutation score 變成常駐 KPI —— 一旦它成為被追的數字，產出就會從
   「想清楚邊界」退化成「對每個中間值下 assertion」，測試變脆、重構全紅
 
