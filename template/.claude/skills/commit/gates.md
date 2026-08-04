@@ -354,27 +354,28 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 對本次 working tree 變更跑 simplify review + 自動修 —— 聚焦 reuse / 精簡 / efficiency / altitude，codex exec review 不會抓這條軸。simplify 修完的版本才是下一步 codex exec review 應該看的對象。
 
-**執行方式：MUST 用 foreground `Agent` tool 開一個**通用 subagent**（`subagent_type: "general-purpose"`、`mode: "auto"`）跑下方 prompt 範本**，**NEVER 用 `Skill(simplify)` 嵌套呼叫**。
+**執行方式：主線直接 `Skill(simplify)` 序跑**（`skill: "simplify"`）。
 
-> **`subagent_type` MUST 是 `"general-purpose"`，NEVER 設成 `"simplify"`**：`/simplify` 是 Claude Code **內建 skill**，**不是** agent type，也不存在「simplify agent type」這種東西。這裡的意圖是「用通用 subagent 在**隔離 context** 跑下方那段 simplify review *工作*」，不是去叫一個名為 simplify 的 agent。若誤把 `subagent_type` 設成 `"simplify"` 會得到 `Agent type 'simplify' not found` 並可能誤導你 fallback 去 `Skill(simplify)`（本段明文 NEVER 的路徑）。
+- **NEVER** 用 `Agent` 包一層再叫它做 simplify
+- **NEVER** 在任何 prompt 裡叫 agent「launch N parallel review agents」之類自行 fan-out —— 四軸分工（Reuse / Simplification / Efficiency / Altitude）是 `simplify` skill 本體的內部實作，由它自己決定，抄出來的副本沒有更新通道
 
-理由：`Skill(simplify)` inline 載入 simplify SKILL.md + 4-agent 編排 + 修正報告，大量 output 會把外層 commit flow 的 continuation 指令推出 working memory。用通用 subagent（`general-purpose`）跑這段 prompt 把 simplify 隔離在 subagent context，主線只收到 compact 結果，commit flow 的 fast-path 判斷指令仍在 working memory 頂端。
+> **本段捨棄了哪一條防護（2026-08-04 TD-362 拍板，pilot 中）**：2026-06-04 起本段曾要求用 foreground `Agent`（`general-purpose`）跑手抄的四軸 prompt，為的是把 simplify 隔離在 subagent context，避免 `Skill(simplify)` 的 inline output 把 commit flow 的 continuation 指令推出 working memory（[[pitfall-commit-simplify-skill-nesting-stalls-flow]]）。
+>
+> 2026-08-04 反證該隔離**從未達成**（[[pitfall-commit-0a0-nested-fanout]]）：子 agent 完整報告仍以 agent-message 灌回主線（實測 ↓59.1k tokens），同時付出中間層空轉 4m41s、子 agent 互斥建議無仲裁者、prompt 範本與 skill 本體雙 SoT 漂移三項成本。既然包一層擋不住 context 灌入，「移除它會讓停頓回來」的隱含前提（現狀擋住了停頓）不成立——那個風險兩邊共有。
+>
+> 另一層理由：主線 Step 3 要把 simplify 的修正**分組 commit**，本來就必須知道改了什麼，隔離擋掉的是主線自己需要的東西。
+>
+> **停頓風險仍在**，由下面兩條防線承接（它們是 2026-06-04 當時不存在的，**NEVER** 隨 Agent-wrapping 一起刪）。pilot 期間若停頓復發，fallback **不是**回到手抄 fan-out prompt，而是 TD-362 登記的 designated fallback（單一 agent 自跑四軸、明文禁再 fan-out）。
 
-Agent prompt 範本（**照搬，不自由發揮**）：
-
-```
-Review the current uncommitted changes (git diff HEAD) for reuse, simplification, efficiency, and altitude issues — not correctness bugs. Launch 4 parallel review agents (Reuse / Simplification / Efficiency / Altitude), dedup findings, fix each one directly. Skip findings that change behavior or require changes outside the diff. After applying all fixes, run `vp lint --deny-warnings` and revert any fix that introduces a lint violation. Report: what was fixed, what was reverted due to lint, what was skipped (or confirm clean). Keep the final summary under 200 words.
-```
-
-Agent 回傳後主線處理：
+主線收到 simplify 結果後：
 
 - **有修正** → 一句話摘要（「simplify 修了 N 處：<列舉>」），deferred items 寫 `HANDOFF.md`（`[simplify]` prefix），**立即** fast-path 判斷
 - **無修正** → 輸出 `✅ 0-A.0 完成（simplify 無修正）`，**立即** fast-path 判斷
-- **NEVER** 把 Agent 回傳的完整報告原文轉貼給 user —— 那正是造成 context 膨脹 + 停頓的根因
+- **NEVER** 把 simplify 的完整報告原文轉貼給 user —— 那是 context 膨脹 + 停頓的根因輸入端，轉貼等於自己把它二次放大
 
 **Deferred items → HANDOFF（自動，不停住）**：simplify 指出「現在不做但值得做」的改善項 **MUST** 自動寫入 `HANDOFF.md` 的 `Next Steps` 區塊（一行一項，前綴 `[simplify]`），然後**立即繼續** fast-path 判斷。**NEVER** 停住等使用者確認。
 
-**0-A.0 完成 ≠ 停頓點（hard rule）**：simplify Agent 回傳後，主線 **MUST 在同一個 assistant turn 內** 輸出一行摘要 → 判斷 fast-path → 啟動 0-A.1/0-B/0-C。**NEVER** 在 simplify 完成後等 user 回應 — commit 流程是單一連續執行，中間不停。
+**0-A.0 完成 ≠ 停頓點（hard rule）**：`Skill(simplify)` 完成後，主線 **MUST 在同一個 assistant turn 內** 輸出一行摘要 → 判斷 fast-path → 啟動 0-A.1/0-B/0-C。**NEVER** 在 simplify 完成後等 user 回應 — commit 流程是單一連續執行，中間不停。
 
 跑完輸出 `✅ 0-A.0 完成（simplify 已 review + 修正{，N 項 deferred → HANDOFF}）` 後判斷 fast-path：
 

@@ -83,6 +83,38 @@ clade 端的覆蓋範圍是 `tsconfig.vendor.json` 的 `include`（`vendor/scrip
 1. **typecheck 涵蓋**：跑 `npx tsc -p <tsconfig> --listFiles | grep <你的檔案>` 確認它真的在編譯清單裡。**NEVER** 因為 `include` 的 glob 看起來會涵蓋就當它涵蓋
 2. **test runner 涵蓋**：測試檔改副檔名後，**MUST** 比對測試**數量**與改名前相同。test glob 沒接上時 `node --test` 回報的是「0 個測試通過」，不是失敗
 
+## 失敗要留痕：寫 `catch → 空值` 之前先分類（MUST）
+
+**核心命題**：「解不出 → 回 `null` → 保守放行」把**兩件語義完全不同**的事塌成同一個值，而下游只看得到「有 / 沒有」。故障於是渲染成缺席，而缺席跟「本來就不適用」在畫面上無法區分——發現者永遠變成使用者。
+
+**每一個** `catch` 回 `null` / `[]` / `{}` / `false` / `undefined` 的點，落筆前 **MUST** 歸到下表其中一類，不是只處理「看起來比較重要的那幾個」：
+
+| 類別 | 可觀察判準 | 處置 |
+| --- | --- | --- |
+| **真不適用** | 這個否定答案是**預期內**的正常結果（`new URL(x)` 對一段本來就不是 URL 的文字 throw；探測「有沒有別的 server 在跑」得到 connection refused） | 照舊回空值，不記 |
+| **嘗試過但失敗** | 本來**應該**拿得到（檔案在但讀不到、JSON 壞掉、外部命令沒裝或被拒、權限不足） | **MUST** 先 `recordDiagnostic()` 之類的留痕再回空值，訊息要寫出「因此下游會少掉什麼」 |
+
+**判不出來 default 記**——多一條灰色提示的成本，遠低於下一個只有人踩得到的 bug。
+
+```ts
+// 真不適用 → 照舊回 null，不記
+try { return new URL(token) } catch { return null }
+
+// 嘗試過但失敗 → 記一筆再回 null
+try { src = readFileSync(routeFile, 'utf8') } catch (err) {
+  recordDiagnostic('role-list-unreadable', `${routeFile} 解不出 role 清單（${err.message}）——寫錯 role 的 item 不會再被標出來`)
+  return null
+}
+```
+
+**三態 NEVER 塌成布林**：「沒有」與「問不出來」是兩件事。探測類函式回 `none`（確認沒有）/ `unknown`（有但問不出身分）/ `known`，`unknown` **MUST** 照樣出警示——**「不知道」不等於「沒問題」**。
+
+**全域掃描的前置條件讀不到 MUST `throw` + 非 0 exit，NEVER 回空結果**：`consumers.local` 之類的清單來源讀不到時回 `total 0`，跟「掃過了、fleet 乾淨」在輸出上一模一樣。這條對**新寫的** script 同樣適用——2026-08-02 當天寫的新 audit script 自己就犯了一次。
+
+**子程序 / 多出口的失敗 MUST 在單一出口收**：二十個 `return 'failed'` 前面各印一行 `✘ <原因>`，卻沒有一個寫進 `metrics.error`，結尾摘要就會印「（無 error 記錄）」。修法是在 log 的**單一出口**認出 `✘` 前綴時寫進 error 集合，**NEVER** 逐個出口補。
+
+> **為什麼測試接不住**：現有測試測的是 graceful degradation 的**結果**，不是 degradation 有沒有**留下痕跡**。「回 null 不 throw」在單元測試裡看起來永遠是對的——那正是它通過的原因。要接住得對每個 `catch → 空值` 點注入失敗，斷言 diagnostic 存在。（per [[pitfall-silent-null-renders-failure-as-absence]]）
+
 ## 用 vp 命令做 lint / format
 
 ```bash

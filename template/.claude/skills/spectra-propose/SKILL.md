@@ -70,7 +70,7 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
    選 A 後 **MUST** 完整讀 `references/dispatch-option-a.md` 並依序執行：
 
    - **Phase 0a**：解析 change name + requirement → 寫 draft prompt 檔（範本含 Plan-first / Phase Purity / Manual Review Kind Marker / Backend-only 規約 / FIXTURES sample / 語言遵循 / **NEVER park**）→ 背景 `codex exec`（max effort）→ notification-only watch（**NEVER** 短輪詢）。
-   - **Phase 0b**（收到 completed 通知**立刻**跑，step 1–10）：讀 stdout → `post-propose-check.sh` → `post-propose-manual-review-check.sh` → **Check 7 hard gate（`--check7-only` MUST exit 0 才續行，NEVER 跳過）** → `design-inject.sh` → 補 Design Review 7 步 → Manual Review Marker Hygiene（Rule 1–5）→ 語言遵循 check → **掃 design.md Open Questions（非空 MUST 立刻 AskUserQuestion 逐題問，NEVER 自行假設答案）** → `spectra analyze` / `validate` → commit artifacts → 回報。
+   - **Phase 0b**（收到 completed 通知**立刻**跑，step 1–10）：讀 stdout → `post-propose-check.sh` → `post-propose-manual-review-check.sh` → **Check 7 hard gate（`--check7-only` MUST exit 0 才續行，NEVER 跳過）** → `design-inject.sh` → 補 Design Review 7 步 → Manual Review Marker Hygiene（Rule 1–6，Rule 6 = 結構化 entry 落盤）→ 語言遵循 check → **掃 design.md Open Questions（非空 MUST 立刻 AskUserQuestion 逐題問，NEVER 自行假設答案）** → `spectra analyze` / `validate` → commit artifacts → 回報。
    - 修補一律主線自己 Edit，**NEVER** 丟回 codex。
 
    ---
@@ -446,13 +446,22 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
 
    **Check 9: Manual Review Marker Hygiene** (applies to **every** change, not only backend-only)
 
-   Verify all four rules from Step 5.5 Manual Review Marker Hygiene Check:
+   Verify all six rules from Step 5.5 Manual Review Marker Hygiene Check:
 
    1. **Every `## 人工檢查` item line MUST carry a legal leading marker** (right after `#N` / `#N.M`, before the description): `[review:ui]` / `[discuss]` / `[verify:e2e]` / `[verify:api]` / `[verify:ui]` / verify multi-marker `[verify:<a>+<b>]` or `[verify:<a>+<b>+<c>]`. Default Kind Derivation Rule is a fallback for legacy in-flight items only — newly authored content **MUST** be explicit. Default fallback does NOT cover any `verify:*` channel.
    2. **New `[verify:auto]` is forbidden**. If codex draft contains `[verify:auto]`, main thread **MUST** inline replace it: pure API → `[verify:api]`; mutation + visual → `[verify:api+ui]`; persistence / full journey → `[verify:e2e]`.
    3. **Evidence-collection items MUST be marked `[discuss]` or `[verify:api]`**. SSH / `docker exec` / `psql` / `\d <table>` / `SELECT FROM` / controlled drift fabrication / migration existence verification / 商業判斷類「分布是否符合預期」→ `[discuss]`; reproducible HTTP / `curl` round-trip → `[verify:api]`.
    4. **Real user round-trip items MUST use the strongest explicit channel**: persistence / reload / full journey → `[verify:e2e]`; HTTP status / backend contract → `[verify:api]`; final-state visual only → `[verify:ui]`; mutation + visual → `[verify:api+ui]`; human-only allowlist → `[review:ui]`.
    5. **Multi-marker cannot mix verify channels with human/discuss kinds**. `[verify:api+ui]` is valid; `[verify:api+review:ui]` and `[verify:api+discuss]` are invalid.
+   6. **每一個**需要特定身分或特定 URL 才看得到的 item（`[review:ui]` / `[verify:ui]` / `[verify:e2e]`，以及任何描述裡出現登入身分的項），**MUST** 在 propose 當下就把入口落盤成結構化 entry，**NEVER** 只寫進中文散文等 GUI 用 regex 考古：
+
+      ```bash
+      node ~/offline/clade/scripts/manual-entry.ts --repo <repo> --change <change> \
+        --item '#4' --url '<要驗收那一頁的絕對 URL>' --login-as <role> [--login-email <email>] [--viewport 390]
+      node ~/offline/clade/scripts/manual-entry.ts --repo <repo> --change <change> --list   # 對帳
+      ```
+
+      欄位語義、四種形狀的範本、三條 NEVER 見 cookbook `~/offline/clade/vendor/snippets/manual-review-entry/`。**`--migrate` 是既有 change 的遷移路徑，NEVER 當新 change 的正規路徑**——它產出的 `source: 'derived'` 標記本身就代表「這筆是考古來的、可能不準」。落盤後 `audit-manual-executability.ts` 對該 item 不再報 `PROSE-ONLY-ENTRY`。
 
    When a violation is detected, the main thread Edit tasks.md inline (do NOT round-trip back to codex). For backend-only changes specifically:
 

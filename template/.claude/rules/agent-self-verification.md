@@ -42,6 +42,8 @@ Local edits will be reverted by the next sync.
 - 「截圖已拍 / evidence 已補」但未驗證截圖內容是否為預期頁面（拍到登入頁 / 白畫面即違反）
 - 「review:ui 項已勾 `[x]`，視為已驗收」但無對應 agent 自拍 evidence 佐證（既有 `[x]` ≠ evidence — 假設 user 有截圖、信任前 session 代勾都算違反；per [[pitfall-review-ui-checkbox-without-agent-evidence-masks-bug]]）
 - 「grep 不到 X，所以 X 不存在」「零命中，確認沒有」「只有 N 個」「無任何 / 沒有任何 X」（未附 known-positive control 就把 negative search 當證據；per 下方 MUST 11）
+- 「curl 打過了，302 / 200，登入流程正常」「cookie jar 有存到，session 沒問題」（對**帶登入態**的流程，curl 的狀態碼不是證據；per 下方 MUST 16）
+- 「連結已產生 / `href` 對了，所以點下去會登入成功」（讀 artifact 的形狀不等於驗它的行為；per 下方 MUST 16）
 
 ### MUST
 
@@ -87,6 +89,19 @@ Local edits will be reverted by the next sync.
     並取得 exit 0。exit 1 代表有**已勾**的 item 沒有對應 evidence receipt：**MUST** 補收 evidence（`evidence-store --write`），或在該 item 標 `(deferred: ...)` 附逐層 failure trail（格式同上方 MUST 3）。**NEVER** 為了讓它變綠去改 checkbox——那是把 false-green 從「沒被發現」變成「主動製造」。
 
     **NEVER** 用逐項 `evidence-store --has-evidence` 查過就當全項齊全。逐項查回答得了「這一項有沒有」，回答不了「哪些項還缺」——而收尾要問的正是後者，漏掉的永遠是沒被查到的那一項。這條與 MUST 8 是同一個 false-green 的兩端：MUST 8 管單項的 checkbox 不可信，本條管整批的「都驗完了」不可信。
+
+16. **驗收對象需要登入態時，MUST 用真瀏覽器走到底並斷言登入後狀態（hard rule）**：只要被驗的流程**需要 session 才會顯示正確結果**（登入後頁面、帶權限的 API 經瀏覽器呼叫、任何「登入 → 跳轉 → 落地頁」鏈路），**MUST** 用真瀏覽器點完整條鏈路，並斷言**登入後**的 DOM 狀態——不是斷言狀態碼、不是斷言 `href` 字串。可觀察的最小斷言組：落地頁 `location.href` 是預期路徑、`document.querySelector('input[type=password]')` 為 `null`、以及一個只有登入後才存在的元素。
+
+    ```bash
+    agent-browser open '<login-url>'
+    agent-browser eval "JSON.stringify({url: location.href, hasLoginForm: !!document.querySelector('input[type=password]')})"
+    ```
+
+    **NEVER** 拿 curl 的狀態碼當帶認證流程的證據。curl **完全不理會** cookie 的 `Secure` 屬性——`-c jar` 照存、`-b jar` 照送，不看 scheme；瀏覽器只在 secure context（`https://`，或 `localhost` / `127.0.0.1` 的明文豁免）儲存 `Secure` cookie。所以經 plain-HTTP origin 登入時，「302 正確 → redirect target 正確 → 落地頁 200」三個訊號**全部正常**，而瀏覽器早在第二步就把 cookie 靜默丟棄，使用者拿到的是未登入畫面。同型差異也存在於 `SameSite` 與 secure-context-only 的 Web API——curl 一律不模擬。
+
+    **NEVER** 用「開過瀏覽器」抵這條：同一輪實測開了瀏覽器但只讀 `href` 字串沒點下去，一樣沒驗到。**檢查 artifact 的形狀不等於檢查它的行為。**
+
+    非 localhost origin 要能登入，該 origin 自己**必須**是真 HTTPS（例：tailnet 的 `tailscale cert` + MagicDNS）。兩者皆無時 **NEVER** 退回 plain-HTTP proxy 產生登入連結——改回報「需 HTTPS 才能登入」並說明原因。（per [[pitfall-plain-http-proxy-cannot-carry-secure-session]]）
 
 ## 派工前的主線預檢責任
 
