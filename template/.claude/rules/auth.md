@@ -23,6 +23,22 @@ Local edits will be reverted by the next sync.
 - (c) **刪除/停用 user 時 MUST 同步撤銷該 user 的 session 資料列**——DB-backed session 不會因刪 user 自動失效
 - (d) **`service_role` 等 server secret NEVER 進 client bundle**（DB 仍是 Supabase，此條照舊適用）
 
+## 與 Supabase 併用時：RLS 不能當授權層
+
+本 variant 下 **Supabase 不會對你的使用者簽發任何 JWT**。直接後果：
+
+- RLS policy 裡的 `auth.uid()` **恆為 null** —— policy 語法正確、RLS 也啟用著，但一條 row 都不會通過
+- server 端若走 service-role 連線（`SUPABASE_SECRET_KEY`），service_role 具 `BYPASSRLS`，policy 連評估都不評估
+
+所以本 variant 的授權模型是 **server-mediated**：
+
+1. **授權 MUST 在 handler 層**完成——`requireAuth` + ownership 比對、`requireRole`、或以 `user.id` 夾住查詢條件。**每一支**會回傳他人資料的 handler 都要做，不是只做「看起來危險的那幾支」
+2. **RLS MUST 改為「啟用 + 零 policy」的 deny-all**，並在 migration 註明是 by design。它擋的是「繞過 server 的直連」，不是「越權的 handler」
+3. server helper **MUST 誠實命名**。`getSupabaseWithContext` 這種名字會讓 handler 作者以為範圍已限縮；本 variant 的等價 helper 是 **`getAuthedSupabase(event)`**（只驗 session、回 `{ client, user }`、不做授權）。reference implementation：`nuxt-supabase-starter` 的 `template/server/utils/supabase.ts`
+4. **NEVER** 用 `set_app_context` 這類 RPC 寫 GUC 給 policy 讀——`set_config(..., true)` 是 transaction-local，PostgREST 每 request 獨立 transaction，恆定無效
+
+完整命題、三次事故實證與判準見 [[auth-data-path-consistency]] § Server 側：RLS policy 的前提條件。
+
 ## 僅適用直接使用 Supabase Auth（GoTrue）的場景
 
 以下僅在 consumer 直接用 Supabase Auth 時適用；better-auth consumer 跳過本節。

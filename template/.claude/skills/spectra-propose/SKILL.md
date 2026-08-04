@@ -446,7 +446,7 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
 
    **Check 9: Manual Review Marker Hygiene** (applies to **every** change, not only backend-only)
 
-   Verify all six rules from Step 5.5 Manual Review Marker Hygiene Check:
+   Verify **every** rule from Step 5.5 Manual Review Marker Hygiene Check（Rule 1–6，定義在 `references/dispatch-option-a.md`）。下列是逐條驗收清單，**不是** Step 5.5 的完整替代——條文以 Step 5.5 為準：
 
    1. **Every `## 人工檢查` item line MUST carry a legal leading marker** (right after `#N` / `#N.M`, before the description): `[review:ui]` / `[discuss]` / `[verify:e2e]` / `[verify:api]` / `[verify:ui]` / verify multi-marker `[verify:<a>+<b>]` or `[verify:<a>+<b>+<c>]`. Default Kind Derivation Rule is a fallback for legacy in-flight items only — newly authored content **MUST** be explicit. Default fallback does NOT cover any `verify:*` channel.
    2. **New `[verify:auto]` is forbidden**. If codex draft contains `[verify:auto]`, main thread **MUST** inline replace it: pure API → `[verify:api]`; mutation + visual → `[verify:api+ui]`; persistence / full journey → `[verify:e2e]`.

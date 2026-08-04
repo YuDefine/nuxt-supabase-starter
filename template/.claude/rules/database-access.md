@@ -14,6 +14,7 @@ Local edits will be reverted by the next sync.
 
 - **Client（預設）**: READ only via `useSupabaseClient<Database>()` — **僅限 RLS SELECT `TO public` 的表**
 - **Server（預設）**: request-scoped 讀寫一律經 `/api/v1/*` + `getSupabaseWithContext(event)`
+> **Helper 名依 `modules.auth` 而異**：本檔以 `getSupabaseWithContext(event)` 為 canonical 名。當 consumer 的 `.claude/hub.json` `modules.auth` 是 `better-auth` 或 `nuxt-auth-utils` 時，等價 helper 是 **`getAuthedSupabase(event)`** —— 那些 auth stack 下 Supabase 不簽 JWT，`auth.uid()` 恆 null，helper 只驗 session 不做授權，名字必須說實話。兩者回傳形狀相同（`{ client, user }`）。見 [[auth-data-path-consistency]] § Server 側：RLS policy 的前提條件。
 - **Privileged system tasks**: `getServerSupabaseClient()` 僅用於 audit logging、backfill、資料修復、背景工作
 - **Optional transactional query layer**: `server/utils/drizzle.ts` 僅用於 service 層 / 系統任務；**NEVER** 讓 Drizzle 接管 migration、RLS、trigger
 - **Client-side writes are architecture exceptions** — 只有在 proposal / ADR 明確記錄並同時滿足下列條件時，才可從 client 使用 `.insert()` / `.update()` / `.delete()` / `.upsert()`：

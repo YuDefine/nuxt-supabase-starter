@@ -1,6 +1,6 @@
 ---
 description: Auth 策略與資料存取路徑一致性——防止混合 auth 狀態導致 silent 權限降級
-paths: ['app/**/*.ts', 'app/**/*.vue', 'supabase/migrations/**/*.sql', 'server/api/**/*.ts']
+paths: ['app/**/*.ts', 'app/**/*.vue', 'supabase/migrations/**/*.sql', 'server/api/**/*.ts', 'server/utils/**/*.ts', 'packages/*/server/api/**/*.ts', 'packages/*/server/utils/**/*.ts', 'template/app/**/*.ts', 'template/app/**/*.vue', 'template/supabase/migrations/**/*.sql', 'template/server/api/**/*.ts', 'template/server/utils/**/*.ts']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -40,13 +40,43 @@ Local edits will be reverted by the next sync.
 2. **NEVER** 留「session 層用 Cookie，但 DB policy 假設 Supabase JWT 存在」的混合狀態——瀏覽器不會因為帶著 Cookie Session 就自動變成 `authenticated` role。
 3. **NEVER** 為了取得 `authenticated` role 而自行簽 PostgREST JWT——同時維護 Cookie Session + JWT 兩套 session lifecycle（rotation、logout、角色同步）的複雜度通常比完整採用 Supabase Auth 更差。
 
+## Server 側：RLS policy 的前提條件
+
+上面幾節管的是「瀏覽器直連 PostgREST」。本節管的是**同一個身分鏈斷裂在 server 側的形態**——它不會回 401，不會有任何錯誤，policy 靜靜地不放行或整個被繞過。
+
+### 命題
+
+RLS policy 裡的 `auth.uid()` 能取到值，前提是**該 request 攜帶 Supabase Auth 簽發的 JWT**。consumer 的 identity 來源若不是 Supabase Auth（Better Auth / nuxt-auth-utils / 自建 session），`auth.uid()` **靜默回 null**——policy 語法正確、`ENABLE ROW LEVEL SECURITY` 也開著，但沒有任何 row 會通過。
+
+若 server 端又是 service-role 連線（`SUPABASE_SECRET_KEY`），情況反過來：service_role 具 `BYPASSRLS`，policy 連評估都不評估，整表放行。
+
+兩者疊加就是最危險的形態：**RLS 已啟用、policy 檔案完整、實際授權為零**。code review 看到 `ENABLE ROW LEVEL SECURITY` 與四條 policy 會判定「有做授權」，但那四條在這個架構下一條都不生效。
+
+### MUST
+
+1. **每一條**引用 `auth.uid()` 的 policy，其所在 repo 的 identity 來源 **MUST** 是 Supabase Auth。（**範圍是所有含 `supabase/migrations/**` 的 consumer 的每一條 policy，不是只檢查新加的那條**——換 auth 策略時既有 policy 會整批失效，而它們不會在 diff 裡出現。）
+2. identity 來源不是 Supabase Auth 時，授權 **MUST** 上移 handler 層（`requireAuth` + ownership 比對 / `requireRole` / 以 `user.id` 夾住查詢條件），RLS **MUST** 改為「啟用 + 零 policy」的 deny-all，並在 migration 內用註解寫明這是 deny-all by design、以及授權在哪一層。
+3. server helper 的**命名 MUST 反映它實際做的事**。回傳 service-role client 的 helper 叫 `getSupabaseWithContext` 這種名字，會讓 handler 作者以為資料範圍已被限縮——實測後果見下方 NEVER 第 1 條的三個事故。
+
+### NEVER
+
+1. **NEVER** 用 `set_app_context` 這類 RPC 寫 GUC 供 policy 讀。`set_config(..., true)` 是 **transaction-local**，而 PostgREST 每個 request 是獨立 transaction——GUC 在 RPC 回傳的當下就失效，policy 裡的 `current_setting('app.*')` 永遠讀不到它。這不是「大部分情況能用」，是**恆定無效**。
+
+   三次獨立實證：<consumer-b>（Sentry <consumer-b>-6，已修，`server/utils/supabase.ts` 留有逐字註解）、nuxt-supabase-starter（2026-08-04，已修）、<consumer-a>（`supabase/migrations/20260318023108_*.sql` 的 `app.current_tenant_id`，**現況仍在**）。
+
+2. **NEVER** 把「policy 存在」當成「授權存在」。判斷授權是否生效要同時回答三件事：identity 來源是不是 Supabase Auth、連線角色是不是 service_role、policy 依賴的是 `auth.uid()` 還是 GUC。三者任一錯位，policy 就是死碼。
+
+3. **NEVER** 因為 policy 看起來沒生效就加 `TO service_role` 的 bypass policy。service_role 本來就有 `BYPASSRLS`，那條 policy 是裝飾品，只會讓後續讀者更難判斷真正的授權在哪。
+
 ## Auth 策略與資料路徑的合法組合
 
-| Auth 策略 | Client 直連 table | Client 直連 Storage | Server API (service_role) |
-| --- | --- | --- | --- |
-| Supabase Auth（JWT 存在） | ✅ 需正確 GRANT + RLS | ✅ Bucket policy | ✅ |
-| nuxt-auth-utils / Better Auth（無 JWT） | ❌ 永遠 anon | ✅ Bucket policy 獨立 | ✅ |
-| 無 auth | ❌ | ⚠️ 只限公開 bucket | ✅ |
+| Auth 策略 | Client 直連 table | Client 直連 Storage | Server API (service_role) | RLS policy 可用 `auth.uid()` |
+| --- | --- | --- | --- | --- |
+| Supabase Auth（JWT 存在） | ✅ 需正確 GRANT + RLS | ✅ Bucket policy | ✅ | ✅ |
+| nuxt-auth-utils / Better Auth（無 JWT） | ❌ 永遠 anon | ✅ Bucket policy 獨立 | ✅ 授權 MUST 在 handler | ❌ 恆 null → policy 死碼 |
+| 無 auth | ❌ | ⚠️ 只限公開 bucket | ✅ | ❌ |
+
+最後一欄是 server 側的判準，與第一欄**互相獨立**：一個 consumer 可以完全不做 client 直連（第一欄 n/a），但只要 migration 裡有 `auth.uid()` policy 而 identity 不是 Supabase Auth，那些 policy 就是死碼。
 
 ## 偵測
 

@@ -205,7 +205,7 @@
     {
       "id": "layered-truth",
       "title": "分層真相／API 契約單一來源",
-      "guidance": "request/response contract 真相須在 shared/schemas/**，shared/types/** 只能相容轉發或做 UI view-model；handler 預設用 getSupabaseWithContext(event)，回傳前須經 response schema parse() 做 drift guard（clade-review-rules.md § 分層真相 / API 契約）。"
+      "guidance": "request/response contract 真相須在 shared/schemas/**，shared/types/** 只能相容轉發或做 UI view-model；handler 預設用 getSupabaseWithContext(event)（modules.auth 為 better-auth / nuxt-auth-utils 的 consumer 等價名為 getAuthedSupabase(event)，兩者皆不做授權，授權在 handler），回傳前須經 response schema parse() 做 drift guard（clade-review-rules.md § 分層真相 / API 契約）。"
     },
     {
       "id": "error-localization",

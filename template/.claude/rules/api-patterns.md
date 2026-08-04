@@ -16,6 +16,7 @@ Local edits will be reverted by the next sync.
 **MUST** use Zod validation for all API inputs — `getValidatedQuery(event, schema.parse)` / `readValidatedBody(event, schema.parse)`
 **MUST** call `requireAuth()` or `requireRole()` before any business logic
 **MUST** use `getSupabaseWithContext(event)` for request-scoped database access
+> **Helper 名依 `modules.auth` 而異**：本檔以 `getSupabaseWithContext(event)` 為 canonical 名。當 consumer 的 `.claude/hub.json` `modules.auth` 是 `better-auth` 或 `nuxt-auth-utils` 時，等價 helper 是 **`getAuthedSupabase(event)`** —— 那些 auth stack 下 Supabase 不簽 JWT，`auth.uid()` 恆 null，helper 只驗 session 不做授權，名字必須說實話。兩者回傳形狀相同（`{ client, user }`）。見 [[auth-data-path-consistency]] § Server 側：RLS policy 的前提條件。
 **MUST** parse outgoing handler payloads with response schema `parse()` before returning
 **NEVER** use `getServerSupabaseClient()` as the default path in request handlers — reserve it for privileged system tasks
 **MUST** log mutations to audit table — 表名與欄位慣例見 `db-schema/<variant>/audit-schema.md`

@@ -59,6 +59,7 @@ Storage 的 RLS 跑在 `storage.objects` 表上，與一般表規則相同：
 ### Service Role Bypass
 
 Server 端用 `getSupabaseWithContext(event)` 或 `useServiceClient()` 取得的 client 具備 `service_role`，**bypass 所有 storage policy**。所有上傳邏輯在 API handler 中明確檢查權限（`requireAuth()` + 業務邏輯），policy 是最後一道防線。
+> **Helper 名依 `modules.auth` 而異**：本檔以 `getSupabaseWithContext(event)` 為 canonical 名。當 consumer 的 `.claude/hub.json` `modules.auth` 是 `better-auth` 或 `nuxt-auth-utils` 時，等價 helper 是 **`getAuthedSupabase(event)`** —— 那些 auth stack 下 Supabase 不簽 JWT，`auth.uid()` 恆 null，helper 只驗 session 不做授權，名字必須說實話。兩者回傳形狀相同（`{ client, user }`）。見 [[auth-data-path-consistency]] § Server 側：RLS policy 的前提條件。
 
 ## 上傳失敗的 Rollback
 

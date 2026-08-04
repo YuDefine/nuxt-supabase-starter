@@ -302,6 +302,22 @@ Local edits will be reverted by the next sync.
            - [ ] #7.5 開 /admin/kiosk-tokens?card_uid=04A1B2C3，row `status=consumed` 且 `consumed_at` 為剛剛時間
       ```
 
+      **Rule 6：需要身分 / 特定 URL 才看得到的 item MUST 落盤結構化 entry**
+
+      **每一個**需要特定身分或特定 URL 才看得到的 item（`[review:ui]` / `[verify:ui]` / `[verify:e2e]`，以及任何描述裡出現登入身分的項），**MUST** 在 propose 當下就把入口寫成結構化 entry，**NEVER** 只留在中文散文裡等 review GUI 用 regex 考古 —— 寫法變體（`E2E-TRAC-PAYROLL` vs `E2E-TRAC_PAYROLL`、具名員工 vs role fixture）永遠追不完，每個追不到的變體都是一次使用者卡在畫面前面。
+
+      ```bash
+      node ~/offline/clade/scripts/manual-entry.ts --repo <repo> --change <change> \
+        --item '#4' --url '<要驗收那一頁的絕對 URL>' --login-as <role> [--login-email <email>] [--viewport 390]
+      node ~/offline/clade/scripts/manual-entry.ts --repo <repo> --change <change> --list   # 寫完 MUST 對帳
+      ```
+
+      - `--url` 填**要驗收的那一頁**，**NEVER** 填 dev-login URL（那是入口不是目的地，登入由 `--login-*` 承載）
+      - `--migrate` 是**既有 change** 的遷移路徑，**NEVER** 當新 change 的正規路徑 —— 它產出的 `source: 'derived'` 標記本身就代表「這筆是考古來的、可能不準」
+      - 落盤後 `audit-manual-executability.ts` 對該 item 不再報 `PROSE-ONLY-ENTRY`
+
+      欄位語義、四種形狀的範本（帶 role / 具名 email / 窄螢幕 viewport / 公開頁 `login: null`）、三條 NEVER 見 cookbook `~/offline/clade/vendor/snippets/manual-review-entry/`。
+
       完整規約見 `.claude/rules/manual-review.md`「Item Kind Marker」+「Kind 分類指引」+「`[review:ui]` 純功能驗證 step actionability」+ `.claude/rules/ux-completeness.md`「必填 Backend-only Manual Review 規約」。
 
    5.6 **Artifact 語言遵循 check**：
