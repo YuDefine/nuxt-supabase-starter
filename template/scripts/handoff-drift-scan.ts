@@ -32,7 +32,7 @@
  * (<consumer-b> 2026-05-24 warehouse-items-tool-aggregation incident).
  *
  * HANDOFF.md health triggers (independent of worktrees):
- *   5. handoff-size-exceeded — HANDOFF.md > max_kb threshold (default 30 KB,
+ *   5. handoff-size-exceeded — HANDOFF.md > max_kb threshold (default 35 KB,
  *      env CLADE_HANDOFF_MAX_KB)
  *   6. handoff-lines-exceeded — HANDOFF.md > max_lines threshold (default 400,
  *      env CLADE_HANDOFF_MAX_LINES)
@@ -69,7 +69,12 @@
  */
 
 const COMMIT_DISTANCE_THRESHOLD_DEFAULT = 50
-const HANDOFF_MAX_KB_DEFAULT = 30
+// 35 = 30（原意：人寫的內容上限）+ 5（機械段實測 4.8 KB 無條件進位）。
+// HANDOFF 現有三段是機械產生、不是 rotate 的對象（rotate 只搬 narrative，機械段搬走下輪
+// 又重寫）：work-loop-status ~2.4 KB、worktree/stash ~1.0 KB、review-gui ~1.5 KB。門檻訂
+// 30 時這些段還不存在，它們是後來悄悄吃掉那個額度的。調到 35 把原意還原，且報告的 KB 數
+// 仍等於讀者實際要讀的量 —— 這是 `handoff-size` 這個 check 唯一的用途（TD-386）。
+const HANDOFF_MAX_KB_DEFAULT = 35
 const HANDOFF_MAX_LINES_DEFAULT = 400
 const HANDOFF_NARRATIVE_AGE_DAYS_DEFAULT = 3
 const HANDOFF_ACTIVE_AGE_DAYS_DEFAULT = 14

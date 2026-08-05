@@ -59,11 +59,23 @@ Local edits will be reverted by the next sync.
 
 - commit 一律 `git commit --only -m "…" -- <你改的檔案路徑>`；NEVER `git add` + `git commit` 兩段式
 - NEVER `git push --force` / `--force-with-lease`
-- NEVER 改標準層：rules/、plugins/hub-core/、CLAUDE.md、任何帶 `🔒 LOCKED — managed by clade` banner 的檔
+- 標準層（rules/、plugins/hub-core/、CLAUDE.md）只改**本 brief 所有權清單逐條列出的**那幾個檔；
+  清單沒列的標準層檔 NEVER 改。帶 `🔒 LOCKED — managed by clade` banner 的檔一律 NEVER 改，
+  清單列了也不例外（那是投影不是源）
 - NEVER 操作本 repo 以外的目錄
 - NEVER 執行不可逆動作：publish、propagate、prod 部署、刪除 branch / tag / 遠端資料、任何花錢的 API
 - 只改 brief 明列的檔案路徑。需要動 scope 外的檔 → 停下來回報，NEVER 自己動手（主線會跑 scope-verify 對照）
 ```
+
+**授權邊界由 brief 的所有權清單承載，不由路徑黑名單承載。** 這是 2026-08-05 從路徑制改過來的：
+護欄 5 已授權「標準層可以改，改完 MUST 走 `/clade-publish`」，而舊版第 3 行寫死
+`NEVER 改標準層` —— round 11 兩條要改標準層的 dispatch 照舊版逐字貼，brief 會同時說「做這 12 個
+`rules/` / `plugins/` 檔」和「NEVER 改 `rules/` / `plugins/`」，合規的 subagent 只能停手回報。
+主線當時是自行在 brief 裡加 carve-out 才派得出去，而 § C 的存在理由正是「不可即興改寫」。
+
+因此主線 **MUST** 確保 brief 帶一份逐條列出的所有權清單（`subagent-scope-discipline.md`
+§ 併發編輯協議 本來就要求兩份清單）——**NEVER** 只寫「你可以改標準層」這種沒有清單的授權，
+那等於把邊界還原成沒有邊界。
 
 ---
 
