@@ -74,6 +74,8 @@ Local edits will be reverted by the next sync.
 
 11. **Negative search 不成立為證據（hard rule）**：下「零命中 / 不存在 / 只有 N 個」的結論前，**MUST** 先用一個已知會命中的樣本驗過 pattern（known-positive control），並在結論裡寫出「此 pattern 對 `<已知樣本>` 命中」——寫不出來，零命中就不是證據。**NEVER** 把「我 grep 過了」當成 absence 的證明：pattern 寫錯、資料形狀誤判（表格儲存格繼承 / 多種寫法 / 跨行屬性 / 別名 import）、未言明的假設偷偷收窄範圍，三者的輸出**都是零命中**，跟真的不存在外觀完全相同，而換一個工具重跑同一個 pattern 驗不到任何一項。有 structured output（`--json` / `--format json`）時優先用它取代文字 grep；更前一步是先問「有沒有不需要數的判準」（例：gate 已設 `severity: CRITICAL,HIGH`，則輸出的每一條依定義都是 HIGH，根本不必數）。（per [[pitfall-narrow-grep-absence-treated-as-proof]]）
 
+    **時間窗查詢是本條最常被違反的形態**：`docker logs` / `docker events` / `journalctl` 的 `--since` / `--until` 收到**裸** wall clock 字串時，以**主機本地時區**解讀，exit code 恆 0、無 warning。所以**每一次**時間窗查詢都 MUST 做兩件事——(a) 先用寬鬆窗撈到一筆 known-positive control，確認這個查詢真的看得到東西，再收窄；(b) 絕對時間**MUST** 帶時區後綴（`2026-08-05T10:00:00Z`），寫不出時區就改用相對時間（`--since 30m`）。**NEVER** 把裸時間字串的空輸出當成「那段期間沒發生」：時區平移的空輸出與真的沒有，外觀完全相同，而重跑同一條指令兩者都不會變。（per [[pitfall-docker-logs-absolute-time-parsed-as-host-local-timezone]]）
+
 12. **「這個帳號能不能登入 / 能不能管理」MUST 逐層驗，不從單層外推**：回答任何帳號可用性問題前，**MUST** 分別驗證五層並逐層寫出結論——(a) 該人在該環境是 active（未離職 / 未停用）、(b) 登入 provider 與 route 對該帳號開放、(c) platform role 是 active、(d) session 真的建得起來、(e) 登入後的 UI 與 API permission 確實放行。**NEVER** 因為 DB 有一筆 employee row、或某份文件列了那個 email，就宣稱帳號可用——這兩者都只證明 (a) 的一部分，跟 (b)–(e) 沒有任何蘊含關係。（<consumer-a> 2026-07-19 實證）
 
 13. **改工具定義前 MUST 從實際生效的命令反查 source**：要改一個 skill / script / hook 的行為時，**MUST** 先確認「執行時真正被讀到的是哪個檔」——從實際跑的命令、程序的 argv、或該工具自己印出的路徑往回查。**NEVER** 從執行環境推定 source：工具跑在哪台主機、哪個容器、哪個 VM，跟它的定義檔放在哪是兩件無關的事。改錯檔的輸出跟改對檔一樣是「已修改」，只有下次執行才會發現沒生效。（<consumer-a> 2026-07-25 實證：目標跑在 Proxmox VM 上，於是把主機管理 skill 當成更新目標，實際生效的是另一支 GUI bridge skill）
