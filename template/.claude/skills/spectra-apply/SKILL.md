@@ -491,6 +491,14 @@ If there is no AskUserQuestion tool available, present options as plain text and
         - When TDD is not enabled: after implementing, verify the code handles the example's input→output correctly
         - Example tables map to parameterized tests — one test per row
           Do NOT invent additional test values beyond what the spec examples provide without reason. The examples ARE the agreed specification.
+        - **追溯鍵**（clade fork addition）：從 Example 導出的 test **MUST** 帶一行標記
+          `// spec: <change-name> :: <Example heading 逐字>`（comment 語法依該 test 檔語言；
+          heading 逐字複製，含 CJK 與標點，只有前後空白會被正規化）。Example table → `test.each`
+          時標記寫在 `test.each` 之前一行，整張表算一個鍵。
+          `tdd: true` 的專案，沒有標記的 Example 會在 `/spectra-verify` 判 **CRITICAL 擋 archive**
+          （`tdd` 未開則是 WARNING）。轉寫 pattern 見 `vendor/snippets/bdd-traceability/README.md`。
+          **NEVER** 靠「test 用了 example 的相同輸入值」當追溯證據——那是文字啟發式，值被抽成
+          constant 或寫法不同就 miss。
    - Make the code changes required
    - Keep changes minimal and focused
    - **Verify before marking done** — re-read the task description from the tasks file AND the relevant Implementation Contract content from design.md. For each requirement stated in the task description and each contract item that covers this task's scope, confirm it is addressed by your changes. Confirm the verification target named by the task (test name, CLI invocation, analyzer check, or manual assertion) actually passes. If any contract item, task requirement, or verification target is missing or failing, implement/fix it now. Do not mark the task complete until every part of the description is covered and the contract for this task is satisfied.

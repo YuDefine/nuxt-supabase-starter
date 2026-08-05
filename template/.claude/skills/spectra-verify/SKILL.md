@@ -158,11 +158,21 @@ Verify that an implementation matches the change artifacts (specs, tasks, design
        - Add WARNING: "Scenario not covered: <scenario name>"
        - Recommendation: "Add test or implementation for scenario: <description>"
 
-   **Example Traceability**:
-   - For each `##### Example:` in delta specs:
-     - Check if a test exists that uses the same input values from the example's GIVEN/WHEN/THEN
-     - If the example has a table, check if parameterized tests cover all rows
-     - If examples appear untested, add WARNING: "Spec example not covered by test: <example name>" with recommendation to add a test using the GIVEN/WHEN/THEN from the example
+   **Example Traceability**（clade fork addition — 追溯鍵比對，非文字啟發式）:
+
+   追溯鍵是 test 檔內的逐字標記 `// spec: <change-name> :: <Example heading 逐字>`，比對是字串相等。
+   **NEVER** 改用「test 有沒有用到 example 的相同輸入值」那種比對——spec 寫 `1_000` 而 test 寫 `1000`、
+   或值被抽成 constant 就 miss，假陽性會教會 consumer 忽略 CRITICAL。
+
+   - 跑 `node ~/offline/clade/scripts/audit-bdd-traceability.ts --repo . --change <change-name> --json`
+     拿 `missing` / `orphan` 明細（該 script 不執行任何測試，純靜態讀）。clade 路徑不存在時退回手動：
+     抽 delta spec 的 `##### Example:` 標題集合 × 掃 test 檔的 `spec: <change> :: <title>` 標記集合，做集合差。
+   - **Severity 依 `.spectra.yaml` 的 `tdd` 決定**：
+     - `tdd: true` → 每個 `missing` 加 **CRITICAL**：`Spec example has no traceable test: <change> :: <example heading>`
+       Recommendation: 對應 test 加一行 `// spec: <change> :: <Example heading 逐字>`（heading 逐字複製，含 CJK）。
+     - `tdd` 未開 → 同樣措辭但加 **WARNING**。
+   - 每個 `orphan`（標記對不到任何 Example）一律加 **WARNING**：`Traceability marker points to no spec example: <key>` —— 多半是 heading 改字沒同步改標記。
+   - **Gate 範圍只咬本次 change 的 delta spec**（`openspec/changes/<change>/specs/**`）。`openspec/specs/` 的歷史存量 **NEVER** 進這個判定——存量覆蓋率永遠是紅的，對它 gate 就是製造死指標。
 
 7. **Verify Coherence**
 
