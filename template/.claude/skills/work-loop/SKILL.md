@@ -1,6 +1,6 @@
 ---
 name: work-loop
-description: "Use when 使用者要把待辦自主推進（「自動推」「把待辦跑完」「無人值守推進」）——spectra change、HANDOFF、tech-debt、ROADMAP 全在 scope 內，或 routine --unattended fire。NOT for 單次盤點交接（用 /handoff）、逐項拍板（用 /goal）、interval 盲跑（用 /loop）。"
+description: "Use when 使用者要把待辦自主推進（「自動推」「把待辦跑完」「無人值守推進」）——spectra change、HANDOFF、tech-debt、ROADMAP 全在 scope 內，或 runner.sh --unattended fire。NOT for 單次盤點交接（用 /handoff）、逐項拍板（用 /goal）、interval 盲跑（用 /loop）。"
 effort: xhigh
 metadata:
   author: clade
@@ -17,9 +17,9 @@ Local edits will be reverted by the next sync.
 
 # /work-loop — 待辦自主推進迴圈
 
-> 2026-08-05 由 `/change-loop`（含 `--turbo`）與 `/handoff-loop` 合併而成。舊名已移除，無相容 stub——routine prompt 若仍寫舊名 MUST 改為 `/work-loop`。
+> 2026-08-05 由 `/change-loop`（含 `--turbo`）與 `/handoff-loop` 合併而成。舊名已移除，無相容 stub。
 
-本 skill 是 loop 四型分類中的 **proactive loop**——trigger 交給 `/loop`、routine 或 `runner.sh`，工作清單交給 scan 自己找。四型分類與通用方法論見 cookbook `vendor/snippets/loop-engineering/`。
+本 skill 是 loop 四型分類中的 **proactive loop**——trigger 交給 `runner.sh` 或 `/loop`，工作清單交給 scan 自己找。四型分類與通用方法論見 cookbook `vendor/snippets/loop-engineering/`。
 
 **沒有「走哪一支」的判定。** repo 有沒有 `openspec/`、待辦是 spectra change 還是 tech-debt 條目，都由 Step 2 的 scan 結果決定路由——無 `openspec/` 的 repo 掃出來的 spectra 段就是空的，**這是正常的，不是 scan 失敗**。
 
@@ -43,7 +43,7 @@ $ARGUMENTS
 
 ### Flags
 
-- `--unattended`（routine / runner fire 帶）：**3-item cap**（避免 runaway）+ **禁止 `AskUserQuestion`**。不帶時無 item cap，改由 Step 6 的 round cap / fingerprint 控制。
+- `--unattended`（`runner.sh` 每輪固定帶）：**3-item cap**（避免 runaway）+ **禁止 `AskUserQuestion`**。不帶時無 item cap，改由 Step 6 的 round cap / fingerprint 控制。
 - 使用者說「自動推」「把待辦跑完」「持續做」「不要停」「無人值守」→ 等同要求 continuous（見下）。
 
 **沒有 `--turbo`。** 非 spectra 待辦（HANDOFF / tech-debt / ROADMAP）是**預設 scope**，不需要任何 flag 開啟。
@@ -89,7 +89,7 @@ $ARGUMENTS
 
 ### 互斥鎖
 
-單輪可能耗時數小時 > routine 間隔，無鎖會疊第二輪。進 Step 1 前：
+單輪可能耗時數小時，無鎖會讓下一次觸發疊上第二輪。進 Step 1 前：
 
 ```bash
 LOCK="$(git rev-parse --show-toplevel)/.spectra/work-loop.lock"
@@ -395,7 +395,7 @@ git show --stat HEAD | tail -3   # 驗 scope
 | [dispatch-topology.md](reference/dispatch-topology.md) | 分組（Step 3.3） |
 | [harvest.md](reference/harvest.md) | 每個 notification 到達時（Step 5） |
 | [handoff-template.md](reference/handoff-template.md) | 寫 HANDOFF status 段前（Step 7.2） |
-| [routine-and-relations.md](reference/routine-and-relations.md) | 建 routine、或查與其他 skill 的邊界 |
+| [skill-relations.md](reference/skill-relations.md) | 查與其他 skill 的邊界、scope 排除清單 |
 
 ## 與其他 skill 的銜接
 

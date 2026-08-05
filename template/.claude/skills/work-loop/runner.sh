@@ -26,11 +26,30 @@ REPO="$(git rev-parse --show-toplevel 2>/dev/null)" || {
 STATE="$REPO/.spectra/work-loop-state.json"
 LOCK="$REPO/.spectra/work-loop.lock"
 LOG_DIR="$REPO/.spectra/work-loop-logs"
+# worktree 母目錄，與 vendor/scripts/wt-helper.ts:779 的 `<repo>-wt` 慣例對齊（推導不寫死）。
+# 它必須進 --add-dir —— 見下方 PERM_MODE 註解。
+#
+# NEVER 從 `$REPO`（`--show-toplevel`）推：在 linked worktree 內跑時它回的是 worktree 自己，
+# 推出來的是 `<repo>-wt/<slug>-wt` 這種不存在的路徑，而 `mkdir -p` 會**把它建出來**，於是
+# 錯誤不報錯、只是 --add-dir 放行了一個空目錄（2026-08-05 首版 dry-run 當場踩到）。
+# `--git-common-dir` 不論從哪個 worktree 跑都指向主 worktree 的 `.git`。
+MAIN_WT="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
+WT_PARENT="$(dirname "$MAIN_WT")/$(basename "$MAIN_WT")-wt"
 
 MAX_ROUNDS=20
 DRY_RUN=0
 # acceptEdits 是刻意的預設：runner 要能無人值守跑，但 bypassPermissions 會連
 # 破壞性指令一起放行。要更寬鬆 MUST 由使用者顯式指定，NEVER 在腳本裡預設。
+#
+# `--print` 把可寫目錄 pin 在 repo root，於是主線寫不進 `<repo>-wt/`，而
+# `.claude/rules/local/clade-home-worktree.md` 要求「≥2 檔」或「最後要 publish」的工作
+# MUST 走 worktree（`sync-rules.ts` 從 **working tree** 讀源檔 —— main 上未 commit 的內容
+# 等同已發佈）。兩者相撞的結果是 loop 推不動任何散播資產，只剩 `docs/` 能動：2026-08-05
+# round 10 因此把 TD-387 的 27 處替換與 handoff SKILL.md 拆檔兩項都判 blocked（[[TD-393]]）。
+#
+# 修法是**只放行 worktree 母目錄這一個路徑**，permission mode 維持 acceptEdits。
+# NEVER 改用 `--dangerously-skip-permissions` 來解這件事 —— 那是把整個權限面開到最大去換
+# 一個目錄的寫入權，兩者成本差一個量級（Charles 2026-08-05 拍板 1a 而非 1b）。
 PERM_MODE="acceptEdits"
 
 while [ $# -gt 0 ]; do
@@ -43,6 +62,9 @@ while [ $# -gt 0 ]; do
 done
 
 mkdir -p "$LOG_DIR"
+# --add-dir 對不存在的路徑會拒絕啟動，而 `<repo>-wt/` 在所有 worktree 都 merge-back 之後
+# 是空的、也可能整個被清掉 —— 先建起來，否則 runner 會在「剛好沒有進行中 worktree」時掛掉。
+mkdir -p "$WT_PARENT"
 
 stopped_reason() {
   [ -f "$STATE" ] || return 1
@@ -76,7 +98,7 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
   log="$LOG_DIR/round-$ts.log"
 
   # 每輪都是新 process = 新 context。--print 跑完就退出。
-  cmd=(claude --print --permission-mode "$PERM_MODE" "/work-loop --unattended")
+  cmd=(claude --print --permission-mode "$PERM_MODE" --add-dir "$WT_PARENT" "/work-loop --unattended")
 
   if [ "$DRY_RUN" = 1 ]; then
     echo "[dry-run] round $((before + 1)): ${cmd[*]}"
