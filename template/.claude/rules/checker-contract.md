@@ -100,8 +100,10 @@ completeness: <complete|partial|unknown>
 node scripts/sync-something.ts | head -5
 
 # ✅ 先落檔再讀，是「想看輸出」與「不截斷上游」唯一相容的寫法
-node scripts/sync-something.ts > /tmp/out.log 2>&1; echo "EXIT=$?"
-head -20 /tmp/out.log
+#    落檔路徑用 mktemp 產唯一名（固定路徑是全機器共用，會讀到別 session 的輸出）
+OUT="$(mktemp -t sync-out.XXXXXXXXXX)"
+node scripts/sync-something.ts > "$OUT" 2>&1; echo "EXIT=$?"
+head -20 "$OUT"
 ```
 
 兩條紀律：

@@ -64,18 +64,19 @@ commit 0-A 的標準入口是 `plugins/hub-core/scripts/codex-review-safe.sh`（
 **替代做法**：用 `codex exec` + review prompt 取代：
 
 ```bash
-# 1. 收集 diff
-git diff --cached > /tmp/codex-review-diff.patch
-git diff >> /tmp/codex-review-diff.patch
+# 1. 收集 diff（MUST mktemp 唯一路徑——固定路徑是全機器所有 session 共用，會互相覆寫）
+PATCH="$(mktemp -t codex-review-diff.XXXXXXXXXX)"
+git diff --cached > "$PATCH"
+git diff >> "$PATCH"
 git ls-files --others --exclude-standard | while read f; do
-  echo "=== NEW FILE: $f ===" >> /tmp/codex-review-diff.patch
-  head -200 "$f" >> /tmp/codex-review-diff.patch
+  echo "=== NEW FILE: $f ===" >> "$PATCH"
+  head -200 "$f" >> "$PATCH"
 done
 
 # 2. 用 codex exec 跑 review
 echo "Review the following uncommitted changes for bugs, security issues, and correctness problems. Output prioritized findings with severity [P1-P3], file path, and line range. If no issues, output 'No issues found.'
 
-$(cat /tmp/codex-review-diff.patch)" | \
+$(cat "$PATCH")" | \
 codex exec \
   --model gpt-5.6-sol \
   --dangerously-bypass-approvals-and-sandbox \

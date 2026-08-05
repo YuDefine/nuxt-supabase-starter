@@ -878,16 +878,18 @@ structured-errors、audit、error-handling 五類 check）。本次 diff 動到 
 ### Step 3 — 跑 gate（預設 strict）
 
 ```bash
-git status --porcelain | awk '{print $NF}' > /tmp/evlog-map-changed.txt
+# MUST mktemp 唯一路徑——固定路徑是全機器所有 consumer 共用，多 session 會互相覆寫
+CHANGED="$(mktemp -t evlog-map-changed.XXXXXXXXXX)"
+git status --porcelain | awk '{print $NF}' > "$CHANGED"
 node .github/actions/evlog-map-gate/gate.ts \
   --baseline evlog.map.json \
-  --changed-files /tmp/evlog-map-changed.txt \
+  --changed-files "$CHANGED" \
   --mode min-score
 
 # layer monorepo：--cwd 可重複，每個 layer 各自帶 <layer>/evlog.map.json baseline
 node .github/actions/evlog-map-gate/gate.ts \
   --cwd packages/core --cwd packages/ehr --cwd packages/trac \
-  --changed-files /tmp/evlog-map-changed.txt
+  --changed-files "$CHANGED"
 ```
 
 **strict（預設）兩條判定**，任一違反即 exit 1：**整個 repo 的每一個 entry point 零失敗 check**、**零 suppression**。判定不看全域整數分——那個數字被 `Math.round` 與 suppression 稀釋，不能當 boolean。

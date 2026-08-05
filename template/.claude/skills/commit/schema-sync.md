@@ -53,7 +53,9 @@ git diff --name-only HEAD -- "$TYPES" supabase/migrations/ | grep -q . && echo H
 
 ```bash
 # 1. 先把 working tree 的版本（含 staged + unstaged）拷一份備查
-cp "$TYPES" /tmp/types-before-reset.ts
+#    MUST mktemp 唯一路徑——固定路徑是全機器所有 consumer 共用，會拿到別 repo 的 types
+TYPES_BEFORE="$(mktemp -t types-before-reset.XXXXXXXXXX)"
+cp "$TYPES" "$TYPES_BEFORE"
 
 # 2. 重置 DB + 從 migrations 重新生成 types（自動偵測 LXC/Docker 模式）
 if node -e "process.exit(require('./package.json').scripts?.['db:reset'] ? 0 : 1)" 2>/dev/null; then
@@ -66,9 +68,9 @@ else
 fi
 
 # 3. 比對：working tree 版本 vs migrations 推導版本
-diff /tmp/types-before-reset.ts "$TYPES"
+diff "$TYPES_BEFORE" "$TYPES"
 ```
 
 有差異 → **停止 commit**，提示使用者依差異建立對應 migration 或還原 `$TYPES`。
 
-> **遠端 LXC 模式注意**：`pnpm db:types` 通常**直接寫入** `$TYPES` 不輸出 stdout，所以**不能**用 `> /tmp/...` 重導向取值（一定要先 `cp` 備份再 `pnpm db:reset`）。
+> **遠端 LXC 模式注意**：`pnpm db:types` 通常**直接寫入** `$TYPES` 不輸出 stdout，所以**不能**用 `> "$TYPES_BEFORE"` 重導向取值（一定要先 `cp` 備份再 `pnpm db:reset`）。
