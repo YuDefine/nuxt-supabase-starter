@@ -1,6 +1,6 @@
 <!--
 🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/change-loop/
+Source: plugins/hub-core/skills/work-loop/
 Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
@@ -31,14 +31,15 @@ Local edits will be reverted by the next sync.
 ### 每收到一個 notification → 立即處理（收割 SOP）
 
 1. **驗收 agent 結果**：`git -C <worktree> log --oneline` + `git -C <worktree> status --short` + 讀 `WORKTREE-BRIEF.md` 的 Progress / frontmatter status——agent 的完成宣稱是未驗證主張（per [[agent-routing]] § Subagent 回報契約），MUST 有 commit 佐證
-2. **高擴散半徑 change MUST 派 checker**：該 dispatch 的 change 觸及跨 consumer 共用 SoT（`rules/core/` / `vendor/` / `hub-*` skill / `claude-md/`）或高擴散半徑 consumer 資產（DB migration / auth 路徑 / 多處 import 的共用 util / 對外 API contract）時，依 [[checker-subagent]] 派一個 **fresh-context** checker subagent（只給 diff + spec 的驗收標準；gate 全綠是派 checker 的**前置條件**，NEVER 塞進 brief 當判定材料），拿 PASS / FAIL。**phase 數不是判準**——3 個 phase 的純 UI 調整不派，1 個 phase 的 migration 要派。主線自己讀一遍 diff **不算**複核——主線是派工方，帶著「我知道我要它做什麼」的記憶，正是 Iron Law 指的有偏差裁判。FAIL 的 blocker finding 修完 MUST 重派新 checker
-3. **更新 HANDOFF progress 段**：`📊 Progress` 條目即時反映該 change 的推進
-4. **Re-scan**：重跑 `handoff-scan.ts --json`
-5. **檢查新 actionable**：bucket 位移（`applyInProgress` → `readyForEvidence` / `ready` / `done`）= 新 actionable → 回 Step 2 排序 + 分組 → 依組別 dispatch，計入 unattended cap
-6. **更新 in-flight ledger**：移除已處理的 agent；步驟 5 的新 dispatch 記進 ledger
-7. **補滿扇出組**：扇出 in-flight < 4 且扇出組還有未 dispatch 的 item → 補一個（4 只計扇出組，dev-port dispatch 另計）
+2. **驗 scope**：`node ~/offline/clade/scripts/scope-verify.ts --repo <repo> --scope '<brief 宣告的每一條路徑>'`。scope 外的**實質**改動 → `git checkout HEAD -- <file>` revert 後 re-run 該 agent 交付的驗證（per [[subagent-scope-discipline]]）。subagent 自報「No changes outside scope」是未驗證主張，**NEVER** 採信
+3. **高擴散半徑 change MUST 派 checker**：該 dispatch 的 change 觸及跨 consumer 共用 SoT（`rules/core/` / `vendor/` / `hub-*` skill / `claude-md/`）或高擴散半徑 consumer 資產（DB migration / auth 路徑 / 多處 import 的共用 util / 對外 API contract）時，依 [[checker-subagent]] 派一個 **fresh-context** checker subagent（只給 diff + spec 的驗收標準；gate 全綠是派 checker 的**前置條件**，NEVER 塞進 brief 當判定材料），拿 PASS / FAIL。**phase 數不是判準**——3 個 phase 的純 UI 調整不派，1 個 phase 的 migration 要派。主線自己讀一遍 diff **不算**複核——主線是派工方，帶著「我知道我要它做什麼」的記憶，正是 Iron Law 指的有偏差裁判。FAIL 的 blocker finding 修完 MUST 重派新 checker
+4. **更新 HANDOFF progress 段**：`📊 Progress` 條目即時反映該 change 的推進
+5. **Re-scan**：重跑 `handoff-scan.ts --json`
+6. **檢查新 actionable**：bucket 位移（`applyInProgress` → `readyForEvidence` / `ready` / `done`）= 新 actionable → 回 Step 3 分類 + 分組 → 依組別 dispatch，計入 unattended cap
+7. **更新 in-flight ledger**：移除已處理的 agent；步驟 6 的新 dispatch 記進 ledger
+8. **補滿扇出組**：扇出 in-flight < 4 且扇出組還有未 dispatch 的 item → 補一個（4 只計扇出組，dev-port dispatch 另計）
 
-### 進 Step 5 的條件（兩者**同時**成立）
+### 進 Step 6 停止判定的條件（兩者**同時**成立）
 
 - In-flight ledger = 0（所有派出的 agent 已回報並走完收割 SOP）
 - 最後一次 re-scan 後四組皆空，且 HANDOFF 補件來源也空
@@ -50,4 +51,4 @@ Local edits will be reverted by the next sync.
 1. Loop dispatch 4 個 background agent：3 個 `/wt /spectra-apply` worktree（`admin-permission-gate-alignment` / `admin-dashboard-action-center` 等）+ 1 個 Fable dump script
 2. ❌ 不收割的行為：可 dispatch 的 item 都派完 → 主線寫 HANDOFF → 釋放 lock → 結束 loop
 3. Agent 陸續完成（`admin-permission-gate-alignment` Phase 1-6 done、`admin-dashboard-action-center` Phase 1-5 done、v1 migration 14/14）——但 loop 已死，沒人 re-scan，user 被迫手動下指令觸發 archive / commit
-4. ✅ 收割行為：每收到一個 agent notification 就驗收 + re-scan，`applyInProgress` 位移成可 archive → 立即 dispatch archive + commit；期間主線繼續做序列組與 turbo work；in-flight 歸零且四組皆空後才寫 HANDOFF + 釋放 lock
+4. ✅ 收割行為：每收到一個 agent notification 就驗收 + re-scan，`applyInProgress` 位移成可 archive → 立即 dispatch archive + commit；期間主線繼續做序列組與非 spectra work；in-flight 歸零且四組皆空後才寫 HANDOFF + 釋放 lock

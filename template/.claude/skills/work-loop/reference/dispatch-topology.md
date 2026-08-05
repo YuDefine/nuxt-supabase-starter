@@ -1,6 +1,6 @@
 <!--
 🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/change-loop/
+Source: plugins/hub-core/skills/work-loop/
 Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
@@ -23,10 +23,10 @@ Step 2 產出的**不是**一條佇列，是**四組**併發特性不同的工�
 
 | 組 | 成員 | 併發 | 獨占的資源 |
 | --- | --- | --- | --- |
-| **扇出組** | 3f applyInProgress、3h parked、turbo code task、**不需要 dev server 的** 3a / 3b（純 backend fix、annotation 補寫） | **同時 in-flight ≤ 4** | 無（各自 worktree） |
+| **扇出組** | 3f applyInProgress、3h parked、非 spectra code task、**不需要 dev server 的** 3a / 3b（純 backend fix、annotation 補寫） | **同時 in-flight ≤ 4** | 無（各自 worktree） |
 | **dev-port 組** | 3a / 3b 中**需要起 dev server** 的 item、Design Review 截圖 | **1** | consumer 的 dev port（SoT：`registry/consumers.json` 的 `dev_ports`） |
 | **main 組** | 3z done、3c awaitArchiveWalkthrough、3d ready(userActionPending=0) | **1** | main worktree（archive → merge-back → commit → push） |
-| **主線即時組** | 3g healthCheckNeeded、3e ready(userActionPending>0) 的 Claude-actionable 檢查、3i applyBlocked 評估、3j awaitingUserDecision 評估、turbo investigation | 主線自己做，不 dispatch | 無 |
+| **主線即時組** | 3g healthCheckNeeded、3e ready(userActionPending>0) 的 Claude-actionable 檢查、3i applyBlocked 評估、3j awaitingUserDecision 評估、非 spectra investigation | 主線自己做，不 dispatch | 無 |
 
 **每一個** priority item 在 dispatch 前都要落進上表某一組，不是只對前幾個分類。
 

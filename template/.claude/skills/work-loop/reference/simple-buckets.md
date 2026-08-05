@@ -1,6 +1,6 @@
 <!--
 🔒 LOCKED — managed by clade
-Source: plugins/hub-core/skills/change-loop/
+Source: plugins/hub-core/skills/work-loop/
 Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
@@ -8,7 +8,7 @@ Local edits will be reverted by the next sync.
 # 固定步驟 bucket（3z / 3c / 3d / 3h / 3g）
 
 > 本檔是 `SKILL.md` Step 3 的 branch 分頁，收錄**步驟固定、無分支判斷**的五個 bucket。命中哪一個就讀哪一節，其餘不必讀。
-> 需要判斷的 bucket 不在這裡：`3a` / `3b` / `3e` / `3f` 留在 SKILL.md 主層，`3i`/`3j` 見 [blocker-evaluation.md](blocker-evaluation.md)，`3t` 見 [turbo-dispatch.md](turbo-dispatch.md)。
+> 需要判斷的 bucket 不在這裡：`3a` / `3b` / `3e` / `3f` 留在 SKILL.md 主層，`3i`/`3j` 見 [blocker-evaluation.md](blocker-evaluation.md)，非 spectra candidate 見 [non-spectra-dispatch.md](non-spectra-dispatch.md)。
 
 ## Archive → ship 三條路徑（3z / 3c / 3d）
 

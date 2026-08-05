@@ -1,0 +1,93 @@
+<!--
+🔒 LOCKED — managed by clade
+Source: plugins/hub-core/skills/work-loop/
+Edit at: $CLADE_HOME
+Local edits will be reverted by the next sync.
+-->
+
+# 非 spectra candidate 的分類與 dispatch
+
+> 前身是 `change-loop/reference/turbo-dispatch.md`（`--turbo` 專屬）。合併成 `/work-loop` 後
+> `--turbo` flag 消失、非 spectra 待辦成為預設 scope，本檔改為 **Step 3.1b 的分類依據**。
+> 分類表、skip 窮舉、逐字藉口實錄**原樣保留**——它們對應的 pitfall 沒有失效。
+
+適用對象：Step 2 candidate list 裡 source 為 `handoff` / `techdebt` / `roadmap` 的每一條。
+
+## 掃描來源（Step 2 已合併，此處只記段落判準）
+
+1. **`HANDOFF.md`** —— 段落名因 consumer 而異，靠 `##` / `###` heading 辨識：
+   `## 你接下來要做的事` / `## Next Steps` / `## Outstanding` / `## Follow-up` / `## In Progress`
+   - 每個 heading 下的 `- [ ]` 未勾項 = 一個 candidate；已勾 `- [x]` 跳過
+   - 純文字段落（無 checkbox）視為單一 candidate
+2. **`docs/tech-debt.md`** —— 從 scan 的 `techDebtHygiene.raw` 取，**NEVER 整讀主檔**
+3. **`openspec/ROADMAP.md`**（存在時）：
+   - `## Next Moves` 下的 `###` 子段（每個子段 = 一個 candidate）
+   - `## Active Changes` 下的 `### In progress` / `### Draft`（若未被 spectra scan 涵蓋）
+
+## Spectra change association（進入分類表前 MUST 跑）
+
+Step 2 scan 的 `entries[].name` + parked change names 合併成 active change name set。對 **每一個**
+非 spectra candidate，若其文字含該 set 中任一 name（**word boundary match，非 substring**；例如
+change name `fix-pinia` 命中「fix-pinia 的 Phase 3」但不命中「fix-pinata」）→ 改判為 `spectra`
+source，走 § 3.1a bucket 路由的 `applyInProgress`。
+
+此步驟在分類表之前跑，命中的 candidate **NEVER** 再走下方分類表的 code task / investigation /
+blocked / ambiguous 路由。
+
+**為什麼**：HANDOFF 條目通常用自然語言引用 change name（「完成 fix-pinia Phase 3」「A6 E2E 需要修」），
+不會寫死 `/spectra-apply fix-pinia`。靠字面路徑比對會漏掉這些 → 降級成 ad-hoc brief dispatch →
+spectra-apply 的 phase 結構、evidence 收集、verify cycle 全部丟失（2026-07 <consumer-a> 實證：A6 live E2E +
+fix-pinia remaining phases 被分類為 code task / investigation → 深度不足 → user 必須停 loop 開
+focused spectra-apply session 手動推）。
+
+## 分類與 dispatch
+
+| 類型 | 辨識方式 | Dispatch |
+| --- | --- | --- |
+| spectra change 引用 | 內容含 `/spectra-apply <name>` 或 `openspec/changes/<name>`，**或**文字命中 § Spectra change association 的 active change name | 走 3.1a `applyInProgress`（已被 Step 2 spectra source 涵蓋則跳過，防重複 dispatch） |
+| code task（有明確檔案路徑 / 行為描述） | 含 `server/` / `app/` / `scripts/` / `.vue` / `.ts` / `.mjs` 等路徑，或含動詞（「改」「加」「修」「移除」「重構」） | worktree 內直接實作：`/wt <slug>: <brief>`，brief 從條目萃取 |
+| investigation / research | 含「調查」「確認」「檢查」「分析」「audit」 | 主線即時組直接執行（不需 worktree），結果寫回對應條目 |
+| blocked / 需拍板 | 含「待 user」「待確認」「blocked」「需拍板」 | **NEVER 直接 skip** —— 走 [autonomy-predicate.md](autonomy-predicate.md) § Decision Packaging |
+| 模糊 / 無法判斷 | 以上皆不符 | 先跑唯讀調查補事實再重判（見 autonomy-predicate.md § 判不出來時的三步）；仍模糊 → packaging，**不是** skip |
+
+> 最後兩列與前身版本不同：`turbo-dispatch.md` 當時寫「跳過，log 到 Skipped」。合併後 packaging
+> 是 MUST——skip 會讓 user-bound 比例高的清單完全停擺，而那正是 `/handoff-loop` 當初存在的理由。
+
+## Dispatch 規則
+
+- **分組同主流程**：**每一個** candidate 依上表落進 [dispatch-topology.md](dispatch-topology.md) 的
+  四組之一——code task / spectra 引用 → 扇出組（**與 spectra item 共用**同一個 ≤4 in-flight 上限），
+  investigation → 主線即時組。非 spectra 工作不是獨立於四組之外的第五條路徑
+- **Commit 紀律同主流程**：`git commit --only -- <paths>`，每個 item 獨立 commit
+- **完成後 MUST 更新來源檔**：勾 `[x]` 或補完成摘要，讓下一輪不重複做
+- **Error handling 同主流程**：失敗 → log + skip + `failStreak` +1
+- **NEVER** 自創 spectra change —— 只做已登記的工作；規模需開 change 的 → packaging 成決策題，
+  內容註明「建議 `/spectra-propose`」
+- **NEVER** 跨 consumer 操作 —— loop 仍限當前 repo
+
+**動標準層不再是 skip 理由**：`rules/` / `plugins/hub-core/` / `CLAUDE.md` / `vendor/`（clade 端）
+**可以改**（2026-08-05 授權），但 MUST 改完走 `/clade-publish` Step 1–9 散播完畢，**NEVER** 改完擱著。
+做不到就 packaging。判準見 [guardrails.md](guardrails.md) 護欄 5 與 [autonomy-predicate.md](autonomy-predicate.md) predicate 2。
+
+## Skip 合法理由窮舉（MUST，其他一律 dispatch 或 packaging）
+
+只有以下 3 條理由可以跳過一個 candidate，**NEVER** 自創第 4 條：
+
+1. **跨 consumer 操作** —— loop 限當前 repo
+2. **blocked on external signal 且已 packaging** —— 等 deploy / 等第三方 / 等具名 user 決策，
+   且已依 packaging SOP 寫進 `## ⏳ Awaiting Charles`。**沒 packaging 的不算，那是 skip**
+3. **本輪已 packaged**（state 的 `packaged` 有 timestamp）—— 不重複 packaging
+
+> 前身版本有「需 spectra-propose」與「動標準層」兩條。兩者現已改為 packaging 對象（前者寫進
+> packaging 內容建議 propose，後者可自主改 + 散播），不再是合法 skip 理由。
+
+以下**不是**合法跳過理由（逐字實錄，per [[pitfall-change-loop-turbo-self-rationalized-idle]]）：
+
+- ❌「needs careful testing」— worktree isolation + codex 就是為此設計的
+- ❌「complex」「多個 scripts 有不同 scope」— codex effort=high 處理
+- ❌「not ideal for quick wins」— loop 不只做 quick wins
+- ❌「需要 visual verification」— 非 `.vue` 的 backend 不需要
+- ❌「這輪已做了一個了」— 沒有 per-round 上限（除 `--unattended` 3-item cap）
+- ❌「等 agents 完成再處理」— 扇出組滿 4 就是做主線即時組的時機，不是該等的時機。等 notification
+  期間 **MUST** 繼續推進（investigation 類主線直接做、code task 類等扇出組空位）
+- ❌「先寫 HANDOFF status」— HANDOFF status 是 Step 7（四組皆空且 in-flight 歸零之後），不是中途的 exit ramp
