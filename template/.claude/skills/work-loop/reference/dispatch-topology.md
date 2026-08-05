@@ -56,8 +56,10 @@ dev port 的互斥**沿用既有機制**，不自建配額：
 - dispatch 一個 dev-port 組 item 前先確認 lease 可取得
 - **lease 被別的 live session 持有** → 該 item 留在 dev-port 佇列，主線改做扇出組回填 / main 組 / 主線即時組，下一輪再試。**NEVER** takeover 別人的 live lease
 - **無 lease 檔 + session 已離場的 stale dev server** → 這不是衝突，主線自行清理 + 重起（三層判定 SOP 見 SKILL.md § Dispatch 共通規則「Dev server 協調」）
+- **launcher 本身跑不起來**（SKILL.md § Step 2.5 的探針非 0）→ 這既不是衝突也不是 stale，本組**整組不可用**：item 全部走 packaging，**NEVER** dispatch 進去試
 
 「等而不搶」與「stale 自行清理」是兩件事，判準是 lease 檔存在且持有者仍 live。
+兩者都預設 launcher 是活的——那件事由 Step 2.5 先確認，不在本節重判。
 
 ## main 組：一次一個
 

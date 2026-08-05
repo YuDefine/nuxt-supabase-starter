@@ -168,7 +168,9 @@ Sol → Terra → Luna → Claude Sonnet subagent → Claude Haiku subagent → 
 ```
 
 1. **先降 Codex 檔位**：`--model terra` 重試，再不行 `--model luna`。三檔共用同一個 7 天池但按權重扣，低檔位在高檔位耗盡後**通常仍可派**
-   - ⚠️ **ChatGPT 帳號登入的 codex CLI 上這一步不存在**：`terra` / `luna` 一律回 `400 invalid_request_error: The '<model>' model is not supported when using Codex with a ChatGPT account`（2026-07-31 實測）。該帳號型態只有 `gpt-5.6-sol` 可用，池耗盡就是**整個 codex 不可用**，直接跳第 2 步換池。**NEVER** 在收到那個 400 之後反覆換檔位重試——三檔在這裡不是三個選項，是一個
+   - ⚠️ **直接打 raw `codex exec` 時 MUST 用完整 model id**（`gpt-5.6-terra` / `gpt-5.6-luna` / `gpt-5.6-sol`）。bare alias `terra` / `luna` 在 codex CLI 上不存在，會回一個**指錯方向的** `400 invalid_request_error: The 'terra' model is not supported when using Codex with a ChatGPT account` —— 那句話讀起來像帳號權限限制，實際是 model 名稱沒解析到（同時會伴隨 `warning: Model metadata for 'terra' not found`）。**NEVER** 據這個 400 推論「本帳號只有 sol 可用」而跳過整條降級鏈（2026-07-31 曾據此誤寫本節，2026-08-05 用完整 id 複驗推翻：`gpt-5.6-terra` / `gpt-5.6-luna` 皆通過驗證、回的是配額錯誤而非 400）。詳見 [[pitfall-codex-bare-model-alias-400-reads-as-account-restriction]]
+   - **走 `codex-dispatch.ts` 不受此影響**：它在 `vendor/scripts/codex-dispatch.ts:70-72` 內建 alias → 完整 id 映射，所以本檔 § Routing Table 各列寫的 `--model terra` 是 dispatcher flag，正確無須改。
+   - ⚠️ **整池耗盡時降級鏈第 1 步不會有幫助**：2026-08-05 實測三檔撞同一個 usage limit、回同一個 reset 時間，此時 `terra` / `luna` 與 `sol` 一起不可用，直接跳第 2 步換池。「低檔位在高檔位耗盡後通常仍可派」只在**部分耗盡**時成立——它未被推翻，但也**尚未**被實測證實。
 2. **再換池**：Codex 三檔全滿才動 Claude subagent（`model` 顯式帶 `sonnet` / `haiku`，per § Subagent 回報契約第 4 條）
 3. **最後才是主線**：上述全不可行時 Opus 主線接走，且 record reason 含 `quota-exhausted` + `date -d @<resets_at>` 換算出的確切 reset 時間
 4. Claude 接走時 session 結尾 **MUST** 回報「本 session 因配額耗盡由 Claude 執行 N 個 codex-primary change，reset 時間 `<YYYY-MM-DD HH:MM>`」

@@ -203,6 +203,37 @@ PARKED="$(spectra list --parked --json 2>/dev/null || echo '{}')"
 
 ---
 
+## Step 2.5 — 工具健檢（分類前，每一輪都跑）
+
+**Iron Law：探針 MUST 是實跑一次，NEVER 是 `[ -f ]` / `command -v` / 「檔案在就算活」。**
+
+scan 回的是**待辦**狀態，不是**工具**狀態。兩者無關：待辦清單完全正常，而推進它們要用的
+launcher 早就死了。分類之前先實跑一次，死掉的組直接標不可用——**NEVER** 派 worktree 進去
+「看看能不能跑」。
+
+對本輪 candidate list 會用到的每一組各跑一次（沒有 item 落在該組就跳過該列）：
+
+| 組 | 探針 | 判活 |
+| --- | --- | --- |
+| dev-port | `node scripts/dev-session.ts status`（無此檔改 `dev-singleton.ts`） | exit 0 |
+| main | `node scripts/wt-helper.ts list` | exit 0 |
+| 扇出 | 同上（`/wt` 靠 wt-helper 建 worktree） | exit 0 |
+| spectra item 存在時 | `spectra list --json` | exit 0 且吐得出 JSON |
+
+**非 0 的處置**（三步，缺一不可）：
+
+1. 把該組標成**本輪不可用**，落進 state 的 `notes`，附**實際 stderr 首行**（不是「壞了」）
+2. 該組的 item **全部改走 § Decision packaging**，**NEVER** dispatch、**NEVER** 標 skip
+3. 修法若落在別的 repo（clade 投影層、上游工具）→ 修法本身也是一條 packaged 決策，
+   **NEVER** 在本 repo 手補投影檔繞過
+
+**為什麼是實跑**：2026-08-05 <consumer-a> 實證——`scripts/lib/detect-runtime.ts` 從未被散播，
+四支入口（`dev-session` / `dev-singleton` / `db-lease` / `claims-lib`）全部
+`ERR_MODULE_NOT_FOUND`。**那四支檔案本身都在**，`[ -f ]` 一路綠燈；死的是它們 import 的東西。
+該輪因此白派了一個 worktree agent 出去，回來才知道 dev-port 組整組不可用。
+
+---
+
 ## Step 3 — 分類與自主判定
 
 **每一個** candidate 都 MUST 走完三步（3.1 分類 → 3.2 自主判定 → 3.3 分組），不是只對前幾條。
