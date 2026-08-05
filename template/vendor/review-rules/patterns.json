@@ -111,6 +111,16 @@
       "fix": "改從 shared/schemas/** 或 shared/types/** 取型別／契約；真需 server 端邏輯，改走 server/api/** 的 HTTP endpoint，不要直接 import server 內部模組。"
     },
     {
+      "id": "shared-imports-server-internals",
+      "section": 6,
+      "severity": "error",
+      "layer": "ratchet",
+      "fileGlob": "shared/**",
+      "pattern": "^(?!\\s*import\\s+type\\b).*from\\s+['\"]~{1,2}\\/server\\/",
+      "message": "shared 層禁 import server 內部模組（type-only import 除外）——shared 同時被 client 與 server 匯入，從這裡 import 會把 server 碼一路帶進 client bundle。分層真相見 clade-review-rules §6。",
+      "fix": "改從 shared/schemas/** 或 shared/types/** 取型別／契約；真需 server 端邏輯，改走 server/api/** 的 HTTP endpoint，不要直接 import server 內部模組。"
+    },
+    {
       "id": "server-console-logging",
       "section": 8,
       "severity": "error",
