@@ -191,7 +191,11 @@ PARKED="$(spectra list --parked --json 2>/dev/null || echo '{}')"
 | `handoff` / `techdebt` / `roadmap` | `HANDOFF.md` 待辦段、`techDebtHygiene.raw`、`openspec/ROADMAP.md` | § 3.1b 分類表 |
 
 - **`HANDOFF.md`** —— 掃 `## In Progress` / `## Blocked` / `## Next Steps` / `## Outstanding` / `## Follow-up`（heading 名因 consumer 而異，靠 `##` / `###` 辨識）。`- [ ]` 未勾項 = 一個 candidate；`- [x]` 跳過；純文字段落視為單一 candidate
-- **`docs/tech-debt.md`** —— **NEVER 整讀主檔**（clade 實測 239KB / <consumer-b> 322KB，整讀一次吃掉大半預算）。從 `techDebtHygiene.raw` 取，優先序三層：`stale`（>60d）→ `aging`（>14d）→ 其他 `open`。需要細節時用 `raw` 的 `lineNo` **定點 Read**（`offset` + `limit`）
+- **`docs/tech-debt.md`** —— **NEVER 整讀主檔**（2026-08-06 實測 clade 196KB / <consumer-b> 363KB，整讀一次吃掉大半預算）。從 `techDebtHygiene.raw` 取，優先序三層：`stale`（>60d）→ `aging`（>14d）→ 其他 `open`。需要細節時用 `raw` 的 `lineNo` **定點 Read**（`offset` + `limit`）
+
+  ```bash
+  wc -c docs/tech-debt.md   # 上面兩個數字的來源。主檔隨 rotate / 新增增減，複跑取當前值
+  ```
 - **`openspec/ROADMAP.md`** `## Next Moves` 的 `###` 子段（存在時）
 - **`worktreeStash`** —— `mergedToMain: false` 的 wt 與每一筆 stash
 

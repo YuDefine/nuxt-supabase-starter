@@ -102,10 +102,21 @@ fleet 表每格是 `violations / scanned` 雙數字，三種狀態不可混讀�
 
 `max-lines-per-function` / `max-lines` / `complexity` / `max-depth` / `max-params` **刻意不收**。
 它們量的是規模與分支密度，不是職責內聚：300 行零分支的 mapper 是 SRP 違規但 complexity 抓不到，
-40 行的 exhaustive switch 是好碼卻會被誤傷。實測 <consumer-b> 這五條共 862 violations / 542 檔，其中 88%
-的違規檔近 30 天仍在改動——staged-only 救不了，開成 error 等於天天擋路。對照組
+40 行的 exhaustive switch 是好碼卻會被誤傷。<consumer-b> 實測 862 violations / 542 檔（2026-08 快照），
+其中 88% 的違規檔近 30 天仍在改動——staged-only 救不了，開成 error 等於天天擋路。對照組
 microsoft/TypeScript、vuejs/core、vitejs/vite、facebook/react、nuxt/nuxt、antfu/eslint-config、xo
 八個專案無一啟用其中任何一條（2026-08 快照）。
+
+複跑（在任一 consumer 根目錄；`-A all` 先關掉預設類別，只留這五條）：
+
+```bash
+npx vp lint -A all -D max-lines-per-function -D max-lines -D complexity -D max-depth -D max-params .
+# 尾行的 "Found N warnings and M errors" 就是 violations，"on K files" 是掃描分母
+git log --since=2026-07-06T00:00:00 --until=2026-08-06T00:00:00 --name-only --pretty= \
+  | sort -u > /tmp/changed-30d.txt   # 與上面的違規檔清單取交集 = 「近 30 天仍在改動」那 88%
+```
+
+**NEVER** 直接跑 `npx oxlint`——本 repo 的 wrapper 只給 IDE `--lsp` 用，會拒絕執行。
 
 本證據決定：gate 層收哪幾條規則。
 本證據不決定：要不要管內聚——**NEVER** 拿本節當「規模與複雜度不必管」的理由，那部分移到 Review 層
