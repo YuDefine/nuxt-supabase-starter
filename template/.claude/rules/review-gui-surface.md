@@ -228,11 +228,16 @@ node ~/offline/clade/vendor/scripts/lib/evidence-store.ts \
 - [[pitfall-verified-ui-annotation-format-drift]] — plural key + sub-item ID mismatch
 - [[pitfall-deferred-vs-issue-annotation-contract-conflict-review-gui]] — `(deferred:)` vs `(issue:)` 辭典衝突
 
-## 截圖進主線 context 的成本（MUST）
+## 截圖 evidence 一律走 dispatcher（MUST）
 
-**Iron Law：主線 `Read` 一張截圖 = 一次約 163k 字元的 context 支出，而且往後每一 turn 都重付。**
+**Iron Law：`[verify:ui]` / `[review:ui]` 的 evidence 一律由 dispatcher 收，主線只消費它回的
+JSON 摘要。主線 `Read` 截圖是例外路徑，只在下表命中時開放。**
 
 本節適用**每一張**截圖、**所有** consumer——不是只有批次審視那次。
+
+這條的依據是**跨模型驗證**（見 § Hard rule 與 [[agent-routing]]），不是 context 成本。
+成本面的實測數字見下方 § 實測——它比一次全檔 `Read` 還小，**NEVER** 拿成本當本節的理由，
+也 **NEVER** 反過來拿「成本不高」當繞過 dispatcher 的藉口：下表的 predicate 是完整的准入條件。
 
 | 可觀察 predicate | MUST |
 | --- | --- |
@@ -240,30 +245,40 @@ node ~/offline/clade/vendor/scripts/lib/evidence-store.ts \
 | 已經拿到 dispatcher 的 JSON 且某 item 判 FAIL / UNCERTAIN | 才准 `Read` **那一張**。**NEVER** 為了「順便看一下其他張」連讀 |
 | 想確認一批截圖是否都拍到東西 | 跑 audit / dispatcher 的 emptiness preflight，**NEVER** 逐張 Read 目視 |
 
-### 實測
+### 實測（2026-08-06 更正：截圖成本遠小於本節初版所稱）
 
-2026-08-04 對最重的 30 個主線 session 量 `tool_result` 位元組：
+2026-08-04 的初版寫「截圖佔 `tool_result` 的 56%、平均 163k 字元/張」。**那是用 base64
+字元數量的，而圖片按尺寸計費**——同一窗口（2026-07-28 ~ 08-04）用成本口徑複跑：
 
-| 成分 | 佔 tool_result | 細節 |
+| 成分 | 佔 `tool_result` tokens | 細節 |
 | --- | --- | --- |
-| `Read` | 63.7% | 630 次，平均 25k 字元 |
-| └ 其中截圖 / 圖片 | **88.8% of Read** | **86 次，平均 163k 字元/次** |
-| `Bash` | 32.3% | 9,640 次，平均僅 830 字元 |
+| `Bash` | **60.6%** | 40,929 次，平均僅 255 tok |
+| `Read` | 32.5% | 3,965 次，平均 1,409 tok |
+| └ 其中截圖 | **5.8% of `Read`** | 281 張，**平均 1,148 tok/張** |
+| **截圖佔全部 `tool_result`** | **1.9%** | 初版稱 56%，高估約 30 倍 |
 
-換算：截圖約佔重量級 session 全部 `tool_result` 位元組的 **56%**——單一最大項，且是 96% 全檔讀
-（`Read` 只有 4% 的量帶 `offset` / `limit`）。
+**一張截圖比一次全檔 `Read` 還便宜**（1,148 vs 1,409 tok）。成本口徑的最大項是 `Bash`，
+而它大是因為次數多、不是單次肥。截圖仍是「往後每一 turn 都重付」，但那對**所有** context
+內容都成立，不是截圖獨有。
 
-這是 § Hard rule 那條 dispatcher 禁令的**成本面證據**：[[agent-routing]] 已記「147 條
-`(verified-ui:)` annotation 0 次走 codex、92 個 session 全部走 bypass 形狀」。bypass 不只
-繞過跨模型驗證，它同時把每張 163k 直接灌進主線 context，並乘上該 session 的剩餘 turn 數
-（成本模型見 [[session-tasks]] § Session context 預算）。
+複跑指令（任何窗口都可原樣重跑）：
+
+```bash
+node scripts/context-cost-report.ts --since <ISO> --until <ISO> --json out.json
+jq '.image.shareOfToolResultTokens, .image.shareOfToolResultChars' out.json
+```
+
+> 初版數字據以寫成本節 Iron Law 並散播到全 fleet，成因是量測用了
+> `scripts/context-cost-report.ts` 檔頭第一條明令禁止的單位。該腳本現在**兩種口徑並列印**，
+> 讓差幾倍在輸出裡就看得見。追蹤見 clade `docs/tech-debt.md` § TD-375。
 
 ### 自我開脫（看到自己這樣說就停下）
 
 | 開脫 | 實際 |
 | --- | --- |
-| 「我自己看比較快，dispatcher 要跑好幾分鐘」 | 快的是 wall-clock，付的是 context × 剩餘 turn。一張圖等於 200 次 Bash 呼叫的量 |
-| 「只看一張確認一下」 | 86 次的實測平均就是這樣累出來的，沒有任何一次是打算讀 86 張 |
+| 「截圖成本其實只有 1.9%，那我直接看沒差」 | 本節的准入條件是上表 predicate，不是成本門檻。成本從來不是這條的依據，數字降下來也不解鎖任何一格 |
+| 「我自己看比較快，dispatcher 要跑好幾分鐘」 | 快的是 wall-clock，跳過的是跨模型驗證——那正是 [[agent-routing]] 記的「147 條 `(verified-ui:)` 0 次走 codex」的形狀 |
+| 「只看一張確認一下」 | 281 張的實測就是這樣累出來的，沒有任何一次是打算讀 281 張 |
 | 「dispatcher 回的 JSON 看不出細節」 | 那是 items-json 的 `ready_signal` / 判準沒寫夠，補那裡。**NEVER** 用目視補契約的洞 |
 
 ## 界線（不在本 rule 範圍）
