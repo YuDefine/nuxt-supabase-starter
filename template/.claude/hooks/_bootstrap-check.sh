@@ -60,6 +60,49 @@ maybe_auto_index() {
 maybe_auto_index
 
 # ─────────────────────────────────────────────────────────
+# 0.5 temp 分割區壓力預警（fire-and-forget，不阻擋）
+# ─────────────────────────────────────────────────────────
+#
+# 為什麼值得佔一段 session 啟動時間：temp 寫滿的**症狀完全不指向真因**。
+# 2026-08-05 實測（<consumer-b>）：測試 fixture 在 /tmp 累積 53,129 個目錄佔 13G，撞爆
+# tmpfs 的 usrquota 之後，vitest 547 個測試檔全數失敗於
+# `Unknown system error -122`（errno 122 = EDQUOT），重導向的 log 檔變成 0 bytes，
+# 連 `wc` 和 `python3` 的 stdout 都寫不出來。整組症狀看起來像 codebase 壞掉，
+# 排查花掉的時間遠超過這段檢查的成本。
+#
+# 只讀 df、不掃目錄（/tmp 有數萬個 entry 時 du 會跑到逾時），所以幾乎零成本。
+
+warn_if_tmp_pressure() {
+  local tmp_dir="${TMPDIR:-/tmp}"
+  [[ -d "$tmp_dir" ]] || return 0
+
+  # df -P 保證單行輸出格式：Filesystem 1024-blocks Used Available Capacity Mounted
+  local cap
+  cap=$(df -P "$tmp_dir" 2>/dev/null | awk 'NR==2 {gsub(/%/,"",$5); print $5}')
+  [[ "$cap" =~ ^[0-9]+$ ]] || return 0
+  [[ "$cap" -ge 75 ]] || return 0
+
+  cat >&2 <<EOF
+
+[clade] ⚠️  ${tmp_dir} 已用 ${cap}% — 接近寫滿
+
+  寫滿後的症狀不會告訴你是磁碟問題：測試整批失敗於 errno 122 (EDQUOT) 或
+  ENOSPC、重導向的 log 變 0 bytes、工具的 stdout 憑空消失。看起來像 code 壞了。
+
+  先看有沒有測試 fixture 殘留：
+    node <clade>/vendor/scripts/cleanup-stale-tmp.ts            # 只報告
+    node <clade>/vendor/scripts/cleanup-stale-tmp.ts --apply    # 真的清
+
+  根治（讓測試的 temp 關進 run-scoped 沙盒、跑完即刪）：
+    package.json 的 test script 包一層
+    node <clade>/vendor/scripts/with-scoped-tmp.ts --label <name> -- <原本的指令>
+
+EOF
+}
+
+warn_if_tmp_pressure
+
+# ─────────────────────────────────────────────────────────
 # 1. 找 clade repo
 # ─────────────────────────────────────────────────────────
 
