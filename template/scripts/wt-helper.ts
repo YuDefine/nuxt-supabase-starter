@@ -79,23 +79,7 @@ import {
 } from './claim-helper.ts'
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
 import { isLockedProjectionPath, isLockedProjectionPathFor } from './locked-projection.ts'
-
-interface WtEnvBootstrapRunResult {
-  status: number | null
-  stdout?: string
-  stderr?: string
-}
-
-type WtEnvBootstrapRunner = (
-  command: string,
-  args: string[],
-  options: Record<string, unknown>,
-) => WtEnvBootstrapRunResult
-
-interface WtEnvBootstrapOptions {
-  allowOrphanRecord?: boolean
-  spawnSyncImpl?: WtEnvBootstrapRunner
-}
+import { runWtEnvBootstrap } from './lib/wt-env-bootstrap-runner.ts'
 
 interface WtOptions {
   json?: boolean
@@ -131,98 +115,10 @@ function git(args, opts = {}) {
   return out ? out.trim() : ''
 }
 
-/**
- * Locate the consumer's per-worktree bootstrap script.
- *
- * `.ts` is the documented name; `.mjs` is accepted because consumers migrating
- * off `.mjs` would otherwise lose the hook **silently** — see the hard rule below.
- *
- * Returns null only when the consumer genuinely ships no such script.
- *
- * **Any other extension is a hard error, never a skip.** A consumer that ships
- * `wt-env-bootstrap.<something-else>` clearly intends the hook to run; treating
- * that as "consumer doesn't have one" makes both `ensure` and `destroy` no-op
- * with zero signal. Observed cost (<consumer-b> 2026-08-02, TD-315): every new worktree
- * came up with `.env.local` still pointing at the *main* worktree's database,
- * and every `cleanup` left its PostgREST sidecar running — each orphan
- * permanently consuming a connection-admission slot until the ceiling was hit
- * and no new worktree could be provisioned at all. None of it surfaced, because
- * the lookup just returned null.
- */
-function resolveWtEnvBootstrapScript(worktreePath: string): string | null {
-  const dir = join(worktreePath, 'scripts')
-  for (const ext of ['ts', 'mjs']) {
-    const candidate = join(dir, `wt-env-bootstrap.${ext}`)
-    if (existsSync(candidate)) return candidate
-  }
-  if (!existsSync(dir)) return null
-  const stray = readdirSync(dir).find((f) => f.startsWith('wt-env-bootstrap.'))
-  if (stray) {
-    throw new Error(
-      `Found scripts/${stray} but expected wt-env-bootstrap.ts (or .mjs). ` +
-        `Refusing to skip silently — per-worktree resources would be neither provisioned ` +
-        `nor released. Rename it to wt-env-bootstrap.ts.`,
-    )
-  }
-  return null
-}
-
-/**
- * Optional per-worktree resource bootstrap.
- *
- * Consumers that provision per-worktree resources (typically an isolated dev
- * database clone plus its sidecar) ship `scripts/wt-env-bootstrap.ts` exposing
- * `ensure` / `destroy`. Consumers without that script are unaffected: this
- * returns null and callers skip the step.
- *
- * Fails closed when the script exists but the command errors or emits invalid
- * JSON — a half-provisioned remote resource must surface, not be swallowed.
- *
- * TD-348: the required CLI is exactly
- *
- *     node scripts/wt-env-bootstrap.ts <ensure|destroy> --worktree <path> --json
- *
- * A script that parses none of those arguments exits 2 on every invocation, so
- * `add` degrades to a warning and `cleanup` fails outright, leaving the
- * worktree undeleted. Anything occupying this filename **MUST** implement that
- * CLI; a tool with a different CLI belongs under a different name, no matter
- * how related its purpose sounds (clade's own env-file copier was renamed to
- * `wt-env-sync.ts` for exactly this reason).
- */
-export function runWtEnvBootstrap(worktreePath, command, opts: WtEnvBootstrapOptions = {}) {
-  const script = resolveWtEnvBootstrapScript(worktreePath)
-  if (!script) return null
-
-  const args = [script, command, '--worktree', worktreePath, '--json']
-  if (opts.allowOrphanRecord) args.push('--allow-orphan-record')
-
-  const run = (opts.spawnSyncImpl ?? spawnSync) as WtEnvBootstrapRunner
-  const result = run(process.execPath, args, {
-    cwd: worktreePath,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-  if (result.status !== 0) {
-    const stderr = result.stderr?.trim() || 'unknown error'
-    // exit 2 is the usage-error convention; combined with an "unknown arg"
-    // complaint it means the script does not implement this CLI at all, which
-    // is a different repair than a genuine provisioning failure (TD-348).
-    const contractMismatch = result.status === 2 || /unknown (arg|option|command)/i.test(stderr)
-    throw new Error(
-      `Worktree env bootstrap ${command} failed: ${stderr}` +
-        (contractMismatch
-          ? `\n  ${script} does not implement the required CLI ` +
-            `\`<ensure|destroy> --worktree <path> --json\`. Either implement it or ` +
-            `rename the file — this filename is reserved for that contract (TD-348).`
-          : ''),
-    )
-  }
-  try {
-    return JSON.parse(result.stdout?.trim())
-  } catch {
-    throw new Error(`Worktree env bootstrap ${command} returned invalid JSON`)
-  }
-}
+// per-worktree backing service 的 spawner 已抽到 `lib/wt-env-bootstrap-runner.ts` —— 因為
+// `dev-session.ts` 的 preflight（per `db-preview-env.md` § 缺席側）也要呼叫它，而不可能為此
+// import 整個 wt-helper。本檔仍 re-export，既有 import 端不受影響。
+export { runWtEnvBootstrap }
 
 // TD-323: stash-reconcile.ts 與 wt-helper.ts 永遠是同目錄 sibling —— clade home 在
 // `vendor/scripts/`、consumer 在 `scripts/`。寫死任一側只是把 MODULE_NOT_FOUND 搬家，

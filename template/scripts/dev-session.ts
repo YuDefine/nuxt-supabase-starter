@@ -55,6 +55,11 @@ import { createHash } from 'node:crypto'
 import { basename, join, resolve, isAbsolute } from 'node:path'
 import { tmpdir } from 'node:os'
 import { detectHolderKind, detectSessionId } from './lib/detect-runtime.ts'
+import {
+  probeBackingService,
+  runWtEnvBootstrap,
+  describeBackingServiceGap,
+} from './lib/wt-env-bootstrap-runner.ts'
 
 const LEASE_DIR = tmpdir()
 const READY_TIMEOUT_MS = 90_000
@@ -519,6 +524,54 @@ function enforceLeaseOrExit(o, meta, consumerId, lid) {
 // commands
 // ─────────────────────────────────────────────────────────────────────────
 
+/**
+ * 起 dev server 前確認這個 worktree 的 backing service（clone DB + PostgREST sidecar）還在。
+ *
+ * 為什麼非查不可：launcher 的成功判準是「port 有沒有 LISTENING」，而那對本問題**恆為真**
+ * —— app 起得來、只是打不到 DB。於是第一個發現異常的是瀏覽器，拿到的又是 app 為「後端暫時
+ * 抖動」寫的 503 文案，完全指不到 DB。修復成本 ≈ 0（兩個指令、數十秒），發現成本極高
+ * （<consumer-b> 2026-07-31 實測十幾輪，中途還跟兩個無關的 dev server 症狀混淆）。這個不對稱就是
+ * 把檢查前移的全部理由。
+ *
+ * 缺席 → 自動補建；補建失敗才 fail-loud 擋下，且訊息 **MUST 點名 backing service 本身與修復
+ * 指令**，NEVER 只說「後端連線失敗」—— 那正是要消滅的那層代言。
+ *
+ * 沒有 per-worktree 拓樸的 consumer（絕大多數）在第一個 probe 就 `applicable:false` 退出，
+ * 零行為改變。探針自身故障同樣走這條 —— tooling 面 fail-open，NEVER 因工具壞掉擋住開發。
+ */
+function preflightBackingService(o) {
+  const probe = probeBackingService(o.cwd)
+  if (!probe.applicable) return
+  if (probe.state === 'ready') return
+
+  const svc = probe.dbName ? `${probe.dbName}` : '(未命名)'
+  out(`⏳ per-worktree backing service 未就緒（state=${probe.state}，${svc}）→ 自動補建…`)
+
+  let ensureErr: string | null = null
+  try {
+    runWtEnvBootstrap(o.cwd, 'ensure')
+  } catch (e) {
+    ensureErr = (e as Error)?.message ?? String(e)
+  }
+
+  // ensure 的 exit 0 只代表「指令沒失敗」，不代表 service 真的起來了 —— 重新 probe 才算驗證。
+  const after = ensureErr ? probe : probeBackingService(o.cwd)
+  if (!ensureErr && after.applicable && after.state === 'ready') {
+    out(
+      `✓ backing service 已補建：${after.dbName ?? svc}${after.port ? ` (port ${after.port})` : ''}`,
+    )
+    return
+  }
+
+  err(
+    describeBackingServiceGap(
+      after.applicable ? after : probe,
+      ensureErr ?? `補建後 state 仍為 ${after.state}`,
+    ),
+  )
+  process.exit(1)
+}
+
 async function cmdLaunch(o) {
   if (!o.cmd || !o.cmd.length) {
     err('用法：dev-session.ts [opts] -- <cmd...>（缺少 `-- <cmd>`）')
@@ -536,6 +589,13 @@ async function cmdLaunch(o) {
   // lease identity 綁 (consumer, port)：同 consumer 的不同 app / review slot 是不同 lease
   const lid = leaseId(consumerId, port, resolvePrimaryPort(meta))
   const urlHint = port ? `http://127.0.0.1:${port}` : '(port 未知)'
+
+  // 0) per-worktree backing service 存在性檢查（per rules/core/db-preview-env.md § 缺席側）。
+  //
+  //    **MUST 排在 reuse 判定之前**：reuse 分支同樣是「使用者要求起 dev server」的結果，而
+  //    clone / sidecar 是在 session 存活期間被 reconcile / 手動清理 / 主機重啟拿掉的 —— 只檢查
+  //    重建路徑，等於放過最常見的那一種缺席。
+  preflightBackingService(o)
 
   // 1) 反累積：起前先查 existing session
   const existing = findSession(sessionName)
