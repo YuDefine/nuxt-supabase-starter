@@ -61,7 +61,7 @@ agent 執行修改後跑 gate chain，FAIL 時**解析 error output → 修正 �
 | 參數 | 預設值 | 說明 |
 | --- | --- | --- |
 | `max_iterations` | 5 | 跑 gate chain → fix → re-run 的最大輪數 |
-| `escalation_action` | `HANDOFF` | 超過上限時的行為：`HANDOFF`（寫 HANDOFF.md 交接）/ `ASK`（問 user）/ `STOP`（靜默停止並報告） |
+| `escalation_action` | `HANDOFF` | 超過上限時的行為：`HANDOFF`（寫 HANDOFF.md 交接）/ `ASK`（問 user）/ `STOP`（靜默停止並報告）/ `ROLLBACK:<artifact>`（退回上游 artifact 修 spec——只在判定 specification error 時用，見 § Error 解析規則） |
 
 **禁止無上限迴圈。** 沒有宣告 `max_iterations` 的自主 iterate 視同違規。
 
@@ -92,6 +92,7 @@ Gate chain FAIL 時，agent MUST：
    - **確定性 error**（type error, syntax error, import 缺失, test assertion fail）→ 可自動修正，繼續 iterate
    - **環境 error**（port 占用, DB 未啟, 缺 env var）→ 嘗試 self-fix（kill port / 起 DB / 讀 .env.local），若不可 fix 則 escalation
    - **不確定 error**（test 紅但 root cause 不明）→ 若已 iterate ≥ 2 輪同一 error 不收斂 → 提前 escalation，不燒剩餘輪數
+   - **specification error**（命中任一即是：驗收條件互相矛盾；要讓 gate 綠必須改 spec 宣告的行為、刪需求或改資料定義；test 斷言與 spec 文字直接衝突）→ **不是 iterate 對象**——再多輪修 code 都是在錯的設計圖上補破網，更高的 reasoning 也修不了錯的 spec。**立刻**執行 `ROLLBACK:<artifact>`，不等 `max_iterations`：spectra change 退回 spec 修正層（tasks.md phase 結構歸 `/spectra-ingest`、需求內容歸 propose 層——執行層 **NEVER** 自己改「做什麼」）；ad-hoc 工作退回 `tasks/<date>-<slug>.md` 改寫驗收段後再重進迴圈。退回時 **MUST** 保留證據：error output、互相衝突的 spec 條目原文、已試過的修法
 3. **同一 error 連續 2 輪不收斂 = 提前 escalation**——避免同一個修法來回震盪
 
 ### Red Flags
@@ -102,6 +103,7 @@ Gate chain FAIL 時，agent MUST：
 - 「先跳過這個 test，其他都過了」（不可。gate chain 是全 PASS 語義）
 - 「typecheck 太久了，應該沒問題」（不可。timeout 不等於 PASS）
 - 「改不動，先 commit 再說」（gate chain FAIL 時 NEVER commit）
+- 「把這條 test 的期望值改掉就全綠了」（執行層沒有資格改「做什麼」——這是 specification error 的訊號，走 `ROLLBACK:<artifact>`，不是修法）
 
 ---
 

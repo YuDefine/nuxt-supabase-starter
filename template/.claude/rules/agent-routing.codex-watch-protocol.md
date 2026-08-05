@@ -367,7 +367,7 @@ Codex 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleW
 | **Spectra `propose` 階段（draft）** | **使用者選單三選一**：A Codex GPT-5.6-sol max draft（預設/推薦）／ B 三模型交叉：Claude Fable 5 xhigh draft ＋ Codex GPT-5.6-sol max review／ C 純 Claude | 預設跳三選一選單；使用者明確指定路徑時跳過。詳見 `spectra-propose` Step 0。 |
 | **Spectra `propose` cross-check / final check** | **主線 Claude Fable 5 xhigh** | 主線 = quality gate（A 的 cross-check、B 的 final check 都由主線跑），不只是 dispatcher。 |
 | **Spectra `apply`（非 Design Review、非 UI view phase，phase 粒度）** | **Codex GPT-5.6-sol high** | medium 漏 schema drift 風險高；phase 粒度避免 round-trip。 |
-| **Spectra `apply` UI view phase（component / page / view / layout / styling）+ Section 7（Design Review）** | **主線 Claude Opus 5 xhigh，永不派 codex** | 視覺 / 互動 / a11y 與 Design skill 緊耦合，Codex tooling 弱。非 view 的 frontend 不在此範圍，仍走 codex（範圍同 § Spectra Apply Phase Dispatch C 類）。 |
+| **Spectra `apply` UI view phase（component / page / view / layout / styling）+ Section 7（Design Review）** | **UI view phase：Claude `sonnet` subagent，永不派 codex（主線收回後跑 Step 6c / 6d 與 Design Review gate）；Design Review：主線自己做，永不外派** | 視覺 / 互動 / a11y 與 Design skill 緊耦合，Codex tooling 弱；Design 品質判定本身外包不了。非 view 的 frontend 不在此範圍，仍走 codex（範圍同 § Spectra Apply Phase Dispatch C 類）。 |
 | **spectra-apply Step 8a self-collect (a)(b)**（dev-login allow-list 小 mod + service_role DB query 證 data shape） | **Codex `--model terra --effort medium` via 泛用 dispatcher** | PoC 已實證 codex 能跑完整 evidence chain；annotation 寫回 tasks.md 維持主線。詳見 spectra-apply SKILL Step 8a。 |
 
 ## Orchestration Residency — 機械 Enforcement（residency-classify + archive-gate Check 8）
@@ -410,7 +410,7 @@ Claude Code session 收到 spectra propose 請求時：
    - **A. Design Review phase**：標題含 "Design Review" 或內容含 `/design improve` / `/impeccable audit` / `/impeccable *` / `review-screenshot`
      → **主線 Claude Opus 5 xhigh 自己做，永不派 codex**
    - **B. UI view phase**：phase 內任一 task 描述/路徑指涉 view 層檔案——`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且該 phase 沒有摻入非 view 的 frontend / backend 工作**（store / hook / API client / type / util / migration / API server）
-     → **主線 Claude Opus 5 xhigh 自己做，永不派 codex**
+     → **派 Claude `sonnet` subagent（Agent tool，`model: sonnet`；thin brief＋「只准動 view 層檔案」guard＋4-status 回報，per [[agent-routing]] § Subagent 回報契約），永不派 codex**。主線收回後、該 phase commit / 標 done 之前，照跑 SKILL Step 6c / 6d 檢查與 Design Review gate。瑣碎 UI 修（≤2 files 且 ≤20 行）主線直接做，不派
    - **C. 其他 phase**：上述兩類以外（schema、migration、API server、CLI、純 backend、frontend 但非 view 的 store / hook / API client / type / util、unit test、docs）
      → **派 background codex GPT-5.6-sol high 做完整 phase**
 3. **混雜 phase fallback**（A、B 都不是純 view、又混雜 view 與非 view 工作）：
@@ -433,7 +433,7 @@ Claude Code session 收到 spectra propose 請求時：
           'app/pages/**' 'app/components/**' 'app/layouts/**' \
           'pages/**' 'components/**' 'layouts/**' 'views/**'
      ```
-     有任何 view 層 file 被 codex 動過 → **AskUserQuestion**：[1] `git -C <wt> reset --soft main` 退 staging + 主線剔除 view 改動 + 重派 codex / [2] 接受並由主線自己重跑該 view phase / [3] 中止
+     有任何 view 層 file 被 codex 動過 → **AskUserQuestion**：[1] `git -C <wt> reset --soft main` 退 staging + 主線剔除 view 改動 + 重派 codex / [2] 接受並依 § Spectra Apply Phase Dispatch B 類形狀重跑該 view 改動（sonnet subagent 或瑣碎修主線直做） / [3] 中止
    - **Scope discipline cross-check**：`git -C <wt> diff main..HEAD --name-only` 對比 prompt 內 scope 宣告；超出範圍 → AskUserQuestion 處理
    - **Sanity check**（typecheck、相關 test）
    - 若有遺漏 → **AskUserQuestion**：[1] 主線在 worktree 內 commit 補丁 / [2] reset 重派 codex / [3] 中止

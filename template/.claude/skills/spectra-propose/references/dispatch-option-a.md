@@ -47,7 +47,7 @@ Local edits will be reverted by the next sync.
       若 change 同時涉及 UI view 層（`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss`）與**非 view 工作**（schema / migration / API server / store / hook / API client / type / util / 純 backend），tasks.md **必須**把這兩類切成不同的 `## N.` phase：
       - 例：`## 1. Database Schema` + `## 2. API Endpoints` + `## 3. Pinia Store + Composables` + `## 4. UI View Implementation` + `## 5. Fixtures / Seed Plan` + `## 6. Design Review`
       - **禁止**把 view 層改動（`.vue` / `app/pages/` 等）與非 view 工作混進同一 phase
-      - 理由：spectra-apply 會把 UI view phase 由主線 Claude Code 自己做、其他 phase 派給 codex；混雜 phase 會破壞 dispatch 規則
+      - 理由：spectra-apply 會把 UI view phase 留在 Claude 端（sonnet subagent 或主線）、其他 phase 派給 codex；混雜 phase 會破壞 dispatch 規則
       - frontend 但非 view 的（store / hook / API client / type / util / unit test）算非 view，可以與 backend 工作放同 phase 或自己一個 phase 都可
 
       若 change 包含 UI scope（tasks 涉及 .vue / pages/ / components/ / layouts/），tasks.md **必須**包含完整 7 步 Design Review section（N.1~N.7）：

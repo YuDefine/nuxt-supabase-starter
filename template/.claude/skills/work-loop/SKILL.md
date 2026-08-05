@@ -306,6 +306,15 @@ ELSE:
 - 純唯讀調查 / 單檔文字改動 → 主線即時組，自己做
 - 記進 state 的 `inFlight`，`subagentsSpawned` +1
 
+上面三條假設 `/wt` 在本 repo 叫得動，而那個假設在**產地（clade home）不成立**。開工前判一次：
+
+| 可觀察 predicate | dispatch 形狀 |
+| --- | --- |
+| `ls .claude/skills/wt` 存在，**或** `jq -r '.enabledPlugins' .claude/settings.json` 不是 `none` | 照上面三條走，扇出組 ≤4 in-flight |
+| 兩者皆不成立 | **主線自己進 worktree**，扇出組併發降為 **1**。**MUST 先完整讀 [no-wt-dispatch.md](reference/no-wt-dispatch.md)** —— 那份的第 4b 步（`merge-back` 只 stage 不 commit）漏掉會讓整份工作停在 index 裡 |
+
+兩格都不是 skip：「工具叫不動」不在 § Skip 合法理由窮舉 的 3 條之內。
+
 **每一個** `/wt` brief **MUST 逐字內嵌** [guardrails.md](reference/guardrails.md) § C 的護欄區塊。subagent 是 fresh context，天然免疫主線 compaction——把安全執行面下沉到 subagent 是本設計對 governance decay 最可靠的一道。**NEVER** 只寫「照護欄做」這種 by-reference 指示。
 
 **NEVER 因 size / progress 跳過 dispatch**：`applyInProgress` 不管進度 0% 或 change 看起來多大，MUST dispatch——`/spectra-apply` 自管步驟粒度、phase、pause 與 blocker。「需要完整 session」「不適合 loop」都是違規。
@@ -425,6 +434,7 @@ git show --stat HEAD | tail -3   # 驗 scope
 | [autonomy-predicate.md](reference/autonomy-predicate.md) | 判自主 / 做 packaging（Step 3.2 / 4b） |
 | [dispatch-topology.md](reference/dispatch-topology.md) | 分組（Step 3.3） |
 | [harvest.md](reference/harvest.md) | 每個 notification 到達時（Step 5） |
+| [no-wt-dispatch.md](reference/no-wt-dispatch.md) | Step 4a 判出 `/wt` 叫不動時（產地 clade home 恆命中） |
 | [handoff-template.md](reference/handoff-template.md) | 寫 HANDOFF status 段前（Step 7.2） |
 | [skill-relations.md](reference/skill-relations.md) | 查與其他 skill 的邊界、scope 排除清單 |
 

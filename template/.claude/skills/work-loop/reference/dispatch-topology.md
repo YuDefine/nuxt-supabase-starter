@@ -48,6 +48,13 @@ Step 2 產出的**不是**一條佇列，是**四組**併發特性不同的工�
 
 **4 的依據**：每個 in-flight = 一個完整 worktree checkout + 一個 background agent。單機磁碟與 usage 成本在這個量級之上開始明顯。這是常數不是公式 —— 改它要改本檔。
 
+**`/wt` 不可用的 repo（產地 clade home 就是）扇出上限是 1，不是 4**：該情況下執行者是主線本身
+（SKILL.md § `/wt` 不可用時的 dispatch 形狀），而主線只有一個。此時「填滿 4」那一節整段不適用——
+主線做完一個 worktree 的 commit → merge-back → 落地，才開下一個。
+
+上限變 1 **只改併發，不改工作量**：其餘分組判定、收割 SOP、commit 紀律逐條照舊，
+item 也不會因此變成可跳過（§ Skip 合法理由窮舉只有 3 條，併發不在內）。
+
 ## dev-port 組：一次一個，等而不搶
 
 dev port 的互斥**沿用既有機制**，不自建配額：

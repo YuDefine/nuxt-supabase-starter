@@ -57,7 +57,7 @@ Local edits will be reverted by the next sync.
       禁止修改 view 層檔案：
       - 副檔名：`.vue` / `.tsx` / `.jsx` / `.css` / `.scss`
       - 目錄：`app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/`
-      若 task 需要 view 層改動，回報 "view layer change required, defer to main thread" 並跳過該 task（不要勾 checkbox），主線會自己處理。
+      若 task 需要 view 層改動，回報 "view layer change required, defer to main thread" 並跳過該 task（不要勾 checkbox），主線會依 Step 6b B 類形狀處理（sonnet subagent 或瑣碎修主線直做）。
 
       Commit Authorization（**MUST**，per `.claude/rules/agent-routing.codex-watch-protocol.md` § Commit Authorization）：
       完成 phase <N> 全部 tasks 後，**MUST** 在 worktree 內 commit 一次（一 phase 一 commit）：
@@ -106,7 +106,7 @@ Local edits will be reverted by the next sync.
       - BashOutput → read full stdout
       - Read tasks.md → confirm phase <N> all checkboxes are `[x]`
       - **MUST commit boundary check**: `git -C <wt> log main..HEAD --oneline` — confirm exactly one new commit per dispatched phase, format `🧹 chore: wt <change>-phase-<N> — ...`. Multiple commits per phase / missing commit / format mismatch → AskUserQuestion: [1] 主線 squash codex 的 multiple commits / [2] `git -C <wt> reset --soft main` 退 staging 重派 / [3] 中止
-      - **MUST view-layer drift double-check**: `git -C <wt> diff main..HEAD --name-only -- '*.vue' '*.tsx' '*.jsx' '*.css' '*.scss' 'app/pages/**' 'app/components/**' 'app/layouts/**' 'pages/**' 'components/**' 'layouts/**' 'views/**'`（codex 自驗應已 abort，此處再驗保險）。**若有任何 view 層檔案被 codex 動過** → AskUserQuestion: [1] `git -C <wt> reset --soft main` 退 staging + 主線剔除 view 改動 + 重派 codex / [2] 接受並由主線自己重跑該 view phase / [3] 中止
+      - **MUST view-layer drift double-check**: `git -C <wt> diff main..HEAD --name-only -- '*.vue' '*.tsx' '*.jsx' '*.css' '*.scss' 'app/pages/**' 'app/components/**' 'app/layouts/**' 'pages/**' 'components/**' 'layouts/**' 'views/**'`（codex 自驗應已 abort，此處再驗保險）。**若有任何 view 層檔案被 codex 動過** → AskUserQuestion: [1] `git -C <wt> reset --soft main` 退 staging + 主線剔除 view 改動 + 重派 codex / [2] 接受並依 Step 6b B 類形狀重跑該 view 改動（sonnet subagent 或瑣碎修主線直做） / [3] 中止
       - **Scope discipline cross-check**: `git -C <wt> diff main..HEAD --name-only` vs prompt 內 phase scope 宣告。超出範圍 → AskUserQuestion 處理
       - Sanity check: `pnpm typecheck` (or equivalent), relevant tests
       - **If gaps detected** → AskUserQuestion: [1] 主線在 worktree 內 commit 補丁 / [2] reset 重派 codex / [3] 中止

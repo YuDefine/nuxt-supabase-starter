@@ -26,7 +26,9 @@ Local edits will be reverted by the next sync.
 - **長時間 background job**——跑得久且主線不必盯著（build / 大量 test / 長 migration）
 - **需要隔離環境**——worktree 平行改動、會互相踩檔或搶 port 的工作
 
-**不外派**（命中就自己做，即使同時有好幾條）：3 個 tool call 以內就結束的事；路徑已知且檔案 ≤5 個的讀取；規約 / 契約 / 對外文件的**措辭**；UI view 與視覺判讀；需要 claude.ai-connected MCP（Notion 等）的工作；安全敏感或不可逆的動作（憑證 / 刪檔 / force push / 對外發佈）；**複驗自己剛做完的東西**——模型會自行捕捉並修正自己的錯誤，派 agent 複驗是把同一份判斷跑第二次（判準見 [[checker-subagent]] § 過度派）。
+**不外派**（命中就自己做，即使同時有好幾條）：3 個 tool call 以內就結束的事；路徑已知且檔案 ≤5 個的讀取；規約 / 契約 / 對外文件的**措辭**；視覺判讀與 Design Review（品質判定本身外包不了）；需要 claude.ai-connected MCP（Notion 等）的工作；安全敏感或不可逆的動作（憑證 / 刪檔 / force push / 對外發佈）；**複驗自己剛做完的東西**——模型會自行捕捉並修正自己的錯誤，派 agent 複驗是把同一份判斷跑第二次（判準見 [[checker-subagent]] § 過度派）。
+
+**UI view 實作不在不外派清單**：命中外派條件時可派，但外派目標**只有一個合法值**——Claude `sonnet` subagent（per § Subagent 回報契約第 4 條），**NEVER** 派 codex（任何檔位）。視覺判讀與 Design Review 仍照上段留主線——可外派的是**實作**，不是品質判定。
 
 **命中多條外派條件時先問「一個 subagent 能不能全部做完」**——能就派**一個**，**NEVER** 一條 task 配一個 agent 地拆。
 
@@ -117,7 +119,7 @@ Local edits will be reverted by the next sync.
 
 執行 `spectra-apply` 時 phase 粒度派 codex。**三條契約**：
 
-1. **Design Review phase 與 UI view phase 一律主線 Claude Opus 5 xhigh 自己做，永不派 codex**；其他 phase（schema / migration / API server / CLI / 純 backend / 非 view 的 frontend / unit test / docs）派 background codex GPT-5.6-sol high
+1. **Design Review phase 一律主線自己做，永不外派；UI view phase 永不派 codex，預設派 Claude `sonnet` subagent**（thin brief＋檔案所有權清單＋「只准動 view 層檔案」guard＋4-status 回報，per § Subagent 回報契約；主線收回後照跑該 phase 的機械檢查與 Design Review gate）。瑣碎 UI 修（≤2 files 且 ≤20 行）主線直接做，不派。其他 phase（schema / migration / API server / CLI / 純 backend / 非 view 的 frontend / unit test / docs）派 background codex GPT-5.6-sol high
 2. **混雜 phase**（同一 phase 摻了 view 與非 view）：**已開工** → 主線整個 phase 自己做，不重切、不派 codex；**未開工** → **STOP** 請使用者跑 `/spectra-ingest <change>` 重切
 3. **禁止**主線自行修改 tasks.md 的 phase 結構（屬 ingest 範圍）
 
@@ -184,7 +186,11 @@ Sol → Terra → Luna → Claude Sonnet subagent → Claude Haiku subagent → 
 1. **4-status 回報**：brief 內 MUST 要求 subagent 以四值之一收尾——`DONE`／`DONE_WITH_CONCERNS`（完成但對正確性有疑慮，concerns 必列）／`NEEDS_CONTEXT`（缺資訊，列缺什麼）／`BLOCKED`（做不了，列卡點與已試方法）。主線處置：`DONE_WITH_CONCERNS` → 先讀 concerns 再決定收不收；`NEEDS_CONTEXT` → 補 context 重派；`BLOCKED` → 依序考慮補 context／升 model／拆小／上報 user。**NEVER** 對 BLOCKED 原樣重派同一 model 不改任何條件。
 2. **Report 是未驗證主張**：subagent 完成回報（含「no changes outside scope」「tests pass」「已自我 review」）一律當 claim——主線 MUST 用 `git status --short` + `git diff` 核實實際改動範圍 = brief 宣告 scope，scope 外 substantive change 一律 revert。subagent 自報的設計說詞（「per YAGNI 略過」「刻意簡化」）**不得**降級任何 review finding 的嚴重度——那是實作者替自己打分。
 3. **File handoffs**：brief／report／diff 超過 ~30 行的內容走**檔案路徑**傳遞，不貼進 dispatch prompt 或回報訊息——貼文會常駐主線 context、每 turn 重讀。dispatch prompt 五要素：定位一行、brief 檔路徑、跨 task interfaces、歧義裁決、report 檔路徑＋回報契約。實測反例:dispatch prompt 42k chars、99% 是貼上的歷史。
-4. **Model 顯式指定**：Agent tool dispatch MUST 顯式帶 `model`——省略 = 靜默繼承主線（通常最貴檔）。選檔原則「**turn count beats token price**」：多步驟工作用最低檔常花 2-3× turns 反而更貴；brief 內含完整 code 的純轉錄型工作才用最低檔；review 型依 diff 的大小／風險選檔。
+4. **Model 與 effort 顯式指定**：**每一個** dispatch 都 MUST 把 model 與 effort 當成兩個獨立決策，不靠靜默繼承——省略 = 繼承主線（通常最貴檔 × 最深推理），機械掃描型 subagent 拿主線的 xhigh 跑就是效能過剩。選檔預設，依序判：
+   - **先過 Routing Table**：非 UI 工作命中本檔已 route 給 Codex 的類別（mechanical fan-out / read-heavy 掃描 / evidence 段等）→ 派 Codex 便宜檔起步（`terra`，`--effort` 原生可調），**NEVER** 用 Claude subagent 接；Claude subagent 只留給 Claude 例外（需 claude.ai-connected MCP、判讀／治理型分析、user 明確指定）
+   - **UI view 實作**：派 Claude subagent 且 `model` **MUST** 是 `sonnet`（**NEVER** codex，per § 派不派）
+   - **effort 選檔**：機械掃描／純轉錄 → `low`；一般執行 → `medium`；判讀型／高錯誤成本 → `high` 以上。**帶得了 effort 參數的入口**（codex `--effort` / `-c model_reasoning_effort`、Workflow `agent()` 的 `effort`、具名 agent type 的 frontmatter）**MUST** 顯式帶；Agent tool 本身沒有 effort 參數、只能繼承主線——這是機械型工作優先走 Codex 而非 Agent tool 的另一個理由
+   - model 選檔原則「**turn count beats token price**」：多步驟工作用最低檔常花 2-3× turns 反而更貴；brief 內含完整 code 的純轉錄型工作才用最低檔；review 型依 diff 的大小／風險選檔。
 5. **中間產物不進主線**：外派出去的 task，主線只讀對方寫回的 report 檔，**NEVER** 為了「確認它做對」把該 task 碰過的原始檔重讀一遍——那把省下來的 context 原封不動加回來，而且重讀的是同一批事實，換不到新判斷。第 2 條的 scope verify 照舊 MUST 跑：看**改了哪些檔**（`git status --short` / `git diff --stat`）跟重讀檔案內容是兩件事。
 
 ## 為什麼集中寫在這
