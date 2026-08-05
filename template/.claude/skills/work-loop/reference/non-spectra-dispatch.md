@@ -53,6 +53,30 @@ focused spectra-apply session 手動推）。
 > 最後兩列與前身版本不同：`turbo-dispatch.md` 當時寫「跳過，log 到 Skipped」。合併後 packaging
 > 是 MUST——skip 會讓 user-bound 比例高的清單完全停擺，而那正是 `/handoff-loop` 當初存在的理由。
 
+## Brief MUST 有驗收二分欄位（machine / human）
+
+**每一個** dispatch 出去的非 spectra brief（code task 走 worktree、investigation 走主線即時組，兩者都算）
+**MUST** 含以下兩份清單，**兩份都要有**，只列一邊不算：
+
+```markdown
+**Machine-verifiable（你自己跑，綠了才算完成）**：
+- <逐條列出：typecheck / 具名 test / lint / audit script / curl endpoint 回 200 …>
+
+**Human-only（你 NEVER 自己判定通過，做完把證據留在 <具名落點>）**：
+- <逐條列出：UI 順不順 / 文案對不對 / 該不該做這個決定 / 視覺回歸 …>
+- 證據落點：<screenshot 路徑 / PR 連結 / HANDOFF entry>
+```
+
+**這兩份清單同時 MUST 寫進 state 的該 item 條目**——harvest 收割時照 machine 清單逐條複驗
+（per [harvest.md](harvest.md)），human 清單則直接轉成 HANDOFF 的驗收方式一行，不重新發明。
+
+**判準**：一條驗收條件能寫成「跑某個指令看 exit code / 看輸出字串」就是 machine，其餘全是 human。
+判不出來的**歸 human**——保守側是多一次人看，不是少一次。
+
+**NEVER** 用「這條 item 很小，驗收顯而易見」略過本節。spectra 路徑靠 `userActionPending` 與
+machine check 分離把這件事結構化了，非 spectra 路徑沒有那個結構——不明寫，evidence pointer 的品質
+就退回 agent 自覺，而 harvest 拿到的是 machine 與 human 混在一起的一段自報完成。
+
 ## Dispatch 規則
 
 - **分組同主流程**：**每一個** candidate 依上表落進 [dispatch-topology.md](dispatch-topology.md) 的
