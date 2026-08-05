@@ -122,6 +122,21 @@ export const lintBase = {
         ],
       },
     ],
+    // === Coupling / cohesion gate（規約見 rules/core/coupling-cohesion.md）===
+    // 這兩條是「SOLID 在 functional TS 語境」唯一機械可判定的部分：cycle =
+    // 兩個模組互相依賴具體實作（DIP），barrel = 隱性依賴聚合。
+    //
+    // 刻意 NOT 收錄 max-lines-per-function / complexity / max-depth / max-params：
+    // 它們量的是分支密度與規模，不是職責內聚，而 microsoft/TypeScript、vuejs/core、
+    // vitejs/vite、facebook/react、nuxt/nuxt、antfu/eslint-config、xo 八個對照對象
+    // 無一啟用。實測 <consumer-b> 862 violations / 542 檔（其中 88% 近 30 天仍在改），
+    // 訊號雜訊比不足以進 gate。
+    //
+    // no-cycle 依賴 plugins 的 'import'（已在下方啟用），不需 CLI flag。已驗證
+    // 它在只 lint 單一 staged 檔時仍能遞迴追出 cycle，且解得到 Nuxt 的 `~/` alias
+    // （tsconfig extends chain 與 project references 兩種形狀皆可）。
+    'import/no-cycle': 'error',
+    'oxc/no-barrel-file': 'error',
   },
   plugins: ['typescript', 'unicorn', 'import', 'promise'],
   env: {

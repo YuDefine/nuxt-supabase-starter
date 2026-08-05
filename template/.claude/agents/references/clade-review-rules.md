@@ -108,6 +108,27 @@ node vendor/scripts/checks/mutation-loading-detect.ts $(git diff --name-only <ba
 | `server/db/schema/**` 當作 RLS / trigger / DDL 真相來源 | `server/db/schema/**`、`docs/**` | persistence truth 在 `supabase/migrations/**`。 |
 | 文件暗示「有 Drizzle 就不需要 Supabase migration」 | `docs/**`、`.claude/**` | 直接破壞 truth layer。 |
 
+## 耦合與內聚（coupling-cohesion）
+
+> enforcement: audit(audit-coupling-cohesion.ts)（gate 由 `vp lint` 的兩條 oxlint 規則承擔，皆 error 級，不經 patterns.json；shotgun surgery 是 reviewer 語意判斷，無對應 patterns.json semantic id）
+
+規約見 `.claude/rules/coupling-cohesion.md`。機械層擋 cycle 與 barrel，本段是 reviewer 補三項機械層抓不到或不該擋的判斷。
+
+| 禁止使用 / 必查項 | 位置 | 說明 |
+| --- | --- | --- |
+| 針對 `import/no-cycle` 的 disable comment | 全部原始碼 | cycle 只有兩條合法路徑：當場修，或登 TD 記錄修法。`// oxlint-disable-next-line import/no-cycle` 出現在 diff 裡一律擋——它把 error 級 gate 降成無聲。 |
+| 同一 discriminant 在 **≥3 個不同檔**各有一條 switch | `app/**`、`server/**`、`shared/**`、`packages/**` | 加一個 variant 要改 N 處，OCP 意義下的真違規，收斂成單一 map / strategy 表。discriminant 指 `type` / `kind` / `status` / `variant` / `mode` / `state`。**單檔內的 exhaustive switch 是慣用法，NEVER 當違規報**；判定前先確認那幾條 switch 吃的是不是同一個 union（不同 union 撞 prop 名是已知 false positive）。 |
+| 既有 cycle 在 20 檔以下卻把規則降 `warn` | `vite.config.ts` | 降級只有一個合法情境：既有 cycle 涉及 **> 20 檔**的結構性 cycle，且同時登 TD 記錄涉及檔數與收斂計畫。20 檔以下降級 = 用 config 繞過 gate。 |
+
+**Reviewer 檢查方式**：
+
+```bash
+# disable comment 逃逸
+grep -rEn "oxlint-disable.*import/no-cycle" app/ server/ shared/ packages/ 2>/dev/null
+# 規則被降級
+grep -En "'import/no-cycle':\s*'warn'" vite.config.ts
+```
+
 ## evlog 採用一致性
 
 > enforcement: mechanical(server-console-logging, server-raw-throw-error) + semantic(evlog-consistency) + audit(evlog-adoption-audit.ts)
