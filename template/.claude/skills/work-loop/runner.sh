@@ -98,7 +98,12 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
   log="$LOG_DIR/round-$ts.log"
 
   # 每輪都是新 process = 新 context。--print 跑完就退出。
-  cmd=(claude --print --permission-mode "$PERM_MODE" --add-dir "$WT_PARENT" "/work-loop --unattended")
+  # 參數順序有意義，NEVER 重排：`--add-dir <directories...>` 是**變參**選項，會一路吃到下一個
+  # flag 為止。把它排在最後、prompt 前面，prompt 就會被當成第二個目錄吞掉，claude 回
+  # `Input must be provided either through stdin or as a prompt argument when using --print`
+  # ——錯誤訊息完全沒提 --add-dir，2026-08-05 實測連兩輪 exit=1 才查到。
+  # 所以 `--add-dir` MUST 後面接另一個 flag（此處 --permission-mode）當終止符。
+  cmd=(claude --print --add-dir "$WT_PARENT" --permission-mode "$PERM_MODE" "/work-loop --unattended")
 
   if [ "$DRY_RUN" = 1 ]; then
     echo "[dry-run] round $((before + 1)): ${cmd[*]}"
