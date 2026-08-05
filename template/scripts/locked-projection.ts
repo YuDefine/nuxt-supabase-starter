@@ -56,7 +56,7 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // Improvement-loop infra (.clade/)
       String.raw`\.clade/(bin|signals|vendor)/`,
       // Vendored script entry points (scripts/)
-      String.raw`scripts/(wt-helper|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|spectra-archive-sidecar|dev-singleton|dev-router|dev-session)\.(mjs|mts|ts)$`,
+      String.raw`scripts/(wt-helper|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|spectra-archive-sidecar|dev-singleton|dev-router|dev-session|db-lease)\.(mjs|mts|ts)$`,
       // Heavy-gate 併發閘門（bash helper，非 .mjs/.ts 家族，故單列一條）
       String.raw`scripts/gate-slot\.sh$`,
       // Recursive vendored script trees
@@ -70,8 +70,12 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       String.raw`vendor/(snippets|oxc-shared|doctor-shared|review-rules)/`,
       // GitHub vendored actions
       String.raw`\.github/actions/`,
-      // Utility files
-      String.raw`utils/assert-never\.ts$`,
+      // Utility files —— dest 是 `join(consumerRoot, manifest.paths.utils ?? 'utils',
+      // 'assert-never.ts')`（`scripts/lib/vendor-targets.ts`），**utils 目錄可設定**。
+      // 舊版寫死 `^utils/` 只蓋得到 default 值：任何設了 `paths.utils` 的 consumer，
+      // 這支投影都不被認得 → auto-reset 當成 user-authored。目前 fleet 無人設定，所以是
+      // 潛在而非現行漏洞；由 TD-400 把 `_validate-manifests` 改成全開 manifest 後浮出來。
+      String.raw`(?:[^/]+/)*utils/assert-never\.ts$`,
       // Top-level injected files
       String.raw`AGENTS\.md$`,
       String.raw`CLAUDE\.md$`,
@@ -97,6 +101,10 @@ const CLADE_OWN_SOURCE_RE = new RegExp(
   '^(' +
     [
       String.raw`vendor/(snippets|oxc-shared|doctor-shared|review-rules)/`,
+      // clade home 的源檔在 `vendor/utils/assert-never.ts`。上面那條放寬成
+      // `(?:[^/]+/)*utils/assert-never\.ts$` 之後，源檔自己也會命中 LOCKED_PROJECTION_RE
+      // —— 沒有這一列，clade home 會把自己的源檔當投影過濾掉，改動不再算 user WIP。
+      String.raw`vendor/utils/assert-never\.ts$`,
       String.raw`utils/assert-never\.ts$`,
       String.raw`AGENTS\.md$`,
       String.raw`CLAUDE\.md$`,
