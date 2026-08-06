@@ -49,7 +49,10 @@
  *   - `multiLine`: true（顯式指定跨行 tag 展平；未給則用 needsMultiLine() 對 `<Tag...` 形式
  *     pattern 的既有 heuristic 自動判斷，行為與舊 review-rules-ban.sh 一致）
  *
- * Baseline 檔格式（consumer repo root，不在 vendor/ 內——一個 repo 一份 ratchet 現況）：
+ * 路徑基準一律是 **consumerRoot**（本檔所在的 `<consumerRoot>/vendor/review-rules/` 往上兩層），
+ * 不是 git toplevel——monorepo 子目錄 consumer 兩者不同，見 resolveConsumerRoot() 的註解。
+ *
+ * Baseline 檔格式（consumerRoot 底下，不在 vendor/ 內——一個 consumer 一份 ratchet 現況）：
  *   { "<ruleId>": { "<file>": <count>, ... }, ... }
  *
  * Exit code:
@@ -58,15 +61,17 @@
  *   2 — --ratchet 模式下，實際命中數 > baseline（新增違規）
  *   3 — 用法錯誤 / 內部錯誤（bad args、JSON 解析失敗等）
  *
- * patterns.json 不存在（consumer 尚未 propagate）→ 靜默 exit 0（非 --json）或印
- * {"skipped":true,...}（--json），不視為錯誤。
+ * patterns.json 不存在（consumer 尚未 propagate）→ exit 0，不視為錯誤。輸出**一律帶找過的
+ * 絕對路徑**（`--json` 走 `patternsPath` / `consumerRoot` 欄位，人讀走 stderr 一行），讓
+ * 「尚未 propagate」與「路徑解錯」在輸出上可區分。
  *
  * 由 ~/clade vendor/review-rules/ 散播，請勿直接編輯 consumer 副本。
  */
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 class UsageError extends Error {}
 
@@ -325,19 +330,38 @@ function compareRatchet(baseline: Baseline | null, violations: Violation[]) {
 
 // ---------- git helpers ----------
 
-function gitRevParseShowToplevel() {
-  return execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
+// consumerRoot = 這份 scan.ts 被 propagate 到哪個 consumer 根目錄下。
+//
+// **NEVER 改回 `git rev-parse --show-toplevel`**：那個假設只在「consumer 根目錄 == git
+// 工作區根目錄」時成立，而 monorepo 子目錄 consumer（registry target 是
+// `<repo>/template` 這類）恆不成立 —— toplevel 會解到上一層，於是
+//   ① patternsPath 永遠找不到（走 § patterns.json 不存在的靜默出口，與「尚未 propagate」同形）
+//   ② 掃描範圍變成整個 monorepo（含 consumer 目錄外的檔）
+//   ③ `DEFAULT_EXCLUDE_RE` 的 `^vendor/` 對 `template/vendor/…` 失效 → cookbook 註解誤觸規則
+// 三者一起壞，而輸出上看起來只是「這個 consumer 還沒收到 patterns.json」（TD-428）。
+//
+// script 位置是唯一與 consumer 根目錄綁定的事實：本檔恆在 `<consumerRoot>/vendor/review-rules/`。
+function resolveConsumerRoot() {
+  return resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 }
 
 // vendor/ 是 clade 投影/cookbook（含帶說明註解的 .vue template），永遠不是 consumer
 // 業務碼——全域排除，防 cookbook 註解文字誤觸規則（如 dark-mode 規則咬到範例說明）。
 const DEFAULT_EXCLUDE_RE = /^(vendor|node_modules)\//
 
-function gitStagedFiles(repoRoot: string) {
-  const out = execFileSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACM'], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-  })
+// 兩支都回 **consumerRoot 相對**路徑（readFile 直接 join consumerRoot 就能讀）。
+// `git ls-files` 天生就是 cwd 相對 + 限縮到 cwd 以下；`git diff` 不是（預設吐 repo root
+// 相對、且不限縮），所以 staged 那支 **MUST 帶 `--relative`** 才對齊。consumerRoot ==
+// git toplevel 的一般 consumer 上，`--relative` 與不帶完全同義（cwd 就是 root）。
+function gitStagedFiles(consumerRoot: string) {
+  const out = execFileSync(
+    'git',
+    ['diff', '--cached', '--name-only', '--diff-filter=ACM', '--relative'],
+    {
+      cwd: consumerRoot,
+      encoding: 'utf8',
+    },
+  )
   return out
     .split('\n')
     .map((s) => s.trim())
@@ -345,8 +369,8 @@ function gitStagedFiles(repoRoot: string) {
     .filter((f) => !DEFAULT_EXCLUDE_RE.test(f))
 }
 
-function gitAllFiles(repoRoot: string) {
-  const out = execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8' })
+function gitAllFiles(consumerRoot: string) {
+  const out = execFileSync('git', ['ls-files'], { cwd: consumerRoot, encoding: 'utf8' })
   return out
     .split('\n')
     .map((s) => s.trim())
@@ -438,14 +462,19 @@ function main() {
   const wantWriteBaseline = argv.includes('--write-baseline')
   const wantJson = argv.includes('--json')
 
-  const repoRoot = gitRevParseShowToplevel()
-  const patternsPath = join(repoRoot, 'vendor', 'review-rules', 'patterns.json')
+  const consumerRoot = resolveConsumerRoot()
+  const patternsPath = join(consumerRoot, 'vendor', 'review-rules', 'patterns.json')
 
   if (!existsSync(patternsPath)) {
+    // 訊息 **MUST 帶找過的絕對路徑**：這條出口原本是為「consumer 尚未 propagate」設計的，
+    // 但任何路徑解析失誤都走同一條，兩種狀態的輸出逐字相同 → 稽核端只能猜，而它猜的那句
+    // （「尚未 propagate」）在路徑失誤時是錯的（TD-428）。印出路徑讓兩者可區分。
     if (wantJson) {
       process.stdout.write(
-        `${JSON.stringify({ skipped: true, reason: 'vendor/review-rules/patterns.json not found' })}\n`,
+        `${JSON.stringify({ skipped: true, reason: 'vendor/review-rules/patterns.json not found', patternsPath, consumerRoot })}\n`,
       )
+    } else {
+      process.stderr.write(`ℹ️  patterns.json 不存在，跳過掃描：${patternsPath}\n`)
     }
     process.exitCode = 0
     return
@@ -455,11 +484,11 @@ function main() {
   const allRules: Rule[] = Array.isArray(data.rules) ? (data.rules as Rule[]) : []
   const rules = allRules.filter((r) => layer === 'all' || (r.layer || 'pre-commit') === layer)
 
-  const files = fileset === 'staged' ? gitStagedFiles(repoRoot) : gitAllFiles(repoRoot)
-  const readFile: ReadFile = (f) => readFileSync(join(repoRoot, f), 'utf8')
+  const files = fileset === 'staged' ? gitStagedFiles(consumerRoot) : gitAllFiles(consumerRoot)
+  const readFile: ReadFile = (f) => readFileSync(join(consumerRoot, f), 'utf8')
   const violations = files.length > 0 ? scan(rules, files, readFile) : []
 
-  const baselinePath = join(repoRoot, 'review-rules-baseline.json')
+  const baselinePath = join(consumerRoot, 'review-rules-baseline.json')
   const baselineExists = existsSync(baselinePath)
   const oldBaseline = wantRatchet || wantWriteBaseline ? loadBaseline(baselinePath) : null
 
