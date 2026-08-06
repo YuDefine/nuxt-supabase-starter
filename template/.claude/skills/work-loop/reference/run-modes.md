@@ -24,6 +24,10 @@ cd <目標 repo> && ~/offline/clade/plugins/hub-core/skills/work-loop/runner.sh 
 cd <目標 repo> && ~/offline/clade/plugins/hub-core/skills/work-loop/runner.sh --dry-run
 ```
 
+**主線起它時 MUST 用 `Bash(run_in_background=true)`，且 NEVER 加 `nohup` / `disown` / 尾綴 `&`**——
+形狀、理由、以及退出後的回報契約在 SKILL.md Step 0 § 起 runner 的形狀與收尾契約。上面兩行是給
+人看的指令原型，主線照抄時要包進 background Bash call。
+
 `runner.sh` 的 flag：`--max-rounds <n>`（預設 20）、`--dry-run`（只印每輪會下的指令）、
 `--permission-mode <mode>`（預設 `acceptEdits`；**NEVER** 預設 `bypassPermissions`——那會連
 破壞性指令一起放行，要更寬鬆 MUST 由使用者顯式指定）。
@@ -63,3 +67,7 @@ runner 只認 state 檔的 `stoppedReason`（整個 loop 該停）；`roundEndRe
 
 runner 自己的停止條件：`stoppedReason` 出現、達 `--max-rounds`、連續 2 輪 exit≠0、
 或 round 數連續 2 輪未前進（代表那輪沒寫 state，通常是被 lock 擋掉或中途夭折）。
+
+**這四種的語義差別 MUST 出現在收尾回報裡**——只有第一種是「待辦推完」，其餘三種分別是額度用完、
+系統性故障、中途夭折。逐列對照表與回報的四個必填項在 SKILL.md Step 0
+§ 起 runner 的形狀與收尾契約 (c)。**兩處講同一件事，改其中一處 MUST 同步改另一處。**

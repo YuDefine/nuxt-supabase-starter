@@ -76,9 +76,9 @@ $ARGUMENTS
 
   | 可觀察 predicate | route 到 |
   | --- | --- |
-  | user 訊息帶無人值守意圖（「自動推」「把待辦跑完」「持續做」「不要停」「無人值守」），**或** 本輪 scan 出的 candidate 多到一個 session 跑不完 | **`runner.sh`** —— 照 [reference/run-modes.md](reference/run-modes.md) 的指令起，或把該指令告訴 user |
+  | user 訊息帶無人值守意圖（「自動推」「把待辦跑完」「持續做」「不要停」「無人值守」），**或** 本輪 scan 出的 candidate 多到一個 session 跑不完 | **`runner.sh`** —— 主線**自己起**，形狀照 § 起 runner 的形狀與收尾契約 |
   | user 明說只跑一兩輪、或要邊看邊介入 | in-session `Skill invoke: /loop /work-loop`（dynamic mode，自我 pace） |
-  | 判不出來 | **`runner.sh`** —— 保守側是續航力，不是觀察便利 |
+  | 判不出來 | **`runner.sh`** —— 主線**自己起**；保守側是續航力，不是觀察便利 |
 
   **route 判準是「這個 loop 要跑多久」，NEVER 是「哪個叫得比較順手」。** in-session 版的主線 context 每輪只增不減，撞門檻就只能走 decay gate 收工——把長清單放進 in-session 等同預先把它綁死在一輪（2026-08-06 round 26 / 27 連續兩輪實測，兩輪都以 `roundEndReason: context-budget-threshold` 結束，而 `runner.sh` 全程可用）。同一條理由的另一半在 [reference/run-modes.md](reference/run-modes.md) § 為什麼 in-session 版有天花板。
 - **從 `/loop` 呼叫**（正常路徑）→ 每輪結束**先判「現在還有沒有事做」，再決定要不要排 wakeup**：
@@ -112,6 +112,45 @@ route 表判完「這個 loop 由誰承載」之後、**跑 Step 2 的 scan 之�
 **改走 runner 是換載體，NEVER 是 skip。** 本步不讓任何一個 item 消失、不寫 `stoppedReason`、不進 § Skip 合法理由窮舉：待辦原封不動留在原處，由 runner 的下一個 process 從乾淨 context 接手。判完就**立刻**起 runner，**NEVER** 只在輸出裡建議 user 自己去跑（那是 Output contract 逐字禁止的 user call-to-action）。
 
 **NEVER 自行放寬門檻**：門檻值是 [[session-tasks]] § Session context 預算 的 predicate 7 項目，想調鬆它的正是已經超標的那個 session。本步只讀「提示有沒有出現」，不讀也不改門檻數字。
+
+### 起 runner 的形狀與收尾契約
+
+route 表判到 `runner.sh` 之後（含 headroom 判定改判過去的那條），起跑與收尾**全部由主線扛完**：user 不需要自己跑任何指令、不需要輪詢進度、不需要來問它停了沒。
+
+#### (a) 起跑形狀（hard rule）
+
+**MUST** 用 `Bash(run_in_background=true)` 起，指令是 [reference/run-modes.md](reference/run-modes.md) 的絕對路徑形式：
+
+```text
+Bash(run_in_background=true):
+  cd <目標 repo> && ~/offline/clade/plugins/hub-core/skills/work-loop/runner.sh --max-rounds 20
+```
+
+**NEVER** 在該指令裡加 `nohup`、`disown` 或尾綴 `&`。`runner.sh` 是前景同步跑（每輪 `claude --print` 跑完才進下一輪），harness 正是靠這點追蹤它、並在它退出時回頭叫醒主線。自行背景化 → Bash call 立刻返回 → harness 判定已結束 → 真正的 runner 成為無人追蹤的孤兒，**收尾通知永遠不會到達**。這是**靜默**失敗：起跑當下零異常訊號，log 照寫、round 照前進，看起來一切正常。
+
+起完 **MUST** 回報 log 目錄後結束本輪。**NEVER** 在主線空等，**也 NEVER** 排 wakeup 去輪詢 state 檔——退出通知由 harness 送達，輪詢買不到任何它沒給的東西。
+
+#### (b) 收尾回報契約
+
+runner process 的退出通知到達時 **MUST 主動回報，不等 user 問**。這不是 Step 5 的收割對象（那管的是 subagent 的 `<task-notification>`），走本節。
+
+**每一次**回報 MUST 含以下四項，缺一不算回報完成：
+
+1. 最終 round 數（runner 尾巴的 `runner 結束 —— 最終 round=<n>`）
+2. `stoppedReason`——有印就照抄，沒印就明說「沒有 `stoppedReason`」
+3. log 目錄路徑
+4. **停止原因屬於下表哪一列**——這項決定 user 要不要再起一輪，是四項裡唯一不能靠貼 log 代替的
+
+#### (c) 四種停止原因（逐字對照 `runner.sh` 的停止分支）
+
+| runner 印的 | 語義 | 回報 MUST 說 |
+| --- | --- | --- |
+| `== stop: <reason>`，且 reason 來自 state 的 `stoppedReason` | 正常收工 | 待辦已推完 |
+| 迴圈跑滿 `--max-rounds`（**沒有** `== stop:` 行） | 額度用完，**不是**做完 | 待辦還在，需再起一輪 |
+| `== stop: 連續 2 輪 exit≠0` | 系統性故障 | **異常中止** + log 路徑 |
+| `== stop: state 連續 2 輪未前進` | 被 lock 擋掉或中途夭折 | **異常中止** + 那幾輪沒寫進 state |
+
+**下三列都不是「跑完了」。** **NEVER** 把其中任何一列回報成待辦已推完，**也 NEVER** 只摘成功的那幾輪而不提中止——runner 每輪成功都印 `✓ round <n> 完成`，只讀那些行會產出一份看起來順利的假報告。命中下兩列時 **MUST** 一併附 `tail -20 <最後一個 log>`。
 
 ### 互斥鎖
 
