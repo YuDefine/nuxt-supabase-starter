@@ -72,7 +72,15 @@ $ARGUMENTS
 
 單次 `/work-loop` = 一輪 scan → 分類 → dispatch/packaging → 收割 → 寫狀態。**一輪不是完成。**
 
-- **直接呼叫**（非從 `/loop`、非 `--unattended`）→ **MUST** 立即改走 `Skill invoke: /loop /work-loop`（dynamic mode，自我 pace），**NEVER** 自己跑完一輪就停
+- **直接呼叫**（非從 `/loop`、非 `--unattended`）→ **NEVER 自己跑完一輪就停**。先照下表 route 到承載這個 loop 的跑法，**NEVER** 無條件選 in-session：
+
+  | 可觀察 predicate | route 到 |
+  | --- | --- |
+  | user 訊息帶無人值守意圖（「自動推」「把待辦跑完」「持續做」「不要停」「無人值守」），**或** 本輪 scan 出的 candidate 多到一個 session 跑不完 | **`runner.sh`** —— 照 [reference/run-modes.md](reference/run-modes.md) 的指令起，或把該指令告訴 user |
+  | user 明說只跑一兩輪、或要邊看邊介入 | in-session `Skill invoke: /loop /work-loop`（dynamic mode，自我 pace） |
+  | 判不出來 | **`runner.sh`** —— 保守側是續航力，不是觀察便利 |
+
+  **route 判準是「這個 loop 要跑多久」，NEVER 是「哪個叫得比較順手」。** in-session 版的主線 context 每輪只增不減，撞門檻就只能走 decay gate 收工——把長清單放進 in-session 等同預先把它綁死在一輪（2026-08-06 round 26 / 27 連續兩輪實測，兩輪都以 `roundEndReason: context-budget-threshold` 結束，而 `runner.sh` 全程可用）。同一條理由的另一半在 [reference/run-modes.md](reference/run-modes.md) § 為什麼 in-session 版有天花板。
 - **從 `/loop` 呼叫**（正常路徑）→ 每輪結束**先判「現在還有沒有事做」，再決定要不要排 wakeup**：
 
   | 可觀察 predicate | 動作 |

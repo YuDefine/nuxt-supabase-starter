@@ -27,18 +27,22 @@ session 結束時對每個未完項**升級或刪，二擇一**，不留著。
 
 ## Session context 預算（MUST）
 
-**Iron Law：context 越過門檻就收工，不是「等這件做完再說」。**
+**Iron Law：越過收工線就收工，不是「等這件做完再說」。而收工線是 500k，不是第一次響的那個門檻。**
 
 本節適用**每一個** session、**所有** consumer——不是只有覺得跑很久的那次。
 
+**兩級語義不同，NEVER 當成同一件事的兩個強度**（Charles 2026-08-06 round 27 拍板）：
+
 | 可觀察 predicate | MUST |
 | --- | --- |
-| session context 越過 **200k** | 找下一個可切點收工：未完項寫進 `tasks/<date>-<slug>.md`（或 `HANDOFF.md` / `docs/tech-debt.md`），**NEVER** 開新的工作段 |
-| session context 越過 **400k** | **現在**登記並收工。手上若是不可分割的驗證迴圈，跑完那一輪就切 |
+| session context 越過 **300k** | **NEVER** 開新的**大**工作段（新的 change / 新的多檔重構 / 新的 spectra phase）；手上這件做完就收。**小 item 照做**——單檔文字修正、補一條 TD、勾一個 checkbox、回答一個問題不受本級限制 |
+| session context 越過 **500k** | **現在**登記並收工：未完項寫進 `tasks/<date>-<slug>.md`（或 `HANDOFF.md` / `docs/tech-debt.md`）。手上若是不可分割的驗證迴圈，跑完那一輪就切 |
 | 正在跑不可分割的驗證迴圈（單一 test run / 單一 migration） | 跑完再切。**NEVER** 拿「等一下還有事要做」把它延伸成新工作段 |
 
+**NEVER 把 300k 那級讀成「什麼都不能開」。** 本節 round 24 版的第一級是 200k 且綁「**NEVER** 開新的工作段」，而 `/work-loop` 這類 loop 的本質就是一個接一個開新 item——那條對它等於硬停。2026-08-06 round 26 / 27 連續兩輪實證：兩輪都在 ~202k 被腰斬，而當下一輪的工作剛做完、正要開下一輪。**改的不是數字算錯，是那一級的語義訂錯了**；把 300k 讀回「什麼都不能開」等於把這次拍板退回它要修的狀態。
+
 門檻是 `session-context-budget-warn.sh`（PostToolUse hook）機械報出來的，本節是它引用的 SoT：
-**200k 響一次、400k 起每 +100k 再響一次**。提示走 exit 2 —— PostToolUse 的 exit 0 stderr
+**300k 響一次、500k 起每 +100k 再響一次**。提示走 exit 2 —— PostToolUse 的 exit 0 stderr
 只進 debug log，agent 永遠看不到（2026-08-06 前本 hook 正是 exit 0，所以它上線後量到的
 「行為沒有改變」其實是提示從未送達）。
 

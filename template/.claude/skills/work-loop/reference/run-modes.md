@@ -51,6 +51,11 @@ runner 把「一輪」的邊界從 turn 提升到 process：每輪 `claude -p` �
 **NEVER** 因為「in-session 比較好觀察」就對長清單用 in-session 版——那是拿 loop 的續航力換
 觀察便利，而 runner 每輪都留 log，觀察性沒有損失。
 
+**這條表態的執行面在 SKILL.md Step 0 § Continuous invocation 的 route 判定表**（無人值守意圖或
+長清單 → runner；user 明說只跑一兩輪 → in-session；判不出來 → runner）。兩處講同一件事，**改
+其中一處 MUST 同步改另一處**——2026-08-06 round 26 / 27 連續兩輪撞 context 門檻收工，成因就是
+Step 0 當時寫成無條件 route 到 in-session、與本節相反，而執行時 Step 0 贏。
+
 ## runner 停止 vs 換 process
 
 runner 只認 state 檔的 `stoppedReason`（整個 loop 該停）；`roundEndReason`（這個 process 滿了）
