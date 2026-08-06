@@ -183,8 +183,10 @@ User 報告看不到 worktree 改動（「看不到變化」「沒反映」「de
 worktree subagent 完成每個 tasks.md phase section 的最後一個 `- [ ]` → `- [x]` 後 **MUST** commit tasks.md 到 worktree branch：
 
 ```bash
-git commit --only -m "📝 spectra: phase N done (<change-name>)" -- openspec/changes/<change-name>/tasks.md
+git commit --only -m "📝 docs(spectra): phase N done (<change-name>)" -- openspec/changes/<change-name>/tasks.md
 ```
+
+type **MUST** 是 `📝 docs`，**NEVER** 是 `📝 spectra` —— 後者不在 conventional type 集合內，帶 emoji 型 `type-enum` 的 consumer（<consumer-b> 等）會在 commit-msg hook 擋下，而報的錯是 `subject may not be empty`，跟真因對不上。
 
 **Why**：`merge-back --squash` 只帶 committed changes 回 main。未 commit 的 checkbox 更新留在 worktree working tree → merge-back 不帶回 → review-gui 讀 main tasks.md 永遠看到 `[ ]` → impl-gate 誤判 <90%。
 

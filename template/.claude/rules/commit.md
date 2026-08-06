@@ -82,7 +82,7 @@ Worktree 完成驗證後的標準收尾（詳見 [[worktree-default]] §5）：*
 上一條的 `git commit` 禁令有且只有一個例外：**把 change artifact 的進度標記落進 worktree branch**，路徑限定 `openspec/changes/**/tasks.md`：
 
 ```bash
-git commit --only -m "📝 spectra: phase N done (<change-name>)" -- openspec/changes/<change-name>/tasks.md
+git commit --only -m "📝 docs(spectra): phase N done (<change-name>)" -- openspec/changes/<change-name>/tasks.md
 ```
 
 `merge-back --squash` 只帶 committed changes 回 main，未 commit 的 checkbox 留在 worktree working tree → main 的 tasks.md 永遠是 `[ ]` → impl-gate 誤判。操作細節與時機見 [[worktree-default]] §9.5.1（該節是執行面 SoT，本節是「worktree 內能不能 commit」的契約 SoT）。
