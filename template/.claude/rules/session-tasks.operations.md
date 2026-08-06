@@ -179,12 +179,14 @@ tasks/
 | **跨 conversation / 跨 project** 個人偏好或行為更正 | auto-memory `feedback` type | user 糾正且該 lesson 在任何 project 都適用 |
 | **跨 session 但只對當前 consumer** 的 lesson | `tasks/lessons.md`（本檔） | 只對當前 repo 有效；不夠成熟升 pitfall；不適合 auto-memory（換 project 不適用） |
 | **consumer 自家業務規約**（演進成穩定規約） | `.claude/rules/local/<topic>.md` | 從 lessons.md 升級；override clade core 須加 [[local-rule-override]] 宣告 |
+| **跨 consumer 適用的正向規約**（pitfall 四項不齊備） | clade 標準層，落點走 `/bp` 判 | 同型 lesson 在 ≥2 個 consumer 出現；**或**該 lesson 描述的是 agent 行為模式（scope 誤判 / 交付格式錯 / 工具路由錯 — 不依賴業務邏輯就能描述），即使只在 1 個 consumer 觀察到也算命中 |
 
 ### 升級路徑（lessons.md → 其他 SoT）
 
 - **熟了升 pitfall**：四項齊備 → `/oops` Mode B → 從 lessons.md 移除
 - **熟了升 rules/local/**：演進成穩定 consumer 規約 → 寫 `.claude/rules/local/<topic>.md` → 從 lessons.md 移除
 - **發現跨 project 適用 → 升 auto-memory**：改寫成 auto-memory `feedback` type → 從 lessons.md 移除
+- **發現跨 consumer 適用 → 走 `/bp`**：clade 標準層有 7 種落點，由 `/bp` record mode 判、回報、等確認 → rule 落地 + propagate 後才從 lessons.md 移除。**NEVER** 自己直接改 clade 源檔（落點判斷要可被當場推翻）；**NEVER** 因為「還沒到 pitfall 四項齊備」就把跨 consumer 的 lesson 留在 lessons.md 不處理 —— pitfall 不是唯一出口，`/bp` 收的正是四項不齊備的那些
 - **過時**：直接刪行（git history 留證）
 
 ### 撞檔與 handoff
