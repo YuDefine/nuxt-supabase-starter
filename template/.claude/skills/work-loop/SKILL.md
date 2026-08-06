@@ -97,6 +97,22 @@ $ARGUMENTS
 
 - **「完成」的定義**：Step 6 的停止條件任一成立。**NEVER** 把「本輪無 actionable item」當成完成——那只代表這一輪 scan 沒新東西，user 答完一條 packaged 決策後下一輪就會有。
 
+### 開場 headroom 判定（在取鎖與 scan 之前）
+
+route 表判完「這個 loop 由誰承載」之後、**跑 Step 2 的 scan 之前**，先判本 session 還有沒有餘裕跑完一輪：
+
+| 可觀察 predicate | 動作 |
+| --- | --- |
+| 本 session 已收到過 context budget 提示（`session-context-budget-warn.sh` 的 300k / 500k 任一級） | **改走 `runner.sh`**——主線用 `Bash(run_in_background=true)` 起它，回報 log 路徑後結束本輪。**NEVER** 先跑 scan |
+| 本輪由 `runner.sh` 起（`claude --print`），**或** 本 skill 是本 session 的第一個工作段 | headroom 充足，照常取鎖進 Step 1 |
+| in-session、本 session 已做過別的工作、但還沒收到提示 | 照常進 Step 1，但 route 表「判不出來」那列**改判為 `runner.sh`**——餘裕不明時保守側是換載體 |
+
+**這一步的位置就是它的全部價值**：scan、分類、Step 1.5 的 guardrails re-read 是一輪裡最先燒掉的一段固定成本，而它們產出的東西在「沒餘裕做事」時完全用不到。**NEVER** 用「先掃一輪看看有什麼再決定」把本步挪到 scan 之後——那正是本步要省掉的那筆開銷。
+
+**改走 runner 是換載體，NEVER 是 skip。** 本步不讓任何一個 item 消失、不寫 `stoppedReason`、不進 § Skip 合法理由窮舉：待辦原封不動留在原處，由 runner 的下一個 process 從乾淨 context 接手。判完就**立刻**起 runner，**NEVER** 只在輸出裡建議 user 自己去跑（那是 Output contract 逐字禁止的 user call-to-action）。
+
+**NEVER 自行放寬門檻**：門檻值是 [[session-tasks]] § Session context 預算 的 predicate 7 項目，想調鬆它的正是已經超標的那個 session。本步只讀「提示有沒有出現」，不讀也不改門檻數字。
+
 ### 互斥鎖
 
 單輪可能耗時數小時，無鎖會讓下一次觸發疊上第二輪。進 Step 1 前：
