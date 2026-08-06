@@ -238,12 +238,13 @@ launcher 早就死了。分類之前先實跑一次，死掉的組直接標不�
 | 組 | 探針 | 判活 |
 | --- | --- | --- |
 | dev-port | `node scripts/dev-session.ts status`（無此檔改 `dev-singleton.ts`） | exit 0 |
-| main | `node scripts/wt-helper.ts list` | exit 0 |
+| main | `node scripts/wt-helper.ts list`（**產地 clade home 在 `vendor/scripts/wt-helper.ts`** —— `scripts/` 是投影側路徑） | exit 0 |
 | 扇出 | 同上（`/wt` 靠 wt-helper 建 worktree） | exit 0 |
 | spectra item 存在時 | `spectra list --json` | exit 0 且吐得出 JSON |
 
-**非 0 的處置**（三步，缺一不可）：
+**非 0 的處置**（四步，缺一不可）：
 
+0. **先確認探針路徑在本 repo 成立** —— 「探針寫錯路徑」與「工具真的死了」在 exit code 上**完全同形**，兩者都回非 0 + `MODULE_NOT_FOUND`。產地與投影的路徑不同（上表 main 列即為一例），照抄另一側的路徑會讓整組 item 被誤判成不可用。路徑確認無誤才進第 1 步
 1. 把該組標成**本輪不可用**，落進 state 的 `notes`，附**實際 stderr 首行**（不是「壞了」）
 2. 該組的 item **全部改走 § Decision packaging**，**NEVER** dispatch、**NEVER** 標 skip
 3. 修法若落在別的 repo（clade 投影層、上游工具）→ 修法本身也是一條 packaged 決策，
@@ -253,6 +254,8 @@ launcher 早就死了。分類之前先實跑一次，死掉的組直接標不�
 四支入口（`dev-session` / `dev-singleton` / `db-lease` / `claims-lib`）全部
 `ERR_MODULE_NOT_FOUND`。**那四支檔案本身都在**，`[ -f ]` 一路綠燈；死的是它們 import 的東西。
 該輪因此白派了一個 worktree agent 出去，回來才知道 dev-port 組整組不可用。
+
+**為什麼第 0 步在實跑之後**：2026-08-06 round 27 於 clade home 實測——`node scripts/wt-helper.ts list` 回 `MODULE_NOT_FOUND`，而 wt-helper 在產地是 `vendor/scripts/wt-helper.ts`、**完全正常**。照 1–3 步處置會把 main 組 + 扇出組整組標成不可用，該輪所有 item 走 packaging，空轉一輪——而 clade home 正是 `/work-loop` 目前唯一的實跑場地（[[TD-395]]）。**實跑擋得住「檔案在但 import 死了」，擋不住「探針量錯檔」**，兩者的輸出無法區分，所以要有獨立的第 0 步。
 
 ---
 
