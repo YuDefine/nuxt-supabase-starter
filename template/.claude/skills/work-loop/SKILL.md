@@ -154,17 +154,34 @@ runner process 的退出通知到達時 **MUST 主動回報，不等 user 問**�
 
 ### 互斥鎖
 
-單輪可能耗時數小時，無鎖會讓下一次觸發疊上第二輪。進 Step 1 前：
+單輪可能耗時數小時，無鎖會讓下一次觸發疊上第二輪。進 Step 1 前 **MUST** 跑：
 
 ```bash
-LOCK="$(git rev-parse --show-toplevel)/.spectra/work-loop.lock"
-# lock 存在且（第一行 pid 存活 && 第二行 timestamp < 6h 前）→ 另一輪進行中：
-#   輸出一行「work-loop already running (pid <pid>, since <ts>)」直接結束本輪
-# 否則（無 lock / pid 死亡 / ≥6h stale）→ 覆寫接手：
-mkdir -p "$(dirname "$LOCK")" && printf '%s\n%s\n' "$$" "$(date -u +%FT%TZ)" > "$LOCK"
+node ~/offline/clade/vendor/scripts/work-loop-lock.ts acquire
 ```
 
-**每一條**停止路徑（含失敗提早結束）都 **MUST** `rm -f "$LOCK"`；in-flight ledger > 0 期間 **NEVER** 釋放。
+| exit | 輸出 | 動作 |
+| --- | --- | --- |
+| 0 | `acquired` / `took-over` / `reentrant` ＋ `WORK_LOOP_SESSION_ID=<id>` | 把 `<id>` 記進 state 的 `lockSessionId`，進 Step 1 |
+| 3 | `work-loop already running (…)` | **逐字照抄那一行輸出後結束本輪**，不做任何其他事 |
+| 1 | `error: …` | 與 Step 2 scan 失敗同級：STOP，直接結束本輪 |
+
+**Iron Law：鎖檔只由這支 script 讀寫。違反字面就是違反精神**——「用 Write tool 補一個就好」「script 跑不動先手寫一個」都不算遵守。
+
+- **heartbeat**：**每一次**寫 `.spectra/work-loop-state.json` 的同時都 MUST 跑 `node ~/offline/clade/vendor/scripts/work-loop-lock.ts refresh --session <id>`（Step 1 / Step 5 **每一次**收割 / Step 7 各一次，不是只在 Step 7 刷）。窗口 45 分鐘
+- **釋放**：**每一條**停止路徑（含失敗提早結束）都 MUST 跑 `node ~/offline/clade/vendor/scripts/work-loop-lock.ts release --session <id>`；in-flight ledger > 0 期間 **NEVER** 釋放
+
+判準是**析取**——`heartbeat 在 45min 窗口內` **或** `pid 存活`，任一成立即為 active。舊版單看 `$$` 的合取判準在 in-session 模式下恆判 stale，鎖從未擋過任何一次（[[TD-424]]）。
+
+**NEVER 用 Write tool、`printf`、`echo` 或任何其他方式手寫鎖檔。** 手寫的鎖沒有 session 識別也沒有 heartbeat，判準當場退回它要修的那個狀態：
+
+| 逐字實錄的開脫 | 實際 |
+| --- | --- |
+| 「sandbox 擋掉 `$$`，用 Write tool 補一個鎖檔就好」（round 33） | 手寫的鎖第一行是**已結束的那個 Bash call 的 pid**，寫進去的當下就是死的 |
+| 「pid 欄填 0 或哨兵值，反正判準會走 DEAD 分支」（round 30 / 36） | 那正是「鎖從未擋過任何一次」的成因，不是它的解法 |
+| 「這支 script 在這個 repo 找不到，先跳過鎖」 | 找不到 = 路徑打錯。先 `ls ~/offline/clade/vendor/scripts/work-loop-lock.ts` 確認，**NEVER** 無鎖開跑 |
+
+**Red Flag**：正要對 `.spectra/work-loop.lock` 下 Write / Edit / `printf` / `echo` —— 停手，回到上面那條指令。
 
 宣布模式一句話後進 Step 1。
 
@@ -191,6 +208,7 @@ STATE="$(git rev-parse --show-toplevel)/.spectra/work-loop-state.json"
   "subagentsSpawned": 4,
   "consecutiveDispatchFailures": 0,
   "guardrailsAck": "2026-08-05T04:02:10Z",
+  "lockSessionId": "mshkf6es-mptx87qc-ubuntu",
   "inFlight": [{ "agent": "wt-td317", "item": "TD-317", "dispatchedAt": "…" }],
   "packaged": { "TD-402": "2026-08-05T03:40:00Z" },
   "awaiting": [{ "id": "TD-402", "title": "grain 二選一", "packagedAt": "2026-08-05T03:40:00Z",
@@ -225,7 +243,7 @@ STATE="$(git rev-parse --show-toplevel)/.spectra/work-loop-state.json"
 
 兩條都不成立 → 續留 escalated（本輪**不 dispatch**），Step 7 原樣 re-emit。
 
-**Decay 偵測（hard gate）**：`guardrailsAck` 讀不到、或 `round` 與 HANDOFF `## Work Loop Status` 段記載的輪次不一致 → **判定 context decayed**，**MUST** 結束本輪：state 寫 `roundEndReason: "context-decay"`、`rm -f` lock、退出。**NEVER**「感覺還記得」就繼續跑。
+**Decay 偵測（hard gate）**：`guardrailsAck` 讀不到、或 `round` 與 HANDOFF `## Work Loop Status` 段記載的輪次不一致 → **判定 context decayed**，**MUST** 結束本輪：state 寫 `roundEndReason: "context-decay"`、跑 `work-loop-lock.ts release --session <id>`、退出。**NEVER**「感覺還記得」就繼續跑。
 
 **`roundEndReason` 與 `stoppedReason` 是兩件事，寫錯會讓 loop 提早死掉**：
 
@@ -262,7 +280,7 @@ GOT="$(jq -r '.consumerId // "MISSING"' "$SCAN")"
 PARKED="$(spectra list --parked --json 2>/dev/null || echo '{}')"
 ```
 
-**失敗 fallback**：script 不存在或回 error、**或 `SCAN-MISMATCH` / `MISSING`** → **STOP**，寫 HANDOFF 一行 `work-loop: scan failed at <ISO>`，`rm -f` lock 後結束。`SCAN-MISMATCH` 表示讀到別 repo 的掃描結果（unattended 下危害最大：無人在旁審視就照它推進待辦）。**NEVER** 憑記憶或 HANDOFF 既有 narrative 猜待辦狀態。
+**失敗 fallback**：script 不存在或回 error、**或 `SCAN-MISMATCH` / `MISSING`** → **STOP**，寫 HANDOFF 一行 `work-loop: scan failed at <ISO>`，跑 `work-loop-lock.ts release --session <id>` 後結束。`SCAN-MISMATCH` 表示讀到別 repo 的掃描結果（unattended 下危害最大：無人在旁審視就照它推進待辦）。**NEVER** 憑記憶或 HANDOFF 既有 narrative 猜待辦狀態。
 
 ### 單一 candidate list，兩種 source
 
@@ -470,7 +488,7 @@ attended mode 且真的選不出來 → 依 Step 0 Iron Law **MUST `AskUserQuest
 
 **每一個** `<task-notification>` 到達時 **MUST 先完整讀 [reference/harvest.md](reference/harvest.md)** 走它的 8 步 SOP（驗收 → scope-verify → 高擴散半徑 change 的 checker subagent → 更新 progress → re-scan → 檢查新 actionable → 更新 ledger → 補滿扇出組），與等待機制（notification-only + `ScheduleWakeup` 1500s 安全網 + **2h 無回報強制退出**）。**NEVER** 憑印象跑收割——漏掉 scope-verify 或 checker 那兩步，未驗證的改動會直接進 main。
 
-state 更新：成功 → 該 item `failStreak` 歸零、來源條目勾 `[x]` 或補完成摘要（讓下一輪不重複做）；失敗 → `failStreak[item] += 1`、`consecutiveDispatchFailures += 1`，≥3 進 `escalated`。兩者都要從 `inFlight` 移除。
+state 更新：成功 → 該 item `failStreak` 歸零、來源條目勾 `[x]` 或補完成摘要（讓下一輪不重複做）；失敗 → `failStreak[item] += 1`、`consecutiveDispatchFailures += 1`，≥3 進 `escalated`。兩者都要從 `inFlight` 移除。**每一次**收割寫完 state 後都 MUST 跑 `work-loop-lock.ts refresh --session <id>`（per Step 0 § 互斥鎖），不是只有最後一次。
 
 **反模式**（任一出現 = 立即停手自查）：
 
@@ -496,7 +514,7 @@ fingerprint = sha256(
 
 與 state 裡的舊 fingerprint 比對：相同 → `fingerprintUnchangedRounds += 1`；不同 → 歸零。
 
-### 6.2 停止條件（任一成立即停；**每一條**都 MUST `rm -f` lock）
+### 6.2 停止條件（任一成立即停；**每一條**都 MUST 跑 `work-loop-lock.ts release --session <id>`）
 
 | 件 | 條件 |
 | --- | --- |
@@ -531,6 +549,8 @@ fingerprint = sha256(
 ### 7.3 落 state 檔
 
 把 Step 1 schema 的每個欄位更新後寫回 `.spectra/work-loop-state.json`（`.spectra/` 已 gitignored）。`guardrailsAck` 用 Step 1.5 讀完的時間。
+
+寫完 **MUST** 跑 `node ~/offline/clade/vendor/scripts/work-loop-lock.ts refresh --session <lockSessionId>`。鎖的 heartbeat 只在 Step 1 / Step 5 / 本步被刷，漏掉一次就讓還在跑的這一輪被下一輪判成死掉並接手——失敗長相是兩個 loop 同時跑、state 互相覆寫，沒有任何錯誤訊號。
 
 **`decisions` 的內容 NEVER 在本步才寫**——Step 2.7 (c) 收到答案當下就已落檔。本步只是把 Step 2.7 之後又變動的欄位一併寫回。
 

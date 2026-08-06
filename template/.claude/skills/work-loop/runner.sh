@@ -15,9 +15,15 @@
 #   ./runner.sh --dry-run          # 只印每輪會下的指令，不真的跑
 #
 # 停止：state 檔出現 stoppedReason，或達 --max-rounds，或連續 2 輪 exit≠0。
-# 中斷：Ctrl-C；lock 會在下一輪的 6h TTL 後自動失效，或手動 rm .spectra/work-loop.lock。
+# 中斷：Ctrl-C；lock 的 heartbeat 逾窗（45min）且本 runner 的 pid 不再存活時自動失效，
+#       或手動 rm .spectra/work-loop.lock。
 
 set -uo pipefail
+
+# 每輪的 agent 在 Step 0 跑 `work-loop-lock.ts acquire`，該 script 讀這個變數當 pid 補強欄。
+# 這裡的 `$$` 是 runner 自己 —— 跨整個 loop 存活，是三種模式中唯一真的長命的那個。
+# 讀 env 而非讓 agent 現算：sandbox 靜態分析會在執行前擋掉 agent 側的 `$$` 與 `$(…)`。
+export WORK_LOOP_RUNNER_PID=$$
 
 REPO="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   echo "error: 不在 git repo 內" >&2

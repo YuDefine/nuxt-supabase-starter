@@ -26,7 +26,7 @@ Local edits will be reverted by the next sync.
 9. **subagent scope verify** —— 每個 subagent 回報後 MUST 跑 `scripts/scope-verify.ts`，scope 外的實質改動 revert
 10. **Error isolation + 跨輪升級** —— 單一 item 失敗不停整個 loop；同 item `failStreak` ≥3 → Escalated，不再 dispatch。同錯重複該產出系統性修正，不是無限 retry。codex pre-scan 的 exit 4（quota）/ exit 3（機械故障）**NEVER** 記入 `failStreak` / `consecutiveDispatchFailures`——fallback 形狀見 `dispatch-topology.md` § pre-scan 的 exit code 分流
 11. **收割護欄** —— `inFlight` > 0 時**不是**停止狀態；lock 在此期間 **NEVER** 釋放；2h 無回報強制退出
-12. **每條停止路徑 MUST `rm -f` lock** —— 含失敗提早結束的路徑
+12. **每條停止路徑 MUST 跑 `work-loop-lock.ts release --session <id>`** —— 含失敗提早結束的路徑。**NEVER** 改用 Write tool 或 `rm` 直接動 `.spectra/work-loop.lock`（per Step 0 § 互斥鎖 Iron Law）
 13. **Blocked / Decision item 先評估再處理** —— `applyBlocked` 走 blocker 鮮度判定、`awaitingUserDecision` 先嘗試自主解決（技術決策自決，只有商業決策才是真的 user-bound）。兩者都**不是**「永遠跳過」。見 `blocker-evaluation.md`
 14. **NEVER 因 size / progress 跳過 dispatch** —— `applyInProgress` 不管進度 0% 或 change 看起來多大，MUST dispatch；`/spectra-apply` 自管步驟粒度、phase、pause 與 blocker。「需要完整 session」「不適合 loop」= 違反本條
 15. **Bucket ≠ ball ownership** —— `bucket=ready` 不等於 user-bound，`bucket=applyBlocked` 不等於 Claude 無事可做。**MUST** 在每條 change 的 bucket routing 後檢查 `issued` / `verifyClaudePendingCount` / `discussPendingCount` / `staleEvidenceCount`，任一 > 0 = 仍有工作。實證（2026-07-21 <consumer-a>）：bucket=`ready` + issued=5 → loop 宣告 user-bound + 30min idle，user 在 review-gui 等一個不會來的接手。**「所有 change 卡 user action」這句話在 `issued>0` 時就是錯誤判斷**
@@ -134,6 +134,7 @@ Local edits will be reverted by the next sync.
 - 正要對 `rules/` 或 `plugins/hub-core/` 底下的檔下 Edit / Write
 - 正要跑 `publish.ts` / `propagate.ts` / `git push --force` / `wrangler deploy` / `supabase db push`
 - 正要 `git add` 之後接 `git commit`
+- 正要對 `.spectra/work-loop.lock` 下 Write / Edit / `printf` / `echo` / `rm`（鎖檔只由 `work-loop-lock.ts` 讀寫）
 - state 檔的 `inFlight` 非空，但你正在寫 Step 7
 - state 檔的 `awaiting[]` 非空、本輪是 attended，而你正要進 Step 3 分類
 - 已收到 Charles 的答案，但還沒寫進 `decisions` 就開始 dispatch
