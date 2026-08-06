@@ -246,7 +246,8 @@ node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
 - `0` — 跑完且 result 可解析：讀 stdout JSON 的 `result` 續流程
 - `2` — codex 跑完但業務 fail（`result.status === 'fail'`）：**NEVER** 換 Claude 重做同 brief（同 brief 同樣會撞）、**NEVER** 原樣重派；依 result 內容決定修補或上報
 - `3` — 機械故障（codex 不存在 / spawn error / timeout / 無 parseable JSON）：唯一允許 Claude fallback 的情形，且 MUST 留下可審計痕跡（per 各 skill 對應段）
-- `4` — quota 擋（5h window primary used_percent > 85）：非急件延後到下一個 window；急件 `AskUserQuestion` 讓 user 拍板（`--no-quota-check` 強派）
+- `4` — quota 擋，**兩種來源同一個 code**：派工前的 gate（primary used_percent > 85），或 codex **跑到一半**回報 usage limit（pre-gate 讀的是上一個 session 的快照，window 在那之後被吃滿、或 rate_limits 讀不到而 fail-open 放行時就會這樣）。後者的 payload 帶 `detected: 'runtime'` 與 `resets_at_human`（codex 給的是散文日期不是 epoch）。處置相同：非急件延後到下一個 window、依 `next_tier` 換 tier；急件 `AskUserQuestion` 讓 user 拍板（`--no-quota-check` 強派）
+  - **`3` 與 `4` 的下一步相反，NEVER 混用**：`3` 是「這次壞了，可以再試」，`4` 是「這個 window 內都別再試」。mid-run 撞配額若被報成 `3`，每一輪都會再燒一次 dispatch 去重新發現同一件事（2026-08-06 實測：配額 reset 在三天後，而輸出寫的是 `no parseable JSON`）
 
 **內建行為**：`--ephemeral --disable memories`（memories 91MB 死循環地雷，恆關）、quota check（預設開）、telemetry append 到 `~/.codex/dispatch-ledger.jsonl`（fail-open；`scripts/audit-codex-adoption.ts` 靠它量 adoption）。
 
