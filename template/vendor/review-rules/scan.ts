@@ -447,7 +447,8 @@ function main() {
         `${JSON.stringify({ skipped: true, reason: 'vendor/review-rules/patterns.json not found' })}\n`,
       )
     }
-    process.exit(0)
+    process.exitCode = 0
+    return
   }
 
   const data = JSON.parse(readFileSync(patternsPath, 'utf8')) as { rules?: unknown }
@@ -532,14 +533,23 @@ function main() {
     }
   }
 
+  // **NEVER 用 `process.exit()` 收尾**：它不等 stdout drain，而 stdout 是 pipe 時（任何呼叫端
+  // 用 execFile / `| jq` 讀 `--json`）Node 的寫入是非同步的 —— 大輸出會在中途被砍斷，留下一段
+  // 語法不完整的 JSON。設 `exitCode` 讓 event loop 自然收尾，行為等價但輸出完整。
+  //
+  // 實證（2026-08-06 work-loop round 30）：<consumer-b> 573 筆違規 / <consumer-a> 同級的 `--json` 經 execFile
+  // 讀回來恆為 108KB 出頭並 `Unterminated string`，而違規數小的 consumer 全部正常 —— 失敗與否
+  // 只取決於輸出大小，所以它在小 repo 上永遠測不出來。
   if (ratchetResult) {
-    process.exit(ratchetResult.pass ? 0 : 2)
+    process.exitCode = ratchetResult.pass ? 0 : 2
+    return
   }
   if (writeBaselineResult) {
-    process.exit(0)
+    process.exitCode = 0
+    return
   }
   const hasError = violations.some((v) => v.severity === 'error')
-  process.exit(hasError ? 1 : 0)
+  process.exitCode = hasError ? 1 : 0
 }
 
 try {
