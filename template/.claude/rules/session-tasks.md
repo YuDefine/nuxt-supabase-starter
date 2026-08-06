@@ -33,12 +33,19 @@ session 結束時對每個未完項**升級或刪，二擇一**，不留著。
 
 | 可觀察 predicate | MUST |
 | --- | --- |
-| session context 越過 **250k** | 找下一個可切點收工：未完項寫進 `tasks/<date>-<slug>.md`（或 `HANDOFF.md` / `docs/tech-debt.md`），**NEVER** 開新的工作段 |
+| session context 越過 **200k** | 找下一個可切點收工：未完項寫進 `tasks/<date>-<slug>.md`（或 `HANDOFF.md` / `docs/tech-debt.md`），**NEVER** 開新的工作段 |
 | session context 越過 **400k** | **現在**登記並收工。手上若是不可分割的驗證迴圈，跑完那一輪就切 |
 | 正在跑不可分割的驗證迴圈（單一 test run / 單一 migration） | 跑完再切。**NEVER** 拿「等一下還有事要做」把它延伸成新工作段 |
 
-門檻是 `session-context-budget-warn.sh`（PostToolUse hook）機械報出來的，本節是它引用的 SoT。
-env 可覆寫：`CLADE_CTX_WARN_TIER1` / `CLADE_CTX_WARN_TIER2`。
+門檻是 `session-context-budget-warn.sh`（PostToolUse hook）機械報出來的，本節是它引用的 SoT：
+**200k 響一次、400k 起每 +100k 再響一次**。提示走 exit 2 —— PostToolUse 的 exit 0 stderr
+只進 debug log，agent 永遠看不到（2026-08-06 前本 hook 正是 exit 0，所以它上線後量到的
+「行為沒有改變」其實是提示從未送達）。
+
+**門檻 NEVER 可由 env / flag 放寬。** 本節 2026-08-06 前寫著 `CLADE_CTX_WARN_TIER1` /
+`CLADE_CTX_WARN_TIER2` 兩個覆寫變數，已移除：門檻是判定 agent 行為合不合格的數值，
+只有 user 能調鬆（per `agent-routing` 的自主判定紀律）。會想調鬆它的，正是已經超標的那個
+session —— 把閂交給它等於沒有閂。
 
 ### 為什麼是硬門檻不是判斷
 
