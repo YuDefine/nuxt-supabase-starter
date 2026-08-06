@@ -30,6 +30,15 @@ cd <目標 repo> && ~/offline/clade/plugins/hub-core/skills/work-loop/runner.sh 
 
 每輪 log 落在 `.spectra/work-loop-logs/round-<ts>.log`。
 
+## 待答決策佇列：runner 只印不擋
+
+runner 起跑時讀 state 的 `awaiting[]`，非空就印一行提示（幾條待答、跑 attended `/work-loop`
+可清算），然後**照常開跑**——**NEVER** 因此 exit≠0、**NEVER** 加 flag 要求先清算。
+
+理由是 runner 的使用情境本身：Charles 打這個腳本就是要離開座位，這時擋住等於什麼都不做。
+無人值守輪次只排除佇列裡那幾條 item，其餘全部照推（Charles 2026-08-06 逐字：「如果我跑那個
+腳本 就不用特別阻擋 就做那些不受影響的」）。清算由下一次 attended 開場的 Step 2.7 承擔。
+
 ## 為什麼 in-session 版有天花板
 
 主線 context 每輪只增不減，跑幾輪就進入 TD-378 量到的重 session 區間（peak >200k，這類

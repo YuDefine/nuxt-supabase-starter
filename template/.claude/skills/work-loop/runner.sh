@@ -82,9 +82,22 @@ round_of() {
   node -e 'try{console.log(require(process.argv[1]).round ?? 0)}catch{console.log(0)}' "$STATE" 2>/dev/null || echo 0
 }
 
+# 待答決策佇列的長度。**只印不擋** —— 打這個腳本的人正要離開座位，擋住等於什麼都不做。
+# 無人值守輪次只排除佇列裡那幾條 item，其餘照推；清算由下一次 attended /work-loop 的
+# Step 2.7 承擔（Charles 2026-08-06 拍板）。NEVER 改成 exit≠0。
+awaiting_count() {
+  [ -f "$STATE" ] || { echo 0; return; }
+  node -e 'try{const a=require(process.argv[1]).awaiting;console.log(Array.isArray(a)?a.length:0)}catch{console.log(0)}' "$STATE" 2>/dev/null || echo 0
+}
+
 fail_streak=0
 start_round="$(round_of)"
 echo "work-loop runner: repo=$REPO  起始 round=$start_round  max=$MAX_ROUNDS  perm=$PERM_MODE"
+
+awaiting="$(awaiting_count)"
+if [ "$awaiting" -gt 0 ] 2>/dev/null; then
+  echo "⏳ $awaiting 條待答決策（跑 attended /work-loop 可清算）；本次只推進不受影響的項目"
+fi
 
 for i in $(seq 1 "$MAX_ROUNDS"); do
   # 只有 stoppedReason 才停 runner；roundEndReason（context 到頂 / item cap）是「換個 process 繼續」。

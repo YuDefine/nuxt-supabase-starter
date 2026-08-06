@@ -136,13 +136,22 @@ predicate 4 問的是「可不可逆」，而放寬自己的上限**完全可逆
 
 **NEVER** 寫「等 owner 拍板」「卡外部依賴」這種無法行動的模糊句。外部依賴要明列**在等什麼 signal**。
 
-完成後在 state 檔 `packaged` 記 `{"<item-id>": "<ISO>"}`，之後輪次跳過不重做。
+### (d) 兩處落檔（缺一這條決策永遠問不出去）
+
+| 位置 | 內容 |
+| --- | --- |
+| state `awaiting[]` | 完整條目：`id` / `title` / `packagedAt` / `round` / `blocker` / `startableDone` / `options[]`（`key` / `label` / `effect` / `recommended`）/ `rationale` / `nextStep`。欄位與下方 § 第三部分段模板一一對應 |
+| state `packaged` | `{"<item-id>": "<ISO>"}` 投影，供 Step 2 排除用 |
+
+`awaiting[]` 是 [decision-drain.md](decision-drain.md)（Step 2.7 開場清算）的**唯一輸入**——只寫 HANDOFF 段不寫 `awaiting[]`，這條決策就永遠不會被端到 Charles 面前，退回清算閘存在之前的單向累積狀態。**NEVER** 只寫其中一邊。
 
 ---
 
 ## 第三部分：`## ⏳ Awaiting Charles` 段模板
 
-寫進 `$MAIN_WT_PATH/HANDOFF.md`。**Append 不覆寫**——Charles 尚未回答的舊決策不能被本輪沖掉。已回答的由下一輪 scan 判定（條目已被改寫 / 已勾 `[x]`）後移除。
+寫進 `$MAIN_WT_PATH/HANDOFF.md`。**Append 不覆寫**——Charles 尚未回答的舊決策不能被本輪沖掉。已回答的由 Step 2.7 (c) 當場刪除對應 `###` 子段。
+
+**本段是人讀渲染，NEVER 是狀態來源**——清算讀的是 state `awaiting[]`（見 (d)）。兩邊不一致時修的是渲染。
 
 ```markdown
 ## ⏳ Awaiting Charles

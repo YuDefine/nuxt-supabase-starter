@@ -34,7 +34,7 @@ Local edits will be reverted by the next sync.
 
 ---
 
-## B. 決策面（3 條）
+## B. 決策面（4 條）
 
 17. **`AskUserQuestion` 的可用性由 mode 決定，NEVER 由 item 決定** ——
 
@@ -47,6 +47,7 @@ Local edits will be reverted by the next sync.
 
 18. **能寫出「推薦 A」就去做，NEVER packaging** —— packaging 是 fallback 不是 default。寫得出 `(推薦)` 標記＝決策已完成，送去等人覆述你的結論是拖慢開發。判準見 `autonomy-predicate.md` § Iron Law
 19. **人類 gate 只擋真正不可逆的** —— prod 部署 / 刪除 branch / tag / 遠端資料 / 花錢的 API / 任何 `--force`。**publish 與 propagate 不在此列**（2026-08-05 Charles 授權）：它們可 revert + 重新 publish，且 MUST 走 `/clade-publish` Step 1–9，NEVER 自己拼 `publish.ts` + `propagate.ts`
+20. **attended 下待答佇列非空 NEVER 開工** —— state 的 `awaiting[]` 非空、且本輪是 attended（非 `--unattended`、非 `claude --print`）→ **MUST** 先跑完 Step 2.7 開場清算把佇列問到空，**NEVER** 進 Step 3 分類或 Step 4 dispatch。判準是 mode 與佇列空不空，**NEVER** 是題數或急迫性。unattended 下反過來：佇列非空**照跑**、只排除佇列裡那幾條，**NEVER** 因此寫 `stoppedReason`。見 `decision-drain.md`
 
 ---
 
@@ -79,7 +80,7 @@ Local edits will be reverted by the next sync.
 
 ---
 
-## D. 反藉口（壓力下最常見的 15 條自我合理化）
+## D. 反藉口（壓力下最常見的 20 條自我合理化）
 
 以下**每一句**都不是合法理由。看到自己在心裡講出其中任何一句 → 立即停手自查。
 
@@ -105,6 +106,14 @@ Local edits will be reverted by the next sync.
 - ❌「等 agents 完成再處理」— 扇出組滿 4 就是做主線即時組的時機，不是等的時機
 - ❌「先寫 HANDOFF status」— 那是 Step 7，不是中途的 exit ramp
 
+**跳過開場清算類**（護欄 20，attended）：
+
+- ❌「先做一件看得到成果的，等一下再問」— 「等一下」就是他已經離開座位的那一刻
+- ❌「這幾條都不急，下次開場再問」— 判準是佇列空不空，不是急不急
+- ❌「一次問 9 題太打擾了」— 沒有題數上限；打擾一次比讓 9 條工作各卡一輪便宜
+- ❌「這條寫得很清楚了，他看 HANDOFF 就會答」— HANDOFF 不會主動出現在他面前，那正是累積的成因
+- ❌「答案我先記著，Step 7 一起寫」— 下一輪是新 process。沒落檔＝沒答
+
 **提早收工類**：
 
 - ❌「本輪無 actionable = 完成」— 只代表這輪 scan 沒新東西
@@ -126,4 +135,6 @@ Local edits will be reverted by the next sync.
 - 正要跑 `publish.ts` / `propagate.ts` / `git push --force` / `wrangler deploy` / `supabase db push`
 - 正要 `git add` 之後接 `git commit`
 - state 檔的 `inFlight` 非空，但你正在寫 Step 7
+- state 檔的 `awaiting[]` 非空、本輪是 attended，而你正要進 Step 3 分類
+- 已收到 Charles 的答案，但還沒寫進 `decisions` 就開始 dispatch
 - 這輪還沒 Read 過本檔

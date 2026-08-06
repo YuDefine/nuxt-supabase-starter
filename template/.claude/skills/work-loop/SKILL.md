@@ -30,7 +30,7 @@ Local edits will be reverted by the next sync.
 - ✅ 「`<change>` 標 🟢 ready-for-review（寫入 HANDOFF）」「TD-317 已修並 commit `a1b2c3d`」— 報告事實
 - ✅ 「本輪處理 3 items：2 completed / 1 packaged。fingerprint 已變，續跑」— 報告進度
 - ❌ 「待 user 驗收：請執行 `pnpm review:ui`」— user call-to-action
-- ❌ 「待 user 決定：TD-402 要用 A 還是 B？」— 決策要落 HANDOFF `## ⏳ Awaiting Charles`，不是 chat
+- ❌ 「待 user 決定：TD-402 要用 A 還是 B？」— 決策要落 `awaiting[]` + HANDOFF `## ⏳ Awaiting Charles`，不是 chat 敘述（attended 下由 Step 2.7 用 `AskUserQuestion` 端出去問）
 - ❌ 「下一輪可推進：1. ... 2. ...」— 列選單讓 user 決定
 
 ---
@@ -58,6 +58,8 @@ $ARGUMENTS
 判不出自己在哪個 mode → **當作 unattended**（保守側是不打斷不在場的人）。
 
 **這條分岔的理由是「人在不在場」，NEVER 是「這個 item 重不重要」。** 重要的 item 在 unattended 下同樣走 packaging，不是破例呼叫 `AskUserQuestion`——那會讓整個 loop 卡死在等人，而本 skill 存在的理由就是消掉那個等待。
+
+同一條 mode predicate 也決定 Step 2.7 開場清算跑不跑：attended 跑完整清算（佇列清空才開工）、unattended 只跑 prune。細節見 [reference/decision-drain.md](reference/decision-drain.md) § Mode 分岔。
 
 ### 兩種跑法 —— 無人值守優先選 runner
 
@@ -128,12 +130,28 @@ STATE="$(git rev-parse --show-toplevel)/.spectra/work-loop-state.json"
   "guardrailsAck": "2026-08-05T04:02:10Z",
   "inFlight": [{ "agent": "wt-td317", "item": "TD-317", "dispatchedAt": "…" }],
   "packaged": { "TD-402": "2026-08-05T03:40:00Z" },
+  "awaiting": [{ "id": "TD-402", "title": "grain 二選一", "packagedAt": "2026-08-05T03:40:00Z",
+                 "round": 6, "blocker": "src/db/schema.ts:88 …", "startableDone": "index 已補齊",
+                 "options": [{ "key": "A", "label": "…", "effect": "…", "recommended": true },
+                             { "key": "B", "label": "…", "effect": "…" }],
+                 "rationale": "…", "nextStep": "/wt td402: …" }],
+  "decisions": { "TD-355": { "answer": "A", "note": "<Charles 逐字>", "answeredAt": "…" } },
   "failStreak": { "TD-388": 2, "fix-pinia-mutation": 1 },
   "escalated": { "add-audit-log": { "bucket": "applyBlocked", "reason": "…" } }
 }
 ```
 
 **檔案不存在** → 這是第 1 輪，用 `{round: 0}` 起手，Step 7 建檔。
+
+**`awaiting` / `packaged` / `decisions` 三者的關係**（寫錯會讓已答的決策被重問，或已問的被當成沒問）：
+
+| 欄位 | 語義 | 唯一寫入時機 |
+| --- | --- | --- |
+| `awaiting[]` | 待答決策佇列，**帶完整選項內容**。Step 2.7 清算的對象就是它 | Step 4b packaging 入列、Step 2.7 出列 |
+| `packaged` | `awaiting[]` 的 `id → packagedAt` 投影，供 Step 2 排除用 | 與 `awaiting[]` 同步增刪，**NEVER** 單獨寫 |
+| `decisions` | 已答的答案（含 Charles 逐字），**答完不刪**——後續輪次照它執行 | Step 2.7 (c) 收到答案當下 |
+
+**舊 state 檔只有 `packaged` 沒有 `awaiting`**（本欄位之前的版本）→ 用 HANDOFF `## ⏳ Awaiting Charles` 的對應 `###` 子段回填成 `awaiting[]` 條目，回填不出來的（子段已不存在）直接把該 key 從 `packaged` 刪掉。
 
 **`failStreak` / `escalated` 的來源是本檔，NEVER 是 HANDOFF 的 marker 段。** HANDOFF 段是**人讀輸出**——它可能被人手動編輯、被 rotate 搬走、被別的 skill 覆寫。狀態只認 state 檔。
 
@@ -238,6 +256,39 @@ launcher 早就死了。分類之前先實跑一次，死掉的組直接標不�
 
 ---
 
+## Step 2.7 — 開場決策清算（每一輪都跑）
+
+**MUST 先完整讀 [reference/decision-drain.md](reference/decision-drain.md) 再執行**——每一輪都讀，不是只在第 1 輪讀。
+
+### Iron Law：attended 下 `awaiting[]` 非空 NEVER 開工
+
+**佇列非空時 NEVER 進 Step 3、NEVER 進 Step 4。** 先清空，再開工。
+
+順序是「先清算，後開工」，不是「邊做邊找機會問」。Charles 在場的那一段**正是**他準備離開座位的那一段——把問題留到「做完手上這件再問」，多數時候等同留到他已經走了。
+
+**判準是 mode，不是題數、不是急迫性。** 佇列剩 1 題和剩 9 題同一條規則；「這幾條都不急」不構成延後——不急的題目照樣佔著佇列。
+
+### 三步
+
+| 步 | 做什麼 |
+| --- | --- |
+| (a) Prune | 對 `awaiting[]` **每一條**逐條判定：已不在本輪 scan → 移除不問；依 [autonomy-predicate.md](reference/autonomy-predicate.md) § Iron Law 重判後**現在**寫得出「推薦 A + 站得住的理由」且未命中 predicate 7 → 移出佇列當自主 item 做掉，**NEVER** 拿去問 |
+| (b) Ask | 剩下的**全部問完**，`AskUserQuestion` 一次 ≤4 題、連續發到佇列清空。**沒有題數上限**，**NEVER** 問一批就先開工 |
+| (c) Record | **每一個**答案立刻三處同步落檔（`decisions` 寫入 / `awaiting` + `packaged` 移除 / HANDOFF 子段刪除），**MUST 在進 Step 3 之前完成**——runner 每輪是全新 process，沒落檔的答案等於沒答 |
+
+### Mode 分岔
+
+| 可觀察 predicate | 本步怎麼跑 |
+| --- | --- |
+| **attended**（非 `--unattended` 且本輪非 `claude --print` 起） | 跑完整 (a)(b)(c)，佇列清空才進 Step 3 |
+| **unattended / runner** | **只跑 (a)**，(b)(c) 跳過。佇列剩下的 item 本輪照舊排除，**其餘工作全部照跑** |
+
+判不出自己在哪個 mode → 當作 unattended。
+
+**unattended 下佇列非空 NEVER 是停 loop 的理由**——**NEVER** 因此寫 `stoppedReason`、**NEVER** 因此跳過與佇列無關的 item。**佇列裡的 item 本輪排除也不是 skip**：它不進 § 3.1b 的 skip 合法理由窮舉，**NEVER** 被拿來當理由套用在其他 item 上。
+
+---
+
 ## Step 3 — 分類與自主判定
 
 **每一個** candidate 都 MUST 走完三步（3.1 分類 → 3.2 自主判定 → 3.3 分組），不是只對前幾條。
@@ -325,7 +376,9 @@ ELSE:
 
 ### 4b. 非自主 item → decision packaging
 
-**NEVER log + skip。** 依 [autonomy-predicate.md](reference/autonomy-predicate.md) § Packaging SOP 做三件事（蒐證 → 抽 startable 子集先做掉 → 寫 2–3 個排序選項進 HANDOFF `## ⏳ Awaiting Charles`），完成後在 state 的 `packaged` 記 ISO 時間。
+**NEVER log + skip。** 依 [autonomy-predicate.md](reference/autonomy-predicate.md) § Packaging SOP 做三件事（蒐證 → 抽 startable 子集先做掉 → 寫 2–3 個排序選項進 HANDOFF `## ⏳ Awaiting Charles`），完成後**同步**寫進 state 的 `awaiting[]`（完整條目：`id` / `title` / `blocker` / `startableDone` / `options` / `rationale` / `nextStep` / `packagedAt` / `round`）與 `packaged`（id → ISO 投影）。
+
+**`awaiting[]` 是 Step 2.7 清算的唯一輸入。** 只寫 HANDOFF 不寫 `awaiting[]` = 這條決策永遠不會被端到 Charles 面前，退回本步存在之前的累積狀態——**NEVER** 只寫其中一邊。
 
 **packaging 本身算合法進度**——它會改變 fingerprint，Step 6 不會誤判成空轉。
 
@@ -412,6 +465,8 @@ fingerprint = sha256(
 
 把 Step 1 schema 的每個欄位更新後寫回 `.spectra/work-loop-state.json`（`.spectra/` 已 gitignored）。`guardrailsAck` 用 Step 1.5 讀完的時間。
 
+**`decisions` 的內容 NEVER 在本步才寫**——Step 2.7 (c) 收到答案當下就已落檔。本步只是把 Step 2.7 之後又變動的欄位一併寫回。
+
 ### 7.4 Commit
 
 ```bash
@@ -433,6 +488,7 @@ git show --stat HEAD | tail -3   # 驗 scope
 | --- | --- |
 | [guardrails.md](reference/guardrails.md) | **每一輪**（Step 1.5，hard rule） |
 | [run-modes.md](reference/run-modes.md) | 決定怎麼起這個 loop 時（Step 0） |
+| [decision-drain.md](reference/decision-drain.md) | **每一輪**（Step 2.7，hard rule） |
 | [simple-buckets.md](reference/simple-buckets.md)／[blocker-evaluation.md](reference/blocker-evaluation.md) | spectra item 命中固定步驟 bucket／`applyBlocked`・`awaitingUserDecision`（Step 3.1a） |
 | [non-spectra-dispatch.md](reference/non-spectra-dispatch.md) | 分類非 spectra candidate（Step 3.1b） |
 | [autonomy-predicate.md](reference/autonomy-predicate.md) | 判自主 / 做 packaging（Step 3.2 / 4b） |

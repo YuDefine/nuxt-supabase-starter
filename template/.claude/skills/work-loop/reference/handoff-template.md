@@ -35,11 +35,19 @@ _(空時寫 `_(none)_`)_
 
 _(空時寫 `_(none)_`；無 spectra 的 repo 整段可省)_
 
-### 📦 Packaged（等拍板，選項見 `## ⏳ Awaiting Charles`）
+### 📦 Packaged（待答佇列，選項見 `## ⏳ Awaiting Charles`）
 
 - `<item>` — packaged <ISO>
 
-_(空時寫 `_(none)_`)_
+_(空時寫 `_(none)_`；本段渲染 state 的 `awaiting[]`，attended 輪次跑完 Step 2.7 後**必為空**)_
+
+### ✅ 本輪清算（Step 2.7）
+
+- 已答：`<item>` → <選項 key>（<Charles 逐字一句>）
+- 自主接手（prune）：`<item>` — 重判後可自主，未問
+- 已失效移除：`<item>` — <不在本輪 scan 的原因>
+
+_(空時寫 `_(none)_`；unattended 輪次只會出現後兩類)_
 
 ### ⏸ Skipped
 
@@ -64,6 +72,6 @@ completed <a> / packaged <b> / escalated <c> / in-flight <d>
 <!-- END: work-loop-status -->
 ```
 
-**本段是人讀輸出，NEVER 是狀態來源**——`failStreak` / `escalated` / `packaged` 一律以
+**本段是人讀輸出，NEVER 是狀態來源**——`failStreak` / `escalated` / `packaged` / `awaiting` 一律以
 `.spectra/work-loop-state.json` 為準（per SKILL.md Step 1）。這裡的數字只是把 state 檔的內容
 渲染給人看；兩邊不一致時修的是渲染，不是 state。
