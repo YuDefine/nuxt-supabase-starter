@@ -26,7 +26,7 @@ Step 2 產出的**不是**一條佇列，是**四組**併發特性不同的工�
 | **扇出組** | 3f applyInProgress、3h parked、非 spectra code task、**不需要 dev server 的** 3a / 3b（純 backend fix、annotation 補寫） | **同時 in-flight ≤ 4** | 無（各自 worktree） |
 | **dev-port 組** | 3a / 3b 中**需要起 dev server** 的 item、Design Review 截圖 | **1** | consumer 的 dev port（SoT：`registry/consumers.json` 的 `dev_ports`） |
 | **main 組** | 3z done、3c awaitArchiveWalkthrough、3d ready(userActionPending=0) | **1** | main worktree（archive → merge-back → commit → push） |
-| **主線即時組** | 3g healthCheckNeeded、3e ready(userActionPending>0) 的 Claude-actionable 檢查、3i applyBlocked 評估、3j awaitingUserDecision 評估、非 spectra investigation | 主線自己做，不 dispatch | 無 |
+| **主線即時組** | 3g healthCheckNeeded、3e ready(userActionPending>0) 的 Claude-actionable 檢查、3i applyBlocked 評估、3j awaitingUserDecision 評估、非 spectra investigation | 主線自己做，不 dispatch（read-heavy 者先過 § 主線即時組的 pre-scan 前置判定） | 無 |
 
 **每一個** priority item 在 dispatch 前都要落進上表某一組，不是只對前幾個分類。
 
@@ -73,6 +73,45 @@ dev port 的互斥**沿用既有機制**，不自建配額：
 archive → merge-back → commit → push 全部寫同一個 main worktree。兩個並行的 archive 會在 merge-back 撞在一起，這是真依賴，不是保守。
 
 同組內依 `pending/total` 排序（完成度高的先 ship）。
+
+## 主線即時組的 pre-scan 前置判定
+
+**每一個**落進主線即時組的 item（3g / 3i / 3j 評估、非 spectra investigation、packaging 蒐證、唯讀補事實），主線在讀**第一個**來源檔之前，MUST 先列出「完成判讀所需的必讀來源清單」，再按下表判定：
+
+| 可觀察 predicate | 動作 |
+| --- | --- |
+| 清單 ≥4 個 source file（scan JSON 與 state 檔不計；同檔多段算 1 檔） | **先派 codex pre-scan**（§ pre-scan 的 dispatch 形狀），主線只消費 report 做判讀 |
+| 本輪 3i + 3j 合計 ≥4 條 | **批次派一個 pre-scan** 收齊全部 blocker / 決策描述事實表（見 [blocker-evaluation.md](blocker-evaluation.md) § 批次蒐證） |
+| 兩者皆未命中 | 主線直接定點 Read——≤3 檔本來就是本組的正常形狀，**NEVER** 為湊派工而擴清單 |
+
+本判定實作 [[agent-routing]] § 必禁事項「**NEVER** 在 exploration / research 型 session 自己逐檔 Read + scan 多個 source 超過 3 個 source file」——本組過去把 investigation 整組寫死在主線，結構上恆違反該條。
+
+**判讀與決策仍在主線**：pre-scan 只搬「讀」。分類（SKILL.md § 3.1b）、七條 predicate、blocker 鮮度判定、packaging 成稿全部照舊主線做，**NEVER** 外派。
+
+### pre-scan 的 dispatch 形狀
+
+model / effort / template 的 SoT：[[agent-routing]] § Routing Table「Exploration / research pre-scan」列 + cookbook `~/offline/clade/vendor/snippets/codex-offload/README.md`。主線直接 Bash `run_in_background` 跑泛用 dispatcher，watch 依 [[agent-routing.codex-watch-protocol]] § 監看排程（notification-only + 單一 `ScheduleWakeup` 安全網，**禁止**短輪詢）。
+
+- brief 的 `task` **MUST** 逐條列出來源清單與要回的欄位（檔名 / 行號 / 現值 / 判準命中與否）；`allowed_paths` 填「（只讀，無寫入授權）」
+- dispatch 記進 state `inFlight`（`agent` 欄填 `codex:<label>`），2h hang 上限照算；等待期間主線照 § 主線在做什麼 推進其他組
+- pre-scan **不計** `--unattended` 的 3-item cap——它是某個 item 處理過程的一段，不是一個 item
+- 收到 notification → 走 [harvest.md](harvest.md) § pre-scan 通知的輕量收割，**不走** 8 步 SOP
+- **report 是未驗證主張**：report 結論若導向**狀態改變**（unblock / packaging / 排除某 item），主線 MUST 對該結論引用的關鍵檔位定點 Read 複驗後才動手
+
+### pre-scan 的 exit code 分流（quota 擋 ≠ dispatch failure）
+
+exit code 契約的 SoT 是 [[agent-routing.codex-watch-protocol]] § 泛用 Dispatcher。本表只定義它在 loop 內的處置：
+
+| exit | 處置 |
+| --- | --- |
+| `0` | 讀 stdout JSON 的 `result` → 輕量收割 → 該 item 回 Step 3 續判 |
+| `2` 業務 fail | `result` 的 fail 原因本身是事實（例：來源檔不存在）——消費它，缺口由主線定點 Read 補。**NEVER** 原樣重派、**NEVER** 換 Claude 重做同 brief |
+| `3` 機械故障 | 主線 fallback 自讀（唯一允許的 Claude fallback），state `notes` 留 `codex-prescan-fallback(exit3): <stderr 首行>`；**本輪剩餘 pre-scan 不再嘗試 codex** |
+| `4` quota 擋 | `resets_at` 落 state `notes`；本輪剩餘 pre-scan 直接走 fallback（不重複撞）。fallback 依 [[agent-routing]] § 配額耗盡時的 fallback 紀律；主線接走時 `notes` 留 `self-read(quota)` |
+
+**exit `2` / `3` / `4` 都 NEVER 記入 `failStreak` / `consecutiveDispatchFailures`**——那兩個計數器管的是 **item 的工作 dispatch**，pre-scan 只是它的蒐證段。quota 擋被記成失敗時，`consecutiveDispatchFailures >= 2` 會在無人值守下把整個 loop 停掉一整夜。
+
+同理，pre-scan 走不通 **NEVER** 成為該 item 的 skip 或 packaging 理由——那份 read 工作主線本來就做得了，pre-scan 只是把它搬出去。
 
 ## 主線在做什麼
 

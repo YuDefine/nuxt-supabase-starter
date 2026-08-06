@@ -46,7 +46,7 @@ focused spectra-apply session 手動推）。
 | --- | --- | --- |
 | spectra change 引用 | 內容含 `/spectra-apply <name>` 或 `openspec/changes/<name>`，**或**文字命中 § Spectra change association 的 active change name | 走 3.1a `applyInProgress`（已被 Step 2 spectra source 涵蓋則跳過，防重複 dispatch） |
 | code task（有明確檔案路徑 / 行為描述） | 含 `server/` / `app/` / `scripts/` / `.vue` / `.ts` / `.mjs` 等路徑，或含動詞（「改」「加」「修」「移除」「重構」） | worktree 內直接實作：`/wt <slug>: <brief>`，brief 從條目萃取 |
-| investigation / research | 含「調查」「確認」「檢查」「分析」「audit」 | 主線即時組直接執行（不需 worktree），結果寫回對應條目 |
+| investigation / research | 含「調查」「確認」「檢查」「分析」「audit」 | 主線即時組直接執行（不需 worktree；read-heavy 者先過 [dispatch-topology.md](dispatch-topology.md) § 主線即時組的 pre-scan 前置判定），結果寫回對應條目 |
 | blocked / 需拍板 | 含「待 user」「待確認」「blocked」「需拍板」 | **NEVER 直接 skip** —— 走 [autonomy-predicate.md](autonomy-predicate.md) § Decision Packaging |
 | 模糊 / 無法判斷 | 以上皆不符 | 先跑唯讀調查補事實再重判（見 autonomy-predicate.md § 判不出來時的三步）；仍模糊 → packaging，**不是** skip |
 

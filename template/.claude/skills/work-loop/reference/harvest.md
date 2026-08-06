@@ -28,6 +28,16 @@ Local edits will be reverted by the next sync.
 | 等待期間 | 主線工作來源見 [dispatch-topology.md](dispatch-topology.md) § 主線在做什麼。四組與 HANDOFF 補件皆空、且 in-flight > 0 時的等待是收斂，不是閒置 |
 | Hang 上限 | 超過 **2 小時**無任何 agent 回報 → 強制退出：尚未回報的 in-flight 條目按 dispatch 失敗記 fail-streak、寫 HANDOFF、釋放 lock（同護欄 #12） |
 
+### pre-scan 通知的輕量收割（不走 8 步 SOP）
+
+`inFlight` 條目 `agent` 為 `codex:<label>` 者，收到通知只做三步：
+
+1. `BashOutput` 讀 dispatcher 的單行 JSON，依 [dispatch-topology.md](dispatch-topology.md) § pre-scan 的 exit code 分流 判處置
+2. `git status --short` 驗零新增改動（read-only 契約）；有改動 → revert 後按 exit 3 機械故障處置
+3. 消費 report，該 item 回 Step 3 續判
+
+ledger 移除照做、2h hang 上限照算。8 步 SOP 的 scope-verify / checker / re-scan 是為**寫入型** dispatch 設計的，對 read-only pre-scan 無對象。
+
 ### 每收到一個 notification → 立即處理（收割 SOP）
 
 1. **驗收 agent 結果**：`git -C <worktree> log --oneline` + `git -C <worktree> status --short` + 讀 `WORKTREE-BRIEF.md` 的 Progress / frontmatter status——agent 的完成宣稱是未驗證主張（per [[agent-routing]] § Subagent 回報契約），MUST 有 commit 佐證

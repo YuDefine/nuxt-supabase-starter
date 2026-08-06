@@ -358,7 +358,7 @@ ELSE:
 
 - 要改 tracked code → `/wt <slug>: <brief>`（扇出組，≤4 in-flight）
 - spectra change 的實作 → `/wt <change-name>: /spectra-apply <change-name>`
-- 純唯讀調查 / 單檔文字改動 → 主線即時組，自己做
+- 純唯讀調查 / 單檔文字改動 → 主線即時組（read-heavy 者先過 [dispatch-topology.md](reference/dispatch-topology.md) § 主線即時組的 pre-scan 前置判定派 codex，主線消費 report）
 - 記進 state 的 `inFlight`，`subagentsSpawned` +1
 
 上面三條假設 `/wt` 在本 repo 叫得動，而那個假設在**產地（clade home）不成立**。開工前判一次：
@@ -394,6 +394,7 @@ attended mode 且真的選不出來 → 依 Step 0 Iron Law **MUST `AskUserQuest
   - **Dispatch failure**（skill 報錯 / infra 不可達）→ log + skip + `failStreak` +1，繼續下一個
   - **Fixable issue found during dispatch**（E2E selector bug / guard 漏路徑 / annotation drift / test assertion 要更新）→ **MUST 就地修 → 重跑 → re-scan → 繼續**，**NEVER** 當成 dispatch failure skip。判準：「我能在當前 session 用 Edit + Bash 修好嗎？」是 → 就地修
   - `failStreak` ≥3 → 移進 state 的 `escalated`，下一輪起不再 dispatch
+  - **codex pre-scan 的 exit 2 / 3 / 4 NEVER 記入 `failStreak` / `consecutiveDispatchFailures`**（分流見 [dispatch-topology.md](reference/dispatch-topology.md) § pre-scan 的 exit code 分流）——兩個計數器管的是 item 的工作 dispatch，不管蒐證段
 
 ---
 

@@ -98,7 +98,7 @@ predicate 4 問的是「可不可逆」，而放寬自己的上限**完全可逆
 
 **NEVER** 把「判不出來」直接當成「必須等人」。依序做：
 
-1. **唯讀補事實**：Read 條目引用的檔 / 跑 `git log --oneline -5 -- <path>` / grep 相關符號。多數「判不出來」是因為條目寫得含糊，不是因為真的需要決策
+1. **唯讀補事實**：Read 條目引用的檔 / 跑 `git log --oneline -5 -- <path>` / grep 相關符號。多數「判不出來」是因為條目寫得含糊，不是因為真的需要決策。必讀來源 ≥4 檔 → **MUST** 先派 pre-scan（[dispatch-topology.md](dispatch-topology.md) § 主線即時組的 pre-scan 前置判定），拿 report 再重判
 2. **重判七條**：拿補到的事實再走一次上表
 3. **仍判不出來** → 當作非自主，走 packaging。**但 packaging 的內容 MUST 包含步驟 1 補到的事實**——那正是讓 Charles 快速決策的材料
 
@@ -116,7 +116,7 @@ predicate 4 問的是「可不可逆」，而放寬自己的上限**完全可逆
 - 涉及的具體檔案路徑與行號
 - 已知的約束（既有 rule / spec / 上游 changelog 講了什麼）
 
-**NEVER** 從條目標題推測 blocker 原因——per `/handoff` § 2B.2.5，MUST 到實際位置抽。
+**NEVER** 從條目標題推測 blocker 原因——per `/handoff` § 2B.2.5，MUST 到實際位置抽。必讀來源 ≥4 檔 → **MUST** 先派 pre-scan（[dispatch-topology.md](dispatch-topology.md) § 主線即時組的 pre-scan 前置判定），拿 report 再成稿。
 
 ### (b) 抽 startable 子集先做掉
 
