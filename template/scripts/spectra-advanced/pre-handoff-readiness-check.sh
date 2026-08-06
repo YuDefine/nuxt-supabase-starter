@@ -7,8 +7,14 @@
 # Checks:
 #   Check 1: Automatic verify unflipped — [verify:e2e]/[verify:api] items with
 #            (verified-*:) annotation but checkbox still [ ] → MUST be auto-flipped
-#   Check 2: Evidence missing — [verify:e2e]/[verify:api]/[verify:ui] items
-#            without corresponding (verified-*:) annotation → evidence not collected
+#            (only meaningful for unchecked items)
+#   Check 2: Evidence missing — [verify:e2e]/[verify:api]/[verify:ui]/[review:ui]
+#            items without corresponding evidence (inline annotation or sidecar
+#            receipt) → evidence not collected. Runs on checked AND unchecked items:
+#            a ticked checkbox is not evidence (per TD-419 —
+#            pitfall-checked-items-exempt-from-every-pre-handoff-evidence-gate).
+#   Check 2P: Parent items carrying a channel tag are exempt from their own receipt,
+#            but only while at least one child supplies that channel's evidence.
 #   Check 3: Unresolved issues — items with （issue:） but no (claude-analyzed:)
 #            or (awaiting-user-decision:) → issue not triaged
 #
@@ -51,13 +57,40 @@ if [ -z "$SECTION" ]; then
   exit 0
 fi
 
-# Pre-compute parent IDs (parents = #N items that have #N.M children)
-PARENT_IDS=$(echo "$SECTION" | grep -oE '#[0-9]+\.[0-9]+' | sed 's/\.[0-9]*$//' | sort -u | sed 's/#//')
+# Pre-compute parent IDs (parents = #N items that have #N.M children).
+# `|| true`: a section with no #N.M child makes grep exit 1, and under
+# `set -euo pipefail` that aborted the whole script with a bare exit 1 — no output,
+# and a code outside this script's documented 0/2 contract.
+PARENT_IDS=$(echo "$SECTION" | grep -oE '#[0-9]+\.[0-9]+' | sed 's/\.[0-9]*$//' | sort -u | sed 's/#//' || true)
 
 FAILS=0
 WARNS=0
 TOTAL=0
 DONE=0
+
+# Channel tag → (inline annotation prefix, sidecar kind). [review:ui] shares the
+# verified-ui receipt kind with [verify:ui].
+channel_ann() {
+  case "$1" in
+    'verify:e2e') echo 'verified-e2e' ;;
+    'verify:api') echo 'verified-api' ;;
+    'verify:ui' | 'review:ui') echo 'verified-ui' ;;
+  esac
+}
+
+# True iff the item has evidence for the channel — inline annotation on the line
+# OR a sidecar receipt. A ticked checkbox is NOT evidence (TD-419).
+line_has_evidence() {
+  local line="$1" item_id="$2" kind="$3"
+  echo "$line" | grep -q "($kind:" && return 0
+  has_sidecar_evidence "#$item_id" "$kind" && return 0
+  return 1
+}
+
+# Parent items are checked after the loop, once every child's evidence is known.
+PARENT_LINES=""
+# One "<parent-id>:<sidecar-kind>" line per child that supplied that channel.
+CHILD_EVIDENCE=""
 
 while IFS= read -r line; do
   # Skip empty/non-checkbox lines
@@ -70,8 +103,9 @@ while IFS= read -r line; do
     item_id=$(echo "$line" | grep -oE '#[0-9]+\.[0-9]+' | head -1 | sed 's/#//')
   elif echo "$line" | grep -qoE '#[0-9]+'; then
     raw_id=$(echo "$line" | grep -oE '#[0-9]+' | head -1 | sed 's/#//')
-    # Skip parent items that have children
+    # Defer parents that have children — Check 2P needs the children's verdicts first.
     if echo "$PARENT_IDS" | grep -qFx "$raw_id" 2>/dev/null; then
+      PARENT_LINES="${PARENT_LINES}${line}"$'\n'
       continue
     fi
     item_id="$raw_id"
@@ -80,49 +114,44 @@ while IFS= read -r line; do
 
   TOTAL=$((TOTAL + 1))
 
-  # Extract checkbox state
   is_done=0
   if echo "$line" | grep -q '\[x\]'; then
     is_done=1
     DONE=$((DONE + 1))
-    continue
   fi
 
   # --- Check 1: Automatic channel annotation exists but checkbox not flipped ---
-  # verify:e2e without +ui
-  if echo "$line" | grep -q '\[verify:e2e\]' && ! echo "$line" | grep -q '+ui'; then
-    if echo "$line" | grep -q '(verified-e2e:' || has_sidecar_evidence "#$item_id" 'verified-e2e'; then
-      echo "❌ Check 1: [verify:e2e] #$item_id has annotation but checkbox [ ] — auto-flip missing" >&2
-      FAILS=$((FAILS + 1))
-    fi
-  fi
-  # verify:api without +ui
-  if echo "$line" | grep -q '\[verify:api\]' && ! echo "$line" | grep -q '+ui'; then
-    if echo "$line" | grep -q '(verified-api:' || has_sidecar_evidence "#$item_id" 'verified-api'; then
-      echo "❌ Check 1: [verify:api] #$item_id has annotation but checkbox [ ] — auto-flip missing" >&2
-      FAILS=$((FAILS + 1))
-    fi
+  # Only meaningful while the item is still unchecked.
+  if [ "$is_done" -eq 0 ]; then
+    for tag in 'verify:e2e' 'verify:api'; do
+      echo "$line" | grep -q "\[$tag\]" || continue
+      echo "$line" | grep -q '+ui' && continue
+      kind=$(channel_ann "$tag")
+      if line_has_evidence "$line" "$item_id" "$kind"; then
+        echo "❌ Check 1: [$tag] #$item_id has annotation but checkbox [ ] — auto-flip missing" >&2
+        FAILS=$((FAILS + 1))
+      fi
+    done
   fi
 
-  # --- Check 2: Verify items without evidence annotation (inline OR sidecar) ---
-  if echo "$line" | grep -q '\[verify:e2e\]' && ! echo "$line" | grep -q '(verified-e2e:'; then
-    if ! has_sidecar_evidence "#$item_id" 'verified-e2e'; then
-      echo "❌ Check 2: [verify:e2e] #$item_id missing evidence — run Step 8a e2e channel" >&2
+  # --- Check 2: Verify / review items without evidence (inline OR sidecar) ---
+  # Runs regardless of checkbox state — see TD-419.
+  for tag in 'verify:e2e' 'verify:api' 'verify:ui' 'review:ui'; do
+    echo "$line" | grep -q "\[$tag\]" || continue
+    kind=$(channel_ann "$tag")
+    if line_has_evidence "$line" "$item_id" "$kind"; then
+      # Record for the parent's Check 2P.
+      parent_id="${item_id%%.*}"
+      CHILD_EVIDENCE="${CHILD_EVIDENCE}${parent_id}:${kind}"$'\n'
+    else
+      # A deferred item states why evidence is absent — that is a decision, not a gap.
+      if echo "$line" | grep -qE '（deferred:|（deferred-user-only:|\(deferred:'; then
+        continue
+      fi
+      echo "❌ Check 2: [$tag] #$item_id missing evidence — run Step 8a ${tag##*:} channel" >&2
       FAILS=$((FAILS + 1))
     fi
-  fi
-  if echo "$line" | grep -q '\[verify:api\]' && ! echo "$line" | grep -q '(verified-api:'; then
-    if ! has_sidecar_evidence "#$item_id" 'verified-api'; then
-      echo "❌ Check 2: [verify:api] #$item_id missing evidence — run Step 8a api channel" >&2
-      FAILS=$((FAILS + 1))
-    fi
-  fi
-  if echo "$line" | grep -q '\[verify:ui\]' && ! echo "$line" | grep -q '(verified-ui:'; then
-    if ! has_sidecar_evidence "#$item_id" 'verified-ui'; then
-      echo "❌ Check 2: [verify:ui] #$item_id missing evidence — run Step 8a ui channel" >&2
-      FAILS=$((FAILS + 1))
-    fi
-  fi
+  done
 
   # --- Check 3: Unresolved issues (inline OR sidecar) ---
   if echo "$line" | grep -qE '（issue:|（issue：|\(issue:'; then
@@ -140,8 +169,31 @@ while IFS= read -r line; do
 
 done <<< "$SECTION"
 
+# --- Check 2P: parent items carrying a channel tag ---
+# A parent does not need its own receipt while a child supplies that channel. It
+# fails only when neither the parent nor any of its children has the evidence.
+while IFS= read -r line; do
+  [ -z "$line" ] && continue
+  parent_id=$(echo "$line" | grep -oE '#[0-9]+' | head -1 | sed 's/#//')
+  [ -z "$parent_id" ] && continue
+  for tag in 'verify:e2e' 'verify:api' 'verify:ui' 'review:ui'; do
+    echo "$line" | grep -q "\[$tag\]" || continue
+    kind=$(channel_ann "$tag")
+    echo "$CHILD_EVIDENCE" | grep -qFx "${parent_id}:${kind}" && continue
+    line_has_evidence "$line" "$parent_id" "$kind" && continue
+    if echo "$line" | grep -qE '（deferred:|（deferred-user-only:|\(deferred:'; then
+      continue
+    fi
+    echo "❌ Check 2P: [$tag] #$parent_id — neither the parent nor any child has $kind evidence" >&2
+    FAILS=$((FAILS + 1))
+  done
+done <<< "$PARENT_LINES"
+
 echo "" >&2
-echo "=== Pre-handoff readiness: $DONE/$TOTAL leaf items passed, $FAILS blockers, $WARNS warnings ===" >&2
+# "$DONE/$TOTAL checked" is a checkbox tally, NOT an evidence verdict — the verdict
+# is $FAILS. Wording kept explicit per TD-419: the old "N/N passed" read as
+# "everything verified" while every checked item had been skipped without a check.
+echo "=== Pre-handoff readiness: $DONE/$TOTAL leaf items checked, $FAILS blockers, $WARNS warnings ===" >&2
 
 if [ "$FAILS" -gt 0 ]; then
   echo "" >&2
