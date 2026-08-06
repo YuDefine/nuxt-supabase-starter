@@ -72,6 +72,50 @@ Local edits will be reverted by the next sync.
 | **Bug-fix evidence 段**（error log capture / stack trace 解析 / repro script 撰寫執行 / hypothesis 驗證迴圈） | **Codex `--model sol --effort high` via 泛用 dispatcher**（強化：非 Debug evidence 段，而是整個 bug-fix session 的 investigation 段） | 既有 Debug evidence rule 未落實（當時的 session 計數為 historical，見 rationale § 工作類別 telemetry 快照）。investigation / evidence / repro 是機械段；root cause 推斷 + 修法設計留主線。**MUST** 在 bug-fix session 開工時先判斷：可分離的 evidence 段派 Codex，不可分離的留主線但 MUST 在 session 結尾回報未派 Codex 的理由。 |
 | **clade publish/propagate pre-scan**（publish 前 dirty file 分組判斷：讀 `git status` + `git diff` 各 file 內容 + 辨識 logical group） | **Codex `--model terra --effort medium` via 泛用 dispatcher**，主線消費分組建議後 selective commit | commit grouping 要推斷修改意圖、耦合、依賴順序與可獨立回退性——讀取命令少不等於決策機械化。publish SOP 中 `vp check → git commit → publish.ts → push --tags → propagate.ts` 是固定序列，但 pre-scan「dirty file 分幾組、每組 commit message 怎麼寫」的 reading 段可以 Codex。 |
 
+## Claude 委派的 model 檔位（決定層）
+
+上表管「派 codex 還是留 Claude」。本節只管**已決定留 Claude 的委派工作**該用哪個 model —— 這是
+`Agent` / `Task` 的 `model` 參數，與 codex 的 `--model` 三檔位無關。
+
+> **本節與 harness 預設對立，所以邊界要明寫**：`Agent` tool 自己的 description 寫「預設省略
+> `model`、繼承主線」，而它在**每一次**派工時都出聲，本規約只在冷載時說一次。因此本節**不**主張
+> 「委派都該指定 model」——那必輸。它只列**窮舉的**降檔 predicate：命中就指定 `model: 'sonnet'`，
+> 一條都沒命中就照 harness 預設省略。**NEVER** 把本節讀成「不確定時降檔比較省」。
+
+⚠️ **省多少配額 UNKNOWN**：訂閱內含配額的 per-model debit multiplier 官方未公布（同 § Routing Table
+的 codex 側警告）。**NEVER** 把「降 Sonnet 省 X%」寫進任何精算或對外敘述——降檔的已知收益只有
+「同一份工作換更便宜的執行者」這個方向，倍率不可量化。
+
+### MUST 指定 `model: 'sonnet'` 的 predicate（窮舉）
+
+**每一個**同時滿足下列**四條**的委派工作都要指定，不是只處理其中最大的那一個：
+
+1. 規格在 brief 內已明確，subagent 不需要裁決「該做什麼」
+2. 目標路徑**已知且已列在 brief 裡**，不需要跨檔追蹤或探索未知路徑
+3. 輸出的正確性有**獨立且夠強的語意 gate** 接住（主線複讀、test、既有 audit script）
+4. 錯誤的修正成本 ≤ 重派一次
+
+既有先例：UI view phase 的派工目標已由 § Routing Table 的 spectra 列定為 Claude sonnet subagent。
+
+### NEVER 降檔的形狀
+
+- 輸出**本身**就是品質或安全 gate（review / 裁決 / 安全判定）
+- 需要跨檔調解矛盾證據，或需要判斷「哪些 evidence 相關」
+- 產出是**規約措辭**（理由見 § Subagent 回報契約 關於措辭一致性那條）
+- 輸出格式結構化**不構成**降檔理由：判準是下游有沒有語意 gate。同一條界線在 § Routing Table
+  的 codex 檔位段已寫成 NEVER 行，本節適用同一條，**NEVER** 在這裡另立一套寬鬆版
+
+### 為什麼是四條全中，不是「傾向降檔」
+
+委派側的 model 組成、Opus 佔委派的比例、`agentType` 分佈都是 rolling window，
+**判現況一律複跑** `node scripts/audit-session-context-budget.ts` 的「模型組成」與「委派 × agentType」
+兩表，**NEVER** 引用任何寫死的百分比當現值。兩件已知的量測邊界會讓寬鬆判準失去回饋：
+
+- `(unattributed)` 是**具名 subagent**，佔委派量體大宗，`agentType` 表因此只覆蓋其中一小部分
+  （見 `docs/tech-debt.md` TD-406）——**NEVER** 拿該表的分佈當委派整體的分佈
+- 主線佔比由 user 起 session 時選定的 model 決定，**本節碰不到**。routing 作用得到的只有委派側
+  （見 TD-403）
+
 ## Orchestration Residency（誰持有長 session — 決定層）
 
 **核心命題**：Routing Table 決定誰**寫** code，這裡決定誰**持有長 session**——主線負擔大頭是 turn 數 × 每 turn 重讀 context，live-watch 會讓它整段燒著。依 change 特性二選一：

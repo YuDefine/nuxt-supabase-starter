@@ -4,7 +4,7 @@
   "checksums": {
     "rules/agent-routing.codex-input-intercept.md": "278ff1ea1fbac8eb",
     "rules/agent-routing.codex-watch-protocol.md": "cf826967c78d5253",
-    "rules/agent-routing.md": "3c69ab851cb89705",
+    "rules/agent-routing.md": "6028f9b8a6efe753",
     "rules/agent-self-verification.md": "226ccec1bff50abb",
     "rules/agent-self-verification.screenshot-evidence.md": "c8f274c48a74c6db",
     "rules/audit-pattern.md": "69856e1bb2377882",
