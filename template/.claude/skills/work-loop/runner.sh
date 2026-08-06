@@ -113,7 +113,9 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
   fi
 
   before="$(round_of)"
-  ts="$(date -u +%Y%m%dT%H%M%SZ)"
+  # 兩個格式一次取，避免跨秒導致 log 檔名與畫面時間對不起來。
+  # ts = 檔名用（無空白 / 冒號）；ts_human = 畫面用。兩者同為 UTC，方便對照 log 檔。
+  IFS='|' read -r ts ts_human <<<"$(date -u +'%Y%m%dT%H%M%SZ|%Y-%m-%d %H:%M:%S')"
   log="$LOG_DIR/round-$ts.log"
 
   # 每輪都是新 process = 新 context。--print 跑完就退出。
@@ -129,7 +131,7 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
     continue
   fi
 
-  echo "== round $((before + 1)) 起跑 ($ts) → $log"
+  echo "== round $((before + 1)) 起跑 ($ts_human UTC) → $log"
   ( cd "$REPO" && "${cmd[@]}" ) >"$log" 2>&1
   rc=$?
 

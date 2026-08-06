@@ -33,7 +33,7 @@ Local edits will be reverted by the next sync.
 3. commit + push（pathspec 取上表）：
 
    ```bash
-   git commit --only -m "✅ archive <change-name>" -- <pathspec>
+   git commit --only -m "📝 docs(spectra): archive <change-name> 歸檔" -- <pathspec>
    git push
    ```
 

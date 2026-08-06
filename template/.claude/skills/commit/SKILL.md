@@ -253,7 +253,7 @@ git diff --stat                 # 僅輔助看 tracked 改動規模；NEVER 當�
 
 ```bash
 git commit --only -m "$(cat <<'EOF'
-feat: 功能描述
+✨ feat: 功能描述
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 Via: /commit
@@ -303,7 +303,7 @@ Untracked file 例外：須先 `git add <untracked>` 再 `git commit --only -- <
 ```bash
 git add package.json
 git commit -m "$(cat <<'EOF'
-deploy: 發布新版本 v{新版本號}
+🚀 deploy: 發布新版本 v{新版本號}
 
 - 功能描述一
 - 功能描述二

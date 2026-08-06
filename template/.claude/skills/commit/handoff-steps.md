@@ -74,7 +74,7 @@ git add HANDOFF.md openspec/ROADMAP.md 2>/dev/null || true
 # 若沒實際變動（HANDOFF 不需更新、ROADMAP 已 current），跳過 commit
 if ! git diff --cached --quiet -- HANDOFF.md openspec/ROADMAP.md 2>/dev/null; then
   git commit -m "$(cat <<'EOF'
-docs(handoff): 更新 commit 後交接狀態
+📝 docs(handoff): 更新 commit 後交接狀態
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 EOF

@@ -557,11 +557,13 @@ fingerprint = sha256(
 ### 7.4 Commit
 
 ```bash
-git commit --only -m "docs(handoff): work-loop round <N>" -- HANDOFF.md <其他改過的檔>
+git commit --only -m "📝 docs(handoff): work-loop round <N> 狀態段更新" -- HANDOFF.md <其他改過的檔>
 git show --stat HEAD | tail -3   # 驗 scope
 ```
 
 **NEVER** `git add` + `git commit` 兩段式——會吞掉別 session 預 stage 的內容。
+
+**message 的 emoji 與中文 subject 都不是裝飾**：clade 與各 consumer 的 `commit-msg` hook 跑 commitlint，header 必須是 `<emoji> <type>[(<scope>)]: <subject>`，emoji 與 type 一對一綁定（`docs` 只能配 📝）。配錯或漏 emoji 會讓 header 整個解析失敗、並誤報成 `subject-empty`。clade 另有 `subject-has-chinese`，所以 subject 需含中文。
 
 ---
 
