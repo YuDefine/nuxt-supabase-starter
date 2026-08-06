@@ -19,6 +19,7 @@
     "rules/consumer-meta.md": "38c5a217af4da7df",
     "rules/coupling-cohesion.md": "1b4db59c090bef02",
     "rules/db-preview-env.md": "52dfcb6ae0e62c94",
+    "rules/deploy-env-identity.md": "ef4a0470d92557d7",
     "rules/dev-port-allocation.md": "81382839a4dfc268",
     "rules/dev-tunnel-convention.md": "0a21c74014e71ee3",
     "rules/error-handling.md": "50e37e5b4f00c618",
