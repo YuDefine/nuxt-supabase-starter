@@ -190,7 +190,7 @@ function resolveConsumerId(o, meta) {
   // /tmp/<consumer>-verification-lease.json 是**不同檔案**。於是從 worktree 跑、又沒帶
   // --consumer-meta 的指令會靜默操作錯的 lease：release 釋放不到、conflict 偵測不到，
   // 跨 worktree 的 lease 隔離形同虛設（2026-07-26 <consumer-a> 實證：worktree 內 `stop` 後
-  // /tmp/<consumer-a>-verification-lease.json 原封不動殘留）。
+  // /tmp/<consumer-a>-verification-lease.json 原封不動殘留）。 fixed-temp-path-exempt: 2026-07-26 事故的現場路徑，改寫等於竄改事故紀錄
   //
   // `--git-common-dir` 在 main 回 `<repo>/.git`、在 linked worktree 回
   // `<main-repo>/.git/worktrees/<slug>`；兩者的 dirname 往上找到 `.git` 的父層即 main worktree。

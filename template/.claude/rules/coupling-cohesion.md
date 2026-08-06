@@ -112,8 +112,9 @@ microsoft/TypeScript、vuejs/core、vitejs/vite、facebook/react、nuxt/nuxt、a
 ```bash
 npx vp lint -A all -D max-lines-per-function -D max-lines -D complexity -D max-depth -D max-params .
 # 尾行的 "Found N warnings and M errors" 就是 violations，"on K files" 是掃描分母
+CHANGED=$(mktemp -t changed-30d.XXXXXXXXXX)   # NEVER 寫死 /tmp/<固定名>：全機器所有 session 共用同一個檔
 git log --since=2026-07-06T00:00:00 --until=2026-08-06T00:00:00 --name-only --pretty= \
-  | sort -u > /tmp/changed-30d.txt   # 與上面的違規檔清單取交集 = 「近 30 天仍在改動」那 88%
+  | sort -u > "$CHANGED"             # 與上面的違規檔清單取交集 = 「近 30 天仍在改動」那 88%
 ```
 
 **NEVER** 直接跑 `npx oxlint`——本 repo 的 wrapper 只給 IDE `--lsp` 用，會拒絕執行。

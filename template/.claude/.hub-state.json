@@ -17,7 +17,7 @@
     "rules/commit.md": "bada7dd4bdd3a827",
     "rules/commit.trunk-gates.md": "7162dee4d04fe5e3",
     "rules/consumer-meta.md": "38c5a217af4da7df",
-    "rules/coupling-cohesion.md": "cc181515662472d3",
+    "rules/coupling-cohesion.md": "1b4db59c090bef02",
     "rules/db-preview-env.md": "52dfcb6ae0e62c94",
     "rules/dev-port-allocation.md": "81382839a4dfc268",
     "rules/dev-tunnel-convention.md": "0a21c74014e71ee3",
