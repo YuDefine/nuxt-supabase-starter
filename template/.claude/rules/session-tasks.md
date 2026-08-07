@@ -31,6 +31,35 @@ session 結束時對每個未完項**升級或刪，二擇一**，不留著。
 
 本節適用**每一個** session、**所有** consumer——不是只有覺得跑很久的那次。
 
+### 主判準是可觀察 predicate，token 數字是兜底（MUST）
+
+**切點由下表判，NEVER 由 token 數字判。** Anthropic 官方文檔全站**不給任何** token 門檻——
+`/clear` 與 `/compact` 的判準一律是行為型（見下表逐字出處）。官方甚至明寫反向那一半：
+*"Sometimes you **should** let context accumulate because you're deep in one complex problem
+and the history is valuable"*（[best-practices](https://code.claude.com/docs/en/best-practices)
+§ Develop your intuition）。
+
+| 可觀察 predicate | 動作 | 出處 |
+| --- | --- | --- |
+| 換到**不相關**的任務 / 換 repo / 換主題 | `/clear`，或收工開新 session | 官方 best-practices § Manage context aggressively 逐字 `Run /clear between unrelated tasks` |
+| 同一個問題已經糾正 **≥2 次** | `/clear` 重來，把學到的寫進更好的初始 prompt。**NEVER** 在同一段壞掉的 context 上繼續第三次 | 同上 § Course-correct 逐字 |
+| 一個 phase / 工作段做完的自然斷點 | `/compact`——**NEVER** 直接跳到「收工開新 session」，見 § 收工訊息契約 | 官方 [context-window](https://code.claude.com/docs/en/context-window) 逐字 `before a long new task` |
+| 品質退化訊號：開始忘記早前指令、重複犯同一個錯、回答明顯變差 | `/compact` 或收工 | 同上逐字 `when context starts affecting performance` |
+| **深在同一個複雜問題中、history 有價值** | **續跑。NEVER 因為 token 數字切** | 官方 best-practices § Develop your intuition 逐字 |
+
+上表沒有任一條觸發時，才輪到下面的 token 兜底層。
+
+**300k / 500k 是兜底上限，不是切點建議**（Charles 2026-08-06 round 27 拍板；2026-08-07 顧問查證後
+維持原值）。它們的正當性**不**來自「官方建議這個數字」——官方不建議任何數字——而來自
+「predicate 全沒觸發時仍需要一條 hard stop」。**NEVER** 把這兩個數字讀成「跑到這裡就該切」，
+那會讓上表第五列（該續跑的那列）永遠輪不到。
+
+> 2026-08-07 撤回的一個下修提案：曾主張 300k→200k，理由是「避開 auto-compact 在 ~155k 中途觸發
+> 炸掉整個 cache」。查證後該理由**整條不成立**——155k 是 200k-window 時代的社群數字，官方
+> [context-window § Set the auto-compact window](https://code.claude.com/docs/en/context-window)
+> 寫的是預設**到模型 context 上限**才 compact；1M context 模型在 300k–500k 區間碰不到它。
+> 且 `/autocompact` 官方範例值本身就是 `500k`。**NEVER** 拿社群單一來源的數字推翻 user 拍板的門檻。
+
 **兩級語義不同，NEVER 當成同一件事的兩個強度**（Charles 2026-08-06 round 27 拍板）：
 
 | 可觀察 predicate | MUST |
@@ -51,15 +80,39 @@ session 結束時對每個未完項**升級或刪，二擇一**，不留著。
 只有 user 能調鬆（per `agent-routing` 的自主判定紀律）。會想調鬆它的，正是已經超標的那個
 session —— 把閂交給它等於沒有閂。
 
-### 為什麼是硬門檻不是判斷
+### 成本模型（2026-08-07 納入 prompt caching 修正）
 
-成本是 **N × C / 2**（N=turns、C=最終 context）——每一 turn 都重讀整個 context，所以
-context 大小是**乘在每一輪上**的係數，不是一次性支出。2026-08-04 對 8 天用量實測：944 個
-主線 session 裡 157 個（17%）平均 context >200k，**吃掉 92% 的 context 讀取量**；67% 的
-session ≤10 turns，合計只佔 0.2%。同樣工作切成 4 段 ≈ 1/4 成本。
+本節 2026-08-07 前寫著 `Cost ≈ N × C / 2`（N=turns、C=最終 context），假設**每個 turn 全額重讀
+整個 context**。**那個假設在 cache 命中時是錯的，高估約 5–10 倍**：訂閱方案自動用 1 小時 TTL，
+cache read 只計 **0.1×**、write 計 2×。
 
-「還剩多少工作」與「現在切要付多少重建成本」都判得出來，唯獨「再跑 N turn 會花多少」
-在 context 已經很大時會被系統性低估——因為直覺算的是新增的內容，實際付的是全量重讀。
+```
+Cost ≈ 0.1 × (N × C / 2) + 2C          # warm cache，訂閱 1h TTL
+每次 cache miss 額外 ≈ +3C              # 全額重讀 1× + 重寫 2×
+```
+
+代入 C=300k / N=50：修正後 ≈ 1.35M effective，舊模型估 7.5M。
+
+**真正的成本殺手不是長 session，是 cache miss。** 單次 miss 在 300k context ≈ +0.9M effective——
+比整場 warm 讀取的一半還多。已知的 miss 觸發源（**MUST** 全部避免）：
+
+- session 中途切 `/model`、`/effort`、首次開 fast mode
+- MCP server 增減、連線斷掉
+- 休息超過 cache TTL（訂閱 1h；吃 usage credits 時降到 5m）後才續跑
+- Claude Code 升級後 `--resume` 舊 session
+
+**推論：session 開頭定好 model 與 effort，中途 NEVER 切。** 一次切換的代價比省下的多得多。
+
+2026-08-04 對 8 天用量實測（944 個主線 session 裡 157 個平均 context >200k、吃掉 92% 的
+context **讀取量**；重跑 `node scripts/context-cost-report.ts`，baseline 存
+`docs/context-cost-baselines.md`）仍然成立，但**讀取量 ≠ 成本**：那 92% 大部分是 0.1×
+權重的 cache read。
+**NEVER** 拿這個數字論證「長 session 很貴」——它論證的是「長 session 讀很多」，兩者差一個
+數量級的權重。長 session 真正的代價在**品質**（context rot）與 **cache miss 風險敞口**，
+不在讀取量本身。
+
+> 上面的 0.1× / 2× 對 API 計價查證過（官方 prompt-caching 文檔）；訂閱方案 plan limit 內部
+> 是否恰好同權重**未證實**，官方只說「billed at cached rate」且 cached read **仍計入用量**。
 
 ### 收工前的自我開脫（看到自己這樣說就停下登記）
 
@@ -76,6 +129,17 @@ session ≤10 turns，合計只佔 0.2%。同樣工作切成 4 段 ≈ 1/4 成�
 **登記完整 ≠ 交接完整。** 前者是檔案狀態，後者是「user 下一步要付出多少」——收工訊息只講到前者，
 就是把「開新 session ＋ 跟它解釋要做什麼」這筆成本靜默轉嫁給 user。本節管的是訊息**形狀**，
 不是收不收工（那由上表判）。
+
+**寫收工訊息之前先判：這次真的需要重開嗎？**
+
+| 可觀察 predicate | 動作 |
+| --- | --- |
+| 還在**同一個**任務裡（只是做久了、或跨了 phase 斷點） | **`/compact` 續同一個 session。NEVER 收工開新 session。** warm 時 compact 讀舊 prefix 走 cache，官方文檔逐字：`costs a fraction of what the context size suggests`；而且 user 零重述 |
+| 換 repo / 換不相關主題 / 這批工作真的結束了 | 才走下面的收工訊息契約 |
+| 剩餘工作可無人值守跑完 | 給 runner 指令，**優先於**開新 session——user 完全不必在場 |
+
+**NEVER 把「context 大了」直接讀成「該收工開新 session」。** 那是本節 2026-08-07 前的預設，
+它讓 user 為每一次 context 增長付一次重述成本，而多數情況根本不必重開。
 
 收工訊息 **MUST** 由下列部件構成，照這個順序，不多不少：
 
