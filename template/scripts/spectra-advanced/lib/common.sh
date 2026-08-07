@@ -188,10 +188,19 @@ sux_find_change_by_name() {
 # List files touched in the working tree + index. Computed once per script
 # invocation and cached in SUX_TOUCHED_FILES to avoid repeated git calls.
 # Call explicitly with `sux_touched_files --refresh` to invalidate.
+#
+# NEVER `export` this variable. It is read only by functions in this file, all
+# of which run in the same shell — export buys nothing and costs correctness:
+# the value is one path per touched file, so a worktree that has drifted far
+# from its fork point makes it arbitrarily large. Once the environment exceeds
+# ARG_MAX every subsequent `exec` in the sourcing script fails with
+# `Argument list too long`, and archive-gate.sh degrades into a gate that
+# reports success while none of its checks ever ran. Observed at <consumer-b>
+# 2026-08-07: a worktree with 2320 touched files produced a 256KB value and
+# silently disabled every check from Check 1 onward.
 sux_touched_files() {
   if [ "${1:-}" = "--refresh" ] || [ -z "${SUX_TOUCHED_FILES:-}" ]; then
     SUX_TOUCHED_FILES=$(git diff --name-only HEAD 2>/dev/null; git diff --cached --name-only 2>/dev/null)
-    export SUX_TOUCHED_FILES
   fi
   printf '%s\n' "${SUX_TOUCHED_FILES:-}"
 }
