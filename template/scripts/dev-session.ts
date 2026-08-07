@@ -19,9 +19,26 @@
  *   3. 反累積       → 一 consumer(-app) 一個 durable session（起前先查、有就 reuse）；
  *                     多 worktree 切換走 dev-router 不要 N 個 dev+tunnel；sweep 清死 session
  *
+ * 4. slot broker  → **agent 租約有界、人類租約無界**（見下）
+ *
+ * 為什麼要 broker（別把它簡化掉）：
+ *   lease 原本是 session-scoped 且**無界** —— 誰先起就持有到 session 結束。無界所有權的
+ *   必然推論鏈是「另一個 agent 永遠不會自己放手 → 想用只能砍掉他 → 砍是破壞性動作 →
+ *   所以必須問 user」。那個「必須問 user」不是規約訂太保守，是無界所有權的數學結果。
+ *   解法**不是**放寬規約讓 agent 自行 takeover（那會變成 agent 互砍），是讓所有權**有界**：
+ *
+ *     holder 是 agent  → 必須有 TTL（預設 10m），過期或心跳斷 → 其他 agent 自動接管，不問 user
+ *     holder 是人類    → 無界，**NEVER** 自動回收；agent 要用一律 refuse + 把訊息呈給 user
+ *
+ *   人類租約無界這條是整個設計的安全閥：agent 之間完全自治，而 user 自己跑的 dev server
+ *   永遠不會被 agent 踢掉。
+ *
  * 用法：
- *   node scripts/dev-session.ts [opts] -- <cmd...>   # 起/reuse durable dev session
- *   node scripts/dev-session.ts status [opts]        # 查 session + port + lease
+ *   node scripts/dev-session.ts [opts] -- <cmd...>   # 起/reuse durable dev session（= start）
+ *   node scripts/dev-session.ts wait [opts] -- <cmd...>  # 排隊等 slot，取得後直接接手
+ *   node scripts/dev-session.ts heartbeat [opts]     # 續租（heartbeatAt=now、expiresAt 往後推一個 TTL）
+ *   node scripts/dev-session.ts release [opts]       # 主動釋放 lease（不動 zellij session）
+ *   node scripts/dev-session.ts status [opts]        # 查 session + port + lease + 佇列
  *   node scripts/dev-session.ts stop [opts]          # kill+delete session + 釋放 lease
  *   node scripts/dev-session.ts list                 # 列所有 dev-* session + health
  *   node scripts/dev-session.ts sweep [--dry-run]    # 清掉 EXITED / 死掉的 dev-* session（反累積）
@@ -33,6 +50,10 @@
  *   --cwd <dir>              dev 命令的 working dir（預設 process.cwd()）
  *   --port <N>               dev port（health / lease 用；缺則從 cmd argv 或 consumer-meta 推）
  *   --label <text>           lease holder label
+ *   --task <text>            這次租用要做什麼（agent 租約 MUST 帶）
+ *   --ttl <10m|30m|90s|1h>   租期；agent 未給則預設 10m，人類 holder 一律無界
+ *   --wait-timeout <15m>     `wait` 排隊上限（預設 15m），逾時 exit 1
+ *   --agent                  強制視為 agent 租約（有界），即使偵測不到 agent runtime
  *   --kind <claude|codex|human|subagent>   覆寫自動偵測的 holder kind
  *   --takeover               搶佔別人的 lease（strict 模式衝突時；會 log 前 holder）
  *   --no-lease               跳過 lease（純 durability + 反累積）
@@ -65,6 +86,17 @@ const LEASE_DIR = tmpdir()
 const READY_TIMEOUT_MS = 90_000
 const READY_POLL_MS = 1_500
 
+/** agent 租約未指定 `--ttl` 時的預設租期。人類 holder 不套用（無界）。 */
+const DEFAULT_TTL_MS = 10 * 60_000
+/**
+ * 心跳判死門檻。`expiresAt` 還沒到但 agent 已崩潰時，唯一的訊號就是心跳停了 ——
+ * 所以 liveness **MUST 兩條都看**，只看 `expiresAt` 會讓崩潰的 agent 把 slot 佔滿整個 TTL。
+ * 同一個門檻也用來剔除不再 poll 的排隊者（NEVER 另發明一套判準）。
+ */
+const HEARTBEAT_DEAD_MS = 180_000
+const DEFAULT_WAIT_TIMEOUT_MS = 15 * 60_000
+const WAIT_POLL_MS = 5_000
+
 // ─────────────────────────────────────────────────────────────────────────
 // 小工具
 // ─────────────────────────────────────────────────────────────────────────
@@ -93,6 +125,150 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
+/**
+ * `10m` / `90s` / `1h` / `500ms` → ms。**裸數字視為分鐘**（`--ttl 10` = 10m）——
+ * 這個位置的量級是「分鐘」，把裸數字當毫秒會安靜地產生一個 10ms 的租約。
+ * 解不出來回 null，caller 自己決定 fallback（NEVER 靜默當 0）。
+ */
+function parseDuration(s) {
+  if (s === undefined || s === null) return null
+  const m = String(s)
+    .trim()
+    .match(/^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/i)
+  if (!m) return null
+  const n = Number(m[1])
+  if (!Number.isFinite(n) || n < 0) return null
+  const unit = (m[2] || 'm').toLowerCase()
+  const mult = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000 }[unit]
+  return Math.round(n * mult)
+}
+
+function fmtDuration(ms) {
+  if (ms === null || ms === undefined) return '—'
+  if (ms < 0) return '已過期'
+  const s = Math.round(ms / 1000)
+  if (s < 60) return `${s}s`
+  const mnt = Math.floor(s / 60)
+  if (mnt < 60) return `${mnt}m${s % 60 ? ` ${s % 60}s` : ''}`
+  return `${Math.floor(mnt / 60)}h ${mnt % 60}m`
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// 租約有界性（broker 的核心分流）
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * 這份 lease 是 agent 租約還是人類租約。
+ *
+ * 判準是 holder.kind：`human` 以外的都是 agent（claude / codex / subagent / …）。
+ * **NEVER 把判不出來的 holder 當成 agent** —— detectHolderKind() 在偵測不到任何 agent
+ * runtime 時回的就是 `human`，那正是「user 自己在 terminal 跑 pnpm dev」的情形。
+ * 誤判成 agent 會讓 user 的 dev server 被自動回收，也就是本設計唯一的安全閥失效。
+ */
+function isAgentLease(lease) {
+  const kind = lease?.holder?.kind
+  if (!kind) return false
+  return kind !== 'human'
+}
+
+/** 本次 claim 是不是 agent 租約（`--agent` 顯式覆寫優先）。 */
+function claimingAsAgent(o) {
+  return o.agent || holderKind(o) !== 'human'
+}
+
+/** 本次 claim 的 TTL（ms）；人類租約回 null = 無界。 */
+function claimTtlMs(o) {
+  if (!claimingAsAgent(o)) return null
+  return o.ttl ?? DEFAULT_TTL_MS
+}
+
+/**
+ * 租約是否已可回收。**MUST 兩條判準都看**：
+ *   1. `expiresAt < now` → 到期
+ *   2. `heartbeatAt` 早於 now − 180s → 心跳斷（agent 崩潰，expiresAt 還沒到也算死）
+ *
+ * 人類租約（`expiresAt` 為 null）**恆回 false** —— 無界，永不自動回收。
+ * 舊格式 lease（沒有這三個欄位）同樣恆回 false：往後相容，不會因為升級就被回收。
+ */
+function leaseReclaimable(lease, now = Date.now()) {
+  if (!lease || !isAgentLease(lease)) return null
+  const expiresAt = lease.expiresAt ? Date.parse(lease.expiresAt) : null
+  if (expiresAt !== null && Number.isFinite(expiresAt) && expiresAt < now) return 'expired'
+  const hb = lease.heartbeatAt ? Date.parse(lease.heartbeatAt) : null
+  if (hb !== null && Number.isFinite(hb) && now - hb > HEARTBEAT_DEAD_MS) return 'heartbeat-dead'
+  return null
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// 佇列（FIFO；檔案化，放在 lease 檔旁）
+// ─────────────────────────────────────────────────────────────────────────
+
+function queuePath(id) {
+  return join(LEASE_DIR, `${id}-verification-lease.queue.json`)
+}
+
+function readQueue(id) {
+  const p = queuePath(id)
+  if (!existsSync(p)) return []
+  try {
+    const parsed = JSON.parse(readFileSync(p, 'utf8'))
+    return Array.isArray(parsed?.entries) ? parsed.entries : []
+  } catch {
+    return []
+  }
+}
+
+function writeQueue(id, entries) {
+  try {
+    const p = queuePath(id)
+    if (!entries.length) {
+      if (existsSync(p)) unlinkSync(p)
+      return
+    }
+    writeFileSync(p, JSON.stringify({ schemaVersion: '1', entries }, null, 2) + '\n')
+  } catch {
+    /* fail-open：佇列壞掉不該擋住開發 */
+  }
+}
+
+/** 剔除超過 HEARTBEAT_DEAD_MS 沒 poll 的排隊項（同一套 liveness 判準）。 */
+function pruneQueue(entries, now = Date.now()) {
+  return entries.filter((e) => {
+    const t = Date.parse(e?.polledAt || e?.enqueuedAt || '')
+    return Number.isFinite(t) && now - t <= HEARTBEAT_DEAD_MS
+  })
+}
+
+/** 把自己排進佇列（已在其中則只更新 polledAt），回傳 pruned 後的整條佇列。 */
+function enqueueSelf(o, id) {
+  const me = holderSessionId(o)
+  const now = new Date().toISOString()
+  const entries = pruneQueue(readQueue(id))
+  const mine = entries.find((e) => e.sessionId === me)
+  if (mine) {
+    mine.polledAt = now
+    if (o.task) mine.task = o.task
+  } else {
+    entries.push({
+      holderKind: holderKind(o),
+      sessionId: me,
+      task: o.task || null,
+      enqueuedAt: now,
+      polledAt: now,
+    })
+  }
+  writeQueue(id, entries)
+  return entries
+}
+
+function dequeueSelf(o, id) {
+  const me = holderSessionId(o)
+  writeQueue(
+    id,
+    pruneQueue(readQueue(id)).filter((e) => e.sessionId !== me),
+  )
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // arg 解析（保留 `--` 之後的整段當 cmd argv）
 // ─────────────────────────────────────────────────────────────────────────
@@ -107,6 +283,10 @@ function parse(argv) {
     cwd: process.cwd(),
     port: null,
     label: null,
+    task: null,
+    ttl: null, // ms；null = 未指定（agent → DEFAULT_TTL_MS，人類 → 無界）
+    waitTimeout: DEFAULT_WAIT_TIMEOUT_MS,
+    agent: false,
     kind: null,
     takeover: false,
     noLease: false,
@@ -136,6 +316,18 @@ function parse(argv) {
         break
       case '--label':
         o.label = next()
+        break
+      case '--task':
+        o.task = next()
+        break
+      case '--ttl':
+        o.ttl = parseDuration(next())
+        break
+      case '--wait-timeout':
+        o.waitTimeout = parseDuration(next()) ?? DEFAULT_WAIT_TIMEOUT_MS
+        break
+      case '--agent':
+        o.agent = true
         break
       case '--kind':
         o.kind = next()
@@ -360,10 +552,18 @@ function pidAlive(pid) {
 
 function writeLease(o, consumerId, sessionName, port, id) {
   try {
+    const now = Date.now()
+    const ttlMs = claimTtlMs(o)
     const lease = {
       schemaVersion: '1',
       consumerId,
-      claimedAt: new Date().toISOString(),
+      claimedAt: new Date(now).toISOString(),
+      // broker 三欄位。人類租約的 expiresAt 是 null（無界），ttlMs 同步為 null ——
+      // 這兩者一起構成「NEVER 自動回收人類 lease」的唯一判準來源。
+      task: o.task || null,
+      ttlMs,
+      expiresAt: ttlMs === null ? null : new Date(now + ttlMs).toISOString(),
+      heartbeatAt: new Date(now).toISOString(),
       holder: {
         kind: holderKind(o),
         sessionId: holderSessionId(o),
@@ -387,10 +587,12 @@ function writeLease(o, consumerId, sessionName, port, id) {
 
 function releaseLease(o, id) {
   try {
+    dequeueSelf(o, id)
     const lease = readLease(id)
     if (!lease) return
     const mine = lease.holder?.sessionId === holderSessionId(o)
-    if (mine || !pidAlive(lease.devServer?.pid)) unlinkSync(leasePath(id))
+    if (mine || !pidAlive(lease.devServer?.pid) || leaseReclaimable(lease))
+      unlinkSync(leasePath(id))
   } catch {
     /* fail-open */
   }
@@ -433,6 +635,9 @@ function leaseConflict(o, id) {
   const mine = lease.holder?.sessionId === holderSessionId(o)
   if (mine) return null
   if (!pidAlive(lease.devServer?.pid)) return null // stale → 不算衝突
+  // 有界性：agent 租約過期 / 心跳斷 → 可回收，不算衝突（下一個 agent 自動接手，不問 user）。
+  // 人類租約在 leaseReclaimable() 內恆回 null，所以這條**不會**放行對人類 lease 的接管。
+  if (leaseReclaimable(lease)) return null
   const leaseCwd = canonicalLeaseCwd(lease.devServer?.cwd)
   if (leaseCwd && leaseCwd === canonicalCwd(o.cwd)) return null // 同 cwd → 同工作
   return lease
@@ -468,6 +673,22 @@ function enforceLeaseOrExit(o, meta, consumerId, lid) {
   if (o.noLease) return null
   const strict = meta?.dev?.leaseMode === 'strict' || meta?.auth?.portPinned === true
 
+  // (0) 有界性 gate — agent 租約過期 / 心跳斷 → 自動接管，**不問 user**。
+  //
+  // 這裡把 o.takeover 打開而不是自己動手殺，是為了走**既有的** takeover 路徑
+  // （kill lease 記錄的 dev pid + killSession → 重建）。NEVER 在這裡自組 lsof + kill。
+  //
+  // 人類租約永遠走不到這條：leaseReclaimable() 對 `holder.kind === 'human'` 恆回 null。
+  const existing = readLease(lid)
+  const reclaim = leaseReclaimable(existing)
+  if (reclaim && !o.takeover) {
+    err(
+      `[lease:${consumerId}] 前 holder ${existing.holder?.kind}:${existing.holder?.sessionId} 的 agent 租約已${reclaim === 'expired' ? '到期' : '心跳中斷（>180s）'} → 自動接管`,
+    )
+    if (existing.task) err(`  前一個 task: ${existing.task}`)
+    o.takeover = true
+  }
+
   // (1) served-code mismatch — 優先於 ownership 判定，因為它跟持有者是誰無關
   const mismatch = servedCwdMismatch(o, lid)
   if (mismatch && !o.takeover) {
@@ -502,6 +723,16 @@ function enforceLeaseOrExit(o, meta, consumerId, lid) {
     err(
       `[lease:${consumerId}] 無法 claim — 已被 ${conflict.holder?.kind}:${conflict.holder?.sessionId} 持有`,
     )
+    if (isAgentLease(conflict)) {
+      const left = conflict.expiresAt ? Date.parse(conflict.expiresAt) - Date.now() : null
+      err(
+        `  這是**存活中的 agent 租約**（task: ${conflict.task || '未註明'}，剩餘 ${fmtDuration(left)}）`,
+      )
+      err(`  → 排隊等它到期：dev-session.ts wait --task "<你要做什麼>" -- <cmd>（不需問 user）`)
+    } else {
+      err(`  這是**人類租約（無界）**——agent NEVER 自動接管。`)
+      err(`  → 把本訊息原樣呈給 user，由 user 決定要不要停掉自己的 dev server。`)
+    }
     err(`  since:   ${conflict.claimedAt}`)
     err(
       `  dev:     PID ${conflict.devServer?.pid}, cwd=${conflict.devServer?.cwd}, port=${conflict.devServer?.port}`,
@@ -630,6 +861,14 @@ async function cmdLaunch(o) {
         if (pidAlive(conflict.devServer?.pid)) sh('kill', [String(conflict.devServer.pid)])
         killSession(sessionName)
       } else {
+        // reuse 且原 lease 已可回收（或根本沒 lease）→ 接手成為 holder。
+        // 只在這兩種情形改寫 holder：**NEVER** 從一個存活中的 holder 手上把 lease 記錄抹掉
+        // 卻繼續用他的 dev server —— 那會讓他的 release 找不到自己的 lease。
+        if (!o.noLease) {
+          const cur = readLease(lid)
+          if (!cur || leaseReclaimable(cur)) writeLease(o, consumerId, sessionName, port, lid)
+          dequeueSelf(o, lid)
+        }
         const servedCwd = readLease(lid)?.devServer?.cwd
         out(`✓ reuse 既有 durable dev session（反累積，不重起）`)
         out(`  session: ${sessionName}  ｜  ${urlHint}`)
@@ -696,7 +935,16 @@ async function cmdLaunch(o) {
   while (Date.now() - start < READY_TIMEOUT_MS) {
     await sleep(READY_POLL_MS)
     if (portListening(port)) {
-      if (!o.noLease) writeLease(o, consumerId, sessionName, port, lid)
+      if (!o.noLease) {
+        writeLease(o, consumerId, sessionName, port, lid)
+        dequeueSelf(o, lid)
+        const ttl = claimTtlMs(o)
+        if (ttl !== null) {
+          out(
+            `  租約：agent，${fmtDuration(ttl)}（續租：dev-session.ts heartbeat；用完請 release）`,
+          )
+        }
+      }
       out(
         `✓ durable dev ready：${urlHint}（session ${sessionName}，掛在 zellij server 不會被 harness reap）`,
       )
@@ -721,11 +969,140 @@ function cmdStatus(o) {
   out(`  zellij session: ${s ? (s.exited ? 'EXITED（死）' : '存在（活）') : '不存在'}`)
   if (port) out(`  port ${port}: ${portListening(port) ? `LISTENING（${urlOf(port)}）` : '沒在聽'}`)
   const lease = readLease(lid)
-  if (lease)
+  if (lease) {
     out(
       `  lease holder: ${lease.holder?.kind}:${lease.holder?.sessionId}  cwd=${lease.devServer?.cwd}`,
     )
-  else out(`  lease: 無`)
+    out(`  task: ${lease.task || '（未註明）'}`)
+    if (!isAgentLease(lease)) {
+      out(`  租約: 人類（無界）—— agent NEVER 自動接管`)
+    } else if (!lease.expiresAt) {
+      out(`  租約: agent（舊格式，無 expiresAt）—— 不自動回收`)
+    } else {
+      const reclaim = leaseReclaimable(lease)
+      const left = Date.parse(lease.expiresAt) - Date.now()
+      out(
+        `  租約: agent，剩餘 ${fmtDuration(left)}${reclaim ? `（可回收：${reclaim}）` : ''}  heartbeat=${lease.heartbeatAt || '—'}`,
+      )
+    }
+  } else out(`  lease: 無`)
+  const queue = pruneQueue(readQueue(lid))
+  out(`  佇列: ${queue.length} 個等待中`)
+  for (const [i, e] of queue.entries()) {
+    out(
+      `    ${i + 1}. ${e.holderKind}:${e.sessionId} — ${e.task || '（未註明）'}（自 ${e.enqueuedAt}）`,
+    )
+  }
+}
+
+/**
+ * 續租。**只有 holder 自己能續**——別人續租等於延長不屬於自己的所有權，
+ * 那會讓「過期就能自動接管」這條保證失效。
+ */
+function cmdHeartbeat(o) {
+  const meta = readConsumerMeta(o.consumerMeta)
+  const consumerId = resolveConsumerId(o, meta)
+  const port = resolvePort(o, meta)
+  const lid = leaseId(consumerId, port, resolvePrimaryPort(meta))
+  const lease = readLease(lid)
+  if (!lease) {
+    err(`[lease:${consumerId}] 無 lease 可續租（是否已被回收？重跑 start / wait）`)
+    process.exit(1)
+  }
+  if (lease.holder?.sessionId !== holderSessionId(o)) {
+    err(
+      `[lease:${consumerId}] 你不是 holder（現持有者 ${lease.holder?.kind}:${lease.holder?.sessionId}），拒絕續租`,
+    )
+    process.exit(1)
+  }
+  if (!isAgentLease(lease)) {
+    out(`[lease:${consumerId}] 人類租約無界，不需要續租`)
+    return
+  }
+  const now = Date.now()
+  const ttlMs = o.ttl ?? lease.ttlMs ?? DEFAULT_TTL_MS
+  lease.ttlMs = ttlMs
+  lease.heartbeatAt = new Date(now).toISOString()
+  lease.expiresAt = new Date(now + ttlMs).toISOString()
+  if (o.task) lease.task = o.task
+  try {
+    writeFileSync(leasePath(lid), JSON.stringify(lease, null, 2) + '\n')
+  } catch (e) {
+    err(`[lease:${consumerId}] 續租寫檔失敗：${(e as Error)?.message ?? e}`)
+    process.exit(1)
+  }
+  out(`✓ 續租 ${fmtDuration(ttlMs)}（到期 ${lease.expiresAt}）`)
+}
+
+/** 主動釋放 lease（不動 zellij session）——task 做完就該放手，別讓下一個 agent 等到 TTL 到期。 */
+function cmdRelease(o) {
+  const meta = readConsumerMeta(o.consumerMeta)
+  const consumerId = resolveConsumerId(o, meta)
+  const lid = leaseId(consumerId, resolvePort(o, meta), resolvePrimaryPort(meta))
+  const before = readLease(lid)
+  releaseLease(o, lid)
+  if (before && existsSync(leasePath(lid))) {
+    out(`[lease:${consumerId}] 你不是 holder 且對方仍存活 —— 未釋放（no-op）`)
+    return
+  }
+  out(`✓ 已釋放 lease${before?.task ? `（task: ${before.task}）` : ''}`)
+}
+
+/**
+ * 排隊等 slot，取得後直接接手（含把 dev server 切到本次的 cwd）。
+ *
+ * 分流與 [[verification-lease]] 的 predicate 表一致：
+ *   - lease 不存在 / agent 租約已過期或心跳斷 → 立刻接手，**不問 user**
+ *   - agent 租約仍存活 → 排隊 poll，**不問 user**；逾時才 exit 1 回報
+ *   - **人類租約 → 立刻 refuse**，訊息原樣呈給 user（排隊也沒有意義：它無界，等不到）
+ */
+async function cmdWait(o) {
+  if (!o.cmd || !o.cmd.length) {
+    err('用法：dev-session.ts wait [opts] -- <cmd...>（缺少 `-- <cmd>`）')
+    process.exit(1)
+  }
+  const meta = readConsumerMeta(o.consumerMeta)
+  const consumerId = resolveConsumerId(o, meta)
+  const lid = leaseId(consumerId, resolvePort(o, meta), resolvePrimaryPort(meta))
+  const me = holderSessionId(o)
+  const deadline = Date.now() + o.waitTimeout
+
+  for (;;) {
+    const lease = readLease(lid)
+    const held =
+      lease &&
+      lease.holder?.sessionId !== me &&
+      pidAlive(lease.devServer?.pid) &&
+      !leaseReclaimable(lease)
+
+    if (held && !isAgentLease(lease)) {
+      dequeueSelf(o, lid)
+      err(`[lease:${consumerId}] 人類租約（無界）持有中 —— agent NEVER 自動接管，也無從排隊。`)
+      err(`  holder: ${lease.holder?.kind}:${lease.holder?.sessionId}（since ${lease.claimedAt}）`)
+      err(`  dev:    PID ${lease.devServer?.pid}, cwd=${lease.devServer?.cwd}`)
+      err(`  → 把本訊息原樣呈給 user，由 user 決定要不要停掉自己的 dev server。`)
+      process.exit(1)
+    }
+
+    const queue = enqueueSelf(o, lid)
+    const head = queue[0]
+    if (!held && head?.sessionId === me) {
+      dequeueSelf(o, lid)
+      return cmdLaunch(o) // 走既有 launch 路徑接手（含 lease gate 的自動回收分支）
+    }
+
+    if (Date.now() >= deadline) {
+      dequeueSelf(o, lid)
+      err(`[lease:${consumerId}] 排隊逾時（${fmtDuration(o.waitTimeout)}）仍未取得 slot`)
+      if (held)
+        err(
+          `  持有者 ${lease.holder?.kind}:${lease.holder?.sessionId}，task: ${lease.task || '未註明'}`,
+        )
+      err(`  佇列位置：${queue.findIndex((e) => e.sessionId === me) + 1}/${queue.length}`)
+      process.exit(1)
+    }
+    await sleep(WAIT_POLL_MS)
+  }
 }
 
 function cmdStop(o) {
@@ -787,11 +1164,15 @@ function cmdSweep(o) {
 // ─────────────────────────────────────────────────────────────────────────
 
 function usage() {
+  // 讀檔頭的 block comment 當說明。**用結束標記切，不要用行號** —— 行號在每次補一段
+  // 註解時都會靜默失準（少印或印到 import），而少印的通常正是新加的那幾行用法。
+  const lines = readFileSync(new URL(import.meta.url))
+    .toString()
+    .split('\n')
+  const end = lines.findIndex((l) => l.trimEnd() === ' */')
   out(
-    readFileSync(new URL(import.meta.url))
-      .toString()
-      .split('\n')
-      .slice(1, 38)
+    lines
+      .slice(1, end === -1 ? 38 : end)
       .map((l) => l.replace(/^ \*?/, ''))
       .join('\n'),
   )
@@ -806,6 +1187,14 @@ async function main() {
       return cmdStatus(o)
     case 'stop':
       return cmdStop(o)
+    case 'heartbeat':
+      return cmdHeartbeat(o)
+    case 'release':
+      return cmdRelease(o)
+    case 'wait':
+      return cmdWait(o)
+    case 'start':
+      return cmdLaunch(o) // 顯式別名；無 subcommand 亦為 launch（既有呼叫方式不變）
     case 'list':
       return cmdList()
     case 'sweep':

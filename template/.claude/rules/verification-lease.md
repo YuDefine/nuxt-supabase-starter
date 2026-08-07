@@ -15,13 +15,23 @@ Lease identity 是 **(consumer_id, port)**：primary port 的檔在 `/tmp/<consu
 
 > 五元組欄位、檔 schema、claim / release / force-takeover 行為、holder identity 解析、哪些工具必須讀寫 lease、consumer-meta `leaseMode` 對照，見 [[verification-lease.spec]]（path-scoped：動 `dev-session*` / `consumer-meta.json` / `nuxt.config.*` 時載入）。
 
+**Agent 租約有界、人類租約無界**：agent 持有的 lease 必須帶 TTL（預設 10m），過期或心跳斷即可被下一個 agent 回收；人類持有的 lease 無界，**NEVER** 自動回收。這條分流讓 agent 之間完全自治，而 user 自己跑的 dev server 永遠不會被 agent 踢掉。
+
 ## Agent 行為契約
 
 Claude / Codex 在這條規則之下：
 
 - **NEVER** 用 raw `nuxt dev` / `node server.mjs` / `playwright start` 之類 bypass lease 的方式啟動 dev server
-- **NEVER** 直接 `lsof + kill` 別 holder 的 PID（即使它是另一個自己的 session）；要殺一律走 `dev-session.ts stop` / `--takeover`（或 legacy `dev-singleton.ts`）的 op
-- **NEVER** 在 lease 衝突訊息出來時自行決定 `--takeover`，**MUST** 把 message 原樣呈給 user 讓 user 決定
-- **NEVER** 在 autonomous mode（background subagent、scheduled task、/loop）下執行 `--takeover`，autonomous = 永遠 refuse + 在 chat 報告
-- **MUST** 在 claim 時帶可辨識的 `--label`（如「verifying #178」「reproducing TD-099」）
-- **MUST** 在 dev server / browser session 結束時主動 `release`（task 結束 / session 收尾 / kill subagent 前）
+- **NEVER** 直接 `lsof + kill` 別 holder 的 PID（即使它是另一個自己的 session）；要殺一律走 `dev-session.ts stop` / `wait` / `--takeover` 的 op
+- **MUST** 在 claim 時帶 `--task "<這次要做什麼>"` 與 `--ttl`（未給 TTL 的 agent 租約自動套 10m）
+- **MUST** 長任務期間定期 `dev-session.ts heartbeat` 續租；task 結束 / session 收尾 / kill subagent 前主動 `release`，**NEVER** 讓下一個 agent 等到 TTL 自然到期
+
+衝突時依**可觀察 predicate** 分流（`dev-session.ts status` 讀得到全部三項）：
+
+| 可觀察 predicate | 動作 |
+| --- | --- |
+| lease 不存在，或持有者是 **agent 且已過期 / 心跳斷（>180s）** | 直接 `start` 自動接管，**不問 user** |
+| lease 由 **agent** 持有且仍存活 | `dev-session.ts wait --task "…" -- <cmd>` 排隊，**不問 user**；逾時才回報 |
+| lease 由 **人類** 持有（`holder.kind = human`） | **NEVER** 自動接管、**NEVER** `--takeover` —— refuse 並把訊息原樣呈給 user |
+
+最後一列在 autonomous mode（background subagent、scheduled task、/loop）同樣成立且無例外。

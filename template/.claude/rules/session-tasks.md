@@ -49,6 +49,23 @@ and the history is valuable"*（[best-practices](https://code.claude.com/docs/en
 
 上表沒有任一條觸發時，才輪到下面的 token 兜底層。
 
+**`/clear` 與「同目錄開新 session」同價，NEVER 假設 `/clear` 比較省。** prompt cache 是
+server-side、以 **prefix bytes + model** 為 key，**process 身份不在 key 裡**——官方
+[prompt-caching § Cache scope](https://code.claude.com/docs/en/prompt-caching) 逐字：
+*"Sessions you run in parallel in the same directory build matching prefixes and **read each
+other's cache**"*，不同 process 互讀就是證明。官方自己也把 `/clear` 定義成開新 session
+（[costs](https://code.claude.com/docs/en/costs) 逐字 `These totals reset when /clear starts a
+new session`）。
+
+> 2026-08-07 實錄：本 session 從 § Cache scope 條文推導出「`/clear` 留在原 process 所以 cache
+> 命中、是最便宜的重置」，並據此對 user 畫了一張三列對照表——**整列是錯的**。「留在原 process」
+> 從來不是命中條件。同一份條文同時支持正解與這個誤讀，所以此處把結論寫死，**NEVER** 要求下一個
+> 讀者自己從 cache scope 重新推導。
+>
+> 連帶結論：headless `claude --print` 沒有 `/clear`（官方 [headless](https://code.claude.com/docs/en/headless)
+> 頁：terminal-only 命令在 `-p` 模式不可用），但**也不需要**——每次 `claude -p` 本身就是新
+> session，依上述等價性沒有多付任何成本。**NEVER** 把「runner 不能 `/clear`」當成 runner 的缺陷。
+
 **300k / 500k 是兜底上限，不是切點建議**（Charles 2026-08-06 round 27 拍板；2026-08-07 顧問查證後
 維持原值）。它們的正當性**不**來自「官方建議這個數字」——官方不建議任何數字——而來自
 「predicate 全沒觸發時仍需要一條 hard stop」。**NEVER** 把這兩個數字讀成「跑到這裡就該切」，

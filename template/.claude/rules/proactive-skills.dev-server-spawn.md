@@ -22,7 +22,7 @@ Local edits will be reverted by the next sync.
 - **NEVER** 直接 `nuxt dev` / `pnpm dev` 不經 wrapper（會繞過 lease + cwd 檢查 + durability，且會被 harness reap）
 - **反累積**：dev-session 一 consumer(-app) 一個 durable session（名 `dev-<consumer_id>[-<app>]`），起前先 `zellij list-sessions` 查、有就 **reuse 不重起第二台**；`node scripts/dev-session.ts sweep` 清 EXITED / 死掉的 session；多 worktree 切換仍走 **dev-router**（一個公開 port 切 backend），**禁止**對每個 worktree 各起一個 dev-session
 - **前提**：consumer 端需有 zellij（本倉標準多工器）。zellij 不在 PATH → dev-session 報錯停下，回報 user 安裝，**NEVER** 退回 `run_in_background`
-- **Lease 衝突**：`dev.leaseMode = strict` 且 cwd-mismatch → dev-session 印衝突訊息 + exit 1，agent **MUST** 把訊息原樣呈給 user，**NEVER** 自行 `--takeover`（參照 [`verification-lease.md`](./verification-lease.md)）
+- **Lease 衝突**：依 [`verification-lease.md`](./verification-lease.md) § Agent 行為契約的 predicate 分支表處置——**agent 租約過期 / 心跳斷 → 自動接管**（不問 user）；**agent 租約存活 → `dev-session.ts wait` 排隊**（不問 user）；**人類租約 → refuse + 把訊息原樣呈給 user**，**NEVER** 自行 `--takeover`
 - **掃 free port（non-pinned）**：scan 3001-3050 找第一個 free port；**禁止**用 3000（留給 user 自己的 dev server）
 - **Tunnel URL**：回報 user 時，**若 consumer 有 `TUNNEL_HOSTNAME`，MUST 額外列 tunnel URL 並標註「tunnel 未啟動先跑 `pnpm tunnel:<app>`」**——外部裝置 / HTTPS-only 驗收 localhost 不夠用。**Agent NEVER 自起 `pnpm tunnel:*`** —— tunnel process 由 user 控制，agent 只負責列 URL + 提示
 - **Worktree env bootstrap**：開新 worktree 後 **MUST** 在啟動前跑 `node vendor/scripts/wt-env-sync.ts --consumer-meta .claude/consumer-meta.json` 補 gitignored env file
@@ -57,4 +57,4 @@ grep -l 'cloudflareTunnel\|vite-plugin-cloudflare-tunnel' nuxt.config.* 2>/dev/n
 - **NEVER** 從 **main** 起 dev server 想 review worktree change —— route 在 worktree 還沒 merge 進 main → 404
 - **NEVER** 對 in-process tunnel 型套 **dev-router**（`scripts/dev-router.ts`）—— dev-router 假設 tunnel 指向一個固定公開 port、背後可切多 backend；in-process tunnel 跟 nuxt dev process 綁死，沒有「獨立公開 port 後面切 backend」的層可佔，套了不會生效
 - **NEVER** 把 worktree nuxt.config 架構級 drift（如 worktree 是舊 framework 時代 fork、main 已遷新架構，vite 回 403「host not allowed」）誤判成 tunnel 問題 —— 那是 change-level 架構 reconcile 問題，review 前先 reconcile，不要在 tunnel / dev-session 層找原因
-- **單一 named tunnel 一次一 worktree**：切 worktree 必 `dev-session.ts stop` 再從另一個 worktree cwd 起，**禁止**對 in-process tunnel 型同時開兩個指向同 hostname 的 dev-session
+- **單一 named tunnel 一次一 worktree**：切 worktree 必 `dev-session.ts stop` 再從另一個 worktree cwd 起，**禁止**對 in-process tunnel 型同時開兩個指向同 hostname 的 dev-session。**除非該 consumer 開了 `dev.perWorktreeTunnel`** —— 此時 `wt-env-sync` 會把每個 worktree 的 `TUNNEL_HOSTNAME` 改寫成 `<slug>.<host>`、`TUNNEL_NAME` 加 `-<slug>` 後綴、dev port 改成該 slug 專屬 port，排他性就從 port 移到 **hostname**：兩個 worktree 各持自己的 hostname 與 lease，同時開是合法的。opt-in 的前提是該 consumer 有涵蓋 `*.<host>` 的 DNS record 與憑證 —— 那是 consumer 自己的決定，**NEVER** 代 consumer 開這個欄位

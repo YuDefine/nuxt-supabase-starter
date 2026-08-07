@@ -54,11 +54,68 @@ review slot 就有三台。共用一個 lease 檔時第二台一律被判衝突�
   `<repo>/.git`、linked worktree 回 `<main-repo>/.git/worktrees/<slug>`），截到 `.git` 的父層即
   main worktree（2026-07-26 <consumer-a> 實證：worktree 內 `stop` 後 main 的 lease 檔原封不動殘留）
 
+## 有界性：agent 租約 vs 人類租約
+
+lease 原本是 session-scoped 且**無界**——誰先起就持有到 session 結束。無界所有權的必然推論鏈是：
+
+```
+另一個 agent 永遠不會自己放手 → 想用只能砍掉他 → 砍是破壞性動作 → 所以必須問 user
+```
+
+「必須問 user」不是規約訂太保守，是無界所有權的**數學結果**。因此解法**不是**放寬規約讓 agent
+自行 takeover（那會變成 agent 互砍），而是讓所有權**有界**——同意這一步才會在機制上消失：
+
+| holder | TTL | 回收 |
+| --- | --- | --- |
+| agent（`holder.kind ≠ human`，或 `--agent`） | **必有**，預設 10m | 過期或心跳斷 → 下一個 agent 自動接管，不問 user |
+| 人類（`holder.kind = human`） | **無界**（`expiresAt: null`） | **NEVER** 自動回收；agent 要用一律 refuse + 把訊息呈給 user |
+
+**人類租約無界是整個設計的安全閥。** `detectHolderKind()` 在偵測不到任何 agent runtime 時回的
+就是 `human`——也就是「user 自己在 terminal 跑 `pnpm dev`」的情形。把判不出來的 holder 當成
+agent 會讓 user 的 dev server 被自動回收，安全閥就此失效，而症狀是 user 的畫面莫名其妙變成
+別的 worktree 的 code。
+
+### Liveness：兩條判準都要看
+
+```
+1. expiresAt < now                     → expired
+2. heartbeatAt < now − 180s            → heartbeat-dead（agent 崩潰）
+```
+
+任一成立**且該 lease 是 agent 租約** → 可回收。只看 (1) 的話，崩潰的 agent 會把 slot 佔滿整個
+TTL；只看 (2) 的話，還活著但早該放手的 agent 永遠不會被回收。舊格式 lease（無這三個欄位）恆
+**不可回收**——升級不會回頭吃掉既有 holder。
+
+回收 **MUST 走既有的 `dev-session.ts` stop / start 路徑**（takeover 分支），**NEVER** 自組
+`lsof + kill`。
+
+### 佇列
+
+檔案化，放在 lease 檔旁：`/tmp/<lease-id>-verification-lease.queue.json`，FIFO。
+
+```jsonc
+{ "schemaVersion": "1",
+  "entries": [ { "holderKind": "claude", "sessionId": "…", "task": "collect verify:ui evidence",
+                 "enqueuedAt": "2026-08-07T…Z", "polledAt": "2026-08-07T…Z" } ] }
+```
+
+排隊者自己 poll（`dev-session.ts wait`，預設 5s 一次、`--wait-timeout` 預設 15m）；超過 **180s**
+沒 poll 的項自動剔除——**與 lease liveness 同一套判準，NEVER 另發明一套**。撞上**人類租約**時
+`wait` 立刻 refuse 而不排隊：它無界，排了也永遠等不到。
+
 ## Lease 檔 schema
 
 schema 全例見 `~/offline/clade/vendor/snippets/dev-session/lease-schema.jsonc`。欄位必填規則：
 
 - `devServer` + `holder` + `claimedAt` 必填；其餘 slot 可缺（如未啟瀏覽器 → `browserProfile: null`）
+- broker 欄位（2026-08-07 加，**往後相容**：舊 lease 缺這些欄位一律視為不可回收）：
+
+  | 欄位 | 型別 | 說明 |
+  | --- | --- | --- |
+  | `task` | `string \| null` | 這次租用要做什麼（`--task`）。agent 租約 MUST 帶——它是別的 agent 決定要不要排隊的唯一依據 |
+  | `ttlMs` | `number \| null` | 租期；人類租約為 `null`。`heartbeat` 用它決定往後推多久 |
+  | `expiresAt` | ISO8601 `\| null` | 硬到期時間；`null` = 無界（人類租約） |
+  | `heartbeatAt` | ISO8601 | 最後一次心跳；`start` 與 `heartbeat` 都會更新 |
 - `devSession` 由 `dev-session.ts` 寫入（dev process 掛哪個 zellij session）；缺 = 非 dev-session 起（legacy / 手動）
 - Durability：dev process 掛獨立 zellij server 下才不被 agent harness reap；`devServer.pid` 是 zellij 內的 nuxt/vite process，kill lease 連帶收掉 zellij session（見 [`proactive-skills.md`](./proactive-skills.md) § Dev Server Auto-Spawn）
 
@@ -68,8 +125,11 @@ schema 全例見 `~/offline/clade/vendor/snippets/dev-session/lease-schema.jsonc
 |---|---|---|
 | **status** | 任何人（含 read-only） | 讀 lease 檔；無檔 = 無 holder；印 holder + uptime + 五元組摘要 |
 | **claim** | lease-aware 工具 | 嘗試取得 lease：無檔 → write；有檔且 PID dead → 視為 stale，覆寫；有檔且同 holder kind+sessionId → reuse（no-op）；其他 → **refuse** |
-| **release** | 持有者 | 刪 lease 檔；非持有者呼叫 = no-op + warn |
-| **force-takeover** | 任何 lease-aware 工具，需顯式 flag（`--takeover`） | 不管現有 holder，覆寫 lease；prev holder 寫進 auditLog；同步 kill 對方 dev server PID（如可達） |
+| **release** | 持有者 | 刪 lease 檔 + 剔除自己的排隊項；非持有者呼叫 = no-op + warn |
+| **heartbeat** | **只有持有者** | `heartbeatAt = now`、`expiresAt = now + ttl`。非持有者呼叫 **MUST refuse**——續租別人的租約等於延長不屬於自己的所有權，「過期就能自動接管」這條保證會失效 |
+| **wait** | agent | 排隊等 slot；取得後直接接手（含把 dev server 切到本次 cwd）。人類租約 → 立刻 refuse；逾時 → exit 1 |
+| **auto-reclaim** | 任何 lease-aware 工具，**無需** flag | 現有 lease 是 agent 租約且 expired / heartbeat-dead → 直接接管、**不問 user**。人類租約永不走這條 |
+| **force-takeover** | 任何 lease-aware 工具，需顯式 flag（`--takeover`） | 不管現有 holder，覆寫 lease；prev holder 寫進 auditLog；同步 kill 對方 dev server PID（如可達）。人類租約仍**只有 user 能授權** |
 
 **Stale 偵測**：claim 時現有 lease 的 `devServer.pid` 死了（`kill -0` fail）→ 視為 stale，silent overwrite，不要求 `--takeover`。
 **並行 race**：同時 claim 靠 `fs.writeFile({ flag: 'wx' })` 檔案級 atomic check，後到者 fail → conflict → 跑 status + refuse。
