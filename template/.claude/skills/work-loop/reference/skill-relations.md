@@ -15,6 +15,7 @@ cd ~/offline/<consumer> && \
 ```
 
 它每輪起新 process、context 不累積，`--unattended` 由它自己帶（見 [run-modes.md](run-modes.md)）。
+主線起它時要配齊的 cache-keepalive heartbeat 與 per-round Monitor 見 SKILL.md § 起 runner 的形狀與收尾契約 (d)(e)。
 
 **本 skill 不走 cron / cloud routine**，也**不**教人建。2026-08-05 定案：唯一使用者不使用
 `/schedule`，而留著一份沒人跑的排程設定只會讓讀者以為那是預期路徑。要週期性觸發就把

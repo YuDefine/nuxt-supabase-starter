@@ -237,6 +237,61 @@ Sol → Terra → Luna → Claude Sonnet subagent → Claude Haiku subagent → 
    - model 選檔原則「**turn count beats token price**」：多步驟工作用最低檔常花 2-3× turns 反而更貴；brief 內含完整 code 的純轉錄型工作才用最低檔；review 型依 diff 的大小／風險選檔。
 5. **中間產物不進主線**：外派出去的 task，主線只讀對方寫回的 report 檔，**NEVER** 為了「確認它做對」把該 task 碰過的原始檔重讀一遍——那把省下來的 context 原封不動加回來，而且重讀的是同一批事實，換不到新判斷。第 2 條的 scope verify 照舊 MUST 跑：看**改了哪些檔**（`git status --short` / `git diff --stat`）跟重讀檔案內容是兩件事。
 
+## 主線靜默上限（所有 dispatch 通用）
+
+> **Iron Law：主線靜默 55 分鐘是上限，不是預算。違反字面就是違反精神——「等通知就好」「醒來也做不了什麼」都不算遵守。**
+
+**Invariant**：只要 session 內存在**任何**尚未收尾的 async work，主線相鄰兩個 assistant turn 的間隔 **NEVER** 超過 55 分鐘。
+
+**適用範圍窮舉**（明寫，不靠外推）：**每一種** async 派工都適用，不是只有長任務——Agent tool subagent（含 `/wt` **Form 1–4 全部**）、`Bash(run_in_background)`、codex dispatch、`runner.sh`、Monitor、Workflow。派出**每一個**這類 job 時都各自套用下表，不是只對「看起來會跑很久」的那一個。
+
+### 派出當下的自查（MUST）
+
+派出 async job 的**同一則訊息**內問一句「這預計超過 55 分鐘嗎？**答不出來 = 會**」，再依下表動作：
+
+| 可觀察 predicate | MUST |
+| --- | --- |
+| 該路徑**已有**間隔 ≤3300s 的既有 wakeup（codex 的 1500s 安全網、work-loop 的 (d) heartbeat） | 不另外排。但收到完成通知前 **MUST** 持續重排既有那個 |
+| 該路徑**沒有**既有 wakeup（Agent tool / `/wt` Claude subagent / 泛用 background bash） | 立刻 `ScheduleWakeup({ delaySeconds: 3300, prompt: <原任務輸入>, reason: "<slug> keepalive" })` |
+| 派完主線手上**還有**不依賴該結果的獨立工作 | 先做那些工作（那本來就不會靜默）。做完仍在等 → 回上面兩列排 keepalive |
+| session 內**沒有**任何未收尾 async job | 不排。keepalive 的觸發條件是「有東西在跑而主線不出聲」，不是「idle」 |
+
+3300s = 55 分，留 5 分餘裕給 1 小時 TTL，且落在 runtime 的 `[60, 3600]` clamp 內。
+
+### 醒來只做兩件事
+
+| 可觀察 predicate | 動作 |
+| --- | --- |
+| job 仍未收尾 | 確認它還活著、**重排** 3300s。**NEVER** 順手輪詢 state / 讀 log 找進度 / 開新工作 |
+| job 已退出但通知沒到 | 走該路徑自己的收尾契約（codex → BashOutput 讀 tail；work-loop → (b) 四項回報；`/wt` → Step 3 verify） |
+
+收到完成通知後 **MUST** 停掉對應 wakeup（`ScheduleWakeup({stop: true})`），否則它會在工作結束後繼續觸發。
+
+### Rationalization table（逐字實錄 → 現實）
+
+| 讀到 / 想到這句 | 現實 |
+| --- | --- |
+| `ScheduleWakeup` tool description：「scheduling extra wakeups just to keep the cache warm is **pure waste — never do that**」 | 那句的前提是它自己下一段寫的「**every allowed delay wakes up with your conversation context still cached**」——前提是**你會醒來**。主線一次都不醒時直接掉出該前提，結論不適用。同一份 description 自己列了本節這一格：「**The long fallback heartbeat**（task notification is the primary wake signal）: 1200s+」 |
+| 「輪詢買不到任何 harness 沒給的東西」 | 正確，而且本節不要求輪詢。這句管的是**醒來後做什麼**，不是**要不要醒**。keepalive 買的不是資訊，是 prompt cache |
+| `wt/SKILL.md`：「The Agent tool call returns when the subagent finishes」 | 那描述的是**結果怎麼回來**，不是**這段期間主線該做什麼**。subagent 跑 1h43m 期間主線零 turn，實測 2026-08-08 |
+| 「`<task-notification>` 會叫醒我」 | 只在 job **結束**時叫醒。job 跑多久，主線就靜默多久——通知機制對 TTL 零保護 |
+| 「這個 subagent 應該十幾分鐘就好」 | 那是估計不是 predicate。上表第一列的判準逐字寫「**答不出來 = 會**」 |
+| 「醒來後的最佳動作必然是『再睡』——那這次醒來的淨產出就是零，只燒掉一個 turn」<br>「換來的資訊是『它還在跑』，而這個資訊不改變我的任何決策」 | 2026-08-08 baseline 實測 5/5 的逐字推理（無規約對照組，`async-dispatch-keepalive` scenario）。**淨產出不是零，只是不在資訊軸上**：那個 turn 買的是接下來一小時的 cache 有效期。整段推理正確地算完了資訊價值，而它一次都沒提到 cache——這正是本 § 存在的理由 |
+
+### Red Flags（發現自己在想這些 = 停下來排 keepalive）
+
+「等通知就好」／「醒來也做不了什麼」／「輪詢沒意義所以不用醒」／「這次應該很快」／「先結束這回合，有消息再說」。
+
+### 邊界
+
+- **與 `\do-all` 主線閒置禁令的關係**：那條要求先撈獨立 task 做，本節要求真的要 idle 時先排 keepalive。兩條不衝突——keepalive 是 idle 的**前提條件**，不是 idle 的替代品。
+- **與全域「不要把工作往後放」的關係**：keepalive 縮短「主線發現問題的時間」，方向與「把工作推到未來」相反，**不**適用該禁令（同 [[agent-routing.codex-watch-protocol]] § `ScheduleWakeup` 用法守則 已載明的論證，此處不複述）。
+
+> 成本：一次 keepalive wakeup = 一個 cache_read 量級的 turn；一次 TTL 過期 = 整份 conversation context 全額重付 input token。2026-08-06 <consumer-a> 實測靜默 119 分鐘、2026-08-08 `/wt` subagent 靜默 1h43m，兩次接手都是冷載（[[pitfall-work-loop-runner-silence-expires-prompt-cache]]）。
+>
+> 本證據決定：主線要不要在 async work 期間醒來——要。
+> 本證據不決定：醒來後做什麼——**NEVER** 拿它論證「所以應該多醒幾次」或「醒來順便輪詢進度」，那兩件事上表已各自禁止。
+
 ## 為什麼集中寫在這
 
 - 散落各 SKILL.md 會漂移；集中方便加新 rule

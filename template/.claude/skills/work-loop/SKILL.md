@@ -103,7 +103,7 @@ route 表判完「這個 loop 由誰承載」之後、**跑 Step 2 的 scan 之�
 
 | 可觀察 predicate | 動作 |
 | --- | --- |
-| 本 session 已收到過 context budget 提示（`session-context-budget-warn.sh` 的 300k / 500k 任一級） | **改走 `runner.sh`**——主線用 `Bash(run_in_background=true)` 起它，回報 log 路徑後結束本輪。**NEVER** 先跑 scan |
+| 本 session 已收到過 context budget 提示（`session-context-budget-warn.sh` 的 300k / 500k 任一級） | **改走 `runner.sh`**——主線用 `Bash(run_in_background=true)` 起它，起跑形狀與收尾走 § 起 runner 的形狀與收尾契約 (a)–(e)（含 cache-keepalive heartbeat 與 per-round Monitor），回報 log 路徑後結束本輪。**NEVER** 先跑 scan |
 | 本輪由 `runner.sh` 起（`claude --print`），**或** 本 skill 是本 session 的第一個工作段 | headroom 充足，照常取鎖進 Step 1 |
 | in-session、本 session 已做過別的工作、但還沒收到提示 | 照常進 Step 1，但 route 表「判不出來」那列**改判為 `runner.sh`**——餘裕不明時保守側是換載體 |
 
@@ -128,7 +128,7 @@ Bash(run_in_background=true):
 
 **NEVER** 在該指令裡加 `nohup`、`disown` 或尾綴 `&`。`runner.sh` 是前景同步跑（每輪 `claude --print` 跑完才進下一輪），harness 正是靠這點追蹤它、並在它退出時回頭叫醒主線。自行背景化 → Bash call 立刻返回 → harness 判定已結束 → 真正的 runner 成為無人追蹤的孤兒，**收尾通知永遠不會到達**。這是**靜默**失敗：起跑當下零異常訊號，log 照寫、round 照前進，看起來一切正常。
 
-起完 **MUST** 回報 log 目錄、依 (d) 排一次 cache-keepalive heartbeat，然後結束本輪。**NEVER** 在主線空等。
+起完 **MUST** 回報 log 目錄、依 (d) 排一次 cache-keepalive heartbeat、依 (e) arm 一個 per-round Monitor，然後結束本輪。三件都做完才算起跑完成。**NEVER** 在主線空等。
 
 **NEVER** 排 wakeup 去**讀 state 檔或 round log 找進度**——退出通知由 harness 送達，輪詢買不到任何它沒給的東西。
 
@@ -178,9 +178,48 @@ heartbeat 醒來時先跑 `pgrep -f runner.sh`，再依下表決定：
 
 **heartbeat 醒來 NEVER 貼進度**，即使 [[TD-430]] 的原始修法草稿寫了「貼一行進度」。貼進度必須先讀 state 或 log，那正是 (a) 第二段獨立禁止的動作——該禁令的理由（輪詢買不到 harness 沒給的東西）不因為換了個觸發時機就失效。進度由 runner 退出時的 harness 通知給，走 (b)。
 
-**這條與 `ScheduleWakeup` tool description 的「scheduling extra wakeups just to keep the cache warm is pure waste — never do that」不衝突。** 那句的前提逐字是「effectively every allowed delay wakes up with your conversation context still cached」——前提是**主線本來就會醒**。runner 路徑下主線一次都不醒，掉出該前提，結論不適用。
+本條是 [[agent-routing]] § 主線靜默上限（所有 dispatch 通用）在 runner 路徑的實例——`3300` 的由來、免重複條款、與 `ScheduleWakeup` tool description「pure waste」那句的邊界，SoT 全在該 §，**此處不複述**。本節只留 runner 專屬的兩項差異：上面的 `pgrep` 判活表，以及醒來 **NEVER** 貼進度。
 
-> **未採用的變體，NEVER 在沒驗完兩件事之前改用**：`runner.sh` 是主線的 child process，理論上能經 `CLAUDE_CODE_MESSAGING_SOCKET` 把每輪結果 post 回主線 inbox——cross-session messaging 對 own-child message 的投遞繞過 permission-class hold，且 Linux 連已退出的 child 都能驗證。那條路徑事件驅動、自帶進度，嚴格優於定時盲醒。2026-08-08 驗證時卡在兩點：主線 session 未 bind inbox socket，socket 的 wire format 也未逆向出來。兩件都驗掉才可改用；擋住它的 permission-class hold 規則與完整評估見 `~/offline/clade/docs/discussions/2026-08-08-cross-session-messaging-evaluation.md`。
+#### (e) per-round 進度回報（MUST，與 (d) 同一個 turn 內 arm）
+
+(d) 保住 cache，但 user 在 5–8 小時內只看得到起跑與收尾兩則訊息。**每輪結束主動回報一行**，事件驅動、不輪詢主線：輪詢發生在 shell 端（零主線 turn），主線只在 round 真的前進時被 Monitor 事件叫醒。
+
+起完 runner **MUST** 立刻 arm（`<repo>` 換成目標 repo 絕對路徑）：
+
+```text
+Monitor({ persistent: true, description: "work-loop round 進度（<repo> ）", command: <<'EOF'
+cd <repo>
+# 絕對路徑是必要的：node 的 require() 對相對路徑會當成模組名解析而丟例外，
+# 被 catch 吞掉後 round 恆為 0 → Monitor 永遠不 emit（2026-08-08 實測踩過）
+S="$PWD/.spectra/work-loop-state.json"; L="$PWD/.spectra/work-loop-logs"
+r() { node -e 'try{console.log(require(process.argv[1]).round??0)}catch{console.log(0)}' "$S" 2>/dev/null || echo 0; }
+prev=$(r); last_change=$(date +%s)
+while true; do
+  sleep 60
+  cur=$(r)
+  if [ "$cur" != "$prev" ]; then
+    log=$(ls -t "$L"/round-*.log 2>/dev/null | head -1)
+    echo "round $cur 完成 — $(tail -n 3 "$log" 2>/dev/null | tr '\n' ' ' | cut -c1-200)"
+    prev=$cur; last_change=$(date +%s)
+  fi
+  reason=$(node -e 'try{const s=require(process.argv[1]);if(s.stoppedReason)console.log(s.stoppedReason)}catch{}' "$S" 2>/dev/null)
+  [ -n "$reason" ] && { echo "runner stopped: $reason"; break; }
+  [ $(( $(date +%s) - last_change )) -ge 5400 ] && { echo "⚠ round 已 90 分鐘沒前進（目前 round=$cur）"; last_change=$(date +%s); }
+done
+EOF
+})
+```
+
+| 契約 | 逐字 |
+| --- | --- |
+| 每輪 emit **一行** | **NEVER** 貼 log 段落、**NEVER** 展開該輪細節——per-round 的 turn 成本必須壓在 cache_read 量級，貼多少就每 turn 重讀多少 |
+| 失敗訊號要蓋到 | round 前進、`stoppedReason`、90 分鐘沒前進三種都 emit（per `Monitor` tool description § Coverage — silence is not success：只 grep 成功訊號的 monitor 在 crashloop 時與「還在跑」長得一模一樣） |
+| 收尾 | runner 退出通知到達 → 走 (b) 回報，並 `TaskStop` 這個 Monitor。**NEVER** 讓它留到 session 結束 |
+| 與 (d) 的關係 | **兩個都要**，不是二選一。round 通常 15–25 分 < 55 分，事件本身順帶維持 cache；但 round 卡住超過 55 分時，(d) 的 heartbeat 是唯一還會醒的東西 |
+
+**這不是 (a) 禁掉的輪詢。** (a) 禁的是**主線**排 wakeup 去讀 state——那燒的是主線 turn。本節的讀取跑在 Monitor 的 shell 裡，主線在 round 前進之前**零 turn**。兩者禁的與買的都不同：(a) 省的是空醒的 turn，(e) 買的是 user 的可見度。
+
+> **未採用的變體，NEVER 在沒驗完兩件事之前改用**：`runner.sh` 是主線的 child process，理論上能經 `CLAUDE_CODE_MESSAGING_SOCKET` 把每輪結果 post 回主線 inbox——cross-session messaging 對 own-child message 的投遞繞過 permission-class hold，且 Linux 連已退出的 child 都能驗證。那條路徑事件驅動、自帶進度，嚴格優於定時盲醒——**但 (e) 的 Monitor 已經用現成工具拿到同樣的事件驅動與 per-round 進度**，socket 路徑剩下的增量只有「不必 poll state 檔」，不值得為它逆向 wire format。2026-08-08 驗證時卡在兩點：主線 session 未 bind inbox socket，socket 的 wire format 也未逆向出來。兩件都驗掉才可改用；擋住它的 permission-class hold 規則與完整評估見 `~/offline/clade/docs/discussions/2026-08-08-cross-session-messaging-evaluation.md`。
 
 ### 互斥鎖
 

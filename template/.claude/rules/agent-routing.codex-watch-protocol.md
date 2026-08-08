@@ -341,6 +341,8 @@ Codex 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleW
 
 **禁止** `< 60`（runtime clamp 也會擋）。安全網 fallback 用 `1200`–`1800` 是正確的——不是 active watch，是 hang-type 失敗的兜底；用 180s 短輪詢反而把要消除的 per-turn 重讀加回來。
 
+**上限 `3300`（MUST）**：這個 fallback 同時承擔 [[agent-routing]] § 主線靜默上限 的 cache-keepalive 職責，所以 codex 路徑**不**另外排第二個 wakeup——但也 **NEVER** 把它拉長到 3300 以上，否則主線會在 codex 仍在跑時掉出 1 小時 prompt-cache TTL。`1200`–`1800` 已在上限內，照用即可。
+
 `reason` 欄位**必須**具體：例如「kiosk-multilingual codex 進度檢查（已派出 3 分）」，**NEVER** 寫「waiting」「monitoring codex」這種空泛字眼。
 
 ### 與「不要把工作往後放」禁令的關係
