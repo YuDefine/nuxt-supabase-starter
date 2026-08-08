@@ -128,7 +128,11 @@ Bash(run_in_background=true):
 
 **NEVER** 在該指令裡加 `nohup`、`disown` 或尾綴 `&`。`runner.sh` 是前景同步跑（每輪 `claude --print` 跑完才進下一輪），harness 正是靠這點追蹤它、並在它退出時回頭叫醒主線。自行背景化 → Bash call 立刻返回 → harness 判定已結束 → 真正的 runner 成為無人追蹤的孤兒，**收尾通知永遠不會到達**。這是**靜默**失敗：起跑當下零異常訊號，log 照寫、round 照前進，看起來一切正常。
 
-起完 **MUST** 回報 log 目錄後結束本輪。**NEVER** 在主線空等，**也 NEVER** 排 wakeup 去輪詢 state 檔——退出通知由 harness 送達，輪詢買不到任何它沒給的東西。
+起完 **MUST** 回報 log 目錄、依 (d) 排一次 cache-keepalive heartbeat，然後結束本輪。**NEVER** 在主線空等。
+
+**NEVER** 排 wakeup 去**讀 state 檔或 round log 找進度**——退出通知由 harness 送達，輪詢買不到任何它沒給的東西。
+
+**「NEVER 輪詢」不蘊含「NEVER 醒來」。** 前者禁的是醒來後**做**的那件事（讀 state、讀 log、貼進度），後者是 (d) 要求的動作本身。兩者曾被綁在同一句 NEVER 裡，而讀的人只看得到一個 NEVER——2026-08-06 <consumer-a> 實測，主線起跑後靜默 119 分鐘、跨過 1 小時 prompt-cache TTL，user 回來那次接手全額重付 input token（[[pitfall-work-loop-runner-silence-expires-prompt-cache]]）。
 
 #### (b) 收尾回報契約
 
@@ -151,6 +155,32 @@ runner process 的退出通知到達時 **MUST 主動回報，不等 user 問**�
 | `== stop: state 連續 2 輪未前進` | 被 lock 擋掉或中途夭折 | **異常中止** + 那幾輪沒寫進 state |
 
 **下三列都不是「跑完了」。** **NEVER** 把其中任何一列回報成待辦已推完，**也 NEVER** 只摘成功的那幾輪而不提中止——runner 每輪成功都印 `✓ round <n> 完成`，只讀那些行會產出一份看起來順利的假報告。命中下兩列時 **MUST** 一併附 `tail -20 <最後一個 log>`。
+
+#### (d) cache-keepalive heartbeat（MUST）
+
+`--max-rounds 20` 跑滿是 5–8 小時，而主線從起跑回報到退出通知之間**一次都不醒**。conversation context 掉出 1 小時 prompt-cache TTL，user 下次接手全額重付 input token。這筆成本在 log 層面零訊號——round 照前進、`✓` 照印，看起來一切正常。
+
+起跑回報完成的**同一個 turn 內** MUST 排一次：
+
+```text
+ScheduleWakeup({ delaySeconds: 3300, prompt: <本輪 /work-loop 指令原文>, reason: "runner cache-keepalive" })
+```
+
+heartbeat 醒來時先跑 `pgrep -f runner.sh`，再依下表決定：
+
+| 可觀察 predicate | 動作 |
+| --- | --- |
+| runner process 仍存活 | 重排一次 3300s heartbeat，本 turn 結束。**NEVER** 讀 state、**NEVER** 讀 log、**NEVER** 貼進度 |
+| runner 已不存在，**且**已收到退出通知 | `ScheduleWakeup({stop: true})`，走 (b) 回報 |
+| runner 已不存在，**但**沒收到退出通知 | 走 (b) 回報，並明說「通知未達，由 heartbeat 發現」 |
+
+**3300s 貼著 TTL 訂，NEVER 縮短。** TTL 是 3600s，3300 留 300s 餘裕且**只醒一次**就跨過；縮到一半就是每次長跑多付一倍喚醒成本，而每一次喚醒都是一個完整 turn。縮到幾分鐘更是 (a) 禁掉的輪詢換了個名字。
+
+**heartbeat 醒來 NEVER 貼進度**，即使 [[TD-430]] 的原始修法草稿寫了「貼一行進度」。貼進度必須先讀 state 或 log，那正是 (a) 第二段獨立禁止的動作——該禁令的理由（輪詢買不到 harness 沒給的東西）不因為換了個觸發時機就失效。進度由 runner 退出時的 harness 通知給，走 (b)。
+
+**這條與 `ScheduleWakeup` tool description 的「scheduling extra wakeups just to keep the cache warm is pure waste — never do that」不衝突。** 那句的前提逐字是「effectively every allowed delay wakes up with your conversation context still cached」——前提是**主線本來就會醒**。runner 路徑下主線一次都不醒，掉出該前提，結論不適用。
+
+> **未採用的變體，NEVER 在沒驗完兩件事之前改用**：`runner.sh` 是主線的 child process，理論上能經 `CLAUDE_CODE_MESSAGING_SOCKET` 把每輪結果 post 回主線 inbox——cross-session messaging 對 own-child message 的投遞繞過 permission-class hold，且 Linux 連已退出的 child 都能驗證。那條路徑事件驅動、自帶進度，嚴格優於定時盲醒。2026-08-08 驗證時卡在兩點：主線 session 未 bind inbox socket，socket 的 wire format 也未逆向出來。兩件都驗掉才可改用；擋住它的 permission-class hold 規則與完整評估見 `~/offline/clade/docs/discussions/2026-08-08-cross-session-messaging-evaluation.md`。
 
 ### 互斥鎖
 
