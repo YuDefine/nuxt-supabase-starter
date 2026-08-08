@@ -104,6 +104,28 @@ Wrapper 把這條鏈在第一步切斷：token verify 失敗 → log warn → �
 - **MUST** 新 consumer 進 `registry/consumers.json` 必須認領未用的 +10 號 port（3000, 3010, 3020, …）
 - **NEVER** 兩個 consumer 在 registry 取同 `dev_ports.nuxt` 值
 - **MUST** 改 port 必須先在 clade `registry/consumers.json` commit + publish + propagate，再改 consumer 端的 dev script / tunnel config
+- **MUST** 新 base 與任一既有 base 相距 **≥10**（`dev-port-audit.ts` 報 `band-spacing` CONFLICT）— 間距不是排版習慣，base+1..base+9 是該 consumer worktree 的 port 池，見 §4
+
+### 4. Worktree 維度
+
+[[worktree-default]] §1 要求任何動 tracked file 的工作都在獨立 worktree 執行，所以「一個 consumer 同時只有一個 dev server」從來不成立。同一 consumer 的 N 個 worktree 各跑 dev，撞的是 §1 那個**唯一**的 registry port。
+
+分配規則：**worktree 的 port = 各宣告 port + 一個 worktree 專屬 offset N**，N 取自 `[1, 9]`。
+
+- **MUST** worktree 內用 `node vendor/scripts/wt-helper.ts dev [<alias>]` 起 dev server，**NEVER** 在 worktree 內跑 `pnpm dev`（那會吃 `package.json` 寫死的 base port，直接撞 main）
+- **MUST** main working tree 維持 §1 的顯式宣告不變 — `package.json` 的 `--port <base 字面數字>` 一個字都不改。offset 只存在於 worktree，由 `wt-helper` 在 `wt-helper add` 時分配
+- **NEVER** 手動挑 worktree port。offset 由 `pickDevPortOffset` 算，它同時排除三件事：mapped port 超出 `[base, base+9]`（會踩到下一個 consumer 的 base）、mapped port 撞到本 consumer 另一個宣告 port（<consumer-a> 宣告 3040 + 3045，offset 5 會讓 `<client-a>` 蓋掉 `shared`）、offset 已被 sibling worktree 佔用
+- 宣告多個 port 的 consumer **帶寬較窄**：天花板由最高的宣告 port 決定（<consumer-a> 只有 N ∈ 1..4，不是 1..9）
+- Offset 記錄在 `~/.cache/clade/dev-port/<consumer>/<slug>.json`，**不**寫進 repo（`.clade/` 在多數 consumer 未被 gitignore，寫進去會讓每個 worktree 帶一個 untracked 檔進 merge-back / publish 的 dirty 判定）。worktree 目錄消失即釋放槽位，不需要手動回收
+- 帶寬用盡時 `wt-helper dev` **fail-loud 拒絕啟動**，**NEVER** fallback 到 base port — 那正是本節要防的撞車
+
+#### Tunnel 在 worktree 內
+
+Tunnel hostname 是 **per-consumer 單一資源**（§2.5 的 `<consumer-id>-dev.<maintainer-domain>`）。N 個 worktree 共用一個 hostname 比共用一個 port 更糟：dev server 起得來、tunnel 也連得上，只是流量被**後啟動的那個** worktree 劫持，main 的畫面靜默變成別人的。
+
+- **MUST** worktree 要開 tunnel 就走 `dev.perWorktreeTunnel` opt-in（`consumer-meta.json`），由 `vendor/scripts/wt-env-sync.ts` 改寫成 `<slug>.<host>` / `<name>-<slug>`
+- **NEVER** 沒開 opt-in 就在 worktree 內啟 tunnel。`wt-helper add` 會複製 `.env.local`（含 tunnel token，這是 `envSyncPolicy` 的既定行為），所以 token **存在不代表可以用**
+- `wt-helper add` 與 `wt-helper dev` 偵測到「有 tunnel key 但沒開 opt-in」會 warn。**warn 不是擋** — 判斷仍在 worktree owner：要嘛 opt-in，要嘛把那幾個 key 在該 worktree 註解掉
 
 ## 自治區（規約不強制）
 

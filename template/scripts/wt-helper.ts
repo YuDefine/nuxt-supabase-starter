@@ -71,6 +71,7 @@ import { stdin, stdout } from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline/promises'
 import {
+  classifyDirtyPaths,
   dropClaim,
   findClaimByWorktree,
   genSessionId,
@@ -262,40 +263,220 @@ async function prompt(question) {
   }
 }
 
+// ── Worktree dev-port allocation (TD-434) ─────────────────────────────────
+//
+// A consumer's dev port is a single registry value (rules/core/dev-port-allocation.md
+// § 3), but worktrees are mandatory for any tracked-file work — so N worktrees of
+// the same consumer race for one port. The loser either gets EADDRINUSE or is
+// silently moved by Nuxt's auto-increment, which decouples it from the tunnel's
+// hard-coded `port:`.
+//
+// Allocation lives here rather than in each consumer's package.json because the
+// registry spaces bases +10 apart, leaving base+1..base+9 free per consumer. An
+// offset applied uniformly to every declared port keeps the whole set inside the
+// consumer's own band, so no consumer's dev script or nuxt.config needs to change.
+
+// Registry allocates bases +10 apart, so base+1..base+9 belongs to this consumer.
+const DEV_PORT_BAND = 9
+
+/**
+ * Allocation records live outside the repo. Writing them into `.clade/` would
+ * leave an untracked file in every worktree of the ~7 consumers whose
+ * `.gitignore` does not cover the path, and that shows up as dirty state in
+ * exactly the flows (merge-back, publish) that treat dirty state as a hazard.
+ */
+function devPortStateDir(consumerRoot) {
+  return join(
+    process.env.XDG_CACHE_HOME || join(process.env.HOME || '', '.cache'),
+    'clade',
+    'dev-port',
+    basename(consumerRoot),
+  )
+}
+
+/**
+ * Ports this consumer declares, sorted ascending — the first entry is the base
+ * the band is measured from.
+ *
+ * `.claude/consumer-meta.json` `dev.ports[]` is the list (it carries aliases and
+ * any secondary targets), but the registry is the SoT for the base. Both are
+ * available consumer-side; when they disagree the meta file is stale and
+ * allocating from it would hand out ports inside a band this consumer no longer
+ * owns, so this throws rather than guessing.
+ */
+function readDeclaredDevPorts(root) {
+  let ports = []
+  try {
+    const meta = JSON.parse(readFileSync(join(root, '.claude', 'consumer-meta.json'), 'utf8'))
+    ports = (meta?.dev?.ports ?? [])
+      .map((p) => ({ port: Number(p.port), alias: p.alias ?? 'main' }))
+      .filter((p) => Number.isInteger(p.port) && p.port > 0)
+      .toSorted((a, b) => a.port - b.port)
+  } catch {
+    return []
+  }
+  if (ports.length === 0) return []
+
+  let registryBase = null
+  try {
+    const reg = JSON.parse(readFileSync(join(root, '.clade', 'registry', 'consumers.json'), 'utf8'))
+    const list = Array.isArray(reg) ? reg : (reg.consumers ?? [])
+    const entry = list.find((c) => c.consumer_id === basename(root))
+    registryBase = entry?.dev_ports?.nuxt ?? null
+  } catch {
+    // No projected registry — consumer-meta stands alone.
+  }
+  if (registryBase !== null && registryBase !== ports[0].port) {
+    throw new Error(
+      `dev-port: consumer-meta base ${ports[0].port} != registry dev_ports.nuxt ${registryBase}.\n` +
+        `Align .claude/consumer-meta.json with the registry before opening worktrees ` +
+        `(rules/core/dev-port-allocation.md § 3).`,
+    )
+  }
+  return ports
+}
+
+/**
+ * Offsets held by this consumer's other worktrees. Records whose worktree is
+ * gone are deleted here — that is what releases a slot, so no explicit
+ * deallocation step has to be remembered on cleanup paths.
+ */
+function siblingDevPortOffsets(consumerRoot, selfWtPath) {
+  const dir = devPortStateDir(consumerRoot)
+  const used = new Set()
+  let entries
+  try {
+    entries = readdirSync(dir)
+  } catch {
+    return used
+  }
+  for (const name of entries) {
+    if (!name.endsWith('.json')) continue
+    const p = join(dir, name)
+    let rec
+    try {
+      rec = JSON.parse(readFileSync(p, 'utf8'))
+    } catch {
+      continue
+    }
+    if (!rec?.wtPath || !existsSync(rec.wtPath)) {
+      try {
+        unlinkSync(p)
+      } catch {
+        // Someone else pruned it first; the slot is free either way.
+      }
+      continue
+    }
+    if (resolve(rec.wtPath) === resolve(selfWtPath)) continue
+    if (Number.isInteger(rec.offset)) used.add(rec.offset)
+  }
+  return used
+}
+
+/** Allocation record for the worktree at `wtPath`, or null if it has none. */
+function readWorktreeDevPorts(consumerRoot, wtPath) {
+  const p = join(devPortStateDir(consumerRoot), `${basename(wtPath)}.json`)
+  try {
+    const rec = JSON.parse(readFileSync(p, 'utf8'))
+    return resolve(rec.wtPath ?? '') === resolve(wtPath) ? rec : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Smallest offset N in 1..DEV_PORT_BAND for which every declared port P maps to
+ * P+N satisfying all three:
+ *   - inside [base, base+DEV_PORT_BAND] — never reaches the next consumer's base
+ *   - not equal to another declared port — <consumer-a> declares 3040 + 3045, so N=5
+ *     would map `<client-a>` straight onto `shared`
+ *   - not already held by a sibling worktree
+ * Returns null when the band is exhausted (consumer has too many live worktrees).
+ */
+export function pickDevPortOffset(declared, usedOffsets) {
+  if (declared.length === 0) return null
+  const base = declared[0].port
+  const declaredSet = new Set(declared.map((d) => d.port))
+  for (let n = 1; n <= DEV_PORT_BAND; n++) {
+    if (usedOffsets.has(n)) continue
+    const mapped = declared.map((d) => d.port + n)
+    if (mapped.some((p) => p > base + DEV_PORT_BAND)) continue
+    if (mapped.some((p) => declaredSet.has(p))) continue
+    return n
+  }
+  return null
+}
+
+/**
+ * Allocate this worktree's dev-port offset and persist it. Returns the record,
+ * or null when the consumer declares no dev ports / the band is exhausted.
+ */
+function allocateWorktreeDevPorts(consumerRoot, wtPath) {
+  const declared = readDeclaredDevPorts(consumerRoot)
+  if (declared.length === 0) return null
+  const offset = pickDevPortOffset(declared, siblingDevPortOffsets(consumerRoot, wtPath))
+  if (offset === null) return null
+  const record = {
+    offset,
+    base: declared[0].port,
+    wtPath: resolve(wtPath),
+    ports: declared.map((d) => ({ alias: d.alias, port: d.port + offset, mainPort: d.port })),
+  }
+  const dir = devPortStateDir(consumerRoot)
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, `${basename(wtPath)}.json`), `${JSON.stringify(record, null, 2)}\n`)
+  return record
+}
+
+// Tunnel identity is a per-consumer singleton unless the consumer opts into
+// `dev.perWorktreeTunnel`, which rewrites the hostname per slug (wt-env-sync.ts).
+// Without that opt-in, a worktree that inherits these keys does not get its own
+// tunnel — it races the main checkout for the same hostname and silently
+// hijacks its traffic.
+//
+// This only reports; it never edits the copied env files. wt-env-sync.ts holds
+// the line that non-opt-in consumers get a byte-identical copy (see
+// test/wt-env-sync-per-worktree-tunnel.test.ts), and a second rewriter here
+// would break exactly the consumers that decided not to opt in.
+const TUNNEL_ENV_KEYS = new Set(['TUNNEL_HOSTNAME', 'TUNNEL_NAME', 'CLOUDFLARE_API_KEY'])
+
+/**
+ * True when this worktree carries tunnel credentials but has no per-worktree
+ * tunnel identity to use them with — i.e. starting a dev server here would
+ * claim the main checkout's hostname.
+ */
+function detectSharedTunnelRisk(root) {
+  let meta
+  try {
+    meta = JSON.parse(readFileSync(join(root, '.claude', 'consumer-meta.json'), 'utf8'))
+  } catch {
+    return null
+  }
+  if (meta?.dev?.perWorktreeTunnel) return null
+  const files = meta?.dev?.envSyncPolicy?.filesToCopy ?? []
+  for (const f of files) {
+    let text
+    try {
+      text = readFileSync(join(root, f), 'utf8')
+    } catch {
+      continue
+    }
+    const hit = text
+      .split('\n')
+      .some((line) => TUNNEL_ENV_KEYS.has(line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=/)?.[1] ?? ''))
+    if (hit) return { file: f }
+  }
+  return null
+}
+
 // Paths under clade-managed projection control are matched by
 // LOCKED_PROJECTION_RE / isLockedProjectionPath imported from
 // `./locked-projection.mjs` (single source of truth shared with the clade
 // _validate-manifests.ts cross-check — see Phase 6 / closes TD-018).
 
-/**
- * Simple glob matcher for claim expected_paths. Supports:
- *   - exact path match
- *   - "<prefix>/**" → recursive prefix match (any depth)
- *   - "<prefix>/*"  → single-level match (one segment after prefix)
- */
-function matchClaimGlob(path, pattern) {
-  if (pattern === path) return true
-  if (pattern.endsWith('/**')) {
-    const prefix = pattern.slice(0, -3)
-    return path === prefix || path.startsWith(`${prefix}/`)
-  }
-  if (pattern.endsWith('/*')) {
-    const prefix = pattern.slice(0, -2)
-    if (!path.startsWith(`${prefix}/`)) return false
-    return !path.slice(prefix.length + 1).includes('/')
-  }
-  return false
-}
+// matchClaimGlob / classifyDirtyPaths moved to ./claim-helper.ts (TD-435) so
+// every tool that moves a working tree shares one ownership predicate.
 
-/**
- * Classify a list of dirty paths against (1) LOCKED projection layer,
- * (2) other-session active claims, (3) everything else (user code or
- * orphan — caller decides downstream).
- *
- * `excludeClaim` is the claim attributed to the caller's own session
- * (typically the merge-back's matching worktree); its expected_paths are
- * NOT classified as "other session".
- */
 function formatActiveSessionsForError(claims) {
   if (claims.length === 0) return '  (none)'
   return claims
@@ -304,40 +485,6 @@ function formatActiveSessionsForError(claims) {
         `  - ${c.session_id} [${c.agent}] change=${c.change_id ?? '(none)'} branch=${c.branch ?? '(none)'} paths=${(c.expected_paths ?? []).length}`,
     )
     .join('\n')
-}
-
-function classifyDirtyPaths(consumerRoot, paths, { excludeClaim = null } = {}) {
-  const locked = []
-  const otherSession = []
-  const other = []
-  let activeClaims
-  try {
-    activeClaims = readActiveClaims(consumerRoot).filter(
-      (c) => !excludeClaim || c.session_id !== excludeClaim.session_id,
-    )
-  } catch {
-    activeClaims = []
-  }
-  for (const p of paths) {
-    if (isLockedProjectionPath(p)) {
-      locked.push({ path: p })
-      continue
-    }
-    const matchedClaim = activeClaims.find((c) =>
-      (c.expected_paths ?? []).some((pat) => matchClaimGlob(p, pat)),
-    )
-    if (matchedClaim) {
-      otherSession.push({
-        path: p,
-        session_id: matchedClaim.session_id,
-        change_id: matchedClaim.change_id,
-        branch: matchedClaim.branch,
-      })
-      continue
-    }
-    other.push({ path: p })
-  }
-  return { locked, otherSession, other }
 }
 
 // Whitelist of consumer-local paths where merge-back may auto-commit oxfmt
@@ -1213,10 +1360,33 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
             `  env-bootstrap: copied ${copied} file(s) from main (${filesToCopy.join(', ')})`,
           )
         }
+        // The copy above deliberately carries dev credentials, but tunnel keys
+        // are the one class that cannot be shared — see TUNNEL_ENV_KEYS.
+        const risk = detectSharedTunnelRisk(wtPath)
+        if (risk) {
+          console.error(
+            `note: ${risk.file} carries tunnel keys and this consumer has no dev.perWorktreeTunnel.\n` +
+              `      Starting a tunnel here claims main's hostname. Either opt into\n` +
+              `      dev.perWorktreeTunnel (consumer-meta.json) or keep the tunnel on main only.`,
+          )
+        }
       }
     } catch (e) {
       console.error(`note: env-bootstrap skipped: ${e.message ?? e}`)
     }
+  }
+
+  // Dev-port slot for this worktree (TD-434). Must run before the "ready"
+  // announce so the port shows up alongside the cd hint.
+  const devPortRecord = allocateWorktreeDevPorts(consumerRoot, wtPath)
+  if (devPortRecord) {
+    const shown = devPortRecord.ports.map((p) => `${p.alias}=${p.port}`).join(' ')
+    console.log(`  dev-port: offset +${devPortRecord.offset} → ${shown} (run 'wt-helper dev')`)
+  } else if (readDeclaredDevPorts(consumerRoot).length > 0) {
+    console.error(
+      `note: dev-port band base+1..base+${DEV_PORT_BAND} exhausted — 'wt-helper dev' will refuse to start.\n` +
+        `      Prune finished worktrees (wt-helper list / prune) to free a slot.`,
+    )
   }
 
   // Per-worktree resource provisioning (isolated dev DB clone + sidecar).
@@ -1738,6 +1908,90 @@ async function cmdSweepSiblings(slug) {
   if (swept.length === 0 && skipped.length === 0) {
     console.log(`sweep-siblings: no sibling worktree carries '${cleanSlug}' (clean)`)
   }
+}
+
+/** Nearest ancestor holding a `.git` entry — the worktree's own top, not main's. */
+function findRepoTop(start = process.cwd()) {
+  let dir = resolve(start)
+  while (dir !== dirname(dir)) {
+    if (existsSync(join(dir, '.git'))) return dir
+    dir = dirname(dir)
+  }
+  throw new Error('Not inside a git repository (no .git found in any parent)')
+}
+
+/**
+ * Start the dev server on this worktree's allocated port.
+ *
+ * The port arrives as a CLI flag on a command this function spawns itself,
+ * which is the only layer that works: `.env.local` is read by Nuxt/Vite, not by
+ * the shell, so an env var there can never reach the `--port` argument baked
+ * into a consumer's `package.json` dev script. Bypassing that script is what
+ * keeps all 11 consumers' `package.json` untouched.
+ *
+ * Consumers whose dev entry does extra setup (env pinning, multiple targets)
+ * override the command via consumer-meta `dev.commands.worktreeSpawn`; it
+ * receives the port appended as `--port <N>`.
+ */
+async function cmdDev(alias, opts: WtOptions = {}) {
+  const repoTop = findRepoTop()
+  const consumerRoot = findConsumerRoot()
+  if (resolve(repoTop) === resolve(consumerRoot)) {
+    throw new Error(
+      `'wt-helper dev' is for worktrees; this is the main checkout (${consumerRoot}).\n` +
+        `Main holds the registry port and the dev tunnel — run 'pnpm dev' here.`,
+    )
+  }
+
+  // Worktrees created before TD-434 have no record; allocate on first use so
+  // they are not stranded on the shared port.
+  const record =
+    readWorktreeDevPorts(consumerRoot, repoTop) ?? allocateWorktreeDevPorts(consumerRoot, repoTop)
+  if (!record) {
+    throw new Error(
+      readDeclaredDevPorts(consumerRoot).length === 0
+        ? `This consumer declares no dev ports in .claude/consumer-meta.json — nothing to allocate.`
+        : `dev-port band base+1..base+${DEV_PORT_BAND} is exhausted.\n` +
+            `Remove a finished worktree ('wt-helper list' / 'cleanup') to free a slot.`,
+    )
+  }
+
+  const entries = record.ports ?? []
+  const chosen = alias ? entries.find((p) => p.alias === alias) : entries[0]
+  if (!chosen) {
+    throw new Error(
+      `No dev port for alias '${alias}'. Declared: ${entries.map((p) => p.alias).join(', ') || '(none)'}`,
+    )
+  }
+
+  let spawnCmd = 'pnpm exec nuxt dev'
+  try {
+    const meta = JSON.parse(readFileSync(join(repoTop, '.claude', 'consumer-meta.json'), 'utf8'))
+    spawnCmd = meta?.dev?.commands?.worktreeSpawn ?? spawnCmd
+  } catch {
+    // Fall through to the Nuxt default — consumer-meta is optional here.
+  }
+
+  const full = `${spawnCmd} --port ${chosen.port}`
+  console.log(`wt-helper dev: ${chosen.alias} on ${chosen.port} (main uses ${chosen.mainPort})`)
+  const risk = detectSharedTunnelRisk(repoTop)
+  if (risk) {
+    console.error(
+      `⚠ ${risk.file} carries tunnel keys without dev.perWorktreeTunnel — the tunnel will\n` +
+        `  claim main's hostname and hijack its traffic. Comment those keys out for this\n` +
+        `  worktree, or opt into dev.perWorktreeTunnel in consumer-meta.json.`,
+    )
+  }
+  console.log(`  ${full}`)
+  if (opts.dryRun) return
+
+  const child = spawn(full, { cwd: repoTop, shell: true, stdio: 'inherit' })
+  await new Promise((resolvePromise) => {
+    child.on('exit', (code) => {
+      process.exitCode = code ?? 0
+      resolvePromise(undefined)
+    })
+  })
 }
 
 // Auto-generated commit messages MUST clear the fleet commitlint config
@@ -3226,9 +3480,16 @@ async function main() {
     case 'sweep-siblings':
       await cmdSweepSiblings(positional[0])
       return
+    case 'dev':
+      await cmdDev(positional[0], opts)
+      return
     default:
       console.error(
-        'Usage: wt-helper <add|detect-main-dirty|list|prune|cleanup|merge-back|land-pending|rescue|orphan-prune|sweep-siblings> [args]',
+        'Usage: wt-helper <add|detect-main-dirty|list|prune|cleanup|merge-back|land-pending|rescue|orphan-prune|sweep-siblings|dev> [args]',
+      )
+      console.error('')
+      console.error(
+        "  dev [<alias>]             Start dev server on this worktree's allocated port",
       )
       console.error('')
       console.error(

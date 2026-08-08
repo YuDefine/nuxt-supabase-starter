@@ -67,9 +67,21 @@ node scripts/claim-helper.ts add --change-id main-session-wip \
 
 ## 3. 誰讀 claim
 
+**MUST** 任何「即將動 working tree」的工具（stash / bulk commit / 投影寫入）都走 `claim-helper.ts` 的 `classifyDirtyPaths()` 判所有權，**NEVER** 各自重寫一份路徑比對。這條是 TD-435 的結論：同型失敗累積 7 條 high severity pitfall，每條的 mitigation 都只綁住當時那一條寫入路徑，於是每開一條新路徑就重踩一次。
+
+判準只有三分類，讀法固定：
+
+| 分類 | 意義 | 允許的動作 |
+| --- | --- | --- |
+| `locked` | clade 投影層 | 依各工具既有投影規則處理 |
+| `otherSession` | 命中別 session active claim | **NEVER** 掃進 bulk stash / commit。fail-loud 指名 session_id |
+| `other` | **無 claim 覆蓋 = 擁有者未知** | **NEVER** 讀成「是我的、可以掃」。主線 session 不寫 claim（§2 刻意如此），user WIP 全部落在這裡 |
+
+第三列是最容易誤讀的一列 —— `other` 為空不代表安全，只代表沒有人宣告過。
+
 | 讀者 | 用途 |
 |---|---|
-| `scripts/publish.ts` (clade) | 跨 consumer scan，warn 「別 session 還活著」 |
+| `scripts/publish.ts` (clade) | 跨 consumer scan，warn 「別 session 還活著」；`ensureCleanOrAutoStash` 在**所有** dirty 分支之前跑 `classifyDirtyPaths`，`otherSession` 非空即 fail-loud |
 | `scripts/propagate.ts` (clade) | per-consumer warn 同上 |
 | `wt-helper.ts merge-back` | Phase 3 audit：偵測「main dirty 屬於別 session 路徑」 |
 | `/commit` skill（走 [[commit]]；spectra-commit 是另一條 change-scoped 路徑） | Phase 4 partition：別 session 路徑 fail-closed |

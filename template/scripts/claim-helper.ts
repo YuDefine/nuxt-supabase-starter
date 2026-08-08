@@ -17,6 +17,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { hostname } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isLockedProjectionPath } from './locked-projection.ts'
 
 const TTL_HOURS = 24
 const CLAIMS_DIR = '.clade/claims'
@@ -210,6 +211,79 @@ export function pathsClaimedByOthers(consumerPath, mySessionId) {
     }
   }
   return result
+}
+
+/**
+ * Simple glob matcher for claim expected_paths. Supports:
+ *   - exact path match
+ *   - "<prefix>/**" → recursive prefix match (any depth)
+ *   - "<prefix>/*"  → single-level match (one segment after prefix)
+ */
+export function matchClaimGlob(path, pattern) {
+  if (pattern === path) return true
+  if (pattern.endsWith('/**')) {
+    const prefix = pattern.slice(0, -3)
+    return path === prefix || path.startsWith(`${prefix}/`)
+  }
+  if (pattern.endsWith('/*')) {
+    const prefix = pattern.slice(0, -2)
+    if (!path.startsWith(`${prefix}/`)) return false
+    return !path.slice(prefix.length + 1).includes('/')
+  }
+  return false
+}
+
+/**
+ * Classify dirty paths by owner: (1) LOCKED projection layer, (2) another
+ * session's active claim, (3) everything else — user code or orphan, caller
+ * decides downstream.
+ *
+ * This is the single ownership predicate for every tool that is about to move
+ * someone's working tree (TD-435). It used to live privately inside wt-helper,
+ * so each new write path — publish's auto-stash, merge-back's bulk stash,
+ * pre-fork baseline, propagate's projection write — re-learned the same lesson
+ * separately, one high-severity pitfall at a time. Keeping one implementation
+ * is the point: a caller that skips it does not get a weaker check, it gets none.
+ *
+ * Known limit, deliberate: only worktree sessions write claims. Main-tree WIP
+ * has no claim and therefore lands in `other`, so `other` means "unknown owner",
+ * NEVER "safe to sweep" — auto-claiming main was rejected by design (it would
+ * make every overlapping fork STOP; see rules/core/session-claims.md).
+ *
+ * `excludeClaim` is the caller's own session; its paths are not "other session".
+ */
+export function classifyDirtyPaths(consumerRoot, paths, { excludeClaim = null } = {}) {
+  const locked = []
+  const otherSession = []
+  const other = []
+  let activeClaims
+  try {
+    activeClaims = readActiveClaims(consumerRoot).filter(
+      (c) => !excludeClaim || c.session_id !== excludeClaim.session_id,
+    )
+  } catch {
+    activeClaims = []
+  }
+  for (const p of paths) {
+    if (isLockedProjectionPath(p)) {
+      locked.push({ path: p })
+      continue
+    }
+    const matchedClaim = activeClaims.find((c) =>
+      (c.expected_paths ?? []).some((pat) => matchClaimGlob(p, pat)),
+    )
+    if (matchedClaim) {
+      otherSession.push({
+        path: p,
+        session_id: matchedClaim.session_id,
+        change_id: matchedClaim.change_id,
+        branch: matchedClaim.branch,
+      })
+      continue
+    }
+    other.push({ path: p })
+  }
+  return { locked, otherSession, other }
 }
 
 export function formatClaimsSummary(claims) {
