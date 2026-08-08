@@ -30,6 +30,52 @@ always-on 觸發反射寫在 CLAUDE.md 注入段（`claude-md/core-snippets/evlo
 
 根因：agent 的 standing「第一反射」是 code-first（codebase-memory-mcp / grep），對 prod **runtime** 症狀方向是反的。evlog wide event 是「實際發生了什麼」的 ground truth，但沒有規約把它擺到調查的第一步，於是缺的調查本能要 user 人工補。
 
+## Step 0：先問這是不是自己人做的（症狀是「環境變了」時 MUST 先跑）
+
+**觸發 predicate**：查出來的東西是**環境本身變了**，而不是程式回錯答案 —— 容器被重建 / 服務被重啟 /
+config 內容或 mtime 變了 / port 被別的 process 佔走 / DB 被 reset / branch 或 working tree 被動過 /
+排程與 daemon 的狀態跟你上次看到的不同。命中就先跑本節三步，**全部沒結果才**進 § Investigation-first
+協定 的主機層鑑識。
+
+多 session 並行是 fleet 常態，所以「另一個自己人剛做的」是這類變動**最大**的一塊。跳過本節直接鑑識，
+等於一開始就把最可能的答案排除在假設空間外。
+
+1. **列並行 session**
+
+   ```text
+   ListAgents
+   ```
+
+   它列得出本機其他 Claude session、雲端 session、Remote Control session。**這個 tool 是 per-session
+   provision，不保證存在** —— 沒有它就跳第 2 步，**NEVER** 因為它不在就把「有沒有其他 session」
+   當成無法回答的問題（可用性判定見 `docs/discussions/2026-08-08-cross-session-messaging-evaluation.md`）。
+
+2. **看被改物件自己的 mtime 與旁邊的備份檔** —— 比 daemon log 便宜一個數量級，且對「自己人做的」
+   命中率最高：
+
+   ```bash
+   ls -la --time-style=full-iso <被改物件所在目錄>/
+   # mtime 落在事件發生前數十秒內 → 就是它
+   # 旁邊有 .bak-<日期> / .orig / ~ 結尾的鄰居 → 幾乎確定是人為刻意修改
+   diff -u <config>.bak-* <config>     # 直接讀出「改了什麼、為什麼」
+   ```
+
+   人手動改設定會留下**檔案**；daemon log 只記「有東西呼叫了 API」。**前者回答意圖，後者只回答動作。**
+
+3. **問 user** —— 「這台機器上剛才是不是你（或你的另一個 session）做了 X？」一句話的成本遠低於
+   一輪主機層鑑識，而且 user 是唯一能給出確定答案的來源。
+
+**NEVER** 把本節讀成「先問 user 再調查」 —— 那會退化成把調查工作推回 user（違反
+[[agent-self-verification]]）。三步的順序是刻意的：前兩步 agent 自己就做得完，第三步才問人。
+
+**NEVER** 因為主機層答不出「誰做的」就繼續加深鑑識。作業系統對這個問題的答案本來就殘缺
+（`/var/log/auth.log` 可能根本不存在、Portainer CE 不記 audit log）；答不出來時該退回本節換一個
+更便宜的問題，不是換更深的 log。
+
+> 實證：2026-08-08 <consumer-b> 調查 Sentry <consumer-b>-2E —— 八條鑑識指令後結論是「誰重建了容器無法從 log 證實」，
+> 而答案在一條 `ls -la` 裡（override 檔 mtime 比容器建立早 15 秒、旁邊躺著當天日期的 `.bak`）。
+> 見 `docs/pitfalls/2026-08-08-infra-change-attribution-skips-concurrent-session-check.md`。
+
 ## Investigation-first 協定（每一個 prod runtime 症狀都適用）
 
 訊息是 prod / staging runtime 症狀（非「改 code / 加 feature」）→ **MUST** 依序：

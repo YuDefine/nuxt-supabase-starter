@@ -151,6 +151,8 @@ Changes can be parked（暫存）— temporarily moved out of `openspec/changes/
 
 這條反射**僅對 runtime 症狀**優先於 codebase-memory-mcp 的 code-first 順序；純 code 探索（找 function、理解架構）仍走 codebase-memory-mcp。
 
+**症狀是「環境本身變了」時（容器被重建 / 服務被重啟 / config 內容或 mtime 變了 / port 被佔 / DB 被 reset / branch 被動過），先跑 Step 0 再進主機層鑑識**：(1) `ListAgents` 列並行 session（該 tool 是 per-session provision，不保證存在；沒有就跳下一步）→ (2) 看被改物件的 mtime 與旁邊的 `.bak` / `.orig` 鄰居並 `diff` —— 人手動改設定會留下**檔案**，daemon log 只記「有東西呼叫了 API」→ (3) 問 user。多 session 並行是常態，「另一個自己人剛做的」是這類變動最大的一塊；跳過等於一開始就把最可能的答案排除在假設空間外。三步全沒結果才進 `docker inspect` / `journalctl` 那一層，**NEVER** 因為主機層答不出「誰做的」就繼續加深鑑識。細節見 `.claude/rules/evlog-investigate.md` § Step 0。
+
 怎麼查（per-backend recipe，含可直接貼的 query）：
 
 - 協定與邊界：`.claude/rules/evlog-investigate.md`
