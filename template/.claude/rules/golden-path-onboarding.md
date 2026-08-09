@@ -7,6 +7,7 @@ paths:
   - 'README.md'
   - 'CLAUDE.md'
   - 'scripts/init-consumer.ts'
+  - 'scripts/register-consumer.ts'
 ---
 <!--
 🔒 LOCKED — managed by clade
