@@ -48,6 +48,10 @@ pnpm verify:starter --full
 | `hub:*` scripts 完整                        | `node -e "const p=require('./package.json'); ['hub:check','hub:sync','hub:bootstrap'].every(s=>p.scripts[s])"` | 重跑 init-consumer                                                     |
 | Clade drift = 0                             | `pnpm hub:check`                                                                                               | `pnpm hub:sync`（先確認 working tree 乾淨）                            |
 | Pre-commit hook wired                       | `grep -lE 'hub:check\|git-pre-commit.sh' .husky/pre-commit .git/hooks/pre-commit 2>/dev/null`                  | scaffold 預設自動 wire；手動見 [QUICK_START.md](verify/QUICK_START.md) |
+| Consumer readiness gate = READY             | `node ~/offline/clade/scripts/audit-consumer-readiness.ts --consumer "$PWD" --gate`                         | 回 Clade 執行 `/project-bootstrap adopt --consumer "$PWD" --repo-id <owner/repo> --dev-port <port>` |
+
+Fleet identity 的 SoT 是 Clade `registry/consumers.json`；`consumers.local` 是 merge/publish 後由
+`bootstrap-consumers-local.ts` 產生的本機投影，禁止直接 append。
 
 ## ✅ Supabase 設定
 

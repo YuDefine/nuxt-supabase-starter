@@ -11,6 +11,12 @@ pnpm create nuxt-supabase-starter my-app
 # non-interactive (帶 flag)
 pnpm create nuxt-supabase-starter my-app --yes
 pnpm create nuxt-supabase-starter my-app --auth nuxt-auth-utils --ci simple
+
+# 一次完成 Clade fleet identity（Clade checkout 必須可被找到）
+pnpm create nuxt-supabase-starter my-app --yes \
+  --repo-id YuDefine/my-app \
+  --workflow-model trunk-based \
+  --dev-port 3120
 ```
 
 ## Flags
@@ -27,9 +33,17 @@ pnpm create nuxt-supabase-starter my-app --auth nuxt-auth-utils --ci simple
 | `--without`           | feature ids                                               | Comma-separated features to remove                   |
 | `--minimal`           | —                                                         | Empty feature set, build up with `--with`            |
 | `--evlog-preset`      | `none` \| `baseline` \| `d-pattern-audit` \| `nuxthub-ai` | evlog (wide event logging) tier — default `baseline` |
-| `--register-consumer` | —                                                         | Register to clade consumers.local (default `true`)   |
+| `--register-consumer` | —                                                         | Register through Clade registry (default `true`)     |
+| `--repo-id`           | `owner/repo`                                              | Stable Clade fleet identity                          |
+| `--workflow-model`    | `trunk-based` \| `pr-merge-based`                         | Clade delivery model (default `trunk-based`)         |
+| `--business-activity` | `pre-production` \| `active` \| `maintenance` \| `paused` \| `auto` | Clade signal weight (default `pre-production`) |
+| `--dev-port`          | `1024..65535`                                             | Centrally allocated Nuxt development port            |
 | `--wire-pre-commit`   | —                                                         | Wire pre-commit hub:check hook (default `true`)      |
 | `--clone-clade`       | —                                                         | Clone clade if not found (default `true`)            |
+
+`--register-consumer` 只有在提供 `--repo-id` 與 `--dev-port` 時才會完成中央 fleet 登記。未提供時，
+scaffold 仍會完成 project-local Clade 初始化，並提示回 Clade 執行
+`/project-bootstrap adopt`。`consumers.local` 是由中央 registry 產生的本機投影，不應手動編輯。
 
 ## evlog preset
 

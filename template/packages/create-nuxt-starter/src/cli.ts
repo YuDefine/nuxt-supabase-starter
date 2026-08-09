@@ -99,7 +99,7 @@ function inferTestingLevel(features: string[]): 'full' | 'vitest-only' | 'none' 
   return 'none'
 }
 
-function inferCladeModules(features: string[]): CladeModules {
+export function inferCladeModules(features: string[], dbStack: DbStack): CladeModules {
   const hasBetterAuth = features.includes('auth-better-auth')
   const hasNuxtAuthUtils = features.includes('auth-nuxt-utils')
 
@@ -109,13 +109,7 @@ function inferCladeModules(features: string[]): CladeModules {
   } else if (hasNuxtAuthUtils) {
     auth = 'nuxt-auth-utils'
   } else {
-    // No auth feature selected — clade manifest still requires a value.
-    // Fall back to the lightest cookie-based option; the user can later
-    // change .claude/hub.json if they actually integrate auth.
-    consola.warn(
-      '[clade] 未選 auth feature；hub.json 暫填 nuxt-auth-utils。實際接認證後請改 .claude/hub.json + 跑 pnpm hub:sync。',
-    )
-    auth = 'nuxt-auth-utils'
+    auth = 'none'
   }
 
   const deploy = inferDeploymentTarget(features)
@@ -129,7 +123,11 @@ function inferCladeModules(features: string[]): CladeModules {
   const dbRuntime: CladeModules['dbRuntime'] =
     runtime === 'nitro-self-hosted' ? 'supabase-self-hosted' : 'cf-workers'
   const dbSchema: CladeModules['dbSchema'] =
-    dbRuntime === 'supabase-self-hosted' ? 'supabase-self-hosted' : 'supabase'
+    dbStack === 'nuxthub-d1'
+      ? 'cf-d1'
+      : dbRuntime === 'supabase-self-hosted'
+        ? 'supabase-self-hosted'
+        : 'supabase'
 
   const localHooks = features.includes('database') ? ['post-migration-gen-types.sh'] : []
   return {
@@ -403,8 +401,28 @@ const main = defineCommand({
     'register-consumer': {
       type: 'boolean',
       description:
-        '登記到 clade consumers.local，讓 propagate 自動推到此專案（--no-register-consumer 跳過）',
+        '透過 Clade registry 登記 consumer（需搭配 --repo-id 與 --dev-port；--no-register-consumer 可關閉）',
       default: true,
+    },
+    'repo-id': {
+      type: 'string',
+      description: 'Clade fleet repository identity: owner/repo',
+      required: false,
+    },
+    'workflow-model': {
+      type: 'string',
+      description: 'Clade workflow model: trunk-based | pr-merge-based (default: trunk-based)',
+      required: false,
+    },
+    'business-activity': {
+      type: 'string',
+      description: 'Clade signal activity: pre-production | active | maintenance | paused | auto',
+      required: false,
+    },
+    'dev-port': {
+      type: 'string',
+      description: 'Centrally allocated Nuxt development port',
+      required: false,
     },
     'wire-pre-commit': {
       type: 'boolean',
@@ -434,6 +452,30 @@ const main = defineCommand({
     const monorepoRoot = detectMonorepoRoot()
     const invocationCwd = getInvocationCwd(monorepoRoot)
     const projectName = args.dir as string | undefined
+    const repoId = args['repo-id'] as string | undefined
+    const workflowModel = (args['workflow-model'] as string | undefined) ?? 'trunk-based'
+    const businessActivity = (args['business-activity'] as string | undefined) ?? 'pre-production'
+    const devPortRaw = args['dev-port'] as string | undefined
+    const devPort = devPortRaw === undefined ? undefined : Number(devPortRaw)
+    if (repoId && !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoId)) {
+      consola.error('--repo-id 格式必須是 owner/repo')
+      process.exit(1)
+    }
+    if (!['trunk-based', 'pr-merge-based'].includes(workflowModel)) {
+      consola.error('--workflow-model 必須是 trunk-based 或 pr-merge-based')
+      process.exit(1)
+    }
+    if (!['pre-production', 'active', 'maintenance', 'paused', 'auto'].includes(businessActivity)) {
+      consola.error('--business-activity 值不合法')
+      process.exit(1)
+    }
+    if (
+      devPort !== undefined &&
+      (!Number.isInteger(devPort) || devPort < 1024 || devPort > 65535)
+    ) {
+      consola.error('--dev-port 必須是 1024 到 65535 的整數')
+      process.exit(1)
+    }
     const hasCustomFlags = Boolean(
       args.auth ||
       args.ci ||
@@ -526,13 +568,28 @@ const main = defineCommand({
     }
 
     // Post-scaffold
-    await postScaffold(targetDir, pkgName, invocationCwd, inferCladeModules(selections.features), {
-      yes: args.yes as boolean,
-      registerConsumer: args['register-consumer'] as boolean,
-      wirePreCommit: args['wire-pre-commit'] as boolean,
-      cloneClade: args['clone-clade'] as boolean,
-      dbStack: selections.dbStack,
-    })
+    await postScaffold(
+      targetDir,
+      pkgName,
+      invocationCwd,
+      inferCladeModules(selections.features, selections.dbStack),
+      {
+        yes: args.yes as boolean,
+        registerConsumer: args['register-consumer'] as boolean,
+        wirePreCommit: args['wire-pre-commit'] as boolean,
+        cloneClade: args['clone-clade'] as boolean,
+        dbStack: selections.dbStack,
+        repoId,
+        workflowModel: workflowModel as 'trunk-based' | 'pr-merge-based',
+        businessActivity: businessActivity as
+          | 'pre-production'
+          | 'active'
+          | 'maintenance'
+          | 'paused'
+          | 'auto',
+        devPort,
+      },
+    )
   },
 })
 

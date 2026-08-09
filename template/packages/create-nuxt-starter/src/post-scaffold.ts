@@ -14,8 +14,8 @@ import { consola } from 'consola'
 import { DEFAULT_DB_STACK, type DbStack } from './types'
 
 export interface CladeModules {
-  auth: 'better-auth' | 'nuxt-auth-utils' | 'supabase-self-hosted'
-  dbSchema: 'supabase' | 'supabase-self-hosted'
+  auth: 'none' | 'better-auth' | 'nuxt-auth-utils' | 'supabase-self-hosted'
+  dbSchema: 'cf-d1' | 'supabase' | 'supabase-self-hosted'
   dbRuntime: 'cf-workers' | 'supabase-self-hosted'
   runtime: 'cf-workers' | 'vercel-node' | 'nitro-self-hosted'
   framework: 'nuxt'
@@ -28,6 +28,10 @@ export interface PostScaffoldOptions {
   wirePreCommit: boolean
   cloneClade: boolean
   dbStack?: DbStack
+  repoId?: string
+  workflowModel?: 'trunk-based' | 'pr-merge-based'
+  businessActivity?: 'pre-production' | 'active' | 'maintenance' | 'paused' | 'auto'
+  devPort?: number
 }
 
 export async function postScaffold(
@@ -106,7 +110,7 @@ export async function postScaffold(
   // 6. Register as clade consumer (idempotent; opt-out via --no-register-consumer)
   let consumerRegistered = false
   if (cladeRoot && opts.registerConsumer) {
-    consumerRegistered = await maybeRegisterConsumer(cladeRoot, targetDir, opts.yes)
+    consumerRegistered = await maybeRegisterConsumer(cladeRoot, targetDir, opts)
   }
 
   // 7. Wire pre-commit hook (idempotent; opt-out via --no-wire-pre-commit)
@@ -146,8 +150,9 @@ export async function postScaffold(
   if (cladeRoot && !consumerRegistered) {
     nextSteps.push(
       '',
-      '選用 — 把專案登記到 clade 中央倉，未來 propagate 才會推到這裡：',
-      `  echo "${targetDir} flow=main" >> ${cladeRoot}/consumers.local`,
+      '尚未完成 Clade fleet 登記；請從 Clade 執行 project-bootstrap：',
+      `  cd ${cladeRoot}`,
+      `  /project-bootstrap adopt --consumer "${targetDir}" --repo-id <owner/repo> --dev-port <port>`,
     )
   }
 
@@ -164,56 +169,76 @@ export async function postScaffold(
   consola.box(nextSteps.join('\n'))
 }
 
-async function maybeRegisterConsumer(
+export function buildRegisterConsumerArgs(
+  script: string,
+  targetDir: string,
+  repoId: string,
+  workflowModel: 'trunk-based' | 'pr-merge-based',
+  businessActivity: 'pre-production' | 'active' | 'maintenance' | 'paused' | 'auto',
+  devPort: number,
+): string[] {
+  return [
+    script,
+    '--consumer',
+    targetDir,
+    '--repo-id',
+    repoId,
+    '--workflow-model',
+    workflowModel,
+    '--business-activity',
+    businessActivity,
+    '--dev-port',
+    String(devPort),
+  ]
+}
+
+export async function maybeRegisterConsumer(
   cladeRoot: string,
   targetDir: string,
-  nonInteractive: boolean,
+  opts: PostScaffoldOptions,
 ): Promise<boolean> {
-  // consumers.local 是空白分隔格式 (`<path> flow=main`)，路徑含 whitespace /
-  // newline 會破壞解析。此處屬於 trust boundary 邊界——`targetDir` 來自
-  // `resolve(invocationCwd, projectName)`，理論上不會含 newline，但保險起見
-  // 顯式擋掉，避免日後重構時靜默壞掉。
-  if (/[\n\r\t ]/.test(targetDir)) {
-    consola.warn(
-      `專案路徑含空白或控制字元，無法登記到 consumers.local（會破壞解析格式）：${targetDir}`,
-    )
-    consola.log('  之後可改用無空白的路徑，或手動編輯 consumers.local')
+  if (!opts.repoId) {
+    consola.warn('缺少 --repo-id，已完成 project-local 初始化但尚未登記 Clade fleet')
+    return false
+  }
+  if (opts.devPort === undefined) {
+    consola.warn('缺少 --dev-port，已完成 project-local 初始化但尚未登記 Clade fleet')
     return false
   }
 
-  const consumersFile = join(cladeRoot, 'consumers.local')
-  const existing = tryReadFile(consumersFile) ?? ''
-  if (existing) {
-    const already = existing.split('\n').some((line) => {
-      const trimmed = line.trim()
-      if (!trimmed || trimmed.startsWith('#')) return false
-      // 第一個 token 即路徑（已禁止含空白，所以 split 安全）
-      return trimmed.split(/\s+/)[0] === targetDir
-    })
-    if (already) {
-      consola.info('專案已登記在 clade consumers.local — 跳過')
-      return true
-    }
+  const script = join(cladeRoot, 'scripts', 'register-consumer.ts')
+  if (!existsSync(script)) {
+    consola.warn(`Clade checkout 缺少 register-consumer.ts：${script}`)
+    return false
   }
 
-  if (!nonInteractive) {
-    const confirmed = await consola.prompt(
-      '登記到 clade consumers.local？未來 publish 新版時 propagate 會自動推到此專案',
-      { type: 'confirm', initial: true },
-    )
+  if (!opts.yes) {
+    const confirmed = await consola.prompt(`把 ${opts.repoId} 登記到 Clade registry？`, {
+      type: 'confirm',
+      initial: true,
+    })
     if (!confirmed) {
-      consola.info('已跳過 consumers.local 登記（之後可手動 echo append）')
+      consola.info('已跳過 Clade fleet 登記')
       return false
     }
   }
 
+  const workflowModel = opts.workflowModel ?? 'trunk-based'
+  const businessActivity = opts.businessActivity ?? 'pre-production'
+  const args = buildRegisterConsumerArgs(
+    script,
+    targetDir,
+    opts.repoId,
+    workflowModel,
+    businessActivity,
+    opts.devPort,
+  )
   try {
-    const prefix = existing.length === 0 || existing.endsWith('\n') ? '' : '\n'
-    appendFileSync(consumersFile, `${prefix}${targetDir} flow=main\n`)
-    consola.success(`已登記到 ${consumersFile}`)
+    execFileSync('node', args, { cwd: cladeRoot, stdio: 'pipe' })
+    consola.success(`已登記到 Clade registry：${opts.repoId}`)
     return true
   } catch (error) {
-    consola.warn(`登記 consumers.local 失敗：${(error as Error).message}`)
+    consola.warn(`Clade registry 登記失敗：${(error as Error).message}`)
     return false
   }
 }
@@ -436,9 +461,9 @@ async function runInitConsumer(
     return undefined
   }
 
-  const script = join(cladeRoot, 'scripts', 'init-consumer.mjs')
-  if (!existsSync(script)) {
-    consola.warn(`找到 clade 但缺 init-consumer.mjs：${script}`)
+  const script = resolveCladeInitScript(cladeRoot)
+  if (!script) {
+    consola.warn(`找到 clade 但缺 init-consumer.ts / init-consumer.mjs：${cladeRoot}`)
     return cladeRoot
   }
 
@@ -471,4 +496,12 @@ async function runInitConsumer(
   }
 
   return cladeRoot
+}
+
+export function resolveCladeInitScript(cladeRoot: string): string | undefined {
+  for (const filename of ['init-consumer.ts', 'init-consumer.mjs']) {
+    const candidate = join(cladeRoot, 'scripts', filename)
+    if (existsSync(candidate)) return candidate
+  }
+  return undefined
 }

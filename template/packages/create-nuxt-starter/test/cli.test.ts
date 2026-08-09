@@ -3,7 +3,7 @@ import { join } from 'pathe'
 import { consola } from 'consola'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { assembleProject } from '../src/assemble'
-import { buildSelectionsFromArgs } from '../src/cli'
+import { buildSelectionsFromArgs, inferCladeModules } from '../src/cli'
 import { promptUser } from '../src/prompts'
 
 const TEST_DIR = join(import.meta.dirname, '.tmp-cli-test')
@@ -126,6 +126,23 @@ describe('CLI dbStack selection', () => {
     expect(config).toContain('@nuxthub/core')
     expect(config).toContain('@evlog/nuxthub')
     expect(config).not.toContain('@nuxtjs/supabase')
+  })
+})
+
+describe('Clade module inference', () => {
+  it('maps NuxtHub D1 to the cf-d1 Clade schema module', () => {
+    const modules = inferCladeModules(['auth-better-auth'], 'nuxthub-d1')
+
+    expect(modules.auth).toBe('better-auth')
+    expect(modules.dbSchema).toBe('cf-d1')
+    expect(modules.dbRuntime).toBe('cf-workers')
+  })
+
+  it('declares no auth instead of inventing an auth provider', () => {
+    const modules = inferCladeModules([], 'supabase')
+
+    expect(modules.auth).toBe('none')
+    expect(modules.dbSchema).toBe('supabase')
   })
 })
 
