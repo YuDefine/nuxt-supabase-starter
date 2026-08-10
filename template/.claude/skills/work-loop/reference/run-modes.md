@@ -31,7 +31,9 @@ cache-keepalive heartbeat 與 (e) 的 per-round Monitor——本檔只管指令�
 
 `runner.sh` 的 flag：`--max-rounds <n>`（預設 20）、`--dry-run`（只印每輪會下的指令）、
 `--permission-mode <mode>`（預設 `acceptEdits`；**NEVER** 預設 `bypassPermissions`——那會連
-破壞性指令一起放行，要更寬鬆 MUST 由使用者顯式指定）。
+破壞性指令一起放行，要更寬鬆 MUST 由使用者顯式指定）。runner 另內建只批准
+`Bash(mktemp -t work-loop-scan.XXXXXXXXXX)`，讓 Step 2 的唯一 scan temp path 可在 headless process
+建立；其他 Bash 仍照 permission mode 與使用者 permission rules 判定。
 
 每輪 log 落在 `.spectra/work-loop-logs/round-<ts>.log`。
 

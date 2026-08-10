@@ -57,6 +57,9 @@ DRY_RUN=0
 # NEVER 改用 `--dangerously-skip-permissions` 來解這件事 —— 那是把整個權限面開到最大去換
 # 一個目錄的寫入權，兩者成本差一個量級（Charles 2026-08-05 拍板 1a 而非 1b）。
 PERM_MODE="acceptEdits"
+# Step 2 的 scan 必須用唯一 temp path；headless process 沒有人能回答 approval。
+# 只批准這一條完整命令，NEVER 擴成 `Bash(mktemp *)` 或 bare `Bash`。
+SCAN_MKTEMP_RULE='Bash(mktemp -t work-loop-scan.XXXXXXXXXX)'
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -119,12 +122,12 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
   log="$LOG_DIR/round-$ts.log"
 
   # 每輪都是新 process = 新 context。--print 跑完就退出。
-  # 參數順序有意義，NEVER 重排：`--add-dir <directories...>` 是**變參**選項，會一路吃到下一個
-  # flag 為止。把它排在最後、prompt 前面，prompt 就會被當成第二個目錄吞掉，claude 回
-  # `Input must be provided either through stdin or as a prompt argument when using --print`
-  # ——錯誤訊息完全沒提 --add-dir，2026-08-05 實測連兩輪 exit=1 才查到。
-  # 所以 `--add-dir` MUST 後面接另一個 flag（此處 --permission-mode）當終止符。
-  cmd=(claude --print --add-dir "$WT_PARENT" --permission-mode "$PERM_MODE" "/work-loop --unattended")
+  # 參數順序有意義，NEVER 重排：`--add-dir` 與 `--allowedTools` 都是**變參**選項，會一路吃到
+  # 下一個 flag 為止。把任一者排在最後、prompt 前面，prompt 就會被當成 option value 吞掉，
+  # claude 回 `Input must be provided either through stdin or as a prompt argument when using --print`
+  # ——錯誤訊息完全沒提是哪個 variadic option，2026-08-05 曾因此連兩輪 exit=1。
+  # 所以兩個 variadic option 後面都 MUST 接另一個 flag 當終止符。
+  cmd=(claude --print --add-dir "$WT_PARENT" --allowedTools "$SCAN_MKTEMP_RULE" --permission-mode "$PERM_MODE" "/work-loop --unattended")
 
   if [ "$DRY_RUN" = 1 ]; then
     echo "[dry-run] round $((before + 1)): ${cmd[*]}"
