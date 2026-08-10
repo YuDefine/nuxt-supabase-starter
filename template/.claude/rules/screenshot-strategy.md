@@ -255,6 +255,23 @@ node scripts/safe-screenshot.ts \
 - 裸 `agent-browser screenshot <path>` 仍可用於**探索 / 一次性**截圖（非 canonical evidence、可隨意覆蓋）
 - `--expect-text` 是擋 blank 的關鍵 anti-pattern guard，review evidence capture **SHOULD** 帶
 
+### Before／after ad-hoc comparison
+
+比較兩個已知 URL 的單次視覺差異時，用 pair helper 一次產生同 viewport 的 `before.png`、`after.png`、`manifest.json` 與並排 `review.md`；每一側仍委派給 `safe-screenshot.ts`，保留上述非破壞性保證：
+
+```bash
+node scripts/before-after-screenshot.ts \
+  --name "settings-density" \
+  --before-url "https://production.example.com/settings" \
+  --after-url "http://localhost:3000/settings" \
+  --viewport 1440x900 \
+  --expect-text "Settings"
+```
+
+預設落在 `screenshots/local/ad-hoc/before-after/<name>-<timestamp>/` 且 `publication=local-only`。只有 manifest `status=complete` 的輸出才是有效 comparison；`failed` / `partial` 的 `review.md` 不產生雙欄表，避免把單邊成功誤讀成完整比較。
+
+這個 helper 是 ad-hoc comparison，不會寫 `(verified-ui:)` 或 evidence sidecar。要納入正式 review-gui 驗收，仍依 item／sub-item 分別走 `vendor/snippets/verify-channels/annotation-cheatsheet.md` 的 `evidence-store.ts` 寫入契約；多 viewport、跨瀏覽器或重複 regression 仍走本檔決策樹指定的 Playwright。
+
 ## 平行 session 隔離（agent-browser）
 
 agent-browser 的 `--session <name>` 是**原生**隔離——每個 session 各自的 daemon + 各自的 tab，互不搶（已實證：兩條平行 session 各守自己的 URL），不需要手動重綁 tab。
