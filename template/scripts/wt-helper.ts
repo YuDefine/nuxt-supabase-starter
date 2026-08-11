@@ -145,13 +145,12 @@ const WT_HELPER_SUBDIR = (() => {
 })()
 
 /**
- * 回傳可直接貼給 user 執行的 `node <path>/stash-reconcile.ts`（相對 repo root）。
+ * 回傳供 coordinator 直接執行的 `node <path>/stash-reconcile.ts`（相對 repo root）。
  *
- * 錨點是「**main root 底下的**對應副本」，不是執行中的那一份。`/wt` 的使用模型是在
- * worktree path 開新 session，各 skill 又都寫相對路徑 `node scripts/wt-helper.ts …`，
- * 所以本檔常常是 worktree 的副本在跑；直接拿 `WT_HELPER_DIR` 相對 main root 會得到
- * `..` 開頭而 fallback 成絕對路徑，而這行訊息印在 cmdCleanup 刪掉該 worktree **之後**
- * —— 使用者會拿到一條指向已刪除目錄的路徑。那是 TD-323 的 MODULE_NOT_FOUND 換個形式。
+ * 錨點是「**main root 底下的**對應副本」，不是執行中的那一份。`/wt` 執行期間，本檔常常是
+ * worktree 的副本在跑；直接拿 `WT_HELPER_DIR` 相對 main root 會得到 `..` 開頭而 fallback 成
+ * 絕對路徑，而這行訊息印在 cmdCleanup 刪掉該 worktree **之後**——coordinator 會拿到一條指向
+ * 已刪除目錄的路徑。那是 TD-323 的 MODULE_NOT_FOUND 換個形式。
  */
 function stashReconcileCmd(baseRoot = undefined) {
   const abs = join(WT_HELPER_DIR, 'stash-reconcile.ts')
@@ -1401,11 +1400,12 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
   // "ready" must not print while the worktree still lacks its database.
   console.log('')
   console.log('Worktree ready.')
-  console.log(`  cd ${wtPath}`)
+  console.log(`  Path: ${wtPath}`)
   console.log(`  Branch: ${branch}`)
+  console.log(`  Handoff: ${JSON.stringify({ cwd: wtPath, branch })}`)
   console.log('')
   console.log(
-    'Open a new Claude Code or Codex session in the worktree path to continue work isolated from main.',
+    'The orchestrator continues directly or dispatches this cwd through the session handoff transport.',
   )
 
   // Auto-install deps + set verify-deps-before-run=install in worktree .npmrc.

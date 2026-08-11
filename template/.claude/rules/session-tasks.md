@@ -152,8 +152,8 @@ context **讀取量**；重跑 `node scripts/context-cost-report.ts`，baseline 
 | 可觀察 predicate | 動作 |
 | --- | --- |
 | 還在**同一個**任務裡（只是做久了、或跨了 phase 斷點） | **`/compact` 續同一個 session。NEVER 收工開新 session。** warm 時 compact 讀舊 prefix 走 cache，官方文檔逐字：`costs a fraction of what the context size suggests`；而且 user 零重述 |
-| 換 repo / 換不相關主題 / 這批工作真的結束了 | 才走下面的收工訊息契約 |
-| 剩餘工作可無人值守跑完 | 給 runner 指令，**優先於**開新 session——user 完全不必在場 |
+| 換 repo / 換不相關主題 / 這批工作真的結束了 | 才走下面的收工訊息契約；若有未完項，由主線依下一節完成 Herdr transport |
+| 剩餘工作可無人值守跑完 | 主線直接啟動該 repo 的 runner，**優先於**開新 session；回報 runner receipt，不把指令交給 user |
 
 **NEVER 把「context 大了」直接讀成「該收工開新 session」。** 那是本節 2026-08-07 前的預設，
 它讓 user 為每一次 context 增長付一次重述成本，而多數情況根本不必重開。
@@ -164,23 +164,28 @@ context **讀取量**；重跑 `node scripts/context-cost-report.ts`，baseline 
 | --- | --- |
 | 首行 | 收工判定 ＋ 觸發的門檻。一句 |
 | 落點 | 未完項登記在哪：`<檔路徑>` ＋ 條目。**NEVER** 只寫「已記全」——那是**你**知道的事實，不是 user 拿得到的東西 |
-| **續跑指令** | **一行可直接複製貼上**的指令，自帶工作內容的指針。這是本節存在的唯一理由，**NEVER** 省略 |
-| user 本人要做的事 | 只列 user 非做不可的（起 dev server、回答某題、給憑證），逐條一句。沒有就整段不出現 |
+| **續跑 receipt** | Herdr handoff 回 workspace / tab / pane / agent status；runner path 回 process / log receipt。這是 user 不必手動切 cwd、開 session、重貼 prompt 的可驗證憑據 |
+| user 本人要做的事 | 只列 user 非做不可的（回答問題、permission、credentials、GUI / 產品決策），逐條一句。沒有就整段不出現 |
 
-續跑指令的形狀綁可觀察 predicate：
+### Herdr session transport（每一個符合的 handoff 都 MUST）
 
-| 可觀察 predicate | 續跑指令長什麼樣 |
+**每一個**原本會要求 user 切換資料夾、開另一個 Claude Code session、再貼 prompt 或指令的 handoff，
+都由主線自行走 Herdr transport；本節是使用者對這項 transport 的 standing explicit authorization，不必逐次再問。
+
+先判邊界：當前 session 能在既有授權與 scope 內直接對目標 cwd 執行，就直接執行；只有既有 routing、
+session boundary 或跨 repo 決策已判定確實需要另一個互動 session，才建立 Herdr Tab。Herdr 只搬運 session，
+**不**新增外派理由、跨界授權、worktree 例外或 approval bypass。
+
+命中時 **MUST** invoke `herdr` skill，並在建立任何資源前 Read
+`~/offline/clade/vendor/snippets/herdr-session-handoff/README.md`。把 durable task path 或 thin brief 當 prompt，
+用 `~/offline/clade/vendor/scripts/herdr-session-handoff.ts` 建立／重用 workspace、建立 Tab、沿用目前
+`cc` / `ccw` / `ccx` launcher並送入 prompt；完成後以 helper 的 JSON 當續跑 receipt。
+
+| 結果 | 主線動作 |
 | --- | --- |
-| 剩餘工作全部已登記在單一檔 | `cd <repo> && claude "續跑 <檔路徑>"` |
-| 剩餘工作已登記且可無人值守跑完 | 該 repo 的 runner 指令（work-loop `runner.sh` 等），**優先於**開新 session ——user 完全不必在場 |
-| 剩餘工作卡在某個待 user 拍板的問題 | 續跑指令照給，前面加一句「先回答 `<哪一題>`」。**NEVER** 因為卡住就不給指令 |
+| `status: dispatched` | 回報 task 落點與 workspace / tab / pane / agent status；user 不需再做 terminal/session 動作 |
+| `status: blocked` | 讀 visible question / approval UI，照原 gate 請 user 只回答那個真正的決策；**NEVER** 盲目重送 prompt |
+| transport / launcher / Herdr preflight 失敗 | 保留 durable task；能在本 session 合法完成就直接完成，否則回具體 blocker。**NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt |
 
-**NEVER 句黑名單（逐字實錄，2026-08-07 Charles 在 <consumer-b> session 端點名）**：
-
-- ❌「建議收工，讓下個乾淨 context 接手，**task 檔已記全**」——「已記全」對 user 零可執行性，
-  他要的是那一行貼進去就跑的指令
-- ❌ 把「開新 session、跟它解釋要做什麼」當成 user 理所當然該付的成本而不寫進訊息裡。
-  **user 重述工作內容的那幾分鐘，正是本節要消掉的東西**
-
-`\nx`（Charles 個人縮寫，判為收工時）同樣受本契約約束：「收工 ＋ 一句已登記在哪」是**下限**不是全部，
-續跑指令那一行照樣 MUST 給。
+`\nx`（Charles 個人縮寫，判為收工時）同樣受本契約約束：「收工 ＋ 一句已登記在哪」只是下限；
+主線仍須自行完成 runner 或 Herdr dispatch，並給續跑 receipt。

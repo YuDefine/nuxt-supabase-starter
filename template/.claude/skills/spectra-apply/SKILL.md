@@ -116,13 +116,9 @@ Implement tasks from a Spectra change.
 
       While waiting: the subagent dispatches and watches its own codex processes (Step 6b Class C, Step 8a verify channels, pre-handoff checks). The parent **MUST NOT** probe those with `ps` / `pgrep` / `/proc` — that output carries no tenant information in either direction, so it produces confident wrong answers rather than none (TD-351; `agent-routing.codex-watch-protocol.md` § 跨 sandbox 可見度約束 v2). Ask via `SendMessage`, or read signals that name the change/phase slug.
 
-      **Fallback** — if the Skill tool / `/wt` dispatch is unavailable in this environment (rare degradation; e.g., minimal runtime without skill support), emit a status-only message:
+      **Fallback** — if the Skill tool / `/wt` dispatch is unavailable in this environment (rare degradation; e.g., minimal runtime without skill support), **NEVER** hand the worktree path or invocation back to the user. If the parent can legally continue in that worktree, continue directly. If a separate interactive session is required, MUST Read `~/offline/clade/vendor/snippets/herdr-session-handoff/README.md`, dispatch the durable change prompt with `herdr-session-handoff.ts`, and return its workspace / tab / pane receipt.
 
-      ```
-      Worktree at <worktree-absolute-path> ready; please run `/spectra-apply <change-name>` from inside it manually.
-      ```
-
-      No `cd … && claude` oneliner under any branch. `<worktree-absolute-path>` 從 wt-helper 輸出抓；`<change-name>` 是 Step 0a 已解析的 name.
+      `<worktree-absolute-path>` 從 wt-helper 輸出抓；`<change-name>` 是 Step 0a 已解析的 name. Transport failure preserves the durable change and reports a blocker; it does not create a manual `cd … && claude` fallback.
 
    e. **Bypass 條件**：使用者**明確**訊息含「不要 worktree」「在 main 跑」「我知道風險」等字眼時，跳過 Step 0 直接 Step 1。**禁止** agent 自行判斷略過（包括 user 跑 `/spectra-apply` 本身不算明確 bypass — 那只是 invocation，不是 worktree 偏好）。
 
@@ -170,8 +166,9 @@ Implement tasks from a Spectra change.
        Running unpark here would write artifacts to a path that disappears → permanent data loss
        (see docs/pitfalls/2026-05-22-agent-tool-subagent-worktree-bypass.md).
 
-       Action: cancel this run; from main session run `/spectra-apply <change>` which will execute
-       Step 0c.5 main-side unpark + commit-to-git before dispatching the subagent.
+       Action: cancel this run and return a structured blocker to the parent coordinator. The parent
+       invokes `/spectra-apply <change>` from main directly, or uses [[session-tasks]] § Herdr session
+       transport when a separate main session is required; Step 0c.5 then runs before subagent dispatch.
        ```
        **NEVER** 自行嘗試 unpark / 用 AskUserQuestion 給「強制 unpark」選項 — 沒有合法的「在 subagent 內 unpark」路徑。
 
@@ -700,7 +697,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    **NEVER** 自判 bucket、NEVER 跳過 script — Claude 自判已 9 次證明不可靠。
 
-   - **DEFAULT path**（**MUST** script exit 0 才發）：handoff message 措辭 **MUST** 照 `references/pre-handoff-checks.md` § Step 8b DEFAULT message 範本（`cd ~/offline/clade && pnpm review` 指引 + review-gui deep-link + GUI 行為說明）。
+   - **DEFAULT path**（**MUST** script exit 0 才發）：handoff message 措辭 **MUST** 照 `references/pre-handoff-checks.md` § Step 8b DEFAULT message 範本（主線從 clade home 啟動 review GUI並確認 ready + review-gui deep-link + GUI 行為說明）。
    - **MUST 直接給 review-gui deep-link**（per `rules/core/proactive-skills.md` § Inline Review-GUI Deep-Link）：訊息 **MUST** 含 `http://127.0.0.1:5174/review/<consumer-id>:<change-name>` 完整 URL（cross-consumer mode 預設啟用，沒 `<consumer-id>:` prefix 會 fallback 到 clade mainEntry → API 404；`<consumer-id>` 從 `~/offline/clade/registry/consumers.json` 對應 entry 抓）。**NEVER** 寫「請在 worktree root 執行」或「請在 main consumer root 執行」當預設措辭——review-gui (`vendor/scripts/review-gui.ts` `listSourceRoots`) 從 clade home 跑時偵測 `vendor/scripts/review-gui.ts` + `consumers.local` 雙標記 → 進 cross-consumer mode，自動聚合所有 consumer + worktree change；consumer 端跑會被 `preflightCladeOnly` guard 擋下、退出 exit 2。**NEVER** 列 dev server URL（`http://localhost:3040/admin/...`）當替代——review-gui 內部已有 final-state screenshot + evidence。若 review 過程發現需要 fresh screenshot 或 user 想 sanity check，**MUST** 由 agent 自起 dev server（per `rules/core/proactive-skills.md` § Dev Server Auto-Spawn：scan free port 3001–3050、避開 3000、`run_in_background`、回報 URL + shellId），**NEVER** 叫 user cd worktree 跑 `pnpm dev`。`5174` 是 `vendor/scripts/review-gui.ts` `DEFAULT_PORT`，找不到時會 fallback 到 5174-5194，由 GUI startup banner 告知 user，主線不必猜。
    - Wait for the user to complete the GUI flow and report back. Do NOT proceed to Step 9 / propose archive until the user signals manual review is done.
    - **NEVER** default to `AskUserQuestion` chat dialog walking items one-by-one — it burns tokens, ignores the screenshot pool, and contradicts `rules/core/manual-review.md` 標準流程.

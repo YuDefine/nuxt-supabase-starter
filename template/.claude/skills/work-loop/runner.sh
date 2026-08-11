@@ -14,9 +14,9 @@
 #   ./runner.sh --max-rounds 5
 #   ./runner.sh --dry-run          # 只印每輪會下的指令，不真的跑
 #
-# 停止：state 檔出現 stoppedReason，或達 --max-rounds，或連續 2 輪 exit≠0。
-# 中斷：Ctrl-C；lock 的 heartbeat 逾窗（45min）且本 runner 的 pid 不再存活時自動失效，
-#       或手動 rm .spectra/work-loop.lock。
+# 停止：state 檔出現 stoppedReason，或達 --max-rounds，或連續 2 輪 exit≠0，
+#       或 state 連續 2 輪未前進。
+# 中斷：Ctrl-C；lock 的 heartbeat 逾窗（45min）且本 runner 的 pid 不再存活時自動失效。
 
 set -uo pipefail
 
@@ -30,8 +30,8 @@ REPO="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   exit 2
 }
 STATE="$REPO/.spectra/work-loop-state.json"
-LOCK="$REPO/.spectra/work-loop.lock"
 LOG_DIR="$REPO/.spectra/work-loop-logs"
+LOCK_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-lock.ts"
 # worktree 母目錄，與 vendor/scripts/wt-helper.ts:779 的 `<repo>-wt` 慣例對齊（推導不寫死）。
 # 它必須進 --add-dir —— 見下方 PERM_MODE 註解。
 #
@@ -88,7 +88,40 @@ stopped_reason() {
 
 round_of() {
   [ -f "$STATE" ] || { echo 0; return; }
-  node -e 'try{console.log(require(process.argv[1]).round ?? 0)}catch{console.log(0)}' "$STATE" 2>/dev/null || echo 0
+  node -e '
+    try {
+      const r = require(process.argv[1]).round ?? 0
+      console.log(Number.isInteger(r) && r >= 0 ? r : "invalid")
+    } catch { console.log("invalid") }
+  ' "$STATE" 2>/dev/null || echo invalid
+}
+
+round_is_uint() {
+  case "$1" in
+    ''|*[!0-9]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+next_round_label() {
+  round_is_uint "$1" && echo $((1 + $1)) || echo "?"
+}
+
+# 異常停止只釋放「helper 回報 pid == 本 runner」的鎖。status 與 release 都經 helper，
+# 中間若被別輪接手，session id guard 會讓 release 回 not-owner，NEVER 誤刪別人的鎖。
+release_runner_lock() {
+  [ -f "$LOCK_HELPER" ] || { echo "   ⚠ 找不到 lock helper，無法釋放本 runner 鎖"; return; }
+  local status session
+  status="$(cd "$REPO" && node "$LOCK_HELPER" status --json 2>/dev/null)" || return
+  session="$(node -e '
+    try {
+      const s = JSON.parse(process.argv[1])
+      if (s.pid === Number(process.argv[2]) && typeof s.sessionId === "string") console.log(s.sessionId)
+    } catch {}
+  ' "$status" "$$")"
+  [ -n "$session" ] || return
+  (cd "$REPO" && node "$LOCK_HELPER" release --session "$session") >/dev/null 2>&1 \
+    || echo "   ⚠ 本 runner 鎖已被別輪接手，未釋放"
 }
 
 # 待答決策佇列的長度。**只印不擋** —— 打這個腳本的人正要離開座位，擋住等於什麼都不做。
@@ -99,7 +132,8 @@ awaiting_count() {
   node -e 'try{const a=require(process.argv[1]).awaiting;console.log(Array.isArray(a)?a.length:0)}catch{console.log(0)}' "$STATE" 2>/dev/null || echo 0
 }
 
-fail_streak=0
+exit_fail_streak=0
+no_progress_streak=0
 start_round="$(round_of)"
 echo "work-loop runner: repo=$REPO  起始 round=$start_round  max=$MAX_ROUNDS  perm=$PERM_MODE"
 
@@ -127,44 +161,56 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
   # claude 回 `Input must be provided either through stdin or as a prompt argument when using --print`
   # ——錯誤訊息完全沒提是哪個 variadic option，2026-08-05 曾因此連兩輪 exit=1。
   # 所以兩個 variadic option 後面都 MUST 接另一個 flag 當終止符。
-  cmd=(claude --print --add-dir "$WT_PARENT" --allowedTools "$SCAN_MKTEMP_RULE" --permission-mode "$PERM_MODE" "/work-loop --unattended")
+  # `--runner-child` 是模型可見的身分 marker；env 是機械補強。Step 0 命中任一者都只跑單輪，
+  # NEVER 再 route 回 runner，否則 child 會遞迴啟動下一層 runner。
+  cmd=(env WORK_LOOP_RUNNER_CHILD=1 claude --print --add-dir "$WT_PARENT" --allowedTools "$SCAN_MKTEMP_RULE" --permission-mode "$PERM_MODE" "/work-loop --unattended --runner-child")
 
   if [ "$DRY_RUN" = 1 ]; then
-    echo "[dry-run] round $((before + 1)): ${cmd[*]}"
+    echo "[dry-run] round $(next_round_label "$before"): ${cmd[*]}"
     continue
   fi
 
-  echo "== round $((before + 1)) 起跑 ($ts_human) → $log"
+  echo "== round $(next_round_label "$before") 起跑 ($ts_human) → $log"
   ( cd "$REPO" && "${cmd[@]}" ) >"$log" 2>&1
   rc=$?
 
   after="$(round_of)"
 
+  # 只有合法整數且 after > before 才是真前進，也是唯一會重設兩個 streak 的事件。
+  # child 若已寫入進展但收尾 exit≠0，保留診斷但不把成功 round 累積成 exit failure。
+  if round_is_uint "$before" && round_is_uint "$after" && [ "$after" -gt "$before" ]; then
+    exit_fail_streak=0
+    no_progress_streak=0
+    if [ "$rc" -ne 0 ]; then
+      echo "   ⚠ round $after 已前進，但 child exit=$rc—— log 尾巴："
+      tail -5 "$log" | sed 's/^/     /'
+    else
+      echo "   ✓ round $after 完成"
+    fi
+    continue
+  fi
+
   if [ "$rc" -ne 0 ]; then
-    fail_streak=$((fail_streak + 1))
-    echo "   exit=$rc（連續失敗 $fail_streak）—— log 尾巴："
+    exit_fail_streak=$((exit_fail_streak + 1))
+    echo "   exit=$rc（連續 exit 失敗 $exit_fail_streak）—— log 尾巴："
     tail -5 "$log" | sed 's/^/     /'
-    # 死掉的 process 不會自己釋放 lock，下一輪會被自己的 lock 擋住。
-    rm -f "$LOCK"
-    if [ "$fail_streak" -ge 2 ]; then
+    # 鎖由 work-loop-lock.ts 管理；同一 runner pid 的下一輪會安全接手殘鎖。
+    if [ "$exit_fail_streak" -ge 2 ]; then
       echo "== stop: 連續 2 輪 exit≠0，可能是系統性問題（log 在 $LOG_DIR）"
+      release_runner_lock
       break
     fi
     continue
   fi
 
-  fail_streak=0
-
-  # round 沒前進代表那一輪沒寫 state —— 通常是被 lock 擋掉或中途夭折。
-  if [ "$after" = "$before" ]; then
-    echo "   ⚠ round 未前進（$before → $after）；state 沒被更新，視為一次失敗"
-    fail_streak=$((fail_streak + 1))
-    rm -f "$LOCK"
-    [ "$fail_streak" -ge 2 ] && { echo "== stop: state 連續 2 輪未前進"; break; }
-    continue
+  # exit=0 但 state 相等、倒退、型別錯誤或損壞都算 no-progress。
+  no_progress_streak=$((no_progress_streak + 1))
+  echo "   ⚠ round 未前進或無效（$before → $after；連續未前進 $no_progress_streak）"
+  if [ "$no_progress_streak" -ge 2 ]; then
+    echo "== stop: state 連續 2 輪未前進"
+    release_runner_lock
+    break
   fi
-
-  echo "   ✓ round $after 完成"
 done
 
 echo

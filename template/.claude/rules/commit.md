@@ -55,7 +55,7 @@ uncommitted 變更
 
 **`/commit` MUST 在 main worktree 跑、NEVER 在 session worktree 內跑**。
 
-Worktree 完成驗證後的標準收尾（詳見 [[worktree-default]] §5）：**主線自動執行** selective stash → 跨 worktree pop → cleanup（**不切** session cwd），完成後 user 只需開 main session 跑 `claude "/commit"`。
+Worktree 完成驗證後的標準收尾（詳見 [[worktree-default]] §5）：**主線自動執行** selective stash → 跨 worktree pop → cleanup（**不切** session cwd）。完成後主線直接在 main cwd invoke `/commit`；若既有 session boundary 要求乾淨 main session，就依 [[session-tasks]] § Herdr session transport 自行 dispatch `/commit` 並回 receipt，**NEVER** 叫 user 開 main session。
 
 - 預檢：pop 前 `git -C <main> status --porcelain` 非空 → 中止 closure、stash entry 保留、提示 user 處理 main 端 WIP
 - Cleanup 安全性依賴 selective stash 列舉完整性（漏列檔永久丟）；pop 失敗 **NEVER** 跑 cleanup（改動還沒進 main）

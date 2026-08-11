@@ -278,7 +278,10 @@ function cmdDetect(mainWt, args) {
       `⚠ spectra-archive interrupted: ${changeName} (phase=${phase}, ${ageSec}s ago)\n`,
     )
     process.stderr.write(
-      `  recovery: cd ${mainWt} && claude /spectra-archive ${changeName} --resume\n`,
+      `  recovery: ${JSON.stringify({ cwd: mainWt, prompt: `/spectra-archive ${changeName} --resume` })}\n`,
+    )
+    process.stderr.write(
+      '  handoff: coordinator resumes directly or through Herdr session transport\n',
     )
     process.stderr.write(`  sidecar: ${path}\n`)
     found++

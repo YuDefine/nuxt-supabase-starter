@@ -107,16 +107,10 @@ Local edits will be reverted by the next sync.
 
 ## Step 8b — DEFAULT path handoff message 範本
 
-   - **DEFAULT path**（**MUST script exit 0 才發**）: Reply to the user with something like:
-     > Implementation 完成。Step 8a 已處理 verify channels：automatic `[verify:e2e]` / `[verify:api]` items 已寫 annotation 並自動完成；含 `[verify:ui]` / `[review:ui]` 的 `<N>` 項仍待你確認。請在 **clade home**（`~/offline/clade`）執行 `pnpm review` 開本地 GUI 驗收（review-gui 從 clade home 跑會自動聚合所有 consumer + worktree change；consumer 端直接跑會被 clade-only guard 擋下；`pnpm review` dev mode default ON，改 review-gui source 自動 reload）：
+   - **DEFAULT path**（**MUST script exit 0 才發**）：回覆前，主線 MUST 自行從 clade home 啟動 `pnpm review`，等待 review GUI URL 可連線，再給 user deep-link；**NEVER** 要 user 切到 clade home 或啟動 server。Reply with something like:
+     > Implementation 完成。Step 8a 已處理 verify channels：automatic `[verify:e2e]` / `[verify:api]` items 已寫 annotation 並自動完成；含 `[verify:ui]` / `[review:ui]` 的 `<N>` 項仍待你確認。
      >
-     >   cd ~/offline/clade
-     >   pnpm review
+     > Review GUI 已就緒：
+     > http://127.0.0.1:5174/review/<consumer-id>:<change-name>
      >
-     > GUI 啟動後直接打開：
-     >
-     >   http://127.0.0.1:5174/review/<consumer-id>:<change-name>
-     >   # 例 <consumer-e> 的 mvp-financial-layer-bootstrap：
-     >   # http://127.0.0.1:5174/review/<consumer-e>:mvp-financial-layer-bootstrap
-     >
-     > GUI 會自動配對 `screenshots/local/<change-name>/#<N>-*.png`、conflict-aware 寫回 tasks.md、對 `[verify:e2e]` / `[verify:api]` automatic-only items 自動勾 `[x]`、對 `[verify:ui]` / `[review:ui]` items 顯示 evidence 等你 OK / Issue / Skip。完成後回報，我繼續 Step 9 status。
+     > GUI 會自動配對 `screenshots/local/<change-name>/#<N>-*.png`、conflict-aware 寫回 tasks.md、對 `[verify:e2e]` / `[verify:api]` automatic-only items 自動勾 `[x]`、對 `[verify:ui]` / `[review:ui]` items 顯示 evidence 等你 OK / Issue / Skip。你只需完成 GUI 的 OK / Issue / Skip 決策；完成後回報，我繼續 Step 9 status。

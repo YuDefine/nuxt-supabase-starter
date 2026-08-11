@@ -33,7 +33,8 @@ cache-keepalive heartbeat 與 (e) 的 per-round Monitor——本檔只管指令�
 `--permission-mode <mode>`（預設 `acceptEdits`；**NEVER** 預設 `bypassPermissions`——那會連
 破壞性指令一起放行，要更寬鬆 MUST 由使用者顯式指定）。runner 另內建只批准
 `Bash(mktemp -t work-loop-scan.XXXXXXXXXX)`，讓 Step 2 的唯一 scan temp path 可在 headless process
-建立；其他 Bash 仍照 permission mode 與使用者 permission rules 判定。
+建立；其他 Bash 仍照 permission mode 與使用者 permission rules 判定。每輪另固定帶模型可見的
+`--runner-child` 與 `WORK_LOOP_RUNNER_CHILD=1`；Step 0 命中任一身分就只執行單輪，NEVER 再啟 runner。
 
 每輪 log 落在 `.spectra/work-loop-logs/round-<ts>.log`。
 
@@ -69,7 +70,8 @@ runner 只認 state 檔的 `stoppedReason`（整個 loop 該停）；`roundEndRe
 會讓它起下一個全新 process 繼續。兩者的語義差別與寫錯的後果見 SKILL.md Step 1。
 
 runner 自己的停止條件：`stoppedReason` 出現、達 `--max-rounds`、連續 2 輪 exit≠0、
-或 round 數連續 2 輪未前進（代表那輪沒寫 state，通常是被 lock 擋掉或中途夭折）。
+或 round 數連續 2 輪未前進。exit failure streak 與 no-progress streak 彼此獨立，只有 round 真正前進
+才同時重設；交錯出現不算恢復。
 
 **這四種的語義差別 MUST 出現在收尾回報裡**——只有第一種是「待辦推完」，其餘三種分別是額度用完、
 系統性故障、中途夭折。逐列對照表與回報的四個必填項在 SKILL.md Step 0

@@ -34,6 +34,12 @@ Local edits will be reverted by the next sync.
 
 **同時像寬掃又像措辭時看產出形狀**：產出是事實表 / 清單 / 統計 → 派（寬掃的價值在把原文壓成結論）；產出是要寫進規約、契約或對外文件的**措辭** → 留。措辭的語氣與抽象層級一致性外包不了，派出去的典型結果是回頭逐條重寫，付兩次成本。
 
+## Session transport boundary
+
+**Herdr transport 不新增 routing 權限。** 有空 workspace / pane 不是外派條件；當前 session 能在既有授權與 scope 內直接完成目標 cwd 的工作，就直接完成。只有本節已判定要換互動 session、或 [[session-tasks]] 的 session boundary 已成立時，才依該規約 § Herdr session transport 搬運 durable task / thin brief。
+
+每一個符合的跨 cwd / 新 Claude Code session handoff 都保留原有 worktree、scope、approval、verification 與 clade / consumer 邊界。Transport 失敗也不改變 routing 結論，且 **NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt。
+
 ## Routing Table
 
 > **Codex 派工是 (model, effort) 二維**，不是只選 effort。三檔共用同一個 7 天配額池，選檔位看下列六維，**NEVER** 只看「這個工作重不重要」或「迴圈長不長」：

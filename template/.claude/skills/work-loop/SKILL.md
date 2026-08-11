@@ -44,9 +44,21 @@ $ARGUMENTS
 ### Flags
 
 - `--unattended`（`runner.sh` 每輪固定帶）：**3-item cap**（避免 runaway）+ **禁止 `AskUserQuestion`**。不帶時無 item cap，改由 Step 6 的 round cap / fingerprint 控制。
+- `--runner-child`（只由 `runner.sh` 帶）：模型可見的 runner child 身分 marker；`WORK_LOOP_RUNNER_CHILD=1` 是同一身分的機械補強。
 - 使用者說「自動推」「把待辦跑完」「持續做」「不要停」「無人值守」→ 等同要求 continuous（見下）。
 
 **沒有 `--turbo`。** 非 spectra 待辦（HANDOFF / tech-debt / ROADMAP）是**預設 scope**，不需要任何 flag 開啟。
+
+### Iron Law：runner child 永遠只執行單輪
+
+`$ARGUMENTS` 含 `--runner-child`，**或**本 process 的 runner 身分是 `WORK_LOOP_RUNNER_CHILD=1` → 直接進 Step 1，執行一次 Step 1–7 後退出。**NEVER** 進入本 Step 後面的 continuous route 判定、**NEVER** 啟動 `runner.sh`、**NEVER** 呼叫 `/loop`。
+
+marker 有兩層是刻意的：prompt 裡的 `--runner-child` 讓模型必定看得見；env 身分讓 shell fixture 與診斷能機械驗證。任一層存在都已足以判定，**NEVER** 因另一層讀不到就把 child 當成直接呼叫。
+
+| Red Flag | 立即動作 |
+| --- | --- |
+| arguments 已有 `--runner-child`，卻正在比較「runner 還是 in-session」 | 停止 route；這就是 runner 已啟動的 child，直接跑單輪 |
+| 正要從 runner child 呼叫 `runner.sh` 或 `/loop` | 停止；完成本輪 Step 1–7 後退出 |
 
 ### Iron Law：`AskUserQuestion` 的可用性由 mode 決定，不由 item 決定
 
@@ -72,7 +84,7 @@ $ARGUMENTS
 
 單次 `/work-loop` = 一輪 scan → 分類 → dispatch/packaging → 收割 → 寫狀態。**一輪不是完成。**
 
-- **直接呼叫**（非從 `/loop`、非 `--unattended`）→ **NEVER 自己跑完一輪就停**。先照下表 route 到承載這個 loop 的跑法，**NEVER** 無條件選 in-session：
+- **直接呼叫**（非從 `/loop`、非 `--unattended`、非 `--runner-child`）→ **NEVER 自己跑完一輪就停**。先照下表 route 到承載這個 loop 的跑法，**NEVER** 無條件選 in-session：
 
   | 可觀察 predicate | route 到 |
   | --- | --- |
@@ -152,7 +164,19 @@ runner process 的退出通知到達時 **MUST 主動回報，不等 user 問**�
 | `== stop: <reason>`，且 reason 來自 state 的 `stoppedReason` | 正常收工 | 待辦已推完 |
 | 迴圈跑滿 `--max-rounds`（**沒有** `== stop:` 行） | 額度用完，**不是**做完 | 待辦還在，需再起一輪 |
 | `== stop: 連續 2 輪 exit≠0` | 系統性故障 | **異常中止** + log 路徑 |
-| `== stop: state 連續 2 輪未前進` | 被 lock 擋掉或中途夭折 | **異常中止** + 那幾輪沒寫進 state |
+| `== stop: state 連續 2 輪未前進` | child 正常退出但 state 沒前進 | **異常中止** + 那幾輪沒寫進 state |
+
+#### (c.1) 連續未前進的 ownership 分流（hard rule）
+
+| 可觀察 predicate | 父層 MUST |
+| --- | --- |
+| runner 是**本 session** 依 (a) 啟動、background Bash task id 已記錄，且 task 狀態仍是 running | 自主 `TaskStop(<runner task id>)`，再停止 (e) 的 Monitor；讀最後兩輪 log、state 與 lock holder，找出未前進 root cause 並直接修復。**NEVER** `AskUserQuestion`、**NEVER** 把停止責任推給 user |
+| runner 是本 session 啟動，但退出 notification 已把 task 標成 completed / failed | runner 已停止，不再對 completed task 呼叫 `TaskStop`；停止 (e) 的 Monitor後立刻做同一套 log/state/lock 調查。**NEVER** `AskUserQuestion` |
+| task id / 啟動 session 無法確認，或可確認 runner 屬於別 session | 先 `AskUserQuestion` 確認 ownership，**NEVER** 擅自 `TaskStop`、刪 lock 或接管 |
+
+**Iron Law：本 session 親自啟動的 runner，就是本 session 的 child。違反字面就是違反精神**——「不知道停了會不會有副作用」「先問一下比較保險」都不成立；harness task id 就是 ownership 證據。只有 ownership 不明或屬別 session 才問。
+
+**Red Flag**：看到 `state 連續 2 輪未前進` 後正要把 log 路徑貼給 user、但尚未依 task 狀態停止 running runner（或確認它已退出）並調查最後兩輪——停下，先走本節 ownership 表。
 
 **下三列都不是「跑完了」。** **NEVER** 把其中任何一列回報成待辦已推完，**也 NEVER** 只摘成功的那幾輪而不提中止——runner 每輪成功都印 `✓ round <n> 完成`，只讀那些行會產出一份看起來順利的假報告。命中下兩列時 **MUST** 一併附 `tail -20 <最後一個 log>`。
 
@@ -163,8 +187,14 @@ runner process 的退出通知到達時 **MUST 主動回報，不等 user 問**�
 起跑回報完成的**同一個 turn 內** MUST 排一次：
 
 ```text
-ScheduleWakeup({ delaySeconds: 3300, prompt: <本輪 /work-loop 指令原文>, reason: "runner cache-keepalive" })
+ScheduleWakeup({
+  delaySeconds: 3300,
+  prompt: "runner cache-keepalive：只判斷 runner 是否存活；存活就重排同一 inert heartbeat，已退出就收割 harness 退出通知並停止。禁止重複原任務、publish、propagate 或寫檔。",
+  reason: "runner cache-keepalive"
+})
 ```
+
+**Iron Law：keepalive prompt 只能判活、重排或收割。** 原任務若含共享資源修改，尤其 publish / propagate，**NEVER** 把原 prompt 或任何可重放原任務的摘要塞進 `ScheduleWakeup`；heartbeat 不得執行原任務、publish、propagate 或寫檔。
 
 heartbeat 醒來時先跑 `pgrep -f runner.sh`，再依下表決定：
 
