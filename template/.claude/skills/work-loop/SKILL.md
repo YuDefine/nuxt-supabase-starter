@@ -228,8 +228,11 @@ while true; do
   sleep 60
   cur=$(r)
   if [ "$cur" != "$prev" ]; then
-    log=$(ls -t "$L"/round-*.log 2>/dev/null | head -1)
-    echo "round $cur 完成 — $(tail -n 3 "$log" 2>/dev/null | tr '\n' ' ' | cut -c1-200)"
+    # 摘要一律取 state 的 sessionNote（該輪做了什麼的人讀敘述）＋ roundEndReason。
+    # NEVER 退回 tail log：log 尾巴是 `claude --print` 的收尾輸出，多數輪沒有實質內容，
+    # 於是 user 每輪只看得到「round N 完成」（2026-08-11 Charles 回報）。
+    node -e 'const s=require(process.argv[1]);console.log(`round ${s.round} 完成｜${s.roundEndReason??"?"}｜${(s.sessionNote??"(無 sessionNote)").replace(/\s+/g," ").slice(0,400)}`)' "$S" 2>/dev/null \
+      || echo "round $cur 完成（sessionNote 讀取失敗）"
     prev=$cur; last_change=$(date +%s)
   fi
   reason=$(node -e 'try{const s=require(process.argv[1]);if(s.stoppedReason)console.log(s.stoppedReason)}catch{}' "$S" 2>/dev/null)
@@ -242,7 +245,8 @@ EOF
 
 | 契約 | 逐字 |
 | --- | --- |
-| 每輪 emit **一行** | **NEVER** 貼 log 段落、**NEVER** 展開該輪細節——per-round 的 turn 成本必須壓在 cache_read 量級，貼多少就每 turn 重讀多少 |
+| 每輪 emit **一行，且該行 MUST 帶該輪成果摘要** | 內容固定為 `round <n> 完成｜<roundEndReason>｜<sessionNote 前 400 字>`。**NEVER** 貼 log 段落、**NEVER** 額外展開該輪細節——per-round 的 turn 成本壓在 cache_read 量級，400 字上限就是為此 |
+| 主線收到該事件後 **MUST 轉述摘要**，不是只回「round N 完成」 | 逐字複述或濃縮 Monitor 那行的 sessionNote 段（**每一輪**都要，不是只在有異常時）——user 對 5–8 小時的 runner 只有這個可見度來源。摘要缺內容時 **MUST** 自己補讀：`node -e 'const s=require(process.argv[1]);console.log(s.sessionNote)' <repo>/.spectra/work-loop-state.json`，**NEVER** 把「Monitor 沒給細節」當成可以只回一句「完成」的理由 |
 | 失敗訊號要蓋到 | round 前進、`stoppedReason`、90 分鐘沒前進三種都 emit（per `Monitor` tool description § Coverage — silence is not success：只 grep 成功訊號的 monitor 在 crashloop 時與「還在跑」長得一模一樣） |
 | 收尾 | runner 退出通知到達 → 走 (b) 回報，並 `TaskStop` 這個 Monitor。**NEVER** 讓它留到 session 結束 |
 | 與 (d) 的關係 | **兩個都要**，不是二選一。round 通常 15–25 分 < 55 分，事件本身順帶維持 cache；但 round 卡住超過 55 分時，(d) 的 heartbeat 是唯一還會醒的東西 |

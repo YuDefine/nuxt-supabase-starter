@@ -836,6 +836,98 @@ Orchestration Residency 判定（codex-primary vs claude-primary）從未落到 
   fi
 fi
 
+# --- Check 9: verify:ui Dispatcher Provenance (agent-routing § Dispatch 入口) ---
+# The rule says the ONLY entry point for verify:ui evidence is
+# codex-dispatch-screenshot-verify.ts, with a Claude fallback allowed solely on
+# mechanical failure and only when the item carries an UNCERTAIN(dispatcher-error)
+# trace. The 2026-06-11 audit measured that text-level NEVER at 147 annotations /
+# 0 codex runs / 92 sessions — it does not bind anything on its own.
+#
+# Provenance is not recoverable from the evidence itself: the screenshot path
+# convention is identical whether codex or Claude took it, the (verified-ui:)
+# annotation is written by the main thread either way, and the sidecar schema has
+# no producer field. So the dispatcher now drops a repo-local receipt carrying the
+# item ids it actually ran, and this check joins against it.
+#
+# Onset is keyed on the ANNOTATION TIMESTAMP, not on "does the receipt file exist".
+# Check 7/8 fail open on a missing ledger because a freshly-propagated gate must not
+# flag-day-block existing consumers. That reasoning inverts here: in the failure mode
+# this gate exists to catch, the dispatcher is never invoked, so the receipt file
+# never appears — "missing file → skip" would make the worst case permanently silent.
+# The date cutoff gets both properties: pre-onset annotations (the in-flight backlog
+# across every consumer) pass untouched, post-onset ones must show a receipt.
+#
+# Boundary, MUST NOT be overstated: the receipt is a plaintext jsonl the main thread
+# can append to. This check catches DRIFT (skipping the dispatcher), NEVER adversarial
+# forgery. Do not read a pass as proof the evidence came from codex.
+VERIFY_UI_RECEIPTS="$REPO_ROOT/.spectra/verify-ui-dispatch-ledger.jsonl"
+VERIFY_UI_GATE_ONSET="2026-08-11" # gate 落地日；早於此日的 annotation 屬存量，豁免
+if [ "$PRE_SKILL" != "true" ] && [ -f "$TASKS_FILE" ]; then
+  BYPASS_VUI=$(sux_count_marker "$TASKS_FILE" 'verify-ui-dispatch: intentional')
+  if [ "$BYPASS_VUI" -eq 0 ]; then
+    ESC_CHANGE_VUI=$(printf '%s' "$CHANGE_NAME" | sed 's/[][\\.*^$()|?+{}/]/\\&/g')
+    UNPROVEN_VUI=()
+    IN_MR_VUI=false
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^##[[:space:]]+人工檢查 ]]; then
+        IN_MR_VUI=true
+        continue
+      fi
+      if [ "$IN_MR_VUI" = true ] && [[ "$line" =~ ^##[[:space:]] ]] &&
+        ! [[ "$line" =~ ^##[[:space:]]+人工檢查 ]]; then
+        break
+      fi
+      [ "$IN_MR_VUI" = true ] || continue
+      [[ "$line" == *"verify:ui"* ]] || continue
+
+      # Same timestamp regex as Check 6 — the fractional-seconds branch is load-bearing
+      # (evidence-store.ts stamps with toISOString()); see that check's comment.
+      _VUI_PROV_RE='\(verified-ui:[[:space:]]*([0-9]{4}-[0-9]{2}-[0-9]{2})'
+      [[ "$line" =~ $_VUI_PROV_RE ]] || continue
+      vui_date="${BASH_REMATCH[1]}"
+      [[ "$vui_date" < "$VERIFY_UI_GATE_ONSET" ]] && continue
+
+      # Legal mechanical-failure fallback, per agent-routing § Dispatch 入口.
+      [[ "$line" == *"UNCERTAIN(dispatcher-error)"* ]] && continue
+
+      vui_id=""
+      if [[ "$line" =~ \#([0-9]+(\.[0-9]+)?) ]]; then
+        vui_id="#${BASH_REMATCH[1]}"
+      fi
+      [ -n "$vui_id" ] || continue
+
+      # Receipt field order is fixed at change → itemIds → ... by the dispatcher,
+      # so an ordered two-literal grep is exact (same technique as Check 7/8).
+      esc_id=$(printf '%s' "$vui_id" | sed 's/[][\\.*^$()|?+{}/]/\\&/g')
+      if ! grep -qE "\"change\":\"${ESC_CHANGE_VUI}\".*\"itemIds\":\[[^]]*\"${esc_id}\"" \
+        "$VERIFY_UI_RECEIPTS" 2>/dev/null; then
+        UNPROVEN_VUI+=("$vui_id ($vui_date)")
+      fi
+    done <"$TASKS_FILE"
+
+    if [ ${#UNPROVEN_VUI[@]} -gt 0 ]; then
+      BLOCKED=true
+      MESSAGES+=("[UX Gate] verify:ui Dispatcher Provenance 未通過 — 下列 item 的 (verified-ui:) evidence 找不到對應的 dispatcher receipt：
+
+$(printf '  - %s\n' "${UNPROVEN_VUI[@]}")
+receipt ledger：${VERIFY_UI_RECEIPTS}
+
+verify:ui evidence 的唯一入口是 codex-dispatch-screenshot-verify.ts（agent-routing
+§ Dispatch 入口）。上述 item 的 annotation 是在沒有 dispatcher 痕跡的情況下寫下的。
+
+補救（擇一）：
+  1. 重跑 dispatcher 收 evidence，它會落 receipt：
+     node <clade-vendor>/scripts/codex-dispatch-screenshot-verify.ts \\
+       --change $CHANGE_NAME --consumer-path . \\
+       --dev-server-url <url> --items-json <path>
+  2. dispatcher 機械故障走 Claude fallback → 在該 item 的 annotation 留
+     UNCERTAIN(dispatcher-error) 痕跡
+  3. 不適用 dispatcher 的情境 → 加
+     <!-- verify-ui-dispatch: intentional, reason: ... --> 到 tasks.md 繞過")
+    fi
+  fi
+fi
+
 # --- Output ---
 if [ "$BLOCKED" = true ]; then
   for msg in "${MESSAGES[@]}"; do

@@ -143,29 +143,45 @@ context **讀取量**；重跑 `node scripts/context-cost-report.ts`，baseline 
 
 ### 收工訊息契約（MUST，每一次收工都適用）
 
-**登記完整 ≠ 交接完整。** 前者是檔案狀態，後者是「user 下一步要付出多少」——收工訊息只講到前者，
-就是把「開新 session ＋ 跟它解釋要做什麼」這筆成本靜默轉嫁給 user。本節管的是訊息**形狀**，
-不是收不收工（那由上表判）。
+**登記完整 ≠ 交接完整。** 前者是檔案狀態；後者是接手 session 已取得工作與責任。只報「已登記」或「接手 pane 正在 working」卻不說原 session 是否停止，責任邊界就是模糊的，同時把「開新 session ＋ 跟它解釋要做什麼」這筆成本靜默轉嫁給 user。本節管的是訊息**形狀**，不是收不收工（那由上表判）。
 
 **寫收工訊息之前先判：這次真的需要重開嗎？**
 
 | 可觀察 predicate | 動作 |
 | --- | --- |
 | 還在**同一個**任務裡（只是做久了、或跨了 phase 斷點） | **`/compact` 續同一個 session。NEVER 收工開新 session。** warm 時 compact 讀舊 prefix 走 cache，官方文檔逐字：`costs a fraction of what the context size suggests`；而且 user 零重述 |
-| 換 repo / 換不相關主題 / 這批工作真的結束了 | 才走下面的收工訊息契約；若有未完項，由主線依下一節完成 Herdr transport |
+| 換 repo / 換不相關主題 / 已登記的中大型工作確實需要乾淨 session | invoke `/handoff now <task pointer>`，由主線依下一節自行完成 Herdr live transfer，收工訊息走下面的 **A** |
+| 這批工作真的結束、沒有未完項 | 直接收工走下面的 **B**，**NEVER** 建立空的接手 session |
 | 剩餘工作可無人值守跑完 | 主線直接啟動該 repo 的 runner，**優先於**開新 session；回報 runner receipt，不把指令交給 user |
 
-**NEVER 把「context 大了」直接讀成「該收工開新 session」。** 那是本節 2026-08-07 前的預設，
-它讓 user 為每一次 context 增長付一次重述成本，而多數情況根本不必重開。
+第 2 列的「換不相關主題」**每一次**都跑這三條，**三條全中才算不相關**：(1) thin brief 只引 durable 檔就寫得完，不需引「只存在於本對話」的結論；(2) 不共享當前任務**未 commit** 的 working tree 狀態；(3) 已有、或當場先登一條屬於它自己的 durable 條目。**任一條不中＝仍是同一任務，走第 1 列 `/compact`。**
 
-收工訊息 **MUST** 由下列部件構成，照這個順序，不多不少：
+**NEVER 把「context 大了」直接讀成「該收工開新 session」。** 判定走上面三條，
+**context 大小本身不是其中任何一條**。
+
+#### A. 已完成 Herdr live transfer
+
+`/handoff now`取得可驗證的 workspace／tab／pane／status receipt，且接手 pane可獨立續跑，就是「交接完成」的可觀察 predicate。收工訊息依固定順序：
+
+| 部件 | 契約 |
+| --- | --- |
+| 首行 | 逐字包含：`目前這裡收工` |
+| 交接 receipt | workspace、tab、pane、label、status、工作摘要、durable brief路徑 |
+| Runtime cleanup | 已停止的不必要 background／agent／shell；仍保留者逐一列用途與接手 pane |
+| user 本人要做的事 | 只列接手 session無法代做者；沒有就省略 |
+
+receipt送出後，原 session **NEVER** 再開新工作、輪詢接手 pane或等待其完成。已由接手 session續跑時，不再輸出叫 user另開 session的 oneliner；那會把已完成的交接重新退回 user。
+
+#### B. 沒有 Herdr live transfer
 
 | 部件 | 契約 |
 | --- | --- |
 | 首行 | 收工判定 ＋ 觸發的門檻。一句 |
 | 落點 | 未完項登記在哪：`<檔路徑>` ＋ 條目。**NEVER** 只寫「已記全」——那是**你**知道的事實，不是 user 拿得到的東西 |
-| **續跑 receipt** | Herdr handoff 回 workspace / tab / pane / agent status；runner path 回 process / log receipt。這是 user 不必手動切 cwd、開 session、重貼 prompt 的可驗證憑據 |
+| **續跑 receipt** | runner path 回 process / log receipt；transport 失敗時回具體 blocker（per 下一節第 3 列）。**NEVER** 把它降級成叫 user 自己 `cd` / 開 session / 貼 prompt 的 oneliner |
 | user 本人要做的事 | 只列 user 非做不可的（回答問題、permission、credentials、GUI / 產品決策），逐條一句。沒有就整段不出現 |
+
+**逐字實錄反制**：「已將下一步派到乾淨 session 執行」＋ receipt，但沒寫「目前這裡收工」——那不是完整交接訊息，讀者無法判斷原 session 是否仍在工作。
 
 ### Herdr session transport（每一個符合的 handoff 都 MUST）
 
@@ -176,10 +192,12 @@ context **讀取量**；重跑 `node scripts/context-cost-report.ts`，baseline 
 session boundary 或跨 repo 決策已判定確實需要另一個互動 session，才建立 Herdr Tab。Herdr 只搬運 session，
 **不**新增外派理由、跨界授權、worktree 例外或 approval bypass。
 
-命中時 **MUST** invoke `herdr` skill，並在建立任何資源前 Read
-`~/offline/clade/vendor/snippets/herdr-session-handoff/README.md`。把 durable task path 或 thin brief 當 prompt，
-用 `~/offline/clade/vendor/scripts/herdr-session-handoff.ts` 建立／重用 workspace、建立 Tab、沿用目前
-`cc` / `ccw` / `ccx` launcher並送入 prompt；完成後以 helper 的 JSON 當續跑 receipt。
+命中時 **MUST** invoke `herdr` skill並先讀 `herdr-session-handoff/README.md`；helper接 task／brief並回 JSON。
+
+**每一次** transport **MUST** 帶任務描述性 `--label`：建 Tab／workspace 就命名該 Tab／workspace，split pane 就命名該 pane；建立什麼就命名什麼。**NEVER** 只給 repo 名或倚賴預設值——同一 repo 派出去的多個 session 會在 UI 與 patrol 輸出裡完全無法分辨。helper 缺 label 直接回 `usage_error`，不會建立任何東西。receipt 的 `pane_label_applied: false` 代表 pane 仍是預設標題，**MUST** 照實寫進收工訊息。
+
+Canonical clade publish **MUST** 走 `node <clade-central-repo>/vendor/scripts/herdr-clade-publish.ts`（無參數）。
+**NEVER** 用 caller-controlled generic `--cwd`／`--prompt` 或 raw `herdr agent prompt` 替代；只搬 intent，Step 1–9屬 `clade-publish` skill。
 
 | 結果 | 主線動作 |
 | --- | --- |
@@ -196,4 +214,4 @@ session boundary 或跨 repo 決策已判定確實需要另一個互動 session�
 permission classifier／harness 拒絕某載體時，**NEVER** 改用其他工具暗渡同一動作；目前 session 能在既有授權與 scope 內合法執行就直接執行，否則回具體 blocker。
 
 `\nx`（Charles 個人縮寫，判為收工時）同樣受本契約約束：「收工 ＋ 一句已登記在哪」只是下限；
-主線仍須自行完成 runner 或 Herdr dispatch，並給續跑 receipt。
+判需要乾淨 session 時同樣 invoke `/handoff now <task pointer>`，取得 receipt 後套用 **A**、不套用 B。

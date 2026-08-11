@@ -38,23 +38,27 @@ Local edits will be reverted by the next sync.
 
 **Herdr transport 不新增 routing 權限。** 有空 workspace / pane 不是外派條件；當前 session 能在既有授權與 scope 內直接完成目標 cwd 的工作，就直接完成。只有本節已判定要換互動 session、或 [[session-tasks]] 的 session boundary 已成立時，才依該規約 § Herdr session transport 搬運 durable task / thin brief。
 
+**Pane 是 dispatch 的投影，不是 dispatch 的理由。** Transport 預設分割當前 Tab，只改變已決定要派的工作長什麼樣。反方向同樣不承載資訊：**NEVER** 從「Tab 沒有分割」推論沒有工作在跑——in-process subagent 沒有 terminal。要看現況跑 `vendor/scripts/herdr-patrol.ts`。
+
 每一個符合的跨 cwd / 新 Claude Code session handoff 都保留原有 worktree、scope、approval、verification 與 clade / consumer 邊界。Transport 失敗也不改變 routing 結論，且 **NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt。
 
 ## Routing Table
 
-> **Codex 派工是 (model, effort) 二維**，不是只選 effort。三檔共用同一個 7 天配額池，選檔位看下列六維，**NEVER** 只看「這個工作重不重要」或「迴圈長不長」：
+> **Codex 派工是 (model, effort) 二維**，但 model 維只有兩個合法值：`sol` 與 `luna`——一般工作**一律 `--model sol`，分級靠 `--effort`**。**NEVER 派 `--model terra`**（2026-08-11 拍板；`codex-dispatch.ts` 仍認得它是**能力**不是政策，理由見 rationale）。
+>
+> 選 effort 檔位看下列六維，**NEVER** 只看「這個工作重不重要」或「迴圈長不長」：
 >
 > 規格清晰度／搜尋空間與分支度／語意跨度（跨檔・矛盾來源）／錯誤成本不對稱性／可驗證性／mutation blast radius
 >
 > | 檔位 | 何時用 |
 > | --- | --- |
-> | `--model terra` | **預設檔**。一般工具協調、read-heavy synthesis、有限探索、小型可驗證修改 |
-> | `--model sol` | 命中任一即用，**即使迴圈很短**：高模糊度／高漏報成本／跨域衝突裁決／廣泛 mutation／結果本身就是最終品質或安全 gate |
+> | `--model sol --effort low` | **預設檔**。一般工具協調、read-heavy synthesis、有限探索、小型可驗證修改 |
+> | `--model sol --effort medium`／`high`／`xhigh` | 命中任一即升 effort，**即使迴圈很短**：高模糊度／高漏報成本／跨域衝突裁決／廣泛 mutation／結果本身就是最終品質或安全 gate。升幾檔看命中幾維、以及漏報成本有多不對稱 |
 > | `--model luna` | 規格完全明確 **且** 來源已正規化 **且** 低風險 **且** 輸出可機械驗證 **且** 錯誤能被後續獨立 gate 接住——**五條全中**才用 |
 >
 > **NEVER** 拿「輸出會被下游機械消費」當降檔理由：下游若只驗 JSON schema 而不驗語意，降檔引入的錯誤會被自動放大。只有下游具備**獨立且夠強的語意 gate** 才可降檔。
 >
-> **NEVER 拿 aggregate 跑分推導 routing boundary**：通用 agentic benchmark 上 Sol–Terra 只差 1.4pp，但 class-conditional 差距是它的 10 倍以上（安全類 SEC-Bench Pro Sol 71.2 vs Terra 57.7）。要看的是**這一類工作**的差距，不是總分。
+> **NEVER 拿 aggregate 跑分推導 routing boundary**：要看的是**這一類工作**的差距，不是總分。**同一個陷阱適用於 effort 檔位之間**——「low 跟 high 在通用題上差不多」對安全類 / 高漏報成本類零證據力。實測數字組見 rationale § model 檔位的量測依據。
 >
 > ⚠️ **配額權重 UNKNOWN**：`NEVER` 把 5:2.5:1 當成已證實的配額比寫進任何計算——那是 API 價格與 purchased-credit rate card，**訂閱內含配額**的 per-model debit multiplier 官方未公布。**降檔究竟省多少配額目前無法量化**。
 >
@@ -62,21 +66,21 @@ Local edits will be reverted by the next sync.
 
 | 工作類別 | 由誰執行 | 為什麼 |
 | --- | --- | --- |
-| **Web search**（即時資料 / 外部資訊查詢） | **Codex `--model terra --effort medium`** | 搜尋 + 整合，非長迴圈。 |
+| **Web search**（即時資料 / 外部資訊查詢） | **Codex `--model sol --effort low`** | 搜尋 + 整合，非長迴圈。 |
 | **Code review（commit 0-A）** | **(1) `simplify` + (2) `codex exec` review high（GPT-5.6-sol，經 codex-review-safe.sh），(3) 0-A.1 出 Critical / Major 時條件升 xhigh** | 跨模型互補盲點。詳見 `.claude/skills/commit/SKILL.md` Step 0-A。 |
 | **Spectra `propose` / `apply` 各階段（draft / cross-check / phase 粒度 / UI view phase）** | 見 reference § Spectra Routing Table | 五列 spectra 專屬 routing 移到 path-scoped reference（碰 `openspec/changes/**` 時載入）。**不變的契約**：UI view phase 與 Design Review **永不派 codex**；propose 的 cross-check / final check **一律主線跑**。 |
 | **`screenshot-review` verify mode**（`[verify:ui]` channel / archive 前視覺 QA） | **主線 Claude 直派 Codex GPT-5.6-sol low**（Bash 走 reference § Codex 派工的標準流程；**禁止** `Agent` tool with `subagent_type: screenshot-review`） | sonnet wrapper 會繞過 Step 0 自做工作（[[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]）。wrapper **僅**在 codex CLI 不可用時作 fallback，**禁止**當預設入口。詳見 reference § screenshot-review Verify Mode Dispatch。 |
 | **Dev/test admin session cookie 取得**（verify channel evidence collection 階段） | **主線自己 scaffold `_dev-login` route + curl mint session**（**禁止**要 user 手動取 cookie；scaffold 前**MUST**先用 detection helper 確認真的 missing） | 詳見 [[manual-review.backend]] § Dev-login route missing → scaffold-first + [[pitfall-agent-asks-user-cookie-skipping-dev-login-scaffold]]。 |
-| **Mechanical fan-out**（收集 / 掃描 / 跑指令驗證型 subagent 工作：grep 掃描、收 evidence、驗證矩陣、fleet 多 repo 盤點） | **Codex `--model terra --effort medium` via 泛用 dispatcher** | Claude 委派（subagent）實測佔加權總量 33.7%（`node scripts/audit-session-context-budget.ts --days 30` 的「委派拆分」表，2026-08-06 跑；rolling window，判現況一律複跑，**NEVER** 引用本行數字當現值）。codex 同工作 ~1/10 成本且 fidelity 100%（PoC，數字組與 PoC 條件見 rationale § 工作類別 telemetry 快照）。走泛用 dispatcher（見 reference § 泛用 Dispatcher）：蒐集命令清單派工前列得全 → 主線跑完再派 `fanout-analyze`，列不全 → `fanout-collect`。例外留 Claude：需要 claude.ai-connected MCP（Notion 等）、判讀 / 治理型分析（如 /oops Mode D 判讀段）、user 明確要求。 |
-| **Read-heavy 長文件 / fleet 掃描**（上游 release notes 解析、跨 consumer reality matrix、pitfall 全量掃描、大 rule 改版前 baseline 重讀） | **Codex `--model terra --effort medium` via 泛用 dispatcher** | read-heavy + structured output 是 codex 強項（中文 brief fidelity 100% 已驗證）。摘要僅作輸入，規約措辭與拍板必回主線。 |
+| **Mechanical fan-out**（收集 / 掃描 / 跑指令驗證型 subagent 工作：grep 掃描、收 evidence、驗證矩陣、fleet 多 repo 盤點） | **Codex `--model sol --effort low` via 泛用 dispatcher** | Claude 委派（subagent）實測佔加權總量 33.7%（`node scripts/audit-session-context-budget.ts --days 30` 的「委派拆分」表，2026-08-06 跑；rolling window，判現況一律複跑，**NEVER** 引用本行數字當現值）。codex 同工作 ~1/10 成本且 fidelity 100%（PoC，數字組與 PoC 條件見 rationale § 工作類別 telemetry 快照）。走泛用 dispatcher（見 reference § 泛用 Dispatcher）：蒐集命令清單派工前列得全 → 主線跑完再派 `fanout-analyze`，列不全 → `fanout-collect`。例外留 Claude：需要 claude.ai-connected MCP（Notion 等）、判讀 / 治理型分析（如 /oops Mode D 判讀段）、user 明確要求。 |
+| **Read-heavy 長文件 / fleet 掃描**（上游 release notes 解析、跨 consumer reality matrix、pitfall 全量掃描、大 rule 改版前 baseline 重讀） | **Codex `--model sol --effort low` via 泛用 dispatcher** | read-heavy + structured output 是 codex 強項（中文 brief fidelity 100% 已驗證）。摘要僅作輸入，規約措辭與拍板必回主線。 |
 | **Debug evidence 段**（log 完整 capture / repro script 撰寫執行 / 既定 hypothesis 的驗證迴圈） | **Codex `--model sol --effort high` via 泛用 dispatcher** | debug 是最大消耗桶；evidence / repro / verify 是機械段，root cause 推斷與修法設計留主線。repro 必在 throwaway worktree（template 內建 guard）。 |
 | **commit 0-C fix-verify loop**（pnpm check / test 修到全綠） | **Codex `--model sol --effort high` via 泛用 dispatcher** | 機械修 lint / type / test 與 dep-upgrade 已驗證模式同構；主線同回合續跑 0-A / 0-B。詳見 commit SKILL Step 0-C。 |
-| **Security review**（`/security-review` skill / commit 前安全檢查） | **最終 gate：Codex `--model sol --effort medium`**。候選 finding 的 pre-triage 可先跑 `--model terra`，但**收斂判定 MUST 回 Sol** | **NEVER** 因為「零互動 / structured diff → structured findings」就把安全 gate 當 pattern matching 降檔——漏報成本不對稱，且 class-conditional 差距遠大於通用 benchmark：SEC-Bench Pro Sol 71.2 vs Terra 57.7、ExploitBench 73.5 vs 52.9（通用類 Sol–Terra 只差 1.4pp）。它佔 Claude session 數的大宗、事件數佔比卻低 — session 啟動成本是主要浪費，但**本列不以那組佔比為依據**（historical，見 rationale § 工作類別 telemetry 快照）。 |
-| **Exploration / research pre-scan**（「依賴什麼」「進度如何」「還有什麼要做」「N 張 change 狀態」等 read-heavy 探索） | **Codex `--model terra --effort medium` via 泛用 dispatcher**，主線消費 structured summary | 「依賴什麼」要探索未知路徑、跨檔追蹤、裁決哪些 evidence 相關——是有限探索，不是 extraction，所以是 Terra 不是 Luna。主線拿 summary 做判斷 / 規劃，不自己逐檔 Read。**本列不以事件數佔比為依據**（historical，見 rationale § 工作類別 telemetry 快照）。 |
-| **Handoff scan 段**（`/handoff` Mode B 的 scan：讀 HANDOFF.md + git log + openspec + tasks + git status 產出 outstanding 清單） | **Codex `--model terra --effort medium` via 泛用 dispatcher**，主線消費 scan report 做決策 | 四個來源（HANDOFF / git log / tasks / git status）可能互相矛盾，判斷某條 task 是否已 commit、部分完成或被工作樹取代是**狀態 reconciliation**，不是格式化——這是它不能降 Luna 的原因。主線只看 report、做 routing / 推薦。**本列不以 session 數 / 事件佔比為依據**（historical，見 rationale § 工作類別 telemetry 快照）。 |
-| **Task-planning pre-scan**（「我需要做什麼」「接下來做什麼」「處理 N 張 change」的規劃 session 前置 scan） | **Codex `--model terra --effort medium` via 泛用 dispatcher**，主線消費 structured report | scan openspec/changes/ + HANDOFF.md + git status + tasks/ 產出 per-change status matrix。矩陣格式固定**不代表**語意判定是機械式的——identity matching、partial completion、衝突證據裁決都在裡面，故 Terra 不 Luna。主線拿 matrix 做排序 / 決策。 |
+| **Security review**（`/security-review` skill / commit 前安全檢查） | **最終 gate：Codex `--model sol --effort medium`**。候選 finding 的 pre-triage 可先跑 `--effort low`，但**收斂判定 MUST 回 medium 以上** | **NEVER** 因為「零互動 / structured diff → structured findings」就把安全 gate 當 pattern matching 降檔——漏報成本不對稱，且 class-conditional 差距遠大於通用 benchmark（class-conditional 實測見 rationale § model 檔位的量測依據）。它佔 Claude session 數的大宗、事件數佔比卻低 — session 啟動成本是主要浪費，但**本列不以那組佔比為依據**（historical，見 rationale § 工作類別 telemetry 快照）。 |
+| **Exploration / research pre-scan**（「依賴什麼」「進度如何」「還有什麼要做」「N 張 change 狀態」等 read-heavy 探索） | **Codex `--model sol --effort low` via 泛用 dispatcher**，主線消費 structured summary | 「依賴什麼」要探索未知路徑、跨檔追蹤、裁決哪些 evidence 相關——是有限探索，不是 extraction，所以不降 Luna。主線拿 summary 做判斷 / 規劃，不自己逐檔 Read。**本列不以事件數佔比為依據**（historical，見 rationale § 工作類別 telemetry 快照）。 |
+| **Handoff scan 段**（`/handoff` Mode B 的 scan：讀 HANDOFF.md + git log + openspec + tasks + git status 產出 outstanding 清單） | **Codex `--model sol --effort low` via 泛用 dispatcher**，主線消費 scan report 做決策 | 四個來源（HANDOFF / git log / tasks / git status）可能互相矛盾，判斷某條 task 是否已 commit、部分完成或被工作樹取代是**狀態 reconciliation**，不是格式化——這是它不能降 Luna 的原因。主線只看 report、做 routing / 推薦。**本列不以 session 數 / 事件佔比為依據**（historical，見 rationale § 工作類別 telemetry 快照）。 |
+| **Task-planning pre-scan**（「我需要做什麼」「接下來做什麼」「處理 N 張 change」的規劃 session 前置 scan） | **Codex `--model sol --effort low` via 泛用 dispatcher**，主線消費 structured report | scan openspec/changes/ + HANDOFF.md + git status + tasks/ 產出 per-change status matrix。矩陣格式固定**不代表**語意判定是機械式的——identity matching、partial completion、衝突證據裁決都在裡面，故不降 Luna。主線拿 matrix 做排序 / 決策。 |
 | **Bug-fix evidence 段**（error log capture / stack trace 解析 / repro script 撰寫執行 / hypothesis 驗證迴圈） | **Codex `--model sol --effort high` via 泛用 dispatcher**（強化：非 Debug evidence 段，而是整個 bug-fix session 的 investigation 段） | 既有 Debug evidence rule 未落實（當時的 session 計數為 historical，見 rationale § 工作類別 telemetry 快照）。investigation / evidence / repro 是機械段；root cause 推斷 + 修法設計留主線。**MUST** 在 bug-fix session 開工時先判斷：可分離的 evidence 段派 Codex，不可分離的留主線但 MUST 在 session 結尾回報未派 Codex 的理由。 |
-| **clade publish/propagate pre-scan**（publish 前 dirty file 分組判斷：讀 `git status` + `git diff` 各 file 內容 + 辨識 logical group） | **Codex `--model terra --effort medium` via 泛用 dispatcher**，主線消費分組建議後 selective commit | commit grouping 要推斷修改意圖、耦合、依賴順序與可獨立回退性——讀取命令少不等於決策機械化。publish SOP 中 `vp check → git commit → publish.ts → push --tags → propagate.ts` 是固定序列，但 pre-scan「dirty file 分幾組、每組 commit message 怎麼寫」的 reading 段可以 Codex。 |
+| **clade publish/propagate pre-scan**（publish 前 dirty file 分組判斷：讀 `git status` + `git diff` 各 file 內容 + 辨識 logical group） | **Codex `--model sol --effort low` via 泛用 dispatcher**，主線消費分組建議後 selective commit | commit grouping 要推斷修改意圖、耦合、依賴順序與可獨立回退性——讀取命令少不等於決策機械化。publish SOP 中 `vp check → git commit → publish.ts → push --tags → propagate.ts` 是固定序列，但 pre-scan「dirty file 分幾組、每組 commit message 怎麼寫」的 reading 段可以 Codex。 |
 
 ## Claude 委派的 model 檔位（決定層）
 
@@ -91,6 +95,27 @@ Local edits will be reverted by the next sync.
 ⚠️ **省多少配額 UNKNOWN**：訂閱內含配額的 per-model debit multiplier 官方未公布（同 § Routing Table
 的 codex 側警告）。**NEVER** 把「降 Sonnet 省 X%」寫進任何精算或對外敘述——降檔的已知收益只有
 「同一份工作換更便宜的執行者」這個方向，倍率不可量化。
+
+### 進本節前 MUST 先過 Routing Table（per § Subagent 回報契約第 4 條）
+
+**每一個**「留 Claude」的判定都要講得出「Routing Table 沒把它 route 給 Codex」。非 UI 工作命中
+已 route 給 Codex 的類別 → 派 Codex，**NEVER** 走到本節挑 Claude 檔位。本節只處理判定後**仍留
+Claude** 的殘集：需 claude.ai-connected MCP、判讀／治理型分析、user 明確指定、降級鏈接手。
+
+### `subagent_type` 是 `general-purpose` 或 `Explore` 時，派工當下 MUST 先判 codex 可用性
+
+**適用範圍就是這兩個字面值**，且產出是事實表／掃描結果、非 UI、不需 MCP。**每一個**這種派工
+都 MUST 顯式帶檔位，**NEVER** 省略參數靜默繼承主線。`subagent_type` 是別的值時照下一節四條
+predicate 走，**NEVER** 把本小節外推成「委派都該指定 model」。
+
+| 可觀察 predicate | 檔位 |
+| --- | --- |
+| codex 可用（`codex-dispatch.ts` 未回 exit 4） | 原判 `sonnet` → `--model luna --effort high`；原判 `haiku` → `--model luna --effort low` |
+| codex 不可用（exit 4） | 走 § 配額耗盡時的 fallback 紀律 的降級鏈，`sonnet` ／ `haiku` **顯式帶** |
+
+**送 luna 前 MUST 逐條驗 § Routing Table 的五條 luna predicate，五條全中才是 luna**；任一條不中
+改 `--model sol`，**NEVER** `--model terra`。**「原本判得起 sonnet」NEVER 當成五條已滿足的證據**
+——sonnet 第 3 條只要求**語意** gate，luna 額外要求**輸出可機械驗證**。
 
 ### MUST 指定 `model: 'sonnet'` 的 predicate（窮舉）
 
@@ -215,19 +240,21 @@ codex-primary verdict 但 ≤2 個 file 的瑣碎 fix（typo / 單行 bug / conf
 配額耗盡（exit 1 / exit 4）**NEVER** 直接跳到 Opus 主線接走——那是拿最貴的檔位接最便宜的活。**MUST** 依序試降級鏈，命中即停：
 
 ```
-Sol → Terra → Luna → Claude Sonnet subagent → Claude Haiku subagent → Opus 主線
-      └─ 同一個 Codex 池，但權重較低 ─┘   └─ 換池，吃 Claude 額度 ─┘
+Sol → Luna → Claude Sonnet subagent → Claude Haiku subagent → Opus 主線
+      └ 同池較低權重 ┘   └─ 換池，吃 Claude 額度 ─┘
 ```
 
-1. **先降 Codex 檔位**：`--model terra` 重試，再不行 `--model luna`。三檔共用同一個 7 天池但按權重扣，低檔位在高檔位耗盡後**通常仍可派**
-   - ⚠️ **直接打 raw `codex exec` 時 MUST 用完整 model id**（`gpt-5.6-terra` / `gpt-5.6-luna` / `gpt-5.6-sol`）。bare alias `terra` / `luna` 在 codex CLI 上不存在，會回一個**指錯方向的** `400 invalid_request_error: The 'terra' model is not supported when using Codex with a ChatGPT account` —— 那句話讀起來像帳號權限限制，實際是 model 名稱沒解析到（同時會伴隨 `warning: Model metadata for 'terra' not found`）。**NEVER** 據這個 400 推論「本帳號只有 sol 可用」而跳過整條降級鏈（2026-07-31 曾據此誤寫本節，2026-08-05 用完整 id 複驗推翻：`gpt-5.6-terra` / `gpt-5.6-luna` 皆通過驗證、回的是配額錯誤而非 400）。詳見 [[pitfall-codex-bare-model-alias-400-reads-as-account-restriction]]
-   - **走 `codex-dispatch.ts` 不受此影響**：它在 `vendor/scripts/codex-dispatch.ts:70-72` 內建 alias → 完整 id 映射，所以本檔 § Routing Table 各列寫的 `--model terra` 是 dispatcher flag，正確無須改。
-   - ⚠️ **整池耗盡時降級鏈第 1 步不會有幫助**：2026-08-05 實測三檔撞同一個 usage limit、回同一個 reset 時間，此時 `terra` / `luna` 與 `sol` 一起不可用，直接跳第 2 步換池。「低檔位在高檔位耗盡後通常仍可派」只在**部分耗盡**時成立——它未被推翻，但也**尚未**被實測證實。
+**降 effort 不是降級鏈的一步**：配額按 **model** 記，Sol 撞 usage limit 時 `--effort low` 重試撞的是**同一個** limit。effort 分級是品質 / 成本維度，**NEVER** 拿它當配額耗盡的應對。
+
+1. **先降 Codex model 檔位**：`--model luna` 重試。兩檔共用同一個 7 天池但按權重扣，低檔位在高檔位耗盡後**通常仍可派**。政策上 terra 已出局（§ Routing Table），**配額耗盡時也不解禁**——真到 Sol 與 Luna 皆不可用就跳第 2 步換池，不繞回 terra
+   - ⚠️ **直接打 raw `codex exec` 時 MUST 用完整 model id**（`gpt-5.6-sol` / `gpt-5.6-luna`）。bare alias 在 codex CLI 上不存在，會回一個**指錯方向的** `400 invalid_request_error: The 'terra' model is not supported when using Codex with a ChatGPT account` —— 那句話讀起來像帳號權限限制，實際是 model 名稱沒解析到（同時會伴隨 `warning: Model metadata for 'terra' not found`）。**NEVER** 據這個 400 推論「本帳號只有 sol 可用」而跳過整條降級鏈（2026-07-31 曾據此誤寫本節，2026-08-05 用完整 id 複驗推翻：`gpt-5.6-terra` / `gpt-5.6-luna` 皆通過驗證、回的是配額錯誤而非 400）。詳見 [[pitfall-codex-bare-model-alias-400-reads-as-account-restriction]]
+   - **走 `codex-dispatch.ts` 不受此影響**：它在 `vendor/scripts/codex-dispatch.ts` 內建 alias → 完整 id 映射，所以本檔 § Routing Table 各列寫的 `--model sol` / `--model luna` 是 dispatcher flag，正確無須改。
+   - ⚠️ **整池耗盡時降級鏈第 1 步不會有幫助**：2026-08-05 實測三檔（含當時仍在政策內的 terra）撞同一個 usage limit、回同一個 reset 時間，此時 `luna` 與 `sol` 一起不可用，直接跳第 2 步換池。「低檔位在高檔位耗盡後通常仍可派」只在**部分耗盡**時成立——它未被推翻，但也**尚未**被實測證實。
 2. **再換池**：Codex 三檔全滿才動 Claude subagent（`model` 顯式帶 `sonnet` / `haiku`，per § Subagent 回報契約第 4 條）
 3. **最後才是主線**：上述全不可行時 Opus 主線接走，且 record reason 含 `quota-exhausted` + `date -d @<resets_at>` 換算出的確切 reset 時間
 4. Claude 接走時 session 結尾 **MUST** 回報「本 session 因配額耗盡由 Claude 執行 N 個 codex-primary change，reset 時間 `<YYYY-MM-DD HH:MM>`」
 
-**NEVER** 把「工作性質適合 Sol」當作跳過降級鏈的理由——配額耗盡時的選擇不是「Sol vs Terra」，是「Terra vs 完全做不了」。品質顧慮寫進 report 交 user 判讀，不是拒絕降級的依據。
+**NEVER** 把「工作性質適合 Sol」當作跳過降級鏈的理由——配額耗盡時的選擇不是「Sol vs Luna」，是「Luna vs 完全做不了」。品質顧慮寫進 report 交 user 判讀，不是拒絕降級的依據。
 
 ## Subagent 回報契約（所有 dispatch 通用）
 
@@ -237,7 +264,7 @@ Sol → Terra → Luna → Claude Sonnet subagent → Claude Haiku subagent → 
 2. **Report 是未驗證主張**：subagent 完成回報（含「no changes outside scope」「tests pass」「已自我 review」）一律當 claim——主線 MUST 用 `git status --short` + `git diff` 核實實際改動範圍 = brief 宣告 scope，scope 外 substantive change 一律 revert。subagent 自報的設計說詞（「per YAGNI 略過」「刻意簡化」）**不得**降級任何 review finding 的嚴重度——那是實作者替自己打分。
 3. **File handoffs**：brief／report／diff 超過 ~30 行的內容走**檔案路徑**傳遞，不貼進 dispatch prompt 或回報訊息——貼文會常駐主線 context、每 turn 重讀。dispatch prompt 五要素：定位一行、brief 檔路徑、跨 task interfaces、歧義裁決、report 檔路徑＋回報契約。2026-07 單一事件實錄（**非母體統計**，不可複跑）：dispatch prompt 42k chars，其中 99% 是貼上的歷史。
 4. **Model 與 effort 顯式指定**：**每一個** dispatch 都 MUST 把 model 與 effort 當成兩個獨立決策，不靠靜默繼承——省略 = 繼承主線（通常最貴檔 × 最深推理），機械掃描型 subagent 拿主線的 xhigh 跑就是效能過剩。選檔預設，依序判：
-   - **先過 Routing Table**：非 UI 工作命中本檔已 route 給 Codex 的類別（mechanical fan-out / read-heavy 掃描 / evidence 段等）→ 派 Codex 便宜檔起步（`terra`，`--effort` 原生可調），**NEVER** 用 Claude subagent 接；Claude subagent 只留給 Claude 例外（需 claude.ai-connected MCP、判讀／治理型分析、user 明確指定）
+   - **先過 Routing Table**：非 UI 工作命中本檔已 route 給 Codex 的類別（mechanical fan-out / read-heavy 掃描 / evidence 段等）→ 派 Codex `--model sol --effort low` 起步（`--effort` 原生可調，見 § Routing Table 檔位表），**NEVER** 用 Claude subagent 接；Claude subagent 只留給 Claude 例外（需 claude.ai-connected MCP、判讀／治理型分析、user 明確指定）
    - **UI view 實作**：派 Claude subagent 且 `model` **MUST** 是 `sonnet`（**NEVER** codex，per § 派不派）
    - **effort 選檔**：機械掃描／純轉錄 → `low`；一般執行 → `medium`；判讀型／高錯誤成本 → `high` 以上。**帶得了 effort 參數的入口**（codex `--effort` / `-c model_reasoning_effort`、Workflow `agent()` 的 `effort`、具名 agent type 的 frontmatter）**MUST** 顯式帶；Agent tool 本身沒有 effort 參數、只能繼承主線——這是機械型工作優先走 Codex 而非 Agent tool 的另一個理由
    - model 選檔原則「**turn count beats token price**」：多步驟工作用最低檔常花 2-3× turns 反而更貴；brief 內含完整 code 的純轉錄型工作才用最低檔；review 型依 diff 的大小／風險選檔。
@@ -316,7 +343,7 @@ Sol → Terra → Luna → Claude Sonnet subagent → Claude Haiku subagent → 
 | **NEVER** 派 codex 跑 UI view phase 時省略 prompt 內「禁止改 view 層檔案」硬指令 | 缺這條 codex 容易順手改到 .vue / .tsx |
 | **NEVER** 派 codex 跑 spectra-apply phase 而 prompt 內漏 Commit Authorization 段（一 phase 一 commit / `🧹 chore: wt <change>-phase-<N>` format / hook 必跑禁 `--no-verify` / commit 前自驗 view-layer + scope） | 缺這段 codex 會混 commit、撞 commitlint hook |
 | **NEVER** 派 Codex 寫 code（spectra-propose draft / spectra-apply phase）而 prompt 漏掉 Plan-first 硬指令 | 沒 plan 主線只能從 diff 反推；codex 寫完 plan 必須立刻續跑 |
-| **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 verify:ui evidence 來取代 Step 8a codex dispatcher | verify:ui evidence 的**唯一**入口是 `codex-dispatch-screenshot-verify.ts`；Claude fallback 僅限機械故障且 MUST 在對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡。2026-06-11 audit 實證：dispatcher 修復後 147 條 (verified-ui:) annotation 0 次走 codex、92 個 session 全走此 bypass 形狀 |
+| **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 verify:ui evidence 來取代 Step 8a codex dispatcher | verify:ui evidence 的**唯一**入口是 `codex-dispatch-screenshot-verify.ts`；Claude fallback 僅限機械故障且 MUST 在對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡。2026-06-11 audit 實證：dispatcher 修復後 147 條 (verified-ui:) annotation 0 次走 codex、92 個 session 全走此 bypass 形狀。**本列自 2026-08-11 起有機械 backstop**：dispatcher 落 repo-local receipt（`.spectra/verify-ui-dispatch-ledger.jsonl`），archive-gate Check 9 逐 item 比對，缺 receipt 且缺 `UNCERTAIN(dispatcher-error)` 痕跡 → block。**該 gate 擋的是 drift，NEVER 是對抗性偽造**——receipt 是主線可 append 的明文檔，過 gate **NEVER** 讀成「evidence 來源已被證實」 |
 | **NEVER** 讓 Claude subagent 當 codex 的**薄中介**——派出 codex 卻不自跑 Codex Watch Protocol，把死活判定留給上一層 | 判準是**誰持有 codex 的生命週期**，不是「有沒有經過 subagent」。薄中介是 2026-05-18 兩個已驗證失敗模式的來源：(1) false positive panic — 上一層拿 process table 誤判死亡；(2) false negative silent miss — codex 完成但中介未 surface 通知，上一層乾等 5-15 分鐘。完整持有生命週期的形狀見下一列 |
 | codex **MUST** 由**該層編排者**在其自身 sandbox 內直接 Bash `run_in_background` 派出（含泛用 dispatcher）：主線是編排者時由主線派；`/wt` Form 3 / Form 4 的 worktree subagent 執行它被指派的 next-skill 時（`/spectra-apply` 的 Step 6b Class C、Step 8a verify channel、pre-handoff checks；`/spectra-debug` 的診斷 / repro dispatch；以及 next-skill `references/` 各層的每一處 codex 派工）由**該 subagent** 派 | 例外的**准入條件**是該編排者自跑完整 Codex Watch Protocol（notification-only + 安全網 fallback，per [[agent-routing.codex-watch-protocol]] § 監看排程），不是「被允許呼叫 codex」——做不到就退回上一列的薄中介禁令。編排者**以外**的任何一層對這些 codex **零探針**（per 同檔 § 跨 sandbox 可見度約束 v2：process table 兩個方向都是零訊號）。**本列的範圍只及 `/wt` Form 3 / Form 4 開出的 worktree subagent**，**NEVER** 外推成「任意 Agent tool subagent 都可以派 codex」 |
 | **NEVER** 在 exploration / research 型 session 自己逐檔 Read + scan 多個 source（openspec / HANDOFF / git log / docs）超過 3 個 source file | 先派 Codex medium pre-scan 拿 structured summary，再由主線消費 summary 做判斷。例外：user 明確問特定檔案 / 需要 claude.ai-connected MCP |

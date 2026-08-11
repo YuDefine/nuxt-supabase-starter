@@ -1,6 +1,6 @@
 ---
 name: codex-fallback
-description: Codex 配額耗盡時的接手層 —— 跑原本要派給 Codex 的 scan / extract / read-heavy 工作（handoff scan、pre-scan、fan-out 收集、pattern matching）。**僅在 codex-dispatch 回 exit 4 且 Sol/Terra/Luna 三檔全滿時使用**；配額還有時一律走 codex-dispatch，不要用這個。
+description: Codex 配額耗盡時的接手層 —— 跑原本要派給 Codex 的 scan / extract / read-heavy 工作（handoff scan、pre-scan、fan-out 收集、pattern matching）。**僅在 codex-dispatch 回 exit 4 且 Sol / Luna 兩檔全滿時使用**；配額還有時一律走 codex-dispatch，不要用這個。
 tools: Bash, Read, Grep, Glob
 model: haiku
 ---
@@ -16,13 +16,13 @@ Local edits will be reverted by the next sync.
 
 ## 你被叫到的前提
 
-主線已經確認：`codex-dispatch.ts` 對 `--model sol`、`--model terra`、`--model luna` **三檔都回 exit 4**。你是降級鏈的下一階（見 `rules/core/agent-routing.md § 配額耗盡時的 fallback 紀律`）。
+主線已經確認：`codex-dispatch.ts` 對 `--model sol` 與 `--model luna` **兩檔都回 exit 4**（`terra` 已於 2026-08-11 退出政策，見 `rules/core/agent-routing.md § Routing Table`，配額耗盡時也不解禁）。你是降級鏈的下一階（見 `rules/core/agent-routing.md § 配額耗盡時的 fallback 紀律`）。
 
 如果 brief 沒有說明配額狀態，**先問**，不要假設自己該接手——配額還有時用 Codex 比用你便宜。
 
 ## 檔位
 
-預設 `haiku`，對應 Luna 級工作（單輪 extract / classify / format）。主線判斷工作屬 Terra 級（read-heavy 掃描、pattern matching、需跨檔案推理）時，會在 Agent tool 呼叫時傳 `model: sonnet` 覆蓋——那是主線的決定，不是你的。
+預設 `haiku`，對應 Luna 級工作（單輪 extract / classify / format）。主線判斷工作需要 read-heavy 掃描、pattern matching 或跨檔案推理時，會在 Agent tool 呼叫時傳 `model: sonnet` 覆蓋——那是主線的決定，不是你的。
 
 ## 執行紀律
 

@@ -371,7 +371,7 @@ Codex 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleW
 | **Spectra `propose` cross-check / final check** | **主線 Claude Fable 5 xhigh** | 主線 = quality gate（A 的 cross-check、B 的 final check 都由主線跑），不只是 dispatcher。 |
 | **Spectra `apply`（非 Design Review、非 UI view phase，phase 粒度）** | **Codex GPT-5.6-sol high** | medium 漏 schema drift 風險高；phase 粒度避免 round-trip。 |
 | **Spectra `apply` UI view phase（component / page / view / layout / styling）+ Section 7（Design Review）** | **UI view phase：Claude `sonnet` subagent，永不派 codex（主線收回後跑 Step 6c / 6d 與 Design Review gate）；Design Review：主線自己做，永不外派** | 視覺 / 互動 / a11y 與 Design skill 緊耦合，Codex tooling 弱；Design 品質判定本身外包不了。非 view 的 frontend 不在此範圍，仍走 codex（範圍同 § Spectra Apply Phase Dispatch C 類）。 |
-| **spectra-apply Step 8a self-collect (a)(b)**（dev-login allow-list 小 mod + service_role DB query 證 data shape） | **Codex `--model terra --effort medium` via 泛用 dispatcher** | PoC 已實證 codex 能跑完整 evidence chain；annotation 寫回 tasks.md 維持主線。詳見 spectra-apply SKILL Step 8a。 |
+| **spectra-apply Step 8a self-collect (a)(b)**（dev-login allow-list 小 mod + service_role DB query 證 data shape） | **Codex `--model sol --effort low` via 泛用 dispatcher** | PoC 已實證 codex 能跑完整 evidence chain；annotation 寫回 tasks.md 維持主線。詳見 spectra-apply SKILL Step 8a。 |
 
 ## Orchestration Residency — 機械 Enforcement（residency-classify + archive-gate Check 8）
 
@@ -502,6 +502,14 @@ Agent 端的對應規範（hard budget、checkpoint、fail-fast、progress.json 
 - **NEVER** 把 progress.json read 想成 poll agent — 它是 read static file，agent 在另一條 loop 寫盤；不違反 polling 規則
 - **NEVER** brief 漏掉 Hard budget / Checkpoint cadence / Fail-fast / 單 call ≤ 1 語義動作 — 缺任一條都會把 agent 推向歷史失控模式
 - **NEVER** 把多個 verify item round-trip 包進同一個 Bash call（多個 `agent-browser` 命令串 `&&`）後派出去 — agent 端 SKILL 已明訂禁止，但 brief 內提供的範例 / 模板也不能違反
+
+### Dispatcher provenance 機械 backstop（2026-08-11 起）
+
+`codex-dispatch-screenshot-verify.ts` 每次成功收尾都往 `<consumer>/.spectra/verify-ui-dispatch-ledger.jsonl` 落一筆 receipt（`change` → `itemIds` → `ts` → `exit` → `ok`，**欄位順序固定**，Check 9 靠有序雙 literal grep 比對）。archive-gate Check 9 逐 `[verify:ui]` item 驗，四條 pass 條件擇一即可：對得上 receipt ／ annotation 帶 `UNCERTAIN(dispatcher-error)` ／ tasks.md 有 `<!-- verify-ui-dispatch: intentional, reason: … -->` ／ annotation 的 ISO 日期早於 gate 落地日（存量豁免）。都不中 → block（exit 2）。
+
+- receipt 寫入是 **fail-closed**：寫不進去就吐 `UNCERTAIN(dispatcher-error)` 並 exit 1。**NEVER** 照 `appendDispatchLedger` 那條 telemetry ledger 的 fail-open 寫法——那會產生沒有人知道成因的 false negative
+- **NEVER** 把 Check 9 的 onset 改成「receipt 檔存在才驗」：這個 gate 要抓的失敗模式就是「dispatcher 從未被呼叫」，那個世界裡 receipt 檔永遠不存在，fail-open 等於讓最壞情境永久靜默通過。存量豁免走**日期切點**，不走檔案存在性
+- **邊界**：receipt 是主線可 append 的明文 jsonl。Check 9 擋的是 **drift**（忘了走 dispatcher），**NEVER** 是對抗性偽造。**NEVER** 拿 gate 通過宣稱 evidence 來源已被證實
 
 ## Codex `$spectra-apply` Runtime Gate
 
