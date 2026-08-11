@@ -1,20 +1,23 @@
 #!/usr/bin/env node
 /**
- * dev-session.ts — durable dev-server 單一入口（zellij detached + lease + 反累積）.
+ * dev-session.ts — durable dev-server 單一入口（herdr tab + lease + 反累積）.
  *
  * 為什麼存在（root cause）：
  *   agent（Claude Code / Codex）的 harness 會在 tool-call 生命週期結束時回收
  *   Bash 衍生的整個 process tree —— **連 `spawn(detached:true)+unref()` / setsid /
  *   nohup 都逃不掉**（實測 2026-06-01 <consumer-a>：run_in_background 與 setsid 起的 nuxt
- *   dev 都被 reap，唯獨掛在 tmux/zellij server daemon 下的存活）。dev-singleton.ts
+ *   dev 都被 reap，唯獨掛在 multiplexer server daemon 下的存活）。dev-singleton.ts
  *   的 `spawn(detached:true)` 同樣會被回收。
  *
  *   唯一可靠的持久化 = 把 dev process 交給一個**獨立於 agent session 的常駐
- *   multiplexer daemon**（本倉標準：zellij）。dev process 變成 zellij server 的
+ *   multiplexer daemon**（本倉唯一標準：herdr）。dev process 變成 herdr server 的
  *   子孫、不在 agent 的 spawn tree 裡 → 跨 tool-call / 跨 session 存活。
  *
+ *   **NEVER** 改回 tmux / zellij：本 fleet 的多工器唯一標準是 herdr
+ *   （見 rules/core/proactive-skills.dev-server-spawn.md § 多工器唯一標準）。
+ *
  * 三層職責（本 script 是單一入口，收斂三者）：
- *   1. durability   → zellij detached session（`attach --create-background` + `run --cwd`）
+ *   1. durability   → herdr 獨立 Tab（`tab create --label --cwd --no-focus` + `pane run`）
  *   2. ownership    → verification-lease（相容 dev-singleton.ts 的 /tmp/<id>-verification-lease.json schema v1）
  *   3. 反累積       → 一 consumer(-app) 一個 durable session（起前先查、有就 reuse）；
  *                     多 worktree 切換走 dev-router 不要 N 個 dev+tunnel；sweep 清死 session
@@ -37,11 +40,11 @@
  *   node scripts/dev-session.ts [opts] -- <cmd...>   # 起/reuse durable dev session（= start）
  *   node scripts/dev-session.ts wait [opts] -- <cmd...>  # 排隊等 slot，取得後直接接手
  *   node scripts/dev-session.ts heartbeat [opts]     # 續租（heartbeatAt=now、expiresAt 往後推一個 TTL）
- *   node scripts/dev-session.ts release [opts]       # 主動釋放 lease（不動 zellij session）
+ *   node scripts/dev-session.ts release [opts]       # 主動釋放 lease（不動 herdr tab）
  *   node scripts/dev-session.ts status [opts]        # 查 session + port + lease + 佇列
- *   node scripts/dev-session.ts stop [opts]          # kill+delete session + 釋放 lease
+ *   node scripts/dev-session.ts stop [opts]          # 關掉 tab + 釋放 lease
  *   node scripts/dev-session.ts list                 # 列所有 dev-* session + health
- *   node scripts/dev-session.ts sweep [--dry-run]    # 清掉 EXITED / 死掉的 dev-* session（反累積）
+ *   node scripts/dev-session.ts sweep [--dry-run]    # 清掉 dev 已退出的 dev-* tab（反累積）
  *
  * 常用 opts：
  *   --consumer-meta <path>   讀 consumer_id / dev.ports / auth.portPinned / dev.leaseMode
@@ -58,11 +61,12 @@
  *   --takeover               搶佔別人的 lease（strict 模式衝突時；會 log 前 holder）
  *   --no-lease               跳過 lease（純 durability + 反累積）
  *
- * 退出碼：0 成功（起 / reuse / status / stop / sweep）；1 lease 衝突 refuse / 啟動逾時 / 用法錯
+ * 退出碼：0 成功（起 / reuse / status / stop / sweep）；1 lease 衝突 refuse / 啟動逾時 / 用法錯 /
+ *         herdr server 不可用
  *
  * 與 dev-singleton / dev-router 的關係：
  *   - dev-singleton.ts 是舊的「lease + spawn(detached)」wrapper —— spawn 層會被 reap，
- *     dev-session 取而代之（durability 靠 zellij，lease schema 相容）。
+ *     dev-session 取而代之（durability 靠 herdr，lease schema 相容）。
  *   - dev-router.ts 管「一個公開 port 後面多 worktree backend 切換」；dev-session 起的
  *     是「一 consumer 一個 durable backend」。多 worktree 驗收走 dev-router，不要對每個
  *     worktree 各起一個 dev-session（那就是反累積要防的）。
@@ -117,8 +121,14 @@ function sh(cmd, args, { allowFail = true } = {}) {
   }
 }
 
-function zellijAvailable() {
-  return sh('zellij', ['--version']) !== null
+/**
+ * herdr CLI 走 unix socket 連常駐 server，**不要求 caller 自己在 Herdr 內**
+ * （實測 2026-08-12：`env -u HERDR_ENV herdr tab list` exit 0）。所以這裡驗的是
+ * 「server 在跑且 CLI 通得到」，不是 `HERDR_ENV=1`——後者會讓所有非 Herdr 終端
+ * 起的 agent 失去 durable dev server 的能力，而它們其實用得了。
+ */
+function herdrAvailable() {
+  return herdrJson(['tab', 'list']) !== null
 }
 
 function sleep(ms) {
@@ -447,41 +457,112 @@ function portPid(port) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// zellij session primitives
+// herdr tab primitives
+//
+// 一個 durable dev session = 一個 herdr Tab，session 名記在 **pane 的 label**。
+// tab_id / pane_id 由 herdr 指派、跨 process 呼叫（stop / sweep / status）拿不到，
+// 一律用 label 反查現況。
+//
+// **identity 用 pane.label，不用 tab label**（2026-08-12 實測）：`tab create --label`
+// 給的名字會被 pane 的第一次 terminal title 更新蓋掉——shell 依 cwd 設 title，於是
+// `dev-probe` 在 dev 起來前就變成了 `tmp`，findSession 從此找不到自己剛建的 session。
+// `pane rename` / `tab rename` 寫的是獨立於 title 的 label 欄，明確設定後不再被覆寫，
+// 所以 createBackgroundTab **MUST** 在 create 之後補一次 rename。
 // ─────────────────────────────────────────────────────────────────────────
 
-// 回傳 [{ name, exited }]
-function listZellijSessions() {
-  const raw = sh('zellij', ['list-sessions', '--no-formatting'])
-  if (!raw) return []
-  return raw
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((l) => {
-      const name = l.split(/\s+/)[0]
-      const exited = /EXITED/i.test(l)
-      return { name, exited }
-    })
+/** 跑一個回 JSON 的 herdr 指令；非 0 或非 JSON 一律 null（caller 自行 fail-open / 報錯）。 */
+function herdrJson(args) {
+  const raw = sh('herdr', args)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
 }
 
+/**
+ * `herdr pane run` 的介面是 **command 字串**（`herdr pane run <PANE_ID> <COMMAND>...`），
+ * 不是 argv 陣列——直接把 argv 用空白接起來會讓含空白 / 引號的參數在 pane 的 shell 內
+ * 被重新斷詞。逐個 single-quote 才能保證 pane 內看到的 argv 與 caller 給的一致。
+ */
+function shellQuote(argv) {
+  return argv.map((a) => `'${String(a).replaceAll("'", `'\\''`)}'`).join(' ')
+}
+
+// 回傳 [{ name, tabId, paneId, workspaceId }]（name = pane label）
+function listHerdrTabs() {
+  const panes = herdrJson(['pane', 'list'])?.result?.panes
+  if (!Array.isArray(panes)) return []
+  return panes
+    .filter((p) => typeof p?.label === 'string' && p.label)
+    .map((p) => ({
+      name: p.label,
+      tabId: p.tab_id,
+      paneId: p.pane_id,
+      workspaceId: p.workspace_id,
+    }))
+}
+
+function listDevTabs() {
+  return listHerdrTabs().filter((t) => t.name.startsWith('dev-'))
+}
+
+/**
+ * herdr 沒有 zellij 的 EXITED session 概念：Tab 在就是在。「裡面的 dev 是否還活著」
+ * 由 caller 用 port + lease 的 devServer.pid 判定（見 cmdLaunch），或用
+ * devProcessAlive() 直接問 herdr 前景程序。
+ */
 function findSession(name) {
-  return listZellijSessions().find((s) => s.name === name) || null
+  return listHerdrTabs().find((t) => t.name === name) || null
 }
 
-function createBackgroundSession(name) {
-  // idempotent：已存在會印 "Session already exists" exit 0
-  sh('zellij', ['attach', '--create-background', name])
+/**
+ * 前景還有沒有 dev 在跑。前景 process group == shell 本身 = 命令已結束、只剩 prompt，
+ * 那個 Tab 就是殘骸（等同舊的 EXITED）。查不到資訊時回 true——**NEVER** 讓一個
+ * 判不出來的 Tab 被 sweep 當成死的殺掉。
+ */
+function devProcessAlive(paneId) {
+  if (!paneId) return true
+  const info = herdrJson(['pane', 'process-info', '--pane', paneId])?.result?.process_info
+  if (!info) return true
+  const fg = info.foreground_process_group_id
+  const shell = info.shell_pid
+  if (typeof fg !== 'number' || typeof shell !== 'number') return true
+  return fg !== shell
 }
 
-function runInSession(name, cwd, cmdArgv) {
-  // zellij --session <name> run --cwd <dir> -- <cmd...>
-  return sh('zellij', ['--session', name, 'run', '--cwd', cwd, '--', ...cmdArgv])
+/**
+ * 起一個 background Tab（不搶焦點），回 { tabId, paneId }。
+ * 已存在同 label 的 Tab 時直接回它的 id，維持 zellij `attach --create-background`
+ * 的 idempotent 語意。
+ */
+function createBackgroundTab(name, cwd) {
+  const existing = findSession(name)
+  if (existing) return { tabId: existing.tabId, paneId: existing.paneId }
+
+  const res = herdrJson(['tab', 'create', '--cwd', cwd, '--label', name, '--no-focus'])?.result
+  const tabId = res?.tab?.tab_id
+  const paneId = res?.root_pane?.pane_id
+  if (!tabId || !paneId) return null
+
+  // create 的 --label 撐不過第一次 title 更新（見本區塊開頭）。rename 才是 identity 的落點：
+  // pane 的給 findSession 用，tab 的給人在 UI 上認。
+  sh('herdr', ['pane', 'rename', paneId, name])
+  sh('herdr', ['tab', 'rename', tabId, name])
+  return { tabId, paneId }
 }
 
+/** Tab 建立時已帶 --cwd，這裡不再 cd。 */
+function runInTab(paneId, cmdArgv) {
+  return sh('herdr', ['pane', 'run', paneId, shellQuote(cmdArgv)], { allowFail: false })
+}
+
+/** 關掉 Tab 連同裡面的 process（實測：Tab 一關，dev 的 port 立即 dead）。 */
 function killSession(name) {
-  sh('zellij', ['kill-session', name])
-  sh('zellij', ['delete-session', name])
+  const t = findSession(name)
+  if (!t) return
+  sh('herdr', ['tab', 'close', t.tabId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -552,6 +633,7 @@ function pidAlive(pid) {
 
 function writeLease(o, consumerId, sessionName, port, id) {
   try {
+    const tab = findSession(sessionName)
     const now = Date.now()
     const ttlMs = claimTtlMs(o)
     const lease = {
@@ -577,7 +659,14 @@ function writeLease(o, consumerId, sessionName, port, id) {
         port: port || null,
         url: port ? `http://127.0.0.1:${port}` : null,
       },
-      devSession: { multiplexer: 'zellij', name: sessionName },
+      // tabId / paneId 純供除錯與 log 追查。**NEVER** 拿它們當 identity 反查現況：
+      // herdr 重建 Tab 後 id 會換，label（= name）才是穩定的 session 名。
+      devSession: {
+        multiplexer: 'herdr',
+        name: sessionName,
+        tabId: tab?.tabId ?? null,
+        paneId: tab?.paneId ?? null,
+      },
     }
     writeFileSync(leasePath(id), JSON.stringify(lease, null, 2) + '\n')
   } catch {
@@ -808,8 +897,10 @@ async function cmdLaunch(o) {
     err('用法：dev-session.ts [opts] -- <cmd...>（缺少 `-- <cmd>`）')
     process.exit(1)
   }
-  if (!zellijAvailable()) {
-    err('zellij 未安裝 / 不在 PATH。dev-session 以 zellij 為持久層，請先安裝 zellij。')
+  if (!herdrAvailable()) {
+    err('herdr server 連不上（未安裝 / 不在 PATH / server 沒在跑）。')
+    err('  dev-session 以 herdr 為持久層：先確認 `herdr status`，再重跑。')
+    err('  **NEVER** 退回 `run_in_background` / setsid / nohup —— 那些一律會被 harness reap。')
     process.exit(1)
   }
 
@@ -830,8 +921,8 @@ async function cmdLaunch(o) {
 
   // 1) 反累積：起前先查 existing session
   const existing = findSession(sessionName)
-  if (existing && !existing.exited) {
-    // 「有人在聽 port」不等於「聽的是我們這個 session 的 dev」。zellij session 還活著、
+  if (existing) {
+    // 「有人在聽 port」不等於「聽的是我們這個 session 的 dev」。Tab 還在、
     // 但裡面的 dev 已死、port 隨即被別的程序接手時，只驗 portListening 會走進 reuse 分支
     // 宣告成功（lease 也還在且 cwd 相符），caller 於是在**外來程序**上收 evidence，
     // 而外觀與正常成功完全相同。lease 的 devServer.pid 記的就是當初的 port listener pid
@@ -878,7 +969,7 @@ async function cmdLaunch(o) {
           err(`  ⚠ 無 lease 紀錄，無法確認此 session 服務哪個 working tree。`)
           err(`    收 evidence 前請自行驗：ls -l /proc/<dev-pid>/cwd`)
         }
-        out(`  看畫面：zellij attach ${sessionName}（離開 Ctrl-q 或 detach Ctrl-o d）`)
+        out(`  看畫面：herdr tab focus ${existing.tabId}`)
         out(`  停止：  node scripts/dev-session.ts stop --session ${sessionName}`)
         return
       }
@@ -889,8 +980,6 @@ async function cmdLaunch(o) {
       err(`session ${sessionName} 存在但 port ${port} 沒在聽 → 視為內部 dev 已死，重建`)
     }
     killSession(sessionName)
-  } else if (existing && existing.exited) {
-    killSession(sessionName) // 清 EXITED 殘骸
   }
 
   // 2) lease（strict 衝突 refuse）— 與 reuse 路徑共用同一個 gate，避免兩處邏輯漂移
@@ -911,24 +1000,29 @@ async function cmdLaunch(o) {
   if (port && portListening(port)) {
     const squatter = portPid(port)
     err(`[dev-session] port ${port} 已被非本 session 的程序占用（PID ${squatter}）`)
-    err(`  同名 zellij session 不存在或已 EXITED，因此這不是可 reuse 的 durable session。`)
+    err(`  同名 herdr Tab（${sessionName}）不存在，因此這不是可 reuse 的 durable session。`)
     err(`  先確認該程序是什麼，再擇一處理：`)
     err(`    - 若是舊的 dev server：node scripts/dev-session.ts stop --session ${sessionName}`)
     err(`    - 若是別的服務：換 port（--port <n>）或自行停掉該程序`)
     process.exit(1)
   }
 
-  // 3) 起 detached zellij session + 把 dev 命令丟進去
-  out(`▶ 起 durable dev session（zellij）：${sessionName}`)
+  // 3) 起 background Tab（不搶焦點）+ 把 dev 命令丟進它的 pane
+  out(`▶ 起 durable dev session（herdr Tab）：${sessionName}`)
   out(`  cmd: ${o.cmd.join(' ')}`)
   out(`  cwd: ${o.cwd}`)
-  createBackgroundSession(sessionName)
-  runInSession(sessionName, o.cwd, o.cmd)
+  const tab = createBackgroundTab(sessionName, o.cwd)
+  if (!tab) {
+    err(`[dev-session] herdr Tab 建立失敗（${sessionName}）—— 沒有拿到 tab_id / pane_id`)
+    err(`  先確認 \`herdr status\`，再重跑。**NEVER** 退回 run_in_background。`)
+    process.exit(1)
+  }
+  runInTab(tab.paneId, o.cmd)
 
   // 4) 等 port ready（若 port 已知）
   if (!port) {
-    out(`✓ 已丟進 zellij session ${sessionName}（port 未知，無法輪詢）`)
-    out(`  看畫面：zellij attach ${sessionName}`)
+    out(`✓ 已丟進 herdr Tab ${sessionName}（port 未知，無法輪詢）`)
+    out(`  看畫面：herdr tab focus ${tab.tabId}`)
     return
   }
   const start = Date.now()
@@ -946,15 +1040,15 @@ async function cmdLaunch(o) {
         }
       }
       out(
-        `✓ durable dev ready：${urlHint}（session ${sessionName}，掛在 zellij server 不會被 harness reap）`,
+        `✓ durable dev ready：${urlHint}（session ${sessionName}，掛在 herdr server 不會被 harness reap）`,
       )
-      out(`  看畫面：zellij attach ${sessionName}（detach Ctrl-o d）`)
+      out(`  看畫面：herdr tab focus ${tab.tabId}`)
       out(`  停止：  node scripts/dev-session.ts stop --session ${sessionName}`)
       return
     }
   }
   err(`⚠ 啟動逾時（${READY_TIMEOUT_MS}ms）port ${port} 仍未聽。session ${sessionName} 保留供檢查：`)
-  err(`  zellij attach ${sessionName}（看 dev 卡在哪）`)
+  err(`  herdr tab focus ${tab.tabId}（看 dev 卡在哪）`)
   process.exit(1)
 }
 
@@ -966,7 +1060,9 @@ function cmdStatus(o) {
   const lid = leaseId(consumerId, port, resolvePrimaryPort(meta))
   const s = findSession(sessionName)
   out(`dev-session status — ${sessionName}`)
-  out(`  zellij session: ${s ? (s.exited ? 'EXITED（死）' : '存在（活）') : '不存在'}`)
+  out(
+    `  herdr tab: ${s ? `${s.tabId}（${devProcessAlive(s.paneId) ? '有前景程序' : '只剩 shell — dev 已退出'}）` : '不存在'}`,
+  )
   if (port) out(`  port ${port}: ${portListening(port) ? `LISTENING（${urlOf(port)}）` : '沒在聽'}`)
   const lease = readLease(lid)
   if (lease) {
@@ -1034,7 +1130,7 @@ function cmdHeartbeat(o) {
   out(`✓ 續租 ${fmtDuration(ttlMs)}（到期 ${lease.expiresAt}）`)
 }
 
-/** 主動釋放 lease（不動 zellij session）——task 做完就該放手，別讓下一個 agent 等到 TTL 到期。 */
+/** 主動釋放 lease（不動 herdr Tab）——task 做完就該放手，別讓下一個 agent 等到 TTL 到期。 */
 function cmdRelease(o) {
   const meta = readConsumerMeta(o.consumerMeta)
   const consumerId = resolveConsumerId(o, meta)
@@ -1116,7 +1212,7 @@ function cmdStop(o) {
     out(`session ${sessionName} 不存在，無需停止`)
   } else {
     killSession(sessionName)
-    out(`✓ 已 kill + delete session ${sessionName}`)
+    out(`✓ 已關閉 herdr Tab ${s.tabId}（session ${sessionName}）`)
   }
   if (!o.noLease) releaseLease(o, lid)
 }
@@ -1126,31 +1222,33 @@ function urlOf(port) {
 }
 
 function cmdList() {
-  const sessions = listZellijSessions().filter((s) => s.name.startsWith('dev-'))
+  const sessions = listDevTabs()
   if (!sessions.length) {
-    out('沒有 dev-* zellij session')
+    out('沒有 dev-* herdr Tab')
     return
   }
   out('dev-* durable sessions：')
   for (const s of sessions) {
-    out(`  ${s.name}${s.exited ? '  [EXITED]' : ''}`)
+    const alive = devProcessAlive(s.paneId)
+    out(`  ${s.name}  ${s.tabId}${alive ? '' : '  [dev 已退出]'}`)
   }
 }
 
 function cmdSweep(o) {
-  const sessions = listZellijSessions().filter((s) => s.name.startsWith('dev-'))
-  const dead = sessions.filter((s) => s.exited)
+  // herdr 沒有 EXITED session：殘骸 = Tab 還在但前景只剩 shell（dev 命令已結束）。
+  const sessions = listDevTabs().map((s) => ({ ...s, alive: devProcessAlive(s.paneId) }))
+  const dead = sessions.filter((s) => !s.alive)
   if (!dead.length) {
-    out('sweep：沒有 EXITED 的 dev-* session 需要清')
+    out('sweep：沒有 dev 已退出的 dev-* Tab 需要清')
   } else {
-    out(`sweep：${dead.length} 個 EXITED dev-* session${o.dryRun ? '（--dry-run，不動）' : ''}`)
+    out(`sweep：${dead.length} 個 dev 已退出的 dev-* Tab${o.dryRun ? '（--dry-run，不動）' : ''}`)
     for (const s of dead) {
-      out(`  ${o.dryRun ? '[would kill]' : '[killed]'} ${s.name}`)
+      out(`  ${o.dryRun ? '[would close]' : '[closed]'} ${s.name}（${s.tabId}）`)
       if (!o.dryRun) killSession(s.name)
     }
   }
   // 提醒跨 consumer 累積（純報告，不自動殺活的）
-  const alive = sessions.filter((s) => !s.exited)
+  const alive = sessions.filter((s) => s.alive)
   if (alive.length > 1) {
     out(
       `提醒：目前有 ${alive.length} 個活著的 dev-* session：${alive.map((s) => s.name).join(', ')}`,

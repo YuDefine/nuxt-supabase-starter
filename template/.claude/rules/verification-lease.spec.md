@@ -116,8 +116,8 @@ schema 全例見 `~/offline/clade/vendor/snippets/dev-session/lease-schema.jsonc
   | `ttlMs` | `number \| null` | 租期；人類租約為 `null`。`heartbeat` 用它決定往後推多久 |
   | `expiresAt` | ISO8601 `\| null` | 硬到期時間；`null` = 無界（人類租約） |
   | `heartbeatAt` | ISO8601 | 最後一次心跳；`start` 與 `heartbeat` 都會更新 |
-- `devSession` 由 `dev-session.ts` 寫入（dev process 掛哪個 zellij session）；缺 = 非 dev-session 起（legacy / 手動）
-- Durability：dev process 掛獨立 zellij server 下才不被 agent harness reap；`devServer.pid` 是 zellij 內的 nuxt/vite process，kill lease 連帶收掉 zellij session（見 [`proactive-skills.md`](./proactive-skills.md) § Dev Server Auto-Spawn）
+- `devSession` 由 `dev-session.ts` 寫入（dev process 掛哪個 herdr Tab；含 `tabId` / `paneId` 供除錯，identity 仍是 `name`）；缺 = 非 dev-session 起（legacy / 手動）
+- Durability：dev process 掛獨立 herdr server 下才不被 agent harness reap；`devServer.pid` 是該 Tab 內的 nuxt/vite process，kill lease 連帶收掉那個 Tab（見 [`proactive-skills.md`](./proactive-skills.md) § Dev Server Auto-Spawn）
 
 ## Operations
 
@@ -178,7 +178,7 @@ human     固定字串 "human"                           不可缺，至少傳�
 
 | 工具 | 何時 claim | 何時 release |
 |---|---|---|
-| `vendor/scripts/dev-session.ts`（**durable 主入口**；durability=zellij，取代 dev-singleton 的 spawn 層） | launch 前讀 lease 對 cwd（strict 衝突 refuse）；ready 後寫 lease + `devSession` 欄 | `stop` 時 |
+| `vendor/scripts/dev-session.ts`（**durable 主入口**；durability=herdr，取代 dev-singleton 的 spawn 層） | launch 前讀 lease 對 cwd（strict 衝突 refuse）；ready 後寫 lease + `devSession` 欄 | `stop` 時 |
 | `vendor/scripts/dev-singleton.ts`（legacy；spawn 層會被 harness reap，新工作走 dev-session） | spawn 前；reuse 前讀 lease 對 cwd | dev server 被 kill 時 |
 | `dev-auth` cookbook `server-api-dev-signin.ts.template` | endpoint 第一次被打時 | lease 有 holder 才允許簽 cookie（防 CSRF） |
 | `vendor/snippets/wt-helper/`（建立 worktree） | bootstrap .env.local 前 | env file 寫完後 |

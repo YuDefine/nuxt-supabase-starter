@@ -198,7 +198,9 @@ prompt已送出、`status: dispatched`、接手 pane可獨立續跑，或 lifecy
 session boundary 或跨 repo 決策已判定確實需要另一個互動 session，才建立 Herdr Tab。Herdr 只搬運 session，
 **不**新增外派理由、跨界授權、worktree 例外或 approval bypass。
 
-命中時 **MUST** invoke `herdr` skill並先讀 `herdr-session-handoff/README.md`；每一個 `/handoff now`只走 `vendor/scripts/herdr-session-handoff.ts --coordinate`的 canonical helper，由 helper統一 provision、fresh Claude session identity、prompt delivery、bounded wait、business outcome harvest與 verified reclaim。原 Claude session只等待 helper的單一結構化結果，**NEVER** 自行輪詢接手 pane、從 lifecycle猜 outcome或向接手 session追問進度。
+命中時 **MUST** invoke `herdr` skill並先讀 `herdr-session-handoff/README.md`；每一個 `/handoff now`只走 `vendor/scripts/herdr-session-handoff.ts --coordinate`的 canonical helper，由 helper統一 provision、fresh Claude session identity、prompt delivery、bounded wait、business outcome harvest與 verified reclaim。**coordinator 尚未返回前**，原 Claude session只等待 helper的單一結構化結果，**NEVER** 自行輪詢接手 pane、從 lifecycle猜 outcome或向接手 session追問進度。
+
+**receipt 返回後這條即失效，查證改為 MUST。** 非 success receipt（`completion_blocked` / `completion_failed` / `completion_unknown`）返回時，在寫下**任何**關於接手 session 做了什麼的斷言之前、以及做**任何**補救動作之前，MUST 先讀該 pane 的 `agent_status` 與 scrollback（`herdr pane list` / `herdr pane read`）。receipt 的 `agent settled without a valid correlated business outcome` 只斷言 **helper 沒收到 outcome**，對「它現在在不在工作」零訊號——Herdr 的 `done` 是「未被看見的背景工作結束後的 idle」，agent 回完一個 turn 後照樣繼續工作。**NEVER** 用「目標檔 mtime 沒變 / `git status` 乾淨 / 無新 commit」推論它沒做事（那是 negative search 當證據）；**NEVER** 未查證就重送同一份 brief（接手 session 仍在工作時重送 ＝ 兩個 agent 同時改同一批檔）。查證程序與四路分流見 handoff skill 的 `now-steps.md` § 4.1。
 
 每一個 canonical接手 session都 **MUST** 在正常 final response前透過 helper回報與 dispatch／pane／Claude session identity相關聯的 `success | blocked | failed | unknown` outcome；`blocked`必須帶一個具體 user decision。**NEVER** 把 secret寫進 Herdr argv、prompt metadata、receipt、summary、decision、log、rule或fixture。
 

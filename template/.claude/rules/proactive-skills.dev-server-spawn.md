@@ -14,14 +14,26 @@ Local edits will be reverted by the next sync.
 
 > 本檔從 `proactive-skills.md` 抽出（2026-07-24 budget 瘦身）。觸發條件：碰 dev-session / consumer-meta / nuxt.config 相關檔案時載入。
 
+## 多工器唯一標準：herdr
+
+本 fleet 的終端多工器唯一標準是 **herdr**。**NEVER** 用 `tmux` 或 `zellij` 起任何 session、window、pane 或長駐 process——這條涵蓋**每一種**用途，不限 dev server：review-gui、ad-hoc 背景 job、跑 migration、看 log、暫存一個 shell，全部在內。
+
+| 你要做的事 | 走哪 |
+| --- | --- |
+| 起長駐 dev server | `node scripts/dev-session.ts`（durability = herdr Tab） |
+| 另開一個 Claude Code session | `vendor/scripts/herdr-session-handoff.ts`（見 `vendor/snippets/herdr-session-handoff/README.md`） |
+| 其他要活過 tool-call 的 process | `herdr tab create --no-focus` + `herdr pane run`，或包成 dev-session 那樣的入口 |
+
+`tmux` / `zellij` 在 user 層 `~/.claude/settings.json` 的 `permissions.deny` 已被擋（`Bash(tmux:*)` / `Bash(zellij:*)`），打了會被拒。**NEVER** 繞過它——不要用 `sh -c 'tmux …'`、絕對路徑、alias、`env` 包裝或任何等價寫法把命令送出去。deny 擋不到的寫法不等於這條規約放行；規約管的是意圖，不是字串。
+
 當 review-gui 顯示某 item 的 screenshot 不存在 / outdated，或 user 想開瀏覽器親自操作 sanity check 時，**agent 自己起 dev server**，禁止叫使用者「請 cd 到 worktree 跑 `pnpm dev`」。完整 recipe（命令、fallback 步驟、回報訊息 template、env bootstrap）：`~/offline/clade/vendor/snippets/dev-session/README.md`。
 
-**持久層（durability）— ALL agent 自起的長駐 dev server MUST 走 [`vendor/scripts/dev-session.ts`](../../vendor/scripts/dev-session.ts)（散播到 consumer `scripts/dev-session.ts`）。** agent harness 會在 tool-call 結束時回收 Bash 衍生的整個 process tree；dev-session 把 dev 命令掛到獨立常駐 zellij server 下，才能跨 tool-call / 跨 session 存活（root cause 實證見 cookbook）。
+**持久層（durability）— ALL agent 自起的長駐 dev server MUST 走 [`vendor/scripts/dev-session.ts`](../../vendor/scripts/dev-session.ts)（散播到 consumer `scripts/dev-session.ts`）。** agent harness 會在 tool-call 結束時回收 Bash 衍生的整個 process tree；dev-session 把 dev 命令掛到獨立常駐 herdr server 的一個 Tab 下，才能跨 tool-call / 跨 session 存活（root cause 實證見 cookbook）。
 
 - **NEVER** 再用 `Bash(run_in_background=true)` / 裸 `nuxt dev` / `spawn(detached)` / setsid / nohup 起長駐 dev server（會被 reap，user 看到 502 / 530）
 - **NEVER** 直接 `nuxt dev` / `pnpm dev` 不經 wrapper（會繞過 lease + cwd 檢查 + durability，且會被 harness reap）
-- **反累積**：dev-session 一 consumer(-app) 一個 durable session（名 `dev-<consumer_id>[-<app>]`），起前先 `zellij list-sessions` 查、有就 **reuse 不重起第二台**；`node scripts/dev-session.ts sweep` 清 EXITED / 死掉的 session；多 worktree 切換仍走 **dev-router**（一個公開 port 切 backend），**禁止**對每個 worktree 各起一個 dev-session
-- **前提**：consumer 端需有 zellij（本倉標準多工器）。zellij 不在 PATH → dev-session 報錯停下，回報 user 安裝，**NEVER** 退回 `run_in_background`
+- **反累積**：dev-session 一 consumer(-app) 一個 durable session（名 `dev-<consumer_id>[-<app>]`，就是那個 herdr Tab 的 label），起前先 `node scripts/dev-session.ts list` 查、有就 **reuse 不重起第二台**；`node scripts/dev-session.ts sweep` 清「Tab 還在但 dev 已退出」的殘骸；多 worktree 切換仍走 **dev-router**（一個公開 port 切 backend），**禁止**對每個 worktree 各起一個 dev-session
+- **前提**：herdr server 要在跑（`herdr status`）。**不要求** caller 自己在 Herdr 終端內——herdr CLI 走 socket，非 Herdr 起的 agent 一樣用得了。連不上 → dev-session 報錯停下，回報 user，**NEVER** 退回 `run_in_background`
 - **Lease 衝突**：依 [`verification-lease.md`](./verification-lease.md) § Agent 行為契約的 predicate 分支表處置——**agent 租約過期 / 心跳斷 → 自動接管**（不問 user）；**agent 租約存活 → `dev-session.ts wait` 排隊**（不問 user）；**人類租約 → refuse + 把訊息原樣呈給 user**，**NEVER** 自行 `--takeover`
 - **掃 free port（non-pinned）**：scan 3001-3050 找第一個 free port；**禁止**用 3000（留給 user 自己的 dev server）
 - **Tunnel URL**：回報 user 時，**若 consumer 有 `TUNNEL_HOSTNAME`，MUST 額外列 tunnel URL 並標註「tunnel 未啟動先跑 `pnpm tunnel:<app>`」**——外部裝置 / HTTPS-only 驗收 localhost 不夠用。**Agent NEVER 自起 `pnpm tunnel:*`** —— tunnel process 由 user 控制，agent 只負責列 URL + 提示
@@ -34,7 +46,7 @@ Local edits will be reverted by the next sync.
 
 | Consumer 屬性 | 啟動方式 | 衝突處理 |
 |---|---|---|
-| `auth.portPinned = true` + `dev.leaseMode = strict` | **MUST** 走 [`vendor/scripts/dev-session.ts`](../../vendor/scripts/dev-session.ts)（durability=zellij），鎖在 manifest 宣告的固定 port | cwd-mismatch → **refuse**（需 user 顯式 `--takeover`），參照 [`verification-lease.md`](./verification-lease.md) |
+| `auth.portPinned = true` + `dev.leaseMode = strict` | **MUST** 走 [`vendor/scripts/dev-session.ts`](../../vendor/scripts/dev-session.ts)（durability=herdr），鎖在 manifest 宣告的固定 port | cwd-mismatch → **refuse**（需 user 顯式 `--takeover`），參照 [`verification-lease.md`](./verification-lease.md) |
 | `auth.portPinned = true` + `dev.leaseMode = advisory` | 同上，但 advisory | cwd-mismatch → warn + reuse |
 | `auth.portPinned = false`（無 OAuth pin） | 走 scan-free-port 邏輯（3001-3050；MUST 細則見 cookbook） | 一 worktree 一 port，不互搶 |
 | 無 `.claude/consumer-meta.json`（未採用 manifest） | 沿用既有 scan-free-port 邏輯 | 一 worktree 一 port |
