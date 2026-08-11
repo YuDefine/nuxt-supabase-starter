@@ -161,16 +161,22 @@ context **讀取量**；重跑 `node scripts/context-cost-report.ts`，baseline 
 
 #### A. 已完成 Herdr live transfer
 
-`/handoff now`取得可驗證的 workspace／tab／pane／status receipt，且接手 pane可獨立續跑，就是「交接完成」的可觀察 predicate。收工訊息依固定順序：
+`/handoff now`只有在 canonical coordinator回傳下列任一 closure時才算「交接完成」：
+
+1. correlated `business_outcome: success`，且原 pane已 settled、scrollback已 archive、pane已 verified reclaim；或
+2. 已驗證另一個不同的 canonical successor pane／Claude session仍 live並接手責任，且原 pane完成同樣 archive + reclaim。
+
+prompt已送出、`status: dispatched`、接手 pane可獨立續跑，或 lifecycle只有 `idle`／`done`，都**不是** business completion。收工訊息依固定順序：
 
 | 部件 | 契約 |
 | --- | --- |
 | 首行 | 逐字包含：`目前這裡收工` |
-| 交接 receipt | workspace、tab、pane、label、status、工作摘要、durable brief路徑 |
-| Runtime cleanup | 已停止的不必要 background／agent／shell；仍保留者逐一列用途與接手 pane |
-| user 本人要做的事 | 只列接手 session無法代做者；沒有就省略 |
+| Closure receipt | business outcome、workspace、tab、原 pane、label、Claude session、dispatch、status、scrollback log、reclaimed狀態；responsibility transfer另列 successor pane |
+| 工作摘要 | coordinator回傳的 summary與 durable brief路徑 |
+| Runtime cleanup | 已停止的不必要 background／agent／shell；仍保留者逐一列用途與 successor pane |
+| user 本人要做的事 | 只列 successor session無法代做者；沒有就省略 |
 
-receipt送出後，原 session **NEVER** 再開新工作、輪詢接手 pane或等待其完成。已由接手 session續跑時，不再輸出叫 user另開 session的 oneliner；那會把已完成的交接重新退回 user。
+`completion_blocked`／`completion_failed`／`completion_unknown`都保留 pane，**NEVER** 輸出「目前這裡收工」。只有前述兩種 closure的 receipt送出後，原 session才 **NEVER** 再開新工作、輪詢接手 pane或等待其完成；下一個動作只能結束回合。正常 success／successor closure由 coordinator當下收斂，**NEVER** 等 user另輸入 `\nx`才 harvest或reclaim。
 
 #### B. 沒有 Herdr live transfer
 
@@ -192,7 +198,9 @@ receipt送出後，原 session **NEVER** 再開新工作、輪詢接手 pane或�
 session boundary 或跨 repo 決策已判定確實需要另一個互動 session，才建立 Herdr Tab。Herdr 只搬運 session，
 **不**新增外派理由、跨界授權、worktree 例外或 approval bypass。
 
-命中時 **MUST** invoke `herdr` skill並先讀 `herdr-session-handoff/README.md`；helper接 task／brief並回 JSON。
+命中時 **MUST** invoke `herdr` skill並先讀 `herdr-session-handoff/README.md`；每一個 `/handoff now`只走 `vendor/scripts/herdr-session-handoff.ts --coordinate`的 canonical helper，由 helper統一 provision、fresh Claude session identity、prompt delivery、bounded wait、business outcome harvest與 verified reclaim。原 Claude session只等待 helper的單一結構化結果，**NEVER** 自行輪詢接手 pane、從 lifecycle猜 outcome或向接手 session追問進度。
+
+每一個 canonical接手 session都 **MUST** 在正常 final response前透過 helper回報與 dispatch／pane／Claude session identity相關聯的 `success | blocked | failed | unknown` outcome；`blocked`必須帶一個具體 user decision。**NEVER** 把 secret寫進 Herdr argv、prompt metadata、receipt、summary、decision、log、rule或fixture。
 
 **每一次** transport **MUST** 帶任務描述性 `--label`：建 Tab／workspace 就命名該 Tab／workspace，split pane 就命名該 pane；建立什麼就命名什麼。**NEVER** 只給 repo 名或倚賴預設值——同一 repo 派出去的多個 session 會在 UI 與 patrol 輸出裡完全無法分辨。helper 缺 label 直接回 `usage_error`，不會建立任何東西。receipt 的 `pane_label_applied: false` 代表 pane 仍是預設標題，**MUST** 照實寫進收工訊息。
 
@@ -201,8 +209,11 @@ Canonical clade publish **MUST** 走 `node <clade-central-repo>/vendor/scripts/h
 
 | 結果 | 主線動作 |
 | --- | --- |
-| `status: dispatched` | 回報 task 落點與 workspace / tab / pane / agent status；user 不需再做 terminal/session 動作 |
-| `status: blocked` | 讀 visible question / approval UI，照原 gate 請 user 只回答那個真正的決策；**NEVER** 盲目重送 prompt |
+| `status: completion_success` | 驗 business success、settled、archive與 reclaimed receipt後，依收工訊息契約 **A**結束回合 |
+| `status: responsibility_transferred` | 驗不同的 live canonical successor及原 pane archive + reclaimed receipt後，依 **A**結束回合 |
+| `status: completion_blocked` | 只有非空 `decision`才向 user問那一個真正決策並保留 pane；回答後走 helper `--continue <pane>`，**NEVER** raw重送 prompt |
+| `status: completion_failed` | 回報失敗 gate與 retained pane；立即停止，不宣稱交接完成 |
+| `status: completion_unknown` | outcome缺失／失真、session漂移或只有 lifecycle `done`；fail closed並保留 pane |
 | transport / launcher / Herdr preflight 失敗 | 保留 durable task；能在本 session 合法完成就直接完成，否則回具體 blocker。**NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt |
 
 #### 已列明 gate 的短答（MUST）

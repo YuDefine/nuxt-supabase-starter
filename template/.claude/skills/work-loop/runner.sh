@@ -6,7 +6,7 @@
 # 加權配額），然後只能走 decay gate 收工。那讓 loop 的價值上限被 context 綁死。
 #
 # 本 runner 把「一輪」的邊界從 turn 提升到 process：每輪 `claude -p` 是全新 session，
-# 讀 .spectra/work-loop-state.json 重建狀態、做事、寫回、退出。context 每輪歸零，
+# 讀 .clade/work-loop/state.json 重建狀態、做事、寫回、退出。context 每輪歸零，
 # 連續性由 state 檔承擔（durable execution：能 resume 的只有落檔的那份）。
 #
 # 用法：
@@ -19,7 +19,7 @@
 # 中斷：Ctrl-C；lock 的 heartbeat 逾窗（45min）且本 runner 的 pid 不再存活時自動失效。
 #
 # 從外面要求它停（人或別的 session）：**寫 sentinel 檔，NEVER 改 state.stoppedReason**——
-#   echo '停止理由' > "$(git rev-parse --show-toplevel)/.spectra/work-loop-stop"
+#   echo '停止理由' > "$(git rev-parse --show-toplevel)/.clade/work-loop/stop"
 # runner 在每輪開始前檢查它，所以語義是「當前這輪跑完就停」，不會腰斬 in-flight 的一輪。
 # 命中後 sentinel 會被消費掉，下一次起 runner 不受影響。
 
@@ -34,8 +34,8 @@ REPO="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   echo "error: 不在 git repo 內" >&2
   exit 2
 }
-STATE="$REPO/.spectra/work-loop-state.json"
-LOG_DIR="$REPO/.spectra/work-loop-logs"
+STATE="$REPO/.clade/work-loop/state.json"
+LOG_DIR="$REPO/.clade/work-loop/logs"
 # 外部停止請求的 sentinel。**NEVER 把它併回 $STATE** —— 那正是本檔案存在的理由：
 # child 在 Step 1 讀 state、Step 7 把自己那份物件**整份**寫回，兩點之間任何外部寫入
 # 都會被 whole-document last-writer-wins 覆蓋掉。2026-08-11 實證：外部在 round 49 寫入
@@ -44,7 +44,7 @@ LOG_DIR="$REPO/.spectra/work-loop-logs"
 #
 # child 自己寫的 state.stoppedReason 仍然有效且保留支援 —— 那條路徑沒有 clobber 風險，
 # 因為寫它的 child 就是最後一個寫入者、寫完立刻退出。壞掉的只有**外部**要求停止這條。
-STOP_FILE="$REPO/.spectra/work-loop-stop"
+STOP_FILE="$REPO/.clade/work-loop/stop"
 LOCK_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-lock.ts"
 # worktree 母目錄，與 vendor/scripts/wt-helper.ts:779 的 `<repo>-wt` 慣例對齊（推導不寫死）。
 # 它必須進 --add-dir —— 見下方 PERM_MODE 註解。
@@ -84,7 +84,19 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# TD-459 落點遷移（`.spectra/work-loop-*` → `.clade/work-loop/*`）。**MUST 排在 mkdir 之前**：
+# migrate 只在目標不存在時搬，先建好 $LOG_DIR 會讓舊 log 目錄永遠搬不過來。
+# helper 缺席或版本較舊（沒有 migrate 子命令）都不擋 runner —— 那時最壞是 state 從頭起算。
+if [ -f "$LOCK_HELPER" ]; then
+  (cd "$REPO" && node "$LOCK_HELPER" migrate) >/dev/null 2>&1 || true
+fi
+
 mkdir -p "$LOG_DIR"
+# 目錄自帶 `.gitignore`（`*` 連自己一起 ignore）—— 多數 consumer 的 .gitignore 只涵蓋
+# `.clade/vendor/ledger/*.jsonl`，不涵蓋 `.clade/`。helper 已做一次，這裡是 helper 缺席時的
+# 補強：少了它，runtime state 會在那些 repo 變成 untracked 噪音。
+[ -f "$REPO/.clade/work-loop/.gitignore" ] || printf '*\n' > "$REPO/.clade/work-loop/.gitignore"
+
 # --add-dir 對不存在的路徑會拒絕啟動，而 `<repo>-wt/` 在所有 worktree 都 merge-back 之後
 # 是空的、也可能整個被清掉 —— 先建起來，否則 runner 會在「剛好沒有進行中 worktree」時掛掉。
 mkdir -p "$WT_PARENT"

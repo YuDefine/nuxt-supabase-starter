@@ -221,7 +221,7 @@ Monitor({ persistent: true, description: "work-loop round 進度（<repo> ）", 
 cd <repo>
 # 絕對路徑是必要的：node 的 require() 對相對路徑會當成模組名解析而丟例外，
 # 被 catch 吞掉後 round 恆為 0 → Monitor 永遠不 emit（2026-08-08 實測踩過）
-S="$PWD/.spectra/work-loop-state.json"; L="$PWD/.spectra/work-loop-logs"
+S="$PWD/.clade/work-loop/state.json"; L="$PWD/.clade/work-loop/logs"
 r() { node -e 'try{console.log(require(process.argv[1]).round??0)}catch{console.log(0)}' "$S" 2>/dev/null || echo 0; }
 prev=$(r); last_change=$(date +%s)
 while true; do
@@ -246,7 +246,7 @@ EOF
 | 契約 | 逐字 |
 | --- | --- |
 | 每輪 emit **一行，且該行 MUST 帶該輪成果摘要** | 內容固定為 `round <n> 完成｜<roundEndReason>｜<sessionNote 前 400 字>`。**NEVER** 貼 log 段落、**NEVER** 額外展開該輪細節——per-round 的 turn 成本壓在 cache_read 量級，400 字上限就是為此 |
-| 主線收到該事件後 **MUST 轉述摘要**，不是只回「round N 完成」 | 逐字複述或濃縮 Monitor 那行的 sessionNote 段（**每一輪**都要，不是只在有異常時）——user 對 5–8 小時的 runner 只有這個可見度來源。摘要缺內容時 **MUST** 自己補讀：`node -e 'const s=require(process.argv[1]);console.log(s.sessionNote)' <repo>/.spectra/work-loop-state.json`，**NEVER** 把「Monitor 沒給細節」當成可以只回一句「完成」的理由 |
+| 主線收到該事件後 **MUST 轉述摘要**，不是只回「round N 完成」 | 逐字複述或濃縮 Monitor 那行的 sessionNote 段（**每一輪**都要，不是只在有異常時）——user 對 5–8 小時的 runner 只有這個可見度來源。摘要缺內容時 **MUST** 自己補讀：`node -e 'const s=require(process.argv[1]);console.log(s.sessionNote)' <repo>/.clade/work-loop/state.json`，**NEVER** 把「Monitor 沒給細節」當成可以只回一句「完成」的理由 |
 | 失敗訊號要蓋到 | round 前進、`stoppedReason`、90 分鐘沒前進三種都 emit（per `Monitor` tool description § Coverage — silence is not success：只 grep 成功訊號的 monitor 在 crashloop 時與「還在跑」長得一模一樣） |
 | 收尾 | runner 退出通知到達 → 走 (b) 回報，並 `TaskStop` 這個 Monitor。**NEVER** 讓它留到 session 結束 |
 | 與 (d) 的關係 | **兩個都要**，不是二選一。round 通常 15–25 分 < 55 分，事件本身順帶維持 cache；但 round 卡住超過 55 分時，(d) 的 heartbeat 是唯一還會醒的東西 |
@@ -271,7 +271,7 @@ node ~/offline/clade/vendor/scripts/work-loop-lock.ts acquire
 
 **Iron Law：鎖檔只由這支 script 讀寫。違反字面就是違反精神**——「用 Write tool 補一個就好」「script 跑不動先手寫一個」都不算遵守。
 
-- **heartbeat**：**每一次**寫 `.spectra/work-loop-state.json` 的同時都 MUST 跑 `node ~/offline/clade/vendor/scripts/work-loop-lock.ts refresh --session <id>`（Step 1 / Step 5 **每一次**收割 / Step 7 各一次，不是只在 Step 7 刷）。窗口 45 分鐘
+- **heartbeat**：**每一次**寫 `.clade/work-loop/state.json` 的同時都 MUST 跑 `node ~/offline/clade/vendor/scripts/work-loop-lock.ts refresh --session <id>`（Step 1 / Step 5 **每一次**收割 / Step 7 各一次，不是只在 Step 7 刷）。窗口 45 分鐘
 - **釋放**：**每一條**停止路徑（含失敗提早結束）都 MUST 跑 `node ~/offline/clade/vendor/scripts/work-loop-lock.ts release --session <id>`；in-flight ledger > 0 期間 **NEVER** 釋放
 
 判準是**析取**——`heartbeat 在 45min 窗口內` **或** `pid 存活`，任一成立即為 active。舊版單看 `$$` 的合取判準在 in-session 模式下恆判 stale，鎖從未擋過任何一次（[[TD-424]]）。
@@ -284,7 +284,7 @@ node ~/offline/clade/vendor/scripts/work-loop-lock.ts acquire
 | 「pid 欄填 0 或哨兵值，反正判準會走 DEAD 分支」（round 30 / 36） | 那正是「鎖從未擋過任何一次」的成因，不是它的解法 |
 | 「這支 script 在這個 repo 找不到，先跳過鎖」 | 找不到 = 路徑打錯。先 `ls ~/offline/clade/vendor/scripts/work-loop-lock.ts` 確認，**NEVER** 無鎖開跑 |
 
-**Red Flag**：正要對 `.spectra/work-loop.lock` 下 Write / Edit / `printf` / `echo` —— 停手，回到上面那條指令。
+**Red Flag**：正要對 `.clade/work-loop/lock` 下 Write / Edit / `printf` / `echo` —— 停手，回到上面那條指令。
 
 宣布模式一句話後進 Step 1。
 
@@ -292,12 +292,12 @@ node ~/offline/clade/vendor/scripts/work-loop-lock.ts acquire
 
 ## Step 1 — State re-hydrate（durable execution，每輪必做）
 
-**Iron Law：每一輪開頭 MUST 從 `.spectra/work-loop-state.json` 重建狀態，NEVER 依賴對話記憶。**
+**Iron Law：每一輪開頭 MUST 從 `.clade/work-loop/state.json` 重建狀態，NEVER 依賴對話記憶。**
 
 理由不是保守，是機制事實：主線 context 會被 auto-compaction 壓縮，壓掉的第一批就是「上一輪做了什麼」。狀態外部化之後，compaction 只丟敘事、不丟事實。
 
 ```bash
-STATE="$(git rev-parse --show-toplevel)/.spectra/work-loop-state.json"
+STATE="$(git rev-parse --show-toplevel)/.clade/work-loop/state.json"
 [ -f "$STATE" ] && cat "$STATE" || echo '{}'
 ```
 
@@ -651,7 +651,7 @@ fingerprint = sha256(
 
 ### 7.3 落 state 檔
 
-把 Step 1 schema 的每個欄位更新後寫回 `.spectra/work-loop-state.json`（`.spectra/` 已 gitignored）。`guardrailsAck` 用 Step 1.5 讀完的時間。
+把 Step 1 schema 的每個欄位更新後寫回 `.clade/work-loop/state.json`（`.clade/` 已 gitignored）。`guardrailsAck` 用 Step 1.5 讀完的時間。
 
 寫完 **MUST** 跑 `node ~/offline/clade/vendor/scripts/work-loop-lock.ts refresh --session <lockSessionId>`。鎖的 heartbeat 只在 Step 1 / Step 5 / 本步被刷，漏掉一次就讓還在跑的這一輪被下一輪判成死掉並接手——失敗長相是兩個 loop 同時跑、state 互相覆寫，沒有任何錯誤訊號。
 

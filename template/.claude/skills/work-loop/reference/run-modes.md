@@ -36,7 +36,7 @@ cache-keepalive heartbeat 與 (e) 的 per-round Monitor——本檔只管指令�
 建立；其他 Bash 仍照 permission mode 與使用者 permission rules 判定。每輪另固定帶模型可見的
 `--runner-child` 與 `WORK_LOOP_RUNNER_CHILD=1`；Step 0 命中任一身分就只執行單輪，NEVER 再啟 runner。
 
-每輪 log 落在 `.spectra/work-loop-logs/round-<ts>.log`。
+每輪 log 落在 `.clade/work-loop/logs/round-<ts>.log`。
 
 ## 待答決策佇列：runner 只印不擋
 
@@ -53,7 +53,7 @@ runner 起跑時讀 state 的 `awaiting[]`，非空就印一行提示（幾條�
 session 吞掉 95.5% 的加權配額），然後只能走 decay gate 收工——loop 的價值上限被 context 綁死。
 
 runner 把「一輪」的邊界從 turn 提升到 process：每輪 `claude -p` 是全新 session，讀
-`.spectra/work-loop-state.json` 重建狀態、做事、寫回、退出。連續性由 state 檔承擔
+`.clade/work-loop/state.json` 重建狀態、做事、寫回、退出。連續性由 state 檔承擔
 （durable execution：能 resume 的只有落檔的那份）。
 
 **NEVER** 因為「in-session 比較好觀察」就對長清單用 in-session 版——那是拿 loop 的續航力換
@@ -72,7 +72,7 @@ runner 只認 state 檔的 `stoppedReason`（整個 loop 該停）；`roundEndRe
 ### 從外面要求它停：寫 sentinel，NEVER 改 `state.stoppedReason`
 
 ```bash
-echo '停止理由' > "$(git rev-parse --show-toplevel)/.spectra/work-loop-stop"
+echo '停止理由' > "$(git rev-parse --show-toplevel)/.clade/work-loop/stop"
 ```
 
 runner 在**每輪開始前**檢查它，語義是「當前這輪跑完就停」，不腰斬 in-flight 的一輪。命中後

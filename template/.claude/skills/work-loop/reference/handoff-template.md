@@ -73,5 +73,5 @@ completed <a> / packaged <b> / escalated <c> / in-flight <d>
 ```
 
 **本段是人讀輸出，NEVER 是狀態來源**——`failStreak` / `escalated` / `packaged` / `awaiting` 一律以
-`.spectra/work-loop-state.json` 為準（per SKILL.md Step 1）。這裡的數字只是把 state 檔的內容
+`.clade/work-loop/state.json` 為準（per SKILL.md Step 1）。這裡的數字只是把 state 檔的內容
 渲染給人看；兩邊不一致時修的是渲染，不是 state。
