@@ -106,6 +106,26 @@ Local edits will be reverted by the next sync.
 
 審計只 warn 不阻擋；實際 rotate 由 `/handoff` Mode B Health Gate 執行（per `plugins/hub-core/skills/handoff/SKILL.md § 2B.1`）。
 
+### rotate 的完成判準是「搬完」，不是「搬到不 warn」
+
+threshold 與完成判準測的是**不同東西**：threshold 測體積，完成判準測**內容狀態**。
+
+**完成判準**：主檔不留**任何**已結束的段落——每一個「已結案 / 已散播 / 已拍板且執行完畢 /
+驗收已達成」的 section，不論當下 size 是多少，都該在這一輪搬走。逐段問一句「這段描述的事情
+做完了嗎？」，答「做完了」就搬。
+
+- **size 降到 threshold 以下 NEVER 是停止 rotate 的理由**，也 NEVER 是「rotate 做完了」的證據。
+  兩者同時為真是常態，但前者為真不蘊含後者
+- 反向同樣成立：**全部搬完後 size 仍超 threshold** → 那是 active 內容真的太多，**MUST** 據實登記，
+  **NEVER** 砍驗收 pointer / 選項內容 / 自驗指令湊門檻
+- 搬走的每一段 **MUST** 逐字進 archive 並驗零遺失（`grep -c -F '<獨特字串>'` 在 archive 回 ≥1、
+  主檔回 0）。行數下降不是零遺失的證據——內容被截斷時行數同樣下降
+
+> **實證（2026-08-11，clade home）**：一次 rotate 搬掉兩條已結 awaiting 的選項表，38.2 → 34.4 KB
+> （threshold 35）就收手。同一份檔案裡 `## Orphan Stashes` 整段 5.1 KB、兩筆 stash 都已結案、
+> `git stash list` 為空——**沒搬，理由是「已經不 warn 了」**。那 0.6 KB 的餘裕撐不過下一輪
+> loop 寫一次 status 段，等於這次 rotate 白做。補搬後 29.8 KB，餘裕才是真的。
+
 ## Outstanding writing hygiene (v1.14+)
 
 **核心命題**：HANDOFF.md `## Outstanding` / `## In Progress` 推薦 next move 前，**MUST** 跑當次 ground-truth signal 確認；禁止把 task 進度當 land 安全度寫。

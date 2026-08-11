@@ -69,6 +69,25 @@ Step 0 當時寫成無條件 route 到 in-session、與本節相反，而執行�
 runner 只認 state 檔的 `stoppedReason`（整個 loop 該停）；`roundEndReason`（這個 process 滿了）
 會讓它起下一個全新 process 繼續。兩者的語義差別與寫錯的後果見 SKILL.md Step 1。
 
+### 從外面要求它停：寫 sentinel，NEVER 改 `state.stoppedReason`
+
+```bash
+echo '停止理由' > "$(git rev-parse --show-toplevel)/.spectra/work-loop-stop"
+```
+
+runner 在**每輪開始前**檢查它，語義是「當前這輪跑完就停」，不腰斬 in-flight 的一輪。命中後
+sentinel 會被消費掉（一次性），下一次起 runner 不受影響。
+
+**NEVER 從外部寫 `state.stoppedReason`**：child 在 Step 1 讀 state、Step 7 把自己那份物件
+**整份**寫回，兩點之間任何外部寫入都被 whole-document last-writer-wins 吃掉。2026-08-11 實證
+——外部在 round 49 寫入 `stoppedReason` 要求「下一輪做完就停」，round 50 的 child 收尾時把它
+蓋掉，runner 毫無所覺地照跑 51、52。**失敗是靜默的**：旗標消失不留任何訊號，外觀與「還沒跑到
+停止條件」完全相同。
+
+child **自己**寫 `state.stoppedReason` 仍然有效且是正解——寫它的 child 就是最後一個寫入者、
+寫完立刻退出，沒有 clobber 窗口。壞掉的只有**外部**這條路。回歸測試在
+`test/work-loop-runner.test.ts`（兩條：sentinel 抗整份覆寫、child 自寫仍有效）。
+
 runner 自己的停止條件：`stoppedReason` 出現、達 `--max-rounds`、連續 2 輪 exit≠0、
 或 round 數連續 2 輪未前進。exit failure streak 與 no-progress streak 彼此獨立，只有 round 真正前進
 才同時重設；交錯出現不算恢復。

@@ -17,6 +17,11 @@
 # 停止：state 檔出現 stoppedReason，或達 --max-rounds，或連續 2 輪 exit≠0，
 #       或 state 連續 2 輪未前進。
 # 中斷：Ctrl-C；lock 的 heartbeat 逾窗（45min）且本 runner 的 pid 不再存活時自動失效。
+#
+# 從外面要求它停（人或別的 session）：**寫 sentinel 檔，NEVER 改 state.stoppedReason**——
+#   echo '停止理由' > "$(git rev-parse --show-toplevel)/.spectra/work-loop-stop"
+# runner 在每輪開始前檢查它，所以語義是「當前這輪跑完就停」，不會腰斬 in-flight 的一輪。
+# 命中後 sentinel 會被消費掉，下一次起 runner 不受影響。
 
 set -uo pipefail
 
@@ -31,6 +36,15 @@ REPO="$(git rev-parse --show-toplevel 2>/dev/null)" || {
 }
 STATE="$REPO/.spectra/work-loop-state.json"
 LOG_DIR="$REPO/.spectra/work-loop-logs"
+# 外部停止請求的 sentinel。**NEVER 把它併回 $STATE** —— 那正是本檔案存在的理由：
+# child 在 Step 1 讀 state、Step 7 把自己那份物件**整份**寫回，兩點之間任何外部寫入
+# 都會被 whole-document last-writer-wins 覆蓋掉。2026-08-11 實證：外部在 round 49 寫入
+# state.stoppedReason 要求「下一輪做完就停」，round 50 的 child 收尾時把它蓋掉，runner
+# 毫無所覺地照跑 51、52。
+#
+# child 自己寫的 state.stoppedReason 仍然有效且保留支援 —— 那條路徑沒有 clobber 風險，
+# 因為寫它的 child 就是最後一個寫入者、寫完立刻退出。壞掉的只有**外部**要求停止這條。
+STOP_FILE="$REPO/.spectra/work-loop-stop"
 LOCK_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-lock.ts"
 # worktree 母目錄，與 vendor/scripts/wt-helper.ts:779 的 `<repo>-wt` 慣例對齊（推導不寫死）。
 # 它必須進 --add-dir —— 見下方 PERM_MODE 註解。
@@ -75,7 +89,22 @@ mkdir -p "$LOG_DIR"
 # 是空的、也可能整個被清掉 —— 先建起來，否則 runner 會在「剛好沒有進行中 worktree」時掛掉。
 mkdir -p "$WT_PARENT"
 
+# 兩個來源，**順序有意義**：先看外部 sentinel，再看 state。
+#
+# 外部停止請求 MUST 走 $STOP_FILE，NEVER 走 state.stoppedReason —— 後者會被 child 的
+# Step 7 整份寫回覆蓋掉（見 $STOP_FILE 宣告處的實證）。sentinel 是獨立檔案，不在任何
+# child 的讀寫路徑上，所以沒有 clobber 窗口。
+#
+# 命中 sentinel 時**消費掉它**（一次性）：留著的話下一個 runner 會在第一輪就停，而那個
+# 「怎麼都跑不起來」的長相跟真正的故障無法區分。停止原因已印進 stdout，紀錄不會消失。
 stopped_reason() {
+  if [ -f "$STOP_FILE" ]; then
+    local reason
+    reason="$(head -c 500 "$STOP_FILE" 2>/dev/null | head -1)"
+    rm -f "$STOP_FILE"
+    echo "${reason:-外部停止請求（$STOP_FILE，內容為空）}"
+    return 0
+  fi
   [ -f "$STATE" ] || return 1
   node -e '
     try {
