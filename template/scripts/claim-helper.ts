@@ -13,7 +13,15 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { hostname } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -302,13 +310,20 @@ export function formatClaimsSummary(claims) {
 // ──────────────────────────────────────────────────────────────────────────
 // CLI
 
-const SCRIPT_PATH = fileURLToPath(import.meta.url)
-const INVOKED_PATH =
-  process.argv[1] && existsSync(process.argv[1])
-    ? fileURLToPath(new URL(`file://${process.argv[1]}`))
-    : null
+// CLI 進入判定：兩邊都 realpath。node 預設把 import.meta.url realpath 化、
+// process.argv[1] 則原樣保留，經 symlink 叫進去兩者不相等 → 整個 CLI 區塊被靜默
+// 跳過且 exit 0，長相與「一切正常」無法區分（TD-460）。
+function invokedAsCli() {
+  const entry = process.argv[1]
+  if (!entry) return false
+  try {
+    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url))
+  } catch {
+    return entry === fileURLToPath(import.meta.url)
+  }
+}
 
-if (INVOKED_PATH === SCRIPT_PATH) {
+if (invokedAsCli()) {
   const [cmd, ...rest] = process.argv.slice(2)
   const consumerPath = findConsumerRoot() ?? process.cwd()
 

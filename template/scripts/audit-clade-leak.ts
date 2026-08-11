@@ -54,7 +54,7 @@
  */
 
 import { execFile } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, realpathSync } from 'node:fs'
 import { lstat, readFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -433,8 +433,20 @@ async function main() {
   process.exit(violations.length > 0 || errors.length > 0 ? 1 : 0)
 }
 
-const invokedDirect = fileURLToPath(import.meta.url) === resolve(process.argv[1] || '')
-if (invokedDirect) {
+// CLI 進入判定：兩邊都 realpath。node 預設把 import.meta.url realpath 化、
+// process.argv[1] 則原樣保留，經 symlink 叫進去兩者不相等 → 整個 CLI 區塊被靜默
+// 跳過且 exit 0，長相與「一切正常」無法區分（TD-460）。
+function invokedAsCli() {
+  const entry = process.argv[1]
+  if (!entry) return false
+  try {
+    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url))
+  } catch {
+    return entry === fileURLToPath(import.meta.url)
+  }
+}
+
+if (invokedAsCli()) {
   main().catch((err) => {
     process.stderr.write(`audit-clade-leak crashed: ${err.message}\n`)
     process.exit(2)
