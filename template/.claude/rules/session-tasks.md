@@ -200,7 +200,7 @@ session boundary 或跨 repo 決策已判定確實需要另一個互動 session�
 
 命中時 **MUST** invoke `herdr` skill並先讀 `herdr-session-handoff/README.md`；每一個 `/handoff now`只走 `vendor/scripts/herdr-session-handoff.ts --coordinate`的 canonical helper，由 helper統一 provision、fresh Claude session identity、prompt delivery、bounded wait、business outcome harvest與 verified reclaim。**coordinator 尚未返回前**，原 Claude session只等待 helper的單一結構化結果，**NEVER** 自行輪詢接手 pane、從 lifecycle猜 outcome或向接手 session追問進度。
 
-**receipt 返回後這條即失效，查證改為 MUST。** 非 success receipt（`completion_blocked` / `completion_failed` / `completion_unknown`）返回時，在寫下**任何**關於接手 session 做了什麼的斷言之前、以及做**任何**補救動作之前，MUST 先讀該 pane 的 `agent_status` 與 scrollback（`herdr pane list` / `herdr pane read`）。receipt 的 `agent settled without a valid correlated business outcome` 只斷言 **helper 沒收到 outcome**，對「它現在在不在工作」零訊號——Herdr 的 `done` 是「未被看見的背景工作結束後的 idle」，agent 回完一個 turn 後照樣繼續工作。**NEVER** 用「目標檔 mtime 沒變 / `git status` 乾淨 / 無新 commit」推論它沒做事（那是 negative search 當證據）；**NEVER** 未查證就重送同一份 brief（接手 session 仍在工作時重送 ＝ 兩個 agent 同時改同一批檔）。查證程序與四路分流見 handoff skill 的 `now-steps.md` § 4.1。
+**receipt 返回後這條即失效，查證改為 MUST。** 非 success receipt（`completion_blocked` / `completion_failed` / `completion_unknown`）返回時，在寫下**任何**關於接手 session 做了什麼的斷言之前、以及做**任何**補救動作之前，MUST 先讀該 pane 的 `agent_status` 與 scrollback（`herdr pane list` / `herdr pane read`）。receipt 的 `agent settled without a valid correlated business outcome` 只斷言 **helper 沒收到 outcome**，對「它現在在不在工作」零訊號——Herdr 的 `done` 是「未被看見的背景工作結束後的 idle」，agent 回完一個 turn 後照樣繼續工作。**NEVER** 用「目標檔 mtime 沒變 / `git status` 乾淨 / 無新 commit」推論它沒做事（那是 negative search 當證據）；**NEVER** 未查證就重送同一份 brief（接手 session 仍在工作時重送 ＝ 兩個 agent 同時改同一批檔）。查證後 `agent_status` 是 `working` → 它還在做，**NEVER** 重送或打斷；receipt 無 `pane_id`（pane 建立前就失敗）→ 本條不適用，直接回具體 error。非 success receipt 返回時 **MUST 讀** handoff skill `now-steps.md` § 4.1 的查證程序與四路分流。
 
 每一個 canonical接手 session都 **MUST** 在正常 final response前透過 helper回報與 dispatch／pane／Claude session identity相關聯的 `success | blocked | failed | unknown` outcome；`blocked`必須帶一個具體 user decision。**NEVER** 把 secret寫進 Herdr argv、prompt metadata、receipt、summary、decision、log、rule或fixture。
 
@@ -213,9 +213,9 @@ Canonical clade publish **MUST** 走 `node <clade-central-repo>/vendor/scripts/h
 | --- | --- |
 | `status: completion_success` | 驗 business success、settled、archive與 reclaimed receipt後，依收工訊息契約 **A**結束回合 |
 | `status: responsibility_transferred` | 驗不同的 live canonical successor及原 pane archive + reclaimed receipt後，依 **A**結束回合 |
-| `status: completion_blocked` | 只有非空 `decision`才向 user問那一個真正決策並保留 pane；回答後走 helper `--continue <pane>`，**NEVER** raw重送 prompt |
-| `status: completion_failed` | 回報失敗 gate與 retained pane；立即停止，不宣稱交接完成 |
-| `status: completion_unknown` | outcome缺失／失真、session漂移或只有 lifecycle `done`；fail closed並保留 pane |
+| `status: completion_blocked` | **先查證（見上），再**：只有非空 `decision`才向 user問那一個真正決策並保留 pane；回答後走 helper `--continue <pane>`，**NEVER** raw重送 prompt |
+| `status: completion_failed` | **先查證（見上），再**回報失敗 gate與 retained pane；立即停止，不宣稱交接完成 |
+| `status: completion_unknown` | **先查證（見上），再**回報；outcome缺失／失真、session漂移或只有 lifecycle `done` 都屬此類，fail closed並保留 pane |
 | transport / launcher / Herdr preflight 失敗 | 保留 durable task；能在本 session 合法完成就直接完成，否則回具體 blocker。**NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt |
 
 #### 已列明 gate 的短答（MUST）

@@ -72,6 +72,27 @@ completed <a> / packaged <b> / escalated <c> / in-flight <d>
 <!-- END: work-loop-status -->
 ```
 
-**本段是人讀輸出，NEVER 是狀態來源**——`failStreak` / `escalated` / `packaged` / `awaiting` 一律以
-`.clade/work-loop/state.json` 為準（per SKILL.md Step 1）。這裡的數字只是把 state 檔的內容
-渲染給人看；兩邊不一致時修的是渲染，不是 state。
+**上面這份主模板是人讀輸出，NEVER 是狀態來源**——`failStreak` / `escalated` / `packaged` /
+`awaiting` 一律以 `.clade/work-loop/state.json` 為準（per SKILL.md Step 1）。這裡的數字只是把
+state 檔的內容渲染給人看；兩邊不一致時修的是渲染，不是 state。
+
+## decay-unblock 變體（只由 Step 1 自癒寫）
+
+`state.round` **>** 本段記載的輪次時，Step 1 § Decay 偵測的 **D1** 自癒條款**只改 header 那一行、
+只加一段說明**，其餘各段原樣不動：
+
+```markdown
+_Round <N> · updated <ISO> · **decay-unblock**（自癒對齊）· fingerprint `<沿用舊值>` (unchanged <M> rounds)_
+
+> ⚠️ **本段其餘內容仍是 round <P> 的紀錄，round <P+1>–<N> 無敘事。** 那幾輪寫進了 state.json、
+> HANDOFF 寫入未完成，造成兩邊輪次不一致。本輪依 Step 1 D1 自癒條款對齊，未更新下方各段內容。
+```
+
+`<N>` = `state.round`、`<P>` = 本段**原本記載**的輪次、`<M>` = 沿用舊 header 的數字。
+`<N>` 與 `<P>` **NEVER 假設只差 1**——連續多輪 HANDOFF 寫入失敗時會差好幾輪，照實際讀到的值寫。
+
+這是本檔唯一的**部分寫入**變體——Step 7.2 的每輪整段覆寫不受影響，**本輪 Step 7.2 跑完時
+decay-unblock 標記與 ⚠️ 說明段會被正常模板整段蓋掉，那是預期行為**（標記只描述本輪開場那一刻
+的狀態，不是持久紀錄）。
+
+**NEVER** 在 Step 7.2 主動沿用這個變體——它只有 Step 1 D1 自癒那一個寫入時機。

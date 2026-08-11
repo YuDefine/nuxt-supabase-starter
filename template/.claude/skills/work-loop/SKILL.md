@@ -311,6 +311,7 @@ STATE="$(git rev-parse --show-toplevel)/.clade/work-loop/state.json"
   "subagentsSpawned": 4,
   "consecutiveDispatchFailures": 0,
   "guardrailsAck": "2026-08-05T04:02:10Z",
+  "sessionNote": "本輪一句話紀錄（Step 1 的 D1–D3 自癒／對齊、以及其他值得留痕的事）",
   "lockSessionId": "mshkf6es-mptx87qc-ubuntu",
   "inFlight": [{ "agent": "wt-td317", "item": "TD-317", "dispatchedAt": "…" }],
   "packaged": { "TD-402": "2026-08-05T03:40:00Z" },
@@ -346,7 +347,68 @@ STATE="$(git rev-parse --show-toplevel)/.clade/work-loop/state.json"
 
 兩條都不成立 → 續留 escalated（本輪**不 dispatch**），Step 7 原樣 re-emit。
 
-**Decay 偵測（hard gate）**：`guardrailsAck` 讀不到、或 `round` 與 HANDOFF `## Work Loop Status` 段記載的輪次不一致 → **判定 context decayed**，**MUST** 結束本輪：state 寫 `roundEndReason: "context-decay"`、跑 `work-loop-lock.ts release --session <id>`、退出。**NEVER**「感覺還記得」就繼續跑。
+### Decay 偵測（hard gate，先判身分再判 decay）
+
+觸發訊號有兩個：`guardrailsAck` 讀不到、或 `round` 與 HANDOFF `## Work Loop Status` 段記載的輪次不一致。
+
+**這兩個訊號在 runner child 身上永遠不代表 decay。** decay 指的是**同一個 process 的 context 被 auto-compaction 壓掉**——只有 in-session `/loop` 有這個失敗模式。runner child 每輪是 `claude --print` 起的**全新 process**，context 從零重建、狀態只從 state 檔讀，結構上不可能 decay。所以在 child 身上，訊號命中**一定**是「上一輪 bookkeeping 沒收尾」，而那需要的是**自癒或忽略**，不是中止。無條件中止會讓**每一輪**都在 Step 1 停住、零 scan 零 dispatch，直到 runner 的 no-progress 條件把自己停掉——而那個停法在 log 上跟正常收工幾乎無法區分（2026-08-11 <consumer-b> 實測：連續空轉近 7 小時，所有健康訊號正常，靠人工介入才發現）。
+
+**輪次不一致 MUST 先判方向再決定動作**——兩個方向的成因與處置相反，方向判錯會把無害的一側改成有害：
+
+| 方向 | 成因 | 該做什麼 |
+| --- | --- | --- |
+| `state.round` **>** HANDOFF | 上一輪 7.3 寫了 state、7.2 的 HANDOFF 沒寫成 —— 這是**死鎖方向** | 自癒（見下） |
+| `state.round` **<** HANDOFF | 上一輪 7.2 寫了 HANDOFF、7.3 的 state 沒寫成 —— per Step 7.2 Iron Law 的**無害方向** | **NEVER 動 HANDOFF**（它有較新一輪的完整敘事）；照常進 Step 1.5，本輪 Step 7 讓 state 自然追上 |
+
+**MUST** 依下表分流，**每一列**都要照著判，不是只看第一列：
+
+**列有代號（D1–D6），其他段落引用時 MUST 用代號、NEVER 用「第 N 列」**——列序會隨增補改變，序號指標會在改動後指到別列而沒有任何訊號。
+
+| 代號 | 可觀察 predicate | 動作 |
+| --- | --- | --- |
+| **D1** | 本輪是 runner child（`$ARGUMENTS` 含 `--runner-child` **或** `WORK_LOOP_RUNNER_CHILD=1`），且 `state.round` **>** HANDOFF 輪次 | **NEVER 判 decay。自癒**：把 HANDOFF status 段 header 的輪次對齊到 `state.round`，插一段說明該輪無敘事與對齊原因（形狀見下），然後**照常進 Step 1.5**，本輪一切照跑。自癒動作寫進本輪 `sessionNote`。**HANDOFF 路徑 MUST 依 Step 7.1 的 invariant 解 main worktree absolute path**——本 Step 讀 state 用的是 `git rev-parse --show-toplevel`（linked worktree 下解到副本），照那個路徑自癒會寫進副本、下一輪讀 main 仍落後，變成每輪自癒一次而 `round` 每輪前進，runner 的 no-progress 網永遠不觸發 |
+| **D2** | runner child，且 `state.round` **<** HANDOFF 輪次 | **NEVER 判 decay、NEVER 自癒、NEVER 改 HANDOFF**。照常進 Step 1.5；本輪 Step 7 正常寫完就對齊了。把這件事記進 `sessionNote` |
+| **D3** | runner child，且 HANDOFF **沒有 status 段 / 段內讀不到輪次**（舊 marker 未遷移、被 rotate 搬走、人工刪段） | **NEVER 判 decay**（沒有可比的方向就不是不一致）。照常進 Step 1.5；本輪 Step 7.2 依模板**整段建立**。記進 `sessionNote` |
+| **D4** | **HANDOFF 寫入失敗**——Step 1 的 D1 自癒寫入、或 Step 7.2 的收尾寫入，任一失敗 | 中止本輪（release lock、退出），照下方 § D4 的部分寫入白名單落檔。**D4 命中時壓過其餘各列**：同時命中 D1／D2／D3／D5 一律以 D4 為準 |
+| **D5** | runner child，`guardrailsAck` 讀不到 | **NEVER 判 decay**。那是第 1 輪、或 state 檔不完整；照常進 Step 1.5，讀完在 Step 7 補寫 `guardrailsAck`。**本列與 D1／D2／D3 可同時命中，命中幾列就做幾列的動作**；與 D4 同時命中則以 D4 為準 |
+| **D6** | **非** runner child（in-session `/loop`），任一訊號命中 | 判定 context decayed，**MUST** 結束本輪：state 寫 `roundEndReason: "context-decay"`、跑 `work-loop-lock.ts release --session <id>`、退出。**NEVER**「感覺還記得」就繼續跑。**但下列兩種不算訊號命中**（它們是首輪的正常長相，不是 decay）：state 檔不存在或 `round` 為 0；HANDOFF 還沒有 status 段 |
+
+### D4 的部分寫入白名單（唯一容許在 7.2 失敗後仍寫 state 的路徑）
+
+D4 與 Step 7.2 的「寫入失敗時 NEVER 繼續寫 7.3」不衝突，因為它寫的**不是** 7.3 的 bookkeeping。**MUST 只寫這兩個欄位、其餘一律不動**：
+
+| 欄位 | 寫什麼 |
+| --- | --- |
+| `roundEndReason` | `handoff-write-failed: <實際錯誤逐字>`，**NEVER** `context-decay` |
+| `stoppedReason` | **只在連續第 2 輪命中時**寫 `handoff-write-failed ×2: <錯誤>`（child 自己寫 `stoppedReason` 合法且有效，per [run-modes.md](reference/run-modes.md)） |
+
+**NEVER** 在 D4 路徑動 `round` / `fingerprint` / `fingerprintUnchangedRounds` / `inFlight` / `packaged` / `awaiting` / `guardrailsAck`——本輪什麼都沒做完，bump 它們等於謊報進度。
+
+**「連續第 2 輪」的判定 predicate**（不是憑印象）：Step 1 讀進來的 state，既有 `roundEndReason` 以 `handoff-write-failed:` 起頭，**且**冒號後的錯誤字串與本輪這次相同 → 這是第 2 輪。
+
+**`round` 不 bump 的連帶效果要講清楚，NEVER 反過來說**：D4 不動 `round`，所以 runner 的 `exit=0 且 round 未前進` 網會在**連續 2 輪**後印 `== stop: state 連續 2 輪未前進` 自行停掉（`runner.sh` 的 no-progress 判定）——**不會**空轉到 `--max-rounds`。`stoppedReason` 在這裡買的是**可診斷性**：沒有它，log 只說「state 未前進」，沒說是寫入權限壞了；有它，停止原因直接寫在 state 檔裡。它是第二道網，不是唯一那道。
+
+D1 自癒寫進 HANDOFF status 段的形狀（**只碰 header 那行 + 加一段說明**；變體同步登記在 [handoff-template.md](reference/handoff-template.md) § decay-unblock 變體）：
+
+```markdown
+_Round <N> · updated <ISO> · **decay-unblock**（自癒對齊）· fingerprint `<沿用舊值>` (unchanged <M> rounds)_
+
+> ⚠️ **本段其餘內容仍是 round <P> 的紀錄，round <P+1>–<N> 無敘事。** 那幾輪寫進了 state.json、
+> HANDOFF 寫入未完成，造成兩邊輪次不一致。本輪依 Step 1 D1 自癒條款對齊，未更新下方各段內容。
+```
+
+`<N>` = `state.round`、`<P>` = HANDOFF **原本記載**的輪次、`<M>` = 沿用舊 header 的數字。**角括號是佔位符，NEVER 逐字寫進 HANDOFF。**
+
+**落差 NEVER 假設是 1 輪**——連續多輪 HANDOFF 寫入失敗時 `<N>` 與 `<P>` 可以差好幾輪，寫死「round `<N-1>`」就是在 HANDOFF 裡陳述一件沒發生過的事，正好違反下一段的禁令。`<P>` 一律照讀到的實際值寫。
+
+**NEVER 讓自癒去改寫下方各段的敘事內容。** 那是上一輪的紀錄，自癒只對齊 header 的輪次並加這段說明；改寫敘事等於替一輪沒發生過的工作編造內容，而下一輪的讀者無從分辨真假。
+
+| Red Flag | 立即動作 |
+| --- | --- |
+| 身為 runner child，正在寫 `roundEndReason: "context-decay"` | 停手。child 不可能 decay，回上表判身分與方向 |
+| 看到輪次不一致就準備「把 HANDOFF 對齊到 state」，還沒判方向 | 停手。`state.round` < HANDOFF 時這個動作會把較新的敘事蓋上錯的輪次 |
+| 「兩邊輪次不一致、狀態不可信，安全起見先停一輪」 | 停止這個推論。安全中止在 child 身上不是保守選擇，是讓 loop 永久空轉 |
+| 自癒時順手把下方 In Progress / Next Steps 各段「更新成現況」 | 停手。本輪 scan 都還沒跑，那些「現況」是編的 |
 
 **`roundEndReason` 與 `stoppedReason` 是兩件事，寫錯會讓 loop 提早死掉**：
 
@@ -355,7 +417,14 @@ STATE="$(git rev-parse --show-toplevel)/.clade/work-loop/state.json"
 | `roundEndReason` | **這個 process** 該結束（context 到頂、item cap 用完） | 起下一個全新 process 繼續 |
 | `stoppedReason` | **整個 loop** 該停（真的做完 / fingerprint 三輪不變 / 連續失敗） | 不再起新 process |
 
-context-decay **永遠**寫 `roundEndReason`，**NEVER** 寫 `stoppedReason`。
+context-decay 與 handoff-write-failed **永遠**寫 `roundEndReason`，**NEVER** 寫 `stoppedReason`——唯一例外是 D4 的「同一寫入錯誤連續第 2 輪」，那時**兩個都寫**（`roundEndReason` 記本輪為何結束、`stoppedReason` 記整個 loop 不該再起新 process）。
+
+**兩個中止值語義不同，寫錯會把後續診斷帶去錯的方向**：
+
+| `roundEndReason` 值 | 語義 | 只在什麼身分下合法 | 讀到它該往哪查 |
+| --- | --- | --- | --- |
+| `context-decay` | **這個 process 的 context 被壓縮**，狀態記憶不可信 | 只有 in-session `/loop`。runner child **NEVER** 寫這個值 | 起 loop 的方式（該改用 runner） |
+| `handoff-write-failed: <錯誤>` | 狀態記憶正常，但 **HANDOFF 寫不進去**（permission / 路徑 / 工具錯誤） | 任何身分 | 寫入權限與 Step 7.1 路徑，**不是** context |
 
 ---
 
@@ -626,7 +695,7 @@ fingerprint = sha256(
 | Budget proxy | `subagentsSpawned >= 15`，或 lock timestamp 距今 ≥6h |
 | 系統性失敗 | `consecutiveDispatchFailures >= 2`（escalated 項不計入——它們本輪未 dispatch，沒有新失敗事件） |
 | Scan 失敗 | Step 2 已 STOP |
-| Context decay | Step 1 已 STOP |
+| Step 1 中止（`context-decay` / `handoff-write-failed`；兩者都寫 `roundEndReason`，**NEVER** 寫成 `stoppedReason`——唯一例外是 D4 連續第 2 輪，那時兩個都寫） | Step 1 已 STOP |
 | 真正做完 | 四組皆空 ∧ `inFlight` 空 ∧ 無未 packaged 的非自主 item |
 
 `fingerprintUnchangedRounds == 2` 且 `inFlight` 空 → 不停，但下次 `ScheduleWakeup` 退到長間隔。
@@ -642,6 +711,15 @@ fingerprint = sha256(
 `HANDOFF.md` / `docs/tech-debt.md` / `openspec/ROADMAP.md` **MUST** 寫到 main worktree absolute path——用 `dirname "$(git rev-parse --path-format=absolute --git-common-dir)"` 解。**禁止**用 cwd-相對路徑寫這幾個檔（在 linked worktree 內跑會寫進 worktree 副本，下一輪讀到舊版）。
 
 ### 7.2 HANDOFF 兩個段
+
+**Iron Law：HANDOFF 先寫、state 後寫，順序不可對調。** 7.2 與 7.3 是兩個獨立寫入、**沒有原子性**，所以要讓失敗往無害的一側倒：
+
+| 先寫誰 | 中途失敗後的下一輪 | 後果 |
+| --- | --- | --- |
+| **HANDOFF 先**（本 skill 的順序） | `state.round` < HANDOFF 輪次 → 下一輪重做一次已完成的 bookkeeping | 冪等、無害 |
+| state 先 | `state.round` > HANDOFF 輪次 → 每輪撞 Step 1 的輪次不一致訊號 | 死鎖（2026-08-11 <consumer-b>：空轉近 7 小時） |
+
+**7.2 寫入失敗時 NEVER 繼續寫 7.3 的 bookkeeping** —— 中止本輪並照 Step 1 § D4 的**部分寫入白名單**落檔：只寫 `roundEndReason`（＋連續第 2 輪的 `stoppedReason`），`round` / `fingerprint` / `inFlight` 等其餘欄位一律不動。「state 先落下來至少不會丟進度」是製造死鎖的那個推論，**NEVER** 採用。
 
 `## Work Loop Status`（`<!-- BEGIN: work-loop-status -->` / `<!-- END: work-loop-status -->` marker 包夾，**每輪整段覆寫**）。模板見 [reference/handoff-template.md](reference/handoff-template.md)。
 
