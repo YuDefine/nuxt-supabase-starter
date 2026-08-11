@@ -3,7 +3,7 @@
   "rulesProjection": "copy",
   "checksums": {
     "rules/agent-routing.codex-input-intercept.md": "278ff1ea1fbac8eb",
-    "rules/agent-routing.codex-watch-protocol.md": "62ab67bd0c41549f",
+    "rules/agent-routing.codex-watch-protocol.md": "66da9164f0032c9c",
     "rules/agent-routing.md": "bf2385b144e728cf",
     "rules/agent-self-verification.md": "226ccec1bff50abb",
     "rules/agent-self-verification.screenshot-evidence.md": "c8f274c48a74c6db",
@@ -58,7 +58,7 @@
     "rules/screenshot-strategy.md": "7165b5cc07b64ffc",
     "rules/self-hosted-runner.md": "288da48fa9017f04",
     "rules/session-claims.md": "d03e59ef4f692d76",
-    "rules/session-tasks.md": "cf4bd3f2d6601e3a",
+    "rules/session-tasks.md": "fada0fd9bf3e268a",
     "rules/session-tasks.operations.md": "c48034e7f84f877f",
     "rules/skill-management.md": "b35fcfe130a457d7",
     "rules/spectra-notion-coupling.md": "c1f47b254a24a467",
@@ -77,7 +77,7 @@
     "rules/wip-orphan-recovery.md": "7d89f540fbe7a8de",
     "rules/work-claims.md": "6dbdcae2298d0b72",
     "rules/worktree-default.commit-ceremony.md": "44a4f6cbc1dec91f",
-    "rules/worktree-default.md": "50f60f25fad15e54",
+    "rules/worktree-default.md": "5969a14f22dc9a7e",
     "rules/worktree-default.troubleshooting.md": "120c5beb57142d0a",
     "rules/auth.md": "0eb9f0b958db0391",
     "rules/dev-login.md": "aed92909f976d0bb",
@@ -153,6 +153,6 @@
     "agents/codex-fallback.md": "3e934c4522b01f2b",
     "agents/db-backup.md": "6cb8d7d93e01642d",
     "agents/references/clade-review-rules.md": "6bfcab329115f10c",
-    "agents/screenshot-review.md": "d1cf00c8e79c8bfe"
+    "agents/screenshot-review.md": "90074c0129d2c0a1"
   }
 }

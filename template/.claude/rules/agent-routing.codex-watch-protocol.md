@@ -303,11 +303,11 @@ Codex 由**該層編排者**在其自身 sandbox 內直接 Bash `run_in_backgrou
 
 讀 BashOutput tail，依末尾訊號決定下一步。**`--json` 模式**下 stdout 是 JSONL 事件，stderr 保持原格式：
 
-| 訊號 | 判定 | 下次 wakeup |
+| 訊號 | 判定 | 下一個 fallback |
 | --- | --- | --- |
-| JSONL 有新 `"type":"item.completed"` 事件（tool_call / shell / agent_message） | 健康 | `180` 秒（3 分，cache 內；使用者要求上限） |
-| JSONL 出現 `"type":"turn.completed"` 含 `usage` 後無新事件 | 即將完成 | `60` 秒（cache 內，便宜） |
-| 末尾 60s+ 無新輸出（看 BashOutput timestamp） | 輕度可疑 | `120` 秒；連續兩次無輸出 → 視為卡住，跳「介入觸發」 |
+| JSONL 有新 `"type":"item.completed"` 事件（tool_call / shell / agent_message） | 健康 | `1500` 秒（再下一個安全網 fallback） |
+| JSONL 出現 `"type":"turn.completed"` 含 `usage` 後無新事件 | 即將完成 | `60` 秒（cache 內，便宜；等 notification 收尾，**不是**輪詢） |
+| 末尾 60s+ 無新輸出（看 BashOutput timestamp） | 輕度可疑 | `300` 秒單次複查；連續兩次無新輸出 → 視為卡住，跳「介入觸發」 |
 | stderr 出現 `fetch failed` / `sandbox: rejected` / `Permission denied` / `EACCES` / 認證失敗 | 阻塞 | **立刻**跳「介入觸發」，不再 wakeup |
 | stderr 出現 `request_user_input is not supported in exec mode` | codex 在問問題 | turn 將結束 → 等 notification 走 [[agent-routing.codex-input-intercept]] 流程 |
 | JSONL 最後 `agent_message` 含 blocker 語意（「無法繼續」「需要使用者決定」「missing context」） | 阻塞 | **立刻**跳「介入觸發」 |
@@ -492,7 +492,7 @@ Agent 端的對應規範（hard budget、checkpoint、fail-fast、progress.json 
 | --- | --- | --- |
 | 進度來源 | `BashOutput` tail（codex stdout） | `progress.json`（agent 主動寫盤） |
 | 介入工具 | `kill <jobId>` | `SendMessage` 詢問 → `TaskStop` |
-| Wakeup 機制 | `ScheduleWakeup`（≤ 180s 上限）| 不一定需要 ScheduleWakeup — 主線在執行其他工作時主動 Read 即可；長時間無其他工作時可用 `ScheduleWakeup(900)` 標 progress.json 檢查 |
+| Wakeup 機制 | notification-only；`ScheduleWakeup` 只作安全網 fallback（`1200`–`1800`，上限 `3300`——見 § `ScheduleWakeup` 用法守則）| 不一定需要 ScheduleWakeup — 主線在執行其他工作時主動 Read 即可；長時間無其他工作時可用 `ScheduleWakeup(900)` 標 progress.json 檢查 |
 | Hard timeout | 30 min 累計 → AskUserQuestion | 60 min hard budget(agent 自我中止) + 45 min stale → AskUserQuestion |
 
 ### 必禁事項

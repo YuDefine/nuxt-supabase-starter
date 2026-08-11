@@ -187,5 +187,13 @@ session boundary 或跨 repo 決策已判定確實需要另一個互動 session�
 | `status: blocked` | 讀 visible question / approval UI，照原 gate 請 user 只回答那個真正的決策；**NEVER** 盲目重送 prompt |
 | transport / launcher / Herdr preflight 失敗 | 保留 durable task；能在本 session 合法完成就直接完成，否則回具體 blocker。**NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt |
 
+#### 已列明 gate 的短答（MUST）
+
+目前 gate 的 scope、targets 與動作已清楚列明後，user 回 `允許`、`可以`、`\sg` 或其他無歧義等價短答，**即完成那一個 gate**。**NEVER** 要求 user 複製、重述或重新貼完整 scope／授權句；下一個不同 gate 仍照常詢問。
+
+跨 session transport 需要 durable evidence 時，只記 compact receipt（gate 名稱或 scope 指標 + user 短答 + 已列明 targets）。Receipt 只證明該 gate 已完成，**不**新增權限或擴張 scope。
+
+permission classifier／harness 拒絕某載體時，**NEVER** 改用其他工具暗渡同一動作；目前 session 能在既有授權與 scope 內合法執行就直接執行，否則回具體 blocker。
+
 `\nx`（Charles 個人縮寫，判為收工時）同樣受本契約約束：「收工 ＋ 一句已登記在哪」只是下限；
 主線仍須自行完成 runner 或 Herdr dispatch，並給續跑 receipt。

@@ -26,7 +26,7 @@ Local edits will be reverted by the next sync.
 
 1. `Write` prompt 到 `/tmp/codex-screenshot-review-<slug>-prompt.md`（prompt 開頭字面 `[DELEGATED-BY-CLAUDE-CODE]`）
 2. `Bash` background：`codex exec --model gpt-5.6-sol --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -c model_reasoning_effort=low < /tmp/...`
-3. 啟動 Codex Watch Protocol（`ScheduleWakeup` 180s 第一次健康檢查）
+3. 啟動 Codex Watch Protocol：notification-only + 單一安全網 fallback（`ScheduleWakeup(1500)`），**不**下短輪詢
 4. 收 `<task-notification status=completed>` → BashOutput 讀 stdout → 整理結果回報
 
 Codex 端讀本檔（投影到 consumer 的 `.claude/agents/screenshot-review.md`）「## 你會收到」以下 section 即可，**跳過**本 BLOCKING + Step 0 identity check 段（那些是給 sonnet wrapper 用的、主線直派 codex 不適用）。

@@ -207,6 +207,29 @@ ls ~/offline/<consumer>-wt/<change-slug>/ 2>/dev/null || git worktree list
 
 只讀 main 會誤判「還沒開始實作」— 實際可能 worktree 已推進數個 phase。`/handoff` scan、`/spectra-ask` status check、主線 cross-check 都適用本 SOP。
 
+### §9.7.1 main 端出現 tasks.md 改動時，方向由 diff 判，不由本節外推
+
+上一段的「main 的是 fork-time snapshot」管的是**讀**。它**不保證** main 上的改動一定比較舊 —— 有人在 main 補勾 checkbox（因為 worktree 沒依 §9.5.1 commit tasks.md，main 看起來落後）是常態。把它外推成「main 端出現的 tasks.md 改動一律是退化副本」，丟掉的會是**唯一**那份較新的進度。
+
+main 端出現 `openspec/changes/**/tasks.md` 改動時 **MUST** 先量打勾方向：
+
+```bash
+git diff -- openspec/changes/<change>/tasks.md | grep -c '^+.*- \[x\]'   # 新增的打勾
+git diff -- openspec/changes/<change>/tasks.md | grep -c '^-.*- \[x\]'   # 移除的打勾
+```
+
+再依下表處置：
+
+| 可觀察 predicate | 動作 |
+| --- | --- |
+| 有 active worktree，且 worktree 內 tasks.md 的打勾數 ≥ main 端 | main 這份確實多餘 → 可 stash / 捨棄 |
+| 有 active worktree，但 **main 端打勾數較多** | main 這份是唯一記錄 → **NEVER** stash。先帶進 worktree（`git -C <wt> checkout main -- <path>`）再依 §9.5.1 commit |
+| 無 active worktree（已 merge-back / 已 archive） | main 就是 working truth → **NEVER** 以「working truth 在 worktree」為由處置 |
+
+**NEVER 只看 `git stash show --stat` 或 `git diff --stat` 判方向** —— `[ ]` → `[x]` 與 `[x]` → `[ ]` 在那裡給出**完全相同**的 insertions / deletions 數字（實證 2026-08-11 <consumer-b>：`21 insertions(+), 21 deletions(-)`，訊息標「退化副本」，實際是多勾了 21 項）。
+
+**NEVER** 因為 stash 訊息自稱那是過期內容就採信 —— 寫那句訊息的 session 依據的正是本節被外推的那句話。詳見 [[pitfall-main-side-tasks-md-tick-stashed-as-stale-copy]]。
+
 ## §10 review-gui 與 worktree 互動的已知坑
 
 > 3 條已記坑（home list silent skip / source aggregation collision / apply-pending 按前 spot check）詳見 [[worktree-default.troubleshooting]] § review-gui 坑。改 review-gui.ts 後 consumer 端 `pnpm review:ui:kill && pnpm review:ui` 重啟才吃新版。
