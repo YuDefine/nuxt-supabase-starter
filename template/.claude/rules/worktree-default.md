@@ -214,16 +214,24 @@ ls ~/offline/<consumer>-wt/<change-slug>/ 2>/dev/null || git worktree list
 main 端出現 `openspec/changes/**/tasks.md` 改動時 **MUST** 先量打勾方向：
 
 ```bash
-git diff -- openspec/changes/<change>/tasks.md | grep -c '^+.*- \[x\]'   # 新增的打勾
-git diff -- openspec/changes/<change>/tasks.md | grep -c '^-.*- \[x\]'   # 移除的打勾
+# MUST 用 `git diff HEAD`（含 staged）—— 純 `git diff` 漏掉已 staged 的改動，全 staged 時兩行都回 0
+git diff HEAD -- openspec/changes/<change>/tasks.md | grep -c '^+.*- \[x\]'   # 新增的打勾
+git diff HEAD -- openspec/changes/<change>/tasks.md | grep -c '^-.*- \[x\]'   # 移除的打勾
+```
+
+方向確認後 **MUST 逐項比對打勾集合，NEVER 只比數量** —— 數量相同也可能是不相交的兩組，比數量會靜默丟掉 main 獨有的項：
+
+```bash
+diff <(grep -n '^\s*- \[x\]' <main>/openspec/changes/<change>/tasks.md) \
+     <(grep -n '^\s*- \[x\]' <wt>/openspec/changes/<change>/tasks.md)
 ```
 
 再依下表處置：
 
 | 可觀察 predicate | 動作 |
 | --- | --- |
-| 有 active worktree，且 worktree 內 tasks.md 的打勾數 ≥ main 端 | main 這份確實多餘 → 可 stash / 捨棄 |
-| 有 active worktree，但 **main 端打勾數較多** | main 這份是唯一記錄 → **NEVER** stash。先帶進 worktree（`git -C <wt> checkout main -- <path>`）再依 §9.5.1 commit |
+| 有 active worktree，且 worktree 的打勾集合 **⊇** main 端（上面 diff 無 `<` 行） | main 這份確實多餘 → 可 stash / 捨棄 |
+| 有 active worktree，但 main 端有 worktree 沒有的打勾項（diff 有 `<` 行） | main 這份是唯一記錄 → **NEVER** stash。依 [[worktree-baseline]] § 手動 selective sync 正解帶過去（`git -C <main> diff --binary HEAD -- <path> \| git -C <wt> apply`）再依 §9.5.1 commit。**NEVER** `git -C <wt> checkout main -- <path>` —— 它讀 main 的 **commit**，而本節前提正是那份改動未 commit |
 | 無 active worktree（已 merge-back / 已 archive） | main 就是 working truth → **NEVER** 以「working truth 在 worktree」為由處置 |
 
 **NEVER 只看 `git stash show --stat` 或 `git diff --stat` 判方向** —— `[ ]` → `[x]` 與 `[x]` → `[ ]` 在那裡給出**完全相同**的 insertions / deletions 數字（實證 2026-08-11 <consumer-b>：`21 insertions(+), 21 deletions(-)`，訊息標「退化副本」，實際是多勾了 21 項）。
