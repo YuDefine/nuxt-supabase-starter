@@ -44,13 +44,25 @@
  *      (default 14, env CLADE_HANDOFF_ACTIVE_AGE_DAYS). Active = section body
  *      contains unchecked checkbox or active-intent keyword. Pure narrative
  *      should rotate at 3 days; active at 14 days warns about stuck WIP.
+ *   9. handoff-section-oversize — a single `## ` section exceeds section_max_kb
+ *      (default 6 KB, env CLADE_HANDOFF_SECTION_MAX_KB).
+ *  10. handoff-entry-oversize — a single `### ` entry exceeds entry_max_lines
+ *      (default 15, env CLADE_HANDOFF_ENTRY_MAX_LINES).
+ *      9/10 are TD-476 步驟二: the whole-file thresholds (35 KB / 400 lines) stay
+ *      untouched; these push the same standard down to section granularity so an
+ *      oversize lands as a warning in the round that writes it, instead of only
+ *      surfacing when the whole file breaks. Opt out by putting the literal
+ *      `handoff-budget-exempt` anywhere in the section/entry body (e.g. inside an
+ *      HTML comment) — an un-silenceable warning trains readers to skip the section.
  *
  * Per-consumer overrides: registry/consumers.json entry can have an optional
  *   "handoff_audit_thresholds": {
  *     "max_kb": 50,
  *     "max_lines": 600,
  *     "narrative_age_days": 5,
- *     "active_age_days": 14
+ *     "active_age_days": 14,
+ *     "section_max_kb": 8,
+ *     "entry_max_lines": 20
  *   }
  * field. drift-scan matches consumer by cwd basename === consumer_id.
  *
@@ -78,6 +90,14 @@ const HANDOFF_MAX_KB_DEFAULT = 35
 const HANDOFF_MAX_LINES_DEFAULT = 400
 const HANDOFF_NARRATIVE_AGE_DAYS_DEFAULT = 3
 const HANDOFF_ACTIVE_AGE_DAYS_DEFAULT = 14
+// TD-476 步驟二：段粒度預算。整檔門檻（35 KB / 400 行）刻意不動 —— 本組是把同一標準
+// 下探到 `##` / `###` 粒度，讓超額在**寫入當輪**可見，而不是等整檔破表才第四次全檔壓縮。
+const HANDOFF_SECTION_MAX_KB_DEFAULT = 6
+const HANDOFF_ENTRY_MAX_LINES_DEFAULT = 15
+// 豁免註記：段 / 條目本文任一行含此字串即整段跳過預算檢查。
+// 檔內自己寫過「關不掉的 warn 會訓練人跳過整段」——長期正當超標的段（例如刻意保存的
+// 決策憑證索引）MUST 有 opt-out，否則訊號會被整體無視。
+const HANDOFF_BUDGET_EXEMPT_MARKER = 'handoff-budget-exempt'
 
 // Conservative keyword list — any one occurrence in a dated section's title
 // or body marks it active. False-positive risk on completed sections is OK
@@ -270,6 +290,11 @@ function loadConsumerThresholds(consumerRoot) {
       'CLADE_HANDOFF_ACTIVE_AGE_DAYS',
       HANDOFF_ACTIVE_AGE_DAYS_DEFAULT,
     ),
+    section_max_kb: envPositiveInt('CLADE_HANDOFF_SECTION_MAX_KB', HANDOFF_SECTION_MAX_KB_DEFAULT),
+    entry_max_lines: envPositiveInt(
+      'CLADE_HANDOFF_ENTRY_MAX_LINES',
+      HANDOFF_ENTRY_MAX_LINES_DEFAULT,
+    ),
   }
   const cladeHome = findCladeHome()
   if (!cladeHome) return defaults
@@ -316,6 +341,40 @@ function parseHandoffSections(text) {
   return sections
 }
 
+// `### ...` 條目切分。`body` 是某個 `##` 段的本文，`bodyStartLine` 是它在整檔的 1-based
+// 起始行。條目行數含自己的 heading 行，切到下一個 `###` 或段尾為止。
+function parseSectionEntries(body, bodyStartLine) {
+  const lines = body.split('\n')
+  const entries = []
+  let current = null
+  let currentStart = 0
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^### (.+?)\s*$/)
+    if (!m) continue
+    if (current) {
+      entries.push({
+        ...current,
+        body: lines.slice(currentStart, i).join('\n'),
+        lines: i - currentStart,
+      })
+    }
+    current = { title: m[1], startLine: bodyStartLine + i }
+    currentStart = i
+  }
+  if (current) {
+    entries.push({
+      ...current,
+      body: lines.slice(currentStart).join('\n'),
+      lines: lines.length - currentStart,
+    })
+  }
+  return entries
+}
+
+function isBudgetExempt(body) {
+  return body.includes(HANDOFF_BUDGET_EXEMPT_MARKER)
+}
+
 function classifySection(title, body) {
   const titleLower = title.toLowerCase()
   for (const kw of BASELINE_TITLE_KEYWORDS) {
@@ -343,16 +402,29 @@ function checkHandoffHealth(consumerRoot, thresholds, now = Date.now()) {
   const sizeKb = sizeBytes / 1024
   const lineCount = text.split('\n').length
   const sections = parseHandoffSections(text)
+  const entryStats = []
   const sectionStats = sections.map((s) => {
     const date = parseDatedTitleDate(s.title)
     const kind = classifySection(s.title, s.body)
     const ageDays = date ? daysBetween(date.getTime(), now) : null
+    for (const e of parseSectionEntries(s.body, s.startLine + 1)) {
+      entryStats.push({
+        section: s.title,
+        title: e.title,
+        startLine: e.startLine,
+        lines: e.lines,
+        exempt: isBudgetExempt(e.body),
+      })
+    }
     return {
       title: s.title,
       startLine: s.startLine,
       kind,
       date: date ? date.toISOString().slice(0, 10) : null,
       ageDays,
+      sizeKb: Number((Buffer.byteLength(s.body, 'utf8') / 1024).toFixed(2)),
+      lines: s.body.split('\n').length,
+      exempt: isBudgetExempt(s.body),
     }
   })
 
@@ -388,6 +460,22 @@ function checkHandoffHealth(consumerRoot, thresholds, now = Date.now()) {
     }
   }
 
+  // TD-476 步驟二：段粒度預算。整檔門檻不動，這兩條讓超額在寫入當輪就可見。
+  for (const s of sectionStats) {
+    if (s.exempt || s.sizeKb <= thresholds.section_max_kb) continue
+    warnings.push({
+      drift: 'handoff-section-oversize',
+      message: `"## ${s.title}" is ${s.sizeKb.toFixed(2)} KB (section budget ${thresholds.section_max_kb} KB, line ${s.startLine}) — 換載體（把 NEVER / 判準搬去它自己的 TD / pitfall / archive，此處只留 pointer），NEVER 靠再壓縮一次整檔`,
+    })
+  }
+  for (const e of entryStats) {
+    if (e.exempt || e.lines <= thresholds.entry_max_lines) continue
+    warnings.push({
+      drift: 'handoff-entry-oversize',
+      message: `"### ${e.title}" (in "## ${e.section}") is ${e.lines} lines (entry budget ${thresholds.entry_max_lines}, line ${e.startLine}) — 換載體或收成 pointer`,
+    })
+  }
+
   return {
     handoffPath,
     exists: true,
@@ -395,6 +483,7 @@ function checkHandoffHealth(consumerRoot, thresholds, now = Date.now()) {
     lines: lineCount,
     thresholds,
     sectionStats,
+    entryStats,
     warnings,
   }
 }
