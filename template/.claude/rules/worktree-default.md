@@ -180,19 +180,9 @@ User 報告看不到 worktree 改動（「看不到變化」「沒反映」「de
 
 ### §9.5.1 Phase-tick commit 紀律（TD-216）
 
-worktree subagent 完成每個 tasks.md phase section 的最後一個 `- [ ]` → `- [x]` 後 **MUST** commit tasks.md 到 worktree branch：
+worktree subagent 完成每個 tasks.md phase section 的最後一個 `- [ ]` → `- [x]` 後 **MUST** commit tasks.md 到 worktree branch（type 用 `📝 docs`，**NEVER** `📝 spectra`；**NEVER** 把 tasks.md 以外的路徑加進這個 commit）—— 未 commit 的打勾不會被 `merge-back --squash` 帶回 main。
 
-```bash
-git commit --only -m "📝 docs(spectra): phase N done (<change-name>)" -- openspec/changes/<change-name>/tasks.md
-```
-
-type **MUST** 是 `📝 docs`，**NEVER** 是 `📝 spectra` —— 後者不在 conventional type 集合內，帶 emoji 型 `type-enum` 的 consumer（<consumer-b> 等）會在 commit-msg hook 擋下，而報的錯是 `subject may not be empty`，跟真因對不上。
-
-**Why**：`merge-back --squash` 只帶 committed changes 回 main。未 commit 的 checkbox 更新留在 worktree working tree → merge-back 不帶回 → review-gui 讀 main tasks.md 永遠看到 `[ ]` → impl-gate 誤判 <90%。
-
-**NEVER** 只在 worktree working tree 勾 checkbox 而不 commit — 即使「等做完一起 commit」也 **MUST** 至少在 build 結束前批次 commit 一次。
-
-**NEVER** 把 `openspec/changes/<change-name>/tasks.md` 以外的路徑加進這個 commit。契約 SoT 在 [[commit]] § worktree 內唯一合法的 commit：artifact-tick —— 那裡的 `git commit` 禁令對 worktree 內**其他任何**改動仍然成立，本節是它唯一的例外。
+> 指令逐字、commit-msg hook 的錯訊對不上真因、與 [[commit]] § artifact-tick 的例外關係詳見 [[worktree-default.troubleshooting]] §9.5.1。
 
 ## §9.7 Artifact Reading SOP — 讀進度前先查 active worktree
 
@@ -209,34 +199,9 @@ ls ~/offline/<consumer>-wt/<change-slug>/ 2>/dev/null || git worktree list
 
 ### §9.7.1 main 端出現 tasks.md 改動時，方向由 diff 判，不由本節外推
 
-上一段的「main 的是 fork-time snapshot」管的是**讀**。它**不保證** main 上的改動一定比較舊 —— 有人在 main 補勾 checkbox（因為 worktree 沒依 §9.5.1 commit tasks.md，main 看起來落後）是常態。把它外推成「main 端出現的 tasks.md 改動一律是退化副本」，丟掉的會是**唯一**那份較新的進度。
+上一段管的是**讀**，它**不保證** main 上的改動比較舊 —— 在 main 補勾 checkbox 是常態。**NEVER** 把它外推成「main 端出現的 tasks.md 改動一律是退化副本」而 stash 掉；**MUST** 先用 `git diff HEAD`（含 staged）量打勾方向、再逐項比對打勾集合（**NEVER** 只比數量、**NEVER** 只看 `--stat`：`[ ]`→`[x]` 與反向給出完全相同的 insertions / deletions）。
 
-main 端出現 `openspec/changes/**/tasks.md` 改動時 **MUST** 先量打勾方向：
-
-```bash
-# MUST 用 `git diff HEAD`（含 staged）—— 純 `git diff` 漏掉已 staged 的改動，全 staged 時兩行都回 0
-git diff HEAD -- openspec/changes/<change>/tasks.md | grep -c '^+.*- \[x\]'   # 新增的打勾
-git diff HEAD -- openspec/changes/<change>/tasks.md | grep -c '^-.*- \[x\]'   # 移除的打勾
-```
-
-方向確認後 **MUST 逐項比對打勾集合，NEVER 只比數量** —— 數量相同也可能是不相交的兩組，比數量會靜默丟掉 main 獨有的項：
-
-```bash
-diff <(grep -n '^\s*- \[x\]' <main>/openspec/changes/<change>/tasks.md) \
-     <(grep -n '^\s*- \[x\]' <wt>/openspec/changes/<change>/tasks.md)
-```
-
-再依下表處置：
-
-| 可觀察 predicate | 動作 |
-| --- | --- |
-| 有 active worktree，且 worktree 的打勾集合 **⊇** main 端（上面 diff 無 `<` 行） | main 這份確實多餘 → 可 stash / 捨棄 |
-| 有 active worktree，但 main 端有 worktree 沒有的打勾項（diff 有 `<` 行） | main 這份是唯一記錄 → **NEVER** stash。依 [[worktree-baseline]] § 手動 selective sync 正解帶過去（`git -C <main> diff --binary HEAD -- <path> \| git -C <wt> apply`）再依 §9.5.1 commit。**NEVER** `git -C <wt> checkout main -- <path>` —— 它讀 main 的 **commit**，而本節前提正是那份改動未 commit |
-| 無 active worktree（已 merge-back / 已 archive） | main 就是 working truth → **NEVER** 以「working truth 在 worktree」為由處置 |
-
-**NEVER 只看 `git stash show --stat` 或 `git diff --stat` 判方向** —— `[ ]` → `[x]` 與 `[x]` → `[ ]` 在那裡給出**完全相同**的 insertions / deletions 數字（實證 2026-08-11 <consumer-b>：`21 insertions(+), 21 deletions(-)`，訊息標「退化副本」，實際是多勾了 21 項）。
-
-**NEVER** 因為 stash 訊息自稱那是過期內容就採信 —— 寫那句訊息的 session 依據的正是本節被外推的那句話。詳見 [[pitfall-main-side-tasks-md-tick-stashed-as-stale-copy]]。
+> 指令逐字、三種 predicate 的處置表、2026-08-11 <consumer-b> 實證詳見 [[worktree-default.troubleshooting]] §9.7.1 與 [[pitfall-main-side-tasks-md-tick-stashed-as-stale-copy]]。
 
 ## §10 review-gui 與 worktree 互動的已知坑
 
