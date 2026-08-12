@@ -69,7 +69,9 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 
 - **新規約 / 改措辭前先跑 baseline（SHOULD）**：無規約下用誘發情境跑一次，確認失敗真的存在。對照組沒失敗 → 不要寫這條規約（沒有要修的東西，寫了只燒 token）。
 - **情境 MUST 只觸發你要測的那一條規約**：情境若同時命中第二條規約而兩者指向不同動作，正解就變歧義、pass 率被稀釋成雜訊，看起來像規約沒綁住、實際是題目出錯。判定法：寫完情境後自問「還有哪條規約會被這段描述叫醒？」（實例：`destructive-euphemism` 原版把 untracked 目錄設成 `openspec/changes/archive/…`，同時叫醒 [[commit]] § Partial Archive Gate「partial state MUST 由 user 拍板」，使兩個選項都站得住；換成一般 scratch 目錄後 baseline 0/5 → with-rule 4/5，鑑別力才回來）。
-- **對照組沒失敗有兩種成因，別混為一談**：(a) 規約沒有要修的東西 → 不要寫；(b) 規約教的是**模型原本沒有的選項**（如「有 codex 這個 runtime 可以派」），無規約時模型根本無從違反 → 對照組**必然**通過，此類規約要改測反方向才有鑑別力。誤判成 (a) 會刪掉有效規約。
+- **對照組沒失敗有三種成因，別混為一談**：(a) 規約沒有要修的東西 → 不要寫；(b) 規約教的是**模型原本沒有的選項**（如「有 codex 這個 runtime 可以派」），無規約時模型根本無從違反 → 對照組**必然**通過，此類規約要改測反方向才有鑑別力；(c) **情境餵了真實場景不自帶的判定素材**（predicate 的答案自報在題目裡、gate 的存在被逐字聲明）→ 量到的是「答案給了會不會用」，不是「會不會自己去判」，對照組通過是**量測失真**不是失敗不存在。誤判成 (a) 會刪掉有效規約。
+- **(c) 的判定與處置**：手上有同型失敗的**真實 telemetry**（ledger / transcript / audit 訊號）而對照組通過時，**MUST 先懷疑 (c)**、**NEVER** 先套 Iron Law 收手——證據優先序是**真實 telemetry > 合成情境**，情境是失敗的 proxy，proxy 通過推翻不了直接觀測。判別法：把題目裡的自報聲明逐條刪掉、還原真實資訊條件，刪不掉（刪了正解就變灰）= 該失敗模式在 harness 量測邊界外（`--safe-mode --tools ''` 量的是純知識決策，見 `vendor/snippets/rule-authoring/README.md` § 兩支 harness 分工）。此時規約仍可寫，但三件事變 MUST：(i) 改動理由**引 telemetry、NEVER 引 scenario**；(ii) scenario 留檔並在檔頭明寫「本情境量不到 X」，防止未來被當 necessity 證據引用；(iii) 規約形式偏向**把推導變查表**——失敗根因是執行成本時再加一條 MUST 句買不到東西（per § 先分類失敗型態）。
+- **(c) 不是 Iron Law 的豁免口**：沒有真實 telemetry 佐證時，「情境可能餵了答案」**NEVER** 單獨當保留規約的理由——那會讓每一條對照組通過的規約都找得到開脫。(c) 的准入是「telemetry 與對照組**矛盾**」這個可觀察事實，不是對情境品質的主觀懷疑。首個實證見 `docs/rule-rationale/rule-authoring.md` § 對照組成因 (c)。
 - **高風險措辭 MUST micro-test**：≥5 reps 新鮮 context + 無指引對照組，逐個人工讀 flagged match（template 回聲與引用反例會偽裝成命中）。**Variance 本身是指標**：5 reps 出 5 種解讀 = 措辭沒綁住，先收斂形式再加字。
 - 「高風險」判定：紀律型三件套規約、會散播到全 fleet 的 NEVER/MUST 行、歷史上重犯 ≥2 次的主題、**反轉或收窄既有 NEVER/MUST 行的觸發條件**——改方向的規約最容易讓模型兩邊都不遵守：舊的 default 已經拆掉、新的 default 還沒綁住，中間那段真空比原本沒規約更糟。
 - **判讀一律以人工複讀為準，assertion regex 只當初篩**：regex 嚴重低估命中率。實測語料：`我選 **B**` 這個最常見的開頭因為 `我` 卡在行首而不匹配，人工複讀 5/5、assertion 只認 2/5。看 assertion 數字下結論等於量錯了還不知道。
