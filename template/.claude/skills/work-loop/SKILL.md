@@ -45,6 +45,7 @@ $ARGUMENTS
 
 - `--unattended`（`runner.sh` 每輪固定帶）：**3-item cap**（避免 runaway）+ **禁止 `AskUserQuestion`**。不帶時無 item cap，改由 Step 6 的 round cap / fingerprint 控制。
 - `--runner-child`（只由 `runner.sh` 帶）：模型可見的 runner child 身分 marker；`WORK_LOOP_RUNNER_CHILD=1` 是同一身分的機械補強。
+- `--min-wakeup-seconds <n>`（`runner.sh` 每輪固定帶，預設 1200；`WORK_LOOP_MIN_WAKEUP_SECONDS` 是機械補強）：本輪**每一個** `ScheduleWakeup` / `Monitor` 的 interval **MUST ≥ n**。帶了它就以它為準，**NEVER** 因為「這次只等一下下」用更短的值——短輪詢買不到 notification 沒給的東西（Step 0 § (d) 已逐字禁止輪詢進度）。不帶時各處原有的 interval 建議照舊。
 - 使用者說「自動推」「把待辦跑完」「持續做」「不要停」「無人值守」→ 等同要求 continuous（見下）。
 
 **沒有 `--turbo`。** 非 spectra 待辦（HANDOFF / tech-debt / ROADMAP）是**預設 scope**，不需要任何 flag 開啟。
@@ -129,7 +130,7 @@ console.log(Array.isArray(s.awaiting)?s.awaiting.length:"STATE_CORRUPT")
   | --- | --- |
   | candidate list 還有**未 triage** 或**已判自主但未執行**的 item | **NEVER 排 wakeup。立刻接著跑下一輪**（同一個 turn 內連續跑，不睡） |
   | in-flight ledger > 0，且扇出組還有空位 | **NEVER 排 wakeup。** 補 dispatch，或做主線即時組的工作 |
-  | in-flight ledger > 0，扇出組已滿、主線即時組已空 | 排 wakeup，短 interval（60–180s）當 notification 的安全網 |
+  | in-flight ledger > 0，扇出組已滿、主線即時組已空 | 排 wakeup 當 notification 的安全網——interval 取 60–180s，但**帶 `--min-wakeup-seconds <n>` 時取 n**（下限壓過本列的建議值） |
   | 所有 item 皆 completed / packaged / escalated / legal-skip，**且** in-flight = 0 | 排 wakeup，長 interval（1200–1800s heartbeat）——這是**唯一**可以睡長的狀態 |
   | Step 6 停止條件成立 | `ScheduleWakeup({stop: true})` |
 
@@ -195,6 +196,8 @@ runner process 的退出通知到達時 **MUST 主動回報，不等 user 問**�
 | 迴圈跑滿 `--max-rounds`（**沒有** `== stop:` 行） | 額度用完，**不是**做完 | 待辦還在，需再起一輪 |
 | `== stop: 連續 2 輪 exit≠0` | 系統性故障 | **異常中止** + log 路徑 |
 | `== stop: state 連續 2 輪未前進` | child 正常退出但 state 沒前進 | **異常中止** + 那幾輪沒寫進 state |
+| `== preflight 未通過`（exit 3） | 起跑前探針就不過，**一輪都沒跑** | **環境故障**：逐字轉述探針給的理由 + `preflight.log` 路徑。**NEVER** 直接補 `--skip-preflight` 重跑——那是把探針抓到的問題蓋掉 |
+| `== 待辦枯竭`（exit 4） | 推得動的待辦少於門檻，**一輪都沒跑** | **不是故障**：說「待辦枯竭，需 attended 補彈藥」+ 印出的 ready 數。**NEVER** 回報成待辦已推完 |
 
 #### (c.1) 連續未前進的 ownership 分流（hard rule）
 
@@ -208,7 +211,7 @@ runner process 的退出通知到達時 **MUST 主動回報，不等 user 問**�
 
 **Red Flag**：看到 `state 連續 2 輪未前進` 後正要把 log 路徑貼給 user、但尚未依 task 狀態停止 running runner（或確認它已退出）並調查最後兩輪——停下，先走本節 ownership 表。
 
-**下三列都不是「跑完了」。** **NEVER** 把其中任何一列回報成待辦已推完，**也 NEVER** 只摘成功的那幾輪而不提中止——runner 每輪成功都印 `✓ round <n> 完成`，只讀那些行會產出一份看起來順利的假報告。命中下兩列時 **MUST** 一併附 `tail -20 <最後一個 log>`。
+**只有第一列是「跑完了」，其餘每一列都不是。** **NEVER** 把其中任何一列回報成待辦已推完，**也 NEVER** 只摘成功的那幾輪而不提中止——runner 每輪成功都印 `✓ round <n> 完成`，只讀那些行會產出一份看起來順利的假報告。命中 `連續 2 輪 exit≠0` 或 `state 連續 2 輪未前進` 時 **MUST** 一併附 `tail -20 <最後一個 log>`；命中 `preflight 未通過` 或 `待辦枯竭` 時沒有 round log 可附，改附 `preflight.log` 的最後一行。
 
 #### (d) cache-keepalive heartbeat（MUST）
 
@@ -367,9 +370,14 @@ fi
                  "rationale": "…", "nextStep": "/wt td402: …" }],
   "decisions": { "TD-355": { "answer": "A", "note": "<Charles 逐字>", "answeredAt": "…" } },
   "failStreak": { "TD-388": 2, "fix-pinia-mutation": 1 },
-  "escalated": { "add-audit-log": { "bucket": "applyBlocked", "reason": "…" } }
+  "escalated": { "add-audit-log": { "bucket": "applyBlocked", "reason": "…" } },
+  "blockers": { "TD-402": { "fingerprint": "sha256:…", "blocker": "<原文>",
+                            "unblockPredicate": "<一條可觀察 predicate>", "predicateValue": "<上次量到的值>",
+                            "firstSeenRound": 12, "lastCheckedRound": 18 } }
 }
 ```
+
+`blockers` 是 blocker 指紋表，讓同一批卡住的 item 不必每輪重新診斷一次——欄位語義、三步查表、入表門檻與清表時機在 [reference/blocker-ledger.md](reference/blocker-ledger.md)，**此處不複述**。舊 state 檔沒有這個欄位是正常的（本欄位之前的版本），當成空物件起算即可。
 
 **檔案不存在** → 這是第 1 輪，用 `{round: 0}` 起手，Step 7 建檔。
 
@@ -481,6 +489,21 @@ context-decay 與 handoff-write-failed **永遠**寫 `roundEndReason`，**NEVER*
 
 讀完把 `guardrailsAck` 更新為當前 ISO 時間（Step 7 落檔）。
 
+### Routing re-read（同一輪，同樣 hard rule）
+
+**每一輪** dispatch 前 **MUST** 一併讀 [[agent-routing]] 的 § 派不派（先於派給誰）、§ Routing Table、
+§ Claude 委派的 model 檔位——loop 是 dispatch 量的主要來源，檔位選擇每一輪都在發生。
+
+三條在 loop 路徑上最常滑掉的：
+
+- **主線自己動手也要過 Routing Table**。mechanical fan-out 與 read-heavy 兩列的觸發條件**不限於委派**：
+  準備自己跑 ≥3 條唯讀指令、或自己讀 ≥5 個檔／>500 行長文件，就已經命中 → 派 `--model luna --effort low`。
+  **NEVER** 因「順手跑掉比較快」略過查表
+- **原判 Claude `sonnet`／`haiku` 的委派 MUST 先判 codex 可用性**，可用就轉派 `--model luna`
+  （`sonnet` → `--effort high`、`haiku` → `--effort low`），准入判準見該 §
+- **每一次 dispatch MUST 帶 `--route`**（缺就 exit 1），重試帶 `--retry-of <label>`。
+  **NEVER** 不確定就填 `manual`
+
 ---
 
 ## Step 2 — Scan
@@ -581,7 +604,7 @@ launcher 早就死了。分類之前先實跑一次，死掉的組直接標不�
 
 | 可觀察 predicate | 本步怎麼跑 |
 | --- | --- |
-| **attended**（非 `--unattended` 且本輪非 `claude --print` 起） | 跑完整 (a)(b)(c)，佇列清空才進 Step 3 |
+| **attended**（非 `--unattended` 且本輪非 `claude --print` 起） | 跑完整 (a)(b)(c)，佇列清空才進 Step 3；**接著逐條重量 `blockers` 的 predicate**（[blocker-ledger.md](reference/blocker-ledger.md) § 清 ledger 是正當工作） |
 | **unattended / runner** | **只跑 (a)**，(b)(c) 跳過。佇列剩下的 item 本輪照舊排除，**其餘工作全部照跑** |
 
 判不出自己在哪個 mode → 當作 unattended。
@@ -607,8 +630,8 @@ launcher 早就死了。分類之前先實跑一次，死掉的組直接標不�
 | 5.5 | `parked` | 3h | unpark → apply |
 | 6 | `applyInProgress` | 3f | 繼續 apply |
 | 7 | `healthCheckNeeded` | 3g | 修 tasks.md 格式 |
-| 8 | `applyBlocked` | 3i | **評估 blocker**（[blocker-evaluation.md](reference/blocker-evaluation.md)） |
-| 9 | `awaitingUserDecision` | 3j | **評估決策需求**（同上） |
+| 8 | `applyBlocked` | 3i | **先過 [blocker-ledger.md](reference/blocker-ledger.md) 三步查表**，沒命中才**評估 blocker**（[blocker-evaluation.md](reference/blocker-evaluation.md)） |
+| 9 | `awaitingUserDecision` | 3j | 同上查表，沒命中才**評估決策需求** |
 | — | `crossWtDirty` / `malformed` | — | 跳過（log） |
 
 **代號欄**是 reference 檔內部使用的 bucket 短碼（`3z` / `3f` / `3i` …）——它們在 reference 裡出現時
@@ -631,6 +654,8 @@ ELSE:
 ### 3.1b 非 spectra source — 分類表
 
 **MUST Read [reference/non-spectra-dispatch.md](reference/non-spectra-dispatch.md)** 取分類表（code task / investigation / blocked / 模糊）與 **skip 合法理由窮舉 4 條 + 8 條不合法藉口逐字實錄**。**NEVER** 自創第 5 條 skip 理由。
+
+分類為 blocked 的 candidate 與 3.1a 的 bucket 8／9 走同一條路：**先過 [blocker-ledger.md](reference/blocker-ledger.md) 三步查表**，沒命中才逐條診斷。
 
 ### 3.2 自主判定（七條 AND）
 
@@ -743,6 +768,8 @@ fingerprint = sha256(
 | Step 1 中止（`context-decay` / `handoff-write-failed`；兩者都寫 `roundEndReason`，**NEVER** 寫成 `stoppedReason`——唯一例外是 D4 連續第 2 輪，那時兩個都寫） | Step 1 已 STOP |
 | 真正做完 | 四組皆空 ∧ `inFlight` 空 ∧ 無未 packaged 的非自主 item |
 
+**寫 `stoppedReason` 之前 MUST 先清一次 `blockers` ledger**（逐條重量 predicate，值變了或 predicate 已不成立就刪條目）——誤入表的 item 不會出現在 candidate list 裡，所以「四組皆空」這個判準看不到它們。清完仍空才算真正做完，詳見 [reference/blocker-ledger.md](reference/blocker-ledger.md) § 清 ledger 是正當工作。
+
 `fingerprintUnchangedRounds == 2` 且 `inFlight` 空 → 不停，但下次 `ScheduleWakeup` 退到長間隔。
 
 **in-flight ledger > 0 就不是停止狀態**，即使 candidate list 空——background agent 完成後狀態會位移（`applyInProgress` → `ready` → `done`），此時退出 = 成果懸空等 user 手動善後。
@@ -841,6 +868,7 @@ git show --stat HEAD | tail -3   # 驗 scope
 | [run-modes.md](reference/run-modes.md) | 決定怎麼起這個 loop 時（Step 0） |
 | [decision-drain.md](reference/decision-drain.md) | **每一輪**（Step 2.7，hard rule） |
 | [simple-buckets.md](reference/simple-buckets.md)／[blocker-evaluation.md](reference/blocker-evaluation.md) | spectra item 命中固定步驟 bucket／`applyBlocked`・`awaitingUserDecision`（Step 3.1a） |
+| [blocker-ledger.md](reference/blocker-ledger.md) | **任一** blocked item 進評估之前（Step 3.1a／3.1b）、以及寫 `stoppedReason` 之前（Step 6.2） |
 | [non-spectra-dispatch.md](reference/non-spectra-dispatch.md) | 分類非 spectra candidate（Step 3.1b） |
 | [autonomy-predicate.md](reference/autonomy-predicate.md) | 判自主 / 做 packaging（Step 3.2 / 4b） |
 | [dispatch-topology.md](reference/dispatch-topology.md) | 分組（Step 3.3） |

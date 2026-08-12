@@ -31,12 +31,34 @@ cache-keepalive heartbeat 與 (e) 的 per-round Monitor——本檔只管指令�
 
 `runner.sh` 的 flag：`--max-rounds <n>`（預設 20）、`--dry-run`（只印每輪會下的指令）、
 `--permission-mode <mode>`（預設 `acceptEdits`；**NEVER** 預設 `bypassPermissions`——那會連
-破壞性指令一起放行，要更寬鬆 MUST 由使用者顯式指定）。runner 另內建只批准
+破壞性指令一起放行，要更寬鬆 MUST 由使用者顯式指定）、`--skip-preflight`、`--min-ready <n>`
+（預設 3，0 = 關掉）、`--min-wakeup <秒>`（預設 1200）。runner 另內建只批准
 `Bash(mktemp -t work-loop-scan.XXXXXXXXXX)`，讓 Step 2 的唯一 scan temp path 可在 headless process
 建立；其他 Bash 仍照 permission mode 與使用者 permission rules 判定。每輪另固定帶模型可見的
 `--runner-child` 與 `WORK_LOOP_RUNNER_CHILD=1`；Step 0 命中任一身分就只執行單輪，NEVER 再啟 runner。
 
 每輪 log 落在 `.clade/work-loop/logs/round-<ts>.log`。
+
+## 起跑前的兩道門：跑得起來嗎、有事可做嗎
+
+runner 在跑第一輪之前先過兩道門，任一不過就**一輪都不跑**、理由落在
+`.clade/work-loop/logs/preflight.log`：
+
+| 門 | 檢查什麼 | 不過時的 exit code 與語義 |
+| --- | --- | --- |
+| **preflight** | PATH 上有 `claude` / `node`、repo 可寫、三種待辦源至少一個讀得到、**headless child 真的能跑一個 Bash tool call** | `3` —— 系統性故障，查權限閘門與環境 |
+| **待辦源健康門檻** | `work-loop-ready-count.ts` 數出的 ready item ≥ `--min-ready`（預設 3） | `4` —— **待辦枯竭，需 attended 補彈藥**，不是故障 |
+
+headless 探針要付一次小的 `claude --print` 呼叫，換掉的是**整個 run**：2026-08-10 <consumer-b> 因
+harness 權限閘門連續拒絕，空轉 99 輪、零待辦被修改。探針同時驗回傳 token 與 `mktemp` 的產出
+路徑——只驗 token 會被「模型不呼叫工具、直接回 token」騙過，而那正是要抓的失敗形狀。
+
+探針誤判過嚴時走 `--skip-preflight`（`--dry-run` 自動略過），**NEVER** 靠拿掉探針本身解決。
+ready-count helper 缺席或輸出無法解析時**放行**：門檻是省成本的優化，NEVER 讓它變成起不了
+runner 的新故障。
+
+本證據決定：這兩道門要不要前置——要，且要在第一輪之前。
+本證據不決定：跑起來之後的停止條件——那仍由下方四種停止原因判定，**NEVER** 拿本節論證「輪次可以更早收掉」。
 
 ## 待答決策佇列：runner 只印不擋
 

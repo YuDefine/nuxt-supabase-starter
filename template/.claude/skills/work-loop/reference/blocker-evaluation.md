@@ -9,6 +9,8 @@ Local edits will be reverted by the next sync.
 
 > 本檔從 SKILL.md § 3i / § 3j 搬移，原文逐字保留。主檔 pointer：「bucket 為 `applyBlocked` 時 MUST 先完整讀本檔 § 3i；bucket 為 `awaitingUserDecision` 時 MUST 先完整讀本檔 § 3j」。
 
+**進本檔任一條判定之前，該 item MUST 已經過 [blocker-ledger.md](blocker-ledger.md) 的三步查表且沒命中。** 命中查表的 item 本輪不進本檔——它上一輪已經照本檔判過，而解除條件的實測值沒有變。
+
 ## 批次蒐證（3i + 3j 合計 ≥4 條時）
 
 本輪 `applyBlocked` + `awaitingUserDecision` 合計 ≥4 條 → 逐條讀 tasks.md / HANDOFF 就是 [dispatch-topology.md](dispatch-topology.md) § 主線即時組的 pre-scan 前置判定 要攔的形狀。

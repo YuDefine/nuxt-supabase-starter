@@ -13,6 +13,12 @@
 #   ./runner.sh                    # 跑到停止條件成立，最多 20 輪
 #   ./runner.sh --max-rounds 5
 #   ./runner.sh --dry-run          # 只印每輪會下的指令，不真的跑
+#   ./runner.sh --skip-preflight   # 探針誤判過嚴時的 override
+#   ./runner.sh --min-ready 0      # 關掉待辦源健康門檻
+#
+# 起跑前先跑 preflight（§ Preflight）與待辦源健康門檻（§ 待辦源健康門檻）：兩者任一不過就
+# **完全不啟動**，理由落在 $LOG_DIR/preflight.log。它們省的不是第 4 輪起的重複失敗，是全部
+# 那幾十輪 —— 2026-08-10 <consumer-b> 因 headless 權限閘門連續拒絕，空轉 99 輪、零待辦被修改。
 #
 # 停止：state 檔出現 stoppedReason，或達 --max-rounds，或連續 2 輪 exit≠0，
 #       或 state 連續 2 輪未前進。
@@ -46,6 +52,7 @@ LOG_DIR="$REPO/.clade/work-loop/logs"
 # 因為寫它的 child 就是最後一個寫入者、寫完立刻退出。壞掉的只有**外部**要求停止這條。
 STOP_FILE="$REPO/.clade/work-loop/stop"
 LOCK_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-lock.ts"
+READY_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-ready-count.ts"
 # worktree 母目錄，與 vendor/scripts/wt-helper.ts:779 的 `<repo>-wt` 慣例對齊（推導不寫死）。
 # 它必須進 --add-dir —— 見下方 PERM_MODE 註解。
 #
@@ -58,6 +65,14 @@ WT_PARENT="$(dirname "$MAIN_WT")/$(basename "$MAIN_WT")-wt"
 
 MAX_ROUNDS=20
 DRY_RUN=0
+SKIP_PREFLIGHT=0
+# 待辦源健康門檻：起跑前數得出的 ready item 少於這個數就不啟動（0 = 關掉本門檻）。
+# 3 是下限側的保守值 —— 低於它時一輪的固定成本（冷載 + scan + 分類）多半換不到一個 item。
+MIN_READY=3
+# `ScheduleWakeup` / `Monitor` 的 interval 下限（秒）。CLAUDE.md 已有長等待規約，但 2026-08-12
+# 量測到 197 次呼叫（<consumer-b> 2.10 次/輪）證明無人值守下遵守不穩，所以在 runner 層把數字下沉進
+# 每輪的 prompt —— 它出現在 user turn，比冷載一次的規約大聲。
+MIN_WAKEUP=1200
 # acceptEdits 是刻意的預設：runner 要能無人值守跑，但 bypassPermissions 會連
 # 破壞性指令一起放行。要更寬鬆 MUST 由使用者顯式指定，NEVER 在腳本裡預設。
 #
@@ -80,6 +95,9 @@ while [ $# -gt 0 ]; do
     --max-rounds) MAX_ROUNDS="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --permission-mode) PERM_MODE="$2"; shift 2 ;;
+    --skip-preflight) SKIP_PREFLIGHT=1; shift ;;
+    --min-ready) MIN_READY="$2"; shift 2 ;;
+    --min-wakeup) MIN_WAKEUP="$2"; shift 2 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -173,6 +191,97 @@ awaiting_count() {
   node -e 'try{const a=require(process.argv[1]).awaiting;console.log(Array.isArray(a)?a.length:0)}catch{console.log(0)}' "$STATE" 2>/dev/null || echo 0
 }
 
+# ── Preflight ─────────────────────────────────────────────────────────────────
+# 起跑前把「這個 runner 跑得起來嗎」問完。不過就 exit≠0 且**一輪都不跑**。
+#
+# 為什麼是前置探針而不是斷路器：斷路器要先燒掉 N 輪才會跳，而失敗模式是**起跑當下就已經
+# 確定**的（權限閘門不會在第 4 輪改變主意）。2026-08-10 <consumer-b> 空轉 99 輪的成本，前置探針能
+# 全額省下，斷路器只省得到後面那 96 輪。
+#
+# 探針誤判過嚴時走 `--skip-preflight`，NEVER 靠拿掉探針本身解決。
+preflight_fail() {
+  local reason="$1"
+  echo "== preflight 未通過：$reason"
+  echo "   一輪都不跑。確認過探針誤判可用 --skip-preflight 覆寫。"
+  printf '%s\tpreflight-fail\t%s\n' "$(TZ=Asia/Taipei date +'%Y-%m-%dT%H:%M:%S%z')" "$reason" \
+    >> "$LOG_DIR/preflight.log" 2>/dev/null || true
+  exit 3
+}
+
+# 探針 D：headless child 到底能不能跑一個 Bash tool call。
+# 這是唯一驗得到 harness 權限閘門的探針，也是唯一要付一次 API 呼叫的 —— 一次小呼叫換掉
+# 一整天的空轉。**MUST 同時驗 token 與 mktemp 產出的路徑**：只驗 token 的話，模型不呼叫
+# 工具、直接把 token 回給你也會通過，而那正是本探針要抓的失敗。
+preflight_headless_probe() {
+  local out rc
+  out="$(cd "$REPO" && timeout 300 env WORK_LOOP_RUNNER_CHILD=1 claude --print \
+    --allowedTools "$SCAN_MKTEMP_RULE" --permission-mode "$PERM_MODE" \
+    'Run exactly this command with the Bash tool: mktemp -t work-loop-scan.XXXXXXXXXX
+Then reply with the token WORK_LOOP_PREFLIGHT_OK followed by the path it printed. No other output.' 2>&1)"
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    preflight_fail "headless child exit=$rc（權限閘門拒絕或 claude 不可用）—— 尾巴：$(printf '%s' "$out" | tail -3 | tr '\n' ' ')"
+  fi
+  case "$out" in
+    *WORK_LOOP_PREFLIGHT_OK*work-loop-scan.*) : ;;
+    *) preflight_fail "headless child 未能執行 Bash tool call —— 尾巴：$(printf '%s' "$out" | tail -3 | tr '\n' ' ')" ;;
+  esac
+}
+
+run_preflight() {
+  command -v claude >/dev/null 2>&1 || preflight_fail "PATH 上找不到 claude"
+  command -v node >/dev/null 2>&1 || preflight_fail "PATH 上找不到 node"
+
+  local probe="$REPO/.clade/work-loop/.preflight-probe"
+  ( : > "$probe" ) 2>/dev/null || preflight_fail "repo 不可寫（$probe）"
+  rm -f "$probe"
+
+  # 待辦源一個都讀不到 = 這輪 scan 必然空手而回。spectra repo 才有 openspec/，缺它屬正常。
+  local has_source=0
+  for f in "$REPO/HANDOFF.md" "$REPO/docs/tech-debt.md" "$REPO/openspec/changes"; do
+    [ -r "$f" ] && has_source=1
+  done
+  [ "$has_source" = 1 ] || preflight_fail "HANDOFF.md / docs/tech-debt.md / openspec/changes 一個都讀不到"
+
+  preflight_headless_probe
+  echo "preflight ok（claude / node / repo 可寫 / 待辦源可讀 / headless Bash 可用）"
+}
+
+# ── 待辦源健康門檻 ────────────────────────────────────────────────────────────
+# 「跑得起來」與「有事可做」是兩件事，所以是兩道門。ready 少於門檻時輸出的是**待辦枯竭**，
+# NEVER 是故障 —— 這種收尾要人補彈藥，不是查 log。
+#
+# helper 缺席或回非數字時**放行**：門檻是省成本的優化，NEVER 讓它變成起不了 runner 的新故障。
+run_ready_gate() {
+  [ "$MIN_READY" -gt 0 ] 2>/dev/null || return 0
+  [ -f "$READY_HELPER" ] || { echo "⚠ 找不到 ready-count helper，略過待辦源健康門檻"; return 0; }
+
+  local json ready
+  json="$(cd "$REPO" && node "$READY_HELPER" --repo "$REPO" --json 2>/dev/null)" || {
+    echo "⚠ ready-count 執行失敗，略過待辦源健康門檻"
+    return 0
+  }
+  ready="$(node -e 'try{const r=JSON.parse(process.argv[1]).ready;console.log(Number.isInteger(r)?r:"NaN")}catch{console.log("NaN")}' "$json" 2>/dev/null)"
+  case "$ready" in
+    ''|*[!0-9]*) echo "⚠ ready-count 輸出無法解析，略過待辦源健康門檻"; return 0 ;;
+  esac
+
+  if [ "$ready" -lt "$MIN_READY" ]; then
+    echo "== 待辦枯竭：ready=$ready < $MIN_READY，需 attended 補彈藥（跑 attended /work-loop 清算 awaiting[]，或補 HANDOFF / tech-debt 條目）"
+    printf '%s\tready-gate\tready=%s min=%s\n' "$(TZ=Asia/Taipei date +'%Y-%m-%dT%H:%M:%S%z')" "$ready" "$MIN_READY" \
+      >> "$LOG_DIR/preflight.log" 2>/dev/null || true
+    exit 4
+  fi
+  echo "待辦源健康：ready=$ready（門檻 $MIN_READY）"
+}
+
+if [ "$DRY_RUN" = 1 ] || [ "$SKIP_PREFLIGHT" = 1 ]; then
+  echo "preflight 略過（$([ "$DRY_RUN" = 1 ] && echo --dry-run || echo --skip-preflight)）"
+else
+  run_preflight
+  run_ready_gate
+fi
+
 exit_fail_streak=0
 no_progress_streak=0
 start_round="$(round_of)"
@@ -204,7 +313,12 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
   # 所以兩個 variadic option 後面都 MUST 接另一個 flag 當終止符。
   # `--runner-child` 是模型可見的身分 marker；env 是機械補強。Step 0 命中任一者都只跑單輪，
   # NEVER 再 route 回 runner，否則 child 會遞迴啟動下一層 runner。
-  cmd=(env WORK_LOOP_RUNNER_CHILD=1 claude --print --add-dir "$WT_PARENT" --allowedTools "$SCAN_MKTEMP_RULE" --permission-mode "$PERM_MODE" "/work-loop --unattended --runner-child")
+  #
+  # **prompt cache 的前綴順序不在本檔管轄範圍內。** 前綴由 harness 組（CLAUDE.md → rules →
+  # skill），runner 能給的只有 CLI flag 與最後那個 prompt 字串；HANDOFF.md / tech-debt.md 這些
+  # 易變內容是 child 在回合中用工具讀進來的，本來就排在穩定前綴之後。所以這裡**沒有**可以重排
+  # 的東西，NEVER 為了「把穩定內容排前面」在本檔加參數 —— 那會做出一個不影響 cache 的假改動。
+  cmd=(env WORK_LOOP_RUNNER_CHILD=1 "WORK_LOOP_MIN_WAKEUP_SECONDS=$MIN_WAKEUP" claude --print --add-dir "$WT_PARENT" --allowedTools "$SCAN_MKTEMP_RULE" --permission-mode "$PERM_MODE" "/work-loop --unattended --runner-child --min-wakeup-seconds $MIN_WAKEUP")
 
   if [ "$DRY_RUN" = 1 ]; then
     echo "[dry-run] round $(next_round_label "$before"): ${cmd[*]}"

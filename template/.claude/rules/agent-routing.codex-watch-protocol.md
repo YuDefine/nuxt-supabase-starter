@@ -228,9 +228,19 @@ node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
   --template ~/offline/clade/vendor/snippets/codex-offload/templates/<name>.template.md \
   --var task='...' --var acceptance='...' --var git_baseline="$(git status --porcelain | head -20)" \
   --var allowed_paths='...' \
-  --label <topic-slug> --effort <low|medium|high|xhigh> [--cwd <dir>] [--budget <分鐘>] \
-  [--output-schema <schema.json>]
+  --label <topic-slug> --effort <low|medium|high|xhigh> \
+  --route <routing-table|claude-delegate-sub|fallback-chain|manual> \
+  [--cwd <dir>] [--budget <分鐘>] [--output-schema <schema.json>] [--retry-of <label>]
 ```
+
+**`--route` 必填**（缺就 exit 1，2026-08-12 起）。它是成功指標的分母——`route=claude-delegate-sub`
+的 dispatch 中 luna 佔比。填法：走本檔 § Routing Table 某一列 → `routing-table`；走 § Claude 委派的
+model 檔位 轉派 → `claude-delegate-sub`；走 § 配額耗盡時的 fallback 紀律 → `fallback-chain`；
+以上皆非的臨時派工 → **顯式**帶 `manual`。**NEVER** 因為不確定就一律填 `manual`——那讓分母恆為 0，
+正是 2026-08-12 全天 11 筆 dispatch 全落 `manual`、政策無法覆核的成因。
+
+重試前一筆時 **MUST** 帶 `--retry-of <被重試的 label>`，**NEVER** 用 `<label>2` / `<label>3` 這種
+命名法表達重試——命名慣例不是資料，事後判不出是否命中「luna 回 exit 2 → 升 `sol` 重派一次」。
 
 **Template registry**（對照表與各 template 的必填 var 見 `~/offline/clade/vendor/snippets/codex-offload/README.md`）：
 
