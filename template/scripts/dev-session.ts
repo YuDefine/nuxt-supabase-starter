@@ -85,6 +85,7 @@ import {
   runWtEnvBootstrap,
   describeBackingServiceGap,
 } from './lib/wt-env-bootstrap-runner.ts'
+import { chooseDevWorkspace } from './lib/dev-workspace.ts'
 
 const LEASE_DIR = tmpdir()
 const READY_TIMEOUT_MS = 90_000
@@ -414,6 +415,31 @@ function resolveConsumerId(o, meta) {
   return basename(o.cwd)
 }
 
+/**
+ * 這次要起的 dev server 屬於哪些 repo 路徑（用來比對 herdr pane 的 cwd）。
+ *
+ * 回 main worktree root 與當前 toplevel 兩者：從 linked worktree 起 dev server 時，
+ * consumer 的 workspace 裡放的多半是 main worktree 的 pane，只比對其中一邊會漏。
+ */
+function resolveRepoRoots(o) {
+  const roots = []
+  const commonDir = sh('git', [
+    '-C',
+    o.cwd,
+    'rev-parse',
+    '--path-format=absolute',
+    '--git-common-dir',
+  ])
+  if (commonDir) {
+    const gitIdx = commonDir.lastIndexOf('/.git')
+    if (gitIdx > 0) roots.push(commonDir.slice(0, gitIdx))
+  }
+  const top = sh('git', ['-C', o.cwd, 'rev-parse', '--show-toplevel'])
+  if (top) roots.push(top)
+  if (!roots.length) roots.push(o.cwd)
+  return [...new Set(roots)]
+}
+
 function resolveSessionName(o, consumerId) {
   if (o.session) return o.session
   return o.app ? `dev-${consumerId}-${o.app}` : `dev-${consumerId}`
@@ -533,15 +559,68 @@ function devProcessAlive(paneId) {
 }
 
 /**
+ * 這台 dev server 的 Tab 該落在哪個 workspace；null = 沒有夠格的既有 workspace。
+ *
+ * herdr 的清單取不到時一律回 null（caller 會退回「建新 workspace」而非硬塞進當前
+ * workspace）——猜錯歸屬正是本函式要修的病。
+ */
+function resolveDevWorkspaceId(consumerId, repoRoots) {
+  const workspaces = herdrJson(['workspace', 'list'])?.result?.workspaces
+  if (!Array.isArray(workspaces)) return null
+  const panes = herdrJson(['pane', 'list'])?.result?.panes
+  return chooseDevWorkspace({
+    workspaces,
+    panes: Array.isArray(panes) ? panes : [],
+    consumerId,
+    repoRoots,
+  }).workspaceId
+}
+
+/**
  * 起一個 background Tab（不搶焦點），回 { tabId, paneId }。
  * 已存在同 label 的 Tab 時直接回它的 id，維持 zellij `attach --create-background`
  * 的 idempotent 語意。
+ *
+ * **MUST 顯式指定 workspace**：不帶 `--workspace` 時 herdr 把 Tab 建在當下 focused
+ * workspace，而 agent 幾乎都從別的 repo（典型：clade）的 session 起 consumer 的 dev
+ * server，於是每台 dev server 都堆在那個 repo 的 space 裡。`--cwd` 只管 shell 的工作
+ * 目錄，對 Tab 歸屬零影響（2026-08-12 實證）。找不到該 consumer 的 workspace 就**建
+ * 一個**，NEVER 退回不帶 `--workspace` 的寫法。
  */
-function createBackgroundTab(name, cwd) {
+function createBackgroundTab(name, cwd, ownership) {
   const existing = findSession(name)
   if (existing) return { tabId: existing.tabId, paneId: existing.paneId }
 
-  const res = herdrJson(['tab', 'create', '--cwd', cwd, '--label', name, '--no-focus'])?.result
+  const consumerId = ownership?.consumerId || name.replace(/^dev-/, '')
+  const workspaceId = resolveDevWorkspaceId(consumerId, ownership?.repoRoots || [cwd])
+
+  let res
+  if (workspaceId) {
+    res = herdrJson([
+      'tab',
+      'create',
+      '--workspace',
+      workspaceId,
+      '--cwd',
+      cwd,
+      '--label',
+      name,
+      '--no-focus',
+    ])?.result
+  } else {
+    // 建新 workspace 會連 Tab + root pane 一起建出來，回應形狀與 `tab create` 相同
+    // （多一層 result.workspace）。
+    out(`  找不到 ${consumerId} 的 herdr workspace → 新建一個（label: ${consumerId}）`)
+    res = herdrJson([
+      'workspace',
+      'create',
+      '--cwd',
+      cwd,
+      '--label',
+      consumerId,
+      '--no-focus',
+    ])?.result
+  }
   const tabId = res?.tab?.tab_id
   const paneId = res?.root_pane?.pane_id
   if (!tabId || !paneId) return null
@@ -1011,7 +1090,10 @@ async function cmdLaunch(o) {
   out(`▶ 起 durable dev session（herdr Tab）：${sessionName}`)
   out(`  cmd: ${o.cmd.join(' ')}`)
   out(`  cwd: ${o.cwd}`)
-  const tab = createBackgroundTab(sessionName, o.cwd)
+  const tab = createBackgroundTab(sessionName, o.cwd, {
+    consumerId,
+    repoRoots: resolveRepoRoots(o),
+  })
   if (!tab) {
     err(`[dev-session] herdr Tab 建立失敗（${sessionName}）—— 沒有拿到 tab_id / pane_id`)
     err(`  先確認 \`herdr status\`，再重跑。**NEVER** 退回 run_in_background。`)

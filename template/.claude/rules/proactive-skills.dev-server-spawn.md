@@ -33,6 +33,7 @@ Local edits will be reverted by the next sync.
 - **NEVER** 再用 `Bash(run_in_background=true)` / 裸 `nuxt dev` / `spawn(detached)` / setsid / nohup 起長駐 dev server（會被 reap，user 看到 502 / 530）
 - **NEVER** 直接 `nuxt dev` / `pnpm dev` 不經 wrapper（會繞過 lease + cwd 檢查 + durability，且會被 harness reap）
 - **反累積**：dev-session 一 consumer(-app) 一個 durable session（名 `dev-<consumer_id>[-<app>]`，就是那個 herdr Tab 的 label），起前先 `node scripts/dev-session.ts list` 查、有就 **reuse 不重起第二台**；`node scripts/dev-session.ts sweep` 清「Tab 還在但 dev 已退出」的殘骸；多 worktree 切換仍走 **dev-router**（一個公開 port 切 backend），**禁止**對每個 worktree 各起一個 dev-session
+- **Workspace 歸屬**：dev Tab **MUST** 落在**該 consumer 自己的** herdr workspace，不是起它的那個 agent session 當下所在的 workspace。dev-session 自己解（workspace label 對 `consumerId` → pane cwd 落在 repo root 下 → 都沒有就新建一個 workspace），所以照常呼叫 dev-session 即可。**NEVER** 自己下不帶 `--workspace` 的 `herdr tab create` 起任何長駐 process —— herdr 會把它建在當下 focused workspace，`--cwd` 只管 shell 工作目錄、對 Tab 歸屬零影響（2026-08-12 實證：全 fleet 的 dev Tab 都堆在 clade 的 space）
 - **前提**：herdr server 要在跑（`herdr status`）。**不要求** caller 自己在 Herdr 終端內——herdr CLI 走 socket，非 Herdr 起的 agent 一樣用得了。連不上 → dev-session 報錯停下，回報 user，**NEVER** 退回 `run_in_background`
 - **Lease 衝突**：依 [`verification-lease.md`](./verification-lease.md) § Agent 行為契約的 predicate 分支表處置——**agent 租約過期 / 心跳斷 → 自動接管**（不問 user）；**agent 租約存活 → `dev-session.ts wait` 排隊**（不問 user）；**人類租約 → refuse + 把訊息原樣呈給 user**，**NEVER** 自行 `--takeover`
 - **掃 free port（non-pinned）**：scan 3001-3050 找第一個 free port；**禁止**用 3000（留給 user 自己的 dev server）
