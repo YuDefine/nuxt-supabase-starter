@@ -530,7 +530,15 @@ PARKED="$(spectra list --parked --json 2>/dev/null || echo '{}')"
 | `handoff` / `techdebt` / `roadmap` | `HANDOFF.md` 待辦段、`techDebtHygiene.raw`、`openspec/ROADMAP.md` | § 3.1b 分類表 |
 
 - **`HANDOFF.md`** —— 掃 `## In Progress` / `## Blocked` / `## Next Steps` / `## Outstanding` / `## Follow-up`（heading 名因 consumer 而異，靠 `##` / `###` 辨識）。`- [ ]` 未勾項 = 一個 candidate；`- [x]` 跳過；純文字段落視為單一 candidate
-- **`docs/tech-debt.md`** —— **NEVER 整讀主檔**（2026-08-06 實測 clade 196KB / <consumer-b> 363KB，整讀一次吃掉大半預算）。從 `techDebtHygiene.raw` 取，優先序三層：`stale`（>60d）→ `aging`（>14d）→ 其他 `open`。需要細節時用 `raw` 的 `lineNo` **定點 Read**（`offset` + `limit`）
+- **`docs/tech-debt.md`** —— **NEVER 整讀主檔**（2026-08-06 實測 clade 196KB / <consumer-b> 363KB，整讀一次吃掉大半預算）。從 `techDebtHygiene.raw` 取，優先序**四層**：`landed-pending-verification`（驗收）→ `stale`（>60d）→ `aging`（>14d）→ 其他 `open`。需要細節時用 `raw` 的 `lineNo` **定點 Read**（`offset` + `limit`）
+
+  **驗收排第一層不是偏好，是流量算術**：landed 條目的 Resolution 已經寫好，close 它的成本是「跑一次自驗」；開一條新 TD 的成本也差不多，但方向相反。驗收永遠排在新工作後面的迴圈，close 流量必定輸給 open 流量——2026-08-13 clade 實測近 7 天 opened 39 / closed 10，同期 landed 桶 16 條無一驗收。**NEVER** 把「landed 那條反正已經 land 了」讀成它不急：它佔著 open class 的位置，且它的 Resolution 每多放一天就多一分過期風險。
+
+  **`--run-selfverify` MUST 帶 `--selfverify-cache`**：全套一次 ~26 秒 / ~384KB 輸出，而 2026-08-06～13 的 round 70–75 **六輪 verdict 逐項相同**——每輪重跑換到的資訊量是 0 bit。快取 key =（audit script 內容 + `docs/tech-debt.md` 內容 + git HEAD），輸入不變就回上次結果並標 `cached: true`。實測冷跑 26s → 熱跑 **0.12s**；TD 檔一改立即失效（實測 0/47 命中），不是恆命中。
+
+  **NEVER 改成「N 輪跑一次」**：calendar-based skip 會讓真實改動落在跳過窗口內溜過去，然後搭著 propagate 散到全 registry consumer 才被發現。輸入不變時跳過在數學上無資訊損失，輪次計數跳過不是。**已知邊界**：48 條 probe 有一部分量的是**活狀態**（檔案數、目錄體積），git HEAD 涵蓋 repo 內變動但涵蓋不到 repo 外的環境漂移——所以它是 opt-in，判斷這一輪能不能接受這個邊界是呼叫端的責任。
+
+  **`blocked-attended-only` 一律跳過**（unattended）：它的定義就是「本迴圈拿不到出口」，撈進 candidate list 只會每輪重新判定一次再放棄。attended 模式照撈——那正是它等的東西。判準與防濫用見 clade `.claude/rules/local/tech-debt-hygiene.md` § Invariant 12。
 
   ```bash
   wc -c docs/tech-debt.md   # 上面兩個數字的來源。主檔隨 rotate / 新增增減，複跑取當前值
@@ -766,7 +774,15 @@ fingerprint = sha256(
 | 系統性失敗 | `consecutiveDispatchFailures >= 2`（escalated 項不計入——它們本輪未 dispatch，沒有新失敗事件） |
 | Scan 失敗 | Step 2 已 STOP |
 | Step 1 中止（`context-decay` / `handoff-write-failed`；兩者都寫 `roundEndReason`，**NEVER** 寫成 `stoppedReason`——唯一例外是 D4 連續第 2 輪，那時兩個都寫） | Step 1 已 STOP |
-| 真正做完 | 四組皆空 ∧ `inFlight` 空 ∧ 無未 packaged 的非自主 item |
+| 真正做完 | 四組皆空 ∧ `inFlight` 空 ∧ 無未 packaged 的非自主 item ∧ `techDebtHygiene.raw.flow.actionableOpen == 0`（**NEVER 讀 open 總數**，見下） |
+
+**「真正做完」讀 `actionableOpen`，NEVER 讀 open 總數。** `techDebtHygiene.raw` 的 `flow.actionableOpen` = open class 扣掉 `blocked-attended-only`（機制擋著）與 `wontfix-until-signal`（等外部 signal）。open 總數含結構性 open，**在設計上就不可能歸零**——拿它當判準的迴圈永遠不會停，而那看起來會像「還有很多事沒做」，不像「判準寫錯了」。
+
+**軟配額——`landed` 桶非空時，本輪 3 items 中 MUST 至少 1 項是 close/verify**（驗收 landed / 改判 wontfix / rotate 進 archive），不是 open/登記。`flow.window.closedInWindow == 0` 而 `openedInWindow > 0` 時這條**升為硬性**：不足額就不算合法進度。
+
+**這不是禁止登記**：帶 `**Blocker**:` 的新條目與 packaging 決策**無條件通過**，因為它們正是「發現了但推不動」的正當出口。要掐斷的是「量測 → 登記 → 下輪再讀一次」的自循環——2026-08-13 實測 clade 近 7 天 opened 40 / closed 10，同期 landed 桶 16 條無一驗收。
+
+**NEVER 靠改 status 讓 `actionableOpen` 下降。** 把 open 改標 `blocked-attended-only` 會當場讓停止條件成立——Invariant 12 是這一格的唯一防線，`blockedWithoutGate` 非 0 時 **`actionableOpen` 讀數不可信，MUST 先修完再判停**。
 
 **寫 `stoppedReason` 之前 MUST 先清一次 `blockers` ledger**（逐條重量 predicate，值變了或 predicate 已不成立就刪條目）——誤入表的 item 不會出現在 candidate list 裡，所以「四組皆空」這個判準看不到它們。清完仍空才算真正做完，詳見 [reference/blocker-ledger.md](reference/blocker-ledger.md) § 清 ledger 是正當工作。
 
