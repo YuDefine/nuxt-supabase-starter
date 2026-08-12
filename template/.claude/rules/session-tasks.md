@@ -27,7 +27,7 @@ session 結束時對每個未完項**升級或刪，二擇一**，不留著。
 
 ## Session context 預算（MUST）
 
-**Iron Law：越過收工線就收工，不是「等這件做完再說」。而收工線是 500k，不是第一次響的那個門檻。**
+**Iron Law：越過收工線就收工，不是「等這件做完再說」。而收工線是第二級，不是第一次響的那個門檻。**（一般 session 兩級是 300k / 500k；work-loop runner child 是 500k / 600k，見下表。）
 
 本節適用**每一個** session、**所有** consumer——不是只有覺得跑很久的那次。
 
@@ -84,11 +84,15 @@ new session`）。
 | session context 越過 **300k** | **NEVER** 開新的**大**工作段（新的 change / 新的多檔重構 / 新的 spectra phase / **invoke 一個本 session 還沒載過的 skill**）；手上這件做完就收。**小 item 照做**——單檔文字修正、補一條 TD、勾一個 checkbox、回答一個問題不受本級限制 |
 | session context 越過 **500k** | **現在**登記並收工：未完項寫進 `tasks/<date>-<slug>.md`（或 `HANDOFF.md` / `docs/tech-debt.md`）。手上若是不可分割的驗證迴圈，跑完那一輪就切 |
 | 正在跑不可分割的驗證迴圈（單一 test run / 單一 migration） | 跑完再切。**NEVER** 拿「等一下還有事要做」把它延伸成新工作段 |
+| **本輪是 work-loop runner child**（`WORK_LOOP_RUNNER_CHILD=1`，由 `runner.sh` 設） | 上面兩級改讀 **500k / 600k**，語義完全不變（500k = 不要再開大工作段、600k = 現在收工）。Charles 2026-08-12 拍板，TD-375 |
+
+**runner child 的兩級為什麼不同。** 上表兩級的立論是「context 越滾越大、成本 ∝ C²」，而 runner child 每輪是 `claude --print` 起的**全新 process**、跨輪不累積——起始載入量是它的**固定成本**，不是累積量。<consumer-b> 五輪實測起始落在 300k–307k，也就是第一級在它**還沒做任何事之前**就響，於是每輪只能做小 item（r52/r53/r54 三輪皆零 dispatch）。**NEVER 把 500k / 600k 套到 in-session `/loop`**——那條路徑的 context 真的跨輪累積，前提成立。判別只認 `runner.sh` 設的那個 env，**NEVER** 從「感覺像無人值守」推斷。
 
 **NEVER 把 300k 那級讀成「什麼都不能開」。** 本節 round 24 版的第一級是 200k 且綁「**NEVER** 開新的工作段」，而 `/work-loop` 這類 loop 的本質就是一個接一個開新 item——那條對它等於硬停。2026-08-06 round 26 / 27 連續兩輪實證：兩輪都在 ~202k 被腰斬，而當下一輪的工作剛做完、正要開下一輪。**改的不是數字算錯，是那一級的語義訂錯了**；把 300k 讀回「什麼都不能開」等於把這次拍板退回它要修的狀態。
 
 門檻是 `session-context-budget-warn.sh`（PostToolUse hook）機械報出來的，本節是它引用的 SoT：
-**300k 響一次、500k 起每 +100k 再響一次**。提示走 exit 2 —— PostToolUse 的 exit 0 stderr
+**300k 響一次、500k 起每 +100k 再響一次**；runner child 同形狀但整組平移成 **500k 響一次、
+600k 起每 +100k 再響一次**。提示走 exit 2 —— PostToolUse 的 exit 0 stderr
 只進 debug log，agent 永遠看不到（2026-08-06 前本 hook 正是 exit 0，所以它上線後量到的
 「行為沒有改變」其實是提示從未送達）。
 
@@ -96,6 +100,11 @@ new session`）。
 `CLADE_CTX_WARN_TIER2` 兩個覆寫變數，已移除：門檻是判定 agent 行為合不合格的數值，
 只有 user 能調鬆（per `agent-routing` 的自主判定紀律）。會想調鬆它的，正是已經超標的那個
 session —— 把閂交給它等於沒有閂。
+
+上表的 runner-child 那列**不是**本條的破口：`WORK_LOOP_RUNNER_CHILD` 不是門檻參數，它是
+`runner.sh` 用來宣告**執行身分**的 marker——值由誰設、設成什麼，都不影響任何一組門檻數字。
+兩組數字都寫死在 hook 裡，要放寬仍然只有改 hook 一途。**NEVER** 反過來拿這一列論證
+「所以其他 env 也可以調門檻」。
 
 ### 成本模型（2026-08-07 納入 prompt caching 修正）
 
