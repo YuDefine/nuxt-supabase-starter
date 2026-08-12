@@ -25,9 +25,11 @@ Local edits will be reverted by the next sync.
 1. 用 **Write** 把指示寫到 `/tmp/codex-<topic>-<slug>-prompt.md`（prompt 太長不要 inline）
 2. **Bash** tool（`run_in_background=true`）：
 
+`<model-slug>` 選檔：命中 [[agent-routing]] § Routing Table 類別 → 照該列（多為 `gpt-5.6-sol`）；本次工作**原本會派 Claude subagent**（原判 `sonnet`／`haiku`）→ 依 § Claude 委派的 model 檔位 派 `gpt-5.6-luna`（sonnet→`--effort high`、haiku→`--effort low`）。判不出來 → `gpt-5.6-sol`。
+
    ```bash
    cd <cwd> && codex exec \
-     --model gpt-5.6-sol \
+     --model <model-slug> \
      --dangerously-bypass-approvals-and-sandbox \
      --skip-git-repo-check \
      --enable default_mode_request_user_input \

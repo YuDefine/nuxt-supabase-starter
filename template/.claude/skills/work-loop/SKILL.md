@@ -80,6 +80,36 @@ marker 有兩層是刻意的：prompt 裡的 `--runner-child` 讓模型必定看
 
 **決定怎麼起這個 loop 時 MUST 先讀 [reference/run-modes.md](reference/run-modes.md)** 取兩種跑法的完整對照、runner 指令與 flag、以及 in-session 版為什麼有 context 天花板。**NEVER** 因為「in-session 比較好觀察」就對長清單用 in-session 版——runner 每輪都留 log，觀察性沒有損失。
 
+### 開場佇列檢查（在 route 判定之前）
+
+route 表判定**之前** MUST 先讀 state 的 `awaiting[]` 長度——只讀這一個欄位，不做完整 re-hydrate（那是 Step 1 的事）：
+
+```bash
+node -e '
+const fs=require("fs");let s;
+try{ s=JSON.parse(fs.readFileSync(process.argv[1],"utf8")) }
+catch(e){ console.log(e.code==="ENOENT"?0:"STATE_CORRUPT"); process.exit(0) }
+console.log(Array.isArray(s.awaiting)?s.awaiting.length:"STATE_CORRUPT")
+' "$(git rev-parse --show-toplevel)/.clade/work-loop/state.json"
+```
+
+**只有 `ENOENT` 才是 0。** parse 失敗、或 `awaiting` 不是 array，一律回 `STATE_CORRUPT` —— **NEVER** 把它們也折成 `0`。折成 0 會讓損毀的 state 判成「佇列空」直接 route 到 runner，而 runner 的 child 恆為 unattended、只跑 `(a) prune`，於是**唯一**的出列動作永遠不會執行。那正是本節要修的佇列滯留，只是換成由讀取端製造。
+
+| 可觀察 predicate | 動作 |
+| --- | --- |
+| 回 `STATE_CORRUPT` | **STOP，NEVER 進 route 表。** 先走 Step 1 § 讀取端的三步還原程序 |
+| user 直接呼叫（非 `--unattended`、非 `--runner-child`）**且** `awaiting[]` 非空 | **NEVER route 到 runner。** 先在本 session 走 Step 2.7 (a)(b)(c) 清算，佇列清空後才回到 route 表 |
+| 其餘（從 `/loop` 進來、`--unattended`、`--runner-child`） | 照 route 表，本步不動作 |
+
+**理由**：user 親手打 `/work-loop` 就是他在場的證明，而 attended 清算是佇列**唯一**的出口——unattended 只跑 `(a) prune`，而 `(a)` 只移除「已不在本輪 scan」的條目，`(b) Ask` 是唯一的出列動作。route 到 runner 之後主線在 Step 0 就結束回合、從不進 Step 2.7，佇列因此單調遞增（2026-08-12 實測：<consumer-a> 6 條積 19 輪、<consumer-b> 7 條積 19 輪，其中一條自述擋著 15 個下游項）。
+
+**清算是有界的**，所以它不與下一節的 headroom 判定衝突：幾個 `AskUserQuestion` 就結束，清完之後仍照 route 表與 headroom 判定決定待辦由誰承載。**NEVER** 拿「這個 session 快滿了」當跳過清算的理由——清算完就換載體，兩件事不互斥。
+
+**NEVER 把「runner 起跑時會印一行待答提示」當成出口。** 那條提示印在 runner 的 log 裡，而打 runner 的前提就是 user 離開座位（[reference/run-modes.md](reference/run-modes.md) § 待答決策佇列）。它已經存在，而佇列照樣積到 19 輪。
+
+本證據決定：佇列非空時要不要先清算——要。
+本證據不決定：待辦由誰承載——清算完仍照 route 表判，**NEVER** 拿它論證「所以該用 in-session 跑待辦」（那會退回 [[pitfall-work-loop-in-session-default-has-no-context-headroom]] 的 context 空轉）。
+
 ### Continuous invocation（hard rule）
 
 單次 `/work-loop` = 一輪 scan → 分類 → dispatch/packaging → 收割 → 寫狀態。**一輪不是完成。**
@@ -298,8 +328,20 @@ node ~/offline/clade/vendor/scripts/work-loop-lock.ts acquire
 
 ```bash
 STATE="$(git rev-parse --show-toplevel)/.clade/work-loop/state.json"
-[ -f "$STATE" ] && cat "$STATE" || echo '{}'
+if [ ! -f "$STATE" ]; then
+  echo '{}'                                    # 真的第一輪
+elif node -e 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))' "$STATE"; then
+  cat "$STATE"
+else
+  echo 'STATE_CORRUPT'; ls -la "$STATE" "$STATE.bak" 2>&1   # 走下面的還原程序
+fi
 ```
+
+**`STATE_CORRUPT` NEVER 當成 `{}` 處理。** 空物件會讓 `round` 從 0 重來、`awaiting` / `decisions` / `failStreak` 全空——上游那 N 輪的記憶一次歸零，而每個欄位看起來都「合法」，沒有任何一步會報錯。還原程序（依序）：
+
+1. `state.json.bak` parse 得過 → `mv` 回正本，本輪的 `sessionNote` **MUST** 記「從 .bak 還原，round <N> 的 bookkeeping 可能遺失」
+2. `.bak` 也壞或不存在 → **STOP，NEVER 自行重建一份新 state**。HANDOFF 的 `## Work Loop Status` 段有上一輪的完整敘事，把輪次與 awaiting 從那裡抄回來是**人**的工作，不是本輪的
+3. 兩者皆不可用 → 標 `stoppedReason: state-unrecoverable` 並回報 user
 
 ```json
 {
@@ -730,6 +772,40 @@ fingerprint = sha256(
 ### 7.3 落 state 檔
 
 把 Step 1 schema 的每個欄位更新後寫回 `.clade/work-loop/state.json`（`.clade/` 已 gitignored）。`guardrailsAck` 用 Step 1.5 讀完的時間。
+
+**Iron Law：NEVER 直接覆寫 `state.json`。一律 temp → 驗 → 備份 → rename。** 這個檔是整個 loop 的**唯一**記憶載體（Step 1 Iron Law：不依賴對話記憶），寫壞它等於把 N 輪進度一次歸零，而失敗完全靜默——寫入工具照樣回成功，下一輪才在讀取端炸開。
+
+**每一步都 MUST 顯式檢查 exit status**，**NEVER** 依賴 ambient `set -e`（skill 貼出去的 bash 多半跑在沒開它的 shell）。下面每個分支都是必要的：漏掉 `cp` 那一個，`.bak` 寫失敗時 `mv` 照樣執行、還會印 `STATE_OK` —— 正本已換新、上一輪備份同時毀掉，兩份一起沒了。
+
+```bash
+S="$(git rev-parse --show-toplevel)/.clade/work-loop/state.json"
+D="$(dirname "$S")"
+TMP="$(mktemp "$D/state.json.tmp.XXXXXX")"    || { echo STATE_WRITE_FAILED; exit 1; }
+BAK="$(mktemp "$D/state.json.bak.XXXXXX")"    || { rm -f "$TMP"; echo STATE_WRITE_FAILED; exit 1; }
+V='JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))'
+
+# 1. 寫 temp。mktemp 保證同目錄（rename 才原子）且 unique —— 固定檔名有 TOCTOU：
+#    驗完到 mv 之間會被另一個 writer 蓋掉，而那份不會再被驗一次
+cat > "$TMP" <<'JSON'
+<內容：你這輪組好的完整 JSON>
+JSON
+
+# 2. 驗新內容 → 3. 備份舊正本（先寫 temp 再 rename，避免 cp 中途失敗把既有 .bak 截斷）
+#    → 4. 只有備份就位才換正本
+if   ! node -e "$V" "$TMP";                  then echo STATE_WRITE_FAILED
+elif [ -f "$S" ] && ! cp -p "$S" "$BAK";     then echo STATE_BACKUP_FAILED
+elif [ -f "$S" ] && ! mv -T "$BAK" "$S.bak"; then echo STATE_BACKUP_FAILED
+elif ! mv -T "$TMP" "$S";                    then echo STATE_WRITE_FAILED
+else echo STATE_OK
+fi
+rm -f "$TMP" "$BAK"
+```
+
+**`mv` 的 `-T` 不是可選的。** 少了它，`$S.bak` 若是**目錄**（前一次救援留下的、或誰手滑 mkdir 的），`mv "$BAK" "$S.bak"` 會把備份**搬進那個目錄**並回傳成功 —— 於是印 `STATE_OK`、正本照換，而 `.bak` 這個路徑上根本沒有備份。實測（2026-08-12）：無 `-T` 時該情境回 `STATE_OK`，加上 `-T` 才正確回 `STATE_BACKUP_FAILED` 且正本不動。
+
+**看到 `STATE_WRITE_FAILED` 或 `STATE_BACKUP_FAILED` MUST 立刻停止本輪 bookkeeping**：兩者都保證正本仍是上一輪的完好版本，照 7.2 Iron Law 的無害方向倒（`state.round` < HANDOFF，下一輪冪等重做）。`STATE_BACKUP_FAILED` 額外意味著磁碟或權限有問題，**MUST** 在 `sessionNote` 記一筆再重試。**NEVER** 因為「內容應該沒問題」跳過驗證，也 **NEVER** 在失敗後改用直接覆寫繞過。
+
+**`.bak` 只保留上一輪的完好版本，NEVER 累積多份帶時間戳的副本**——救援時要能一眼看出該還原哪一個。且 **NEVER 把寫壞的檔存成 `.bak-<ts>`**：那個名字會讓還原程序把屍體當備份撿起來（2026-08-12 <consumer-b> 實際留過一份，已改名 `state.json.corrupt-<ts>`）。
 
 寫完 **MUST** 跑 `node ~/offline/clade/vendor/scripts/work-loop-lock.ts refresh --session <lockSessionId>`。鎖的 heartbeat 只在 Step 1 / Step 5 / 本步被刷，漏掉一次就讓還在跑的這一輪被下一輪判成死掉並接手——失敗長相是兩個 loop 同時跑、state 互相覆寫，沒有任何錯誤訊號。
 

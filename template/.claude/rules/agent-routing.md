@@ -44,7 +44,7 @@ Local edits will be reverted by the next sync.
 
 ## Routing Table
 
-> **Codex 派工是 (model, effort) 二維**，但 model 維只有兩個合法值：`sol` 與 `luna`——一般工作**一律 `--model sol`，分級靠 `--effort`**。**NEVER 派 `--model terra`**（2026-08-11 拍板；`codex-dispatch.ts` 仍認得它是**能力**不是政策，理由見 rationale）。
+> **Codex 派工是 (model, effort) 二維**，model 維只有兩個合法值：`sol` 與 `luna`。**Routing Table 已列明檔位的類別照列派**（各列多為 `--model sol`，分級靠 `--effort`）；**原本會派 Claude subagent 的委派工作**（原判 `sonnet`／`haiku`）依 § Claude 委派的 model 檔位 轉派 `--model luna`。**NEVER 派 `--model terra`**（2026-08-11 拍板；`codex-dispatch.ts` 仍認得它是**能力**不是政策，理由見 rationale）。
 >
 > 選 effort 檔位看下列六維，**NEVER** 只看「這個工作重不重要」或「迴圈長不長」：
 >
@@ -52,11 +52,12 @@ Local edits will be reverted by the next sync.
 >
 > | 檔位 | 何時用 |
 > | --- | --- |
-> | `--model sol --effort low` | **預設檔**。一般工具協調、read-heavy synthesis、有限探索、小型可驗證修改 |
+> | `--model sol --effort low` | **Routing Table 類別的預設檔**。一般工具協調、read-heavy synthesis、有限探索、小型可驗證修改 |
 > | `--model sol --effort medium`／`high`／`xhigh` | 命中任一即升 effort，**即使迴圈很短**：高模糊度／高漏報成本／跨域衝突裁決／廣泛 mutation／結果本身就是最終品質或安全 gate。升幾檔看命中幾維、以及漏報成本有多不對稱 |
-> | `--model luna` | 規格完全明確 **且** 來源已正規化 **且** 低風險 **且** 輸出可機械驗證 **且** 錯誤能被後續獨立 gate 接住——**五條全中**才用 |
+> | `--model luna`（Routing Table 類別內降檔） | 規格完全明確 **且** 來源已正規化 **且** 低風險 **且** 輸出可機械驗證 **且** 錯誤能被後續獨立 gate 接住——**五條全中**才用 |
+> | `--model luna`（Claude 委派替代檔） | 原判 Claude `sonnet` 的委派工作 → `--effort high`；原判 `haiku` → `--effort low`。准入判準在 § Claude 委派的 model 檔位——這是同級工作換 runtime，**不是降檔**，不走上一列的五條連言 |
 >
-> **NEVER** 拿「輸出會被下游機械消費」當降檔理由：下游若只驗 JSON schema 而不驗語意，降檔引入的錯誤會被自動放大。只有下游具備**獨立且夠強的語意 gate** 才可降檔。
+> **Routing Table 類別的檔位選擇中，NEVER** 拿「輸出會被下游機械消費」當降檔理由：下游若只驗 JSON schema 而不驗語意，降檔引入的錯誤會被自動放大。只有下游具備**獨立且夠強的語意 gate** 才可降檔。（§ Claude 委派的 model 檔位 的轉派自帶語意 gate 要求——它的第 3 條 predicate 就是這一條。）
 >
 > **NEVER 拿 aggregate 跑分推導 routing boundary**：要看的是**這一類工作**的差距，不是總分。**同一個陷阱適用於 effort 檔位之間**——「low 跟 high 在通用題上差不多」對安全類 / 高漏報成本類零證據力。實測數字組見 rationale § model 檔位的量測依據。
 >
@@ -104,8 +105,15 @@ Claude** 的殘集：需 claude.ai-connected MCP、判讀／治理型分析、us
 
 ### `subagent_type` 是 `general-purpose` 或 `Explore` 時，派工當下 MUST 先判 codex 可用性
 
-**適用範圍就是這兩個字面值**，且產出是事實表／掃描結果、非 UI、不需 MCP。**每一個**這種派工
-都 MUST 顯式帶檔位，**NEVER** 省略參數靜默繼承主線。`subagent_type` 是別的值時照下一節四條
+**適用範圍就是這兩個字面值**，且非 UI、不需 MCP，產出屬下列任一：
+
+- **(a) 事實表／掃描結果** —— 主線要消費它的回報
+- **(b) brief 內已逐字指定的機械改寫（mutation）** —— 產出就是改好的檔案本身，沒有回報要消費。
+  (b) 額外 MUST 兩項：改動有**硬 gate**（typecheck ／ test ／ lint 的 exit code）接住，且**可一鍵
+  還原**（`git checkout`）。兩項缺一 → 不走本節，照原判派 Claude `sonnet`。**NEVER** 拿「沒有回報
+  通道就不該給 codex」當把 (b) 退回 Claude 的理由——那是 dispatch 形狀，不是檔位判準。
+
+**每一個**這種派工都 MUST 顯式帶檔位，**NEVER** 省略參數靜默繼承主線。`subagent_type` 是別的值時照下一節四條
 predicate 走，**NEVER** 把本小節外推成「委派都該指定 model」。
 
 | 可觀察 predicate | 檔位 |
@@ -113,9 +121,15 @@ predicate 走，**NEVER** 把本小節外推成「委派都該指定 model」。
 | codex 可用（`codex-dispatch.ts` 未回 exit 4） | 原判 `sonnet` → `--model luna --effort high`；原判 `haiku` → `--model luna --effort low` |
 | codex 不可用（exit 4） | 走 § 配額耗盡時的 fallback 紀律 的降級鏈，`sonnet` ／ `haiku` **顯式帶** |
 
-**送 luna 前 MUST 逐條驗 § Routing Table 的五條 luna predicate，五條全中才是 luna**；任一條不中
-改 `--model sol`，**NEVER** `--model terra`。**「原本判得起 sonnet」NEVER 當成五條已滿足的證據**
-——sonnet 第 3 條只要求**語意** gate，luna 額外要求**輸出可機械驗證**。
+**本節路徑的 luna 准入（與 § Routing Table 五條連言無關）**：原判 `sonnet` 的委派 MUST 同時滿足
+兩項——(1) § MUST 指定 `model: 'sonnet'` 的四條 predicate 全中（原判 sonnet 的判定本身就要求這
+四條，此處是複核不是加碼）；(2) 未命中 § NEVER 降檔的形狀任一條。兩項都過 → 派
+`--model luna --effort high`，**NEVER** 因「luna 是最低檔」自行改回 `--model sol` 或退回 Claude
+`sonnet`。任一項不過 → 照原判派 Claude `sonnet`（顯式帶 `model`），**NEVER** `--model terra`。
+
+**luna 回 exit 2（業務 fail）→ 升 `--model sol` 同 effort 重派一次**；再 fail 才回 Claude `sonnet`
+subagent。exit 3／4 照 § 配額耗盡時的 fallback 紀律 與 watch-protocol 的 exit code 分流走，
+**NEVER** 記入品質判斷。
 
 ### MUST 指定 `model: 'sonnet'` 的 predicate（窮舉）
 

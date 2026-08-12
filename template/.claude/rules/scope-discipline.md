@@ -170,6 +170,10 @@ Local edits will be reverted by the next sync.
 - 話術出現 revert / 還原 / 清掉 / 重置 / undo / rollback 等關鍵詞：立即停手 + AskUserQuestion
 ```
 
+上面是 **brief 內容**的最低要求。**派工參數**另有一項：執行者（Claude 檔位 or 轉派 codex）
+依 [[agent-routing]] § Claude 委派的 model 檔位 判定後**顯式帶上**——省略 `model` 是靜默繼承
+主線 Opus，不是「沒指定」。判定結果本身可以是「刻意繼承主線」（例如 checker），那時**寫出來**。
+
 ## 與其他規則的關係
 
 - `follow-up-register.md`：提供技術債登記與 archive gate

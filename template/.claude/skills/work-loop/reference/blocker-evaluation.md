@@ -33,6 +33,10 @@ Local edits will be reverted by the next sync.
    | 「等 user 測過 / 等 production data」 | 需 user 確認 | **AskUserQuestion**（`--unattended` 時改 log + skip）同上 |
    | blocker 描述模糊 / 空白 | 不明 | **AskUserQuestion**（`--unattended` 時改 log + skip）：「`<change>` 標為 blocked 但原因不明，要推進嗎？」 |
 
+   **歸因無證據即重查（hard rule）**：blocker 敘述把成因歸給另一條 workstream（「別 session 動過 X」「等 Y 收斂」），而該敘述**沒附「怎麼驗的」** → 本輪一律當**未驗證**重查，**NEVER** 因為「上面寫著」就沿用它繼續延後。判準不是「這個歸因對不對」（那要查才知道），是**這個歸因有沒有各自的證據**。一句話涵蓋 ≥2 個獨立 gate / blocker、而證據只有一份時間相關性 → 必重查（實錄：`docs/pitfalls/2026-08-11-simultaneously-red-gates-share-one-attribution.md`）。
+
+   鮮度判定過了**不蘊含**這條也過：新鮮的歸因照樣可以是沒驗過的歸因，兩者各自判。
+
 3. User 回答「仍 blocked」→ 跳過 + log。User 回答「已解除」→ unblock + dispatch。
 
 4. **Impl blocked ≠ review items blocked（hard rule）**：即使 impl 仍 blocked，**MUST** 檢查 `## 人工檢查` 區是否有 Claude-actionable items（`issued > 0` / `verifyClaudePendingCount > 0` / `discussPendingCount > 0` / review-gui 顯示「🤖 等 Claude 接手」）。有 → 走 § 3a/3b/3c 處理 review items，**NEVER** 因為 impl blocked 就整條 change 跳過。人工檢查 lifecycle 獨立於 impl lifecycle。
