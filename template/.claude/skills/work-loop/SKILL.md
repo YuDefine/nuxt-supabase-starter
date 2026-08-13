@@ -345,7 +345,7 @@ fi
 
 **`STATE_CORRUPT` NEVER 當成 `{}` 處理。** 空物件會讓 `round` 從 0 重來、`awaiting` / `decisions` / `failStreak` 全空——上游那 N 輪的記憶一次歸零，而每個欄位看起來都「合法」，沒有任何一步會報錯。還原程序（依序）：
 
-1. `state.json.bak` parse 得過 → `mv` 回正本，本輪的 `sessionNote` **MUST** 記「從 .bak 還原，round <N> 的 bookkeeping 可能遺失」
+1. `state.json.bak` parse 得過 → `mv` 回正本，本輪的 `sessionNote` **MUST** 記「從 .bak 還原，round <N> 的 bookkeeping 可能遺失」。還原回來的 `sessionNote` 若以 `⟨截斷 …⟩` 收尾，全文在 `state-archive.json` 的 `sessionNotes.r<N>`（見 § Retention）——**MUST** 讀那份全文再判上一輪做到哪，**NEVER** 只憑截斷後的頭 800 字下判斷
 2. `.bak` 也壞或不存在 → **STOP，NEVER 自行重建一份新 state**。HANDOFF 的 `## Work Loop Status` 段有上一輪的完整敘事，把輪次與 awaiting 從那裡抄回來是**人**的工作，不是本輪的
 3. 兩者皆不可用 → 標 `stoppedReason: state-unrecoverable` 並回報 user
 
@@ -387,9 +387,24 @@ fi
 | --- | --- | --- |
 | `awaiting[]` | 待答決策佇列，**帶完整選項內容**。Step 2.7 清算的對象就是它 | Step 4b packaging 入列、Step 2.7 出列 |
 | `packaged` | `awaiting[]` 的 `id → packagedAt` 投影，供 Step 2 排除用 | 與 `awaiting[]` 同步增刪，**NEVER** 單獨寫 |
-| `decisions` | 已答的答案（含 Charles 逐字），**答完不刪**——後續輪次照它執行 | Step 2.7 (c) 收到答案當下 |
+| `decisions` | 已答的答案（含 Charles 逐字），**答完不刪**——後續輪次照它執行。較舊的條目會被 retention 轉成 stub（key 與 `answer` 都還在，見 § Retention），語義不變 | Step 2.7 (c) 收到答案當下 |
 
 **舊 state 檔只有 `packaged` 沒有 `awaiting`**（本欄位之前的版本）→ 用 HANDOFF `## ⏳ Awaiting Charles` 的對應 `###` 子段回填成 `awaiting[]` 條目，回填不出來的（子段已不存在）直接把該 key 從 `packaged` 刪掉。
+
+### Retention（state 正本只留會改變路由的內容）
+
+state.json 每輪被**整讀**一次，所以它的體積是一筆與本輪成果無關的固定成本（2026-08-13 clade 實測 48.6 KB，TD-491）。`work-loop-state-write.ts` 每次寫入時自動把下列內容 rotate 進**同目錄**的 `state-archive.json`，正本只留路由需要的部分：
+
+| 正本欄位 | 留下什麼 | 全文去哪 |
+| --- | --- | --- |
+| `sessionNote` | 頭 800 字元 + `…⟨截斷 N 字元，全文見 state-archive.json sessionNotes.r<N>⟩` | `sessionNotes.r<N>` |
+| `notes` | 頭 1200 字元 + 同款標記 | `notes.r<N>` |
+| `decisions` | 最近 12 筆全文；更舊的轉 stub `{ answer, answeredAt, archivedAt: "r<N>" }` | `decisions.<key>` |
+| `completed` | 最近 8 筆 | `completed[]` |
+
+**`decisions` 的 key 與 `answer` NEVER 因 rotate 而消失**——這正是三欄位關係表要防的失敗（已答的決策被重問）。看到某 key 帶 `archivedAt` 就是「這條已答、答案是 `answer`」，照它執行即可；**只有需要 Charles 逐字理由時**才去讀 `state-archive.json`。
+
+**自創欄位 MUST 自己收斂。** `nextRoundQueue` / `decidedHoldSteady` / `roundFindings` / `legitimateSkips` 這類不在本 schema 的欄位沒有 reader 契約，retention **不會**替它們修剪——猜著剪的失敗是靜默資料遺失。寫這些欄位的**每一輪**都 MUST 只留下輪真的會用到的條目，**NEVER** 把歷史累積留著等人清。writer 在 state 超過 24 KB 時於 stderr 印 `STATE_OVERSIZE: <bytes>｜前三大：<欄位=bytes>`——**看到它 MUST 當輪就把被點名的欄位收斂掉**，`NEVER` 記進 `notes` 留給下一輪。
 
 **`failStreak` / `escalated` 的來源是本檔，NEVER 是 HANDOFF 的 marker 段。** HANDOFF 段是**人讀輸出**——它可能被人手動編輯、被 rotate 搬走、被別的 skill 覆寫。狀態只認 state 檔。
 
@@ -871,6 +886,12 @@ patch 語義：**給值＝覆蓋、給 `null`＝刪除、沒提到＝原值不�
 - `.bak` 先寫 temp 再 rename —— `cp` 中途失敗不會把既有備份截斷。漏掉這道的長相是：`.bak` 寫壞、正本照換、還印 `STATE_OK`，兩份一起沒了
 - 換檔用 `rename(2)`（即 `mv -T` 語義）：`state.json.bak` 若是**目錄**（前一次救援留下的、或誰手滑 mkdir 的）直接失敗，**NEVER** 把備份搬進那個目錄還回成功。實測（2026-08-12）：無 `-T` 時該情境回 `STATE_OK` 而備份根本不存在
 - `round` 不得倒退 —— 倒退代表本輪讀到的是舊 state 或 patch 算錯，續寫會靜默吃掉中間輪次的 bookkeeping。確認過是刻意的才加 `--allow-round-regress`
+- retention pass（`--no-retention` 關閉）—— 契約見 Step 1 § Retention。archive **先**落地才換正本，所以被移出正本的內容不會兩邊都不在
+
+**stderr 的 `STATE_ARCHIVE_FAILED` / `STATE_OVERSIZE` 都不是失敗 token**（stdout 仍是 `STATE_OK`、exit 0），**NEVER** 因為看到它們就中止本輪 bookkeeping：
+
+- `STATE_ARCHIVE_FAILED: <原因>` —— 本輪不 rotate、state **照原樣完整**寫入。正本是完好的，停下來只會製造 `state.round` < HANDOFF 的落差。記進 `sessionNote` 讓下一輪知道 archive 落點有問題，然後**照常收尾**
+- `STATE_OVERSIZE: …｜前三大：<欄位=bytes>` —— 被點名的欄位是自創欄位（無 reader 契約），處置見 Step 1 § Retention：**當輪**收斂掉它
 
 **現有 `state.json` parse 不過時它回 `STATE_CORRUPT_REFUSED` 並且不動正本**，**NEVER** 當成 `{}` 從頭寫 —— 那會讓 `round` 從 0 重來且每個欄位看起來都合法（處置走 Step 1 § `STATE_CORRUPT` 的還原程序）。
 

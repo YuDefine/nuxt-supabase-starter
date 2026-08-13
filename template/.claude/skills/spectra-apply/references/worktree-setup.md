@@ -89,12 +89,10 @@ Local edits will be reverted by the next sync.
          - 數量不一致（worktree 有新 migration）→ **自動** `cd <worktree> && pnpm supabase:sync && pnpm db:reset`
          - 一致 → pass
          - `supabase:sync --dry-run` 不支援 → fallback 直接跑 `pnpm supabase:sync`（idempotent）
-         - **Per `db-topology-invariant` 規則**：dev DB 是共享實例，reset 前 **MUST** 自主協調（不問 user）：
-           1. `node scripts/claim-helper.ts list` 列 active claims
-           2. 分類：`lastActivity > 2h` = stale（殭屍 claim，忽略）；`lastActivity < 30min` 且 claim 的 change 有 DB-dependent work（migration / seed / e2e） = 真 active
-           3. 真 active claim = 0 → 直接 proceed，log 一行「dev DB reset — N stale claims ignored」
-           4. 真 active claim > 0 → 仍 proceed（apply 的 DB sync 優先於 claim collision），但 log「dev DB reset — warning: N active claims: <names>」
-           5. **NEVER** 因為有 stale claims 或甚至 active claims 就停下來問 user — dev DB reset 是 evidence collection 的前置條件，阻斷 reset = 阻斷整條 change 的推進。log 足矣
+         - Reset 前 **MUST** 依 `db-reset-coordination` + `db-topology-invariant` 的 canonical 分支執行：
+           1. `node scripts/db-reset-peer-coordination.ts coordinate --cwd <worktree>`；linked worktree 正常回 `not_applicable`，primary checkout 必須取得 `safe_to_reset`
+           2. 依 repo 實際拓樸判 `per-worktree`／`shared`；shared 或 canonical maintenance 另 claim `db-lease`
+           3. 任一 gate 未通過 → STOP，透過 Herdr 自行與 peer 協調順序；**NEVER** 只 warning 後照跑，也 NEVER 把一般先後丟給 user
 
       2. **Dev server cwd alignment**（有 singleton dev server 的 consumer — 讀 `scripts/singleton.mjs` 存在性）：
 
