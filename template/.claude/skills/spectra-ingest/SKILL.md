@@ -188,7 +188,7 @@ Update an existing Spectra change — from a plan file or conversation context.
       ```
 
    3. **立刻**簡短回報：「已派 <runtime> 在背景 ingest `<change-name>`（bash job `<id>`），完成後主線會 cross-check」。
-   4. 啟動 **notification-only watch**：主線 idle 等 `<task-notification>`，只下**一個**安全網 fallback `ScheduleWakeup(1500, "<runtime> spectra-ingest <change-name> 安全網檢查")`。**NEVER** 短輪詢。
+   4. 啟動 **notification-only watch**：背景 Bash 回傳 `<task-id>` 後，立刻依 [[agent-routing]] § Generic async keepalive prompt 記錄 owner / deadline，並排 1500s `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=<runtime>:spectra-ingest:<change-name> deadline=<ISO>...` canonical inert control message。控制 turn 只准查 `TaskOutput(block=false)`、重排同一 inert prompt或排 lifecycle intervention；**NEVER** 放原 ingest prompt、讀 output tail、短輪詢或執行 artifact mutation。
 
    **Cross-check（A / B 共用，收到 `<task-notification status=completed>` 後立刻）**：
 

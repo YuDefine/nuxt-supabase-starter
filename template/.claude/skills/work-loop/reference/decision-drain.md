@@ -25,7 +25,7 @@ Charles 2026-08-06 逐字：「work-loop 會累積很多 waiting user 的事件�
 
 ## Iron Law：attended 下佇列非空 NEVER 開工
 
-**`awaiting[]` 非空時 NEVER 進 Step 3 分類、NEVER 進 Step 4 dispatch。** 先把佇列清空，再開工。
+**unresolved `awaiting[]` 非空時 NEVER 進 Step 3 分類、NEVER 進 Step 4 dispatch。** `refused` 已移到獨立 ledger，不計入 unresolved queue，也不阻塞其他 item。先把 unresolved 佇列清空，再開工。
 
 順序是「**先清算，後開工**」，不是「邊做邊找機會問」。理由是機制事實而非禮貌：Charles 在場的
 時間是這個 loop 最稀缺的資源，而他在場的那一段**正是**他準備離開座位去做別的事的那一段。把
@@ -61,7 +61,7 @@ Charles 2026-08-06 逐字：「work-loop 會累積很多 waiting user 的事件�
 | 可觀察 predicate | 動作 |
 | --- | --- |
 | 該 item 已不在本輪 scan（已 archive / 已勾 `[x]` / 條目已刪） | 移出佇列，**不問**。HANDOFF 對應 `###` 子段一併刪除 |
-| 依 [autonomy-predicate.md](autonomy-predicate.md) § Iron Law 重判：**現在**寫得出「推薦 A + 站得住的理由」，**且未命中 predicate 7** | 移出佇列，當自主 item 進 Step 3 做掉，**NEVER** 拿去問 |
+| 依 [autonomy-predicate.md](autonomy-predicate.md) § Iron Law 重判：**現在**寫得出「推薦 A + 站得住的理由」，**且未命中 predicate 7，且 `requiresSpecificConsent !== true`** | 移出佇列，當自主 item 進 Step 3 做掉，**NEVER** 拿去問。已拒絕項目不在 awaiting，而在 `refused` ledger |
 | 以上皆非 | 留在佇列，進 (b) |
 
 **重判是 MUST，不是可選。** 一條 item 當初 packaging 是因為**那一輪**的事實不足；此後可能已經
@@ -86,6 +86,8 @@ Charles 2026-08-05 逐字：「等我拍板的那些問題 其實你都能決策
 `options`：`recommended: true` 那項排第一、label 後綴 `(推薦)`，`effect` 進 description。
 問題文字 = 條目的 `title` + 一句 `blocker`。
 
+permission classifier 要求 **specific shared-action consent** 的題目一律遵守 [[agent-routing]] § Shared-action specific consent UX；本檔只補 work-loop 狀態約束：packaging MUST 設 `requiresSpecificConsent=true`，unattended / runner 不呼叫 `AskUserQuestion`，並保留該 SoT 要求的完整範圍，等下一次 attended 開場顯示。
+
 **NEVER 在這一步做這三件事**：
 
 - ❌ **自己設上限**（「先問最急的 4 題，其餘下次」）——沒有題數上限。剩下的就是還沒清空
@@ -105,14 +107,14 @@ Charles 2026-08-05 逐字：「等我拍板的那些問題 其實你都能決策
 
 | 位置 | 動作 |
 | --- | --- |
-| state `decisions` | 寫 `{"<id>": {"answer": "<key>", "note": "<Charles 逐字>", "answeredAt": "<ISO>"}}` |
-| state `awaiting[]` / `packaged` | 移除該條目 / 刪除該 key |
-| `$MAIN_WT_PATH/HANDOFF.md` | 刪掉 `## ⏳ Awaiting Charles` 底下對應的 `###` 子段 |
+| state `decisions` | 寫 `{"<id>": {"answer": "<key>", "outcome": "granted|refused", "note": "<Charles 逐字>", "answeredAt": "<ISO>"}}`。specific shared-action 的 granted answer 另建 `grant={actionFingerprint,scope,grantedAt,consumedAt:null}`；每個可執行的縮小範圍選項也 MUST 自帶完整 scope |
+| state `awaiting[]` / `packaged` | granted 與 refused 都從 unresolved queue / projection 移除。granted 建 one-shot grant；refused 另寫 `refused[id]={answer,scope,refusedAt,note}` ledger，供 scan 排除 |
+| `$MAIN_WT_PATH/HANDOFF.md` | granted 刪對應子段；refused 保留子段並標明 blocked/refused scope，但它不回填 awaiting |
 
 `note` **MUST 逐字記 Charles 說的話**（含他在選項外補的說明），**NEVER** 記成你的複述——下一輪
 是新 context，複述會把他的但書弄丟。
 
-答完的條目在**本輪**就照答案進 Step 3 當自主 item 做掉，**NEVER** 留到下一輪。
+只有 `outcome=granted` 且 action fingerprint 與選取 scope 完全相符的條目，才在**本輪**進 Step 3；dispatch 前 MUST 原子寫入 `consumedAt`，同一 grant **NEVER** 重播。`outcome=refused` 寫入獨立 ledger後保持 blocked，**NEVER** 進 Step 3、NEVER 自動重問或自行執行，但不阻塞其他 unresolved item 清算與開工。
 
 ---
 

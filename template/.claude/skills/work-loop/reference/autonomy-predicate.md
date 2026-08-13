@@ -140,7 +140,7 @@ predicate 4 問的是「可不可逆」，而放寬自己的上限**完全可逆
 
 | 位置 | 內容 |
 | --- | --- |
-| state `awaiting[]` | 完整條目：`id` / `title` / `packagedAt` / `round` / `blocker` / `startableDone` / `options[]`（`key` / `label` / `effect` / `recommended`）/ `rationale` / `nextStep`。欄位與下方 § 第三部分段模板一一對應 |
+| state `awaiting[]` | 完整條目：`id` / `title` / `packagedAt` / `round` / `blocker` / `startableDone` / `options[]`（`key` / `label` / `effect` / `recommended`）/ `rationale` / `nextStep` / `requiresSpecificConsent` / `state`。欄位與下方 § 第三部分段模板一一對應。**permission classifier 要求具名 shared-action consent 的題目 MUST 設 `requiresSpecificConsent: true`**——漏設會讓 [decision-drain.md](decision-drain.md) (a) 的 `requiresSpecificConsent !== true` 護欄恆為真，該題被當自主 item prune 掉 |
 | state `packaged` | `{"<item-id>": "<ISO>"}` 投影，供 Step 2 排除用 |
 
 `awaiting[]` 是 [decision-drain.md](decision-drain.md)（Step 2.7 開場清算）的**唯一輸入**——只寫 HANDOFF 段不寫 `awaiting[]`，這條決策就永遠不會被端到 Charles 面前，退回清算閘存在之前的單向累積狀態。**NEVER** 只寫其中一邊。

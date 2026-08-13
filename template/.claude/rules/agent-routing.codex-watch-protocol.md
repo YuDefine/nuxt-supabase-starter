@@ -285,7 +285,7 @@ dispatcher 會把 `--tier-basis` × `--model` × `--route` 交叉檢查，自相
 
 **`--output-schema`**：codex 0.138+ 支援以 JSON Schema 約束最終回覆。新 dispatch 場景**預設提供 schema 檔**，取代脆弱的「stdout 結尾 JSON 摘要」約定；既有 dispatcher（screenshot-verify / pre-handoff-check）維持現行契約不回頭改。
 
-**Watch**：dispatcher 屬「主線直接 Bash 派」路徑 → notification-only + 單一 ScheduleWakeup(1500-1800) 安全網（見下方 § 監看排程），**禁止** 180s 短輪詢。
+**Watch**：dispatcher 屬「主線直接 Bash 派」路徑；取得 `<task-id>` 後，同一 turn 記錄 owner / deadline 並排單一 1500–1800s `ASYNC_KEEPALIVE_CONTROL` inert safety net（見下方 § 監看排程）。控制 turn 只准查 task status與 lifecycle 分流，**禁止** 180s 短輪詢、讀 output tail或重播原 dispatch。
 
 ## Codex Watch Protocol（防止主線乾等與卡住盲區）
 
@@ -312,7 +312,7 @@ dispatcher 會把 `--tier-basis` × `--model` × `--route` 交叉檢查，自相
 
 問進度要 `SendMessage({to: <agent-id>})` 讓該編排者在自家 sandbox 回報，**NEVER** 自己去掃 process table 替它回答。
 
-上述檔案訊號的讀取節奏對齊下方 § 監看排程 的安全網 fallback（1200–1800s），**NEVER** 回到每 ~3 分鐘的短輪詢——那是薄中介形狀的產物，理由見該節末的成本論證。
+上述檔案訊號只在使用者主動問進度、或 completed result 需要 cross-check 時讀；generic async keepalive safety net **NEVER** 讀它們。安全網只查 harness task 狀態，理由見下方 § 監看排程。
 
 > 歷史 pitfall：`docs/pitfalls/2026-05-18-subagent-background-bash-invisible-from-main-ps.md`（v1 的「看不到」形狀）。v2 的「看得到但分不出租戶」形狀見 `pitfall-wt-form3-resurrects-banned-subagent-codex-path`。
 
@@ -324,58 +324,41 @@ Codex 由**該層編排者**在其自身 sandbox 內直接 Bash `run_in_backgrou
 
 | 時機 | 動作 |
 | --- | --- |
-| 派出後**立刻** | **不**下短輪詢。只下**一個**安全網 fallback：`ScheduleWakeup(1500, "codex <topic> <slug> 安全網檢查 — 預期靠 task-notification 收尾")`（~25 分） |
-| 收到 `<task-notification status=completed>` | 立刻 BashOutput 讀 stdout → cross-check → 回報；後續 fallback 自然作廢（**不再** wakeup） |
-| 安全網 fallback 觸發（仍沒收到通知） | BashOutput 讀 tail → 套「健康判斷」：健康/即將完成 → 再下一個 ~1500s fallback；阻塞/卡住 → 跳「介入觸發」 |
-| 任何時點累計 ≥ 30 min 未完成 | **MUST** `AskUserQuestion` [繼續等 / kill 重派 / 中止] |
+| 派出後**立刻** | **不**下短輪詢。記下 background Bash `taskId`、`owner=codex-watch` 與有限 deadline，下一個 1200–1800s safety net 使用 [[agent-routing]] § Generic async keepalive prompt 的 canonical control message |
+| 收到 `<task-notification status=completed>` | 停 wakeup，先以 task id claim；claim 成功才 BashOutput 讀 stdout → cross-check → 回報 |
+| 安全網 fallback 觸發（仍沒收到通知） | 只依 `TaskOutput(block=false)` 走 canonical control 分流：terminal 才停 wakeup、claim 並排 `ASYNC_LIFECYCLE_HANDOFF task=<id> owner=codex-watch cause=terminal`；running 到 deadline 或未知狀態保留 pending ownership，改排 `ASYNC_DEADLINE_INTERVENTION`，**不得**收割或重派 |
 
-> **為什麼安全網用長間隔而非 180s**：notification-only 的常態是「主線 idle 等通知」= 零 turn。短輪詢（180s）會強制主線每 3 分鐘醒來重讀整段 context（重倉 ~270K/turn）——那正是要消除的負擔來源。直接 dispatch 的**常見失敗是 exit-type**（`fetch failed` / auth fail → codex 退出 → bash 完成 → 通知即時觸發，主線馬上讀錯誤 tail）；安全網 fallback 只防罕見的 **hang-type**（codex 卡住 never exit、never notify），25 分鐘醒一次足夠（一次 cache miss vs 每 3 分鐘一次 cache read，便宜得多）。
+> **為什麼安全網用長間隔而非 180s**：notification-only 的常態是「主線 idle 等通知」= 零 turn。短輪詢會強制主線頻繁醒來重讀整段 context；安全網買的是 cache 存活與遺失通知兜底，不是 codex progress telemetry。
+>
+> 本證據決定：Codex safety net 可用長 interval，但不得超過 cache-keepalive 上限。
+> 本證據不決定：其他 async 路徑的 interval、deadline 或是否可查 task status。
 
-### 健康判斷（每次 wakeup 必跑）
+### 安全網 control turn（hard boundary）
 
-讀 BashOutput tail，依末尾訊號決定下一步。**`--json` 模式**下 stdout 是 JSONL 事件，stderr 保持原格式：
+安全網 wakeup 的 allowlist 以 [[agent-routing]] § Generic keepalive 醒來只做控制面動作 為準：只可 `TaskOutput(block=false)`、重排 / 停 wakeup、排 handoff。**NEVER** 讀 BashOutput tail 判健康、執行原 codex 任務、或做任何 mutation。
 
-| 訊號 | 判定 | 下一個 fallback |
-| --- | --- | --- |
-| JSONL 有新 `"type":"item.completed"` 事件（tool_call / shell / agent_message） | 健康 | `1500` 秒（再下一個安全網 fallback） |
-| JSONL 出現 `"type":"turn.completed"` 含 `usage` 後無新事件 | 即將完成 | `60` 秒（cache 內，便宜；等 notification 收尾，**不是**輪詢） |
-| 末尾 60s+ 無新輸出（看 BashOutput timestamp） | 輕度可疑 | `300` 秒單次複查；連續兩次無新輸出 → 視為卡住，跳「介入觸發」 |
-| stderr 出現 `fetch failed` / `sandbox: rejected` / `Permission denied` / `EACCES` / 認證失敗 | 阻塞 | **立刻**跳「介入觸發」，不再 wakeup |
-| stderr 出現 `request_user_input is not supported in exec mode` | codex 在問問題 | turn 將結束 → 等 notification 走 [[agent-routing.codex-input-intercept]] 流程 |
-| JSONL 最後 `agent_message` 含 blocker 語意（「無法繼續」「需要使用者決定」「missing context」） | 阻塞 | **立刻**跳「介入觸發」 |
+`ASYNC_LIFECYCLE_HANDOFF` 與 native notification 只在 terminal 時共用 task-id claim；claim 成功的正常 turn 才讀 stdout / stderr、cross-check 並分類。stdout / stderr 命中 `fetch failed`、sandbox / permission / auth error、`request_user_input is not supported in exec mode` 或 blocker 語意 → 依 [[agent-routing.codex-input-intercept]] 與下方介入契約處理。
 
-### 介入觸發（用 AskUserQuestion）
+### 介入觸發
 
-偵測到阻塞或卡住時，**MUST** 立刻向使用者開問題，**禁止**自行 kill 或調整 prompt：
+completed result 顯示阻塞、或 harness 明確回報 failed / cancelled 時：attended mode **MUST** 立刻用 `AskUserQuestion` 呈現至少 [重派 / 中止]；unattended / headless mode **NEVER** 問，改以完整 blocker 與選項 packaging，並安全結束該 path。`ASYNC_DEADLINE_INTERVENTION` 的 attended 選項可包含 [繼續等 / 中止]：選「繼續等」**MUST** 寫入新的有限 deadline，保持 `lifecycle=pending`，並重新 arm canonical inert control message；選中止則先 `TaskStop`，確認 terminal 才收割。**NEVER** 自行 kill 或調整 prompt。
 
-```
-codex 跑了 N 分鐘，目前狀態：<一句話卡點>
-
-末尾輸出（≤10 行）：
-<tail>
-
-要怎麼處理？
-[1] 繼續等 N 分 — 主線再 wakeup 看一次
-[2] kill <jobId> 後重派（請告知 prompt 要怎麼調整）
-[3] 直接中止
-```
-
-選項數量與內容可依情境調整，但**必須**包含至少 [繼續等 / kill 重派 / 中止] 三類其中兩類。
+permission classifier 另要求 specific shared-action consent 時，推薦選項的 description MUST 放完整具名範圍，選取即授權；**NEVER** 要 user 手打或貼完整授權句（SoT：[[agent-routing]] § Shared-action specific consent UX）。
 
 ### `ScheduleWakeup` 用法守則
 
-Codex 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleWakeup` 只用於安全網 fallback：
+Codex 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleWakeup` 只用於 generic async keepalive 安全網：
 
 | 情境 | 建議值 |
 | --- | --- |
-| **安全網 fallback（預設）** | **`1200`–`1800`**（超 cache TTL；這是「codex 死了卻沒發通知」的兜底，**不是** active watch） |
-| 即將完成 / 等通知收尾 | `60`–`120`（cache 內） |
+| **安全網 fallback（預設）** | **`1200`–`1800`**，prompt = canonical inert control message |
+| harness task 仍 running | 以完全相同的 interval 與 inert prompt 重排 |
 
-**禁止** `< 60`（runtime clamp 也會擋）。安全網 fallback 用 `1200`–`1800` 是正確的——不是 active watch，是 hang-type 失敗的兜底；用 180s 短輪詢反而把要消除的 per-turn 重讀加回來。
+**180s 的具名例外（窮舉，其餘一律禁止）**：`commit` gate 0-A.1 的 codex review、`dep-upgrade` outdated-mode 的 low-risk 升版 review。兩者的共同 predicate 是**主線在同一段時間跑並行軸、且結果一到就要接著用**——短 interval 買的是並行軸的銜接，不是 progress telemetry；prompt 仍 **MUST** 是 canonical inert control message，控制 turn 一樣不得讀 output。不在這份清單上的路徑用 `1200`–`1800`。
 
-**上限 `3300`（MUST）**：這個 fallback 同時承擔 [[agent-routing]] § 主線靜默上限 的 cache-keepalive 職責，所以 codex 路徑**不**另外排第二個 wakeup——但也 **NEVER** 把它拉長到 3300 以上，否則主線會在 codex 仍在跑時掉出 1 小時 prompt-cache TTL。`1200`–`1800` 已在上限內，照用即可。
+**禁止** `< 60`（runtime clamp 也會擋）。**上限 `3300`（MUST）**：這個 fallback 同時承擔 [[agent-routing]] § 主線靜默上限 的 cache-keepalive 職責，所以 codex 路徑**不**另外排第二個 wakeup，也 **NEVER** 拉長到 3300 以上。
 
-`reason` 欄位**必須**具體：例如「kiosk-multilingual codex 進度檢查（已派出 3 分）」，**NEVER** 寫「waiting」「monitoring codex」這種空泛字眼。
+`reason` 欄位**必須**具體描述 control 對象，例如「kiosk-multilingual codex keepalive」，**NEVER** 寫「waiting」「monitoring codex」這種空泛字眼；原任務內容只留在已存在的 background task，NEVER 複製進 wakeup prompt。
 
 ### 與「不要把工作往後放」禁令的關係
 
@@ -383,15 +366,14 @@ Codex 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleW
 
 判別準則：
 
-- 合法用途 → 派出 background job 後監看其進度、卡住偵測、收尾通知
+- 合法用途 → 派出 background job 後維持 harness task lifecycle、遺失通知兜底與既有結果收尾
 - 仍禁止 → 把當下可處理的事推遲到未來、為「等使用者反應」排 follow-up、用 schedule 填充看似貼心的提醒
 
 ### 監看期間的紀律
 
-- **NEVER** 在 wakeup loop 中跑與監看無關的探索動作（grep / 額外 Read / 開新 subagent）— 監看就是監看
-- **NEVER** 在 watch 中途自行決定殺掉 / 重派 codex — 必須先 AskUserQuestion
-- **NEVER** 看到健康訊號就提早終止 watch loop（例如「應該快好了」直接放著） — 必須跑到收到 `<task-notification>` 為止
-- **MUST** 收到 `<task-notification>` 後**不再** ScheduleWakeup（否則 wakeup 會在 codex 已結束後重複觸發）
+- **NEVER** 在 wakeup control turn 中跑探索動作（grep / 額外 Read / 開新 subagent）或原任務 — 只做 harness lifecycle control
+- **NEVER** 在 watch 中途自行決定殺掉 / 重派 codex — completed result 顯示 blocker 後必須先 AskUserQuestion
+- **MUST** 收到 `<task-notification>` 或收割到 completed result 後停止 ScheduleWakeup（否則 wakeup 會在 codex 已結束後重複觸發）
 
 ## Spectra Routing Table
 
@@ -522,10 +504,10 @@ Agent 端的對應規範（hard budget、checkpoint、fail-fast、progress.json 
 
 | 軸 | Codex Watch | screenshot-review Verify Watch |
 | --- | --- | --- |
-| 進度來源 | `BashOutput` tail（codex stdout） | `progress.json`（agent 主動寫盤） |
-| 介入工具 | `kill <jobId>` | `SendMessage` 詢問 → `TaskStop` |
-| Wakeup 機制 | notification-only；`ScheduleWakeup` 只作安全網 fallback（`1200`–`1800`，上限 `3300`——見 § `ScheduleWakeup` 用法守則）| 不一定需要 ScheduleWakeup — 主線在執行其他工作時主動 Read 即可；長時間無其他工作時可用 `ScheduleWakeup(900)` 標 progress.json 檢查 |
-| Hard timeout | 30 min 累計 → AskUserQuestion | 60 min hard budget(agent 自我中止) + 45 min stale → AskUserQuestion |
+| 進度來源 | completion notification；terminal / deadline handoff 才讀既有 result | `progress.json`（agent 主動寫盤） |
+| 介入工具 | terminal / deadline handoff 後 `AskUserQuestion` | `SendMessage` 詢問 → `TaskStop` |
+| Wakeup 機制 | `ScheduleWakeup` 1200–1800s 的 task-aware control wakeup（SoT：[[agent-routing]] § Generic async keepalive prompt） | 不一定需要 ScheduleWakeup — 主線在執行其他工作時主動 Read 即可；長時間無其他工作時可用 `ScheduleWakeup(900)` 標 progress.json 檢查 |
+| Hard timeout | dispatch 時寫入 deadline；deadline handoff → AskUserQuestion | 60 min hard budget(agent 自我中止) + 45 min stale → AskUserQuestion |
 
 ### 必禁事項
 

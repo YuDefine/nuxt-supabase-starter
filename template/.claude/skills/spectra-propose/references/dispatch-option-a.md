@@ -128,7 +128,7 @@ Local edits will be reverted by the next sync.
       ```
 
    4. **立刻**簡短回報給使用者：「已派 Codex GPT-5.6-sol max 在背景 draft `/spectra-propose <change-name>`（bash job `<id>`），完成後主線會 cross-check 並補 Design Review template」
-   5. 啟動 **Codex Watch Protocol**（見 `.claude/rules/agent-routing.codex-watch-protocol.md` § 監看排程 A. 主線直接 Bash 派）— **notification-only**：派出後**不**下短輪詢，主線 idle 等 `<task-notification>`；只下**一個**安全網 fallback `ScheduleWakeup(1500, "codex spectra-propose <change-name> 安全網檢查 — 預期靠 task-notification 收尾")`（~25 分，防 hang-type 失敗；`fetch failed` / auth 等 exit-type 失敗 codex 會直接 exit → background bash 完成 → 通知**立刻**觸發，不需輪詢）。**NEVER** 用 `ScheduleWakeup(180)` 短輪詢 — 每 3 分鐘醒來重讀整段 context 正是 notification-only 要消除的負擔
+   5. 啟動 **Codex Watch Protocol**（見 `.claude/rules/agent-routing.codex-watch-protocol.md` § 監看排程 A）：background Bash 回傳 `<task-id>` 後，立刻記錄 owner / deadline，並排 1500s canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=codex:spectra-propose:<change-name> deadline=<ISO>...` inert control message。控制 turn 只准 `TaskOutput(block=false)`、重排同一 inert prompt、停止 wakeup或排 lifecycle intervention；**NEVER** 放原 propose prompt、讀 output tail、執行 artifact mutation或用 180s 短輪詢。完成通知到達後才 claim task id、讀 stdout並進 Phase 0b。
 
    #### Phase 0b：主線 Cross-Check（codex 完成後**立刻**執行）
 

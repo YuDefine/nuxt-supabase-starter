@@ -23,10 +23,10 @@ Local edits will be reverted by the next sync.
 
 | 機制 | 行為 |
 | --- | --- |
-| Notification-only 等待 | 每個 in-flight agent 完成時系統送 `<task-notification>`（或 SendMessage 回報），主線收到才處理——不短輪詢 |
-| 安全網 fallback | ScheduleWakeup 1500s——超過 25 分鐘無任何通知時醒來查一次 in-flight agent 狀態（worktree `git log` 有無新 commit / process 是否存活）；活著 → 續等下一輪安全網；死掉（無 process 且無 commit 進展）→ 按 dispatch 失敗處理（log + fail-streak + 移出 ledger） |
+| Notification-only 等待 | 每個 in-flight agent 完成時系統送 `<task-notification>`（或 SendMessage 回報），主線收到才處理——不短輪詢。無 task id 的條目仍在 `inFlight` 持久記錄 `dispatchedAt`、`owner`、`deadline` 與 `lifecycle`。這類條目的 claim key 是 **owner ref**（`taskId: null`），狀態機與 task-id claim 相同：`pending → harvesting → harvested`，已是 `harvesting` / `harvested` 則 no-op |
+| 安全網 fallback | 有 `Bash(run_in_background)` harness task id 的 dispatch：把 `taskId`、`owner`、`deadline`、`lifecycle=pending` 記入 `inFlight`，並排 1500s generic control wakeup（SoT：[[agent-routing]] § Generic async keepalive prompt）。只有 terminal 才排 `ASYNC_LIFECYCLE_HANDOFF` 並 claim；deadline / unknown 一律保留 ledger ownership，走下列 deadline protocol。無 task id 的 dispatch 改排 [[agent-routing]] § Notification-only keepalive prompt，並用 ledger deadline 觸發同一 deadline protocol。**NEVER** 放原 `/work-loop` prompt，或在 control turn 做任何 mutation |
 | 等待期間 | 主線工作來源見 [dispatch-topology.md](dispatch-topology.md) § 主線在做什麼。四組與 HANDOFF 補件皆空、且 in-flight > 0 時的等待是收斂，不是閒置 |
-| Hang 上限 | 超過 **2 小時**無任何 agent 回報 → 強制退出：尚未回報的 in-flight 條目按 dispatch 失敗記 fail-streak、寫 HANDOFF、釋放 lock（同護欄 #12） |
+| Hang 上限 | 每個 `deadline` = dispatch 後 **2 小時**。deadline 到達時先把 `lifecycle` 寫為 `cancelling`，停止 control wakeup，並以 `TaskStop` 取消可取消的 task；無 task id 的 owner 走自身 cancel protocol。**確認 terminal 前 NEVER** 記 fail-streak、移除 ledger、釋放 lock 或重派。terminal 通知到達後才 claim、按 dispatch failure 收尾、寫 HANDOFF 與釋放 lock |
 
 ### pre-scan 通知的輕量收割（不走 8 步 SOP）
 

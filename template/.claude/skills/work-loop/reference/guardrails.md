@@ -25,7 +25,7 @@ Local edits will be reverted by the next sync.
 8. **不碰 user 的 stash** —— worktree / stash audit 只讀不寫
 9. **subagent scope verify** —— 每個 subagent 回報後 MUST 跑 `scripts/scope-verify.ts`，scope 外的實質改動 revert
 10. **Error isolation + 跨輪升級** —— 單一 item 失敗不停整個 loop；同 item `failStreak` ≥3 → Escalated，不再 dispatch。同錯重複該產出系統性修正，不是無限 retry。codex pre-scan 的 exit 4（quota）/ exit 3（機械故障）**NEVER** 記入 `failStreak` / `consecutiveDispatchFailures`——fallback 形狀見 `dispatch-topology.md` § pre-scan 的 exit code 分流
-11. **收割護欄** —— `inFlight` > 0 時**不是**停止狀態；lock 在此期間 **NEVER** 釋放；2h 無回報強制退出
+11. **收割護欄** —— `inFlight` > 0 時**不是**停止狀態；lock 在此期間 **NEVER** 釋放。deadline 到達只進 `cancelling` / intervention，依 owner 的原生控制面取消並等待 terminal；terminal 確認前 NEVER 移除 ledger、記 fail-streak、重派或收割
 12. **每條停止路徑 MUST 跑 `work-loop-lock.ts release --session <id>`** —— 含失敗提早結束的路徑。**NEVER** 改用 Write tool 或 `rm` 直接動 `.clade/work-loop/lock`（per Step 0 § 互斥鎖 Iron Law）
 13. **Blocked / Decision item 先評估再處理** —— `applyBlocked` 走 blocker 鮮度判定、`awaitingUserDecision` 先嘗試自主解決（技術決策自決，只有商業決策才是真的 user-bound）。兩者都**不是**「永遠跳過」。見 `blocker-evaluation.md`
 14. **NEVER 因 size / progress 跳過 dispatch** —— `applyInProgress` 不管進度 0% 或 change 看起來多大，MUST dispatch；`/spectra-apply` 自管步驟粒度、phase、pause 與 blocker。「需要完整 session」「不適合 loop」= 違反本條
@@ -56,7 +56,7 @@ carve-out 之前護欄 7 沒有例外 → 那條答案 unattended runner 永遠�
 
 ---
 
-## B. 決策面（4 條）
+## B. 決策面（5 條）
 
 17. **`AskUserQuestion` 的可用性由 mode 決定，NEVER 由 item 決定** ——
 
@@ -70,6 +70,7 @@ carve-out 之前護欄 7 沒有例外 → 那條答案 unattended runner 永遠�
 18. **能寫出「推薦 A」就去做，NEVER packaging** —— packaging 是 fallback 不是 default。寫得出 `(推薦)` 標記＝決策已完成，送去等人覆述你的結論是拖慢開發。判準見 `autonomy-predicate.md` § Iron Law
 19. **人類 gate 只擋真正不可逆的** —— prod 部署 / 刪除 branch / tag / 遠端資料 / 花錢的 API / 任何 `--force`。**publish 與 propagate 不在此列**（2026-08-05 Charles 授權）：它們可 revert + 重新 publish，且 MUST 走 `/clade-publish` Step 1–9，NEVER 自己拼 `publish.ts` + `propagate.ts`
 20. **attended 下待答佇列非空 NEVER 開工** —— state 的 `awaiting[]` 非空、且本輪是 attended（非 `--unattended`、非 `claude --print`）→ **MUST** 先跑完 Step 2.7 開場清算把佇列問到空，**NEVER** 進 Step 3 分類或 Step 4 dispatch。判準是 mode 與佇列空不空，**NEVER** 是題數或急迫性。unattended 下反過來：佇列非空**照跑**、只排除佇列裡那幾條，**NEVER** 因此寫 `stoppedReason`。見 `decision-drain.md`
+21. **specific shared-action consent 用可點選選項完成** —— classifier 要具名 consent 時，attended mode MUST 用 `AskUserQuestion`；推薦選項 description 放完整 repo / resource、action、path / ref 與排除項，選取即授權。**NEVER** 要 Charles 手打、複製或貼上同一句授權。unattended 只 packaging 同一份完整範圍，NEVER 推定 consent
 
 ---
 

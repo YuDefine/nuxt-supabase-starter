@@ -173,9 +173,9 @@ Log 目的：
 
 ## 與 Watch Protocol 的整合
 
-### JSONL 格式下的健康判斷
+### JSONL 格式下的 output 判讀
 
-`--json` 改變 BashOutput 內容格式。Watch Protocol 的健康判斷 pattern 對照：
+`--json` 改變 BashOutput 內容格式。**只在 terminal 收割後判讀既有 output 時**用下表對照——安全網 control turn **NEVER** 讀 BashOutput tail 判健康（SoT：[[agent-routing.codex-watch-protocol]] § 安全網 control turn（hard boundary））：
 
 | 舊 pattern（plain text） | 新 pattern（JSONL） |
 | --- | --- |
@@ -197,9 +197,11 @@ dispatch (run_in_background)
       → resume (新 run_in_background) → 新 Watch Protocol cycle → 回到偵測
 ```
 
-### 安全網 fallback 期間的問題偵測
+### 安全網 fallback 期間 NEVER 提前偵測
 
-Watch Protocol 安全網 fallback 觸發時（codex 仍在跑），若 BashOutput tail 含 `request_user_input is not supported` error → codex 正在等 input 但 exec mode 拒絕了。此時 codex 會 fallback 輸出文字問題後結束 turn → background bash 很快就會完成 → notification 觸發 → 走正常 Input Intercept 流程。**不需要在安全網 fallback 階段提前介入**。
+安全網 fallback 觸發時（codex 仍在跑）**NEVER** 讀 BashOutput tail 找 `request_user_input is not supported`——control turn 的 allowlist 不含讀 output（SoT：[[agent-routing.codex-watch-protocol]] § 安全網 control turn（hard boundary））。
+
+不需要提前介入的理由不變：codex 被 exec mode 拒絕 input 時會 fallback 輸出文字問題後結束 turn → background bash 很快完成 → terminal notification 或 `ASYNC_LIFECYCLE_HANDOFF` 觸發 → claim 成功後才讀 stdout / stderr，走正常 Input Intercept 流程。
 
 ## codex-dispatch.ts 整合
 

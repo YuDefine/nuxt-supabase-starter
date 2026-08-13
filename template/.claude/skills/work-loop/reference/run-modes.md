@@ -28,6 +28,8 @@ cd <目標 repo> && ~/offline/clade/plugins/hub-core/skills/work-loop/runner.sh 
 形狀、理由、以及退出後的回報契約在 SKILL.md Step 0 § 起 runner 的形狀與收尾契約。上面兩行是給
 人看的指令原型，主線照抄時要包進 background Bash call。起跑的**同一則訊息**內還要配齊該節 (d) 的
 cache-keepalive heartbeat 與 (e) 的 per-round Monitor——本檔只管指令長什麼樣，配哪些出口以該節為準。
+runner heartbeat 是 generic async keepalive，prompt MUST 使用 [[agent-routing]] 的 canonical inert control
+message；只有 in-session `/loop /work-loop` 的 dynamic 自我續跑保留原 `/loop` prompt / sentinel。
 
 `runner.sh` 的 flag：`--max-rounds <n>`（預設 20）、`--dry-run`（只印每輪會下的指令）、
 `--permission-mode <mode>`（預設 `acceptEdits`；**NEVER** 預設 `bypassPermissions`——那會連
@@ -117,3 +119,70 @@ runner 自己的停止條件：`stoppedReason` 出現、達 `--max-rounds`、連
 **這四種的語義差別 MUST 出現在收尾回報裡**——只有第一種是「待辦推完」，其餘三種分別是額度用完、
 系統性故障、中途夭折。逐列對照表與回報的四個必填項在 SKILL.md Step 0
 § 起 runner 的形狀與收尾契約 (c)。**兩處講同一件事，改其中一處 MUST 同步改另一處。**
+
+## per-round Monitor 指令原型
+
+SKILL.md Step 0 § 起 runner 的形狀與收尾契約 (e) 要 arm 的就是這一份，**照抄，NEVER 自己重寫**
+（`<repo>` 換成目標 repo 絕對路徑）。契約表（emit 幾行、主線收到後 MUST 做什麼、收尾怎麼停）留在
+該節，本檔只放指令本身。
+
+```text
+Monitor({ persistent: true, description: "work-loop round 進度（<repo> ）", command: <<'EOF'
+cd <repo>
+# 絕對路徑是必要的：node 的 require() 對相對路徑會當成模組名解析而丟例外，
+# 被 catch 吞掉後 round 恆為 0 → Monitor 永遠不 emit（2026-08-08 實測踩過）
+S="$PWD/.clade/work-loop/state.json"; L="$PWD/.clade/work-loop/logs"
+r() { node -e 'try{console.log(require(process.argv[1]).round??0)}catch{console.log(0)}' "$S" 2>/dev/null || echo 0; }
+prev=$(r); last_change=$(date +%s)
+while true; do
+  sleep 60
+  cur=$(r)
+  if [ "$cur" != "$prev" ]; then
+    # 摘要一律取 state 的 sessionNote（該輪做了什麼的人讀敘述）＋ roundEndReason。
+    # NEVER 退回 tail log：log 尾巴是 `claude --print` 的收尾輸出，多數輪沒有實質內容，
+    # 於是 user 每輪只看得到「round N 完成」（2026-08-11 Charles 回報）。
+    node -e 'const s=require(process.argv[1]);console.log(`round ${s.round} 完成｜${s.roundEndReason??"?"}｜${(s.sessionNote??"(無 sessionNote)").replace(/\s+/g," ").slice(0,400)}`)' "$S" 2>/dev/null \
+      || echo "round $cur 完成（sessionNote 讀取失敗）"
+    prev=$cur; last_change=$(date +%s)
+  fi
+  reason=$(node -e 'try{const s=require(process.argv[1]);if(s.stoppedReason)console.log(s.stoppedReason)}catch{}' "$S" 2>/dev/null)
+  [ -n "$reason" ] && { echo "runner stopped: $reason"; break; }
+  [ $(( $(date +%s) - last_change )) -ge 5400 ] && { echo "⚠ round 已 90 分鐘沒前進（目前 round=$cur）"; last_change=$(date +%s); }
+done
+EOF
+})
+```
+
+**未採用的變體，NEVER 在沒驗完兩件事之前改用**：`runner.sh` 是主線的 child process，理論上能經
+`CLAUDE_CODE_MESSAGING_SOCKET` 把每輪結果 post 回主線 inbox——cross-session messaging 對 own-child
+message 的投遞繞過 permission-class hold，且 Linux 連已退出的 child 都能驗證。那條路徑事件驅動、
+自帶進度，嚴格優於定時盲醒——**但 (e) 的 Monitor 已經用現成工具拿到同樣的事件驅動與 per-round
+進度**，socket 路徑剩下的增量只有「不必 poll state 檔」，不值得為它逆向 wire format。2026-08-08
+驗證時卡在兩點：主線 session 未 bind inbox socket，socket 的 wire format 也未逆向出來。**兩件都
+驗掉才可改用**；擋住它的 permission-class hold 規則與完整評估見
+`~/offline/clade/docs/discussions/2026-08-08-cross-session-messaging-evaluation.md`。
+
+## scan 的 temp 與落點（Step 2 的兩個為什麼）
+
+- **temp 仍在 `/tmp` 且仍唯一**：那裡是全機器所有 consumer 共用，唯一化是必要條件
+  （[[pitfall-fixed-temp-path-shared-across-sessions-silent-data-pollution]]）。而且那條 `mktemp`
+  是 runner.sh `--allowedTools` 逐字放行的**唯一**一條 Bash 命令，改寫成別的形狀在無人值守下
+  會停在 approval —— 沒有人能回答
+- **最終落點固定**：`.clade/work-loop/` 是 per-repo，且同一 repo 同時只有一個 loop session
+  （Step 0 互斥鎖保證），沒有互相覆寫的對象。隨機路徑有它自己的失敗模式 —— **本輪稍後想再看
+  一眼 scan 的人找不到那個路徑，於是重跑一次**。2026-08-13 實測 clade round 70 留下
+  `scan-r70-mid` 到 `mid7` 共七份（49.0→51.3 KB，幾乎無 delta），全是同一輪內的重跑（TD-491 第 2 項）
+
+## 工具健檢為什麼要實跑（Step 2.5 的兩段實證）
+
+**為什麼是實跑**：2026-08-05 <consumer-a> 實證——`scripts/lib/detect-runtime.ts` 從未被散播，四支入口
+（`dev-session` / `dev-singleton` / `db-lease` / `claims-lib`）全部 `ERR_MODULE_NOT_FOUND`。
+**那四支檔案本身都在**，`[ -f ]` 一路綠燈；死的是它們 import 的東西。該輪因此白派了一個 worktree
+agent 出去，回來才知道 dev-port 組整組不可用。
+
+**為什麼第 0 步（確認探針路徑）排在實跑之後**：2026-08-06 round 27 於 clade home 實測——
+`node scripts/wt-helper.ts list` 回 `MODULE_NOT_FOUND`，而 wt-helper 在產地是
+`vendor/scripts/wt-helper.ts`、**完全正常**。照 1–3 步處置會把 main 組 + 扇出組整組標成不可用，
+該輪所有 item 走 packaging，空轉一輪——而 clade home 正是 `/work-loop` 目前唯一的實跑場地
+（[[TD-395]]）。實跑擋得住「檔案在但 import 死了」，擋不住「探針量錯檔」。
+

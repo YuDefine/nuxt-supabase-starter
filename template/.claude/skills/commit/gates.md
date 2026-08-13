@@ -384,7 +384,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 ### 0-A.1 — Codex GPT-5.6-sol exec review (xhigh)，背景（並行軸 A）
 
-**Polling contract**：背景啟動（`run_in_background: true`）→ 每 3 分鐘讀一次背景輸出（`ScheduleWakeup({delaySeconds: 180})`，落在 prompt cache 5 分鐘 TTL 內）→ 每次 poll 讀實際輸出並回報具體狀態（哪一步、哪個檔、有沒有 issue 浮現）。啟動背景 process 後 MUST 立即進入並行階段（同一個 assistant 回合內），啟動 0-B（條件觸發）與 0-C。
+**Watch contract**：背景啟動（`run_in_background: true`）取得 `<task-id>` 後，同一 turn 記錄 owner / deadline 並排 180s（[[agent-routing.codex-watch-protocol]] § ScheduleWakeup 用法守則 的具名例外）canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=commit:codex-review deadline=<ISO>...` inert control wakeup；控制 turn 只准 `TaskOutput(block=false)`、重排同一訊息或排 lifecycle intervention，**NEVER** 讀 review output、重播 review 指令或做 mutation。實際 findings 只在 terminal notification + task-id claim 後讀取。啟動背景 process 後 MUST 立即進入並行階段，啟動 0-B（條件觸發）與 0-C。
 
 ```bash
 .claude/scripts/codex-review-safe.sh xhigh

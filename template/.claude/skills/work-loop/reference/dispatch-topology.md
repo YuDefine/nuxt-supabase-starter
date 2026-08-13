@@ -90,7 +90,7 @@ archive → merge-back → commit → push 全部寫同一個 main worktree。�
 
 ### pre-scan 的 dispatch 形狀
 
-model / effort / template 的 SoT：[[agent-routing]] § Routing Table「Exploration / research pre-scan」列 + cookbook `~/offline/clade/vendor/snippets/codex-offload/README.md`。主線直接 Bash `run_in_background` 跑泛用 dispatcher，watch 依 [[agent-routing.codex-watch-protocol]] § 監看排程（notification-only + 單一 `ScheduleWakeup` 安全網，**禁止**短輪詢）。
+model / effort / template 的 SoT：[[agent-routing]] § Routing Table「Exploration / research pre-scan」列 + cookbook `~/offline/clade/vendor/snippets/codex-offload/README.md`。主線直接 Bash `run_in_background` 跑泛用 dispatcher，watch 依 [[agent-routing.codex-watch-protocol]] § 監看排程（notification-only + 單一 `ScheduleWakeup` 安全網，**禁止**短輪詢）。該安全網是 generic async keepalive：prompt MUST 使用 [[agent-routing]] 的 canonical inert control message，NEVER 放原 pre-scan / work-loop 任務。Codex task 的 `owner` **固定為 `codex-watch`**；terminal claim / intervention 由該 owner 完成後 callback 至本節的輕量收割，**NEVER** 另以 `work-loop-dispatch` 對同一 task claim。
 
 - brief 的 `task` **MUST** 逐條列出來源清單與要回的欄位（檔名 / 行號 / 現值 / 判準命中與否）；`allowed_paths` 填「（只讀，無寫入授權）」
 - dispatch 記進 state `inFlight`（`agent` 欄填 `codex:<label>`），2h hang 上限照算；等待期間主線照 § 主線在做什麼 推進其他組
