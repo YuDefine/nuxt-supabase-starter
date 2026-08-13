@@ -230,6 +230,7 @@ node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
   --var allowed_paths='...' \
   --label <topic-slug> --effort <low|medium|high|xhigh> \
   --route <routing-table|claude-delegate-sub|fallback-chain|manual> \
+  --tier-basis <table-row|five-conjunct|adjudication|delegate-sub|quota-fallback|manual> \
   [--cwd <dir>] [--budget <分鐘>] [--output-schema <schema.json>] [--retry-of <label>]
 ```
 
@@ -239,8 +240,27 @@ model 檔位 轉派 → `claude-delegate-sub`；走 § 配額耗盡時的 fallba
 以上皆非的臨時派工 → **顯式**帶 `manual`。**NEVER** 因為不確定就一律填 `manual`——那讓分母恆為 0，
 正是 2026-08-12 全天 11 筆 dispatch 全落 `manual`、政策無法覆核的成因。
 
+**`--tier-basis` 必填**（缺就 exit 1，2026-08-13 起）。`--route` 解掉的是「這筆走哪條政策」，
+本欄解掉的是「那條政策對 model 的結論有沒有被執行」——兩者不可互相推導，`routing-table` 底下
+既有 sol 列也有 luna 列。六個值：
+
+| 值 | 用在 | 對 `--model` 的約束 |
+| --- | --- | --- |
+| `table-row` | [[agent-routing]] § Routing Table 該列已列明檔位，照列派 | 無（列自己說了算） |
+| `five-conjunct` | 該表類別內**自行**降 luna，五條連言全中 | 必須 `luna` |
+| `adjudication` | 需裁決 → 不降，回 sol | 必須 `sol` |
+| `delegate-sub` | § Claude 委派的 model 檔位 轉派 | 必須 `luna`（例外見下） |
+| `quota-fallback` | § 配額耗盡時的 fallback 紀律 | 無（降級鏈決定） |
+| `manual` | 臨時手動派工 | 無 |
+
+dispatcher 會把 `--tier-basis` × `--model` × `--route` 交叉檢查，自相矛盾的組合當場 exit 1
+（宣告 `five-conjunct` 卻派 sol、宣告 `adjudication` 卻派 luna、`route` 與 basis 對不起來）。
+**NEVER** 改宣告去遷就已經打好的 `--model`——判準變了就換一個 basis，那是兩件不同的事。
+
 重試前一筆時 **MUST** 帶 `--retry-of <被重試的 label>`，**NEVER** 用 `<label>2` / `<label>3` 這種
 命名法表達重試——命名慣例不是資料，事後判不出是否命中「luna 回 exit 2 → 升 `sol` 重派一次」。
+`--tier-basis delegate-sub` 配 `--model sol` 就是靠這個欄位才合法（它是那條升檔規則的唯一出口），
+沒帶 `--retry-of` 一律 exit 1。
 
 **Template registry**（對照表與各 template 的必填 var 見 `~/offline/clade/vendor/snippets/codex-offload/README.md`）：
 

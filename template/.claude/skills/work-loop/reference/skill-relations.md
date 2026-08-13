@@ -28,7 +28,9 @@ cd ~/offline/<consumer> && \
 
 | Skill | 本 skill 如何用它 / 邊界 |
 | --- | --- |
-| handoff-scan.ts | Step 2 + Step 5 re-scan 的唯一狀態來源 |
+| handoff-scan.ts | Step 2 + Step 5 re-scan 的唯一狀態來源；輸出固定落 `.clade/work-loop/scan-latest.json`（覆蓋前 rotate 一份 `scan-prev.json`） |
+| work-loop-summary.ts | 把上面那份 scan 壓成十餘行摘要（只列非 pass 的 check）。**要回頭看 scan 就讀它，NEVER 重跑 scan** |
+| work-loop-state-write.ts | Step 7.3 落 state 的唯一寫入路徑（patch 淺層合併 + 原子換檔 + round 不得倒退）。**NEVER** 每輪自己生成一支 write-state script |
 | /spectra-apply | spectra source 的 `feedbackGiven` / `readyForEvidence` / `applyInProgress` dispatch（透過 /wt） |
 | /spectra-archive | `done` / `awaitArchiveWalkthrough` / `ready(0)` dispatch（直接，免 worktree） |
 | /wt | worktree 建立 + dispatch subagent |

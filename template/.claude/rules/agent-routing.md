@@ -44,7 +44,7 @@ Local edits will be reverted by the next sync.
 
 ## Routing Table
 
-> **Codex 派工是 (model, effort) 二維**，model 維只有兩個合法值：`sol` 與 `luna`。**Routing Table 已列明檔位的類別照列派**（各列多為 `--model sol`，分級靠 `--effort`）；**原本會派 Claude subagent 的委派工作**（原判 `sonnet`／`haiku`）依 § Claude 委派的 model 檔位 轉派 `--model luna`。**NEVER 派 `--model terra`**（2026-08-11 拍板；`codex-dispatch.ts` 仍認得它是**能力**不是政策，理由見 rationale）。
+> **Codex 派工是 (model, effort) 二維**，model 維只有兩個合法值：`sol` 與 `luna`。**Routing Table 已列明檔位的類別照列派**（各列多為 `--model sol`，分級靠 `--effort`）；**原本會派 Claude subagent 的委派工作**（原判 `sonnet`／`haiku`）依 § Claude 委派的 model 檔位 轉派 `--model luna`。**NEVER 派 `--model terra`**（2026-08-11 拍板；dispatcher 仍認得它是**能力**不是政策，理由見 rationale）。
 >
 > 選 effort 檔位看下列六維，**NEVER** 只看「這個工作重不重要」或「迴圈長不長」：
 >
@@ -57,18 +57,19 @@ Local edits will be reverted by the next sync.
 > | `--model luna`（Routing Table 類別內降檔） | **本表列明 luna 的列照列派**；其餘要五條全中：規格完全明確 ∧ 來源已正規化 ∧ 低風險 ∧ 輸出可機械驗證 ∧ 錯誤有獨立 gate 接住。**需裁決一律不降**，回 `sol`；**exit 2 升 `sol` 重派** |
 > | `--model luna`（Claude 委派替代檔） | 原判 Claude `sonnet` 的委派工作 → `--effort high`；原判 `haiku` → `--effort low`。准入判準在 § Claude 委派的 model 檔位——這是同級工作換 runtime，**不是降檔**，不走上一列的五條連言 |
 >
-> **每一次** codex dispatch **MUST 帶 `--route`**（缺就 exit 1）：本表某列 → `routing-table`；
-> § Claude 委派的 model 檔位 → `claude-delegate-sub`；§ 配額耗盡時的 fallback 紀律 →
-> `fallback-chain`；皆非才**顯式** `manual`。**NEVER** 不確定就填 `manual`——它是政策指標的分母，
-> 填錯讀起來是假陰性而不是缺資料。重試帶 `--retry-of <label>`，**NEVER** 用 `<label>2` 表達。
+> **每一次** codex dispatch **MUST 帶 `--route` 與 `--tier-basis`**（缺就 exit 1）：前者記走哪條
+> 政策（本表某列 → `routing-table`；§ Claude 委派的 model 檔位 → `claude-delegate-sub`；配額降級鏈
+> → `fallback-chain`；皆非才**顯式** `manual`），後者記該政策對 model 的**結論**（六值見 reference）；
+> dispatcher 交叉檢查兩者與 `--model`、矛盾即 exit 1。**NEVER** 不確定就填 `manual` ／
+> `table-row`——與「判定沒發生」不可區分。重試帶 `--retry-of <label>`，**NEVER** 用 `<label>2`。
 >
 > **Routing Table 類別的檔位選擇中，NEVER** 拿「輸出會被下游機械消費」當降檔理由：下游若只驗 JSON schema 而不驗語意，降檔引入的錯誤會被自動放大。只有下游具備**獨立且夠強的語意 gate** 才可降檔。（§ Claude 委派的 model 檔位 的轉派自帶語意 gate 要求——它的第 3 條 predicate 就是這一條。）
 >
-> **NEVER 拿 aggregate 跑分推導 routing boundary**：要看的是**這一類工作**的差距，不是總分。**同一個陷阱適用於 effort 檔位之間**——「low 跟 high 在通用題上差不多」對安全類 / 高漏報成本類零證據力。實測數字組見 rationale § model 檔位的量測依據。
+> **NEVER 拿 aggregate 跑分推導 routing boundary**：要看的是**這一類工作**的差距，不是總分。**同一個陷阱適用於 effort 檔位之間**——「low 跟 high 在通用題上差不多」對安全類 / 高漏報成本類零證據力。
 >
 > ⚠️ **配額權重 UNKNOWN**：`NEVER` 把 5:2.5:1 當成已證實的配額比寫進任何計算——那是 API 價格與 purchased-credit rate card，**訂閱內含配額**的 per-model debit multiplier 官方未公布。**降檔究竟省多少配額目前無法量化**。
 >
-> 完整跑分數字組、兩個 benchmark 的 scaffold 性質、配額估算範圍為何不呈現乾淨反比，見 `docs/rule-rationale/agent-routing.md` § model 檔位的量測依據。
+> 完整跑分數字組、benchmark 的 scaffold 性質、配額估算為何不呈現乾淨反比，見 rationale § model 檔位的量測依據。
 
 | 工作類別 | 由誰執行 | 為什麼 |
 | --- | --- | --- |

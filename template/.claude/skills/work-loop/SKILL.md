@@ -501,24 +501,53 @@ context-decay 與 handoff-write-failed **永遠**寫 `roundEndReason`，**NEVER*
   **NEVER** 因「順手跑掉比較快」略過查表
 - **原判 Claude `sonnet`／`haiku` 的委派 MUST 先判 codex 可用性**，可用就轉派 `--model luna`
   （`sonnet` → `--effort high`、`haiku` → `--effort low`），准入判準見該 §
-- **每一次 dispatch MUST 帶 `--route`**（缺就 exit 1），重試帶 `--retry-of <label>`。
-  **NEVER** 不確定就填 `manual`
+- **每一次 dispatch MUST 帶 `--route` 與 `--tier-basis`**（各缺就 exit 1），重試帶 `--retry-of <label>`。
+  **NEVER** 不確定就填 `manual`／`table-row`——兩者都與「判定根本沒發生」事後不可區分。
+  `--tier-basis` 各值與對 `--model` 的約束見該 § 的 `--tier-basis` 段；宣告與實際檔位矛盾時
+  dispatcher 直接 exit 1，**NEVER** 改宣告去遷就已經打好的 `--model`
 
 ---
 
 ## Step 2 — Scan
 
 ```bash
-# MUST mktemp 唯一路徑——固定路徑是全機器所有 consumer 共用，多 session 會互相覆寫
-SCAN="$(mktemp -t work-loop-scan.XXXXXXXXXX)"
-node ~/offline/clade/vendor/scripts/handoff-scan.ts --json > "$SCAN" 2>/dev/null
+# temp 一律用**這條逐字命令**——runner.sh 的 --allowedTools 只放行它，換個寫法在無人值守下
+# 會停在 approval 等一個不存在的人（$SCAN_MKTEMP_RULE，NEVER 改成 mktemp "$D/xxx.XXXXXX"）
+TMP="$(mktemp -t work-loop-scan.XXXXXXXXXX)"
+# 落點固定在 repo 內（見下方「為什麼是固定路徑」）
+D="$(git rev-parse --show-toplevel)/.clade/work-loop"; mkdir -p "$D"
+SCAN="$D/scan-latest.json"
+node ~/offline/clade/vendor/scripts/handoff-scan.ts --json > "$TMP" 2>/dev/null
 # MUST 落檔後立刻驗歸屬，不符就當 scan 失敗處理
 EXPECT="$(basename "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")")"
-GOT="$(jq -r '.consumerId // "MISSING"' "$SCAN")"
-[ "$GOT" = "$EXPECT" ] && echo "scan ok: $GOT" || echo "SCAN-MISMATCH: got=$GOT expect=$EXPECT"
+GOT="$(jq -r '.consumerId // "MISSING"' "$TMP" 2>/dev/null)"
+if [ "$GOT" = "$EXPECT" ]; then
+  [ -f "$SCAN" ] && cp -p "$SCAN" "$D/scan-prev.json"   # 覆蓋前 rotate 一份，要比 delta 時讀它
+  mv -T "$TMP" "$SCAN" && echo "scan ok: $GOT → $SCAN"
+else
+  rm -f "$TMP"; echo "SCAN-MISMATCH: got=$GOT expect=$EXPECT"   # 驗不過 NEVER 覆蓋既有 scan-latest
+fi
 # spectra repo 才有 parked（無 openspec 時回空，屬正常）
 PARKED="$(spectra list --parked --json 2>/dev/null || echo '{}')"
 ```
+
+**為什麼寫進 temp、卻落在固定路徑**：兩件事各自有理由，缺一不可。
+
+- **temp 仍在 `/tmp` 且仍唯一**：那裡是全機器所有 consumer 共用，唯一化是必要條件
+  （[[pitfall-fixed-temp-path-shared-across-sessions-silent-data-pollution]]）。而且那條 `mktemp`
+  是 runner.sh `--allowedTools` 逐字放行的**唯一**一條 Bash 命令，改寫成別的形狀在無人值守下
+  會停在 approval —— 沒有人能回答
+- **最終落點固定**：`.clade/work-loop/` 是 per-repo，且同一 repo 同時只有一個 loop session
+  （Step 0 互斥鎖保證），沒有互相覆寫的對象。隨機路徑有它自己的失敗模式 —— **本輪稍後想再看
+  一眼 scan 的人找不到那個路徑，於是重跑一次**。2026-08-13 實測 clade round 70 留下
+  `scan-r70-mid` 到 `mid7` 共七份（49.0→51.3 KB，幾乎無 delta），全是同一輪內的重跑（TD-491 第 2 項）
+
+**同一輪內 NEVER 為了「找不到上一份輸出」重跑 scan**：要回頭看就讀 `scan-latest.json`，
+只要摘要就跑 `node ~/offline/clade/vendor/scripts/work-loop-summary.ts`（50 KB → 十餘行，
+只列非 pass 的 check）。本輪合法的重跑**只有一個**時機：Step 5 收割後的 re-scan——那時狀態真的變了。
+
+**NEVER 因此改成「N 輪跑一次」**：scan 是路由輸入，跳過的那一輪是盲跑，而落在跳過窗口內的改動
+會搭著 propagate 散到全 registry consumer 才被發現。要省的是**同一輪內的重複**，不是輪次覆蓋率。
 
 **失敗 fallback**：script 不存在或回 error、**或 `SCAN-MISMATCH` / `MISSING`** → **STOP**，寫 HANDOFF 一行 `work-loop: scan failed at <ISO>`，跑 `work-loop-lock.ts release --session <id>` 後結束。`SCAN-MISMATCH` 表示讀到別 repo 的掃描結果（unattended 下危害最大：無人在旁審視就照它推進待辦）。**NEVER** 憑記憶或 HANDOFF 既有 narrative 猜待辦狀態。
 
@@ -823,35 +852,29 @@ fingerprint = sha256(
 
 **Iron Law：NEVER 直接覆寫 `state.json`。一律 temp → 驗 → 備份 → rename。** 這個檔是整個 loop 的**唯一**記憶載體（Step 1 Iron Law：不依賴對話記憶），寫壞它等於把 N 輪進度一次歸零，而失敗完全靜默——寫入工具照樣回成功，下一輪才在讀取端炸開。
 
-**每一步都 MUST 顯式檢查 exit status**，**NEVER** 依賴 ambient `set -e`（skill 貼出去的 bash 多半跑在沒開它的 shell）。下面每個分支都是必要的：漏掉 `cp` 那一個，`.bak` 寫失敗時 `mv` 照樣執行、還會印 `STATE_OK` —— 正本已換新、上一輪備份同時毀掉，兩份一起沒了。
+**寫入一律走 `work-loop-state-write.ts`，NEVER 自己生成一支 write-state script。** 上面那個序列逐輪不變，逐輪變的只有欄位值 —— 所以本輪要產出的只有一份 **patch**（改了什麼寫什麼），沒改的欄位不必重述：
 
 ```bash
-S="$(git rev-parse --show-toplevel)/.clade/work-loop/state.json"
-D="$(dirname "$S")"
-TMP="$(mktemp "$D/state.json.tmp.XXXXXX")"    || { echo STATE_WRITE_FAILED; exit 1; }
-BAK="$(mktemp "$D/state.json.bak.XXXXXX")"    || { rm -f "$TMP"; echo STATE_WRITE_FAILED; exit 1; }
-V='JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))'
-
-# 1. 寫 temp。mktemp 保證同目錄（rename 才原子）且 unique —— 固定檔名有 TOCTOU：
-#    驗完到 mv 之間會被另一個 writer 蓋掉，而那份不會再被驗一次
-cat > "$TMP" <<'JSON'
-<內容：你這輪組好的完整 JSON>
+PATCH="$(mktemp -t work-loop-patch.XXXXXX)"
+cat > "$PATCH" <<'JSON'
+{ "round": <N>, "lastRoundAt": "<ISO>", "sessionNote": "<本輪一句話>", "…": "…" }
 JSON
-
-# 2. 驗新內容 → 3. 備份舊正本（先寫 temp 再 rename，避免 cp 中途失敗把既有 .bak 截斷）
-#    → 4. 只有備份就位才換正本
-if   ! node -e "$V" "$TMP";                  then echo STATE_WRITE_FAILED
-elif [ -f "$S" ] && ! cp -p "$S" "$BAK";     then echo STATE_BACKUP_FAILED
-elif [ -f "$S" ] && ! mv -T "$BAK" "$S.bak"; then echo STATE_BACKUP_FAILED
-elif ! mv -T "$TMP" "$S";                    then echo STATE_WRITE_FAILED
-else echo STATE_OK
-fi
-rm -f "$TMP" "$BAK"
+node ~/offline/clade/vendor/scripts/work-loop-state-write.ts --patch "$PATCH"
+rm -f "$PATCH"
 ```
 
-**`mv` 的 `-T` 不是可選的。** 少了它，`$S.bak` 若是**目錄**（前一次救援留下的、或誰手滑 mkdir 的），`mv "$BAK" "$S.bak"` 會把備份**搬進那個目錄**並回傳成功 —— 於是印 `STATE_OK`、正本照換，而 `.bak` 這個路徑上根本沒有備份。實測（2026-08-12）：無 `-T` 時該情境回 `STATE_OK`，加上 `-T` 才正確回 `STATE_BACKUP_FAILED` 且正本不動。
+patch 語義：**給值＝覆蓋、給 `null`＝刪除、沒提到＝原值不動**。合併是**淺層**的，**NEVER** 期待深合併 —— `awaiting[]` / `blockers` / `decisions` 的正確更新常常是「整個換成本輪算出來的版本」，深合併會把已經移除的條目悄悄留下來。
 
-**看到 `STATE_WRITE_FAILED` 或 `STATE_BACKUP_FAILED` MUST 立刻停止本輪 bookkeeping**：兩者都保證正本仍是上一輪的完好版本，照 7.2 Iron Law 的無害方向倒（`state.round` < HANDOFF，下一輪冪等重做）。`STATE_BACKUP_FAILED` 額外意味著磁碟或權限有問題，**MUST** 在 `sessionNote` 記一筆再重試。**NEVER** 因為「內容應該沒問題」跳過驗證，也 **NEVER** 在失敗後改用直接覆寫繞過。
+該 script 已內建四道，**NEVER** 因為「這輪只改一個欄位」就改用 `>` 直接覆寫來繞過：
+
+- 新內容寫進同目錄 temp 後**讀回來 parse 一次**才換正本（rename 要原子就必須同目錄）
+- `.bak` 先寫 temp 再 rename —— `cp` 中途失敗不會把既有備份截斷。漏掉這道的長相是：`.bak` 寫壞、正本照換、還印 `STATE_OK`，兩份一起沒了
+- 換檔用 `rename(2)`（即 `mv -T` 語義）：`state.json.bak` 若是**目錄**（前一次救援留下的、或誰手滑 mkdir 的）直接失敗，**NEVER** 把備份搬進那個目錄還回成功。實測（2026-08-12）：無 `-T` 時該情境回 `STATE_OK` 而備份根本不存在
+- `round` 不得倒退 —— 倒退代表本輪讀到的是舊 state 或 patch 算錯，續寫會靜默吃掉中間輪次的 bookkeeping。確認過是刻意的才加 `--allow-round-regress`
+
+**現有 `state.json` parse 不過時它回 `STATE_CORRUPT_REFUSED` 並且不動正本**，**NEVER** 當成 `{}` 從頭寫 —— 那會讓 `round` 從 0 重來且每個欄位看起來都合法（處置走 Step 1 § `STATE_CORRUPT` 的還原程序）。
+
+**看到 `STATE_WRITE_FAILED` / `STATE_BACKUP_FAILED` / `STATE_ROUND_REGRESS` / `STATE_CORRUPT_REFUSED` MUST 立刻停止本輪 bookkeeping**（`STATE_OK` 以外的每一個都是）：四者都保證正本仍是上一輪的完好版本，照 7.2 Iron Law 的無害方向倒（`state.round` < HANDOFF，下一輪冪等重做）。`STATE_BACKUP_FAILED` 額外意味著磁碟或權限有問題，**MUST** 在 `sessionNote` 記一筆再重試。**NEVER** 因為「內容應該沒問題」跳過驗證，也 **NEVER** 在失敗後改用直接覆寫繞過。
 
 **`.bak` 只保留上一輪的完好版本，NEVER 累積多份帶時間戳的副本**——救援時要能一眼看出該還原哪一個。且 **NEVER 把寫壞的檔存成 `.bak-<ts>`**：那個名字會讓還原程序把屍體當備份撿起來（2026-08-12 <consumer-b> 實際留過一份，已改名 `state.json.corrupt-<ts>`）。
 

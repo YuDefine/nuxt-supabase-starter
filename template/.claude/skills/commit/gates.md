@@ -649,10 +649,11 @@ Doctor health score < 100 或 exit code ≠ 0 → **MUST block commit**，修復
 node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
   --template ~/offline/clade/vendor/snippets/codex-offload/templates/fix-verify-loop.template.md \
   --var <key>=<value> ...（依 template 變數表填：check 命令、失敗摘要 / log 等） \
-  --label commit-0c-<slug> --effort high --route routing-table
+  --label commit-0c-<slug> --effort high --route routing-table --tier-basis table-row
 ```
 
-（`--route` 必填，缺就 exit 1。0-C fix-verify loop 是 Routing Table 明列的一列，故 `routing-table`。
+（`--route` 與 `--tier-basis` 皆必填，缺就 exit 1。0-C fix-verify loop 是 Routing Table 明列的一列，
+故 `--route routing-table`；該列已列明 `sol high`，照列派 → `--tier-basis table-row`。
 同一輪要再修一次時帶 `--retry-of commit-0c-<前一個 slug>`，**NEVER** 改用 `<slug>2` 表達重試。）
 
 （背景跑、stdout 單一 JSON；exit 0=全綠 / 2=修不到全綠（業務 fail）/ 3=機械故障 / 4=quota。exit 3/4 → 主線 fallback foreground 自跑 fix loop；exit 2 → 失敗摘要回主線判斷，**不**重派同一 brief。）
