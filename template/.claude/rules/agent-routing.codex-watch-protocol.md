@@ -231,6 +231,7 @@ node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
   --label <topic-slug> --effort <low|medium|high|xhigh> \
   --route <routing-table|claude-delegate-sub|fallback-chain|manual> \
   --tier-basis <table-row|five-conjunct|adjudication|delegate-sub|quota-fallback|manual> \
+  [--table-row <列名>] \
   [--cwd <dir>] [--budget <分鐘>] [--output-schema <schema.json>] [--retry-of <label>]
 ```
 
@@ -246,7 +247,7 @@ model 檔位 轉派 → `claude-delegate-sub`；走 § 配額耗盡時的 fallba
 
 | 值 | 用在 | 對 `--model` 的約束 |
 | --- | --- | --- |
-| `table-row` | [[agent-routing]] § Routing Table 該列已列明檔位，照列派 | 無（列自己說了算） |
+| `table-row` | [[agent-routing]] § Routing Table 該列已列明檔位，照列派 | **MUST 再帶 `--table-row <列名>`**，約束由該列列明的 model 決定 |
 | `five-conjunct` | 該表類別內**自行**降 luna，五條連言全中 | 必須 `luna` |
 | `adjudication` | 需裁決 → 不降，回 sol | 必須 `sol` |
 | `delegate-sub` | § Claude 委派的 model 檔位 轉派 | 必須 `luna`（例外見下） |
@@ -256,6 +257,13 @@ model 檔位 轉派 → `claude-delegate-sub`；走 § 配額耗盡時的 fallba
 dispatcher 會把 `--tier-basis` × `--model` × `--route` 交叉檢查，自相矛盾的組合當場 exit 1
 （宣告 `five-conjunct` 卻派 sol、宣告 `adjudication` 卻派 luna、`route` 與 basis 對不起來）。
 **NEVER** 改宣告去遷就已經打好的 `--model`——判準變了就換一個 basis，那是兩件不同的事。
+
+`table-row` 的 `--table-row <列名>` **同樣缺就 exit 1**（2026-08-13 起）。列名是 [[agent-routing]]
+§ Routing Table 每列開頭 〔`如此標示`〕 的 slug，dispatcher 拿該列列明的 model 交叉檢查。
+**NEVER** 略過它：`table-row` 原本是六個值裡唯一對 model 零約束的，於是宣告它成了**查表姿勢做足、
+派哪個 model 都不受檢查**的最省力路徑——2026-08-13 `v1-annual-leave-scan` 命中 `read-heavy-scan`
+列（該列列明 luna）卻派 sol，`--tier-basis table-row` 照樣通過。說不出列名 = 沒查表，**MUST** 換一個
+basis，**NEVER** 隨手挑一個列名湊過去。
 
 重試前一筆時 **MUST** 帶 `--retry-of <被重試的 label>`，**NEVER** 用 `<label>2` / `<label>3` 這種
 命名法表達重試——命名慣例不是資料，事後判不出是否命中「luna 回 exit 2 → 升 `sol` 重派一次」。

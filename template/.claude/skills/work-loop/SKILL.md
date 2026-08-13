@@ -326,7 +326,7 @@ fi
 **`STATE_CORRUPT` NEVER 當成 `{}` 處理。** 空物件會讓 `round` 從 0 重來、`awaiting` / `decisions` / `failStreak` 全空——上游那 N 輪的記憶一次歸零，而每個欄位看起來都「合法」，沒有任何一步會報錯。還原程序（依序）：
 
 1. `state.json.bak` parse 得過 → `mv` 回正本，本輪的 `sessionNote` **MUST** 記「從 .bak 還原，round <N> 的 bookkeeping 可能遺失」。還原回來的 `sessionNote` 若以 `⟨截斷 …⟩` 收尾，全文在 `state-archive.json` 的 `sessionNotes.r<N>`（見 § Retention）——**MUST** 讀那份全文再判上一輪做到哪，**NEVER** 只憑截斷後的頭 800 字下判斷
-2. `.bak` 也壞或不存在 → **STOP，NEVER 自行重建一份新 state**。HANDOFF 的 `## Work Loop Status` 段有上一輪的完整敘事，把輪次與 awaiting 從那裡抄回來是**人**的工作，不是本輪的
+2. `.bak` 也壞或不存在 → **STOP，NEVER 自行重建一份新 state**。沒有第二份現況可抄（HANDOFF 自 2026-08-13 起不 render 進度），重建輪次與 awaiting 是**人**的工作，不是本輪的
 3. 兩者皆不可用 → 標 `stoppedReason: state-unrecoverable` 並回報 user
 
 ```json
@@ -340,7 +340,7 @@ fi
   "subagentsSpawned": 4,
   "consecutiveDispatchFailures": 0,
   "guardrailsAck": "2026-08-05T04:02:10Z",
-  "sessionNote": "本輪一句話紀錄（Step 1 的 D1–D3 自癒／對齊、以及其他值得留痕的事）",
+  "sessionNote": "本輪一句話紀錄（值得留痕的事）",
   "lockSessionId": "mshkf6es-mptx87qc-ubuntu",
   "inFlight": [{ "agent": "wt-td317", "item": "TD-317", "dispatchedAt": "…",
                  "taskId": "<Bash harness task id 或 null>", "owner": "work-loop-dispatch",
@@ -406,29 +406,21 @@ state.json 每輪被**整讀**一次，所以它的體積是一筆與本輪成�
 
 ### Decay 偵測（hard gate，先判身分再判 decay）
 
-觸發訊號有兩個：`guardrailsAck` 讀不到、或 `round` 與 HANDOFF `## Work Loop Status` 段記載的輪次不一致。
+觸發訊號只有一個：`guardrailsAck` 讀不到。
 
-**這兩個訊號在 runner child 身上永遠不代表 decay。** decay 指的是**同一個 process 的 context 被 auto-compaction 壓掉**——只有 in-session `/loop` 有這個失敗模式。runner child 每輪是 `claude --print` 起的**全新 process**，context 從零重建、狀態只從 state 檔讀，結構上不可能 decay。所以在 child 身上，訊號命中**一定**是「上一輪 bookkeeping 沒收尾」，而那需要的是**自癒或忽略**，不是中止。無條件中止會讓**每一輪**都在 Step 1 停住、零 scan 零 dispatch，直到 runner 的 no-progress 條件把自己停掉——而那個停法在 log 上跟正常收工幾乎無法區分（2026-08-11 <consumer-b> 實測：連續空轉近 7 小時，所有健康訊號正常，靠人工介入才發現）。
+> **2026-08-13 TD-495 起，「`round` 與 HANDOFF 記載輪次不一致」不再是訊號。** HANDOFF 不再 render loop 進度（Step 7.2），第二份現況不存在了，也就沒有「兩邊不一致」這回事。真正的停滯由 `runner.sh` 的 no-progress 網接（`exit=0 且 round 未前進` 連續 2 輪 → 自行停）。**NEVER** 為了恢復這個訊號把進度寫回 HANDOFF —— 兩份現況正是 2026-08-11 <consumer-b> 空轉近 7 小時的根因。
 
-**輪次不一致 MUST 先判方向再決定動作**——兩個方向的成因與處置相反，方向判錯會把無害的一側改成有害：
-
-| 方向 | 成因 | 該做什麼 |
-| --- | --- | --- |
-| `state.round` **>** HANDOFF | 上一輪 7.3 寫了 state、7.2 的 HANDOFF 沒寫成 —— 這是**死鎖方向** | 自癒（見下） |
-| `state.round` **<** HANDOFF | 上一輪 7.2 寫了 HANDOFF、7.3 的 state 沒寫成 —— per Step 7.2 Iron Law 的**無害方向** | **NEVER 動 HANDOFF**（它有較新一輪的完整敘事）；照常進 Step 1.5，本輪 Step 7 讓 state 自然追上 |
+**這個訊號在 runner child 身上永遠不代表 decay。** decay 指的是**同一個 process 的 context 被 auto-compaction 壓掉**——只有 in-session `/loop` 有這個失敗模式。runner child 每輪是 `claude --print` 起的**全新 process**，context 從零重建、狀態只從 state 檔讀，結構上不可能 decay。所以在 child 身上，訊號命中**一定**是「上一輪 bookkeeping 沒收尾」，而那需要的是**自癒或忽略**，不是中止。無條件中止會讓**每一輪**都在 Step 1 停住、零 scan 零 dispatch，直到 runner 的 no-progress 條件把自己停掉——而那個停法在 log 上跟正常收工幾乎無法區分（2026-08-11 <consumer-b> 實測：連續空轉近 7 小時，所有健康訊號正常，靠人工介入才發現）。
 
 **MUST** 依下表分流，**每一列**都要照著判，不是只看第一列：
 
-**列有代號（D1–D6），其他段落引用時 MUST 用代號、NEVER 用「第 N 列」**——列序會隨增補改變，序號指標會在改動後指到別列而沒有任何訊號。
+**列有代號（D4–D6），其他段落引用時 MUST 用代號、NEVER 用「第 N 列」**——列序會隨增補改變，序號指標會在改動後指到別列而沒有任何訊號。**D1–D3 已於 2026-08-13 隨 HANDOFF 輪次訊號一併廢除，代號 NEVER 回收再用於新列**（舊 sessionNote 與 log 仍寫著它們，回收會讓歷史紀錄指到不同語義）。
 
 | 代號 | 可觀察 predicate | 動作 |
 | --- | --- | --- |
-| **D1** | 本輪是 runner child（`$ARGUMENTS` 含 `--runner-child` **或** `WORK_LOOP_RUNNER_CHILD=1`），且 `state.round` **>** HANDOFF 輪次 | **NEVER 判 decay。自癒**：把 HANDOFF status 段 header 的輪次對齊到 `state.round`，插一段說明該輪無敘事與對齊原因（形狀見下），然後**照常進 Step 1.5**，本輪一切照跑。自癒動作寫進本輪 `sessionNote`。**HANDOFF 路徑 MUST 依 Step 7.1 的 invariant 解 main worktree absolute path**——本 Step 讀 state 用的是 `git rev-parse --show-toplevel`（linked worktree 下解到副本），照那個路徑自癒會寫進副本、下一輪讀 main 仍落後，變成每輪自癒一次而 `round` 每輪前進，runner 的 no-progress 網永遠不觸發 |
-| **D2** | runner child，且 `state.round` **<** HANDOFF 輪次 | **NEVER 判 decay、NEVER 自癒、NEVER 改 HANDOFF**。照常進 Step 1.5；本輪 Step 7 正常寫完就對齊了。把這件事記進 `sessionNote` |
-| **D3** | runner child，且 HANDOFF **沒有 status 段 / 段內讀不到輪次**（舊 marker 未遷移、被 rotate 搬走、人工刪段） | **NEVER 判 decay**（沒有可比的方向就不是不一致）。照常進 Step 1.5；本輪 Step 7.2 依模板**整段建立**。記進 `sessionNote` |
-| **D4** | **HANDOFF 寫入失敗**——Step 1 的 D1 自癒寫入、或 Step 7.2 的收尾寫入，任一失敗 | 中止本輪（release lock、退出），照下方 § D4 的部分寫入白名單落檔。**D4 命中時壓過其餘各列**：同時命中 D1／D2／D3／D5 一律以 D4 為準 |
-| **D5** | runner child，`guardrailsAck` 讀不到 | **NEVER 判 decay**。那是第 1 輪、或 state 檔不完整；照常進 Step 1.5，讀完在 Step 7 補寫 `guardrailsAck`。**本列與 D1／D2／D3 可同時命中，命中幾列就做幾列的動作**；與 D4 同時命中則以 D4 為準 |
-| **D6** | **非** runner child（in-session `/loop`），任一訊號命中 | 判定 context decayed，**MUST** 結束本輪：state 寫 `roundEndReason: "context-decay"`、跑 `work-loop-lock.ts release --session <id>`、退出。**NEVER**「感覺還記得」就繼續跑。**但下列兩種不算訊號命中**（它們是首輪的正常長相，不是 decay）：state 檔不存在或 `round` 為 0；HANDOFF 還沒有 status 段 |
+| **D4** | **HANDOFF 寫入失敗**——Step 7.2 的 `## ⏳ Awaiting Charles` 收尾寫入失敗 | 中止本輪（release lock、退出），照下方 § D4 的部分寫入白名單落檔。**D4 命中時壓過其餘各列**：同時命中 D5 一律以 D4 為準 |
+| **D5** | runner child，`guardrailsAck` 讀不到 | **NEVER 判 decay**。那是第 1 輪、或 state 檔不完整；照常進 Step 1.5，讀完在 Step 7 補寫 `guardrailsAck`。與 D4 同時命中則以 D4 為準 |
+| **D6** | **非** runner child（in-session `/loop`），任一訊號命中 | 判定 context decayed，**MUST** 結束本輪：state 寫 `roundEndReason: "context-decay"`、跑 `work-loop-lock.ts release --session <id>`、退出。**NEVER**「感覺還記得」就繼續跑。**但下列不算訊號命中**（那是首輪的正常長相，不是 decay）：state 檔不存在或 `round` 為 0 |
 
 ### D4 的部分寫入白名單（唯一容許在 7.2 失敗後仍寫 state 的路徑）
 
@@ -445,10 +437,6 @@ D4 與 Step 7.2 的「寫入失敗時 NEVER 繼續寫 7.3」不衝突，因為�
 
 **`round` 不 bump 的連帶效果要講清楚，NEVER 反過來說**：D4 不動 `round`，所以 runner 的 `exit=0 且 round 未前進` 網會在**連續 2 輪**後印 `== stop: state 連續 2 輪未前進` 自行停掉（`runner.sh` 的 no-progress 判定）——**不會**空轉到 `--max-rounds`。`stoppedReason` 在這裡買的是**可診斷性**：沒有它，log 只說「state 未前進」，沒說是寫入權限壞了；有它，停止原因直接寫在 state 檔裡。它是第二道網，不是唯一那道。
 
-D1 自癒寫進 HANDOFF status 段的形狀（**只碰 header 那行 + 加一段說明**）逐字模板、佔位符語義、
-「落差 NEVER 假設是 1 輪」見 [handoff-template.md](reference/handoff-template.md) § decay-unblock 變體——**此處不複述**。
-
-**NEVER 讓自癒去改寫下方各段的敘事內容。** 那是上一輪的紀錄，自癒只對齊 header 的輪次並加這段說明；改寫敘事等於替一輪沒發生過的工作編造內容，而下一輪的讀者無從分辨真假。
 
 | Red Flag | 立即動作 |
 | --- | --- |
@@ -841,20 +829,20 @@ fingerprint = sha256(
 
 `HANDOFF.md` / `docs/tech-debt.md` / `openspec/ROADMAP.md` **MUST** 寫到 main worktree absolute path——用 `dirname "$(git rev-parse --path-format=absolute --git-common-dir)"` 解。**禁止**用 cwd-相對路徑寫這幾個檔（在 linked worktree 內跑會寫進 worktree 副本，下一輪讀到舊版）。
 
-### 7.2 HANDOFF 兩個段
+### 7.2 HANDOFF 的一個段
 
 **Iron Law：HANDOFF 先寫、state 後寫，順序不可對調。** 7.2 與 7.3 是兩個獨立寫入、**沒有原子性**，所以要讓失敗往無害的一側倒：
 
 | 先寫誰 | 中途失敗後的下一輪 | 後果 |
 | --- | --- | --- |
-| **HANDOFF 先**（本 skill 的順序） | `state.round` < HANDOFF 輪次 → 下一輪重做一次已完成的 bookkeeping | 冪等、無害 |
-| state 先 | `state.round` > HANDOFF 輪次 → 每輪撞 Step 1 的輪次不一致訊號 | 死鎖（2026-08-11 <consumer-b>：空轉近 7 小時） |
+| **HANDOFF 先**（本 skill 的順序） | 待答條目已寫進 HANDOFF、state 沒記 → 下一輪重做一次已完成的 bookkeeping | 冪等、無害 |
+| state 先 | state 說某條已 packaged、HANDOFF 卻沒有那條的選項 → Charles 看不到題目，佇列永遠不清 | 靜默失效 |
 
 **7.2 寫入失敗時 NEVER 繼續寫 7.3 的 bookkeeping** —— 中止本輪並照 Step 1 § D4 的**部分寫入白名單**落檔：只寫 `roundEndReason`（＋連續第 2 輪的 `stoppedReason`），`round` / `fingerprint` / `inFlight` 等其餘欄位一律不動。「state 先落下來至少不會丟進度」是製造死鎖的那個推論，**NEVER** 採用。
 
-`## Work Loop Status`（`<!-- BEGIN: work-loop-status -->` / `<!-- END: work-loop-status -->` marker 包夾，**每輪整段覆寫**）。模板見 [reference/handoff-template.md](reference/handoff-template.md)。
+**NEVER 把 loop 進度 render 進 HANDOFF**（2026-08-13 TD-495 起）。`.clade/work-loop/state.json` 是進度的**唯一** SoT；每輪整段覆寫一份它的 markdown 副本，買到的只有「每輪一次必然的 diff ＋ 一份會過期的第二現況」。要看進度跑 `jq . .clade/work-loop/state.json`。
 
-**舊 marker 遷移（每輪 MUST 檢查，不是只在第一輪）**：HANDOFF 若存在 `<!-- BEGIN: loop-engineer-status -->` 或 `<!-- BEGIN: handoff-loop-status -->` 包夾的段落 → **整段刪除**（連 marker），內容以本輪新段取代。**NEVER** 讓兩個世代的 status 段並存——讀者無法判斷哪個是現況，而舊段不會再被任何東西更新。
+**舊 marker 遷移（每輪 MUST 檢查，不是只在第一輪）**：HANDOFF 若存在 `<!-- BEGIN: work-loop-status -->`、`<!-- BEGIN: loop-engineer-status -->` 或 `<!-- BEGIN: handoff-loop-status -->` 包夾的段落 → **整段刪除**（連 marker 連 `## Work Loop Status` 標題），**不產生取代內容**。**NEVER** 因為「本輪有值得記的發現」就把它寫回 HANDOFF —— 那類發現的載體是 TD entry / pitfall / `tasks/`，不是 HANDOFF。
 
 `## ⏳ Awaiting Charles` —— 格式見 [autonomy-predicate.md](reference/autonomy-predicate.md) § 段模板。**Append 不覆寫**（尚未答的舊決策不能被沖掉）；已答的由下一輪 scan 判定移除。
 
@@ -934,7 +922,6 @@ git show --stat HEAD | tail -3   # 驗 scope
 | [dispatch-topology.md](reference/dispatch-topology.md) | 分組（Step 3.3） |
 | [harvest.md](reference/harvest.md) | 每個 notification 到達時（Step 5） |
 | [no-wt-dispatch.md](reference/no-wt-dispatch.md) | Step 4a 判出 `/wt` 叫不動時（產地 clade home 恆命中） |
-| [handoff-template.md](reference/handoff-template.md) | 寫 HANDOFF status 段前（Step 7.2） |
 | [skill-relations.md](reference/skill-relations.md) | 查與其他 skill 的邊界、scope 排除清單 |
 
 ## 與其他 skill 的銜接

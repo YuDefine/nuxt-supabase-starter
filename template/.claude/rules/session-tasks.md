@@ -82,7 +82,7 @@ new session`）。
 | 可觀察 predicate | MUST |
 | --- | --- |
 | session context 越過 **300k** | **NEVER** 開新的**大**工作段（新的 change / 新的多檔重構 / 新的 spectra phase / **invoke 一個本 session 還沒載過的 skill**）；手上這件做完就收。**小 item 照做**——單檔文字修正、補一條 TD、勾一個 checkbox、回答一個問題不受本級限制 |
-| session context 越過 **500k** | **現在**登記並收工：未完項寫進 `tasks/<date>-<slug>.md`（或 `HANDOFF.md` / `docs/tech-debt.md`）。手上若是不可分割的驗證迴圈，跑完那一輪就切 |
+| session context 越過 **500k** | **現在**收工，走下面 § 收工三步（先派、後登記、再收工）。手上若是不可分割的驗證迴圈，跑完那一輪就切 |
 | 正在跑不可分割的驗證迴圈（單一 test run / 單一 migration） | 跑完再切。**NEVER** 拿「等一下還有事要做」把它延伸成新工作段 |
 | **本輪是 work-loop runner child**（`WORK_LOOP_RUNNER_CHILD=1`，由 `runner.sh` 設） | 上面兩級改讀 **500k / 600k**，語義完全不變（500k = 不要再開大工作段、600k = 現在收工）。Charles 2026-08-12 拍板，TD-375 |
 
@@ -105,6 +105,31 @@ session —— 把閂交給它等於沒有閂。
 `runner.sh` 用來宣告**執行身分**的 marker——值由誰設、設成什麼，都不影響任何一組門檻數字。
 兩組數字都寫死在 hook 裡，要放寬仍然只有改 hook 一途。**NEVER** 反過來拿這一列論證
 「所以其他 env 也可以調門檻」。
+
+### 收工三步（越過 500k 那一級 MUST，順序不可調換）
+
+1. **先把每一項可派的殘工 `/handoff now` 派出去**（transport 走 § Herdr session transport）
+2. 剩下**派不出去**的才寫進 `tasks/<date>-<slug>.md`（或 `HANDOFF.md` / `docs/tech-debt.md`），且**逐條寫明它派不出去的具體外部條件**
+3. 收工，收工訊息走 § 收工訊息契約
+
+本三步適用**每一個**越過 500k 的 session、**所有** consumer，且**每一項**殘工都要各自過第 1 步——
+不是「挑一項派掉、其餘登記」。
+
+**NEVER 把第 2 步當成第 1 步的替代品。** 逐字反開脫：「已經寫進交接檔了」「未完項都登記好了，
+留給下一個 session」「下個 session 接手時看得到」——這幾句描述的是第 2 步做完，對第 1 步零訊號。
+
+**context 越滿，dispatch 的相對價值越高**：那些 token 每一個 turn 都重讀一次。500k 那一級是**最該派**
+的時刻，**NEVER** 讀成「已經沒有餘裕再派了」。
+
+「派不出去」**MUST 講得出具體外部條件**，只有兩類算數：
+
+| 可觀察 predicate | 例（2026-08-13 實錄） |
+| --- | --- |
+| 等一個具體外部 signal | 目標目錄是**別 session 進行中**的封存產出，含 HEAD 沒有的檔，現在動就是永久遺失 |
+| 被別 session 的未 commit 檔擋住 | pre-push ratchet 對別 session 兩個未 commit `.vue` 掃出 baseline 超標，且不在本次授權 scope |
+
+「需要人判斷」「要謹慎」「這個比較複雜」「要 attended」**都不是**外部條件。講不出具體外部條件
+＝ 派得出去。
 
 ### 成本模型（2026-08-07 納入 prompt caching 修正）
 
@@ -207,9 +232,15 @@ prompt已送出、`status: dispatched`、接手 pane可獨立續跑，或 lifecy
 session boundary 或跨 repo 決策已判定確實需要另一個互動 session，才建立 Herdr Tab。Herdr 只搬運 session，
 **不**新增外派理由、跨界授權、worktree 例外或 approval bypass。
 
-命中時 **MUST** invoke `herdr` skill並先讀 `herdr-session-handoff/README.md`；每一個 `/handoff now`只走 `vendor/scripts/herdr-session-handoff.ts --coordinate`的 canonical helper，由 helper統一 provision、fresh Claude session identity、prompt delivery、bounded wait、business outcome harvest與 verified reclaim。coordinator 每次只執行 bounded foreground slice，**NEVER** 使用 `run_in_background=true`。slice 到期且exact child仍在工作、沒有correlated completion時回 `coordination_pending`：它是**非終局 receipt**，保留pane與durable record，pending不得archive或reclaim，也不進下段terminal receipt查證；同一parent pane只能用 canonical `--coordinate-resume <dispatch-id>`重驗ownership、exact pane與exact Claude session後續接下一個前景slice。**coordinator 尚未返回前**，原 Claude session只等待 helper的單一結構化結果，**NEVER** 自行輪詢接手 pane、從 lifecycle猜 outcome或向接手 session追問進度。
+**`attended` 的要求是「過人眼」，NEVER 讀成「必須在當前這個對話裡做」。** `/handoff now` 開的是
+**互動式** session，user 看得到那個 pane，接手 agent 可以用 `AskUserQuestion` 讓 user 在那個 pane
+裡逐批拍板。需要拍板**不構成**不派的理由，只構成 brief 裡要寫明「你是互動式 session，需要拍板的
+直接問 user」。逐字反開脫：「這項要 attended，所以不能派」「要 user 逐批拍板，留在本 session 比較快」。
+本段適用**每一項**判為需要人拍板的殘工，不是只有其中比較單純的那幾項。
 
-**拿到 `coordination_pending` 而本回合要結束時，MUST 在結束前 arm 一個 keepalive wakeup 續跑 `--coordinate-resume <dispatch-id>`**（形狀依 [[agent-routing]] § Generic async keepalive prompt）。逐字反開脫：「不阻塞、等通知回來再收」「我不打算輪詢」「等 coordinator」——child 的 outcome 只寫進 durable record，**沒有任何東西會替你把 turn 叫回來**；helper 在 child 回報時會 best-effort push 叫醒 parent pane，但 parent pane 換了 session 或已消失就 skip，**NEVER** 拿它當 arm keepalive 的替代。兜底自查：任何 session 都可跑 `node vendor/scripts/herdr-patrol.ts --stalled`，逐列印出已回報卻沒人收割的 dispatch 與該跑的指令（有停滯 exit 3）；coordinator pane 已消失的標 `orphan`，ownership guard 會拒絕任何人 resume，只能人工接管。
+命中時 **MUST** invoke `herdr` skill並先讀 `herdr-session-handoff/README.md`；每一個 `/handoff now`只走 `vendor/scripts/herdr-session-handoff.ts --coordinate`的 canonical helper，由 helper統一 provision、fresh Claude session identity、prompt delivery、bounded wait、business outcome harvest與 verified reclaim。coordinator 每次只執行 bounded foreground slice，**NEVER** 使用 `run_in_background=true`。slice 到期且exact child仍在工作、沒有correlated completion時回 `coordination_pending`：它是**非終局 receipt**，保留pane與durable record，pending不得archive或reclaim，也不進下段terminal receipt查證；exact parent Claude session仍 live時只能用 canonical `--coordinate-resume <dispatch-id>`重驗ownership與exact session後續接下一個前景slice，session移到別pane仍由helper解析，原pane換成別session不得resume。**coordinator 尚未返回前**，原 Claude session只等待 helper的單一結構化結果，**NEVER** 自行輪詢接手 pane、從 lifecycle猜 outcome或向接手 session追問進度。
+
+**拿到 `coordination_pending` 而本回合要結束時，MUST 在結束前 arm 一個 keepalive wakeup 續跑 `--coordinate-resume <dispatch-id>`**（形狀依 [[agent-routing]] § Generic async keepalive prompt）。逐字反開脫：「不阻塞、等通知回來再收」「我不打算輪詢」「等 coordinator」——child 的 outcome 只寫進 durable record，**沒有任何東西會替你把 turn 叫回來**；helper 在 child 回報時會 best-effort push 叫醒 parent pane，但 parent pane 換了 session 或已消失就 skip，**NEVER** 拿它當 arm keepalive 的替代。兜底自查：任何 session 都可跑 `node vendor/scripts/herdr-patrol.ts --stalled`，逐列印出已回報卻沒人收割的 dispatch 與該跑的指令（有停滯 exit 3）；exact parent session全域缺席標 `orphan-recoverable`，只有該 durable dispatch的exact child可由 `/handoff now`走 `--recover-orphan` one-way claim建立唯一fresh successor。Parent exact session仍 live、identity缺失／重複／snapshot不可驗時都不得recovery；prompt-cache TTL與record年齡對ownership零訊號。一般 coordinated child仍禁止nested handoff，**只有**helper核准的 recovery token例外。
 
 **terminal receipt 返回後這條即失效，查證改為 MUST。** 非 success terminal receipt（`completion_blocked` / `completion_failed` / `completion_unknown`）返回時，在寫下**任何**關於接手 session 做了什麼的斷言之前、以及做**任何**補救動作之前，MUST 先讀該 pane 的 `agent_status` 與 scrollback（`herdr pane list` / `herdr pane read`）。receipt 的 `agent settled without a valid correlated business outcome` 只斷言 **helper 沒收到 outcome**，對「它現在在不在工作」零訊號——Herdr 的 `done` 是「未被看見的背景工作結束後的 idle」，agent 回完一個 turn 後照樣繼續工作。**NEVER** 用「目標檔 mtime 沒變 / `git status` 乾淨 / 無新 commit」推論它沒做事（那是 negative search 當證據）；**NEVER** 未查證就重送同一份 brief（接手 session 仍在工作時重送 ＝ 兩個 agent 同時改同一批檔）。查證後 `agent_status` 是 `working` → 它還在做，**NEVER** 重送或打斷；receipt 無 `pane_id`（pane 建立前就失敗）→ 本條不適用，直接回具體 error。非 success receipt 返回時 **MUST 讀** handoff skill `now-steps.md` § 4.1 的查證程序與四路分流。
 
