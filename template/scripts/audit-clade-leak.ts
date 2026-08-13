@@ -1,9 +1,15 @@
 #!/usr/bin/env node
 // CLADE:VENDOR-SCRIPT
 /**
- * audit-clade-leak.ts — starter consumer 公開倉 0-leak audit
+ * audit-clade-leak.ts — PUBLIC consumer 0-leak audit
  *
- * 用途：`nuxt-supabase-starter` 是公開 GitHub repo。clade 中央倉的 rule /
+ * 適用對象是**每一個 PUBLIC repo consumer**，不是只有 starter：投影條件在
+ * `scripts/lib/vendor-targets.ts` 綁 `consumerIsPublic`（2026-08-13 由 `starterOnly`
+ * 改判準，TD-414）。判準是「公不公開」，**NEVER** 改回綁某個 consumer 身分——
+ * v1.4.502 的實際後果是 fleet 兩個 PUBLIC repo 只有一個拿得到這支 audit，另一個
+ * 零層防護一路綠燈 push 上公開 GitHub。
+ *
+ * 用途：clade 中央倉的 rule /
  * skill / commands / agents 內含 consumer 名稱（<consumer-a> / <consumer-b> / <consumer-c> /
  * <consumer-d> / <consumer-c>）、personal path (`~/`)、
  * personal email (`<maintainer-email>`)、客戶名 (<client-a> / <client-b>)、
@@ -17,8 +23,13 @@
  * 執行載體（per `rules/core/checker-contract.md` § 執行載體）：**沒有**自動觸發點。
  * 唯一消費端是 `pnpm audit:manual`（registry/audits.json 宣告 cadence `on-demand`
  * / consumers `["npm-script"]` / blocking false）。**不要**把檔頭寫成「CI gate」——
- * starter CI 從未跑過它，那是願望不是現況（TD-273）。若要升 blocking，先解決
- * 「forbidden token 含 consumer 自己的名字，對私有 repo 是類別錯誤」的 scope 問題。
+ * starter CI 從未跑過它，那是願望不是現況（TD-273）。
+ *
+ * Fleet 名冊 token 是「**自身以外**的 consumer 名」：`selfAliases()` 依 repo 目錄名 /
+ * `package.json` name / git remote 判出這個 repo 自己是誰，把對應 token 從清單移除，
+ * 否則 `<consumer-c>` 會對自己的名字報約 100 條類別錯誤的 violation。
+ * 被排除的 token **一律印出來**（text 與 `--json` 都有）：那是覆蓋面的縮減，
+ * **NEVER** 讓它靜默發生——靜默排除與「這個 repo 很乾淨」輸出完全同形。
  *
  * Scope:
  *   1. `template/.agents/skills/{oops,improvement-loop,review-rules}/` 殘留：
@@ -39,6 +50,8 @@
  *                                                              # sanitization_profile 的
  *                                                              # consumer（只在 clade home 可用）
  *   node vendor/scripts/audit-clade-leak.ts --json             # 機器輸出
+ *   node vendor/scripts/audit-clade-leak.ts --self <token>     # 額外指定「這是我自己的名字」
+ *                                                              # （可重複；自動偵測判不出時用）
  *
  * 觸發點：**手動**（`pnpm audit:manual`）。
  *   ⚠️ 本檔曾聲稱「starter CI（GitHub Actions）作 mandatory job」——2026-07-26 查證
@@ -46,9 +59,8 @@
  *   `propagate.ts` 也沒有呼叫它（只有一句註解）。宣告已改為 on-demand，
  *   接上真實消費端要走 TD-273。
  *
- *   另注意判準是為**公開** repo 設計的：forbidden tokens 含 consumer 自己的名字，
- *   所以對私有 consumer 會回報約 100 條「violation」，那是類別錯誤不是洩漏。
- *   `--all-consumers` 因此只掃帶 `sanitization_profile` 的 consumer。
+ *   `--all-consumers` 只掃帶 `sanitization_profile` 的 consumer —— 那是宣告層的
+ *   「這個 repo 需要去敏感化」，與 self-exclusion 正交。
  *
  * 對應 governance：clade `scripts/lib/sanitization-governance.ts`。
  */
@@ -68,16 +80,23 @@ const execFileAsync = promisify(execFile)
 // IMPORTANT：在 starter 端跑時，starter 倉本身**不**會內含這份 lib（clade
 // `scripts/lib/` 是 clade 中央倉自己的，不散播到 starter）。所以必須 fallback。
 
-const FALLBACK_FORBIDDEN_TOKENS = [
-  // consumer name 別名（覆蓋 sanitization-governance 對應 list）
-  /\bnuxt-edge-<consumer-c>\b/g,
-  /\byuntech-usr-<consumer-d>\b/g,
-  /\bedge-rag\b/g,
-  /\bperno\b/g,
-  /\bTDMS\b/g,
-  /\bbigbyte\b/g,
-  /\bfongchen\b/g,
+// Fleet 名冊 + 客戶名。語義是「**這個 repo 以外**的 consumer / 客戶名字」——
+// 掃描前會依 selfAliases() 把該 repo 自己的名字移除（見檔頭）。
+//
+// **一組 = 一個身分的所有別名**（對應 `sanitization_profile.consumer_name_map` 裡
+// 共用同一個 placeholder 的那幾個 key，如 `<consumer-c>` 與 `<consumer-c>` 都是
+// `<consumer-c>`）。自身偵測命中組內任一別名就**整組**排除——只排掉命中的那一個，
+// 該 repo 會對自己的短名報 violation，那是同一個類別錯誤換個名字回來。
+const FLEET_ALIAS_GROUPS = [
+  ['<consumer-c>', '<consumer-c>'],
+  ['<consumer-d>'],
+  ['<consumer-a>'],
+  ['<consumer-b>'],
+  ['<client-a>'],
+  ['<client-b>'],
 ]
+
+const FLEET_NAME_TOKENS = FLEET_ALIAS_GROUPS.flat()
 
 const FALLBACK_PERSONAL_NEEDLES = [
   // macOS home layout
@@ -125,7 +144,7 @@ const RETIRED_MANIFEST_RELS = [
 ]
 
 function parseArgs(argv) {
-  const out = { root: null, json: false, allConsumers: false }
+  const out = { root: null, json: false, allConsumers: false, self: [] }
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i]
     if (a === '--root') {
@@ -135,6 +154,9 @@ function parseArgs(argv) {
       out.json = true
     } else if (a === '--all-consumers') {
       out.allConsumers = true
+    } else if (a === '--self') {
+      if (argv[i + 1]) out.self.push(argv[i + 1])
+      i += 1
     }
   }
   return out
@@ -209,9 +231,51 @@ async function loadHubStateFiles(repoRoot) {
   return null
 }
 
-function scanForbiddenTokens(text) {
+// 這個 repo 自己叫什麼：目錄名 / package.json name / git remote 三個來源任一命中即算。
+// 三個都查不到時回空集合 —— 那代表**一個 token 都不排除**（保守方向：寧可多報，
+// 不可少掃）。呼叫端負責把結果印出來。
+async function selfAliases(repoRoot, extra = []) {
+  const haystacks = [basename(repoRoot)]
+
+  for (const rel of ['package.json', 'template/package.json']) {
+    const abs = join(repoRoot, rel)
+    if (!existsSync(abs)) continue
+    try {
+      const pkg = JSON.parse(await readFile(abs, 'utf8'))
+      if (typeof pkg?.name === 'string') haystacks.push(pkg.name)
+    } catch {
+      // package.json 壞掉不是本 audit 的職責，其他來源照走
+    }
+  }
+
+  try {
+    const { stdout } = await execFileAsync('git', ['remote', 'get-url', 'origin'], {
+      cwd: repoRoot,
+    })
+    haystacks.push(stdout.trim())
+  } catch {
+    // 沒有 origin（新 repo / 純本機）—— 其他來源照走
+  }
+
+  const lowered = haystacks.filter(Boolean).map((h) => h.toLowerCase())
+  const self = new Set()
+  for (const group of FLEET_ALIAS_GROUPS) {
+    const hitByName = group.some((t) => lowered.some((h) => h.includes(t.toLowerCase())))
+    const hitByFlag = group.some((t) => extra.some((e) => e.toLowerCase() === t.toLowerCase()))
+    if (hitByName || hitByFlag) for (const t of group) self.add(t)
+  }
+  return self
+}
+
+function forbiddenTokenRegexes(selfSet) {
+  return FLEET_NAME_TOKENS.filter((t) => !selfSet.has(t)).map(
+    (t) => new RegExp(String.raw`\b${t}\b`, 'g'),
+  )
+}
+
+function scanForbiddenTokens(text, tokenRegexes) {
   const hits = new Set()
-  for (const re of FALLBACK_FORBIDDEN_TOKENS) {
+  for (const re of tokenRegexes) {
     re.lastIndex = 0
     const m = text.match(re)
     if (m) for (const t of m) hits.add(t)
@@ -268,9 +332,11 @@ async function listTrackedUnder(repoRoot, prefixes) {
   }
 }
 
-async function auditOneRoot(repoRoot) {
+async function auditOneRoot(repoRoot, selfFlags = []) {
   const violations = []
   const errors = []
+  const self = await selfAliases(repoRoot, selfFlags)
+  const tokenRegexes = forbiddenTokenRegexes(self)
 
   // (1) Maintainer-only skill 殘留偵測
   const agentsSkillsRoot = existsSync(join(repoRoot, 'template'))
@@ -318,7 +384,7 @@ async function auditOneRoot(repoRoot) {
         errors.push(`${rel}: read failed (${err.message.split('\n')[0]})`)
         continue
       }
-      const hits = scanForbiddenTokens(text)
+      const hits = scanForbiddenTokens(text, tokenRegexes)
       for (const token of hits) {
         violations.push({ path: rel, token })
       }
@@ -336,7 +402,7 @@ async function auditOneRoot(repoRoot) {
     if (!TEXTUAL_REL_RE.test(rel)) continue
     const blob = await readTrackedBlob(repoRoot, rel)
     if (blob === null) continue
-    for (const token of scanForbiddenTokens(blob)) {
+    for (const token of scanForbiddenTokens(blob, tokenRegexes)) {
       violations.push({ path: rel, token })
     }
   }
@@ -345,7 +411,7 @@ async function auditOneRoot(repoRoot) {
   for (const rel of RETIRED_MANIFEST_RELS) {
     const blob = await readTrackedBlob(repoRoot, rel)
     if (blob !== null) {
-      const hits = scanForbiddenTokens(blob)
+      const hits = scanForbiddenTokens(blob, tokenRegexes)
       // 即使沒命中 token，這個檔本身就是不該還在版控裡的退役產物（無 writer 重生）。
       violations.push({
         path: `${rel} (git HEAD)`,
@@ -363,7 +429,7 @@ async function auditOneRoot(repoRoot) {
         errors.push(`${rel}: read failed (${err.message.split('\n')[0]})`)
         continue
       }
-      const hits = scanForbiddenTokens(text)
+      const hits = scanForbiddenTokens(text, tokenRegexes)
       if (hits.length > 0) {
         // 磁碟上存在但可能還沒進版控 —— 一次 `git add -A` 就會 leak。
         for (const token of hits) violations.push({ path: `${rel} (worktree)`, token })
@@ -371,7 +437,7 @@ async function auditOneRoot(repoRoot) {
     }
   }
 
-  return { violations, errors }
+  return { violations, errors, selfExcluded: Array.from(self) }
 }
 
 async function main() {
@@ -397,22 +463,35 @@ async function main() {
 
   const violations = []
   const errors = []
+  const selfExcluded = []
   for (const root of roots) {
-    const res = await auditOneRoot(root)
+    const res = await auditOneRoot(root, opts.self)
     // 多 root 時在 path 前綴 repo 名，否則兩個 consumer 的同名路徑會混在一起讀不出來。
     const label = roots.length > 1 ? `${basename(root)}/` : ''
     for (const v of res.violations) violations.push({ ...v, path: `${label}${v.path}` })
     for (const e of res.errors) errors.push(`${label}${e}`)
+    selfExcluded.push({ root: basename(root), tokens: res.selfExcluded })
   }
 
   // Output
   if (opts.json) {
-    const out = { ok: violations.length === 0 && errors.length === 0, violations, errors }
+    const out = {
+      ok: violations.length === 0 && errors.length === 0,
+      violations,
+      errors,
+      selfExcluded,
+    }
     process.stdout.write(JSON.stringify(out, null, 2) + '\n')
   } else {
     if (errors.length > 0) {
       process.stderr.write('audit errors:\n')
       for (const e of errors) process.stderr.write(`  ✘ ${e}\n`)
+    }
+    // 覆蓋面的縮減一律先印，NEVER 讓它藏在 0 violations 後面。
+    for (const { root, tokens } of selfExcluded) {
+      const shown =
+        tokens.length > 0 ? tokens.join(', ') : '(none — 自身身分判不出，全部 token 照掃)'
+      process.stdout.write(`ℹ self-exclusion ${root}: ${shown}\n`)
     }
     if (violations.length === 0) {
       process.stdout.write('✓ audit-clade-leak: 0 violations\n')

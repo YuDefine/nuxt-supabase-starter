@@ -20,7 +20,7 @@ Local edits will be reverted by the next sync.
 
 `/commit` 封裝了品質閘門，繞過等於讓壞 code / 壞版本號 / 壞 tag 進 repo。各 gate 一行定性如下，**MUST 全綠才能 commit**；執行細節一律見 `/commit` skill（`.claude/skills/commit/SKILL.md`）：
 
-- **0-A** 程式碼審查：simplify（序跑第一）→ `codex exec` review high（GPT-5.5 跨模型，經 codex-review-safe.sh）→ Critical / Major 條件升 xhigh；修正一律由主線執行
+- **0-A** 程式碼審查：simplify（序跑第一）→ `codex exec` review high（GPT-5.6-sol 跨模型，經 codex-review-safe.sh）→ Critical / Major 條件升 xhigh；修正一律由主線執行
 - **0-B** UI Design Review（條件觸發）：`.vue` 模板 + 頁面/元件/佈局/互動/樣式變更時派 screenshot-review
 - **0-C** format / lint / typecheck / test / doctor 全綠：`scripts.check` 不含 test → 額外跑 `pnpm test`；`scripts.doctor` **必裝**（缺裝 = block commit，要求先安裝 vite-doctor）。oxfmt batched `--check` 報未預期 diff 以單檔重跑為準（[[pitfall-oxfmt-batched-check-false-positive]]）
 - **0-D** Doc Alignment（條件觸發）：diff 觸及 docs / rules / snippets / audit script / 業務碼 / bug fix 時，檢查 cross-ref / 路徑引用 / pitfall status / 三方受眾文件忠實度（含 VitePress sidebar）四面向

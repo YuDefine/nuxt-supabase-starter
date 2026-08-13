@@ -492,7 +492,7 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
    - Code identifiers, file paths, technical names (e.g., `audit_signed_chain`, `business_keys_drift`, `PostgREST`), SQL blocks, shell commands, and inline `code` remain untranslated.
    - OpenSpec / Spectra 制式英文標題（如 `## Why`、`## What Changes`、`## Non-Goals`、`## Affected Entity Matrix`、`## User Journeys`、`## Implementation Risk Plan`）保留英文，body 內容必須繁中。
    - If codex draft produced English artifacts despite the convention, fix inline now — main thread Edit 翻譯，**不要**回 codex 重 draft.
-   - Reason: codex GPT-5.5 在 prompt 已有繁中指示時仍可能默認輸出英文；主線 cross-check 是最後一道翻譯把關。違反語言慣例會讓使用者在 review/manual-check 階段卡關。
+   - Reason: codex GPT-5.6-sol 在 prompt 已有繁中指示時仍可能默認輸出英文；主線 cross-check 是最後一道翻譯把關。違反語言慣例會讓使用者在 review/manual-check 階段卡關。
 
 ---
 

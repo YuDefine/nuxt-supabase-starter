@@ -34,6 +34,44 @@ Local edits will be reverted by the next sync.
 
 **同時像寬掃又像措辭時看產出形狀**：產出是事實表 / 清單 / 統計 → 派（寬掃的價值在把原文壓成結論）；產出是要寫進規約、契約或對外文件的**措辭** → 留。措辭的語氣與抽象層級一致性外包不了，派出去的典型結果是回頭逐條重寫（成本見 rationale）。
 
+## Dispatch 資料邊界（Approved-Tools gate，先於能力判斷）
+
+上一節的不外派清單管的是**動作**（憑證 / 刪檔 / force push），本節管的是**內容**：一個完全合法的
+外派動作，照樣可以把 secret 或客戶個資寫進另一個 runtime 的 prompt 與其日誌。適用**每一次**
+dispatch 的**每一種** brief 載體——`codex-dispatch.ts` 的 prompt 檔、Claude subagent 的 thin brief、
+Herdr transport 的 durable task 檔、workflow agent 的 prompt 字串。
+
+### MUST：brief 明列 Approved Tools
+
+每份 brief **MUST** 有一段逐條列出這次准許動用的資源：可讀 / 可寫的檔案或目錄、可跑的指令、
+可打的外部服務，並寫明**清單外的一律回報、NEVER 自取**。
+
+這是本節唯一**買得到東西**的一條，其餘是查表。實測（2026-08-13，`dispatch-data-boundary`
+scenario，5 reps 兩臂）：無規約時 **0/5** 的 brief 帶准許資源清單，有規約時 **5/5** 帶。
+
+清單寫不出來 = 這件事還沒被消化到可以外派（回 § 派不派 的預消化紀律）。
+
+### 查表：什麼不進 dispatch prompt
+
+| 類別 | 改帶什麼 |
+| --- | --- |
+| 憑證與 secret 的**值**（`.env` 任一行、API key、token、cookie、session id、DB 連線字串、private key） | 變數名 + 檔案路徑（「值在目標 repo `.env.local` 的 `SUPABASE_SERVICE_ROLE_KEY`，你自己讀」） |
+| 客戶個資（真實姓名 / email / 電話 / 地址 / 身分證字號 / 帳務與訂單明細） | 只給 id 與欄位型別，或同 schema 的假資料；fleet 內有客戶案（<consumer-b> / <consumer-a>） |
+| 未公開商業內容（報價、合約條款、客戶內部策略） | 只給判斷所需的結論，不給原文 |
+| 完整 log / DB dump / request body 原文 | 取樣 + 遮蔽後的片段 |
+
+判準是資料**離開本 session、進入另一個 runtime**，不是誰付費、不是對方可不可信。判不出來就不帶。
+
+**本表刻意寫成查表而不是紀律型三件套**：同一次 micro-test 顯示這半**兩臂皆 5/5**——無規約時模型
+已經自發指路徑不貼值、自發遮蔽個資。沒有真實違規 telemetry 佐證前，**NEVER** 把它加寫成
+Iron Law + rationalization table（per [[rule-authoring]] § 先分類失敗型態：沒有要修的失敗就別加句子）。
+出現第一筆真實違規時，處置是**帶著那筆 telemetry**回來改寫本節，不是憑感覺加強語氣。
+
+### 為什麼這條沒有機械網子接
+
+redaction 只在 signal payload 上強制（`vendor/signals/redact.mjs`），**dispatch prompt 不經過它**。
+本節是這條路徑上唯一的攔截點，**NEVER** 假設有下游 gate 會幫忙擋。
+
 ## Session transport boundary
 
 **Herdr transport 不新增 routing 權限。** 有空 workspace / pane 不是外派條件；當前 session 能在既有授權與 scope 內直接完成目標 cwd 的工作，就直接完成。只有本節已判定要換互動 session、或 [[session-tasks]] 的 session boundary 已成立時，才依該規約 § Herdr session transport 搬運 durable task / thin brief。

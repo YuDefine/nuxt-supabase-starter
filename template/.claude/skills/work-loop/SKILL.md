@@ -341,6 +341,7 @@ fi
   "consecutiveDispatchFailures": 0,
   "guardrailsAck": "2026-08-05T04:02:10Z",
   "sessionNote": "本輪一句話紀錄（值得留痕的事）",
+  "notes": "string，不是 object：sandbox 無外網；pnpm 一律 --prefer-offline",
   "lockSessionId": "mshkf6es-mptx87qc-ubuntu",
   "inFlight": [{ "agent": "wt-td317", "item": "TD-317", "dispatchedAt": "…",
                  "taskId": "<Bash harness task id 或 null>", "owner": "work-loop-dispatch",
@@ -366,6 +367,14 @@ fi
 `blockers` 是 blocker 指紋表，讓同一批卡住的 item 不必每輪重新診斷一次——欄位語義、三步查表、入表門檻與清表時機在 [reference/blocker-ledger.md](reference/blocker-ledger.md)，**此處不複述**。舊 state 檔沒有這個欄位是正常的（本欄位之前的版本），當成空物件起算即可。
 
 **檔案不存在** → 這是第 1 輪，用 `{round: 0}` 起手，Step 7 建檔。
+
+**`notes` 的型別是 string，寫入方式是改寫、不是累加。** 它存的**只有**「下一輪仍然成立的 sandbox / 環境事實」——無外網、某個 CLI 缺 binary、某條路徑在本機解不到。每一輪都是把整段**重寫**成當下仍成立的版本：已經不成立的句子刪掉，新的事實寫進同一段散文。
+
+- **NEVER 把 `notes` 寫成 object**，也 **NEVER** 在它底下開 `notes.r<N>` / `notes.round42` 這類逐輪 key。實測（2026-08-12 round 59，<consumer-a> round=38）：object 型 `notes` 長到 **27787 B**，佔該 runtime 三個累積欄位的 88%；同期兩個 string 型 runtime 停在 1.3–1.7 KB，而其中一家的輪數還更高——驅動因素是**型別**不是輪數。object 形態讓「每輪 append 一個新 key」變成最省事的寫法，string 形態逼人改寫既有句子。
+- **NEVER 拿 `notes` 記本輪發生過什麼**——那是 `sessionNote` 的職責，且它有 retention 接住。事件記進 `notes` 就永遠不會有人來刪，因為讀者分不出哪一條還成立。
+- **NEVER 記進 `notes` 留給下一輪處理**：本輪看到的收斂義務（§ Retention 的 `STATE_OVERSIZE`）**當輪**就要做掉。
+
+本欄位**刻意不訂位元組上界**：上界會把判斷換成算數，而該刪的判準是「這句話還成不成立」，不是「超了幾個 byte」。§ Retention 對 `notes` 的截斷是**讀取端的止血**，**NEVER** 讀成「寫多少都有人幫我剪」——被截掉的部分下一輪就看不到了。
 
 **`awaiting` / `packaged` / `decisions` 三者的關係**（寫錯會讓已答的決策被重問，或已問的被當成沒問）：
 

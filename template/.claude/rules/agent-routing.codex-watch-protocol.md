@@ -109,7 +109,7 @@ Plan 寫完後**立刻**繼續執行，**不要**停下來等使用者或主線�
 
 ### Brief 措辭紀律（4.8-aware，寫 code 派工必加）
 
-GPT-5.5 與 Claude 4.8 都**字面遵守指令、不外推**（Anthropic prompt best-practices 對 4.8 的明示行為）。派工 brief（給 codex 的 prompt，或 fan-out subagent 的 thin brief）**MUST**：
+GPT-5.6 與 Claude 4.8 都**字面遵守指令、不外推**（Anthropic prompt best-practices 對 4.8 的明示行為）。派工 brief（給 codex 的 prompt，或 fan-out subagent 的 thin brief）**MUST**：
 
 1. **祈使動詞要「動手」**：寫「**實作** / **修改** / **產出到 `<path>`**」，**NEVER** 用「分析 / 看看 / 評估 / 建議」這類動詞——後者會被字面理解成「只讀不寫」，回來一份報告卻沒改檔。
 2. **明寫套用範圍**：要對多個對象做同一件事時，**MUST** 點名範圍（「**每個** phase 都做，不只第一個」「`app/components/` 底下**全部** `.vue`」）。4.8 不會把「修 X」默默推廣到 Y/Z，範圍含糊就只做命中的第一個。
@@ -414,7 +414,7 @@ Claude Code session 收到 spectra propose 請求時：
 1. **NEVER** 用 AskUserQuestion 問 A/B（除非使用者**明確**要求「純 Claude propose」或「不要派 codex」）
 2. **MUST** 預設走「Codex draft + 主線 cross-check」流程：
    1. 主線解析 change name + requirement
-   2. 派 background codex GPT-5.5 xhigh draft（走「Codex 派工的標準流程」）
+   2. 派 background codex GPT-5.6-sol xhigh draft（走「Codex 派工的標準流程」）
    3. 收到 `<task-notification status=completed>` 後，主線 **MUST** 依序：
       - Read codex 產出的 proposal.md / design.md / tasks.md
       - 跑 `bash scripts/spectra-advanced/post-propose-check.sh <change>`（檢查 User Journeys / Affected Entity Matrix / Implementation Risk Plan / Design Review 7 步）

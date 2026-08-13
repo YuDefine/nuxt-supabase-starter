@@ -41,7 +41,7 @@ Codex 端讀本檔（投影到 consumer 的 `.claude/agents/screenshot-review.md
 
 ## 🚫 BLOCKING — 第一動作就是 Codex Dispatch（不准跳）
 
-> 本 section 給 **sonnet wrapper path** 用（主線直派 codex 不會進到這裡）。Codex GPT-5.5 自己跑時跳過此 section、從「## 你會收到」開始讀。
+> 本 section 給 **sonnet wrapper path** 用（主線直派 codex 不會進到這裡）。Codex GPT-5.6-sol 自己跑時跳過此 section、從「## 你會收到」開始讀。
 
 ### Step 0 — Identity check（**機械字面 grep，禁止推斷**）
 
@@ -54,7 +54,7 @@ Codex 端讀本檔（投影到 consumer 的 `.claude/agents/screenshot-review.md
 
 | 收到的 prompt 第一行 | 你是 | 動作 |
 | --- | --- | --- |
-| 字面**就是** `[DELEGATED-BY-CLAUDE-CODE]`（28 字元，不多不少） | codex GPT-5.5 執行 instance | **MUST 跳過本 § BLOCKING**，從下一個 `## 你會收到` section 開始讀 |
+| 字面**就是** `[DELEGATED-BY-CLAUDE-CODE]`（28 字元，不多不少） | codex GPT-5.6-sol 執行 instance | **MUST 跳過本 § BLOCKING**，從下一個 `## 你會收到` section 開始讀 |
 | **其他任何情況**（無此字面 marker、brief 是 markdown header、是 `mode: verify` 開頭、是其他結構化文字...） | Claude Code sonnet subagent | **直接執行** agent body（從「你會收到」section 開始）。**NEVER** 在 subagent 內呼叫 codex CLI |
 
 **禁止軟推斷**（看到自己這樣想就立刻停下、回到「我是 sonnet」default）：
