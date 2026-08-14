@@ -242,7 +242,7 @@ Main-thread 同一 prompt segment 的第 3 個高信心 readonly Bash、第 5 �
 Pending decision 只接受下列三種 standalone resolution；一般 Bash／Read 會持續 block：
 
 ```bash
-# 命中列照 trigger 填 mechanical-fanout 或 read-heavy-scan
+# 工作仍是 threshold trigger 本身：照 trigger 填 mechanical-fanout 或 read-heavy-scan
 node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
   --decision-id <rgd_...> --model luna --effort low \
   --route routing-table --tier-basis table-row --table-row <trigger> \
@@ -253,15 +253,19 @@ node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
 node ~/offline/clade/vendor/scripts/codex-routing-gate.ts waive \
   --decision-id <rgd_...> --reason <waiver-enum> [--note '...']
 
-# dispatcher 已留下最新 exit 3／4 outcome 後才 fallback
+# dispatcher 已留下最新 exit 3／4 outcome 後，授權 Claude fallback
 node ~/offline/clade/vendor/scripts/codex-routing-gate.ts fallback \
   --decision-id <rgd_...> \
   --reason <dispatcher-mechanical-failure|quota-exhausted>
 ```
 
-Waiver enum 固定為 `claude-mcp-required`、`governance-adjudication`、`user-explicit-mainline`、`wording-contract-output`、`visual-design-review`、`safety-or-irreversible`、`self-verification`；沒有 `other` 或 free-text bypass。Dispatcher exit `0`／`2` 會留下 terminal receipt 並 release；exit `3`／`4` 留 pending，分別只配 `dispatcher-mechanical-failure`／`quota-exhausted`；dry-run／exit `1` 不消費 decision。下一個 UserPromptSubmit 會把未結案 decision 記為 orphan，再開始新 segment。
+工作若已收斂成另一個**更具體**的 Routing Table row，可把 dispatch 的 `--table-row`、`--model` 與 `--effort` 改成該列的值；gate 只接受共用 policy 中已知且有單一 concrete Codex model 的 row。`spectra` 這類 conditional row沒有單一 model，不能拿來結案。Exact trigger仍固定 `luna low`，**NEVER** 以 specific-row 出口改名繞過同一份工作。
 
-Enforcement authority 是 `~/.claude/clade-routing-gate/receipts.jsonl`；`~/.codex/dispatch-ledger.jsonl` 仍是 fail-open usage／observability telemetry，**NEVER** 用 telemetry 缺列推翻已成功落盤的 receipt。Segment identity 尚未初始化或中央 helper 缺件時 diagnostic fail-open；state 一旦建立，corrupt state、lock／atomic write／receipt failure、session／row／model／effort mismatch 一律 fail-closed。事後結案跑 `node scripts/audit-codex-adoption.ts`；usage report 不讀 receipt。
+Waiver enum 固定為 `claude-mcp-required`、`governance-adjudication`、`user-explicit-mainline`、`wording-contract-output`、`visual-design-review`、`safety-or-irreversible`、`self-verification`；沒有 `other` 或 free-text bypass。Dispatcher exit `0`／`2` 會留下 terminal receipt 並 release；exit `3`／`4` 留 pending，分別只配 `dispatcher-mechanical-failure`／`quota-exhausted`。`fallback` 命令寫入的事件是 `fallback-authorized`：它只表示 runtime不可用後**允許** Claude接手，不宣稱 fallback工作已完成。Dry-run／exit `1` 不消費 decision。下一個 UserPromptSubmit 會把未結案 decision 記為 orphan，再開始新 segment。
+
+Enforcement authority 是 `~/.claude/clade-routing-gate/receipts.jsonl`；`~/.codex/dispatch-ledger.jsonl` 仍是 fail-open usage／observability telemetry，**NEVER** 用 telemetry 缺列推翻已成功落盤的 receipt。每次 live判定會先用 unique receipt重建 `latestAttempt`，並把單一 terminal receipt materialize回 stale state；同 `eventId`重播是 benign，兩個不同 terminal resolution與未完成的 orphan segment transition會 fail-closed。這使 receipt-first／state-second 的 crash window可恢復，不會重跑已成功的 Codex dispatch。
+
+Fail-open／fail-closed 邊界以 helper是否在 Claude Code外層 deadline內回傳為準：segment identity 尚未初始化、中央 helper缺件時 diagnostic fail-open；state 一旦建立，helper回傳的 corrupt state、lock／atomic write／receipt failure、session／row／model／effort mismatch一律 fail-closed。Claude Code外層 command hook timeout或 helper根本無法啟動時，hook output會被丟棄並回到正常 permission flow，仍是 residual fail-open；正常 permission flow **不等於**無條件 auto-allow。事後結案跑 `node scripts/audit-codex-adoption.ts`；usage report不讀 receipt。
 
 **`--route` 必填**（缺就 exit 1，2026-08-12 起）。它是成功指標的分母——`route=claude-delegate-sub`
 的 dispatch 中 luna 佔比。填法：走本檔 § Routing Table 某一列 → `routing-table`；走 § Claude 委派的
