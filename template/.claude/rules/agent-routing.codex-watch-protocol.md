@@ -235,6 +235,34 @@ node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
   [--cwd <dir>] [--budget <分鐘>] [--output-schema <schema.json>] [--retry-of <label>]
 ```
 
+### Routing threshold gate
+
+Main-thread 同一 prompt segment 的第 3 個高信心 readonly Bash、第 5 個 distinct textual Read，或第一次 Read 501+ 行文字檔會在執行前 block，訊息帶 `decision_id`。Gate 只計高信心事件；compound Bash 一次只計一筆，mutation／build／test／unknown command 不計，含 `agent_id` 的 child hook event 本輪全部 skip。
+
+Pending decision 只接受下列三種 standalone resolution；一般 Bash／Read 會持續 block：
+
+```bash
+# 命中列照 trigger 填 mechanical-fanout 或 read-heavy-scan
+node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+  --decision-id <rgd_...> --model luna --effort low \
+  --route routing-table --tier-basis table-row --table-row <trigger> \
+  --template <template.md> --var task='...' --var acceptance='...' \
+  --var allowed_paths='...' --label <topic-slug>
+
+# 只有 Routing Table 已列明的 Claude 例外才 waiver
+node ~/offline/clade/vendor/scripts/codex-routing-gate.ts waive \
+  --decision-id <rgd_...> --reason <waiver-enum> [--note '...']
+
+# dispatcher 已留下最新 exit 3／4 outcome 後才 fallback
+node ~/offline/clade/vendor/scripts/codex-routing-gate.ts fallback \
+  --decision-id <rgd_...> \
+  --reason <dispatcher-mechanical-failure|quota-exhausted>
+```
+
+Waiver enum 固定為 `claude-mcp-required`、`governance-adjudication`、`user-explicit-mainline`、`wording-contract-output`、`visual-design-review`、`safety-or-irreversible`、`self-verification`；沒有 `other` 或 free-text bypass。Dispatcher exit `0`／`2` 會留下 terminal receipt 並 release；exit `3`／`4` 留 pending，分別只配 `dispatcher-mechanical-failure`／`quota-exhausted`；dry-run／exit `1` 不消費 decision。下一個 UserPromptSubmit 會把未結案 decision 記為 orphan，再開始新 segment。
+
+Enforcement authority 是 `~/.claude/clade-routing-gate/receipts.jsonl`；`~/.codex/dispatch-ledger.jsonl` 仍是 fail-open usage／observability telemetry，**NEVER** 用 telemetry 缺列推翻已成功落盤的 receipt。Segment identity 尚未初始化或中央 helper 缺件時 diagnostic fail-open；state 一旦建立，corrupt state、lock／atomic write／receipt failure、session／row／model／effort mismatch 一律 fail-closed。事後結案跑 `node scripts/audit-codex-adoption.ts`；usage report 不讀 receipt。
+
 **`--route` 必填**（缺就 exit 1，2026-08-12 起）。它是成功指標的分母——`route=claude-delegate-sub`
 的 dispatch 中 luna 佔比。填法：走本檔 § Routing Table 某一列 → `routing-table`；走 § Claude 委派的
 model 檔位 轉派 → `claude-delegate-sub`；走 § 配額耗盡時的 fallback 紀律 → `fallback-chain`；
@@ -274,9 +302,9 @@ basis，**NEVER** 隨手挑一個列名湊過去。
 
 | Template | 場景 | 建議 effort |
 | --- | --- | --- |
-| `fanout-analyze` | 蒐集命令清單派工前能列全時的 fan-out：主線跑完命令，只派分析（必填 `evidence`） | medium |
-| `fanout-collect` | 蒐集命令清單派工前**無法**列全（命令 N 的對象取決於 N-1 輸出）的掃描 / 驗證型 fan-out | medium |
-| `read-heavy-scan` | 長文件 / fleet 多 repo 掃描摘要 | medium |
+| `fanout-analyze` | 蒐集命令清單派工前能列全時的 fan-out：主線跑完命令，只派分析（必填 `evidence`） | low |
+| `fanout-collect` | 蒐集命令清單派工前**無法**列全（命令 N 的對象取決於 N-1 輸出）的掃描 / 驗證型 fan-out | low |
+| `read-heavy-scan` | 長文件 / fleet 多 repo 掃描摘要 | low |
 | `debug-evidence` | debug 拆段：log capture / repro / hypothesis 驗證矩陣 | high |
 | `fix-verify-loop` | commit 0-C：跑 check → 機械修 → loop 到全綠 | high |
 | `self-collect-evidence` | spectra-apply Step 8a (a)(b)：dev-login allow-list + DB query evidence | medium |

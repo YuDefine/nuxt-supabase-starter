@@ -3,8 +3,8 @@
   "rulesProjection": "copy",
   "checksums": {
     "rules/agent-routing.codex-input-intercept.md": "1ee92dacf936fc47",
-    "rules/agent-routing.codex-watch-protocol.md": "c801430862f6b644",
-    "rules/agent-routing.md": "57e505d1df8b7942",
+    "rules/agent-routing.codex-watch-protocol.md": "7ece4d11ff3dd84b",
+    "rules/agent-routing.md": "e0973ab0bc04c8cc",
     "rules/agent-self-verification.md": "7e0a431d776ea55b",
     "rules/agent-self-verification.screenshot-evidence.md": "c8f274c48a74c6db",
     "rules/audit-pattern.md": "69856e1bb2377882",
