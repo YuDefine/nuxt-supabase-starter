@@ -142,19 +142,19 @@ Local edits will be reverted by the next sync.
 
       **Model allocation**：截圖收集由 **codex GPT-5.6-sol medium** 執行；收集完成後由 **codex GPT-5.6-sol xhigh** 分析每張截圖是否匹配對應 item 要求（防止亂截圖搪塞——收集與判斷分開、同 model 不同 effort，收集便宜跑快、判斷用最高推理力）。
 
-      **Runtime 選擇**（default codex；Claude subagent fallback）：
+      **Runtime 選擇**（default Codex model via Pi；Claude subagent fallback）：
 
-      - **Default — codex**：偵測 `command -v codex` 存在且 env `CLADE_FORCE_CLAUDE_SCREENSHOT` 未設 → 呼叫 `node <clade-vendor>/scripts/codex-dispatch-screenshot-verify.ts --change <name> --consumer-path . --dev-server-url <url> --items-json <items.json>`（dispatcher 內部以 **medium** effort 收集截圖）。Dispatcher 跑完 stdout 印 JSON 摘要（`{"runtime":"codex","change":...,"items":[...],"audit_exit_code":N,"progress_json":"...","review_md":"..."}`），主線解析該 JSON 後進入 **Screenshot Match Analysis gate**（見下方 §）。Codex 任一 item `status` 不是 `PASS` 時 → 保留 `[ ]` + 寫 issue / blocker（業務結果，**NEVER** fallback Claude — 同一 brief 在 Claude 也會撞同樣業務問題）
+      - **Default — Codex model via Pi**：偵測 `command -v pi` 存在、Pi `openai-codex` OAuth 已就緒且 env `CLADE_FORCE_CLAUDE_SCREENSHOT` 未設 → 呼叫 `node <clade-vendor>/scripts/codex-dispatch-screenshot-verify.ts --change <name> --consumer-path . --dev-server-url <url> --items-json <items.json>`（dispatcher 內部以 **medium** effort 收集截圖）。Dispatcher 跑完 stdout 印 JSON 摘要（`{"runtime":"codex","transport":"pi","change":...,"items":[...],"audit_exit_code":N,"progress_json":"...","review_md":"..."}`），主線解析該 JSON 後進入 **Screenshot Match Analysis gate**（見下方 §）。Codex 模型任一 item `status` 不是 `PASS` 時 → 保留 `[ ]` + 寫 issue / blocker（業務結果，**NEVER** fallback Claude — 同一 brief 在 Claude 也會撞同樣業務問題）
       - **Fallback — Claude subagent**：以下任一情境**才** fallback 到 `screenshot-review` subagent（brief copy/adapt 自 `vendor/snippets/verify-channels/ui-final-state-brief.template.md`）：
-        - `command -v codex` 不存在
+        - `command -v pi` 不存在或 Pi `openai-codex` OAuth 未就緒
         - env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 強制退場（debug / 退場用）
-        - Dispatcher exit 非 0 **且** stdout 沒印出可 parse 的 JSON 摘要（機械故障，例如 codex auth 失效、subprocess crash）
-      - 兩 runtime 走相同的 brief contract（change name、dev server URL、items、Scope）；codex runtime 多了 self-contained guardrails（codex 不會 auto-load `screenshot-review.md`）
+        - Dispatcher exit 非 0 **且** stdout 沒印出可 parse 的 JSON 摘要（機械故障，例如 Pi auth 失效、subprocess crash）
+      - 兩 runtime 走相同的 brief contract（change name、dev server URL、items、Scope）；Pi Codex runtime 多了 self-contained guardrails（machine dispatch 不會 auto-load `screenshot-review.md`）
 
       **反 bypass（hard rule — 2026-06-11 audit 實證）**：
 
       - **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 `verify:ui` evidence 來取代本步 dispatcher — 2026-06-11 audit 實證：05-29 dispatcher 修復後 147 條 `(verified-ui:)` annotation **0 次走 codex**、92 個 session 全部走此 bypass 形狀（從未進入本分支）、0 次機械故障 fallback 記錄。需要 `verify:ui` evidence 的**唯一**入口是 `node ~/offline/clade/vendor/scripts/codex-dispatch-screenshot-verify.ts`
-      - **Claude fallback 僅限機械故障**（`command -v codex` 不存在 / dispatcher exit≠0 且 stdout 無 parseable JSON；env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 為 user 明確設定的 debug 退場，不在此限），且 **MUST** 在 tasks.md 對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡 — **無此痕跡的 Claude 自拍 evidence 視為違規**（audit 以 annotation × dispatcher 記錄比對抓）
+      - **Claude fallback 僅限機械故障**（`command -v pi` 不存在 / Pi `openai-codex` OAuth 未就緒 / dispatcher exit≠0 且 stdout 無 parseable JSON；env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 為 user 明確設定的 debug 退場，不在此限），且 **MUST** 在 tasks.md 對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡 — **無此痕跡的 Claude 自拍 evidence 視為違規**（audit 以 annotation × dispatcher 記錄比對抓）
 
       共用規約：
 
@@ -179,12 +179,12 @@ Local edits will be reverted by the next sync.
       Dispatcher 收集完所有截圖後（JSON 摘要已拿到），**MUST** 對每個 `status === "PASS"` 的 item 派 **codex GPT-5.6-sol xhigh** 做截圖 vs 要求匹配分析：
 
       ```bash
-      codex exec \
-        --model gpt-5.6-sol \
-        --dangerously-bypass-approvals-and-sandbox \
-        --skip-git-repo-check \
-        -c model_reasoning_effort=xhigh \
-        < /tmp/codex-screenshot-match-analysis-<change>-prompt.md 2>&1
+      node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+        --brief /tmp/codex-screenshot-match-analysis-<change>-prompt.md \
+        --cwd <consumer-repo-root> \
+        --label screenshot-match-<change> \
+        --model sol --effort xhigh \
+        --route routing-table --tier-basis table-row --table-row screenshot-review-verify
       ```
 
       Prompt 內容固定包含：

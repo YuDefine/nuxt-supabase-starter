@@ -16,9 +16,9 @@ Local edits will be reverted by the next sync.
 
 ## Codex 派工的標準流程（所有 routing 共用）
 
-派 Codex 出去工作**一律走原生 `codex` CLI + background bash**——**禁止**任何 `codex:rescue` / `codex:setup` / `codex:codex-rescue` plugin 路線（已驗證無法使用）。
+派 Codex 模型出去工作**一律走 `vendor/scripts/codex-dispatch.ts`，由 Pi `openai-codex` 執行**。Public 名稱保留 Codex 是指 model/routing 類別，不代表 Codex CLI transport。**NEVER** 直接執行 `codex exec`、`codex review`，也不走任何 `codex:rescue` / `codex:setup` / `codex:codex-rescue` plugin 路線。
 
-主線 Claude 自己派、自己等通知、自己讀檔回報，**禁止**叫使用者切到 Codex CLI、**禁止**「Stop here」純文字 handoff。
+主線 Claude 自己派、自己等通知、自己讀 dispatcher JSON 回報，**禁止**叫使用者切 CLI、**禁止**「Stop here」純文字 handoff。
 
 模板：
 
@@ -28,17 +28,17 @@ Local edits will be reverted by the next sync.
 `<model-slug>` 選檔：命中 [[agent-routing]] § Routing Table 類別 → 照該列（多為 `gpt-5.6-sol`）；本次工作**原本會派 Claude subagent**（原判 `sonnet`／`haiku`）→ 依 § Claude 委派的 model 檔位 派 `gpt-5.6-luna`（sonnet→`--effort high`、haiku→`--effort low`）。判不出來 → `gpt-5.6-sol`。
 
    ```bash
-   cd <cwd> && codex exec \
-     --model <model-slug> \
-     --dangerously-bypass-approvals-and-sandbox \
-     --skip-git-repo-check \
-     --enable default_mode_request_user_input \
-     --json \
-     -c model_reasoning_effort=<medium|high|xhigh> \
-     < /tmp/codex-<topic>-<slug>-prompt.md 2>&1
+   node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+     --brief /tmp/codex-<topic>-<slug>-prompt.md \
+     --cwd <cwd> \
+     --label <topic>-<slug> \
+     --model <sol|luna> --effort <low|medium|high|xhigh|max> \
+     --route <routing-table|claude-delegate-sub|fallback-chain|manual> \
+     --tier-basis <table-row|five-conjunct|adjudication|delegate-sub|quota-fallback|manual> \
+     [--table-row <routing-row>] [--retry-of <prior-label>]
    ```
 
-   > ⚠️ `--dangerously-bypass-approvals-and-sandbox` 在背景非互動 codex 是**必要**的，不是偷懶 — codex `exec` 沒人可批准時，sandbox 為非 `danger-full-access` 的 MCP tool call 全部會被自動回 `user cancelled`（codebase-memory-mcp 等都會死）。Codex 官方文檔 `agent-approvals-security` 把這個 flag 與 `-s danger-full-access` 並列為「非互動信任環境」的標準寫法。**禁止**把它換回 `-s read-only` / `-s workspace-write` — 那會讓 codex 失去 MCP 能力（`approval_mode = "auto"` 在 `mcp_servers.*` 不是合法 codex config key，無法作為替代）。
+   Dispatcher 固定用 Pi JSON mode、`openai-codex` provider、ephemeral session與 machine-safe extension profile；model、effort、routing attribution與 exit code由這個入口統一驗證。MCP extension存在時由 dispatcher明確載入，interactive `cx` extension不會進 machine dispatch。
 
 3. 立刻簡短回報 bash job ID 給使用者
 4. 立刻啟動 **Codex Watch Protocol**（見下節 § 監看排程）— notification-only（主線 idle 等通知，只下**一個** ~1500s 安全網 fallback 防罕見 hang-type 失敗）。**禁止**啟動每 3 分鐘短輪詢（無謂 turn 重燒 context）。**禁止**任何 subagent 中介 dispatch（per `agent-routing.md` § Dispatch 入口）
@@ -55,45 +55,21 @@ Local edits will be reverted by the next sync.
 
 > sandbox flag 統一使用 `--dangerously-bypass-approvals-and-sandbox`，不再分 `-s read-only` / `-s workspace-write`（在背景 codex 會擋 MCP）。「預期動作」由主線在 prompt 內陳述，靠 codex 自律。
 
-### `codex review` 禁用（改用 `codex exec` + review prompt）
+### Code review 唯一入口
 
-**NEVER** 用 `codex review --uncommitted`（或 `--base`、`--commit`）做跨模型 review。
+**NEVER** 用 `codex review`、raw `codex exec`或一般 coding dispatcher做跨模型 review。
 
-**根因**：`codex review` 硬編碼 `workspace-write` sandbox，無法透過 `-c` 覆寫。此 sandbox 模式會讓 `~/.codex/config.toml` 註冊的 MCP server（如 `codebase-memory-mcp`）在 `list_projects` 呼叫永久 hang — MCP 進程寫回 response 但 sandbox 管線未正確傳遞。`codex exec --dangerously-bypass-approvals-and-sandbox`（`danger-full-access` sandbox）則完全正常。
-
-commit 0-A 的標準入口是 `plugins/hub-core/scripts/codex-review-safe.sh`（封裝本節替代做法）。
-
-**替代做法**：用 `codex exec` + review prompt 取代：
+commit 0-A 的標準入口是 `plugins/hub-core/scripts/codex-review-safe.sh`。它由 caller凍結完整working-tree changeset，再呼叫Pi review runner；runner只開`read,grep,find,ls`，沒有bash、write、edit或MCP，因此read-only是tool allowlist契約，不靠prompt自律。
 
 ```bash
-# 1. 收集 diff（MUST mktemp 唯一路徑——固定路徑是全機器所有 session 共用，會互相覆寫）
-PATCH="$(mktemp -t codex-review-diff.XXXXXXXXXX)"
-git diff --cached > "$PATCH"
-git diff >> "$PATCH"
-git ls-files --others --exclude-standard | while read f; do
-  echo "=== NEW FILE: $f ===" >> "$PATCH"
-  head -200 "$f" >> "$PATCH"
-done
-
-# 2. 用 codex exec 跑 review
-echo "Review the following uncommitted changes for bugs, security issues, and correctness problems. Output prioritized findings with severity [P1-P3], file path, and line range. If no issues, output 'No issues found.'
-
-$(cat "$PATCH")" | \
-codex exec \
-  --model gpt-5.6-sol \
-  --dangerously-bypass-approvals-and-sandbox \
-  --skip-git-repo-check \
-  -c model_reasoning_effort=high \
-  --ephemeral \
-  --disable memories 2>&1
+.claude/scripts/codex-review-safe.sh high
 ```
 
-- 已驗證 MCP 全部正常（`list_projects`、`get_code_snippet`、`search_graph` 均 completed）
-- review 一律走 `codex exec`；reasoning effort 用 `-c model_reasoning_effort=<level>` 指定
+reasoning effort由第一個參數指定；wrapper不接受額外runtime flags。所有consumer與clade自身都走這個入口。
 
 ### Plan-first（寫 code 的派工必加）
 
-派 Codex **寫 code / 改檔**（spectra-propose draft、spectra-apply phase）的 prompt **MUST** 內含以下硬指令（**WebSearch / review 用途的 `codex exec`（codex-review-safe.sh）不需要** — 它們純讀不寫）：
+派 Codex **寫 code / 改檔**（spectra-propose draft、spectra-apply phase）的 prompt **MUST** 內含以下硬指令（**WebSearch / review wrapper（codex-review-safe.sh）不需要** — 它們純讀不寫）：
 
 ```
 Plan-first（**MUST**）：
@@ -158,12 +134,12 @@ hub:bootstrap 自動同步產生（請完全忽略，與本次工作無關）：
 
 例外：
 
-- review 用途的 `codex exec`（codex-review-safe.sh）與 WebSearch 不需要這段（review 的本質就是讀 dirty diff、WebSearch 純讀不動檔）
+- review wrapper（codex-review-safe.sh）與 WebSearch 不需要這段（review 的本質就是讀 dirty diff、WebSearch 純讀不動檔）
 - 同一條派工 round-trip ≥ 2 次都因**同類 dirty** 停手（例：hub:bootstrap 反覆觸發 LOCKED projection 更新），且**剩餘工作是純 mechanical**（明確檔案 swap、< 5 行 edit），主線改自己做合理；但同步要 root-cause baseline 為什麼沒穩定（hub:bootstrap 重複跑？missing path？）並修，不是只把當下 task 收掉跳過教訓
 
 ### Commit Authorization（codex 派工 hard rule）
 
-派 Codex **寫 code / 改檔** 時，prompt **MUST** 內含以下硬指令（**WebSearch / review 用途的 `codex exec`（codex-review-safe.sh）不需要** — 它們純讀不寫）：
+派 Codex **寫 code / 改檔** 時，prompt **MUST** 內含以下硬指令（**WebSearch / review wrapper（codex-review-safe.sh）不需要** — 它們純讀不寫）：
 
 ```
 ## Commit Authorization（**MUST**）
@@ -210,13 +186,13 @@ hub:bootstrap 自動同步產生（請完全忽略，與本次工作無關）：
 Commit 完直接停手回報，**NEVER** 自己跑下一 phase。主線會在 commit 後做 phase boundary 對齊 + view-layer drift 再驗 + scope cross-check，再決定 [接受 / reset 重派 / 中止]。
 ```
 
-理由：worktree 內的 commit 在 archive merge-back 階段會被 `git merge --squash` squash 進 main 的 working tree、再走 `/commit` 0-A `codex exec` review + 0-B Design Review + 0-C check 才進 main HEAD。所以 worktree 內 codex 自 commit **沒有跳過 review** 的風險（commit 在 squash 時就消失、不會留在 main history）。
+理由：worktree 內的 commit 在 archive merge-back 階段會被 `git merge --squash` squash 進 main 的 working tree、再走 `/commit` 0-A Pi Codex review + 0-B Design Review + 0-C check 才進 main HEAD。所以 worktree 內 codex 自 commit **沒有跳過 review** 的風險（commit 在 squash 時就消失、不會留在 main history）。
 
 仍 enforce 的 guardrail 純粹是 phase boundary 對齊（一 phase 一 commit、message format 機械化解析）+ drift 早攔截（codex 自驗比主線事後 reset 便宜）。Win：主線收到完工通知後直接 inspect → 派下一 phase，不必停下來做 staging。
 
 例外：
 
-- review 用途的 `codex exec`（codex-review-safe.sh）與 WebSearch 不寫檔，本節不適用
+- review wrapper（codex-review-safe.sh）與 WebSearch 不寫檔，本節不適用
 - 對 `claude` type subagent（如 `/spectra-ingest` 在 /wt 內派出的 wt subagent）規約相同（`🧹 chore: wt …` 前綴 + selective stage + self-check + hook 必跑），per worktree-default.md §5
 
 ## 泛用 Dispatcher（codex-dispatch.ts）
@@ -273,7 +249,7 @@ node ~/offline/clade/vendor/scripts/codex-routing-gate.ts fallback \
 
 Waiver enum 固定為 `claude-mcp-required`、`governance-adjudication`、`ui-view-implementation`、`user-explicit-claude-agent`、`user-explicit-mainline`、`wording-contract-output`、`visual-design-review`、`safety-or-irreversible`、`self-verification`；沒有 `other` 或 free-text bypass。`claude-agent-dispatch` decision 只接受其中 `claude-mcp-required`、`ui-view-implementation`、`user-explicit-claude-agent` 三種，避免拿治理／措辭／複驗理由替普通掃描開洞。一般 threshold decision 的 dispatcher exit `0`／`2` 會留下 terminal receipt 並 release；`claude-agent-dispatch` 的 Luna exit `2` 留 pending 並把下一次 model 鎖成 Sol，同 effort 的 Sol 再 exit `2` 後才接受 `delegate-escalation-failed` fallback receipt。exit `3`／`4` 都留 pending，分別只配 `dispatcher-mechanical-failure`／`quota-exhausted`。`fallback` 命令寫入的事件是 `fallback-authorized`：它只表示 runtime不可用後**允許** Claude接手，不宣稱 fallback工作已完成。Dry-run／exit `1` 不消費 decision。下一個 UserPromptSubmit 會把未結案 decision 記為 orphan，再開始新 segment。
 
-Enforcement authority 是 `~/.claude/clade-routing-gate/receipts.jsonl`；`~/.codex/dispatch-ledger.jsonl` 仍是 fail-open usage／observability telemetry，**NEVER** 用 telemetry 缺列推翻已成功落盤的 receipt。每次 live判定會先用 unique receipt重建 `latestAttempt`，並把單一 terminal receipt materialize回 stale state；同 `eventId`重播是 benign，兩個不同 terminal resolution與未完成的 orphan segment transition會 fail-closed。這使 receipt-first／state-second 的 crash window可恢復，不會重跑已成功的 Codex dispatch。
+Enforcement authority 是 `~/.claude/clade-routing-gate/receipts.jsonl`；`~/.pi/agent/clade/dispatch-ledger.jsonl` 是現行 fail-open usage／observability telemetry，legacy `~/.codex/dispatch-ledger.jsonl` 只供歷史報表，**NEVER** 用 telemetry 缺列推翻已成功落盤的 receipt。每次 live判定會先用 unique receipt重建 `latestAttempt`，並把單一 terminal receipt materialize回 stale state；同 `eventId`重播是 benign，兩個不同 terminal resolution與未完成的 orphan segment transition會 fail-closed。這使 receipt-first／state-second 的 crash window可恢復，不會重跑已成功的 Codex dispatch。
 
 Fail-open／fail-closed 邊界以 helper是否在 Claude Code外層 deadline內回傳為準：segment identity 尚未初始化、中央 helper缺件時 diagnostic fail-open；state 一旦建立，helper回傳的 corrupt state、lock／atomic write／receipt failure、session／row／model／effort mismatch一律 fail-closed。Claude Code外層 command hook timeout或 helper根本無法啟動時，hook output會被丟棄並回到正常 permission flow，仍是 residual fail-open；正常 permission flow **不等於**無條件 auto-allow。事後結案跑 `node scripts/audit-codex-adoption.ts`；usage report不讀 receipt。
 
@@ -331,7 +307,7 @@ basis，**NEVER** 隨手挑一個列名湊過去。
 - `4` — quota 擋，**兩種來源同一個 code**：派工前的 gate（primary used_percent > 85），或 codex **跑到一半**回報 usage limit（pre-gate 讀的是上一個 session 的快照，window 在那之後被吃滿、或 rate_limits 讀不到而 fail-open 放行時就會這樣）。後者的 payload 帶 `detected: 'runtime'` 與 `resets_at_human`（codex 給的是散文日期不是 epoch）。處置相同：非急件延後到下一個 window、依 `next_tier` 換 tier；急件 `AskUserQuestion` 讓 user 拍板（`--no-quota-check` 強派）
   - **`3` 與 `4` 的下一步相反，NEVER 混用**：`3` 是「這次壞了，可以再試」，`4` 是「這個 window 內都別再試」。mid-run 撞配額若被報成 `3`，每一輪都會再燒一次 dispatch 去重新發現同一件事（2026-08-06 實測：配額 reset 在三天後，而輸出寫的是 `no parseable JSON`）
 
-**內建行為**：`--ephemeral --disable memories`（memories 91MB 死循環地雷，恆關）、quota check（預設開）、telemetry append 到 `~/.codex/dispatch-ledger.jsonl`（fail-open；`scripts/audit-codex-adoption.ts` 靠它量 adoption）。
+**內建行為**：Pi `--no-session --no-extensions` machine mode、explicit MCP extension、routing metadata validation、telemetry append 到 `~/.pi/agent/clade/dispatch-ledger.jsonl`（fail-open；`scripts/audit-codex-adoption.ts` 靠它量 adoption）。Pi目前沒有authoritative pre-dispatch quota snapshot，因此precheck明示unavailable並fail-open；runtime quota仍固定映射exit 4。
 
 **`--output-schema`**：codex 0.138+ 支援以 JSON Schema 約束最終回覆。新 dispatch 場景**預設提供 schema 檔**，取代脆弱的「stdout 結尾 JSON 摘要」約定；既有 dispatcher（screenshot-verify / pre-handoff-check）維持現行契約不回頭改。
 
@@ -404,7 +380,7 @@ Codex 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleW
 | **安全網 fallback（預設）** | **`1200`–`1800`**，prompt = canonical inert control message |
 | harness task 仍 running | 以完全相同的 interval 與 inert prompt 重排 |
 
-**180s 的具名例外（窮舉，其餘一律禁止）**：`commit` gate 0-A.1 的 codex review、`dep-upgrade` outdated-mode 的 low-risk 升版 review。兩者的共同 predicate 是**主線在同一段時間跑並行軸、且結果一到就要接著用**——短 interval 買的是並行軸的銜接，不是 progress telemetry；prompt 仍 **MUST** 是 canonical inert control message，控制 turn 一樣不得讀 output。不在這份清單上的路徑用 `1200`–`1800`。
+**180s 的具名例外（窮舉，其餘一律禁止）**：`commit` gate 0-A.1 的 Pi Codex review、`dep-upgrade` outdated-mode 的 low-risk 升版 review。兩者的共同 predicate 是**主線在同一段時間跑並行軸、且結果一到就要接著用**——短 interval 買的是並行軸的銜接，不是 progress telemetry；prompt 仍 **MUST** 是 canonical inert control message，控制 turn 一樣不得讀 output。不在這份清單上的路徑用 `1200`–`1800`。
 
 **禁止** `< 60`（runtime clamp 也會擋）。**上限 `3300`（MUST）**：這個 fallback 同時承擔 [[agent-routing]] § 主線靜默上限 的 cache-keepalive 職責，所以 codex 路徑**不**另外排第二個 wakeup，也 **NEVER** 拉長到 3300 以上。
 

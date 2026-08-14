@@ -116,15 +116,15 @@ Local edits will be reverted by the next sync.
       active，artifacts 留在 disk（決策見 `docs/decisions/2026-07-31-propose-does-not-park.md`）。
       不要呼叫 /spectra-apply。產出後在 stdout 摘要 artifacts 列表 + `spectra validate` 結果。
       ```
-   3. **背景啟動 codex exec**（**Bash** tool 加 `run_in_background=true`）：
+   3. **背景啟動Pi Codex dispatcher**（**Bash** tool 加 `run_in_background=true`）：
 
       ```bash
-      cd <consumer-repo-root> && codex exec \
-        --model gpt-5.6-sol \
-        --dangerously-bypass-approvals-and-sandbox \
-        --skip-git-repo-check \
-        -c model_reasoning_effort=max \
-        < /tmp/codex-spectra-propose-<change-name>-prompt.md 2>&1
+      node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+        --brief /tmp/codex-spectra-propose-<change-name>-prompt.md \
+        --cwd <consumer-repo-root> \
+        --label spectra-propose-<change-name> \
+        --model sol --effort max \
+        --route routing-table --tier-basis table-row --table-row spectra
       ```
 
    4. **立刻**簡短回報給使用者：「已派 Codex GPT-5.6-sol max 在背景 draft `/spectra-propose <change-name>`（bash job `<id>`），完成後主線會 cross-check 並補 Design Review template」

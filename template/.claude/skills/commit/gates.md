@@ -337,8 +337,8 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 **審查策略**：
 
-1. 主線先跑 `simplify` skill —— 它看 reuse / 精簡 / 過度設計 / altitude 這條軸，codex exec review 不會抓。先處理掉避免後續 codex 重複指出
-2. 接著（若 fast-path 不命中）以背景方式跑 codex exec review xhigh（GPT-5.6-sol）—— 跨模型抓 bug / 邏輯 / 安全，盲點與 simplify / Claude 主線不同。**啟動後立即進入並行階段（見主檔「0-A/B/C 並行策略」）**，主線同步推進 0-C 並派 0-B subagent
+1. 主線先跑 `simplify` skill —— 它看 reuse / 精簡 / 過度設計 / altitude 這條軸，Pi Codex review 不會抓。先處理掉避免後續 codex 重複指出
+2. 接著（若 fast-path 不命中）以背景方式跑 Pi Codex review xhigh（GPT-5.6-sol）—— 跨模型抓 bug / 邏輯 / 安全，盲點與 simplify / Claude 主線不同。**啟動後立即進入並行階段（見主檔「0-A/B/C 並行策略」）**，主線同步推進 0-C 並派 0-B subagent
 3. 0-A.1 出現 Critical / Major → 進入 0-A.2 兩步驟：先派 Codex GPT-5.6-sol max 深度 review，再由 Fable（`claude-fable-5`）跑 `code-review` agent max，拿著 codex 的回饋做最終決策
 4. 修正一律由 Claude Code 主線執行；所有並行軸的 finding 匯合後一次性修正
 
@@ -352,7 +352,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 ### 0-A.0 — simplify（主線，永遠跑、永遠先跑）
 
-對本次 working tree 變更跑 simplify review + 自動修 —— 聚焦 reuse / 精簡 / efficiency / altitude，codex exec review 不會抓這條軸。simplify 修完的版本才是下一步 codex exec review 應該看的對象。
+對本次 working tree 變更跑 simplify review + 自動修 —— 聚焦 reuse / 精簡 / efficiency / altitude，Pi Codex review 不會抓這條軸。simplify 修完的版本才是下一步 Pi Codex review 應該看的對象。
 
 **執行方式：主線直接 `Skill(simplify)` 序跑**（`skill: "simplify"`）。
 
@@ -390,7 +390,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 .claude/scripts/codex-review-safe.sh xhigh
 ```
 
-> codex-review-safe.sh 以 `codex exec`＋內嵌 review prompt 執行——`codex review` 子命令已禁用（硬編碼 workspace-write sandbox 會卡死 MCP，見 agent-routing.codex-watch-protocol.md）。MCP 在 `-s read-only` sandbox 下會被拒（2026-07-22 實證：codex 6 次 `search_graph` 全 cancelled），review 期間**不可用**；同一個 sandbox 也讓 prompt injection 無法逃逸到 write / MCP side-effects——本 script 僅用於 review 自家 fleet 的 diff，NEVER 拿去 review 不可信第三方 code。
+> codex-review-safe.sh 先凍結changeset，再呼叫Pi `openai-codex` review runner。Runner只允許`read,grep,find,ls`，沒有bash、write、edit或MCP；prompt injection無法取得mutation tool。這支script只review自家fleet diff，NEVER拿去review不可信第三方code。
 >
 > **changeset 由 script 自己收集後嵌進 prompt**（TD-320），codex 不再自行跑 `git diff`。兩個要判讀的 stderr 訊號：超出 `CODEX_REVIEW_MAX_DIFF_LINES`（預設 6000 行）的檔案會被整塊剔除並具名，**MUST** 當成該檔未被 review、NEVER 當作它通過；**exit 3** ＝ 收不到任何未提交變更（codex 未被呼叫），照 collection bug 處理，NEVER 當作 0-A.1 通過。
 

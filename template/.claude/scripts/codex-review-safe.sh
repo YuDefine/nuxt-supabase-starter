@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
-# codex-review-safe.sh — cross-model code review via `codex exec`
+# codex-review-safe.sh — cross-model code review via Pi openai-codex
 #
-# Engine: `codex exec -s read-only` with an embedded review prompt — not
-# `codex review`, which hardcodes a `workspace-write` sandbox that permanently
-# hangs any MCP server registered in ~/.codex/config.toml on its first tool
-# call (see rules/core/agent-routing.codex-watch-protocol.md § "`codex review`
-# 禁用"). read-only sandbox allows shell commands (git diff, cat) but rejects
-# write operations and MCP tool calls (fail-fast, not hang) — matches review's
-# read-only intent and blocks prompt-injection escape to write/MCP side-effects.
-# ~/.codex/config.toml is never read, copied, or moved by this script.
+# Engine: Pi `openai-codex` with a deterministic `read,grep,find,ls` allowlist.
+# The caller freezes the working-tree snapshot before model execution, and the
+# runtime cannot obtain write/edit/bash/MCP tools. This keeps prompt injection
+# from escaping into mutations or side effects. Legacy Codex CLI config and
+# credentials are never read, copied, or moved by this script.
 #
 # Usage:
 #   .claude/scripts/codex-review-safe.sh [reasoning_effort] [extra codex args...]
@@ -60,8 +57,8 @@
 # way never expand shell variables. Missing/empty patterns.json degrades to an
 # empty block plus one stderr warning; it never fails the script.
 #
-# Exit code: passes through codex exec's exit code, except 3 = empty changeset
-# (codex was not called).
+# Exit code: passes through the Pi review runner; 3 also means empty changeset
+# (the model was not called).
 
 set -uo pipefail
 
@@ -73,6 +70,16 @@ shift || true  # tolerate no args after reasoning
 # sit at different depths, so a path computed from $0 would resolve wrong in
 # one of the two contexts.
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+CLADE_HOME="${CLADE_HOME:-$HOME/offline/clade}"
+if [ -f "$REPO_ROOT/vendor/scripts/pi-codex-review.ts" ]; then
+  PI_REVIEW_RUNNER="$REPO_ROOT/vendor/scripts/pi-codex-review.ts"
+else
+  PI_REVIEW_RUNNER="$CLADE_HOME/vendor/scripts/pi-codex-review.ts"
+fi
+if [ "$#" -gt 0 ]; then
+  echo "[codex-review-safe] 錯誤：遷移到 Pi 後不接受額外 runtime flags；收到：$*" >&2
+  exit 1
+fi
 PATTERNS_JSON="$REPO_ROOT/vendor/review-rules/patterns.json"
 
 # Collect from the repo root: `git ls-files --others` is cwd-scoped, so running
@@ -160,6 +167,10 @@ awk -v maxl="$MAX_DIFF_LINES" -v omit="$OMITTED" '
 EMBEDDED_FILES="$(grep -c '^diff --git ' "$SNAPSHOT" 2>/dev/null)"
 EMBEDDED_LINES="$(wc -l <"$SNAPSHOT" | tr -d ' ')"
 echo "[codex-review-safe] changeset: ${EMBEDDED_FILES:-0} 檔 / ${EMBEDDED_LINES} 行嵌入（budget ${MAX_DIFF_LINES} 行）" >&2
+if [ ! -f "$PI_REVIEW_RUNNER" ]; then
+  echo "[codex-review-safe] 錯誤：Pi review runner 不存在：$PI_REVIEW_RUNNER" >&2
+  exit 3
+fi
 if [ -s "$OMITTED" ]; then
   echo "[codex-review-safe] warn: 超出 budget、未納入 review 的檔案：" >&2
   cat "$OMITTED" >&2
@@ -224,11 +235,7 @@ PROMPT_SUFFIX
 Additionally, for EACH semantic rule listed above, output a `## Semantic Verdict` table with one row per id: `| <id> | pass|fail|n-a | <one-line evidence> |`. Use n-a only when the diff touches no file in that rule's scope.
 PROMPT_VERDICT
   fi
-} | codex exec \
+} | node "$PI_REVIEW_RUNNER" \
+  --cwd "$REPO_ROOT" \
   --model gpt-5.6-sol \
-  -s read-only \
-  --skip-git-repo-check \
-  -c model_reasoning_effort="$REASONING" \
-  --ephemeral \
-  --disable memories \
-  "$@" 2>&1
+  --effort "$REASONING" 2>&1

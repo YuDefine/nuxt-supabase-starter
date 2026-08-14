@@ -69,7 +69,7 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
 
    選 A 後 **MUST** 完整讀 `references/dispatch-option-a.md` 並依序執行：
 
-   - **Phase 0a**：解析 change name + requirement → 寫 draft prompt 檔（範本含 Plan-first / Phase Purity / Manual Review Kind Marker / Backend-only 規約 / FIXTURES sample / 語言遵循 / **NEVER park**）→ 背景 `codex exec`（max effort）→ notification-only watch（**NEVER** 短輪詢）。
+   - **Phase 0a**：解析 change name + requirement → 寫 draft prompt 檔（範本含 Plan-first / Phase Purity / Manual Review Kind Marker / Backend-only 規約 / FIXTURES sample / 語言遵循 / **NEVER park**）→ 背景 Pi Codex dispatcher（max effort）→ notification-only watch（**NEVER** 短輪詢）。
    - **Phase 0b**（收到 completed 通知**立刻**跑，step 1–10）：讀 stdout → `post-propose-check.sh` → `post-propose-manual-review-check.sh` → **Check 7 hard gate（`--check7-only` MUST exit 0 才續行，NEVER 跳過）** → `design-inject.sh` → 補 Design Review 7 步 → Manual Review Marker Hygiene（Rule 1–6，Rule 6 = 結構化 entry 落盤）→ 語言遵循 check → **掃 design.md Open Questions（非空 MUST 立刻 AskUserQuestion 逐題問，NEVER 自行假設答案）** → `spectra analyze` / `validate` → commit artifacts → 回報。
    - 修補一律主線自己 Edit，**NEVER** 丟回 codex。
 
@@ -80,7 +80,7 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
    選 B 後 **MUST** 完整讀 `references/dispatch-option-b.md` 並依序執行三段背景 pipeline：
 
    - **Phase B-0a**：沿用選項 A draft prompt 範本寫 `-draft-prompt.md` → 背景 `claude -p --model claude-fable-5 --effort xhigh` → notification-only watch。
-   - **Phase B-0b**：Fable draft 完成 → 寫 `-review-prompt.md`（**只出 findings、禁止改檔**）→ 背景 codex review（max）。
+   - **Phase B-0b**：Fable draft 完成 → 寫 `-review-prompt.md`（**只出 findings、禁止改檔**）→ 背景 Pi Codex review（max）。
    - **Phase B-0c**：主線整合 findings + 跑選項 A Phase 0b step 3–9 全套 cross-check，主線自己 Edit 修。
 
    ---

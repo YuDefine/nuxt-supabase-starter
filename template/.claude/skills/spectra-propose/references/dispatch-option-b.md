@@ -54,15 +54,15 @@ Local edits will be reverted by the next sync.
       - .claude/rules/agent-routing.md（Phase Purity：UI view phase vs 非 view phase 是否切開）
       輸出格式：findings list，每條一行 `[檔案] 問題 → 建議修法`。無問題的面向寫「OK」。**禁止** Edit / Write / 改檔，只輸出文字 findings。
       ```
-   4. **背景啟動 codex exec**（**Bash** tool 加 `run_in_background=true`）：
+   4. **背景啟動Pi Codex dispatcher**（**Bash** tool 加 `run_in_background=true`）：
 
       ```bash
-      cd <consumer-repo-root> && codex exec \
-        --model gpt-5.6-sol \
-        --dangerously-bypass-approvals-and-sandbox \
-        --skip-git-repo-check \
-        -c model_reasoning_effort=max \
-        < /tmp/codex-spectra-propose-<change-name>-review-prompt.md 2>&1
+      node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+        --brief /tmp/codex-spectra-propose-<change-name>-review-prompt.md \
+        --cwd <consumer-repo-root> \
+        --label spectra-propose-review-<change-name> \
+        --model sol --effort max \
+        --route routing-table --tier-basis table-row --table-row spectra
       ```
 
    5. **立刻**回報：「Fable draft 完成，已派 Codex GPT-5.6-sol max review（bash job `<id>`）；完成後主線 Fable final check」+ 啟動 notification-only watch（同 Phase B-0a step 5）。

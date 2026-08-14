@@ -80,22 +80,40 @@ archive → merge-back → commit → push 全部寫同一個 main worktree。�
 
 | 可觀察 predicate | 動作 |
 | --- | --- |
-| 清單 ≥4 個 source file（scan JSON 與 state 檔不計；同檔多段算 1 檔） | **先派 codex pre-scan**（§ pre-scan 的 dispatch 形狀），主線只消費 report 做判讀 |
-| 本輪 3i + 3j 合計 ≥4 條 | **批次派一個 pre-scan** 收齊全部 blocker / 決策描述事實表（見 [blocker-evaluation.md](blocker-evaluation.md) § 批次蒐證） |
+| 清單 ≥4 個 source file（scan JSON 與 state 檔不計；同檔多段算 1 檔） | **先派 codex pre-scan**；接著依下方 extraction / reconciliation predicate 選 `read-heavy-scan` 或 `exploration-prescan`，主線只消費 report 做判讀 |
+| 本輪 3i + 3j 合計 ≥4 條 | **批次派一個 pre-scan** 收齊全部 blocker / 決策描述事實表（見 [blocker-evaluation.md](blocker-evaluation.md) § 批次蒐證）；涉及 blocker/status 對帳時固定走 `exploration-prescan` |
 | 兩者皆未命中 | 主線直接定點 Read——≤3 檔本來就是本組的正常形狀，**NEVER** 為湊派工而擴清單 |
 
 本判定實作 [[agent-routing]] § 必禁事項「**NEVER** 在 exploration / research 型 session 自己逐檔 Read + scan 多個 source 超過 3 個 source file」——本組過去把 investigation 整組寫死在主線，結構上恆違反該條。
 
 **判讀與決策仍在主線**：pre-scan 只搬「讀」。分類（SKILL.md § 3.1b）、七條 predicate、blocker 鮮度判定、packaging 成稿全部照舊主線做，**NEVER** 外派。
 
+### pre-scan 的 model predicate（extraction 與 reconciliation 分開）
+
+先用上表判「要不要 pre-scan」，再逐條判工作形狀；輸出矩陣固定不代表工作一定是 extraction。
+
+| 可觀察 predicate | Routing Table row |
+| --- | --- |
+| 下列五項**全部**成立：source list 已封閉並逐條列出；回傳欄位固定；每個 fact 都要求 `source path + line/JSON pointer + raw value`；不需 identity matching、status 推斷或 evidence relevance 判斷；來源矛盾時只回 `needs-reconciliation`、不自行裁決 | `read-heavy-scan` → Luna low |
+| 上列任一不成立，或任一命中：未知路徑探索、來源矛盾、跨來源 identity matching、partial completion／status 推斷、evidence relevance 判斷、git/history/state 對帳 | `exploration-prescan` → Sol low |
+
+Luna report 若回 `needs-reconciliation`，主線用同一份 sources + facts 建 Sol brief，帶 `--retry-of <luna-label>` 派 `exploration-prescan`；**NEVER** 要 Luna 自行裁決，也 NEVER 以提高 Luna effort 取代 Sol。
+
 ### pre-scan 的 dispatch 形狀
 
-model / effort / template 的 SoT：[[agent-routing]] § Routing Table「Exploration / research pre-scan」列 + cookbook `~/offline/clade/vendor/snippets/codex-offload/README.md`。主線直接 Bash `run_in_background` 跑泛用 dispatcher，watch 依 [[agent-routing.codex-watch-protocol]] § 監看排程（notification-only + 單一 `ScheduleWakeup` 安全網，**禁止**短輪詢）。該安全網是 generic async keepalive：prompt MUST 使用 [[agent-routing]] 的 canonical inert control message，NEVER 放原 pre-scan / work-loop 任務。Codex task 的 `owner` **固定為 `codex-watch`**；terminal claim / intervention 由該 owner 完成後 callback 至本節的輕量收割，**NEVER** 另以 `work-loop-dispatch` 對同一 task claim。
+model / effort / template 的 SoT：[[agent-routing]] § Routing Table 對應列 + cookbook `~/offline/clade/vendor/snippets/codex-offload/README.md`。brief 的 `task` **MUST** 逐條列出來源清單與要回的欄位（檔名 / 行號 / 現值 / 判準命中與否）；`allowed_paths` 填「（只讀，無寫入授權）」。每一筆 dispatch 都帶 `--origin work-loop --origin-id wl-r<本輪 round>`；`read-heavy-scan` 另帶 `--cohort fact-extraction`，`exploration-prescan` 另帶 `--cohort reconciliation`。runner child 已由 env 注入 origin pair，CLI 仍顯式帶以便 attended 與 dry-run 形狀一致。
 
-- brief 的 `task` **MUST** 逐條列出來源清單與要回的欄位（檔名 / 行號 / 現值 / 判準命中與否）；`allowed_paths` 填「（只讀，無寫入授權）」
-- dispatch 記進 state `inFlight`（`agent` 欄填 `codex:<label>`），2h hang 上限照算；等待期間主線照 § 主線在做什麼 推進其他組
+執行形狀依 process 身分 first-match：
+
+| 可觀察 predicate | dispatch / harvest |
+| --- | --- |
+| runner child（`--runner-child --linked-dispatch-mode foreground` 或 `WORK_LOOP_RUNNER_CHILD=1`） | foreground Bash 跑泛用 dispatcher，timeout 600000；同一 tool call 收到 exit 與 stdout JSON 後立即輕量收割，**不**寫 `inFlight`、不 arm keepalive |
+| 非 runner child | Bash `run_in_background` 跑泛用 dispatcher；watch 依 [[agent-routing.codex-watch-protocol]] § 監看排程（notification-only + 單一 `ScheduleWakeup` 安全網，禁止短輪詢），並記 state `inFlight`（`agent=codex:<label>`、owner 固定 `codex-watch`、2h deadline） |
+
+非 runner child 的安全網 prompt MUST 使用 [[agent-routing]] 的 canonical inert control message，NEVER 放原 pre-scan / work-loop 任務；terminal claim / intervention 由 `codex-watch` 完成後 callback 至本節的輕量收割，**NEVER** 另以 `work-loop-dispatch` 對同一 task claim。
+
 - pre-scan **不計** `--unattended` 的 3-item cap——它是某個 item 處理過程的一段，不是一個 item
-- 收到 notification → 走 [harvest.md](harvest.md) § pre-scan 通知的輕量收割，**不走** 8 步 SOP
+- async 路徑收到 notification → 走 [harvest.md](harvest.md) § pre-scan 通知的輕量收割，**不走** 8 步 SOP
 - **report 是未驗證主張**：report 結論若導向**狀態改變**（unblock / packaging / 排除某 item），主線 MUST 對該結論引用的關鍵檔位定點 Read 複驗後才動手
 
 ### pre-scan 的 exit code 分流（quota 擋 ≠ dispatch failure）

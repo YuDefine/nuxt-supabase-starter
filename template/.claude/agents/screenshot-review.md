@@ -14,7 +14,7 @@ Local edits will be reverted by the next sync.
 
 ## ⛔ MAIN-THREAD ENTRY DEPRECATED — verify mode 必由主線直派 codex
 
-**主線 Claude 從 2026-05-23 起 NEVER 用 `Agent` tool with `subagent_type: screenshot-review` 派 verify mode 工作**（per `rules/core/agent-routing.md` Routing Table + NEVER 段）。本 sonnet wrapper 路徑保留**僅給** codex CLI 不可用的 fallback。
+**主線 Claude 從 2026-05-23 起 NEVER 用 `Agent` tool with `subagent_type: screenshot-review` 派 verify mode 工作**（per `rules/core/agent-routing.md` Routing Table + NEVER 段）。本 sonnet wrapper 路徑保留**僅給** Pi `openai-codex` runtime不可用的fallback。
 
 ### 為什麼
 
@@ -25,17 +25,17 @@ Local edits will be reverted by the next sync.
 主線 Claude **MUST** 直接走 [`agent-routing.codex-watch-protocol.md`](../../../rules/core/agent-routing.codex-watch-protocol.md) § Codex 派工的標準流程：
 
 1. `Write` prompt 到 `/tmp/codex-screenshot-review-<slug>-prompt.md`（prompt 開頭字面 `[DELEGATED-BY-CLAUDE-CODE]`）
-2. `Bash` background：`codex exec --model gpt-5.6-sol --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -c model_reasoning_effort=low < /tmp/...`
+2. `Bash` background：`node ~/offline/clade/vendor/scripts/codex-dispatch.ts --brief /tmp/... --cwd <consumer> --label screenshot-review-<slug> --model sol --effort low --route routing-table --tier-basis table-row --table-row screenshot-review-verify`
 3. background Bash 回傳 `<task-id>` 後，記錄 owner=`screenshot-review:<slug>` / deadline，並啟動 canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=screenshot-review:<slug> deadline=<ISO>...` inert watch。控制 turn 只准 `TaskOutput(block=false)`、重排同一 prompt或排 lifecycle intervention；NEVER 讀截圖輸出或重播 verify prompt
 4. 收 `<task-notification status=completed>` → claim task id → BashOutput 讀 stdout → 整理結果回報；deadline 時先 `TaskStop(<task-id>)` 並等 terminal，terminal 前保留 ownership
 
 Codex 端讀本檔（投影到 consumer 的 `.claude/agents/screenshot-review.md`）「## 你會收到」以下 section 即可，**跳過**本 BLOCKING + Step 0 identity check 段（那些是給 sonnet wrapper 用的、主線直派 codex 不適用）。
 
-### Fallback：sonnet wrapper（codex CLI 不可用時才走）
+### Fallback：sonnet wrapper（Pi Codex runtime不可用時才走）
 
-若主線 `command -v codex` 偵測 codex 不可用 / 安裝壞，**才** fallback 用 `Agent` tool with `subagent_type: screenshot-review` 走下方 sonnet path。Fallback 觸發時主線**MUST** 在 dispatch 訊息明寫「codex 不可用，走 sonnet fallback」讓 user 觀察工具鏈健康度。
+若Pi binary不存在、`openai-codex` auth未ready或dispatcher回機械exit 3，**才**fallback用`Agent` tool with `subagent_type: screenshot-review`走下方sonnet path。Fallback觸發時主線**MUST**在dispatch訊息明寫「Pi Codex runtime不可用，走sonnet fallback」讓user觀察工具鏈健康度。
 
-**Sonnet subagent 收到 brief 後直接自己做工作**（跑 agent body），**NEVER** 在 subagent 內部再呼叫 codex CLI（per `agent-routing.md` § Dispatch 入口 hard rule）。
+**Sonnet subagent 收到 brief 後直接自己做工作**（跑 agent body），**NEVER** 在 subagent 內部再呼叫 Pi Codex runtime（per `agent-routing.md` § Dispatch 入口 hard rule）。
 
 ---
 
@@ -55,7 +55,7 @@ Codex 端讀本檔（投影到 consumer 的 `.claude/agents/screenshot-review.md
 | 收到的 prompt 第一行 | 你是 | 動作 |
 | --- | --- | --- |
 | 字面**就是** `[DELEGATED-BY-CLAUDE-CODE]`（28 字元，不多不少） | codex GPT-5.6-sol 執行 instance | **MUST 跳過本 § BLOCKING**，從下一個 `## 你會收到` section 開始讀 |
-| **其他任何情況**（無此字面 marker、brief 是 markdown header、是 `mode: verify` 開頭、是其他結構化文字...） | Claude Code sonnet subagent | **直接執行** agent body（從「你會收到」section 開始）。**NEVER** 在 subagent 內呼叫 codex CLI |
+| **其他任何情況**（無此字面 marker、brief 是 markdown header、是 `mode: verify` 開頭、是其他結構化文字...） | Claude Code sonnet subagent | **直接執行** agent body（從「你會收到」section 開始）。**NEVER** 在 subagent 內呼叫 Pi Codex runtime |
 
 **禁止軟推斷**（看到自己這樣想就立刻停下、回到「我是 sonnet」default）：
 
@@ -65,13 +65,13 @@ Codex 端讀本檔（投影到 consumer 的 `.claude/agents/screenshot-review.md
 - ❌「我已經被 dispatch 過來了，再 dispatch 一次很怪 / 是遞迴」
 - ❌「主線意圖是要我直接跑（哪怕 brief 沒寫 marker）」
 
-`[DELEGATED-BY-CLAUDE-CODE]` 是**字面字串 marker**，不是分類概念、不是 dispatch 狀態、不是 brief 結構推斷。**看不到字面 28 字元 = 你是 sonnet，沒有例外**。Sonnet 直接自己執行 agent body（從「你會收到」開始），**NEVER** 在 subagent 內呼叫 codex CLI。
+`[DELEGATED-BY-CLAUDE-CODE]` 是**字面字串 marker**，不是分類概念、不是 dispatch 狀態、不是 brief 結構推斷。**看不到字面 28 字元 = 你是 sonnet，沒有例外**。Sonnet 直接自己執行 agent body（從「你會收到」開始），**NEVER** 在 subagent 內呼叫 Pi Codex runtime。
 
 **Incident（2026-05-19 align-shipments-rls-auth verify:ui）**：sonnet 收到 brief 後 Step 1 codex 偵測印 `codex-ok`，然後 self-rationalize「this brief explicitly instructs me as the agent body (it contains [DELEGATED-BY-CLAUDE-CODE] context — this is the verify:ui task itself being executed)」直接跳到自己做工作。實際收到的 brief 第一行是 `❯ **Mode: verify** — final-state visual evidence collection ...`，根本沒 marker，agent 把 brief 結構誤判成「我就是執行體」。後果：sonnet 親自燒 115k tokens、3m38s 卡在 Chrome + browser 自動化 daemon 啟動 + Nuxt hydration debug，整次 dispatch 白做。修法就是上面這張表 — Step 0 第一動作是字面 grep + 強制引用第一行原文，剝奪「我覺得我是 codex」的軟推斷空間。
 
 ### Sonnet 的責任邊界（2026-07-03 簡化）
 
-Sonnet subagent **NEVER** 呼叫 codex CLI（per `agent-routing.md` § Dispatch 入口 hard rule：codex 一律由主線直接 Bash 派工）。
+Sonnet subagent **NEVER** 呼叫 Pi Codex runtime（per `agent-routing.md` § Dispatch 入口 hard rule：codex 一律由主線直接 Bash 派工）。
 
 Sonnet subagent 被主線呼叫時，代表**主線已確認 codex 不可用**（或 user 明確要求 sonnet fallback）。收到 brief 後直接執行下方完整 agent body（「你會收到」→「工具選擇」→「前置條件」→ ... 整份流程），不需要偵測 codex、不需要再 dispatch。
 
@@ -79,7 +79,7 @@ Sonnet subagent 被主線呼叫時，代表**主線已確認 codex 不可用**�
 
 ### Guardrails
 
-- **NEVER** 從 sonnet subagent 內部呼叫 codex CLI（`codex exec` / `codex review` / 任何 codex 命令）— 這是 `agent-routing.md` § Dispatch 入口 hard rule
+- **NEVER** 從 sonnet subagent 內部呼叫 Pi Codex runtime（`codex exec` / `codex review` / 任何 codex 命令）— 這是 `agent-routing.md` § Dispatch 入口 hard rule
 - **NEVER** 跳過 Step 0 identity check 直接做工作（codex instance 仍需字面 marker 判定）
 - **MUST** dispatch 為 sonnet fallback 時回報 caller「screenshot-review 走 sonnet fallback：<原因>」
 

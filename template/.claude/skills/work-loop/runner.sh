@@ -318,7 +318,14 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
   # skill），runner 能給的只有 CLI flag 與最後那個 prompt 字串；HANDOFF.md / tech-debt.md 這些
   # 易變內容是 child 在回合中用工具讀進來的，本來就排在穩定前綴之後。所以這裡**沒有**可以重排
   # 的東西，NEVER 為了「把穩定內容排前面」在本檔加參數 —— 那會做出一個不影響 cache 的假改動。
-  cmd=(env WORK_LOOP_RUNNER_CHILD=1 "WORK_LOOP_MIN_WAKEUP_SECONDS=$MIN_WAKEUP" claude --print --add-dir "$WT_PARENT" --allowedTools "$SCAN_MKTEMP_RULE" --permission-mode "$PERM_MODE" "/work-loop --unattended --runner-child --min-wakeup-seconds $MIN_WAKEUP")
+  if round_is_uint "$before"; then
+    origin_id="wl-r$((before + 1))"
+  else
+    origin_id="wl-run-$i"
+  fi
+  # dispatcher 讀這兩個 env 當 telemetry attribution 的機械 fallback；模型顯式帶 CLI 時 CLI 優先。
+  # 每輪一個 origin-id，讓 round summary 不必用時間窗猜哪筆 dispatch 屬於哪輪。
+  cmd=(env WORK_LOOP_RUNNER_CHILD=1 "WORK_LOOP_MIN_WAKEUP_SECONDS=$MIN_WAKEUP" CLADE_DISPATCH_ORIGIN=work-loop "CLADE_DISPATCH_ORIGIN_ID=$origin_id" claude --print --add-dir "$WT_PARENT" --allowedTools "$SCAN_MKTEMP_RULE" --permission-mode "$PERM_MODE" "/work-loop --unattended --runner-child --linked-dispatch-mode foreground --min-wakeup-seconds $MIN_WAKEUP")
 
   if [ "$DRY_RUN" = 1 ]; then
     echo "[dry-run] round $(next_round_label "$before"): ${cmd[*]}"

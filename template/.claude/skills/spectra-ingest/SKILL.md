@@ -171,12 +171,12 @@ Update an existing Spectra change — from a plan file or conversation context.
 
       選項 A：
       ```bash
-      cd <consumer-repo-root> && codex exec \
-        --model gpt-5.6-sol \
-        --dangerously-bypass-approvals-and-sandbox \
-        --skip-git-repo-check \
-        -c model_reasoning_effort=max \
-        < /tmp/codex-spectra-ingest-<change-name>-prompt.md 2>&1
+      node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+        --brief /tmp/codex-spectra-ingest-<change-name>-prompt.md \
+        --cwd <consumer-repo-root> \
+        --label spectra-ingest-<change-name> \
+        --model sol --effort max \
+        --route routing-table --tier-basis table-row --table-row spectra
       ```
 
       選項 B：

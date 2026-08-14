@@ -45,6 +45,7 @@ $ARGUMENTS
 
 - `--unattended`（`runner.sh` 每輪固定帶）：**3-item cap**（避免 runaway）+ **禁止 `AskUserQuestion`**。不帶時無 item cap，改由 Step 6 的 round cap / fingerprint 控制。
 - `--runner-child`（只由 `runner.sh` 帶）：模型可見的 runner child 身分 marker；`WORK_LOOP_RUNNER_CHILD=1` 是同一身分的機械補強。
+- `--linked-dispatch-mode foreground`（只由 `runner.sh` 帶）：runner child 內每一筆 decision-linked Codex dispatch 都是同輪 dependency，依 Step 1.5 的 foreground 契約執行；不帶時沿用一般 async watch protocol。
 - `--min-wakeup-seconds <n>`（`runner.sh` 每輪固定帶，預設 1200；`WORK_LOOP_MIN_WAKEUP_SECONDS` 是機械補強）：本輪**每一個** `ScheduleWakeup` / `Monitor` 的 interval **MUST ≥ n**。帶了它就以它為準，**NEVER** 因為「這次只等一下下」用更短的值——短輪詢買不到 notification 沒給的東西（Step 0 § (d) 已逐字禁止輪詢進度）。不帶時各處原有的 interval 建議照舊。
 - 使用者說「自動推」「把待辦跑完」「持續做」「不要停」「無人值守」→ 等同要求 continuous（見下）。
 
@@ -497,6 +498,21 @@ context-decay 與 handoff-write-failed **永遠**寫 `roundEndReason`，**NEVER*
   `--tier-basis` 各值與對 `--model` 的約束見該 § 的 `--tier-basis` 段；宣告與實際檔位矛盾時
   dispatcher 直接 exit 1，**NEVER** 改宣告去遷就已經打好的 `--model`
 
+### Runner child 的 decision-linked dispatch（同輪 foreground dependency）
+
+當本輪是 runner child，且 routing gate 阻擋 Read / Bash 後回傳 `decision_id`，該 dispatch 是 Step 1.5
+繼續執行的前置，不是可跨 round 收割的工作。依下表 first-match：
+
+| 可觀察 predicate | 執行形狀 |
+| --- | --- |
+| `$ARGUMENTS` 含 `--runner-child --linked-dispatch-mode foreground`，或 `WORK_LOOP_RUNNER_CHILD=1` | 在**同一個** `claude --print` process 用 foreground `Bash` 呼叫 dispatcher，timeout 600000；等待 exit `0/2/3/4` 後立刻按 routing receipt 分流，再繼續本輪 |
+| 非 runner child | 沿用 [[agent-routing.codex-watch-protocol]] 的 async watch protocol |
+
+Foreground 路徑**不**寫 `inFlight`、不建 background task、也不 arm keepalive：結果已在同一 tool call
+回來，沒有未來 notification 可收割。**NEVER** 在 runner child 對 decision-linked dispatch 使用
+`run_in_background=true`——`claude --print` 回覆後 process 退出，background task ownership 隨之消失；
+2026-08-14 <consumer-a> round 46 的 log 只留下 `task ba6yk67mk`，state 停在 round 45。
+
 ---
 
 ## Step 2 — Scan
@@ -662,7 +678,7 @@ ELSE:
 
 ### 3.1b 非 spectra source — 分類表
 
-**MUST Read [reference/non-spectra-dispatch.md](reference/non-spectra-dispatch.md)** 取分類表（code task / investigation / blocked / 模糊）與 **skip 合法理由窮舉 4 條 + 8 條不合法藉口逐字實錄**。**NEVER** 自創第 5 條 skip 理由。
+**MUST Read [reference/non-spectra-dispatch.md](reference/non-spectra-dispatch.md)** 取分類表（code task / investigation / blocked / 模糊）與 **skip 合法理由窮舉 3 條 + 7 條不合法藉口逐字實錄**。**NEVER** 自創第 4 條 skip 理由。
 
 分類為 blocked 的 candidate 與 3.1a 的 bucket 8／9 走同一條路：**先過 [blocker-ledger.md](reference/blocker-ledger.md) 三步查表**，沒命中才逐條診斷。
 
@@ -866,13 +882,27 @@ fingerprint = sha256(
 **寫入一律走 `work-loop-state-write.ts`，NEVER 自己生成一支 write-state script。** 上面那個序列逐輪不變，逐輪變的只有欄位值 —— 所以本輪要產出的只有一份 **patch**（改了什麼寫什麼），沒改的欄位不必重述：
 
 ```bash
+ORIGIN_ID="${CLADE_DISPATCH_ORIGIN_ID:-wl-r<N>}"
+ROUTING_SUMMARY="$(node ~/offline/clade/vendor/scripts/work-loop-routing-summary.mjs --origin-id "$ORIGIN_ID")" || \
+  ROUTING_SUMMARY="{\"schemaVersion\":1,\"origin\":\"work-loop\",\"originId\":\"$ORIGIN_ID\",\"error\":\"summary-failed\"}"
+printf 'routing summary: %s\n' "$ROUTING_SUMMARY"   # runner round log 直接可見；zero 也照印
+
 PATCH="$(mktemp -t work-loop-patch.XXXXXX)"
-cat > "$PATCH" <<'JSON'
-{ "round": <N>, "lastRoundAt": "<ISO>", "sessionNote": "<本輪一句話>", "…": "…" }
-JSON
+node -e '
+  const fs = require("node:fs")
+  const patch = {
+    round: Number(process.argv[2]),
+    lastRoundAt: process.argv[3],
+    sessionNote: process.argv[4],
+    routingSummary: JSON.parse(process.argv[5]),
+  }
+  fs.writeFileSync(process.argv[1], JSON.stringify(patch))
+' "$PATCH" '<N>' '<ISO>' '<本輪一句話>' "$ROUTING_SUMMARY"
 node ~/offline/clade/vendor/scripts/work-loop-state-write.ts --patch "$PATCH"
 rm -f "$PATCH"
 ```
+
+`routingSummary.eligibleObserved` 只計**已進 dispatcher** 的 eligible decision／explicit dispatch；structured waiver 不在 dispatcher ledger，故不冒充完整 eligibility 分母。`dispatched`、各 exit、model mix、fallback lineage 與 token 欄皆直接來自 ledger；本輪零 dispatch 時也寫 zero summary，**NEVER** 以欄位缺席暗示「可能有派」。
 
 patch 語義：**給值＝覆蓋、給 `null`＝刪除、沒提到＝原值不動**。合併是**淺層**的，**NEVER** 期待深合併 —— `awaiting[]` / `blockers` / `decisions` 的正確更新常常是「整個換成本輪算出來的版本」，深合併會把已經移除的條目悄悄留下來。
 

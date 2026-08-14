@@ -355,7 +355,9 @@ If there is no AskUserQuestion tool available, present options as plain text and
       node ~/offline/clade/vendor/scripts/residency-classify.ts classify --change openspec/changes/<change>
       ```
 
-      stdout JSON：`{verdict: "codex-primary" | "claude-primary", phases: [...]}`。
+      stdout JSON：`{verdict: "codex-primary" | "claude-primary", phases: [...]}`。每個 `phases[]` 另帶 additive `execution`：Class C 的 `prescan` eligibility、mechanical shadow candidate 與 authoritative `effective` row；這些欄位**不**改 residency verdict。
+
+      現行 `execution.rolloutStage` 固定為 `shadow`：`mechanical.eligible=true` 只把 effective Sol implementation 記進 `shadow-luna-candidate` cohort，**NEVER** 直接授權 Luna mutation。Machine-readable marker 的唯一格式、完整 predicate 與 prescan／implementation recipe 在 Step 6b reference。
 
    2. **MUST 立刻** record decision（決定實際 executor 後、第一個 dispatch / 第一個 Edit 之前）：
 
@@ -387,8 +389,8 @@ If there is no AskUserQuestion tool available, present options as plain text and
         → 主線收回後、該 phase commit / 標 done **之前**，照跑 Step 6c / 6d 檢查與 Design Review gate——實作可派，品質判定留主線
         → frontend 但非 view 的工作（store / hook / API client / type / util）不在此範圍，走 C 類
       - **C. Other phase** — 上述兩類以外（schema / migration / API server / CLI / 純 backend / frontend 但非 view 的 store / hook / API client / type / util / unit test / docs）
-        → **派 background codex GPT-5.6-sol high**
-        → Phase 粒度避免大量 codex round-trip
+        → **派 background Codex，統一走泛用 dispatcher 的 `spectra-phase-implementation` row（Sol high）**
+        → Phase 粒度避免大量 Codex round-trip；model／effort／origin 由 dispatcher receipt 與 ledger 鎖定
         → **在 Form 3 / Form 4 下這一步由 worktree subagent 自己派**，per `agent-routing.md` § Dispatch 入口「codex MUST 由該層編排者在其自身 sandbox 內直接 Bash 派」。准入條件是**該 subagent 自跑完整 Codex Watch Protocol**（notification-only + 安全網 fallback），做不到就退回薄中介禁令。主線對這些 codex **零探針**（TD-351）
    3. **Mixed-phase fallback**（A、B 都不是純 view、又混雜 view 與非 view 工作）:
       - **看該 phase 是否已開工**（任一 task `[x]`，或 git history 顯示 phase 內檔案已被改）:
@@ -402,7 +404,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
    4. **NEVER** dispatch Phase Dispatch（Step 6b）with `medium` effort — schema drift / cross-file refactor / enum exhaustiveness require `high` minimum。Step 8a 系列收集工作允許 `medium`
    5. **NEVER** dispatch task-by-task — phase-level only
 
-   **C 類 phase dispatch 執行**：**每一個** C 類 phase 派工前 **MUST** 完整讀 `references/codex-phase-dispatch.md`——prompt 範本（Plan-first / worktree workaround / view-layer guard / Commit Authorization）、background codex exec、Codex Watch Protocol、以及 notification 後的 **MUST checks**（commit boundary / view-layer drift double-check / scope cross-check / sanity check）。**NEVER** 憑記憶派工或跳過 post-notification checks；主線收報後 re-classify 下一個 phase。
+   **C 類 phase dispatch 執行**：**每一個** C 類 phase 派工前 **MUST** 完整讀 `references/codex-phase-dispatch.md`——classifier execution 欄位、eligible Luna read-only prescan、shadow-only marker、共用 template／output schema、background Pi Codex dispatcher invocation、Codex Watch Protocol，以及 notification 後的 **MUST checks**（commit boundary / view-layer drift double-check / scope cross-check / gate replay）。**NEVER** 憑記憶派工、退回 raw `codex exec`、自行覆寫 classifier 或跳過 post-notification checks；主線收報後 re-classify 下一個 phase。
 
    6. After ALL C 類 phases complete → **本次 apply session 內 MUST 完成**所有 A、B 類 phases：**每一個 B 類 phase** 依 Step 6b 的 B 類派工形狀派 Claude `sonnet` subagent 實作（瑣碎 UI 修照 Step 6b 主線直做），收回後主線跑 Step 6c / 6d；**A 類（Design Review）主線自己做**——**直接 invoke Skill tool** 跑 `/design improve`、`/impeccable audit`、`review-screenshot` 等 Claude Code first-class skill，完整跑完該 phase 所有 tasks 並標 `[x]`。
 
@@ -465,7 +467,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
    **Reminder: Track progress by editing checkboxes in the tasks file only. Do not use any built-in task tracker.**
 
    **Dispatch reminder**: For each phase, follow Step 6b's three-way classification:
-   - Class C（Other）→ dispatch codex GPT-5.6-sol high (phase granularity)
+   - Class C（Other）→ 以泛用 dispatcher 的 `spectra-phase-implementation` row dispatch Codex Sol high（phase granularity）
    - Class A（Design Review）→ 主線 Opus 5 xhigh self-execute：**MUST invoke Skill tool** 跑 `/design improve` + `/impeccable audit` 完成全部 tasks（per Step 6b §6 hard rule；NEVER 停下叫 user 自己跑）
    - Class B（UI view: component / page / view / layout / styling）→ dispatch Claude `sonnet` subagent（NEVER codex；派工形狀見 Step 6b B 類）；瑣碎 UI 修（≤2 files 且 ≤20 行）主線直接做。該 phase 收回、commit / 標 done **之前** MUST 跑 **Step 6c Refactor Invariant Check** + **Step 6d Review Rules Check**
    - Mixed phase（UI view + 非 view 摻同 phase）→ 已開工主線吸收、未開工 STOP 提示 `/spectra-ingest`
@@ -602,7 +604,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
    **反 bypass（hard rule — 2026-06-11 audit 實證）**：
 
    - **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 `verify:ui` evidence 來取代 dispatcher — 需要 `verify:ui` evidence 的**唯一**入口是 `node ~/offline/clade/vendor/scripts/codex-dispatch-screenshot-verify.ts`
-   - **Claude fallback 僅限機械故障**（`command -v codex` 不存在 / dispatcher exit≠0 且 stdout 無 parseable JSON；env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 為 user 明確設定的 debug 退場），且 **MUST** 在 tasks.md 對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡 — 無此痕跡的 Claude 自拍 evidence 視為違規（audit 以 annotation × dispatcher 記錄比對抓）
+   - **Claude fallback 僅限機械故障**（`command -v pi` 不存在 / Pi OAuth 未就緒 / dispatcher exit≠0 且 stdout 無 parseable JSON；env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 為 user 明確設定的 debug 退場），且 **MUST** 在 tasks.md 對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡 — 無此痕跡的 Claude 自拍 evidence 視為違規（audit 以 annotation × dispatcher 記錄比對抓）
    - **NEVER** 跳過 Screenshot Match Analysis 直接寫 `(verified-ui:)` annotation — 收集與判斷分離是防搪塞的核心機制
 
    **Guardrails**：

@@ -13,102 +13,165 @@ Local edits will be reverted by the next sync.
 
 ---
 
-## Step 6b — C 類 phase dispatch：prompt 範本、background dispatch、watch、post-notification checks
+## Step 6b — C 類 phase dispatch：classifier、prescan、implementation、watch、checks
 
-   **Codex phase dispatch template**（C 類專用，per `agent-routing.md` 「Codex 派工的標準流程」+「Spectra Apply Phase Dispatch」）:
+### 1. 封閉本 phase 的輸入
 
-   1. Write prompt to `/tmp/codex-spectra-apply-<change>-phase-<N>-prompt.md`，內容固定包含：
+從 `tasks.md`、change artifacts 與 Step 6a 的 classifier JSON 產生：
 
-      ```
-      [DELEGATED-BY-CLAUDE-CODE]
+- `CONSUMER_SLUG`：`basename "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"`，在 main／worktree 都解析成同一 consumer 名。
+- `CHANGE_NAME`：change slug。
+- `PHASE_NUMBER` / `PHASE_TITLE`：`## N. <title>`。
+- `PHASE_TASKS`：本 phase 每個 task 的編號＋逐字描述，保留換行。
+- `ALLOWED_PATHS`：每個 task 的預期寫入 path，一行一個；另含本 change `tasks.md` 與 `.spectra/touched/<change>.json`。
+- `GIT_BASELINE`：dispatch 前 `git status --short` 中已知既有變更；乾淨時填 `(clean)`。
+- `GATE_COMMANDS`：consumer `.claude/rules/local/verify-commands.md` 定義的 L0–L2 exact commands，一行一個。
+- `PHASE_EXECUTION`：classifier `phases[]` 中 `n === PHASE_NUMBER` 的 `execution` object。
 
-      請執行本 repo 的 spectra-apply phase <N>（<phase-title>）的全部 tasks。
+`CHANGE_NAME` 到 `GATE_COMMANDS` 是 implementation prompt 的 REQUIRED 欄位。`ALLOWED_PATHS` 寫不全，代表工作尚未消化到可外派，回主線補 task→file mapping。
 
-      Change: <change-name>
-      Phase: <N>. <phase-title>
-      Tasks（請依序完成並用 `spectra task done <change> <task-id>` 標記）：
+`PHASE_EXECUTION.applicable` 必須為 true；false 代表這不是 Class C，不得用本 recipe。取：
 
-      <每個 task 的編號 + 描述，從 tasks.md 抓>
+```text
+IMPLEMENTATION_COHORT = PHASE_EXECUTION.effective.cohort
+IMPLEMENTATION_ORIGIN_ID = spectra-$CONSUMER_SLUG-$CHANGE_NAME-p$PHASE_NUMBER
+PRESCAN_ORIGIN_ID = $IMPLEMENTATION_ORIGIN_ID-prescan
+```
 
-      Worktree workaround（clade TD-015 / spectra ≤2.3.1）：
-      你在 session worktree 內跑 `spectra task done` 時，`.spectra/touched/` 會正確寫到當前 worktree ✅，
-      但 tasks.md 的 `[ ] → [x]` 翻轉可能寫到 Claude Code system-managed agent worktree（`<consumer>/.claude/worktrees/agent-*/`），
-      導致**當前 worktree 的 tasks.md 沒翻**。每跑完一次 `spectra task done`：
-      1. `git -C $(pwd) diff -- openspec/changes/<change>/tasks.md` 確認當前 worktree 看得到 `[ ] → [x]`
-      2. 若 diff 空 → 手動 Edit tasks.md 把對應行 `- [ ] <task-id>` 改成 `- [x] <task-id>`
-      3. **NEVER** 動 `<consumer>/.claude/worktrees/agent-*/` 內任何檔（harness 自管，session 結束會 GC）
+現行 `rolloutStage=shadow` 時，`effective` 必定是 `spectra-phase-implementation` / Sol high。`mechanical.eligible=true` 只決定 cohort=`shadow-luna-candidate`，**不**授權 Luna mutation。
 
-      Plan-first（**MUST**，per `.claude/rules/agent-routing.md` Plan-first 條目）：
-      在動任何 Edit / Write / Bash 寫入動作之前，先在 stdout 最開頭輸出一段 `## Plan` section，包含：
-      - **要動的具體檔案**（每條一行的相對路徑；對應到 phase <N> 內每個 task 的預期落點）
-      - **每個檔案打算做什麼變動**（一句話 — 例如 schema 加哪欄 / API 加哪 endpoint / store 加哪個 action / migration 寫什麼）
-      - **預期影響範圍**（typecheck / 哪些 unit test 會被觸發 / 是否需要 migration / runtime 行為改變）
-      - **task → 檔案對應表**（每個 task ID 對應到哪些檔案，若某 task 不需要改檔請標 `(no file change — verification only)`）
-      Plan 寫完後**立刻**繼續執行，**不要**停下來等確認。Plan 是事前公開思路給主線 cross-check，不是 review gate；主線會用 plan vs. `git diff` 對齊抓「漏做的 task」與「踩到 view 層」這類 drift。
+### 2. Eligible phase 先跑 Luna read-only prescan
 
-      讀取以下檔案了解上下文：
-      - openspec/changes/<change-name>/proposal.md
-      - openspec/changes/<change-name>/design.md
-      - openspec/changes/<change-name>/specs/*/spec.md
-      - openspec/changes/<change-name>/tasks.md
-      - .claude/rules/（相關 rule，例如 server-api / pinia-store / supabase-* / development）
+若 `PHASE_EXECUTION.prescan.eligible === true`，先走 `spectra-phase-prescan`。Source list 是封閉集合：本 change proposal／design／specs／tasks，加上 task 明列的 target paths；不存在的 optional artifact 在 dispatch 前剔除並於 acceptance 註明，不讓 Luna 自行找入口。
 
-      View-layer guard（**MUST**）：
-      禁止修改 view 層檔案：
-      - 副檔名：`.vue` / `.tsx` / `.jsx` / `.css` / `.scss`
-      - 目錄：`app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/`
-      若 task 需要 view 層改動，回報 "view layer change required, defer to main thread" 並跳過該 task（不要勾 checkbox），主線會依 Step 6b B 類形狀處理（sonnet subagent 或瑣碎修主線直做）。
+固定欄位只有：
 
-      Commit Authorization（**MUST**，per `.claude/rules/agent-routing.codex-watch-protocol.md` § Commit Authorization）：
-      完成 phase <N> 全部 tasks 後，**MUST** 在 worktree 內 commit 一次（一 phase 一 commit）：
+1. 每個 task ID 的逐字 target path；
+2. target path 內既有 symbol 名稱＋location；
+3. artifacts 明列的 exact gate command＋location；
+4. 找不到／矛盾時的 raw value 與 `needs_reconciliation`。
 
-      1. **Commit 前 self-check（任一條命中即 abort、NEVER commit）**：
-         - View-layer drift：
+```bash
+node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+  --template ~/offline/clade/vendor/snippets/codex-offload/templates/read-heavy-scan.template.md \
+  --var "task=對 $CHANGE_NAME phase $PHASE_NUMBER 的封閉 source list 抽取 task→path、既有 symbol 與 exact gate command；每筆附 location + raw_value" \
+  --var "acceptance=$PRESCAN_ACCEPTANCE" \
+  --var "git_baseline=$GIT_BASELINE" \
+  --var "allowed_paths=（只讀；除 /tmp capture 外無寫入授權）" \
+  --output-schema ~/offline/clade/vendor/snippets/codex-offload/schemas/read-heavy-scan-result.schema.json \
+  --label "$PRESCAN_ORIGIN_ID" \
+  --cwd <consumer-worktree-root> \
+  --model luna --effort low \
+  --route routing-table \
+  --tier-basis table-row --table-row spectra-phase-prescan \
+  --origin spectra-apply \
+  --origin-id "$PRESCAN_ORIGIN_ID" \
+  --cohort phase-prescan
+```
 
-           git diff --staged --name-only | grep -E '\.vue$|\.tsx$|\.jsx$|\.css$|\.scss$|app/(pages|components|layouts)/|^(pages|components|layouts|views)/'
+依 Codex Watch Protocol 收 terminal receipt：
 
-           命中 → 回報 "view layer drift: <files>" 並中止
-         - Scope discipline：
+- `exit 0/2` 且有 parseable result → `PRESCAN_EVIDENCE=<receipt.lastMessagePath>`；即使 `needs_reconciliation=true` 仍保留 raw facts，裁決交下一步 Sol high。
+- `exit 3/4` → 依標準 fallback 處理；不重試 Luna medium/high。若決定略過 prescan，`PRESCAN_EVIDENCE=(prescan unavailable: <exit/reason>)`，implementation 仍可開始。
 
-           git diff --staged --name-only
+若 `prescan.eligible === false`，設 `PRESCAN_EVIDENCE=(not run)`。
 
-           對比本 phase 預期落點 — 超出範圍 → 回報 "scope drift: <files>" 並中止
-      2. **Selective stage**：`git add -- <each scoped file path>` — **禁止** `git add -A` / `git add .`（會撈到 baseline）
-      3. **Commit**：
+### 3. 用泛用 dispatcher 派 Sol high implementation
 
-         git commit -m "🧹 chore: wt <change-name>-phase-<N> — <一行說明>"
+每一個 C 類 phase 的 effective mutation 都走 named row `spectra-phase-implementation`。Template 與 output schema 是 clade SoT；**NEVER** 複製 raw `codex exec` 或在 caller 自行拼 model flag。
 
-         - **MUST** 用 `🧹 chore: wt <change-name>-phase-<N>` format（emoji-conventional commitlint 合規；主線用 `git log main..HEAD` 對齊 phase）
-         - **禁止** `--no-verify`（per `rules/core/commit.md` hard rule，hook 擋住代表 phase 內容有問題，必須修而非繞）
+```bash
+node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+  --template ~/offline/clade/vendor/snippets/codex-offload/templates/spectra-phase-implementation.template.md \
+  --var "change_name=$CHANGE_NAME" \
+  --var "phase_number=$PHASE_NUMBER" \
+  --var "phase_title=$PHASE_TITLE" \
+  --var "phase_tasks=$PHASE_TASKS" \
+  --var "prescan_evidence=$PRESCAN_EVIDENCE" \
+  --var "git_baseline=$GIT_BASELINE" \
+  --var "allowed_paths=$ALLOWED_PATHS" \
+  --var "gate_commands=$GATE_COMMANDS" \
+  --output-schema ~/offline/clade/vendor/snippets/codex-offload/schemas/spectra-phase-result.schema.json \
+  --label "$IMPLEMENTATION_ORIGIN_ID" \
+  --cwd <consumer-worktree-root> \
+  --model sol --effort high \
+  --route routing-table \
+  --tier-basis table-row --table-row spectra-phase-implementation \
+  --origin spectra-apply \
+  --origin-id "$IMPLEMENTATION_ORIGIN_ID" \
+  --cohort "$IMPLEMENTATION_COHORT"
+```
 
-      仍禁止：`git push` / `git stash`（中途）/ `git commit --amend` / `/commit` / `/spectra-commit` / 跨 phase 混 commit。
+以 Bash `run_in_background=true` 啟動。Dispatcher 自己持久化 rendered prompt、stdout/stderr、last-message 與 ledger；**NEVER** 另接 pipe 或自行 redirect Codex stdout。
 
-      Acceptance：所有 phase <N> 的 tasks 完成、checkbox 已勾、**gate chain（L0–L2）全 PASS**（per [[verify-gate-chain]]）、phase commit 已在 worktree 內成立、`git log main..HEAD` 顯示 `🧹 chore: wt <change>-phase-<N> — ...`。
-      Gate chain FAIL 時：解析 error output → 修正 → 重跑 gate chain，最多 5 輪（per [[verify-gate-chain]] § Iterate-until-green）。超過 5 輪仍 FAIL → 回報 main thread "gate chain not converging after 5 iterations: <last error summary>"。
-      不要動 phase <N> 以外的 tasks。不要碰 ## Design Review 區塊（主線會自己做）。
-      不要呼叫 /spectra-archive。
-      ```
+在 Form 3 / Form 4 下，由 worktree subagent 在自己的 sandbox 直接跑上述命令，且由該層完整持有 watch lifecycle；主線不探針。
 
-   2. Background bash:
+### 4. Machine-readable marker（shadow-only）
 
-      ```bash
-      cd <consumer-repo-root> && codex exec \
-        --model gpt-5.6-sol \
-        --dangerously-bypass-approvals-and-sandbox \
-        --skip-git-repo-check \
-        -c model_reasoning_effort=high \
-        < /tmp/codex-spectra-apply-<change>-phase-<N>-prompt.md 2>&1
-      ```
+Marker 必須是 phase 內單一行 JSON comment：
 
-   3. Inform user briefly + start Codex Watch Protocol（見 `agent-routing.md`）
+```html
+<!-- spectra-luna-pilot: {"mode":"docs-update","paths":["docs/example.md"],"gates":["vp check"]} -->
+```
 
-   4. After `<task-notification status=completed>` — codex 已在 worktree 自 commit per § Commit Authorization：
-      - BashOutput → read full stdout
-      - Read tasks.md → confirm phase <N> all checkboxes are `[x]`
-      - **MUST commit boundary check**: `git -C <wt> log main..HEAD --oneline` — confirm exactly one new commit per dispatched phase, format `🧹 chore: wt <change>-phase-<N> — ...`. Multiple commits per phase / missing commit / format mismatch → AskUserQuestion: [1] 主線 squash codex 的 multiple commits / [2] `git -C <wt> reset --soft main` 退 staging 重派 / [3] 中止
-      - **MUST view-layer drift double-check**: `git -C <wt> diff main..HEAD --name-only -- '*.vue' '*.tsx' '*.jsx' '*.css' '*.scss' 'app/pages/**' 'app/components/**' 'app/layouts/**' 'pages/**' 'components/**' 'layouts/**' 'views/**'`（codex 自驗應已 abort，此處再驗保險）。**若有任何 view 層檔案被 codex 動過** → AskUserQuestion: [1] `git -C <wt> reset --soft main` 退 staging + 主線剔除 view 改動 + 重派 codex / [2] 接受並依 Step 6b B 類形狀重跑該 view 改動（sonnet subagent 或瑣碎修主線直做） / [3] 中止
-      - **Scope discipline cross-check**: `git -C <wt> diff main..HEAD --name-only` vs prompt 內 phase scope 宣告。超出範圍 → AskUserQuestion 處理
-      - Sanity check: `pnpm typecheck` (or equivalent), relevant tests
-      - **If gaps detected** → AskUserQuestion: [1] 主線在 worktree 內 commit 補丁 / [2] reset 重派 codex / [3] 中止
+`residency-classify.ts` 是唯一 eligibility SoT。它機械驗 mode、exact relative paths、task path equality、gate、pending task cap、path cap、view/mixed 與高風險詞；caller **NEVER** 自己重算或覆寫 `mechanical.eligible`。
 
-   5. Move to next phase (re-classify and dispatch or self-execute)
+現行 shadow stage 的唯一效果：implementation ledger cohort 分成 `shadow-luna-candidate` 與 `shadow-sol-control`。**NEVER** 因 marker 合法就把 Step 3 改成 `spectra-mechanical-substep` Luna low。該 row 先保留為下一 stage 的 locked policy；只有 cohort gate 達標並修改 classifier rollout SoT 後才能成為 effective route。
+
+### 5. 啟動 Codex Watch Protocol
+
+取得 background task ID 後：
+
+1. 簡短告知使用者本 phase 已派出。
+2. 依 `agent-routing.codex-watch-protocol.md` 建 canonical keepalive；notification-only，不短輪詢。
+3. terminal notification 到達後 claim task ID，讀 dispatcher 的單一 JSON receipt。
+4. 依 exit code 分流：
+   - `0`：讀 `result`，進下節 checks。
+   - `2`：業務 fail；讀 `result` 的 drift／skip／gate 原因，主線決定修補或重派。
+   - `3`：機械故障；讀 receipt 指向的 stderr log，依 watch protocol fallback。
+   - `4`：配額擋；依 quota fallback，**NEVER** 當成可立即重試的機械故障。
+
+### 6. Notification 後 MUST checks
+
+即使 dispatcher `exit=0` 且 `result.status=pass`，主線仍逐條驗，不採信自報：
+
+1. **Checkbox**：Read `tasks.md`，確認 phase N 全部 `[x]`；skip 的 task 必須仍 `[ ]`。
+2. **Commit boundary**：`git -C <wt> log main..HEAD --oneline`，確認該 phase正好一個新 commit，subject 符合 `🧹 chore: wt <change>-phase-<N> — ...`。
+   - multiple／missing／format mismatch → AskUserQuestion：[1] squash；[2] `reset --soft main` 後重派；[3] 中止。
+3. **View-layer drift double-check**：
+
+   ```bash
+   git -C <wt> diff main..HEAD --name-only -- \
+     '*.vue' '*.tsx' '*.jsx' '*.css' '*.scss' \
+     'app/pages/**' 'app/components/**' 'app/layouts/**' \
+     'pages/**' 'components/**' 'layouts/**' 'views/**'
+   ```
+
+   任一命中 → AskUserQuestion：[1] soft reset＋剔除 view 改動＋重派；[2] 接受並按 B 類重跑；[3] 中止。
+4. **Scope discipline**：`git -C <wt> diff main..HEAD --name-only` 對照本次 `ALLOWED_PATHS`。超出範圍 → AskUserQuestion 處理。
+5. **Gate replay**：主線自行重跑 `GATE_COMMANDS`；Codex 回報的 gate JSON 只作索引，不替代實跑。
+6. **Result integrity**：`result.status` 必須精確為 `pass`；`result.change` / `result.phase` 必須等於本次 dispatch；`scope_drift` / `view_layer_drift` / `uncertain_reasons` 必須為空；commit SHA 必須等於 worktree HEAD。`status=uncertain` 即使 dispatcher exit 0 也不得通過本 check。
+7. **Pilot verification record**：上述 checks 結束後立即記一筆，不等 session 收尾：
+   - 全部通過 → `pass`
+   - gate replay 證明語意不符／測試 regression → `semantic-regression`
+   - view 或 scope drift → `scope-drift`
+   - background ownership／commit／checkbox lifecycle 缺口 → `lifecycle-orphan`
+   - 無法歸入以上 → `inconclusive`
+
+   ```bash
+   node ~/offline/clade/vendor/scripts/residency-classify.ts pilot-record \
+     --consumer-path . \
+     --change "$CHANGE_NAME" --phase "$PHASE_NUMBER" \
+     --origin-id "$IMPLEMENTATION_ORIGIN_ID" \
+     --cohort "$IMPLEMENTATION_COHORT" \
+     --outcome <pass|semantic-regression|scope-drift|lifecycle-orphan|inconclusive> \
+     --details "<一行 evidence pointer>"
+   ```
+
+   這份 `.spectra/luna-pilot-ledger.jsonl` 只記主線 verification；model／effort／exit 真相仍只在 dispatcher ledger，**NEVER** 手抄進 verification row。
+
+有 gap → 記完 outcome 後 AskUserQuestion：[1] 主線在 worktree 內做 scoped 補丁並另 commit；[2] reset 重派；[3] 中止。
+
+### 7. 下一個 phase
+
+本 phase checks 全過後才 re-classify 下一個 phase。**NEVER** 依上一個 phase 的類別、candidate 或檔位外推後續 phase。

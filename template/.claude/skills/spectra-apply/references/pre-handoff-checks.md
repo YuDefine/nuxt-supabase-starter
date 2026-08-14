@@ -18,12 +18,12 @@ Local edits will be reverted by the next sync.
    **E.1 收集階段**（codex GPT-5.6-sol medium）：
 
    ```bash
-   codex exec \
-     --model gpt-5.6-sol \
-     --dangerously-bypass-approvals-and-sandbox \
-     --skip-git-repo-check \
-     -c model_reasoning_effort=medium \
-     < /tmp/codex-8a6-e1-collect-<change>-prompt.md 2>&1
+   node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+     --brief /tmp/codex-8a6-e1-collect-<change>-prompt.md \
+     --cwd <consumer-repo-root> \
+     --label spectra-e1-collect-<change> \
+     --model sol --effort medium \
+     --route routing-table --tier-basis table-row --table-row spectra
    ```
 
    Prompt 基於 `~/offline/clade/vendor/snippets/pre-handoff-cross-check/main-self-analysis.template.md`，要求 codex 走全 **5 dimensions**（D1 task↔render / D2 evidence↔dom fab guard / D3 list↔fallback / D4 api contract boundary / D5 error tail），對每個 dimension 收集**客觀 evidence**（讀截圖、讀 DOM observation、讀 annotation、讀 git diff、讀 API response），輸出 JSON：`{"dimensions": [{"id":"D1","evidence":"...","raw_data":"..."}, ...]}` — 收集階段**不做** PASS/FAIL 判定。
@@ -31,12 +31,12 @@ Local edits will be reverted by the next sync.
    **E.1 判定階段**（codex GPT-5.6-sol xhigh）：
 
    ```bash
-   codex exec \
-     --model gpt-5.6-sol \
-     --dangerously-bypass-approvals-and-sandbox \
-     --skip-git-repo-check \
-     -c model_reasoning_effort=xhigh \
-     < /tmp/codex-8a6-e1-judge-<change>-prompt.md 2>&1
+   node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+     --brief /tmp/codex-8a6-e1-judge-<change>-prompt.md \
+     --cwd <consumer-repo-root> \
+     --label spectra-e1-judge-<change> \
+     --model sol --effort xhigh \
+     --route routing-table --tier-basis table-row --table-row spectra
    ```
 
    Prompt 給上一階段收集的 5-dimension evidence JSON，要求對每個 dimension 判定 `PASS` / `FAIL` / `N/A` + 判定理由。輸出 JSON：`{"dimensions": [{"id":"D1","verdict":"PASS"|"FAIL"|"N/A","reason":"..."}, ...]}` 。
