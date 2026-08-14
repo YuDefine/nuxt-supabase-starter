@@ -173,6 +173,8 @@ predicate 走，**NEVER** 把本小節外推成「委派都該指定 model」。
 | codex 可用（`codex-dispatch.ts` 未回 exit 4） | 原判 `sonnet` → `--model luna --effort high`；原判 `haiku` → `--model luna --effort low` |
 | codex 不可用（exit 4） | 走 § 配額耗盡時的 fallback 紀律 的降級鏈，`sonnet` ／ `haiku` **顯式帶** |
 
+**PreToolUse:Agent 機械 gate**：主線直接呼叫 `Agent(subagent_type: Explore|general-purpose, model: haiku|sonnet)`（省略 `subagent_type` 時按預設 `general-purpose` 計）會立即建立 `claude-agent-dispatch` pending decision 並阻擋。正常結案必須是 `codex-dispatch.ts --decision-id <id> --route claude-delegate-sub --tier-basis delegate-sub --model luna`，effort 依原 model 為 Haiku→low、Sonnet→high。確實要留 Claude 時只接受三個具名 waiver：`claude-mcp-required`、`ui-view-implementation`、`user-explicit-claude-agent`；Luna exit 2 必須同 effort 升 Sol 重派，Sol 再 exit 2 才能以 `delegate-escalation-failed` fallback receipt 放行；Codex exit 3／4 則先記 dispatch outcome，再走 matching fallback receipt。**NEVER** 把例外理由寫進 Agent prompt 當作 bypass——gate 只認 decision receipt，不解析自由文字。
+
 **本節路徑的 luna 准入（與 § Routing Table 五條連言無關）**：原判 `sonnet` 的委派 MUST 同時滿足
 兩項——(1) § MUST 指定 `model: 'sonnet'` 的四條 predicate 全中（原判 sonnet 的判定本身就要求這
 四條，此處是複核不是加碼）；(2) 未命中 § NEVER 降檔的形狀任一條。兩項都過 → 派

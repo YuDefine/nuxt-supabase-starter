@@ -235,11 +235,13 @@ node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
   [--cwd <dir>] [--budget <分鐘>] [--output-schema <schema.json>] [--retry-of <label>]
 ```
 
-### Routing threshold gate
+### Routing threshold 與 Claude Agent dispatch gate
 
 Main-thread 同一 prompt segment 的第 3 個高信心 readonly Bash、第 5 個 distinct textual Read，或第一次 Read 501+ 行文字檔會在執行前 block，訊息帶 `decision_id`。Gate 只計高信心事件；compound Bash 一次只計一筆，mutation／build／test／unknown command 不計，含 `agent_id` 的 child hook event 本輪全部 skip。
 
-Pending decision 只接受下列三種 standalone resolution；一般 Bash／Read 會持續 block：
+同一 helper 也攔直接 `Agent(subagent_type: Explore|general-purpose, model: haiku|sonnet)`（省略 `subagent_type` 時視為預設 `general-purpose`）：第一次呼叫即建立 `claude-agent-dispatch` decision，不等 Read／Bash threshold。這條只攔主線顯式降檔委派；其他 agent type、model 省略（繼承主線）與 Opus 不在此 gate 的機械範圍。
+
+Pending decision 只接受下列三種 standalone resolution；一般 Bash／Read／同型 Agent retry 會持續 block：
 
 ```bash
 # 工作仍是 threshold trigger 本身：照 trigger 填 mechanical-fanout 或 read-heavy-scan
@@ -249,19 +251,27 @@ node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
   --template <template.md> --var task='...' --var acceptance='...' \
   --var allowed_paths='...' --label <topic-slug>
 
+# claude-agent-dispatch：原判 Haiku 用 low；原判 Sonnet 用 high
+node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+  --decision-id <rgd_...> --model luna --effort <low|high> \
+  --route claude-delegate-sub --tier-basis delegate-sub \
+  --template <template.md> --var task='...' --var acceptance='...' \
+  --var allowed_paths='...' --label <topic-slug>
+
 # 只有 Routing Table 已列明的 Claude 例外才 waiver
 node ~/offline/clade/vendor/scripts/codex-routing-gate.ts waive \
   --decision-id <rgd_...> --reason <waiver-enum> [--note '...']
 
-# dispatcher 已留下最新 exit 3／4 outcome 後，授權 Claude fallback
+# dispatcher 已留下最新 exit 3／4 outcome 後，授權 Claude fallback；
+# claude-agent-dispatch 的 Luna→Sol 兩次 exit 2 則用 delegate-escalation-failed
 node ~/offline/clade/vendor/scripts/codex-routing-gate.ts fallback \
   --decision-id <rgd_...> \
-  --reason <dispatcher-mechanical-failure|quota-exhausted>
+  --reason <dispatcher-mechanical-failure|quota-exhausted|delegate-escalation-failed>
 ```
 
 工作若已收斂成另一個**更具體**的 Routing Table row，可把 dispatch 的 `--table-row`、`--model` 與 `--effort` 改成該列的值；gate 只接受共用 policy 中已知且有單一 concrete Codex model 的 row。`spectra` 這類 conditional row沒有單一 model，不能拿來結案。Exact trigger仍固定 `luna low`，**NEVER** 以 specific-row 出口改名繞過同一份工作。
 
-Waiver enum 固定為 `claude-mcp-required`、`governance-adjudication`、`user-explicit-mainline`、`wording-contract-output`、`visual-design-review`、`safety-or-irreversible`、`self-verification`；沒有 `other` 或 free-text bypass。Dispatcher exit `0`／`2` 會留下 terminal receipt 並 release；exit `3`／`4` 留 pending，分別只配 `dispatcher-mechanical-failure`／`quota-exhausted`。`fallback` 命令寫入的事件是 `fallback-authorized`：它只表示 runtime不可用後**允許** Claude接手，不宣稱 fallback工作已完成。Dry-run／exit `1` 不消費 decision。下一個 UserPromptSubmit 會把未結案 decision 記為 orphan，再開始新 segment。
+Waiver enum 固定為 `claude-mcp-required`、`governance-adjudication`、`ui-view-implementation`、`user-explicit-claude-agent`、`user-explicit-mainline`、`wording-contract-output`、`visual-design-review`、`safety-or-irreversible`、`self-verification`；沒有 `other` 或 free-text bypass。`claude-agent-dispatch` decision 只接受其中 `claude-mcp-required`、`ui-view-implementation`、`user-explicit-claude-agent` 三種，避免拿治理／措辭／複驗理由替普通掃描開洞。一般 threshold decision 的 dispatcher exit `0`／`2` 會留下 terminal receipt 並 release；`claude-agent-dispatch` 的 Luna exit `2` 留 pending 並把下一次 model 鎖成 Sol，同 effort 的 Sol 再 exit `2` 後才接受 `delegate-escalation-failed` fallback receipt。exit `3`／`4` 都留 pending，分別只配 `dispatcher-mechanical-failure`／`quota-exhausted`。`fallback` 命令寫入的事件是 `fallback-authorized`：它只表示 runtime不可用後**允許** Claude接手，不宣稱 fallback工作已完成。Dry-run／exit `1` 不消費 decision。下一個 UserPromptSubmit 會把未結案 decision 記為 orphan，再開始新 segment。
 
 Enforcement authority 是 `~/.claude/clade-routing-gate/receipts.jsonl`；`~/.codex/dispatch-ledger.jsonl` 仍是 fail-open usage／observability telemetry，**NEVER** 用 telemetry 缺列推翻已成功落盤的 receipt。每次 live判定會先用 unique receipt重建 `latestAttempt`，並把單一 terminal receipt materialize回 stale state；同 `eventId`重播是 benign，兩個不同 terminal resolution與未完成的 orphan segment transition會 fail-closed。這使 receipt-first／state-second 的 crash window可恢復，不會重跑已成功的 Codex dispatch。
 
