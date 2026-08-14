@@ -193,6 +193,19 @@ context **讀取量**；重跑 `node scripts/context-cost-report.ts`，baseline 
 **NEVER 把「context 大了」直接讀成「該收工開新 session」。** 判定走上面三條，
 **context 大小本身不是其中任何一條**。
 
+#### Worktree lifecycle close gate（A／B 共用）
+
+**每一次**收工訊息都 MUST 帶 `Worktree lifecycle` receipt；目前 cwd 是 linked worktree 時，結果只有 `removed` 或 `retained: <owner + next landing event>` 才能宣稱 closure。先實跑並列出 `path`、`branch`、`dirty`、`merged_to_main`、`locked`；不在 linked worktree 才寫 `not-applicable`。
+
+| 可觀察狀態 | 動作 |
+| --- | --- |
+| workflow明定 worktree要 parked | `retained`，指名 owner與 next landing event |
+| clean + fully merged + 無 unique commit／WIP + 無 parking contract，且已有該 worktree的明確 remove授權 | 實際移除 worktree與branch，receipt寫 `removed` |
+| 同上但沒有明確 remove授權 | 先用 `AskUserQuestion`問 `remove`／`retain`；回答前**不得**輸出「目前這裡收工」或等價完整 closure |
+| dirty、未 fully merged、ownership不明 | fail closed列 blocker；**NEVER**用 `--force`把不確定性刪掉 |
+
+Herdr／subagent receipt中的 `retained:false`只描述該 child runtime，**NEVER**拿它代替 parent cwd的 Worktree lifecycle receipt。
+
 #### A. 已完成 Herdr live transfer
 
 `/handoff now`只有在 canonical coordinator回傳下列任一 closure時才算「交接完成」：
@@ -208,6 +221,7 @@ prompt已送出、`status: dispatched`、接手 pane可獨立續跑，或 lifecy
 | Closure receipt | business outcome、workspace、tab、原 pane、label、Claude session、dispatch、status、scrollback log、reclaimed狀態；responsibility transfer另列 successor pane |
 | 工作摘要 | coordinator回傳的 summary與 durable brief路徑 |
 | Runtime cleanup | 已停止的不必要 background／agent／shell；仍保留者逐一列用途與 successor pane |
+| Worktree lifecycle | `not-applicable`，或五欄實測 + `removed`／`retained: <owner + next landing event>` |
 | user 本人要做的事 | 只列 successor session無法代做者；沒有就省略 |
 
 `completion_blocked`／`completion_failed`／`completion_unknown`都保留 pane，**NEVER** 輸出「目前這裡收工」。只有前述兩種 closure的 receipt送出後，原 session才 **NEVER** 再開新工作、輪詢接手 pane或等待其完成；下一個動作只能結束回合。正常 success／successor closure由 coordinator當下收斂，**NEVER** 等 user另輸入 `\nx`才 harvest或reclaim。
@@ -219,6 +233,7 @@ prompt已送出、`status: dispatched`、接手 pane可獨立續跑，或 lifecy
 | 首行 | 收工判定 ＋ 觸發的門檻。一句 |
 | 落點 | 未完項登記在哪：`<檔路徑>` ＋ 條目。**NEVER** 只寫「已記全」——那是**你**知道的事實，不是 user 拿得到的東西 |
 | **續跑 receipt** | runner path 回 process / log receipt；transport 失敗時回具體 blocker（per 下一節第 3 列）。**NEVER** 把它降級成叫 user 自己 `cd` / 開 session / 貼 prompt 的 oneliner |
+| Worktree lifecycle | `not-applicable`，或五欄實測 + `removed`／`retained: <owner + next landing event>` |
 | user 本人要做的事 | 只列 user 非做不可的（回答問題、permission、credentials、GUI / 產品決策），逐條一句。沒有就整段不出現 |
 
 **逐字實錄反制**：「已將下一步派到乾淨 session 執行」＋ receipt，但沒寫「目前這裡收工」——那不是完整交接訊息，讀者無法判斷原 session 是否仍在工作。

@@ -51,8 +51,10 @@ LOG_DIR="$REPO/.clade/work-loop/logs"
 # child 自己寫的 state.stoppedReason 仍然有效且保留支援 —— 那條路徑沒有 clobber 風險，
 # 因為寫它的 child 就是最後一個寫入者、寫完立刻退出。壞掉的只有**外部**要求停止這條。
 STOP_FILE="$REPO/.clade/work-loop/stop"
+QUARANTINE_FILE="$REPO/.clade/work-loop/orphan-quarantine.json"
 LOCK_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-lock.ts"
 READY_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-ready-count.ts"
+SCAN_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-scan.ts"
 # worktree 母目錄，與 vendor/scripts/wt-helper.ts:779 的 `<repo>-wt` 慣例對齊（推導不寫死）。
 # 它必須進 --add-dir —— 見下方 PERM_MODE 註解。
 #
@@ -86,9 +88,12 @@ MIN_WAKEUP=1200
 # NEVER 改用 `--dangerously-skip-permissions` 來解這件事 —— 那是把整個權限面開到最大去換
 # 一個目錄的寫入權，兩者成本差一個量級（Charles 2026-08-05 拍板 1a 而非 1b）。
 PERM_MODE="acceptEdits"
-# Step 2 的 scan 必須用唯一 temp path；headless process 沒有人能回答 approval。
-# 只批准這一條完整命令，NEVER 擴成 `Bash(mktemp *)` 或 bare `Bash`。
-SCAN_MKTEMP_RULE='Bash(mktemp -t work-loop-scan.XXXXXXXXXX)'
+# Step 2 的 scan、驗證與 rotate 全收進單一 helper；headless process 沒有人能回答
+# mktemp / cp / mv 的分段 approval。只批准這一條完整 invocation，NEVER 擴成 bare `Bash`。
+SCAN_HELPER_CMD='node "$HOME/offline/clade/vendor/scripts/work-loop-scan.ts"'
+SCAN_HELPER_RULE="Bash($SCAN_HELPER_CMD)"
+SCAN_PREFLIGHT_CMD="$SCAN_HELPER_CMD --preflight"
+SCAN_PREFLIGHT_RULE="Bash($SCAN_PREFLIGHT_CMD)"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -191,6 +196,73 @@ awaiting_count() {
   node -e 'try{const a=require(process.argv[1]).awaiting;console.log(Array.isArray(a)?a.length:0)}catch{console.log(0)}' "$STATE" 2>/dev/null || echo 0
 }
 
+# child process 已退出後，background task 的 harness ownership 也跟著消失。runner 必須在
+# 起下一個 child 前 fail closed；只看 round 是否前進會把「已寫 bookkeeping、未收割 task」
+# 誤判成成功輪。
+in_flight_count() {
+  [ -f "$STATE" ] || { echo 0; return; }
+  node -e '
+    try {
+      const a = require(process.argv[1]).inFlight
+      if (a === undefined) console.log(0)
+      else if (Array.isArray(a)) console.log(a.length)
+      else console.log("invalid")
+    } catch { console.log("invalid") }
+  ' "$STATE" 2>/dev/null || echo invalid
+}
+
+# The lock is a persistent JSON file, but its heartbeat/pid lease can expire after this
+# process exits. The quarantine marker is therefore the mechanical startup gate; the lock
+# file is retained for attended diagnosis and is released only by attended reconciliation.
+write_quarantine_marker() {
+  local reason="$1" count="$2" phase="$3"
+  node -e '
+    const fs = require("node:fs")
+    const [path, reason, count, phase] = process.argv.slice(1)
+    const parsedCount = /^\d+$/.test(count) ? Number(count) : null
+    fs.writeFileSync(path, `${JSON.stringify({
+      reason,
+      phase,
+      inFlightCount: parsedCount,
+      inFlightStatus: parsedCount === null ? count : "present",
+      detectedAt: new Date().toISOString(),
+      intervention: "Run attended /work-loop; reconcile every inFlight owner to terminal/cancelled, then remove this marker and release the lock.",
+    }, null, 2)}\n`)
+  ' "$QUARANTINE_FILE" "$reason" "$count" "$phase"
+}
+
+guard_runner_quarantine() {
+  local phase="$1" count
+  if [ -f "$QUARANTINE_FILE" ]; then
+    runner_stop_reason="orphan-quarantine-awaiting-attended-reconciliation"
+    echo "== stop: $runner_stop_reason（marker=$QUARANTINE_FILE；禁止自動 retry）"
+    return 1
+  fi
+
+  count="$(in_flight_count)"
+  case "$count" in
+    ''|*[!0-9]*)
+      runner_stop_reason="$([ "$phase" = child-exit ] && echo child-exited-inflight-unreadable || echo preexisting-inflight-unreadable)"
+      ;;
+    0) return 0 ;;
+    *)
+      runner_stop_reason="$([ "$phase" = child-exit ] && echo child-exited-with-inflight || echo preexisting-inflight-quarantine)"
+      ;;
+  esac
+
+  write_quarantine_marker "$runner_stop_reason" "$count" "$phase"
+  echo "== stop: $runner_stop_reason count=$count（保留 lock 檔與 quarantine marker；需 attended reconciliation，禁止自動 retry）"
+  return 1
+}
+
+print_runner_summary() {
+  echo
+  echo "runner 結束 —— 最終 round=$(round_of)"
+  if [ -n "$runner_stop_reason" ]; then echo "runnerStopReason: $runner_stop_reason"; fi
+  if reason="$(stopped_reason)"; then echo "stoppedReason: $reason"; fi
+  echo "logs: $LOG_DIR"
+}
+
 # ── Preflight ─────────────────────────────────────────────────────────────────
 # 起跑前把「這個 runner 跑得起來嗎」問完。不過就 exit≠0 且**一輪都不跑**。
 #
@@ -213,19 +285,24 @@ preflight_fail() {
 # 一整天的空轉。**MUST 同時驗 token 與 mktemp 產出的路徑**：只驗 token 的話，模型不呼叫
 # 工具、直接把 token 回給你也會通過，而那正是本探針要抓的失敗。
 preflight_headless_probe() {
-  local out rc
-  out="$(cd "$REPO" && timeout 300 env WORK_LOOP_RUNNER_CHILD=1 claude --print \
-    --allowedTools "$SCAN_MKTEMP_RULE" --permission-mode "$PERM_MODE" \
-    'Run exactly this command with the Bash tool: mktemp -t work-loop-scan.XXXXXXXXXX
-Then reply with the token WORK_LOOP_PREFLIGHT_OK followed by the path it printed. No other output.' 2>&1)"
+  local out rc nonce proof_file proof
+  nonce="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(16).toString("hex"))')" \
+    || preflight_fail "無法產生 headless proof nonce"
+  proof_file="$REPO/.clade/work-loop/preflight-proof-$nonce"
+  rm -f "$proof_file"
+  out="$(cd "$REPO" && timeout 300 env WORK_LOOP_RUNNER_CHILD=1 WORK_LOOP_SCAN_PREFLIGHT_NONCE="$nonce" claude --print \
+    --allowedTools "$SCAN_PREFLIGHT_RULE" --permission-mode "$PERM_MODE" \
+    "Run exactly this command with the Bash tool: $SCAN_PREFLIGHT_CMD
+Do not claim success unless the command completed. No other tool calls." 2>&1)"
   rc=$?
   if [ "$rc" -ne 0 ]; then
+    rm -f "$proof_file"
     preflight_fail "headless child exit=$rc（權限閘門拒絕或 claude 不可用）—— 尾巴：$(printf '%s' "$out" | tail -3 | tr '\n' ' ')"
   fi
-  case "$out" in
-    *WORK_LOOP_PREFLIGHT_OK*work-loop-scan.*) : ;;
-    *) preflight_fail "headless child 未能執行 Bash tool call —— 尾巴：$(printf '%s' "$out" | tail -3 | tr '\n' ' ')" ;;
-  esac
+  proof="$(head -1 "$proof_file" 2>/dev/null || true)"
+  rm -f "$proof_file"
+  [ "$proof" = "$nonce" ] \
+    || preflight_fail "headless child 未產生 runner-verifiable proof（模型文字不採信）—— 尾巴：$(printf '%s' "$out" | tail -3 | tr '\n' ' ')"
 }
 
 run_preflight() {
@@ -275,6 +352,14 @@ run_ready_gate() {
   echo "待辦源健康：ready=$ready（門檻 $MIN_READY）"
 }
 
+runner_stop_reason=""
+runner_exit_code=0
+if ! guard_runner_quarantine startup; then
+  runner_exit_code=5
+  print_runner_summary
+  exit "$runner_exit_code"
+fi
+
 if [ "$DRY_RUN" = 1 ] || [ "$SKIP_PREFLIGHT" = 1 ]; then
   echo "preflight 略過（$([ "$DRY_RUN" = 1 ] && echo --dry-run || echo --skip-preflight)）"
 else
@@ -296,6 +381,11 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
   # 只有 stoppedReason 才停 runner；roundEndReason（context 到頂 / item cap）是「換個 process 繼續」。
   if reason="$(stopped_reason)"; then
     echo "== stop: $reason"
+    break
+  fi
+
+  if ! guard_runner_quarantine prelaunch; then
+    runner_exit_code=5
     break
   fi
 
@@ -325,7 +415,7 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
   fi
   # dispatcher 讀這兩個 env 當 telemetry attribution 的機械 fallback；模型顯式帶 CLI 時 CLI 優先。
   # 每輪一個 origin-id，讓 round summary 不必用時間窗猜哪筆 dispatch 屬於哪輪。
-  cmd=(env WORK_LOOP_RUNNER_CHILD=1 "WORK_LOOP_MIN_WAKEUP_SECONDS=$MIN_WAKEUP" CLADE_DISPATCH_ORIGIN=work-loop "CLADE_DISPATCH_ORIGIN_ID=$origin_id" claude --print --add-dir "$WT_PARENT" --allowedTools "$SCAN_MKTEMP_RULE" --permission-mode "$PERM_MODE" "/work-loop --unattended --runner-child --linked-dispatch-mode foreground --min-wakeup-seconds $MIN_WAKEUP")
+  cmd=(env WORK_LOOP_RUNNER_CHILD=1 "WORK_LOOP_MIN_WAKEUP_SECONDS=$MIN_WAKEUP" CLADE_DISPATCH_ORIGIN=work-loop "CLADE_DISPATCH_ORIGIN_ID=$origin_id" claude --print --add-dir "$WT_PARENT" --allowedTools "$SCAN_HELPER_RULE" --permission-mode "$PERM_MODE" "/work-loop --unattended --runner-child --linked-dispatch-mode foreground --min-wakeup-seconds $MIN_WAKEUP --scan-helper-command '$SCAN_HELPER_CMD'")
 
   if [ "$DRY_RUN" = 1 ]; then
     echo "[dry-run] round $(next_round_label "$before"): ${cmd[*]}"
@@ -337,6 +427,13 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
   rc=$?
 
   after="$(round_of)"
+
+  # Mechanical ownership guard：不論 child exit code、round 是否前進、item cap 是否已滿，
+  # process 一旦退出而 ledger 仍有 ownership，就不能用下一個 child 冒充原 owner 收割。
+  if ! guard_runner_quarantine child-exit; then
+    runner_exit_code=5
+    break
+  fi
 
   # 只有合法整數且 after > before 才是真前進，也是唯一會重設兩個 streak 的事件。
   # child 若已寫入進展但收尾 exit≠0，保留診斷但不把成功 round 累積成 exit failure。
@@ -375,7 +472,5 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
   fi
 done
 
-echo
-echo "runner 結束 —— 最終 round=$(round_of)"
-if reason="$(stopped_reason)"; then echo "stoppedReason: $reason"; fi
-echo "logs: $LOG_DIR"
+print_runner_summary
+exit "$runner_exit_code"

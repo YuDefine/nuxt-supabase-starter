@@ -198,6 +198,7 @@ runner process 的退出通知到達時 **MUST 主動回報，不等 user 問**�
 | `== stop: state 連續 2 輪未前進` | child 正常退出但 state 沒前進 | **異常中止** + 那幾輪沒寫進 state |
 | `== preflight 未通過`（exit 3） | 起跑前探針就不過，**一輪都沒跑** | **環境故障**：逐字轉述探針給的理由 + `preflight.log` 路徑。**NEVER** 直接補 `--skip-preflight` 重跑——那是把探針抓到的問題蓋掉 |
 | `== 待辦枯竭`（exit 4） | 推得動的待辦少於門檻，**一輪都沒跑** | **不是故障**：說「待辦枯竭，需 attended 補彈藥」+ 印出的 ready 數。**NEVER** 回報成待辦已推完 |
+| `== stop: orphan-quarantine-*`（exit 5） | `inFlight` 非空 / 不可解析，或 quarantine marker 尚未由 attended 清除，**一輪都沒跑**（child-exit guard 除外） | **孤兒 ownership quarantine**：逐字回報 `runnerStopReason`、marker 路徑與 attended reconciliation 要求；**NEVER** 自動 retry、刪 lock 或宣稱 lock 仍由 process 持有 |
 
 #### (c.1) 連續未前進的 ownership 分流（hard rule）
 
@@ -286,7 +287,7 @@ node ~/offline/clade/vendor/scripts/work-loop-lock.ts acquire
 **Iron Law：鎖檔只由這支 script 讀寫。違反字面就是違反精神**——「用 Write tool 補一個就好」「script 跑不動先手寫一個」都不算遵守。
 
 - **heartbeat**：**每一次**寫 `.clade/work-loop/state.json` 的同時都 MUST 跑 `node ~/offline/clade/vendor/scripts/work-loop-lock.ts refresh --session <id>`（Step 1 / Step 5 **每一次**收割 / Step 7 各一次，不是只在 Step 7 刷）。窗口 45 分鐘
-- **釋放**：**每一條**停止路徑（含失敗提早結束）都 MUST 跑 `node ~/offline/clade/vendor/scripts/work-loop-lock.ts release --session <id>`；in-flight ledger > 0 期間 **NEVER** 釋放
+- **釋放**：正常 terminal / attended reconciliation 才 MUST 跑 `node ~/offline/clade/vendor/scripts/work-loop-lock.ts release --session <id>`；in-flight ledger > 0 或 runner orphan quarantine 期間 **NEVER** 釋放。runner 保留持久 lock 檔供診斷，但 heartbeat/pid lease 仍可能在 process 退出後失效；`orphan-quarantine.json` 的 startup gate 才是禁止自動 retry 的機械保證。只有 attended 將每筆 ownership 標成 terminal/cancelled、清空 `inFlight`，再移除 marker 並 release lock。
 - **Budget 計數器歸零（定義「一次 run」的唯一位置）**：`acquire` 回 `acquired` 或 `took-over` = **一次新的 run 開始** → 本輪 Step 7 寫 state 時 MUST 把 `subagentsSpawned` **歸零重新起算**；回 `reentrant` = 同一個 run 續跑 → **沿用**既有值，**NEVER** 歸零。這讓 Step 6.2 budget proxy 的兩半（`subagentsSpawned` 與 `lock timestamp`）字面共用同一個窗口定義
 
 **NEVER 把歸零改掛在 `runner.sh` 起跑。** 兩條理由：in-session `/loop` 沒有 `runner.sh`，掛那裡會讓同一條停止條件在兩種 run mode 語義分裂；且 `runner.sh` 的分工是「不碰 state 內容、連續性全由 child 承擔」，歸零屬於 state 內容。鎖的 acquire 已經是「一次 run」的天然邊界，用它不必另外定義窗口。
@@ -518,27 +519,18 @@ Foreground 路徑**不**寫 `inFlight`、不建 background task、也不 arm kee
 ## Step 2 — Scan
 
 ```bash
-# temp 一律用**這條逐字命令**——runner.sh 的 --allowedTools 只放行它，換個寫法在無人值守下
-# 會停在 approval 等一個不存在的人（$SCAN_MKTEMP_RULE，NEVER 改成 mktemp "$D/xxx.XXXXXX"）
-TMP="$(mktemp -t work-loop-scan.XXXXXXXXXX)"
-# 落點固定在 repo 內（見下方「為什麼是固定路徑」）
-D="$(git rev-parse --show-toplevel)/.clade/work-loop"; mkdir -p "$D"
-SCAN="$D/scan-latest.json"
-node ~/offline/clade/vendor/scripts/handoff-scan.ts --json > "$TMP" 2>/dev/null
-# MUST 落檔後立刻驗歸屬，不符就當 scan 失敗處理
-EXPECT="$(basename "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")")"
-GOT="$(jq -r '.consumerId // "MISSING"' "$TMP" 2>/dev/null)"
-if [ "$GOT" = "$EXPECT" ]; then
-  [ -f "$SCAN" ] && cp -p "$SCAN" "$D/scan-prev.json"   # 覆蓋前 rotate 一份，要比 delta 時讀它
-  mv -T "$TMP" "$SCAN" && echo "scan ok: $GOT → $SCAN"
-else
-  rm -f "$TMP"; echo "SCAN-MISMATCH: got=$GOT expect=$EXPECT"   # 驗不過 NEVER 覆蓋既有 scan-latest
-fi
+# runner child MUST 從 $ARGUMENTS 的 --scan-helper-command 取完整命令並逐字執行；那是
+# runner.sh --allowedTools 唯一放行的 Bash invocation。命令以 cwd 推導 repo，故不得把 repo
+# path（尤其含空白、引號或換行）插進 prompt / allowance。非 runner child 才用下列等價形狀。
+node "$HOME/offline/clade/vendor/scripts/work-loop-scan.ts"
 # spectra repo 才有 parked（無 openspec 時回空，屬正常）
 PARKED="$(spectra list --parked --json 2>/dev/null || echo '{}')"
 ```
 
-**為什麼寫進 temp、卻落在固定路徑**（兩件事各自有理由，缺一不可）見 [reference/run-modes.md](reference/run-modes.md) § scan 的 temp 與落點。
+helper 在單一 Node process 內完成 handoff-scan → repo-local 同目錄 temp → JSON parse → git common dir owner
+`consumerId` 驗證 → latest rotate 成 prev → atomic rename。任何 `WORK_LOOP_SCAN_MISMATCH` /
+`WORK_LOOP_SCAN_MALFORMED` / nonzero 都視為 scan 失敗，既有 latest 不得被覆蓋。完整理由見
+[reference/run-modes.md](reference/run-modes.md) § scan helper 的原子邊界。
 
 **同一輪內 NEVER 為了「找不到上一份輸出」重跑 scan**：要回頭看就讀 `scan-latest.json`，只要摘要就跑 `node ~/offline/clade/vendor/scripts/work-loop-summary.ts`。本輪合法的重跑**只有一個**時機：Step 5 收割後的 re-scan。
 **NEVER 因此改成「N 輪跑一次」**：scan 是路由輸入，跳過的那一輪是盲跑；要省的是**同一輪內的重複**，不是輪次覆蓋率。
@@ -705,6 +697,23 @@ ELSE:
 
 同一個 item 的步驟之間序列；**不同 item 之間沒有依賴**，NEVER 讓 B 等 A 完成。
 
+### Runner child 的 background ownership（hard rule）
+
+runner child 一旦建立任何 background task（含 `Bash(run_in_background=true)`），**同一個
+`claude --print` process MUST 留著直到 terminal harvest**：立刻以
+`TaskOutput(block=true, timeout=600000)` 等待；timeout 只代表本次等待窗結束，照全域長等待規則再次
+block，直到收到 terminal completion / failure，再依 Step 5 收割並從 `inFlight` 移除。
+
+`inFlight` 非空時，item cap、turn cap、budget proxy 與「等待 notification」都**只能停止新 dispatch**，
+NEVER 輸出 final text、釋放 lock 或退出 process。**同一 process 收割完成**壓過所有收輪 cap；不得把
+taskId 留給下一個 runner child，因為下一個 child 無法取得前一個 child 的 harness task ownership。
+
+runner.sh 另有 mechanical fail-closed：起跑前、每次 child launch 前，以及 child 退出後都檢查
+`inFlight`。非空或不可解析時寫入持久 `orphan-quarantine.json`、輸出 `preexisting-inflight-quarantine`
+或 `child-exited-with-inflight`、保留 lock 檔並停止，**NEVER 起下一個 child**。process 退出後 lock
+的 heartbeat/pid lease 仍可能自然失效；startup marker gate 才負責禁止 retry。這道 guard 只防 orphan
+擴大，不取代本節的同 process wait + harvest 契約。
+
 ### 4a. 自主 item → dispatch
 
 - 要改 tracked code → `/wt <slug>: <brief>`（扇出組，≤4 in-flight）
@@ -808,7 +817,7 @@ fingerprint = sha256(
 | 件 | 條件 |
 | --- | --- |
 | No-progress | `fingerprintUnchangedRounds >= 3` |
-| Turn cap | `--unattended` 已處理 3 items（**含收割後補 dispatch 的**）；interactive `round >= 12` |
+| Turn cap | `inFlight` 已空，且 `--unattended` 已處理 3 items（**含收割後補 dispatch 的**）；interactive `round >= 12`。`inFlight` 非空只停止新 dispatch，轉入 Step 4 的同 process wait + harvest |
 | Budget proxy | **本 run 內**（per lock session，歸零時機見 Step 0 § 互斥鎖）`subagentsSpawned >= 15`，或 lock timestamp 距今 ≥6h |
 | 非生產 | `nonProductiveRounds >= 2`（見 6.3） |
 | 系統性失敗 | `consecutiveDispatchFailures >= 2`（escalated 項不計入——它們本輪未 dispatch，沒有新失敗事件） |

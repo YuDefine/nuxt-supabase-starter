@@ -34,26 +34,31 @@ message；只有 in-session `/loop /work-loop` 的 dynamic 自我續跑保留原
 `runner.sh` 的 flag：`--max-rounds <n>`（預設 20）、`--dry-run`（只印每輪會下的指令）、
 `--permission-mode <mode>`（預設 `acceptEdits`；**NEVER** 預設 `bypassPermissions`——那會連
 破壞性指令一起放行，要更寬鬆 MUST 由使用者顯式指定）、`--skip-preflight`、`--min-ready <n>`
-（預設 3，0 = 關掉）、`--min-wakeup <秒>`（預設 1200）。runner 另內建只批准
-`Bash(mktemp -t work-loop-scan.XXXXXXXXXX)`，讓 Step 2 的唯一 scan temp path 可在 headless process
-建立；其他 Bash 仍照 permission mode 與使用者 permission rules 判定。每輪另固定帶模型可見的
+（預設 3，0 = 關掉）、`--min-wakeup <秒>`（預設 1200）。runner 另內建只批准該 repo 的
+`Bash(node "$HOME/offline/clade/vendor/scripts/work-loop-scan.ts")`（以及顯式 `--preflight`）精確 invocation；helper 在單一 process
+內完成 scan / parse / owner 驗證 / rotate / atomic rename，其他 Bash 仍照 permission mode 與使用者
+permission rules 判定。每輪另固定帶模型可見的
 `--runner-child` 與 `WORK_LOOP_RUNNER_CHILD=1`；Step 0 命中任一身分就只執行單輪，NEVER 再啟 runner。
 
 每輪 log 落在 `.clade/work-loop/logs/round-<ts>.log`。
 
 ## 起跑前的兩道門：跑得起來嗎、有事可做嗎
 
-runner 在跑第一輪之前先過兩道門，任一不過就**一輪都不跑**、理由落在
+runner 在跑第一輪之前先過 quarantine gate 與兩道環境門，任一不過就**一輪都不跑**、理由落在
 `.clade/work-loop/logs/preflight.log`：
 
 | 門 | 檢查什麼 | 不過時的 exit code 與語義 |
 | --- | --- | --- |
+| **orphan quarantine** | `inFlight` 非空 / 不可解析，或持久 `orphan-quarantine.json` 尚未由 attended reconciliation 清除 | `5` —— 禁止自動 retry；attended 將 ownership 標成 terminal/cancelled、清空 ledger、移除 marker 後才可重跑 |
 | **preflight** | PATH 上有 `claude` / `node`、repo 可寫、三種待辦源至少一個讀得到、**headless child 真的能跑一個 Bash tool call** | `3` —— 系統性故障，查權限閘門與環境 |
 | **待辦源健康門檻** | `work-loop-ready-count.ts` 數出的 ready item ≥ `--min-ready`（預設 3） | `4` —— **待辦枯竭，需 attended 補彈藥**，不是故障 |
 
-headless 探針要付一次小的 `claude --print` 呼叫，換掉的是**整個 run**：2026-08-10 <consumer-b> 因
-harness 權限閘門連續拒絕，空轉 99 輪、零待辦被修改。探針同時驗回傳 token 與 `mktemp` 的產出
-路徑——只驗 token 會被「模型不呼叫工具、直接回 token」騙過，而那正是要抓的失敗形狀。
+headless 探針要付一次小的 `claude --print` 呼叫，並以顯式 `--preflight` 加 runner 未知 nonce
+**實際執行同一支 helper**（含 scanner syntax check、但不寫 scan；helper 以 nonce proof marker
+回寫 repo-local 路徑，runner 驗證後立即刪除），換掉的是**整個 run**：2026-08-10 <consumer-b> 因
+harness 權限閘門連續拒絕，空轉 99 輪、零待辦被修改。child `exit=0` 仍不構成成功；只有
+repo-local nonce proof marker 的內容逐字匹配 runner 產生的 nonce 才通過。helper stdout（包含任何
+token 或路徑）僅供診斷，不是 proof；只用 `[ -f ]` 看檔案存在會漏掉 script 無法執行或 scanner parse 失敗。
 
 探針誤判過嚴時走 `--skip-preflight`（`--dry-run` 自動略過），**NEVER** 靠拿掉探針本身解決。
 ready-count helper 缺席或輸出無法解析時**放行**：門檻是省成本的優化，NEVER 讓它變成起不了
@@ -112,9 +117,9 @@ child **自己**寫 `state.stoppedReason` 仍然有效且是正解——寫它�
 寫完立刻退出，沒有 clobber 窗口。壞掉的只有**外部**這條路。回歸測試在
 `test/work-loop-runner.test.ts`（兩條：sentinel 抗整份覆寫、child 自寫仍有效）。
 
-runner 自己的停止條件：`stoppedReason` 出現、達 `--max-rounds`、連續 2 輪 exit≠0、
-或 round 數連續 2 輪未前進。exit failure streak 與 no-progress streak 彼此獨立，只有 round 真正前進
-才同時重設；交錯出現不算恢復。
+runner 自己的停止分類：`stoppedReason` 出現、達 `--max-rounds`、連續 2 輪 exit≠0、
+round 數連續 2 輪未前進，或 exit 5 的 orphan quarantine。exit failure streak 與 no-progress streak
+彼此獨立，只有 round 真正前進才同時重設；交錯出現不算恢復。
 
 **這四種的語義差別 MUST 出現在收尾回報裡**——只有第一種是「待辦推完」，其餘三種分別是額度用完、
 系統性故障、中途夭折。逐列對照表與回報的四個必填項在 SKILL.md Step 0
@@ -162,16 +167,16 @@ message 的投遞繞過 permission-class hold，且 Linux 連已退出的 child 
 驗掉才可改用**；擋住它的 permission-class hold 規則與完整評估見
 `~/offline/clade/docs/discussions/2026-08-08-cross-session-messaging-evaluation.md`。
 
-## scan 的 temp 與落點（Step 2 的兩個為什麼）
+## scan helper 的原子邊界
 
-- **temp 仍在 `/tmp` 且仍唯一**：那裡是全機器所有 consumer 共用，唯一化是必要條件
-  （[[pitfall-fixed-temp-path-shared-across-sessions-silent-data-pollution]]）。而且那條 `mktemp`
-  是 runner.sh `--allowedTools` 逐字放行的**唯一**一條 Bash 命令，改寫成別的形狀在無人值守下
-  會停在 approval —— 沒有人能回答
-- **最終落點固定**：`.clade/work-loop/` 是 per-repo，且同一 repo 同時只有一個 loop session
-  （Step 0 互斥鎖保證），沒有互相覆寫的對象。隨機路徑有它自己的失敗模式 —— **本輪稍後想再看
-  一眼 scan 的人找不到那個路徑，於是重跑一次**。2026-08-13 實測 clade round 70 留下
-  `scan-r70-mid` 到 `mid7` 共七份（49.0→51.3 KB，幾乎無 delta），全是同一輪內的重跑（TD-491 第 2 項）
+- **temp 與 latest 同目錄**：helper 在 `<repo>/.clade/work-loop/` 建唯一 temp，最後的 rename 才是
+  同 filesystem atomic rename；不再碰 `/tmp`，也不讓 `mktemp` / `cp` / `mv` 各自觸發 unattended approval。
+- **驗證先於 rotate**：JSON malformed 或 `consumerId` 與 git common dir owner 不符時，helper nonzero 並印
+  `WORK_LOOP_SCAN_MALFORMED` / `WORK_LOOP_SCAN_MISMATCH`，既有 `scan-latest.json` 原封不動。
+- **固定 latest / prev**：驗證通過才 copy latest 到同目錄 prev-temp、atomic publish prev，最後 atomic rename
+  temp 成 latest；latest 從不被移走，因此任何 fault window 都不會出現 ENOENT。latest replace 失敗時
+  latest 保持舊 snapshot，prev 可能與它相同，這是明確 failure contract。同一輪要回看讀固定路徑，不重跑
+  scan。2026-08-13 clade round 70 的七份 mid scan 正是這條在防的重跑噪音。
 
 ## 工具健檢為什麼要實跑（Step 2.5 的兩段實證）
 
@@ -185,4 +190,3 @@ agent 出去，回來才知道 dev-port 組整組不可用。
 `vendor/scripts/wt-helper.ts`、**完全正常**。照 1–3 步處置會把 main 組 + 扇出組整組標成不可用，
 該輪所有 item 走 packaging，空轉一輪——而 clade home 正是 `/work-loop` 目前唯一的實跑場地
 （[[TD-395]]）。實跑擋得住「檔案在但 import 死了」，擋不住「探針量錯檔」。
-
