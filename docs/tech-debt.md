@@ -309,7 +309,8 @@ repo root 的。
 clade 半邊的改動落點在 `~/offline/clade/vendor/scripts/pre-push/`，需要 cwd 在 clade 的 session：
 
 - 從 nuxt-supabase-starter 的 session 直接改 clade，會跟 clade 當下 in-flight 的工作搶 working
-  tree（實測 clade 有 1 個 dirty 檔 + 4 個 active worktree）
+  tree（clade 長期有 in-flight 工作與 active worktree；開工前自己實測當下狀態，**NEVER** 引用本檔
+  寫死的數字）
 - publish + propagate 會散播到整個 fleet，屬不可逆的對外動作
 - Herdr transport 無法自行派出（本 session 是 coordinated child，`--new-tab` 回
   `nested_dispatch_refused`）
@@ -319,6 +320,16 @@ consumer 端那一行也刻意先不落地：它在 clade 半邊 propagate 之�
 
 準備好的 durable brief 在 `~/.cache/clade/briefs/td-005-prepush-project-root.md`，
 clade session 直接讀那個檔即可開工。
+
+### 已定案的分工（2026-08-19）
+
+- **clade 半邊**由 clade session `clade-3b` 承接（Charles 直接在該 session 確認指派）：
+  `vendor/scripts/pre-push/runner.sh` + 7 支 `checks/*.sh`，共 8 檔
+- **排序**：`clade-3b` 的 work-loop runner 監督權優先。等 `clade-67` 的 `v1.6.62` 窗口結束後才起跑
+- **走 `v1.6.63`，不併進 `v1.6.62`**：TD-005 已經靜默壞了不知道多久，再等一版不會更糟；
+  併窗口等於把一條沒 review 過的改動塞進別人正在收尾的版本，換來的只是早一輪散播
+- **本 repo 這半邊**（`template/.vite-hooks/pre-push` 帶入 `CLADE_PROJECT_ROOT="$PWD"`）
+  等 propagate 完成後才落地，接著跑上面兩條 Acceptance。在那之前本側沒有可推進的動作
 
 ---
 
