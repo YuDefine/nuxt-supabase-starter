@@ -273,6 +273,8 @@ user 不成立**，結果是 stash 單調遞增、owner 資訊隨時間流失，
 
 - **每個 commit 獨立且完整** — 不相關的變更**MUST**分到不同 commit
 - **Commit message 使用繁體中文**描述
+- **Header 的 emoji 與 type 是一對一綁定**，逐字只有這 12 組：`✨ feat` / `🐛 fix` / `🧹 chore` / `🔨 refactor` / `🧪 test` / `🎨 style` / `📝 docs` / `📦 build` / `👷 ci` / `⏪ revert` / `🚀 deploy` / `🎉 init`。**NEVER 憑語意挑 emoji** —— `🛡️ feat`（安全性改動）、`♻️ refactor`、`⚡ perf` 這種看起來對得上的組合全部不在清單裡。走 `/commit` 時對照表在 SKILL.md Step 3，走 ad-hoc `git commit --only` 時**沒有任何東西會在你打字的當下提醒你**，所以清單在這裡再寫一次
+- **不確定就先驗，NEVER 拿 commit 當測試**：`echo '<你要用的 header>' | npx commitlint`。理由不是「省一次重打」——header 解析失敗時 commitlint 報的是 **`subject may not be empty`**（per [[pitfall-commitlint-emoji-type-mismatch-reports-subject-empty]]），訊息指向 subject 而真因在 emoji，照著訊息改會愈改愈遠；而 `--only` 的路徑清單長時，重打整條指令本身就是漏掉某個 path 的入口
 - **所有 uncommitted 變更都必須入庫**，**NEVER** 以「不在本次範圍」「影響不大」為由跳過任何檔案
 - **`.gitignore` 變更**：只允許保留 Clade 管理的 installation artifact / runtime state ignore 條目（例如 `.claude/.commit.lock`、`codex/`）；其他變更**MUST** `git stash push -- .gitignore` 並寫入 `HANDOFF.md`（**NEVER** `git checkout .gitignore` 直接還原）
 - **`.env` / 敏感檔案**：警告使用者但仍由使用者決定是否 commit，**NEVER** 自行跳過
