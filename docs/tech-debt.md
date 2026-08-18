@@ -19,6 +19,7 @@
 | TD-005 | meta-monorepo 下 pre-push 7 道 check 全部靜默 no-op | high     | open   | 2026-08-19         | —     |
 | TD-006 | 在本 repo 跑 install 會讓 clade bootstrap 把 starter 自己當 consumer 投影 | high     | done   | 2026-08-19         | —     |
 | TD-007 | scaffolder 測試套件並行不安全；`detectMonorepoRoot` 讀 `PWD` 而非 cwd | mid      | done   | 2026-08-19         | —     |
+| TD-008 | `template/scripts/validate-starter.mjs` 是維護者工具卻會被 scaffold 帶走 | mid      | open   | 2026-08-19         | —     |
 
 ---
 
@@ -467,3 +468,59 @@ exit 0（0 errors / 5 既有 no-underscore-dangle warnings）
 **原記錄的「並行才失敗」在本次無法重現**：`npx vitest run` 在修改前後都是全綠。真正會造成
 損害的是 `PWD` 那條——它不需要並行就會把檔案寫到錯的地方，測試端原本是靠顯式覆寫 `PWD` /
 `INIT_CWD` 繞過。TEST_DIR 遷出 repo 一併消掉了測試檔互相干擾的結構性條件。
+
+---
+
+## TD-008 — `template/scripts/validate-starter.mjs` 是維護者工具卻會被 scaffold 帶走
+
+**Status**: open
+**Priority**: mid
+**Discovered**: 2026-08-19 — 做 `starter-public-hygiene-commands` 的 L3 commands 審查時發現
+**Location**: `template/scripts/validate-starter.mjs`、`template/package.json` (`validate:starter`)、`template/presets/_base/strip-manifest.json`
+
+### Problem
+
+`validate-starter` 的 slash command 已經 relocate 到 root（`starter-public-hygiene-commands`），
+但它背後的實作 `template/scripts/validate-starter.mjs` 還留在會被 scaffold 帶走的 `template/`。
+
+該 script 的性質是 starter 維護者專用：
+
+- `resolve(TEMPLATE_ROOT, '..')` 取 `REPO_ROOT`，再往上找 `scripts/vendor/evlog-adoption-audit.mjs`
+- 對 `packages/create-nuxt-starter` 跑 scaffold simulation
+- 把 fixture 落在 `template/temp/validate-starter/`
+
+scaffold 出去的使用者專案沒有 `packages/create-nuxt-starter`，也沒有上一層的 `REPO_ROOT` —
+這支 script 在使用者專案裡跑必然失敗。`template/package.json` 的 `validate:starter` script 同樣
+會被帶走，變成一個註定壞掉的指令。
+
+依 `.claude/rules/starter-hygiene.md` 的 Pollution 類型表，這是 `maintenance-script-misplacement`。
+
+### 為什麼現有 gate 沒擋下
+
+`scripts/audit-template-hygiene.sh` 的 `maintenance-script-misplacement` 檢查沒有涵蓋
+`validate-starter.mjs` 這個檔名；`template/presets/_base/strip-manifest.json` 也沒有對應 entry，
+所以 create-clean 與 scaffolder 都不會把它剝掉。
+
+### Fix approach
+
+兩條路，擇一（不要兩條都做）：
+
+- **A. 移到 root** — `template/scripts/validate-starter.mjs` → `scripts/validate-starter-scaffold.mjs`，
+  同步改 `.github/workflows/validate-starter.yml`（目前 `working-directory: template` 跑
+  `vp run validate:starter`）與 `template/package.json`。缺點：script 依賴 `template/node_modules`
+  的 dev 依賴，移到 root 要另外解決執行環境
+- **B. 留在 `template/` 但加進 strip manifest** — 在 `presets/_base/strip-manifest.json` 加
+  `template/scripts/validate-starter.mjs` 與 `package.json` 的 `validate:starter` script rewrite，
+  consumers 設 `["create-clean", "scaffolder"]`。缺點：`package.json` 的 script 剝除需要
+  create-clean 的 output rewriting 支援，要確認現有機制做不做得到
+
+B 較貼近既有機制（strip manifest 本來就是為這種「留在 template 但不外流」的東西設計的），
+但需要先確認 create-clean 能不能改寫 `package.json` 的 scripts 段。
+
+### Acceptance
+
+1. scaffold 出去的專案內不存在 `scripts/validate-starter.mjs`，且 `package.json` 沒有指向它的
+   `validate:starter` script
+2. `.github/workflows/validate-starter.yml` 仍能跑完整的 preset scaffold simulation
+3. `scripts/audit-template-hygiene.sh` 的 `maintenance-script-misplacement` 檢查補上對應 pattern，
+   fixture 測試涵蓋（避免同類檔案再次漏網）
