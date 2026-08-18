@@ -176,7 +176,7 @@ if (selections.useYes) return // skip confirm entirely
 **Status**: open
 **Priority**: mid
 **Discovered**: 2026-05-10 — v0.31.0 release 後 Template CI 反覆撞 stale
-**Location**: `template/scripts/spectra-advanced/roadmap-sync.mts`、`.github/workflows/template-ci.yml`
+**Location**: `template/scripts/spectra-advanced/roadmap-sync.ts`、`.github/workflows/template-ci.yml`
 
 ### Problem
 

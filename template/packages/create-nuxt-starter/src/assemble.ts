@@ -320,8 +320,8 @@ export function generatePackageJson(
   }
 
   // Spectra UX completeness (always needed)
-  basePkg.scripts['audit:ux-drift'] = 'npx tsx scripts/audit-ux-drift.mts'
-  basePkg.scripts['spectra:roadmap'] = 'npx tsx scripts/spectra-ux/roadmap-sync.mts'
+  basePkg.scripts['audit:ux-drift'] = 'npx tsx scripts/audit-ux-drift.ts'
+  basePkg.scripts['spectra:roadmap'] = 'npx tsx scripts/spectra-advanced/roadmap-sync.ts'
 
   // Sort dependencies
   basePkg.dependencies = sortObject(basePkg.dependencies)
@@ -1083,7 +1083,7 @@ function copyScripts(targetDir: string, feats: string[], agentTargets: AgentRunt
     'check-skills.sh',
     'setup.sh',
     'restore-hooks.sh',
-    'audit-ux-drift.mts',
+    'audit-ux-drift.ts',
     'verify-starter.mjs',
   ]
 
@@ -1107,9 +1107,9 @@ function copyScripts(targetDir: string, feats: string[], agentTargets: AgentRunt
     generateInstallSkillsScript(targetDir, feats)
   }
 
-  // Copy spectra-ux scripts (always needed for Spectra workflow)
-  const spectraUxSrc = join(STARTER_ROOT, 'scripts', 'spectra-ux')
-  const spectraUxDest = join(targetDir, 'scripts', 'spectra-ux')
+  // Copy spectra-advanced scripts (always needed for Spectra workflow)
+  const spectraUxSrc = join(STARTER_ROOT, 'scripts', 'spectra-advanced')
+  const spectraUxDest = join(targetDir, 'scripts', 'spectra-advanced')
   if (existsSync(spectraUxSrc)) {
     mkdirSync(spectraUxDest, { recursive: true })
     copyDirectory(spectraUxSrc, spectraUxDest)

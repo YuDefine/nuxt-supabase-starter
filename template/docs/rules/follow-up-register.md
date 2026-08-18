@@ -117,7 +117,7 @@ mcp-token-store 使用 D1 `$client.prepare()` raw API，local dev libsql 不相�
 ## Session-start Surfacing
 
 `.claude/hooks/session-start-roadmap-sync.sh` 在 roadmap sync 之後呼叫
-`collect-followups.mts --session-summary`，把以下內容印到 stderr（agent 可見，不擋流程）：
+`collect-followups.ts --session-summary`，把以下內容印到 stderr（agent 可見，不擋流程）：
 
 - **Open / In-progress 數量** + top 5 by priority（critical → high → mid → low）
 - **Unregistered Markers** —— tasks.md 有 `@followup[TD-NNN]` 但 register 沒登記（通常是剛加 marker 還沒跑 register 更新）
@@ -130,7 +130,7 @@ mcp-token-store 使用 D1 `$client.prepare()` raw API，local dev libsql 不相�
 
 ## Collect Script：`pnpm spectra:followups`
 
-`scripts/spectra-ux/collect-followups.mts` 提供三種模式：
+`scripts/spectra-advanced/collect-followups.ts` 提供三種模式：
 
 ```bash
 pnpm spectra:followups            # 人類可讀報告
