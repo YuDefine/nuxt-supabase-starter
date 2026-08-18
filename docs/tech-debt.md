@@ -18,7 +18,7 @@
 | TD-004 | Spectra roadmap drift check 在 CI 永遠 false positive | mid      | in-progress | 2026-05-10 v0.31.0 | —     |
 | TD-005 | meta-monorepo 下 pre-push 7 道 check 全部靜默 no-op | high     | open   | 2026-08-19         | —     |
 | TD-006 | 在本 repo 跑 install 會讓 clade bootstrap 把 starter 自己當 consumer 投影 | high     | done   | 2026-08-19         | —     |
-| TD-007 | scaffolder 測試套件並行不安全；`detectMonorepoRoot` 讀 `PWD` 而非 cwd | mid      | open   | 2026-08-19         | —     |
+| TD-007 | scaffolder 測試套件並行不安全；`detectMonorepoRoot` 讀 `PWD` 而非 cwd | mid      | done   | 2026-08-19         | —     |
 
 ---
 
@@ -388,7 +388,7 @@ prune 清單裡，full audit 會照掃，目前是綠的。
 
 ## TD-007 — scaffolder 測試套件並行不安全；`detectMonorepoRoot` 讀 `PWD` 而非 cwd
 
-**Status**: open
+**Status**: done（2026-08-19）
 **Priority**: mid
 **Discovered**: 2026-08-19 — 新增 `test/cli-evlog-preset.e2e.test.ts` 時撞到
 **Location**: `template/packages/create-nuxt-starter/test/`、`src/cli.ts` `detectMonorepoRoot()`
@@ -419,3 +419,51 @@ prune 清單裡，full audit 會照掃，目前是綠的。
 
 - `npx vitest run`（不加 `--no-file-parallelism`）全綠
 - 從 repo 內任一目錄 `spawnSync(node, [cli, name, '--yes'], {cwd: X})`，專案建在 `X/name`
+
+### 驗收輸出（2026-08-19）
+
+**1. 修前重現**（`PWD` = starter 套件目錄、`spawnSync` cwd = tmpdir、不給 `INIT_CWD`）：
+
+```text
+expected at: /tmp/td007-C5zwl7/probe-app false
+leaked to repo root: <home>/offline/nuxt-supabase-starter/probe-app true
+```
+
+專案真的被寫到 repo root，且 post-scaffold 的 cd 提示印成 `cd ../../../probe-app`。
+
+**2. 修後同一探測**：
+
+```text
+expected at: /tmp/td007-Rx2CSB/probe-app true
+leaked to repo root: <home>/offline/nuxt-supabase-starter/probe-app false
+cd 提示：cd probe-app
+```
+
+**3. 兩個 runner 都全綠（皆未加 `--no-file-parallelism`）**：
+
+```text
+$ npx vitest run            # 上游 vitest 4.1.11
+Test Files  11 passed | 1 skipped (12)
+     Tests  93 passed | 1 skipped (94)
+
+$ pnpm vp test run          # workspace 的 @voidzero-dev/vite-plus-test
+Test Files  11 passed | 1 skipped (12)
+     Tests  93 passed | 1 skipped (94)
+
+$ pnpm run check            # template 全域 lint + typecheck
+exit 0（0 errors / 5 既有 no-underscore-dangle warnings）
+```
+
+### 修法紀錄
+
+- `cli.ts` `detectMonorepoRoot()` / `getInvocationCwd()` 與 `post-scaffold.ts` 的 `userCwd`
+  全部改以 `process.cwd()` 為判準，`INIT_CWD`（真正的 npm / pnpm 呼叫路徑）保留為優先來源，
+  `process.env.PWD` 三處全部移除。
+- 10 個測試檔的 `TEST_DIR` 從 `test/.tmp-*` 改為 `mkdtempSync(tmpdir())`，測試不再寫進 repo。
+- 新增回歸測試 `cli-evlog-preset.e2e.test.ts` >「落點只看實際 cwd」：刻意把 `PWD` 指到 starter
+  套件目錄並清掉 `INIT_CWD`，斷言專案落在 spawn cwd、repo root 沒有殘留。把 `cli.ts` 改回讀
+  `PWD` 該測試即轉紅（已實測）。
+
+**原記錄的「並行才失敗」在本次無法重現**：`npx vitest run` 在修改前後都是全綠。真正會造成
+損害的是 `PWD` 那條——它不需要並行就會把檔案寫到錯的地方，測試端原本是靠顯式覆寫 `PWD` /
+`INIT_CWD` 繞過。TEST_DIR 遷出 repo 一併消掉了測試檔互相干擾的結構性條件。
