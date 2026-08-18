@@ -4,7 +4,7 @@ import {
   analyzeComponentResolution,
   collectTemplateComponentTags,
   findUnresolvedComponentUsages,
-} from '../../../scripts/lib/vue-component-resolution.mts'
+} from '../../../scripts/lib/vue-component-resolution.ts'
 
 describe('vue component resolution guard', () => {
   it('collects component tags from template', () => {

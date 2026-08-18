@@ -1,7 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 
-import { analyzeComponentResolution } from './lib/vue-component-resolution.mts'
+import { analyzeComponentResolution } from './lib/vue-component-resolution.ts'
 
 const BUILT_IN_COMPONENTS = new Set([
   'Transition',
