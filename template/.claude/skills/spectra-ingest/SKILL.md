@@ -190,6 +190,14 @@ Update an existing Spectra change — from a plan file or conversation context.
    3. **立刻**簡短回報：「已派 <runtime> 在背景 ingest `<change-name>`（bash job `<id>`），完成後主線會 cross-check」。
    4. 啟動 **notification-only watch**：背景 Bash 回傳 `<task-id>` 後，立刻依 [[agent-routing]] § Generic async keepalive prompt 記錄 owner / deadline，並排 1500s `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=<runtime>:spectra-ingest:<change-name> deadline=<ISO>...` canonical inert control message。控制 turn 只准查 `TaskOutput(block=false)`、重排同一 inert prompt或排 lifecycle intervention；**NEVER** 放原 ingest prompt、讀 output tail、短輪詢或執行 artifact mutation。
 
+   **exit code 分流（收到 terminal notification 後先做，per `codex-phase-dispatch.md` § 4）**：
+
+   - `0`：讀 `result`，往下走。
+   - `2`：業務 fail；讀 `result` 的原因，主線決定修補或重派。
+   - `3`：機械故障；讀 receipt 指向的 stderr log，依 watch protocol fallback。
+   - `4`：配額擋；本列是 sol，依 [[agent-routing]] § 配額耗盡時的 fallback 紀律先走 `--model sol-cursor`
+     同 effort 重派一次，**NEVER** 當成可立即重試的機械故障，**也 NEVER** 改派 Claude subagent。
+
    **Cross-check（A / B 共用，收到 `<task-notification status=completed>` 後立刻）**：
 
    1. Read draft stdout，確認 artifacts 已更新 + `spectra validate` 通過。

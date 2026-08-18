@@ -47,7 +47,7 @@ Local edits will be reverted by the next sync.
       若 change 同時涉及 UI view 層（`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss`）與**非 view 工作**（schema / migration / API server / store / hook / API client / type / util / 純 backend），tasks.md **必須**把這兩類切成不同的 `## N.` phase：
       - 例：`## 1. Database Schema` + `## 2. API Endpoints` + `## 3. Pinia Store + Composables` + `## 4. UI View Implementation` + `## 5. Fixtures / Seed Plan` + `## 6. Design Review`
       - **禁止**把 view 層改動（`.vue` / `app/pages/` 等）與非 view 工作混進同一 phase
-      - 理由：spectra-apply 會把 UI view phase 留在 Claude 端（sonnet subagent 或主線）、其他 phase 派給 codex；混雜 phase 會破壞 dispatch 規則
+      - 理由：spectra-apply 會把 UI view phase 派 Pi grok（`--model grok-xai`，主線收回後做品質判定與 Design Review）、其他 phase 派 Pi sol；混雜 phase 會破壞 dispatch 規則
       - frontend 但非 view 的（store / hook / API client / type / util / unit test）算非 view，可以與 backend 工作放同 phase 或自己一個 phase 都可
 
       若 change 包含 UI scope（tasks 涉及 .vue / pages/ / components/ / layouts/），tasks.md **必須**包含完整 7 步 Design Review section（N.1~N.7）：
@@ -131,6 +131,14 @@ Local edits will be reverted by the next sync.
    5. 啟動 **Codex Watch Protocol**（見 `.claude/rules/agent-routing.codex-watch-protocol.md` § 監看排程 A）：background Bash 回傳 `<task-id>` 後，立刻記錄 owner / deadline，並排 1500s canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=codex:spectra-propose:<change-name> deadline=<ISO>...` inert control message。控制 turn 只准 `TaskOutput(block=false)`、重排同一 inert prompt、停止 wakeup或排 lifecycle intervention；**NEVER** 放原 propose prompt、讀 output tail、執行 artifact mutation或用 180s 短輪詢。完成通知到達後才 claim task id、讀 stdout並進 Phase 0b。
 
    #### Phase 0b：主線 Cross-Check（codex 完成後**立刻**執行）
+
+   **exit code 分流（收到 terminal notification 後先做，per `codex-phase-dispatch.md` § 4）**：
+
+   - `0`：讀 `result`，往下走。
+   - `2`：業務 fail；讀 `result` 的原因，主線決定修補或重派。
+   - `3`：機械故障；讀 receipt 指向的 stderr log，依 watch protocol fallback。
+   - `4`：配額擋；本列是 sol，依 [[agent-routing]] § 配額耗盡時的 fallback 紀律先走 `--model sol-cursor`
+     同 effort 重派一次，**NEVER** 當成可立即重試的機械故障，**也 NEVER** 改派 Claude subagent。
 
    收到 `<task-notification> status=completed` 時**立刻**依序執行：
 

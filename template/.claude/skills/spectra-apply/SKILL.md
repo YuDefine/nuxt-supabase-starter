@@ -385,7 +385,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
         → **主線 Claude Opus 5 xhigh 自己做**，**永不**派 codex
         → Design skill is Claude Code first-class; codex tooling weak in this domain
       - **B. UI view phase** — phase 內任一 task 描述/路徑指涉 view 層檔案：`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且**該 phase 沒有摻入非 view 的 frontend / backend 工作（store / hook / API client / type / util / migration / API server）
-        → **走泛用 dispatcher `--model grok --effort high --table-row ui-view-implementation`，永不派 sol／luna**——thin brief＋檔案所有權清單＋「只准動 view 層檔案」guard＋4-status 回報（per `agent-routing.md` § Subagent 回報契約）。瑣碎 UI 修（≤2 files 且 ≤20 行）主線直接做，不派
+        → **走泛用 dispatcher `--model grok-xai --effort high --table-row ui-view-implementation`，永不派 sol／luna**——thin brief＋檔案所有權清單＋「只准動 view 層檔案」guard＋4-status 回報（per `agent-routing.md` § Subagent 回報契約）。瑣碎 UI 修（≤2 files 且 ≤20 行）主線直接做，不派
         → 主線收回後、該 phase commit / 標 done **之前**，照跑 Step 6c / 6d 檢查與 Design Review gate——實作可派，品質判定留主線
         → frontend 但非 view 的工作（store / hook / API client / type / util）不在此範圍，走 C 類
       - **C. Other phase** — 上述兩類以外（schema / migration / API server / CLI / 純 backend / frontend 但非 view 的 store / hook / API client / type / util / unit test / docs）
@@ -406,7 +406,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    **C 類 phase dispatch 執行**：**每一個** C 類 phase 派工前 **MUST** 完整讀 `references/codex-phase-dispatch.md`——classifier execution 欄位、eligible Luna read-only prescan、shadow-only marker、共用 template／output schema、background Pi Codex dispatcher invocation、Codex Watch Protocol，以及 notification 後的 **MUST checks**（commit boundary / view-layer drift double-check / scope cross-check / gate replay）。**NEVER** 憑記憶派工、退回 raw `codex exec`、自行覆寫 classifier 或跳過 post-notification checks；主線收報後 re-classify 下一個 phase。
 
-   6. After ALL C 類 phases complete → **本次 apply session 內 MUST 完成**所有 A、B 類 phases：**每一個 B 類 phase** 依 Step 6b 的 B 類派工形狀派 `--model grok` 實作（瑣碎 UI 修照 Step 6b 主線直做），收回後主線跑 Step 6c / 6d；**A 類（Design Review）主線自己做**——**直接 invoke Skill tool** 跑 `/design improve`、`/impeccable audit`、`review-screenshot` 等 Claude Code first-class skill，完整跑完該 phase 所有 tasks 並標 `[x]`。
+   6. After ALL C 類 phases complete → **本次 apply session 內 MUST 完成**所有 A、B 類 phases：**每一個 B 類 phase** 依 Step 6b 的 B 類派工形狀派 `--model grok-xai` 實作（瑣碎 UI 修照 Step 6b 主線直做），收回後主線跑 Step 6c / 6d；**A 類（Design Review）主線自己做**——**直接 invoke Skill tool** 跑 `/design improve`、`/impeccable audit`、`review-screenshot` 等 Claude Code first-class skill，完整跑完該 phase 所有 tasks 並標 `[x]`。
 
       **Hard rule — Design Review 內含完成義務**：
       - **MUST** 在 apply flow 內自行 invoke 並完成 Design Review phase 的全部工作（`/design improve` → `/impeccable audit` → screenshot），**不是**停下來告訴 user「接手 session 請跑 /design improve」
@@ -469,7 +469,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
    **Dispatch reminder**: For each phase, follow Step 6b's three-way classification:
    - Class C（Other）→ 以泛用 dispatcher 的 `spectra-phase-implementation` row dispatch Codex Sol high（phase granularity）
    - Class A（Design Review）→ 主線 Opus 5 xhigh self-execute：**MUST invoke Skill tool** 跑 `/design improve` + `/impeccable audit` 完成全部 tasks（per Step 6b §6 hard rule；NEVER 停下叫 user 自己跑）
-   - Class B（UI view: component / page / view / layout / styling）→ 泛用 dispatcher `--model grok --effort high`（NEVER sol／luna；派工形狀見 Step 6b B 類）；瑣碎 UI 修（≤2 files 且 ≤20 行）主線直接做。該 phase 收回、commit / 標 done **之前** MUST 跑 **Step 6c Refactor Invariant Check** + **Step 6d Review Rules Check**
+   - Class B（UI view: component / page / view / layout / styling）→ 泛用 dispatcher `--model grok-xai --effort high`（NEVER sol／luna；派工形狀見 Step 6b B 類）；瑣碎 UI 修（≤2 files 且 ≤20 行）主線直接做。該 phase 收回、commit / 標 done **之前** MUST 跑 **Step 6c Refactor Invariant Check** + **Step 6d Review Rules Check**
    - Mixed phase（UI view + 非 view 摻同 phase）→ 已開工主線吸收、未開工 STOP 提示 `/spectra-ingest`
 
    For each pending task:
@@ -593,7 +593,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    | 角色 | 範圍 | 檔位 |
    | --- | --- | --- |
-   | **收集**（輸出不是 gate） | Step 8a 全部（含 8a.5 / 8a.6 / 8a.7）跑 verify channel、截圖、hook、sweep | **codex GPT-5.6-sol medium** |
+   | **收集**（輸出不是 gate） | Step 8a 全部（含 8a.5 / 8a.6 / 8a.7）跑 verify channel、截圖、hook、sweep | **Pi Grok-4.6 low**（`--model grok-xai`） |
    | **判定（gate）** | 截圖收集完成後分析每張截圖是否匹配對應要求（防止亂截圖搪塞） | **codex GPT-5.6-sol xhigh** |
 
    Read `tasks.md` `## 人工檢查` 找未勾 `[verify:e2e]` / `[verify:api]` / `[verify:ui]` / `[verify:<a>+<b>]` / deprecated `[verify:auto]` items。**MUST** 先處理完所有 verify channels 才進 Step 8b。
@@ -640,11 +640,11 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    | 角色 | 範圍 | 檔位 |
    | --- | --- | --- |
-   | **收集**（輸出不是 gate） | E.1 五維 evidence 收集 | **codex GPT-5.6-sol medium** |
+   | **收集**（輸出不是 gate） | E.1 五維 evidence 收集 | **Pi Grok-4.6 medium（`--model grok-xai`）** |
    | **判定（gate）** | E.1 對收集結果做五維判定 | **codex GPT-5.6-sol xhigh** |
    | **判定（gate）** | E.2 cross-model second opinion（另起 session 獨立審） | **codex GPT-5.6-sol xhigh** |
 
-   **MUST** before Step 8b handoff 先派 **codex GPT-5.6-sol medium** 跑 5-dimension 收集（template 見下）。
+   **MUST** before Step 8b handoff 先派 **Pi Grok-4.6 medium（`--model grok-xai --table-row spectra-prehandoff-collect`）** 跑 5-dimension 收集（template 見下）。
    收集回來後 **MUST** 另派 **codex GPT-5.6-sol xhigh** 對收集結果做 5-dimension 判定——判定是 gate，**NEVER** 與收集併在同一次 dispatch：
 
    **E.1 + E.2 執行**：**MUST** 完整讀 `references/pre-handoff-checks.md` § Step 8a.6 執行——E.1（codex medium 收集 5-dimension evidence → codex xhigh 判定 → 主線寫 finding report、FAIL 補 `（issue:）` / strip 假 annotation → `pre-handoff-ledger.ts record`）與 E.2（`codex-dispatch-pre-handoff-check.ts` cross-model 獨立審；fallback Claude subagent，**NEVER** 憑記憶補、**NEVER** 跳過 cross-check 直接 handoff）。**No finding report written → NO Step 8b handoff — this is the gate**；E.1 record 由 `archive-gate.sh` Check 7 機械強制。
@@ -810,7 +810,7 @@ What would you like to do?
 - **Worktree isolation — NEVER halt apply on main's WIP**: Step 0 必須自動把 user 帶進 worktree（用 commit-then-fork 或 clean fork，視 scope 而定）；無論 Step 0c 階段或 apply 進行中，**NEVER** 因 main repo 的 dirty WIP / staged / untracked / 同檔別 session WIP 中斷 apply、AskUserQuestion 要 user clean main、或建議 user 自己處理後重試。worktree 是獨立 working tree，main 的 WIP 不在 worktree 也無法影響它；同檔衝突是 merge-back 時的事，由 `/spectra-commit` + user 決策處理。唯一合法 STOP 是 unmerged conflict（wt-helper 拒絕 fork）或 helper 本身錯誤；user-decision-needed pause **NEVER**。
 - **Phase dispatch discipline**（per `agent-routing.md`）:
   - **NEVER** dispatch Design Review phase to codex — Design skill is Claude Code first-class
-  - **NEVER** dispatch UI view phase（component / page / view / layout / styling）to sol／luna — UI view phase 的唯一合法外派目標是 `--model grok`（per Step 6b B 類），品質判定（Step 6c / 6d、Design Review）留主線。Frontend 但非 view 的（store / hook / API client / type / util）仍走 sol
+  - **NEVER** dispatch UI view phase（component / page / view / layout / styling）to sol／luna — UI view phase 的唯一合法外派目標是 `--model grok-xai`（per Step 6b B 類），品質判定（Step 6c / 6d、Design Review）留主線。Frontend 但非 view 的（store / hook / API client / type / util）仍走 sol
   - **NEVER** dispatch **Phase Dispatch（Step 6b）** with `medium` effort — use `high` minimum。Step 8a 系列的收集工作允許 `medium`（見 Step 8a Model allocation）
   - **NEVER** dispatch task-by-task — phase granularity only
   - **NEVER** dispatch a codex phase without including the「view-layer guard」instruction in the prompt — without it, codex tends to incidentally touch `.vue` / `.tsx` files

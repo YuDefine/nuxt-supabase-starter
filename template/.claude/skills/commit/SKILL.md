@@ -133,7 +133,7 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
    - **命中** → 跳過 0-A.1/0-A.2，0-B/0-C 並行（同回合 fan-out）
    - **不命中** → **MUST** 用單一回合的多個 tool call 並行啟動：
      - Bash `codex-review-safe.sh xhigh`（`run_in_background: true`）→ 拿到 background bash id
-     - Agent `screenshot-review`（若 0-B 觸發條件成立）
+     - Pi dispatch `screenshot-review`（grok-xai low；若 0-B 觸發條件成立）
      - Bash `pnpm check`（foreground，主線同步跑）
 2. 主線 foreground 0-C 完成後 → poll 軸 A、等軸 B 回收
 3. 三軸全部 done 才進入修正合併

@@ -12,9 +12,11 @@ Local edits will be reverted by the next sync.
 -->
 
 
-## ⛔ MAIN-THREAD ENTRY DEPRECATED — verify mode 必由主線直派 codex
+## ⛔ MAIN-THREAD ENTRY DEPRECATED — 四個模式全部必由主線直派 codex
 
-**主線 Claude 從 2026-05-23 起 NEVER 用 `Agent` tool with `subagent_type: screenshot-review` 派 verify mode 工作**（per `rules/core/agent-routing.md` Routing Table + NEVER 段）。本 sonnet wrapper 路徑保留**僅給** Pi `openai-codex` runtime不可用的fallback。
+**主線 Claude NEVER 用 `Agent` tool with `subagent_type: screenshot-review` 派任何截圖工作**（per `rules/core/agent-routing.md` Routing Table 〔`screenshot-review-verify`〕+ NEVER 段）。2026-05-23 起適用 verify mode；2026-08-19 起**範圍擴到全部四個模式**——verify、archive 前 QA、commit 0-B、使用者臨時要求的 ad-hoc 截圖。本 sonnet wrapper 路徑保留**僅給** Pi runtime 機械不可用（dispatcher exit 3）的 fallback。
+
+**NEVER** 用「ad-hoc 的輸出不是 gate，所以走 wrapper 沒關係」放行——下面兩起 incident 的根因是 wrapper 自己 self-rationalize 跳過 Step 0，與輸出是不是 gate 無關。
 
 ### 為什麼
 

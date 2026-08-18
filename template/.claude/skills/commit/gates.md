@@ -394,6 +394,48 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 >
 > **changeset 由 script 自己收集後嵌進 prompt**（TD-320），codex 不再自行跑 `git diff`。兩個要判讀的 stderr 訊號：超出 `CODEX_REVIEW_MAX_DIFF_LINES`（預設 6000 行）的檔案會被整塊剔除並具名，**MUST** 當成該檔未被 review、NEVER 當作它通過；**exit 3** ＝ 收不到任何未提交變更（codex 未被呼叫），照 collection bug 處理，NEVER 當作 0-A.1 通過。
 
+#### exit 4（配額耗盡）→ 換池重跑，NEVER 改派 Claude
+
+**這條與 0-C 的 exit 4 處置相反，NEVER 類比。** 0-C 的 exit 4 可以「主線 foreground 自跑」，因為修 code 誰修都行；0-A.1 不行 —— 這道 gate 的**存在理由**就是不能由主線同池模型自審。實證（2026-08-19）：一個 session 在 0-A.1 撞額度後改派同池同模型的 Claude subagent 當 reviewer，形式上補了位、實質上 gate 是空的；換池後 Cursor 池的 gpt-5.6-sol 立刻多抓到兩條該 Claude reviewer 完全沒看到的 finding。
+
+**現階段沒有安全的換池路徑（TD-520，見下）**，所以 exit 4 的處置是：
+
+1. 主線 foreground 自 review
+2. **MUST** 明示「**跨模型 gate 未達成**」—— NEVER 把主線自審講成 0-A.1 通過
+3. **MUST** 在 `HANDOFF.md` 登記待補範圍（`git diff <base>..<head>`），配額恢復後補跑
+
+**NEVER 改派 Claude subagent 充當跨模型 review。** 那是同池同模型，gate 實質為空 —— 主線自己 review 至少誠實，派一個同款模型只是把「未達成」偽裝成「達成」。**NEVER 降檔到 luna / haiku**（配額按 model 記，降檔換不到額度，只換到更差的 reviewer）。
+
+> **為什麼不用 Cursor 池換池**：`codex-review-safe.sh` 有 `--pool cursor`，同檔換池在 [[agent-routing]] § 配額耗盡時的 fallback 紀律上是正確形狀。但 TD-520 已確認 cursor 池的模型**以同一 UID 執行且有 unrestricted Shell**，而 review prompt 內嵌的是待審 changeset。事後偵測（worktree snapshot 比對）對這種對手無效 —— baseline 本身就在它可寫的位置。**在拿到 OS 層隔離之前，`--pool cursor` NEVER 用於 0-A.1。** 該旗標保留是為了 default 池的防迴歸與後續隔離方案的接點。
+
+> **cursor 池沒有工具面 enforcement — 已確認，非未決（TD-520）**：pi 的 `--tools read,grep,find,ls` 只是 pi 層 flag，cursor provider 下模型的執行**全部**走 Cursor SDK 原生工具，該 flag 對它們無效。2026-08-19 授權 probe 實測：模型自報可用工具含 `Shell` / `Delete` / `ApplyPatch` / `CallMcpTool` / `WebFetch` / `Subagent`，並**實際寫出了檔案**。三條 enforcement 路徑逐一查證全部不存在（SDK `LocalAgentOptions` 無工具面欄位、`--cursor-mode plan` 是 prompt guidance、`PI_CURSOR_SANDBOX=1` 本環境拒跑）。
+>
+> `--tools` 唯一還有的作用是**決定哪些原生執行會被回放進 events log**（回放條件 = builtin 七種 ∩ pi active tools）。推論反直覺但重要：**白名單越窄，稽核越盲** —— events log 能證明「有用 X」，永遠不能證明「沒用 Y」。
+>
+> 因此 `--pool cursor` **NEVER** 用來 review 不可信的第三方 code，也 **NEVER** 用於會接觸 secrets / prod 憑證的 changeset。自家 fleet diff 走這條的殘餘風險由 exit 6 接住其中一類（見下），其餘明列為不覆蓋。
+
+#### exit 5（workspace 綁定不符）→ verdict 作廢
+
+runner 比對 pi session 事件的 cwd 與 `--cwd`，realpath 不符即 exit 5。此時模型的檔案探索打在別的 repo 上，**verdict 作廢、NEVER 當作 0-A.1 通過**，照環境問題排查後重跑。
+
+**缺 session 事件同樣 exit 5**（fail-closed）。這道 guard 的用途是「證明」綁定正確，拿不到證據就是證明不了 —— 放行等於 gate 只在 pi 願意提供證據時才存在，而攻擊面（prompt 內嵌的不可信 changeset）恰恰有動機讓它不提供。真 pi 每次 run 都吐 session 事件，所以這條在正常路徑上不會誤觸。
+
+> 查 events log **MUST 用 runner 自己印的 `pi-codex-review: events log: <path>`**（出現在輸出頂端），**NEVER** 用 `ls -t /tmp/pi-codex-review-*` 撈「最新那個」—— `/tmp` 是全 session 共用、檔名只有 pid+ts，並行 session 下會撈到別人的 run。2026-08-19 就是這樣把另一個 repo 的 review log 誤讀成自己的，得出「跑錯 workspace」的錯誤結論，連帶用那份 log 錯誤地否證了一條真實的 Critical。
+
+#### exit 6（review 期間 working tree 被改動）→ verdict 不可信 + 人工檢視
+
+script 在 runner 前後各拍一次 worktree snapshot（HEAD + 暫存 index 的 `git write-tree` 單一 tree hash——原生涵蓋內容、executable bit、symlink target、binary，純 git 可攜——+ `git status --porcelain=v2`），不一致即 exit 6 並在 stderr 印出 `git diff-tree` 的逐檔明細。runner 的 verdict 先落檔、**通過 after-check 才放行到 stdout**——exit 6 時 verdict 被扣住不輸出，只認 heading / 表格的機械檢查不會誤判通過。baseline 拍在 changeset 收集**之前**（拍在之後的話，收集期間的並行修改會被寫進 baseline，review 過的是一份 stale changeset 而檢查靜默）。snapshot 本身 fail-closed：任一步 git 失敗即 exit 6（unborn HEAD 是合法狀態、不觸發），NEVER 留下「前後同樣殘缺所以比對通過」的假綠。
+
+**write-tree 換法解的是可攜性與覆蓋率，不是安全性。** 它移除了 GNU coreutils 依賴、把 executable bit 與 symlink target 收進覆蓋範圍，但 `git write-tree` 一樣走 PATH 上的 `git` —— 上一段那個「同 UID 對手可劫持度量工具本身」的問題，換 tree hash **一點都沒解**。**NEVER** 把 snapshot 實作的改良讀成安全等級提升；封口的只有 bwrap。
+
+**這是偵測控制，不是安全邊界 —— 對 adversarial injection 它結構性無效，別讓下一個人把它當 sandbox 用。** cursor 池 = 把有 unrestricted Shell 的模型放進呼叫者自己的 UID；同 UID 的對手可以竄改 `$WORK_DIR` baseline、劫持 PATH 上的 `git` 本身，任何 script 內的事後比對都騙得過（0-A.2 review 2026-08-19 定案）。它可靠接住的是**非對抗**的三類：並行 session 在 review 期間的編輯 / commit（實測發生率最高）、模型無惡意的誤寫事故、default 池 pi 層 enforcement 的回歸。它擋不住的包括：蓄意 mutation 後湮滅痕跡、資料外洩（WebFetch / MCP 送出去）、對其他 repo 或 `$HOME` 的破壞、以及**先改再還原**。
+
+事前 enforcement 三條路已查證皆不存在（sdk `LocalAgentOptions` 無工具面欄位、`--cursor-mode plan` 只是 guidance、`PI_CURSOR_SANDBOX=1` 本環境拒跑，TD-520）；**對抗性場景的真修是 OS 層隔離（bwrap，可行性已驗、實作見 TD-520 處置節）**，落地前 cursor 池是明示接受風險的 fallback（script 起跑印 WARNING）。**接受的前提是「只 review 自家 fleet diff、不接觸 secrets / prod 憑證」**——那兩條邊界破了，MUST 改走 default 池或等配額恢復。default 池照跑本檢查（防 pi 層 enforcement 回歸）。
+
+處置：**verdict 不可信、NEVER 當作 0-A.1 通過**。先人工檢視 stderr 的 snapshot diff 定性 —— 可能是 cursor 池被 prompt injection 帶去 mutation（此時被動到的檔 **NEVER 自動還原**，依 [[commit]] WIP 處置禁令交使用者拍板），也可能是並行 session 在 review 期間的正當編輯（此時 verdict 審的不是最終狀態，處置完重跑即可）。
+
+**覆蓋邊界**：只偵測本 repo worktree 的 tracked + untracked 內容。**gitignored 檔（`.env`、`node_modules/` 等）、**/tmp、`$HOME`、其他 repo、MCP / 網路副作用在 cursor 池下**查不到也偵測不到** —— NEVER 把 exit 6 沒觸發講成「cursor 池 review 確認無副作用」。
+
 - **NEVER** 就乾等到 codex 自己結束才看一眼 — 中途卡住（codex auth 過期、context 超量、模型拒答）會白等
 - 結束條件：背景 process 結束、輸出含完成標記、或使用者叫停 — 才進入後續判斷
 
@@ -574,15 +616,17 @@ node .claude/scripts/0a-metrics.mjs record \
 
 **不觸發**：純 `<script>` / `<style>` 微調、composable / store / API 純邏輯、測試、文件、設定檔、單純重構不影響視覺輸出。
 
-**並行啟動**：觸發時 MUST 在 0-A.1 codex 背景 process 啟動的**同一個 assistant 回合**內派 `screenshot-review` agent —— **NEVER** 等 codex 跑完才派（會浪費 3–5 min 的並行收益）。subagent 跑完回收 finding，與 0-A.1 / 0-C 的 finding 一起匯合修正。
+**Dispatch 方式**：主線直派 Pi `--model grok-xai --effort low`（`--route routing-table --tier-basis table-row --table-row screenshot-review-verify`），指令與 brief 素材見 [[review-screenshot]] § 派遣方式。**NEVER** 用 `Agent` tool with `subagent_type: screenshot-review`——per `agent-routing.md` Routing Table 該列，四個模式（含 0-B）一律直派；wrapper 只在 dispatcher exit 3 後才開。exit 4 走 `--model grok-cursor` 同 effort 重派，**NEVER** 當機械故障。
 
-觸發時派 `screenshot-review` agent 截圖並評估。問題修正後輸出 `✅ 0-B 通過`；不觸發則直接輸出 `⏭️ 0-B 跳過（無 UI 變更）`。
+**並行啟動**：觸發時 MUST 在 0-A.1 codex 背景 process 啟動的**同一個 assistant 回合**內送出 0-B dispatch —— **NEVER** 等 0-A.1 跑完才派（會浪費 3–5 min 的並行收益）。0-B 跑完回收 finding，與 0-A.1 / 0-C 的 finding 一起匯合修正。
+
+問題修正後輸出 `✅ 0-B 通過`；不觸發則直接輸出 `⏭️ 0-B 跳過（無 UI 變更）`。
 
 ---
 
 ## § 0-C: CI 等效檢查（Fix-Verify Loop、並行軸 C）
 
-**並行啟動**：MUST 在 0-A.1 codex 背景 process 啟動的**同一個 assistant 回合**內，主線 foreground 開跑 `pnpm check` —— 跟 codex 並行不阻塞。0-C 完成（含 fix loop 通過）後再 poll 0-A.1 與回收 0-B subagent。
+**並行啟動**：MUST 在 0-A.1 codex 背景 process 啟動的**同一個 assistant 回合**內，主線 foreground 開跑 `pnpm check` —— 跟 codex 並行不阻塞。0-C 完成（含 fix loop 通過）後再 poll 0-A.1 與回收 0-B dispatch。
 
 跑下列指令確保 **format / lint / typecheck / test / doctor 全部 0 errors + 0 warnings + 0 test failures**：
 
@@ -658,7 +702,7 @@ node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
 ＋ `--table-row commit-0c-fix-verify`（dispatcher 拿該列列明的 sol 交叉檢查 `--model`）。
 同一輪要再修一次時帶 `--retry-of commit-0c-<前一個 slug>`，**NEVER** 改用 `<slug>2` 表達重試。）
 
-（背景跑、stdout 單一 JSON；exit 0=全綠 / 2=修不到全綠（業務 fail）/ 3=機械故障 / 4=quota。exit 3/4 → 主線 fallback foreground 自跑 fix loop；exit 2 → 失敗摘要回主線判斷，**不**重派同一 brief。）
+（背景跑、stdout 單一 JSON；exit 0=全綠 / 2=修不到全綠（業務 fail）/ 3=機械故障 / 4=quota。exit 3 → 機械故障，主線 fallback foreground 自跑 fix loop；exit 4 → 配額擋，本列是 sol，依 [[agent-routing]] § 配額耗盡時的 fallback 紀律先走 `--model sol-cursor` 同 effort 重派（`-cursor` 變體的適用邊界受 TD-520 限制：**NEVER** 用於不可信第三方 code 或會接觸 secrets／prod 憑證的內容；0-A.1 review gate 已明文排除，見 `commit/gates.md` § 0-A.1），**NEVER** 當成機械故障；exit 2 → 失敗摘要回主線判斷，**不**重派同一 brief。）
 
 **4.8-aware 範圍明寫**：**每一輪** 0-C 失敗都先做 dispatch 評估（含匯合修正 / 大改動回扣後重跑 0-C 又紅的輪次），不是只有第一輪。
 

@@ -48,7 +48,7 @@ Local edits will be reverted by the next sync.
      --route routing-table --tier-basis table-row --table-row spectra-8a-self-collect
    ```
 
-   （背景跑、stdout 單一 JSON evidence；exit 0=ok / 2=(a)(b) 皆業務 fail / 3=機械故障 / 4=quota。exit 2 → 主線依序降到 (c)(d)，**不**重派同一 brief；exit 3/4 → 機械故障，主線 fallback foreground 自跑 (a)(b) 再續 chain。）
+   （背景跑、stdout 單一 JSON evidence；exit 0=ok / 2=(a)(b) 皆業務 fail / 3=機械故障 / 4=quota。exit 2 → 主線依序降到 (c)(d)，**不**重派同一 brief；exit 3 → 機械故障，主線 fallback foreground 自跑 (a)(b) 再續 chain；exit 4 → 配額擋，本列是 sol，依 [[agent-routing]] § 配額耗盡時的 fallback 紀律先走 `--model sol-cursor` 同 effort 重派（`-cursor` 變體的適用邊界受 TD-520 限制：**NEVER** 用於不可信第三方 code 或會接觸 secrets／prod 憑證的內容；0-A.1 review gate 已明文排除，見 `commit/gates.md` § 0-A.1），**NEVER** 當成機械故障直接 foreground 自跑。）
 
    - **(c)(d) 既有路徑不動**：(c) 維持主線自起 dev server + agent-browser；(d) 已走 `codex-dispatch-screenshot-verify.ts`，**不**改走本 dispatcher
    - **Evidence annotation 寫回 tasks.md 維持主線**（多 session 共用 working tree 的寫入紀律）— codex 只回報 JSON evidence，**NEVER** 讓 codex 直接 Edit tasks.md
@@ -145,7 +145,7 @@ Local edits will be reverted by the next sync.
 
       | 角色 | 範圍 | 檔位 |
       | --- | --- | --- |
-      | **收集**（輸出不是 gate） | 開 known URL、poll ready_signal、拍 final-state 截圖 | **codex GPT-5.6-sol medium** |
+      | **收集**（輸出不是 gate） | 開 known URL、poll ready_signal、拍 final-state 截圖 | **Pi Grok-4.6 low**（`--model grok-xai`） |
       | **判定（gate）** | 分析每張截圖是否匹配對應 item 要求（防止亂截圖搪塞） | **codex GPT-5.6-sol xhigh** |
 
       收集便宜跑快、判斷用最高推理力；兩者分開 dispatch 才擋得住「自己拍自己判」。
