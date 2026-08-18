@@ -36,6 +36,68 @@ Local edits will be reverted by the next sync.
 
 **同時像寬掃又像措辭時看產出形狀**：產出是事實表 / 清單 / 統計 → 派（寬掃的價值在把原文壓成結論）；產出是要寫進規約、契約或對外文件的**措辭** → 留。措辭的語氣與抽象層級一致性外包不了，派出去的典型結果是回頭逐條重寫（成本見 rationale）。
 
+## 停下來要人做之前（agent 與人的邊界，先於一切派工判定）
+
+上一節決定「主線做還是派出去」，本節決定**更前面**的一件事：這件事到底該不該離開 agent。
+適用**每一次**準備寫出「請你跑 / 需要你 / 麻煩你 / 我自己解不開」的時刻，不分工具、不分情境。
+
+**Iron Law：本 session 執行得了的動作 NEVER 交給人。違反字面就是違反精神——「他跑比較快」
+「這樣比較安全」「我試過了做不到」都不算遵守。**
+
+### MUST：兩條全中才准交給人
+
+1. **該動作在本 session 已實際嘗試過並失敗**，且貼得出失敗的逐字輸出（指令 + exit code + 訊息）。
+2. 失敗原因落在**人類專屬能力**：需要人的憑證或生物辨識、需要人在外部系統點擊授權、需要人做
+   商業／產品決策、或該動作不可逆且既有規約明文要求人 gate。
+
+兩條缺一就是自己做。**NEVER** 用「規約沒寫這種情況」推論可以交給人——沒有規約覆蓋的新情境，
+預設是 agent 自己處理，不是升級給人。
+
+### MUST：相鄰動作的失敗 NEVER 當作目標動作的證據
+
+探測用的指令被擋、相似的指令失敗、同一個 gate 擋過別的東西——**都不是**目標動作會失敗的證據。
+第 1 條要的是**那一個動作本身**的失敗輸出。
+
+**NEVER** 把「機制 M 擋掉了 A」推論成「機制 M 會擋掉 B」，即使 A 與 B 都經過 M。實測：擋住
+探測指令與放行解法指令，正是同一個 gate 被設計成要同時做到的兩件事。
+
+### MUST：session-scoped 的動作只有本 session 做得到
+
+動作若綁在本 session 的身分上（routing gate latch、session claim、verification lease、
+本 session 持有的鎖），人與其他 session 都**代勞不了**——交出去不是省事，是把它變成無人能解。
+遇到這類動作，第 1 條的「實際嘗試」是唯一出路。
+
+### Rationalization table（逐字實錄，2026-08-19 <consumer-i> session）
+
+| 開脫 | 現實 |
+| --- | --- |
+| 「Routing gate 進入死鎖了，我自己解不開——需要你跑一行指令」 | gate 從頭到尾可解；該 session 從未逐字跑過任何一條解法 |
+| 「hook 現在攔截所有 Bash 呼叫（我用 `echo` probe 驗證過），包括它自己指示的 waive 指令本身」 | `echo` 被擋是預期行為（它不是 remediation）。waive 指令實測 exit 0 放行——推論的兩端從未各自驗過 |
+| 「請你跑這行（`!` 前綴讓輸出落進本 session）」 | waive 認呼叫端 session id，人在別處跑會回 `routing decision is not pending for this Claude session`——交出去等於沒人做得到 |
+
+### Red Flags（發現自己在想這些 = 停下來，先去實際跑一次）
+
+- 「我自己解不開」——在還沒逐字跑過該動作之前
+- 「這是死鎖 / 這是雞生蛋」——結構性不可能要有兩端各自的失敗輸出才成立
+- 「請你跑這行就好，很快」——快不是理由，第 2 條才是
+- 「我用 X 驗證過了，所以 Y 也不行」——X 不是 Y
+- 「規約沒說這種情況怎麼辦，先問人比較保險」——沒覆蓋的預設是自己做
+
+### 已有的領域實例（本節是它們的通則，不取代任何一條）
+
+[[proactive-skills.dev-server-spawn]]（agent 自起 dev server，不叫 user `cd`）、[[commit.detail]]
+（不叫 user 開 main session）、[[session-tasks]] § Herdr session transport（transport 失敗回具體
+blocker，不降級成叫 user 貼 prompt）、[[review-gui-surface]]（`fix-requested` item 是 Claude 的
+工作，不推給 user）、[[manual-review.data-readiness]]（marker 誤標先改 marker，不叫 user 自己想辦法）。
+
+新情境不在上列時適用本節通則，**NEVER** 因為「我這個情況不在清單裡」就交給人。
+
+> 2026-08-19 實測：6 個 session 的 routing gate 卡在 pending，最久一筆從 08-14 卡到 08-19；其中
+> 一個明確宣告死鎖並停下等人工介入，而該 gate 全程可由它自己解開。
+>
+> 本證據決定：交給人之前 MUST 先實際跑過。
+> 本證據不決定：要不要用 gate／latch 這類機制——**NEVER** 拿它論證放寬或移除 gate。
+
 ## Dispatch 資料邊界（Approved-Tools gate，先於能力判斷）
 
 上一節的不外派清單管的是**動作**（憑證 / 刪檔 / force push），本節管的是**內容**：一個完全合法的
