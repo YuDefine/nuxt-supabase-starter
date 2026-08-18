@@ -589,7 +589,12 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
 8a. **Verify Channel Pass**（Step 8b 前 hard gate）
 
-   **Model allocation**：Step 8a 全部（含 8a.5 / 8a.6 / 8a.7）的**收集**工作（跑 verify channel、截圖、hook、sweep）由 **codex GPT-5.6-sol medium** 執行；截圖收集完成後，由 **codex GPT-5.6-sol xhigh** 分析每張截圖是否匹配對應要求（防止亂截圖搪塞）。
+   **Model allocation**（收集與判定是兩個角色，各自一個檔位；**NEVER** 合寫成一句，那會讓檔位判不出來）：
+
+   | 角色 | 範圍 | 檔位 |
+   | --- | --- | --- |
+   | **收集**（輸出不是 gate） | Step 8a 全部（含 8a.5 / 8a.6 / 8a.7）跑 verify channel、截圖、hook、sweep | **codex GPT-5.6-sol medium** |
+   | **判定（gate）** | 截圖收集完成後分析每張截圖是否匹配對應要求（防止亂截圖搪塞） | **codex GPT-5.6-sol xhigh** |
 
    Read `tasks.md` `## 人工檢查` 找未勾 `[verify:e2e]` / `[verify:api]` / `[verify:ui]` / `[verify:<a>+<b>]` / deprecated `[verify:auto]` items。**MUST** 先處理完所有 verify channels 才進 Step 8b。
 
@@ -631,9 +636,16 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    The user must not be the **first** to discover trivial UX/data defects in the GUI. <consumer-a> `app-status-badge-extraction`（2026-05-24）handed 9 fabricated `(verified-ui:)` annotations + an all-「-」員工 column straight to the user because nothing between Step 8a and the GUI re-checked the change. Step 8a.6 is that re-check.
 
-   **Model allocation**：E.1 五維分析由 **codex GPT-5.6-sol medium** 收集 + **codex GPT-5.6-sol xhigh** 判定。E.2 cross-model opinion 由 **codex GPT-5.6-sol xhigh** 執行。
+   **Model allocation**（收集與判定是兩個角色，各自一個檔位；**NEVER** 合寫成一句）：
 
-   **MUST** before Step 8b handoff, 派 **codex GPT-5.6-sol medium** 跑 5-dimension 收集（template 見下），再由 **codex GPT-5.6-sol xhigh** 對收集結果做 5-dimension 判定：
+   | 角色 | 範圍 | 檔位 |
+   | --- | --- | --- |
+   | **收集**（輸出不是 gate） | E.1 五維 evidence 收集 | **codex GPT-5.6-sol medium** |
+   | **判定（gate）** | E.1 對收集結果做五維判定 | **codex GPT-5.6-sol xhigh** |
+   | **判定（gate）** | E.2 cross-model second opinion（另起 session 獨立審） | **codex GPT-5.6-sol xhigh** |
+
+   **MUST** before Step 8b handoff 先派 **codex GPT-5.6-sol medium** 跑 5-dimension 收集（template 見下）。
+   收集回來後 **MUST** 另派 **codex GPT-5.6-sol xhigh** 對收集結果做 5-dimension 判定——判定是 gate，**NEVER** 與收集併在同一次 dispatch：
 
    **E.1 + E.2 執行**：**MUST** 完整讀 `references/pre-handoff-checks.md` § Step 8a.6 執行——E.1（codex medium 收集 5-dimension evidence → codex xhigh 判定 → 主線寫 finding report、FAIL 補 `（issue:）` / strip 假 annotation → `pre-handoff-ledger.ts record`）與 E.2（`codex-dispatch-pre-handoff-check.ts` cross-model 獨立審；fallback Claude subagent，**NEVER** 憑記憶補、**NEVER** 跳過 cross-check 直接 handoff）。**No finding report written → NO Step 8b handoff — this is the gate**；E.1 record 由 `archive-gate.sh` Check 7 機械強制。
 

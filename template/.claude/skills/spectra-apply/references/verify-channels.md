@@ -140,7 +140,14 @@ Local edits will be reverted by the next sync.
 
    4. **`[verify:ui]` channel — 派 verify mode（UI only）**
 
-      **Model allocation**：截圖收集由 **codex GPT-5.6-sol medium** 執行；收集完成後由 **codex GPT-5.6-sol xhigh** 分析每張截圖是否匹配對應 item 要求（防止亂截圖搪塞——收集與判斷分開、同 model 不同 effort，收集便宜跑快、判斷用最高推理力）。
+      **Model allocation**（收集與判定是兩個角色，各自一個檔位；**NEVER** 合寫成一句）：
+
+      | 角色 | 範圍 | 檔位 |
+      | --- | --- | --- |
+      | **收集**（輸出不是 gate） | 開 known URL、poll ready_signal、拍 final-state 截圖 | **codex GPT-5.6-sol medium** |
+      | **判定（gate）** | 分析每張截圖是否匹配對應 item 要求（防止亂截圖搪塞） | **codex GPT-5.6-sol xhigh** |
+
+      收集便宜跑快、判斷用最高推理力；兩者分開 dispatch 才擋得住「自己拍自己判」。
 
       **Runtime 選擇**（default Codex model via Pi；Claude subagent fallback）：
 
@@ -184,7 +191,7 @@ Local edits will be reverted by the next sync.
         --cwd <consumer-repo-root> \
         --label screenshot-match-<change> \
         --model sol --effort xhigh \
-        --route routing-table --tier-basis table-row --table-row screenshot-review-verify
+        --route routing-table --tier-basis table-row --table-row screenshot-match-analysis
       ```
 
       Prompt 內容固定包含：

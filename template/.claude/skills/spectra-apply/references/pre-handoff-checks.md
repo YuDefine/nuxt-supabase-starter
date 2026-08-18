@@ -15,14 +15,14 @@ Local edits will be reverted by the next sync.
 
 ## Step 8a.6 — E.1 收集 / 判定、結果處理、ledger record、E.2 dispatcher 與 fallback
 
-   **E.1 收集階段**（codex GPT-5.6-sol medium）：
+   **E.1 收集階段**（codex Grok-4.6 medium；收集輸出不是 gate，判定階段才是）：
 
    ```bash
    node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
      --brief /tmp/codex-8a6-e1-collect-<change>-prompt.md \
      --cwd <consumer-repo-root> \
      --label spectra-e1-collect-<change> \
-     --model sol --effort medium \
+     --model grok-xai --effort medium \
      --route routing-table --tier-basis table-row --table-row spectra
    ```
 
@@ -86,9 +86,9 @@ Local edits will be reverted by the next sync.
 
    2. **LEGACY 清理**：刪掉 `legacy` array 內所有無 `#N` 前綴的舊圖（`rm` 即可；它們不配對任何 item）。
 
-   3. **STALE 重拍**（**codex GPT-5.6-sol medium**）：對 `stale` array 內每個 item：
+   3. **STALE 重拍**（**codex Grok-4.6 medium**）：對 `stale` array 內每個 item：
       - 從 tasks.md `## 人工檢查` 找到對應 `#N` item 的 URL + ready_signal
-      - 派 codex GPT-5.6-sol medium 透過 `codex-dispatch-screenshot-verify.ts` 重拍該張截圖
+      - 派 codex Grok-4.6 medium 透過 `codex-dispatch-screenshot-verify.ts` 重拍該張截圖
       - 覆蓋原檔（mtime 自然 > last UI commit）
       - 重拍完成後，對重拍的截圖跑 **Screenshot Match Analysis gate**（同 Step 8a § 4 的 codex GPT-5.6-sol xhigh 分析），確認重拍截圖匹配要求
 

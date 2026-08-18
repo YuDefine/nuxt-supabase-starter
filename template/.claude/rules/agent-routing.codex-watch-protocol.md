@@ -432,7 +432,7 @@ Claude Code session 收到 spectra propose 請求時：
 1. **NEVER** 用 AskUserQuestion 問 A/B（除非使用者**明確**要求「純 Claude propose」或「不要派 codex」）
 2. **MUST** 預設走「Codex draft + 主線 cross-check」流程：
    1. 主線解析 change name + requirement
-   2. 派 background codex GPT-5.6-sol xhigh draft（走「Codex 派工的標準流程」）
+   2. 派 background codex GPT-5.6-sol max draft（走「Codex 派工的標準流程」）
    3. 收到 `<task-notification status=completed>` 後，主線 **MUST** 依序：
       - Read codex 產出的 proposal.md / design.md / tasks.md
       - 跑 `bash scripts/spectra-advanced/post-propose-check.sh <change>`（檢查 User Journeys / Affected Entity Matrix / Implementation Risk Plan / Design Review 7 步）
