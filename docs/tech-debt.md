@@ -16,6 +16,9 @@
 | TD-002 | Scaffolder `nuxthub-ai` preset 不自動生 D1 evlog_events migration | high     | done | 2026-05-10         | —     |
 | TD-003 | Scaffolder dist 在非 TTY (Claude Code Bash / CI) 必經 `script` wrapper | low      | done   | 2026-05-10         | —     |
 | TD-004 | Spectra roadmap drift check 在 CI 永遠 false positive | mid      | in-progress | 2026-05-10 v0.31.0 | —     |
+| TD-005 | meta-monorepo 下 pre-push 7 道 check 全部靜默 no-op | high     | open   | 2026-08-19         | —     |
+| TD-006 | 在本 repo 跑 install 會讓 clade bootstrap 把 starter 自己當 consumer 投影 | high     | open   | 2026-08-19         | —     |
+| TD-007 | scaffolder 測試套件並行不安全；`detectMonorepoRoot` 讀 `PWD` 而非 cwd | mid      | open   | 2026-08-19         | —     |
 
 ---
 
@@ -235,3 +238,134 @@ node dist/cli.js test-app-baseline --yes --evlog-preset baseline < /dev/null   #
 - 連續數輪 `check passed` → 問題已隨其他改動消失，拿掉 `continue-on-error`
   改回真 gate，本條結案
 - 報 stale → diff 即是待查的 structural difference 來源，接 §Fix approach 第 2 步
+
+---
+
+## TD-005 — meta-monorepo 下 pre-push 7 道 check 全部靜默 no-op
+
+**Status**: open
+**Priority**: high
+**Discovered**: 2026-08-19 — clade convention 對齊掃描（bp 庫比對）
+**Location**: `template/scripts/pre-push/runner.sh`（clade vendor script，投影副本勿直接改）、`template/scripts/pre-push/checks/*.sh`
+
+### Problem
+
+`runner.sh` 與每支 check 都用 `PROJECT_ROOT="$(git rev-parse --show-toplevel)"` 決定工作目錄。
+在 scaffold 出去的專案裡這是對的（`template/` 內容就是 repo root），但在本 meta-monorepo
+裡 git toplevel 是 `nuxt-supabase-starter/`，而 `nuxt.config.ts` 在 `template/`。
+
+七支 check 全部走 auto-detect「偵測 nuxt.config.* 才跑」，於是**全部判定不適用、全部
+exit 0、全部零輸出**。實測 `bash template/scripts/pre-push/runner.sh` 的 stdout 是空的、
+exit code 0：
+
+| check | 本 repo 實際行為 |
+| --- | --- |
+| nuxt-typecheck / native-picker-ban / data-perf-check / mutation-loading / review-rules-ratchet / nuxt-ui-mixed-slot / utable-slots | 全部 no-op |
+
+這層防護在本 repo 從來沒有跑過，而它的失效是靜默的——沒有 warning，只有「pre-push 很快就過了」。
+
+（本次已另外補上 `template/.vite-hooks/pre-push`，讓 hook 至少會被 git 呼叫到；
+在 scaffold 出去的專案裡那條修正就完整生效。本 entry 只剩 meta-monorepo 這一半。）
+
+### Fix approach
+
+1. 讓 check 的 project root 可覆寫（例如認 `CLADE_PROJECT_ROOT`，未設時 fallback 回
+   `git rev-parse --show-toplevel`），由 `template/.vite-hooks/pre-push` 帶入 `template/`。
+2. 改動落點是 clade `vendor/scripts/pre-push/`，**NEVER** 直接編輯本 repo 的投影副本；
+   改完走 publish + propagate。
+3. 順帶檢查同型：`template/.husky/pre-commit` / `pre-push` 在 `core.hooksPath` 指向
+   `.vite-hooks/_` 之後是否已成為死檔，若是就移除，避免兩份看起來都生效的 hook。
+
+### Acceptance
+
+- 在本 repo 對 `template/**` 動一個會被 review-rules-ratchet 抓到的違規，`git push` 被擋下
+- `bash template/scripts/pre-push/runner.sh` 有實際輸出，七項逐項印出結果
+
+---
+
+## TD-006 — 在本 repo 跑 install 會讓 clade bootstrap 把 starter 自己當 consumer 投影
+
+**Status**: open
+**Priority**: high — 污染會直接進 `template/` seed，而 seed 是要公開發佈的
+**Discovered**: 2026-08-19 — 在 `template/packages/create-nuxt-starter/` 跑 `npx vitest`（npx 需先安裝 vitest）時實際發生
+**Location**: `template/package.json` 的 `postinstall`（呼叫 clade `scripts/bootstrap-hub.ts`）
+
+### Problem
+
+`template/package.json` 的 `postinstall` 對 scaffold 出去的專案是正確的——新專案就該從 clade 拉
+rules / skills / hooks。但在**本 repo 內**，最近的 `package.json` 就是 `template/package.json`，
+於是任何觸發 install 的動作（`npx <未安裝的套件>`、`pnpm install`、某些 test runner 啟動）
+都會讓 clade bootstrap 把 **starter 自己**當成 consumer 做投影。
+
+實測一次觸發造成 97 個檔變更：
+
+- `template/.claude/` 81 個檔被 clade **未去識別化**版本覆蓋——202 行寫入真實 consumer 名稱
+  （去識別化 placeholder 被真名取代），`<!-- starter:strip-begin -->` 段落被寫回
+- golden-path 注入：`app/app.vue` 加 `NuxtLoadingIndicator`、`.env.example` 加 `NUXT_APP_ENV`、
+  `nuxt.config.ts` / Sentry 相關檔
+- 新增 `.claude/rules/drag-interaction.md`
+
+（原本本節還列了 `NuxtLoadingIndicator`、`NUXT_APP_ENV`、`evlog-postgres-drain.ts`、
+`*_create_evlog_events.sql`、`.vite-hooks/pre-push`、`evlog` 版本 bump——那些其實是
+並行 session 的 clade convention 對齊工作（commit 75b8f03），不是 bootstrap 產物。
+當時兩者的變更同時出現在 working tree 才被歸成一筆。）
+- 連帶重生成 clade 端 `registry/consumers-meta.json`
+
+沒有任何 gate 擋住它，且 `git status` 之外沒有訊號——不主動比對就會被下一次 commit 帶走。
+
+**2026-08-19 已實際發生一次**：commit `eae5091` 就是這個入口的產物，帶進 221 行真實
+consumer 名稱與 11 處 `starter:strip` marker，已由 `a351053` revert。這條的 Priority
+是 high 不是理論值。
+
+### Fix approach
+
+1. `postinstall` 加 self-detection：偵測到 cwd 落在 starter 維護倉內（例如上層有
+   `scripts/create-clean.sh` + `template/`，即 `assemble.ts:isMonorepoRoot()` 的同一判準）
+   就 skip bootstrap 並印一行說明
+2. 或改由 `CLADE_HOME` 之外再要求一個 opt-in env，本 repo 的 `.npmrc` 明確關掉
+3. 補一道 audit / pre-commit check：`template/.claude/` 出現真實 consumer 名稱即 block
+   （對應 `.claude/rules/starter-hygiene.md` 的 `real-tenant-identifier`）
+
+第 3 條與 `starter-public-hygiene-commands` / `clade-starter-sanitization` 同屬一個問題域，
+但那兩條處理的是**存量**去識別化，本條處理的是**再污染入口**——存量清乾淨後這個入口仍在。
+
+### Acceptance
+
+- 在 `template/` 或其子目錄跑 `pnpm install`，`git status` 對 `template/.claude/` 零變更
+- 刻意在 `template/.claude/rules/` 寫入一個真實 consumer 名稱，pre-commit 或 audit 擋下
+
+---
+
+## TD-007 — scaffolder 測試套件並行不安全；`detectMonorepoRoot` 讀 `PWD` 而非 cwd
+
+**Status**: open
+**Priority**: mid
+**Discovered**: 2026-08-19 — 新增 `test/cli-evlog-preset.e2e.test.ts` 時撞到
+**Location**: `template/packages/create-nuxt-starter/test/`、`src/cli.ts` `detectMonorepoRoot()`
+
+### Problem
+
+兩個獨立但會互相放大的問題：
+
+1. **測試套件並行不安全**：`npx vitest run` 預設並行跑 file，`scaffold-audit-regression.test.ts`
+   會失敗；同一套測試加 `--no-file-parallelism` 則 92 passed 全綠。多個測試檔同時 scaffold
+   到相鄰目錄，彼此干擾。
+2. **`detectMonorepoRoot()` 讀 `process.env.PWD`**（`cli.ts:48`）而非實際 cwd。`spawnSync` 給的
+   `cwd` 選項不會改寫 `PWD`——子程序繼承呼叫者 shell 的值。所以任何從 repo 內用工具呼叫
+   `dist/cli.js` 的情境，CLI 都會判定「在 starter monorepo 裡」並把專案改建到 repo root，
+   而不是呼叫者指定的目錄。這不只是測試斷言失敗，是**真的把檔案寫到別的地方**。
+
+新測試已用 `mkdtempSync(tmpdir())` + 顯式覆寫 `PWD` / `INIT_CWD` 迴避第 2 點，但那是測試端的
+繞道，CLI 本身的行為沒改。
+
+### Fix approach
+
+1. `vitest.config.ts` 設 `fileParallelism: false`，或讓每個測試檔的 TEST_DIR 落在
+   `mkdtempSync(tmpdir())` 而非 `test/.tmp-*`（後者較好，順帶讓測試不寫進 repo）
+2. `detectMonorepoRoot()` 改以 `process.cwd()` 為主、`PWD` 僅作 fallback；
+   或明確只在 `INIT_CWD` 存在時（真正的 npm/pnpm 呼叫路徑）才採用環境變數
+
+### Acceptance
+
+- `npx vitest run`（不加 `--no-file-parallelism`）全綠
+- 從 repo 內任一目錄 `spawnSync(node, [cli, name, '--yes'], {cwd: X})`，專案建在 `X/name`
