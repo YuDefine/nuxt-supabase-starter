@@ -108,7 +108,7 @@ session —— 把閂交給它等於沒有閂。
 
 ### 收工三步（越過 500k 那一級 MUST，順序不可調換）
 
-1. **先把每一項可派的殘工 `/handoff now` 派出去**（transport 走 § Herdr session transport）
+1. **先把殘工派出去**（transport 走 § Herdr session transport）。**預設走 `/handoff relay` 一次交出整個位置**——把所有殘工寫進同一份 brief 交給 successor，由它以 fresh context 續判要不要再細分。只有當殘工是**單一一項**、且本 session 確實還付得起「留下來持有 handshake 到 terminal receipt」的成本時，才走 `/handoff now`（判準見 § `now`（delegate）還是 `relay`（succession））
 2. 剩下**派不出去**的才寫進 `tasks/<date>-<slug>.md`（或 `HANDOFF.md` / `docs/tech-debt.md`），且**逐條寫明它派不出去的具體外部條件**
 3. 收工，收工訊息走 § 收工訊息契約
 
@@ -120,6 +120,12 @@ session —— 把閂交給它等於沒有閂。
 
 **context 越滿，dispatch 的相對價值越高**：那些 token 每一個 turn 都重讀一次。500k 那一級是**最該派**
 的時刻，**NEVER** 讀成「已經沒有餘裕再派了」。
+
+**但 500k 也正是 `now` 付不起的時刻**——它要求本 session 留下來反覆前景 `--coordinate-resume` 直到
+terminal receipt，而收工三步的前提就是本 session 要收工了。**NEVER** 在 500k 用 `now` 派完就宣稱收工：
+那會留下一個沒有人持有的 handshake，child 的 outcome 寫進 durable record 後沒有任何東西會把它收割
+（實測形狀：15 筆 dispatch record 掛 118–169 小時從無 completion）。要交出去就用 `relay` 連 coordinator
+身分一起交，要留下來驗收就別宣稱收工，**NEVER** 兩者都要。
 
 「派不出去」**MUST 講得出具體外部條件**，只有兩類算數：
 
