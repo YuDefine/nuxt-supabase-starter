@@ -171,9 +171,6 @@ catalog:
 
 #### 真實事故參考
 
-<!-- starter:strip-begin -->
-<consumer-b> 2026-05-19：原本走全域 `vite-plus@0.1.19`（含 oxlint 1.60 / oxfmt 0.45），其他 consumer 全域可能各裝不同版（<consumer-a> 跑 0.1.20、<consumer-d> 可能更舊）。新人 fork <consumer-b> 不裝 vite-plus → 直接撞 `vp: command not found`，誤以為要全域裝 latest（會升到 oxlint 1.66）→ 撞 10 個既有 test 檔 lint violation。把 vite-plus pin 進 `devDependencies@0.1.21` 解決：(a) 確定工具鏈版本、(b) CI / dev / fork 工作流一致、(c) 未來升級走 upgrade-packages skill。
-<!-- starter:strip-end -->
 
 ### 禁止在 lint-staged / pre-commit / CI 命令中呼叫 eslint / prettier
 
@@ -227,13 +224,6 @@ consumer 端 LOCKED projection 的 ignore 機制設計：
 
 對應 `package.json` `check` script（local dev / pre-push 用）可保留 `vp check` 但 consumer 必須**清楚知道**這個 script 在 LOCKED projection 既有的情況下會撞——dev 端用 `vp staged` (pre-commit) 或拆 step 跑各別 npm script 替代。
 
-<!-- starter:strip-begin -->
-### 真實事故參考
-
-<consumer-a> consumer v0.40.0（2026-05-13）CI 紅燈：`_ci-reusable.yml` 跑 `vp run check` → vp check 撞 9 個 LOCKED projection format issue → deploy/migrate job 沒跑 → production 沒上線。修法 = 把 `vp run check` 拆成 `vp run format:check` + `vp run typecheck`（對齊 <consumer-b>）。詳見 <consumer-a> `docs/tech-debt.md` TD-056（CI workflow ignore-path drift）。
-
-`pnpm-lock.yaml` 重生時 oxlint patch 升版可能讓既有 warning 升 error（<consumer-a> 2026-05-14 觀察到 `vp lint` 對 `scripts/audit-ux-drift.ts` 從「2 warnings + 0 errors」變成「0 warnings + 1 error」）。CI lint baseline 需週期性 audit。
-<!-- starter:strip-end -->
 
 ## 必須事項（MUST）
 
@@ -283,13 +273,6 @@ baseline 內容（自 `vendor/oxc-shared/preset.mjs`）：
 - 直接 inline 寫 `lint:` / `fmt:` 全部欄位而不 import preset — 哪天 preset 升版（例：oxlint patch 升 `no-underscore-dangle` 從 warn 升 error 要在 preset 反制），consumer 就會 silently drift。
 - 在 consumer 端的 `vendor/oxc-shared/preset.mjs` 投影檔直接改 — 下次 propagate 會覆蓋。要改 baseline → cd 到 clade 改 `vendor/oxc-shared/preset.mjs` 再 propagate。
 
-<!-- starter:strip-begin -->
-**真實事故參考**：<consumer-a> 2026-05-14 觀察 `vp lint scripts/audit-ux-drift.ts`（檔案內容無 git diff）：
-- @ v0.39.2: `Found 2 warnings and 0 errors`
-- @ main (v0.40.0): `Found 0 warnings and 1 error`
-
-`pnpm-lock.yaml` 自 v0.39.2 後重生兩次，oxlint 在 `^0.1.21` 內升 patch，把 `no-underscore-dangle` rule level 從 warn 升 error。各 consumer 都吃 clade 同一份 oxlint dep range — preset 已 pin 此 rule 為 `['warn', { allow: ['__dirname', '__filename'] }]`，import 即享 single source of truth。
-<!-- starter:strip-end -->
 
 # Lint（修復可自動修復的問題）
 pnpm vp lint --fix
@@ -406,7 +389,7 @@ pnpm exec vp fmt --migrate=prettier  # 從既有 prettier config 遷移（若有
   2. **inlineDrift** — 未 import preset 時，inline 寫死的 fmt baseline 欄位（`trailingComma`、`semi`、`singleQuote`、`printWidth` 等 11 項）與 baseline 不一致的 entries
   - 用法：`node scripts/audit-tooling-drift.ts [--markdown|--json]`；diagnostic-only，exit code 永遠 0；HANDOFF §4 baseline 由此 script 維護
   - 後續擴充至 7 個 signal（`structuralDrift` / `strayDotfiles` / `viteplusLocal` / `pnpmOrphans` / `eslintDeps`）
-- `scripts/audit-tooling-drift.ts` `eslintDeps` signal：掃每個 consumer `package.json` deps/devDeps 是否含本節禁用的 eslint / prettier 套件（`eslint` / `@nuxt/eslint*` / `@typescript-eslint/*` / `eslint-config-*` / `eslint-plugin-*` / `prettier` / `prettier-plugin-*`）→ 列為 `forbidden-deps-present`。warn-only，源於 <consumer-k> + co-purchase 採 Vite+ 後移除 `@nuxt/eslint`
+- `scripts/audit-tooling-drift.ts` `eslintDeps` signal：掃每個 consumer `package.json` deps/devDeps 是否含本節禁用的 eslint / prettier 套件（`eslint` / `@nuxt/eslint*` / `@typescript-eslint/*` / `eslint-config-*` / `eslint-plugin-*` / `prettier` / `prettier-plugin-*`）→ 列為 `forbidden-deps-present`。warn-only，源於 <consumer-h> + <consumer-e> 採 Vite+ 後移除 `@nuxt/eslint`
 
 ### 建議擴充（尚未實作）
 

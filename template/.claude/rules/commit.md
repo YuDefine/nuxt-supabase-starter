@@ -36,7 +36,7 @@ Local edits will be reverted by the next sync.
 
 ### Git 命令禁令
 
-- **NEVER** 執行 `git restore` / `git restore --staged` / `git checkout --` / `git checkout <path>` — 這會永久毀掉 unstaged 變更。**禁的是動作，不是某一種用途**：「清場」只是最常見的那個，「**還原剛才為了驗證而臨時改的檔**」是同樣會毀掉整輪未 commit 改動的第二個入口 —— 它主觀上像 undo，實際是還原到 index，而 index 裡是**上一次 commit** 的版本。臨時改動要還原就反向改回去（同一支 script、同一個編輯器），**NEVER 讓 git 來做這件事**
+- **NEVER** 執行 `git restore` / `git restore --staged` / `git checkout --` / `git checkout <path>` 清場 — 這會永久毀掉 unstaged 變更
 - **NEVER** 執行 `git reset --hard` / `git reset HEAD --hard` / `git clean -fd` — 同上
 - **NEVER** 執行 `git stash clear`（一次炸掉全部，無法逐條判定）；`git stash drop` **僅**在通過下方
   § Stash 自動處置 gate 的全部判準時允許，其餘一律禁止

@@ -124,7 +124,7 @@ Local edits will be reverted by the next sync.
         --cwd <consumer-repo-root> \
         --label spectra-propose-<change-name> \
         --model sol --effort max \
-        --route routing-table --tier-basis table-row --table-row spectra-artifact-draft
+        --route routing-table --tier-basis table-row --table-row spectra
       ```
 
    4. **立刻**簡短回報給使用者：「已派 Codex GPT-5.6-sol max 在背景 draft `/spectra-propose <change-name>`（bash job `<id>`），完成後主線會 cross-check 並補 Design Review template」
