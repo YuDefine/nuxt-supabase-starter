@@ -253,9 +253,24 @@ session boundary 或跨 repo 決策已判定確實需要另一個互動 session�
 直接問 user」。逐字反開脫：「這項要 attended，所以不能派」「要 user 逐批拍板，留在本 session 比較快」。
 本段適用**每一項**判為需要人拍板的殘工，不是只有其中比較單純的那幾項。
 
-命中時 **MUST** invoke `herdr` skill並先讀 `herdr-session-handoff/README.md`；每一個 `/handoff now`只走 `vendor/scripts/herdr-session-handoff.ts --coordinate`的 canonical helper，由 helper統一 provision、fresh Claude session identity、prompt delivery、bounded wait、business outcome harvest與 verified reclaim。coordinator 每次只執行 bounded foreground slice，**NEVER** 使用 `run_in_background=true`。slice 到期且exact child仍在工作、沒有correlated completion時回 `coordination_pending`：它是**非終局 receipt**，保留pane與durable record，pending不得archive或reclaim，也不進下段terminal receipt查證；exact parent Claude session仍 live時只能用 canonical `--coordinate-resume <dispatch-id>`重驗ownership與exact session後續接下一個前景slice，session移到別pane仍由helper解析，原pane換成別session不得resume。**coordinator 尚未返回前**，原 Claude session只等待 helper的單一結構化結果，**NEVER** 自行輪詢接手 pane、從 lifecycle猜 outcome或向接手 session追問進度。
+### `now`（delegate）還是 `relay`（succession）—— 先判這一題
 
-**拿到 `coordination_pending` 而本回合要結束時，MUST 在結束前 arm 一個 keepalive wakeup 續跑 `--coordinate-resume <dispatch-id>`**（形狀依 [[agent-routing]] § Generic async keepalive prompt）。逐字反開脫：「不阻塞、等通知回來再收」「我不打算輪詢」「等 coordinator」——child 的 outcome 只寫進 durable record，**沒有任何東西會替你把 turn 叫回來**；helper 在 child 回報時會 best-effort push 叫醒 parent pane，但 parent pane 換了 session 或已消失就 skip，**NEVER** 拿它當 arm keepalive 的替代。兜底自查：任何 session 都可跑 `node vendor/scripts/herdr-patrol.ts --stalled`，逐列印出已回報卻沒人收割的 dispatch 與該跑的指令（有停滯 exit 3）；exact parent session全域缺席標 `orphan-recoverable`，只有該 durable dispatch的exact child可由 `/handoff now`走 `--recover-orphan` one-way claim建立唯一fresh successor。Parent exact session仍 live、identity缺失／重複／snapshot不可驗時都不得recovery；prompt-cache TTL與record年齡對ownership零訊號。一般 coordinated child仍禁止nested handoff，**只有**helper核准的 recovery token例外。
+兩條 path 交出去的東西不同，判準是**交出去之後本 session 還有沒有下一步**：
+
+| 可觀察 predicate | path | 交出去的是 |
+| --- | --- | --- |
+| 交出去之後本 session 仍要驗收 outcome、把 blocked decision 端給 user、或繼續推別的工作 | `/handoff now` | **一件工作**。本 session 仍是責任持有者，MUST 持有 handshake 到 terminal receipt |
+| 交出去之後本 session 沒有下一步了——context 撐不住、或這份工作就是它剩下的全部 | `/handoff relay` | **一個位置**。successor 繼承 brief ＋ 所有 in-flight dispatch 的 coordinator 身分，本 session 隨即收工 |
+
+**context 吃緊時 MUST 走 `relay`，NEVER 走 `now`。** `now` 要求 coordinator 反覆前景 `--coordinate-resume` 直到 terminal receipt，而那正是 context 吃緊時付不起的成本——用 `now` 交出工作再留下來燒 context，手段否定了目的。逐字反開脫：「先 `now` 派出去，撐不住再說」「反正它應該很快就回來」「我等一下自己就收工了，用哪條都一樣」。
+
+**relay 之後 NEVER 再開任何新工作段。** 位置已經交出去了：本 session 唯一剩下的動作是回報 relay receipt 然後結束回合，**NEVER** 續推 brief 裡的工作、**NEVER** 輪詢 successor、**NEVER** 等它回應。successor 讀完 brief 後會回收本 pane。
+
+**本段適用每一次 handoff 判定，不是只有其中看起來比較大的那幾次。**
+
+命中時 **MUST** invoke `herdr` skill並先讀 `herdr-session-handoff/README.md`；每一個 `/handoff now`／`/handoff relay` 都只走 `vendor/scripts/herdr-session-handoff.ts` 的 canonical helper（`now` 用 `--coordinate`、`relay` 用 `--relay`），由 helper統一 provision、fresh Claude session identity、prompt delivery、bounded wait、business outcome harvest與 verified reclaim。coordinator 每次只執行 bounded foreground slice，**NEVER** 使用 `run_in_background=true`。slice 到期且exact child仍在工作、沒有correlated completion時回 `coordination_pending`：它是**非終局 receipt**，保留pane與durable record，pending不得archive或reclaim，也不進下段terminal receipt查證；exact parent Claude session仍 live時只能用 canonical `--coordinate-resume <dispatch-id>`重驗ownership與exact session後續接下一個前景slice，session移到別pane仍由helper解析，原pane換成別session不得resume。**coordinator 尚未返回前**，原 Claude session只等待 helper的單一結構化結果，**NEVER** 自行輪詢接手 pane、從 lifecycle猜 outcome或向接手 session追問進度。
+
+**拿到 `coordination_pending` 而本回合要結束時，MUST 在結束前 arm 一個 keepalive wakeup 續跑 `--coordinate-resume <dispatch-id>`**（形狀依 [[agent-routing]] § Generic async keepalive prompt）。逐字反開脫：「不阻塞、等通知回來再收」「我不打算輪詢」「等 coordinator」——child 的 outcome 只寫進 durable record，**沒有任何東西會替你把 turn 叫回來**；helper 在 child 回報時會 best-effort push 叫醒 parent pane，但 parent pane 換了 session 或已消失就 skip，**NEVER** 拿它當 arm keepalive 的替代。兜底自查：任何 session 都可跑 `node vendor/scripts/herdr-patrol.ts --stalled`，逐列印出已回報卻沒人收割的 dispatch 與該跑的指令（有停滯 exit 3）；exact parent session全域缺席標 `orphan-recoverable`，只有該 durable dispatch的exact child可由 `/handoff now`走 `--recover-orphan` one-way claim建立唯一fresh successor。Parent exact session仍 live、identity缺失／重複／snapshot不可驗時都不得recovery；prompt-cache TTL與record年齡對ownership零訊號。一般 coordinated child仍禁止nested handoff，**只有**helper核准的 recovery token與 attested relay例外。
 
 **terminal receipt 返回後這條即失效，查證改為 MUST。** 非 success terminal receipt（`completion_blocked` / `completion_failed` / `completion_unknown`）返回時，在寫下**任何**關於接手 session 做了什麼的斷言之前、以及做**任何**補救動作之前，MUST 先讀該 pane 的 `agent_status` 與 scrollback（`herdr pane list` / `herdr pane read`）。receipt 的 `agent settled without a valid correlated business outcome` 只斷言 **helper 沒收到 outcome**，對「它現在在不在工作」零訊號——Herdr 的 `done` 是「未被看見的背景工作結束後的 idle」，agent 回完一個 turn 後照樣繼續工作。**NEVER** 用「目標檔 mtime 沒變 / `git status` 乾淨 / 無新 commit」推論它沒做事（那是 negative search 當證據）；**NEVER** 未查證就重送同一份 brief（接手 session 仍在工作時重送 ＝ 兩個 agent 同時改同一批檔）。查證後 `agent_status` 是 `working` → 它還在做，**NEVER** 重送或打斷；receipt 無 `pane_id`（pane 建立前就失敗）→ 本條不適用，直接回具體 error。非 success receipt 返回時 **MUST 讀** handoff skill `now-steps.md` § 4.1 的查證程序與四路分流。
 
