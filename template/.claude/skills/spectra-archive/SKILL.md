@@ -22,6 +22,10 @@ Archive a completed change.
 
 > **Ownership**（clade fork；cross-phase matrix in `rules/core/spectra-workflow.md`）：archive gate-check 負責 archive 前再跑 Layer C data-sanity + `archive-gate.sh` Check 1–7（journey / schema-types / exhaustiveness / manual-review kind / screenshot quality / stale verified-ui / pre-handoff-verdict）。**不**負責上游 phase 已 own 的 checkpoint（propose Layer A、apply Step 6c/Layer B、pre-handoff Step 8a.6/Layer E 各在自己 phase 抓）；Check 7 只是機械驗證 Step 8a.6 的 E.1 verdict record 已存在（缺則擋 archive），不重跑 self-analysis 本身。
 
+> **Pre-flight evidence gate**（clade fork；2026-08-18）：PreToolUse hook `pre-archive-evidence-gate.sh` 在本 skill 啟動前跑 `vendor/scripts/audit-evidence-completeness.ts`，核對每個**已勾** manual-review item 是否有對應 receipt。已勾卻沒有 evidence 就是 false-green（`rules/core/agent-self-verification.md` MUST 8），gate 以 exit 2 擋下 archive 並把缺口清單印進 stderr。
+>
+> 被擋時只有兩條合法出路：**補齊 receipt**，或把該 item 標 `deferred`（audit 自帶的逃生口）。**NEVER** 把 item 取消勾選來繞過——那讓「做過但沒證據」偽裝成「沒做」，兩者在後續稽核上不可區分。audit 回 infrastructure-error（exit 2）時 hook fail-open 放行，所以 gate 靜默不等於 evidence 齊全。
+
 **Input**: Optionally specify a change name after `/spectra-archive` (e.g., `/spectra-archive add-auth`). If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
 
 **Prerequisites**: This skill requires the `spectra` CLI. If any `spectra` command fails with "command not found" or similar, report the error and STOP.
