@@ -51,6 +51,20 @@ LOG_DIR="$REPO/.clade/work-loop/logs"
 # child 自己寫的 state.stoppedReason 仍然有效且保留支援 —— 那條路徑沒有 clobber 風險，
 # 因為寫它的 child 就是最後一個寫入者、寫完立刻退出。壞掉的只有**外部**要求停止這條。
 STOP_FILE="$REPO/.clade/work-loop/stop"
+
+# 解析 JSON 用的 node —— **MUST 走這個變數，NEVER 直接 `node -e`**。
+#
+# 這些 node -e 的 stdout 被下面的 `case "$x" in ''|*[!0-9]*)` 當數字判讀，而 `console.log(<number>)`
+# 走 util.inspect：`FORCE_COLOR` 有值時它會把 `0` 印成 `\033[33m0\033[39m`，於是「讀得到而且是 0」
+# 被判成「讀不出來」→ runner 在 startup 就 exit 5，還寫下 quarantine marker 說 preexisting-inflight
+# —— 訊息與真實成因完全無關，看到的人會去查根本不存在的 in-flight job。
+#
+# 2026-08-18 實測：`FORCE_COLOR=3`（Claude Code 的 Bash 工具環境即為此值）下 runner 一輪都跑不起來，
+# `test/work-loop-runner.test.ts` 10 個 case 全紅。字串輸出（"invalid" / "NaN" / stoppedReason）
+# 不受影響，所以只有印數字的那幾處會發作 —— 這是它能潛伏到現在的原因。
+#
+# NEVER 改成在 runner 頂層 export FORCE_COLOR=0：那會一併關掉 child `claude --print` 的顏色。
+NODE_PLAIN="env FORCE_COLOR=0 NO_COLOR=1 node"
 QUARANTINE_FILE="$REPO/.clade/work-loop/orphan-quarantine.json"
 LOCK_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-lock.ts"
 READY_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-ready-count.ts"
@@ -152,7 +166,7 @@ stopped_reason() {
 
 round_of() {
   [ -f "$STATE" ] || { echo 0; return; }
-  node -e '
+  $NODE_PLAIN -e '
     try {
       const r = require(process.argv[1]).round ?? 0
       console.log(Number.isInteger(r) && r >= 0 ? r : "invalid")
@@ -193,7 +207,7 @@ release_runner_lock() {
 # Step 2.7 承擔（Charles 2026-08-06 拍板）。NEVER 改成 exit≠0。
 awaiting_count() {
   [ -f "$STATE" ] || { echo 0; return; }
-  node -e 'try{const a=require(process.argv[1]).awaiting;console.log(Array.isArray(a)?a.length:0)}catch{console.log(0)}' "$STATE" 2>/dev/null || echo 0
+  $NODE_PLAIN -e 'try{const a=require(process.argv[1]).awaiting;console.log(Array.isArray(a)?a.length:0)}catch{console.log(0)}' "$STATE" 2>/dev/null || echo 0
 }
 
 # child process 已退出後，background task 的 harness ownership 也跟著消失。runner 必須在
@@ -201,7 +215,7 @@ awaiting_count() {
 # 誤判成成功輪。
 in_flight_count() {
   [ -f "$STATE" ] || { echo 0; return; }
-  node -e '
+  $NODE_PLAIN -e '
     try {
       const a = require(process.argv[1]).inFlight
       if (a === undefined) console.log(0)
@@ -338,7 +352,7 @@ run_ready_gate() {
     echo "⚠ ready-count 執行失敗，略過待辦源健康門檻"
     return 0
   }
-  ready="$(node -e 'try{const r=JSON.parse(process.argv[1]).ready;console.log(Number.isInteger(r)?r:"NaN")}catch{console.log("NaN")}' "$json" 2>/dev/null)"
+  ready="$($NODE_PLAIN -e 'try{const r=JSON.parse(process.argv[1]).ready;console.log(Number.isInteger(r)?r:"NaN")}catch{console.log("NaN")}' "$json" 2>/dev/null)"
   case "$ready" in
     ''|*[!0-9]*) echo "⚠ ready-count 輸出無法解析，略過待辦源健康門檻"; return 0 ;;
   esac
