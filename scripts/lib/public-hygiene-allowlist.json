@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "comment": [
+    "starter-public-hygiene-commands change 的 L3 audit allowlist。",
+    "commands 段已由該 change 逐條審查（design.md 內 9 條 disposition 表格）。",
+    "skills 段為 placeholder，由後續 starter-public-hygiene-skills change 填入；",
+    "在那之前 skills 一律歸類為 unaudited（warning，不 fail）。"
+  ],
+  "commands": {
+    "starter-owned-keep": [
+      "canary",
+      "freeze",
+      "guard",
+      "retro",
+      "second-opinion",
+      "ship",
+      "sprint-status",
+      "unfreeze"
+    ],
+    "starter-owned-relocate": ["validate-starter"],
+    "starter-owned-deny": []
+  },
+  "skills": {
+    "starter-owned-keep": [],
+    "starter-owned-relocate": [],
+    "starter-owned-deny": []
+  }
+}
