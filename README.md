@@ -194,6 +194,30 @@ Stack preset：`cloudflare-supabase`（預設）/ `cloudflare-nuxthub-ai` / `ver
 
 ---
 
+## Public hygiene policy
+
+這個 repo 是公開 starter：`template/` 內的任何東西都會被 `pnpm create nuxt-supabase-starter`
+帶進使用者的新專案。因此 `template/.claude/` 的 agent 配置分三層治理，避免維護者自己的流程
+洩漏給讀者：
+
+| 層 | 內容 | Source of truth |
+| --- | --- | --- |
+| L1 | clade hub:sync 投影的 rules / spectra skills / commands / agents | `template/.claude/.hub-state.json` |
+| L2 | clade plugin marketplace skills | plugin manifest |
+| L3 | starter 自己維護的 commands 與 skills | `scripts/lib/public-hygiene-allowlist.json` |
+
+L3 每個 starter-owned command 都經過逐條審查，判定它對 scaffold 出去的使用者是否真的有用；
+只服務 starter 維護者的（例如 `validate-starter`）放在 repo root 的 `.claude/commands/`，
+不進 `template/`。
+
+```bash
+node scripts/audit-public-hygiene.mjs           # 檢查有無未審查 / 已 relocate 的殘留
+node scripts/audit-public-hygiene.mjs --strict  # 未審查項目也視為失敗
+bash scripts/audit-public-hygiene.test.sh       # fixture 測試
+```
+
+完整邊界定義與新增 command 的 ceremony 見 [`.claude/rules/starter-hygiene.md`](.claude/rules/starter-hygiene.md)。
+
 ## License
 
 [MIT](LICENSE) © [YuDefine - 域定資訊工作室](https://github.com/YuDefine)

@@ -1,0 +1,45 @@
+name: Public Hygiene
+
+on:
+  pull_request:
+    paths:
+      - "template/.claude/**"
+      - "template/.cursor/**"
+      - "scripts/audit-public-hygiene.mjs"
+      - "scripts/lib/public-hygiene-allowlist.json"
+      - ".github/workflows/public-hygiene.yml"
+  push:
+    branches: [main]
+    paths:
+      - "template/.claude/**"
+      - "template/.cursor/**"
+      - "scripts/audit-public-hygiene.mjs"
+      - "scripts/lib/public-hygiene-allowlist.json"
+      - ".github/workflows/public-hygiene.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-hygiene-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: L3 Commands / Skills Allowlist Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      # 本 repo root 沒有 package.json（meta 維護層刻意不建 npm surface），
+      # 因此與 scripts/audit-template-hygiene.sh 一樣直接叫 script，不走 pnpm run。
+      - name: Audit public hygiene
+        run: node scripts/audit-public-hygiene.mjs
