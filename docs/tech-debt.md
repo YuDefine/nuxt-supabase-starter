@@ -14,7 +14,7 @@
 | ------ | ------------------------------------------------------- | -------- | ------ | ------------------ | ----- |
 | TD-001 | Template E2E 跑超過 15 min（root cause = retry 放大）   | mid      | done   | 2026-05-07 v0.30.9 | —     |
 | TD-002 | Scaffolder `nuxthub-ai` preset 不自動生 D1 evlog_events migration | high     | done | 2026-05-10         | —     |
-| TD-003 | Scaffolder dist 在非 TTY (Claude Code Bash / CI) 必經 `script` wrapper | low      | open   | 2026-05-10         | —     |
+| TD-003 | Scaffolder dist 在非 TTY (Claude Code Bash / CI) 必經 `script` wrapper | low      | done   | 2026-05-10         | —     |
 | TD-004 | Spectra roadmap drift check 在 CI 永遠 false positive | mid      | open   | 2026-05-10 v0.31.0 | —     |
 
 ---
@@ -137,7 +137,7 @@ User 拍板走方向 A — nuxthub-ai 升級為 first-class fresh-scaffold。設
 
 ## TD-003 — Scaffolder dist 在非 TTY 環境必經 `script` wrapper 才能跑
 
-**Status**: open
+**Status**: done（2026-08-19 驗證）
 **Priority**: low — 一般 user 互動 terminal 沒問題；只在 CI / Claude Code Bash tool / Docker non-tty 環境會撞
 **Discovered**: 2026-05-10 — clade HANDOFF §2.1 C 群 session 用 Claude Code Bash tool 跑 `node dist/cli.js test-app-baseline --yes ...` 報 `TTY initialization failed: uv_tty_init returned EINVAL`，必改 `script -q /dev/null sh -c "cd ... && node $CLI ..."` 才過
 **Location**: `template/packages/create-nuxt-starter/src/cli.ts confirmScaffold()` 函式（dist line ~1724）
@@ -168,6 +168,16 @@ if (selections.useYes) return // skip confirm entirely
 
 - `node dist/cli.js test-app-X --yes --evlog-preset baseline ... < /dev/null` 直接成功，不需 `script` wrapper
 - e2e workflow `template-e2e.yml` scaffold step 不需特殊 wrapper
+
+### Resolution（2026-08-19）
+
+`cli.ts:542` 現已用 `if (!args.yes)` 包住 `confirmScaffold()`，`--yes` 完全不觸及 prompt API。實測 acceptance 條件 1 通過：
+
+```
+node dist/cli.js test-app-baseline --yes --evlog-preset baseline < /dev/null   # exit 0，無 script wrapper
+```
+
+修在哪一次 commit 未追（TD 登記時的 code path 已不存在）；驗證方式如上，複發時重跑同一條指令即可證偽。
 
 ---
 
@@ -204,3 +214,12 @@ if (selections.useYes) return // skip confirm entirely
 
 - 連續 5 次 main push CI 跑 `vp run spectra:roadmap --check` 都綠
 - ROADMAP drift gate 在 CI 重新 enabled 且不再 false positive
+
+### 複測（2026-08-19）
+
+本機 `node template/scripts/spectra-advanced/roadmap-sync.ts --check` → `✓ check passed`。
+CI 側未驗：`.github/workflows/template-ci.yml:98` 的 gate 仍是註解掉的狀態。
+
+**推不動的原因**：root cause 只在 ubuntu runner 顯現，本機無法重現。要往下走必須先把
+debug step（或 gate 本身）放回 workflow 再 push 觀察——那是需要拍板的對外動作，
+不是本 repo 內能自證的工作。
