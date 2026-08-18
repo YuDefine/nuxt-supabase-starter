@@ -12,6 +12,9 @@ Local edits will be reverted by the next sync.
 繁體中文
 
 **核心命題**：multi-session 並行開發共用單一 working tree，staged 區、branch HEAD、partial WIP 都會跨 session 滲漏。
+<!-- starter:strip-begin -->
+最痛的兩次真實事故：<consumer-b> `bcfde9c8`（`git add -A` 吞別 session WIP + clade 投影層一起 commit，同根因見 [[pitfall-consumer-ad-hoc-commit-eats-other-session-staged]]）與 `clade publish`（並行 session feature branch 還 checked out 時直接 publish，把未準備好的 commit 一起推 + propagate）。git worktree 從根本解掉這兩件事（per-session 獨立檔案系統 + 獨立 HEAD + 獨立 staging）。
+<!-- starter:strip-end -->
 
 操作層面由 `/wt` 全自動 orchestrate — user 不需手動 add / merge / cleanup，主線 cwd 全程不動。
 

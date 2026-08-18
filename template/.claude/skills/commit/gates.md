@@ -649,7 +649,7 @@ Doctor health score < 100 或 exit code ≠ 0 → **MUST block commit**，修復
 node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
   --template ~/offline/clade/vendor/snippets/codex-offload/templates/fix-verify-loop.template.md \
   --var <key>=<value> ...（依 template 變數表填：check 命令、失敗摘要 / log 等） \
-  --label commit-0c-<slug> --effort high \
+  --label commit-0c-<slug> --model sol --effort high \
   --route routing-table --tier-basis table-row --table-row commit-0c-fix-verify
 ```
 

@@ -44,7 +44,8 @@ Local edits will be reverted by the next sync.
    node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
      --template ~/offline/clade/vendor/snippets/codex-offload/templates/self-collect-evidence.template.md \
      --var <key>=<value> ...（依 template 變數表填：change name、dev-login route 路徑、fixture UUID、port、table 等） \
-     --label 8a-self-collect-<change> --effort medium
+     --label 8a-self-collect-<change> --model sol --effort low \
+     --route routing-table --tier-basis table-row --table-row spectra-8a-self-collect
    ```
 
    （背景跑、stdout 單一 JSON evidence；exit 0=ok / 2=(a)(b) 皆業務 fail / 3=機械故障 / 4=quota。exit 2 → 主線依序降到 (c)(d)，**不**重派同一 brief；exit 3/4 → 機械故障，主線 fallback foreground 自跑 (a)(b) 再續 chain。）

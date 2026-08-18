@@ -28,6 +28,9 @@ Local edits will be reverted by the next sync.
 
 ### 為什麼從 v2 改 v3
 
+<!-- starter:strip-begin -->
+v2 失敗模式（<consumer-a> 2026-05-17）：各 session 在 `/wt` 返回時各自 squash 進 main 互撞 — main 累積 cross-session unstaged WIP、`/commit` 被人工檢查 Gate 卡死、squash 撞 blocker 需 `cross-session-block-*` stash 強推、HANDOFF entries 全 stale。
+<!-- starter:strip-end -->
 
 v3 atomic landing 解這些：main 永遠 deployable；多 session 平行不污染 main（每條 worktree 各自保留到 archive）；一個 ceremony land 全部；人工檢查 Gate 與 archive gate 對齊為同一道進 main 關卡。
 

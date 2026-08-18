@@ -19,7 +19,7 @@ Local edits will be reverted by the next sync.
 
 # Golden Path Onboarding
 
-**核心命題**：clade 的 `docs/golden-paths/` 定義了跨 consumer 共用的部署 / CI 樣板（Docker self-hosted deploy、Discord deploy-notify），`vendor/actions/` 有對應的 vendored composite action。但這些 golden path **不會自動套用**到新 consumer — 新 repo 開好後常整條漏掉，直到 user 手動發現才補。實證：<consumer-c> / <consumer-d> 兩個新 repo 一開始都沒有 Discord 部署通知。
+**核心命題**：clade 的 `docs/golden-paths/` 定義了跨 consumer 共用的部署 / CI 樣板（Docker self-hosted deploy、Discord deploy-notify），`vendor/actions/` 有對應的 vendored composite action。但這些 golden path **不會自動套用**到新 consumer — 新 repo 開好後常整條漏掉，直到 user 手動發現才補。實證：<consumer-g> / <consumer-h> 兩個新 repo 一開始都沒有 Discord 部署通知。
 
 這條 rule 把「對齊 golden path」變成 session 開場的反射動作，而非靠人肉發現。
 

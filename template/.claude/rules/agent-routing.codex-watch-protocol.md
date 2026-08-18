@@ -130,7 +130,7 @@ hub:bootstrap 自動同步產生（請完全忽略，與本次工作無關）：
 
 派工視窗保護：若派 codex 期間預期會再跑 `pnpm install` / `pnpm hub:check` 等可能觸發 sync 的動作，**先在主線跑完讓 baseline 穩定**再派 codex；不要在 codex 跑的同時讓 hub:bootstrap 又撐出新 LOCKED diff，否則 codex 會再次按 scope discipline 停手。
 
-理由：codex 內建 scope discipline——看到工作目標範圍外的修改會合理地停下來避免越權踩到別 session WIP。兩種 dirty 來源 codex 都觀念正確：(1) 主線剛跑完 ingest / propose / TD / handoff 後 working tree 自然 dirty；(2) `pnpm install` postinstall 自動觸發 hub:bootstrap 把 main 的 clade 更新拉進來。兩種都不告知就會逼 codex 走「未知既有變更 → 停手」路徑，回來再 round-trip 重派比 prompt 多寫兩行貴得多。**禁止**把這當「codex 觀念錯」處理——它觀念是對的，是主線 prompt 沒給 git baseline。
+理由：codex 內建 scope discipline——看到工作目標範圍外的修改會合理地停下來避免越權踩到別 session WIP。兩種 dirty 來源 codex 都觀念正確：(1) 主線剛跑完 ingest / propose / TD / handoff 後 working tree 自然 dirty；(2) `pnpm install` postinstall 自動觸發 hub:bootstrap 把 main 的 clade 更新拉進來<!-- starter:strip-begin -->（實證：`.claude/.hub-state.json` syncedAt 跳到當天近期時間）<!-- starter:strip-end -->。兩種都不告知就會逼 codex 走「未知既有變更 → 停手」路徑，回來再 round-trip 重派比 prompt 多寫兩行貴得多。**禁止**把這當「codex 觀念錯」處理——它觀念是對的，是主線 prompt 沒給 git baseline。
 
 例外：
 
@@ -404,6 +404,19 @@ Codex 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleW
 ## Spectra Routing Table
 
 從 [[agent-routing]] § Routing Table 移出（2026-07-31）——這五列只在 spectra flow 內成立，主檔留一列 stub 指這裡。**UI view phase 只派 grok（`grok-xai` 起、`grok-cursor` 接）、Design Review 永不外派**、**propose 的 cross-check / final check 一律主線跑**這兩條契約主檔仍帶著。
+
+**派工時 `--table-row` 要填哪一列**：本節的類別名不是 row 名。裸 `--table-row spectra` 在 `TABLE_ROW_POLICIES` 是 `model: null`（因為下表五列檔位各異，一個 row 表達不了），dispatcher 一律拒絕。對照表：
+
+| 本表類別 | `--table-row` |
+| --- | --- |
+| propose draft（選項 A / B 的 codex 段）、ingest draft | `spectra-artifact-draft`（sol max） |
+| apply 非 view phase | `spectra-phase-implementation`（sol high） |
+| apply 已封閉 phase 的 read-only 抽取 | `spectra-phase-prescan`（luna low） |
+| apply UI view phase | `ui-view-implementation`（grok-xai high） |
+| pre-handoff E.1 收集 | `spectra-prehandoff-collect`（grok-xai medium） |
+| pre-handoff E.1 判定 | `spectra-prehandoff-judge`（sol xhigh） |
+
+主線 cross-check / final check / Design Review **不派 codex**，沒有對應 row。`test/table-row-recipe-audit.test.ts` 機械驗證 clade 內所有 recipe 與本表一致。
 
 | 工作類別 | 由誰執行 | 為什麼 |
 | --- | --- | --- |

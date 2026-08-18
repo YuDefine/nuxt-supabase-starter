@@ -53,6 +53,17 @@ scenario，5 reps 兩臂）：無規約時 **0/5** 的 brief 帶准許資源清�
 
 清單寫不出來 = 這件事還沒被消化到可以外派（回 § 派不派 的預消化紀律）。
 
+### MUST：檔案要逐個列路徑，NEVER 只給目錄名
+
+brief 要 carrier 讀一批檔（截圖、log、fixture）時，**MUST 逐項列出精確相對路徑**，
+NEVER 只寫「目錄：`./screenshots/`」讓它自己列。2026-08-18 實測：同一批圖、同一個 cwd，
+只給目錄名時 `sol-cursor` **連續 7 發**回「該目錄內沒有截圖」並把每項判 `UNCERTAIN`（檔案確實在）；
+換成逐檔路徑後 **5 發全對**。加一句「先列出目錄再逐一開啟」只把失敗率從 100% 降到約 50%，
+**不是修法**。
+
+失敗方向雖保守（回 UNCERTAIN 而非假 PASS），但「**carrier 沒去看**」與「**證據真的不足**」
+在輸出上同形——一個永遠回 UNCERTAIN 的 gate 沒有判定價值。取證見 [[agent-routing]] rationale。
+
 ### 查表：什麼不進 dispatch prompt
 
 | 類別 | 改帶什麼 |
