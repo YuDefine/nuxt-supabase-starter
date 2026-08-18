@@ -12,9 +12,9 @@
 
 ## Active Changes
 
-_last synced: 2026-05-10T17:21:23.874Z_
+_last synced: 2026-08-04T15:03:09.792Z_
 
-1 active change (0 ready · 1 in progress · 0 draft · 0 blocked)
+2 active changes (0 ready · 1 in progress · 1 draft · 0 blocked)
 
 ### Ready to apply
 
@@ -26,7 +26,7 @@ _(none)_
 
 ### Draft
 
-_(none)_
+- **starter-public-hygiene-commands** — 0/28 tasks (0%)
 
 ### Blocked
 
@@ -56,6 +56,7 @@ _No active claims._
 ### Independent (can run in parallel)
 
 - `add-evlog-baseline-and-scaffolder-preset-flag`
+- `starter-public-hygiene-commands`
 
 ### Mutex (same spec touched)
 
