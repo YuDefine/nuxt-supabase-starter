@@ -62,7 +62,7 @@ Local edits will be reverted by the next sync.
         --cwd <consumer-repo-root> \
         --label spectra-propose-review-<change-name> \
         --model sol --effort max \
-        --route routing-table --tier-basis table-row --table-row spectra
+        --route routing-table --tier-basis table-row --table-row spectra-artifact-draft
       ```
 
    5. **立刻**回報：「Fable draft 完成，已派 Codex GPT-5.6-sol max review（bash job `<id>`）；完成後主線 Fable final check」+ 啟動 notification-only watch（同 Phase B-0a step 5）。

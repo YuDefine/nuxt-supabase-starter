@@ -405,6 +405,19 @@ Codex 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleW
 
 從 [[agent-routing]] § Routing Table 移出（2026-07-31）——這五列只在 spectra flow 內成立，主檔留一列 stub 指這裡。**UI view phase 只派 grok（`grok-xai` 起、`grok-cursor` 接）、Design Review 永不外派**、**propose 的 cross-check / final check 一律主線跑**這兩條契約主檔仍帶著。
 
+**派工時 `--table-row` 要填哪一列**：本節的類別名不是 row 名。裸 `--table-row spectra` 在 `TABLE_ROW_POLICIES` 是 `model: null`（因為下表五列檔位各異，一個 row 表達不了），dispatcher 一律拒絕。對照表：
+
+| 本表類別 | `--table-row` |
+| --- | --- |
+| propose draft（選項 A / B 的 codex 段）、ingest draft | `spectra-artifact-draft`（sol max） |
+| apply 非 view phase | `spectra-phase-implementation`（sol high） |
+| apply 已封閉 phase 的 read-only 抽取 | `spectra-phase-prescan`（luna low） |
+| apply UI view phase | `ui-view-implementation`（grok-xai high） |
+| pre-handoff E.1 收集 | `spectra-prehandoff-collect`（grok-xai medium） |
+| pre-handoff E.1 判定 | `spectra-prehandoff-judge`（sol xhigh） |
+
+主線 cross-check / final check / Design Review **不派 codex**，沒有對應 row。`test/table-row-recipe-audit.test.ts` 機械驗證 clade 內所有 recipe 與本表一致。
+
 | 工作類別 | 由誰執行 | 為什麼 |
 | --- | --- | --- |
 | **Spectra `propose` 階段（draft）** | **使用者選單三選一**：A Codex GPT-5.6-sol max draft（預設/推薦）／ B 三模型交叉：Claude Fable 5 xhigh draft ＋ Codex GPT-5.6-sol max review／ C 純 Claude | 預設跳三選一選單；使用者明確指定路徑時跳過。詳見 `spectra-propose` Step 0。 |

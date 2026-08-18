@@ -176,7 +176,7 @@ Update an existing Spectra change — from a plan file or conversation context.
         --cwd <consumer-repo-root> \
         --label spectra-ingest-<change-name> \
         --model sol --effort max \
-        --route routing-table --tier-basis table-row --table-row spectra
+        --route routing-table --tier-basis table-row --table-row spectra-artifact-draft
       ```
 
       選項 B：
