@@ -332,6 +332,8 @@ grok 鏈載的是 UI view high effort → `sonnet`；sol 鏈載的是 flagship �
    - model 選檔原則「**turn count beats token price**」：brief 內含完整 code 的純轉錄型工作才用最低檔；review 型依 diff 的大小／風險選檔（為什麼見 rationale）。
 5. **中間產物不進主線**：外派出去的 task，主線只讀對方寫回的 report 檔，**NEVER** 為了「確認它做對」把該 task 碰過的原始檔重讀一遍——那把省下來的 context 原封不動加回來，而且重讀的是同一批事實，換不到新判斷。第 2 條的 scope verify 照舊 MUST 跑：看**改了哪些檔**（`git status --short` / `git diff --stat`）跟重讀檔案內容是兩件事。
 
+N ≥ 3 個 dispatch 的 findings 要收斂進同一個 synthesis 時，reducer 的五步形狀、group key 准入表與 guard 表在 `~/offline/clade/vendor/snippets/fan-in-reduction/`。**這不是規約**——2026-08-18 micro-test 兩支 scenario 的無規約對照組都是 5/5（含刪掉自報聲明的重測），寫成 MUST 買不到東西，見 `~/offline/clade/docs/rule-rationale/agent-routing.md` § fan-in reducer 量到什麼。
+
 ## 主線靜默上限（所有 dispatch 通用）
 
 > **Iron Law：主線靜默 55 分鐘是上限，不是預算。違反字面就是違反精神——「等通知就好」「醒來也做不了什麼」都不算遵守。**
