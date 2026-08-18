@@ -268,10 +268,32 @@ exit code 0：
 （本次已另外補上 `template/.vite-hooks/pre-push`，讓 hook 至少會被 git 呼叫到；
 在 scaffold 出去的專案裡那條修正就完整生效。本 entry 只剩 meta-monorepo 這一半。）
 
+### 已定位到行（2026-08-19 復現）
+
+```
+$ bash template/scripts/pre-push/runner.sh
+exit=0 bytes=0
+```
+
+- clade `vendor/scripts/pre-push/runner.sh`：`PROJECT_ROOT="$(git rev-parse --show-toplevel)"` 後 `cd "$PROJECT_ROOT"`
+- 7 支 `vendor/scripts/pre-push/checks/*.sh` **各自也做同一件事**（例：`checks/nuxt-typecheck.sh` 開頭兩行）
+
+關鍵細節：`template/.vite-hooks/pre-push` **已經**做了 `cd "$(dirname "$0")/.."`，呼叫 runner 時
+cwd 已經是 `template/`。是 runner.sh 自己那行 `cd "$(git rev-parse --show-toplevel)"` 把它跳回
+repo root 的。
+
+因此**只改 runner.sh 等於沒改**：runner 並行 spawn 的是各 check 的獨立 bash 程序，每支 check
+會自己再 `cd` 一次。8 個檔都要改。
+
 ### Fix approach
 
-1. 讓 check 的 project root 可覆寫（例如認 `CLADE_PROJECT_ROOT`，未設時 fallback 回
-   `git rev-parse --show-toplevel`），由 `template/.vite-hooks/pre-push` 帶入 `template/`。
+1. 讓 check 的 project root 可覆寫，contract 釘死為：
+   `PROJECT_ROOT="${CLADE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"`
+   ——未設環境變數時行為與現在完全一致，既有 consumer 零影響。runner.sh 與 7 支 check 逐檔改：
+   `data-perf-check.sh` / `mutation-loading.sh` / `native-picker-ban.sh` / `nuxt-typecheck.sh` /
+   `nuxt-ui-mixed-slot.sh` / `review-rules-ratchet.sh` / `utable-slots.sh`。
+   consumer 端另一半是 `template/.vite-hooks/pre-push` 帶入 `CLADE_PROJECT_ROOT="$PWD"`
+   （該檔是 starter-owned，不在 `template/.claude/.hub-state.json` 內，由本 repo 自己改）。
 2. 改動落點是 clade `vendor/scripts/pre-push/`，**NEVER** 直接編輯本 repo 的投影副本；
    改完走 publish + propagate。
 3. 順帶檢查同型：`template/.husky/pre-commit` / `pre-push` 在 `core.hooksPath` 指向
@@ -281,6 +303,22 @@ exit code 0：
 
 - 在本 repo 對 `template/**` 動一個會被 review-rules-ratchet 抓到的違規，`git push` 被擋下
 - `bash template/scripts/pre-push/runner.sh` 有實際輸出，七項逐項印出結果
+
+### 為什麼還沒動手（2026-08-19）
+
+clade 半邊的改動落點在 `~/offline/clade/vendor/scripts/pre-push/`，需要 cwd 在 clade 的 session：
+
+- 從 nuxt-supabase-starter 的 session 直接改 clade，會跟 clade 當下 in-flight 的工作搶 working
+  tree（實測 clade 有 1 個 dirty 檔 + 4 個 active worktree）
+- publish + propagate 會散播到整個 fleet，屬不可逆的對外動作
+- Herdr transport 無法自行派出（本 session 是 coordinated child，`--new-tab` 回
+  `nested_dispatch_refused`）
+
+consumer 端那一行也刻意先不落地：它在 clade 半邊 propagate 之前是死的環境變數，落地了也無法
+照 Acceptance 驗證。兩半要一起做。
+
+準備好的 durable brief 在 `~/.cache/clade/briefs/td-005-prepush-project-root.md`，
+clade session 直接讀那個檔即可開工。
 
 ---
 
