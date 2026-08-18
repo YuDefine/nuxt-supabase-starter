@@ -15,7 +15,7 @@
 | TD-001 | Template E2E 跑超過 15 min（root cause = retry 放大）   | mid      | done   | 2026-05-07 v0.30.9 | —     |
 | TD-002 | Scaffolder `nuxthub-ai` preset 不自動生 D1 evlog_events migration | high     | done | 2026-05-10         | —     |
 | TD-003 | Scaffolder dist 在非 TTY (Claude Code Bash / CI) 必經 `script` wrapper | low      | done   | 2026-05-10         | —     |
-| TD-004 | Spectra roadmap drift check 在 CI 永遠 false positive | mid      | open   | 2026-05-10 v0.31.0 | —     |
+| TD-004 | Spectra roadmap drift check 在 CI 永遠 false positive | mid      | in-progress | 2026-05-10 v0.31.0 | —     |
 
 ---
 
@@ -183,7 +183,7 @@ node dist/cli.js test-app-baseline --yes --evlog-preset baseline < /dev/null   #
 
 ## TD-004 — Spectra roadmap drift check 在 CI 永遠 false positive
 
-**Status**: open
+**Status**: in-progress（2026-08-19 起 CI 診斷觀察中）
 **Priority**: mid
 **Discovered**: 2026-05-10 — v0.31.0 release 後 Template CI 反覆撞 stale
 **Location**: `template/scripts/spectra-advanced/roadmap-sync.ts`、`.github/workflows/template-ci.yml`
@@ -217,9 +217,21 @@ node dist/cli.js test-app-baseline --yes --evlog-preset baseline < /dev/null   #
 
 ### 複測（2026-08-19）
 
-本機 `node template/scripts/spectra-advanced/roadmap-sync.ts --check` → `✓ check passed`。
-CI 側未驗：`.github/workflows/template-ci.yml:98` 的 gate 仍是註解掉的狀態。
+本機把三個已知 CI 差異逐一模擬，`--check` 全數 PASS，重現不出來：
 
-**推不動的原因**：root cause 只在 ubuntu runner 顯現，本機無法重現。要往下走必須先把
-debug step（或 gate 本身）放回 workflow 再 push 觀察——那是需要拍板的對外動作，
-不是本 repo 內能自證的工作。
+| 模擬條件 | 結果 |
+| --- | --- |
+| 現有 working tree 直接跑 | `✓ check passed` |
+| `git clone --depth 1` fresh shallow clone（無 `.spectra/`） | `✓ check passed` |
+| fresh clone + node 24 + `spectra` CLI 不在 PATH | `✓ check passed` |
+
+**Status 改為 in-progress**：已依 §Fix approach 第 1 步，在
+`.github/workflows/template-ci.yml` 放回 `Spectra roadmap drift check`，
+但帶 `continue-on-error: true`（診斷用，不擋 CI），stale 時 dump
+「committed vs CI-synced」的 unified diff。
+
+下一步依 CI 實際輸出分流：
+
+- 連續數輪 `check passed` → 問題已隨其他改動消失，拿掉 `continue-on-error`
+  改回真 gate，本條結案
+- 報 stale → diff 即是待查的 structural difference 來源，接 §Fix approach 第 2 步

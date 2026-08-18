@@ -95,9 +95,27 @@ jobs:
           base-ref: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'origin/main' }}
           cwd: template
 
-      # NOTE: Spectra roadmap drift check 在 CI 環境經常 false positive
-      # （spectra CLI 不在 ubuntu PATH、.spectra/spectra.db 不存在等），
-      # 暫時不在 CI 擋；本地 hook 仍會跑 sync 維持 ROADMAP 鮮度。
-      # Follow-up: 讓 sync --check 在 spectra CLI unavailable 時對齊 disk
-      # parked block（已有 skip-replace 機制，但其他結構性差異待查），
-      # 之後再恢復這個 gate。
+      # TD-004 診斷步驟（不擋 CI）。
+      #
+      # 這個 gate 因 CI false positive 被停用，但 2026-08-19 在本機把三個已知
+      # 差異全模擬過——fresh shallow clone、node 24、spectra CLI 不在 PATH——
+      # `--check` 一律 PASS，本機重現不出來。剩下的差異只在 ubuntu runner 上
+      # 才顯現，所以先用 continue-on-error 把 CI 側的實際輸出撈回來定位。
+      #
+      # 判讀：連續數輪都是 `check passed` → 問題已隨其他改動消失，把
+      # continue-on-error 拿掉改回真 gate，並結案 docs/tech-debt.md TD-004。
+      # 若報 stale → 底下的 diff 就是 TD-004 §Fix approach 第 1 步要的
+      # structural difference 來源。
+      - name: Spectra roadmap drift check (diagnostic, non-blocking)
+        continue-on-error: true
+        run: |
+          cp openspec/ROADMAP.md /tmp/roadmap-before.md
+          if vp run spectra:roadmap --check; then
+            echo "::notice::roadmap drift check PASSED in CI"
+          else
+            echo "::warning::roadmap drift check reported stale — dumping diff"
+            vp run spectra:roadmap
+            echo '--- diff: committed (left) vs CI-synced (right) ---'
+            diff -u /tmp/roadmap-before.md openspec/ROADMAP.md || true
+            git checkout -- openspec/ROADMAP.md
+          fi
