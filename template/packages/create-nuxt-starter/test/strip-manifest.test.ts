@@ -1,9 +1,10 @@
 import { spawnSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'pathe'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-const TEST_DIR = join(import.meta.dirname, '.tmp-strip-manifest-test')
+const TEST_DIR = mkdtempSync(join(tmpdir(), 'strip-manifest-test-'))
 const ROOT_CREATE_CLEAN = join(
   import.meta.dirname,
   '..',

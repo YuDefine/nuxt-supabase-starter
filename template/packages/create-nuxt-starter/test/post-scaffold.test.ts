@@ -1,4 +1,5 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { consola } from 'consola'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -8,7 +9,7 @@ import {
   resolveCladeInitScript,
 } from '../src/post-scaffold'
 
-const TEST_DIR = join(import.meta.dirname, '.tmp-post-scaffold-test')
+const TEST_DIR = mkdtempSync(join(tmpdir(), 'post-scaffold-test-'))
 
 beforeEach(() => {
   rmSync(TEST_DIR, { recursive: true, force: true })

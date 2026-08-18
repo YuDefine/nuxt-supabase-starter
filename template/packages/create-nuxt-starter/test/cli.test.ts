@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'pathe'
 import { consola } from 'consola'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,7 +7,7 @@ import { assembleProject } from '../src/assemble'
 import { buildSelectionsFromArgs, inferCladeModules } from '../src/cli'
 import { promptUser } from '../src/prompts'
 
-const TEST_DIR = join(import.meta.dirname, '.tmp-cli-test')
+const TEST_DIR = mkdtempSync(join(tmpdir(), 'cli-test-'))
 
 function cleanTestDir() {
   if (existsSync(TEST_DIR)) {

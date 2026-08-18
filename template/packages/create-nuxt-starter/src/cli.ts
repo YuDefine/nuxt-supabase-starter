@@ -39,22 +39,26 @@ function isMonorepoRoot(dir: string): boolean {
   )
 }
 
+// NEVER 拿 process.env.PWD 當判準：`PWD` 由 shell 維護，子程序原封繼承呼叫者 shell 的值，
+// spawnSync 的 `cwd` 選項不會改寫它。從 starter repo 內用工具呼叫 dist/cli.js 時，CLI 會
+// 誤判「在 starter monorepo 裡」並把專案改建到 repo root，而不是呼叫者指定的目錄（TD-007）。
+// 真正的 npm / pnpm 呼叫路徑另有 INIT_CWD，那條保留。
 function detectMonorepoRoot(): string | undefined {
   const initCwd = process.env.INIT_CWD?.trim()
   if (initCwd && isMonorepoRoot(initCwd)) {
     return initCwd
   }
 
-  const shellPwd = process.env.PWD?.trim() || process.cwd()
-  const normalized = shellPwd.replaceAll('\\', '/')
+  const cwd = process.cwd()
+  const normalized = cwd.replaceAll('\\', '/')
 
   if (normalized.endsWith('/template/packages/create-nuxt-starter')) {
-    const root = resolve(shellPwd, '..', '..', '..')
+    const root = resolve(cwd, '..', '..', '..')
     if (isMonorepoRoot(root)) return root
   }
 
-  if (isMonorepoRoot(shellPwd)) {
-    return shellPwd
+  if (isMonorepoRoot(cwd)) {
+    return cwd
   }
 
   return undefined
@@ -76,7 +80,8 @@ function getInvocationCwd(monorepoRoot: string | undefined): string {
     return initCwd
   }
 
-  return process.env.PWD?.trim() || process.cwd()
+  // 同 detectMonorepoRoot：PWD 會是呼叫者 shell 的值，不是本程序的實際 cwd。
+  return process.cwd()
 }
 
 function parseCsv(value: string | undefined): string[] {

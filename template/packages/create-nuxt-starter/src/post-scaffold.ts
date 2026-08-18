@@ -44,8 +44,10 @@ export async function postScaffold(
   opts: PostScaffoldOptions,
 ): Promise<void> {
   // Use the user's actual cwd for the cd hint, not invocationCwd
-  // (which may differ when running inside the monorepo)
-  const userCwd = process.env.INIT_CWD?.trim() || process.env.PWD?.trim() || process.cwd()
+  // (which may differ when running inside the monorepo).
+  // NEVER 退回 process.env.PWD：那是呼叫者 shell 的值，不隨 spawn 的 cwd 改變，
+  // 會讓 cd 提示指到完全無關的目錄（TD-007，與 cli.ts detectMonorepoRoot 同型）。
+  const userCwd = process.env.INIT_CWD?.trim() || process.cwd()
   const relativeTargetDir = relative(userCwd, targetDir) || '.'
 
   // 1. Register as clade consumer — rewrite .claude/hub.json with the

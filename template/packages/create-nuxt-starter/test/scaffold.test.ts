@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'pathe'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { assembleProject } from '../src/assemble'
@@ -6,7 +7,7 @@ import { getDefaultSelections } from '../src/prompts'
 import { resolveFeatureDependencies } from '../src/features'
 import { buildSelectionsFromArgs } from '../src/cli'
 
-const TEST_DIR = join(import.meta.dirname, '.tmp-test')
+const TEST_DIR = mkdtempSync(join(tmpdir(), 'scaffold-test-'))
 
 function cleanTestDir() {
   if (existsSync(TEST_DIR)) {

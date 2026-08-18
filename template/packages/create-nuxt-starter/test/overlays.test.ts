@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'pathe'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { applyOverlay, validateOverlayCompatibility } from '../src/overlays'
 
-const TEST_DIR = join(import.meta.dirname, '.tmp-overlays-test')
+const TEST_DIR = mkdtempSync(join(tmpdir(), 'overlays-test-'))
 
 function cleanTestDir() {
   if (existsSync(TEST_DIR)) {

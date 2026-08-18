@@ -1,4 +1,5 @@
-import { copyFileSync, existsSync, readFileSync, rmSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { execFile as execFileCb } from 'node:child_process'
 import { join } from 'pathe'
 import { promisify } from 'node:util'
@@ -7,7 +8,7 @@ import { assembleProject } from '../src/assemble'
 import { buildSelectionsFromArgs } from '../src/cli'
 
 const execFile = promisify(execFileCb)
-const TEST_DIR = join(import.meta.dirname, '.tmp-nuxthub-d1-migration-smoke')
+const TEST_DIR = mkdtempSync(join(tmpdir(), 'nuxthub-d1-migration-smoke-'))
 const RUN_SMOKE = process.env.RUN_NUXTHUB_D1_SMOKE === '1'
 
 function cleanTestDir() {

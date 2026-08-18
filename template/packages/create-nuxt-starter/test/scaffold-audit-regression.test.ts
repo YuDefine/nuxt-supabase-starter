@@ -1,4 +1,5 @@
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'pathe'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { assembleProject } from '../src/assemble'
@@ -11,7 +12,7 @@ import {
   formatReportRow,
 } from '../../../scripts/validate-starter.mjs'
 
-const TEST_DIR = join(import.meta.dirname, '.tmp-scaffold-audit-regression')
+const TEST_DIR = mkdtempSync(join(tmpdir(), 'scaffold-audit-regression-'))
 
 function cleanTestDir() {
   if (existsSync(TEST_DIR)) {

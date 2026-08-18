@@ -17,10 +17,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
  * 一律帶 `--no-install`。scaffold 的 `pnpm install` 每次 60s 起跳，測的又不是
  * 依賴解析——這裡驗的是 argv → selections → 檔案落點這條鏈。
  *
- * TEST_DIR 落在 os.tmpdir() 而非 test/ 底下，且 spawn 時把 PWD / INIT_CWD 對齊它：
- * CLI 的 detectMonorepoRoot() 讀的是 `process.env.PWD`，不是 spawn 給的 cwd。在 repo 內
- * 跑測試時那個變數是呼叫者的 shell 路徑，CLI 會據此判定「在 starter monorepo 裡」並把
- * 專案改建到 repo root——真的會寫進工作目錄，不是只有斷言失敗而已。
+ * TEST_DIR 落在 os.tmpdir() 而非 test/ 底下：測試不寫進 repo，並行跑也不互撞。
+ *
+ * CLI 自 TD-007 起以 `process.cwd()` 為判準（`process.env.PWD` 是呼叫者 shell 的值，
+ * 不隨 spawn 的 cwd 改變），所以下面 runCli 的 PWD / INIT_CWD 對齊只是還原真實呼叫情境，
+ * 不再是繞過 CLI bug 的必要條件。「PWD 故意指到別處」那條由本檔末尾的回歸測試守住。
  */
 
 const PKG_ROOT = resolve(import.meta.dirname, '..')
@@ -96,5 +97,32 @@ describe('dist/cli.js --evlog-preset (end-to-end)', () => {
     expect(`${result.stdout}${result.stderr}`).not.toContain('TTY initialization failed')
     expect(result.status).toBe(0)
     expect(existsSync(join(TEST_DIR, 'e2e-non-tty', 'package.json'))).toBe(true)
+  })
+})
+
+describe('dist/cli.js 的落點只看實際 cwd（TD-007 回歸）', () => {
+  it('PWD 指向 starter 套件目錄時，專案仍建在 spawn 指定的 cwd', { timeout: 120_000 }, () => {
+    const isolated = mkdtempSync(join(tmpdir(), 'cli-cwd-regression-'))
+    // 刻意重現 bug 情境：shell 曾 cd 到 starter 套件目錄，PWD 停在那；
+    // spawn 另給 cwd，且不給 INIT_CWD（那是 npm / pnpm 才會設的）。
+    const env = { ...process.env, PWD: PKG_ROOT }
+    delete env.INIT_CWD
+
+    try {
+      const result = spawnSync(process.execPath, [CLI, 'cwd-probe', '--yes', '--no-install'], {
+        cwd: isolated,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 90_000,
+        env,
+      })
+
+      expect(result.status).toBe(0)
+      expect(existsSync(join(isolated, 'cwd-probe'))).toBe(true)
+      // repo root 是舊行為會寫進去的地方——不能有東西落在那
+      expect(existsSync(join(PKG_ROOT, '..', '..', '..', 'cwd-probe'))).toBe(false)
+    } finally {
+      rmSync(isolated, { recursive: true, force: true })
+    }
   })
 })

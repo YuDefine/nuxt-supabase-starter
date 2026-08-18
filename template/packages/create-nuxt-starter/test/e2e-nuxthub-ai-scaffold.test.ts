@@ -1,10 +1,11 @@
-import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'pathe'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { assembleProject } from '../src/assemble'
 import { buildSelectionsFromArgs } from '../src/cli'
 
-const TEST_DIR = join(import.meta.dirname, '.tmp-e2e-nuxthub-ai-scaffold')
+const TEST_DIR = mkdtempSync(join(tmpdir(), 'e2e-nuxthub-ai-scaffold-'))
 
 function cleanTestDir() {
   if (existsSync(TEST_DIR)) {
