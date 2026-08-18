@@ -23,6 +23,10 @@ AUDIT_CHECKS=(
   maintenance-script-misplacement
 )
 
+# clade 投影面用的真實 consumer 名清單（check_clade_projection_consumer_names）。
+# check_dogfood_business_code 有另一份**刻意不同**的清單，理由寫在該函式上方。
+CONSUMER_NAMES='<consumer-b>|<consumer-d>|<consumer-d>|<consumer-c>|<consumer-h>|yudefine|<consumer-a>'
+
 finding_checks=()
 finding_problems=()
 finding_evidence=()
@@ -292,6 +296,10 @@ check_tenant_identifiers() {
   local blob="$2"
   local uuid line lowered
 
+  # 先跑投影面那半條：下面兩個迴圈命中就 `return 0`，掛在函式尾端會被短路——
+  # 同一個檔同時有非 placeholder UUID 與真實 consumer 名時，報告會漏掉後者。
+  check_clade_projection_consumer_names "${path}" "${blob}"
+
   while IFS= read -r uuid; do
     [[ -z "${uuid}" ]] && continue
     if [[ "${uuid}" != "00000000-0000-0000-0000-000000000000" && "${uuid}" != "550e8400-e29b-41d4-a716-446655440000" ]]; then
@@ -322,6 +330,48 @@ check_tenant_identifiers() {
   done < <(grep -Ei -- '(tenant|organization|org|customer|company)[_-]?(id|slug|key|name)?[[:space:]]*[:=][[:space:]]*["'\''][A-Za-z0-9][A-Za-z0-9._-]{5,}["'\'']' <<< "${blob}" || true)
 }
 
+# clade 投影面的真實 consumer 名。
+#
+# 上面兩段比對的是 UUID 與 `tenant_id = "..."` 這類 assignment 形狀，對散文裡直接寫出的
+# consumer 名零訊號。而 template/package.json 的 postinstall 一旦在本 repo 內觸發 clade
+# bootstrap，寫回來的正是散文——投影規約整篇引用真實 consumer 當實證來源（TD-006；
+# 2026-08-19 commit eae5091 帶進 221 行）。check_dogfood_business_code 接不到它：那支對
+# 含 `LOCKED` + `managed by clade` 的檔直接 return，而 clade 投影全中。
+check_clade_projection_consumer_names() {
+  local path="$1"
+  local blob="$2"
+  local sanitized
+
+  case "${path}" in
+    template/.claude/*|template/.agents/*|template/.codex/*|template/AGENTS.md|template/CLAUDE.md) ;;
+    *) return 0 ;;
+  esac
+
+  # 先統一小寫再剝例外：偵測用的是 grep -i，例外字串若逐一列大小寫變體必然漏一種
+  # （`YUDEFINE/nuxt-supabase-starter` 就會漏），剝與比對的大小寫語義必須一致。
+  # 剝掉兩種已知的非 consumer-identity 出現：
+  #   `_notion-<consumer-b>-board`                全域 skill 的目錄名
+  #   `yudefine/nuxt-supabase-starter`    發佈本 starter 的 GitHub org + repo，正當引用
+  # 用 tr 而非 ${blob,,}：後者是 bash 4+ 專屬，macOS 內建 bash 3.2 會 bad substitution，
+  # 而本檔另外三處小寫化本來就走 tr。
+  sanitized="$(printf '%s' "${blob}" | tr '[:upper:]' '[:lower:]')"
+  sanitized="${sanitized//_notion-<consumer-b>-board/}"
+  sanitized="${sanitized//yudefine\/nuxt-supabase-starter/}"
+
+  # 邊界刻意只把英數算成識別字——`-` 與 `_` 都要當分隔字元：`<consumer-b>-dev.<domain>`、
+  # `gh-runner-<consumer-b>`、`<consumer-b>_wt_<slug>` 全是真實洩漏，任一符號留在邊界類別裡都會放掉它們
+  # （`db-preview-env.md` 的 `<consumer-b>_wt_<slug>` 就是把 `_` 放掉時漏掉的那一個）。
+  # sanitized 已全小寫，這裡不用 -i——用了反而讓「剝與比對同語義」的保證失效。
+  if grep -Eq -- "(^|[^a-z0-9])(${CONSUMER_NAMES})([^a-z0-9]|\$)" <<< "${sanitized}"; then
+    add_finding \
+      "real-tenant-identifier" \
+      "clade 投影面含真實 consumer 名，代表投影未去識別化（多半是 bootstrap 在本 repo 內跑過）。" \
+      "${path} + real consumer identifier category" \
+      "改用 <consumer-a> 這類去識別化 placeholder；若是 bootstrap 產物，先確認 template/package.json 的 postinstall self-detection 生效再重投影。" \
+      "只有在 Spectra artifact / PR / commit context 記錄該名稱為刻意保留後，才允許維護者明示 bypass。"
+  fi
+}
+
 check_starter_only_docs() {
   local path="$1"
   local blob="$2"
@@ -349,6 +399,9 @@ check_dogfood_business_code() {
     return 0
   fi
 
+  # 這份清單刻意**不**共用 ${CONSUMER_NAMES}：`yudefine` 是發佈本 starter 的 GitHub org，
+  # 在 template/app/** 的 clone URL 與 docs 連結裡是正當出現（`(home).vue` 就有兩處），
+  # 併進來會把 starter 自己的首頁判成 dogfood 污染。
   if [[ "${path}" =~ ^template/(app/pages|app/components|server|supabase|tests|test)/ ]] && grep -Eiq -- '(dogfood|<consumer-d>|<consumer-d>|<consumer-b>|<consumer-a>|procurement|workstation|inspection_equipment|school[-_]window)' <<< "${blob}"; then
     add_finding \
       "dogfood-business-code" \

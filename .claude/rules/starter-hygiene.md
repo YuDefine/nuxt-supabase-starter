@@ -45,11 +45,30 @@ globs:
 | `private-env-file`                | `template/.env`、`template/.env.local`、`template/**/.env`、`template/**/.env.local` 等私人 env 檔；`.env.example` 僅能放 placeholder | 移出 `template/`，或改成 `template/.env.example` 並清成 placeholder               |
 | `secret-like-content`             | API key prefix、`Bearer` token、JWT-shaped token、Slack webhook、private key block、其他疑似 secret                                   | 移除 secret，改用 placeholder，並不要在報告中印完整值                             |
 | `real-email-identifier`           | 非 placeholder 的真實 email、個人帳號、可識別使用者資料                                                                               | 改用 `user@example.com`、`admin@example.test` 或明確範例資料                      |
-| `real-tenant-identifier`          | 真實 tenant slug、org id、customer id、非 placeholder UUID 或可對應實體租戶的 identifier                                              | 改用 `demo-tenant`、`example-org`、零值 UUID 或 `template/.examples/` 中的範例    |
+| `real-tenant-identifier`          | 真實 tenant slug、org id、customer id、非 placeholder UUID 或可對應實體租戶的 identifier；以及 clade 投影面（`template/.claude/**`、`template/.agents/**`、`template/.codex/**`、`template/AGENTS.md`、`template/CLAUDE.md`）散文中的真實 consumer 名 | 改用 `demo-tenant`、`example-org`、零值 UUID、`<consumer-a>` 這類 placeholder 或 `template/.examples/` 中的範例 |
 | `unmarked-starter-only-doc`       | 一般 `template/**/*.md` 中出現 `starter-only`、`internal-only`、`do not scaffold`、`dogfood` 等未標記維護文字                         | 改名為 `*.starter.md`，或移入 `template/.starter/` / `template/.examples/`        |
 | `dogfood-business-code`           | dogfood 專案的頁面、API、seed、測試、copy、schema、tenant-specific workflow                                                           | 移到 root docs / examples / playground，或另開 change 設計為 starter-safe 範例    |
 | `dogfood-schema-hint`             | `template/supabase/**` 中出現特定客戶、業務域、tenant schema、private seed data 的痕跡                                                | 改成通用 starter schema，業務範例放 `template/.examples/` 並去識別化              |
 | `maintenance-script-misplacement` | root 維護腳本、release / validate / audit / scaffolder tooling 誤放進 `template/scripts/`                                             | 移到 repo root `scripts/`，`template/scripts/` 只保留 scaffold 後專案會用到的腳本 |
+
+### clade 投影面的覆蓋邊界
+
+`real-tenant-identifier` 對 clade 投影面的那半條，**三個投影目錄只在 pre-commit hook 生效，是 ratchet**：
+full-tree `scripts/audit-template-hygiene.sh` 的 `find ... -prune` 清單本來就排除 `template/.claude` /
+`.agents` / `.codex`，所以那支掃不到這三個目錄；hook 走的是 `git diff --cached -- template`，沒有
+prune，staged 的投影檔一律過檢查。
+
+另兩個投影面 `template/AGENTS.md` 與 `template/CLAUDE.md` **不在 prune 清單裡**，full-tree audit
+會照掃——這兩個檔目前是綠的，所以它們對 full audit 是「維持綠」的約束，不是 ratchet。
+
+實務後果：既有已污染的投影檔（2026-08-19 實測：`template/.claude` 13 / 895、`template/.agents`
+17 / 821、`template/.codex` 0 / 9）在**被重新 stage 時**才會擋下。這是刻意的——存量去識別化屬
+`starter-public-hygiene-commands` / `clade-starter-sanitization`，本檢查只負責擋住**再污染**
+（bootstrap 把 starter 自己當 consumer 投影，入口見 `docs/tech-debt.md` TD-006）。
+**NEVER** 為了讓 clade propagate 過關而 bypass 這條——被擋的那個檔就是還沒去識別化的那個。
+
+名稱邊界只把英數當識別字元，`-` 與 `_` 都是分隔字元：`<consumer-b>-dev.<domain>`、`gh-runner-<consumer-b>`、
+`<consumer-b>_wt_<slug>` 都必須擋下。放寬任一邊界就會漏掉其中一類。
 
 ## Spectra session 分流規則
 

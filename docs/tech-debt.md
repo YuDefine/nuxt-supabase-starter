@@ -17,7 +17,7 @@
 | TD-003 | Scaffolder dist 在非 TTY (Claude Code Bash / CI) 必經 `script` wrapper | low      | done   | 2026-05-10         | —     |
 | TD-004 | Spectra roadmap drift check 在 CI 永遠 false positive | mid      | in-progress | 2026-05-10 v0.31.0 | —     |
 | TD-005 | meta-monorepo 下 pre-push 7 道 check 全部靜默 no-op | high     | open   | 2026-08-19         | —     |
-| TD-006 | 在本 repo 跑 install 會讓 clade bootstrap 把 starter 自己當 consumer 投影 | high     | open   | 2026-08-19         | —     |
+| TD-006 | 在本 repo 跑 install 會讓 clade bootstrap 把 starter 自己當 consumer 投影 | high     | done   | 2026-08-19         | —     |
 | TD-007 | scaffolder 測試套件並行不安全；`detectMonorepoRoot` 讀 `PWD` 而非 cwd | mid      | open   | 2026-08-19         | —     |
 
 ---
@@ -285,7 +285,7 @@ exit code 0：
 
 ## TD-006 — 在本 repo 跑 install 會讓 clade bootstrap 把 starter 自己當 consumer 投影
 
-**Status**: open
+**Status**: done（2026-08-19）
 **Priority**: high — 污染會直接進 `template/` seed，而 seed 是要公開發佈的
 **Discovered**: 2026-08-19 — 在 `template/packages/create-nuxt-starter/` 跑 `npx vitest`（npx 需先安裝 vitest）時實際發生
 **Location**: `template/package.json` 的 `postinstall`（呼叫 clade `scripts/bootstrap-hub.ts`）
@@ -333,6 +333,56 @@ consumer 名稱與 11 處 `starter:strip` marker，已由 `a351053` revert。這
 
 - 在 `template/` 或其子目錄跑 `pnpm install`，`git status` 對 `template/.claude/` 零變更
 - 刻意在 `template/.claude/rules/` 寫入一個真實 consumer 名稱，pre-commit 或 audit 擋下
+
+### 驗收輸出（2026-08-19）
+
+**1. postinstall self-detection** — `template/` 跑 `pnpm install`：
+
+```text
+. postinstall: [clade] starter maintainer repo detected — skip bootstrap. 在本 repo 內跑 bootstrap
+會把 starter 自己當 consumer 投影，寫入未去識別化內容（見 starter repo 的 docs/tech-debt.md TD-006）。
+要手動投影請自行跑 pnpm hub:bootstrap。
+Done in 5s using pnpm v10.28.1
+
+$ git status --porcelain -- template/.claude/ | wc -l
+0
+```
+
+**2. pre-commit ratchet** — 在 `template/.claude/rules/` 放 probe 檔並 stage：
+
+```text
+$ bash .husky/pre-commit; echo $?
+[Starter Hygiene] real-tenant-identifier 不通過
+問題: clade 投影面含真實 consumer 名，代表投影未去識別化（多半是 bootstrap 在本 repo 內跑過）。
+證據: template/.claude/rules/_td006-probe.md + real consumer identifier category
+1
+
+# 負向控制（<consumer-a> + _notion-<consumer-b>-board）
+$ bash .husky/pre-commit; echo $?
+0
+```
+
+**3. fixture test / full audit**：
+
+```text
+$ bash scripts/audit-template-hygiene.test.sh; echo $?
+... 8 個 ok ...
+All 8 audit-template-hygiene fixture cases passed.
+0
+
+$ bash scripts/audit-template-hygiene.sh >/dev/null 2>&1; echo $?
+0
+```
+
+### 覆蓋邊界（重要，別誤讀成 full audit 也擋）
+
+full-tree audit 的 `find ... -prune` 清單本來就排除 `template/.claude` / `.agents` / `.codex`，
+所以新檢查對這三個目錄的載體是 **pre-commit ratchet**（hook 走 `git diff --cached -- template`，
+沒有 prune），full audit 維持綠。另兩個投影面 `template/AGENTS.md` / `template/CLAUDE.md` 不在
+prune 清單裡，full audit 會照掃，目前是綠的。
+
+既有污染仍歸 `starter-public-hygiene-commands` / `clade-starter-sanitization`——本條只擋**再污染**。
+2026-08-19 重測基線：`template/.claude` 13 / 895、`template/.agents` 17 / 821、`template/.codex` 0 / 9。
 
 ---
 

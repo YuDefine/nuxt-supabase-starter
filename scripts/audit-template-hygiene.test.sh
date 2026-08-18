@@ -8,7 +8,12 @@ tmp_root=""
 
 cleanup() {
   if [[ -n "${tmp_root}" && -d "${tmp_root}" ]]; then
-    rm -rf "${tmp_root}"
+    # trap 內失敗必須自己出聲：結尾的顯式 `exit 0` 會蓋掉 trap 留下的 status，
+    # 靜默的 cleanup 失敗就會變成「看起來全綠」。
+    rm -rf "${tmp_root}" || {
+      printf 'not ok - cleanup failed to remove %s\n' "${tmp_root}" >&2
+      exit 1
+    }
   fi
 }
 trap cleanup EXIT
@@ -18,8 +23,11 @@ fail() {
   exit 1
 }
 
+passed_count=0
+
 pass() {
   printf 'ok - %s\n' "$1"
+  passed_count=$((passed_count + 1))
 }
 
 write_rule() {
@@ -108,7 +116,9 @@ TS
   [[ ${status} -ne 0 ]] || fail "secret fixture exits non-zero"
   grep -Fq "[Starter Hygiene] secret-like-content 不通過" <<< "${output}" || fail "secret report check name"
   grep -Fq "Bearer token" <<< "${output}" || fail "secret report category"
-  grep -Fvq "abcdefghijklmnopqrstuvwxyz1234567890" <<< "${output}" || fail "secret report redacts full token"
+  if grep -Fq "abcdefghijklmnopqrstuvwxyz1234567890" <<< "${output}"; then
+    fail "secret report redacts full token"
+  fi
   pass "secret-like token is blocked without full value"
 }
 
@@ -164,9 +174,70 @@ assert_template_cwd_root_detection() {
   pass "template cwd root detection scans repo template"
 }
 
+# clade 投影面那半條 real-tenant-identifier 走的是 pre-commit hook，不是 full-tree audit——
+# audit 的 find 清單把 template/.claude / .agents / .codex 整個 prune 掉（見 rule 的
+# 「clade 投影面的覆蓋邊界」）。hook 是 source 本 script 後逐檔呼叫 check 函式，所以這裡
+# 照 hook 的用法直接驗函式，而不是造 fixture 樹跑 audit（那樣永遠是 0 命中，測不到東西）。
+assert_clade_projection_consumer_names() {
+  local output
+  output="$(
+    source "${AUDIT_SCRIPT}"
+    set +e
+    add_finding() { printf '%s|%s\n' "$1" "$3"; }
+    check_tenant_identifiers "template/.claude/rules/probe.md" "這條規約在 <consumer-b> 上實測過，另有 <consumer-b>-dev.example.com。"
+    check_tenant_identifiers "template/.claude/rules/snake.md" "DB clone <consumer-b>_wt_<slug> 不存在時要 fail loud。"
+    check_tenant_identifiers "template/.claude/rules/case.md" "clone 自 YUDEFINE/nuxt-supabase-starter 即可。"
+    check_tenant_identifiers "template/.claude/rules/ok.md" "這條規約在 <consumer-a> 上實測過。skill dir 是 _notion-<consumer-b>-board。"
+    check_tenant_identifiers "template/docs/prose.md" "這份 root 文件提到 <consumer-b>，不在投影面範圍內。"
+  )"
+
+  if ! grep -Fq "real-tenant-identifier|template/.claude/rules/probe.md" <<< "${output}"; then
+    fail "clade projection real consumer name is blocked"
+  fi
+  # 邊界把 `_` 當分隔字元，否則 `<consumer-b>_wt_<slug>` 這類 snake_case 洩漏會整批漏掉。
+  if ! grep -Fq "real-tenant-identifier|template/.claude/rules/snake.md" <<< "${output}"; then
+    fail "snake_case consumer name is blocked"
+  fi
+  if grep -Fq "template/.claude/rules/ok.md" <<< "${output}"; then
+    fail "placeholder + _notion-<consumer-b>-board must not false-positive"
+  fi
+  if grep -Fq "template/docs/prose.md" <<< "${output}"; then
+    fail "check must stay scoped to clade projection surfaces"
+  fi
+  # 例外剝除與偵測都在小寫上進行，所以 GitHub org 的大小寫變體不能誤觸。
+  if grep -Fq "template/.claude/rules/case.md" <<< "${output}"; then
+    fail "starter own GitHub org must not false-positive in any letter case"
+  fi
+  pass "clade projection consumer names blocked, placeholders and non-projection paths pass"
+}
+
+# check_tenant_identifiers 前兩個迴圈命中就 return，投影面那半條若掛在函式尾端會被短路。
+# 同一個檔同時有非 placeholder UUID 與真實 consumer 名時，兩則 finding 都必須出現。
+assert_tenant_check_does_not_short_circuit_projection() {
+  local output
+  output="$(
+    source "${AUDIT_SCRIPT}"
+    set +e
+    add_finding() { printf '%s|%s|%s\n' "$1" "$3" "$2"; }
+    check_tenant_identifiers "template/.claude/rules/both.md" \
+      "tenant_id = \"8d2f9d4a-99b2-4dd8-99cb-f0f527c8895a\" —— 這條在 <consumer-b> 上實測過。"
+  )"
+
+  if ! grep -Fq "non-placeholder UUID pattern" <<< "${output}"; then
+    fail "UUID finding still reported"
+  fi
+  if ! grep -Fq "real consumer identifier category" <<< "${output}"; then
+    fail "projection finding not short-circuited by UUID finding"
+  fi
+  pass "UUID finding does not short-circuit clade projection finding"
+}
+
 [[ -x "${AUDIT_SCRIPT}" || -f "${AUDIT_SCRIPT}" ]] || fail "audit script exists"
 
 tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/starter-hygiene-test.XXXXXX")"
+
+# 下面每加一個 assert_* 呼叫就 +1；結尾用它核對沒有 case 被靜默跳過。
+EXPECTED_CASES=8
 
 assert_clean_fixture
 assert_private_env_fixture
@@ -174,5 +245,16 @@ assert_secret_fixture
 assert_identifier_fixture
 assert_starter_only_doc_fixture
 assert_template_cwd_root_detection
+assert_clade_projection_consumer_names
+assert_tenant_check_does_not_short_circuit_projection
 
-printf 'All audit-template-hygiene fixture cases passed.\n'
+# 顯式且**有條件**的 exit：先前量到過「全部 ok 但 exit 127」，印出的結果與退出碼不一致的測試
+# 比沒有測試更糟。這裡不寫無條件 exit 0——先核對實際 pass 數等於上面呼叫的 assert 數，
+# 任何一個 case 被靜默跳過都會在這裡轉紅。另外兩條失敗路徑（斷言失敗走 fail() 的 exit 1、
+# cleanup 失敗走 trap 內的 exit 1）都不經過這裡。
+if [[ ${passed_count} -ne ${EXPECTED_CASES} ]]; then
+  fail "expected ${EXPECTED_CASES} assertions to pass, got ${passed_count}"
+fi
+
+printf 'All %d audit-template-hygiene fixture cases passed.\n' "${passed_count}"
+exit 0
