@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+# core.hooksPath 指向 template/.vite-hooks/_，其 dispatcher 只呼叫同名的
+# template/.vite-hooks/<hook>。這個檔不存在時 dispatcher 是 `exit 0` —— 靜默略過，
+# 不報錯。所以 .husky/pre-push 裡的 `bash scripts/pre-push/runner.sh` 從來沒被跑過，
+# typecheck / native-picker-ban / data-perf-check 三道 gate 形同不存在。
+#
+# 切到 package.json 所在目錄（template/），以支援 monorepo 與獨立專案兩種結構。
+# vp config 重新生成此檔時會把這個 cd 拿掉，要記得補回來。
+cd "$(dirname "$0")/.." || exit 1
+
+bash scripts/pre-push/runner.sh

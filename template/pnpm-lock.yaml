@@ -58,8 +58,8 @@ importers:
         specifier: ^0.45.2
         version: 0.45.2(@cloudflare/workers-types@4.20260402.1)(@electric-sql/pglite@0.4.1)(@opentelemetry/api@1.9.1)(@prisma/client@5.22.0(prisma@7.6.0(@types/react@19.2.14)(magicast@0.5.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)))(@types/pg@8.20.0)(kysely@0.28.15)(mysql2@3.15.3)(pg@8.20.0)(postgres@3.4.9)(prisma@7.6.0(@types/react@19.2.14)(magicast@0.5.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))
       evlog:
-        specifier: ^2.16.0
-        version: 2.16.0(@nuxt/kit@4.4.2(magicast@0.5.2))(@voidzero-dev/vite-plus-core@0.1.21(@types/node@25.5.0)(esbuild@0.27.5)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(unrun@0.2.34(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1))(yaml@2.8.3))(h3@1.15.11)(hono@4.12.10)(ofetch@1.5.1)(react@19.2.4)
+        specifier: ^2.24.0
+        version: 2.26.0(@nuxt/kit@4.4.2(magicast@0.5.2))(@voidzero-dev/vite-plus-core@0.1.21(@types/node@25.5.0)(esbuild@0.27.5)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(unrun@0.2.34(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1))(yaml@2.8.3))(h3@1.15.11)(hono@4.12.10)(ofetch@1.5.1)(react@19.2.4)
       nuxt:
         specifier: ^4.4.2
         version: 4.4.2(c564bac670e9bc2d51c1a00e89569a73)
@@ -6753,35 +6753,42 @@ packages:
     resolution: {integrity: sha512-mQw+2fkQbALzQ7V0MY0IqdnXNOeTtP4r0lN9z7AAawCXgqea7bDii20AYrIBrFd/Hx0M2Ocz6S111CaFkUcb0Q==}
     engines: {node: '>=0.8.x'}
 
-  evlog@2.16.0:
-    resolution: {integrity: sha512-qpIt+5+5hY8hxpca4vFTxR3x5jcnEC5DQh9OffR1mZWFfX2wui7ksh9I0AUUxRNP8ttlU/QN/JPVbSj5nepJ9w==}
+  evlog@2.22.4:
+    resolution: {integrity: sha512-u0hsh+FudUWkqqfrlWGI1CvSd2pz1iWkLWjawGcvbnLp9BHZqY1xS7BlRt21/Qq/rs60IODaei/Wbmry/q/zeg==}
+    engines: {node: '>=18.0.0'}
     peerDependencies:
-      '@nestjs/common': '>=11.1.19'
+      '@nestjs/common': '>=11.1.28'
       '@nuxt/kit': ^4.4.2
-      '@tanstack/start-client-core': ^1.167.20
-      ai: '>=6.0.168'
-      elysia: '>=1.4.28'
+      '@orpc/server': '>=1.14.8'
+      '@tanstack/start-client-core': ^1.170.14
+      ai: '>=6.0.168 <8.0.0'
+      elysia: '>=1.4.29'
+      eve: '>=0.24.3'
       express: '>=5.2.1'
-      fastify: '>=5.8.5'
+      fastify: '>=5.10.0'
       h3: ^1.15.11
-      hono: ''
-      next: '>=16.2.4'
+      hono: '>=4.12.30'
+      next: '>=16.2.10'
       nitro: ^3.0.260311-beta
-      nitropack: ^2.13.3
+      nitropack: ^2.13.4
       ofetch: ^1.5.1
-      react: '>=19.2.5'
-      react-router: '>=7.14.2'
+      react: '>=19.2.7'
+      react-router: '>=7.18.1'
       vite: ^7.0.0 || ^8.0.0
     peerDependenciesMeta:
       '@nestjs/common':
         optional: true
       '@nuxt/kit':
         optional: true
+      '@orpc/server':
+        optional: true
       '@tanstack/start-client-core':
         optional: true
       ai:
         optional: true
       elysia:
+        optional: true
+      eve:
         optional: true
       express:
         optional: true
@@ -6806,8 +6813,8 @@ packages:
       vite:
         optional: true
 
-  evlog@2.22.4:
-    resolution: {integrity: sha512-u0hsh+FudUWkqqfrlWGI1CvSd2pz1iWkLWjawGcvbnLp9BHZqY1xS7BlRt21/Qq/rs60IODaei/Wbmry/q/zeg==}
+  evlog@2.26.0:
+    resolution: {integrity: sha512-5/UrfWGJEIuPdOk2m2lBqxJcDoH+71bejl/D1U4q42A/+UPPZ11h35GvVdzn6HTMfnkfbBiRIfLBR5C8Osg47g==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@nestjs/common': '>=11.1.28'
@@ -6816,7 +6823,7 @@ packages:
       '@tanstack/start-client-core': ^1.170.14
       ai: '>=6.0.168 <8.0.0'
       elysia: '>=1.4.29'
-      eve: '>=0.24.3'
+      eve: '>=0.30.0'
       express: '>=5.2.1'
       fastify: '>=5.10.0'
       h3: ^1.15.11
@@ -14971,7 +14978,7 @@ snapshots:
       obug: 2.1.1
       std-env: 4.0.0
       tinyrainbow: 3.1.0
-      vitest: '@voidzero-dev/vite-plus-test@0.1.21(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(@vitest/coverage-v8@4.1.5)(@voidzero-dev/vite-plus-core@0.1.21(@types/node@25.5.0)(esbuild@0.27.5)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(unrun@0.2.34(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1))(yaml@2.8.3))(esbuild@0.27.5)(happy-dom@20.8.9)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(unrun@0.2.34(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1))(yaml@2.8.3)'
+      vitest: '@voidzero-dev/vite-plus-test@0.1.21(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(@vitest/coverage-v8@4.1.5)(esbuild@0.27.5)(happy-dom@20.8.9)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(unrun@0.2.34(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1))(vite@8.1.0(@types/node@25.5.0)(esbuild@0.27.5)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(yaml@2.8.3)'
 
   '@vitest/pretty-format@4.1.5':
     dependencies:
@@ -16660,7 +16667,7 @@ snapshots:
 
   events@3.3.0: {}
 
-  evlog@2.16.0(@nuxt/kit@4.4.2(magicast@0.5.2))(@voidzero-dev/vite-plus-core@0.1.21(@types/node@25.5.0)(esbuild@0.27.5)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(unrun@0.2.34(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1))(yaml@2.8.3))(h3@1.15.11)(hono@4.12.10)(ofetch@1.5.1)(react@19.2.4):
+  evlog@2.22.4(@nuxt/kit@4.4.2(magicast@0.5.2))(@voidzero-dev/vite-plus-core@0.1.21(@types/node@25.5.0)(esbuild@0.27.5)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(unrun@0.2.34(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1))(yaml@2.8.3))(h3@1.15.11)(hono@4.12.10)(ofetch@1.5.1)(react@19.2.4):
     optionalDependencies:
       '@nuxt/kit': 4.4.2(magicast@0.5.2)
       h3: 1.15.11
@@ -16669,7 +16676,7 @@ snapshots:
       react: 19.2.4
       vite: '@voidzero-dev/vite-plus-core@0.1.21(@types/node@25.5.0)(esbuild@0.27.5)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(unrun@0.2.34(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1))(yaml@2.8.3)'
 
-  evlog@2.22.4(@nuxt/kit@4.4.2(magicast@0.5.2))(@voidzero-dev/vite-plus-core@0.1.21(@types/node@25.5.0)(esbuild@0.27.5)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(unrun@0.2.34(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1))(yaml@2.8.3))(h3@1.15.11)(hono@4.12.10)(ofetch@1.5.1)(react@19.2.4):
+  evlog@2.26.0(@nuxt/kit@4.4.2(magicast@0.5.2))(@voidzero-dev/vite-plus-core@0.1.21(@types/node@25.5.0)(esbuild@0.27.5)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(typescript@5.9.3)(unrun@0.2.34(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1))(yaml@2.8.3))(h3@1.15.11)(hono@4.12.10)(ofetch@1.5.1)(react@19.2.4):
     optionalDependencies:
       '@nuxt/kit': 4.4.2(magicast@0.5.2)
       h3: 1.15.11

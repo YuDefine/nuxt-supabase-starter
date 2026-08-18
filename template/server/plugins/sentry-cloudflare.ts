@@ -8,8 +8,10 @@ import pkg from '../../package.json'
 export default defineNitroPlugin(
   sentryCloudflareNitroPlugin({
     dsn: process.env.SENTRY_DSN,
-    // 使用 MODE 支援 staging 等其他環境，fallback 為 'production'
-    environment: process.env.NODE_ENV || 'production',
+    // 部署身分取自注入，NEVER 從 build mode 推導（clade rules/core/deploy-env-identity.md）：
+    // NODE_ENV 描述「用什麼模式 build」，不是「build 出來的東西被放到哪」。
+    // 注入斷掉時落到顯眼的 'unknown'，NEVER 是 'production'。
+    environment: useRuntimeConfig().appEnv,
     // Release 版本：優先使用環境變數，fallback 為 package.json 版本
     release: process.env.SENTRY_RELEASE || pkg.version,
     // Server 端的 transaction 取樣率

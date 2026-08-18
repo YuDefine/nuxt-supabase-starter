@@ -72,7 +72,10 @@
     emit('update:filters', { page })
   }
 
+  // timeZone 一律顯式帶（clade rules/core/timezone.md § Must 2）——不依賴 process TZ，
+  // 否則同一份 build 在 Workers（UTC）與本機（Asia/Taipei）會顯示不同日期。
   const dateFormatter = new Intl.DateTimeFormat('zh-TW', {
+    timeZone: 'Asia/Taipei',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

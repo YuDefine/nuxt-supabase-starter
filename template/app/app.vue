@@ -13,6 +13,9 @@
 
 <template>
   <UApp :locale="zh_tw">
+    <!-- Tier 1 路由級進度條（clade rules/modules/framework/nuxt/page-loading-golden-path.md）：
+         零 per-page code、自帶 a11y，解掉導航空白感。MUST 掛在 UApp 內、NuxtLayout 前。 -->
+    <NuxtLoadingIndicator />
     <NuxtLayout>
       <NuxtPage />
     </NuxtLayout>

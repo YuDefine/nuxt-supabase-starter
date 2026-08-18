@@ -17,8 +17,11 @@ const sentryRelease = __APP_VERSION__
 if (!import.meta.dev && sentryDsn) {
   Sentry.init({
     dsn: sentryDsn,
-    // 使用 MODE 支援 staging 等其他環境，fallback 為 'production' 確保可靠性
-    environment: import.meta.env.MODE || 'production',
+    // 部署身分取自注入，NEVER 從 build mode 推導（clade rules/core/deploy-env-identity.md）：
+    // staging 與 production 共用同一份 production build，MODE 對兩者恆等。
+    // 由 nuxt.config.ts 的 vite.define 從 NUXT_APP_ENV inline 進來；
+    // 注入斷掉時落到顯眼的 'unknown'，NEVER 是 'production'。
+    environment: import.meta.env.NUXT_PUBLIC_APP_ENV || 'unknown',
     // Release 版本：用於追蹤不同版本的錯誤，與 server 端保持一致
     release: sentryRelease,
     integrations: [

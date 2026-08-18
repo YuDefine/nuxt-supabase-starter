@@ -40,7 +40,14 @@ export default defineNuxtConfig({
   // evlog: wide event logging — T1 baseline preset (depth 5)
   // 對應 presets/evlog-baseline/PRESET.md pre-applied 範例 + master plan § 14 真實 API
   evlog: {
-    env: { service: 'nuxt-supabase-starter' },
+    // wide event 的 environment 與 Sentry 讀同一個來源（clade rules/core/deploy-env-identity.md
+    // § 誰是消費者：Sentry 與 evlog 吃同一個病因，MUST 同一次改動一起接）。
+    // 放在 env 內而非頂層：Nuxt module 的 ModuleOptions 沒有頂層 environment 欄位，
+    // EnvironmentContext 才有。
+    env: {
+      service: 'nuxt-supabase-starter',
+      environment: process.env.NUXT_APP_ENV || 'unknown',
+    },
     include: ['/api/**'],
     sampling: {
       // rates 是百分比 0-100；error 預設 100 不可降
@@ -98,6 +105,13 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
+    // 部署身分：MUST 取自部署時注入的顯式 env var，NEVER 從 build mode 推導
+    // （clade rules/core/deploy-env-identity.md）。同一份 production build 會被放到
+    // staging 與 production 兩個目標，NODE_ENV / import.meta.env.MODE 對兩者恆等。
+    // fallback MUST 是顯眼的 'unknown'——填 'production' 會把「注入斷了」靜默轉成
+    // 「staging 事件污染 production 資料」。
+    // 部署端接線：wrangler vars / GitHub Actions env 設 NUXT_APP_ENV=<staging|production>。
+    appEnv: process.env.NUXT_APP_ENV || 'unknown',
     // Server-side only（不會暴露給 client）
     supabase: {
       // Service role key，用於 serverSupabaseServiceRole()
@@ -149,6 +163,9 @@ export default defineNuxtConfig({
       'import.meta.env.NUXT_PUBLIC_SENTRY_DSN': JSON.stringify(
         process.env.NUXT_PUBLIC_SENTRY_DSN || '',
       ),
+      // 部署身分的 client 端來源。sentry.client.config.ts 跑在 runtime config 可用之前，
+      // 只能吃 build 期 inline 的常數——所以改部署目標要重 build，這是這條路徑的代價。
+      'import.meta.env.NUXT_PUBLIC_APP_ENV': JSON.stringify(process.env.NUXT_APP_ENV || ''),
     },
     esbuild: {
       drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : [],
