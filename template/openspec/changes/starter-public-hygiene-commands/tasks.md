@@ -53,9 +53,9 @@
 - [x] #1 [verify:api] (root) `bash scripts/validate-starter.sh` 從 root cwd 執行 → 正常跑完並輸出報告（40 PASS / 4 FAIL，exit 1）。4 個 FAIL 全是**開發中 repo 的既有狀態**、與本 change 無關：`docs/templates/.github/workflows/ci.yml` 缺檔、`openspec/changes/archive/` 26 檔、2 個 active change dir、`.spectra/` 6 檔 — 後三者是 clean baseline 檢查，只對 scaffold 輸出或 release 前的乾淨樹有意義。Phase 1 的 `.claude/commands` 結構檢查仍 PASS，證明刪掉 `validate-starter.md` 沒破壞 seed 結構
 - [x] #2 [verify:api] (root) `node scripts/audit-public-hygiene.mjs` → exit 0、`PASS (0 violations, 30 warnings)`；clade-managed 41、starter-owned allowed 16（8 條 keep × `.claude` + `.cursor` 兩個 surface）、unaudited 30（全部落在 `.claude/skills/`，commands 層 0 條未審查）
 - [x] #3 [verify:api] (root) `node scripts/audit-public-hygiene.mjs --json` → 合法 JSON，含 `clade_managed_count` / `starter_owned_keep_count` / `starter_owned_unaudited_count` / `hub_state_found` / `violations` / `warnings`
-- [ ] #4 [verify:ui] (root) GitHub Actions push main 跑 `Public Hygiene` workflow → 綠燈證據
-- [ ] #5 [discuss] (root) 跟使用者確認 8 個 keep as-is commands 的 disposition
-- [ ] #6 [discuss] (root) 跟使用者確認 unaudited 的預設嚴格度（default warning vs default error）
+- [x] #4 [verify:ui] (root) GitHub Actions run [32184934412](https://github.com/YuDefine/nuxt-supabase-starter/actions/runs/32184934412) → `✓ L3 Commands / Skills Allowlist Gate in 10s`，log 內 `Public hygiene audit result: PASS (0 violations, 24 warnings)`。CI 的 unaudited 是 24 而本機是 30，差額是 `template/.gitignore` 內那幾個 `.claude/skills/` 目錄（`create-evlog-*` / `document-writer` / `nuxt-content` / `nuxt-modules` / `nuxthub` / `review-logging-patterns` / `ts-library`）不在 CI checkout 內 — CI 的數字才是「實際會被 scaffold 帶走」的量
+- [x] #5 [discuss] (root) 已確認：8 條全部 keep as-is（canary / freeze / unfreeze / guard / retro / second-opinion / ship / sprint-status），allowlist 維持現狀
+- [x] #6 [discuss] (root) 已確認：unaudited 預設 warning、`--strict` 才 fail；只有 relocated / denied 讓 default 走 exit 1。等 `starter-public-hygiene-skills` 把 skills 段填完，再把 CI 那行改成 `--strict`，L3 gate 才成為完整 ratchet — 已寫進 `.claude/rules/starter-hygiene.md` § L3 Commands Hygiene
 - [x] #7 [review:ui] (root) 實跑 scaffolder：`node template/packages/create-nuxt-starter/dist/cli.js test-app -y --no-install --no-register-consumer --no-clone-clade --agents claude-code,cursor` → 輸出的 `test-app/.claude/commands/` 共 10 檔，**不含** `validate-starter`；`.claude` / `.cursor` 內 `validate-starter` 引用 0 筆；8 條 keep commands 全部存在
 
 ## 8. 後續（不在本 change scope）

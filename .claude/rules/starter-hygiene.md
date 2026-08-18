@@ -98,6 +98,11 @@ prune，staged 的投影檔一律過檢查。
 這是刻意的 ratchet——`template/.claude/skills/` 的存量尚未逐條審查（歸後續
 `starter-public-hygiene-skills` change），先擋住 commands 層的再污染，不因存量而讓整條 gate 失效。
 
+`starter-public-hygiene-skills` 把 skills 段填完之後，**MUST** 把
+`.github/workflows/public-hygiene.yml` 的 audit 那行改成 `node scripts/audit-public-hygiene.mjs --strict`。
+在那之前預設留 warning 是因為：24 條未審 skills 若一開始就 fail-closed，唯一能讓 CI 轉綠的做法是把
+它們未經審查地塞進 `starter-owned-keep`——那正是上面 NEVER 的那條。
+
 ### 新增 starter-owned command 的 ceremony
 
 新加一個 `template/.claude/commands/<name>.md` **MUST** 同時：
