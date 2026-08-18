@@ -436,6 +436,11 @@ const main = defineCommand({
         '找不到 clade 中央倉時，嘗試 git clone 到 ~/offline/clade（--no-clone-clade 跳過）',
       default: true,
     },
+    install: {
+      type: 'boolean',
+      description: 'scaffold 後執行 pnpm install（--no-install 跳過，CI / e2e 測試用）',
+      default: true,
+    },
     'evlog-preset': {
       type: 'string',
       description:
@@ -578,6 +583,7 @@ const main = defineCommand({
         registerConsumer: args['register-consumer'] as boolean,
         wirePreCommit: args['wire-pre-commit'] as boolean,
         cloneClade: args['clone-clade'] as boolean,
+        installDeps: args.install as boolean,
         dbStack: selections.dbStack,
         repoId,
         workflowModel: workflowModel as 'trunk-based' | 'pr-merge-based',

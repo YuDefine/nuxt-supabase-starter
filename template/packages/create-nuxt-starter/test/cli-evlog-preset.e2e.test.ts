@@ -1,0 +1,100 @@
+import { execFileSync, spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'pathe'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+/**
+ * 端到端：跑真正的 `dist/cli.js`，不是直呼 `assembleProject`。
+ *
+ * 其他 scaffold 測試都從 `buildSelectionsFromArgs()` 起跳，所以 citty 的 argv
+ * parsing、`--evlog-preset` 的 enum validation、以及 `--yes` 是否真的繞過
+ * confirm prompt 這三段從來沒有被覆蓋——它們只在 build 過的 CLI 上才存在。
+ *
+ * stdin 一律接 'ignore'（等同 `< /dev/null`）：非 TTY 是 CI 與 agent 執行時的
+ * 實際情境，`--yes` 必須在那底下也不觸及任何 prompt API。
+ *
+ * 一律帶 `--no-install`。scaffold 的 `pnpm install` 每次 60s 起跳，測的又不是
+ * 依賴解析——這裡驗的是 argv → selections → 檔案落點這條鏈。
+ *
+ * TEST_DIR 落在 os.tmpdir() 而非 test/ 底下，且 spawn 時把 PWD / INIT_CWD 對齊它：
+ * CLI 的 detectMonorepoRoot() 讀的是 `process.env.PWD`，不是 spawn 給的 cwd。在 repo 內
+ * 跑測試時那個變數是呼叫者的 shell 路徑，CLI 會據此判定「在 starter monorepo 裡」並把
+ * 專案改建到 repo root——真的會寫進工作目錄，不是只有斷言失敗而已。
+ */
+
+const PKG_ROOT = resolve(import.meta.dirname, '..')
+const CLI = join(PKG_ROOT, 'dist', 'cli.js')
+const TEST_DIR = mkdtempSync(join(tmpdir(), 'cli-evlog-e2e-'))
+
+function cleanTestDir() {
+  if (existsSync(TEST_DIR)) {
+    rmSync(TEST_DIR, { recursive: true, force: true })
+  }
+}
+
+function runCli(args: string[]) {
+  return spawnSync(process.execPath, [CLI, ...args], {
+    cwd: TEST_DIR,
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 90_000,
+    env: { ...process.env, PWD: TEST_DIR, INIT_CWD: TEST_DIR },
+  })
+}
+
+beforeAll(() => {
+  execFileSync('npx', ['tsdown', 'src/cli.ts', '--format', 'esm', '--out-dir', 'dist'], {
+    cwd: PKG_ROOT,
+    stdio: 'ignore',
+    timeout: 300_000,
+  })
+}, 320_000)
+
+afterAll(cleanTestDir)
+
+describe('dist/cli.js --evlog-preset (end-to-end)', () => {
+  it('baseline 產出 evlog plugin 三件套與 identity helper', { timeout: 120_000 }, () => {
+    const result = runCli(['e2e-baseline', '--yes', '--no-install', '--evlog-preset', 'baseline'])
+    expect(result.status).toBe(0)
+
+    const target = join(TEST_DIR, 'e2e-baseline')
+    expect(existsSync(join(target, 'server/plugins/evlog-drain.ts'))).toBe(true)
+    expect(existsSync(join(target, 'server/plugins/evlog-enrich.ts'))).toBe(true)
+    expect(existsSync(join(target, 'server/plugins/evlog-sentry-drain.ts'))).toBe(true)
+    expect(existsSync(join(target, 'app/utils/evlog-identity.ts'))).toBe(true)
+    // PRESET.md 是 preset 自己的說明書，不該進使用者專案
+    expect(existsSync(join(target, 'PRESET.md'))).toBe(false)
+  })
+
+  it('none 產出乾淨專案，沒有任何 evlog plugin', { timeout: 120_000 }, () => {
+    const result = runCli(['e2e-none', '--yes', '--no-install', '--evlog-preset', 'none'])
+    expect(result.status).toBe(0)
+
+    const target = join(TEST_DIR, 'e2e-none')
+    expect(existsSync(join(target, 'package.json'))).toBe(true)
+    expect(existsSync(join(target, 'server/plugins/evlog-drain.ts'))).toBe(false)
+    expect(existsSync(join(target, 'server/plugins/evlog-enrich.ts'))).toBe(false)
+    expect(existsSync(join(target, 'server/plugins/evlog-sentry-drain.ts'))).toBe(false)
+  })
+
+  it('未知的 preset 名稱直接 fail，並印出可用值', { timeout: 60_000 }, () => {
+    const result = runCli(['e2e-bogus', '--yes', '--no-install', '--evlog-preset', 'not-a-preset'])
+    expect(result.status).not.toBe(0)
+
+    const output = `${result.stdout}${result.stderr}`
+    expect(output).toContain('--evlog-preset')
+    expect(output).toContain('baseline')
+    expect(existsSync(join(TEST_DIR, 'e2e-bogus'))).toBe(false)
+  })
+
+  it('--yes 在非 TTY stdin 底下不觸發 prompt（TD-003 回歸鎖）', { timeout: 120_000 }, () => {
+    const result = runCli(['e2e-non-tty', '--yes', '--no-install', '--evlog-preset', 'baseline'])
+
+    // uv_tty_init EINVAL 是這條回歸的具體症狀：曾經必須靠 `script -q /dev/null`
+    // 包一層才跑得動，修好之後 stdin 是不是 TTY 都不該影響 --yes。
+    expect(`${result.stdout}${result.stderr}`).not.toContain('TTY initialization failed')
+    expect(result.status).toBe(0)
+    expect(existsSync(join(TEST_DIR, 'e2e-non-tty', 'package.json'))).toBe(true)
+  })
+})

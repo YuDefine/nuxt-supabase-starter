@@ -27,6 +27,8 @@ export interface PostScaffoldOptions {
   registerConsumer: boolean
   wirePreCommit: boolean
   cloneClade: boolean
+  /** false 時跳過 `pnpm install`（CI / e2e 測試用；預設安裝）。 */
+  installDeps?: boolean
   dbStack?: DbStack
   repoId?: string
   workflowModel?: 'trunk-based' | 'pr-merge-based'
@@ -57,22 +59,29 @@ export async function postScaffold(
   // pnpm v10/v11 在 fresh install 時可能對 build script approval 機制 emit
   // ERR_PNPM_IGNORED_BUILDS 即使 package.json 已設 pnpm.allowBuilds dict。
   // 實測 retry 一次（lockfile 已建立）必通過，所以失敗時自動 retry 一次。
-  consola.start('正在安裝依賴套件...')
+  // 三態：true / undefined 都要裝，只有顯式 false 才跳過。
+  const skipInstall = opts.installDeps === false
   let pnpmInstalled = false
-  for (const attempt of [1, 2]) {
-    try {
-      execFileSync('pnpm', ['install'], { cwd: targetDir, stdio: 'inherit' })
-      consola.success('依賴套件安裝完成！')
-      pnpmInstalled = true
-      break
-    } catch (error) {
-      if (attempt === 1) {
-        consola.warn('第一次 pnpm install 結束時 emit 警告，自動 retry 一次...')
-        continue
+  if (skipInstall) {
+    consola.info('已跳過依賴安裝（--no-install）。')
+    consola.log(`  需要時手動執行：cd ${relativeTargetDir} && pnpm install`)
+  } else {
+    consola.start('正在安裝依賴套件...')
+    for (const attempt of [1, 2]) {
+      try {
+        execFileSync('pnpm', ['install'], { cwd: targetDir, stdio: 'inherit' })
+        consola.success('依賴套件安裝完成！')
+        pnpmInstalled = true
+        break
+      } catch (error) {
+        if (attempt === 1) {
+          consola.warn('第一次 pnpm install 結束時 emit 警告，自動 retry 一次...')
+          continue
+        }
+        consola.warn(`依賴套件安裝失敗：${(error as Error).message}`)
+        consola.log(`  上方為 pnpm 實際輸出；修正後手動執行：`)
+        consola.log(`  cd ${relativeTargetDir} && pnpm install`)
       }
-      consola.warn(`依賴套件安裝失敗：${(error as Error).message}`)
-      consola.log(`  上方為 pnpm 實際輸出；修正後手動執行：`)
-      consola.log(`  cd ${relativeTargetDir} && pnpm install`)
     }
   }
 
@@ -88,6 +97,9 @@ export async function postScaffold(
   //    this before pnpm install would leave projections stale.
   if (pnpmInstalled) {
     runSyncToAgents(targetDir)
+  } else if (skipInstall) {
+    consola.info('略過 sync-to-agents（依賴未安裝）。裝完依賴後手動：')
+    consola.log(`  cd ${relativeTargetDir} && node ~/.claude/scripts/sync-to-agents.mjs`)
   } else {
     consola.warn('略過 sync-to-agents — 請在 pnpm install 成功後手動：')
     consola.log(`  cd ${relativeTargetDir} && node ~/.claude/scripts/sync-to-agents.mjs`)
