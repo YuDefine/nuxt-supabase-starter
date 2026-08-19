@@ -75,7 +75,7 @@ Skill 自己 fork worktree、有**清楚 end-of-skill 完成點**、**無下游 
 `--auto-stash` 實際執行的是 **bulk-stash（`git stash push -u`，不帶 pathspec）**，捲走 main **全部** dirty —— 不只 `blockers`（= branch changeset ∩ main dirty）。因此 `--auto-stash` 在真正 bulk-stash **之前**，claim guard 的檢查範圍 **MUST ⊇ 將被 bulk-stash 捲走的全部 dirty**，**NEVER** 只查 `blockers` 子集。
 
 - bulk-stash 前 **MUST** 對 main **全部** dirty（`detectMainDirty`）跑 claim 比對（`classifyDirtyPaths`，`excludeClaim` 為本 merge-back worktree 的 claim）；
-- 差集（`allDirty \ blockers`）若含**別 session 認領**（`otherSession`）的 dirty → **fail-loud STOP / refuse auto-stash**（與既有 blocker-only / pre-fork guard 一致），列出 `<path> → <session-id>` 並要 user 等別 session 收斂或協調，**NEVER** 默默 bulk-stash 捲走別 session WIP；
+- 差集（`allDirty \ blockers`）若含**別 session 認領**（`otherSession`）的 dirty → **fail-loud STOP / refuse auto-stash**（與既有 blocker-only / pre-fork guard 一致），列出 `<path> → <session-id>`，並**先跑 [[session-tasks]] § 並行爭用 的 Step 0 判出對方性質再決定動作**（前景 session → 主動 `SendMessage` 協調；unattended runner → 讓位、**NEVER** 等它「收斂」；人類 → 才是要 user 介入的那一種），**NEVER** 默默 bulk-stash 捲走別 session WIP、**NEVER** 在未判出對方性質前就把這題退回給 user；
 - 差集為空 / 全屬本 change / 為**無主**（unclaimed）dirty → 維持既有正常 flow（`--auto-stash` 本就設計來吞無主 dirty，squash 落地後**自動 pop 回 main**，不留 stash tail；只有 pop 撞真衝突才走 `stash-reconcile`）。
 
 ⚠️ **guard 的有效性綁在 claim 有沒有宣告 `expected_paths`**：`classifyDirtyPaths` 是拿 dirty path 去比對 `c.expected_paths`，claim 沒帶 paths 就**永遠比不中**，`otherSession` 恆為空、guard 恆放行。因此 [[worktree-default]] §1 那條「main 累積 dirty 時寫 coarse claim **要帶 `--expected-paths`**」不是禮貌性建議，它是本 guard 唯一的輸入來源。（2026-08-03 <consumer-a> 實證：3 個 active claim 的 `expected_paths` 全空，88 條 unclaimed dirty 全數被 bulk-stash 捲走而 guard 零告警。）

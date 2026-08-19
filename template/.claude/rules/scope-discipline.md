@@ -93,6 +93,8 @@ Local edits will be reverted by the next sync.
 - **A. 馬上修，回 flow 繼續** — 在當前 session 直接編輯該 WIP 檔，原 flow（`/commit` / `/spectra-archive` / 等）繼續走完。前提：user 確認該編輯不會跟別 session 的修改互踩（或別 session 已結束）
 - **B. 登 TD，放棄當前 flow** — 把問題寫進 `docs/tech-debt.md`（編號 `TD-NNN`），當前 flow **立即中止**（commit 不繼續、archive 不繼續），等別 session 結束後由 user 決定何時處理；已成功 commit 的 group 保留不動
 
+**選 B 之前 MUST 先跑 [[session-tasks]] § 並行爭用 的 Step 0 確認「別 session」真的會結束。** 對方是 unattended runner 時它不會在可預期時間內停，「等它結束」等於把 flow 無限期掛起——判出是 runner 就直接登 TD 並讓位，**NEVER** 把中止理由寫成「等對方結束」。
+
 **NEVER** 自行二選一、自行 commit 略過該檔、自行用「不在 scope」當理由跳過 — 這兩條都是觸發 AskUserQuestion 的合法分支，不是 Claude 主線可單方決定的事。
 
 **為什麼預先固化 A/B**：這個衝突在 `/commit` 流程裡會反覆出現（review agent 跑出 nitpick → 落在 HANDOFF 是常態）。每次重新發明選項會讓 Claude 傾向「自行解讀」而不是嚴格走 AskUserQuestion；預先固化 = 把分支變成 reflex，不留發揮空間。

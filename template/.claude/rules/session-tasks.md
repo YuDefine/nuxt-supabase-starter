@@ -339,3 +339,64 @@ permission classifier／harness 拒絕某載體時，**NEVER** 改用其他工�
 
 `\nx`（Charles 個人縮寫，判為收工時）同樣受本契約約束：「收工 ＋ 一句已登記在哪」只是下限；
 判需要乾淨 session 時同樣 invoke `/handoff relay <task pointer>`（N 件可平行則 `/handoff fanout`），取得 receipt 後套用 **A**、不套用 B。
+
+## 並行爭用：檔案層之後 MUST 再問 session 層
+
+**Iron Law：檔案層回答「有沒有人在寫」，回答不了「對方會不會自己停」——而動作完全由後者決定。探測停在檔案層就 escalate，是規約違反，不是謹慎。違反字面就是違反精神。**
+
+`git status` dirty、mtime 在數十秒內、`.clade/claims/` 有沒有活 claim——這些觀測值在**人類正在編輯**、**前景 agent session**、**背景 unattended runner** 三種情況下**完全相同**。檔案層跑得再完整都停在同一個岔路口；判不出來**不是**「該 user 拍板」的訊號，是還有一層沒探。
+
+### Step 0（三步，順序不可調換）
+
+**每一次**檔案層探測回報「有另一個 actor 正在寫」都 MUST 跑完這三步再決定動作——不是只有 publish 被擋那次，ad-hoc commit、worktree merge-back、stash 判定、gate 撞紅同樣適用。
+
+```bash
+# 1) 誰在這個 repo 家族上工作（linked worktree 的 cwd 是 <repo>-wt/*，MUST 用前綴比對而非等值）
+herdr agent list | python3 -c '
+import json,sys
+for a in json.load(sys.stdin)["result"]["agents"]:
+    if a["cwd"].startswith("<repo 絕對路徑，不含尾斜線>"):
+        print(a["pane_id"], a["agent_status"], a["terminal_title_stripped"])
+'
+# 2) 命中的 pane 逐一讀，看它正在做什麼
+herdr agent read <pane_id> --source recent-unwrapped --lines 70
+# 3) 無論前兩步結論是什麼都 MUST 跑：背景 runner 沒有自己的 pane，第 1 步對它零訊號
+pgrep -af 'work-loop/[r]unner\.sh'            # runner 本體
+pgrep -af 'claude --print.*[-]-runner-child'  # 它的當輪 child（runner 正在換輪時只剩這個在）
+```
+
+**`agent_status: idle` NEVER 等於「對方收手了」。** 它只表示那個 pane 的互動 agent 正在等輸入，對「它掛的背景 process 停了沒」零訊號——2026-08-19 那個 pane 就是 `idle`，背後的 runner 還有 19 輪要跑。**判出 idle 之後 MUST 再跑第 3 步**，不得因為「看起來已經停了」跳過。
+
+第 3 步 **MUST 用 `work-loop/[r]unner\.sh` 這個 pattern**，**NEVER** 用 `runner.sh` / `work-loop` / `--unattended` 這類寬 pattern：2026-08-20 於 `~/offline/clade` 實跑 `pgrep -af "work-loop|runner.sh|--unattended"` 回 9 筆，**全是 false positive**（8 筆 `vendor/scripts/pre-push/runner.sh` git hook ＋ pgrep 自己的 shell），真正的 runner 0 筆。方括號防自我匹配：自己的 command line 含字面 `[r]unner`，不匹配 regex `[r]unner`。
+
+### 三種對方性質 → 動作（判出哪一種就直接執行）
+
+| 對方是 | 可觀察判準 | 動作 |
+| --- | --- | --- |
+| **unattended runner** | 第 3 步 `pgrep` 命中，或 pane 輸出含 `--unattended` / `--runner-child` / `max-rounds` | **什麼都不做，不搶。** 它有自己的 commit + publish 循環，dirty 是它當輪的中間狀態。**NEVER** stash（腰斬它當輪產出）、**NEVER** 代 commit、**NEVER** 搶 publish；本輪的 publish 需求登記後讓位 |
+| **前景 agent session** | 第 1 步命中 pane 且 `agent_status` 隨時間變動、第 3 步無命中 | `SendMessage` ／ `herdr agent prompt` 主動協調（請它先 commit、或告知你要 publish）。對方寫入在數十秒內且看得出正要落地 → **等它落地**，等待本身就是動作 |
+| **人類正在編輯** | 第 1、3 步都無命中，但檔案 mtime 持續更新 | 代為分組 commit（`git commit --only -- <paths>`）；半成品訊號命中才 stash |
+
+判出是哪一種之後就**自己執行對應動作**，**NEVER** 把已經判得出來的並行爭用用 `AskUserQuestion` 退回給 user。
+
+**「等」是上表三個動作之一，NEVER 是「判不出來」的同義詞。** 2026-08-20 於 `~/offline/clade` 實測：merge-back dry-run 報 `docs/tech-debt.md` dirty，第 1 步命中一個前景 session、`git diff` 是別人 16 秒前新增的 TD entry 且缺 `## Restart brief`（半成品訊號命中）——正解是**等它自己 land**（實測 10 秒），代 commit 會把半成品寫進 history、stash 會奪走它正在寫的檔。寫「等」時 **MUST 指名等到哪一個可觀察事件**，**NEVER** 只寫「等對方收手」。
+
+### 非 Herdr 環境的 graceful degrade
+
+`test "${HERDR_ENV:-}" = 1` 失敗時第 1、2 步不可用，**第 3 步照跑**（`pgrep` 不依賴 Herdr），再回退到檔案層 ＋ `.clade/claims/` 的 `last_heartbeat`。**降級掉的是「對方是誰」，NEVER 是「所以可以 escalate 了」**——降級後仍 MUST 自己選出上表三個動作之一；判不出對方性質時取最保守的那個：**什麼都不做**。
+
+### 逐字反開脫
+
+| 開脫 | 實際 |
+| --- | --- |
+| 「探測都跑完了還是判不出來，這題該 user 拍板」 | 跑完的是檔案層。Step 0 三步跑完了嗎？沒跑完就不叫探測完 |
+| 「pane 顯示 idle，對方應該收手了」 | `idle` 只描述互動 agent。2026-08-19 那個 idle pane 背後的 runner 還有 19 輪 |
+| 「先 stash 起來比較安全，之後再還原」 | 對 unattended runner 是腰斬當輪產出，對前景 session 是奪走它正在寫的檔。stash 只在「對方是人且已停手」時安全 |
+| 「我 SendMessage 問它一下就好」（對方是 runner 時） | runner child 是 `claude --print`，沒有 pane 也不讀訊息；那個 idle pane 收到訊息不會轉達給背景 process |
+| 「等對方收手就好」 | 對 unattended runner 是等數小時。「等」MUST 綁一個可觀察事件才算動作 |
+
+**Red Flags（發現自己在寫這幾句就停下來跑 Step 0）**：正要列出「等對方收手／stash 強推／我去問那個 session」這組選項；正要用 `AskUserQuestion` 問並行爭用怎麼辦；正要在「對方是誰」還是未知數的狀態下往下決策。
+
+**爭用訊號帶得出 pid 時（advisory lock、process 訊息）走 pid，NEVER 退回 cwd 過濾**：第 1 步的 cwd 前綴在同一 repo 同時有多個 pane 時過濾不出唯一解，而 pid 經 `ps` 祖先鏈直達 `claude … --session-id`，是精確對映。做法與「持有者正在跑同一條冪等流程時搭它的車」見 [[pitfall-pipeline-lock-contention-raced-instead-of-probed]]。
+
+> 第一手實錄：[[pitfall-working-tree-contention-escalated-without-session-layer-probe]]（2026-08-19 <consumer-a>，連問三輪、選項 3/3 錯，user 一句「你去檢查 pane」終結）。同型換 domain：[[pitfall-infra-change-attribution-skips-concurrent-session-check]]。
