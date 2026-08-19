@@ -61,6 +61,18 @@ repo-local nonce proof marker 的內容逐字匹配 runner 產生的 nonce 才�
 token 或路徑）僅供診斷，不是 proof；只用 `[ -f ]` 看檔案存在會漏掉 script 無法執行或 scanner parse 失敗。
 
 探針誤判過嚴時走 `--skip-preflight`（`--dry-run` 自動略過），**NEVER** 靠拿掉探針本身解決。
+
+### headless child 一律走官方 CC 帳號
+
+preflight 探針與每輪 child 都由 runner 剝掉 gateway 路由變數（`ANTHROPIC_BASE_URL` /
+`ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_DEFAULT_*_MODEL` / `CLAUDE_CODE_*_CONTEXT*` 與 gateway 祕密）
+才起 `claude --print`，名單與 `~/.zshrc` 的 `cc` / `ccw` wrapper 對齊。所以**從 CCG / CCX pane
+起 runner，跑的仍然是官方 CC 帳號**，不是 Grok / GPT —— 這是刻意的，不是漏掉。
+
+不剝的話 child 整場走 gateway，撞上游 429 只會 `exit=1`，而 preflight 報的是「權限閘門拒絕或
+claude 不可用」，訊息與真因對不上（2026-08-19 23:50 clade home 實測 exit 3、一輪都沒跑，尾巴是
+`Request rejected (429) · All credentials for model claude-opus-5 are cooling down`）。這種形狀的
+preflight 失敗 **NEVER** 用 `--skip-preflight` 繞 —— 繞過去第一輪照樣炸。
 ready-count helper 缺席或輸出無法解析時**放行**：門檻是省成本的優化，NEVER 讓它變成起不了
 runner 的新故障。
 
