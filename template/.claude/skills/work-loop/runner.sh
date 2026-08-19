@@ -66,21 +66,21 @@ STOP_FILE="$REPO/.clade/work-loop/stop"
 # NEVER 改成在 runner 頂層 export FORCE_COLOR=0：那會一併關掉 child `claude --print` 的顏色。
 NODE_PLAIN="env FORCE_COLOR=0 NO_COLOR=1 node"
 
-# ── headless child 的 env 淨化 ────────────────────────────────────────────────
-# `claude --print` 繼承呼叫者的完整 env。從 CCG / CCX pane（`~/.local/bin/claudeg`、
-# `claudex`）起 runner 時那份 env 帶著 gateway 路由：`ANTHROPIC_BASE_URL` 指向
-# 127.0.0.1:8317、`ANTHROPIC_AUTH_TOKEN` 是 gateway 的 `CLIENT_API_KEY`。於是 headless child
-# 整場走 gateway，撞上游 429 就 exit 1 —— 而 preflight 把它報成「權限閘門拒絕或 claude
-# 不可用」，訊息與真因完全對不上（2026-08-19 23:50 實測，尾巴是
-# `Request rejected (429) · All credentials for model claude-opus-5 are cooling down`）。
+# ── headless child 的發起點路由 ──────────────────────────────────────────────
+# child 跟起 runner 的那條入口走同一條帳號，不是永遠剝成官方 CC。
 #
-# runner 的 child 一律走官方 CC 憑證（`~/.claude` / `~/.claude-work`，看呼叫端繼承的
-# `CLAUDE_CONFIG_DIR`），所以這裡把整組 gateway 變數剝掉。路由那 8 個名字與 `~/.zshrc` 的
-# `cc` / `ccw` wrapper 逐字對齊 —— 那兩支是 canonical 的「官方帳號」入口；後面 4 個是
-# `claudeg` 的 `set -a; source .env` 一併外洩的 gateway 祕密，無人值守的 child 不需要它們。
+#   cc  / ccw → 官方 CC（剝 gateway 變數，與 ~/.zshrc 的 cc / ccw wrapper 對齊）
+#   ccg / ccx → claudeg / claudex（wrapper 會釘 --model ccg-opus / ccx-opus 並設 500K / 272K）
 #
-# NEVER 改用 `env -i`：child 需要 HOME / PATH / TERM / CLAUDE_CONFIG_DIR，清空只是換一個更難
-# 查的故障。NEVER 拿 `--skip-preflight` 當本問題的修法 —— 探針抓到的是真實故障不是誤判。
+# 2026-08-19 曾一律剝成官方 CC：當時 child 繼承 CCG env 卻呼叫裸 `claude --print`
+# （沒有 --model ccg-opus），gateway 把預設 opus 路由到 Codex channel 的 `claude-opus-5`，
+# 429 被 preflight 報成「權限閘門拒絕」。真因是 launcher 不對，不是「CCG 起源不該走 gateway」。
+# 2026-08-20 從 CCG 起 runner、剝成官方 CC 後撞 `You've hit your session limit · resets 5am`：
+# 官方額度與 gateway 額度不是同一池。修法是「起源是 ccg 就用 claudeg」，不是永遠剝掉。
+#
+# NEVER 改用 `env -i`：child 需要 HOME / PATH / TERM / CLAUDE_CONFIG_DIR。
+# NEVER 對 ccg/ccx 起源改回裸 `claude --print` 還留著 gateway env —— 那就是 08-19 的 429。
+# NEVER 拿 `--skip-preflight` 當本問題的修法。
 CHILD_ENV=(
   env
   -u ANTHROPIC_BASE_URL
@@ -96,6 +96,25 @@ CHILD_ENV=(
   -u CPAMP_ADMIN_KEY
   -u KEEPER_PASSWORD
 )
+
+detect_origin_launcher() {
+  case "${ANTHROPIC_DEFAULT_OPUS_MODEL:-}" in
+    ccg-*) echo ccg; return ;;
+    ccx-*) echo ccx; return ;;
+  esac
+  if [ "${CLAUDE_CONFIG_DIR:-}" = "$HOME/.claude-work" ]; then
+    echo ccw
+    return
+  fi
+  echo cc
+}
+
+ORIGIN="$(detect_origin_launcher)"
+case "$ORIGIN" in
+  ccg) CHILD_BIN="$HOME/.local/bin/claudeg" ;;
+  ccx) CHILD_BIN="$HOME/.local/bin/claudex" ;;
+  *)   CHILD_BIN="claude" ;;
+esac
 QUARANTINE_FILE="$REPO/.clade/work-loop/orphan-quarantine.json"
 LOCK_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-lock.ts"
 READY_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-ready-count.ts"
@@ -335,7 +354,7 @@ preflight_headless_probe() {
     || preflight_fail "無法產生 headless proof nonce"
   proof_file="$REPO/.clade/work-loop/preflight-proof-$nonce"
   rm -f "$proof_file"
-  out="$(cd "$REPO" && timeout 300 "${CHILD_ENV[@]}" WORK_LOOP_RUNNER_CHILD=1 WORK_LOOP_SCAN_PREFLIGHT_NONCE="$nonce" claude --print \
+  out="$(cd "$REPO" && timeout 300 "${CHILD_ENV[@]}" WORK_LOOP_RUNNER_CHILD=1 WORK_LOOP_SCAN_PREFLIGHT_NONCE="$nonce" "$CHILD_BIN" --print \
     --allowedTools "$SCAN_PREFLIGHT_RULE" --permission-mode "$PERM_MODE" \
     "Run exactly this command with the Bash tool: $SCAN_PREFLIGHT_CMD
 Do not claim success unless the command completed. No other tool calls." 2>&1)"
@@ -351,7 +370,11 @@ Do not claim success unless the command completed. No other tool calls." 2>&1)"
 }
 
 run_preflight() {
-  command -v claude >/dev/null 2>&1 || preflight_fail "PATH 上找不到 claude"
+  if [ "$ORIGIN" = ccg ] || [ "$ORIGIN" = ccx ]; then
+    [ -x "$CHILD_BIN" ] || preflight_fail "起源是 $ORIGIN 但找不到可執行的 $CHILD_BIN"
+  else
+    command -v claude >/dev/null 2>&1 || preflight_fail "PATH 上找不到 claude"
+  fi
   command -v node >/dev/null 2>&1 || preflight_fail "PATH 上找不到 node"
 
   local probe="$REPO/.clade/work-loop/.preflight-probe"
@@ -415,7 +438,7 @@ fi
 exit_fail_streak=0
 no_progress_streak=0
 start_round="$(round_of)"
-echo "work-loop runner: repo=$REPO  起始 round=$start_round  max=$MAX_ROUNDS  perm=$PERM_MODE"
+echo "work-loop runner: repo=$REPO  起始 round=$start_round  max=$MAX_ROUNDS  perm=$PERM_MODE  origin=$ORIGIN  launcher=$CHILD_BIN"
 
 awaiting="$(awaiting_count)"
 if [ "$awaiting" -gt 0 ] 2>/dev/null; then
@@ -460,7 +483,7 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
   fi
   # dispatcher 讀這兩個 env 當 telemetry attribution 的機械 fallback；模型顯式帶 CLI 時 CLI 優先。
   # 每輪一個 origin-id，讓 round summary 不必用時間窗猜哪筆 dispatch 屬於哪輪。
-  cmd=("${CHILD_ENV[@]}" WORK_LOOP_RUNNER_CHILD=1 "WORK_LOOP_MIN_WAKEUP_SECONDS=$MIN_WAKEUP" CLADE_DISPATCH_ORIGIN=work-loop "CLADE_DISPATCH_ORIGIN_ID=$origin_id" claude --print --add-dir "$WT_PARENT" --allowedTools "$SCAN_HELPER_RULE" --permission-mode "$PERM_MODE" "/work-loop --unattended --runner-child --linked-dispatch-mode foreground --min-wakeup-seconds $MIN_WAKEUP --scan-helper-command '$SCAN_HELPER_CMD'")
+  cmd=("${CHILD_ENV[@]}" WORK_LOOP_RUNNER_CHILD=1 "WORK_LOOP_MIN_WAKEUP_SECONDS=$MIN_WAKEUP" CLADE_DISPATCH_ORIGIN=work-loop "CLADE_DISPATCH_ORIGIN_ID=$origin_id" "$CHILD_BIN" --print --add-dir "$WT_PARENT" --allowedTools "$SCAN_HELPER_RULE" --permission-mode "$PERM_MODE" "/work-loop --unattended --runner-child --linked-dispatch-mode foreground --min-wakeup-seconds $MIN_WAKEUP --scan-helper-command '$SCAN_HELPER_CMD'")
 
   if [ "$DRY_RUN" = 1 ]; then
     echo "[dry-run] round $(next_round_label "$before"): ${cmd[*]}"

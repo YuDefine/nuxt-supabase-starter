@@ -62,17 +62,24 @@ token 或路徑）僅供診斷，不是 proof；只用 `[ -f ]` 看檔案存在�
 
 探針誤判過嚴時走 `--skip-preflight`（`--dry-run` 自動略過），**NEVER** 靠拿掉探針本身解決。
 
-### headless child 一律走官方 CC 帳號
+### headless child 跟發起點走同一條帳號
 
-preflight 探針與每輪 child 都由 runner 剝掉 gateway 路由變數（`ANTHROPIC_BASE_URL` /
-`ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_DEFAULT_*_MODEL` / `CLAUDE_CODE_*_CONTEXT*` 與 gateway 祕密）
-才起 `claude --print`，名單與 `~/.zshrc` 的 `cc` / `ccw` wrapper 對齊。所以**從 CCG / CCX pane
-起 runner，跑的仍然是官方 CC 帳號**，不是 Grok / GPT —— 這是刻意的，不是漏掉。
+preflight 探針與每輪 child 的 **launcher 跟起 runner 的入口對齊**：
 
-不剝的話 child 整場走 gateway，撞上游 429 只會 `exit=1`，而 preflight 報的是「權限閘門拒絕或
-claude 不可用」，訊息與真因對不上（2026-08-19 23:50 clade home 實測 exit 3、一輪都沒跑，尾巴是
-`Request rejected (429) · All credentials for model claude-opus-5 are cooling down`）。這種形狀的
-preflight 失敗 **NEVER** 用 `--skip-preflight` 繞 —— 繞過去第一輪照樣炸。
+| 發起點 | child 呼叫 | 帳號 |
+| --- | --- | --- |
+| `cc` | 剝 gateway 變數後 `claude --print` | 官方個人（`~/.claude`） |
+| `ccw` | 同上，`CLAUDE_CONFIG_DIR=~/.claude-work` | 官方工作 |
+| `ccg` | `claudeg --print`（釘 `--model ccg-opus`） | gateway / Grok |
+| `ccx` | `claudex --print`（釘 `--model ccx-opus`） | gateway / GPT |
+
+判定看 `ANTHROPIC_DEFAULT_OPUS_MODEL` 是否 `ccg-*` / `ccx-*`，再看 `CLAUDE_CONFIG_DIR` 是否
+`~/.claude-work`，其餘當 `cc`。**NEVER** 從 CCG pane 起 runner 卻剝成官方 CC —— 兩池額度
+不是同一個，2026-08-20 實測剝完撞 `You've hit your session limit · resets 5am`，gateway 還有額度。
+
+2026-08-19 的 gateway 429（`claude-opus-5` cooling down）是「繼承 CCG env 卻呼叫裸
+`claude --print`、沒釘 `ccg-opus`」，gateway 把預設 opus 送到 Codex channel。修法是換 launcher
+為 `claudeg`，**不是**永遠剝掉。這種 preflight 失敗 **NEVER** 用 `--skip-preflight` 繞。
 ready-count helper 缺席或輸出無法解析時**放行**：門檻是省成本的優化，NEVER 讓它變成起不了
 runner 的新故障。
 
