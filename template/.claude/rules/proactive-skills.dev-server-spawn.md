@@ -56,7 +56,7 @@ Local edits will be reverted by the next sync.
 
 ## In-process tunnel consumer：review 未 merge 的 worktree change（hard rule）
 
-部分 consumer 的 dev tunnel 是 **in-process plugin**（`vite-plugin-cloudflare-tunnel` 寫在 `nuxt.config.ts`，tunnel 跟 nuxt dev process **綁死**；典型：<consumer-b> / <consumer-e>）。review 未 merge 的 worktree change 正解 = 把唯一的 dev-session 指向**那個 worktree 的 cwd**（`dev-session --cwd <wt>`，一次一 worktree）；完整 SOP：`~/offline/clade/vendor/snippets/inprocess-tunnel-worktree-review/README.md`。
+部分 consumer 的 dev tunnel 是 **in-process plugin**（`vite-plugin-cloudflare-tunnel` 寫在 `nuxt.config.ts`，tunnel 跟 nuxt dev process **綁死**；典型：<consumer-b> / <consumer-h>）。review 未 merge 的 worktree change 正解 = 把唯一的 dev-session 指向**那個 worktree 的 cwd**（`dev-session --cwd <wt>`，一次一 worktree）；完整 SOP：`~/offline/clade/vendor/snippets/inprocess-tunnel-worktree-review/README.md`。
 
 判別「我是哪型」（grep dev script + nuxt.config）：
 

@@ -181,8 +181,8 @@ Helper 掃描 priority：**repo root canonical → repo root legacy → repo roo
 | <consumer-a> | ✅ `packages/core/server/routes/auth/_dev-login.get.ts` (monorepo) | ❌ false-negative |
 | <consumer-d> | ✅ `server/routes/auth/_dev-login.get.ts` | ✅ |
 | <consumer-c> | ✅ `server/api/_dev/login.post.ts` (better-auth POST) | ❌ false-negative |
-| <consumer-h> | ❌ MISSING (nuxt-auth-utils + libsql-drizzle, no cookbook template) | ✅ |
-| <consumer-e> | ❌ MISSING (同上) | ✅ |
+| <consumer-i> | ❌ MISSING (nuxt-auth-utils + libsql-drizzle, no cookbook template) | ✅ |
+| <consumer-h> | ❌ MISSING (同上) | ✅ |
 
 **真實 adoption 4/6 + 1 monorepo misdetected + 2 真缺**（不是 1/6）。修法源頭 clade 2026-05-24 land：audit script + helper module + dispatcher fix（`scripts/audit-dev-login-adoption.ts` + `vendor/snippets/dev-auth/lib/detect-dev-login-route.ts` + `vendor/scripts/codex-dispatch-screenshot-verify.ts` 對齊）。下次 agent / 主線撞「is dev-login present？」即走上述 detection 路徑，**NEVER** 再 lazy grep。
 

@@ -68,7 +68,7 @@ Local edits will be reverted by the next sync.
 
 10. **部署宣稱需交叉核對**：宣稱部署平台 / runtime 時，**MUST** 核對 `.github/workflows/` deploy job + deploy config（`wrangler.toml` / `Dockerfile`）+ `package.json` scripts。**NEVER** 只引單一 `docs/` 文件。
 
-    **開始調查 production 之前先釘 canonical tuple**：讀任何設定 / 查任何 log / 提任何修正**之前**，**MUST** 先確認四項並寫出來——repo、framework、hosting platform、domain。**NEVER** 從當前工作目錄推斷是哪個 production 專案：cwd 只說明你在哪個 checkout 裡，不說明它部署到哪、甚至不說明它有沒有部署。四項有任一項答不出來，就還沒到可以動手的階段。（<consumer-i> 2026-07-14 實證）
+    **開始調查 production 之前先釘 canonical tuple**：讀任何設定 / 查任何 log / 提任何修正**之前**，**MUST** 先確認四項並寫出來——repo、framework、hosting platform、domain。**NEVER** 從當前工作目錄推斷是哪個 production 專案：cwd 只說明你在哪個 checkout 裡，不說明它部署到哪、甚至不說明它有沒有部署。四項有任一項答不出來，就還沒到可以動手的階段。（<consumer-j> 2026-07-14 實證）
 
 11. **Negative search 不成立為證據（hard rule）**：下「零命中 / 不存在 / 只有 N 個」的結論前，**MUST** 先用一個已知會命中的樣本驗過 pattern（known-positive control），並在結論裡寫出「此 pattern 對 `<已知樣本>` 命中」——寫不出來，零命中就不是證據。**NEVER** 把「我 grep 過了」當成 absence 的證明：pattern 寫錯、資料形狀誤判（表格儲存格繼承 / 多種寫法 / 跨行屬性 / 別名 import）、未言明的假設偷偷收窄範圍，三者的輸出**都是零命中**，跟真的不存在外觀完全相同，而換一個工具重跑同一個 pattern 驗不到任何一項。有 structured output（`--json` / `--format json`）時優先用它取代文字 grep；更前一步是先問「有沒有不需要數的判準」（例：gate 已設 `severity: CRITICAL,HIGH`，則輸出的每一條依定義都是 HIGH，根本不必數）。（per [[pitfall-narrow-grep-absence-treated-as-proof]]）
 

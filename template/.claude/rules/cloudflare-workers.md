@@ -48,7 +48,7 @@ Local edits will be reverted by the next sync.
 - NuxtHub 對 Supabase consumer 幫不上忙：Supabase 走 HTTP API，binding 抽象沒用武之地
 - void.cloud + D1 場景下，`void/db` + `env.DB` raw R2 已足夠；NuxtHub helper 在此 track 沒對應 runtime injection 機制（void 不 auto-import `hub*()`）
 - Unused dep 會被 Nitro auto-import 掃到、type generator 帶進來、IDE 出現假 `hub*()` 補完，誤導 maintainer
-- 已驗證移除安全：2026-05-23 對 4 個 Supabase consumer ripgrep `hub*()` API 呼叫 = 0；2026-05-26 對 <consumer-e>（void.cloud migrate 後）同樣驗證 `hub*()` 呼叫 = 0
+- 已驗證移除安全：2026-05-23 對 4 個 Supabase consumer ripgrep `hub*()` API 呼叫 = 0；2026-05-26 對 <consumer-h>（void.cloud migrate 後）同樣驗證 `hub*()` 呼叫 = 0
 
 ## § 2 — wrangler config format（hard rule）
 
@@ -96,7 +96,7 @@ Local edits will be reverted by the next sync.
 
 ### § 3.2 Track B — void.cloud（2026-07-14 current baseline）
 
-走 [void.cloud](https://void.cloud) VoidZero 部署平台的 consumer（建在 Cloudflare Workers 上，但 deploy pipeline 由 void 接管）。Fleet 採用：<consumer-i>、<consumer-e>、quotation-generator（migration 中）。
+走 [void.cloud](https://void.cloud) VoidZero 部署平台的 consumer（建在 Cloudflare Workers 上，但 deploy pipeline 由 void 接管）。Fleet 採用：<consumer-j>、<consumer-h>、quotation-generator（migration 中）。
 
 #### MUST
 
@@ -105,7 +105,7 @@ Local edits will be reverted by the next sync.
 - **MUST** 新建或升級中的 consumer 使用 current `void@0.10.x`；`void@0.8.x` 只視為 legacy migration 狀態，不再當 current baseline
 - **MUST** 在根目錄存在 `void.json`，至少含 `target: "cloudflare"` 與 framework inference；保留 `wrangler.jsonc` 給 Nuxt dev、IDE schema 與 compatibility config
 - **MUST** `void@0.8.x` 的 `void.json.worker.compatibility_flags` 依 `inference.appType` 分流：
-  - **`appType: "framework"` (Nuxt / SvelteKit / Astro 等)**：**MUST** 走**配置 3**（`["nodejs_compat", "nodejs_als", "no_nodejs_compat_v2"]`）— 顯式停 workerd 原生 v2，unenv v1 polyfill 獨佔。配置 2（純 v2）對 Nitro `cloudflare-module` preset **不可用** — Nitro build 主動 warn「`Please consider replacing nodejs_compat_v2 with nodejs_compat ... or USE IT AT YOUR OWN RISK as it can cause issues with nitro`」+ deploy 撞 `Cannot read private member #t in get stdout`（<consumer-i> 2026-05-27 first-ever CI deploy 實證；blog 之前 prod live 是 user 本機 manual deploy 沒踩到）
+  - **`appType: "framework"` (Nuxt / SvelteKit / Astro 等)**：**MUST** 走**配置 3**（`["nodejs_compat", "nodejs_als", "no_nodejs_compat_v2"]`）— 顯式停 workerd 原生 v2，unenv v1 polyfill 獨佔。配置 2（純 v2）對 Nitro `cloudflare-module` preset **不可用** — Nitro build 主動 warn「`Please consider replacing nodejs_compat_v2 with nodejs_compat ... or USE IT AT YOUR OWN RISK as it can cause issues with nitro`」+ deploy 撞 `Cannot read private member #t in get stdout`（<consumer-j> 2026-05-27 first-ever CI deploy 實證；blog 之前 prod live 是 user 本機 manual deploy 沒踩到）
   - **`appType: "void"` (pure Vite+ void app，無 meta framework)**：**MUST** 走**配置 2**（`["nodejs_compat_v2", "nodejs_als"]`）— 直接吃 workerd 原生 v2，無 Nitro 中間層 polyfill 衝突
 - **MUST** `wrangler.jsonc` 的 `compatibility_flags` 與 `void.json` **對齊**，避免 dev / prod 行為漂移；current void 可從 wrangler config 讀取 compatibility settings，不能再假設 deploy 永遠忽略 wrangler config
 - **MUST** GitHub Actions 使用 void.cloud 的 GitHub OIDC：workflow 加 `permissions: { contents: read, id-token: write }`，以 `void github connect <project> --repo <owner/repo> --executor github_actions` 做一次性授權；**不使用**長效 `VOID_TOKEN`
@@ -129,7 +129,7 @@ Local edits will be reverted by the next sync.
 
 Nitro `cloudflare-module` preset build 時會在 `.output/server/wrangler.json` 自動加 `no_nodejs_compat_v2`，但 legacy void 0.8 deploy 曾只採用 `void.json.worker.compatibility_flags`，導致兩份 config 漂移。current void 已能從 wrangler config 讀取 compatibility settings；保留兩份檔時仍應對齊，並以 current official integration 為準。
 
-→ Fleet 為什麼沒事到 2026-05：所有 wrangler-action consumer 讀 `.output/server/wrangler.json`，flag 自動對齊；只有 void.cloud track 暴露 void.json 與 wrangler.json 的 flag 落差。<consumer-i>（2026-05-25）+ <consumer-e>（2026-05-27）兩例撞 10021 後 promote 成本 §。
+→ Fleet 為什麼沒事到 2026-05：所有 wrangler-action consumer 讀 `.output/server/wrangler.json`，flag 自動對齊；只有 void.cloud track 暴露 void.json 與 wrangler.json 的 flag 落差。<consumer-j>（2026-05-25）+ <consumer-h>（2026-05-27）兩例撞 10021 後 promote 成本 §。
 
 #### void.cloud 派可帶 NuxtHub 嗎
 
@@ -185,7 +185,7 @@ hub: {
 - **dev binding fallback**：用 `process.env.NITRO_PRESET` 條件切換 local sqlite / prod D1（wrangler.jsonc 沒法寫 conditional），dev 不用 wrangler dev 就能跑
 - 對齊 `vendor/snippets/d1-drizzle/nuxthub-dev-binding-fallback.ts` cookbook
 
-**Fleet 採用**：<consumer-h>（<consumer-e> 2026-05-26 前採此 pattern，遷 void.cloud 後改走 § 4.5）
+**Fleet 採用**：<consumer-i>（<consumer-h> 2026-05-26 前採此 pattern，遷 void.cloud 後改走 § 4.5）
 
 ### § 4.2 Pattern B — wrangler.jsonc 完整宣告 + hub: 啟用 helper（**例外**）
 
@@ -309,7 +309,7 @@ export function getDb(event: H3Event) {
 
 詳細遷移 runbook（Phase 1-10）+ Schema migration 與 NuxtHub `blob.put` API 差異等 sharp edges 見 `/yudefine-deploy` skill。
 
-**Fleet 採用**：<consumer-i>、<consumer-e>、quotation-generator（migration 中）
+**Fleet 採用**：<consumer-j>、<consumer-h>、quotation-generator（migration 中）
 
 ## § 5 — 違反偵測
 
@@ -341,13 +341,13 @@ export function getDb(event: H3Event) {
 | Consumer | DB | Deploy track | NuxtHub | void.json compat flags |
 |---|---|---|---|---|
 | <consumer-c> | Cloudflare D1 | A (wrangler-action) | ✅ | n/a |
-| <consumer-h> | Cloudflare D1 | A (wrangler-action) | ✅ | n/a |
+| <consumer-i> | Cloudflare D1 | A (wrangler-action) | ✅ | n/a |
 | <consumer-a> | Supabase | A (wrangler-action) | ❌ | n/a |
 | <consumer-d> | Supabase | A (wrangler-action) | ❌ | n/a |
 | <consumer-b> | Supabase | A (wrangler-action) | ❌ | n/a |
 | nuxt-supabase-starter | Supabase | A (wrangler-action) | ❌ | n/a |
-| **<consumer-e>** | Cloudflare D1（void 自管）| **B (void.cloud)** | ❌ | legacy 0.8：配置 3（v1 + no_v2）+ patch-void-deploy；待升 current void 後退役 patch |
-| **<consumer-i>** | Cloudflare D1（void 自管，via @nuxt/content adapter）| **B (void.cloud)** | ❌ | current void 0.10；配置 3 沿用已驗證 production baseline；workflow 已改 GitHub OIDC，需一次性 connect |
+| **<consumer-h>** | Cloudflare D1（void 自管）| **B (void.cloud)** | ❌ | legacy 0.8：配置 3（v1 + no_v2）+ patch-void-deploy；待升 current void 後退役 patch |
+| **<consumer-j>** | Cloudflare D1（void 自管，via @nuxt/content adapter）| **B (void.cloud)** | ❌ | current void 0.10；配置 3 沿用已驗證 production baseline；workflow 已改 GitHub OIDC，需一次性 connect |
 | quotation-generator（非 registry）| Cloudflare D1（void 自管）| B (void.cloud) | ❌ | main：配置 1 + `@void-sdk/void@^0.6.x` 舊 SDK；vp-void-migration worktree：配置 3 + `void@^0.8.x` |
 
 未來新 consumer 加入時，依此表決定派別 + 跟 cookbook 對齊。改派（例：某 consumer 從 Supabase 遷 D1、從 wrangler-action 遷 void.cloud）必須同步：
@@ -360,7 +360,7 @@ export function getDb(event: H3Event) {
 
 > **Runner 本身的標籤設計、job 路由契約與三類 runner 職責分工見 [[self-hosted-runner]]**。本節只講 CI **step 寫法**（cache / secrets）的差異；「這個 job 會落在哪台機器」由標籤決定，屬該規約範圍。
 
-YuDefine fleet 多個 consumer（<consumer-h> / <consumer-e> / <consumer-i>）的 CI / deploy workflow 跑在自架 runner `runs-on: [self-hosted, gh-runner-lxc]`（YuDefine LXC，省 GitHub-hosted minutes）。Self-hosted runner 跟 GitHub-hosted runner 有兩個關鍵差異，沿用 GitHub-hosted 的 workflow 寫法會踩坑：
+YuDefine fleet 多個 consumer（<consumer-i> / <consumer-h> / <consumer-j>）的 CI / deploy workflow 跑在自架 runner `runs-on: [self-hosted, gh-runner-lxc]`（YuDefine LXC，省 GitHub-hosted minutes）。Self-hosted runner 跟 GitHub-hosted runner 有兩個關鍵差異，沿用 GitHub-hosted 的 workflow 寫法會踩坑：
 
 ### § 7.1 — NEVER `cache: pnpm`（用 LXC 本地 persistent store）
 
@@ -416,8 +416,8 @@ Self-hosted runner 的 working dir 是 `actions/checkout` clone 的乾淨 repo�
 
 | Consumer | runs-on | `cache: pnpm` 已移除 | LXC store-dir | env via secrets |
 | --- | --- | --- | --- | --- |
-| <consumer-e> | self-hosted, gh-runner-lxc | ✅ | ✅ | legacy VOID_TOKEN；待遷 GitHub OIDC |
-| <consumer-h> | self-hosted, gh-runner-lxc | ❌（仍 `cache: pnpm`） | ❌ | — |
-| <consumer-i> | self-hosted, gh-runner-lxc | ✅ | ✅ | GitHub OIDC + VOID_PROJECT |
+| <consumer-h> | self-hosted, gh-runner-lxc | ✅ | ✅ | legacy VOID_TOKEN；待遷 GitHub OIDC |
+| <consumer-i> | self-hosted, gh-runner-lxc | ❌（仍 `cache: pnpm`） | ❌ | — |
+| <consumer-j> | self-hosted, gh-runner-lxc | ✅ | ✅ | GitHub OIDC + VOID_PROJECT |
 
-<consumer-i> 的 `.github/workflows/deploy.yml` 是 current void.cloud + GitHub OIDC reference；<consumer-e> / <consumer-h> 的遷移屬 consumer 自家工作（clade 只散播標準 + 稽核，不替 consumer 改 workflow）。
+<consumer-j> 的 `.github/workflows/deploy.yml` 是 current void.cloud + GitHub OIDC reference；<consumer-h> / <consumer-i> 的遷移屬 consumer 自家工作（clade 只散播標準 + 稽核，不替 consumer 改 workflow）。
