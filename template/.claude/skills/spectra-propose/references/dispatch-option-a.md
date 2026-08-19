@@ -352,6 +352,11 @@ Local edits will be reverted by the next sync.
         - **NEVER** 自行假設答案、自行標 wontfix、或推給未來
         - 拿到答案後 Edit design.md 把 `## Open Questions` 改為 `## Resolved Questions`，每題下補 `**Answer:** <使用者回答>`
 
+   6b. **Elicitation gate Part 2（QA 視角 agent）** —— 依 SKILL.md § Elicitation gate 派一個
+       fresh-context subagent 對 spec deltas 問「那如果⋯⋯呢」。回來的每一條 MUST 補進 spec 或
+       明確標為 out of scope，兩者都留痕跡；**NEVER** 靜默丟棄，**NEVER** 用繼承主線對話的
+       fork 型 subagent。
+
    7. **跑 `spectra analyze <change-name> --json`** 確認無 Critical/Warning（max 2 輪 fix loop，與 Step 9 邏輯相同）
 
    8. **`spectra validate <change-name>`** 確認 artifacts 結構合法

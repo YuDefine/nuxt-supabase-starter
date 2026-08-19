@@ -48,6 +48,8 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
 
 0. **Dispatch 路徑選擇（三選一選單）**
 
+   **先跑 § Elicitation gate 的 Part 1（4 問），再跳選單。** 那 4 問問的是 requirement 本身，與走哪條 dispatch 路徑無關；跳過它，A / B / C 三條路徑會用同一份有洞的 requirement 起草。
+
    本 skill 的 draft 階段有三條可選路徑。**Step 0 開頭 MUST 用 AskUserQuestion 跳三選一選單**讓使用者選（除非使用者已明確指定路徑，見下方捷徑）：
 
    - **A. Codex flow（預設 / 推薦，選單第一項）** — Codex GPT-5.6-sol max draft + 主線 Claude Fable 5 xhigh cross-check。draft + cross-check 比擇一穩，wall-clock 最短。
@@ -84,6 +86,52 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
    - **Phase B-0c**：主線整合 findings + 跑選項 A Phase 0b step 3–9 全套 cross-check，主線自己 Edit 修。
 
    ---
+
+   ### Elicitation gate（A / B / C 通用，MUST）
+
+   Spectra 保證「寫下來的規格被實作、不漂」，**不**保證規格本身完整。缺的那條需求不會出現在
+   任何 diff、任何測試、任何 traceability 報表裡 —— 它只在上線後以事故的形式出現。本 gate 是
+   規格成形**之前**唯一的攔截點，三條路徑都 MUST 走。
+
+   **Part 1 — Pre-draft 4 問（起草任何 Scenario 之前）**
+
+   對 requirement 逐題問，答案逐字寫進 `design.md` 的 Open Questions 或直接寫成 Scenario：
+
+   1. **分次累計上界** —— 這個需求裡有沒有「可對同一 entity 重複寫入的 amount / quantity /
+      count」？有的話，歷史聚合量的上界是什麼？（對應 [[testing-anti-patterns]] Anti-Pattern 7）
+   2. **重複執行冪等** —— 同一個動作被送兩次（重試、使用者連點、webhook redelivery），
+      第二次的正確行為是什麼？
+   3. **併發雙送** —— 兩個請求同時通過檢查再同時寫入，會發生什麼？誰負責序列化？
+   4. **時間邊界** —— 這個規則在期別交界、時區換日、資料補登（backdate）時怎麼算？
+
+   **答不出來 = spec gap，不是可以先擱著的細節。** MUST 把該題原文放進 design.md 的
+   Open Questions 浮給 spec owner，**NEVER** 自己發明一個上界 / 一套冪等語義然後把它寫成
+   Scenario —— 那是把猜測釘成契約，之後每一份測試與 review 都會以它為準。
+
+   四題全部「本需求不適用」時 MUST 逐題寫出為什麼不適用，**NEVER** 整段略過不留痕跡。
+
+   **Part 2 — Post-draft QA 視角 agent（spec deltas 寫完、`spectra validate` 之前）**
+
+   派**一個** fresh-context subagent，任務只有一個：對草稿 spec 問「那如果⋯⋯呢」。
+
+   ```
+   Agent({ subagent_type: 'general-purpose', model: <與主線同檔或更高>,
+           prompt: <spec delta 檔路徑 + 上面 4 問 + 「只輸出你想到而 spec 沒回答的情境，
+                    一條一行；NEVER 改任何檔；NEVER 評論寫得好不好」> })
+   ```
+
+   機制沿用 [[checker-subagent]]，但往前移到規格階段：checker 檢查「實作有沒有照 spec」，
+   本 agent 檢查「spec 有沒有漏掉該規範的情境」。三條紀律照搬：
+
+   - **MUST 是新開的 subagent**，**NEVER** 用繼承主線對話的 fork 型（`/subtask`、
+     `subagent_type: 'fork'`）—— 主線的起草敘事整份附過去，fresh context 當場失效
+   - **MUST 顯式帶 model 檔位**，NEVER 靠繼承
+   - 它 **NEVER 改檔**；回來的每一條由主線判定「補進 spec」或「明確標為 out of scope」，
+     兩者都要留痕跡，**NEVER** 靜默丟棄
+
+   **為什麼由 agent 扮**：Three Amigos 需要 PM / 開發 / 測試三個視角互相追問，而 fleet 多數
+   專案是一個人 + agent，另外兩角不存在 —— 等真人對話這條路是空的。這不保證想得到該想的，
+   但把機率從「一個人埋頭寫」提升到「有人專門唱反調」。
 
    ### 禁止事項（重點重申，A / B / C 通用）
 
@@ -508,6 +556,12 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
 | "The placeholder is fine for now, I'll fill it in later"      | There is no "later" — implementation is next. Fill it in now                          |
 
 ---
+
+8b. **Elicitation gate Part 2（QA 視角 agent）**
+
+   依上方 § Elicitation gate Part 2 派一個 fresh-context subagent 對 spec deltas 問
+   「那如果⋯⋯呢」。回來的每一條 MUST 補進 spec 或明確標為 out of scope，兩者都留痕跡；
+   **NEVER** 靜默丟棄，**NEVER** 用繼承主線對話的 fork 型 subagent。
 
 9. **Analyze-Fix Loop** (max 2 iterations)
    1. Run `spectra analyze <change-name> --json`

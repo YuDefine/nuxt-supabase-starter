@@ -415,6 +415,79 @@ mutation testing 讓**存活的突變體**直接指出哪個邊界沒被釘住�
 - **NEVER** 把 mutation score 變成常駐 KPI —— 一旦它成為被追的數字，產出就會從
   「想清楚邊界」退化成「對每個中間值下 assertion」，測試變脆、重構全紅
 
+## Anti-Pattern 7: Accumulated Invariant Not Pinned
+
+**The violation:**
+
+```sql
+-- 額度餘額的 canonical model 是 remaining = Σ hours_change
+-- （核發本身就是一筆正的 hours_change）
+-- ❌ 實作又把核發時數加了一次
+v_available := v_batch.hours + v_transaction_hours - v_reserved_hours;
+```
+
+112 小時的額度看起來是 224 小時，員工能預約並核銷超出實際持有的時數。型別正確、lint 乾淨、
+happy-path 測試全綠 —— 因為測試餵的是**單筆**核發，單筆時 `Σ hours_change` 恰好等於
+`batch.hours`，兩個項相加的錯誤要到第二筆才顯形。實證：<consumer-a>
+`supabase/migrations/20260629181459_leave_quota_reservation_double_count_fix.sql`。
+
+**為什麼 Anti-Pattern 6 抓不到**：AP6 的 mental mutation check 錨在**你 code 裡既有的比較
+運算子**上 —— 它問「翻轉這個運算子，測試會不會紅」。本 anti-pattern 的 fault 不在任何既有
+運算子裡，而在**該有卻沒被寫下來的那條不變量**。對「缺的那一行」，以既有 code 為錨的檢查
+結構性全盲；mutation testing 繼承同一個盲點（突變體只能從既有語句生成）。所以 AP7 的錨點
+不是 code，是 **data model**。
+
+### Gate Function
+
+```
+FOR 每一個「可對同一 parent entity 重複寫入」的 amount / quantity / count 欄位
+  （額度異動、出貨明細、扣款紀錄、預約時數、點數異動 —— 不是只查手上這一個）:
+
+  Q1. 這個欄位的歷史聚合量，上界是什麼？
+  Q2. 那條上界寫在 spec 的哪一行？
+
+  IF Q2 答不出來:
+    STOP — 這是 spec gap，不是 test gap。
+    先把不變量寫進 spec，再回來寫測試。
+    NEVER 自己發明一個上界然後把它測起來 —— 那是把猜測釘成契約。
+
+  IF 不變量已在 spec:
+    寫一條測試，fixture 直接帶「已累積若干筆歷史 row」的狀態，
+    斷言聚合結果仍滿足該不變量。
+```
+
+**In-fleet exemplar** —— <consumer-b> `openspec/specs/shipment-return/spec.md` 的
+`Requirement: Shipment quantity control` 把不變量寫成一行：
+
+```
+可出貨數量 = 進料數量 - 報廢數量 - 已出貨數量
+```
+
+spec 有這一行，實作與測試就有共同錨點；沒有這一行，double-count 與 under-count 都只是
+「看起來合理的算式」。
+
+**Test shape：static fixture，不要真的連續呼叫 N 次。** fixture 直接帶已累積的 history rows
+（`[{hours: 112}, {hours: 8}]`），斷言 available 是 120 而不是 232。不需新依賴、不需
+property-based testing、不需跑 N 輪迴圈 —— 累積狀態是**資料**，直接餵資料。
+
+### 機械訊號（參照完整性，不判語意）
+
+`node ~/offline/clade/scripts/audit-bdd-elicitation-enrollment.ts` —— 分母是各 consumer
+**既有**的 `stryker.config.json` 的 `mutate`（consumer 自己宣告過「這幾個模組算錯會賠錢」），
+查那些模組的 test 檔有沒有 `spec: <change> :: <Example heading>` 標記、標記指不指得到一個
+真的存在的 `##### Example:`。它只查參照完整性，**NEVER** 判斷 spec 內容對不對。
+
+**NEVER 為了讓它變綠而編一個標記** —— spec 沒有對應的 Example 時，那是 spec gap，
+要補的是 spec 不是標記。絕對路徑的理由同上方 mutation testing 兩條。
+
+### Red flags
+
+- spec 只寫「檢查是否超過額度」，沒寫額度**怎麼算出來的**
+- 測試 fixture 每條都只有一筆歷史 row（單筆時多數聚合錯誤恰好隱形）
+- 餘額算式散在 RPC / API / 報表三處各寫一份，沒有一處被 spec 指名為 canonical
+- 斷言的是**算式原文**（`expect(body).toContain('v_available := …')`）而不是算式的**結果** ——
+  見下方 § 對設定檔原文的斷言，標的是行為本身
+
 ## When Mocks Become Too Complex
 
 **Warning signs:**
@@ -447,6 +520,7 @@ mutation testing 讓**存活的突變體**直接指出哪個邊界沒被釘住�
 | Incomplete mocks                | Mirror real API completely                    |
 | Tests as afterthought           | TDD - tests first                             |
 | Boundary values not tested      | Enumerate null/empty/zero/max+1 boundaries; trace actual client payload |
+| Accumulated invariant not pinned | 先把「歷史聚合量的上界」寫進 spec，再用帶已累積 history rows 的 static fixture 釘住 |
 | Over-complex mocks              | Consider integration tests                    |
 
 ## Red Flags
@@ -550,7 +624,9 @@ seedConversation({ updatedAt: daysAgo(60) })  // 更早
 
 ## 對設定檔原文的斷言，標的是行為本身
 
-測 `.github/workflows/*.yml`、`docker-compose.yml`、`Dockerfile` 這類設定檔時，斷言的標的**MUST** 是可執行的那幾行，不是含註解的整段原文。註解為了解釋實作會逐字引用實作 —— 一旦斷言看得到註解，「實作存在」與「有人寫過關於實作的說明」就變成同一件事，把實作刪掉，斷言仍被註解滿足。
+本節對**每一份被執行環境消費的宣告式原始碼**生效，不是只有 `.github/workflows/*.yml`、`docker-compose.yml`、`Dockerfile` 這類設定檔 —— SQL migration 與 function body、RLS policy、Terraform / wrangler 宣告同樣算，判準是「這份文字由某個 runtime 讀進去執行」而不是副檔名。斷言的標的**MUST** 是可執行的那幾行，不是含註解的整段原文。註解為了解釋實作會逐字引用實作 —— 一旦斷言看得到註解，「實作存在」與「有人寫過關於實作的說明」就變成同一件事，把實作刪掉，斷言仍被註解滿足。
+
+**斷言原文即使剝掉註解仍是弱形式**：它證明的是「這幾個字元在檔案裡」，不是「這段宣告跑起來會得到正確結果」。實證：<consumer-a> `test/unit/supabase/leave-quota-reservation-double-count-fix.test.ts` 斷言 `expect(body).toContain('v_available := v_transaction_hours - v_reserved_hours')` —— 把算式改成任何其他**同樣正確**的等價寫法，測試就紅；把整個 RPC 的語意改壞但字串留著，測試照綠。有行為通道（能跑 migration、能查回結果）時**MUST** 斷言行為；只有在行為通道確實不存在時才退回原文斷言，並在測試檔逐字寫明退回理由。
 
 **兩條 MUST**：
 
