@@ -117,7 +117,7 @@ if [ "${1:-}" = "--pool" ]; then
   case "$POOL" in
     cursor)
       PI_POOL_ARGS=(--provider cursor --model 'gpt-5.6-sol@272k')
-      echo "[codex-review-safe] NOTE: --pool cursor 跑在 bwrap 內（TD-524）：受審 repo 唯讀、\$HOME 為 tmpfs、只掛 cursor 憑證，mutation 由核心擋下。bwrap 不可用時整個 run 拒跑，不會降級裸跑。仍未涵蓋：外洩（保留網路）—— 餵進去的材料敏感度自負。" >&2
+      echo "[codex-review-safe] NOTE: --pool cursor 跑在 bwrap 內（TD-524）：受審 repo 唯讀、\$HOME 為 tmpfs、只掛 cursor 憑證，mutation 由核心擋下。出口鎖在 Cursor API（TD-533），材料來源限自家 fleet repo 與自家 commit（TD-534）。任一道未就緒即拒跑，不降級。仍未涵蓋：Cursor 自己看得到你送過去的 prompt。" >&2
       ;;
     default) ;;
     *)
@@ -142,6 +142,31 @@ if [ "$#" -gt 0 ]; then
   echo "[codex-review-safe] 錯誤：遷移到 Pi 後不接受額外 runtime flags；收到：$*" >&2
   exit 1
 fi
+# TD-534 上層門檻：repo 身分由 runtime 的下層擋（所有 cursor 派工都過），本層擋的是
+# 「repo 是我們的、但這個 branch 上是第三方 PR」。兩層都要——下層拿不到「這批 changeset
+# 從哪來」的語意，上層漏掉 codex-dispatch 的 cursor tier。
+#
+# 判定失敗就拒跑，**NEVER** 印個警告繼續：警告的預設結果是照跑，而這道門檻的整個用途
+# 就是改掉那個預設。門檻檔缺席（consumer 尚未散播）時同樣拒跑 cursor 池——「檢查不存在」
+# 與「檢查通過」在外部無法區分，fail-open 會讓這道門檻在最需要它的機器上靜靜消失。
+if [ "$POOL" = "cursor" ]; then
+  CURSOR_ORIGIN_GATE="$CLADE_HOME/vendor/scripts/lib/cursor-material-origin.ts"
+  if [ ! -f "$CURSOR_ORIGIN_GATE" ]; then
+    echo "[codex-review-safe] 錯誤：--pool cursor 拒跑，找不到材料來源門檻 $CURSOR_ORIGIN_GATE（TD-534）" >&2
+    exit 7
+  fi
+  if ! ORIGIN_VERDICT=$(node --input-type=module -e '
+    const m = await import(process.argv[1])
+    const v = m.assertFleetAuthored(process.argv[2])
+    if (!v.allowed) { process.stderr.write(v.reason + "\n"); process.exit(1) }
+  ' "$CURSOR_ORIGIN_GATE" "$REPO_ROOT" 2>&1); then
+    echo "[codex-review-safe] 錯誤：--pool cursor 拒跑，材料來源門檻未過（TD-534）" >&2
+    echo "[codex-review-safe]   $ORIGIN_VERDICT" >&2
+    echo "[codex-review-safe]   第三方材料 MUST 走 default 池。" >&2
+    exit 7
+  fi
+fi
+
 PATTERNS_JSON="$REPO_ROOT/vendor/review-rules/patterns.json"
 
 # Collect from the repo root: `git ls-files --others` is cwd-scoped, so running

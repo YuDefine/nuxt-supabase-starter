@@ -4,7 +4,7 @@
   "checksums": {
     "rules/agent-routing.codex-input-intercept.md": "5dcb18970e360299",
     "rules/agent-routing.codex-watch-protocol.md": "f35681dd26dc24ce",
-    "rules/agent-routing.md": "b071ef084d420273",
+    "rules/agent-routing.md": "ac2fa206f0a808ab",
     "rules/agent-self-verification.md": "763faff247d4744c",
     "rules/agent-self-verification.screenshot-evidence.md": "c8f274c48a74c6db",
     "rules/audit-pattern.md": "69856e1bb2377882",
@@ -108,7 +108,7 @@
     "rules/nuxt-ui-native-picker-ban.md": "b6af1e670b27f6c2",
     "rules/page-loading-golden-path.md": "53cfb54674d32974",
     "scripts/0a-metrics.mjs": "57b42780af6ab775",
-    "scripts/codex-review-safe.sh": "fac6b7896161ff6c",
+    "scripts/codex-review-safe.sh": "0c14f60223d1ee88",
     "scripts/commit-lock.mjs": "f81c79df484ce5db",
     "scripts/gh-ci-watch.sh": "ec01b7de6d10fb32",
     "skills/commit/SKILL.md": "162f5cd44d4005d8",

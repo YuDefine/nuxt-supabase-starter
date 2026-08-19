@@ -358,6 +358,11 @@ always-load 只留 payload **算不出來**的三條判斷：
 - `/commit` 0-A.1 的跨模型 review gate **NEVER** 走 `-cursor` 那一跳換池（TD-520：cursor 池同 UID
   且有 unrestricted Shell，而 review prompt 內嵌待審 changeset）。撞配額的處置是主線自 review
   ＋ 明示 gate 未達成 ＋ 登記待補，**不是**換池
+- `-cursor` 那一跳的准入 **MUST 綁在待審材料的來源，NEVER 綁在使用者意願**（TD-534）。門檻是機械的、
+  兩層都會擋：repo 不在 `registry/consumers.json` 內 → runtime 拒跑（`errorClass:
+  material-origin-refused`）；repo 是自家的但 branch 上有從未在 origin 預設分支出現過的作者
+  （第三方 PR 的形狀）→ `codex-review-safe.sh` exit 7。**NEVER** 用 env var / flag / 提示語把它做成
+  可繞過的形式——那三種都是「綁使用者意願」的變體
 
 鏈的完整形狀、cross-family 跳的准入連言、`--chain-origin` 為何在 `grok-xai` 那格 required、
 grok 接手 luna 鏈的 `PRECONDITIONS_VERIFIED:` 補償控制，全文在
