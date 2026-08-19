@@ -43,7 +43,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECKS_DIR="$SCRIPT_DIR/checks"
-PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+# PROJECT_ROOT 允許被 CLADE_PROJECT_ROOT 覆寫。meta-monorepo（app root 在子目錄，例如
+# nuxt-supabase-starter 的 template/）的 app root ≠ git toplevel，而各 check 的 auto-detect 是
+# 「找不到 nuxt.config 就 exit 0」，直接用 toplevel 會讓 7 道 check 全部靜默 no-op。
+# 未設 CLADE_PROJECT_ROOT 時行為與過去完全一致（既有 consumer 零影響）。
+#
+# NEVER 只改這裡：下方是並行 spawn 各 check 的獨立 bash 程序，每支 check 會自己再
+# 推導一次 PROJECT_ROOT 並 cd，所以 7 支 checks/*.sh 必須各自帶同一個覆寫。
+PROJECT_ROOT="${CLADE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
 
 cd "$PROJECT_ROOT"
 
