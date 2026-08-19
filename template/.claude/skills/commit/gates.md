@@ -358,6 +358,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 - **NEVER** 用 `Agent` 包一層再叫它做 simplify
 - **NEVER** 在任何 prompt 裡叫 agent「launch N parallel review agents」之類自行 fan-out —— 四軸分工（Reuse / Simplification / Efficiency / Altitude）是 `simplify` skill 本體的內部實作，由它自己決定，抄出來的副本沒有更新通道
+- **`simplify` 內文叫起的每一個 `Agent`，一樣要過 `agent-routing` 的 PreToolUse:Agent gate**（[[agent-routing]] § Routing Table）。上一條不放寬這一條：它禁的是主線覆寫 `simplify` 的 fan-out **形狀**，不是免除那些委派的 routing 判定。內建 skill 不知道 clade Routing Table 存在，它省略 `model` 時 subagent 繼承主線 Opus——那正是 gate 現在 default-deny 攔的形狀（TD-513）。gate 攔下來時 **MUST** 照 block message 走 dispatch／waive／fallback 三選一，**NEVER** 因為「這是 skill 內部行為」就當它不適用、也 **NEVER** 改寫 `simplify` 的 fan-out 來規避
 
 > **本段捨棄了哪一條防護（2026-08-04 TD-362 拍板，pilot 中）**：2026-06-04 起本段曾要求用 foreground `Agent`（`general-purpose`）跑手抄的四軸 prompt，為的是把 simplify 隔離在 subagent context，避免 `Skill(simplify)` 的 inline output 把 commit flow 的 continuation 指令推出 working memory（[[pitfall-commit-simplify-skill-nesting-stalls-flow]]）。
 >

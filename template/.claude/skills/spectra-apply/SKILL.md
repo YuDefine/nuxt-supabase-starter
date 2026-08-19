@@ -469,6 +469,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
    **Dispatch reminder**: For each phase, follow Step 6b's three-way classification:
    - Class C（Other）→ 以泛用 dispatcher 的 `spectra-phase-implementation` row dispatch Codex Sol high（phase granularity）
    - Class A（Design Review）→ 主線 Opus 5 xhigh self-execute：**MUST invoke Skill tool** 跑 `/design improve` + `/impeccable audit` 完成全部 tasks（per Step 6b §6 hard rule；NEVER 停下叫 user 自己跑）
+     - 這兩支是 Claude Code 內建 skill，不知道 clade Routing Table 存在。它們內文若叫起 `Agent`（含省略 `model` 而繼承主線 Opus 的形狀），照樣會被 PreToolUse:Agent gate default-deny 攔下（per [[agent-routing]] § Routing Table，TD-513）。攔下時 **MUST** 照 block message 走 dispatch／waive／fallback；Design Review 本身仍是主線自己做，**NEVER** 把它變成外派
    - Class B（UI view: component / page / view / layout / styling）→ 泛用 dispatcher `--model grok-xai --effort high`（NEVER sol／luna；派工形狀見 Step 6b B 類）；瑣碎 UI 修（≤2 files 且 ≤20 行）主線直接做。該 phase 收回、commit / 標 done **之前** MUST 跑 **Step 6c Refactor Invariant Check** + **Step 6d Review Rules Check**
    - Mixed phase（UI view + 非 view 摻同 phase）→ 已開工主線吸收、未開工 STOP 提示 `/spectra-ingest`
 
