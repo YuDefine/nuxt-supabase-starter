@@ -426,11 +426,22 @@ runner 比對 pi session 事件的 cwd 與 `--cwd`，realpath 不符即 exit 5�
 
 script 在 runner 前後各拍一次 worktree snapshot（HEAD + 暫存 index 的 `git write-tree` 單一 tree hash——原生涵蓋內容、executable bit、symlink target、binary，純 git 可攜——+ `git status --porcelain=v2`），不一致即 exit 6 並在 stderr 印出 `git diff-tree` 的逐檔明細。runner 的 verdict 先落檔、**通過 after-check 才放行到 stdout**——exit 6 時 verdict 被扣住不輸出，只認 heading / 表格的機械檢查不會誤判通過。baseline 拍在 changeset 收集**之前**（拍在之後的話，收集期間的並行修改會被寫進 baseline，review 過的是一份 stale changeset 而檢查靜默）。snapshot 本身 fail-closed：任一步 git 失敗即 exit 6（unborn HEAD 是合法狀態、不觸發），NEVER 留下「前後同樣殘缺所以比對通過」的假綠。
 
-**write-tree 換法解的是可攜性與覆蓋率，不是安全性。** 它移除了 GNU coreutils 依賴、把 executable bit 與 symlink target 收進覆蓋範圍，但 `git write-tree` 一樣走 PATH 上的 `git` —— 上一段那個「同 UID 對手可劫持度量工具本身」的問題，換 tree hash **一點都沒解**。**NEVER** 把 snapshot 實作的改良讀成安全等級提升；封口的只有 bwrap。
+**write-tree 換法解的是可攜性與覆蓋率，不是安全性。** 它移除了 GNU coreutils 依賴、把 executable bit 與 symlink target 收進覆蓋範圍，但 `git write-tree` 一樣走 PATH 上的 `git` —— 「同 UID 對手可劫持度量工具本身」的問題，換 tree hash **一點都沒解**。**NEVER** 把 snapshot 實作的改良讀成安全等級提升；封口的是 bwrap（TD-524，已落地，見下）。
 
-**這是偵測控制，不是安全邊界 —— 對 adversarial injection 它結構性無效，別讓下一個人把它當 sandbox 用。** cursor 池 = 把有 unrestricted Shell 的模型放進呼叫者自己的 UID；同 UID 的對手可以竄改 `$WORK_DIR` baseline、劫持 PATH 上的 `git` 本身，任何 script 內的事後比對都騙得過（0-A.2 review 2026-08-19 定案）。它可靠接住的是**非對抗**的三類：並行 session 在 review 期間的編輯 / commit（實測發生率最高）、模型無惡意的誤寫事故、default 池 pi 層 enforcement 的回歸。它擋不住的包括：蓄意 mutation 後湮滅痕跡、資料外洩（WebFetch / MCP 送出去）、對其他 repo 或 `$HOME` 的破壞、以及**先改再還原**。
+**這是偵測控制，不是安全邊界 —— 別讓下一個人把它當 sandbox 用。** 它為什麼結構性無效的原論證是：同 UID 的對手可以竄改 `$WORK_DIR` baseline、劫持 PATH 上的 `git` 本身，任何 script 內的事後比對都騙得過（0-A.2 review 2026-08-19 定案）。**那條論證對 cursor 池自 TD-524 起不再成立**——它已經不在呼叫者的 UID 檔案空間裡（見下）。但本檢查的定位**不變**：它從來就不是靠對抗性強度存在的，改變的是它不再是 cursor 池唯一的那道。它可靠接住的是**非對抗**的三類：並行 session 在 review 期間的編輯 / commit（實測發生率最高）、模型無惡意的誤寫事故、default 池 pi 層 enforcement 的回歸。它擋不住的包括：蓄意 mutation 後湮滅痕跡、資料外洩（WebFetch / MCP 送出去）、對其他 repo 或 `$HOME` 的破壞、以及**先改再還原**。
 
-事前 enforcement 三條路已查證皆不存在（sdk `LocalAgentOptions` 無工具面欄位、`--cursor-mode plan` 只是 guidance、`PI_CURSOR_SANDBOX=1` 本環境拒跑，TD-520）；**對抗性場景的真修是 OS 層隔離（bwrap，可行性已驗、實作見 TD-520 處置節）**，落地前 cursor 池是明示接受風險的 fallback（script 起跑印 WARNING）。**接受的前提是「只 review 自家 fleet diff、不接觸 secrets / prod 憑證」**——那兩條邊界破了，MUST 改走 default 池或等配額恢復。default 池照跑本檢查（防 pi 層 enforcement 回歸）。
+**sdk 層**事前 enforcement 三條路已查證皆不存在（`LocalAgentOptions` 無工具面欄位、`--cursor-mode plan` 只是 guidance、`PI_CURSOR_SANDBOX=1` 本環境拒跑，TD-520）。**OS 層的真修已落地（TD-524）**：cursor 池的 pi 一律跑在 bubblewrap 內 —— 受審 repo 唯讀綁入、`$HOME` 換成 tmpfs、`auth.json` 濾到只剩 cursor 一把、`/tmp` 是拋棄式 tmpfs。所以在 cursor 池上：
+
+| 這件事 | 現況 |
+| --- | --- |
+| 寫進受審 repo | **核心拒絕**（`EROFS`），不是事後偵測 |
+| 讀 `~/.ssh` / 其他 repo / codex 與 xai 的 refresh token | **不在 namespace 裡**，讀不到 |
+| bwrap 不可用 | **整個 run 拒跑**（`errorClass: sandbox-unavailable`），**NEVER** 降級成裸跑 |
+| 外洩（WebFetch / MCP / 網路） | **仍未涵蓋** —— sandbox 保留網路，模型讀得到的東西（frozen changeset、唯讀 repo、cursor key）都送得出去 |
+
+2026-08-19 實測是讓 cursor 池的模型自己在 sandbox 內跑那五條 probe 回報的：`touch` 回 `Read-only file system`、`~/.ssh` 回 `No such file or directory`、`ls ~/offline` 只剩 bind skeleton、`auth.json` 只剩 cursor 一個 key。
+
+**因此「接受風險」的前提收窄成一條**：判斷依據是**你餵進去的材料敏感度**（外洩仍未涵蓋），不再是「它會不會動到我的檔案」。default 池照跑本檢查（防 pi 層 enforcement 回歸）。
 
 處置：**verdict 不可信、NEVER 當作 0-A.1 通過**。先人工檢視 stderr 的 snapshot diff 定性 —— 可能是 cursor 池被 prompt injection 帶去 mutation（此時被動到的檔 **NEVER 自動還原**，依 [[commit]] WIP 處置禁令交使用者拍板），也可能是並行 session 在 review 期間的正當編輯（此時 verdict 審的不是最終狀態，處置完重跑即可）。
 

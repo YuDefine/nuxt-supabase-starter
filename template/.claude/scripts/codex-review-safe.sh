@@ -7,14 +7,25 @@
 # tools, which keeps prompt injection from escaping into mutations or side
 # effects. On `--pool cursor` that allowlist is NOT enforced (TD-520): Cursor
 # native tools (Shell / Write / MCP / WebFetch / Subagent) stay available and
-# their executions do not enter the pi events log — the cursor pool runs a
-# shelled model under the caller's own UID, and no in-script control can
-# contain a same-UID adversary (it can tamper with baselines or hijack PATH).
-# The worktree integrity check below (exit 6) is a DETECTION control for
+# their executions do not enter the pi events log.
+#
+# Since TD-524 the cursor pool no longer runs under the caller's own UID with a
+# live filesystem: `runPiCodex` spawns it inside bubblewrap with the audited
+# repo bound read-only, $HOME replaced by a tmpfs, and an auth.json filtered
+# down to the cursor credential. Repo mutation is refused by the kernel rather
+# than detected afterwards, and ~/.ssh, sibling repos and the codex/xai refresh
+# tokens are not in the namespace to reach. The sandbox is mandatory: if bwrap
+# is missing the run is REFUSED (errorClass `sandbox-unavailable`), never
+# downgraded to a bare spawn.
+#
+# Still NOT contained, because the sandbox keeps the network: exfiltration of
+# whatever the model can read — the frozen changeset, the read-only repo, the
+# cursor key itself — via WebFetch / MCP / plain network. Judge the cursor pool
+# on the sensitivity of the material you feed it, not on the sandbox.
+#
+# The worktree integrity check below (exit 6) remains a DETECTION control for
 # accidents, concurrent-session edits, and default-pool enforcement
-# regressions — NOT a security boundary. Real isolation for the cursor pool
-# is OS-level (bwrap; see TD-520 disposition). Coverage is the repo worktree
-# only; side effects outside it are undetectable on the cursor pool.
+# regressions — NOT a security boundary. Coverage is the repo worktree only.
 # Legacy Codex CLI config and credentials are never read, copied, or moved by
 # this script.
 #
@@ -85,11 +96,12 @@ shift || true  # tolerate no args after reasoning
 #
 # 同檔換池不是降檔（per rules/core/agent-routing.md § 配額耗盡時的 fallback 紀律）。
 #
-# 安全邊界差異（TD-520）：cursor 池上 pi 的 `--tools` 白名單無效，read-only 靠
-# 事後的 worktree 完整性檢查（exit 6）補償，不靠事前 enforcement。三條 enforcement
-# 路徑已查證皆不可行：@cursor/sdk LocalAgentOptions 無工具白名單可設；
-# `--cursor-mode plan` 是 prompt guidance（sdk 自述 plan 下 Shell 仍可呼叫）；
-# `PI_CURSOR_SANDBOX=1` 在本環境直接拒跑（sandboxing not supported，2026-08-19 實測）。
+# 安全邊界差異（TD-520 / TD-524）：cursor 池上 pi 的 `--tools` 白名單無效 —— sdk 層
+# 三條 enforcement 路徑已查證皆不可行（@cursor/sdk LocalAgentOptions 無工具白名單可設；
+# `--cursor-mode plan` 是 prompt guidance；`PI_CURSOR_SANDBOX=1` 本環境直接拒跑）。
+# 真修在 OS 層：TD-524 起 cursor 池一律跑在 bwrap 內，受審 repo 唯讀綁入、$HOME 換成
+# tmpfs、憑證只掛 cursor 一把。**read-only 現在是核心拒絕，不再是 exit 6 事後補償。**
+# 未被涵蓋的仍是外洩（sandbox 保留網路），判斷依據是你餵進去的材料敏感度。
 POOL="default"
 PI_POOL_ARGS=(--model gpt-5.6-sol)
 if [ "${1:-}" = "--pool" ]; then
@@ -98,7 +110,7 @@ if [ "${1:-}" = "--pool" ]; then
   case "$POOL" in
     cursor)
       PI_POOL_ARGS=(--provider cursor --model 'gpt-5.6-sol@272k')
-      echo "[codex-review-safe] WARNING: --pool cursor = 把一個有 unrestricted Shell 的模型放進你的 UID（TD-520）。對 adversarial prompt injection 無防護；exit 6 完整性檢查只是事故偵測，不是安全邊界。" >&2
+      echo "[codex-review-safe] NOTE: --pool cursor 跑在 bwrap 內（TD-524）：受審 repo 唯讀、\$HOME 為 tmpfs、只掛 cursor 憑證，mutation 由核心擋下。bwrap 不可用時整個 run 拒跑，不會降級裸跑。仍未涵蓋：外洩（保留網路）—— 餵進去的材料敏感度自負。" >&2
       ;;
     default) ;;
     *)
