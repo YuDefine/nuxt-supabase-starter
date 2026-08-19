@@ -399,17 +399,23 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 **這條與 0-C 的 exit 4 處置相反，NEVER 類比。** 0-C 的 exit 4 可以「主線 foreground 自跑」，因為修 code 誰修都行；0-A.1 不行 —— 這道 gate 的**存在理由**就是不能由主線同池模型自審。實證（2026-08-19）：一個 session 在 0-A.1 撞額度後改派同池同模型的 Claude subagent 當 reviewer，形式上補了位、實質上 gate 是空的；換池後 Cursor 池的 gpt-5.6-sol 立刻多抓到兩條該 Claude reviewer 完全沒看到的 finding。
 
-**現階段沒有安全的換池路徑（TD-520，見下）**，所以 exit 4 的處置是：
+exit 4 的處置是**照鏈往下走**，逐格都換池、不換家族：
 
-1. 主線 foreground 自 review
-2. **MUST** 明示「**跨模型 gate 未達成**」—— NEVER 把主線自審講成 0-A.1 通過
-3. **MUST** 在 `HANDOFF.md` 登記待補範圍（`git diff <base>..<head>`），配額恢復後補跑
+1. `.claude/scripts/codex-review-safe.sh xhigh --pool cursor` —— 同檔換 Cursor 的 sol 座位。
+   script 自己的 exit-4 `NEXT:` 行就是印這一條
+2. cursor 池也 exit 4 → **派 Fable（`claude-fable-5`）`code-review` agent 接手**，
+   它是 sol 鏈的正規終點（見 [[agent-routing]] § 配額耗盡時的 fallback 紀律 的
+   gate-output 那條）。routing gate 認得這一格：`code-review` 屬 `GATE_OUTPUT_ROWS`，
+   delegate tier 是 fable，**不必 waive**
+3. 連 Fable 都拿不到 → 主線 foreground 自 review，**MUST** 明示「**跨模型 gate 未達成**」
+   （NEVER 把主線自審講成 0-A.1 通過），並在 `HANDOFF.md` 登記待補範圍
+   （`git diff <base>..<head>`），配額恢復後補跑
 
-**NEVER 改派 Claude subagent 充當跨模型 review。** 那是同池同模型，gate 實質為空 —— 主線自己 review 至少誠實，派一個同款模型只是把「未達成」偽裝成「達成」。**NEVER 降檔到 luna / haiku**（配額按 model 記，降檔換不到額度，只換到更差的 reviewer）。
+**NEVER 改派同池 Claude subagent 充當跨模型 review。** 那是同池同模型，gate 實質為空 —— 主線自己 review 至少誠實，派一個同款模型只是把「未達成」偽裝成「達成」。**NEVER 降檔到 luna / haiku**（配額按 model 記，降檔換不到額度，只換到更差的 reviewer）。Fable 不在這條禁令內：它換的是**家族**，不是檔位。
 
-> **為什麼不用 Cursor 池換池**：`codex-review-safe.sh` 有 `--pool cursor`，同檔換池在 [[agent-routing]] § 配額耗盡時的 fallback 紀律上是正確形狀。但 TD-520 已確認 cursor 池的模型**以同一 UID 執行且有 unrestricted Shell**，而 review prompt 內嵌的是待審 changeset。事後偵測（worktree snapshot 比對）對這種對手無效 —— baseline 本身就在它可寫的位置。**在拿到 OS 層隔離之前，`--pool cursor` NEVER 用於 0-A.1。** 該旗標保留是為了 default 池的防迴歸與後續隔離方案的接點。
+> **Cursor 池的隔離已經到位（TD-524 / TD-533 / TD-534）**：本節一度寫著「在拿到 OS 層隔離之前，`--pool cursor` NEVER 用於 0-A.1」，依據是 TD-520 的「同 UID 執行 + unrestricted Shell」。那個前提已被解除 —— TD-524 起 cursor 池一律跑在 bubblewrap 內（受審 repo 唯讀綁入、`$HOME` 換成 tmpfs、憑證只掛 cursor 一把，mutation 由核心拒絕而非事後偵測）；TD-533 再加上 network namespace（DNS 與 TLS SNI 都鎖在 Cursor API）；TD-534 把准入綁在待審材料的來源。任一道未就緒即拒跑，不降級。
 
-> **cursor 池沒有工具面 enforcement — 已確認，非未決（TD-520）**：pi 的 `--tools read,grep,find,ls` 只是 pi 層 flag，cursor provider 下模型的執行**全部**走 Cursor SDK 原生工具，該 flag 對它們無效。2026-08-19 授權 probe 實測：模型自報可用工具含 `Shell` / `Delete` / `ApplyPatch` / `CallMcpTool` / `WebFetch` / `Subagent`，並**實際寫出了檔案**。三條 enforcement 路徑逐一查證全部不存在（SDK `LocalAgentOptions` 無工具面欄位、`--cursor-mode plan` 是 prompt guidance、`PI_CURSOR_SANDBOX=1` 本環境拒跑）。
+> **cursor 池沒有工具面 enforcement — 已確認，非未決（TD-520）**。這條事實沒有過期，過期的是它曾經導出的禁令：工具面補不起來，所以 TD-524 / TD-533 把 enforcement 整個移到 OS 層（見上一段），下面這些觀察仍是判斷殘餘風險的依據。pi 的 `--tools read,grep,find,ls` 只是 pi 層 flag，cursor provider 下模型的執行**全部**走 Cursor SDK 原生工具，該 flag 對它們無效。2026-08-19 授權 probe 實測：模型自報可用工具含 `Shell` / `Delete` / `ApplyPatch` / `CallMcpTool` / `WebFetch` / `Subagent`，並**實際寫出了檔案**。三條 enforcement 路徑逐一查證全部不存在（SDK `LocalAgentOptions` 無工具面欄位、`--cursor-mode plan` 是 prompt guidance、`PI_CURSOR_SANDBOX=1` 本環境拒跑）。
 >
 > `--tools` 唯一還有的作用是**決定哪些原生執行會被回放進 events log**（回放條件 = builtin 七種 ∩ pi active tools）。推論反直覺但重要：**白名單越窄，稽核越盲** —— events log 能證明「有用 X」，永遠不能證明「沒用 Y」。
 >

@@ -355,9 +355,13 @@ always-load 只留 payload **算不出來**的三條判斷：
 
 - **NEVER** 把 Sol 的活降成 Luna——鏈上每一跳是**換配額池**，不是降檔
 - **NEVER** 拿 `--effort low` 重試當配額應對——配額按 **model** 記，同一個 model 撞的是同一個 limit
-- `/commit` 0-A.1 的跨模型 review gate **NEVER** 走 `-cursor` 那一跳換池（TD-520：cursor 池同 UID
-  且有 unrestricted Shell，而 review prompt 內嵌待審 changeset）。撞配額的處置是主線自 review
-  ＋ 明示 gate 未達成 ＋ 登記待補，**不是**換池
+- **輸出本身就是 gate 的工作，鏈的終點是 Fable，NEVER 是主線自審**。判準見
+  `vendor/scripts/codex-routing-policy.ts` 的 `GATE_OUTPUT_ROWS`（`code-review` /
+  `security-review` / `spectra-prehandoff-judge`）——那一組與 § NEVER 降檔的形狀 第一條同源，
+  **MUST 一起改**。理由是這類工作沒有「誰做都行」這個性質：產出 changeset 的那條主線回頭審自己，
+  跟同家族模型代審一樣，gate 形式上補了位、實質是空的。因此 sol 鏈耗盡時 dispatcher 的
+  `next_step` 對這些 row 指向 **Fable subagent**（`--model fable`，effort `max`），
+  對其餘 row 才維持 Opus 主線。`-cursor` 那一跳照走，它換的是配額池不是家族
 - `-cursor` 那一跳的准入 **MUST 綁在待審材料的來源，NEVER 綁在使用者意願**（TD-534）。門檻是機械的、
   兩層都會擋：repo 不在 `registry/consumers.json` 內 → runtime 拒跑（`errorClass:
   material-origin-refused`）；repo 是自家的但 branch 上有從未在 origin 預設分支出現過的作者
