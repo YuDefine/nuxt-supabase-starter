@@ -31,7 +31,7 @@ Task 涉及 UI？
        │
        ├─ 1. 檢查 PRODUCT.md（必要）+ DESIGN.md（建議）
        │     PRODUCT.md 存在？→ 繼續（DESIGN.md 缺則建議跑 /impeccable document）
-       │     PRODUCT.md 不存在？→ 先跑 /impeccable teach
+       │     PRODUCT.md 不存在？→ 先跑 /impeccable init
        │
        ├─ 2. 跑 /design improve [affected pages/components]
        │     → 取得診斷報告 + Design Fidelity Report
@@ -72,11 +72,11 @@ Task 涉及 UI？
 ### Canonical Order（偏離需說明理由）
 
 ```
-/impeccable teach       ← 專案首次（無 PRODUCT.md 時）
+/impeccable init        ← 專案首次（無 PRODUCT.md 時；舊名 teach）
 /impeccable document    ← 已有 code 但無 DESIGN.md 時，從 code 反推
-/impeccable shape       ← （選用）code 前需求釐清
+/impeccable shape       ← （選用）code 前需求釐清；確認走 Shape brief 決策頁
   ↓
-/impeccable craft       ← 主要建置流程（shape-then-build）
+new-work build          ← 描述目標介面（Direction Gate 之後；NEVER 輸出 /impeccable craft）
 /impeccable distill     ← 先簡化（若雜亂）
   ↓
 /impeccable layout      ← 結構與佈局
@@ -107,7 +107,7 @@ Task 涉及 UI？
 ```markdown
 ## N. Design Review
 
-- [ ] N.1 檢查 PRODUCT.md（必要）+ DESIGN.md（建議）；缺 PRODUCT.md 跑 /impeccable teach、缺 DESIGN.md 跑 /impeccable document
+- [ ] N.1 檢查 PRODUCT.md（必要）+ DESIGN.md（建議）；缺 PRODUCT.md 跑 /impeccable init、缺 DESIGN.md 跑 /impeccable document
 - [ ] N.2 執行 /design improve [affected pages/components]（含 Design Fidelity Report）
 - [ ] N.3 修復所有 DRIFT 項目（Fidelity Score < 8/8 時必做，loop 直到 DRIFT = 0）
 - [ ] N.4 依 /design 計劃按 canonical order 執行 targeted skills

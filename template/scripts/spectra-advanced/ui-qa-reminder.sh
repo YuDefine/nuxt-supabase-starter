@@ -30,9 +30,9 @@ ROOT=$(sux_repo_root)
 
 if [ "$COUNT" -eq 1 ]; then
   if [ ! -f "$ROOT/PRODUCT.md" ]; then
-    echo "首次 UI 編輯：尚未看到 PRODUCT.md。建議先跑 /impeccable teach 建立設計脈絡，再持續修改 UI。"
+    echo "首次 UI 編輯：尚未看到 PRODUCT.md。建議先跑 /impeccable init 建立設計脈絡，再持續修改 UI。"
   elif [ ! -f "$ROOT/DESIGN.md" ]; then
-    echo "首次 UI 編輯：PRODUCT.md 已建立但缺 DESIGN.md。已有 code 可跑 /impeccable document 反推；尚未實作可待 craft 後再 document。"
+    echo "首次 UI 編輯：PRODUCT.md 已建立但缺 DESIGN.md。已有 code 可跑 /impeccable document 反推；尚未實作可待 new-work build 後再 document。"
   fi
   exit 0
 fi

@@ -41,9 +41,9 @@ interface StepDef {
 const STEPS_7: StepDef[] = [
   {
     key: 'N.1',
-    matcher: /PRODUCT\.md|DESIGN\.md|impeccable teach|impeccable document/i,
+    matcher: /PRODUCT\.md|DESIGN\.md|impeccable teach|impeccable init|impeccable document/i,
     defaultText:
-      '檢查 PRODUCT.md（必要）+ DESIGN.md（建議）；缺 PRODUCT.md 跑 /impeccable teach、缺 DESIGN.md 跑 /impeccable document',
+      '檢查 PRODUCT.md（必要）+ DESIGN.md（建議）；缺 PRODUCT.md 跑 /impeccable init、缺 DESIGN.md 跑 /impeccable document',
   },
   {
     key: 'N.2',

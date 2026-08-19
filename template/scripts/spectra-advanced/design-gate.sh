@@ -84,7 +84,7 @@ if [ "$HAS_UI" = true ]; then
     DR_TASK_LINES=$(printf '%s\n' "$DESIGN_SECTION" | grep -cE '^\- \[[ x]\]' || true)
     DR_TASK_LINES=${DR_TASK_LINES:-0}
 
-    printf '%s\n' "$DESIGN_SECTION" | grep -qiE 'PRODUCT\.md|DESIGN\.md|impeccable teach|impeccable document' || STRUCTURAL_DRIFT+=('N.1 PRODUCT.md / DESIGN.md 檢查')
+    printf '%s\n' "$DESIGN_SECTION" | grep -qiE 'PRODUCT\.md|DESIGN\.md|impeccable teach|impeccable init|impeccable document' || STRUCTURAL_DRIFT+=('N.1 PRODUCT.md / DESIGN.md 檢查')
     printf '%s\n' "$DESIGN_SECTION" | grep -qiE '/design improve|design improve|Fidelity Report' || STRUCTURAL_DRIFT+=('N.2 /design improve + Fidelity Report')
     printf '%s\n' "$DESIGN_SECTION" | grep -qiE 'DRIFT|loop|修復.*DRIFT|fix.*DRIFT' || STRUCTURAL_DRIFT+=('N.3 修復 DRIFT loop')
     printf '%s\n' "$DESIGN_SECTION" | grep -qiE 'canonical order|targeted.*skills|impeccable skills|layout.*typeset|typeset.*colorize' || STRUCTURAL_DRIFT+=('N.4 按 canonical order 跑 targeted impeccable skills')
@@ -113,7 +113,7 @@ if [ "$HAS_UI" = true ]; then
 
 UI 變更（觸動 .vue / pages / components / layouts）必須包含完整 7 步 Design Review template：
 
-  - [ ] N.1 檢查 PRODUCT.md（必要）+ DESIGN.md（建議）；缺 PRODUCT.md 跑 /impeccable teach、缺 DESIGN.md 跑 /impeccable document
+  - [ ] N.1 檢查 PRODUCT.md（必要）+ DESIGN.md（建議）；缺 PRODUCT.md 跑 /impeccable init、缺 DESIGN.md 跑 /impeccable document
   - [ ] N.2 執行 /design improve [affected pages/components]，產出 Design Fidelity Report
   - [ ] N.3 修復所有 DRIFT 項目（Fidelity Score < 8/8 時必做，loop 直到 DRIFT = 0，max 2 輪）
   - [ ] N.4 依 /design improve 計劃按 canonical order 執行 targeted impeccable skills
@@ -133,7 +133,7 @@ $(printf '  - %s\n' "${STRUCTURAL_DRIFT[@]}")
 
 請補齊 N.1~N.7 完整 7 步 template（完整規格見 \`ux-completeness.md\` Design Review Task Template）：
 
-  - [ ] N.1 檢查 PRODUCT.md（必要）+ DESIGN.md（建議）；缺 PRODUCT.md 跑 /impeccable teach、缺 DESIGN.md 跑 /impeccable document
+  - [ ] N.1 檢查 PRODUCT.md（必要）+ DESIGN.md（建議）；缺 PRODUCT.md 跑 /impeccable init、缺 DESIGN.md 跑 /impeccable document
   - [ ] N.2 執行 /design improve [affected pages/components]，產出 Design Fidelity Report
   - [ ] N.3 修復所有 DRIFT 項目（Fidelity Score < 8/8 時必做，loop 直到 DRIFT = 0，max 2 輪）
   - [ ] N.4 依 /design improve 計劃按 canonical order 執行 targeted impeccable skills

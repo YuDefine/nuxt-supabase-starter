@@ -347,7 +347,7 @@ if [ -f "$TASKS_FILE" ] && [ "$HAS_UI_SCOPE" = true ]; then
 \`\`\`markdown
 ## N. Design Review
 
-- [ ] N.1 檢查 PRODUCT.md（必要）+ DESIGN.md（建議）；缺 PRODUCT.md 跑 /impeccable teach、缺 DESIGN.md 跑 /impeccable document
+- [ ] N.1 檢查 PRODUCT.md（必要）+ DESIGN.md（建議）；缺 PRODUCT.md 跑 /impeccable init、缺 DESIGN.md 跑 /impeccable document
 - [ ] N.2 執行 /design improve [affected pages/components]，產出 Design Fidelity Report
 - [ ] N.3 修復所有 DRIFT 項目（Fidelity Score < 8/8 時必做，loop 直到 DRIFT = 0，max 2 輪）
 - [ ] N.4 依 /design improve 計劃按 canonical order 執行 targeted impeccable skills（layout / typeset / clarify / harden / colorize 等）
@@ -370,7 +370,7 @@ if [ -f "$TASKS_FILE" ] && [ "$HAS_UI_SCOPE" = true ]; then
     done <<< "$DESIGN_SECTION"
 
     DR_MISSING=()
-    echo "${DR_STEP_TEXT[1]:-}" | grep -qiE 'PRODUCT\.md|DESIGN\.md|impeccable teach|impeccable document' || DR_MISSING+=('N.1 PRODUCT.md / DESIGN.md 檢查')
+    echo "${DR_STEP_TEXT[1]:-}" | grep -qiE 'PRODUCT\.md|DESIGN\.md|impeccable teach|impeccable init|impeccable document' || DR_MISSING+=('N.1 PRODUCT.md / DESIGN.md 檢查')
     echo "${DR_STEP_TEXT[2]:-}" | grep -qiE '/design improve|design improve|Fidelity Report' || DR_MISSING+=('N.2 /design improve + Fidelity Report')
     echo "${DR_STEP_TEXT[3]:-}" | grep -qiE 'DRIFT|loop|修復.*DRIFT|fix.*DRIFT' || DR_MISSING+=('N.3 修復 DRIFT loop')
     echo "${DR_STEP_TEXT[4]:-}" | grep -qiE 'canonical order|targeted.*skills|impeccable skills|layout.*typeset|typeset.*colorize' || DR_MISSING+=('N.4 按 canonical order 跑 targeted impeccable skills')

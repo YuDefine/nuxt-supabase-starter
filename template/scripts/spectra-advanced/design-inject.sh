@@ -41,7 +41,7 @@ Design Review 提醒：change「${CHANGE_NAME}」包含 UI scope，但 tasks.md 
 
 ## ${NEXT_SECTION}. Design Review
 
-- [ ] ${NEXT_SECTION}.1 檢查 PRODUCT.md（必要）+ DESIGN.md（建議）；缺 PRODUCT.md 跑 /impeccable teach、缺 DESIGN.md 跑 /impeccable document
+- [ ] ${NEXT_SECTION}.1 檢查 PRODUCT.md（必要）+ DESIGN.md（建議）；缺 PRODUCT.md 跑 /impeccable init、缺 DESIGN.md 跑 /impeccable document
 - [ ] ${NEXT_SECTION}.2 執行 /design improve [affected pages/components]，產出 Design Fidelity Report
 - [ ] ${NEXT_SECTION}.3 修復所有 DRIFT 項目（Fidelity Score < 8/8 時必做，loop 直到 DRIFT = 0，max 2 輪）
 - [ ] ${NEXT_SECTION}.4 依 /design improve 計劃按 canonical order 執行 targeted impeccable skills（layout / typeset / clarify / harden / colorize 等實際所需項目）
