@@ -861,6 +861,28 @@ export default defineEventHandler(async (event) => {
 
 註：agent-browser 預設情境下，該 profile 只要登入過一次，後續 agent 截圖都會繼承該 session — dev-login route 不再是 hard requirement。
 
+## Evidence Manifest（每張圖 hard rule）
+
+每張交付的截圖 **MUST** 附一組 manifest。任一欄答不出、或 `discriminating` 為 `no` → 該圖自動標 **NON-EVIDENCE**，**NEVER** 列入驗收證據。
+
+| 欄位 | 內容 | 取法 |
+| --- | --- | --- |
+| `claim` | 這張圖要證明的那句命題（一句話，可證偽） | 由 item description 推導 |
+| `identity` | 拍攝當下的登入身分 / role | dev-login 用的 `as=` 值，或 DOM 上的身分指示 |
+| `rowCount` | 畫面主資料區的列數 | **MUST** 用 a11y tree 數（`snapshot -i`，或 `eval` 數 `tbody tr` / `[role=row]`），**NEVER** 目測 |
+| `stateBranch` | 圖中實際渲染的分支 | `populated` / `empty` / `error` / `loading` / `unauthorized` |
+| `discriminating` | `yes` / `no` + 一句理由 | 回答「若 `claim` 為假，這張圖會長什麼不一樣？」——答案是「一樣」就是 `no` |
+
+`discriminating` 是 `rules/core/agent-self-verification.md` § 證據鑑別力 在截圖路徑上的具體化。`rowCount` 低於該 entity 的 seed plan 最小列數時 **MUST** 自標 `discriminating: no` —— 那正是 UI invariant「row count vs seed」在這條路徑上終於被執行。
+
+**空狀態圖的額外要求**：`stateBranch: empty` 而 `claim` 不是「空狀態分支本身」→ 直接 `discriminating: no`。`claim` 就是空狀態分支時，**MUST** 附同頁、同 session 產出的非空對照圖，證明「空」不是該身分下的預設長相；拿不出對照圖同樣標 `no`。
+
+### 目標分支在真實導航下不可觸發時 → UNREACHABLE
+
+- **NEVER** 改 middleware / auth guard / 偽造身分把畫面逼出來 —— 那會產出使用者永遠到不了的畫面，還掩蓋「這可能是 dead branch」這個真問題
+- **MUST** 建議替代手段：component test mount + mock 該 state 驗組件契約；人工要看觀感就用 test harness 渲染該分支並誠實標「mocked state，真實導航不可達」
+- **MUST** 把「不可達」本身當 finding 上報，**NEVER** 當成驗不到就略過的雜項
+
 ## 產出報告
 
 在 `screenshots/<env>/<folder-name>/review.md` 寫入：
@@ -874,11 +896,12 @@ export default defineEventHandler(async (event) => {
 
 ## 截圖結果
 
-## 證據對應表
+## 證據對應表（Evidence Manifest — 每張圖一列，缺欄即 NON-EVIDENCE）
 
-| Item | 截圖 | 為什麼是驗收證據 |
-| --- | --- | --- |
-| #1 | `screenshots/<env>/<change-name>/#1-saved.png` | 已完成儲存且 toast / 更新後數值可見，不是過程觀察 |
+| Item | 截圖 | claim | identity | rowCount | stateBranch | discriminating |
+| --- | --- | --- | --- | --- | --- | --- |
+| #1 | `screenshots/<env>/<change-name>/#1-saved.png` | 儲存後列表出現更新後數值 | `as=admin` | 4 | populated | yes — 未儲存時該列仍是舊值 |
+| #2 | `screenshots/<env>/<change-name>/#2-empty.png` | 薪資頁錯誤時顯示 error state | `as=employee` | 0 | empty | **no** — 該 fixture 本來就無薪資記錄，改動前後同一張畫面 → **NON-EVIDENCE** |
 
 ### #1 <描述>
 

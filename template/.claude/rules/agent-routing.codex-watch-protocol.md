@@ -1,5 +1,5 @@
 ---
-description: Codex 派工的標準流程模板、Codex Watch Protocol、Plan-first / Git baseline declaration、$spectra-apply Runtime Gate、screenshot-review verify mode 派工與監看；apply 階段 / 觸及 spectra change 時 path-scoped 載入——單純「要派 codex」不會自動載入本檔，MUST 依 [[agent-routing]] 的強制指針主動 Read
+description: Codex 派工的標準流程模板、Codex Watch Protocol、Plan-first / Git baseline declaration、$spectra-apply Runtime Gate、screenshot-review verify mode 派工與監看、配額耗盡的 fallback 鏈全文、Spectra Propose / Apply 的 dispatch 契約；apply 階段 / 觸及 spectra change 時 path-scoped 載入——單純「要派 codex」不會自動載入本檔，MUST 依 [[agent-routing]] 的強制指針主動 Read
 paths: ['openspec/changes/**/tasks.md', 'openspec/changes/**/design.md', 'scripts/spectra-advanced/**', '.claude/agents/**', 'screenshots/**/progress.json']
 ---
 <!--
@@ -16,7 +16,11 @@ Local edits will be reverted by the next sync.
 
 ## Codex 派工的標準流程（所有 routing 共用）
 
-派 Codex 模型出去工作**一律走 `vendor/scripts/codex-dispatch.ts`，由 Pi `openai-codex` 執行**。Public 名稱保留 Codex 是指 model/routing 類別，不代表 Codex CLI transport。**NEVER** 直接執行 `codex exec`、`codex review`，也不走任何 `codex:rescue` / `codex:setup` / `codex:codex-rescue` plugin 路線。
+派**任何** Pi 席位出去工作**一律走 `vendor/scripts/codex-dispatch.ts`**——`sol` / `luna`（provider `openai-codex`；`terra` 可解析但 2026-08-11 起 **NEVER** 派）、`sol-cursor` / `luna-cursor` / `grok-cursor`（provider `cursor`）、`grok-xai`（provider `xai`）**每一格都走這個入口**，沒有例外。
+
+`codex-dispatch` 是**歷史工具名，不是 provider 限定**：席位裡的 `grok-4.6` 不是 Codex model，仍然走它。**NEVER** 從「這個 model 不是 codex」推論它有別的入口、可以直接開 CLI、或該派 Claude subagent。要指 `openai-codex` 那組時寫 **codex-pool**，那個區分只在配額鏈與計價成立。
+
+**NEVER** 直接執行 `codex exec`、`codex review`，也不走任何 `codex:rescue` / `codex:setup` / `codex:codex-rescue` plugin 路線。
 
 主線 Claude 自己派、自己等通知、自己讀 dispatcher JSON 回報，**禁止**叫使用者切 CLI、**禁止**「Stop here」純文字 handoff。
 
@@ -42,7 +46,7 @@ Local edits will be reverted by the next sync.
    終點的 Claude 檔位按**起點**分（luna→`haiku`、grok-xai→`sonnet`）。不帶且 `--retry-of` 也回溯不到起點時，
    dispatcher 的 exit 4 回 unresolved 而不猜檔位。其餘 model 起點唯一，不必帶。
 
-   Dispatcher 固定用 Pi JSON mode、`openai-codex` provider、ephemeral session與 machine-safe extension profile；model、effort、routing attribution與 exit code由這個入口統一驗證。MCP extension存在時由 dispatcher明確載入，interactive `cx` extension不會進 machine dispatch。
+   Dispatcher 固定用 Pi JSON mode、ephemeral session與 machine-safe extension profile，provider 由 `--model` 決定（`openai-codex` / `cursor` / `xai`）；model、effort、routing attribution與 exit code由這個入口統一驗證。MCP extension存在時由 dispatcher明確載入，interactive `cx` extension不會進 machine dispatch。
 
 3. 立刻簡短回報 bash job ID 給使用者
 4. 立刻啟動 **Codex Watch Protocol**（見下節 § 監看排程）— notification-only（主線 idle 等通知，只下**一個** ~1500s 安全網 fallback 防罕見 hang-type 失敗）。**禁止**啟動每 3 分鐘短輪詢（無謂 turn 重燒 context）。**禁止**任何 subagent 中介 dispatch（per `agent-routing.md` § Dispatch 入口）
@@ -448,6 +452,13 @@ Codex 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleW
 
 ## Spectra Propose Handoff（具體做法）
 
+### 決策層契約（2026-08-19 從 [[agent-routing]] 下推，TD-540）
+
+
+1. **MUST** 預設跳三選一 dispatch 選單（A Codex draft + 主線 cross-check／B 三模型交叉：Fable draft + Codex review + 主線 final check／C 純 Claude）。使用者**明確**指定路徑（「純 Claude propose」「不要派 codex」「用 Fable」「用 codex」等）時跳過選單直接走。詳見 `spectra-propose` Step 0
+2. **MUST** 主線是 quality gate — A 的 cross-check 與 B 的 final check 都由主線 Fable 5 xhigh 跑
+3. **NEVER** 把 cross-check / final check 的修補丟回 codex — 主線自己 Edit 修
+
 Claude Code session 收到 spectra propose 請求時：
 
 1. **NEVER** 用 AskUserQuestion 問 A/B（除非使用者**明確**要求「純 Claude propose」或「不要派 codex」）
@@ -466,6 +477,19 @@ Claude Code session 收到 spectra propose 請求時：
 詳細流程見 `plugins/hub-core/skills/spectra-propose/SKILL.md` Step 0。
 
 ## Spectra Apply Phase Dispatch（具體做法）
+
+### 決策層契約（2026-08-19 從 [[agent-routing]] 下推，TD-540）
+
+
+> **先判 residency**（§ Orchestration Residency）：符合 Codex-primary 進入條件 → change 粒度單次 dispatch + notification-only，**不要**逐 phase 派工；以下限 **Claude-primary** 場景。
+
+執行 `spectra-apply` 時 phase 粒度派 codex。**三條契約**：
+
+1. **Design Review phase 一律主線自己做，永不外派；UI view phase 走泛用 dispatcher 的 `ui-view-implementation` row（`--model grok-xai --effort high`），NEVER 派 sol／luna**（thin brief＋檔案所有權清單＋「只准動 view 層檔案」guard＋4-status 回報，per § Subagent 回報契約；主線收回後照跑該 phase 的機械檢查與 Design Review gate）。瑣碎 UI 修（≤2 files 且 ≤20 行）主線直接做，不派。其他 phase（schema / migration / API server / CLI / 純 backend / 非 view 的 frontend / unit test / docs）以泛用 dispatcher 的 `spectra-phase-implementation` row 派 background Codex Sol high；**每一個**符合封閉來源 extraction predicate 的 prescan 才可另走 `spectra-phase-prescan` Luna low，且不得取代 Sol 實作
+2. **混雜 phase**（同一 phase 摻了 view 與非 view）：**已開工** → 主線整個 phase 自己做，不重切、不派 codex；**未開工** → **STOP** 請使用者跑 `/spectra-ingest <change>` 重切
+3. **禁止**主線自行修改 tasks.md 的 phase 結構（屬 ingest 範圍）
+
+A/B/C 三類的完整判定條件（含 view 層檔案路徑清單）與 C 類派工細節（共用 template／schema、dispatcher metadata、watch、drift 檢查、收尾驗證）見 reference § Spectra Apply Phase Dispatch（具體做法）。
 
 執行 `spectra-apply` 時，phase 粒度派 codex 的具體 dispatch 步驟：
 
@@ -606,3 +630,57 @@ Codex session 收到 `$spectra-apply`（或任何要它執行 spectra-apply 流�
 ### 與其他 spectra 入口的關係
 
 本 gate **只**作用於 `$spectra-apply`(最容易踩到 claim / Design Review 跳過坑的入口)。其他 `$spectra-*` 在 Codex 端的限制策略不在本節範圍——若未來發現類似問題，比照本節設計獨立加 gate。
+
+## 配額耗盡時的 fallback 紀律（全文）
+
+> 從 [[agent-routing]] 同名 § 下推（2026-08-19，TD-540）。always-load 側留 thin pointer ＋ payload
+> 算不出來的三條 NEVER；**要新增或改動任何一跳 MUST 讀完本節**。
+
+配額耗盡（exit 4）**MUST** 依工作原本的檔位走對應鏈，命中即停。**NEVER** 把 Sol 的活降成 Luna——那是拿修舊系統的座位去接 flagship 工作。
+
+**適用範圍是所有 codex 呼叫點，不只 dispatcher 派工**——含 `/commit` 0-A.1 的跨模型 review gate（該 gate 的具體分支見 commit skill 的 gates.md § 0-A.1）。review gate 尤其吃這條：它的**存在理由**就是不能由主線同池模型自審，所以「撞額度就改派 Claude subagent 補位」形式上補了位、實質上讓 gate 變空。
+
+**但 review gate 目前走不了 `-cursor` 這一跳**：TD-520 已確認 cursor 池的模型同 UID 且有 unrestricted Shell，而 review 的 prompt 內嵌待審 changeset。在拿到 OS 層隔離前，0-A.1 撞配額的處置是主線自 review ＋ 明示 gate 未達成 ＋ 登記待補，**不是**換池。這是「鏈的形狀正確、但這一跳對這個用途不安全」，不是降級鏈本身有問題。
+
+限制範圍是餘下的兩個 `-cursor` 跳（`sol-cursor`、`luna-cursor`）；luna 鏈的 `grok-xai` 跳能不能承接 0-A.1 **尚未評估**，
+**NEVER** 從「它不是 cursor」推論「review gate 可以走它」。
+
+```
+Sol      → sol-cursor（cursor/gpt-5.6-sol@272k）→ Opus 主線
+Luna     → luna-cursor（cursor/gpt-5.6-luna@272k）→ grok-xai（xai/grok-4.6）→ Claude Haiku
+Grok-xai → grok-cursor（cursor/grok-4.6）→ Claude Sonnet
+```
+
+**鏈上的每一跳都是換配額池，不是降檔。** 判準是那一跳有**獨立計量**的配額，不是「它是同一個 model」。
+
+**`grok-cursor` 只在 grok 鏈出現，NEVER 接在 luna 鏈後面**（2026-08-19 Charles 拍板）。成因：Cursor 那一跳
+經 Cursor API key 取用，計入 Ultra 方案的 included quota（on-demand 已關），**不是**先前規約寫的
+「`composer + grok` 獨立閒置 bucket」。luna 鏈的最後一個換池機會因此是 `grok-xai`（xAI OAuth，完全獨立），
+再耗盡就進 Claude 終點。**NEVER** 從「grok 鏈還有 `grok-cursor` 這一跳」推論 luna 鏈也能用它。
+
+**跨 model 家族的跳只有 luna 鏈有，是具名例外不是通則。** 新增跨家族跳 MUST Charles 逐鏈拍板，
+准入三條連言是**申請門檻**，**NEVER** 由它自動導出（必要條件不是充分條件）；逐條判準與取證見
+rationale § luna 鏈的跨家族跳。**sol 鏈第 2 條不中**，且 flagship 工作與 `spectra-phase-implementation`
+的 NEVER 轉 grok 是**獨立 veto、不進連言協商**，那條 NEVER **含 fallback 路徑，配額耗盡不是豁免條件**。
+sol 鏈維持兩跳，**NEVER** 跨去 grok、**更 NEVER** 降成 luna——「luna 鏈都插了」不是理由。
+
+**終點的 Claude 檔位按鏈的「起點」對齊，不是按耗盡的那一格**：`grok-xai` 是兩條鏈共用的一格，
+luna 起點 → 在這格就終止、接 `haiku`；grok 起點 → 續走 `grok-cursor`、耗盡才接 `sonnet`。
+dispatcher 對 `grok-xai` 這格 required `--chain-origin`（**起點決定的是下一跳，不只是終點檔位**），
+起點不可解時 `next_tier` 回 null 並明說 unresolved 而**不猜**。
+
+**grok 接手 luna 鏈時的補償控制**：grok 有已取證的 fail-open（前置契約未滿足時自報 `status: pass`，
+見 § Routing Table 的 `spectra-phase-implementation` 列）。dispatcher 對 `--route fallback-chain` 的 grok
+dispatch 注入 fail-closed 段，要求回覆帶一行 `PRECONDITIONS_VERIFIED:`，**並機械檢查它在不在**——
+自報 pass 但缺 attestation 一律改判 exit 2。prompt 側只是第一層（用 prompt 修「不遵守 prompt」是同構的），
+機械檢查才是控制；主線收回時仍 MUST 實核 diff。**NEVER** 拿這條 fail-open 當「所以該退回 Claude」的理由，
+**也 NEVER** 把 gate 改成「pass ∧ diff 空 → 改判」（scan／extraction 的空 diff 正是正確結果）。
+
+**降 effort 不是降級鏈的一步**：配額按 **model** 記，Sol 撞 usage limit 時 `--effort low` 重試撞的是**同一個** limit。effort 分級是品質 / 成本維度，**NEVER** 拿它當配額耗盡的應對。
+
+1. **Sol exit 4 → `--model sol-cursor` 換池**（`cursor/gpt-5.6-sol`，`--route fallback-chain --tier-basis quota-fallback --retry-of <sol-label>`）；**sol-cursor 再 exit 4 才回 Opus 主線**。record reason 含 `quota-exhausted`。**NEVER** `--model luna` 重試——換池不是降檔，降檔才是。
+2. **Luna exit 4 → 換池到 Cursor**：`--model luna-cursor --route fallback-chain --tier-basis quota-fallback --retry-of <luna-label>`。這是同一檔智力、另一個配額池，不是降檔。
+3. **luna-cursor exit 4 → `--model grok-xai --chain-origin luna`** 同 effort 重派（`--route fallback-chain --tier-basis quota-fallback --retry-of <luna-cursor-label>`）。**`--chain-origin` 在這格 MUST 帶**——`grok-xai` 是兩條鏈共用的一格，起點決定它耗盡後是終止還是續走 `grok-cursor`，不帶就判不出來。
+4. **grok-xai exit 4（luna 鏈）→ 這條鏈到此為止**，才動 Claude subagent，且**只接 `haiku`**（顯式帶，per § Subagent 回報契約第 4 條），**NEVER** 升 `sonnet`。**NEVER** 在這裡續派 `--model grok-cursor`——那一跳只屬於 grok 鏈，理由見上方 `grok-cursor` 段。
+5. **Grok 鏈自己的路徑**（`ui-view-implementation` / `web-search` / `screenshot-review-verify` 三列）：`grok-xai` exit 4 → `--model grok-cursor --chain-origin grok-xai` 重派一次；再 exit 4 才動 Claude subagent，且**只接 `sonnet`**，**NEVER** 降 `haiku`。
+6. Claude 接走時 session 結尾 **MUST** 回報「本 session 因配額耗盡，由 Claude 執行 N 個本應外派的 change」；有 runtime reset 資訊再附上，沒有就明說 unavailable。

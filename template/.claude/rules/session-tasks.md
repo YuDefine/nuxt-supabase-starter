@@ -57,10 +57,8 @@ other's cache**"*，不同 process 互讀就是證明。官方自己也把 `/cle
 （[costs](https://code.claude.com/docs/en/costs) 逐字 `These totals reset when /clear starts a
 new session`）。
 
-> 2026-08-07 實錄：本 session 從 § Cache scope 條文推導出「`/clear` 留在原 process 所以 cache
-> 命中、是最便宜的重置」，並據此對 user 畫了一張三列對照表——**整列是錯的**。「留在原 process」
-> 從來不是命中條件。同一份條文同時支持正解與這個誤讀，所以此處把結論寫死，**NEVER** 要求下一個
-> 讀者自己從 cache scope 重新推導。
+> 同一份條文同時支持正解與一個已實際發生的誤讀（實錄見 rationale），所以此處把結論寫死，
+> **NEVER** 要求下一個讀者自己從 cache scope 重新推導。
 >
 > 連帶結論：headless `claude --print` 沒有 `/clear`（官方 [headless](https://code.claude.com/docs/en/headless)
 > 頁：terminal-only 命令在 `-p` 模式不可用），但**也不需要**——每次 `claude -p` 本身就是新
@@ -71,11 +69,8 @@ new session`）。
 「predicate 全沒觸發時仍需要一條 hard stop」。**NEVER** 把這兩個數字讀成「跑到這裡就該切」，
 那會讓上表第五列（該續跑的那列）永遠輪不到。
 
-> 2026-08-07 撤回的一個下修提案：曾主張 300k→200k，理由是「避開 auto-compact 在 ~155k 中途觸發
-> 炸掉整個 cache」。查證後該理由**整條不成立**——155k 是 200k-window 時代的社群數字，官方
-> [context-window § Set the auto-compact window](https://code.claude.com/docs/en/context-window)
-> 寫的是預設**到模型 context 上限**才 compact；1M context 模型在 300k–500k 區間碰不到它。
-> 且 `/autocompact` 官方範例值本身就是 `500k`。**NEVER** 拿社群單一來源的數字推翻 user 拍板的門檻。
+> **NEVER** 拿社群單一來源的數字推翻 user 拍板的門檻——一個曾據此提出的 300k→200k 下修提案，
+> 查證後理由整條不成立（實錄見 rationale）。
 
 **兩級語義不同，NEVER 當成同一件事的兩個強度**（Charles 2026-08-06 round 27 拍板）：
 
@@ -86,19 +81,17 @@ new session`）。
 | 正在跑不可分割的驗證迴圈（單一 test run / 單一 migration） | 跑完再切。**NEVER** 拿「等一下還有事要做」把它延伸成新工作段 |
 | **本輪是 work-loop runner child**（`WORK_LOOP_RUNNER_CHILD=1`，由 `runner.sh` 設） | 上面兩級改讀 **500k / 600k**，語義完全不變（500k = 不要再開大工作段、600k = 現在收工）。Charles 2026-08-12 拍板，TD-375 |
 
-**runner child 的兩級為什麼不同。** 上表兩級的立論是「context 越滾越大、成本 ∝ C²」，而 runner child 每輪是 `claude --print` 起的**全新 process**、跨輪不累積——起始載入量是它的**固定成本**，不是累積量。<consumer-b> 五輪實測起始落在 300k–307k，也就是第一級在它**還沒做任何事之前**就響，於是每輪只能做小 item（r52/r53/r54 三輪皆零 dispatch）。**NEVER 把 500k / 600k 套到 in-session `/loop`**——那條路徑的 context 真的跨輪累積，前提成立。判別只認 `runner.sh` 設的那個 env，**NEVER** 從「感覺像無人值守」推斷。
+**runner child 的兩級為什麼不同。** runner child 每輪是 `claude --print` 起的**全新 process**、跨輪不累積——起始載入量是它的**固定成本**，不是累積量，而實測起始就已越過第一級（取證見 rationale）。**NEVER 把 500k / 600k 套到 in-session `/loop`**——那條路徑的 context 真的跨輪累積，前提成立。判別只認 `runner.sh` 設的那個 env，**NEVER** 從「感覺像無人值守」推斷。
 
-**NEVER 把 300k 那級讀成「什麼都不能開」。** 本節 round 24 版的第一級是 200k 且綁「**NEVER** 開新的工作段」，而 `/work-loop` 這類 loop 的本質就是一個接一個開新 item——那條對它等於硬停。2026-08-06 round 26 / 27 連續兩輪實證：兩輪都在 ~202k 被腰斬，而當下一輪的工作剛做完、正要開下一輪。**改的不是數字算錯，是那一級的語義訂錯了**；把 300k 讀回「什麼都不能開」等於把這次拍板退回它要修的狀態。
+**NEVER 把 300k 那級讀成「什麼都不能開」。** 舊版第一級綁「NEVER 開新的工作段」，對 `/work-loop` 這類一個接一個開 item 的 loop 等於硬停（兩輪腰斬實證見 rationale）。**改的不是數字算錯，是那一級的語義訂錯了**；把 300k 讀回「什麼都不能開」等於把這次拍板退回它要修的狀態。
 
 門檻是 `session-context-budget-warn.sh`（PostToolUse hook）機械報出來的，本節是它引用的 SoT：
 **300k 響一次、500k 起每 +100k 再響一次**；runner child 同形狀但整組平移成 **500k 響一次、
 600k 起每 +100k 再響一次**。提示走 exit 2 —— PostToolUse 的 exit 0 stderr
-只進 debug log，agent 永遠看不到（2026-08-06 前本 hook 正是 exit 0，所以它上線後量到的
-「行為沒有改變」其實是提示從未送達）。
+只進 debug log，agent 永遠看不到（實錄見 rationale）。
 
-**門檻 NEVER 可由 env / flag 放寬。** 本節 2026-08-06 前寫著 `CLADE_CTX_WARN_TIER1` /
-`CLADE_CTX_WARN_TIER2` 兩個覆寫變數，已移除：門檻是判定 agent 行為合不合格的數值，
-只有 user 能調鬆（per `agent-routing` 的自主判定紀律）。會想調鬆它的，正是已經超標的那個
+**門檻 NEVER 可由 env / flag 放寬**（曾有的兩個覆寫變數已移除）：門檻是判定 agent 行為合不合格的
+數值，只有 user 能調鬆（per `agent-routing` 的自主判定紀律）。會想調鬆它的，正是已經超標的那個
 session —— 把閂交給它等於沒有閂。
 
 上表的 runner-child 那列**不是**本條的破口：`WORK_LOOP_RUNNER_CHILD` 不是門檻參數，它是
@@ -160,16 +153,10 @@ Cost ≈ 0.1 × (N × C / 2) + 2C          # warm cache，訂閱 1h TTL
 
 **推論：session 開頭定好 model 與 effort，中途 NEVER 切。** 一次切換的代價比省下的多得多。
 
-2026-08-04 對 8 天用量實測（944 個主線 session 裡 157 個平均 context >200k、吃掉 92% 的
-context **讀取量**；重跑 `node scripts/context-cost-report.ts`，baseline 存
-`docs/context-cost-baselines.md`）仍然成立，但**讀取量 ≠ 成本**：那 92% 大部分是 0.1×
-權重的 cache read。
-**NEVER** 拿這個數字論證「長 session 很貴」——它論證的是「長 session 讀很多」，兩者差一個
-數量級的權重。長 session 真正的代價在**品質**（context rot）與 **cache miss 風險敞口**，
-不在讀取量本身。
-
-> 上面的 0.1× / 2× 對 API 計價查證過（官方 prompt-caching 文檔）；訂閱方案 plan limit 內部
-> 是否恰好同權重**未證實**，官方只說「billed at cached rate」且 cached read **仍計入用量**。
+**讀取量 ≠ 成本**：長 session 佔掉的 context 讀取量大部分是 0.1× 權重的 cache read。
+**NEVER** 拿讀取量佔比論證「長 session 很貴」——它論證的是「長 session 讀很多」，兩者差一個
+數量級的權重。長 session 真正的代價在**品質**（context rot）與 **cache miss 風險敞口**。
+量測出處、baseline 檔與 cache 權重的查證邊界見 rationale § 成本模型的量測依據。
 
 ### 收工前的自我開脫（看到自己這樣說就停下登記）
 
@@ -286,7 +273,7 @@ session boundary 或跨 repo 決策已判定確實需要另一個互動 session�
 
 **命名對了不代表放對地方——落點是另一條獨立契約。** dispatch 出去的 pane **MUST** 落在**目標 cwd 所屬的 workspace**，不是呼叫者當下所在的 workspace。預設 `mode: "split"` 分割的是**呼叫者的 pane**，與目標 cwd 無關；helper 自 2026-08-13 起在 split 前比對，目標 cwd 明確屬於別的 workspace 時自動退回 Tab／workspace topology（該路徑本來就 canonicalize cwd）。
 
-**判 receipt 時 MUST 讀 `pane_id` 的 workspace 前綴**（`wE:pG` 的 workspace 是 `wE`），**NEVER** 只看 label 就認定放對了——2026-08-13 實測：一個 <consumer-a> session dispatch 出去的 clade publish，label 是完全正確的 `[wE:pG] 發布 Herdr root fix`，pane 卻落在 **<consumer-a>** workspace。兩個方向同時出錯：clade 操作者在 clade workspace 遍尋不著，而它混在 <consumer-a> 的 tab 裡又被誤讀成 <consumer-a> 的工作。**label 對這件事零訊號。**
+**判 receipt 時 MUST 讀 `pane_id` 的 workspace 前綴**（`wE:pG` 的 workspace 是 `wE`），**NEVER** 只看 label 就認定放對了——2026-08-13 實測：一個 `<consumer-a>` session dispatch 出去的 clade publish，label 是完全正確的 `[wE:pG] 發布 Herdr root fix`，pane 卻落在 **`<consumer-a>`** workspace。兩個方向同時出錯：clade 操作者在 clade workspace 遍尋不著，而它混在 `<consumer-a>` 的 tab 裡又被誤讀成 `<consumer-a>` 的工作。**label 對這件事零訊號。**
 
 Canonical clade publish **MUST** 走 `node <clade-central-repo>/vendor/scripts/herdr-clade-publish.ts`（無參數）。
 **NEVER** 用 caller-controlled generic `--cwd`／`--prompt` 或 raw `herdr agent prompt` 替代；只搬 intent，Step 1–9屬 `clade-publish` skill。

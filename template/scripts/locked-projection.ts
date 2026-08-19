@@ -67,7 +67,11 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // and matching the whole dir would mark those clade-managed → auto-reset clobbers them.
       String.raw`scripts/lib/(evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace)\.(mjs|mts|ts)$`,
       // Snippets / shared presets
-      String.raw`vendor/(snippets|oxc-shared|doctor-shared|review-rules)/`,
+      String.raw`vendor/(snippets|oxc-shared|doctor-shared|review-rules|husky)/`,
+      // prepare-commit-msg 掛載點 —— 逐檔列出，**NEVER** 放寬成 `\.husky/`：
+      // consumer 的 commit-msg / pre-commit / pre-push 是 init-consumer 寫的自家檔，
+      // 整個目錄標成 clade-managed 會讓 auto-reset 把它們清掉。
+      String.raw`\.husky/prepare-commit-msg$`,
       // GitHub vendored actions
       String.raw`\.github/actions/`,
       // Utility files —— dest 是 `join(consumerRoot, manifest.paths.utils ?? 'utils',

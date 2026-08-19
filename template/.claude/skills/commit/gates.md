@@ -437,11 +437,14 @@ script 在 runner 前後各拍一次 worktree snapshot（HEAD + 暫存 index 的
 | 寫進受審 repo | **核心拒絕**（`EROFS`），不是事後偵測 |
 | 讀 `~/.ssh` / 其他 repo / codex 與 xai 的 refresh token | **不在 namespace 裡**，讀不到 |
 | bwrap 不可用 | **整個 run 拒跑**（`errorClass: sandbox-unavailable`），**NEVER** 降級成裸跑 |
-| 外洩（WebFetch / MCP / 網路） | **仍未涵蓋** —— sandbox 保留網路，模型讀得到的東西（frozen changeset、唯讀 repo、cursor key）都送得出去 |
+| 外洩（WebFetch / MCP / 網路） | **出口白名單**（TD-533）—— run 跑在只連得到 Cursor API 的 network namespace 裡；DNS 只答 cursor 兩個 host，TLS 依 ClientHello 的 SNI 過濾，其餘一律斷 |
+| netns 未就緒 | **整個 run 拒跑**（`errorClass: egress-unavailable`），**NEVER** 降級成開放網路。修法：`node vendor/scripts/cursor-netns.ts setup`（需 sudo，一次性） |
 
-2026-08-19 實測是讓 cursor 池的模型自己在 sandbox 內跑那五條 probe 回報的：`touch` 回 `Read-only file system`、`~/.ssh` 回 `No such file or directory`、`ls ~/offline` 只剩 bind skeleton、`auth.json` 只剩 cursor 一個 key。
+2026-08-19 實測是讓 cursor 池的模型自己在 sandbox 內跑 probe 回報的（**NEVER** 只從外面推論）。TD-524 那五條：`touch` 回 `Read-only file system`、`~/.ssh` 回 `No such file or directory`、`ls ~/offline` 只剩 bind skeleton、`auth.json` 只剩 cursor 一個 key。TD-533 四條，模型逐字回 `1=exit 6, code 000 2=exit 6, code 000 3=exit 0, code 200 4=cursor` —— example.com 斷、api.github.com 斷、api.cursor.com 通、憑證只剩 cursor。host 端 proxy log 獨立佐證同一輪 `deny dns example.com` / `deny dns api.github.com`。
 
-**因此「接受風險」的前提收窄成一條**：判斷依據是**你餵進去的材料敏感度**（外洩仍未涵蓋），不再是「它會不會動到我的檔案」。default 池照跑本檢查（防 pi 層 enforcement 回歸）。
+> 問 `auth.json` 時 **MUST 只要 key 的名稱**（`Object.keys`）。2026-08-19 有一次 probe 讓模型把檔案內容原文回報，live cursor key 因此進了 transcript。
+
+**「接受風險」的前提因此再收窄**：出口已鎖到 Cursor API，剩下的判斷是**你願不願意讓 Cursor 看到這批材料**——那是無法用沙箱解決的部分（模型的 prompt 依定義會送到 Cursor 伺服器）。default 池照跑本檢查（防 pi 層 enforcement 回歸）。
 
 處置：**verdict 不可信、NEVER 當作 0-A.1 通過**。先人工檢視 stderr 的 snapshot diff 定性 —— 可能是 cursor 池被 prompt injection 帶去 mutation（此時被動到的檔 **NEVER 自動還原**，依 [[commit]] WIP 處置禁令交使用者拍板），也可能是並行 session 在 review 期間的正當編輯（此時 verdict 審的不是最終狀態，處置完重跑即可）。
 

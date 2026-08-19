@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+# CLADE:VENDOR-SCRIPT
+#
+# prepare-commit-msg — 把 commit header 的 emoji 依 type 正規化（見 vendor/husky/normalize-commit-emoji.ts）
+#
+# 由 ~/clade vendor/husky/ 散播，請勿直接編輯 consumer 副本。
+
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+ENGINE="$ROOT/vendor/husky/normalize-commit-emoji.ts"
+
+# 引擎未散播到本 repo → 跳過（commit-msg 那道仍在，行為等同本 hook 不存在）
+[ -f "$ENGINE" ] || exit 0
+
+# fail-open：normalize 是便利層不是 gate，它壞掉時不該擋住任何人 commit
+CLADE_REPO_ROOT="$ROOT" node "$ENGINE" "$1" "$2" || exit 0

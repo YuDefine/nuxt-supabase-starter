@@ -3,9 +3,9 @@
   "rulesProjection": "copy",
   "checksums": {
     "rules/agent-routing.codex-input-intercept.md": "5dcb18970e360299",
-    "rules/agent-routing.codex-watch-protocol.md": "e8483d9615b0af74",
-    "rules/agent-routing.md": "e89ee451c3a1cb85",
-    "rules/agent-self-verification.md": "5366f27e73504cd3",
+    "rules/agent-routing.codex-watch-protocol.md": "f35681dd26dc24ce",
+    "rules/agent-routing.md": "b071ef084d420273",
+    "rules/agent-self-verification.md": "763faff247d4744c",
     "rules/agent-self-verification.screenshot-evidence.md": "c8f274c48a74c6db",
     "rules/audit-pattern.md": "69856e1bb2377882",
     "rules/auth-data-path-consistency.md": "372d85414ae7faee",
@@ -61,7 +61,7 @@
     "rules/screenshot-strategy.md": "7165b5cc07b64ffc",
     "rules/self-hosted-runner.md": "288da48fa9017f04",
     "rules/session-claims.md": "d03e59ef4f692d76",
-    "rules/session-tasks.md": "c6ac608c83d24f1c",
+    "rules/session-tasks.md": "8b75b6c8e0657441",
     "rules/session-tasks.operations.md": "c48034e7f84f877f",
     "rules/skill-management.md": "b35fcfe130a457d7",
     "rules/spectra-notion-coupling.md": "c1f47b254a24a467",
@@ -108,11 +108,11 @@
     "rules/nuxt-ui-native-picker-ban.md": "b6af1e670b27f6c2",
     "rules/page-loading-golden-path.md": "53cfb54674d32974",
     "scripts/0a-metrics.mjs": "57b42780af6ab775",
-    "scripts/codex-review-safe.sh": "9c69ac1befaeec2e",
+    "scripts/codex-review-safe.sh": "fac6b7896161ff6c",
     "scripts/commit-lock.mjs": "f81c79df484ce5db",
     "scripts/gh-ci-watch.sh": "ec01b7de6d10fb32",
     "skills/commit/SKILL.md": "162f5cd44d4005d8",
-    "skills/commit/gates.md": "e02ddce21f0b817d",
+    "skills/commit/gates.md": "1e74e2575a8d9f9f",
     "skills/commit/handoff-steps.md": "3c45c24a3fe8e272",
     "skills/commit/schema-sync.md": "3fce665a60e04d0f",
     "skills/spectra/SKILL.md": "530eaa7278fd399b",
@@ -155,8 +155,8 @@
     "commands/db-migration.md": "c65b8e21970857a5",
     "commands/doc-sync.md": "89eed1c6673549dc",
     "agents/code-review.md": "1d65cf8896c87114",
-    "agents/codex-fallback.md": "42d30be40760cfad",
+    "agents/dispatch-fallback.md": "37ee59ae22f468fe",
     "agents/references/clade-review-rules.md": "6bfcab329115f10c",
-    "agents/screenshot-review.md": "224425c1d9007a26"
+    "agents/screenshot-review.md": "c71ab0453bf325b6"
   }
 }

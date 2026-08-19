@@ -18,10 +18,17 @@
 # is missing the run is REFUSED (errorClass `sandbox-unavailable`), never
 # downgraded to a bare spawn.
 #
-# Still NOT contained, because the sandbox keeps the network: exfiltration of
-# whatever the model can read — the frozen changeset, the read-only repo, the
-# cursor key itself — via WebFetch / MCP / plain network. Judge the cursor pool
-# on the sensitivity of the material you feed it, not on the sandbox.
+# Since TD-533 the sandbox also no longer keeps the network. The run enters a
+# network namespace whose only route is a host-side filter: DNS answers nothing
+# outside the Cursor API hostnames, and TLS connections are cut unless the
+# ClientHello SNI matches them. Enforcement is in the kernel's routing, so it
+# covers the SDK's in-process tools too — not just shell children, which is all
+# Cursor's own sandbox option reaches. Missing namespace = REFUSED
+# (errorClass `egress-unavailable`), never downgraded to an open network.
+#
+# What that still does not cover: the Cursor API itself is a permitted
+# destination, and the model's prompt reaches Cursor's servers by construction.
+# The allowlist bounds where the material can go, not who ultimately sees it.
 #
 # The worktree integrity check below (exit 6) remains a DETECTION control for
 # accidents, concurrent-session edits, and default-pool enforcement
