@@ -407,6 +407,84 @@ export function pickDevPortOffset(declared, usedOffsets) {
 }
 
 /**
+ * How many offsets this consumer's band can actually hand out.
+ *
+ * This is NOT `DEV_PORT_BAND`. Every declared port shifts by the same offset, so
+ * the highest declared port hits the ceiling first: a consumer declaring
+ * 3040 + 3045 inside a 9-wide band gets 4 usable offsets, because offset 5 would
+ * push `shared` to 3050 — the next consumer's base. Reporting the band width
+ * instead of this number tells the reader there are five more slots than exist,
+ * which is exactly the wrong thing to believe when you are deciding whether to
+ * clean up a worktree.
+ *
+ * Derived by exhausting `pickDevPortOffset` rather than recomputing its
+ * arithmetic, so the two can never disagree.
+ */
+export function devPortCapacity(declared) {
+  const used = new Set()
+  for (;;) {
+    const offset = pickDevPortOffset(declared, used)
+    if (offset === null) return used.size
+    used.add(offset)
+  }
+}
+
+/**
+ * Who currently holds an offset, newest-allocated last. Feeds the exhaustion
+ * message: "the band is full" is not actionable, "these four worktrees hold it"
+ * is. Stale records are dropped by `siblingDevPortOffsets`, so this only lists
+ * holders whose worktree still exists.
+ */
+function devPortHolders(consumerRoot) {
+  const dir = devPortStateDir(consumerRoot)
+  const holders = []
+  let entries
+  try {
+    entries = readdirSync(dir)
+  } catch {
+    return holders
+  }
+  for (const name of entries) {
+    if (!name.endsWith('.json')) continue
+    let rec
+    try {
+      rec = JSON.parse(readFileSync(join(dir, name), 'utf8'))
+    } catch {
+      continue
+    }
+    if (!rec?.wtPath || !existsSync(rec.wtPath)) continue
+    if (!Number.isInteger(rec.offset)) continue
+    holders.push({ offset: rec.offset, slug: basename(rec.wtPath) })
+  }
+  return holders.toSorted((a, b) => a.offset - b.offset)
+}
+
+/**
+ * The exhaustion message, shared by `add` (warning) and `dev` (hard error).
+ * Names the real capacity and the current holders — the reader's next action is
+ * picking one to land, and that decision needs both numbers.
+ */
+function devPortExhaustedReport(consumerRoot, declared) {
+  const capacity = devPortCapacity(declared)
+  const holders = devPortHolders(consumerRoot)
+  const spread = declared.length > 1 ? declared[declared.length - 1].port - declared[0].port : 0
+  const why =
+    capacity < DEV_PORT_BAND
+      ? ` (band width ${DEV_PORT_BAND} minus ${spread} for the ` +
+        `${declared[0].port}→${declared[declared.length - 1].port} declared spread)`
+      : ''
+  const lines = [`dev-port capacity is ${capacity}${why}, and all ${capacity} are held:`]
+  for (const h of holders) lines.push(`  +${h.offset}  ${h.slug}`)
+  lines.push(
+    `Landing one of these ('wt-helper merge-back <slug>') frees its offset.`,
+    `Offsets are handed out at 'wt-helper add' time and on first 'wt-helper dev';`,
+    `a worktree created while the band was full holds none, so removing a worktree`,
+    `that never had one frees nothing.`,
+  )
+  return lines.join('\n')
+}
+
+/**
  * Allocate this worktree's dev-port offset and persist it. Returns the record,
  * or null when the consumer declares no dev ports / the band is exhausted.
  */
@@ -1381,10 +1459,25 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
   if (devPortRecord) {
     const shown = devPortRecord.ports.map((p) => `${p.alias}=${p.port}`).join(' ')
     console.log(`  dev-port: offset +${devPortRecord.offset} → ${shown} (run 'wt-helper dev')`)
+    // Warn while a slot is still gettable, not once the band is already full:
+    // by then the worktree that needed the warning is the one that cannot get a
+    // slot, and its work stalls at whatever step needed a dev server.
+    const declared = readDeclaredDevPorts(consumerRoot)
+    const capacity = devPortCapacity(declared)
+    const held = devPortHolders(consumerRoot).length
+    if (capacity > 0 && held >= capacity - 1) {
+      console.error(
+        `note: dev-port capacity ${held}/${capacity} after this allocation — the next worktree gets none.\n` +
+          `      Land a finished one ('wt-helper merge-back <slug>') to keep a slot available.`,
+      )
+    }
   } else if (readDeclaredDevPorts(consumerRoot).length > 0) {
     console.error(
-      `note: dev-port band base+1..base+${DEV_PORT_BAND} exhausted — 'wt-helper dev' will refuse to start.\n` +
-        `      Prune finished worktrees (wt-helper list / prune) to free a slot.`,
+      `note: 'wt-helper dev' will refuse to start in this worktree.\n` +
+        devPortExhaustedReport(consumerRoot, readDeclaredDevPorts(consumerRoot))
+          .split('\n')
+          .map((l) => `      ${l}`)
+          .join('\n'),
     )
   }
 
@@ -1539,15 +1632,30 @@ async function cmdList(opts) {
     console.log('No session worktrees.')
     return
   }
+  const holderBySlug = new Map(devPortHolders(consumerRoot).map((h) => [h.slug, h.offset]))
   for (const w of enriched) {
     const ageLabel = w.daysOld === null ? '?' : `${w.daysOld}d`
     const mergedTag = w.mergedToMain ? ', merged' : ''
-    console.log(`${w.branch}  (${ageLabel} ago${mergedTag})`)
+    const offset = holderBySlug.get(basename(w.path))
+    // Which worktrees hold a dev-port offset is the one thing this listing was
+    // missing when the band ran dry: without it the reader picks a cleanup
+    // target by age or status and frees nothing, because most worktrees created
+    // after the band filled never held a slot at all.
+    const portTag = offset === undefined ? '' : `, dev-port +${offset}`
+    console.log(`${w.branch}  (${ageLabel} ago${mergedTag}${portTag})`)
     console.log(`  ${w.path}`)
     if (w.taskSummary) {
       const statusTag = w.briefStatus ? ` [${w.briefStatus}]` : ''
       console.log(`  ${w.taskSummary}${statusTag}`)
     }
+  }
+
+  const declared = readDeclaredDevPorts(consumerRoot)
+  if (declared.length > 0) {
+    const capacity = devPortCapacity(declared)
+    const held = holderBySlug.size
+    const suffix = held >= capacity ? ' — exhausted; land one to free a slot' : ''
+    console.log(`\ndev-port slots: ${held}/${capacity} held${suffix}`)
   }
 }
 
@@ -1951,8 +2059,7 @@ async function cmdDev(alias, opts: WtOptions = {}) {
     throw new Error(
       readDeclaredDevPorts(consumerRoot).length === 0
         ? `This consumer declares no dev ports in .claude/consumer-meta.json — nothing to allocate.`
-        : `dev-port band base+1..base+${DEV_PORT_BAND} is exhausted.\n` +
-            `Remove a finished worktree ('wt-helper list' / 'cleanup') to free a slot.`,
+        : devPortExhaustedReport(consumerRoot, readDeclaredDevPorts(consumerRoot)),
     )
   }
 
