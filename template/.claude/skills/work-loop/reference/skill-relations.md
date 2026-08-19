@@ -34,7 +34,7 @@ cd ~/offline/<consumer> && \
 | /spectra-apply | spectra source 的 `feedbackGiven` / `readyForEvidence` / `applyInProgress` dispatch（透過 /wt） |
 | /spectra-archive | `done` / `awaitArchiveWalkthrough` / `ready(0)` dispatch（直接，免 worktree） |
 | /wt | worktree 建立 + dispatch subagent |
-| /handoff | 不直接調用（本 skill 自動化 handoff Mode B 的「盤點 → 推薦 → 執行」，unattended 下把 AskUserQuestion 換成 packaging） |
+| /handoff | 不直接調用（本 skill 自動化 handoff `next` 的「盤點 → 推薦 → 執行」，unattended 下把 AskUserQuestion 換成 packaging） |
 | **/goal** | **attended 版姊妹**：user 在場、要逐項拍板 dispatch 優先序（見 [[goal-mode]]）。想逐項拍板 → 用 /goal 不用本 skill |
 | **/loop**（內建） | interval 盲跑某 prompt/命令、stateless 無 verifier。「每 N 分鐘重跑 X」→ /loop；「狀態驅動推進待辦」→ 本 skill |
 

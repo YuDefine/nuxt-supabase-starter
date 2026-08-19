@@ -83,7 +83,7 @@ Local edits will be reverted by the next sync.
 
 **與 `session-tasks.md` 的銜接**：tasks 檔內未完項在 session 結束時若需下一 session 立刻接手，**MUST** 升到 `HANDOFF.md` 的 `## In Progress`，不能只留在 tasks 檔等下一 session 自己 grep。
 
-## 歷史段路由（Mode B 2B.1 Health Gate 用）
+## 歷史段路由（`next` 2B.1 Health Gate 用）
 
 對 `HANDOFF.md` 每個 `## ` section 依下表分類處置：
 
@@ -92,7 +92,7 @@ Local edits will be reverted by the next sync.
 | **active** | section 含 `- [ ]` unchecked checkbox / `Outstanding` / `Next session` / `下次 session` / `待後續` / `待客戶` / `等客戶` / `等 prod` / `[discuss]` / `尚未` / `未完` / `TODO` / `awaiting` 等 keyword | 留 `HANDOFF.md` |
 | **baseline-snapshot** | section title 含 `Worktree Audit` / `Review-gui Readiness` / `Parked` / `Deferred discuss` / `跨 repo` / `並行 session` / `In Progress` / `Blocked` / `Next Steps` 等基準關鍵字；或 section title 無 `YYYY-MM-DD` 前綴 | 留 `HANDOFF.md`（**覆寫式**更新，不累積歷史版本） |
 | **completed-narrative** | `## YYYY-MM-DD ...` 且**不**符 active / baseline 條件（純已完成 prose + checked checkbox） | rotate 到 `docs/archives/<YYYY-MM>-handoff-narrative.md`（month-bucket，append-only） |
-| **ambiguous** | 介於上述之間、無法穩定判定 | 保守保留 `HANDOFF.md` + 標 review-pending（等下次 Mode B 重判） |
+| **ambiguous** | 介於上述之間、無法穩定判定 | 保守保留 `HANDOFF.md` + 標 review-pending（等下次 `next` 重判） |
 
 > **baseline 過度累積**：若 `HANDOFF.md` 大多為 baseline section 但仍超 size / lines threshold（clade 自家常見情境），表示 baseline 已過度膨脹，**MUST** 評估是否該把某些 baseline 段拆出成 `docs/archives/<YYYY-MM>-<topic>.md` 或 `docs/solutions/<topic>.md`、`docs/decisions/<topic>.md`。HANDOFF 不是長期 KB。
 
@@ -102,9 +102,9 @@ Local edits will be reverted by the next sync.
 - `narrative-section-stale`：completed-narrative dated section 超過 narrative_age_days（default 3 天）
 - `active-section-stale`：active dated section 超過 active_age_days（default 14 天）→ 提醒「outstanding work 可能 silently 卡住」
 
-> **14 天是 escalation threshold，不是 grace period**。所有 active item 預設都應儘速處理；Mode B 盤點時**一律列入 outstanding 並推薦處理**，不因 age < 14d 而降低優先序或省略。14d threshold 的作用僅是「超過時語氣升級為 warn — 可能 silently 卡住」，不代表「未超過 = 不需關注」。
+> **14 天是 escalation threshold，不是 grace period**。所有 active item 預設都應儘速處理；`next` 盤點時**一律列入 outstanding 並推薦處理**，不因 age < 14d 而降低優先序或省略。14d threshold 的作用僅是「超過時語氣升級為 warn — 可能 silently 卡住」，不代表「未超過 = 不需關注」。
 
-審計只 warn 不阻擋；實際 rotate 由 `/handoff` Mode B Health Gate 執行（per `plugins/hub-core/skills/handoff/SKILL.md § 2B.1`）。
+審計只 warn 不阻擋；實際 rotate 由 `/handoff next` Health Gate 執行（per `plugins/hub-core/skills/handoff/SKILL.md § 2B.1`）。
 
 ### rotate 的完成判準是「搬完」，不是「搬到不 warn」
 
@@ -160,7 +160,7 @@ git for-each-ref "refs/wt-baseline/<slug>/" --format='%(refname)'
 
 ## Outstanding actionability hygiene (v1.15+)
 
-**核心命題**：HANDOFF.md `## Outstanding` / `## Next Steps` / handoff Mode B § 2B.4 推薦下一 session（含 remote-control session、並行 Codex / Cursor session、人類 user）動工時，**MUST** inline 必要 actionable detail；禁止「by reference」handoff（只列 candidate 名稱 + 1-line summary + 指向 audit/scan/decision doc，要 receiver 自己 grep 還原 context）。
+**核心命題**：HANDOFF.md `## Outstanding` / `## Next Steps` / handoff `next` § 2B.4 推薦下一 session（含 remote-control session、並行 Codex / Cursor session、人類 user）動工時，**MUST** inline 必要 actionable detail；禁止「by reference」handoff（只列 candidate 名稱 + 1-line summary + 指向 audit/scan/decision doc，要 receiver 自己 grep 還原 context）。
 
 ### 適用範圍
 
@@ -234,7 +234,7 @@ git for-each-ref "refs/wt-baseline/<slug>/" --format='%(refname)'
 
 2026-05-24 實證：<consumer-a> HANDOFF Next Steps #4 列 9 條 Nuxt UI audit candidate，只給 1-line summary + 指向 audit doc。當天另開 remote-control session 嘗試接 C1 → `/spectra-propose app-status-badge-extraction` 後第一句就是「argument 看起來像在說『把 app 內的 status badge 抽出來』，但細節不夠 — 是哪種 badge？目前散落在哪？要抽到哪？」，開始重跑 grep / glob 探索。
 
-Root cause = HANDOFF writer（包含 Mode B § 2B.4 推薦階段）把 audit doc 當「receiver 自己會 grep」的 implicit context，沒 inline 必要細節。Receiver 重做 investigation = 重複 main session 已 sunk 的 token，且容易 scope drift（receiver 可能對「44 callsites」「8 files」「Pattern A vs B vs C」的邊界判斷不同）。
+Root cause = HANDOFF writer（包含 `next` § 2B.4 推薦階段）把 audit doc 當「receiver 自己會 grep」的 implicit context，沒 inline 必要細節。Receiver 重做 investigation = 重複 main session 已 sunk 的 token，且容易 scope drift（receiver 可能對「44 callsites」「8 files」「Pattern A vs B vs C」的邊界判斷不同）。
 
 「治根」修法 = 在 outstanding 寫作層強制 inline，不靠 audit doc 當 indirection。
 

@@ -101,7 +101,7 @@ session —— 把閂交給它等於沒有閂。
 
 ### 收工三步（越過 500k 那一級 MUST，順序不可調換）
 
-1. **先把殘工派出去**（transport 走 § Herdr session transport）。**預設走 `/handoff relay` 一次交出整個位置**——把所有殘工寫進同一份 brief 交給 successor，由它以 fresh context 續判要不要再細分。只有當殘工是**單一一項**、且本 session 確實還付得起「留下來持有 handshake 到 terminal receipt」的成本時，才走 `/handoff now`（判準見 § `now`（delegate）還是 `relay`（succession））
+1. **先把殘工派出去**（transport 走 § Herdr session transport）。**判準是「有幾件可平行的工作」**：1 件（含多件但彼此 serial）走 `/handoff relay`，全部寫進同一份 brief 交給 successor 依序推進；N ≥ 2 件可平行走 `/handoff fanout`，各派一個 worker pane 再交棒給 successor 繼承它們。兩者本 session 都隨即收工（判準見 § 派幾個 pane —— 先判這一題）
 2. 剩下**派不出去**的才寫進 `tasks/<date>-<slug>.md`（或 `HANDOFF.md` / `docs/tech-debt.md`），且**逐條寫明它派不出去的具體外部條件**
 3. 收工，收工訊息走 § 收工訊息契約
 
@@ -114,11 +114,11 @@ session —— 把閂交給它等於沒有閂。
 **context 越滿，dispatch 的相對價值越高**：那些 token 每一個 turn 都重讀一次。500k 那一級是**最該派**
 的時刻，**NEVER** 讀成「已經沒有餘裕再派了」。
 
-**但 500k 也正是 `now` 付不起的時刻**——它要求本 session 留下來反覆前景 `--coordinate-resume` 直到
-terminal receipt，而收工三步的前提就是本 session 要收工了。**NEVER** 在 500k 用 `now` 派完就宣稱收工：
-那會留下一個沒有人持有的 handshake，child 的 outcome 寫進 durable record 後沒有任何東西會把它收割
-（實測形狀：15 筆 dispatch record 掛 118–169 小時從無 completion）。要交出去就用 `relay` 連 coordinator
-身分一起交，要留下來驗收就別宣稱收工，**NEVER** 兩者都要。
+**每一次派工都 MUST 以 successor 收尾**（`relay` 本身就是，`fanout` 的最後一步是 `--relay`）。
+派了 worker 卻不交棒、直接收工，會留下**沒有人持有的 handshake**：child 的 outcome 寫進 durable
+record 後沒有任何東西會把它收割（實測形狀：15 筆 dispatch record 掛 118–169 小時從無 completion）。
+逐字反開脫：「反正 patrol 之後會掃到」「outcome 寫進 record 就好」「下個 session 會看到」——
+patrol 只印出「這筆該有人收」，它不是收割者。
 
 「派不出去」**MUST 講得出具體外部條件**，只有兩類算數：
 
@@ -177,7 +177,7 @@ Cost ≈ 0.1 × (N × C / 2) + 2C          # warm cache，訂閱 1h TTL
 | 可觀察 predicate | 動作 |
 | --- | --- |
 | 還在**同一個**任務裡（只是做久了、或跨了 phase 斷點） | **`/compact` 續同一個 session。NEVER 收工開新 session。** warm 時 compact 讀舊 prefix 走 cache，官方文檔逐字：`costs a fraction of what the context size suggests`；而且 user 零重述 |
-| 換 repo / 換不相關主題 / 已登記的中大型工作確實需要乾淨 session | invoke `/handoff now <task pointer>`，由主線依下一節自行完成 Herdr live transfer，收工訊息走下面的 **A** |
+| 換 repo / 換不相關主題 / 已登記的中大型工作確實需要乾淨 session | invoke `/handoff relay <task pointer>`（N 件可平行則 `/handoff fanout`），由主線依下一節自行完成 Herdr transport，收工訊息走下面的 **A** |
 | 這批工作真的結束、沒有未完項 | 直接收工走下面的 **B**，**NEVER** 建立空的接手 session |
 | 剩餘工作可無人值守跑完 | 主線直接啟動該 repo 的 runner，**優先於**開新 session；回報 runner receipt，不把指令交給 user |
 
@@ -199,25 +199,26 @@ Cost ≈ 0.1 × (N × C / 2) + 2C          # warm cache，訂閱 1h TTL
 
 Herdr／subagent receipt中的 `retained:false`只描述該 child runtime，**NEVER**拿它代替 parent cwd的 Worktree lifecycle receipt。
 
-#### A. 已完成 Herdr live transfer
+#### A. 已交出 pane（`relay` / `fanout` / `next` 派工後）
 
-`/handoff now`只有在 canonical coordinator回傳下列任一 closure時才算「交接完成」：
+成功事件是 helper 回傳 **`relay_dispatched`**：successor 已 live、已收到 brief、durable 轉移已落盤。
+**不是**「successor 完成了工作」——那不再是本 session 的事。`fanout` 另外要求 `relayed_dispatch_ids`
+與派出去的 worker **逐筆比對通過**（少一筆＝那筆已成 orphan，**NEVER** 收工）。
 
-1. correlated `business_outcome: success`，且原 pane已 settled、scrollback已 archive、pane已 verified reclaim；或
-2. 已驗證另一個不同的 canonical successor pane／Claude session仍 live並接手責任，且原 pane完成同樣 archive + reclaim。
-
-prompt已送出、`status: dispatched`、接手 pane可獨立續跑，或 lifecycle只有 `idle`／`done`，都**不是** business completion。收工訊息依固定順序：
+收工訊息依固定順序：
 
 | 部件 | 契約 |
 | --- | --- |
-| 首行 | 逐字包含：`目前這裡收工` |
-| Closure receipt | business outcome、workspace、tab、原 pane、label、Claude session、dispatch、status、scrollback log、reclaimed狀態；responsibility transfer另列 successor pane |
-| 工作摘要 | coordinator回傳的 summary與 durable brief路徑 |
-| Runtime cleanup | 已停止的不必要 background／agent／shell；仍保留者逐一列用途與 successor pane |
+| 首行 | 逐字包含：`目前這裡收工；位置已交給 successor。` |
+| Relay receipt | successor workspace／tab／pane／Claude session、本 pane id、`predecessor_dispatch_id`、`relayed_dispatch_ids`（沒有就明寫「無」） |
+| Worker receipt | **只有 `fanout`**：逐筆列 dispatch_id、label、pane、在做什麼 |
+| 工作摘要 | durable brief 路徑與一句主題 |
+| Runtime cleanup | 已停止的不必要 background／agent／shell；仍保留者逐一列用途與對應 pane |
 | Worktree lifecycle | `not-applicable`，或五欄實測 + `removed`／`retained: <owner + next landing event>` |
-| user 本人要做的事 | 只列 successor session無法代做者；沒有就省略 |
+| user 本人要做的事 | 只列 successor 無法代做者；沒有就省略 |
 
-`completion_blocked`／`completion_failed`／`completion_unknown`都保留 pane，**NEVER** 輸出「目前這裡收工」。只有前述兩種 closure的 receipt送出後，原 session才 **NEVER** 再開新工作、輪詢接手 pane或等待其完成；下一個動作只能結束回合。正常 success／successor closure由 coordinator當下收斂，**NEVER** 等 user另輸入 `\nx`才 harvest或reclaim。
+`relay_refused`／`transport_error`／任何 preflight failure 都保留 pane，**NEVER** 輸出「目前這裡收工」。
+receipt 送出後，本 session **NEVER** 再開新工作段、輪詢接手 pane 或等它回應；下一個動作只能是結束回合。
 
 #### B. 沒有 Herdr live transfer
 
@@ -237,54 +238,95 @@ prompt已送出、`status: dispatched`、接手 pane可獨立續跑，或 lifecy
 都由主線自行走 Herdr transport；本節是使用者對這項 transport 的 standing explicit authorization，不必逐次再問。
 
 先判邊界：當前 session 能在既有授權與 scope 內直接對目標 cwd 執行，就直接執行；只有既有 routing、
-session boundary 或跨 repo 決策已判定確實需要另一個互動 session，才建立 Herdr Tab。Herdr 只搬運 session，
+session boundary 或跨 repo 決策已判定確實需要另一個互動 session，才建立 Herdr pane。Herdr 只搬運 session，
 **不**新增外派理由、跨界授權、worktree 例外或 approval bypass。
 
-**`attended` 的要求是「過人眼」，NEVER 讀成「必須在當前這個對話裡做」。** `/handoff now` 開的是
-**互動式** session，user 看得到那個 pane，接手 agent 可以用 `AskUserQuestion` 讓 user 在那個 pane
-裡逐批拍板。需要拍板**不構成**不派的理由，只構成 brief 裡要寫明「你是互動式 session，需要拍板的
-直接問 user」。逐字反開脫：「這項要 attended，所以不能派」「要 user 逐批拍板，留在本 session 比較快」。
-本段適用**每一項**判為需要人拍板的殘工，不是只有其中比較單純的那幾項。
+**`attended` 的要求是「過人眼」，NEVER 讀成「必須在當前這個對話裡做」。** 派出去的是**互動式** session，
+user 看得到那個 pane，接手 agent 可以用 `AskUserQuestion` 讓 user 在那個 pane 裡逐批拍板。需要拍板
+**不構成**不派的理由，只構成 brief 裡要寫明「你是互動式 session，需要拍板的直接問 user」。逐字反開脫：
+「這項要 attended，所以不能派」「要 user 逐批拍板，留在本 session 比較快」。本段適用**每一項**判為需要
+人拍板的殘工，不是只有其中比較單純的那幾項。
 
-### `now`（delegate）還是 `relay`（succession）—— 先判這一題
+### 派幾個 pane —— 先判這一題
 
-兩條 path 交出去的東西不同，判準是**交出去之後本 session 還有沒有下一步**：
+**四個 arg 全部收工**，差別只在開幾個 pane：
 
-| 可觀察 predicate | path | 交出去的是 |
+| 可觀察 predicate | arg | 開出去的是 |
 | --- | --- | --- |
-| 交出去之後本 session 仍要驗收 outcome、把 blocked decision 端給 user、或繼續推別的工作 | `/handoff now` | **一件工作**。本 session 仍是責任持有者，MUST 持有 handshake 到 terminal receipt |
-| 交出去之後本 session 沒有下一步了——context 撐不住、或這份工作就是它剩下的全部 | `/handoff relay` | **一個位置**。successor 繼承 brief ＋ 所有 in-flight dispatch 的 coordinator 身分，本 session 隨即收工 |
+| 沒有要派的工作，只需登記未完項 | `/handoff park` | 0 個 pane |
+| 1 件工作，或多件但彼此 **serial**（動同一批檔／有 phase 依賴／共享 mutex 資源） | `/handoff relay` | 1 個 successor，繼承整個位置 |
+| N ≥ 2 件工作，四條 parallel rubric **全成立**（檔案不重疊、無 phase 依賴、無共享 mutex、可獨立驗證） | `/handoff fanout` | N 個 worker + 1 個 successor 繼承它們 |
+| 還不知道有幾件——要先跑 health gate／worktree／TD hygiene 盤點 | `/handoff next` | 盤點後落到上面三者之一 |
 
-**context 吃緊時 MUST 走 `relay`，NEVER 走 `now`。** `now` 要求 coordinator 反覆前景 `--coordinate-resume` 直到 terminal receipt，而那正是 context 吃緊時付不起的成本——用 `now` 交出工作再留下來燒 context，手段否定了目的。逐字反開脫：「先 `now` 派出去，撐不住再說」「反正它應該很快就回來」「我等一下自己就收工了，用哪條都一樣」。
+**NEVER 因為「一件一個 pane 比較整齊」把 serial 工作拆成 N 個 worker**——它們會同時改同一批檔。
+**NEVER 因為「合成一份 brief 比較省事」把 N 件真正獨立的工作塞給單一 successor 依序做**——那放棄了
+平行性，而 fanout 的成本只是多一個 pane。
 
-**relay 之後 NEVER 再開任何新工作段。** 位置已經交出去了：本 session 唯一剩下的動作是回報 relay receipt 然後結束回合，**NEVER** 續推 brief 裡的工作、**NEVER** 輪詢 successor、**NEVER** 等它回應。successor 讀完 brief 後會回收本 pane。
+**任何一個 arg 都不要求本 session 留下來盯著。** 交出去之後本 session 的下一個動作只能是結束回合：
+**NEVER** 續推 brief 裡的工作、**NEVER** 輪詢接手 pane、**NEVER** 讀它的 lifecycle 猜進度、
+**NEVER** 向它追問或等它回應。逐字反開脫：「反正還沒關掉，順手做完」「等它讀完 brief 我再確認一下」。
 
 **本段適用每一次 handoff 判定，不是只有其中看起來比較大的那幾次。**
 
-命中時 **MUST** invoke `herdr` skill並先讀 `herdr-session-handoff/README.md`；每一個 `/handoff now`／`/handoff relay` 都只走 `vendor/scripts/herdr-session-handoff.ts` 的 canonical helper（`now` 用 `--coordinate`、`relay` 用 `--relay`），由 helper統一 provision、fresh Claude session identity、prompt delivery、bounded wait、business outcome harvest與 verified reclaim。coordinator 每次只執行 bounded foreground slice，**NEVER** 使用 `run_in_background=true`。slice 到期且exact child仍在工作、沒有correlated completion時回 `coordination_pending`：它是**非終局 receipt**，保留pane與durable record，pending不得archive或reclaim，也不進下段terminal receipt查證；exact parent Claude session仍 live時只能用 canonical `--coordinate-resume <dispatch-id>`重驗ownership與exact session後續接下一個前景slice，session移到別pane仍由helper解析，原pane換成別session不得resume。**coordinator 尚未返回前**，原 Claude session只等待 helper的單一結構化結果，**NEVER** 自行輪詢接手 pane、從 lifecycle猜 outcome或向接手 session追問進度。
+命中時 **MUST** invoke `herdr` skill 並先讀 `herdr-session-handoff/README.md`；每一個
+`/handoff relay`／`/handoff fanout` 都只走 `vendor/scripts/herdr-session-handoff.ts` 的 canonical
+helper（`relay` 用 `--relay`；`fanout` 先對每件工作跑一次裸 dispatch，**全部派完**才跑 `--relay`），
+由 helper 統一 provision、fresh Claude session identity、prompt delivery、in-flight dispatch 的
+coordinator 身分轉移，以及寫出讓 successor 回收本 pane 的 predecessor record。
 
-**拿到 `coordination_pending` 而本回合要結束時，MUST 在結束前 arm 一個 keepalive wakeup 續跑 `--coordinate-resume <dispatch-id>`**（形狀依 [[agent-routing]] § Generic async keepalive prompt）。逐字反開脫：「不阻塞、等通知回來再收」「我不打算輪詢」「等 coordinator」——child 的 outcome 只寫進 durable record，**沒有任何東西會替你把 turn 叫回來**；helper 在 child 回報時會 best-effort push 叫醒 parent pane，但 parent pane 換了 session 或已消失就 skip，**NEVER** 拿它當 arm keepalive 的替代。兜底自查：任何 session 都可跑 `node vendor/scripts/herdr-patrol.ts --stalled`，逐列印出已回報卻沒人收割的 dispatch 與該跑的指令（有停滯 exit 3）；exact parent session全域缺席標 `orphan-recoverable`，只有該 durable dispatch的exact child可由 `/handoff now`走 `--recover-orphan` one-way claim建立唯一fresh successor。Parent exact session仍 live、identity缺失／重複／snapshot不可驗時都不得recovery；prompt-cache TTL與record年齡對ownership零訊號。一般 coordinated child仍禁止nested handoff，**只有**helper核准的 recovery token與 attested relay例外。
+**`fanout` 的順序是硬約束**：`--relay` 轉移的是它**執行那一刻**掃到的 in-flight dispatch。relay 之後
+才派的 worker 不會被任何人繼承，而本 pane 隨即被 successor 回收——那筆 worker 直接變成 orphan。
+**NEVER** 邊派邊 relay，**NEVER** relay 之後補派。漏掉的要補，只有一條路：由 successor 去派。
 
-**terminal receipt 返回後這條即失效，查證改為 MUST。** 非 success terminal receipt（`completion_blocked` / `completion_failed` / `completion_unknown`）返回時，在寫下**任何**關於接手 session 做了什麼的斷言之前、以及做**任何**補救動作之前，MUST 先讀該 pane 的 `agent_status` 與 scrollback（`herdr pane list` / `herdr pane read`）。receipt 的 `agent settled without a valid correlated business outcome` 只斷言 **helper 沒收到 outcome**，對「它現在在不在工作」零訊號——Herdr 的 `done` 是「未被看見的背景工作結束後的 idle」，agent 回完一個 turn 後照樣繼續工作。**NEVER** 用「目標檔 mtime 沒變 / `git status` 乾淨 / 無新 commit」推論它沒做事（那是 negative search 當證據）；**NEVER** 未查證就重送同一份 brief（接手 session 仍在工作時重送 ＝ 兩個 agent 同時改同一批檔）。查證後 `agent_status` 是 `working` → 它還在做，**NEVER** 重送或打斷；receipt 無 `pane_id`（pane 建立前就失敗）→ 本條不適用，直接回具體 error。非 success receipt 返回時 **MUST 讀** handoff skill `now-steps.md` § 4.1 的查證程序與四路分流。
+**`fanout` 只有 main line session 能用。** 本 session 自己是被派出來的 child（`CLADE_DISPATCH_ID`
+非空）時，裸 dispatch 一律被 helper 回 `nested_dispatch_refused`——那道 guard 防的是責任樹擴張。
+改走 `relay`（helper 對 relay 開了缺口，因為它做的是相反的事：橫向移交後自己站下來）。**NEVER**
+為了讓 fanout 在 child 內跑起來去取 `--recovery-token`：orphan recovery 的前提是 parent 已死，
+拿它繞過一道針對「parent 還活著」設計的 guard 是偽造前提。
 
-每一個 canonical接手 session都 **MUST** 在正常 final response前透過 helper回報與 dispatch／pane／Claude session identity相關聯的 `success | blocked | failed | unknown` outcome；`blocked`必須帶一個具體 user decision。**NEVER** 把 secret寫進 Herdr argv、prompt metadata、receipt、summary、decision、log、rule或fixture。
+每一個被派出去的 **worker** 都 **MUST** 在正常 final response 前透過 helper 回報與 dispatch／pane／
+Claude session identity 相關聯的 `success | blocked | failed | unknown` outcome；`blocked` 必須帶一個
+具體 user decision。**NEVER** 把 secret 寫進 Herdr argv、prompt metadata、receipt、summary、decision、
+log、rule 或 fixture。
 
-**每一次** transport **MUST** 帶任務描述性 `--label`：建 Tab／workspace 就命名該 Tab／workspace，split pane 就命名該 pane；建立什麼就命名什麼。**NEVER** 只給 repo 名或倚賴預設值——同一 repo 派出去的多個 session 會在 UI 與 patrol 輸出裡完全無法分辨。helper 缺 label 直接回 `usage_error`，不會建立任何東西。receipt 的 `pane_label_applied: false` 代表 pane 仍是預設標題，**MUST** 照實寫進收工訊息。
+### successor 怎麼收割它繼承的 worker
 
-**命名對了不代表放對地方——落點是另一條獨立契約。** dispatch 出去的 pane **MUST** 落在**目標 cwd 所屬的 workspace**，不是呼叫者當下所在的 workspace。預設 `mode: "split"` 分割的是**呼叫者的 pane**，與目標 cwd 無關；helper 自 2026-08-13 起在 split 前比對，目標 cwd 明確屬於別的 workspace 時自動退回 Tab／workspace topology（該路徑本來就 canonicalize cwd）。
+那份 outcome 由 successor 收割，helper 注入的 relay protocol 會告訴它用 `--coordinate-resume <dispatch-id>`
+續接。**收割的判準是 correlated business outcome，不是 pane 的 lifecycle**：`prompt 已送出`、
+`status: dispatched`，或 lifecycle只有 `idle`／`done`，都**不是** business completion。逐字反開脫：
+「pane 已經 done 了，應該是做完了」——Herdr 的 `done` 是「未被看見的背景工作結束後的 idle」，
+agent 回完一個 turn 後照樣繼續工作。
 
-**判 receipt 時 MUST 讀 `pane_id` 的 workspace 前綴**（`wE:pG` 的 workspace 是 `wE`），**NEVER** 只看 label 就認定放對了——2026-08-13 實測：一個 `<consumer-a>` session dispatch 出去的 clade publish，label 是完全正確的 `[wE:pG] 發布 Herdr root fix`，pane 卻落在 **`<consumer-a>`** workspace。兩個方向同時出錯：clade 操作者在 clade workspace 遍尋不著，而它混在 `<consumer-a>` 的 tab 裡又被誤讀成 `<consumer-a>` 的工作。**label 對這件事零訊號。**
+正常 success 或 successor closure 由收割者當下收斂，**NEVER** 等 user另輸入 `\nx`才 harvest或reclaim。
+
+**worker 的 parent 死掉時**（successor 自己也消失了），該 worker 成為 orphan：只有該 durable dispatch
+的 exact child 可經 canonical `--recover-orphan` one-way claim 建立唯一 fresh successor。可觀察判準是
+durable record 的 exact `parent_claude_session_id` 在 `herdr agent list` 全域缺席——
+prompt-cache TTL與record年齡對ownership零訊號。一般 coordinated child仍禁止nested handoff，**只有**helper核准的 recovery token與 attested relay例外。
+
+**每一次** transport **MUST** 帶任務描述性 `--label`：建 Tab／workspace 就命名該 Tab／workspace，
+split pane 就命名該 pane；建立什麼就命名什麼。**NEVER** 只給 repo 名或倚賴預設值——同一 repo 派出去的多個 session 會在 UI
+與 patrol 輸出裡完全無法分辨，而 `fanout` 一次就派 N 個，這件事在 fanout 下不是不便而是致命。helper
+缺 label 直接回 `usage_error`，不會建立任何東西。receipt 的 `pane_label_applied: false` 代表 pane 仍是
+預設標題，**MUST** 照實寫進收工訊息。
+
+**命名對了不代表放對地方——落點是另一條獨立契約。** dispatch 出去的 pane **MUST** 落在**目標 cwd
+所屬的 workspace**，不是呼叫者當下所在的 workspace。預設 `mode: "split"` 分割的是**呼叫者的 pane**，
+與目標 cwd 無關；helper 自 2026-08-13 起在 split 前比對，目標 cwd 明確屬於別的 workspace 時自動退回
+Tab／workspace topology。**判 receipt 時 MUST 讀 `pane_id` 的 workspace 前綴**（`wE:pG` 的 workspace
+是 `wE`），**NEVER** 只看 label 就認定放對了——2026-08-13 實測：一個 `<consumer-a>` session dispatch
+出去的 clade publish，label 完全正確，pane 卻落在 `<consumer-a>` workspace。**label 對這件事零訊號。**
 
 Canonical clade publish **MUST** 走 `node <clade-central-repo>/vendor/scripts/herdr-clade-publish.ts`（無參數）。
-**NEVER** 用 caller-controlled generic `--cwd`／`--prompt` 或 raw `herdr agent prompt` 替代；只搬 intent，Step 1–9屬 `clade-publish` skill。
+**NEVER** 用 caller-controlled generic `--cwd`／`--prompt` 或 raw `herdr agent prompt` 替代；只搬 intent，
+Step 1–9 屬 `clade-publish` skill。
 
 | 結果 | 主線動作 |
 | --- | --- |
-| `status: completion_success` | 驗 business success、settled、archive與 reclaimed receipt後，依收工訊息契約 **A**結束回合 |
-| `status: responsibility_transferred` | 驗不同的 live canonical successor及原 pane archive + reclaimed receipt後，依 **A**結束回合 |
-| `status: completion_blocked` | **先查證（見上），再**：只有非空 `decision`才向 user問那一個真正決策並保留 pane；回答後走 helper `--continue <pane>`，**NEVER** raw重送 prompt |
-| `status: completion_failed` | **先查證（見上），再**回報失敗 gate與 retained pane；立即停止，不宣稱交接完成 |
-| `status: completion_unknown` | **先查證（見上），再**回報；outcome缺失／失真、session漂移或只有 lifecycle `done` 都屬此類，fail closed並保留 pane |
+| `status: relay_dispatched` | （`fanout` 先過 `relayed_dispatch_ids` 逐筆比對）依收工訊息契約 **A** 結束回合 |
+| `status: dispatched`（fanout 的 worker） | 記下 `dispatch_id` 與 `pane_id`，繼續派下一筆；**全部派完才跑 `--relay`** |
+| `status: relay_refused` | 保留 durable task 與**所有已派出的 pane**，回具體 blocker 並列出那些 dispatch_id。**NEVER** 改用 raw `herdr` 繞過、**NEVER** 收工 |
+| `status: nested_dispatch_refused` | 本 session 是 coordinated child，fanout 不適用。改走 `relay` |
 | transport / launcher / Herdr preflight 失敗 | 保留 durable task；能在本 session 合法完成就直接完成，否則回具體 blocker。**NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt |
 
 #### 已列明 gate 的短答（MUST）
@@ -296,4 +338,4 @@ Canonical clade publish **MUST** 走 `node <clade-central-repo>/vendor/scripts/h
 permission classifier／harness 拒絕某載體時，**NEVER** 改用其他工具暗渡同一動作；目前 session 能在既有授權與 scope 內合法執行就直接執行，否則回具體 blocker。
 
 `\nx`（Charles 個人縮寫，判為收工時）同樣受本契約約束：「收工 ＋ 一句已登記在哪」只是下限；
-判需要乾淨 session 時同樣 invoke `/handoff now <task pointer>`，取得 receipt 後套用 **A**、不套用 B。
+判需要乾淨 session 時同樣 invoke `/handoff relay <task pointer>`（N 件可平行則 `/handoff fanout`），取得 receipt 後套用 **A**、不套用 B。

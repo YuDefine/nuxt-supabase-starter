@@ -743,13 +743,19 @@ runner.sh 另有 mechanical fail-closed：起跑前、每次 child launch 前，
 | 殘工 <15 分鐘 | 本輪做完，不落任何檔（turn cap 為此 +0 不 +1） |
 | 需要 Charles 拍板（過不了自主判定七條 AND） | **packaging**——照下方既有 Packaging SOP 全文執行（唯一免費的登記） |
 | 需要 attended / permission gate（publish、`.claude/**`） | attended 佇列（`tasks/` 既有形狀，一檔一條） |
-| 可執行，且 context 可 durable 化成 ≤5K thin brief | **`/handoff now <task pointer>` dispatch**（default 出口；brief 紀律照 [[session-tasks]] § Herdr session transport） |
+| 可執行，且 context 可 durable 化成 ≤5K thin brief | **裸 dispatch**（default 出口）：`herdr-session-handoff.ts --cwd <main-checkout> --label <描述性 label> --prompt-file <brief>`，**不帶 `--relay`、不帶 `--coordinate`**。brief 紀律照 [[session-tasks]] § Herdr session transport |
 | 等具體外部 signal | TD ＋ `wontfix-until-signal` ＋ **可觀察 signal predicate**。寫不出 predicate 就不准用本格——那是等待區，不是掩埋場 |
 | 以上皆非（context 無法 durable 化） | TD 登記，**MUST 同 commit 附 `### Restart brief` 段**：檔案路徑、指令、驗收 predicate、已排除方案。heading 逐字 `### Restart brief`（`####` 亦可），**NEVER** 寫成 `**Restart brief**` 粗體或 `## `（前者不是 heading、後者被 TD parser 當成新 entry 的起點）。缺 = `audit-tech-debt-hygiene` violation（`restart-brief-missing`，紅線 >0） |
 
 **Iron Law：登記之前先問「這條為什麼不能現在 dispatch」。違反字面就是違反精神**——「登記比較快」
 「brief 明天再補」「反正 HANDOFF 會有人看」都不成立：Restart brief 的內容就是 thin brief 的內容，
 寫得出來的當下 dispatch 幾乎恆優於登記。
+
+**runner NEVER 走 `/handoff` 的任何 arg。** 那四個 arg（`park`／`relay`／`fanout`／`next`）全部以
+**本 session 收工**結束，而 round 結束不是收工——`relay` 會把位置連同 coordinator 身分交給 successor，
+runner 迴圈就沒有主體了；且 `completeRelay()` 要求有 current pane 可交，headless runner child 沒有 pane
+時直接回 `relay_refused`。runner 只派 worker、不交位置：outcome 落 durable record，由後續輪次的 Step 2
+re-scan 或 `herdr-patrol.ts --stalled` 收。逐字反開脫：「反正 relay 也是派出去」「派完這輪就結束了」。
 
 **dispatch 的三個不准**：探索型（結論仍依賴本 session 判斷鏈、brief 落不下來）NEVER dispatch——先把
 判斷落盤，落不了走登記；需 attended gate 的 NEVER dispatch——新 session 一樣 blocked；**並行 dispatch
@@ -974,7 +980,7 @@ git show --stat HEAD | tail -3   # 驗 scope
 
 ## 與其他 skill 的銜接
 
-- `/handoff` —— 本 skill 不取代它。Mode A（登記）仍由 `/handoff` 做；本 skill 自動化的是 Mode B 的「盤點 → 推薦 → 執行」，並在 unattended 下把 `AskUserQuestion` 換成 packaging
+- `/handoff` —— 本 skill 不取代它。`park`（登記）仍由 `/handoff` 做；本 skill 自動化的是 `next` 的「盤點 → 推薦 → 執行」，並在 unattended 下把 `AskUserQuestion` 換成 packaging
 - `/goal` —— attended 姊妹：user 在場、要逐項拍板 dispatch 優先序時用它
 - `/spectra-apply` / `/spectra-archive` —— spectra item 的實際執行者，本 skill 只編排不介入其內部流程
 - `/wt` —— 所有 tracked code 改動的 dispatch 入口
