@@ -399,4 +399,6 @@ pgrep -af 'claude --print.*[-]-runner-child'  # 它的當輪 child（runner 正�
 
 **爭用訊號帶得出 pid 時（advisory lock、process 訊息）走 pid，NEVER 退回 cwd 過濾**：第 1 步的 cwd 前綴在同一 repo 同時有多個 pane 時過濾不出唯一解，而 pid 經 `ps` 祖先鏈直達 `claude … --session-id`，是精確對映。做法與「持有者正在跑同一條冪等流程時搭它的車」見 [[pitfall-pipeline-lock-contention-raced-instead-of-probed]]。
 
+可貼的探測序列（兩個入口、身分兩條、`rg -L | xargs` 回 0 的坑）在 [[concurrent-session-probe]]（`vendor/snippets/concurrent-session-probe/`）——**撞上爭用時 MUST 開它照貼，NEVER 現場重拼指令**。
+
 > 第一手實錄：[[pitfall-working-tree-contention-escalated-without-session-layer-probe]]（2026-08-19 <consumer-a>，連問三輪、選項 3/3 錯，user 一句「你去檢查 pane」終結）。同型換 domain：[[pitfall-infra-change-attribution-skips-concurrent-session-check]]。
