@@ -654,8 +654,10 @@ Grok-xai → grok-cursor（cursor/grok-4.6）→ Claude Sonnet
 **鏈上的每一跳都是換配額池，不是降檔。** 判準是那一跳有**獨立計量**的配額，不是「它是同一個 model」。
 
 **`grok-cursor` 只在 grok 鏈出現，NEVER 接在 luna 鏈後面**（2026-08-19 Charles 拍板）。成因：Cursor 那一跳
-經 Cursor API key 取用，計入 Ultra 方案的 included quota（on-demand 已關），**不是**先前規約寫的
-「`composer + grok` 獨立閒置 bucket」。luna 鏈的最後一個換池機會因此是 `grok-xai`（xAI OAuth，完全獨立），
+經 Cursor API key 取用，計入 Ultra 方案的 **`Other Models`** bucket（2026-08-19 Charles 實測確認；
+on-demand spending 已關，用完就是硬停），**不是**先前規約寫的「`composer + grok` 獨立閒置 bucket」。
+`Other Models` 是 Claude / GPT / Gemini 共用的那個 $400 桶——**派一發 `grok-cursor` 就是從同一個桶裡
+扣**，而訂閱內含、專給 Cursor Grok 與 Composer 的 `Cursor Models` bucket 走 API key 根本碰不到。luna 鏈的最後一個換池機會因此是 `grok-xai`（xAI OAuth，完全獨立），
 再耗盡就進 Claude 終點。**NEVER** 從「grok 鏈還有 `grok-cursor` 這一跳」推論 luna 鏈也能用它。
 
 **跨 model 家族的跳只有 luna 鏈有，是具名例外不是通則。** 新增跨家族跳 MUST Charles 逐鏈拍板，

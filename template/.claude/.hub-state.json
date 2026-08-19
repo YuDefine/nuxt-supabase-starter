@@ -3,7 +3,7 @@
   "rulesProjection": "copy",
   "checksums": {
     "rules/agent-routing.codex-input-intercept.md": "5dcb18970e360299",
-    "rules/agent-routing.codex-watch-protocol.md": "f35681dd26dc24ce",
+    "rules/agent-routing.codex-watch-protocol.md": "99d596ec36514c4c",
     "rules/agent-routing.md": "ac2fa206f0a808ab",
     "rules/agent-self-verification.md": "763faff247d4744c",
     "rules/agent-self-verification.screenshot-evidence.md": "c8f274c48a74c6db",
