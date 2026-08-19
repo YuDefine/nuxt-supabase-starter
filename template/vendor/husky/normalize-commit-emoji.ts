@@ -51,6 +51,9 @@ const headerIdx = lines.findIndex((l) => l.trim() !== '' && !l.startsWith('#'))
 if (headerIdx === -1) process.exit(0)
 
 const header = lines[headerIdx]
+// headerIdx 來自 findIndex，取回來必然有值；顯式收窄是為了讓 consumer 的 strict
+// typecheck（noUncheckedIndexedAccess）看得懂，行為與既有 fail-open 一致。
+if (header === undefined) process.exit(0)
 // fixup! / squash! / amend! 的 header 由 git 組出來指向另一則 commit，改寫會讓它失去指向。
 if (/^(fixup|squash|amend)!/.test(header) || /^(Merge|Revert) /.test(header)) process.exit(0)
 
@@ -59,6 +62,8 @@ const m = header.match(/^(?:([^\p{L}\p{N}\s][^\s]*)\s+)?([A-Za-z]+)(\([^)]*\))?(
 if (!m) process.exit(0)
 
 const [, currentEmoji, type, scope = '', bang = '', subject] = m
+// type / subject 是 regex 的必填 group，m 命中時必然有值；同樣顯式收窄。
+if (type === undefined || subject === undefined) process.exit(0)
 const want = emojiByType.get(type.toLowerCase())
 // type 不在映射內 = type 本身非法，不是 emoji 的問題。留給 commit-msg 擋。
 if (!want) process.exit(0)
@@ -80,11 +85,15 @@ process.stderr.write(
 function parseEmojiMap(src: string): Map<string, string> {
   const map = new Map<string, string>()
   const block = src.match(/'type-enum':\s*\[[\s\S]*?\[([\s\S]*?)\]/)
-  if (!block) return map
-  for (const [, literal] of block[1].matchAll(/'([^']+)'/g)) {
+  const enumBody = block?.[1]
+  // 解不出 enum body → 回空 map，呼叫端的 `size < 5` 檢查會 fail-open。
+  if (enumBody === undefined) return map
+  for (const [, literal] of enumBody.matchAll(/'([^']+)'/g)) {
+    if (literal === undefined) continue
     const parts = literal.trim().split(/\s+/)
     if (parts.length !== 2) continue
     const [emoji, typeName] = parts
+    if (emoji === undefined || typeName === undefined) continue
     if (!/^[a-z]+$/.test(typeName)) continue
     map.set(typeName, emoji)
   }
