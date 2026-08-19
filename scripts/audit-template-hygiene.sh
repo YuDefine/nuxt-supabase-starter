@@ -25,7 +25,14 @@ AUDIT_CHECKS=(
 
 # clade 投影面用的真實 consumer 名清單（check_clade_projection_consumer_names）。
 # check_dogfood_business_code 有另一份**刻意不同**的清單，理由寫在該函式上方。
-CONSUMER_NAMES='<consumer-b>|<consumer-d>|<consumer-d>|<consumer-c>|<consumer-h>|yudefine|<consumer-a>'
+#
+# `<consumer-l>` 寫全名而不是裸 `yudefine`：裸 org 名在投影面是**正當出現**
+# （`YuDefine fleet 部署 SOP`、`/yudefine-deploy` skill 名、`YuDefine LXC` runner），
+# 它是發佈本 repo 的 GitHub org，不是租戶識別字——clade 的 buildFleetProfile 也基於
+# 同一個理由刻意不遮 maintainer org。裸名留在清單裡會把 11 處正當引用判成洩漏，
+# 而真正該抓的 `<consumer-l>`（registry 內的 consumer）用全名一樣抓得到。
+# 下方 check_dogfood_business_code 的清單早就寫著同一條理由，這裡原本沒跟上。
+CONSUMER_NAMES='<consumer-b>|<consumer-d>|<consumer-d>|<consumer-c>|<consumer-h>|<consumer-l>|<consumer-a>'
 
 finding_checks=()
 finding_problems=()

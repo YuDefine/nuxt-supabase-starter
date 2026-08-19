@@ -187,6 +187,8 @@ assert_clade_projection_consumer_names() {
     check_tenant_identifiers "template/.claude/rules/probe.md" "這條規約在 <consumer-b> 上實測過，另有 <consumer-b>-dev.example.com。"
     check_tenant_identifiers "template/.claude/rules/snake.md" "DB clone <consumer-b>_wt_<slug> 不存在時要 fail loud。"
     check_tenant_identifiers "template/.claude/rules/case.md" "clone 自 YUDEFINE/nuxt-supabase-starter 即可。"
+    check_tenant_identifiers "template/.claude/rules/org.md" "詳見 /yudefine-deploy Phase 1-10 runbook，跑在 YuDefine LXC 的 self-hosted runner。"
+    check_tenant_identifiers "template/.claude/rules/blog.md" "這條 hydration 修法在 <consumer-l> 上實測過。"
     check_tenant_identifiers "template/.claude/rules/ok.md" "這條規約在 <consumer-a> 上實測過。skill dir 是 _notion-<consumer-b>-board。"
     check_tenant_identifiers "template/docs/prose.md" "這份 root 文件提到 <consumer-b>，不在投影面範圍內。"
   )"
@@ -207,6 +209,16 @@ assert_clade_projection_consumer_names() {
   # 例外剝除與偵測都在小寫上進行，所以 GitHub org 的大小寫變體不能誤觸。
   if grep -Fq "template/.claude/rules/case.md" <<< "${output}"; then
     fail "starter own GitHub org must not false-positive in any letter case"
+  fi
+  # 裸 org 名（未接 repo 名）同樣是正當引用：skill 名 `/yudefine-deploy`、`YuDefine LXC`
+  # runner、`YuDefine fleet` 在投影面共 11 處，清單寫裸 `yudefine` 會把它們全判成洩漏。
+  if grep -Fq "template/.claude/rules/org.md" <<< "${output}"; then
+    fail "bare maintainer org must not false-positive"
+  fi
+  # 但 org 名開頭的**真實 consumer**（registry 內的 <consumer-l>）仍必須被擋——
+  # 上一條放寬的是裸 org，不是任何以它開頭的字串。
+  if ! grep -Fq "real-tenant-identifier|template/.claude/rules/blog.md" <<< "${output}"; then
+    fail "consumer whose id starts with the maintainer org is still blocked"
   fi
   pass "clade projection consumer names blocked, placeholders and non-projection paths pass"
 }
