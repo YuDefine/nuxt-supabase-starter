@@ -377,23 +377,45 @@ codex-primary verdict 但 ≤2 個 file 的瑣碎 fix（typo / 單行 bug / conf
 
 **但 review gate 目前走不了 `-cursor` 這一跳**：TD-520 已確認 cursor 池的模型同 UID 且有 unrestricted Shell，而 review 的 prompt 內嵌待審 changeset。在拿到 OS 層隔離前，0-A.1 撞配額的處置是主線自 review ＋ 明示 gate 未達成 ＋ 登記待補，**不是**換池。這是「鏈的形狀正確、但這一跳對這個用途不安全」，不是降級鏈本身有問題。
 
+限制範圍是兩個 `-cursor` 跳；luna 鏈的 `grok-xai` 跳能不能承接 0-A.1 **尚未評估**，
+**NEVER** 從「它不是 cursor」推論「review gate 可以走它」。
+
 ```
-Sol      → sol-cursor（cursor/gpt-5.6-sol）→ Opus 主線
-Luna     → luna-cursor（cursor/gpt-5.6-luna@272k）→ Claude Haiku
+Sol      → sol-cursor（cursor/gpt-5.6-sol@272k）→ Opus 主線
+Luna     → luna-cursor（cursor/gpt-5.6-luna@272k）→ grok-xai（xai/grok-4.6）→ grok-cursor（cursor/grok-4.6）→ Claude Haiku
 Grok-xai → grok-cursor（cursor/grok-4.6）→ Claude Sonnet
 ```
 
-**每條鏈的第一跳都是同一個 model 換配額池**（Codex OAuth ／ xAI OAuth → Cursor），不是降檔。
-**終點的 Claude 檔位按鏈對齊，不再共用一段 `Sonnet → Haiku`**：luna 鏈載的是機械／extraction 工作 → `haiku`；
-grok 鏈載的是 UI view high effort → `sonnet`；sol 鏈載的是 flagship 工作，**NEVER** 交給 Claude 小模型，直接回 Opus 主線。
+**鏈上的每一跳都是換配額池，不是降檔。** 判準是那一跳有**獨立計量**的配額，不是「它是同一個 model」。
+**Cursor 分兩條 bucket**——`composer + grok` 一條、`others`（`sol-cursor` / `luna-cursor`）一條，
+所以 `luna-cursor → grok-cursor` 確實換池。**NEVER** 把 Cursor 當單一額度池推理。
+
+**跨 model 家族的跳只有 luna 鏈有，是具名例外不是通則。** 新增跨家族跳 MUST Charles 逐鏈拍板，
+准入三條連言是**申請門檻**，**NEVER** 由它自動導出（必要條件不是充分條件）；逐條判準與取證見
+rationale § luna 鏈的跨家族跳。**sol 鏈第 2 條不中**，且 flagship 工作與 `spectra-phase-implementation`
+的 NEVER 轉 grok 是**獨立 veto、不進連言協商**，那條 NEVER **含 fallback 路徑，配額耗盡不是豁免條件**。
+sol 鏈維持兩跳，**NEVER** 跨去 grok、**更 NEVER** 降成 luna——「luna 鏈都插了」不是理由。
+
+**終點的 Claude 檔位按鏈的「起點」對齊，不是按耗盡的那一格**：`grok-cursor` 是兩條鏈共用的最後一格，
+luna 起點 → `haiku`、grok 起點 → `sonnet`。dispatcher 對這格 required `--chain-origin`，起點不可解時
+回 unresolved 而**不猜**。
+
+**grok 接手 luna 鏈時的補償控制**：grok 有已取證的 fail-open（前置契約未滿足時自報 `status: pass`，
+見 § Routing Table 的 `spectra-phase-implementation` 列）。dispatcher 對 `--route fallback-chain` 的 grok
+dispatch 注入 fail-closed 段，要求回覆帶一行 `PRECONDITIONS_VERIFIED:`，**並機械檢查它在不在**——
+自報 pass 但缺 attestation 一律改判 exit 2。prompt 側只是第一層（用 prompt 修「不遵守 prompt」是同構的），
+機械檢查才是控制；主線收回時仍 MUST 實核 diff。**NEVER** 拿這條 fail-open 當「所以該退回 Claude」的理由，
+**也 NEVER** 把 gate 改成「pass ∧ diff 空 → 改判」（scan／extraction 的空 diff 正是正確結果）。
 
 **降 effort 不是降級鏈的一步**：配額按 **model** 記，Sol 撞 usage limit 時 `--effort low` 重試撞的是**同一個** limit。effort 分級是品質 / 成本維度，**NEVER** 拿它當配額耗盡的應對。
 
 1. **Sol exit 4 → `--model sol-cursor` 換池**（`cursor/gpt-5.6-sol`，`--route fallback-chain --tier-basis quota-fallback --retry-of <sol-label>`）；**sol-cursor 再 exit 4 才回 Opus 主線**。record reason 含 `quota-exhausted`。**NEVER** `--model luna` 重試——換池不是降檔，降檔才是。
 2. **Luna exit 4 → 換池到 Cursor**：`--model luna-cursor --route fallback-chain --tier-basis quota-fallback --retry-of <luna-label>`。這是同一檔智力、另一個配額池，不是降檔。
-3. **luna-cursor 再 exit 4** 才動 Claude subagent，且**只接 `haiku`**（顯式帶，per § Subagent 回報契約第 4 條）——luna 鏈載的是機械／extraction 工作，**NEVER** 在這裡升 `sonnet`。
-4. **Grok（`xai/grok-4.6`）exit 4 → `--model grok-cursor`**（`cursor/grok-4.6`）同 effort 重派一次；再 exit 4 才動 Claude subagent，且**只接 `sonnet`**——grok 鏈載的是 UI view high effort，**NEVER** 在這裡降 `haiku`。
-5. Claude 接走時 session 結尾 **MUST** 回報「本 session 因配額耗盡，由 Claude 執行 N 個本應外派的 change」；有 runtime reset 資訊再附上，沒有就明說 unavailable。
+3. **luna-cursor exit 4 → `--model grok-xai`** 同 effort 重派（`--route fallback-chain --tier-basis quota-fallback --retry-of <luna-cursor-label>`）。**先 grok-xai 不先 grok-cursor**：xAI OAuth 完全獨立，Cursor 的 `composer + grok` bucket 還要跟 composer 平時用量搶。
+4. **grok-xai exit 4（luna 鏈）→ `--model grok-cursor --chain-origin luna`** 同 effort 重派。**`--chain-origin` 在這格 MUST 帶**——兩條鏈都終止於 grok-cursor，不帶判不出終點檔位。
+5. **grok-cursor 再 exit 4** 才動 Claude subagent，且**只接 `haiku`**（顯式帶，per § Subagent 回報契約第 4 條），**NEVER** 升 `sonnet`。
+6. **Grok 鏈自己的路徑**（`ui-view-implementation` / `web-search` / `screenshot-review-verify` 三列）：`grok-xai` exit 4 → `--model grok-cursor --chain-origin grok-xai` 重派一次；再 exit 4 才動 Claude subagent，且**只接 `sonnet`**，**NEVER** 降 `haiku`。
+7. Claude 接走時 session 結尾 **MUST** 回報「本 session 因配額耗盡，由 Claude 執行 N 個本應外派的 change」；有 runtime reset 資訊再附上，沒有就明說 unavailable。
 
 ## Subagent 回報契約（所有 dispatch 通用）
 

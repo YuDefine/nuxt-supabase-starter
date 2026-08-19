@@ -2071,13 +2071,38 @@ async function cmdDev(alias, opts: WtOptions = {}) {
     )
   }
 
-  let spawnCmd = 'pnpm exec nuxt dev'
-  try {
-    const meta = JSON.parse(readFileSync(join(repoTop, '.claude', 'consumer-meta.json'), 'utf8'))
-    spawnCmd = meta?.dev?.commands?.worktreeSpawn ?? spawnCmd
-  } catch {
-    // Fall through to the Nuxt default — consumer-meta is optional here.
+  // `worktreeSpawn` carries the consumer's real invocation — its app subdir, its
+  // dotenv file, its fork mode. A worktree forked before the consumer declared
+  // that key has an older consumer-meta, and falling straight through to the
+  // bare Nuxt default silently drops all three: the server binds and answers
+  // 200, but every page 500s on missing env because the root dir and dotenv
+  // were never passed. Read main's copy before giving up, so an old worktree
+  // starts the same server a fresh one would.
+  //
+  // Silence is the whole problem here — a server that refuses to start is a
+  // five-second fix, one that starts wrong costs however long it takes someone
+  // to open a page and read the stack trace.
+  let spawnCmd = null
+  for (const root of [repoTop, findConsumerRoot()]) {
+    try {
+      const meta = JSON.parse(readFileSync(join(root, '.claude', 'consumer-meta.json'), 'utf8'))
+      const declared = meta?.dev?.commands?.worktreeSpawn
+      if (declared) {
+        if (resolve(root) !== resolve(repoTop)) {
+          console.error(
+            `note: this worktree's consumer-meta declares no dev.commands.worktreeSpawn — ` +
+              `using main's.\n` +
+              `      The worktree predates that key; its projected .claude is stale.`,
+          )
+        }
+        spawnCmd = declared
+        break
+      }
+    } catch {
+      // Missing or unparseable consumer-meta at this level — try the next.
+    }
   }
+  spawnCmd ??= 'pnpm exec nuxt dev'
 
   const full = `${spawnCmd} --port ${chosen.port}`
   console.log(`wt-helper dev: ${chosen.alias} on ${chosen.port} (main uses ${chosen.mainPort})`)

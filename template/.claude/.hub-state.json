@@ -3,8 +3,8 @@
   "rulesProjection": "copy",
   "checksums": {
     "rules/agent-routing.codex-input-intercept.md": "5dcb18970e360299",
-    "rules/agent-routing.codex-watch-protocol.md": "cae3a3053e04e37a",
-    "rules/agent-routing.md": "46d7f82db38410ad",
+    "rules/agent-routing.codex-watch-protocol.md": "e8483d9615b0af74",
+    "rules/agent-routing.md": "e89ee451c3a1cb85",
     "rules/agent-self-verification.md": "5366f27e73504cd3",
     "rules/agent-self-verification.screenshot-evidence.md": "c8f274c48a74c6db",
     "rules/audit-pattern.md": "69856e1bb2377882",
@@ -155,7 +155,7 @@
     "commands/db-migration.md": "c65b8e21970857a5",
     "commands/doc-sync.md": "89eed1c6673549dc",
     "agents/code-review.md": "1d65cf8896c87114",
-    "agents/codex-fallback.md": "28b9c1a589abb1a7",
+    "agents/codex-fallback.md": "42d30be40760cfad",
     "agents/references/clade-review-rules.md": "6bfcab329115f10c",
     "agents/screenshot-review.md": "224425c1d9007a26"
   }

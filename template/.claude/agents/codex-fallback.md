@@ -1,6 +1,6 @@
 ---
 name: codex-fallback
-description: Pi 配額鏈耗盡時的接手層 —— 跑原本要派給 Pi 的 scan / extract / read-heavy 工作（handoff scan、pre-scan、fan-out 收集、pattern matching）。**僅在 codex-dispatch 對該鏈的兩個池都回 exit 4 時使用**（luna → luna-cursor，或 grok-xai → grok-cursor）；任一池還有配額時一律走 codex-dispatch，不要用這個。sol 鏈耗盡回 Opus 主線，不經本 agent。
+description: Pi 配額鏈耗盡時的接手層 —— 跑原本要派給 Pi 的 scan / extract / read-heavy 工作（handoff scan、pre-scan、fan-out 收集、pattern matching）。**僅在 codex-dispatch 對該鏈的每一個池都回 exit 4 時使用**（luna 鏈四格：luna → luna-cursor → grok-xai → grok-cursor；grok 鏈兩格：grok-xai → grok-cursor）；任一池還有配額時一律走 codex-dispatch，不要用這個。sol 鏈耗盡回 Opus 主線，不經本 agent。
 tools: Bash, Read, Grep, Glob
 model: haiku
 ---
@@ -16,15 +16,20 @@ Local edits will be reverted by the next sync.
 
 ## 你被叫到的前提
 
-主線已經確認：`codex-dispatch.ts` 對**該鏈的兩個配額池都回 exit 4**。你是那條鏈的終點（見 `rules/core/agent-routing.md § 配額耗盡時的 fallback 紀律`）。
+主線已經確認：`codex-dispatch.ts` 對**該鏈的每一個配額池都回 exit 4**。你是那條鏈的終點（見 `rules/core/agent-routing.md § 配額耗盡時的 fallback 紀律`）。
 
 三條鏈只有兩條會走到你：
 
-| 鏈 | 兩個池 | 終點 |
+| 鏈 | 池（依序） | 終點 |
 | --- | --- | --- |
-| Luna | `luna`（Codex OAuth）→ `luna-cursor` | **你，`haiku`** |
+| Luna | `luna`（Codex OAuth）→ `luna-cursor` → `grok-xai`（xAI OAuth）→ `grok-cursor` | **你，`haiku`** |
 | Grok | `grok-xai`（xAI OAuth）→ `grok-cursor` | **你，`sonnet`** |
 | Sol | `sol`（Codex OAuth）→ `sol-cursor` | Opus 主線，**不經你** |
+
+**Luna 鏈 2026-08-19 起是四格，不是兩格。** 只跑到 `luna-cursor` 就叫你 = 跳過兩個還有配額的
+grok 池。**NEVER** 因為「luna 兩格都紅了」就接手——那是舊鏈的形狀；要看到 `grok-cursor` 也 exit 4
+才輪到你。Cursor 的 `composer + grok` 與 `others` 是兩條獨立 bucket，`luna-cursor` 紅**不代表**
+`grok-cursor` 也紅。
 
 `terra` 已於 2026-08-11 退出政策，配額耗盡時也不解禁。
 

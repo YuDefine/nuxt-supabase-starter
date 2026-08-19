@@ -35,8 +35,12 @@ Local edits will be reverted by the next sync.
      --model <sol|sol-cursor|luna|luna-cursor|grok-xai|grok-cursor> --effort <low|medium|high|xhigh|max> \
      --route <routing-table|claude-delegate-sub|fallback-chain|manual> \
      --tier-basis <table-row|five-conjunct|adjudication|delegate-sub|quota-fallback|manual> \
-     [--table-row <routing-row>] [--retry-of <prior-label>]
+     [--table-row <routing-row>] [--retry-of <prior-label>] [--chain-origin <sol|luna|grok-xai>]
    ```
+
+   `--chain-origin` 只在 `--model grok-cursor` 這一格 **required**：luna 鏈與 grok 鏈都終止於它，
+   終點的 Claude 檔位按**起點**分（luna→`haiku`、grok-xai→`sonnet`）。不帶且 `--retry-of` 也回溯不到起點時，
+   dispatcher 的 exit 4 回 unresolved 而不猜檔位。其餘 model 起點唯一，不必帶。
 
    Dispatcher 固定用 Pi JSON mode、`openai-codex` provider、ephemeral session與 machine-safe extension profile；model、effort、routing attribution與 exit code由這個入口統一驗證。MCP extension存在時由 dispatcher明確載入，interactive `cx` extension不會進 machine dispatch。
 
@@ -307,7 +311,11 @@ basis，**NEVER** 隨手挑一個列名湊過去。
 - `4` — quota 擋，**兩種來源同一個 code**：派工前的 gate（primary used_percent > 85），或 codex **跑到一半**回報 usage limit（pre-gate 讀的是上一個 session 的快照，window 在那之後被吃滿、或 rate_limits 讀不到而 fail-open 放行時就會這樣）。後者的 payload 帶 `detected: 'runtime'` 與 `resets_at_human`（codex 給的是散文日期不是 epoch）。處置相同：非急件延後到下一個 window、依 `next_tier` 換 tier；急件 `AskUserQuestion` 讓 user 拍板（`--no-quota-check` 強派）
   - **`3` 與 `4` 的下一步相反，NEVER 混用**：`3` 是「這次壞了，可以再試」，`4` 是「這個 window 內都別再試」。mid-run 撞配額若被報成 `3`，每一輪都會再燒一次 dispatch 去重新發現同一件事（2026-08-06 實測：配額 reset 在三天後，而輸出寫的是 `no parseable JSON`）
 
-**內建行為**：Pi `--no-session --no-extensions` machine mode、explicit MCP extension、routing metadata validation、telemetry append 到 `~/.pi/agent/clade/dispatch-ledger.jsonl`（fail-open；`scripts/audit-codex-adoption.ts` 靠它量 adoption）。Pi目前沒有authoritative pre-dispatch quota snapshot，因此precheck明示unavailable並fail-open；runtime quota仍固定映射exit 4。
+**內建行為**：Pi `--no-session --no-extensions` machine mode、explicit MCP extension、token discipline system prompt、routing metadata validation、telemetry append 到 `~/.pi/agent/clade/dispatch-ledger.jsonl`（fail-open；`scripts/audit-codex-adoption.ts` 靠它量 adoption）。Pi目前沒有authoritative pre-dispatch quota snapshot，因此precheck明示unavailable並fail-open；runtime quota仍固定映射exit 4。
+
+**Token discipline 是 runtime 內建，template / brief NEVER 各自重寫一份**：`vendor/pi/system/token-discipline.md`（codebase-memory 優先於 grep ＋ rtk 包裹重輸出指令）由 `runPiCodex()` 以 `--append-system-prompt` 附掛到**每一發**有工具的 dispatch，四個入口（`codex-dispatch.ts` / `codex-dispatch-screenshot-verify.ts` / `codex-dispatch-pre-handoff-check.ts` / `pi-codex-review.ts`）一致生效，`toolProfile: 'none'` 除外。主線 Claude 是靠 harness 的 SessionStart hook 與 Bash 改寫 hook 拿到這兩條，**Pi 上沒有等價機制**——2026-08-19 實測：全歷史 dispatch 3415 次 bash 只有 460 次走 rtk，同時仍有 raw `git` 657、`ls` 229、`pnpm` 143。
+
+**readonly profile 的 `--tools` allowlist MUST 含 codebase-memory 工具名**：pi 的 allowlist 同時作用於 built-in、extension 與 MCP 工具，所以 `review-readonly` / `analysis-readonly` 少列 `mcp_codebase_memory_*` = MCP extension 載了也一次都叫不到（2026-08-19 實測：`commit-0a1-review-r61` 整輪只有 `read`）。清單在 `CODEBASE_MEMORY_READONLY_TOOLS`（`vendor/scripts/lib/pi-codex-runtime.ts`），`index_repository` 刻意不在列。
 
 **`--output-schema`**：codex 0.138+ 支援以 JSON Schema 約束最終回覆。新 dispatch 場景**預設提供 schema 檔**，取代脆弱的「stdout 結尾 JSON 摘要」約定；既有 dispatcher（screenshot-verify / pre-handoff-check）維持現行契約不回頭改。
 
