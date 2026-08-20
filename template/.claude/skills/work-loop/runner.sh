@@ -13,15 +13,16 @@
 #   ./runner.sh                    # 跑到停止條件成立，最多 20 輪
 #   ./runner.sh --max-rounds 5
 #   ./runner.sh --dry-run          # 只印每輪會下的指令，不真的跑
-#   ./runner.sh --skip-preflight   # 探針誤判過嚴時的 override
+#   ./runner.sh --skip-preflight   # 探針誤判過嚴時的 override（不略過互斥鎖門檻）
 #   ./runner.sh --min-ready 0      # 關掉待辦源健康門檻
 #
-# 起跑前先跑 preflight（§ Preflight）與待辦源健康門檻（§ 待辦源健康門檻）：兩者任一不過就
-# **完全不啟動**，理由落在 $LOG_DIR/preflight.log。它們省的不是第 4 輪起的重複失敗，是全部
-# 那幾十輪 —— 2026-08-10 <consumer-b> 因 headless 權限閘門連續拒絕，空轉 99 輪、零待辦被修改。
+# 起跑前先跑 quarantine、互斥鎖門檻、preflight 與待辦源健康門檻：任一不過就
+# **完全不啟動**，理由落在 $LOG_DIR/preflight.log。preflight 省的不是第 4 輪起的
+# 重複失敗，是全部那幾十輪 —— 2026-08-10 <consumer-b> 因 headless 權限閘門連續拒絕，空轉
+# 99 輪、零待辦被修改。互斥鎖命中（exit 6）是「已有 runner 在跑」，不是故障。
 #
 # 停止：state 檔出現 stoppedReason，或達 --max-rounds，或連續 2 輪 exit≠0，
-#       或 state 連續 2 輪未前進。
+#       或 state 連續 2 輪未前進，或起跑前 exit 3/4/5/6。
 # 中斷：Ctrl-C；lock 的 heartbeat 逾窗（45min）且本 runner 的 pid 不再存活時自動失效。
 #
 # 從外面要求它停（人或別的 session）：**寫 sentinel 檔，NEVER 改 state.stoppedReason**——
@@ -201,7 +202,7 @@ stopped_reason() {
     local reason
     reason="$(head -c 500 "$STOP_FILE" 2>/dev/null | head -1)"
     rm -f "$STOP_FILE"
-    echo "${reason:-外部停止請求（$STOP_FILE，內容為空）}"
+    echo "${reason:-外部停止請求（${STOP_FILE}，內容為空）}"
     return 0
   fi
   [ -f "$STATE" ] || return 1
@@ -299,7 +300,7 @@ guard_runner_quarantine() {
   local phase="$1" count
   if [ -f "$QUARANTINE_FILE" ]; then
     runner_stop_reason="orphan-quarantine-awaiting-attended-reconciliation"
-    echo "== stop: $runner_stop_reason（marker=$QUARANTINE_FILE；禁止自動 retry）"
+    echo "== stop: ${runner_stop_reason}（marker=${QUARANTINE_FILE}；禁止自動 retry）"
     return 1
   fi
 
@@ -315,7 +316,7 @@ guard_runner_quarantine() {
   esac
 
   write_quarantine_marker "$runner_stop_reason" "$count" "$phase"
-  echo "== stop: $runner_stop_reason count=$count（保留 lock 檔與 quarantine marker；需 attended reconciliation，禁止自動 retry）"
+  echo "== stop: ${runner_stop_reason} count=${count}（保留 lock 檔與 quarantine marker；需 attended reconciliation，禁止自動 retry）"
   return 1
 }
 
@@ -344,6 +345,37 @@ preflight_fail() {
   exit 3
 }
 
+# GNU `timeout` 在 macOS 預設不存在。探針必須有上限，否則權限對話卡住會讓 runner 永遠停在 preflight。
+# 沒有 GNU/BSD timeout 時用 perl fork + alarm（exec 會清掉 alarm，所以不能 perl -e 'alarm; exec'）。
+with_timeout() {
+  local secs="$1"
+  shift
+  if command -v timeout >/dev/null 2>&1; then
+    command timeout "$secs" "$@"
+    return $?
+  fi
+  if command -v gtimeout >/dev/null 2>&1; then
+    command gtimeout "$secs" "$@"
+    return $?
+  fi
+  command -v perl >/dev/null 2>&1 || {
+    echo "error: PATH 上找不到 timeout / gtimeout / perl，無法為 headless 探針設上限" >&2
+    return 127
+  }
+  perl -e '
+    my $secs = shift;
+    my $pid = fork();
+    die "fork: $!\n" unless defined $pid;
+    if ($pid == 0) { exec { $ARGV[0] } @ARGV; exit 127; }
+    $SIG{ALRM} = sub { kill "TERM", $pid; waitpid $pid, 0; exit 124; };
+    alarm $secs;
+    waitpid $pid, 0;
+    alarm 0;
+    my $rc = $? == -1 ? 127 : ($? & 127) ? 128 + ($? & 127) : $? >> 8;
+    exit $rc;
+  ' "$secs" "$@"
+}
+
 # 探針 D：headless child 到底能不能跑一個 Bash tool call。
 # 這是唯一驗得到 harness 權限閘門的探針，也是唯一要付一次 API 呼叫的 —— 一次小呼叫換掉
 # 一整天的空轉。**MUST 同時驗 token 與 mktemp 產出的路徑**：只驗 token 的話，模型不呼叫
@@ -354,14 +386,14 @@ preflight_headless_probe() {
     || preflight_fail "無法產生 headless proof nonce"
   proof_file="$REPO/.clade/work-loop/preflight-proof-$nonce"
   rm -f "$proof_file"
-  out="$(cd "$REPO" && timeout 300 "${CHILD_ENV[@]}" WORK_LOOP_RUNNER_CHILD=1 WORK_LOOP_SCAN_PREFLIGHT_NONCE="$nonce" "$CHILD_BIN" --print \
+  out="$(cd "$REPO" && with_timeout 300 "${CHILD_ENV[@]}" WORK_LOOP_RUNNER_CHILD=1 WORK_LOOP_SCAN_PREFLIGHT_NONCE="$nonce" "$CHILD_BIN" --print \
     --allowedTools "$SCAN_PREFLIGHT_RULE" --permission-mode "$PERM_MODE" \
     "Run exactly this command with the Bash tool: $SCAN_PREFLIGHT_CMD
 Do not claim success unless the command completed. No other tool calls." 2>&1)"
   rc=$?
   if [ "$rc" -ne 0 ]; then
     rm -f "$proof_file"
-    preflight_fail "headless child exit=$rc（權限閘門拒絕或 claude 不可用）—— 尾巴：$(printf '%s' "$out" | tail -3 | tr '\n' ' ')"
+    preflight_fail "headless child exit=${rc}（權限閘門拒絕或 claude 不可用）—— 尾巴：$(printf '%s' "$out" | tail -3 | tr '\n' ' ')"
   fi
   proof="$(head -1 "$proof_file" 2>/dev/null || true)"
   rm -f "$proof_file"
@@ -378,7 +410,7 @@ run_preflight() {
   command -v node >/dev/null 2>&1 || preflight_fail "PATH 上找不到 node"
 
   local probe="$REPO/.clade/work-loop/.preflight-probe"
-  ( : > "$probe" ) 2>/dev/null || preflight_fail "repo 不可寫（$probe）"
+  ( : > "$probe" ) 2>/dev/null || preflight_fail "repo 不可寫（${probe}）"
   rm -f "$probe"
 
   # 待辦源一個都讀不到 = 這輪 scan 必然空手而回。spectra repo 才有 openspec/，缺它屬正常。
@@ -412,12 +444,46 @@ run_ready_gate() {
   esac
 
   if [ "$ready" -lt "$MIN_READY" ]; then
-    echo "== 待辦枯竭：ready=$ready < $MIN_READY，需 attended 補彈藥（跑 attended /work-loop 清算 awaiting[]，或補 HANDOFF / tech-debt 條目）"
+    echo "== 待辦枯竭：ready=$ready < ${MIN_READY}，需 attended 補彈藥（跑 attended /work-loop 清算 awaiting[]，或補 HANDOFF / tech-debt 條目）"
     printf '%s\tready-gate\tready=%s min=%s\n' "$(TZ=Asia/Taipei date +'%Y-%m-%dT%H:%M:%S%z')" "$ready" "$MIN_READY" \
       >> "$LOG_DIR/preflight.log" 2>/dev/null || true
     exit 4
   fi
-  echo "待辦源健康：ready=$ready（門檻 $MIN_READY）"
+  echo "待辦源健康：ready=${ready}（門檻 ${MIN_READY}）"
+}
+
+# ── 互斥鎖門檻 ────────────────────────────────────────────────────────────────
+# 「已有 runner 在跑」不是故障。status 的析取判準在 work-loop-lock.ts，NEVER 在
+# bash 重寫 heartbeat 窗口或 pid 存活。helper 缺席或輸出無法解析時放行：門是優化，
+# NEVER 讓它變成起不了 runner 的新故障。
+#
+# --dry-run 略過（只印指令，不該拒絕）。--skip-preflight 不略過——鎖被持有不是
+# 探針誤判，兩者是不同 failure class。
+run_lock_gate() {
+  [ "$DRY_RUN" = 1 ] && return 0
+  [ -f "$LOCK_HELPER" ] || { echo "⚠ 找不到 lock helper，略過互斥鎖門檻"; return 0; }
+
+  local json held session pid age
+  json="$(cd "$REPO" && node "$LOCK_HELPER" status --json 2>/dev/null)" || {
+    echo "⚠ lock status 執行失敗，略過互斥鎖門檻"
+    return 0
+  }
+  held="$($NODE_PLAIN -e 'try{const s=JSON.parse(process.argv[1]);console.log(s.held===true?"true":s.held===false?"false":"NaN")}catch{console.log("NaN")}' "$json" 2>/dev/null)"
+  case "$held" in
+    false) return 0 ;;
+    true) ;;
+    *) echo "⚠ lock status 輸出無法解析，略過互斥鎖門檻"; return 0 ;;
+  esac
+
+  session="$($NODE_PLAIN -e 'try{const s=JSON.parse(process.argv[1]);console.log(typeof s.sessionId==="string"?s.sessionId:"?") }catch{console.log("?")}' "$json" 2>/dev/null)"
+  pid="$($NODE_PLAIN -e 'try{const p=JSON.parse(process.argv[1]).pid;console.log(p==null?"?":String(p))}catch{console.log("?")}' "$json" 2>/dev/null)"
+  age="$($NODE_PLAIN -e 'try{const a=JSON.parse(process.argv[1]).heartbeatAgeMin;console.log(typeof a==="number"?a:"?")}catch{console.log("?")}' "$json" 2>/dev/null)"
+
+  echo "== 已有 runner 在跑：sessionId=$session pid=$pid heartbeatAgeMin=$age"
+  printf '%s\tlock-gate\tsessionId=%s pid=%s heartbeatAgeMin=%s\n' \
+    "$(TZ=Asia/Taipei date +'%Y-%m-%dT%H:%M:%S%z')" "$session" "$pid" "$age" \
+    >> "$LOG_DIR/preflight.log" 2>/dev/null || true
+  exit 6
 }
 
 runner_stop_reason=""
@@ -427,6 +493,8 @@ if ! guard_runner_quarantine startup; then
   print_runner_summary
   exit "$runner_exit_code"
 fi
+
+run_lock_gate
 
 if [ "$DRY_RUN" = 1 ] || [ "$SKIP_PREFLIGHT" = 1 ]; then
   echo "preflight 略過（$([ "$DRY_RUN" = 1 ] && echo --dry-run || echo --skip-preflight)）"
@@ -509,7 +577,7 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
     exit_fail_streak=0
     no_progress_streak=0
     if [ "$rc" -ne 0 ]; then
-      echo "   ⚠ round $after 已前進，但 child exit=$rc—— log 尾巴："
+      echo "   ⚠ round $after 已前進，但 child exit=${rc}—— log 尾巴："
       tail -5 "$log" | sed 's/^/     /'
     else
       echo "   ✓ round $after 完成"
@@ -519,11 +587,11 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
 
   if [ "$rc" -ne 0 ]; then
     exit_fail_streak=$((exit_fail_streak + 1))
-    echo "   exit=$rc（連續 exit 失敗 $exit_fail_streak）—— log 尾巴："
+    echo "   exit=${rc}（連續 exit 失敗 ${exit_fail_streak}）—— log 尾巴："
     tail -5 "$log" | sed 's/^/     /'
     # 鎖由 work-loop-lock.ts 管理；同一 runner pid 的下一輪會安全接手殘鎖。
     if [ "$exit_fail_streak" -ge 2 ]; then
-      echo "== stop: 連續 2 輪 exit≠0，可能是系統性問題（log 在 $LOG_DIR）"
+      echo "== stop: 連續 2 輪 exit≠0，可能是系統性問題（log 在 ${LOG_DIR}）"
       release_runner_lock
       break
     fi
@@ -532,7 +600,7 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
 
   # exit=0 但 state 相等、倒退、型別錯誤或損壞都算 no-progress。
   no_progress_streak=$((no_progress_streak + 1))
-  echo "   ⚠ round 未前進或無效（$before → $after；連續未前進 $no_progress_streak）"
+  echo "   ⚠ round 未前進或無效（$before → ${after}；連續未前進 ${no_progress_streak}）"
   if [ "$no_progress_streak" -ge 2 ]; then
     echo "== stop: state 連續 2 輪未前進"
     release_runner_lock

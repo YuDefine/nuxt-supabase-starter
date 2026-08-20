@@ -317,7 +317,7 @@ async function handleSubmit() {
 2026-06-23 跨 8 consumer 稽核發現：
 - `dedupe` 全 fleet = 0（MasteringNuxt tip 指出的盲區）
 - `getCachedData` 全 fleet = 0
-- 未安裝 Colada 的 consumer（<consumer-i> / <consumer-h> / blog）全面 D 級
+- 未安裝 Colada 的 consumer（<consumer-j> / <consumer-h> / blog）全面 D 級
 - 已安裝 Colada 的 consumer（<consumer-a> / <consumer-b> / <consumer-d> / <consumer-c>）全部 B+ 以上，但 key management 和 dedupe 仍有缺口
 - <consumer-a> 的 pattern（STALE_TIME 三級 + key factory + 100% mutation invalidation）是 gold standard，需推廣
 

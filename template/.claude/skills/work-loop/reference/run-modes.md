@@ -42,14 +42,15 @@ permission rules 判定。每輪另固定帶模型可見的
 
 每輪 log 落在 `.clade/work-loop/logs/round-<ts>.log`。
 
-## 起跑前的兩道門：跑得起來嗎、有事可做嗎
+## 起跑前的四道門：有沒有人在跑、跑得起來嗎、有事可做嗎
 
-runner 在跑第一輪之前先過 quarantine gate 與兩道環境門，任一不過就**一輪都不跑**、理由落在
+runner 在跑第一輪之前先過四道門，任一不過就**一輪都不跑**、理由落在
 `.clade/work-loop/logs/preflight.log`：
 
 | 門 | 檢查什麼 | 不過時的 exit code 與語義 |
 | --- | --- | --- |
 | **orphan quarantine** | `inFlight` 非空 / 不可解析，或持久 `orphan-quarantine.json` 尚未由 attended reconciliation 清除 | `5` —— 禁止自動 retry；attended 將 ownership 標成 terminal/cancelled、清空 ledger、移除 marker 後才可重跑 |
+| **互斥鎖** | `work-loop-lock.ts status --json` 回 `held=true`（判準 SoT 在該檔，**NEVER** 在 bash 重寫） | `6` —— **已有 runner 在跑，不是故障**；等持鎖的那一個跑完。**NEVER** 刪鎖或再起第二個 |
 | **preflight** | PATH 上有 `claude` / `node`、repo 可寫、三種待辦源至少一個讀得到、**headless child 真的能跑一個 Bash tool call** | `3` —— 系統性故障，查權限閘門與環境 |
 | **待辦源健康門檻** | `work-loop-ready-count.ts` 數出的 ready item ≥ `--min-ready`（預設 3） | `4` —— **待辦枯竭，需 attended 補彈藥**，不是故障 |
 
@@ -60,7 +61,7 @@ harness 權限閘門連續拒絕，空轉 99 輪、零待辦被修改。child `e
 repo-local nonce proof marker 的內容逐字匹配 runner 產生的 nonce 才通過。helper stdout（包含任何
 token 或路徑）僅供診斷，不是 proof；只用 `[ -f ]` 看檔案存在會漏掉 script 無法執行或 scanner parse 失敗。
 
-探針誤判過嚴時走 `--skip-preflight`（`--dry-run` 自動略過），**NEVER** 靠拿掉探針本身解決。
+探針誤判過嚴時走 `--skip-preflight`（`--dry-run` 自動略過 preflight 與待辦源健康門檻），**NEVER** 靠拿掉探針本身解決。`--skip-preflight` **不**略過互斥鎖門檻——鎖被持有不是探針誤判；`--dry-run` 略過互斥鎖門檻（只印指令，不該拒絕）。
 
 ### headless child 跟發起點走同一條帳號
 
@@ -80,10 +81,10 @@ preflight 探針與每輪 child 的 **launcher 跟起 runner 的入口對齊**�
 2026-08-19 的 gateway 429（`claude-opus-5` cooling down）是「繼承 CCG env 卻呼叫裸
 `claude --print`、沒釘 `ccg-opus`」，gateway 把預設 opus 送到 Codex channel。修法是換 launcher
 為 `claudeg`，**不是**永遠剝掉。這種 preflight 失敗 **NEVER** 用 `--skip-preflight` 繞。
-ready-count helper 缺席或輸出無法解析時**放行**：門檻是省成本的優化，NEVER 讓它變成起不了
+ready-count helper 與 lock helper 缺席或輸出無法解析時**放行**：門檻是省成本的優化，NEVER 讓它變成起不了
 runner 的新故障。
 
-本證據決定：這兩道門要不要前置——要，且要在第一輪之前。
+本證據決定：這四道門要不要前置——要，且要在第一輪之前。
 本證據不決定：跑起來之後的停止條件——那仍由下方四種停止原因判定，**NEVER** 拿本節論證「輪次可以更早收掉」。
 
 ## 待答決策佇列：runner 只印不擋
@@ -137,7 +138,7 @@ child **自己**寫 `state.stoppedReason` 仍然有效且是正解——寫它�
 `test/work-loop-runner.test.ts`（兩條：sentinel 抗整份覆寫、child 自寫仍有效）。
 
 runner 自己的停止分類：`stoppedReason` 出現、達 `--max-rounds`、連續 2 輪 exit≠0、
-round 數連續 2 輪未前進，或 exit 5 的 orphan quarantine。exit failure streak 與 no-progress streak
+round 數連續 2 輪未前進，或 exit 5 的 orphan quarantine、exit 6 的互斥鎖門檻。exit failure streak 與 no-progress streak
 彼此獨立，只有 round 真正前進才同時重設；交錯出現不算恢復。
 
 **這四種的語義差別 MUST 出現在收尾回報裡**——只有第一種是「待辦推完」，其餘三種分別是額度用完、

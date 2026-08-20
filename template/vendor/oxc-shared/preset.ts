@@ -53,7 +53,7 @@
  *
  * 2026-07-28: that is exactly how `nuxt-supabase-starter` Template CI broke on
  * `vp fmt --check` over `vendor/snippets/manual-review-enforcement/patterns.json`
- * — <consumer-i> and <consumer-h> had each independently patched `vendor/**`
+ * — <consumer-j> and <consumer-h> had each independently patched `vendor/**`
  * into their own vite.config.ts, which hid the gap instead of closing it.
  * `scripts/audit-governance-drift.ts` check 10 now fails on any config that
  * re-inlines one of these, so the next gap surfaces before a consumer does.

@@ -124,7 +124,7 @@ if [[ "$MODE" == "workflow" ]]; then
   if [[ -n "$COMMIT" && ! "$COMMIT" =~ ^[0-9a-fA-F]{40}$ ]]; then
     FULL_SHA=$(git rev-parse --verify "${COMMIT}^{commit}" 2>/dev/null || true)
     if [[ "$FULL_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
-      echo "[watch] --commit '$COMMIT' → $FULL_SHA（gh run list -c 不接受縮寫 SHA）"
+      echo "[watch] --commit '$COMMIT' → ${FULL_SHA}（gh run list -c 不接受縮寫 SHA）"
       COMMIT="$FULL_SHA"
     else
       echo "RESULT: UNAVAILABLE (--commit '$COMMIT' 展不開成完整 40 碼 SHA；gh run list -c 只認完整 SHA)"
