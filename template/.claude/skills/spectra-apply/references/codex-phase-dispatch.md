@@ -61,7 +61,7 @@ node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
   --output-schema ~/offline/clade/vendor/snippets/codex-offload/schemas/read-heavy-scan-result.schema.json \
   --label "$PRESCAN_ORIGIN_ID" \
   --cwd <consumer-worktree-root> \
-  --model luna --effort low \
+  --model gemini --effort low \
   --route routing-table \
   --tier-basis table-row --table-row spectra-phase-prescan \
   --origin spectra-apply \

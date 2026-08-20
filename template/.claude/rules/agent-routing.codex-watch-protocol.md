@@ -230,14 +230,14 @@ Pending decision 只接受下列三種 standalone resolution；一般 Bash／Rea
 ```bash
 # 工作仍是 threshold trigger 本身：照 trigger 填 mechanical-fanout 或 read-heavy-scan
 node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
-  --decision-id <rgd_...> --model luna --effort low \
+  --decision-id <rgd_...> --model gemini --effort low \
   --route routing-table --tier-basis table-row --table-row <trigger> \
   --template <template.md> --var task='...' --var acceptance='...' \
   --var allowed_paths='...' --label <topic-slug>
 
 # claude-agent-dispatch：原判 Haiku 用 low；原判 Sonnet 用 high
 node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
-  --decision-id <rgd_...> --model luna --effort <low|high> \
+  --decision-id <rgd_...> --model gemini --effort <low|high> \
   --route claude-delegate-sub --tier-basis delegate-sub \
   --template <template.md> --var task='...' --var acceptance='...' \
   --var allowed_paths='...' --label <topic-slug>
@@ -274,9 +274,9 @@ model 檔位 轉派 → `claude-delegate-sub`；走 § 配額耗盡時的 fallba
 | 值 | 用在 | 對 `--model` 的約束 |
 | --- | --- | --- |
 | `table-row` | [[agent-routing]] § Routing Table 該列已列明檔位，照列派 | **MUST 再帶 `--table-row <列名>`**，約束由該列列明的 model 決定 |
-| `five-conjunct` | 該表類別內**自行**降 luna，五條連言全中 | 必須 `luna` |
+| `five-conjunct` | 該表類別內**自行**降檔，五條連言全中 | 必須 `gemini` |
 | `adjudication` | 需裁決 → 不降，回 sol | 必須 `sol` |
-| `delegate-sub` | § Claude 委派的 model 檔位 轉派 | 必須 `luna`（例外見下） |
+| `delegate-sub` | § Claude 委派的 model 檔位 轉派 | 必須 `gemini`（exit 2 升 sol；exit 4 回 luna） |
 | `quota-fallback` | § 配額耗盡時的 fallback 紀律 | 無（降級鏈決定） |
 | `manual` | 臨時手動派工 | 無 |
 
@@ -423,7 +423,7 @@ Codex 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleW
 | --- | --- |
 | propose draft（選項 A / B 的 codex 段）、ingest draft | `spectra-artifact-draft`（sol max） |
 | apply 非 view phase | `spectra-phase-implementation`（sol high） |
-| apply 已封閉 phase 的 read-only 抽取 | `spectra-phase-prescan`（luna low） |
+| apply 已封閉 phase 的 read-only 抽取 | `spectra-phase-prescan`（gemini low） |
 | apply UI view phase | `ui-view-implementation`（grok-xai high） |
 | pre-handoff E.1 收集 | `spectra-prehandoff-collect`（grok-xai medium） |
 | pre-handoff E.1 判定 | `spectra-prehandoff-judge`（sol xhigh） |
@@ -485,7 +485,7 @@ Claude Code session 收到 spectra propose 請求時：
 
 執行 `spectra-apply` 時 phase 粒度派 codex。**三條契約**：
 
-1. **Design Review phase 一律主線自己做，永不外派；UI view phase 走泛用 dispatcher 的 `ui-view-implementation` row（`--model grok-xai --effort high`），NEVER 派 sol／luna**（thin brief＋檔案所有權清單＋「只准動 view 層檔案」guard＋4-status 回報，per § Subagent 回報契約；主線收回後照跑該 phase 的機械檢查與 Design Review gate）。瑣碎 UI 修（≤2 files 且 ≤20 行）主線直接做，不派。其他 phase（schema / migration / API server / CLI / 純 backend / 非 view 的 frontend / unit test / docs）以泛用 dispatcher 的 `spectra-phase-implementation` row 派 background Codex Sol high；**每一個**符合封閉來源 extraction predicate 的 prescan 才可另走 `spectra-phase-prescan` Luna low，且不得取代 Sol 實作
+1. **Design Review phase 一律主線自己做，永不外派；UI view phase 走泛用 dispatcher 的 `ui-view-implementation` row（`--model grok-xai --effort high`），NEVER 派 sol／luna**（thin brief＋檔案所有權清單＋「只准動 view 層檔案」guard＋4-status 回報，per § Subagent 回報契約；主線收回後照跑該 phase 的機械檢查與 Design Review gate）。瑣碎 UI 修（≤2 files 且 ≤20 行）主線直接做，不派。其他 phase（schema / migration / API server / CLI / 純 backend / 非 view 的 frontend / unit test / docs）以泛用 dispatcher 的 `spectra-phase-implementation` row 派 background Codex Sol high；**每一個**符合封閉來源 extraction predicate 的 prescan 才可另走 `spectra-phase-prescan` Gemini low，且不得取代 Sol 實作
 2. **混雜 phase**（同一 phase 摻了 view 與非 view）：**已開工** → 主線整個 phase 自己做，不重切、不派 codex；**未開工** → **STOP** 請使用者跑 `/spectra-ingest <change>` 重切
 3. **禁止**主線自行修改 tasks.md 的 phase 結構（屬 ingest 範圍）
 
@@ -647,7 +647,8 @@ Codex session 收到 `$spectra-apply`（或任何要它執行 spectra-apply 流�
 
 ```
 Sol      → sol-cursor（cursor/gpt-5.6-sol@272k）→ Opus 主線
-Luna     → luna-cursor（cursor/gpt-5.6-luna@272k）→ grok-xai（xai/grok-4.6）→ Claude Haiku
+Gemini   → luna → luna-cursor（cursor/gpt-5.6-luna@272k）→ grok-xai（xai/grok-4.6）→ Claude Haiku
+Luna     → luna-cursor → grok-xai → Claude Haiku   # 第一手只在 Gemini hop 不可用時
 Grok-xai → grok-cursor（cursor/grok-4.6）→ Claude Sonnet
 ```
 
@@ -680,9 +681,10 @@ dispatch 注入 fail-closed 段，要求回覆帶一行 `PRECONDITIONS_VERIFIED:
 
 **降 effort 不是降級鏈的一步**：配額按 **model** 記，Sol 撞 usage limit 時 `--effort low` 重試撞的是**同一個** limit。effort 分級是品質 / 成本維度，**NEVER** 拿它當配額耗盡的應對。
 
-1. **Sol exit 4 → `--model sol-cursor` 換池**（`cursor/gpt-5.6-sol`，`--route fallback-chain --tier-basis quota-fallback --retry-of <sol-label>`）；**sol-cursor 再 exit 4 才回 Opus 主線**。record reason 含 `quota-exhausted`。**NEVER** `--model luna` 重試——換池不是降檔，降檔才是。
-2. **Luna exit 4 → 換池到 Cursor**：`--model luna-cursor --route fallback-chain --tier-basis quota-fallback --retry-of <luna-label>`。這是同一檔智力、另一個配額池，不是降檔。
-3. **luna-cursor exit 4 → `--model grok-xai --chain-origin luna`** 同 effort 重派（`--route fallback-chain --tier-basis quota-fallback --retry-of <luna-cursor-label>`）。**`--chain-origin` 在這格 MUST 帶**——`grok-xai` 是兩條鏈共用的一格，起點決定它耗盡後是終止還是續走 `grok-cursor`，不帶就判不出來。
-4. **grok-xai exit 4（luna 鏈）→ 這條鏈到此為止**，才動 Claude subagent，且**只接 `haiku`**（顯式帶，per § Subagent 回報契約第 4 條），**NEVER** 升 `sonnet`。**NEVER** 在這裡續派 `--model grok-cursor`——那一跳只屬於 grok 鏈，理由見上方 `grok-cursor` 段。
-5. **Grok 鏈自己的路徑**（`ui-view-implementation` / `web-search` / `screenshot-review-verify` 三列）：`grok-xai` exit 4 → `--model grok-cursor --chain-origin grok-xai` 重派一次；再 exit 4 才動 Claude subagent，且**只接 `sonnet`**，**NEVER** 降 `haiku`。
-6. Claude 接走時 session 結尾 **MUST** 回報「本 session 因配額耗盡，由 Claude 執行 N 個本應外派的 change」；有 runtime reset 資訊再附上，沒有就明說 unavailable。
+1. **Sol exit 4 → `--model sol-cursor` 換池**（`cursor/gpt-5.6-sol`，`--route fallback-chain --tier-basis quota-fallback --retry-of <sol-label>`）；**sol-cursor 再 exit 4 才回 Opus 主線**。record reason 含 `quota-exhausted`。**NEVER** `--model luna` 或 `--model gemini` 重試——換池不是降檔，降檔才是。
+2. **Gemini exit 4／catalog 無 `gemini-3.7-flash`／OAuth 未就緒 → `--model luna --route fallback-chain --tier-basis quota-fallback --retry-of <gemini-label>`**。**NEVER** 靜默改用舊 Flash。Gemini origin 在 `resolveChainOrigin` 視為 luna-class（終點仍 Haiku）。
+3. **Luna exit 4 → 換池到 Cursor**：`--model luna-cursor --route fallback-chain --tier-basis quota-fallback --retry-of <luna-label>`。這是同一檔智力、另一個配額池，不是降檔。
+4. **luna-cursor exit 4 → `--model grok-xai --chain-origin luna`** 同 effort 重派（`--route fallback-chain --tier-basis quota-fallback --retry-of <luna-cursor-label>`）。**`--chain-origin` 在這格 MUST 帶**——`grok-xai` 是兩條鏈共用的一格，起點決定它耗盡後是終止還是續走 `grok-cursor`，不帶就判不出來。
+5. **grok-xai exit 4（luna 鏈）→ 這條鏈到此為止**，才動 Claude subagent，且**只接 `haiku`**（顯式帶，per § Subagent 回報契約第 4 條），**NEVER** 升 `sonnet`。**NEVER** 在這裡續派 `--model grok-cursor`——那一跳只屬於 grok 鏈，理由見上方 `grok-cursor` 段。
+6. **Grok 鏈自己的路徑**（`ui-view-implementation` / `web-search` / `screenshot-review-verify` 三列）：`grok-xai` exit 4 → `--model grok-cursor --chain-origin grok-xai` 重派一次；再 exit 4 才動 Claude subagent，且**只接 `sonnet`**，**NEVER** 降 `haiku`。
+7. Claude 接走時 session 結尾 **MUST** 回報「本 session 因配額耗盡，由 Claude 執行 N 個本應外派的 change」；有 runtime reset 資訊再附上，沒有就明說 unavailable。

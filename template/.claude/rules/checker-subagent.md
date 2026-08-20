@@ -46,7 +46,7 @@ gate 紅 → 先修，修完再派。**NEVER** 把 gate output 塞進 checker br
 **checker 的 `model` 刻意省略、繼承主線**——checker 的輸出**本身**就是品質判定，命中
 [[agent-routing]] § NEVER 降檔的形狀第 1 條。這是聲明不是疏漏：**NEVER** 拿該檔
 § `subagent_type` 是 `general-purpose` 或 `Explore` 時… 的「MUST 顯式帶檔位」外推到 checker，
-**也 NEVER** 把 checker 轉派 codex `--model luna`。
+**也 NEVER** 把 checker 轉派 codex `--model luna` 或 `--model gemini`。
 
 ## Checker brief 模板（REQUIRED 欄位）
 

@@ -494,9 +494,9 @@ context-decay 與 handoff-write-failed **永遠**寫 `roundEndReason`，**NEVER*
 三條在 loop 路徑上最常滑掉的：
 
 - **主線自己動手也要過 Routing Table**。mechanical fan-out 與 read-heavy 兩列的觸發條件**不限於委派**：
-  準備自己跑 ≥3 條唯讀指令、或自己讀 ≥5 個檔／>500 行長文件，就已經命中 → 派 `--model luna --effort low`。
+  準備自己跑 ≥3 條唯讀指令、或自己讀 ≥5 個檔／>500 行長文件，就已經命中 → 派 `--model gemini --effort low`。
   **NEVER** 因「順手跑掉比較快」略過查表
-- **原判 Claude `sonnet`／`haiku` 的委派 MUST 先判 codex 可用性**，可用就轉派 `--model luna`
+- **原判 Claude `sonnet`／`haiku` 的委派 MUST 先判 codex 可用性**，可用就轉派 `--model gemini`
   （`sonnet` → `--effort high`、`haiku` → `--effort low`），准入判準見該 §
 - **每一次 dispatch MUST 帶 `--route` 與 `--tier-basis`**（各缺就 exit 1），重試帶 `--retry-of <label>`。
   **NEVER** 不確定就填 `manual`／`table-row`——兩者都與「判定根本沒發生」事後不可區分。

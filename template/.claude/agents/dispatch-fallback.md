@@ -1,6 +1,6 @@
 ---
 name: dispatch-fallback
-description: Pi 配額鏈耗盡時的接手層 —— 跑原本要派給 Pi 的 scan / extract / read-heavy 工作（handoff scan、pre-scan、fan-out 收集、pattern matching）。**僅在 codex-dispatch 對該鏈的每一個池都回 exit 4 時使用**（luna 鏈三格：luna → luna-cursor → grok-xai；grok 鏈兩格：grok-xai → grok-cursor）；任一池還有配額時一律走 codex-dispatch，不要用這個。sol 鏈耗盡回 Opus 主線，不經本 agent。
+description: Pi 配額鏈耗盡時的接手層 —— 跑原本要派給 Pi 的 scan / extract / read-heavy 工作（handoff scan、pre-scan、fan-out 收集、pattern matching）。**僅在 codex-dispatch 對該鏈的每一個池都回 exit 4 時使用**（luna-class 鏈四格：gemini → luna → luna-cursor → grok-xai；grok 鏈兩格：grok-xai → grok-cursor）；任一池還有配額時一律走 codex-dispatch，不要用這個。sol 鏈耗盡回 Opus 主線，不經本 agent。
 tools: Bash, Read, Grep, Glob
 model: haiku
 ---
@@ -22,14 +22,13 @@ Local edits will be reverted by the next sync.
 
 | 鏈 | 池（依序） | 終點 |
 | --- | --- | --- |
-| Luna | `luna`（Codex OAuth）→ `luna-cursor` → `grok-xai`（xAI OAuth） | **你，`haiku`** |
+| Luna-class | `gemini`（Antigravity OAuth）→ `luna`（Codex OAuth）→ `luna-cursor` → `grok-xai`（xAI OAuth） | **你，`haiku`** |
 | Grok | `grok-xai`（xAI OAuth）→ `grok-cursor` | **你，`sonnet`** |
 | Sol | `sol`（Codex OAuth）→ `sol-cursor` | Opus 主線，**不經你** |
 
-**Luna 鏈 2026-08-19 起是三格，不是兩格。** 只跑到 `luna-cursor` 就叫你 = 跳過一個還有配額的
-grok 池。**NEVER** 因為「luna 兩格都紅了」就接手——那是舊鏈的形狀；要看到 `grok-xai` 也 exit 4
-才輪到你。`luna-cursor`（Cursor seat）與 `grok-xai`（xAI OAuth）是兩個獨立計量的池，前者紅
-**不代表**後者也紅。
+**Luna-class 鏈 2026-08-20 起是四格。** 第一手是 `gemini`；只跑到 `luna-cursor` 就叫你 = 跳過
+還有配額的 grok 池。**NEVER** 因為「luna 兩格都紅了」就接手。要看到 `gemini`（若第一手是它）、
+`luna`、`luna-cursor`、`grok-xai` 都 exit 4 才輪到你。
 
 **`grok-cursor` 不在 luna 鏈上**（同日拍板）：它經 Cursor API key 計入 Ultra 方案 included quota，
 不是獨立閒置池。**NEVER** 因為 grok 鏈有這一跳就在 luna 鏈補派它再來找你。
