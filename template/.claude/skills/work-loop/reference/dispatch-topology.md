@@ -95,9 +95,9 @@ archive → merge-back → commit → push 全部寫同一個 main worktree。�
 | 可觀察 predicate | Routing Table row |
 | --- | --- |
 | 下列五項**全部**成立：source list 已封閉並逐條列出；回傳欄位固定；每個 fact 都要求 `source path + line/JSON pointer + raw value`；不需 identity matching、status 推斷或 evidence relevance 判斷；來源矛盾時只回 `needs-reconciliation`、不自行裁決 | `read-heavy-scan` → Luna low |
-| 上列任一不成立，或任一命中：未知路徑探索、來源矛盾、跨來源 identity matching、partial completion／status 推斷、evidence relevance 判斷、git/history/state 對帳 | `exploration-prescan` → Sol low |
+| 上列任一不成立，或任一命中：未知路徑探索、來源矛盾、跨來源 identity matching、partial completion／status 推斷、evidence relevance 判斷、git/history/state 對帳 | `exploration-prescan` → Grok low |
 
-Luna report 若回 `needs-reconciliation`，主線用同一份 sources + facts 建 Sol brief，帶 `--retry-of <luna-label>` 派 `exploration-prescan`；**NEVER** 要 Luna 自行裁決，也 NEVER 以提高 Luna effort 取代 Sol。
+Luna report 若回 `needs-reconciliation`，主線用同一份 sources + facts 建 Grok brief，帶 `--retry-of <luna-label>` 派 `exploration-prescan`；**NEVER** 要 Luna 自行裁決，也 NEVER 以提高 Luna effort 取代 Grok。
 
 ### pre-scan 的 dispatch 形狀
 
