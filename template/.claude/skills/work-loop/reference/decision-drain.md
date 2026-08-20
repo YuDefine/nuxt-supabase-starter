@@ -75,6 +75,23 @@ Charles 2026-08-05 逐字：「等我拍板的那些問題 其實你都能決策
 
 ---
 
+## (a2) Open TD 不是 waiting-user
+
+開場清算的輸入不只 `awaiting[]`。`docs/tech-debt.md` 裡 open class、未 parked 的條目**預設是債**，
+不是「缺 `### 自驗` 所以等 Charles」。2026-08-20 <consumer-b> 實測 158 條 open 只有 2 條有那個 heading，
+runner 於是在還有 161 條債時寫 `no-admissible-work`。
+
+| 可觀察 predicate | 動作 |
+| --- | --- |
+| open TD、未 parked、runner child 且 Location 落 `.claude/` / `rules/` / `plugins/` / `vendor/` / `claude-md/` | 本輪排除（needsPublish），**不是** skip 其他 item 的理由 |
+| open TD、未 parked、重判後寫得出推薦 A 且未命中 predicate 7 | **不當 waiting-user**。進 Step 3 當 candidate。缺 `### 自驗` 就在做完那一輪補，**NEVER** 因此 packaging |
+| 重判寫不出推薦、或命中 predicate 7 / 真的要值（時段／人／門檻） | 才 packaging 進 `awaiting[]` 走 (b) |
+
+**NEVER** 把「沒有 `### 自驗` heading」讀成 user-bound。那是做完才落的憑證，不是準入條件。
+attended 開場 MUST 把這批跟 `awaiting[]` 一起過 (a) 的 prune：能自主的直接做，不能的才問。
+
+---
+
 ## (b) Ask —— 全部問完，不設題數上限
 
 **排序**（兩層，依序套）：

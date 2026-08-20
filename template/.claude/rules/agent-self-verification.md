@@ -103,6 +103,24 @@ Local edits will be reverted by the next sync.
 
     非 localhost origin 要能登入，該 origin 自己**必須**是真 HTTPS（例：tailnet 的 `tailscale cert` + MagicDNS）。兩者皆無時 **NEVER** 退回 plain-HTTP proxy 產生登入連結——改回報「需 HTTPS 才能登入」並說明原因。（per [[pitfall-plain-http-proxy-cannot-carry-secure-session]]）
 
+17. **診斷型指令 NEVER 串接後截斷（hard rule）**：判準是**失敗訊息會不會被截掉**，不是輸出長不長。publish / audit / gate / lock acquire 這類「失敗時我要讀原因」的指令，**MUST** 全量落檔再挑著看，前置檢查與主指令分開跑。**違反字面就是違反精神。**
+
+    ```bash
+    # ❌ 錯誤在頭、stack 在尾；pipeline exit 屬於 tail（幾乎恆 0）；前面的 ✓ 漂進同一視窗
+    node scripts/_validate-manifests.ts && node scripts/publish.ts patch 2>&1 | tail -5
+
+    # ✅ 全量落檔；exit code 是主指令自己的
+    node scripts/publish.ts patch > /tmp/pub.log 2>&1; echo "exit=$?"; tail -6 /tmp/pub.log
+    ```
+
+    | 讀到自己在想 | 現實 |
+    | --- | --- |
+    | 「輸出太長，tail 一下」 | 錯誤訊息在頭，tail 正好丟掉要讀的那段 |
+    | 「反正有 ✓ 就是過了」 | ✓ 可能是 `&&` 前面那條印的 |
+    | 「exit 0 就是成功」 | `cmd \| tail` 的 exit 屬於 tail |
+
+    **Red Flag**：正要把 publish / audit / gate 接到 `\| tail` / `\| head`，或用 `&&` 把前置檢查和主指令串成一行再截斷。純查詢（`git log \| head -5`）不在本條。副作用指令被 `head` 腰斬是另一條，見 MUST 4 與 [[pitfall-sigpipe-truncates-side-effecting-script]]。（per [[pitfall-chained-command-tail-truncation-hides-failure]]／[[TD-461]]）
+
 ## 派工前的主線預檢責任
 
 派 subagent / codex / screenshot-review 前，主線 **MUST**：

@@ -264,10 +264,13 @@ runner process 的退出通知到達時 **MUST 主動回報，不等 user 問**�
 | `debtReady == 0` 且 `awaiting[]` 非空且 attended | 准入，但本輪只做 Step 2.7 清算，**NEVER** dispatch 新工作 |
 | `debtReady == 0`（其餘情況） | **不准入**。寫 state `stoppedReason: no-admissible-work`（走 Step 7.3 正常寫入路徑，允許只寫這一個欄位），**NEVER 取鎖、NEVER 跑 scan**，結束本輪 |
 
-**不准入是收工，NEVER 是 skip**：沒有 item 被標記、沒有 `⏸ Skipped` 條目——`debtReady == 0` 的意思是
-**沒有 item 存在**。回報措辭 MUST 是「**無可推進的債**（debtReady 0），需 attended 補彈藥或等 audit /
-digest signal」，**NEVER** 回報成「待辦已推完」。**NEVER 為了讓 `debtReady >= 1` 而登記新 TD**、**NEVER
-用「掃一輪看看」繞過本節**、**不准入時 NEVER 排長間隔 wakeup**——四條的實測依據見
+**不准入是收工，NEVER 是 skip**：`debtReady == 0` 的意思是 **open TD 也沒了**（或只剩
+`blocked-attended-only` / `wontfix-until-signal` / runner child 收不了尾的 publish 落點）。
+**NEVER** 把「缺 `### 自驗` heading」讀成不准入——那不是 user-waiting，open TD 本身就是債
+（2026-08-20 <consumer-b>：158 條 open 只有 2 條有該 heading，runner 誤停）。回報措辭 MUST 是
+「**無可推進的債**（debtReady 0），需 attended 補彈藥或等 audit / digest signal」，**NEVER**
+回報成「待辦已推完」。**NEVER 為了讓 `debtReady >= 1` 而登記新 TD**、**NEVER 用「掃一輪看看」
+繞過本節**、**不准入時 NEVER 排長間隔 wakeup**——四條的實測依據見
 [reference/productivity-gate.md](reference/productivity-gate.md) § 准入。
 
 ### 互斥鎖
