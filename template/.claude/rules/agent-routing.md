@@ -142,6 +142,13 @@ redaction 只在 signal payload 上強制（`vendor/signals/redact.mjs`），**d
 
 > **Pi 派工是 (model, effort) 二維**，model 維合法值：`sol`、`sol-cursor`、`gemini`、`luna`、`luna-cursor`、`grok-xai`、`grok-cursor`（`grok` 是 `grok-cursor` 的向後相容別名）。同一 tier 的 `-cursor` 變體是**換配額池、不換檔位**，只在配額降級鏈上出現，**NEVER** 拿它當第一手選擇。**Routing Table 已列明檔位的類別照列派**（多數列為 `--model sol`，分級靠 `--effort`；web-search／screenshot-verify 兩列列明 `grok-xai`）；**原本會派 Claude subagent 的委派工作**（原判 `sonnet`／`haiku`）依 § Claude 委派的 model 檔位 轉派 `--model gemini`（額度耗盡才回 `luna`）。**NEVER 派 `--model terra`**（2026-08-11 拍板；dispatcher 仍認得它是**能力**不是政策，理由見 rationale）。**NEVER** 把 Cursor catalog 的 `gemini-3.7-flash` 當這一跳——那是 Ultra `Other Models` 桶。
 >
+> **`*-cursor` NEVER 接要讀 cwd 以外路徑的任務**：cursor 池的 `$HOME` 與 `/tmp` 是空 tmpfs
+> （TD-520 刻意設計），派進去只會拿到一張**與真結果同形**的全 missing 表。配額鏈走到那一格時，
+> brief 指涉 cwd 以外路徑就**跳過該格**進終端步驟——判的是**這份 brief**，不是列名。
+> `pi-dispatch.ts` 送出前會掃 brief 拒跑（exit 1），但它只看得到 brief 寫出來的路徑，
+> **NEVER** 拿它當自己不必判的理由。**NEVER** 用 `PI_CURSOR_SANDBOX_BIND` 加 bind 繞過。
+> 成因與實測見 `docs/tech-debt.md` § TD-541。
+>
 > **理由欄只回答「為何不降 luna」，那不等於回答過「能不能用 grok」。NEVER** 把「理由欄沒提到 grok」讀成「已評估過並排除」。**樣本不足以轉列，現行檔位一律照表**；要轉先補 TD-509 列的 reps（已補的 n=1 取證見 rationale § grok 擴權取證）。
 >
 > 選 effort 檔位看下列六維，**NEVER** 只看「這個工作重不重要」或「迴圈長不長」：
