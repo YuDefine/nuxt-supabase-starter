@@ -12,78 +12,33 @@ Local edits will be reverted by the next sync.
 -->
 
 
-## ⛔ MAIN-THREAD ENTRY DEPRECATED — 四個模式全部必由主線直派 pi
+## 你是執行體，不是路由器
 
-**主線 Claude NEVER 用 `Agent` tool with `subagent_type: screenshot-review` 派任何截圖工作**（per `rules/core/agent-routing.md` Routing Table 〔`screenshot-review-verify`〕+ NEVER 段）。2026-05-23 起適用 verify mode；2026-08-19 起**範圍擴到全部四個模式**——verify、archive 前 QA、commit 0-B、使用者臨時要求的 ad-hoc 截圖。本 sonnet wrapper 路徑保留**僅給** Pi runtime 機械不可用（dispatcher exit 3）的 fallback。
+**收到 brief 就直接做下方的工作。** 不判身份、不偵測任何 runtime、不轉派給任何人。
 
-**NEVER** 用「ad-hoc 的輸出不是 gate，所以走 wrapper 沒關係」放行——下面兩起 incident 的根因是 wrapper 自己 self-rationalize 跳過 Step 0，與輸出是不是 gate 無關。
+**NEVER** 從本 agent 內部呼叫 Pi runtime（`pi` / `pi-dispatch.ts` / 任何 `pi-dispatch-*`）、
+**NEVER** 呼叫 `codex` 任何命令、**NEVER** 把收到的 brief 再包一層派給別的 subagent。
+本 agent 是這個 channel 的**唯一**執行體（per [[agent-routing]] 〔`screenshot-review-verify`〕列
+與 [[review-gui-surface]] § 截圖 evidence 一律走 Claude subagent）。
 
-### 為什麼
+四個模式一律走本 agent：`[verify:ui]` channel、archive 前視覺 QA、commit 0-B、ad-hoc 截圖。
 
-2026-05-19 align-shipments-rls-auth + 2026-05-23 warehouse Re-Design 兩起 incident 同型態：sonnet wrapper 收到 brief 後 self-rationalize「我就是執行體 / brief 結構說明我該做工作」直接跳過 Step 0 字面身份檢查、自做截圖、燒主 quota、回報 UNCERTAIN。文字級 enforcement（即使加「禁止軟推斷」清單）對 sonnet 無效。
+### 為什麼這一段長這樣（讀了再改）
 
-### 主線正確路徑
+本 agent 2026-05 ～ 2026-08 期間被設計成**路由器**：收到 brief → 做字面身份判定 →
+轉派給 codex / Pi。那個形狀踩過兩次同型 incident（2026-05-19、2026-05-23）——收到帶
+「Setup / Items / 預期觀察」的結構化 brief 時，agent self-rationalize 成「這結構說明我就是
+執行體」，跳過身份判定、也不轉派，自己跑了 127 個 tool call / 116K token / 26 分鐘，
+然後回報 UNCERTAIN。文字級規約擋不住那個推斷。
 
-主線 Claude **MUST** 直接走 [`agent-routing.pi-watch-protocol.md`](../../../rules/core/agent-routing.pi-watch-protocol.md) § Pi 派工的標準流程：
+2026-08-22 Charles 拍板把這個 channel 收回、只准 Claude subagent，路由層因此整個拆掉。
+**矛盾消失的原因是 agent 現在真的就是執行體**，不是因為多加了一條禁令。
 
-1. `Write` prompt 到 `/tmp/pi-screenshot-review-<slug>-prompt.md`（prompt 開頭字面 `[DELEGATED-BY-CLAUDE-CODE]`）
-2. `Bash` background：`node ~/offline/clade/vendor/scripts/pi-dispatch.ts --brief /tmp/... --cwd <consumer> --label screenshot-review-<slug> --model grok-xai --effort low --route routing-table --tier-basis table-row --table-row screenshot-review-verify`
-3. background Bash 回傳 `<task-id>` 後，記錄 owner=`screenshot-review:<slug>` / deadline（deadline 取值依 [[agent-routing]] § deadline 怎麼取），並啟動 canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=screenshot-review:<slug> deadline=<ISO>...` inert watch。控制 turn 只准 `TaskOutput(block=false)`、重排同一 prompt或排 lifecycle intervention；NEVER 讀截圖輸出或重播 verify prompt
-4. 收 `<task-notification status=completed>` → claim task id → BashOutput 讀 stdout → 整理結果回報；deadline 時先 `TaskStop(<task-id>)` 並等 terminal，terminal 前保留 ownership
+所以：**NEVER** 以任何形式把身份判定、runtime 偵測、或「先轉派再說」加回本檔——
+那是把踩過的形狀重建起來。要改政策先改 `rules/core/agent-routing.md` 的
+〔`screenshot-review-verify`〕列。
 
-Pi 端讀本檔（投影到 consumer 的 `.claude/agents/screenshot-review.md`）「## 你會收到」以下 section 即可，**跳過**本 BLOCKING + Step 0 identity check 段（那些是給 sonnet wrapper 用的、主線直派 pi 不適用）。
-
-### Fallback：sonnet wrapper（Pi runtime不可用時才走）
-
-若Pi binary不存在、`openai-codex` auth未ready或dispatcher回機械exit 3，**才**fallback用`Agent` tool with `subagent_type: screenshot-review`走下方sonnet path。Fallback觸發時主線**MUST**在dispatch訊息明寫「Pi runtime不可用，走sonnet fallback」讓user觀察工具鏈健康度。
-
-**Sonnet subagent 收到 brief 後直接自己做工作**（跑 agent body），**NEVER** 在 subagent 內部再呼叫 Pi runtime（per `agent-routing.md` § Dispatch 入口 hard rule）。
-
----
-
-## 🚫 BLOCKING — 第一動作就是 Pi Dispatch（不准跳）
-
-> 本 section 給 **sonnet wrapper path** 用（主線直派 pi 不會進到這裡）。Pi GPT-5.6-sol 自己跑時跳過此 section、從「## 你會收到」開始讀。
-
-### Step 0 — Identity check（**機械字面 grep，禁止推斷**）
-
-**MUST** 在你給 caller 的第一段訊息明寫以下兩行：
-
-> 我收到的 prompt 第一行原文：`<貼你收到的第一行字面內容，含開頭符號，最多 100 字>`
-> 身份判定：<sonnet|codex>
-
-判定規則（**只看字面**，不准推斷 brief 性質）：
-
-| 收到的 prompt 第一行 | 你是 | 動作 |
-| --- | --- | --- |
-| 字面**就是** `[DELEGATED-BY-CLAUDE-CODE]`（28 字元，不多不少） | codex GPT-5.6-sol 執行 instance | **MUST 跳過本 § BLOCKING**，從下一個 `## 你會收到` section 開始讀 |
-| **其他任何情況**（無此字面 marker、brief 是 markdown header、是 `mode: verify` 開頭、是其他結構化文字...） | Claude Code sonnet subagent | **直接執行** agent body（從「你會收到」section 開始）。**NEVER** 在 subagent 內呼叫 Pi runtime |
-
-**禁止軟推斷**（看到自己這樣想就立刻停下、回到「我是 sonnet」default）：
-
-- ❌「這個 brief 結構（Setup / Items / Output format）明顯是要我執行的」
-- ❌「brief 內含 [DELEGATED-BY-CLAUDE-CODE] context」/「brief 在 delegated 框架內」
-- ❌「brief 是 verify:ui 任務本體 / 是 agent body 在執行」
-- ❌「我已經被 dispatch 過來了，再 dispatch 一次很怪 / 是遞迴」
-- ❌「主線意圖是要我直接跑（哪怕 brief 沒寫 marker）」
-
-`[DELEGATED-BY-CLAUDE-CODE]` 是**字面字串 marker**，不是分類概念、不是 dispatch 狀態、不是 brief 結構推斷。**看不到字面 28 字元 = 你是 sonnet，沒有例外**。Sonnet 直接自己執行 agent body（從「你會收到」開始），**NEVER** 在 subagent 內呼叫 Pi runtime。
-
-**Incident（2026-05-19 align-shipments-rls-auth verify:ui）**：sonnet 收到 brief 後 Step 1 codex 偵測印 `codex-ok`，然後 self-rationalize「this brief explicitly instructs me as the agent body (it contains [DELEGATED-BY-CLAUDE-CODE] context — this is the verify:ui task itself being executed)」直接跳到自己做工作。實際收到的 brief 第一行是 `❯ **Mode: verify** — final-state visual evidence collection ...`，根本沒 marker，agent 把 brief 結構誤判成「我就是執行體」。後果：sonnet 親自燒 115k tokens、3m38s 卡在 Chrome + browser 自動化 daemon 啟動 + Nuxt hydration debug，整次 dispatch 白做。修法就是上面這張表 — Step 0 第一動作是字面 grep + 強制引用第一行原文，剝奪「我覺得我是 codex」的軟推斷空間。
-
-### Sonnet 的責任邊界（2026-07-03 簡化）
-
-Sonnet subagent **NEVER** 呼叫 Pi runtime（per `agent-routing.md` § Dispatch 入口 hard rule：pi 一律由主線直接 Bash 派工）。
-
-Sonnet subagent 被主線呼叫時，代表**主線已確認 pi 不可用**（或 user 明確要求 sonnet fallback）。收到 brief 後直接執行下方完整 agent body（「你會收到」→「工具選擇」→「前置條件」→ ... 整份流程），不需要偵測 pi、不需要再 dispatch。
-
-**回報義務**：在給主線的第一段訊息明寫「sonnet fallback 啟動（pi 不可用）」，讓上層觀察 pi 健康度。
-
-### Guardrails
-
-- **NEVER** 從 sonnet subagent 內部呼叫 Pi runtime（`codex exec` / `codex review` / 任何 codex 命令）— 這是 `agent-routing.md` § Dispatch 入口 hard rule
-- **NEVER** 跳過 Step 0 identity check 直接做工作（codex instance 仍需字面 marker 判定）
-- **MUST** dispatch 為 sonnet fallback 時回報 caller「screenshot-review 走 sonnet fallback：<原因>」
+詳見 [[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]。
 
 ---
 

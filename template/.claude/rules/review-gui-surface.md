@@ -39,9 +39,9 @@ Local edits will be reverted by the next sync.
 | --- | --- | --- |
 | `/commit` 0-MR gate block | `plugins/hub-core/skills/commit/SKILL.md` Step 0-MR | block 後 **MUST** auto-triage pending items（MUST 9）；Claude 可處理的先自行推進，只有 `bucket=ready` 才引導 user 到 review-gui |
 | `/handoff` Mode B 2B.0 | `plugins/hub-core/skills/handoff/SKILL.md` Step 2B.0/2B.1.7 | 推薦 user 跑 review:ui **前** MUST 先跑 `review-gui.ts --scan` 寫入 HANDOFF.md |
-| `screenshot-review` verify mode | 主線直派 codex（per [[agent-routing]]） | item 含 compound visual state → 分成 scoped sub-items 或 multi-screenshot annotation |
+| `screenshot-review` verify mode | 主線派 Claude subagent（per [[agent-routing]]） | item 含 compound visual state → 分成 scoped sub-items 或 multi-screenshot annotation |
 | `verified-ui` evidence collection（spectra-apply Step 8a） | `vendor/snippets/verify-channels/ui-final-state-brief*.template.md` | compound state evidence 必拆 / 必標多 screenshot |
-| `pi-dispatch-screenshot-verify.ts` dispatcher | clade vendor script | dispatcher 內 invoke external CLI 前 verify CLI contract（per [[agent-self-verification]] § MUST 4） |
+| `screenshot-review` subagent 的 CLI 呼叫 | agent body 內的 `agent-browser` 等 external CLI | invoke 前 verify CLI contract（per [[agent-self-verification]] § MUST 4） |
 | review-gui detail page 互動 | `vendor/scripts/review-gui.ts` server-side handlers | impl 完成率 < threshold → manual review block readonly + amber banner（已 implemented v1.4.30+） |
 
 ## Hard rule
@@ -228,22 +228,50 @@ node ~/offline/clade/vendor/scripts/lib/evidence-store.ts \
 - [[pitfall-verified-ui-annotation-format-drift]] — plural key + sub-item ID mismatch
 - [[pitfall-deferred-vs-issue-annotation-contract-conflict-review-gui]] — `(deferred:)` vs `(issue:)` 辭典衝突
 
-## 截圖 evidence 一律走 dispatcher（MUST）
+## 截圖 evidence 一律走 Claude subagent（MUST）
 
-**Iron Law：`[verify:ui]` / `[review:ui]` 的 evidence 一律由 dispatcher 收，主線只消費它回的
-JSON 摘要。主線 `Read` 截圖是例外路徑，只在下表命中時開放。**
+**Iron Law：`[verify:ui]` / `[review:ui]` 的 evidence 一律由 `screenshot-review` Claude subagent
+收，主線只消費它回的 JSON 摘要。主線 `Read` 截圖是例外路徑，只在下表命中時開放。**
 
-本節適用**每一張**截圖、**所有** consumer——不是只有批次審視那次。
+**這個 channel NEVER 外派給 Claude 以外的 carrier。** 逐字包含：**NEVER** 派 Pi 任一 model
+（`grok-xai` / `grok-cursor` / `sol` / `gemini` / `luna` 一律不准）、**NEVER** 走
+`pi-dispatch-screenshot-verify.ts`（該檔已 fail-closed，見下）、**NEVER** 因為「配額比較省」
+「seat 剛好有空」「這次只是 ad-hoc 不是 gate」而改派。Charles 2026-08-22 拍板，理由在
+§ 為什麼只准 Claude subagent。
 
-這條的依據是**跨模型驗證**（見 § Hard rule 與 [[agent-routing]]），不是 context 成本。
-成本面的實測數字見下方 § 實測——它比一次全檔 `Read` 還小，**NEVER** 拿成本當本節的理由，
-也 **NEVER** 反過來拿「成本不高」當繞過 dispatcher 的藉口：下表的 predicate 是完整的准入條件。
+本節適用**每一張**截圖、**所有** consumer、**所有四個模式**（`[verify:ui]` channel / archive
+前視覺 QA / commit 0-B / ad-hoc）——不是只有批次審視那次。
+
+這條的依據是**收集與判定分離 ＋ 主線 context 隔離**，不是 context 成本、也不再是跨模型驗證
+（2026-08-22 起，見下節）。成本面的實測數字見下方 § 實測——它比一次全檔 `Read` 還小，
+**NEVER** 拿成本當本節的理由，也 **NEVER** 反過來拿「成本不高」當主線自己 Read 的藉口：
+下表的 predicate 是完整的准入條件。
 
 | 可觀察 predicate | MUST |
 | --- | --- |
-| 要對 `[verify:ui]` / `[review:ui]` item 收 evidence | 走 `pi-dispatch-screenshot-verify.ts`（唯一入口，見 § Hard rule），主線只消費它回的 JSON 摘要 |
-| 已經拿到 dispatcher 的 JSON 且某 item 判 FAIL / UNCERTAIN | 才准 `Read` **那一張**。**NEVER** 為了「順便看一下其他張」連讀 |
-| 想確認一批截圖是否都拍到東西 | 跑 audit / dispatcher 的 emptiness preflight，**NEVER** 逐張 Read 目視 |
+| 要對 `[verify:ui]` / `[review:ui]` item 收 evidence | 派 `screenshot-review` Claude subagent（唯一入口），主線只消費它回的 JSON 摘要 |
+| 已經拿到 subagent 的 JSON 且某 item 判 FAIL / UNCERTAIN | 才准 `Read` **那一張**。**NEVER** 為了「順便看一下其他張」連讀 |
+| 想確認一批截圖是否都拍到東西 | 跑 `audit-screenshot-quality.ts` 或 subagent 的 emptiness preflight，**NEVER** 逐張 Read 目視 |
+
+### 為什麼只准 Claude subagent
+
+這一列曾經外派給 Pi 的 `grok-xai` seat，2026-08-22 收回。**收回的理由不是 grok 拍不好**——
+兩個 seat 是同一個 `grok-4.6`，能力相同。理由是**兩條交付路徑都要付不該付的代價**：
+
+| 路徑 | 代價 |
+| --- | --- |
+| `xai` seat（當時的預設） | `toolProfile: 'coding'` 不推任何 `--tools`，等於**完整工具集、裸跑在 host、無沙箱、有完整網路** |
+| `cursor` seat（沙箱化的那個） | 沙箱是 bwrap ＋ netns，出口只有兩個 hostname。要讓它拍得到本機 dev server，必須替 dev server 開一條 RFC1918 例外——而 dev server 後面有 DB、dev-login 與對外能力，**清單上每一項都把自己的可達範圍一併帶進來** |
+
+也就是為了一個**純機械取證**的工作（開 URL → 等 ready → 拍 → 記 DOM，明文禁止點擊與判斷），
+要嘛容忍一個無沙箱的第三方 runtime，要嘛在 default-deny egress 上鑿一個洞。兩者買到的只是
+「誰按快門」這個很薄的跨模型性質——**判定本來就留在主線**，截圖品質另有
+`audit-screenshot-quality.ts` 機械稽核。
+
+**NEVER** 把本節讀成「Claude subagent 比較可靠所以選它」：[[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]
+量到過 Claude wrapper 自作主張的實例。那次的成因是**它被設計成路由器卻決定當執行體**；
+本次改動把路由層整個拿掉、subagent 就是執行體，那個矛盾不存在了。**NEVER** 恢復任何
+「subagent 收到 brief 後再轉派給別的 carrier」的形狀——那正是踩坑的形狀。
 
 ### 實測（2026-08-06 更正：截圖成本遠小於本節初版所稱）
 

@@ -50,7 +50,7 @@ Local edits will be reverted by the next sync.
 
    （背景跑、stdout 單一 JSON evidence；exit 0=ok / 2=(a)(b) 皆業務 fail / 3=機械故障 / 4=quota。exit 2 → 主線依序降到 (c)(d)，**不**重派同一 brief；exit 3 → 機械故障，主線 fallback foreground 自跑 (a)(b) 再續 chain；exit 4 → 配額擋，本列是 sol，依 [[agent-routing]] § 配額耗盡時的 fallback 紀律先走 `--model sol-cursor` 同 effort 重派（`-cursor` 變體的適用邊界受 TD-520 限制：**NEVER** 用於不可信第三方 code 或會接觸 secrets／prod 憑證的內容；0-A.1 review gate 已明文排除，見 `commit/gates.md` § 0-A.1），**NEVER** 當成機械故障直接 foreground 自跑。）
 
-   - **(c)(d) 既有路徑不動**：(c) 維持主線自起 dev server + agent-browser；(d) 已走 `pi-dispatch-screenshot-verify.ts`，**不**改走本 dispatcher
+   - **(c)(d) 既有路徑不動**：(c) 維持主線自起 dev server + agent-browser；(d) 走 `screenshot-review` Claude subagent，**不**改走本 dispatcher
    - **Evidence annotation 寫回 tasks.md 維持主線**（多 session 共用 working tree 的寫入紀律）— pi 只回報 JSON evidence，**NEVER** 讓 pi 直接 Edit tasks.md
    - 主線收到 pi JSON evidence 後 **MUST 抽查至少一項**（重跑一條 curl / SELECT 比對回報值）再寫 annotation — **不信 pi 自報**
 
@@ -149,24 +149,25 @@ Local edits will be reverted by the next sync.
 
       | 角色 | 範圍 | 檔位 |
       | --- | --- | --- |
-      | **收集**（輸出不是 gate） | 開 known URL、poll ready_signal、拍 final-state 截圖 | **Pi Grok-4.6 low**（`--model grok-xai`） |
+      | **收集**（輸出不是 gate） | 開 known URL、poll ready_signal、拍 final-state 截圖 | **`screenshot-review` Claude subagent**（本 channel NEVER 派 Pi） |
       | **判定（gate）** | 分析每張截圖是否匹配對應 item 要求（防止亂截圖搪塞） | **pi GPT-5.6-sol xhigh** |
 
       收集便宜跑快、判斷用最高推理力；兩者分開 dispatch 才擋得住「自己拍自己判」。
 
-      **Runtime 選擇**（default Pi model；Claude subagent fallback）：
+      **Runtime（2026-08-22 起單一路徑）**：派 `screenshot-review` Claude subagent
+      （`Agent` tool，`subagent_type: screenshot-review`），brief copy/adapt 自
+      `vendor/snippets/verify-channels/ui-final-state-brief.template.md`，直接放 `prompt` 參數。
+      Subagent 回 JSON 摘要，主線解析後進入 **Screenshot Match Analysis gate**（見下方 §）。
+      任一 item `status` 不是 `PASS` → 保留 `[ ]` + 寫 issue / blocker（業務結果，換 carrier 也不會變）。
 
-      - **Default — Pi model**：偵測 `command -v pi` 存在、Pi `openai-codex` OAuth 已就緒且 env `CLADE_FORCE_CLAUDE_SCREENSHOT` 未設 → 呼叫 `node <clade-vendor>/scripts/pi-dispatch-screenshot-verify.ts --change <name> --consumer-path . --dev-server-url <url> --items-json <items.json>`（dispatcher 內部以 **medium** effort 收集截圖）。Dispatcher 跑完 stdout 印 JSON 摘要（`{"runtime":"codex","transport":"pi","change":...,"items":[...],"audit_exit_code":N,"progress_json":"...","review_md":"..."}`），主線解析該 JSON 後進入 **Screenshot Match Analysis gate**（見下方 §）。Pi 模型任一 item `status` 不是 `PASS` 時 → 保留 `[ ]` + 寫 issue / blocker（業務結果，**NEVER** fallback Claude — 同一 brief 在 Claude 也會撞同樣業務問題）
-      - **Fallback — Claude subagent**：以下任一情境**才** fallback 到 `screenshot-review` subagent（brief copy/adapt 自 `vendor/snippets/verify-channels/ui-final-state-brief.template.md`）：
-        - `command -v pi` 不存在或 Pi `openai-codex` OAuth 未就緒
-        - env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 強制退場（debug / 退場用）
-        - Dispatcher exit 非 0 **且** stdout 沒印出可 parse 的 JSON 摘要（機械故障，例如 Pi auth 失效、subprocess crash）
-      - 兩 runtime 走相同的 brief contract（change name、dev server URL、items、Scope）；Pi runtime 多了 self-contained guardrails（machine dispatch 不會 auto-load `screenshot-review.md`）
+      **本 channel NEVER 外派給 Pi 任一 model**：`pi-dispatch-screenshot-verify.ts` 已 fail-closed
+      拒跑、`pi-routing-policy.ts` 對 `--table-row screenshot-review-verify` 直接 throw。
+      收回理由見 [[review-gui-surface]] § 為什麼只准 Claude subagent。
 
       **反 bypass（hard rule — 2026-06-11 audit 實證）**：
 
-      - **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 `verify:ui` evidence 來取代本步 dispatcher — 2026-06-11 audit 實證：05-29 dispatcher 修復後 147 條 `(verified-ui:)` annotation **0 次走 codex**、92 個 session 全部走此 bypass 形狀（從未進入本分支）、0 次機械故障 fallback 記錄。需要 `verify:ui` evidence 的**唯一**入口是 `node ~/offline/clade/vendor/scripts/pi-dispatch-screenshot-verify.ts`
-      - **Claude fallback 僅限機械故障**（`command -v pi` 不存在 / Pi `openai-codex` OAuth 未就緒 / dispatcher exit≠0 且 stdout 無 parseable JSON；env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 為 user 明確設定的 debug 退場，不在此限），且 **MUST** 在 tasks.md 對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡 — **無此痕跡的 Claude 自拍 evidence 視為違規**（audit 以 annotation × dispatcher 記錄比對抓）
+      - **NEVER** 派 general-purpose / worktree / 臨時 Claude subagent 自跑 playwright / agent-browser 收 `verify:ui` evidence——**唯一**入口是 `screenshot-review` 這支 agent。2026-06-11 audit 實證：147 條 `(verified-ui:)` annotation 有 92 個 session 走了「隨手找個 agent 自己拍」的形狀。**收回 Pi 外派不放寬這一條**——它擋的是「繞過具名 agent」，跟 carrier 是誰無關
+      - **NEVER** 由主線自己拍：主線 `Read` 截圖的例外路徑僅限 [[review-gui-surface]] § 截圖 evidence 一律走 Claude subagent 的表所列
 
       共用規約：
 

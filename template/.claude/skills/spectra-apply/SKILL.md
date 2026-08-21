@@ -610,8 +610,8 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    **反 bypass（hard rule — 2026-06-11 audit 實證）**：
 
-   - **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 `verify:ui` evidence 來取代 dispatcher — 需要 `verify:ui` evidence 的**唯一**入口是 `node ~/offline/clade/vendor/scripts/pi-dispatch-screenshot-verify.ts`
-   - **Claude fallback 僅限機械故障**（`command -v pi` 不存在 / Pi OAuth 未就緒 / dispatcher exit≠0 且 stdout 無 parseable JSON；env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 為 user 明確設定的 debug 退場），且 **MUST** 在 tasks.md 對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡 — 無此痕跡的 Claude 自拍 evidence 視為違規（audit 以 annotation × dispatcher 記錄比對抓）
+   - **NEVER** 派 general-purpose / worktree / 臨時 Claude subagent 自跑 playwright / agent-browser 收 `verify:ui` evidence — 唯一入口是 `screenshot-review` 這支具名 agent（`Agent` tool，`subagent_type: screenshot-review`）。本條擋的是「繞過具名 agent」，**NEVER** 因 2026-08-22 收回 Pi 外派而讀成放寬
+   - **NEVER** 派 Pi 任一 model 收本 channel 的 evidence（2026-08-22 起）——`pi-dispatch-screenshot-verify.ts` 已 fail-closed、`pi-routing-policy.ts` 對該 table-row 直接 throw；理由見 [[review-gui-surface]] § 為什麼只准 Claude subagent
    - **NEVER** 跳過 Screenshot Match Analysis 直接寫 `(verified-ui:)` annotation — 收集與判斷分離是防搪塞的核心機制
 
    **Guardrails**：

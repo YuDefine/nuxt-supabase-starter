@@ -837,10 +837,11 @@ Orchestration Residency 判定（codex-primary vs claude-primary）從未落到 
 fi
 
 # --- Check 9: verify:ui Dispatcher Provenance (agent-routing § Dispatch 入口) ---
-# The rule says the ONLY entry point for verify:ui evidence is
-# pi-dispatch-screenshot-verify.ts, with a Claude fallback allowed solely on
-# mechanical failure and only when the item carries an UNCERTAIN(dispatcher-error)
-# trace. The 2026-06-11 audit measured that text-level NEVER at 147 annotations /
+# The rule says the ONLY entry point for verify:ui evidence is the named
+# `screenshot-review` Claude subagent (Claude-only since 2026-08-22; the Pi
+# dispatcher that used to hold this row is retired and fail-closed). A collector
+# failure is allowed through only when the item carries an
+# UNCERTAIN(dispatcher-error) trace. The 2026-06-11 audit measured that text-level NEVER at 147 annotations /
 # 0 codex runs / 92 sessions — it does not bind anything on its own.
 #
 # Provenance is not recoverable from the evidence itself: the screenshot path
@@ -912,15 +913,15 @@ if [ "$PRE_SKILL" != "true" ] && [ -f "$TASKS_FILE" ]; then
 $(printf '  - %s\n' "${UNPROVEN_VUI[@]}")
 receipt ledger：${VERIFY_UI_RECEIPTS}
 
-verify:ui evidence 的唯一入口是 pi-dispatch-screenshot-verify.ts（agent-routing
-§ Dispatch 入口）。上述 item 的 annotation 是在沒有 dispatcher 痕跡的情況下寫下的。
+verify:ui evidence 的唯一入口是 screenshot-review Claude subagent（agent-routing
+§ Dispatch 入口；2026-08-22 起本 channel Claude-only）。上述 item 的 annotation 是在
+沒有 collector 痕跡的情況下寫下的。
 
 補救（擇一）：
-  1. 重跑 dispatcher 收 evidence，它會落 receipt：
-     node <clade-vendor>/scripts/pi-dispatch-screenshot-verify.ts \\
-       --change $CHANGE_NAME --consumer-path . \\
-       --dev-server-url <url> --items-json <path>
-  2. dispatcher 機械故障走 Claude fallback → 在該 item 的 annotation 留
+  1. 重派 screenshot-review Claude subagent 收 evidence，收完主線落 receipt：
+     node <clade-vendor>/scripts/verify-ui-receipt.ts \\
+       --change $CHANGE_NAME --consumer-path . --items '<id,id,...>'
+  2. collector 機械故障 → 在該 item 的 annotation 留
      UNCERTAIN(dispatcher-error) 痕跡
   3. 不適用 dispatcher 的情境 → 加
      <!-- verify-ui-dispatch: intentional, reason: ... --> 到 tasks.md 繞過")

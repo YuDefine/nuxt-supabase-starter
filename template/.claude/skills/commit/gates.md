@@ -667,7 +667,7 @@ node .claude/scripts/0a-metrics.mjs record \
 
 **不觸發**：純 `<script>` / `<style>` 微調、composable / store / API 純邏輯、測試、文件、設定檔、單純重構不影響視覺輸出。
 
-**Dispatch 方式**：主線直派 Pi `--model grok-xai --effort low`（`--route routing-table --tier-basis table-row --table-row screenshot-review-verify`），指令與 brief 素材見 [[review-screenshot]] § 派遣方式。**NEVER** 用 `Agent` tool with `subagent_type: screenshot-review`——per `agent-routing.md` Routing Table 該列，四個模式（含 0-B）一律直派；wrapper 只在 dispatcher exit 3 後才開。exit 4 走 `--model grok-cursor` 同 effort 重派，**NEVER** 當機械故障。
+**Dispatch 方式**：`Agent` tool，`subagent_type: screenshot-review`（Claude subagent），brief 素材見 [[review-screenshot]] § 派遣方式。**NEVER** 派 Pi 任一 model——per `agent-routing.md` Routing Table 該列，本 channel 四個模式（含 0-B）一律 Claude-only，`pi-routing-policy.ts` 會對 `--table-row screenshot-review-verify` 直接 throw。
 
 **並行啟動**：觸發時 MUST 在 0-A.1 pi 背景 process 啟動的**同一個 assistant 回合**內送出 0-B dispatch —— **NEVER** 等 0-A.1 跑完才派（會浪費 3–5 min 的並行收益）。0-B 跑完回收 finding，與 0-A.1 / 0-C 的 finding 一起匯合修正。
 

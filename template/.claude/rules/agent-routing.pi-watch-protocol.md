@@ -589,7 +589,7 @@ Agent 端的對應規範（hard budget、checkpoint、fail-fast、progress.json 
 
 ### Dispatcher provenance 機械 backstop（2026-08-11 起）
 
-`pi-dispatch-screenshot-verify.ts` 每次成功收尾都往 `<consumer>/.spectra/verify-ui-dispatch-ledger.jsonl` 落一筆 receipt（`change` → `itemIds` → `ts` → `exit` → `ok`，**欄位順序固定**，Check 9 靠有序雙 literal grep 比對）。archive-gate Check 9 逐 `[verify:ui]` item 驗，四條 pass 條件擇一即可：對得上 receipt ／ annotation 帶 `UNCERTAIN(dispatcher-error)` ／ tasks.md 有 `<!-- verify-ui-dispatch: intentional, reason: … -->` ／ annotation 的 ISO 日期早於 gate 落地日（存量豁免）。都不中 → block（exit 2）。
+主線消費完 `screenshot-review` subagent 回的 JSON 摘要後 **MUST** 跑 `node <clade-vendor>/scripts/verify-ui-receipt.ts --change <name> --items <id,id> --consumer-path <consumer>` 落一筆 receipt 到 `<consumer>/.spectra/verify-ui-dispatch-ledger.jsonl`（2026-08-22 起寫入責任在主線；此前由已退役的 dispatcher 寫）（`change` → `itemIds` → `ts` → `exit` → `ok`，**欄位順序固定**，Check 9 靠有序雙 literal grep 比對）。archive-gate Check 9 逐 `[verify:ui]` item 驗，四條 pass 條件擇一即可：對得上 receipt ／ annotation 帶 `UNCERTAIN(dispatcher-error)` ／ tasks.md 有 `<!-- verify-ui-dispatch: intentional, reason: … -->` ／ annotation 的 ISO 日期早於 gate 落地日（存量豁免）。都不中 → block（exit 2）。
 
 - receipt 寫入是 **fail-closed**：寫不進去就吐 `UNCERTAIN(dispatcher-error)` 並 exit 1。**NEVER** 照 `appendDispatchLedger` 那條 telemetry ledger 的 fail-open 寫法——那會產生沒有人知道成因的 false negative
 - **NEVER** 把 Check 9 的 onset 改成「receipt 檔存在才驗」：這個 gate 要抓的失敗模式就是「dispatcher 從未被呼叫」，那個世界裡 receipt 檔永遠不存在，fail-open 等於讓最壞情境永久靜默通過。存量豁免走**日期切點**，不走檔案存在性
@@ -685,5 +685,5 @@ dispatch 注入 fail-closed 段，要求回覆帶一行 `PRECONDITIONS_VERIFIED:
 3. **Luna exit 4 → 換池到 Cursor**：`--model luna-cursor --route fallback-chain --tier-basis quota-fallback --retry-of <luna-label>`。這是同一檔智力、另一個配額池，不是降檔。
 4. **luna-cursor exit 4 → `--model grok-xai --chain-origin luna`** 同 effort 重派（`--route fallback-chain --tier-basis quota-fallback --retry-of <luna-cursor-label>`）。**`--chain-origin` 在這格 MUST 帶**——`grok-xai` 是兩條鏈共用的一格，起點決定它耗盡後是終止還是續走 `grok-cursor`，不帶就判不出來。
 5. **grok-xai exit 4（luna 鏈）→ 這條鏈到此為止**，才動 Claude subagent，且**只接 `haiku`**（顯式帶，per § Subagent 回報契約第 4 條），**NEVER** 升 `sonnet`。**NEVER** 在這裡續派 `--model grok-cursor`——那一跳只屬於 grok 鏈，理由見上方 `grok-cursor` 段。
-6. **Grok 鏈自己的路徑**（`web-search` / `screenshot-review-verify` 兩列）：`grok-xai` exit 4 → `--model grok-cursor --chain-origin grok-xai` 重派一次；再 exit 4 才動 Claude subagent，且**只接 `sonnet`**，**NEVER** 降 `haiku`。
+6. **Grok 鏈自己的路徑**（`web-search` 列；`screenshot-review-verify` 2026-08-22 起 Claude-only，不再屬於本鏈）：`grok-xai` exit 4 → `--model grok-cursor --chain-origin grok-xai` 重派一次；再 exit 4 才動 Claude subagent，且**只接 `sonnet`**，**NEVER** 降 `haiku`。
 7. Claude 接走時 session 結尾 **MUST** 回報「本 session 因配額耗盡，由 Claude 執行 N 個本應外派的 change」；有 runtime reset 資訊再附上，沒有就明說 unavailable。
