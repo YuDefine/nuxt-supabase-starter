@@ -87,3 +87,5 @@ openspec/.vector-search.db*
 
 .spectra/*
 !.spectra/evidence/
+
+.spectra/evidence/*.bak*
