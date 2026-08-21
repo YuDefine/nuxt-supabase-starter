@@ -171,7 +171,7 @@ Update an existing Spectra change — from a plan file or conversation context.
 
       選項 A：
       ```bash
-      node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+      node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
         --brief /tmp/codex-spectra-ingest-<change-name>-prompt.md \
         --cwd <consumer-repo-root> \
         --label spectra-ingest-<change-name> \

@@ -144,7 +144,7 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 - persistence across reload → `[verify:e2e]`
 - 後端 SSH / psql / cron / drift 驗證 → `[discuss]`
 
-把這些誤標 `[review:ui]` = 把該由 agent 自驗的工作丟回 user，違反 propose 階段對 user 時間的尊重。
+把這些誤標 `[review:ui]` = 把該由 agent 自驗的工作丟回 user，違反 propose 階段對 user 時間的尊重。review-gui PWA **不顯示**這類項；截圖 channel `[verify:ui]` 有 `(verified-ui:)` 後由 auto-check 勾選，不進 inbox。
 
 ### `[verify:ui]` 對 sample-key-bound item 的反例（hard rule，2026-05-24 補強）
 

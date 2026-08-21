@@ -609,7 +609,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    **反 bypass（hard rule — 2026-06-11 audit 實證）**：
 
-   - **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 `verify:ui` evidence 來取代 dispatcher — 需要 `verify:ui` evidence 的**唯一**入口是 `node ~/offline/clade/vendor/scripts/codex-dispatch-screenshot-verify.ts`
+   - **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 `verify:ui` evidence 來取代 dispatcher — 需要 `verify:ui` evidence 的**唯一**入口是 `node ~/offline/clade/vendor/scripts/pi-dispatch-screenshot-verify.ts`
    - **Claude fallback 僅限機械故障**（`command -v pi` 不存在 / Pi OAuth 未就緒 / dispatcher exit≠0 且 stdout 無 parseable JSON；env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 為 user 明確設定的 debug 退場），且 **MUST** 在 tasks.md 對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡 — 無此痕跡的 Claude 自拍 evidence 視為違規（audit 以 annotation × dispatcher 記錄比對抓）
    - **NEVER** 跳過 Screenshot Match Analysis 直接寫 `(verified-ui:)` annotation — 收集與判斷分離是防搪塞的核心機制
 
@@ -648,7 +648,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
    **MUST** before Step 8b handoff 先派 **Pi Grok-4.6 medium（`--model grok-xai --table-row spectra-prehandoff-collect`）** 跑 5-dimension 收集（template 見下）。
    收集回來後 **MUST** 另派 **codex GPT-5.6-sol xhigh** 對收集結果做 5-dimension 判定——判定是 gate，**NEVER** 與收集併在同一次 dispatch：
 
-   **E.1 + E.2 執行**：**MUST** 完整讀 `references/pre-handoff-checks.md` § Step 8a.6 執行——E.1（codex medium 收集 5-dimension evidence → codex xhigh 判定 → 主線寫 finding report、FAIL 補 `（issue:）` / strip 假 annotation → `pre-handoff-ledger.ts record`）與 E.2（`codex-dispatch-pre-handoff-check.ts` cross-model 獨立審；fallback Claude subagent，**NEVER** 憑記憶補、**NEVER** 跳過 cross-check 直接 handoff）。**No finding report written → NO Step 8b handoff — this is the gate**；E.1 record 由 `archive-gate.sh` Check 7 機械強制。
+   **E.1 + E.2 執行**：**MUST** 完整讀 `references/pre-handoff-checks.md` § Step 8a.6 執行——E.1（codex medium 收集 5-dimension evidence → codex xhigh 判定 → 主線寫 finding report、FAIL 補 `（issue:）` / strip 假 annotation → `pre-handoff-ledger.ts record`）與 E.2（`pi-dispatch-pre-handoff-check.ts` cross-model 獨立審；fallback Claude subagent，**NEVER** 憑記憶補、**NEVER** 跳過 cross-check 直接 handoff）。**No finding report written → NO Step 8b handoff — this is the gate**；E.1 record 由 `archive-gate.sh` Check 7 機械強制。
 
    **Level**: Phase 2 仍為 **warning / soft-gate** — E.1 + E.2 都跑、findings 必寫成 `（issue:）`annotation 讓 user 在 review-gui 看到，但**不**hard-block workflow（user 在 GUI 拍板）。Phase 3.1 才把「zero unresolved findings」整進 `archive-gate.sh` 成 hard gate。每次 E.1/E.2 verdict 已落 `<consumer>/.spectra/pre-handoff-ledger.jsonl`（telemetry，gitignored）；Phase 3.1 升 hard gate 的 soak 評估跑 `node <clade-vendor>/scripts/pre-handoff-ledger.ts report --all-consumers`（出 fire-rate / by-dimension / E.1↔E.2 agreement）。
 

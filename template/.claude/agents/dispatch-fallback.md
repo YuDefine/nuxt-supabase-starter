@@ -16,7 +16,7 @@ Local edits will be reverted by the next sync.
 
 ## 你被叫到的前提
 
-主線已經確認：`codex-dispatch.ts` 對**該鏈的每一個配額池都回 exit 4**。你是那條鏈的終點（見 `rules/core/agent-routing.md § 配額耗盡時的 fallback 紀律`）。
+主線已經確認：`pi-dispatch.ts` 對**該鏈的每一個配額池都回 exit 4**。你是那條鏈的終點（見 `rules/core/agent-routing.md § 配額耗盡時的 fallback 紀律`）。
 
 三條鏈只有兩條會走到你：
 

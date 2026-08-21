@@ -838,7 +838,7 @@ fi
 
 # --- Check 9: verify:ui Dispatcher Provenance (agent-routing § Dispatch 入口) ---
 # The rule says the ONLY entry point for verify:ui evidence is
-# codex-dispatch-screenshot-verify.ts, with a Claude fallback allowed solely on
+# pi-dispatch-screenshot-verify.ts, with a Claude fallback allowed solely on
 # mechanical failure and only when the item carries an UNCERTAIN(dispatcher-error)
 # trace. The 2026-06-11 audit measured that text-level NEVER at 147 annotations /
 # 0 codex runs / 92 sessions — it does not bind anything on its own.
@@ -912,12 +912,12 @@ if [ "$PRE_SKILL" != "true" ] && [ -f "$TASKS_FILE" ]; then
 $(printf '  - %s\n' "${UNPROVEN_VUI[@]}")
 receipt ledger：${VERIFY_UI_RECEIPTS}
 
-verify:ui evidence 的唯一入口是 codex-dispatch-screenshot-verify.ts（agent-routing
+verify:ui evidence 的唯一入口是 pi-dispatch-screenshot-verify.ts（agent-routing
 § Dispatch 入口）。上述 item 的 annotation 是在沒有 dispatcher 痕跡的情況下寫下的。
 
 補救（擇一）：
   1. 重跑 dispatcher 收 evidence，它會落 receipt：
-     node <clade-vendor>/scripts/codex-dispatch-screenshot-verify.ts \\
+     node <clade-vendor>/scripts/pi-dispatch-screenshot-verify.ts \\
        --change $CHANGE_NAME --consumer-path . \\
        --dev-server-url <url> --items-json <path>
   2. dispatcher 機械故障走 Claude fallback → 在該 item 的 annotation 留

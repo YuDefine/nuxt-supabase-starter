@@ -46,7 +46,7 @@ git commit --only -m "…" -- <逐條列出剛才改的檔>               # 4b. 
 
 ## codex 可用性獨立於 `/wt`
 
-`/wt` 叫不動的根因是 hub-core plugin 未啟用；`codex-dispatch.ts` 是 clade 本地 `vendor/scripts/` 腳本，**不依賴任何 plugin**。**NEVER** 從「`/wt` 叫不動」外推「codex 也叫不動」。
+`/wt` 叫不動的根因是 hub-core plugin 未啟用；`pi-dispatch.ts` 是 clade 本地 `vendor/scripts/` 腳本，**不依賴任何 plugin**。**NEVER** 從「`/wt` 叫不動」外推「codex 也叫不動」。
 
 本分支收窄的只有**寫**的併發（主線親自進 worktree，上限 1）。**每一個**命中 [dispatch-topology.md](dispatch-topology.md) § 主線即時組的 pre-scan 前置判定 的 read-heavy item 照樣派 codex——read 不佔主線的序列額度。這在本分支比其他 repo 更重要：全部執行 context 壓在單一主線時，pre-scan 省下的正是最稀缺的那份。
 

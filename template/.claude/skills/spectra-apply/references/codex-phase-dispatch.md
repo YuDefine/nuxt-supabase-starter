@@ -52,7 +52,7 @@ PRESCAN_ORIGIN_ID = $IMPLEMENTATION_ORIGIN_ID-prescan
 4. 找不到／矛盾時的 raw value 與 `needs_reconciliation`。
 
 ```bash
-node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
   --template ~/offline/clade/vendor/snippets/codex-offload/templates/read-heavy-scan.template.md \
   --var "task=對 $CHANGE_NAME phase $PHASE_NUMBER 的封閉 source list 抽取 task→path、既有 symbol 與 exact gate command；每筆附 location + raw_value" \
   --var "acceptance=$PRESCAN_ACCEPTANCE" \
@@ -81,7 +81,7 @@ node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
 每一個 C 類 phase 的 effective mutation 都走 named row `spectra-phase-implementation`。Template 與 output schema 是 clade SoT；**NEVER** 複製 raw `codex exec` 或在 caller 自行拼 model flag。
 
 ```bash
-node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
   --template ~/offline/clade/vendor/snippets/codex-offload/templates/spectra-phase-implementation.template.md \
   --var "change_name=$CHANGE_NAME" \
   --var "phase_number=$PHASE_NUMBER" \

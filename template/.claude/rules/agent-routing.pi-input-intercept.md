@@ -75,7 +75,7 @@ dispatcher stdout是單一JSON。依序讀：
 5. 同一工作連續重派3次仍在問，第4次強制升級user；這代表brief或前置資訊仍不完整。
 
 ```bash
-node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
   --brief /tmp/codex-<topic>-<slug>-answered-<N>.md \
   --cwd <cwd> \
   --label <new-label> \

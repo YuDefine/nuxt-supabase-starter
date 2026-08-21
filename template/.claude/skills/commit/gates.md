@@ -741,7 +741,7 @@ Doctor health score < 100 或 exit code ≠ 0 → **MUST block commit**，修復
 0-C 檢查發現失敗需要修補時，**預設**派背景 codex 跑 fix-verify loop，主線同回合繼續既有並行收尾（poll 軸 A、回收軸 B）— 三軸並行結構不變，軸 C 只是從「主線 foreground 修」換成「codex 背景修」：
 
 ```bash
-node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
   --template ~/offline/clade/vendor/snippets/codex-offload/templates/fix-verify-loop.template.md \
   --var <key>=<value> ...（依 template 變數表填：check 命令、失敗摘要 / log 等） \
   --var max_iterations=2 \
@@ -761,7 +761,7 @@ node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
 3. grok-xai 與 grok-cursor 都 exit 4（配額鏈走完；本列終點是 sol 升級列，**NEVER** 退回 Claude）
 
 ```bash
-node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
   --template ~/offline/clade/vendor/snippets/codex-offload/templates/fix-verify-loop.template.md \
   --var <key>=<value> ...（帶 grok 留下的 remaining_failures） \
   --var max_iterations=none \

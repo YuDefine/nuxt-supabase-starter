@@ -41,7 +41,7 @@ Local edits will be reverted by the next sync.
 | `/handoff` Mode B 2B.0 | `plugins/hub-core/skills/handoff/SKILL.md` Step 2B.0/2B.1.7 | 推薦 user 跑 review:ui **前** MUST 先跑 `review-gui.ts --scan` 寫入 HANDOFF.md |
 | `screenshot-review` verify mode | 主線直派 codex（per [[agent-routing]]） | item 含 compound visual state → 分成 scoped sub-items 或 multi-screenshot annotation |
 | `verified-ui` evidence collection（spectra-apply Step 8a） | `vendor/snippets/verify-channels/ui-final-state-brief*.template.md` | compound state evidence 必拆 / 必標多 screenshot |
-| `codex-dispatch-screenshot-verify.ts` dispatcher | clade vendor script | dispatcher 內 invoke external CLI 前 verify CLI contract（per [[agent-self-verification]] § MUST 4） |
+| `pi-dispatch-screenshot-verify.ts` dispatcher | clade vendor script | dispatcher 內 invoke external CLI 前 verify CLI contract（per [[agent-self-verification]] § MUST 4） |
 | review-gui detail page 互動 | `vendor/scripts/review-gui.ts` server-side handlers | impl 完成率 < threshold → manual review block readonly + amber banner（已 implemented v1.4.30+） |
 
 ## Hard rule
@@ -241,7 +241,7 @@ JSON 摘要。主線 `Read` 截圖是例外路徑，只在下表命中時開放�
 
 | 可觀察 predicate | MUST |
 | --- | --- |
-| 要對 `[verify:ui]` / `[review:ui]` item 收 evidence | 走 `codex-dispatch-screenshot-verify.ts`（唯一入口，見 § Hard rule），主線只消費它回的 JSON 摘要 |
+| 要對 `[verify:ui]` / `[review:ui]` item 收 evidence | 走 `pi-dispatch-screenshot-verify.ts`（唯一入口，見 § Hard rule），主線只消費它回的 JSON 摘要 |
 | 已經拿到 dispatcher 的 JSON 且某 item 判 FAIL / UNCERTAIN | 才准 `Read` **那一張**。**NEVER** 為了「順便看一下其他張」連讀 |
 | 想確認一批截圖是否都拍到東西 | 跑 audit / dispatcher 的 emptiness preflight，**NEVER** 逐張 Read 目視 |
 

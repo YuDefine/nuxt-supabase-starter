@@ -41,7 +41,7 @@ Local edits will be reverted by the next sync.
    (a)(b) 兩層**預設**派背景 codex 執行，主線不 foreground 自跑：
 
    ```bash
-   node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+   node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
      --template ~/offline/clade/vendor/snippets/codex-offload/templates/self-collect-evidence.template.md \
      --var <key>=<value> ...（依 template 變數表填：change name、dev-login route 路徑、fixture UUID、port、table 等） \
      --label 8a-self-collect-<change> --model sol --effort low \
@@ -50,7 +50,7 @@ Local edits will be reverted by the next sync.
 
    （背景跑、stdout 單一 JSON evidence；exit 0=ok / 2=(a)(b) 皆業務 fail / 3=機械故障 / 4=quota。exit 2 → 主線依序降到 (c)(d)，**不**重派同一 brief；exit 3 → 機械故障，主線 fallback foreground 自跑 (a)(b) 再續 chain；exit 4 → 配額擋，本列是 sol，依 [[agent-routing]] § 配額耗盡時的 fallback 紀律先走 `--model sol-cursor` 同 effort 重派（`-cursor` 變體的適用邊界受 TD-520 限制：**NEVER** 用於不可信第三方 code 或會接觸 secrets／prod 憑證的內容；0-A.1 review gate 已明文排除，見 `commit/gates.md` § 0-A.1），**NEVER** 當成機械故障直接 foreground 自跑。）
 
-   - **(c)(d) 既有路徑不動**：(c) 維持主線自起 dev server + agent-browser；(d) 已走 `codex-dispatch-screenshot-verify.ts`，**不**改走本 dispatcher
+   - **(c)(d) 既有路徑不動**：(c) 維持主線自起 dev server + agent-browser；(d) 已走 `pi-dispatch-screenshot-verify.ts`，**不**改走本 dispatcher
    - **Evidence annotation 寫回 tasks.md 維持主線**（多 session 共用 working tree 的寫入紀律）— codex 只回報 JSON evidence，**NEVER** 讓 codex 直接 Edit tasks.md
    - 主線收到 codex JSON evidence 後 **MUST 抽查至少一項**（重跑一條 curl / SELECT 比對回報值）再寫 annotation — **不信 codex 自報**
 
@@ -152,7 +152,7 @@ Local edits will be reverted by the next sync.
 
       **Runtime 選擇**（default Codex model via Pi；Claude subagent fallback）：
 
-      - **Default — Codex model via Pi**：偵測 `command -v pi` 存在、Pi `openai-codex` OAuth 已就緒且 env `CLADE_FORCE_CLAUDE_SCREENSHOT` 未設 → 呼叫 `node <clade-vendor>/scripts/codex-dispatch-screenshot-verify.ts --change <name> --consumer-path . --dev-server-url <url> --items-json <items.json>`（dispatcher 內部以 **medium** effort 收集截圖）。Dispatcher 跑完 stdout 印 JSON 摘要（`{"runtime":"codex","transport":"pi","change":...,"items":[...],"audit_exit_code":N,"progress_json":"...","review_md":"..."}`），主線解析該 JSON 後進入 **Screenshot Match Analysis gate**（見下方 §）。Codex 模型任一 item `status` 不是 `PASS` 時 → 保留 `[ ]` + 寫 issue / blocker（業務結果，**NEVER** fallback Claude — 同一 brief 在 Claude 也會撞同樣業務問題）
+      - **Default — Codex model via Pi**：偵測 `command -v pi` 存在、Pi `openai-codex` OAuth 已就緒且 env `CLADE_FORCE_CLAUDE_SCREENSHOT` 未設 → 呼叫 `node <clade-vendor>/scripts/pi-dispatch-screenshot-verify.ts --change <name> --consumer-path . --dev-server-url <url> --items-json <items.json>`（dispatcher 內部以 **medium** effort 收集截圖）。Dispatcher 跑完 stdout 印 JSON 摘要（`{"runtime":"codex","transport":"pi","change":...,"items":[...],"audit_exit_code":N,"progress_json":"...","review_md":"..."}`），主線解析該 JSON 後進入 **Screenshot Match Analysis gate**（見下方 §）。Codex 模型任一 item `status` 不是 `PASS` 時 → 保留 `[ ]` + 寫 issue / blocker（業務結果，**NEVER** fallback Claude — 同一 brief 在 Claude 也會撞同樣業務問題）
       - **Fallback — Claude subagent**：以下任一情境**才** fallback 到 `screenshot-review` subagent（brief copy/adapt 自 `vendor/snippets/verify-channels/ui-final-state-brief.template.md`）：
         - `command -v pi` 不存在或 Pi `openai-codex` OAuth 未就緒
         - env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 強制退場（debug / 退場用）
@@ -161,7 +161,7 @@ Local edits will be reverted by the next sync.
 
       **反 bypass（hard rule — 2026-06-11 audit 實證）**：
 
-      - **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 `verify:ui` evidence 來取代本步 dispatcher — 2026-06-11 audit 實證：05-29 dispatcher 修復後 147 條 `(verified-ui:)` annotation **0 次走 codex**、92 個 session 全部走此 bypass 形狀（從未進入本分支）、0 次機械故障 fallback 記錄。需要 `verify:ui` evidence 的**唯一**入口是 `node ~/offline/clade/vendor/scripts/codex-dispatch-screenshot-verify.ts`
+      - **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 `verify:ui` evidence 來取代本步 dispatcher — 2026-06-11 audit 實證：05-29 dispatcher 修復後 147 條 `(verified-ui:)` annotation **0 次走 codex**、92 個 session 全部走此 bypass 形狀（從未進入本分支）、0 次機械故障 fallback 記錄。需要 `verify:ui` evidence 的**唯一**入口是 `node ~/offline/clade/vendor/scripts/pi-dispatch-screenshot-verify.ts`
       - **Claude fallback 僅限機械故障**（`command -v pi` 不存在 / Pi `openai-codex` OAuth 未就緒 / dispatcher exit≠0 且 stdout 無 parseable JSON；env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 為 user 明確設定的 debug 退場，不在此限），且 **MUST** 在 tasks.md 對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡 — **無此痕跡的 Claude 自拍 evidence 視為違規**（audit 以 annotation × dispatcher 記錄比對抓）
 
       共用規約：
@@ -187,7 +187,7 @@ Local edits will be reverted by the next sync.
       Dispatcher 收集完所有截圖後（JSON 摘要已拿到），**MUST** 對每個 `status === "PASS"` 的 item 派 **codex GPT-5.6-sol xhigh** 做截圖 vs 要求匹配分析：
 
       ```bash
-      node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+      node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
         --brief /tmp/codex-screenshot-match-analysis-<change>-prompt.md \
         --cwd <consumer-repo-root> \
         --label screenshot-match-<change> \
@@ -262,8 +262,8 @@ Local edits will be reverted by the next sync.
    5. **Multi-marker completion semantics**
 
       - 每個 channel 完成就寫對應 annotation；同一 line 可同時有 `(verified-e2e:)` / `(verified-api:)` / `(verified-ui:)`，順序 **MUST** 是 e2e → api → ui。
-      - 最後一個 channel 完成且 item 不含 `verify:ui` / `review:ui` 時，呼叫 review-gui auto-check helper `autoCheckCompletedAutomaticItems(...)`，自動 flip `[x]`。
-      - item 含 `verify:ui` 或 `review:ui` 時，checkbox **MUST** 保持 `[ ]`，等 user 在 review GUI 確認。
+      - 最後一個 channel 完成且 item 不含 `review:ui` 時，呼叫 review-gui auto-check helper `autoCheckCompletedAutomaticItems(...)`，自動 flip `[x]`。
+      - item 含 `review:ui` 時，checkbox **MUST** 保持 `[ ]`，等 user 在 PWA 確認畫面。
 
    6. **Deprecated `[verify:auto]` alias**
 
@@ -273,5 +273,5 @@ Local edits will be reverted by the next sync.
 
    7. **Exit**
 
-      - 所有 automatic-only items 完成 annotations 後，呼叫 `autoCheckCompletedAutomaticItems(...)` 讓 review-gui helper 自動勾 `[x]`。
-      - 所有含 `verify:ui` 的 items 保持未勾，進 Step 8b 由 user GUI 確認 visual evidence。
+      - 所有不含 `review:ui` 的 verify items 完成 annotations 後，呼叫 `autoCheckCompletedAutomaticItems(...)` 讓 review-gui helper 自動勾 `[x]`。
+      - 含 `review:ui` 的 items 保持未勾，進 Step 8b 由 user 在 PWA 確認畫面。

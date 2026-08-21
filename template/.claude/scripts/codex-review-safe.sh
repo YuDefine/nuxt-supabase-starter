@@ -133,10 +133,10 @@ fi
 # one of the two contexts.
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 CLADE_HOME="${CLADE_HOME:-$HOME/offline/clade}"
-if [ -f "$REPO_ROOT/vendor/scripts/pi-codex-review.ts" ]; then
-  PI_REVIEW_RUNNER="$REPO_ROOT/vendor/scripts/pi-codex-review.ts"
+if [ -f "$REPO_ROOT/vendor/scripts/pi-review.ts" ]; then
+  PI_REVIEW_RUNNER="$REPO_ROOT/vendor/scripts/pi-review.ts"
 else
-  PI_REVIEW_RUNNER="$CLADE_HOME/vendor/scripts/pi-codex-review.ts"
+  PI_REVIEW_RUNNER="$CLADE_HOME/vendor/scripts/pi-review.ts"
 fi
 if [ "$#" -gt 0 ]; then
   echo "[codex-review-safe] 錯誤：遷移到 Pi 後不接受額外 runtime flags；收到：$*" >&2

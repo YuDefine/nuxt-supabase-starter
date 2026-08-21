@@ -92,7 +92,7 @@ blocker，不降級成叫 user 貼 prompt）、[[review-gui-surface]]（`fix-req
 
 上一節的不外派清單管的是**動作**（憑證 / 刪檔 / force push），本節管的是**內容**：一個完全合法的
 外派動作，照樣可以把 secret 或客戶個資寫進另一個 runtime 的 prompt 與其日誌。適用**每一次**
-dispatch 的**每一種** brief 載體——`codex-dispatch.ts` 的 prompt 檔、Claude subagent 的 thin brief、
+dispatch 的**每一種** brief 載體——`pi-dispatch.ts` 的 prompt 檔、Claude subagent 的 thin brief、
 Herdr transport 的 durable task 檔、workflow agent 的 prompt 字串。
 
 ### MUST：brief 明列 Approved Tools
@@ -237,7 +237,7 @@ predicate 走，**NEVER** 把本小節外推成「委派都該指定 model」。
 | Pi runtime機械不可用（exit 3） | 依watch-protocol判斷修runtime或顯式改派Claude；**NEVER** fallback到Codex CLI |
 | Pi Codex配額不可用（exit 4） | 走§ 配額耗盡時的fallback紀律，`sonnet`／`haiku` **顯式帶** |
 
-**PreToolUse:Agent 機械 gate**：主線呼叫 `Agent` **一律**立即建立 `claude-agent-dispatch` pending decision 並阻擋，**不分 `subagent_type`、也不分 `model`**——`Explore`／`general-purpose`／`Plan`／任何具名 agent 一律計入（省略 `subagent_type` 時按預設 `general-purpose` 記錄），**省略 `model`（繼承主線）與明寫 Opus／Fable 同樣計入**。判準是 default-deny：`model` 是 optional，省略它等於讓 subagent 繼承主線 resolved model，那正是**最貴**的委派形狀，舊版「只認明寫便宜檔位」的 key 看不到它（TD-513）。agent 名稱與請求檔位（`model=inherited` / `model=opus` …）記進 decision key 供 receipt 追溯。正常結案必須是 `codex-dispatch.ts --decision-id <id> --route claude-delegate-sub --tier-basis delegate-sub --model gemini`，effort 依請求檔位為 Haiku→low、**其餘（含 inherited／Opus／Fable）→high**。確實要留 Claude 時只接受四個具名 waiver：`claude-mcp-required`、`parent-context-required`（`subagent_type: fork` 這種必須繼承主線 context 者）、`ui-view-implementation`、`user-explicit-claude-agent`；Gemini exit 2 必須同 effort 升 Sol 重派，Sol 再 exit 2 才能以 `delegate-escalation-failed` fallback receipt 放行；Gemini exit 4 先走 `--model luna` 配額鏈；Codex exit 3／4 則先記 dispatch outcome，再走 matching fallback receipt。**NEVER** 把例外理由寫進 Agent prompt 當作 bypass——gate 只認 decision receipt，不解析自由文字。
+**PreToolUse:Agent 機械 gate**：主線呼叫 `Agent` **一律**立即建立 `claude-agent-dispatch` pending decision 並阻擋，**不分 `subagent_type`、也不分 `model`**——`Explore`／`general-purpose`／`Plan`／任何具名 agent 一律計入（省略 `subagent_type` 時按預設 `general-purpose` 記錄），**省略 `model`（繼承主線）與明寫 Opus／Fable 同樣計入**。判準是 default-deny：`model` 是 optional，省略它等於讓 subagent 繼承主線 resolved model，那正是**最貴**的委派形狀，舊版「只認明寫便宜檔位」的 key 看不到它（TD-513）。agent 名稱與請求檔位（`model=inherited` / `model=opus` …）記進 decision key 供 receipt 追溯。正常結案必須是 `pi-dispatch.ts --decision-id <id> --route claude-delegate-sub --tier-basis delegate-sub --model gemini`，effort 依請求檔位為 Haiku→low、**其餘（含 inherited／Opus／Fable）→high**。確實要留 Claude 時只接受四個具名 waiver：`claude-mcp-required`、`parent-context-required`（`subagent_type: fork` 這種必須繼承主線 context 者）、`ui-view-implementation`、`user-explicit-claude-agent`；Gemini exit 2 必須同 effort 升 Sol 重派，Sol 再 exit 2 才能以 `delegate-escalation-failed` fallback receipt 放行；Gemini exit 4 先走 `--model luna` 配額鏈；Codex exit 3／4 則先記 dispatch outcome，再走 matching fallback receipt。**NEVER** 把例外理由寫進 Agent prompt 當作 bypass——gate 只認 decision receipt，不解析自由文字。
 
 **本節路徑的 luna 准入（與 § Routing Table 五條連言無關）**：原判 `sonnet` 的委派 MUST 同時滿足
 兩項——(1) § MUST 指定 `model: 'sonnet'` 的四條 predicate 全中（原判 sonnet 的判定本身就要求這
@@ -347,7 +347,7 @@ codex-primary verdict 但 ≤2 個 file 的瑣碎 fix（typo / 單行 bug / conf
 
 ### 配額耗盡時的 fallback 紀律
 
-**執行 SoT 是 dispatcher 自己的 exit 4 payload**：`codex-dispatch.ts` 撞 runtime quota 時回
+**執行 SoT 是 dispatcher 自己的 exit 4 payload**：`pi-dispatch.ts` 撞 runtime quota 時回
 `next_tier` / `next_step`（`--chain-origin` 未解時 `next_tier` 回 null 並要求補帶），逐跳鏈與終點
 Claude 檔位由它機械算出。**MUST 照那個 payload 派下一跳，NEVER 憑印象選 model**——記不得鏈長什麼樣
 不是問題，payload 每次都會印。
@@ -357,7 +357,7 @@ always-load 只留 payload **算不出來**的三條判斷：
 - **NEVER** 把 Sol 的活降成 Luna——鏈上每一跳是**換配額池**，不是降檔
 - **NEVER** 拿 `--effort low` 重試當配額應對——配額按 **model** 記，同一個 model 撞的是同一個 limit
 - **輸出本身就是 gate 的工作，鏈的終點是 Fable，NEVER 是主線自審**。判準見
-  `vendor/scripts/codex-routing-policy.ts` 的 `GATE_OUTPUT_ROWS`（`code-review` /
+  `vendor/scripts/pi-routing-policy.ts` 的 `GATE_OUTPUT_ROWS`（`code-review` /
   `security-review` / `spectra-prehandoff-judge`）——那一組與 § NEVER 降檔的形狀 第一條同源，
   **MUST 一起改**。理由是這類工作沒有「誰做都行」這個性質：產出 changeset 的那條主線回頭審自己，
   跟同家族模型代審一樣，gate 形式上補了位、實質是空的。因此 sol 鏈耗盡時 dispatcher 的
@@ -486,12 +486,12 @@ canonical 選項形狀（label / description / 另一選項的逐字模板）見
 | NEVER | 說明 |
 | --- | --- |
 | **NEVER** 印「請開啟Codex CLI」「Stop here」「請貼prompt」這類純文字handoff訊息要使用者手動切 | 主線必須自己以背景dispatcher派Codex模型 |
-| **NEVER** 直接執行`codex`binary（含`codex exec`／`codex review`／`codex exec resume`）或把它當Pi故障fallback | 每一個active Codex-model dispatch都走`vendor/scripts/codex-dispatch.ts`或專用Pi wrapper；execution transport只有Pi |
+| **NEVER** 直接執行`codex`binary（含`codex exec`／`codex review`／`codex exec resume`）或把它當Pi故障fallback | 每一個active Codex-model dispatch都走`vendor/scripts/pi-dispatch.ts`或專用Pi wrapper；execution transport只有Pi |
 | **NEVER** 嘗試`codex:rescue`／`codex:setup`plugin路線 | 已驗證無法使用、已全清（含`/assign`） |
 | **NEVER** 派 codex 跑 UI view phase 時省略 prompt 內「禁止改 view 層檔案」硬指令 | 缺這條 codex 容易順手改到 .vue / .tsx |
 | **NEVER** 派 codex 跑 spectra-apply phase 而 prompt 內漏 Commit Authorization 段（一 phase 一 commit / `🧹 chore: wt <change>-phase-<N>` format / hook 必跑禁 `--no-verify` / commit 前自驗 view-layer + scope） | 缺這段 codex 會混 commit、撞 commitlint hook |
 | **NEVER** 派 Codex 寫 code（spectra-propose draft / spectra-apply phase）而 prompt 漏掉 Plan-first 硬指令 | 沒 plan 主線只能從 diff 反推；codex 寫完 plan 必須立刻續跑 |
-| **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 verify:ui evidence 來取代 Step 8a codex dispatcher | verify:ui evidence 的**唯一**入口是 `codex-dispatch-screenshot-verify.ts`；Claude fallback 僅限機械故障且 MUST 在對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡。（audit 實證見 rationale § verify:ui bypass 的 audit 實證）**機械 backstop**：dispatcher 落 receipt（`.spectra/verify-ui-dispatch-ledger.jsonl`），archive-gate Check 9 逐 item 比對，缺 receipt 且缺 `UNCERTAIN(dispatcher-error)` 痕跡 → block。**該 gate 擋的是 drift，NEVER 是對抗性偽造**——過 gate **NEVER** 讀成「evidence 來源已被證實」 |
+| **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 verify:ui evidence 來取代 Step 8a codex dispatcher | verify:ui evidence 的**唯一**入口是 `pi-dispatch-screenshot-verify.ts`；Claude fallback 僅限機械故障且 MUST 在對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡。（audit 實證見 rationale § verify:ui bypass 的 audit 實證）**機械 backstop**：dispatcher 落 receipt（`.spectra/verify-ui-dispatch-ledger.jsonl`），archive-gate Check 9 逐 item 比對，缺 receipt 且缺 `UNCERTAIN(dispatcher-error)` 痕跡 → block。**該 gate 擋的是 drift，NEVER 是對抗性偽造**——過 gate **NEVER** 讀成「evidence 來源已被證實」 |
 | **NEVER** 讓 Claude subagent 當 codex 的**薄中介**——派出 codex 卻不自跑 Codex Watch Protocol，把死活判定留給上一層 | 判準是**誰持有 codex 的生命週期**，不是「有沒有經過 subagent」。薄中介的兩個已驗證失敗模式見 rationale（同 §）。完整持有生命週期的形狀見下一列 |
 | codex **MUST** 由**該層編排者**在其自身 sandbox 內直接 Bash `run_in_background` 派出（含泛用 dispatcher）：主線是編排者時由主線派；`/wt` Form 3 / Form 4 的 worktree subagent 執行它被指派的 next-skill 時（`/spectra-apply` 的 Step 6b Class C、Step 8a verify channel、pre-handoff checks；`/spectra-debug` 的診斷 / repro dispatch；以及 next-skill `references/` 各層的每一處 codex 派工）由**該 subagent** 派 | 例外的**准入條件**是該編排者自跑完整 Codex Watch Protocol（notification-only + 安全網 fallback，per [[agent-routing.pi-watch-protocol]] § 監看排程）——做不到就退回上一列的薄中介禁令。編排者**以外**的任何一層對這些 codex **零探針**（per 同檔 § 跨 sandbox 可見度約束 v2）。**本列的範圍只及 `/wt` Form 3 / Form 4 開出的 worktree subagent**，**NEVER** 外推成「任意 Agent tool subagent 都可以派 codex」 |
 | **NEVER** 在 exploration / research 型 session 自己逐檔 Read + scan 多個 source（openspec / HANDOFF / git log / docs）超過 3 個 source file | 先派 Codex `sol low` pre-scan 拿 structured summary，再由主線消費 summary 做判斷。例外：user 明確問特定檔案 / 需要 claude.ai-connected MCP |

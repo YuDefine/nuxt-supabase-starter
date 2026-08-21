@@ -16,7 +16,7 @@ Local edits will be reverted by the next sync.
 
 ## Codex 派工的標準流程（所有 routing 共用）
 
-派**任何** Pi 席位出去工作**一律走 `vendor/scripts/codex-dispatch.ts`**——`sol` / `luna`（provider `openai-codex`；`terra` 可解析但 2026-08-11 起 **NEVER** 派）、`sol-cursor` / `luna-cursor` / `grok-cursor`（provider `cursor`）、`grok-xai`（provider `xai`）**每一格都走這個入口**，沒有例外。
+派**任何** Pi 席位出去工作**一律走 `vendor/scripts/pi-dispatch.ts`**——`sol` / `luna`（provider `openai-codex`；`terra` 可解析但 2026-08-11 起 **NEVER** 派）、`sol-cursor` / `luna-cursor` / `grok-cursor`（provider `cursor`）、`grok-xai`（provider `xai`）**每一格都走這個入口**，沒有例外。
 
 `codex-dispatch` 是**歷史工具名，不是 provider 限定**：席位裡的 `grok-4.6` 不是 Codex model，仍然走它。**NEVER** 從「這個 model 不是 codex」推論它有別的入口、可以直接開 CLI、或該派 Claude subagent。要指 `openai-codex` 那組時寫 **codex-pool**，那個區分只在配額鏈與計價成立。
 
@@ -32,7 +32,7 @@ Local edits will be reverted by the next sync.
 `<model-slug>` 選檔：命中 [[agent-routing]] § Routing Table 類別 → 照該列（多為 `gpt-5.6-sol`）；本次工作**原本會派 Claude subagent**（原判 `sonnet`／`haiku`）→ 依 § Claude 委派的 model 檔位 派 `gpt-5.6-luna`（sonnet→`--effort high`、haiku→`--effort low`）。判不出來 → `gpt-5.6-sol`。
 
    ```bash
-   node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+   node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
      --brief /tmp/codex-<topic>-<slug>-prompt.md \
      --cwd <cwd> \
      --label <topic>-<slug> \
@@ -203,12 +203,12 @@ Commit 完直接停手回報，**NEVER** 自己跑下一 phase。主線會在 co
 - review wrapper（codex-review-safe.sh）與 WebSearch 不寫檔，本節不適用
 - 對 `claude` type subagent（如 `/spectra-ingest` 在 /wt 內派出的 wt subagent）規約相同（`🧹 chore: wt …` 前綴 + selective stage + self-check + hook 必跑），per worktree-default.md §5
 
-## 泛用 Dispatcher（codex-dispatch.ts）
+## 泛用 Dispatcher（pi-dispatch.ts）
 
-**定位**：對已有 cookbook template 的派工場景，用 `~/offline/clade/vendor/scripts/codex-dispatch.ts` 取代手組 prompt — 它把上面標準流程的固定成分（marker / flag 組 / stdin 餵 prompt / 無 pipe redirect / last-message JSON 解析）機械化成一個 node 呼叫，並內建手組 prompt 沒有的 quota check 與 telemetry。**template 已覆蓋的場景一律走 dispatcher；手寫 prompt 僅限 template 未覆蓋的新場景**（寫完若會重複用，回 clade 補 template）。
+**定位**：對已有 cookbook template 的派工場景，用 `~/offline/clade/vendor/scripts/pi-dispatch.ts` 取代手組 prompt — 它把上面標準流程的固定成分（marker / flag 組 / stdin 餵 prompt / 無 pipe redirect / last-message JSON 解析）機械化成一個 node 呼叫，並內建手組 prompt 沒有的 quota check 與 telemetry。**template 已覆蓋的場景一律走 dispatcher；手寫 prompt 僅限 template 未覆蓋的新場景**（寫完若會重複用，回 clade 補 template）。
 
 ```bash
-node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
   --template ~/offline/clade/vendor/snippets/codex-offload/templates/<name>.template.md \
   --var task='...' --var acceptance='...' --var git_baseline="$(git status --porcelain | head -20)" \
   --var allowed_paths='...' \
@@ -229,26 +229,26 @@ Pending decision 只接受下列三種 standalone resolution；一般 Bash／Rea
 
 ```bash
 # 工作仍是 threshold trigger 本身：照 trigger 填 mechanical-fanout 或 read-heavy-scan
-node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
   --decision-id <rgd_...> --model gemini --effort low \
   --route routing-table --tier-basis table-row --table-row <trigger> \
   --template <template.md> --var task='...' --var acceptance='...' \
   --var allowed_paths='...' --label <topic-slug>
 
 # claude-agent-dispatch：原判 Haiku 用 low；原判 Sonnet 用 high
-node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
   --decision-id <rgd_...> --model gemini --effort <low|high> \
   --route claude-delegate-sub --tier-basis delegate-sub \
   --template <template.md> --var task='...' --var acceptance='...' \
   --var allowed_paths='...' --label <topic-slug>
 
 # 只有 Routing Table 已列明的 Claude 例外才 waiver
-node ~/offline/clade/vendor/scripts/codex-routing-gate.ts waive \
+node ~/offline/clade/vendor/scripts/pi-routing-gate.ts waive \
   --decision-id <rgd_...> --reason <waiver-enum> [--note '...']
 
 # dispatcher 已留下最新 exit 3／4 outcome 後，授權 Claude fallback；
 # claude-agent-dispatch 的 Luna→Sol 兩次 exit 2 則用 delegate-escalation-failed
-node ~/offline/clade/vendor/scripts/codex-routing-gate.ts fallback \
+node ~/offline/clade/vendor/scripts/pi-routing-gate.ts fallback \
   --decision-id <rgd_...> \
   --reason <dispatcher-mechanical-failure|quota-exhausted|delegate-escalation-failed>
 ```
@@ -317,9 +317,9 @@ basis，**NEVER** 隨手挑一個列名湊過去。
 
 **內建行為**：Pi `--no-session --no-extensions` machine mode、explicit MCP extension、token discipline system prompt、routing metadata validation、telemetry append 到 `~/.pi/agent/clade/dispatch-ledger.jsonl`（fail-open；`scripts/audit-codex-adoption.ts` 靠它量 adoption）。Pi目前沒有authoritative pre-dispatch quota snapshot，因此precheck明示unavailable並fail-open；runtime quota仍固定映射exit 4。
 
-**Token discipline 是 runtime 內建，template / brief NEVER 各自重寫一份**：`vendor/pi/system/token-discipline.md`（codebase-memory 優先於 grep ＋ rtk 包裹重輸出指令）由 `runPiCodex()` 以 `--append-system-prompt` 附掛到**每一發**有工具的 dispatch，四個入口（`codex-dispatch.ts` / `codex-dispatch-screenshot-verify.ts` / `codex-dispatch-pre-handoff-check.ts` / `pi-codex-review.ts`）一致生效，`toolProfile: 'none'` 除外。主線 Claude 是靠 harness 的 SessionStart hook 與 Bash 改寫 hook 拿到這兩條，**Pi 上沒有等價機制**——2026-08-19 實測：全歷史 dispatch 3415 次 bash 只有 460 次走 rtk，同時仍有 raw `git` 657、`ls` 229、`pnpm` 143。
+**Token discipline 是 runtime 內建，template / brief NEVER 各自重寫一份**：`vendor/pi/system/token-discipline.md`（codebase-memory 優先於 grep ＋ rtk 包裹重輸出指令）由 `runPiCodex()` 以 `--append-system-prompt` 附掛到**每一發**有工具的 dispatch，四個入口（`pi-dispatch.ts` / `pi-dispatch-screenshot-verify.ts` / `pi-dispatch-pre-handoff-check.ts` / `pi-review.ts`）一致生效，`toolProfile: 'none'` 除外。主線 Claude 是靠 harness 的 SessionStart hook 與 Bash 改寫 hook 拿到這兩條，**Pi 上沒有等價機制**——2026-08-19 實測：全歷史 dispatch 3415 次 bash 只有 460 次走 rtk，同時仍有 raw `git` 657、`ls` 229、`pnpm` 143。
 
-**readonly profile 的 `--tools` allowlist MUST 含 codebase-memory 工具名**：pi 的 allowlist 同時作用於 built-in、extension 與 MCP 工具，所以 `review-readonly` / `analysis-readonly` 少列 `mcp_codebase_memory_*` = MCP extension 載了也一次都叫不到（2026-08-19 實測：`commit-0a1-review-r61` 整輪只有 `read`）。清單在 `CODEBASE_MEMORY_READONLY_TOOLS`（`vendor/scripts/lib/pi-codex-runtime.ts`），`index_repository` 刻意不在列。
+**readonly profile 的 `--tools` allowlist MUST 含 codebase-memory 工具名**：pi 的 allowlist 同時作用於 built-in、extension 與 MCP 工具，所以 `review-readonly` / `analysis-readonly` 少列 `mcp_codebase_memory_*` = MCP extension 載了也一次都叫不到（2026-08-19 實測：`commit-0a1-review-r61` 整輪只有 `read`）。清單在 `CODEBASE_MEMORY_READONLY_TOOLS`（`vendor/scripts/lib/pi-runtime.ts`），`index_repository` 刻意不在列。
 
 **`--output-schema`**：codex 0.138+ 支援以 JSON Schema 約束最終回覆。新 dispatch 場景**預設提供 schema 檔**，取代脆弱的「stdout 結尾 JSON 摘要」約定；既有 dispatcher（screenshot-verify / pre-handoff-check）維持現行契約不回頭改。
 
@@ -590,7 +590,7 @@ Agent 端的對應規範（hard budget、checkpoint、fail-fast、progress.json 
 
 ### Dispatcher provenance 機械 backstop（2026-08-11 起）
 
-`codex-dispatch-screenshot-verify.ts` 每次成功收尾都往 `<consumer>/.spectra/verify-ui-dispatch-ledger.jsonl` 落一筆 receipt（`change` → `itemIds` → `ts` → `exit` → `ok`，**欄位順序固定**，Check 9 靠有序雙 literal grep 比對）。archive-gate Check 9 逐 `[verify:ui]` item 驗，四條 pass 條件擇一即可：對得上 receipt ／ annotation 帶 `UNCERTAIN(dispatcher-error)` ／ tasks.md 有 `<!-- verify-ui-dispatch: intentional, reason: … -->` ／ annotation 的 ISO 日期早於 gate 落地日（存量豁免）。都不中 → block（exit 2）。
+`pi-dispatch-screenshot-verify.ts` 每次成功收尾都往 `<consumer>/.spectra/verify-ui-dispatch-ledger.jsonl` 落一筆 receipt（`change` → `itemIds` → `ts` → `exit` → `ok`，**欄位順序固定**，Check 9 靠有序雙 literal grep 比對）。archive-gate Check 9 逐 `[verify:ui]` item 驗，四條 pass 條件擇一即可：對得上 receipt ／ annotation 帶 `UNCERTAIN(dispatcher-error)` ／ tasks.md 有 `<!-- verify-ui-dispatch: intentional, reason: … -->` ／ annotation 的 ISO 日期早於 gate 落地日（存量豁免）。都不中 → block（exit 2）。
 
 - receipt 寫入是 **fail-closed**：寫不進去就吐 `UNCERTAIN(dispatcher-error)` 並 exit 1。**NEVER** 照 `appendDispatchLedger` 那條 telemetry ledger 的 fail-open 寫法——那會產生沒有人知道成因的 false negative
 - **NEVER** 把 Check 9 的 onset 改成「receipt 檔存在才驗」：這個 gate 要抓的失敗模式就是「dispatcher 從未被呼叫」，那個世界裡 receipt 檔永遠不存在，fail-open 等於讓最壞情境永久靜默通過。存量豁免走**日期切點**，不走檔案存在性

@@ -18,7 +18,7 @@ Local edits will be reverted by the next sync.
    **E.1 收集階段**（codex Grok-4.6 medium；收集輸出不是 gate，判定階段才是）：
 
    ```bash
-   node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+   node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
      --brief /tmp/codex-8a6-e1-collect-<change>-prompt.md \
      --cwd <consumer-repo-root> \
      --label spectra-e1-collect-<change> \
@@ -31,7 +31,7 @@ Local edits will be reverted by the next sync.
    **E.1 判定階段**（codex GPT-5.6-sol xhigh）：
 
    ```bash
-   node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+   node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
      --brief /tmp/codex-8a6-e1-judge-<change>-prompt.md \
      --cwd <consumer-repo-root> \
      --label spectra-e1-judge-<change> \
@@ -59,7 +59,7 @@ Local edits will be reverted by the next sync.
    **Layer E.2 — codex cross-model second opinion**（clade fork addition；Phase 2）：E.1 之後 **MUST** 再派 **codex GPT-5.6-sol xhigh** 對同 5 dimension 做獨立 cross-check（E.1 收集 + 判定都是同 model 同 session，E.2 另起一個 session 獨立審——不同 session 各自推理，防止 E.1 session 內的 rationalization 傳染）：
 
    ```bash
-   node <clade-vendor>/scripts/codex-dispatch-pre-handoff-check.ts \
+   node <clade-vendor>/scripts/pi-dispatch-pre-handoff-check.ts \
      --change <change-name> --consumer-path . \
      --tasks-file openspec/changes/<change-name>/tasks.md \
      --screenshots-dir screenshots/local/<change-name>
@@ -88,7 +88,7 @@ Local edits will be reverted by the next sync.
 
    3. **STALE 重拍**（**codex Grok-4.6 medium**）：對 `stale` array 內每個 item：
       - 從 tasks.md `## 人工檢查` 找到對應 `#N` item 的 URL + ready_signal
-      - 派 codex Grok-4.6 medium 透過 `codex-dispatch-screenshot-verify.ts` 重拍該張截圖
+      - 派 codex Grok-4.6 medium 透過 `pi-dispatch-screenshot-verify.ts` 重拍該張截圖
       - 覆蓋原檔（mtime 自然 > last UI commit）
       - 重拍完成後，對重拍的截圖跑 **Screenshot Match Analysis gate**（同 Step 8a § 4 的 codex GPT-5.6-sol xhigh 分析），確認重拍截圖匹配要求
 

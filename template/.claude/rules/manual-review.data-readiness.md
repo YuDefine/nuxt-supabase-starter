@@ -250,7 +250,10 @@ item 只寫「以 `E2E-ADMIN`（`e2e-admin@dev.local`）登入」是**不可執�
 node -e "import('~/offline/clade/vendor/snippets/dev-auth/lib/detect-dev-login-route.ts').then(m => console.log(m.resolveDevLoginContract(process.cwd())))"
 ```
 
-`<base>` 的選擇綁一個可觀察 predicate：**上面那個 contract 的 `loopbackOnly` 為 true 時，`<base>` MUST 是 `http://127.0.0.1:<port>`，NEVER 寫公開 dev tunnel URL。** 這類 route 的 gate 看的是 request IP，tunnel 來源在它眼中是外部請求，回的是 404——畫面上看起來只是「頁面不存在」，沒有任何線索指向 gate，驗收者會去查 route 存不存在而不是查來源 IP。
+`<base>` 的選擇分兩條路：
+
+- **本機契約 route**（screenshot agent、E2E、`/__preview`）：contract 的 `loopbackOnly` 為 true 時，`<base>` MUST 是 `http://127.0.0.1:<port>`。這類 route 的 gate 看 request IP，tunnel 來源會 404。
+- **review-gui PWA「開啟畫面」**：每個 consumer 都走公開 `-dev.` origin 的 GET `/auth/_dev-login?as=<role>&email=e2e-<role>@dev.local&redirect=<path>`。那條路 **MUST NOT** 做 loopback gate。**NEVER** 叫手機開 `http://127.0.0.1:<port>`，也 **NEVER** 讓開啟畫面落到 Google／人類登入頁。GUI 會自己組這條網址；item 散文仍要寫得出身分與檢驗起點。
 
 **NEVER** 只寫帳號 email / employee_no 就當作交代完登入方式。**NEVER** 假設 admin 登入就能看到所有員工的 /my/ 資料 — /my/ 頁面只顯示 session user 的紀錄。
 

@@ -70,8 +70,8 @@ Multi-marker item **MUST** 由主線依 channel order `e2e → api → ui` 逐�
 - [ ] #1 [verify:api+ui] admin 改 offset → 200 + grid 顯示更新 (verified-api: 2026-05-11T08:00:00Z) (verified-ui: 2026-05-11T08:00:30Z)
 ```
 
-- 若 item 只含 automatic channels（`verify:e2e` / `verify:api`），最後一個 channel annotation 寫入後 `autoCheckCompletedAutomaticItems(...)` 可自動 flip `[x]`。
-- 若 item 含 `verify:ui` 或 `review:ui`，automatic channel 只完成 evidence；checkbox **MUST** 保持 `[ ]`，等使用者在 GUI 確認。
+- 若 item 只含 verify channels（`verify:e2e` / `verify:api` / `verify:ui`），最後一個 channel annotation 寫入後 `autoCheckCompletedAutomaticItems(...)` 可自動 flip `[x]`。
+- 若 item 含 `review:ui`，automatic channel 只完成 evidence；checkbox **MUST** 保持 `[ ]`，等使用者在 PWA 確認畫面。
 - Archive-gate **MUST** 對每個 kind 獨立驗證並取 worst-case（block > warn > pass）。
 
 #### `[verify:auto]` deprecated alias
@@ -80,7 +80,7 @@ Multi-marker item **MUST** 由主線依 channel order `e2e → api → ui` 逐�
 
 1. 主線先跑 `verify:api` channel，寫 `(verified-api: ...)`
 2. 再跑 `verify:ui` channel，寫 `(verified-ui: ...)`
-3. 使用者仍需在 review GUI 對 UI evidence 點 OK 才能勾 `[x]`
+3. 使用者不需在 PWA 對 UI evidence 再點一次；`(verified-ui:)` 寫入後 auto-check 勾 `[x]`。
 
 Archive-gate / parser **MUST** emit deprecation warning。新 authoring **NEVER** 使用 `[verify:auto]`；新項目必須使用 explicit `[verify:e2e]` / `[verify:api]` / `[verify:ui]` 或 multi-marker。
 
@@ -184,7 +184,7 @@ Helper 掃描 priority：**repo root canonical → repo root legacy → repo roo
 | <consumer-j> | ❌ MISSING (nuxt-auth-utils + libsql-drizzle, no cookbook template) | ✅ |
 | <consumer-h> | ❌ MISSING (同上) | ✅ |
 
-**真實 adoption 4/6 + 1 monorepo misdetected + 2 真缺**（不是 1/6）。修法源頭 clade 2026-05-24 land：audit script + helper module + dispatcher fix（`scripts/audit-dev-login-adoption.ts` + `vendor/snippets/dev-auth/lib/detect-dev-login-route.ts` + `vendor/scripts/codex-dispatch-screenshot-verify.ts` 對齊）。下次 agent / 主線撞「is dev-login present？」即走上述 detection 路徑，**NEVER** 再 lazy grep。
+**真實 adoption 4/6 + 1 monorepo misdetected + 2 真缺**（不是 1/6）。修法源頭 clade 2026-05-24 land：audit script + helper module + dispatcher fix（`scripts/audit-dev-login-adoption.ts` + `vendor/snippets/dev-auth/lib/detect-dev-login-route.ts` + `vendor/scripts/pi-dispatch-screenshot-verify.ts` 對齊）。下次 agent / 主線撞「is dev-login present？」即走上述 detection 路徑，**NEVER** 再 lazy grep。
 
 ##### Scaffold 行為
 

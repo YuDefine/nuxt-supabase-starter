@@ -119,7 +119,7 @@ Local edits will be reverted by the next sync.
    3. **背景啟動Pi Codex dispatcher**（**Bash** tool 加 `run_in_background=true`）：
 
       ```bash
-      node ~/offline/clade/vendor/scripts/codex-dispatch.ts \
+      node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
         --brief /tmp/codex-spectra-propose-<change-name>-prompt.md \
         --cwd <consumer-repo-root> \
         --label spectra-propose-<change-name> \

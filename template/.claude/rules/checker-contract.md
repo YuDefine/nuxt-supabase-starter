@@ -49,7 +49,7 @@ completeness: <complete|partial|unknown>
 
 消費端（CI job、pre-commit hook、gate-runner）收到 2 時 **NEVER** 當成「檢查過了沒問題」，**也 NEVER** 當成一般違規去 retry——它代表這個 gate 這次根本沒有執行。
 
-**鎖的是語義軸，不是數字。** 同一條軸的既有實例：`vendor/scripts/codex-dispatch.ts` 用 `2` = 業務 fail（跑完了，結果不合格）、`3` = mechanical failure（codex 缺失／spawn error／timeout／無可解析 JSON）、`4` = quota gate。它多一個配額態，數字自然往後排，這是**正確的**——**NEVER** 為了對齊數字去改既有 dispatcher 或 checker，要對齊的是「兩類失敗必須是不同 exit code」這件事本身。
+**鎖的是語義軸，不是數字。** 同一條軸的既有實例：`vendor/scripts/pi-dispatch.ts` 用 `2` = 業務 fail（跑完了，結果不合格）、`3` = mechanical failure（codex 缺失／spawn error／timeout／無可解析 JSON）、`4` = quota gate。它多一個配額態，數字自然往後排，這是**正確的**——**NEVER** 為了對齊數字去改既有 dispatcher 或 checker，要對齊的是「兩類失敗必須是不同 exit code」這件事本身。
 
 ## Fail-closed Iron Law
 
