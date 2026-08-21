@@ -331,6 +331,28 @@ clade session 直接讀那個檔即可開工。
 - **本 repo 這半邊**（`template/.vite-hooks/pre-push` 帶入 `CLADE_PROJECT_ROOT="$PWD"`）
   等 propagate 完成後才落地，接著跑上面兩條 Acceptance。在那之前本側沒有可推進的動作
 
+### Restart brief
+
+- **問題**：meta-monorepo 執行 pre-push 時，runner 與各 check 會跳回 git root，導致 template Nuxt 專案完全未被檢查且仍回成功。
+- **要改的檔**：
+  - `../clade/vendor/scripts/pre-push/runner.sh`
+  - `../clade/vendor/scripts/pre-push/checks/data-perf-check.sh`
+  - `../clade/vendor/scripts/pre-push/checks/mutation-loading.sh`
+  - `../clade/vendor/scripts/pre-push/checks/native-picker-ban.sh`
+  - `../clade/vendor/scripts/pre-push/checks/nuxt-typecheck.sh`
+  - `../clade/vendor/scripts/pre-push/checks/nuxt-ui-mixed-slot.sh`
+  - `../clade/vendor/scripts/pre-push/checks/review-rules-ratchet.sh`
+  - `../clade/vendor/scripts/pre-push/checks/utable-slots.sh`
+  - `template/.vite-hooks/pre-push`
+- **驗收 predicate**：
+```bash
+files=(template/scripts/pre-push/runner.sh template/scripts/pre-push/checks/*.sh)
+for f in "${files[@]}"; do rg -q 'CLADE_PROJECT_ROOT' "$f" || { echo "FAIL $f"; exit 1; }; done
+out=$(CLADE_PROJECT_ROOT="$PWD/template" bash template/scripts/pre-push/runner.sh 2>&1) || { printf '%s\nFAIL\n' "$out"; exit 1; }
+if test -n "$out" && rg -q 'CLADE_PROJECT_ROOT="\$PWD"' template/.vite-hooks/pre-push; then echo PASS; else echo FAIL; exit 1; fi
+```
+- **已排除方案**：NEVER 只改 runner；七支獨立 check 都會再次自行 `git rev-parse` 並跳回錯誤 root。
+
 ---
 
 ## TD-006 — 在本 repo 跑 install 會讓 clade bootstrap 把 starter 自己當 consumer 投影
@@ -573,3 +595,20 @@ B 較貼近既有機制（strip manifest 本來就是為這種「留在 template
 2. `.github/workflows/validate-starter.yml` 仍能跑完整的 preset scaffold simulation
 3. `scripts/audit-template-hygiene.sh` 的 `maintenance-script-misplacement` 檢查補上對應 pattern，
    fixture 測試涵蓋（避免同類檔案再次漏網）
+
+### Restart brief
+
+- **問題**：scaffold output 會包含只能在維護倉拓樸執行的 script 與 package command，使用者拿到的是必定失敗的公開介面。
+- **要改的檔**：
+  - `template/presets/_base/strip-manifest.json`
+  - `template/package.json`
+  - `template/packages/create-nuxt-starter/src/strip-manifest.ts`
+  - `template/packages/create-nuxt-starter/test/strip-manifest.test.ts`
+  - `scripts/audit-template-hygiene.sh`
+  - `scripts/audit-template-hygiene.test.sh`
+  - `.github/workflows/validate-starter.yml`
+- **驗收 predicate**：
+```bash
+if pnpm --dir template vp test run packages/create-nuxt-starter/test/strip-manifest.test.ts --coverage.enabled=false && bash scripts/audit-template-hygiene.test.sh; then echo PASS; else echo FAIL; exit 1; fi
+```
+- **已排除方案**：NEVER 同時採用移到 root 與 strip manifest 兩條路；雙軌會再製造兩份維護入口與漂移面。
