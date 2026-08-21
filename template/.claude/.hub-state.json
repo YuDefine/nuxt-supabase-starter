@@ -4,7 +4,7 @@
   "checksums": {
     "rules/agent-routing.md": "84ad1e970324b934",
     "rules/agent-routing.pi-input-intercept.md": "55f54fe680b33fb9",
-    "rules/agent-routing.pi-watch-protocol.md": "2c8a1442bcf389bc",
+    "rules/agent-routing.pi-watch-protocol.md": "2ac27ad9d66769dc",
     "rules/agent-self-verification.md": "9c42049264bf13a2",
     "rules/agent-self-verification.screenshot-evidence.md": "c8f274c48a74c6db",
     "rules/audit-pattern.md": "69856e1bb2377882",

@@ -259,7 +259,7 @@ Waiver enum 固定為 `claude-mcp-required`、`parent-context-required`、`gover
 
 Enforcement authority 是 `~/.claude/clade-routing-gate/receipts.jsonl`；`~/.pi/agent/clade/dispatch-ledger.jsonl` 是現行 fail-open usage／observability telemetry，legacy `~/.codex/dispatch-ledger.jsonl` 只供歷史報表，**NEVER** 用 telemetry 缺列推翻已成功落盤的 receipt。每次 live判定會先用 unique receipt重建 `latestAttempt`，並把單一 terminal receipt materialize回 stale state；同 `eventId`重播是 benign，兩個不同 terminal resolution與未完成的 orphan segment transition會 fail-closed。這使 receipt-first／state-second 的 crash window可恢復，不會重跑已成功的 Codex dispatch。
 
-Fail-open／fail-closed 邊界以 helper是否在 Claude Code外層 deadline內回傳為準：segment identity 尚未初始化、中央 helper缺件時 diagnostic fail-open；state 一旦建立，helper回傳的 corrupt state、lock／atomic write／receipt failure、session／row／model／effort mismatch一律 fail-closed。Claude Code外層 command hook timeout或 helper根本無法啟動時，hook output會被丟棄並回到正常 permission flow，仍是 residual fail-open；正常 permission flow **不等於**無條件 auto-allow。事後結案跑 `node scripts/audit-codex-adoption.ts`；usage report不讀 receipt。
+Fail-open／fail-closed 邊界以 helper是否在 Claude Code外層 deadline內回傳為準：segment identity 尚未初始化、中央 helper缺件時 diagnostic fail-open；state 一旦建立，helper回傳的 corrupt state、lock／atomic write／receipt failure、session／row／model／effort mismatch一律 fail-closed。Claude Code外層 command hook timeout或 helper根本無法啟動時，hook output會被丟棄並回到正常 permission flow，仍是 residual fail-open；正常 permission flow **不等於**無條件 auto-allow。事後結案跑 `node scripts/audit-pi-adoption.ts`；usage report不讀 receipt。
 
 **`--route` 必填**（缺就 exit 1，2026-08-12 起）。它是成功指標的分母——`route=claude-delegate-sub`
 的 dispatch 中 luna 佔比。填法：走本檔 § Routing Table 某一列 → `routing-table`；走 § Claude 委派的
@@ -315,7 +315,7 @@ basis，**NEVER** 隨手挑一個列名湊過去。
 - `4` — quota 擋，**兩種來源同一個 code**：派工前的 gate（primary used_percent > 85），或 codex **跑到一半**回報 usage limit（pre-gate 讀的是上一個 session 的快照，window 在那之後被吃滿、或 rate_limits 讀不到而 fail-open 放行時就會這樣）。後者的 payload 帶 `detected: 'runtime'` 與 `resets_at_human`（codex 給的是散文日期不是 epoch）。處置相同：非急件延後到下一個 window、依 `next_tier` 換 tier；急件 `AskUserQuestion` 讓 user 拍板（`--no-quota-check` 強派）
   - **`3` 與 `4` 的下一步相反，NEVER 混用**：`3` 是「這次壞了，可以再試」，`4` 是「這個 window 內都別再試」。mid-run 撞配額若被報成 `3`，每一輪都會再燒一次 dispatch 去重新發現同一件事（2026-08-06 實測：配額 reset 在三天後，而輸出寫的是 `no parseable JSON`）
 
-**內建行為**：Pi `--no-session --no-extensions` machine mode、explicit MCP extension、token discipline system prompt、routing metadata validation、telemetry append 到 `~/.pi/agent/clade/dispatch-ledger.jsonl`（fail-open；`scripts/audit-codex-adoption.ts` 靠它量 adoption）。Pi目前沒有authoritative pre-dispatch quota snapshot，因此precheck明示unavailable並fail-open；runtime quota仍固定映射exit 4。
+**內建行為**：Pi `--no-session --no-extensions` machine mode、explicit MCP extension、token discipline system prompt、routing metadata validation、telemetry append 到 `~/.pi/agent/clade/dispatch-ledger.jsonl`（fail-open；`scripts/audit-pi-adoption.ts` 靠它量 adoption）。Pi目前沒有authoritative pre-dispatch quota snapshot，因此precheck明示unavailable並fail-open；runtime quota仍固定映射exit 4。
 
 **Token discipline 是 runtime 內建，template / brief NEVER 各自重寫一份**：`vendor/pi/system/token-discipline.md`（codebase-memory 優先於 grep ＋ rtk 包裹重輸出指令）由 `runPiCodex()` 以 `--append-system-prompt` 附掛到**每一發**有工具的 dispatch，四個入口（`pi-dispatch.ts` / `pi-dispatch-screenshot-verify.ts` / `pi-dispatch-pre-handoff-check.ts` / `pi-review.ts`）一致生效，`toolProfile: 'none'` 除外。主線 Claude 是靠 harness 的 SessionStart hook 與 Bash 改寫 hook 拿到這兩條，**Pi 上沒有等價機制**——2026-08-19 實測：全歷史 dispatch 3415 次 bash 只有 460 次走 rtk，同時仍有 raw `git` 657、`ls` 229、`pnpm` 143。
 
@@ -447,7 +447,7 @@ Codex 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleW
 - **MUST** 立刻 record decision：`node ~/offline/clade/vendor/scripts/residency-classify.ts record --consumer-path . --change <change> --verdict <v> --executor <codex|claude> [--reason ...]` → 落 `.spectra/residency-ledger.jsonl`
 - verdict=`codex-primary` 而決定 executor=`claude` → `--reason` 必填（record 入口會擋）
 - archive-gate **Check 8** 機械驗 record 存在：缺 record → archive exit 2；正當例外加 `<!-- residency-decision: intentional, reason: ... -->` 到 tasks.md 繞過
-- adoption 量測：`node ~/offline/clade/scripts/audit-codex-adoption.ts`（clade home 稽核：verdict × executor 表 + dispatch ledger 分桶）
+- adoption 量測：`node ~/offline/clade/scripts/audit-pi-adoption.ts`（clade home 稽核：verdict × executor 表 + dispatch ledger 分桶）
 
 ## Spectra Propose Handoff（具體做法）
 
