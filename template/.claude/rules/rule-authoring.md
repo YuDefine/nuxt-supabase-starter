@@ -194,6 +194,11 @@ clade 自家正例：`notion-board` 的「**NOT for** 主動建立一張新的�
 ## Token 紀律
 
 - 對 always-load rule（frontmatter 無 `paths:`）加段落前，先考慮 conditional-load 或併入既有 §；預算 gate：`scripts/audit-always-load-budget.ts`（cap 以該 script 為準）。
+- **always-load 是 zero-sum 面，加段落前 MUST 先答一句「這一段有沒有可判定的觸發條件」（MUST）**：該段的 NEVER / MUST 只在**特定檔案類型或特定 flow** 下才會被違反 → 它屬於 conditional，**MUST** 併進**既存**的 path-scoped 姊妹檔（`rules/core/<topic>.<sub>.md`），always-load 端只留同編號 stub ＋ **具名時機**的 MUST-Read 指針（「開始收截圖 evidence 之前」「派 spectra apply phase 之前」這種，NEVER 是「詳見」）。答案是「每一次派工前都要判」這種無觸發條件的，才留 always-load。
+
+  **NEVER 為了騰空間新開一支寬 glob 的 conditional 檔**——`paths:` 的成本是「包」不是「支」（見下一條），把常駐成本從 cached prefix 搬到 nested_memory 是更貴的方向。併進既存姊妹檔不新增注入包。
+
+  **NEVER 調高 `DEFAULT_MAX_KB` 代替**（zero-sum ratchet 是這個 gate 的設計本身，要調只能先轉出等量以上再 append `BUDGET_RAISE_LOG`），**也 NEVER 靠刪 NEVER 行省空間**——那是拿規約效力換 KB，兩者不可交換。headroom 低於 4 KB 時 audit 會印 `NOTE:` 早期警示；**NEVER** 等到 publish 中段撞 gate 才處理，那時工作已做完、正要散播。（TD-584 / TD-590：0.8 KB 的壓縮在兩天內被新增段落吃回去，說明缺的是回收機制不是一次壓縮）
 - **`paths:` 的寬度是成本變數，conditional-load 不等於免費（MUST）**：條件式規約一旦命中就是**整份**進場，之後被該 session 剩下的每一個 request 以 cache-read 重讀。實測（2026-08-02，7 天）：`nested_memory` 注入 2,105 次、8.45M tokens，約佔加權帳單 5.8%——單次注入 8–12.5k tokens。所以「移到 conditional 就不用管長度」是錯的，**上一條的長度校準對 conditional 規約一樣適用**。
 
   寫或改 `paths:` 時 **MUST** 逐個 glob 問：**這個副檔名 / 目錄底下的編輯，本規約真的有對應條文嗎？** 答不出來就不要放進去。三個實測命中的反例：

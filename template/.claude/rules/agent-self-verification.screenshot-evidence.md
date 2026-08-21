@@ -1,5 +1,5 @@
 ---
-description: 收 verify:ui / review:ui 視覺 evidence 的操作規約——截圖與驗證同一個 Bash call、(a)–(e) 五層驗證的 canonical pattern、seed fixture 必須進 seed.sql、既有 [x] 要自拍佐證、UI 改動後全批重拍
+description: 收 verify:ui / review:ui 視覺 evidence 的操作規約——截圖與驗證同一個 Bash call、(a)–(e) 五層驗證的 canonical pattern、seed fixture 必須進 seed.sql、worktree .env 先驗再宣稱缺、既有 [x] 要自拍佐證、UI 改動後全批重拍、`(deferred:)` failure trail 逐字範例、收尾前 receipt 齊全核對
 paths: ['screenshots/**', 'openspec/changes/**/tasks.md', 'app/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'e2e/**', 'packages/*/e2e/**', 'playwright.config.*', 'packages/**/app/**/*.vue']
 ---
 <!--
@@ -16,11 +16,25 @@ Local edits will be reverted by the next sync.
 
 主檔的四條一句話 MUST 是契約，本檔是它們的執行細節與 canonical pattern。兩邊衝突時以主檔為準。
 
+## MUST 3 — `(deferred: ...)` annotation 的 failure trail 格式
+
+逐層列出 (a)(b)(c)(d) 的嘗試結果。逐字範例：
+
+```text
+（deferred: tried (a) dev-login route 限 E2E user only, edit 後 typecheck fail / (b) service_role 不適用（需驗 RLS 邏輯）/ (c) OAuth callback 撞 redirect URI mismatch / (d) screenshot-review fail with "login required"。剩需 user 親自跑）
+```
+
 ## MUST 5 — verify:ui / verify:e2e evidence 的 fixture MUST 在 seed.sql
 
 Step 8a evidence collection 發現 seed 缺 fixture（verify item 引用的 entity ID 在 `seed.sql` 不存在）時，**MUST** 先把 fixture INSERT 寫進 `seed.sql` → `pnpm supabase:sync` → `pnpm db:reset` → 再拍截圖。
 
 **NEVER** 用 `curl POST` / `$fetch` / browser form submit 臨時建 ephemeral data 拍截圖 —— ephemeral data 在任何 db:reset 後消失，截圖全部 stale，被迫重建 + 重拍（per [[pitfall-verify-evidence-ephemeral-fixture-washed-by-db-reset]]）。
+
+## MUST 6 — Worktree .env 驗證
+
+在 worktree 做 verify channel evidence collection 時，若 item 依賴特定 env var（API key / token / secret），**MUST** 先 `grep -i '<VAR_NAME>' .env.local` 確認存在且有值。
+
+**NEVER** 假設 worktree env 缺失而寫 `blocked on <VAR>` —— worktree 透過 `wt-env-sync.ts` 或 stash-apply baseline 繼承 main 的 `.env.local`，env var 幾乎一定存在。驗證成本 = 一行 grep，假設成本 = 把 actionable item 降級為 blocker + 浪費 user 時間糾正。（per [[pitfall-worktree-env-assumption-and-unverified-evidence]]）
 
 ## MUST 7 — 截圖 + 驗證不可分割（atomic screenshot-then-verify）
 
@@ -95,3 +109,15 @@ node --experimental-strip-types vendor/scripts/audit-screenshot-staleness.ts \
 ```
 
 **NEVER** 只重拍被標 `（issue:）` 的那張 — 同次 code 改動影響的 sibling items 截圖同樣過時。（per [[pitfall-issue-fix-refreshes-only-flagged-screenshot-leaves-batch-stale]]；<consumer-a> 2026-07-04 regression 實證：timeline 上色改動後只重拍 #1.1，其餘 7 張 stale → bucket 卡 `readyForEvidence`）
+
+## MUST 15 — 收尾前核對 receipt 齊全
+
+change 收尾 / archive / hand back user 前，**MUST** 跑
+
+```bash
+node --experimental-strip-types ~/offline/clade/vendor/scripts/audit-evidence-completeness.ts --repo <repo> --change <change>
+```
+
+並取得 exit 0。exit 1 代表有**已勾**的 item 沒有對應 evidence receipt：**MUST** 補收 evidence（`evidence-store --write`），或在該 item 標 `(deferred: ...)` 附逐層 failure trail（格式同 MUST 3）。**NEVER** 為了讓它變綠去改 checkbox——那是把 false-green 從「沒被發現」變成「主動製造」。
+
+**NEVER** 用逐項 `evidence-store --has-evidence` 查過就當全項齊全。逐項查回答得了「這一項有沒有」，回答不了「哪些項還缺」——而收尾要問的正是後者，漏掉的永遠是沒被查到的那一項。這條與 MUST 8 是同一個 false-green 的兩端：MUST 8 管單項的 checkbox 不可信，本條管整批的「都驗完了」不可信。

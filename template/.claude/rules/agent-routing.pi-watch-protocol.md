@@ -1,5 +1,5 @@
 ---
-description: Pi 派工的標準流程模板、Pi Watch Protocol、Plan-first / Git baseline declaration、$spectra-apply Runtime Gate、screenshot-review verify mode 派工與監看、配額耗盡的 fallback 鏈全文、Spectra Propose / Apply 的 dispatch 契約；apply 階段 / 觸及 spectra change 時 path-scoped 載入——單純「要派 pi」不會自動載入本檔，MUST 依 [[agent-routing]] 的強制指針主動 Read
+description: Pi 派工的標準流程模板、Pi Watch Protocol、Plan-first / Git baseline declaration、$spectra-apply Runtime Gate、screenshot-review verify mode 派工與監看、配額耗盡的 fallback 鏈全文、Spectra Propose / Apply 的 dispatch 契約、Orchestration Residency 的四步做法、Routing Table 下推列（spectra 三列 + screenshot 兩列）的取證全文；apply 階段 / 觸及 spectra change 時 path-scoped 載入——單純「要派 pi」不會自動載入本檔，MUST 依 [[agent-routing]] 的強制指針主動 Read
 paths: ['openspec/changes/**/tasks.md', 'openspec/changes/**/design.md', 'scripts/spectra-advanced/**', '.claude/agents/**', 'screenshots/**/progress.json']
 ---
 <!--
@@ -439,7 +439,16 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleWake
 
 ## Orchestration Residency — 機械 Enforcement（residency-classify + archive-gate Check 8）
 
-從 [[agent-routing]] § Orchestration Residency 移出（2026-07-31）。Residency 的**判定條件**（Codex-primary A/B 進入條件、Claude-primary 五條）留在主檔；本節是它的機械強制步驟，只在 spectra-apply 開工時用得到。
+從 [[agent-routing]] § Orchestration Residency 移出（2026-07-31；四步做法於 2026-08-22 一併下推，TD-590）。Residency 的**判定條件**（Codex-primary A/B 進入條件、Claude-primary 五條）留在主檔；本節是它的執行步驟與機械強制點，只在 spectra-apply 開工時用得到。
+
+**Codex-primary 的四步做法（change 粒度，不是 phase 粒度）**：
+
+1. 主線**一次** dispatch 整條 change 的**所有**非 view phase 給單一 background pi（prompt 列全部 phase + acceptance + Plan-first + Commit Authorization；模板見 § Pi 派工的標準流程）。**NEVER** 一個一個 phase 派（phase 粒度是 Claude-primary 才用）。
+2. Dispatch 後 **notification-only watch**（§ 監看排程）——**不**逐 phase cross-check、**不**短輪詢。
+3. 完工通知後**一次** change 粒度 cross-check：commit 數 / format、view-layer drift + scope discipline（§ Spectra Apply Phase Dispatch Step 5）、typecheck + test。
+4. 主線**自己**跑 Section 7 Design Review（永不派 pi），再進 `/commit` 0-A gate。
+
+把關移到邊界：兩道 gate（`/commit` 0-A + archive Design Review）作用在最終 diff 上。
 
 **為什麼**：該節上線 6 天實測（2026-06-11 audit），eligible change 採用率僅 1/3 — 兩條純非-view change 仍由主線自做、0 dispatch。文字規約對 routing 自律無效，故比照 Check 7 / E.1 先例補機械強制點。
 
@@ -448,6 +457,18 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleWake
 - verdict=`codex-primary` 而決定 executor=`claude` → `--reason` 必填（record 入口會擋）
 - archive-gate **Check 8** 機械驗 record 存在：缺 record → archive exit 2；正當例外加 `<!-- residency-decision: intentional, reason: ... -->` 到 tasks.md 繞過
 - adoption 量測：`node ~/offline/clade/scripts/audit-pi-adoption.ts`（clade home 稽核：verdict × executor 表 + dispatch ledger 分桶）
+
+## Routing Table 下推列的全文（2026-08-22 從 [[agent-routing]] § Routing Table 下推，TD-590）
+
+主檔留短列（類別 ＋ model／effort ＋ 硬 NEVER），本節是那幾列的取證與範圍全文。**派這幾列之前 MUST 先讀對應那一列**，主檔的短列不足以判邊界。
+
+| 工作類別 | 由誰執行 | 為什麼（全文） |
+| --- | --- | --- |
+| 〔`spectra-phase-implementation`〕 **Spectra Apply Class C phase 語意實作** | **Pi `--model sol --effort high` via 泛用 dispatcher** | schema／migration／API／backend／非 view frontend 等 phase 的預設 carrier。Plan-first、task→file、view guard、scope、one-phase-one-commit 與 L0–L2 gate 不因 carrier 統一而放寬。**NEVER 轉 grok**——前置契約未滿足時 grok 自報 `status: pass` ＋ `tasks_completed` 非空，sol／luna 都 fail-closed（取證見 rationale § `spectra-phase-implementation` NEVER 轉 grok）。**NEVER** 反過來讀成「反正下游 check 接得住所以可以轉」：`pi-phase-dispatch.md` § 6 的 check 6 只驗 `result.status` 精確為 `pass`，對「報 pass 但沒做」零訊號。 |
+| 〔`spectra-phase-prescan`〕 **Spectra Apply 已封閉 phase 的 read-only fact extraction** | **Pi `--model gemini --effort low` via 泛用 dispatcher** | 只抽 task→file、既有 symbol、exact gate command 與 source location；不得做 status／identity／relevance／實作裁決。矛盾回 `needs_reconciliation`，後續實作仍走 `spectra-phase-implementation`。exit 4 → luna。 |
+| 〔`spectra-mechanical-substep`〕 **Spectra Apply machine-readable pilot marker 指定的 deterministic mutation** | **Pi `--model gemini --effort low` via 泛用 dispatcher** | 只有 execution classifier 的完整低風險 predicate 全中才 eligible；rollout stage 未開或樣本 gate 未達時只記 shadow candidate，effective route 仍是 `spectra-phase-implementation` Sol high。exit 4 → luna。 |
+| 〔`screenshot-match-analysis`〕 **截圖 vs item 要求的匹配判定**（`[verify:ui]` 收集完成後的 gate） | **Pi `--model sol --effort xhigh` via 泛用 dispatcher** | 收集與判定是兩個角色：收集走上一列 grok low（輸出不是 gate，錯了下游接得住），判定是 gate 且要擋「亂截圖搪塞」。**NEVER** 把兩者併成同一次 dispatch——那會讓 effort 不是單一值、檔位判不出來。留 sol 的理由是**樣本不足以轉**，不是 grok 守不住（取證見 rationale § gate 列與 reconciliation 列的 grok 取證）——**NEVER** 再拿「要最高推理力」當留列依據。要轉需補到 TD-509 列的 reps。 |
+| 〔`screenshot-review-verify`〕 **`screenshot-review` 全部模式**（`[verify:ui]` channel / archive 前視覺 QA / commit 0-B / ad-hoc 截圖） | **`Agent` tool，`subagent_type: screenshot-review`（Claude）。本列 NEVER 派 Pi 任一 model**——`grok-xai` / `grok-cursor` / `sol` / `gemini` / `luna` 一律不准，`pi-dispatch-screenshot-verify.ts` 已 fail-closed 拒跑 | 2026-08-22 Charles 拍板收回外派。**收回的理由不是 grok 拍不好**（兩 seat 同一個 `grok-4.6`），是兩條交付路徑各有不該付的代價：`xai` seat 無沙箱、完整工具集、完整網路；`cursor` seat 要拍到本機 dev server 就得在 default-deny egress 上開 RFC1918 例外。純機械取證不值這個價，判定本來就留主線。**NEVER** 把 [[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]] 讀成「Claude 收不了截圖」——那次成因是 wrapper 被設計成路由器卻決定當執行體，本列已把路由層拿掉、subagent 就是執行體。**NEVER** 恢復任何「subagent 再轉派」的形狀。四個模式一律適用；verify / archive / 0-B 三個模式的輸出仍是 gate。詳見 [[review-gui-surface]] § 為什麼只准 Claude subagent。 |
 
 ## Spectra Propose Handoff（具體做法）
 

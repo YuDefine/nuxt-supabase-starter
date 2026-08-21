@@ -132,17 +132,6 @@ patrol 只印出「這筆該有人收」，它不是收割者。
 
 ### 成本模型（2026-08-07 納入 prompt caching 修正）
 
-本節 2026-08-07 前寫著 `Cost ≈ N × C / 2`（N=turns、C=最終 context），假設**每個 turn 全額重讀
-整個 context**。**那個假設在 cache 命中時是錯的，高估約 5–10 倍**：訂閱方案自動用 1 小時 TTL，
-cache read 只計 **0.1×**、write 計 2×。
-
-```
-Cost ≈ 0.1 × (N × C / 2) + 2C          # warm cache，訂閱 1h TTL
-每次 cache miss 額外 ≈ +3C              # 全額重讀 1× + 重寫 2×
-```
-
-代入 C=300k / N=50：修正後 ≈ 1.35M effective，舊模型估 7.5M。
-
 **真正的成本殺手不是長 session，是 cache miss。** 單次 miss 在 300k context ≈ +0.9M effective——
 比整場 warm 讀取的一半還多。已知的 miss 觸發源（**MUST** 全部避免）：
 
@@ -153,10 +142,10 @@ Cost ≈ 0.1 × (N × C / 2) + 2C          # warm cache，訂閱 1h TTL
 
 **推論：session 開頭定好 model 與 effort，中途 NEVER 切。** 一次切換的代價比省下的多得多。
 
-**讀取量 ≠ 成本**：長 session 佔掉的 context 讀取量大部分是 0.1× 權重的 cache read。
-**NEVER** 拿讀取量佔比論證「長 session 很貴」——它論證的是「長 session 讀很多」，兩者差一個
-數量級的權重。長 session 真正的代價在**品質**（context rot）與 **cache miss 風險敞口**。
-量測出處、baseline 檔與 cache 權重的查證邊界見 rationale § 成本模型的量測依據。
+**讀取量 ≠ 成本**：**NEVER** 拿讀取量佔比論證「長 session 很貴」——它論證的是「長 session 讀很多」，
+兩者差一個數量級的權重。長 session 真正的代價在**品質**（context rot）與 **cache miss 風險敞口**。
+公式、`Cost ≈ 0.1 × (N × C / 2) + 2C` 的代入、舊模型為何高估 5–10 倍、量測出處與 cache 權重的
+查證邊界，全文見 rationale § 成本模型的量測依據。
 
 ### 收工前的自我開脫（看到自己這樣說就停下登記）
 

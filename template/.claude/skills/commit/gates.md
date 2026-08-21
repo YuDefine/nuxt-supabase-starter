@@ -380,6 +380,15 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 | 0-A.2 Step 1 | Pi GPT-5.6-sol | max | 深度搜尋所有可能問題 |
 | 0-A.2 Step 2 | Fable `claude-fable-5` | max | 拿 pi finding 做最終裁決 |
 
+### 0-A dispatch 禁令（2026-08-22 從 [[agent-routing]] § 必禁事項 下推，TD-590）
+
+| NEVER | 說明 |
+| --- | --- |
+| **NEVER** 在 commit 0-A 把 `simplify` 跟 pi 並行 | simplify 修完才是 pi 該看的版本 |
+| **NEVER** 在 commit 0-A 啟用已棄用的 `code-review` agent（Opus subagent） | 與 pi review 重疊且同為 Anthropic 模型盲點 |
+| **NEVER** 在 commit 0-A 跑第 3 輪 pi | 2 輪內處理不完先 split；0-A.2 由 0-A.1 Critical / Major 條件觸發，不可無條件升級也不可跳過 |
+| **NEVER** 在 commit 0-A.0 用 `Agent` 包一層跑 simplify，也 **NEVER** 在 prompt 裡叫 agent 自行 launch N 個平行 review 子 agent | 主線直接 `Skill(simplify)`；四軸分工是 `simplify` skill 本體的內部實作。依據見 rationale，詳見 commit `gates.md` § 0-A.0 |
+
 ### 0-A.0 — simplify（主線，永遠跑、永遠先跑）
 
 對本次 working tree 變更跑 simplify review + 自動修 —— 聚焦 reuse / 精簡 / efficiency / altitude，Pi review 不會抓這條軸。simplify 修完的版本才是下一步 Pi review 應該看的對象。
