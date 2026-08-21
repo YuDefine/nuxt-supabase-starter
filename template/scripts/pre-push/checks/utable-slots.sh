@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 🔒 LOCKED — managed by clade · Source: vendor/scripts/pre-push/checks/utable-slots.sh · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/pre-push/checks/utable-slots.sh
 # CLADE:VENDOR-SCRIPT
 #
 # utable-slots (pre-push, repo-wide) — 全站掃 <UTable> 內漏掉 `-cell` 後綴的 cell slot

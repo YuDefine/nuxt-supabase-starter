@@ -1,3 +1,4 @@
+# 🔒 LOCKED — managed by clade · Source: vendor/actions/evlog-map-gate/action.yml · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/actions/evlog-map-gate/action.yml
 name: 'evlog map Coverage Gate'
 description: 'Run the clade evlog map gate. Default mode is strict: EVERY entry point in the repo must have zero failing checks and zero suppressions — not just the ones this diff touched. Ratchet mode (score must not drop below the committed evlog.map.json baseline, touched entry points must be perfect) remains available for repos still climbing to 100. Also fails on the false-green case where evlog map finds 0 entry points but reports score 100. Assumes the caller has already checked out the repo with fetch-depth 0 and installed dependencies.'
 author: 'YuDefine/clade'

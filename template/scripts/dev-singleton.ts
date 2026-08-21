@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// 🔒 LOCKED — managed by clade · Source: vendor/scripts/dev-singleton.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/dev-singleton.ts
 
 /**
  * dev-singleton.ts — clade-managed dev server singleton wrapper

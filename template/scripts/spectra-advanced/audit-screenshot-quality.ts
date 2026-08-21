@@ -1,4 +1,5 @@
 #!/usr/bin/env -S node --experimental-strip-types
+// 🔒 LOCKED — managed by clade · Source: vendor/scripts/spectra-advanced/audit-screenshot-quality.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/spectra-advanced/audit-screenshot-quality.ts
 /**
  * Screenshot Quality Audit.
  *

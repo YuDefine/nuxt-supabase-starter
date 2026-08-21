@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 🔒 LOCKED — managed by clade · Source: vendor/scripts/spectra-advanced/pre-apply-brief.sh · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/spectra-advanced/pre-apply-brief.sh
 # spectra-advanced: pre-apply journey brief
 #
 # Briefs the implementer with the User Journeys and Affected Entity Matrix

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 🔒 LOCKED — managed by clade · Source: vendor/scripts/pre-commit/checks/vp-staged.sh · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/pre-commit/checks/vp-staged.sh
 # CLADE:VENDOR-SCRIPT
 #
 # vp-staged — 對 staged 檔案跑 vite-plus lint + format

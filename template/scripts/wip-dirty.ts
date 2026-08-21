@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// 🔒 LOCKED — managed by clade · Source: vendor/scripts/wip-dirty.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/wip-dirty.ts
 // wip-dirty.ts — 列出一個 repo working tree 內「user WIP」dirty paths，
 // 即 git status --porcelain 過濾掉 clade-managed projection 後剩下的檔。
 //

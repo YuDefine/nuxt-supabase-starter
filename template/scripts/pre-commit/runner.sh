@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 🔒 LOCKED — managed by clade · Source: vendor/scripts/pre-commit/runner.sh · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/pre-commit/runner.sh
 # CLADE:VENDOR-SCRIPT
 #
 # clade — pre-commit runner
@@ -60,3 +61,6 @@ run_check nuxt-ui-mixed-slot
 
 # 8) utable-slots — 偵測 staged .vue 在 UTable 內漏掉 cell slot 的 -cell 後綴
 run_check utable-slots
+
+# 9) clade-projection-drift — 擋 staged 的 clade 投影檔被本地改過（TD-582）
+run_check clade-projection-drift

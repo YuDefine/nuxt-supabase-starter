@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// 🔒 LOCKED — managed by clade · Source: vendor/scripts/checks/mutation-loading-detect.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/checks/mutation-loading-detect.ts
 // CLADE:VENDOR-SCRIPT
 /**
  * Pinia Colada mutation-status-as-loading detector — 單一真相偵測器。

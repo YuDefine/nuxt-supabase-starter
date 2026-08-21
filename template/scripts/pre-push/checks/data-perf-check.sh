@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 🔒 LOCKED — managed by clade · Source: vendor/scripts/pre-push/checks/data-perf-check.sh · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/pre-push/checks/data-perf-check.sh
 # CLADE:VENDOR-SCRIPT
 #
 # data-perf-check (pre-push, repo-wide) — 全站偵測 .vue 中 raw $fetch anti-pattern（HR-1）

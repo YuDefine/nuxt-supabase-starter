@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// 🔒 LOCKED — managed by clade · Source: vendor/scripts/dev-session.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/dev-session.ts
 /**
  * dev-session.ts — durable dev-server 單一入口（herdr tab + lease + 反累積）.
  *

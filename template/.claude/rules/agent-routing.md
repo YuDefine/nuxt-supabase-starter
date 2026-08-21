@@ -398,7 +398,7 @@ N ≥ 3 個 dispatch 的 findings 要收斂進同一個 synthesis 時，reducer 
 
 **Invariant**：session 內只要存在**任何**未收尾的 async work，主線相鄰兩個 assistant turn 的間隔 **NEVER** 超過 55 分鐘。
 
-**適用範圍窮舉**（明寫，不靠外推）：**每一種** async 派工都適用，不是只有長任務——Agent tool subagent（含 `/wt` **Form 1–4 全部**）、`Bash(run_in_background)`、pi dispatch、`runner.sh`、Monitor、Workflow。task-aware control wakeup 僅適用於可用 `TaskOutput(block=false)` 查詢的 harness task id；沒有這個 id 的路徑不得假裝可查狀態。
+**適用範圍窮舉**（明寫，不靠外推）：**每一種** async 派工都適用，不是只有長任務——Agent tool subagent（含 `/wt` **Form 1–4 全部**）、`Bash(run_in_background)`、pi dispatch、`runner.sh`、Monitor、Workflow。
 
 ### 派出當下的自查（MUST）
 
@@ -407,36 +407,27 @@ N ≥ 3 個 dispatch 的 findings 要收斂進同一個 synthesis 時，reducer 
 | 可觀察 predicate | MUST |
 | --- | --- |
 | 該路徑**已有**間隔 ≤3300s 的既有 wakeup（pi 的 1500s 安全網、work-loop 的 (d) heartbeat） | 不另外排。但收到完成通知前 **MUST** 持續重排既有那個 |
-| 該路徑是可查 task id 的 `Bash(run_in_background)`，但沒有既有 wakeup | 立刻排 3300s task-aware generic async keepalive；`prompt` **MUST** 使用下方 canonical inert control message，**NEVER** 放原任務輸入 |
-| 該路徑是沒有可查 task id 的 Agent tool / `/wt` Claude subagent / Monitor / Workflow，且沒有既有 wakeup | 立刻排 3300s notification-only keepalive；`prompt` **MUST** 使用下方 notification-only inert message，**NEVER** 放原任務輸入或虛構 task id |
-| 派完主線手上**還有**不依賴該結果的獨立工作 | 先做那些工作（那本來就不會靜默）。做完仍在等 → 回上面兩列排 keepalive |
+| 該路徑有 async job 在跑，但沒有既有 wakeup | 立刻排 3300s keepalive；`prompt` **MUST** 使用下方 canonical inert control message，**NEVER** 放原任務輸入或虛構 id |
+| 派完主線手上**還有**不依賴該結果的獨立工作 | 先做那些工作（本來就不會靜默）。做完仍在等 → 回上面兩列排 keepalive |
 | session 內**沒有**任何未收尾 async job | 不排。keepalive 的觸發條件是「有東西在跑而主線不出聲」，不是「idle」 |
 
 3300s = 55 分，留 5 分餘裕給 1 小時 TTL，落在 runtime 的 `[60, 3600]` clamp 內。
 
-### Generic async keepalive prompt（canonical inert control message）
+### Async keepalive prompt（canonical inert control message）
 
-僅限有 `TaskOutput(block=false)` 可查詢的 `Bash(run_in_background)` harness task；派出時 **MUST** 同時記下 `<task-id>`、`<owner>` 與有限的 `<deadline>`。控制訊息只替換這三個欄位：
-
-```text
-ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=<owner> deadline=<ISO>. Status-only: call TaskOutput(block=false) for this task. If terminal, stop this wakeup and enqueue ASYNC_LIFECYCLE_HANDOFF task=<task-id> owner=<owner> cause=terminal. If running before deadline, re-arm this exact message. If running at deadline, or status remains unknown after the bounded retry, stop this wakeup and enqueue ASYNC_DEADLINE_INTERVENTION task=<task-id> owner=<owner> cause=<deadline|unknown>. Never replay the dispatched instruction.
-```
-
-**Iron Law：generic async keepalive 只控制既有 harness task 的生命週期，NEVER 承載原任務。違反字面就是違反精神。** 原任務若含共享修改，把它塞進 `prompt` 會讓 wakeup 被 classifier 正確讀成「未來重新執行共享修改」，即使本意只是 keepalive。
-
-### Notification-only keepalive prompt（無 task id）
-
-Agent tool、`/wt` Claude subagent、Monitor、Workflow 沒有可查的 harness task id 時，控制訊息只能維持 cache，**不得**偽裝成 task lifecycle control：
+**每一種** async 派工都用這一份模板：只有 `Bash(run_in_background)` 有 `TaskOutput(block=false)` 查得到的 harness task id，填真實 `<task-id>`；**其餘每一種**（Agent tool、`/wt` Claude subagent、Monitor、Workflow）**逐字**填 `task=none`，**NEVER** 虛構 id 補洞。派出時 MUST 記下這三個欄位的值（`<owner>` 要能被 `TaskStop(owner)` 操作），控制訊息也只替換它們：
 
 ```text
-ASYNC_NOTIFICATION_KEEPALIVE owner=<owner> deadline=<ISO>. Notification-only: if no native completion notification has arrived before deadline, re-arm this exact message. At or after deadline, stop this wakeup and enqueue ASYNC_DEADLINE_INTERVENTION owner=<owner> cause=deadline. Never query TaskOutput, infer task status, or replay the dispatched instruction.
+ASYNC_KEEPALIVE_CONTROL task=<task-id|none> owner=<owner> deadline=<ISO>. Status-only. If task is an id, call TaskOutput(block=false) for it: if terminal, stop this wakeup and enqueue ASYNC_LIFECYCLE_HANDOFF task=<task-id> owner=<owner> cause=terminal. If task=none, never query TaskOutput or infer task status; wait for the native completion notification instead. Before deadline, if it is still running or no notification has arrived, re-arm this exact message. At deadline, or if status remains unknown after the bounded retry, stop this wakeup and enqueue ASYNC_DEADLINE_INTERVENTION task=<task-id|none> owner=<owner> cause=<deadline|unknown>. Never replay the dispatched instruction.
 ```
 
-native completion notification 到達時 **MUST** 停掉對應 wakeup。notification-only job 沒有 harness task status 可查，但 **owner 自己的原生狀態面**（Herdr pane 的 `agent_status`、Agent 的 idle notification）**是 allowlist 內的 liveness 確認**；被禁的是**讀 output / log / repo 猜進度**（兩者的界線見 rationale § liveness 確認 vs 猜進度）。dispatch 時 MUST 記錄可操作的 owner ref（Agent name/id、Monitor task id、Workflow run/task id）與 deadline。deadline intervention 只准用 owner 的原生控制面（例如 `TaskStop(owner)`）發出取消，並等待 native terminal notification；確認 terminal 前保留 ownership，NEVER 收割、重派、記 fail-streak或釋放 lock。**NEVER** 以虛構 task id 補洞。
+**Iron Law：async keepalive 只控制既有 async job 的生命週期，NEVER 承載原任務。違反字面就是違反精神。** 原任務含共享修改時，塞進 `prompt` 會讓 classifier 正確讀成「未來重新執行共享修改」，即使本意只是 keepalive。
+
+native completion notification 到達時 **MUST** 停掉對應 wakeup。`task=none` 的 job 沒有 harness task status 可查，但 **owner 自己的原生狀態面**（Herdr pane 的 `agent_status`、Agent 的 idle notification）**是 allowlist 內的 liveness 確認**；被禁的是**讀 output / log / repo 猜進度**（兩者的界線見 rationale § liveness 確認 vs 猜進度）。deadline intervention 只准用 owner 的原生控制面（例如 `TaskStop(owner)`）發出取消，並等待 native terminal notification；確認 terminal 前保留 ownership，NEVER 收割、重派、記 fail-streak或釋放 lock。
 
 ### deadline 怎麼取（MUST）
 
-兩份 canonical 模板的 `deadline` 是**必填**欄位，而它是破壞性分支的觸發點——到期要 `TaskStop(owner)`，善後只能冷啟重跑。取值錯的代價因此不對稱：太晚只是多等一輪 interval，太早會砍掉一個**仍在自己預算內**的 run。**一律往晚的方向取。**
+canonical 模板的 `deadline` 是**必填**欄位，也是破壞性分支的觸發點——到期要 `TaskStop(owner)`，善後只能冷啟重跑。取值錯的代價因此不對稱：太晚只是多等一輪 interval，太早會砍掉一個**仍在自己預算內**的 run。**一律往晚的方向取。**
 
 **每一次**填 `deadline` 都先答一句「我派出去的東西，自己的硬超時（子層的 pi `--budget`、CI job timeout、Monitor TTL）落在哪？」再依下表取值。**每一份** keepalive 都適用，不是只有長任務：
 
@@ -448,18 +439,18 @@ native completion notification 到達時 **MUST** 停掉對應 wakeup。notifica
 
 **NEVER** 把 deadline 讀成「我希望它多久做完」——它不是期望值，是「超過這個點就判定它卡死」的閾值。**NEVER** 靠縮短 interval 補償取不準的 deadline：interval 管 prompt cache，deadline 管誤殺，兩條軸獨立。
 
-逐字反開脫：「dispatch 時間 +4 小時，看起來夠寬鬆了」——2026-08-13 <consumer-a> 實測父層正是這樣填出 `20:48:37`，而子層選 `--budget 240`、實際 kill timeout 落在 `20:56`，父層早了 8 分鐘。**直覺值不是上界**。
+逐字反開脫：「dispatch 時間 +4 小時，看起來夠寬鬆了」——2026-08-13 <consumer-a> 實測父層就是這樣填出 `20:48:37`，子層選 `--budget 240`、實際 kill timeout 落在 `20:56`，早了 8 分鐘。**直覺值不是上界**。
 
 本證據決定：deadline 往哪個方向取（一律往晚；資訊不足時取上界並改排）。
 本證據不決定：要不要排 keepalive——**NEVER** 拿「deadline 估不準」當不排 keepalive 的理由。
 
 ### `/loop` dynamic 是唯一 prompt-preserving 分支
 
-由 `/loop` dynamic mode 自我續跑的 wakeup **MUST** 保留同一份 `/loop` prompt；autonomous dynamic loop 使用 harness 指定的 `<<autonomous-loop-dynamic>>` sentinel（**逐字寫錯就等於默默放掉這個分支**，改動前先對照 `ScheduleWakeup` tool description 的 `prompt` 欄位；混用警告見 rationale）。這一支的目的就是下一輪繼續執行 loop，**NEVER** 套 generic inert message。反方向也成立：`runner.sh`、work-loop background dispatch、pi safety net 都是 generic keepalive，**NEVER** 因原任務來自 `/work-loop` 就保留原 prompt。
+由 `/loop` dynamic mode 自我續跑的 wakeup **MUST** 保留同一份 `/loop` prompt；autonomous dynamic loop 使用 harness 指定的 `<<autonomous-loop-dynamic>>` sentinel（**逐字寫錯就等於默默放掉這個分支**，改動前先對照 `ScheduleWakeup` tool description 的 `prompt` 欄位；混用警告見 rationale）。這一支的目的就是下一輪繼續執行 loop，**NEVER** 套 inert control message。反方向也成立：`runner.sh`、work-loop background dispatch、pi safety net 都是 async keepalive，**NEVER** 因原任務來自 `/work-loop` 就保留原 prompt。
 
 ### 醒來與 consent 的契約在 [[agent-routing.keepalive-wake]]（MUST 主動 Read）
 
-**收到 keepalive wakeup 的那個 turn、以及 permission classifier 要求具名 shared-action consent 的那一刻，MUST 先 Read `rules/core/agent-routing.keepalive-wake.md`**——control turn 的 allowlist（只准 `TaskOutput(block=false)`、重排同一 inert wakeup、停 wakeup、排 lifecycle handoff / deadline intervention）、`pending → harvesting → harvested` claim 狀態機、以及 consent 選項的逐字形狀都在那裡，**此處不複述**。consent 情境**不限於** keepalive turn，非 keepalive turn 觸發時同樣 MUST Read。
+**收到 keepalive wakeup 的那個 turn、以及 permission classifier 要求具名 shared-action consent 的那一刻，MUST 先 Read [[agent-routing.keepalive-wake]]**——control turn 的 allowlist（只准 `TaskOutput(block=false)`、重排同一 inert wakeup、停 wakeup、排 lifecycle handoff / deadline intervention）、`pending → harvesting → harvested` claim 狀態機、以及 consent 選項的逐字形狀都在那裡，**此處不複述**。consent 情境**不限於** keepalive turn，非 keepalive turn 觸發時同樣 MUST Read。
 
 ### Red Flags（發現自己在想這些 = 停下來排 keepalive）
 
@@ -467,7 +458,7 @@ native completion notification 到達時 **MUST** 停掉對應 wakeup。notifica
 
 ### 邊界
 
-與 `\do-all` 主線閒置禁令、與全域「不要把工作往後放」都**不衝突**（兩條關係的完整論證見 rationale § keepalive 與其他兩條規約的關係）。
+與 `\do-all` 主線閒置禁令、全域「不要把工作往後放」都**不衝突**（兩條關係的完整論證見 rationale § keepalive 與其他兩條規約的關係）。
 
 > 成本量級與兩次靜默實測（119 分鐘 / 1h43m）見 rationale § keepalive 的成本量級。
 >

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 🔒 LOCKED — managed by clade · Source: vendor/scripts/pre-commit/checks/supabase-migration-safety.sh · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/pre-commit/checks/supabase-migration-safety.sh
 # CLADE:VENDOR-SCRIPT
 #
 # supabase-migration-safety — 對 staged supabase migrations 做安全檢查

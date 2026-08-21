@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 🔒 LOCKED — managed by clade · Source: vendor/scripts/pre-push/checks/mutation-loading.sh · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/pre-push/checks/mutation-loading.sh
 # CLADE:VENDOR-SCRIPT
 #
 # mutation-loading (pre-push, 全 repo) — 回溯型掃描全 repo *.vue 的 Pinia Colada mutation

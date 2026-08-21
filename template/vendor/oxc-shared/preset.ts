@@ -1,3 +1,4 @@
+// 🔒 LOCKED — managed by clade · Source: vendor/oxc-shared/preset.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/oxc-shared/preset.ts
 // vendor/oxc-shared/preset.ts — clade-governed oxlint + oxfmt baseline preset
 //
 // Single source of truth for `vite.config.ts` lint/fmt rules across:

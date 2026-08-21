@@ -1,3 +1,4 @@
+# 🔒 LOCKED — managed by clade · Source: vendor/actions/review-rules-scan/action.yml · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/actions/review-rules-scan/action.yml
 name: 'Review Rules Scan (Ratchet)'
 description: 'Run the clade review-rules ratchet scan against the full repo (pre-commit + ratchet layer entries) via vendor/review-rules/scan.ts, failing only on violations that exceed review-rules-baseline.json. Assumes the caller has already checked out the repo.'
 author: 'YuDefine/clade'

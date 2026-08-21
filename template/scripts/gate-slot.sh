@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 🔒 LOCKED — managed by clade · Source: vendor/scripts/gate-slot.sh · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/gate-slot.sh
 # clade gate-slot — 限制同時執行的 heavy gate（typecheck / test）數量。
 #
 # 為什麼存在：post-edit hook 每次編輯 .ts/.vue 都跑完整 typecheck，pre-push 又跑一次。

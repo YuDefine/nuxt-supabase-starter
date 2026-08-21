@@ -1,3 +1,4 @@
+// 🔒 LOCKED — managed by clade · Source: vendor/scripts/lib/wt-env-bootstrap-runner.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/lib/wt-env-bootstrap-runner.ts
 // wt-env-bootstrap-runner.ts — consumer 的 per-worktree backing service 探針/補建的單一入口。
 //
 // 為什麼抽出來：這段原本只活在 `wt-helper.ts`（145KB）裡，且只在**建 worktree 那一刻**

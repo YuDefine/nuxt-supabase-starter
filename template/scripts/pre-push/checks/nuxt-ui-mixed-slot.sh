@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 🔒 LOCKED — managed by clade · Source: vendor/scripts/pre-push/checks/nuxt-ui-mixed-slot.sh · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/pre-push/checks/nuxt-ui-mixed-slot.sh
 # CLADE:VENDOR-SCRIPT
 #
 # nuxt-ui-mixed-slot (pre-push, repo-wide) — 全站掃 UDashboardPanel 混用

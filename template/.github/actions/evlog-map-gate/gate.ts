@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// 🔒 LOCKED — managed by clade · Source: vendor/actions/evlog-map-gate/gate.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/actions/evlog-map-gate/gate.ts
 
 /**
  * gate.ts — evlog map ratchet gate

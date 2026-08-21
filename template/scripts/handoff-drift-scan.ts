@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// 🔒 LOCKED — managed by clade · Source: vendor/scripts/handoff-drift-scan.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/handoff-drift-scan.ts
 
 /**
  * handoff-drift-scan.ts — surface stale HANDOFF.md entries

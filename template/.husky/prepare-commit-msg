@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
+# 🔒 LOCKED — managed by clade · Source: vendor/husky/prepare-commit-msg · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/husky/prepare-commit-msg
 # CLADE:VENDOR-SCRIPT
 #
 # prepare-commit-msg — 把 commit header 的 emoji 依 type 正規化（見 vendor/husky/normalize-commit-emoji.ts）

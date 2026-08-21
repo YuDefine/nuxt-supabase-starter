@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 🔒 LOCKED — managed by clade · Source: vendor/scripts/pre-push/checks/nuxt-typecheck.sh · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/pre-push/checks/nuxt-typecheck.sh
 # CLADE:VENDOR-SCRIPT
 #
 # nuxt-typecheck — pre-push 跑一次 full project typecheck

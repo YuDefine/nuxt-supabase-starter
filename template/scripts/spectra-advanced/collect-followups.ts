@@ -1,4 +1,5 @@
 #!/usr/bin/env -S node --experimental-strip-types
+// 🔒 LOCKED — managed by clade · Source: vendor/scripts/spectra-advanced/collect-followups.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/spectra-advanced/collect-followups.ts
 /**
  * spectra-ux v1.5+: Collect follow-up markers from tasks.md + validate against register.
  *

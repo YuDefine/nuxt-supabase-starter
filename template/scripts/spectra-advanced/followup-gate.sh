@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 🔒 LOCKED — managed by clade · Source: vendor/scripts/spectra-advanced/followup-gate.sh · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/spectra-advanced/followup-gate.sh
 # spectra-advanced v1.5+: Follow-up Register Archive Gate
 #
 # Blocks spectra-archive when tasks.md contains @followup[TD-NNN] markers

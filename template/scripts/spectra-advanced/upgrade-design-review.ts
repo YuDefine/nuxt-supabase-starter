@@ -1,4 +1,5 @@
 #!/usr/bin/env -S node --experimental-strip-types
+// 🔒 LOCKED — managed by clade · Source: vendor/scripts/spectra-advanced/upgrade-design-review.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/spectra-advanced/upgrade-design-review.ts
 /**
  * spectra-ux: upgrade existing Design Review sections from N-step (typically 5)
  * template to the canonical 7-step template (N.1~N.7).

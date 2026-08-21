@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 🔒 LOCKED — managed by clade · Source: vendor/scripts/spectra-advanced/ui-qa-reminder.sh · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/spectra-advanced/ui-qa-reminder.sh
 # spectra-advanced: UI edit reminder
 #
 # Emits lightweight reminders during active UI work so design / QA checks do

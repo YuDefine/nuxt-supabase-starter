@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// 🔒 LOCKED — managed by clade · Source: vendor/scripts/spectra-advanced/verify-url-check.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/spectra-advanced/verify-url-check.ts
 // verify-url-check — ## 人工檢查 item URL 的機械驗證（TD-220，
 // pitfall-verify-item-fake-url-no-interaction prevention #4）。
 //

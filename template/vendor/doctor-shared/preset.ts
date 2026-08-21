@@ -1,3 +1,4 @@
+// 🔒 LOCKED — managed by clade · Source: vendor/doctor-shared/preset.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/doctor-shared/preset.ts
 // vendor/doctor-shared/preset.ts — clade-governed vite-doctor rule baseline
 //
 // ⚠️ 下面 usage 範例的 import 是 extensionless，那是刻意的：nuxt.config.ts 在 nuxi

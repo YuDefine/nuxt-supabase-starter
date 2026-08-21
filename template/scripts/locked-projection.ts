@@ -1,3 +1,4 @@
+// 🔒 LOCKED — managed by clade · Source: vendor/scripts/locked-projection.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/locked-projection.ts
 /**
  * locked-projection.ts — canonical regex for clade-managed projection paths.
  *

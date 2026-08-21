@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 🔒 LOCKED — managed by clade · Source: vendor/scripts/pre-commit/checks/mutation-loading.sh · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/pre-commit/checks/mutation-loading.sh
 # CLADE:VENDOR-SCRIPT
 #
 # mutation-loading (pre-commit, staged) — 擋 staged .vue 把 Pinia Colada mutation 的

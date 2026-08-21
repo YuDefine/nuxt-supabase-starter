@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 🔒 LOCKED — managed by clade · Source: vendor/scripts/pre-push/checks/native-picker-ban.sh · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/pre-push/checks/native-picker-ban.sh
 # CLADE:VENDOR-SCRIPT
 #
 # native-picker-ban (pre-push, repo-wide) — 全站禁止原生 / 第三方 date / time / calendar picker

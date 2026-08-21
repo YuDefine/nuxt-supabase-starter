@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 🔒 LOCKED — managed by clade · Source: vendor/scripts/spectra-advanced/design-inject.sh · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/spectra-advanced/design-inject.sh
 # spectra-advanced: post-propose design review reminder
 #
 # Detects newly created UI-scoped changes and reminds the agent to add a

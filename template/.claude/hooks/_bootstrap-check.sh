@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 🔒 LOCKED — managed by clade · Source: vendor/_bootstrap-check.sh · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/_bootstrap-check.sh
 #
 # clade — bootstrap-check.sh
 #

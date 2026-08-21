@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// 🔒 LOCKED — managed by clade · Source: vendor/scripts/lib/evidence-store.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/lib/evidence-store.ts
 /**
  * evidence-store — sidecar-first evidence resolver for review-gui annotations.
  *

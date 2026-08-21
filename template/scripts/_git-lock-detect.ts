@@ -1,3 +1,4 @@
+// 🔒 LOCKED — managed by clade · Source: vendor/scripts/_git-lock-detect.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/_git-lock-detect.ts
 /**
  * _git-lock-detect.ts — stale `.git/index.lock` detection + auto-cleanup.
  *

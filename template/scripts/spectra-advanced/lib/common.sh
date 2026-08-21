@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 🔒 LOCKED — managed by clade · Source: vendor/scripts/spectra-advanced/lib/common.sh · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/spectra-advanced/lib/common.sh
 # spectra-advanced common functions — sourced by the gate scripts.
 #
 # (Function/var prefix `sux_` / `SUX_` retained from the legacy `spectra-ux`

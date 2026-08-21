@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# 🔒 LOCKED — managed by clade · Source: vendor/scripts/spectra-advanced/pre-handoff-readiness-check.sh · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/spectra-advanced/pre-handoff-readiness-check.sh
 # spectra-advanced: pre-handoff readiness check
 #
 # Validates that verify channels are complete before Step 8b review-gui handoff.

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// 🔒 LOCKED — managed by clade · Source: vendor/husky/normalize-commit-emoji.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/husky/normalize-commit-emoji.ts
 // CLADE:VENDOR-SCRIPT
 //
 // normalize-commit-emoji — 把 commit header 的 emoji 依 type 改寫成正解（prepare-commit-msg layer）

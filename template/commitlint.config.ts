@@ -1,3 +1,4 @@
+// 🔒 LOCKED — managed by clade · Source: vendor/commitlint/commitlint.config.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/commitlint/commitlint.config.ts
 /**
  * clade fleet 統一的 commit message 規約（golden path）。
  *

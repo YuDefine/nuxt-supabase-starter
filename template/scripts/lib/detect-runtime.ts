@@ -1,3 +1,4 @@
+// 🔒 LOCKED — managed by clade · Source: vendor/scripts/lib/detect-runtime.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/lib/detect-runtime.ts
 // detect-runtime.ts — agent runtime 辨識的單一詞彙表與判定來源。
 //
 // 為什麼要抽出來：辨識邏輯原本散在五處各寫一份（`residency-classify.ts` 的

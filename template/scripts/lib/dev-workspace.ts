@@ -1,3 +1,4 @@
+// 🔒 LOCKED — managed by clade · Source: vendor/scripts/lib/dev-workspace.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/lib/dev-workspace.ts
 /**
  * dev-workspace.ts — 決定 dev-session 的 herdr Tab 該落在哪個 workspace。
  *

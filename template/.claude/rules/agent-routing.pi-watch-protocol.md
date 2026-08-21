@@ -362,7 +362,7 @@ Pi 由**該層編排者**在其自身 sandbox 內直接 Bash `run_in_background`
 
 | 時機 | 動作 |
 | --- | --- |
-| 派出後**立刻** | **不**下短輪詢。記下 background Bash `taskId`、`owner=pi-watch` 與有限 deadline，下一個 1200–1800s safety net 使用 [[agent-routing]] § Generic async keepalive prompt 的 canonical control message |
+| 派出後**立刻** | **不**下短輪詢。記下 background Bash `taskId`、`owner=pi-watch` 與有限 deadline，下一個 1200–1800s safety net 使用 [[agent-routing]] § Async keepalive prompt 的 canonical control message |
 | 收到 `<task-notification status=completed>` | 停 wakeup，先以 task id claim；claim 成功才 BashOutput 讀 stdout → cross-check → 回報 |
 | 安全網 fallback 觸發（仍沒收到通知） | 只依 `TaskOutput(block=false)` 走 canonical control 分流：terminal 才停 wakeup、claim 並排 `ASYNC_LIFECYCLE_HANDOFF task=<id> owner=pi-watch cause=terminal`；running 到 deadline 或未知狀態保留 pending ownership，改排 `ASYNC_DEADLINE_INTERVENTION`，**不得**收割或重派 |
 
@@ -576,7 +576,7 @@ Agent 端的對應規範（hard budget、checkpoint、fail-fast、progress.json 
 | --- | --- | --- |
 | 進度來源 | completion notification；terminal / deadline handoff 才讀既有 result | `progress.json`（agent 主動寫盤） |
 | 介入工具 | terminal / deadline handoff 後 `AskUserQuestion` | `SendMessage` 詢問 → `TaskStop` |
-| Wakeup 機制 | `ScheduleWakeup` 1200–1800s 的 task-aware control wakeup（SoT：[[agent-routing]] § Generic async keepalive prompt） | 不一定需要 ScheduleWakeup — 主線在執行其他工作時主動 Read 即可；長時間無其他工作時可用 `ScheduleWakeup(900)` 標 progress.json 檢查 |
+| Wakeup 機制 | `ScheduleWakeup` 1200–1800s 的 task-aware control wakeup（SoT：[[agent-routing]] § Async keepalive prompt） | 不一定需要 ScheduleWakeup — 主線在執行其他工作時主動 Read 即可；長時間無其他工作時可用 `ScheduleWakeup(900)` 標 progress.json 檢查 |
 | Hard timeout | dispatch 時寫入 deadline；deadline handoff → AskUserQuestion | 60 min hard budget(agent 自我中止) + 45 min stale → AskUserQuestion |
 
 ### 必禁事項
