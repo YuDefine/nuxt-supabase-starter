@@ -490,7 +490,7 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
      - 一個 phase 要嘛純 view 工作（component / page / view / layout / styling），要嘛純非 view 工作；混雜 phase 違規
    - Verify by running `bash scripts/spectra-advanced/post-propose-check.sh <change-name>` and acting on Check 4c FINDINGS
    - If a mixed phase is detected, **MUST** split inline now into independent phases — do NOT defer to ingest. spectra-apply Phase Dispatch 規則仰賴 phase purity；混雜 phase 在 apply 時會被擋下要求重 ingest，propose 階段就修掉成本最低
-   - Reason: spectra-apply 把 UI view phase 留在 Claude 端（sonnet subagent 或主線）、其他 phase 派給 codex GPT-5.6-sol high；phase 混雜會破壞 dispatch 邊界，要嘛讓 codex 碰 view 層、要嘛讓 Claude 端吞下原本可以 offload 的 mechanical 工作
+   - Reason: spectra-apply 把 UI view phase 留在主線 Opus（永不外派）、其他 phase 派給 Pi sol high；phase 混雜會破壞 dispatch 邊界，要嘛讓 Pi 碰 view 層、要嘛讓主線吞下原本可以 offload 的 mechanical 工作
 
    **Check 9: Manual Review Marker Hygiene** (applies to **every** change, not only backend-only)
 

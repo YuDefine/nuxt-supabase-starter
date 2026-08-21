@@ -26,11 +26,9 @@ Local edits will be reverted by the next sync.
 - **長時間 background job**——跑得久且主線不必盯著（build / 大量 test / 長 migration）
 - **需要隔離環境**——worktree 平行改動、會互相踩檔或搶 port 的工作
 
-**不外派**（命中就自己做，即使同時有好幾條）：少量工具即可結束；路徑已知的少量讀取；規約 / 契約 / 對外文件的**措辭**；視覺判讀與 Design Review（品質判定本身外包不了）；需要 claude.ai-connected MCP（Notion 等）的工作；安全敏感或不可逆的動作（憑證 / 刪檔 / force push / 對外發佈）；**複驗自己剛做完的東西**（判準見 [[checker-subagent]] § 過度派）。
+**不外派**（命中就自己做，即使同時有好幾條）：少量工具即可結束；路徑已知的少量讀取；規約 / 契約 / 對外文件的**措辭**；**UI view 實作**與視覺判讀 / Design Review（component / page / view / layout / styling —— 實作與品質判定都留主線 Opus，**NEVER** 派 Pi 任一 model、**NEVER** 派 Claude subagent）；需要 claude.ai-connected MCP（Notion 等）的工作；安全敏感或不可逆的動作（憑證 / 刪檔 / force push / 對外發佈）；**複驗自己剛做完的東西**（判準見 [[checker-subagent]] § 過度派）。
 
 **具名 threshold 優先於上段的 generic「少量」判準**：同一 prompt segment 準備執行第 3 個高信心 readonly Bash、第 5 個 distinct textual Read，或第一次 Read 501+ 行文字檔時，PreToolUse gate 會建立 pending decision。主線 MUST 以 decision-linked dispatch（exact trigger 走 `luna low`；更具體工作可走共用 policy 驗證過的 concrete Codex row）、structured waiver，或 dispatcher exit 3／4 後的 matching fallback authorization receipt 結案；完整命令與狀態轉移見 reference § Routing threshold gate。
-
-**UI view 實作不在不外派清單**：命中外派條件時可派，但外派目標**只有一個合法值**——Pi `--model grok-xai`（`xai/grok-4.6`，xAI OAuth 訂閱池；exit 4 才改 `--model grok-cursor`），**NEVER** 派 sol／luna。視覺判讀與 Design Review 仍照上段留主線——可外派的是**實作**，不是品質判定。
 
 **命中多條外派條件時先問「一個 subagent 能不能全部做完」**——能就派**一個**，**NEVER** 一條 task 配一個 agent 地拆。
 
@@ -140,7 +138,7 @@ redaction 只在 signal payload 上強制（`vendor/signals/redact.mjs`），**d
 
 ## Routing Table
 
-> **Pi 派工是 (model, effort) 二維**，model 維合法值：`sol`、`sol-cursor`、`gemini`、`luna`、`luna-cursor`、`grok-xai`、`grok-cursor`（`grok` 是 `grok-cursor` 的向後相容別名）。同一 tier 的 `-cursor` 變體是**換配額池、不換檔位**，只在配額降級鏈上出現，**NEVER** 拿它當第一手選擇。**Routing Table 已列明檔位的類別照列派**（多數列為 `--model sol`，分級靠 `--effort`；web-search／screenshot-verify／UI view 三列列明 `grok-xai`）；**原本會派 Claude subagent 的委派工作**（原判 `sonnet`／`haiku`）依 § Claude 委派的 model 檔位 轉派 `--model gemini`（額度耗盡才回 `luna`）。**NEVER 派 `--model terra`**（2026-08-11 拍板；dispatcher 仍認得它是**能力**不是政策，理由見 rationale）。**NEVER** 把 Cursor catalog 的 `gemini-3.7-flash` 當這一跳——那是 Ultra `Other Models` 桶。
+> **Pi 派工是 (model, effort) 二維**，model 維合法值：`sol`、`sol-cursor`、`gemini`、`luna`、`luna-cursor`、`grok-xai`、`grok-cursor`（`grok` 是 `grok-cursor` 的向後相容別名）。同一 tier 的 `-cursor` 變體是**換配額池、不換檔位**，只在配額降級鏈上出現，**NEVER** 拿它當第一手選擇。**Routing Table 已列明檔位的類別照列派**（多數列為 `--model sol`，分級靠 `--effort`；web-search／screenshot-verify 兩列列明 `grok-xai`）；**原本會派 Claude subagent 的委派工作**（原判 `sonnet`／`haiku`）依 § Claude 委派的 model 檔位 轉派 `--model gemini`（額度耗盡才回 `luna`）。**NEVER 派 `--model terra`**（2026-08-11 拍板；dispatcher 仍認得它是**能力**不是政策，理由見 rationale）。**NEVER** 把 Cursor catalog 的 `gemini-3.7-flash` 當這一跳——那是 Ultra `Other Models` 桶。
 >
 > **理由欄只回答「為何不降 luna」，那不等於回答過「能不能用 grok」。NEVER** 把「理由欄沒提到 grok」讀成「已評估過並排除」。**樣本不足以轉列，現行檔位一律照表**；要轉先補 TD-509 列的 reps（已補的 n=1 取證見 rationale § grok 擴權取證）。
 >
@@ -179,7 +177,7 @@ redaction 只在 signal payload 上強制（`vendor/signals/redact.mjs`），**d
 | --- | --- | --- |
 | 〔`web-search`〕 **Web search**（即時資料 / 外部資訊查詢） | **Pi `--model grok-xai --effort low`**（`xai/grok-4.6`）。exit 4 → `--model grok-cursor` 同 effort 重派一次 | 走 xAI OAuth 獨立池、不吃 Codex 配額（轉列取證見 rationale § grok 擴權取證）。**來源可信度裁決仍是本列工作的一部分**——查不到就回「查不到」，NEVER 拿二手彙整頁的數字充數。 |
 | 〔`code-review`〕 **Code review（commit 0-A）** | **(1) `simplify` + (2) Pi Codex review xhigh（GPT-5.6-sol，經 codex-review-safe.sh），(3) 0-A.1 出 Critical / Major 時條件升 max** | 跨模型互補盲點。詳見 commit SKILL Step 0-A。effort 以 `commit/gates.md` § 0-A 與 `codex-review-safe.sh` 的 default 為 SoT。 |
-| 〔`spectra`〕 **Spectra `propose` / `apply` 各階段（draft / cross-check / phase 粒度 / UI view phase）** | 見 reference § Spectra Routing Table | spectra 專屬 routing 在 path-scoped reference（碰 `openspec/changes/**` 時載入）。**不變的契約**：UI view phase **只派 grok**（起點 `grok-xai`，exit 4 才 `grok-cursor`）、Design Review **永不外派**；propose 的 cross-check / final check **一律主線跑**。 |
+| 〔`spectra`〕 **Spectra `propose` / `apply` 各階段（draft / cross-check / phase 粒度 / UI view phase）** | 見 reference § Spectra Routing Table | spectra 專屬 routing 在 path-scoped reference（碰 `openspec/changes/**` 時載入）。**不變的契約**：UI view phase 與 Design Review **都永不外派**（主線 Opus 自己做）；propose 的 cross-check / final check **一律主線跑**。 |
 | 〔`spectra-phase-implementation`〕 **Spectra Apply Class C phase 語意實作** | **Codex `--model sol --effort high` via 泛用 dispatcher** | schema／migration／API／backend／非 view frontend 等 phase 的預設 carrier。Plan-first、task→file、view guard、scope、one-phase-one-commit 與 L0–L2 gate 不因 carrier 統一而放寬。**NEVER 轉 grok**——前置契約未滿足時 grok 自報 `status: pass` ＋ `tasks_completed` 非空，sol／luna 都 fail-closed（取證見 rationale § `spectra-phase-implementation` NEVER 轉 grok）。**NEVER** 反過來讀成「反正下游 check 接得住所以可以轉」：`codex-phase-dispatch.md` § 6 的 check 6 只驗 `result.status` 精確為 `pass`，對「報 pass 但沒做」零訊號。 |
 | 〔`spectra-phase-prescan`〕 **Spectra Apply 已封閉 phase 的 read-only fact extraction** | **Codex `--model gemini --effort low` via 泛用 dispatcher** | 只抽 task→file、既有 symbol、exact gate command 與 source location；不得做 status／identity／relevance／實作裁決。矛盾回 `needs_reconciliation`，後續實作仍走 `spectra-phase-implementation`。exit 4 → luna。 |
 | 〔`spectra-mechanical-substep`〕 **Spectra Apply machine-readable pilot marker 指定的 deterministic mutation** | **Codex `--model gemini --effort low` via 泛用 dispatcher** | 只有 execution classifier 的完整低風險 predicate 全中才 eligible；rollout stage 未開或樣本 gate 未達時只記 shadow candidate，effective route 仍是 `spectra-phase-implementation` Sol high。exit 4 → luna。 |
@@ -197,7 +195,6 @@ redaction 只在 signal payload 上強制（`vendor/signals/redact.mjs`），**d
 | 〔`task-planning-prescan`〕 **Task-planning pre-scan**（「我需要做什麼」「接下來做什麼」「處理 N 張 change」的規劃 session 前置 scan） | **Pi `--model grok-xai --effort low` via 泛用 dispatcher**（`xai/grok-4.6`）。exit 4 → `--model grok-cursor` 同 effort 重派一次，主線消費 structured report | 產出 per-change status matrix。矩陣格式固定**不代表**語意判定機械化——identity matching、partial completion、衝突裁決都在裡面，**故不降 Luna**。轉 grok 見 rationale § 群 2 四列轉 grok-xai low。主線拿 matrix 做排序 / 決策。 |
 | 〔`bugfix-evidence`〕 **Bug-fix evidence 段**（error log capture / stack trace 解析 / repro script 撰寫執行 / hypothesis 驗證迴圈） | **Codex `--model sol --effort high` via 泛用 dispatcher**（強化：非 Debug evidence 段，而是整個 bug-fix session 的 investigation 段） | investigation / evidence / repro 是機械段；root cause 推斷 + 修法設計留主線。**MUST** 在 bug-fix session 開工時先判斷：可分離的 evidence 段派 Codex，不可分離的留主線但 MUST 在 session 結尾回報未派 Codex 的理由。 |
 | 〔`publish-prescan`〕 **clade publish/propagate pre-scan**（publish 前 dirty file 分組判斷：讀 `git status` + `git diff` 各 file 內容 + 辨識 logical group） | **Pi `--model grok-xai --effort low` via 泛用 dispatcher**（`xai/grok-4.6`）。exit 4 → `--model grok-cursor` 同 effort 重派一次，主線消費分組建議後 selective commit | commit grouping 要推斷修改意圖、耦合、依賴順序與可獨立回退性——**讀取命令少不等於決策機械化**；可派的只有 pre-scan 的 reading 段。轉 grok 見 rationale § 群 2 四列轉 grok-xai low。 |
-| 〔`ui-view-implementation`〕 **UI view 實作**（component / page / view / layout / styling；spectra Class B 或同等獨立 view 工作） | **Pi `--model grok-xai --effort high` via 泛用 dispatcher**（`xai/grok-4.6`）。exit 4 → `--model grok-cursor` 同 effort 重派一次 | **NEVER** 派 sol／luna（依據見 rationale § grok 擴權取證）。`grok-xai` 與 `grok-cursor` 是同一個 model，前者走 OAuth 訂閱、先吃那條。Design Review 與視覺判定仍留主線。瑣碎 UI 修（≤2 files 且 ≤20 行）主線直接做。 |
 
 ## Claude 委派的 model 檔位（決定層）
 
@@ -258,8 +255,6 @@ subagent。exit 3／4 照 § 配額耗盡時的 fallback 紀律 與 watch-protoc
 3. 輸出的正確性有**獨立且夠強的語意 gate** 接住（主線複讀、test、既有 audit script）
 4. 錯誤的修正成本 ≤ 重派一次
 
-既有先例：UI view phase 的派工目標已由 § Routing Table 的 `ui-view-implementation` 列定為 `--model grok-xai`。
-
 ### NEVER 降檔的形狀
 
 - 輸出**本身**就是品質或安全 gate（review / 裁決 / 安全判定）
@@ -297,7 +292,7 @@ subagent。exit 3／4 照 § 配額耗盡時的 fallback 紀律 與 watch-protoc
 把關移到邊界：兩道 gate（`/commit` 0-A + archive Design Review）作用在最終 diff 上。
 ### Claude-primary（以下任一命中即留主線）
 
-- **UI view 工作**（per Routing Table 只派 grok —— `grok-xai` 起、`grok-cursor` 接，永不派 sol／luna）
+- **UI view 工作**（per § 派不派 不外派清單 —— 實作與品質判定都留主線 Opus，永不外派）
 - **架構 / 設計決策、需求模糊**——先 plan mode 釐清
 - **安全敏感** / 需 tight review loop 的 change
 - **clade routing / 規則知識**的編輯
@@ -312,7 +307,7 @@ subagent。exit 3／4 照 § 配額耗盡時的 fallback 紀律 與 watch-protoc
 ## Spectra Propose / Apply Dispatch（決策層 — thin pointer）
 
 `spectra-propose` 的三選一 dispatch 選單與主線 quality gate 責任、`spectra-apply` 的 phase 粒度
-三條契約（Design Review 永不外派／UI view 走 `ui-view-implementation` `--model grok-xai`／混雜 phase
+三條契約（Design Review 與 UI view phase 都永不外派／非 view phase 才派 Pi／混雜 phase
 的已開工與未開工分支），全文在 [[agent-routing.pi-watch-protocol]] § Spectra Propose Handoff
 與 § Spectra Apply Phase Dispatch。
 
@@ -384,7 +379,7 @@ MUST 先讀那一節**，本 pointer 不複述。
 3. **File handoffs**：brief／report／diff 超過 ~30 行的內容走**檔案路徑**傳遞，不貼進 dispatch prompt 或回報訊息——貼文會常駐主線 context、每 turn 重讀。dispatch prompt 五要素：定位一行、brief 檔路徑、跨 task interfaces、歧義裁決、report 檔路徑＋回報契約（單一事件實錄見 rationale）。
 4. **Model 與 effort 顯式指定**：**每一個** dispatch 都 MUST 把 model 與 effort 當成兩個獨立決策，不靠靜默繼承——省略 = 繼承主線（通常最貴檔 × 最深推理），機械掃描型 subagent 拿主線的 xhigh 跑就是效能過剩。選檔預設，依序判：
    - **先過 Routing Table**：非 UI 工作命中本檔已 route 給 Codex 的類別 → 依該列的 model / effort 派工（`mechanical-fanout`、`read-heavy-scan` 為 `gemini low`），**NEVER** 用 Claude subagent 接；Claude subagent 只留給 Claude 例外（需 claude.ai-connected MCP、判讀／治理型分析、user 明確指定）
-   - **UI view 實作**：泛用 dispatcher `--model grok-xai --effort high --table-row ui-view-implementation`（**NEVER** sol／luna，per § 派不派）
+   - **UI view 實作**：**不派**，主線 Opus 自己做（per § 派不派 不外派清單）。**NEVER** 為它挑任何 model —— 這一格沒有合法檔位
    - **effort 選檔**：機械掃描／純轉錄 → `low`；一般執行 → `medium`；判讀型／高錯誤成本 → `high` 以上。**帶得了 effort 參數的入口**（codex `--effort` / `-c model_reasoning_effort`、Workflow `agent()` 的 `effort`、具名 agent type 的 frontmatter）**MUST** 顯式帶；Agent tool 本身沒有 effort 參數、只能繼承主線——這是機械型工作優先走 Codex 而非 Agent tool 的另一個理由
    - model 選檔原則「**turn count beats token price**」：brief 內含完整 code 的純轉錄型工作才用最低檔；review 型依 diff 的大小／風險選檔（為什麼見 rationale）。
 5. **中間產物不進主線**：外派出去的 task，主線只讀對方寫回的 report 檔，**NEVER** 為了「確認它做對」把該 task 碰過的原始檔重讀一遍——那把省下來的 context 原封不動加回來，而且重讀的是同一批事實，換不到新判斷。第 2 條的 scope verify 照舊 MUST 跑：看**改了哪些檔**（`git status --short` / `git diff --stat`）跟重讀檔案內容是兩件事。
@@ -488,7 +483,7 @@ canonical 選項形狀（label / description / 另一選項的逐字模板）見
 | **NEVER** 印「請開啟Codex CLI」「Stop here」「請貼prompt」這類純文字handoff訊息要使用者手動切 | 主線必須自己以背景dispatcher派Codex模型 |
 | **NEVER** 直接執行`codex`binary（含`codex exec`／`codex review`／`codex exec resume`）或把它當Pi故障fallback | 每一個active Codex-model dispatch都走`vendor/scripts/pi-dispatch.ts`或專用Pi wrapper；execution transport只有Pi |
 | **NEVER** 嘗試`codex:rescue`／`codex:setup`plugin路線 | 已驗證無法使用、已全清（含`/assign`） |
-| **NEVER** 派 codex 跑 UI view phase 時省略 prompt 內「禁止改 view 層檔案」硬指令 | 缺這條 codex 容易順手改到 .vue / .tsx |
+| **NEVER** 把 UI view phase 派給任何 runtime（Pi 任一 model／Claude subagent 都算） | UI view 實作在不外派清單；非 view phase 的 dispatch prompt 仍 MUST 含「禁止改 view 層檔案」硬指令，缺這條 runtime 容易順手改到 .vue / .tsx |
 | **NEVER** 派 codex 跑 spectra-apply phase 而 prompt 內漏 Commit Authorization 段（一 phase 一 commit / `🧹 chore: wt <change>-phase-<N>` format / hook 必跑禁 `--no-verify` / commit 前自驗 view-layer + scope） | 缺這段 codex 會混 commit、撞 commitlint hook |
 | **NEVER** 派 Codex 寫 code（spectra-propose draft / spectra-apply phase）而 prompt 漏掉 Plan-first 硬指令 | 沒 plan 主線只能從 diff 反推；codex 寫完 plan 必須立刻續跑 |
 | **NEVER** 派 general-purpose / worktree Claude subagent 自跑 playwright / agent-browser 收 verify:ui evidence 來取代 Step 8a codex dispatcher | verify:ui evidence 的**唯一**入口是 `pi-dispatch-screenshot-verify.ts`；Claude fallback 僅限機械故障且 MUST 在對應 item 留 `UNCERTAIN(dispatcher-error)` 痕跡。（audit 實證見 rationale § verify:ui bypass 的 audit 實證）**機械 backstop**：dispatcher 落 receipt（`.spectra/verify-ui-dispatch-ledger.jsonl`），archive-gate Check 9 逐 item 比對，缺 receipt 且缺 `UNCERTAIN(dispatcher-error)` 痕跡 → block。**該 gate 擋的是 drift，NEVER 是對抗性偽造**——過 gate **NEVER** 讀成「evidence 來源已被證實」 |

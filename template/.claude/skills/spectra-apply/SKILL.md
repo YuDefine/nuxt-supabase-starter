@@ -385,8 +385,9 @@ If there is no AskUserQuestion tool available, present options as plain text and
         → **主線 Claude Opus 5 xhigh 自己做**，**永不**派 codex
         → Design skill is Claude Code first-class; codex tooling weak in this domain
       - **B. UI view phase** — phase 內任一 task 描述/路徑指涉 view 層檔案：`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且**該 phase 沒有摻入非 view 的 frontend / backend 工作（store / hook / API client / type / util / migration / API server）
-        → **走泛用 dispatcher `--model grok-xai --effort high --table-row ui-view-implementation`，永不派 sol／luna**——thin brief＋檔案所有權清單＋「只准動 view 層檔案」guard＋4-status 回報（per `agent-routing.md` § Subagent 回報契約）。瑣碎 UI 修（≤2 files 且 ≤20 行）主線直接做，不派
-        → 主線收回後、該 phase commit / 標 done **之前**，照跑 Step 6c / 6d 檢查與 Design Review gate——實作可派，品質判定留主線
+        → **主線 Claude Opus 5 xhigh 自己做**，**永不**派 codex——UI view 實作在 `agent-routing.md` § 派不派 的不外派清單，**NEVER** 派 Pi 任一 model、**NEVER** 派 Claude subagent
+        → **NEVER** 因為 phase 大、時間晚、非 view phase 的 dispatch 管線現成就轉派——那條管線是 C 類專用
+        → 實作完、該 phase commit / 標 done **之前**，照跑 Step 6c / 6d 檢查與 Design Review gate
         → frontend 但非 view 的工作（store / hook / API client / type / util）不在此範圍，走 C 類
       - **C. Other phase** — 上述兩類以外（schema / migration / API server / CLI / 純 backend / frontend 但非 view 的 store / hook / API client / type / util / unit test / docs）
         → **派 background Codex，統一走泛用 dispatcher 的 `spectra-phase-implementation` row（Sol high）**
@@ -421,7 +422,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    **理由**：refactor 不得改變 observable behavior；失效鏈實證見 `references/ui-phase-gates.md` § Step 6c 理由。
 
-   **觸發範圍**：每個 **Class B（UI view）phase** 由主線在該 phase 實作完成（grok dispatch 收回，或瑣碎修主線自做完）後、commit / 標 tasks done **之前**，跑一次。Class A / Class C phase 不觸發（Class C 已由 codex view-layer guard 擋住 view 改動；Class A 是純設計審查）。Phase 內 touched files 沒有 `.vue` list/table page → script 自動 skip（exit 0），不需主線預判。
+   **觸發範圍**：每個 **Class B（UI view）phase** 由主線在該 phase 實作完成後、commit / 標 tasks done **之前**，跑一次。Class A / Class C phase 不觸發（Class C 已由 codex view-layer guard 擋住 view 改動；Class A 是純設計審查）。Phase 內 touched files 沒有 `.vue` list/table page → script 自動 skip（exit 0），不需主線預判。
 
    **執行流程**：
 
@@ -470,7 +471,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
    - Class C（Other）→ 以泛用 dispatcher 的 `spectra-phase-implementation` row dispatch Codex Sol high（phase granularity）
    - Class A（Design Review）→ 主線 Opus 5 xhigh self-execute：**MUST invoke Skill tool** 跑 `/design improve` + `/impeccable audit` 完成全部 tasks（per Step 6b §6 hard rule；NEVER 停下叫 user 自己跑）
      - 這兩支是 Claude Code 內建 skill，不知道 clade Routing Table 存在。它們內文若叫起 `Agent`（含省略 `model` 而繼承主線 Opus 的形狀），照樣會被 PreToolUse:Agent gate default-deny 攔下（per [[agent-routing]] § Routing Table，TD-513）。攔下時 **MUST** 照 block message 走 dispatch／waive／fallback；Design Review 本身仍是主線自己做，**NEVER** 把它變成外派
-   - Class B（UI view: component / page / view / layout / styling）→ 泛用 dispatcher `--model grok-xai --effort high`（NEVER sol／luna；派工形狀見 Step 6b B 類）；瑣碎 UI 修（≤2 files 且 ≤20 行）主線直接做。該 phase 收回、commit / 標 done **之前** MUST 跑 **Step 6c Refactor Invariant Check** + **Step 6d Review Rules Check**
+   - Class B（UI view: component / page / view / layout / styling）→ 主線 Opus 5 xhigh self-execute，永不派 codex（形狀見 Step 6b B 類）。該 phase 實作完、commit / 標 done **之前** MUST 跑 **Step 6c Refactor Invariant Check** + **Step 6d Review Rules Check**
    - Mixed phase（UI view + 非 view 摻同 phase）→ 已開工主線吸收、未開工 STOP 提示 `/spectra-ingest`
 
    For each pending task:
@@ -811,7 +812,7 @@ What would you like to do?
 - **Worktree isolation — NEVER halt apply on main's WIP**: Step 0 必須自動把 user 帶進 worktree（用 commit-then-fork 或 clean fork，視 scope 而定）；無論 Step 0c 階段或 apply 進行中，**NEVER** 因 main repo 的 dirty WIP / staged / untracked / 同檔別 session WIP 中斷 apply、AskUserQuestion 要 user clean main、或建議 user 自己處理後重試。worktree 是獨立 working tree，main 的 WIP 不在 worktree 也無法影響它；同檔衝突是 merge-back 時的事，由 `/spectra-commit` + user 決策處理。唯一合法 STOP 是 unmerged conflict（wt-helper 拒絕 fork）或 helper 本身錯誤；user-decision-needed pause **NEVER**。
 - **Phase dispatch discipline**（per `agent-routing.md`）:
   - **NEVER** dispatch Design Review phase to codex — Design skill is Claude Code first-class
-  - **NEVER** dispatch UI view phase（component / page / view / layout / styling）to sol／luna — UI view phase 的唯一合法外派目標是 `--model grok-xai`（per Step 6b B 類），品質判定（Step 6c / 6d、Design Review）留主線。Frontend 但非 view 的（store / hook / API client / type / util）仍走 sol
+  - **NEVER** dispatch UI view phase（component / page / view / layout / styling）to any runtime — Pi 任一 model 與 Claude subagent 都算。實作與品質判定（Step 6c / 6d、Design Review）都留主線 Opus（per Step 6b B 類）。Frontend 但非 view 的（store / hook / API client / type / util）仍走 sol
   - **NEVER** dispatch **Phase Dispatch（Step 6b）** with `medium` effort — use `high` minimum。Step 8a 系列的收集工作允許 `medium`（見 Step 8a Model allocation）
   - **NEVER** dispatch task-by-task — phase granularity only
   - **NEVER** dispatch a codex phase without including the「view-layer guard」instruction in the prompt — without it, codex tends to incidentally touch `.vue` / `.tsx` files

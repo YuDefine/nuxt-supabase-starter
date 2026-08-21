@@ -415,7 +415,7 @@ Codex 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleW
 
 ## Spectra Routing Table
 
-從 [[agent-routing]] § Routing Table 移出（2026-07-31）——這五列只在 spectra flow 內成立，主檔留一列 stub 指這裡。**UI view phase 只派 grok（`grok-xai` 起、`grok-cursor` 接）、Design Review 永不外派**、**propose 的 cross-check / final check 一律主線跑**這兩條契約主檔仍帶著。
+從 [[agent-routing]] § Routing Table 移出（2026-07-31）——這五列只在 spectra flow 內成立，主檔留一列 stub 指這裡。**UI view phase 與 Design Review 都永不外派（主線 Opus 5 xhigh 自己做）**、**propose 的 cross-check / final check 一律主線跑**這兩條契約主檔仍帶著。
 
 **派工時 `--table-row` 要填哪一列**：本節的類別名不是 row 名。裸 `--table-row spectra` 在 `TABLE_ROW_POLICIES` 是 `model: null`（因為下表五列檔位各異，一個 row 表達不了），dispatcher 一律拒絕。對照表：
 
@@ -424,7 +424,6 @@ Codex 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleW
 | propose draft（選項 A / B 的 codex 段）、ingest draft | `spectra-artifact-draft`（sol max） |
 | apply 非 view phase | `spectra-phase-implementation`（sol high） |
 | apply 已封閉 phase 的 read-only 抽取 | `spectra-phase-prescan`（gemini low） |
-| apply UI view phase | `ui-view-implementation`（grok-xai high） |
 | pre-handoff E.1 收集 | `spectra-prehandoff-collect`（grok-xai medium） |
 | pre-handoff E.1 判定 | `spectra-prehandoff-judge`（sol xhigh） |
 
@@ -435,7 +434,7 @@ Codex 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleW
 | **Spectra `propose` 階段（draft）** | **使用者選單三選一**：A Codex GPT-5.6-sol max draft（預設/推薦）／ B 三模型交叉：Claude Fable 5 xhigh draft ＋ Codex GPT-5.6-sol max review／ C 純 Claude | 預設跳三選一選單；使用者明確指定路徑時跳過。詳見 `spectra-propose` Step 0。 |
 | **Spectra `propose` cross-check / final check** | **主線 Claude Fable 5 xhigh** | 主線 = quality gate（A 的 cross-check、B 的 final check 都由主線跑），不只是 dispatcher。 |
 | **Spectra `apply`（非 Design Review、非 UI view phase，phase 粒度）** | **Codex GPT-5.6-sol high** | medium 漏 schema drift 風險高；phase 粒度避免 round-trip。 |
-| **Spectra `apply` UI view phase（component / page / view / layout / styling）+ Section 7（Design Review）** | **UI view phase：泛用 dispatcher `--model grok-xai --effort high`（`ui-view-implementation`），永不派 sol／luna（主線收回後跑 Step 6c / 6d 與 Design Review gate）；Design Review：主線自己做，永不外派** | CursorBench 上 Grok 貼 Fable、高過 Sol；走 Cursor 內含池。Design 品質判定本身外包不了。非 view 的 frontend 不在此範圍，仍走 sol（範圍同 § Spectra Apply Phase Dispatch C 類）。 |
+| **Spectra `apply` UI view phase（component / page / view / layout / styling）+ Section 7（Design Review）** | **主線 Claude Opus 5 xhigh 自己做，永不派 codex**（UI view 實作與 Design Review 都是；實作完主線照跑 Step 6c / 6d 與 Design Review gate） | 視覺 / 互動 / a11y 與 Design skill 緊耦合，實作與品質判定分不開。非 view 的 frontend 不在此範圍，仍走 sol（範圍同 § Spectra Apply Phase Dispatch C 類）。 |
 | **spectra-apply Step 8a self-collect (a)(b)**（dev-login allow-list 小 mod + service_role DB query 證 data shape） | **Codex `--model sol --effort low` via 泛用 dispatcher** | PoC 已實證 codex 能跑完整 evidence chain；annotation 寫回 tasks.md 維持主線。詳見 spectra-apply SKILL Step 8a。 |
 
 ## Orchestration Residency — 機械 Enforcement（residency-classify + archive-gate Check 8）
@@ -485,7 +484,7 @@ Claude Code session 收到 spectra propose 請求時：
 
 執行 `spectra-apply` 時 phase 粒度派 codex。**三條契約**：
 
-1. **Design Review phase 一律主線自己做，永不外派；UI view phase 走泛用 dispatcher 的 `ui-view-implementation` row（`--model grok-xai --effort high`），NEVER 派 sol／luna**（thin brief＋檔案所有權清單＋「只准動 view 層檔案」guard＋4-status 回報，per § Subagent 回報契約；主線收回後照跑該 phase 的機械檢查與 Design Review gate）。瑣碎 UI 修（≤2 files 且 ≤20 行）主線直接做，不派。其他 phase（schema / migration / API server / CLI / 純 backend / 非 view 的 frontend / unit test / docs）以泛用 dispatcher 的 `spectra-phase-implementation` row 派 background Codex Sol high；**每一個**符合封閉來源 extraction predicate 的 prescan 才可另走 `spectra-phase-prescan` Gemini low，且不得取代 Sol 實作
+1. **Design Review phase 與 UI view phase 一律主線 Opus 5 xhigh 自己做，永不外派**——**NEVER** 派 Pi 任一 model，**NEVER** 派 Claude subagent，**NEVER** 因為 phase 大、時間晚、管線現成就轉派（UI view 實作完主線照跑該 phase 的機械檢查與 Design Review gate）。其他 phase（schema / migration / API server / CLI / 純 backend / 非 view 的 frontend / unit test / docs）以泛用 dispatcher 的 `spectra-phase-implementation` row 派 background Codex Sol high；**每一個**符合封閉來源 extraction predicate 的 prescan 才可另走 `spectra-phase-prescan` Gemini low，且不得取代 Sol 實作
 2. **混雜 phase**（同一 phase 摻了 view 與非 view）：**已開工** → 主線整個 phase 自己做，不重切、不派 codex；**未開工** → **STOP** 請使用者跑 `/spectra-ingest <change>` 重切
 3. **禁止**主線自行修改 tasks.md 的 phase 結構（屬 ingest 範圍）
 
@@ -498,7 +497,7 @@ A/B/C 三類的完整判定條件（含 view 層檔案路徑清單）與 C 類�
    - **A. Design Review phase**：標題含 "Design Review" 或內容含 `/design improve` / `/impeccable audit` / `/impeccable *` / `review-screenshot`
      → **主線 Claude Opus 5 xhigh 自己做，永不派 codex**
    - **B. UI view phase**：phase 內任一 task 描述/路徑指涉 view 層檔案——`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且該 phase 沒有摻入非 view 的 frontend / backend 工作**（store / hook / API client / type / util / migration / API server）
-     → **走泛用 dispatcher `--model grok-xai --effort high --table-row ui-view-implementation`**（thin brief＋「只准動 view 層檔案」guard＋4-status 回報，per [[agent-routing]] § Subagent 回報契約），**永不派 sol／luna**。主線收回後、該 phase commit / 標 done 之前，照跑 SKILL Step 6c / 6d 檢查與 Design Review gate。瑣碎 UI 修（≤2 files 且 ≤20 行）主線直接做，不派
+     → **主線 Claude Opus 5 xhigh 自己做，永不派 codex**。實作完、該 phase commit / 標 done 之前，照跑 SKILL Step 6c / 6d 檢查與 Design Review gate
    - **C. 其他 phase**：上述兩類以外（schema、migration、API server、CLI、純 backend、frontend 但非 view 的 store / hook / API client / type / util、unit test、docs）
      → **派 background codex GPT-5.6-sol high 做完整 phase**
 3. **混雜 phase fallback**（A、B 都不是純 view、又混雜 view 與非 view 工作）：
@@ -521,7 +520,7 @@ A/B/C 三類的完整判定條件（含 view 層檔案路徑清單）與 C 類�
           'app/pages/**' 'app/components/**' 'app/layouts/**' \
           'pages/**' 'components/**' 'layouts/**' 'views/**'
      ```
-     有任何 view 層 file 被 codex 動過 → **AskUserQuestion**：[1] `git -C <wt> reset --soft main` 退 staging + 主線剔除 view 改動 + 重派 codex / [2] 接受並依 § Spectra Apply Phase Dispatch B 類形狀重跑該 view 改動（`--model grok-xai` 或瑣碎修主線直做） / [3] 中止
+     有任何 view 層 file 被 codex 動過 → **AskUserQuestion**：[1] `git -C <wt> reset --soft main` 退 staging + 主線剔除 view 改動 + 重派 codex / [2] 接受並依 § Spectra Apply Phase Dispatch B 類形狀由主線重跑該 view 改動 / [3] 中止
    - **Scope discipline cross-check**：`git -C <wt> diff main..HEAD --name-only` 對比 prompt 內 scope 宣告；超出範圍 → AskUserQuestion 處理
    - **Sanity check**（typecheck、相關 test）
    - 若有遺漏 → **AskUserQuestion**：[1] 主線在 worktree 內 commit 補丁 / [2] reset 重派 codex / [3] 中止
@@ -686,5 +685,5 @@ dispatch 注入 fail-closed 段，要求回覆帶一行 `PRECONDITIONS_VERIFIED:
 3. **Luna exit 4 → 換池到 Cursor**：`--model luna-cursor --route fallback-chain --tier-basis quota-fallback --retry-of <luna-label>`。這是同一檔智力、另一個配額池，不是降檔。
 4. **luna-cursor exit 4 → `--model grok-xai --chain-origin luna`** 同 effort 重派（`--route fallback-chain --tier-basis quota-fallback --retry-of <luna-cursor-label>`）。**`--chain-origin` 在這格 MUST 帶**——`grok-xai` 是兩條鏈共用的一格，起點決定它耗盡後是終止還是續走 `grok-cursor`，不帶就判不出來。
 5. **grok-xai exit 4（luna 鏈）→ 這條鏈到此為止**，才動 Claude subagent，且**只接 `haiku`**（顯式帶，per § Subagent 回報契約第 4 條），**NEVER** 升 `sonnet`。**NEVER** 在這裡續派 `--model grok-cursor`——那一跳只屬於 grok 鏈，理由見上方 `grok-cursor` 段。
-6. **Grok 鏈自己的路徑**（`ui-view-implementation` / `web-search` / `screenshot-review-verify` 三列）：`grok-xai` exit 4 → `--model grok-cursor --chain-origin grok-xai` 重派一次；再 exit 4 才動 Claude subagent，且**只接 `sonnet`**，**NEVER** 降 `haiku`。
+6. **Grok 鏈自己的路徑**（`web-search` / `screenshot-review-verify` 兩列）：`grok-xai` exit 4 → `--model grok-cursor --chain-origin grok-xai` 重派一次；再 exit 4 才動 Claude subagent，且**只接 `sonnet`**，**NEVER** 降 `haiku`。
 7. Claude 接走時 session 結尾 **MUST** 回報「本 session 因配額耗盡，由 Claude 執行 N 個本應外派的 change」；有 runtime reset 資訊再附上，沒有就明說 unavailable。
