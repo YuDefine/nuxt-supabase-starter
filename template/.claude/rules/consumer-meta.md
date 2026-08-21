@@ -178,7 +178,7 @@ fleet 的部署形態收斂成**三型**。新專案 **MUST** 貼齊其中一型
 **MUST** 用 `$comment` 寫明是哪一種：
 
 - **尚未定型** — 合法但不該長期停在這，沒有 type 的 consumer 拿不到任何 type-scoped 的能力
-- **不適用** — 該 consumer 不是 Nuxt app。實例：`<consumer-g>` 是 5 個 Go service 的 matrix build，無 preset、無 D1/Supabase 概念
+- **不適用** — 該 consumer 不是 Nuxt app。實例：`<consumer-h>` 是 5 個 Go service 的 matrix build，無 preset、無 D1/Supabase 概念
 
 **NEVER** 為了「讓每個 consumer 都有 type」而多開一個 enum 值容納單一特例——`null` + 明寫不適用的成本低得多。
 

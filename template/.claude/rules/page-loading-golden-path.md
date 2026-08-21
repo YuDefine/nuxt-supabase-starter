@@ -144,6 +144,6 @@ mutation `status === 'pending'` 當 loading 是**真 functional bug**（永久 s
 
 ## 為什麼這條 rule 存在
 
-- 導航 loading 是每個 Nuxt consumer 都會遇到的 cross-cutting concern，散規範必漂移：盤點顯示 <consumer-b> 有完整 pattern、<consumer-a>/starter 有分歧半套、<consumer-d> / <consumer-c> / <consumer-j> / <consumer-h> 全缺。
+- 導航 loading 是每個 Nuxt consumer 都會遇到的 cross-cutting concern，散規範必漂移：盤點顯示 <consumer-b> 有完整 pattern、<consumer-a>/starter 有分歧半套、<consumer-d> / <consumer-c> / <consumer-k> / <consumer-i> 全缺。
 - `await useFetch` 的 blocking 行為是 Nuxt 新手最常踩的 perceived-performance 坑，typecheck / lint 抓不到，只有使用者抱怨「卡」才暴露 → 需要 impl-time 規約在最接近犯錯時點對齊。
 - skeleton 的色彩硬編碼會同時違反本 rule 與 color-mode rule；統一走 `<USkeleton>` 才 theme-safe。

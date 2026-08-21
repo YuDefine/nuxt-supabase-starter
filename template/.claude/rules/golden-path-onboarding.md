@@ -19,7 +19,7 @@ Local edits will be reverted by the next sync.
 
 # Golden Path Onboarding
 
-**核心命題**：clade 的 `docs/golden-paths/` 定義了跨 consumer 共用的部署 / CI 樣板（Docker self-hosted deploy、Discord deploy-notify），`vendor/actions/` 有對應的 vendored composite action。但這些 golden path **不會自動套用**到新 consumer — 新 repo 開好後常整條漏掉，直到 user 手動發現才補。實證：<consumer-f> / <consumer-g> 兩個新 repo 一開始都沒有 Discord 部署通知。
+**核心命題**：clade 的 `docs/golden-paths/` 定義了跨 consumer 共用的部署 / CI 樣板（Docker self-hosted deploy、Discord deploy-notify），`vendor/actions/` 有對應的 vendored composite action。但這些 golden path **不會自動套用**到新 consumer — 新 repo 開好後常整條漏掉，直到 user 手動發現才補。實證：<consumer-g> / <consumer-h> 兩個新 repo 一開始都沒有 Discord 部署通知。
 
 這條 rule 把「對齊 golden path」變成 session 開場的反射動作，而非靠人肉發現。
 
@@ -36,7 +36,7 @@ Local edits will be reverted by the next sync.
    - `ci-notify-job` 缺 → 在 deploy / CI workflow 尾端加 `notify` job（`if: always()`，`uses: ./.github/actions/discord-deploy-notify`）
    - `webhook-secret` 未引用 → notify job 傳入 `webhook_url: ${{ secrets.DISCORD_WEBHOOK_URL }}`，並提醒 user 在 GitHub repo Actions secrets 設定該值（值本身 audit 查不到，標 `set=?`）
 
-3. **`self-hosted-runner` 是 informational**：wrangler / Cloudflare 型 consumer 用 `ubuntu-latest` 合理，不因此判 drift。只有走 Docker self-hosted deploy 型（<consumer-a> / <consumer-b> / <consumer-d> / <consumer-g>-*）才 MUST 用 `[self-hosted, ...]` runner。
+3. **`self-hosted-runner` 是 informational**：wrangler / Cloudflare 型 consumer 用 `ubuntu-latest` 合理，不因此判 drift。只有走 Docker self-hosted deploy 型（<consumer-a> / <consumer-b> / <consumer-d> / <consumer-h>-*）才 MUST 用 `[self-hosted, ...]` runner。
 
 4. **同一時機 MUST 一併跑 CI gate 接線稽核**（clade 散播的 blocking gate 只跑在 `.husky/pre-push`，`--no-verify` 與 web 編輯介面都能繞過）：
 
