@@ -34,6 +34,8 @@ Local edits will be reverted by the next sync.
 
 **同時像寬掃又像措辭時看產出形狀**：產出是事實表 / 清單 / 統計 → 派（寬掃的價值在把原文壓成結論）；產出是要寫進規約、契約或對外文件的**措辭** → 留。措辭的語氣與抽象層級一致性外包不了，派出去的典型結果是回頭逐條重寫（成本見 rationale）。
 
+**NEVER 因 plan mode 這類唯讀模式寫不了檔，就判 in-process subagent 不能派**——`Agent` tool 的 brief 是 prompt 字串、不落檔，只有 `pi-dispatch.ts` 與 Herdr transport 落檔。逐字反開脫：「plan mode 不允許寫 brief 檔，所以改由主線直接讀檔探索」。
+
 ## 停下來要人做之前（agent 與人的邊界，先於一切派工判定）
 
 上一節決定「主線做還是派出去」，本節決定**更前面**的一件事：這件事到底該不該離開 agent。

@@ -45,7 +45,7 @@ $ARGUMENTS
 
 - `--unattended`（`runner.sh` 每輪固定帶）：**3-item cap**（避免 runaway）+ **禁止 `AskUserQuestion`**。不帶時無 item cap，改由 Step 6 的 round cap / fingerprint 控制。
 - `--runner-child`（只由 `runner.sh` 帶）：模型可見的 runner child 身分 marker；`WORK_LOOP_RUNNER_CHILD=1` 是同一身分的機械補強。
-- `--linked-dispatch-mode foreground`（只由 `runner.sh` 帶）：runner child 內每一筆 decision-linked Codex dispatch 都是同輪 dependency，依 Step 1.5 的 foreground 契約執行；不帶時沿用一般 async watch protocol。
+- `--linked-dispatch-mode foreground`（只由 `runner.sh` 帶）：runner child 內每一筆 decision-linked Pi dispatch 都是同輪 dependency，依 Step 1.5 的 foreground 契約執行；不帶時沿用一般 async watch protocol。
 - `--min-wakeup-seconds <n>`（`runner.sh` 每輪固定帶，預設 1200；`WORK_LOOP_MIN_WAKEUP_SECONDS` 是機械補強）：本輪**每一個** `ScheduleWakeup` / `Monitor` 的 interval **MUST ≥ n**。帶了它就以它為準，**NEVER** 因為「這次只等一下下」用更短的值——短輪詢買不到 notification 沒給的東西（Step 0 § (d) 已逐字禁止輪詢進度）。不帶時各處原有的 interval 建議照舊。
 - 使用者說「自動推」「把待辦跑完」「持續做」「不要停」「無人值守」→ 等同要求 continuous（見下）。
 
@@ -498,7 +498,7 @@ context-decay 與 handoff-write-failed **永遠**寫 `roundEndReason`，**NEVER*
 - **主線自己動手也要過 Routing Table**。mechanical fan-out 與 read-heavy 兩列的觸發條件**不限於委派**：
   準備自己跑 ≥3 條唯讀指令、或自己讀 ≥5 個檔／>500 行長文件，就已經命中 → 派 `--model gemini --effort low`。
   **NEVER** 因「順手跑掉比較快」略過查表
-- **原判 Claude `sonnet`／`haiku` 的委派 MUST 先判 codex 可用性**，可用就轉派 `--model gemini`
+- **原判 Claude `sonnet`／`haiku` 的委派 MUST 先判 pi 可用性**，可用就轉派 `--model gemini`
   （`sonnet` → `--effort high`、`haiku` → `--effort low`），准入判準見該 §
 - **每一次 dispatch MUST 帶 `--route` 與 `--tier-basis`**（各缺就 exit 1），重試帶 `--retry-of <label>`。
   **NEVER** 不確定就填 `manual`／`table-row`——兩者都與「判定根本沒發生」事後不可區分。
@@ -724,7 +724,7 @@ runner.sh 另有 mechanical fail-closed：起跑前、每次 child launch 前，
 
 - 要改 tracked code → `/wt <slug>: <brief>`（扇出組，≤4 in-flight）
 - spectra change 的實作 → `/wt <change-name>: /spectra-apply <change-name>`
-- 純唯讀調查 / 單檔文字改動 → 主線即時組（read-heavy 者先過 [dispatch-topology.md](reference/dispatch-topology.md) § 主線即時組的 pre-scan 前置判定派 codex，主線消費 report）
+- 純唯讀調查 / 單檔文字改動 → 主線即時組（read-heavy 者先過 [dispatch-topology.md](reference/dispatch-topology.md) § 主線即時組的 pre-scan 前置判定派 pi，主線消費 report）
 - 記進 state 的 `inFlight`，`subagentsSpawned` +1
 
 上面三條假設 `/wt` 在本 repo 叫得動，而那個假設在**產地（clade home）不成立**。開工前判一次：
@@ -779,7 +779,7 @@ attended mode 且真的選不出來 → 依 Step 0 Iron Law **MUST `AskUserQuest
 
 ### 4c. Dispatch 共通規則
 
-- **Lifecycle 兩階段綁定（MUST）**：dispatch 前先把 intent 寫入 state：`inFlight={agent,item,dispatchedAt,taskId:null,owner,deadline,lifecycle:"dispatching"}`。`Bash(run_in_background=true)` 回傳後，**同一 assistant turn** 原子綁定真實 `taskId`、確認 owner / deadline、改 `lifecycle:"pending"`，再 arm `ASYNC_KEEPALIVE_CONTROL`。dispatch 失敗則移除 intent或標 `lifecycle:"dispatch-failed"`，**NEVER** 留下假 ownership。無 task id 的 Agent / Monitor / Workflow 保留 `taskId:null`，但 MUST 寫可由 `TaskStop(owner)` 操作的 owner ref 與 deadline，並 arm `ASYNC_NOTIFICATION_KEEPALIVE`。Codex pre-scan owner 固定 `codex-watch`。
+- **Lifecycle 兩階段綁定（MUST）**：dispatch 前先把 intent 寫入 state：`inFlight={agent,item,dispatchedAt,taskId:null,owner,deadline,lifecycle:"dispatching"}`。`Bash(run_in_background=true)` 回傳後，**同一 assistant turn** 原子綁定真實 `taskId`、確認 owner / deadline、改 `lifecycle:"pending"`，再 arm `ASYNC_KEEPALIVE_CONTROL`。dispatch 失敗則移除 intent或標 `lifecycle:"dispatch-failed"`，**NEVER** 留下假 ownership。無 task id 的 Agent / Monitor / Workflow 保留 `taskId:null`，但 MUST 寫可由 `TaskStop(owner)` 操作的 owner ref 與 deadline，並 arm `ASYNC_NOTIFICATION_KEEPALIVE`。Pi pre-scan owner 固定 `pi-watch`。
 - **Per-item task 追蹤（MUST）**：每條 dispatch item MUST 先 `TaskCreate`（subject 用 `<item>: <狀態> → <動作>`），dispatch 時標 `in_progress`，完成/skip/blocked 立即標 `completed`。**NEVER** 只建概括性收割 task——user 看 task list 判斷 loop 在幹嘛，概括 task 提供零資訊
 - **Dev server 協調**：evidence collection 需要 dev server 時**主線自行協調**（清 stale session → 起新 dev server），**NEVER** 把 port 被佔當 user 協調事項跳過。三層判定（archived → stale → active claim < 30min 才是真 conflict）
 - **Workflow model 感知**（archive 後 push 前 MUST）：讀 `~/offline/clade/registry/consumers.json` 的 `workflow_model`——`trunk-based` 直接 push；`pr-merge-based` **NEVER 直推 main**，改 push feature branch + `gh pr create --fill`；查不到當 `pr-merge-based` 保守處理
@@ -788,7 +788,7 @@ attended mode 且真的選不出來 → 依 Step 0 Iron Law **MUST `AskUserQuest
   - **Dispatch failure**（skill 報錯 / infra 不可達）→ log + skip + `failStreak` +1，繼續下一個
   - **Fixable issue found during dispatch**（E2E selector bug / guard 漏路徑 / annotation drift / test assertion 要更新）→ **MUST 就地修 → 重跑 → re-scan → 繼續**，**NEVER** 當成 dispatch failure skip。判準：「我能在當前 session 用 Edit + Bash 修好嗎？」是 → 就地修
   - `failStreak` ≥3 → 移進 state 的 `escalated`，下一輪起不再 dispatch
-  - **codex pre-scan 的 exit 2 / 3 / 4 NEVER 記入 `failStreak` / `consecutiveDispatchFailures`**（分流見 [dispatch-topology.md](reference/dispatch-topology.md) § pre-scan 的 exit code 分流）——兩個計數器管的是 item 的工作 dispatch，不管蒐證段
+  - **pi pre-scan 的 exit 2 / 3 / 4 NEVER 記入 `failStreak` / `consecutiveDispatchFailures`**（分流見 [dispatch-topology.md](reference/dispatch-topology.md) § pre-scan 的 exit code 分流）——兩個計數器管的是 item 的工作 dispatch，不管蒐證段
 
 ---
 

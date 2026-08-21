@@ -30,7 +30,7 @@ Local edits will be reverted by the next sync.
 
 ### pre-scan 通知的輕量收割（不走 8 步 SOP）
 
-`inFlight` 條目 `agent` 為 `codex:<label>` 者，收到通知只做三步：
+`inFlight` 條目 `agent` 為 `pi:<label>`（改名前寫成 `codex:<label>`，舊拼法一併認）者，收到通知只做三步：
 
 1. `BashOutput` 讀 dispatcher 的單行 JSON，依 [dispatch-topology.md](dispatch-topology.md) § pre-scan 的 exit code 分流 判處置
 2. `git status --short` 驗零新增改動（read-only 契約）；有改動 → revert 後按 exit 3 機械故障處置

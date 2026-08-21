@@ -80,7 +80,7 @@ archive → merge-back → commit → push 全部寫同一個 main worktree。�
 
 | 可觀察 predicate | 動作 |
 | --- | --- |
-| 清單 ≥4 個 source file（scan JSON 與 state 檔不計；同檔多段算 1 檔） | **先派 codex pre-scan**；接著依下方 extraction / reconciliation predicate 選 `read-heavy-scan` 或 `exploration-prescan`，主線只消費 report 做判讀 |
+| 清單 ≥4 個 source file（scan JSON 與 state 檔不計；同檔多段算 1 檔） | **先派 pi pre-scan**；接著依下方 extraction / reconciliation predicate 選 `read-heavy-scan` 或 `exploration-prescan`，主線只消費 report 做判讀 |
 | 本輪 3i + 3j 合計 ≥4 條 | **批次派一個 pre-scan** 收齊全部 blocker / 決策描述事實表（見 [blocker-evaluation.md](blocker-evaluation.md) § 批次蒐證）；涉及 blocker/status 對帳時固定走 `exploration-prescan` |
 | 兩者皆未命中 | 主線直接定點 Read——≤3 檔本來就是本組的正常形狀，**NEVER** 為湊派工而擴清單 |
 
@@ -108,9 +108,9 @@ model / effort / template 的 SoT：[[agent-routing]] § Routing Table 對應列
 | 可觀察 predicate | dispatch / harvest |
 | --- | --- |
 | runner child（`--runner-child --linked-dispatch-mode foreground` 或 `WORK_LOOP_RUNNER_CHILD=1`） | foreground Bash 跑泛用 dispatcher，timeout 600000；同一 tool call 收到 exit 與 stdout JSON 後立即輕量收割，**不**寫 `inFlight`、不 arm keepalive |
-| 非 runner child | Bash `run_in_background` 跑泛用 dispatcher；watch 依 [[agent-routing.pi-watch-protocol]] § 監看排程（notification-only + 單一 `ScheduleWakeup` 安全網，禁止短輪詢），並記 state `inFlight`（`agent=codex:<label>`、owner 固定 `codex-watch`、2h deadline） |
+| 非 runner child | Bash `run_in_background` 跑泛用 dispatcher；watch 依 [[agent-routing.pi-watch-protocol]] § 監看排程（notification-only + 單一 `ScheduleWakeup` 安全網，禁止短輪詢），並記 state `inFlight`（`agent=pi:<label>`、owner 固定 `pi-watch`、2h deadline） |
 
-非 runner child 的安全網 prompt MUST 使用 [[agent-routing]] 的 canonical inert control message，NEVER 放原 pre-scan / work-loop 任務；terminal claim / intervention 由 `codex-watch` 完成後 callback 至本節的輕量收割，**NEVER** 另以 `work-loop-dispatch` 對同一 task claim。
+非 runner child 的安全網 prompt MUST 使用 [[agent-routing]] 的 canonical inert control message，NEVER 放原 pre-scan / work-loop 任務；terminal claim / intervention 由 `pi-watch` 完成後 callback 至本節的輕量收割，**NEVER** 另以 `work-loop-dispatch` 對同一 task claim。
 
 - pre-scan **不計** `--unattended` 的 3-item cap——它是某個 item 處理過程的一段，不是一個 item
 - async 路徑收到 notification → 走 [harvest.md](harvest.md) § pre-scan 通知的輕量收割，**不走** 8 步 SOP
@@ -124,7 +124,7 @@ exit code 契約的 SoT 是 [[agent-routing.pi-watch-protocol]] § 泛用 Dispat
 | --- | --- |
 | `0` | 讀 stdout JSON 的 `result` → 輕量收割 → 該 item 回 Step 3 續判 |
 | `2` 業務 fail | `result` 的 fail 原因本身是事實（例：來源檔不存在）——消費它，缺口由主線定點 Read 補。**NEVER** 原樣重派、**NEVER** 換 Claude 重做同 brief |
-| `3` 機械故障 | 主線 fallback 自讀（唯一允許的 Claude fallback），state `notes` 留 `codex-prescan-fallback(exit3): <stderr 首行>`；**本輪剩餘 pre-scan 不再嘗試 codex** |
+| `3` 機械故障 | 主線 fallback 自讀（唯一允許的 Claude fallback），state `notes` 留 `pi-prescan-fallback(exit3): <stderr 首行>`；**本輪剩餘 pre-scan 不再嘗試 pi** |
 | `4` quota 擋 | `resets_at` 落 state `notes`；本輪剩餘 pre-scan 直接走 fallback（不重複撞）。fallback 依 [[agent-routing]] § 配額耗盡時的 fallback 紀律；主線接走時 `notes` 留 `self-read(quota)` |
 
 **exit `2` / `3` / `4` 都 NEVER 記入 `failStreak` / `consecutiveDispatchFailures`**——那兩個計數器管的是 **item 的工作 dispatch**，pre-scan 只是它的蒐證段。quota 擋被記成失敗時，`consecutiveDispatchFailures >= 2` 會在無人值守下把整個 loop 停掉一整夜。

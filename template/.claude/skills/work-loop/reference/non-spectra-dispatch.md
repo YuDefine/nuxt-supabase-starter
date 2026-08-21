@@ -107,8 +107,8 @@ machine check 分離把這件事結構化了，非 spectra 路徑沒有那個結
 
 以下**不是**合法跳過理由（逐字實錄，per [[pitfall-change-loop-turbo-self-rationalized-idle]]）：
 
-- ❌「needs careful testing」— worktree isolation + codex 就是為此設計的
-- ❌「complex」「多個 scripts 有不同 scope」— codex effort=high 處理
+- ❌「needs careful testing」— worktree isolation + pi 就是為此設計的
+- ❌「complex」「多個 scripts 有不同 scope」— pi effort=high 處理
 - ❌「not ideal for quick wins」— loop 不只做 quick wins
 - ❌「需要 visual verification」— 非 `.vue` 的 backend 不需要
 - ❌「這輪已做了一個了」— 沒有 per-round 上限（除 `--unattended` 3-item cap）
