@@ -129,6 +129,9 @@ Consumer 端的 `.claude/` / `scripts/spectra-advanced/` / vendor 副本是 clad
 ## 與其他規則的關係
 
 - `rules/core/follow-up-register.md`：管 TD ID 命名 / archive gate / `@followup[TD-NNN]` marker
+- `rules/core/agent-self-verification.md` § 驗收 gate MUST 收窄到本次觸及的範圍：管 entry 的
+  `**自驗**` / restart brief **怎麼寫才可達**。寫成 repo-wide 綠燈的 gate 在紅 baseline 的 repo 裡
+  結構性不可達，會把 entry 永久釘死（TD-387 / TD-544 同型）
 - 本 rule：管 **TD 登在哪個 repo 的 docs/tech-debt.md**
 
 兩條規則正交。發現 TD 時先依本 rule 路由、再依 follow-up-register 編號 + 寫 entry。

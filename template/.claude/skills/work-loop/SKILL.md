@@ -284,7 +284,7 @@ node ~/offline/clade/vendor/scripts/work-loop-lock.ts acquire
 
 | exit | 輸出 | 動作 |
 | --- | --- | --- |
-| 0 | `acquired` / `took-over` / `reentrant` ＋ `WORK_LOOP_SESSION_ID=<id>` | 把 `<id>` 記進 state 的 `lockSessionId`，進 Step 1 |
+| 0 | `acquired` / `took-over` / `reentrant` / `continued` ＋ `WORK_LOOP_SESSION_ID=<id>` | 把 `<id>` 記進 state 的 `lockSessionId`，進 Step 1 |
 | 3 | `work-loop already running (…)` | **逐字照抄那一行輸出後結束本輪**，不做任何其他事 |
 | 1 | `error: …` | 與 Step 2 scan 失敗同級：STOP，直接結束本輪 |
 
@@ -292,7 +292,9 @@ node ~/offline/clade/vendor/scripts/work-loop-lock.ts acquire
 
 - **heartbeat**：**每一次**寫 `.clade/work-loop/state.json` 的同時都 MUST 跑 `node ~/offline/clade/vendor/scripts/work-loop-lock.ts refresh --session <id>`（Step 1 / Step 5 **每一次**收割 / Step 7 各一次，不是只在 Step 7 刷）。窗口 45 分鐘
 - **釋放**：正常 terminal / attended reconciliation 才 MUST 跑 `node ~/offline/clade/vendor/scripts/work-loop-lock.ts release --session <id>`；in-flight ledger > 0 或 runner orphan quarantine 期間 **NEVER** 釋放。runner 保留持久 lock 檔供診斷，但 heartbeat/pid lease 仍可能在 process 退出後失效；`orphan-quarantine.json` 的 startup gate 才是禁止自動 retry 的機械保證。只有 attended 將每筆 ownership 標成 terminal/cancelled、清空 `inFlight`，再移除 marker 並 release lock。
-- **Budget 計數器歸零（定義「一次 run」的唯一位置）**：`acquire` 回 `acquired` 或 `took-over` = **一次新的 run 開始** → 本輪 Step 7 寫 state 時 MUST 把 `subagentsSpawned` **歸零重新起算**；回 `reentrant` = 同一個 run 續跑 → **沿用**既有值，**NEVER** 歸零。這讓 Step 6.2 budget proxy 的兩半（`subagentsSpawned` 與 `lock timestamp`）字面共用同一個窗口定義
+- **Budget 計數器歸零（定義「一次 run」的唯一位置）**：`acquire` 回 `acquired` 或 `took-over` = **一次新的 run 開始** → 本輪 Step 7 寫 state 時 MUST 把 `subagentsSpawned` **歸零重新起算**；回 `reentrant` 或 `continued` = 同一個 run 續跑 → **沿用**既有值，**NEVER** 歸零。這讓 Step 6.2 budget proxy 的兩半（`subagentsSpawned` 與 `lock timestamp`）字面共用同一個窗口定義
+
+  **`continued` 是 runner 模式的常態**（第 2 輪起每一輪都回它）：同一個 `runner.sh` pid 的上一輪殘鎖，`sessionId` 與 `acquiredAt` 都由 script 保留。**NEVER 把 `continued` 讀成 `took-over`**——那正是 2026-08-13 那份「budget proxy 兩半皆為死碼」的成因：舊版對這一格回 `took-over` ＋ 換新 `sessionId`／`acquiredAt`，於是 runner 下 `subagentsSpawned` 每輪歸零、`lock timestamp` 每輪重設，`>= 15` 與 `≥6h` 兩條**在無人值守下永遠不可能成立**，攔 runaway 只剩 `--max-rounds` / no-progress 2 輪 / 連續失敗 2 輪。判準寫在檔上但不會觸發，與判準不存在的差別只在讀的人以為有防線
 
 **NEVER 把歸零改掛在 `runner.sh` 起跑。** 兩條理由：in-session `/loop` 沒有 `runner.sh`，掛那裡會讓同一條停止條件在兩種 run mode 語義分裂；且 `runner.sh` 的分工是「不碰 state 內容、連續性全由 child 承擔」，歸零屬於 state 內容。鎖的 acquire 已經是「一次 run」的天然邊界，用它不必另外定義窗口。
 
@@ -856,11 +858,18 @@ fingerprint = sha256(
 | # | Predicate | 機械判法 |
 | --- | --- | --- |
 | P1 | Tier A 淨減 | Tier A 檔（`HANDOFF.md`、`tasks/*.md`、`docs/tech-debt.md`）行數合計下降，**且**通過 entropy 過濾：本輪 diff 中 Tier A 移除行若與 `docs/archives/**`、`*-bodies.md`、`docs/pitfalls/**` 的新增行**含相同 `TD-\d+` id 或行級匹配 ≥70%**，該部分減量**不計**。過濾後仍 <0 才算 |
-| P2 | 交付物 landed | 本輪 commit 觸及 `rules/core/`、`rules/modules/`、`vendor/`、`plugins/hub-core/`、`scripts/`（`.clade/` 除外），且該 item 已過 Step 5 收割的 scope-verify |
+| P2 | 交付物 landed | 本輪 commit 觸及至少一個 **tracked 交付檔**，且該 item 已過 Step 5 收割的 scope-verify。交付檔 = 排除集以外的**全部** tracked path；排除集只有三類：(a) `.clade/**`（loop 自身 state）、(b) Tier A 待辦檔（`HANDOFF.md`、`tasks/*.md`、`docs/tech-debt.md` —— 由 P1／P3 計，不重複計）、(c) `docs/archives/**` 與 `*-bodies.md`（rotate 落點，與 P1 entropy 過濾同一組）。**判準是排除集，NEVER 是白名單** |
 | P3 | TD 關閉帶憑證 | `docs/tech-debt.md` 內某條 TD 的 `**Status**:` token 由 open-class（`open` / `pending` / `landed` / `blocked`）轉為 closed-class（`done` / `resolved` / `wontfix` / `deferred` / `mitigated` / `closed`），**且**同輪 commit 內含該條 `### 自驗` 的實跑輸出、或 state `decisions` 對應條目、或一行 wontfix 理由＋可觀察 signal predicate。token 集合的 SoT 是 `scripts/audit-tech-debt-hygiene.ts`（`statusToken()` ＋ `STRICT_DONE_RE` / `SOFT_CLOSE_RE`），**NEVER** 在此處另立一份。**不看 heading 是否消失**——rotate 由 `closedBloatThreshold` 批次化，與關閉是兩件事；同一條 TD 只在轉 closed-class 那一輪計一次，之後 rotate 那輪 NEVER 再計。憑證三選一皆無 = 不計 P3 也不計 P1（那是改標籤不是關閉） |
 | P4 | 新決策 packaging | `awaiting[]` 新增**先前未出現過的 id** 的完整條目（含 options）。**單輪 P4 至多貢獻一次**——三條 packaging 不等於三輪份的生產 |
 
 皆不成立 → `nonProductiveRounds += 1`（state 新欄位，Step 7.3 寫）；任一成立 → 歸零。
+**P2 為什麼是排除集而不是路徑白名單**：白名單只可能列出寫規約那一刻手上那個 repo 的交付路徑。
+2026-08-19 <consumer-a> r54 實證——舊白名單逐字寫 `rules/core/`／`rules/modules/`／`vendor/`／
+`plugins/hub-core/`／`scripts/`，那是 **clade 自己**的交付形狀；consumer 的交付落在 `packages/**`／
+`app/**`／`test/**`，**字面一條都不中**。那一輪關掉一條 TD（三條 HTTP 探測）並 land 一次 refactor
+（100 tests 全綠、已 merge-back），P1–P4 仍全部不成立 → `nonProductiveRounds` 進 2、整個 loop 停掉。
+**NEVER** 用「本 repo 的交付路徑不在清單上」推論本輪非生產——那是判準沒涵蓋這個 repo，不是本輪沒交付。
+
 **與軟配額的關係是包含，不是並列**：軟配額（6.2）不足額的輪，P1–P4 的計入資格直接取消，該輪**必為**
 非生產輪；反向不成立。**兩條 NEVER 矛盾**——嚴者恆贏。entropy 過濾完整算法、P1–P4 邊界案例、N=2 的
 理由、包含關係的完整論證、反 Goodhart 防線見 [reference/productivity-gate.md](reference/productivity-gate.md)。
@@ -894,7 +903,7 @@ fingerprint = sha256(
 
 把 Step 1 schema 的每個欄位更新後寫回 `.clade/work-loop/state.json`（`.clade/` 已 gitignored）。`guardrailsAck` 用 Step 1.5 讀完的時間。
 
-**`subagentsSpawned` 是唯一一個「不是累加就好」的欄位**：本輪 Step 0 的 `acquire` 回 `acquired` / `took-over` 時 MUST 從 **0** 起算（本輪派幾個就寫幾個），回 `reentrant` 才是舊值 + 本輪新增。判定與理由在 Step 0 § 互斥鎖，**此處不複述**——但 **NEVER** 因為「schema 範例長得像單調遞增」就無條件累加，那會讓 Step 6.2 的 budget proxy 退化成跨 run 單調計數（門檻一旦跨過就永遠為真，[[TD-424]] 同型）。
+**`subagentsSpawned` 是唯一一個「不是累加就好」的欄位**：本輪 Step 0 的 `acquire` 回 `acquired` / `took-over` 時 MUST 從 **0** 起算（本輪派幾個就寫幾個），回 `reentrant` / `continued` 才是舊值 + 本輪新增（runner 模式第 2 輪起恆為 `continued`）。判定與理由在 Step 0 § 互斥鎖，**此處不複述**——但 **NEVER** 因為「schema 範例長得像單調遞增」就無條件累加，那會讓 Step 6.2 的 budget proxy 退化成跨 run 單調計數（門檻一旦跨過就永遠為真，[[TD-424]] 同型）。
 
 **Iron Law：NEVER 直接覆寫 `state.json`。一律 temp → 驗 → 備份 → rename。** 這個檔是整個 loop 的**唯一**記憶載體（Step 1 Iron Law：不依賴對話記憶），寫壞它等於把 N 輪進度一次歸零，而失敗完全靜默——寫入工具照樣回成功，下一輪才在讀取端炸開。
 

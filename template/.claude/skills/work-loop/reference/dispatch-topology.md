@@ -131,6 +131,23 @@ exit code 契約的 SoT 是 [[agent-routing.pi-watch-protocol]] § 泛用 Dispat
 
 同理，pre-scan 走不通 **NEVER** 成為該 item 的 skip 或 packaging 理由——那份 read 工作主線本來就做得了，pre-scan 只是把它搬出去。
 
+### item 工作 dispatch 的 exit 4（quota 不是失敗，是換座位）
+
+上表只管 pre-scan。**item 的工作 dispatch 撞 exit 4 時，同樣 NEVER 直接記 `failStreak` /
+`consecutiveDispatchFailures`**——quota 是座位滿了，不是這個 item 推不動。
+
+`pi-dispatch.ts` 在 exit 4 的 stdout JSON 裡**已經印出**下一跳：
+`next_step: "retry with --model <nextTier> --tier-basis quota-fallback --route fallback-chain"`。
+
+| 可觀察 predicate | 動作 |
+| --- | --- |
+| exit 4 且 stdout 有 `next_step` | **MUST 照它重派一次**（`--retry-of <原 label>`），本輪內完成。這一跳成功 = 本 item 正常收割，quota 完全不進 state 的失敗計數 |
+| 整條 fallback 鏈都回 exit 4（沒有 `next_step` 可跳） | 記 state `notes` 一行 `quota-exhausted(<item>): resets_at=<ISO>`，該 item **本輪** skip；`resets_at` 進 `blockers` ledger 當解除條件。**NEVER** 記入 `consecutiveDispatchFailures`、**NEVER** 因此寫 `stoppedReason` |
+| 撞 exit 4 就寫「等配額恢復」進 HANDOFF 後不再處理 | **違反本節。** 「等配額恢復」是 fallback 鏈跑完才成立的結論，不是撞第一次 exit 4 的結論 |
+
+**NEVER 把 quota 擋讀成「這個 item 需要 attended」**——它與人在不在場無關，`resets_at` 到了就自己解除。
+兩者混在一起會讓一條純機械的等待被 packaging 成待 Charles 拍板的決策。
+
 ## 主線在做什麼
 
 主線**不是**扇出後的等待者，它是序列組的執行者。任一時刻主線的工作來源，依序：

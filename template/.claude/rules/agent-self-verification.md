@@ -17,6 +17,30 @@ Local edits will be reverted by the next sync.
 
 > 本 rule 的成因（根因同質的 pitfall 群）見 `docs/rule-rationale/agent-self-verification.md`。
 
+## 驗收 gate MUST 收窄到本次觸及的範圍
+
+寫任何 gate（TD 的 `**自驗**`、change brief 的驗收條件、restart brief、tasks.md 的 acceptance）時，
+**MUST** 先跑一次那條指令拿 **baseline**，再把 gate 寫成「相對 baseline 的 delta」或「本次觸及的檔」。
+
+| gate 寫法 | 判定 |
+| --- | --- |
+| `pnpm typecheck:tests` exit 0 | ❌ repo 本來就 68 errors／22 檔時**結構性不可達**——沒有任何一次正確的工作能讓它成立 |
+| `pnpm run doctor` 零 error | ❌ 同型（baseline 4 errors） |
+| `pnpm typecheck:tests` 對 `<本次觸及的檔>` 零 error，且**總 error 數 ≤ baseline 的 68** | ✅ 可達、可驗、且擋得住新增退化 |
+| `pnpm check` exit 0 | ❌ 若它固定 exit 1 |
+| `pnpm check` 的 `<本次觸及的檔>` 區段零新增 finding（baseline 見 `<記在哪>`） | ✅ |
+
+**NEVER 用「repo-wide 指令 exit 0」當 gate，除非你剛剛實跑過、它現在就是 0。** 沒跑過就寫上去的
+repo-wide 綠燈，在紅 baseline 的 repo 裡與「工作沒做完」外觀完全相同：接手的人（或無人值守迴圈）
+每一輪跑一次、每一輪紅、每一輪判成未完成，而**真正的工作可能早就做完了**。這不是嚴格，是把一條
+item 永久釘死。
+
+**baseline MUST 落在 gate 旁邊**（數字 ＋ 量測日期 ＋ 指令原文），不是「跑一下就知道」——
+baseline 只存在於某次 session 記憶裡時，下一個讀 gate 的人算不出 delta，只能退回讀 exit code。
+
+**NEVER 用「先讓它綠、之後再補」處理紅 baseline**（那是暫時修法）。正確動作是把紅 baseline 本身
+登記成獨立條目，讓它有自己的 owner，而不是掛在每一條無關 item 的驗收條件上。
+
 ## Hard rule
 
 ### NEVER

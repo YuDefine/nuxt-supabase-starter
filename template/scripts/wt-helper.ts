@@ -3082,72 +3082,80 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
           `\n\nRe-run with --auto-stash to bulk-stash main's dirty state as 'wt-merge-block/${cleanSlug}/<ISO>'\n` +
           `(blockers + any unrelated dirty paths); reconcile later via \`${stashReconcileCmd(consumerRoot)}\`.`,
       )
-    }
-    const isoTs = new Date().toISOString().replace(/[:.]/g, '-')
-    // Phase 7 (Q8): stash namespace carries the merge-back's session_id (from
-    // its worktree claim) so stash-reconcile can attribute a stash back to a
-    // specific session. Fallback to slug-only when no claim found (warn so
-    // path-detection-only attribution is visible).
-    let mergeBackClaim = null
-    try {
-      mergeBackClaim = findClaimByWorktree(consumerRoot, target.path)
-    } catch {}
-    const sessionPart = mergeBackClaim?.session_id ? `/${mergeBackClaim.session_id}` : ''
-    if (!mergeBackClaim) {
-      console.error(
-        `note: no .clade/claims/ entry for worktree ${target.path} — stash falls back to slug-only namespace`,
-      )
-    }
-    const stashMsg = `wt-merge-block/${cleanSlug}${sessionPart}/${isoTs}`
-    // Snapshot refs/stash before push so we can verify a new entry was actually created.
-    // See pitfall-wt-helper-merge-back-silent-stash-miss: `git stash push -u` on a
-    // clean working tree exits 0 with "No local changes to save" and creates no
-    // entry, which made the success log misleading when a concurrent session
-    // cleared main between blocker detection and stash push.
-    let stashHeadBefore = null
-    try {
-      stashHeadBefore = git(['rev-parse', '--verify', 'refs/stash'], { cwd: consumerRoot })
-    } catch {
-      stashHeadBefore = null
-    }
-    try {
-      // Bulk stash (no pathspec) — matches cmdAdd's baseline-stash strategy.
-      // Previously this used `git stash push -u -m <msg> -- <blocker-paths>`,
-      // but `git stash push -u` with pathspec hits a scope-leak bug on
-      // git 2.50.1 (<consumer-b> 2026-05-18: 22 blockers requested → 74 files stashed
-      // including unrelated main tracked-tree mods). Bulk stash makes the
-      // semantics explicit: "snapshot main's dirty state so squash can land,
-      // user reconciles via stash-reconcile.ts". See pitfall-git-stash-
-      // pathspec-scope-leak (merge-back surface).
-      git(['stash', 'push', '-u', '-m', stashMsg], { cwd: consumerRoot })
-    } catch (e) {
-      throw new Error(`merge-back: failed to stash blockers: ${e.message ?? e}`, { cause: e })
-    }
-    let stashHeadAfter = null
-    try {
-      stashHeadAfter = git(['rev-parse', '--verify', 'refs/stash'], { cwd: consumerRoot })
-    } catch {
-      stashHeadAfter = null
-    }
-    if (stashHeadAfter && stashHeadAfter !== stashHeadBefore) {
-      stashRef = stashMsg
-      console.log(
-        `merge-back: bulk-stashed main's dirty state as '${stashMsg}' (covers ${blockers.length} blocker(s) + any unrelated dirty paths)`,
-      )
     } else {
-      stashRef = null
-      console.warn(
-        `merge-back: warning — bulk stash command exited clean but no new stash entry created.`,
-      )
-      console.warn(
-        `             main working tree was already clean when stash ran (likely a concurrent`,
-      )
-      console.warn(
-        `             session cleared it between blocker detection and stash push). Skipping`,
-      )
-      console.warn(
-        `             stashRef assignment; squash will proceed against current main state.`,
-      )
+      // --auto-stash path ONLY. This block MUST stay mutually exclusive with the
+      // minimal-stash branch above: it pushes a SECOND stash and reassigns
+      // `stashRef`, while the auto-restore below pops only `stash@{0}`. When both
+      // ran, the minimal `protect/*` stash was orphaned and its blockers silently
+      // vanished from the working tree — with the success log still claiming
+      // "auto-restored N minimal-stashed path(s)".
+      // See pitfall-wt-helper-merge-back-double-stash-orphans-minimal.
+      const isoTs = new Date().toISOString().replace(/[:.]/g, '-')
+      // Phase 7 (Q8): stash namespace carries the merge-back's session_id (from
+      // its worktree claim) so stash-reconcile can attribute a stash back to a
+      // specific session. Fallback to slug-only when no claim found (warn so
+      // path-detection-only attribution is visible).
+      let mergeBackClaim = null
+      try {
+        mergeBackClaim = findClaimByWorktree(consumerRoot, target.path)
+      } catch {}
+      const sessionPart = mergeBackClaim?.session_id ? `/${mergeBackClaim.session_id}` : ''
+      if (!mergeBackClaim) {
+        console.error(
+          `note: no .clade/claims/ entry for worktree ${target.path} — stash falls back to slug-only namespace`,
+        )
+      }
+      const stashMsg = `wt-merge-block/${cleanSlug}${sessionPart}/${isoTs}`
+      // Snapshot refs/stash before push so we can verify a new entry was actually created.
+      // See pitfall-wt-helper-merge-back-silent-stash-miss: `git stash push -u` on a
+      // clean working tree exits 0 with "No local changes to save" and creates no
+      // entry, which made the success log misleading when a concurrent session
+      // cleared main between blocker detection and stash push.
+      let stashHeadBefore = null
+      try {
+        stashHeadBefore = git(['rev-parse', '--verify', 'refs/stash'], { cwd: consumerRoot })
+      } catch {
+        stashHeadBefore = null
+      }
+      try {
+        // Bulk stash (no pathspec) — matches cmdAdd's baseline-stash strategy.
+        // Previously this used `git stash push -u -m <msg> -- <blocker-paths>`,
+        // but `git stash push -u` with pathspec hits a scope-leak bug on
+        // git 2.50.1 (<consumer-b> 2026-05-18: 22 blockers requested → 74 files stashed
+        // including unrelated main tracked-tree mods). Bulk stash makes the
+        // semantics explicit: "snapshot main's dirty state so squash can land,
+        // user reconciles via stash-reconcile.ts". See pitfall-git-stash-
+        // pathspec-scope-leak (merge-back surface).
+        git(['stash', 'push', '-u', '-m', stashMsg], { cwd: consumerRoot })
+      } catch (e) {
+        throw new Error(`merge-back: failed to stash blockers: ${e.message ?? e}`, { cause: e })
+      }
+      let stashHeadAfter = null
+      try {
+        stashHeadAfter = git(['rev-parse', '--verify', 'refs/stash'], { cwd: consumerRoot })
+      } catch {
+        stashHeadAfter = null
+      }
+      if (stashHeadAfter && stashHeadAfter !== stashHeadBefore) {
+        stashRef = stashMsg
+        console.log(
+          `merge-back: bulk-stashed main's dirty state as '${stashMsg}' (covers ${blockers.length} blocker(s) + any unrelated dirty paths)`,
+        )
+      } else {
+        stashRef = null
+        console.warn(
+          `merge-back: warning — bulk stash command exited clean but no new stash entry created.`,
+        )
+        console.warn(
+          `             main working tree was already clean when stash ran (likely a concurrent`,
+        )
+        console.warn(
+          `             session cleared it between blocker detection and stash push). Skipping`,
+        )
+        console.warn(
+          `             stashRef assignment; squash will proceed against current main state.`,
+        )
+      }
     }
   }
 

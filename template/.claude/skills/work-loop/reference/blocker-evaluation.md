@@ -33,6 +33,7 @@ Local edits will be reverted by the next sync.
    | 「等 dependency Y change」且 Y 在 scan 中 bucket=`done`/`ready` | dependency 已滿足 | **直接 unblock + dispatch** |
    | 「等外部 API / 第三方」 | 無法自動驗證 | **AskUserQuestion**（`--unattended` 時改 log `⏭️ <change> blocked on external: <reason>, skip` + skip）：「`<change>` blocked on `<reason>`，blocker 解了嗎？」[1] 已解除，接手推進 / [2] 仍 blocked，跳過 |
    | 「等 user 測過 / 等 production data」 | 需 user 確認 | **AskUserQuestion**（`--unattended` 時改 log + skip）同上 |
+   | 「需要看畫面 / 需已登入的視覺工作階段 / 需 runtime e2e 斷言」 | **先跑下方 § 視覺 blocker 的 capability probe**，NEVER 憑敘述判定 | probe 三條全綠 → **dispatch 收 evidence**（不是 blocker）；任一條紅 → 用**那一條 predicate 的原文**當 blocker 落 packaging |
    | blocker 描述模糊 / 空白 | 不明 | **AskUserQuestion**（`--unattended` 時改 log + skip）：「`<change>` 標為 blocked 但原因不明，要推進嗎？」 |
 
    **歸因無證據即重查（hard rule）**：blocker 敘述把成因歸給另一條 workstream（「別 session 動過 X」「等 Y 收斂」），而該敘述**沒附「怎麼驗的」** → 本輪一律當**未驗證**重查，**NEVER** 因為「上面寫著」就沿用它繼續延後。判準不是「這個歸因對不對」（那要查才知道），是**這個歸因有沒有各自的證據**。一句話涵蓋 ≥2 個獨立 gate / blocker、而證據只有一份時間相關性 → 必重查（實錄：`docs/pitfalls/2026-08-11-simultaneously-red-gates-share-one-attribution.md`）。
@@ -44,6 +45,32 @@ Local edits will be reverted by the next sync.
 4. **Impl blocked ≠ review items blocked（hard rule）**：即使 impl 仍 blocked，**MUST** 檢查 `## 人工檢查` 區是否有 Claude-actionable items（`issued > 0` / `verifyClaudePendingCount > 0` / `discussPendingCount > 0` / review-gui 顯示「🤖 等 Claude 接手」）。有 → 走 § 3a/3b/3c 處理 review items，**NEVER** 因為 impl blocked 就整條 change 跳過。人工檢查 lifecycle 獨立於 impl lifecycle。
 
    **為什麼**（2026-07-21 <consumer-a> 實證）：`ops-deploy-safety` bucket=`applyBlocked`（4.1-4.3 卡 TD-002），但 review-gui 顯示「🤖 等 Claude 接手」有 1 個 Claude-actionable discuss item。loop 看到 `applyBlocked` 就整條跳過，review-gui 的 Claude-ball 永遠沒人接。
+
+### 視覺 blocker 的 capability probe（unattended 一樣要跑）
+
+「需要看畫面」**不是**一個 blocker 類型，它是一個**尚未量測的假設**。fleet 已經有把它自動化的整條
+路徑（dev-login route → dev server → `pi-dispatch-screenshot-verify.ts`），所以在跑完下面三條之前
+**NEVER** 把這種 item 判成 `blocked-attended-only`、**NEVER** 寫「需 attended 視覺工作階段」進
+HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
+
+| # | probe | 指令 | 紅了代表什麼 |
+| --- | --- | --- | --- |
+| 1 | dev-login route 存在 | `node ~/offline/clade/scripts/audit-dev-login-adoption.ts --consumer . --json` → 該 consumer `status == "PRESENT"` | `MISSING` → 真缺口。修法是 scaffold dev-login（[[manual-review.backend]] § Dev-login route missing → scaffold-first），**那是可自主推進的工作**，不是 attended 條目 |
+| 2 | dev server 起得來 | 依 [[proactive-skills.dev-server-spawn]] 起，拿到 `http://localhost:<port>` | 起不來 → 記實際 stderr 當 blocker，那通常是環境債不是視覺債 |
+| 3 | dispatcher 可用 | `command -v pi` 有；`CLADE_FORCE_CLAUDE_SCREENSHOT` 未設 | 沒有 → 機械缺口，落 `notes`，**NEVER** 改派 Claude subagent 自跑 playwright／agent-browser 取代 dispatcher（唯一入口紀律見 [[review-gui-surface]] § Hard rule） |
+
+三條全綠 → 照 [[review-gui-surface]] § 收 evidence 走
+`node ~/offline/clade/vendor/scripts/pi-dispatch-screenshot-verify.ts --change <name> --consumer-path . --dev-server-url <url> --items-json <items.json>`，
+主線只消費它回的 JSON 摘要。**這條路徑本來就是無人值守設計的**（Pi grok seat，不需要人在座位上）。
+
+任一條紅 → packaging 的 blocker 欄 **MUST 逐字寫那一條 probe 的失敗輸出**（哪一條、跑了什麼、回了什麼）。
+**NEVER** 寫「需 attended」這種形容詞——形容詞每一輪都會被重新「發現」一次，而 predicate 有解除條件、
+可以進 [blocker-ledger.md](blocker-ledger.md) 查表，下一輪不必重判。
+
+**真物理限制長什麼樣**：需要**人的眼睛做美感／可用性判斷**（「這個間距看起來對嗎」）、需要**人的授權**、
+需要**不可逆的 prod 動作**。這三類 probe 全綠也仍是 attended——但它們的 blocker 文字同樣要寫成 predicate
+（「需 Charles 對 3 張截圖做 en-US 文案判讀」），而且 **MUST 附上已經自動收好的 evidence 路徑**：把人要做的事
+從「開一個 dev session 自己點」縮到「看三張圖回一句」，那才是 packaging 的意義。
 
 ### 3j. awaitingUserDecision（自主解決優先，只有商業決策才問 user）
 

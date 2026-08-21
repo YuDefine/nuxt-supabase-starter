@@ -5,7 +5,7 @@
     "rules/agent-routing.md": "3f1996e68aaa3808",
     "rules/agent-routing.pi-input-intercept.md": "55f54fe680b33fb9",
     "rules/agent-routing.pi-watch-protocol.md": "971a8ca2ce0c4a7a",
-    "rules/agent-self-verification.md": "9c42049264bf13a2",
+    "rules/agent-self-verification.md": "d142bf131fe05fd7",
     "rules/agent-self-verification.screenshot-evidence.md": "c8f274c48a74c6db",
     "rules/audit-pattern.md": "69856e1bb2377882",
     "rules/auth-data-path-consistency.md": "372d85414ae7faee",
@@ -66,7 +66,7 @@
     "rules/skill-management.md": "b35fcfe130a457d7",
     "rules/spectra-notion-coupling.md": "d92f5252bd1a2818",
     "rules/spectra-workflow.md": "23e7521a9f6369f5",
-    "rules/tech-debt-routing.md": "f39990435455bcb5",
+    "rules/tech-debt-routing.md": "77c588712fcc2d06",
     "rules/test-scripts.md": "537f725340873114",
     "rules/testing-anti-patterns.md": "df9ff942b1cc34d2",
     "rules/threshold-remediation.md": "13beb399615cced3",
@@ -137,12 +137,12 @@
     "skills/spectra-propose/references/dispatch-option-a.md": "c2ab241f21943e53",
     "skills/spectra-propose/references/dispatch-option-b.md": "80ae90050e933756",
     "skills/spectra-verify/SKILL.md": "651f0ea59d5b2f55",
-    "skills/work-loop/SKILL.md": "0fede41e17ee19e6",
+    "skills/work-loop/SKILL.md": "a50223d7370251f1",
     "skills/work-loop/reference/autonomy-predicate.md": "172da82b3451a8a7",
-    "skills/work-loop/reference/blocker-evaluation.md": "7a4684431ee4ee46",
+    "skills/work-loop/reference/blocker-evaluation.md": "57d51c84f3d7c1cc",
     "skills/work-loop/reference/blocker-ledger.md": "bce72c847990a343",
     "skills/work-loop/reference/decision-drain.md": "04f9f4dc31c246c2",
-    "skills/work-loop/reference/dispatch-topology.md": "a44f612889352574",
+    "skills/work-loop/reference/dispatch-topology.md": "7daf69bc93245b6f",
     "skills/work-loop/reference/guardrails.md": "3909c41e948a9ac5",
     "skills/work-loop/reference/harvest.md": "452bff6d6f5379d7",
     "skills/work-loop/reference/no-wt-dispatch.md": "92925a642fa917f1",
@@ -157,6 +157,6 @@
     "agents/code-review.md": "324b74b4a77e2b4c",
     "agents/dispatch-fallback.md": "bf9fc5c995bfa8a6",
     "agents/references/clade-review-rules.md": "6bfcab329115f10c",
-    "agents/screenshot-review.md": "6dfbfebaaef64783"
+    "agents/screenshot-review.md": "ade38cd351e0128f"
   }
 }
