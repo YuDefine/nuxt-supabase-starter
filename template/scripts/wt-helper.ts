@@ -2184,24 +2184,46 @@ export function fmtDriftCommitMessage(slug, paths) {
 // discrete pre-sync commit on the wt branch — see preSyncCommitMessage()).
 // Throws with structured guidance on conflict — does NOT auto-abort; leaves wt
 // in unmerged state so user can inspect markers, resolve, commit, re-run.
-export function syncWorktreeWithMain(wtPath, branchName, slug) {
-  let targetRef = 'main'
+// SoT for "which ref does the worktree flow treat as the landing target".
+// MUST stay the single source for BOTH pre-sync (aligns the wt branch to it)
+// and merge-back (fast-forwards local main to it before the squash). Two
+// independently-computed refs is precisely the asymmetry behind
+// pitfall-merge-back-presync-stages-origin-main-commits: pre-sync aligned the
+// branch to origin/main while the squash landed into a local main that was N
+// commits behind, so those N commits' files silently joined the staged scope.
+export function resolveSyncTargetRef(cwd, opts: { fetch?: boolean } = {}) {
   let hasOriginMain = false
   try {
-    git(['rev-parse', '--verify', 'origin/main'], { cwd: wtPath })
+    git(['rev-parse', '--verify', 'origin/main'], { cwd })
     hasOriginMain = true
   } catch {}
-
-  if (hasOriginMain) {
-    try {
-      git(['fetch', 'origin', 'main'], { cwd: wtPath, stdio: 'inherit' })
-      targetRef = 'origin/main'
-    } catch (e) {
-      console.error(
-        `warn: pre-sync fetch origin main failed (${e.message ?? e}); falling back to local main`,
-      )
-    }
+  if (!hasOriginMain) return 'main'
+  if (opts.fetch === false) return 'origin/main'
+  try {
+    git(['fetch', 'origin', 'main'], { cwd, stdio: 'inherit' })
+    return 'origin/main'
+  } catch (e) {
+    console.error(
+      `warn: pre-sync fetch origin main failed (${e.message ?? e}); falling back to local main`,
+    )
+    return 'main'
   }
+}
+
+// Commits `<cwd HEAD>` is missing relative to `ref`. Returns 0 when ref is the
+// local branch itself or the count cannot be read (fail-open on measurement —
+// the ff attempt below is what actually enforces the invariant).
+function commitsBehindRef(cwd, ref) {
+  if (ref === 'main') return 0
+  try {
+    return parseInt(git(['rev-list', '--count', `HEAD..${ref}`], { cwd }), 10) || 0
+  } catch {
+    return 0
+  }
+}
+
+export function syncWorktreeWithMain(wtPath, branchName, slug) {
+  const targetRef = resolveSyncTargetRef(wtPath, { fetch: true })
 
   let behind = 0
   try {
@@ -2794,6 +2816,13 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
     } catch {}
   }
 
+  // Distinct from `preSyncBehind` on purpose: that one measures branch..target
+  // (nonzero on every healthy merge-back). This one measures local main against
+  // the SAME landing ref pre-sync uses, and nonzero means the squash would stage
+  // files this worktree never touched.
+  const landingRef = resolveSyncTargetRef(consumerRoot, { fetch: false })
+  const mainBehindTarget = commitsBehindRef(consumerRoot, landingRef)
+
   if (opts.dryRun) {
     console.log(`merge-back dry-run for ${cleanSlug}:`)
     console.log(`  Worktree:        ${target.path}`)
@@ -2826,6 +2855,10 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
     } else {
       console.log(`  Pre-sync behind: ${preSyncBehind} commit(s) on main`)
     }
+    console.log(
+      `  Local main behind ${landingRef}: ${mainBehindTarget} commit(s)` +
+        (mainBehindTarget > 0 ? ` (would fast-forward local main before squash)` : ''),
+    )
     if (wtUserDirty.length > 0) {
       console.log(
         `  Action: worktree has uncommitted WIP; without --include-worktree-wip, merge-back would refuse.`,
@@ -2850,6 +2883,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
       wtFmtDrift,
       baselineRefs,
       preSyncBehind,
+      mainBehindTarget,
     }
   }
 
@@ -3156,6 +3190,40 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
           `             stashRef assignment; squash will proceed against current main state.`,
         )
       }
+    }
+  }
+
+  // ── Local main MUST NOT be behind the landing ref before the squash ─────
+  // pre-sync aligned the wt branch to `landingRef`; the squash below lands into
+  // local main. When local main is behind, the squash diff is
+  //   (branch changeset) ∪ (commits local main is missing)
+  // and `git status` does not distinguish the two sources. Every surface signal
+  // stays green for the session running merge-back — the cost lands on the NEXT
+  // session sharing this tree (publish's clean-tree re-check refuses to run).
+  // Re-measured here (not reused from the pre-dry-run reading) because pre-sync
+  // ran a real `git fetch` in between. See
+  // pitfall-merge-back-presync-stages-origin-main-commits.
+  const behindAtSquash = commitsBehindRef(consumerRoot, landingRef)
+  if (behindAtSquash > 0) {
+    try {
+      git(['merge', '--ff-only', landingRef], { cwd: consumerRoot, stdio: 'inherit' })
+      console.log(
+        `merge-back: fast-forwarded local main to ${landingRef} (${behindAtSquash} commit(s)) before squash`,
+      )
+    } catch (e) {
+      throw new Error(
+        `merge-back STOP: local main is ${behindAtSquash} commit(s) behind ${landingRef} and could not be fast-forwarded:\n` +
+          `  ${e.message ?? e}\n\n` +
+          `Pre-sync already aligned '${branchName}' to ${landingRef}, so squashing into a stale main\n` +
+          `would stage those ${behindAtSquash} commit(s)' files alongside your changeset — indistinguishable\n` +
+          `by source, and enough to block the next session's publish on this shared tree.\n\n` +
+          `Resolution — bring local main current, then re-run:\n` +
+          `  cd ${consumerRoot}\n` +
+          `  git status                      # resolve whatever blocks the fast-forward\n` +
+          `  git merge --ff-only ${landingRef}\n` +
+          `  wt-helper merge-back ${cleanSlug}`,
+        { cause: e },
+      )
     }
   }
 

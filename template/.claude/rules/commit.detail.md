@@ -194,6 +194,39 @@ main 髒 / 有別 session WIP 不能直接跑 `/commit`（會吃別人 staged）
 
 **「純 typo」不是跨路徑的例外**。它只在白名單路徑內成立，且僅限散文本身的錯字。**NEVER** 拿它包裝：規約措辭修正（改的是 MUST / NEVER 的語意）、程式識別字重命名、註解以外的任何程式碼改動——這三類即使一個字元也走 `/commit`。
 
+## 程式化區段編輯的定界（hard rule）
+
+**適用範圍**：**每一次**用腳本或 one-liner（python、node、`sed -n '/a/,/b/p'`、`awk '/a/,/b/'`）改寫長 markdown 的**某一段**——`docs/tech-debt.md`、`HANDOFF.md`、spec、pitfall、locale 檔全部適用，不是只有最大的那一份。手動逐段 Edit 不在此列。本節管的是**怎麼定界**，**NEVER** 讀成放寬 § 禁止事項 — WIP 處置禁令的 `sed -i` / `echo >` 條款：腳本改 git-tracked 檔仍 MUST 留下可見 diff（走 Edit/Write tool，或改完立刻 `git diff -- <file>` 給人看）。
+
+1. **區段邊界 MUST 用結構正則算**：先用該檔的 heading 形狀（`^## ` / `^### `）掃出**所有** heading 的位置，某段的終點取「**下一個** heading 的 offset」，最後一段取檔尾。
+
+   ```python
+   import re
+   heads = [(m.start(), m.group(1)) for m in re.finditer(r'^## TD-(\d+) ', s, re.M)]
+   bounds = {num: (pos, heads[k + 1][0] if k + 1 < len(heads) else len(s))
+             for k, (pos, num) in enumerate(heads)}
+   a, b = bounds['575']     # 終點是「下一個 heading」，不是「下一個我以為的 heading」
+   ```
+
+   **NEVER 拿另一個條目的標題當終點**（`s.index('## TD-574 —')`、`awk '/^## TD-575 /,/^## TD-574 /'`）——條目的相鄰關係由多個 session 各自 insert 的位置決定，**不是不變量**；把它寫進定位邏輯，等於把別人的編輯權接進自己的刪除範圍。逐字反開脫：**「剛才 grep 過，`## TD-574` 就緊接在 `## TD-575` 後面」**——那是**當時**的排列，不是**寫入那一刻**的排列，而中間別 session 可以插入任意多條。`awk` 的 range pattern 更糟：end pattern 不存在時它一路吃到檔尾。
+
+2. **一次改多段 MUST 由後往前替換**（依起點 offset 由大到小），否則前面的替換會讓後面**每一段**的 offset 全部位移。反序處理**每一段**，不是只有最後一段例外。
+
+   ```python
+   for num, new in sorted(edits, key=lambda x: -bounds[x[0]][0]):
+       a, b = bounds[num]
+       s = s[:a] + rebuild(s[a:b], new) + s[b:]
+   ```
+
+3. **寫入後、commit 前 MUST 驗區段數**：編輯前後各跑一次 `grep -c '^## ' <file>`，差額 **MUST 等於本次刻意增刪的區段數**（沒有刻意增刪就是 0）。不等 → **STOP**，用 `git diff -- <file> | grep '^-## '` 看是哪幾段消失了，還原後用結構正則重做。
+
+   **NEVER 用「grep 得到自己寫的那一段」代替本步**——那是 § Verify hard rule 的第 2 層，它問的是「**我寫的**在不在」，對「**別人的**還在不在」結構性零訊號（實證：第 1、2 層全數通過，只有第 3 層行數比對接住）。已經 commit 才發現 → `git revert <sha>`，**NEVER** 改寫已 push 的 history。
+
+實證：`git show ee56679d --stat -- docs/tech-debt.md`（誤刪三條整條 entry）→ `61ebc282`（revert）→ `46b21800`（以 heading 正則重做）。成因與 detection 指令見 [[pitfall-adjacent-heading-boundary-slice-eats-middle-entries]]。
+
+本證據決定：程式化改寫區段時怎麼定界、寫入後要驗什麼。
+本證據不決定：要不要用腳本改 markdown——**NEVER** 拿它論證「一律改用手動 Edit」，長檔多段編輯手動逐段改一樣會漏，只是漏得比較安靜。
+
 ## Multi-session shared working-tree 的 git hazard
 
 多 session 並行是常態。任何**不帶 path scope** 的 git index / stash 操作（`git add -A` / `git add .` / `git stash push` 不帶 pathspec / `publish.ts --stash-untracked` / merge-back auto-stash / `git clean`）都會把別 session 未 commit 的東西捲進來 → mixed commit、WIP 永久遺失、deploy commit 內容跟 message 不符。防法統一：**path-scoped 隔離**（`git commit --only -- <paths>`）或**避開共用 index**（per-session worktree）。
