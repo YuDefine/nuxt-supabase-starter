@@ -12,11 +12,15 @@
  *                    last-commit ISO timestamp, days-since-touch, merged flag.
  *   prune            Interactively remove worktrees whose branches are
  *                    already merged into main. Per-entry [y/N] confirm.
- *   cleanup <slug>   Remove one session worktree by slug. Requires --force
+ *   cleanup <slug> [--dry-run]
+ *                    Remove one session worktree by slug. Requires --force
  *                    if branch not merged AND --force-discard-unland if
  *                    branch HEAD has files NOT landed into main's working
  *                    tree. Pre-checks both gates and reports the full flag
- *                    combo needed.
+ *                    combo needed. --dry-run reports the verdict read-only.
+ *                    Squash-landed branches (refs/wt-landed/<slug> matching
+ *                    the branch tip) skip both ancestry gates; clade-managed
+ *                    projection drift is exempt from the uncommitted gate.
  *   merge-back <slug> [--dry-run] [--auto-stash] [--no-cleanup]
  *                    Atomic ceremony: squash session branch into main +
  *                    cleanup worktree. Pre-flight detects main-worktree
@@ -1949,9 +1953,19 @@ function detectUnlandedFiles(consumerRoot, branchName) {
   // 的那次就不會有人停下來看。TD-302，同家族 TD-291 / TD-297。
   if (branchAheadCount(consumerRoot, branchName) === 0) return []
 
+  // 檔案集 MUST 取 `merge-base..branch`（branch **自己**改過的檔），NEVER 取
+  // `main..branch`。後者是 main tip 與 branch tip 的兩點 diff —— branch 落後 main N 個
+  // commit 時，那 N 個 commit 動過的檔全部被算進來，而 branch 從沒碰過它們。實測 <consumer-a>
+  // `app-drawer-form-footer`（behind 488 / ahead 1、自身只改 6 個檔）被報成 1900 個
+  // 「內容不在 main」，其中 1894 個是 main 自己往前走的結果。
+  //
+  // 這與上面 ahead===0 短路是同一個 TD-302 家族的缺陷：短路只擋掉 ahead===0 那一種，
+  // ahead>0 且 behind 很多的（也就是絕大多數長命 worktree）照樣被淹沒。
   let branchFiles = []
   try {
-    const out = git(['diff', '--name-only', `main..${branchName}`], { cwd: consumerRoot })
+    const base = git(['merge-base', 'main', branchName], { cwd: consumerRoot }).trim()
+    if (!base) return []
+    const out = git(['diff', '--name-only', `${base}..${branchName}`], { cwd: consumerRoot })
     branchFiles = out.split('\n').filter(Boolean)
   } catch {
     return []
@@ -1965,6 +1979,67 @@ function detectUnlandedFiles(consumerRoot, branchName) {
     }
   }
   return unlanded
+}
+
+// ── Squash-landing marker (refs/wt-landed/<slug>) ─────────────────────────
+//
+// `/wt` 的收尾是 `git merge --squash <branch>` —— squash **不建立 merge 邊**，所以 land
+// 完成後 `git branch --merged main` 仍然看不到這條 branch，`main..<branch>` 也仍然回報
+// N 個 commit「不在 main」。cleanup 的前兩道 gate 純看 ancestry，於是對**每一個**正常
+// land 完的 worktree 都誤報。
+//
+// 內容比對補不了這個洞：land 之後 main 通常還會再改（manual review fix、後續 commit），
+// 於是 branch 版本與 main 版本既非 byte-equal、三方合併也會在同一批行上衝突。2026-08-22
+// 於 <consumer-a> 實測兩條**已確認 land** 的 branch：`git merge-tree --write-tree` 兩條都非
+// main^{tree}，逐檔三方吸收測試 14 個檔有 8 個 CONFLICT。「已 land」在 squash 之後是
+// **不可由內容反推**的，這不是實作不夠好，是資訊已經被 squash 丟掉了。
+//
+// 唯一能證明的辦法是在 squash 當下把事實記下來：wt-helper 自己執行了 squash，它知道吃
+// 進去的是哪一個 branch tip。marker 記那個 tip sha，cleanup 只在 **sha 仍逐字相符** 時
+// 採信 —— branch 之後又長出新 commit，marker 立刻失效，gate 恢復原本的擋法。
+//
+// NEVER 把 marker 讀成「main 已 commit」：`git merge --squash` 只 stage 不 commit，落地
+// 由呼叫端在 main 跑 /commit 收尾。marker 的語義嚴格是「wt-helper 已把這個 tip 的
+// changeset 併進 main 的 index」。這已經**嚴格強於現況**：cmdMergeBack 今天是無條件對
+// 自己的 cleanup 傳 force + forceDiscardUnland，連 tip 相不相符都沒驗。
+function landedMarkerRef(slug) {
+  return `refs/wt-landed/${slug}`
+}
+
+function writeLandedMarker(consumerRoot, slug, sha) {
+  if (!sha) return false
+  try {
+    git(['update-ref', landedMarkerRef(slug), sha], { cwd: consumerRoot })
+    return true
+  } catch {
+    // marker 純屬加分證據，寫不進去不該讓 merge-back 失敗 —— 退回原本的 gate 行為即可。
+    return false
+  }
+}
+
+function deleteLandedMarker(consumerRoot, slug) {
+  try {
+    git(['update-ref', '-d', landedMarkerRef(slug)], { cwd: consumerRoot })
+  } catch {}
+}
+
+/** marker 存在且逐字等於 branch 現在的 tip 才回 true。取不到一律 false（fail-closed）。 */
+function isSquashLanded(consumerRoot, slug, branchName) {
+  let marked
+  try {
+    marked = git(['rev-parse', '--verify', `${landedMarkerRef(slug)}^{commit}`], {
+      cwd: consumerRoot,
+    }).trim()
+  } catch {
+    return false
+  }
+  let tip
+  try {
+    tip = git(['rev-parse', '--verify', `${branchName}^{commit}`], { cwd: consumerRoot }).trim()
+  } catch {
+    return false
+  }
+  return Boolean(marked) && marked === tip
 }
 
 function sweepSiblingChangeResidues(consumerRoot, slug) {
@@ -2573,7 +2648,7 @@ function preserveWorktreeScreenshots(wtPath, mainPath, slug = 'worktree') {
 async function cmdCleanup(slug, opts) {
   if (!slug)
     throw new Error(
-      'Usage: wt-helper cleanup <slug> [--force] [--force-discard-unland] [--force-discard-uncommitted] [--allow-orphan-record]',
+      'Usage: wt-helper cleanup <slug> [--dry-run] [--force] [--force-discard-unland] [--force-discard-uncommitted] [--allow-orphan-record]',
     )
   const cleanSlug = makeSlugSafe(slug)
   const consumerRoot = findConsumerRoot()
@@ -2591,8 +2666,16 @@ async function cmdCleanup(slug, opts) {
   // The third gate (uncommitted) was added after <consumer-b> 2026-05-17 incident
   // where 47 baseline files lived only in the worktree's working tree
   // (applied from stash, never committed) and vanished on cleanup.
-  const branchMerged = mergedBranches(consumerRoot).has(branchName)
-  const unlanded = detectUnlandedFiles(consumerRoot, branchName)
+  // squash-merge 不建立 merge 邊，ancestry 因此對每一條正常 land 完的 branch 都誤報。
+  // marker 相符時兩道 ancestry gate 一起放行（見 isSquashLanded 上方的推導與實測）。
+  const squashLanded = isSquashLanded(consumerRoot, cleanSlug, branchName)
+  const branchMerged = squashLanded || mergedBranches(consumerRoot).has(branchName)
+  const unlanded = squashLanded ? [] : detectUnlandedFiles(consumerRoot, branchName)
+  if (squashLanded) {
+    console.log(
+      `cleanup: ${branchName} 的 tip 與 squash-landing marker '${landedMarkerRef(cleanSlug)}' 相符 —— 略過兩道 ancestry gate`,
+    )
+  }
   // Tool-managed drift MUST be excluded here for the same reason merge-back's WIP gate
   // excludes it (see isToolManagedDrift) — and the two gates MUST agree, or atomic
   // merge-back breaks in half: cmdMergeBack squashes successfully, then calls cmdCleanup,
@@ -2602,18 +2685,70 @@ async function cmdCleanup(slug, opts) {
   //
   // Only `modified` is filtered: isToolManagedDrift compares against HEAD, which an
   // untracked file has no version of.
+  //
+  // LOCKED projection（`.claude/**`、`CLAUDE.md`、`.clade/vendor/**`、vendored `scripts/*` …）
+  // 同理 MUST 一起豁免，而且理由與 merge-back 逐字相同 —— cmdMergeBack 的 WIP 判定
+  // (`wtUserDirtyAll`) 就是先過 `isLockedProjectionPathFor` 才算數，那裡的註解寫得很清楚：
+  // *propagate residue, not user WIP* + *re-materialize on next bootstrap*。main 是這些
+  // 檔的 SoT，worktree 內留下的是 clade bootstrap 每次進去就重寫一次的**較舊**投影。
+  //
+  // 沒有這一層，bootstrap 跑一次就在每個 worktree 種下一批永遠清不掉的髒檔，於是
+  // merge-back 自己呼叫的 cleanup（它只傳 force + forceDiscardUnland，**沒有**傳
+  // forceDiscardUncommitted）必然失敗，atomic 收尾再次斷成兩半 —— 正是上面 TD-252 那段
+  // 註解所描述、且明寫「兩道 gate MUST agree」的同一個斷法，只是換成投影檔觸發。
+  // 2026-08-22 於 <consumer-a> 實測：20 個 session worktree 有 8 個的髒檔 100% 屬於這一類。
+  //
+  // 豁免範圍嚴格等於 merge-back 的判準，**NEVER** 放寬成「髒檔一律豁免」：真 user WIP
+  // （未 commit 的 openspec 提案、`.env*.example`、scratch script）照舊擋 —— 另外 12 個
+  // worktree 就是靠這條繼續被擋住的。
   const uncommittedRaw = detectUncommittedWorktreeFiles(target.path)
+  const isIgnorableDrift = (entry, kind) =>
+    isLockedProjectionPathFor(target.path, entry.path) ||
+    (kind === 'modified' && isToolManagedDrift(target.path, entry.path))
   const uncommitted = {
-    modified: uncommittedRaw.modified.filter((m) => !isToolManagedDrift(target.path, m.path)),
-    untracked: uncommittedRaw.untracked,
+    modified: uncommittedRaw.modified.filter((m) => !isIgnorableDrift(m, 'modified')),
+    untracked: uncommittedRaw.untracked.filter((u) => !isIgnorableDrift(u, 'untracked')),
   }
   const uncommittedCount = uncommitted.modified.length + uncommitted.untracked.length
   // git 不知道我們決定忽略這些檔，`git worktree remove` 照樣會因 dirty 而拒絕。
   // 只放行 gate 而不讓 remove 帶 --force，等於把同一個失敗從 gate 挪到 remove。
-  const toolManagedCount = uncommittedRaw.modified.length - uncommitted.modified.length
+  const toolManagedCount =
+    uncommittedRaw.modified.length -
+    uncommitted.modified.length +
+    (uncommittedRaw.untracked.length - uncommitted.untracked.length)
   const needsForce = !branchMerged && !opts.force
   const needsDiscardUnland = unlanded.length > 0 && !opts.forceDiscardUnland
   const needsDiscardUncommitted = uncommittedCount > 0 && !opts.forceDiscardUncommitted
+
+  // --dry-run：唯讀回報三道 gate 的判定，不動 worktree、不刪 branch、不寫任何 ref。
+  // 這是驗證豁免規則是否正確分辨「投影殘留」與「真 user WIP」的唯一非破壞性入口 ——
+  // 沒有它，要確認一個 worktree 現在可不可以清，就只能真的去清它。
+  if (opts.dryRun) {
+    const blocked = [
+      needsForce ? '--force' : null,
+      needsDiscardUnland ? '--force-discard-unland' : null,
+      needsDiscardUncommitted ? '--force-discard-uncommitted' : null,
+    ].filter(Boolean)
+    console.log(`cleanup --dry-run: ${cleanSlug}`)
+    console.log(`  worktree           ${target.path}`)
+    console.log(`  branch             ${branchName}`)
+    console.log(
+      `  ancestry           merged=${branchMerged ? 'Y' : 'N'} squashLandedMarker=${squashLanded ? 'Y' : 'N'} unlandedFiles=${unlanded.length}`,
+    )
+    console.log(
+      `  uncommitted        blocking=${uncommittedCount} ignored(projection/tool-managed)=${toolManagedCount}`,
+    )
+    if (uncommittedCount > 0) {
+      for (const m of uncommitted.modified.slice(0, 10)) console.log(`    ${m.status}  ${m.path}`)
+      for (const u of uncommitted.untracked.slice(0, 10)) console.log(`    ??  ${u.path}`)
+    }
+    console.log(
+      blocked.length === 0
+        ? '  verdict            CLEAN — 零 flag 即可 cleanup'
+        : `  verdict            BLOCKED — 需要 ${blocked.join(' ')}`,
+    )
+    return
+  }
 
   if (needsForce || needsDiscardUnland || needsDiscardUncommitted) {
     const issues = []
@@ -2685,11 +2820,14 @@ async function cmdCleanup(slug, opts) {
 
   const removeArgs = ['worktree', 'remove']
   // toolManagedCount > 0：gate 已判定這些 drift 可忽略（見上方），但 git 仍視之為 dirty
-  // 而拒絕移除，所以這裡必須補 --force。它只涵蓋 isToolManagedDrift 認可的檔——真的
-  // user WIP 早在 gate 就攔下了，不會走到這裡。
+  // 而拒絕移除，所以這裡必須補 --force。它只涵蓋 isToolManagedDrift 與
+  // isLockedProjectionPathFor 認可的檔——真的 user WIP 早在 gate 就攔下了，走不到這裡。
   if (opts.force || toolManagedCount > 0) removeArgs.push('--force')
   removeArgs.push(target.path)
   git(removeArgs, { cwd: consumerRoot })
+  // worktree 已消失，marker 的用途（證明這個 tip 已 land）也隨之結束。留著只會在同名
+  // slug 被重新開出來時變成一條指向舊 tip 的死 ref。
+  deleteLandedMarker(consumerRoot, cleanSlug)
   // Post-remove verification: git worktree remove may leave gitignored dirs
   // (e.g. screenshots/) on macOS. Fallback rm ensures no orphaned directories.
   if (existsSync(target.path)) {
@@ -3296,6 +3434,25 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
         `Worktree '${target.path}' + branch '${branchName}' preserved.\n` +
         `Resolve conflicts manually then re-run \`wt-helper merge-back ${cleanSlug}\`.`,
     )
+  }
+
+  // Squash 已無衝突落進 index —— 這是「wt-helper 把這個 branch tip 併進 main」唯一一次
+  // 能被直接觀察到的時刻，記下來供之後的 cleanup 採信（見 landedMarkerRef 上方）。
+  // 寫失敗只降級成原本的 ancestry gate 行為，不影響本次收尾。
+  {
+    let tipSha = null
+    try {
+      tipSha = git(['rev-parse', '--verify', `${branchName}^{commit}`], {
+        cwd: consumerRoot,
+      }).trim()
+    } catch {
+      tipSha = null
+    }
+    if (writeLandedMarker(consumerRoot, cleanSlug, tipSha)) {
+      console.log(
+        `merge-back: 記下 squash-landing marker '${landedMarkerRef(cleanSlug)}' → ${tipSha.slice(0, 8)}`,
+      )
+    }
   }
 
   // Auto-restore covers BOTH stash paths (minimal-scope and --auto-stash bulk).

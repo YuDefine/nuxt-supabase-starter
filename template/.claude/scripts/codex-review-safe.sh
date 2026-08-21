@@ -207,6 +207,26 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 # (3) openai-codex 池 pi 層 enforcement 的回歸。對抗性場景的真修是 OS 層隔離
 # （bwrap，TD-520 處置節），不是這裡。
 #
+# 不一致時**先歸因再判定**（2026-08-22）：原本的全樹二值比對讓 exit 6 在 consumer 上
+# 幾乎必然觸發 —— clade bootstrap 每 20–40 分鐘 auto-commit 一次投影層，一次 review 要
+# 5–15 分鐘，兩者必然賽跑。<consumer-a> 單一 session 六輪撞三次，三次的變更明細全部只有
+# `.clade/` / `.claude/` / `scripts/wt-helper.ts` / `vendor/snippets/`，受審 changeset
+# 一個檔都沒被動到。每次都紅的檢查，讀的人學會的是重跑 —— gate 對真訊號失去鑑別力。
+#
+# 改由 lib/review-integrity-scope.ts 把差異歸因到路徑，兩層判定：
+#   (1) 受審 changeset 涉及的路徑（含超出 embed budget、只具名未嵌入的）→ 動到就扣住；
+#   (2) 其餘路徑 → 全部命中 `isLockedProjectionPathFor()` 才放行，出現任一非投影路徑
+#       就照舊扣住。歸因失敗（HEAD unborn 位移、porcelain 解析不出路徑、classifier
+#       不存在或自己出錯）一律當真訊號。
+#
+# 為什麼是路徑所有權而不是呼叫端傳 `--paths`：誰擁有那些投影路徑是已知事實（chmod 444
+# ＋ checksum gate ＋ bootstrap 自動還原），不是每次呼叫要重新表態的參數。做成參數會讓
+# 檢查強度取決於呼叫端記不記得傳，而漏傳的預設結果是整棵樹不被檢查 —— 預設值站在錯的一邊。
+#
+# 這個縮小**不擴大** cursor 池的曝險：那裡整棵檔案系統是 `--ro-bind / /`（TD-524），
+# 寫入由核心拒絕，與本檢查的寬窄無關。default 池縮掉的只有「pi 白名單回歸 ∩ 寫到投影
+# 路徑」這一個交集，而投影路徑正是最不耐久的寫入目標（下次 bootstrap 就還原）。
+#
 # snapshot = HEAD + 暫存 index 的 `git write-tree`（tracked 修改 + untracked 非
 # ignored 一次收進單一 tree hash；原生涵蓋內容、executable bit、symlink target、
 # binary）+ `git status --porcelain=v2`（staged/worktree 分佈）。純 git、可攜
@@ -228,7 +248,10 @@ snapshot_worktree() {
   GIT_INDEX_FILE="$index" git add -A -- . || return 1
   tree="$(GIT_INDEX_FILE="$index" git write-tree)" || return 1
   printf 'HEAD %s\ntree %s\n' "$head" "$tree"
-  git status --porcelain=v2 || return 1
+  # core.quotePath=false：預設會把非 ASCII 路徑 C-quote 成 `"src/\346\270..."`，
+  # 而歸因端要拿那個字串去比對受審路徑集與投影 regex —— quote 過的字串兩邊都對不上，
+  # 於是一個中文檔名的變更會被歸成「非投影路徑」而永遠扣住 verdict。
+  git -c core.quotePath=false status --porcelain=v2 || return 1
 }
 
 snapshot_or_die() {
@@ -267,6 +290,22 @@ fi
 while IFS= read -r -d '' f; do
   git diff --no-index --no-color --no-ext-diff -- /dev/null "$f" >>"$RAW_DIFF" 2>/dev/null || true
 done < <(git ls-files --others --exclude-standard -z 2>/dev/null)
+
+# 受審路徑集：after-check 的第 1 層（fail-closed 那層）拿它判「verdict 有 claim 的檔
+# 有沒有在 review 期間變動」。收集點必須在這裡 —— 與 RAW_DIFF 同一批 git 呼叫、同一個
+# 時間點，晚一步收就可能收到 review 期間才出現的路徑，那些檔從沒進過 prompt。
+#
+# 涵蓋超出 embed budget 而被剔除的檔：它們沒進 prompt，但呼叫端接下來 commit 的是整個
+# working tree —— 這道 gate 保護的是那個 commit，不只是 prompt 裡的位元組。
+REVIEWED_PATHS="$WORK_DIR/reviewed-paths.z"
+: >"$REVIEWED_PATHS"
+if git rev-parse --verify -q HEAD >/dev/null 2>&1; then
+  git diff HEAD --name-only --no-renames -z >>"$REVIEWED_PATHS" 2>/dev/null
+else
+  git diff --cached --name-only --no-renames -z >>"$REVIEWED_PATHS" 2>/dev/null
+  git diff --name-only --no-renames -z >>"$REVIEWED_PATHS" 2>/dev/null
+fi
+git ls-files --others --exclude-standard -z >>"$REVIEWED_PATHS" 2>/dev/null
 
 if [ ! -s "$RAW_DIFF" ]; then
   echo "[codex-review-safe] 錯誤：working tree 無任何未提交變更（staged / unstaged / untracked 皆空）— 未呼叫 codex，exit 3" >&2
@@ -379,17 +418,45 @@ rc=$?
 
 snapshot_or_die "$WORK_DIR/worktree-after.txt" after
 if ! cmp -s "$WORK_DIR/worktree-before.txt" "$WORK_DIR/worktree-after.txt"; then
-  echo "[codex-review-safe] RESULT: working tree 在 review 期間被改動 — verdict 不可信、已扣住不輸出，NEVER 當作 0-A.1 通過（exit 6）" >&2
-  echo "[codex-review-safe] 變更明細（git diff-tree before..after）：" >&2
-  TREE_BEFORE="$(sed -n 's/^tree //p' "$WORK_DIR/worktree-before.txt" | head -1)"
-  TREE_AFTER="$(sed -n 's/^tree //p' "$WORK_DIR/worktree-after.txt" | head -1)"
-  if [ -n "$TREE_BEFORE" ] && [ -n "$TREE_AFTER" ] && [ "$TREE_BEFORE" != "$TREE_AFTER" ]; then
-    git diff-tree -r --name-status "$TREE_BEFORE" "$TREE_AFTER" | head -40 >&2
+  # 歸因器：優先用 repo 自己那份（clade home），否則回 clade 中央倉。找不到、或它自己
+  # 出錯（exit 2）→ 退回加這層之前的行為：一律扣住。NEVER fail-open —— 「歸因器不在」
+  # 與「歸因結果無害」在外部無法區分。
+  SCOPE_CLASSIFIER="$CLADE_HOME/vendor/scripts/lib/review-integrity-scope.ts"
+  if [ -f "$REPO_ROOT/vendor/scripts/lib/review-integrity-scope.ts" ]; then
+    SCOPE_CLASSIFIER="$REPO_ROOT/vendor/scripts/lib/review-integrity-scope.ts"
   fi
-  diff "$WORK_DIR/worktree-before.txt" "$WORK_DIR/worktree-after.txt" | head -20 >&2
-  echo "[codex-review-safe] 這是偵測控制不是 sandbox：只擋「受審 repo 被改」這一類。資料外洩、其他 repo/\$HOME 破壞、先改再還原（前後 snapshot 相同）都擋不住（TD-520）。" >&2
-  echo "[codex-review-safe] 可能來源：cursor 池 review 被 prompt injection 帶去 mutation，或並行 session 的正當編輯。NEVER 自動還原（rules/core/commit.md WIP 處置禁令）—— 人工檢視上列明細定性後，重跑 review。" >&2
-  exit 6
+  SCOPE_OUT=""
+  SCOPE_RC=1
+  if [ -f "$SCOPE_CLASSIFIER" ]; then
+    SCOPE_OUT="$(node "$SCOPE_CLASSIFIER" \
+      --repo "$REPO_ROOT" \
+      --before "$WORK_DIR/worktree-before.txt" \
+      --after "$WORK_DIR/worktree-after.txt" \
+      --reviewed "$REVIEWED_PATHS" 2>&1)"
+    SCOPE_RC=$?
+  else
+    SCOPE_OUT="歸因器不存在：$SCOPE_CLASSIFIER"
+  fi
+
+  if [ "$SCOPE_RC" -eq 0 ]; then
+    echo "[codex-review-safe] warn: working tree 在 review 期間被改動，但變更全部落在 clade 投影層、且不在受審 changeset 內 — verdict 照常輸出。" >&2
+    printf '%s\n' "$SCOPE_OUT" | sed 's/^/[codex-review-safe]   /' >&2
+    echo "[codex-review-safe] 這些路徑由 clade bootstrap 管（chmod 444 + checksum gate + 自動還原），consumer 端不該有人手改；出現在這裡的預期來源是 bootstrap 自己的 auto-commit。" >&2
+  else
+    echo "[codex-review-safe] RESULT: working tree 在 review 期間被改動 — verdict 不可信、已扣住不輸出，NEVER 當作 0-A.1 通過（exit 6）" >&2
+    echo "[codex-review-safe] 歸因結果：" >&2
+    printf '%s\n' "$SCOPE_OUT" | sed 's/^/[codex-review-safe]   /' >&2
+    echo "[codex-review-safe] 變更明細（git diff-tree before..after）：" >&2
+    TREE_BEFORE="$(sed -n 's/^tree //p' "$WORK_DIR/worktree-before.txt" | head -1)"
+    TREE_AFTER="$(sed -n 's/^tree //p' "$WORK_DIR/worktree-after.txt" | head -1)"
+    if [ -n "$TREE_BEFORE" ] && [ -n "$TREE_AFTER" ] && [ "$TREE_BEFORE" != "$TREE_AFTER" ]; then
+      git diff-tree -r --name-status "$TREE_BEFORE" "$TREE_AFTER" | head -40 >&2
+    fi
+    diff "$WORK_DIR/worktree-before.txt" "$WORK_DIR/worktree-after.txt" | head -20 >&2
+    echo "[codex-review-safe] 這是偵測控制不是 sandbox：只擋「受審 repo 被改」這一類。資料外洩、其他 repo/\$HOME 破壞、先改再還原（前後 snapshot 相同）都擋不住（TD-520）。" >&2
+    echo "[codex-review-safe] 可能來源：cursor 池 review 被 prompt injection 帶去 mutation，或並行 session 的正當編輯。NEVER 自動還原（rules/core/commit.md WIP 處置禁令）—— 人工檢視上列明細定性後，重跑 review。" >&2
+    exit 6
+  fi
 fi
 
 cat "$WORK_DIR/verdict.out"

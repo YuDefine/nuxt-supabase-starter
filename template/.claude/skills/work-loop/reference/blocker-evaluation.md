@@ -49,7 +49,7 @@ Local edits will be reverted by the next sync.
 ### 視覺 blocker 的 capability probe（unattended 一樣要跑）
 
 「需要看畫面」**不是**一個 blocker 類型，它是一個**尚未量測的假設**。fleet 已經有把它自動化的整條
-路徑（dev-login route → dev server → `pi-dispatch-screenshot-verify.ts`），所以在跑完下面三條之前
+路徑（dev-login route → dev server → `pi-dispatch-screenshot-verify.ts`），所以在跑完下面五條之前
 **NEVER** 把這種 item 判成 `blocked-attended-only`、**NEVER** 寫「需 attended 視覺工作階段」進
 HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
 
@@ -58,14 +58,38 @@ HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
 | 1 | dev-login route 存在 | `node ~/offline/clade/scripts/audit-dev-login-adoption.ts --consumer . --json` → 該 consumer `status == "PRESENT"` | `MISSING` → 真缺口。修法是 scaffold dev-login（[[manual-review.backend]] § Dev-login route missing → scaffold-first），**那是可自主推進的工作**，不是 attended 條目 |
 | 2 | dev server 起得來 | 依 [[proactive-skills.dev-server-spawn]] 起，拿到 `http://localhost:<port>` | 起不來 → 記實際 stderr 當 blocker，那通常是環境債不是視覺債 |
 | 3 | dispatcher 可用 | `command -v pi` 有；`CLADE_FORCE_CLAUDE_SCREENSHOT` 未設 | 沒有 → 機械缺口，落 `notes`，**NEVER** 改派 Claude subagent 自跑 playwright／agent-browser 取代 dispatcher（唯一入口紀律見 [[review-gui-surface]] § Hard rule） |
+| 4 | **seat 進得去** | `node ~/offline/clade/vendor/scripts/pi-seat-probe.ts --provider xai --model grok-4.6` → exit 0 | exit 1 → 那一列的 seat 進不去。**NEVER** 讀成「dispatcher 壞了」或「視覺工作做不到」——載具進不去是**帳務／授權**擋點。它 stdout 的第一行**逐字**就是 blocker 文字（原文帶解除條件），**NEVER** 改寫成形容詞 |
+| 5 | **items.json 組得出來** | 對每個 item 都要有 `id` / `known_url` / `expected_dom` / `screenshot_path`，assertion-bearing 的還要 `ready_signal` | 組不出來 → item 描述沒有機械可判的斷言，那是 **item 品質缺口**（回去補 tasks.md 的斷言），不是視覺 blocker |
 
-三條全綠 → 照 [[review-gui-surface]] § 收 evidence 走
+五條全綠 → 照 [[review-gui-surface]] § 收 evidence 走
 `node ~/offline/clade/vendor/scripts/pi-dispatch-screenshot-verify.ts --change <name> --consumer-path . --dev-server-url <url> --items-json <items.json>`，
 主線只消費它回的 JSON 摘要。**這條路徑本來就是無人值守設計的**（Pi grok seat，不需要人在座位上）。
 
 任一條紅 → packaging 的 blocker 欄 **MUST 逐字寫那一條 probe 的失敗輸出**（哪一條、跑了什麼、回了什麼）。
 **NEVER** 寫「需 attended」這種形容詞——形容詞每一輪都會被重新「發現」一次，而 predicate 有解除條件、
 可以進 [blocker-ledger.md](blocker-ledger.md) 查表，下一輪不必重判。
+
+#### 2026-08-22 端到端實測（<consumer-k>）——probe 4 / 5 是怎麼長出來的
+
+首版只有 probe 1–3，**三條全綠之後那一步從未量過**。2026-08-22 在 <consumer-k>
+（`shape: canonical`、`emailRequired: false`、`stackHint: libsql-drizzle`）跑完整鏈路，量到的是：
+
+- **鏈路本身是通的**：probe 1–3 全綠 → dev-session 起 3050 → 手組 items.json（2 個真 `[verify:ui]` item）
+  → dispatcher → 回 parseable JSON 摘要 → 落 `.spectra/verify-ui-dispatch-ledger.jsonl` receipt，**全程無人介入**。
+  dev server 生命週期、loopbackOnly、`_exploration/` 診斷截圖產出都沒有額外擋點。
+- **擋點在 seat，不在鏈路**：`command -v pi` 綠，但 `xai/grok-4.6` 回
+  `403 "You have run out of credits or need a Grok subscription."`，整趟 9.5 秒死掉、
+  沒有 receipt、沒有截圖，摘要是 `UNCERTAIN(dispatcher-error)`。**probe 3 量的是 binary 在不在，
+  不是 seat 進不進得去**——這正是 probe 4 存在的理由。
+- **文件上的配額 fallback 對這一列不成立**。兩層各自斷：`pi-runtime.ts` 的 `QUOTA_ERROR_RE`
+  不吃 xAI 的 `run out of credits` 措辭 → `quotaError` 為 null → 沒有 exit 4，
+  而 `pi-dispatch-screenshot-verify.ts` 本來就沒讀 `quotaError`；就算兩層都補好，
+  `grok-cursor` 跑在 bwrap `--tmpfs $HOME` 裡，實測 `agent-browser` 回 **exit 127**——
+  **cursor 池結構上收不了截圖**。所以 probe 4 紅掉時 **NEVER** 建議「降到 grok-cursor 重試」。
+
+**probe 4 紅 ≠ 改派 Claude 自跑瀏覽器。** 唯一入口紀律不因為 seat 沒錢而放寬
+（見 [[review-gui-surface]] § Hard rule）。它是一條 predicate 清楚、解除條件由人執行的 blocker：
+逐字寫「`xai/grok-4.6` 回 403 out of credits，seat 需補額度」進 packaging，下一輪查表即可，不必重判。
 
 **真物理限制長什麼樣**：需要**人的眼睛做美感／可用性判斷**（「這個間距看起來對嗎」）、需要**人的授權**、
 需要**不可逆的 prod 動作**。這三類 probe 全綠也仍是 attended——但它們的 blocker 文字同樣要寫成 predicate

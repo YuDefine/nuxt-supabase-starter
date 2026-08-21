@@ -680,18 +680,88 @@ function returnedLiterals(text: string, masked: string, depths: Int32Array): Set
 }
 
 /**
+ * Body spans of functions defined *inside* this slice's own function. A function
+ * slice carries its own signature and body, so the outermost span found here is
+ * the slice itself — only a span with a parent is genuinely nested.
+ */
+function nestedFunctionSpans(masked: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = []
+  FN_MARKER_RE.lastIndex = 0
+  let marker: RegExpExecArray | null
+  while ((marker = FN_MARKER_RE.exec(masked)) !== null) {
+    let i = marker.index + marker[0].length
+    let open = -1
+    while (i < masked.length) {
+      const ch = masked[i]!
+      if (ch === '{') {
+        open = i
+        break
+      }
+      if (ch === ';' || ch === '}') break
+      if (marker[0] === '=>' && !/\s/.test(ch)) break
+      i++
+    }
+    if (open === -1) {
+      // Expression-bodied arrow (`(s) => assertNever(s)`): the body is whatever
+      // follows until the expression ends. Without this, such a helper is
+      // invisible here and its assert is credited to the enclosing dispatcher.
+      if (marker[0] !== '=>') continue
+      const bodyStart = marker.index + marker[0].length
+      let nesting = 0
+      let stop = masked.length
+      for (let j = bodyStart; j < masked.length; j++) {
+        const ch = masked[j]!
+        if (ch === '(' || ch === '[' || ch === '{') nesting++
+        else if (ch === ')' || ch === ']' || ch === '}') {
+          if (nesting === 0) {
+            stop = j
+            break
+          }
+          nesting--
+        } else if (nesting === 0 && (ch === ';' || ch === ',' || ch === '\n')) {
+          stop = j
+          break
+        }
+      }
+      spans.push([bodyStart, stop])
+      continue
+    }
+    let depth = 0
+    for (let j = open; j < masked.length; j++) {
+      const ch = masked[j]!
+      if (ch === '{') depth++
+      else if (ch === '}') {
+        depth--
+        if (depth === 0) {
+          spans.push([open, j + 1])
+          break
+        }
+      }
+    }
+  }
+  // The slice's own body has no parent; helpers defined inside it do.
+  return spans.filter((span) => spans.some((o) => o !== span && o[0] < span[0] && span[1] <= o[1]))
+}
+
+/**
  * Subjects a slice hands to `assertNever` — exhaustiveness is a compile error for
- * those only. Depth-filtered for the same reason `returnedLiterals` is: an
+ * those only, and only for the handler that made the call. An
  * `assertNever(status)` inside a helper defined in this slice proves the *helper*
  * is exhaustive, not the dispatcher that happens to name its variable `status`
- * too. Counting it would silence the outer handler on a namesake's credentials.
+ * too; counting it silences the outer handler on a namesake's credentials.
+ *
+ * Nesting is measured in *functions*, not braces: the canonical shape is
+ * `switch (s) { default: return assertNever(s) }`, whose call sits two braces
+ * deep inside the very handler it belongs to.
  */
-function assertedSubjects(text: string, depths: Int32Array): Set<string> {
+function assertedSubjects(text: string, masked: string): Set<string> {
+  const nested = nestedFunctionSpans(masked)
   const subjects = new Set<string>()
   for (const m of text.matchAll(
     /\bassertNever\s*\(\s*([A-Za-z_$][\w$]*(?:\s*\??\.\s*[A-Za-z_$][\w$]*)*)/g,
   )) {
-    if ((depths[m.index!] ?? 0) <= 1) subjects.add(normalizeSubject(m[1]!))
+    if (nested.some(([lo, hi]) => lo < m.index! && m.index! < hi)) continue
+    subjects.add(normalizeSubject(m[1]!))
   }
   return subjects
 }
@@ -835,7 +905,7 @@ function sliceFacts(text: string): SliceFacts {
   return {
     comparisons: extractComparisons(text, masked),
     returned: returnedLiterals(text, masked, depths),
-    asserted: assertedSubjects(text, depths),
+    asserted: assertedSubjects(text, masked),
     domains: localDomains(text),
     hasCase: /\bcase\s+['"]/m.test(text),
   }
