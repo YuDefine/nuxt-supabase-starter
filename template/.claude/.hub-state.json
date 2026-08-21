@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "rulesProjection": "copy",
   "checksums": {
-    "rules/agent-routing.md": "84ad1e970324b934",
+    "rules/agent-routing.md": "3f1996e68aaa3808",
     "rules/agent-routing.pi-input-intercept.md": "55f54fe680b33fb9",
-    "rules/agent-routing.pi-watch-protocol.md": "2ac27ad9d66769dc",
+    "rules/agent-routing.pi-watch-protocol.md": "971a8ca2ce0c4a7a",
     "rules/agent-self-verification.md": "9c42049264bf13a2",
     "rules/agent-self-verification.screenshot-evidence.md": "c8f274c48a74c6db",
     "rules/audit-pattern.md": "69856e1bb2377882",
