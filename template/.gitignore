@@ -75,7 +75,6 @@ yarn-error.log*
 .claude/.commit.lock
 
 # Clade local runtime state
-.spectra/
 openspec/.vector-search.db*
 
 .codex/
@@ -85,3 +84,6 @@ openspec/.vector-search.db*
 
 # Codex 投影層（sync-to-codex.ts 從 .claude/ 產生，可重生 → 不進版控）
 .agents/
+
+.spectra/*
+!.spectra/evidence/

@@ -84,15 +84,18 @@ Worktree 完成驗證後的標準收尾（詳見 [[worktree-default]] §5）：*
 
 ### worktree 內唯一合法的 commit：artifact-tick（hard rule）
 
-上一條的 `git commit` 禁令有且只有一個例外：**把 change artifact 的進度標記落進 worktree branch**，路徑限定 `openspec/changes/**/tasks.md`：
+上一條的 `git commit` 禁令有且只有一個例外：**把 change artifact 的進度標記落進 worktree branch**，路徑限定**兩條**——`openspec/changes/**/tasks.md` 與該 change 的 verify evidence sidecar `.spectra/evidence/<change-name>.jsonl`：
 
 ```bash
-git commit --only -m "📝 docs(spectra): phase N done (<change-name>)" -- openspec/changes/<change-name>/tasks.md
+git commit --only -m "📝 docs(spectra): phase N done (<change-name>)" -- \
+  openspec/changes/<change-name>/tasks.md .spectra/evidence/<change-name>.jsonl
 ```
 
-`merge-back --squash` 只帶 committed changes 回 main，未 commit 的 checkbox 留在 worktree working tree → main 的 tasks.md 永遠是 `[ ]` → impl-gate 誤判。操作細節與時機見 [[worktree-default]] §9.5.1（該節是執行面 SoT，本節是「worktree 內能不能 commit」的契約 SoT）。
+**每一個** phase-tick commit 都 **MUST** 同時帶 tasks.md 與該 change 的 evidence sidecar，不是只帶其中一個、也不是只有「有跑 verify 的那一次」才帶——sidecar 檔不存在時（該 change 尚未產生任何 receipt）才可以省略那條路徑。
 
-**NEVER** 把其他檔搭這條例外的便車：同一個 commit 混進 `openspec/changes/**/tasks.md` 以外的路徑，就不再是 artifact-tick，回到上一條禁令。
+`merge-back --squash` 只帶 committed changes 回 main，未 commit 的 checkbox 留在 worktree working tree → main 的 tasks.md 永遠是 `[ ]` → impl-gate 誤判；sidecar 沒一起 commit 則 checkbox 回到 main、receipt 留在 worktree 被 GC，兩者走不同運輸機制就是 [[TD-394]] 的成因。操作細節與時機見 [[worktree-default]] §9.5.1（該節是執行面 SoT，本節是「worktree 內能不能 commit」的契約 SoT）。
+
+**NEVER** 把上述兩條路徑以外的檔搭這條例外的便車：同一個 commit 混進 `openspec/changes/**/tasks.md` 與 `.spectra/evidence/<change-name>.jsonl` 以外的路徑，就不再是 artifact-tick，回到上一條禁令。**NEVER** 把 `.spectra/` 底下其他子目錄（`snapshots/` / `touched/` / `residency-ledger/` / `spectra.db.bak`）讀成也在白名單內——白名單只有 `.spectra/evidence/`，其餘仍被 `.spectra/*` ignore。
 - **NEVER** 用 `git stash push` 不加 `-u` — 漏掉 untracked 新檔
 - **NEVER** stash pop 撞 conflict 時用 `git checkout --` / `git restore` 「清理」 — 會永久毀掉 main 既有 WIP
 
@@ -188,7 +191,7 @@ main 髒 / 有別 session WIP 不能直接跑 `/commit`（會吃別人 staged）
 | `tasks/**`、`docs/discussions/**`、`docs/digests/**` | session-scoped 與討論紀錄 |
 | `docs/pitfalls/**`、`docs/archives/**` | 事後紀錄與 rotate 產物 |
 | `vendor/snippets/**/*.md` | cookbook / pressure scenario 散文 |
-| `openspec/changes/**/tasks.md` | worktree phase-tick 專用（見 § worktree 內唯一合法的 commit：artifact-tick） |
+| `openspec/changes/**/tasks.md`<br>`.spectra/evidence/<change-name>.jsonl` | worktree phase-tick 專用，**兩條一起**（見 § worktree 內唯一合法的 commit：artifact-tick） |
 
 **白名單外的一切改動 MUST 走 `/commit`**，包含但不限於：`rules/**`、`scripts/**`、`vendor/scripts/**`、`plugins/**`、`claude-md/**`、`registry/**`、任何 source code。改動落在白名單內外**混合**時，整批走 `/commit`——**NEVER** 拆成「白名單那半用 `--only` 先送」。
 

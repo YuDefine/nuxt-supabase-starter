@@ -60,19 +60,22 @@ Session 開頭判定要動 code 就 **SHOULD** 立刻打 `/wt <task>`，不要�
 
 ### §9.5.1 Phase-tick commit 紀律（TD-216）
 
-worktree subagent 完成每個 tasks.md phase section 的最後一個 `- [ ]` → `- [x]` 後 **MUST** commit tasks.md 到 worktree branch：
+worktree subagent 完成每個 tasks.md phase section 的最後一個 `- [ ]` → `- [x]` 後 **MUST** commit tasks.md **與該 change 的 verify evidence sidecar** 到 worktree branch：
 
 ```bash
-git commit --only -m "📝 docs(spectra): phase N done (<change-name>)" -- openspec/changes/<change-name>/tasks.md
+git commit --only -m "📝 docs(spectra): phase N done (<change-name>)" -- \
+  openspec/changes/<change-name>/tasks.md .spectra/evidence/<change-name>.jsonl
 ```
+
+**每一個** phase-tick commit 都 MUST 同時帶這兩條路徑，不是只有跑過 verify 的那一次；sidecar 檔尚未存在時才可省略該路徑。
 
 type **MUST** 是 `📝 docs`，**NEVER** 是 `📝 spectra` —— 後者不在 conventional type 集合內，帶 emoji 型 `type-enum` 的 consumer（<consumer-b> 等）會在 commit-msg hook 擋下，而報的錯是 `subject may not be empty`，跟真因對不上。
 
 **Why**：`merge-back --squash` 只帶 committed changes 回 main。未 commit 的 checkbox 更新留在 worktree working tree → merge-back 不帶回 → review-gui 讀 main tasks.md 永遠看到 `[ ]` → impl-gate 誤判 <90%。
 
-**NEVER** 只在 worktree working tree 勾 checkbox 而不 commit — 即使「等做完一起 commit」也 **MUST** 至少在 build 結束前批次 commit 一次。
+**NEVER** 只在 worktree working tree 勾 checkbox 而不 commit — 即使「等做完一起 commit」也 **MUST** 至少在 build 結束前批次 commit 一次。同一條對 receipt 成立：**NEVER** 讓 `.spectra/evidence/<change-name>.jsonl` 只停在 worktree working tree —— checkbox 走 commit 回 main、receipt 留在原地被 GC，正是 [[TD-394]] 記的失敗型態。
 
-**NEVER** 把 `openspec/changes/<change-name>/tasks.md` 以外的路徑加進這個 commit。契約 SoT 在 [[commit]] § worktree 內唯一合法的 commit：artifact-tick —— 那裡的 `git commit` 禁令對 worktree 內**其他任何**改動仍然成立，本節是它唯一的例外。
+**NEVER** 把 `openspec/changes/<change-name>/tasks.md` 與 `.spectra/evidence/<change-name>.jsonl` 以外的路徑加進這個 commit。契約 SoT 在 [[commit]] § worktree 內唯一合法的 commit：artifact-tick —— 那裡的 `git commit` 禁令對 worktree 內**其他任何**改動仍然成立，本節是它唯一的例外。
 
 ## §9.7.1 main 端出現 tasks.md 改動時，方向由 diff 判，不由 §9.7 外推
 

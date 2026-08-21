@@ -137,7 +137,7 @@ v3 atomic landing：`/wt` 跑完 subagent 在 worktree commit、worktree+branch 
 
 ### §9.5.1 Phase-tick commit 紀律（TD-216）
 
-worktree subagent 完成每個 tasks.md phase section 的最後一個 `- [ ]` → `- [x]` 後 **MUST** commit tasks.md 到 worktree branch（type 用 `📝 docs`，**NEVER** `📝 spectra`；**NEVER** 把 tasks.md 以外的路徑加進這個 commit）—— 未 commit 的打勾不會被 `merge-back --squash` 帶回 main。
+worktree subagent 完成每個 tasks.md phase section 的最後一個 `- [ ]` → `- [x]` 後 **MUST** commit tasks.md **與該 change 的 verify evidence sidecar `.spectra/evidence/<change-name>.jsonl`** 到 worktree branch（type 用 `📝 docs`，**NEVER** `📝 spectra`；**NEVER** 把這兩條以外的路徑加進這個 commit）—— 未 commit 的打勾與 receipt 都不會被 `merge-back --squash` 帶回 main。**每一個** phase-tick commit 都適用，不是只有跑過 verify 的那一次；sidecar 檔不存在時才可省略該路徑。
 
 > 指令逐字、commit-msg hook 的錯訊對不上真因、與 [[commit]] § artifact-tick 的例外關係詳見 [[worktree-default.troubleshooting]] §9.5.1。
 

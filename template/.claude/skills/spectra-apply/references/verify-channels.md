@@ -122,6 +122,8 @@ Local edits will be reverted by the next sync.
         # stdout: (verified-e2e: <ISO-8601>)
         ```
 
+      - sidecar（`.spectra/evidence/<change>.jsonl`）是 git-tracked 的：該 phase section 收尾時 **MUST** 讓它跟 tasks.md 進**同一個** phase-tick commit，依 [[commit]] § worktree 內唯一合法的 commit：artifact-tick 的雙路徑樣板。**NEVER** 只 commit tasks.md —— checkbox 回得了 main、receipt 留在 worktree 被 GC，就是 [[TD-394]]。
+
       - Trace zip 抓不到（playwright.config 沒開 `trace: 'on'` / per-test 沒 `test.use({ trace: 'on' })`）→ **視同 blocker**，保留 `[ ]`，寫 `（issue: trace not captured — enable trace recording in playwright.config or per-test）`；**NEVER** 省略 `--trace` 硬寫降級 evidence（CLI 會 exit 2，archive-gate 也會擋）。
       - Spec fail → 保留 `[ ]`，寫 `（issue: <spec failure summary>）` 或回報 blocker；**NEVER** 寫 `(verified-e2e:)`。
 
@@ -136,6 +138,8 @@ Local edits will be reverted by the next sync.
           --method '<METHOD>' --url '<URL>' --status '<STATUS>' [--body '<sha256-12chars>']
         # stdout: (verified-api: <ISO-8601>)
         ```
+
+      - sidecar（`.spectra/evidence/<change>.jsonl`）是 git-tracked 的：該 phase section 收尾時 **MUST** 讓它跟 tasks.md 進**同一個** phase-tick commit，依 [[commit]] § worktree 內唯一合法的 commit：artifact-tick 的雙路徑樣板。**NEVER** 只 commit tasks.md —— checkbox 回得了 main、receipt 留在 worktree 被 GC，就是 [[TD-394]]。
 
       - Request fail / status 不符 → 保留 `[ ]`，寫 `（issue: <METHOD URL expected/actual>）` 或回報 blocker；**NEVER** 寫 `(verified-api:)`。
 
@@ -179,6 +183,8 @@ Local edits will be reverted by the next sync.
           --screenshot 'screenshots/local/<change>/#<id>-final.png' [--dom '<obs>']
         # stdout: (verified-ui: <ISO-8601>)
         ```
+
+      - sidecar（`.spectra/evidence/<change>.jsonl`）是 git-tracked 的：該 phase section 收尾時 **MUST** 讓它跟 tasks.md 進**同一個** phase-tick commit，依 [[commit]] § worktree 內唯一合法的 commit：artifact-tick 的雙路徑樣板。**NEVER** 只 commit tasks.md —— checkbox 回得了 main、receipt 留在 worktree 被 GC，就是 [[TD-394]]。
 
       - FAIL / UNCERTAIN → 保留 `[ ]`，寫 issue 或回報 blocker；**NEVER** 寫 `(verified-ui:)`。
 

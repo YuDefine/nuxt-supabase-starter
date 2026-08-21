@@ -2645,6 +2645,115 @@ function preserveWorktreeScreenshots(wtPath, mainPath, slug = 'worktree') {
   return { files, ok: failed.length === 0 }
 }
 
+/**
+ * Belt-and-braces: carry verify-evidence receipts that only exist in the worktree
+ * back to main before cleanup destroys the directory.
+ *
+ * `.spectra/evidence/*.jsonl` is git-tracked as of TD-394, so the phase-tick commit
+ * is the primary transport and `merge-back --squash` normally carries receipts on its
+ * own. This function covers the paths that never reach a commit at all: manual merges,
+ * flows that bypass the phase-tick discipline, and worktrees forked before TD-394.
+ * Landing here means that discipline was not followed, so it warns rather than staying
+ * silent.
+ *
+ * Merge semantics mirror evidence-store: append-only JSONL, last-write-wins per
+ * `(itemId, kind)`. A worktree record is carried over when main has no record for that
+ * key, or main's record is older.
+ */
+function preserveWorktreeEvidence(wtPath, mainPath, slug = 'worktree') {
+  const src = join(wtPath, '.spectra', 'evidence')
+  if (!existsSync(src)) return { files: [], ok: true }
+
+  const dstRoot = join(mainPath, '.spectra', 'evidence')
+  const files = []
+
+  let entries
+  try {
+    entries = readdirSync(src).filter((f) => f.endsWith('.jsonl'))
+  } catch (e) {
+    return {
+      files: [
+        {
+          rel: '.spectra/evidence',
+          failed: true,
+          scanFailure: true,
+          error: e.message ?? String(e),
+        },
+      ],
+      ok: false,
+    }
+  }
+
+  for (const name of entries) {
+    const rel = `.spectra/evidence/${name}`
+    try {
+      const wtLines = readFileSync(join(src, name), 'utf8').split('\n')
+      const dstFile = join(dstRoot, name)
+      const mainLines = existsSync(dstFile) ? readFileSync(dstFile, 'utf8').split('\n') : []
+
+      // Malformed lines cannot be keyed, so they cannot be shown to be already in main.
+      // Fail closed rather than let cleanup delete something unaccounted for.
+      const malformed = []
+      const parse = (lines, bucket) => {
+        const out = new Map()
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed) continue
+          try {
+            const record = JSON.parse(trimmed)
+            out.set(`${record.itemId}::${record.kind}`, { record, raw: trimmed })
+          } catch {
+            bucket.push(trimmed.slice(0, 120))
+          }
+        }
+        return out
+      }
+      const wtRecords = parse(wtLines, malformed)
+      const mainRecords = parse(mainLines, [])
+
+      const carried = []
+      for (const [key, entry] of wtRecords) {
+        const existing = mainRecords.get(key)
+        if (
+          existing &&
+          !(String(existing.record.timestamp ?? '') < String(entry.record.timestamp ?? ''))
+        ) {
+          continue
+        }
+        carried.push(entry.raw)
+      }
+
+      if (malformed.length > 0) {
+        files.push({
+          rel,
+          failed: true,
+          error: `${malformed.length} malformed JSONL line(s) could not be accounted for: ${malformed.join(' | ')}`,
+        })
+        continue
+      }
+
+      if (carried.length === 0) {
+        files.push({ rel, identical: true, slug: makeSlugSafe(slug) })
+        continue
+      }
+
+      mkdirSync(dstRoot, { recursive: true })
+      let payload = ''
+      if (existsSync(dstFile)) {
+        const current = readFileSync(dstFile, 'utf8')
+        if (current.length > 0 && !current.endsWith('\n')) payload += '\n'
+      }
+      payload += carried.join('\n') + '\n'
+      appendFileSync(dstFile, payload, 'utf8')
+      files.push({ rel, copied: true, count: carried.length, slug: makeSlugSafe(slug) })
+    } catch (e) {
+      files.push({ rel, failed: true, error: e.message ?? String(e) })
+    }
+  }
+
+  return { files, ok: files.every((f) => !f.failed) }
+}
+
 async function cmdCleanup(slug, opts) {
   if (!slug)
     throw new Error(
@@ -3535,19 +3644,49 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
     }
   }
 
+  // Belt-and-braces for verify receipts that never made it into a phase-tick commit
+  // (manual merge, bypassed discipline, pre-TD-394 worktree). See TD-394.
+  let evidenceSync = { files: [], ok: true }
+  if (opts.cleanup !== false) {
+    try {
+      evidenceSync = preserveWorktreeEvidence(target.path, consumerRoot, cleanSlug)
+    } catch (e) {
+      evidenceSync = {
+        files: [{ rel: '.spectra/evidence', failed: true, error: e.message ?? String(e) }],
+        ok: false,
+      }
+    }
+    const carried = evidenceSync.files.filter((f) => f.copied)
+    const evFailed = evidenceSync.files.filter((f) => f.failed)
+    if (carried.length > 0) {
+      const list = carried.map((f) => `${f.rel} (+${f.count})`).join(', ')
+      console.warn(
+        `merge-back: ${carried.length} evidence sidecar(s) had worktree-only receipts and were carried to main: ${list}\n` +
+          `             These should have landed via the phase-tick commit (see rules/core/commit.detail.md\n` +
+          `             § worktree 內唯一合法的 commit：artifact-tick). Review and commit them on main.`,
+      )
+    }
+    if (evFailed.length > 0) {
+      const list = evFailed.map((f) => `${f.rel} (${f.error})`).join('; ')
+      console.error(
+        `merge-back: ${evFailed.length} evidence sidecar(s) could not be preserved: ${list}`,
+      )
+    }
+  }
+
   // Fail-closed: gitignored artifacts have no git object to recover from, so a
   // worktree may only be destroyed once every one of them is accounted for.
-  if (opts.cleanup !== false && !screenshotSync.ok) {
+  if (opts.cleanup !== false && (!screenshotSync.ok || !evidenceSync.ok)) {
     console.error(
       `merge-back: cleanup skipped; worktree retained at ${target.path}\n` +
-        `  Reason: screenshot preserve did not account for every gitignored artifact (see errors above).\n` +
+        `  Reason: ${screenshotSync.ok ? 'evidence sidecar preserve' : 'screenshot preserve'} did not account for every artifact (see errors above).\n` +
         `  Resolve the listed paths (copy them out manually if needed), then re-run:\n` +
         `    node scripts/wt-helper.ts cleanup ${cleanSlug} --force --force-discard-unland`,
     )
   }
 
   let cleanupDone = false
-  if (opts.cleanup !== false && screenshotSync.ok) {
+  if (opts.cleanup !== false && screenshotSync.ok && evidenceSync.ok) {
     try {
       await cmdCleanup(cleanSlug, { force: true, forceDiscardUnland: true })
       cleanupDone = true
@@ -3970,6 +4109,7 @@ export {
   mergedBranches,
   parseWorktreeList,
   preserveWorktreeScreenshots,
+  preserveWorktreeEvidence,
   sessionWorktrees,
   setupBriefExclude,
   sweepSiblingChangeResidues,
