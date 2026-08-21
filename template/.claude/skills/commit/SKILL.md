@@ -269,7 +269,7 @@ Untracked file 例外：須先 `git add <untracked>` 再 `git commit --only -- <
 
 遵守 `.claude/rules/handoff.md`：Step 4 分組 commit 完成後**必須**更新 `HANDOFF.md`，把**所有可延續且尚未被接手的後續工作**寫入 —— 不限於 spectra change。同時同步 Spectra ROADMAP。
 
-> 本步驟在版本號升級（Step 6）**之前**執行——HANDOFF/ROADMAP 的 commit 會跟 Step 6 的 bump/deploy commit 一起，在同一次 `git push origin main` 送出。若該 repo 的 staging workflow 掛了 `push: branches: [main]` 且帶 `cancel-in-progress`，二次 main push 會觸發新的 staging run 把發版 commit 的 run 取消（見 `~/offline/clade/vendor/snippets/deploy-gate/README.md`）；沒有 main-push 觸發的 repo 則單純少一次無謂 push。本步驟收集的內容不依賴版本號或 push 結果，版本號在 Step 6 才產生。
+> 本步驟在 Step 6 **之前**執行——HANDOFF/ROADMAP 的 commit 會跟 Step 6-A 的 bump/deploy commit 一起，在同一次 `git push origin main` 送出。若該 repo 的 staging workflow 掛了 `push: branches: [main]` 且帶 `cancel-in-progress`，二次 main push 會觸發新的 staging run 把發版 commit 的 run 取消（見 `~/offline/clade/vendor/snippets/deploy-gate/README.md`）；沒有 main-push 觸發的 repo 則單純少一次無謂 push。本步驟收集的內容不依賴版本號或 push 結果，版本號在 Step 6-A 才產生（走 6-B 時不產生版本號）。
 
 ### 5-A. 判斷是否需要 handoff
 
@@ -291,7 +291,26 @@ Untracked file 例外：須先 `git add <untracked>` 再 `git commit --only -- <
 
 5-A 判定**不需要** → 跳到 5-D 的清理路徑（同檔）。
 
-## Step 6: 版本號升級與 Deploy Commit
+## Step 6-Gate: 發版授權判定（**Step 6 的必做第一步**）
+
+Step 6 會建立並推送 release tag。**對 production 由 tag 觸發的 repo，那一步等於 agent 自行決定部署 production**（含跑 production migration）。因此 **MUST** 先判定本 repo 的發版觸發形狀，**NEVER** 直接進 Step 6 的 bump / tag。
+
+```bash
+node -e "const f='.claude/consumer-meta.json';const fs=require('node:fs');if(!fs.existsSync(f)){console.log('unknown');process.exit(0)}console.log(JSON.parse(fs.readFileSync(f,'utf8'))?.deploy?.deployTrigger ?? 'unknown')"
+```
+
+| 輸出 | 意義 | Step 6 走哪條 |
+| --- | --- | --- |
+| `push-main` | production 由 main push 觸發 —— 不建 tag 也照樣部署，攔 tag 沒有保護作用 | **走 6-A（現行完整流程）** |
+| `tag-v` | production 由 `v*` tag 觸發 —— 建 tag = 部署 production | **走 6-B（停在 push main）** |
+| `manual` | production 由人手動觸發 | **走 6-B** |
+| `unknown` / `null` / 其他 | 宣告缺漏或本 repo 沒有 consumer-meta | **走 6-B（fail-closed）** |
+
+**NEVER 因為「這個 repo 我記得是 push-main」就跳過這條查詢。** 宣告與現實不符是 fleet 的既有狀態（2026-08-22 實測：<consumer-a> 實際 `tag-v` 卻宣告 `null`、<consumer-d> 實際 `tag-v` 卻宣告 `push-main`）。查詢回 `unknown` 時 **MUST** 走 6-B，**NEVER** 自行推論成 `push-main`——推錯的方向是不可逆的（tag 一推出去 production 就開始跑）。
+
+> `unknown` 同時是一個 finding：該 repo 的 `.claude/consumer-meta.json` 應補上 `deploy.deployTrigger`。**列進 Step 7 完成報告**，但 **NEVER** 在本次 `/commit` 順手改它——那是獨立的宣告修正，要單獨走。
+
+## Step 6-A: 版本號升級與 Deploy Commit（`push-main` 專用）
 
 判斷升級類型：
 
@@ -325,9 +344,33 @@ git push origin main
 
 > 這跟 2026-06-03 v1.185.1 那次的問題方向不同：當時是「main 先、tags 後」分兩步推送，GitHub 先收到 main commit SHA、再收到指向同 SHA 的 tag，有機率不觸發 `push:tags` workflow。本步驟採用的 tags-first 順序不落入那個情境，是刻意設計。
 
+## Step 6-B: 停在 push main，發版另問（`tag-v` / `manual` / `unknown`）
+
+這些形狀下 **建 tag 就是部署 production**（`tag-v`），或部署本來就不由 `/commit` 負責（`manual`）。因此本步驟只做一件事：
+
+```bash
+git push origin main
+```
+
+**本步驟 NEVER 做以下四件事**，即使本次 commit 含 `feat`、即使使用者說「commit 完就好」：
+
+- ❌ `pnpm version <patch|minor>` —— 未發版就不該有版本號 bump
+- ❌ `🚀 deploy:` commit —— main 上出現「發布新版本 vX」卻沒有對應 tag，會讓下一個接手的人誤判已發版
+- ❌ `pnpm tag` / `git tag`
+- ❌ `git push origin --tags`
+
+`git push origin main` 成功後，**MUST** 用 `AskUserQuestion` 問使用者是否現在發版，二選一：
+
+- **`[1] 現在發版`** → **MUST 先讀該 repo 的 `HANDOFF.md` 發版段與 `.github/workflows/`**，確認有沒有固定發版路徑（例：先跑 precheck workflow 拿到 `SAFE` 才授權 deploy、staging-gate 要求同 SHA 的 staging 已綠）。**有固定路徑就照它走，NEVER 直接 `git push origin --tags` 蓋過去**；沒有固定路徑才回頭執行 6-A 的 bump / tag / push tags
+- **`[2] 先不發版`** → 本次到此為止。**MUST** 在 Step 5 的 HANDOFF 裡登記「已 land 未發版」：寫明哪幾個 commit、下次發版該升 major/minor/patch、以及不發版的理由（若使用者有給）
+
+**NEVER 把「使用者沒有回應」讀成 `[1]`。** 這條問題沒有安全的預設值——`tag-v` 的預設值是「對 production 跑 migration」。
+
+> **Step 6b 的前提**：Step 6b 的 Notion 同步依賴 tag 已推出。走 6-B 且使用者選 `[2]` 時 **MUST 跳過 Step 6b**（沒有 tag 可同步）；選 `[1]` 並實際完成發版後才執行。
+
 ## Step 6b: Notion 專案層同步（條件觸發）
 
-per [[spectra-notion-coupling]] § 專案層。consumer 的 `.claude/consumer-meta.json` 若有 `notion.projectWorkflow: true`，Step 6 的 tag 已推出後 **MUST** 執行：
+per [[spectra-notion-coupling]] § 專案層。consumer 的 `.claude/consumer-meta.json` 若有 `notion.projectWorkflow: true`，Step 6-A（或 6-B 選 `[1]` 後）的 tag 已推出後 **MUST** 執行：
 
 ```bash
 node ~/offline/clade/vendor/scripts/notion-sync.ts release \
@@ -347,9 +390,12 @@ node ~/offline/clade/vendor/scripts/notion-sync.ts release \
 
 - [ ] 每個 commit scope 驗證：貼各 commit 的 `git show --stat <hash> | tail -3` 輸出（changed files 數 vs 預期不符 → 回 Step 4 處置，不出報告）
 - [ ] Step 0 品質檢查結論：貼 0-A / 0-C 的結論行（條件未觸發的軸標明「未觸發＋原因」）
-- [ ] push / tag 結果：貼 `git push --tags` 與 `git push origin main` 兩者輸出（本次不 push 則標明原因）
+- [ ] Step 6-Gate 判定：貼 `deployTrigger` 查詢的實際輸出，並標明走 6-A 還是 6-B（`unknown` 時 MUST 一併列出「該 repo 缺 `deploy.deployTrigger` 宣告」這條 finding）
+- [ ] push / tag 結果：走 6-A 貼 `git push --tags` 與 `git push origin main` 兩者輸出；走 6-B 貼 `git push origin main` 輸出 ＋ 使用者對發版問題的選擇（本次不 push 則標明原因）
 
 三格證據放進完成報告的 `Evidence` 段。
+
+走 6-B 且使用者選「先不發版」時，完成報告 **MUST** 把「版本 / Tag」兩行改成 `未發版（deployTrigger=<值>，已 push main，發版待人拍板）`，**NEVER** 沿用下面樣板的「已建立並推送」字樣。
 
 ```text
 ✅ Commit 完成！
@@ -366,6 +412,7 @@ Tag：v1.8.0 已建立並推送
 Evidence:
 - scope: <各 git show --stat 摘尾>
 - checks: <0-A/0-C 結論行或未觸發原因>
+- release-gate: deployTrigger=<實際輸出> → 走 Step 6-<A|B>
 - push: <git push --tags 與 git push origin main 摘尾>
 ```
 

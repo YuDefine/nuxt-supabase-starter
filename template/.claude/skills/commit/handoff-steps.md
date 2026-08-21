@@ -65,7 +65,7 @@ pnpm spectra:roadmap
 
 ## 5-E. 把 HANDOFF/ROADMAP 變更納入 commit（不 push）
 
-5-C/5-D 修改的是 tracked 檔（`HANDOFF.md`、`openspec/ROADMAP.md`），**MUST** 在此處 commit 進去，否則 working tree 會 dirty、Step 6 的 deploy commit 也不含這次的交接狀態。
+5-C/5-D 修改的是 tracked 檔（`HANDOFF.md`、`openspec/ROADMAP.md`），**MUST** 在此處 commit 進去，否則 working tree 會 dirty、Step 6-A 的 deploy commit 也不含這次的交接狀態。
 
 ```bash
 # 只 stage 5-C/5-D 動到的檔，避免誤包其他 WIP（commit 流程預設不該再撿東西）
@@ -83,7 +83,7 @@ EOF
 fi
 ```
 
-> 注意：這個 commit **不** push。它**不**重新 bump 版本（不是 deploy），只是把 HANDOFF/ROADMAP 落入 history。它會跟 Step 6 的 bump/deploy commit 一起在同一次 `git push origin main` 送出——刻意延後 push 是為了讓發版 commit（HANDOFF commit + deploy commit）只觸發**一次** main push，不讓第二次 push 取消掉第一次 push 已排入佇列的 staging run（見 `~/offline/clade/vendor/snippets/deploy-gate/README.md`）。
+> 注意：這個 commit **不** push。它**不**重新 bump 版本（不是 deploy），只是把 HANDOFF/ROADMAP 落入 history。它會跟 Step 6-A 的 bump/deploy commit 一起在同一次 `git push origin main` 送出（走 6-B 時沒有 deploy commit，本 commit 由 6-B 的那次 push main 送出）——刻意延後 push 是為了讓發版 commit（HANDOFF commit + deploy commit）只觸發**一次** main push，不讓第二次 push 取消掉第一次 push 已排入佇列的 staging run（見 `~/offline/clade/vendor/snippets/deploy-gate/README.md`）。
 
 ## 5-F. 報告
 

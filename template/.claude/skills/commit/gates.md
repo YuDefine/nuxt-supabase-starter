@@ -659,6 +659,7 @@ node .claude/scripts/0a-metrics.mjs record \
 - **NEVER** 因 0-A.1 抓到 Critical/Major 後跳過 0-A.2 —— 一律進入 Pi max + Fable max 驗證
 - **NEVER** 用主線自判把 pi 標的 Major / Critical 降級成 Minor 來跳過 0-A.2 —— severity 以 pi 輸出為準
 - **NEVER** 跳過 0-A.2 的 Fable 步驟只跑 Pi max —— 兩步驟綁定，缺 Fable 裁決 = 0-A.2 未完成
+- **NEVER** 把 heavy gate 的 `exit 75` 讀成 gate 本身失敗（typecheck 掛了 / OOM / 該調 heap） —— 75 是 `gate-slot.sh` 的 `EX_TEMPFAIL`，代表等不到 slot、inner command 從未執行。判準是 `grep -c "error TS"` 回 0；接著查 lock holder 並比 CPU time vs elapsed。三步診斷與逃生口見 [[pitfall-heavy-gate-exit-75-reads-as-typecheck-failure]]。**NEVER** 用調大 `--max-old-space-size` 或 `CLADE_GATE_WAIT_TIMEOUT` 回應它 —— 兩者都是對著錯誤的層施力
 
 ---
 

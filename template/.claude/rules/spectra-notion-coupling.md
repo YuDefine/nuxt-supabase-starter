@@ -176,7 +176,7 @@ Story 的 idempotent key 是 **(`Change`, `Capability`) 兩個欄位的組合**�
 | apply 真開工 | `/spectra-apply` 開工判定點 | Story → `開發中` + `拍板日` |
 | manual review handoff | `/spectra-apply` Step 8b | Story → `待驗收`；依 tasks.md 現況**補正全部** Task 狀態 |
 | archive | `/spectra-archive` Step 8 | Story → `待驗收` |
-| 發版（版本 bump + tag） | `/commit` **Step 6** | Story `上線日`；重算所屬 Milestone 進度；100% 時觸發 Class 3 (a) |
+| 發版（版本 bump + tag） | `/commit` **Step 6-A**（或 6-B 選「現在發版」後） | Story `上線日`；重算所屬 Milestone 進度；100% 時觸發 Class 3 (a) |
 
 執行一律透過 `vendor/scripts/notion-sync.ts`，**NEVER** 在各 SKILL.md 各寫一份寫入邏輯——四個掛載點呼叫同一支，避免四份實作彼此漂移。
 
