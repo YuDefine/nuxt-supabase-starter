@@ -128,11 +128,11 @@ Local edits will be reverted by the next sync.
       ```
 
    4. **立刻**簡短回報給使用者：「已派 Codex GPT-5.6-sol max 在背景 draft `/spectra-propose <change-name>`（bash job `<id>`），完成後主線會 cross-check 並補 Design Review template」
-   5. 啟動 **Codex Watch Protocol**（見 `.claude/rules/agent-routing.codex-watch-protocol.md` § 監看排程 A）：background Bash 回傳 `<task-id>` 後，立刻記錄 owner / deadline，並排 1500s canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=codex:spectra-propose:<change-name> deadline=<ISO>...` inert control message。控制 turn 只准 `TaskOutput(block=false)`、重排同一 inert prompt、停止 wakeup或排 lifecycle intervention；**NEVER** 放原 propose prompt、讀 output tail、執行 artifact mutation或用 180s 短輪詢。完成通知到達後才 claim task id、讀 stdout並進 Phase 0b。
+   5. 啟動 **Codex Watch Protocol**（見 `.claude/rules/agent-routing.pi-watch-protocol.md` § 監看排程 A）：background Bash 回傳 `<task-id>` 後，立刻記錄 owner / deadline，並排 1500s canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=codex:spectra-propose:<change-name> deadline=<ISO>...` inert control message。控制 turn 只准 `TaskOutput(block=false)`、重排同一 inert prompt、停止 wakeup或排 lifecycle intervention；**NEVER** 放原 propose prompt、讀 output tail、執行 artifact mutation或用 180s 短輪詢。完成通知到達後才 claim task id、讀 stdout並進 Phase 0b。
 
    #### Phase 0b：主線 Cross-Check（codex 完成後**立刻**執行）
 
-   **exit code 分流（收到 terminal notification 後先做，per `codex-phase-dispatch.md` § 4）**：
+   **exit code 分流（收到 terminal notification 後先做，per `pi-phase-dispatch.md` § 4）**：
 
    - `0`：讀 `result`，往下走。
    - `2`：業務 fail；讀 `result` 的原因，主線決定修補或重派。

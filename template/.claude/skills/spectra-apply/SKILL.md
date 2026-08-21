@@ -114,7 +114,7 @@ Implement tasks from a Spectra change.
 
       Wait for the dispatched skill to return, surface its report to the user, and STOP — do **not** re-enter Step 1 in the parent session.
 
-      While waiting: the subagent dispatches and watches its own codex processes (Step 6b Class C, Step 8a verify channels, pre-handoff checks). The parent **MUST NOT** probe those with `ps` / `pgrep` / `/proc` — that output carries no tenant information in either direction, so it produces confident wrong answers rather than none (TD-351; `agent-routing.codex-watch-protocol.md` § 跨 sandbox 可見度約束 v2). Ask via `SendMessage`, or read signals that name the change/phase slug.
+      While waiting: the subagent dispatches and watches its own codex processes (Step 6b Class C, Step 8a verify channels, pre-handoff checks). The parent **MUST NOT** probe those with `ps` / `pgrep` / `/proc` — that output carries no tenant information in either direction, so it produces confident wrong answers rather than none (TD-351; `agent-routing.pi-watch-protocol.md` § 跨 sandbox 可見度約束 v2). Ask via `SendMessage`, or read signals that name the change/phase slug.
 
       **Fallback** — if the Skill tool / `/wt` dispatch is unavailable in this environment (rare degradation; e.g., minimal runtime without skill support), **NEVER** hand the worktree path or invocation back to the user. If the parent can legally continue in that worktree, continue directly. If a separate interactive session is required, MUST Read `~/offline/clade/vendor/snippets/herdr-session-handoff/README.md`, dispatch the durable change prompt with `herdr-session-handoff.ts`, and return its workspace / tab / pane receipt.
 
@@ -405,7 +405,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
    4. **NEVER** dispatch Phase Dispatch（Step 6b）with `medium` effort — schema drift / cross-file refactor / enum exhaustiveness require `high` minimum。Step 8a 系列收集工作允許 `medium`
    5. **NEVER** dispatch task-by-task — phase-level only
 
-   **C 類 phase dispatch 執行**：**每一個** C 類 phase 派工前 **MUST** 完整讀 `references/codex-phase-dispatch.md`——classifier execution 欄位、eligible Luna read-only prescan、shadow-only marker、共用 template／output schema、background Pi Codex dispatcher invocation、Codex Watch Protocol，以及 notification 後的 **MUST checks**（commit boundary / view-layer drift double-check / scope cross-check / gate replay）。**NEVER** 憑記憶派工、退回 raw `codex exec`、自行覆寫 classifier 或跳過 post-notification checks；主線收報後 re-classify 下一個 phase。
+   **C 類 phase dispatch 執行**：**每一個** C 類 phase 派工前 **MUST** 完整讀 `references/pi-phase-dispatch.md`——classifier execution 欄位、eligible Luna read-only prescan、shadow-only marker、共用 template／output schema、background Pi Codex dispatcher invocation、Codex Watch Protocol，以及 notification 後的 **MUST checks**（commit boundary / view-layer drift double-check / scope cross-check / gate replay）。**NEVER** 憑記憶派工、退回 raw `codex exec`、自行覆寫 classifier 或跳過 post-notification checks；主線收報後 re-classify 下一個 phase。
 
    6. After ALL C 類 phases complete → **本次 apply session 內 MUST 完成**所有 A、B 類 phases：**每一個 B 類 phase** 依 Step 6b 的 B 類派工形狀派 `--model grok-xai` 實作（瑣碎 UI 修照 Step 6b 主線直做），收回後主線跑 Step 6c / 6d；**A 類（Design Review）主線自己做**——**直接 invoke Skill tool** 跑 `/design improve`、`/impeccable audit`、`review-screenshot` 等 Claude Code first-class skill，完整跑完該 phase 所有 tasks 並標 `[x]`。
 

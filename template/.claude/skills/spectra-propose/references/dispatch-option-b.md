@@ -17,7 +17,7 @@ Local edits will be reverted by the next sync.
 
    ### 選項 B：三模型交叉 pipeline（Fable draft → Codex review → 主線 Fable final check）
 
-   三段序列：Claude Fable 5 xhigh 在背景起草 → Codex GPT-5.6-sol max（fresh session）檢查出 findings → 主線 Claude Fable 5 xhigh 整合 findings 並完成全套 cross-check。三段皆背景派工 + notification-only watch（per `.claude/rules/agent-routing.codex-watch-protocol.md` § 監看排程 A）。draft 與 review 是兩個不同 model 的獨立 session（Fable draft + Codex review 交叉視角，比同 model 更能抓到盲點）。
+   三段序列：Claude Fable 5 xhigh 在背景起草 → Codex GPT-5.6-sol max（fresh session）檢查出 findings → 主線 Claude Fable 5 xhigh 整合 findings 並完成全套 cross-check。三段皆背景派工 + notification-only watch（per `.claude/rules/agent-routing.pi-watch-protocol.md` § 監看排程 A）。draft 與 review 是兩個不同 model 的獨立 session（Fable draft + Codex review 交叉視角，比同 model 更能抓到盲點）。
 
    #### Phase B-0a：背景 Fable draft
 
@@ -69,7 +69,7 @@ Local edits will be reverted by the next sync.
 
    #### Phase B-0c：Codex 檢查完 → 主線 Fable final check
 
-   **exit code 分流（收到 terminal notification 後先做，per `codex-phase-dispatch.md` § 4）**：
+   **exit code 分流（收到 terminal notification 後先做，per `pi-phase-dispatch.md` § 4）**：
 
    - `0`：讀 findings，往下走。
    - `2`：業務 fail；讀 `result` 的原因，主線決定修補或重派。

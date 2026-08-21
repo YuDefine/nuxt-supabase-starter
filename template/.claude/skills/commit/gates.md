@@ -742,7 +742,7 @@ Doctor health score < 100 或 exit code ≠ 0 → **MUST block commit**，修復
 
 ```bash
 node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
-  --template ~/offline/clade/vendor/snippets/codex-offload/templates/fix-verify-loop.template.md \
+  --template ~/offline/clade/vendor/snippets/pi-offload/templates/fix-verify-loop.template.md \
   --var <key>=<value> ...（依 template 變數表填：check 命令、失敗摘要 / log 等） \
   --var max_iterations=2 \
   --label commit-0c-<slug> --model grok-xai --effort high \
@@ -762,7 +762,7 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
 
 ```bash
 node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
-  --template ~/offline/clade/vendor/snippets/codex-offload/templates/fix-verify-loop.template.md \
+  --template ~/offline/clade/vendor/snippets/pi-offload/templates/fix-verify-loop.template.md \
   --var <key>=<value> ...（帶 grok 留下的 remaining_failures） \
   --var max_iterations=none \
   --label commit-0c-<slug>-sol --model sol --effort high \

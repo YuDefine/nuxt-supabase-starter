@@ -209,7 +209,7 @@ Commit 完直接停手回報，**NEVER** 自己跑下一 phase。主線會在 co
 
 ```bash
 node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
-  --template ~/offline/clade/vendor/snippets/codex-offload/templates/<name>.template.md \
+  --template ~/offline/clade/vendor/snippets/pi-offload/templates/<name>.template.md \
   --var task='...' --var acceptance='...' --var git_baseline="$(git status --porcelain | head -20)" \
   --var allowed_paths='...' \
   --label <topic-slug> --effort <low|medium|high|xhigh> \
@@ -296,7 +296,7 @@ basis，**NEVER** 隨手挑一個列名湊過去。
 `--tier-basis delegate-sub` 配 `--model sol` 就是靠這個欄位才合法（它是那條升檔規則的唯一出口），
 沒帶 `--retry-of` 一律 exit 1。
 
-**Template registry**（對照表與各 template 的必填 var 見 `~/offline/clade/vendor/snippets/codex-offload/README.md`）：
+**Template registry**（對照表與各 template 的必填 var 見 `~/offline/clade/vendor/snippets/pi-offload/README.md`）：
 
 | Template | 場景 | 建議 effort |
 | --- | --- | --- |

@@ -101,7 +101,7 @@ Luna report 若回 `needs-reconciliation`，主線用同一份 sources + facts �
 
 ### pre-scan 的 dispatch 形狀
 
-model / effort / template 的 SoT：[[agent-routing]] § Routing Table 對應列 + cookbook `~/offline/clade/vendor/snippets/codex-offload/README.md`。brief 的 `task` **MUST** 逐條列出來源清單與要回的欄位（檔名 / 行號 / 現值 / 判準命中與否）；`allowed_paths` 填「（只讀，無寫入授權）」。每一筆 dispatch 都帶 `--origin work-loop --origin-id wl-r<本輪 round>`；`read-heavy-scan` 另帶 `--cohort fact-extraction`，`exploration-prescan` 另帶 `--cohort reconciliation`。runner child 已由 env 注入 origin pair，CLI 仍顯式帶以便 attended 與 dry-run 形狀一致。
+model / effort / template 的 SoT：[[agent-routing]] § Routing Table 對應列 + cookbook `~/offline/clade/vendor/snippets/pi-offload/README.md`。brief 的 `task` **MUST** 逐條列出來源清單與要回的欄位（檔名 / 行號 / 現值 / 判準命中與否）；`allowed_paths` 填「（只讀，無寫入授權）」。每一筆 dispatch 都帶 `--origin work-loop --origin-id wl-r<本輪 round>`；`read-heavy-scan` 另帶 `--cohort fact-extraction`，`exploration-prescan` 另帶 `--cohort reconciliation`。runner child 已由 env 注入 origin pair，CLI 仍顯式帶以便 attended 與 dry-run 形狀一致。
 
 執行形狀依 process 身分 first-match：
 

@@ -42,7 +42,7 @@ Local edits will be reverted by the next sync.
 
    ```bash
    node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
-     --template ~/offline/clade/vendor/snippets/codex-offload/templates/self-collect-evidence.template.md \
+     --template ~/offline/clade/vendor/snippets/pi-offload/templates/self-collect-evidence.template.md \
      --var <key>=<value> ...（依 template 變數表填：change name、dev-login route 路徑、fixture UUID、port、table 等） \
      --label 8a-self-collect-<change> --model sol --effort low \
      --route routing-table --tier-basis table-row --table-row spectra-8a-self-collect

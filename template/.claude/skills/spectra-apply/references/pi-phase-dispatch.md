@@ -53,12 +53,12 @@ PRESCAN_ORIGIN_ID = $IMPLEMENTATION_ORIGIN_ID-prescan
 
 ```bash
 node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
-  --template ~/offline/clade/vendor/snippets/codex-offload/templates/read-heavy-scan.template.md \
+  --template ~/offline/clade/vendor/snippets/pi-offload/templates/read-heavy-scan.template.md \
   --var "task=對 $CHANGE_NAME phase $PHASE_NUMBER 的封閉 source list 抽取 task→path、既有 symbol 與 exact gate command；每筆附 location + raw_value" \
   --var "acceptance=$PRESCAN_ACCEPTANCE" \
   --var "git_baseline=$GIT_BASELINE" \
   --var "allowed_paths=（只讀；除 /tmp capture 外無寫入授權）" \
-  --output-schema ~/offline/clade/vendor/snippets/codex-offload/schemas/read-heavy-scan-result.schema.json \
+  --output-schema ~/offline/clade/vendor/snippets/pi-offload/schemas/read-heavy-scan-result.schema.json \
   --label "$PRESCAN_ORIGIN_ID" \
   --cwd <consumer-worktree-root> \
   --model gemini --effort low \
@@ -82,7 +82,7 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
 
 ```bash
 node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
-  --template ~/offline/clade/vendor/snippets/codex-offload/templates/spectra-phase-implementation.template.md \
+  --template ~/offline/clade/vendor/snippets/pi-offload/templates/spectra-phase-implementation.template.md \
   --var "change_name=$CHANGE_NAME" \
   --var "phase_number=$PHASE_NUMBER" \
   --var "phase_title=$PHASE_TITLE" \
@@ -91,7 +91,7 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
   --var "git_baseline=$GIT_BASELINE" \
   --var "allowed_paths=$ALLOWED_PATHS" \
   --var "gate_commands=$GATE_COMMANDS" \
-  --output-schema ~/offline/clade/vendor/snippets/codex-offload/schemas/spectra-phase-result.schema.json \
+  --output-schema ~/offline/clade/vendor/snippets/pi-offload/schemas/spectra-phase-result.schema.json \
   --label "$IMPLEMENTATION_ORIGIN_ID" \
   --cwd <consumer-worktree-root> \
   --model sol --effort high \
@@ -123,7 +123,7 @@ Marker 必須是 phase 內單一行 JSON comment：
 取得 background task ID 後：
 
 1. 簡短告知使用者本 phase 已派出。
-2. 依 `agent-routing.codex-watch-protocol.md` 建 canonical keepalive；notification-only，不短輪詢。
+2. 依 `agent-routing.pi-watch-protocol.md` 建 canonical keepalive；notification-only，不短輪詢。
 3. terminal notification 到達後 claim task ID，讀 dispatcher 的單一 JSON receipt。
 4. 依 exit code 分流：
    - `0`：讀 `result`，進下節 checks。
