@@ -4,7 +4,7 @@ paths: ['openspec/changes/**/tasks.md', 'openspec/changes/**/design.md', 'script
 ---
 <!--
 🔒 LOCKED — managed by clade
-Source: rules/core/agent-routing.codex-input-intercept.md
+Source: rules/core/agent-routing.pi-input-intercept.md
 Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->

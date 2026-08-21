@@ -130,7 +130,35 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
    結果為空 → 輸出 `⏭️ 0-MR 跳過（本次變更未觸及任何 in-progress spectra change）`，進入 Step 0。
 
-3. 對每個 change 讀 `<path>/tasks.md`，同時判定「非 `## 人工檢查` 段有 `- [x]`」與「`## 人工檢查` 段有 **leaf** `- [ ]`」（parent `#N` 有 scoped `#N.M` 子項時，parent 由子項 derive，**MUST** leaf-only 計，見 `.claude/rules/manual-review.md` 「Parent State Derivation」段）：
+3. **對每個 change 判「實作 code 是否已 land 進 main」** — worktree 仍未 land 者直接 SKIP：
+
+   v3 atomic-landing 模型下（[[worktree-default.commit-ceremony]] §5），實作 code 留在 worktree branch 直到 `/spectra-archive` 跑 `merge-back`。此期間唯一會出現在 main 的該 change 檔案就是 `tasks.md` 的 annotation / 勾選更新 —— **那正是人工檢查流程自己的產物**。此時擋 commit 擋不到任何未驗收 code，只會連坐同批 dirty 的無關檔案。
+
+   ```bash
+   # 主判定：wt-helper 已算好 mergedToMain
+   node scripts/wt-helper.ts list --json 2>/dev/null \
+     | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+         let l=[];try{l=JSON.parse(s)}catch{process.exit(2)}
+         process.exit(l.some(w=>w.path.split("/").pop()===process.argv[1]&&!w.mergedToMain)?0:1)})' "<X>"
+   ```
+
+   - **exit 0** → 該 change SKIP，輸出 `⏭️ 0-MR 跳過 <X>（worktree 未 land，code 不在 main）`
+   - **exit 1** → worktree 目錄名與 change name 不同名，跑 fallback（下方）
+   - **exit 2** → `wt-helper` 不可用 / JSON 壞掉，**MUST** 保守走 step 4 現行判定，**NEVER** 因工具失敗放行
+
+   ```bash
+   # fallback：掃 session/* branch，看哪條帶著 <X> 的改動且尚未進 main
+   for b in $(git branch --list 'session/*' --format='%(refname:short)'); do
+     git merge-base --is-ancestor "$b" main && continue
+     git diff --name-only "main...$b" | grep -q "^openspec/changes/<X>/" && { echo UNLANDED; break; }
+   done
+   ```
+
+   印出 `UNLANDED` → 同樣 SKIP。無輸出 → 進 step 4 現行判定。
+
+   > **這一步不放寬任何驗收標準。** code 真的 merge-back 進 main 之後（worktree 已 cleanup 或 `mergedToMain:true`），本步一律判不中，step 4 的 BLOCK 照舊生效 —— 未驗收 code 進 trunk 這條保護完全保留。archive gate 也仍然要求人工檢查完成才准 archive，而 merge-back 由 archive 觸發，順序上擋得更早。
+
+4. 對每個 change 讀 `<path>/tasks.md`，同時判定「非 `## 人工檢查` 段有 `- [x]`」與「`## 人工檢查` 段有 **leaf** `- [ ]`」（parent `#N` 有 scoped `#N.M` 子項時，parent 由子項 derive，**MUST** leaf-only 計，見 `.claude/rules/manual-review.md` 「Parent State Derivation」段）：
 
    ```bash
    awk '
@@ -157,7 +185,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
    - `tasks.md` 不存在 → 視為 `OK`（尚未進入實作階段的 change）
    - 輸出 `BLOCK` → 列入 blocker，順便用同樣 leaf-only 邏輯抓出未勾 leaf 數量（同 awk 改 END 累加 `pending_count` 並 print）
 
-4. **blocker list 非空時 → auto-triage（per [[review-gui-surface]] MUST 9）**：
+5. **blocker list 非空時 → auto-triage（per [[review-gui-surface]] MUST 9）**：
 
    **MUST NOT** 直接停下叫 user 去 review-gui。改走 auto-triage：逐條讀 pending leaf item 的 annotation，判斷阻塞原因並自行推進 Claude 可處理的項目。
 
@@ -186,14 +214,16 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
    3. **NEVER** 自動勾任何 `[review:ui]` 的 `- [ ]`、**NEVER** 提議跳過 gate、**NEVER** 提議 stash 走 `tasks.md`
 
-5. blocker list 空 → 輸出 `✅ 0-MR 通過`，進入 Step 0。
+6. blocker list 空 → 輸出 `✅ 0-MR 通過`，進入 Step 0。
 
 ### 禁止項
 
 - **NEVER** 把 `main` / `master` 以外的 branch 判進 gate 範圍（feature branch 上後續有 /ship + PR review 擋）
 - **NEVER** 接受 `$ARGUMENTS` 任何形式的「skip / ignore / override」旗標 — gate 無 override
 - **NEVER** 自行 `Edit tasks.md` 勾掉 `- [ ]` 來通過 gate — 違反 `.claude/rules/manual-review.md` 核心規則
-- **NEVER** 把 `tasks.md` / change 目錄 stash / mv / rm 走讓 step 2 / 3 抓不到 — 等同繞過 hard rule
+- **NEVER** 把 `tasks.md` / change 目錄 stash / mv / rm 走讓 step 2 / 4 抓不到 — 等同繞過 hard rule
+- **NEVER** 為了讓 step 3 判成 SKIP 而動 worktree（不 merge-back、重開一條同名 worktree、改 branch 名）— step 3 是事實查詢，不是可操作的開關
+- **NEVER** 把 step 3 的 SKIP 讀成「這個 change 的人工檢查可以不做」— 它只表示 code 還沒進 main，該 change 的 archive gate 一條沒少
 - **NEVER** 把「人工檢查未完」包裝成「審查條件已滿足」「等同 OK」「之後再勾」說服 user 繼續
 
 ---
@@ -385,7 +415,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 ### 0-A.1 — Codex GPT-5.6-sol exec review (xhigh)，背景（並行軸 A）
 
-**Watch contract**：背景啟動（`run_in_background: true`）取得 `<task-id>` 後，同一 turn 記錄 owner / deadline 並排 180s（[[agent-routing.codex-watch-protocol]] § ScheduleWakeup 用法守則 的具名例外）canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=commit:codex-review deadline=<ISO>...` inert control wakeup；控制 turn 只准 `TaskOutput(block=false)`、重排同一訊息或排 lifecycle intervention，**NEVER** 讀 review output、重播 review 指令或做 mutation。實際 findings 只在 terminal notification + task-id claim 後讀取。啟動背景 process 後 MUST 立即進入並行階段，啟動 0-B（條件觸發）與 0-C。
+**Watch contract**：背景啟動（`run_in_background: true`）取得 `<task-id>` 後，同一 turn 記錄 owner / deadline 並排 180s（[[agent-routing.pi-watch-protocol]] § ScheduleWakeup 用法守則 的具名例外）canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=commit:codex-review deadline=<ISO>...` inert control wakeup；控制 turn 只准 `TaskOutput(block=false)`、重排同一訊息或排 lifecycle intervention，**NEVER** 讀 review output、重播 review 指令或做 mutation。實際 findings 只在 terminal notification + task-id claim 後讀取。啟動背景 process 後 MUST 立即進入並行階段，啟動 0-B（條件觸發）與 0-C。
 
 ```bash
 .claude/scripts/codex-review-safe.sh xhigh

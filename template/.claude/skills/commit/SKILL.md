@@ -38,7 +38,7 @@ node .claude/scripts/commit-lock.mjs acquire
 
 ## Step 0-Codex: 派 codex 跑 commit 工作時的路由規約
 
-主線從 commit SKILL 派 codex 跑 commit 工作時（例如 `/wt` worktree 內派 codex commit phase），**MUST** 走 [`rules/core/agent-routing.codex-watch-protocol.md`](../../../../rules/core/agent-routing.codex-watch-protocol.md) § Codex 派工的標準流程 + Codex Watch Protocol。**禁止** `Agent` tool with `subagent_type: screenshot-review` 派視覺 QA — sonnet wrapper 派工已多次驗證 self-rationalize（per [[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]）。
+主線從 commit SKILL 派 codex 跑 commit 工作時（例如 `/wt` worktree 內派 codex commit phase），**MUST** 走 [`rules/core/agent-routing.pi-watch-protocol.md`](../../../../rules/core/agent-routing.pi-watch-protocol.md) § Codex 派工的標準流程 + Codex Watch Protocol。**禁止** `Agent` tool with `subagent_type: screenshot-review` 派視覺 QA — sonnet wrapper 派工已多次驗證 self-rationalize（per [[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]）。
 
 ## Step 0-Scope: WIP 預設全部納入（果斷，不徵詢）
 

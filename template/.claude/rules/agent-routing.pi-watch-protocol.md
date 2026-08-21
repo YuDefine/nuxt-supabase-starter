@@ -4,7 +4,7 @@ paths: ['openspec/changes/**/tasks.md', 'openspec/changes/**/design.md', 'script
 ---
 <!--
 🔒 LOCKED — managed by clade
-Source: rules/core/agent-routing.codex-watch-protocol.md
+Source: rules/core/agent-routing.pi-watch-protocol.md
 Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
@@ -50,7 +50,7 @@ Local edits will be reverted by the next sync.
 
 3. 立刻簡短回報 bash job ID 給使用者
 4. 立刻啟動 **Codex Watch Protocol**（見下節 § 監看排程）— notification-only（主線 idle 等通知，只下**一個** ~1500s 安全網 fallback 防罕見 hang-type 失敗）。**禁止**啟動每 3 分鐘短輪詢（無謂 turn 重燒 context）。**禁止**任何 subagent 中介 dispatch（per `agent-routing.md` § Dispatch 入口）
-5. 收到 `<task-notification> status=completed` → 立刻 BashOutput 讀 stdout → **先跑 Input Intercept 偵測**（per [[agent-routing.codex-input-intercept]] § 問題偵測）→ 無問題則整理結果回報；有問題則走攔截→評估→代答/升級流程；watch loop 自然終止
+5. 收到 `<task-notification> status=completed` → 立刻 BashOutput 讀 stdout → **先跑 Input Intercept 偵測**（per [[agent-routing.pi-input-intercept]] § 問題偵測）→ 無問題則整理結果回報；有問題則走攔截→評估→代答/升級流程；watch loop 自然終止
 6. **NEVER** 沉默等使用者來問進度
 
 各 routing 的參數差異：
@@ -375,7 +375,7 @@ Codex 由**該層編排者**在其自身 sandbox 內直接 Bash `run_in_backgrou
 
 安全網 wakeup 的 allowlist 以 [[agent-routing]] § Generic keepalive 醒來只做控制面動作 為準：只可 `TaskOutput(block=false)`、重排 / 停 wakeup、排 handoff。**NEVER** 讀 BashOutput tail 判健康、執行原 codex 任務、或做任何 mutation。
 
-`ASYNC_LIFECYCLE_HANDOFF` 與 native notification 只在 terminal 時共用 task-id claim；claim 成功的正常 turn 才讀 stdout / stderr、cross-check 並分類。stdout / stderr 命中 `fetch failed`、sandbox / permission / auth error、`request_user_input is not supported in exec mode` 或 blocker 語意 → 依 [[agent-routing.codex-input-intercept]] 與下方介入契約處理。
+`ASYNC_LIFECYCLE_HANDOFF` 與 native notification 只在 terminal 時共用 task-id claim；claim 成功的正常 turn 才讀 stdout / stderr、cross-check 並分類。stdout / stderr 命中 `fetch failed`、sandbox / permission / auth error、`request_user_input is not supported in exec mode` 或 blocker 語意 → 依 [[agent-routing.pi-input-intercept]] 與下方介入契約處理。
 
 ### 介入觸發
 

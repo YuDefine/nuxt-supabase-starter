@@ -24,7 +24,7 @@ Local edits will be reverted by the next sync.
 
 ### 主線正確路徑
 
-主線 Claude **MUST** 直接走 [`agent-routing.codex-watch-protocol.md`](../../../rules/core/agent-routing.codex-watch-protocol.md) § Codex 派工的標準流程：
+主線 Claude **MUST** 直接走 [`agent-routing.pi-watch-protocol.md`](../../../rules/core/agent-routing.pi-watch-protocol.md) § Codex 派工的標準流程：
 
 1. `Write` prompt 到 `/tmp/codex-screenshot-review-<slug>-prompt.md`（prompt 開頭字面 `[DELEGATED-BY-CLAUDE-CODE]`）
 2. `Bash` background：`node ~/offline/clade/vendor/scripts/codex-dispatch.ts --brief /tmp/... --cwd <consumer> --label screenshot-review-<slug> --model grok-xai --effort low --route routing-table --tier-basis table-row --table-row screenshot-review-verify`

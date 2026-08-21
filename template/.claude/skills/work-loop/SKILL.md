@@ -511,7 +511,7 @@ context-decay 與 handoff-write-failed **永遠**寫 `roundEndReason`，**NEVER*
 | 可觀察 predicate | 執行形狀 |
 | --- | --- |
 | `$ARGUMENTS` 含 `--runner-child --linked-dispatch-mode foreground`，或 `WORK_LOOP_RUNNER_CHILD=1` | 在**同一個** `claude --print` process 用 foreground `Bash` 呼叫 dispatcher，timeout 600000；等待 exit `0/2/3/4` 後立刻按 routing receipt 分流，再繼續本輪 |
-| 非 runner child | 沿用 [[agent-routing.codex-watch-protocol]] 的 async watch protocol |
+| 非 runner child | 沿用 [[agent-routing.pi-watch-protocol]] 的 async watch protocol |
 
 Foreground 路徑**不**寫 `inFlight`、不建 background task、也不 arm keepalive：結果已在同一 tool call
 回來，沒有未來 notification 可收割。**NEVER** 在 runner child 對 decision-linked dispatch 使用

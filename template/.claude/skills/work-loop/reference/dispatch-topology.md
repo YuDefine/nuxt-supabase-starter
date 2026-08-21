@@ -108,7 +108,7 @@ model / effort / template 的 SoT：[[agent-routing]] § Routing Table 對應列
 | 可觀察 predicate | dispatch / harvest |
 | --- | --- |
 | runner child（`--runner-child --linked-dispatch-mode foreground` 或 `WORK_LOOP_RUNNER_CHILD=1`） | foreground Bash 跑泛用 dispatcher，timeout 600000；同一 tool call 收到 exit 與 stdout JSON 後立即輕量收割，**不**寫 `inFlight`、不 arm keepalive |
-| 非 runner child | Bash `run_in_background` 跑泛用 dispatcher；watch 依 [[agent-routing.codex-watch-protocol]] § 監看排程（notification-only + 單一 `ScheduleWakeup` 安全網，禁止短輪詢），並記 state `inFlight`（`agent=codex:<label>`、owner 固定 `codex-watch`、2h deadline） |
+| 非 runner child | Bash `run_in_background` 跑泛用 dispatcher；watch 依 [[agent-routing.pi-watch-protocol]] § 監看排程（notification-only + 單一 `ScheduleWakeup` 安全網，禁止短輪詢），並記 state `inFlight`（`agent=codex:<label>`、owner 固定 `codex-watch`、2h deadline） |
 
 非 runner child 的安全網 prompt MUST 使用 [[agent-routing]] 的 canonical inert control message，NEVER 放原 pre-scan / work-loop 任務；terminal claim / intervention 由 `codex-watch` 完成後 callback 至本節的輕量收割，**NEVER** 另以 `work-loop-dispatch` 對同一 task claim。
 
@@ -118,7 +118,7 @@ model / effort / template 的 SoT：[[agent-routing]] § Routing Table 對應列
 
 ### pre-scan 的 exit code 分流（quota 擋 ≠ dispatch failure）
 
-exit code 契約的 SoT 是 [[agent-routing.codex-watch-protocol]] § 泛用 Dispatcher。本表只定義它在 loop 內的處置：
+exit code 契約的 SoT 是 [[agent-routing.pi-watch-protocol]] § 泛用 Dispatcher。本表只定義它在 loop 內的處置：
 
 | exit | 處置 |
 | --- | --- |

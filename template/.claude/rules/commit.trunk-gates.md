@@ -66,10 +66,19 @@ Local edits will be reverted by the next sync.
 
 當前 branch 為 `main` / `master` 且本次 `/commit` 觸及的 spectra change（`openspec/changes/<name>/**` 路徑，archive 子目錄除外）滿足下列**兩條件同時成立**時，未 ready 時 MUST 擋下 commit——但不是直接停下，走 /commit skill Step 0-MR 的 auto-triage：先推進 Claude 可自行處理項，再以 `check-review-readiness.ts` gate 判定放行與否：
 
+0. **該 change 的實作 code 已 land 進 main** → 對應 worktree 已 merge-back（`wt-helper list --json` 的 `mergedToMain:true`）或已 cleanup。仍有未 land 的 worktree 帶著該 change 的改動時，本 gate 對該 change 判 **SKIP**
 1. 該 change 的 `tasks.md` **非** `## 人工檢查` 段落含任一 `- [x]` → 已開始 / 完成實作
 2. 該 change 的 `## 人工檢查` 段落含任一 `- [ ]` → 人工檢查未完成
 
 只滿足其一不擋（純 propose 未動工、或實作完且人工檢查全綠，都允許 commit）。判定流程、fail-fast 位置見 `.claude/skills/commit/SKILL.md` Step 0-MR。
+
+### 為何加條件 0（worktree 未 land 即 SKIP）
+
+v3 atomic-landing（[[worktree-default.commit-ceremony]] §5）下，實作 code 留在 worktree branch 直到 `/spectra-archive` 觸發 `merge-back`。此期間會出現在 main 的該 change 檔案**只有** `tasks.md` 的 annotation / 勾選更新 —— 那正是人工檢查流程自己的產物。對它擋 commit 擋不到任何未驗收 code，只會把同批 dirty 的無關檔案一起連坐。
+
+實證（<consumer-b> 2026-08-21）：main 9 個 dirty 檔中僅 `openspec/changes/shipment-loading-per-box-capacity/tasks.md` 觸發 gate，該 change 的 code 全在 `mergedToMain:false` 的 worktree 內，卻連帶卡住 `docs/tech-debt.md`、`nuxt.config.ts`、`shared/schemas/*` 等 8 個無關檔。
+
+條件 0 **不放寬任何驗收標準**：code 一旦 merge-back 進 main，條件 0 即不成立，條件 1 / 2 的 BLOCK 照舊；而 merge-back 由 `/spectra-archive` 觸發，archive gate 本身就要求人工檢查完成 —— 順序上擋得比本 gate 更早。
 
 ### 為何 gate 在這
 
@@ -86,3 +95,5 @@ Local edits will be reverted by the next sync.
 - **NEVER** 把「人工檢查還沒完成」包裝成「審查條件已滿足」「等同 OK」「之後再勾」 — gate 看的是 tasks.md 的實際勾選狀態
 - **NEVER** 建議 user「先 checkout 到 feature branch 跑 /commit 再 merge 回 main」繞過 gate
 - **NEVER** 因為「使用者沒明說 main 算 trunk」而判 branch 不算 — `main` / `master` 都算
+- **NEVER** 為了讓條件 0 成立而動 worktree（不 merge-back、重開同名 worktree、改 branch 名）— 條件 0 是事實查詢，不是可操作的開關
+- **NEVER** 把條件 0 的 SKIP 讀成該 change 的人工檢查可以省略 — archive gate 一條沒少
