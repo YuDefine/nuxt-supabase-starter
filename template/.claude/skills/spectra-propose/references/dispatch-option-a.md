@@ -22,7 +22,7 @@ Local edits will be reverted by the next sync.
    依以下順序執行（每一步都是主線 Claude 自己做，不需使用者介入）：
 
    1. **解析 change name + requirement**：從 argument / discuss artifacts / 對話脈絡萃取，導出 kebab-case `<change-name>` 與一句話 requirement
-   2. **Write prompt 檔到 `/tmp/codex-spectra-propose-<change-name>-prompt.md`**，內容固定包含：
+   2. **Write prompt 檔到 `/tmp/pi-spectra-propose-<change-name>-prompt.md`**，內容固定包含：
 
       ```
       請以本 repo 的 spectra-propose 流程建立 change `<change-name>`。
@@ -120,7 +120,7 @@ Local edits will be reverted by the next sync.
 
       ```bash
       node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
-        --brief /tmp/codex-spectra-propose-<change-name>-prompt.md \
+        --brief /tmp/pi-spectra-propose-<change-name>-prompt.md \
         --cwd <consumer-repo-root> \
         --label spectra-propose-<change-name> \
         --model sol --effort max \

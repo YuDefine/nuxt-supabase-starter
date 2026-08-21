@@ -68,7 +68,7 @@ dispatcher stdout是單一JSON。依序讀：
 
 ## 重派契約
 
-1. 建立`/tmp/codex-<topic>-<slug>-qa-log.md`，記錄question、answer、source與auto/escalated。
+1. 建立`/tmp/pi-<topic>-<slug>-qa-log.md`，記錄question、answer、source與auto/escalated。
 2. 產生新的brief：完整保留原brief，在末尾追加`## Confirmed Answers`，逐題列question、answer與source。
 3. 用原model／effort／cwd／route／tier-basis重跑dispatcher，label使用新值並帶`--retry-of <prior-label>`。
 4. 新dispatch啟動新的Watch Protocol cycle；回來後重新做問題偵測。
@@ -76,7 +76,7 @@ dispatcher stdout是單一JSON。依序讀：
 
 ```bash
 node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
-  --brief /tmp/codex-<topic>-<slug>-answered-<N>.md \
+  --brief /tmp/pi-<topic>-<slug>-answered-<N>.md \
   --cwd <cwd> \
   --label <new-label> \
   --model <sol|luna> --effort <level> \

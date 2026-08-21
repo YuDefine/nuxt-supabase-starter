@@ -3,8 +3,8 @@
   "rulesProjection": "copy",
   "checksums": {
     "rules/agent-routing.md": "f96522b7e47b82d5",
-    "rules/agent-routing.pi-input-intercept.md": "55f54fe680b33fb9",
-    "rules/agent-routing.pi-watch-protocol.md": "971a8ca2ce0c4a7a",
+    "rules/agent-routing.pi-input-intercept.md": "3ce83c14bad33d06",
+    "rules/agent-routing.pi-watch-protocol.md": "b10fa71d35df4c32",
     "rules/agent-self-verification.md": "d142bf131fe05fd7",
     "rules/agent-self-verification.screenshot-evidence.md": "c8f274c48a74c6db",
     "rules/audit-pattern.md": "69856e1bb2377882",
@@ -119,9 +119,9 @@
     "skills/spectra-analyze/SKILL.md": "69238d8bcdf5cd50",
     "skills/spectra-apply/SKILL.md": "584ceb33de998ec8",
     "skills/spectra-apply/references/pi-phase-dispatch.md": "72fb8f9e0ce65172",
-    "skills/spectra-apply/references/pre-handoff-checks.md": "29a3621be5a2f3f1",
+    "skills/spectra-apply/references/pre-handoff-checks.md": "6662e674b6403b97",
     "skills/spectra-apply/references/ui-phase-gates.md": "1c0d6fbc99d8c602",
-    "skills/spectra-apply/references/verify-channels.md": "fcbff428ff2115eb",
+    "skills/spectra-apply/references/verify-channels.md": "0b13285fcfbf36d4",
     "skills/spectra-apply/references/worktree-setup.md": "9cc62dc58e4d5a32",
     "skills/spectra-archive/SKILL.md": "c061cadf63a72f08",
     "skills/spectra-archive/references/discuss-walkthrough.md": "70d64154e32cd0d5",
@@ -132,10 +132,10 @@
     "skills/spectra-debug/SKILL.md": "caf6f13811520cdf",
     "skills/spectra-discuss/SKILL.md": "f967fb2df772d8e4",
     "skills/spectra-drift/SKILL.md": "de56b84ba5714ce0",
-    "skills/spectra-ingest/SKILL.md": "49a07d5f8358f1e8",
+    "skills/spectra-ingest/SKILL.md": "cce428b4dfd74706",
     "skills/spectra-propose/SKILL.md": "6b07a8da9a28ea26",
-    "skills/spectra-propose/references/dispatch-option-a.md": "c2ab241f21943e53",
-    "skills/spectra-propose/references/dispatch-option-b.md": "80ae90050e933756",
+    "skills/spectra-propose/references/dispatch-option-a.md": "d6bafa8a20c66621",
+    "skills/spectra-propose/references/dispatch-option-b.md": "792216c9db147be5",
     "skills/spectra-verify/SKILL.md": "651f0ea59d5b2f55",
     "skills/work-loop/SKILL.md": "878a0bf6220db9c8",
     "skills/work-loop/reference/autonomy-predicate.md": "172da82b3451a8a7",
@@ -157,6 +157,6 @@
     "agents/code-review.md": "324b74b4a77e2b4c",
     "agents/dispatch-fallback.md": "bf9fc5c995bfa8a6",
     "agents/references/clade-review-rules.md": "6bfcab329115f10c",
-    "agents/screenshot-review.md": "ade38cd351e0128f"
+    "agents/screenshot-review.md": "b7d0d75f59fcc0d6"
   }
 }

@@ -188,7 +188,7 @@ Local edits will be reverted by the next sync.
 
       ```bash
       node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
-        --brief /tmp/codex-screenshot-match-analysis-<change>-prompt.md \
+        --brief /tmp/pi-screenshot-match-analysis-<change>-prompt.md \
         --cwd <consumer-repo-root> \
         --label screenshot-match-<change> \
         --model sol --effort xhigh \

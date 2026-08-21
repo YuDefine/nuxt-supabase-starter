@@ -44,7 +44,7 @@ Local edits will be reverted by the next sync.
    2. **若 Fable draft 仍 `spectra park` 了**（不該發生，draft prompt 已明令禁止）：先
       `spectra unpark <change-name>` —— park 後 artifacts 只存 `.git/spectra-app/spectra.db` SQLite
       blob、不在 disk，review Pi 讀不到。
-   3. **Write Pi review prompt 到 `/tmp/codex-spectra-propose-<change-name>-review-prompt.md`**：
+   3. **Write Pi review prompt 到 `/tmp/pi-spectra-propose-<change-name>-review-prompt.md`**：
 
       ```
       請檢查（review）本 repo 已 draft 的 change `<change-name>`，**不要修改任何檔案**，只輸出 findings。
@@ -58,7 +58,7 @@ Local edits will be reverted by the next sync.
 
       ```bash
       node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
-        --brief /tmp/codex-spectra-propose-<change-name>-review-prompt.md \
+        --brief /tmp/pi-spectra-propose-<change-name>-review-prompt.md \
         --cwd <consumer-repo-root> \
         --label spectra-propose-review-<change-name> \
         --model sol --effort max \

@@ -26,7 +26,7 @@ Local edits will be reverted by the next sync.
 
 主線 Claude **MUST** 直接走 [`agent-routing.pi-watch-protocol.md`](../../../rules/core/agent-routing.pi-watch-protocol.md) § Pi 派工的標準流程：
 
-1. `Write` prompt 到 `/tmp/codex-screenshot-review-<slug>-prompt.md`（prompt 開頭字面 `[DELEGATED-BY-CLAUDE-CODE]`）
+1. `Write` prompt 到 `/tmp/pi-screenshot-review-<slug>-prompt.md`（prompt 開頭字面 `[DELEGATED-BY-CLAUDE-CODE]`）
 2. `Bash` background：`node ~/offline/clade/vendor/scripts/pi-dispatch.ts --brief /tmp/... --cwd <consumer> --label screenshot-review-<slug> --model grok-xai --effort low --route routing-table --tier-basis table-row --table-row screenshot-review-verify`
 3. background Bash 回傳 `<task-id>` 後，記錄 owner=`screenshot-review:<slug>` / deadline，並啟動 canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=screenshot-review:<slug> deadline=<ISO>...` inert watch。控制 turn 只准 `TaskOutput(block=false)`、重排同一 prompt或排 lifecycle intervention；NEVER 讀截圖輸出或重播 verify prompt
 4. 收 `<task-notification status=completed>` → claim task id → BashOutput 讀 stdout → 整理結果回報；deadline 時先 `TaskStop(<task-id>)` 並等 terminal，terminal 前保留 ownership

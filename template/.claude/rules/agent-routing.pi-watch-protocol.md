@@ -26,14 +26,14 @@ Local edits will be reverted by the next sync.
 
 模板：
 
-1. 用 **Write** 把指示寫到 `/tmp/codex-<topic>-<slug>-prompt.md`（prompt 太長不要 inline）
+1. 用 **Write** 把指示寫到 `/tmp/pi-<topic>-<slug>-prompt.md`（prompt 太長不要 inline）
 2. **Bash** tool（`run_in_background=true`）：
 
 `<model-slug>` 選檔：命中 [[agent-routing]] § Routing Table 類別 → 照該列（多為 `gpt-5.6-sol`）；本次工作**原本會派 Claude subagent**（原判 `sonnet`／`haiku`）→ 依 § Claude 委派的 model 檔位 派 `gpt-5.6-luna`（sonnet→`--effort high`、haiku→`--effort low`）。判不出來 → `gpt-5.6-sol`。
 
    ```bash
    node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
-     --brief /tmp/codex-<topic>-<slug>-prompt.md \
+     --brief /tmp/pi-<topic>-<slug>-prompt.md \
      --cwd <cwd> \
      --label <topic>-<slug> \
      --model <sol|sol-cursor|luna|luna-cursor|grok-xai|grok-cursor> --effort <low|medium|high|xhigh|max> \
@@ -344,7 +344,7 @@ basis，**NEVER** 隨手挑一個列名湊過去。
 | 情境 | 唯一合法訊號 |
 | --- | --- |
 | 這個 pi 派工 是**你自己**派的 | 你 `Bash(run_in_background)` 拿到的 **jobId** —— `BashOutput(<jobId>)` 與 `<task-notification>`。**NEVER** 改用 `ps` 文字比對認領：pi 的 argv 不含 tenant 欄位 |
-| 這個 pi 派工是**別層**派的（主線看 worktree subagent 的 pi 派工） | 訊號本身含**本次 change / phase 的 slug** 才合法：`/tmp/codex-phase-*-stdout.log` 這類含 slug 的落檔、worktree 的 `git log` 是否長出 `🧹 chore: wt <change>-phase-<N>`、`tasks.md` 的 `[x]` count。**process table 不含 slug，故永不合法** |
+| 這個 pi 派工是**別層**派的（主線看 worktree subagent 的 pi 派工） | 訊號本身含**本次 change / phase 的 slug** 才合法：`/tmp/pi-phase-*-stdout.log` 這類含 slug 的落檔、worktree 的 `git log` 是否長出 `🧹 chore: wt <change>-phase-<N>`、`tasks.md` 的 `[x]` count。**process table 不含 slug，故永不合法** |
 
 **判準一句話：訊號合法 ⟺ 訊號本身認得出這是哪一個 change / phase 的 pi 派工。**
 

@@ -19,7 +19,7 @@ Local edits will be reverted by the next sync.
 
    ```bash
    node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
-     --brief /tmp/codex-8a6-e1-collect-<change>-prompt.md \
+     --brief /tmp/pi-8a6-e1-collect-<change>-prompt.md \
      --cwd <consumer-repo-root> \
      --label spectra-e1-collect-<change> \
      --model grok-xai --effort medium \
@@ -32,7 +32,7 @@ Local edits will be reverted by the next sync.
 
    ```bash
    node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
-     --brief /tmp/codex-8a6-e1-judge-<change>-prompt.md \
+     --brief /tmp/pi-8a6-e1-judge-<change>-prompt.md \
      --cwd <consumer-repo-root> \
      --label spectra-e1-judge-<change> \
      --model sol --effort xhigh \
