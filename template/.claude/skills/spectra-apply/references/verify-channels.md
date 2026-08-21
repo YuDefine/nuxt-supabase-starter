@@ -36,9 +36,9 @@ Local edits will be reverted by the next sync.
 
    Baseline 確認存在但**功能性缺**（dev-login route 不接 fixture user UUID / 受測 endpoint 需要 role 不符 / seed identifier 對應不到 dev-login allow-list / curl 401 因 cookie missing 等），主線 / subagent **MUST** 依序嘗試以下 self-collect path，**全部失敗才**寫 `deferred` annotation：
 
-   **(a)(b) 執行者 — 預設派背景 codex**：
+   **(a)(b) 執行者 — 預設派背景 pi**：
 
-   (a)(b) 兩層**預設**派背景 codex 執行，主線不 foreground 自跑：
+   (a)(b) 兩層**預設**派背景 pi 執行，主線不 foreground 自跑：
 
    ```bash
    node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
@@ -51,8 +51,8 @@ Local edits will be reverted by the next sync.
    （背景跑、stdout 單一 JSON evidence；exit 0=ok / 2=(a)(b) 皆業務 fail / 3=機械故障 / 4=quota。exit 2 → 主線依序降到 (c)(d)，**不**重派同一 brief；exit 3 → 機械故障，主線 fallback foreground 自跑 (a)(b) 再續 chain；exit 4 → 配額擋，本列是 sol，依 [[agent-routing]] § 配額耗盡時的 fallback 紀律先走 `--model sol-cursor` 同 effort 重派（`-cursor` 變體的適用邊界受 TD-520 限制：**NEVER** 用於不可信第三方 code 或會接觸 secrets／prod 憑證的內容；0-A.1 review gate 已明文排除，見 `commit/gates.md` § 0-A.1），**NEVER** 當成機械故障直接 foreground 自跑。）
 
    - **(c)(d) 既有路徑不動**：(c) 維持主線自起 dev server + agent-browser；(d) 已走 `pi-dispatch-screenshot-verify.ts`，**不**改走本 dispatcher
-   - **Evidence annotation 寫回 tasks.md 維持主線**（多 session 共用 working tree 的寫入紀律）— codex 只回報 JSON evidence，**NEVER** 讓 codex 直接 Edit tasks.md
-   - 主線收到 codex JSON evidence 後 **MUST 抽查至少一項**（重跑一條 curl / SELECT 比對回報值）再寫 annotation — **不信 codex 自報**
+   - **Evidence annotation 寫回 tasks.md 維持主線**（多 session 共用 working tree 的寫入紀律）— pi 只回報 JSON evidence，**NEVER** 讓 pi 直接 Edit tasks.md
+   - 主線收到 pi JSON evidence 後 **MUST 抽查至少一項**（重跑一條 curl / SELECT 比對回報值）再寫 annotation — **不信 pi 自報**
 
    **(a) 擴 dev-login route allow-list**（首選；最持久的治根）：
 
@@ -77,10 +77,10 @@ Local edits will be reverted by the next sync.
    - final-state screenshot + DOM 觀察
    - 適用：OAuth provider 在 dev 環境可達 + user 已登入過
 
-   **(d) 派 screenshot-review codex（mode: verify）**：
+   **(d) 派 screenshot-review pi（mode: verify）**：
 
-   - 給 codex 完整 brief（含 dev server URL + known route + expected DOM observation + screenshot path）
-   - codex 跑 final-state screenshot capture
+   - 給 pi 完整 brief（含 dev server URL + known route + expected DOM observation + screenshot path）
+   - pi 跑 final-state screenshot capture
    - 適用：純 final-state visual evidence、不涉及 mutation / multi-role / form fill
 
    **四層全失敗才寫 deferred** + handoff user。Annotation **MUST** 註明已嘗試 path 與失敗原因（避免 user 重複試同樣 path）：
@@ -146,18 +146,18 @@ Local edits will be reverted by the next sync.
       | 角色 | 範圍 | 檔位 |
       | --- | --- | --- |
       | **收集**（輸出不是 gate） | 開 known URL、poll ready_signal、拍 final-state 截圖 | **Pi Grok-4.6 low**（`--model grok-xai`） |
-      | **判定（gate）** | 分析每張截圖是否匹配對應 item 要求（防止亂截圖搪塞） | **codex GPT-5.6-sol xhigh** |
+      | **判定（gate）** | 分析每張截圖是否匹配對應 item 要求（防止亂截圖搪塞） | **pi GPT-5.6-sol xhigh** |
 
       收集便宜跑快、判斷用最高推理力；兩者分開 dispatch 才擋得住「自己拍自己判」。
 
-      **Runtime 選擇**（default Codex model via Pi；Claude subagent fallback）：
+      **Runtime 選擇**（default Pi model；Claude subagent fallback）：
 
-      - **Default — Codex model via Pi**：偵測 `command -v pi` 存在、Pi `openai-codex` OAuth 已就緒且 env `CLADE_FORCE_CLAUDE_SCREENSHOT` 未設 → 呼叫 `node <clade-vendor>/scripts/pi-dispatch-screenshot-verify.ts --change <name> --consumer-path . --dev-server-url <url> --items-json <items.json>`（dispatcher 內部以 **medium** effort 收集截圖）。Dispatcher 跑完 stdout 印 JSON 摘要（`{"runtime":"codex","transport":"pi","change":...,"items":[...],"audit_exit_code":N,"progress_json":"...","review_md":"..."}`），主線解析該 JSON 後進入 **Screenshot Match Analysis gate**（見下方 §）。Codex 模型任一 item `status` 不是 `PASS` 時 → 保留 `[ ]` + 寫 issue / blocker（業務結果，**NEVER** fallback Claude — 同一 brief 在 Claude 也會撞同樣業務問題）
+      - **Default — Pi model**：偵測 `command -v pi` 存在、Pi `openai-codex` OAuth 已就緒且 env `CLADE_FORCE_CLAUDE_SCREENSHOT` 未設 → 呼叫 `node <clade-vendor>/scripts/pi-dispatch-screenshot-verify.ts --change <name> --consumer-path . --dev-server-url <url> --items-json <items.json>`（dispatcher 內部以 **medium** effort 收集截圖）。Dispatcher 跑完 stdout 印 JSON 摘要（`{"runtime":"codex","transport":"pi","change":...,"items":[...],"audit_exit_code":N,"progress_json":"...","review_md":"..."}`），主線解析該 JSON 後進入 **Screenshot Match Analysis gate**（見下方 §）。Pi 模型任一 item `status` 不是 `PASS` 時 → 保留 `[ ]` + 寫 issue / blocker（業務結果，**NEVER** fallback Claude — 同一 brief 在 Claude 也會撞同樣業務問題）
       - **Fallback — Claude subagent**：以下任一情境**才** fallback 到 `screenshot-review` subagent（brief copy/adapt 自 `vendor/snippets/verify-channels/ui-final-state-brief.template.md`）：
         - `command -v pi` 不存在或 Pi `openai-codex` OAuth 未就緒
         - env `CLADE_FORCE_CLAUDE_SCREENSHOT=1` 強制退場（debug / 退場用）
         - Dispatcher exit 非 0 **且** stdout 沒印出可 parse 的 JSON 摘要（機械故障，例如 Pi auth 失效、subprocess crash）
-      - 兩 runtime 走相同的 brief contract（change name、dev server URL、items、Scope）；Pi Codex runtime 多了 self-contained guardrails（machine dispatch 不會 auto-load `screenshot-review.md`）
+      - 兩 runtime 走相同的 brief contract（change name、dev server URL、items、Scope）；Pi runtime 多了 self-contained guardrails（machine dispatch 不會 auto-load `screenshot-review.md`）
 
       **反 bypass（hard rule — 2026-06-11 audit 實證）**：
 
@@ -184,7 +184,7 @@ Local edits will be reverted by the next sync.
 
       **Screenshot Match Analysis gate**（截圖收集完成後 xhigh 分析）：
 
-      Dispatcher 收集完所有截圖後（JSON 摘要已拿到），**MUST** 對每個 `status === "PASS"` 的 item 派 **codex GPT-5.6-sol xhigh** 做截圖 vs 要求匹配分析：
+      Dispatcher 收集完所有截圖後（JSON 摘要已拿到），**MUST** 對每個 `status === "PASS"` 的 item 派 **pi GPT-5.6-sol xhigh** 做截圖 vs 要求匹配分析：
 
       ```bash
       node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
@@ -231,8 +231,8 @@ Local edits will be reverted by the next sync.
 
       **分析結果處理**：
       - **全部 MATCH** → 對每個 item 寫 `(verified-ui:)` annotation
-      - **任一 MISMATCH / UNCERTAIN** → 該 item 保留 `[ ]`，寫 `（issue: screenshot-match-analysis: <reason>）`；主線重派 codex medium 重拍該 item（最多 2 輪），重拍後再跑一次 xhigh 分析
-      - **Codex xhigh 不可用 / 機械故障** → fallback 派 Sonnet 5 讀截圖檔做 visual sanity check（Sonnet 5 可讀圖、速度快），判定 MATCH 才寫 annotation
+      - **任一 MISMATCH / UNCERTAIN** → 該 item 保留 `[ ]`，寫 `（issue: screenshot-match-analysis: <reason>）`；主線重派 pi medium 重拍該 item（最多 2 輪），重拍後再跑一次 xhigh 分析
+      - **Pi xhigh 不可用 / 機械故障** → fallback 派 Sonnet 5 讀截圖檔做 visual sanity check（Sonnet 5 可讀圖、速度快），判定 MATCH 才寫 annotation
 
       **NEVER** 跳過 Screenshot Match Analysis 直接寫 `(verified-ui:)` annotation — 收集與判斷分離是防搪塞的核心機制。
 

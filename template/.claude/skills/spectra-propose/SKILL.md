@@ -52,37 +52,37 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
 
    本 skill 的 draft 階段有三條可選路徑。**Step 0 開頭 MUST 用 AskUserQuestion 跳三選一選單**讓使用者選（除非使用者已明確指定路徑，見下方捷徑）：
 
-   - **A. Codex flow（預設 / 推薦，選單第一項）** — Codex GPT-5.6-sol max draft + 主線 Claude Fable 5 xhigh cross-check。draft + cross-check 比擇一穩，wall-clock 最短。
-   - **B. 三模型交叉 pipeline** — Claude Fable 5 xhigh draft → Codex GPT-5.6-sol max review（fresh session、只出 findings、不改檔）→ 主線 Claude Fable 5 xhigh final check。三模型交叉（Fable draft + Codex review + Fable final）比擇一穩，wall-clock 較長（多一層背景等待）。
+   - **A. Pi flow（預設 / 推薦，選單第一項）** — Pi GPT-5.6-sol max draft + 主線 Claude Fable 5 xhigh cross-check。draft + cross-check 比擇一穩，wall-clock 最短。
+   - **B. 三模型交叉 pipeline** — Claude Fable 5 xhigh draft → Pi GPT-5.6-sol max review（fresh session、只出 findings、不改檔）→ 主線 Claude Fable 5 xhigh final check。三模型交叉（Fable draft + Pi review + Fable final）比擇一穩，wall-clock 較長（多一層背景等待）。
    - **C. 純 Claude** — 主線 Claude Fable 5 xhigh 直接走 Step 1~11（含 Step 8 補 7 步 Design Review check）。
 
    選單寫法：option A label 標「(預設/推薦)」並排第一（使用者按 Enter 即走現狀）。
 
    **明確指定捷徑（跳過選單，直接走對應選項）**：使用者訊息已明確指定路徑時**不問選單**：
-   - 「不要派 codex」「我要純 Claude propose」「直接你做」→ **選項 C**
+   - 「不要派 pi」「不要派 codex」「我要純 Claude propose」「直接你做」→ **選項 C**
    - 「用 Fable」「走 Fable pipeline」「Fable 起草」「三模型交叉」「Fable draft+review」→ **選項 B**
-   - 「用 codex」「現有流程」「照舊」→ **選項 A**
+   - 「用 pi」「用 codex」「現有流程」「照舊」→ **選項 A**
 
    選定後依對應選項段落執行。**選項 A / B 在 Step 0 內完成整個 draft + check，本 session 不再執行 Step 1~11**；只有**選項 C** 才往下跑 Step 1~11。
 
    ---
 
-   ### 選項 A：Codex flow（Codex draft + 主線 cross-check）
+   ### 選項 A：Pi flow（Pi draft + 主線 cross-check）
 
    選 A 後 **MUST** 完整讀 `references/dispatch-option-a.md` 並依序執行：
 
-   - **Phase 0a**：解析 change name + requirement → 寫 draft prompt 檔（範本含 Plan-first / Phase Purity / Manual Review Kind Marker / Backend-only 規約 / FIXTURES sample / 語言遵循 / **NEVER park**）→ 背景 Pi Codex dispatcher（max effort）→ notification-only watch（**NEVER** 短輪詢）。
+   - **Phase 0a**：解析 change name + requirement → 寫 draft prompt 檔（範本含 Plan-first / Phase Purity / Manual Review Kind Marker / Backend-only 規約 / FIXTURES sample / 語言遵循 / **NEVER park**）→ 背景 Pi dispatcher（max effort）→ notification-only watch（**NEVER** 短輪詢）。
    - **Phase 0b**（收到 completed 通知**立刻**跑，step 1–10）：讀 stdout → `post-propose-check.sh` → `post-propose-manual-review-check.sh` → **Check 7 hard gate（`--check7-only` MUST exit 0 才續行，NEVER 跳過）** → `design-inject.sh` → 補 Design Review 7 步 → Manual Review Marker Hygiene（Rule 1–6，Rule 6 = 結構化 entry 落盤）→ 語言遵循 check → **掃 design.md Open Questions（非空 MUST 立刻 AskUserQuestion 逐題問，NEVER 自行假設答案）** → `spectra analyze` / `validate` → commit artifacts → 回報。
-   - 修補一律主線自己 Edit，**NEVER** 丟回 codex。
+   - 修補一律主線自己 Edit，**NEVER** 丟回 pi。
 
    ---
 
-   ### 選項 B：三模型交叉 pipeline（Fable draft → Codex review → 主線 Fable final check）
+   ### 選項 B：三模型交叉 pipeline（Fable draft → Pi review → 主線 Fable final check）
 
    選 B 後 **MUST** 完整讀 `references/dispatch-option-b.md` 並依序執行三段背景 pipeline：
 
    - **Phase B-0a**：沿用選項 A draft prompt 範本寫 `-draft-prompt.md` → 背景 `claude -p --model claude-fable-5 --effort xhigh` → notification-only watch。
-   - **Phase B-0b**：Fable draft 完成 → 寫 `-review-prompt.md`（**只出 findings、禁止改檔**）→ 背景 Pi Codex review（max）。
+   - **Phase B-0b**：Fable draft 完成 → 寫 `-review-prompt.md`（**只出 findings、禁止改檔**）→ 背景 Pi review（max）。
    - **Phase B-0c**：主線整合 findings + 跑選項 A Phase 0b step 3–9 全套 cross-check，主線自己 Edit 修。
 
    ---
@@ -136,16 +136,16 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
    ### 禁止事項（重點重申，A / B / C 通用）
 
    - **NEVER** 跳過 Step 0 選單（除非使用者**明確**指定路徑 — 見上方 § 明確指定捷徑）。預設**MUST**跳三選一選單
-   - **NEVER** 派 draft（codex）後不跑 cross-check / final check（post-propose-check + design-inject + 主線補 Design Review 7 步 + spectra analyze）
-   - **NEVER** 把 cross-check / final check 的修補工作丟回 codex（太慢、來回成本高）— 主線**自己** Edit 修
+   - **NEVER** 派 draft（pi）後不跑 cross-check / final check（post-propose-check + design-inject + 主線補 Design Review 7 步 + spectra analyze）
+   - **NEVER** 把 cross-check / final check 的修補工作丟回 pi（太慢、來回成本高）— 主線**自己** Edit 修
    - **NEVER** 沉默等使用者來問進度；通知一到自己讀檔 + 續跑後續 phase
-   - **NEVER** 派 draft（codex）而 prompt 漏掉 Plan-first 段落 — 必須在動筆前先輸出 `## Plan`（要動哪些檔 / 每檔寫什麼 / phase 切分），主線後續 check 才有對齊基準
+   - **NEVER** 派 draft（pi）而 prompt 漏掉 Plan-first 段落 — 必須在動筆前先輸出 `## Plan`（要動哪些檔 / 每檔寫什麼 / phase 切分），主線後續 check 才有對齊基準
 
    **選項 B 專屬 NEVER**：
 
    - **NEVER** 把 Phase B-0a 的 draft prompt（`-draft-prompt.md`）與 Phase B-0b 的 review prompt（`-review-prompt.md`）混用 — draft 會寫檔，review 只出 findings、禁止改檔
-   - **NEVER** 在 Phase B-0b 派 Codex review 前，讓 artifacts 處於 parked 狀態（artifacts 在 SQLite blob、不在 disk，Codex 讀不到）。正常流程不會 park；若 draft 違規 park 了，先 `spectra unpark`
-   - **NEVER** 讓 Codex review 階段改檔 — review prompt 必含「禁止 Edit / Write、只輸出 findings」；實際修補由主線 Phase B-0c 做
+   - **NEVER** 在 Phase B-0b 派 Pi review 前，讓 artifacts 處於 parked 狀態（artifacts 在 SQLite blob、不在 disk，Pi 讀不到）。正常流程不會 park；若 draft 違規 park 了，先 `spectra unpark`
+   - **NEVER** 讓 Pi review 階段改檔 — review prompt 必含「禁止 Edit / Write、只輸出 findings」；實際修補由主線 Phase B-0c 做
 
    **選 A / B 時本 session 不再執行任何 Step 1 ~ 11**（避免雙重生產）— Step 0 結束本 skill。
 
@@ -497,7 +497,7 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
    Verify **every** rule from Step 5.5 Manual Review Marker Hygiene Check（Rule 1–6，定義在 `references/dispatch-option-a.md`）。下列是逐條驗收清單，**不是** Step 5.5 的完整替代——條文以 Step 5.5 為準：
 
    1. **Every `## 人工檢查` item line MUST carry a legal leading marker** (right after `#N` / `#N.M`, before the description): `[review:ui]` / `[discuss]` / `[verify:e2e]` / `[verify:api]` / `[verify:ui]` / verify multi-marker `[verify:<a>+<b>]` or `[verify:<a>+<b>+<c>]`. Default Kind Derivation Rule is a fallback for legacy in-flight items only — newly authored content **MUST** be explicit. Default fallback does NOT cover any `verify:*` channel.
-   2. **New `[verify:auto]` is forbidden**. If codex draft contains `[verify:auto]`, main thread **MUST** inline replace it: pure API → `[verify:api]`; mutation + visual → `[verify:api+ui]`; persistence / full journey → `[verify:e2e]`.
+   2. **New `[verify:auto]` is forbidden**. If pi draft contains `[verify:auto]`, main thread **MUST** inline replace it: pure API → `[verify:api]`; mutation + visual → `[verify:api+ui]`; persistence / full journey → `[verify:e2e]`.
    3. **Evidence-collection items MUST be marked `[discuss]` or `[verify:api]`**. SSH / `docker exec` / `psql` / `\d <table>` / `SELECT FROM` / controlled drift fabrication / migration existence verification / 商業判斷類「分布是否符合預期」→ `[discuss]`; reproducible HTTP / `curl` round-trip → `[verify:api]`.
    4. **Real user round-trip items MUST use the strongest explicit channel**: persistence / reload / full journey → `[verify:e2e]`; HTTP status / backend contract → `[verify:api]`; final-state visual only → `[verify:ui]`; mutation + visual → `[verify:api+ui]`; human-only allowlist → `[review:ui]`.
    5. **Multi-marker cannot mix verify channels with human/discuss kinds**. `[verify:api+ui]` is valid; `[verify:api+review:ui]` and `[verify:api+discuss]` are invalid.
@@ -511,7 +511,7 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
 
       欄位語義、四種形狀的範本、三條 NEVER 見 cookbook `~/offline/clade/vendor/snippets/manual-review-entry/`。**`--migrate` 是既有 change 的遷移路徑，NEVER 當新 change 的正規路徑**——它產出的 `source: 'derived'` 標記本身就代表「這筆是考古來的、可能不準」。落盤後 `audit-manual-executability.ts` 對該 item 不再報 `PROSE-ONLY-ENTRY`。
 
-   When a violation is detected, the main thread Edit tasks.md inline (do NOT round-trip back to codex). For backend-only changes specifically:
+   When a violation is detected, the main thread Edit tasks.md inline (do NOT round-trip back to pi). For backend-only changes specifically:
 
    - Pure technical evidence items (SSH / psql / `\d` / `SELECT` / drift fabrication / migration existence verify) **MUST** be moved out of `## 人工檢查` into `## N. Backend Verification Evidence` section (位置：最後一個功能區塊之後、`## 人工檢查` 之前；N = 上一個功能區塊序號 + 1) — apply Claude self-runs them and pastes evidence under each task.
    - `## 人工檢查` retains only `[discuss]` items in three categories plus reproducible `[verify:api]` HTTP round-trips:
@@ -539,8 +539,8 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
    - All artifacts (`proposal.md` / `design.md` / `tasks.md` / `specs/**/*.md`) **MUST** be written in 繁體中文.
    - Code identifiers, file paths, technical names (e.g., `audit_signed_chain`, `business_keys_drift`, `PostgREST`), SQL blocks, shell commands, and inline `code` remain untranslated.
    - OpenSpec / Spectra 制式英文標題（如 `## Why`、`## What Changes`、`## Non-Goals`、`## Affected Entity Matrix`、`## User Journeys`、`## Implementation Risk Plan`）保留英文，body 內容必須繁中。
-   - If codex draft produced English artifacts despite the convention, fix inline now — main thread Edit 翻譯，**不要**回 codex 重 draft.
-   - Reason: codex GPT-5.6-sol 在 prompt 已有繁中指示時仍可能默認輸出英文；主線 cross-check 是最後一道翻譯把關。違反語言慣例會讓使用者在 review/manual-check 階段卡關。
+   - If pi draft produced English artifacts despite the convention, fix inline now — main thread Edit 翻譯，**不要**回 pi 重 draft.
+   - Reason: pi GPT-5.6-sol 在 prompt 已有繁中指示時仍可能默認輸出英文；主線 cross-check 是最後一道翻譯把關。違反語言慣例會讓使用者在 review/manual-check 階段卡關。
 
 ---
 

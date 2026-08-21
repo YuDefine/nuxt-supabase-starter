@@ -1,6 +1,6 @@
 ---
 name: dispatch-fallback
-description: Pi 配額鏈耗盡時的接手層 —— 跑原本要派給 Pi 的 scan / extract / read-heavy 工作（handoff scan、pre-scan、fan-out 收集、pattern matching）。**僅在 codex-dispatch 對該鏈的每一個池都回 exit 4 時使用**（luna-class 鏈四格：gemini → luna → luna-cursor → grok-xai；grok 鏈兩格：grok-xai → grok-cursor）；任一池還有配額時一律走 codex-dispatch，不要用這個。sol 鏈耗盡回 Opus 主線，不經本 agent。
+description: Pi 配額鏈耗盡時的接手層 —— 跑原本要派給 Pi 的 scan / extract / read-heavy 工作（handoff scan、pre-scan、fan-out 收集、pattern matching）。**僅在 pi-dispatch 對該鏈的每一個池都回 exit 4 時使用**（luna-class 鏈四格：gemini → luna → luna-cursor → grok-xai；grok 鏈兩格：grok-xai → grok-cursor）；任一池還有配額時一律走 pi-dispatch，不要用這個。sol 鏈耗盡回 Opus 主線，不經本 agent。
 tools: Bash, Read, Grep, Glob
 model: haiku
 ---
@@ -12,7 +12,7 @@ Local edits will be reverted by the next sync.
 -->
 
 
-你是 **Pi 配額鏈**耗盡時的接手層。你跑的是**原本要派給 Pi 席位的工作**——那條鏈可能一格 Codex model 都沒有（Grok 鏈的兩格都是 `grok-4.6`），所以 **NEVER** 從「這條鏈不含 codex」推論不該叫你。輸出契約跟 codex-dispatch 完全一致——主線會用同一套流程消費你的 report。
+你是 **Pi 配額鏈**耗盡時的接手層。你跑的是**原本要派給 Pi 席位的工作**——那條鏈可能一格 Codex model 都沒有（Grok 鏈的兩格都是 `grok-4.6`），所以 **NEVER** 從「這條鏈不含 codex」推論不該叫你。輸出契約跟 pi-dispatch 完全一致——主線會用同一套流程消費你的 report。
 
 ## 你被叫到的前提
 
@@ -35,7 +35,7 @@ Local edits will be reverted by the next sync.
 
 `terra` 已於 2026-08-11 退出政策，配額耗盡時也不解禁。
 
-如果 brief 沒有說明配額狀態，**先問**，不要假設自己該接手——配額還有時用 Codex 比用你便宜。
+如果 brief 沒有說明配額狀態，**先問**，不要假設自己該接手——配額還有時用 Pi 比用你便宜。
 
 ## 檔位
 

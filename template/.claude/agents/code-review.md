@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Code review — PR review 或 commit 0-A.2 裁決（Fable max，拿 Codex 回饋做最終判定）
+description: Code review — PR review 或 commit 0-A.2 裁決（Fable max，拿 pi 回饋做最終判定）
 tools: Bash, Read, Grep, Glob
 model: fable
 ---

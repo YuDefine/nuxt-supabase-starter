@@ -20,7 +20,7 @@ Local edits will be reverted by the next sync.
 
 Implement tasks from a Spectra change.
 
-> **Ownership**（clade fork；cross-phase matrix in `rules/core/spectra-workflow.md`）：apply 負責 code 正確性 + Class B UI view phase refactor invariant（Step 6c / Layer B：無 column 整欄 fallback + 0 個 4xx/5xx）+ review-rules 機械規則掃描（Step 6d：`patterns.json` multi-line match，補 pre-commit hook 逐行 grep 漏抓的跨行 Vue props）+ Design Review data-sanity（Layer C：client param vs server schema bound）+ pre-handoff 5-維度 cross-check（Step 8a.6 / Layer E.1 主線 + E.2 codex）。**不**負責 user 主觀視覺 / UX 真人驗收（manual review / review-gui 管）。
+> **Ownership**（clade fork；cross-phase matrix in `rules/core/spectra-workflow.md`）：apply 負責 code 正確性 + Class B UI view phase refactor invariant（Step 6c / Layer B：無 column 整欄 fallback + 0 個 4xx/5xx）+ review-rules 機械規則掃描（Step 6d：`patterns.json` multi-line match，補 pre-commit hook 逐行 grep 漏抓的跨行 Vue props）+ Design Review data-sanity（Layer C：client param vs server schema bound）+ pre-handoff 5-維度 cross-check（Step 8a.6 / Layer E.1 主線 + E.2 pi）。**不**負責 user 主觀視覺 / UX 真人驗收（manual review / review-gui 管）。
 
 **Input**: Optionally specify a change name (e.g., `/spectra-apply add-auth`). If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
 
@@ -114,7 +114,7 @@ Implement tasks from a Spectra change.
 
       Wait for the dispatched skill to return, surface its report to the user, and STOP — do **not** re-enter Step 1 in the parent session.
 
-      While waiting: the subagent dispatches and watches its own codex processes (Step 6b Class C, Step 8a verify channels, pre-handoff checks). The parent **MUST NOT** probe those with `ps` / `pgrep` / `/proc` — that output carries no tenant information in either direction, so it produces confident wrong answers rather than none (TD-351; `agent-routing.pi-watch-protocol.md` § 跨 sandbox 可見度約束 v2). Ask via `SendMessage`, or read signals that name the change/phase slug.
+      While waiting: the subagent dispatches and watches its own pi processes (Step 6b Class C, Step 8a verify channels, pre-handoff checks). The parent **MUST NOT** probe those with `ps` / `pgrep` / `/proc` — that output carries no tenant information in either direction, so it produces confident wrong answers rather than none (TD-351; `agent-routing.pi-watch-protocol.md` § 跨 sandbox 可見度約束 v2). Ask via `SendMessage`, or read signals that name the change/phase slug.
 
       **Fallback** — if the Skill tool / `/wt` dispatch is unavailable in this environment (rare degradation; e.g., minimal runtime without skill support), **NEVER** hand the worktree path or invocation back to the user. If the parent can legally continue in that worktree, continue directly. If a separate interactive session is required, MUST Read `~/offline/clade/vendor/snippets/herdr-session-handoff/README.md`, dispatch the durable change prompt with `herdr-session-handoff.ts`, and return its workspace / tab / pane receipt.
 
@@ -382,20 +382,20 @@ If there is no AskUserQuestion tool available, present options as plain text and
    1. **Read tasks.md** and identify all `## N.` phase sections
    2. **For each phase, classify into one of three categories**（依序判定，命中即停）:
       - **A. Design Review phase** — title contains "Design Review" OR phase body references `/design improve` / `/impeccable audit` / `/impeccable *` / `review-screenshot` / `/design *`
-        → **主線 Claude Opus 5 xhigh 自己做**，**永不**派 codex
-        → Design skill is Claude Code first-class; codex tooling weak in this domain
+        → **主線 Claude Opus 5 xhigh 自己做**，**永不**派 pi
+        → Design skill is Claude Code first-class; pi tooling weak in this domain
       - **B. UI view phase** — phase 內任一 task 描述/路徑指涉 view 層檔案：`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且**該 phase 沒有摻入非 view 的 frontend / backend 工作（store / hook / API client / type / util / migration / API server）
-        → **主線 Claude Opus 5 xhigh 自己做**，**永不**派 codex——UI view 實作在 `agent-routing.md` § 派不派 的不外派清單，**NEVER** 派 Pi 任一 model、**NEVER** 派 Claude subagent
+        → **主線 Claude Opus 5 xhigh 自己做**，**永不**派 pi——UI view 實作在 `agent-routing.md` § 派不派 的不外派清單，**NEVER** 派 Pi 任一 model、**NEVER** 派 Claude subagent
         → **NEVER** 因為 phase 大、時間晚、非 view phase 的 dispatch 管線現成就轉派——那條管線是 C 類專用
         → 實作完、該 phase commit / 標 done **之前**，照跑 Step 6c / 6d 檢查與 Design Review gate
         → frontend 但非 view 的工作（store / hook / API client / type / util）不在此範圍，走 C 類
       - **C. Other phase** — 上述兩類以外（schema / migration / API server / CLI / 純 backend / frontend 但非 view 的 store / hook / API client / type / util / unit test / docs）
-        → **派 background Codex，統一走泛用 dispatcher 的 `spectra-phase-implementation` row（Sol high）**
-        → Phase 粒度避免大量 Codex round-trip；model／effort／origin 由 dispatcher receipt 與 ledger 鎖定
-        → **在 Form 3 / Form 4 下這一步由 worktree subagent 自己派**，per `agent-routing.md` § Dispatch 入口「codex MUST 由該層編排者在其自身 sandbox 內直接 Bash 派」。准入條件是**該 subagent 自跑完整 Codex Watch Protocol**（notification-only + 安全網 fallback），做不到就退回薄中介禁令。主線對這些 codex **零探針**（TD-351）
+        → **派 background Pi，統一走泛用 dispatcher 的 `spectra-phase-implementation` row（Sol high）**
+        → Phase 粒度避免大量 Pi round-trip；model／effort／origin 由 dispatcher receipt 與 ledger 鎖定
+        → **在 Form 3 / Form 4 下這一步由 worktree subagent 自己派**，per `agent-routing.md` § Dispatch 入口「pi MUST 由該層編排者在其自身 sandbox 內直接 Bash 派」。准入條件是**該 subagent 自跑完整 Pi Watch Protocol**（notification-only + 安全網 fallback），做不到就退回薄中介禁令。主線對這些 pi **零探針**（TD-351）
    3. **Mixed-phase fallback**（A、B 都不是純 view、又混雜 view 與非 view 工作）:
       - **看該 phase 是否已開工**（任一 task `[x]`，或 git history 顯示 phase 內檔案已被改）:
-        - **已開工** → **主線整個 phase 自己做**（safety fallback；不重切、不派 codex；該 phase 內的 codex 工作量由主線吸收）
+        - **已開工** → **主線整個 phase 自己做**（safety fallback；不重切、不派 pi；該 phase 內的 pi 工作量由主線吸收）
         - **未開工** → **STOP**，回覆使用者:
           ```
           phase `<N>. <title>` 同時混雜 UI view 與非 UI 工作，違反新版 Phase Dispatch 規則。
@@ -405,7 +405,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
    4. **NEVER** dispatch Phase Dispatch（Step 6b）with `medium` effort — schema drift / cross-file refactor / enum exhaustiveness require `high` minimum。Step 8a 系列收集工作允許 `medium`
    5. **NEVER** dispatch task-by-task — phase-level only
 
-   **C 類 phase dispatch 執行**：**每一個** C 類 phase 派工前 **MUST** 完整讀 `references/pi-phase-dispatch.md`——classifier execution 欄位、eligible Luna read-only prescan、shadow-only marker、共用 template／output schema、background Pi Codex dispatcher invocation、Codex Watch Protocol，以及 notification 後的 **MUST checks**（commit boundary / view-layer drift double-check / scope cross-check / gate replay）。**NEVER** 憑記憶派工、退回 raw `codex exec`、自行覆寫 classifier 或跳過 post-notification checks；主線收報後 re-classify 下一個 phase。
+   **C 類 phase dispatch 執行**：**每一個** C 類 phase 派工前 **MUST** 完整讀 `references/pi-phase-dispatch.md`——classifier execution 欄位、eligible Luna read-only prescan、shadow-only marker、共用 template／output schema、background Pi dispatcher invocation、Pi Watch Protocol，以及 notification 後的 **MUST checks**（commit boundary / view-layer drift double-check / scope cross-check / gate replay）。**NEVER** 憑記憶派工、退回 raw `codex exec`、自行覆寫 classifier 或跳過 post-notification checks；主線收報後 re-classify 下一個 phase。
 
    6. After ALL C 類 phases complete → **本次 apply session 內 MUST 完成**所有 A、B 類 phases：**每一個 B 類 phase** 依 Step 6b 的 B 類派工形狀派 `--model grok-xai` 實作（瑣碎 UI 修照 Step 6b 主線直做），收回後主線跑 Step 6c / 6d；**A 類（Design Review）主線自己做**——**直接 invoke Skill tool** 跑 `/design improve`、`/impeccable audit`、`review-screenshot` 等 Claude Code first-class skill，完整跑完該 phase 所有 tasks 並標 `[x]`。
 
@@ -422,13 +422,13 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    **理由**：refactor 不得改變 observable behavior；失效鏈實證見 `references/ui-phase-gates.md` § Step 6c 理由。
 
-   **觸發範圍**：每個 **Class B（UI view）phase** 由主線在該 phase 實作完成後、commit / 標 tasks done **之前**，跑一次。Class A / Class C phase 不觸發（Class C 已由 codex view-layer guard 擋住 view 改動；Class A 是純設計審查）。Phase 內 touched files 沒有 `.vue` list/table page → script 自動 skip（exit 0），不需主線預判。
+   **觸發範圍**：每個 **Class B（UI view）phase** 由主線在該 phase 實作完成後、commit / 標 tasks done **之前**，跑一次。Class A / Class C phase 不觸發（Class C 已由 pi view-layer guard 擋住 view 改動；Class A 是純設計審查）。Phase 內 touched files 沒有 `.vue` list/table page → script 自動 skip（exit 0），不需主線預判。
 
    **執行流程**：
 
    1. **取得 dev server**（per `rules/core/proactive-skills.md` § Dev Server Auto-Spawn）：若本 session 尚未起 dev server，scan free port 3001–3050（避開 3000）`run_in_background` 起，記下 URL；已起則重用。
    2. **收集本 phase touched view files**：`git -C <worktree> diff main..HEAD --name-only -- '*.vue'`（或本 phase commit 的 `.vue` 變更），組成 comma-separated list。
-   3. **跑 check**（從 clade central 呼叫，`<clade-vendor>` 解析為 `~/offline/clade/vendor`，與 Step 8a.4 codex-dispatch 同慣例）：
+   3. **跑 check**（從 clade central 呼叫，`<clade-vendor>` 解析為 `~/offline/clade/vendor`，與 Step 8a.4 pi-dispatch 同慣例）：
 
       ```bash
       node <clade-vendor>/scripts/refactor-invariant-check.ts \
@@ -468,10 +468,10 @@ If there is no AskUserQuestion tool available, present options as plain text and
    **Reminder: Track progress by editing checkboxes in the tasks file only. Do not use any built-in task tracker.**
 
    **Dispatch reminder**: For each phase, follow Step 6b's three-way classification:
-   - Class C（Other）→ 以泛用 dispatcher 的 `spectra-phase-implementation` row dispatch Codex Sol high（phase granularity）
+   - Class C（Other）→ 以泛用 dispatcher 的 `spectra-phase-implementation` row dispatch Pi Sol high（phase granularity）
    - Class A（Design Review）→ 主線 Opus 5 xhigh self-execute：**MUST invoke Skill tool** 跑 `/design improve` + `/impeccable audit` 完成全部 tasks（per Step 6b §6 hard rule；NEVER 停下叫 user 自己跑）
      - 這兩支是 Claude Code 內建 skill，不知道 clade Routing Table 存在。它們內文若叫起 `Agent`（含省略 `model` 而繼承主線 Opus 的形狀），照樣會被 PreToolUse:Agent gate default-deny 攔下（per [[agent-routing]] § Routing Table，TD-513）。攔下時 **MUST** 照 block message 走 dispatch／waive／fallback；Design Review 本身仍是主線自己做，**NEVER** 把它變成外派
-   - Class B（UI view: component / page / view / layout / styling）→ 主線 Opus 5 xhigh self-execute，永不派 codex（形狀見 Step 6b B 類）。該 phase 實作完、commit / 標 done **之前** MUST 跑 **Step 6c Refactor Invariant Check** + **Step 6d Review Rules Check**
+   - Class B（UI view: component / page / view / layout / styling）→ 主線 Opus 5 xhigh self-execute，永不派 pi（形狀見 Step 6b B 類）。該 phase 實作完、commit / 標 done **之前** MUST 跑 **Step 6c Refactor Invariant Check** + **Step 6d Review Rules Check**
    - Mixed phase（UI view + 非 view 摻同 phase）→ 已開工主線吸收、未開工 STOP 提示 `/spectra-ingest`
 
    For each pending task:
@@ -596,7 +596,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
    | 角色 | 範圍 | 檔位 |
    | --- | --- | --- |
    | **收集**（輸出不是 gate） | Step 8a 全部（含 8a.5 / 8a.6 / 8a.7）跑 verify channel、截圖、hook、sweep | **Pi Grok-4.6 low**（`--model grok-xai`） |
-   | **判定（gate）** | 截圖收集完成後分析每張截圖是否匹配對應要求（防止亂截圖搪塞） | **codex GPT-5.6-sol xhigh** |
+   | **判定（gate）** | 截圖收集完成後分析每張截圖是否匹配對應要求（防止亂截圖搪塞） | **pi GPT-5.6-sol xhigh** |
 
    Read `tasks.md` `## 人工檢查` 找未勾 `[verify:e2e]` / `[verify:api]` / `[verify:ui]` / `[verify:<a>+<b>]` / deprecated `[verify:auto]` items。**MUST** 先處理完所有 verify channels 才進 Step 8b。
 
@@ -604,9 +604,9 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    Cookbook 與範本入口：`vendor/snippets/verify-channels/README.md`。
 
-   **Pre-verify baseline check + 自接路徑**：dispatch 任何 verify channel 前 **MUST** 完整讀 `references/verify-channels.md` § Pre-verify——per-channel baseline 檢查、mis-marked item reclassify（TD-176）、以及 baseline 存在但功能性缺時的 (a)(b)(c)(d) self-collect chain（預設派背景 codex，per [[pitfall-verify-evidence-handoff-instead-of-self-collect]]）。**四層全失敗才**寫 `deferred` annotation 且 MUST 註明已嘗試 path；主線收 codex JSON evidence 後 **MUST 抽查至少一項**再寫 annotation。
+   **Pre-verify baseline check + 自接路徑**：dispatch 任何 verify channel 前 **MUST** 完整讀 `references/verify-channels.md` § Pre-verify——per-channel baseline 檢查、mis-marked item reclassify（TD-176）、以及 baseline 存在但功能性缺時的 (a)(b)(c)(d) self-collect chain（預設派背景 pi，per [[pitfall-verify-evidence-handoff-instead-of-self-collect]]）。**四層全失敗才**寫 `deferred` annotation 且 MUST 註明已嘗試 path；主線收 pi JSON evidence 後 **MUST 抽查至少一項**再寫 annotation。
 
-   **執行流程**：**MUST** 完整讀 `references/verify-channels.md` § 執行流程，逐 channel 執行——`[verify:e2e]` 主線寫 Playwright spec、`[verify:api]` 主線跑 HTTP round-trip、`[verify:ui]` 走 codex dispatcher + **Screenshot Match Analysis gate**（收集 medium / 判斷 xhigh 分離）、multi-marker 依 `e2e → api → ui`、deprecated `[verify:auto]` 視為 `[verify:api+ui]`。evidence 一律走 `evidence-store.ts` 寫入（payload 進 sidecar，短 marker 貼 tasks.md）。
+   **執行流程**：**MUST** 完整讀 `references/verify-channels.md` § 執行流程，逐 channel 執行——`[verify:e2e]` 主線寫 Playwright spec、`[verify:api]` 主線跑 HTTP round-trip、`[verify:ui]` 走 pi dispatcher + **Screenshot Match Analysis gate**（收集 medium / 判斷 xhigh 分離）、multi-marker 依 `e2e → api → ui`、deprecated `[verify:auto]` 視為 `[verify:api+ui]`。evidence 一律走 `evidence-store.ts` 寫入（payload 進 sidecar，短 marker 貼 tasks.md）。
 
    **反 bypass（hard rule — 2026-06-11 audit 實證）**：
 
@@ -628,7 +628,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
    bash scripts/spectra-advanced/post-propose-manual-review-check.sh <change-name>
    ```
 
-   Exit 2 = pattern findings (any of `ABSTRACT_REFERENCE` / `CARD_WITHOUT_UID` / `UI_ITEM_NO_URL` / `MULTI_STEP_NOT_SCOPED` / `REVIEW_UI_BACKEND_ROUNDTRIP` / `INTERNAL_JARGON_LEAKAGE`). Main thread **SHALL** Edit `tasks.md` directly to fix findings inline per hook stdout remediation guidance — do NOT round-trip to `codex` (slow). Reference: `vendor/snippets/manual-review-enforcement/patterns.json` + `rules/core/manual-review.data-readiness.md`.
+   Exit 2 = pattern findings (any of `ABSTRACT_REFERENCE` / `CARD_WITHOUT_UID` / `UI_ITEM_NO_URL` / `MULTI_STEP_NOT_SCOPED` / `REVIEW_UI_BACKEND_ROUNDTRIP` / `INTERNAL_JARGON_LEAKAGE`). Main thread **SHALL** Edit `tasks.md` directly to fix findings inline per hook stdout remediation guidance — do NOT round-trip to `pi` (slow). Reference: `vendor/snippets/manual-review-enforcement/patterns.json` + `rules/core/manual-review.data-readiness.md`.
 
    Legitimate false positive (e.g., 真機掃 SMS 無 dev replay endpoint, sample inline value `weekly_target=5000`) → add `@no-manual-review-check[<reason>]` trailing marker per `manual-review.md`「`@no-manual-review-check` Marker」, re-run hook to confirm bypass recognized, then proceed.
 
@@ -643,13 +643,13 @@ If there is no AskUserQuestion tool available, present options as plain text and
    | 角色 | 範圍 | 檔位 |
    | --- | --- | --- |
    | **收集**（輸出不是 gate） | E.1 五維 evidence 收集 | **Pi Grok-4.6 medium（`--model grok-xai`）** |
-   | **判定（gate）** | E.1 對收集結果做五維判定 | **codex GPT-5.6-sol xhigh** |
-   | **判定（gate）** | E.2 cross-model second opinion（另起 session 獨立審） | **codex GPT-5.6-sol xhigh** |
+   | **判定（gate）** | E.1 對收集結果做五維判定 | **pi GPT-5.6-sol xhigh** |
+   | **判定（gate）** | E.2 cross-model second opinion（另起 session 獨立審） | **pi GPT-5.6-sol xhigh** |
 
    **MUST** before Step 8b handoff 先派 **Pi Grok-4.6 medium（`--model grok-xai --table-row spectra-prehandoff-collect`）** 跑 5-dimension 收集（template 見下）。
-   收集回來後 **MUST** 另派 **codex GPT-5.6-sol xhigh** 對收集結果做 5-dimension 判定——判定是 gate，**NEVER** 與收集併在同一次 dispatch：
+   收集回來後 **MUST** 另派 **pi GPT-5.6-sol xhigh** 對收集結果做 5-dimension 判定——判定是 gate，**NEVER** 與收集併在同一次 dispatch：
 
-   **E.1 + E.2 執行**：**MUST** 完整讀 `references/pre-handoff-checks.md` § Step 8a.6 執行——E.1（codex medium 收集 5-dimension evidence → codex xhigh 判定 → 主線寫 finding report、FAIL 補 `（issue:）` / strip 假 annotation → `pre-handoff-ledger.ts record`）與 E.2（`pi-dispatch-pre-handoff-check.ts` cross-model 獨立審；fallback Claude subagent，**NEVER** 憑記憶補、**NEVER** 跳過 cross-check 直接 handoff）。**No finding report written → NO Step 8b handoff — this is the gate**；E.1 record 由 `archive-gate.sh` Check 7 機械強制。
+   **E.1 + E.2 執行**：**MUST** 完整讀 `references/pre-handoff-checks.md` § Step 8a.6 執行——E.1（pi medium 收集 5-dimension evidence → pi xhigh 判定 → 主線寫 finding report、FAIL 補 `（issue:）` / strip 假 annotation → `pre-handoff-ledger.ts record`）與 E.2（`pi-dispatch-pre-handoff-check.ts` cross-model 獨立審；fallback Claude subagent，**NEVER** 憑記憶補、**NEVER** 跳過 cross-check 直接 handoff）。**No finding report written → NO Step 8b handoff — this is the gate**；E.1 record 由 `archive-gate.sh` Check 7 機械強制。
 
    **Level**: Phase 2 仍為 **warning / soft-gate** — E.1 + E.2 都跑、findings 必寫成 `（issue:）`annotation 讓 user 在 review-gui 看到，但**不**hard-block workflow（user 在 GUI 拍板）。Phase 3.1 才把「zero unresolved findings」整進 `archive-gate.sh` 成 hard gate。每次 E.1/E.2 verdict 已落 `<consumer>/.spectra/pre-handoff-ledger.jsonl`（telemetry，gitignored）；Phase 3.1 升 hard gate 的 soak 評估跑 `node <clade-vendor>/scripts/pre-handoff-ledger.ts report --all-consumers`（出 fire-rate / by-dimension / E.1↔E.2 agreement）。
 
@@ -661,7 +661,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    **觸發條件**：`## 人工檢查` 含至少一個 `[verify:ui]` item 且 `screenshots/local/<change>/` 目錄存在。否則 silent skip。
 
-   **執行流程**：**MUST** 依 `references/pre-handoff-checks.md` § Step 8a.7 執行——`audit-screenshot-staleness.ts` → LEGACY 清理 → STALE 重拍（codex medium + Screenshot Match Analysis）→ 重跑 audit 至 `stale` 為 0（最多 2 輪）→ selective commit 更新截圖。
+   **執行流程**：**MUST** 依 `references/pre-handoff-checks.md` § Step 8a.7 執行——`audit-screenshot-staleness.ts` → LEGACY 清理 → STALE 重拍（pi medium + Screenshot Match Analysis）→ 重跑 audit 至 `stale` 為 0（最多 2 輪）→ selective commit 更新截圖。
 
    **Skip 條件**：
    - 無 `screenshots/local/<change>/` 目錄（純 backend change）
@@ -811,15 +811,15 @@ What would you like to do?
 - **No external task tracking** — do not use any built-in task management, todo list, or progress tracking tool; the tasks file is the only system
 - **Worktree isolation — NEVER halt apply on main's WIP**: Step 0 必須自動把 user 帶進 worktree（用 commit-then-fork 或 clean fork，視 scope 而定）；無論 Step 0c 階段或 apply 進行中，**NEVER** 因 main repo 的 dirty WIP / staged / untracked / 同檔別 session WIP 中斷 apply、AskUserQuestion 要 user clean main、或建議 user 自己處理後重試。worktree 是獨立 working tree，main 的 WIP 不在 worktree 也無法影響它；同檔衝突是 merge-back 時的事，由 `/spectra-commit` + user 決策處理。唯一合法 STOP 是 unmerged conflict（wt-helper 拒絕 fork）或 helper 本身錯誤；user-decision-needed pause **NEVER**。
 - **Phase dispatch discipline**（per `agent-routing.md`）:
-  - **NEVER** dispatch Design Review phase to codex — Design skill is Claude Code first-class
+  - **NEVER** dispatch Design Review phase to pi — Design skill is Claude Code first-class
   - **NEVER** dispatch UI view phase（component / page / view / layout / styling）to any runtime — Pi 任一 model 與 Claude subagent 都算。實作與品質判定（Step 6c / 6d、Design Review）都留主線 Opus（per Step 6b B 類）。Frontend 但非 view 的（store / hook / API client / type / util）仍走 sol
   - **NEVER** dispatch **Phase Dispatch（Step 6b）** with `medium` effort — use `high` minimum。Step 8a 系列的收集工作允許 `medium`（見 Step 8a Model allocation）
   - **NEVER** dispatch task-by-task — phase granularity only
-  - **NEVER** dispatch a codex phase without including the「view-layer guard」instruction in the prompt — without it, codex tends to incidentally touch `.vue` / `.tsx` files
-  - **NEVER** dispatch a codex phase without including the「Plan-first」instruction in the prompt — without it, 主線只能從 `git diff` 反推 codex 意圖，cross-check 易漏「漏做的 task」與「踩到 view 層」這類 drift（per `agent-routing.md` Plan-first 條目）
-  - **NEVER** skip view-layer drift check after codex completion — `git diff --name-only` filtered by view paths is the primary quality gate
+  - **NEVER** dispatch a pi phase without including the「view-layer guard」instruction in the prompt — without it, pi tends to incidentally touch `.vue` / `.tsx` files
+  - **NEVER** dispatch a pi phase without including the「Plan-first」instruction in the prompt — without it, 主線只能從 `git diff` 反推 pi 意圖，cross-check 易漏「漏做的 task」與「踩到 view 層」這類 drift（per `agent-routing.md` Plan-first 條目）
+  - **NEVER** skip view-layer drift check after pi completion — `git diff --name-only` filtered by view paths is the primary quality gate
   - **NEVER** auto-fix mixed phases by editing tasks.md mid-apply — that belongs to `/spectra-ingest`; for未開工 mixed phase, STOP and instruct the user to run ingest
-  - **NEVER** skip cross-check after codex phase completion — read tasks.md, confirm checkboxes, run typecheck/test, review diff
+  - **NEVER** skip cross-check after pi phase completion — read tasks.md, confirm checkboxes, run typecheck/test, review diff
 - If **AskUserQuestion tool** is not available, ask the same questions as plain text and wait for the user's response
 
 **Fluid Workflow Integration**

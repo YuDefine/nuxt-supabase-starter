@@ -5,7 +5,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
-# spectra-apply — Step 6b C 類 phase codex 派工
+# spectra-apply — Step 6b C 類 phase pi 派工
 
 > 本檔是 `spectra-apply/SKILL.md` 的執行細節分冊（clade fork 加料，2026-08-02 自 SKILL.md 抽出以縮 invoke 成本）。
 > SKILL.md 對應 step 的 inline pointer 指到本檔；**MUST 依 pointer 指示完整讀對應 § 再執行**。
@@ -69,7 +69,7 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
   --cohort phase-prescan
 ```
 
-依 Codex Watch Protocol 收 terminal receipt：
+依 Pi Watch Protocol 收 terminal receipt：
 
 - `exit 0/2` 且有 parseable result → `PRESCAN_EVIDENCE=<receipt.lastMessagePath>`；即使 `needs_reconciliation=true` 仍保留 raw facts，裁決交下一步 Sol high。
 - `exit 3/4` → 依標準 fallback 處理；不重試 Luna medium/high。若決定略過 prescan，`PRESCAN_EVIDENCE=(prescan unavailable: <exit/reason>)`，implementation 仍可開始。
@@ -102,7 +102,7 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
   --cohort "$IMPLEMENTATION_COHORT"
 ```
 
-以 Bash `run_in_background=true` 啟動。Dispatcher 自己持久化 rendered prompt、stdout/stderr、last-message 與 ledger；**NEVER** 另接 pipe 或自行 redirect Codex stdout。
+以 Bash `run_in_background=true` 啟動。Dispatcher 自己持久化 rendered prompt、stdout/stderr、last-message 與 ledger；**NEVER** 另接 pipe 或自行 redirect Pi stdout。
 
 在 Form 3 / Form 4 下，由 worktree subagent 在自己的 sandbox 直接跑上述命令，且由該層完整持有 watch lifecycle；主線不探針。
 
@@ -118,7 +118,7 @@ Marker 必須是 phase 內單一行 JSON comment：
 
 現行 shadow stage 的唯一效果：implementation ledger cohort 分成 `shadow-luna-candidate` 與 `shadow-sol-control`。**NEVER** 因 marker 合法就把 Step 3 改成 `spectra-mechanical-substep` Luna low。該 row 先保留為下一 stage 的 locked policy；只有 cohort gate 達標並修改 classifier rollout SoT 後才能成為 effective route。
 
-### 5. 啟動 Codex Watch Protocol
+### 5. 啟動 Pi Watch Protocol
 
 取得 background task ID 後：
 
@@ -149,7 +149,7 @@ Marker 必須是 phase 內單一行 JSON comment：
 
    任一命中 → AskUserQuestion：[1] soft reset＋剔除 view 改動＋重派；[2] 接受並按 B 類重跑；[3] 中止。
 4. **Scope discipline**：`git -C <wt> diff main..HEAD --name-only` 對照本次 `ALLOWED_PATHS`。超出範圍 → AskUserQuestion 處理。
-5. **Gate replay**：主線自行重跑 `GATE_COMMANDS`；Codex 回報的 gate JSON 只作索引，不替代實跑。
+5. **Gate replay**：主線自行重跑 `GATE_COMMANDS`；Pi 回報的 gate JSON 只作索引，不替代實跑。
 6. **Result integrity**：`result.status` 必須精確為 `pass`；`result.change` / `result.phase` 必須等於本次 dispatch；`scope_drift` / `view_layer_drift` / `uncertain_reasons` 必須為空；commit SHA 必須等於 worktree HEAD。`status=uncertain` 即使 dispatcher exit 0 也不得通過本 check。
 7. **Pilot verification record**：上述 checks 結束後立即記一筆，不等 session 收尾：
    - 全部通過 → `pass`

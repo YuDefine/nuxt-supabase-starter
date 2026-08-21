@@ -5,7 +5,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
-# spectra-propose — Step 0 選項 A Codex flow
+# spectra-propose — Step 0 選項 A Pi flow
 
 > 本檔是 `spectra-propose/SKILL.md` 的執行細節分冊（clade fork 加料，2026-08-02 自 SKILL.md 抽出以縮 invoke 成本）。
 > SKILL.md 對應 step 的 inline pointer 指到本檔；**MUST 依 pointer 指示完整讀對應 § 再執行**。
@@ -15,9 +15,9 @@ Local edits will be reverted by the next sync.
 
 ## 選項 A 全流程（Phase 0a draft prompt 範本 + dispatch + watch；Phase 0b cross-check step 1–10）
 
-   ### 選項 A：Codex flow（Codex draft + 主線 cross-check）
+   ### 選項 A：Pi flow（Pi draft + 主線 cross-check）
 
-   #### Phase 0a：派 Codex 在背景跑
+   #### Phase 0a：派 Pi 在背景跑
 
    依以下順序執行（每一步都是主線 Claude 自己做，不需使用者介入）：
 
@@ -116,7 +116,7 @@ Local edits will be reverted by the next sync.
       active，artifacts 留在 disk（決策見 `docs/decisions/2026-07-31-propose-does-not-park.md`）。
       不要呼叫 /spectra-apply。產出後在 stdout 摘要 artifacts 列表 + `spectra validate` 結果。
       ```
-   3. **背景啟動Pi Codex dispatcher**（**Bash** tool 加 `run_in_background=true`）：
+   3. **背景啟動 Pi dispatcher**（**Bash** tool 加 `run_in_background=true`）：
 
       ```bash
       node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
@@ -127,10 +127,10 @@ Local edits will be reverted by the next sync.
         --route routing-table --tier-basis table-row --table-row spectra-artifact-draft
       ```
 
-   4. **立刻**簡短回報給使用者：「已派 Codex GPT-5.6-sol max 在背景 draft `/spectra-propose <change-name>`（bash job `<id>`），完成後主線會 cross-check 並補 Design Review template」
-   5. 啟動 **Codex Watch Protocol**（見 `.claude/rules/agent-routing.pi-watch-protocol.md` § 監看排程 A）：background Bash 回傳 `<task-id>` 後，立刻記錄 owner / deadline，並排 1500s canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=codex:spectra-propose:<change-name> deadline=<ISO>...` inert control message。控制 turn 只准 `TaskOutput(block=false)`、重排同一 inert prompt、停止 wakeup或排 lifecycle intervention；**NEVER** 放原 propose prompt、讀 output tail、執行 artifact mutation或用 180s 短輪詢。完成通知到達後才 claim task id、讀 stdout並進 Phase 0b。
+   4. **立刻**簡短回報給使用者：「已派 Pi GPT-5.6-sol max 在背景 draft `/spectra-propose <change-name>`（bash job `<id>`），完成後主線會 cross-check 並補 Design Review template」
+   5. 啟動 **Pi Watch Protocol**（見 `.claude/rules/agent-routing.pi-watch-protocol.md` § 監看排程 A）：background Bash 回傳 `<task-id>` 後，立刻記錄 owner / deadline，並排 1500s canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=pi:spectra-propose:<change-name> deadline=<ISO>...` inert control message。控制 turn 只准 `TaskOutput(block=false)`、重排同一 inert prompt、停止 wakeup或排 lifecycle intervention；**NEVER** 放原 propose prompt、讀 output tail、執行 artifact mutation或用 180s 短輪詢。完成通知到達後才 claim task id、讀 stdout並進 Phase 0b。
 
-   #### Phase 0b：主線 Cross-Check（codex 完成後**立刻**執行）
+   #### Phase 0b：主線 Cross-Check（pi 完成後**立刻**執行）
 
    **exit code 分流（收到 terminal notification 後先做，per `pi-phase-dispatch.md` § 4）**：
 
@@ -142,9 +142,9 @@ Local edits will be reverted by the next sync.
 
    收到 `<task-notification> status=completed` 時**立刻**依序執行：
 
-   1. **Read codex stdout** 摘要：BashOutput 讀完整 stdout，回報 artifacts list / `spectra validate` 結果
+   1. **Read pi stdout** 摘要：BashOutput 讀完整 stdout，回報 artifacts list / `spectra validate` 結果
 
-   2. **若 codex 仍 `spectra park` 了**（不該發生，draft prompt 已明令禁止）：先
+   2. **若 pi 仍 `spectra park` 了**（不該發生，draft prompt 已明令禁止）：先
       `spectra unpark <change-name>` 把 artifacts 還原到 disk 才能繼續 cross-check
 
    3. **跑 post-propose-check.sh**（檢查 User Journeys / Affected Entity Matrix / Implementation Risk Plan / Design Review 7 步）：
@@ -153,7 +153,7 @@ Local edits will be reverted by the next sync.
       bash scripts/spectra-advanced/post-propose-check.sh <change-name>
       ```
 
-      若有 FINDINGS → 主線**自己**直接 Edit proposal.md / tasks.md 補齊（**不要**回 codex 修，太慢）
+      若有 FINDINGS → 主線**自己**直接 Edit proposal.md / tasks.md 補齊（**不要**回 pi 修，太慢）
 
    3a. **跑 post-propose-manual-review-check.sh**（檢查 ## 人工檢查 item step actionability，per Layer B of `manual-review.md` mechanical enforcement）：
 
@@ -201,7 +201,7 @@ Local edits will be reverted by the next sync.
 
    5.5 **Manual Review Marker Hygiene Check**（所有 change，不限 backend-only）：
 
-      Read tasks.md `## 人工檢查` 區塊全部 checkbox，依以下 hygiene rules 檢查並修正。違規 → 主線**自己**直接 Edit tasks.md（**不**回 codex 修，太慢）。
+      Read tasks.md `## 人工檢查` 區塊全部 checkbox，依以下 hygiene rules 檢查並修正。違規 → 主線**自己**直接 Edit tasks.md（**不**回 pi 修，太慢）。
 
       **Rule 1：每條 item line MUST 有 leading marker**
 
@@ -209,7 +209,7 @@ Local edits will be reverted by the next sync.
       - Verify multi-marker channels 僅限 `e2e` / `api` / `ui`，canonical order 是 `e2e → api → ui`
       - Multi-marker **MUST NOT** 與 `[review:ui]` / `[discuss]` 混用；`[verify:api+review:ui]` / `[verify:api+discuss]` 非法
       - 缺 marker → 依下方 Rule 2 / Rule 3 / Rule 4 的內容分類補上正確 marker；**禁止**仰賴 Default Kind Derivation Rule（fallback 只給既有 in-flight legacy item 用，且 fallback 不涵蓋任何 `verify:*`）
-      - 新 item **MUST NOT** 使用 `[verify:auto]`；若 codex draft 含 `[verify:auto]`，主線 inline 替換成 explicit marker（pure API → `[verify:api]`；mutation + visual → `[verify:api+ui]`；persistence / full journey → `[verify:e2e]`）
+      - 新 item **MUST NOT** 使用 `[verify:auto]`；若 pi draft 含 `[verify:auto]`，主線 inline 替換成 explicit marker（pure API → `[verify:api]`；mutation + visual → `[verify:api+ui]`；persistence / full journey → `[verify:e2e]`）
 
       **Rule 2：Evidence-collection items MUST 標 `[discuss]` 或 `[verify:api]`**
 

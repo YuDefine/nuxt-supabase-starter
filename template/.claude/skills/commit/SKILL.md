@@ -36,9 +36,9 @@ node .claude/scripts/commit-lock.mjs acquire
 
 觸發 0-Coord 命中時 **MUST** 先完整讀 [gates.md](gates.md) § 0-Coord 的 signal 定義與命中處置流程再繼續。
 
-## Step 0-Codex: 派 codex 跑 commit 工作時的路由規約
+## Step 0-Pi: 派 pi 跑 commit 工作時的路由規約
 
-主線從 commit SKILL 派 codex 跑 commit 工作時（例如 `/wt` worktree 內派 codex commit phase），**MUST** 走 [`rules/core/agent-routing.pi-watch-protocol.md`](../../../../rules/core/agent-routing.pi-watch-protocol.md) § Codex 派工的標準流程 + Codex Watch Protocol。**禁止** `Agent` tool with `subagent_type: screenshot-review` 派視覺 QA — sonnet wrapper 派工已多次驗證 self-rationalize（per [[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]）。
+主線從 commit SKILL 派 pi 跑 commit 工作時（例如 `/wt` worktree 內派 pi commit phase），**MUST** 走 [`rules/core/agent-routing.pi-watch-protocol.md`](../../../../rules/core/agent-routing.pi-watch-protocol.md) § Pi 派工的標準流程 + Pi Watch Protocol。**禁止** `Agent` tool with `subagent_type: screenshot-review` 派視覺 QA — sonnet wrapper 派工已多次驗證 self-rationalize（per [[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]）。
 
 ## Step 0-Scope: WIP 預設全部納入（果斷，不徵詢）
 
@@ -114,7 +114,7 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 ### 0-A/B/C/D 並行策略（總時長省 ~45% 的關鍵）
 
-0-A.0 `simplify` **必序跑且永遠第一**（會刪死碼 / 精簡，否則後續 codex 白檢即將刪除 / 改寫的 code）。**simplify 完成後，0-A.1 / 0-B / 0-C 三軸 MUST 並行**（除非 fast-path 跳過 0-A.1），不可串行：
+0-A.0 `simplify` **必序跑且永遠第一**（會刪死碼 / 精簡，否則後續 pi 白檢即將刪除 / 改寫的 code）。**simplify 完成後，0-A.1 / 0-B / 0-C 三軸 MUST 並行**（除非 fast-path 跳過 0-A.1），不可串行：
 
 ```
 0-A.0 simplify（序跑）
@@ -138,7 +138,7 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 2. 主線 foreground 0-C 完成後 → poll 軸 A、等軸 B 回收
 3. 三軸全部 done 才進入修正合併
 
-**Fast-path 判定**（同時滿足下列三條件才能跳過 codex，任一不滿足都跑）：
+**Fast-path 判定**（同時滿足下列三條件才能跳過 pi review，任一不滿足都跑）：
 
 1. 整個 diff 行數（additions + deletions）< 20 行
 2. 改動限於 doc / config 類檔案：`*.md`、`*.json`（**除** `package.json` 的 `dependencies` / `devDependencies`）、`*.yml`、`*.yaml`、`.gitignore`、`HANDOFF.md`、`openspec/ROADMAP.md`
@@ -148,13 +148,13 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 **安全性保證**：
 
-- review prompt 讓 codex 在自己 turn 開頭讀 working tree diff——snapshot 語義不變：啟動後 working tree 變動不影響已啟動的 review
-- 0-A / 0-B / 0-C 修正後若**累計超過 50 行或跨 5 檔以上** → **MUST** 在匯合階段重跑一次 `codex-review-safe.sh xhigh` 確認新引入的程式碼也過 codex 眼睛
+- review prompt 讓 pi 在自己 turn 開頭讀 working tree diff——snapshot 語義不變：啟動後 working tree 變動不影響已啟動的 review
+- 0-A / 0-B / 0-C 修正後若**累計超過 50 行或跨 5 檔以上** → **MUST** 在匯合階段重跑一次 `codex-review-safe.sh xhigh` 確認新引入的程式碼也過 pi 眼睛
 - 0-B / 0-A.1 / 0-C 抓到的問題**全部匯合一次修**，避免反覆 review
 
 ### Gate 執行細節
 
-每個 gate 的完整執行流程（bash scripts、trigger 條件、fix loop、codex offload）見 [gates.md](gates.md)。執行任一 gate 前 **MUST** 先讀對應 §。
+每個 gate 的完整執行流程（bash scripts、trigger 條件、fix loop、pi offload）見 [gates.md](gates.md)。執行任一 gate 前 **MUST** 先讀對應 §。
 
 - **0-A 程式碼審查**：simplify（0-A.0，序跑）→ Codex xhigh（0-A.1，背景）→ 條件升 Codex max + Fable code-review max（0-A.2）。詳見 [gates.md](gates.md) § 0-A。
 - **0-B UI Design Review**：條件觸發（`.vue` template 變更 + 視覺影響）。詳見 [gates.md](gates.md) § 0-B。
@@ -166,7 +166,7 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 ### 紀律禁止項
 
 - **NEVER** 在 0-A.1 背景跑的時候，主線只 poll 不做事 —— 必須同步推進 0-C，0-B 觸發時派 subagent
-- **NEVER** 因為「擔心 0-C 修改影響 codex」而退回串行 —— codex 看的是 snapshot，不受後續 working tree 變動影響；大改動的 fallback 已寫在「安全性保證」
+- **NEVER** 因為「擔心 0-C 修改影響 pi」而退回串行 —— pi 看的是 snapshot，不受後續 working tree 變動影響；大改動的 fallback 已寫在「安全性保證」
 
 其餘紀律禁止項見 [gates.md](gates.md) § 0-A/B/C/D 並行匯合 紀律禁止項。
 

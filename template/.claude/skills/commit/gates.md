@@ -107,7 +107,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 ## § 0-MR: 人工檢查 Gate（main / master 限定，硬擋無 override）
 
-`.claude/rules/commit.trunk-gates.md` 「人工檢查 Gate」hard rule 的執行點（`commit.md` 只有一句 pointer，判定條件的 SoT 在 `commit.trunk-gates.md`）。**MUST** 在 Step 0 品質檢查之前 fail-fast，避免人工檢查未完的 change 浪費 5–15 min codex / screenshot review 時間。
+`.claude/rules/commit.trunk-gates.md` 「人工檢查 Gate」hard rule 的執行點（`commit.md` 只有一句 pointer，判定條件的 SoT 在 `commit.trunk-gates.md`）。**MUST** 在 Step 0 品質檢查之前 fail-fast，避免人工檢查未完的 change 浪費 5–15 min pi / screenshot review 時間。
 
 ### 判定流程
 
@@ -367,22 +367,22 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 **審查策略**：
 
-1. 主線先跑 `simplify` skill —— 它看 reuse / 精簡 / 過度設計 / altitude 這條軸，Pi Codex review 不會抓。先處理掉避免後續 codex 重複指出
-2. 接著（若 fast-path 不命中）以背景方式跑 Pi Codex review xhigh（GPT-5.6-sol）—— 跨模型抓 bug / 邏輯 / 安全，盲點與 simplify / Claude 主線不同。**啟動後立即進入並行階段（見主檔「0-A/B/C 並行策略」）**，主線同步推進 0-C 並派 0-B subagent
-3. 0-A.1 出現 Critical / Major → 進入 0-A.2 兩步驟：先派 Codex GPT-5.6-sol max 深度 review，再由 Fable（`claude-fable-5`）跑 `code-review` agent max，拿著 codex 的回饋做最終決策
+1. 主線先跑 `simplify` skill —— 它看 reuse / 精簡 / 過度設計 / altitude 這條軸，Pi review 不會抓。先處理掉避免後續 pi 重複指出
+2. 接著（若 fast-path 不命中）以背景方式跑 Pi review xhigh（GPT-5.6-sol）—— 跨模型抓 bug / 邏輯 / 安全，盲點與 simplify / Claude 主線不同。**啟動後立即進入並行階段（見主檔「0-A/B/C 並行策略」）**，主線同步推進 0-C 並派 0-B subagent
+3. 0-A.1 出現 Critical / Major → 進入 0-A.2 兩步驟：先派 Pi GPT-5.6-sol max 深度 review，再由 Fable（`claude-fable-5`）跑 `code-review` agent max，拿著 pi 的回饋做最終決策
 4. 修正一律由 Claude Code 主線執行；所有並行軸的 finding 匯合後一次性修正
 
 **模型分工**：
 
 | 步驟 | 模型 | Effort | 職責 |
 | --- | --- | --- | --- |
-| 0-A.1 | Codex GPT-5.6-sol | xhigh | 跨模型盲點互補，抓 bug / 邏輯 / 安全 |
-| 0-A.2 Step 1 | Codex GPT-5.6-sol | max | 深度搜尋所有可能問題 |
-| 0-A.2 Step 2 | Fable `claude-fable-5` | max | 拿 Codex finding 做最終裁決 |
+| 0-A.1 | Pi GPT-5.6-sol | xhigh | 跨模型盲點互補，抓 bug / 邏輯 / 安全 |
+| 0-A.2 Step 1 | Pi GPT-5.6-sol | max | 深度搜尋所有可能問題 |
+| 0-A.2 Step 2 | Fable `claude-fable-5` | max | 拿 pi finding 做最終裁決 |
 
 ### 0-A.0 — simplify（主線，永遠跑、永遠先跑）
 
-對本次 working tree 變更跑 simplify review + 自動修 —— 聚焦 reuse / 精簡 / efficiency / altitude，Pi Codex review 不會抓這條軸。simplify 修完的版本才是下一步 Pi Codex review 應該看的對象。
+對本次 working tree 變更跑 simplify review + 自動修 —— 聚焦 reuse / 精簡 / efficiency / altitude，Pi review 不會抓這條軸。simplify 修完的版本才是下一步 Pi review 應該看的對象。
 
 **執行方式：主線直接 `Skill(simplify)` 序跑**（`skill: "simplify"`）。
 
@@ -413,7 +413,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 - **命中** → 輸出 `⏭️ 0-A.1/0-A.2 跳過（fast-path: diff <20 行、限 doc/config、無敏感路徑）`，進入 0-B/0-C 並行
 - **不命中** → 進入 0-A.1
 
-### 0-A.1 — Codex GPT-5.6-sol exec review (xhigh)，背景（並行軸 A）
+### 0-A.1 — Pi GPT-5.6-sol review (xhigh)，背景（並行軸 A）
 
 **Watch contract**：背景啟動（`run_in_background: true`）取得 `<task-id>` 後，同一 turn 記錄 owner / deadline 並排 180s（[[agent-routing.pi-watch-protocol]] § ScheduleWakeup 用法守則 的具名例外）canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=commit:codex-review deadline=<ISO>...` inert control wakeup；控制 turn 只准 `TaskOutput(block=false)`、重排同一訊息或排 lifecycle intervention，**NEVER** 讀 review output、重播 review 指令或做 mutation。實際 findings 只在 terminal notification + task-id claim 後讀取。啟動背景 process 後 MUST 立即進入並行階段，啟動 0-B（條件觸發）與 0-C。
 
@@ -423,7 +423,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 > codex-review-safe.sh 先凍結changeset，再呼叫Pi `openai-codex` review runner。Runner只允許`read,grep,find,ls`，沒有bash、write、edit或MCP；prompt injection無法取得mutation tool。這支script只review自家fleet diff，NEVER拿去review不可信第三方code。
 >
-> **changeset 由 script 自己收集後嵌進 prompt**（TD-320），codex 不再自行跑 `git diff`。兩個要判讀的 stderr 訊號：超出 `CODEX_REVIEW_MAX_DIFF_LINES`（預設 6000 行）的檔案會被整塊剔除並具名，**MUST** 當成該檔未被 review、NEVER 當作它通過；**exit 3** ＝ 收不到任何未提交變更（codex 未被呼叫），照 collection bug 處理，NEVER 當作 0-A.1 通過。
+> **changeset 由 script 自己收集後嵌進 prompt**（TD-320），pi 不再自行跑 `git diff`。兩個要判讀的 stderr 訊號：超出 `CODEX_REVIEW_MAX_DIFF_LINES`（預設 6000 行）的檔案會被整塊剔除並具名，**MUST** 當成該檔未被 review、NEVER 當作它通過；**exit 3** ＝ 收不到任何未提交變更（pi 未被呼叫），照 collection bug 處理，NEVER 當作 0-A.1 通過。
 
 #### exit 4（配額耗盡）→ 換池重跑，NEVER 改派 Claude
 
@@ -487,10 +487,10 @@ script 在 runner 前後各拍一次 worktree snapshot（HEAD + 暫存 index 的
 
 **覆蓋邊界**：只偵測本 repo worktree 的 tracked + untracked 內容。**gitignored 檔（`.env`、`node_modules/` 等）、**/tmp、`$HOME`、其他 repo、MCP / 網路副作用在 cursor 池下**查不到也偵測不到** —— NEVER 把 exit 6 沒觸發講成「cursor 池 review 確認無副作用」。
 
-- **NEVER** 就乾等到 codex 自己結束才看一眼 — 中途卡住（codex auth 過期、context 超量、模型拒答）會白等
+- **NEVER** 就乾等到 pi 自己結束才看一眼 — 中途卡住（codex auth 過期、context 超量、模型拒答）會白等
 - 結束條件：背景 process 結束、輸出含完成標記、或使用者叫停 — 才進入後續判斷
 
-讀完 codex 輸出後依 **codex 自己輸出的 severity 標記**分情境處理（**此時 0-B / 0-C 應已並行完成或在收尾**）：
+讀完 pi 輸出後依 **pi 自己輸出的 severity 標記**分情境處理（**此時 0-B / 0-C 應已並行完成或在收尾**）：
 
 - **MUST** 檢查輸出含完整 `## Semantic Verdict` 表且覆蓋 patterns.json semantic 全部 id——缺表或缺列＝review 不完整，重跑 0-A.1，NEVER 當作通過
 - **無 issue** → 輸出 `✅ 0-A.1 通過（Codex xhigh 無 issue）`，**跳過 0-A.2**，進入「並行匯合」
@@ -506,18 +506,18 @@ script 在 runner 前後各拍一次 worktree snapshot（HEAD + 暫存 index 的
 >
 > 實證（<consumer-a> 2026-07-26）：0-A.1 的修法引入了一條 quota regression，正常使用者累積滿額後永久 429，由 0-A.2 的 Fable 裁決抓到。當時若因「finding 都修完了」跳過 0-A.2，會直接把功能壞掉的版本推上 production。
 
-**Severity 來源**：以 codex 自己輸出的 severity 標記為準（Critical / Major / Minor / Info）。**NEVER** 由主線自行判定降級「這個其實沒那麼嚴重」—— codex 標 Major 就照 Major 處理，否則 0-A.2 條件觸發機制等於形同虛設。
+**Severity 來源**：以 pi 自己輸出的 severity 標記為準（Critical / Major / Minor / Info）。**NEVER** 由主線自行判定降級「這個其實沒那麼嚴重」—— pi 標 Major 就照 Major 處理，否則 0-A.2 條件觸發機制等於形同虛設。
 
 #### finding 的三類分流
 
-codex 看的是 working tree diff，但它讀得到整個 repo，因此會評論到**本次沒改的舊碼**。「一律修」對這類 finding 會把 unrelated fix 帶進本次 commit（違反 § Step 3 的分組紀律）；「不在本次範圍」則是本檔明文禁止的跳過藉口。出路是分流，不是二選一。
+pi 看的是 working tree diff，但它讀得到整個 repo，因此會評論到**本次沒改的舊碼**。「一律修」對這類 finding 會把 unrelated fix 帶進本次 commit（違反 § Step 3 的分組紀律）；「不在本次範圍」則是本檔明文禁止的跳過藉口。出路是分流，不是二選一。
 
 **每一個** finding **MUST** 落在下表三類之一，依序判定，第一個命中的為準：
 
 | 可觀察 predicate | 類別 | 處置 |
 | --- | --- | --- |
-| finding 指涉的 code 出現在本次 diff 的 `+` 行 | **缺失類** | 照 codex 標的 severity 一律修。**位置無關**——修法要動到同檔別處、別的檔、或 diff 外的呼叫端，照修不誤 |
-| 問題成立，但 finding 給的 `<file>:<line>` 指到本次 diff 以外（codex 的行號對不上 working tree） | **行號漂移** | 先定位到真正的位置，再照 severity 修。**NEVER** 因為「行號指到沒改的地方」就歸純舊碼 |
+| finding 指涉的 code 出現在本次 diff 的 `+` 行 | **缺失類** | 照 pi 標的 severity 一律修。**位置無關**——修法要動到同檔別處、別的檔、或 diff 外的呼叫端，照修不誤 |
+| 問題成立，但 finding 給的 `<file>:<line>` 指到本次 diff 以外（pi 的行號對不上 working tree） | **行號漂移** | 先定位到真正的位置，再照 severity 修。**NEVER** 因為「行號指到沒改的地方」就歸純舊碼 |
 | 上兩類都不成立 | **純舊碼** | 不進本次 commit，但 **MUST** 當場登記 + 回報（見下）。**NEVER** silent drop |
 
 判為**純舊碼**的 finding，**MUST** 在給 user 的回報中逐條輸出下列三行，**任一行留白或寫不出來就照 severity 修**：
@@ -532,47 +532,47 @@ PRE-EXISTING — 未觸碰：<file>:<line>（舉證本次 diff 不含此檔／�
 
 登記走 `docs/tech-debt.md` 開 TD（跨 session 要追）或 `HANDOFF.md`（下一 session 就會碰），**NEVER** 只在 chat 講一句。「已經跟 user 說了」不算登記——chat 不是 session 之間的傳遞介面。
 
-### 0-A.2 — Codex max + Fable code-review max（兩步驟，條件觸發）
+### 0-A.2 — Pi max + Fable code-review max（兩步驟，條件觸發）
 
 **僅在 0-A.1 出現 Critical / Major 級 issue 時執行**，其他情況一律跳過。
 
-0-A.2 分兩步驟，先用 Codex 深度 review，再用 Fable 拿 Codex 回饋做最終裁決：
+0-A.2 分兩步驟，先用 Pi 深度 review，再用 Fable 拿 pi 回饋做最終裁決：
 
-**Step 1 — Codex GPT-5.6-sol exec review (max)**：
+**Step 1 — Pi GPT-5.6-sol review (max)**：
 
 ```bash
 .claude/scripts/codex-review-safe.sh max
 ```
 
-Codex 完成後，**把完整輸出存到變數**（後續餵給 Fable）。
+Pi 完成後，**把完整輸出存到變數**（後續餵給 Fable）。
 
 **Verdict-presence check**（TD-246 — 防 context exhaustion 靜默跳過 review）：
 
-Codex max 完成後 **MUST** 檢查輸出是否含 `## Review Verdict` heading。兩條路：
+Pi max 完成後 **MUST** 檢查輸出是否含 `## Review Verdict` heading。兩條路：
 
 - **含 `## Review Verdict`** → 正常進 Step 2（Fable 裁決）
-- **缺 `## Review Verdict`**（context exhaustion / 輸出截斷 / 任何非正常完成）→ **MUST** 向 user 報 warning「⚠ Codex max context exhaustion — 未產出 Review Verdict，fallback to 0-A.1 findings」，然後 **fallback**：跳過 Step 2 的 Codex 輸出，改用 0-A.1 xhigh findings 直接餵 Fable code-review agent 做裁決（prompt 改為「你收到 Codex GPT-5.6-sol (xhigh effort) 對本次 diff 的 review 結果」+ 0-A.1 輸出）。**NEVER** 重跑 `codex-review-safe.sh max`（context exhaustion 大概率重現）、**NEVER** 靜默跳過 0-A.2 當作通過。
+- **缺 `## Review Verdict`**（context exhaustion / 輸出截斷 / 任何非正常完成）→ **MUST** 向 user 報 warning「⚠ Pi max context exhaustion — 未產出 Review Verdict，fallback to 0-A.1 findings」，然後 **fallback**：跳過 Step 2 的 Pi 輸出，改用 0-A.1 xhigh findings 直接餵 Fable code-review agent 做裁決（prompt 改為「你收到 Pi GPT-5.6-sol (xhigh effort) 對本次 diff 的 review 結果」+ 0-A.1 輸出）。**NEVER** 重跑 `codex-review-safe.sh max`（context exhaustion 大概率重現）、**NEVER** 靜默跳過 0-A.2 當作通過。
 
 **Step 2 — Fable `code-review` agent (max)**：
 
 派 `code-review` agent（`subagent_type: "code-review"`、`model: "fable"`），prompt 包含：
 
 1. 本次 working tree diff（`git diff HEAD` 摘要）
-2. **0-A.2 Step 1 Codex 的完整 review 輸出**
-3. 明確指示：「你的職責是**裁決**——對 Codex 列出的每個 finding 判定：(a) real issue → 標 severity + 建議修法；(b) false positive → 標 dismissed **並附具體反證**；(c) severity 不準確 → 重標。同時掃一遍 diff 找 Codex 漏掉的問題。輸出格式照 code-review agent 標準報告。」
+2. **0-A.2 Step 1 Pi 的完整 review 輸出**
+3. 明確指示：「你的職責是**裁決**——對 pi 列出的每個 finding 判定：(a) real issue → 標 severity + 建議修法；(b) false positive → 標 dismissed **並附具體反證**；(c) severity 不準確 → 重標。同時掃一遍 diff 找 pi 漏掉的問題。輸出格式照 code-review agent 標準報告。」
 
 Agent prompt 範本：
 
 ```
-你收到 Codex GPT-5.6-sol (max effort) 對本次 working tree diff 的 review 結果。你的職責是做最終裁決。
+你收到 Pi GPT-5.6-sol (max effort) 對本次 working tree diff 的 review 結果。你的職責是做最終裁決。
 
-## Codex Review 結果
+## Pi Review 結果
 
-<貼入 Codex Step 1 完整輸出>
+<貼入 Pi Step 1 完整輸出>
 
 ## 你的任務
 
-1. 對 Codex 列出的**每一個** finding 逐一判定：
+1. 對 pi 列出的**每一個** finding 逐一判定：
    - real issue → 保留，確認或重標 severity（Critical/Major/Minor/Info），給具體修法建議
    - false positive → 標 `DISMISSED`，**MUST** 照下列格式輸出，`反證：` 欄不得留白：
 
@@ -583,7 +583,7 @@ Agent prompt 範本：
 
    - severity 不準確 → 重標並說明
 2. **反證立不出來就不是 DISMISSED**：查證之後仍無法指出具體反證位置的 finding，**一律保留為 real issue**。你有完整 repo 讀取權，「判不出來」是查證還沒做完的訊號，不是終局狀態——先去讀 code、追呼叫端、必要時跑 test，讀完仍立不出反證就保留。
-3. 獨立掃一遍 diff，找 Codex 漏掉的問題（Codex 跨模型盲點互補是你存在的原因）
+3. 獨立掃一遍 diff，找 pi 漏掉的問題（pi 跨模型盲點互補是你存在的原因）
 4. 輸出標準 code-review 報告格式（含 Semantic Verdict 表）
 
 對 real issue 不做修正——只判定 + 建議修法，修正由主線執行。
@@ -593,14 +593,14 @@ Agent prompt 範本：
 
 讀完 Fable 輸出後，**先驗收 DISMISSED 的舉證，再判斷通過與否**：
 
-**舉證驗收**：對 Fable 標 `DISMISSED` 的**每一條** finding，檢查它有沒有附具體反證（`<file>:<line>` 的 code、契約、或文件/規則條文）。**沒附反證的 DISMISSED 一律視同 real issue 處理**，照 Codex 原本標的 severity 走——**NEVER** 因為「Fable 是 max effort，它說 dismiss 應該有它的道理」就放行。裁決者省略舉證跟主線自行降級 severity 是同一種失效，`gates.md` § 0-A.1 已禁止後者。
+**舉證驗收**：對 Fable 標 `DISMISSED` 的**每一條** finding，檢查它有沒有附具體反證（`<file>:<line>` 的 code、契約、或文件/規則條文）。**沒附反證的 DISMISSED 一律視同 real issue 處理**，照 pi 原本標的 severity 走——**NEVER** 因為「Fable 是 max effort，它說 dismiss 應該有它的道理」就放行。裁決者省略舉證跟主線自行降級 severity 是同一種失效，`gates.md` § 0-A.1 已禁止後者。
 
 驗收完才判斷：
 
-- **無 real issue**（全部 dismissed **且逐條附反證**，或無新發現）→ 輸出 `✅ 0-A.2 通過（Codex max + Fable max 無 real issue）`，進入「並行匯合」
+- **無 real issue**（全部 dismissed **且逐條附反證**，或無新發現）→ 輸出 `✅ 0-A.2 通過（Pi max + Fable max 無 real issue）`，進入「並行匯合」
 - **有 real issue** → 主線依 Fable 的裁決逐一修正，修完**直接進入「並行匯合」**（最多到 0-A.2，不做第 3 輪）
 
-**為什麼兩步驟**：Codex（GPT-5.6-sol）和 Fable（claude-fable-5）模型盲點不同。Codex max 負責深度搜尋——用最高推理深度翻出所有可能問題；Fable max 負責裁決——以不同模型族的視角判定哪些是 real issue，過濾 false positive，並找 Codex 漏掉的問題。這比同一模型跑兩輪更有效。
+**為什麼兩步驟**：Pi（GPT-5.6-sol）和 Fable（claude-fable-5）模型盲點不同。Pi max 負責深度搜尋——用最高推理深度翻出所有可能問題；Fable max 負責裁決——以不同模型族的視角判定哪些是 real issue，過濾 false positive，並找 pi 漏掉的問題。這比同一模型跑兩輪更有效。
 
 ### 0-A/B/C/D 並行匯合（收口檢查）
 
@@ -613,7 +613,7 @@ Agent prompt 範本：
 
 **0-D 執行時機**：三軸匯合後、大改動回扣之前。0-D 條件觸發（見下方 § 0-D），觸發時在主線 foreground 跑，修完再評估大改動回扣。
 
-**大改動回扣**：若 0-A / 0-B / 0-C / 0-D 累計的修正**超過 50 行或跨 5 檔以上**，**MUST** 在此處重跑一次 `codex-review-safe.sh xhigh` 確認新引入的程式碼也過 codex 眼睛（codex 看的是啟動時 snapshot，後續大改動不在它覆蓋範圍）。小改動（< 50 行 / < 5 檔）視同安全跳過。
+**大改動回扣**：若 0-A / 0-B / 0-C / 0-D 累計的修正**超過 50 行或跨 5 檔以上**，**MUST** 在此處重跑一次 `codex-review-safe.sh xhigh` 確認新引入的程式碼也過 pi 眼睛（pi 看的是啟動時 snapshot，後續大改動不在它覆蓋範圍）。小改動（< 50 行 / < 5 檔）視同安全跳過。
 
 完成匯合後 **MUST** 用 metrics recorder 產生匯合行，**NEVER** 自己手打那行：
 
@@ -642,14 +642,14 @@ node .claude/scripts/0a-metrics.mjs record \
 **紀律禁止項**（每條皆對應壓力下違規模式或已知 rationalization）：
 
 - **NEVER** 跳過 0-A.0（simplify 是常駐第一步，不視變更大小例外）
-- **NEVER** 改用其他模型（Codex 必須 `gpt-5.6-sol`、Fable 必須 `claude-fable-5`）
-- **NEVER** 把 codex 列出的問題判定為「建議性質」而跳過 —— 一律修
+- **NEVER** 改用其他模型（Pi 席位必須 `gpt-5.6-sol`、Fable 必須 `claude-fable-5`）
+- **NEVER** 把 pi 列出的問題判定為「建議性質」而跳過 —— 一律修
 - **NEVER** 用「不在本次範圍」跳過 finding —— 該判定只有走 § 0-A.1「finding 的三類分流」判為**純舊碼**、且三行舉證逐行寫齊才成立；缺任一行照 severity 修
-- **NEVER** 在 fast-path 條件未完全滿足時提早跳過 codex —— 三條件 AND，任一不滿足都跑
+- **NEVER** 在 fast-path 條件未完全滿足時提早跳過 pi review —— 三條件 AND，任一不滿足都跑
 - **NEVER** 做第 3 輪 review（會無限拖長 commit 流程；0-A.1 + 0-A.2 兩輪處理不完代表變更太大，應先 split）
-- **NEVER** 因 0-A.1 抓到 Critical/Major 後跳過 0-A.2 —— 一律進入 Codex max + Fable max 驗證
-- **NEVER** 用主線自判把 codex 標的 Major / Critical 降級成 Minor 來跳過 0-A.2 —— severity 以 codex 輸出為準
-- **NEVER** 跳過 0-A.2 的 Fable 步驟只跑 Codex max —— 兩步驟綁定，缺 Fable 裁決 = 0-A.2 未完成
+- **NEVER** 因 0-A.1 抓到 Critical/Major 後跳過 0-A.2 —— 一律進入 Pi max + Fable max 驗證
+- **NEVER** 用主線自判把 pi 標的 Major / Critical 降級成 Minor 來跳過 0-A.2 —— severity 以 pi 輸出為準
+- **NEVER** 跳過 0-A.2 的 Fable 步驟只跑 Pi max —— 兩步驟綁定，缺 Fable 裁決 = 0-A.2 未完成
 
 ---
 
@@ -669,7 +669,7 @@ node .claude/scripts/0a-metrics.mjs record \
 
 **Dispatch 方式**：主線直派 Pi `--model grok-xai --effort low`（`--route routing-table --tier-basis table-row --table-row screenshot-review-verify`），指令與 brief 素材見 [[review-screenshot]] § 派遣方式。**NEVER** 用 `Agent` tool with `subagent_type: screenshot-review`——per `agent-routing.md` Routing Table 該列，四個模式（含 0-B）一律直派；wrapper 只在 dispatcher exit 3 後才開。exit 4 走 `--model grok-cursor` 同 effort 重派，**NEVER** 當機械故障。
 
-**並行啟動**：觸發時 MUST 在 0-A.1 codex 背景 process 啟動的**同一個 assistant 回合**內送出 0-B dispatch —— **NEVER** 等 0-A.1 跑完才派（會浪費 3–5 min 的並行收益）。0-B 跑完回收 finding，與 0-A.1 / 0-C 的 finding 一起匯合修正。
+**並行啟動**：觸發時 MUST 在 0-A.1 pi 背景 process 啟動的**同一個 assistant 回合**內送出 0-B dispatch —— **NEVER** 等 0-A.1 跑完才派（會浪費 3–5 min 的並行收益）。0-B 跑完回收 finding，與 0-A.1 / 0-C 的 finding 一起匯合修正。
 
 問題修正後輸出 `✅ 0-B 通過`；不觸發則直接輸出 `⏭️ 0-B 跳過（無 UI 變更）`。
 
@@ -677,7 +677,7 @@ node .claude/scripts/0a-metrics.mjs record \
 
 ## § 0-C: CI 等效檢查（Fix-Verify Loop、並行軸 C）
 
-**並行啟動**：MUST 在 0-A.1 codex 背景 process 啟動的**同一個 assistant 回合**內，主線 foreground 開跑 `pnpm check` —— 跟 codex 並行不阻塞。0-C 完成（含 fix loop 通過）後再 poll 0-A.1 與回收 0-B dispatch。
+**並行啟動**：MUST 在 0-A.1 pi 背景 process 啟動的**同一個 assistant 回合**內，主線 foreground 開跑 `pnpm check` —— 跟 pi 並行不阻塞。0-C 完成（含 fix loop 通過）後再 poll 0-A.1 與回收 0-B dispatch。
 
 跑下列指令確保 **format / lint / typecheck / test / doctor 全部 0 errors + 0 warnings + 0 test failures**：
 
@@ -734,11 +734,11 @@ Doctor health score < 100 或 exit code ≠ 0 → **MUST block commit**，修復
 
 > **oxfmt batched false-positive**（vite-plus 0.1.21 已知 bug）：第一次 `pnpm format:check` 紅但 single-file `vp fmt --check <path>` 通過，是 batched bug 不是 format issue — **先**跑一次 `pnpm format`（vp fmt --write）再重跑 check 通常就過。**NEVER** 動 `.oxfmtignore` 或 LOCKED projection（`.claude/rules/` / `AGENTS.md` / `CLAUDE.md` / spectra change markdown）試圖讓 oxfmt 滿意 — 那是 governance violation。clade 中央倉 release flow 已在 `scripts/publish.ts` 主流程加 stable fmt pre-stage（兩輪 `vp fmt --write` + `vp fmt --check`），consumer 端 commit 流程不需再背 workaround SOP。詳見 `docs/pitfalls/2026-05-18-oxfmt-batched-check-false-positive.md`。
 
-失敗時進入 loop：修復 → `pnpm format`（裸打 `vp fmt` 必須加 `--ignore-path .oxfmtignore`） → 重跑上述步驟 → 直到全綠。loop 的執行者依下方「fix loop 的 codex offload」規則決定（**預設背景 codex**；例外才主線直修）。
+失敗時進入 loop：修復 → `pnpm format`（裸打 `vp fmt` 必須加 `--ignore-path .oxfmtignore`） → 重跑上述步驟 → 直到全綠。loop 的執行者依下方「fix loop 的 pi offload」規則決定（**預設背景 pi**；例外才主線直修）。
 
-**Fix loop 的 codex offload（預設派背景 codex，主線不留在 foreground 修）**：
+**Fix loop 的 pi offload（預設派背景 pi，主線不留在 foreground 修）**：
 
-0-C 檢查發現失敗需要修補時，**預設**派背景 codex 跑 fix-verify loop，主線同回合繼續既有並行收尾（poll 軸 A、回收軸 B）— 三軸並行結構不變，軸 C 只是從「主線 foreground 修」換成「codex 背景修」：
+0-C 檢查發現失敗需要修補時，**預設**派背景 pi 跑 fix-verify loop，主線同回合繼續既有並行收尾（poll 軸 A、回收軸 B）— 三軸並行結構不變，軸 C 只是從「主線 foreground 修」換成「pi 背景修」：
 
 ```bash
 node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
@@ -786,12 +786,12 @@ exit 2 在 grok 第一手 → 走升級列；exit 2 在 sol 升級列 → 失敗
 **例外（主線直修，不派）**：
 
 1. trivial 單點修 — 單檔 ≤5 行、typo / import 級
-2. 失敗根因明顯涉及本次 commit 的設計判斷（修法本身要決策）— codex 只能猜，主線自修
+2. 失敗根因明顯涉及本次 commit 的設計判斷（修法本身要決策）— pi 只能猜，主線自修
 
-**codex 完工後主線 MUST**：
+**pi 完工後主線 MUST**：
 
-1. 重跑 `pnpm check`（+ 條件觸發的 `pnpm test` / `pnpm run doctor`）確認全綠 — **不信 codex 自報**
-2. `git diff` 確認 codex 改動 scope 只在修錯相關檔；scope 外 substantive change → revert 該段改動 + 主線自修（注意 working tree 含本次 commit 的 uncommitted 變更，**NEVER** `git checkout HEAD -- <file>` 整檔回退 — 會把本次 commit 的原始變更一起砍掉；用 Edit 撤掉 codex 引入的段落即可）
+1. 重跑 `pnpm check`（+ 條件觸發的 `pnpm test` / `pnpm run doctor`）確認全綠 — **不信 pi 自報**
+2. `git diff` 確認 pi 改動 scope 只在修錯相關檔；scope 外 substantive change → revert 該段改動 + 主線自修（注意 working tree 含本次 commit 的 uncommitted 變更，**NEVER** `git checkout HEAD -- <file>` 整檔回退 — 會把本次 commit 的原始變更一起砍掉；用 Edit 撤掉 pi 引入的段落即可）
 
 **禁止**用 `npx vitest run` / `npx eslint` 等個別工具替代 `pnpm check` / `pnpm test` / `pnpm run doctor`。若 `.claude/worktrees/` 干擾結果，先清理再跑。
 

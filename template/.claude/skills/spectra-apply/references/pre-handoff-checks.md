@@ -15,7 +15,7 @@ Local edits will be reverted by the next sync.
 
 ## Step 8a.6 — E.1 收集 / 判定、結果處理、ledger record、E.2 dispatcher 與 fallback
 
-   **E.1 收集階段**（codex Grok-4.6 medium；收集輸出不是 gate，判定階段才是）：
+   **E.1 收集階段**（pi Grok-4.6 medium；收集輸出不是 gate，判定階段才是）：
 
    ```bash
    node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
@@ -26,9 +26,9 @@ Local edits will be reverted by the next sync.
      --route routing-table --tier-basis table-row --table-row spectra-prehandoff-collect
    ```
 
-   Prompt 基於 `~/offline/clade/vendor/snippets/pre-handoff-cross-check/main-self-analysis.template.md`，要求 codex 走全 **5 dimensions**（D1 task↔render / D2 evidence↔dom fab guard / D3 list↔fallback / D4 api contract boundary / D5 error tail），對每個 dimension 收集**客觀 evidence**（讀截圖、讀 DOM observation、讀 annotation、讀 git diff、讀 API response），輸出 JSON：`{"dimensions": [{"id":"D1","evidence":"...","raw_data":"..."}, ...]}` — 收集階段**不做** PASS/FAIL 判定。
+   Prompt 基於 `~/offline/clade/vendor/snippets/pre-handoff-cross-check/main-self-analysis.template.md`，要求 pi 走全 **5 dimensions**（D1 task↔render / D2 evidence↔dom fab guard / D3 list↔fallback / D4 api contract boundary / D5 error tail），對每個 dimension 收集**客觀 evidence**（讀截圖、讀 DOM observation、讀 annotation、讀 git diff、讀 API response），輸出 JSON：`{"dimensions": [{"id":"D1","evidence":"...","raw_data":"..."}, ...]}` — 收集階段**不做** PASS/FAIL 判定。
 
-   **E.1 判定階段**（codex GPT-5.6-sol xhigh）：
+   **E.1 判定階段**（pi GPT-5.6-sol xhigh）：
 
    ```bash
    node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
@@ -56,7 +56,7 @@ Local edits will be reverted by the next sync.
 
       `--status fail` 當任一 dimension FAIL，否則 `pass`；`--findings-json` 列每個 FAIL 的 `{dimension, severity}`（無 FAIL 給 `[]`）。此 step append-only + fail-open，**NEVER** 因 ledger 寫入失敗而中斷 handoff。此 E.1 record 現由 `archive-gate.sh` **Check 7（Pre-handoff Verdict Presence）機械強制存在** — 缺 E.1 record → archive 被擋 exit 2（fail-open 僅限 ledger 檔尚不存在的 pre-propagation consumer）。
 
-   **Layer E.2 — codex cross-model second opinion**（clade fork addition；Phase 2）：E.1 之後 **MUST** 再派 **codex GPT-5.6-sol xhigh** 對同 5 dimension 做獨立 cross-check（E.1 收集 + 判定都是同 model 同 session，E.2 另起一個 session 獨立審——不同 session 各自推理，防止 E.1 session 內的 rationalization 傳染）：
+   **Layer E.2 — pi cross-model second opinion**（clade fork addition；Phase 2）：E.1 之後 **MUST** 再派 **pi GPT-5.6-sol xhigh** 對同 5 dimension 做獨立 cross-check（E.1 收集 + 判定都是同 model 同 session，E.2 另起一個 session 獨立審——不同 session 各自推理，防止 E.1 session 內的 rationalization 傳染）：
 
    ```bash
    node <clade-vendor>/scripts/pi-dispatch-pre-handoff-check.ts \
@@ -67,7 +67,7 @@ Local edits will be reverted by the next sync.
 
    - Dispatcher stdout 印 JSON：`{"layer":"E.2","runtime":"codex","status":"pass"|"fail","findings":[{dimension,severity,evidence,suggested_fix}]}`。
    - **merge E.1 + E.2 findings**：兩方任一 `FAIL` → 對應 item 寫 `（issue: <dimension>: <evidence>）` annotation（去重；D2 fabrication 同樣 strip 假 `(verified-ui:)` + restore `[ ]`）。
-   - **Fallback**：dispatcher 回 `status:"error"` + `fallback:"claude-subagent"`（codex 不在 / 無 parseable JSON）→ 改派一個 Claude subagent 用 `main-self-analysis.template.md` 同 5 dimension 做 cross-check（**NEVER** 憑記憶補；**NEVER** 跳過 cross-check 直接 handoff）。
+   - **Fallback**：dispatcher 回 `status:"error"` + `fallback:"claude-subagent"`（pi 不在 / 無 parseable JSON）→ 改派一個 Claude subagent 用 `main-self-analysis.template.md` 同 5 dimension 做 cross-check（**NEVER** 憑記憶補；**NEVER** 跳過 cross-check 直接 handoff）。
 
 ---
 
@@ -86,11 +86,11 @@ Local edits will be reverted by the next sync.
 
    2. **LEGACY 清理**：刪掉 `legacy` array 內所有無 `#N` 前綴的舊圖（`rm` 即可；它們不配對任何 item）。
 
-   3. **STALE 重拍**（**codex Grok-4.6 medium**）：對 `stale` array 內每個 item：
+   3. **STALE 重拍**（**pi Grok-4.6 medium**）：對 `stale` array 內每個 item：
       - 從 tasks.md `## 人工檢查` 找到對應 `#N` item 的 URL + ready_signal
-      - 派 codex Grok-4.6 medium 透過 `pi-dispatch-screenshot-verify.ts` 重拍該張截圖
+      - 派 pi Grok-4.6 medium 透過 `pi-dispatch-screenshot-verify.ts` 重拍該張截圖
       - 覆蓋原檔（mtime 自然 > last UI commit）
-      - 重拍完成後，對重拍的截圖跑 **Screenshot Match Analysis gate**（同 Step 8a § 4 的 codex GPT-5.6-sol xhigh 分析），確認重拍截圖匹配要求
+      - 重拍完成後，對重拍的截圖跑 **Screenshot Match Analysis gate**（同 Step 8a § 4 的 pi GPT-5.6-sol xhigh 分析），確認重拍截圖匹配要求
 
    4. **重跑 audit 確認 0 stale**：
 

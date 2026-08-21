@@ -13,11 +13,11 @@ Local edits will be reverted by the next sync.
 
 ---
 
-## 選項 B 全流程（Phase B-0a Fable draft / B-0b Codex review / B-0c 主線 final check）
+## 選項 B 全流程（Phase B-0a Fable draft / B-0b Pi review / B-0c 主線 final check）
 
-   ### 選項 B：三模型交叉 pipeline（Fable draft → Codex review → 主線 Fable final check）
+   ### 選項 B：三模型交叉 pipeline（Fable draft → Pi review → 主線 Fable final check）
 
-   三段序列：Claude Fable 5 xhigh 在背景起草 → Codex GPT-5.6-sol max（fresh session）檢查出 findings → 主線 Claude Fable 5 xhigh 整合 findings 並完成全套 cross-check。三段皆背景派工 + notification-only watch（per `.claude/rules/agent-routing.pi-watch-protocol.md` § 監看排程 A）。draft 與 review 是兩個不同 model 的獨立 session（Fable draft + Codex review 交叉視角，比同 model 更能抓到盲點）。
+   三段序列：Claude Fable 5 xhigh 在背景起草 → Pi GPT-5.6-sol max（fresh session）檢查出 findings → 主線 Claude Fable 5 xhigh 整合 findings 並完成全套 cross-check。三段皆背景派工 + notification-only watch（per `.claude/rules/agent-routing.pi-watch-protocol.md` § 監看排程 A）。draft 與 review 是兩個不同 model 的獨立 session（Fable draft + Pi review 交叉視角，比同 model 更能抓到盲點）。
 
    #### Phase B-0a：背景 Fable draft
 
@@ -33,18 +33,18 @@ Local edits will be reverted by the next sync.
       ```
 
       預設 text 輸出（主線讀 tail）。
-   4. **立刻**簡短回報：「已派 Claude Fable 5 xhigh 在背景 draft `<change-name>`（bash job `<id>`）；完成後派 Codex review，再由主線 Fable final check」。
+   4. **立刻**簡短回報：「已派 Claude Fable 5 xhigh 在背景 draft `<change-name>`（bash job `<id>`）；完成後派 Pi review，再由主線 Fable final check」。
    5. 啟動 **Watch Protocol**：`claude -p` background Bash 回傳 `<task-id>` 後，立刻記錄 owner / deadline，並排 1500s canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=fable:spectra-propose:<change-name>:draft deadline=<ISO>...` inert control message。控制 turn 只准 `TaskOutput(block=false)`、重排同一 inert prompt、停止 wakeup或排 lifecycle intervention；**NEVER** 放原 draft prompt、讀 output tail、執行 artifact mutation或短輪詢。完成通知到達後才 claim task id、讀 stdout並進 Phase B-0b。
 
-   #### Phase B-0b：Fable draft 完成 → 派 Codex review
+   #### Phase B-0b：Fable draft 完成 → 派 Pi review
 
    收到 Fable draft `<task-notification status=completed>` 時**立刻**：
 
    1. **Read Fable draft stdout** 摘要：BashOutput 讀完整 stdout，回報 artifacts list / `spectra validate` 結果。
    2. **若 Fable draft 仍 `spectra park` 了**（不該發生，draft prompt 已明令禁止）：先
       `spectra unpark <change-name>` —— park 後 artifacts 只存 `.git/spectra-app/spectra.db` SQLite
-      blob、不在 disk，review Codex 讀不到。
-   3. **Write Codex review prompt 到 `/tmp/codex-spectra-propose-<change-name>-review-prompt.md`**：
+      blob、不在 disk，review Pi 讀不到。
+   3. **Write Pi review prompt 到 `/tmp/codex-spectra-propose-<change-name>-review-prompt.md`**：
 
       ```
       請檢查（review）本 repo 已 draft 的 change `<change-name>`，**不要修改任何檔案**，只輸出 findings。
@@ -54,7 +54,7 @@ Local edits will be reverted by the next sync.
       - .claude/rules/agent-routing.md（Phase Purity：UI view phase vs 非 view phase 是否切開）
       輸出格式：findings list，每條一行 `[檔案] 問題 → 建議修法`。無問題的面向寫「OK」。**禁止** Edit / Write / 改檔，只輸出文字 findings。
       ```
-   4. **背景啟動Pi Codex dispatcher**（**Bash** tool 加 `run_in_background=true`）：
+   4. **背景啟動 Pi dispatcher**（**Bash** tool 加 `run_in_background=true`）：
 
       ```bash
       node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
@@ -65,9 +65,9 @@ Local edits will be reverted by the next sync.
         --route routing-table --tier-basis table-row --table-row spectra-artifact-draft
       ```
 
-   5. **立刻**回報：「Fable draft 完成，已派 Codex GPT-5.6-sol max review（bash job `<id>`）；完成後主線 Fable final check」+ 啟動 notification-only watch（同 Phase B-0a step 5）。
+   5. **立刻**回報：「Fable draft 完成，已派 Pi GPT-5.6-sol max review（bash job `<id>`）；完成後主線 Fable final check」+ 啟動 notification-only watch（同 Phase B-0a step 5）。
 
-   #### Phase B-0c：Codex 檢查完 → 主線 Fable final check
+   #### Phase B-0c：Pi 檢查完 → 主線 Fable final check
 
    **exit code 分流（收到 terminal notification 後先做，per `pi-phase-dispatch.md` § 4）**：
 
@@ -75,12 +75,12 @@ Local edits will be reverted by the next sync.
    - `2`：業務 fail；讀 `result` 的原因，主線決定修補或重派。
    - `3`：機械故障；讀 receipt 指向的 stderr log，依 watch protocol fallback。
    - `4`：配額擋；本段是 sol，依 [[agent-routing]] § 配額耗盡時的 fallback 紀律先走 `--model sol-cursor`
-     同 effort 重派一次，**NEVER** 當成可立即重試的機械故障。Codex review 是本選項的**交叉視角來源**，
+     同 effort 重派一次，**NEVER** 當成可立即重試的機械故障。Pi review 是本選項的**交叉視角來源**，
      兩池皆耗盡時 **NEVER** 用主線 Fable 自審頂替——那會讓三模型交叉塌成兩模型，MUST 明示使用者並登記待補。
 
-   收到 Codex `<task-notification status=completed>` 時**立刻**：
+   收到 Pi `<task-notification status=completed>` 時**立刻**：
 
-   1. **Read Codex findings**：BashOutput 讀 codex stdout，整理 findings 摘要。
-   2. **主線整合 findings + 跑完整 cross-check** — 執行 Phase 0b step 3 ~ 9 全套（`post-propose-check.sh` / `post-propose-manual-review-check.sh` / **`--check7-only` hard gate** / `design-inject.sh` / 補 Design Review 7 步 / Manual Review Marker Hygiene / `[verify:auto]`→explicit marker / Backend Verification Evidence 搬移 / Open Questions→AskUserQuestion / `spectra analyze` / `spectra validate` / commit artifacts 進 git），並把 Codex findings 一併納入修補依據。
-   3. **主線自己 Edit 修**（**NEVER** 把修補丟回 codex，太慢、來回成本高）。
-   4. 回報使用者：artifacts list + Fable draft 摘要 + **Codex review findings 摘要** + 主線補了什麼（Design Review 7 步 OK 與否、analyze/validate 結果）+ `/spectra-apply <change-name>` 提示。
+   1. **Read Pi findings**：BashOutput 讀 pi stdout，整理 findings 摘要。
+   2. **主線整合 findings + 跑完整 cross-check** — 執行 Phase 0b step 3 ~ 9 全套（`post-propose-check.sh` / `post-propose-manual-review-check.sh` / **`--check7-only` hard gate** / `design-inject.sh` / 補 Design Review 7 步 / Manual Review Marker Hygiene / `[verify:auto]`→explicit marker / Backend Verification Evidence 搬移 / Open Questions→AskUserQuestion / `spectra analyze` / `spectra validate` / commit artifacts 進 git），並把 Pi findings 一併納入修補依據。
+   3. **主線自己 Edit 修**（**NEVER** 把修補丟回 pi，太慢、來回成本高）。
+   4. 回報使用者：artifacts list + Fable draft 摘要 + **Pi review findings 摘要** + 主線補了什麼（Design Review 7 步 OK 與否、analyze/validate 結果）+ `/spectra-apply <change-name>` 提示。

@@ -146,12 +146,12 @@ Update an existing Spectra change — from a plan file or conversation context.
 
    **Step 4b 開頭 MUST 用 AskUserQuestion 跳三選一選單**讓使用者選（除非使用者已明確指定路徑，見下方捷徑）：
 
-   - **A. Codex flow（預設 / 推薦，選單第一項）** — Codex GPT-5.6-sol max 在背景更新 artifacts + 主線 Claude Fable 5 xhigh cross-check。
+   - **A. Pi flow（預設 / 推薦，選單第一項）** — Pi GPT-5.6-sol max 在背景更新 artifacts + 主線 Claude Fable 5 xhigh cross-check。
    - **B. Fable flow** — Claude Fable 5 xhigh 在背景更新 artifacts + 主線 Claude Fable 5 xhigh cross-check。
    - **C. 純 Claude** — 主線 Claude Fable 5 xhigh 直接走 Step 5~9。
 
    **明確指定捷徑（跳過選單）**：
-   - 「用 codex」「照舊」→ **選項 A**
+   - 「用 pi」「用 codex」「照舊」→ **選項 A**
    - 「用 Fable」「Fable 做」→ **選項 B**
    - 「不要派」「純 Claude」「直接你做」→ **選項 C**
 
@@ -311,7 +311,7 @@ Update an existing Spectra change — from a plan file or conversation context.
 
    **Check 7: Manual Review Marker Hygiene** (clade fork — applies whenever ingest modifies `## 人工檢查` items)
 
-   `/spectra-ingest` retro-updates a change after impl / verify, which can introduce **new** `## 人工檢查` items or modify existing ones — bypassing `/spectra-propose` Step 5.5. The same hygiene rules **MUST** be enforced here. Apply Rule 1-4 mirroring `spectra-propose` Step 5.5 (Manual Review Marker Hygiene Check). Violations → main thread Edits `tasks.md` directly (do **NOT** round-trip to codex; too slow):
+   `/spectra-ingest` retro-updates a change after impl / verify, which can introduce **new** `## 人工檢查` items or modify existing ones — bypassing `/spectra-propose` Step 5.5. The same hygiene rules **MUST** be enforced here. Apply Rule 1-4 mirroring `spectra-propose` Step 5.5 (Manual Review Marker Hygiene Check). Violations → main thread Edits `tasks.md` directly (do **NOT** round-trip to pi; too slow):
 
    **Rule 1: Every item line MUST carry a leading marker**
 
