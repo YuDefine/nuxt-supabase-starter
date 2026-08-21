@@ -10,7 +10,7 @@
 # their executions do not enter the pi events log.
 #
 # Since TD-524 the cursor pool no longer runs under the caller's own UID with a
-# live filesystem: `runPiCodex` spawns it inside bubblewrap with the audited
+# live filesystem: `runPi` spawns it inside bubblewrap with the audited
 # repo bound read-only, $HOME replaced by a tmpfs, and an auth.json filtered
 # down to the cursor credential. Repo mutation is refused by the kernel rather
 # than detected afterwards, and ~/.ssh, sibling repos and the codex/xai refresh

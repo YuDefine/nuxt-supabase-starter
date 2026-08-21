@@ -148,6 +148,22 @@ exit code 契約的 SoT 是 [[agent-routing.pi-watch-protocol]] § 泛用 Dispat
 **NEVER 把 quota 擋讀成「這個 item 需要 attended」**——它與人在不在場無關，`resets_at` 到了就自己解除。
 兩者混在一起會讓一條純機械的等待被 packaging 成待 Charles 拍板的決策。
 
+## 併發上限是兩個，按載體選（NEVER 挑數字小的那個）
+
+`≤4` 與 `≥2` 不是矛盾，是兩種**載體**各自的上限。判之前先問一題：**這幾條 dispatch 共用一棵 working tree 嗎？**
+
+| 可觀察 predicate | 上限 | 出處 |
+| --- | ---: | --- |
+| 每個 worker 各自 worktree（`/wt <slug>` 扇出組） | **4** | SKILL.md § 4a |
+| 共用同一棵 working tree 的 session dispatch | **2** | SKILL.md § dispatch 的三個不准 |
+
+4 那條買的是並行度（worktree 隔離，沒有 race 可搶）；2 那條買的是 race 防護
+（`N session 搶同一 working tree 是把 usage 問題升級成 race 問題`，逐字理由在 SKILL.md）。
+**NEVER** 把 2 當全域上限套到 worktree 扇出組上——那會把並行度砍半換一個不存在的 race；
+**NEVER** 把 4 套到共享樹上——那正是 2 那條在防的東西。
+
+兩者可同時生效：扇出組 4 條各自 worktree ＋ 主線這棵樹上另有 1 條 dispatch，合法。
+
 ## 主線在做什麼
 
 主線**不是**扇出後的等待者，它是序列組的執行者。任一時刻主線的工作來源，依序：

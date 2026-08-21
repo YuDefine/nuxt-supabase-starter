@@ -457,7 +457,7 @@ runner 比對 pi session 事件的 cwd 與 `--cwd`，realpath 不符即 exit 5�
 
 **缺 session 事件同樣 exit 5**（fail-closed）。這道 guard 的用途是「證明」綁定正確，拿不到證據就是證明不了 —— 放行等於 gate 只在 pi 願意提供證據時才存在，而攻擊面（prompt 內嵌的不可信 changeset）恰恰有動機讓它不提供。真 pi 每次 run 都吐 session 事件，所以這條在正常路徑上不會誤觸。
 
-> 查 events log **MUST 用 runner 自己印的 `pi-codex-review: events log: <path>`**（出現在輸出頂端），**NEVER** 用 `ls -t /tmp/pi-codex-review-*` 撈「最新那個」—— `/tmp` 是全 session 共用、檔名只有 pid+ts，並行 session 下會撈到別人的 run。2026-08-19 就是這樣把另一個 repo 的 review log 誤讀成自己的，得出「跑錯 workspace」的錯誤結論，連帶用那份 log 錯誤地否證了一條真實的 Critical。
+> 查 events log **MUST 用 runner 自己印的 `pi-review: events log: <path>`**（出現在輸出頂端），**NEVER** 用 `ls -t /tmp/pi-review-*` 撈「最新那個」—— `/tmp` 是全 session 共用、檔名只有 pid+ts，並行 session 下會撈到別人的 run。2026-08-19 就是這樣把另一個 repo 的 review log 誤讀成自己的，得出「跑錯 workspace」的錯誤結論，連帶用那份 log 錯誤地否證了一條真實的 Critical。
 
 #### exit 6（review 期間 working tree 被改動）→ verdict 不可信 + 人工檢視
 

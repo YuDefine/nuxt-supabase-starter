@@ -722,7 +722,9 @@ runner.sh 另有 mechanical fail-closed：起跑前、每次 child launch 前，
 
 ### 4a. 自主 item → dispatch
 
-- 要改 tracked code → `/wt <slug>: <brief>`（扇出組，≤4 in-flight）
+- 要改 tracked code → `/wt <slug>: <brief>`（扇出組，**≤4 in-flight**）
+  - 這個 4 綁的 predicate 是「**每個 worker 各自 worktree**」——`/wt` 保證這件事，所以彼此不搶同一棵樹。
+    **NEVER** 把 4 套到共享 working tree 的 dispatch 上（那條上限是 2，見 § dispatch 的三個不准）。
 - spectra change 的實作 → `/wt <change-name>: /spectra-apply <change-name>`
 - 純唯讀調查 / 單檔文字改動 → 主線即時組（read-heavy 者先過 [dispatch-topology.md](reference/dispatch-topology.md) § 主線即時組的 pre-scan 前置判定派 pi，主線消費 report）
 - 記進 state 的 `inFlight`，`subagentsSpawned` +1
@@ -764,8 +766,11 @@ runner 迴圈就沒有主體了；且 `completeRelay()` 要求有 current pane �
 re-scan 或 `herdr-patrol.ts --stalled` 收。逐字反開脫：「反正 relay 也是派出去」「派完這輪就結束了」。
 
 **dispatch 的三個不准**：探索型（結論仍依賴本 session 判斷鏈、brief 落不下來）NEVER dispatch——先把
-判斷落盤，落不了走登記；需 attended gate 的 NEVER dispatch——新 session 一樣 blocked；**並行 dispatch
+判斷落盤，落不了走登記；需 attended gate 的 NEVER dispatch——新 session 一樣 blocked；**共享同一 working tree 的並行 dispatch
 已 ≥2 條時 NEVER 再發**——排入下一輪，N session 搶同一 working tree 是把 usage 問題升級成 race 問題。
+這個 2 綁的 predicate 是「**共用一棵 working tree**」。**NEVER** 把它讀成全域併發上限：每個 worker
+各自 worktree 的 `/wt` 扇出組不受本條約束，上限是 4（見 § 4a）。兩個數字不是矛盾，是兩種載體——
+判的時候先問「這幾條 dispatch 共用一棵樹嗎」，**NEVER** 憑「哪個數字比較小就照哪個」選邊。
 
 #### Packaging SOP（「需要拍板」那格的執行內容；本體不動）
 
