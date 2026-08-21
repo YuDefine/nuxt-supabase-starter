@@ -103,7 +103,7 @@ attended 開場 MUST 把這批跟 `awaiting[]` 一起過 (a) 的 prune：能自�
 `options`：`recommended: true` 那項排第一、label 後綴 `(推薦)`，`effect` 進 description。
 問題文字 = 條目的 `title` + 一句 `blocker`。
 
-permission classifier 要求 **specific shared-action consent** 的題目一律遵守 [[agent-routing]] § Shared-action specific consent UX；本檔只補 work-loop 狀態約束：packaging MUST 設 `requiresSpecificConsent=true`，unattended / runner 不呼叫 `AskUserQuestion`，並保留該 SoT 要求的完整範圍，等下一次 attended 開場顯示。
+permission classifier 要求 **specific shared-action consent** 的題目一律遵守 [[agent-routing.keepalive-wake]] § Shared-action specific consent UX；本檔只補 work-loop 狀態約束：packaging MUST 設 `requiresSpecificConsent=true`，unattended / runner 不呼叫 `AskUserQuestion`，並保留該 SoT 要求的完整範圍，等下一次 attended 開場顯示。
 
 **NEVER 在這一步做這三件事**：
 

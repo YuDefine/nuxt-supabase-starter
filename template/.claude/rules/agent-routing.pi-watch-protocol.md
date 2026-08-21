@@ -373,7 +373,7 @@ Pi 由**該層編排者**在其自身 sandbox 內直接 Bash `run_in_background`
 
 ### 安全網 control turn（hard boundary）
 
-安全網 wakeup 的 allowlist 以 [[agent-routing]] § Generic keepalive 醒來只做控制面動作 為準：只可 `TaskOutput(block=false)`、重排 / 停 wakeup、排 handoff。**NEVER** 讀 BashOutput tail 判健康、執行原 pi 任務、或做任何 mutation。
+安全網 wakeup 的 allowlist 以 [[agent-routing.keepalive-wake]] § Generic keepalive 醒來只做控制面動作 為準：只可 `TaskOutput(block=false)`、重排 / 停 wakeup、排 handoff。**NEVER** 讀 BashOutput tail 判健康、執行原 pi 任務、或做任何 mutation。
 
 `ASYNC_LIFECYCLE_HANDOFF` 與 native notification 只在 terminal 時共用 task-id claim；claim 成功的正常 turn 才讀 stdout / stderr、cross-check 並分類。stdout / stderr 命中 `fetch failed`、sandbox / permission / auth error、`request_user_input is not supported in exec mode` 或 blocker 語意 → 依 [[agent-routing.pi-input-intercept]] 與下方介入契約處理。
 
@@ -381,7 +381,7 @@ Pi 由**該層編排者**在其自身 sandbox 內直接 Bash `run_in_background`
 
 completed result 顯示阻塞、或 harness 明確回報 failed / cancelled 時：attended mode **MUST** 立刻用 `AskUserQuestion` 呈現至少 [重派 / 中止]；unattended / headless mode **NEVER** 問，改以完整 blocker 與選項 packaging，並安全結束該 path。`ASYNC_DEADLINE_INTERVENTION` 的 attended 選項可包含 [繼續等 / 中止]：選「繼續等」**MUST** 寫入新的有限 deadline，保持 `lifecycle=pending`，並重新 arm canonical inert control message；選中止則先 `TaskStop`，確認 terminal 才收割。**NEVER** 自行 kill 或調整 prompt。
 
-permission classifier 另要求 specific shared-action consent 時，推薦選項的 description MUST 放完整具名範圍，選取即授權；**NEVER** 要 user 手打或貼完整授權句（SoT：[[agent-routing]] § Shared-action specific consent UX）。
+permission classifier 另要求 specific shared-action consent 時，推薦選項的 description MUST 放完整具名範圍，選取即授權；**NEVER** 要 user 手打或貼完整授權句（SoT：[[agent-routing.keepalive-wake]] § Shared-action specific consent UX）。
 
 ### `ScheduleWakeup` 用法守則
 

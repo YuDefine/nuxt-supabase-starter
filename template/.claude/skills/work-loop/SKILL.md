@@ -227,7 +227,7 @@ runner process 的退出通知到達時 **MUST 主動回報，不等 user 問**�
 | --- | --- |
 | `TaskOutput(block=false)` = running，且未到 deadline | 重排同一個 3300s control prompt，本 turn 結束。**NEVER** 讀 state、**NEVER** 讀 log、**NEVER** 貼進度 |
 | terminal | 停 heartbeat，排一次 `ASYNC_LIFECYCLE_HANDOFF task=<id> owner=work-loop-runner cause=terminal`；handoff 一般 turn 先 claim task id，**先 `TaskStop` per-round Monitor**，再讀 result、分類 (c)、必要時取 `tail -20`，最後走 (b) 回報 |
-| deadline / unknown | 依 [[agent-routing]] § Generic keepalive 醒來只做控制面動作 保留 ownership 進 deadline intervention；**確認 terminal 前 NEVER** 讀 result、回報完成或停止 Monitor |
+| deadline / unknown | 依 [[agent-routing.keepalive-wake]] § Generic keepalive 醒來只做控制面動作 保留 ownership 進 deadline intervention；**確認 terminal 前 NEVER** 讀 result、回報完成或停止 Monitor |
 
 **3300s 貼著 TTL 訂，NEVER 縮短。** TTL 是 3600s，3300 留 300s 餘裕且**只醒一次**就跨過；縮到一半就是每次長跑多付一倍喚醒成本，而每一次喚醒都是一個完整 turn。縮到幾分鐘更是 (a) 禁掉的輪詢換了個名字。
 

@@ -5,18 +5,45 @@
  * Scans typed enum definitions (`as const` arrays, Zod `z.enum(...)`) and
  * reports consumers that appear to handle the enum non-exhaustively.
  *
- * Heuristic: a *function-sized slice* that references 2+ literal values of an
- * enum but is missing at least one value is flagged as a suspected drift.
- * Slices using `switch` + `assertNever` are excluded (TypeScript already
- * enforces them).
+ * Heuristic: within a slice, comparisons are grouped by the expression they
+ * compare (`facet.availability`, `questionConfigSection`). A group with 2+
+ * positive branches on one enum's values, missing at least one value, is
+ * flagged as a suspected drift. A subject passed to `assertNever` is excluded
+ * (TypeScript already enforces it).
  *
  * Comparison scope is the function, not the whole file — matching literals
  * across unrelated functions was the bulk of historical false positives.
  * Slicing is heuristic (brace balancing over a string/comment-masked copy);
- * there is no TS parse. Code outside any function body is compared as a single
- * `module` slice so `<script setup>` top-level handlers stay covered. Within a
- * slice, an enum whose matched literals are fully explained by another enum is
- * dropped (see dropSubsumed) — enum value sets overlap heavily.
+ * there is no TS parse. `.vue` files are split by SFC block first, so markup
+ * and top-level script code never pool their literals. Code outside any
+ * function body is compared as a single `module` slice so `<script setup>`
+ * top-level handlers stay covered.
+ *
+ * Four guards keep literal coincidence from reading as drift (see TD-064):
+ *   · per-subject grouping — two dispatchers in one slice stay separate, and
+ *     each exemption below binds to one subject rather than the whole slice
+ *   · declared domains win — a symbol annotated `computed<'a' | 'b'>` is not
+ *     an enum that merely happens to contain `a` and `b`. Only module-level
+ *     declarations are consulted from another slice, and a name declared twice
+ *     with conflicting domains is dropped rather than guessed at
+ *   · 2+ *positive* branches required — `x !== 'a' && x !== 'b'` is a guard.
+ *     Negated comparisons never count as coverage: `x !== 'c'` narrows without
+ *     giving `c` a branch
+ *   · top-level returned literals count as handled — a fallthrough
+ *     `return 'ready'` covers `ready` without an explicit `=== 'ready'`, but a
+ *     return inside a nested helper does not, and neither does a return in a
+ *     slice holding two dispatchers: the literal names no subject, so there is
+ *     nothing to say whose gap it closes
+ *
+ * Known bound: a comparison's subject must be a dotted identifier chain
+ * (`facet.availability`, `props?.status`). Computed access (`row[key] === 'draft'`)
+ * and call results (`getStatus() === 'draft'`) are not scanned at all — those
+ * dispatchers are invisible to this audit, which under-reports rather than
+ * false-positives. Widening it needs a real expression parse, not a longer regex.
+ *
+ * Within a slice, an enum whose matched literals are fully explained by
+ * another enum on the same subject is dropped (see dropSubsumed) — enum value
+ * sets overlap heavily.
  *
  * Configuration: reads `spectra-advanced.config.json` (or legacy `spectra-ux.config.json`)
  * from the project root. Falls back to Nuxt-style defaults when no config is present.
@@ -59,6 +86,8 @@ interface DriftFinding {
   scope: string
   /** 1-based line where the enclosing slice starts. */
   line: number
+  /** Normalized expression the branches compare against (`facet.availability`). */
+  subject: string
   present: string[]
   missing: string[]
   handlerKind: 'switch' | 'if-chain'
@@ -477,56 +506,400 @@ function sliceFunctions(content: string): CodeSlice[] {
   return slices
 }
 
-function auditSlice(file: string, slice: CodeSlice, enumDef: EnumDef): DriftFinding | null {
-  const present = new Set<string>()
-  for (const v of enumDef.values) {
-    const escaped = v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const re = new RegExp(`(?:===|!==|==|!=|case)\\s*['"]${escaped}['"]`, 'g')
-    if (re.test(slice.text)) present.add(v)
+/**
+ * Blank out everything outside `[start, end)`, preserving offsets and newlines
+ * so line numbers computed against the result still match the original file.
+ */
+function isolateRange(content: string, start: number, end: number): string {
+  const blank = (s: string): string => s.replace(/[^\n]/g, ' ')
+  return blank(content.slice(0, start)) + content.slice(start, end) + blank(content.slice(end))
+}
+
+/**
+ * `<script>` block bodies. Scripts never nest, so each opening tag pairs with
+ * the next closing tag. Indentation is tolerated — an indented `<script>` is
+ * unusual but must not make the file invisible to the audit.
+ */
+function sfcScriptBlocks(content: string): Array<[number, number]> {
+  const openRe = /^[ \t]*<script(?:\s[^>]*)?>/gm
+  const ranges: Array<[number, number]> = []
+  let m: RegExpExecArray | null
+  while ((m = openRe.exec(content)) !== null) {
+    const bodyStart = m.index + m[0].length
+    const closeIdx = content.indexOf('</script>', bodyStart)
+    const end = closeIdx === -1 ? content.length : closeIdx
+    ranges.push([bodyStart, end])
+    openRe.lastIndex = end
+  }
+  return ranges
+}
+
+/**
+ * The single root `<template>` body. Vue's `<template v-if>` nests inside it,
+ * so the range runs from the *first* opening tag to the *last* closing tag
+ * rather than pairing them — pairing would cut the block at a nested child.
+ */
+function sfcTemplateBlock(content: string): [number, number] | null {
+  const open = /^[ \t]*<template(?:\s[^>]*)?>/m.exec(content)
+  if (!open) return null
+  const closeIdx = content.lastIndexOf('</template>')
+  const bodyStart = open.index + open[0].length
+  if (closeIdx < bodyStart) return null
+  return [bodyStart, closeIdx]
+}
+
+/**
+ * Slice a consumer file. Plain `.ts` files slice by function body. `.vue` files
+ * are split by SFC block first: each `<script>` slices by function body, and
+ * the root `<template>` becomes one slice of its own. Without the split, markup
+ * and module-level script code shared a single `module` slice, so literals from
+ * a `v-if` chain and from unrelated top-level code were compared together.
+ *
+ * A `.vue` file that yields nothing (unrecognized block layout) falls back to
+ * whole-file slicing — losing precision beats silently auditing nothing.
+ */
+function sliceConsumer(file: string, content: string): CodeSlice[] {
+  if (!file.endsWith('.vue')) return sliceFunctions(content)
+
+  const slices: CodeSlice[] = []
+  for (const [start, end] of sfcScriptBlocks(content)) {
+    slices.push(...sliceFunctions(isolateRange(content, start, end)))
+  }
+  const template = sfcTemplateBlock(content)
+  if (template) {
+    const text = isolateRange(content, template[0], template[1])
+    if (text.trim()) {
+      slices.push({ scope: 'template', line: lineOf(content, template[0]), text })
+    }
+  }
+  return slices.length > 0 ? slices : sliceFunctions(content)
+}
+
+/** A literal comparison found in a slice, keyed by what it compares against. */
+interface Comparison {
+  subject: string
+  literal: string
+  positive: boolean
+}
+
+/** `a?.b.value.c` → `a.b.c`; the `.value` unwrap makes refs and their reads agree. */
+function normalizeSubject(raw: string): string {
+  const flat = raw.replace(/\s+/g, '').replace(/\?\./g, '.')
+  const parts = flat.split('.').filter((p) => p && p !== 'value')
+  return parts.join('.') || flat
+}
+
+const CMP_RE =
+  /([A-Za-z_$][\w$]*(?:\s*\??\.\s*[A-Za-z_$][\w$]*)*)\s*(===|!==|==|!=)\s*(['"])([^'"\n]*)\3/g
+const CMP_REVERSED_RE =
+  /(['"])([^'"\n]*)\1\s*(===|!==|==|!=)\s*([A-Za-z_$][\w$]*(?:\s*\??\.\s*[A-Za-z_$][\w$]*)*)/g
+const SWITCH_RE = /\bswitch\s*\(\s*([^)]*?)\s*\)/g
+const CASE_RE = /\bcase\s+(['"])([^'"\n]*)\1/g
+
+/** Brace depth at each offset of `masked`, counting the opening brace as inside. */
+function braceDepths(masked: string): Int32Array {
+  const depths = new Int32Array(masked.length)
+  let depth = 0
+  for (let i = 0; i < masked.length; i++) {
+    if (masked[i] === '{') depth++
+    depths[i] = depth
+    if (masked[i] === '}') depth = Math.max(0, depth - 1)
+  }
+  return depths
+}
+
+/** `switch (subject) { … }` bodies, so a `case` is attributed to the switch that encloses it. */
+function switchBodies(
+  text: string,
+  masked: string,
+): Array<{ subject: string; span: [number, number] }> {
+  const bodies: Array<{ subject: string; span: [number, number] }> = []
+  for (const m of text.matchAll(SWITCH_RE)) {
+    const open = masked.indexOf('{', m.index! + m[0].length)
+    if (open === -1) continue
+    let depth = 0
+    let end = masked.length
+    for (let j = open; j < masked.length; j++) {
+      if (masked[j] === '{') depth++
+      else if (masked[j] === '}' && --depth === 0) {
+        end = j
+        break
+      }
+    }
+    bodies.push({ subject: normalizeSubject(m[1]!), span: [open, end] })
+  }
+  return bodies
+}
+
+/**
+ * Collect every literal comparison in a slice together with the expression it
+ * compares. Grouping by subject is what keeps two unrelated dispatchers in one
+ * slice from pooling their literals into a single bogus enum match.
+ */
+function extractComparisons(text: string, masked: string): Comparison[] {
+  const found: Comparison[] = []
+
+  for (const m of text.matchAll(CMP_RE)) {
+    found.push({ subject: normalizeSubject(m[1]!), literal: m[4]!, positive: m[2]![0] === '=' })
+  }
+  for (const m of text.matchAll(CMP_REVERSED_RE)) {
+    found.push({ subject: normalizeSubject(m[4]!), literal: m[2]!, positive: m[3]![0] === '=' })
   }
 
-  if (present.size < 2) return null
-
-  const missing = enumDef.values.filter((v) => !present.has(v))
-  if (missing.length === 0) return null
-
-  // Classify: a slice with `case '...':` lines is treated as a switch,
-  // otherwise it's an if-chain. Switches that use assertNever are already
-  // compiler-enforced, so they're excluded from drift reports.
-  const hasCase = /\bcase\s+['"]/m.test(slice.text)
-  const handlerKind: DriftFinding['handlerKind'] = hasCase ? 'switch' : 'if-chain'
-
-  if (handlerKind === 'switch' && /assertNever\s*\(/.test(slice.text)) {
-    return null
+  // `case 'x':` belongs to the innermost `switch` whose body contains it —
+  // "nearest preceding switch" misattributes every case that follows a nested
+  // switch back to the inner discriminant.
+  const bodies = switchBodies(text, masked)
+  for (const m of text.matchAll(CASE_RE)) {
+    let subject = 'unknown'
+    let widest = -1
+    for (const body of bodies) {
+      if (body.span[0] < m.index! && m.index! < body.span[1] && body.span[0] > widest) {
+        widest = body.span[0]
+        subject = body.subject
+      }
+    }
+    found.push({ subject, literal: m[2]!, positive: true })
   }
 
+  return found
+}
+
+/**
+ * Literals returned from the slice's own top level — a fallthrough
+ * `return 'ready'` handles `ready`. Returns nested inside a helper defined in
+ * the same slice belong to that helper's control flow, not this handler's, so
+ * they must not silently complete an enum on the caller's behalf.
+ */
+function returnedLiterals(text: string, masked: string, depths: Int32Array): Set<string> {
+  const literals = new Set<string>()
+  for (const m of text.matchAll(/\breturn\s*(['"])([^'"\n]*)\1/g)) {
+    if ((depths[m.index!] ?? 0) <= 1) literals.add(m[2]!)
+  }
+  return literals
+}
+
+/**
+ * Subjects a slice hands to `assertNever` — exhaustiveness is a compile error for
+ * those only. Depth-filtered for the same reason `returnedLiterals` is: an
+ * `assertNever(status)` inside a helper defined in this slice proves the *helper*
+ * is exhaustive, not the dispatcher that happens to name its variable `status`
+ * too. Counting it would silence the outer handler on a namesake's credentials.
+ */
+function assertedSubjects(text: string, depths: Int32Array): Set<string> {
+  const subjects = new Set<string>()
+  for (const m of text.matchAll(
+    /\bassertNever\s*\(\s*([A-Za-z_$][\w$]*(?:\s*\??\.\s*[A-Za-z_$][\w$]*)*)/g,
+  )) {
+    if ((depths[m.index!] ?? 0) <= 1) subjects.add(normalizeSubject(m[1]!))
+  }
+  return subjects
+}
+
+/** Parse `'a' | 'b' | 'c'` into a value set; null if anything else appears. */
+function literalUnion(text: string): Set<string> | null {
+  const parts = text
+    .replace(/;\s*$/, '')
+    .split('|')
+    .map((p) => p.trim())
+    .filter(Boolean)
+  if (parts.length < 2) return null
+  const values: string[] = []
+  for (const part of parts) {
+    const m = /^(['"])([^'"]*)\1$/.exec(part)
+    if (!m) return null
+    values.push(m[2]!)
+  }
+  return new Set(values)
+}
+
+/**
+ * `type Foo = 'a' | 'b'`, in any of the wrappings prettier produces: all on one
+ * line, continuation lines led by `|`, or the whole union on lines after a bare
+ * `=`. A trailing `;` terminates the declaration.
+ */
+function localTypeAliases(content: string): Map<string, Set<string>> {
+  const aliases = new Map<string, Set<string>>()
+  const lines = content.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^\s*(?:export\s+)?type\s+([A-Za-z_$][\w$]*)\s*=\s*(.*)$/.exec(lines[i]!)
+    if (!m) continue
+    let body = m[2]!.trim()
+    for (let j = i + 1; j < lines.length && !body.endsWith(';'); j++) {
+      const next = lines[j]!.trim()
+      // Continue only while the declaration is visibly unfinished.
+      if (!next.startsWith('|') && !body.endsWith('|') && body !== '') break
+      body = `${body} ${next}`.trim()
+    }
+    const values = literalUnion(body)
+    if (values) aliases.set(m[1]!, values)
+  }
+  return aliases
+}
+
+/**
+ * Map each locally-declared symbol to its literal domain, when that domain is
+ * written down in the file (`computed<'a' | 'b'>`, `const x: Foo =`, a function
+ * return annotation). A symbol whose declared domain differs from an enum's
+ * values is simply not that enum — comparing it against the enum's value list
+ * is the literal-collision false positive this exists to stop.
+ *
+ * There is no scope analysis here, so a name declared twice with conflicting
+ * domains is dropped entirely: an exemption is only safe when the file leaves
+ * no doubt about which declaration a comparison refers to.
+ */
+function localDomains(content: string, aliasSource = content): Map<string, Set<string>> {
+  const aliases = localTypeAliases(aliasSource)
+  const domains = new Map<string, Set<string>>()
+  const ambiguous = new Set<string>()
+  const record = (name: string, typeText: string): void => {
+    const values = literalUnion(typeText) ?? aliases.get(typeText.trim())
+    if (!values) return
+    const existing = domains.get(name)
+    if (existing && !sameValues(existing, [...values])) {
+      ambiguous.add(name)
+      return
+    }
+    domains.set(name, values)
+  }
+
+  for (const m of content.matchAll(
+    /\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*(?:computed|ref|shallowRef)\s*<([^>]*)>\s*\(/g,
+  )) {
+    record(m[1]!, m[2]!)
+  }
+  for (const m of content.matchAll(/\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*:\s*([^=;]+?)\s*=/g)) {
+    record(m[1]!, m[2]!)
+  }
+  for (const m of content.matchAll(
+    /\bfunction\s+([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*:\s*([^{;]+?)\s*\{/g,
+  )) {
+    record(m[1]!, m[2]!)
+  }
+  for (const name of ambiguous) domains.delete(name)
+  return domains
+}
+
+function sameValues(a: Set<string>, b: readonly string[]): boolean {
+  return a.size === b.length && b.every((v) => a.has(v))
+}
+
+/**
+ * Code outside every function body. A `.vue` template compares symbols declared
+ * at `<script setup>` top level, so those declarations must be visible to it —
+ * but a `const` buried in one function must not leak its domain onto a
+ * same-named symbol handled in another.
+ */
+function moduleLevelText(file: string, content: string): string {
+  const regions = file.endsWith('.vue')
+    ? sfcScriptBlocks(content).map(([s, e]) => isolateRange(content, s, e))
+    : [content]
+  if (regions.length === 0) return content
+  return regions
+    .flatMap((region) => sliceFunctions(region).filter((s) => s.scope === 'module'))
+    .map((s) => s.text)
+    .join('\n')
+}
+
+interface FileContext {
+  /** Literal domains of module-level symbols, keyed by normalized name. */
+  domains: Map<string, Set<string>>
+  /** Enums exempted by a `// ux-drift-audit: ignore <Enum>` comment. */
+  ignored: Set<string>
+}
+
+function fileContext(file: string, content: string): FileContext {
+  // The ignore comment is a user-authored exemption: it stays file-wide even
+  // though comparison is per-slice.
+  const ignored = new Set(
+    [...content.matchAll(/ux-drift-audit:\s*ignore\s+([A-Za-z_$][\w$]*)/g)].map((m) => m[1]!),
+  )
+  // Type aliases are resolved against the whole file (they are hoisted and
+  // rarely local); only the *declarations* are restricted to module level.
+  return { domains: localDomains(moduleLevelText(file, content), content), ignored }
+}
+
+/** Everything a slice contributes, scanned once instead of once per enum. */
+interface SliceFacts {
+  comparisons: Comparison[]
+  returned: Set<string>
+  asserted: Set<string>
+  /** Domains declared inside this slice — they shadow the module-level ones. */
+  domains: Map<string, Set<string>>
+  hasCase: boolean
+}
+
+function sliceFacts(text: string): SliceFacts {
+  const masked = maskNonCode(text)
+  const depths = braceDepths(masked)
   return {
-    file: relative(repoRoot, file),
-    enumName: enumDef.name,
-    scope: slice.scope,
-    line: slice.line,
-    present: [...present].toSorted(),
-    missing,
-    handlerKind,
+    comparisons: extractComparisons(text, masked),
+    returned: returnedLiterals(text, masked, depths),
+    asserted: assertedSubjects(text, depths),
+    domains: localDomains(text),
+    hasCase: /\bcase\s+['"]/m.test(text),
   }
 }
 
-function auditFile(
+function auditSlice(
   file: string,
-  slices: CodeSlice[],
-  content: string,
+  slice: CodeSlice,
+  facts: SliceFacts,
   enumDef: EnumDef,
+  ctx: FileContext,
 ): DriftFinding[] {
-  // The ignore comment is a user-authored exemption: it stays file-wide even
-  // though comparison is now per-slice.
-  const ignoreRe = new RegExp(`ux-drift-audit:\\s*ignore\\s+${enumDef.name}\\b`)
-  if (ignoreRe.test(content)) return []
+  const values = new Set(enumDef.values)
+  const bySubject = new Map<string, Set<string>>()
+  for (const cmp of facts.comparisons) {
+    // Only positive branches count. `x !== 'c'` narrows the type without
+    // producing a branch that handles `c` — treating it as coverage is how a
+    // value that falls through to an error path gets reported as handled.
+    if (!cmp.positive || !values.has(cmp.literal)) continue
+    const entry = bySubject.get(cmp.subject) ?? new Set<string>()
+    entry.add(cmp.literal)
+    bySubject.set(cmp.subject, entry)
+  }
 
   const findings: DriftFinding[] = []
-  for (const slice of slices) {
-    const finding = auditSlice(file, slice, enumDef)
-    if (finding) findings.push(finding)
+
+  // A fallthrough `return 'ready'` carries no subject of its own, so it can only
+  // be credited when the slice holds exactly one dispatcher. With two, crediting
+  // it lets one handler's return close the other handler's gap — the same
+  // borrowed-credentials shape the per-subject `asserted` / `domains` lookups
+  // already refuse.
+  const dispatchers = [...bySubject.values()].filter((positive) => positive.size >= 2).length
+  const returned = dispatchers === 1 ? facts.returned : new Set<string>()
+
+  for (const [subject, positive] of bySubject) {
+    // Two positive branches is the minimum shape of a dispatcher. A run of
+    // `x !== 'a' && x !== 'b'` before an early return is a guard — it narrows,
+    // it does not claim to handle every value.
+    if (positive.size < 2) continue
+
+    // `assertNever` makes exhaustiveness a compile error, but only for the
+    // expression actually handed to it — a second handler in the same slice
+    // gets no protection from someone else's assert.
+    if (facts.asserted.has(subject)) continue
+
+    // The declared domain wins over literal coincidence.
+    const domain = facts.domains.get(subject) ?? ctx.domains.get(subject)
+    if (domain && !sameValues(domain, enumDef.values)) continue
+
+    const missing = enumDef.values.filter((v) => !positive.has(v) && !returned.has(v))
+    if (missing.length === 0) continue
+
+    findings.push({
+      file: relative(repoRoot, file),
+      enumName: enumDef.name,
+      scope: slice.scope,
+      line: slice.line,
+      subject,
+      present: [...positive].toSorted(),
+      missing,
+      handlerKind: facts.hasCase ? 'switch' : 'if-chain',
+    })
   }
+
   return findings
 }
 
@@ -558,6 +931,8 @@ function dropSubsumed(findings: DriftFinding[], enumByName: Map<string, EnumDef>
     const own = new Set(f.present)
     return !findings.some((other) => {
       if (other === f) return false
+      // Only a match on the *same* compared expression is competing evidence.
+      if (other.subject !== f.subject) return false
       const theirs = new Set(other.present)
       const coversOwn = [...own].every((v) => theirs.has(v))
       if (!coversOwn) return false
@@ -590,11 +965,13 @@ function runScan(): Report {
   for (const consumer of consumers) {
     const content = readSafe(consumer)
     if (!content) continue
-    const slices = sliceFunctions(content)
-    for (const slice of slices) {
+    const ctx = fileContext(consumer, content)
+    for (const slice of sliceConsumer(consumer, content)) {
+      const facts = sliceFacts(slice.text)
       const perSlice: DriftFinding[] = []
       for (const enumDef of enums) {
-        perSlice.push(...auditFile(consumer, [slice], content, enumDef))
+        if (ctx.ignored.has(enumDef.name)) continue
+        perSlice.push(...auditSlice(consumer, slice, facts, enumDef, ctx))
       }
       findings.push(...dropSubsumed(perSlice, enumByName))
     }
@@ -653,7 +1030,7 @@ function emitText(report: Report): void {
     console.log(`  ${file}`)
     for (const f of fs) {
       console.log(
-        `    · ${f.enumName} in ${f.scope}() :${f.line} [${f.handlerKind}] missing: ${f.missing.join(', ')}`,
+        `    · ${f.enumName} in ${f.scope}() :${f.line} [${f.handlerKind} on ${f.subject}] missing: ${f.missing.join(', ')}`,
       )
     }
   }

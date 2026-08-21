@@ -128,7 +128,7 @@ Local edits will be reverted by the next sync.
       ```
 
    4. **立刻**簡短回報給使用者：「已派 Pi GPT-5.6-sol max 在背景 draft `/spectra-propose <change-name>`（bash job `<id>`），完成後主線會 cross-check 並補 Design Review template」
-   5. 啟動 **Pi Watch Protocol**（見 `.claude/rules/agent-routing.pi-watch-protocol.md` § 監看排程 A）：background Bash 回傳 `<task-id>` 後，立刻記錄 owner / deadline，並排 1500s canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=pi:spectra-propose:<change-name> deadline=<ISO>...` inert control message。控制 turn 只准 `TaskOutput(block=false)`、重排同一 inert prompt、停止 wakeup或排 lifecycle intervention；**NEVER** 放原 propose prompt、讀 output tail、執行 artifact mutation或用 180s 短輪詢。完成通知到達後才 claim task id、讀 stdout並進 Phase 0b。
+   5. 啟動 **Pi Watch Protocol**（見 `.claude/rules/agent-routing.pi-watch-protocol.md` § 監看排程 A）：background Bash 回傳 `<task-id>` 後，立刻記錄 owner / deadline（deadline 取值依 [[agent-routing]] § deadline 怎麼取），並排 1500s canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=pi:spectra-propose:<change-name> deadline=<ISO>...` inert control message。控制 turn 只准 `TaskOutput(block=false)`、重排同一 inert prompt、停止 wakeup或排 lifecycle intervention；**NEVER** 放原 propose prompt、讀 output tail、執行 artifact mutation或用 180s 短輪詢。完成通知到達後才 claim task id、讀 stdout並進 Phase 0b。
 
    #### Phase 0b：主線 Cross-Check（pi 完成後**立刻**執行）
 

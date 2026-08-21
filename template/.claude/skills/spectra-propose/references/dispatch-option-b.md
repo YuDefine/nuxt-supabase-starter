@@ -34,7 +34,7 @@ Local edits will be reverted by the next sync.
 
       預設 text 輸出（主線讀 tail）。
    4. **立刻**簡短回報：「已派 Claude Fable 5 xhigh 在背景 draft `<change-name>`（bash job `<id>`）；完成後派 Pi review，再由主線 Fable final check」。
-   5. 啟動 **Watch Protocol**：`claude -p` background Bash 回傳 `<task-id>` 後，立刻記錄 owner / deadline，並排 1500s canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=fable:spectra-propose:<change-name>:draft deadline=<ISO>...` inert control message。控制 turn 只准 `TaskOutput(block=false)`、重排同一 inert prompt、停止 wakeup或排 lifecycle intervention；**NEVER** 放原 draft prompt、讀 output tail、執行 artifact mutation或短輪詢。完成通知到達後才 claim task id、讀 stdout並進 Phase B-0b。
+   5. 啟動 **Watch Protocol**：`claude -p` background Bash 回傳 `<task-id>` 後，立刻記錄 owner / deadline（deadline 取值依 [[agent-routing]] § deadline 怎麼取），並排 1500s canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=fable:spectra-propose:<change-name>:draft deadline=<ISO>...` inert control message。控制 turn 只准 `TaskOutput(block=false)`、重排同一 inert prompt、停止 wakeup或排 lifecycle intervention；**NEVER** 放原 draft prompt、讀 output tail、執行 artifact mutation或短輪詢。完成通知到達後才 claim task id、讀 stdout並進 Phase B-0b。
 
    #### Phase B-0b：Fable draft 完成 → 派 Pi review
 

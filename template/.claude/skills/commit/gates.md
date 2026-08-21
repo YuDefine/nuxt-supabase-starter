@@ -415,7 +415,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 ### 0-A.1 — Pi GPT-5.6-sol review (xhigh)，背景（並行軸 A）
 
-**Watch contract**：背景啟動（`run_in_background: true`）取得 `<task-id>` 後，同一 turn 記錄 owner / deadline 並排 180s（[[agent-routing.pi-watch-protocol]] § ScheduleWakeup 用法守則 的具名例外）canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=commit:codex-review deadline=<ISO>...` inert control wakeup；控制 turn 只准 `TaskOutput(block=false)`、重排同一訊息或排 lifecycle intervention，**NEVER** 讀 review output、重播 review 指令或做 mutation。實際 findings 只在 terminal notification + task-id claim 後讀取。啟動背景 process 後 MUST 立即進入並行階段，啟動 0-B（條件觸發）與 0-C。
+**Watch contract**：背景啟動（`run_in_background: true`）取得 `<task-id>` 後，同一 turn 記錄 owner / deadline（deadline 取值依 [[agent-routing]] § deadline 怎麼取） 並排 180s（[[agent-routing.pi-watch-protocol]] § ScheduleWakeup 用法守則 的具名例外）canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=commit:codex-review deadline=<ISO>...` inert control wakeup；控制 turn 只准 `TaskOutput(block=false)`、重排同一訊息或排 lifecycle intervention，**NEVER** 讀 review output、重播 review 指令或做 mutation。實際 findings 只在 terminal notification + task-id claim 後讀取。啟動背景 process 後 MUST 立即進入並行階段，啟動 0-B（條件觸發）與 0-C。
 
 ```bash
 .claude/scripts/codex-review-safe.sh xhigh
