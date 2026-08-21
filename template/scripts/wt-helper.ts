@@ -2898,7 +2898,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   // or refuse with clear remediation steps. See computation above for rationale.
   //
   // pre-commit + commit-msg hooks run on amend. The HEAD commit message was
-  // produced by Claude/codex following worktree-default.md §5 (emoji + scope:
+  // produced by Claude/pi following worktree-default.md §5 (emoji + scope:
   // `🧹 chore(wt): ...` or similar), so commit-msg passes. pre-commit may fail
   // if amended user WIP has lint/test issues — that's a legitimate gate, the
   // catch below surfaces remediation.

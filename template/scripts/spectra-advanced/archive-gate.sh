@@ -844,7 +844,7 @@ fi
 # 0 codex runs / 92 sessions — it does not bind anything on its own.
 #
 # Provenance is not recoverable from the evidence itself: the screenshot path
-# convention is identical whether codex or Claude took it, the (verified-ui:)
+# convention is identical whether pi or Claude took it, the (verified-ui:)
 # annotation is written by the main thread either way, and the sidecar schema has
 # no producer field. So the dispatcher now drops a repo-local receipt carrying the
 # item ids it actually ran, and this check joins against it.
@@ -859,7 +859,7 @@ fi
 #
 # Boundary, MUST NOT be overstated: the receipt is a plaintext jsonl the main thread
 # can append to. This check catches DRIFT (skipping the dispatcher), NEVER adversarial
-# forgery. Do not read a pass as proof the evidence came from codex.
+# forgery. Do not read a pass as proof the evidence came from pi.
 VERIFY_UI_RECEIPTS="$REPO_ROOT/.spectra/verify-ui-dispatch-ledger.jsonl"
 VERIFY_UI_GATE_ONSET="2026-08-11" # gate 落地日；早於此日的 annotation 屬存量，豁免
 if [ "$PRE_SKILL" != "true" ] && [ -f "$TASKS_FILE" ]; then
