@@ -904,6 +904,8 @@ fingerprint = sha256(
 
 `## ⏳ Awaiting Charles` —— 格式見 [autonomy-predicate.md](reference/autonomy-predicate.md) § 段模板。**Append 不覆寫**（尚未答的舊決策不能被沖掉）；已答的由下一輪 scan 判定移除。
 
+寫入形狀（待辦一律 checkbox 行、結案段的 checkbox 全部勾掉、已有 TD 編號的只留一行 pointer）走 `/handoff` SKILL 的 § HANDOFF 寫回契約。本輪寫的每一條都要過那三條 —— 散文段在下一輪的 Step 2 只算**一個** candidate，等於把本輪寫進去的 N 件事綁成一個不可分派的單位。
+
 ### 7.3 落 state 檔
 
 把 Step 1 schema 的每個欄位更新後寫回 `.clade/work-loop/state.json`（`.clade/` 已 gitignored）。`guardrailsAck` 用 Step 1.5 讀完的時間。

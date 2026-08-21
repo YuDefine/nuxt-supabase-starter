@@ -236,6 +236,10 @@ predicate 走，**NEVER** 把本小節外推成「委派都該指定 model」。
 | Pi runtime機械不可用（exit 3） | 依watch-protocol判斷修runtime或顯式改派Claude；**NEVER** fallback到Codex CLI |
 | Pi配額不可用（exit 4） | 走§ 配額耗盡時的fallback紀律，`sonnet`／`haiku` **顯式帶** |
 
+**First-hit 路徑（正路，先於下面那道 gate）**：已判定要派 pi 的工作，**MUST 直接跑 `pi-dispatch.ts`**，**NEVER** 為了「先取得 decision_id」刻意呼一次 `Agent`。未帶 `--decision-id` 時 dispatcher 會自鑄一顆決策，寫 `trigger: 'self-dispatch'` receipt、ledger 記 `decisionOrigin: self-armed`——稽核紀錄與走 gate 的那條同樣完整，差別只在少一個 round trip。刻意先撞 gate 再補救，會把一筆本來就路由正確的 dispatch 記成 block 後的補救，讓「第一擊就派對」這個指標讀起來永遠是 0。
+
+撞到下面那道 gate 時 **NEVER 讀成自己做錯了、流程壞了、或需要有人來解**：它是取證握手，訊息裡的 `decision_id` 就是給這次 dispatch 用的。照它給的指令跑完即可，**NEVER** 停下來反省或改問人。
+
 **PreToolUse:Agent 機械 gate**：主線呼叫 `Agent` **一律**立即建立 `claude-agent-dispatch` pending decision 並阻擋，**不分 `subagent_type`、也不分 `model`**——`Explore`／`general-purpose`／`Plan`／任何具名 agent 一律計入（省略 `subagent_type` 時按預設 `general-purpose` 記錄），**省略 `model`（繼承主線）與明寫 Opus／Fable 同樣計入**。判準是 default-deny：`model` 是 optional，省略它等於讓 subagent 繼承主線 resolved model，那正是**最貴**的委派形狀，舊版「只認明寫便宜檔位」的 key 看不到它（TD-513）。agent 名稱與請求檔位（`model=inherited` / `model=opus` …）記進 decision key 供 receipt 追溯。正常結案必須是 `pi-dispatch.ts --decision-id <id> --route claude-delegate-sub --tier-basis delegate-sub --model gemini`，effort 依請求檔位為 Haiku→low、**其餘（含 inherited／Opus／Fable）→high**。確實要留 Claude 時只接受四個具名 waiver：`claude-mcp-required`、`parent-context-required`（`subagent_type: fork` 這種必須繼承主線 context 者）、`ui-view-implementation`、`user-explicit-claude-agent`；Gemini exit 2 必須同 effort 升 Sol 重派，Sol 再 exit 2 才能以 `delegate-escalation-failed` fallback receipt 放行；Gemini exit 4 先走 `--model luna` 配額鏈；Pi exit 3／4 則先記 dispatch outcome，再走 matching fallback receipt。**NEVER** 把例外理由寫進 Agent prompt 當作 bypass——gate 只認 decision receipt，不解析自由文字。
 
 **本節路徑的 luna 准入（與 § Routing Table 五條連言無關）**：原判 `sonnet` 的委派 MUST 同時滿足

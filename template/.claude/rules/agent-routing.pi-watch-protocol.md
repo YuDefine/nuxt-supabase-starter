@@ -352,7 +352,7 @@ basis，**NEVER** 隨手挑一個列名湊過去。
 
 上述檔案訊號只在使用者主動問進度、或 completed result 需要 cross-check 時讀；generic async keepalive safety net **NEVER** 讀它們。安全網只查 harness task 狀態，理由見下方 § 監看排程。
 
-> 歷史 pitfall：`docs/pitfalls/2026-05-18-subagent-background-bash-invisible-from-main-ps.md`（v1 的「看不到」形狀）。v2 的「看得到但分不出租戶」形狀見 `pitfall-wt-form3-resurrects-banned-subagent-codex-path`。
+> 歷史 pitfall：`docs/pitfalls/2026-05-18-subagent-background-bash-invisible-from-main-ps.md`（v1 的「看不到」形狀）。v2 的「看得到但分不出租戶」形狀見 `pitfall-wt-form3-resurrects-banned-subagent-pi-path`。
 
 ### 監看排程（notification-only）
 

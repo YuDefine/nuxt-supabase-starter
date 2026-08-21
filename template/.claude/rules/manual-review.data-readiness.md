@@ -103,7 +103,7 @@ assertion-bearing `[verify:ui]` item（要驗「某具體內容有出現」而�
 
 每條 `[review:ui]` item **MUST** 滿足「自帶導覽」標準：
 
-1. **明確 URL** — 寫出要打開的具體頁面（含必要 query string / route param），不要只說「kiosk 頁」「dashboard」「設定頁」。**Host 部分 MUST 優先用 consumer 的 Cloudflare tunnel hostname**：
+1. **明確 URL** — 寫出要打開的具體頁面（含必要 query string / route param），不要只說「kiosk 頁」「dashboard」「設定頁」。這條 URL 就是 review-gui「開啟畫面」的 `redirect=`，每個 consumer 同一條規則：檢驗起點必須寫進 URL 本身。寫 `https://…/parts` 卻用箭頭交代「刀片」，而頁面用 `?tab=` 定 tab，算 URL 沒寫完。子項寫「同一 URL」時，開啟畫面沿用父層或上一則 sibling 已補齊的那一條，不是 `/`。**Host 部分 MUST 優先用 consumer 的 Cloudflare tunnel hostname**：
    - 該 consumer 對應 `.env*` 有 `TUNNEL_HOSTNAME=<host>` → 寫 `https://<host>/<path>`（HTTPS / 真實 cookie domain / 跨裝置可開；webauthn / OAuth callback / camera permission 等 HTTPS-only feature 也只能用 tunnel 驗）
    - 沒設 `TUNNEL_HOSTNAME`（如 `<consumer-d>`）→ fallback `http://localhost:<port>/<path>`，`<port>` 取自 `registry/consumers.json` 的 `dev_ports.nuxt`
    - Multi-app consumer（如 <consumer-a>: <client-a> 3040 / shared 3045）→ 依 change 觸碰的 app 反推 `.env.<app>` 找對應 `TUNNEL_HOSTNAME`；找不到 app hint **MUST** 在 propose 階段問清楚，不要靜默挑一個
@@ -137,6 +137,23 @@ assertion-bearing `[verify:ui]` item（要驗「某具體內容有出現」而�
 - Multi-app consumer（<consumer-a>: <client-a> 3040 / shared 3045）→ 依 change 觸碰的 app 反推 `.env.<app>`；無 app hint 在 propose 階段就問清楚
 - 該 consumer 真的沒設 tunnel（如 `<consumer-d>`）→ fallback `http://localhost:<port>/<path>` 是合法的；hook 會自動 suppress 此 pattern 不 fire
 - 完整解析 SOP、反向 mapping、fallback decision table：`~/offline/clade/vendor/snippets/tunnel-url-for-review/README.md`
+
+### 反例：檢驗起點只寫到父層 route
+
+開啟畫面的 `redirect=` 必須是指定畫面本身。頁面用 query 定 tab／group／view 時，那些參數 MUST 寫進 URL。每個 consumer 同一條規則。
+
+❌ 不夠（`/parts` 預設不是刀片 tab；點開還要再找）：
+
+```markdown
+- [ ] #6.1 [review:ui] 開 `https://<consumer-b>-dev.<maintainer-domain>/parts` →「刀片」→ 搜尋 `WDHT063006-G-ECP330`
+```
+
+✅ 好（檢驗起點含 `?tab=`；子項「同一 URL」沿用這條，不必重寫 host）：
+
+```markdown
+- [ ] #6.1 [review:ui] 開 `https://<consumer-b>-dev.<maintainer-domain>/parts?tab=tool_inserts` →「刀片」→ 搜尋 `WDHT063006-G-ECP330`
+  - [ ] #6.2 [review:ui] 以 390px 開同一 URL 並搜尋同一顆料
+```
 
 ### 反例：multi-card UI selector
 
@@ -253,7 +270,7 @@ node -e "import('~/offline/clade/vendor/snippets/dev-auth/lib/detect-dev-login-r
 `<base>` 的選擇分兩條路：
 
 - **本機契約 route**（screenshot agent、E2E、`/__preview`）：contract 的 `loopbackOnly` 為 true 時，`<base>` MUST 是 `http://127.0.0.1:<port>`。這類 route 的 gate 看 request IP，tunnel 來源會 404。
-- **review-gui PWA「開啟畫面」**：每個 consumer 都走公開 `-dev.` origin 的 GET `/auth/_dev-login?as=<role>&email=e2e-<role>@dev.local&redirect=<path>`。那條路 **MUST NOT** 做 loopback gate。**NEVER** 叫手機開 `http://127.0.0.1:<port>`，也 **NEVER** 讓開啟畫面落到 Google／人類登入頁。GUI 會自己組這條網址；item 散文仍要寫得出身分與檢驗起點。
+- **review-gui PWA「開啟畫面」**：每個 consumer 都走公開 `-dev.` origin 的 GET `/auth/_dev-login?as=<role>&email=e2e-<role>@dev.local&redirect=<inspect-path>`。`<inspect-path>` **MUST** 是該 item 的完整檢驗起點（path + 指定的 query／route param），不是父層 route。那條路 **MUST NOT** 做 loopback gate。**NEVER** 叫手機開 `http://127.0.0.1:<port>`，也 **NEVER** 讓開啟畫面落到 Google／人類登入頁。GUI 組連結時從 item 全文（含相對 path、bare query、同一組「同一 URL」／父層已補齊的 path）取最完整的那一條；**NEVER** 從中文標籤臆造 consumer 專屬參數，也 **NEVER** 用 `/` 充數。item 散文仍要寫得出身分與檢驗起點。
 
 **NEVER** 只寫帳號 email / employee_no 就當作交代完登入方式。**NEVER** 假設 admin 登入就能看到所有員工的 /my/ 資料 — /my/ 頁面只顯示 session user 的紀錄。
 
