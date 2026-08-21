@@ -299,6 +299,27 @@ agent 回完一個 turn 後照樣繼續工作。
 
 正常 success 或 successor closure 由收割者當下收斂，**NEVER** 等 user另輸入 `\nx`才 harvest或reclaim。
 
+#### `completion_success` 帶 `followup_brief` 時，收割者 MUST 自己派下一跳
+
+worker 做完自己那段、卻留下**它不該做或做不完**的殘工時，會把殘工寫成 durable brief 並用
+`--complete success --followup-brief <absolute-path>` 帶回來；收割到的 `completion_success` receipt
+就帶著同一個 `followup_brief` 欄位。**該欄位非空 = 收割者當下就有一件已具名、已落檔的工作**：
+
+| 收割者狀態 | 動作 |
+| --- | --- |
+| context 還撐得住，且該殘工本 session 合法做得完 | 直接照那份 brief 做完 |
+| context 還撐得住，但殘工與手上的工作可平行 | `/handoff fanout` 把它派成一個 worker |
+| 收割者自己也撞到 § Session context 預算 的收工線 | `/handoff relay`／`fanout` 交棒，successor brief **MUST** 逐字帶上那個 `followup_brief` 路徑 |
+
+**NEVER 把 `followup_brief` 讀完就當作已經處理**——它是一份還沒有人做的工作，不是一份回報。
+**NEVER 因為「worker 回的是 success」就認定這條 dispatch 已經結案**：`success` 說的是 worker 那一段
+做完了，`followup_brief` 說的是它旁邊還有一段沒人接。逐字反開脫：「它回 success 了，那就是好了」
+「殘工我記在收工訊息裡就行」「下一個 session 讀 HANDOFF 自然會看到」。
+
+**收割者自身耗盡 context 不是這條的終端狀態。** 這條的終端狀態只有兩種：那份 brief 的工作**已完成**，
+或它**已經在另一個 live session 手上**（fanout worker／relay successor，且路徑已寫進對方的 brief）。
+一個已收工 session 手上的 `followup_brief` 路徑既不是前者也不是後者，**NEVER** 拿它當收斂。
+
 **worker 的 parent 死掉時**（successor 自己也消失了），該 worker 成為 orphan：只有該 durable dispatch
 的 exact child 可經 canonical `--recover-orphan` one-way claim 建立唯一 fresh successor。可觀察判準是
 durable record 的 exact `parent_claude_session_id` 在 `herdr agent list` 全域缺席——
@@ -326,6 +347,7 @@ Step 1–9 屬 `clade-publish` skill。
 | `status: relay_dispatched` | （`fanout` 先過 `relayed_dispatch_ids` 逐筆比對）依收工訊息契約 **A** 結束回合 |
 | `status: dispatched`（fanout 的 worker） | 記下 `dispatch_id` 與 `pane_id`，繼續派下一筆；**全部派完才跑 `--relay`** |
 | `status: relay_refused` | 保留 durable task 與**所有已派出的 pane**，回具體 blocker 並列出那些 dispatch_id。**NEVER** 改用 raw `herdr` 繞過、**NEVER** 收工 |
+| `status: completion_success` 且 `followup_brief` 非空 | worker 那段完成，殘工已落檔且**還沒有人接**。依 § `completion_success` 帶 `followup_brief` 時，收割者 MUST 自己派下一跳 的分流表走，**NEVER** 只寫進收工訊息 |
 | `status: nested_dispatch_refused` | 本 session 是 coordinated child，fanout 不適用。改走 `relay` |
 | transport / launcher / Herdr preflight 失敗 | 保留 durable task；能在本 session 合法完成就直接完成，否則回具體 blocker。**NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt |
 
