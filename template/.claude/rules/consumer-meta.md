@@ -1,6 +1,6 @@
 ---
 description: 每個 consumer 自宣告 .claude/consumer-meta.json，描述 dev port / auth / database / deploy / verification 等 runtime 事實；clade 聚合成 registry/consumers-meta.json snapshot 供規則 / skill / audit 使用
-paths: ['.claude/consumer-meta.json', 'registry/consumers-meta.json', 'registry/consumer-meta.schema.json']
+paths: ['.claude/consumer-meta.json', 'registry/consumers-meta.json', 'registry/consumer-meta.schema.json', '.github/workflows/**']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -150,9 +150,28 @@ Local edits will be reverted by the next sync.
 兩個 schema 有少數欄位有**交叉約束**：
 
 - `consumers.json workflow_model='trunk-based'` ⇒ `consumer-meta.deploy.deployTrigger` 應為 `push-main` 或 `tag-v`
+- `consumer-meta.deploy.deployTrigger` ⇒ 必須等於 `.github/workflows/` 裡 production deploy workflow 的實際 `on:` 觸發（由 `vendor/scripts/deploy-trigger-check.ts` 推導比對）
 - `consumers.json capabilities.preview_db` ⇒ `consumer-meta.database.previewEnvCapability` 應一致
 
 aggregator 對這些交叉約束做 cross-check，不一致寫進 `validation.errors`。
+
+## `deployTrigger` 是發版分流的唯一依據
+
+這個欄位不是描述性註記。`/commit` 的 Step 6-Gate 用它決定要不要**無人值守**建 tag 並推出去：`push-main` 走完整發版流程，其餘一律停下來問人。對 production 由 tag 觸發的 repo，那一步等於 agent 自行決定部署 production（含跑 production migration）。
+
+因此：
+
+- 宣告 **MUST** 填 **production** 的觸發條件。同一個 workflow 內 main push 部 staging、tag push 部 production 時，填 `tag-v`，**NEVER** 填 main push 那個——Step 6-Gate 讀到 `push-main` 就會把 tag 推出去，而那正是部 production 的動作
+- 宣告錯成 `push-main` 的後果是**靜默**的：gate 放行、流程全綠、沒有任何一步會講出宣告與現實不符。<consumer-b> 宣告 `push-main`、實際 `push: tags: ['*']`，靠人工 grep workflow 才發現（2026-08-22）
+
+所以正確性不靠人記得去核對，靠兩道機械檢查：
+
+| 何時 | 誰檢查 | 不符時 |
+| --- | --- | --- |
+| 聚合 snapshot 時 | `scripts/sync-consumer-meta.ts` 對每個 consumer 推導 `.github/workflows/` 的實際觸發 | 寫進 `validation.errors` |
+| 每次 `/commit` | `scripts/deploy-trigger-check.ts`（projected 到每個 consumer） | `verdict=needs-approval`，Step 6 走 ask-first 分支 |
+
+第二道是 fail-closed 的：**`push-main` 只有在 workflow 推導同意時才成立**，宣告缺漏 / 矛盾 / 推不出單一結論 / 腳本不存在全部落到 needs-approval。改 workflow 的 `on:` 而沒同步改宣告，下一次 `/commit` 就會停下來。
 
 ## Deployment type（`deploymentType`）
 

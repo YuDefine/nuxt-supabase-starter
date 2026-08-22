@@ -15,6 +15,8 @@ Local edits will be reverted by the next sync.
 
 驗收引用的證據 E，MUST 能回答「若被驗命題為假，E 會長什麼不一樣？」——答不出或答案是「一樣」→ E 不是證據，換一個在兩個世界會分岔的觀測。**status code、exit code、「檔案存在」、工具自我宣告、來自常數宣告而非量測的數字，預設視為未分岔訊號**。MUST 11 / 16 是本條的兩個實例；新形態回到上面那句自判。降級路徑觸發時 MUST loud（warning / health degraded），讓假世界主動分岔。實證三例見 [[pitfall-empty-state-screenshot-has-no-discriminating-power]]。
 
+**摘要值（hash / 行數 / 檔案數 / diff 大小）同屬未分岔訊號**：`sha256sum` / `md5sum` / `wc -l` 這類全域函式對空輸入不報錯、照樣回一個外觀正常的值，於是「上游命令死掉」與「內容真的是空的」在它的輸出裡完全相同。**每一次**拿 hash 或 count 當證據，MUST 先驗產生它的那條 pipeline 的 exit code 與非空性；**NEVER** 從摘要值反推成因。逐字反開脫：「hash 有值代表命令成功了」——`[ -n "$(printf '' | sha256sum)" ]` 恆真（空輸入的 sha256 就是 `e3b0c442…`），那道 guard 讀起來在防空值、實際永遠通過。實證見 [[pitfall-hash-of-empty-stdout-collapses-distinct-causes]]。
+
 > 本 rule 的成因（根因同質的 pitfall 群）見 `docs/rule-rationale/agent-self-verification.md`。
 
 ## 驗收 gate MUST 收窄到本次觸及的範圍

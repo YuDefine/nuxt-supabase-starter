@@ -296,19 +296,23 @@ Untracked file 例外：須先 `git add <untracked>` 再 `git commit --only -- <
 Step 6 會建立並推送 release tag。**對 production 由 tag 觸發的 repo，那一步等於 agent 自行決定部署 production**（含跑 production migration）。因此 **MUST** 先判定本 repo 的發版觸發形狀，**NEVER** 直接進 Step 6 的 bump / tag。
 
 ```bash
-node -e "const f='.claude/consumer-meta.json';const fs=require('node:fs');if(!fs.existsSync(f)){console.log('unknown');process.exit(0)}console.log(JSON.parse(fs.readFileSync(f,'utf8'))?.deploy?.deployTrigger ?? 'unknown')"
+node scripts/deploy-trigger-check.ts
 ```
 
-| 輸出 | 意義 | Step 6 走哪條 |
+它讀 `.claude/consumer-meta.json` 的宣告，**同時**從 `.github/workflows/` 推導實際觸發條件，兩邊一致才給放行。判定看 `verdict=` 那一行：
+
+| `verdict=` | 意義 | Step 6 走哪條 |
 | --- | --- | --- |
-| `push-main` | production 由 main push 觸發 —— 不建 tag 也照樣部署，攔 tag 沒有保護作用 | **走 6-A（現行完整流程）** |
-| `tag-v` | production 由 `v*` tag 觸發 —— 建 tag = 部署 production | **走 6-B（停在 push main）** |
-| `manual` | production 由人手動觸發 | **走 6-B** |
-| `unknown` / `null` / 其他 | 宣告缺漏或本 repo 沒有 consumer-meta | **走 6-B（fail-closed）** |
+| `confirmed-push-main` | 宣告 `push-main`，且 production deploy workflow 確實由 main push 觸發 —— 不建 tag 也照樣部署，攔 tag 沒有保護作用 | **走 6-A（現行完整流程）** |
+| `needs-approval` | 其餘全部：`tag-v` / `manual`、宣告缺漏、宣告與 workflow 不符、workflow 推不出單一結論、腳本不存在 | **走 6-B（停在 push main）** |
 
-**NEVER 因為「這個 repo 我記得是 push-main」就跳過這條查詢。** 宣告與現實不符是 fleet 的既有狀態（2026-08-22 實測：<consumer-a> 實際 `tag-v` 卻宣告 `null`、<consumer-d> 實際 `tag-v` 卻宣告 `push-main`）。查詢回 `unknown` 時 **MUST** 走 6-B，**NEVER** 自行推論成 `push-main`——推錯的方向是不可逆的（tag 一推出去 production 就開始跑）。
+**放行條件是「宣告與 workflow 一致」，不是「宣告寫了 push-main」。** 這個 gate 曾經只讀宣告，而宣告是手寫的：<consumer-b> 宣告 `push-main`、實際 `push: tags: ['*']`，於是拿到 6-A —— 沒有任何一步會講出這件事，2026-08-22 靠人工 grep workflow 才發現。現在推導失敗、宣告與現實矛盾一律 fail-closed 到 6-B，**宣告錯誤換不到寬鬆分支**。
 
-> `unknown` 同時是一個 finding：該 repo 的 `.claude/consumer-meta.json` 應補上 `deploy.deployTrigger`。**列進 Step 7 完成報告**，但 **NEVER** 在本次 `/commit` 順手改它——那是獨立的宣告修正，要單獨走。
+`scripts/deploy-trigger-check.ts` 不存在（consumer 尚未收到該次散播）時 **MUST 走 6-B**，**NEVER** 退回舊的「只讀宣告」查法——那正是這條 gate 要取代的東西。
+
+**NEVER 因為「這個 repo 我記得是 push-main」就跳過這條查詢。**推錯的方向是不可逆的（tag 一推出去 production 就開始跑）。
+
+> `status=` 那一行同時是 finding 來源：`undeclared`（缺 `deploy.deployTrigger`）、`mismatch`（宣告與 workflow 矛盾）、`unconfirmable`（同一個 workflow 內 main push 與 tag push 各部一個環境，宣告要填 **production** 的那個）。**列進 Step 7 完成報告**，但 **NEVER** 在本次 `/commit` 順手改它——那是獨立的宣告修正，要單獨走。
 
 ## Step 6-A: 版本號升級與 Deploy Commit（`push-main` 專用）
 
@@ -390,12 +394,12 @@ node ~/offline/clade/vendor/scripts/notion-sync.ts release \
 
 - [ ] 每個 commit scope 驗證：貼各 commit 的 `git show --stat <hash> | tail -3` 輸出（changed files 數 vs 預期不符 → 回 Step 4 處置，不出報告）
 - [ ] Step 0 品質檢查結論：貼 0-A / 0-C 的結論行（條件未觸發的軸標明「未觸發＋原因」）
-- [ ] Step 6-Gate 判定：貼 `deployTrigger` 查詢的實際輸出，並標明走 6-A 還是 6-B（`unknown` 時 MUST 一併列出「該 repo 缺 `deploy.deployTrigger` 宣告」這條 finding）
+- [ ] Step 6-Gate 判定：貼 `deploy-trigger-check.ts` 的實際輸出（含 `verdict=` / `status=` / `detail=`），並標明走 6-A 還是 6-B（`status=` 不是 `confirmed` 時 MUST 一併把 `detail=` 列成 finding）
 - [ ] push / tag 結果：走 6-A 貼 `git push --tags` 與 `git push origin main` 兩者輸出；走 6-B 貼 `git push origin main` 輸出 ＋ 使用者對發版問題的選擇（本次不 push 則標明原因）
 
 三格證據放進完成報告的 `Evidence` 段。
 
-走 6-B 且使用者選「先不發版」時，完成報告 **MUST** 把「版本 / Tag」兩行改成 `未發版（deployTrigger=<值>，已 push main，發版待人拍板）`，**NEVER** 沿用下面樣板的「已建立並推送」字樣。
+走 6-B 且使用者選「先不發版」時，完成報告 **MUST** 把「版本 / Tag」兩行改成 `未發版（verdict=needs-approval / status=<值>，已 push main，發版待人拍板）`，**NEVER** 沿用下面樣板的「已建立並推送」字樣。
 
 ```text
 ✅ Commit 完成！
@@ -412,7 +416,7 @@ Tag：v1.8.0 已建立並推送
 Evidence:
 - scope: <各 git show --stat 摘尾>
 - checks: <0-A/0-C 結論行或未觸發原因>
-- release-gate: deployTrigger=<實際輸出> → 走 Step 6-<A|B>
+- release-gate: verdict=<實際輸出> status=<實際輸出> → 走 Step 6-<A|B>
 - push: <git push --tags 與 git push origin main 摘尾>
 ```
 

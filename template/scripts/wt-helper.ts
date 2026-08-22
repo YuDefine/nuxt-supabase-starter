@@ -236,35 +236,7 @@ function parseWorktreeList(porcelain) {
   return result
 }
 
-/**
- * Worktree 的 landing base —— fork 從哪裡來、之後要 land 回哪裡去。
- *
- * **NEVER 寫死 `'main'`。** merge-back 的落地動作是在 consumer root 裡跑
- * `git merge --squash <branch>`（本檔 § cmdMergeBack），它 land 進去的是 consumer root
- * 的**當前 HEAD**，不是名為 `main` 的 branch。fork 端若寫死 `main`，兩端就在
- * 「main checkout 不在 main 上」時分岔 —— 這是長命 feature branch（`feat/*`、release
- * branch、fork 的預設分支不叫 main）的常態，不是邊角。
- *
- * 實證（2026-08-22 <consumer-j>）：main checkout 在 `feat/self-host-evlog-admin`
- * （領先 `main` 16 個 commit），`wt-helper add` 從 stale `main` fork 出來的 worktree
- * 缺 `openspec/`、`app/`、`DESIGN.md` —— 而 merge-back 會 land 回 `feat/...`。
- * 症狀出現在 worktree 內（檔案不見了），根因在 fork 端，中間隔了整個 session。
- *
- * 解析不出具名 branch（detached HEAD）時才回退 `main`：那時沒有「當前 branch」可用，
- * 而 detached HEAD 上跑 merge-back 本來就會被其他 gate 擋下。
- *
- * consumer root 就在 `main` 上時本函式回 `'main'` —— 與寫死時**逐字相同**，所以這個
- * 改動對 fleet 的常見路徑是恆等的。
- */
-function resolveLandingBase(cwd) {
-  try {
-    const branch = git(['symbolic-ref', '--quiet', '--short', 'HEAD'], { cwd }).trim()
-    if (branch) return branch
-  } catch {}
-  return 'main'
-}
-
-function mergedBranches(cwd, baseBranch = resolveLandingBase(cwd)) {
+function mergedBranches(cwd, baseBranch = 'main') {
   let raw = ''
   try {
     raw = git(['branch', '--merged', baseBranch], { cwd })
@@ -935,8 +907,7 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
     throw new Error(`Worktree path already exists: ${wtPath}`)
   }
 
-  // Fork base MUST 等於 merge-back 的 land 目標（見 resolveLandingBase 的 doc comment）。
-  let baseRef = resolveLandingBase(consumerRoot)
+  let baseRef = 'main'
   try {
     git(['rev-parse', '--verify', baseRef], { cwd: consumerRoot })
   } catch {
@@ -1879,8 +1850,7 @@ function gitSelectiveCommit(consumerRoot, scopePaths, message) {
 function detectMergeBlockers(consumerRoot, branchName) {
   let branchFiles = []
   try {
-    const base = resolveLandingBase(consumerRoot)
-    const out = git(['diff', '--name-only', `${base}..${branchName}`], { cwd: consumerRoot })
+    const out = git(['diff', '--name-only', `main..${branchName}`], { cwd: consumerRoot })
     branchFiles = out.split('\n').filter(Boolean)
   } catch {
     return []
@@ -1951,8 +1921,7 @@ function detectUncommittedWorktreeFiles(wtPath) {
  */
 function branchAheadCount(consumerRoot, branchName) {
   try {
-    const base = resolveLandingBase(consumerRoot)
-    const out = git(['rev-list', '--count', `${base}..${branchName}`], { cwd: consumerRoot }).trim()
+    const out = git(['rev-list', '--count', `main..${branchName}`], { cwd: consumerRoot }).trim()
     const n = Number.parseInt(out, 10)
     return Number.isNaN(n) ? null : n
   } catch {
@@ -1963,10 +1932,7 @@ function branchAheadCount(consumerRoot, branchName) {
 /** 未進 main 的 commit（`<sha> <subject>` 一行一條）。 */
 function unlandedCommits(consumerRoot, branchName) {
   try {
-    const base = resolveLandingBase(consumerRoot)
-    return git(['log', '--oneline', '--no-decorate', `${base}..${branchName}`], {
-      cwd: consumerRoot,
-    })
+    return git(['log', '--oneline', '--no-decorate', `main..${branchName}`], { cwd: consumerRoot })
       .split('\n')
       .filter(Boolean)
   } catch {
@@ -1998,8 +1964,7 @@ function detectUnlandedFiles(consumerRoot, branchName) {
   // ahead>0 且 behind 很多的（也就是絕大多數長命 worktree）照樣被淹沒。
   let branchFiles = []
   try {
-    const landingBase = resolveLandingBase(consumerRoot)
-    const base = git(['merge-base', landingBase, branchName], { cwd: consumerRoot }).trim()
+    const base = git(['merge-base', 'main', branchName], { cwd: consumerRoot }).trim()
     if (!base) return []
     const out = git(['diff', '--name-only', `${base}..${branchName}`], { cwd: consumerRoot })
     branchFiles = out.split('\n').filter(Boolean)
