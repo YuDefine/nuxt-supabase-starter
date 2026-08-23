@@ -50,7 +50,7 @@ baseline 只存在於某次 session 記憶裡時，下一個讀 gate 的人算�
 對下列場景**禁止**直接 handoff user：
 
 1. **缺 session cookie** → 走 [[manual-review.backend]] § Dev-login route missing → scaffold-first hard rule 的 detection 路徑與 scaffold 流程（**不**問 user 取 cookie / Google OAuth + DevTools 複製）
-2. **缺 visual evidence** → 走 [[manual-review.backend]] § `[verify:ui]` channel 的 dispatch path（主線直派 Pi `--model grok-xai --effort low`；**禁止** `Agent` tool with `subagent_type: screenshot-review` — sonnet wrapper 反覆無法 enforce identity check）
+2. **缺 visual evidence** → 走 [[manual-review.backend]] § `[verify:ui]` channel 的 dispatch path。**dispatch 對象與 model 一律以 [[agent-routing]] § Routing Table〔`screenshot-review-verify`〕列為準**（2026-08-22 拍板：`Agent` tool `subagent_type: screenshot-review`，該列 **NEVER 派 Pi 任一 model**）。**NEVER 在本檔複寫該列的 model 選擇**——本行舊複本曾寫成相反方向，隨投影散到全 fleet 十一個 consumer
 3. **撞 baseline functional gap**（route 存在但 allow-list 不收 fixture user / role 不符 / seed identifier 對不上）→ 走 [[main-self-collect-fallback-chain]] (a)(b)(c)(d) 四層，**全失敗**才寫 `deferred` annotation
 4. **工具呼叫 error**（CLI flag 錯、env 缺、process exit non-zero）→ 先 read source code 確認 CLI contract，**不**把 error message 原文 forward 給 user（往往誤導）
 

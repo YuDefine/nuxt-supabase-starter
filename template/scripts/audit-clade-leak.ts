@@ -10,11 +10,14 @@
  * v1.4.502 的實際後果是 fleet 兩個 PUBLIC repo 只有一個拿得到這支 audit，另一個
  * 零層防護一路綠燈 push 上公開 GitHub。
  *
- * 用途：clade 中央倉的 rule /
- * skill / commands / agents 內含 consumer 名稱（<consumer-a> / <consumer-b> / <consumer-c> /
- * <consumer-d> / <consumer-c>）、personal path (`~/`)、
- * personal email (`<maintainer-email>`)、客戶名 (<client-a> / <client-b>)、
- * 以及未該對外曝光的 maintainer skill (`oops` / `improvement-loop` / `review-rules`)。
+ * 用途：偵測 clade 中央倉的 rule / skill / commands / agents 帶進公開 repo 的
+ * 四類洩漏 —— 其他 consumer 與客戶的**名稱**、maintainer 的**個人路徑**、
+ * maintainer 的 **email / 網域**，以及未該對外曝光的 maintainer skill
+ * (`oops` / `improvement-loop` / `review-rules`)。
+ *
+ * 前三類的 token 表**一律 runtime 解析、不落字面**（TD-503）：字面寫在這裡會被
+ * propagate 的 sanitization 逐字改寫成它自己的替換值，投影副本因此掃錯東西。
+ * 來源與失效形狀見下方 `IDENTITY` 上方那段，**改動前先讀完**。
  *
  * Sanitization 在 clade 端 propagate 時自動處理（v1.4.349 起依 repo visibility
  * 套用 registry 生成的 fleet profile）；本 script 是**成果驗證用的手動工具**，
@@ -36,7 +39,8 @@
  *   1. `template/.agents/skills/{oops,improvement-loop,review-rules}/` 殘留：
  *      若任一存在 → violation（maintainer-only skill 不該散播到公開 repo）
  *   2. `template/.claude/` checksums 列出的所有檔：grep forbidden tokens
- *      （consumer name 別名 + personal redactions needles + home-path regex）
+ *      （consumer name 別名 + personal redaction needles + home-path regex；
+ *      consumer 名冊只在 clade home 載得到，見 `IDENTITY`）
  *   3. 已退役 generator 的 `{,template/}.{agents,codex}/.sync-manifest.json`：
  *      **從 git object 讀**（該檔已不在 worktree，leak 只存在於 index/HEAD）
  *
@@ -69,8 +73,9 @@
 import { execFile } from 'node:child_process'
 import { existsSync, realpathSync } from 'node:fs'
 import { lstat, readFile } from 'node:fs/promises'
+import { homedir, userInfo } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
@@ -81,43 +86,193 @@ const execFileAsync = promisify(execFile)
 // IMPORTANT：在 starter 端跑時，starter 倉本身**不**會內含這份 lib（clade
 // `scripts/lib/` 是 clade 中央倉自己的，不散播到 starter）。所以必須 fallback。
 
-// Fleet 名冊 + 客戶名。語義是「**這個 repo 以外**的 consumer / 客戶名字」——
-// 掃描前會依 selfAliases() 把該 repo 自己的名字移除（見檔頭）。
+// ─── Identity tables：一律 runtime 解析，NEVER 落字面（TD-503）──────────────
 //
-// **一組 = 一個身分的所有別名**（對應 `sanitization_profile.consumer_name_map` 裡
-// 共用同一個 placeholder 的那幾個 key，如 `<consumer-c>` 與 `<consumer-c>` 都是
-// `<consumer-c>`）。自身偵測命中組內任一別名就**整組**排除——只排掉命中的那一個，
-// 該 repo 會對自己的短名報 violation，那是同一個類別錯誤換個名字回來。
-const FLEET_ALIAS_GROUPS = [
-  ['<consumer-c>', '<consumer-c>'],
-  ['<consumer-d>'],
-  ['<consumer-a>'],
-  ['<consumer-b>'],
-  ['<client-a>'],
-  ['<client-b>'],
-]
+// 這裡**刻意不寫**任何個人路徑 / email / consumer 名的字面。本檔會被散播到每個
+// PUBLIC consumer，而 propagate 對投影出去的每個檔逐字套 sanitization profile
+// （consumer 名 regex + personal_redactions 字面比對）—— 字面 needle 因此在投影
+// 副本裡被改寫成它自己的**替換值**：maintainer 的 home 前綴變成 `~/`、consumer 名
+// 變成 `<consumer-x>`。改寫後那份 audit 掃的是 `~/`（技術文件裡到處都是）與從不
+// 出現的 placeholder：
+// 實測 <consumer-c> 24 條 violation 全部假陽性，consumer 名偵測全失效。
+//
+// NEVER 把任一條 needle 改回字面（即使「只有一條、看起來無害」）：needle 與
+// sanitization 用的是同一份字串比對，寫進來就必然被改寫。也 NEVER 用「把 `~/`
+// 加進白名單」繞過 —— 那讓 audit 對個人路徑這**整個類別**失去偵測力，而那正是
+// 它最主要的職責（v1.4.502 外洩的 `.sync-manifest.json` 就是 918–982 條絕對路徑）。
+//
+// 兩張表的來源：
+//   - **consumer 名冊**：`registry/consumers.json` ＋ `scripts/lib/sanitization-governance.ts`
+//     的 `buildFleetProfile()` —— 即 propagate 實際拿來遮蔽的**同一份** profile
+//     （順帶消掉「硬寫名冊 vs registry 漂移」）。兩者只在 **clade home** 存在，
+//     consumer 端的投影副本讀不到 → 名冊為空、consumer 名偵測不執行，改由 clade 端
+//     `node vendor/scripts/audit-clade-leak.ts --all-consumers` 承接。覆蓋面的縮減
+//     **一律印出來**（見 main()），NEVER 讓它靜默發生。
+//     ⚠️ `--all-consumers` 的選取判準是「registry 帶 sanitization_profile」，**不是**
+//     「repo 是 PUBLIC」——所以沒宣告 profile 的 PUBLIC consumer 兩邊都掃不到
+//     consumer 名（2026-08-24 現況：<consumer-c> 正是這一格）。那是
+//     `resolveSanitizedConsumers()` 的選取面問題，不是本節的 needle 問題。
+//   - **個人路徑 / email**：由執行者環境當場派生（`homedir()` / `userInfo()` /
+//     `git config user.email`）。語義因此是「跑這支 audit 的人的個人身分外洩了嗎」，
+//     在 clade home 與 consumer 端都成立，且不依賴任何落檔的字面。
+let IDENTITY = {
+  aliasGroups: [],
+  nameTokens: [],
+  personalNeedles: [],
+  rosterSource: null,
+  notices: [],
+}
 
-const FLEET_NAME_TOKENS = FLEET_ALIAS_GROUPS.flat()
+// 通用 email domain 不當 needle：有人用個人 gmail 跑這支 audit 時，`gmail.com`
+// 會把每個提到它的文件變成 violation。
+const GENERIC_EMAIL_DOMAINS = new Set([
+  'gmail.com',
+  'googlemail.com',
+  'outlook.com',
+  'hotmail.com',
+  'icloud.com',
+  'qq.com',
+  'proton.me',
+  'protonmail.com',
+  'users.noreply.github.com',
+])
 
-const FALLBACK_PERSONAL_NEEDLES = [
-  // macOS home layout
-  '<HOME>/.local/bin/',
-  '<clade-central-repo>',
-  '<home>/offline/',
-  '~/',
-  // Linux home layout — 逐字比對，缺一邊等於該平台上完全偵測不到洩漏
-  '<HOME>/.local/bin/',
-  '<clade-central-repo>',
-  '<home>/offline/',
-  '~/',
-  '<maintainer-email>',
-  '<maintainer-domain>',
-]
+// 兩個平台 layout 各派生一份：redaction 與偵測都是逐字比對，缺一邊等於該平台上
+// 完全偵測不到洩漏（同 sanitization-governance 的 personal_redactions）。
+function derivePersonalNeedles() {
+  const needles = new Set<string>()
+  const users = new Set<string>()
+  try {
+    const u = userInfo().username
+    if (u) users.add(u)
+  } catch {
+    // 沒有 passwd entry（容器 / CI）—— homedir() 那條照走
+  }
+  const home = homedir()
+  if (home) users.add(basename(home))
+  for (const user of users) {
+    if (!user || user === '/' || user === '.') continue
+    for (const prefix of [`/Users/${user}`, `/home/${user}`]) {
+      needles.add(`${prefix}/.local/bin/`)
+      needles.add(`${prefix}/offline/clade`)
+      needles.add(`${prefix}/offline/`)
+      needles.add(`${prefix}/`)
+    }
+  }
+  // 非標準 home layout（`/root`、`/var/home/...`）—— 上面兩個前綴都蓋不到
+  if (home && !home.startsWith('/Users/') && !home.startsWith('/home/')) needles.add(`${home}/`)
+  return needles
+}
 
-// 上面那份是逐字 needle，只認 `charles` 這個 username。這條 regex 補「任意 username ×
+async function deriveEmailNeedles() {
+  const needles = new Set<string>()
+  let email = ''
+  try {
+    const { stdout } = await execFileAsync('git', ['config', '--get', 'user.email'])
+    email = stdout.trim()
+  } catch {
+    // 沒設 git email —— 個人路徑那條照走
+  }
+  if (!email.includes('@')) return needles
+  needles.add(email)
+  const domain = email.split('@').pop()
+  if (domain && domain.includes('.') && !GENERIC_EMAIL_DOMAINS.has(domain.toLowerCase())) {
+    needles.add(domain)
+  }
+  return needles
+}
+
+// registry 的 consumer_name_map：一個 placeholder = 一個身分的所有別名（`<consumer-c>`
+// 與 `<consumer-c>` 共用 `<consumer-c>`）。分組後 selfAliases() 命中組內
+// 任一別名就整組排除 —— 只排掉命中的那一個，該 repo 會對自己的短名報 violation。
+function groupAliasesByPlaceholder(nameMap) {
+  const byPlaceholder = new Map()
+  for (const [name, placeholder] of Object.entries(nameMap || {})) {
+    if (!name || !placeholder) continue
+    if (!byPlaceholder.has(placeholder)) byPlaceholder.set(placeholder, new Set())
+    byPlaceholder.get(placeholder).add(name)
+  }
+  return Array.from(byPlaceholder.values(), (set) => Array.from(set))
+}
+
+// registry 內各 consumer 手寫的 sanitization_profile 的 union —— governance lib
+// import 不到時的退路（欄位語義相同，只是不含 registry 動態生成的新 consumer）。
+function declaredNameMap(registry) {
+  const merged = {}
+  for (const entry of registry?.consumers || registry || []) {
+    Object.assign(merged, entry?.sanitization_profile?.consumer_name_map || {})
+  }
+  return merged
+}
+
+// clade home 才有 registry / governance lib；consumer 端的投影副本兩者皆無。
+async function loadFleetIdentity(cladeRoot) {
+  const notices = []
+  const registryPath = join(cladeRoot, 'registry', 'consumers.json')
+  if (!existsSync(registryPath)) {
+    notices.push(
+      'fleet 名冊未載入（本副本沒有 registry/consumers.json）— consumer 名偵測未執行，' +
+        '個人路徑 / email 偵測照跑；名冊那半要在 clade home 跑 `--all-consumers`' +
+        '（限 registry 內帶 sanitization_profile 的 consumer）',
+    )
+    return { groups: [], personalNeedles: [], source: null, notices }
+  }
+
+  let registry
+  try {
+    registry = JSON.parse(await readFile(registryPath, 'utf8'))
+  } catch (err) {
+    notices.push(
+      `registry/consumers.json 解析失敗（${err.message.split('\n')[0]}）— consumer 名偵測未執行`,
+    )
+    return { groups: [], personalNeedles: [], source: null, notices }
+  }
+
+  let profile = null
+  const libPath = join(cladeRoot, 'scripts', 'lib', 'sanitization-governance.ts')
+  if (existsSync(libPath)) {
+    try {
+      const mod = await import(pathToFileURL(libPath).href)
+      profile = mod.buildFleetProfile(registry)
+    } catch (err) {
+      notices.push(
+        `sanitization-governance 載入失敗（${err.message.split('\n')[0]}）— 改用 registry 手寫 profile 的 union`,
+      )
+    }
+  }
+
+  const nameMap = profile?.consumer_name_map ?? declaredNameMap(registry)
+  return {
+    groups: groupAliasesByPlaceholder(nameMap),
+    // clade 端把 propagate 實際用的 redaction needle 一併納入：那是本機環境派生
+    // 不出來的部分（例如 maintainer 的其他 layout）。consumer 端沒有這份。
+    personalNeedles: Object.keys(profile?.personal_redactions || {}),
+    source: profile ? 'registry + buildFleetProfile()' : 'registry (手寫 profile union)',
+    notices,
+  }
+}
+
+async function resolveIdentity(cladeRoot) {
+  const fleet = await loadFleetIdentity(cladeRoot)
+  const personal = new Set([
+    ...derivePersonalNeedles(),
+    ...(await deriveEmailNeedles()),
+    ...fleet.personalNeedles,
+  ])
+  IDENTITY = {
+    aliasGroups: fleet.groups,
+    nameTokens: fleet.groups.flat(),
+    // 長的排前面，命中時 token 讀起來是最具體的那條
+    personalNeedles: Array.from(personal).toSorted((a, b) => b.length - a.length),
+    rosterSource: fleet.source,
+    notices: fleet.notices,
+  }
+}
+
+// 上面那份是逐字 needle，只認**執行者自己**的 username。這條 regex 補「任意 username ×
 // 兩平台」，來源是 `vendor/signals/redact.mjs` 的 `home-path` pattern（同一份語義，
 // 那邊已在 signal payload 上用了很久）。兩者並存：needle 命中時 token 可讀
-// （`<home>/offline/`），regex 負責兜住 needle 蓋不到的 username。
+// （`/Users/<you>/offline/`），regex 負責兜住 needle 蓋不到的 username。
 const HOME_PATH_RE = /\/(?:Users|home)\/([^/\s"']+)/g
 
 // 文件裡示範用的佔位路徑（`/Users/<you>/…`、`/Users/...`、`/home/$USER/…`）不是洩漏。
@@ -260,7 +415,7 @@ async function selfAliases(repoRoot, extra = []) {
 
   const lowered = haystacks.filter(Boolean).map((h) => h.toLowerCase())
   const self = new Set()
-  for (const group of FLEET_ALIAS_GROUPS) {
+  for (const group of IDENTITY.aliasGroups) {
     const hitByName = group.some((t) => lowered.some((h) => h.includes(t.toLowerCase())))
     const hitByFlag = group.some((t) => extra.some((e) => e.toLowerCase() === t.toLowerCase()))
     if (hitByName || hitByFlag) for (const t of group) self.add(t)
@@ -269,9 +424,9 @@ async function selfAliases(repoRoot, extra = []) {
 }
 
 function forbiddenTokenRegexes(selfSet) {
-  return FLEET_NAME_TOKENS.filter((t) => !selfSet.has(t)).map(
-    (t) => new RegExp(String.raw`\b${t}\b`, 'g'),
-  )
+  return IDENTITY.nameTokens
+    .filter((t) => !selfSet.has(t))
+    .map((t) => new RegExp(String.raw`\b${t}\b`, 'g'))
 }
 
 function scanForbiddenTokens(text, tokenRegexes) {
@@ -281,7 +436,7 @@ function scanForbiddenTokens(text, tokenRegexes) {
     const m = text.match(re)
     if (m) for (const t of m) hits.add(t)
   }
-  for (const needle of FALLBACK_PERSONAL_NEEDLES) {
+  for (const needle of IDENTITY.personalNeedles) {
     if (text.includes(needle)) hits.add(needle)
   }
   HOME_PATH_RE.lastIndex = 0
@@ -445,6 +600,10 @@ async function main() {
   const scriptDir = dirname(fileURLToPath(import.meta.url))
   const opts = parseArgs(process.argv.slice(2))
 
+  // 掃描前先解析身分表：consumer 名冊（clade home 才有）＋ 個人路徑 / email
+  // （環境派生）。NEVER 把它改成 module 載入期的字面常數，成因見 IDENTITY 上方。
+  await resolveIdentity(resolve(scriptDir, '..', '..'))
+
   let roots
   if (opts.allConsumers) {
     const resolved = await resolveSanitizedConsumers(resolve(scriptDir, '..', '..'))
@@ -481,6 +640,8 @@ async function main() {
       violations,
       errors,
       selfExcluded,
+      rosterSource: IDENTITY.rosterSource,
+      notices: IDENTITY.notices,
     }
     process.stdout.write(JSON.stringify(out, null, 2) + '\n')
   } else {
@@ -489,6 +650,13 @@ async function main() {
       for (const e of errors) process.stderr.write(`  ✘ ${e}\n`)
     }
     // 覆蓋面的縮減一律先印，NEVER 讓它藏在 0 violations 後面。
+    // 名冊來源同理：`consumer 名偵測未執行` 與「掃過了、很乾淨」的輸出完全同形。
+    for (const n of IDENTITY.notices) process.stdout.write(`ℹ ${n}\n`)
+    process.stdout.write(
+      `ℹ fleet 名冊：${IDENTITY.nameTokens.length} tokens${
+        IDENTITY.rosterSource ? ` (${IDENTITY.rosterSource})` : ''
+      }\n`,
+    )
     for (const { root, tokens } of selfExcluded) {
       const shown =
         tokens.length > 0 ? tokens.join(', ') : '(none — 自身身分判不出，全部 token 照掃)'
