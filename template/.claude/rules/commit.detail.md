@@ -1,6 +1,6 @@
 ---
-description: Commit 全文規約（gate 清單、Single Session Lock、WIP 處置決策樹、main worktree 預設位置、ad-hoc `git commit --only` 紀律與 Verify / Recovery、路徑白名單、trunk hard gate、Stash 自動處置 gate、分組與訊息規範）；always-load 的薄 pointer 在 [[commit]]，本檔在編輯任何檔時 path-scoped 載入
-paths: ['**/*', '.claude/**', '.github/**', '.clade/**', '.codex/**']
+description: Commit 全文規約（gate 清單、Single Session Lock、WIP 處置決策樹、main worktree 預設位置、ad-hoc `git commit --only` 紀律與 Verify / Recovery、路徑白名單、trunk hard gate、Stash 自動處置 gate、分組與訊息規範）；always-load 的薄 pointer 在 [[commit]]，觸發時機是「下任何 git commit / git add / git stash / /commit 之前」，由 [[commit]] 的 MUST-Read 指針叫醒
+paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**', '.clade/work-loop/**']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -75,7 +75,7 @@ uncommitted 變更
 
 **`/commit` MUST 在 main worktree 跑、NEVER 在 session worktree 內跑**。
 
-Worktree 完成驗證後的標準收尾（詳見 [[worktree-default]] §5）：**主線自動執行** selective stash → 跨 worktree pop → cleanup（**不切** session cwd）。完成後主線直接在 main cwd invoke `/commit`；若既有 session boundary 要求乾淨 main session，就依 [[session-tasks]] § Herdr session transport 自行 dispatch `/commit` 並回 receipt，**NEVER** 叫 user 開 main session。
+Worktree 完成驗證後的標準收尾（詳見 [[worktree-default]] §5）：**主線自動執行** selective stash → 跨 worktree pop → cleanup（**不切** session cwd）。完成後主線直接在 main cwd invoke `/commit`；若既有 session boundary 要求乾淨 main session，就依 [[session-tasks.operations]] § Herdr session transport 自行 dispatch `/commit` 並回 receipt，**NEVER** 叫 user 開 main session。
 
 - 預檢：pop 前 `git -C <main> status --porcelain` 非空 → 中止 closure、stash entry 保留、提示 user 處理 main 端 WIP
 - Cleanup 安全性依賴 selective stash 列舉完整性（漏列檔永久丟）；pop 失敗 **NEVER** 跑 cleanup（改動還沒進 main）

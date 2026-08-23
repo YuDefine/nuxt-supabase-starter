@@ -51,8 +51,8 @@
  * Usage:
  *   node vendor/scripts/audit-clade-leak.ts                    # 預設 cwd = repo root
  *   node vendor/scripts/audit-clade-leak.ts --root <path>      # 指定 consumer repo root
- *   node vendor/scripts/audit-clade-leak.ts --all-consumers    # 掃 registry 內所有帶
- *                                                              # sanitization_profile 的
+ *   node vendor/scripts/audit-clade-leak.ts --all-consumers    # 掃 consumers.local 內所有
+ *                                                              # visibility == PUBLIC 的
  *                                                              # consumer（只在 clade home 可用）
  *   node vendor/scripts/audit-clade-leak.ts --json             # 機器輸出
  *   node vendor/scripts/audit-clade-leak.ts --self <token>     # 額外指定「這是我自己的名字」
@@ -64,8 +64,10 @@
  *   `propagate.ts` 也沒有呼叫它（只有一句註解）。宣告已改為 on-demand，
  *   接上真實消費端要走 TD-273。
  *
- *   `--all-consumers` 只掃帶 `sanitization_profile` 的 consumer —— 那是宣告層的
- *   「這個 repo 需要去敏感化」，與 self-exclusion 正交。
+ *   `--all-consumers` 掃 **visibility == PUBLIC** 的 consumer（走
+ *   `scripts/lib/repo-visibility.ts`，與 propagate 判去敏感化的同一個來源）。
+ *   NEVER 改回「帶 sanitization_profile」那個宣告層判準：宣告漏一次 = 該 repo 的
+ *   consumer 名偵測永久盲（TD-612）。
  *
  * 對應 governance：clade `scripts/lib/sanitization-governance.ts`。
  */
@@ -108,10 +110,9 @@ const execFileAsync = promisify(execFile)
 //     consumer 端的投影副本讀不到 → 名冊為空、consumer 名偵測不執行，改由 clade 端
 //     `node vendor/scripts/audit-clade-leak.ts --all-consumers` 承接。覆蓋面的縮減
 //     **一律印出來**（見 main()），NEVER 讓它靜默發生。
-//     ⚠️ `--all-consumers` 的選取判準是「registry 帶 sanitization_profile」，**不是**
-//     「repo 是 PUBLIC」——所以沒宣告 profile 的 PUBLIC consumer 兩邊都掃不到
-//     consumer 名（2026-08-24 現況：<consumer-c> 正是這一格）。那是
-//     `resolveSanitizedConsumers()` 的選取面問題，不是本節的 needle 問題。
+//     `--all-consumers` 的選取判準是「repo visibility == PUBLIC」（TD-612 起），
+//     所以 consumer 端讀不到名冊的那一半，在 clade 端由**每一個** PUBLIC consumer
+//     承接，不再取決於有沒有人替它手寫 sanitization_profile。
 //   - **個人路徑 / email**：由執行者環境當場派生（`homedir()` / `userInfo()` /
 //     `git config user.email`）。語義因此是「跑這支 audit 的人的個人身分外洩了嗎」，
 //     在 clade home 與 consumer 端都成立，且不依賴任何落檔的字面。
@@ -213,7 +214,7 @@ async function loadFleetIdentity(cladeRoot) {
     notices.push(
       'fleet 名冊未載入（本副本沒有 registry/consumers.json）— consumer 名偵測未執行，' +
         '個人路徑 / email 偵測照跑；名冊那半要在 clade home 跑 `--all-consumers`' +
-        '（限 registry 內帶 sanitization_profile 的 consumer）',
+        '（涵蓋每一個 visibility == PUBLIC 的 consumer）',
     )
     return { groups: [], personalNeedles: [], source: null, notices }
   }
@@ -320,11 +321,27 @@ function parseArgs(argv) {
 
 // registry 只在 clade home 存在（本檔會被散播到 consumer，那邊沒有 registry），
 // 所以 --all-consumers 找不到 registry 時要明講而不是靜默掃 0 個。
-// 只回傳帶 sanitization_profile 的 consumer —— 判準是為公開 repo 設計的，
-// 對私有 consumer 跑會得到約 100 條類別錯誤的「violation」（見檔頭）。
-// 兩個 SoT 要對起來：`registry/consumers.json` 說「誰帶 sanitization_profile」（宣告層，
-// 不含路徑），`consumers.local` 說「本機路徑」（每行一條，可帶 `flow=` 後綴）。
-async function resolveSanitizedConsumers(cladeRoot) {
+//
+// 選取判準是 **repo visibility == PUBLIC**，NEVER「registry 帶 sanitization_profile」
+// （TD-612）：後者是**宣告層**——有人手寫了 profile 才算數，於是「PUBLIC 但沒人替它
+// 寫 profile」的 consumer 兩邊都掃不到 consumer 名（consumer 端投影副本讀不到
+// registry、clade 端這裡又沒選到它）。宣告漏一次 = 該 repo 的名冊偵測永久盲。
+// visibility 則是 repo 的客觀狀態，補不補 profile 都不影響它被掃到。
+//
+// visibility 不落 registry（那會變成第二份會漂移的真相，per TD-274），一律走
+// `scripts/lib/repo-visibility.ts` 的三層解析（memo → 快取檔 → `gh repo view`），
+// 與 propagate 判「要不要去敏感化」用的是**同一個**來源。
+//
+// 判不出 visibility 的 consumer **NEVER 靜默跳過**：跳過它就是 TD-612 的盲區原樣
+// 復發。一律回進 `errors` 讓輸出變紅，其餘 PUBLIC consumer 照掃。
+//
+// 三個 SoT 要對起來：`registry/consumers.json` 給 `consumer_id → repo_id`、
+// visibility 解析給 `repo_id → PUBLIC?`、`consumers.local` 給本機路徑
+// （每行一條，可帶 `flow=` 後綴）。
+export async function resolvePublicConsumers(
+  cladeRoot,
+  opts: { getVisibility?: (repoId: string) => boolean | Promise<boolean> } = {},
+) {
   const registryPath = join(cladeRoot, 'registry', 'consumers.json')
   const localPath = join(cladeRoot, 'consumers.local')
   if (!existsSync(registryPath) || !existsSync(localPath)) {
@@ -334,21 +351,80 @@ async function resolveSanitizedConsumers(cladeRoot) {
   }
 
   const parsed = JSON.parse(await readFile(registryPath, 'utf8'))
-  const sanitizedIds = (parsed.consumers || parsed)
-    .filter((entry) => entry?.sanitization_profile)
-    .map((entry) => entry.consumer_id)
-    .filter(Boolean)
+  const entries = (parsed.consumers || parsed).filter((e) => e?.consumer_id)
+
+  const getVisibility = opts.getVisibility ?? (await loadVisibilityResolver(cladeRoot))
+  if (!getVisibility) {
+    return {
+      error:
+        `--all-consumers 需要 scripts/lib/repo-visibility.ts 判定哪些 repo 是 PUBLIC` +
+        `（在 ${cladeRoot} 找不到）—— 沒有它就只能靠宣告層猜，那正是 TD-612 的盲區`,
+    }
+  }
 
   const localRoots = (await readFile(localPath, 'utf8'))
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.length > 0 && !line.startsWith('#'))
     .map((line) => line.split(/\s+/)[0])
+    .filter((p) => existsSync(p))
 
-  const roots = localRoots.filter(
-    (p) => existsSync(p) && sanitizedIds.some((id) => p.includes(`/${id}`)),
-  )
-  return { roots }
+  const roots = []
+  const errors = []
+  for (const path of localRoots) {
+    const entry = matchConsumerEntry(path, entries)
+    if (!entry) {
+      errors.push(
+        `${path}: consumers.local 有這條路徑，但 registry 找不到對應 consumer_id —— ` +
+          `判不出 repo visibility，本輪未掃描（補 registry 條目或移除該行）`,
+      )
+      continue
+    }
+    if (!entry.repo_id) {
+      errors.push(`${entry.consumer_id}: registry 缺 repo_id —— 判不出 repo visibility，本輪未掃描`)
+      continue
+    }
+    let visibility
+    try {
+      visibility = await getVisibility(entry.repo_id, { cladeRoot })
+    } catch (err) {
+      errors.push(
+        `${entry.consumer_id}: repo visibility 判不出（${
+          err.message.split('\n')[0]
+        }）—— 本輪未掃描，NEVER 當成「不是 PUBLIC」`,
+      )
+      continue
+    }
+    if (visibility !== 'PUBLIC') continue
+    roots.push({ path, consumerId: entry.consumer_id, repoId: entry.repo_id, visibility })
+  }
+  return { roots, errors }
+}
+
+// 路徑 → consumer：比對**路徑區段**而非 substring。substring 會讓 `<consumer-h>` 命中
+// `<consumer-g>`，而選錯 consumer 就是選錯 repo_id、選錯 visibility。
+// 多個區段都命中時取最長的 id（`<consumer-g>` 勝過 `<consumer-h>`）。
+function matchConsumerEntry(path, entries) {
+  const segments = new Set(path.split('/').filter(Boolean))
+  let best = null
+  for (const entry of entries) {
+    if (!segments.has(entry.consumer_id)) continue
+    if (!best || entry.consumer_id.length > best.consumer_id.length) best = entry
+  }
+  return best
+}
+
+// visibility 解析 lib 只在 clade home 有（`scripts/lib/` 不散播到 consumer），
+// 與 loadFleetIdentity 對 sanitization-governance 的處理同型。
+async function loadVisibilityResolver(cladeRoot) {
+  const libPath = join(cladeRoot, 'scripts', 'lib', 'repo-visibility.ts')
+  if (!existsSync(libPath)) return null
+  try {
+    const mod = await import(pathToFileURL(libPath).href)
+    return mod.getRepoVisibility ?? null
+  } catch {
+    return null
+  }
 }
 
 async function findRepoRoot(start) {
@@ -605,26 +681,30 @@ async function main() {
   await resolveIdentity(resolve(scriptDir, '..', '..'))
 
   let roots
+  const errors = []
   if (opts.allConsumers) {
-    const resolved = await resolveSanitizedConsumers(resolve(scriptDir, '..', '..'))
+    const resolved = await resolvePublicConsumers(resolve(scriptDir, '..', '..'))
     if (resolved.error) {
       process.stderr.write(`${resolved.error}\n`)
       process.exit(2)
     }
     roots = resolved.roots
+    // 判不出 visibility 的 consumer 進 errors —— 覆蓋面縮減一律出聲並讓輸出變紅，
+    // NEVER 讓「跳過了幾個」藏在 0 violations 後面（TD-612）。
+    errors.push(...resolved.errors)
     if (roots.length === 0) {
-      process.stderr.write('registry 內沒有帶 sanitization_profile 的 consumer\n')
+      process.stderr.write('consumers.local 內沒有 PUBLIC consumer（visibility 判定後）\n')
       process.exit(2)
     }
   } else {
     const startRoot = resolveStarterRoot(opts)
-    roots = [(await findRepoRoot(startRoot)) || startRoot]
+    const path = (await findRepoRoot(startRoot)) || startRoot
+    roots = [{ path, consumerId: basename(path), repoId: null, visibility: null }]
   }
 
   const violations = []
-  const errors = []
   const selfExcluded = []
-  for (const root of roots) {
+  for (const { path: root } of roots) {
     const res = await auditOneRoot(root, opts.self)
     // 多 root 時在 path 前綴 repo 名，否則兩個 consumer 的同名路徑會混在一起讀不出來。
     const label = roots.length > 1 ? `${basename(root)}/` : ''
@@ -640,6 +720,7 @@ async function main() {
       violations,
       errors,
       selfExcluded,
+      roots,
       rosterSource: IDENTITY.rosterSource,
       notices: IDENTITY.notices,
     }
@@ -657,6 +738,11 @@ async function main() {
         IDENTITY.rosterSource ? ` (${IDENTITY.rosterSource})` : ''
       }\n`,
     )
+    if (opts.allConsumers) {
+      process.stdout.write(
+        `ℹ 掃描面（PUBLIC repo）：${roots.map((r) => r.consumerId).join(', ')}\n`,
+      )
+    }
     for (const { root, tokens } of selfExcluded) {
       const shown =
         tokens.length > 0 ? tokens.join(', ') : '(none — 自身身分判不出，全部 token 照掃)'

@@ -77,6 +77,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync, unlinkSync, realpathSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
 import { basename, join, resolve, isAbsolute } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -441,9 +442,13 @@ function resolveRepoRoots(o) {
   return [...new Set(roots)]
 }
 
-function resolveSessionName(o, consumerId) {
+export function resolveSessionName(o, consumerId, port = null, primaryPort = null) {
   if (o.session) return o.session
-  return o.app ? `dev-${consumerId}-${o.app}` : `dev-${consumerId}`
+  if (o.app) return `dev-${consumerId}-${o.app}`
+  // port 分名與 leaseId 同規則：primary（或未知）維持舊名，非 primary 才加後綴。
+  // 無條件加後綴會讓既有的 `dev-<consumer>` session 變孤兒。
+  if (!port || !primaryPort || port === primaryPort) return `dev-${consumerId}`
+  return `dev-${consumerId}-${port}`
 }
 
 // 從 cmd argv 找 `--port N`；或從 consumer-meta dev.ports 推
@@ -986,10 +991,11 @@ async function cmdLaunch(o) {
 
   const meta = readConsumerMeta(o.consumerMeta)
   const consumerId = resolveConsumerId(o, meta)
-  const sessionName = resolveSessionName(o, consumerId)
   const port = resolvePort(o, meta)
+  const primaryPort = resolvePrimaryPort(meta)
+  const sessionName = resolveSessionName(o, consumerId, port, primaryPort)
   // lease identity 綁 (consumer, port)：同 consumer 的不同 app / review slot 是不同 lease
-  const lid = leaseId(consumerId, port, resolvePrimaryPort(meta))
+  const lid = leaseId(consumerId, port, primaryPort)
   const urlHint = port ? `http://127.0.0.1:${port}` : '(port 未知)'
 
   // 0) per-worktree backing service 存在性檢查（per rules/core/db-preview-env.md § 缺席側）。
@@ -1138,9 +1144,10 @@ async function cmdLaunch(o) {
 function cmdStatus(o) {
   const meta = readConsumerMeta(o.consumerMeta)
   const consumerId = resolveConsumerId(o, meta)
-  const sessionName = resolveSessionName(o, consumerId)
   const port = resolvePort(o, meta)
-  const lid = leaseId(consumerId, port, resolvePrimaryPort(meta))
+  const primaryPort = resolvePrimaryPort(meta)
+  const sessionName = resolveSessionName(o, consumerId, port, primaryPort)
+  const lid = leaseId(consumerId, port, primaryPort)
   const s = findSession(sessionName)
   out(`dev-session status — ${sessionName}`)
   out(
@@ -1287,9 +1294,11 @@ async function cmdWait(o) {
 function cmdStop(o) {
   const meta = readConsumerMeta(o.consumerMeta)
   const consumerId = resolveConsumerId(o, meta)
-  const sessionName = resolveSessionName(o, consumerId)
+  const port = resolvePort(o, meta)
+  const primaryPort = resolvePrimaryPort(meta)
+  const sessionName = resolveSessionName(o, consumerId, port, primaryPort)
   // stop 也要解 port —— 否則非 primary port 的 lease 永遠釋放不到，殘留成假衝突
-  const lid = leaseId(consumerId, resolvePort(o, meta), resolvePrimaryPort(meta))
+  const lid = leaseId(consumerId, port, primaryPort)
   const s = findSession(sessionName)
   if (!s) {
     out(`session ${sessionName} 不存在，無需停止`)
@@ -1385,7 +1394,19 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  err(`dev-session error: ${e?.message || e}`)
-  process.exit(1)
-})
+function invokedAsCli() {
+  const entry = process.argv[1]
+  if (!entry) return false
+  try {
+    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url))
+  } catch {
+    return entry === fileURLToPath(import.meta.url)
+  }
+}
+
+if (invokedAsCli()) {
+  main().catch((e) => {
+    err(`dev-session error: ${e?.message || e}`)
+    process.exit(1)
+  })
+}

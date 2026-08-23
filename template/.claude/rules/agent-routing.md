@@ -26,13 +26,13 @@ Local edits will be reverted by the next sync.
 - **長時間 background job**——跑得久且主線不必盯著（build / 大量 test / 長 migration）
 - **需要隔離環境**——worktree 平行改動、會互相踩檔或搶 port 的工作
 
-**不外派**（命中就自己做，即使同時有好幾條）：少量工具即可結束；路徑已知的少量讀取；規約 / 契約 / 對外文件的**措辭**；**UI view 實作**與視覺判讀 / Design Review（component / page / view / layout / styling —— 實作與品質判定都留主線 Opus，**NEVER** 派 Pi 任一 model、**NEVER** 派 Claude subagent）；需要 claude.ai-connected MCP（Notion 等）的工作；安全敏感或不可逆的動作（憑證 / 刪檔 / force push / 對外發佈）；**複驗自己剛做完的東西**（判準見 [[checker-subagent]] § 過度派）。
+**不外派**（命中就自己做，即使同時有好幾條）：少量工具即可結束；路徑已知的少量讀取；規約 / 契約 / 對外文件的**定稿措辭**（會原樣成為交付物的最終文字）；**UI view 實作**與視覺判讀 / Design Review（component / page / view / layout / styling —— 實作與品質判定都留主線 Opus，**NEVER** 派 Pi 任一 model、**NEVER** 派 Claude subagent）；需要 claude.ai-connected MCP（Notion 等）的工作；安全敏感或不可逆的動作（憑證 / 刪檔 / force push / 對外發佈）；**複驗自己剛做完的東西**（判準見 [[checker-subagent]] § 過度派）。
 
 **具名 threshold 優先於上段的 generic「少量」判準**：同一 prompt segment 準備執行第 3 個高信心 readonly Bash、第 5 個 distinct textual Read，或第一次 Read 501+ 行文字檔時，PreToolUse gate 會建立 pending decision。主線 MUST 以 decision-linked dispatch（exact trigger 走 `luna low`；更具體工作可走共用 policy 驗證過的 concrete Pi row）、structured waiver，或 dispatcher exit 3／4 後的 matching fallback authorization receipt 結案；完整命令與狀態轉移見 reference § Routing threshold gate。
 
 **命中多條外派條件時先問「一個 subagent 能不能全部做完」**——能就派**一個**，**NEVER** 一條 task 配一個 agent 地拆。
 
-**同時像寬掃又像措辭時看產出形狀**：產出是事實表 / 清單 / 統計 → 派（寬掃的價值在把原文壓成結論）；產出是要寫進規約、契約或對外文件的**措辭** → 留。措辭的語氣與抽象層級一致性外包不了，派出去的典型結果是回頭逐條重寫（成本見 rationale）。
+**同時像寬掃又像措辭時看產出形狀**：產出是事實表 / 清單 / 統計 → 派（寬掃的價值在把原文壓成結論）；產出是要寫進規約、契約或對外文件的**定稿措辭** → 留。措辭的語氣與抽象層級一致性外包不了，派出去的典型結果是回頭逐條重寫（成本見 rationale）。
 
 **NEVER 因 plan mode 這類唯讀模式寫不了檔，就判 in-process subagent 不能派**——`Agent` tool 的 brief 是 prompt 字串、不落檔，只有 `pi-dispatch.ts` 與 Herdr transport 落檔。逐字反開脫：「plan mode 不允許寫 brief 檔，所以改由主線直接讀檔探索」。
 
@@ -79,7 +79,7 @@ Local edits will be reverted by the next sync.
 ### 已有的領域實例（本節是它們的通則，不取代任何一條）
 
 [[proactive-skills.dev-server-spawn]]（agent 自起 dev server，不叫 user `cd`）、[[commit.detail]]
-（不叫 user 開 main session）、[[session-tasks]] § Herdr session transport（transport 失敗回具體
+（不叫 user 開 main session）、[[session-tasks.operations]] § Herdr session transport（transport 失敗回具體
 blocker，不降級成叫 user 貼 prompt）、[[review-gui-surface]]（`fix-requested` item 是 Claude 的
 工作，不推給 user）、[[manual-review.data-readiness]]（marker 誤標先改 marker，不叫 user 自己想辦法）。
 
@@ -90,10 +90,7 @@ blocker，不降級成叫 user 貼 prompt）、[[review-gui-surface]]（`fix-req
 
 ## Dispatch 資料邊界（Approved-Tools gate，先於能力判斷）
 
-上一節的不外派清單管的是**動作**（憑證 / 刪檔 / force push），本節管的是**內容**：一個完全合法的
-外派動作，照樣可以把 secret 或客戶個資寫進另一個 runtime 的 prompt 與其日誌。適用**每一次**
-dispatch 的**每一種** brief 載體——`pi-dispatch.ts` 的 prompt 檔、Claude subagent 的 thin brief、
-Herdr transport 的 durable task 檔、workflow agent 的 prompt 字串。
+上一節管的是**動作**（憑證 / 刪檔 / force push），本節管**內容**：完全合法的外派動作照樣可以把 secret 或客戶個資寫進另一個 runtime 的 prompt 與其日誌。適用**每一次** dispatch 的**每一種** brief 載體——`pi-dispatch.ts` 的 prompt 檔、Claude subagent 的 thin brief、Herdr durable task 檔、workflow agent 的 prompt 字串。
 
 ### MUST：brief 明列 Approved Tools
 
@@ -104,35 +101,17 @@ Herdr transport 的 durable task 檔、workflow agent 的 prompt 字串。
 
 清單寫不出來 = 這件事還沒被消化到可以外派（回 § 派不派 的預消化紀律）。
 
-### MUST：檔案要逐個列路徑，NEVER 只給目錄名
+### 逐項列路徑的紀律、不進 prompt 的查表、為何沒有機械網子接，全文在 [[agent-routing.pi-watch-protocol]]（具名時機 MUST-Read）
 
-brief 要 carrier 讀一批檔（截圖、log、fixture）時，**MUST 逐項列出精確相對路徑**，
-NEVER 只寫「目錄：`./screenshots/`」讓它自己列。**NEVER** 拿「先列出目錄再逐一開啟」這句當修法——它只降低失敗率、不消除。失敗方向雖保守
-（回 UNCERTAIN 而非假 PASS），但「**carrier 沒去看**」與「**證據真的不足**」在輸出上同形。
-取證見 rationale § dispatch 資料邊界的量測。
-
-### 查表：什麼不進 dispatch prompt
-
-| 類別 | 改帶什麼 |
-| --- | --- |
-| 憑證與 secret 的**值**（`.env` 任一行、API key、token、cookie、session id、DB 連線字串、private key） | 變數名 + 檔案路徑（「值在目標 repo `.env.local` 的 `SUPABASE_SERVICE_ROLE_KEY`，你自己讀」） |
-| 客戶個資（真實姓名 / email / 電話 / 地址 / 身分證字號 / 帳務與訂單明細） | 只給 id 與欄位型別，或同 schema 的假資料；fleet 內有客戶案（<consumer-b> / <consumer-a>） |
-| 未公開商業內容（報價、合約條款、客戶內部策略） | 只給判斷所需的結論，不給原文 |
-| 完整 log / DB dump / request body 原文 | 取樣 + 遮蔽後的片段 |
-
-判準是資料**離開本 session、進入另一個 runtime**，不是誰付費、不是對方可不可信。判不出來就不帶。
-
-**本表刻意寫成查表而不是紀律型三件套**（依據見 rationale § dispatch 資料邊界的量測）：出現第一筆
-真實違規前，**NEVER** 把它加寫成 Iron Law + rationalization table。
-
-### 為什麼這條沒有機械網子接
-
-redaction 只在 signal payload 上強制（`vendor/signals/redact.mjs`），**dispatch prompt 不經過它**。
-本節是這條路徑上唯一的攔截點，**NEVER** 假設有下游 gate 會幫忙擋。
+**寫任何一份 dispatch brief 之前（`pi-dispatch.ts` 的 prompt 檔、Claude subagent 的 thin brief、
+Herdr durable task 檔、workflow agent 的 prompt 字串都算），MUST 先讀
+[[agent-routing.pi-watch-protocol]] § Dispatch 資料邊界（全文）**——沒讀到就沒有「檔案 MUST 逐個
+列精確路徑、NEVER 只給目錄名」、沒有四類**不進 prompt** 的查表與各自的替代帶法，也不會知道
+redaction（`vendor/signals/redact.mjs`）只作用在 signal payload、**dispatch prompt 不經過它**。
 
 ## Session transport boundary
 
-**Herdr transport 不新增 routing 權限。** 有空 workspace / pane 不是外派條件；當前 session 能在既有授權與 scope 內直接完成目標 cwd 的工作，就直接完成。只有本節已判定要換互動 session、或 [[session-tasks]] 的 session boundary 已成立時，才依該規約 § Herdr session transport 搬運 durable task / thin brief。
+**Herdr transport 不新增 routing 權限。** 有空 workspace / pane 不是外派條件；當前 session 能在既有授權與 scope 內直接完成目標 cwd 的工作，就直接完成。只有本節已判定要換互動 session、或 [[session-tasks]] 的 session boundary 已成立時，才依 [[session-tasks.operations]] § Herdr session transport 搬運 durable task / thin brief。
 
 **Pane 是 dispatch 的投影，不是 dispatch 的理由。** Transport 預設分割當前 Tab，只改變已決定要派的工作長什麼樣。反方向同樣不承載資訊：**NEVER** 從「Tab 沒有分割」推論沒有工作在跑——in-process subagent 沒有 terminal。要看現況跑 `vendor/scripts/herdr-patrol.ts`。
 
@@ -142,18 +121,11 @@ redaction 只在 signal payload 上強制（`vendor/signals/redact.mjs`），**d
 
 > **Pi 派工是 (model, effort) 二維**，model 維合法值：`sol`、`sol-cursor`、`gemini`、`luna`、`luna-cursor`、`grok-xai`、`grok-cursor`（`grok` 是 `grok-cursor` 的向後相容別名）。同一 tier 的 `-cursor` 變體是**換配額池、不換檔位**，只在配額降級鏈上出現，**NEVER** 拿它當第一手選擇。**Routing Table 已列明檔位的類別照列派**（多數列為 `--model sol`，分級靠 `--effort`；web-search 列列明 `grok-xai`；screenshot-verify 列 2026-08-22 起 Claude-only，見〔`screenshot-review-verify`〕）；**原本會派 Claude subagent 的委派工作**（原判 `sonnet`／`haiku`）依 § Claude 委派的 model 檔位 轉派 `--model gemini`（額度耗盡才回 `luna`）。**NEVER 派 `--model terra`**（2026-08-11 拍板；dispatcher 仍認得它是**能力**不是政策，理由見 rationale）。**NEVER** 把 Cursor catalog 的 `gemini-3.7-flash` 當這一跳——那是 Ultra `Other Models` 桶。
 >
-> **`*-cursor` NEVER 接要讀 cwd 以外路徑的任務**：cursor 池的 `$HOME` 與 `/tmp` 是空 tmpfs
-> （TD-520 刻意設計），派進去只會拿到一張**與真結果同形**的全 missing 表。配額鏈走到那一格時，
-> brief 指涉 cwd 以外路徑就**跳過該格**進終端步驟——判的是**這份 brief**，不是列名。
-> `pi-dispatch.ts` 送出前會掃 brief 拒跑（exit 1），但它只看得到 brief 寫出來的路徑，
-> **NEVER** 拿它當自己不必判的理由。**NEVER** 用 `PI_CURSOR_SANDBOX_BIND` 加 bind 繞過。
-> 成因與實測見 `docs/tech-debt.md` § TD-541。
+> **`*-cursor` NEVER 接要讀 cwd 以外路徑的任務**（cursor 池的 `$HOME` / `/tmp` 是空 tmpfs，拿到的是**與真結果同形**的全 missing 表）。配額鏈走到那一格時，brief 指涉 cwd 以外路徑就**跳過該格**進終端步驟——判的是**這份 brief**，不是列名。`pi-dispatch.ts` 會掃 brief 拒跑（exit 1），但它只看得到 brief 寫出來的路徑，**NEVER** 拿它當自己不必判的理由。**NEVER** 用 `PI_CURSOR_SANDBOX_BIND` 繞過。成因與實測見 `docs/tech-debt.md` § TD-541。
 >
 > **理由欄只回答「為何不降 luna」，那不等於回答過「能不能用 grok」。NEVER** 把「理由欄沒提到 grok」讀成「已評估過並排除」。**樣本不足以轉列，現行檔位一律照表**；要轉先補 TD-509 列的 reps（已補的 n=1 取證見 rationale § grok 擴權取證）。
 >
-> 選 effort 檔位看下列六維，**NEVER** 只看「這個工作重不重要」或「迴圈長不長」：
->
-> 規格清晰度／搜尋空間與分支度／語意跨度（跨檔・矛盾來源）／錯誤成本不對稱性／可驗證性／mutation blast radius
+> 選 effort 檔位看六維——規格清晰度／搜尋空間與分支度／語意跨度（跨檔・矛盾來源）／錯誤成本不對稱性／可驗證性／mutation blast radius——**NEVER** 只看「這個工作重不重要」或「迴圈長不長」。
 >
 > | 檔位 | 何時用 |
 > | --- | --- |
@@ -162,17 +134,9 @@ redaction 只在 signal payload 上強制（`vendor/signals/redact.mjs`），**d
 > | `--model gemini`（Routing Table 類別內降檔） | **本表列明 gemini 的列照列派**（額度耗盡才回 `luna`）；其餘要五條全中：規格完全明確 ∧ 來源已正規化 ∧ 低風險 ∧ 輸出可機械驗證 ∧ 錯誤有獨立 gate 接住。**需裁決一律不降**，回 `sol`；**exit 2 升 `sol` 重派**。**NEVER** 靜默改用舊 Flash model |
 > | `--model gemini`（Claude 委派替代檔） | 原判 Claude `sonnet` 的委派工作 → `--effort high`；原判 `haiku` → `--effort low`。准入判準在 § Claude 委派的 model 檔位——這是同級工作換 runtime，**不是降檔**，不走上一列的五條連言。Gemini hop 不可用／exit 4 → `luna` |
 >
-> **每一次** pi dispatch **MUST 帶 `--route` 與 `--tier-basis`**（缺就 exit 1）：前者記走哪條
-> 政策（本表某列 → `routing-table`；§ Claude 委派的 model 檔位 → `claude-delegate-sub`；配額降級鏈
-> → `fallback-chain`；皆非才**顯式** `manual`），後者記該政策對 model 的**結論**（六值見 reference）；
-> dispatcher 交叉檢查兩者與 `--model`、矛盾即 exit 1。**NEVER** 不確定就填 `manual` ／
-> `table-row`——與「判定沒發生」不可區分。重試帶 `--retry-of <label>`，**NEVER** 用 `<label>2`。
+> **每一次** pi dispatch **MUST 帶 `--route` 與 `--tier-basis`**（缺就 exit 1）：前者記走哪條政策（本表某列 → `routing-table`；§ Claude 委派的 model 檔位 → `claude-delegate-sub`；配額降級鏈 → `fallback-chain`；皆非才**顯式** `manual`），後者記該政策對 model 的**結論**（六值見 reference）；dispatcher 交叉檢查兩者與 `--model`、矛盾即 exit 1。**NEVER** 不確定就填 `manual` ／ `table-row`——與「判定沒發生」不可區分。重試帶 `--retry-of <label>`，**NEVER** 用 `<label>2`。
 >
-> **`--tier-basis table-row` 時 MUST 再帶 `--table-row <列名>`**（缺就 exit 1，2026-08-13 起）：
-> 列名就是下表每列開頭 〔`如此標示`〕 的那個 slug，dispatcher 拿該列列明的 model 交叉檢查。
-> **NEVER** 因為「反正 table-row 也是查表」就省略它——它曾是六個 basis 裡唯一對 model
-> 零約束的值，實測成了「查表姿勢做足、派哪個 model 都不受檢查」的最省力路徑（實錄見 rationale）。
-> **NEVER** 在派工當下偏離列上的 model —— 認為某列該換檔位就先改本表再派。
+> **`--tier-basis table-row` 時 MUST 再帶 `--table-row <列名>`**（缺就 exit 1）：列名是下表每列開頭 〔`如此標示`〕 的 slug，dispatcher 拿該列的 model 交叉檢查。**NEVER** 因為「反正 table-row 也是查表」就省略它（它曾是唯一對 model 零約束的 basis，實錄見 rationale）。**NEVER** 在派工當下偏離列上的 model —— 認為某列該換檔位就先改本表再派。
 >
 > **Routing Table 類別的檔位選擇中，NEVER** 拿「輸出會被下游機械消費」當降檔理由：下游若只驗 JSON schema 而不驗語意，降檔引入的錯誤會被自動放大。只有下游具備**獨立且夠強的語意 gate** 才可降檔。（§ Claude 委派的 model 檔位 的轉派自帶語意 gate 要求——它的第 3 條 predicate 就是這一條。）
 >
@@ -184,26 +148,27 @@ redaction 只在 signal payload 上強制（`vendor/signals/redact.mjs`），**d
 
 | 工作類別 | 由誰執行 | 為什麼 |
 | --- | --- | --- |
-| 〔`web-search`〕 **Web search**（即時資料 / 外部資訊查詢） | **Pi `--model grok-xai --effort low`**（`xai/grok-4.6`）。exit 4 → `--model grok-cursor` 同 effort 重派一次 | 走 xAI OAuth 獨立池、不吃 codex-pool 配額（轉列取證見 rationale § grok 擴權取證）。**來源可信度裁決仍是本列工作的一部分**——查不到就回「查不到」，NEVER 拿二手彙整頁的數字充數。 |
-| 〔`code-review`〕 **Code review（commit 0-A）** | **(1) `simplify` + (2) Pi review xhigh（GPT-5.6-sol，經 codex-review-safe.sh），(3) 0-A.1 出 Critical / Major 時條件升 max** | 跨模型互補盲點。詳見 commit SKILL Step 0-A。effort 以 `commit/gates.md` § 0-A 與 `codex-review-safe.sh` 的 default 為 SoT。 |
+| 〔`web-search`〕 **Web search**（即時資料 / 外部資訊查詢） | **Pi `--model grok-xai --effort low`**（`xai/grok-4.6`）。exit 4 → `--model grok-cursor` 同 effort 重派一次 | 走 xAI OAuth 獨立池、不吃 codex-pool 配額（取證見 rationale § grok 擴權取證）。**來源可信度裁決仍是本列工作的一部分**——查不到就回「查不到」，NEVER 拿二手彙整頁的數字充數。 |
+| 〔`code-review`〕 **Code review（commit 0-A）** | **(1) `simplify` + (2) Pi review xhigh（GPT-5.6-sol，經 codex-review-safe.sh），(3) 0-A.1 出 Critical / Major 時條件升 max** | 跨模型互補盲點。effort 的 SoT 是 `commit/gates.md` § 0-A 與 `codex-review-safe.sh` 的 default；流程見 commit SKILL Step 0-A。 |
 | 〔`spectra`〕 **Spectra `propose` / `apply` 各階段（draft / cross-check / phase 粒度 / UI view phase）** | 見 reference § Spectra Routing Table | spectra 專屬 routing 在 path-scoped reference（碰 `openspec/changes/**` 時載入）。**不變的契約**：UI view phase 與 Design Review **都永不外派**（主線 Opus 自己做）；propose 的 cross-check / final check **一律主線跑**。 |
-| 〔`spectra-phase-implementation`〕 **Spectra Apply Class C phase 語意實作** | **Pi `--model sol --effort high` via 泛用 dispatcher** | schema／migration／API／backend／非 view frontend 等 phase 的預設 carrier；Plan-first、task→file、view guard、scope、one-phase-one-commit 與 L0–L2 gate 不因 carrier 統一而放寬。**NEVER 轉 grok**（成因、下游 check 為何接不住，見 reference § Spectra Routing Table）。 |
+| 〔`spectra-phase-implementation`〕 **Spectra Apply Class C phase 語意實作** | **Pi `--model sol --effort high` via 泛用 dispatcher** | schema／migration／API／backend／非 view frontend phase 的預設 carrier；Plan-first、task→file、view guard、scope、one-phase-one-commit 與 L0–L2 gate 不因 carrier 統一而放寬。**NEVER 轉 grok**（見 reference § Spectra Routing Table）。 |
 | 〔`spectra-phase-prescan`〕 **Spectra Apply 已封閉 phase 的 read-only fact extraction** | **Pi `--model gemini --effort low` via 泛用 dispatcher** | 只抽事實不做裁決，矛盾回 `needs_reconciliation`；範圍與 exit 4 分流見 reference § Spectra Routing Table。 |
 | 〔`spectra-mechanical-substep`〕 **Spectra Apply pilot marker 指定的 deterministic mutation** | **Pi `--model gemini --effort low` via 泛用 dispatcher** | eligible 判準與 shadow candidate 分流見 reference § Spectra Routing Table。 |
-| 〔`screenshot-review-verify`〕 **`screenshot-review` 全部模式**（`[verify:ui]` channel / archive 前視覺 QA / commit 0-B / ad-hoc 截圖） | **`Agent` tool，`subagent_type: screenshot-review`（Claude）。本列 NEVER 派 Pi 任一 model**——`grok-xai` / `grok-cursor` / `sol` / `gemini` / `luna` 一律不准，`pi-dispatch-screenshot-verify.ts` 已 fail-closed 拒跑 | 2026-08-22 Charles 拍板收回外派，四個模式一律適用。收回理由、**NEVER 恢復「subagent 再轉派」**的形狀與 pitfall 對照見 reference § Spectra Routing Table 與 [[review-gui-surface]] § 為什麼只准 Claude subagent。 |
+| 〔`screenshot-review-verify`〕 **`screenshot-review` 全部模式**（`[verify:ui]` channel / archive 前視覺 QA / commit 0-B / ad-hoc 截圖） | **`Agent` tool，`subagent_type: screenshot-review`（Claude）。本列 NEVER 派 Pi 任一 model**——`grok-xai` / `grok-cursor` / `sol` / `gemini` / `luna` 一律不准，`pi-dispatch-screenshot-verify.ts` 已 fail-closed 拒跑 | 2026-08-22 Charles 拍板收回外派，四個模式一律適用。**NEVER 恢復「subagent 再轉派」**的形狀；收回理由與 pitfall 對照見 reference § Spectra Routing Table 與 [[review-gui-surface]] § 為什麼只准 Claude subagent。 |
 | 〔`screenshot-match-analysis`〕 **截圖 vs item 要求的匹配判定**（`[verify:ui]` 收集完成後的 gate） | **Pi `--model sol --effort xhigh` via 泛用 dispatcher** | 收集與判定是兩個角色，**NEVER** 併成同一次 dispatch。留 sol 的理由是**樣本不足以轉**，不是 grok 守不住；取證與轉列條件見 reference § Spectra Routing Table。 |
 | **Dev/test admin session cookie 取得**（verify channel evidence collection 階段） | **主線自己 scaffold `_dev-login` route + curl mint session**（**禁止**要 user 手動取 cookie；scaffold 前**MUST**先用 detection helper 確認真的 missing） | 詳見 [[manual-review.backend]] § Dev-login route missing → scaffold-first + [[pitfall-agent-asks-user-cookie-skipping-dev-login-scaffold]]。 |
-| 〔`mechanical-fanout`〕 **Mechanical fan-out**（收集 / 掃描 / 跑指令驗證：grep 掃描、收 evidence、驗證矩陣、fleet 多 repo 盤點）。**不限委派**：主線**準備自己跑** ≥3 條唯讀指令（`grep`／`git log`／`jq`／一次性解析腳本）彙整成事實表就已命中 | **Pi `--model gemini --effort low` via 泛用 dispatcher** | 第 3 個高信心 readonly Bash 前會建立 pending decision；依 reference § Routing threshold gate 結案。走泛用 dispatcher：命令清單列得全 → `fanout-analyze`，列不全 → `fanout-collect`。例外留 Claude：需要 claude.ai-connected MCP（Notion 等）、判讀 / 治理型分析（如 /oops Mode D 判讀段）、user 明確要求。**NEVER** 以「我自己順手跑掉比較快」略過本列（成因與成本證據見 rationale）。exit 4 → luna。 |
-| 〔`read-heavy-scan`〕 **封閉來源的 fact extraction**（長文件 / fleet 掃描中的固定欄位抽取）。**不限委派**：主線準備自己讀 ≥5 個檔或任一 >500 行長文件時先觸發 gate；只有 source list 已封閉、欄位固定、每筆要求 location + raw value、且不需 identity/status/relevance 裁決才走本列 | **Pi `--model gemini --effort low` via 泛用 dispatcher** | 第 5 個 distinct textual Read 或第一次 Read 501+ 行文字檔前會建立 pending decision；依 reference § Routing threshold gate 結案。來源矛盾只准回 `needs-reconciliation`，主線改派 `exploration-prescan` grok-xai low。摘要只作輸入，規約措辭與拍板回主線。**NEVER** 拿「反正我讀一下就知道了」略過 gate，也 NEVER 把固定輸出 schema 當成不需裁決的證據。exit 4 → luna。 |
-| 〔`debug-evidence`〕 **Debug evidence 段**（log 完整 capture / repro script 撰寫執行 / 既定 hypothesis 的驗證迴圈） | **Pi `--model sol --effort high` via 泛用 dispatcher** | debug 是最大消耗桶；evidence / repro / verify 是機械段，root cause 推斷與修法設計留主線。repro 必在 throwaway worktree（template 內建 guard）。 |
-| 〔`commit-0c-fix-verify`〕 **commit 0-C fix-verify loop**（pnpm check / test 修到全綠） | **Pi `--model grok-xai --effort high` via 泛用 dispatcher**（`xai/grok-4.6`）。同一 dispatch 最多 **2** 輪 check→fix（`--var max_iterations=2`）。exit 4 → `--model grok-cursor` 同 effort 重派一次 | 機械修 lint / type / test。本列 grok 無 class-conditional 取證，用次數上限接住；主線重跑 check **不信自報**。詳見 commit SKILL Step 0-C。 |
+| 〔`mechanical-fanout`〕 **Mechanical fan-out**（收集 / 掃描 / 跑指令驗證：grep 掃描、收 evidence、驗證矩陣、fleet 多 repo 盤點）。**不限委派**：主線**準備自己跑** ≥3 條唯讀指令（`grep`／`git log`／`jq`／一次性解析腳本）彙整成事實表就已命中 | **Pi `--model gemini --effort low` via 泛用 dispatcher** | 第 3 個高信心 readonly Bash 前建立 pending decision（結案見 reference § Routing threshold gate）。命令清單列得全 → `fanout-analyze`，列不全 → `fanout-collect`。例外留 Claude：需 claude.ai-connected MCP、判讀／治理型分析、user 明確要求。**NEVER** 以「我自己順手跑掉比較快」略過本列（成因見 rationale）。exit 4 → luna。 |
+| 〔`copywriting-draft`〕 **行銷／產品對外文案的草稿與變體生成**（標題變體、商品描述、社群貼文、EDM、SEO meta、landing page 段落初稿）。**只收候選素材**：主線會整份重寫才走本列 | **Pi `--model gemini --effort low` via 泛用 dispatcher**（`gemini-3.7-flash`）。**exit 2／3／4 一律直接回主線 Opus 5 自己寫**，本列 NEVER 進全域配額降級鏈 | **主線 Opus 5 MUST 收斂重寫每一條採用的文案，NEVER 原樣貼進交付物**——Pi 回的是素材不是成稿。繁中語感、台灣慣用語與品牌 tone 的最終判定留主線。**本列只涵蓋行銷／產品對外文案**：規約措辭、commit message、技術文件、PR 描述、對外報告一律留主線（per § 派不派 不外派清單），**NEVER** 從本列外推到那幾類。降檔救不回語感，所以不進配額鏈——成本論證見 rationale。 |
+| 〔`read-heavy-scan`〕 **封閉來源的 fact extraction**（長文件 / fleet 掃描中的固定欄位抽取）。**不限委派**：主線準備自己讀 ≥5 個檔或任一 >500 行長文件時先觸發 gate；只有 source list 已封閉、欄位固定、每筆要求 location + raw value、且不需 identity/status/relevance 裁決才走本列 | **Pi `--model gemini --effort low` via 泛用 dispatcher** | 第 5 個 distinct textual Read 或第一次 Read 501+ 行文字檔前建立 pending decision（結案見 reference § Routing threshold gate）。來源矛盾只准回 `needs-reconciliation`，主線改派 `exploration-prescan` grok-xai low。摘要只作輸入，規約措辭與拍板回主線。**NEVER** 拿「反正我讀一下就知道了」略過 gate，也 NEVER 把固定輸出 schema 當成不需裁決的證據。exit 4 → luna。 |
+| 〔`debug-evidence`〕 **Debug evidence 段**（log 完整 capture / repro script 撰寫執行 / 既定 hypothesis 的驗證迴圈） | **Pi `--model sol --effort high` via 泛用 dispatcher** | evidence / repro / verify 是機械段，root cause 推斷與修法設計留主線。repro 必在 throwaway worktree（template 內建 guard）。 |
+| 〔`commit-0c-fix-verify`〕 **commit 0-C fix-verify loop**（pnpm check / test 修到全綠） | **Pi `--model grok-xai --effort high` via 泛用 dispatcher**（`xai/grok-4.6`）。同一 dispatch 最多 **2** 輪 check→fix（`--var max_iterations=2`）。exit 4 → `--model grok-cursor` 同 effort 重派一次 | 機械修 lint / type / test。grok 無 class-conditional 取證，用次數上限接住；主線重跑 check **不信自報**。見 commit SKILL Step 0-C。 |
 | 〔`commit-0c-fix-verify-escalate`〕 **commit 0-C grok 次數用盡後的 sol 升級** | **Pi `--model sol --effort high` via 泛用 dispatcher** | **NEVER** 當第一手。只在 grok 2 輪後仍紅、grok 報 pass 但主線重跑仍紅、或 grok 兩池都 exit 4 時進。 |
-| 〔`security-review`〕 **Security review**（`/security-review` skill / commit 前安全檢查） | **最終 gate：Pi `--model sol --effort medium`**。候選 finding 的 pre-triage 可先跑 `--effort low`，但**收斂判定 MUST 回 medium 以上** | **NEVER** 因為「零互動 / structured diff → structured findings」就把安全 gate 當 pattern matching 降檔——漏報成本不對稱，且 class-conditional 差距遠大於通用 benchmark（class-conditional 實測見 rationale § model 檔位的量測依據）。**本列不以任何佔比為依據**（historical，見 rationale § 工作類別 telemetry 快照）。 |
+| 〔`security-review`〕 **Security review**（`/security-review` skill / commit 前安全檢查） | **最終 gate：Pi `--model sol --effort medium`**。候選 finding 的 pre-triage 可先跑 `--effort low`，但**收斂判定 MUST 回 medium 以上** | **NEVER** 因為「零互動 / structured diff → structured findings」就把安全 gate 當 pattern matching 降檔——漏報成本不對稱，class-conditional 差距遠大於通用 benchmark（見 rationale § model 檔位的量測依據）。**本列不以任何佔比為依據**。 |
 | 〔`exploration-prescan`〕 **Exploration / reconciliation pre-scan**（「依賴什麼」「進度如何」「還有什麼要做」「N 張 change 狀態」或來源矛盾後對帳） | **Pi `--model grok-xai --effort low` via 泛用 dispatcher**（`xai/grok-4.6`）。exit 4 → `--model grok-cursor` 同 effort 重派一次，主線消費 structured summary | 任一命中即走本列：未知路徑探索、跨檔 identity matching、partial completion／status 推斷、evidence relevance 判斷、git/history/state reconciliation、來源衝突裁決。固定輸出矩陣不會把這些語意工作變成 extraction，**所以不降 Luna**。轉 grok 見 rationale § 群 2 四列轉 grok-xai low。主線拿 summary 做判斷，不自己逐檔 Read。 |
 | 〔`handoff-scan`〕 **Handoff scan 段**（`/handoff` Mode B 的 scan：讀 HANDOFF.md + git log + openspec + tasks + git status 產出 outstanding 清單） | **Pi `--model grok-xai --effort low` via 泛用 dispatcher**（`xai/grok-4.6`）。exit 4 → `--model grok-cursor` 同 effort 重派一次，主線消費 scan report 做決策 | 四個來源可能互相矛盾，判「已 commit / 部分完成 / 被工作樹取代」是**狀態 reconciliation** 不是格式化——**這是它不能降 Luna 的原因**。轉 grok 見 rationale § 群 2 四列轉 grok-xai low。主線只看 report 做 routing。 |
 | 〔`task-planning-prescan`〕 **Task-planning pre-scan**（「我需要做什麼」「接下來做什麼」「處理 N 張 change」的規劃 session 前置 scan） | **Pi `--model grok-xai --effort low` via 泛用 dispatcher**（`xai/grok-4.6`）。exit 4 → `--model grok-cursor` 同 effort 重派一次，主線消費 structured report | 產出 per-change status matrix。矩陣格式固定**不代表**語意判定機械化——identity matching、partial completion、衝突裁決都在裡面，**故不降 Luna**。轉 grok 見 rationale § 群 2 四列轉 grok-xai low。主線拿 matrix 做排序 / 決策。 |
-| 〔`bugfix-evidence`〕 **Bug-fix evidence 段**（error log capture / stack trace 解析 / repro script 撰寫執行 / hypothesis 驗證迴圈） | **Pi `--model sol --effort high` via 泛用 dispatcher**（強化：非 Debug evidence 段，而是整個 bug-fix session 的 investigation 段） | investigation / evidence / repro 是機械段；root cause 推斷 + 修法設計留主線。**MUST** 在 bug-fix session 開工時先判斷：可分離的 evidence 段派 Pi，不可分離的留主線但 MUST 在 session 結尾回報未派 Pi 的理由。 |
-| 〔`publish-prescan`〕 **clade publish/propagate pre-scan**（publish 前 dirty file 分組判斷：讀 `git status` + `git diff` 各 file 內容 + 辨識 logical group） | **Pi `--model grok-xai --effort low` via 泛用 dispatcher**（`xai/grok-4.6`）。exit 4 → `--model grok-cursor` 同 effort 重派一次，主線消費分組建議後 selective commit | commit grouping 要推斷修改意圖、耦合、依賴順序與可獨立回退性——**讀取命令少不等於決策機械化**；可派的只有 pre-scan 的 reading 段。轉 grok 見 rationale § 群 2 四列轉 grok-xai low。 |
+| 〔`bugfix-evidence`〕 **Bug-fix evidence 段**（error log capture / stack trace 解析 / repro script 撰寫執行 / hypothesis 驗證迴圈） | **Pi `--model sol --effort high` via 泛用 dispatcher**（強化：非 Debug evidence 段，而是整個 bug-fix session 的 investigation 段） | investigation / evidence / repro 是機械段；root cause 推斷與修法設計留主線。**MUST** 在 bug-fix session 開工時就判：可分離的 evidence 段派 Pi，不可分離的留主線並在 session 結尾回報未派的理由。 |
+| 〔`publish-prescan`〕 **clade publish/propagate pre-scan**（publish 前 dirty file 分組判斷：讀 `git status` + `git diff` 各 file 內容 + 辨識 logical group） | **Pi `--model grok-xai --effort low` via 泛用 dispatcher**（`xai/grok-4.6`）。exit 4 → `--model grok-cursor` 同 effort 重派一次，主線消費分組建議後 selective commit | commit grouping 要推斷修改意圖、耦合、依賴順序與可獨立回退性——**讀取命令少不等於決策機械化**；可派的只有 pre-scan 的 reading 段。轉 grok 取證見 rationale § 群 2。 |
 
 ## Claude 委派的 model 檔位（決定層）
 
@@ -220,9 +185,7 @@ redaction 只在 signal payload 上強制（`vendor/signals/redact.mjs`），**d
 
 ### 進本節前 MUST 先過 Routing Table（per § Subagent 回報契約第 4 條）
 
-**每一個**「留 Claude」的判定都要講得出「Routing Table 沒把它 route 給 Pi」。非 UI 工作命中
-已 route 給 Pi 的類別 → 派 Pi，**NEVER** 走到本節挑 Claude 檔位。本節只處理判定後**仍留
-Claude** 的殘集：需 claude.ai-connected MCP、判讀／治理型分析、user 明確指定、降級鏈接手。
+**每一個**「留 Claude」的判定都要講得出「Routing Table 沒把它 route 給 Pi」。非 UI 工作命中已 route 給 Pi 的類別 → 派 Pi，**NEVER** 走到本節挑 Claude 檔位。本節只處理判定後**仍留 Claude** 的殘集：需 claude.ai-connected MCP、判讀／治理型分析、user 明確指定、降級鏈接手。
 
 ### `subagent_type` 是 `general-purpose` 或 `Explore` 時，派工當下 MUST 先判 pi 可用性
 
@@ -247,17 +210,13 @@ predicate 走，**NEVER** 把本小節外推成「委派都該指定 model」。
 
 撞到下面那道 gate 時 **NEVER 讀成自己做錯了、流程壞了、或需要有人來解**：它是取證握手，訊息裡的 `decision_id` 就是給這次 dispatch 用的。照它給的指令跑完即可，**NEVER** 停下來反省或改問人。
 
-**PreToolUse:Agent 機械 gate**：主線呼叫 `Agent` **一律**立即建立 `claude-agent-dispatch` pending decision 並阻擋，**不分 `subagent_type`、也不分 `model`**——`Explore`／`general-purpose`／`Plan`／任何具名 agent 一律計入（省略 `subagent_type` 時按預設 `general-purpose` 記錄），**省略 `model`（繼承主線）與明寫 Opus／Fable 同樣計入**。判準是 default-deny：`model` 是 optional，省略它等於讓 subagent 繼承主線 resolved model，那正是**最貴**的委派形狀，舊版「只認明寫便宜檔位」的 key 看不到它（TD-513）。agent 名稱與請求檔位（`model=inherited` / `model=opus` …）記進 decision key 供 receipt 追溯。正常結案必須是 `pi-dispatch.ts --decision-id <id> --route claude-delegate-sub --tier-basis delegate-sub --model gemini`，effort 依請求檔位為 Haiku→low、**其餘（含 inherited／Opus／Fable）→high**。確實要留 Claude 時只接受四個具名 waiver：`claude-mcp-required`、`parent-context-required`（`subagent_type: fork` 這種必須繼承主線 context 者）、`ui-view-implementation`、`user-explicit-claude-agent`；Gemini exit 2 必須同 effort 升 Sol 重派，Sol 再 exit 2 才能以 `delegate-escalation-failed` fallback receipt 放行；Gemini exit 4 先走 `--model luna` 配額鏈；Pi exit 3／4 則先記 dispatch outcome，再走 matching fallback receipt。**NEVER** 把例外理由寫進 Agent prompt 當作 bypass——gate 只認 decision receipt，不解析自由文字。
+**PreToolUse:Agent 機械 gate**：主線呼叫 `Agent` **一律**立即建立 `claude-agent-dispatch` pending decision 並阻擋，**不分 `subagent_type`、也不分 `model`**——省略 `model`（繼承主線）與明寫 Opus／Fable 同樣計入（判準是 default-deny：繼承主線正是**最貴**的委派形狀，TD-513）。**NEVER** 把例外理由寫進 Agent prompt 當作 bypass——gate 只認 decision receipt，不解析自由文字。
 
-**本節路徑的 luna 准入（與 § Routing Table 五條連言無關）**：原判 `sonnet` 的委派 MUST 同時滿足
-兩項——(1) § MUST 指定 `model: 'sonnet'` 的四條 predicate 全中（原判 sonnet 的判定本身就要求這
-四條，此處是複核不是加碼）；(2) 未命中 § NEVER 降檔的形狀任一條。兩項都過 → 派
-`--model gemini --effort high`，**NEVER** 因「gemini 較便宜」自行改回 `--model sol` 或退回 Claude
-`sonnet`。任一項不過 → 照原判派 Claude `sonnet`（顯式帶 `model`），**NEVER** `--model terra`。
+**撞到這道 gate、要決定怎麼結案之前，MUST 先讀 [[agent-routing.pi-watch-protocol]] § Routing threshold 與 Claude Agent dispatch gate**——正常結案的逐字 `pi-dispatch.ts` 指令與 effort 對照、四個具名 waiver、Gemini／Sol exit 2 的升級鏈與 exit 4 的配額鏈，都在那裡，**此處不複述**。
 
-**gemini 回 exit 2（業務 fail）→ 升 `--model sol` 同 effort 重派一次**；再 fail 才回 Claude `sonnet`
-subagent。exit 3／4 照 § 配額耗盡時的 fallback 紀律 與 watch-protocol 的 exit code 分流走，
-**NEVER** 記入品質判斷。
+**本節路徑的 luna 准入（與 § Routing Table 五條連言無關）**：原判 `sonnet` 的委派 MUST 同時滿足兩項——(1) § MUST 指定 `model: 'sonnet'` 的四條 predicate 全中（複核，不是加碼）；(2) 未命中 § NEVER 降檔的形狀任一條。兩項都過 → 派 `--model gemini --effort high`，**NEVER** 因「gemini 較便宜」自行改回 `--model sol` 或退回 Claude `sonnet`。任一項不過 → 照原判派 Claude `sonnet`（顯式帶 `model`），**NEVER** `--model terra`。
+
+**gemini 回 exit 2（業務 fail）→ 升 `--model sol` 同 effort 重派一次**；再 fail 才回 Claude `sonnet` subagent。exit 3／4 照 § 配額耗盡時的 fallback 紀律 與 watch-protocol 的 exit code 分流走，**NEVER** 記入品質判斷。
 
 ### MUST 指定 `model: 'sonnet'` 的 predicate（窮舉）
 
@@ -286,7 +245,7 @@ subagent。exit 3／4 照 § 配額耗盡時的 fallback 紀律 與 watch-protoc
 
 ## Orchestration Residency（誰持有長 session — 決定層）
 
-**核心命題**：Routing Table 決定誰**寫** code，這裡決定誰**持有長 session**（成本結構見 rationale）。依 change 特性二選一：
+Routing Table 決定誰**寫** code，本節決定誰**持有長 session**（成本結構見 rationale）。依 change 特性二選一：
 
 ### Codex-primary（Codex 扛整條 session）
 
@@ -340,11 +299,7 @@ Pi `openai-codex`目前不提供authoritative pre-dispatch quota snapshot。Disp
 - 有明確reset時間且工作確實綁該外部signal時，可回報該時間；這不改變當下先判斷fallback能否完成工作的責任。
 - `--no-quota-check`只改回報為`skipped:true`，不會繞過provider runtime quota。
 
-### 最小 dispatch 門檻（避免瑣碎 override）
-
-codex-primary verdict 但 ≤2 個 file 的瑣碎 fix（typo / 單行 bug / config tweak）→ Claude 直接做，**不需要**走 dispatch 流程。residency-classify 的 verdict 仍照跑（Check 8 需要 record），reason 填 `trivial-threshold`，不算 override 違規。
-
-**判定標準**：`git diff --stat` ≤2 files **且** 預估 ≤20 行 **且** 不涉及 migration / auth / RLS / permission。超過任一門檻 → 照原 routing 走 Pi。
+**拿到 codex-primary verdict、要判「這件事小到不必真的 dispatch 嗎」之前，或要動配額鏈 `-cursor` 那一跳之前，MUST 先讀 [[agent-routing.pi-watch-protocol]] § 配額與 residency 的下推兩段**——最小 dispatch 門檻的三條連言與 `trivial-threshold` reason 值、`-cursor` 的兩層機械門檻，都在那裡。
 
 ### 配額耗盡時的 fallback 紀律
 
@@ -364,11 +319,7 @@ always-load 只留 payload **算不出來**的三條判斷：
   跟同家族模型代審一樣，gate 形式上補了位、實質是空的。因此 sol 鏈耗盡時 dispatcher 的
   `next_step` 對這些 row 指向 **Fable subagent**（`--model fable`，effort `max`），
   對其餘 row 才維持 Opus 主線。`-cursor` 那一跳照走，它換的是配額池不是家族
-- `-cursor` 那一跳的准入 **MUST 綁在待審材料的來源，NEVER 綁在使用者意願**（TD-534）。門檻是機械的、
-  兩層都會擋：repo 不在 `registry/consumers.json` 內 → runtime 拒跑（`errorClass:
-  material-origin-refused`）；repo 是自家的但 branch 上有從未在 origin 預設分支出現過的作者
-  （第三方 PR 的形狀）→ `codex-review-safe.sh` exit 7。**NEVER** 用 env var / flag / 提示語把它做成
-  可繞過的形式——那三種都是「綁使用者意願」的變體
+- `-cursor` 那一跳的准入 **MUST 綁在待審材料的來源，NEVER 綁在使用者意願**（TD-534）——兩層機械門檻與「NEVER 做成可繞過的形式」全文在下面那條指針指的那一節
 
 鏈的完整形狀、cross-family 跳的准入連言、`--chain-origin` 為何在 `grok-xai` 那格 required、
 grok 接手 luna 鏈的 `PRECONDITIONS_VERIFIED:` 補償控制，全文在
@@ -413,57 +364,20 @@ N ≥ 3 個 dispatch 的 findings 要收斂進同一個 synthesis 時，reducer 
 
 3300s = 55 分，留 5 分餘裕給 1 小時 TTL，落在 runtime 的 `[60, 3600]` clamp 內。
 
-### Async keepalive prompt（canonical inert control message）
+### 模板逐字與 deadline 取值在 [[agent-routing.keepalive-wake]]（具名時機 MUST-Read）
 
-**每一種** async 派工都用這一份模板：只有 `Bash(run_in_background)` 有 `TaskOutput(block=false)` 查得到的 harness task id，填真實 `<task-id>`；**其餘每一種**（Agent tool、`/wt` Claude subagent、Monitor、Workflow）**逐字**填 `task=none`，**NEVER** 虛構 id 補洞。派出時 MUST 記下這三個欄位的值（`<owner>` 要能被 `TaskStop(owner)` 操作），控制訊息也只替換它們：
+**填 canonical keepalive prompt 的 `task` / `owner` / `deadline` 三個欄位之前，MUST 先讀
+[[agent-routing.keepalive-wake]] § 派出當下的模板與 deadline**——沒讀到就沒有 inert control
+message 的逐字形狀（虛構 task id 是實測最常見的失敗）、沒有 deadline 一律往晚取的三列取值表、
+也沒有 `/loop` dynamic 這唯一的 prompt-preserving 例外。
 
-```text
-ASYNC_KEEPALIVE_CONTROL task=<task-id|none> owner=<owner> deadline=<ISO>. Status-only. If task is an id, call TaskOutput(block=false) for it: if terminal, stop this wakeup and enqueue ASYNC_LIFECYCLE_HANDOFF task=<task-id> owner=<owner> cause=terminal. If task=none, never query TaskOutput or infer task status; wait for the native completion notification instead. Before deadline, if it is still running or no notification has arrived, re-arm this exact message. At deadline, or if status remains unknown after the bounded retry, stop this wakeup and enqueue ASYNC_DEADLINE_INTERVENTION task=<task-id|none> owner=<owner> cause=<deadline|unknown>. Never replay the dispatched instruction.
-```
-
-**Iron Law：async keepalive 只控制既有 async job 的生命週期，NEVER 承載原任務。違反字面就是違反精神。** 原任務含共享修改時，塞進 `prompt` 會讓 classifier 正確讀成「未來重新執行共享修改」，即使本意只是 keepalive。
-
-native completion notification 到達時 **MUST** 停掉對應 wakeup。`task=none` 的 job 沒有 harness task status 可查，但 **owner 自己的原生狀態面**（Herdr pane 的 `agent_status`、Agent 的 idle notification）**是 allowlist 內的 liveness 確認**；被禁的是**讀 output / log / repo 猜進度**（兩者的界線見 rationale § liveness 確認 vs 猜進度）。deadline intervention 只准用 owner 的原生控制面（例如 `TaskStop(owner)`）發出取消，並等待 native terminal notification；確認 terminal 前保留 ownership，NEVER 收割、重派、記 fail-streak或釋放 lock。
-
-### deadline 怎麼取（MUST）
-
-canonical 模板的 `deadline` 是**必填**欄位，也是破壞性分支的觸發點——到期要 `TaskStop(owner)`，善後只能冷啟重跑。取值錯的代價因此不對稱：太晚只是多等一輪 interval，太早會砍掉一個**仍在自己預算內**的 run。**一律往晚的方向取。**
-
-**每一次**填 `deadline` 都先答一句「我派出去的東西，自己的硬超時（子層的 pi `--budget`、CI job timeout、Monitor TTL）落在哪？」再依下表取值。**每一份** keepalive 都適用，不是只有長任務：
-
-| 可觀察 predicate | deadline MUST |
-| --- | --- |
-| 派出的東西有**已知**硬超時（pi dispatch `--budget N` → 實際 kill 在 `(N+5)` 分；CI job 的 timeout；Monitor TTL） | ≥ 該硬超時 ＋ 父層收尾所需時間。**NEVER** 取一個比它早的值 |
-| 兩層 dispatch，下游 job 的 budget 由子層自己決定、父層填 deadline 當下**尚不存在**（`/wt` Form 3 → Claude subagent 再自行派 pi，是主幹不是邊角） | 取子層**可能的最大** budget 當上界；上界也取不出來 → brief 內 MUST 要求子層回報它選定的 budget，收到後**改排**一次修正 deadline |
-| 完全估不出硬超時 | 取一個明顯寬鬆的值，並在 `ScheduleWakeup` 的 `reason` 逐字註明「deadline 為上界猜測」 |
-
-**NEVER** 把 deadline 讀成「我希望它多久做完」——它不是期望值，是「超過這個點就判定它卡死」的閾值。**NEVER** 靠縮短 interval 補償取不準的 deadline：interval 管 prompt cache，deadline 管誤殺，兩條軸獨立。
-
-逐字反開脫：「dispatch 時間 +4 小時，看起來夠寬鬆了」——2026-08-13 <consumer-a> 實測父層就是這樣填出 `20:48:37`，子層選 `--budget 240`、實際 kill timeout 落在 `20:56`，早了 8 分鐘。**直覺值不是上界**。
-
-本證據決定：deadline 往哪個方向取（一律往晚；資訊不足時取上界並改排）。
-本證據不決定：要不要排 keepalive——**NEVER** 拿「deadline 估不準」當不排 keepalive 的理由。
-
-### `/loop` dynamic 是唯一 prompt-preserving 分支
-
-由 `/loop` dynamic mode 自我續跑的 wakeup **MUST** 保留同一份 `/loop` prompt；autonomous dynamic loop 使用 harness 指定的 `<<autonomous-loop-dynamic>>` sentinel（**逐字寫錯就等於默默放掉這個分支**，改動前先對照 `ScheduleWakeup` tool description 的 `prompt` 欄位；混用警告見 rationale）。這一支的目的就是下一輪繼續執行 loop，**NEVER** 套 inert control message。反方向也成立：`runner.sh`、work-loop background dispatch、pi safety net 都是 async keepalive，**NEVER** 因原任務來自 `/work-loop` 就保留原 prompt。
-
-### 醒來與 consent 的契約在 [[agent-routing.keepalive-wake]]（MUST 主動 Read）
-
-**收到 keepalive wakeup 的那個 turn、以及 permission classifier 要求具名 shared-action consent 的那一刻，MUST 先 Read [[agent-routing.keepalive-wake]]**——control turn 的 allowlist（只准 `TaskOutput(block=false)`、重排同一 inert wakeup、停 wakeup、排 lifecycle handoff / deadline intervention）、`pending → harvesting → harvested` claim 狀態機、以及 consent 選項的逐字形狀都在那裡，**此處不複述**。consent 情境**不限於** keepalive turn，非 keepalive turn 觸發時同樣 MUST Read。
+**收到 keepalive wakeup 的那個 turn、以及 permission classifier 要求具名 shared-action consent 的
+那一刻**，同一份檔的 § Generic keepalive 醒來只做控制面動作 與 § Shared-action specific consent UX
+是那兩個時刻的 MUST-Read，**此處不複述**。
 
 ### Red Flags（發現自己在想這些 = 停下來排 keepalive）
 
 「等通知就好」／「醒來也做不了什麼」／「輪詢沒意義所以不用醒」／「這次應該很快」／「先結束這回合，有消息再說」。
-
-### 邊界
-
-與 `\do-all` 主線閒置禁令、全域「不要把工作往後放」都**不衝突**（兩條關係的完整論證見 rationale § keepalive 與其他兩條規約的關係）。
-
-> 成本量級與兩次靜默實測（119 分鐘 / 1h43m）見 rationale § keepalive 的成本量級。
->
-> 本證據決定：主線要不要在 async work 期間醒來——要。
-> 本證據不決定：醒來後做什麼——**NEVER** 拿它論證「所以應該多醒幾次」或「醒來順便輪詢進度」，那兩件事上表已各自禁止。
 
 ## 為什麼集中寫在這
 
@@ -481,25 +395,17 @@ canonical 模板的 `deadline` 是**必填**欄位，也是破壞性分支的觸
 | **NEVER** 直接執行`codex`binary（含`codex exec`／`codex review`／`codex exec resume`）或把它當Pi故障fallback | 每一個active Codex-model dispatch都走`vendor/scripts/pi-dispatch.ts`或專用Pi wrapper；execution transport只有Pi |
 | **NEVER** 嘗試`codex:rescue`／`codex:setup`plugin路線 | 已驗證無法使用、已全清（含`/assign`） |
 | **NEVER** 把 UI view phase 派給任何 runtime（Pi 任一 model／Claude subagent 都算） | UI view 實作在不外派清單；非 view phase 的 dispatch prompt 仍 MUST 含「禁止改 view 層檔案」硬指令，缺這條 runtime 容易順手改到 .vue / .tsx |
-| **NEVER** 派 pi 跑 spectra-apply phase 而 prompt 內漏 Commit Authorization 段（一 phase 一 commit / `🧹 chore: wt <change>-phase-<N>` format / hook 必跑禁 `--no-verify` / commit 前自驗 view-layer + scope） | 缺這段 pi 會混 commit、撞 commitlint hook |
-| **NEVER** 派 Pi 寫 code（spectra-propose draft / spectra-apply phase）而 prompt 漏掉 Plan-first 硬指令 | 沒 plan 主線只能從 diff 反推；pi 寫完 plan 必須立刻續跑 |
-| **NEVER** 派 general-purpose / worktree / 臨時 Claude subagent 自跑 playwright / agent-browser 收 verify:ui evidence | 唯一入口是 `screenshot-review` 這支**具名** agent（2026-08-22 起本 channel Claude-only，**NEVER** 派 Pi）。本列擋的是「繞過具名 agent」，**NEVER** 因收回 Pi 外派而讀成放寬。（audit 實證見 rationale § verify:ui bypass 的 audit 實證）**機械 backstop**：主線消費完 subagent 的 JSON 後跑 `verify-ui-receipt.ts` 落 receipt（`.spectra/verify-ui-dispatch-ledger.jsonl`），archive-gate Check 9 逐 item 比對，缺 receipt 且缺 `UNCERTAIN(dispatcher-error)` 痕跡 → block。**該 gate 擋的是 drift，NEVER 是對抗性偽造**——過 gate **NEVER** 讀成「evidence 來源已被證實」 |
 | **NEVER** 讓 Claude subagent 當 pi 的**薄中介**——派出 pi 卻不自跑 Pi Watch Protocol，把死活判定留給上一層 | 判準是**誰持有 pi 的生命週期**，不是「有沒有經過 subagent」。薄中介的兩個已驗證失敗模式見 rationale（同 §）。完整持有生命週期的形狀見下一列 |
-| pi **MUST** 由**該層編排者**在其自身 sandbox 內直接 Bash `run_in_background` 派出（含泛用 dispatcher）：主線是編排者時由主線派；`/wt` Form 3 / Form 4 的 worktree subagent 執行它被指派的 next-skill 時（`/spectra-apply` 的 Step 6b Class C、Step 8a verify channel、pre-handoff checks；`/spectra-debug` 的診斷 / repro dispatch；以及 next-skill `references/` 各層的每一處 pi 派工）由**該 subagent** 派 | 例外的**准入條件**是該編排者自跑完整 Pi Watch Protocol（notification-only + 安全網 fallback，per [[agent-routing.pi-watch-protocol]] § 監看排程）——做不到就退回上一列的薄中介禁令。編排者**以外**的任何一層對這些 pi **零探針**（per 同檔 § 跨 sandbox 可見度約束 v2）。**本列的範圍只及 `/wt` Form 3 / Form 4 開出的 worktree subagent**，**NEVER** 外推成「任意 Agent tool subagent 都可以派 pi」 |
 | **NEVER** 在 exploration / research 型 session 自己逐檔 Read + scan 多個 source（openspec / HANDOFF / git log / docs）超過 3 個 source file | 先派 Pi `sol low` pre-scan 拿 structured summary，再由主線消費 summary 做判斷。例外：user 明確問特定檔案 / 需要 claude.ai-connected MCP |
 
-### Watch 行為
+**派 pi 寫 code、派 spectra-apply phase、或收 `verify:ui` evidence 之前，MUST 先讀 [[agent-routing.pi-watch-protocol]] § Dispatch 入口禁令（下推四列）**——Commit Authorization 段、Plan-first 硬指令、`verify:ui` 唯一入口與它的機械 backstop、以及「pi MUST 由該層編排者自己派」那條的准入與範圍界線，都在那裡，**此處不複述**。
 
-| NEVER | 說明 |
-| --- | --- |
-| **NEVER** 沉默等使用者問進度 | 收到 `<task-notification> status=completed` 必須立刻自己讀檔回報 |
-| **NEVER** 派出 pi 後不啟動 Pi Watch Protocol | 「乾等盲區」是已驗證根因 |
-| **NEVER** 偵測到 `fetch failed` / sandbox 拒絕 / 互動 prompt 還繼續 wakeup | 必須立刻 `AskUserQuestion` 介入 |
-| **NEVER** 在 watch loop 中跑與監看無關的工作（grep、Read、subagent） | 監看純粹只看進度 |
-| **NEVER** 派 pi propose 後不跑 cross-check（post-propose-check + design-inject + 主線補 Design Review 7 步 + spectra analyze） | 主線 = quality gate |
-| **NEVER** 收到 pi 完工通知後跳過 view-layer drift 檢查（`git diff --name-only` 過濾 view 路徑） | 主要的回收 quality gate |
-| **NEVER** 對主線直接 Bash 派的 pi 啟動每 3 分鐘強制 poll | 直接派預設 **notification-only** + 單一 ~1500s 安全網 fallback。subagent 中介 dispatch 已全面禁止（§ Dispatch 入口） |
-| **NEVER** 現場自組 `pgrep` / `ps \| grep` 當進度探針 | 要回報「派出去的長任務做到哪」時，**MUST** 貼 cookbook `~/offline/clade/vendor/snippets/subagent-progress-probe/` 的 artifact 探針（worktree commit 對 **merge-base**、tasks.md tick count 附分母、輸出檔 mtime + size）。process 列表沒有租戶邊界，兩個方向都會給錯答案（成因見 rationale） |
+### Watch 行為的禁令表在 [[agent-routing.pi-watch-protocol]]（具名時機 MUST-Read）
+
+**派出 pi 之後、進入監看期之前，MUST 先讀 [[agent-routing.pi-watch-protocol]] § Watch 行為禁令**
+——八條逐字禁令（沉默等使用者問進度／不啟動 Watch Protocol／偵測到 `fetch failed` 仍續排 wakeup／
+watch loop 內夾帶無關工作／propose 後跳過 cross-check／完工後跳過 view-layer drift 檢查／
+對直接派的 pi 每 3 分鐘強制 poll／現場自組 `pgrep` 當進度探針）都在那裡，**此處不複述**。
 
 ### Commit 0-A
 

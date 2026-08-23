@@ -708,3 +708,73 @@ dispatch 注入 fail-closed 段，要求回覆帶一行 `PRECONDITIONS_VERIFIED:
 5. **grok-xai exit 4（luna 鏈）→ 這條鏈到此為止**，才動 Claude subagent，且**只接 `haiku`**（顯式帶，per § Subagent 回報契約第 4 條），**NEVER** 升 `sonnet`。**NEVER** 在這裡續派 `--model grok-cursor`——那一跳只屬於 grok 鏈，理由見上方 `grok-cursor` 段。
 6. **Grok 鏈自己的路徑**（`web-search` 列；`screenshot-review-verify` 2026-08-22 起 Claude-only，不再屬於本鏈）：`grok-xai` exit 4 → `--model grok-cursor --chain-origin grok-xai` 重派一次；再 exit 4 才動 Claude subagent，且**只接 `sonnet`**，**NEVER** 降 `haiku`。
 7. Claude 接走時 session 結尾 **MUST** 回報「本 session 因配額耗盡，由 Claude 執行 N 個本應外派的 change」；有 runtime reset 資訊再附上，沒有就明說 unavailable。
+
+## Dispatch 資料邊界（全文）
+
+> 本節是 [[agent-routing]] § Dispatch 資料邊界 的下推全文，觸發時機是「寫任何一份 dispatch brief 之前」。母檔常駐該節開頭的內容邊界宣告與 § MUST：brief 明列 Approved Tools（那條是唯一買得到東西的一條）。
+
+### MUST：檔案要逐個列路徑，NEVER 只給目錄名
+
+brief 要 carrier 讀一批檔（截圖、log、fixture）時，**MUST 逐項列出精確相對路徑**，
+NEVER 只寫「目錄：`./screenshots/`」讓它自己列。**NEVER** 拿「先列出目錄再逐一開啟」這句當修法——它只降低失敗率、不消除。失敗方向雖保守
+（回 UNCERTAIN 而非假 PASS），但「**carrier 沒去看**」與「**證據真的不足**」在輸出上同形。
+取證見 rationale § dispatch 資料邊界的量測。
+
+### 查表：什麼不進 dispatch prompt
+
+| 類別 | 改帶什麼 |
+| --- | --- |
+| 憑證與 secret 的**值**（`.env` 任一行、API key、token、cookie、session id、DB 連線字串、private key） | 變數名 + 檔案路徑（「值在目標 repo `.env.local` 的 `SUPABASE_SERVICE_ROLE_KEY`，你自己讀」） |
+| 客戶個資（真實姓名 / email / 電話 / 地址 / 身分證字號 / 帳務與訂單明細） | 只給 id 與欄位型別，或同 schema 的假資料；fleet 內有客戶案（<consumer-b> / <consumer-a>） |
+| 未公開商業內容（報價、合約條款、客戶內部策略） | 只給判斷所需的結論，不給原文 |
+| 完整 log / DB dump / request body 原文 | 取樣 + 遮蔽後的片段 |
+
+判準是資料**離開本 session、進入另一個 runtime**，不是誰付費、不是對方可不可信。判不出來就不帶。
+
+**本表刻意寫成查表而不是紀律型三件套**（依據見 rationale § dispatch 資料邊界的量測）：出現第一筆
+真實違規前，**NEVER** 把它加寫成 Iron Law + rationalization table。
+
+### 為什麼這條沒有機械網子接
+
+redaction 只在 signal payload 上強制（`vendor/signals/redact.mjs`），**dispatch prompt 不經過它**。
+本節是這條路徑上唯一的攔截點，**NEVER** 假設有下游 gate 會幫忙擋。
+
+## Watch 行為禁令（全文）
+
+> 本節是 [[agent-routing]] § 必禁事項 § Watch 行為 的下推全文，觸發時機是「派出 pi 之後、進入監看期之前」。母檔留具名時機指針。
+
+| NEVER | 說明 |
+| --- | --- |
+| **NEVER** 沉默等使用者問進度 | 收到 `<task-notification> status=completed` 必須立刻自己讀檔回報 |
+| **NEVER** 派出 pi 後不啟動 Pi Watch Protocol | 「乾等盲區」是已驗證根因 |
+| **NEVER** 偵測到 `fetch failed` / sandbox 拒絕 / 互動 prompt 還繼續 wakeup | 必須立刻 `AskUserQuestion` 介入 |
+| **NEVER** 在 watch loop 中跑與監看無關的工作（grep、Read、subagent） | 監看純粹只看進度 |
+| **NEVER** 派 pi propose 後不跑 cross-check（post-propose-check + design-inject + 主線補 Design Review 7 步 + spectra analyze） | 主線 = quality gate |
+| **NEVER** 收到 pi 完工通知後跳過 view-layer drift 檢查（`git diff --name-only` 過濾 view 路徑） | 主要的回收 quality gate |
+| **NEVER** 對主線直接 Bash 派的 pi 啟動每 3 分鐘強制 poll | 直接派預設 **notification-only** + 單一 ~1500s 安全網 fallback。subagent 中介 dispatch 已全面禁止（§ Dispatch 入口） |
+| **NEVER** 現場自組 `pgrep` / `ps \| grep` 當進度探針 | 要回報「派出去的長任務做到哪」時，**MUST** 貼 cookbook `~/offline/clade/vendor/snippets/subagent-progress-probe/` 的 artifact 探針（worktree commit 對 **merge-base**、tasks.md tick count 附分母、輸出檔 mtime + size）。process 列表沒有租戶邊界，兩個方向都會給錯答案（成因見 rationale） |
+
+## Dispatch 入口禁令（下推四列）
+
+> 本節是 [[agent-routing]] § 必禁事項 § Dispatch 入口 下推的四列，觸發時機是「派 pi 寫 code、派 spectra-apply phase、或收 `verify:ui` evidence 之前」。母檔保留其餘各列與具名時機指針。
+
+| NEVER | 說明 |
+| --- | --- |
+| **NEVER** 派 pi 跑 spectra-apply phase 而 prompt 內漏 Commit Authorization 段（一 phase 一 commit / `🧹 chore: wt <change>-phase-<N>` format / hook 必跑禁 `--no-verify` / commit 前自驗 view-layer + scope） | 缺這段 pi 會混 commit、撞 commitlint hook |
+| **NEVER** 派 Pi 寫 code（spectra-propose draft / spectra-apply phase）而 prompt 漏掉 Plan-first 硬指令 | 沒 plan 主線只能從 diff 反推；pi 寫完 plan 必須立刻續跑 |
+| **NEVER** 派 general-purpose / worktree / 臨時 Claude subagent 自跑 playwright / agent-browser 收 verify:ui evidence | 唯一入口是 `screenshot-review` 這支**具名** agent（2026-08-22 起本 channel Claude-only，**NEVER** 派 Pi）。本列擋的是「繞過具名 agent」，**NEVER** 因收回 Pi 外派而讀成放寬。（audit 實證見 rationale § verify:ui bypass 的 audit 實證）**機械 backstop**：主線消費完 subagent 的 JSON 後跑 `verify-ui-receipt.ts` 落 receipt（`.spectra/verify-ui-dispatch-ledger.jsonl`），archive-gate Check 9 逐 item 比對，缺 receipt 且缺 `UNCERTAIN(dispatcher-error)` 痕跡 → block。**該 gate 擋的是 drift，NEVER 是對抗性偽造**——過 gate **NEVER** 讀成「evidence 來源已被證實」 |
+| pi **MUST** 由**該層編排者**在其自身 sandbox 內直接 Bash `run_in_background` 派出（含泛用 dispatcher）：主線是編排者時由主線派；`/wt` Form 3 / Form 4 的 worktree subagent 執行它被指派的 next-skill 時（`/spectra-apply` 的 Step 6b Class C、Step 8a verify channel、pre-handoff checks；`/spectra-debug` 的診斷 / repro dispatch；以及 next-skill `references/` 各層的每一處 pi 派工）由**該 subagent** 派 | 例外的**准入條件**是該編排者自跑完整 Pi Watch Protocol（notification-only + 安全網 fallback，per [[agent-routing.pi-watch-protocol]] § 監看排程）——做不到就退回上一列的薄中介禁令。編排者**以外**的任何一層對這些 pi **零探針**（per 同檔 § 跨 sandbox 可見度約束 v2）。**本列的範圍只及 `/wt` Form 3 / Form 4 開出的 worktree subagent**，**NEVER** 外推成「任意 Agent tool subagent 都可以派 pi」 |
+
+## 配額與 residency 的下推兩段
+
+> 本節是 [[agent-routing]] § 配額邊界 下推的兩段。**判「這個 codex-primary verdict 要不要真的 dispatch」之前，以及要動配額鏈 `-cursor` 那一跳之前，MUST 先讀本節。**
+
+### `-cursor` 那一跳的准入（材料來源，非使用者意願）
+
+門檻是機械的、兩層都會擋：repo 不在 `registry/consumers.json` 內 → runtime 拒跑（`errorClass: material-origin-refused`）；repo 是自家的但 branch 上有從未在 origin 預設分支出現過的作者（第三方 PR 的形狀）→ `codex-review-safe.sh` exit 7。**NEVER** 用 env var / flag / 提示語把它做成可繞過的形式——那三種都是「綁使用者意願」的變體（TD-534）。
+
+### 最小 dispatch 門檻（避免瑣碎 override）
+
+codex-primary verdict 但 ≤2 個 file 的瑣碎 fix（typo / 單行 bug / config tweak）→ Claude 直接做，**不需要**走 dispatch 流程。residency-classify 的 verdict 仍照跑（Check 8 需要 record），reason 填 `trivial-threshold`，不算 override 違規。
+
+**判定標準**：`git diff --stat` ≤2 files **且** 預估 ≤20 行 **且** 不涉及 migration / auth / RLS / permission。超過任一門檻 → 照原 routing 走 Pi。

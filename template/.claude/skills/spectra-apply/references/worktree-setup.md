@@ -146,7 +146,7 @@ Local edits will be reverted by the next sync.
        (see docs/pitfalls/2026-05-22-agent-tool-subagent-worktree-bypass.md).
 
        Action: cancel this run and return a structured blocker to the parent coordinator. The parent
-       invokes `/spectra-apply <change>` from main directly, or uses [[session-tasks]] § Herdr session
+       invokes `/spectra-apply <change>` from main directly, or uses [[session-tasks.operations]] § Herdr session
        transport when a separate main session is required; Step 0c.5 then runs before subagent dispatch.
        ```
        **NEVER** 自行嘗試 unpark / 用 AskUserQuestion 給「強制 unpark」選項 — 沒有合法的「在 subagent 內 unpark」路徑。

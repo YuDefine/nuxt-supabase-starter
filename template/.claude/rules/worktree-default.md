@@ -36,7 +36,7 @@ Local edits will be reverted by the next sync.
 
 ## 強制載入指針（thin pointer；全文在 [[worktree-default.detail]]）
 
-本檔只常駐**開工前就要生效**的三段：§1 預設用 worktree 的判定、§2 禁止 silent branch、§5.1 landing 前的話術停手信號。其餘（工具契約、命名、merge-back ceremony、troubleshooting 索引）全文在 `rules/core/worktree-default.detail.md`（path-scoped，編輯任何檔即載入）。
+本檔只常駐**開工前就要生效**的三段：§1 預設用 worktree 的判定、§2 禁止 silent branch、§5.1 landing 前的話術停手信號。其餘（工具契約、命名、merge-back ceremony、troubleshooting 索引）全文在 `rules/core/worktree-default.detail.md`（path-scoped，glob 只涵蓋 `wt-helper.ts` / `stash-reconcile.ts` / `WORKTREE-BRIEF.md`——它的觸發是下一行那個具名時機，不是編輯檔案順帶載入）。
 
 **送出 `wt-helper add` / `merge-back` / 任何 worktree 操作之前，MUST 先讀 [[worktree-default.detail]]**——沒讀到就沒有 pre-fork baseline guard 的四條契約、沒有 merge-back 的 claim guard scope。
 

@@ -1,6 +1,6 @@
 ---
 description: Review tiers 規則——依變更規模與風險決定 self-review、spectra-audit、code-review 的最低要求
-paths: ['**/*']
+paths: ['openspec/changes/**', '.claude/agents/**', 'supabase/migrations/**/*.sql', 'server/database/migrations/**/*.sql', 'packages/*/supabase/migrations/**/*.sql', 'packages/*/server/database/migrations/**/*.sql']
 ---
 <!--
 🔒 LOCKED — managed by clade
