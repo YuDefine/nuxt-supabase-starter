@@ -48,7 +48,7 @@ Local edits will be reverted by the next sync.
 
 ### MUST
 
-1. **入口 SoP scan**：`/handoff` Mode B 在推薦 user 跑 `pnpm review:ui` **前**，主線 **MUST**：
+1. **入口 SoP scan**：`/handoff` Mode B 在把 user 導向 review-gui **前**，主線 **MUST**：
    ```bash
    cd ~/offline/clade && node vendor/scripts/review-gui.ts --scan
    ```
@@ -75,7 +75,7 @@ Local edits will be reverted by the next sync.
 
 8. **Post-work scan 回報 MUST 逐條標 bucket（hard rule）**：完成 evidence collection / annotation 修正 / issue triage 等批次工作後向 user 回報 scan 結果時，**MUST** 對每條 change 個別標示實際 `bucket`。只有 `bucket=ready` 的 change 才能寫「可以在 review-gui 驗收」或列 review-gui URL 引導 user 開始檢查。非 `ready` 的 change **MUST** 如實報告實際 bucket + 卡住原因（例：「`readyForEvidence` — evidence 已收齊但有 2 條 `（issue:）` 待 user 重評」），**NEVER** 混入「可以驗收」的清單。反模式：3 條 change 中 1 條 `ready`、2 條 `readyForEvidence`，結尾寫「三條都可以在 review-gui 做最後驗收」— 這直接誤導 user。
 
-9. **引導 user 到 review-gui 前 MUST 跑 mechanical gate + 自行推進到 ready（hard rule）**：**任何**要把 user 導向 `pnpm review:ui` 的場景（`/commit` 0-MR block、handoff、spectra-apply Step 8b、session 結尾回報），Claude **MUST** 先跑 mechanical gate script **取得 exit 0** 才能引導：
+9. **引導 user 到 review-gui 前 MUST 跑 mechanical gate + 自行推進到 ready（hard rule）**：**任何**要把 user 導向 review-gui 的場景（`/commit` 0-MR block、handoff、spectra-apply Step 8b、session 結尾回報），Claude **MUST** 先跑 mechanical gate script **取得 exit 0** 才能引導：
 
    ```bash
    node ~/offline/clade/vendor/scripts/check-review-readiness.ts \
@@ -136,7 +136,7 @@ Review-gui 的狀態全部落在 `tasks.md` 這個**雙寫**檔上——user 在
 - ❌ 推 review-gui URL 給 user 自看（除非已耗盡 [[agent-self-verification]] § fallback chain）— review-gui「📋 補 evidence prompt」按鈕是 **fallback**，**不是 default**（per [[manual-review]] § review-gui 補 evidence prompt 路徑分類）
 - ❌ 對 compound item 只收一張截圖代表多 state；annotation 寫 `screenshot=path` 但 description 含 paired-state marker（`before/after` / `A→B` / `hover` / `focus` 等）
 - ❌ 在 detail page 試圖重刻或繞過 impl gate — server-side gate 是 final guard
-- ❌ `/handoff` Mode B 推薦 `pnpm review:ui` 後就放手，**不**先跑 `--scan` 預備 HANDOFF.md state
+- ❌ `/handoff` Mode B 把 user 導向 review-gui 後就放手，**不**先跑 `--scan` 預備 HANDOFF.md state
 - ❌ review web UI change 時 skip perf keyword 偵測、或偵測命中後不實測就讓 review pass（per MUST 5）
 - ❌ 回答 change「卡在誰 / ready 了沒」時從 tasks.md 散文或 checkbox leaf count 推測，而非讀 `change.bucket` / `--scan` bucket（per MUST 6）
 - ❌ 對 route E 結論的 issue 只寫散文分析或只開 `@followup[TD]`、卻漏寫 `(claude-analyzed: route=E)` annotation（per MUST 7）
@@ -145,6 +145,61 @@ Review-gui 的狀態全部落在 `tasks.md` 這個**雙寫**檔上——user 在
 - ❌ annotation 寫在 `- [ ] #N` 下一行（即使 indent 正確）而非 inline 同行末尾（per Annotation MUST 5）
 - ❌ scan 結果 non-ready 時直接回報 user「bucket=readyForEvidence」/「healthCheckNeeded」而不先自己讀 blocking reason + 修正（per Annotation MUST 6）
 - ❌ user 說「我點了 X」時，拿自己本 turn 之前的 scan / tasks.md 讀取回「你還沒點」——那是用 stale 快照反駁 user 的第一手事實（per MUST 10 / 11）
+
+## Inline Review-GUI Deep-Link（hard rule）
+
+已依 MUST 9 取得 exit 0、要把 user 導向 review-gui 時，訊息 **MUST** 含一條可直接點開的
+完整 URL。**NEVER** 只寫「去 review-gui 看」或只描述路徑（「在 admin-nuxt-ui-shell 那條」）。
+
+### 第一動作：判 service 是不是常駐
+
+```bash
+systemctl is-active review-gui
+```
+
+| 回傳 | 動作 |
+| --- | --- |
+| `active` | **NEVER** 叫 user 跑任何啟動指令。GUI 已經在 `127.0.0.1:5174` 上，直接給下面的 deep-link |
+| 其他（`inactive` / `failed` / `unknown`） | 才走 fallback：請 user 從 clade home（`~/offline/clade`）跑 `pnpm review` |
+
+**NEVER 加 `--user`**：`review-gui.service` 與 `review-gui-tunnel.service` 都是 **system** unit。
+`systemctl --user is-active review-gui` 對一個活著的 system unit 回 `inactive`，照著它去叫 user
+啟動，正是本節要擋的那次誤導。
+
+**Fallback 的指令是「從 clade home 跑 `pnpm review`」，整句都要給。** consumer 的 `package.json`
+裡確實還有 `review:ui`（clade-managed script，指向 clade working tree 的 `review-gui.ts`），
+但從 consumer cwd 跑會被 `preflightCladeOnly` 擋下並 `exit 2`（v1.3.161+）——review-gui 是
+cross-consumer 集中模式，只從 clade home 起。**NEVER** 叫 user「在 consumer repo 跑 `pnpm review:ui`」。
+
+### URL 格式（三層，逐層加細）
+
+| 要 user 看什麼 | URL |
+| --- | --- |
+| 一條 change | `http://127.0.0.1:5174/review/<consumer-id>:<change-name>` |
+| change 裡的某一條 item | `http://127.0.0.1:5174/review/<consumer-id>:<change-name>?item=<encoded-itemId>` |
+| user 不在本機（手機 / 外出） | 同上兩式，host 換成 `https://review-gui.<maintainer-domain>` |
+
+- **`<consumer-id>` MUST 帶**：從 `~/offline/clade/registry/consumers.json` 抓。缺 prefix 會 fallback
+  到 clade mainEntry → API 404（per [[pitfall-review-gui-cross-consumer-url-missing-prefix]]）
+- **`<itemId>` 的 `#` MUST encode 成 `%23`**：itemId 就是 `tasks.md` 裡的 `#N` / `#N.M`，
+  寫成 `?item=%231.3`。不 encode 的話 `#` 之後整段被瀏覽器當 fragment 吃掉，query 根本不會送出，
+  而畫面照樣渲染 —— 看起來只是「deep-link 沒作用」，不會有任何錯誤
+- **遠端網域不帶任何 token**：由 Cloudflare Access（policy `Only Charles Mail`）把關，
+  見 `docs/decisions/2026-08-22-review-gui-no-pairing-token.md`
+- **itemId 指不到東西時 GUI 會明說**：落回該 change 的第一條待判項並在頁面上告知原因
+  （change 不在 inbox / 該 item 已判完）。這是 user 的安全網，**NEVER** 拿它當「itemId 不必查對」的理由
+
+### NEVER
+
+- ❌ 給裸 `/review`——inbox 常態橫跨多個 consumer 的數十條 item，要 user 自己找是哪一條。
+  要 user 看 N 條 change 就給 N 條 deep-link
+- ❌ 給根路徑 `http://127.0.0.1:5174/`——它 302 到 `/review`，落點仍是裸清單
+- ❌ service 已 `active` 還叫 user 跑 `pnpm review`——`--reuse-probe` 會探到既有 instance
+  而不報錯（2026-08-23 實測 exit 0），所以這不是會爆的那種錯：它只是要 user 多跑一次沒有作用的指令，
+  然後 reuse banner 給的是裸 `/review`，把你原本該給的 deep-link 換成一份要 user 自己找的清單
+- ❌ 用 `systemctl --user` 判常駐狀態
+- ❌ 手寫 `<consumer-id>` 靠印象——registry 是唯一真相源
+
 
 ## Annotation Format Contract
 

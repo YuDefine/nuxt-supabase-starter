@@ -54,6 +54,21 @@ uncommitted 變更
 - **排除條件（唯一）**：使用者在 `$ARGUMENTS` 中**明確**指名排除（例如「排除 .env.local」「只 commit app/」）。其他任何情境一律全包
 - **NEVER** 以「這個不在我 scope」「看起來是別的 session 做的」「不確定是否該 commit」自行排除、啟動 stash、或徵詢使用者意見 — 分組是 Step 3 的工作，不是 Step 0 的判斷題
 
+### 並行 staged 的歸屬探測（MUST，先於任何 AskUserQuestion）
+
+`git status` 出現大批不屬於自己的 staged 變更時（典型：別 session 的 worktree merge-back 落進 main），
+**每一次**都 MUST 先跑歸屬探測，再決定要不要停下來問 user——四條可觀察 predicate 與命令塊見
+`vendor/snippets/git-recovery/` § 並行 staged 的歸屬探測，分流判準見 [[scope-discipline]]
+§ 歸屬探測前置（**NEVER** 在本檔複製那些命令，會漂）。
+
+- 四條**全部給得出答案** ⇒ 不算衝突：`/commit` 場景照上面決策樹預設全納入、Step 3 分組；ad-hoc
+  場景自行 `git commit --only -- <自己的 paths>` 隔離。兩者都在收尾一句話說明歸屬與隔離方式
+- 任一條答不出來、或探測顯示雙方改到**同一檔的同一段**（`--only` 隔離不掉）⇒ 才走
+  [[scope-discipline]] § Rule 衝突解法
+
+**NEVER** 把「這批看起來是別 session 的」當成停下來問 user 的理由——那與上面決策樹「不認得來源
+不是阻礙」是同一件事，探測沒跑就等於還沒判。
+
 **理由**：品質閘門成本高，WIP 分次 commit = 多跑一次閘門；stash 把工作往後推，但保留可恢復 + HANDOFF paper trail，等同「延後」而非「丟棄」；任何 `git restore` / `git checkout --` / `git reset` / `git revert` 都會**永久毀掉使用者的 WIP**（見「WIP 處置禁令」）。
 
 ## Commit 預設位置：main worktree

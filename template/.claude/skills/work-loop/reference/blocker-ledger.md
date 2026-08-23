@@ -7,8 +7,10 @@ Local edits will be reverted by the next sync.
 
 # Blocker Ledger（卡點指紋，跨輪不重診斷）
 
-> 主檔 pointer：Step 3.1a 的 `applyBlocked` / `awaitingUserDecision` 兩列、Step 3.1b 的 blocked 分類，
-> 在走 [blocker-evaluation.md](blocker-evaluation.md) 之前 MUST 先過本檔的三步查表。
+> 主檔 pointer：**任一** blocked item 在走 [blocker-evaluation.md](blocker-evaluation.md) 之前
+> MUST 先過本檔的三步查表——Step 3.1a 的**每一個** bucket、Step 3.1b 的 blocked 分類都算。
+> **NEVER 讀成只有 `applyBlocked` / `awaitingUserDecision` 兩列**：入表門檻是
+> § 入表門檻 的「本輪量得到 `predicateValue`」，**不是** bucket 白名單。
 
 ## 這份 ledger 在防什麼
 
@@ -42,17 +44,61 @@ ledger 是 `.clade/work-loop/state.json` 的一個欄位，寫入走 Step 7.3 �
 | `blocker` | 本輪從 tasks.md `[blocked]` annotation 或 HANDOFF 讀到的**原文逐字**，NEVER 改寫成摘要 |
 | `unblockPredicate` | **一條可觀察 predicate**：一條命令、一個 scan JSON 欄位、一個檔案存不存在。見下方入表門檻 |
 | `predicateValue` | 上一次實際量到的值**逐字**。查表比的就是它 |
-| `firstSeenRound` / `lastCheckedRound` | 入表輪次 / 最後一次真的量過 predicate 的輪次 |
+| `firstSeenRound` | 入表輪次，也是 § 三步查表 第 3 步那條上界的**唯一**錨點。強制重診斷後仍 blocked 時重設為當輪 |
+| `lastCheckedRound` | 最後一次真的量過 predicate 的輪次。查表每輪都會更新它，所以它**NEVER** 拿來算陳舊 |
 
 ## 三步查表（每一條 blocked item 都跑，不是只對前幾條）
 
 1. **算本輪指紋**：`sha256(id + 本輪讀到的 blocker 原文 + 表上的 unblockPredicate)`。表上沒有這個 id、或指紋不同 → **完整重診斷**（blocker 敘述變了就是事實變了）
 2. **量 predicate 現值**：跑那條命令 / 讀那個欄位。值與 `predicateValue` 不同 → **完整重診斷**
-3. **有界陳舊**：`round - lastCheckedRound >= 10` → **完整重診斷**，不論前兩步結果
+3. **有界陳舊**：`round - firstSeenRound >= 10` → **完整重診斷**，不論前兩步結果。重診斷後仍 blocked 的條目**刪除後重新入表**（`firstSeenRound` = 本輪）——那是本條上界唯一的歸零方式
 
-三步都不觸發 → 跳過重診斷：log 一行 `⏭️ <id> blocker 未變（predicate <值>，round <first>–<now>）`、把 `lastCheckedRound` 更新為本輪、繼續下一條。
+**NEVER 把第 3 步錨在 `lastCheckedRound`。** 第 2 步每一輪都真的量了 predicate，而跳過重診斷的收尾又把 `lastCheckedRound` 更新為本輪，所以 `round - lastCheckedRound` 恆為 0：錨在它等於這條上界永遠不觸發，而「上界寫在紙上但從不觸發」與「沒有上界」在 state 檔上長得一模一樣。2026-08-24 <consumer-b> round 123 實測：4 條 ledger 的 `lastCheckedRound` **全部**等於 123，`firstSeenRound` 分別是 67 / 70 / 73 / 105——最久的一條已 56 輪沒有被完整重診斷過，而第 3 步一次也沒有觸發。複驗指令：
 
-**跳過重診斷不是 skip。** 它不進 § Skip 合法理由窮舉、不記 `failStreak`、不改 fingerprint。它跟「這條 item 本輪不動」是同一個結果，差別只在**沒有再付一次診斷成本**。
+```bash
+python3 -c "
+import json;s=json.load(open('$HOME/offline/<consumer-b>/.clade/work-loop/state.json'))
+print('round', s['round'])
+for k,v in s.get('blockers',{}).items():
+    print(k, 'first', v['firstSeenRound'], 'lastChecked', v['lastCheckedRound'])"
+```
+
+三步都不觸發 → 跳過重診斷。收尾**固定四動作，順序不可換**：
+
+1. 讀本輪 scan JSON 的 `issued` / `verifyClaudePendingCount` / `discussPendingCount` / `staleEvidenceCount` 四欄
+2. **任一 > 0 → 本輪 MUST 動這條**（見下節），不往下走
+3. 四欄全 0 → log 一行 `⏭️ <id> blocker 未變（predicate <值>，round <first>–<now>）`
+4. `lastCheckedRound` 更新為本輪，繼續下一條
+
+**跳過重診斷不是 skip。** 它不進 § Skip 合法理由窮舉、不記 `failStreak`、不改 fingerprint，省下的只有**再推導一次同一個結論**那筆成本。
+
+## 查表命中不豁免 Claude-actionable override（MUST）
+
+主檔 § 3.1a 的 **Claude-actionable override** 對**每一條** change 檢查 `issued` /
+`verifyClaudePendingCount` / `discussPendingCount` / `staleEvidenceCount`，任一 > 0 就代表有 Claude
+自己做得完的 review work。**本檔查表命中之後，那條檢查照跑**——查表買到的是「不必重新推導這條為什麼卡住」，**NEVER** 讀成「這條 item 本輪不用動」。
+
+這條 MUST 是本檔適用範圍涵蓋 Step 3.1a **每一個** bucket 的前提。`readyForEvidence` / `feedbackGiven`
+的表列動作（「補 evidence annotation」「處理 review feedback → 補 evidence」）本來就是 Claude 做得完的事，
+少了這條，放寬適用範圍就等於把一批本來要動的 item 靜默停住。
+
+2026-08-24 <consumer-b> round 123 實測，`warehouse-part-stock-all-part-types` 的 `predicateValue` 逐字是
+`stale=7 uap=0`——`staleEvidenceCount=7` 觸發 override，而該條目自 round 105 起在 ledger 裡待了 18 輪。
+**它的 blocker 敘述沒變是事實，「本輪沒事可做」不是。**（複驗指令同 § 三步查表 第 3 步那段，
+`predicateValue` 欄逐字可讀。）
+
+**逐字反開脫**（2026-08-24 無規約對照組 rep-4 實錄，語料在
+`vendor/snippets/rule-authoring/scenarios/blocker-ledger-hit-under-load.md`）：
+
+> 「指紋表命中且四條 predicate 實測值全部未變，本輪不重跑這條的高成本 evidence 重收，額度改投在
+> 成本極低的 `parts-search-ripple`。」
+
+predicate 未變講的是**卡點**沒變，`staleEvidenceCount=7` 講的是**有 7 件 Claude 自己做得完的事**——
+兩者是不同欄位、不同判斷。**NEVER 拿前者的「沒變」推論後者的「不用動」。**
+
+本證據決定：查表命中之後 override 要不要照跑——要跑。
+本證據不決定：適用範圍要不要放寬——**NEVER** 拿這 18 輪論證「所以 3a／3b 不該進 ledger」。
+把它們排除在外換回來的是每輪重推同一個結論，那正是本檔 § 這份 ledger 在防什麼 要防的事。
 
 ## 入表門檻：`predicateValue` 是必填，填不出來就不入表
 
@@ -79,7 +125,7 @@ ledger 寫得太寬時的失敗是**靜默**的：item 不會消失、不會報�
 
 | 時機 | 誰做 | 做什麼 |
 | --- | --- | --- |
-| **每一輪** | 查表第 3 步 | `lastCheckedRound` 超過 10 輪的條目強制重診斷（機械上限，不靠判斷） |
+| **每一輪** | 查表第 3 步 | `round - firstSeenRound >= 10` 的條目強制重診斷（機械上限，不靠判斷） |
 | **attended 開場**（Step 2.7 走完整 (a)(b)(c) 的那一路） | 主線 | 逐條重量 predicate，值變了或 predicate 已不成立的條目直接刪除 |
 
 **loop 判到「本輪無 actionable item」時，重量整張 ledger 是本輪的正當工作**——它不是 idle 的替代品，是**唯一**能把誤入表的 item 撿回來的動作。**NEVER** 在無事可做時直接寫 `stoppedReason` 而不先清一次 ledger。

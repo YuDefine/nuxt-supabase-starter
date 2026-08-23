@@ -990,7 +990,7 @@ git show --stat HEAD | tail -3   # 驗 scope
 | [productivity-gate.md](reference/productivity-gate.md) | 改准入／生產性判準之前（Step 0 § 開場准入判定、Step 6.3）——執行時不必讀 |
 | [decision-drain.md](reference/decision-drain.md) | **每一輪**（Step 2.7，hard rule） |
 | [simple-buckets.md](reference/simple-buckets.md)／[blocker-evaluation.md](reference/blocker-evaluation.md) | spectra item 命中固定步驟 bucket／`applyBlocked`・`awaitingUserDecision`（Step 3.1a） |
-| [blocker-ledger.md](reference/blocker-ledger.md) | **任一** blocked item 進評估之前（Step 3.1a／3.1b）、以及寫 `stoppedReason` 之前（Step 6.2） |
+| [blocker-ledger.md](reference/blocker-ledger.md) | **任一** blocked item 進評估之前（Step 3.1a 的**每一個** bucket／3.1b，不限 `applyBlocked`・`awaitingUserDecision` 兩列）、以及寫 `stoppedReason` 之前（Step 6.2） |
 | [non-spectra-dispatch.md](reference/non-spectra-dispatch.md) | 分類非 spectra candidate（Step 3.1b） |
 | [autonomy-predicate.md](reference/autonomy-predicate.md) | 判自主 / 做 packaging（Step 3.2 / 4b） |
 | [dispatch-topology.md](reference/dispatch-topology.md) | 分組（Step 3.3） |

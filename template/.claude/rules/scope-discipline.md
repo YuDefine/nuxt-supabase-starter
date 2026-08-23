@@ -69,8 +69,40 @@ Local edits will be reverted by the next sync.
 偵測到「rule A 被 rule B / hook / 其他 session / automation 違反」的當前狀態時（例：`manual-review.md` 規定 `[discuss]` items 應由使用者 walkthrough，但 hook 自動勾 `[x]` + 寫 `(claude-discussed:)` annotation），**MUST** 走以下流程：
 
 1. **保留現狀**（preserve）— **NEVER** 動手「修正」目前狀態以對齊另一條 rule
-2. **AskUserQuestion** — 列出觀察、可能成因、可選處理路徑，讓使用者拍板
-3. 取得使用者明確指示後才行動
+2. **歸屬探測**（見下方 § 歸屬探測前置）— 先判到底有沒有歧義存在
+3. **AskUserQuestion** — 探測後仍有真歧義時才走：列出觀察、可能成因、可選處理路徑，讓使用者拍板
+4. 取得使用者明確指示後才行動
+
+### 歸屬探測前置（MUST，先於 AskUserQuestion）
+
+衝突狀態涉及**檔案歸屬**（別 session / worktree / hook / automation 的 staged 或 untracked 變更）時，
+**每一次**都 MUST 先跑歸屬探測，才准考慮 `AskUserQuestion`。**每一條**路徑各跑一次，**NEVER** 抽驗
+一條代表全部：
+
+| 要判的事 | 可觀察 predicate |
+| --- | --- |
+| 這條路徑會不會進我的 commit | `git cat-file -e HEAD:<path>` 給得出 in-HEAD／staged-only |
+| 那批是不是別人的 in-flight | `git worktree list` 有對應 worktree、`.git/index` mtime 在分鐘級內 |
+| gate 紅燈是不是我造成的 | 失敗檔逐條跑上一列，全部 staged-only ⇒ 不在我的 tree、CI 看不到 |
+| 我的產物有沒有被污染 | 產物型檔案（baseline／lockfile／生成 JSON）逐條比對條目是否 in HEAD |
+
+命令塊在 `vendor/snippets/git-recovery/` § 並行 staged 的歸屬探測（**NEVER** 在本檔複製一份，會漂）。
+
+**四條全部給得出答案 ⇒ 不算衝突。** 主線 MUST 自行以 `git commit --only -- <自己的 paths>` 隔離，
+並在收尾一句話說明歸屬與隔離方式，**NEVER** 為此走 `AskUserQuestion`。任一條答不出來、或探測顯示
+雙方改到**同一檔的同一段**（`--only` 隔離不掉）才走上面第 3 步。
+
+**逐字反開脫**（想到這幾句就是探測還沒跑）：
+
+| 開脫 | 現實 |
+| --- | --- |
+| 「這批是別 session 的東西，依 scope-discipline 應該交還 user」 | 本節攔的是**無法用證據判定**該不該動的推理鏈，不是「只要涉及別 session 就交還 user」 |
+| 「這是未知變更 / 我不認得這些檔」 | 「未知」「不認得」是形容詞不是判準；`git cat-file -e HEAD:<path>` 對每一條都給得出答案 |
+| 「gate 紅了，這次 commit 過不了」 | 先問失敗檔在不在 HEAD——staged-only 的檔不在你的 commit tree |
+| 「問一下比較安全」 | 過度 escalate 與正確 escalate 在 transcript 上長得一模一樣，差別只在當時有沒有可跑而沒跑的探測 |
+
+> 2026-08-08 <consumer-b>：主線引本節停下來問 user，user 回「你自己探測，未來這種情況你必須總是自己
+> 探測決策」。對應 pitfall [[pitfall-mechanically-decidable-conflict-escalated-to-user]]。
 
 **錯誤的內部反射**：
 

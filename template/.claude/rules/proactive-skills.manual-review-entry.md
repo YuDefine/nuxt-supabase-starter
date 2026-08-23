@@ -16,7 +16,7 @@ Local edits will be reverted by the next sync.
 
 `## 人工檢查` 的 checkbox **不能由 agent 自行代勾**。
 
-**MUST** 進入人工檢查階段（implementation tasks 完成、剩 `## 人工檢查` 區塊）時，**第一動作是 auto-triage（per [[review-gui-surface]] MUST 9），不是直接引導使用者跑 `pnpm review:ui`**。
+**MUST** 進入人工檢查階段（implementation tasks 完成、剩 `## 人工檢查` 區塊）時，**第一動作是 auto-triage（per [[review-gui-surface]] MUST 9），不是直接把 review-gui 連結丟給使用者**。
 
 ## Auto-triage + mechanical readiness gate
 
@@ -38,12 +38,20 @@ Local edits will be reverted by the next sync.
 
 **NEVER** 在 script exit ≠ 0 時引導 user 到 review-gui — Claude 自判已多次證明不可靠（同根因 pitfall 見 [[review-gui-surface]]）。
 
-**NEVER** 預設用 `AskUserQuestion` 在 chat 內逐項彈對話框走人工檢查——那是 `pnpm review:ui` 不可用時的 fallback，不是 default path。
+**NEVER** 預設用 `AskUserQuestion` 在 chat 內逐項彈對話框走人工檢查——那是 review-gui 不可用時的 fallback，不是 default path。
 
 正確流程：
 
 1. **Auto-triage first**：推進所有 Claude 可處理的 pending items（fix-requested / evidence missing / issue triage）
-2. **首選（DEFAULT）**：auto-triage 後 `bucket=ready` → 主線回「從 **clade home**（`~/offline/clade`）執行 `pnpm review:ui` 開本地 GUI 驗收」（聚合機制與 cwd 規約見 [[review-gui-surface]]），等使用者跑完 GUI 流程回報後繼續
+2. **首選（DEFAULT）**：auto-triage 後 `bucket=ready` → **先跑 `systemctl is-active review-gui`**：
+   - **`active`**（常態）→ **NEVER** 叫 user 跑任何啟動指令，直接給 deep-link
+     `http://127.0.0.1:5174/review/<consumer-id>:<change-name>`（要指到某條 item 就加 `?item=%23N.M`；
+     user 不在本機就換 host 成 `https://review-gui.<maintainer-domain>`）
+   - **非 `active`** → 才回「從 **clade home**（`~/offline/clade`）執行 `pnpm review` 開本地 GUI 驗收」
+     （聚合機制與 cwd 規約見 [[review-gui-surface]]）
+
+   兩條路都是給完 URL 後等使用者跑完 GUI 流程回報再繼續。完整格式、encode 規則與 NEVER 清單見
+   [[review-gui-surface]] § Inline Review-GUI Deep-Link。
 3. **Fallback**（GUI 不可用時）：截圖 → 逐項展示 → 使用者回覆 OK / 問題 / skip → 依答覆更新 checkbox
 
 ## `[discuss]` items 不在 review:ui 主流程
@@ -56,4 +64,4 @@ review-gui 對純 D-only pending 的 change 自動歸「🗓 等 archive walkthr
 
 ## Inline Review-GUI Deep-Link（hard rule）
 
-完整 deep-link 規約（URL 格式、cross-consumer prefix、訊息 template、cwd、NEVER 清單）詳見 [[review-gui-surface]] § Inline Review-GUI Deep-Link。核心 one-liner：引導使用者跑 `pnpm review:ui` 時，**MUST** 在 chat 訊息中給出 `http://127.0.0.1:5174/review/<consumer-id>:<change-name>` deep-link。
+完整 deep-link 規約（service 常駐判定、URL 三層格式、cross-consumer prefix、itemId encode、NEVER 清單）詳見 [[review-gui-surface]] § Inline Review-GUI Deep-Link。核心 one-liner：引導使用者到 review-gui 時，**MUST** 在 chat 訊息中給出 `http://127.0.0.1:5174/review/<consumer-id>:<change-name>` deep-link，**NEVER** 給裸 `/review` 或根路徑 `/`。
