@@ -1,10 +1,16 @@
 #!/usr/bin/env node
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { basename, resolve } from 'pathe'
 import { defineCommand, runMain } from 'citty'
 import { consola } from 'consola'
 import { assembleProject } from './assemble'
+import {
+  type TargetDirState,
+  classifyTargetDir,
+  describeAdoption,
+  describeRejection,
+} from './target-dir'
 import { featureModules, getModuleById, resolveFeatureDependencies } from './features'
 import { confirmScaffold, displaySummary, getDefaultSelections, promptUser } from './prompts'
 import {
@@ -506,15 +512,21 @@ const main = defineCommand({
       args['evlog-preset'],
     )
 
-    // Validate directory
+    // Validate directory.
+    //
+    // 「已開好 git repo + 寫好產品 README，還沒有 code」是最常見的起手式之一，
+    // 舊行為把它跟「目錄裡已經有一個專案」混為一談，兩者都吐同一句
+    // 「已存在且不為空」就 exit 1，使用者沒有任何下一步可循。
+    // 現在分成三態：可就地展開 → 說明處置後照走；真的被佔用 → 拒絕但給出路。
+    let adoptState: TargetDirState | undefined
     if (projectName) {
       const targetDir = resolve(invocationCwd, projectName)
-      if (existsSync(targetDir)) {
-        const entries = readdirSync(targetDir)
-        if (entries.length > 0) {
-          consola.error(`目錄 "${projectName}" 已存在且不為空。`)
-          process.exit(1)
-        }
+      adoptState = classifyTargetDir(targetDir)
+      if (adoptState.kind === 'occupied') {
+        const [headline, ...rest] = describeRejection(projectName, adoptState)
+        consola.error(headline)
+        for (const line of rest) consola.log(line)
+        process.exit(1)
       }
     }
 
@@ -553,8 +565,31 @@ const main = defineCommand({
       selections = await promptUser(projectName)
     }
 
+    // Resolve target directory and use basename as project name for package.json.
+    // 互動模式的專案名是在 promptUser 才定案的，所以最終判定要以它為準重跑一次
+    // ——不能沿用開頭那次 fail-fast 的結果。
+    const targetDir = resolve(invocationCwd, selections.projectName)
+    const pkgName = basename(targetDir)
+
+    adoptState = classifyTargetDir(targetDir)
+    if (adoptState.kind === 'occupied') {
+      const [headline, ...rest] = describeRejection(pkgName, adoptState)
+      consola.error(headline)
+      for (const line of rest) consola.log(line)
+      process.exit(1)
+    }
+
     // Display summary and confirm
     displaySummary(selections)
+
+    if (adoptState.kind === 'adoptable') {
+      // 顯示解析後的目錄名，不是使用者打的字面值 —— 既有 repo 的正確咒語是
+      // 專案名填 `.`，而「偵測到既有 repo「.」」讀起來像是 CLI 搞錯了。
+      consola.info(`偵測到既有 repo「${pkgName}」，將就地展開 starter。`)
+      for (const line of describeAdoption(adoptState)) {
+        consola.log(`  ${line}`)
+      }
+    }
 
     if (!args.yes) {
       const confirmed = await confirmScaffold()
@@ -563,10 +598,6 @@ const main = defineCommand({
         process.exit(0)
       }
     }
-
-    // Resolve target directory and use basename as project name for package.json
-    const targetDir = resolve(invocationCwd, selections.projectName)
-    const pkgName = basename(targetDir)
 
     // 給了 --repo-id 就是要求登記進 Clade fleet —— 那些約束（fleet base、
     // consumer_id / repo_id 衝突、dev port 撞號）在寫第一個檔之前就問得出來。
@@ -604,6 +635,7 @@ const main = defineCommand({
         selections.agentTargets,
         selections.evlogPreset,
         selections.dbStack,
+        { mergeExistingGitignore: adoptState?.kind === 'adoptable' },
       )
       consola.success('專案檔案建立完成！')
     } catch (error) {
@@ -623,6 +655,7 @@ const main = defineCommand({
         wirePreCommit: args['wire-pre-commit'] as boolean,
         cloneClade: args['clone-clade'] as boolean,
         installDeps: args.install as boolean,
+        existingGitRepo: adoptState?.hasGitRepo === true,
         dbStack: selections.dbStack,
         repoId,
         workflowModel: workflowModel as 'trunk-based' | 'pr-merge-based',

@@ -20,6 +20,11 @@ const STARTER_ROOT = resolve(import.meta.dirname, '..', '..', '..')
 
 export interface AssembleProjectOptions {
   stripManifestPath?: string
+  /**
+   * 就地展開到既有 repo 時設 true：`templates/base/.gitignore` 改成與使用者
+   * 既有的 `.gitignore` 聯集，而不是直接覆蓋掉它。
+   */
+  mergeExistingGitignore?: boolean
 }
 
 export function assembleProject(
@@ -32,7 +37,14 @@ export function assembleProject(
   options: AssembleProjectOptions = {},
 ): void {
   // 1. Copy base template
+  const existingGitignore =
+    options.mergeExistingGitignore && existsSync(join(targetDir, '.gitignore'))
+      ? readFileSync(join(targetDir, '.gitignore'), 'utf8')
+      : undefined
   copyDirectory(join(TEMPLATES_DIR, 'base'), targetDir)
+  if (existingGitignore !== undefined) {
+    mergeGitignore(join(targetDir, '.gitignore'), existingGitignore)
+  }
 
   // 2. Apply feature overlays in dependency order
   const orderedFeatures = orderByDependency(selectedFeatureIds)
@@ -114,6 +126,38 @@ function inferAuthSelection(
   if (selectedFeatureIds.includes('auth-better-auth')) return 'better-auth'
   if (selectedFeatureIds.includes('auth-nuxt-utils')) return 'nuxt-auth-utils'
   return 'none'
+}
+
+/**
+ * 把 starter 的 `.gitignore` 併進使用者既有的那份，而不是覆蓋。
+ *
+ * 使用者既有的行永遠保留在最前面且順序不變；starter 只補使用者還沒有的規則，
+ * 並標出區塊來源，讓之後看 diff 的人分得出哪幾行不是自己寫的。
+ */
+function mergeGitignore(gitignorePath: string, existingContent: string): void {
+  const starterContent = readFileSync(gitignorePath, 'utf8')
+  const existingRules = new Set(
+    existingContent
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith('#')),
+  )
+
+  const added = starterContent
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line) => {
+      const trimmed = line.trim()
+      return trimmed.length > 0 && !trimmed.startsWith('#') && !existingRules.has(trimmed)
+    })
+
+  if (added.length === 0) {
+    writeFileSync(gitignorePath, existingContent)
+    return
+  }
+
+  const base = existingContent.endsWith('\n') ? existingContent : `${existingContent}\n`
+  writeFileSync(gitignorePath, `${base}\n# --- nuxt-supabase-starter ---\n${added.join('\n')}\n`)
 }
 
 function copyDirectory(src: string, dest: string): void {

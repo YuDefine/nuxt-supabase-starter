@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join, relative } from 'node:path'
+import { basename, dirname, join, relative } from 'node:path'
 import { consola } from 'consola'
 import { DEFAULT_DB_STACK, type DbStack } from './types'
 
@@ -35,6 +35,12 @@ export interface PostScaffoldOptions {
   businessActivity?: 'pre-production' | 'active' | 'maintenance' | 'paused' | 'auto'
   /** `auto` 交給 Clade 依 fleet 慣例配號（3000 起、每 10 一階）。 */
   devPort?: number | 'auto'
+  /**
+   * 就地展開到既有 git repo 時設 true：不重跑 `git init`，commit message 也
+   * 改成「加入 starter」而非「initial scaffold」——那個 repo 的第一個 commit
+   * 不是這次跑出來的。
+   */
+  existingGitRepo?: boolean
 }
 
 export async function postScaffold(
@@ -102,24 +108,34 @@ export async function postScaffold(
     runSyncToAgents(targetDir)
   } else if (skipInstall) {
     consola.info('略過 sync-to-agents（依賴未安裝）。裝完依賴後手動：')
-    consola.log(`  cd ${relativeTargetDir} && node ~/.claude/scripts/sync-to-agents.mjs`)
+    consola.log(`  cd ${relativeTargetDir} && node ~/.claude/scripts/sync-to-codex.mjs`)
   } else {
     consola.warn('略過 sync-to-agents — 請在 pnpm install 成功後手動：')
-    consola.log(`  cd ${relativeTargetDir} && node ~/.claude/scripts/sync-to-agents.mjs`)
+    consola.log(`  cd ${relativeTargetDir} && node ~/.claude/scripts/sync-to-codex.mjs`)
   }
 
   // 5. Initialize git
-  consola.start('正在初始化 Git...')
+  const adoptingRepo = opts.existingGitRepo === true
+  consola.start(adoptingRepo ? '正在提交 starter 檔案...' : '正在初始化 Git...')
   try {
-    execFileSync('git', ['init'], { cwd: targetDir, stdio: 'pipe' })
+    if (!adoptingRepo) {
+      execFileSync('git', ['init'], { cwd: targetDir, stdio: 'pipe' })
+    }
     execFileSync('git', ['add', '-A'], { cwd: targetDir, stdio: 'pipe' })
-    execFileSync('git', ['commit', '-m', 'chore: initial project scaffold'], {
-      cwd: targetDir,
-      stdio: 'pipe',
-    })
-    consola.success('Git 初始化完成！')
+    execFileSync(
+      'git',
+      [
+        'commit',
+        '-m',
+        adoptingRepo
+          ? 'chore: scaffold nuxt starter into existing repo'
+          : 'chore: initial project scaffold',
+      ],
+      { cwd: targetDir, stdio: 'pipe' },
+    )
+    consola.success(adoptingRepo ? 'starter 檔案已提交（既有歷史保留）！' : 'Git 初始化完成！')
   } catch {
-    consola.warn('Git 初始化失敗，請手動執行。')
+    consola.warn(adoptingRepo ? 'Git 提交失敗，請手動執行。' : 'Git 初始化失敗，請手動執行。')
   }
 
   // 6. Register as clade consumer (idempotent; opt-out via --no-register-consumer)
@@ -494,12 +510,36 @@ function runHubPrune(targetDir: string): void {
   }
 }
 
+/**
+ * 這支 script 被改過名（`sync-to-agents` → `sync-to-codex`），且同時存在 `.mjs`
+ * 與 `.ts` 兩種投影。寫死單一檔名的後果是「找不到就靜默跳過」——改名之後
+ * 每一次 scaffold 都不再產 `.codex/` 與 `AGENTS.md`，而使用者只會看到一行
+ * 略過警告，不會知道專案少了東西。所以這裡按序探測，全部落空才報。
+ */
+const SYNC_TO_CODEX_CANDIDATES = [
+  'sync-to-codex.mjs',
+  'sync-to-codex.ts',
+  // 舊名，保留給還沒更新 ~/.claude/scripts 的機器
+  'sync-to-agents.mjs',
+]
+
+export function resolveSyncToCodexScript(scriptsDir: string): string | undefined {
+  for (const name of SYNC_TO_CODEX_CANDIDATES) {
+    const candidate = join(scriptsDir, name)
+    if (existsSync(candidate)) return candidate
+  }
+  return undefined
+}
+
 function runSyncToAgents(targetDir: string): void {
-  const script = join(homedir(), '.claude', 'scripts', 'sync-to-agents.mjs')
-  if (!existsSync(script)) {
+  const scriptsDir = join(homedir(), '.claude', 'scripts')
+  const script = resolveSyncToCodexScript(scriptsDir)
+  if (!script) {
     consola.warn(
-      '找不到 ~/.claude/scripts/sync-to-agents.mjs，略過 .codex/.agents/AGENTS.md 重投影',
+      `在 ~/.claude/scripts/ 找不到 ${SYNC_TO_CODEX_CANDIDATES.join(' / ')}，` +
+        '略過 .codex/.agents/AGENTS.md 重投影',
     )
+    consola.log('  這代表專案不會有 Codex / Cursor 的投影檔。只用 Claude Code 的話可以忽略。')
     return
   }
   consola.start('重投影 .codex/.agents/AGENTS.md（Claude Code First → projections）')
@@ -507,8 +547,8 @@ function runSyncToAgents(targetDir: string): void {
     execFileSync('node', [script], { cwd: targetDir, stdio: 'pipe' })
     consola.success('Projection 重生完成')
   } catch (error) {
-    consola.warn(`sync-to-agents 執行失敗：${(error as Error).message}`)
-    consola.log('  之後可手動：node ~/.claude/scripts/sync-to-agents.mjs')
+    consola.warn(`${basename(script)} 執行失敗：${(error as Error).message}`)
+    consola.log(`  之後可手動：node ${script}`)
   }
 }
 
