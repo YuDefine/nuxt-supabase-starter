@@ -43,7 +43,10 @@ describe('scaffold: base-only (no features)', () => {
     expect(existsSync(join(targetDir, '.claude', 'settings.json'))).toBe(true)
     expect(existsSync(join(targetDir, '.claude', 'versions.json'))).toBe(true)
     expect(existsSync(join(targetDir, '.claude', 'skills'))).toBe(true)
-    expect(existsSync(join(targetDir, '.claude', 'commands', 'validate-starter.md'))).toBe(true)
+    expect(existsSync(join(targetDir, '.claude', 'commands', 'ship.md'))).toBe(true)
+    // validate-starter 是 starter repo 自身的 self-validation tool，17f080cf 起移回 root
+    // .claude/commands/；scaffold 出去的專案不維護 starter，拿到它沒有意義。
+    expect(existsSync(join(targetDir, '.claude', 'commands', 'validate-starter.md'))).toBe(false)
     expect(existsSync(join(targetDir, '.scaffold-cleanup'))).toBe(false)
     expect(existsSync(join(targetDir, 'scripts', 'compress-skill-descriptions.sh'))).toBe(true)
     expect(existsSync(join(targetDir, 'scripts', 'templates', 'clean', 'README.md'))).toBe(true)
