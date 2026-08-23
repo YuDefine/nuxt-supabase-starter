@@ -67,3 +67,9 @@ Local edits will be reverted by the next sync.
       process.exit(hasError ? 1 : 0);
       " <touched-vue-files...>
       ```
+
+---
+
+## Step 6c — rollout 狀態
+
+Phase 1 為 model-driven（SKILL.md 指示）；Phase 3 會把本 check 升級成 `archive-gate.sh` hard gate（master plan 3.1）。

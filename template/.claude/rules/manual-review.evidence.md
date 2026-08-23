@@ -241,6 +241,10 @@ Scoped sub-item 格式必須剛好縮排兩個空白，並使用 `#N.M`：
 
 ## `@no-screenshot` Marker（hard rule）
 
+> **本節的 fence 範例是 live fixture**：`test/rule-example-parser-contract.test.ts` 現場抽出來餵進
+> `vendor/scripts/review-gui.parser.ts`。改動範例（含標點全半形）等於改動 parser 的驗收條件，
+> 測試紅了就是兩邊真的不一致，**NEVER** 改測試期望值去遷就。
+
 當人工檢查項目是純 functional round-trip，且 screenshot review 無法提供有效視覺證據時，可在該 checkbox line 行尾加上 `@no-screenshot` marker。這個 marker 表示 `pnpm review:ui` 應把該 item 視為 round-trip-only manual-review item：使用者親自操作後可直接勾 OK，不需要截圖，viewer 顯示 round-trip-only UI，且不顯示「複製 handoff prompt」。
 
 Marker 語法：

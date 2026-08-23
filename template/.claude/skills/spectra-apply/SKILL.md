@@ -49,55 +49,11 @@ Implement tasks from a Spectra change.
 
    c.5. **Main-side unpark + commit-to-git**（clade fork addition；critical data-safety guardrail，per `docs/pitfalls/2026-05-22-agent-tool-subagent-worktree-bypass.md`）：
 
-      **理由**：spectra v3 `spectra park` 把 artifacts 從 disk 搬進 `.git/spectra-app/spectra.db` SQLite blob（**不在 git tracked file**）；後續 `spectra unpark` 會 restore artifacts 到 cwd 的 worktree disk 並把 SQLite parked 條目刪除。若 unpark 在 Claude Code `Agent` tool dispatched subagent 的 ephemeral cwd（`.claude/worktrees/agent-*/`，session 結束 GC）跑 → artifacts 寫進去就被 GC 清掉、SQLite 也沒了 → **永久遺失**（<consumer-i> 已撞，99 tasks + 5 specs + proposal 蒸發）。
+      **MUST** 在 dispatch subagent **之前**，由主線在 main worktree（或 Step 0c 剛 fork 出的 session worktree — 兩者都是 persistent disk）跑 unpark + commit-to-git，讓 artifacts 落 git tracked file，不再依賴 `.git/spectra-app/spectra.db` 的 SQLite blob。
 
-      因此 **MUST** 在 dispatch subagent **之前**，由主線在 main worktree（**或** Step 0c 剛 fork 出的 session worktree — 兩者都是 persistent disk，非 ephemeral）跑 unpark + commit-to-git，artifacts 落 git tracked file，subagent fork 出去後天然帶過、不再依賴 SQLite blob。
+      **執行流程**：**MUST** 完整讀 `references/worktree-setup.md` § Step 0c.5——偵測是否 parked → 主線在 main 跑 `spectra unpark` → selective stage + commit → worktree sync，含 unpark / commit / pull 各自的 failure handling。**NEVER** 憑記憶跑。
 
-      **執行流程**：
-
-      1. **偵測是否 parked**：
-
-         ```bash
-         spectra list --parked --json | jq -r '.parked[]?' | grep -Fx "<change-name>"
-         ```
-
-         - 命中（change 在 parked 列表）→ 繼續執行 unpark
-         - 未命中 → artifacts 已在 disk / git（可能 propose 階段 Option A 已 commit、或前次 apply session 已處理），跳過此步進 Step 0d
-
-      2. **主線在 main 跑 unpark**（**禁止**在 subagent / ephemeral worktree 跑；本步驟發生在 dispatch 之前，主線 cwd 仍是 main）：
-
-         ```bash
-         spectra unpark "<change-name>"
-         ```
-
-         Unpark 把 artifacts blob restore 到 main worktree disk 的 `openspec/changes/<change-name>/`。SQLite parked 條目被刪除（這是 unpark 的正常行為）。
-
-      3. **selective stage + commit to git**（讓 artifacts 進入 git tracked，不再依賴 SQLite）：
-
-         ```bash
-         git add openspec/changes/<change-name>/
-         git commit -m "📝 docs(spectra): unpark artifacts for <change-name> before apply"
-         ```
-
-         **禁止** `git add -A` / `git add .`（會撈到 main 上其他 user WIP）；**禁止** `--no-verify`（per `rules/core/commit.md` hard rule）。
-
-      4. **若 Step 0c 已 fork session worktree**：主線在 main 跑完 unpark + commit 後，worktree 是基於 main HEAD fork 的（在 Step 0c.4 建好），尚未看到剛剛 commit 的 artifacts。**MUST** 在 worktree 內同步：
-
-         ```bash
-         git -C <worktree-absolute-path> pull --ff-only
-         ```
-
-         或等價的 `git -C <wt> fetch && git -C <wt> reset --hard origin/main`（視 consumer workflow_model 而定）。Worktree 拿到 artifacts 之後 subagent dispatch 才看得到。
-
-      5. **若 Step 0c 跑 commit-then-fork（c.4 已 commit baseline）**：unpark 的 commit 是 main 上**繼 baseline 之後**的新 commit；worktree 需要 sync 到 main 最新 HEAD 才看得到 artifacts，方法同 step 4。
-
-      **Failure handling**：
-
-      - `spectra unpark` 失敗（SQLite blob corrupt / change name typo）→ STOP，回報 error，**不要** dispatch subagent；user 解掉 unpark issue 再重試 `/spectra-apply`
-      - `git commit` 失敗（pre-commit hook fail / no changes to commit）→
-        - `no changes to commit`：artifacts 已在 git，視為成功，繼續
-        - hook fail：STOP，回報 hook 拒絕原因，user 修完 artifacts 再重試
-      - `git pull --ff-only` 失敗（worktree 有 commit 跟 main 衝突）→ 罕見情境（worktree 是 fresh fork from main，理論上 ff 安全）；STOP，回報並讓 user 手動 sync
+      **Skip-condition**：`spectra list --parked --json` 未命中本 change → artifacts 已在 disk / git，直接進 Step 0d。
 
       **NEVER**：
 
@@ -150,64 +106,35 @@ Implement tasks from a Spectra change.
    Look for the change name in the `parked` array of the JSON output.
    - **If the change IS in the parked list** (it's parked):
 
-     **clade fork data-safety guard**（per `docs/pitfalls/2026-05-22-agent-tool-subagent-worktree-bypass.md`）：在 Step 0c.5 規約之下，主線理應已在 dispatch 之前跑過 unpark + commit-to-git。本路徑能命中表示 Step 0c.5 被跳過（罕見：cwd 已在 worktree、Bypass 條件、或主線 skill 邏輯被覆寫）。
+     **clade fork data-safety guard**（per `docs/pitfalls/2026-05-22-agent-tool-subagent-worktree-bypass.md`）：本路徑能命中表示 Step 0c.5 被跳過。先 `git rev-parse --git-dir`，**若路徑含 `.claude/worktrees/agent-`** → **STOP**，回報 `references/worktree-setup.md` § Step 2 parked fallback 的 STOP 訊息全文並交還 parent。**NEVER** 自行嘗試 unpark、**NEVER** 用 AskUserQuestion 給「強制 unpark」選項——沒有合法的「在 subagent 內 unpark」路徑。cwd 在 main / persistent worktree 才續走以下流程。
 
-     **Detect cwd**：
+     Inform the user that this change is currently parked（暫存）.
+     Use the **AskUserQuestion tool** to ask whether to continue.
+     Two options:
+     - **Continue**: Unpark the change and proceed with apply
+     - **Cancel**: Stop the workflow
+
+     If the user chooses to continue:
 
      ```bash
-     git rev-parse --show-toplevel
-     git rev-parse --git-dir
+     spectra unpark "<name>"
      ```
 
-     - 若 cwd 看起來像 ephemeral agent worktree（`git-dir` 路徑含 `.claude/worktrees/agent-` 片段）→ **STOP**，回報：
-       ```
-       ⚠ spectra unpark must run on main worktree or persistent session worktree, NOT inside Agent tool dispatched subagent.
-       This subagent's cwd is `.claude/worktrees/agent-*/`, which Claude Code will GC at session end.
-       Running unpark here would write artifacts to a path that disappears → permanent data loss
-       (see docs/pitfalls/2026-05-22-agent-tool-subagent-worktree-bypass.md).
+     **Post-unpark commit**（clade fork addition；防 SQLite-only state）：unpark 後 **MUST** 立刻把 artifacts commit 進 git（`git add openspec/changes/<name>/` → commit）。**禁止** `git add -A`；`no changes to commit` 視為成功、hook fail 則 STOP。逐字指令見 `references/worktree-setup.md` § Step 2 parked fallback。
 
-       Action: cancel this run and return a structured blocker to the parent coordinator. The parent
-       invokes `/spectra-apply <change>` from main directly, or uses [[session-tasks]] § Herdr session
-       transport when a separate main session is required; Step 0c.5 then runs before subagent dispatch.
-       ```
-       **NEVER** 自行嘗試 unpark / 用 AskUserQuestion 給「強制 unpark」選項 — 沒有合法的「在 subagent 內 unpark」路徑。
+     Then mark it as in-progress:
 
-     - 若 cwd 在 main / `<consumer>-wt/<slug>/` 等 persistent worktree → 繼續以下 fallback 流程：
+     ```bash
+     spectra in-progress add "<name>"
+     ```
 
-       Inform the user that this change is currently parked（暫存）.
-       Use the **AskUserQuestion tool** to ask whether to continue.
-       Two options:
-       - **Continue**: Unpark the change and proceed with apply
-       - **Cancel**: Stop the workflow
+     This is a silent operation — do not show the output to the user.
 
-       If the user chooses to continue:
+     Then re-run `spectra status --change "<name>" --json` and continue normally.
 
-       ```bash
-       spectra unpark "<name>"
-       ```
-
-       **Post-unpark commit**（clade fork addition；防 SQLite-only state）：unpark 把 artifacts restore 到 cwd worktree disk，SQLite parked 條目被刪。**MUST** 立刻 commit 到 git，避免下次 session 又需重做：
-
-       ```bash
-       git add openspec/changes/<name>/
-       git commit -m "📝 docs(spectra): unpark artifacts for <name> before apply"
-       ```
-
-       **禁止** `git add -A`；commit 失敗（hook reject / no changes）視同 Step 0c.5 同名情境處理（no changes = 視為成功；hook fail = STOP）。
-
-       Then mark it as in-progress:
-
-       ```bash
-       spectra in-progress add "<name>"
-       ```
-
-       This is a silent operation — do not show the output to the user.
-
-       Then re-run `spectra status --change "<name>" --json` and continue normally.
-
-       If there is no AskUserQuestion tool available (non-Claude-Code environment):
-       Inform the user that this change is currently parked（暫存）and ask via plain text whether to unpark and continue, or cancel.
-       Wait for the user's response. If the user confirms, run `spectra unpark "<name>"` + post-unpark commit + `spectra in-progress add "<name>"`, and continue normally.
+     If there is no AskUserQuestion tool available (non-Claude-Code environment):
+     Inform the user that this change is currently parked（暫存）and ask via plain text whether to unpark and continue, or cancel.
+     Wait for the user's response. If the user confirms, run `spectra unpark "<name>"` + post-unpark commit + `spectra in-progress add "<name>"`, and continue normally.
 
    - **If the change is NOT in the parked list**: mark it as in-progress and proceed normally.
 
@@ -223,7 +150,7 @@ Implement tasks from a Spectra change.
 
 2.5. **Stash Reconcile (clade fork; not in upstream spectra)**
 
-   Scan namespaced stashes related to this change before starting work. Catches resume scenarios where the previous session's WIP got auto-stashed by wt-helper / propagate / clade-publish and never reapplied — without this, apply will run on a clean baseline while real WIP rots in stash.
+   Scan namespaced stashes related to this change before starting work — resume 場景下前一 session 的 WIP 可能已被 wt-helper / propagate / clade-publish auto-stash 且從未 reapply。
 
    - Run: `node scripts/stash-reconcile.ts --slug "<change-name>" --json`
    - Parse stdout JSON. If `entries.length === 0`, continue silently to Step 3.
@@ -347,7 +274,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
 6a. **Residency Classify + Record（機械前置，MUST — 任何 phase dispatch 決策前）**
 
-   Per `agent-routing.md` § Orchestration Residency。Residency 規則上線 6 天 audit 實證：eligible（純非-view + tasks.md 定稿）change 採用率 1/3 — 2 條被主線自做、0 dispatch。「主線自行判斷 residency」已證實不可靠，classify + record 改為機械步驟。**每一條** change 開工都要 classify + record，不是只有看起來像純後端的那條。
+   Per `agent-routing.md` § Orchestration Residency。「主線自行判斷 residency」已由 audit 證實不可靠（上線 6 天 eligible change 採用率 1/3），所以 classify + record 是機械步驟。**每一條** change 開工都要 classify + record，不是只有看起來像純後端的那條。
 
    1. **MUST** 跑 classifier 拿 verdict（開工後、動任何 phase 之前）：
 
@@ -446,7 +373,6 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    5. **False positive 出口**：某 column 真的 intentionally 全空（例「備註」大多 row 空）→ 在該 `.vue` template 加 `<!-- @ui-invariant-allow-empty[<column-header>] -->` 註解，re-run 確認 suppressed。**NEVER** 用 marker 掩蓋真壞掉的 column（lookup-resolved column 全 fallback 是 bug，不是 optional）。
 
-   Phase 1 為 model-driven（SKILL.md 指示）；Phase 3 會把本 check 升級成 `archive-gate.sh` hard gate（master plan 3.1）。
 
 6d. **Review Rules Check**（clade fork addition；not in upstream spectra）
 
@@ -622,7 +548,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
 8a.5. **Manual-Review Pattern Re-check** (clade fork addition — pre-handoff `## 人工檢查` hygiene gate before Step 8b)
 
-   `## 人工檢查` items can drift during Step 7 implementation phases — impl-phase tasks may surface new manual-review items, edit existing ones inline, or paste internal jargon (DB column names / capability flag names / spec heading slugs) into descriptions while the impl context is fresh. Re-run the same enforcement hook that `/spectra-propose` Step 3a uses, so jargon leakage / abstract reference / missing URL etc. doesn't reach the GUI handoff or get baked into the archive history:
+   **理由**：`## 人工檢查` items 會在 Step 7 implementation 期間漂移；失效鏈實證見 `references/pre-handoff-checks.md` § Step 8a.5 理由。跑與 `/spectra-propose` Step 3a 同一支 enforcement hook：
 
    ```bash
    bash scripts/spectra-advanced/post-propose-manual-review-check.sh <change-name>
@@ -632,11 +558,11 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    Legitimate false positive (e.g., 真機掃 SMS 無 dev replay endpoint, sample inline value `weekly_target=5000`) → add `@no-manual-review-check[<reason>]` trailing marker per `manual-review.md`「`@no-manual-review-check` Marker」, re-run hook to confirm bypass recognized, then proceed.
 
-   Hook exits 0 → proceed to Step 8b silently. Defense in depth: primary catches are propose / ingest / archive — apply Step 8a.5 specifically catches drift introduced during impl phases that bypass all three.
+   Hook exits 0 → proceed to Step 8b silently.
 
 8a.6. **Pre-Manual-Review Self-Analysis** (clade fork addition — Layer E.1 of pre-handoff quality gates; not in upstream spectra)
 
-   The user must not be the **first** to discover trivial UX/data defects in the GUI. <consumer-a> `app-status-badge-extraction`（2026-05-24）handed 9 fabricated `(verified-ui:)` annotations + an all-「-」員工 column straight to the user because nothing between Step 8a and the GUI re-checked the change. Step 8a.6 is that re-check.
+   **理由**：user **NEVER** 該是第一個在 GUI 發現 trivial UX / data defect 的人；實證見 `references/pre-handoff-checks.md` § Step 8a.6 理由。
 
    **Model allocation**（收集與判定是兩個角色，各自一個檔位；**NEVER** 合寫成一句）：
 
@@ -651,13 +577,13 @@ If there is no AskUserQuestion tool available, present options as plain text and
 
    **E.1 + E.2 執行**：**MUST** 完整讀 `references/pre-handoff-checks.md` § Step 8a.6 執行——E.1（pi medium 收集 5-dimension evidence → pi xhigh 判定 → 主線寫 finding report、FAIL 補 `（issue:）` / strip 假 annotation → `pre-handoff-ledger.ts record`）與 E.2（`pi-dispatch-pre-handoff-check.ts` cross-model 獨立審；fallback Claude subagent，**NEVER** 憑記憶補、**NEVER** 跳過 cross-check 直接 handoff）。**No finding report written → NO Step 8b handoff — this is the gate**；E.1 record 由 `archive-gate.sh` Check 7 機械強制。
 
-   **Level**: Phase 2 仍為 **warning / soft-gate** — E.1 + E.2 都跑、findings 必寫成 `（issue:）`annotation 讓 user 在 review-gui 看到，但**不**hard-block workflow（user 在 GUI 拍板）。Phase 3.1 才把「zero unresolved findings」整進 `archive-gate.sh` 成 hard gate。每次 E.1/E.2 verdict 已落 `<consumer>/.spectra/pre-handoff-ledger.jsonl`（telemetry，gitignored）；Phase 3.1 升 hard gate 的 soak 評估跑 `node <clade-vendor>/scripts/pre-handoff-ledger.ts report --all-consumers`（出 fire-rate / by-dimension / E.1↔E.2 agreement）。
+   **Level**：Phase 2 為 **warning / soft-gate**——E.1 + E.2 都 MUST 跑、findings MUST 寫成 `（issue:）` annotation 讓 user 在 review-gui 看到，但**不** hard-block workflow。升 hard gate 的 rollout 狀態與 soak 評估指令見 `references/pre-handoff-checks.md` § Step 8a.6 rollout 狀態。
 
    **Reuse Step 6c / Layer C**: D3 / D5 是 `refactor-invariant-check.ts`（Layer B）偵測的；D4 是 `audit-data-sanity.ts`（Layer C）偵測的。已跑過就 cite 結果，不必重跑。
 
 8a.7. **Screenshot Staleness Sweep + Auto-reshoot** (clade fork addition — mechanical gate before Step 8b handoff)
 
-   **理由**：Step 8a verify:ui 拍完截圖後，後續步驟（seed fix、allow-empty marker、pattern re-check fix、E.2 finding fix 等）常產生新 commit 碰到 `.vue` / seed / config 檔。這些 commit 讓先前的截圖 mtime < last UI commit → review-gui 顯示 ⚠ 截圖過時。User 必須手動告訴 Claude session 重拍 — 這個 relay 不該是 user 的事。本 step 把「重拍 stale」從 behavioral rule 升級成 mechanical gate。
+   **理由**：後續步驟的 commit 會讓先前截圖 mtime < last UI commit → review-gui 顯示 ⚠ 截圖過時；把「重拍 stale」從 behavioral rule 升成 mechanical gate。失效鏈見 `references/pre-handoff-checks.md` § Step 8a.7 理由。
 
    **觸發條件**：`## 人工檢查` 含至少一個 `[verify:ui]` item 且 `screenshots/local/<change>/` 目錄存在。否則 silent skip。
 
@@ -714,7 +640,7 @@ If there is no AskUserQuestion tool available, present options as plain text and
    **NEVER** 自判 bucket、NEVER 跳過 script — Claude 自判已 9 次證明不可靠。
 
    - **DEFAULT path**（**MUST** script exit 0 才發）：handoff message 措辭 **MUST** 照 `references/pre-handoff-checks.md` § Step 8b DEFAULT message 範本（主線從 clade home 啟動 review GUI並確認 ready + review-gui deep-link + GUI 行為說明）。
-   - **MUST 直接給 review-gui deep-link**（per `rules/core/proactive-skills.md` § Inline Review-GUI Deep-Link）：訊息 **MUST** 含 `http://127.0.0.1:5174/review/<consumer-id>:<change-name>` 完整 URL（cross-consumer mode 預設啟用，沒 `<consumer-id>:` prefix 會 fallback 到 clade mainEntry → API 404；`<consumer-id>` 從 `~/offline/clade/registry/consumers.json` 對應 entry 抓）。**NEVER** 寫「請在 worktree root 執行」或「請在 main consumer root 執行」當預設措辭——review-gui (`vendor/scripts/review-gui.ts` `listSourceRoots`) 從 clade home 跑時偵測 `vendor/scripts/review-gui.ts` + `consumers.local` 雙標記 → 進 cross-consumer mode，自動聚合所有 consumer + worktree change；consumer 端跑會被 `preflightCladeOnly` guard 擋下、退出 exit 2。**NEVER** 列 dev server URL（`http://localhost:3040/admin/...`）當替代——review-gui 內部已有 final-state screenshot + evidence。若 review 過程發現需要 fresh screenshot 或 user 想 sanity check，**MUST** 由 agent 自起 dev server（per `rules/core/proactive-skills.md` § Dev Server Auto-Spawn：scan free port 3001–3050、避開 3000、`run_in_background`、回報 URL + shellId），**NEVER** 叫 user cd worktree 跑 `pnpm dev`。`5174` 是 `vendor/scripts/review-gui.ts` `DEFAULT_PORT`，找不到時會 fallback 到 5174-5194，由 GUI startup banner 告知 user，主線不必猜。
+   - **MUST 直接給 review-gui deep-link**（per `rules/core/proactive-skills.md` § Inline Review-GUI Deep-Link）：訊息 **MUST** 含 `http://127.0.0.1:5174/review/<consumer-id>:<change-name>` 完整 URL（`<consumer-id>` 從 `~/offline/clade/registry/consumers.json` 抓；缺 prefix 會 fallback 到 clade mainEntry → API 404）。**NEVER** 寫「請在 worktree root / main consumer root 執行」當預設措辭、**NEVER** 列 dev server URL 當替代、**NEVER** 叫 user cd worktree 跑 `pnpm dev`——需要 fresh screenshot 時由 agent 自起 dev server（per `rules/core/proactive-skills.md` § Dev Server Auto-Spawn）。cross-consumer mode 偵測、`preflightCladeOnly` guard、port fallback 的機制說明見 `references/pre-handoff-checks.md` § Step 8b review-gui deep-link 機制。
    - Wait for the user to complete the GUI flow and report back. Do NOT proceed to Step 9 / propose archive until the user signals manual review is done.
    - **NEVER** default to `AskUserQuestion` chat dialog walking items one-by-one — it burns tokens, ignores the screenshot pool, and contradicts `rules/core/manual-review.md` 標準流程.
 

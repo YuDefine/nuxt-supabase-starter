@@ -20,6 +20,11 @@ Local edits will be reverted by the next sync.
 
 逐層列出 (a)(b)(c)(d) 的嘗試結果。逐字範例：
 
+> **下面這個 fence 是 live fixture**：`test/rule-example-parser-contract.test.ts` 會現場把它抽出來
+> 餵進 `vendor/scripts/review-gui.parser.ts`。改動它（含標點全半形）等於改動 parser 的驗收條件——
+> 測試紅了就是兩邊真的不一致，**NEVER** 為了讓它綠而去改測試的期望值。範例被整段搬走時，
+> 該測試的抽取數守門會失敗，不會靜默失去保護。
+
 ```text
 （deferred: tried (a) dev-login route 限 E2E user only, edit 後 typecheck fail / (b) service_role 不適用（需驗 RLS 邏輯）/ (c) OAuth callback 撞 redirect URI mismatch / (d) screenshot-review fail with "login required"。剩需 user 親自跑）
 ```

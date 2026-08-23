@@ -418,13 +418,14 @@ rc=$?
 
 snapshot_or_die "$WORK_DIR/worktree-after.txt" after
 if ! cmp -s "$WORK_DIR/worktree-before.txt" "$WORK_DIR/worktree-after.txt"; then
-  # 歸因器：優先用 repo 自己那份（clade home），否則回 clade 中央倉。找不到、或它自己
-  # 出錯（exit 2）→ 退回加這層之前的行為：一律扣住。NEVER fail-open —— 「歸因器不在」
-  # 與「歸因結果無害」在外部無法區分。
+  # 歸因器一律取 clade 中央倉那份，**NEVER** 取受審 repo 內的同名檔。這一段只在
+  # 「working tree 在 review 期間被改動」時執行 —— 也就是恰好在懷疑受審材料會動手腳
+  # 的當下，拿受審 repo 提供的檔去 `node` 執行，等於把 review 邊界外的任意程式碼執行
+  # 權交給 changeset；而且它的 exit code 直接決定放行與否，攻擊者只要回 0 就解除扣留。
+  # 同 repo 內的 CURSOR_ORIGIN_GATE 也是只認 CLADE_HOME，本行與它對齊。
+  # 找不到、或歸因器自己出錯（exit 2）→ 退回加這層之前的行為：一律扣住。
+  # NEVER fail-open —— 「歸因器不在」與「歸因結果無害」在外部無法區分。
   SCOPE_CLASSIFIER="$CLADE_HOME/vendor/scripts/lib/review-integrity-scope.ts"
-  if [ -f "$REPO_ROOT/vendor/scripts/lib/review-integrity-scope.ts" ]; then
-    SCOPE_CLASSIFIER="$REPO_ROOT/vendor/scripts/lib/review-integrity-scope.ts"
-  fi
   SCOPE_OUT=""
   SCOPE_RC=1
   if [ -f "$SCOPE_CLASSIFIER" ]; then

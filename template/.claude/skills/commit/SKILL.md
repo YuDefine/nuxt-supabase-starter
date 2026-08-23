@@ -304,7 +304,7 @@ node scripts/deploy-trigger-check.ts
 | `verdict=` | 意義 | Step 6 走哪條 |
 | --- | --- | --- |
 | `confirmed-push-main` | 宣告 `push-main`，且 production deploy workflow 確實由 main push 觸發 —— 不建 tag 也照樣部署，攔 tag 沒有保護作用 | **走 6-A（現行完整流程）** |
-| `needs-approval` | 其餘全部：`tag-v` / `manual`、宣告缺漏、宣告與 workflow 不符、workflow 推不出單一結論、腳本不存在 | **走 6-B（停在 push main）** |
+| `needs-approval` | 其餘全部：`tag-v` / `manual`、宣告缺漏、宣告與 workflow 不符、workflow 推不出單一結論、腳本不存在 | **走 6-B（不建 tag；push main 本身另判授權）** |
 
 **放行條件是「宣告與 workflow 一致」，不是「宣告寫了 push-main」。** 這個 gate 曾經只讀宣告，而宣告是手寫的：<consumer-b> 宣告 `push-main`、實際 `push: tags: ['*']`，於是拿到 6-A —— 沒有任何一步會講出這件事，2026-08-22 靠人工 grep workflow 才發現。現在推導失敗、宣告與現實矛盾一律 fail-closed 到 6-B，**宣告錯誤換不到寬鬆分支**。
 
@@ -350,11 +350,7 @@ git push origin main
 
 ## Step 6-B: 停在 push main，發版另問（`tag-v` / `manual` / `unknown`）
 
-這些形狀下 **建 tag 就是部署 production**（`tag-v`），或部署本來就不由 `/commit` 負責（`manual`）。因此本步驟只做一件事：
-
-```bash
-git push origin main
-```
+這些形狀下 **建 tag 就是部署 production**（`tag-v`），或部署本來就不由 `/commit` 負責（`manual`）。因此本步驟不建 tag、不發版。
 
 **本步驟 NEVER 做以下四件事**，即使本次 commit 含 `feat`、即使使用者說「commit 完就好」：
 
@@ -363,7 +359,33 @@ git push origin main
 - ❌ `pnpm tag` / `git tag`
 - ❌ `git push origin --tags`
 
-`git push origin main` 成功後，**MUST** 用 `AskUserQuestion` 問使用者是否現在發版，二選一：
+### 6-B.0: 先判 `git push origin main` 本身是不是部署（**先於 push**）
+
+`needs-approval` 是個混合袋。`tag-v` / `manual` 這兩種**已確認**的形狀下，push main 什麼都不會觸發；但「宣告缺漏 / 宣告與 workflow 不符 / 推不出單一結論 / 腳本不存在」這幾格，**沒有人知道 main push 會不會部署 production**。同一句 `git push origin main` 在後者就是一次未經授權的部署 —— 而 6-Gate 攔下 tag 的保護在這裡完全沒有覆蓋到。
+
+判定只看 Step 6-Gate 已經印出來的那兩行，不必再跑任何東西：
+
+| Step 6-Gate 輸出 | 本步驟動作 |
+| --- | --- |
+| `status=confirmed` **且** `derived=` 不是 `push-main` | 直接 `git push origin main` |
+| 其餘全部：`status=mismatch` / `undeclared` / `unconfirmable`，或 `derived=push-main`，或 `deploy-trigger-check.ts` 不存在 | **NEVER 先 push**，先照下面取得授權 |
+
+第二個條件（`derived` 不是 `push-main`）不能省：`declared=pr-merge` + `derived=push-main` 會拿到 `status=confirmed` 卻仍被送進 6-B，而那種拓樸下 main push 就是部署。
+
+未確認時 **MUST** 先用 `AskUserQuestion` 二選一，**NEVER** 先推了再問：
+
+- **`[1] 授權 push main`** → 明確告知「本 repo 推不出 main push 會不會觸發部署」後才 `git push origin main`，接著往下走發版提問
+- **`[2] 先不 push`** → 停在 local commit。**MUST** 在 Step 5 的 HANDOFF 登記「已 commit 未 push」：哪幾個 commit、卡在哪一格（`status=` / `detail=` 原文照抄）、下一步要補的是宣告還是 workflow
+
+**NEVER 把「使用者沒有回應」讀成 `[1]`。** 這條沒有安全預設值 —— 未確認形狀的預設值是「可能對 production 跑 migration」。
+
+### 6-B.1: push 與發版提問
+
+```bash
+git push origin main
+```
+
+`git push origin main` 完成後（6-B.0 判定可直接推，或使用者選了 `[1]`），**MUST** 用 `AskUserQuestion` 問使用者是否現在發版，二選一：
 
 - **`[1] 現在發版`** → **MUST 先讀該 repo 的 `HANDOFF.md` 發版段與 `.github/workflows/`**，確認有沒有固定發版路徑（例：先跑 precheck workflow 拿到 `SAFE` 才授權 deploy、staging-gate 要求同 SHA 的 staging 已綠）。**有固定路徑就照它走，NEVER 直接 `git push origin --tags` 蓋過去**；沒有固定路徑才回頭執行 6-A 的 bump / tag / push tags
 - **`[2] 先不發版`** → 本次到此為止。**MUST** 在 Step 5 的 HANDOFF 裡登記「已 land 未發版」：寫明哪幾個 commit、下次發版該升 major/minor/patch、以及不發版的理由（若使用者有給）
