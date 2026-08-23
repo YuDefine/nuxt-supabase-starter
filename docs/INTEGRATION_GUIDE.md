@@ -36,10 +36,14 @@ related:
 ```
 clade（~/offline/clade）         ← 跨專案共用：rules / skills / hooks / scripts
   └→ 你的專案/.claude/            ← 投影目標 + 你的 settings.json / hub.json
-       └→ .codex/ / .agents/ / AGENTS.md    ← sync-to-agents 投影
+       └→ .codex/ / .agents/ / AGENTS.md    ← sync-to-codex 投影
 ```
 
 ### 1.1 安裝 clade 中央倉（首次）
+
+> **clade 是私有 repo。** 沒有 `YuDefine` org 存取權的話，下面這條會回 404 —— 這不是
+> 你環境的問題。**沒有 clade 這套 starter 一樣能用**，只是少掉治理層（共用 rules /
+> skills / hooks / CI gate）。本章其餘部分可以整章跳過，直接進 § 2。
 
 ```bash
 git clone https://github.com/YuDefine/clade.git ~/offline/clade
@@ -48,12 +52,12 @@ git clone https://github.com/YuDefine/clade.git ~/offline/clade
 
 ### 1.2 把現有專案註冊為 clade consumer
 
-進入你現有 Nuxt 專案根目錄，跑 clade 的 `init-consumer.mjs` 一鍵建立：
+進入你現有 Nuxt 專案根目錄，跑 clade 的 `init-consumer.ts` 一鍵建立：
 
 ```bash
 cd /path/to/your-existing-nuxt-app
 
-node ~/offline/clade/scripts/init-consumer.mjs \
+node ~/offline/clade/scripts/init-consumer.ts \
   --auth better-auth \
   --db-schema supabase \
   --db-runtime cf-workers \
@@ -73,20 +77,20 @@ node ~/offline/clade/scripts/init-consumer.mjs \
 | `--local-hooks` | 例如 `post-migration-gen-types.sh`              | 你自家保留的 `.claude/hooks/*.sh`（逗號分隔） |
 | `--force`      | —                                                | 覆寫既有 `.claude/hub.json`         |
 
-`init-consumer.mjs` 會做：
+`init-consumer.ts` 會做：
 
 1. 寫 `.claude/hub.json`（manifest）
 2. Vendor `.claude/hooks/_bootstrap-check.sh`（SessionStart 自動 drift 偵測）
 3. Patch `.claude/settings.json` — 加 SessionStart hook、清掉 stale hook 引用
 4. Patch `package.json` — 加 `postinstall` + `hub:bootstrap` / `hub:check` / `hub:sync` / `hub:doctor` / `hub:prune` / `hub:vendor` 等 scripts
-5. 跑 `bootstrap-hub.mjs` — 從 clade 拉所有 rules / skills / hooks / scripts 進 `.claude/`
+5. 跑 `bootstrap-hub.ts` — 從 clade 拉所有 rules / skills / hooks / scripts 進 `.claude/`
 
 ### 1.3 投影到 Codex / Cursor 等 runtime（可選）
 
-若你也用 Codex / Cursor / 其他 AI runtime，`.codex/`、`.agents/`、`AGENTS.md` 都是從 `.claude/` sync-to-agents 投影出來的：
+若你也用 Codex / Cursor / 其他 AI runtime，`.codex/`、`.agents/`、`AGENTS.md` 都是從 `.claude/` sync-to-codex 投影出來的：
 
 ```bash
-node ~/.claude/scripts/sync-to-agents.mjs
+node ~/.claude/scripts/sync-to-codex.mjs
 ```
 
 **禁止**直接編輯 `.codex/` 或 `AGENTS.md` — 要改先回 `.claude/` 改、再 sync。

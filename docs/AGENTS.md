@@ -40,7 +40,7 @@ scaffold CLI（`create-nuxt-starter`）已盡量機械化，AI 可全自動完�
 | 步驟 | 自動化狀態 | AI 該做 |
 |---|---|---|
 | 找 clade 中央倉 | ✅ 自動偵測 `CLADE_HOME` / `~/clade` / `~/offline/clade` | 不必介入 |
-| 寫 `.claude/hub.json` + postinstall + `hub:*` scripts | ✅ `init-consumer.mjs` 自動 | 不必介入 |
+| 寫 `.claude/hub.json` + postinstall + `hub:*` scripts | ✅ `init-consumer.ts` 自動 | 不必介入 |
 | `pnpm install`（含失敗 retry） | ✅ 自動 | 不必介入 |
 | 從 clade 拉 rules/skills/hooks | ✅ postinstall 自動跑 bootstrap-hub | 不必介入 |
 | 投影 `.codex/.agents/AGENTS.md` | ✅ 自動 | 不必介入 |

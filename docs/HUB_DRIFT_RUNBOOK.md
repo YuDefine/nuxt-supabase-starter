@@ -159,7 +159,7 @@ cat .claude/hub.json | jq '.localHooks'
 cat .claude/hub.json
 # 對照 ~/offline/clade/manifest.schema.json 的 localHooks 規範
 
-# 2. 真的該加入白名單 → 改 ~/offline/clade/scripts/init-consumer.mjs 或 hub.json 的 localHooks
+# 2. 真的該加入白名單 → 改 ~/offline/clade/scripts/init-consumer.ts 或 hub.json 的 localHooks
 # 然後 patch + propagate
 ```
 

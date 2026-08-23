@@ -271,7 +271,7 @@ pnpm dev          # 開啟 http://localhost:3000
 - 注入 `package.json` 的 `postinstall` + `hub:*` scripts
 - 重新從 `.claude/` 投影 `.codex/`、`.agents/`、`AGENTS.md`
 
-`pnpm install` 的 `postinstall` 會自動跑 clade `bootstrap-hub.mjs`，把最新規則拉下來。常用命令：
+`pnpm install` 的 `postinstall` 會自動跑 clade `bootstrap-hub.ts`，把最新規則拉下來。常用命令：
 
 ```bash
 pnpm hub:check    # 檢查 vs clade 中央倉的 drift
