@@ -7,7 +7,12 @@ import { consola } from 'consola'
 import { assembleProject } from './assemble'
 import { featureModules, getModuleById, resolveFeatureDependencies } from './features'
 import { confirmScaffold, displaySummary, getDefaultSelections, promptUser } from './prompts'
-import { postScaffold, type CladeModules } from './post-scaffold'
+import {
+  findCladeRoot,
+  postScaffold,
+  preflightCladeRegistration,
+  type CladeModules,
+} from './post-scaffold'
 import {
   PRESET_IDS,
   applyPreset,
@@ -466,7 +471,9 @@ const main = defineCommand({
     const workflowModel = (args['workflow-model'] as string | undefined) ?? 'trunk-based'
     const businessActivity = (args['business-activity'] as string | undefined) ?? 'pre-production'
     const devPortRaw = args['dev-port'] as string | undefined
-    const devPort = devPortRaw === undefined ? undefined : Number(devPortRaw)
+    // `auto` 由 Clade 依 fleet 慣例配號，本地不解析成數字。
+    const devPortAuto = devPortRaw === 'auto'
+    const devPort = devPortRaw === undefined || devPortAuto ? undefined : Number(devPortRaw)
     if (repoId && !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoId)) {
       consola.error('--repo-id 格式必須是 owner/repo')
       process.exit(1)
@@ -483,7 +490,7 @@ const main = defineCommand({
       devPort !== undefined &&
       (!Number.isInteger(devPort) || devPort < 1024 || devPort > 65535)
     ) {
-      consola.error('--dev-port 必須是 1024 到 65535 的整數')
+      consola.error('--dev-port 必須是 1024 到 65535 的整數，或 auto')
       process.exit(1)
     }
     const hasCustomFlags = Boolean(
@@ -560,6 +567,33 @@ const main = defineCommand({
     // Resolve target directory and use basename as project name for package.json
     const targetDir = resolve(invocationCwd, selections.projectName)
     const pkgName = basename(targetDir)
+
+    // 給了 --repo-id 就是要求登記進 Clade fleet —— 那些約束（fleet base、
+    // consumer_id / repo_id 衝突、dev port 撞號）在寫第一個檔之前就問得出來。
+    // 不先問的話要等 scaffold + pnpm install 全部跑完才在最後一步 warn，
+    // 而專案已經建在錯的位置上了。
+    // --no-register-consumer 明示不登記，這時預檢沒有東西要保護。
+    if (repoId && args['register-consumer'] !== false) {
+      const cladeRoot = findCladeRoot()
+      if (cladeRoot) {
+        const preflight = preflightCladeRegistration(cladeRoot, targetDir, {
+          repoId,
+          workflowModel: workflowModel as 'trunk-based' | 'pr-merge-based',
+          businessActivity: businessActivity as 'pre-production',
+          devPort: devPortAuto ? 'auto' : devPort,
+        })
+        if (preflight.status === 'rejected') {
+          consola.error('Clade fleet 登記預檢未過，未建立任何檔案：')
+          consola.log(`  ${preflight.reason}`)
+          consola.log('  修正後重跑，或拿掉 --repo-id 先建立不登記的專案。')
+          process.exit(1)
+        }
+        if (preflight.status === 'skipped') {
+          consola.warn(`略過 Clade 登記預檢：${preflight.reason}`)
+        }
+      }
+    }
+
     consola.start(`正在建立專案 ${pkgName}...`)
 
     try {
@@ -598,7 +632,7 @@ const main = defineCommand({
           | 'maintenance'
           | 'paused'
           | 'auto',
-        devPort,
+        devPort: devPortAuto ? 'auto' : devPort,
       },
     )
   },

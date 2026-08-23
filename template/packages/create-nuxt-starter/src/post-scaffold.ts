@@ -33,7 +33,8 @@ export interface PostScaffoldOptions {
   repoId?: string
   workflowModel?: 'trunk-based' | 'pr-merge-based'
   businessActivity?: 'pre-production' | 'active' | 'maintenance' | 'paused' | 'auto'
-  devPort?: number
+  /** `auto` 交給 Clade 依 fleet 慣例配號（3000 起、每 10 一階）。 */
+  devPort?: number | 'auto'
 }
 
 export async function postScaffold(
@@ -189,7 +190,7 @@ export function buildRegisterConsumerArgs(
   repoId: string,
   workflowModel: 'trunk-based' | 'pr-merge-based',
   businessActivity: 'pre-production' | 'active' | 'maintenance' | 'paused' | 'auto',
-  devPort: number,
+  devPort: number | 'auto',
 ): string[] {
   return [
     script,
@@ -204,6 +205,59 @@ export function buildRegisterConsumerArgs(
     '--dev-port',
     String(devPort),
   ]
+}
+
+export interface PreflightOutcome {
+  status: 'ok' | 'skipped' | 'rejected'
+  reason?: string
+}
+
+/**
+ * Scaffold **之前**問 Clade：「這個位置 / 身分 / port 登記得進去嗎？」
+ *
+ * 沒有這一步時，fleet base 這類約束要等整個 scaffold + pnpm install 跑完
+ * （實測數分鐘）才在最後一步 warn，而那時專案已經建在錯的位置上了。
+ *
+ * 判準交給 Clade 的 register-consumer.ts --preflight，**NEVER** 在這裡重寫
+ * fleet base 的計算 —— 兩份會漂，而漂掉的那份不會有任何訊號。
+ */
+export function preflightCladeRegistration(
+  cladeRoot: string,
+  targetDir: string,
+  opts: Pick<PostScaffoldOptions, 'repoId' | 'workflowModel' | 'businessActivity' | 'devPort'>,
+): PreflightOutcome {
+  if (!opts.repoId) return { status: 'skipped', reason: '未給 --repo-id' }
+
+  const script = join(cladeRoot, 'scripts', 'register-consumer.ts')
+  if (!existsSync(script)) return { status: 'skipped', reason: `找不到 ${script}` }
+
+  const args = [
+    ...buildRegisterConsumerArgs(
+      script,
+      targetDir,
+      opts.repoId,
+      opts.workflowModel ?? 'trunk-based',
+      opts.businessActivity ?? 'pre-production',
+      opts.devPort ?? 'auto',
+    ),
+    '--preflight',
+    '--json',
+  ]
+
+  try {
+    execFileSync('node', args, { cwd: cladeRoot, stdio: 'pipe' })
+    return { status: 'ok' }
+  } catch (error) {
+    const message = String(
+      (error as { stderr?: Buffer | string }).stderr ?? (error as Error).message,
+    ).trim()
+    // 舊版 Clade 還沒有 --preflight，會回 unknown flag。那是版本落差不是
+    // 這次 scaffold 有問題 —— 略過 preflight，讓 scaffold 照舊往下走。
+    if (/unknown flag: --preflight/.test(message)) {
+      return { status: 'skipped', reason: 'Clade checkout 尚未支援 --preflight' }
+    }
+    return { status: 'rejected', reason: message }
+  }
 }
 
 export async function maybeRegisterConsumer(
@@ -419,7 +473,7 @@ function tryReadFile(path: string): string | undefined {
   }
 }
 
-function findCladeRoot(): string | undefined {
+export function findCladeRoot(): string | undefined {
   const env = process.env.CLADE_HOME?.trim()
   if (env && existsSync(env)) return env
   const home = homedir()

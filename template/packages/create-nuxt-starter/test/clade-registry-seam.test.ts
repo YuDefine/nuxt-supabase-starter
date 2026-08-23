@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'pathe'
 import { afterAll, describe, expect, it } from 'vitest'
-import { buildRegisterConsumerArgs } from '../src/post-scaffold'
+import { buildRegisterConsumerArgs, preflightCladeRegistration } from '../src/post-scaffold'
 
 /**
  * 這個 seam 跨兩個 repo：starter 的 buildRegisterConsumerArgs 產生 argv，
@@ -119,6 +119,28 @@ describe.skipIf(!seamAvailable)('starter CLI → Clade registry seam', () => {
       JSON.parse(execFileSync('node', args, { cwd: cladeRoot, encoding: 'utf8' })).status,
     ).toBe('exists')
     expect(JSON.parse(readFileSync(registryPath, 'utf8')).consumers).toHaveLength(1)
+  })
+})
+
+describe.skipIf(!seamAvailable)('scaffold 前的 preflight', () => {
+  it('放行還不存在、但位置合法的 target', () => {
+    const fleetBase = join(TEST_DIR, 'fleet-preflight-ok')
+    mkdirSync(fleetBase, { recursive: true })
+    // 刻意不建立 target 目錄：preflight 就是要在 scaffold 之前跑。
+    const outcome = preflightCladeRegistration(cladeRoot!, join(fleetBase, 'not-yet-there'), {
+      repoId: 'YuDefine/not-yet-there',
+      devPort: 'auto',
+    })
+
+    // 真實 fleet base 是 Clade 的上一層，所以這個臨時路徑會被擋 ——
+    // 這裡驗的是「preflight 有真的做出判斷」，而不是它恆回 ok。
+    expect(outcome.status).toBe('rejected')
+    expect(outcome.reason).toMatch(/fleet base/)
+  })
+
+  it('沒給 repoId 時不呼叫 Clade', () => {
+    const outcome = preflightCladeRegistration(cladeRoot!, join(TEST_DIR, 'whatever'), {})
+    expect(outcome.status).toBe('skipped')
   })
 })
 
