@@ -115,6 +115,51 @@ try { src = readFileSync(routeFile, 'utf8') } catch (err) {
 
 > **為什麼測試接不住**：現有測試測的是 graceful degradation 的**結果**，不是 degradation 有沒有**留下痕跡**。「回 null 不 throw」在單元測試裡看起來永遠是對的——那正是它通過的原因。要接住得對每個 `catch → 空值` 點注入失敗，斷言 diagnostic 存在。（per [[pitfall-silent-null-renders-failure-as-absence]]）
 
+## CLI script 的 stdout 收尾：會被 pipe 消費就 MUST 等 flush（MUST）
+
+**核心命題**：Node 的 `process.stdout` 導向 **pipe** 時是非同步寫入、導向**檔案**時是同步寫入。
+所以 `process.stdout.write(payload)` 緊接 `process.exit()` **只在 pipe 那條路徑**丟尾段——同一支
+script 重導到檔案完整無缺、接 `| jq` 卻截斷。**只驗過寫檔路徑的人拿到的是真的全綠**。
+
+**每一個** CLI script 的每一個 `process.exit()` 出口，落筆前 MUST 用下表判一次，不是只處理
+「輸出看起來最長的那一個」：
+
+| 可觀察 predicate | 處置 |
+| --- | --- |
+| 這支有 `--json` / `--markdown` 之類**給程式消費**的輸出模式，或任何文件 / 規約 / gate 裡出現過 `<這支> \| <consumer>` 的用法 | **MUST** 走下面的 `writeThenExit`，每個出口都要 |
+| 輸出只走 stderr，或只寫檔，或恆為固定幾行且沒有任何 pipe 消費者 | 照舊 `process.exit(code)` |
+
+判不出來 default 走 `writeThenExit`——它的成本是一個 await，錯過的成本是下游拿到**語法上合法但被
+截斷**的 JSON。
+
+```ts
+async function writeThenExit(payload: string, code: number): Promise<never> {
+  await new Promise<void>((resolve) => process.stdout.write(payload, () => resolve()))
+  process.exit(code)
+}
+```
+
+**NEVER 改成裸的 `process.exitCode = code`**——它確實會讓 Node 跑完 event loop 才退出、也確實會把
+尚未 flush 的 stdout 寫完，但有未關閉 handle 時會從「截斷」變成「掛住」，比原本更難診斷（CI 上表現為
+無訊息的 timeout）。要的是 flush callback，不是拿掉 exit。
+
+**NEVER 用「這支輸出很短 / 沒破 64 KB」當跳過的理由**：風險子集的正確定義是
+**「輸出量體隨資料單調成長 ∧ 有 pipe 消費者」**，不是當下的絕對量體。2026-08-13 實測推翻量體篩選——
+真形狀的三支當下各 50 B / 1.6 KB / 未測，全遠低於 64 KB，而真正出事那支是 128 KB；差別在量體**由什麼
+驅動**，consumer 數或 finding 數一長它就會過線，而過線那天沒有任何東西會轉紅。
+
+**驗這條 MUST 用多次小 write 當 control，NEVER 用單次大 write**：500 KB 單次 `write` 在裸 exit 下
+兩版都不截斷，量出來是**假陰性**。可複驗的雙向 control（2026-08-24 實測）：
+
+```bash
+# 20000 次小 write + 裸 exit → pipe 丟 13.6%（17281/20000），同段 code 重導到檔案 20000/20000
+# 同樣 20000 行改走 writeThenExit → pipe 20000/20000
+```
+
+> **為什麼測試接不住**：單元測試呼叫的是函式、不是 CLI 進程，`process.exit` 那一步根本不在測試路徑上；
+> 而端到端測試多半把輸出重導到檔案或用 `execFileSync` 收 stdout（兩者都是同步路徑）。這條只有在
+> **真的接一個 pipe consumer** 時才會現形。（per [[TD-488]]）
+
 ## 用 vp 命令做 lint / format
 
 ```bash

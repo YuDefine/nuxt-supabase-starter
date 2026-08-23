@@ -296,11 +296,14 @@ agent 回完一個 turn 後照樣繼續工作。
 durable record 的 exact `parent_claude_session_id` 在 `herdr agent list` 全域缺席——
 prompt-cache TTL與record年齡對ownership零訊號。一般 coordinated child仍禁止nested handoff，**只有**helper核准的 recovery token與 attested relay例外。
 
-**每一次** transport **MUST** 帶任務描述性 `--label`：建 Tab／workspace 就命名該 Tab／workspace，
-split pane 就命名該 pane；建立什麼就命名什麼。**NEVER** 只給 repo 名或倚賴預設值——同一 repo 派出去的多個 session 會在 UI
+**每一次** transport **MUST** 帶任務描述性 `--label`：**split／tab／workspace 三種 topology 都命名 pane**，
+建 Tab／workspace 時額外命名該 Tab／workspace。**NEVER** 只給 repo 名或倚賴預設值——同一 repo 派出去的多個 session 會在 UI
 與 patrol 輸出裡完全無法分辨，而 `fanout` 一次就派 N 個，這件事在 fanout 下不是不便而是致命。helper
-缺 label 直接回 `usage_error`，不會建立任何東西。receipt 的 `pane_label_applied: false` 代表 pane 仍是
-預設標題，**MUST** 照實寫進收工訊息。
+缺 label 直接回 `usage_error`，不會建立任何東西。receipt 的 `pane_label_applied` 為 `false` **或欄位不存在**，
+兩者是同一格：都代表 pane 可能仍是預設標題，**MUST** 照實寫進收工訊息並當場補
+`herdr pane rename <pane-id> "[<pane-id>] <label>"`。**NEVER** 把欄位缺席讀成「這條路徑不適用」——
+缺席正是這條契約實測唯一遇過的失敗形狀（58 筆 record：`false` 0 次、缺席 48 次）。斷言 **MUST** 寫成
+「欄位存在且為 `true`」，**NEVER** 寫成 `!== false`。
 
 **命名對了不代表放對地方——落點是另一條獨立契約。** dispatch 出去的 pane **MUST** 落在**目標 cwd
 所屬的 workspace**，不是呼叫者當下所在的 workspace。預設 `mode: "split"` 分割的是**呼叫者的 pane**，
