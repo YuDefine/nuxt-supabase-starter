@@ -277,3 +277,38 @@ describe('scaffold: nuxthub-ai db stack', () => {
     expect(existsSync(join(targetDir, 'server/db'))).toBe(false)
   })
 })
+
+// Nuxt UI 官方安裝文件要求 main.css 同時有 `@import 'tailwindcss'` 與
+// `@import '@nuxt/ui'`。少了後者時 Tailwind 不掃描 Nuxt UI 的 theme，
+// 只存在於元件內部的 utility（.p-1\.5、.size-5 …）不會被生成 ——
+// lint / typecheck / happy-dom 測試都量不到 runtime CSS，這裡是唯一的機械 gate。
+describe('scaffold: Nuxt UI CSS entry', () => {
+  const CSS_PATH = ['app', 'assets', 'css', 'main.css']
+
+  it('ui feature 產生的 main.css 同時含 tailwindcss 與 @nuxt/ui import', () => {
+    const targetDir = join(TEST_DIR, 'ui-css')
+    assembleProject(targetDir, resolveFeatureDependencies(['ui']), 'ui-css')
+
+    const css = readFileSync(join(targetDir, ...CSS_PATH), 'utf-8')
+    expect(css).toMatch(/^@import\s+['"]tailwindcss['"];/m)
+    expect(css).toMatch(/^@import\s+['"]@nuxt\/ui['"];/m)
+  })
+
+  it('未選 ui feature 時 main.css 不 import 未安裝的套件', () => {
+    const targetDir = join(TEST_DIR, 'no-ui-css')
+    assembleProject(targetDir, [], 'no-ui-css')
+
+    const css = readFileSync(join(targetDir, ...CSS_PATH), 'utf-8')
+    expect(css).not.toMatch(/^@import\s+['"]@nuxt\/ui['"];/m)
+    expect(css).not.toMatch(/^@import\s+['"]tailwindcss['"];/m)
+  })
+
+  it('starter 本體 template 的 main.css 與 ui overlay 不漂移', () => {
+    const starterCss = readFileSync(
+      join(import.meta.dirname, '..', '..', '..', ...CSS_PATH),
+      'utf-8',
+    )
+    expect(starterCss).toMatch(/^@import\s+['"]tailwindcss['"];/m)
+    expect(starterCss).toMatch(/^@import\s+['"]@nuxt\/ui['"];/m)
+  })
+})

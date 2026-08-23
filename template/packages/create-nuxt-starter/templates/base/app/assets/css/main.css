@@ -1,12 +1,9 @@
-@import 'tailwindcss';
-
 /*
- * 字體載入：Nuxt UI 自動註冊 @nuxt/fonts，只需在 @theme 中宣告字體名稱即可。
- * 不要使用 @import url() 或手動 <link> 載入 Google Fonts。
- * 參考：https://ui.nuxt.com/docs/getting-started/integrations/fonts
+ * 全域樣式入口（nuxt.config.ts 的 `css` 指向這裡）。
  *
- * 範例：
- * @theme {
- *   --font-sans: 'Noto Sans TC', sans-serif;
- * }
+ * Tailwind 與 Nuxt UI 的 `@import` 不在這裡 —— tailwindcss / @nuxt/ui
+ * 兩個套件都屬於 `ui` feature，只有選了該 feature 才會安裝。對應的
+ * CSS 入口由 templates/features/ui/app/assets/css/main.css 覆蓋本檔
+ * （與 app.vue 同一套 overlay 模式）。在 base 無條件 import 會讓
+ * minimal preset 引用到沒安裝的套件。
  */

@@ -1,0 +1,25 @@
+@import 'tailwindcss';
+@import '@nuxt/ui';
+
+/*
+ * 上面兩行都是必要的，缺一不可（Nuxt UI 官方安裝文件逐字要求）：
+ *   https://ui.nuxt.com/docs/getting-started/installation/nuxt
+ * 少了 `@import '@nuxt/ui'`，Tailwind 不會掃描 Nuxt UI 的 theme
+ * （那些 utility 寫在 node_modules 的元件裡），於是只出現在 Nuxt UI
+ * 內部的 class（.p-1\.5、.size-5 …）完全不會被生成 —— 畫面照樣渲染，
+ * 但 icon-only 按鈕 padding 變 0、UInput 高度掉到 20px。
+ * lint / typecheck / happy-dom 測試都量不到 runtime CSS，不會擋下這個缺口。
+ */
+
+/*
+ * 字體載入：Nuxt UI 自動註冊 @nuxt/fonts，只需在 @theme 中宣告字體名稱即可。
+ * 不要使用 @import url() 或手動 <link> 載入 Google Fonts。
+ * 參考：https://ui.nuxt.com/docs/getting-started/integrations/fonts
+ *
+ * 範例：
+ * @theme {
+ *   --font-sans: 'Noto Sans TC', sans-serif;
+ * }
+ */
+
+/* 自訂樣式 */

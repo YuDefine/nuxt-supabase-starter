@@ -526,6 +526,54 @@ function checkResidualKeywords() {
   }
 }
 
+/**
+ * Nuxt UI 官方安裝文件要求 main.css 同時 import 'tailwindcss' 與 '@nuxt/ui'：
+ *   https://ui.nuxt.com/docs/getting-started/installation/nuxt
+ * 少了第二行時 Tailwind 從未掃描 Nuxt UI 的 theme（那些 utility 寫在
+ * node_modules 的元件內），只出現在 Nuxt UI 內部的 class（.p-1\\.5、.size-5 …）
+ * 完全不會被生成 —— 元件照樣渲染，但 icon-only 按鈕 padding 變 0、
+ * UInput 高度掉到 20px。lint 讀 source、typecheck 看型別、happy-dom 測試
+ * 不算 computed style，沒有任何既有 gate 會量到 runtime CSS，所以放在這裡。
+ */
+function checkNuxtUiCss() {
+  const pkg = readJsonSafe(join(ROOT, 'package.json'))
+  const hasNuxtUi = Boolean(pkg?.dependencies?.['@nuxt/ui'] || pkg?.devDependencies?.['@nuxt/ui'])
+  if (!hasNuxtUi) {
+    record('nuxt-ui-css', "main.css 有 @import '@nuxt/ui'", 'SKIP', '本專案未使用 Nuxt UI')
+    return
+  }
+
+  const cssPath = join(ROOT, 'app', 'assets', 'css', 'main.css')
+  if (!existsSync(cssPath)) {
+    record(
+      'nuxt-ui-css',
+      "main.css 有 @import '@nuxt/ui'",
+      'FAIL',
+      '找不到 app/assets/css/main.css',
+      "建立 app/assets/css/main.css，內容以 @import 'tailwindcss'; 與 @import '@nuxt/ui'; 開頭",
+    )
+    return
+  }
+
+  const css = readFileSync(cssPath, 'utf8')
+  const missing = []
+  if (!/^@import\s+['"]tailwindcss['"];/m.test(css)) missing.push("@import 'tailwindcss';")
+  if (!/^@import\s+['"]@nuxt\/ui['"];/m.test(css)) missing.push("@import '@nuxt/ui';")
+
+  if (missing.length === 0) {
+    record('nuxt-ui-css', "main.css 有 @import '@nuxt/ui'", 'OK')
+    return
+  }
+
+  record(
+    'nuxt-ui-css',
+    "main.css 有 @import '@nuxt/ui'",
+    'FAIL',
+    `缺 ${missing.join(' 與 ')}`,
+    'app/assets/css/main.css 開頭補上這兩行（缺 @nuxt/ui 會讓 Nuxt UI 內部 utility 完全不生成）',
+  )
+}
+
 function checkPnpmCheck() {
   if (!FULL_MODE) {
     record(
@@ -559,6 +607,7 @@ checkDatabaseTypes()
 checkPreCommitWired()
 checkHubDrift()
 checkResidualKeywords()
+checkNuxtUiCss()
 checkPnpmCheck()
 
 const failCount = results.filter((r) => r.status === 'FAIL').length
