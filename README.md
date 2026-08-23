@@ -20,9 +20,19 @@
 
 ## 快速開始
 
+### 最省事：讓 AI 帶你做
+
+👉 **[PROMPT.md](PROMPT.md)**：複製一段提示詞，貼給任何 AI（Claude Code / Codex /
+Cursor / Gemini / ChatGPT），它會帶你把專案建起來並驗收。不需要先讀文件。
+
+### 自己動手
+
 👉 **[QUICK_START.md](docs/QUICK_START.md)**：從 clone 到跑起來的完整步驟
 
-> 整合至現有專案：[INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md)
+> 整合至**已經有 code** 的既有專案：[INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md)
+>
+> 只有 README、還沒有 code 的空 repo **不需要**走整合指南 —— CLI 會直接就地展開，
+> 保留你的 git 歷史與 README。
 
 ---
 
