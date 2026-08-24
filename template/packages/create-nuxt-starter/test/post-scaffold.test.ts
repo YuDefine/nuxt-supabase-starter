@@ -8,6 +8,7 @@ import {
   maybeRegisterConsumer,
   readPendingBuildApprovals,
   resolveCladeInitScript,
+  resolveSyncToCursorScript,
 } from '../src/post-scaffold'
 
 const TEST_DIR = mkdtempSync(join(tmpdir(), 'post-scaffold-test-'))
@@ -140,5 +141,31 @@ describe('base 模板的 pnpm build approval 設定', () => {
     )
 
     expect(pkg.pnpm).toBeUndefined()
+  })
+})
+
+describe('sync-to-cursor 解析', () => {
+  // 與 resolveSyncToCodexScript 同型：按序探測，NEVER 寫死單一檔名。
+  // 那個形狀存在的理由是 sync-to-agents → sync-to-codex 改名後每次 scaffold 都靜默
+  // 不產投影的那次事故。
+  it('.mjs 優先於 .ts', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sync-cursor-'))
+    writeFileSync(join(dir, 'sync-to-cursor.ts'), '')
+    writeFileSync(join(dir, 'sync-to-cursor.mjs'), '')
+
+    expect(resolveSyncToCursorScript(dir)).toBe(join(dir, 'sync-to-cursor.mjs'))
+  })
+
+  it('只有 .ts 時取 .ts', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sync-cursor-ts-'))
+    writeFileSync(join(dir, 'sync-to-cursor.ts'), '')
+
+    expect(resolveSyncToCursorScript(dir)).toBe(join(dir, 'sync-to-cursor.ts'))
+  })
+
+  it('都沒有時回 undefined（呼叫端才好報出「投影沒產」）', () => {
+    expect(
+      resolveSyncToCursorScript(mkdtempSync(join(tmpdir(), 'sync-cursor-none-'))),
+    ).toBeUndefined()
   })
 })

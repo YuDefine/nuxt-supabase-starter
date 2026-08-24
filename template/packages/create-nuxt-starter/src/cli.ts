@@ -731,6 +731,7 @@ const main = defineCommand({
           | 'paused'
           | 'auto',
         devPort: devPortAuto ? 'auto' : devPort,
+        agentTargets: selections.agentTargets,
       },
     )
   },

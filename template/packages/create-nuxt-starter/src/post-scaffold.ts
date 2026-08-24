@@ -43,6 +43,8 @@ export interface PostScaffoldOptions {
   existingGitRepo?: boolean
   /** 部署目標。void 需要一個 scaffold 完成後才做得到的必要步驟，見收尾警告。 */
   deployTarget?: 'cloudflare' | 'void' | 'node'
+  /** 使用者勾選的 AI runtime。決定要不要跑 Cursor 投影。預設只有 claude-code。 */
+  agentTargets?: readonly ('claude-code' | 'codex' | 'cursor')[]
 }
 
 /**
@@ -148,6 +150,11 @@ export async function postScaffold(
   //    this before pnpm install would leave projections stale.
   if (pnpmInstalled) {
     runSyncToAgents(targetDir)
+    // 順序 MUST 是 codex → cursor：sync-to-cursor 的 pre-sync gate 會檢查 AGENTS.md
+    // 在不在，而 AGENTS.md 由 sync-to-codex 產。反過來跑會拿到一條假的 critical lossy。
+    if (opts.agentTargets?.includes('cursor')) {
+      runSyncToCursor(targetDir)
+    }
   } else if (skipInstall) {
     consola.info('略過 sync-to-agents（依賴未安裝）。裝完依賴後手動：')
     consola.log(`  cd ${relativeTargetDir} && node ~/.claude/scripts/sync-to-codex.mjs`)
@@ -622,6 +629,43 @@ export function resolveSyncToCodexScript(scriptsDir: string): string | undefined
     if (existsSync(candidate)) return candidate
   }
   return undefined
+}
+
+/**
+ * 同 SYNC_TO_CODEX_CANDIDATES 的理由：按序探測，NEVER 寫死單一檔名。
+ * 這支比 codex 那支年輕（2026-08-24 才進 clade），所以還沒有舊名要相容 ——
+ * 但形狀先立好，改名時才不會重演「靜默不產投影」。
+ */
+const SYNC_TO_CURSOR_CANDIDATES = ['sync-to-cursor.mjs', 'sync-to-cursor.ts']
+
+export function resolveSyncToCursorScript(scriptsDir: string): string | undefined {
+  for (const name of SYNC_TO_CURSOR_CANDIDATES) {
+    const candidate = join(scriptsDir, name)
+    if (existsSync(candidate)) return candidate
+  }
+  return undefined
+}
+
+function runSyncToCursor(targetDir: string): void {
+  const scriptsDir = join(homedir(), '.claude', 'scripts')
+  const script = resolveSyncToCursorScript(scriptsDir)
+  if (!script) {
+    consola.warn(
+      `在 ~/.claude/scripts/ 找不到 ${SYNC_TO_CURSOR_CANDIDATES.join(' / ')}，略過 .cursor/ 重投影`,
+    )
+    consola.log('  專案裡的 .cursor/ 會停在 starter 附帶的版本，不會反映本專案選的 modules。')
+    consola.log('  clade 需要 v1.11.62+；升級後手動：')
+    consola.log(`  cd ${targetDir} && node ~/.claude/scripts/sync-to-cursor.ts`)
+    return
+  }
+  consola.start('重投影 .cursor/（Claude Code First → Cursor projection）')
+  try {
+    execFileSync('node', [script], { cwd: targetDir, stdio: 'pipe' })
+    consola.success('Cursor projection 重生完成')
+  } catch (error) {
+    consola.warn(`${basename(script)} 執行失敗：${(error as Error).message}`)
+    consola.log(`  之後可手動：node ${script}`)
+  }
 }
 
 function runSyncToAgents(targetDir: string): void {
