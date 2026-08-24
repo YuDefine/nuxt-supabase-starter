@@ -28,6 +28,7 @@ import {
 } from './presets'
 import {
   DB_STACKS,
+  DB_STACKS_WITHOUT_SUPABASE,
   DEFAULT_DB_STACK,
   EVLOG_PRESETS,
   type AgentRuntime,
@@ -139,8 +140,10 @@ export function inferCladeModules(features: string[], dbStack: DbStack): CladeMo
   // wrangler and void tracks use).
   const dbRuntime: CladeModules['dbRuntime'] =
     runtime === 'nitro-self-hosted' ? 'supabase-self-hosted' : 'cf-workers'
+  // void 託管的 D1 底層就是 Cloudflare D1，clade manifest 的 dbSchema 同樣是 cf-d1；
+  // 差別在誰 provision（void 平台 vs NuxtHub），不在 schema 種類。
   const dbSchema: CladeModules['dbSchema'] =
-    dbStack === 'nuxthub-d1'
+    dbStack === 'nuxthub-d1' || dbStack === 'void-d1'
       ? 'cf-d1'
       : dbRuntime === 'supabase-self-hosted'
         ? 'supabase-self-hosted'
@@ -209,13 +212,25 @@ export function validateDeployDbStackCompatibility(
   features: readonly string[],
   dbStack: DbStack,
 ): void {
-  if (!features.includes('deploy-void') || dbStack !== 'nuxthub-d1') return
+  const deploysToVoid = features.includes('deploy-void')
 
-  failValidation(
-    'void.cloud 部署不支援 --db nuxthub-d1：void track 不得帶 @nuxthub/core。\n' +
-      'void 要接 D1 的話用它自家的 `void/db` + `void/schema-d1`（`void init` 之後即可用），' +
-      '不經 NuxtHub。\n請改用 --db supabase，或改用 --preset cloudflare-nuxthub-ai。',
-  )
+  if (deploysToVoid && dbStack === 'nuxthub-d1') {
+    failValidation(
+      'void.cloud 部署不支援 --db nuxthub-d1：void track 不得帶 @nuxthub/core。\n' +
+        'void 自己託管 D1，schema 走 `void/db` + `void/schema-d1`（`void init` 會建好），' +
+        '不經 NuxtHub。\n請改用 --db void-d1，或改用 --preset cloudflare-nuxthub-ai。',
+    )
+  }
+
+  // 反向也要擋：void 託管的 D1 是 void 平台在 provision 的，換一個部署目標就沒有那個
+  // binding，專案會 build 得起來但 runtime 找不到資料庫。
+  if (!deploysToVoid && dbStack === 'void-d1') {
+    failValidation(
+      '--db void-d1 只能搭配 void.cloud 部署：那個 D1 是 void 平台 provision 的，' +
+        '換別的部署目標就沒有對應 binding。\n' +
+        '請加 --preset void-cloud（或 --with deploy-void），或改用 --db supabase / nuxthub-d1。',
+    )
+  }
 }
 
 function resolveDbStack(evlogPreset: EvlogPreset, dbArg: DbStack | undefined): DbStack {
@@ -371,10 +386,9 @@ export function buildSelectionsFromArgs(args: {
   }
 
   const resolvedFeatures = resolveFeatureDependencies([...selected])
-  const features =
-    dbStack === 'nuxthub-d1'
-      ? resolvedFeatures.filter((featureId) => featureId !== 'database')
-      : resolvedFeatures
+  const features = DB_STACKS_WITHOUT_SUPABASE.has(dbStack)
+    ? resolvedFeatures.filter((featureId) => featureId !== 'database')
+    : resolvedFeatures
   validateAuthDbStackCompatibility(inferAuthFromFeatures(features), dbStack)
   validateDeployDbStackCompatibility([...features], dbStack)
 

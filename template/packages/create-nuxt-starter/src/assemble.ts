@@ -13,7 +13,13 @@ import { applyEvlogPreset } from './evlog-preset'
 import { getModuleById } from './features'
 import { applyOverlay } from './overlays'
 import { applyStripManifest, loadStripManifest } from './strip-manifest'
-import { DEFAULT_DB_STACK, type AgentRuntime, type DbStack, type EvlogPreset } from './types'
+import {
+  DB_STACKS_WITHOUT_SUPABASE,
+  DEFAULT_DB_STACK,
+  type AgentRuntime,
+  type DbStack,
+  type EvlogPreset,
+} from './types'
 
 const TEMPLATES_DIR = resolve(import.meta.dirname, '..', 'templates')
 const STARTER_ROOT = resolve(import.meta.dirname, '..', '..', '..')
@@ -624,7 +630,7 @@ export function generateEnvExample(
     selectedFeatureIds.includes('auth-better-auth')
 
   // Supabase CLI 標準 local dev 預設值（公開 demo JWT，非 secret）
-  if (selectedFeatureIds.includes('database') && dbStack !== 'nuxthub-d1') {
+  if (selectedFeatureIds.includes('database') && !DB_STACKS_WITHOUT_SUPABASE.has(dbStack)) {
     generatedValues.SUPABASE_URL = 'http://127.0.0.1:54321'
     generatedValues.SUPABASE_KEY =
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0'

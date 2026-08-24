@@ -49,10 +49,10 @@ export const PRESETS: readonly PresetDefinition[] = [
   },
   {
     id: 'void-cloud',
-    label: 'void.cloud + Supabase',
-    description: 'void.cloud 一鍵部署（自動 provision D1/R2）、Supabase 託管資料庫、baseline evlog',
+    label: 'void.cloud（D1 + R2 全託管）',
+    description: 'void.cloud 一鍵部署，D1 與 R2 由 void 託管；schema 走 void/db，不必自備資料庫',
     deploy: 'void',
-    dbStack: 'supabase',
+    dbStack: 'void-d1',
     evlogPreset: 'baseline',
     authDefault: 'auth-nuxt-utils',
     ci: 'ci-simple',

@@ -238,7 +238,9 @@ describe('--preset stack values', () => {
     expect(selections.features).toContain('deploy-void')
     expect(selections.features).not.toContain('deploy-cloudflare')
     expect(selections.features).not.toContain('deploy-node')
-    expect(selections.dbStack).toBe('supabase')
+    expect(selections.dbStack).toBe('void-d1')
+    // void 全託管 D1，NEVER 同時拉 Supabase 進來
+    expect(selections.features).not.toContain('database')
   })
 
   it('--preset vercel-supabase 已移除，fail 時要指出等價寫法', () => {
@@ -263,6 +265,12 @@ describe('--preset stack values', () => {
     expect(() =>
       buildSelectionsFromArgs({ projectName: 'x', preset: 'void-cloud', db: 'nuxthub-d1' }),
     ).toThrow(/void\/db/)
+  })
+
+  it('void-d1 沒搭 void 部署也必須 fail —— 那個 D1 是 void 平台 provision 的', () => {
+    expect(() =>
+      buildSelectionsFromArgs({ projectName: 'x', preset: 'cloudflare-supabase', db: 'void-d1' }),
+    ).toThrow(/只能搭配 void\.cloud 部署/)
   })
 
   it('--preset self-hosted-node 帶 Node deploy + ci-advanced', () => {

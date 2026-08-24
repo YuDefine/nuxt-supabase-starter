@@ -65,7 +65,8 @@ describe('preset smoke: 5 個 stack preset 各跑 assembleProject', () => {
     const { targetDir } = scaffold('void-cloud', 'void-sb')
     const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf-8'))
 
-    expect(pkg.dependencies['@nuxtjs/supabase']).toBeDefined()
+    // void 自己託管 D1（schema 走 void/db），不該把 Supabase 一起拉進來
+    expect(pkg.dependencies['@nuxtjs/supabase']).toBeUndefined()
     // cloudflare-workers.md § 1 矩陣第三列：void track MUST NOT 帶 @nuxthub/core
     expect(pkg.dependencies['@nuxthub/core']).toBeUndefined()
     expect(pkg.dependencies['void'] ?? pkg.devDependencies?.['void']).toBeDefined()

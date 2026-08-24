@@ -1,5 +1,6 @@
 import { consola } from 'consola'
 import {
+  DB_STACKS_WITHOUT_SUPABASE,
   DEFAULT_DB_STACK,
   type AgentRuntime,
   type DbStack,
@@ -226,10 +227,10 @@ async function promptUserPreset(
   }
 
   const resolvedWithDependencies = resolveFeatureDependencies([...selected])
-  const resolved =
-    preset.dbStack === 'nuxthub-d1'
-      ? resolvedWithDependencies.filter((id) => id !== 'database')
-      : resolvedWithDependencies
+  // nuxthub-d1 與 void-d1 都不走 Supabase：前者用 NuxtHub helper，後者用 void/db。
+  const resolved = DB_STACKS_WITHOUT_SUPABASE.has(preset.dbStack)
+    ? resolvedWithDependencies.filter((id) => id !== 'database')
+    : resolvedWithDependencies
 
   // 自動補的 dependencies 提示
   const autoAdded = resolved.filter((f) => !selected.has(f))
@@ -476,6 +477,7 @@ async function promptUserCustom(defaultProjectName?: string): Promise<UserSelect
       options: [
         { label: 'Supabase（預設）', value: 'supabase' },
         { label: 'NuxtHub D1', value: 'nuxthub-d1' },
+        { label: 'void 託管 D1（需搭配 void.cloud 部署）', value: 'void-d1' },
       ],
       initial: DEFAULT_DB_STACK,
     })) as DbStack
@@ -507,10 +509,9 @@ async function promptUserCustom(defaultProjectName?: string): Promise<UserSelect
 
   // Resolve dependencies
   const resolvedWithDependencies = resolveFeatureDependencies(features)
-  const resolved =
-    dbStack === 'nuxthub-d1'
-      ? resolvedWithDependencies.filter((featureId) => featureId !== 'database')
-      : resolvedWithDependencies
+  const resolved = DB_STACKS_WITHOUT_SUPABASE.has(dbStack)
+    ? resolvedWithDependencies.filter((featureId) => featureId !== 'database')
+    : resolvedWithDependencies
 
   // Check if dependencies were auto-added
   const autoAdded = resolved.filter((f) => !features.includes(f))
