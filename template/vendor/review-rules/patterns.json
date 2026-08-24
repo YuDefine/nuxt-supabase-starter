@@ -195,6 +195,28 @@
       "excludePattern": "lazy-atomic-ok",
       "message": "首屏輕量原子元件加 Lazy 前綴是淨負面：拆出獨立 async chunk 卻換不到 hydration 節省（Nuxt 官方明載 Avoid delayed hydration for critical, above-the-fold content）。LazyUSkeleton 尤其本末倒置——loading 指示器自己得先等 chunk 下載完才顯示。",
       "fix": "移除 Lazy 前綴，改用一般元件。只有真正該延後載入的重元件（chart / editor / map / 大型 modal）才用 Lazy。ssr: true 的專案另 MUST 搭 hydration strategy（hydrate-on-visible / hydrate-on-idle / hydrate-on-interaction）；ssr: false 的 SPA 沒有 hydration 階段，NEVER 補這些屬性（無效程式碼），<Lazy*> 的 code-split 效果本身仍有效。確有正當理由的個案在該行加 lazy-atomic-ok 標記豁免。"
+    },
+    {
+      "id": "colada-query-missing-signal",
+      "section": 10,
+      "severity": "warning",
+      "layer": "ratchet",
+      "fileGlob": "*.vue",
+      "pattern": "query:\\s*(?:async\\s*)?\\(\\s*\\)\\s*=>",
+      "excludePattern": "colada-signal-ok",
+      "message": "Pinia Colada 的取消是無條件的——每次 fetch() 砍前一個 pending、最後一個 dep 移除進 gc 排程時也砍。但 query function 沒接住 signal 就沒有東西可砍，切 tab / 離開頁面時瀏覽器仍會把整個 response body 下載完，取消等於空包彈。",
+      "fix": "把 query 改成 query: ({ signal }) => $fetch(url, { signal })（nuxt-data-perf HR-6）。共用 client 的 onRequest interceptor NEVER 覆寫已存在的 options.signal，需要自己的 controller 時用 AbortSignal.any([options.signal, mine]) 合併。範本：vendor/snippets/nuxt-data-perf/colada-query-signal.ts。確有理由不接 signal 的個案在該行加 colada-signal-ok 標記豁免。"
+    },
+    {
+      "id": "colada-query-missing-signal-ts",
+      "section": 10,
+      "severity": "warning",
+      "layer": "ratchet",
+      "fileGlob": "**/queries/**",
+      "pattern": "query:\\s*(?:async\\s*)?\\(\\s*\\)\\s*=>",
+      "excludePattern": "colada-signal-ok",
+      "message": "Pinia Colada 的取消是無條件的——每次 fetch() 砍前一個 pending、最後一個 dep 移除進 gc 排程時也砍。但 query function 沒接住 signal 就沒有東西可砍，切 tab / 離開頁面時瀏覽器仍會把整個 response body 下載完，取消等於空包彈。",
+      "fix": "把 query 改成 query: ({ signal }) => $fetch(url, { signal })（nuxt-data-perf HR-6）。共用 client 的 onRequest interceptor NEVER 覆寫已存在的 options.signal，需要自己的 controller 時用 AbortSignal.any([options.signal, mine]) 合併。範本：vendor/snippets/nuxt-data-perf/colada-query-signal.ts。確有理由不接 signal 的個案在該行加 colada-signal-ok 標記豁免。"
     }
   ],
   "semantic": [

@@ -194,9 +194,9 @@ grep -En "'import/no-cycle':\s*'warn'" vite.config.ts
 
 ## Nuxt 效能規約
 
-> enforcement: mechanical(fontsource-bare-import, lazy-atomic-component, nuxtimg-missing-sizes, heavy-lib-client-static-import) + semantic(lazy-hydration-strategy, nitro-cache-auth-safety)
+> enforcement: mechanical(fontsource-bare-import, lazy-atomic-component, nuxtimg-missing-sizes, heavy-lib-client-static-import, colada-query-missing-signal) + semantic(lazy-hydration-strategy, nitro-cache-auth-safety)
 
-規約本體見 [[nuxt-data-perf]]（HR-\* 高頻 / SR-\* 渲染兩組，條號以該檔為準）。本節只列**機械層抓不到、需 reviewer 讀 context 判斷**的三類，機械可檢部分已由 `patterns.json` 承擔。
+規約本體見 [[nuxt-data-perf]]（HR-\* 高頻 / SR-\* 渲染兩組，條號以該檔為準）。本節只列**機械層抓不到、需 reviewer 讀 context 判斷**的四類，機械可檢部分已由 `patterns.json` 承擔。
 
 ### 1. Lazy 元件：先問該不該 lazy，再問有沒有 strategy
 
@@ -247,3 +247,16 @@ Nuxt 官方立場：**Avoid delayed hydration for critical, above-the-fold conte
 ### 4. 字型宣告單一來源
 
 `@fontsource/*` bare import 只給 weight 400（Fontsource 官方預設）；用到 `font-medium` / `font-semibold` / `font-bold` 卻沒載對應 weight，瀏覽器會合成粗體，CJK faux bold 筆畫糊化。機械層 `fontsource-bare-import` 已擋 CSS `@import`；reviewer 補判斷**跨檔的雙重宣告**——`nuxt.config` 的 `fonts.families` 與 CSS `@import` 同時宣告同一字型，機械層看單行看不出來。
+
+### 5. 取消訊號：機械層只看得到零參數那一種
+
+機械層 `colada-query-missing-signal` 只抓 `query: () =>` / `query: async () =>` 這種**零參數**寫法。Reviewer 補判斷 diff 內另外三種它看不到的（規約 [[nuxt-data-perf]] HR-6 / HR-7 / SR-9）：
+
+| 檢查 | 違規長相 | 正解 |
+| --- | --- | --- |
+| query 有參數但沒用 signal | `query: ({ entry }) => $fetch(url)` | `query: ({ signal }) => $fetch(url, { signal })` |
+| 共用 client 覆寫既有 signal | `onRequest({ options }) { options.signal = mine }` | `AbortSignal.any([options.signal, mine])`，或既有就跳過注入 |
+| 拿取消當寫入防重 | 提交前 `cancelQueries` / `abortKey` 再 `mutate()` | 按鈕 disabled ＋ idempotency key（HR-7） |
+| 取消被上報成 error 或被靜默吞掉 | `captureException(err)` 不分流；或 `if (isAbort) return` 什麼都不留 | `err.name === 'AbortError'` 分流 ＋ 留計數 / debug log（SR-9） |
+
+判斷依據：Colada 的 abort 是無條件的（每次 `fetch()` ＋ 最後一個 dep 移除時各一處），signal 沒貫通到 `$fetch` 就整條打空。**NEVER** 因為「已經用 Colada」或「已經是預設 `dedupe: 'cancel'`」就判定頻寬已省。
