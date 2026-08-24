@@ -612,3 +612,41 @@ B 較貼近既有機制（strip manifest 本來就是為這種「留在 template
 if pnpm --dir template vp test run packages/create-nuxt-starter/test/strip-manifest.test.ts --coverage.enabled=false && bash scripts/audit-template-hygiene.test.sh; then echo PASS; else echo FAIL; exit 1; fi
 ```
 - **已排除方案**：NEVER 同時採用移到 root 與 strip manifest 兩條路；雙軌會再製造兩份維護入口與漂移面。
+
+## TD-009 — 參考 app 仍釘在停更的 `@onmax/nuxt-better-auth`
+
+**Priority**: mid — 不影響 scaffold 產出，但 starter 自己與它 scaffold 出去的東西已分岔
+**Status**: open
+**Discovered**: 2026-08-24 —— co-purchase 流程實驗
+
+`create-nuxt-starter` 的 auth feature 已改用 `@nuxtjs/better-auth@^0.1.4`（模組搬進官方
+`nuxt-modules` org，`better-auth` 是硬 peer `>=1.7.1 <2`），模板頁面也已遷移到 0.1.x API
+（commit `21873104`）。但 **starter 自己的參考 app 沒動**：
+
+- `template/nuxt.config.ts:19` 仍載 `@onmax/nuxt-better-auth`
+- `template/package.json` 仍釘 `@onmax/nuxt-better-auth@0.0.2-alpha.15` + `better-auth@^1.5.6`
+- `template/app/auth.config.ts`、`template/app/pages/auth/*.vue` 仍用 0.0.x API
+
+這不是漏改，是**另一份遷移**：參考 app 的 auth 頁面比模板豐富（含 OAuth social 流程、
+`useAuthError` 的 `message/hasError/setError/clearError` 介面），0.1.x 的 breaking change
+在它身上要多處理：
+
+- `useUserSession()` 不再回傳 `signIn` / `signUp` / `client` → `useSignIn(method)` /
+  `useSignUp(method)` 的 action handle 與 `useAuthClient()`
+- handle 的 `execute()` **不 throw**，成敗看 `status` / `error` —— 現有的 try/catch 與
+  `onSuccess` / `onError` callback 寫法要整段改
+- social 登入走 `useSignIn('social')`，provider 是 typed
+- `signOut` 的 options 從 `{ redirect }` 變 `{ onSuccess }`
+
+舊套件仍可安裝（停在 0.1.2），所以參考 app 現在不會壞 —— 代價是 starter 自己示範的是一組
+已經不存在於它 scaffold 出去的專案裡的 API。
+
+**要改的檔**：`template/nuxt.config.ts`、`template/package.json`、`template/app/auth.config.ts`、
+`template/app/pages/auth/{login,register,forgot-password,callback}.vue`、
+`template/app/composables/useAuthError.ts`、`template/app/stores/user.ts`（讀 `loggedIn` / `ready`，
+應無需改，要驗）
+
+**驗收**：`pnpm --dir template install` 後 `pnpm --dir template typecheck` 零錯誤，
+且 `pnpm --dir template dev` 起得來、登入頁能渲染
+**參考**：0.1.4 的 API surface 已逐項驗過並寫進 `template/.claude/skills/nuxt-better-auth/`
+（`references/client-auth.md` 是對照 d.ts 重寫的）
