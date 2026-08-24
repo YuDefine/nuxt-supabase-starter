@@ -431,3 +431,17 @@ describe('wizard preset picker', () => {
     expect(selections.features).not.toContain('database') // d1 模式 strip 掉
   })
 })
+
+describe('CLI help 與實際接受的值', () => {
+  // help 漏列一個合法值，等於那個值只有讀過原始碼的人知道。--db void-d1 從
+  // 02050558 起就被 validateDeployDbStackCompatibility 認得，help 卻沒跟上。
+  it('--db 的說明列出所有合法 dbStack', () => {
+    const src = readFileSync(join(import.meta.dirname, '..', 'src', 'cli.ts'), 'utf-8')
+    const dbHelp = /description: 'Database stack: ([^']+)'/.exec(src)?.[1]
+    expect(dbHelp).toBeDefined()
+
+    for (const stack of ['supabase', 'nuxthub-d1', 'void-d1']) {
+      expect(dbHelp, `--db 的說明沒列 ${stack}`).toContain(stack)
+    }
+  })
+})

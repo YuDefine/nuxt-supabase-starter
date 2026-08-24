@@ -529,7 +529,7 @@ const main = defineCommand({
     },
     db: {
       type: 'string',
-      description: 'Database stack: supabase | nuxthub-d1 (default: supabase)',
+      description: 'Database stack: supabase | nuxthub-d1 | void-d1 (default: supabase)',
       required: false,
     },
   },
