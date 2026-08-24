@@ -65,6 +65,29 @@ Fail-loud 的訊息 **MUST 點名 backing service 本身與修復指令**（例�
 
 Cookbook（naming / ownership / template refresh / path adapter / pool / cleanup 的 contract 與範例）：`vendor/snippets/worktree-db-isolation/`。
 
+#### Schema cache 側：套用 migration 後 MUST 通知 PostgREST 重載
+
+PostgREST 的 schema cache 只在收到 `NOTIFY <PGRST_DB_CHANNEL>` 時重建。因此**每一個**會套用
+DDL 的入口——CI 的 migrate job、本機 `db:reset`、手動補 migration、integration test 的 setup——
+在套用完成後 **MUST** 發一次 NOTIFY：
+
+```bash
+psql "$DATABASE_URL" -c "NOTIFY <PGRST_DB_CHANNEL>, 'reload schema'"
+```
+
+channel 名字 **MUST 從該 sidecar 的 `PGRST_DB_CHANNEL` 讀，NEVER 猜**——per-schema sidecar
+拓樸下每個 schema 有自己的 channel，發錯 channel 不報錯、也不生效。
+
+**不發的後果是靜默且指不到真因**：新建的表在 PostgREST 眼裡不存在（回 `PGRST205` / 404），
+而 app 的 DB error wrapper 通常把它包成 503「資料庫操作失敗」——表明明在 DB 裡、container 正常、
+`information_schema` 查得到，唯一會分岔的觀測是「經 PostgREST 打那張表」。逐字反開脫：
+「migration exit 0 了，DB 端沒問題」——exit 0 只證明 DDL 執行了，對 schema cache 零訊號。
+
+修復成本是一行 psql，發現成本是一輪完整的 prod triage。**這個不對稱就是把它自動化的全部理由**，
+**NEVER** 把「記得手動發 NOTIFY」當成防線。
+
+實證與 detection 指令見 [[pitfall-migration-creates-table-postgrest-schema-cache-not-reloaded]]。
+
 **in-memory Postgres（PGlite）已評估、不採用**：三條硬阻礙——測試全走 PostgREST 而 PGlite 一次只接一個 client、RLS 是測試標的（改直連 SQL 就繞過去）、`pg_cron` / `pg_net` / `supabase_vault` / `auth.users` 對不上。證據與重啟條件見 `docs/discussions/2026-08-03-pglite-in-memory-db-rejected.md`，**NEVER** 因為「聽起來很快」就重跑一次調查。
 
 ## MUST

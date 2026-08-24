@@ -2043,7 +2043,7 @@ function detectMergeBlockers(consumerRoot, branchName) {
   let branchFiles = []
   try {
     const base = resolveLandingBase(consumerRoot)
-    const out = git(['diff', '--name-only', `${base}..${branchName}`], { cwd: consumerRoot })
+    const out = git(['diff', '--name-only', `${base}...${branchName}`], { cwd: consumerRoot })
     branchFiles = out.split('\n').filter(Boolean)
   } catch {
     return []
@@ -2164,7 +2164,7 @@ function detectUnlandedFiles(consumerRoot, branchName) {
     const landingBase = resolveLandingBase(consumerRoot)
     const base = git(['merge-base', landingBase, branchName], { cwd: consumerRoot }).trim()
     if (!base) return []
-    const out = git(['diff', '--name-only', `${base}..${branchName}`], { cwd: consumerRoot })
+    const out = git(['diff', '--name-only', `${base}...${branchName}`], { cwd: consumerRoot })
     branchFiles = out.split('\n').filter(Boolean)
   } catch {
     return []

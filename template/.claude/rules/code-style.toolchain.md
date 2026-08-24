@@ -169,6 +169,31 @@ catalog:
 
 `scripts/audit-tooling-drift.ts` 提供 `viteplusLocal` signal（diagnostic-only，exit code 永遠 0），對每個 consumer 讀 `package.json` 看 `vite-plus` 是否 pinned-local。
 
+#### `setup-vp` 的 `version` input 換的是 global CLI，不是 `vp run` 用的工具鏈（hard rule）
+
+上面整節講「不要只依賴全域 vp」。本小節是它的反向那一半：**釘了全域也沒用**。
+
+`vp` 有兩層版本，各自獨立：
+
+| 層 | 誰決定 | 帶哪個 oxfmt / oxlint |
+| --- | --- | --- |
+| global `vp` CLI | `setup-vp` 的 `version` input，或本機全域安裝 | 該 CLI 自己 bundle 的 |
+| `vp run <script>` 實際執行的工具鏈 | **`package.json` 的 `vite-plus` devDependency** | local `vite-plus` bundle 的 |
+
+- **NEVER 用 `setup-vp` 的 `version` input 解決工具鏈版本不一致**——它只換第一層，
+  `vp run format:check` 走的永遠是第二層。釘 global 之後症狀一模一樣，而排查方向會被帶偏。
+- **要換工具鏈就升 devDependency**：`pnpm add -D vite-plus@<帶所需 oxfmt 的版本>`，
+  並**移除** workflow 的 `version` pin——`setup-vp` 的預設行為就是從 lockfile 解析，那是對的。
+- **`vp --version` 的輸出 MUST 讀完兩層**。只看第一行 `vp vX.Y.Z` 會得出「版本已對齊」的
+  錯誤結論；`Local vite-plus:` 與 `Tools:` 那兩段才是 `vp run` 的實際版本。
+
+升 vite-plus 連帶會撞的兩件事（**MUST 一起處理**，否則 CI 仍紅）：oxlint 同時升版可能對既有
+code 產生新 finding；pnpm 的 `minimumReleaseAge` 會擋當天發布的版本，需要在
+`pnpm-workspace.yaml` 補 `minimumReleaseAgeExclude`——`pnpm add` 會在 local 自動加，
+但那是它改了 working tree，`git commit --only` 沒帶上該檔就不會進 commit。
+
+實證見 [[pitfall-setup-vp-version-pins-cli-not-local-toolchain]]。
+
 #### 真實事故參考
 
 
