@@ -1,0 +1,164 @@
+# Deploy Production — void.cloud
+#
+# 觸發是 push tag `v*`，不是 push branch。搭配 `deploy-staging.yml`（main → staging）
+# 組成兩段式：合進 main 先上 staging，打 tag 才上 production。
+#
+# ⚠️ 首次使用要驗證的假設：void 的 OIDC 交換是以「repo + 授權的 workflow 檔路徑」為信任錨
+#    （官方 docs/reference/cli.md：「only this one workflow can mint a deploy token」），
+#    文件未提到 ref 綁定，因此 tag 觸發應該同樣能換到 token。但 `void github connect`
+#    的 `--branch` 是必填欄位，本專案尚未在真實 tag push 上驗證過這條路。
+#    第一次打 tag 時請確認 deploy job 真的成功換到 token；若被拒，退路是改用
+#    `workflow_dispatch` 手動觸發（下方已保留），並回報給 void。
+#
+# 這裡的 production 與 staging 是**兩個各自獨立的長期 void project**。
+# void.cloud 沒有 per-change preview / branch / alias，唯一的多目標機制是 `--project`。
+#
+# 沒有 migrate job：`void deploy` 內部自己做 build 與 D1 / R2 provisioning，
+# 中間沒有位置插 migration SQL。
+#
+# 前置（只需一次）：
+#
+#   void github connect <production-project-slug> \
+#     --repo <owner>/<repo> --branch main \
+#     --executor github_actions \
+#     --workflow .github/workflows/deploy-production.yml
+#
+# `--workflow` 必須逐字指向**本檔**，且與 staging 那份指向不同檔 —— 一個 project
+# 只授權一個 workflow 檔，兩個 project 各自授權自己的那份。
+#
+# 需要的 repository variable：
+#   VOID_PROJECT           production project 的 slug
+# 選用：
+#   NUXT_PUBLIC_SITE_URL   smoke test 目標（未設則跳過該 job）
+#   DISCORD_WEBHOOK_URL    部署結果通知
+
+name: Deploy Production
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+# production 不取消進行中的部署：一個已經開始寫入的 production deploy 被腰斬，
+# 比多跑一次更危險。
+concurrency:
+  group: void-production-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Run tests
+        run: pnpm test
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VOID_PROJECT: ${{ vars.VOID_PROJECT }}
+    steps:
+      - name: Fail fast if VOID_PROJECT is unset
+        run: |
+          if [ -z "$VOID_PROJECT" ]; then
+            echo "::error::缺少 repository variable VOID_PROJECT。"
+            echo "::error::設定位置：Settings → Secrets and variables → Actions → Variables"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Deploy to void.cloud
+        run: pnpm exec void deploy --project "$VOID_PROJECT"
+
+  smoke-test:
+    needs: deploy
+    if: vars.NUXT_PUBLIC_SITE_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Wait for propagation
+        run: sleep 30
+
+      - name: Health check
+        run: |
+          STATUS=$(curl -sf -o /dev/null -w '%{http_code}' "${{ vars.NUXT_PUBLIC_SITE_URL }}" --max-time 10)
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Health check failed: HTTP $STATUS"
+            exit 1
+          fi
+          echo "✅ Production is healthy (HTTP $STATUS)"
+
+  notify:
+    if: always()
+    needs: [ci, deploy, smoke-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Notify Discord
+        if: env.WEBHOOK_URL != ''
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          CI_RESULT: ${{ needs.ci.result }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          SMOKE_RESULT: ${{ needs.smoke-test.result }}
+        run: |
+          # smoke-test 被 if 條件跳過時是 'skipped'，那不算失敗。
+          if [ "$CI_RESULT" = "success" ] && [ "$DEPLOY_RESULT" = "success" ] && \
+             { [ "$SMOKE_RESULT" = "success" ] || [ "$SMOKE_RESULT" = "skipped" ]; }; then
+            COLOR=3066993; STATUS="✅ void production 部署成功（${GITHUB_REF_NAME}）"
+          else
+            COLOR=15158332; STATUS="❌ void production 部署失敗（${GITHUB_REF_NAME}）"
+          fi
+
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          PAYLOAD=$(jq -n \
+            --arg title "${STATUS}" \
+            --arg url "$RUN_URL" \
+            --argjson color "$COLOR" \
+            --arg footer "$GITHUB_REPOSITORY" \
+            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{ embeds: [{ title: $title, url: $url, color: $color, footer: { text: $footer }, timestamp: $ts }] }')
+
+          curl -sf -X POST "$WEBHOOK_URL" -H "Content-Type: application/json" -d "$PAYLOAD" || true

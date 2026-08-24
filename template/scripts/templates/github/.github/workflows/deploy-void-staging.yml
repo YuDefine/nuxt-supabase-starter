@@ -1,0 +1,158 @@
+# Deploy Staging — void.cloud
+#
+# 這裡的「staging」是**第二個長期存在的 void project**，不是 per-change preview。
+# void.cloud 沒有 preview / branch / alias 機制（實跑 `void deploy --help` 驗證過
+# 0.8.x 與 0.10.x，flag 相同），唯一的多目標機制就是 `--project <slug>`。兩個 project
+# 各自累積狀態、用完不會自動消失 —— 要當拋棄式環境用之前先想清楚這一點。
+#
+# 沒有 migrate job：`void deploy` 內部自己做 build 與 D1 / R2 provisioning，
+# 中間沒有位置插 migration SQL。硬加一個 migrate job 會是空殼。
+#
+# 前置（每個 project 各做一次，且只需一次）：
+#
+#   void github connect <staging-project-slug> \
+#     --repo <owner>/<repo> --branch main \
+#     --executor github_actions \
+#     --workflow .github/workflows/deploy-staging.yml
+#
+# `--executor github_actions` 是必要的，預設的 `container` executor 不走這條路。
+# `--workflow` 必須逐字指向**本檔**：OIDC 交換是無密鑰的，void 只授權這一個 workflow
+# 檔去 mint 該 project 的 deploy token，repo 內其他 workflow 一律被拒。
+#
+# 需要的 repository variable（Settings → Secrets and variables → Actions → Variables）：
+#   VOID_PROJECT_STAGING   staging project 的 slug
+# 選用 secret：
+#   DISCORD_WEBHOOK_URL    部署結果通知
+#   NUXT_PUBLIC_SITE_URL   smoke test 的健康檢查目標（未設則跳過該 job）
+
+name: Deploy Staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 最新的 push 獲勝：同 repo + ref 的舊部署被取消，避免較舊的 commit 後發先至。
+concurrency:
+  group: void-staging-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# id-token: write 讓 job 能 mint GitHub OIDC token。沒有長期 VOID_TOKEN secret 要保管或輪替 ——
+# `void deploy` 自己拿 OIDC token 換一個短效、project-scoped 的 deploy token。
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Run tests
+        run: pnpm test
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VOID_PROJECT: ${{ vars.VOID_PROJECT_STAGING }}
+    steps:
+      - name: Fail fast if VOID_PROJECT_STAGING is unset
+        run: |
+          if [ -z "$VOID_PROJECT" ]; then
+            echo "::error::缺少 repository variable VOID_PROJECT_STAGING。"
+            echo "::error::設定位置：Settings → Secrets and variables → Actions → Variables"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Deploy to void.cloud
+        run: pnpm exec void deploy --project "$VOID_PROJECT"
+
+  smoke-test:
+    needs: deploy
+    if: vars.NUXT_PUBLIC_SITE_URL_STAGING != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Wait for propagation
+        run: sleep 30
+
+      - name: Health check
+        run: |
+          STATUS=$(curl -sf -o /dev/null -w '%{http_code}' "${{ vars.NUXT_PUBLIC_SITE_URL_STAGING }}" --max-time 10)
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Health check failed: HTTP $STATUS"
+            exit 1
+          fi
+          echo "✅ Staging is healthy (HTTP $STATUS)"
+
+  notify:
+    if: always()
+    needs: [ci, deploy, smoke-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Notify Discord
+        if: env.WEBHOOK_URL != ''
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          CI_RESULT: ${{ needs.ci.result }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          SMOKE_RESULT: ${{ needs.smoke-test.result }}
+        run: |
+          # smoke-test 被 if 條件跳過時是 'skipped'，那不算失敗。
+          if [ "$CI_RESULT" = "success" ] && [ "$DEPLOY_RESULT" = "success" ] && \
+             { [ "$SMOKE_RESULT" = "success" ] || [ "$SMOKE_RESULT" = "skipped" ]; }; then
+            COLOR=3066993; STATUS="✅ void staging 部署成功"
+          else
+            COLOR=15158332; STATUS="❌ void staging 部署失敗"
+          fi
+
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          PAYLOAD=$(jq -n \
+            --arg title "${STATUS}" \
+            --arg url "$RUN_URL" \
+            --argjson color "$COLOR" \
+            --arg footer "$GITHUB_REPOSITORY" \
+            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{ embeds: [{ title: $title, url: $url, color: $color, footer: { text: $footer }, timestamp: $ts }] }')
+
+          curl -sf -X POST "$WEBHOOK_URL" -H "Content-Type: application/json" -d "$PAYLOAD" || true

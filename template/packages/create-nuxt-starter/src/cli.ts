@@ -103,8 +103,8 @@ function parseCsv(value: string | undefined): string[] {
     .filter(Boolean)
 }
 
-function inferDeploymentTarget(features: string[]): 'cloudflare' | 'vercel' | 'node' {
-  if (features.includes('deploy-vercel')) return 'vercel'
+function inferDeploymentTarget(features: string[]): 'cloudflare' | 'void' | 'node' {
+  if (features.includes('deploy-void')) return 'void'
   if (features.includes('deploy-node')) return 'node'
   return 'cloudflare'
 }
@@ -129,13 +129,14 @@ export function inferCladeModules(features: string[], dbStack: DbStack): CladeMo
   }
 
   const deploy = inferDeploymentTarget(features)
-  const runtime: CladeModules['runtime'] =
-    deploy === 'vercel' ? 'vercel-node' : deploy === 'node' ? 'nitro-self-hosted' : 'cf-workers'
+  // void.cloud 建在 Cloudflare Workers 上，所以 clade manifest 的 runtime 仍是 cf-workers；
+  // 兩者的差別在部署管道（void CLI vs wrangler-action），不在 runtime。
+  const runtime: CladeModules['runtime'] = deploy === 'node' ? 'nitro-self-hosted' : 'cf-workers'
 
   // db-runtime schema only allows cf-workers / supabase-self-hosted.
   // Self-hosted Node deploy implies self-hosted Supabase; otherwise treat
-  // DB connection as cf-workers (Supabase Cloud over HTTP, which Vercel
-  // and CF Workers both use).
+  // DB connection as cf-workers (Supabase Cloud over HTTP, which both the
+  // wrangler and void tracks use).
   const dbRuntime: CladeModules['dbRuntime'] =
     runtime === 'nitro-self-hosted' ? 'supabase-self-hosted' : 'cf-workers'
   const dbSchema: CladeModules['dbSchema'] =
@@ -198,6 +199,25 @@ export function validateAuthDbStackCompatibility(auth: CliAuth, dbStack: DbStack
   )
 }
 
+/**
+ * void.cloud track MUST NOT 帶 `@nuxthub/core`（`rules/core/cloudflare-workers.md` § 1
+ * 矩陣第三列），而 `nuxthub-d1` dbStack 正是靠它。這兩個湊在一起會產出一個
+ * 「宣稱走 void、卻拉進 NuxtHub helper」的專案——helper 在這條軌上沒有對應的 runtime
+ * injection，只會污染 type space，而且要到實際呼叫 `hub*()` 才會炸。
+ */
+export function validateDeployDbStackCompatibility(
+  features: readonly string[],
+  dbStack: DbStack,
+): void {
+  if (!features.includes('deploy-void') || dbStack !== 'nuxthub-d1') return
+
+  failValidation(
+    'void.cloud 部署不支援 --db nuxthub-d1：void track 不得帶 @nuxthub/core。\n' +
+      'void 要接 D1 的話用它自家的 `void/db` + `void/schema-d1`（`void init` 之後即可用），' +
+      '不經 NuxtHub。\n請改用 --db supabase，或改用 --preset cloudflare-nuxthub-ai。',
+  )
+}
+
 function resolveDbStack(evlogPreset: EvlogPreset, dbArg: DbStack | undefined): DbStack {
   if (evlogPreset === 'nuxthub-ai') {
     if (dbArg === 'supabase') {
@@ -227,6 +247,12 @@ export function buildSelectionsFromArgs(args: {
   const fromWithout = parseCsv(args.without)
   const unknown = [...fromWith, ...fromWithout].filter((id) => !availableFeatureIds.has(id))
 
+  if (unknown.includes('deploy-vercel')) {
+    failValidation(
+      'feature `deploy-vercel` 已移除（fleet 內零 consumer 使用 Vercel）。' +
+        '請改用 `deploy-cloudflare` 或 `deploy-void`。',
+    )
+  }
   if (unknown.length > 0) {
     failValidation(
       `未知的 feature id：${unknown.join(', ')}\n可用 feature id：\n${featureModules
@@ -259,6 +285,13 @@ export function buildSelectionsFromArgs(args: {
   if (presetArgRaw === 'fast') {
     failValidation(
       `--preset fast 已移除。請改用 --preset cloudflare-supabase --without testing-full,testing-vitest。\n可用 preset：${PRESET_IDS.join(' | ')}`,
+    )
+  }
+  if (presetArgRaw === 'vercel-supabase') {
+    failValidation(
+      `--preset vercel-supabase 已移除（fleet 內零 consumer 使用 Vercel）。` +
+        `請改用 --preset cloudflare-supabase 或 --preset void-cloud。\n` +
+        `可用 preset：${PRESET_IDS.join(' | ')}`,
     )
   }
   if (presetArgRaw && !isPresetId(presetArgRaw)) {
@@ -343,6 +376,7 @@ export function buildSelectionsFromArgs(args: {
       ? resolvedFeatures.filter((featureId) => featureId !== 'database')
       : resolvedFeatures
   validateAuthDbStackCompatibility(inferAuthFromFeatures(features), dbStack)
+  validateDeployDbStackCompatibility([...features], dbStack)
 
   return {
     projectName: args.projectName,
@@ -656,6 +690,7 @@ const main = defineCommand({
         cloneClade: args['clone-clade'] as boolean,
         installDeps: args.install as boolean,
         existingGitRepo: adoptState?.hasGitRepo === true,
+        deployTarget: selections.deploymentTarget,
         dbStack: selections.dbStack,
         repoId,
         workflowModel: workflowModel as 'trunk-based' | 'pr-merge-based',

@@ -46,7 +46,7 @@ export interface UserSelections {
   projectName: string
   features: string[]
   ssr: boolean
-  deploymentTarget: 'cloudflare' | 'vercel' | 'node'
+  deploymentTarget: 'cloudflare' | 'void' | 'node'
   testingLevel: 'full' | 'vitest-only' | 'none'
   agentTargets: AgentRuntime[]
   evlogPreset: EvlogPreset

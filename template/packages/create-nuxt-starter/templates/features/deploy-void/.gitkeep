@@ -1,0 +1,7 @@
+void.cloud 這個 feature 刻意不放任何 config 模板。
+
+void.json / wrangler.jsonc / compatibility 設定都跟 `void` npm package 版本鎖步，
+由 `npx void init --agents` 產生當前版本正確的值。把某個時點的值抄進 starter 會變成
+一顆會過期的地雷，而「看起來能用的過期設定」比「明確缺一步」更難察覺。
+
+deploy workflow 不走這個目錄，由 assemble.ts 的 copyWorkflows() 處理。

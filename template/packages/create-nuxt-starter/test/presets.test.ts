@@ -14,7 +14,7 @@ describe('PRESETS manifest', () => {
     expect(ids).toEqual([
       'cloudflare-supabase',
       'cloudflare-nuxthub-ai',
-      'vercel-supabase',
+      'void-cloud',
       'self-hosted-node',
       'minimal',
     ])
@@ -59,10 +59,10 @@ describe('PRESETS manifest', () => {
 })
 
 describe('applyPreset', () => {
-  it('cloudflare-supabase 後 features 含 deploy-cloudflare、不含 deploy-vercel / deploy-node', () => {
+  it('cloudflare-supabase 後 features 含 deploy-cloudflare、不含 deploy-void / deploy-node', () => {
     const features = applyPreset(getPresetById('cloudflare-supabase')!)
     expect(features.has('deploy-cloudflare')).toBe(true)
-    expect(features.has('deploy-vercel')).toBe(false)
+    expect(features.has('deploy-void')).toBe(false)
     expect(features.has('deploy-node')).toBe(false)
   })
 
@@ -72,10 +72,11 @@ describe('applyPreset', () => {
     expect(features.has('auth-nuxt-utils')).toBe(false)
   })
 
-  it('vercel-supabase 後 features 含 deploy-vercel、不含 deploy-cloudflare', () => {
-    const features = applyPreset(getPresetById('vercel-supabase')!)
-    expect(features.has('deploy-vercel')).toBe(true)
+  it('void-cloud 後 features 含 deploy-void、不含 deploy-cloudflare', () => {
+    const features = applyPreset(getPresetById('void-cloud')!)
+    expect(features.has('deploy-void')).toBe(true)
     expect(features.has('deploy-cloudflare')).toBe(false)
+    expect(features.has('deploy-node')).toBe(false)
   })
 
   it('self-hosted-node 後 features 含 deploy-node + ci-advanced、不含 ci-simple', () => {

@@ -349,6 +349,13 @@ export function generatePackageJson(
     basePkg.scripts['supabase:check'] = 'bash ./scripts/supabase-tunnel.sh'
   }
 
+  // void.cloud：deploy 走 void CLI。`void deploy` 內部自做 build，所以不串 `pnpm build`。
+  // 專案 slug 由 --project / VOID_PROJECT / 已連結的 .void/project.json 依序解析
+  // （見 void docs/reference/cli.md「Project resolution」），這裡不寫死。
+  if (selectedFeatureIds.includes('deploy-void')) {
+    basePkg.scripts['void:deploy'] = 'void deploy'
+  }
+
   // Always add
   basePkg.scripts.typecheck = 'nuxt typecheck'
   basePkg.scripts.setup = 'bash scripts/setup.sh'
@@ -573,9 +580,12 @@ export function generateNuxtConfig(
     nitroLines.push(`      nodeCompat: true,`)
     nitroLines.push(`    },`)
     nitroLines.push(`  },`)
-  } else if (selectedFeatureIds.includes('deploy-vercel')) {
+  } else if (selectedFeatureIds.includes('deploy-void')) {
+    // void 也跑在 Cloudflare Workers 上，但 compatibility 相關設定由 `void init` 產生的
+    // void.json / wrangler.jsonc 與 voidPlugin() 決定 —— 這裡 NEVER 照抄 deploy-cloudflare
+    // 那段寫死的 deployConfig / nodeCompat，那會跟 void 自己的設定打架。
     nitroLines.push(`  nitro: {`)
-    nitroLines.push(`    preset: 'vercel',`)
+    nitroLines.push(`    preset: process.env.NITRO_PRESET || 'cloudflare_module',`)
     nitroLines.push(`  },`)
   }
   // Node.js uses default preset, no nitro config needed
@@ -899,7 +909,7 @@ function copyCommands(targetDir: string, feats: string[]): void {
     'doc-sync.md',
   ]
   if (has(feats, 'database')) files.push('db-migration.md')
-  if (hasAny(feats, 'deploy-cloudflare', 'deploy-vercel')) files.push('canary.md')
+  if (hasAny(feats, 'deploy-cloudflare', 'deploy-void')) files.push('canary.md')
 
   const starterCommands = join(STARTER_ROOT, '.claude', 'commands')
   const targetCommands = join(targetDir, '.claude', 'commands')
@@ -1329,7 +1339,14 @@ function copyWorkflows(targetDir: string, feats: string[]): void {
     files.push(['deploy-staging.yml', 'deploy-staging.yml'])
     files.push(['deploy-production.yml', 'deploy-production.yml'])
   }
-  // Vercel uses built-in Git integration — no workflow needed
+
+  // void.cloud 走自己的一組：同樣是 main → staging、tag → production，但 deploy step 是
+  // `void deploy --project`（GitHub OIDC，無 token）而非 wrangler-action，且沒有 migrate
+  // job —— `void deploy` 內部自做 build 與 D1/R2 provisioning，沒有位置插 migration SQL。
+  if (has(feats, 'deploy-void')) {
+    files.push(['deploy-void-staging.yml', 'deploy-staging.yml'])
+    files.push(['deploy-void-production.yml', 'deploy-production.yml'])
+  }
 
   if (has(feats, 'testing-full')) {
     files.push([`e2e-${ciMode}.yml`, 'e2e.yml'])

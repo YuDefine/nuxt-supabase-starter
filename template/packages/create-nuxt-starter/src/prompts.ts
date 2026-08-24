@@ -374,10 +374,10 @@ async function promptUserCustom(defaultProjectName?: string): Promise<UserSelect
     type: 'select',
     options: [
       { label: 'Cloudflare Workers（推薦）', value: 'cloudflare' },
-      { label: 'Vercel', value: 'vercel' },
+      { label: 'void.cloud（VoidZero，建在 Cloudflare 上）', value: 'void' },
       { label: 'Node.js Server', value: 'node' },
     ],
-  })) as string as 'cloudflare' | 'vercel' | 'node'
+  })) as string as 'cloudflare' | 'void' | 'node'
 
   if (typeof deployChoice === 'symbol') process.exit(0)
 

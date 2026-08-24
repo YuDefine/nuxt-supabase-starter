@@ -228,16 +228,41 @@ describe('--preset stack values', () => {
     expect(selections.features).toContain('monitoring')
   })
 
-  it('--preset vercel-supabase 切到 Vercel deploy', () => {
+  it('--preset void-cloud 切到 void.cloud deploy', () => {
     const selections = buildSelectionsFromArgs({
-      projectName: 'vercel-app',
-      preset: 'vercel-supabase',
+      projectName: 'void-app',
+      preset: 'void-cloud',
     })
 
-    expect(selections.deploymentTarget).toBe('vercel')
-    expect(selections.features).toContain('deploy-vercel')
+    expect(selections.deploymentTarget).toBe('void')
+    expect(selections.features).toContain('deploy-void')
     expect(selections.features).not.toContain('deploy-cloudflare')
     expect(selections.features).not.toContain('deploy-node')
+    expect(selections.dbStack).toBe('supabase')
+  })
+
+  it('--preset vercel-supabase 已移除，fail 時要指出等價寫法', () => {
+    expect(() => buildSelectionsFromArgs({ projectName: 'x', preset: 'vercel-supabase' })).toThrow(
+      /vercel-supabase 已移除/,
+    )
+    expect(() => buildSelectionsFromArgs({ projectName: 'x', preset: 'vercel-supabase' })).toThrow(
+      /void-cloud/,
+    )
+  })
+
+  it('feature id deploy-vercel 已移除，fail 時要指出等價寫法', () => {
+    expect(() => buildSelectionsFromArgs({ projectName: 'x', with: 'deploy-vercel' })).toThrow(
+      /deploy-vercel` 已移除/,
+    )
+    expect(() => buildSelectionsFromArgs({ projectName: 'x', with: 'deploy-vercel' })).toThrow(
+      /deploy-void/,
+    )
+  })
+
+  it('void.cloud + nuxthub-d1 必須 fail —— void track NEVER 帶 @nuxthub/core', () => {
+    expect(() =>
+      buildSelectionsFromArgs({ projectName: 'x', preset: 'void-cloud', db: 'nuxthub-d1' }),
+    ).toThrow(/void\/db/)
   })
 
   it('--preset self-hosted-node 帶 Node deploy + ci-advanced', () => {

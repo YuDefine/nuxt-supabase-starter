@@ -41,6 +41,8 @@ export interface PostScaffoldOptions {
    * 不是這次跑出來的。
    */
   existingGitRepo?: boolean
+  /** 部署目標。void 需要一個 scaffold 完成後才做得到的必要步驟，見收尾警告。 */
+  deployTarget?: 'cloudflare' | 'void' | 'node'
 }
 
 export async function postScaffold(
@@ -198,6 +200,31 @@ export async function postScaffold(
 
   consola.log('')
   consola.box(nextSteps.join('\n'))
+
+  // void 的 config 與 compatibility 設定跟 `void` npm package 版本鎖步，所以 starter
+  // 刻意不產 void.json / wrangler.jsonc —— 抄某個時點的值進模板會變成會過期的地雷。
+  // 代價是 scaffold 完還缺一步，而這一步缺了會在**部署當下**才炸。
+  // 用 warn 不用 info、也不放進上面的 box：box 讀起來像補充說明，這是缺一步。
+  if (opts.deployTarget === 'void') {
+    consola.log('')
+    consola.warn('void.cloud：還差一步，現在還不能部署')
+    consola.log(`  cd ${relativeTargetDir} && npx void init --agents`)
+    consola.log('')
+    consola.log('  它會產生當前版本正確的 void.json / wrangler.jsonc、把 voidPlugin() patch 進')
+    consola.log('  nuxt.config，並裝上官方 void skill + MCP（agent 之後查 void 用法的權威來源）。')
+    consola.log('')
+    consola.log('  接著把 repo 連到 void project（staging / production 各做一次）：')
+    consola.log('    void github connect <staging-slug> --repo <owner/repo> --branch main \\')
+    consola.log('      --executor github_actions --workflow .github/workflows/deploy-staging.yml')
+    consola.log('    void github connect <prod-slug> --repo <owner/repo> --branch main \\')
+    consola.log(
+      '      --executor github_actions --workflow .github/workflows/deploy-production.yml',
+    )
+    consola.log('')
+    consola.log('  最後在 GitHub 設 repository variables（不是 secrets）：')
+    consola.log('    VOID_PROJECT_STAGING / VOID_PROJECT')
+    consola.log('  部署認證走 GitHub OIDC，沒有 token 要保管。')
+  }
 }
 
 export function buildRegisterConsumerArgs(

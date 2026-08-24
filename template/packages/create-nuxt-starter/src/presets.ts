@@ -4,13 +4,13 @@ import { featureModules, getModuleById } from './features'
 export type PresetId =
   | 'cloudflare-supabase'
   | 'cloudflare-nuxthub-ai'
-  | 'vercel-supabase'
+  | 'void-cloud'
   | 'self-hosted-node'
   | 'minimal'
 
 export type PresetAuthDefault = 'auth-nuxt-utils' | 'auth-better-auth' | 'none'
 export type PresetCi = 'ci-simple' | 'ci-advanced'
-export type PresetDeploy = 'cloudflare' | 'vercel' | 'node'
+export type PresetDeploy = 'cloudflare' | 'void' | 'node'
 
 export interface PresetDefinition {
   id: PresetId
@@ -48,10 +48,10 @@ export const PRESETS: readonly PresetDefinition[] = [
     ci: 'ci-simple',
   },
   {
-    id: 'vercel-supabase',
-    label: 'Vercel + Supabase',
-    description: 'Vercel 部署、Supabase 託管資料庫、baseline evlog',
-    deploy: 'vercel',
+    id: 'void-cloud',
+    label: 'void.cloud + Supabase',
+    description: 'void.cloud 一鍵部署（自動 provision D1/R2）、Supabase 託管資料庫、baseline evlog',
+    deploy: 'void',
     dbStack: 'supabase',
     evlogPreset: 'baseline',
     authDefault: 'auth-nuxt-utils',

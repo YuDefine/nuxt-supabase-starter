@@ -5,7 +5,7 @@ export const featureModules: FeatureModule[] = [
   {
     id: 'auth-nuxt-utils',
     name: 'nuxt-auth-utils（推薦）',
-    description: 'Cookie-based session — 適用所有部署環境（Workers/Vercel/Node）',
+    description: 'Cookie-based session — 適用所有部署環境（Workers/void/Node）',
     default: true,
     group: 'auth',
     incompatible: ['auth-better-auth'],
@@ -272,7 +272,7 @@ export const featureModules: FeatureModule[] = [
     description: 'Cloudflare Workers 部署',
     default: true,
     group: 'deployment',
-    incompatible: ['deploy-vercel', 'deploy-node'],
+    incompatible: ['deploy-void', 'deploy-node'],
     packages: {
       '@nuxthub/core': '^0.10.7',
       wrangler: '^4.72.0',
@@ -280,16 +280,20 @@ export const featureModules: FeatureModule[] = [
     templateDir: 'features/deploy-cloudflare',
   },
 
-  // Deployment - Vercel
+  // Deployment - void.cloud
+  //
+  // NEVER 在此加 @nuxthub/core：`rules/core/cloudflare-workers.md` § 1 矩陣第三列明訂
+  // void track MUST NOT 帶它 —— void 有自家的 `void/db` + `void/storage`，NuxtHub helper
+  // 在這條軌上沒有對應的 runtime injection，留著只會污染 type space。
   {
-    id: 'deploy-vercel',
-    name: 'Vercel',
-    description: 'Vercel 部署',
+    id: 'deploy-void',
+    name: 'void.cloud',
+    description: 'void.cloud 部署（VoidZero，建在 Cloudflare Workers 上）',
     default: false,
     group: 'deployment',
     incompatible: ['deploy-cloudflare', 'deploy-node'],
-    packages: {},
-    templateDir: 'features/deploy-vercel',
+    packages: { void: '^0.10.12' },
+    templateDir: 'features/deploy-void',
   },
 
   // Deployment - Node
@@ -299,7 +303,7 @@ export const featureModules: FeatureModule[] = [
     description: 'Node.js Server 部署',
     default: false,
     group: 'deployment',
-    incompatible: ['deploy-cloudflare', 'deploy-vercel'],
+    incompatible: ['deploy-cloudflare', 'deploy-void'],
     packages: {},
     templateDir: 'features/deploy-node',
   },
