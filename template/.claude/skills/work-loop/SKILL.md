@@ -528,7 +528,7 @@ Foreground 路徑**不**寫 `inFlight`、不建 background task、也不 arm kee
 
 ```bash
 # runner child MUST 從 $ARGUMENTS 的 --scan-helper-command 取完整命令並逐字執行；那是
-# runner.sh --allowedTools 唯一放行的 Bash invocation。命令以 cwd 推導 repo，故不得把 repo
+# runner.sh --allowedTools 放行的 Bash invocation（scan helper；closedBloat 另放行 rotate-closed-bloat.ts）。命令以 cwd 推導 repo，故不得把 repo
 # path（尤其含空白、引號或換行）插進 prompt / allowance。非 runner child 才用下列等價形狀。
 node "$HOME/offline/clade/vendor/scripts/work-loop-scan.ts"
 # spectra repo 才有 parked（無 openspec 時回空，屬正常）
@@ -540,7 +540,7 @@ helper 在單一 Node process 內完成 handoff-scan → repo-local 同目錄 te
 `WORK_LOOP_SCAN_MALFORMED` / nonzero 都視為 scan 失敗，既有 latest 不得被覆蓋。完整理由見
 [reference/run-modes.md](reference/run-modes.md) § scan helper 的原子邊界。
 
-**同一輪內 NEVER 為了「找不到上一份輸出」重跑 scan**：要回頭看就讀 `scan-latest.json`，只要摘要就跑 `node ~/offline/clade/vendor/scripts/work-loop-summary.ts`。本輪合法的重跑**只有一個**時機：Step 5 收割後的 re-scan。
+**同一輪內 NEVER 為了「找不到上一份輸出」重跑 scan**：要回頭看就讀 `scan-latest.json`，只要摘要就跑 `node ~/offline/clade/vendor/scripts/work-loop-summary.ts`。本輪合法的重跑**只有兩個**時機：① `tech-debt-closed-bloat` warn 時跑完 `rotate-closed-bloat.ts` 之後；② Step 5 收割後的 re-scan。
 **NEVER 因此改成「N 輪跑一次」**：scan 是路由輸入，跳過的那一輪是盲跑；要省的是**同一輪內的重複**，不是輪次覆蓋率。
 
 **失敗 fallback**：script 不存在或回 error、**或 `SCAN-MISMATCH` / `MISSING`** → **STOP**，寫 HANDOFF 一行 `work-loop: scan failed at <ISO>`，跑 `work-loop-lock.ts release --session <id>` 後結束。`SCAN-MISMATCH` 表示讀到別 repo 的掃描結果（unattended 下危害最大：無人在旁審視就照它推進待辦）。**NEVER** 憑記憶或 HANDOFF 既有 narrative 猜待辦狀態。
@@ -562,6 +562,8 @@ helper 在單一 Node process 內完成 handoff-scan → repo-local 同目錄 te
   **NEVER 改成「N 輪跑一次」**：calendar-based skip 會讓真實改動落在跳過窗口內溜過去，然後搭著 propagate 散到全 registry consumer 才被發現。輸入不變時跳過在數學上無資訊損失，輪次計數跳過不是。**已知邊界**：48 條 probe 有一部分量的是**活狀態**（檔案數、目錄體積），git HEAD 涵蓋 repo 內變動但涵蓋不到 repo 外的環境漂移——所以它是 opt-in，判斷這一輪能不能接受這個邊界是呼叫端的責任。
 
   **`blocked-attended-only` 一律跳過**（unattended）：它的定義就是「本迴圈拿不到出口」，撈進 candidate list 只會每輪重新判定一次再放棄。attended 模式照撈——那正是它等的東西。判準與防濫用見 clade `.claude/rules/local/tech-debt-hygiene.md` § Invariant 12。
+
+  **closedBloat 自動 rotate（不佔 5-item cap）**：`techDebtHygiene.checks` 含 `name: tech-debt-closed-bloat` 且 `status: warn` 時，**MUST** 跑 `node "$HOME/offline/clade/vendor/scripts/rotate-closed-bloat.ts"`，stdout 不是 `noop` 就再 scan 一次。**NEVER** 把 rotate 當 candidate、**NEVER** `AskUserQuestion`。`work-loop-scan.ts` 本身 NEVER 寫檔。
 
   ```bash
   wc -c docs/tech-debt.md   # 上面兩個數字的來源。主檔隨 rotate / 新增增減，複跑取當前值

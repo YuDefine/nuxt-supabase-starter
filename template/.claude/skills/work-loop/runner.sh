@@ -155,12 +155,15 @@ MIN_WAKEUP=1200
 # NEVER 改用 `--dangerously-skip-permissions` 來解這件事 —— 那是把整個權限面開到最大去換
 # 一個目錄的寫入權，兩者成本差一個量級（Charles 2026-08-05 拍板 1a 而非 1b）。
 PERM_MODE="acceptEdits"
-# Step 2 的 scan、驗證與 rotate 全收進單一 helper；headless process 沒有人能回答
-# mktemp / cp / mv 的分段 approval。只批准這一條完整 invocation，NEVER 擴成 bare `Bash`。
+# Step 2 的 scan 收進單一 helper；closedBloat writer 是另一條同樣釘死的 invocation。
+# headless process 沒有人能回答 mktemp / cp / mv 的分段 approval。NEVER 擴成 bare `Bash`。
 SCAN_HELPER_CMD='node "$HOME/offline/clade/vendor/scripts/work-loop-scan.ts"'
 SCAN_HELPER_RULE="Bash($SCAN_HELPER_CMD)"
 SCAN_PREFLIGHT_CMD="$SCAN_HELPER_CMD --preflight"
 SCAN_PREFLIGHT_RULE="Bash($SCAN_PREFLIGHT_CMD)"
+ROTATE_HELPER_CMD='node "$HOME/offline/clade/vendor/scripts/rotate-closed-bloat.ts"'
+ROTATE_HELPER_RULE="Bash($ROTATE_HELPER_CMD)"
+CHILD_ALLOWED_TOOLS="$SCAN_HELPER_RULE,$ROTATE_HELPER_RULE"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -553,7 +556,7 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
   fi
   # dispatcher 讀這兩個 env 當 telemetry attribution 的機械 fallback；模型顯式帶 CLI 時 CLI 優先。
   # 每輪一個 origin-id，讓 round summary 不必用時間窗猜哪筆 dispatch 屬於哪輪。
-  cmd=("${CHILD_ENV[@]}" WORK_LOOP_RUNNER_CHILD=1 "WORK_LOOP_MIN_WAKEUP_SECONDS=$MIN_WAKEUP" CLADE_DISPATCH_ORIGIN=work-loop "CLADE_DISPATCH_ORIGIN_ID=$origin_id" "$CHILD_BIN" --print --add-dir "$WT_PARENT" --allowedTools "$SCAN_HELPER_RULE" --permission-mode "$PERM_MODE" "/work-loop --unattended --runner-child --linked-dispatch-mode foreground --min-wakeup-seconds $MIN_WAKEUP --scan-helper-command '$SCAN_HELPER_CMD'")
+  cmd=("${CHILD_ENV[@]}" WORK_LOOP_RUNNER_CHILD=1 "WORK_LOOP_MIN_WAKEUP_SECONDS=$MIN_WAKEUP" CLADE_DISPATCH_ORIGIN=work-loop "CLADE_DISPATCH_ORIGIN_ID=$origin_id" "$CHILD_BIN" --print --add-dir "$WT_PARENT" --allowedTools "$CHILD_ALLOWED_TOOLS" --permission-mode "$PERM_MODE" "/work-loop --unattended --runner-child --linked-dispatch-mode foreground --min-wakeup-seconds $MIN_WAKEUP --scan-helper-command '$SCAN_HELPER_CMD'")
 
   if [ "$DRY_RUN" = 1 ]; then
     echo "[dry-run] round $(next_round_label "$before"): ${cmd[*]}"
