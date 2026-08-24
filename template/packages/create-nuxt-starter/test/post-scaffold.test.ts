@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { consola } from 'consola'
@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   buildRegisterConsumerArgs,
   maybeRegisterConsumer,
+  readPendingBuildApprovals,
   resolveCladeInitScript,
 } from '../src/post-scaffold'
 
@@ -77,5 +78,67 @@ describe('Clade registry handoff', () => {
       }),
     ).resolves.toBe(false)
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('--repo-id'))
+  })
+})
+
+describe('pnpm build approval 佔位字串', () => {
+  // pnpm v11 遇到未表態的 build script 會把它寫進 pnpm-workspace.yaml 並以退出碼 1 abort，
+  // 但依賴其實已經裝好。這一種 MUST 與真的安裝失敗分開，否則 scaffold 會誤報失敗並
+  // 跳掉後續的 hub prune / sync-to-codex。
+  it('讀得出 pnpm 寫進 allowBuilds 的待表態套件', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pending-builds-'))
+    writeFileSync(
+      join(dir, 'pnpm-workspace.yaml'),
+      [
+        'allowBuilds:',
+        "  '@parcel/watcher': true",
+        "  '@sentry/cli': set this to true or false",
+        '  better-sqlite3: set this to true or false',
+        '  esbuild: true',
+        '',
+      ].join('\n'),
+    )
+
+    expect(readPendingBuildApprovals(dir)).toEqual(['@sentry/cli', 'better-sqlite3'])
+  })
+
+  it('全部表態完就是空陣列', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pending-builds-clean-'))
+    writeFileSync(
+      join(dir, 'pnpm-workspace.yaml'),
+      "allowBuilds:\n  '@sentry/cli': true\n  better-sqlite3: true\n",
+    )
+
+    expect(readPendingBuildApprovals(dir)).toEqual([])
+  })
+
+  it('沒有 pnpm-workspace.yaml 不炸', () => {
+    expect(readPendingBuildApprovals(mkdtempSync(join(tmpdir(), 'pending-builds-none-')))).toEqual(
+      [],
+    )
+  })
+})
+
+describe('base 模板的 pnpm build approval 設定', () => {
+  // 這兩個是 scaffold 出來必然會被拉進去的：better-sqlite3 走 nitropack → db0（每個 Nuxt
+  // 專案都有），@sentry/cli 走監控 feature。少一個，install 與 husky pre-commit 一起壞。
+  it('allowBuilds 涵蓋 better-sqlite3 與 @sentry/cli', () => {
+    const ws = readFileSync(
+      join(import.meta.dirname, '..', 'templates', 'base', 'pnpm-workspace.yaml'),
+      'utf-8',
+    )
+
+    expect(ws).toMatch(/^\s+better-sqlite3: true$/m)
+    expect(ws).toMatch(/^\s+'@sentry\/cli': true$/m)
+    // 佔位字串只能出現在說明用的註解裡，NEVER 是某個 key 的值
+    expect(ws).not.toMatch(/^\s+'?[^'#:]+'?:\s*set this to true or false\s*$/m)
+  })
+
+  it('package.json 不再帶 pnpm v11 已不讀的 pnpm.allowBuilds', () => {
+    const pkg = JSON.parse(
+      readFileSync(join(import.meta.dirname, '..', 'templates', 'base', 'package.json'), 'utf-8'),
+    )
+
+    expect(pkg.pnpm).toBeUndefined()
   })
 })

@@ -45,6 +45,33 @@ export interface PostScaffoldOptions {
   deployTarget?: 'cloudflare' | 'void' | 'node'
 }
 
+/**
+ * pnpm v11 遇到未表態的 build script 時，會把它寫進 `pnpm-workspace.yaml` 的
+ * `allowBuilds`，值是佔位字串 `set this to true or false`，然後以退出碼 1 abort。
+ * 回傳這些待表態的套件名（沒有就空陣列）。
+ *
+ * 這是「安裝其實成功、但退出碼是 1」的唯一已知形狀 —— 拿它來把這一種與真的安裝失敗
+ * 分開，NEVER 靠退出碼本身判斷。
+ */
+export function readPendingBuildApprovals(targetDir: string): string[] {
+  const wsPath = join(targetDir, 'pnpm-workspace.yaml')
+  if (!existsSync(wsPath)) return []
+
+  let content: string
+  try {
+    content = readFileSync(wsPath, 'utf8')
+  } catch {
+    return []
+  }
+
+  const pending: string[] = []
+  for (const line of content.split('\n')) {
+    const match = /^\s+'?([^':]+)'?:\s*set this to true or false\s*$/.exec(line)
+    if (match) pending.push(match[1])
+  }
+  return pending
+}
+
 export async function postScaffold(
   targetDir: string,
   projectName: string,
@@ -67,9 +94,12 @@ export async function postScaffold(
 
   // 2. Install dependencies — postinstall hook runs clade bootstrap-hub
   //    which pulls fresh rules / skills / hooks / scripts into .claude/.
-  // pnpm v10/v11 在 fresh install 時可能對 build script approval 機制 emit
-  // ERR_PNPM_IGNORED_BUILDS 即使 package.json 已設 pnpm.allowBuilds dict。
-  // 實測 retry 一次（lockfile 已建立）必通過，所以失敗時自動 retry 一次。
+  //
+  // pnpm v11 對「未表態的 build script」是 abort（退出碼 1），不是警告。未表態的套件
+  // 會被 pnpm 自己寫進 pnpm-workspace.yaml 的 allowBuilds，值是佔位字串
+  // `set this to true or false`。原本這裡的 retry 建立在「第一次只是警告、retry 必通過」
+  // 的假設上 —— 實測是錯的：兩次都以同一個原因退出 1，而套件其實已經裝好了。
+  // 所以 retry 保留（真的有瞬時失敗），但失敗後 MUST 分辨這一種：它不是安裝失敗。
   // 三態：true / undefined 都要裝，只有顯式 false 才跳過。
   const skipInstall = opts.installDeps === false
   let pnpmInstalled = false
@@ -85,8 +115,18 @@ export async function postScaffold(
         pnpmInstalled = true
         break
       } catch (error) {
+        const pending = readPendingBuildApprovals(targetDir)
+        if (pending.length > 0) {
+          consola.warn('pnpm 因為有未表態的 build script 而退出，依賴其實已經裝好。')
+          consola.log(`  待表態：${pending.join(', ')}`)
+          consola.log(`  修法：編輯 ${relativeTargetDir}/pnpm-workspace.yaml 的 allowBuilds，`)
+          consola.log('        把上面每個 key 的值從佔位字串改成 true（或 false）。')
+          consola.log('  這通常代表 starter 的 allowBuilds 預設清單少了東西，值得回報。')
+          pnpmInstalled = true
+          break
+        }
         if (attempt === 1) {
-          consola.warn('第一次 pnpm install 結束時 emit 警告，自動 retry 一次...')
+          consola.warn('第一次 pnpm install 失敗，自動 retry 一次...')
           continue
         }
         consola.warn(`依賴套件安裝失敗：${(error as Error).message}`)
@@ -114,6 +154,21 @@ export async function postScaffold(
   } else {
     consola.warn('略過 sync-to-agents — 請在 pnpm install 成功後手動：')
     consola.log(`  cd ${relativeTargetDir} && node ~/.claude/scripts/sync-to-codex.mjs`)
+  }
+
+  // 4.5 Typecheck — scaffold 的自我驗證。在此之前沒有任何一步確認「產出的專案編得過」，
+  //     而 scaffold 最容易壞的正是模板與套件版本脫節（feature 組合是動態的，模板是靜態的）。
+  //     失敗不中止：檔案都已落地，使用者需要的是知道哪裡壞了，不是回到零。
+  if (pnpmInstalled) {
+    consola.start('驗證產出的專案編得過（pnpm typecheck）...')
+    try {
+      execFileSync('pnpm', ['typecheck'], { cwd: targetDir, stdio: 'inherit' })
+      consola.success('typecheck 通過。')
+    } catch {
+      consola.warn('typecheck 沒過 —— scaffold 產出的專案有型別錯誤。')
+      consola.log('  上方為 tsc 實際輸出。這代表模板與當前套件版本脫節，值得回報。')
+      consola.log(`  重跑：cd ${relativeTargetDir} && pnpm typecheck`)
+    }
   }
 
   // 5. Initialize git
@@ -166,12 +221,23 @@ export async function postScaffold(
     `  cd ${relativeTargetDir}`,
   ]
 
-  if ((opts.dbStack ?? DEFAULT_DB_STACK) === 'nuxthub-d1') {
+  // 收尾步驟 MUST 依 dbStack 分流到底：`scripts/setup.sh` 會檢查 Supabase CLI，
+  // 找不到就直接中止。把它端給沒有 Supabase 的軌（void-d1 / nuxthub-d1），使用者
+  // 會照著撞牆，然後以為是 scaffold 壞了。
+  const resolvedDbStack = opts.dbStack ?? DEFAULT_DB_STACK
+  if (resolvedDbStack === 'nuxthub-d1') {
     nextSteps.push(
       '  npx nuxthub link        # 連結 NuxtHub project',
       '  pnpm hub:db:migrations:apply --local',
       '  pnpm dev                # 啟動本機開發伺服器',
       '  pnpm verify:starter     # 檢查 scaffold 狀態',
+    )
+  } else if (resolvedDbStack === 'void-d1') {
+    // 這條軌沒有 Supabase：D1 由 void 託管，schema 走 `void/db`。
+    nextSteps.push(
+      '  npx void init --agents   # 必要：產生 void.json / wrangler.jsonc（詳見下方警告）',
+      '  pnpm dev                 # 啟動開發伺服器',
+      '  pnpm verify:starter      # 檢查 scaffold 狀態',
     )
   } else {
     nextSteps.push(
