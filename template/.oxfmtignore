@@ -10,3 +10,5 @@
 .cursor/
 
 .claude/scripts/
+
+vendor/
