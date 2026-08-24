@@ -378,7 +378,14 @@ export function generatePackageJson(
 
   // Spectra UX completeness (always needed)
   basePkg.scripts['audit:ux-drift'] = 'npx tsx scripts/audit-ux-drift.ts'
+  // 這四支的 script 檔都已被 copyScripts 複製進專案，但 package.json 的入口曾經只寫
+  // roadmap 一條 —— 於是 first-run 流程叫使用者跑 `pnpm spectra:claims` 時會拿到
+  // 「Command not found」。有檔沒入口比兩者都缺更難查：檔案明明在。
   basePkg.scripts['spectra:roadmap'] = 'npx tsx scripts/spectra-advanced/roadmap-sync.ts'
+  basePkg.scripts['spectra:claim'] = 'node scripts/spectra-advanced/claim-work.ts'
+  basePkg.scripts['spectra:claims'] = 'node scripts/spectra-advanced/claims-status.ts'
+  basePkg.scripts['spectra:followups'] = 'node scripts/spectra-advanced/collect-followups.ts'
+  basePkg.scripts['spectra:release'] = 'node scripts/spectra-advanced/release-work.ts'
 
   // Sort dependencies
   basePkg.dependencies = sortObject(basePkg.dependencies)

@@ -106,6 +106,10 @@ function checkDocker() {
 }
 
 function checkSupabaseCli() {
+  if (!usesSupabase()) {
+    record('supabase-cli', 'Supabase CLI 已安裝', 'SKIP', '本專案的 db-schema 不是 Supabase')
+    return
+  }
   const v = tryExec('supabase', ['--version'])
   if (v) record('supabase-cli', 'Supabase CLI 已安裝', 'OK', v)
   else
@@ -134,6 +138,21 @@ function checkClaudeCli() {
 function checkNodeModules() {
   if (existsSync(join(ROOT, 'node_modules'))) record('node-modules', 'node_modules 已安裝', 'OK')
   else record('node-modules', 'node_modules 已安裝', 'FAIL', '未安裝', 'pnpm install')
+}
+
+/**
+ * 這個專案的 db-schema 是不是 Supabase。
+ *
+ * void / NuxtHub D1 軌完全沒有 Supabase，卻仍被檢查「Supabase CLI 有沒有裝」、
+ * 「本地 Supabase 有沒有跑」、「database.types.ts 產了沒」，於是首輪驗收固定吐三條
+ * 與這個專案無關的 WARN —— 其中一條還給出 `supabase gen types --local` 這個在該軌
+ * 永遠跑不動的修法。判不出來（缺 hub.json / 解析失敗）時回 true，維持原行為。
+ */
+function usesSupabase() {
+  const data = readJsonSafe(join(ROOT, '.claude', 'hub.json'))
+  const dbSchema = data?.modules?.['db-schema']
+  if (typeof dbSchema !== 'string') return true
+  return dbSchema.startsWith('supabase')
 }
 
 function checkHubJson() {
@@ -384,6 +403,15 @@ function checkEnvFile() {
 }
 
 function checkSupabaseRunning() {
+  if (!usesSupabase()) {
+    record(
+      'supabase-running',
+      'Supabase 本地服務運作中',
+      'SKIP',
+      '本專案的 db-schema 不是 Supabase',
+    )
+    return
+  }
   const status = tryExec('supabase', ['status', '--output', 'json'])
   if (!status) {
     record('supabase-running', 'Supabase 本地服務運作中', 'SKIP', '未跑或無 supabase CLI')
@@ -413,6 +441,17 @@ function checkSupabaseRunning() {
 }
 
 function checkDatabaseTypes() {
+  // database.types.ts 是 `supabase gen types` 的產物 —— 非 Supabase 軌沒有這個檔，
+  // 也沒有任何指令能產它。
+  if (!usesSupabase()) {
+    record(
+      'db-types',
+      'app/types/database.types.ts 存在',
+      'SKIP',
+      '本專案的 db-schema 不是 Supabase',
+    )
+    return
+  }
   const p = join(ROOT, 'app', 'types', 'database.types.ts')
   if (!existsSync(p)) {
     record(

@@ -506,8 +506,19 @@ function writeFirstRunMarker(targetDir: string, projectName: string, mods: Clade
     scaffoldedAt: new Date().toISOString(),
     projectName,
     cladeModules: mods,
-    instructions:
-      'AI agent: 看到此檔代表 scaffold 剛完成。建議行動：(1) 跑 pnpm verify:starter；(2) 跑 pnpm spectra:roadmap；(3) 列出 next-step 給使用者；(4) 完成後 rm .claude/.first-run。詳見 docs/AGENTS.md。',
+    // instructions MUST 自給自足：原本結尾把讀者導到 starter 的 template/docs/ 底下
+    // 那份 agent 指南，但 scaffold **不會複製**它（只複製 root AGENTS.md），所以每個
+    // scaffold 出去的專案都拿到一個指向不存在檔案的指標。
+    // 步驟本身也 MUST 只列產生出來的 script —— 舊版列了 pnpm spectra:claims，
+    // 而那個 script 當時沒被寫進 package.json。
+    instructions: [
+      'AI agent: 看到此檔代表 scaffold 剛完成，請先跑首輪暖機再開始任何開發。',
+      '(1) pnpm verify:starter —— 機械化驗收。exit 0=全過 / 2=有 WARN（環境仍可用）/ 1=有 FAIL。',
+      '(2) pnpm spectra:roadmap —— 重算 ROADMAP（首次跑會建立基礎結構）。',
+      '(3) pnpm spectra:claims —— 確認沒有殘留 claim。',
+      '(4) 依 verify:starter 的 WARN/FAIL 列出 next-step 給使用者（缺的 env var、OAuth console URL 都會印在輸出裡）。',
+      '(5) 暖機完成後 rm .claude/.first-run。',
+    ].join('\n'),
   }
   try {
     writeFileSync(markerPath, JSON.stringify(payload, null, 2) + '\n', 'utf8')

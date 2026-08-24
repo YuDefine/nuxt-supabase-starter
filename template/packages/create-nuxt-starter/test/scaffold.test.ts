@@ -407,3 +407,40 @@ describe('scaffold: void.cloud 接線', () => {
     expect(config).not.toContain('voidPlugin')
   })
 })
+
+describe('scaffold: first-run 暖機流程的可執行性', () => {
+  // first-run marker 叫使用者跑的每一條 script MUST 真的存在於產出的 package.json。
+  // 這四支的檔案一直都被複製進專案，但 package.json 只寫了 roadmap 一條 ——
+  // 有檔沒入口比兩者都缺更難查：檔案明明在，指令卻 Command not found。
+  it('package.json 有 first-run 流程用到的 spectra script', () => {
+    const targetDir = join(TEST_DIR, 'spectra-scripts')
+    assembleProject(targetDir, [], 'spectra-scripts')
+
+    const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf-8'))
+    for (const name of [
+      'spectra:roadmap',
+      'spectra:claim',
+      'spectra:claims',
+      'spectra:followups',
+    ]) {
+      expect(pkg.scripts[name]).toBeDefined()
+    }
+  })
+
+  it('每個 spectra script 指到的檔案都真的被複製進專案', () => {
+    const targetDir = join(TEST_DIR, 'spectra-script-files')
+    assembleProject(targetDir, [], 'spectra-script-files')
+
+    const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf-8'))
+    const spectraScripts = Object.entries(pkg.scripts as Record<string, string>).filter(([k]) =>
+      k.startsWith('spectra:'),
+    )
+    expect(spectraScripts.length).toBeGreaterThan(0)
+
+    for (const [, cmd] of spectraScripts) {
+      const scriptPath = /(scripts\/[\w/.-]+)/.exec(cmd)?.[1]
+      expect(scriptPath, `無法從 "${cmd}" 取出 script 路徑`).toBeDefined()
+      expect(existsSync(join(targetDir, scriptPath!)), `${scriptPath} 沒被複製`).toBe(true)
+    }
+  })
+})

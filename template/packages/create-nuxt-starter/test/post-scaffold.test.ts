@@ -169,3 +169,39 @@ describe('sync-to-cursor 解析', () => {
     ).toBeUndefined()
   })
 })
+
+describe('first-run marker', () => {
+  // marker 的 instructions 曾以「詳見 docs/AGENTS.md」收尾，但那份文件在 starter 的
+  // template/docs/ 底下、scaffold 不複製（只複製 root AGENTS.md）—— 每個 scaffold
+  // 出去的專案都拿到一個指向不存在檔案的指標。指標型缺陷只有讀的人會發現，而讀的人
+  // 通常就是那個最沒有背景知識的 first-run agent。
+  function readMarkerFn(): string {
+    const src = readFileSync(join(import.meta.dirname, '..', 'src', 'post-scaffold.ts'), 'utf-8')
+    const start = src.indexOf('function writeFirstRunMarker')
+    expect(start).toBeGreaterThan(-1)
+    // 只取這一個函式：切到檔尾會把別的函式（例如叫 pnpm hub:prune 的那支）一起吃進來，
+    // 讓斷言對著不相干的內容誤報。
+    const end = src.indexOf('\n}\n', start)
+    expect(end).toBeGreaterThan(start)
+    return src.slice(start, end)
+  }
+
+  it('instructions 不指向 scaffold 不會產生的檔案', () => {
+    expect(readMarkerFn()).not.toContain('docs/AGENTS.md')
+  })
+
+  it('instructions 列的每一條 pnpm 指令都在 assemble 產生的 script 裡', () => {
+    const marker = readMarkerFn()
+    const assemble = readFileSync(join(import.meta.dirname, '..', 'src', 'assemble.ts'), 'utf-8')
+
+    const mentioned = [...marker.matchAll(/pnpm ([\w:-]+)/g)].map((m) => m[1])
+    expect(mentioned.length).toBeGreaterThan(0)
+
+    for (const name of mentioned) {
+      expect(
+        assemble.includes(`'${name}'`),
+        `marker 叫人跑 pnpm ${name}，但 assemble 沒產這條`,
+      ).toBe(true)
+    }
+  })
+})
