@@ -4,47 +4,46 @@
     auth: false,
   })
 
-  const { signIn } = useUserSession()
+  // `@nuxtjs/better-auth` 0.1.x 起 signIn 不再掛在 `useUserSession()` 上，改成各自的
+  // action handle：`execute()` NEVER throw，成敗一律看 `status` / `error`。
+  const signIn = useSignIn('email')
+  const signInSocial = useSignIn('social')
   const { message: errorMessage, hasError, setError, clearError } = useAuthError()
   const route = useRoute()
-  const redirectTo = computed(() => (route.query.redirect as string) || '/')
+
+  // 只接受 site-relative 路徑，擋掉 `//evil.example` 這類 protocol-relative 的 open redirect。
+  const redirectTo = computed(() => {
+    const target = route.query.redirect
+    if (typeof target !== 'string' || !target.startsWith('/') || target.startsWith('//')) return '/'
+    return target
+  })
 
   const form = reactive({
     email: '',
     password: '',
   })
-  const loading = ref(false)
+  const loading = computed(() => signIn.status.value === 'pending')
 
   async function handleEmailLogin() {
     clearError()
-    loading.value = true
+    await signIn.execute({ email: form.email, password: form.password })
 
-    try {
-      await signIn.email(
-        { email: form.email, password: form.password },
-        {
-          onSuccess: async () => {
-            await navigateTo(redirectTo.value)
-          },
-          onError: (ctx: any) => setError(ctx.error),
-        },
-      )
-    } catch (err) {
-      setError(err)
-    } finally {
-      loading.value = false
+    if (signIn.error.value) {
+      setError(signIn.error.value)
+      return
     }
+
+    await navigateTo(redirectTo.value)
   }
 
+  // provider 是 typed —— 只吃 server/auth.config.ts 的 `socialProviders` 有列出來的 id。
   async function handleOAuthLogin(provider: 'google' | 'github' | 'line') {
     clearError()
-    try {
-      await signIn.social({
-        provider,
-        callbackURL: redirectTo.value,
-      })
-    } catch (err) {
-      setError(err)
+    // 成功時瀏覽器會被導去 provider，這裡不會往下跑；失敗（例如未設定 credentials）才回來。
+    await signInSocial.execute({ provider, callbackURL: redirectTo.value })
+
+    if (signInSocial.error.value) {
+      setError(signInSocial.error.value)
     }
   }
 </script>

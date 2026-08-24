@@ -13,7 +13,7 @@ This starter provides a baseline for Nuxt 4 + Supabase + AI-assisted development
 - Nuxt UI
 - Pinia
 - Supabase
-- @onmax/nuxt-better-auth
+- @nuxtjs/better-auth
 
 ## Conventions
 

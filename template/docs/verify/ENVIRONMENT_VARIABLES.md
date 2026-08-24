@@ -80,12 +80,12 @@ NUXT_PUBLIC_SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
 
 ## 4. 認證架構說明
 
-本系統使用 **@onmax/nuxt-better-auth** 進行認證：
+本系統使用 **@nuxtjs/better-auth** 進行認證：
 
 ### 4.1. 認證流程
 
 ```
-使用者 → signIn.social({ provider: 'google' }) → OAuth Provider
+使用者 → useSignIn('social').execute({ provider: 'google' }) → OAuth Provider
                                                      ↓
                       ← Session ← Server 驗證 + 建立 Session
 ```
@@ -103,10 +103,11 @@ const { client } = getAuthedSupabase(event)
 ### 4.3. Client 端使用
 
 ```ts
-const { user, loggedIn, signIn, signOut } = useUserSession()
+const { user, loggedIn, signOut } = useUserSession()
+const signInSocial = useSignIn('social')
 
 // OAuth 登入
-await signIn.social({ provider: 'google' })
+await signInSocial.execute({ provider: 'google' })
 
 // 登出
 await signOut()

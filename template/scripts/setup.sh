@@ -86,7 +86,7 @@ OS="$(detect_os)"
 detect_auth_provider() {
   if grep -q '"nuxt-auth-utils"' package.json 2>/dev/null; then
     echo "nuxt-auth-utils"
-  elif grep -q '"@onmax/nuxt-better-auth"' package.json 2>/dev/null; then
+  elif grep -qE '"@(nuxtjs|onmax)/nuxt-better-auth"|"@nuxtjs/better-auth"' package.json 2>/dev/null; then
     echo "better-auth"
   else
     echo "none"

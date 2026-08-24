@@ -434,7 +434,7 @@ brew install supabase/tap/supabase
 建立 `app/auth.config.ts`：
 
 ```typescript
-import { defineClientAuth } from '@onmax/nuxt-better-auth/config'
+import { defineClientAuth } from '@nuxtjs/better-auth/config'
 
 export default defineClientAuth({
   // 可在此加入 client-side plugins
@@ -444,7 +444,7 @@ export default defineClientAuth({
 建立 `server/auth.config.ts`：
 
 ```typescript
-import { defineServerAuth } from '@onmax/nuxt-better-auth/config'
+import { defineServerAuth } from '@nuxtjs/better-auth/config'
 
 export default defineServerAuth({
   emailAndPassword: { enabled: true },

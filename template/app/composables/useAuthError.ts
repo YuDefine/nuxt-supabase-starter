@@ -17,6 +17,9 @@ export function useAuthError(): AuthErrorState {
   const hasError = computed(() => message.value !== '')
 
   function setError(err: unknown) {
+    // `@nuxtjs/better-auth` 的 action handle 把錯誤正規化成 `AuthActionError`
+    // （`{ message, code?, status?, raw }` 的**純物件**，不是 Error 實例），所以下面的
+    // `'message' in err` 分支是 0.1.x 登入 / 註冊失敗的實際落點，NEVER 拿掉。
     if (err instanceof Error) {
       message.value = parseAuthError(err.message)
     } else if (typeof err === 'string') {

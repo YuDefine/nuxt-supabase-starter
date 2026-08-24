@@ -4,7 +4,8 @@
     auth: false,
   })
 
-  const { signUp } = useUserSession()
+  // 同 login.vue：0.1.x 的 signUp 是獨立 action handle，錯誤不走 throw。
+  const signUp = useSignUp('email')
   const { message: errorMessage, hasError, setError, clearError } = useAuthError()
 
   const form = reactive({
@@ -13,7 +14,7 @@
     password: '',
     confirmPassword: '',
   })
-  const loading = ref(false)
+  const loading = computed(() => signUp.status.value === 'pending')
 
   const passwordMismatch = computed(
     () => form.confirmPassword !== '' && form.password !== form.confirmPassword,
@@ -28,27 +29,18 @@
     if (passwordMismatch.value) return
 
     clearError()
-    loading.value = true
+    await signUp.execute({
+      name: form.name,
+      email: form.email,
+      password: form.password,
+    })
 
-    try {
-      await signUp.email(
-        {
-          name: form.name,
-          email: form.email,
-          password: form.password,
-        },
-        {
-          onSuccess: async () => {
-            await navigateTo('/')
-          },
-          onError: (ctx: any) => setError(ctx.error),
-        },
-      )
-    } catch (err) {
-      setError(err)
-    } finally {
-      loading.value = false
+    if (signUp.error.value) {
+      setError(signUp.error.value)
+      return
     }
+
+    await navigateTo('/')
   }
 </script>
 

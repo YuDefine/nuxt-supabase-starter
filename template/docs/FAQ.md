@@ -135,8 +135,10 @@ pnpm docs:build  # 建置靜態網站
 **正確方式**：
 
 ```typescript
-// Client 端
-const { user, loggedIn, signIn, signOut } = useUserSession()
+// Client 端：session 狀態走 useUserSession()，
+// 登入 / 註冊走各自的 action handle（0.1.x 起不再掛在 useUserSession() 上）
+const { user, loggedIn, signOut } = useUserSession()
+const signIn = useSignIn('email')
 
 // Server 端
 // 使用 better-auth 提供的方式取得 session
@@ -397,7 +399,7 @@ pnpm db:types
 
 **不需要認證**：
 
-1. 移除 `better-auth` 和 `@onmax/nuxt-better-auth`
+1. 移除 `better-auth` 和 `@nuxtjs/better-auth`
 2. 從 `nuxt.config.ts` 移除 betterAuth 模組
 3. 刪除 `app/auth.config.ts` 和 `server/auth.config.ts`
 

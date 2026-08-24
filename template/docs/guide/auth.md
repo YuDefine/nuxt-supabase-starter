@@ -21,7 +21,10 @@ Email/password authentication with optional OAuth providers.
 
 ```vue
 <script setup>
-  const { signIn, signUp, loggedIn, user } = useUserSession()
+  // session 狀態走 useUserSession()；signIn / signUp 從 0.1.x 起是獨立的 action handle
+  const { loggedIn, user } = useUserSession()
+  const signIn = useSignIn('email')
+  const signUp = useSignUp('email')
 </script>
 ```
 

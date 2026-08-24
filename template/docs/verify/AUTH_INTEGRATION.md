@@ -11,13 +11,13 @@ applies-to: post-scaffold
 
 ## 方案比較
 
-|                       | nuxt-auth-utils                 | @onmax/nuxt-better-auth                         |
+|                       | nuxt-auth-utils                 | @nuxtjs/better-auth                             |
 | --------------------- | ------------------------------- | ----------------------------------------------- |
 | **Session 儲存**      | Cookie（無 DB）                 | Database                                        |
 | **登入方式**          | OAuth only                      | Email/Password + OAuth                          |
 | **部署相容性**        | 所有環境（Workers/Vercel/Node） | Workers + 自架 DB 需 Hyperdrive                 |
 | **額外頁面**          | login                           | login, register, forgot-password, callback      |
-| **Type 擴充**         | `declare module '#auth-utils'`  | `declare module '@onmax/nuxt-better-auth'`      |
+| **Type 擴充**         | `declare module '#auth-utils'`  | `declare module '#nuxt-better-auth'`            |
 | **Server 端 session** | `requireUserSession(event)`     | `requireUserSession(event, { user: { role } })` |
 | **角色檢查**          | 手動實作                        | 內建 `requireUserSession` 支援                  |
 
@@ -103,21 +103,24 @@ applies-to: post-scaffold
 
 **better-auth — Email/Password + OAuth：**
 
+`@nuxtjs/better-auth` 0.1.x 起 signIn 是獨立的 action handle，`execute()` **不會 throw**，
+成敗一律看 `status` / `error`（包在 try/catch 裡等於永遠不會進 catch）。
+
 ```vue
 <script setup lang="ts">
-  const { signIn } = useUserSession()
+  const signIn = useSignIn('email')
+  const signInSocial = useSignIn('social')
 
   // Email 登入
   async function loginWithEmail() {
-    await signIn.email(
-      { email: 'user@example.com', password: 'password' },
-      { onSuccess: () => navigateTo('/') }
-    )
+    await signIn.execute({ email: 'user@example.com', password: 'password' })
+    if (signIn.error.value) return
+    await navigateTo('/')
   }
 
-  // OAuth 登入
+  // OAuth 登入（provider 是 typed —— 只吃 server/auth.config.ts 有列出的 id）
   async function loginWithGoogle() {
-    await signIn.social({ provider: 'google' })
+    await signInSocial.execute({ provider: 'google' })
   }
 </script>
 ```
@@ -248,8 +251,8 @@ export {}
 
 ```typescript
 // server/types/auth.d.ts
-declare module '@onmax/nuxt-better-auth' {
-  interface User {
+declare module '#nuxt-better-auth' {
+  interface AuthUser {
     id: string
     email: string
     name?: string
@@ -292,12 +295,18 @@ const {
 
 ```typescript
 const {
-  user, // Ref<User | null>
+  user, // Ref<AuthUser | null>
   loggedIn, // ComputedRef<boolean>
-  signIn, // { social, email, ... }
-  signOut, // () => Promise<void>
-  fetch, // () => Promise<void> - 重新取得 session
+  ready, // ComputedRef<boolean> - session 取得完成
+  signOut, // (options?: { onSuccess }) => Promise<void>
+  fetchSession, // (options?: { force }) => Promise<void>
 } = useUserSession()
+
+// signIn / signUp / auth client 在 0.1.x 起是各自獨立的 composable，
+// NEVER 從 useUserSession() 取（拿到的是 undefined）
+const signIn = useSignIn('email') // execute / status / data / error
+const signUp = useSignUp('email')
+const authClient = useAuthClient() // 可能是 null
 ```
 
 ### Server 端（共用）

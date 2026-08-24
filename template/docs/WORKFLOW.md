@@ -55,20 +55,21 @@ await $fetch('/api/v1/todos', {
 
 ### 認證：nuxt-better-auth
 
-本專案使用 `@onmax/nuxt-better-auth`，支援 33+ OAuth providers：
+本專案使用 `@nuxtjs/better-auth`，支援 33+ OAuth providers：
 
 ```typescript
 // nuxt.config.ts
 export default defineNuxtConfig({
-  modules: ['@onmax/nuxt-better-auth'],
+  modules: ['@nuxtjs/better-auth'],
   routeRules: {
     '/dashboard/**': { auth: 'user' },
   },
 })
 
 // 在元件中使用
-const { user, loggedIn, signIn, signOut } = useUserSession()
-await signIn('google')
+const { user, loggedIn, signOut } = useUserSession()
+const signInSocial = useSignIn('social')
+await signInSocial.execute({ provider: 'google' })
 ```
 
 ---

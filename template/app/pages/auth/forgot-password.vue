@@ -4,7 +4,9 @@
     auth: false,
   })
 
-  const { client } = useUserSession()
+  // 0.1.x 的 auth client 從 `useAuthClient()` 取（`useUserSession().client` 已不存在）；
+  // SSR / clientOnly 尚未就緒時是 null，呼叫前 MUST 判。
+  const authClient = useAuthClient()
   const { message: errorMessage, hasError, setError, clearError } = useAuthError()
 
   const email = ref('')
@@ -16,12 +18,14 @@
     loading.value = true
 
     try {
-      // Note: actual reset flow should be handled through your auth provider
-      // For now, we'll show a placeholder implementation
-      if (!client) {
-        throw new Error('No auth client available')
+      if (!authClient) {
+        setError('Auth client is not ready yet. Please try again in a moment.')
+        return
       }
-      // Placeholder: in real implementation, call your server API
+
+      // TODO(project): 接上實際的重設密碼流程，例如
+      // `await authClient.requestPasswordReset({ email: email.value, redirectTo: '/auth/reset' })`
+      // —— 需要先在 server/auth.config.ts 設定寄信。
       submitted.value = true
     } catch (err) {
       setError(err)

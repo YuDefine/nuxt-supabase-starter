@@ -16,7 +16,7 @@ export default defineNuxtConfig({
     '@pinia/nuxt',
     '@vueuse/nuxt',
     '@sentry/nuxt/module',
-    '@onmax/nuxt-better-auth',
+    '@nuxtjs/better-auth',
     '@pinia/colada-nuxt',
     'nuxt-charts',
     'nuxt-security',

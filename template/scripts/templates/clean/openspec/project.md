@@ -13,7 +13,7 @@ TODO: Describe your project purpose.
 - Nuxt UI
 - Pinia
 - Supabase
-- @onmax/nuxt-better-auth
+- @nuxtjs/better-auth
 
 ## Conventions
 

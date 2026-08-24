@@ -20,6 +20,9 @@
 | TD-006 | 在本 repo 跑 install 會讓 clade bootstrap 把 starter 自己當 consumer 投影 | high     | done   | 2026-08-19         | —     |
 | TD-007 | scaffolder 測試套件並行不安全；`detectMonorepoRoot` 讀 `PWD` 而非 cwd | mid      | done   | 2026-08-19         | —     |
 | TD-008 | `template/scripts/validate-starter.mjs` 是維護者工具卻會被 scaffold 帶走 | mid      | open   | 2026-08-19         | —     |
+| TD-009 | 參考 app 仍釘在停更的 `@onmax/nuxt-better-auth`          | mid      | done   | 2026-08-24         | —     |
+| TD-010 | 參考 app 的 email 登入被自家 nuxt-security CSRF 擋在 403 | mid      | open   | 2026-08-24         | —     |
+| TD-011 | clade 投影的 auth rule / skill 仍寫舊套件名             | low      | open   | 2026-08-24         | —     |
 
 ---
 
@@ -616,7 +619,7 @@ if pnpm --dir template vp test run packages/create-nuxt-starter/test/strip-manif
 ## TD-009 — 參考 app 仍釘在停更的 `@onmax/nuxt-better-auth`
 
 **Priority**: mid — 不影響 scaffold 產出，但 starter 自己與它 scaffold 出去的東西已分岔
-**Status**: open
+**Status**: done（2026-08-24）
 **Discovered**: 2026-08-24 —— co-purchase 流程實驗
 
 `create-nuxt-starter` 的 auth feature 已改用 `@nuxtjs/better-auth@^0.1.4`（模組搬進官方
@@ -650,3 +653,89 @@ if pnpm --dir template vp test run packages/create-nuxt-starter/test/strip-manif
 且 `pnpm --dir template dev` 起得來、登入頁能渲染
 **參考**：0.1.4 的 API surface 已逐項驗過並寫進 `template/.claude/skills/nuxt-better-auth/`
 （`references/client-auth.md` 是對照 d.ts 重寫的）
+
+### Resolution（2026-08-24）
+
+參考 app 已遷到 `@nuxtjs/better-auth@^0.1.4` + `better-auth@^1.7.1`：
+
+- `nuxt.config.ts` / `package.json` 換套件；`app/auth.config.ts`、`server/auth.config.ts`
+  的 import 改 `@nuxtjs/better-auth/config`
+- `login.vue` / `register.vue` 改用 `useSignIn('email')` / `useSignIn('social')` /
+  `useSignUp('email')` 的 action handle，錯誤改讀 `handle.error`、loading 改讀
+  `handle.status === 'pending'`；`forgot-password.vue` 改用 `useAuthClient()`
+- `callback.vue`（`fetchSession` / `loggedIn`）、`layouts/default.vue`（`signOut()`）、
+  `stores/user.ts`、`middleware/auth.global.ts` 的 API 在 0.1.x 未變，實測後不動
+- `useAuthError` 的 `message/hasError/setError/clearError` 介面保留（模板那份是
+  `parseAuthError`，介面不同，NEVER 對抄）；`setError` 的 plain-object 分支就是
+  `AuthActionError` 的落點，補了註解
+- `server/auth.config.ts` **新增 `socialProviders`（google / github / line）**：0.1.x 的
+  `useSignIn('social')` provider 是 typed，id 由本檔 `socialProviders` 的 key 推導。不列
+  就是 `never`，登入頁的 OAuth 按鈕連 typecheck 都過不了。credentials 留空不影響啟動 ——
+  Better Auth 只在實際發起授權時才檢查（實測只 warn）
+- 連帶修掉會把舊 API 寫回去的兩處：`template/scripts/setup.sh` 的 `detect_auth_provider`
+  （只認舊套件名 → 遷移後會判成 `none`）、`template/scripts/templates/auth/better-auth/*`
+  的兩份 config 範本
+- 文件層的舊套件名 / 舊 API 示範一併更新（root `docs/INTEGRATION_GUIDE.md`、
+  `docs/TECH_STACK.md`；`template/docs/` 的 `FAQ`、`WORKFLOW`、`guide/auth`、
+  `verify/{README,AUTH_INTEGRATION,ENVIRONMENT_VARIABLES}`、兩份 `openspec/project.md`）
+
+**驗收輸出**：`pnpm --dir template typecheck` exit 0（另以刻意型別錯誤反證 vue-tsc 真的在跑）、
+`vp test run --project=unit` 280 passed / 2 skipped、`format:check` 綠、
+`scripts/audit-template-hygiene.sh` 與 `scripts/audit-public-hygiene.mjs` 皆 PASS。
+`nuxt dev` 起得來，`/auth/{login,register,forgot-password,callback}` 四頁實際渲染截圖確認；
+輸入錯誤帳密後 `signIn.error` → `setError` → `UAlert` 的錯誤路徑實測會顯示（見 TD-010）。
+
+---
+
+## TD-010 — 參考 app 的 email 登入被自家 nuxt-security CSRF 擋在 403
+
+**Status**: open
+**Priority**: mid — 參考 app 的 email 登入在預設設定下走不完；OAuth 走 redirect 不受影響
+**Discovered**: 2026-08-24 —— TD-009 遷移後實測登入流程時撞到（**與該遷移無關，是既有狀態**）
+**Location**: `template/nuxt.config.ts` `security.csrf`、`template/app/pages/auth/login.vue`
+
+### Problem
+
+`nuxt.config.ts` 設 `security.csrf: true`，Better Auth client 的 `POST /api/auth/sign-in/email`
+沒有帶 nuxt-security 的 CSRF token，被擋在 403：
+
+```text
+$ curl -i -X POST http://localhost:3123/api/auth/sign-in/email \
+    -H 'content-type: application/json' -d '{"email":"user@example.com","password":"whatever12"}'
+HTTP/1.1 403 CSRF Token Mismatch
+```
+
+gate 在 server middleware，與 auth 模組版本無關 —— 舊 `@onmax` 版本走同一條路徑，
+所以這是既有缺口，不是 0.1.x 遷移造成的回歸。CI 沒抓到是因為 `e2e/auth.spec.ts` 的真實登入
+測試在缺 `E2E_USER_EMAIL` / `E2E_USER_PASSWORD` 時 `test.skip`，而 `auth.setup.ts` 走的是
+`POST /api/_dev/login`（server 端呼叫 `serverAuth()`，不經過 client fetch）。
+
+### Fix approach（尚未拍板）
+
+1. `security.csrf` 加 `/api/auth/**` 的 exclusion —— Better Auth 自己有 origin / cookie 防護，
+   但要先確認它在本專案的設定下真的啟用
+2. 或讓 client 帶上 nuxt-security 的 token（需要 wire `useCsrf`-類的 header）
+
+**NEVER** 直接關掉 `security.csrf` 了事 —— 那是把整個 app 的保護拿掉來換一條 route。
+
+### Acceptance
+
+- `pnpm --dir template dev` 下，登入頁用有效帳密可完成登入（不再是 `CSRF Token not found`）
+- 其他 mutation route 仍受 CSRF 保護（至少一條 `POST /api/**` 無 token 時仍 403）
+- `e2e/auth.spec.ts` 的真實登入路徑在有測試帳號時能跑完
+
+---
+
+## TD-011 — clade 投影的 auth rule / skill 仍寫舊套件名
+
+**Status**: open —— **不在本 repo 自治區**，MUST 在 `~/offline/clade` 改源檔再 propagate
+**Priority**: low — 只影響 agent 讀到的敘述，不影響 build / runtime
+**Discovered**: 2026-08-24 —— TD-009 收尾掃殘留時發現
+**Location**（皆為 clade-managed 投影，列在 `template/.claude/.hub-state.json` 的 `checksums`）：
+
+- `template/.claude/rules/auth.md:17`、`:54` —— 「本 variant = `@onmax/nuxt-better-auth`」
+- `template/.claude/skills/document-writer/SKILL.md:115` —— `pnpm add @onmax/nuxt-better-auth`
+- `template/.cursor/` 下的對應投影
+
+**NEVER** 在 consumer 端直接改這幾個檔 —— 下次 `hub:sync` 會被蓋回去。
+

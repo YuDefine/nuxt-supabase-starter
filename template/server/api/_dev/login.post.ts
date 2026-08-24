@@ -128,7 +128,7 @@ async function syncDevLoginRole(
   //      建立的持久 row MUST 帶 dev/test provider marker」（provider='dev-login'
   //      或 provider_id='e2e-*'）。profiles 表沒有這個欄位，現在寫進去就是造出
   //      一批與真實使用者無法區分的 row。
-  //   2. Better Auth 在本專案沒有接資料庫 —— @onmax/nuxt-better-auth 只有在偵測到
+  //   2. Better Auth 在本專案沒有接資料庫 —— @nuxtjs/better-auth 只有在偵測到
   //      NuxtHub 的 hub.db 時才提供 drizzle adapter，否則 createDatabase() 回
   //      undefined。使用者 id 目前沒有穩定的持久來源，寫進 profiles 會產生孤兒 row。
   //

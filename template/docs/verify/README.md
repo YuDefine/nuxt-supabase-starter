@@ -67,11 +67,11 @@ docs/verify/    穩定文件（本手冊、Quick Start、DB 操作、Auth、Stat
 
 ## 3. 認證與 Supabase 模組規範
 
-1. **認證架構**：使用 `@onmax/nuxt-better-auth` 進行認證。
-   - OAuth 登入：透過 `signIn.social({ provider: 'google' })` 等方式
+1. **認證架構**：使用 `@nuxtjs/better-auth` 進行認證。
+   - OAuth 登入：透過 `useSignIn('social').execute({ provider: 'google' })` 等方式
    - Session 管理：`useUserSession()` composable
    - Server 端驗證：`requireUserSession(event)`
-2. **Supabase 模組**：使用 `@nuxtjs/supabase` 進行資料庫操作（認證使用 `@onmax/nuxt-better-auth`）。
+2. **Supabase 模組**：使用 `@nuxtjs/supabase` 進行資料庫操作（認證使用 `@nuxtjs/better-auth`）。
    - Server 端使用 Service Role Client
    - Client 端僅執行讀取查詢
 3. **環境變數命名**（詳見 [ENVIRONMENT_VARIABLES](./ENVIRONMENT_VARIABLES.md)）

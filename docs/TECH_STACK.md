@@ -119,7 +119,7 @@ CREATE POLICY "Users can view own posts"
 | OAuth 支援   | ~10 providers                   | 33+ providers（含 LINE、微信等）   |
 | 部署耦合     | 綁定 Supabase 服務              | 獨立運作，不依賴特定 BaaS          |
 | Session 管理 | JWT token（需處理 refresh）     | Server-side session（更簡單安全）  |
-| Nuxt 整合    | `@nuxtjs/supabase` 混合 Auth+DB | `@onmax/nuxt-better-auth` 專職認證 |
+| Nuxt 整合    | `@nuxtjs/supabase` 混合 Auth+DB | `@nuxtjs/better-auth` 專職認證   |
 | 遷移彈性     | 遷移需重寫認證邏輯              | 換資料庫不影響認證                 |
 
 **選擇原因**：
