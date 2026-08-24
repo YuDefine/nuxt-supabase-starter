@@ -44,6 +44,18 @@ describe('classifyTargetDir', () => {
     expect(state.blockers).toEqual([])
   })
 
+  it('clade 的 .clade/ runtime 訊號目錄不擋就地展開', () => {
+    mkdirSync(join(root, '.git'))
+    mkdirSync(join(root, '.clade', 'flow'), { recursive: true })
+    writeFileSync(join(root, '.clade', 'flow', 'events.jsonl'), '{}\n')
+    seed('README.md', '# my product')
+
+    const state = classifyTargetDir(root)
+
+    expect(state.kind).toBe('adoptable')
+    expect(state.blockers).toEqual([])
+  })
+
   it('LICENSE / .gitignore / CHANGELOG 也算起手檔', () => {
     seed('LICENSE')
     seed('.gitignore', 'node_modules\n')

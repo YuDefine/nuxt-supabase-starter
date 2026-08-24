@@ -20,6 +20,10 @@ export const ADOPTABLE_SEED_ENTRIES: ReadonlySet<string> = new Set([
   'LICENSE.md',
   'LICENCE',
   'CHANGELOG.md',
+  // clade 的 runtime 訊號目錄。scaffold 一個字都不往裡面寫，而它是**流程自己**留下的：
+  // 任何被 clade 碰過的空 repo 都會有它。不列入白名單的話，「clade 起手 → starter 就地
+  // 展開」這條主線會被自己的產物擋在 occupied。
+  '.clade',
 ])
 
 /** scaffold 會寫、且可能與既有起手檔衝突的檔案。目前只有 `.gitignore`。 */
