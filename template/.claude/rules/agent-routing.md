@@ -36,6 +36,25 @@ Local edits will be reverted by the next sync.
 
 **NEVER 因 plan mode 這類唯讀模式寫不了檔，就判 in-process subagent 不能派**——`Agent` tool 的 brief 是 prompt 字串、不落檔，只有 `pi-dispatch.ts` 與 Herdr transport 落檔。逐字反開脫：「plan mode 不允許寫 brief 檔，所以改由主線直接讀檔探索」。
 
+## Cursor runtime 主線 residency
+
+**適用 predicate**（命中任一，本節就約束本檔其餘委派指示）：系統提示自稱 Cursor；Task tool 的 model 清單含 `claude-opus-5` / `composer-2.5` / `gpt-5.6-sol` / `grok-4.5`；env 有 `CURSOR_SESSION_ID` 或 `CURSOR_TRACE_ID`。
+
+**Iron Law：本 session 的執行 model 維持 Grok 4.6。違反字面就是違反精神。**
+
+**NEVER** 把 Cursor 的 Task / Agent `model` 設成非 grok-4.6。省略 `model`（inherit 主線）合法。`cursor-grok-4.6-high` 同家族合法。`claude-opus-5-thinking-high`、`composer-2.5-fast`、`cursor-grok-4.5-high-fast`、`gpt-5.6-sol-medium` 一律非法。
+
+其他 model 的合法載體只有兩條：
+
+1. **Pi CLI 真的能派** → `vendor/scripts/pi-dispatch.ts`。predicate：`command -v pi` 成功，且該次 `--model` 沒被 dispatcher 以 exit 3（runtime）或 exit 4（配額）當場拒絕。
+2. **否則** → Herdr create-only：`node vendor/scripts/herdr-session-handoff.ts --cwd <abs> --label <label> --prompt-file <brief> --launcher cc` 或 `--launcher ccw`，並加 `--coordinate`。**NEVER** `--relay`。clade / YuDefine 工作預設 `ccw`，其餘 `cc`。Cursor 沒有 `CLADE_CLAUDE_LAUNCHER`，缺 `--launcher` 會 `unsupported_launcher`。
+
+Cursor 派出 Herdr 之後 MUST `--coordinate` 或 `--coordinate-resume` 等到 correlated `--complete`，再收回 child pane 並繼續；NEVER `--relay`。切片逾時會回 `coordination_pending`，主線立刻 `--coordinate-resume <dispatch_id>`，**不得**把 idle/done 當完成、也不得直接 `herdr pane close`。這不是 `/handoff`：主線繼續工作，**NEVER** 輸出「目前這裡收工」。
+
+**NEVER** 把「Routing Table 寫 Agent tool Claude」讀成「Cursor Task 設 `model=claude-opus-5`」。那是 Claude Code 的 Agent tool，不是 Cursor 的 Task catalog。截圖列 Pi 已 fail-closed，Cursor 只能走第 2 條。
+
+全域注入走 Cursor **User Rules**（Customize → Rules，「Cursor 主線只留 Grok 4.6」）。專案 `.cursor/rules/` 只罩該 repo；**NEVER** 靠 consumer `CLAUDE.md` snippet 當全域通道——那會讓 Claude Code session 付 always-load 預算。
+
 ## 停下來要人做之前（agent 與人的邊界，先於一切派工判定）
 
 上一節決定「主線做還是派出去」，本節決定**更前面**的一件事：這件事到底該不該離開 agent。
@@ -154,7 +173,7 @@ redaction（`vendor/signals/redact.mjs`）只作用在 signal payload、**dispat
 | 〔`spectra-phase-implementation`〕 **Spectra Apply Class C phase 語意實作** | **Pi `--model sol --effort high` via 泛用 dispatcher** | schema／migration／API／backend／非 view frontend phase 的預設 carrier；Plan-first、task→file、view guard、scope、one-phase-one-commit 與 L0–L2 gate 不因 carrier 統一而放寬。**NEVER 轉 grok**（見 reference § Spectra Routing Table）。 |
 | 〔`spectra-phase-prescan`〕 **Spectra Apply 已封閉 phase 的 read-only fact extraction** | **Pi `--model gemini --effort low` via 泛用 dispatcher** | 只抽事實不做裁決，矛盾回 `needs_reconciliation`；範圍與 exit 4 分流見 reference § Spectra Routing Table。 |
 | 〔`spectra-mechanical-substep`〕 **Spectra Apply pilot marker 指定的 deterministic mutation** | **Pi `--model gemini --effort low` via 泛用 dispatcher** | eligible 判準與 shadow candidate 分流見 reference § Spectra Routing Table。 |
-| 〔`screenshot-review-verify`〕 **`screenshot-review` 全部模式**（`[verify:ui]` channel / archive 前視覺 QA / commit 0-B / ad-hoc 截圖） | **`Agent` tool，`subagent_type: screenshot-review`（Claude）。本列 NEVER 派 Pi 任一 model**——`grok-xai` / `grok-cursor` / `sol` / `gemini` / `luna` 一律不准，`pi-dispatch-screenshot-verify.ts` 已 fail-closed 拒跑 | 2026-08-22 Charles 拍板收回外派，四個模式一律適用。**NEVER 恢復「subagent 再轉派」**的形狀；收回理由與 pitfall 對照見 reference § Spectra Routing Table 與 [[review-gui-surface]] § 為什麼只准 Claude subagent。 |
+| 〔`screenshot-review-verify`〕 **`screenshot-review` 全部模式**（`[verify:ui]` channel / archive 前視覺 QA / commit 0-B / ad-hoc 截圖） | **`Agent` tool，`subagent_type: screenshot-review`（Claude）。本列 NEVER 派 Pi 任一 model**——`grok-xai` / `grok-cursor` / `sol` / `gemini` / `luna` 一律不准，`pi-dispatch-screenshot-verify.ts` 已 fail-closed 拒跑。**Cursor runtime 例外**：NEVER 用 Cursor Task 的 `model=claude-*` 假裝本列；改走 § Cursor runtime 主線 residency 的 Herdr create-only `cc`／`ccw` | 2026-08-22 Charles 拍板收回外派，四個模式一律適用。**NEVER 恢復「subagent 再轉派」**的形狀；收回理由與 pitfall 對照見 reference § Spectra Routing Table 與 [[review-gui-surface]] § 為什麼只准 Claude subagent。 |
 | 〔`screenshot-match-analysis`〕 **截圖 vs item 要求的匹配判定**（`[verify:ui]` 收集完成後的 gate） | **Pi `--model sol --effort xhigh` via 泛用 dispatcher** | 收集與判定是兩個角色，**NEVER** 併成同一次 dispatch。留 sol 的理由是**樣本不足以轉**，不是 grok 守不住；取證與轉列條件見 reference § Spectra Routing Table。 |
 | **Dev/test admin session cookie 取得**（verify channel evidence collection 階段） | **主線自己 scaffold `_dev-login` route + curl mint session**（**禁止**要 user 手動取 cookie；scaffold 前**MUST**先用 detection helper 確認真的 missing） | 詳見 [[manual-review.backend]] § Dev-login route missing → scaffold-first + [[pitfall-agent-asks-user-cookie-skipping-dev-login-scaffold]]。 |
 | 〔`mechanical-fanout`〕 **Mechanical fan-out**（收集 / 掃描 / 跑指令驗證：grep 掃描、收 evidence、驗證矩陣、fleet 多 repo 盤點）。**不限委派**：主線**準備自己跑** ≥3 條唯讀指令（`grep`／`git log`／`jq`／一次性解析腳本）彙整成事實表就已命中 | **Pi `--model gemini --effort low` via 泛用 dispatcher** | 第 3 個高信心 readonly Bash 前建立 pending decision（結案見 reference § Routing threshold gate）。命令清單列得全 → `fanout-analyze`，列不全 → `fanout-collect`。例外留 Claude：需 claude.ai-connected MCP、判讀／治理型分析、user 明確要求。**NEVER** 以「我自己順手跑掉比較快」略過本列（成因見 rationale）。exit 4 → luna。 |
@@ -171,6 +190,8 @@ redaction（`vendor/signals/redact.mjs`）只作用在 signal payload、**dispat
 | 〔`publish-prescan`〕 **clade publish/propagate pre-scan**（publish 前 dirty file 分組判斷：讀 `git status` + `git diff` 各 file 內容 + 辨識 logical group） | **Pi `--model grok-xai --effort low` via 泛用 dispatcher**（`xai/grok-4.6`）。exit 4 → `--model grok-cursor` 同 effort 重派一次，主線消費分組建議後 selective commit | commit grouping 要推斷修改意圖、耦合、依賴順序與可獨立回退性——**讀取命令少不等於決策機械化**；可派的只有 pre-scan 的 reading 段。轉 grok 取證見 rationale § 群 2。 |
 
 ## Claude 委派的 model 檔位（決定層）
+
+**Cursor runtime 先停：本節整節不適用。** 命中 § Cursor runtime 主線 residency 的 session **NEVER** 走到本節挑 `Agent` / `Task` 的 Claude／Fable／Haiku 檔位。
 
 上表管「派 pi 還是留 Claude」。本節只管**已決定留 Claude 的委派工作**該用哪個 model —— 這是
 `Agent` / `Task` 的 `model` 參數，與 pi 的 `--model` 三檔位無關。
@@ -318,7 +339,8 @@ always-load 只留 payload **算不出來**的三條判斷：
   **MUST 一起改**。理由是這類工作沒有「誰做都行」這個性質：產出 changeset 的那條主線回頭審自己，
   跟同家族模型代審一樣，gate 形式上補了位、實質是空的。因此 sol 鏈耗盡時 dispatcher 的
   `next_step` 對這些 row 指向 **Fable subagent**（`--model fable`，effort `max`），
-  對其餘 row 才維持 Opus 主線。`-cursor` 那一跳照走，它換的是配額池不是家族
+  對其餘 row 才維持 Opus 主線。`-cursor` 那一跳照走，它換的是配額池不是家族。
+  **Cursor runtime 例外**：Fable／Opus subagent 不得改用 Cursor Task 的非 grok-4.6 `model`；改走 § Cursor runtime 主線 residency 的 Herdr create-only `cc`／`ccw`
 - `-cursor` 那一跳的准入 **MUST 綁在待審材料的來源，NEVER 綁在使用者意願**（TD-534）——兩層機械門檻與「NEVER 做成可繞過的形式」全文在下面那條指針指的那一節
 
 鏈的完整形狀、cross-family 跳的准入連言、`--chain-origin` 為何在 `grok-xai` 那格 required、
@@ -397,6 +419,7 @@ message 的逐字形狀（虛構 task id 是實測最常見的失敗）、沒有
 | **NEVER** 把 UI view phase 派給任何 runtime（Pi 任一 model／Claude subagent 都算） | UI view 實作在不外派清單；非 view phase 的 dispatch prompt 仍 MUST 含「禁止改 view 層檔案」硬指令，缺這條 runtime 容易順手改到 .vue / .tsx |
 | **NEVER** 讓 Claude subagent 當 pi 的**薄中介**——派出 pi 卻不自跑 Pi Watch Protocol，把死活判定留給上一層 | 判準是**誰持有 pi 的生命週期**，不是「有沒有經過 subagent」。薄中介的兩個已驗證失敗模式見 rationale（同 §）。完整持有生命週期的形狀見下一列 |
 | **NEVER** 在 exploration / research 型 session 自己逐檔 Read + scan 多個 source（openspec / HANDOFF / git log / docs）超過 3 個 source file | 先派 Pi `sol low` pre-scan 拿 structured summary，再由主線消費 summary 做判斷。例外：user 明確問特定檔案 / 需要 claude.ai-connected MCP |
+| **NEVER** 把 Cursor 的 Task / Agent `model` 設成非 grok-4.6 | Cursor 主線 residency。其他 model 只走 Pi CLI；Pi 不能派則 Herdr create-only `cc`／`ccw`。省略 `model`（inherit Grok 4.6）合法 |
 
 **派 pi 寫 code、派 spectra-apply phase、或收 `verify:ui` evidence 之前，MUST 先讀 [[agent-routing.pi-watch-protocol]] § Dispatch 入口禁令（下推四列）**——Commit Authorization 段、Plan-first 硬指令、`verify:ui` 唯一入口與它的機械 backstop、以及「pi MUST 由該層編排者自己派」那條的准入與範圍界線，都在那裡，**此處不複述**。
 

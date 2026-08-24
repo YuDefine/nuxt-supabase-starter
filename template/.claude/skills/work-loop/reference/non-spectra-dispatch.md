@@ -111,7 +111,7 @@ machine check 分離把這件事結構化了，非 spectra 路徑沒有那個結
 - ❌「complex」「多個 scripts 有不同 scope」— pi effort=high 處理
 - ❌「not ideal for quick wins」— loop 不只做 quick wins
 - ❌「需要 visual verification」— 非 `.vue` 的 backend 不需要
-- ❌「這輪已做了一個了」— 沒有 per-round 上限（除 `--unattended` 3-item cap）
+- ❌「這輪已做了一個了」— 沒有 per-round 上限（除 `--unattended` 5-item cap）
 - ❌「等 agents 完成再處理」— 扇出組滿 4 就是做主線即時組的時機，不是該等的時機。等 notification
   期間 **MUST** 繼續推進（investigation 類主線直接做、code task 類等扇出組空位）
 - ❌「先寫 HANDOFF status」— HANDOFF status 是 Step 7（四組皆空且 in-flight 歸零之後），不是中途的 exit ramp

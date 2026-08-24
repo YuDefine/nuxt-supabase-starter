@@ -44,7 +44,7 @@ Step 2 產出的**不是**一條佇列，是**四組**併發特性不同的工�
 - dispatch 到第 4 個 in-flight 後停止 dispatch，主線改做 main 組 / dev-port 組 / 主線即時組
 - 每收到一個 `<task-notification>` 並走完收割 SOP，從扇出組**補一個**新的 dispatch
 - **≤ 4 只計扇出組的 dispatch**。dev-port 組的 `/wt` dispatch 另計（它自己的配額是 1），兩者不互佔——4 個扇出 in-flight 加 1 個 dev-port dispatch 是合法狀態
-- `--unattended` 的 3-item cap 管的是**本輪處理總數**，不是併發數。兩者同時生效時 3-item cap 必然先觸頂（總數 3 < 併發 4），實質併發上限變成 3
+- `--unattended` 的 5-item cap 管的是**本輪處理總數**，不是併發數。兩者同時生效時**併發 4 先觸頂**（總數 5 > 併發 4），實質併發上限維持 4 —— 2026-08-24 把 cap 從 3 放寬到 5 之前是反過來的（總數 3 < 併發 4，實質併發被壓成 3）。**NEVER** 把本行讀成「併發上限跟著 cap 走」：兩個常數各有依據，改一個不會連動另一個
 
 **4 的依據**：每個 in-flight = 一個完整 worktree checkout + 一個 background agent。單機磁碟與 usage 成本在這個量級之上開始明顯。這是常數不是公式 —— 改它要改本檔。
 
@@ -112,7 +112,7 @@ model / effort / template 的 SoT：[[agent-routing]] § Routing Table 對應列
 
 非 runner child 的安全網 prompt MUST 使用 [[agent-routing]] 的 canonical inert control message，NEVER 放原 pre-scan / work-loop 任務；terminal claim / intervention 由 `pi-watch` 完成後 callback 至本節的輕量收割，**NEVER** 另以 `work-loop-dispatch` 對同一 task claim。
 
-- pre-scan **不計** `--unattended` 的 3-item cap——它是某個 item 處理過程的一段，不是一個 item
+- pre-scan **不計** `--unattended` 的 5-item cap——它是某個 item 處理過程的一段，不是一個 item
 - async 路徑收到 notification → 走 [harvest.md](harvest.md) § pre-scan 通知的輕量收割，**不走** 8 步 SOP
 - **report 是未驗證主張**：report 結論若導向**狀態改變**（unblock / packaging / 排除某 item），主線 MUST 對該結論引用的關鍵檔位定點 Read 複驗後才動手
 

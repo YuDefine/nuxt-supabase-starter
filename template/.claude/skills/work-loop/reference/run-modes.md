@@ -73,8 +73,9 @@ preflight 探針與每輪 child 的 **launcher 跟起 runner 的入口對齊**�
 | `ccw` | 同上，`CLAUDE_CONFIG_DIR=~/.claude-work` | 官方工作 |
 | `ccg` | `claudeg --print`（釘 `--model ccg-opus`） | gateway / Grok |
 | `ccx` | `claudex --print`（釘 `--model ccx-opus`） | gateway / GPT |
+| `ccagy` | `claudeagy --print`（釘 `--model ccagy-opus`） | gateway / Antigravity |
 
-判定看 `ANTHROPIC_DEFAULT_OPUS_MODEL` 是否 `ccg-*` / `ccx-*`，再看 `CLAUDE_CONFIG_DIR` 是否
+判定看 `ANTHROPIC_DEFAULT_OPUS_MODEL` 是否 `ccagy-*` / `ccg-*` / `ccx-*`，再看 `CLAUDE_CONFIG_DIR` 是否
 `~/.claude-work`，其餘當 `cc`。**NEVER** 從 CCG pane 起 runner 卻剝成官方 CC —— 兩池額度
 不是同一個，2026-08-20 實測剝完撞 `You've hit your session limit · resets 5am`，gateway 還有額度。
 

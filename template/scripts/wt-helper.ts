@@ -22,13 +22,19 @@
  *                    Squash-landed branches (refs/wt-landed/<slug> matching
  *                    the branch tip) skip both ancestry gates; clade-managed
  *                    projection drift is exempt from the uncommitted gate.
- *   merge-back <slug> [--dry-run] [--auto-stash] [--no-cleanup]
+ *   merge-back <slug> [--dry-run] [--auto-stash] [--no-cleanup] [--accept-landed]
  *                    Atomic ceremony: squash session branch into main +
  *                    cleanup worktree. Pre-flight detects main-worktree
  *                    blockers (modified or untracked files at branch's
  *                    changeset paths). With --auto-stash, stashes blockers
  *                    as `wt-merge-block/<slug>/<ISO>` for later reconcile
  *                    via stash-reconcile.mjs.
+ *                    Branch content already carried into main by another path
+ *                    ends cleanly (no --force): if every path the branch
+ *                    touched is byte-identical in main, nothing is left to
+ *                    squash. When some paths still differ, they are listed and
+ *                    --accept-landed is the explicit exit — it pins the tip as
+ *                    refs/wt-accepted-landed/<slug> before discarding the delta.
  *   land-pending <slug> [opts]
  *                    Alias for merge-back. Semantic marker for migrating
  *                    grandfathered worktrees from the pre-atomic flow
@@ -61,16 +67,19 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  mkdtempSync,
   openSync,
   readFileSync,
   readSync,
   readdirSync,
   statSync,
+  symlinkSync,
   writeFileSync,
   realpathSync,
   rmSync,
   unlinkSync,
 } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { stdin, stdout } from 'node:process'
 import { fileURLToPath } from 'node:url'
@@ -92,6 +101,7 @@ interface WtOptions {
   force?: boolean
   forceDiscardUnland?: boolean
   forceDiscardUncommitted?: boolean
+  acceptLanded?: boolean
   dryRun?: boolean
   autoStash?: boolean
   includeWorktreeWip?: boolean
@@ -914,6 +924,52 @@ function pinPreForkBaseline(consumerRoot, cleanSlug, iso, opts: { label?: string
   }
 }
 
+// TD-614: gitignored runtime 檔在 linked worktree 內不存在（`git worktree` fork 只帶
+// tracked 檔），而讀它們的工具**不會報錯**——`consumers.local` 缺席時 fleet audit 只掃到
+// clade 自己，輸出讀起來與「全綠」同形。失效方向是假陰性，所以在 fork 當下就補上。
+//
+// 用 symlink 不用 copy：這些檔是**本機當前狀態**（registry 覆寫、路徑指標），worktree
+// 讀到的必須是 main root 的現況，不是 fork 當下的快照。
+// **NEVER** 反過來讓 audit 在找不到檔時 fallback 去讀 main working tree —— 那會讓
+// worktree 內的 audit 讀到不屬於該 branch 的狀態。
+const GITIGNORED_RUNTIME_LINKS = ['consumers.local']
+
+// main worktree 的 root。linked worktree 的 `--git-common-dir` 指回 main 的 `.git`，
+// 所以 dirname 就是 main root。**NEVER 寫死路徑** —— 這支同時服務 11 個 consumer。
+export function mainWorktreeRoot(cwd) {
+  const common = git(['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd })
+  return dirname(common.trim())
+}
+
+export function linkGitignoredRuntimeFiles(consumerRoot, wtPath, names = GITIGNORED_RUNTIME_LINKS) {
+  const linked = []
+  let mainRoot
+  try {
+    mainRoot = mainWorktreeRoot(consumerRoot)
+  } catch {
+    return linked
+  }
+  for (const name of names) {
+    try {
+      const src = join(mainRoot, name)
+      const dst = join(wtPath, name)
+      if (!existsSync(src) || existsSync(dst)) continue
+      // 只 link 真的被 ignore 的檔：非 ignored 的 symlink 會變成 untracked 檔，
+      // 接著 merge-back / cleanup 的 uncommitted-files gate 就擋在它上面。
+      // 判準取**目的地 worktree** 的 ignore 視角（檔案落在那裡），不是 main 的 ——
+      // 兩邊的 `.gitignore` 可以不同（main 的是 working tree 現況，worktree 的是
+      // 它 fork 出來那個 commit 的）。
+      if (spawnSync('git', ['check-ignore', '-q', name], { cwd: wtPath }).status !== 0) continue
+      mkdirSync(dirname(dst), { recursive: true })
+      symlinkSync(src, dst)
+      linked.push(name)
+    } catch (e) {
+      console.error(`note: runtime link ${name} skipped: ${e?.message ?? e}`)
+    }
+  }
+  return linked
+}
+
 async function cmdAdd(slug, opts: WtOptions = {}) {
   if (!slug) {
     throw new Error(
@@ -1445,6 +1501,16 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
     }
   } catch (e) {
     console.error(`note: .clade/bin copy skipped: ${e?.message ?? e}`)
+  }
+
+  // TD-614: link gitignored runtime files (consumers.local …) from main root.
+  {
+    const linked = linkGitignoredRuntimeFiles(consumerRoot, wtPath)
+    if (linked.length > 0) {
+      console.log(
+        `  runtime-link: symlinked ${linked.join(', ')} from main (gitignored, fleet audits read it)`,
+      )
+    }
   }
 
   // TD-187: auto-invoke wt-env-bootstrap.ts if consumer-meta declares filesToCopy.
@@ -2330,6 +2396,220 @@ function commitsBehindRef(cwd, ref) {
     return parseInt(git(['rev-list', '--count', `HEAD..${ref}`], { cwd }), 10) || 0
   } catch {
     return 0
+  }
+}
+
+/**
+ * 把失敗的 `git merge --squash` 留在 main 上的殘骸還原（TD-619）。
+ *
+ * `git merge --abort` 對 squash merge **無效** —— squash 不寫 MERGE_HEAD，abort 直接
+ * 報 "no merge to abort"，而既有 code 把它 swallow 掉。於是衝突的 index（UU）與已
+ * stage 的部分會原地留在**共用的** main working tree 上：下一個在這棵樹上跑
+ * `publish.ts` 的 session 看到的是一棵髒樹，而重跑 merge-back 也只是在同一個殘骸上
+ * 再撞一次同一組衝突。「重跑永遠不會結束」的機制就在這裡。
+ *
+ * 只還原**這次 squash 自己動到的路徑**（staged 或 conflicted），逐條 reset 回 HEAD：
+ * merge-back 的 blocker gate 已保證這些路徑在 main 上原本是乾淨的（有 WIP 就先 stash
+ * 或直接拒絕），所以還原不會吃到任何人的東西。
+ * **NEVER 用 `git reset --hard`** —— 那會連別 session 在其他路徑上的 WIP 一起清掉。
+ */
+export function resetSquashResidue(consumerRoot: string, paths: string[]) {
+  const targets: string[] = [...new Set(paths.filter(Boolean))]
+  if (targets.length === 0) return []
+  const restored = []
+  for (const path of targets) {
+    try {
+      git(['reset', '-q', 'HEAD', '--', path], { cwd: consumerRoot })
+    } catch {
+      // 路徑在 HEAD 不存在（branch 新增的檔）時 reset 仍會把 index entry 清掉；
+      // 失敗只代表沒有 index entry 可清，繼續往下還原 working tree。
+    }
+    let inHead = true
+    try {
+      git(['cat-file', '-e', `HEAD:${path}`], { cwd: consumerRoot })
+    } catch {
+      inHead = false
+    }
+    try {
+      if (inHead) {
+        git(['checkout', '--force', 'HEAD', '--', path], { cwd: consumerRoot })
+      } else {
+        // 這次 squash 才創出來的檔：squash 前 main 沒有它（blocker gate 已排除
+        // 同路徑的 untracked user 檔），留著只會變成下一道 uncommitted gate 的絆索。
+        rmSync(join(consumerRoot, path), { force: true })
+      }
+      restored.push(path)
+    } catch (e) {
+      console.error(`note: squash residue at ${path} could not be reset: ${e?.message ?? e}`)
+    }
+  }
+  return restored
+}
+
+/**
+ * 「branch 加的每一行，base 是不是都已經有了」的**諮詢用**量測（TD-619）。
+ *
+ * 這**不是**判定，是給人看的證據。真正的自動判定是 detectAbsorbedByOtherPath 的
+ * patch 反套 —— 那個嚴格到 context 被鄰行動過就失敗，於是「內容確實已在 main、只是
+ * 上下文變了」的實際形狀會落在它外面。那種情形只有人判得出來，所以這裡把人要看的
+ * 東西先算好：每個路徑上，branch 加了而 base 沒有的行有幾條。
+ *
+ * **NEVER 拿這個結果當自動收尾的依據**：行集合比對忽略順序與重複，`missing === 0`
+ * 不蘊含語義等價。它的用途只有一個 —— 讓 `--accept-landed` 不是盲按。
+ */
+export function summarizeAddedLinesPresence(
+  consumerRoot,
+  branchName,
+  mergeBase,
+  paths,
+  baseRef = 'HEAD',
+) {
+  const rows = []
+  for (const path of paths.slice(0, 50)) {
+    let added = []
+    try {
+      added = git(['diff', '--unified=0', mergeBase, branchName, '--', path], { cwd: consumerRoot })
+        .split('\n')
+        .filter((l) => l.startsWith('+') && !l.startsWith('+++'))
+        .map((l) => l.slice(1).trim())
+        .filter(Boolean)
+    } catch {
+      rows.push({ path, missing: null })
+      continue
+    }
+    if (added.length === 0) {
+      rows.push({ path, missing: 0 })
+      continue
+    }
+    let baseLines
+    try {
+      baseLines = new Set(
+        git(['show', `${baseRef}:${path}`], { cwd: consumerRoot })
+          .split('\n')
+          .map((l) => l.trim()),
+      )
+    } catch {
+      rows.push({ path, missing: added.length })
+      continue
+    }
+    rows.push({ path, missing: added.filter((l) => !baseLines.has(l)).length })
+  }
+  return rows
+}
+
+/**
+ * 「branch 的 changeset 已由別條路徑落進 base」的判定（TD-619）。
+ *
+ * 一條 session branch 的內容有時是被**別的 commit** 帶進 main 的（例：另一個 session
+ * 在自己的樹上重打同一批改動後先 land）。這種 branch 再跑 merge-back，
+ * `git merge --squash` 必定回報衝突——兩邊從同一個 base 各自動過同一段——而正確的
+ * 解法是「兩邊都取 main」，解完 index 是空的。舊行為只看「squash 有沒有衝突」，於是
+ * 每次重跑都重現同一組衝突，**沒有任何重跑次數會讓它結束**。
+ *
+ * 判準是 patch 層的「這份 changeset 是否已經套用在 base 上」：把
+ * `merge-base..branch` 的 diff **反向**試套到 base 的樹（`git apply --check -R`）。
+ * 全部 hunk 都反套得掉 ⟺ branch 加的每一行都已在 base、刪的每一行都已不在 base
+ * ⟺ 再 squash 一次不會多出任何東西。
+ *
+ * 為什麼不是「兩棵樹逐檔 byte-identical」：那個判準永遠不會在這裡成立。樹相同的
+ * branch 根本不會產生衝突（git 的 3-way merge 對兩邊同結果直接收斂），所以它只在
+ * 走不到這個分支的情況下為真，對真正的失敗型態零覆蓋。反套判準涵蓋它，並且多接住
+ * 「別條路徑帶進來的內容比 branch 更多」這個實際形狀。
+ *
+ * **NEVER 放寬成「衝突就自動取 ours」**：任何一個 hunk 反套不掉就回 absorbed:false，
+ * 交還給原本的衝突錯誤——真有內容只在此 branch 的情況永遠走不到捷徑這條路。
+ * 檢查跑在**臨時 index**（`GIT_INDEX_FILE` + `read-tree`）上，不碰 working tree 也
+ * 不碰真正的 index，所以呼叫時機與 main 當下的 dirty 狀態都不影響結果。
+ */
+export function detectAbsorbedByOtherPath(consumerRoot, branchName, baseRef = 'HEAD') {
+  const empty = { changedPaths: [], differing: [] }
+  let mergeBase
+  try {
+    mergeBase = git(['merge-base', baseRef, branchName], { cwd: consumerRoot }).trim()
+  } catch (e) {
+    return {
+      absorbed: false,
+      reason: 'merge-base-unreadable',
+      ...empty,
+      error: e?.message ?? String(e),
+    }
+  }
+  if (!mergeBase) return { absorbed: false, reason: 'merge-base-unreadable', ...empty }
+
+  const nameOnly = (args) =>
+    git(args, { cwd: consumerRoot })
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+
+  let changedPaths
+  try {
+    changedPaths = nameOnly(['diff', '--name-only', mergeBase, branchName])
+  } catch (e) {
+    return {
+      absorbed: false,
+      reason: 'changeset-unreadable',
+      ...empty,
+      error: e?.message ?? String(e),
+    }
+  }
+  if (changedPaths.length === 0) {
+    return { absorbed: true, reason: 'empty-changeset', changedPaths, differing: [] }
+  }
+
+  // 訊息用：branch 與 base 兩棵樹在 changeset 路徑上實際不同的部分。整份比對後取交集，
+  // 不把 changedPaths 當 pathspec 傳給 git —— changeset 大時會撞到 argv 長度上限。
+  let differing = changedPaths
+  try {
+    const treeDiff = new Set(nameOnly(['diff', '--name-only', branchName, baseRef]))
+    differing = changedPaths.filter((p) => treeDiff.has(p))
+  } catch {
+    differing = changedPaths
+  }
+  if (differing.length === 0) {
+    return { absorbed: true, reason: 'content-identical', changedPaths, differing }
+  }
+
+  let patch
+  try {
+    patch = execFileSync('git', ['diff', '--binary', mergeBase, branchName], {
+      cwd: consumerRoot,
+      encoding: 'utf8',
+      maxBuffer: 256 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch (e) {
+    return {
+      absorbed: false,
+      reason: 'patch-unreadable',
+      changedPaths,
+      differing,
+      error: e?.message ?? String(e),
+    }
+  }
+  if (!patch.trim()) {
+    return { absorbed: true, reason: 'empty-changeset', changedPaths, differing: [] }
+  }
+
+  const scratch = mkdtempSync(join(tmpdir(), 'wt-absorb-'))
+  const patchFile = join(scratch, 'changeset.patch')
+  const indexFile = join(scratch, 'index')
+  try {
+    writeFileSync(patchFile, patch)
+    const env = { ...process.env, GIT_INDEX_FILE: indexFile }
+    git(['read-tree', baseRef], { cwd: consumerRoot, env })
+    git(['apply', '--cached', '--check', '--reverse', patchFile], { cwd: consumerRoot, env })
+    return {
+      absorbed: true,
+      reason: 'changeset-already-applied',
+      changedPaths,
+      differing,
+      mergeBase,
+    }
+  } catch {
+    return { absorbed: false, reason: 'content-differs', changedPaths, differing, mergeBase }
+  } finally {
+    rmSync(scratch, { recursive: true, force: true })
   }
 }
 
@@ -3524,10 +3804,24 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
     .filter((line) => /^(UU|AA|DD|AU|UA|UD|DU) /.test(line))
     .map((line) => line.slice(3).trim())
 
+  // TD-619: 衝突不必然代表「還有東西要落地」—— branch 內容被別條路徑先帶進 main 時
+  // 也長這個樣子，而那種情況每次重跑都重現同一組衝突，沒有終止條件。判定放在 abort
+  // 之後、throw 之前；absorbed 為真時本函式後段照常走 cleanup（見 absorbedByOtherPath）。
+  let absorbedByOtherPath = false
   if (conflicted.length > 0 || squashError) {
     try {
       git(['merge', '--abort'], { cwd: consumerRoot, stdio: 'ignore' })
     } catch {}
+
+    // abort 對 squash merge 是 no-op（見 resetSquashResidue）—— 殘骸要自己收，
+    // 否則 UU 會留在共用的 main 上，重跑也只是在殘骸上再撞一次同一組衝突。
+    const squashTouched = statusAfter
+      .split('\n')
+      .filter((line) => line.trim().length > 0)
+      .filter((line) => line[0] !== ' ' && line[0] !== '?')
+      .map((line) => line.slice(3).trim())
+      .filter(Boolean)
+    resetSquashResidue(consumerRoot, squashTouched)
 
     // Pop stash and re-check — git stash pop can leave UU in index when stash
     // content conflicts with the post-abort working tree. Previously this was
@@ -3574,17 +3868,127 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
           ? `\n\nstash pop exited with error but no UU detected; stash '${stashRef}' preserved — inspect with \`git stash list\`.`
           : ''
 
-    throw new Error(
-      `merge-back: ${squashDetail}${popDetail}\n\n` +
-        `Worktree '${target.path}' + branch '${branchName}' preserved.\n` +
-        `Resolve conflicts manually then re-run \`wt-helper merge-back ${cleanSlug}\`.`,
-    )
+    // 內容已被別條路徑吸收 → 沒有東西可 commit，重跑幾次都一樣。改走正常 cleanup，
+    // 使用者不必按 `cleanup --force --force-discard-unland`（那個旗標的語義是「丟棄
+    // 未落地工作」，與此處的事實相反）。
+    // stash pop 若自己也留下 UU，就算 absorbed 也不能往下走 —— 那是獨立的破壞訊號。
+    const absorbCheck =
+      popUnmerged.length === 0 && !popExitError
+        ? detectAbsorbedByOtherPath(consumerRoot, branchName)
+        : { absorbed: false, reason: 'stash-pop-unresolved', changedPaths: [], differing: [] }
+
+    if (absorbCheck.absorbed) {
+      absorbedByOtherPath = true
+      // conflict 分支已經把 stash pop 回來了（若有），後段的 auto-restore 不該再跑一次。
+      stashRef = null
+      const tipShaForVerify = (() => {
+        try {
+          return git(['rev-parse', '--verify', `${branchName}^{commit}`], {
+            cwd: consumerRoot,
+          }).trim()
+        } catch {
+          return branchName
+        }
+      })()
+      console.log('')
+      console.log(
+        `merge-back: '${cleanSlug}' 的 changeset 已由別條路徑落進 main` +
+          `（absorbed-by-other-path / ${absorbCheck.reason}；${absorbCheck.changedPaths.length} 個路徑）。` +
+          `再 squash 一次不會多出任何東西，改走正常 cleanup —— 不需要 --force。`,
+      )
+      console.log(
+        `  逐檔驗證（branch 加的每一行都應已在 main；下列 patch 反套得掉正是本次的判定依據）：`,
+      )
+      for (const f of absorbCheck.changedPaths.slice(0, 10)) {
+        console.log(`    git diff ${tipShaForVerify.slice(0, 12)} HEAD -- '${f}'`)
+      }
+      if (absorbCheck.changedPaths.length > 10) {
+        console.log(`    … 另外 ${absorbCheck.changedPaths.length - 10} 個路徑`)
+      }
+      console.log('')
+    } else if (absorbCheck.reason === 'content-differs' && opts.acceptLanded) {
+      // 使用者明確斷言「main 的版本已取代這條 branch，剩下的 delta 作廢」。
+      // 這是一句斷言不是一個 force —— 但它丟掉的是**真的只存在此 branch**的內容，
+      // 所以在刪 branch 之前把 tip 釘成 rescue ref，並把丟掉的路徑逐條印出來留證。
+      absorbedByOtherPath = true
+      stashRef = null
+      let discardedTip = null
+      try {
+        discardedTip = git(['rev-parse', '--verify', `${branchName}^{commit}`], {
+          cwd: consumerRoot,
+        }).trim()
+        git(['update-ref', `refs/wt-accepted-landed/${cleanSlug}`, discardedTip], {
+          cwd: consumerRoot,
+        })
+      } catch (e) {
+        throw new Error(
+          `merge-back --accept-landed: 無法釘住 '${branchName}' 的 tip 供事後救回，拒絕往下走：` +
+            `${e?.message ?? e}`,
+          { cause: e },
+        )
+      }
+      console.log('')
+      console.warn(
+        `merge-back --accept-landed: 以 main 的版本為準收掉 '${cleanSlug}'。` +
+          `以下 ${absorbCheck.differing.length} 個路徑在此 branch 與 main **不同**，其差異將不會進 main：`,
+      )
+      for (const f of absorbCheck.differing.slice(0, 20)) console.warn(`    ${f}`)
+      if (absorbCheck.differing.length > 20) {
+        console.warn(`    … 另外 ${absorbCheck.differing.length - 20} 個路徑`)
+      }
+      console.warn(
+        `  branch tip 已釘為 'refs/wt-accepted-landed/${cleanSlug}' → ${discardedTip.slice(0, 12)}\n` +
+          `  事後要看被丟掉的內容：git diff HEAD refs/wt-accepted-landed/${cleanSlug}`,
+      )
+      console.log('')
+    } else {
+      let absorbNote = ''
+      if (absorbCheck.reason === 'content-differs') {
+        // 每個路徑報「branch 加了而 main 沒有的行數」。0 = main 已含 branch 加的每一行
+        // （上下文變了才反套不掉）；>0 = 那些行真的只在此 branch 上。這是**證據不是判定**，
+        // 所以呈現成數字讓人判，NEVER 拿它自動收尾。
+        const rows = summarizeAddedLinesPresence(
+          consumerRoot,
+          branchName,
+          absorbCheck.mergeBase,
+          absorbCheck.differing,
+        )
+        const onlyHere = rows.filter((r) => r.missing !== 0)
+        absorbNote =
+          `\n\n這條 branch 與 main 在 ${absorbCheck.differing.length} 個路徑上仍不同。` +
+          `每列的數字 = branch 加了而 main 沒有的行數（0 = main 已含 branch 加的每一行）：\n` +
+          rows
+            .slice(0, 10)
+            .map((r) => `   ${r.missing === null ? '?' : r.missing}  ${r.path}`)
+            .join('\n') +
+          (rows.length < absorbCheck.differing.length
+            ? `\n   … 另外 ${absorbCheck.differing.length - rows.length} 個路徑未量測`
+            : '') +
+          `\n\n逐條看差異：git diff HEAD ${branchName} -- '<path>'\n` +
+          (onlyHere.length === 0
+            ? `全部為 0：main 已含此 branch 加的每一行（自動判定沒過只因 patch 的上下文被鄰行改動）。\n`
+            : `其中 ${onlyHere.length} 個路徑有只存在此 branch 的行 —— 收掉前先確認那些行真的作廢。\n`) +
+          `確認 main 的版本已取代這條 branch 後：\n` +
+          `   wt-helper merge-back ${cleanSlug} --accept-landed\n` +
+          `（會先把 branch tip 釘成 refs/wt-accepted-landed/${cleanSlug} 供事後救回，不需要 --force）`
+      } else if (absorbCheck.reason !== 'stash-pop-unresolved') {
+        absorbNote = `\n\n(absorbed-by-other-path 判定：無法量測 —— ${absorbCheck.reason})`
+      }
+      throw new Error(
+        `merge-back: ${squashDetail}${popDetail}${absorbNote}\n\n` +
+          `Worktree '${target.path}' + branch '${branchName}' preserved; ` +
+          `main 已還原到 squash 之前的狀態（沒有留下衝突的 index）。\n` +
+          `原樣重跑會撞到同一組衝突 —— 上面兩條出路擇一。`,
+      )
+    }
   }
 
   // Squash 已無衝突落進 index —— 這是「wt-helper 把這個 branch tip 併進 main」唯一一次
   // 能被直接觀察到的時刻，記下來供之後的 cleanup 採信（見 landedMarkerRef 上方）。
   // 寫失敗只降級成原本的 ancestry gate 行為，不影響本次收尾。
-  {
+  // absorbed-by-other-path 走不到這裡的前提：本次執行**沒有**把 branch tip squash 進
+  // main（內容是別條路徑帶進去的），寫 marker 等於記一筆沒發生過的事。
+  if (!absorbedByOtherPath) {
     let tipSha = null
     try {
       tipSha = git(['rev-parse', '--verify', `${branchName}^{commit}`], {
@@ -3732,7 +4136,10 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   }
 
   const summary =
-    `merge-back: ${cleanSlug} absorbed into main` +
+    `merge-back: ${cleanSlug} ` +
+    (absorbedByOtherPath
+      ? 'already in main via another path (nothing squashed)'
+      : 'absorbed into main') +
     (stashRef ? ` (blockers stashed as ${stashRef})` : '') +
     (cleanupDone ? ' + worktree cleaned' : ' (cleanup skipped/failed)')
   console.log(summary)
@@ -3774,7 +4181,15 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
     console.log(`  ${stashReconcileCmd(consumerRoot)} --slug ${cleanSlug} --interactive`)
     console.log(`(Stash preserved in 'git stash list' — apply/drop is user's call.)`)
   }
-  return { absorbed: true, slug: cleanSlug, stashRef, cleanupDone, blockers, baselineRefs }
+  return {
+    absorbed: true,
+    absorbedByOtherPath,
+    slug: cleanSlug,
+    stashRef,
+    cleanupDone,
+    blockers,
+    baselineRefs,
+  }
 }
 
 // Semantic alias for migrating grandfathered worktrees from the pre-atomic
@@ -3970,6 +4385,7 @@ async function main() {
     force: flags.has('--force'),
     forceDiscardUnland: flags.has('--force-discard-unland'),
     forceDiscardUncommitted: flags.has('--force-discard-uncommitted'),
+    acceptLanded: flags.has('--accept-landed'),
     dryRun: flags.has('--dry-run'),
     autoStash: flags.has('--auto-stash'),
     includeWorktreeWip: flags.has('--include-worktree-wip'),

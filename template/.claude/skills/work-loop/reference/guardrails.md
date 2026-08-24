@@ -125,7 +125,7 @@ carve-out 之前護欄 7 沒有例外 → 那條答案 unattended runner 永遠�
 - ❌「needs careful testing」— worktree isolation 就是為此設計
 - ❌「complex」「多個 script 有不同 scope」— 那是 dispatch 的理由不是 skip 的理由
 - ❌「not ideal for quick wins」— loop 不只做 quick wins
-- ❌「這輪已經做了一個了」— 沒有 per-round 上限（除 `--unattended` 3-item cap）
+- ❌「這輪已經做了一個了」— 沒有 per-round 上限（除 `--unattended` 5-item cap）
 - ❌「等 agents 完成再處理」— 扇出組滿 4 就是做主線即時組的時機，不是等的時機
 - ❌「先寫 HANDOFF status」— 那是 Step 7，不是中途的 exit ramp
 

@@ -43,7 +43,9 @@ $ARGUMENTS
 
 ### Flags
 
-- `--unattended`（`runner.sh` 每輪固定帶）：**3-item cap**（避免 runaway）+ **禁止 `AskUserQuestion`**。不帶時無 item cap，改由 Step 6 的 round cap / fingerprint 控制。
+- `--unattended`（`runner.sh` 每輪固定帶）：**5-item cap**（避免 runaway）+ **禁止 `AskUserQuestion`**。不帶時無 item cap，改由 Step 6 的 round cap / fingerprint 控制。
+
+  **裝載準則**：cap 之內優先把**同一 Location／同一 skill** 的 item 併進同一輪。理由是成本不是整齊——runner 每輪起全新 process，而 git snapshot 每輪變動使 always-load 段整段重付一次冷載（約 90k effective tokens），輪數減半即該固定成本減半（[[TD-433]]，前提實測 median 18.6 分 < 1h cache TTL）。**NEVER** 反過來為了湊滿 5 個而把不相干的 item 拉進同一輪：cap 是上限不是配額，湊數只會讓單輪失敗牽連無關 item。
 - `--runner-child`（只由 `runner.sh` 帶）：模型可見的 runner child 身分 marker；`WORK_LOOP_RUNNER_CHILD=1` 是同一身分的機械補強。
 - `--linked-dispatch-mode foreground`（只由 `runner.sh` 帶）：runner child 內每一筆 decision-linked Pi dispatch 都是同輪 dependency，依 Step 1.5 的 foreground 契約執行；不帶時沿用一般 async watch protocol。
 - `--min-wakeup-seconds <n>`（`runner.sh` 每輪固定帶，預設 1200；`WORK_LOOP_MIN_WAKEUP_SECONDS` 是機械補強）：本輪**每一個** `ScheduleWakeup` / `Monitor` 的 interval **MUST ≥ n**。帶了它就以它為準，**NEVER** 因為「這次只等一下下」用更短的值——短輪詢買不到 notification 沒給的東西（Step 0 § (d) 已逐字禁止輪詢進度）。不帶時各處原有的 interval 建議照舊。
@@ -834,7 +836,7 @@ fingerprint = sha256(
 | 件 | 條件 |
 | --- | --- |
 | No-progress | `fingerprintUnchangedRounds >= 3` |
-| Turn cap | `inFlight` 已空，且 `--unattended` 已處理 3 items（**含收割後補 dispatch 的**）；interactive `round >= 12`。`inFlight` 非空只停止新 dispatch，轉入 Step 4 的同 process wait + harvest |
+| Turn cap | `inFlight` 已空，且 `--unattended` 已處理 5 items（**含收割後補 dispatch 的**）；interactive `round >= 12`。`inFlight` 非空只停止新 dispatch，轉入 Step 4 的同 process wait + harvest |
 | Budget proxy | **本 run 內**（per lock session，歸零時機見 Step 0 § 互斥鎖）`subagentsSpawned >= 15`，或 lock timestamp 距今 ≥6h |
 | 非生產 | `nonProductiveRounds >= 2`（見 6.3） |
 | 系統性失敗 | `consecutiveDispatchFailures >= 2`（escalated 項不計入——它們本輪未 dispatch，沒有新失敗事件） |
@@ -844,7 +846,7 @@ fingerprint = sha256(
 
 **「真正做完」讀 `actionableOpen`，NEVER 讀 open 總數。** `techDebtHygiene.raw` 的 `flow.actionableOpen` = open class 扣掉 `blocked-attended-only`（機制擋著）與 `wontfix-until-signal`（等外部 signal）。open 總數含結構性 open，**在設計上就不可能歸零**——拿它當判準的迴圈永遠不會停，而那看起來會像「還有很多事沒做」，不像「判準寫錯了」。
 
-**軟配額——`landed` 桶非空時，本輪 3 items 中 MUST 至少 1 項是 close/verify**（驗收 landed / 改判 wontfix / rotate 進 archive），不是 open/登記。`flow.window.closedInWindow == 0` 而 `openedInWindow > 0` 時這條**升為硬性**：不足額就不算合法進度。
+**軟配額——`landed` 桶非空時，本輪 5 items 中 MUST 至少 1 項是 close/verify**（驗收 landed / 改判 wontfix / rotate 進 archive），不是 open/登記。`flow.window.closedInWindow == 0` 而 `openedInWindow > 0` 時這條**升為硬性**：不足額就不算合法進度。
 
 **這不是禁止登記**：帶 `**Blocker**:` 的新條目與 packaging 決策**無條件通過**——要掐斷的是「量測 → 登記 → 下輪再讀一次」的自循環（2026-08-13 實測近 7 天 opened 40 / closed 10）。
 
@@ -997,6 +999,7 @@ git show --stat HEAD | tail -3   # 驗 scope
 | [harvest.md](reference/harvest.md) | 每個 notification 到達時（Step 5） |
 | [no-wt-dispatch.md](reference/no-wt-dispatch.md) | Step 4a 判出 `/wt` 叫不動時（產地 clade home 恆命中） |
 | [skill-relations.md](reference/skill-relations.md) | 查與其他 skill 的邊界、scope 排除清單 |
+| `vendor/scripts/flow/nodes/README.md` | **本輪要手刻一次性 script 之前**——先查 node library 有沒有現成的。有就 `node vendor/scripts/flow/flow.ts step <node> [--flags]`，它比手刻省事且順帶記進事件脊椎。沒有就照常手刻，**NEVER** 為了湊節點硬套。（產地 clade home 才有；consumer 端尚未散播） |
 
 ## 與其他 skill 的銜接
 

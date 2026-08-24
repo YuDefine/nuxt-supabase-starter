@@ -127,6 +127,23 @@ if ((${#out_of_order[@]} > 0)); then
       bname=$(basename "$f")
       [[ "$bname" =~ ^[0-9]{14}_ ]] || continue
       ts="${bname:0:14}"
+      # Catalog-alignment stub 豁免：多個 repo 共用一台 Postgres 時，
+      # supabase_migrations.schema_migrations 是整個 DB 一份、不分 schema，
+      # 於是 remote catalog 會出現本 repo 沒有的 version，`db push` 便以
+      # "Remote migration versions not found in local migrations directory"
+      # 整批拒絕。解法是補一個同名、零 SQL 的對齊檔——它的 version 必須逐字
+      # 等於 remote 那筆，rename 到當下 timestamp 反而會破壞對齊。
+      #
+      # 兩個條件都成立才豁免（缺一不可）：
+      #   1) 帶 CLADE:CATALOG-ALIGNMENT-STUB marker —— 表明是刻意的對齊檔
+      #   2) 檔案不含任何非註解、非空白行 —— 零 SQL 就不可能造成 out-of-order DDL
+      # 只看 marker 會放行「加了 marker 又寫 SQL」的檔；只看零 SQL 會放行
+      # 「忘了貼內容」的半成品。
+      if grep -q 'CLADE:CATALOG-ALIGNMENT-STUB' "$f" 2>/dev/null \
+        && ! grep -qE '^[[:space:]]*[^-[:space:]]' "$f" 2>/dev/null; then
+        echo "skip catalog-alignment stub: $bname" >&2
+        continue
+      fi
       if [[ "$ts" < "$latest_on_main" || "$ts" == "$latest_on_main" ]]; then
         fail_entries+=("$f|$ts")
       fi
@@ -166,7 +183,13 @@ EOF
 繞過：若已驗證遠端環境從未 applied 此 migration、確需保留原 timestamp，
       此 hook 仍會擋；請依上述 git mv 命令重新命名後再 commit。
 
-詳細規則：rules/modules/db-runtime/supabase-self-hosted/migration.md
+例外 —— catalog-alignment stub：多個 repo 共用同一台 Postgres 時，remote catalog
+      會有本 repo 沒有的 version，db push 整批拒絕。此時補的同名零 SQL 對齊檔
+      MUST 保留原 timestamp（rename 會破壞對齊），本 hook 會放行，條件是
+      同時滿足：檔案含 CLADE:CATALOG-ALIGNMENT-STUB marker，且不含任何
+      非註解、非空白行。詳見規約的「例外：catalog-alignment stub」段。
+
+詳細規則：rules/modules/db-schema/supabase/migration.md
           「Timestamp 順序契約」段落
 
 EOF

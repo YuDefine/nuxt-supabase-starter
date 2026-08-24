@@ -45,6 +45,30 @@ production deploy 直接紅燈。
 - **NEVER** 在 `supabase db push` 加 `--include-all` flag — 永久關掉 supabase 的 out-of-order 保護，任何後續漂移都會默默放行
 - **NEVER** 為了「保留 commit 順序」而手改 migration 檔 timestamp — 用 `supabase migration new` 重生
 
+### 例外：catalog-alignment stub（多 repo 共用一台 Postgres）
+
+多個 repo 共用同一台 Postgres 時，`supabase_migrations.schema_migrations` 是**整個 DB 一份、
+不分 schema**。於是 remote catalog 會出現本 repo 沒有的 version，`supabase db push` 以
+`Remote migration versions not found in local migrations directory` **整批拒絕**，deploy 全卡。
+
+解法是在本 repo 補一個**同名、零 SQL** 的對齊檔。它的 version **MUST 逐字等於** remote 那筆——
+rename 到當下 timestamp 會製造一個新的 pending version，而原本那筆仍然「local 找不到」，
+push 照樣拒絕。**這是 § MUST 第 3 條「rename 到當下 UTC timestamp」的唯一例外**，
+pre-commit hook 對它的 out-of-order 判定也 MUST 放行。
+
+豁免條件**兩條都要成立**（hook 逐條檢查，缺一不可）：
+
+1. 檔案含 `CLADE:CATALOG-ALIGNMENT-STUB` marker —— 表明是刻意的對齊檔
+2. 檔案不含任何非註解、非空白行 —— 零 SQL 就不可能造成 out-of-order DDL
+
+只看 marker 會放行「加了 marker 又寫 SQL」的檔；只看零 SQL 會放行「忘了貼內容」的半成品。
+
+- **MUST** 在 stub 內註明該 version 的 DDL 由哪個 repo 擁有、何時套用到哪個環境
+- **NEVER** 在 stub 內加任何 SQL —— 該 version 在 remote 已記為 applied，production 永遠不會執行它，
+  只有 ephemeral replay 會跑，兩邊會就此分歧
+- catalog-alignment stub 是**過渡措施**：每次對方新增 migration 就要再補一次。根治方向是讓
+  非擁有者改用自有 catalog table，或分離資料庫——**MUST** 在採用 stub 的同時登記根治待辦
+
 ### 自動化
 
 `vendor/scripts/pre-commit/checks/supabase-migration-safety.sh` 第 2 條

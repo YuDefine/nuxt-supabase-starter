@@ -94,7 +94,7 @@ Tier A = `HANDOFF.md`、`tasks/*.md`、`docs/tech-debt.md`。本輪 `git diff <r
 
 ## 與軟配額的關係是包含，不是並列
 
-軟配額（Step 6.2：`landed` 桶非空時，本輪 3 items 至少 1 項 close/verify）不足額的輪，
+軟配額（Step 6.2：`landed` 桶非空時，本輪 5 items 至少 1 項 close/verify）不足額的輪，
 「不算合法進度」＝ P1–P4 的**計入資格直接取消**，該輪**必為**非生產輪。反向不成立——軟配額
 滿足不保證生產（三條都 close 但全是 rotate，P1 仍被 entropy 過濾掉）。
 
