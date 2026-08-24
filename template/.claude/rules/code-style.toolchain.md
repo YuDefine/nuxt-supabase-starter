@@ -6,6 +6,7 @@ paths:
     'nuxt.config.*',
     'package.json',
     'packages/*/package.json',
+    'pnpm-workspace.yaml',
     'tsconfig*.json',
     '.github/workflows/**',
     '.husky/**',
@@ -251,6 +252,35 @@ consumer 端 LOCKED projection 的 ignore 機制設計：
 
 
 ## 必須事項（MUST）
+
+### 改 `catalog:` / `overrides:` 之後，收尾 MUST 驗 lockfile 本身
+
+改動 `pnpm-workspace.yaml` 的 `catalog:` / `overrides:`（或 `package.json` 的 `pnpm.overrides`）之後，
+**MUST** 在同一個收尾動作裡讀 `pnpm-lock.yaml` **本身**，確認它記的值等於你剛寫進 manifest 的值：
+
+```bash
+awk '/^overrides:/{f=1;next} f&&/^[^[:space:]]/{exit} f' pnpm-lock.yaml   # 值須等於 manifest
+awk '/^catalog:/{f=1;next}   f&&/^[^[:space:]]/{exit} f' pnpm-lock.yaml
+```
+
+值對不上 = lockfile 沒被改寫。修法是把 pnpm 的 up-to-date 短路條件消掉，**不是**再換一個旗標：
+
+```bash
+rm -rf node_modules && pnpm install     # 這次才會真的 resolve 並改寫 lockfile
+```
+
+**NEVER 用下列任一項代替上面那條驗證** —— 三者在整個失敗期間都是「對的」，而 lockfile 是錯的：
+
+- `pnpm install` / `--force` / `--lockfile-only` / `--frozen-lockfile` 回 `Already up to date`。
+  **四者共用同一道以 node_modules 為判準的短路，所以「四個旗標都試過了」不是四個獨立證據，是同一個
+  證據被問了四次**——包含 `--frozen-lockfile`，它的存在理由就是不一致時 fail，而這裡它回 exit 0
+- `node_modules/<pkg>/package.json` 的版本。node_modules 已經是新版**正是**短路成立的原因
+- `git diff` 乾淨。lockfile 沒被動過，diff 當然乾淨——那是症狀不是通過
+
+本地端錯過它不會有任何紅燈：CI 在 fresh checkout 會照著舊 lockfile 老老實實裝**舊版**，跑出來的相依樹
+與本機不同而兩邊都不出聲。fleet 層的事後偵測跑 `node scripts/audit-lockfile-staleness.ts`（clade home），
+成因與控制實驗見 [[pitfall-pnpm-up-to-date-attests-node-modules-not-lockfile]]。
+
 
 ### `vite.config.ts` 必備欄位（跨 consumer 統一，避免 propagate drift）
 

@@ -312,33 +312,89 @@ if [ ! -s "$RAW_DIFF" ]; then
   exit 3
 fi
 
+# Generated / build-artifact 路徑。它們照樣在 changeset 裡（呼叫端接下來會 commit 它們），
+# 但**填 budget 的順序排在原始碼後面**。
+#
+# 2026-08-24 <consumer-i> 實測：`coverage/` 被納入版控，`vitest --coverage` 每跑一次就重寫
+# 整棵目錄，44 個 HTML 檔 5999 行剛好填滿 6000 行 budget —— 該次 review 一行產品程式碼都
+# 沒讀到，卻照樣輸出了一份外觀完全正常的 verdict。這是「證據無鑑別力」的教科書形態：
+# 通過與沒讀到在輸出上長得一樣。
+#
+# 兩件事一起修：(1) 原始碼先填 budget，產物撿剩下的；(2) 一個原始碼檔都沒嵌到就 fail-loud。
+#
+# clade 投影層（.claude/rules|skills|agents|commands）同樣排在原始碼後面：它們的源檔在
+# ~/offline/clade，在 consumer 端改了會被下次 sync 還原。2026-08-24 <consumer-i> 實測的
+# 兩條 finding 就落在投影層（TD-005），對 consumer 而言是不可執行的建議。
+GENERATED_RE='^(coverage|dist|build|\.output|\.nuxt|\.void|\.wrangler|node_modules)/|^[^ ]*/(coverage|dist|\.output|\.nuxt)/|^\.claude/(rules|skills|agents|commands)/|\.min\.(js|css)$|\.map$|(^|/)(pnpm-lock\.yaml|package-lock\.json|yarn\.lock)$'
+
 # Two passes over the same file: measure every `diff --git` block, then re-emit
 # only the blocks that fit the budget. `used == 0 ||` keeps the first block whole
 # no matter its size, so an oversized single file degrades to "review that one
 # file" rather than to an empty changeset.
-awk -v maxl="$MAX_DIFF_LINES" -v omit="$OMITTED" '
-  NR == FNR {
-    if ($0 ~ /^diff --git /) blk++
-    size[blk]++
-    next
-  }
-  /^diff --git / {
-    cur++
-    keep = (used == 0 || used + size[cur] <= maxl)
-    if (keep) {
-      used += size[cur]
-    } else {
-      path = $0
-      sub(/^diff --git a\/.* b\//, "", path)
-      printf("  - %s (%d lines)\n", path, size[cur]) >>omit
+#
+# sel=1 → 只收 **不** 符合 GENERATED_RE 的 block（原始碼優先）
+# sel=0 → 只收符合的（拿原始碼填完後剩下的 budget）
+select_blocks() {
+  awk -v maxl="$1" -v omit="$2" -v genre="$3" -v sel="$4" -v usedfile="$5" '
+    NR == FNR {
+      if ($0 ~ /^diff --git /) {
+        blk++
+        p = $0
+        sub(/^diff --git a\/.* b\//, "", p)
+        bpath[blk] = p
+      }
+      size[blk]++
+      next
     }
-  }
-  keep
-' "$RAW_DIFF" "$RAW_DIFF" >"$SNAPSHOT"
+    /^diff --git / {
+      cur++
+      isgen = (bpath[cur] ~ genre)
+      mine = (sel == 1 ? !isgen : isgen)
+      if (!mine) { keep = 0; next }
+      # 「第一塊整塊保留」只給原始碼 pass：一個過大的原始碼檔要降級成「只 review 這一個檔」，
+      # 而不是降級成空 changeset。generated pass 沒有這個讓步 —— 它一旦超出剩餘 budget，
+      # 就是回到「產物把 review 擠掉」的原狀。
+      keep = (sel == 1 && used == 0 && maxl > 0) || (used + size[cur] <= maxl)
+      if (keep) {
+        used += size[cur]
+      } else {
+        printf("  - %s (%d lines)\n", bpath[cur], size[cur]) >>omit
+      }
+    }
+    keep
+    END { printf("%d\n", used) >usedfile }
+  ' "$RAW_DIFF" "$RAW_DIFF"
+}
+
+SNAP_SRC="$WORK_DIR/snapshot-src.diff"
+SNAP_GEN="$WORK_DIR/snapshot-gen.diff"
+USED_SRC="$WORK_DIR/used-src"
+USED_GEN="$WORK_DIR/used-gen"
+
+select_blocks "$MAX_DIFF_LINES" "$OMITTED" "$GENERATED_RE" 1 "$USED_SRC" >"$SNAP_SRC"
+SRC_USED="$(cat "$USED_SRC" 2>/dev/null || echo 0)"
+SRC_FILES="$(grep -c '^diff --git ' "$SNAP_SRC" 2>/dev/null || echo 0)"
+GEN_BUDGET=$((MAX_DIFF_LINES - SRC_USED))
+[ "$GEN_BUDGET" -lt 0 ] && GEN_BUDGET=0
+select_blocks "$GEN_BUDGET" "$OMITTED" "$GENERATED_RE" 0 "$USED_GEN" >"$SNAP_GEN"
+cat "$SNAP_SRC" "$SNAP_GEN" >"$SNAPSHOT"
+
+TOTAL_SRC_BLOCKS="$(awk -v genre="$GENERATED_RE" '
+  /^diff --git / { p = $0; sub(/^diff --git a\/.* b\//, "", p); if (p !~ genre) n++ }
+  END { print n + 0 }
+' "$RAW_DIFF")"
 
 EMBEDDED_FILES="$(grep -c '^diff --git ' "$SNAPSHOT" 2>/dev/null)"
 EMBEDDED_LINES="$(wc -l <"$SNAPSHOT" | tr -d ' ')"
-echo "[codex-review-safe] changeset: ${EMBEDDED_FILES:-0} 檔 / ${EMBEDDED_LINES} 行嵌入（budget ${MAX_DIFF_LINES} 行）" >&2
+echo "[codex-review-safe] changeset: ${EMBEDDED_FILES:-0} 檔 / ${EMBEDDED_LINES} 行嵌入（budget ${MAX_DIFF_LINES} 行；其中原始碼 ${SRC_FILES:-0} 檔 / ${SRC_USED} 行）" >&2
+
+# changeset 有原始碼、但一個都沒進 prompt → review 讀到的全是產物。這種 verdict 沒有
+# 鑑別力，NEVER 讓它以正常外觀輸出。
+if [ "${TOTAL_SRC_BLOCKS:-0}" -gt 0 ] && [ "${SRC_FILES:-0}" -eq 0 ]; then
+  echo "[codex-review-safe] 錯誤：budget（${MAX_DIFF_LINES} 行）被 generated / build artifact 吃光，${TOTAL_SRC_BLOCKS} 個原始碼檔一個都沒進 review。" >&2
+  echo "[codex-review-safe] 這通常代表 build artifact 被納入版控（例：coverage/ 是 tracked）。把它加進 .gitignore + git rm -r --cached，或提高 CODEX_REVIEW_MAX_DIFF_LINES。" >&2
+  exit 3
+fi
 if [ ! -f "$PI_REVIEW_RUNNER" ]; then
   echo "[codex-review-safe] 錯誤：Pi review runner 不存在：$PI_REVIEW_RUNNER" >&2
   exit 3
@@ -355,6 +411,12 @@ You are performing a cross-model code review of a git working-tree snapshot.
 The complete changeset is embedded below between the CHANGESET markers. The
 caller collected it for you at launch time (tracked changes vs HEAD, plus every
 untracked file rendered as a diff against /dev/null).
+
+Paths under `.claude/rules/`, `.claude/skills/`, `.claude/agents/` and
+`.claude/commands/` are PROJECTIONS of the clade central repo. Their source of
+truth lives outside this repository. If you find a defect there, say so and name
+it as upstream-owned (clade) — **NEVER** tell this repository to edit them, the
+next sync would revert the change.
 
 **NEVER** run `git diff`, `git status`, or `git ls-files` to re-collect it —
 everything you are asked to review is already in this prompt, and re-collecting
