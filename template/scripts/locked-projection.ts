@@ -55,9 +55,13 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // Plumbing JSON files
       String.raw`\.claude/(hub\.json|\.hub-state\.json|sync-to-codex\.config\.json)$`,
       // Improvement-loop infra (.clade/)
-      String.raw`\.clade/(bin|signals|vendor)/`,
+      // `scripts` / `registry` 於 2026-08-24 補上（TD-639）：兩者都是 improvement-loop
+      // 投影的整目錄（`.clade/scripts/` 五支 + `.clade/registry/consumers.json`），
+      // 抽查 <consumer-a> / <consumer-b> / <consumer-f> / <consumer-k> 四台，目錄內**沒有**任何 consumer
+      // 自家檔——與 `scripts/lib/` 那種混住的目錄不同，可以整目錄匹配。
+      String.raw`\.clade/(bin|signals|vendor|scripts|registry)/`,
       // Vendored script entry points (scripts/)
-      String.raw`scripts/(wt-helper|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|audit-risk-path-coverage|deploy-trigger-check|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|spectra-archive-sidecar|dev-singleton|dev-router|dev-session|db-lease|db-reset-peer-coordination)\.(mjs|mts|ts)$`,
+      String.raw`scripts/(wt-helper|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|audit-risk-path-coverage|audit-clade-leak|deploy-trigger-check|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|spectra-archive-sidecar|dev-singleton|dev-router|dev-session|db-lease|db-reset-peer-coordination)\.(mjs|mts|ts)$`,
       // Heavy-gate 併發閘門（bash helper，非 .mjs/.ts 家族，故單列一條）
       String.raw`scripts/gate-slot\.sh$`,
       // Recursive vendored script trees
