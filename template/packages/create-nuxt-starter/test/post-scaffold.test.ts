@@ -148,9 +148,18 @@ describe('sync-to-cursor 解析', () => {
   // 與 resolveSyncToCodexScript 同型：按序探測，NEVER 寫死單一檔名。
   // 那個形狀存在的理由是 sync-to-agents → sync-to-codex 改名後每次 scaffold 都靜默
   // 不產投影的那次事故。
-  it('.mjs 優先於 .ts', () => {
+  // `.ts` MUST 優先：clade 的 `.mjs` → `.ts` 改名後，user shim 只增不減，很多機器上
+  // 仍留著一支指向已不存在的 `run-sync-to-*.mjs` 的死 `.mjs`。挑到它就等於投影沒產。
+  it('.ts 優先於 .mjs', () => {
     const dir = mkdtempSync(join(tmpdir(), 'sync-cursor-'))
     writeFileSync(join(dir, 'sync-to-cursor.ts'), '')
+    writeFileSync(join(dir, 'sync-to-cursor.mjs'), '')
+
+    expect(resolveSyncToCursorScript(dir)).toBe(join(dir, 'sync-to-cursor.ts'))
+  })
+
+  it('只有 .mjs 時仍取 .mjs（還沒更新 shim 的機器）', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sync-cursor-mjs-'))
     writeFileSync(join(dir, 'sync-to-cursor.mjs'), '')
 
     expect(resolveSyncToCursorScript(dir)).toBe(join(dir, 'sync-to-cursor.mjs'))

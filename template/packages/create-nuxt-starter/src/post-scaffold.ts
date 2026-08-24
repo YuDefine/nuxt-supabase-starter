@@ -629,9 +629,14 @@ function runHubPrune(targetDir: string): void {
  * 每一次 scaffold 都不再產 `.codex/` 與 `AGENTS.md`，而使用者只會看到一行
  * 略過警告，不會知道專案少了東西。所以這裡按序探測，全部落空才報。
  */
+// 順序 MUST 是 `.ts` 在前：clade 自 `.mjs` → `.ts` 改名後，user shim 的安裝只增不減，
+// 於是很多機器上仍留著一支**指向已不存在的 `run-sync-to-codex.mjs`** 的死 `.mjs`。
+// 2026-08-24 全新 scaffold 實測，`.mjs` 排前面就固定挑到那支死的：
+//   Error: Cannot find module '<clade>/scripts/run-sync-to-codex.mjs'
+// clade v1.11.63 起 bootstrap-hub 會主動剪除它，但已存在的機器要下一次 bootstrap 才清掉。
 const SYNC_TO_CODEX_CANDIDATES = [
-  'sync-to-codex.mjs',
   'sync-to-codex.ts',
+  'sync-to-codex.mjs',
   // 舊名，保留給還沒更新 ~/.claude/scripts 的機器
   'sync-to-agents.mjs',
 ]
@@ -649,7 +654,8 @@ export function resolveSyncToCodexScript(scriptsDir: string): string | undefined
  * 這支比 codex 那支年輕（2026-08-24 才進 clade），所以還沒有舊名要相容 ——
  * 但形狀先立好，改名時才不會重演「靜默不產投影」。
  */
-const SYNC_TO_CURSOR_CANDIDATES = ['sync-to-cursor.mjs', 'sync-to-cursor.ts']
+// 同上：`.ts` 在前。cursor 這支比 codex 年輕，目前沒有死 `.mjs` 的實例，但形狀先立好。
+const SYNC_TO_CURSOR_CANDIDATES = ['sync-to-cursor.ts', 'sync-to-cursor.mjs']
 
 export function resolveSyncToCursorScript(scriptsDir: string): string | undefined {
   for (const name of SYNC_TO_CURSOR_CANDIDATES) {
