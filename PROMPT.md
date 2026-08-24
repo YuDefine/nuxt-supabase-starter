@@ -57,6 +57,11 @@ pnpm --version
 | 「已經有 repo 了，在 `/path/to/foo`」 | `/path/to/foo`（repo 自己） | `.` | `/path/to/foo` |
 | 「建一個新的，叫 foo」 | 要放 foo 的**父目錄** `/path/to` | `foo` | `/path/to/foo` |
 
+我很可能只給你一個名字（「叫 my-app」）或一段相對路徑（「放在 ./test」）而不是絕對路徑。
+那種情況下**以你當前的 `pwd` 當父目錄換算成絕對路徑**，然後把換算結果告訴我確認，
+再往下走。三個值一律用絕對路徑，**NEVER** 留相對路徑 —— 你每執行一條指令可能都是
+新的 subshell，相對路徑會漂到別的地方去。
+
 這三個值請你在 Step 0 就算好、寫下來，後面每一步照著填，不要臨場再推導。
 
 既有 repo 一定要用 `.`，不要填 repo 名 —— 填 repo 名會在 repo 裡再長出一層
@@ -101,10 +106,11 @@ cd <執行目錄> && pnpm --dir ~/offline/nuxt-supabase-starter/template/package
 CLI 會依序問我 stack preset 與其餘選項，然後自己完成 scaffold、安裝依賴、
 初始化 git、並在有 clade 的機器上註冊 consumer。
 
-我回報後，你會看到兩種結果之一：
+我回報後，你會看到三種結果之一：
 
-- **「偵測到既有 repo「…」，將就地展開 starter」** → 正常。它會保留我的 git
-  歷史與 README，`.gitignore` 是合併不是覆蓋。確認它列的處置清單沒問題就往下。
+- **「專案 … 建立完成！」加一個框框列出接下來的步驟** → 全新專案的正常結果，直接往下。
+- **「偵測到既有 repo「…」，將就地展開 starter」** → 既有 repo 的正常結果。它會保留我的
+  git 歷史與 README，`.gitignore` 是合併不是覆蓋。確認它列的處置清單沒問題就往下。
 - **「目錄已存在，且含有 scaffold 會覆蓋到的內容」** → 它會列出擋住的項目和三條路。
   跟我一起挑一條。**不要自己選第 3 條去清空目錄**（鐵則 4）。
 
@@ -130,8 +136,14 @@ cd <專案目錄> && cat .claude/.first-run
 ```
 （scaffold 剛完成才會有這支；沒有就跳過，不是錯誤）
 
-**這支檔案裡的 `instructions` 就是暖機流程**，照它列的步驟做，不要只挑其中一條跑，
-也不要在做完之前刪掉它。下面 Step 3 的驗收與它重疊的部分（`verify:starter`）跑一次就好。
+**這支檔案裡的 `instructions` 就是暖機流程**，照它列的步驟做，不要只挑其中一條跑。
+
+**唯一的例外是它的最後一步「刪掉 marker」—— 那一步留到 Step 5 再做。**
+（marker 是寫給「單獨進到這個專案的 AI」看的，所以它自己帶了刪除步驟；
+你手上有這份提示詞，刪除由 Step 5 統一負責。兩邊都刪會讓你在 Step 3 中途就把它清掉，
+後面 Step 5 的回報就少了依據。）
+
+下面 Step 3 的驗收與 marker 重疊的部分（`verify:starter`）跑一次就好。
 
 ```bash
 cd <專案目錄> && pnpm verify:starter
@@ -183,10 +195,13 @@ ls -d ~/offline/clade
 
 跑得出路徑就是存在；`No such file or directory` 就是不存在。
 
-- **存在** → Step 2 的 CLI 已經自動註冊過了。跑這條確認：
+- **存在** → Step 2 的 CLI 多半已經自動註冊過了。跑這條確認：
   ```bash
   cd <專案目錄> && pnpm hub:check
   ```
+  **這條失敗不算流程失敗**（鐵則 3 在這裡不適用）：CLI 會在互動時問我要不要登記，
+  我可能答了不要，那樣就不會有對應設定。把輸出貼給我，在 Step 5 記成
+  「clade 未接上」往下走，不要停在這裡。
 - **不存在** → 告訴我「clade 不在這台機器上」，並問我有沒有存取權。
   **不要自己去 clone**（私有 repo，多半會失敗）。我說我有權限、也要裝，才給我
   clone 指令讓我自己跑。裝好後專案的 `pnpm hub:bootstrap` 會把規則拉下來。
@@ -206,7 +221,7 @@ ls -d ~/offline/clade
 沒做完就刪，等於把那份指示丟掉而且沒有人會再看到它：
 
 ```bash
-rm .claude/.first-run
+cd <專案目錄> && rm -f .claude/.first-run
 ```
 
 ## 我可能會問你的事
@@ -234,6 +249,11 @@ rm .claude/.first-run
 | 專案建好了但沒有任何一條指令真的跑過就宣告完成 | Step 3 + Step 5 的回報格式 |
 | AI 讀了 `.first-run` 的暖機指示，只挑一條跑完就把 marker 刪掉 | Step 3 的「照它列的步驟做」+ Step 5 的刪除前提 |
 | 選了 void.cloud，Step 3 全綠就宣告完成，缺的那一步到部署當下才炸 | Step 2 結尾的「照抄黃色警告」 |
+| 全新專案順利建好，AI 卻因為對不上列出的情境而卡住不敢往下 | Step 2 的三種結果 |
+| 我只說「叫 my-app」，AI 拿相對路徑往下跑，指令漂到別的目錄 | Step 0 的 `pwd` 換算規則 |
+| AI 照 marker 的最後一步在 Step 3 就把它刪掉，Step 5 沒東西可回報 | Step 3 的刪除例外說明 |
+| `pnpm hub:check` 失敗（我當初答了不要登記），AI 當成嚴重錯誤停下 | Step 4 的「這條失敗不算流程失敗」 |
+| Step 5 的 `rm` 沒帶 `cd`，在別的目錄執行後報錯或刪錯檔 | Step 5 的完整指令 |
 
 ## 相關文件
 
