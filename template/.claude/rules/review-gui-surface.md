@@ -154,22 +154,29 @@ Review-gui 的狀態全部落在 `tasks.md` 這個**雙寫**檔上——user 在
 ### 第一動作：判 service 是不是常駐
 
 ```bash
-systemctl is-active review-gui
+bash ~/offline/clade/ops/review-gui-service.sh status   # 判 exit code，不要逐行比對字串
 ```
 
-| 回傳 | 動作 |
+| 結果 | 動作 |
 | --- | --- |
-| `active` | **NEVER** 叫 user 跑任何啟動指令。GUI 已經在 `127.0.0.1:5174` 上，直接給下面的 deep-link |
-| 其他（`inactive` / `failed` / `unknown`） | 才走 fallback：請 user 從 clade home（`~/offline/clade`）跑 `pnpm review` |
+| exit 0 | 服務健全（末行 `{"ok":true,"authRequired":false}`）。**NEVER** 叫 user 跑任何啟動指令，直接給下面的 deep-link |
+| exit ≠ 0 | **agent 自己**跑 `bash ~/offline/clade/ops/review-gui-service.sh install` 把服務帶起來（該子命令自帶 `systemctl restart` 與健康等待迴圈，末尾自呼 `status`），再回到上一列。**NEVER** 把啟動指令交給 user |
+
+**MUST 判 exit code，NEVER 拿單一行輸出當結論**：`status` 印多行，其中 `not-found` / `inactive`
+兩行是 `review-gui-dispatch-pickup.path` 的狀態，與 GUI unit 健康無關——逐行字串比對會把健全的
+服務判成掛了。`status` 是 `systemctl is-active review-gui` 的**超集**（另驗 listener 與
+`/api/health`），**NEVER** 退回單跑 `is-active` 的單值判讀。判定與交付路徑的 SoT 是
+[[proactive-skills.manual-review-entry]] § 交付入口前置查詢，本節與它一致。
 
 **NEVER 加 `--user`**：`review-gui.service` 與 `review-gui-tunnel.service` 都是 **system** unit。
 `systemctl --user is-active review-gui` 對一個活著的 system unit 回 `inactive`，照著它去叫 user
 啟動，正是本節要擋的那次誤導。
 
-**Fallback 的指令是「從 clade home 跑 `pnpm review`」，整句都要給。** consumer 的 `package.json`
+**`pnpm review` 只能從 clade home 跑，而且那是 agent 自己的事。** consumer 的 `package.json`
 裡確實還有 `review:ui`（clade-managed script，指向 clade working tree 的 `review-gui.ts`），
 但從 consumer cwd 跑會被 `preflightCladeOnly` 擋下並 `exit 2`（v1.3.161+）——review-gui 是
-cross-consumer 集中模式，只從 clade home 起。**NEVER** 叫 user「在 consumer repo 跑 `pnpm review:ui`」。
+cross-consumer 集中模式，只從 clade home 起，該 cwd 約束對 agent 一樣成立。**NEVER** 把
+`pnpm review` / `pnpm review:ui` 交給 user 跑；服務沒起來就由 agent 自己走上表 exit ≠ 0 那列。
 
 ### URL 格式（三層，逐層加細）
 
@@ -194,10 +201,12 @@ cross-consumer 集中模式，只從 clade home 起。**NEVER** 叫 user「在 c
 - ❌ 給裸 `/review`——inbox 常態橫跨多個 consumer 的數十條 item，要 user 自己找是哪一條。
   要 user 看 N 條 change 就給 N 條 deep-link
 - ❌ 給根路徑 `http://127.0.0.1:5174/`——它 302 到 `/review`，落點仍是裸清單
-- ❌ service 已 `active` 還叫 user 跑 `pnpm review`——`--reuse-probe` 會探到既有 instance
+- ❌ 叫 user 跑 `pnpm review` 或任何啟動指令——服務健全時 `--reuse-probe` 會探到既有 instance
   而不報錯（2026-08-23 實測 exit 0），所以這不是會爆的那種錯：它只是要 user 多跑一次沒有作用的指令，
-  然後 reuse banner 給的是裸 `/review`，把你原本該給的 deep-link 換成一份要 user 自己找的清單
+  然後 reuse banner 給的是裸 `/review`，把你原本該給的 deep-link 換成一份要 user 自己找的清單；
+  服務不健全時該由 agent 自己 `review-gui-service.sh install` 帶起來
 - ❌ 用 `systemctl --user` 判常駐狀態
+- ❌ 用 `systemctl is-active review-gui` 的單值回傳取代 `review-gui-service.sh status` 的 exit code
 - ❌ 手寫 `<consumer-id>` 靠印象——registry 是唯一真相源
 
 

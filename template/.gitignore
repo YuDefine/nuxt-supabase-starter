@@ -89,3 +89,5 @@ openspec/.vector-search.db*
 !.spectra/evidence/
 
 .spectra/evidence/*.bak*
+
+.clade/flow/

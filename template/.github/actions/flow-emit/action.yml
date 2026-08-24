@@ -1,0 +1,71 @@
+# 🔒 LOCKED — managed by clade · Source: vendor/actions/flow-emit/action.yml · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/actions/flow-emit/action.yml
+name: 'Flow Spine Emit'
+description: 'Append one flow-spine event for this CI job and upload the repo spine as an artifact, so the run shows up on the same local timeline as the agent and propagate events. No-ops when the consumer has no flow projection yet.'
+author: 'YuDefine/clade'
+
+inputs:
+  kind:
+    description: 'Envelope kind (work.open|invoke_agent|invoke_workflow|execute_tool|plan|session_transport|gate|other). CI gates are usually "gate".'
+    required: false
+    default: 'gate'
+  actor:
+    description: 'Who did the work — the workflow or job name reads best on the timeline.'
+    required: false
+    default: 'ci'
+  outcome:
+    description: 'ok | fail | blocked | skipped'
+    required: false
+    default: 'ok'
+  work-id:
+    description: 'Attach to an existing work item. Empty mints an orphan id, which still lands on the spine and stays countable.'
+    required: false
+    default: ''
+  payload:
+    description: 'JSON object of extra facts (workflow, sha, run number). Secrets are redacted by the same non-bypassable pass as every other spine write, but do not put them here anyway.'
+    required: false
+    default: '{}'
+  upload:
+    description: 'Upload the spine as artifact flow-events-<run_id>. The runner is ephemeral, so without this the event dies with the job.'
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Emit flow event
+      shell: bash
+      env:
+        FLOW_KIND: ${{ inputs.kind }}
+        FLOW_ACTOR: ${{ inputs.actor }}
+        FLOW_OUTCOME: ${{ inputs.outcome }}
+        FLOW_WORK_ID: ${{ inputs.work-id }}
+        FLOW_PAYLOAD: ${{ inputs.payload }}
+      run: |
+        set -euo pipefail
+
+        FLOW_CLI=".clade/vendor/scripts/flow/flow.ts"
+        if [ ! -f "$FLOW_CLI" ]; then
+          echo "::warning::$FLOW_CLI not found — consumer not yet propagated, skipping emit"
+          exit 0
+        fi
+
+        # 值一律走 env，NEVER 直接內插進 run: —— ${{ }} 展開後就是 shell 原始碼，
+        # 一個帶引號的 workflow 名稱就足以改寫這段指令的語意。
+        args=(emit --kind "$FLOW_KIND" --actor "$FLOW_ACTOR" --substrate ci
+              --outcome "$FLOW_OUTCOME" --payload "$FLOW_PAYLOAD")
+        if [ -n "$FLOW_WORK_ID" ]; then
+          args+=(--work-id "$FLOW_WORK_ID")
+        fi
+
+        # 一筆遙測 NEVER 擋 CI。emit 本身就是 fail-open，這裡再兜一層是為了
+        # 「node 版本太舊 / 投影半套」這類 CLI 根本起不來的情況。
+        node "$FLOW_CLI" "${args[@]}" || echo "::warning::flow emit failed (non-fatal)"
+
+    - name: Upload spine
+      if: ${{ inputs.upload == 'true' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: flow-events-${{ github.run_id }}
+        path: .clade/flow/events.jsonl
+        if-no-files-found: ignore
+        retention-days: 7

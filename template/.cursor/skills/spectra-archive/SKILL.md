@@ -1,21 +1,183 @@
 ---
 name: spectra-archive
-description: 'Archive a completed change'
+description: "Archive a completed change"
+effort: low
 license: MIT
 compatibility: Requires spectra CLI.
 metadata:
   author: spectra
-  version: '1.0'
-  generatedBy: 'Spectra'
+  version: "1.0"
+  generatedBy: "Spectra"
+permission_tier: action
 ---
+<!--
+🔒 LOCKED — managed by clade
+Source: plugins/hub-core/skills/spectra-archive/
+Edit at: $CLADE_HOME
+Local edits will be reverted by the next sync.
+-->
+
 
 Archive a completed change.
 
-**Input**: Optionally specify a change name after `/spectra:archive` (e.g., `/spectra:archive add-auth`). If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
+> **Ownership**（clade fork；cross-phase matrix in `rules/core/spectra-workflow.md`）：archive gate-check 負責 archive 前再跑 Layer C data-sanity + `archive-gate.sh` Check 1–7（journey / schema-types / exhaustiveness / manual-review kind / screenshot quality / stale verified-ui / pre-handoff-verdict）。**不**負責上游 phase 已 own 的 checkpoint（propose Layer A、apply Step 6c/Layer B、pre-handoff Step 8a.6/Layer E 各在自己 phase 抓）；Check 7 只是機械驗證 Step 8a.6 的 E.1 verdict record 已存在（缺則擋 archive），不重跑 self-analysis 本身。
+
+> **Pre-flight evidence gate**（clade fork；2026-08-18）：PreToolUse hook `pre-archive-evidence-gate.sh` 在本 skill 啟動前跑 `vendor/scripts/audit-evidence-completeness.ts`，核對每個**已勾** manual-review item 是否有對應 receipt。已勾卻沒有 evidence 就是 false-green（`rules/core/agent-self-verification.md` MUST 8），gate 以 exit 2 擋下 archive 並把缺口清單印進 stderr。
+>
+> 被擋時只有兩條合法出路：**補齊 receipt**，或把該 item 標 `deferred`（audit 自帶的逃生口）。**NEVER** 把 item 取消勾選來繞過——那讓「做過但沒證據」偽裝成「沒做」，兩者在後續稽核上不可區分。audit 回 infrastructure-error（exit 2）時 hook fail-open 放行，所以 gate 靜默不等於 evidence 齊全。
+
+**Input**: Optionally specify a change name after `/spectra-archive` (e.g., `/spectra-archive add-auth`). If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
 
 **Prerequisites**: This skill requires the `spectra` CLI. If any `spectra` command fails with "command not found" or similar, report the error and STOP.
 
+## Change Disposition Decision (clade fork addition)
+
+Before running archive, classify the change into one of four dispositions. Pick the wrong path and you either (a) burn user time on a review that doesn't apply, (b) write spec for a feature that won't ship, or (c) abandon work that's actually still pending.
+
+| Disposition | Trigger | spec sync | manual review | CLI |
+|---|---|---|---|---|
+| **Park** | Change is **postponed but still planned**. Premise still valid. | — | — | `spectra park <name>` (NOT this skill) |
+| **Standard archive** | Implementation `[x]` complete + `## 人工檢查` `[x]` complete | applied | already done | `spectra archive <name>` (default flow) |
+| **Skip-archive (A)** | **Won't be implemented.** Premise dissolved (decision changed / concept removed / change became redundant). | **skipped** | **skipped** | `spectra archive <name> --mark-tasks-complete --skip-specs --no-validate -y` |
+| **In-main-done archive (B)** | Implementation `[x]` complete (built directly on main, no session worktree). Only `## 人工檢查` items remain unchecked. | applied | **skipped** | `spectra archive <name> --mark-tasks-complete --no-validate -y` |
+| **Apply-required (block)** | Non-`## 人工檢查` items still `[ ]` + change is still wanted. | — | — | **STOP** — run `/spectra-apply <name>` first, then re-classify |
+
+### Hard rules
+
+- **NEVER** use Park for "won't implement" — Park's contract is "future work pending"; abandoned changes pollute the parked queue and look like a backlog. Use Skip-archive (A) instead.
+- **NEVER** use Skip-archive (A) when implementation work is actually done — that drops the spec delta and leaves the codebase with shipped behavior that has no spec record. Use In-main-done archive (B) instead.
+- **NEVER** run In-main-done archive (B) without first verifying that non-`## 人工檢查` task sections are fully `[x]`. Use the inspection check below.
+- **NEVER** auto-batch multiple changes into Skip-archive (A) without per-change user confirmation — abandoning work is destructive (spec delta thrown away, future readers lose the why).
+- **MUST** record the disposition reason (1 line) in the archive commit message when using Skip-archive (A) or In-main-done archive (B), so future readers can tell why standard flow was bypassed:
+  - A: `archive: <name>; skip — <reason premise dissolved>`
+  - B: `archive: <name>; in-main-done — <reason no worktree, e.g. built directly on main>`
+
+### Inspection check (before B vs Apply-required)
+
+To distinguish In-main-done archive (B) from Apply-required, parse `openspec/changes/<name>/tasks.md`:
+
+```bash
+awk '/^## 人工檢查/{mr=1; next} /^## /{mr=0} !mr && /^- \[ \]/{print NR": "$0}' \
+  openspec/changes/<name>/tasks.md
+```
+
+- **Empty output** → all non-manual-review items are `[x]` → eligible for In-main-done archive (B)
+- **Non-empty output** → there are unchecked implementation tasks → MUST be either:
+  1. **Apply-required**: run `/spectra-apply <name>` to finish them, then re-classify
+  2. **Skip-archive (A)**: explicit user confirmation that the unchecked work won't be done (premise dissolved)
+  - **NEVER** silently auto-`--mark-tasks-complete` non-manual-review tasks without classifying — that hides incomplete implementation behind a green archive.
+
+### Worktree handling per disposition
+
+- **Skip-archive (A)**: change has no implementation to land. If a session worktree exists (typically with only ingest / sync commits, no real implementation), run `node scripts/wt-helper.ts cleanup <name> --force --force-discard-unland` to drop branch + worktree; do **NOT** run `merge-back` (nothing meaningful to merge).
+- **In-main-done archive (B)**: change was built on main, no worktree to absorb. Step 0 `wt-helper merge-back ... --noop-if-missing` becomes silent no-op — proceed.
+- **Standard archive**: Step 0 absorbs the matching worktree as documented below.
+
+### When user asks for "skip 人工檢查 and archive"
+
+"Skip 人工檢查 + archive" is ambiguous between A and B. **MUST** disambiguate with the user before running:
+
+- "這條的功能會做嗎？" → No → A
+- "已經在 main 做完了，只是沒走 worktree？" → Yes → B (after passing the Inspection check)
+- Both ambiguous → walk through Inspection check output with the user, then pick.
+
+**Worktree exemption (clade fork addition)**: This skill is exempt from the [[worktree-default]] §1 worktree requirement. Archive is main-bound — every output (delta sync into `openspec/specs/<capability>/spec.md`, move into `openspec/changes/archive/`, screenshot sweep) targets main, so running inside a worktree adds a mandatory merge-back with no isolation benefit. The skill SHALL proceed regardless of whether cwd is on the main worktree or inside a session worktree; the orchestrator (e.g., `/handoff` Mode B Step 2B.5) SHALL dispatch this skill directly without routing through `/wt`. Do NOT add prose instructing the user to "open a worktree first" — that contradicts the §1 exemption.
+
+**Atomic merge-back contract (clade fork addition)**: Per [[worktree-default]] §5.5, worktree branches do NOT squash back to main at `/wt` return time — they wait until archive. Step 0 below absorbs any slug-matching session worktree into main BEFORE the archive gates run, so gates inspect the post-squash state and so main never carries half-done work between sessions.
+
 **Steps**
+
+0. **Atomic merge-back from active worktree** (clade fork addition)
+
+   Per [[worktree-default]] §5.5, any session worktree whose slug matches this change-name MUST be absorbed into main before archive gates run. If gates run on un-absorbed main, they would see a false-clean diff (worktree changes never landed) and produce a misleading archive.
+
+   **Sidecar init (TD-155)** — before running merge-back, create the in-flight sidecar so that subsequent steps record progress and an interrupted run leaves a detectable orphan:
+
+   ```bash
+   node scripts/spectra-archive-sidecar.ts init <change-name>
+   ```
+
+   - Sidecar is always written to main worktree `.spectra/in-flight-archive/<change-name>.json` (helper resolves via `git rev-parse --git-common-dir`), so a linked worktree's archive is visible from main on the next session start (cross-session detection per `plugins/hub-core/hooks/session-start-spectra-resume-check.sh`).
+   - If `scripts/spectra-archive-sidecar.ts` does not exist (consumer pre-propagation), skip silently with a one-line note: `Sidecar: skipped — helper not available (consumer pre-propagate)`.
+   - **Skip in resume mode**: when Step 0.5 has dispatched into mid-flight resume (sidecar already exists with `phase=merge-back`), do NOT re-init — proceed directly to the merge-back command below.
+
+   ```bash
+   node scripts/wt-helper.ts merge-back <change-name> --auto-stash --noop-if-missing
+   ```
+
+   - `--noop-if-missing` makes this a silent no-op when no matching worktree exists (solo archive path — change implemented directly on main).
+   - `--auto-stash` bulk-stashes main's dirty state as `wt-merge-block/<change-name>/<ISO>` so the squash can land, then **pops it back automatically** once the squash succeeds — main ends up holding squash result + prior dirty together, which is what the eventual single `/commit` needs. A stash tail is left ONLY when the pop hits a genuine conflict, and that case prints an explicit warning (squash landed, stash did not merge back) plus the resolution path; reconcile it via `node scripts/stash-reconcile.ts`.
+   - On conflict, the squash aborts, the worktree + branch are preserved, and the stash is popped back. Surface the error and **STOP** the archive — the change cannot be archived until the conflict is resolved.
+
+   **Skip condition**: if `scripts/wt-helper.ts` does not exist (consumer hasn't propagated the merge-back subcommand yet), skip this step silently with a one-line note: `Step 0: skipped — wt-helper merge-back not available (consumer pre-propagate)`.
+
+   After merge-back, sweep sibling worktrees that carry fork-time stale copies of the change being archived (prevents spectra CLI cross-worktree existence check from refusing):
+
+   ```bash
+   node scripts/wt-helper.ts sweep-siblings <change-name>
+   ```
+
+   **Sidecar advance (TD-155)** — after merge-back returns (whether absorbed, no-op, or skipped), advance phase:
+
+   ```bash
+   node scripts/spectra-archive-sidecar.ts update <change-name> --phase gate-check --last-completed merge-back
+   ```
+
+   (silent fail-safe: if sidecar helper or sidecar file is missing, ignore — sidecar lifecycle is best-effort visibility, not a hard dependency of archive correctness.)
+
+   **Output (when worktree absorbed)**:
+   - `merge-back: <change-name> absorbed into main` — proceed to Step 1
+   - `merge-back: <change-name> absorbed into main (blockers stashed as wt-merge-block/<name>/<ISO>) + worktree cleaned` — proceed; remind user in Step 8 summary that stash entry needs reconciliation
+
+0.5. **Resume / mid-flight detection** (clade fork addition — fires only when explicit change-name given)
+
+   Two independent resume paths share this step:
+   - **Mid-flight resume (TD-155)** — fires when an in-flight sidecar exists from an interrupted prior run
+   - **Discuss-deferred resume (legacy)** — fires when archive was completed but discuss items were deferred to HANDOFF
+
+   ### Mid-flight resume (TD-155)
+
+   Before anything else, check for an in-flight sidecar:
+
+   ```bash
+   node scripts/spectra-archive-sidecar.ts read <change-name> 2>/dev/null
+   ```
+
+   Branch:
+
+   - **Sidecar exists + user invoked `/spectra-archive <X> --resume`** → enter **Mid-flight resume mode**. Parse sidecar's `phase` field and jump per Resume Dispatch Table below. Do NOT re-init the sidecar; do NOT re-run completed phases.
+   - **Sidecar exists + user did NOT pass `--resume`** → STOP. Prompt the user:
+     > Previous /spectra-archive for `<X>` interrupted at phase `<phase>` (sidecar started `<ISO>`). Options:
+     >  a) Resume — re-run as `/spectra-archive <X> --resume`
+     >  b) Discard previous run and start fresh — `node scripts/spectra-archive-sidecar.ts delete <X>` then re-invoke without `--resume`
+     >
+     > Choose a / b. Standard archive cannot proceed while a sidecar exists.
+   - **No sidecar** → fall through to discuss-deferred resume detection below.
+
+   #### Resume Dispatch Table (mid-flight)
+
+   讀 sidecar `.phase`（`node scripts/spectra-archive-sidecar.ts read <change-name>`）後 **MUST** 依 `references/resume.md` § Resume Dispatch Table 跳轉（merge-back / gate-check / spec-sync / screenshot-sweep / cleanup 各自 idempotent 重入）——**唯一例外 `phase=folder-mv` 是 STOP，manual fixup required**（`spectra archive` CLI 黑盒中斷，現實狀態未知，不可 retry）。
+
+   ### Discuss-deferred resume (legacy)
+
+   When **no sidecar** exists, also check the legacy discuss-deferred path:
+
+   ```bash
+   if [ ! -d "openspec/changes/<change-name>" ] && [ -d "openspec/changes/archive/<change-name>" ]; then
+     if grep -q '(deferred-to-handoff:' "openspec/changes/archive/<change-name>/tasks.md" 2>/dev/null; then
+       # Discuss-deferred resume candidate
+       ...
+     fi
+   fi
+   ```
+
+   - **No active dir + no archived dir + no sidecar** → STOP with error: "change `<name>` not found in active or archived"
+   - **No active dir + archived dir but no `(deferred-to-handoff:` annotation** → STOP with note: "change `<name>` already fully archived; nothing to resume"
+   - **No active dir + archived dir with `(deferred-to-handoff:` annotations** → enter **Discuss-deferred resume mode**: skip Step 0 (merge-back), skip Step 1 (selection prompt), skip Steps 2 / 3 / 3.3 / 3.5 / 4 / 5 / 6 / 7 / 8 entirely. Jump to **Step 3.5b — Resume walkthrough** below; that step is the only work performed in this resume path.
+
+   Standard archive runs (active change directory exists + no sidecar) **MUST NOT** trigger discuss-deferred resume even if a homonymous archived change has deferred items.
+
+   **Skip Step 0.5 entirely** when no change-name was provided (Step 1 still handles selection from active changes).
 
 1. **If no change name provided, prompt for selection**
 
@@ -43,7 +205,7 @@ Archive a completed change.
 
    Read the tasks file (typically `tasks.md`) to check for incomplete tasks.
 
-   Count tasks marked with `- [ ]` (incomplete) vs `- [x]` (complete).
+   Count **leaf** tasks marked with `- [ ]` (incomplete) vs `- [x]` (complete). For `## 人工檢查` items, parent `#N` lines that own scoped `#N.M` children have state derived from children (see `rules/core/manual-review.md`「Parent State Derivation」) — never count those parent lines directly.
 
    **If incomplete tasks found:**
    - Display warning showing count of incomplete tasks
@@ -51,6 +213,55 @@ Archive a completed change.
    - Proceed if user confirms
 
    **If no tasks file exists:** Proceed without task-related warning.
+
+3.3. **Manual-Review Pattern Re-check** (clade fork addition — archive gate for `## 人工檢查` hygiene)
+
+   `## 人工檢查` items can drift between propose / ingest and archive (apply phase edits, screenshot annotations, fix-up rewrites). Re-run the same enforcement hook that `/spectra-propose` uses, so jargon leakage / abstract reference / missing URL etc. doesn't slip into archive:
+
+   ```bash
+   bash scripts/spectra-advanced/post-propose-manual-review-check.sh <change-name>
+   ```
+
+   Exit 2 = pattern findings (any of `ABSTRACT_REFERENCE` / `CARD_WITHOUT_UID` / `UI_ITEM_NO_URL` / `MULTI_STEP_NOT_SCOPED` / `REVIEW_UI_BACKEND_ROUNDTRIP` / `INTERNAL_JARGON_LEAKAGE`).
+
+   **If findings exist:**
+   - Display warning showing pattern hit summary (parsed from hook stderr)
+   - Prompt user: "Archive 前 manual-review 還有 N 個 pattern 命中（見上）— 修完再 archive vs 帶 followup 跳過？"
+     - **Fix now** → main thread Edit `tasks.md` per hook remediation guidance; re-run hook; loop until clean
+     - **Bypass with @followup** → user adds `@followup[TD-NNN]` to each hit item + opens consumer-side TD; main thread re-runs hook to confirm bypass markers recognized; proceed
+     - **Bypass with @no-manual-review-check** → only if hit is legitimate false positive (e.g., 真機掃 SMS 無 dev replay endpoint); main thread adds marker + re-runs hook; proceed
+   - Proceed only after hook exits 0 or user explicitly confirms bypass strategy
+
+   **If hook exits 0:** Silent skip — proceed to Step 3.5.
+
+   Reference: `vendor/snippets/manual-review-enforcement/patterns.json` + `rules/core/manual-review.data-readiness.md`.
+
+3.5. **Discuss Items Walkthrough** (Step 2.5 in the spec — runs after artifact + task completion checks, before delta sync preview)
+
+   Spec authority: `openspec/specs/manual-review-item-kind/spec.md` "Spectra-Archive Discuss Walkthrough"
+
+   Read `openspec/changes/<change-name>/tasks.md` `## 人工檢查` section. Identify every unchecked item where `kind = "discuss"` (either explicit `[discuss]` marker, OR derived via Default Kind Derivation Rule when proposal.md contains `**No user-facing journey (backend-only)**`).
+
+   **For each unchecked `[discuss]` item, the main thread Claude SHALL** (proactively, without prompting):
+
+      **MUST** 完整讀 `references/discuss-walkthrough.md` 依步驟 1–6 執行：分類 trigger condition（internal evidence / external signal occurred / **external signal pending**）→ 準備 evidence（pending 免收集）→ 逐項以固定格式呈現（**Defer 選項只在 external signal pending 出現**）→ 依 OK / Issue / Skip / Defer 分支編輯 tasks.md annotation → Defer 時**同一 run 內**寫 HANDOFF entry（`<!-- deferred-begin/end -->` HTML markers 是 load-bearing，**NEVER** drop / rename）。
+
+   **Skip-condition**: if `## 人工檢查` has no unchecked `[discuss]` items, skip this step silently.
+
+   **Out of scope here**: unchecked `[review:ui]` items are NOT processed in this step — they are routed to `/review-screenshot` by the orchestrator's Archive Flow (`spectra/SKILL.md` Step 1). If `[review:ui]` items remain unchecked at this point, the orchestrator should already have prompted the user; if they reach Step 6 unchecked, archive-gate.sh Check 4 will block.
+
+   **Restrictions** (hard rules from `manual-review.md`):
+
+   - **NEVER** mark a `[discuss]` item `[x]` without showing the user evidence first AND receiving an explicit OK / Skip / Defer
+   - **NEVER** write `(claude-discussed: <ISO>)` annotation without an actual discussion taking place
+   - **NEVER** offer the Defer option when trigger is "internal evidence available" or "external signal already occurred" — Defer is reserved for "external signal pending"
+   - **NEVER** write `(deferred-to-handoff: <ISO>)` annotation without also writing the matching HANDOFF entry in the same archive run
+   - **NEVER** batch-process multiple `[discuss]` items in one user prompt — present them one at a time so the user can give a focused answer per item
+   - **NEVER** touch `[review:ui]` items during this step
+
+3.5b. **Resume walkthrough** (clade fork addition — only runs when Step 0.5 detected Resume mode; skip otherwise)
+
+   **MUST** 完整讀 `references/resume.md` § Step 3.5b 執行：對每條 `(deferred-to-handoff:)` item 重新分類 trigger → 收 post-signal evidence → 逐項問 user（OK / Issue / Skip / **Still pending**；**Defer 在 Resume mode 禁止** — 會無限再延）→ 依回答編輯 archived tasks.md + 移除對應 HANDOFF entry。**NEVER** 在 Resume mode 跑 `spectra archive` CLI / 重跑 gates / 動 archived 目錄 / 碰未帶 `(deferred-to-handoff:)` 的 items。
 
 4. **Assess delta spec sync state**
 
@@ -77,6 +288,53 @@ Archive a completed change.
 
    If the file does not exist, silently continue.
 
+5.5. **Post-walkthrough gate re-check** (clade fork addition — paired with `--pre-skill` PreToolUse hook)
+
+   **Journey URL Touch (Check 1) bypass marker** — if Check 1 reports `Journey URL Touch 未通過` for a URL whose `.vue` was committed in main **before this worktree was forked** (typical: earlier propose iteration impl'd the UI, current worktree only carries verify evidence / tasks.md annotations / screenshot sweep), this is the expected atomic-landing edge case. Drop a bypass marker into the relevant `tasks.md` block:
+
+   ```markdown
+   <!-- journey-touch: intentional, reason: UI already committed in <commit-sha> (earlier propose iteration); this worktree only carries verify evidence -->
+   ```
+
+   The gate honours the marker per-URL. Use only when commit history actually contains the touched UI (verify via `git log -- <ui-path>`); never use to silence a missing implementation.
+
+   The PreToolUse hook `pre-archive-ux-gate.sh` runs `archive-gate.sh --pre-skill <name>` before this skill starts, which skips Check 4 (Manual Review Kind Validation) because annotations are populated by Step 3.5 above. Now that Step 3.5 has run, validate the post-walkthrough state by re-running the gate **without** `--pre-skill`:
+
+   ```bash
+   bash scripts/spectra-advanced/archive-gate.sh "<change-name>"
+   ```
+
+   **Branch on exit code:**
+
+   - **Exit 0** → All checks pass. Proceed to Step 6.
+   - **Exit 2** → A check failed. Most common cause: Step 3.5 walkthrough was interrupted / skipped / produced incomplete annotations. Other checks (1/2/3/5/6) already passed pre-skill, so a failure here is almost certainly Check 4 — **or Check 7（缺 Step 8a.6 的 E.1 verdict record；補跑 `pre-handoff-ledger.ts record --layer E.1 ...` 後重試，或對非適用 change 加 `<!-- pre-handoff-verdict: intentional, reason: ... -->` 到 tasks.md）**。
+     - Display the gate stderr to the user.
+     - **MUST** prompt via `AskUserQuestion`:
+       - **Fix now** — go back to Step 3.5 and finish walkthrough for the items the gate flagged
+       - **Abort archive** — stop the skill, leave change in-flight; user investigates manually
+     - **NEVER** silently bypass exit 2 — Check 4 is the only post-walkthrough validation that the pre-skill path defers.
+
+   **Skip condition**: if the gate script does not exist (consumer pre-propagation state), warn and proceed (fail-open, matches existing Check 5 fail-open behavior).
+
+   **Layer C — data-sanity audit**（clade fork addition; pre-handoff quality gates; not in upstream spectra）：archive-gate 過後、spec-sync 前，對本 change 跑 static data-shape audit，擋住「client query param literal 違反 server zod bound → silent 4xx → lookup map empty → admin list column 整列 fallback」這類 typecheck/lint/視覺都抓不到的資料形狀問題（<consumer-a> `app-status-badge-extraction` root cause）：
+
+   ```bash
+   node <clade-vendor>/scripts/audit-data-sanity.ts --consumer-path . --json
+   ```
+
+   - **exit 0 `status: "pass"`** → 通過（advisory lookupRisks 印 stderr 供參考，不 block）；進 sidecar advance。
+   - **exit 1 `status: "fail"`**（PARAM_BOUNDARY，Critical）→ **MUST block archive**：顯示 violations 給 user，root-cause 修 client literal 到 bound 內（典型 `perPage: 200`→`100`）或調 server schema 後 re-run。**NEVER** silently bypass、**NEVER** 標 archive done 留給 user manual review 抓。
+   - **Skip condition**: `audit-data-sanity.ts` 不存在（consumer pre-propagation）→ warn + 跳過（fail-open，與 Check 5 一致）。
+   - 完整偵測 / 限制（heuristic param-name 跨檔對應）見 `/data-sanity` skill。
+
+   **Sidecar advance (TD-155)** — once gates pass (exit 0 or user explicitly bypassed), advance phase before entering spec-sync / archive CLI:
+
+   ```bash
+   node scripts/spectra-archive-sidecar.ts update <change-name> --phase spec-sync --last-completed gate-check
+   ```
+
+   (silent fail-safe if helper / sidecar missing.)
+
 6. **Perform the archive**
 
    Use the `spectra archive` CLI command which handles the full archive workflow
@@ -93,7 +351,115 @@ Archive a completed change.
 
    **If archive fails** with "already exists" error, suggest renaming existing archive.
 
-7. **Display summary**
+   **Sidecar advance (TD-155)** — **only after `spectra archive` exits 0**, advance phase:
+
+   ```bash
+   node scripts/spectra-archive-sidecar.ts update <change-name> --phase folder-mv --last-completed spec-sync
+   ```
+
+   **NEVER** advance the sidecar to `folder-mv` if the CLI failed or was interrupted — leaving `phase=spec-sync` is the trigger that lets Step 0.5 detect the dangerous mid-CLI state and force manual fixup on next `--resume`. (silent fail-safe if helper / sidecar missing.)
+
+7. **Sweep screenshots (auto)**
+
+   After successful archive, **automatically** invoke the `screenshots-archive` skill (via Skill tool) with `change <change-name>` to sweep the corresponding screenshot folders into `screenshots/<env>/_archive/YYYY-MM/`.
+
+   - Caller-trusted: spectra-archive completing = the change is closed = its screenshots belong in `_archive/` (no extra confirmation here; `screenshots-archive` Mode B handles topic-name mismatch internally).
+   - **Skip condition**: if user explicitly passed `--no-sweep` (or said "不要 sweep 截圖") when invoking spectra-archive, skip this step and note in Step 8 summary: `Screenshots: sweep skipped (user --no-sweep)`.
+   - **Failure handling**: if `screenshots-archive` errors (e.g., disk write failure), do NOT fail the overall archive — log the error and note in Step 8 summary: `Screenshots: sweep failed — see error above`. The change is already archived; sweep is best-effort cleanup.
+
+   **Note (TD-160 preserve)**: when Step 0 ran `wt-helper merge-back`, gitignored worktree screenshots at `screenshots/<env>/<topic>/` are automatically copied to main before cleanup destroys the worktree (see `preserveWorktreeScreenshots` in `vendor/scripts/wt-helper.ts`). Step 7 sweep therefore finds the files in main as expected. Without this preserve, cleanup would delete them and sweep would be a no-op.
+
+   **Sidecar advance (TD-155)** — after sweep completes (success, skipped, or failed — all three count as "Step 7 phase reached"):
+
+   ```bash
+   node scripts/spectra-archive-sidecar.ts update <change-name> --phase screenshot-sweep --last-completed folder-mv
+   ```
+
+   (silent fail-safe if helper / sidecar missing.)
+
+7.5. **Auto-reconcile merge-back stash (clade fork; auto-善後 — no tail)**
+
+   merge-back (`--auto-stash`, Step 0) sets aside main's pre-merge dirty as `wt-merge-block/<change>/...` so the squash can land cleanly. **This is main's OWN work, NOT stale change residue** — typically HANDOFF entries from parallel sessions, ROADMAP/spec regen, telemetry appends. It **MUST be restored** to main's working tree (so it lands with the user's eventual `/commit`); the archive **auto-善後** it here and **NEVER leaves a stash tail for the user** (the only exception is a genuine per-file divergence, which is surfaced, not buried).
+
+   > **NEVER blanket-drop a `wt-merge-block` stash.** Proven incident (2026-06-11): a `wt-merge-block` stash held a *parallel session's* `receiving-material-map` HANDOFF entry (blocked-status handoff for another in-flight change); the old "drop archived-slug" guidance would have destroyed it. `wt-merge-block` = main's blockers, not change residue. (`stash-reconcile.ts` itself already recommends `apply` for clean merge-block entries — the old AskUserQuestion+keep default was the bug, not the script.)
+
+   ```bash
+   node scripts/stash-reconcile.ts --slug "<change-name>" --json
+   ```
+
+   Parse JSON `entries`. If empty → `Reconcile: 0 entries`, proceed. For each entry, branch on `namespace.kind` (main thread runs the git ops directly — **no AskUserQuestion** in the common path):
+
+   - **`wt-merge-block`** → **auto-restore per-file**:
+
+     ```bash
+     REF="<entry.ref e.g. stash@{0}>"
+     # archive already produced the authoritative version of these → keep current, do NOT restore the stale stash copy
+     REGEN_RE='^(openspec/ROADMAP\.md|openspec/specs/)'
+     surfaced=()
+     for f in $(git stash show --include-untracked --name-only "$REF"); do
+       echo "$f" | grep -qE "$REGEN_RE" && continue   # keep current post-archive version
+       # restore only when main has NOT independently changed f since the stash
+       # (current working file === stash base → no divergence → safe to restore stash content)
+       if diff -q <(git show "$REF^1:$f" 2>/dev/null) "$f" >/dev/null 2>&1; then
+         git checkout "$REF" -- "$f"                  # restore main's set-aside work
+       else
+         surfaced+=("$f")                             # diverged since stash — do NOT auto-overwrite
+       fi
+     done
+     if [ ${#surfaced[@]} -eq 0 ]; then
+       git stash drop "$REF"                          # fully reconciled — no tail
+     fi   # else: keep stash, report surfaced[] for manual handling (rare)
+     ```
+
+     Report `Reconcile: restored N file(s) from merge-block, dropped stash` (or, if surfaced) `Reconcile: M file(s) diverged — stash kept, see <list>`.
+
+   - **`wt-baseline` / `wt-final-baseline`** → pre-fork pin, stale post-archive (content pinned as `refs/wt-baseline/...`): `git stash drop <entry.ref>`. Report `Reconcile: dropped baseline pin`.
+
+   - **other / unknown kind** → do NOT auto-touch; print `ref` + file list, note `Reconcile: 1 unknown-shape entry kept (manual)`.
+
+   **Restrictions**:
+   - **NEVER** drop a `wt-merge-block` stash without first restoring its non-regenerated files — that loses main's real work (e.g. parallel-session HANDOFF entries).
+   - **NEVER** auto-overwrite a file that diverged from the stash base (`surfaced[]`) — surface it instead; this is the *only* path that leaves a tail, and it is warranted (a genuine conflict needs human eyes).
+   - **NEVER** restore archive-regenerated paths (`openspec/ROADMAP.md`, `openspec/specs/**`) from the stash — the archive's freshly-applied version is authoritative; the stash holds the pre-archive snapshot, which would revert the archive.
+   - **NEVER** fall back to AskUserQuestion + "keep all" for a clean `wt-merge-block` entry — that is the old tail-leaving behavior this step replaces.
+   - **Skip condition**: `--no-reconcile` → note `Reconcile: skipped (user --no-reconcile)`.
+   - **Failure handling**: any git op error → do NOT fail the archive (already done); note `Reconcile: failed — see error above` + leave the stash intact for the user.
+   - **Note in Step 8 summary**: `Reconcile: restored N / dropped` / `Reconcile: M diverged — stash kept` / `Reconcile: dropped baseline pin` / `Reconcile: 0 entries` / `Reconcile: skipped` / `Reconcile: failed`.
+
+   **Sidecar advance (TD-155)** — after stash reconcile completes (any outcome), advance to final phase:
+
+   ```bash
+   node scripts/spectra-archive-sidecar.ts update <change-name> --phase cleanup --last-completed screenshot-sweep
+   ```
+
+   (silent fail-safe if helper / sidecar missing.)
+
+7.7. **Notion ticket status — ensure 進行中 + surface pending 驗收中**（clade fork addition — per [[spectra-notion-coupling]]）
+
+   **Skip-condition**（任一成立即 silent skip）：consumer-meta `notion.ticketWorkflow !== true`；或本 change 的 `proposal.md`（已搬到 `openspec/changes/archive/<date>-<name>/proposal.md`）頂部無 `> **Notion ticket**:` 連結。不適用時**不要**硬湊 ticket。
+
+   兩條件都成立時，**MUST**：
+
+   1. 抓 ticket `page_id`（proposal.md 頂部）+ consumer-meta `notion.dataSourceId`。
+   2. `notion-fetch collection://<dataSourceId>` 重撈 schema 校對 property key（中文 + 全形空格 + `>=`，憑記憶必錯）。
+   3. **Ensure 進行中**：ticket 若還停在 `未開始` / `需確認` → 補轉 `→ 進行中`（per `~/.cursor/skills/_notion-<consumer-b>-board/REFERENCE.md §3`）。
+   4. **Pending 驗收中**：archive 是 bookkeeping，**此刻尚無本次發版 git tag**（標準順序「先 archive 再 `/commit`」，tag 在 `/commit` Step 5 才生）→ **NEVER 在此推 `驗收中`**；改在 Step 8 summary 明文列 pending 動作（見下），由緊接的 `/commit` 發版後**同一主線**完成 `進行中 → 驗收中` + 填 `修復版本 >= <tag>`。
+
+   **NEVER** 在 archive 當下標 `驗收中`（無 tag）或填 `修復版本 >=`。**NEVER** 碰客戶側轉移（`驗收中→完成` 等）或 `發布日期` / `驗收日期` / `名稱` / `驗收完成` 欄位。
+
+   **Notion 專案層同步**（clade fork addition；per [[spectra-notion-coupling]] § 專案層）
+
+   consumer 的 `.claude/consumer-meta.json` 若有 `notion.projectWorkflow: true`，**MUST** 執行：
+
+   ```bash
+   node ~/offline/clade/vendor/scripts/notion-sync.ts archive --consumer-path . --change <change-name> --json
+   ```
+
+   - `needsDecision` 非空 → **MUST** 逐條用 `AskUserQuestion` 問，帶 `--force-overwrite` 等答案重跑。**NEVER** silent skip。
+   - `pending` 非空 → 寫入未確認落地，**MUST** 列進下面的 summary。
+   - Story 在此只推到 `待驗收`；`上線日` 與 Milestone 進度要等 `/commit` Step 6 出 tag 後才寫（同 ticket 的 `驗收中` tag 依賴）。
+
+8. **Display summary**
 
    Show archive completion summary including:
    - Change name
@@ -101,6 +467,15 @@ Archive a completed change.
    - Archive location
    - Spec sync status (synced / sync skipped / no delta specs)
    - Note about any warnings (incomplete artifacts/tasks)
+   - **Notion ticket pending**（only when Step 7.7 applied — consumer-meta `notion.ticketWorkflow` + change 有連結）：一行明文 `📌 Notion ticket <page_id>：已 ensure 進行中；待 /commit 發版產 git tag 後 → 轉 驗收中 + 填 修復版本 >= <tag>（同一主線跑完 /commit 立即執行，NEVER 留到下次想起來）`（per [[spectra-notion-coupling]]）
+
+   **Sidecar cleanup (TD-155)** — after the summary is displayed (archive considered complete from the user's perspective), delete the sidecar:
+
+   ```bash
+   node scripts/spectra-archive-sidecar.ts delete <change-name>
+   ```
+
+   (silent fail-safe: if sidecar is already missing — e.g., consumer pre-propagate — the helper is a no-op.)
 
 **Output On Success**
 
@@ -109,10 +484,17 @@ Archive a completed change.
 
 **Change:** <change-name>
 **Schema:** <schema-name>
+**Worktree:** ✓ Absorbed into main (or: no worktree — solo path)
 **Archived to:** openspec/changes/archive/YYYY-MM-DD-<name>/
 **Specs:** ✓ Synced to main specs
+**Screenshots:** ✓ Swept to _archive/YYYY-MM/ (or: no screenshots / skipped (user --no-sweep) / sweep failed)
 
 All artifacts complete. All tasks complete.
+```
+
+If Step 0 stashed blockers, append a line under **Worktree**:
+```
+**Stash to reconcile:** wt-merge-block/<change-name>/<ISO> (run `node scripts/stash-reconcile.ts` to plan)
 ```
 
 **Output On Success (No Delta Specs)**
@@ -124,6 +506,7 @@ All artifacts complete. All tasks complete.
 **Schema:** <schema-name>
 **Archived to:** openspec/changes/archive/YYYY-MM-DD-<name>/
 **Specs:** No delta specs
+**Screenshots:** ✓ Swept to _archive/YYYY-MM/ (or: no screenshots / skipped / failed)
 
 All artifacts complete. All tasks complete.
 ```
@@ -137,11 +520,13 @@ All artifacts complete. All tasks complete.
 **Schema:** <schema-name>
 **Archived to:** openspec/changes/archive/YYYY-MM-DD-<name>/
 **Specs:** Sync skipped (user chose to skip)
+**Screenshots:** Sweep failed — see error above
 
 **Warnings:**
 - Archived with 2 incomplete artifacts
 - Archived with 3 incomplete tasks
 - Delta spec sync was skipped (user chose to skip)
+- Screenshot sweep failed (archive itself succeeded)
 
 Review the archive if this was not intentional.
 ```
@@ -172,3 +557,5 @@ Target archive directory already exists.
 - If sync is requested, use the Skill tool to invoke `spectra-sync-specs` (agent-driven)
 - If delta specs exist, always run the sync assessment and show the combined summary before prompting
 - If **AskUserQuestion tool** is not available, ask the same questions as plain text and wait for the user's response
+- **NEVER** skip Step 7 screenshot sweep silently — always run it (unless `--no-sweep`); sweep failure must surface in summary, but **NEVER** roll back the successful archive on sweep failure
+- **ALWAYS** call `screenshots-archive` via Skill tool with explicit `change <change-name>` argument so Mode B logic (caller-trusted, internal topic-mismatch prompt) kicks in

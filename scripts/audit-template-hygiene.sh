@@ -465,6 +465,27 @@ is_text_file() {
   LC_ALL=C grep -Iq . "${file}" 2>/dev/null
 }
 
+# `.cursor/` 自 clade 的 sync-to-cursor 上線後是 `.claude/` 的**生成投影**，內容逐位元
+# 來自同一個來源。對投影掃、對來源不掃，會得到一個互相矛盾的結果：同一份 vendored
+# skill 文件（例：vueuse-functions 的 useJwt.md 內含 JWT 形狀的範例 token）放在
+# `.claude/skills/` 是通過的、投影到 `.cursor/skills/` 就擋 commit。
+#
+# 所以：**投影檔只在「來源檔存在」時跳過**。來源不存在就照掃 —— 那代表它不是投影，
+# 是有人手寫進 `.cursor/` 的東西，正是這個 gate 該攔的。
+# NEVER 改成無條件跳過整個 `.cursor/`：那會開一個「把東西寫進投影目錄就免掃」的洞。
+is_projection_of_scanned_source() {
+  local path="$1"
+  local root="${2:-.}"
+  local source_path
+
+  case "${path}" in
+    template/.cursor/*) source_path="template/.claude/${path#template/.cursor/}" ;;
+    *) return 1 ;;
+  esac
+
+  [[ -f "${root}/${source_path}" ]]
+}
+
 scan_file() {
   local root="$1"
   local abs_path="$2"
@@ -484,6 +505,10 @@ scan_file() {
       return 0
       ;;
   esac
+
+  if is_projection_of_scanned_source "${path}" "${root}"; then
+    return 0
+  fi
 
   if [[ ! -r "${abs_path}" ]]; then
     scanner_error "無法讀取 template 檔案，starter hygiene audit 採 fail-closed。" "${path}"

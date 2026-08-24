@@ -1,7 +1,15 @@
 ---
-description: Postgres Trigger 撰寫規範
-globs: ['supabase/migrations/**/*.sql']
+description: "Postgres Trigger 撰寫規範"
+globs: ["supabase/migrations/**/*.sql"]
+alwaysApply: false
 ---
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/modules/db-schema/supabase/trigger.md
+Edit at: $CLADE_HOME
+Local edits will be reverted by the next sync.
+-->
+
 
 # Trigger
 

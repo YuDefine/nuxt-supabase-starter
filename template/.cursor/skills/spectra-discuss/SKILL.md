@@ -1,22 +1,31 @@
 ---
 name: spectra-discuss
-description: 'Have a focused discussion about a topic and reach a conclusion'
+description: "Have a focused discussion about a topic and reach a conclusion"
+effort: medium
 disallowedTools: [Edit, Write]
 license: MIT
 compatibility: Requires spectra CLI.
 metadata:
   author: spectra
-  version: '1.0'
-  generatedBy: 'Spectra'
+  version: "1.0"
+  generatedBy: "Spectra"
+permission_tier: draft
 ---
+<!--
+🔒 LOCKED — managed by clade
+Source: plugins/hub-core/skills/spectra-discuss/
+Edit at: $CLADE_HOME
+Local edits will be reverted by the next sync.
+-->
+
 
 Have a focused discussion about a topic and reach a conclusion.
 
-**IMPORTANT: Discuss mode is for thinking, not implementing.** You may read files, search code, and investigate the codebase, but you must NEVER write code or implement features. If the user asks you to implement something, remind them to exit discuss mode first (e.g., start a change with `/spectra:propose`). You MAY create Spectra artifacts (proposals, designs, specs) if the user asks—that's capturing thinking, not implementing.
+**IMPORTANT: Discuss mode is for thinking, not implementing.** You may read files, search code, and investigate the codebase, but you must NEVER write code or implement features. If the user asks you to implement something, remind them to exit discuss mode first (e.g., start a change with `/spectra-propose`). You MAY create Spectra artifacts (proposals, designs, specs) if the user asks—that's capturing thinking, not implementing.
 
 **This is a task-oriented discussion.** Every discussion has a topic, works toward a goal, and ends with a clear conclusion. Unlike open-ended exploration, discuss mode converges.
 
-**Input**: The argument after `/spectra:discuss` is the topic. Could be:
+**Input**: The argument after `/spectra-discuss` is the topic. Could be:
 
 - A design question: "should we use WebSockets or SSE?"
 - A problem to solve: "the auth system is getting unwieldy"
@@ -28,7 +37,16 @@ Have a focused discussion about a topic and reach a conclusion.
 
 ## Before You Speak
 
-Before asking anything, do a quick codebase scout to decide how to run this discussion.
+Before asking anything, load the shared vocabulary, then do a quick codebase scout to decide how to run this discussion.
+
+### Step 0: Load shared vocabulary
+
+Try to read `openspec/LANGUAGE.md`. This file is the project's canonical vocabulary — terms with `definition`, `avoid`, and `why` notes, plus principles for when legacy terminology may remain.
+
+- **If the file exists**: scan the canonical terms and their avoided synonyms. Prefer the canonical term when you summarize, capture conclusions, or update artifacts. If you notice a relevant `avoid` synonym in the user's topic or in the artifacts you read, plan to surface that as vocabulary drift in the conclusion.
+- **If the file does not exist**: continue silently with the normal flow. A missing vocabulary file is not an error; do not announce it, do not block, and do not stop to ask the user to create it.
+
+This step runs before the codebase scout, the assumptions list, the interview questions, and the conclusion capture.
 
 ### Step 1: Extract search terms
 
@@ -82,6 +100,26 @@ The user can switch modes at any time during the discussion:
 
 - **"Ask me questions instead"** / **"one at a time"** → switch to interview mode (the "How to Discuss" section below)
 - **"Just list your assumptions"** / **"what do you think?"** → run the codebase scout if not done yet, then switch to assumptions mode
+
+### Step 4: Interface depth check (conditional)
+
+After the codebase scout, evaluate whether the topic introduces a new architectural seam. Run this check **only** when the topic involves at least one of:
+
+- A **new module** (a new Rust crate, file under `src-tauri/src/commands/`, or a new top-level Svelte module).
+- A **new IPC command** (a new `#[tauri::command]` exposed to the frontend, or a new front-to-back message shape).
+- A **cross-layer Rust ↔ Tauri ↔ Svelte flow** that did not exist before.
+- A **new storage abstraction** (new on-disk format, new database table, new file-system layout, new adapter over existing storage).
+
+If none of those conditions apply, **skip this check**. Topics that only change static UI copy, visual styling, documentation wording, or other non-architectural surfaces SHALL skip the depth check entirely. The vocabulary load from Step 0 still happens; nothing else from this step runs.
+
+When the check is triggered, work through these four questions before you finalize assumptions or interview answers:
+
+1. **Seam location** — where does the boundary belong? Name the module, file, or store that owns the new contract.
+2. **Adapter count** — is there exactly one adapter on this path, or are several thin wrappers stacked on each other?
+3. **Depth** — what behaviour is hidden behind the interface? If the answer is "nothing — it just forwards calls", the seam is too shallow.
+4. **Deletion test** — if you deleted this module today, what would break? If nothing meaningful breaks, the module is a pass-through and probably should not exist.
+
+Surface the answers in the conclusion (or the assumptions list, if you are in assumptions mode) so the depth question is part of the captured decision, not an internal note.
 
 ---
 
@@ -157,6 +195,92 @@ Good: "Which errors are causing problems now? Are users seeing
 
 ---
 
+## Plain-Language Synthesis
+
+Before convergence, **MUST** pause for a plain-language synthesis when the discussion's stakes extend beyond pure-technical detail. Surface misalignment in user-domain language before fixing it in artifact-domain language.
+
+### Trigger
+
+Run synthesis when **any** of:
+
+- Discussion touches DB schema / migration / new table / new column / enum extension
+- Cross-functional decision (affects PM, ops, business owner, support, finance)
+- Multi-stage user workflow (admin + staff + customer involved)
+- Migration path mutates existing data
+- User signals confusion: "can you explain in plain terms" / "簡單說" / "I don't quite get X" / "what does this mean for users"
+
+**Skip** synthesis when the topic is purely technical (variable rename, internal helper refactor, dev-only script, lint config).
+
+### Why this exists
+
+A schema-aware assumptions list (Step 3 output) is enough for engineers, but breaks down for:
+
+- Domain experts / PM / business owner reading along
+- Engineers whose intent hasn't fully converged
+- Cross-functional decisions where DB choice ripples into business model
+
+Without a plain-language layer, propose may capture the surface motivation (e.g. "add 'part' enum value") and miss the real one underneath (e.g. "I need a two-layer inventory model + restock mutation"). Apply then catches the mismatch and burns ingest cycles.
+
+### Structure (4 parts, in order)
+
+1. **現況（為什麼這件事存在）** — describe status quo using everyday metaphors:
+   - DB table → 「櫃子」/「本子」/「資料夾」/「文件」
+   - API endpoint → 「服務窗口」
+   - cron job → 「鬧鐘」
+   - FK link → 「身份證對應」
+   - migration → 「整理舊資料」
+   - **NEVER** use schema / FK / enum / column / RPC / Zod / RLS / function signature vocabulary in this section
+
+2. **你要的兩件事的差異（layered intent table）** — when discussion uncovers layered intent (visibility vs management; admin vs user; read vs write; current vs future scope), make it a table:
+
+   | 層次 | 描述 | 誰負責 |
+   | --- | --- | --- |
+   | (e.g.) 看得到 | 倉儲頁能列出總量 | 既有 change |
+   | (e.g.) 管得到 | 倉儲頁能直接補貨 | 新 change |
+
+3. **建議做法（N 條，全非技術）** — numbered list, each:
+   - one-sentence summary in user's domain language
+   - 「理由」 / 「做法」 in one paragraph
+   - **NEVER** introduce field names, table names, enum values, FK terms, function signatures
+   - Use ASCII diagrams when explaining data flow / state transitions / 雙層 / 三層 models
+
+   Example diagram (everyday vocabulary):
+
+   ```
+   採購進來          倉庫存量          販賣機存量        員工領用
+   ┌────────┐  →  ┌────────┐  →  ┌─────────┐  → 
+   │ N 支    │    │ A 支    │    │ B 支     │
+   └────────┘    └────────┘    └─────────┘
+   ```
+
+4. **範圍邊界（做 vs 不做）** — table:
+
+   | 做 | 不做（未來另開） |
+   | --- | --- |
+   | (concrete action) | (concrete action with rationale) |
+
+5. **Close with one focused AskUserQuestion** — the **single** highest-leverage undecided question, with concrete options. **NEVER** dump all open questions at once. Synthesis is meant to **surface** the critical drill, not exhaust all open items.
+
+### What this is NOT
+
+- **NOT patronizing** — plain language ≠ dumbed-down. Same intellectual rigor; only the vocabulary swaps.
+- **NOT a substitute for technical Convergence** — the conclusion summary in "## Convergence" still happens after, with proper capability / spec / artifact names.
+- **NOT triggered for trivial topics** — variable renames and pure refactors don't need synthesis.
+
+### Worked example (<consumer-b> warehouse inventory)
+
+Topic: "add 'part' to warehouse_items.item_category enum + integrate vending tool aggregation".
+
+- **Section 1 現況**: used 「文具櫃」 / 「專業刀具櫃」 / 「販賣機」 metaphors instead of `warehouse_items` / `tool_bodies` / `vending_slot_inventory`
+- **Section 2 layered table**: separated 「看得到」（既有 aggregation） vs 「管得到」（新 change） — surfaced that visibility layer was 90% done already
+- **Section 3 diagrams**: ASCII boxes `採購 → 倉庫 → 販賣機 → 員工` made the four-stage flow visceral in 5 seconds
+- **Section 4 boundary table**: made IN-scope vs FUTURE-scope obvious in 30 seconds
+- **Closing AskUserQuestion**: one drill — "what's your real motivation behind this?" with 4 concrete options
+
+**Outcome**: real motivation surfaced — user wanted two-layer inventory model + restock mutation, not cosmetic enum addition. Scope went from "30-min cosmetic" to "architectural addition" before propose started. Without synthesis, propose would have captured surface intent and apply would have hit "wait, that's not what I meant" mid-flow, burning ingest cycles.
+
+---
+
 ## Convergence
 
 Discussions must converge. As the conversation progresses:
@@ -220,15 +344,33 @@ Where to capture:
 | Design decision made       | `design.md`                  |
 | Scope changed              | `proposal.md`                |
 | New work identified        | `tasks.md`                   |
+| Vocabulary drift           | `openspec/LANGUAGE.md`       |
+
+**Vocabulary drift** means the discussion surfaced a recurring concept that is missing, ambiguous, or pulling away from the shared vocabulary loaded in Step 0. Examples: the topic uses a term that the vocabulary lists as an `avoid` synonym, or the discussion repeatedly names a concept that has no entry yet. When this happens, name it as vocabulary drift in the conclusion summary and direct the capture to `openspec/LANGUAGE.md`. The conclusion summary SHALL preserve this contract — do not silently rewrite the term in the artifacts without recording the drift.
 
 Present the summary and say something like "I'll capture this to design.md unless you'd rather not." Default to capturing — the user can decline.
 
 ### Transition to action
 
-When the discussion converges on building something:
+When the discussion converges on building something, **MUST** ask via **AskUserQuestion** who runs propose before invoking anything:
 
-- "Ready to formalize this? `/spectra:propose`"
-- Or capture the decision in existing artifacts and continue
+| Option                           | 行為                                                                                       | 適用場景                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| **A. Pi（GPT-5.6-sol max）**     | 主線 Claude 自己派 Pi 在背景跑（不要使用者切 CLI）                                         | propose 牽涉高度抽象決策、想要更高思考預算、或想用另一個模型獨立審視     |
+| **B. AI Agent 繼續做**        | 當前 session 直接接 `/spectra-propose` 走 Step 1-11                                        | discuss 上下文已成熟、想保持單一 session 連續性                          |
+| **Stay**                         | 不進 propose，繼續 capture 到既有 artifacts                                                | 結論還沒到「值得開 change」的程度，先存進 design.md / spec.md            |
+
+統一處理：**選 A 或 B 都 invoke `/spectra-propose <change-name>`**，並在呼叫前的訊息明示使用者選擇，讓 spectra-propose Step 0 統一分流——discuss 自己**不**派 pi、**不**印 handoff 純文字訊息。
+
+- 選 **A** → 主線**先**輸出 `▶ 使用者在 discuss 選擇 A（Pi GPT-5.6-sol max）— 接下來由 spectra-propose Step 0 派 Pi 在背景執行` → 接著 invoke `/spectra-propose <change-name>`
+- 選 **B** → 主線輸出 `▶ 使用者在 discuss 選擇 B（AI Agent 繼續）— spectra-propose Step 0 會 skip 詢問，直接走 Step 1` → 接著 invoke `/spectra-propose <change-name>`
+- 選 **Stay** → 把 conclusion 寫進對應 artifact，繼續討論（不 invoke propose）
+
+**禁止事項**：
+- **NEVER** 在 A 路徑印「請開啟 Codex CLI」「Stop here」「請貼 prompt 到 Codex」之類的純文字 handoff — 主線必須自己派背景 pi
+- **NEVER** 自己重複 spectra-propose Step 0 的派發邏輯，要 invoke `/spectra-propose` 讓 Step 0 統一處理
+
+If **AskUserQuestion** is unavailable, present the same three options as plain text and wait for the user's reply.
 
 ---
 
@@ -242,3 +384,4 @@ When the discussion converges on building something:
 - **Do visualize** — A good diagram is worth many paragraphs.
 - **Do explore the codebase** — Ground discussions in reality.
 - **Do be opinionated** — Have a recommendation. The user can disagree.
+- **Do run Plain-Language Synthesis before Convergence** — when stakes touch DB schema / cross-functional / multi-stage user workflow / migration paths, plain-language synthesis surfaces misalignment in user-domain language before it hardens into artifacts. See "## Plain-Language Synthesis".

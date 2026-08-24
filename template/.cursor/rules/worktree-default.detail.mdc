@@ -1,0 +1,173 @@
+---
+description: "Worktree 全文規約（§1 pre-fork baseline guard 四條契約與 archive-on-main clobber 窗口、§3 命名與位置、§4 與 propagate 的互動、§5 commit 階段、§5.5 merge-back ceremony 與 claim guard scope、§6–§11 工具與 troubleshooting 索引）；always-load 的薄 pointer 在 [[worktree-default]]，觸發時機是「送出 wt-helper add / merge-back / 任何 worktree 操作之前」，由 [[worktree-default]] 的 MUST-Read 指針叫醒"
+globs: ["vendor/scripts/wt-helper.ts", "scripts/wt-helper.ts", "vendor/scripts/stash-reconcile.ts", "scripts/stash-reconcile.ts", "**/WORKTREE-BRIEF.md"]
+alwaysApply: false
+---
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/core/worktree-default.detail.md
+Edit at: $CLADE_HOME
+Local edits will be reverted by the next sync.
+-->
+
+
+# Worktree Default（全文）
+
+> 本檔是 [[worktree-default]] 的下推全文。[[worktree-default]] 常駐 §1 判定、§2 禁止 silent branch、§5.1 停手信號，其餘全部在這裡。
+
+## §1 細則
+
+### §1 archive-on-main 的 clobber 窗口（pitfall 2026-06-01）
+
+archive-on-main 例外讓未 commit 的 archive batch 躺在 **shared main**；`/commit` 因 gate halt 時這批 dirty 長期留在 main，會被別 session 的 `wt-helper add --baseline-strategy stash` 當 unclaimed dirty 整批捲進 `refs/wt-baseline/*`（實證見 [[pitfall-prefork-baseline-stash-sweeps-unclaimed-main-work]]）。
+
+**MUST**（縮短 / 消除窗口）：
+
+- **archive 收尾的 follow-up fix（修測試 / 補 code / 加 migration）走 `/wt` 進隔離 worktree**，**NEVER** 在 main 累積多步 in-flight 工作等 commit；archive bookkeeping 本身才 MAY 在 main 跑。
+- `/commit` 因可恢復的 gate halt、batch 需進一步 code 改動才能過 gate 時，**SHOULD** 立即把 batch 移進隔離 worktree 修。
+- 跨多步在 main 累積 batch 且無法立刻 commit 時，**SHOULD** 寫 coarse claim 讓別 session 的 `otherSession` guard 看得到這批 dirty，commit 後 `drop`：
+
+  ```bash
+  node scripts/claim-helper.ts add --change-id main-session-wip \
+    --branch main --worktree-path "$(pwd)" \
+    --expected-paths "$(git status --porcelain | awk '{print $2}' | paste -sd, -)"
+  # 完成 / commit 後：
+  node scripts/claim-helper.ts drop <session-id>
+  ```
+
+  claim 檔 schema、誰讀、stale 處理見 [[session-claims]]（path-scoped）。
+
+### §1 invariant：parent session cwd 不動
+
+`/wt` 的所有 invocation form **SHALL NOT** 遷移 parent session 的 cwd。worktree 內操作由 subagent（cwd = worktree path）執行，主線（cwd = main）負責 dispatch。
+
+**無例外**。先前的 `--dispatch-from-handoff` flag 已**移除** — subagent 隔離 cwd 達到同樣 UX。理由：mid-conversation 切 parent cwd 會破壞 file watcher、Bash cwd state、未完成 Read window。
+
+### §1.x 階段間 setup chore：主線一行式 `cd` 進 worktree 自動跑
+
+Phase 切換之間若需在 worktree 跑 **local-only** setup chore，主線 **MUST** 用 Bash `cd <wt> && <cmd>` 一行式自跑，**NEVER** 把指令清單推回 user。subshell `cd` 不影響 parent cwd（§1 invariant 講 sticky cwd，不禁 subshell cd）。
+
+**自動代勞 OK**：`pnpm install` / `pnpm db:*` / `pnpm supabase:sync` / `pnpm build` / `pnpm lint` / `pnpm test` / `vp check` / `tsc --noEmit` / local pnpm script（無 push/publish/deploy 副作用）。
+
+**仍需 user 拍板（真 destructive）**：`rm -rf <wt>`、`git push`（已被 §5 禁）、Prod DB migration / Prod creds、outbound 訊息、shared infra。
+
+**失敗處理**：跑爆主線自己診斷修復，不丟回 user。**反模式**（立刻停手）：列「請你 cd 過去跑」清單、「跑完回我 OK」。**例外**：user 明確說「我自己跑」/「先別動」尊重。
+
+### §1 Pre-fork baseline guard（契約）
+
+`wt-helper add` fork 之前會先偵測 main working tree 狀態再決定策略。**四條契約在每個 session 都成立**：
+
+1. **預設完全不 capture main dirty** — main 原封不動、worktree 從 HEAD fork clean。
+2. **要把 main WIP 帶進 worktree 必須顯式傳 flag** — `--include-unrelated-dirty`（bulk 全帶）或 `--baseline-scope-paths <comma>`（scoped，走 commit strategy）。有 change context 時 scoped 才是正解，bulk 是無從 scope 時的鈍器。
+3. **傳了 `--include-unrelated-dirty` 之後，NEVER 對 user 宣稱「main working tree 不變」/「main 沒被動到」/「你的 WIP 還在 main」** —— 傳了它，那三句話**必然**是假的。**MUST** 明確告訴 user：main 上原有的 N 個 dirty 檔已搬進 worktree `<path>`，main 端現在是乾淨的。（per [[pitfall-include-unrelated-dirty-claimed-main-untouched]]）
+4. **NEVER 主線自己跑 `git stash push -u -m "<msg>" -- <pathspec>`** 做 selective baseline sync —— git 2.50.1 pathspec stash 有 scope leak，stash commit 會包整個 tracked tree 的 modifications。任何「想把 X、Y、Z 三個檔搬去別 worktree」的場景，第一反應是 wt-helper 或 patch route。（per [[pitfall-git-stash-pathspec-scope-leak]]）
+
+> **決定要 fork worktree 之後、送出 `wt-helper add` 之前，MUST 先讀 [[wt]] skill 的 `baseline-guard.md`**（SKILL.md Step 1 帶 MUST Read 指示；該 skill 由 hub-core plugin 提供，不在 consumer 的 `.cursor/skills/` 下）—— unmerged / clean / dirty 三路分流、`--baseline-scope-paths` 的對齊要求、stash strategy 的隱性風險與 `rescue` 救援、bulk-capture 的還原三步驟都在那裡。
+
+### Pre-flight guard 不適用範圍：spectra-propose
+
+`spectra-propose` Step 11 的 `wt-helper add "<change-name>"` 呼叫**預設不帶** `--precheck-baseline`，整套 dirty / unmerged / scope guard **不適用**於 propose。理由：propose 全程只寫 `openspec/changes/<change-name>/`、跟 main 的 staged / modified / untracked 完全不撞檔；fork 基於 main HEAD commit，working tree state 留在 main；product code 要到 apply 階段才動。
+
+**操作守則**：
+
+- 看到 main dirty / staged / unmerged 時**直接** `/spectra-propose <name>`，**NEVER** 反射性建議 user 先 commit / stash / 詢問 staged 內容
+- 例外：若 user 的 staged / WIP **就在** `openspec/changes/<change-name>/` 子目錄裡（重跑同名 propose 的 path collision 場景），先 inspect、跟 user 對齊是否覆蓋
+
+> Anti-pattern 警示：別把這條鬆綁推廣到 `/spectra-apply` / `/spectra-ingest` / `/spectra-debug` — 這些 skill **會**寫 tracked product code，**仍須**走 §1 Pre-fork baseline guard。本例外**僅限** propose（fork 純粹為 apply 預備 worktree，不寫 product code）。
+
+
+## §3 Worktree 命名與位置
+
+### Branch 命名
+
+`session/<YYYY-MM-DD-HHMM>-<slug>`
+
+- 時間戳對齊 [[session-tasks]] 慣例
+- `<slug>` 經 `wt-helper` 的 normalization：lowercase、空白與特殊字元轉 `-`、collapse 重複 `-`、trim 首尾 `-`
+
+### 檔案系統位置
+
+`<consumer-parent>/<consumer-name>-wt/<slug>/`，即 `~/offline/<consumer>-wt/<slug>/`。
+
+**Monorepo 子目錄 consumer**：`wt-helper` 走最外層 `.git` 解析 consumer root（例：starter 的 worktree 落在 `~/offline/nuxt-supabase-starter-wt/<slug>/`，**不是** `~/offline/template-wt/<slug>/`）。
+
+## §4 與 propagate 的互動
+
+`scripts/propagate.ts` 的 worktree-aware preflight 偵測 cwd 在非 main worktree 即 exit non-zero — **publish + propagate 必須在 clade 主 worktree 跑**（先 `cd ~/offline/clade`）。理由：跨 worktree 寫投影層在 file watcher / staging 區會撞，refuse-and-guide 比悄悄出錯安全。
+
+`/wt` 建 worktree 時已由 `wt-helper add` 跑 `git merge --ff-only origin/main` 拉最新投影層，一般不需再手動 sync。
+
+## §5 Commit 階段：subagent commit → archive 吸收 → user `/commit`
+
+v3 atomic landing：`/wt` 跑完 subagent 在 worktree commit、worktree+branch **保留**（不 squash 不 cleanup）；`/spectra-archive` Step 0 `wt-helper merge-back` atomic 吸收進 main，user 再在 main 跑 `/commit`。Skill-owned worktree（`/dep-upgrade` 等有清楚完成點）**MUST** 自主 merge-back，不丟回 user。**NEVER** 在 subagent prompt 叫它跑 `/commit` / 在 worktree `git push` / `/wt` 返回時 squash。
+
+> 完整 Codex 派工規約、auto merge-back contract、禁止項詳見 [[worktree-default.commit-ceremony]]（path-scoped：動 `openspec/changes/**` / `HANDOFF.md` / wt-helper 時載入）。
+
+
+## §5.5 Merge-back ceremony
+
+`wt-helper merge-back <slug>` 是 atomic landing 核心命令。`--auto-stash` 實為 **bulk-stash**（捲走 main **全部** dirty，不只 blockers）→ claim guard 檢查範圍 **MUST ⊇** 全部將被捲走的 dirty，撞別 session 認領 → **fail-loud STOP**。`git stash push` 必 verify create（乾淨 tree 不丟 exception）。
+
+> 完整 flags / claim guard scope / stash reconcile 詳見 [[worktree-default.commit-ceremony]] § Merge-back ceremony。
+
+## §6 操作工具：`/wt`、`wt-helper.ts`、`stash-reconcile.ts`
+
+> 工具速查（list / merge-back / rescue / stash-reconcile）詳見 [[worktree-default.commit-ceremony]] § 操作工具；完整表見 `~/offline/clade/vendor/snippets/wt-helper/README.md`。
+
+## §7 升級路徑與 grandfathered worktree
+
+> 命名不符 `session/*` 的舊 worktree grandfathered；V2→V3 in-flight 處置、legacy stash / HANDOFF drift 詳見 [[worktree-default.troubleshooting]]。
+
+## §8 Stop hook 死鎖 fallback
+
+主線在 main 累積 dirty WIP + Stop hook 攔住 + 還要繼續：剩下可隔離 → `/wt <剩下的事>`；必須 main 直接處理（罕見）→ escalate `/handoff`（Mode A 自動偵測）。**預防**：session 開頭判定要動 code 就 SHOULD 立刻打 `/wt`。
+
+> 詳見 [[worktree-default.troubleshooting]] § Stop hook 死鎖 fallback。
+
+## §9 spectra DB 跨 worktree 共享心智模型
+
+`.git/spectra-app/spectra.db` 是**跨所有 worktree 共享的單一 SQLite**。**NEVER** 對它跑 `DELETE` / `UPDATE` / `INSERT`；「main 無 directory + `spectra list` 顯示 active + park/unpark 失敗」**不**等於 zombie（多半別 session 在 sibling worktree 物化）。偵測 zombie 前 **MUST** 先 `git worktree list` + `find` + `mdfind`，看似 zombie 一律 **STOP + AskUserQuestion**。
+
+> 詳見 [[worktree-default.troubleshooting]] § spectra DB 跨 worktree。
+
+## §9.5 Spectra change artifact 必須活在 git
+
+`Agent` tool subagent 的 ephemeral worktree（`.claude/worktrees/agent-*`）session 結束 GC，裡面 `spectra unpark` 的 artifacts 永久遺失。propose 收尾 **commit 進 git**；apply Step 2 unpark 移主線預先做；**NEVER** 假設 subagent cwd = `<consumer>-wt/<slug>/`（派工前 echo cwd 確認）。
+
+> 詳見 [[worktree-default.troubleshooting]] § artifact 活在 git。
+
+### §9.5.1 Phase-tick commit 紀律（TD-216）
+
+worktree subagent 完成每個 tasks.md phase section 的最後一個 `- [ ]` → `- [x]` 後 **MUST** commit tasks.md **與該 change 的 verify evidence sidecar `.spectra/evidence/<change-name>.jsonl`** 到 worktree branch（type 用 `📝 docs`，**NEVER** `📝 spectra`；**NEVER** 把這兩條以外的路徑加進這個 commit）—— 未 commit 的打勾與 receipt 都不會被 `merge-back --squash` 帶回 main。**每一個** phase-tick commit 都適用，不是只有跑過 verify 的那一次；sidecar 檔不存在時才可省略該路徑。
+
+> 指令逐字、commit-msg hook 的錯訊對不上真因、與 [[commit]] § artifact-tick 的例外關係詳見 [[worktree-default.troubleshooting]] §9.5.1。
+
+## §9.7 Artifact Reading SOP — 讀進度前先查 active worktree
+
+讀 spectra change 進度（`tasks.md` / `openspec/changes/<slug>/` artifacts / WORKTREE-BRIEF.md）時 **MUST** 先查有沒有 active worktree：
+
+```bash
+ls ~/offline/<consumer>-wt/<change-slug>/ 2>/dev/null || git worktree list
+```
+
+- **有 active worktree** → 讀 worktree 內的 `tasks.md`（working truth）；main 的 `tasks.md` 是 fork-time snapshot，不代表當前進度
+- **無 active worktree** → 讀 main（change 尚未 `/wt` 物化，或已 merge-back）
+
+只讀 main 會誤判「還沒開始實作」— 實際可能 worktree 已推進數個 phase。`/handoff` scan、`/spectra-ask` status check、主線 cross-check 都適用本 SOP。
+
+### §9.7.1 main 端出現 tasks.md 改動時，方向由 diff 判，不由本節外推
+
+上一段管的是**讀**，它**不保證** main 上的改動比較舊 —— 在 main 補勾 checkbox 是常態。**NEVER** 把它外推成「main 端出現的 tasks.md 改動一律是退化副本」而 stash 掉；**MUST** 先用 `git diff HEAD`（含 staged）量打勾方向、再逐項比對打勾集合（**NEVER** 只比數量、**NEVER** 只看 `--stat`：`[ ]`→`[x]` 與反向給出完全相同的 insertions / deletions）。
+
+> 指令逐字、三種 predicate 的處置表、2026-08-11 <consumer-b> 實證詳見 [[worktree-default.troubleshooting]] §9.7.1 與 [[pitfall-main-side-tasks-md-tick-stashed-as-stale-copy]]。
+
+## §10 review-gui 與 worktree 互動的已知坑
+
+> 3 條已記坑（home list silent skip / source aggregation collision / apply-pending 按前 spot check）詳見 [[worktree-default.troubleshooting]] § review-gui 坑。改 review-gui.ts 後 consumer 端 `pnpm review:ui:kill && pnpm review:ui` 重啟才吃新版。
+
+## §11 WORKTREE-BRIEF.md — 持久化任務交接上下文
+
+Session worktree 攜帶 `WORKTREE-BRIEF.md`（原始任務 + thin brief + Progress checklist）。cwd 在 session worktree 且 brief 存在時 **MUST** 先讀它再做事。`/wt` 派的 subagent **MUST** 更新 Progress + 完成時改 frontmatter `status`。檔不進 git（已在 per-worktree exclude），**NEVER** `git add` 它、**NEVER** 加進 `.gitignore`。
+
+> 詳見 [[worktree-default.troubleshooting]] § WORKTREE-BRIEF。
+

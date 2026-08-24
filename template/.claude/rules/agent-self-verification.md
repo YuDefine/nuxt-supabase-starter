@@ -136,6 +136,40 @@ baseline 只存在於某次 session 記憶裡時，下一個讀 gate 的人算�
 
     **Red Flag**：正要把 publish / audit / gate 接到 `\| tail` / `\| head`，或用 `&&` 把前置檢查和主指令串成一行再截斷。純查詢（`git log \| head -5`）不在本條。副作用指令被 `head` 腰斬是另一條，見 MUST 4 與 [[pitfall-sigpipe-truncates-side-effecting-script]]。（per [[pitfall-chained-command-tail-truncation-hides-failure]]／[[TD-461]]）
 
+18. **拿計數 / 探針當證據前 MUST 過三條前提（hard rule）**：MUST 11 管的是「零命中不等於不存在」，
+    本條管的是**非零**的那一半——數字印出來了、exit 0、量級看起來合理，而它量的根本不是命題問的東西。
+    三條各自的失效都是靜默的，**每一次**把數字寫進結論、`### 自驗`、TD entry 或 gate 判準之前
+    都要過，不是只在「數字看起來可疑」的時候過。
+
+    - **(a) 搜尋路徑清單 MUST 不含互為 symlink 的目錄。** ripgrep / grep 依 inode 去重，路徑清單
+      同時含 symlink 目錄與其目標時計數靜默偏低，且隨走訪順序在多次執行間漂移（clade home 實測
+      同一條指令 116 vs 208，而該 symlink 目錄單獨只有 4）。可疑時跑三跑法——分別量 A（合併）、
+      B、C 兩個子路徑，`B + C != A` 即為去重生效。**NEVER** 因為「兩次都跑得出數字」就當它穩定：
+      漂移的兩次都是 exit 0。（per [[pitfall-rg-symlink-target-dedup-undercounts]]）
+
+    - **(b) 判定單位 MUST 與命題單位同級。** 命題問「還有幾**處**不合形狀」時，`rg -l` / `comm`
+      這類**以整個檔為判定單位**的指令當粗篩可以，當**判準** NEVER 可以——同一個檔在別處為別的
+      用途出現過一次目標 pattern，整支就被判安全，而真正要看的那一處是舊形狀。判準 MUST 綁到與
+      命題同級的儀器：逐 occurrence 的 `rg -o`，或直接跑 test。實證：TD-462 三次檔案層計數
+      （22 / 22 / 23）全數漏掉 `scripts/audit-rule-authoring.ts` L833 的舊形狀守衛，window 層的
+      test 一跑就抓到。
+
+    - **(c) 探針寫進 `### 自驗` 之前 MUST 先跑一次 control。** 餵一個**真答案已知為非空**的輸入，
+      確認這條指令印得出非空結果，再拿它去量預期為 0 的那一次。只跑「預期回 0」那一次時，
+      **壞探針與真陰性外觀完全相同**：exit 0、stdout 空、只有 stderr 帶訊號，而覆核者與
+      `audit-tech-debt-hygiene.ts --run-selfverify` 的 `shim-dropped-flag` 判準都只在**它自己**
+      執行的那一面有效——覆核者在 Bash tool 裡自己下的那一次，機械面結構上零覆蓋。
+      **NEVER** 靠「我記得這個 flag 會不會被吃掉」推論：改寫是**形狀相依**的，同一個 flag 裸跑被
+      忽略（空輸出、exit 0）、接了 pipe 完全正常、帶 compound predicate 則拒跑 exit 1，三種形狀
+      三種答案。
+
+    | 讀到自己在想 | 現實 |
+    | --- | --- |
+    | 「數字跑出來了，跟預期差不多」 | 差不多是對**你以為它在量什麼**而言；三條前提量的正是「它在量什麼」 |
+    | 「同一條指令我跑過兩次，結果一樣」 | (a) 的漂移可以連續兩次相同；穩定不是正確 |
+    | 「`rg -l` 比較快，先用它掃一遍」 | 當粗篩可以，寫進判準就是 (b)。粗篩結果 NEVER 直接當結論 |
+    | 「探針回 0，正好符合我的判斷」 | 那正是 (c) 要擋的一格——符合預期的空輸出最不會被複驗 |
+
 ## 派工前的主線預檢責任
 
 派 subagent / codex / screenshot-review 前，主線 **MUST**：

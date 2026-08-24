@@ -1,148 +1,255 @@
 ---
-description: 防止 scope 擴散、漏登記 follow-up、與誤刪他人成果
+description: "Scope discipline 規則——不擴散、必登記、不擅改他人成果，避免 AI 工作流吞掉 WIP 或把範圍外問題靜默遺失"
+globs: ["openspec/**", "docs/tech-debt.md", "docs/decisions/**", "HANDOFF.md"]
 alwaysApply: false
 ---
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/core/scope-discipline.md
+Edit at: $CLADE_HOME
+Local edits will be reverted by the next sync.
+-->
+
 
 # Scope Discipline
 
-**核心命題**：scope discipline 的本體是「**不擴散 × 必登記 × 不擅改他人成果**」三件事一起，不是「看到其他問題就裝沒看見」，也不是「看到未知變更就 revert 清場」。
+**核心命題**：scope discipline 不是「範圍外就裝沒看到」，而是三件事一起成立：
 
-此規則優先於個別 skill 說明與 subagent brief。違反本規則造成的進度遺失由主線負責，不得以「brief 寫得不清楚」「subagent 擅自行動」卸責。
+1. **不擴散**
+2. **必登記**
+3. **不擅改他人成果**
 
----
+少任何一項，都會讓 AI 工作流默默吞掉風險、遺失 WIP，或把範圍外問題埋進歷史。
 
-## 1. 正確的 scope discipline 三要素
+## 正確的 scope discipline
 
-| 要素                 | 意思                                                               | 反例                                                         |
-| -------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------ |
-| **不擴散**           | 當前 task 範圍外的檔案 / 模組，不順手改                            | 改 A 檔順便重構 B 檔                                         |
-| **必登記**           | 途中發現的其他問題、技術債、改進點 **一律**登記，不得默默忽略      | 「這超出 scope，不管了」                                     |
-| **不擅改他人成果**   | 看到 unknown / uncommitted / 跨 session 變更先問，禁止 revert 清場 | `git reset --hard` / `git checkout --` 清掉不認識的 WIP      |
+| 要素 | 意思 | 反例 |
+| --- | --- | --- |
+| **不擴散** | 當前 task 範圍外的檔案 / 模組，不順手改 | 改 A 檔順便重構 B 檔 |
+| **必登記** | 途中發現的問題、技術債、改進點一律登記 | 「這不在 scope，先不管」然後永遠消失 |
+| **不擅改他人成果** | 看到未知 / 未提交 / 跨 session 變更先問 | `git reset --hard`、`git checkout --` 直接清場 |
 
-三者缺一不可。只做「不擴散」不做「必登記」= 隱患埋在歷史；只做「不擴散」不做「不擅改」= 進度被吞。
+## 意外發現的登記路徑（強制）
 
----
+發現範圍外問題時，**MUST** 選一條路徑登記：
 
-## 2. 意外發現的登記路徑（強制）
+| 發現類型 | 登記位置 | 做法 |
+| --- | --- | --- |
+| 技術債 / bug / 邊界情況 | `docs/tech-debt.md` | 建 `TD-NNN` entry，並在當前 change `tasks.md` 加 `@followup[TD-NNN]` |
+| session 尚未完成的 WIP / blocker | `HANDOFF.md` | 留下目前狀態、阻擋原因、下一步 |
+| 未來要做但尚未 propose 的工作 | `openspec/ROADMAP.md` `## Next Moves` | 以 `high/mid/low` + 依賴關係記錄 |
+| 當前 change 本身的 scope 漏項 | `spectra-ingest` | 更新 proposal / tasks / design artifact |
+| 架構層級決策 | `docs/decisions/YYYY-MM-DD-<topic>.md` | 用 ADR 格式記錄 |
 
-**NEVER** 以「這不在 scope / brief 沒要求 / 不影響當前 task」為由忽略發現。所有意外發現 **MUST** 選一個路徑登記：
+**登記後才能回到當前 task。**
 
-| 發現類型                                         | 登記到                                              | 做法                                                         |
-| ------------------------------------------------ | --------------------------------------------------- | ------------------------------------------------------------ |
-| 技術債 / bug / 未處理的邊界情況                  | `docs/tech-debt.md`（TD-NNN entry）                 | 同時在當前 change 的 `tasks.md` 加 `@followup[TD-NNN]` marker |
-| 當前 session 未完的 WIP / blocker                | `template/HANDOFF.md`                               | 下個 session 接手時讀取                                      |
-| 未來該做但還沒定案的工作                         | `openspec/ROADMAP.md` → `## Next Moves`             | 依優先序 high/mid/low + 依賴關係                             |
-| 當前 change 的 scope 增補                        | `spectra-ingest` 更新 artifacts                     | tasks.md / proposal.md / design 對應段落                     |
-| 架構層級的設計決策                               | `docs/decisions/YYYY-MM-DD-<topic>.md`（ADR）        | 格式見 `knowledge-and-decisions.md`                          |
+## 未知變更的處理方式
 
-登記後**才可**回到當前 task 繼續。「我會記得」不算登記。
+看到以下任一狀態時，視為**未知成果**，必須先回報、再行動：
 
----
+- `git status` 有你不認得的 modified / untracked 檔案
+- 有不屬於當前 scope 的 active change / worktree / stash
+- `openspec/changes/<name>/` 裡出現你不清楚來源的 artifact
+- **hook / automation 自動產出的 working tree 變動**：
+  - pre-commit / post-commit / spectra-archive / sync-vendor 等 hook 自動建立 / 刪除 / 移動的檔案或目錄
+  - hook 自動寫入的 annotation（例：`(claude-discussed: ...)`、`(verified-*: ...)`、`@followup[TD-NNN]`）
+  - hook 自動觸發的 archive directory（`openspec/changes/archive/YYYY-MM-DD-*/`）
+  - hook 自動 propagate 到 spec.md / rule 投影層的內容
+  - chmod 設定的 LOCKED projection 改動
 
-## 3. Destructive 操作的 guardrails
+正確流程：
 
-### 3.1 看到 unknown / unexpected state 時
+1. 列出未知狀態並告知使用者
+2. 問清楚是否為其他 session / 使用者 / subagent / hook / automation 的產出
+3. 在取得明確指示前，**不清理、不覆寫、不 revert、不還原、不修正**
 
-**MUST** 先回報、後行動。所有符合以下描述的 state 視為「未知成果」，禁止直接清理：
+**自動產出 = 跨 session 成果**：hook / sync-vendor / spectra-archive 等 automation 在 commit / archive / propagate 流程中自動建立的東西，**MUST** 視同其他 session 或使用者本人的 WIP。看到時 **MUST** AskUserQuestion，**禁止**以「這違反 X rule 應該還原」的理由自行處置 — automation 是使用者環境的一部分，行為對錯由使用者判斷，不是當前 session 判斷。
 
-- `git status` 出現你不記得動過的 modified / untracked 檔案
-- 某個 branch 不在當前任務 scope
-- `.claude/worktrees/` 下有未知目錄
-- `openspec/changes/<name>/` 裡有你不認得的 artifact
-- stash list 出現未知 stash
+## Rule 衝突解法（preserve > revert）
 
-**正確流程**：
+偵測到「rule A 被 rule B / hook / 其他 session / automation 違反」的當前狀態時（例：`manual-review.md` 規定 `[discuss]` items 應由使用者 walkthrough，但 hook 自動勾 `[x]` + 寫 `(claude-discussed:)` annotation），**MUST** 走以下流程：
 
-1. 列出這些 state → 告知使用者「發現以下變更，不屬於當前 task，請問是否為其他 session 的 WIP？」
-2. 等待使用者確認
-3. 使用者回「是 WIP 保留」→ 絕不動它，必要時 stash 保護（`git stash push -m 'cross-session-wip' -- <files>`）然後通知 stash ref
-4. 使用者回「是 subagent 副作用要清掉」→ 才執行 revert
+1. **保留現狀**（preserve）— **NEVER** 動手「修正」目前狀態以對齊另一條 rule
+2. **歸屬探測**（見下方 § 歸屬探測前置）— 先判到底有沒有歧義存在
+3. **AskUserQuestion** — 探測後仍有真歧義時才走：列出觀察、可能成因、可選處理路徑，讓使用者拍板
+4. 取得使用者明確指示後才行動
 
-### 3.2 禁止當成「清場工具」使用的指令
+### 歸屬探測前置（MUST，先於 AskUserQuestion）
 
-下列指令 **MUST** 在取得使用者明確同意後才可跑，且**禁止**在 subagent 內自主執行：
+衝突狀態涉及**檔案歸屬**（別 session / worktree / hook / automation 的 staged 或 untracked 變更）時，
+**每一次**都 MUST 先跑歸屬探測，才准考慮 `AskUserQuestion`。**每一條**路徑各跑一次，**NEVER** 抽驗
+一條代表全部：
 
-- `git reset --hard <anything>`
-- `git checkout -- <paths>` / `git restore <paths>`（對 tracked 檔案丟棄變更）
+| 要判的事 | 可觀察 predicate |
+| --- | --- |
+| 這條路徑會不會進我的 commit | `git cat-file -e HEAD:<path>` 給得出 in-HEAD／staged-only |
+| 那批是不是別人的 in-flight | `git worktree list` 有對應 worktree、`.git/index` mtime 在分鐘級內 |
+| gate 紅燈是不是我造成的 | 失敗檔逐條跑上一列，全部 staged-only ⇒ 不在我的 tree、CI 看不到 |
+| 我的產物有沒有被污染 | 產物型檔案（baseline／lockfile／生成 JSON）逐條比對條目是否 in HEAD |
+
+命令塊在 `vendor/snippets/git-recovery/` § 並行 staged 的歸屬探測（**NEVER** 在本檔複製一份，會漂）。
+
+**四條全部給得出答案 ⇒ 不算衝突。** 主線 MUST 自行以 `git commit --only -- <自己的 paths>` 隔離，
+並在收尾一句話說明歸屬與隔離方式，**NEVER** 為此走 `AskUserQuestion`。任一條答不出來、或探測顯示
+雙方改到**同一檔的同一段**（`--only` 隔離不掉）才走上面第 3 步。
+
+**逐字反開脫**（想到這幾句就是探測還沒跑）：
+
+| 開脫 | 現實 |
+| --- | --- |
+| 「這批是別 session 的東西，依 scope-discipline 應該交還 user」 | 本節攔的是**無法用證據判定**該不該動的推理鏈，不是「只要涉及別 session 就交還 user」 |
+| 「這是未知變更 / 我不認得這些檔」 | 「未知」「不認得」是形容詞不是判準；`git cat-file -e HEAD:<path>` 對每一條都給得出答案 |
+| 「gate 紅了，這次 commit 過不了」 | 先問失敗檔在不在 HEAD——staged-only 的檔不在你的 commit tree |
+| 「問一下比較安全」 | 過度 escalate 與正確 escalate 在 transcript 上長得一模一樣，差別只在當時有沒有可跑而沒跑的探測 |
+
+> 2026-08-08 <consumer-b>：主線引本節停下來問 user，user 回「你自己探測，未來這種情況你必須總是自己
+> 探測決策」。對應 pitfall [[pitfall-mechanically-decidable-conflict-escalated-to-user]]。
+
+**錯誤的內部反射**：
+
+> 「rule A 規定 X 必須 Y / Y 必須 user walkthrough，但現在狀態是 Z（被 hook 自動做了）— 違反 rule A，應該 revert / 還原 / 對齊」
+
+**這個推理鏈在本 rule 之下是非法的。** Rule 之間衝突時，**保留現狀**是預設，不是「找出哪條優先 + 動手 reconcile」。理由：
+
+- Rule A 與 Rule B 不一定真衝突（rule A 通常是「未來應該怎做」、rule B 是「現有狀態不准擅自動」— 兩者正交）
+- 即使真衝突，當前 session 沒有「rule 仲裁權」— 仲裁權在使用者
+- 拿 rule A 當理由 revert rule B 的產出，是把限制變武器 — 本 rule 明文禁止
+
+**唯一例外**：使用者在 AskUserQuestion 後明確說「請 revert / 還原 / 對齊 rule A」。
+
+### 具體分支模板：當前 flow 規約要求「必修」撞別 session WIP
+
+最常見情境：`/commit` 跑 review / lint / typecheck / test 發現問題 → `commit.md` 規約「MUST 修，NEVER 以建議性質 / 不在本次範圍為由跳過」→ 但修法會動到別 session in-flight WIP（典型：`HANDOFF.md`、別 session 的 `tasks/<...>.md`、其他 active change 的 artifact）→ 撞上「不擅改他人成果」。
+
+此時 **MUST** 用 `AskUserQuestion` 帶以下兩個固定選項：
+
+- **A. 馬上修，回 flow 繼續** — 在當前 session 直接編輯該 WIP 檔，原 flow（`/commit` / `/spectra-archive` / 等）繼續走完。前提：user 確認該編輯不會跟別 session 的修改互踩（或別 session 已結束）
+- **B. 登 TD，放棄當前 flow** — 把問題寫進 `docs/tech-debt.md`（編號 `TD-NNN`），當前 flow **立即中止**（commit 不繼續、archive 不繼續），等別 session 結束後由 user 決定何時處理；已成功 commit 的 group 保留不動
+
+**選 B 之前 MUST 先跑 [[session-tasks]] § 並行爭用 的 Step 0 確認「別 session」真的會結束。** 對方是 unattended runner 時它不會在可預期時間內停，「等它結束」等於把 flow 無限期掛起——判出是 runner 就直接登 TD 並讓位，**NEVER** 把中止理由寫成「等對方結束」。
+
+**NEVER** 自行二選一、自行 commit 略過該檔、自行用「不在 scope」當理由跳過 — 這兩條都是觸發 AskUserQuestion 的合法分支，不是 Claude 主線可單方決定的事。
+
+**為什麼預先固化 A/B**：這個衝突在 `/commit` 流程裡會反覆出現（review agent 跑出 nitpick → 落在 HANDOFF 是常態）。每次重新發明選項會讓 Claude 傾向「自行解讀」而不是嚴格走 AskUserQuestion；預先固化 = 把分支變成 reflex，不留發揮空間。
+
+## 破壞性指令的 guardrails
+
+以下指令 **MUST** 先經使用者明確同意，且不得在 subagent 內自主執行：
+
+### Git 命令
+
+- `git reset --hard`
+- `git checkout -- <paths>` / `git restore <paths>`
 - `git clean -fd` / `git clean -fdx`
-- `git revert <commit>`（尤其是 published commit）
-- `git reflog expire --expire=now`
-- 刪除 `.claude/worktrees/*`、`openspec/changes/*` 目錄
-- `rm -rf` 任何含 user-authored 內容的目錄
+- `git revert <commit>`
+- `git stash drop` / `git stash clear`
 
-**NEVER** 以「把 repo 回到 clean state」「清理 subagent 副作用」「rollback 失敗的嘗試」為由跑這些指令，**除非**已對照第 3.1 流程確認過。
+### 檔案系統等效動作（同樣 destructive，但容易誤以為「不是 git 命令所以 OK」）
 
-### 3.3 Subagent 內部的強制限制
+以下動作**功能上等同破壞性 git 命令**，因此**同樣受本 rule 限制**：
 
-長駐 subagent（透過 Agent tool 啟動的）**MUST NOT** 執行第 3.2 節任何指令，即使主線給的 brief 寫「請清理」。遇到需要清理的情境，subagent 必須：
+- `mv <git-tracked-path> <elsewhere>` / `mv <elsewhere> <git-tracked-path>` — 把 hook 自動建立的 archive directory 搬回原位（等同 revert hook 工作）；把目錄反向搬等同 `git checkout --` 對 directory layout 操作
+- `rm -rf <openspec/changes/**>` / `rm -rf <openspec/changes/archive/**>` / `rm -rf <screenshots/**>` 等批次刪除 user-authored 或 hook-authored 內容
+- `cp --remove-destination` / `cp -f <source> <git-tracked-path>` — 覆蓋掉現有 working tree 內容
+- `sed -i` / `awk -i inplace` / `perl -i` 等 in-place 文字替換在 git-tracked 檔案上**無 explicit Edit/Write tool 走的修改**
+- 用 `echo > <git-tracked-path>` / `cat > <git-tracked-path>` / `tee <git-tracked-path>` 等覆蓋 git-tracked 檔案內容
+- 任何 shell script / Python script 中包含上述動作的批次操作
 
-1. 回報主線當前 state
-2. 要求主線決定是否清理
-3. 等主線指示，不得自主行動
+### 總原則
 
-主線若要 subagent 清理，**MUST** 先用 `git status` / `git diff` 對照，確認要清的東西**真的**是當次 subagent 產出的，不是其他 session 或使用者的成果。
+**任何讓 working tree / git index 從現狀（含 hook 自動產出、其他 session WIP、第三方 automation 結果）回到「先前狀態」、「乾淨狀態」、「對齊 rule X 的狀態」的動作**，不論使用 git、shell、檔案系統、editor in-place 寫入、subprocess script — 都列為破壞性指令，**MUST** 先 AskUserQuestion。
 
----
+判別測試（self-check）：
 
-## 4. Subagent brief 字眼範本
+- 「這個動作執行後，是否會讓某個檔案 / 目錄消失、被覆蓋、被移到別處？」 → 是 → 破壞性
+- 「執行後 user 想 undo，是否容易（git stash pop 可恢復 / 該檔在 git history 內）？」 → 否（檔案是 untracked / 已被 mv 走 / 已被 in-place 覆蓋）→ 高破壞性，絕對停手
 
-寫 subagent brief 時，scope discipline 段落 **MUST** 採以下結構：
+## 話術關鍵詞 = 立即停手訊號
+
+當前 session 的 chat 輸出、內部 thinking、tool call description 中出現以下任一**話術關鍵詞**時，**MUST** 立即停手：
+
+### 關鍵詞清單
+
+中英全表見 [[commit]] § 話術關鍵詞 = 立即停手訊號——**該表是 SoT，本檔不複製**。
+
+方向不可顛倒：`commit.md` 是 always-load、本檔是 conditional-load（`paths:` 只涵蓋 openspec / HANDOFF / tech-debt / decisions）。**指標一律 conditional → always**；反過來會讓本檔沒載入的 session 完全失去這層保護。
+
+### 停手定義
+
+「停手」意指：
+
+1. **NEVER** 下任何破壞性指令（含 git、shell、檔案系統、script）— **包含 dry run**
+2. **NEVER** 在 chat 中向使用者建議 / 暗示這些動作
+3. **MUST** 立即用 `AskUserQuestion` 給使用者看：當前狀態 / 觀察到的衝突 / 可能成因 / 兩個以上選項（含「保留現狀不動」）
+4. 取得使用者明確指示後才繼續
+
+### 為什麼是「話術 = 思考表徵」
+
+關鍵詞出現代表 Claude 內部已經把「現狀 → 應該還原」的推理鏈走完一半 — **這個推理鏈本身是錯**（見上「Rule 衝突解法」）。攔住話術 = 攔住錯誤推理鏈。
+
+**特別注意**：把破壞性動作包裝成「**清理**」「**重置**」「**回到乾淨狀態**」「**對齊規約**」「**修正一下**」等委婉說法繞過本節，**同樣違反本 rule**。委婉說法仍是話術關鍵詞，仍觸發停手訊號。
+
+## Subagent brief 最低要求
+
+委派 subagent 時，scope discipline 段落至少要包含：
 
 ```markdown
-## Scope discipline
+## Scope Discipline
 
-- 範圍外檔案（路徑 A、B、C 以外）不要順手改
-- 意外發現其他問題 → **不修** 但 **必登記**：
-  - 技術債 → `docs/tech-debt.md` + tasks.md `@followup[TD-NNN]`
-  - 當前 change 缺項 → 回報主線，由主線決定 ingest
-  - 不清楚該登記到哪 → 回報主線
-- 遇到不認識的 uncommitted 變更 → 停、回報、等指示
-- 禁止跑 `git reset --hard` / `git checkout --` / `git clean` 等破壞性指令
+- 範圍外檔案不要順手改
+- 意外發現其他問題：不修，但必登記
+- 看到不認識的 uncommitted 變更 / hook 自動產出 / archive directory：停下並回報
+- 禁止跑 git reset / git checkout -- / git restore / git clean / git revert
+- 禁止用 mv / rm -rf / cp -f / sed -i / 覆蓋 redirect 反向 hook 工作或丟棄 working tree 內容
+- 看到 rule A 被 rule B / hook 違反：保留現狀 + AskUserQuestion，不准自行對齊
+- 話術出現 revert / 還原 / 清掉 / 重置 / undo / rollback 等關鍵詞：立即停手 + AskUserQuestion
 ```
 
-**禁止**只寫「NEVER 全域 find-replace 不看語意」「意外發現不展開修」這類**只有上半段**的句子——會被解讀為「忽略 = 合規」。
+上面是 **brief 內容**的最低要求。**派工參數**另有一項：執行者（Claude 檔位 or 轉派 codex）
+依 [[agent-routing]] § Claude 委派的 model 檔位 判定後**顯式帶上**——省略 `model` 是靜默繼承
+主線 Opus，不是「沒指定」。判定結果本身可以是「刻意繼承主線」（例如 checker），那時**寫出來**。
 
----
+## 與其他規則的關係
 
-## 5. 違反時的回報格式
+- `follow-up-register.md`：提供技術債登記與 archive gate
+- `handoff.md`：提供跨 session 交接出口
+- `knowledge-and-decisions.md`：提供長期知識與 ADR 出口
+- `ux-completeness.md`：補上「發現未登記 = 未完成」的完成度觀點
 
-Hook / agent / 後續 session 偵測到違反時：
+## 已決 scope 不可重開
 
-```
-[Scope Discipline] 違反 <第 N 節>
+當專案內存在**明確記錄的 scope 決策**（`docs/decisions/`、discussion artifact、lessons.md、或後續 supersede 紀錄），agent **MUST** 視為已定案。後續 session 只討論「怎麼做」，**NEVER** 把「是否要做」重新當開放問題。
 
-事件：<一句話描述發生了什麼>
+**可觀察 predicate**：agent 正在產出的文字含「是否需要」「要不要做」「可以考慮排除」「scope 可能不包含」等措辭，且對象是已有 decision artifact 的 feature → 停，讀 decision artifact 確認。
 
-證據：
-  - git reflog: <HEAD@{...}: reset/checkout/...>
-  - 遺失內容：<檔案清單或 commit hash>
+**為什麼**：已決 scope 被重開 = user 花時間再次說明同一件事。Agent 查舊決策的成本（grep `docs/decisions/` + lessons.md）遠低於 user 重新解釋的成本。
 
-救援可能：
-  - git fsck --lost-found 的 dangling blobs/commits
-  - .git/objects/ 在時間窗內的新物件
-  - IDE local history / VS Code Timeline
+## 交付物必須是可追蹤檔案
 
-修正方式：
-  - 先救回遺失內容（若仍可救）
-  - 把發現的問題補登記到對應路徑
-  - 檢討 subagent brief 字眼是否漏了「必登記」下半段
-```
+User 要求報告、分析、比較、盤點等輸出時，交付物 **MUST** 是一個有路徑的檔案（`.md` / `.json` / `.csv`），**NEVER** 是 chat 訊息裡的 inline 文字。
 
----
+正確 recipe：
+1. 寫檔（`Write` tool）到 `docs/` 或 `tasks/` 或 user 指定位置
+2. 在 chat 回報路徑 + 一句話摘要
+3. 需要跨 repo 共享時，指定單一 owner repo + 用 diff 或 snapshot 機械比對
 
-## 6. 與既有規則的關係
+**為什麼**：chat inline 的分析無法被後續 session 引用、搜尋、或 version control。「聊天摘要不算交付」。
 
-- **`follow-up-register.md`**：本規則第 2 節把 `@followup[TD-NNN]` 機制擴展到所有「意外發現」類型，不限於 archive gate 擋下的 task marker
-- **`handoff.md`**：第 2 節的 HANDOFF.md 路徑依其格式
-- **`commit.md`**：第 3.2 節禁用的指令與 `/commit` 的品質閘門正交——commit 走 `/commit`，清場行為走本規則
-- **`ux-completeness.md`**：Definition of Done 包含「發現未登記 = 未完成」此精神
+## 開放式策略問題不過早路由到 spectra
 
----
+User 提出**跨產品、商業模式、系統邊界**的大範圍策略題時，**MUST** 先獨立分析再決定是否進 spectra 流程。
 
-## 7. 必禁事項
+**可觀察 predicate**：user 的問題未指名任何具體 module / file / endpoint，而是問「我們能提供什麼」「這兩個產品的關係」「商業模式怎麼切」等探索性問題 → 先做分析（寫成檔案，per § 交付物），分析完 user 明確說「開 spectra change」時才進 spectra。
 
-- **NEVER** 把「超出 scope」當作不處理發現的理由
-- **NEVER** 把未知 uncommitted 變更當成「上次沒清乾淨」自行清掉
-- **NEVER** 在 subagent 內自主執行 `git reset` / `git checkout --` / `git clean`
-- **NEVER** 寫只有「不擴散」沒有「必登記」的 subagent brief
-- **NEVER** 以「節省對話往返」為由跳過第 3.1 的「先問再行動」
+**NEVER** 對策略題直接跑 `/spectra-propose` 或 `/spectra-discuss` — spectra 是實作工具，不是策略分析框架。
+
+## 禁止事項
+
+- **NEVER** 把「超出 scope」當成忽略發現的理由
+- **NEVER** 把未知變更當作「上次沒清乾淨」直接清掉
+- **NEVER** 在 subagent 內執行 `git reset` / `git checkout --` / `git restore` / `git clean` / `git revert`
+- **NEVER** 用 `mv` / `rm -rf` / `cp -f` / `sed -i` / `echo >` / `tee` 等檔案系統等效動作反向 hook 工作、刪除 archive directory、覆蓋 working tree 內容（同樣受破壞性指令 guardrails 限制）
+- **NEVER** 看到 hook / automation 自動產出時，自行判定「該保留 / 該還原 / 該修正」— **MUST** AskUserQuestion
+- **NEVER** 拿 rule A 當理由 revert rule B 的產出（含 hook 自動產出）— rule 衝突一律保留現狀 + AskUserQuestion
+- **NEVER** 在出現話術關鍵詞後繼續動手，含把破壞性動作包裝成委婉說法規避 — 關鍵詞全表與停手定義見本檔 § 話術關鍵詞 = 立即停手訊號（單一 SoT，不在他處複製）
+- **NEVER** 寫只有「不擴散」沒有「必登記」的 brief

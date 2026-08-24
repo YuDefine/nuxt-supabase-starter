@@ -1,0 +1,51 @@
+---
+alwaysApply: true
+---
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/core/threshold-remediation.md
+Edit at: $CLADE_HOME
+Local edits will be reverted by the next sync.
+-->
+
+# Threshold Remediation（門檻處置的幅度紀律）
+
+**核心命題**：任何 audit 門檻（HANDOFF size / lines、TD entry oversize、closedBloat、per-section budget、
+lint warning 數、bundle size…）報超標時，處置的驗收標準是**清掉超標量**，不是「壓回門檻附近」。
+every session always-load。
+
+**Iron Law：超過門檻 NEVER 只修到略低於門檻，一律全面處理。違反字面就是違反精神——
+「這樣就沒有 warn 了」不是達標，達標是「這個量已經不再逼近門檻」。**
+
+## MUST
+
+1. **處置前先算超標量**：`超標量 = 實測值 − 門檻`。**每一個**候選處置都 MUST 標出它的**預期降幅**，
+   降幅算不出來的候選 **MUST** 先算再列，NEVER 以「應該夠」進入選項組。
+2. **降幅 < 超標量的候選 NEVER 進選項組**，更 NEVER 被標成推薦。列出來就會被選——2026-08-12 clade
+   HANDOFF 超標事件的三個選項**沒有一個**清得掉超標量（實測 42.8 KB / 門檻 35 KB，推薦的 A 只降
+   約 4 KB → 執行後 38.8 KB 仍超標），而它照樣被標成推薦並執行。
+3. **處置後 MUST 立刻複量**，用同一支 audit / 同一個指令，NEVER 用估算或 diff 行數推算。
+4. **複量結果仍 > 門檻的 90%（含仍超標）→ MUST 派 Fable 顧問檢討成長結構**，NEVER 自行再修一次邊。
+   顧問 brief 帶：門檻與歷次實測值、本次處置手法與降幅、前幾次同型處置的結果。
+   `Agent({ subagent_type: 'Plan', model: 'fable', run_in_background: false })`，read-only（brief 明寫
+   「只回建議與理由，NEVER 改任何檔」）。反覆長回門檻的檔案，成因在**寫入契約**而不在存量，
+   而那一層不是再壓縮一次能碰到的。
+
+## NEVER
+
+- **NEVER 調門檻當處置**——那是放寬管自己的判定基準，且不解決成長率。
+- **NEVER 用「本輪先降一部分、剩下的下輪再說」收工**：下一輪讀到的是「已在門檻內」，沒有任何欄位
+  記得還欠多少。要分批 MUST 當輪就把剩餘量寫進 `docs/tech-debt.md` 或 `HANDOFF.md`，帶具體數字。
+- **NEVER 把「warn 不見了」當驗收**：warn 的消失只證明跨過那一格，本規約要的是餘裕。
+
+## Red Flags（發現自己在想這些 = 停下來重算）
+
+- 「壓到 38.8 KB，門檻 35 KB，已經好很多了」
+- 「先套 A，之後有需要再處理」
+- 「三個選項都不夠但 A 最接近，就推薦 A」
+- 「這次成長是特例，不用檢討結構」——同一個檔第三次長回門檻時，特例是最不可能的解釋
+
+## 手法紀律在別處
+
+「處置是**下推**不是**砍字**」由 [[tech-debt-hygiene]] Invariant 7 管。兩者獨立：手法對了但幅度不夠
+仍違反本規約，幅度夠了但靠砍字達成仍違反那條。

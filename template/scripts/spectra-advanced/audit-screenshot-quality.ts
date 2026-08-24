@@ -9,6 +9,11 @@
  *   node scripts/spectra-advanced/audit-screenshot-quality.ts --json
  *   node scripts/spectra-advanced/audit-screenshot-quality.ts --fail-on-issues
  *
+ * Signals include the TD-548 Evidence Manifest field checks
+ * (missing_screenshot_manifest_field / manifest_row_count_not_numeric /
+ * manifest_discriminating_unparseable / manifest_non_evidence_unmarked) —
+ * opt-in blocking: they only fail the run under --fail-on-issues.
+ *
  * Exit:
  *   0 — clean, or issues found without --fail-on-issues
  *   1 — issues found with --fail-on-issues
@@ -219,6 +224,7 @@ async function auditChange(changeName: string): Promise<{
   applyCountRules(byItem, changeName, issues)
   applyMissingEvidenceRule(items, byItem, changeName, issues)
   await applyReviewReferenceRule(changeName, issues)
+  await applyManifestFieldRule(changeName, issues)
 
   return { items, screenshots, issues }
 }
@@ -522,6 +528,147 @@ async function applyReviewReferenceRule(changeName: string, issues: Issue[]) {
       }
     }
   }
+}
+
+/**
+ * TD-548 — Evidence Manifest 的五欄機械檢查。
+ *
+ * 契約在 `plugins/hub-core/agents/screenshot-review.md` § 證據對應表：每張圖一列，
+ * 欄位為 `claim` / `identity` / `rowCount` / `stateBranch` / `discriminating`。TD-536 讓
+ * 契約落地，但執行力只有 agent 自律 —— 漏一欄不會有任何東西轉紅。
+ *
+ * 退出契約走 **opt-in blocking**（2026-08-24 Charles 拍板）：本規則照既有 Issue 通道發，
+ * 預設 exit 0；要它擋人就帶已存在的 `--fail-on-issues`。**NEVER** 改成預設 block —— 現有
+ * 消費端（consumer 投影、digest）都建立在 warning-only 上。
+ *
+ * **沒有 `## 證據對應表` 段的 review.md 不發訊號**：那是 TD-536 之前的既有檔，對它們發等於
+ * 讓每個舊 change 在下一次 archive 時當場轉紅。本規則管的是「表在、欄缺」。
+ */
+async function applyManifestFieldRule(changeName: string, issues: Issue[]) {
+  const reviewFiles = await collectReviewFiles(changeName)
+  for (const reviewFile of reviewFiles) {
+    const content = await readFile(reviewFile, 'utf8')
+    for (const row of parseManifestRows(content)) {
+      const rel = toRel(reviewFile)
+      for (const field of MANIFEST_FIELDS) {
+        if (isBlankCell(row.fields[field])) {
+          issues.push({
+            severity: 'warning',
+            code: 'missing_screenshot_manifest_field',
+            change: changeName,
+            itemId: row.itemId,
+            file: rel,
+            message: `${rel} 證據對應表第 ${row.rowNumber} 列缺 \`${field}\``,
+            suggestion: `補上 \`${field}\`；該欄空白時這一列不構成證據（見 screenshot-review § 證據對應表）`,
+          })
+        }
+      }
+      const rowCount = row.fields.rowCount
+      if (!isBlankCell(rowCount) && !/^\d+$/.test(stripCell(rowCount))) {
+        issues.push({
+          severity: 'warning',
+          code: 'manifest_row_count_not_numeric',
+          change: changeName,
+          itemId: row.itemId,
+          file: rel,
+          message: `${rel} 第 ${row.rowNumber} 列 rowCount 是 "${stripCell(rowCount)}"，不是數字`,
+          suggestion: 'rowCount MUST 是實際列數；目測 / 約 / N.A. 都無法與「沒去數」區分',
+        })
+      }
+      const disc = stripCell(row.fields.discriminating)
+      if (!isBlankCell(row.fields.discriminating)) {
+        if (!/^(yes|no)\b/i.test(disc)) {
+          issues.push({
+            severity: 'warning',
+            code: 'manifest_discriminating_unparseable',
+            change: changeName,
+            itemId: row.itemId,
+            file: rel,
+            message: `${rel} 第 ${row.rowNumber} 列 discriminating 開頭不是 yes / no`,
+            suggestion: 'discriminating MUST 以 yes 或 no 開頭，後接理由',
+          })
+        } else if (/^no\b/i.test(disc) && !/NON-EVIDENCE/i.test(row.raw)) {
+          issues.push({
+            severity: 'warning',
+            code: 'manifest_non_evidence_unmarked',
+            change: changeName,
+            itemId: row.itemId,
+            file: rel,
+            message: `${rel} 第 ${row.rowNumber} 列 discriminating 為 no 卻沒標 NON-EVIDENCE`,
+            suggestion: '沒有鑑別力的截圖 MUST 逐字標 NON-EVIDENCE，否則它在報告裡與有效證據同形',
+          })
+        }
+      }
+    }
+  }
+}
+
+const MANIFEST_FIELDS = ['claim', 'identity', 'rowCount', 'stateBranch', 'discriminating'] as const
+
+type ManifestField = (typeof MANIFEST_FIELDS)[number]
+
+interface ManifestRow {
+  rowNumber: number
+  itemId: string | null
+  raw: string
+  fields: Record<ManifestField, string>
+}
+
+/** 空欄的三種寫法：真空白、`-` / `—` 佔位、TBD / N/A。三種都是「這一欄沒填」。 */
+function isBlankCell(value: string | undefined): boolean {
+  const v = stripCell(value ?? '')
+  return v === '' || /^[-—–]+$/.test(v) || /^(tbd|n\/?a|待填|未填)$/i.test(v)
+}
+
+function stripCell(value: string): string {
+  return value.replace(/[`*]/g, '').trim()
+}
+
+/**
+ * 解 `## 證據對應表` 下的 markdown 表。表頭以欄名定位（NEVER 靠欄位順序 —— 契約範本的欄序
+ * 改一次，靠順序取值的解析就會靜默取到隔壁欄）。
+ */
+function parseManifestRows(content: string): ManifestRow[] {
+  const lines = content.split(/\r?\n/)
+  const startIdx = lines.findIndex((line) => /^#{2,3}\s.*證據對應表/.test(line))
+  if (startIdx === -1) return []
+  const rows: ManifestRow[] = []
+  let header: string[] | null = null
+  let rowNumber = 0
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    const line = lines[i]!
+    if (/^#{1,3}\s/.test(line)) break
+    if (!line.trim().startsWith('|')) {
+      if (header) break
+      continue
+    }
+    const cells = splitRow(line)
+    if (!header) {
+      header = cells.map((c) => stripCell(c))
+      continue
+    }
+    if (cells.every((c) => /^[-: ]*$/.test(c))) continue
+    rowNumber += 1
+    const fields = {} as Record<ManifestField, string>
+    for (const field of MANIFEST_FIELDS) {
+      const idx = header.findIndex((h) => h.toLowerCase() === field.toLowerCase())
+      fields[field] = idx === -1 ? '' : (cells[idx] ?? '')
+    }
+    const itemCell = header.findIndex((h) => /^item$/i.test(h))
+    const itemRaw = itemCell === -1 ? '' : stripCell(cells[itemCell] ?? '')
+    rows.push({
+      rowNumber,
+      itemId: /^#\d+(\.\d+)?$/.test(itemRaw) ? itemRaw : null,
+      raw: line,
+      fields,
+    })
+  }
+  return rows
+}
+
+function splitRow(line: string): string[] {
+  const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '')
+  return trimmed.split('|').map((c) => c.trim())
 }
 
 async function collectReviewFiles(changeName: string): Promise<string[]> {

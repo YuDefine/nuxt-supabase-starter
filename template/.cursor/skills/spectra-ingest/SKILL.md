@@ -1,36 +1,45 @@
 ---
 name: spectra-ingest
-description: 'Update an existing Spectra change from external context'
+description: "Update an existing Spectra change from external context"
+effort: high
 license: MIT
 compatibility: Requires spectra CLI.
 metadata:
   author: spectra
-  version: '1.0'
-  generatedBy: 'Spectra'
+  version: "1.0"
+  generatedBy: "Spectra"
+permission_tier: action
 ---
+<!--
+🔒 LOCKED — managed by clade
+Source: plugins/hub-core/skills/spectra-ingest/
+Edit at: $CLADE_HOME
+Local edits will be reverted by the next sync.
+-->
+
 
 Update an existing Spectra change — from a plan file or conversation context.
 
-**Plan file support** is available when the tool has a plan directory (`.cursor/plans/`). Otherwise, use conversation context to update artifacts.
+**Plan file support** is available when the tool has a plan directory (`~/.claude/plans/`). Otherwise, use conversation context to update artifacts.
 
 **Prerequisites**: This skill requires the `spectra` CLI. If any `spectra` command fails with "command not found" or similar, report the error and STOP.
 
 **Input**: Optionally specify a plan file path or name.
 
-- `/spectra:ingest .cursor/plans/agile-discovering-rocket.md`
-- `/spectra:ingest agile-discovering-rocket`
-- `/spectra:ingest` (use conversation context or auto-detect plan file)
+- `/spectra-ingest ~/.claude/plans/agile-discovering-rocket.md`
+- `/spectra-ingest agile-discovering-rocket`
+- `/spectra-ingest` (use conversation context or auto-detect plan file)
 
 **Steps**
 
 1. **Locate the requirement source**
 
-   a. **Argument provided** → treat as plan file reference (prepend `.cursor/plans/` and append `.md` if needed)
+   a. **Argument provided** → treat as plan file reference (prepend `~/.claude/plans/` and append `.md` if needed)
    - If the file exists → use it as the plan file source, proceed to Step 2
    - If the file does NOT exist → report the error and **stop**
 
    b. **No argument, plan file detectable**:
-   - Check conversation context for plan file path (plan mode system messages include the path like `.cursor/plans/<name>.md`)
+   - Check conversation context for plan file path (plan mode system messages include the path like `~/.claude/plans/<name>.md`)
    - If found and the file exists → use the **AskUserQuestion tool** to ask:
      - Option 1: Use the plan file
      - Option 2: Use conversation context
@@ -38,7 +47,7 @@ Update an existing Spectra change — from a plan file or conversation context.
    - If the user picks conversation context → skip Step 2, go to Step 3
 
    c. **No argument, no plan file detectable**:
-   - Check `.cursor/plans/` for recent files
+   - Check `~/.claude/plans/` for recent files
    - If recent files exist → list 5 most recent with the **AskUserQuestion tool**, include "Use conversation context" as an additional option
    - If the user picks a file → proceed to Step 2
    - If the user picks conversation context → skip Step 2, go to Step 3
@@ -50,7 +59,7 @@ Update an existing Spectra change — from a plan file or conversation context.
 
 2. **Parse the plan structure** (skip if using conversation context)
 
-   Claude Code plan files typically contain:
+   AI Agent plan files typically contain:
    - **Title** (`# ...`) — the high-level goal
    - **Context** section — background, motivation, current state
    - **Stages/Steps** — numbered implementation stages with goals and file lists
@@ -79,7 +88,7 @@ Update an existing Spectra change — from a plan file or conversation context.
    Parse both JSON outputs to get the full list of changes (active + parked). Parked changes should be annotated with "(parked)" in any selection list.
    - If one change exists (active or parked) → use the **AskUserQuestion tool** to confirm updating it
    - If multiple changes exist → use the **AskUserQuestion tool** to let user pick which one to update
-   - If no changes at all (neither active nor parked) → tell the user: "No active change found. Use `/spectra:propose` first to create one." and **stop**
+   - If no changes at all (neither active nor parked) → tell the user: "No active change found. Use `/spectra-propose` first to create one." and **stop**
 
 4. **Select the change**
 
@@ -100,6 +109,112 @@ Update an existing Spectra change — from a plan file or conversation context.
    Wait for the user's response. If the user confirms, run `spectra unpark "<name>"` then proceed.
 
    Read existing artifacts for context before updating.
+
+   ---
+
+   **⚠ Pre-update gate: Plain-language scope check** (when scope is structurally changing)
+
+   If the new context (plan file or conversation) introduces **structural scope change** — not just adding task detail — present a plain-language summary BEFORE rewriting artifacts so the user can catch misunderstandings early.
+
+   **Trigger** structural-scope mode when the new context does any of:
+
+   - Changes the proposal's "Why" or core motivation (not just adds tasks)
+   - Touches DB schema / migration (new column, new table, new FK, enum extension)
+   - Changes user-facing journeys (new admin/staff flow, new role, new entity)
+   - Introduces a new architectural layer or cross-table relationship
+   - Expands or contracts the change's coverage beyond the original capability
+
+   **Skip** when the new context is purely additive task detail (e.g. "add screenshot to manual review step 3", "rename function X to Y", "fix typo in spec", "add @no-screenshot marker to item #4.2").
+
+   **Apply the same 4-part structure as `/spectra-discuss` § Plain-Language Synthesis**:
+
+   1. **現況** — what the change currently captures (use everyday metaphors — `櫃子` / `本子` / `服務窗口`, not `table` / `endpoint`)
+   2. **差異** — what the new context actually wants (layered table if multi-intent)
+   3. **建議調整** — N items, non-technical, with ASCII diagrams
+   4. **範圍邊界** — 做 / 不做 table
+   5. **Closing AskUserQuestion** — one focused confirmation question
+
+   **Get explicit user confirmation** before proceeding to Step 5. If user signals "no, that's not what I meant" → loop back and clarify before touching artifacts.
+
+   **NEVER** apply structural artifact changes without this confirmation step. The cost of a misread ingest is high — completed `[x]` tasks may need rework, design.md may need recapture, capability boundaries may shift.
+
+   See `/spectra-discuss` SKILL.md § Plain-Language Synthesis for full structure, examples, and trigger details.
+
+   ---
+
+4b. **Dispatch 路徑選擇（三選一選單）**
+
+   **Step 4b 開頭 MUST 用 AskUserQuestion 跳三選一選單**讓使用者選（除非使用者已明確指定路徑，見下方捷徑）：
+
+   - **A. Pi flow（預設 / 推薦，選單第一項）** — Pi GPT-5.6-sol max 在背景更新 artifacts + 主線 Claude Fable 5 xhigh cross-check。
+   - **B. Fable flow** — Claude Fable 5 xhigh 在背景更新 artifacts + 主線 Claude Fable 5 xhigh cross-check。
+   - **C. 純 Claude** — 主線 Claude Fable 5 xhigh 直接走 Step 5~9。
+
+   **明確指定捷徑（跳過選單）**：
+   - 「用 pi」「用 codex」「照舊」→ **選項 A**
+   - 「用 Fable」「Fable 做」→ **選項 B**
+   - 「不要派」「純 Claude」「直接你做」→ **選項 C**
+
+   **選項 A / B 流程**：
+
+   1. **萃取 brief**：從 Step 1~4 取得的 requirement source（plan file / conversation context）+ 既有 artifacts 現況，寫 prompt 檔到 `/tmp/<runtime>-spectra-ingest-<change-name>-prompt.md`，內容包含：
+      - change name + requirement source 全文
+      - 既有 artifacts 路徑與現況摘要
+      - Step 5 的 artifact 更新規約（Plan-to-Artifact Mapping / Context-to-Artifact Mapping / 保留 `[x]` / 保留 `[P]` / locale 規約）
+      - Step 6 的 Inline Self-Review 全部 7 項 Check（No Placeholders / Internal Consistency / Scope / Ambiguity / Preservation / Durable Handoff / Manual Review Marker Hygiene）
+      - Step 7 的 Analyze-Fix Loop（`spectra analyze` 最多 2 輪）
+      - Step 8 的 `spectra validate`
+      - 完成標準：`spectra validate` 通過 + `spectra park <change-name>`
+      - 語言遵循：artifacts 依 `spectra instructions` 的 `locale` 欄位寫；spec 一律英文
+
+   2. **背景啟動**（**Bash** tool 加 `run_in_background=true`）：
+
+      選項 A：
+      ```bash
+      node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
+        --brief /tmp/pi-spectra-ingest-<change-name>-prompt.md \
+        --cwd <consumer-repo-root> \
+        --label spectra-ingest-<change-name> \
+        --model sol --effort max \
+        --route routing-table --tier-basis table-row --table-row spectra-artifact-draft
+      ```
+
+      選項 B：
+      ```bash
+      cd <consumer-repo-root> && claude -p \
+        --model claude-fable-5 \
+        --effort xhigh \
+        < /tmp/fable-spectra-ingest-<change-name>-prompt.md 2>&1
+      ```
+
+   3. **立刻**簡短回報：「已派 <runtime> 在背景 ingest `<change-name>`（bash job `<id>`），完成後主線會 cross-check」。
+   4. 啟動 **notification-only watch**：背景 Bash 回傳 `<task-id>` 後，立刻依 [[agent-routing]] § Async keepalive prompt 記錄 owner / deadline（deadline 取值依 [[agent-routing]] § deadline 怎麼取），並排 1500s `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=<runtime>:spectra-ingest:<change-name> deadline=<ISO>...` canonical inert control message。控制 turn 只准查 `TaskOutput(block=false)`、重排同一 inert prompt或排 lifecycle intervention；**NEVER** 放原 ingest prompt、讀 output tail、短輪詢或執行 artifact mutation。
+
+   **exit code 分流（收到 terminal notification 後先做，per `pi-phase-dispatch.md` § 4）**：
+
+   - `0`：讀 `result`，往下走。
+   - `2`：業務 fail；讀 `result` 的原因，主線決定修補或重派。
+   - `3`：機械故障；讀 receipt 指向的 stderr log，依 watch protocol fallback。
+   - `4`：配額擋；本列是 sol，依 [[agent-routing]] § 配額耗盡時的 fallback 紀律先走 `--model sol-cursor`
+     同 effort 重派一次，**NEVER** 當成可立即重試的機械故障，**也 NEVER** 改派 Claude subagent。
+
+   **Cross-check（A / B 共用，收到 `<task-notification status=completed>` 後立刻）**：
+
+   1. Read draft stdout，確認 artifacts 已更新 + `spectra validate` 通過。
+   2. 若 draft 已 `spectra park <change-name>`：先 `spectra unpark <change-name>`。
+   3. 主線跑 Step 6 全套 Inline Self-Review（7 項 Check）— 對 draft 產出做 cross-check，發現問題主線自己 Edit 修。
+   4. 主線跑 Step 7 Analyze-Fix Loop + Step 8 Validation。
+   5. 主線跑 Step 8.5 commit artifacts + Step 9 Summary。
+   6. 回報使用者：artifacts list + cross-check 結果 + `/spectra-apply <change-name>` 提示。
+
+   **選 A / B 時本 session 不再執行 Step 5**（draft 已做）；**只有選項 C** 才往下跑 Step 5。
+
+   **禁止事項（A / B / C 通用）**：
+   - **NEVER** 派 draft 後不跑 cross-check — 主線 MUST 跑 Inline Self-Review 全套
+   - **NEVER** 把 cross-check 修補丟回 draft runtime — 主線自己 Edit 修
+   - **NEVER** 派 draft 而 prompt 漏掉保留 `[x]` / `[P]` 規約 — ingest 最重要的 invariant 是不丟進度
+
+   ---
 
 5. **Update artifacts**
 
@@ -184,6 +299,69 @@ Update an existing Spectra change — from a plan file or conversation context.
    - Were existing `[P]` markers preserved on tasks that still qualify?
    - Was existing content merged (not replaced)?
 
+   **Check 6: Durable Handoff Review** (run BEFORE the CLI analyzer)
+
+   The updated change has to survive being parked or handed to another agent. Reject and fix any of the following on **incomplete** design and task content (do not rewrite completed `[x]` tasks):
+   - **File-path-only tasks**: a pending task whose entire description is "edit file X" with no behavior, contract, or verification target. File paths are locator context — the task SHALL still describe what is observably true when complete.
+   - **Line-number-coupled instructions**: design or task content that points to "line 42" / "the function on lines 80-95" as the only way to identify the work. Source line numbers drift; name the function, command, struct, or behavior instead.
+   - **Vague acceptance criteria**: success conditions like "works correctly", "behaves as expected", "handles edge cases" without naming the observable behavior or the verification target (test name, CLI invocation, analyzer rule, manual assertion).
+   - **Missing scope boundaries on non-trivial work**: design lacking explicit "in scope" / "out of scope" lines for any change that touches more than one subsystem or introduces new behavior. Trivial artifact-only edits MAY skip this; runtime, build, or tooling effects MUST NOT.
+
+   Fix every failure inline using the existing context and the new plan/conversation source before running the CLI analyzer. Update incomplete design and task content so behavior contracts, verification criteria, and scope boundaries stay current with the new context. Preserve completed tasks unchanged.
+
+   **Check 7: Manual Review Marker Hygiene** (clade fork — applies whenever ingest modifies `## 人工檢查` items)
+
+   `/spectra-ingest` retro-updates a change after impl / verify, which can introduce **new** `## 人工檢查` items or modify existing ones — bypassing `/spectra-propose` Step 5.5. The same hygiene rules **MUST** be enforced here. Apply Rule 1-4 mirroring `spectra-propose` Step 5.5 (Manual Review Marker Hygiene Check). Violations → main thread Edits `tasks.md` directly (do **NOT** round-trip to pi; too slow):
+
+   **Rule 1: Every item line MUST carry a leading marker**
+
+   - Each `- [ ] #N ...` / `- [ ] #N.M ...` line **MUST** have a legal marker immediately after the id: `[review:ui]` / `[discuss]` / `[verify:e2e]` / `[verify:api]` / `[verify:ui]` / verify multi-marker `[verify:<a>+<b>]` or `[verify:<a>+<b>+<c>]`
+   - Verify multi-marker channels limited to `e2e` / `api` / `ui`, canonical order `e2e → api → ui`
+   - Multi-marker **MUST NOT** mix with `[review:ui]` / `[discuss]`; `[verify:api+review:ui]` / `[verify:api+discuss]` are illegal
+   - Missing marker → classify per Rule 2 / 3 / 4 content and add explicit marker; **DO NOT** rely on Default Kind Derivation Rule (fallback is for legacy in-flight items only, and silently falls back to the most strict `review:ui` — the root cause of repeated `[review:ui]` mis-tagging)
+   - Ingest-modified items **MUST** carry explicit marker even if the original (legacy) item did not. Ingest is the boundary where Default Kind Derivation grandfathering ends.
+
+   **Rule 2: Evidence-collection items → `[discuss]` or `[verify:api]`**
+
+   Items containing `Apply migration` / `SSH` / `docker exec` / `psql` / `\d <table>` / `SELECT ... FROM` / `curl` / `Trigger ... cron` / `SET session_replication_role` / 「合理性檢查」/「商業判斷」:
+
+   - SSH / psql / `\d` / `SELECT` / controlled drift / migration existence / 商業判斷 → `[discuss]`
+   - `curl` / HTTP endpoint round-trip reproducible by apply main thread → `[verify:api]`
+   - Misclassified `[review:ui]` / `[verify:ui]` / deprecated `[verify:auto]` → change to `[discuss]` or `[verify:api]`
+
+   **Rule 3: Real user round-trip items → channel per evidence shape**
+
+   - persistence / reload / full journey → `[verify:e2e]`
+   - HTTP status / backend contract → `[verify:api]`
+   - final-state visual only → `[verify:ui]`
+   - mutation response + visual state → `[verify:api+ui]`
+   - journey + extra screenshot evidence → `[verify:e2e+ui]`
+   - real-person-required (Rule 4 whitelist) → `[review:ui]`
+
+   **Rule 4: `[review:ui]` whitelist**
+
+   `[review:ui]` only when description contains one of:
+
+   - email inbox / webhook (agent inbox unreachable)
+   - 「視覺主觀」/「美感」/「a11y 主觀判斷」
+   - 「實體裝置」/「真機」/「手機」/「平板」/「kiosk QR」/「印表機」/「條碼槍」
+   - 「跨機器」/「跨 session」/ production-authorized operation
+   - 「電話」/「SMS」 or spec-external non-UI environment
+
+   Otherwise → explicit `verify:*` per Rule 3. Misclassified items flagged and rewritten by main thread.
+
+   **Then re-run the hook**:
+
+   ```bash
+   bash scripts/spectra-advanced/post-propose-manual-review-check.sh <change-name>
+   ```
+
+   Exit 2 = pattern findings (any of `MISSING_KIND_MARKER` / `ABSTRACT_REFERENCE` / `CARD_WITHOUT_UID` / `UI_ITEM_NO_URL` / `MULTI_STEP_NOT_SCOPED` / `REVIEW_UI_BACKEND_ROUNDTRIP` / `INTERNAL_JARGON_LEAKAGE` / `MIXED_CN_EN_TERM`). Main thread **SHALL** Edit `tasks.md` directly per hook stdout remediation guidance. Reference: `vendor/snippets/manual-review-enforcement/patterns.json` + `rules/core/manual-review.data-readiness.md`.
+
+   Legitimate false positive (e.g., 真機掃 SMS 無 dev replay endpoint) → add `@no-manual-review-check[<reason>]` trailing marker per `manual-review.md`「`@no-manual-review-check` Marker」.
+
+   **Why this exists**: Without ingest-time enforcement, items modified or added after the original propose cycle can land with `Default Kind Derivation Rule` silently falling back to `[review:ui]`. The review-gui displays the fallback identically to an explicit marker, so the user only discovers the mismatch when they reach the item in review (e.g., 「為何叫我打 API」 / 「這違反 review:ui 收斂原則」). This loop has repeated across multiple changes — ingest **MUST** be the gate that catches it.
+
 ---
 
 ## Rationalization Table
@@ -224,6 +402,16 @@ Update an existing Spectra change — from a plan file or conversation context.
 
    If validation fails, fix errors and re-validate.
 
+8.5. **Commit artifacts** (post-validation, TD-216 desync prevention)
+
+   After validation passes, **MUST** commit the updated openspec artifacts so `/wt` fork picks up re-scoped tasks.md:
+
+   ```bash
+   git commit --only -m "📝 docs(spectra): ingest <change-name>" -- openspec/changes/<change-name>/
+   ```
+
+   Per worktree-default §9.5, spectra artifacts MUST live in git. Uncommitted re-scoped tasks.md causes review-gui impl-gate desync: `/wt` fork inherits committed (pre-ingest) version → build in worktree uses old phase list → review-gui reads main's re-scoped tasks.md with unchecked phases → impl% falsely low.
+
 9. **Summary and next steps**
 
    Show:
@@ -233,21 +421,22 @@ Update an existing Spectra change — from a plan file or conversation context.
    - Validation result
 
    Use **AskUserQuestion tool** to confirm the workflow is complete. This ensures the workflow stops even when auto-accept is enabled. Provide exactly these options:
-   - **First option (will be auto-selected)**: "Done" — End the ingest workflow. Inform the user they can run `/spectra:apply <change-name>` when ready.
-   - **Second option**: "Apply" — Invoke `/spectra:apply <change-name>` to start implementation.
+   - **First option (will be auto-selected)**: "Done" — End the ingest workflow. Inform the user they can run `/spectra-apply <change-name>` when ready.
+   - **Second option**: "Apply" — Invoke `/spectra-apply <change-name>` to start implementation.
 
-   If **AskUserQuestion tool** is not available, display the summary and inform the user to run `/spectra:apply <change-name>` when ready. Then STOP — do not continue.
+   If **AskUserQuestion tool** is not available, display the summary and inform the user to run `/spectra-apply <change-name>` when ready. Then STOP — do not continue.
 
-   **After the user responds**, if they chose "Done", the workflow is OVER. If they chose "Apply", invoke `/spectra:apply <change-name>` to begin implementation.
+   **After the user responds**, if they chose "Done", the workflow is OVER. If they chose "Apply", invoke `/spectra-apply <change-name>` to begin implementation.
 
 **Guardrails**
 
-- **NEVER** modify the original plan file in `.cursor/plans/`
+- **NEVER** modify the original plan file in `~/.claude/plans/`
 - **NEVER** write application code — this skill only creates/updates Spectra artifacts
-- **NEVER** create new changes — ingest only updates existing changes. If no active change exists, direct user to `/spectra:propose`
+- **NEVER** create new changes — ingest only updates existing changes. If no active change exists, direct user to `/spectra-propose`
 - When updating existing changes, **preserve all completed tasks** (`[x]`) — never revert progress
 - If the source content is too brief to fill all artifact sections, use the **AskUserQuestion tool** to get more details rather than inventing content
 - If `spectra` CLI is not available, report the error and stop
 - Verify each artifact file exists after writing before proceeding to next
 - **NEVER** skip the artifact workflow to write code directly
+- **NEVER** apply structural scope changes (DB schema / new journeys / new architectural layer) without running the Pre-update plain-language gate between Step 4 and Step 5 — see "Pre-update gate: Plain-language scope check" callout
 - If **AskUserQuestion tool** is not available, ask the same questions as plain text and wait for the user's response

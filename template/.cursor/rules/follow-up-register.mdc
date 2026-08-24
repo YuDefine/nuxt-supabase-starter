@@ -1,7 +1,15 @@
 ---
-description: Follow-up Register 規則——強制 tasks.md 的未解決項目使用 @followup[TD-xxx] marker 並在 docs/tech-debt.md 留下可追蹤 entry；archive gate 攔截未登記 marker
-globs: ['openspec/changes/**/tasks.md', 'docs/tech-debt.md']
+description: "Follow-up Register 規則——強制 tasks.md 的未解決項目使用 @followup[TD-xxx] marker 並在 docs/tech-debt.md 留下可追蹤 entry；archive gate 攔截未登記 marker"
+globs: ["openspec/changes/**/tasks.md", "docs/tech-debt.md"]
+alwaysApply: false
 ---
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/core/follow-up-register.md
+Edit at: $CLADE_HOME
+Local edits will be reverted by the next sync.
+-->
+
 
 # Follow-up Register
 
@@ -93,7 +101,7 @@ mcp-token-store 使用 D1 `$client.prepare()` raw API，local dev libsql 不相�
 
 ## Archive Gate（強制閘門）
 
-`.claude/hooks/pre-archive-followup-gate.sh` 在 `spectra-archive` 前自動執行：
+`.cursor/hooks/pre-archive-followup-gate.sh` 在 `spectra-archive` 前自動執行：
 
 1. 掃描 change 的 `openspec/changes/<change>/tasks.md` 所有 `@followup[TD-NNN]` marker
 2. 每個 `TD-NNN` **MUST** 存在於 `docs/tech-debt.md`
@@ -114,8 +122,8 @@ mcp-token-store 使用 D1 `$client.prepare()` raw API，local dev libsql 不相�
 
 ## Session-start Surfacing
 
-`.claude/hooks/session-start-roadmap-sync.sh` 在 roadmap sync 之後呼叫
-`collect-followups.mts --session-summary`，把以下內容印到 stderr（agent 可見，不擋流程）：
+`.cursor/hooks/session-start-roadmap-sync.sh` 在 roadmap sync 之後呼叫
+`collect-followups.ts --session-summary`，把以下內容印到 stderr（agent 可見，不擋流程）：
 
 - **Open / In-progress 數量** + top 5 by priority（critical → high → mid → low）
 - **Unregistered Markers** —— tasks.md 有 `@followup[TD-NNN]` 但 register 沒登記（通常是剛加 marker 還沒跑 register 更新）
@@ -128,7 +136,7 @@ mcp-token-store 使用 D1 `$client.prepare()` raw API，local dev libsql 不相�
 
 ## Collect Script：`pnpm spectra:followups`
 
-`scripts/spectra-ux/collect-followups.mts` 提供三種模式：
+`scripts/spectra-advanced/collect-followups.ts` 提供三種模式：
 
 ```bash
 pnpm spectra:followups            # 人類可讀報告
@@ -149,6 +157,7 @@ pnpm spectra:followups --fail-on-drift  # CI gate：未登記 marker 時 exit 1
 - **`ux-completeness.md`**：本規則補充「Definition of Done」延伸面——即使 tasks 全勾，若有 follow-up marker 未登記 register，archive 仍被擋。
 - **`proactive-skills.md` Design Gate**：Design Gate 檢查 UI 視覺品質；本 Follow-up Gate 檢查未解決項是否有追蹤。兩者並存。
 - **`commit.md`**：本規則不阻擋 commit，只阻擋 archive。commit `/commit` 流程不變。
+- **`session-tasks.md`**：`tasks/<id>.md` 內出現「等待中」「之後再說」性質的項目，session 結束升級時 **MUST** 建 TD-NNN entry，不能只留註記在 tasks 檔（tasks 檔會被刪 / archive，註記跟著消失）。
 
 ---
 

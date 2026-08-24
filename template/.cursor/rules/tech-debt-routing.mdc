@@ -1,0 +1,138 @@
+---
+description: "Tech debt 路由規則——決定發現的 TD 該登在 clade 還是當前 consumer，以散播範圍與修法歸屬為準"
+globs: ["docs/tech-debt.md", "**/docs/tech-debt.md"]
+alwaysApply: false
+---
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/core/tech-debt-routing.md
+Edit at: $CLADE_HOME
+Local edits will be reverted by the next sync.
+-->
+
+
+# Tech Debt Routing
+
+繁體中文
+
+**核心命題**：發現問題時要先問「修法落在哪一層」，再決定 TD 登記位置。否則同一條問題會在各 consumer 各自登一遍、互相不知道、修也修不完整。
+
+此規則優先於個別 skill 說明。
+
+---
+
+## 決策流程
+
+對任一 TD 候選問問三個問題：
+
+1. **修法在哪一層改？** clade 中央倉、本 consumer、還是 starter / 其他工具？
+2. **修完誰受惠？** 只有當前 consumer，還是 clade propagate 後所有 consumer 都受惠？
+3. **真相來源是誰？** 修在 consumer 端會被下次 propagate 蓋掉嗎？
+
+依答案路由：
+
+| 修法位置 | 散播後受惠 | TD 登在 |
+| --- | --- | --- |
+| clade `scripts/` / `vendor/` / `rules/` / `plugins/hub-core/` / `claude-md/core-snippets/` | 全部 consumer（散播後） | **clade `docs/tech-debt.md`** |
+| 單一 consumer 業務碼（自家 `server/` / `app/` / 自家 migration / 自家 nuxt.config） | 只該 consumer | **該 consumer `docs/tech-debt.md`** |
+| starter scaffolder（`packages/create-nuxt-starter/`） | 未來所有 scaffold 出的新專案 | **starter `docs/tech-debt.md`** |
+| 同時 clade + consumer 都要改 | 跨層 | **clade 為主、consumer 為輔**：clade TD 描述根因 + 散播計畫，consumer TD 描述本地後置動作（如 `pnpm hub:vendor:force` 後跑某個 backfill） |
+
+---
+
+## 就地標記（發現當下留下來，不靠記憶）
+
+蓄意簡化在當下不登記，事後就只能靠記憶——而記憶不跨 session。在 code 裡就地標記，之後機械收割成候選。
+
+**格式**（`scripts/harvest-td-markers.ts` 認的就是這個）：
+
+```
+// CLADE-TD: <ceiling — 這個做法在什麼條件下會不夠> → <upgrade path — 屆時換成什麼>
+// CLADE-TD(TD-087): <同上；已有 TD entry 時回指編號>
+```
+
+- **MUST 同時寫 ceiling 與 upgrade path**，用 `→` 分隔。只寫「這裡之後要改」的裸 marker 不算——沒有 ceiling 就沒有「何時該動它」的判準，那就是永遠不會被處理的那種 marker
+- **NEVER 用裸 `TODO` / `FIXME` / `XXX` 承載這個角色**：fleet 實測（2026-08-03，12 consumer / 3.3M 行）直接掃 `TODO` 的假陽性約 3:1，四個來源分別是 vendored 第三方 skill、build cache、掃描器自身的字串常數、格式佔位（`F-X-XX-XXX`）——都不是調 regex 能乾淨解決的。獨特前綴一次消掉全部四類
+- **標記不取代登記**：跨 session 或會影響他人的缺口仍 MUST 進 `docs/tech-debt.md` 走本檔的決策流程。marker 承接的是「當下判斷還不值得開一條 TD entry，但忘了就再也找不回來」那一層
+
+**收割**：`node scripts/harvest-td-markers.ts [--repo <path>]` 掃出所有 marker 輸出候選清單。它**只出清單、不寫 `docs/tech-debt.md`**——TD entry 有 hygiene gate（六條 invariant ＋ Class 分類，見 `scripts/audit-tech-debt-hygiene.ts`），機械產出的候選不會自動合格，升級成正式 entry 是人的判斷。同一條哲學見 improvement-digest：候選進 digest，落不落地由人決定。
+
+## 為什麼一律先問 clade
+
+Consumer 端的 `.claude/` / `scripts/spectra-advanced/` / vendor 副本是 clade **投影**（帶 LOCKED banner、chmod 444、checksum gate）。
+
+- 在 consumer 端登 TD 描述「投影層的問題」→ 修法看似在 consumer，但下次 propagate 會把 consumer 修法蓋回 clade 版本 → TD 永遠修不完
+- 唯一不被蓋的是 consumer 自家業務檔（`server/api/**`、`server/utils/**`、自家 migration、自家 nuxt.config 業務段、`local/**` rule 等）
+- 因此**任何發現「投影層」有問題的 TD，都應追到 clade source 並登在 clade**，不是登在發現它的 consumer
+
+---
+
+## 範例
+
+### 範例 1：audit script glob 對 macOS symlink 路徑失敗
+
+- 問題：`evlog-adoption-audit.ts` 用 `-g "server/plugins/**"` 對 `/tmp/scaffold` (`/tmp` 是 `/private/tmp` symlink) 不命中
+- 修法：改 `**/server/plugins/**`
+- 修在哪：`~/offline/clade/scripts/evlog-adoption-audit.ts`（clade 真相層）
+- 散播：propagate 後各 consumer 的 `scripts/evlog-adoption-audit.ts` 副本同步收到
+- → **登 clade TD**
+
+### 範例 2：<consumer-a> staging app 廣布 500
+
+- 問題：staging worker `/api/v1/employees/me`、`/api/v1/leave/types` 都 500
+- 修法：<consumer-a> 自家 worker secret / module load / supabase tunnel 排查
+- 修在哪：<consumer-a> 自家 `server/` / `wrangler.jsonc` / GitHub Secrets
+- 散播：clade 不參與
+- → **登 <consumer-a> TD**
+
+### 範例 3：scaffolder `nuxthub-ai` 缺 D1 migrations:create
+
+- 問題：`pnpm create nuxt-supabase-starter --evlog-preset nuxthub-ai` 後新專案 `server/database/migrations/` 無 evlog_events migration → 第一次 deploy dead-write
+- 修法：starter scaffolder 加 post-scaffold `pnpm hub:db:migrations:create` step（或在 PRESET.md 寫提醒）
+- 修在哪：`~/offline/nuxt-supabase-starter/template/packages/create-nuxt-starter/`（starter）
+- 散播：未來 scaffold 出的新專案受惠（不影響既有 consumer）
+- → **登 starter TD**
+
+### 範例 4：跨層問題（clade rule + consumer 後置）
+
+- 問題：clade 新增 `rules/modules/runtime/cf-workers/secrets.md` 規則，consumer 端 `deploy.yml` 沒對齊
+- 修法：clade 端定 rule（已 done）；consumer 端各自跑「audit `deploy.yml` 是否有 `secrets:` block」+ 補修
+- 修在哪：clade 寫 rule，consumer 補 deploy.yml
+- → **clade TD** 描述 rule + 跨 consumer 散播追蹤；**每個 consumer TD** 描述自家 audit 結果 + 補修步驟（互相 cross-link）
+
+---
+
+## 禁止事項
+
+- **NEVER** 在 consumer 端登 TD 描述「`.cursor/rules/X.mdc` 內容怪怪的」/「vendor 某個 helper 行為不對」/「audit script 算錯」/「propagate 沒推某條」/「sync-rules 沒對齊」/「commit hook 邏輯怪」等明顯屬於 clade 真相層的問題。**先到 clade 找 source**
+- **NEVER** 把同一條跨 consumer 共通問題在各 consumer 各登一條 TD（duplicate noise + 散播後消失）
+- **NEVER** 跳過判斷「下次 propagate 會不會蓋掉我的修」就直接在 consumer 改 + 登 TD
+- **MUST** 在跨層 TD 內**互相 cross-link**（clade TD 列出 consumer-side action，consumer TD 引用 clade TD ID）
+
+---
+
+## 速判用 cheatsheet
+
+```
+看到 TD 候選 → 問：「修法是改 X？」
+  X ∈ {scripts/, vendor/, rules/, plugins/hub-core/, claude-md/core-snippets/, vendor/evlog-templates/, docs/} (clade)
+    → 登 clade
+  X ∈ {scaffolder, template/} (starter)
+    → 登 starter
+  X ∈ {server/, app/, 自家 migration, 自家 nuxt.config 業務段, local/}
+    → 登該 consumer
+  X 跨層
+    → clade 主、consumer 輔；cross-link
+```
+
+---
+
+## 與其他規則的關係
+
+- `rules/core/follow-up-register.md`：管 TD ID 命名 / archive gate / `@followup[TD-NNN]` marker
+- `rules/core/agent-self-verification.md` § 驗收 gate MUST 收窄到本次觸及的範圍：管 entry 的
+  `**自驗**` / restart brief **怎麼寫才可達**。寫成 repo-wide 綠燈的 gate 在紅 baseline 的 repo 裡
+  結構性不可達，會把 entry 永久釘死（TD-387 / TD-544 同型）
+- 本 rule：管 **TD 登在哪個 repo 的 docs/tech-debt.md**
+
+兩條規則正交。發現 TD 時先依本 rule 路由、再依 follow-up-register 編號 + 寫 entry。

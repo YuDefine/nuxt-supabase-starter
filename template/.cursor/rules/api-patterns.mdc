@@ -1,7 +1,15 @@
 ---
-description: Server API 設計規範
-globs: ["server/api/**/*.ts"]
+description: "Server API 設計規範"
+globs: ["server/api/**/*.ts", "packages/*/server/api/**/*.ts"]
+alwaysApply: false
 ---
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/modules/runtime/cf-workers/api-patterns.md
+Edit at: $CLADE_HOME
+Local edits will be reverted by the next sync.
+-->
+
 
 # API Patterns
 
@@ -9,9 +17,10 @@ globs: ["server/api/**/*.ts"]
 **MUST** use Zod validation for all API inputs — `getValidatedQuery(event, schema.parse)` / `readValidatedBody(event, schema.parse)`
 **MUST** call `requireAuth()` or `requireRole()` before any business logic
 **MUST** use `getSupabaseWithContext(event)` for request-scoped database access
+> **Helper 名依 `modules.auth` 而異**：本檔以 `getSupabaseWithContext(event)` 為 canonical 名。當 consumer 的 `.claude/hub.json` `modules.auth` 是 `better-auth` 或 `nuxt-auth-utils` 時，等價 helper 是 **`getAuthedSupabase(event)`** —— 那些 auth stack 下 Supabase 不簽 JWT，`auth.uid()` 恆 null，helper 只驗 session 不做授權，名字必須說實話。兩者回傳形狀相同（`{ client, user }`）。見 [[auth-data-path-consistency]] § Server 側：RLS policy 的前提條件。
 **MUST** parse outgoing handler payloads with response schema `parse()` before returning
 **NEVER** use `getServerSupabaseClient()` as the default path in request handlers — reserve it for privileged system tasks
-**MUST** log mutations to `audit_logs` table（action, target_type, target_id, details）— 選用
+**MUST** log mutations to audit table — 表名與欄位慣例見 `db-schema/<variant>/audit-schema.md`
 **MUST** use unified response format `{ data, pagination? }`
 **NEVER** return raw database errors to client — use `handleDbError()` + `createError()` with user-friendly message
 **MUST** `const log = useLogger(event)` as first line — see `logging.md` for evlog patterns
@@ -19,6 +28,132 @@ globs: ["server/api/**/*.ts"]
 Reference: `docs/api/API_DESIGN_GUIDE.md` — 完整 API 設計指南含進階模式
 
 > 本檔為 starter template 的預設規則，複製出去後依專案實際使用調整。
+
+## OWASP API Authorization
+
+`requireAuth()` / `requireRole()`（垂直權限）**不足以**擋 OWASP API Top 10 的授權類風險 — 一個 `authenticated` 使用者仍可能存取**別人的**物件、寫入**不該由 client 設定的欄位**、或濫用端點。每個 **state-changing / 敏感讀取** endpoint **MUST** 同時具備 authz + input-shape + abuse-control 三層：
+
+### Authz 層
+
+- **Object-level authorization（BOLA / IDOR）**：**MUST** 對 request 帶的每個 resource id（`:id`、body 內 `targetId` 等）驗證**當前使用者是否真的有權存取該筆 row**（ownership / tenant / role scope），**NEVER** 只因為 id 存在就回傳 / 修改。做法：查詢時把 scope 條件放進 WHERE（`.eq('tenant_id', user.tenantId)` / `.eq('owner_id', user.id)`），或先 fetch 再比對再操作。BOLA 是最常見的 API 漏洞 — `requireAuth()` 過了不代表這個 user 能碰**這筆** row。
+- **Property-level authorization（BOPLA / mass assignment）**：**MUST** 用**明確的欄位 allowlist** 決定使用者能讀 / 寫哪些欄位，**NEVER** 直接把 `readBody()` 整包 spread 進 `.update()` / `.insert()`（`update({ ...body })`）。做法：Zod schema 只 `.pick()` 允許的欄位，或手動列 `{ title: body.title, note: body.note }`。防止使用者偷塞 `role` / `is_admin` / `tenant_id` / `price` / `status` 等**不該由 client 設定**的欄位（mass assignment），也防止 response 回傳不該給該 role 看的欄位（over-exposure）。
+
+### Input-shape 層
+
+- **Request body size limit**：**MUST** 對 body 設大小上限（Nitro `routeRules` maxBodySize 或 handler 內檢查 `content-length`），**NEVER** 讓端點無限接收 payload（memory exhaustion / DoS）。大檔上傳走 Storage signed upload（見 `db-runtime/*/database.md`），不經 JSON body。
+- **Zod 驗證所有輸入**（已在上方 MUST）— schema 同時是 input-shape gate 與 BOPLA allowlist。
+
+### Abuse-control 層
+
+- **Rate limit**：**MUST** 對敏感 / 昂貴 / 可濫用端點（登入、OTP、密碼重設、匯出、寫入類）設 rate limit（per-user + per-IP），**NEVER** 讓 auth / mutation 端點無限呼叫（暴力破解 / 資源耗盡）。可用 `nuxt-security` rateLimiter 或自管 counter。
+- **Quota 分母 MUST 可回落**：**每一個**以「目前有幾個 X」當上限的配額（storage 前綴物件數、DB row count、KV key 數），設定前 **MUST** 回答「被計數的 X，在使用者走完正常流程之後會不會消失或被排除？」——會（session 過期 / 暫存 row 被刪 / job 完成出隊）才可直接計數；不會（被業務 row 引用後留在原地 / audit row 永久保留 / 已完成訂單）**MUST** 改用時間窗、狀態排除、或在正常流程結束時回收該資源。分母只增不減的配額，量到的是**累計使用量**而非濫用強度，正常使用者用到第 N 次就永久 429 —— 加了這種配額比不加更糟（不加只是累積 orphan，加了是功能在正常路徑上壞掉）。**MUST** 補 regression test 釘住「正常流程結束後仍可繼續操作」。三種修法與實作細節（Storage `list()` 的 `sortBy` 必須顯式、`limit` 要放大於配額）見 `~/offline/clade/docs/pitfalls/2026-07-26-quota-counts-unreclaimed-resource.md`。
+- **CSRF protection**：對 **browser-origin 的 state-changing 請求**（cookie/session 認證的 POST/PATCH/DELETE）**MUST** 有 CSRF 防護（`nuxt-csurf` double-submit token、或 SameSite=strict/lax cookie + origin 檢查），**NEVER** 只靠 session cookie 就信任跨站來的 mutation。純 token（Authorization header）認證的 API 不受 CSRF 影響，但 cookie-based 一定要防。
+
+**判斷準則**：寫任何 state-changing endpoint 時逐條問 — 「這個 id 是**這個** user 的嗎（BOLA）？」「body 有沒有不該讓 client 設的欄位（BOPLA）？」「body 會不會太大（size）？」「這端點會不會被刷（rate limit）？」「設了配額的話，分母會不會回落（quota）？」「是 cookie 認證的 browser mutation 嗎（CSRF）？」
+
+## OpenAPI Metadata Convention
+
+當 consumer 在 `nuxt.config.ts` 開啟 `nitro.experimental.openAPI: true` 時，nitropack 的 `handlersMeta` rollup plugin 會對每個 server handler 跑 `esbuild.transform()` 掃 `defineRouteMeta()`。**MUST** 為每個 covered public API handler 宣告 metadata，否則 plugin 跑空轉且容易在壞 handler 上 cascade 出 `spawn EBADF` 連鎖錯誤。
+
+### Covered handler 範圍
+
+**MUST** 為 `packages/*/server/api/v1/**/*.{get,post,patch,delete,put}.ts` 每個 handler 在 module scope 宣告：
+
+```ts
+defineRouteMeta({
+  openAPI: {
+    tags: ['employees'],
+    summary: '取得員工列表（admin 用）',
+    parameters: [
+      { in: 'query', name: 'department_id', required: false, schema: { type: 'string' } },
+    ],
+    responses: {
+      200: { description: 'OK', content: { 'application/json': { schema: { /* ... */ } } } },
+      401: { description: 'Unauthorized' },
+    },
+  },
+})
+
+export default defineEventHandler(async (event) => {
+  /* ... */
+})
+```
+
+**Minimum required fields**: `openAPI.summary` + `openAPI.responses`。`tags` / `parameters` 建議但非強制。
+
+### Internal endpoint 排除
+
+以下路徑屬內部 endpoint，**MUST NOT** 暴露到 OpenAPI spec、**MUST NOT** 被要求宣告 `defineRouteMeta`：
+
+- `server/api/webhooks/**` — 第三方 webhook，HMAC 驗證
+- `server/api/_cron/**` — 內部排程
+- `server/api/_evlog/**` — evlog client transport ingest
+- `server/api/mcp/**` — MCP endpoint（Bearer token）
+- `server/api/_dev/**` — dev-only
+
+Guard / convention 文件**必須**列出相同的排除清單；修改 exclusion 列表時兩端同步更新。
+
+### Guard wiring
+
+Consumer 端 **MUST** 寫一支 `scripts/check-route-meta.ts`（仿 `scripts/check-api-logging.ts` 模式），規則：
+
+- Default 全 scan covered handlers；`--staged` 模式只檢查 staged covered files
+- 每個 covered handler **MUST** 含 `defineRouteMeta({ openAPI: { ... } })`、`summary`、`responses`
+- 排除 internal endpoint paths（見上節）
+- Violation → 列 offending file path + missing field、exit non-zero
+
+Wire 入口：
+
+```jsonc
+// package.json
+{
+  "scripts": {
+    "check:route-meta": "node --experimental-strip-types scripts/check-route-meta.ts",
+    "check": "vp check && vp run typecheck && pnpm check:api-logging && pnpm check:nuxt-imports && pnpm check:route-meta"
+  }
+}
+```
+
+- `pnpm check` append `&& pnpm check:route-meta`
+- `.husky/pre-commit` 加 `bash scripts/pre-commit/checks/route-meta-staged.sh`（staged mode）
+- `.github/workflows/_ci-reusable.yml` 加 `vp run check:route-meta` step（跟其他 check 同列）
+
+### Production exposure deny
+
+OpenAPI endpoint **MUST** 只在 dev 暴露，production deny：
+
+```ts
+// packages/core/server/middleware/_nitro-prod-deny.ts
+export default defineEventHandler((event) => {
+  if (import.meta.dev) return
+  const url = getRequestURL(event)
+  if (url.pathname.startsWith('/_nitro/')) {
+    throw createError({ statusCode: 404, statusMessage: 'Not Found' })
+  }
+})
+```
+
+`import.meta.dev` 是 build-time constant，nitro 在 production bundle inline 成 `false` — middleware 永遠走 deny 分支，無 runtime branch。
+
+> **不要**用 `routeRules` deny — routeRules 無法乾淨表達 deny + body semantic（會回 304 / 308 等怪 status）；middleware 配 `import.meta.dev` 是唯一乾淨路徑。
+
+### Default OpenAPI route 重 mount
+
+Nitro 預設 OpenAPI endpoint 是 `/_openapi.json` / `/_scalar` / `/_swagger`，但 production deny middleware 用 `/_nitro/**` prefix 比較乾淨。**MUST** 用 `nuxt.config.ts` 內 `nitro.openAPI.route` / `nitro.openAPI.ui.scalar.route` / `nitro.openAPI.ui.swagger.route` 把 path 改 mount 到 `/_nitro/*` namespace：
+
+```ts
+// nuxt.config.ts
+nitro: {
+  experimental: { openAPI: true },
+  openAPI: {
+    route: '/_nitro/openapi.json',
+    ui: {
+      scalar: { route: '/_nitro/scalar' },
+      swagger: { route: '/_nitro/swagger' },
+    },
+  },
+}
+```
 
 ## Runtime 環境差異
 
@@ -45,15 +180,16 @@ Template 預設部署到 **Cloudflare Workers**（`nitro.preset: 'cloudflare_mod
 - **NEVER** 用 Node.js-only API（`Buffer`, `process.env` 部分、`fs`）— 改用 Web Standard API
 - **Env 存取**：透過 `useRuntimeConfig()` 或 `event.context.cloudflare.env`，**NEVER** 用 `process.env`
 
-## Audit Logs（選用）
+## Audit Logs
 
-Template **預設未建立** `audit_logs` 表。若專案需要 audit 需求：
+Audit table 命名、欄位、hash chain、RLS、helper 統一規約見：
 
-1. 建 migration：`public.audit_logs`（uuid PK、user_id、action enum、target_type、target_id、changes JSONB、created_at）
-2. RLS：immutable（只 INSERT + SELECT，無 UPDATE / DELETE policy）
-3. API handler 在 mutation 成功後插入 log
-4. **NEVER** log sensitive 欄位（密碼、token、PII）
-5. 建表後更新本檔，把本段改為具體欄位規約
+- **通用 D-pattern**：`db-schema/supabase/audit-schema.md`（<consumer-a> / <consumer-d> / <consumer-c> 用 `audit_logs` 表）
+- **<consumer-b> legacy**：`db-schema/supabase-self-hosted/audit-schema.md`（<consumer-b> 用 `<consumer-b>.operation_logs`）
+
+Runtime module 不重複定義 schema；session agent 從 `db-schema/<variant>/audit-schema.md` 找完整規約。
+
+<!-- requires-module: db-schema -->
 
 ## Idempotency 與 Retry
 

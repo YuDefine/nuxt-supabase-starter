@@ -160,6 +160,12 @@ for path in "${staged_paths[@]}"; do
       ;;
   esac
 
+  # `.cursor/` 是 `.claude/` 的生成投影 —— 掃來源就夠了，理由與判準見 audit script 的
+  # is_projection_of_scanned_source（來源不存在時照掃，不是無條件放行）。
+  if is_projection_of_scanned_source "${path}" "${repo_root}"; then
+    continue
+  fi
+
   check_private_env_path "${path}"
 
   if ! blob="$(git show ":${path}" 2>/dev/null)"; then
