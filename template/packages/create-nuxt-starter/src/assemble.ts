@@ -1162,11 +1162,6 @@ function copyScripts(targetDir: string, feats: string[], agentTargets: AgentRunt
     copyDirectory(libSrc, libDest)
   }
 
-  // Generate install-skills.sh dynamically based on selected features
-  if (hasAgent(agentTargets, 'claude-code')) {
-    generateInstallSkillsScript(targetDir, feats)
-  }
-
   // Copy spectra-advanced scripts (always needed for Spectra workflow)
   const spectraUxSrc = join(STARTER_ROOT, 'scripts', 'spectra-advanced')
   const spectraUxDest = join(targetDir, 'scripts', 'spectra-advanced')
@@ -1178,6 +1173,14 @@ function copyScripts(targetDir: string, feats: string[], agentTargets: AgentRunt
   // Finally sync the full template scripts tree so Quick Start always inherits
   // the latest shared scripts, skill installers, and script templates.
   copyDirectory(join(STARTER_ROOT, 'scripts'), join(targetDir, 'scripts'))
+
+  // install-skills.sh MUST 在整棵 scripts/ 複製「之後」才產生：starter 自己的
+  // `scripts/install-skills.sh` 是給 starter repo 用的完整清單，會蓋掉這裡依選擇的
+  // feature 產生的版本。順序寫反時徵狀是「scaffold 成功、但裝的 skill 與勾選無關」，
+  // 沒有任何錯誤訊息。
+  if (hasAgent(agentTargets, 'claude-code')) {
+    generateInstallSkillsScript(targetDir, feats)
+  }
 
   if (!hasAgent(agentTargets, 'claude-code')) {
     rmSync(join(targetDir, 'scripts', 'install-skills.sh'), { force: true })
@@ -1222,11 +1225,15 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
   lines.push('')
 
   // Onmax Nuxt Skills — conditional
+  // 每一項都必須是 `onmax/nuxt-skills` 現存的 skill 目錄。上游會刪 skill，而
+  // `npx skills add` 對不存在的名字只會噴一行錯誤就往下跑（迴圈不中斷），
+  // 於是 setup script 看起來成功、skill 卻沒裝。2026-08-24 逐一以
+  // GitHub contents API 驗過：nuxthub / reka-ui / motion 存在；
+  // `vueuse` 與 `nuxt-better-auth` 已被上游移除（404），故不再列入。
+  // vueuse 的替代覆蓋是 antfu/skills@vueuse-functions（上面無條件安裝）。
   const onmaxSkills: string[] = []
   if (has(feats, 'deploy-cloudflare')) onmaxSkills.push('nuxthub')
-  if (has(feats, 'vueuse')) onmaxSkills.push('vueuse')
   if (has(feats, 'ui')) onmaxSkills.push('reka-ui', 'motion')
-  if (hasAny(feats, 'auth-better-auth')) onmaxSkills.push('nuxt-better-auth')
 
   if (onmaxSkills.length > 0) {
     lines.push('# Onmax Nuxt Skills')
@@ -1406,11 +1413,7 @@ export function generateClaudeMd(targetDir: string, selectedFeatureIds: string[]
   const hasBetterAuth = selectedFeatureIds.includes('auth-better-auth')
   const hasDatabase = selectedFeatureIds.includes('database')
 
-  const authModule = hasAuthUtils
-    ? 'nuxt-auth-utils'
-    : hasBetterAuth
-      ? '@onmax/nuxt-better-auth'
-      : null
+  const authModule = hasAuthUtils ? 'nuxt-auth-utils' : hasBetterAuth ? '@nuxtjs/better-auth' : null
 
   const authSkill = hasAuthUtils ? '`nuxt-auth-utils`' : hasBetterAuth ? '`nuxt-better-auth`' : ''
 

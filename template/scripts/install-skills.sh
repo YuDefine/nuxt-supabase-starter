@@ -25,8 +25,11 @@ echo ""
 # Onmax Nuxt Skills
 # onmax/nuxt-skills@vueuse 已於上游下架（2026-08-02 實測 npx skills add 列不到），
 # 故從清單移除。VueUse 的 composable 參考仍由 antfu/skills@vueuse-functions 提供。
+# onmax/nuxt-skills@nuxt-better-auth 同樣已下架（2026-08-24 實測 GitHub contents API 回 404），
+# 時間點與模組搬進官方 nuxt-modules org（改名 @nuxtjs/better-auth）一致。
+# 本 repo 的 .claude/skills/nuxt-better-auth 已就地更新成新套件名，不再由上游覆寫。
 echo "📦 Onmax Nuxt Skills..."
-for skill in document-writer motion nuxt-better-auth nuxt-content nuxt-modules nuxthub reka-ui ts-library; do
+for skill in document-writer motion nuxt-content nuxt-modules nuxthub reka-ui ts-library; do
   npx skills add onmax/nuxt-skills@$skill $COPY_FLAGS
 done
 echo "  ✓ Onmax Nuxt Skills 完成"

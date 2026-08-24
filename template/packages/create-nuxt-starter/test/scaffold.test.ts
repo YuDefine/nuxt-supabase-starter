@@ -74,12 +74,30 @@ describe('scaffold: base-only (no features)', () => {
     expect(config).toContain('sourcemap: false')
   })
 
-  it('uses template install-skills script without removed vendor skill ids', () => {
+  // 這條原本斷言的是 starter 自己那份靜態 scripts/install-skills.sh —— 因為整棵 scripts/
+  // 的複製排在動態產生之後，把依 feature 產生的版本蓋掉了。順序修好之後，scaffold 出去的
+  // 專案拿到的必須是動態版（產生日期 header 是它獨有的標記）。
+  it('install-skills.sh 是依選擇的 feature 動態產生的，不是 starter 自己那份靜態清單', () => {
     const targetDir = join(TEST_DIR, 'base-only-skills')
     assembleProject(targetDir, [], 'base-only-skills')
 
     const script = readFileSync(join(targetDir, 'scripts', 'install-skills.sh'), 'utf-8')
-    expect(script).toContain('本地 starter design skills 已直接內建於 .claude/skills/')
+    expect(script).toContain('由 scaffold 依選擇的功能自動產生')
+    // 沒選 ui 就不該有 Nuxt UI / impeccable 段落
+    expect(script).not.toContain('nuxt/ui')
+    expect(script).not.toContain('pbakaus/impeccable')
+    expect(script).not.toMatch(
+      /for skill in .*\b(arrange|extract|frontend-design|normalize|onboard|teach-impeccable)\b/,
+    )
+  })
+
+  it('選了 ui 才裝 Nuxt UI / impeccable，且不含上游已移除的 skill id', () => {
+    const targetDir = join(TEST_DIR, 'ui-skills')
+    assembleProject(targetDir, ['ui'], 'ui-skills')
+
+    const script = readFileSync(join(targetDir, 'scripts', 'install-skills.sh'), 'utf-8')
+    expect(script).toContain('nuxt/ui')
+    expect(script).toContain('pbakaus/impeccable')
     expect(script).not.toMatch(
       /for skill in .*\b(arrange|extract|frontend-design|normalize|onboard|teach-impeccable)\b/,
     )
@@ -313,5 +331,42 @@ describe('scaffold: Nuxt UI CSS entry', () => {
     )
     expect(starterCss).toMatch(/^@import\s+['"]tailwindcss['"];/m)
     expect(starterCss).toMatch(/^@import\s+['"]@nuxt\/ui['"];/m)
+  })
+})
+
+describe('scaffold: Better Auth 模組身分', () => {
+  // 這個模組 2026-08 搬進官方 nuxt-modules org 並改名：`@onmax/nuxt-better-auth`
+  // （停在 0.1.2）→ `@nuxtjs/better-auth`。新模組把 `better-auth >=1.7.1 <2` 訂成硬 peer，
+  // 所以套件名與 better-auth 版本必須一起釘住，任一邊漂掉都會 install 失敗或裝到死套件。
+  it('scaffold 出來的專案裝的是 @nuxtjs/better-auth，不是已停更的 @onmax 版', () => {
+    const targetDir = join(TEST_DIR, 'better-auth-identity')
+    assembleProject(targetDir, resolveFeatureDependencies(['auth-better-auth']), 'ba-app')
+
+    const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf-8'))
+    expect(pkg.dependencies['@nuxtjs/better-auth']).toBe('^0.1.4')
+    expect(pkg.dependencies['@onmax/nuxt-better-auth']).toBeUndefined()
+    expect(pkg.dependencies['better-auth']).toBe('^1.7.1')
+
+    const nuxtConfig = readFileSync(join(targetDir, 'nuxt.config.ts'), 'utf-8')
+    expect(nuxtConfig).toContain('@nuxtjs/better-auth')
+    expect(nuxtConfig).not.toContain('@onmax/nuxt-better-auth')
+
+    const authConfig = readFileSync(join(targetDir, 'app', 'auth.config.ts'), 'utf-8')
+    expect(authConfig).toContain("from '@nuxtjs/better-auth/config'")
+  })
+
+  it('install-skills.sh 不再安裝上游已移除的 onmax skill', () => {
+    const targetDir = join(TEST_DIR, 'better-auth-skills')
+    assembleProject(
+      targetDir,
+      resolveFeatureDependencies(['auth-better-auth', 'vueuse']),
+      'ba-skills',
+    )
+
+    const installSkills = readFileSync(join(targetDir, 'scripts', 'install-skills.sh'), 'utf-8')
+    // onmax/nuxt-skills 已刪掉 nuxt-better-auth 與 vueuse 兩個 skill（2026-08-24 實測 404）
+    expect(installSkills).not.toContain('nuxt-better-auth')
+    expect(installSkills).not.toMatch(/onmax\/nuxt-skills@\$skill[\s\S]*?\bvueuse\b/)
+    expect(installSkills).toContain('vueuse-functions')
   })
 })
