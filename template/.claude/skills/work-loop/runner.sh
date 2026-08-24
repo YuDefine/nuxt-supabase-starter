@@ -597,6 +597,9 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
       release_runner_lock
       break
     fi
+    EXIT_FAIL_BACKOFF_SECS="${EXIT_FAIL_BACKOFF_SECS:-30}"
+    echo "   ⏳ 等 ${EXIT_FAIL_BACKOFF_SECS}s 再重試（跨過暫時性故障窗口）"
+    sleep "$EXIT_FAIL_BACKOFF_SECS"
     continue
   fi
 

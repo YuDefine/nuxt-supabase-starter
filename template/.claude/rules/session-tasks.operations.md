@@ -220,7 +220,7 @@ Hook / human review 偵測到違反時，輸出格式統一：
 ### 收工三步（越過 500k 那一級 MUST，順序不可調換）
 
 1. **先把殘工派出去**（transport 走 § Herdr session transport）。**判準是「有幾件可平行的工作」**：1 件（含多件但彼此 serial）走 `/handoff relay`，全部寫進同一份 brief 交給 successor 依序推進；N ≥ 2 件可平行走 `/handoff fanout`，各派一個 worker pane 再交棒給 successor 繼承它們。兩者本 session 都隨即收工（判準見 § 派幾個 pane —— 先判這一題）
-2. 剩下**派不出去**的才寫進 `tasks/<date>-<slug>.md`（或 `HANDOFF.md` / `docs/tech-debt.md`），且**逐條寫明它派不出去的具體外部條件**
+2. 剩下**派不出去**的才寫進 `tasks/<date>-<slug>.md`（或 `HANDOFF.md` / `docs/tech-debt.md`），且**逐條寫明它派不出去的具體外部條件**，格式走下面的 § 外部條件逐字格式
 3. 收工，收工訊息走 § 收工訊息契約
 
 本三步適用**每一個**越過 500k 的 session、**所有** consumer，且**每一項**殘工都要各自過第 1 步——
@@ -244,6 +244,26 @@ patrol 只印出「這筆該有人收」，它不是收割者。
 | --- | --- |
 | 等一個具體外部 signal | 目標目錄是**別 session 進行中**的封存產出，含 HEAD 沒有的檔，現在動就是永久遺失 |
 | 被別 session 的未 commit 檔擋住 | pre-push ratchet 對別 session 兩個未 commit `.vue` 掃出 baseline 超標，且不在本次授權 scope |
+
+#### 外部條件逐字格式（第 2 步的 REQUIRED 欄位）
+
+第 2 步登記的**每一個**未勾項，都 MUST 在自己那一行、或它底下的縮排續行，帶一行以逐字
+`派不出去：` 起頭的外部條件。**是每一條各寫一行，不是整份檔開頭寫一次**——整份檔那一次對
+「這一條為什麼不派」零訊號。
+
+```markdown
+- [ ] 把 <consumer-b> archive 的 3 個 untracked 目錄轉 tracked 後刪除
+  - 派不出去：目標目錄是別 session 進行中的封存產出，含 HEAD 沒有的檔，現在動就是永久遺失
+```
+
+`派不出去：` 後面接的 MUST 是上表兩類之一的**具體**外部條件。「需要人判斷」「要謹慎」
+「這個比較複雜」「要 attended」寫在 marker 後面**不會**讓它變成合格條件——它們是第 1 步的
+派工理由，不是第 2 步的登記理由。
+
+**為什麼要逐字 marker**：這一步是本節唯一有機械回饋的地方。`node scripts/audit-close-out-dispatch.ts`
+掃「越過 500k、已收工、0 個 dispatch record、tasks 卻有未勾項沒帶這個 marker」的 session；
+marker 是它區分「合法登記」與「該派沒派」的唯一輸入。不寫 marker 的合法登記會被報成 VIOLATION，
+而那正是本 script 存在的理由——沒有它，第 1 步被跳過時整條規約在機器層零訊號（TD-499）。
 
 「需要人判斷」「要謹慎」「這個比較複雜」「要 attended」**都不是**外部條件。講不出具體外部條件
 ＝ 派得出去。

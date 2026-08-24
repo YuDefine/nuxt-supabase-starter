@@ -7,7 +7,7 @@
  * Subcommands:
  *   add <slug>       Create worktree at ~/offline/<consumer>-wt/<slug>/
  *                    on branch session/<YYYY-MM-DD-HHMM>-<slug>; post-create
- *                    fast-forward merge origin/main so projection layers
+ *                    fast-forward merge origin/<landing-base> so projection layers
  *                    (rules/, scripts/, etc.) are current.
  *   list [--json]    Enumerate session worktrees with path, branch,
  *                    last-commit ISO timestamp, days-since-touch, merged flag.
@@ -1278,16 +1278,21 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
     stdio: 'inherit',
   })
 
-  let hasOriginMain = false
+  // Fast-forward to the remote tracking branch of the landing base (TD-592:
+  // was hardcoded to origin/main; now uses the consumer root's current branch).
+  const remoteBase = `origin/${baseRef}`
+  let hasRemoteBase = false
   try {
-    git(['rev-parse', '--verify', 'origin/main'], { cwd: wtPath })
-    hasOriginMain = true
+    git(['rev-parse', '--verify', remoteBase], { cwd: wtPath })
+    hasRemoteBase = true
   } catch {}
-  if (hasOriginMain) {
+  if (hasRemoteBase) {
     try {
-      git(['merge', '--ff-only', 'origin/main'], { cwd: wtPath, stdio: 'inherit' })
+      git(['merge', '--ff-only', remoteBase], { cwd: wtPath, stdio: 'inherit' })
     } catch {
-      console.error('warn: could not fast-forward merge origin/main; worktree may need manual sync')
+      console.error(
+        `warn: could not fast-forward merge ${remoteBase}; worktree may need manual sync`,
+      )
     }
   }
 
@@ -1707,6 +1712,26 @@ function enrichWorktree(consumerRoot, w, now = Date.now()) {
       if (taskMatch) taskSummary = taskMatch[1].trim()
     }
   } catch {}
+  // Three-layer staleness judgment (TD-563):
+  //   stale  — merged to main, OR brief status indicates done (archived/completed/done)
+  //   live   — brief status is active/in-progress AND last commit < 30min ago
+  //   unknown — everything else (ask user in attended; package in unattended)
+  const STALE_STATUSES = new Set(['archived', 'completed', 'done', 'landed', 'merged'])
+  const LIVE_STATUSES = new Set(['active', 'in-progress', 'wip', 'dispatched', 'pending'])
+  const THIRTY_MIN_MS = 30 * 60 * 1000
+
+  let staleness = 'unknown'
+  if (merged || (briefStatus && STALE_STATUSES.has(briefStatus.toLowerCase()))) {
+    staleness = 'stale'
+  } else if (
+    briefStatus &&
+    LIVE_STATUSES.has(briefStatus.toLowerCase()) &&
+    lastCommitMs &&
+    now - lastCommitMs < THIRTY_MIN_MS
+  ) {
+    staleness = 'live'
+  }
+
   return {
     path: w.path,
     branch: branchName,
@@ -1715,6 +1740,7 @@ function enrichWorktree(consumerRoot, w, now = Date.now()) {
     mergedToMain: merged,
     briefStatus,
     taskSummary,
+    staleness,
   }
 }
 
@@ -1788,6 +1814,77 @@ async function cmdPrune() {
       console.log(`Skipped ${c.path}`)
     }
   }
+}
+
+/**
+ * Reclaim dev-port slots held by stale worktrees (TD-563).
+ *
+ * Iterates dev-port holders, checks each worktree's staleness via enrichWorktree,
+ * and deletes the dev-port JSON record for stale ones. Does NOT remove the
+ * worktree directory — that's a separate cleanup step. Live holders are left
+ * alone; unknown holders are reported but not touched.
+ */
+async function cmdReclaimStale() {
+  const consumerRoot = findConsumerRoot()
+  const declared = readDeclaredDevPorts(consumerRoot)
+  if (declared.length === 0) {
+    console.log('No dev-port declarations found for this consumer.')
+    return
+  }
+
+  const holders = devPortHolders(consumerRoot)
+  if (holders.length === 0) {
+    console.log('No dev-port slots are held.')
+    return
+  }
+
+  const wts = sessionWorktrees(consumerRoot)
+  const wtBySlug = new Map(wts.map((w) => [basename(w.path), w]))
+
+  let freed = 0
+  const unknown = []
+  for (const h of holders) {
+    const w = wtBySlug.get(h.slug)
+    if (!w) {
+      // Holder has no matching worktree entry (orphan record) — reclaim
+      const recPath = join(devPortStateDir(consumerRoot), `${h.slug}.json`)
+      try {
+        unlinkSync(recPath)
+        console.log(`  freed +${h.offset}  ${h.slug}  (orphan — no matching worktree)`)
+        freed++
+      } catch {}
+      continue
+    }
+
+    const enriched = enrichWorktree(consumerRoot, w)
+    if (enriched.staleness === 'stale') {
+      const recPath = join(devPortStateDir(consumerRoot), `${h.slug}.json`)
+      try {
+        unlinkSync(recPath)
+        console.log(
+          `  freed +${h.offset}  ${h.slug}  (${enriched.mergedToMain ? 'merged' : `status: ${enriched.briefStatus}`})`,
+        )
+        freed++
+      } catch {}
+    } else if (enriched.staleness === 'live') {
+      // Active session — do not touch
+    } else {
+      unknown.push({ ...h, enriched })
+    }
+  }
+
+  if (unknown.length > 0) {
+    console.log(`\n${unknown.length} holder(s) with unknown staleness (not auto-reclaimed):`)
+    for (const u of unknown) {
+      console.log(
+        `  +${u.offset}  ${u.slug}  (status: ${u.enriched.briefStatus ?? 'none'}, ${u.enriched.daysOld ?? '?'}d old)`,
+      )
+    }
+  }
+
+  const capacity = devPortCapacity(declared)
+  const remaining = holders.length - freed
+  console.log(`\nReclaimed ${freed} slot(s). ${remaining}/${capacity} still held.`)
 }
 
 // Unmerged XY status codes from `git status --porcelain` (per git-status(1)
@@ -2350,7 +2447,7 @@ export function fmtDriftCommitMessage(slug, paths) {
 // Legacy merge-back ran `git merge --squash <branch>` at main, contaminating
 // main on conflict (recovery required `merge --abort` + stash pop dance and
 // repeatedly destabilized publish/propagate flows). Pre-sync inverts direction:
-// `git merge origin/main` inside <wtPath> isolates conflict resolution there.
+// `git merge origin/<landing-base>` inside <wtPath> isolates conflict resolution there.
 //
 // Strategy: merge (not rebase). Final merge-back is squash so wt commit-chain
 // shape is irrelevant; rebase would force per-commit replay on multi-phase wt
@@ -2369,29 +2466,38 @@ export function fmtDriftCommitMessage(slug, paths) {
 // branch to origin/main while the squash landed into a local main that was N
 // commits behind, so those N commits' files silently joined the staged scope.
 export function resolveSyncTargetRef(cwd, opts: { fetch?: boolean } = {}) {
-  let hasOriginMain = false
+  // Resolve the consumer root's current branch so we sync against the real
+  // landing target, not a hardcoded 'main'. When the consumer root is on
+  // `feat/x`, the worktree must pre-sync to `origin/feat/x` — not
+  // `origin/main` (see TD-592, pitfall-merge-back-presync-stages-origin-main-commits).
+  const consumerRoot = findConsumerRoot(cwd)
+  const landingBase = resolveLandingBase(consumerRoot)
+  const remoteRef = `origin/${landingBase}`
+
+  let hasRemote = false
   try {
-    git(['rev-parse', '--verify', 'origin/main'], { cwd })
-    hasOriginMain = true
+    git(['rev-parse', '--verify', remoteRef], { cwd })
+    hasRemote = true
   } catch {}
-  if (!hasOriginMain) return 'main'
-  if (opts.fetch === false) return 'origin/main'
+  if (!hasRemote) return landingBase
+  if (opts.fetch === false) return remoteRef
   try {
-    git(['fetch', 'origin', 'main'], { cwd, stdio: 'inherit' })
-    return 'origin/main'
+    git(['fetch', 'origin', landingBase], { cwd, stdio: 'inherit' })
+    return remoteRef
   } catch (e) {
     console.error(
-      `warn: pre-sync fetch origin main failed (${e.message ?? e}); falling back to local main`,
+      `warn: pre-sync fetch origin ${landingBase} failed (${e.message ?? e}); falling back to local ${landingBase}`,
     )
-    return 'main'
+    return landingBase
   }
 }
 
-// Commits `<cwd HEAD>` is missing relative to `ref`. Returns 0 when ref is the
-// local branch itself or the count cannot be read (fail-open on measurement —
-// the ff attempt below is what actually enforces the invariant).
+// Commits `<cwd HEAD>` is missing relative to `ref`. Returns 0 when ref is a
+// local branch (no remote info available) or the count cannot be read
+// (fail-open on measurement — the ff attempt below is what actually enforces
+// the invariant).
 function commitsBehindRef(cwd, ref) {
-  if (ref === 'main') return 0
+  if (!ref.startsWith('origin/')) return 0
   try {
     return parseInt(git(['rev-list', '--count', `HEAD..${ref}`], { cwd }), 10) || 0
   } catch {
@@ -3371,10 +3477,13 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
     baselineRefs = raw.split('\n').filter(Boolean)
   } catch {}
 
+  // landingRef is resolved first so preSyncBehind uses the same target (TD-592).
+  const landingRef = resolveSyncTargetRef(consumerRoot, { fetch: false })
+
   let preSyncBehind = 0
   if (!opts.skipPreSync) {
     try {
-      const out = git(['rev-list', '--count', `${branchName}..main`], { cwd: target.path })
+      const out = git(['rev-list', '--count', `${branchName}..${landingRef}`], { cwd: target.path })
       preSyncBehind = parseInt(out, 10) || 0
     } catch {}
   }
@@ -3383,7 +3492,6 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   // (nonzero on every healthy merge-back). This one measures local main against
   // the SAME landing ref pre-sync uses, and nonzero means the squash would stage
   // files this worktree never touched.
-  const landingRef = resolveSyncTargetRef(consumerRoot, { fetch: false })
   const mainBehindTarget = commitsBehindRef(consumerRoot, landingRef)
 
   if (opts.dryRun) {
@@ -3432,7 +3540,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
       )
     } else if (preSyncBehind > 0 && !opts.skipPreSync) {
       console.log(
-        `  Action: would merge origin/main into wt (${preSyncBehind} commit(s)), then squash + cleanup. Conflicts (if any) stay in wt.`,
+        `  Action: would merge ${landingRef} into wt (${preSyncBehind} commit(s)), then squash + cleanup. Conflicts (if any) stay in wt.`,
       )
     } else {
       console.log(`  Action: would squash + cleanup cleanly.`)
@@ -4418,6 +4526,9 @@ async function main() {
     case 'prune':
       await cmdPrune()
       return
+    case 'reclaim-stale':
+      await cmdReclaimStale()
+      return
     case 'cleanup':
       await cmdCleanup(positional[0], opts)
       return
@@ -4441,7 +4552,7 @@ async function main() {
       return
     default:
       console.error(
-        'Usage: wt-helper <add|detect-main-dirty|list|prune|cleanup|merge-back|land-pending|rescue|orphan-prune|sweep-siblings|dev> [args]',
+        'Usage: wt-helper <add|detect-main-dirty|list|prune|reclaim-stale|cleanup|merge-back|land-pending|rescue|orphan-prune|sweep-siblings|dev> [args]',
       )
       console.error('')
       console.error(
@@ -4490,6 +4601,7 @@ async function main() {
       console.error("  detect-main-dirty         Report main's dirty paths; pairs with --json.")
       console.error('  list [--json]             Enumerate session worktrees with staleness')
       console.error('  prune                     Interactively remove merged session worktrees')
+      console.error('  reclaim-stale             Free dev-port slots held by stale worktrees')
       console.error('  cleanup <slug>            Remove worktree (gated by --force +')
       console.error('                            --force-discard-unland; pre-checks both)')
       console.error('  merge-back <slug>         Atomic squash into main + cleanup; flags:')
@@ -4519,7 +4631,7 @@ async function main() {
       console.error(
         '    --noop-if-missing       silently no-op if no matching worktree (for hooks)',
       )
-      console.error('    --skip-pre-sync         skip wt-side merge of origin/main before squash')
+      console.error('    --skip-pre-sync         skip wt-side merge of landing base before squash')
       console.error(
         '                            (default: pre-sync isolates conflicts in wt, not main)',
       )

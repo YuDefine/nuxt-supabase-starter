@@ -77,8 +77,37 @@ REPO_LOCK="$LOCK_DIR/repo-$safe_key.lock"
 : >>"$REPO_LOCK" 2>/dev/null || exec "$@"
 
 exec 9>>"$REPO_LOCK"
+
+# 印 lock holder 診斷到 stderr（逾時出口用）。
+# 用法: print_holder_diag <lock_file> <context_msg>
+# NEVER 自動 kill — 低 CPU 不蘊含卡死（I/O bound 同樣低 CPU）。
+print_holder_diag() {
+  local lock_file=$1 context=$2
+  printf '\n── gate-slot diagnostic ──\n' >&2
+  printf '75 = 等不到 slot，不是 gate 失敗（inner command 從未執行）\n' >&2
+  printf 'context: %s\n' "$context" >&2
+  printf 'lock file: %s\n' "$lock_file" >&2
+  local holder_pids
+  holder_pids=$(fuser "$lock_file" 2>/dev/null) || true
+  if [ -n "$holder_pids" ]; then
+    printf 'holder process(es):\n' >&2
+    for pid in $holder_pids; do
+      printf '  pid=%s\n' "$pid" >&2
+      ps -o pid=,ppid=,etime=,time=,args= -p "$pid" 2>/dev/null | while IFS= read -r line; do
+        printf '    %s\n' "$line" >&2
+      done
+    done
+  else
+    printf 'holder: (no process found on lock — may have just released)\n' >&2
+  fi
+  printf '──────────────────────────\n' >&2
+}
+
 if [ "$mode" = wait ]; then
-  flock -w "$WAIT_TIMEOUT" 9 || exit "$BUSY"
+  if ! flock -w "$WAIT_TIMEOUT" 9; then
+    print_holder_diag "$REPO_LOCK" "repo lock wait timed out after ${WAIT_TIMEOUT}s (key=$safe_key)"
+    exit "$BUSY"
+  fi
 else
   flock -n 9 || exit "$BUSY"
 fi
@@ -105,6 +134,11 @@ if ! acquire_slot; then
   deadline=$(($(date +%s) + WAIT_TIMEOUT))
   until acquire_slot; do
     if [ "$(date +%s)" -ge "$deadline" ]; then
+      # 印所有 slot lock 的 holder 診斷
+      for si in $(seq 1 "$SLOTS"); do
+        slot_lock="$LOCK_DIR/heavy-$si.lock"
+        [ -f "$slot_lock" ] && print_holder_diag "$slot_lock" "slot $si/$SLOTS holder (slot acquire timed out after ${WAIT_TIMEOUT}s, key=$safe_key)"
+      done
       exit "$BUSY"
     fi
     sleep 2

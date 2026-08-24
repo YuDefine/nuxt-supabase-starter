@@ -157,15 +157,56 @@ Update an existing Spectra change — from a plan file or conversation context.
 
    **選項 A / B 流程**：
 
-   1. **萃取 brief**：從 Step 1~4 取得的 requirement source（plan file / conversation context）+ 既有 artifacts 現況，寫 prompt 檔到 `/tmp/<runtime>-spectra-ingest-<change-name>-prompt.md`，內容包含：
-      - change name + requirement source 全文
-      - 既有 artifacts 路徑與現況摘要
-      - Step 5 的 artifact 更新規約（Plan-to-Artifact Mapping / Context-to-Artifact Mapping / 保留 `[x]` / 保留 `[P]` / locale 規約）
-      - Step 6 的 Inline Self-Review 全部 7 項 Check（No Placeholders / Internal Consistency / Scope / Ambiguity / Preservation / Durable Handoff / Manual Review Marker Hygiene）
-      - Step 7 的 Analyze-Fix Loop（`spectra analyze` 最多 2 輪）
-      - Step 8 的 `spectra validate`
-      - 完成標準：`spectra validate` 通過 + `spectra park <change-name>`
-      - 語言遵循：artifacts 依 `spectra instructions` 的 `locale` 欄位寫；spec 一律英文
+   1. **組裝 context pack + thin draft prompt**
+
+      **Step 1a：Write context pack 到 `/tmp/spectra-ingest-<change-name>-context.md`**
+
+      ```markdown
+      # Context Pack: <change-name>
+
+      ## Change
+      - name: <change-name>
+      - type: ingest
+      - locale: <from spectra instructions>
+      - ui_scope: <true/false>
+      - backend_only: <true/false>
+
+      ## Requirement
+      <requirement source 全文（plan file content 或 conversation context）>
+
+      ## Applicable Contract Sections
+      §3, §6, §8, §9, §10
+      （動態：§4 只在 backend_only=true 時列入）
+
+      ## Existing Artifacts
+      - openspec/changes/<name>/proposal.md
+      - openspec/changes/<name>/design.md
+      - openspec/changes/<name>/tasks.md
+      - openspec/changes/<name>/specs/**
+      ```
+
+      **Step 1b：Write thin draft prompt 到 `/tmp/<runtime>-spectra-ingest-<change-name>-prompt.md`**
+
+      ```
+      請更新本 repo 已存在的 change `<change-name>` 的 Spectra artifacts。
+
+      讀取以下檔案後執行：
+      1. Context pack（change 元資料 + requirement + 適用 § 清單）：
+         /tmp/spectra-ingest-<change-name>-context.md
+      2. Artifact draft contract（共用規約彙編，只讀 context pack 列出的 §）：
+         .claude/skills/spectra-propose/references/artifact-draft-contract.md
+      3. Flow（執行 Step 5~9）：
+         .claude/skills/spectra-ingest/SKILL.md
+
+      完成標準：`spectra validate` 通過 + `spectra park <change-name>`。
+      語言遵循：artifacts 依 `spectra instructions` 的 `locale` 欄位寫；spec 一律英文。
+      ```
+
+      > **Why context pack + contract 取代 inline 規約**：原 prompt 把 Step 5 更新規約 / Step 6
+      > Self-Review 7 項 Check / Step 7 Analyze-Fix Loop / Step 8 validate 全部 inline，
+      > draft runtime 讀完後又再讀完整 SKILL.md — 同一批規則載入兩次。context pack + contract
+      > 讓 draft runtime 只讀一份共用 contract 的命中 §，cross-check 同理。
+      > 完整規約見 `artifact-draft-contract.md` §3/§6/§8/§9/§10。
 
    2. **背景啟動**（**Bash** tool 加 `run_in_background=true`）：
 
@@ -311,44 +352,12 @@ Update an existing Spectra change — from a plan file or conversation context.
 
    **Check 7: Manual Review Marker Hygiene** (clade fork — applies whenever ingest modifies `## 人工檢查` items)
 
-   `/spectra-ingest` retro-updates a change after impl / verify, which can introduce **new** `## 人工檢查` items or modify existing ones — bypassing `/spectra-propose` Step 5.5. The same hygiene rules **MUST** be enforced here. Apply Rule 1-4 mirroring `spectra-propose` Step 5.5 (Manual Review Marker Hygiene Check). Violations → main thread Edits `tasks.md` directly (do **NOT** round-trip to pi; too slow):
+   `/spectra-ingest` retro-updates a change after impl / verify, which can introduce **new** `## 人工檢查` items or modify existing ones — bypassing `/spectra-propose` Step 5.5. The same hygiene rules **MUST** be enforced here.
 
-   **Rule 1: Every item line MUST carry a leading marker**
+   依 `artifact-draft-contract.md` §3（Rules 1-6）+ §4（Backend-only）檢查。
+   Violations → main thread Edits `tasks.md` directly (do **NOT** round-trip to pi; too slow).
 
-   - Each `- [ ] #N ...` / `- [ ] #N.M ...` line **MUST** have a legal marker immediately after the id: `[review:ui]` / `[discuss]` / `[verify:e2e]` / `[verify:api]` / `[verify:ui]` / verify multi-marker `[verify:<a>+<b>]` or `[verify:<a>+<b>+<c>]`
-   - Verify multi-marker channels limited to `e2e` / `api` / `ui`, canonical order `e2e → api → ui`
-   - Multi-marker **MUST NOT** mix with `[review:ui]` / `[discuss]`; `[verify:api+review:ui]` / `[verify:api+discuss]` are illegal
-   - Missing marker → classify per Rule 2 / 3 / 4 content and add explicit marker; **DO NOT** rely on Default Kind Derivation Rule (fallback is for legacy in-flight items only, and silently falls back to the most strict `review:ui` — the root cause of repeated `[review:ui]` mis-tagging)
-   - Ingest-modified items **MUST** carry explicit marker even if the original (legacy) item did not. Ingest is the boundary where Default Kind Derivation grandfathering ends.
-
-   **Rule 2: Evidence-collection items → `[discuss]` or `[verify:api]`**
-
-   Items containing `Apply migration` / `SSH` / `docker exec` / `psql` / `\d <table>` / `SELECT ... FROM` / `curl` / `Trigger ... cron` / `SET session_replication_role` / 「合理性檢查」/「商業判斷」:
-
-   - SSH / psql / `\d` / `SELECT` / controlled drift / migration existence / 商業判斷 → `[discuss]`
-   - `curl` / HTTP endpoint round-trip reproducible by apply main thread → `[verify:api]`
-   - Misclassified `[review:ui]` / `[verify:ui]` / deprecated `[verify:auto]` → change to `[discuss]` or `[verify:api]`
-
-   **Rule 3: Real user round-trip items → channel per evidence shape**
-
-   - persistence / reload / full journey → `[verify:e2e]`
-   - HTTP status / backend contract → `[verify:api]`
-   - final-state visual only → `[verify:ui]`
-   - mutation response + visual state → `[verify:api+ui]`
-   - journey + extra screenshot evidence → `[verify:e2e+ui]`
-   - real-person-required (Rule 4 whitelist) → `[review:ui]`
-
-   **Rule 4: `[review:ui]` whitelist**
-
-   `[review:ui]` only when description contains one of:
-
-   - email inbox / webhook (agent inbox unreachable)
-   - 「視覺主觀」/「美感」/「a11y 主觀判斷」
-   - 「實體裝置」/「真機」/「手機」/「平板」/「kiosk QR」/「印表機」/「條碼槍」
-   - 「跨機器」/「跨 session」/ production-authorized operation
-   - 「電話」/「SMS」 or spec-external non-UI environment
-
-   Otherwise → explicit `verify:*` per Rule 3. Misclassified items flagged and rewritten by main thread.
+   **Ingest-specific addendum**: Ingest-modified items **MUST** carry explicit marker even if the original (legacy) item did not. Ingest is the boundary where Default Kind Derivation grandfathering ends.
 
    **Then re-run the hook**:
 

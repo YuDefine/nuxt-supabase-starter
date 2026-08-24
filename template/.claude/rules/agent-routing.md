@@ -189,6 +189,14 @@ redaction（`vendor/signals/redact.mjs`）只作用在 signal payload、**dispat
 | 〔`bugfix-evidence`〕 **Bug-fix evidence 段**（error log capture / stack trace 解析 / repro script 撰寫執行 / hypothesis 驗證迴圈） | **Pi `--model sol --effort high` via 泛用 dispatcher**（強化：非 Debug evidence 段，而是整個 bug-fix session 的 investigation 段） | investigation / evidence / repro 是機械段；root cause 推斷與修法設計留主線。**MUST** 在 bug-fix session 開工時就判：可分離的 evidence 段派 Pi，不可分離的留主線並在 session 結尾回報未派的理由。 |
 | 〔`publish-prescan`〕 **clade publish/propagate pre-scan**（publish 前 dirty file 分組判斷：讀 `git status` + `git diff` 各 file 內容 + 辨識 logical group） | **Pi `--model grok-xai --effort low` via 泛用 dispatcher**（`xai/grok-4.6`）。exit 4 → `--model grok-cursor` 同 effort 重派一次，主線消費分組建議後 selective commit | commit grouping 要推斷修改意圖、耦合、依賴順序與可獨立回退性——**讀取命令少不等於決策機械化**；可派的只有 pre-scan 的 reading 段。轉 grok 取證見 rationale § 群 2。 |
 
+### Plan mode 期間的派工邊界
+
+Plan mode 的契約是「不對 repo 做任何改動」。Pi dispatch 的 ledger（`~/.pi/agent/clade/dispatch-ledger.jsonl`）與 prompt 持久化（`~/.pi/agent/clade/dispatch-prompts/`）寫在 **homedir**，不是 repo working tree，**不違反** plan mode 的 no-mutation 契約。
+
+- **Plan mode 期間可派的 Routing Table 列**：`read-heavy-scan`、`mechanical-fanout`（read-only profile）、`exploration-prescan`、`handoff-scan`、`task-planning-prescan`、`publish-prescan`、`screenshot-match-analysis`——這些列的工作不寫 working tree。
+- **Plan mode 期間不可派的列**：`spectra-phase-implementation`、`spectra-mechanical-substep`、`commit-0c-fix-verify`（含 escalate）、`debug-evidence`、`bugfix-evidence`——這些列的產物是 repo 內的 code change，plan mode 下不應執行。
+- **NEVER** 因為「plan mode 不該有副作用」就把 read-only 的派工也退回主線自己做——那把 routing table 標明應派工的量體全堆回 Opus 主線，正是 TD-507 要修的行為。
+
 ## Claude 委派的 model 檔位（決定層）
 
 **Cursor runtime 先停：本節整節不適用。** 命中 § Cursor runtime 主線 residency 的 session **NEVER** 走到本節挑 `Agent` / `Task` 的 Claude／Fable／Haiku 檔位。

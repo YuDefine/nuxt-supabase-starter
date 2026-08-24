@@ -91,7 +91,20 @@ checker **MUST** 輸出 PASS 或 FAIL，四條全滿足才 PASS：
 - **PASS** → 繼續（commit / handoff / next step）
 - **FAIL（有 blocker finding）** → **MUST** 修完每一筆 blocker，修完**重派新 checker**（再次 fresh context）複跑；**NEVER** 帶 open blocker finding commit
 - **checker 誤解 spec**（主線判定 finding 站不住）→ **NEVER** 靜默 dismiss；**MUST** 在回報寫一行「finding X 不採納，理由：<spec 依據>」留審計軌跡
-- **迴圈上限**：checker → fix → re-check 最多 3 輪；仍有 blocker 走 [[verify-gate-chain]] 的 `escalation_action`（default HANDOFF）。**禁止無上限 re-check 迴圈**
+- **迴圈上限**：checker → fix → re-check 最多 3 個 **fix 輪**（該輪有實際修改）；用盡仍有 blocker 走 [[verify-gate-chain]] 的 `escalation_action`（default HANDOFF）。**禁止無上限 re-check 迴圈**。**輪數用盡 NEVER 等於可以落地**——終止條件見下節
+
+## 終止條件是「最後一輪 0 修改」，不是輪數用盡（MUST）
+
+**每一次**修改後那一版 MUST 再經一顆 fresh checker——包含**最後一次**修改。迴圈只能終止於兩種狀態：
+
+1. fresh checker 對一版**本輪 0 修改**的內容給出 PASS → 落地
+2. verify-only 輪仍有 blocker → 走 `escalation_action`，該版本 **NEVER** 落地
+
+fix 輪上限用盡時 **MUST 追加一輪 verify-only checker**，讀修完 blocker 後的完整 diff。該輪結果只有 PASS 或 escalate，**NEVER 在 verify-only 輪再改任何檔**（再改就是又造出一版沒被檢查的內容）。verify-only 輪**不計入** fix 輪上限。
+
+**NEVER 把剛修完 blocker 的那一版直接 commit / publish / handoff**，即使那筆修復很小、即使 gate 全綠、即使輪數已用盡。
+
+**只調高 fix 輪上限 NEVER 算解決**：3 改 5 只是把「最後一次修改沒被檢查」平移到新的最後一輪。
 
 ## Red Flags
 
@@ -101,6 +114,8 @@ checker **MUST** 輸出 PASS 或 FAIL，四條全滿足才 PASS：
 - 「migration 我自己跑過了沒問題」（跑得起來 ≠ 既有查詢仍對，那正是擴散面）
 - 「把我的實作理由也貼給 checker，它比較好判斷」（附敘事 = fresh context 失效，等於沒派）
 - 「checker 說 FAIL，但我覺得它誤解 spec，直接 commit」（NEVER 靜默 dismiss，MUST 留理由）
+- 「blocker 都修完了，最後這筆很小，直接 commit」（修完 blocker 的那一版從未被 fresh context 讀過；per § 終止條件）
+- 「3 輪已經用盡，不能再派了」（上限管的是 fix 輪；verify-only 輪不計入且是 MUST）
 
 **過度派**——同樣是違反本規約，發現自己在想以下任一句就 **STOP**，自己做完：
 

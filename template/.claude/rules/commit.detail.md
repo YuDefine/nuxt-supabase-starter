@@ -327,6 +327,7 @@ user 不成立**，結果是 stash 單調遞增、owner 資訊隨時間流失，
 - **Header 的 emoji 與 type 是一對一綁定**，逐字只有這 12 組：`✨ feat` / `🐛 fix` / `🧹 chore` / `🔨 refactor` / `🧪 test` / `🎨 style` / `📝 docs` / `📦 build` / `👷 ci` / `⏪ revert` / `🚀 deploy` / `🎉 init`。**NEVER 憑語意挑 emoji** —— `🛡️ feat`（安全性改動）、`♻️ refactor`、`⚡ perf` 這種看起來對得上的組合全部不在清單裡。走 `/commit` 時對照表在 SKILL.md Step 3，走 ad-hoc `git commit --only` 時**沒有任何東西會在你打字的當下提醒你**，所以清單在這裡再寫一次
 - **不確定就先驗，NEVER 拿 commit 當測試**：`echo '<你要用的 header>' | npx commitlint`。理由不是「省一次重打」——header 解析失敗時 commitlint 報的是 **`subject may not be empty`**（per [[pitfall-commitlint-emoji-type-mismatch-reports-subject-empty]]），訊息指向 subject 而真因在 emoji，照著訊息改會愈改愈遠；而 `--only` 的路徑清單長時，重打整條指令本身就是漏掉某個 path 的入口
 - **所有 uncommitted 變更都必須入庫**，**NEVER** 以「不在本次範圍」「影響不大」為由跳過任何檔案
+- **純機械正名（識別字替換）MUST 獨立 commit，NEVER 與語意編輯混合**——正名 sweep 時看到措辭問題「順手修掉」會讓整個 commit 失去 evidence-inert 豁免資格：驗證器（`audit-tech-debt-hygiene.ts`）逐 token 比對，宣告的替換以外只要有一個 token 不同就不算 inert，該 commit 觸及的每一條 TD 都照常進覆核佇列。語意編輯另開一筆 commit 即可，兩筆可以在同一次 `/commit` 分組裡
 - **`.gitignore` 變更**：只允許保留 Clade 管理的 installation artifact / runtime state ignore 條目（例如 `.claude/.commit.lock`、`codex/`）；其他變更**MUST** `git stash push -- .gitignore` 並寫入 `HANDOFF.md`（**NEVER** `git checkout .gitignore` 直接還原）
 - **`.env` / 敏感檔案**：警告使用者但仍由使用者決定是否 commit，**NEVER** 自行跳過
 - **修正所有發現的問題（含既有 codebase 問題）**：review / lint / typecheck / test / codex review 發現的問題都**MUST**修正，**包含不在本次 diff scope 內的既有 codebase 問題**。codex review 掃到的 finding 不論是本次改動引入還是既有存在，處置路徑一律：

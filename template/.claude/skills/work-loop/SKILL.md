@@ -130,7 +130,7 @@ console.log(Array.isArray(s.awaiting)?s.awaiting.length:"STATE_CORRUPT")
   | --- | --- |
   | candidate list 還有**未 triage** 或**已判自主但未執行**的 item | **NEVER 排 wakeup。立刻接著跑下一輪**（同一個 turn 內連續跑，不睡） |
   | in-flight ledger > 0，且扇出組還有空位 | **NEVER 排 wakeup。** 補 dispatch，或做主線即時組的工作 |
-  | in-flight ledger > 0，扇出組已滿、主線即時組已空 | 排 wakeup 當 notification 的安全網——interval 取 60–180s，但**帶 `--min-wakeup-seconds <n>` 時取 n**（下限壓過本列的建議值） |
+  | in-flight ledger > 0，扇出組已滿、主線即時組已空 | 排 wakeup 當 notification 未送達的安全網——interval 取 1200–1800s（`<task-notification>` 是主要喚醒信號，不需短 interval 輪詢），但**帶 `--min-wakeup-seconds <n>` 時取 n**（下限壓過本列的建議值） |
   | 尚未命中 Step 6、所有當前 item 都不可推進（completed / packaged / escalated / legal-skip），**且** in-flight = 0 | 排 wakeup，長 interval（1200–1800s heartbeat）——這是**唯一**可以睡長的狀態 |
   | Step 6 停止條件成立 | `ScheduleWakeup({stop: true})`，**不得**再排 heartbeat |
 
@@ -788,7 +788,7 @@ attended mode 且真的選不出來 → 依 Step 0 Iron Law **MUST `AskUserQuest
 
 - **Lifecycle 兩階段綁定（MUST）**：dispatch 前先把 intent 寫入 state：`inFlight={agent,item,dispatchedAt,taskId:null,owner,deadline,lifecycle:"dispatching"}`。`Bash(run_in_background=true)` 回傳後，**同一 assistant turn** 原子綁定真實 `taskId`、確認 owner / deadline、改 `lifecycle:"pending"`，再 arm `ASYNC_KEEPALIVE_CONTROL`。dispatch 失敗則移除 intent或標 `lifecycle:"dispatch-failed"`，**NEVER** 留下假 ownership。無 task id 的 Agent / Monitor / Workflow 保留 `taskId:null`，但 MUST 寫可由 `TaskStop(owner)` 操作的 owner ref 與 deadline，並 arm 逐字填 `task=none` 的 `ASYNC_KEEPALIVE_CONTROL`。Pi pre-scan owner 固定 `pi-watch`。
 - **Per-item task 追蹤（MUST）**：每條 dispatch item MUST 先 `TaskCreate`（subject 用 `<item>: <狀態> → <動作>`），dispatch 時標 `in_progress`，完成/skip/blocked 立即標 `completed`。**NEVER** 只建概括性收割 task——user 看 task list 判斷 loop 在幹嘛，概括 task 提供零資訊
-- **Dev server 協調**：evidence collection 需要 dev server 時**主線自行協調**（清 stale session → 起新 dev server），**NEVER** 把 port 被佔當 user 協調事項跳過。三層判定（archived → stale → active claim < 30min 才是真 conflict）
+- **Dev server 協調**：evidence collection 需要 dev server 時**主線自行協調**，**NEVER** 把 port 被佔當 user 協調事項跳過。池滿時先跑 `wt-helper reclaim-stale`（三層機械判定見 [[worktree-default]] §6：stale 自動釋放 dev-port record → live 不動 → unknown 才問 user / packaging），reclaim 後仍滿才進人工分流
 - **Workflow model 感知**（archive 後 push 前 MUST）：讀 `~/offline/clade/registry/consumers.json` 的 `workflow_model`——`trunk-based` 直接 push；`pr-merge-based` **NEVER 直推 main**，改 push feature branch + `gh pr create --fill`；查不到當 `pr-merge-based` 保守處理
 - **Commit 紀律**：每個 item 獨立 commit，走 `git commit --only -- <paths>`
 - **Error handling**：
