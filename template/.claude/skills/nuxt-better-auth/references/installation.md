@@ -3,23 +3,23 @@
 ## Install
 
 ```bash
-pnpm add @onmax/nuxt-better-auth better-auth
+pnpm add @nuxtjs/better-auth better-auth
 ```
 
 **Version Requirements:**
 
-- `@onmax/nuxt-better-auth`: `^0.0.2-alpha.19` (alpha)
-- `better-auth`: `^1.0.0` (module tested with `1.4.7`)
+- `@nuxtjs/better-auth`: `^0.1.4`
+- `better-auth`: `>=1.7.1 <2`（模組的硬 peer，降版裝不起來）
 - `@nuxthub/core`: `^0.10.5+` (optional, for database - requires 0.10.5+ for `hub:db` aliases)
 
 ## Module Setup
 
-The module auto-scaffolds `server/auth.config.ts` and `app/auth.config.ts` files during installation (since v0.0.2-alpha.15).
+The module auto-scaffolds `server/auth.config.ts` and `app/auth.config.ts` files during installation.
 
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
-  modules: ['@onmax/nuxt-better-auth'],
+  modules: ['@nuxtjs/better-auth'],
   auth: {
     serverConfig: 'server/auth.config',  // default
     clientConfig: 'app/auth.config',     // default
@@ -103,7 +103,7 @@ export default createAppAuthClient({
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
-  modules: ['@nuxthub/core', '@onmax/nuxt-better-auth'],
+  modules: ['@nuxthub/core', '@nuxtjs/better-auth'],
   hub: { database: true },
   auth: {
     secondaryStorage: true  // Enable KV for session caching
@@ -130,12 +130,12 @@ See [references/client-only.md](client-only.md) for full setup.
 
 ## i18n Integration
 
-For internationalization support with `@nuxtjs/i18n` (since v0.0.2-alpha.15):
+For internationalization support with `@nuxtjs/i18n`:
 
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
-  modules: ['@nuxtjs/i18n', '@onmax/nuxt-better-auth'],
+  modules: ['@nuxtjs/i18n', '@nuxtjs/better-auth'],
   i18n: {
     // Your i18n config
   }

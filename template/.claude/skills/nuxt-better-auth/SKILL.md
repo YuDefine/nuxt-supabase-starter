@@ -1,6 +1,6 @@
 ---
 name: nuxt-better-auth
-description: Use when implementing auth in Nuxt apps with @onmax/nuxt-better-auth - provides useUserSession composable, server auth helpers, route protection, and Better Auth plugins integration.
+description: Use when implementing auth in Nuxt apps with @nuxtjs/better-auth - provides useUserSession composable, server auth helpers, route protection, and Better Auth plugins integration.
 license: MIT
 ---
 
@@ -8,11 +8,15 @@ license: MIT
 
 Authentication module for Nuxt 4+ built on [Better Auth](https://www.better-auth.com/). Provides composables, server utilities, and route protection.
 
-> **Alpha Status**: This module is currently in alpha (v0.0.2-alpha.19) and not recommended for production use. APIs may change.
+> **Package rename**: this module moved to the official `nuxt-modules` org.
+> The package is `@nuxtjs/better-auth` (>=0.1.4); the old `@onmax/nuxt-better-auth`
+> is frozen at 0.1.2. Docs: https://better-auth.nuxt.dev
+>
+> `better-auth` itself is a hard peer at `>=1.7.1 <2`.
 
 ## When to Use
 
-- Installing/configuring `@onmax/nuxt-better-auth`
+- Installing/configuring `@nuxtjs/better-auth`
 - Implementing login/signup/signout flows
 - Protecting routes (client and server)
 - Accessing user session in API routes
@@ -56,7 +60,10 @@ Authentication module for Nuxt 4+ built on [Better Auth](https://www.better-auth
 
 | Concept                | Description                                                     |
 | ---------------------- | --------------------------------------------------------------- |
-| `useUserSession()`     | Client composable - user, session, loggedIn, signIn/Out methods |
+| `useUserSession()`     | Client composable - user, session, loggedIn, ready, signOut      |
+| `useSignIn(method)`    | Sign-in action handle - execute / status / data / error         |
+| `useSignUp(method)`    | Sign-up action handle - 同上                                     |
+| `useAuthClient()`      | 取 Better Auth client（可能是 null）                             |
 | `requireUserSession()` | Server helper - throws 401/403 if not authenticated             |
 | `auth` route mode      | `'user'`, `'guest'`, `{ user: {...} }`, or `false`              |
 | `serverAuth()`         | Get Better Auth instance in server routes                       |
@@ -64,9 +71,13 @@ Authentication module for Nuxt 4+ built on [Better Auth](https://www.better-auth
 ## Quick Reference
 
 ```ts
-// Client: useUserSession()
-const { user, loggedIn, signIn, signOut } = useUserSession()
-await signIn.email({ email, password }, { onSuccess: () => navigateTo('/') })
+// Client: session state
+const { user, loggedIn, signOut } = useUserSession()
+
+// Client: sign in（0.1.x 起是獨立 action handle，execute() NEVER throw）
+const signIn = useSignIn('email')
+await signIn.execute({ email, password })
+if (!signIn.error.value) await navigateTo('/')
 ```
 
 ```ts
@@ -85,7 +96,7 @@ routeRules: {
 
 ## Resources
 
-- [Module Docs](https://github.com/onmax/nuxt-better-auth)
+- [Module Docs](https://better-auth.nuxt.dev)
 - [Better Auth Docs](https://www.better-auth.com/)
 
 ---

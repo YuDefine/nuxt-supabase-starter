@@ -7,7 +7,7 @@
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
-  modules: ['@nuxthub/core', '@onmax/nuxt-better-auth'],
+  modules: ['@nuxthub/core', '@nuxtjs/better-auth'],
   hub: { database: true },
   auth: {
     secondaryStorage: true,  // Optional: KV for session caching

@@ -197,7 +197,7 @@ export default defineEventHandler(async (event) => {
 
   // TODO(project): replace `serverAuth(event)` with the project's actual
   // server-side better-auth handle (the helper exposed by the chosen
-  // better-auth integration, e.g. `@onmax/nuxt-better-auth`).
+  // better-auth integration, e.g. `@nuxtjs/better-auth`).
   const auth = serverAuth(event)
   const signInResponse = await auth.api
     .signInEmail({

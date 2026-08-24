@@ -1,24 +1,25 @@
 <script setup lang="ts">
   definePageMeta({ layout: 'auth', auth: false })
 
-  const { signIn } = useUserSession()
+  // `@nuxtjs/better-auth` 0.1.x 起 signIn/signUp 不再掛在 `useUserSession()` 上，
+  // 改成各自的 action handle：`execute()` NEVER throw，成敗看 `status` / `error`。
+  const signIn = useSignIn('email')
   const { parseAuthError } = useAuthError()
   const email = ref('')
   const password = ref('')
-  const loading = ref(false)
   const errorMessage = ref('')
+  const loading = computed(() => signIn.status.value === 'pending')
 
   async function handleLogin() {
-    loading.value = true
     errorMessage.value = ''
-    try {
-      await signIn.email({ email: email.value, password: password.value })
-      await navigateTo('/')
-    } catch (e: unknown) {
-      errorMessage.value = parseAuthError(e)
-    } finally {
-      loading.value = false
+    await signIn.execute({ email: email.value, password: password.value })
+
+    if (signIn.error.value) {
+      errorMessage.value = parseAuthError(signIn.error.value)
+      return
     }
+
+    await navigateTo('/')
   }
 </script>
 

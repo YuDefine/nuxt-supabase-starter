@@ -1,25 +1,25 @@
 <script setup lang="ts">
   definePageMeta({ layout: 'auth', auth: false })
 
-  const { signUp } = useUserSession()
+  // 同 login.vue：0.1.x 的 signUp 是獨立 action handle，錯誤不走 throw。
+  const signUp = useSignUp('email')
   const { parseAuthError } = useAuthError()
   const name = ref('')
   const email = ref('')
   const password = ref('')
-  const loading = ref(false)
   const errorMessage = ref('')
+  const loading = computed(() => signUp.status.value === 'pending')
 
   async function handleRegister() {
-    loading.value = true
     errorMessage.value = ''
-    try {
-      await signUp.email({ name: name.value, email: email.value, password: password.value })
-      await navigateTo('/')
-    } catch (e: unknown) {
-      errorMessage.value = parseAuthError(e)
-    } finally {
-      loading.value = false
+    await signUp.execute({ name: name.value, email: email.value, password: password.value })
+
+    if (signUp.error.value) {
+      errorMessage.value = parseAuthError(signUp.error.value)
+      return
     }
+
+    await navigateTo('/')
   }
 </script>
 

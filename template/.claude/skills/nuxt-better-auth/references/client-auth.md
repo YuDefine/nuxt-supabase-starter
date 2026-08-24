@@ -1,8 +1,12 @@
 # Client-Side Authentication
 
+> 以下對照 `@nuxtjs/better-auth` **0.1.4** 的實際 d.ts。0.1.x 把 sign-in / sign-up /
+> auth client 從 `useUserSession()` 拆成獨立 composable —— 舊寫法
+> （`const { signIn, signUp, client } = useUserSession()`）在 0.1.x 會拿到 undefined。
+
 ## useUserSession()
 
-Main composable for auth state and methods.
+Session state and session-level actions.
 
 ```ts
 const {
@@ -10,48 +14,74 @@ const {
   session,        // Ref<AuthSession | null>
   loggedIn,       // ComputedRef<boolean>
   ready,          // ComputedRef<boolean> - session fetch complete
-  client,         // Better Auth client (client-side only)
-  signIn,         // Proxy to client.signIn
-  signUp,         // Proxy to client.signUp
-  signOut,        // Sign out and clear session
-  fetchSession,   // Manually refresh session
-  updateUser      // Optimistic local user update
+  signOut,        // (options?: { onSuccess?: () => void | Promise<void> }) => Promise<void>
+  waitForSession, // () => Promise<void>
+  fetchSession,   // (options?: { headers?, force? }) => Promise<void>
+  updateUser      // (updates: Partial<AuthUser>) => Promise<void>
 } = useUserSession()
 ```
 
-## Sign In
+**NOT on this composable（0.1.x 起）**：`client`、`signIn`、`signUp`。見下面各節。
+
+## Sign In / Sign Up — action handles
+
+`useSignIn(method)` / `useSignUp(method)` 各回傳一個 action handle：
 
 ```ts
-// Email/password
-await signIn.email({
-  email: 'user@example.com',
-  password: 'password123'
-}, {
-  onSuccess: () => navigateTo('/dashboard')
-})
+interface UserAuthActionHandle<TArgs, TResult> {
+  execute: (...args: TArgs) => Promise<void>   // NEVER throw
+  status: Ref<'idle' | 'pending' | 'success' | 'error'>
+  data: Ref<TResult | null>
+  error: Ref<AuthActionError | null>           // { message, code?, status?, raw }
+}
+```
 
+`execute()` **不會 throw**，也不回傳結果 —— 成敗一律看 `status` / `error`。
+把它包在 try/catch 裡等於永遠不會進 catch。
+
+```ts
+// Email/password 登入
+const signIn = useSignIn('email')
+
+async function login() {
+  await signIn.execute({ email: email.value, password: password.value })
+  if (signIn.error.value) return showError(signIn.error.value.message)
+  await navigateTo('/dashboard')
+}
+
+// loading 狀態直接讀 status，不必自己維護 ref
+const loading = computed(() => signIn.status.value === 'pending')
+```
+
+```ts
 // OAuth
-await signIn.social({ provider: 'github' })
+const signInSocial = useSignIn('social')
+await signInSocial.execute({ provider: 'github', callbackURL: '/dashboard' })
 ```
-
-## Sign Up
 
 ```ts
-await signUp.email({
-  email: 'user@example.com',
-  password: 'password123',
-  name: 'John Doe'
-}, {
-  onSuccess: () => navigateTo('/welcome')
-})
+// 註冊
+const signUp = useSignUp('email')
+await signUp.execute({ email: email.value, password: password.value, name: name.value })
+if (signUp.error.value) { /* ... */ }
 ```
+
+`social` 的 `provider` 是 typed —— 只吃 `AuthSocialProviderRegistry` 註冊過的 id。
+
+## Auth client
+
+```ts
+const authClient = useAuthClient()   // AppAuthClient | null
+```
+
+SSR 或 clientOnly 尚未就緒時是 `null`，呼叫前 MUST 判。
 
 ## Sign Out
 
 ```ts
 await signOut()
-// or with redirect
-await signOut({ redirect: '/login' })
+// 帶 callback（0.1.x 的 options 只有 onSuccess，NEVER 是 `{ redirect }`）
+await signOut({ onSuccess: () => navigateTo('/login') })
 ```
 
 ## Check Auth State
@@ -82,11 +112,8 @@ function getSafeRedirect() {
   return redirect
 }
 
-await signIn.email({
-  email, password
-}, {
-  onSuccess: () => navigateTo(getSafeRedirect())
-})
+await signIn.execute({ email, password })
+if (!signIn.error.value) await navigateTo(getSafeRedirect())
 ```
 
 ## Wait for Session
@@ -112,7 +139,8 @@ await fetchSession({ force: true })
 Additional session management via Better Auth client:
 
 ```ts
-const { client } = useUserSession()
+const client = useAuthClient()
+if (!client) throw new Error('auth client not ready')
 
 // List all active sessions for current user
 const sessions = await client.listSessions()

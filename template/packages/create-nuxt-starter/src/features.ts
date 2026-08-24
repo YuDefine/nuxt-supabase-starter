@@ -31,10 +31,11 @@ export const featureModules: FeatureModule[] = [
     incompatible: ['auth-nuxt-utils'],
     dependencies: ['database'],
     packages: {
-      'better-auth': '^1.5.5',
-      '@onmax/nuxt-better-auth': '0.0.2-alpha.15',
+      // @nuxtjs/better-auth 的硬 peer 是 `better-auth >=1.7.1 <2`，降版會裝不起來。
+      'better-auth': '^1.7.1',
+      '@nuxtjs/better-auth': '^0.1.4',
     },
-    nuxtModules: ['@onmax/nuxt-better-auth'],
+    nuxtModules: ['@nuxtjs/better-auth'],
     envVars: {
       BETTER_AUTH_SECRET: '# 必須至少 32 字元的隨機字串（openssl rand -base64 32）',
       NUXT_SESSION_PASSWORD: '# 必須至少 32 字元的隨機字串（openssl rand -base64 32）',

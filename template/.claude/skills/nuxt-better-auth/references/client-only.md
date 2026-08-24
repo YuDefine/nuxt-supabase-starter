@@ -8,7 +8,7 @@ When Better Auth runs on a separate backend (microservices, standalone server), 
 
 ```ts
 export default defineNuxtConfig({
-  modules: ['@onmax/nuxt-better-auth'],
+  modules: ['@nuxtjs/better-auth'],
   auth: {
     clientOnly: true,
   },
@@ -73,7 +73,7 @@ Session fetched client-side only:
 - **Microservices**: Auth service is separate deployment
 - **Shared auth**: Multiple frontends share one auth backend
 - **Existing backend**: Already have Better Auth server running elsewhere
-- **Convex backend**: Use Convex HTTP adapter for serverless auth (since v0.0.2-alpha.16)
+- **Convex backend**: Use Convex HTTP adapter for serverless auth
 
 ## Architecture Example
 
