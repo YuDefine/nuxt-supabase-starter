@@ -79,6 +79,10 @@ git diff main...HEAD
 - [ ] 優先使用 `interface` 而非 `type`
 - [ ] 無 console.log 或 debugger 殘留
 - [ ] 無未使用的 imports 或變數
+- [ ] 名字不對型別說謊（`List` / `Map` / `Count` / `isX` / `hasX` 與值的型別一致）
+- [ ] 無 magic number 與單字母名（一行 lambda 參數除外）
+- [ ] 函式內分段註解（`// Validation` 等）= extract-method 警報
+- [ ] 無 commented-out code、無檔頭 changelog / banner 分隔線
 
 #### 🧪 測試 (Testing)
 

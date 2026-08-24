@@ -73,7 +73,7 @@ curl -s --max-time 60 http://127.0.0.1:5174/api/changes \
 
 | 兩條指令的結果 | 交付什麼 |
 | --- | --- |
-| 第 1 條 exit 0，且第 2 條印出了自己那條 `changeKey` | canonical URL = `https://review-gui.<maintainer-domain>` ＋ 該條的 `reviewPath`（Cloudflare Access 保護；user 在本機時 host 換 `http://127.0.0.1:5174`）。**這是常態，不需要補任何東西** |
+| 第 1 條 exit 0，且第 2 條印出了自己那條 `changeKey` | 給人的 URL = `https://review-gui.<maintainer-domain>` ＋ 該條的 `reviewPath`（= scan 的 `reviewUrl` / stderr `review_url=`）。**NEVER** 換成 `127.0.0.1` / Tailscale IPv4 / `*.ts.net`。loopback 只出現在第 2 條 curl。**這是常態** |
 | 第 1 條 exit 0，但第 2 條沒印出自己那條 | 改 `registry/consumers.json` → 跑 `node scripts/bootstrap-consumers-local.ts` 重生 `consumers.local`（該檔 gitignored，手改不留存）→ `sudo systemctl restart review-gui` → 重跑第 2 條確認它出現 |
 | 第 1 條 exit ≠ 0 | 自己用 `bash ~/offline/clade/ops/review-gui-service.sh install` 把服務帶起來（該子命令自帶 `systemctl restart` 與健康等待），再回到上面兩列 |
 
@@ -82,6 +82,53 @@ curl -s --max-time 60 http://127.0.0.1:5174/api/changes \
 **NEVER 從 consumer 自己的 config 推論入口不存在。** `nuxt.config.ts` 沒掛 tunnel plugin、`consumer-meta.json` 的 `deploy.prodUrl` 是 null——這兩件事跟 review-gui 有沒有在跑**無關**：它是跨 consumer 共用服務，consumer 清單來自 clade 的 `consumers.local`，不由任何 consumer 的 config 描述。這類 negative search 不成立為 absence 證據（[[agent-self-verification]] MUST 11）。
 
 **NEVER 交付 `cd <path> && <cmd>`。** 逐字實錄：「`cd ~/offline/<consumer-j>-wt/kiosk-google-allowlist && pnpm review:ui`」——那是指令不是位址（要 user 自己執行才生得出畫面）、`127.0.0.1` 只在跑 dev server 的那台機器上有意義、且綁在會過期的 agent lease 上。同理 **NEVER 交付 `https://review-gui.<tailnet>.ts.net/`**：pairing token 已停用（`ops/review-gui-service.sh` 的 `pairing_retired()`），那條會停在配對畫面。
+
+**Iron Law：給人的驗收入口永遠是 scan 的 `reviewUrl`（`https://review-gui.<maintainer-domain>` + `reviewPath`）。違反字面就是違反精神。**
+
+| 藉口 | 現實 |
+| --- | --- |
+| 「user 在本機」 | iPad / 外出裝置上的 `127.0.0.1` 是裝置自己，不是桌機 |
+| 「scan 印的是 127.0.0.1 所以照抄」 | scan 的 `reviewUrl` 是 HTTPS；loopback 在 `probeUrl` |
+| 「Tailscale DNS 也是 HTTPS」 | `review-gui.<tailnet>.ts.net` pairing 已停用，會停在配對畫面 |
+
+**Red Flags**：正要把 `127.0.0.1:5174/review`、Tailscale IPv4、或 `*.ts.net` 貼進給人看的訊息。
+
+### 同一條 Iron Law 管 item 敘述**內文**的 URL
+
+上面管的是 review-gui 入口本身。**`## 人工檢查` item 敘述裡指向被驗 app 的那條 URL 同樣適用**——
+`[review:ui]` item 是寫給**人**照著做的，敘述裡的 `http://localhost:<port>/...` 在他手上那台
+iPad／手機上指向裝置自己，跟交付一條 loopback 入口是同一個錯誤，只是換了個載體。
+
+| item channel | 敘述裡的 URL |
+| --- | --- |
+| `[review:ui]`（人親自跑） | **MUST** 走下面那道階梯的 HTTPS origin，第 1 列優先 |
+| `[verify:ui]` / `[verify:e2e]` / `[verify:api]`（agent 跑） | `http://localhost:<devPort>/...` 合法——執行者就在這台機器上 |
+
+`[review:ui]` 的 host 階梯（與 [[manual-review.data-readiness]] § 通則 § 1 同一道，兩份 MUST 不得分岔）：
+
+1. 該 consumer 對應 `.env*` 有 `TUNNEL_HOSTNAME=<host>` → `https://<host>/<path>`。tunnel 本來就是真 HTTPS 公開 origin，優先用它
+2. 沒設 `TUNNEL_HOSTNAME` → review-gui preview proxy：`https://review-gui.<maintainer-domain>/__preview/<devPort>/<path>`（`<devPort>` 取自 `registry/consumers.json` 的 `dev_ports.nuxt`）
+3. `http://localhost:<port>` **只給 agent 自己探測**，**NEVER** 出現在給人的 item 敘述裡
+
+**NEVER** 因為「本 consumer 沒有 tunnel」就退回第 3 列——那正是階梯第 2 列存在的理由。
+
+preview proxy 路徑由 `previewPathFor(devPort, path)` 決定（`vendor/scripts/review-gui.preview-proxy.ts`，
+prefix `/__preview`）；`verify-url-check.ts` 的 `parseUrl` 會剝掉 `/__preview/<port>` 再比對 route tree，
+所以寫 canonical HTTPS **不會**觸發 `VERIFY_URL_ROUTE_MISSING`。
+
+**NEVER 把「沒有公開 origin」寫進 item annotation 當成退回 user 的待辦**，除非已實測過下面三條全落空：
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' --max-time 5  http://127.0.0.1:<devPort>/
+curl -s -o /dev/null -w '%{http_code}\n' --max-time 8  https://review-gui.<maintainer-domain>/
+curl -s -o /dev/null -w '%{http_code}\n' --max-time 5  http://127.0.0.1:5174/__preview/<devPort>/
+```
+
+第 2 條回 302 到 `cloudflareaccess.com` = tunnel 活著（per `review-gui.preview-origin.ts` 的
+`probePublicPreviewOrigin`），**不是**失敗。consumer 的 `.env` 沒有 `TUNNEL_HOSTNAME`、
+`deploy.prodUrl` 為 null **都不構成證據**——那描述的是 consumer 自己的部署，跟 review-gui 的
+公開 origin 無關。逐字反開脫：「本 consumer 沒有設 tunnel，所以 iPad 連不到，實機檢查前要先給
+那台 iPad 一個連得到的 origin」——那條 origin 早就在了，三條 curl 一跑就知道。
 
 ### 能力真的缺席時怎麼講（照抄）
 

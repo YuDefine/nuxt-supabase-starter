@@ -21,6 +21,13 @@ import { parseArgs } from 'node:util'
 export function parseUrl(url) {
   let raw = String(url ?? '').trim()
   raw = raw.replace(/^https?:\/\/[^/]+/, '')
+  // 給人的驗收 URL 一律 canonical HTTPS，經 review-gui preview proxy 轉發：
+  // /__preview/<devPort><consumer path>。route tree 要比對的是 consumer path，
+  // 帶著 prefix 比一定 miss（VERIFY_URL_ROUTE_MISSING 誤報）。port 段限定數字，
+  // consumer 自己真有 /__preview/... route 時不誤剝。
+  // 只認 / # 與字串結尾：port 後直接接 ? 的形狀 proxy 服務不到（parsePreviewPath 的
+  // (/.*)? 比對含 query 的 req.url 會 null），不剝 prefix 讓它照常報 route missing。
+  raw = raw.replace(/^\/__preview\/\d+(?=[/#]|$)/, '') || '/'
   const [beforeHash] = raw.split('#')
   const [pathPart, queryPart = ''] = beforeHash.split('?')
   const queryParams = []

@@ -182,9 +182,10 @@ cross-consumer 集中模式，只從 clade home 起，該 cwd 約束對 agent �
 
 | 要 user 看什麼 | URL |
 | --- | --- |
-| 一條 change | `http://127.0.0.1:5174/review/<consumer-id>:<change-name>` |
-| change 裡的某一條 item | `http://127.0.0.1:5174/review/<consumer-id>:<change-name>?item=<encoded-itemId>` |
-| user 不在本機（手機 / 外出） | 同上兩式，host 換成 `https://review-gui.<maintainer-domain>` |
+| 一條 change | `https://review-gui.<maintainer-domain>/review/<consumer-id>:<change-name>` |
+| change 裡的某一條 item | `https://review-gui.<maintainer-domain>/review/<consumer-id>:<change-name>?item=<encoded-itemId>` |
+
+`http://127.0.0.1:5174` 只准 agent 探測（`curl /api/changes`）。人開的入口永遠是上一表，**NEVER** 因「user 在本機」改 host。
 
 - **`<consumer-id>` MUST 帶**：從 `~/offline/clade/registry/consumers.json` 抓。缺 prefix 會 fallback
   到 clade mainEntry → API 404（per [[pitfall-review-gui-cross-consumer-url-missing-prefix]]）
@@ -201,6 +202,7 @@ cross-consumer 集中模式，只從 clade home 起，該 cwd 約束對 agent �
 - ❌ 給裸 `/review`——inbox 常態橫跨多個 consumer 的數十條 item，要 user 自己找是哪一條。
   要 user 看 N 條 change 就給 N 條 deep-link
 - ❌ 給根路徑 `http://127.0.0.1:5174/`——它 302 到 `/review`，落點仍是裸清單
+- ❌ 給 `http://127.0.0.1:5174/review/...`、Tailscale IPv4、或 `https://review-gui.<tailnet>.ts.net/` 當人開的入口
 - ❌ 叫 user 跑 `pnpm review` 或任何啟動指令——服務健全時 `--reuse-probe` 會探到既有 instance
   而不報錯（2026-08-23 實測 exit 0），所以這不是會爆的那種錯：它只是要 user 多跑一次沒有作用的指令，
   然後 reuse banner 給的是裸 `/review`，把你原本該給的 deep-link 換成一份要 user 自己找的清單；

@@ -1,5 +1,5 @@
 ---
-description: 寫 code 當下的 TypeScript 語法限制（type stripping 擋不掉的三條）、副檔名與 import specifier 規則、用 vp 命令驗證；工具鏈設定治理在 code-style.toolchain
+description: 寫 code 當下的 TypeScript 語法限制（type stripping 擋不掉的三條）、副檔名與 import specifier 規則、命名與註解（機器擋不住的那一半）、用 vp 命令驗證；工具鏈設定治理在 code-style.toolchain
 paths: ['**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts}']
 ---
 <!--
@@ -107,7 +107,7 @@ try { src = readFileSync(routeFile, 'utf8') } catch (err) {
 }
 ```
 
-**三態 NEVER 塌成布林**：「沒有」與「問不出來」是兩件事。探測類函式回 `none`（確認沒有）/ `unknown`（有但問不出身分）/ `known`，`unknown` **MUST** 照樣出警示——**「不知道」不等於「沒問題」**。
+**三態 NEVER 塌成布林**：「沒有」與「問不出來」是兩件事。探測類函式回 `none`（確認沒有）/ `unknown`（有但問不出身分）/ `known`，`unknown` **MUST** 照樣出警示——**「不知道」不等於「沒問題」**。本節已覆蓋「空值同時代表兩件事」；**NEVER** 另立一條「禁止回 null」——三態才是形狀。
 
 **全域掃描的前置條件讀不到 MUST `throw` + 非 0 exit，NEVER 回空結果**：`consumers.local` 之類的清單來源讀不到時回 `total 0`，跟「掃過了、fleet 乾淨」在輸出上一模一樣。這條對**新寫的** script 同樣適用——2026-08-02 當天寫的新 audit script 自己就犯了一次。
 
@@ -195,4 +195,93 @@ async function writeThenExit(payload: string, code: number): Promise<never> {
 繞過：
   - 若有不可避免的 peer dependency 需求，加 <bypass marker> 並在
     docs/decisions/YYYY-MM-DD-<topic>.md 記錄理由
+```
+
+## 命名：機器擋不住的那一半
+
+oxlint 判不了 `accountList` 到底是不是 List。本節純 review 層，無機械訊號；消費端是
+`code-review` agent 的程式碼品質 checklist。
+
+### 名字要能回答「為什麼」
+
+一個名字若需要旁邊那行註解才看得懂，MUST 改名到那行註解變成冗詞。**每一個**需要「翻譯」
+才能讀的名字都算——不是只處理「看起來最怪的那幾個」。
+
+```ts
+const d = 86400 // 一天的秒數     // ❌ 註解在做名字該做的事
+const SECONDS_PER_DAY = 86400    // ✅
+```
+
+### NEVER 讓名字對型別說謊
+
+名字帶 `List` / `Map` / `Count` / `isX` / `hasX` 時，值 MUST 真的是那個型別。型別系統擋得住
+`accountList: Account`，擋不住 `accountList: AccountBag`。
+
+```ts
+const accountList: AccountBag = bag  // ❌ 名字說 List，值是 Bag
+const accounts: AccountBag = bag     // ✅
+const isReady = 0                    // ❌ isX 不是 boolean
+```
+
+### 可搜尋 > 簡短
+
+magic number 與單字母名 MUST 換成可 grep 的具名常數。一行 lambda 的參數（`.map(x => x.id)`）除外。
+
+```ts
+if (status === 3) wait(5000)   // ❌ 3 與 5000 搜不到語意
+const STATUS_PENDING = 3
+const RETRY_DELAY_MS = 5000
+```
+
+### NEVER 用這三種名字
+
+- Hungarian 前綴（`strName` / `iCount` / `bReady`）——型別系統已經在講型別
+- 不可發音的縮寫（`genymdhms` / `btnMgr`）
+- 只差 `Info` / `Data` / `2` 的一對名字（`User` vs `UserInfo`、`load` vs `load2`）
+
+判準：caller 不必打開實作就能選對哪一個。選不出來 = 這組名字還沒取完。
+
+## 註解：預設不寫，寫了就要對
+
+本節判準面由人遵守。closing-brace tag（`} // end`）與檔頭 changelog / `@author` 由
+`vendor/review-rules/patterns.json` 機械掃（warning）。banner 分隔線（`// ====` /
+`// ----`）留在 review 層：單行 `[-=]{4,}` 會把 fleet 既有章節分隔線整批當違規，誤判率
+不可接受，不進機械。消費端還有 `code-review` agent 的程式碼品質 checklist。
+
+複跑（在任一 consumer 根目錄；排除 `vendor/`）：
+
+```bash
+git ls-files '*.ts' | grep -v '^vendor/' | xargs -r grep -E '^[[:space:]]*//[[:space:]]*[-=]{4,}[[:space:]]*$' | wc -l
+# 2026-08-25 快照：<consumer-b> 1036 / <consumer-a> 119 / clade 54 / starter 6
+```
+
+
+### 註解預設不寫
+
+想寫註解解釋一段複雜布林邏輯時，MUST 先抽成具名 local variable 或 helper。抽出後還需要註解
+才看得懂的，才寫。
+
+```ts
+// ❌ 註解在翻譯布林
+// 員工在職且通過考核，或主管特批
+if ((e.status === 'active' && e.score >= 80) || e.override) { ... }
+
+// ✅ 名字就是註解
+const eligible = e.status === 'active' && e.score >= PASSING_SCORE
+if (eligible || e.override) { ... }
+```
+
+### 寫了就 MUST 100% 對
+
+註解描述的行為與 code 不符時 MUST 當場刪掉，NEVER 留著。錯的註解比沒有註解更糟。
+
+### 值得寫的三種
+
+1. **非直覺 workaround 的成因與移除條件**。MUST 帶 `@followup[TD-xxx]`——接
+   [[follow-up-register]] 既有 marker，NEVER 自創一套 issue ID 慣例。
+2. **public API 的 param / return / throws**（給不讀實作的 caller）
+3. **測試裡對慣例值（`-1` / `0` / `1`）的語意翻譯**
+
+```ts
+// @followup[TD-412] stripe SDK 在空字串 idempotencyKey 會 400，空值改傳 undefined。升級後刪。
 ```

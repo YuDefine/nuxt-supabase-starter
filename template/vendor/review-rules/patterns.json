@@ -217,6 +217,24 @@
       "excludePattern": "colada-signal-ok",
       "message": "Pinia Colada 的取消是無條件的——每次 fetch() 砍前一個 pending、最後一個 dep 移除進 gc 排程時也砍。但 query function 沒接住 signal 就沒有東西可砍，切 tab / 離開頁面時瀏覽器仍會把整個 response body 下載完，取消等於空包彈。",
       "fix": "把 query 改成 query: ({ signal }) => $fetch(url, { signal })（nuxt-data-perf HR-6）。共用 client 的 onRequest interceptor NEVER 覆寫已存在的 options.signal，需要自己的 controller 時用 AbortSignal.any([options.signal, mine]) 合併。範本：vendor/snippets/nuxt-data-perf/colada-query-signal.ts。確有理由不接 signal 的個案在該行加 colada-signal-ok 標記豁免。"
+    },
+    {
+      "id": "closing-brace-tag",
+      "section": 11,
+      "severity": "warning",
+      "fileGlob": "**/*.ts",
+      "pattern": "\\}\\s*//\\s*[Ee]nd(\\s+[Oo]f)?\\b",
+      "message": "} // end 這類 closing-brace tag 是編輯器摺疊還沒出現時的遺物。函式 / 區塊過長到需要標結尾 = 該抽函式，不是該加註解。",
+      "fix": "刪掉 } 後面的 // end … 註解。若沒有它就對不到結尾，把區塊抽成具名函式。"
+    },
+    {
+      "id": "file-header-changelog",
+      "section": 11,
+      "severity": "warning",
+      "fileGlob": "**/*.ts",
+      "pattern": "^\\s*(//|\\*)\\s*(@author|Modified by|Change[ -]?log|Created by)\\b",
+      "message": "檔頭 @author / Modified by / Change log 區塊與 git history 重複，而且會過期。作者與變更紀錄以 git 為準。",
+      "fix": "刪掉檔頭 changelog / @author 區塊。workaround 成因改寫成帶 @followup[TD-xxx] 的一行註解，見 code-style.md § 註解。"
     }
   ],
   "semantic": [

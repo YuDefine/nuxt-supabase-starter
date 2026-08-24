@@ -88,6 +88,7 @@ Local edits will be reverted by the next sync.
 1. 進入人工檢查階段（implementation tasks 完成、剩 `## 人工檢查` 區塊）時，**第一動作是 auto-triage**（per [[review-gui-surface]] MUST 9），不是直接引導使用者跑 `pnpm review:ui`
 2. 推進完畢後 **MUST** 跑 `node ~/offline/clade/vendor/scripts/check-review-readiness.ts --repo . --change <change-name>` 確認 bucket；**exit 0 才可引導 user 到 review-gui**
 3. **NEVER** 自判 bucket、**NEVER** 跳過 script、**NEVER** 在 exit ≠ 0 時引導 user 到 review-gui —— Claude 自判已多次證明不可靠
+4. **給人的 URL = scan 的 `reviewUrl`（永遠 `https://review-gui.<maintainer-domain>` + `reviewPath`）**。違反字面就是違反精神。`127.0.0.1` / Tailscale IPv4 / `*.ts.net` 只准 agent 探測。交付前 MUST 讀 [[proactive-skills.manual-review-entry]] § 交付入口前置查詢
 
 Auto-triage 的三類 pending item 路由、`[discuss]` item 的歸屬、review-gui deep-link 格式與 fallback 模式見 [[proactive-skills.manual-review-entry]]（path-scoped：碰 `openspec/changes/**` 時載入）。
 

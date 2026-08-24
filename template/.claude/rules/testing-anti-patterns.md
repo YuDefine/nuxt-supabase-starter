@@ -1,5 +1,5 @@
 ---
-description: Testing anti-patterns to avoid — mock 濫用、test-only production methods、不完整 mock、E2E fixture 寫死絕對日期
+description: Testing anti-patterns to avoid — mock 濫用、test-only production methods、不完整 mock、E2E fixture 寫死絕對日期、測試碼品質低於生產碼、測試結構契約
 paths:
   [
     'test/**/*.ts',
@@ -488,6 +488,39 @@ property-based testing、不需跑 N 輪迴圈 —— 累積狀態是**資料**�
 - 斷言的是**算式原文**（`expect(body).toContain('v_available := …')`）而不是算式的**結果** ——
   見下方 § 對設定檔原文的斷言，標的是行為本身
 
+## Anti-Pattern 8: 測試碼品質低於生產碼
+
+**The violation:**
+
+測試裡複製生產碼不願意寫的捷徑——單字母名、magic number、一條測試塞三個概念、fixture 直接
+new 出底層 SDK client。一開始綠，三個月後沒人敢改，然後被 `.skip`，最後被刪。
+
+**Why this is wrong:**
+
+- 髒測試會先變成維護負擔、再被 skip、最後被刪
+- 測試被刪之後，生產碼失去唯一的安全網
+- 「測試碼比較短、可以隨便寫」把安全網的承載力寫進例外條款
+
+**The fix:**
+
+測試碼遵守與生產碼同一套命名 / 結構契約（見下方 § 測試結構契約）。測試變髒的當下 MUST 先整理
+再加下一條，NEVER 用「先讓它綠」把髒寫進去。
+
+### Gate Function
+
+```
+BEFORE 宣告一條測試寫完:
+  Ask: "六個月後，失敗訊息能讓一個沒寫過這條的人指出壞掉的是哪一個能力嗎？"
+
+  IF no:
+    STOP - 這條測試還沒寫完。拆概念、換名字、或抽 domain helper。
+
+  Ask: "我會不會因為它太難改而 skip 它？"
+
+  IF yes:
+    STOP - 先讓它變好改，再讓它綠。
+```
+
 ## When Mocks Become Too Complex
 
 **Warning signs:**
@@ -501,6 +534,12 @@ property-based testing、不需跑 N 輪迴圈 —— 累積狀態是**資料**�
 
 ## TDD Prevents These Anti-Patterns
 
+**TDD 三法則**（寫任何生產碼之前，**每一條**都適用，不是只處理「看起來比較重要的那個模組」）：
+
+1. **先有失敗測試才寫生產碼**——沒有紅燈就沒有下一步
+2. **測試只寫到剛好失敗**（含編譯失敗）——不要一次把整個 spec 寫完再實作
+3. **生產碼只寫到剛好通過**——不要順便把「下次會用到」的分支寫進去
+
 **Why TDD helps:**
 
 1. **Write test first** → Forces you to think about what you're actually testing
@@ -509,6 +548,33 @@ property-based testing、不需跑 N 輪迴圈 —— 累積狀態是**資料**�
 4. **Real dependencies** → You see what the test actually needs before mocking
 
 **If you're testing mock behavior, you violated TDD** - you added mocks without watching test fail against real code first.
+
+## 測試結構契約
+
+失敗時能不能立刻指出壞掉的是哪一個能力——本節三條都在服務這個問題。本節純 review 層，
+無機械訊號。
+
+### Fast / Isolated / Repeatable / Self-validating / Timely
+
+**每一條**測試 MUST 同時滿足：
+
+| | 意思 | 可觀察判準 |
+| --- | --- | --- |
+| Fast | 幾秒內跑完 | 診斷過程會跑幾十次；慢的抽去 integration / e2e |
+| Isolated | 不依賴執行順序、不共享可變狀態 | 單獨跑與整包跑結果相同 |
+| Repeatable | 任何環境、任何時間點結果相同 | 見下方 E2E fixture 時間錨點；無網路、無鐘點、無亂數未 seed |
+| Self-validating | 失敗 = 非 0 exit，不靠人看 log | 沒有「跑完自己看輸出對不對」 |
+| Timely | 與生產碼同時寫 | 見上方 TDD 三法則 |
+
+### 一個測試只驗一個概念
+
+`it('creates user, sends mail, and updates audit log')` 失敗時看不出壞的是哪一件。MUST 拆成三條。
+共用的 setup 抽 helper，不要靠把三件事塞進同一條來「少寫 setup」。
+
+### Build-Operate-Check
+
+每條測試 MUST 看得出三段：準備資料 → 執行被測動作 → 斷言。低階 fixture（直接組 SDK client、
+手寫 SQL row）MUST 抽成 domain helper（`givenPendingOrder()`），讓 Build 段讀起來是領域語言。
 
 ## Quick Reference
 
@@ -521,6 +587,9 @@ property-based testing、不需跑 N 輪迴圈 —— 累積狀態是**資料**�
 | Tests as afterthought           | TDD - tests first                             |
 | Boundary values not tested      | Enumerate null/empty/zero/max+1 boundaries; trace actual client payload |
 | Accumulated invariant not pinned | 先把「歷史聚合量的上界」寫進 spec，再用帶已累積 history rows 的 static fixture 釘住 |
+| 測試碼品質低於生產碼            | 測試遵守同一套命名／結構；髒了先整理再加下一條 |
+| 一條測試塞多個概念              | 拆成一概念一條；失敗訊息要指得出能力 |
+| 測試看不出 Build-Operate-Check  | 三段寫清楚；低階 fixture 抽成 domain helper |
 | Over-complex mocks              | Consider integration tests                    |
 
 ## Red Flags

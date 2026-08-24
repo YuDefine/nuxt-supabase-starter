@@ -260,3 +260,20 @@ Nuxt 官方立場：**Avoid delayed hydration for critical, above-the-fold conte
 | 取消被上報成 error 或被靜默吞掉 | `captureException(err)` 不分流；或 `if (isAbort) return` 什麼都不留 | `err.name === 'AbortError'` 分流 ＋ 留計數 / debug log（SR-9） |
 
 判斷依據：Colada 的 abort 是無條件的（每次 `fetch()` ＋ 最後一個 dep 移除時各一處），signal 沒貫通到 `$fetch` 就整條打空。**NEVER** 因為「已經用 Colada」或「已經是預設 `dedupe: 'cancel'`」就判定頻寬已省。
+
+## 註解機械層（brace tag / 檔頭 changelog）
+
+> enforcement: mechanical(closing-brace-tag, file-header-changelog)
+
+機械層掃 `.ts`（warning，不擋 commit）：`} // end` 與檔頭 `@author` / `Modified by` /
+`Change log`。banner 分隔線（`// ====` / `// ----`）**不進機械**——誤判率與複跑指令見
+[[code-style]] § 註解，改由 review checklist 接。`.vue` `<script>` 與「註解何時該寫」同樣走
+`code-review` agent 程式碼品質 checklist。判準全文見 [[code-style]] § 註解 與
+[[coupling-cohesion]] § Review 層 checklist。
+
+Reviewer 補判斷機械層看不到的：
+
+- banner 分隔線（`// ====` / `// ----`）——把被切開的區塊抽成具名函式
+- commented-out code（通用正則誤判率太高，不進 patterns.json）
+- 註解與 code 不符——錯的註解 MUST 當場刪
+- workaround 註解缺 `@followup[TD-xxx]`

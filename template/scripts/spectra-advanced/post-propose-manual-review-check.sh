@@ -243,7 +243,17 @@ run_tunnel_check() {
     fi
   done
   if [ -z "$host" ]; then
-    # No tunnel configured — suppress hit. The author legitimately needs localhost.
+    # v1.8.0: no tunnel is NOT a licence for localhost on a [review:ui] item — that
+    # item is executed by a **human**, whose phone / iPad resolves `localhost` to
+    # itself. The ladder's rung 2 (review-gui preview proxy) covers exactly this
+    # case, so only [verify:*]-only items get suppressed here.
+    case "$line" in
+      *'[review:ui]'*)
+        printf '[tunnel-check] 本 consumer 的 .env* 沒有 TUNNEL_HOSTNAME → 走階梯第 2 列：改寫為 `https://review-gui.<maintainer-domain>/__preview/<devPort>/<path>`（<devPort> 取 registry/consumers.json 的 dev_ports.nuxt，保留原 path + query string）'
+        return 0
+        ;;
+    esac
+    # [verify:*]-only item — the executor is this machine, localhost is legitimate.
     return 1
   fi
   # Strip absolute path prefix from source_env for readability.
