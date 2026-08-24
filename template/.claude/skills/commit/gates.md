@@ -819,7 +819,7 @@ exit 2 在 grok 第一手 → 走升級列；exit 2 在 sol 升級列 → 失敗
 
 1. diff 觸及 `docs/**` 本身
 2. diff 觸及 `rules/core/**` / `rules/modules/**` / `vendor/snippets/**`（標準層有變 → docs 可能需同步）
-3. diff 觸及 `scripts/*-audit.mjs`（audit signal 變更 → `docs/rule-enforcement-matrix.md` 或 `docs/dev-guide.md` 可能需更新）
+3. diff 觸及 `scripts/*-audit.mjs`（audit signal 變更 → `registry/audits.json` 的 `cadence` / `consumers` 或 `docs/dev-guide.md` 可能需更新）
 4. diff 觸及 `[packages/<pkg>/]{server/api,server/utils,server/routes,app/components,app/pages,composables}/**` 或 `[packages/<pkg>/]nuxt.config.ts`（業務碼 / 框架設定有變 → consumer docs/ 可能需對齊）
 5. diff 含 bug fix（commit message 含 `fix` type）→ pitfall 覆蓋檢查
 

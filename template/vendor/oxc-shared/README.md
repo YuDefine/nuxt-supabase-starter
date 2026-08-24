@@ -6,7 +6,7 @@ baseline is one edit + `propagate`, not five hand-syncs.
 
 ## When to edit
 
-- **Edit `preset.mjs` in clade** when a baseline rule needs adjusting across
+- **Edit `preset.ts` in clade** when a baseline rule needs adjusting across
   every consumer (e.g. oxlint patch upgrade flipped a default).
 - **Do not edit the projected copy** in any consumer's `vendor/oxc-shared/` —
   it is overwritten on next `propagate`.
@@ -26,7 +26,7 @@ export default defineConfig({
     rules: {
       ...lintBase.rules,
       // business overrides only — anything that belongs in the baseline
-      // should be added to preset.mjs instead.
+      // should be added to preset.ts instead.
       'unicorn/no-thenable': 'off', // supabase PostgREST mock builder chain
     },
     ignorePatterns: [
@@ -61,7 +61,7 @@ export default defineConfig({
 | common ignore prefixes (`node_modules/`, `.nuxt/`, `.output/`, `.claude/skills/`, etc.) | |
 
 If you find yourself adding the same override to every consumer, **promote it
-to `preset.mjs`** rather than letting it duplicate.
+to `preset.ts`** rather than letting it duplicate.
 
 ## Why not LOCKED project the whole `vite.config.ts`?
 

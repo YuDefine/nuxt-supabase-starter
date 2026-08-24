@@ -169,7 +169,7 @@ Depth 表量**裝了什麼**，`evlog map` 量**每個 entry point 用了沒有*
 ### MUST
 
 - **每一個**新增或修改的 entry point（`server/{api,routes,middleware,tasks}/`、pages、Next route handler）都 MUST 通過 map 的全部 check。**不是**「entry point 應該要有 log」——是本次 diff 動到的每一個都要滿分
-- `evlog.map.json` MUST track 進 git，且 MUST 與 code 在同一個 commit 內更新（`npx evlog map` 重新產生，**NEVER** 手改數字）。它是**產生物**：已排除在 formatter 之外（`vendor/oxc-shared/preset.mjs`），**NEVER** 把它加回任何 format run
+- `evlog.map.json` MUST track 進 git，且 MUST 與 code 在同一個 commit 內更新（`npx evlog map` 重新產生，**NEVER** 手改數字）。它是**產生物**：已排除在 formatter 之外（`vendor/oxc-shared/preset.ts`），**NEVER** 把它加回任何 format run
 - 查看報告 MUST 帶 `--no-write`。**NEVER** 用不帶 flag 的 `evlog map --all` / `evlog map <file>` 當 read-only 指令 —— 它們會改寫 tracked 檔
 - 無法插樁的 entry point MUST 留 `// evlog-map-disable-next-line <check> — <理由>`，理由 MUST 寫「為什麼這個 entry point 不可插樁」。收斂到 strict 之後 **零豁免**——strict 判定拒絕任何 `suppressedChecks > 0`
 - catalog 的 `why` MUST 寫**技術根因**，`fix` MUST 寫**呼叫端能執行的動作**。**NEVER** 把 `why` 寫成 message 的複述（「文件查詢在後端失敗」）或把 `fix` 寫成泛化的「稍後重試」——那是用文案換分數，而分數本來就不檢查 catalog 內容

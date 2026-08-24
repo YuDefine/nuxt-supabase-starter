@@ -1,5 +1,5 @@
 ---
-description: Commit 全文規約（gate 清單、Single Session Lock、WIP 處置決策樹、main worktree 預設位置、ad-hoc `git commit --only` 紀律與 Verify / Recovery、路徑白名單、trunk hard gate、Stash 自動處置 gate、分組與訊息規範）；always-load 的薄 pointer 在 [[commit]]，觸發時機是「下任何 git commit / git add / git stash / /commit 之前」，由 [[commit]] 的 MUST-Read 指針叫醒
+description: Commit 全文規約（gate 清單、Single Session Lock、WIP 處置決策樹、main worktree 預設位置、ad-hoc `git commit --only` 紀律與 Verify / Recovery、路徑白名單、trunk hard gate、Stash 自動處置 gate、分組與訊息規範、Tag 位置 release hard gate）；always-load 的薄 pointer 在 [[commit]]，觸發時機是「下任何 git commit / git add / git stash / git tag / git push --tags / /commit 之前」，由 [[commit]] 的 MUST-Read 指針叫醒
 paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**', '.clade/work-loop/**']
 ---
 <!--
@@ -334,6 +334,47 @@ user 不成立**，結果是 stash 單調遞增、owner 資訊隨時間流失，
   - **不可立即修**（架構級、跨多檔、需要更多 context）→ **MUST** 登記到 `docs/tech-debt.md` 開 TD-NNN，**NEVER** 靜默跳過
   - **NEVER** 以「既有問題」「不在本次 scope」「建議性質」「影響不大」為由跳過任何 finding — 跳過等於讓已知問題長期留存
   - **例外**：修法會動到別 session in-flight WIP（典型：`HANDOFF.md`、別 session 的 `tasks/<...>.md`）時，**MUST** 走 `scope-discipline.md`「Rule 衝突解法」具體分支模板（A. 馬上修續 flow / B. 登 TD 中止 flow）由 user 拍板，**NEVER** 自行二選一
+
+## Tag 位置（release hard gate）
+
+**每一個** release tag 都 MUST 打在與 `origin/<default branch>` 同步的 commit 上——不是只有正式版、
+不是只有想起來的那次。tag-triggered workflow 檢出的是 **tag 那棵樹**，不是 default branch。
+
+打 tag 前的正確動作序列（三步，缺一不可）：
+
+```bash
+git fetch origin main && git merge --ff-only origin/main   # 1. 先同步，不是先確認
+git rev-list --count HEAD..origin/main                     # 2. 必須回 0
+git tag v<x.y.z> && git push origin v<x.y.z>               # 3. 才打、才推
+```
+
+第 2 步回非 0 就是**還沒到能打 tag 的狀態**——`git tag` 不會警告、`git push` 不會警告，
+唯一的回饋是後來 CI 那份長得像回歸的紅。
+
+### 機械 gate 與它的邊界
+
+`vendor/scripts/pre-push/checks/tag-position.sh` 在 pre-push 階段擋下落後的 tag（push 不含 tag
+時零成本 no-op）。它**只在 consumer 的 `.husky/pre-push` 已接線時生效**，且 `--no-verify` 可繞過——
+所以上面那三步是規約，gate 是兜底，**NEVER 反過來**。
+
+`CLADE_ALLOW_STALE_TAG=1` 的唯一合法用途：**刻意**在舊 commit 上打 hotfix release tag，且已知
+該 tag 那棵樹不含 main 後續改動。**NEVER** 用它讓一個「不知道為什麼被擋」的 push 過關——
+那個「不知道為什麼」就是這條 gate 唯一要抓的東西。
+
+### CI 紅在 tag-triggered run 時，第一件事
+
+**MUST** 先排除 tag 位置，再看任何一條 test：
+
+```bash
+git fetch origin main --tags && git rev-list --count <tag>..origin/main
+```
+
+**NEVER 用「CI 會抓到」跳過打 tag 前的同步**——CI 抓到了，抓的是**那棵舊樹**上的真實失敗：
+具名 test、具體行號、可重現。與真實回歸完全同形，所以正確的反射（去查那幾條 test）方向是錯的，
+而且愈查愈確信。（2026-08-23 <consumer-b> `v1.269.1`，tag 落後 22 個 commit，4 個 test file 紅；
+同一棵樹的 `v1.269.3` 全綠。）
+
+修法與完整成因：[[pitfall-tag-cut-from-stale-commit]]。
 
 ## 搭配
 

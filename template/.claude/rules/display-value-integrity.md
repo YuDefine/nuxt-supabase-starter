@@ -1,0 +1,116 @@
+---
+description: 顯示值完整性——統計 / metric / aggregate 顯示給使用者的數字必須等於它宣稱的東西
+paths: ['server/**/*.ts', 'packages/*/server/**/*.ts', 'app/composables/**/*.ts', 'packages/*/app/composables/**/*.ts']
+---
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/core/display-value-integrity.md
+Edit at: $CLADE_HOME
+Local edits will be reverted by the next sync.
+-->
+
+
+# Display Value Integrity
+
+使用者讀到一個數字時會對它形成一個 mental model（「這是本月新增的有效訂單數」）。本規約管的是那個 mental model 與實際計算式之間的落差。
+
+這族失敗**不會 throw、不進 error log、test 全綠**——數字長得像個合理的數字，只有讀它的人會發現不對，而且通常是在拿它做完決策之後。所以它不能靠 runtime 訊號接住，只能在寫 query 的當下逐條檢查。
+
+本規約對**每一個**產生使用者可見數字的 query / composable / handler 生效，不是只有 dashboard 那幾支；一個 API 回傳的欄位最後被畫成數字，它就在範圍內。以下五條彼此獨立，命中哪條套哪條。
+
+## 一個 metric 一個計算來源（MUST）
+
+**Predicate**：同一支 RPC / 同一個計算函式的回傳值被 ≥2 個使用者可見欄位讀取。
+
+兩個 metric 的**業務定義**不同（排除集不同、時間窗不同、狀態集不同）時，**NEVER** 共用同一段計算。共用之前 **MUST** 把兩者的定義各寫成一句話，**逐字相同**才可以共用——「差不多都是算有效筆數」不算相同。
+
+違反時的失敗形狀是延遲的：共用當下兩個數字都對，直到有人為了修 A 改了那段計算，B 在完全沒被碰到的情況下開始給錯值，而改 A 的人沒有任何理由去看 B。
+
+```ts
+// ❌ 一支 rpc 餵兩個語意不同的欄位
+const { data } = await supabase.rpc('get_order_stats')
+const activeCount = data.total      // 「進行中訂單」
+const monthlyCount = data.total     // 「本月訂單」— 定義不同卻同源
+
+// ✅ 各自定義、各自查
+const activeCount = await countOrders({ status: 'active' })
+const monthlyCount = await countOrders({ createdAfter: monthStart })
+```
+
+## Aggregate MUST 顯式列出排除集（MUST）
+
+**Predicate**：資料表上存在任何「保留紀錄但業務上已終止」的狀態（退款、取消、作廢、停權、soft-delete、逾期失效）。
+
+命中時，**每一個** count / sum / avg / 清單 query 都 **MUST** 帶對應 filter，並且在程式碼上**看得出來它排除了什麼**。**NEVER** 依賴「這張表預設不會有那種 row」——那句話在寫的當下是真的，在加了退款功能的那天起就不是了，而合計只會虛胖不會報錯。
+
+```ts
+// ❌ 裸查，讀者無從得知它包不包含已取消的
+const { count } = await supabase.from('orders').select('*', { count: 'exact', head: true })
+
+// ✅ 排除集寫在 query 上
+const { count } = await supabase
+  .from('orders')
+  .select('*', { count: 'exact', head: true })
+  .eq('status', 'active')
+  .is('voided_at', null)
+```
+
+排除集**不只**是 soft-delete。soft-delete 通常已被 ORM / RLS 統一處理，真正會漏的是**業務語意上的終止**——那些 row 的 `deleted_at` 是 null，它們確實存在、確實有效，只是不該被算進這個數字。
+
+## 混單位欄位 MUST 有同表 discriminator（MUST）
+
+**Predicate**：同一個 numeric 欄位承載 ≥2 種單位、幣別、或計價方式（現金 vs 等值點數、不同幣別的金額、不同計量單位的數量）。
+
+命中時 **MUST** 在**同一張表**加 discriminator 欄位（`unit` / `currency` / `kind`），且**每一個** sum / avg / 排序 / 比大小 **MUST** 先依 discriminator 分組。
+
+**NEVER** 用「join 另一張表的 type 欄位可以推出來」代替本表 discriminator——顯示端手上的是這一筆 row，推導鏈上任何一環沒 join 到，那筆數字就會被冠上錯的單位符號送出去。**NEVER** 對混單位欄位做全域 sum 再冠上單一符號，即使目前資料裡只有一種單位。
+
+## 可被使用者改變的數字 MUST 回讀權威來源（MUST）
+
+**Predicate**：該數字在同一個畫面內可被使用者的操作改變（送出、扣款、審核、上下架）。
+
+兩條都要：
+
+1. 操作成功後 **MUST** 重新向權威來源取值（refetch / invalidate cache）。**NEVER** 用前端本地推算（`balance.value -= amount`）代替——本地推算與伺服器實際套用的規則（手續費、四捨五入、上限截斷）不保證一致，而畫面會信誓旦旦地顯示推算值。
+2. 明細（逐筆 ledger / 紀錄表）與彙總（aggregate 欄位 / 快取表）分開儲存時，寫入明細的**同一個 transaction** **MUST** 同時更新彙總；做不到就把彙總改成即時由明細計算。**NEVER** 讓兩者分屬不同 transaction——第二個失敗時明細已落地、彙總沒動，之後每一次顯示都是錯的，且沒有任何一次請求會失敗。
+
+## Label 措辭 MUST 被計算式逐字支持（MUST）
+
+**Predicate**：metric 的 label 使用了口語化的時間詞或範圍詞（「本月」「最近」「目前」「總共」「新增」）。
+
+命中時 **MUST** 檢查 label 的字面意思與計算式的窗口 / 範圍是否一致。不一致時二選一：**改 label 說實話**，或**改計算式對齊 label**。**NEVER** 保留兩者不一致再用 tooltip / 說明文字補救——使用者讀的是 label，不是 tooltip。
+
+最常見的三組不一致：
+
+| Label 讀起來是 | 計算式常常實際是 |
+| --- | --- |
+| 「本月」 | 滾動 30 天，或帳期月而非自然月 |
+| 「總共」 | 已排除某些狀態的小計 |
+| 「新增」 | 含狀態轉換進來的既有紀錄 |
+
+同一條的另一半：畫面上有「本月」這種期間詞、但**沒有**讓使用者切換期間的控制項時，`getFullYear()` / `getMonth()` 這類硬編碼當期寫法不算違反本條；一旦加了期間選擇器，那些硬編碼就是下一個 label 說謊的地方。
+
+## 稽核
+
+```bash
+node scripts/audit-display-value-integrity.ts              # markdown（預設）
+node scripts/audit-display-value-integrity.ts --json
+node scripts/audit-display-value-integrity.ts --consumer <path>
+```
+
+**觸發條件**：informational — 不觸發任何東西（warn-only，不擋 publish）。它量的是觸發面大小與裸 aggregate 佔比，不是違規證明——一筆裸 `count: 'exact'` 可能完全正確，只是排除集寫在別處。
+
+**消費端**：clade 主線跑 fleet 稽核時讀（`pnpm audit:manual`）、consumer 主線在編輯統計 / 查詢檔時由本規約的 `paths` gate 載入後自行對照。
+
+**NEVER** 拿它回 0 當「本規約已遵守」——它偵測不到上面第一、三、四、五條的任何一條，那四條沒有可 grep 的形狀。
+
+## 與其他規約的邊界
+
+| 這件事 | 去哪 |
+| --- | --- |
+| 輸入端的長度 / 格式 / 必填驗證 | [[nuxt-form-validation]] |
+| 功能做完但 UI 缺面（新欄位下游看不到） | [[ux-completeness]] § Affected Entity Matrix |
+| 授權過濾（誰看得到哪些 row） | [[auth-data-path-consistency]]、`db-schema/<variant>/rls-policy.md` |
+| 時區換算導致的日期歸屬錯誤 | [[timezone]] |
+
+本規約只管**通過了上面所有關卡之後、數字本身仍然不等於它宣稱的東西**這一段。

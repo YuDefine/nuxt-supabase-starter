@@ -54,14 +54,14 @@ glob 掛著 `md` 而讓編輯 markdown 也拉進整份規約（該規約自己�
 
 ## Governance — lint / fmt 設定改在哪
 
-**跨 consumer 統一的 baseline**（oxlint rules / oxfmt 風格 / 共用 ignore patterns）**MUST** 改在 clade 中央倉 `vendor/oxc-shared/preset.mjs`，再 `node scripts/publish.ts <bump> && node scripts/propagate.ts` 散播到所有 consumer。**NEVER** 在 consumer 端的 `vendor/oxc-shared/preset.mjs` 投影副本直接改 — 下次 propagate 會覆蓋，且各 consumer 會 silently drift。
+**跨 consumer 統一的 baseline**（oxlint rules / oxfmt 風格 / 共用 ignore patterns）**MUST** 改在 clade 中央倉 `vendor/oxc-shared/preset.ts`，再 `node scripts/publish.ts <bump> && node scripts/propagate.ts` 散播到所有 consumer。**NEVER** 在 consumer 端的 `vendor/oxc-shared/preset.ts` 投影副本直接改 — 下次 propagate 會覆蓋，且各 consumer 會 silently drift。
 
 **consumer 自家業務 override**（單一 consumer 因第三方套件需要關掉某條 rule、或自家業務需要加 ignore path）寫在該 consumer 的 `vite.config.ts` 內、`spread baseline 之後`的 override block，**禁止**整段 inline 重寫 baseline（會 silently drift）。範例見下方 § `vite.config.ts` 必備欄位。
 
 判斷流程：
 
 1. 「這條規則 / 風格 / ignore 是否每個 consumer 都該套？」
-   - 是 → clade `vendor/oxc-shared/preset.mjs`（baseline）
+   - 是 → clade `vendor/oxc-shared/preset.ts`（baseline）
    - 否，只有單一 consumer 需要 → 該 consumer 自家 `vite.config.ts` override block
 2. 不確定 → 預設放 clade baseline（過鬆比過嚴容易補；先散播再個別 override 比反向收斂容易）
 
@@ -69,7 +69,7 @@ glob 掛著 `md` 而讓編輯 markdown 也拉進整份規約（該規約自己�
 
 clade 投影進 consumer 的路徑（`vendor/**`、`.claude/**`、`.clade/**`、`.spectra/**`）在 consumer 端是 `chmod 444` 的 LOCKED 副本。**consumer 修不了裡面的 lint / fmt 違規** —— 修法只能回 clade 改源檔再 propagate。
 
-所以「這些路徑要不要送進 lint / fmt」**MUST** 由 `vendor/oxc-shared/preset.mjs` 的 `PROJECTION_EXCLUDES` 一處決定。
+所以「這些路徑要不要送進 lint / fmt」**MUST** 由 `vendor/oxc-shared/preset.ts` 的 `PROJECTION_EXCLUDES` 一處決定。
 
 - **NEVER** 在任何 consumer 的 `vite.config.ts` 自行 inline 投影層排除路徑（`'vendor/**'`、`'.claude/rules/**'` …）。那不是 override，是在補 preset 的洞 —— 補了的 consumer 看起來沒事，沒補的那個下次就是 CI red，而且它自己解不掉
 - **NEVER** 用「加一個 `.oxfmtignore` 就好」代替修 preset。同一個洞多一種擋法，只會讓 fleet 更難看出源頭少了什麼
@@ -231,11 +231,11 @@ consumer 端 LOCKED projection 的 ignore 機制設計：
 
 clade 散播檔（`vendor/scripts/*.ts`、`scripts/spectra-advanced/*`、`.github/actions/*`）會進到每個 consumer 的 `vp fmt` 掃描範圍。若 clade 與 consumer 的 `vite.config.ts` fmt 設定不一致，consumer 端 `vp fmt --check` 會把 clade 寫出的程式重排成 consumer 風格 → 形成 LOCKED 檔被改動 → CI 紅燈或下次 propagate 出現 drift commit。
 
-**MUST** 從 clade 散播的 `vendor/oxc-shared/preset.mjs` import baseline 並 spread merge：
+**MUST** 從 clade 散播的 `vendor/oxc-shared/preset.ts` import baseline 並 spread merge：
 
 ```ts
 import { defineConfig } from 'vite-plus'
-import { lintBase, fmtBase } from './vendor/oxc-shared/preset.mjs'
+import { lintBase, fmtBase } from './vendor/oxc-shared/preset.ts'
 
 export default defineConfig({
   resolve: { alias: [/* consumer build config */] },
@@ -244,7 +244,7 @@ export default defineConfig({
     ...lintBase,
     rules: {
       ...lintBase.rules,
-      // 業務 override 僅放這裡（屬於 baseline 的請改 preset.mjs，跨 consumer 統一）
+      // 業務 override 僅放這裡（屬於 baseline 的請改 preset.ts，跨 consumer 統一）
       'unicorn/no-thenable': 'off', // supabase PostgREST mock builder chain
     },
     ignorePatterns: [...lintBase.ignorePatterns, '.wrangler/'],
@@ -259,7 +259,7 @@ export default defineConfig({
 })
 ```
 
-baseline 內容（自 `vendor/oxc-shared/preset.mjs`）：
+baseline 內容（自 `vendor/oxc-shared/preset.ts`）：
 
 - `fmt`: `semi: false`, `singleQuote: true`, `printWidth: 100`, `tabWidth: 2`, `trailingComma: 'all'`, `quoteProps: 'as-needed'`, `arrowParens: 'always'`, `endOfLine: 'lf'`, `htmlWhitespaceSensitivity: 'css'`, `vueIndentScriptAndStyle: true`, `experimentalSortPackageJson: { sortScripts: true }`
 - `lint.categories`: `correctness:error` / `suspicious:warn` / `perf:warn` / `pedantic|style|restriction|nursery:off`
@@ -271,7 +271,7 @@ baseline 內容（自 `vendor/oxc-shared/preset.mjs`）：
 **禁止**：
 
 - 直接 inline 寫 `lint:` / `fmt:` 全部欄位而不 import preset — 哪天 preset 升版（例：oxlint patch 升 `no-underscore-dangle` 從 warn 升 error 要在 preset 反制），consumer 就會 silently drift。
-- 在 consumer 端的 `vendor/oxc-shared/preset.mjs` 投影檔直接改 — 下次 propagate 會覆蓋。要改 baseline → cd 到 clade 改 `vendor/oxc-shared/preset.mjs` 再 propagate。
+- 在 consumer 端的 `vendor/oxc-shared/preset.ts` 投影檔直接改 — 下次 propagate 會覆蓋。要改 baseline → cd 到 clade 改 `vendor/oxc-shared/preset.ts` 再 propagate。
 
 
 # Lint（修復可自動修復的問題）
@@ -385,7 +385,7 @@ pnpm exec vp fmt --migrate=prettier  # 從既有 prettier config 遷移（若有
 - `scripts/lib/oxfmtignore-governance.ts` 在 `pnpm hub:bootstrap` 時主動刪除舊 `.prettierignore`（self-healing）
 - `pnpm hub:check` 包含上述 drift signal，consumer 端 CI 應啟用此 job
 - `scripts/audit-tooling-drift.ts`（v1.3.19）：掃每個 consumer 的 `vite.config.ts` 對齊狀態。報兩個 signal：
-  1. **presetImport** — 是否從 `./vendor/oxc-shared/preset.mjs` import `lintBase` + `fmtBase`
+  1. **presetImport** — 是否從 `./vendor/oxc-shared/preset.ts` import `lintBase` + `fmtBase`
   2. **inlineDrift** — 未 import preset 時，inline 寫死的 fmt baseline 欄位（`trailingComma`、`semi`、`singleQuote`、`printWidth` 等 11 項）與 baseline 不一致的 entries
   - 用法：`node scripts/audit-tooling-drift.ts [--markdown|--json]`；diagnostic-only，exit code 永遠 0；HANDOFF §4 baseline 由此 script 維護
   - 後續擴充至 7 個 signal（`structuralDrift` / `strayDotfiles` / `viteplusLocal` / `pnpmOrphans` / `eslintDeps`）

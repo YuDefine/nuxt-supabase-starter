@@ -26,7 +26,7 @@
 #   test typecheck 改放 CI（informational），不在 hook 階段擋。
 #
 # 為什麼並行跑（2026-07-26）：
-#   7 個 check 彼此獨立（typecheck 寫 .nuxt/，其餘皆唯讀掃描，無共享寫入），
+#   8 個 check 彼此獨立（typecheck 寫 .nuxt/，其餘皆唯讀掃描，無共享寫入），
 #   序列跑等於把每個 check 的耗時相加。<consumer-b> 實測序列 ≈ 98s，其中
 #   nuxt-typecheck 57.9s + review-rules-ratchet 39.2s 佔 99%，其餘五項合計
 #   < 0.6s。propagate.ts 的 push timeout 是 120s，序列跑的餘裕薄到會被機器
@@ -34,7 +34,7 @@
 #   每次都要事後手動補跑）。並行後 wall time 由最慢的單一 check 決定。
 #
 #   設計對齊 scripts/lib/gate-runner.ts：**全部跑完**才報告，不第一個失敗
-#   就中止——一次 push 就看到所有問題，不必修一條重跑一次。7 個 check 全數
+#   就中止——一次 push 就看到所有問題，不必修一條重跑一次。8 個 check 全數
 #   保留、全數仍 blocking，並行只改執行順序，不改任何判定。
 #   CLADE_PREPUSH_SERIAL=1 可退回序列（debug 用；輸出即時不緩衝）。
 #
@@ -46,17 +46,35 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECKS_DIR="$SCRIPT_DIR/checks"
 # PROJECT_ROOT 允許被 CLADE_PROJECT_ROOT 覆寫。meta-monorepo（app root 在子目錄，例如
 # nuxt-supabase-starter 的 template/）的 app root ≠ git toplevel，而各 check 的 auto-detect 是
-# 「找不到 nuxt.config 就 exit 0」，直接用 toplevel 會讓 7 道 check 全部靜默 no-op。
+# 「找不到 nuxt.config 就 exit 0」，直接用 toplevel 會讓那幾道 check 全部靜默 no-op。
 # 未設 CLADE_PROJECT_ROOT 時行為與過去完全一致（既有 consumer 零影響）。
 #
 # NEVER 只改這裡：下方是並行 spawn 各 check 的獨立 bash 程序，每支 check 會自己再
-# 推導一次 PROJECT_ROOT 並 cd，所以 7 支 checks/*.sh 必須各自帶同一個覆寫。
+# 推導一次 PROJECT_ROOT 並 cd，所以每一支 checks/*.sh 必須各自帶同一個覆寫。
 PROJECT_ROOT="${CLADE_PROJECT_ROOT:-$(git rev-parse --show-toplevel)}"
 
 cd "$PROJECT_ROOT"
 
+# --- push refs（MUST 在 spawn 平行 check 之前讀）----------------------------
+# git 把本次 push 的 refs 一行一筆餵進 pre-push hook 的 stdin，格式：
+#   <local_ref> <local_sha> <remote_ref> <remote_sha>
+# 那是**一次性 stream**：下方平行 spawn 的 subshell 共用同一個 stdin，誰先讀誰拿到，
+# 其餘的拿到 EOF。所以 MUST 在這裡一次讀完落成檔，再用 env 交給需要的 check。
+#
+# `[ -t 0 ]` 守著手動執行（bash scripts/pre-push/runner.sh）—— 那時 stdin 是 tty，
+# 直接 cat 會卡住不動。非 tty 但沒有內容（< /dev/null）則立即回，refs 檔為空。
+#
+# 既有各支 check 都不讀 stdin，讀完後它們拿到的 stdin 停在 EOF —— 行為零改變。
+REFS_FILE="$(mktemp "${TMPDIR:-/tmp}/clade-prepush-refs.XXXXXX")"
+trap 'rm -f "$REFS_FILE"' EXIT
+if [[ ! -t 0 ]]; then
+  cat > "$REFS_FILE" || true
+fi
+export CLADE_PREPUSH_REFS_FILE="$REFS_FILE"
+
 # 宣告順序 = 輸出順序（並行執行，但輸出仍依此序印出，讓 log 可預期）
 CHECKS=(
+  tag-position          # push 帶 tag 時驗 tag 不落後 default branch（blocking；無 tag 則零成本 no-op）
   nuxt-typecheck        # full project typecheck（auto-detect nuxt.config）
   native-picker-ban     # 全站掃 .vue（auto-detect nuxt.config；非 Nuxt repo 自動 no-op）
   data-perf-check       # 全站掃 .vue setup context raw $fetch（auto-detect nuxt.config）
@@ -84,7 +102,9 @@ fi
 
 # --- 並行模式（預設）-----------------------------------------------------
 RUN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/clade-prepush.XXXXXX")"
-trap 'rm -rf "$RUN_DIR"' EXIT
+# NEVER 只寫 rm -rf "$RUN_DIR"：那會覆蓋上方 REFS_FILE 的 trap（EXIT trap 只有一個），
+# 讓每次 push 在 TMPDIR 留一個 refs 檔。兩個都要清。
+trap 'rm -rf "$RUN_DIR"; rm -f "$REFS_FILE"' EXIT
 
 pids=()
 for i in "${!CHECKS[@]}"; do

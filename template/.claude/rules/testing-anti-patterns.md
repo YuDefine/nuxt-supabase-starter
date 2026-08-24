@@ -587,6 +587,26 @@ E2E test coverage 不該用「跑了幾條」當 KPI，也不該用「按鈕能�
 
 其他 change 為**建議**而非強制。違反靠 reviewer 在 manual-review tier 1/2 攔截，不靠 CI gate（會誤殺 typo fix）。
 
+### 機械訊號（warn-only，TD-636）
+
+```bash
+node vendor/scripts/audit-risk-path-coverage.ts        # 恆 exit 0
+```
+
+diff 命中上列五類任一時，驗作用中 change 的 design.md / proposal.md 有 § Risk paths，**且該節引用的
+測試檔真的存在**。只驗章節在不在會被 pro forma 生一段騙過——那正是「全部打勾但沒人看」的機械版。
+
+**這支 NEVER 升成 blocking。** 上一段反對的是**無條件** CI gate；本支是條件觸發，五類全部是 diff
+路徑可偵測的，碰不到 typo fix，所以原理由對它不適用——但反過來說，一旦讓它擋 PR，那個理由就重新成立。
+findings 是 review 的**對話起點**，不是通過條件。
+
+**綠燈 NEVER 讀成「風險路徑覆蓋足夠」**：它只證明「有宣告、宣告指的檔在」，測得對不對只有人能判。
+
+**上線 baseline 是 0，這是預期值不是異常。** 2026-08-24 實測三個 consumer 共 75 條 change
+（9 active + 66 archived）——**沒有任何一份**寫過 § Risk paths。本節 2026-05 上線至今未被遵守過一次，
+所以接上訊號後高風險 change 幾乎必然報 finding。**NEVER** 因為「一片紅」就把這支關掉或降級：
+那個紅正是它被建立的理由，也是「規約存在 ≠ 規約生效」最直接的讀數。
+
 ## E2E fixture 的時間錨點 MUST 相對於執行當下
 
 E2E seed 出來的資料若帶**絕對日期**，測試就綁在寫它的那個月。UI 只要有任何 recency 分群（今天 / 昨天 / 本週 / 本月 / 更早）、保留期、或「N 天內」的篩選，同一份 fixture 過幾週後就會落進不同的桶 —— 元素預設收合、或根本不 render，於是所有依賴它可見的斷言一起 timeout。

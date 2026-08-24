@@ -57,6 +57,8 @@ Local edits will be reverted by the next sync.
 
 ## 交付入口前置查詢（MUST）
 
+**誰要讀本節**：交付驗收入口給人的那個角色，**不是**動 `openspec/changes/**` 的那個角色。本檔 frontmatter 的 `paths` 是 path-scoped 觸發，而在 `/wt` 親子拆分下，開那些檔的是 worktree subagent、交付 URL 的是主線 orchestrator——主線整段 session 可能一個 `openspec/changes/**` 檔都沒開，規約於是對**唯一會犯這個錯的角色**不載入。因此：**要交付人工檢查入口時，MUST 主動載入本檔**，NEVER 等 path 觸發（2026-08-24 <consumer-a> `employee-backpay-request` 實證：主線未載入本檔，跳過下方兩條指令直接自建平行 GUI）。
+
 把人工檢查入口交給人之前，**MUST 先問「現在有沒有服務在提供入口」**。這是查表不是推理，兩條指令逐字：
 
 ```bash
@@ -74,6 +76,8 @@ curl -s --max-time 60 http://127.0.0.1:5174/api/changes \
 | 第 1 條 exit 0，且第 2 條印出了自己那條 `changeKey` | canonical URL = `https://review-gui.<maintainer-domain>` ＋ 該條的 `reviewPath`（Cloudflare Access 保護；user 在本機時 host 換 `http://127.0.0.1:5174`）。**這是常態，不需要補任何東西** |
 | 第 1 條 exit 0，但第 2 條沒印出自己那條 | 改 `registry/consumers.json` → 跑 `node scripts/bootstrap-consumers-local.ts` 重生 `consumers.local`（該檔 gitignored，手改不留存）→ `sudo systemctl restart review-gui` → 重跑第 2 條確認它出現 |
 | 第 1 條 exit ≠ 0 | 自己用 `bash ~/offline/clade/ops/review-gui-service.sh install` 把服務帶起來（該子命令自帶 `systemctl restart` 與健康等待），再回到上面兩列 |
+
+**NEVER 因為「主 checkout 的 `tasks.md` 看起來是舊的」就自建一台平行 GUI。** 共用 review-gui **本來就會解析 worktree**：`/api/changes/<changeKey>` 回的 `sourceRoot` 會指向該 change 的 session worktree、`worktreeSlug` 會帶 slug，item 勾選狀態讀的是 worktree 那份。「主 checkout 資料過時」因此不成立為「共用服務給不出正確畫面」的理由——那是**推理**，而本節第一句就要求查表。自建的那台只在本機可達（`127.0.0.1:<derived-port>`），等於把已經修好的坑重踩一次。
 
 **NEVER 從 consumer 自己的 config 推論入口不存在。** `nuxt.config.ts` 沒掛 tunnel plugin、`consumer-meta.json` 的 `deploy.prodUrl` 是 null——這兩件事跟 review-gui 有沒有在跑**無關**：它是跨 consumer 共用服務，consumer 清單來自 clade 的 `consumers.local`，不由任何 consumer 的 config 描述。這類 negative search 不成立為 absence 證據（[[agent-self-verification]] MUST 11）。
 
