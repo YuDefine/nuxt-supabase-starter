@@ -370,3 +370,40 @@ describe('scaffold: Better Auth 模組身分', () => {
     expect(installSkills).toContain('vueuse-functions')
   })
 })
+
+describe('scaffold: void.cloud 接線', () => {
+  // `npx void init` 實測（void 0.10.12）只產 wrangler.jsonc —— 不產 void.json，
+  // 也不會把 voidPlugin() patch 進 nuxt.config。少了那段接線，專案跑得起來卻完全沒接到
+  // void 平台，而且要到用 `void/db` 之類才會發現。所以 scaffold MUST 自己寫好。
+  it('void 軌的 nuxt.config 帶 voidPlugin()', () => {
+    const targetDir = join(TEST_DIR, 'void-plugin')
+    assembleProject(targetDir, ['deploy-void'], 'void-app', ['claude-code'], 'baseline', 'void-d1')
+
+    const config = readFileSync(join(targetDir, 'nuxt.config.ts'), 'utf-8')
+    expect(config).toContain("import { voidPlugin } from 'void'")
+    expect(config).toContain('plugins: [voidPlugin()]')
+  })
+
+  it('void 軌帶 wrangler（Nuxt dev 期建 Cloudflare platform proxy 用）', () => {
+    const targetDir = join(TEST_DIR, 'void-wrangler')
+    assembleProject(
+      targetDir,
+      ['deploy-void'],
+      'void-wrangler',
+      ['claude-code'],
+      'baseline',
+      'void-d1',
+    )
+
+    const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf-8'))
+    expect(pkg.dependencies.wrangler ?? pkg.devDependencies?.wrangler).toBeDefined()
+  })
+
+  it('非 void 軌不得混進 voidPlugin', () => {
+    const targetDir = join(TEST_DIR, 'no-void-plugin')
+    assembleProject(targetDir, ['deploy-cloudflare'], 'cf-app')
+
+    const config = readFileSync(join(targetDir, 'nuxt.config.ts'), 'utf-8')
+    expect(config).not.toContain('voidPlugin')
+  })
+})

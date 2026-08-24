@@ -293,7 +293,9 @@ export const featureModules: FeatureModule[] = [
     default: false,
     group: 'deployment',
     incompatible: ['deploy-cloudflare', 'deploy-node'],
-    packages: { void: '^0.10.12' },
+    // wrangler 是 Nuxt 在 dev 期建 Cloudflare platform proxy 用的，void 官方 Nuxt
+    // 整合文件明列為必要依賴（不是 void 自己的傳遞依賴）。少了它 dev 期拿不到 binding。
+    packages: { void: '^0.10.12', wrangler: '^4.125.0' },
     templateDir: 'features/deploy-void',
   },
 

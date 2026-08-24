@@ -588,15 +588,30 @@ export function generateNuxtConfig(
     nitroLines.push(`  },`)
   } else if (selectedFeatureIds.includes('deploy-void')) {
     // void 也跑在 Cloudflare Workers 上，但 compatibility 相關設定由 `void init` 產生的
-    // void.json / wrangler.jsonc 與 voidPlugin() 決定 —— 這裡 NEVER 照抄 deploy-cloudflare
+    // wrangler.jsonc 與 voidPlugin() 決定 —— 這裡 NEVER 照抄 deploy-cloudflare
     // 那段寫死的 deployConfig / nodeCompat，那會跟 void 自己的設定打架。
     nitroLines.push(`  nitro: {`)
     nitroLines.push(`    preset: process.env.NITRO_PRESET || 'cloudflare_module',`)
+    nitroLines.push(`  },`)
+    nitroLines.push(``)
+    // voidPlugin() 是 void 在 Nuxt 上的**必要**接線（binding 推導、typed DB、dev 期
+    // migration），而 `npx void init` 實測（void 0.10.12）**不會**自己 patch 這裡 ——
+    // 它只產 wrangler.jsonc。少了這段，專案跑得起來但完全沒接到 void 平台，
+    // 而且要到用 `void/db` 之類才發現。
+    // 這段可以寫死是因為它是穩定的 import + 呼叫；會隨版本漂的是 wrangler.jsonc 的
+    // compatibility 值，那部分仍然交給 `void init`。
+    nitroLines.push(`  // void.cloud：binding 推導 / typed DB / dev 期 migration`)
+    nitroLines.push(`  vite: {`)
+    nitroLines.push(`    plugins: [voidPlugin()],`)
     nitroLines.push(`  },`)
   }
   // Node.js uses default preset, no nitro config needed
 
   config = config.replace('  // __NITRO_CONFIG__', nitroLines.join('\n'))
+
+  if (selectedFeatureIds.includes('deploy-void')) {
+    config = `import { voidPlugin } from 'void'\n\n${config}`
+  }
 
   writeFileSync(configPath, config)
 }
