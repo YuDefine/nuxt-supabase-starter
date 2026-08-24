@@ -444,3 +444,35 @@ describe('scaffold: first-run 暖機流程的可執行性', () => {
     }
   })
 })
+
+describe('scaffold: 全新專案的 pnpm check 前置條件', () => {
+  // 這三條各對應一次「beginner 照 PROMPT.md 跑 pnpm check 就撞牆」的實測。
+  // 撞的都不是使用者寫的 code —— 是投影層、vendored bundle、與 Nuxt boot 時間。
+  it('產出 vite.config.ts，且投影層與 vendor 都在 lint/fmt 排除清單內', () => {
+    const targetDir = join(TEST_DIR, 'vite-config-excludes')
+    assembleProject(targetDir, [], 'vite-config-excludes')
+
+    const configPath = join(targetDir, 'vite.config.ts')
+    expect(existsSync(configPath)).toBe(true)
+
+    const config = readFileSync(configPath, 'utf-8')
+    // vendor/：cookbook 語料含 `port: <DEV_PORT>` 佔位樣板，oxfmt parse 直接失敗
+    // .claude/：LOCKED 投影，含第三方 UMD bundle，oxlint --deny-warnings 會炸
+    for (const pattern of ['.claude/**', '.agents/**', '.codex/**', '.cursor/**', 'vendor/**']) {
+      expect(config, `${pattern} 不在排除清單`).toContain(pattern)
+    }
+    expect(config).toContain('lint:')
+    expect(config).toContain('fmt:')
+  })
+
+  it('vitest 的 hookTimeout 撐得過 Nuxt boot', () => {
+    const targetDir = join(TEST_DIR, 'vitest-hook-timeout')
+    assembleProject(targetDir, ['testing-full'], 'vitest-hook-timeout')
+
+    const config = readFileSync(join(targetDir, 'vitest.config.ts'), 'utf-8')
+    expect(config).toContain('hookTimeout')
+    // 預設 10s 不夠：environment 'nuxt' 每個 test 檔都要 boot 一次完整 Nuxt build
+    const declared = /hookTimeout:\s*([\d_]+)/.exec(config)?.[1]?.replace(/_/g, '')
+    expect(Number(declared)).toBeGreaterThanOrEqual(30000)
+  })
+})

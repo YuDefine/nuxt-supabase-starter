@@ -108,6 +108,12 @@ CLI 會依序問我 stack preset 與其餘選項，然後自己完成 scaffold�
 - **「目錄已存在，且含有 scaffold 會覆蓋到的內容」** → 它會列出擋住的項目和三條路。
   跟我一起挑一條。**不要自己選第 3 條去清空目錄**（鐵則 4）。
 
+CLI 收尾若印出**黃色警告**（不是在那個框框裡、而是框框下方的 `WARN`），照抄給我 ——
+那代表這個 stack 還差一步才完整。目前已知的一種：選 void.cloud 部署時會要你跑
+`npx void init --agents`，它會產生當前版本正確的 `wrangler.jsonc` 並裝上 void 的
+skill 與 MCP。**那一步缺了不會讓 build 失敗，會在部署當下才炸**，所以不要因為
+Step 3 全綠就跳過它。
+
 ## Step 3 — 驗收
 
 先切到專案目錄。你的工具每次執行可能是獨立 subshell，所以**下面每一條都要
@@ -124,8 +130,19 @@ cd <專案目錄> && cat .claude/.first-run
 ```
 （scaffold 剛完成才會有這支；沒有就跳過，不是錯誤）
 
+**這支檔案裡的 `instructions` 就是暖機流程**，照它列的步驟做，不要只挑其中一條跑，
+也不要在做完之前刪掉它。下面 Step 3 的驗收與它重疊的部分（`verify:starter`）跑一次就好。
+
 ```bash
 cd <專案目錄> && pnpm verify:starter
+```
+
+```bash
+cd <專案目錄> && pnpm spectra:roadmap
+```
+
+```bash
+cd <專案目錄> && pnpm spectra:claims
 ```
 
 ```bash
@@ -185,7 +202,8 @@ ls -d ~/offline/clade
 - **clade**：已接上 / 不在這台機器 / 我明示不用
 - **下一步**：三件我現在就做得完的事，每件一句話
 
-回報完，如果 `.claude/.first-run` 存在就刪掉它（鐵則 4 的唯一例外）：
+`.claude/.first-run` 裡列的暖機步驟**都做完之後**才刪掉它（鐵則 4 的唯一例外）。
+沒做完就刪，等於把那份指示丟掉而且沒有人會再看到它：
 
 ```bash
 rm .claude/.first-run
@@ -214,6 +232,8 @@ rm .claude/.first-run
 | AI 跑 `pnpm dev`，工具 hang 到 timeout 才收工 | Step 3 改用 `pnpm build` |
 | AI 去 clone 私有的 clade，拿到 404 後開始亂試 | Step 4 明說 clade 是私有 |
 | 專案建好了但沒有任何一條指令真的跑過就宣告完成 | Step 3 + Step 5 的回報格式 |
+| AI 讀了 `.first-run` 的暖機指示，只挑一條跑完就把 marker 刪掉 | Step 3 的「照它列的步驟做」+ Step 5 的刪除前提 |
+| 選了 void.cloud，Step 3 全綠就宣告完成，缺的那一步到部署當下才炸 | Step 2 結尾的「照抄黃色警告」 |
 
 ## 相關文件
 
