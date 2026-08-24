@@ -37,6 +37,9 @@
 //   `.agents/` `.codex/` 卻漏掉 `vendor/`，連續擋掉 clade v1.4.388 / v1.4.389 / v1.4.409
 //   三次交付（TD-310）。這裡的 `PROJECTION_EXCLUDES` 一改，所有讀它的 consumer 自動跟上。
 //
+//   `.agents/` `.codex/` `.cursor/` 也在這份清單裡（2026-08-24 起），所以 staged filter
+//   **NEVER** 再另外維護一份 agent 投影目錄的手寫陣列。
+//
 // Why a preset (not inline rule duplication):
 //   `rules/core/code-style.md` § MUST documents these fields as required, but
 //   text-only governance does not lock structure — 5 consumers had drifted
@@ -61,8 +64,26 @@
  *
  * clade itself is the source of truth for `vendor/`, so its own vite.config.ts
  * filters `vendor/**` back out — that one exception is deliberate and local.
+ *
+ * 2026-08-24 (TD-626): the three agent projection dirs joined this list. They had
+ * been sitting only in lintBase/fmtBase.ignorePatterns, which the `staged` filter
+ * never reads — so every consumer hand-wrote its own parallel copy, the exact
+ * drift the comment at the top of this file exists to ban.
  */
-export const PROJECTION_EXCLUDES = ['.claude/**', '.clade/**', '.spectra/**', 'vendor/**']
+export const PROJECTION_EXCLUDES = [
+  '.claude/**',
+  '.clade/**',
+  '.spectra/**',
+  'vendor/**',
+  // Agent 投影面：`.agents/` `.codex/` 由 scripts/sync-to-codex.ts 生成，`.cursor/` 由
+  // scripts/sync-to-cursor.ts 生成（2026-08-24 起，先前是人工快照）。三者與上面四條同性質
+  // —— consumer 端是產生物，裡面的 lint / fmt 違規只能回 clade 修。先前它們只躺在下面的
+  // lintBase / fmtBase.ignorePatterns，沒進這份清單，所以讀 PROJECTION_EXCLUDES 的 staged
+  // filter 看不到它們，每個 consumer 只好各自手寫一份平行清單（TD-626）。
+  '.agents/**',
+  '.codex/**',
+  '.cursor/**',
+]
 
 /**
  * The slice of `vendor/` that stays excluded even in clade, where `vendor/` is
@@ -152,12 +173,9 @@ export const lintBase = {
     'dist/',
     'coverage/',
     'supabase/',
-    '.claude/skills/',
-    '.agents/',
-    '.codex/',
-    '.clade/',
     '.vite-doctor/',
     '*.d.ts',
+    // `.claude/` `.clade/` `.agents/` `.codex/` `.cursor/` 全部由 PROJECTION_EXCLUDES 帶入。
     ...PROJECTION_EXCLUDES,
   ],
 }
@@ -188,13 +206,9 @@ export const fmtBase = {
     // 非 canonical 形式，不排除的話每次更新 baseline 都要多跑一次 fmt，且 lint-staged
     // 會在 commit 當下偷改內容並 re-stage。與上面的 lockfile 同類：tracked 的產生物。
     '**/evlog.map.json',
-    '.claude/plugins/cache/**',
-    '.spectra/**',
-    // Derived projections (LOCKED) by sync-to-codex; mirror lintBase so
-    // consumers don't have to re-inline these in fmt.ignorePatterns.
-    '.agents/**',
-    '.codex/**',
     '.vite-doctor/**',
+    // 投影面（`.claude/` `.clade/` `.spectra/` `vendor/` `.agents/` `.codex/` `.cursor/`）
+    // 一律由 PROJECTION_EXCLUDES 帶入 —— consumer 不必在自己的 fmt.ignorePatterns 再列一次。
     ...PROJECTION_EXCLUDES,
   ],
 }
