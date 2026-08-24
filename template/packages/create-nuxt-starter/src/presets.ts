@@ -54,6 +54,21 @@ export const PRESETS: readonly PresetDefinition[] = [
     deploy: 'void',
     dbStack: 'void-d1',
     evlogPreset: 'baseline',
+    /**
+     * void 軌的 auth **必須**是 `auth-nuxt-utils`，不是沿用預設而已。三條理由：
+     *
+     * 1. void 內建的 Better Auth 在 Nuxt 上不可用：void 官方 `docs/guide/auth.md`
+     *    開頭 warning 明載 Void-managed auth 只支援 Void apps、meta-framework mode
+     *    尚未支援，而 `docs/guide/app-types.md` 把 Nuxt 列為 meta-framework。
+     * 2. starter 的 `auth-better-auth` feature 宣告 `dependencies: ['database']`
+     *    （Supabase），但 `void-d1` dbStack 會把 `database` 過濾掉。兩者湊在一起會
+     *    scaffold 出一個「有 better-auth、沒有它要的 DB」的專案——見 cli.ts 的
+     *    `validateDeployDbStackCompatibility()`，該組合現在直接 fail。
+     * 3. `nuxt-auth-utils` 是 cookie session、不需要 DB、跑得動 Workers，
+     *    正是 void 部署的執行環境。
+     *
+     * NEVER 為了「跟其他 preset 一致」把它改成 `auth-better-auth`。
+     */
     authDefault: 'auth-nuxt-utils',
     ci: 'ci-simple',
   },

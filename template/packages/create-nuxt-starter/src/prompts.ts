@@ -30,10 +30,81 @@ function normalizePromptValues(values: unknown): string[] {
     .filter(Boolean)
 }
 
+/**
+ * dbStack × auth 的相容矩陣。**這是 backstop，不是主要防線**——wizard 應該一開始就
+ * 不把不相容的選項端到使用者面前（見 `authOptionsForDbStack()` / `dbStackOptionsForAuth()`）。
+ * 走到這裡代表選項過濾漏了。
+ */
 function assertWizardAuthCompatible(authChoice: string, dbStack: DbStack): void {
-  if (dbStack !== 'nuxthub-d1' || authChoice !== 'auth-nuxt-utils') return
+  if (dbStack === 'nuxthub-d1' && authChoice === 'auth-nuxt-utils') {
+    throw new Error('dbStack nuxthub-d1 只支援 Better Auth 或不啟用 auth；不支援 nuxt-auth-utils')
+  }
 
-  throw new Error('dbStack nuxthub-d1 只支援 Better Auth 或不啟用 auth；不支援 nuxt-auth-utils')
+  // void-d1 走的是 void 託管的 D1，Supabase feature 會被濾掉，Better Auth 會缺它要的 DB。
+  // 理由三條寫在 presets.ts 的 void-cloud 註解，強制執行在 cli.ts 的
+  // validateDeployDbStackCompatibility()。
+  if (dbStack === 'void-d1' && authChoice === 'auth-better-auth') {
+    throw new Error(
+      'dbStack void-d1 不支援 Better Auth（Better Auth 需要自己的 DB，void-d1 會把 Supabase 濾掉）；' +
+        '請改用 nuxt-auth-utils 或不啟用 auth',
+    )
+  }
+}
+
+interface WizardOption {
+  label: string
+  value: string
+}
+
+const AUTH_OPTION_NUXT_UTILS: WizardOption = {
+  label: 'nuxt-auth-utils — Cookie session，適用所有部署環境',
+  value: 'auth-nuxt-utils',
+}
+const AUTH_OPTION_BETTER_AUTH: WizardOption = {
+  label: 'Better Auth — 需要 DB 連線，Workers + 自架 DB 需 Hyperdrive',
+  value: 'auth-better-auth',
+}
+const AUTH_OPTION_NONE: WizardOption = { label: '不需要', value: 'none' }
+
+/** 只端出與該 dbStack 相容的 auth 選項，並說明少掉的那個為什麼不在。 */
+function authOptionsForDbStack(dbStack: DbStack): WizardOption[] {
+  if (dbStack === 'nuxthub-d1') {
+    consola.info('dbStack nuxthub-d1：auth 選項只列 Better Auth（nuxt-auth-utils 不相容）。')
+    return [AUTH_OPTION_BETTER_AUTH, AUTH_OPTION_NONE]
+  }
+
+  if (dbStack === 'void-d1') {
+    consola.info(
+      'dbStack void-d1：auth 選項不列 Better Auth——它需要自己的資料庫，' +
+        '而 void 託管 D1 這條軌不會帶 Supabase。',
+    )
+    return [AUTH_OPTION_NUXT_UTILS, AUTH_OPTION_NONE]
+  }
+
+  return [AUTH_OPTION_NUXT_UTILS, AUTH_OPTION_BETTER_AUTH, AUTH_OPTION_NONE]
+}
+
+/** custom wizard 先問 auth、後問 dbStack，所以反過來過濾 dbStack 選項。 */
+function dbStackOptionsForAuth(authChoice: string): WizardOption[] {
+  const options: WizardOption[] = [
+    { label: 'Supabase（預設）', value: 'supabase' },
+    { label: 'NuxtHub D1', value: 'nuxthub-d1' },
+    { label: 'void 託管 D1（需搭配 void.cloud 部署）', value: 'void-d1' },
+  ]
+
+  if (authChoice === 'auth-better-auth') {
+    consola.info('auth 選了 Better Auth：dbStack 不列 void-d1（那條軌沒有 Better Auth 要的 DB）。')
+    return options.filter((o) => o.value !== 'void-d1')
+  }
+
+  if (authChoice === 'auth-nuxt-utils') {
+    consola.info(
+      'auth 選了 nuxt-auth-utils：dbStack 不列 nuxthub-d1（該 stack 只支援 Better Auth）。',
+    )
+    return options.filter((o) => o.value !== 'nuxthub-d1')
+  }
+
+  return options
 }
 
 export async function promptUser(defaultProjectName?: string): Promise<UserSelections> {
@@ -87,17 +158,7 @@ async function promptUserPreset(
   // 2. Auth — preset.authDefault 為 initial 值，使用者可調整
   const authChoice = (await consola.prompt('認證系統？', {
     type: 'select',
-    options: [
-      {
-        label: 'nuxt-auth-utils — Cookie session，適用所有部署環境',
-        value: 'auth-nuxt-utils',
-      },
-      {
-        label: 'Better Auth — 需要 DB 連線，Workers + 自架 DB 需 Hyperdrive',
-        value: 'auth-better-auth',
-      },
-      { label: '不需要', value: 'none' },
-    ],
+    options: authOptionsForDbStack(preset.dbStack),
     initial: preset.authDefault,
   })) as string
 
@@ -474,11 +535,7 @@ async function promptUserCustom(defaultProjectName?: string): Promise<UserSelect
   } else {
     dbStack = (await consola.prompt('Database stack？', {
       type: 'select',
-      options: [
-        { label: 'Supabase（預設）', value: 'supabase' },
-        { label: 'NuxtHub D1', value: 'nuxthub-d1' },
-        { label: 'void 託管 D1（需搭配 void.cloud 部署）', value: 'void-d1' },
-      ],
+      options: dbStackOptionsForAuth(authChoice),
       initial: DEFAULT_DB_STACK,
     })) as DbStack
   }

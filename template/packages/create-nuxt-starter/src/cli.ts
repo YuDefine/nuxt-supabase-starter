@@ -222,6 +222,22 @@ export function validateDeployDbStackCompatibility(
     )
   }
 
+  // void-d1 + Better Auth：`auth-better-auth` 宣告 `dependencies: ['database']`（Supabase），
+  // 但 void-d1 會把 `database` 從 feature 集合裡濾掉（見 buildSelectionsFromArgs 的
+  // DB_STACKS_WITHOUT_SUPABASE 過濾）。於是 better-auth 被 scaffold 出來、它要的 DB 卻不在，
+  // 而且要到跑起來連 DB 才炸。void 內建的 Better Auth 也接不上——void 官方 auth 文件明載
+  // Void-managed auth 尚未支援 meta-framework（Nuxt 就是），細節見 presets.ts 的 void-cloud 註解。
+  if (dbStack === 'void-d1' && features.includes('auth-better-auth')) {
+    failValidation(
+      '--db void-d1 不能搭配 Better Auth：Better Auth 需要一個它自己的資料庫，' +
+        '而 void-d1 走的是 void 託管的 D1，starter 的 Supabase feature 會被濾掉，' +
+        '產出的專案會缺 DB。\n' +
+        'void 內建的 Better Auth 目前也只支援 Void apps，尚未支援 Nuxt 這類 meta-framework。\n' +
+        '請改用 --auth nuxt-auth-utils（cookie session、不需要 DB），' +
+        '或改用 --db supabase / nuxthub-d1。',
+    )
+  }
+
   // 反向也要擋：void 託管的 D1 是 void 平台在 provision 的，換一個部署目標就沒有那個
   // binding，專案會 build 得起來但 runtime 找不到資料庫。
   if (!deploysToVoid && dbStack === 'void-d1') {

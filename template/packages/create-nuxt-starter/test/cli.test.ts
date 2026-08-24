@@ -273,6 +273,22 @@ describe('--preset stack values', () => {
     ).toThrow(/只能搭配 void\.cloud 部署/)
   })
 
+  it('void-d1 + Better Auth 必須 fail —— void 軌沒有 Better Auth 要的 DB', () => {
+    expect(() =>
+      buildSelectionsFromArgs({ projectName: 'x', preset: 'void-cloud', auth: 'better-auth' }),
+    ).toThrow(/void-d1 不能搭配 Better Auth/)
+    expect(() =>
+      buildSelectionsFromArgs({ projectName: 'x', preset: 'void-cloud', auth: 'better-auth' }),
+    ).toThrow(/nuxt-auth-utils/)
+  })
+
+  it('void-cloud preset 預設 auth 是 nuxt-auth-utils，NEVER 是 Better Auth', () => {
+    const selections = buildSelectionsFromArgs({ projectName: 'void-app', preset: 'void-cloud' })
+
+    expect(selections.features).toContain('auth-nuxt-utils')
+    expect(selections.features).not.toContain('auth-better-auth')
+  })
+
   it('--preset self-hosted-node 帶 Node deploy + ci-advanced', () => {
     const selections = buildSelectionsFromArgs({
       projectName: 'node-app',
