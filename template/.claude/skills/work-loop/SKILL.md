@@ -4,7 +4,7 @@ description: "Use when 使用者要把待辦自主推進（「自動推」「把
 effort: xhigh
 metadata:
   author: clade
-  version: "3.0"
+  version: "3.1"
 permission_tier: action
 ---
 <!--
@@ -738,7 +738,7 @@ runner.sh 另有 mechanical fail-closed：起跑前、每次 child launch 前，
 | 可觀察 predicate | dispatch 形狀 |
 | --- | --- |
 | `ls .claude/skills/wt` 存在，**或** `jq -r '.enabledPlugins' .claude/settings.json` 不是 `none` | 照上面三條走，扇出組 ≤4 in-flight |
-| 兩者皆不成立 | **主線自己進 worktree**，扇出組併發降為 **1**。**MUST 先完整讀 [no-wt-dispatch.md](reference/no-wt-dispatch.md)** —— 那份的第 4b 步（`merge-back` 只 stage 不 commit）漏掉會讓整份工作停在 index 裡 |
+| 兩者皆不成立 | **主線自己進 worktree**，扇出組併發降為 **1**。**MUST 先完整讀 [no-wt-dispatch.md](reference/no-wt-dispatch.md)** —— 那份的第 4b 步（`merge-back` 只 stage 不 commit；落地走 `/commit`，白名單才 `--only`）漏掉會讓整份工作停在 index 裡 |
 
 兩格都不是 skip：「工具叫不動」不在 § Skip 合法理由窮舉 的 3 條之內。
 
@@ -792,7 +792,7 @@ attended mode 且真的選不出來 → 依 Step 0 Iron Law **MUST `AskUserQuest
 - **Per-item task 追蹤（MUST）**：每條 dispatch item MUST 先 `TaskCreate`（subject 用 `<item>: <狀態> → <動作>`），dispatch 時標 `in_progress`，完成/skip/blocked 立即標 `completed`。**NEVER** 只建概括性收割 task——user 看 task list 判斷 loop 在幹嘛，概括 task 提供零資訊
 - **Dev server 協調**：evidence collection 需要 dev server 時**主線自行協調**，**NEVER** 把 port 被佔當 user 協調事項跳過。池滿時先跑 `wt-helper reclaim-stale`（三層機械判定見 [[worktree-default]] §6：stale 自動釋放 dev-port record → live 不動 → unknown 才問 user / packaging），reclaim 後仍滿才進人工分流
 - **Workflow model 感知**（archive 後 push 前 MUST）：讀 `~/offline/clade/registry/consumers.json` 的 `workflow_model`——`trunk-based` 直接 push；`pr-merge-based` **NEVER 直推 main**，改 push feature branch + `gh pr create --fill`；查不到當 `pr-merge-based` 保守處理
-- **Commit 紀律**：每個 item 獨立 commit，走 `git commit --only -- <paths>`
+- **Commit 紀律**：每個 item 獨立 commit。落地 main 時路徑全在 [[commit.detail]] 白名單 → `git commit --only -- <paths>`；任一不在 → invoke `/commit`（0-A + `Via: /commit` trailer）。**NEVER** 用 work-loop 當跳過 `/commit` 的理由。卡人工檢查 → packaging。worktree 內的 session-branch commit 見 [guardrails.md](reference/guardrails.md) § C
 - **Error handling**：
   - **Dispatch failure**（skill 報錯 / infra 不可達）→ log + skip + `failStreak` +1，繼續下一個
   - **Fixable issue found during dispatch**（E2E selector bug / guard 漏路徑 / annotation drift / test assertion 要更新）→ **MUST 就地修 → 重跑 → re-scan → 繼續**，**NEVER** 當成 dispatch failure skip。判準：「我能在當前 session 用 Edit + Bash 修好嗎？」是 → 就地修
@@ -970,10 +970,14 @@ patch 語義：**給值＝覆蓋、給 `null`＝刪除、沒提到＝原值不�
 
 ### 7.4 Commit
 
+本步 **只 commit 白名單路徑**（`HANDOFF.md`、`docs/tech-debt.md`、`tasks/**` 等，見 [[commit.detail]] § `--only` 適用範圍）。產品碼不走這步——它在 harvest / archive 時已由 `/commit` 落地。
+
 ```bash
-git commit --only -m "📝 docs(handoff): work-loop round <N> 狀態段更新" -- HANDOFF.md <其他改過的檔>
-git show --stat HEAD | tail -3   # 驗 scope
+git commit --only -m "📝 docs(handoff): work-loop round <N> 狀態段更新" -- HANDOFF.md
+git show --stat HEAD | tail -3   # 驗 scope；出現 .ts/.vue/.sql 等 → STOP，那批改走 /commit
 ```
+
+若本輪也改了 `docs/tech-debt.md` / `tasks/**`，把它們加進同一個 `--only` pathspec。**NEVER** 把白名單外的檔塞進來。
 
 **NEVER** `git add` + `git commit` 兩段式——會吞掉別 session 預 stage 的內容。
 

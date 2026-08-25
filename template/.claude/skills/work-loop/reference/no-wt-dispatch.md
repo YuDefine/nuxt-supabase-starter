@@ -21,21 +21,26 @@ Step 4a 的三條 dispatch 都假設 `/wt` 在本 repo 叫得動。那個假設�
 
 ```bash
 node vendor/scripts/wt-helper.ts add <slug>          # 1. 開，main 保持 dirty 不動
-# 2. 主線在 ~/offline/<repo>-wt/<slug>/ 內 Edit / 跑 test / git commit --only
+# 2. 主線在 ~/offline/<repo>-wt/<slug>/ 內 Edit / 跑 test / git commit --only（session branch）
 node vendor/scripts/wt-helper.ts merge-back <slug> --dry-run   # 3. 先確認別 session WIP 不會被捲走
 node vendor/scripts/wt-helper.ts merge-back <slug>             # 4. squash 進 main 的 index
-git commit --only -m "…" -- <逐條列出剛才改的檔>               # 4b. 這步不能省，見下
+# 4b. 落地 main：白名單 → git commit --only；否則 Skill invoke: /commit。這步不能省，見下
 ```
 
 **第 4b 步不能省**：`merge-back` 走 `git merge --squash`，改動落在 main 的 **index、不建 commit**，
 而同一次執行已經刪掉 worktree 目錄與 session branch。那個瞬間 staged 區是這份工作的唯一副本。
 它收尾照印 `absorbed into main + worktree cleaned`，真相在上面幾行的 `Squash commit -- not updating HEAD`。
 
+路徑全在 [[commit.detail]] 白名單 → `git commit --only -m "…" -- <paths>`。
+任一路徑不在（source / migration / plugin / 任何程式碼）→ **MUST** `Skill invoke: /commit`。
+**NEVER** 用 `git commit --only` 送白名單外的檔——那是 2026-08-24/25 <consumer-a> 五筆無 `Via: /commit` 擋住 `git push` 的成因。
+卡 `/commit` 人工檢查 → packaging，**NEVER** `--only` 繞過。
+
 ## 驗收不打折
 
 收割 SOP（[harvest.md](harvest.md)）每一步照跑，[guardrails.md](guardrails.md) 的
-`git commit --only`、scope-verify、三層 verify 一條都不放寬。差別只在**誰產生那個 commit**
-（主線而非 subagent），不在**要不要有 commit**。
+commit 紀律（白名單 `--only` / 其餘 `/commit`）、scope-verify、三層 verify 一條都不放寬。
+差別只在**誰產生那個 commit**（主線而非 subagent），不在**要不要有 commit**。
 
 ## 代價是併發，不是工作量
 

@@ -192,7 +192,7 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 
 ### 隔離 worktree ≠ 繞過 /commit（hard rule）
 
-main 髒 / 有別 session WIP 不能直接跑 `/commit`（會吃別人 staged）→ 正解是**在乾淨隔離 worktree 內跑 `/commit`**，**NEVER** 用「隔離 worktree + raw `git commit` + `git push origin main`」把 substantive change 繞過 0-A review 推上 origin/main。隔離 worktree 是多 session 安全手段、不是 review 豁免。判別走下節的路徑白名單，**NEVER** 靠「這批算不算小」自評；`\do-all` / 時間壓力 **NEVER** 是跳 gate 的理由。實證：[[pitfall-isolated-worktree-raw-commit-push-bypasses-commit-gate]]
+main 髒 / 有別 session WIP 不能直接跑 `/commit`（會吃別人 staged）→ 正解是**在乾淨隔離 worktree 內跑 `/commit`**，**NEVER** 用「隔離 worktree + raw `git commit` + `git push origin main`」把 substantive change 繞過 0-A review 推上 origin/main。隔離 worktree 是多 session 安全手段、不是 review 豁免。判別走下節的路徑白名單，**NEVER** 靠「這批算不算小」自評；`\do-all` / 時間壓力 **NEVER** 是跳 gate 的理由。work-loop / unattended / 「護欄說一律 `--only`」同樣不是。實證：[[pitfall-isolated-worktree-raw-commit-push-bypasses-commit-gate]]
 
 ### `--only` 適用範圍 = 路徑白名單（hard rule）
 
@@ -209,6 +209,8 @@ main 髒 / 有別 session WIP 不能直接跑 `/commit`（會吃別人 staged）
 | `openspec/changes/**/tasks.md`<br>`.spectra/evidence/<change-name>.jsonl` | worktree phase-tick 專用，**兩條一起**（見 § worktree 內唯一合法的 commit：artifact-tick） |
 
 **白名單外的一切改動 MUST 走 `/commit`**，包含但不限於：`rules/**`、`scripts/**`、`vendor/scripts/**`、`plugins/**`、`claude-md/**`、`registry/**`、任何 source code。改動落在白名單內外**混合**時，整批走 `/commit`——**NEVER** 拆成「白名單那半用 `--only` 先送」。
+
+**work-loop 不是例外。** HANDOFF / tech-debt 短更走本表 `--only`；merge-back / archive / 非 spectra 收割後的產品落地走 `/commit`。護欄原文若寫「一律 `--only`」，以本節為準。機械層：`pre-bash-git-commit-only-whitelist.sh` 在 main 上擋白名單外的 `--only`（`/commit` 的 `Via: /commit` trailer 放行）。
 
 **「純 typo」不是跨路徑的例外**。它只在白名單路徑內成立，且僅限散文本身的錯字。**NEVER** 拿它包裝：規約措辭修正（改的是 MUST / NEVER 的語意）、程式識別字重命名、註解以外的任何程式碼改動——這三類即使一個字元也走 `/commit`。
 

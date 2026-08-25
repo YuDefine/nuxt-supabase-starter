@@ -12,13 +12,13 @@ Local edits will be reverted by the next sync.
 
 ## Archive → ship 三條路徑（3z / 3c / 3d）
 
-三者的差別只有**進場條件**與 **commit pathspec**，其餘相同。pathspec 弄錯會漏 commit 或誤納其他 change 的檔案，**MUST** 照下表取值，NEVER 憑印象。
+三者的差別只有**進場條件**，其餘相同。archive Step 0 的 merge-back 會把產品碼放進 main 的 index，跟 archive 目錄是同一批落地——**MUST** 整批走 `/commit`，NEVER 用 `--only` 只送 `openspec/`（會漏產品碼，或把產品碼用不帶 `Via` 的 `--only` 送上 main）。
 
-| Bucket | 進場條件 | archive 前 | commit pathspec |
-| --- | --- | --- | --- |
-| **3z. done** | review 全通過（`pending=0` 且 `issued=0`） | 無 | `-- openspec/changes/archive/` |
-| **3c. awaitArchiveWalkthrough** | 只剩 `[discuss]` items 待 walkthrough | archive 內部 Step 3.5 自行處理 discuss walkthrough，不必先跑 | `-- openspec/` |
-| **3d. ready (userActionPending=0)** | review 全部 OK，可直接 ship | 無 | 同 3z |
+| Bucket | 進場條件 | archive 前 |
+| --- | --- | --- |
+| **3z. done** | review 全通過（`pending=0` 且 `issued=0`） | 無 |
+| **3c. awaitArchiveWalkthrough** | 只剩 `[discuss]` items 待 walkthrough | archive 內部 Step 3.5 自行處理 discuss walkthrough，不必先跑 |
+| **3d. ready (userActionPending=0)** | review 全部 OK，可直接 ship | 無 |
 
 共同步驟：
 
@@ -30,12 +30,14 @@ Local edits will be reverted by the next sync.
 
 2. Archive 完成 → merge-back 已包含在 archive Step 0，不必另外跑。
 
-3. commit + push（pathspec 取上表）：
+3. 落地 + push（merge-back 已把產品碼放進 index，與 archive 目錄同一批）：
 
-   ```bash
-   git commit --only -m "📝 docs(spectra): archive <change-name> 歸檔" -- <pathspec>
+   ```
+   Skill invoke: /commit
    git push
    ```
+
+   **NEVER** `git commit --only -- openspec/` 取代 `/commit`。卡人工檢查 → packaging，**NEVER** `--only` 繞 0-A。
 
 4. 標 ✅ shipped。
 
@@ -47,7 +49,8 @@ Local edits will be reverted by the next sync.
 
    ```bash
    spectra unpark "<change-name>"
-   git commit --only -m "📝 docs(spectra): unpark <change-name>" -- openspec/changes/<change-name>/
+   git commit --only -m "📝 docs(spectra): unpark <change-name>" -- openspec/changes/<change-name>/tasks.md
+   # 若 git diff --name-only 出現 tasks.md 以外的路徑 → 改走 /commit，NEVER 擴大 --only pathspec
    ```
 
 2. **Dispatch spectra-apply**（同 SKILL.md § 3f）：

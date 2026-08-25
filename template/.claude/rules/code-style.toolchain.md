@@ -80,6 +80,48 @@ clade 投影進 consumer 的路徑（`vendor/**`、`.claude/**`、`.clade/**`、
 
 機械檢查：`node scripts/audit-governance-drift.ts` check 10 掃 clade + 全 consumer 的 `vite.config.ts`，preset 未涵蓋的 inline 排除路徑會 fail。對應 [[pitfall-projection-excludes-not-in-shared-preset]]。
 
+#### `staged` 區塊的排除清單也 MUST 讀 `PROJECTION_EXCLUDES`
+
+上面那條管的是 `lint.ignorePatterns` / `fmt.ignorePatterns`。**`staged` 那一格是獨立的第二處**——
+`vp staged` 不讀 `ignorePatterns` 決定要不要把檔案送進命令，它照 glob 把 staged 檔原樣交出去。
+
+- **MUST** 讓 `staged` 區塊的過濾邏輯追溯得到 `vendor/oxc-shared/preset.ts` 匯出的
+  `PROJECTION_EXCLUDES`（直接用它，或用由它推導出的 helper）
+- **NEVER** 在 `staged` 手寫一份平行的投影層目錄清單。preset 一補條目、這裡沒跟上，
+  那個目錄的檔一進 staged 就整個 pre-commit 掛
+- **NEVER** 把「檔案別處的註解提過 `PROJECTION_EXCLUDES`」當成已經濾了——註解不過濾任何檔案
+
+```ts
+import { defineConfig } from 'vite-plus'
+import { fmtBase, lintBase, PROJECTION_EXCLUDES } from './vendor/oxc-shared/preset.ts'
+
+const projectionPrefixes = PROJECTION_EXCLUDES.map((p) => p.replace(/\/\*\*$/, '/'))
+const isProjection = (f: string) => projectionPrefixes.some((d) => f.includes(`/${d}`) || f.startsWith(d))
+
+export default defineConfig({
+  staged: {
+    '*.{js,ts,vue}': (files: string[]) => {
+      const lintable = files.filter((f) => !f.endsWith('.d.ts') && !isProjection(f))
+      if (lintable.length === 0) return ['true']
+      return [`vp lint --fix ${lintable.join(' ')}`, `vp fmt ${lintable.join(' ')}`]
+    },
+  },
+})
+```
+
+**為什麼平時不炸、propagate 一定炸**：`vp lint` / `vp fmt` 對「輸入路徑**全部**被 ignore」
+回 exit 1，訊息是 `No files found to lint`——看起來像路徑打錯，不像被 ignore。consumer 自己
+commit 時 staged 混有業務檔，有東西可 lint 就不報錯；而 `propagate.ts` 走 partial-commit
+（`git commit --only -- <clade-paths>`），**它 commit 的必然全是投影檔**。沒濾的 consumer
+每一趟 propagate 都站在觸發線上，只差那輪有沒有動到被 ignore 的路徑（2026-08-25 v1.11.80：
+<consumer-i> 只 staged 到 `.clade/vendor/scripts/flow/{flow,serve}.ts`，pre-commit 掛、
+propagate 回 `failed`，而同樣的洞當時在另外 7 台開著）。
+
+機械檢查：`node scripts/audit-governance-drift.ts` check 16 掃 clade + 全 consumer 的
+`vite.config.ts`（含 `template/`），有 `staged` 區塊卻追溯不到 `PROJECTION_EXCLUDES` 的落點
+列進 offenders；沒有 `staged` 區塊的列 `not_applicable`（沒有 hook 就沒有這個洞）。
+本 check **不擋 publish**——違規落在 consumer 自治區的 `vite.config.ts`，clade 主線不代改。
+
 ## 禁止事項（NEVER）
 
 ### 禁止建立 eslint 設定檔
