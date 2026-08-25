@@ -626,7 +626,7 @@ if (IS_BROWSER) {
       if (currentStyle.filter && currentStyle.filter !== 'none') reasons.add('filter');
       if (currentStyle.backdropFilter && currentStyle.backdropFilter !== 'none') reasons.add('backdrop filter');
 
-      const solidBg = parseRgb(currentStyle.backgroundColor);
+      const solidBg = parseRgb(currentStyle.backgroundColor) || parseAnyColor(currentStyle.backgroundColor);
       if (solidBg && solidBg.a >= 0.95 && (!bgImage || bgImage === 'none')) break;
       current = current.parentElement;
     }
@@ -683,8 +683,12 @@ if (IS_BROWSER) {
 
       const reasons = collectVisualContrastReasons(el, style);
       if (reasons.length === 0) continue;
+      // Image-only mode filters here, inside the cap: gradient/opacity/filter
+      // candidates earlier in DOM order must not consume the budget and
+      // starve the url()-backed texts this mode exists to sample.
+      if (options.imageOnly && !reasons.includes('image background')) continue;
 
-      const textColor = parseRgb(style.color);
+      const textColor = parseRgb(style.color) || parseAnyColor(style.color);
       const fontSize = parseFloat(style.fontSize) || 16;
       const fontWeight = parseInt(style.fontWeight) || 400;
       const isLargeText = fontSize >= WCAG_LARGE_TEXT_PX || (fontSize >= WCAG_LARGE_BOLD_TEXT_PX && fontWeight >= 700);
@@ -981,7 +985,7 @@ if (IS_BROWSER) {
         return sample;
       }
     }
-    const bg = parseRgb(style.backgroundColor);
+    const bg = parseRgb(style.backgroundColor) || parseAnyColor(style.backgroundColor);
     if (bg && bg.a > 0.05) return { status: 'sampled', color: bg, method: 'solid-background' };
     return { status: 'unresolved', reason: 'no readable background' };
   }
@@ -1111,7 +1115,7 @@ if (IS_BROWSER) {
     }
 
     const style = getComputedStyle(el);
-    const textColor = parseRgb(style.color) || candidate.textColor;
+    const textColor = parseRgb(style.color) || parseAnyColor(style.color) || candidate.textColor;
     if (!textColor) return { ...candidate, status: 'unresolved', confidence: 'none', reason: 'unreadable text color' };
 
     const rect = getDirectTextRect(el) || el.getBoundingClientRect();
@@ -1175,6 +1179,7 @@ if (IS_BROWSER) {
   }
 
   async function analyzeVisualContrast(options = {}) {
+    // imageOnly is enforced inside the collector, before the candidate cap.
     const candidates = collectVisualContrastCandidates(options);
     const results = [];
     const shouldScrollOffscreen = options.scrollOffscreen === true;
@@ -1260,9 +1265,16 @@ if (IS_BROWSER) {
 
   function addBrowserFindings(groupMap, el, findings) {
     if (!findings || findings.length === 0) return;
+    // Element-scoped waivers: a data-impeccable-ignore ancestor suppresses
+    // matching findings for its whole subtree. Applied at this choke point so
+    // every per-element attribution (checks, layout, occlusion, rhythm)
+    // honors it; page-level findings attributed to <body> pass through
+    // untouched, since body has no ignoring ancestor.
+    const kept = findings.filter(f => !scopedIgnoreActive(el, f.type));
+    if (kept.length === 0) return;
     const existing = groupMap.get(el);
-    if (existing) existing.push(...findings);
-    else groupMap.set(el, [...findings]);
+    if (existing) existing.push(...kept);
+    else groupMap.set(el, [...kept]);
   }
 
   function browserFindingsFromMap(groupMap) {
@@ -1620,9 +1632,27 @@ if (IS_BROWSER) {
     for (const node of docClone.querySelectorAll('[id^="impeccable-live-"]')) {
       node.remove();
     }
-    const htmlPatternFindings = checkHtmlPatterns(docClone.outerHTML);
-    if (htmlPatternFindings.length > 0) {
-      const mapped = htmlPatternFindings.map(f => {
+    // Regex findings that name a live selector resolve against the real DOM:
+    // pseudo-element/class segments are stripped (the host element is the
+    // anchor), a selector that matches nothing on this page drops the finding
+    // (the CSS ships here, but the pattern never renders — the live DOM is
+    // ground truth in the browser), and a match under a data-impeccable-ignore
+    // ancestor is waived. Selector-less findings stay page-level.
+    const scopedHtmlFindings = checkHtmlPatterns(docClone.outerHTML).filter(f => {
+      if (!f.selector) return true;
+      const query = String(f.selector).replace(/::?[a-zA-Z-]+(\([^)]*\))?/g, '').trim().replace(/,\s*(?=,|$)/g, '');
+      if (!query || /^[,\s]*$/.test(query)) return true;
+      let matches;
+      try {
+        matches = document.querySelectorAll(query);
+      } catch {
+        return true;
+      }
+      if (matches.length === 0) return false;
+      return [...matches].some(el => !scopedIgnoreActive(el, f.id));
+    });
+    if (scopedHtmlFindings.length > 0) {
+      const mapped = scopedHtmlFindings.map(f => {
         const item = { type: f.id, detail: f.snippet };
         if (f.severity) {
           item.severity = f.severity;
@@ -1652,8 +1682,27 @@ if (IS_BROWSER) {
     };
   }
 
+  // Visual contrast has three modes. Explicit true runs the full sampled
+  // pass; explicit false disables it entirely (the deterministic-only mode
+  // the test suites use). Unset — the default overlay run — samples ONLY
+  // image-backed text: the one class the analytic walk deliberately skips,
+  // because a url() layer's pixels are unknowable without looking. In-page
+  // sampling draws the source image alone to a canvas (glyph ink never
+  // pollutes it), and a cross-origin image without CORS reports unresolved
+  // instead of guessing.
+  function visualContrastMode(options = {}) {
+    const explicit = typeof options.visualContrast === 'boolean'
+      ? options.visualContrast
+      : typeof window.__IMPECCABLE_CONFIG__?.visualContrast === 'boolean'
+        ? window.__IMPECCABLE_CONFIG__.visualContrast
+        : null;
+    if (explicit === true) return 'full';
+    if (explicit === false) return false;
+    return 'image-only';
+  }
+
   function shouldRunVisualContrast(options = {}) {
-    return options.visualContrast === true || window.__IMPECCABLE_CONFIG__?.visualContrast === true;
+    return visualContrastMode(options) !== false;
   }
 
   function visualContrastOptions(options = {}) {
@@ -1830,6 +1879,7 @@ if (IS_BROWSER) {
       return [];
     }
     const resolvedOptions = visualContrastOptions(options);
+    if (visualContrastMode(options) === 'image-only') resolvedOptions.imageOnly = true;
     const analyses = await analyzeVisualContrast(resolvedOptions);
     if (runtime.generation && runtime.generation !== scanGeneration) return analyses;
     lastVisualContrastAnalyses = analyses;

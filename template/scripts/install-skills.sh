@@ -3,7 +3,7 @@
 # Skills 安裝／更新腳本
 # 統一使用 --agent claude-code --copy：直接寫入 .claude/skills/，不建立 symlink
 # 重複執行會覆寫為最新版（等同 update）
-# 更新日期：2026-04-17（impeccable v2.1 breaking changes 同步）
+# 更新日期：2026-08-25（impeccable v4.1.1 同步）
 
 set -e
 
@@ -43,10 +43,36 @@ npx skills add nuxt/ui $COPY_FLAGS
 echo "  ✓ 官方 Skills 完成"
 echo ""
 
+# Better Auth 官方 Skills
+echo "📦 Better Auth 官方 Skills..."
+npx skills add better-auth/skills@better-auth-best-practices $COPY_FLAGS
+npx skills add better-auth/skills@better-auth-security-best-practices $COPY_FLAGS
+echo "  ✓ Better Auth 官方 Skills 完成"
+echo ""
+
+# Cloudflare Skills
+echo "📦 Cloudflare Skills..."
+npx skills add cloudflare/skills@wrangler $COPY_FLAGS
+npx skills add cloudflare/skills@workers-best-practices $COPY_FLAGS
+echo "  ✓ Cloudflare Skills 完成"
+echo ""
+
 # TDD
 echo "📦 TDD Skill..."
 npx skills add obra/superpowers@test-driven-development $COPY_FLAGS
 echo "  ✓ TDD Skill 完成"
+echo ""
+
+# Playwright
+echo "📦 Playwright 最佳實踐 Skill..."
+npx skills add currents-dev/playwright-best-practices-skill $COPY_FLAGS
+echo "  ✓ Playwright 最佳實踐 Skill 完成"
+echo ""
+
+# Zod
+echo "📦 Zod Skill..."
+npx skills add pproenca/dot-skills@zod $COPY_FLAGS
+echo "  ✓ Zod Skill 完成"
 echo ""
 
 # Evlog（Observability）
@@ -55,15 +81,15 @@ npx skills add https://www.evlog.dev $COPY_FLAGS
 echo "  ✓ Evlog Skills 完成"
 echo ""
 
-# Impeccable Design Skill（pbakaus/impeccable v3.0.6 — 單一 skill 含 24 sub-command；clade design orchestrator 鎖定此版本）
-# v3.0 breaking: 拆分形態（@adapt / @animate / ...）合併為單一 skill，sub-command 改由 SKILL.md 統一定義
+# Impeccable Design Skill（pbakaus/impeccable v4.1.1 — 單一 skill 含 23 sub-command）
+# v4 延續單一 skill 形態，sub-command 由 SKILL.md 統一定義
 # 本地 starter skills（不從 upstream 覆寫）：design / design-retro / review-archive / subagent-dev
 echo "📦 Impeccable Design Skill..."
 npx skills add pbakaus/impeccable $COPY_FLAGS
 echo "  ✓ Impeccable Design Skill 完成"
 echo ""
 
-# 清理 v1.x / v2.x deprecated sub-skill 目錄（v3 已合併為單一 skill）
+# 清理 v1.x / v2.x deprecated sub-skill 目錄（v4 已合併為單一 skill）
 DEPRECATED_DIR="$(pwd)/.claude/skills"
 for legacy in adapt animate arrange audit bolder clarify colorize critique delight distill extract frontend-design harden layout normalize onboard optimize overdrive polish quieter shape teach-impeccable typeset; do
   if [ -d "$DEPRECATED_DIR/$legacy" ] && grep -qi impeccable "$DEPRECATED_DIR/$legacy/SKILL.md" 2>/dev/null; then
