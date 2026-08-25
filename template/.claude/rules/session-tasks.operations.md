@@ -49,15 +49,19 @@ tasks/
 
 ## 寫入規約補充
 
-開工建檔、只 `Edit` 自己那檔、session 結束升級或刪 —— 這三條在 [[session-tasks]]，本檔不複述（主檔是 always-load，子檔載入時它必然也在）。這裡只補兩件主檔放不下的：
+開工建檔、只 `Edit` 自己那檔、session 結束升級或刪 —— 這三條在 [[session-tasks]]，本檔不複述（主檔是 always-load，子檔載入時它必然也在）。這裡只補三件主檔放不下的：
 
 - **timestamp 與 slug**：timestamp 取**開工當下**（HHMM 解析度足夠；同分撞名極罕見，撞到加 `-2` 後綴即可）；slug 用 kebab-case 描述任務本質（如 `imports-warn-fix`、`handoff-cleanup`）
 - **別的 session 的 tasks 檔怎麼處理，看檔名 timestamp 距今幾天**：
 
   | 判定 | 你可以做的 | 你不可以做的 |
   | --- | --- | --- |
+  | 檔頭 `work_id:` 在本 repo flow spine 上**所有 span 都已收尾**（收尾證據，見下方第三條） | 整檔 `mv` 到 `tasks/archive/`，**不必等 7 天** | `Edit` 內容、代跑升級路徑 |
   | 檔名 timestamp **或** mtime 任一 ≤ 7 天 | 什麼都不做 | `Edit`、`mv`、刪 —— 那個 session 可能還活著 |
-  | 兩者**都** > 7 天（無主） | 整檔 `mv` 到 `tasks/archive/` | `Edit` 內容、代跑升級路徑 |
+  | 兩者**都** > 7 天（無主推定） | 整檔 `mv` 到 `tasks/archive/` | `Edit` 內容、代跑升級路徑 |
+
+  第一列優先於後兩列：**有收尾證據就不必用年齡推定**。三列的可做／不可做完全相同（只 `mv`），
+  差別只在**憑什麼**判它可以動。
 
   ```bash
   find tasks -maxdepth 1 -name '[0-9]*-*.md' -mtime +7 \
@@ -84,6 +88,21 @@ tasks/
 
   不設接管條款的代價：無主檔單調累積，2026-08-02 實測全 fleet 38 檔、最舊超過四週。
 
+- **檔頭 `work_id:` 是選填，NEVER 變成強制**：宣告了就讓 `audit-stale-tasks.ts` 改用**收尾證據**
+  判該檔可否歸檔（上表第一列）；沒宣告就照舊走年齡判定，行為與加這個欄位之前逐字相同。
+  值來自 `node vendor/scripts/flow/flow.ts open <slug>`。
+
+  **NEVER 對缺 `work_id:` 的檔報違例、NEVER 讓任何 gate 因此擋人**——2026-08 全 fleet 實測
+  malformed 170 檔，那個數字是「登記成本高過收益」的結構信號，不是紀律問題；加強制只會把
+  成本再抬高一級，然後收穫一批為了過 gate 而填的假 id。
+
+  宣告了 work_id 但 spine 上查無該 work（沒跑過 `flow open`、或該 consumer 還沒收到 flow CLI
+  的散播）→ **NEVER** 當成已收尾。事件缺席不是完成證據，退回年齡判定。
+
+  同理，**`flow open` 本身 NEVER 構成收尾證據**：它發的是 point 事件，start 與 end 同一刻，
+  「剛開工」與「全做完」在 span 上長相逐字相同。判定要求至少一個**真正跑完的 interval span**
+  （有 start 有 end、且 outcome 不是 fail）。
+
 **為什麼分檔**：與 `.spectra/claims/*.json`、`openspec/changes/<name>/`、`docs/decisions/YYYY-MM-DD-*.md` 同 pattern——每個 entity 一檔，避免多寫者單檔競態。
 
 ---
@@ -95,6 +114,7 @@ tasks/
 
 > Session: <YYYY-MM-DD HH:MM>
 > 狀態: in-progress | blocked | done
+> work_id: <選填，`node vendor/scripts/flow/flow.ts open <slug>` 印出的 W-… id>
 
 ## Plan
 

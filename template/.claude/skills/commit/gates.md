@@ -88,7 +88,17 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
   3. 確認別 session 沒在跑後再繼續
 ```
 
-接著用 **AskUserQuestion** 二擇一：
+接著 **MUST 先跑 [[session-tasks]] § 並行爭用 的 Step 0** 判出持有者性質（`herdr agent list` 過濾 cwd → `herdr agent read` → `pgrep -af 'work-loop/[r]unner\.sh'`），再依下表決定動作。**NEVER** 從 warn block 直接跳到 `AskUserQuestion`：
+
+| Step 0 判出持有者是 | 這裡做什麼 |
+| --- | --- |
+| **前景 agent session** | **① 先 `herdr agent prompt <pane_id> "<四項>"` 通知對方**——這一步排在等候重試 / 強制繼續 / 問 user **之前**。訊息 MUST 含的四項與逐字範本見 [[concurrent-session-probe]] § 探測之後：協商（negotiate）。**② 依對方回覆分流**：對方說它正要 land → 等到它 commit 落地再重跑 0-Coord；對方說那批無主 → 直接進 Step 0-Scope；對方說它要接手 → 釋放 commit-lock 後 STOP。**③ 對方沒回應，才落到下面的 `AskUserQuestion`** |
+| **unattended runner**（`pgrep` 命中且 `/proc/<pid>/cwd` 是本 repo） | 對話不適用——runner child 是 `claude --print`，沒有 pane 也不讀訊息，那個 idle pane 收到訊息不會轉達給背景 process。退出 /commit 並登記本輪需求，**NEVER** 對它 prompt、**NEVER** 搶 |
+| **人類正在編輯**，或 Step 0 判不出持有者 | 才走下面的 `AskUserQuestion` |
+
+送出 `herdr agent prompt` 之後 **MUST 指名等到哪一個可觀察事件**（對方回覆、或 `git status` 那幾個檔消失），**NEVER** 只寫「等對方回」就無限期掛著；等待上限與逾時升級路徑見 [[concurrent-session-probe]] § 探測之後：協商（negotiate）。
+
+落到上表第三列（或第一列的 ③）時，用 **AskUserQuestion** 二擇一：
 
 - **選項 A**：`label: "等候重試"`, `description: "退出 /commit，等 60 秒後重跑（推薦：避開 staged 污染風險）"`
 - **選項 B**：`label: "強制繼續"`, `description: "接受 staged 污染風險繼續跑 Step 0-Scope（user 確認別 session 已結束時用）"`
@@ -99,7 +109,9 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 - **NEVER** 把 Step 0-Coord 升級為 hard block；偽陽性 / 別 session 剛好結束的場景太多，warn-and-ask 是當前正解
 - **NEVER** 嘗試自動 `rm .git/index.lock` 或清掉 sidecar — 那是別 session 的 SoT，誤刪比繼續跑風險更高
-- **NEVER** 跳過 AskUserQuestion 自行決定繼續 — 命中時 user 必須親自選 A/B
+- **NEVER** 在**未經對話**的情況下自行決定繼續 — 持有者是前景 agent session 時，跳過 `herdr agent prompt` 直接選 A 或 B 都算違反
+- **NEVER** 在對話**尚未發生**時就開 `AskUserQuestion` — 「我不動別人的檔」**NEVER** 讀成「我什麼都不做」，不動檔與不溝通是兩件事，而本 gate 要求的只有前者
+- 落到上表第三列（人類編輯 / 判不出持有者）之後，**NEVER** 跳過 AskUserQuestion 自行決定繼續 — 該情況下 user 必須親自選 A/B
 
 > 同類 race 也存在於 **ad-hoc commit**（不走本 skill 的單檔 commit、HANDOFF 補一行就 commit、修 typo 就 commit 等）。預防規約見 `rules/core/commit.md` § Ad-hoc commit 必走 `git commit --only -- <paths>`。
 

@@ -32,9 +32,9 @@ node .claude/scripts/commit-lock.mjs acquire
 
 ## Step 0-Coord: Cross-Session Staged Pollution Detection
 
-跑 3 個 detection signal（index.lock mtime、publish stash sidecar、wt-helper baseline stash）warn-only 偵測別 session 的 staging 活動。全部 silent → 直接進 Step 0-Scope。任一命中 → AskUserQuestion 二擇一（等候重試 / 強制繼續）。
+跑 3 個 detection signal（index.lock mtime、publish stash sidecar、wt-helper baseline stash）warn-only 偵測別 session 的 staging 活動。全部 silent → 直接進 Step 0-Scope。任一命中 → 先判持有者性質，持有者是**前景 agent session** 時 **MUST 先 `herdr agent prompt` 跟它對話**，對方沒回應才輪到 AskUserQuestion 二擇一。
 
-觸發 0-Coord 命中時 **MUST** 先完整讀 [gates.md](gates.md) § 0-Coord 的 signal 定義與命中處置流程再繼續。
+觸發 0-Coord 命中時 **MUST** 先完整讀 [gates.md](gates.md) § 0-Coord 的 signal 定義與命中處置流程再繼續——**NEVER** 憑本段摘要直接開 `AskUserQuestion`，對話那一步只寫在 gates.md 的分流表裡。
 
 ## Step 0-Pi: 派 pi 跑 commit 工作時的路由規約
 
