@@ -1,6 +1,6 @@
 ---
 description: 多 session 並行下「哪些路徑屬於別 session 還活著的工作」的 claim 機制規格——claim 檔 schema、寫 / refresh / drop 時機、誰讀、stale 處理、claim-helper CLI
-paths: ['.clade/claims/**', 'scripts/claim-helper.ts', 'scripts/spectra-advanced/claim*.ts', 'scripts/spectra-advanced/claims-lib.ts', 'scripts/spectra-advanced/release-work.ts']
+paths: ['.clade/claims/**', 'scripts/claim-helper.ts', 'scripts/spectra-advanced/claim*.ts', 'scripts/spectra-advanced/claims-lib.ts', 'scripts/spectra-advanced/release-work.ts', 'vendor/scripts/claim-helper.ts', 'vendor/scripts/spectra-advanced/claim*.ts', 'vendor/scripts/spectra-advanced/claims-lib.ts', 'vendor/scripts/spectra-advanced/release-work.ts']
 ---
 <!--
 🔒 LOCKED — managed by clade

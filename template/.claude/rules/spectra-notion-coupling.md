@@ -67,6 +67,7 @@ Local edits will be reverted by the next sync.
 
 ## 執行機制
 
+- **Runtime**：狀態推進的 ntn 呼叫走 [[agent-routing]] 〔`notion-ops`〕（gemini → luna → 主線），**NEVER** 主線第一手自己跑。
 - **入口**：走 `/notion-board`（inbound 全生命週期 skill）的狀態同步路徑，或依 `_notion-<consumer-b>-board/REFERENCE.md §3/§4` 直接 `ntn api -X PATCH "/v1/pages/<page_id>"` 改單一 `狀態` / `修復版本 >=` 欄位。
 - **寫入前 MUST**：`notion-fetch collection://<dataSourceId>`（consumer-meta `notion.dataSourceId`）重撈 schema，property key（中文 + 全形空格 + `>=`）一字不差 copy-paste，**NEVER** 憑記憶拼 property 名（REFERENCE.md §2 hard rule）。
 - **欄位邊界**（REFERENCE.md §2）：只寫 `狀態` 與 `修復版本 >=`（+ 必要時 `備註` 補開發備註）。**NEVER** 動 `名稱`（客戶原始描述）、`發布日期`（客戶提報日，不是發版日）、`驗收日期`（客戶側）、`驗收完成`（系統 readOnly）。

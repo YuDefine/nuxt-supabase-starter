@@ -1,0 +1,149 @@
+# 🔒 LOCKED — managed by clade · Source: vendor/actions/supabase-check/action.yml · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/actions/supabase-check/action.yml
+name: 'Supabase Schema Check'
+description: 'Cold-replay the repo migrations on a throwaway local Postgres, then assert three things: the committed database types match what the migrations produce, supabase db lint is clean at the configured level, and (when supabase/tests/ exists) the pgTAP suite passes. Never touches a dev, staging or production database — it starts its own stack on the runner, which is also what makes it verify that the migration chain replays from zero. Assumes the caller has already checked out the repo and installed the Supabase CLI (supabase/setup-cli@v1).'
+author: 'YuDefine/clade'
+
+inputs:
+  cwd:
+    description: 'Directory containing the supabase/ folder, relative to the repo root. Set this for monorepos where the app root is not the repo root.'
+    required: false
+    default: '.'
+  lint-level:
+    description: 'Severity floor passed to `supabase db lint`. warning (default) means zero tolerance — any finding at warning or above fails the job.'
+    required: false
+    default: 'warning'
+  types-path:
+    description: 'Path to the committed database types file, relative to cwd. Leave empty to auto-detect (package.json config.dbTypesPath, then the conventional locations).'
+    required: false
+    default: ''
+  run-tests:
+    description: 'auto (default; run `supabase test db` only when supabase/tests/ contains files), always, or never.'
+    required: false
+    default: 'auto'
+
+runs:
+  using: composite
+  steps:
+    - name: Supabase schema check
+      shell: bash
+      env:
+        INPUT_CWD: ${{ inputs.cwd }}
+        INPUT_LINT_LEVEL: ${{ inputs.lint-level }}
+        INPUT_TYPES_PATH: ${{ inputs.types-path }}
+        INPUT_RUN_TESTS: ${{ inputs.run-tests }}
+      run: |
+        set -euo pipefail
+
+        WORKDIR="$(printf '%s' "$INPUT_CWD" | tr -d '[:space:]')"
+        [ -z "$WORKDIR" ] && WORKDIR=.
+        cd "$WORKDIR"
+
+        # 這個 repo 還沒採用 supabase migrations —— 不是失敗，是還沒接。
+        if [ ! -d supabase/migrations ]; then
+          echo "::warning::no supabase/migrations/ under $WORKDIR — supabase-check not applicable here, skipping"
+          exit 0
+        fi
+
+        # CLI 由 caller 的 supabase/setup-cli@v1 提供。缺了就是 workflow 寫錯，
+        # 不能 warn+skip —— 那會讓「gate 沒跑」與「gate 通過」在 UI 上長得一樣。
+        if ! command -v supabase >/dev/null 2>&1; then
+          echo "::error::supabase CLI not found. Add a 'uses: supabase/setup-cli@v1' step before this action."
+          echo "See vendor/snippets/supabase-ci/README.md for the full workflow template."
+          exit 1
+        fi
+
+        cleanup() { supabase stop --no-backup >/dev/null 2>&1 || true; }
+        trap cleanup EXIT
+
+        # 只起 DB service。lint / gen types / pgTAP 都只需要 Postgres，
+        # 起全套 stack（auth / storage / studio）純粹是浪費 runner 時間。
+        echo "::group::supabase db start (cold replay of supabase/migrations/)"
+        supabase db start
+        echo "::endgroup::"
+
+        FAILED=0
+
+        # ── 1. types drift ────────────────────────────────────────────────
+        # 解析路徑的候選清單 MUST 與 commit skill 的 schema-sync.md Step 1.1 一致；
+        # 兩邊分歧會讓 CI 與 commit gate 檢查不同的檔，而兩邊都顯示綠燈。
+        TYPES="$(printf '%s' "$INPUT_TYPES_PATH" | tr -d '[:space:]')"
+        if [ -z "$TYPES" ] && [ -f package.json ]; then
+          TYPES="$(node -e "
+            const fs = require('fs');
+            const pkg = require('./package.json');
+            const custom = pkg.config && pkg.config.dbTypesPath;
+            const candidates = [
+              'packages/core/app/types/database.types.ts',
+              'app/types/database.types.ts',
+              'shared/types/database.types.ts',
+              'src/types/database.types.ts',
+            ];
+            process.stdout.write(custom || candidates.find(p => fs.existsSync(p)) || '');
+          " 2>/dev/null || true)"
+        fi
+
+        if [ -n "$TYPES" ] && [ -f "$TYPES" ]; then
+          echo "::group::types drift ($TYPES)"
+          supabase gen types typescript --local > "$TYPES"
+          if git diff --ignore-space-at-eol --exit-code --quiet -- "$TYPES"; then
+            echo "types match migrations"
+          else
+            echo "::error::$TYPES does not match what supabase/migrations/ produces."
+            echo "Someone hand-edited the types without a matching migration. Regenerate and commit:"
+            echo "  supabase gen types typescript --local > $TYPES"
+            git --no-pager diff -- "$TYPES" || true
+            FAILED=1
+          fi
+          echo "::endgroup::"
+        else
+          echo "::warning::no committed database types file found — types drift check skipped. Set the types-path input if this repo keeps one somewhere non-conventional."
+        fi
+
+        # ── 2. db lint ────────────────────────────────────────────────────
+        # exit code 不可靠（clean 與 findings 都可能回 0），所以判的是輸出內容。
+        # 優先 JSON：空陣列是「乾淨」的明確訊號，文字模式的 header 行會誤判成 finding。
+        echo "::group::supabase db lint --level $INPUT_LINT_LEVEL"
+        LINT_OUT="${RUNNER_TEMP:-/tmp}/supabase-lint.out"
+        if supabase db lint --level "$INPUT_LINT_LEVEL" --local --output json > "$LINT_OUT" 2>/dev/null \
+           && node -e "JSON.parse(require('fs').readFileSync('$LINT_OUT','utf8'))" 2>/dev/null; then
+          COUNT="$(node -e "
+            const r = JSON.parse(require('fs').readFileSync('$LINT_OUT','utf8'));
+            process.stdout.write(String(Array.isArray(r) ? r.length : (r && r.lints ? r.lints.length : 0)));
+          ")"
+          if [ "$COUNT" != "0" ]; then
+            echo "::error::supabase db lint reported $COUNT finding(s) at level $INPUT_LINT_LEVEL or above."
+            cat "$LINT_OUT"
+            FAILED=1
+          else
+            echo "lint clean"
+          fi
+        else
+          # JSON 不支援 → 退文字模式，非空即失敗。
+          supabase db lint --level "$INPUT_LINT_LEVEL" --local > "$LINT_OUT" 2>&1 || true
+          if [ -s "$LINT_OUT" ] && grep -qE '[^[:space:]]' "$LINT_OUT"; then
+            echo "::error::supabase db lint reported findings at level $INPUT_LINT_LEVEL or above."
+            cat "$LINT_OUT"
+            FAILED=1
+          else
+            echo "lint clean"
+          fi
+        fi
+        echo "::endgroup::"
+
+        # ── 3. pgTAP（opt-in：有測試才跑） ────────────────────────────────
+        RUN_TESTS=0
+        case "$INPUT_RUN_TESTS" in
+          always) RUN_TESTS=1 ;;
+          never)  RUN_TESTS=0 ;;
+          *)      [ -d supabase/tests ] && [ -n "$(find supabase/tests -name '*.sql' -print -quit)" ] && RUN_TESTS=1 ;;
+        esac
+
+        if [ "$RUN_TESTS" -eq 1 ]; then
+          echo "::group::supabase test db (pgTAP)"
+          supabase test db || FAILED=1
+          echo "::endgroup::"
+        else
+          echo "no supabase/tests/*.sql — pgTAP skipped (opt-in; see vendor/snippets/supabase-ci/README.md)"
+        fi
+
+        exit "$FAILED"

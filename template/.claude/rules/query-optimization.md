@@ -134,4 +134,6 @@ Supabase CLI v2.81.3+ 提供 `supabase db advisors` 自動檢查：
 - RLS policy 效能問題
 - Security 建議
 
-**SHOULD** 在每次大量 migration 後跑一次：`supabase db advisors`。
+執行時機與處置義務的 SoT 在 [[migration]] § Lint 與 advisors 的處置義務——**每一條** security 類
+finding MUST 當場修或登 TD，performance 類純參考。機械執行點是 `/commit` Step 1.5。
+**本節不複述那些判準**（複本必漂移）；這裡只列 advisors 查什麼。

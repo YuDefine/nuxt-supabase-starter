@@ -175,14 +175,15 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 **每一次** `/commit` 都 MUST 跑這一步的觸發判定 —— 判定本身無條件，判定**結果**才決定要不要做事：
 
 ```bash
-git status --porcelain | grep -Eq 'supabase/migrations/|\.types\.ts' && echo HAS || echo NO
+git status --porcelain | grep -Eq 'supabase/.*\.sql|supabase/migrations/|\.types\.ts' && echo HAS || echo NO
 ```
 
 - `NO` → 本 repo 這次沒動到 migrations 或 types，**直接進 Step 2**，不需要讀任何東西。
-- `HAS` → **MUST** 先完整讀 [schema-sync.md](schema-sync.md) 並照其中 Step 1.1–1.3 走完，再進 Step 2。
+- `HAS` → **MUST** 先完整讀 [schema-sync.md](schema-sync.md) 並照其中 Step 1.1–1.5 **每一步**走完，再進 Step 2。
+  Step 1.4（SQL lint）與 1.5（advisors）在 1.3 的 reset 之後跑，**NEVER** 做完 types 比對就當 Step 1 結束。
 
 上面這條判定刻意寬鬆（寧可誤送進 reference 也不漏），精確判定與完整流程都在 reference 檔裡。
-**NEVER** 憑印象自行重建重置 / 比對流程 —— `pnpm db:reset` 與 `supabase db reset` 的分支、
+**NEVER** 憑印象自行重建重置 / 比對 / lint 流程 —— `pnpm db:reset` 與 `supabase db reset` 的分支、
 `cp` 備份先於重置的順序、自訂 `config.dbTypesPath` 的解析，寫錯任一條都會靜默放行不一致的 schema。
 
 ## Step 2: 檢查變更狀態

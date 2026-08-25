@@ -20,10 +20,50 @@ Local edits will be reverted by the next sync.
 - **NEVER** use MCP `execute_sql` for DDL — `supabase_admin` owner breaks CI/CD
 - **MUST** use `bigint GENERATED ALWAYS AS IDENTITY` for new table primary keys — **NEVER** `bigserial`（SQL 標準，避免 sequence ownership 問題）
 - Existing tables using `bigserial` **SHALL NOT** be migrated（風險高、收益低）
-- After migration：依 runtime variant 跑 reset → lint → gen types → typecheck（具體命令見對應 `db-runtime/<variant>` rule，例如 self-hosted 走 `pnpm db:reset` / `pnpm db:lint` / `pnpm db:types`；local docker 走 `supabase db reset` / `supabase db lint` / `supabase gen types typescript --local`）
-- **SHOULD** run `supabase db advisors`（CLI v2.81.3+）檢查 schema 建議 — 涵蓋 index、security、performance 問題
+- **每一個** migration 檔新增或修改後都 **MUST** 依 runtime variant 跑 reset → lint → gen types → typecheck，**不是只處理最後一個**（具體命令見對應 `db-runtime/<variant>` rule，例如 self-hosted 走 `pnpm db:reset` / `pnpm db:lint` / `pnpm db:types`；local docker 走 `supabase db reset` / `supabase db lint` / `supabase gen types typescript --local`）
+- **MUST** run `supabase db advisors`（CLI v2.81.3+；版本不足退 MCP `get_advisors`）並**逐條**處置 security 類 finding — 見下方 § Lint 與 advisors 的處置義務
+
 
 > 本檔為 starter template 的預設規則，複製出去後依專案實際使用調整。
+
+## Lint 與 advisors 的處置義務
+
+上面兩條的機械執行點是 `/commit` **Step 1.4 / 1.5**（`plugins/hub-core/skills/commit/schema-sync.md`）——
+它在 Step 1.3 的 reset 之後跑，那是 DB 剛好處於「migrations 全部重放一次」狀態的唯一時刻。
+本節定義**義務**，執行流程不在這裡複述。
+
+### `supabase db lint` — hard block，零容忍
+
+- **MUST** 用 `--level warning` 門檻，輸出非空即停止 commit
+- **NEVER** 分級或維護「已知可忽略」清單 —— 那是會與現實漂開的第二份平行文件
+- **NEVER** 以「非本次 diff 引入」「既有 debt」為由放行；gate 不區分新舊
+
+### `supabase db advisors` — advisory，但義務逐條
+
+advisors 沒有文件化的 exit code 與輸出契約，所以**不做 hard gate**（flaky gate 的下場是被繞過，
+比 advisory 更糟）。但輸出 **MUST** 讀，且處置義務是逐條的：
+
+- **每一條** security 類 finding（RLS disabled、policy exists but RLS disabled、security definer
+  view、`auth.users` 暴露、function `search_path` 未設等）**MUST** 當場修掉，或在
+  `docs/tech-debt.md` 登一條 entry 並在完成報告寫明編號
+- **「每一條」是字面意思**：advisors 回 5 條就要 5 條都有著落，**NEVER** 修最嚴重的那條就往下走，
+  **NEVER** 只處理「跟本次 diff 相關」的那幾條
+- performance 類 finding（unindexed FK、unused index、`auth_rls_initplan`、multiple permissive
+  policies）純參考，不強制處置
+
+> **為什麼不把 advisors 交給 Dashboard**：官方文件把 advisors 定位成 Dashboard 巡檢面板，
+> 那個擺法的前提是 hosted 專案。self-hosted 沒有這兩個面板，照抄官方等於這個訊號沒有消費端。
+> 本 fleet 的消費端是**正在跑 `/commit` 的 agent**（commit-time）與 **CI 的 `supabase-check`
+> action**（lint 那半，見 `vendor/snippets/supabase-ci/`）。
+
+### CI 兜底
+
+commit gate 依賴 agent 走完流程；機械兜底在 CI。**每一個**有 `supabase/migrations/` 的 consumer
+都 **MUST** 有一份引用 `./.github/actions/supabase-check` 的 workflow，對碰到 `supabase/**` 的 PR
+跑冷啟重放 + types drift + lint。範本與落地步驟見 `vendor/snippets/supabase-ci/README.md`。
+
+CI 用 `supabase db start` 在 runner 上起本機 stack，**NEVER** 讓 CI 連 dev / staging 的實體 DB ——
+本機冷啟另外免費驗掉「依賴 dev DB 既有狀態才跑得起來的 migration」，那是在 dev DB 上 reset 驗不出來的。
 
 ## Timestamp 順序契約
 
