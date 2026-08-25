@@ -211,3 +211,103 @@ agent 出去，回來才知道 dev-port 組整組不可用。
 `vendor/scripts/wt-helper.ts`、**完全正常**。照 1–3 步處置會把 main 組 + 扇出組整組標成不可用，
 該輪所有 item 走 packaging，空轉一輪——而 clade home 正是 `/work-loop` 目前唯一的實跑場地
 （[[TD-395]]）。實跑擋得住「檔案在但 import 死了」，擋不住「探針量錯檔」。
+
+---
+
+## 起 runner 的形狀與收尾契約
+
+route 表判到 `runner.sh` 之後（含 headroom 判定改判過去的那條），起跑與收尾**全部由主線扛完**：user 不需要自己跑任何指令、不需要輪詢進度、不需要來問它停了沒。
+
+#### (a) 起跑形狀（hard rule）
+
+**MUST** 用 `Bash(run_in_background=true)` 起，指令是 本檔 的絕對路徑形式：
+
+```text
+Bash(run_in_background=true):
+  cd <目標 repo> && ~/offline/clade/plugins/hub-core/skills/work-loop/runner.sh --max-rounds 20
+```
+
+**NEVER** 在該指令裡加 `nohup`、`disown` 或尾綴 `&`。`runner.sh` 是前景同步跑（每輪 `claude --print` 跑完才進下一輪），harness 正是靠這點追蹤它、並在它退出時回頭叫醒主線。自行背景化 → Bash call 立刻返回 → harness 判定已結束 → 真正的 runner 成為無人追蹤的孤兒，**收尾通知永遠不會到達**。這是**靜默**失敗：起跑當下零異常訊號，log 照寫、round 照前進，看起來一切正常。
+
+起完 **MUST** 回報 log 目錄、依 (d) 排一次 cache-keepalive heartbeat、依 (e) arm 一個 per-round Monitor，然後結束本輪。三件都做完才算起跑完成。**NEVER** 在主線空等。
+
+**NEVER** 排 wakeup 去**讀 state 檔或 round log 找進度**——退出通知由 harness 送達，輪詢買不到任何它沒給的東西。
+
+**「NEVER 輪詢」不蘊含「NEVER 醒來」**：前者禁的是醒來後**做**的那件事（讀 state / log / 貼進度），後者是 (d) 要求的動作本身（[[pitfall-work-loop-runner-silence-expires-prompt-cache]]：靜默 119 分鐘跨過 cache TTL）。
+
+#### (b) 收尾回報契約
+
+runner process 的退出通知到達時 **MUST 主動回報，不等 user 問**。這不是 Step 5 的收割對象（那管的是 subagent 的 `<task-notification>`），走本節。
+
+**每一次**回報 MUST 含以下四項，缺一不算回報完成：
+
+1. 最終 round 數（runner 尾巴的 `runner 結束 —— 最終 round=<n>`）
+2. `stoppedReason`——有印就照抄，沒印就明說「沒有 `stoppedReason`」
+3. log 目錄路徑
+4. **停止原因屬於下表哪一列**——這項決定 user 要不要再起一輪，是四項裡唯一不能靠貼 log 代替的
+
+#### (c) 四種停止原因（逐字對照 `runner.sh` 的停止分支）
+
+| runner 印的 | 語義 | 回報 MUST 說 |
+| --- | --- | --- |
+| `== stop: <reason>`，且 reason 來自 state 的 `stoppedReason` | 正常收工 | 待辦已推完 |
+| 迴圈跑滿 `--max-rounds`（**沒有** `== stop:` 行） | 額度用完，**不是**做完 | 待辦還在，需再起一輪 |
+| `== stop: 連續 2 輪 exit≠0` | 系統性故障 | **異常中止** + log 路徑 |
+| `== stop: state 連續 2 輪未前進` | child 正常退出但 state 沒前進 | **異常中止** + 那幾輪沒寫進 state |
+| `== preflight 未通過`（exit 3） | 起跑前探針就不過，**一輪都沒跑** | **環境故障**：逐字轉述探針給的理由 + `preflight.log` 路徑。**NEVER** 直接補 `--skip-preflight` 重跑——那是把探針抓到的問題蓋掉 |
+| `== 待辦枯竭`（exit 4） | 推得動的待辦少於門檻，**一輪都沒跑** | **不是故障**：說「待辦枯竭，需 attended 補彈藥」+ 印出的 ready 數。**NEVER** 回報成待辦已推完 |
+| `== stop: orphan-quarantine-*`（exit 5） | `inFlight` 非空 / 不可解析，或 quarantine marker 尚未由 attended 清除，**一輪都沒跑**（child-exit guard 除外） | **孤兒 ownership quarantine**：逐字回報 `runnerStopReason`、marker 路徑與 attended reconciliation 要求；**NEVER** 自動 retry、刪 lock 或宣稱 lock 仍由 process 持有 |
+| `== 已有 runner 在跑`（exit 6） | **不是故障**：另一個 runner 持鎖，本次一輪都沒跑 | 說出 sessionId / pid 與「不需重起，等它跑完」。**NEVER** 刪鎖、`--force`、接管或再起第二個 runner |
+
+#### (c.1) 連續未前進的 ownership 分流（hard rule）
+
+| 可觀察 predicate | 父層 MUST |
+| --- | --- |
+| runner 是**本 session** 依 (a) 啟動、background Bash task id 已記錄，且 task 狀態仍是 running | 自主 `TaskStop(<runner task id>)`，再停止 (e) 的 Monitor；讀最後兩輪 log、state 與 lock holder，找出未前進 root cause 並直接修復。**NEVER** `AskUserQuestion`、**NEVER** 把停止責任推給 user |
+| runner 是本 session 啟動，但退出 notification 已把 task 標成 completed / failed | runner 已停止，不再對 completed task 呼叫 `TaskStop`；停止 (e) 的 Monitor後立刻做同一套 log/state/lock 調查。**NEVER** `AskUserQuestion` |
+| task id / 啟動 session 無法確認，或可確認 runner 屬於別 session | 先 `AskUserQuestion` 確認 ownership，**NEVER** 擅自 `TaskStop`、刪 lock 或接管 |
+
+**Iron Law：本 session 親自啟動的 runner，就是本 session 的 child。違反字面就是違反精神**——「不知道停了會不會有副作用」「先問一下比較保險」都不成立；harness task id 就是 ownership 證據。只有 ownership 不明或屬別 session 才問。
+
+**Red Flag**：看到 `state 連續 2 輪未前進` 後正要把 log 路徑貼給 user、但尚未依 task 狀態停止 running runner（或確認它已退出）並調查最後兩輪——停下，先走本節 ownership 表。
+
+**只有第一列是「跑完了」，其餘每一列都不是。** **NEVER** 把其中任何一列回報成待辦已推完，**也 NEVER** 只摘成功的那幾輪而不提中止——runner 每輪成功都印 `✓ round <n> 完成`，只讀那些行會產出一份看起來順利的假報告。命中 `連續 2 輪 exit≠0` 或 `state 連續 2 輪未前進` 時 **MUST** 一併附 `tail -20 <最後一個 log>`；命中 `preflight 未通過`、`待辦枯竭` 或 `已有 runner 在跑` 時沒有 round log 可附，改附 `preflight.log` 的最後一行。
+
+#### (d) cache-keepalive heartbeat（MUST）
+
+`--max-rounds 20` 可能跨越 prompt-cache TTL，而主線從起跑回報到退出通知之間可能**一次都不醒**。conversation context 掉出 1 小時 TTL 後，user 下次接手會重付 input token。這筆成本在 log 層面零訊號——round 照前進、`✓` 照印，看起來一切正常。
+
+起跑回報完成的**同一個 turn 內** MUST 排一次；`<task-id>` 是 background Bash 回傳的 harness task id，`deadline` = 起跑後 9 小時。prompt 與 control-turn 分流一律使用 [[agent-routing]] § Async keepalive prompt 的 canonical 形狀，`owner=work-loop-runner`、interval=3300s。
+
+**Iron Law：keepalive prompt 只能判活、重排或收割。** 判活的唯一手段是查 harness task 狀態，**NEVER** 讀 log / state / process table 代替。原任務若含共享資源修改，尤其 publish / propagate，**NEVER** 把原 prompt 或任何可重放原任務的摘要塞進 `ScheduleWakeup`——禁止重複原任務、publish、propagate 或寫檔。
+
+| 可觀察 predicate | 動作 |
+| --- | --- |
+| `TaskOutput(block=false)` = running，且未到 deadline | 重排同一個 3300s control prompt，本 turn 結束。**NEVER** 讀 state、**NEVER** 讀 log、**NEVER** 貼進度 |
+| terminal | 停 heartbeat，排一次 `ASYNC_LIFECYCLE_HANDOFF task=<id> owner=work-loop-runner cause=terminal`；handoff 一般 turn 先 claim task id，**先 `TaskStop` per-round Monitor**，再讀 result、分類 (c)、必要時取 `tail -20`，最後走 (b) 回報 |
+| deadline / unknown | 依 [[agent-routing.keepalive-wake]] § Generic keepalive 醒來只做控制面動作 保留 ownership 進 deadline intervention；**確認 terminal 前 NEVER** 讀 result、回報完成或停止 Monitor |
+
+**3300s 貼著 TTL 訂，NEVER 縮短。** TTL 是 3600s，3300 留 300s 餘裕且**只醒一次**就跨過；縮到一半就是每次長跑多付一倍喚醒成本，而每一次喚醒都是一個完整 turn。縮到幾分鐘更是 (a) 禁掉的輪詢換了個名字。
+
+**heartbeat 醒來 NEVER 貼進度**，即使 [[TD-430]] 的原始修法草稿寫了「貼一行進度」。貼進度必須先讀 state 或 log，那正是 (a) 第二段獨立禁止的動作——該禁令的理由（輪詢買不到 harness 沒給的東西）不因為換了個觸發時機就失效。進度由 runner 退出時的 harness 通知或 lifecycle handoff 給，走 (b)。
+
+本條是 [[agent-routing]] § 主線靜默上限在 runner 路徑的實例——`3300`、canonical prompt、task-id claim 與 control/handoff 邊界均以該 § 為 SoT。本節只留 runner 專屬差異：background Bash task id、9 小時 deadline 與 handoff 必須依 (c) 取足異常證據。
+
+#### (e) per-round 進度回報（MUST，與 (d) 同一個 turn 內 arm）
+
+(d) 保住 cache，但長跑期間 user 可能只看得到起跑與收尾兩則訊息。**每輪結束主動回報一行**，事件驅動、不輪詢主線：輪詢發生在 shell 端（零主線 turn），主線只在 round 真的前進時被 Monitor 事件叫醒。
+
+起完 runner **MUST** 立刻 arm（`<repo>` 換成目標 repo 絕對路徑）：
+
+指令原型在 本檔 § per-round Monitor 指令原型——**照抄，NEVER 自己重寫一份**（相對路徑、tail log 兩個踩過的坑寫在那份的註解裡）。
+
+| 契約 | 逐字 |
+| --- | --- |
+| 每輪 emit **一行，且該行 MUST 帶該輪成果摘要** | 內容固定為 `round <n> 完成｜<roundEndReason>｜<sessionNote 前 400 字>`。**NEVER** 貼 log 段落、**NEVER** 額外展開該輪細節——per-round 的 turn 成本壓在 cache_read 量級，400 字上限就是為此 |
+| 主線收到該事件後 **MUST 轉述摘要**，不是只回「round N 完成」 | 逐字複述或濃縮 Monitor 那行的 sessionNote 段（**每一輪**都要，不是只在有異常時）——user 對 5–8 小時的 runner 只有這個可見度來源。摘要缺內容時 **MUST** 自己補讀：`node -e 'const s=require(process.argv[1]);console.log(s.sessionNote)' <repo>/.clade/work-loop/state.json`，**NEVER** 把「Monitor 沒給細節」當成可以只回一句「完成」的理由 |
+| 失敗訊號要蓋到 | round 前進、`stoppedReason`、90 分鐘沒前進三種都 emit（per `Monitor` tool description § Coverage — silence is not success：只 grep 成功訊號的 monitor 在 crashloop 時與「還在跑」長得一模一樣） |
+| 收尾 | runner 退出通知到達 → 走 (b) 回報，並 `TaskStop` 這個 Monitor。**NEVER** 讓它留到 session 結束 |
+| 與 (d) 的關係 | **兩個都要**，不是二選一。round 通常 15–25 分 < 55 分，事件本身順帶維持 cache；但 round 卡住超過 55 分時，(d) 的 heartbeat 是唯一還會醒的東西 |
+
+**這不是 (a) 禁掉的輪詢**：(a) 禁的是**主線**排 wakeup 去讀 state（燒主線 turn），本節的讀取跑在 Monitor 的 shell 裡，主線在 round 前進之前**零 turn**。
+> **NEVER 改用 `CLAUDE_CODE_MESSAGING_SOCKET` 那條變體**，除非先驗掉 本檔 § 未採用的變體 列的兩件事。

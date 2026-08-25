@@ -970,10 +970,24 @@ export function linkGitignoredRuntimeFiles(consumerRoot, wtPath, names = GITIGNO
   return linked
 }
 
+const ADD_USAGE =
+  'Usage: wt-helper add <slug> --task-summary <text> [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>] [--skip-prefork-audit] [--include-unrelated-dirty]'
+
 async function cmdAdd(slug, opts: WtOptions = {}) {
   if (!slug) {
+    throw new Error(ADD_USAGE)
+  }
+  // TD-664 Phase 4 — `--task-summary` 從選配改必填。
+  // 選配的宣告欄位就是永遠不會被填的欄位：實測 17 個 claim 裡 16 個 task_summary 是 null，
+  // 與 expected_paths 全 [] 是同一個機制在同一個地方失效兩次。而 claim 的整個用途是讓別的
+  // session 判得出「這棵樹在做什麼、該不該等」——欄位是 null 時它退化成一個沒有內容的佔位。
+  // NEVER 改回選配、NEVER 加 --no-task-summary 之類的逃生口：那等於把這條打回原狀。
+  if (!opts.taskSummary || !opts.taskSummary.trim()) {
     throw new Error(
-      'Usage: wt-helper add <slug> [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>] [--skip-prefork-audit] [--include-unrelated-dirty] [--task-summary <text>]',
+      `--task-summary <text> is required (TD-664 Phase 4).\n` +
+        `  它會寫進 .clade/claims/<id>.json 的 task_summary，是別的 session 判「這棵樹在做什麼」的唯一來源。\n` +
+        `  一句話講清楚這棵樹要做什麼，例如：--task-summary "TD-667 gate 判讀分離 environment/真失敗"\n` +
+        ADD_USAGE,
     )
   }
   const cleanSlug = makeSlugSafe(slug)

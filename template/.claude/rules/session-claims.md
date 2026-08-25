@@ -34,14 +34,14 @@ Local edits will be reverted by the next sync.
 ```
 
 - `session_id` 純 ID（由 `claim-helper.ts` 生成；含 timestamp + random + hostname 片段）
-- `expected_paths` 是這個 session 預期會碰的檔案 glob（可空，越精確越好）
+- `expected_paths` 是這個 session 預期會碰的檔案 glob（可空，越精確越好）。**實測恆為 `[]`** —— 所以讀 claim 的那一側 **MUST** 走 § 3.3 的導出值，**NEVER** 只讀這個欄位就下「這棵樹沒碰任何檔」的結論
 - `expires_at` = `last_heartbeat + 24h`；過期 claim 視為失活，prune 階段會自動刪
 
 ## 2. Claim 寫 / refresh / drop 時機
 
 | 時機 | 動作 | 由誰 |
 |---|---|---|
-| `wt-helper add <slug>` 開 worktree | 寫 claim | `wt-helper.ts` |
+| `wt-helper add <slug> --task-summary <text>` 開 worktree | 寫 claim（`--task-summary` 必填，TD-664 Phase 4） | `wt-helper.ts` |
 | AI session 啟動 in worktree | refresh `last_heartbeat` + `expires_at` | SessionStart hook `session-start-claim-heartbeat.sh` |
 | **每次 Edit / Write 寫檔**（throttle ≥5 分鐘） | refresh `last_heartbeat` + `expires_at` | PostToolUse hook `post-tool-ownership-journal.sh`（TD-664 Phase 2） |
 | `wt-helper cleanup <slug>` | drop claim | `wt-helper.ts` |
@@ -124,6 +124,28 @@ publish 的 gate 對一個已經 commit 完並退出的持有者盲等（gate �
 **`unknown` 不是暫時狀態，是常駐的一大類**：Bash 寫的檔（`sed -i` / heredoc）、Codex 寫的檔
 （沒有 PostToolUse hook）、人手改的、journal 上線前就存在的，全部落在這裡。
 **NEVER** 因為「`unknown` 太多、判不出來很煩」就放寬它的禁令 —— 數量多正是它必須保守的理由。
+
+### 3.3 `expected_paths` 由 journal 導出（TD-664 Phase 4）
+
+`expected_paths` 是宣告型欄位，而本 TD 的整個前提是宣告型欄位不被維護：17 個 claim 全 `[]`。
+後果不是「少一個欄位」，是 **`classifyDirtyPaths` 的 claim 比對永遠比不中，`otherSession`
+恆為空、guard 恆放行**（2026-08-03 <consumer-a> 實證：3 個 active claim 的 `expected_paths` 全空，
+88 條 unclaimed dirty 全數被 bulk-stash 捲走而 guard 零告警）。
+
+`--task-summary` 那條用「改成必填」解決，**這條不能照抄**：開 worktree 的當下還不知道會改哪些檔。
+所以方向是**導出**不是宣告 —— `derivedClaimPaths()` 把 journal 裡屬於該 worktree 的寫入路徑
+join 回 claim，宣告值與導出值並存，每一列帶 `via: 'declared' | 'derived'`。
+
+三條邊界，**NEVER** 放寬任何一條：
+
+| 邊界 | 逐字 | 放寬會怎樣 |
+| --- | --- | --- |
+| join key 是 `worktree` | claim 的 `session_id` 由 `claim-helper.ts` 生成，journal 的來自 harness —— **兩個不同命名空間**，拿它比對永遠不相等 | 安靜回空陣列，而空陣列與「這棵樹什麼都沒寫」長得一模一樣 |
+| 只有 `alive` 才導出 | 持有者 `orphan` / `unknown` 一律不導出，那些路徑回到 § 3.1 拿自己的 verdict 與證據 | TTL 未到期的死 claim 會把一批路徑鎖成 `otherSession`（永不可掃）—— 就是本 TD 要消滅的盲等從新的門走回來 |
+| 導出排在 journal 查詢**之後** | main 的 dirty 檔若有自己的寫入時證據，那個人就是答案 | 別棵樹的同名相對路徑會蓋過去，把「我自己剛寫的檔」判成別人的 |
+
+導出值**不回寫進 claim 檔**。verdict 與 derived 值落成 store 就是 drift 的起點（同
+`flow/serve.ts` 的 READ-ONLY 鐵律）—— journal 仍是唯一新增的寫入面。
 
 ### 3.2 Provenance journal
 

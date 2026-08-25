@@ -120,6 +120,12 @@ case "$ORIGIN" in
 esac
 QUARANTINE_FILE="$REPO/.clade/work-loop/orphan-quarantine.json"
 LOCK_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-lock.ts"
+# 每輪一行的機械紀錄。round 內的敘事全在 $LOG_DIR/round-<ts>.log 裡，成功輪畫面上只剩
+# 「✓ round N 完成」，重建一輪的決策鏈要翻三個檔（log / state.sessionNote / dispatch record）。
+# ledger 把「這一輪做了什麼」壓成一行，讓 patrol --work-loop 不必讀 log 就答得出來。
+ROUNDS_LEDGER="$REPO/.clade/work-loop/rounds.jsonl"
+UNHARVESTED_FILE="$REPO/.clade/work-loop/unharvested.json"
+PATROL_HELPER="$HOME/offline/clade/vendor/scripts/herdr-patrol.ts"
 READY_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-ready-count.ts"
 SCAN_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-scan.ts"
 # worktree 母目錄，與 vendor/scripts/wt-helper.ts:779 的 `<repo>-wt` 慣例對齊（推導不寫死）。
@@ -325,12 +331,101 @@ guard_runner_quarantine() {
   return 1
 }
 
+# 每輪結束後 append 一行 JSONL。**寫失敗 NEVER 擋 runner** —— 這是觀測面，不是控制面；
+# 讓一個壞掉的 ledger 停掉推進，就是拿可視化去換掉它本來要觀測的東西。
+#
+# 欄位裡的 `dispatched` / `reported` 都是**本輪時間窗內、cwd 落在本 repo 或其 worktree 母目錄**
+# 的 durable dispatch record 計數。`reported` 是「回報了 business outcome」，NEVER 讀成「已被收割」
+# —— 已回報而沒人收割正是 patrol 的 silent-idle，判定權在 patrol，不在這裡。
+append_round_ledger() {
+  local before="$1" after="$2" rc="$3" started="$4" log="$5" origin="$6"
+  $NODE_PLAIN -e '
+    const fs = require("node:fs")
+    const path = require("node:path")
+    const [ledger, state, before, after, rc, started, log, origin, repo, wtParent] = process.argv.slice(1)
+    const readState = () => { try { return JSON.parse(fs.readFileSync(state, "utf8")) } catch { return {} } }
+    const s = readState()
+    const endedAt = new Date().toISOString()
+    const startedMs = Date.parse(started)
+    const endedMs = Date.parse(endedAt)
+    let dispatched = 0
+    let reported = 0
+    try {
+      const dir = path.join(process.env.HOME, ".cache", "clade", "dispatch")
+      for (const entry of fs.readdirSync(dir)) {
+        if (!entry.endsWith(".json")) continue
+        let rec
+        try { rec = JSON.parse(fs.readFileSync(path.join(dir, entry), "utf8")) } catch { continue }
+        const cwd = typeof rec.cwd === "string" ? rec.cwd : ""
+        if (cwd !== repo && !cwd.startsWith(`${wtParent}/`)) continue
+        const created = Date.parse(rec.created_at ?? "")
+        if (!Number.isFinite(created) || created < startedMs || created > endedMs) continue
+        dispatched += 1
+        if (typeof rec.completion_result_path === "string" && fs.existsSync(rec.completion_result_path)) reported += 1
+      }
+    } catch { /* dispatch dir absent = 0 dispatches, not an error */ }
+    const firstLine = (v) => (typeof v === "string" ? v.split("\n")[0].slice(0, 240) : null)
+    const uint = (v) => (/^\d+$/.test(v) ? Number(v) : null)
+    fs.appendFileSync(ledger, `${JSON.stringify({
+      round: uint(after),
+      prevRound: uint(before),
+      progressed: uint(before) !== null && uint(after) !== null && uint(after) > uint(before),
+      childExit: Number(rc),
+      startedAt: started,
+      endedAt,
+      durationSec: Number.isFinite(startedMs) ? Math.round((endedMs - startedMs) / 1000) : null,
+      originId: origin,
+      roundEndReason: s.roundEndReason ?? null,
+      stoppedReason: s.stoppedReason ?? null,
+      sessionNote: firstLine(s.sessionNote),
+      dispatched,
+      reported,
+      log: path.basename(log),
+    })}\n`)
+  ' "$ROUNDS_LEDGER" "$STATE" "$before" "$after" "$rc" "$started" "$log" "$origin" "$REPO" "$WT_PARENT" 2>/dev/null \
+    || echo "   ⚠ round ledger 寫入失敗（觀測面，不擋推進）"
+}
+
+# 收尾時把「已回報 outcome 卻沒人收割」的 dispatch 拉出來。runner 的每一輪 child 都是新 process，
+# 沒有任何一輪負責回頭看上一輪派出去的東西 —— 待辦枯竭（exit 4 / no-admissible-work）時更沒有
+# 下一輪來 re-scan，鏈就在這裡斷掉。所以收割缺口 MUST 在 runner 收尾當下落成檔案。
+#
+# NEVER 讓這一步影響 $runner_exit_code：patrol 是唯讀觀測，它的 exit 3 描述的是 fleet 狀態，
+# 不是本 runner 的成敗。
+report_unharvested() {
+  [ -f "$PATROL_HELPER" ] || return 0
+  [ "${HERDR_ENV:-}" = 1 ] || return 0
+  local json rc
+  json="$(cd "$REPO" && node "$PATROL_HELPER" --stalled --json 2>/dev/null)"
+  rc=$?
+  [ "$rc" -eq 3 ] || return 0
+  printf '%s' "$json" > "$UNHARVESTED_FILE" 2>/dev/null || return 0
+  echo
+  echo "⚠ 有 dispatch 已回報但沒人收割（完整清單：$UNHARVESTED_FILE）："
+  printf '%s' "$json" | $NODE_PLAIN -e '
+    let raw = ""
+    process.stdin.on("data", (c) => { raw += c })
+    process.stdin.on("end", () => {
+      let parsed
+      try { parsed = JSON.parse(raw) } catch { return }
+      for (const pane of parsed.panes ?? []) {
+        console.log(`   ${pane.pane_id} ${pane.verdict}: ${pane.label} (${pane.cwd})`)
+      }
+      for (const rec of parsed.abandoned_records ?? []) {
+        console.log(`   [abandoned] ${rec.pane_id} ${rec.label} — ${rec.action}`)
+      }
+    })
+  ' 2>/dev/null || true
+}
+
 print_runner_summary() {
   echo
   echo "runner 結束 —— 最終 round=$(round_of)"
   if [ -n "$runner_stop_reason" ]; then echo "runnerStopReason: $runner_stop_reason"; fi
   if reason="$(stopped_reason)"; then echo "stoppedReason: $reason"; fi
   echo "logs: $LOG_DIR"
+  [ -f "$ROUNDS_LEDGER" ] && echo "rounds: $ROUNDS_LEDGER（node vendor/scripts/herdr-patrol.ts --work-loop 讀）"
+  report_unharvested
 }
 
 # ── Preflight ─────────────────────────────────────────────────────────────────
@@ -438,7 +533,7 @@ run_ready_gate() {
   [ "$MIN_READY" -gt 0 ] 2>/dev/null || return 0
   [ -f "$READY_HELPER" ] || { echo "⚠ 找不到 ready-count helper，略過待辦源健康門檻"; return 0; }
 
-  local json ready
+  local json ready harvest
   json="$(cd "$REPO" && node "$READY_HELPER" --repo "$REPO" --json 2>/dev/null)" || {
     echo "⚠ ready-count 執行失敗，略過待辦源健康門檻"
     return 0
@@ -447,6 +542,17 @@ run_ready_gate() {
   case "$ready" in
     ''|*[!0-9]*) echo "⚠ ready-count 輸出無法解析，略過待辦源健康門檻"; return 0 ;;
   esac
+
+  # 未收割的 dispatch 是「還有事可做」的一種，而且是**只有 runner 收得掉**的那一種：
+  # worker 回報 outcome 之後沒有人收割，而待辦枯竭那一輪不會有下一輪來 re-scan，鏈就斷了。
+  # 它獨立於 ready 門檻——本輪只做收割，不需要任何待辦彈藥。
+  harvest="$($NODE_PLAIN -e 'try{const h=JSON.parse(process.argv[1]).harvestReady;console.log(Number.isInteger(h)?h:0)}catch{console.log(0)}' "$json" 2>/dev/null)"
+  case "$harvest" in ''|*[!0-9]*) harvest=0 ;; esac
+
+  if [ "$ready" -lt "$MIN_READY" ] && [ "$harvest" -gt 0 ]; then
+    echo "待辦枯竭（ready=${ready}）但有 ${harvest} 筆已回報未收割的 dispatch —— 照常起跑，本輪只做收割"
+    return 0
+  fi
 
   if [ "$ready" -lt "$MIN_READY" ]; then
     echo "== 待辦枯竭：ready=$ready < ${MIN_READY}，需 attended 補彈藥（跑 attended /work-loop 清算 awaiting[]，或補 HANDOFF / tech-debt 條目）"
@@ -564,10 +670,15 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
   fi
 
   echo "== round $(next_round_label "$before") 起跑 ($ts_human) → $log"
+  round_started_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   ( cd "$REPO" && "${cmd[@]}" ) >"$log" 2>&1
   rc=$?
 
   after="$(round_of)"
+
+  # **排在 quarantine guard 之前**：guard 命中會 break，排在它後面的 ledger 就永遠寫不到
+  # 那一輪 —— 而 quarantine 輪正是最需要留下紀錄的一輪。
+  append_round_ledger "$before" "$after" "$rc" "$round_started_iso" "$log" "$origin_id"
 
   # Mechanical ownership guard：不論 child exit code、round 是否前進、item cap 是否已滿，
   # process 一旦退出而 ledger 仍有 ownership，就不能用下一個 child 冒充原 owner 收割。

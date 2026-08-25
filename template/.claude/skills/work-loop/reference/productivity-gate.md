@@ -128,3 +128,24 @@ predicate、已排除方案）就是 thin brief 的內容——寫得出來的�
 
 **`wontfix-until-signal` 那格 MUST 寫得出可觀察 signal predicate**——寫不出來就不准用該格。
 那是等待區，不是掩埋場；沒有 predicate 的等待與放棄事後不可區分。
+
+---
+
+## P1–P4 逐條定義
+
+SKILL.md Step 6.3 留的是一句話對照表。**機械 SoT 是 `vendor/scripts/work-loop-verdict.ts`**——
+本節與 script 不一致時以 script 為準並回報，NEVER 照本節手算一次。
+
+| # | Predicate | 機械判法 |
+| --- | --- | --- |
+| P1 | Tier A 淨減 | Tier A 檔（`HANDOFF.md`、`tasks/*.md`、`docs/tech-debt.md`）行數合計下降，**且**通過 entropy 過濾：本輪 diff 中 Tier A 移除行若與 `docs/archives/**`、`*-bodies.md`、`docs/pitfalls/**` 的新增行**含相同 `TD-\d+` id 或行級匹配 ≥70%**，該部分減量**不計**。過濾後仍 <0 才算 |
+| P2 | 交付物 landed | 本輪 commit 觸及至少一個 **tracked 交付檔**，且該 item 已過 Step 5 收割的 scope-verify。交付檔 = 排除集以外的**全部** tracked path；排除集只有三類：(a) `.clade/**`（loop 自身 state）、(b) Tier A 待辦檔（`HANDOFF.md`、`tasks/*.md`、`docs/tech-debt.md` —— 由 P1／P3 計，不重複計）、(c) `docs/archives/**` 與 `*-bodies.md`（rotate 落點，與 P1 entropy 過濾同一組）。**判準是排除集，NEVER 是白名單** |
+| P3 | TD 關閉帶憑證 | `docs/tech-debt.md` 內某條 TD 的 `**Status**:` token 由 open-class（`open` / `pending` / `landed` / `blocked`）轉為 closed-class（`done` / `resolved` / `wontfix` / `deferred` / `mitigated` / `closed`），**且**同輪 commit 內含該條 `### 自驗` 的實跑輸出、或 state `decisions` 對應條目、或一行 wontfix 理由＋可觀察 signal predicate。token 集合的 SoT 是 `scripts/audit-tech-debt-hygiene.ts`（`statusToken()` ＋ `STRICT_DONE_RE` / `SOFT_CLOSE_RE`），**NEVER** 在此處另立一份。**不看 heading 是否消失**——rotate 由 `closedBloatThreshold` 批次化，與關閉是兩件事；同一條 TD 只在轉 closed-class 那一輪計一次，之後 rotate 那輪 NEVER 再計。憑證三選一皆無 = 不計 P3 也不計 P1（那是改標籤不是關閉） |
+| P4 | 新決策 packaging | `awaiting[]` 新增**先前未出現過的 id** 的完整條目（含 options）。**單輪 P4 至多貢獻一次**——三條 packaging 不等於三輪份的生產 |
+
+**P2 為什麼是排除集而不是路徑白名單**：白名單只可能列出寫規約那一刻手上那個 repo 的交付路徑。
+2026-08-19 <consumer-a> r54 實證——舊白名單逐字寫 `rules/core/`／`rules/modules/`／`vendor/`／
+`plugins/hub-core/`／`scripts/`，那是 **clade 自己**的交付形狀；consumer 的交付落在 `packages/**`／
+`app/**`／`test/**`，**字面一條都不中**。那一輪關掉一條 TD（三條 HTTP 探測）並 land 一次 refactor
+（100 tests 全綠、已 merge-back），P1–P4 仍全部不成立 → `nonProductiveRounds` 進 2、整個 loop 停掉。
+**NEVER** 用「本 repo 的交付路徑不在清單上」推論本輪非生產——那是判準沒涵蓋這個 repo，不是本輪沒交付。

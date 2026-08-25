@@ -228,18 +228,89 @@ export function findClaimByWorktree(consumerPath, worktreePath) {
 
 export function pathsClaimedByOthers(consumerPath, mySessionId) {
   const result = []
+  let journal: ReturnType<typeof readJournal>
+  try {
+    journal = readJournal(consumerPath)
+  } catch {
+    journal = []
+  }
   for (const claim of readActiveClaims(consumerPath)) {
     if (claim.session_id === mySessionId) continue
-    for (const p of claim.expected_paths ?? []) {
+    const declared = claim.expected_paths ?? []
+    // Declared first so a hand-written glob keeps its `via` label; the derived set is
+    // append-only on top of it and never replaces a declaration.
+    const seen = new Set(declared)
+    const rows: { path: string; via: 'declared' | 'derived' }[] = declared.map((p) => ({
+      path: p,
+      via: 'declared',
+    }))
+    for (const p of derivedClaimPaths(claim, journal).paths) {
+      if (seen.has(p)) continue
+      seen.add(p)
+      rows.push({ path: p, via: 'derived' })
+    }
+    for (const row of rows) {
       result.push({
         session_id: claim.session_id,
         change_id: claim.change_id,
-        path: p,
+        path: row.path,
+        via: row.via,
         branch: claim.branch,
       })
     }
   }
   return result
+}
+
+/**
+ * 一個 claim 的 worktree **實際被觀察到寫過**的路徑（TD-664 Phase 4）。
+ *
+ * ## 為什麼不是把 `expected_paths` 填得更勤
+ *
+ * 本 TD 的整個前提是「宣告型欄位實測不被維護」：17 個 claim 的 `expected_paths` 全 `[]`，
+ * 於是 `classifyDirtyPaths` 的 claim 比對**永遠比不中**，`otherSession` 恆為空——
+ * `rules/core/worktree-default.commit-ceremony.md` 已經量到這個後果（<consumer-a> 3 個 active claim
+ * 的 `expected_paths` 全空，88 條 unclaimed dirty 被 bulk-stash 捲走而 guard 零告警）。
+ *
+ * 而 `--task-summary` 那條用「改成必填」解決，這條**不能照抄**：開 worktree 的當下根本還不
+ * 知道會改哪些檔。所以方向是**導出**不是宣告——journal 已經記了每次 Edit/Write/Bash 的實際
+ * 路徑，只要 join 回 claim 就有了。
+ *
+ * ## join key 是 worktree，NEVER 是 session_id
+ *
+ * claim 的 `session_id` 是 `genSessionId()` 生的；journal 的 `session_id` 是 harness 給 hook 的。
+ * 兩個不同的命名空間，字串比對永遠不會相等——拿它當 join key 會安靜地回空陣列，而空陣列與
+ * 「這棵樹什麼都沒寫」長得一模一樣。能對得上的是 `claim.worktree_path` === `entry.worktree`。
+ *
+ * ## 路徑是相對「那棵樹」的，這是刻意的
+ *
+ * 回傳的路徑相對該 worktree toplevel，而呼叫端拿去比對的是 main 的 dirty path。這正是宣告版
+ * `expected_paths` 本來的語義：worktree session 宣告「我會碰這些路徑，所以 main 的同名檔是
+ * contended」。導出版只是把那句宣告換成寫入時證據。
+ *
+ * ## live 才導出
+ *
+ * 持有者已死的 claim **NEVER** 導出路徑——那會讓一個 TTL 還沒到期的死 claim 把一批路徑鎖成
+ * `otherSession`（永不可掃），也就是本 TD § Problem 那個「等一個永遠不會來的 land」從新的門
+ * 走回來。判死沿用 `writerLiveness` 的雙訊號；`unknown` 不導出，那些路徑會落回 journal 分類
+ * 並拿到自己的 `unknown` verdict 與證據，兩邊都是不可掃的，但後者說得出理由。
+ */
+export function derivedClaimPaths(
+  claim: Claim,
+  journal: ReturnType<typeof readJournal>,
+  { sessions }: { sessions?: Set<string> | null } = {},
+): { paths: string[]; live: boolean } {
+  if (!claim.worktree_path) return { paths: [], live: false }
+  const mine = journal.filter((e) => e.worktree === claim.worktree_path)
+  if (mine.length === 0) return { paths: [], live: false }
+  let liveness
+  try {
+    liveness = writerLiveness(mine[mine.length - 1], { sessions })
+  } catch {
+    return { paths: [], live: false }
+  }
+  if (liveness.verdict !== 'alive') return { paths: [], live: false }
+  return { paths: [...new Set(mine.map((e) => e.path))].toSorted(), live: true }
 }
 
 /**
@@ -315,9 +386,15 @@ export function classifyDirtyPaths(
   const otherLive = []
   const orphan = []
   const unknown = []
+  let journalEntries: ReturnType<typeof readJournal>
+  try {
+    journalEntries = readJournal(consumerRoot)
+  } catch {
+    journalEntries = []
+  }
   let journalByPath
   try {
-    journalByPath = lastWriterByPath(readJournal(consumerRoot), { tree: consumerRoot })
+    journalByPath = lastWriterByPath(journalEntries, { tree: consumerRoot })
   } catch {
     journalByPath = new Map()
   }
@@ -343,6 +420,14 @@ export function classifyDirtyPaths(
       sessions = null
     }
   }
+  // TD-664 Phase 4: 每個**還活著**的 worktree claim 實際寫過的路徑。這是 `expected_paths`
+  // 恆為 `[]` 的替代輸入，位置刻意排在 journal 查詢**之後**（見迴圈內）——寫入時證據永遠贏。
+  const derivedByPath = new Map<string, Claim>()
+  for (const claim of activeClaims) {
+    for (const p of derivedClaimPaths(claim, journalEntries, { sessions }).paths) {
+      if (!derivedByPath.has(p)) derivedByPath.set(p, claim)
+    }
+  }
   for (const p of paths) {
     if (isLockedProjectionPath(p)) {
       locked.push({ path: p })
@@ -357,6 +442,7 @@ export function classifyDirtyPaths(
         session_id: matchedClaim.session_id,
         change_id: matchedClaim.change_id,
         branch: matchedClaim.branch,
+        via: 'declared',
       })
       continue
     }
@@ -366,6 +452,22 @@ export function classifyDirtyPaths(
     // 兩個獨立訊號同時缺席（journal 沒有這個檔 ∧ 寫入者 process 不在），缺一個只能判 unknown。
     const writer = journalByPath.get(p)
     if (!writer) {
+      // main 這一份沒有寫入時證據。此時、也只有此時，才問「有沒有哪個活著的 worktree 正在
+      // 寫同名路徑」——那是 `expected_paths` 本來要回答的問題，只是改用觀察值而非宣告值。
+      // 這一步 **NEVER** 排在 journal 查詢之前：main 的 dirty 檔如果有自己的寫入者，那個人
+      // 就是答案，讓別棵樹的同名路徑蓋過去會把「我自己剛寫的檔」判成別人的。
+      const viaClaim = derivedByPath.get(p)
+      if (viaClaim) {
+        otherSession.push({
+          path: p,
+          session_id: viaClaim.session_id,
+          change_id: viaClaim.change_id,
+          branch: viaClaim.branch,
+          via: 'derived',
+          worktree_path: viaClaim.worktree_path,
+        })
+        continue
+      }
       const entry = { path: p, verdict: 'unknown', why: 'no journal entry for this path' }
       unknown.push(entry)
       other.push(entry)
@@ -413,15 +515,29 @@ export function classifyDirtyPaths(
   return { locked, otherSession, other, otherLive, orphan, unknown }
 }
 
-export function formatClaimsSummary(claims) {
+/**
+ * `consumerRoot` 帶了就一併算出每個 claim 的**觀察到的**路徑數（TD-664 Phase 4）。
+ * 不帶就只印宣告值——那在實測上恆為 0，讀者會以為那棵樹什麼都沒做。
+ */
+export function formatClaimsSummary(claims, { consumerRoot }: { consumerRoot?: string } = {}) {
   if (claims.length === 0) return '  (none)'
+  let journal: ReturnType<typeof readJournal> = []
+  if (consumerRoot) {
+    try {
+      journal = readJournal(consumerRoot)
+    } catch {
+      journal = []
+    }
+  }
   return claims
     .map((c) => {
       const age = Math.round((Date.now() - new Date(c.started_at).getTime()) / 60000)
       const paths = (c.expected_paths ?? []).slice(0, 3).join(', ')
       const more = (c.expected_paths?.length ?? 0) > 3 ? ` +${c.expected_paths.length - 3}` : ''
       const task = c.task_summary ? ` — ${c.task_summary}` : ''
-      return `  - ${c.session_id} [${c.agent}] ${c.change_id ?? '(no change_id)'} — ${age}min — paths: ${paths}${more}${task}`
+      const observed = consumerRoot ? derivedClaimPaths(c, journal).paths.length : 0
+      const obs = observed > 0 ? ` (+${observed} observed)` : ''
+      return `  - ${c.session_id} [${c.agent}] ${c.change_id ?? '(no change_id)'} — ${age}min — paths: ${paths || '(none declared)'}${more}${obs}${task}`
     })
     .join('\n')
 }
@@ -484,7 +600,7 @@ if (invokedAsCli()) {
       const flags = parseFlags(rest)
       const claims = readActiveClaims(consumerPath, { includeExpired: flags.all === true })
       console.log(`active claims in ${consumerPath}: ${claims.length}`)
-      console.log(formatClaimsSummary(claims))
+      console.log(formatClaimsSummary(claims, { consumerRoot: consumerPath }))
     } else if (cmd === 'prune') {
       const n = pruneExpired(consumerPath)
       console.log(`pruned ${n} expired claim(s)`)

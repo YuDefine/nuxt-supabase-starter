@@ -24,11 +24,22 @@
 //     },
 //   })
 //
-// lint-staged / `staged` hook 的排除清單 MUST 讀 `PROJECTION_EXCLUDES`，NEVER 手寫一份平行的：
+// lint-staged / `staged` hook 的排除清單 MUST 追溯得到 `PROJECTION_EXCLUDES`，NEVER 手寫
+// 一份平行的。預設形狀是直接用 preset 匯出的 `stagedBase`（一行，不必自己組 filter）：
 //
-//   import { fmtBase, lintBase, PROJECTION_EXCLUDES } from './vendor/oxc-shared/preset.ts'
-//   const projectionPrefixes = PROJECTION_EXCLUDES.map((p) => p.replace(/\/\*\*$/, '/'))
-//   const isProjection = (f) => projectionPrefixes.some((d) => f.includes(`/${d}`))
+//   import { fmtBase, lintBase, stagedBase } from './vendor/oxc-shared/preset.ts'
+//
+//   export default defineConfig({ /* … */ staged: stagedBase })
+//
+// glob 要客製（例如 `'*': 'vp check --fix'` 那種形狀）時改用 `isProjectionPath`：
+//
+//   import { isProjectionPath } from './vendor/oxc-shared/preset.ts'
+//   staged: {
+//     '*': (files) => {
+//       const t = files.filter((f) => !isProjectionPath(f))
+//       return t.length > 0 ? [`vp check --fix ${t.join(' ')}`] : ['true']
+//     },
+//   }
 //
 //   `vp lint` / `vp fmt` 對「輸入路徑全被 ignore」回 **exit 1**，而投影層本來就在上面兩個
 //   ignorePatterns 內。所以只要 staged 檔裡有一個投影檔、而 hook 沒把它濾掉，整個
@@ -96,6 +107,59 @@ export const PROJECTION_EXCLUDES = [
 // string，oxfmt 會重排字串內容、oxlint 會對字串裡的 client-side JS 誤報。用 glob 而非
 // 逐一列名 —— 拆檔後新增 sibling 若忘了加，格式化會直接改壞 embedded template。
 export const CLADE_VENDOR_EXCLUDES = ['vendor/snippets/**', 'vendor/scripts/review-gui*.ts']
+
+/**
+ * `PROJECTION_EXCLUDES` 的目錄前綴形式（`'.clade/**'` → `'.clade/'`），給逐檔比對用。
+ * glob 形式餵不了 staged hook —— hook 拿到的是 `git diff --name-only` 的相對路徑字串。
+ */
+export const projectionPrefixes = PROJECTION_EXCLUDES.map((p) => p.replace(/\/\*\*$/, '/'))
+
+/**
+ * 這個 staged 檔路徑是不是投影層（LOCKED、chmod 444、consumer 端改不動）。
+ *
+ * `startsWith` 接 repo root 的投影（`.clade/vendor/scripts/flow.ts`），`includes('/'+dir)`
+ * 接巢狀落點（starter 的 `template/.claude/...`）。兩條缺一都會漏。
+ *
+ * @param {string} file staged 檔的相對路徑
+ * @returns {boolean}
+ */
+export function isProjectionPath(file) {
+  return projectionPrefixes.some((dir) => file.startsWith(dir) || file.includes(`/${dir}`))
+}
+
+/**
+ * consumer `vite.config.ts` 的 `staged` 現成值 —— 直接 `staged: stagedBase` 即可，
+ * NEVER 再自己抄一份 filter（那正是本檔檔頭那條 MUST 要禁的漂移）。
+ *
+ * 為什麼一定要濾：`vp lint` / `vp fmt` 對「輸入路徑**全部**被 ignore」回 exit 1，訊息是
+ * `No files found to lint`，長得像路徑打錯。而 `propagate.ts` 走
+ * `git commit --only -- <clade-paths>`，它 commit 的**必然全是投影檔** —— 沒濾的 consumer
+ * 每一趟 propagate 都站在觸發線上（2026-08-26 v1.11.84：<consumer-i> 整個 pre-commit 掛，
+ * propagate 回 failed，TD-670）。
+ *
+ * **NEVER 在這裡加 `'*.md'` 那一格**：`fmtBase.ignorePatterns` 含 `'**\/*.md'`，所以
+ * markdown 對 `vp fmt` 永遠是空輸入 → 每次純 md commit 都 exit 1。那不是投影層的洞，
+ * 是同一個空輸入語義的另一個入口（2026-08-26 實測 <consumer-c> 就有這一格）。
+ *
+ * glob 不含 `*.d.ts` 的排除是刻意的：`.d.ts` 在 `lintBase.ignorePatterns` 內、卻不在
+ * `fmtBase` 內，所以它要進 fmt、不能進 lint。
+ *
+ * 需要自訂 glob（例如 `'*': 'vp check --fix'` 那種形狀）時改用 `isProjectionPath`
+ * 自己組，一樣算接上這條 MUST。
+ */
+export const stagedBase = {
+  /** @param {readonly string[]} files */
+  '*.{js,ts,mjs,cjs,vue}': (files) => {
+    const fmtable = files.filter((f) => !isProjectionPath(f))
+    const lintable = fmtable.filter((f) => !f.endsWith('.d.ts'))
+    const cmds = []
+    if (lintable.length > 0) cmds.push(`vp lint --fix ${lintable.join(' ')}`)
+    if (fmtable.length > 0) cmds.push(`vp fmt ${fmtable.join(' ')}`)
+    // 全被濾掉時回 no-op —— 回空陣列 lint-staged 會當成「這格沒事做」照過，但回
+    // `['true']` 語義更明確，且與既有兩台（<consumer-f> / starter template）逐字相同。
+    return cmds.length > 0 ? cmds : ['true']
+  },
+}
 
 /** @type {import('oxlint').OxlintConfig} */
 export const lintBase = {

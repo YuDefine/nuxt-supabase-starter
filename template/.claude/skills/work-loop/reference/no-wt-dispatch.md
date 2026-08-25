@@ -20,7 +20,7 @@ Step 4a 的三條 dispatch 都假設 `/wt` 在本 repo 叫得動。那個假設�
 ## 四步
 
 ```bash
-node vendor/scripts/wt-helper.ts add <slug>          # 1. 開，main 保持 dirty 不動
+node vendor/scripts/wt-helper.ts add <slug> --task-summary "<一句話>"   # 1. 開，main 保持 dirty 不動
 # 2. 主線在 ~/offline/<repo>-wt/<slug>/ 內 Edit / 跑 test / git commit --only（session branch）
 node vendor/scripts/wt-helper.ts merge-back <slug> --dry-run   # 3. 先確認別 session WIP 不會被捲走
 node vendor/scripts/wt-helper.ts merge-back <slug>             # 4. squash 進 main 的 index

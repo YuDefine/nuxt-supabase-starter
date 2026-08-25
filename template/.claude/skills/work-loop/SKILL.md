@@ -162,110 +162,31 @@ route 表判完「這個 loop 由誰承載」之後、**跑 Step 2 的 scan 之�
 
 route 表判到 `runner.sh` 之後（含 headroom 判定改判過去的那條），起跑與收尾**全部由主線扛完**：user 不需要自己跑任何指令、不需要輪詢進度、不需要來問它停了沒。
 
-#### (a) 起跑形狀（hard rule）
+**起 runner 之前、以及收到 runner 退出通知之後，MUST 先讀
+[reference/run-modes.md](reference/run-modes.md) § 起 runner 的形狀與收尾契約。** (a) 起跑形狀、
+(b) 收尾回報契約、(c) 中止分類、(d) cache-keepalive heartbeat、(e) per-round Monitor 五條逐條都是
+hard rule，**NEVER** 憑印象起跑——(a) 的 `nohup` 禁令與 (e) 的 Monitor arm 條件都是靜默失敗，
+起跑當下零異常訊號。
 
-**MUST** 用 `Bash(run_in_background=true)` 起，指令是 [reference/run-modes.md](reference/run-modes.md) 的絕對路徑形式：
+**runner child NEVER 讀這一段**：Iron Law 已禁止 child 起 runner，這五條只在 attended 主線
+起 runner 的那一刻適用。
 
-```text
-Bash(run_in_background=true):
-  cd <目標 repo> && ~/offline/clade/plugins/hub-core/skills/work-loop/runner.sh --max-rounds 20
-```
-
-**NEVER** 在該指令裡加 `nohup`、`disown` 或尾綴 `&`。`runner.sh` 是前景同步跑（每輪 `claude --print` 跑完才進下一輪），harness 正是靠這點追蹤它、並在它退出時回頭叫醒主線。自行背景化 → Bash call 立刻返回 → harness 判定已結束 → 真正的 runner 成為無人追蹤的孤兒，**收尾通知永遠不會到達**。這是**靜默**失敗：起跑當下零異常訊號，log 照寫、round 照前進，看起來一切正常。
-
-起完 **MUST** 回報 log 目錄、依 (d) 排一次 cache-keepalive heartbeat、依 (e) arm 一個 per-round Monitor，然後結束本輪。三件都做完才算起跑完成。**NEVER** 在主線空等。
-
-**NEVER** 排 wakeup 去**讀 state 檔或 round log 找進度**——退出通知由 harness 送達，輪詢買不到任何它沒給的東西。
-
-**「NEVER 輪詢」不蘊含「NEVER 醒來」**：前者禁的是醒來後**做**的那件事（讀 state / log / 貼進度），後者是 (d) 要求的動作本身（[[pitfall-work-loop-runner-silence-expires-prompt-cache]]：靜默 119 分鐘跨過 cache TTL）。
-
-#### (b) 收尾回報契約
-
-runner process 的退出通知到達時 **MUST 主動回報，不等 user 問**。這不是 Step 5 的收割對象（那管的是 subagent 的 `<task-notification>`），走本節。
-
-**每一次**回報 MUST 含以下四項，缺一不算回報完成：
-
-1. 最終 round 數（runner 尾巴的 `runner 結束 —— 最終 round=<n>`）
-2. `stoppedReason`——有印就照抄，沒印就明說「沒有 `stoppedReason`」
-3. log 目錄路徑
-4. **停止原因屬於下表哪一列**——這項決定 user 要不要再起一輪，是四項裡唯一不能靠貼 log 代替的
-
-#### (c) 四種停止原因（逐字對照 `runner.sh` 的停止分支）
-
-| runner 印的 | 語義 | 回報 MUST 說 |
-| --- | --- | --- |
-| `== stop: <reason>`，且 reason 來自 state 的 `stoppedReason` | 正常收工 | 待辦已推完 |
-| 迴圈跑滿 `--max-rounds`（**沒有** `== stop:` 行） | 額度用完，**不是**做完 | 待辦還在，需再起一輪 |
-| `== stop: 連續 2 輪 exit≠0` | 系統性故障 | **異常中止** + log 路徑 |
-| `== stop: state 連續 2 輪未前進` | child 正常退出但 state 沒前進 | **異常中止** + 那幾輪沒寫進 state |
-| `== preflight 未通過`（exit 3） | 起跑前探針就不過，**一輪都沒跑** | **環境故障**：逐字轉述探針給的理由 + `preflight.log` 路徑。**NEVER** 直接補 `--skip-preflight` 重跑——那是把探針抓到的問題蓋掉 |
-| `== 待辦枯竭`（exit 4） | 推得動的待辦少於門檻，**一輪都沒跑** | **不是故障**：說「待辦枯竭，需 attended 補彈藥」+ 印出的 ready 數。**NEVER** 回報成待辦已推完 |
-| `== stop: orphan-quarantine-*`（exit 5） | `inFlight` 非空 / 不可解析，或 quarantine marker 尚未由 attended 清除，**一輪都沒跑**（child-exit guard 除外） | **孤兒 ownership quarantine**：逐字回報 `runnerStopReason`、marker 路徑與 attended reconciliation 要求；**NEVER** 自動 retry、刪 lock 或宣稱 lock 仍由 process 持有 |
-| `== 已有 runner 在跑`（exit 6） | **不是故障**：另一個 runner 持鎖，本次一輪都沒跑 | 說出 sessionId / pid 與「不需重起，等它跑完」。**NEVER** 刪鎖、`--force`、接管或再起第二個 runner |
-
-#### (c.1) 連續未前進的 ownership 分流（hard rule）
-
-| 可觀察 predicate | 父層 MUST |
-| --- | --- |
-| runner 是**本 session** 依 (a) 啟動、background Bash task id 已記錄，且 task 狀態仍是 running | 自主 `TaskStop(<runner task id>)`，再停止 (e) 的 Monitor；讀最後兩輪 log、state 與 lock holder，找出未前進 root cause 並直接修復。**NEVER** `AskUserQuestion`、**NEVER** 把停止責任推給 user |
-| runner 是本 session 啟動，但退出 notification 已把 task 標成 completed / failed | runner 已停止，不再對 completed task 呼叫 `TaskStop`；停止 (e) 的 Monitor後立刻做同一套 log/state/lock 調查。**NEVER** `AskUserQuestion` |
-| task id / 啟動 session 無法確認，或可確認 runner 屬於別 session | 先 `AskUserQuestion` 確認 ownership，**NEVER** 擅自 `TaskStop`、刪 lock 或接管 |
-
-**Iron Law：本 session 親自啟動的 runner，就是本 session 的 child。違反字面就是違反精神**——「不知道停了會不會有副作用」「先問一下比較保險」都不成立；harness task id 就是 ownership 證據。只有 ownership 不明或屬別 session 才問。
-
-**Red Flag**：看到 `state 連續 2 輪未前進` 後正要把 log 路徑貼給 user、但尚未依 task 狀態停止 running runner（或確認它已退出）並調查最後兩輪——停下，先走本節 ownership 表。
-
-**只有第一列是「跑完了」，其餘每一列都不是。** **NEVER** 把其中任何一列回報成待辦已推完，**也 NEVER** 只摘成功的那幾輪而不提中止——runner 每輪成功都印 `✓ round <n> 完成`，只讀那些行會產出一份看起來順利的假報告。命中 `連續 2 輪 exit≠0` 或 `state 連續 2 輪未前進` 時 **MUST** 一併附 `tail -20 <最後一個 log>`；命中 `preflight 未通過`、`待辦枯竭` 或 `已有 runner 在跑` 時沒有 round log 可附，改附 `preflight.log` 的最後一行。
-
-#### (d) cache-keepalive heartbeat（MUST）
-
-`--max-rounds 20` 可能跨越 prompt-cache TTL，而主線從起跑回報到退出通知之間可能**一次都不醒**。conversation context 掉出 1 小時 TTL 後，user 下次接手會重付 input token。這筆成本在 log 層面零訊號——round 照前進、`✓` 照印，看起來一切正常。
-
-起跑回報完成的**同一個 turn 內** MUST 排一次；`<task-id>` 是 background Bash 回傳的 harness task id，`deadline` = 起跑後 9 小時。prompt 與 control-turn 分流一律使用 [[agent-routing]] § Async keepalive prompt 的 canonical 形狀，`owner=work-loop-runner`、interval=3300s。
-
-**Iron Law：keepalive prompt 只能判活、重排或收割。** 判活的唯一手段是查 harness task 狀態，**NEVER** 讀 log / state / process table 代替。原任務若含共享資源修改，尤其 publish / propagate，**NEVER** 把原 prompt 或任何可重放原任務的摘要塞進 `ScheduleWakeup`——禁止重複原任務、publish、propagate 或寫檔。
-
-| 可觀察 predicate | 動作 |
-| --- | --- |
-| `TaskOutput(block=false)` = running，且未到 deadline | 重排同一個 3300s control prompt，本 turn 結束。**NEVER** 讀 state、**NEVER** 讀 log、**NEVER** 貼進度 |
-| terminal | 停 heartbeat，排一次 `ASYNC_LIFECYCLE_HANDOFF task=<id> owner=work-loop-runner cause=terminal`；handoff 一般 turn 先 claim task id，**先 `TaskStop` per-round Monitor**，再讀 result、分類 (c)、必要時取 `tail -20`，最後走 (b) 回報 |
-| deadline / unknown | 依 [[agent-routing.keepalive-wake]] § Generic keepalive 醒來只做控制面動作 保留 ownership 進 deadline intervention；**確認 terminal 前 NEVER** 讀 result、回報完成或停止 Monitor |
-
-**3300s 貼著 TTL 訂，NEVER 縮短。** TTL 是 3600s，3300 留 300s 餘裕且**只醒一次**就跨過；縮到一半就是每次長跑多付一倍喚醒成本，而每一次喚醒都是一個完整 turn。縮到幾分鐘更是 (a) 禁掉的輪詢換了個名字。
-
-**heartbeat 醒來 NEVER 貼進度**，即使 [[TD-430]] 的原始修法草稿寫了「貼一行進度」。貼進度必須先讀 state 或 log，那正是 (a) 第二段獨立禁止的動作——該禁令的理由（輪詢買不到 harness 沒給的東西）不因為換了個觸發時機就失效。進度由 runner 退出時的 harness 通知或 lifecycle handoff 給，走 (b)。
-
-本條是 [[agent-routing]] § 主線靜默上限在 runner 路徑的實例——`3300`、canonical prompt、task-id claim 與 control/handoff 邊界均以該 § 為 SoT。本節只留 runner 專屬差異：background Bash task id、9 小時 deadline 與 handoff 必須依 (c) 取足異常證據。
-
-#### (e) per-round 進度回報（MUST，與 (d) 同一個 turn 內 arm）
-
-(d) 保住 cache，但長跑期間 user 可能只看得到起跑與收尾兩則訊息。**每輪結束主動回報一行**，事件驅動、不輪詢主線：輪詢發生在 shell 端（零主線 turn），主線只在 round 真的前進時被 Monitor 事件叫醒。
-
-起完 runner **MUST** 立刻 arm（`<repo>` 換成目標 repo 絕對路徑）：
-
-指令原型在 [reference/run-modes.md](reference/run-modes.md) § per-round Monitor 指令原型——**照抄，NEVER 自己重寫一份**（相對路徑、tail log 兩個踩過的坑寫在那份的註解裡）。
-
-| 契約 | 逐字 |
-| --- | --- |
-| 每輪 emit **一行，且該行 MUST 帶該輪成果摘要** | 內容固定為 `round <n> 完成｜<roundEndReason>｜<sessionNote 前 400 字>`。**NEVER** 貼 log 段落、**NEVER** 額外展開該輪細節——per-round 的 turn 成本壓在 cache_read 量級，400 字上限就是為此 |
-| 主線收到該事件後 **MUST 轉述摘要**，不是只回「round N 完成」 | 逐字複述或濃縮 Monitor 那行的 sessionNote 段（**每一輪**都要，不是只在有異常時）——user 對 5–8 小時的 runner 只有這個可見度來源。摘要缺內容時 **MUST** 自己補讀：`node -e 'const s=require(process.argv[1]);console.log(s.sessionNote)' <repo>/.clade/work-loop/state.json`，**NEVER** 把「Monitor 沒給細節」當成可以只回一句「完成」的理由 |
-| 失敗訊號要蓋到 | round 前進、`stoppedReason`、90 分鐘沒前進三種都 emit（per `Monitor` tool description § Coverage — silence is not success：只 grep 成功訊號的 monitor 在 crashloop 時與「還在跑」長得一模一樣） |
-| 收尾 | runner 退出通知到達 → 走 (b) 回報，並 `TaskStop` 這個 Monitor。**NEVER** 讓它留到 session 結束 |
-| 與 (d) 的關係 | **兩個都要**，不是二選一。round 通常 15–25 分 < 55 分，事件本身順帶維持 cache；但 round 卡住超過 55 分時，(d) 的 heartbeat 是唯一還會醒的東西 |
-
-**這不是 (a) 禁掉的輪詢**：(a) 禁的是**主線**排 wakeup 去讀 state（燒主線 turn），本節的讀取跑在 Monitor 的 shell 裡，主線在 round 前進之前**零 turn**。
-> **NEVER 改用 `CLAUDE_CODE_MESSAGING_SOCKET` 那條變體**，除非先驗掉 [reference/run-modes.md](reference/run-modes.md) § 未採用的變體 列的兩件事。
 
 ### 開場准入判定（headroom 之後、取鎖與 scan 之前；**每一輪**都跑，含 runner child 的每一輪，不是只有第一輪）
 
-跑 `node ~/offline/clade/vendor/scripts/work-loop-ready-count.ts --repo "$(git rev-parse --show-toplevel)" --json`，依下表分流：
+跑 `node ~/offline/clade/vendor/scripts/work-loop-verdict.ts --repo "$(git rev-parse --show-toplevel)"`（attended 加 `--attended`），讀 `admission.mode` 一欄分流：
 
-| 可觀察 predicate | 動作 |
+| `admission.mode` | 動作 |
 | --- | --- |
-| `inFlight` 非空 | **准入**（有收割工作），本節其餘列不再判 |
-| `debtReady >= 1` | 准入，照常取鎖進 Step 1 |
-| `debtReady == 0` 且 `awaiting[]` 非空且 attended | 准入，但本輪只做 Step 2.7 清算，**NEVER** dispatch 新工作 |
-| `debtReady == 0`（其餘情況） | **不准入**。寫 state `stoppedReason: no-admissible-work`（走 Step 7.3 正常寫入路徑，允許只寫這一個欄位），**NEVER 取鎖、NEVER 跑 scan**，結束本輪 |
+| `harvest-only` | **准入**（`inFlight` 非空 = 有收割工作），本表其餘列不再判 |
+| `normal` | 准入，照常取鎖進 Step 1 |
+| `harvest-only`（`debtReady` 已 0） | 准入，但本輪**只做收割**：有 worker 回報了 outcome 而沒人收。**NEVER** 因為「債已經 0 了」就當成收工 |
+| `drain-only` | 准入，但本輪只做 Step 2.7 清算，**NEVER** dispatch 新工作 |
+| `refused` 且 `admission.stoppedReason` 非 null | **不准入**。把該值寫進 state `stoppedReason`（走 Step 7.3 正常寫入路徑，允許只寫這一個欄位），**NEVER 取鎖、NEVER 跑 scan**，結束本輪 |
+| `refused` 且 `admission.stoppedReason` 為 null | helper 自己失敗了，**不是** debtReady=0。與 Step 2 scan 失敗同級：STOP，結束本輪，**NEVER** 寫任何 `stoppedReason` |
+
+**准入這一題由 verdict 判，不由你判。** 覺得它判錯 → **停下來把 `admission.reason` 逐字回報**，
+**NEVER** 自己重算一次 `debtReady`、**NEVER** 因為「掃一輪就知道了」先取鎖再說。
 
 **不准入是收工，NEVER 是 skip**：`debtReady == 0` 的意思是 **open TD 也沒了**（或只剩
 `blocked-attended-only` / `wontfix-until-signal` / runner child 收不了尾的 publish 落點）。
@@ -296,11 +217,7 @@ node ~/offline/clade/vendor/scripts/work-loop-lock.ts acquire
 - **釋放**：正常 terminal / attended reconciliation 才 MUST 跑 `node ~/offline/clade/vendor/scripts/work-loop-lock.ts release --session <id>`；in-flight ledger > 0 或 runner orphan quarantine 期間 **NEVER** 釋放。runner 保留持久 lock 檔供診斷，但 heartbeat/pid lease 仍可能在 process 退出後失效；`orphan-quarantine.json` 的 startup gate 才是禁止自動 retry 的機械保證。只有 attended 將每筆 ownership 標成 terminal/cancelled、清空 `inFlight`，再移除 marker 並 release lock。
 - **Budget 計數器歸零（定義「一次 run」的唯一位置）**：`acquire` 回 `acquired` 或 `took-over` = **一次新的 run 開始** → 本輪 Step 7 寫 state 時 MUST 把 `subagentsSpawned` **歸零重新起算**；回 `reentrant` 或 `continued` = 同一個 run 續跑 → **沿用**既有值，**NEVER** 歸零。這讓 Step 6.2 budget proxy 的兩半（`subagentsSpawned` 與 `lock timestamp`）字面共用同一個窗口定義
 
-  **`continued` 是 runner 模式的常態**（第 2 輪起每一輪都回它）：同一個 `runner.sh` pid 的上一輪殘鎖，`sessionId` 與 `acquiredAt` 都由 script 保留。**NEVER 把 `continued` 讀成 `took-over`**——那正是 2026-08-13 那份「budget proxy 兩半皆為死碼」的成因：舊版對這一格回 `took-over` ＋ 換新 `sessionId`／`acquiredAt`，於是 runner 下 `subagentsSpawned` 每輪歸零、`lock timestamp` 每輪重設，`>= 15` 與 `≥6h` 兩條**在無人值守下永遠不可能成立**，攔 runaway 只剩 `--max-rounds` / no-progress 2 輪 / 連續失敗 2 輪。判準寫在檔上但不會觸發，與判準不存在的差別只在讀的人以為有防線
-
-**NEVER 把歸零改掛在 `runner.sh` 起跑。** 兩條理由：in-session `/loop` 沒有 `runner.sh`，掛那裡會讓同一條停止條件在兩種 run mode 語義分裂；且 `runner.sh` 的分工是「不碰 state 內容、連續性全由 child 承擔」，歸零屬於 state 內容。鎖的 acquire 已經是「一次 run」的天然邊界，用它不必另外定義窗口。
-
-判準是**析取**——`heartbeat 在 45min 窗口內` **或** `pid 存活`，任一成立即為 active。舊版單看 `$$` 的合取判準在 in-session 模式下恆判 stale，鎖從未擋過任何一次（[[TD-424]]）。
+  **`continued` 是 runner 模式的常態**（第 2 輪起每一輪都回它），**NEVER 讀成 `took-over`**。這一格讀錯會讓 Step 6.2 的 budget proxy 兩半同時變成死碼——成因、TD-424 的析取判準、以及「為什麼歸零不能掛在 `runner.sh` 起跑」都在 [reference/lock.md](reference/lock.md)，**改動 `subagentsSpawned` 歸零時機前 MUST 先讀它**。
 
 **NEVER 用 Write tool、`printf`、`echo` 或任何其他方式手寫鎖檔。** 手寫的鎖沒有 session 識別也沒有 heartbeat，判準當場退回它要修的那個狀態：
 
@@ -427,13 +344,8 @@ state.json 每輪被**整讀**一次，所以它的體積是一筆與本輪成�
 
 觸發訊號只有一個：`guardrailsAck` 讀不到。
 
-> **2026-08-13 TD-495 起，「`round` 與 HANDOFF 記載輪次不一致」不再是訊號。** HANDOFF 不再 render loop 進度（Step 7.2），第二份現況不存在了，也就沒有「兩邊不一致」這回事。真正的停滯由 `runner.sh` 的 no-progress 網接（`exit=0 且 round 未前進` 連續 2 輪 → 自行停）。**NEVER** 為了恢復這個訊號把進度寫回 HANDOFF —— 兩份現況正是 2026-08-11 <consumer-b> 空轉近 7 小時的根因。
-
-**這個訊號在 runner child 身上永遠不代表 decay。** decay 指的是**同一個 process 的 context 被 auto-compaction 壓掉**——只有 in-session `/loop` 有這個失敗模式。runner child 每輪是 `claude --print` 起的**全新 process**，context 從零重建、狀態只從 state 檔讀，結構上不可能 decay。所以在 child 身上，訊號命中**一定**是「上一輪 bookkeeping 沒收尾」，而那需要的是**自癒或忽略**，不是中止。無條件中止會讓**每一輪**都在 Step 1 停住、零 scan 零 dispatch，直到 runner 的 no-progress 條件把自己停掉——而那個停法在 log 上跟正常收工幾乎無法區分（2026-08-11 <consumer-b> 實測：連續空轉近 7 小時，所有健康訊號正常，靠人工介入才發現）。
-
 **MUST** 依下表分流，**每一列**都要照著判，不是只看第一列：
 
-**列有代號（D4–D6），其他段落引用時 MUST 用代號、NEVER 用「第 N 列」**——列序會隨增補改變，序號指標會在改動後指到別列而沒有任何訊號。**D1–D3 已於 2026-08-13 隨 HANDOFF 輪次訊號一併廢除，代號 NEVER 回收再用於新列**（舊 sessionNote 與 log 仍寫著它們，回收會讓歷史紀錄指到不同語義）。
 
 | 代號 | 可觀察 predicate | 動作 |
 | --- | --- | --- |
@@ -441,46 +353,11 @@ state.json 每輪被**整讀**一次，所以它的體積是一筆與本輪成�
 | **D5** | runner child，`guardrailsAck` 讀不到 | **NEVER 判 decay**。那是第 1 輪、或 state 檔不完整；照常進 Step 1.5，讀完在 Step 7 補寫 `guardrailsAck`。與 D4 同時命中則以 D4 為準 |
 | **D6** | **非** runner child（in-session `/loop`），任一訊號命中 | 判定 context decayed，**MUST** 結束本輪：state 寫 `roundEndReason: "context-decay"`、跑 `work-loop-lock.ts release --session <id>`、退出。**NEVER**「感覺還記得」就繼續跑。**但下列不算訊號命中**（那是首輪的正常長相，不是 decay）：state 檔不存在或 `round` 為 0 |
 
-### D4 的部分寫入白名單（唯一容許在 7.2 失敗後仍寫 state 的路徑）
-
-D4 與 Step 7.2 的「寫入失敗時 NEVER 繼續寫 7.3」不衝突，因為它寫的**不是** 7.3 的 bookkeeping。**MUST 只寫這兩個欄位、其餘一律不動**：
-
-| 欄位 | 寫什麼 |
-| --- | --- |
-| `roundEndReason` | `handoff-write-failed: <實際錯誤逐字>`，**NEVER** `context-decay` |
-| `stoppedReason` | **只在連續第 2 輪命中時**寫 `handoff-write-failed ×2: <錯誤>`（child 自己寫 `stoppedReason` 合法且有效，per [run-modes.md](reference/run-modes.md)） |
-
-**NEVER** 在 D4 路徑動 `round` / `fingerprint` / `fingerprintUnchangedRounds` / `inFlight` / `packaged` / `awaiting` / `guardrailsAck`——本輪什麼都沒做完，bump 它們等於謊報進度。
-
-**「連續第 2 輪」的判定 predicate**（不是憑印象）：Step 1 讀進來的 state，既有 `roundEndReason` 以 `handoff-write-failed:` 起頭，**且**冒號後的錯誤字串與本輪這次相同 → 這是第 2 輪。
-
-**`round` 不 bump 的連帶效果要講清楚，NEVER 反過來說**：D4 不動 `round`，所以 runner 的 `exit=0 且 round 未前進` 網會在**連續 2 輪**後印 `== stop: state 連續 2 輪未前進` 自行停掉（`runner.sh` 的 no-progress 判定）——**不會**空轉到 `--max-rounds`。`stoppedReason` 在這裡買的是**可診斷性**：沒有它，log 只說「state 未前進」，沒說是寫入權限壞了；有它，停止原因直接寫在 state 檔裡。它是第二道網，不是唯一那道。
-
-
-| Red Flag | 立即動作 |
-| --- | --- |
-| 身為 runner child，正在寫 `roundEndReason: "context-decay"` | 停手。child 不可能 decay，回上表判身分與方向 |
-| 看到輪次不一致就準備「把 HANDOFF 對齊到 state」，還沒判方向 | 停手。`state.round` < HANDOFF 時這個動作會把較新的敘事蓋上錯的輪次 |
-| 「兩邊輪次不一致、狀態不可信，安全起見先停一輪」 | 停止這個推論。安全中止在 child 身上不是保守選擇，是讓 loop 永久空轉 |
-| 自癒時順手把下方 In Progress / Next Steps 各段「更新成現況」 | 停手。本輪 scan 都還沒跑，那些「現況」是編的 |
-
-**`roundEndReason` 與 `stoppedReason` 是兩件事，寫錯會讓 loop 提早死掉**：
-
-| 欄位 | 語義 | runner 的反應 |
-| --- | --- | --- |
-| `roundEndReason` | **這個 process** 該結束（context 到頂、item cap 用完） | 起下一個全新 process 繼續 |
-| `stoppedReason` | **整個 loop** 該停（真的做完 / fingerprint 三輪不變 / 連續失敗） | 不再起新 process |
-
-context-decay 與 handoff-write-failed **永遠**寫 `roundEndReason`，**NEVER** 寫 `stoppedReason`——唯一例外是 D4 的「同一寫入錯誤連續第 2 輪」，那時**兩個都寫**（`roundEndReason` 記本輪為何結束、`stoppedReason` 記整個 loop 不該再起新 process）。
-
-**兩個中止值語義不同，寫錯會把後續診斷帶去錯的方向**：
-
-| `roundEndReason` 值 | 語義 | 只在什麼身分下合法 | 讀到它該往哪查 |
-| --- | --- | --- | --- |
-| `context-decay` | **這個 process 的 context 被壓縮**，狀態記憶不可信 | 只有 in-session `/loop`。runner child **NEVER** 寫這個值 | 起 loop 的方式（該改用 runner） |
-| `handoff-write-failed: <錯誤>` | 狀態記憶正常，但 **HANDOFF 寫不進去**（permission / 路徑 / 工具錯誤） | 任何身分 | 寫入權限與 Step 7.1 路徑，**不是** context |
-
----
+**D4 命中、或要改動 D4–D6 任一列之前，MUST 先讀 [reference/decay.md](reference/decay.md)**
+——D4 的部分寫入白名單（唯一容許在 7.2 失敗後仍寫 state 的兩個欄位、「連續第 2 輪」的判定
+predicate）、代號 NEVER 回收再用的理由、以及 runner child 為什麼結構上不可能 decay 都在那裡。
+**NEVER** 在沒讀白名單的情況下走 D4 路徑：它與 Step 7.2 的「寫入失敗時 NEVER 繼續寫 7.3」
+只差在寫哪兩個欄位，寫錯就是謊報進度。
 
 ## Step 1.5 — Guardrails re-read（hard rule，dispatch 前）
 
@@ -769,6 +646,18 @@ runner 迴圈就沒有主體了；且 `completeRelay()` 要求有 current pane �
 時直接回 `relay_refused`。runner 只派 worker、不交位置：outcome 落 durable record，由後續輪次的 Step 2
 re-scan 或 `herdr-patrol.ts --stalled` 收。逐字反開脫：「反正 relay 也是派出去」「派完這輪就結束了」。
 
+**這條禁的是「交位置」，不是「並行」。** 兩件事在 runner 底下有各自的載體，NEVER 從
+「不准 relay」推出「runner 不能並行」：
+
+| 要的是 | 載體 | 誰能用 |
+| --- | --- | --- |
+| 並行推進多條 worker 工作 | 4a 的 `/wt` 扇出組（≤4）、4b 的裸 dispatch（共享同一 working tree ≤2）、`Workflow` script 的 `parallel()` | **runner child 每一輪都可以** |
+| 把本 session 的位置交給下一個 | `/handoff` 的 `park` / `relay` / `fanout` / `next` | **只有 attended 收工時**——那本來就是它的場域 |
+
+`fanout` 看起來像「並行」是因為它同時做了兩件事：派 N 個 worker **並且**交出位置給 successor 收割。
+runner 要的只有前一半，而後一半由**下一輪 child 的 Step 0 准入**承擔（`harvestReady > 0` 就准入、
+該輪只做收割）——不需要任何 pane 交接。
+
 **dispatch 的三個不准**：探索型（結論仍依賴本 session 判斷鏈、brief 落不下來）NEVER dispatch——先把
 判斷落盤，落不了走登記；需 attended gate 的 NEVER dispatch——新 session 一樣 blocked；**共享同一 working tree 的並行 dispatch
 已 ≥2 條時 NEVER 再發**——排入下一輪，N session 搶同一 working tree 是把 usage 問題升級成 race 問題。
@@ -821,17 +710,19 @@ attended mode 且真的選不出來 → 依 Step 0 Iron Law **MUST `AskUserQuest
 
 ### 6.1 算 fingerprint
 
-```
-fingerprint = sha256(
-  排序後的 [(每條 candidate 的 id/heading slug, 狀態類別, failStreak)] 序列
-  + scan JSON 各 section 的 count
-  + spectra entries 的 (name, bucket) 序列
-)
+Step 0 那支 verdict 已經算完了。加上本輪的 scan JSON 再跑一次，直接讀兩個欄位：
+
+```bash
+node ~/offline/clade/vendor/scripts/work-loop-verdict.ts \
+  --repo "$(git rev-parse --show-toplevel)" --scan <本輪 scan JSON 路徑>
 ```
 
-**用 slug / bucket 不用全文**——全文會因為措辭微調產生假進度。`packaged` 新增、`[x]` 勾選、`failStreak` 變動、**bucket 位移**都會改 fingerprint，都是真進度。
+`fingerprint` 與 `fingerprintUnchangedRounds` 照抄進 state，Step 6.2 的 no-progress 條件讀後者。
 
-與 state 裡的舊 fingerprint 比對：相同 → `fingerprintUnchangedRounds += 1`；不同 → 歸零。
+**NEVER 自己算 sha256。** 手算的 fingerprint 每一輪的輸入集合都由當輪的模型現場決定，
+於是「這一輪沒進度」與「這一輪算法跟上一輪不一樣」事後不可區分——而 no-progress 停止條件
+正是讀它。輸入集合（td token、handoff heading slug、task 勾選狀態、scan check 狀態、
+spectra bucket、per-item failStreak）的 SoT 是 `computeFingerprint()`，**NEVER** 在這裡另列一份。
 
 ### 6.2 停止條件（任一成立即停；**每一條**都 MUST 跑 `work-loop-lock.ts release --session <id>`）
 
@@ -862,22 +753,33 @@ fingerprint = sha256(
 
 ### 6.3 生產性判定（**每一輪**收輪時算，含 runner child 的每一輪；只當停止條件用，NEVER 當本輪目標）
 
-本輪為**生產輪**，若下列 P1–P4 **任一**成立（由 round-start 基線與 `git diff <round-start-sha>..HEAD` 機械判定）：
+本輪為**生產輪**，若下列 P1–P4 **任一**成立。**判定跑 script，NEVER 手跑 git diff 分析**：
 
-| # | Predicate | 機械判法 |
+```bash
+node ~/offline/clade/vendor/scripts/work-loop-verdict.ts \
+  --repo "$(git rev-parse --show-toplevel)" --round-start-sha <round-start 基線 sha> \
+  --prev-state <本輪 Step 1 讀到的 state 副本路徑>
+```
+
+讀 `productive` 一欄：`true` → 生產輪，`false` → 非生產輪，**`null` → script 判不出來**
+（缺基線 sha、`git diff` 失敗，或 P3 的憑證不在 diff 裡）。`null` **MUST** 當「未判定」處理：
+補齊缺的輸入重跑，或把 `p1`–`p4` 各自的 `basis` 逐字回報。**NEVER 把 `null` 讀成 `false`**——
+「判準沒涵蓋這個 repo」與「本輪沒交付」是兩件事，把前者當後者正是 2026-08-19 <consumer-a> r54 誤停的形狀。
+
+四條 predicate 的定義如下（**SoT 是 script**，本表是給人讀的說明；兩者不一致時以 script 為準並回報）：
+
+| # | Predicate | 一句話 |
 | --- | --- | --- |
-| P1 | Tier A 淨減 | Tier A 檔（`HANDOFF.md`、`tasks/*.md`、`docs/tech-debt.md`）行數合計下降，**且**通過 entropy 過濾：本輪 diff 中 Tier A 移除行若與 `docs/archives/**`、`*-bodies.md`、`docs/pitfalls/**` 的新增行**含相同 `TD-\d+` id 或行級匹配 ≥70%**，該部分減量**不計**。過濾後仍 <0 才算 |
-| P2 | 交付物 landed | 本輪 commit 觸及至少一個 **tracked 交付檔**，且該 item 已過 Step 5 收割的 scope-verify。交付檔 = 排除集以外的**全部** tracked path；排除集只有三類：(a) `.clade/**`（loop 自身 state）、(b) Tier A 待辦檔（`HANDOFF.md`、`tasks/*.md`、`docs/tech-debt.md` —— 由 P1／P3 計，不重複計）、(c) `docs/archives/**` 與 `*-bodies.md`（rotate 落點，與 P1 entropy 過濾同一組）。**判準是排除集，NEVER 是白名單** |
-| P3 | TD 關閉帶憑證 | `docs/tech-debt.md` 內某條 TD 的 `**Status**:` token 由 open-class（`open` / `pending` / `landed` / `blocked`）轉為 closed-class（`done` / `resolved` / `wontfix` / `deferred` / `mitigated` / `closed`），**且**同輪 commit 內含該條 `### 自驗` 的實跑輸出、或 state `decisions` 對應條目、或一行 wontfix 理由＋可觀察 signal predicate。token 集合的 SoT 是 `scripts/audit-tech-debt-hygiene.ts`（`statusToken()` ＋ `STRICT_DONE_RE` / `SOFT_CLOSE_RE`），**NEVER** 在此處另立一份。**不看 heading 是否消失**——rotate 由 `closedBloatThreshold` 批次化，與關閉是兩件事；同一條 TD 只在轉 closed-class 那一輪計一次，之後 rotate 那輪 NEVER 再計。憑證三選一皆無 = 不計 P3 也不計 P1（那是改標籤不是關閉） |
-| P4 | 新決策 packaging | `awaiting[]` 新增**先前未出現過的 id** 的完整條目（含 options）。**單輪 P4 至多貢獻一次**——三條 packaging 不等於三輪份的生產 |
+| P1 | Tier A 淨減 | 待辦檔行數真的少了（搬進 archives 的不算） |
+| P2 | 交付物 landed | 本輪 commit 觸及排除集以外的 tracked 檔。**判準是排除集，NEVER 是白名單** |
+| P3 | TD 關閉帶憑證 | Status token 由 open-class 轉 closed-class，且同輪有憑證 |
+| P4 | 新決策 packaging | `awaiting[]` 新增先前未出現過的 id。單輪至多計一次 |
+
+**四條的完整定義（entropy 過濾算法、排除集三類、closed-class token 集合、憑證三選一）在**
+**[reference/productivity-gate.md](reference/productivity-gate.md) § P1–P4 逐條定義。改動 `work-loop-verdict.ts`**
+**的任一 predicate 之前 MUST 先讀它**——上表是給人對照用的一句話版，**NEVER** 拿它當實作依據。
 
 皆不成立 → `nonProductiveRounds += 1`（state 新欄位，Step 7.3 寫）；任一成立 → 歸零。
-**P2 為什麼是排除集而不是路徑白名單**：白名單只可能列出寫規約那一刻手上那個 repo 的交付路徑。
-2026-08-19 <consumer-a> r54 實證——舊白名單逐字寫 `rules/core/`／`rules/modules/`／`vendor/`／
-`plugins/hub-core/`／`scripts/`，那是 **clade 自己**的交付形狀；consumer 的交付落在 `packages/**`／
-`app/**`／`test/**`，**字面一條都不中**。那一輪關掉一條 TD（三條 HTTP 探測）並 land 一次 refactor
-（100 tests 全綠、已 merge-back），P1–P4 仍全部不成立 → `nonProductiveRounds` 進 2、整個 loop 停掉。
-**NEVER** 用「本 repo 的交付路徑不在清單上」推論本輪非生產——那是判準沒涵蓋這個 repo，不是本輪沒交付。
 
 **與軟配額的關係是包含，不是並列**：軟配額（6.2）不足額的輪，P1–P4 的計入資格直接取消，該輪**必為**
 非生產輪；反向不成立。**兩條 NEVER 矛盾**——嚴者恆贏。entropy 過濾完整算法、P1–P4 邊界案例、N=2 的
@@ -916,6 +818,13 @@ fingerprint = sha256(
 
 **`subagentsSpawned` 是唯一一個「不是累加就好」的欄位**：本輪 Step 0 的 `acquire` 回 `acquired` / `took-over` 時 MUST 從 **0** 起算（本輪派幾個就寫幾個），回 `reentrant` / `continued` 才是舊值 + 本輪新增（runner 模式第 2 輪起恆為 `continued`）。判定與理由在 Step 0 § 互斥鎖，**此處不複述**——但 **NEVER** 因為「schema 範例長得像單調遞增」就無條件累加，那會讓 Step 6.2 的 budget proxy 退化成跨 run 單調計數（門檻一旦跨過就永遠為真，[[TD-424]] 同型）。
 
+**Scratch 命名 contract：本輪寫進 `.clade/work-loop/` 的**每一個**中間檔 MUST 叫 `<tag>-r<N>.<ext>`**
+（`N` = 本輪 round），不是只有「看起來會留很久的那幾個」。state-write 的 sweep 依這個 marker 清掉
+`N < round-3` 的檔；**沒帶 `-r<N>` 的檔它一律不動**，於是永遠留著。2026-08-26 clade home 實測 291 檔
+22MB，其中五個 400KB 以上的分析中間檔彼此看不出誰還有效——agent glob 誤讀一個就是一次 context 事故。
+`state*` 與 `lock` / `stop` / `scan-latest.json` / `rounds.jsonl` / `unharvested.json` /
+`orphan-quarantine.json` 是執行狀態不是 scratch，sweep NEVER 碰它們。
+
 **Iron Law：NEVER 直接覆寫 `state.json`。一律 temp → 驗 → 備份 → rename。** 這個檔是整個 loop 的**唯一**記憶載體（Step 1 Iron Law：不依賴對話記憶），寫壞它等於把 N 輪進度一次歸零，而失敗完全靜默——寫入工具照樣回成功，下一輪才在讀取端炸開。
 
 **寫入一律走 `work-loop-state-write.ts`，NEVER 自己生成一支 write-state script。** 上面那個序列逐輪不變，逐輪變的只有欄位值 —— 所以本輪要產出的只有一份 **patch**（改了什麼寫什麼），沒改的欄位不必重述：
@@ -945,24 +854,17 @@ rm -f "$PATCH"
 
 patch 語義：**給值＝覆蓋、給 `null`＝刪除、沒提到＝原值不動**。合併是**淺層**的，**NEVER** 期待深合併 —— `awaiting[]` / `blockers` / `decisions` 的正確更新常常是「整個換成本輪算出來的版本」，深合併會把已經移除的條目悄悄留下來。
 
-該 script 已內建四道，**NEVER** 因為「這輪只改一個欄位」就改用 `>` 直接覆寫來繞過：
+該 script 已內建五道保護（temp 讀回驗證、`.bak` 先 temp 再 rename、`rename(2)` 語義、`round` 不得倒退、retention pass），**NEVER** 因為「這輪只改一個欄位」就改用 `>` 直接覆寫來繞過。
 
-- 新內容寫進同目錄 temp 後**讀回來 parse 一次**才換正本（rename 要原子就必須同目錄）
-- `.bak` 先寫 temp 再 rename —— `cp` 中途失敗不會把既有備份截斷。漏掉這道的長相是：`.bak` 寫壞、正本照換、還印 `STATE_OK`，兩份一起沒了
-- 換檔用 `rename(2)`（即 `mv -T` 語義）：`state.json.bak` 若是**目錄**（前一次救援留下的、或誰手滑 mkdir 的）直接失敗，**NEVER** 把備份搬進那個目錄還回成功。實測（2026-08-12）：無 `-T` 時該情境回 `STATE_OK` 而備份根本不存在
-- `round` 不得倒退 —— 倒退代表本輪讀到的是舊 state 或 patch 算錯，續寫會靜默吃掉中間輪次的 bookkeeping。確認過是刻意的才加 `--allow-round-regress`
-- retention pass（`--no-retention` 關閉）—— 契約見 Step 1 § Retention。archive **先**落地才換正本，所以被移出正本的內容不會兩邊都不在
+**判讀規則只有一條：stdout 不是 `STATE_OK` 就停止本輪 bookkeeping。** `STATE_WRITE_FAILED` /
+`STATE_BACKUP_FAILED` / `STATE_ROUND_REGRESS` / `STATE_CORRUPT_REFUSED` 每一個都是——四者都保證正本
+仍是上一輪的完好版本。stderr 的 `STATE_ARCHIVE_FAILED` / `STATE_OVERSIZE` **不是**失敗 token
+（stdout 仍是 `STATE_OK`），**NEVER** 因為看到它們就中止。
 
-**stderr 的 `STATE_ARCHIVE_FAILED` / `STATE_OVERSIZE` 都不是失敗 token**（stdout 仍是 `STATE_OK`、exit 0），**NEVER** 因為看到它們就中止本輪 bookkeeping：
-
-- `STATE_ARCHIVE_FAILED: <原因>` —— 本輪不 rotate、state **照原樣完整**寫入。正本是完好的，停下來只會製造 `state.round` < HANDOFF 的落差。記進 `sessionNote` 讓下一輪知道 archive 落點有問題，然後**照常收尾**
-- `STATE_OVERSIZE: …｜前三大：<欄位=bytes>` —— 被點名的欄位是自創欄位（無 reader 契約），處置見 Step 1 § Retention：**當輪**收斂掉它
-
-**現有 `state.json` parse 不過時它回 `STATE_CORRUPT_REFUSED` 並且不動正本**，**NEVER** 當成 `{}` 從頭寫 —— 那會讓 `round` 從 0 重來且每個欄位看起來都合法（處置走 Step 1 § `STATE_CORRUPT` 的還原程序）。
-
-**看到 `STATE_WRITE_FAILED` / `STATE_BACKUP_FAILED` / `STATE_ROUND_REGRESS` / `STATE_CORRUPT_REFUSED` MUST 立刻停止本輪 bookkeeping**（`STATE_OK` 以外的每一個都是）：四者都保證正本仍是上一輪的完好版本，照 7.2 Iron Law 的無害方向倒（`state.round` < HANDOFF，下一輪冪等重做）。`STATE_BACKUP_FAILED` 額外意味著磁碟或權限有問題，**MUST** 在 `sessionNote` 記一筆再重試。**NEVER** 因為「內容應該沒問題」跳過驗證，也 **NEVER** 在失敗後改用直接覆寫繞過。
-
-**`.bak` 只保留上一輪的完好版本，NEVER 累積多份帶時間戳的副本**——救援時要能一眼看出該還原哪一個。且 **NEVER 把寫壞的檔存成 `.bak-<ts>`**：那個名字會讓還原程序把屍體當備份撿起來（2026-08-12 <consumer-b> 實際留過一份，已改名 `state.json.corrupt-<ts>`）。
+**每個 token 的處置、五道保護各自擋掉什麼、以及 `.bak` 命名的救援契約在
+[reference/state-write.md](reference/state-write.md)。收到 `STATE_OK` 以外的任何 token 時 MUST 先讀它**——
+`STATE_CORRUPT_REFUSED` 與 `STATE_ROUND_REGRESS` 的處置方向相反，憑印象選一個就是把 N 輪 bookkeeping
+賭在記憶上。
 
 寫完 **MUST** 跑 `node ~/offline/clade/vendor/scripts/work-loop-lock.ts refresh --session <lockSessionId>`。鎖的 heartbeat 只在 Step 1 / Step 5 / 本步被刷，漏掉一次就讓還在跑的這一輪被下一輪判成死掉並接手——失敗長相是兩個 loop 同時跑、state 互相覆寫，沒有任何錯誤訊號。
 
@@ -994,7 +896,10 @@ git show --stat HEAD | tail -3   # 驗 scope；出現 .ts/.vue/.sql 等 → STOP
 | 檔 | 什麼時候 MUST 讀 |
 | --- | --- |
 | [guardrails.md](reference/guardrails.md) | **每一輪**（Step 1.5，hard rule） |
-| [run-modes.md](reference/run-modes.md) | 決定怎麼起這個 loop 時（Step 0） |
+| [run-modes.md](reference/run-modes.md) | 決定怎麼起這個 loop 時（Step 0）、**以及起 runner 之前與收到 runner 退出通知之後**（§ 起 runner 的形狀與收尾契約 (a)–(e)）——runner child 不必讀 |
+| [lock.md](reference/lock.md) | 改動 `subagentsSpawned` 歸零時機之前（Step 0 § 互斥鎖 / Step 7.3）——執行時不必讀 |
+| [decay.md](reference/decay.md) | **D4 命中時**，或要改動 D4–D6 任一列之前（Step 1 § Decay 偵測） |
+| [state-write.md](reference/state-write.md) | 收到 `STATE_OK` 以外的**任何** token 時（Step 7.3） |
 | [productivity-gate.md](reference/productivity-gate.md) | 改准入／生產性判準之前（Step 0 § 開場准入判定、Step 6.3）——執行時不必讀 |
 | [decision-drain.md](reference/decision-drain.md) | **每一輪**（Step 2.7，hard rule） |
 | [simple-buckets.md](reference/simple-buckets.md)／[blocker-evaluation.md](reference/blocker-evaluation.md) | spectra item 命中固定步驟 bucket／`applyBlocked`・`awaitingUserDecision`（Step 3.1a） |
