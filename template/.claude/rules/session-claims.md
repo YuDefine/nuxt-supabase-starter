@@ -1,6 +1,6 @@
 ---
 description: 多 session 並行下「哪些路徑屬於別 session 還活著的工作」的判定規格——claim 檔 schema、寫 / refresh / drop 時機、誰讀、stale 處理、claim-helper CLI，以及 ownership provenance journal 的寫入時證據與 other-live / orphan / unknown 三分類
-paths: ['.clade/claims/**', 'scripts/claim-helper.ts', 'scripts/spectra-advanced/claim*.ts', 'scripts/spectra-advanced/claims-lib.ts', 'scripts/spectra-advanced/release-work.ts', 'vendor/scripts/claim-helper.ts', 'vendor/scripts/ownership-journal.ts', 'vendor/scripts/flow/who.ts', '.clade/ownership/**', 'plugins/hub-core/hooks/post-tool-ownership-journal.sh', 'vendor/scripts/spectra-advanced/claim*.ts', 'vendor/scripts/spectra-advanced/claims-lib.ts', 'vendor/scripts/spectra-advanced/release-work.ts']
+paths: ['.clade/claims/**', 'plugins/hub-core/hooks/pre-bash-ownership-stamp.sh', 'scripts/claim-helper.ts', 'scripts/spectra-advanced/claim*.ts', 'scripts/spectra-advanced/claims-lib.ts', 'scripts/spectra-advanced/release-work.ts', 'vendor/scripts/claim-helper.ts', 'vendor/scripts/ownership-journal.ts', 'vendor/scripts/flow/who.ts', '.clade/ownership/**', 'plugins/hub-core/hooks/post-tool-ownership-journal.sh', 'vendor/scripts/spectra-advanced/claim*.ts', 'vendor/scripts/spectra-advanced/claims-lib.ts', 'vendor/scripts/spectra-advanced/release-work.ts']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -43,9 +43,15 @@ Local edits will be reverted by the next sync.
 |---|---|---|
 | `wt-helper add <slug>` 開 worktree | 寫 claim | `wt-helper.ts` |
 | AI session 啟動 in worktree | refresh `last_heartbeat` + `expires_at` | SessionStart hook `session-start-claim-heartbeat.sh` |
+| **每次 Edit / Write 寫檔**（throttle ≥5 分鐘） | refresh `last_heartbeat` + `expires_at` | PostToolUse hook `post-tool-ownership-journal.sh`（TD-664 Phase 2） |
 | `wt-helper cleanup <slug>` | drop claim | `wt-helper.ts` |
 | `wt-helper merge-back <slug>` 成功 | drop claim（透過 cmdCleanup 轉發） | `wt-helper.ts` |
 | 過期超過 24h | prune | `claim-helper.ts prune`（手動 / cron） |
+
+**heartbeat 的寫者 MUST 是 hook，NEVER 是 model。** SessionStart 那列只證明「這個 session 開過」，
+所以在它是唯一寫者的期間，`last_heartbeat` 實測恆等於 `started_at`（17 個 claim 檔全數如此）——
+量到的是開機時刻，不是「還在推進」。PostToolUse 那列量的才是後者。**NEVER** 改成由 model 記得去
+呼叫 `claim-helper refresh`：那讓它退回宣告型欄位，而宣告型欄位不被維護正是 TD-664 的前提本身。
 
 主線 session（**非** worktree）目前**不自動寫** claim — 主線預設可動全部，是 worktree session 需要宣告「我擁有這條 branch + 這些 paths」。
 
@@ -91,13 +97,29 @@ publish 的 gate 對一個已經 commit 完並退出的持有者盲等（gate �
 
 | 分類 | 證據 | 允許的動作 |
 | --- | --- | --- |
-| `other-live` | journal 記到寫入者，且其 process **kernel 可驗仍在**（pid ＋ starttime 兩欄同時吻合） | 等待**只准對這一類成立**。有 pane 就先 `herdr agent prompt` 談，per [[clade-role-and-todo-discipline]]。**NEVER** 代它 stash / commit |
-| `orphan` | journal 記到寫入者，且其 process 已不在 | **NEVER 盲等**。轉 adjudicate：自己 `git commit --only -- <path>` 落地或 stash |
-| `unknown` | journal 沒有這個檔，或寫入者存活**判不出來** | 承接 `other` 今天的**全部**禁令。**NEVER sweep**、**NEVER** 讀成 `orphan` |
+| `other-live` | journal 記到寫入者，且**兩個存活訊號任一說活著** | 等待**只准對這一類成立**。有 pane 就先 `herdr agent prompt` 談，per [[clade-role-and-todo-discipline]]。**NEVER** 代它 stash / commit |
+| `orphan` | journal 記到寫入者，且**兩個訊號都說死** | **NEVER 盲等**。轉 adjudicate：自己 `git commit --only -- <path>` 落地或 stash |
+| `unknown` | journal 沒有這個檔，或兩個訊號**沒有同時成立死亡** | 承接 `other` 今天的**全部**禁令。**NEVER sweep**、**NEVER** 讀成 `orphan` |
 
-**判死 MUST 兩個獨立訊號同時缺席**（journal 沒有這個路徑 ∧ 寫入者 process 不在），
-只缺一個一律 `unknown`。成因：provenance hook 是 fail-open 的，**單靠證據缺席會把
-「hook 壞了」誤讀成「全員陣亡」** —— 而那個誤讀的方向正好是會 sweep 掉別人 WIP 的方向。
+**判死 MUST 兩個獨立訊號同時缺席**，只缺一個一律 `unknown`。兩個訊號逐字是：
+
+| 訊號 | 證據 | 取不到時 |
+| --- | --- | --- |
+| process | `/proc/<pid>` 存在 ∧ `stat` 第 22 欄 starttime 與 journal 記的 `pid_start` 吻合（**pid 會被重用，單看 pid 不算**） | `null`（非 Linux / 沒記 pid） |
+| session presence | `herdr agent list` 的 `agent_session.value` 仍列出該 `session_id` —— 與 journal 的 `session_id` 是**同一個** harness id，可直接比對 | `null`（`HERDR_ENV != 1` / `herdr` 不可達） |
+
+**任一訊號說活著就是 `other-live`**；兩個都說死才是 `orphan`；其餘全部 `unknown`。
+成因：provenance hook 是 fail-open 的，**單靠證據缺席會把「hook 壞了」誤讀成「全員陣亡」**
+—— 而那個誤讀的方向正好是會 sweep 掉別人 WIP 的方向。
+
+**不在 Herdr 裡跑的 session 會讓 `unknown` 變多**（第二個訊號整個取不到，process 已死的檔
+一律降級成 `unknown`）。那是**正確的保守方向**，**NEVER** 拿「unknown 太多、gate 太吵」
+當理由改成單訊號判死，也 **NEVER** 為了湊出 `orphan` 去偽造 session 清單 —— 在
+`classifyDirtyPaths` / `buildWhoRows` 上，live session 清單是**參數**不是環境變數，
+正是為了讓「扣住某個 session 以製造 orphan」做不到。
+
+**session presence 比對的是 session id，NEVER 是 pane。** pane 會被下一棒接手、terminal title
+會繼承上一棒 —— 那兩個正是本條要停止依賴的四個不可信訊號中的兩個。
 
 **`unknown` 不是暫時狀態，是常駐的一大類**：Bash 寫的檔（`sed -i` / heredoc）、Codex 寫的檔
 （沒有 PostToolUse hook）、人手改的、journal 上線前就存在的，全部落在這裡。
@@ -105,8 +127,20 @@ publish 的 gate 對一個已經 commit 完並退出的持有者盲等（gate �
 
 ### 3.2 Provenance journal
 
-`.clade/ownership/journal.jsonl`，每行一次寫入：`{ts, path, worktree, session_id, pane_id, cwd, tool, pid, pid_start}`。
-唯一寫入者是 PostToolUse hook `post-tool-ownership-journal.sh`（Edit / Write / NotebookEdit）。
+`.clade/ownership/journal.jsonl`，每行一次寫入：`{ts, path, worktree, session_id, pane_id, cwd, tool, pid, pid_start, attribution}`。
+唯一寫入者是 PostToolUse hook `post-tool-ownership-journal.sh`（Edit / Write / NotebookEdit / Bash）。
+
+**兩種證據等級，`attribution` 欄分辨**：
+
+| `attribution` | 怎麼來 | 可信度 |
+| --- | --- | --- |
+| `hook` | harness 在 payload 裡直接給路徑（Edit / Write / NotebookEdit） | 強 —— model 動不了 |
+| `mtime-diff` | Bash：PreToolUse `pre-bash-ownership-stamp.sh` 開時間窗，post hook 只收 mtime 落在窗內的 dirty 路徑 | 較弱 —— 窗內別 session 的併發寫入會被記成我的 |
+
+- **NEVER 解析 Bash command 字串推路徑**，也 **NEVER** 在拿不到 stamp 時退化成「掃 `git status`
+  把所有 dirty 記成本 session 的」—— 後者把偶爾誤歸換成必定誤歸，正是 § 3.1 唯一會毀掉工作的方向。
+  沒有 stamp 就整段不記
+- `flow who` 對 `mtime-diff` 的列會在 action 裡明說證據較弱；**NEVER** 把它讀成與 `hook` 同級
 
 - **`session_id` MUST 取自 harness 的 hook input JSON，NEVER 由 model 自報。** 本機制的全部價值
   就在於它是 model 動不了的證據；一旦可自報，它立刻退化成又一個宣告型欄位 —— 也就是本節要繞開的東西
@@ -114,8 +148,8 @@ publish 的 gate 對一個已經 commit 完並退出的持有者盲等（gate �
   linked worktree 共寫，所以同一個相對路徑在兩棵樹裡是兩個檔。**NEVER** 拿掉 `worktree` 欄位
 - **NEVER 把 verdict 回寫成 store** —— verdict 是 derived 值，落盤就是 drift 起點
   （同 `flow/serve.ts` 的 READ-ONLY 鐵律）。journal 是本機制唯一新增的寫入面，其餘全部 derived
-- **NEVER 改成「Bash 之後掃 `git status` 把所有 dirty 檔記成本 session 的」** —— 那會把別 session
-  活著的 WIP 標成我的，正是 § 3.1 那個唯一會毀掉工作的方向
+- **NEVER 把 verdict 或 `unknown` 的處置寫死成「反正判不出來就當沒人要」** —— `unknown` 的禁令
+  在 § 3.1，一行不放寬
 
 查詢入口：`node vendor/scripts/flow/flow.ts who [--json] [--session <id>]` ——
 一行一資源（dirty path / worktree / stash），含 verdict 與具名 `action`（沿用 `stall.ts` 的 action 契約）。

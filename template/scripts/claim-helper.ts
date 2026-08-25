@@ -28,7 +28,12 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isRecord } from './lib/json-unknown.ts'
 import { isLockedProjectionPath } from './locked-projection.ts'
-import { isWriterAlive, lastWriterByPath, readJournal } from './ownership-journal.ts'
+import {
+  lastWriterByPath,
+  liveSessionIds,
+  readJournal,
+  writerLiveness,
+} from './ownership-journal.ts'
 
 const TTL_HOURS = 24
 const CLAIMS_DIR = '.clade/claims'
@@ -296,7 +301,14 @@ export function matchClaimGlob(path, pattern) {
  * destroys work is `unknown` being read as `orphan`; nothing in this function may narrow
  * that gap by guessing.
  */
-export function classifyDirtyPaths(consumerRoot, paths, { excludeClaim = null } = {}) {
+export function classifyDirtyPaths(
+  consumerRoot,
+  paths,
+  {
+    excludeClaim = null,
+    liveSessions,
+  }: { excludeClaim?: Claim | null; liveSessions?: Set<string> | null } = {},
+) {
   const locked = []
   const otherSession = []
   const other = []
@@ -316,6 +328,20 @@ export function classifyDirtyPaths(consumerRoot, paths, { excludeClaim = null } 
     )
   } catch {
     activeClaims = []
+  }
+  // One Herdr probe for the whole call: this runs over every dirty path in a publish gate,
+  // and the probe is a subprocess. `null` means the signal is unavailable, NEVER "nobody is alive".
+  // `liveSessions` is a test seam: production callers omit it and get the probe. It is an
+  // argument rather than an env var on purpose — an env seam could be used to *withhold* a
+  // session and manufacture an `orphan`, which is the one direction that authorises touching
+  // someone else's work.
+  let sessions = liveSessions
+  if (sessions === undefined) {
+    try {
+      sessions = liveSessionIds()
+    } catch {
+      sessions = null
+    }
   }
   for (const p of paths) {
     if (isLockedProjectionPath(p)) {
@@ -345,11 +371,17 @@ export function classifyDirtyPaths(consumerRoot, paths, { excludeClaim = null } 
       other.push(entry)
       continue
     }
-    let alive
+    // 判死 MUST 兩個獨立訊號同時缺席（process 不在 ∧ herdr 不再列出該 session）。
+    // 缺一個一律 unknown —— hook 是 fail-open 的，單訊號會把「hook 壞了」讀成「全員陣亡」。
+    let liveness
     try {
-      alive = isWriterAlive(writer)
+      liveness = writerLiveness(writer, { sessions })
     } catch {
-      alive = null
+      liveness = {
+        verdict: 'unknown',
+        signals: { process: null, session: null },
+        why: 'liveness probe threw',
+      }
     }
     const provenance = {
       session_id: writer.session_id,
@@ -358,19 +390,20 @@ export function classifyDirtyPaths(consumerRoot, paths, { excludeClaim = null } 
       tool: writer.tool,
       written_at: writer.ts,
     }
-    if (alive === true) {
-      const entry = { path: p, verdict: 'other-live', ...provenance }
+    if (liveness.verdict === 'alive') {
+      const entry = { path: p, verdict: 'other-live', signals: liveness.signals, ...provenance }
       otherLive.push(entry)
       other.push(entry)
-    } else if (alive === false) {
-      const entry = { path: p, verdict: 'orphan', ...provenance }
+    } else if (liveness.verdict === 'dead') {
+      const entry = { path: p, verdict: 'orphan', signals: liveness.signals, ...provenance }
       orphan.push(entry)
       other.push(entry)
     } else {
       const entry = {
         path: p,
         verdict: 'unknown',
-        why: 'writer liveness not verifiable (no pid / no /proc)',
+        why: liveness.why,
+        signals: liveness.signals,
         ...provenance,
       }
       unknown.push(entry)

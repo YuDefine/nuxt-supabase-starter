@@ -15,6 +15,7 @@
  * 落成 store 就是 drift 的起點（同 `flow/serve.ts` 的鐵律）。唯一的寫入面是那支 hook。
  */
 
+import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isRecord } from './lib/json-unknown.ts'
@@ -33,6 +34,12 @@ export interface JournalEntry {
   tool: string
   pid: number | null
   pid_start: number | null
+  /**
+   * How the path was attributed. `hook` = the harness named the file (Edit/Write/NotebookEdit).
+   * `mtime-diff` = a Bash write, attributed by the pre/post mtime window, which can misattribute
+   * a concurrent write inside that window. Entries predating the field read as `hook`.
+   */
+  attribution: 'hook' | 'mtime-diff'
 }
 
 function isEntry(value: unknown): value is JournalEntry {
@@ -74,6 +81,7 @@ export function readJournal(consumerRoot: string): JournalEntry[] {
           tool: typeof parsed.tool === 'string' ? parsed.tool : 'unknown',
           pid: typeof parsed.pid === 'number' ? parsed.pid : null,
           pid_start: typeof parsed.pid_start === 'number' ? parsed.pid_start : null,
+          attribution: parsed.attribution === 'mtime-diff' ? 'mtime-diff' : 'hook',
         })
       }
     } catch {
@@ -150,5 +158,123 @@ export function provenanceCoverage(consumerRoot: string, paths: string[], tree =
     covered: covered.length,
     ratio: paths.length === 0 ? 1 : covered.length / paths.length,
     uncovered: paths.filter((p) => !byPath.has(p)),
+  }
+}
+
+/**
+ * The second, independent liveness signal: which Claude sessions Herdr still lists.
+ *
+ * `isWriterAlive` above reads the kernel. That is one signal, and one signal is not enough to
+ * declare a writer dead — `rules/core/session-claims.md` § 3.1 requires two independent ones,
+ * because the direction of a wrong "dead" verdict is the direction that sweeps live WIP.
+ *
+ * The identity compared here is exact: Herdr reports `agent_session.value`, which is the same
+ * `session_id` the hook copies out of the harness's hook input. NEVER substitute pane geometry
+ * or terminal title for it — a pane is inherited by whoever takes the tab next, which is one of
+ * the four unreliable signals TD-664 exists to stop relying on.
+ *
+ * Returns `null` — not an empty set — whenever the signal cannot be taken at all (outside Herdr,
+ * `herdr` missing, transport error). `null` means "unknown", and an unknown signal can never be
+ * half of a death sentence.
+ */
+let liveSessionCache: Set<string> | null | undefined
+
+export function liveSessionIds({ herdrBin = 'herdr' } = {}): Set<string> | null {
+  // Memoized for the whole process: one publish gate asks about hundreds of paths, and each
+  // probe is a subprocess. A session that dies mid-gate reading as alive is the safe direction.
+  if (liveSessionCache !== undefined) return liveSessionCache
+  if (process.env.HERDR_ENV !== '1') {
+    liveSessionCache = null
+    return liveSessionCache
+  }
+  try {
+    const res = spawnSync(herdrBin, ['agent', 'list'], {
+      encoding: 'utf8',
+      timeout: 15_000,
+      maxBuffer: 4 * 1024 * 1024,
+    })
+    if ((res.status ?? 1) !== 0) {
+      liveSessionCache = null
+      return liveSessionCache
+    }
+    const parsed: unknown = JSON.parse((res.stdout ?? '').trim())
+    const agents = isRecord(parsed) && isRecord(parsed.result) ? parsed.result.agents : null
+    if (!Array.isArray(agents)) {
+      liveSessionCache = null
+      return liveSessionCache
+    }
+    const out = new Set<string>()
+    for (const agent of agents) {
+      if (!isRecord(agent)) continue
+      const session = agent.agent_session
+      if (isRecord(session) && typeof session.value === 'string') out.add(session.value)
+    }
+    liveSessionCache = out
+    return liveSessionCache
+  } catch {
+    liveSessionCache = null
+    return liveSessionCache
+  }
+}
+
+/** Test seam only — the cache is per-process by design; production code MUST NOT call this. */
+export function resetLiveSessionCache(): void {
+  liveSessionCache = undefined
+}
+
+export type LivenessVerdict = 'alive' | 'dead' | 'unknown'
+
+export interface WriterLiveness {
+  verdict: LivenessVerdict
+  /** `true` alive, `false` gone, `null` the signal could not be taken. */
+  signals: { process: boolean | null; session: boolean | null }
+  why: string
+}
+
+/**
+ * Two-signal liveness for a journal entry's writer.
+ *
+ * `dead` requires BOTH signals to say gone. Either one saying alive wins, and anything else is
+ * `unknown`. The asymmetry is deliberate and is the whole point: the provenance hook is
+ * fail-open, so evidence going missing is indistinguishable from "the hook broke", and reading
+ * that as "everyone died" is what lets a gate sweep another session's WIP.
+ *
+ * `sessions` is the Herdr signal: pass a Set to inject it, `null` to declare it unavailable, or
+ * omit it to probe. Callers that ask about many paths SHOULD hoist one probe and inject it.
+ */
+export function writerLiveness(
+  entry: JournalEntry,
+  { sessions }: { sessions?: Set<string> | null } = {},
+): WriterLiveness {
+  let proc: boolean | null
+  try {
+    proc = isWriterAlive(entry)
+  } catch {
+    proc = null
+  }
+  const live = sessions === undefined ? liveSessionIds() : sessions
+  const session = live === null ? null : live.has(entry.session_id)
+  const signals = { process: proc, session }
+  if (proc === true || session === true) {
+    return {
+      verdict: 'alive',
+      signals,
+      why: proc === true ? 'writer pid still matches' : 'session still listed by herdr',
+    }
+  }
+  if (proc === false && session === false) {
+    return {
+      verdict: 'dead',
+      signals,
+      why: 'writer process is gone and herdr no longer lists the session',
+    }
+  }
+  return {
+    verdict: 'unknown',
+    signals,
+    why:
+      proc === false
+        ? 'writer process is gone but the session signal is unavailable (not in Herdr / herdr unreachable) — one signal is never enough to declare a writer dead'
+        : 'writer liveness not verifiable (no pid / no /proc)',
   }
 }
