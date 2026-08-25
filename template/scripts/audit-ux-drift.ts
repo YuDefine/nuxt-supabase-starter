@@ -66,6 +66,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isRecord } from './lib/json-unknown.ts'
 
 interface ScanConfig {
   typesDirs: string[]
@@ -190,15 +191,10 @@ function loadConfig(): ScanConfig {
   const configPath = resolveConfigPath(repoRoot)
   if (!configPath) return DEFAULT_CONFIG
   try {
-    const raw = JSON.parse(readFileSync(configPath, 'utf-8')) as {
-      paths?: {
-        types?: string | string[]
-        ui?: string | string[]
-        uiExtensions?: string | string[]
-        server?: string | string[]
-      }
-    }
-    const p = raw.paths ?? {}
+    const raw: unknown = JSON.parse(readFileSync(configPath, 'utf-8'))
+    if (!isRecord(raw)) return DEFAULT_CONFIG
+    const paths = isRecord(raw.paths) ? raw.paths : {}
+    const p = paths
     return {
       typesDirs: asArray(p.types, DEFAULT_CONFIG.typesDirs),
       uiDirs: asArray(p.ui, DEFAULT_CONFIG.uiDirs),
@@ -211,9 +207,10 @@ function loadConfig(): ScanConfig {
   }
 }
 
-function asArray(v: string | string[] | undefined, fallback: string[]): string[] {
-  if (v === null || v === undefined) return fallback
-  return Array.isArray(v) ? v : [v]
+function asArray(v: unknown, fallback: string[]): string[] {
+  if (typeof v === 'string') return [v]
+  if (Array.isArray(v) && v.every((item) => typeof item === 'string')) return v
+  return fallback
 }
 
 const config = loadConfig()

@@ -76,7 +76,14 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync, unlinkSync, realpathSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  unlinkSync,
+  realpathSync,
+} from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
 import { basename, join, resolve, isAbsolute } from 'node:path'
@@ -488,6 +495,71 @@ function portPid(port) {
   return r ? r.split('\n')[0].trim() : null
 }
 
+function spawnStatusPath(cwd, port) {
+  return join(cwd, '.review-gui', `spawn-${port}.json`)
+}
+
+/**
+ * 結局檔給 review-gui 的 poll 讀。寫失敗要出聲——GUI 讀不到 = 自助頁永遠停在「正在啟動」。
+ * 但寫失敗本身不改 exit 路徑（該 exit 1 的還是 exit 1）。
+ */
+function writeSpawnStatus(cwd, port, payload) {
+  if (!cwd || !port) return
+  try {
+    mkdirSync(join(cwd, '.review-gui'), { recursive: true })
+    writeFileSync(
+      spawnStatusPath(cwd, port),
+      JSON.stringify(
+        {
+          requestedPort: port,
+          heardPort: null,
+          message: null,
+          herdrTab: null,
+          updatedAt: new Date().toISOString(),
+          ...payload,
+        },
+        null,
+        2,
+      ) + '\n',
+    )
+  } catch (e) {
+    err(`[dev-session] 寫不進 spawn status（${spawnStatusPath(cwd, port)}）：${e?.message ?? e}`)
+  }
+}
+
+/**
+ * 這個 cwd 裡現在有誰在聽。用來抓「請求 3070、實際綁 3000」——只盯請求 port 會把它
+ * 退化成 90s 逾時，外觀與還在編譯完全相同。
+ */
+function listeningPortsForCwd(cwd) {
+  if (!cwd) return []
+  let wanted = cwd
+  try {
+    wanted = realpathSync(cwd)
+  } catch {
+    /* keep cwd */
+  }
+  const raw = sh('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-F', 'pPn'])
+  if (!raw) return []
+  const ports = []
+  let pid = null
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('p')) {
+      pid = line.slice(1)
+      continue
+    }
+    if (!line.startsWith('n') || !pid) continue
+    const m = line.match(/:(\d+)\s*$/)
+    if (!m) continue
+    try {
+      if (realpathSync(`/proc/${pid}/cwd`) === wanted) ports.push(Number(m[1]))
+    } catch {
+      /* pid 已消失或沒權限讀 cwd */
+    }
+  }
+  return [...new Set(ports)]
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // herdr tab primitives
 //
@@ -876,6 +948,10 @@ function enforceLeaseOrExit(o, meta, consumerId, lid) {
       err(`  dev:     PID ${mismatch.devServer?.pid}, port=${mismatch.devServer?.port}`)
       err(`  ⚠ 照這個 session 收 evidence 會拍到**錯的 code**。`)
       err(`  要接管請加 --takeover（會 kill 現有 dev process 後重建）。`)
+      writeSpawnStatus(o.cwd, o.port, {
+        status: 'failed',
+        message: `[lease] refuse — 既有 dev server 服務的不是你要的 working tree（serving ${mismatch.devServer?.cwd}，你要的 ${o.cwd}）`,
+      })
       process.exit(1)
     }
     err(`[lease:${consumerId}] ⚠ served cwd 不符（advisory 模式，不阻擋）`)
@@ -914,6 +990,10 @@ function enforceLeaseOrExit(o, meta, consumerId, lid) {
     err(`  你要的:  cwd=${o.cwd}`)
     err(`  ⚠ cwd 不符代表既有 dev server 服務的是另一個 working tree 的 code。`)
     err(`  要強制接管請加 --takeover（會 log 前 holder 並 kill 其 dev process）。`)
+    writeSpawnStatus(o.cwd, o.port, {
+      status: 'failed',
+      message: `[lease] 無法 claim — 已被 ${conflict.holder?.kind}:${conflict.holder?.sessionId} 持有`,
+    })
     process.exit(1)
   }
 
@@ -979,10 +1059,15 @@ function preflightBackingService(o) {
 
 async function cmdLaunch(o) {
   if (!o.cmd || !o.cmd.length) {
-    err('用法：dev-session.ts [opts] -- <cmd...>（缺少 `-- <cmd>`）')
+    const msg = '用法：dev-session.ts [opts] -- <cmd...>（缺少 `-- <cmd>`）'
+    writeSpawnStatus(o.cwd, o.port, { status: 'failed', message: msg })
+    err(msg)
     process.exit(1)
   }
   if (!herdrAvailable()) {
+    const msg =
+      'herdr server 連不上（未安裝 / 不在 PATH / server 沒在跑）。dev-session 以 herdr 為持久層：先確認 `herdr status`，再重跑。'
+    writeSpawnStatus(o.cwd, o.port, { status: 'failed', message: msg })
     err('herdr server 連不上（未安裝 / 不在 PATH / server 沒在跑）。')
     err('  dev-session 以 herdr 為持久層：先確認 `herdr status`，再重跑。')
     err('  **NEVER** 退回 `run_in_background` / setsid / nohup —— 那些一律會被 harness reap。')
@@ -1057,6 +1142,11 @@ async function cmdLaunch(o) {
         }
         out(`  看畫面：herdr tab focus ${existing.tabId}`)
         out(`  停止：  node scripts/dev-session.ts stop --session ${sessionName}`)
+        writeSpawnStatus(o.cwd, port, {
+          status: 'ready',
+          heardPort: port,
+          herdrTab: existing.tabId,
+        })
         return
       }
     }
@@ -1090,6 +1180,10 @@ async function cmdLaunch(o) {
     err(`  先確認該程序是什麼，再擇一處理：`)
     err(`    - 若是舊的 dev server：node scripts/dev-session.ts stop --session ${sessionName}`)
     err(`    - 若是別的服務：換 port（--port <n>）或自行停掉該程序`)
+    writeSpawnStatus(o.cwd, port, {
+      status: 'failed',
+      message: `port ${port} 已被非本 session 的程序占用（PID ${squatter}）`,
+    })
     process.exit(1)
   }
 
@@ -1102,6 +1196,8 @@ async function cmdLaunch(o) {
     repoRoots: resolveRepoRoots(o),
   })
   if (!tab) {
+    const msg = `herdr Tab 建立失敗（${sessionName}）—— 沒有拿到 tab_id / pane_id。先確認 herdr status，再重跑。`
+    writeSpawnStatus(o.cwd, port, { status: 'failed', message: msg })
     err(`[dev-session] herdr Tab 建立失敗（${sessionName}）—— 沒有拿到 tab_id / pane_id`)
     err(`  先確認 \`herdr status\`，再重跑。**NEVER** 退回 run_in_background。`)
     process.exit(1)
@@ -1133,11 +1229,35 @@ async function cmdLaunch(o) {
       )
       out(`  看畫面：herdr tab focus ${tab.tabId}`)
       out(`  停止：  node scripts/dev-session.ts stop --session ${sessionName}`)
+      writeSpawnStatus(o.cwd, port, {
+        status: 'ready',
+        heardPort: port,
+        herdrTab: tab.tabId,
+      })
       return
     }
+    const heard = listeningPortsForCwd(o.cwd).filter((p) => p !== port)
+    if (heard.length) {
+      const msg = `請求 ${port}、聽到 ${heard[0]}`
+      err(`⚠ ${msg}。session ${sessionName} 保留供檢查：`)
+      err(`  herdr tab focus ${tab.tabId}（看 dev 卡在哪）`)
+      writeSpawnStatus(o.cwd, port, {
+        status: 'failed',
+        heardPort: heard[0],
+        message: msg,
+        herdrTab: tab.tabId,
+      })
+      process.exit(1)
+    }
   }
+  const timeoutMsg = `⚠ 啟動逾時（${READY_TIMEOUT_MS}ms）port ${port} 仍未聽。session ${sessionName} 保留供檢查： herdr tab focus ${tab.tabId}`
   err(`⚠ 啟動逾時（${READY_TIMEOUT_MS}ms）port ${port} 仍未聽。session ${sessionName} 保留供檢查：`)
   err(`  herdr tab focus ${tab.tabId}（看 dev 卡在哪）`)
+  writeSpawnStatus(o.cwd, port, {
+    status: 'failed',
+    message: timeoutMsg,
+    herdrTab: tab.tabId,
+  })
   process.exit(1)
 }
 

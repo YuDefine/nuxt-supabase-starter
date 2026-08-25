@@ -73,6 +73,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isRecord } from '../scripts/lib/json-unknown.ts'
 
 class UsageError extends Error {}
 
@@ -481,7 +482,8 @@ function main() {
     return
   }
 
-  const data = JSON.parse(readFileSync(patternsPath, 'utf8')) as { rules?: unknown }
+  const dataRaw: unknown = JSON.parse(readFileSync(patternsPath, 'utf8'))
+  const data = isRecord(dataRaw) ? dataRaw : {}
   const allRules: Rule[] = Array.isArray(data.rules) ? (data.rules as Rule[]) : []
   const rules = allRules.filter((r) => layer === 'all' || (r.layer || 'pre-commit') === layer)
 

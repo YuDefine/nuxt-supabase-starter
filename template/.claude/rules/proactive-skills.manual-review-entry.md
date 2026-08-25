@@ -59,23 +59,24 @@ Local edits will be reverted by the next sync.
 
 **誰要讀本節**：交付驗收入口給人的那個角色，**不是**動 `openspec/changes/**` 的那個角色。本檔 frontmatter 的 `paths` 是 path-scoped 觸發，而在 `/wt` 親子拆分下，開那些檔的是 worktree subagent、交付 URL 的是主線 orchestrator——主線整段 session 可能一個 `openspec/changes/**` 檔都沒開，規約於是對**唯一會犯這個錯的角色**不載入。因此：**要交付人工檢查入口時，MUST 主動載入本檔**，NEVER 等 path 觸發（2026-08-24 <consumer-a> `employee-backpay-request` 實證：主線未載入本檔，跳過下方兩條指令直接自建平行 GUI）。
 
-把人工檢查入口交給人之前，**MUST 先問「現在有沒有服務在提供入口」**。這是查表不是推理，兩條指令逐字：
+把人工檢查入口交給人之前，**MUST 先問「現在有沒有服務在提供入口」**，再問「PWA inbox 有沒有這條、人點下去會不會落到這條」。這是查表不是推理，兩條指令逐字：
 
 ```bash
 bash ~/offline/clade/ops/review-gui-service.sh status          # 判 exit code，不要逐行比對字串
-curl -s --max-time 60 http://127.0.0.1:5174/api/changes \
-  | python3 -c "import json,sys;[print(i['changeKey'],i['reviewPath']) for i in json.load(sys.stdin)['changes']]"
+node ~/offline/clade/vendor/scripts/review-handoff-url.ts resolve \
+  --change <change-name> [--item '#N']
 ```
 
 **第 1 條 MUST 判 exit code，NEVER 拿單一行字串當結論**：它的輸出是多行（`enabled` / GUI unit 的 `active` / dispatch-pickup 的 `not-found` 與 `inactive` / `ss` 表 / 健康 JSON），裡面本來就同時出現 `active` 與 `inactive`。**exit 0 就是服務健全**（末行為 `{"ok":true,"authRequired":false}`）。
 
-**第 2 條印的是 `changeKey` 與 `reviewPath`**（`/api/changes` 的 change object **沒有** `id` 欄位），它同時是 [[agent-self-verification]] MUST 11 要的 known-positive control：回答「服務看不看得到**我這條 change**」，而任何 repo-scoped grep 對這題都答不出來。`reviewPath` 就是要交付的路徑，直接接在 host 後面，**NEVER** 自己憑印象拼。
+**第 2 條打的是 live `/api/inbox`**，不是 isolated `--scan --repo`、也不是 `/api/changes` 的 `reviewPath`。stdout 的 `review_url` 才是人開得了的入口（含 consumer prefix 與 `?item=`）。**exit 1 = 不在待判清單**（典型：只剩 `[verify:ui]`、bucket=`feedbackGiven`）→ **NEVER 貼 URL**，把 JSON 的 `reason` / `bucket` / `hint` 原樣告訴人。
 
 | 兩條指令的結果 | 交付什麼 |
 | --- | --- |
-| 第 1 條 exit 0，且第 2 條印出了自己那條 `changeKey` | 給人的 URL = `https://review-gui.<maintainer-domain>` ＋ 該條的 `reviewPath`（= scan 的 `reviewUrl` / stderr `review_url=`）。**NEVER** 換成 `127.0.0.1` / Tailscale IPv4 / `*.ts.net`。loopback 只出現在第 2 條 curl。**這是常態** |
-| 第 1 條 exit 0，但第 2 條沒印出自己那條 | 改 `registry/consumers.json` → 跑 `node scripts/bootstrap-consumers-local.ts` 重生 `consumers.local`（該檔 gitignored，手改不留存）→ `sudo systemctl restart review-gui` → 重跑第 2 條確認它出現 |
-| 第 1 條 exit ≠ 0 | 自己用 `bash ~/offline/clade/ops/review-gui-service.sh install` 把服務帶起來（該子命令自帶 `systemctl restart` 與健康等待），再回到上面兩列 |
+| 第 1 條 exit 0，且第 2 條 exit 0 | 給人的 URL = stdout 的 `review_url`。**NEVER** 換成 `127.0.0.1` / Tailscale IPv4 / `*.ts.net`、**NEVER** 改貼 `--scan --repo` 的無 prefix `reviewUrl`。**這是常態** |
+| 第 1 條 exit 0，第 2 條 exit 1 `not-in-inbox` / `item-not-in-inbox` | 不給連結。報告 JSON。人在 PWA 點下去會落到別張的第一項 |
+| 第 1 條 exit 0，第 2 條 `service-unreachable` | 第 1 條說服務活著但 inbox 打不到 → 自己 `review-gui-service.sh install` 再重跑第 2 條 |
+| 第 1 條 exit ≠ 0 | 自己用 `bash ~/offline/clade/ops/review-gui-service.sh install` 把服務帶起來（該子命令自帶 `systemctl restart` 與健康等待），再回到上面幾列 |
 
 **NEVER 因為「主 checkout 的 `tasks.md` 看起來是舊的」就自建一台平行 GUI。** 共用 review-gui **本來就會解析 worktree**：`/api/changes/<changeKey>` 回的 `sourceRoot` 會指向該 change 的 session worktree、`worktreeSlug` 會帶 slug，item 勾選狀態讀的是 worktree 那份。「主 checkout 資料過時」因此不成立為「共用服務給不出正確畫面」的理由——那是**推理**，而本節第一句就要求查表。自建的那台只在本機可達（`127.0.0.1:<derived-port>`），等於把已經修好的坑重踩一次。
 
@@ -83,15 +84,16 @@ curl -s --max-time 60 http://127.0.0.1:5174/api/changes \
 
 **NEVER 交付 `cd <path> && <cmd>`。** 逐字實錄：「`cd ~/offline/<consumer-j>-wt/kiosk-google-allowlist && pnpm review:ui`」——那是指令不是位址（要 user 自己執行才生得出畫面）、`127.0.0.1` 只在跑 dev server 的那台機器上有意義、且綁在會過期的 agent lease 上。同理 **NEVER 交付 `https://review-gui.<tailnet>.ts.net/`**：pairing token 已停用（`ops/review-gui-service.sh` 的 `pairing_retired()`），那條會停在配對畫面。
 
-**Iron Law：給人的驗收入口永遠是 scan 的 `reviewUrl`（`https://review-gui.<maintainer-domain>` + `reviewPath`）。違反字面就是違反精神。**
+**Iron Law：給人的驗收入口永遠是 `review-handoff-url.ts resolve` exit 0 的 `review_url`。違反字面就是違反精神。**
 
 | 藉口 | 現實 |
 | --- | --- |
 | 「user 在本機」 | iPad / 外出裝置上的 `127.0.0.1` 是裝置自己，不是桌機 |
-| 「scan 印的是 127.0.0.1 所以照抄」 | scan 的 `reviewUrl` 是 HTTPS；loopback 在 `probeUrl` |
+| 「scan 印的是 127.0.0.1 所以照抄」 | isolated `--scan --repo` 的 `reviewUrl` 常缺 consumer prefix；loopback 在 `probeUrl` |
+| 「`/api/changes` 有 `reviewPath` 就貼」 | 那條 URL 在 PWA inbox 裡找不到時，畫面會落到別張的第一項 |
 | 「Tailscale DNS 也是 HTTPS」 | `review-gui.<tailnet>.ts.net` pairing 已停用，會停在配對畫面 |
 
-**Red Flags**：正要把 `127.0.0.1:5174/review`、Tailscale IPv4、或 `*.ts.net` 貼進給人看的訊息。
+**Red Flags**：正要把 `127.0.0.1:5174/review`、Tailscale IPv4、`*.ts.net`、或**沒有 `consumer:` prefix** 的 `/review/<change>` 貼進給人看的訊息。
 
 ### 同一條 Iron Law 管 item 敘述**內文**的 URL
 

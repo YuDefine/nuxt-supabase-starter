@@ -70,7 +70,11 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // NEVER widen to `scripts/lib/`: consumers author their own files there
       // (<consumer-a> `common.sh` / `read-infra-manifest.mjs`, <consumer-d> `vue-component-resolution.ts`),
       // and matching the whole dir would mark those clade-managed → auto-reset clobbers them.
-      String.raw`scripts/lib/(evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace)\.(mjs|mts|ts)$`,
+      String.raw`scripts/lib/(evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|json-unknown)\.(mjs|mts|ts)$`,
+      // json-unknown.ts 第二條 dest：vendor/review-rules/scan.ts 以
+      // `../scripts/lib/json-unknown.ts` 解析到 vendor/scripts/lib/。
+      // NEVER 放寬成 `vendor/scripts/lib/`——那個目錄在 clade home 是源。
+      String.raw`vendor/scripts/lib/json-unknown\.ts$`,
       // Snippets / shared presets
       String.raw`vendor/(snippets|oxc-shared|doctor-shared|review-rules|husky)/`,
       // prepare-commit-msg 掛載點 —— 逐檔列出，**NEVER** 放寬成 `\.husky/`：
@@ -115,6 +119,9 @@ const CLADE_OWN_SOURCE_RE = new RegExp(
       // —— 沒有這一列，clade home 會把自己的源檔當投影過濾掉，改動不再算 user WIP。
       String.raw`vendor/utils/assert-never\.ts$`,
       String.raw`utils/assert-never\.ts$`,
+      // json-unknown.ts 源檔在 vendor/scripts/lib/；LOCKED_PROJECTION_RE 為
+      // consumer dest 加了同路徑之後，沒有這一列 clade home 會把自己的源當投影。
+      String.raw`vendor/scripts/lib/json-unknown\.ts$`,
       String.raw`AGENTS\.md$`,
       String.raw`CLAUDE\.md$`,
       String.raw`commitlint\.config\.ts$`,

@@ -5,6 +5,7 @@ import os from 'node:os'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isRecord } from '../lib/json-unknown.ts'
 
 const DEFAULT_CLAIMS_DIR = '.spectra/claims'
 const DEFAULT_STALE_SECONDS = 60 * 60
@@ -91,20 +92,20 @@ export function loadClaimsRuntimeConfig(): ClaimsRuntimeConfig {
   if (!path) return defaults
 
   try {
-    const raw = JSON.parse(readFileSync(path, 'utf8')) as {
-      paths?: { openspec?: string }
-      claims?: { enabled?: boolean; path?: string; staleSeconds?: number }
-    }
+    const raw: unknown = JSON.parse(readFileSync(path, 'utf8'))
+    if (!isRecord(raw)) return defaults
+    const claims = isRecord(raw.claims) ? raw.claims : {}
+    const paths = isRecord(raw.paths) ? raw.paths : {}
     const staleSeconds =
-      typeof raw.claims?.staleSeconds === 'number' && Number.isFinite(raw.claims.staleSeconds)
-        ? Math.max(60, Math.floor(raw.claims.staleSeconds))
+      typeof claims.staleSeconds === 'number' && Number.isFinite(claims.staleSeconds)
+        ? Math.max(60, Math.floor(claims.staleSeconds))
         : defaults.staleSeconds
     return {
       repoRoot,
-      openspecDir: raw.paths?.openspec ?? defaults.openspecDir,
-      claimsDir: raw.claims?.path ?? defaults.claimsDir,
+      openspecDir: typeof paths.openspec === 'string' ? paths.openspec : defaults.openspecDir,
+      claimsDir: typeof claims.path === 'string' ? claims.path : defaults.claimsDir,
       staleSeconds,
-      enabled: raw.claims?.enabled ?? defaults.enabled,
+      enabled: typeof claims.enabled === 'boolean' ? claims.enabled : defaults.enabled,
     }
   } catch {
     return defaults

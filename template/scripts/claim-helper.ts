@@ -26,6 +26,7 @@ import {
 import { hostname } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isRecord } from './lib/json-unknown.ts'
 import { isLockedProjectionPath } from './locked-projection.ts'
 
 const TTL_HOURS = 24
@@ -43,6 +44,18 @@ interface Claim {
   task_summary: string | null
   last_heartbeat: string
   expires_at: string
+}
+
+function isClaim(value: unknown): value is Claim {
+  return (
+    isRecord(value) &&
+    typeof value.session_id === 'string' &&
+    typeof value.agent === 'string' &&
+    typeof value.started_at === 'string' &&
+    typeof value.last_heartbeat === 'string' &&
+    typeof value.expires_at === 'string' &&
+    Array.isArray(value.expected_paths)
+  )
 }
 
 type ClaimInput = Partial<Claim>
@@ -169,9 +182,10 @@ export function readActiveClaims(
   for (const name of readdirSync(dir)) {
     if (!name.endsWith('.json') || name.startsWith('.')) continue
     try {
-      const claim = JSON.parse(readFileSync(join(dir, name), 'utf8')) as Claim
-      if (!includeExpired && isExpired(claim)) continue
-      claims.push(claim)
+      const parsed: unknown = JSON.parse(readFileSync(join(dir, name), 'utf8'))
+      if (!isClaim(parsed)) continue
+      if (!includeExpired && isExpired(parsed)) continue
+      claims.push(parsed)
     } catch {
       // skip malformed claim files
     }

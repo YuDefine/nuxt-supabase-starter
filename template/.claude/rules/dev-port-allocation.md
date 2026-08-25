@@ -16,9 +16,13 @@ Local edits will be reverted by the next sync.
 
 > SoT：`registry/consumers.json` 每個 consumer entry 的 `dev_ports` object。
 >
-> Audit signal：`scripts/dev-port-audit.ts`。
+> Audit gate：`scripts/dev-port-audit.ts`（DRIFT / MISSING / CONFLICT → exit 1）。
 >
 > Cookbook 範本：`vendor/snippets/dev-port/`。
+>
+> Preview 轉發：`/__preview/<port>` 在 request-time 用 `previewListenerDecision` 確認
+> listener cwd 屬於該 port 的主人。mismatch / unknown **MUST** 出自我頁，
+> **NEVER** 把別的 consumer 的 HTML（含 Nuxt welcome）嵌進驗收畫面。
 
 ## MUST
 
@@ -27,6 +31,8 @@ Local edits will be reverted by the next sync.
 - **MUST** consumer `package.json` 的 `dev` script 必須顯式帶 `--port <registry.dev_ports.nuxt>`
 - **NEVER** 裸 `nuxt dev`（吃 Nuxt default 3000）
 - **NEVER** 省略 `--port` flag
+- **NEVER** 寫 `pnpm dev -- --port <N>` 來補 flag：多出來的 `--` 會讓 Nuxt 把 `--port` 當位置參數丟掉，又落到 default 3000。要覆寫 port 用 `pnpm dev --port <N>`（沒有中間那個 `--`），且 script 本身仍 MUST 帶 `--port`
+- `scripts/dev-port-audit.ts` 對 DRIFT / MISSING / CONFLICT **MUST** exit 1。**NEVER** 把它當 diagnostic-only 吞掉 exit code
 
 ### 2. Tunnel port 對齊
 
