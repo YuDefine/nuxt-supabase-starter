@@ -1,6 +1,6 @@
 ---
-description: 多 session 並行下「哪些路徑屬於別 session 還活著的工作」的 claim 機制規格——claim 檔 schema、寫 / refresh / drop 時機、誰讀、stale 處理、claim-helper CLI
-paths: ['.clade/claims/**', 'scripts/claim-helper.ts', 'scripts/spectra-advanced/claim*.ts', 'scripts/spectra-advanced/claims-lib.ts', 'scripts/spectra-advanced/release-work.ts', 'vendor/scripts/claim-helper.ts', 'vendor/scripts/spectra-advanced/claim*.ts', 'vendor/scripts/spectra-advanced/claims-lib.ts', 'vendor/scripts/spectra-advanced/release-work.ts']
+description: 多 session 並行下「哪些路徑屬於別 session 還活著的工作」的判定規格——claim 檔 schema、寫 / refresh / drop 時機、誰讀、stale 處理、claim-helper CLI，以及 ownership provenance journal 的寫入時證據與 other-live / orphan / unknown 三分類
+paths: ['.clade/claims/**', 'scripts/claim-helper.ts', 'scripts/spectra-advanced/claim*.ts', 'scripts/spectra-advanced/claims-lib.ts', 'scripts/spectra-advanced/release-work.ts', 'vendor/scripts/claim-helper.ts', 'vendor/scripts/ownership-journal.ts', 'vendor/scripts/flow/who.ts', '.clade/ownership/**', 'plugins/hub-core/hooks/post-tool-ownership-journal.sh', 'vendor/scripts/spectra-advanced/claim*.ts', 'vendor/scripts/spectra-advanced/claims-lib.ts', 'vendor/scripts/spectra-advanced/release-work.ts']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -79,6 +79,48 @@ node scripts/claim-helper.ts add --change-id main-session-wip \
 
 第三列是最容易誤讀的一列 —— `other` 為空不代表安全，只代表沒有人宣告過。
 
+### 3.1 `other` 的三分類（TD-664，寫入時證據）
+
+`other` 把兩個相反的處境塌縮成同一個字：「有人**現在正在**寫它」與「寫它的人**早就死了**」。
+於是讀的人只能對兩者採同一種行為 —— 而那兩種處境該做的事正好相反。2026-08-26 實測代價：
+publish 的 gate 對一個已經 commit 完並退出的持有者盲等（gate 自己的措辭是「最多 90 分鐘」），
+三個 session 互等約兩小時。
+
+`classifyDirtyPaths()` 因此**在 `other` 之外**額外回三個陣列。`other` 內容一個不少，
+四個既有呼叫端一行不改就沿用今天的保守行為；要停止盲等的呼叫端才讀新欄位。
+
+| 分類 | 證據 | 允許的動作 |
+| --- | --- | --- |
+| `other-live` | journal 記到寫入者，且其 process **kernel 可驗仍在**（pid ＋ starttime 兩欄同時吻合） | 等待**只准對這一類成立**。有 pane 就先 `herdr agent prompt` 談，per [[clade-role-and-todo-discipline]]。**NEVER** 代它 stash / commit |
+| `orphan` | journal 記到寫入者，且其 process 已不在 | **NEVER 盲等**。轉 adjudicate：自己 `git commit --only -- <path>` 落地或 stash |
+| `unknown` | journal 沒有這個檔，或寫入者存活**判不出來** | 承接 `other` 今天的**全部**禁令。**NEVER sweep**、**NEVER** 讀成 `orphan` |
+
+**判死 MUST 兩個獨立訊號同時缺席**（journal 沒有這個路徑 ∧ 寫入者 process 不在），
+只缺一個一律 `unknown`。成因：provenance hook 是 fail-open 的，**單靠證據缺席會把
+「hook 壞了」誤讀成「全員陣亡」** —— 而那個誤讀的方向正好是會 sweep 掉別人 WIP 的方向。
+
+**`unknown` 不是暫時狀態，是常駐的一大類**：Bash 寫的檔（`sed -i` / heredoc）、Codex 寫的檔
+（沒有 PostToolUse hook）、人手改的、journal 上線前就存在的，全部落在這裡。
+**NEVER** 因為「`unknown` 太多、判不出來很煩」就放寬它的禁令 —— 數量多正是它必須保守的理由。
+
+### 3.2 Provenance journal
+
+`.clade/ownership/journal.jsonl`，每行一次寫入：`{ts, path, worktree, session_id, pane_id, cwd, tool, pid, pid_start}`。
+唯一寫入者是 PostToolUse hook `post-tool-ownership-journal.sh`（Edit / Write / NotebookEdit）。
+
+- **`session_id` MUST 取自 harness 的 hook input JSON，NEVER 由 model 自報。** 本機制的全部價值
+  就在於它是 model 動不了的證據；一旦可自報，它立刻退化成又一個宣告型欄位 —— 也就是本節要繞開的東西
+- **`path` 相對 `worktree`，不是相對 consumer root。** 一個 consumer 一份 journal，main 與所有
+  linked worktree 共寫，所以同一個相對路徑在兩棵樹裡是兩個檔。**NEVER** 拿掉 `worktree` 欄位
+- **NEVER 把 verdict 回寫成 store** —— verdict 是 derived 值，落盤就是 drift 起點
+  （同 `flow/serve.ts` 的 READ-ONLY 鐵律）。journal 是本機制唯一新增的寫入面，其餘全部 derived
+- **NEVER 改成「Bash 之後掃 `git status` 把所有 dirty 檔記成本 session 的」** —— 那會把別 session
+  活著的 WIP 標成我的，正是 § 3.1 那個唯一會毀掉工作的方向
+
+查詢入口：`node vendor/scripts/flow/flow.ts who [--json] [--session <id>]` ——
+一行一資源（dirty path / worktree / stash），含 verdict 與具名 `action`（沿用 `stall.ts` 的 action 契約）。
+任何一列不屬於自己時 exit 3，與 `flow status --stalled` / `herdr-patrol` 同慣例。
+
 | 讀者 | 用途 |
 |---|---|
 | `scripts/publish.ts` (clade) | 跨 consumer scan，warn 「別 session 還活著」；`ensureCleanOrAutoStash` 在**所有** dirty 分支之前跑 `classifyDirtyPaths`，`otherSession` 非空即 fail-loud |
@@ -86,6 +128,7 @@ node scripts/claim-helper.ts add --change-id main-session-wip \
 | `wt-helper.ts merge-back` | Phase 3 audit：偵測「main dirty 屬於別 session 路徑」 |
 | `/commit` skill（走 [[commit]]；spectra-commit 是另一條 change-scoped 路徑） | Phase 4 partition：別 session 路徑 fail-closed |
 | `wt-helper.ts` stash namespace | Phase 7：stash slug 帶 session_id |
+| `flow who` / `herdr-patrol` | 人與 agent 查「現在誰持有什麼」的同一份 JSON |
 
 ## 4. 儲存與 gitignore
 

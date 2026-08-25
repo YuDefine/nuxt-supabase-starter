@@ -28,6 +28,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isRecord } from './lib/json-unknown.ts'
 import { isLockedProjectionPath } from './locked-projection.ts'
+import { isWriterAlive, lastWriterByPath, readJournal } from './ownership-journal.ts'
 
 const TTL_HOURS = 24
 const CLAIMS_DIR = '.clade/claims'
@@ -274,11 +275,40 @@ export function matchClaimGlob(path, pattern) {
  * make every overlapping fork STOP; see rules/core/session-claims.md).
  *
  * `excludeClaim` is the caller's own session; its paths are not "other session".
+ *
+ * ## TD-664: `other` is additionally split three ways, without changing `other`
+ *
+ * `other` collapsed two opposite situations into one word — "someone is actively
+ * writing this right now" and "whoever wrote this is long dead" — and callers could
+ * only pick one behaviour for both. 2026-08-26 that cost three sessions ~2h of mutual
+ * waiting: publish's gate waited (up to 90 minutes, by its own wording) on a holder
+ * that had already committed and exited.
+ *
+ * So `otherLive` / `orphan` / `unknown` are now returned **alongside** `other`, which
+ * still holds every one of those entries. Existing callers upgrade with zero edits and
+ * keep today's conservative behaviour; a caller that wants to stop blind-waiting reads
+ * the new fields. The evidence comes from the write-time journal (see ownership-journal.ts),
+ * not from any declared field — declared fields are what this whole TD exists to route around.
+ *
+ * **`unknown` inherits every prohibition `other` carries today — NEVER sweep it.**
+ * It is where Bash-written files, Codex-written files (no PostToolUse hook exists there),
+ * hand edits, and everything predating the journal land. The one failure mode that actually
+ * destroys work is `unknown` being read as `orphan`; nothing in this function may narrow
+ * that gap by guessing.
  */
 export function classifyDirtyPaths(consumerRoot, paths, { excludeClaim = null } = {}) {
   const locked = []
   const otherSession = []
   const other = []
+  const otherLive = []
+  const orphan = []
+  const unknown = []
+  let journalByPath
+  try {
+    journalByPath = lastWriterByPath(readJournal(consumerRoot), { tree: consumerRoot })
+  } catch {
+    journalByPath = new Map()
+  }
   let activeClaims
   try {
     activeClaims = readActiveClaims(consumerRoot).filter(
@@ -304,9 +334,50 @@ export function classifyDirtyPaths(consumerRoot, paths, { excludeClaim = null } 
       })
       continue
     }
-    other.push({ path: p })
+    // No claim covers it. Ask the journal who actually wrote it, and whether that
+    // writer's process is still alive. `isWriterAlive` returns null — not false — when
+    // the evidence cannot be evaluated, and null MUST land in `unknown`: 判死 MUST
+    // 兩個獨立訊號同時缺席（journal 沒有這個檔 ∧ 寫入者 process 不在），缺一個只能判 unknown。
+    const writer = journalByPath.get(p)
+    if (!writer) {
+      const entry = { path: p, verdict: 'unknown', why: 'no journal entry for this path' }
+      unknown.push(entry)
+      other.push(entry)
+      continue
+    }
+    let alive
+    try {
+      alive = isWriterAlive(writer)
+    } catch {
+      alive = null
+    }
+    const provenance = {
+      session_id: writer.session_id,
+      pane_id: writer.pane_id,
+      cwd: writer.cwd,
+      tool: writer.tool,
+      written_at: writer.ts,
+    }
+    if (alive === true) {
+      const entry = { path: p, verdict: 'other-live', ...provenance }
+      otherLive.push(entry)
+      other.push(entry)
+    } else if (alive === false) {
+      const entry = { path: p, verdict: 'orphan', ...provenance }
+      orphan.push(entry)
+      other.push(entry)
+    } else {
+      const entry = {
+        path: p,
+        verdict: 'unknown',
+        why: 'writer liveness not verifiable (no pid / no /proc)',
+        ...provenance,
+      }
+      unknown.push(entry)
+      other.push(entry)
+    }
   }
-  return { locked, otherSession, other }
+  return { locked, otherSession, other, otherLive, orphan, unknown }
 }
 
 export function formatClaimsSummary(claims) {
