@@ -12,6 +12,8 @@ Local edits will be reverted by the next sync.
 -->
 
 
+<!-- namespace-claim: spectra — 上游 Spectra 只出 spectra-* 子 skill，裸名懸空；clade 刻意用它當「自動判斷該叫哪一支」的入口。2026-08-27 曾與一支同名的手寫 spec 產生器撞名，見 _validate-manifests 的品牌真空名佔用檢查。 -->
+
 # Spectra Orchestrator
 
 When the user invokes `/spectra` without specifying a sub-skill, act as the orchestrator that determines the right workflow phase.

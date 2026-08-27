@@ -99,7 +99,7 @@ Local edits will be reverted by the next sync.
    | evidence missing（無 `(verified-*:)` annotation） | Claude | 走 [[agent-self-verification]] fallback chain 收 evidence |
    | `（issue:）` 無 `(claude-analyzed:)` | Claude | triage issue → 走 (A)-(E) 路由 |
    | `[review:ui]` 純 user 驗收（無上述阻塞） | User | **只有這類**才引導 user 到 review-gui |
-   | `[discuss]` 等外部 signal | Archive walkthrough | 不在此處處理 |
+   | `[discuss]` / `(awaiting-user-decision:)` | Claude Code 對話 | **NEVER** 進 PWA inbox。packet 已備妥 → work-loop `awaiting[]`；其餘 → archive Step 2.5 walkthrough。見 [[manual-review.discuss]] |
 
    **實證（2026-07-05）**：<consumer-b> `/commit` 0-MR 擋下 `sop-case-ux-phase-a1`（2 個 pending leaf），Claude 直接叫 user 去 review-gui，但兩個 item 都帶 `（fix-requested）` — user 去了也做不了任何事。正確做法是 Claude 先 dispatch fix → merge-back → 更新 evidence → 重跑 0-MR，全部自己推完。
 

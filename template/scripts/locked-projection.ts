@@ -64,6 +64,8 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       String.raw`scripts/(wt-helper|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|audit-risk-path-coverage|audit-clade-leak|deploy-trigger-check|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|spectra-archive-sidecar|dev-singleton|dev-router|dev-session|db-lease|db-reset-peer-coordination|ownership-journal)\.(mjs|mts|ts)$`,
       // Heavy-gate 併發閘門（bash helper，非 .mjs/.ts 家族，故單列一條）
       String.raw`scripts/gate-slot\.sh$`,
+      // codebase-memory index 的 lock + MemoryMax wrapper（同上，bash helper 單列一條）
+      String.raw`scripts/cbm-index\.sh$`,
       // Recursive vendored script trees
       String.raw`scripts/(spectra-advanced|pre-commit|pre-push|checks)/`,
       // Vendored helpers under scripts/lib/ — MUST stay an explicit filename list.

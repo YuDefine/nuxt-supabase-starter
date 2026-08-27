@@ -24,7 +24,7 @@ Local edits will be reverted by the next sync.
 
 ## 自定義 Review 清單熱區
 
-> enforcement: mechanical(raw-img-tag, ubadge-size-ban, ubadge-size-ban-config, client-side-mutation, dark-mode-hardcoded-color, dark-mode-dark-prefix, dark-mode-semantic-color, overlay-width-class) + semantic(form-validation, error-localization, overlay-body-slot)
+> enforcement: mechanical(raw-img-tag, ubadge-size-ban, ubadge-size-ban-config, text-size-floor, interactive-size-floor, client-side-mutation, dark-mode-hardcoded-color, dark-mode-dark-prefix, dark-mode-semantic-color, overlay-width-class) + semantic(form-validation, error-localization, overlay-body-slot)
 
 若本次變更包含下列路徑，**MUST** 逐條套用對應 checklist：
 

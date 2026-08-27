@@ -351,11 +351,28 @@ function resolveConsumerRoot() {
 // 業務碼——全域排除，防 cookbook 註解文字誤觸規則（如 dark-mode 規則咬到範例說明）。
 const DEFAULT_EXCLUDE_RE = /^(vendor|node_modules)\//
 
+/**
+ * `--include <glob>`（可重複）把預設排除掉的路徑重新納入。
+ *
+ * 存在的理由是 **clade home 自己**：上面那條排除說「vendor/ 是 clade 投影/cookbook，永遠不是
+ * consumer 業務碼」，這句話在每個 consumer 上都對，在 clade 自己身上卻剛好相反 —— clade 唯一
+ * 的 `.vue` 全部住在 `vendor/review-gui-web/`，它是源檔不是投影。結果是這支掃描器散播給 11 個
+ * consumer 保護他們的 `.vue`，而**寫規則的那個 repo 自己的 `.vue` 沒有任何東西在掃**。
+ *
+ * 做成 opt-in flag 而不是改 `DEFAULT_EXCLUDE_RE` 的語意：後者是 fleet-wide 行為改動，會讓每個
+ * consumer 的 cookbook 範例註解開始誤觸規則（TD-428 那條註解記的正是這個失敗）。沒傳 flag 的
+ * 呼叫端 —— 也就是所有 consumer —— 行為逐位元不變。
+ */
+function excluded(file: string, include: string[]): boolean {
+  if (!DEFAULT_EXCLUDE_RE.test(file)) return false
+  return include.length === 0 || !matchAnyGlob(file, include)
+}
+
 // 兩支都回 **consumerRoot 相對**路徑（readFile 直接 join consumerRoot 就能讀）。
 // `git ls-files` 天生就是 cwd 相對 + 限縮到 cwd 以下；`git diff` 不是（預設吐 repo root
 // 相對、且不限縮），所以 staged 那支 **MUST 帶 `--relative`** 才對齊。consumerRoot ==
 // git toplevel 的一般 consumer 上，`--relative` 與不帶完全同義（cwd 就是 root）。
-function gitStagedFiles(consumerRoot: string) {
+function gitStagedFiles(consumerRoot: string, include: string[]) {
   const out = execFileSync(
     'git',
     ['diff', '--cached', '--name-only', '--diff-filter=ACM', '--relative'],
@@ -368,16 +385,16 @@ function gitStagedFiles(consumerRoot: string) {
     .split('\n')
     .map((s) => s.trim())
     .filter(Boolean)
-    .filter((f) => !DEFAULT_EXCLUDE_RE.test(f))
+    .filter((f) => !excluded(f, include))
 }
 
-function gitAllFiles(consumerRoot: string) {
+function gitAllFiles(consumerRoot: string, include: string[]) {
   const out = execFileSync('git', ['ls-files'], { cwd: consumerRoot, encoding: 'utf8' })
   return out
     .split('\n')
     .map((s) => s.trim())
     .filter(Boolean)
-    .filter((f) => !DEFAULT_EXCLUDE_RE.test(f))
+    .filter((f) => !excluded(f, include))
 }
 
 // ---------- output ----------
@@ -427,13 +444,15 @@ function usage() {
 
 用法：
   node scan.mjs [--staged|--all] [--layer pre-commit|ratchet|all] [--ratchet]
-                [--write-baseline] [--json] [--help]
+                [--include <glob>]... [--write-baseline] [--json] [--help]
 
 範例：
   node scan.mjs --staged --layer pre-commit                 # pre-commit hook
   node scan.mjs --all --layer all --ratchet                  # pre-push / CI ratchet gate
   node scan.mjs --all --layer all --write-baseline           # 收斂 baseline
   node scan.mjs --all --layer pre-commit --json              # 機器可讀全站掃描
+  node scan.mjs --all --layer all --ratchet \\
+    --include 'vendor/review-gui-web/**'                     # clade home 自己的 .vue（見 excluded()）
 `
 }
 
@@ -459,6 +478,9 @@ function main() {
   if (!['pre-commit', 'ratchet', 'all'].includes(layer)) {
     throw new UsageError(`--layer 值不合法：${layer}（合法值：pre-commit | ratchet | all）`)
   }
+
+  // 可重複：`--include a/** --include b/**`。只有明確傳了才會重新納入被預設排除的路徑。
+  const include = argv.flatMap((a, i) => (a === '--include' && argv[i + 1] ? [argv[i + 1]] : []))
 
   const wantRatchet = argv.includes('--ratchet')
   const wantWriteBaseline = argv.includes('--write-baseline')
@@ -487,7 +509,10 @@ function main() {
   const allRules: Rule[] = Array.isArray(data.rules) ? (data.rules as Rule[]) : []
   const rules = allRules.filter((r) => layer === 'all' || (r.layer || 'pre-commit') === layer)
 
-  const files = fileset === 'staged' ? gitStagedFiles(consumerRoot) : gitAllFiles(consumerRoot)
+  const files =
+    fileset === 'staged'
+      ? gitStagedFiles(consumerRoot, include)
+      : gitAllFiles(consumerRoot, include)
   const readFile: ReadFile = (f) => readFileSync(join(consumerRoot, f), 'utf8')
   const violations = files.length > 0 ? scan(rules, files, readFile) : []
 

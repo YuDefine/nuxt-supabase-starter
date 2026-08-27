@@ -120,10 +120,14 @@ export const projectionPrefixes = PROJECTION_EXCLUDES.map((p) => p.replace(/\/\*
  * `startsWith` 接 repo root 的投影（`.clade/vendor/scripts/flow.ts`），`includes('/'+dir)`
  * 接巢狀落點（starter 的 `template/.claude/...`）。兩條缺一都會漏。
  *
- * @param {string} file staged 檔的相對路徑
- * @returns {boolean}
+ * 型別必須寫成 TS 註記，NEVER 只留 JSDoc `@param {string}`：本檔副檔名是 `.ts`，
+ * JSDoc 型別只有 `.js` 檔（allowJs + checkJs）才會被採納。consumer 端跑
+ * `noImplicitAny` 的 typecheck 時，未標註的參數一律 TS7006，投影過去就把對方的
+ * pre-push 擋死（v1.11.86 實際擋住 <consumer-a>）。
+ *
+ * @param file staged 檔的相對路徑
  */
-export function isProjectionPath(file) {
+export function isProjectionPath(file: string): boolean {
   return projectionPrefixes.some((dir) => file.startsWith(dir) || file.includes(`/${dir}`))
 }
 
@@ -148,8 +152,7 @@ export function isProjectionPath(file) {
  * 自己組，一樣算接上這條 MUST。
  */
 export const stagedBase = {
-  /** @param {readonly string[]} files */
-  '*.{js,ts,mjs,cjs,vue}': (files) => {
+  '*.{js,ts,mjs,cjs,vue}': (files: readonly string[]) => {
     const fmtable = files.filter((f) => !isProjectionPath(f))
     const lintable = fmtable.filter((f) => !f.endsWith('.d.ts'))
     const cmds = []

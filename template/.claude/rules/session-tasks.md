@@ -15,7 +15,9 @@ Local edits will be reverted by the next sync.
 
 本規約適用**所有** consumer。`tasks/` 目錄不存在**不代表**本 repo 未採用——直接建立即可。
 
-**NEVER** 用共享單檔（`tasks/todo.md`、`tasks/notes.md`）——multi-session 並行會 lost update。一 session 一檔，只 `Edit` 自己那檔。
+拆得開的工作 **NEVER** 用共享單檔（`tasks/todo.md`、`tasks/notes.md`）——multi-session 並行會 lost update。一 session 一檔，只 `Edit` 自己那檔。
+
+**本質共享、拆不開的登記簿是例外，不是違規**——`HANDOFF.md`、`ROADMAP.md`、`docs/tech-debt.md`、`docs/pitfalls/**` 的價值來自所有人讀同一份，分檔等於取消它們存在的理由。那幾個檔的並行寫入紀律見 [[shared-file-concurrent-write]]（`paths:` gated，碰到該檔當下載入）。
 
 不建檔的代價：auto-compact 觸發後本 session 的工作狀態全失，task 檔是跨 compact 的主要狀態載體。
 

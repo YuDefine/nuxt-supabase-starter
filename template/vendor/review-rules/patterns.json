@@ -235,9 +235,73 @@
       "pattern": "^\\s*(//|\\*)\\s*(@author|Modified by|Change[ -]?log|Created by)\\b",
       "message": "檔頭 @author / Modified by / Change log 區塊與 git history 重複，而且會過期。作者與變更紀錄以 git 為準。",
       "fix": "刪掉檔頭 changelog / @author 區塊。workaround 成因改寫成帶 @followup[TD-xxx] 的一行註解，見 code-style.md § 註解。"
+    },
+    {
+      "id": "prose-difficulty-dismissal-en",
+      "severity": "warning",
+      "fileGlob": "**",
+      "scanPaths": ["content/", "app/pages/"],
+      "pattern": "\\b([Ee]asy|[Ss]imple|[Jj]ust|[Oo]bvious|[Ss]traightforward|[Tt]rivial)\\b",
+      "excludePattern": "^\\s*(//|<!--)|`[^`]*\\b([Ee]asy|[Ss]imple|[Jj]ust|[Oo]bvious|[Ss]traightforward|[Tt]rivial)\\b[^`]*`",
+      "message": "對外文案 NEVER 用難度詞描述任務。讀者卡在這一步時，這些詞不提供協助，只告訴他「卡住的是你的問題」。severity 是 warning 而非 error：行層掃描看不出 markdown code fence 與 .vue script 區塊，套件名 / 識別字裡的 simple、just 會誤報。",
+      "fix": "把字數花在下一個實際動作上。套件名 / 指令名等識別字請用 `code font` 包起來（inline code 已自動豁免）。"
+    },
+    {
+      "id": "prose-vague-anchor-text",
+      "severity": "error",
+      "fileGlob": "**",
+      "scanPaths": ["content/", "app/pages/"],
+      "pattern": "\\[(點這裡|點擊這裡|這裡|詳見連結|連結|[Cc]lick [Hh]ere|here)\\]\\(|>\\s*(點這裡|點擊這裡|詳見連結|[Cc]lick [Hh]ere)\\s*<",
+      "message": "錨文字 MUST 說出目的地是什麼。螢幕閱讀器使用者會拿到一串「點這裡」，無從分辨。",
+      "fix": "把錨文字換成目的地名稱：[Nuxt 的 SSR 設定](...) 勝過 [點這裡](...)。"
+    },
+    {
+      "id": "prose-anthropomorphism",
+      "severity": "error",
+      "fileGlob": "**",
+      "scanPaths": ["content/", "app/pages/"],
+      "pattern": "(系統認為|系統以為|系統覺得|它以為|程式覺得|機器不喜歡)",
+      "message": "NEVER 用擬人化描述系統行為。讀者無法從「系統認為」推出任何可操作的下一步。",
+      "fix": "寫實際發生的事與判定條件：「系統把這筆記錄判定為逾期，因為結束時間早於開始時間。」"
+    },
+    {
+      "id": "prose-appeal-to-authority",
+      "severity": "warning",
+      "fileGlob": "**",
+      "scanPaths": ["content/", "app/pages/"],
+      "exclude": ["content/authors/**"],
+      "pattern": "(最佳實踐|業界標準|大家都這樣做|業界慣例)|[Bb]est [Pp]ractice|[Ii]ndustry [Ss]tandard",
+      "message": "訴諸權威不是理由。讀者無法從「這是最佳實踐」判斷該不該照做。",
+      "fix": "寫出問題是什麼、這樣做省下什麼、代價是什麼。寫不出這三項時，那條建議本身還沒想清楚。"
+    },
+    {
+      "id": "text-size-floor",
+      "section": 3,
+      "severity": "error",
+      "layer": "ratchet",
+      "fileGlob": "*.vue",
+      "pattern": "\\b(?:text-xs\\b|text-\\[(?:[0-9]|1[0-3])px\\])",
+      "message": "字級下限是 text-sm（14px）。text-xs 與任意 text-[<14px] 一律禁——這些畫面主要在手機上讀，而 14px 也是 iOS 不觸發輸入框 auto-zoom 的下限。",
+      "fix": "改用 text-sm 或更大。真的需要次要層級就用 text-muted / font-normal 降對比，NEVER 用縮字級表達層級。"
+    },
+    {
+      "id": "interactive-size-floor",
+      "section": 3,
+      "severity": "error",
+      "layer": "ratchet",
+      "fileGlob": "*.vue",
+      "multiLine": true,
+      "pattern": "<(?:Lazy)?U(?:Button|Input|InputNumber|Select|SelectMenu|Textarea|Checkbox|Radio|Switch)\\b[^>]*size=\"xs\"",
+      "message": "可點擊元件的 size 下限是 sm，禁 xs。理由比 UBadge 那條更強：UBadge 只是讀不清楚，可點擊元件的 xs 是觸控目標過小，屬可用性缺陷。",
+      "fix": "移除 size prop（吃預設）或顯式寫 sm / md / lg。密集版面要省空間就調 padding 與間距，NEVER 縮點擊目標。"
     }
   ],
   "semantic": [
+    {
+      "id": "reader-facing-prose",
+      "title": "對外文案的段落契約、標題與步驟結構（writing-for-humans 判斷層）",
+      "guidance": "只對 content/** 與 app/pages/** 的 diff 適用；其餘檔案判 n/a。逐字類（英文難度詞、錨文字、擬人化、訴諸權威）已由機械規則 prose-* 擋下，本 verdict 只判機器測不了的四件事：(1) 難度詞的上下文——中文「簡單 / 容易 / 只要 / 不難」機械層刻意不擋，因為「判準很簡單：X」這類收斂句是本 fleet blog-voice 要求的文體；要判的是它有沒有被用來描述『讀者該覺得容易』，是則 fail，描述判準本身簡短則 pass。(2) 段落契約——每一節第一段的第 1 句給讀者遇到的狀況（不是功能名稱）、第 2 句讓他當場決定要不要往下讀；用功能名開場（『本節介紹 X 模組的設計』）是 fail。(3) 標題描述讀者的問題或任務而非功能名稱：『為什麼百分比跟我算的不一樣』勝過『壽命百分比計算邏輯』。(4) 操作步驟四部件——引導句結尾冒號、順序步驟用編號不用 bullet、每步動詞開頭且條件寫在動作之前、選用步驟明標『選用：』，且流程結束給一句怎麼確認做對了。複合 verdict：任一適用的檢查不通過即 fail；全部不適用才 n/a。SoT 見 rules/modules/docs-audience/human-zh-tw/writing-for-humans.md。"
+    },
     {
       "id": "lazy-hydration-strategy",
       "title": "Lazy 元件須搭 hydration strategy，且不得用於首屏",

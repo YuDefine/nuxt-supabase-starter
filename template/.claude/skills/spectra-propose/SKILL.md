@@ -619,7 +619,7 @@ Main worktree 的 staged / modified / untracked / unmerged **完全不影響**�
     Per [[worktree-default]] §1, spectra-apply 必須在 isolated session worktree 跑（會寫 tracked product code）。Propose 結束時主動建好對應 worktree，user 才能一鍵接續 apply，不必再手動 `/wt`。
 
     ```bash
-    node scripts/wt-helper.ts add "<change-name>"
+    node scripts/wt-helper.ts add "<change-name>" --task-summary "<一句話：這棵樹要做什麼>"
     ```
 
     Helper 行為與失敗處理見 `plugins/hub-core/skills/wt/SKILL.md`。若 helper fail with `Worktree path already exists`（slug 已存在，例如同名 change 之前建過、user 重跑 propose）→ 沿用既有 worktree 即可，視為成功；用 `node scripts/wt-helper.ts list --json` 抓既有 path。其他 helper 錯誤 → 報錯但**仍**繼續吐下方 handoff message，附上錯誤摘要讓 user 手動處理。

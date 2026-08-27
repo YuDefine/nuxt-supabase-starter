@@ -54,12 +54,13 @@ Local edits will be reverted by the next sync.
       ```bash
       # 有 scope-in baseline 要 commit
       node scripts/wt-helper.ts add <change-name> \
+        --task-summary "<一句話：這棵樹要做什麼>" \
         --precheck-baseline <change-name> \
         --baseline-strategy commit \
         --baseline-scope-paths <comma-separated-scope-in-paths>
 
       # 或：main clean / user 選 (b) cross-session 不動 dirty
-      node scripts/wt-helper.ts add <change-name>
+      node scripts/wt-helper.ts add <change-name> --task-summary "<一句話：這棵樹要做什麼>"
       ```
 
       Helper 用 change name 當 slug，內部 normalize（lowercase / 空白轉 `-` / collapse 重複 `-`）。commit 策略時 helper 跑 selective stage（`git add -- <scope-paths>`，**禁** `git add -A`）+ commit `baseline: <change-name> pre-fork sync` + fork。Helper 行為與失敗處理見 `plugins/hub-core/skills/wt/SKILL.md`。

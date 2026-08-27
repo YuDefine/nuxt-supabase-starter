@@ -110,7 +110,11 @@ HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
 
    **自主解決後**：移除 `awaitingUserDecision` 標記 → 該 change bucket 位移成 `applyInProgress` → 走 § 3f dispatch。
 
-3. **只有「商業決策」才 AskUserQuestion**（`--unattended` 時改 log + skip）：
+3. **只有「商業決策」才問 user。Surface 是對話 `awaiting[]`，NEVER review-gui：**
+
+   - `[discuss]` / `(awaiting-user-decision:)` **NEVER** 放進 PWA inbox（見 `itemBelongsOnReviewInbox`）。人眼驗收 GUI 不負責拍板。
+   - **attended**：AskUserQuestion（一次 ≤4 題），選項從 tasks.md / HANDOFF 萃取。
+   - **unattended**：**MUST** 走 [autonomy-predicate.md](autonomy-predicate.md) § Packaging SOP，寫進 state `awaiting[]` + HANDOFF `## ⏳ Awaiting Charles`。**NEVER** 只 log + skip 讓決策只躺在 review-gui 或 tasks.md annotation 裡——那正是 2026-08-25 dual-track #6 人在 PWA 看到 `discuss` badge、不知道要驗什麼的成因。
 
    ```
    <change> 等待你的決策：
@@ -119,7 +123,7 @@ HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
    [選項從 tasks.md / HANDOFF 內容萃取]
    ```
 
-4. 自主解決或 user 拍板後 → 把決策寫入 tasks.md → dispatch 繼續推進。
+4. 自主解決或 user 拍板後 → 把決策寫入 tasks.md（`[x]` + `(claude-discussed:)` / `(answered-user-decision:)`）→ 從 `awaiting[]` 出列 → dispatch 繼續推進。
 
 **核心原則**：work-loop 的自主模式承諾「能自主決策的自主完成」。未實作的 phase、技術 findings、標準 spectra phases（Design Review / evidence collection）**全部屬於自主範疇**，NEVER 因為被標記 `awaitingUserDecision` 就當真 — 先判斷是否真的需要 user、還是上一輪 apply 過度保守地標記了。
 

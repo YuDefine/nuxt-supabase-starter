@@ -27,7 +27,7 @@
 
 import { execFile as execFileCb } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
-import { relative, resolve } from 'node:path'
+import { dirname, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
 const execFile = promisify(execFileCb)
@@ -107,19 +107,47 @@ function readJson(path) {
   }
 }
 
+const MAP_ARGV = ['map', '--json', '--no-write']
+
+/**
+ * 決定用哪個執行檔跑 evlog CLI。三段 fallback，語意都是「只認 node_modules 內裝好的
+ * 版本」—— CI 不該在 gate 執行當下抓一個未 pin 的 CLI：
+ *
+ *   1. `EVLOG_CLI_BIN` 覆寫，給 fixtures test 與把 CLI 裝在 node_modules 外的 repo 用
+ *   2. 從 cwd 逐層往上找 `node_modules/.bin/evlog` —— 直接解析 bin shim。往上走是為了
+ *      monorepo：`--cwd layers/foo` 掃 layer 時，bin 通常 hoist 在 repo 根
+ *   3. 才退到 `npx --no-install`
+ *
+ * 第 2 段是 2026-08-27 補的：`npx` 由 npm 執行，consumer 的 package.json 若宣告
+ * `devEngines.packageManager: { name: "pnpm" }`，npm 會判名稱不符直接 EBADDEVENGINES
+ * 退出，gate 本體一行都跑不到。而失敗訊息寫「evlog map 執行失敗」，讀起來像該 repo 的
+ * 插樁壞了 —— 真因在 spawn 入口挑錯。已裝好的 bin shim 本來就是 npx 要找的同一個檔，
+ * 直接解析它比繞 npm 更貼近本函式的意圖，也不引入新依賴。
+ */
+function resolveEvlogCli(cwd: string): [string, string[]] {
+  const override = process.env.EVLOG_CLI_BIN
+  if (override) return [override, MAP_ARGV]
+  // Windows 的 bin shim 是 `.cmd`，execFile 不帶 shell 無法直接執行，所以那裡維持原本
+  // 的 npx 行為（那條路徑本來就需要 shell，不因本次改動變好或變壞）。
+  if (process.platform !== 'win32') {
+    let dir = resolve(cwd)
+    for (;;) {
+      const local = resolve(dir, 'node_modules', '.bin', 'evlog')
+      if (existsSync(local)) return [local, MAP_ARGV]
+      const parent = dirname(dir)
+      if (parent === dir) break
+      dir = parent
+    }
+  }
+  return ['npx', ['--no-install', 'evlog', ...MAP_ARGV]]
+}
+
 /**
  * 跑 `evlog map --json --no-write` 拿當前結果。
  * --no-write 確保 gate 不會偷改 working tree 的 evlog.map.json。
- *
- * 預設走 `npx --no-install`，只認 node_modules 內裝好的版本 —— CI 不該在 gate 執行
- * 當下抓一個未 pin 的 CLI。`EVLOG_CLI_BIN` 覆寫執行檔，給 fixtures test 與把 CLI 裝在
- * node_modules 外的 repo 用。
  */
 async function runMap(cwd) {
-  const override = process.env.EVLOG_CLI_BIN
-  const [cmd, argv] = override
-    ? [override, ['map', '--json', '--no-write']]
-    : ['npx', ['--no-install', 'evlog', 'map', '--json', '--no-write']]
+  const [cmd, argv] = resolveEvlogCli(cwd)
   const { stdout } = await execFile(cmd, argv, { cwd, maxBuffer: 64 * 1024 * 1024 })
   return JSON.parse(stdout)
 }

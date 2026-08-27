@@ -117,7 +117,24 @@ maybe_auto_index() {
     payload="{\"repo_path\":\"$PROJECT_ROOT\",\"mode\":\"fast\"}"
     printf 'codebase-memory-mcp: project="%s" status=indexing (fast, background)\n' "$path_id"
   fi
-  nohup "$bin" cli index_repository "$payload" >/dev/null 2>&1 &
+  # 兩道保護，NEVER 拿掉（2026-08-27 事故，見
+  # docs/pitfalls/2026-08-27-cbm-auto-index-concurrent-oom.md）：
+  #   flock -n     —— 本 hook 在**每個 session 的每次 SessionStart** 觸發，而 ready 判定
+  #                   是 nodes>0。DB 一旦損毀，全部 session 同時判「未 index」→ 同一個 repo
+  #                   被 N 份併發 index。實測 25 份併發、5 份同時 index 同一個 repo。
+  #   MemoryMax    —— index worker 記憶體無界成長，工具自報的 budget_mb 對它自己沒有約束力。
+  #                   實測單一 worker anon-rss 衝到 16.2G、18 分鐘內 6 次 OOM kill，SIGKILL
+  #                   打斷 journal_mode=delete 的 SQLite 寫入 → DB 損毀 → 迴圈自我維持。
+  # 拿不到 lock 就放棄是正確語義：別人正在 index 同一個 repo，它跑完就是新的。
+  # payload 一字不動，short name 契約不受影響。
+  local lock="${TMPDIR:-/tmp}/cbm-index-${path_id}.lock"
+  if [[ "$(systemctl --user is-system-running 2>/dev/null)" =~ ^(running|degraded)$ ]]; then
+    nohup systemd-run --user --scope -q \
+      -p MemoryMax="${CBM_INDEX_MEM_MAX:-6G}" -p MemorySwapMax=0 -p CPUQuota="${CBM_INDEX_CPU_QUOTA:-200%}" \
+      flock -n "$lock" "$bin" cli index_repository "$payload" >/dev/null 2>&1 &
+  else
+    nohup flock -n "$lock" "$bin" cli index_repository "$payload" >/dev/null 2>&1 &
+  fi
   disown
 }
 

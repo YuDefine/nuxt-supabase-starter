@@ -518,6 +518,11 @@ if ! cmp -s "$WORK_DIR/worktree-before.txt" "$WORK_DIR/worktree-after.txt"; then
     diff "$WORK_DIR/worktree-before.txt" "$WORK_DIR/worktree-after.txt" | head -20 >&2
     echo "[codex-review-safe] 這是偵測控制不是 sandbox：只擋「受審 repo 被改」這一類。資料外洩、其他 repo/\$HOME 破壞、先改再還原（前後 snapshot 相同）都擋不住（TD-520）。" >&2
     echo "[codex-review-safe] 可能來源：cursor 池 review 被 prompt injection 帶去 mutation，或並行 session 的正當編輯。NEVER 自動還原（rules/core/commit.md WIP 處置禁令）—— 人工檢視上列明細定性後，重跑 review。" >&2
+    echo "[codex-review-safe] NEXT: 定性為並行 session 的正當編輯 → 別在 main 原樣重跑（會撞同一件事），改在隔離 worktree 內跑："  >&2
+    echo "[codex-review-safe]   git worktree add --detach /tmp/\$(basename \"\$REPO_ROOT\")-review HEAD" >&2
+    echo "[codex-review-safe]   cd /tmp/\$(basename \"\$REPO_ROOT\")-review && git apply <自己這批的 patch>  # git diff --cached -- <自己的路徑>" >&2
+    echo "[codex-review-safe]   cd /tmp/\$(basename \"\$REPO_ROOT\")-review && bash \"\$REPO_ROOT/.claude/scripts/codex-review-safe.sh\" <effort>" >&2
+    echo "[codex-review-safe]   用完 git worktree remove。判準與禁令見 skills/commit/gates.md § exit 6 處置。定性為蓄意 mutation 或定不出性時 NEVER 換場地重跑。" >&2
     exit 6
   fi
 fi

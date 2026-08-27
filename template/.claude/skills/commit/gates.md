@@ -484,6 +484,35 @@ runner 比對 pi session 事件的 cwd 與 `--cwd`，realpath 不符即 exit 5�
 
 script 在 runner 前後各拍一次 worktree snapshot（HEAD + 暫存 index 的 `git write-tree` 單一 tree hash——原生涵蓋內容、executable bit、symlink target、binary，純 git 可攜——+ `git status --porcelain=v2`），不一致即 exit 6 並在 stderr 印出 `git diff-tree` 的逐檔明細。runner 的 verdict 先落檔、**通過 after-check 才放行到 stdout**——exit 6 時 verdict 被扣住不輸出，只認 heading / 表格的機械檢查不會誤判通過。baseline 拍在 changeset 收集**之前**（拍在之後的話，收集期間的並行修改會被寫進 baseline，review 過的是一份 stale changeset 而檢查靜默）。snapshot 本身 fail-closed：任一步 git 失敗即 exit 6（unborn HEAD 是合法狀態、不觸發），NEVER 留下「前後同樣殘缺所以比對通過」的假綠。
 
+##### 處置：歸因先，重跑前先換場地
+
+exit 6 的 stderr 已經把改動**歸因**成兩類（受審 changeset 內的路徑 / changeset 外的路徑）。
+**MUST** 先讀那份明細定性，**NEVER** 直接重跑 —— 蓄意 mutation 與並行 session 的正當編輯在
+exit code 上長得一樣，而前者要停下來查，後者只是場地選錯了。
+
+定性為**並行 session 的正當編輯**時，原樣重跑會撞同一件事：多人同時在 main 上工作，
+review 期間沒有人改檔的機率隨 session 數遞減。改在**隔離的 detached worktree** 內跑，
+changeset 就只含自己這批：
+
+```bash
+git worktree add --detach /tmp/<repo>-<slug>-review HEAD
+cd /tmp/<repo>-<slug>-review && git apply <自己這批的 patch>
+cd /tmp/<repo>-<slug>-review && bash <repo>/.claude/scripts/codex-review-safe.sh xhigh
+```
+
+patch 取自 `git diff --cached -- <自己的路徑>`（或 `git diff`），**MUST** 用路徑限定 ——
+那同時解掉第二個問題：在 main 直接跑，changeset 會含**所有** session 的 dirty 檔，
+pi 讀的是一份混雜的 diff，findings 也會混進別人的檔。
+
+2026-08-27 <consumer-b> 實測（main 上 4 個 session 並行）：在 main 跑是 49 檔 / 5307 行且連續兩次
+被扣住；同一批改動移到 detached worktree 後是 4 檔 / 593 行，跑三輪都沒再觸發。
+
+三件事別搞混：
+
+- 這**不是**繞過 exit 6。隔離 worktree 內的 snapshot 檢查照跑，只是沒有別人會去動它
+- 這**不放寬**任何判準。定性為蓄意 mutation 或定不出性時，仍是停下來查，**NEVER** 換場地重跑當作解決
+- worktree 用完 **MUST** `git worktree remove`，**NEVER** 留著累積（它會進下一次 `/handoff` 的 audit）
+
 **write-tree 換法解的是可攜性與覆蓋率，不是安全性。** 它移除了 GNU coreutils 依賴、把 executable bit 與 symlink target 收進覆蓋範圍，但 `git write-tree` 一樣走 PATH 上的 `git` —— 「同 UID 對手可劫持度量工具本身」的問題，換 tree hash **一點都沒解**。**NEVER** 把 snapshot 實作的改良讀成安全等級提升；封口的是 bwrap（TD-524，已落地，見下）。
 
 **這是偵測控制，不是安全邊界 —— 別讓下一個人把它當 sandbox 用。** 它為什麼結構性無效的原論證是：同 UID 的對手可以竄改 `$WORK_DIR` baseline、劫持 PATH 上的 `git` 本身，任何 script 內的事後比對都騙得過（0-A.2 review 2026-08-19 定案）。**那條論證對 cursor 池自 TD-524 起不再成立**——它已經不在呼叫者的 UID 檔案空間裡（見下）。但本檢查的定位**不變**：它從來就不是靠對抗性強度存在的，改變的是它不再是 cursor 池唯一的那道。它可靠接住的是**非對抗**的三類：並行 session 在 review 期間的編輯 / commit（實測發生率最高）、模型無惡意的誤寫事故、default 池 pi 層 enforcement 的回歸。它擋不住的包括：蓄意 mutation 後湮滅痕跡、資料外洩（WebFetch / MCP 送出去）、對其他 repo 或 `$HOME` 的破壞、以及**先改再還原**。

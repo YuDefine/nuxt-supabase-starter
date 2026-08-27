@@ -1,6 +1,6 @@
 ---
 description: patterns.json 機械 ban 清單的實作階段投影 — 寫 .vue / app.config.ts 前必讀；不等 /commit review 才抓
-paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'app.config.ts', 'packages/*/app.config.ts', 'app/app.config.ts', 'packages/*/app/app.config.ts']
+paths: ['app/**/*.vue', 'packages/*/app/**/*.vue', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'app.config.ts', 'packages/*/app.config.ts', 'app/app.config.ts', 'packages/*/app/app.config.ts', 'vendor/review-gui-web/**/*.vue']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -33,6 +33,24 @@ Local edits will be reverted by the next sync.
 **理由**：xs / sm 在密集表格字級過小、可讀性不足。
 
 **正解**：移除 `size` prop（吃預設 `md`），或顯式寫 `size="md"` / `"lg"` / `"xl"`。
+
+### 1b. 字級下限（`text-size-floor`，severity: error，layer: ratchet）
+
+**禁止**：`text-xs`，以及任意 `text-[Npx]` 其中 N < 14。
+
+**理由**：字級下限是 `text-sm`（14px）。這些畫面主要在手機上讀，而 14px 也是 iOS 不觸發輸入框 auto-zoom 的下限。
+
+**正解**：改用 `text-sm` 或更大。真的需要次要層級就用 `text-muted` / `font-normal` 降對比，**NEVER** 用縮字級表達層級。
+
+### 1c. 可點擊元件尺寸下限（`interactive-size-floor`，severity: error，layer: ratchet）
+
+**禁止**：`<UButton size="xs">` / `<UInput size="xs">` / `<USelect size="xs">` 等可點擊元件的 `size="xs"`（完整清單見 patterns.json 的 pattern）。
+
+**理由**：比 UBadge 那條更強——UBadge 的 xs 只是讀不清楚，可點擊元件的 xs 是**觸控目標過小**，屬可用性缺陷。
+
+**正解**：移除 `size` prop（吃預設）或顯式寫 `sm` / `md` / `lg`。密集版面要省空間就調 padding 與間距，**NEVER** 縮點擊目標。
+
+> 這兩條是 `layer: ratchet`：導入時全 repo 已有存量違規，baseline（`review-rules-baseline.json`）凍結現況、只擋新增。**NEVER** 因為 ratchet 通過就以為存量已清——那是兩件事。
 
 ### 2. Client-side mutation ban（`client-side-mutation`，severity: error）
 
