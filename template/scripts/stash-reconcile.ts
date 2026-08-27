@@ -25,7 +25,7 @@ const pad2 = (n) => String(n).padStart(2, '0')
  *
  * Safety contract: this script NEVER pops or auto-commits. `apply` uses
  * `git stash apply` (entry preserved). After apply, user WIP sits in the
- * working tree — commit via `/spectra-commit` or `/commit` with selective
+ * working tree — commit via `/commit` with selective
  * stage; do NOT `git add -A`.
  *
  * Default: write a markdown report at `.spectra/stash-reconcile-<YYYY-MM-DD-HHMM>.md`
@@ -401,7 +401,7 @@ function recommendAction(consumerRoot, ref, files, namespace) {
 
 const SAFETY_BANNER = [
   'Safety: stash apply does NOT pop or stage. After apply, your WIP sits in',
-  'the working tree. To commit, run /spectra-commit or /commit with selective',
+  'the working tree. To commit, run /commit with selective',
   'stage (do NOT git add -A).',
 ].join(' ')
 

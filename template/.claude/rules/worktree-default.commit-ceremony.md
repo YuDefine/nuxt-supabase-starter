@@ -88,7 +88,7 @@ Skill 自己 fork worktree、有**清楚 end-of-skill 完成點**、**無下游 
 
 ### Stash reconcile（後續清理）
 
-`node scripts/stash-reconcile.ts`（`--interactive` / `--json` / `--slug <slug>` / `--stale-days N` / `--include-all`）列每條 namespaced stash + 建議命令；merge-back 成功收尾會自動印帶 `--slug` 的 reconcile hint。**永遠不 auto-pop / auto-stage / auto-commit**：apply 後 user WIP 在 working tree，必須走 `/spectra-commit` 或 `/commit` 的 selective stage（**禁止** `git add -A`）。
+`node scripts/stash-reconcile.ts`（`--interactive` / `--json` / `--slug <slug>` / `--stale-days N` / `--include-all`）列每條 namespaced stash + 建議命令；merge-back 成功收尾會自動印帶 `--slug` 的 reconcile hint。**永遠不 auto-pop / auto-stage / auto-commit**：apply 後 user WIP 在 working tree，必須走 `/commit` 的 selective stage（**禁止** `git add -A`）。
 
 **`drop` 不在上面那條禁令內**（它管的是 pop / stage / commit）：通過 [[commit]] § Stash 自動處置 gate
 全部判準的 stash，agent **MUST** 主動 drop + 留痕，不留給 user —— 詳見該節與 `/handoff` Step 3.2a。

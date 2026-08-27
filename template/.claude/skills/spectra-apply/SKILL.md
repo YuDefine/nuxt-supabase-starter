@@ -735,7 +735,7 @@ What would you like to do?
 - Pause on errors, blockers, or unclear requirements - don't guess
 - Use contextFiles from CLI output, don't assume specific file names
 - **No external task tracking** — do not use any built-in task management, todo list, or progress tracking tool; the tasks file is the only system
-- **Worktree isolation — NEVER halt apply on main's WIP**: Step 0 必須自動把 user 帶進 worktree（用 commit-then-fork 或 clean fork，視 scope 而定）；無論 Step 0c 階段或 apply 進行中，**NEVER** 因 main repo 的 dirty WIP / staged / untracked / 同檔別 session WIP 中斷 apply、AskUserQuestion 要 user clean main、或建議 user 自己處理後重試。worktree 是獨立 working tree，main 的 WIP 不在 worktree 也無法影響它；同檔衝突是 merge-back 時的事，由 `/spectra-commit` + user 決策處理。唯一合法 STOP 是 unmerged conflict（wt-helper 拒絕 fork）或 helper 本身錯誤；user-decision-needed pause **NEVER**。
+- **Worktree isolation — NEVER halt apply on main's WIP**: Step 0 必須自動把 user 帶進 worktree（用 commit-then-fork 或 clean fork，視 scope 而定）；無論 Step 0c 階段或 apply 進行中，**NEVER** 因 main repo 的 dirty WIP / staged / untracked / 同檔別 session WIP 中斷 apply、AskUserQuestion 要 user clean main、或建議 user 自己處理後重試。worktree 是獨立 working tree，main 的 WIP 不在 worktree 也無法影響它；同檔衝突是 merge-back 時的事，由 `/commit` + user 決策處理。唯一合法 STOP 是 unmerged conflict（wt-helper 拒絕 fork）或 helper 本身錯誤；user-decision-needed pause **NEVER**。
 - **Phase dispatch discipline**（per `agent-routing.md`）:
   - **NEVER** dispatch Design Review phase to pi — Design skill is Claude Code first-class
   - **NEVER** dispatch UI view phase（component / page / view / layout / styling）to any runtime — Pi 任一 model 與 Claude subagent 都算。實作與品質判定（Step 6c / 6d、Design Review）都留主線 Opus（per Step 6b B 類）。Frontend 但非 view 的（store / hook / API client / type / util）仍走 sol

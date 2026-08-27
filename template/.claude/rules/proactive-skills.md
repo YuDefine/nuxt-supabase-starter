@@ -60,6 +60,32 @@ Local edits will be reverted by the next sync.
 
 **原因**：spectra-commit 是 spectra CLI 上游帶來的薄殼，本治理範圍下 commit 必須統一走 `rules/core/commit.md`。Claude 偵測到使用者要 commit Spectra change 的相關檔案時，**MUST** 直接走標準 git / `/commit` 流程，**NEVER** 改派 spectra-commit。
 
+#### 禁用不只管「不觸發」，也管「不引導」
+
+**任何 skill / rule / snippet / script 輸出，NEVER 出現叫人去跑禁用清單上那支 skill 的句子。**
+不觸發與不引導是兩件事：hook 攔得住 agent 自己 invoke，攔不住一份 SKILL.md 寫著
+「commit 用 `/spectra-commit` 走 selective stage」而 user 照著打——那時被擋下的是 user，
+而擋人的理由寫在他讀不到的另一個檔裡。
+
+合法與違規的分界是**語境**，不是有沒有出現那個字串：
+
+| 出現形式 | 判定 |
+| --- | --- |
+| `**NEVER** 在 worktree 內跑 `/spectra-commit`` | ✅ 禁止陳述，MUST 保留 |
+| 本節這種「已停用、改用 X」的說明 | ✅ 禁用宣告 |
+| `docs/archives/` / `docs/pitfalls/` / `tasks/archive/` 的歷史紀錄 | ✅ 不改寫歷史 |
+| 「commit 走 `/spectra-commit`」「必須走 `/spectra-commit` 或 `/commit`」 | ❌ 引導，MUST 改成替代方式 |
+| script 執行期印出「run /spectra-commit」 | ❌ 引導，且它繞過所有文件審查直接到 user 眼前 |
+
+**NEVER** 用「它只是描述既有機制」「這句是給知道它已停用的人看的」當保留理由——
+讀到那句話的人不會同時讀到本節，這正是禁用清單存在的前提。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 非禁止語境下出現禁用 skill 名 → `scripts/audit-disabled-skill-guidance.ts` 報 offender、exit 1。**warn-only，不接 publish gate**：它靠語境啟發式判定，會有誤報，放在擋路的位置會逼人加逃生口 |
+| 消費端 | 正在寫 / 改 skill、rule、snippet、script 輸出文案的 agent（本節）；`/clade-health` 每輪跑一次 |
+| 載入路徑 | 本節（`rules/core/proactive-skills.md`，consumer 端投影為 `.claude/rules/proactive-skills.md`） |
+
 ## Scope Discipline
 
 所有 spectra / design workflow 都受 [`scope-discipline.md`](./scope-discipline.md) 約束：範圍外檔案不順手改、途中發現其他問題**不修但必登記**、未知變更先回報不自行清場、不得在 subagent 內執行 `git reset --hard` / `git checkout --` / `git clean`。

@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "impeccable-detector.schema.json",
+  "title": "impeccable-detector.json",
+  "description": "Change-local detector artifact. CLI --json is a findings array with no failureCount; verifier recomputes primaryCount from findings where advisory !== true.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "changeId",
+    "producedAt",
+    "mode",
+    "detector",
+    "config",
+    "targets",
+    "runs",
+    "suppressions"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "changeId": { "type": ["string", "null"] },
+    "producedAt": { "type": "string" },
+    "mode": { "type": "string", "enum": ["source", "url"] },
+    "detector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry", "entryDigest"],
+      "properties": {
+        "entry": { "type": "string" },
+        "entryDigest": { "type": "string" }
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "digest"],
+      "properties": {
+        "path": { "type": ["string", "null"] },
+        "digest": { "type": ["string", "null"] }
+      }
+    },
+    "targets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files", "routes", "viewports", "coveredFiles"],
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "sourceFingerprint"],
+            "properties": {
+              "path": { "type": "string" },
+              "sourceFingerprint": { "type": "string" }
+            }
+          }
+        },
+        "routes": { "type": "array", "items": { "type": "string" } },
+        "viewports": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["width", "height"],
+            "properties": {
+              "width": { "type": "integer", "minimum": 1 },
+              "height": { "type": "integer", "minimum": 1 }
+            }
+          }
+        },
+        "coveredFiles": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["target", "viewport", "exitCode", "findings"],
+        "properties": {
+          "target": { "type": "string" },
+          "viewport": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": ["width", "height"],
+            "properties": {
+              "width": { "type": "integer", "minimum": 1 },
+              "height": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "exitCode": { "type": "integer" },
+          "findings": {
+            "type": "array",
+            "items": { "type": "object" }
+          }
+        }
+      }
+    },
+    "suppressions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "reason"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["ignoreValue", "ignoreRule", "ignoreFile"] },
+          "rule": { "type": "string" },
+          "value": { "type": "string" },
+          "file": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    }
+  }
+}

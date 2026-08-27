@@ -45,6 +45,27 @@ tasks/
 
 `tasks/` **是 tracked**（不進 `.gitignore`）——「刪檔 = git history 留證」的前提就是它被追蹤過。`archive/` 可定期整批刪。
 
+### 建檔的同一步順路鑄 work id（MUST）
+
+建完 tasks 檔的同一步 **MUST** 讓這件事在 /flow 上有名字：
+
+```bash
+node ~/offline/clade/vendor/scripts/flow/flow.ts open <slug> \
+  --actor claude-code --origin 'tasks:tasks/<檔名>' --title '<一句話：這件事是什麼>'
+# stderr 印出 export CLADE_WORK_ID=W-<date>-<slug>；本 session 後續的 dispatch 沿用它，
+# relay / fanout 的 successor 也會繼承，整條接力鏈算同一件事。
+```
+
+**每一個**新建的 tasks 檔都鑄，不是只有覺得會做很久的那次——「這件事夠不夠大」這個判斷本身
+正是 79% 事件掛在 `orphan-` 名下的成因（clade 2026-08-27 實測）。
+
+鑄名 **fail-open**：clade home 不在、node 不在、指令非 0 exit，都**NEVER** 擋建檔或擋開工——
+照常做事，這件事在 /flow 上叫 `未命名工作` 而已。
+
+權威的對應由 `work.open` 的 `origin_ref: tasks:<路徑>` 承載——spine 指向 tasks 檔，這個方向由
+工具在 emit 當下寫入、append-only。反方向的檔頭 `work_id:` 是**選填索引**，維持選填的理由與
+它的機械消費端見下方 § 寫入規約補充第三條；**NEVER** 因為現在鑄名了就把它改成強制欄位。
+
 ---
 
 ## 寫入規約補充
@@ -321,17 +342,28 @@ marker 是它區分「合法登記」與「該派沒派」的唯一輸入。不�
 
 **寫收工訊息之前先判：這次真的需要重開嗎？**
 
+**先過門檻閘（MUST，先於下表）：已越過第二級收工線（一般 session 500k／work-loop runner
+child 600k）時，下表第 1 列（`/compact` 續同一個 session）整列不適用**——那一級只有一條出口：
+把殘工派出去（`relay`／`fanout`）、派不出去的登記、收工（§ 收工三步）。**NEVER** 用「還在
+同一個任務裡」「只是跨了 phase 斷點」「compact 走 cache 比較便宜」「compact 完 user 零重述」
+把第 1 列讀回來——這幾句在 500k 之後**全部仍為真**，它們正是本閘要擋的東西。
+
+compact 壓掉的是敘事，**壓完之後每一 turn 仍重讀壓縮後的整份 context**，而收工線買的是
+「successor 從 fresh context 起跑」——這兩件事不可互相替代，**NEVER** 拿 compact 當收工線的
+較便宜版本。門檻未過時才輪到下表。
+
 | 可觀察 predicate | 動作 |
 | --- | --- |
-| 還在**同一個**任務裡（只是做久了、或跨了 phase 斷點） | **`/compact` 續同一個 session。NEVER 收工開新 session。** warm 時 compact 讀舊 prefix 走 cache，官方文檔逐字：`costs a fraction of what the context size suggests`；而且 user 零重述 |
+| 還在**同一個**任務裡（只是做久了、或跨了 phase 斷點），**且未越過第二級收工線** | **`/compact` 續同一個 session。NEVER 收工開新 session。** warm 時 compact 讀舊 prefix 走 cache，官方文檔逐字：`costs a fraction of what the context size suggests`；而且 user 零重述 |
 | 換 repo / 換不相關主題 / 已登記的中大型工作確實需要乾淨 session | invoke `/handoff relay <task pointer>`（N 件可平行則 `/handoff fanout`），由主線依下一節自行完成 Herdr transport，收工訊息走下面的 **A** |
 | 這批工作真的結束、沒有未完項 | 直接收工走下面的 **B**，**NEVER** 建立空的接手 session |
 | 剩餘工作可無人值守跑完 | 主線直接啟動該 repo 的 runner，**優先於**開新 session；回報 runner receipt，不把指令交給 user |
 
-第 2 列的「換不相關主題」**每一次**都跑這三條，**三條全中才算不相關**：(1) thin brief 只引 durable 檔就寫得完，不需引「只存在於本對話」的結論；(2) 不共享當前任務**未 commit** 的 working tree 狀態；(3) 已有、或當場先登一條屬於它自己的 durable 條目。**任一條不中＝仍是同一任務，走第 1 列 `/compact`。**
+第 2 列的「換不相關主題」**每一次**都跑這三條，**三條全中才算不相關**：(1) thin brief 只引 durable 檔就寫得完，不需引「只存在於本對話」的結論；(2) 不共享當前任務**未 commit** 的 working tree 狀態；(3) 已有、或當場先登一條屬於它自己的 durable 條目。**任一條不中＝仍是同一任務，走第 1 列 `/compact`**——但這條 fallback 同受上面的門檻閘管：已越過第二級收工線時第 1 列不存在，仍走第 2 列 `relay`／`fanout`。
 
-**NEVER 把「context 大了」直接讀成「該收工開新 session」。** 判定走上面三條，
-**context 大小本身不是其中任何一條**。
+**門檻未過時，NEVER 把「context 大了」直接讀成「該收工開新 session」。** 該區間的判定走上面
+三條，**context 大小本身不是其中任何一條**。越過第二級收工線之後這句不再適用——那一級的門檻
+閘就是由 context 大小觸發的，且它只留 `relay`／`fanout` 一條出口。
 
 #### Worktree lifecycle close gate（A／B 共用）
 
@@ -453,6 +485,33 @@ agent 回完一個 turn 後照樣繼續工作。
 的 exact child 可經 canonical `--recover-orphan` one-way claim 建立唯一 fresh successor。可觀察判準是
 durable record 的 exact `parent_claude_session_id` 在 `herdr agent list` 全域缺席——
 prompt-cache TTL與record年齡對ownership零訊號。一般 coordinated child仍禁止nested handoff，**只有**helper核准的 recovery token與 attested relay例外。
+
+### 收割的機械兜底：Stop gate（不是提醒，是擋）
+
+上一段的義務掛在「successor 記得去收」這個事件上，而它不保證發生——coordinator 可能不經 relay
+就消失（park、關 pane、被 kill、pane 內 `/clear` 換掉 session id）。所以同一件事在**收工那一刻**
+再攔一次：`stop-herdr-stalled-warn.sh` → `vendor/scripts/herdr-stop-gate.ts` 分兩級。
+
+| 這一筆是什麼 | gate 行為 |
+| --- | --- |
+| 已回報 outcome、`coordinator_pane_id` **就是本 pane** | **exit 2 擋下 stop**，逐筆把 `--coordinate-resume <id>` 射回本 session，當場收完再收工 |
+| 別人持有的 dispatch、abandoned record、orphan process、stale routing gate | exit 0 warn——它們的 action 不是本 session 一個 turn 做得完的 |
+| 本 session 不在 Herdr pane 內（`HERDR_ENV != 1`） | exit 0 warn（走 spine，grace 0）——`--coordinate-resume` 在那裡一律 `not_in_herdr`，擋下來是死路 |
+
+**擋得到「剛做完」是這道 gate 存在的理由**：patrol 的 `owes-resume` 沒有 grace，worker 一回報
+就成立；而 `flow status --stalled` 的 `unharvested` 套 60 分鐘 grace，那一批對 SessionStart 那條
+路徑完全隱形。收工是它唯一看得見的時刻。
+
+被擋一次之後若仍要收工，harness 會在 payload 帶 `stop_hook_active: true`，gate 降級為 warn 放行。
+**NEVER 把那次放行讀成「這批可以不收」**——降級的理由只有「不能把 session 鎖死」，逐字反開脫：
+「gate 放我過了」「第二次沒擋就是沒事」「下個 session 會看到」。放行之後那筆仍是未收割，
+**MUST** 當下改走 `relay`／`fanout` 把它交給有人持有的 successor，或明寫它為什麼收不掉。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 本 pane 持有 ≥1 筆已回報 outcome 而未 reclaim 的 dispatch → **exit 2 block**；其餘殘留 → exit 0 warn |
+| 消費端 | 正在收工的 coordinator 本人——它是唯一跑得動 `--coordinate-resume` 的角色，且此刻仍在場 |
+| 載入路徑 | hook stderr 經 exit 2 直接注入 turn（機械，不依賴規約載入）＋ 本節 |
 
 **每一次** transport **MUST** 帶任務描述性 `--label`：**split／tab／workspace 三種 topology 都命名 pane**，
 建 Tab／workspace 時額外命名該 Tab／workspace。**NEVER** 只給 repo 名或倚賴預設值——同一 repo 派出去的多個 session 會在 UI

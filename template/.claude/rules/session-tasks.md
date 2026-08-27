@@ -45,7 +45,7 @@ and the history is valuable"*（[best-practices](https://code.claude.com/docs/en
 | --- | --- | --- |
 | 換到**不相關**的任務 / 換 repo / 換主題 | `/clear`，或收工開新 session | 官方 best-practices § Manage context aggressively 逐字 `Run /clear between unrelated tasks` |
 | 同一個問題已經糾正 **≥2 次** | `/clear` 重來，把學到的寫進更好的初始 prompt。**NEVER** 在同一段壞掉的 context 上繼續第三次 | 同上 § Course-correct 逐字 |
-| 一個 phase / 工作段做完的自然斷點 | `/compact`——**NEVER** 直接跳到「收工開新 session」，見 § 收工訊息契約 | 官方 [context-window](https://code.claude.com/docs/en/context-window) 逐字 `before a long new task` |
+| 一個 phase / 工作段做完的自然斷點，**且未越過第二級收工線** | `/compact`——**NEVER** 直接跳到「收工開新 session」，見 § 收工訊息契約。越過第二級收工線之後 `/compact` 不再是選項（見該節門檻閘） | 官方 [context-window](https://code.claude.com/docs/en/context-window) 逐字 `before a long new task` |
 | 品質退化訊號：開始忘記早前指令、重複犯同一個錯、回答明顯變差 | `/compact` 或收工 | 同上逐字 `when context starts affecting performance` |
 | **深在同一個複雜問題中、history 有價值** | **續跑。NEVER 因為 token 數字切** | 官方 best-practices § Develop your intuition 逐字 |
 
@@ -79,7 +79,7 @@ new session`）。
 | 可觀察 predicate | MUST |
 | --- | --- |
 | session context 越過 **300k** | **NEVER** 開新的**大**工作段（新的 change / 新的多檔重構 / 新的 spectra phase / **invoke 一個本 session 還沒載過的 skill**）；手上這件做完就收。**小 item 照做**——單檔文字修正、補一條 TD、勾一個 checkbox、回答一個問題不受本級限制 |
-| session context 越過 **500k** | **現在**收工，走下面 § 收工三步（先派、後登記、再收工）。手上若是不可分割的驗證迴圈，跑完那一輪就切 |
+| session context 越過 **500k** | **現在**收工，走下面 § 收工三步（先派、後登記、再收工）。手上若是不可分割的驗證迴圈，跑完那一輪就切。**NEVER 用 `/compact` 續跑代替收工**——這一級唯一的出口是 `relay`／`fanout`，判準見 [[session-tasks.operations]] § 收工訊息契約 的門檻閘 |
 | 正在跑不可分割的驗證迴圈（單一 test run / 單一 migration） | 跑完再切。**NEVER** 拿「等一下還有事要做」把它延伸成新工作段 |
 | **本輪是 work-loop runner child**（`WORK_LOOP_RUNNER_CHILD=1`，由 `runner.sh` 設） | 上面兩級改讀 **500k / 600k**，語義完全不變（500k = 不要再開大工作段、600k = 現在收工）。Charles 2026-08-12 拍板，TD-375 |
 

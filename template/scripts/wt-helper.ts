@@ -1615,6 +1615,38 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
   console.log(`  Path: ${wtPath}`)
   console.log(`  Branch: ${branch}`)
   console.log(`  Handoff: ${JSON.stringify({ cwd: wtPath, branch })}`)
+  // TD-684 — /wt is one of the entry points where a piece of work is named, and `--task-summary`
+  // is already required (TD-664 Phase 4), so the naming material is guaranteed to exist. Without
+  // this the spine records the worktree's whole span series under an `orphan-` id and /flow shows
+  // it as unclaimed residue.
+  //
+  // Fail-open by construction: the spine module is clade-home-only (wt-helper itself is projected
+  // into every consumer, `vendor/scripts/flow/` is not), so the import is dynamic and every
+  // failure path is a warn. NEVER let this gate worktree creation — the tree is already on disk.
+  const ambientWorkId = process.env.CLADE_WORK_ID?.trim()
+  if (ambientWorkId) {
+    console.error(`export CLADE_WORK_ID=${ambientWorkId}`)
+  } else {
+    try {
+      const { openWork } = await import(new URL('./flow/emit.ts', import.meta.url).href)
+      const workSlug = String(opts.taskSummary ?? '')
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 48)
+        .replace(/-+$/, '')
+      const { work_id } = openWork({
+        slug: workSlug || cleanSlug,
+        actor: opts.agent ?? 'claude-code',
+        payload: { origin_kind: 'wt', origin_ref: `wt:${cleanSlug}`, title: opts.taskSummary },
+        cwd: consumerRoot,
+      })
+      console.log(`  Work: ${work_id}`)
+      console.error(`export CLADE_WORK_ID=${work_id}`)
+    } catch (e) {
+      console.error(`note: flow work open skipped (fail-open): ${e?.message ?? e}`)
+    }
+  }
   console.log('')
   console.log(
     'The orchestrator continues directly or dispatches this cwd through the session handoff transport.',
@@ -1636,8 +1668,25 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
   //      auto-install as better UX than persistent WARN on every command.
   if (existsSync(join(wtPath, 'package.json'))) {
     try {
-      console.log('  deps: pnpm install --prefer-offline …')
-      const inst = spawnSync('pnpm', ['install', '--prefer-offline', '--frozen-lockfile'], {
+      /**
+       * argv 先成形，log 由它產生——**NEVER 手寫這一行**。
+       *
+       * 它原本是手寫字串 `'  deps: pnpm install --prefer-offline …'`，漏了
+       * `--frozen-lockfile` 並以 `…` 結尾。2026-08-27 實測後果：五個 agent 讀過這一行、
+       * 五個都據此判定「開 worktree 會改寫全 repo lockfile」、零個去讀下一行的 argv，
+       * 其中一個把它一般化成判準寫進 ledger，另一個據此對四個 pane 發了錯誤的凍結範圍。
+       *
+       * 而那個 `…` 是誠實的省略號——它確實表示「還有更多」。**只是沒有人會去追一個 `…`**：
+       * 它讀起來像省略了不重要的細節，而被省略的正好是唯一改變語義的那個 flag。
+       * 誠實的省略與有害的省略在字面上同形，差別只在被省略的那一項重不重要，
+       * 而那件事只有已經知道答案的人判得出來。
+       *
+       * 通則：**一個描述自己在做什麼的 log，MUST 由它描述的那個東西產生。** 手寫的那一刻
+       * 兩者就開始漂，而漂了不會有任何訊號——它看起來仍然像那件事本身的權威描述。
+       */
+      const installArgs = ['install', '--prefer-offline', '--frozen-lockfile']
+      console.log(`  deps: pnpm ${installArgs.join(' ')}`)
+      const inst = spawnSync('pnpm', installArgs, {
         cwd: wtPath,
         stdio: ['ignore', 'pipe', 'pipe'],
         timeout: 120_000,

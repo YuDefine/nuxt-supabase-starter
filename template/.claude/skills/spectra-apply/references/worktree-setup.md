@@ -35,7 +35,7 @@ Local edits will be reverted by the next sync.
 
       把 dirty paths 分成 **scope-in**（屬於這條 change 的 baseline）vs **scope-out**（其他）。三來源 union：
 
-      1. 讀 `.spectra/touched/<change-name>.json`（若存在；spectra-commit 上次 sync 寫入）— 列出的 path 為 scope-in
+      1. 讀 `.spectra/touched/<change-name>.json`（若存在；spectra-commit 上次 sync 寫入——該 skill 已停用，所以這個檔只可能是舊資料）— 列出的 path 為 scope-in
       2. Grep `openspec/changes/<change-name>/proposal.md` + `openspec/changes/<change-name>/specs/**/*.md`，找 `packages/` / `server/` / `app/` / `supabase/` / `scripts/` 等 module path 提及；任一 dirty path 是它們的子路徑或開頭命中 → scope-in
       3. Fallback：dirty path basename 或開頭跟 change name slug 的 word 命中 → scope-in
 
