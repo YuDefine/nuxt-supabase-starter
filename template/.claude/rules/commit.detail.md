@@ -128,9 +128,17 @@ git add scripts/my-file.sh && git commit -m "..."
 
 # ALWAYS:
 git commit --only -m "..." -- scripts/my-file.sh
+SHA=$(git rev-parse HEAD)          # MUST 當下捕捉，NEVER 事後用 HEAD
 git push
-git show --stat HEAD | tail -3   # MUST verify scope == expected paths
+git show --stat "$SHA" | tail -3   # MUST verify scope == expected paths
 ```
+
+> **NEVER 用 `git show --stat HEAD` 驗自己剛才那一筆。** `HEAD` 是**移動中的參照**：
+> 多寫者的樹上，別 session 可以在你 commit 與你 verify 之間再 commit 一筆，
+> 於是它回的是**別人的** commit。失敗形態最惡劣的地方是**它會給你一份看起來完全合理的
+> 檔案清單，而你沒有任何訊號** —— 檔數若碰巧相符，這一格永遠不會發作。
+> 2026-08-27 clade home 實測：commit 完跑 `git show --stat HEAD`，回的是另一個 pane 的 commit。
+> **三層 verify 的意圖是驗「我剛才那一筆」，而 `HEAD` 不承載那個意思。**
 
 ### Why
 
@@ -160,8 +168,14 @@ working tree / git index 是 **process-wide shared state**——多 session 並�
 Commit 後 **MUST**：
 
 ```bash
-git show --stat HEAD | tail -3
+SHA=$(git rev-parse HEAD)        # commit 當下就捕捉；NEVER 事後才用 HEAD 指代它
+git show --stat "$SHA" | tail -3
 ```
+
+**第 1 層 MUST 驗那個捕捉下來的 SHA，NEVER 驗 `HEAD`** —— 理由與上方 § Ad-hoc commit 同一條：
+`HEAD` 是移動中的參照，別 session 在你 commit 與 verify 之間再 commit 一筆，
+它就回別人的那筆，而且清單看起來完全合理。本節下一行「HEAD 可能不是你預期的 HEAD」
+講的是同一件事，**那個懷疑同樣適用於這一行的 verify 本身**。
 
 Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery from mixed commit (multi-session safety)（**NEVER** 反射性 `git reset --soft HEAD~1` — HEAD 可能不是你預期的 HEAD，會吃掉別 session 的 commit）。
 
