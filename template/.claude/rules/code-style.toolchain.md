@@ -162,6 +162,33 @@ oxfmt 不會自動 fallback 讀 `.oxfmtignore`（只有 `.prettierignore` / `.gi
 
 例外：當第三方套件（如 husky / lint-staged）的 peer dependency 強制要求時，可保留，但**不該被 user code 直接呼叫**。`@nuxt/eslint` 是 opt-in module（不是任何套件的強制 peer dep），不適用此例外 — 直接移除。
 
+#### 上面兩條都攔不到 binary：`node_modules/.bin/prettier` 仍可執行
+
+上面禁的是 **config 檔**與**直接安裝**，兩條都不管 **transitive dependency**。而 prettier
+**不需要 config 就能運作**（它的預設值本身就是一套完整風格），所以 binary 只要在 PATH 上，
+任何人跑一次就會把整檔改成互斥風格（單引號無分號 → 雙引號加分號），而且 **exit 0、零警告**。
+
+2026-08-28 fleet 掃描：**<consumer-a> 與 <consumer-b>** 的 `node_modules/.bin/prettier` 是
+`@nuxt/hints@1.1.4` 帶進來的 `prettier@3.9.6`（`.npmrc` 的 `shamefully-hoist` 提上來），
+其餘 13 個 repo 無。同日 <consumer-a> 實際踩到：**586 行假 diff**。
+
+- **NEVER** 在本 fleet 的任何 repo 執行 prettier（`npx` / `pnpm exec` / `node_modules/.bin/` /
+  裸命令都一樣）。格式化一律走 `pnpm format`（全 repo）或 `pnpm exec vp fmt --write <file>`（單檔）
+- **NEVER** 為了讓禁令生效去移除 `@nuxt/hints` —— 它是 Nuxt 系的正常依賴，不是這條坑的錯
+- **NEVER** 把 `.bin/prettier` 存在接成 `pnpm check` 的 fail —— 它是移不掉的 transitive dep，
+  那條 check 會讓兩台 CI 永久紅，而永久紅的 gate 是噪音不是攔阻
+
+攔阻掛在**動作**上：`plugins/hub-core/hooks/pre-bash-prettier-invocation-gate.sh`
+（PreToolUse:Bash）在命令位置比對到 prettier 時 exit 2 並指回 `pnpm format`。
+它是**絆索不是牆** —— 只看得到 Claude Code 的 Bash tool call，user 在自己 terminal 手打
+完全碰不到它。**NEVER** 把它存在讀成「這個 repo 已經不可能被 prettier 改壞」。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 命令位置出現 prettier × 目標 repo 有 `.oxfmtignore` / `.claude/hub.json` / `package.json` 依賴 `vite-plus` → **exit 2 擋下**。逃生門 `CLADE_ALLOW_PRETTIER=1`（給「只是要在文件裡寫下這個字串」用） |
+| 消費端 | 每一次 Bash tool call（fleet 全 consumer + clade home，隨 `hooks.json` 散播）；回歸測試 `test/pre-bash-prettier-invocation-gate.test.ts` |
+| 載入路徑 | 本節（`rules/core/code-style.toolchain.md`，consumer 端投影為 `.claude/rules/code-style.toolchain.md`）；成因與 fleet 掃描見 `docs/pitfalls/2026-08-28-banned-tool-binary-still-on-path.md` |
+
 ### 禁止依賴全域 vite-plus（hard rule）
 
 `vite-plus`（vp）**MUST** 安裝為 consumer 的 per-project devDependency 並 pin 具體版本。**禁止**僅依賴全域 `pnpm add -g vite-plus` 而 consumer `package.json` 不列。
