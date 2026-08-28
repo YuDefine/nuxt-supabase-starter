@@ -7,6 +7,9 @@
     "db-runtime": "cf-workers",
     "runtime": "cf-workers",
     "framework": "nuxt",
+    "ecosystem": [
+      "node"
+    ],
     "domain": []
   },
   "localHooks": [
