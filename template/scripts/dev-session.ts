@@ -75,7 +75,7 @@
  * 詳見 rules/core/proactive-skills.md § Dev Server Auto-Spawn 與 rules/core/verification-lease.md。
  */
 
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import {
   existsSync,
   mkdirSync,
@@ -139,6 +139,41 @@ function sh(cmd, args, { allowFail = true } = {}) {
  */
 function herdrAvailable() {
   return herdrJson(['tab', 'list']) !== null
+}
+
+/**
+ * herdr 不可用時分辨**三種**成因，各自給不同訊息 —— 塌成同一句的代價已實測過一次
+ * （2026-08-28：review-gui systemd service 的 PATH 缺 ~/.local/bin，binary 明明裝著、
+ * server 明明在跑，訊息卻把讀的人導向「herdr 掛了」）：
+ *
+ * 1. binary 不在**本行程**的 PATH → 附上實際 PATH。這是唯一能讓讀的人看出
+ *    「是 service 環境問題、不是安裝問題」的資訊。
+ * 2. binary 在、版本 / protocol 不相容 → 附 `herdr status` 的相容性段落。
+ * 3. binary 在、server 連不上 → 維持原訊息（先 `herdr status`，再重跑）。
+ */
+function herdrUnavailableReason() {
+  let probe
+  try {
+    probe = spawnSync('herdr', ['--version'], { encoding: 'utf8' })
+  } catch {
+    probe = { error: { code: 'ENOENT' } }
+  }
+  if (probe?.error?.code === 'ENOENT') {
+    return (
+      '`herdr` 不在本行程的 PATH（不是沒安裝 —— 呼叫端環境沒帶到它的安裝目錄，' +
+      '典型：systemd service 未設 Environment=PATH= 含 ~/.local/bin）。\n' +
+      `本行程 PATH=${process.env.PATH ?? '(未設)'}`
+    )
+  }
+  const status = sh('herdr', ['status'])
+  if (status && /compatible:\s*no/i.test(status)) {
+    const compat = status
+      .split('\n')
+      .filter((l) => /version|protocol|compatible/i.test(l))
+      .join('\n')
+    return `herdr client 與 server 版本 / protocol 不相容：\n${compat}\n先升級或重啟 herdr server 再重跑。`
+  }
+  return 'herdr server 連不上（server 沒在跑 / socket 不通）。dev-session 以 herdr 為持久層：先確認 `herdr status`，再重跑。'
 }
 
 function sleep(ms) {
@@ -515,6 +550,10 @@ function writeSpawnStatus(cwd, port, payload) {
           heardPort: null,
           message: null,
           herdrTab: null,
+          // 消費端的 stale 判定靠這個 pid 分辨「還在起（可能卡在無上限的 backing service
+          // 補建）」與「起動程序已經消失」。NEVER 拿它當「dev server 的 pid」——它是
+          // dev-session 自己，dev server 由 herdr 持有（見 writeLease 的 devServer.pid）。
+          pid: process.pid,
           updatedAt: new Date().toISOString(),
           ...payload,
         },
@@ -915,7 +954,7 @@ function servedCwdMismatch(o, id) {
 // `--cwd` 被靜默忽略，指令回 exit 0 + 「✓ reuse」，但實際服務的是**別的 working tree 的
 // code**。任何 agent 照這個成功訊號往下收 evidence（截圖 / round-trip），拍到的都是錯的
 // 版本，且外觀與成功無異 —— 比直接失敗危險得多。
-function enforceLeaseOrExit(o, meta, consumerId, lid) {
+function enforceLeaseOrExit(o, meta, consumerId, lid, port) {
   if (o.noLease) return null
   const strict = meta?.dev?.leaseMode === 'strict' || meta?.auth?.portPinned === true
 
@@ -948,7 +987,7 @@ function enforceLeaseOrExit(o, meta, consumerId, lid) {
       err(`  dev:     PID ${mismatch.devServer?.pid}, port=${mismatch.devServer?.port}`)
       err(`  ⚠ 照這個 session 收 evidence 會拍到**錯的 code**。`)
       err(`  要接管請加 --takeover（會 kill 現有 dev process 後重建）。`)
-      writeSpawnStatus(o.cwd, o.port, {
+      writeSpawnStatus(o.cwd, port, {
         status: 'failed',
         message: `[lease] refuse — 既有 dev server 服務的不是你要的 working tree（serving ${mismatch.devServer?.cwd}，你要的 ${o.cwd}）`,
       })
@@ -990,7 +1029,7 @@ function enforceLeaseOrExit(o, meta, consumerId, lid) {
     err(`  你要的:  cwd=${o.cwd}`)
     err(`  ⚠ cwd 不符代表既有 dev server 服務的是另一個 working tree 的 code。`)
     err(`  要強制接管請加 --takeover（會 log 前 holder 並 kill 其 dev process）。`)
-    writeSpawnStatus(o.cwd, o.port, {
+    writeSpawnStatus(o.cwd, port, {
       status: 'failed',
       message: `[lease] 無法 claim — 已被 ${conflict.holder?.kind}:${conflict.holder?.sessionId} 持有`,
     })
@@ -1024,7 +1063,7 @@ function enforceLeaseOrExit(o, meta, consumerId, lid) {
  * 沒有 per-worktree 拓樸的 consumer（絕大多數）在第一個 probe 就 `applicable:false` 退出，
  * 零行為改變。探針自身故障同樣走這條 —— tooling 面 fail-open，NEVER 因工具壞掉擋住開發。
  */
-function preflightBackingService(o) {
+function preflightBackingService(o, port) {
   const probe = probeBackingService(o.cwd)
   if (!probe.applicable) return
   if (probe.state === 'ready') return
@@ -1048,35 +1087,50 @@ function preflightBackingService(o) {
     return
   }
 
-  err(
-    describeBackingServiceGap(
-      after.applicable ? after : probe,
-      ensureErr ?? `補建後 state 仍為 ${after.state}`,
-    ),
+  const gapMsg = describeBackingServiceGap(
+    after.applicable ? after : probe,
+    ensureErr ?? `補建後 state 仍為 ${after.state}`,
   )
+  err(gapMsg)
+  writeSpawnStatus(o.cwd, port, { status: 'failed', message: gapMsg })
   process.exit(1)
 }
 
 async function cmdLaunch(o) {
+  // port 先於一切失敗分支解出來：結局檔以 port 定址（spawn-<port>.json），早退路徑若只拿
+  // o.port（caller 沒帶 --port、port 其實來自 consumer-meta 時為 null）就寫不進正確的檔，
+  // GUI 讀到的仍是「starting」—— 黑洞的另一種長相。
+  const meta = readConsumerMeta(o.consumerMeta)
+  const port = resolvePort(o, meta)
+  try {
+    await runLaunch(o, meta, port)
+  } catch (e) {
+    // 沒被任何具名失敗分支接住的例外（herdr RPC / lease IO / probe 自爆…）也是一條
+    // 「非零退出」路徑 —— 不回寫結局檔，自助頁就永遠停在「正在啟動」。
+    writeSpawnStatus(o.cwd, port, {
+      status: 'failed',
+      message: `dev-session 意外中止：${e?.message ?? e}`,
+    })
+    throw e
+  }
+}
+
+async function runLaunch(o, meta, port) {
   if (!o.cmd || !o.cmd.length) {
     const msg = '用法：dev-session.ts [opts] -- <cmd...>（缺少 `-- <cmd>`）'
-    writeSpawnStatus(o.cwd, o.port, { status: 'failed', message: msg })
+    writeSpawnStatus(o.cwd, port, { status: 'failed', message: msg })
     err(msg)
     process.exit(1)
   }
   if (!herdrAvailable()) {
-    const msg =
-      'herdr server 連不上（未安裝 / 不在 PATH / server 沒在跑）。dev-session 以 herdr 為持久層：先確認 `herdr status`，再重跑。'
-    writeSpawnStatus(o.cwd, o.port, { status: 'failed', message: msg })
-    err('herdr server 連不上（未安裝 / 不在 PATH / server 沒在跑）。')
-    err('  dev-session 以 herdr 為持久層：先確認 `herdr status`，再重跑。')
+    const msg = herdrUnavailableReason()
+    writeSpawnStatus(o.cwd, port, { status: 'failed', message: msg })
+    for (const line of msg.split('\n')) err(line)
     err('  **NEVER** 退回 `run_in_background` / setsid / nohup —— 那些一律會被 harness reap。')
     process.exit(1)
   }
 
-  const meta = readConsumerMeta(o.consumerMeta)
   const consumerId = resolveConsumerId(o, meta)
-  const port = resolvePort(o, meta)
   const primaryPort = resolvePrimaryPort(meta)
   const sessionName = resolveSessionName(o, consumerId, port, primaryPort)
   // lease identity 綁 (consumer, port)：同 consumer 的不同 app / review slot 是不同 lease
@@ -1088,7 +1142,7 @@ async function cmdLaunch(o) {
   //    **MUST 排在 reuse 判定之前**：reuse 分支同樣是「使用者要求起 dev server」的結果，而
   //    clone / sidecar 是在 session 存活期間被 reconcile / 手動清理 / 主機重啟拿掉的 —— 只檢查
   //    重建路徑，等於放過最常見的那一種缺席。
-  preflightBackingService(o)
+  preflightBackingService(o, port)
 
   // 1) 反累積：起前先查 existing session
   const existing = findSession(sessionName)
@@ -1113,7 +1167,7 @@ async function cmdLaunch(o) {
     } else if (!port || portListening(port)) {
       // reuse 前 MUST 過 lease gate — cwd 不符時 strict 模式直接 refuse。
       // 這裡曾是靜默漏洞：直接 return 導致 --cwd 被忽略、caller 在錯的 code 上收 evidence。
-      const conflict = enforceLeaseOrExit(o, meta, consumerId, lid)
+      const conflict = enforceLeaseOrExit(o, meta, consumerId, lid, port)
 
       // --takeover + cwd 不符：caller 明確要接管，reuse 別人那台等於沒接管 → 改重建
       if (conflict && o.takeover) {
@@ -1160,7 +1214,7 @@ async function cmdLaunch(o) {
 
   // 2) lease（strict 衝突 refuse）— 與 reuse 路徑共用同一個 gate，避免兩處邏輯漂移
   if (!o.noLease) {
-    const conflict = enforceLeaseOrExit(o, meta, consumerId, lid)
+    const conflict = enforceLeaseOrExit(o, meta, consumerId, lid, port)
     if (conflict && o.takeover) {
       err(
         `[lease:${consumerId}] --takeover：接管 ${conflict.holder?.kind}:${conflict.holder?.sessionId} 的 lease`,

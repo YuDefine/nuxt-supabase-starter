@@ -37,7 +37,8 @@
 //   staged: {
 //     '*': (files) => {
 //       const t = files.filter((f) => !isProjectionPath(f))
-//       return t.length > 0 ? [`vp check --fix ${t.join(' ')}`] : ['true']
+//       // 逐檔加引號（含空白的路徑不加就被 string-argv 拆錯）、空的回 `[]` 不回 `['true']`
+//       return t.length > 0 ? [`vp check --fix ${t.map((f) => JSON.stringify(f)).join(' ')}`] : []
 //     },
 //   }
 //
@@ -115,20 +116,64 @@ export const CLADE_VENDOR_EXCLUDES = ['vendor/snippets/**', 'vendor/scripts/revi
 export const projectionPrefixes = PROJECTION_EXCLUDES.map((p) => p.replace(/\/\*\*$/, '/'))
 
 /**
+ * repo root 的絕對路徑。lint-staged 依版本 / 設定可能餵**絕對路徑**進來，而投影判定
+ * 只在 repo-relative 座標下才有意義（見 `isProjectionPath` 的註解）。
+ *
+ * `process.cwd()` 在 pre-commit 情境就是 repo root（husky / vp staged 都從那裡起 hook）。
+ * 拿不到就回空字串，此時 `toRepoRelative` 原樣返回 —— 退化成純相對比對，不會誤殺。
+ */
+function repoRoot(): string {
+  try {
+    const cwd = globalThis.process?.cwd?.()
+    return typeof cwd === 'string' && cwd.length > 0 ? cwd.replace(/\/+$/, '') + '/' : ''
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * 把可能是絕對路徑的 staged 檔名相對化到 repo root。已是相對路徑就原樣返回。
+ * 前導 `./` 一併去掉 —— `./vendor/x.ts` 與 `vendor/x.ts` 是同一個檔。
+ */
+export function toRepoRelative(file: string): string {
+  const root = repoRoot()
+  let f = file
+  if (root && f.startsWith(root)) f = f.slice(root.length)
+  while (f.startsWith('./')) f = f.slice(2)
+  return f
+}
+
+/**
  * 這個 staged 檔路徑是不是投影層（LOCKED、chmod 444、consumer 端改不動）。
  *
- * `startsWith` 接 repo root 的投影（`.clade/vendor/scripts/flow.ts`），`includes('/'+dir)`
- * 接巢狀落點（starter 的 `template/.claude/...`）。兩條缺一都會漏。
+ * **先相對化到 repo root，再做前綴比對** —— NEVER 對原始字串做 `includes('/' + dir)`
+ * 片段比對。2026-08-28（TD-770）：舊實作是
+ * `file.startsWith(dir) || file.includes('/' + dir)`，而 lint-staged 餵進來的是絕對
+ * 路徑。checkout 落在 `~/vendor/<repo>` / `~/.claude/<repo>` 這類**祖先目錄同名**的位置
+ * 時，`includes('/vendor/')` 對**每一個**業務檔為真 → 全部被當投影排除 → `vp lint` /
+ * `vp fmt` 一個都不跑，pre-commit **無聲**放行。那個失敗與「lint 真的沒發現問題」在
+ * 任何輸出上同形，所以它不會被任何人發現。repo 內的巢狀同名目錄（`app/vendor/`）同樣誤殺。
+ *
+ * 巢狀投影落點由下面第二條前綴段覆蓋：相對化之後才允許 `/<dir>` 片段比對，此時分母
+ * 已經被限制在 repo 內，不會再撞到 repo 外的祖先目錄。**repo 內**的同名目錄仍會命中，
+ * 這是刻意取捨不是漏修 —— starter 真的有 `template/vendor/`、`template/.claude/`、
+ * `scripts/vendor/` 三處巢狀投影，與假想的業務目錄 `app/vendor/` 在路徑形狀上不可區分。
+ * 多濾一個業務目錄的症狀是 loud（那些檔沒過 lint）；漏濾一個投影目錄的症狀是整個
+ * pre-commit 被 `No files found to lint` exit 1 擋死（TD-310 / TD-670）。
  *
  * 型別必須寫成 TS 註記，NEVER 只留 JSDoc `@param {string}`：本檔副檔名是 `.ts`，
  * JSDoc 型別只有 `.js` 檔（allowJs + checkJs）才會被採納。consumer 端跑
  * `noImplicitAny` 的 typecheck 時，未標註的參數一律 TS7006，投影過去就把對方的
  * pre-push 擋死（v1.11.86 實際擋住 <consumer-a>）。
  *
- * @param file staged 檔的相對路徑
+ * @param file staged 檔路徑（相對或絕對皆可）
  */
 export function isProjectionPath(file: string): boolean {
-  return projectionPrefixes.some((dir) => file.startsWith(dir) || file.includes(`/${dir}`))
+  const rel = toRepoRelative(file)
+  // 相對化之後仍是絕對路徑 = 這個檔根本不在本 repo 內。投影判定對它沒有意義，
+  // 而片段比對在這裡正是誤殺的來源 —— 一律回 false，交給下游工具自己處理。
+  if (rel.startsWith('/')) return false
+  return projectionPrefixes.some((dir) => rel.startsWith(dir) || rel.includes(`/${dir}`))
 }
 
 /**
@@ -151,16 +196,31 @@ export function isProjectionPath(file: string): boolean {
  * 需要自訂 glob（例如 `'*': 'vp check --fix'` 那種形狀）時改用 `isProjectionPath`
  * 自己組，一樣算接上這條 MUST。
  */
+/**
+ * 逐個檔名加引號再串成一條命令的引數列。
+ *
+ * lint-staged 把回傳字串交給 string-argv 依空白拆 —— 含空白的路徑不加引號就被拆成
+ * 兩個不存在的檔（TD-770 第 2 條）。consumer 的舊手寫 config 普遍用 `JSON.stringify`
+ * 加這層引號，換裝到 `stagedBase` 時不能把它掉了。
+ *
+ * 用 `JSON.stringify` 而非手動包單引號：它同時逃逸引號與反斜線，對 string-argv 的
+ * double-quote 語法是正確的。
+ */
+function quoteArgs(files: readonly string[]): string {
+  return files.map((f) => JSON.stringify(f)).join(' ')
+}
+
 export const stagedBase = {
   '*.{js,ts,mjs,cjs,vue}': (files: readonly string[]) => {
     const fmtable = files.filter((f) => !isProjectionPath(f))
     const lintable = fmtable.filter((f) => !f.endsWith('.d.ts'))
     const cmds = []
-    if (lintable.length > 0) cmds.push(`vp lint --fix ${lintable.join(' ')}`)
-    if (fmtable.length > 0) cmds.push(`vp fmt ${fmtable.join(' ')}`)
-    // 全被濾掉時回 no-op —— 回空陣列 lint-staged 會當成「這格沒事做」照過，但回
-    // `['true']` 語義更明確，且與既有兩台（<consumer-f> / starter template）逐字相同。
-    return cmds.length > 0 ? cmds : ['true']
+    if (lintable.length > 0) cmds.push(`vp lint --fix ${quoteArgs(lintable)}`)
+    if (fmtable.length > 0) cmds.push(`vp fmt ${quoteArgs(fmtable)}`)
+    // 全被濾掉時回**空陣列** —— lint-staged 對空任務列的語義就是「這格沒事做」，照過。
+    // NEVER 回 `['true']`：那是一個 shell 依賴（原生 Windows 無 coreutils 就失敗），
+    // 而它換來的只是語義上看起來明確一點（TD-770 第 3 條）。
+    return cmds
   },
 }
 

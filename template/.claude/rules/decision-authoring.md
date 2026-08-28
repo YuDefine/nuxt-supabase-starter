@@ -190,6 +190,50 @@ MUST 先跑 [[session-tasks]] § 並行爭用 的 Step 0 判出持有者，再�
 `herdr agent prompt` 問它還要多久 land／要不要合併。談過之後仍談不攏的那一題才進佇列，且
 問句 MUST 寫明已探測、對方怎麼回。
 
+### NEVER 把 live change 的 `## 人工檢查` 寫成登記簿條目
+
+逐條看證據、勾 `[x]`、寫 `[issue]` 退回，是 **`/review` 的職責**——它有 preview 入口、evidence
+檢視、以及寫回 `tasks.md` 的能力，`/decisions` 三樣都沒有。所以 `HANDOFF.md` /
+`docs/tech-debt.md` 的條目 **NEVER** 承載「去把 `<change>` 的 `## 人工檢查` 逐條確認」。
+
+那條 bullet 只會在兩種狀態下被寫出來，兩種的處置都不是留在登記簿上：
+
+| 那個 change 現在的 bucket | 這條 bullet 是什麼 | MUST |
+| --- | --- | --- |
+| `changeBelongsOnReviewInbox` 回 **true**（票已經在 `/review` 上） | 重複——同一個勾由兩個畫面各要一次 | 刪掉這條 bullet |
+| 回 **false**（`readyForEvidence` / `applyInProgress` 這類 **Claude 球**的桶） | 繞道——票進不了 inbox，於是改用登記簿叫人做 | 補齊缺的 evidence 讓它進 inbox，**再**刪掉這條 |
+
+**判之前 MUST 實跑**，NEVER 從「我記得它已經做完了」推斷：
+
+```bash
+cd ~/offline/clade && node --input-type=module -e "
+const m = await import('./vendor/scripts/review-gui.ts')
+for (const c of await m.listPendingChanges('<repo>'))
+  console.log(c.name, c.bucket, JSON.stringify(c.evidenceMissing?.map(e => e.itemId)))
+"
+```
+
+**NEVER 代勾 `## 人工檢查` 的 checkbox 讓這條消失**——沒有人確認的 `[x]` 一律是 false-green
+（per `agent-self-verification` MUST 8）。那是唯一比繞道更糟的收法：繞道至少還看得見。
+
+**已封存的 change 不在此列。** `openspec/changes/archive/**` 的 `## 人工檢查` 在 `/review` 上
+沒有 surface，它進 `/decisions` 是正確路由——那條路由由 `tasks.md` 上的 `(deferred-user-only:)`
+標記承載（見 [[review-gui-surface]]），**NEVER** 改用登記簿 bullet 去補一條它漏掉的。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 條目文字同時含 `人工檢查` 與某個 **live** change 的目錄名 → `belongs-on-review` lint ＋ `decision-sync` 自動退回給作者。**warn-only，不 block**——擋在佇列外會讓繞道變隱形，比一條掛著 lint 的列更糟（同 `missing-evidence` 的理由） |
+| 消費端 | 寫該條目的 agent（收自動退回，照上表處置）＋ `/decisions` 與 `flow pending` 上的 Charles（看到 `✎ 這條把 live change 的 ## 人工檢查 寫成 HANDOFF 條目` 可以跳過不讀） |
+| 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`——寫那條 bullet 正是在編輯這兩個檔） |
+
+> 2026-08-28 成因：<consumer-j> 的 `product-save-hardening` 四條 `## 人工檢查` 都宣告
+> `[verify:api+ui]`，實際每條只寫了一種 evidence，於是 change 停在 `readyForEvidence`
+> （`changeBelongsOnReviewInbox` 回 false，那是**Claude 球**的桶，刻意不畫進 inbox）。
+> 作者拿不到 `/review` 的票，就把「五條逐項確認」寫成 `## 需要 Charles 執行` 的 bullet——
+> 於是它以「要我動手」出現在 `/decisions`，而 Charles 在那裡連要看什麼都打不開。
+> **繞道的成因不是不懂分工，是 `/review` 收不進來**，所以本節的第二列要求先補 evidence、
+> 而不是只要求刪 bullet。
+
 ## 改寫與重問
 
 `source_id` 由 identity（檔案 + 問句）導出，**不由內容**。因此：

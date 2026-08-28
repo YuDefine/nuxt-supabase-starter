@@ -418,23 +418,39 @@ bash scripts/pre-commit/runner.sh
 
 > `--ignore-path .oxfmtignore` 對投影層而言已是**歷史包袱** —— preset 的 `PROJECTION_EXCLUDES` 已經排除 `vendor/**` / `.claude/**` / `.clade/**` / `.spectra/**`，裸打 `vp fmt` 不會再掃到 LOCKED 檔（per § 投影層排除清單集中在 preset）。`.oxfmtignore` 只保留給該 consumer 自家、與投影層無關的路徑；沒有這種路徑就不必有這個檔。
 
-### lint-staged 配置（若用 husky）
+### staged 配置：一行 re-export，NEVER 手寫排除陣列
 
-`.lintstagedrc.cjs`：
+投影層的排除清單 **MUST** 追溯得到 preset 的 `PROJECTION_EXCLUDES`。預設形狀是 `vite.config.ts` 直接用 preset 匯出的 `stagedBase`：
 
-```js
-module.exports = {
-  '*.{js,ts,vue,jsx,tsx}': ['vp lint --fix', 'vp fmt --ignore-path .oxfmtignore'],
-  '*.md': (files) => {
-    const allowed = files.filter(
-      (f) => !f.startsWith('.claude/rules/') && !f.startsWith('.claude/skills/') && !f.startsWith('.claude/hooks/')
-    )
-    return allowed.length ? [`vp fmt --ignore-path .oxfmtignore ${allowed.join(' ')}`] : []
-  },
-}
+```ts
+import { defineConfig } from 'vite-plus'
+import { fmtBase, lintBase, stagedBase } from './vendor/oxc-shared/preset.ts'
+
+export default defineConfig({
+  lint: { ...lintBase },
+  fmt: { ...fmtBase },
+  staged: stagedBase,
+})
 ```
 
-`.claude/{rules,skills,hooks}/` 由 clade 治理（chmod 444），lint-staged 必須排除。雙重保險：shell-side filter + `--ignore-path .oxfmtignore`。
+需要自訂 glob 時改用 preset 匯出的 `isProjectionPath` 自己組，一樣算接上這條 MUST：
+
+```ts
+import { isProjectionPath } from './vendor/oxc-shared/preset.ts'
+
+export default defineConfig({
+  staged: {
+    '*': (files) => {
+      const t = files.filter((f) => !isProjectionPath(f))
+      return t.length > 0 ? [`vp check --fix ${t.map((f) => JSON.stringify(f)).join(' ')}`] : []
+    },
+  },
+})
+```
+
+**NEVER 手寫一份平行的目錄清單**（`f.startsWith('.claude/rules/') && …` 那種形狀）。手寫清單必然漂移：它只長出「當下踩到的那個目錄」，而 `PROJECTION_EXCLUDES` 現在有七條（`.claude/` `.clade/` `.spectra/` `vendor/` `.agents/` `.codex/` `.cursor/`）。nuxt-supabase-starter 漏 `vendor/` 連擋三次交付（[[TD-310]]）；<consumer-i> 漏 `.clade/` 讓 v1.11.94 propagate 連兩趟 `failed`（[[TD-670]]、[[TD-770]]）。preset 這份清單一改，所有 re-export 的 consumer 自動跟上。
+
+漏濾的症狀認得出來但不像成因：`vp lint` / `vp fmt` 對「輸入路徑**全部**被 ignore」回 **exit 1**，訊息是 `No files found to lint` —— 看起來像路徑打錯，不像被 ignore 排除。
 
 > ⚠️ **NEVER** 用 `oxlint --fix` / `oxfmt` 直接呼叫（見上節「禁止在 lint-staged ... 中呼叫 eslint / prettier」的注意事項）。`vp lint` / `vp fmt` 是唯一正確入口。
 
