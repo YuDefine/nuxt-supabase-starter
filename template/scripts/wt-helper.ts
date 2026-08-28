@@ -324,23 +324,23 @@ async function prompt(question) {
 // offset applied uniformly to every declared port keeps the whole set inside the
 // consumer's own band, so no consumer's dev script or nuxt.config needs to change.
 
-// Registry allocates bases +10 apart, so base+1..base+9 belongs to this consumer.
-const DEV_PORT_BAND = 9
+// Dev-port allocation lives in ./lib/worktree-dev-port.ts — the single SoT shared
+// with review-gui. Keeping a second copy here is what let the two disagree: this
+// file handed each worktree its own port while review-gui went on spawning every
+// one of them on the registry base, so N worktrees fought over one dev server.
+import {
+  DEV_PORT_BAND,
+  allocateWorktreeDevPorts as allocateWorktreeDevPortsIn,
+  devPortCapacity as devPortCapacityOf,
+  devPortStateDir,
+  pickDevPortOffset as pickDevPortOffsetIn,
+  readWorktreeDevPorts,
+  type WorktreePortBand,
+} from './lib/worktree-dev-port.ts'
 
-/**
- * Allocation records live outside the repo. Writing them into `.clade/` would
- * leave an untracked file in every worktree of the ~7 consumers whose
- * `.gitignore` does not cover the path, and that shows up as dirty state in
- * exactly the flows (merge-back, publish) that treat dirty state as a hazard.
- */
-function devPortStateDir(consumerRoot) {
-  return join(
-    process.env.XDG_CACHE_HOME || join(process.env.HOME || '', '.cache'),
-    'clade',
-    'dev-port',
-    basename(consumerRoot),
-  )
-}
+// Re-exported: test/wt-helper-dev-port-offset.test.ts imports them from here.
+export const pickDevPortOffset = pickDevPortOffsetIn
+export const devPortCapacity = devPortCapacityOf
 
 /**
  * Ports this consumer declares, sorted ascending — the first entry is the base
@@ -385,100 +385,6 @@ function readDeclaredDevPorts(root) {
 }
 
 /**
- * Offsets held by this consumer's other worktrees. Records whose worktree is
- * gone are deleted here — that is what releases a slot, so no explicit
- * deallocation step has to be remembered on cleanup paths.
- */
-function siblingDevPortOffsets(consumerRoot, selfWtPath) {
-  const dir = devPortStateDir(consumerRoot)
-  const used = new Set()
-  let entries
-  try {
-    entries = readdirSync(dir)
-  } catch {
-    return used
-  }
-  for (const name of entries) {
-    if (!name.endsWith('.json')) continue
-    const p = join(dir, name)
-    let rec
-    try {
-      rec = JSON.parse(readFileSync(p, 'utf8'))
-    } catch {
-      continue
-    }
-    if (!rec?.wtPath || !existsSync(rec.wtPath)) {
-      try {
-        unlinkSync(p)
-      } catch {
-        // Someone else pruned it first; the slot is free either way.
-      }
-      continue
-    }
-    if (resolve(rec.wtPath) === resolve(selfWtPath)) continue
-    if (Number.isInteger(rec.offset)) used.add(rec.offset)
-  }
-  return used
-}
-
-/** Allocation record for the worktree at `wtPath`, or null if it has none. */
-function readWorktreeDevPorts(consumerRoot, wtPath) {
-  const p = join(devPortStateDir(consumerRoot), `${basename(wtPath)}.json`)
-  try {
-    const rec = JSON.parse(readFileSync(p, 'utf8'))
-    return resolve(rec.wtPath ?? '') === resolve(wtPath) ? rec : null
-  } catch {
-    return null
-  }
-}
-
-/**
- * Smallest offset N in 1..DEV_PORT_BAND for which every declared port P maps to
- * P+N satisfying all three:
- *   - inside [base, base+DEV_PORT_BAND] — never reaches the next consumer's base
- *   - not equal to another declared port — <consumer-a> declares 3040 + 3045, so N=5
- *     would map `<client-a>` straight onto `shared`
- *   - not already held by a sibling worktree
- * Returns null when the band is exhausted (consumer has too many live worktrees).
- */
-export function pickDevPortOffset(declared, usedOffsets) {
-  if (declared.length === 0) return null
-  const base = declared[0].port
-  const declaredSet = new Set(declared.map((d) => d.port))
-  for (let n = 1; n <= DEV_PORT_BAND; n++) {
-    if (usedOffsets.has(n)) continue
-    const mapped = declared.map((d) => d.port + n)
-    if (mapped.some((p) => p > base + DEV_PORT_BAND)) continue
-    if (mapped.some((p) => declaredSet.has(p))) continue
-    return n
-  }
-  return null
-}
-
-/**
- * How many offsets this consumer's band can actually hand out.
- *
- * This is NOT `DEV_PORT_BAND`. Every declared port shifts by the same offset, so
- * the highest declared port hits the ceiling first: a consumer declaring
- * 3040 + 3045 inside a 9-wide band gets 4 usable offsets, because offset 5 would
- * push `shared` to 3050 — the next consumer's base. Reporting the band width
- * instead of this number tells the reader there are five more slots than exist,
- * which is exactly the wrong thing to believe when you are deciding whether to
- * clean up a worktree.
- *
- * Derived by exhausting `pickDevPortOffset` rather than recomputing its
- * arithmetic, so the two can never disagree.
- */
-export function devPortCapacity(declared) {
-  const used = new Set()
-  for (;;) {
-    const offset = pickDevPortOffset(declared, used)
-    if (offset === null) return used.size
-    used.add(offset)
-  }
-}
-
-/**
  * Who currently holds an offset, newest-allocated last. Feeds the exhaustion
  * message: "the band is full" is not actionable, "these four worktrees hold it"
  * is. Stale records are dropped by `siblingDevPortOffsets`, so this only lists
@@ -514,7 +420,7 @@ function devPortHolders(consumerRoot) {
  * picking one to land, and that decision needs both numbers.
  */
 function devPortExhaustedReport(consumerRoot, declared) {
-  const capacity = devPortCapacity(declared)
+  const capacity = devPortCapacity(declared, readWorktreeBand(consumerRoot))
   const holders = devPortHolders(consumerRoot)
   const spread = declared.length > 1 ? declared[declared.length - 1].port - declared[0].port : 0
   const why =
@@ -537,33 +443,39 @@ function devPortExhaustedReport(consumerRoot, declared) {
  * Allocate this worktree's dev-port offset and persist it. Returns the record,
  * or null when the consumer declares no dev ports / the band is exhausted.
  */
-function allocateWorktreeDevPorts(consumerRoot, wtPath) {
-  const declared = readDeclaredDevPorts(consumerRoot)
-  if (declared.length === 0) return null
-  const offset = pickDevPortOffset(declared, siblingDevPortOffsets(consumerRoot, wtPath))
-  if (offset === null) return null
-  const record = {
-    offset,
-    base: declared[0].port,
-    wtPath: resolve(wtPath),
-    ports: declared.map((d) => ({ alias: d.alias, port: d.port + offset, mainPort: d.port })),
+
+/**
+ * This consumer's worktree band from the projected registry, or null when it
+ * declares none (then only the base+1..base+9 pool exists).
+ */
+function readWorktreeBand(root): WorktreePortBand | null {
+  try {
+    const reg = JSON.parse(readFileSync(join(root, '.clade', 'registry', 'consumers.json'), 'utf8'))
+    const list = Array.isArray(reg) ? reg : (reg.consumers ?? [])
+    const entry = list.find((c) => c.consumer_id === basename(root))
+    const band = entry?.dev_ports?.worktree_band
+    if (!Array.isArray(band) || band.length !== 2 || !band.every(Number.isInteger)) return null
+    // 逐項取出再組 tuple。`return band` 交出去的是 `any[]`，而 `WorktreePortBand` 是
+    // `[number, number]` —— 長度保證在 runtime 檢查裡，型別系統看不到，所以要在這裡收窄。
+    return [band[0], band[1]]
+  } catch {
+    return null
   }
-  const dir = devPortStateDir(consumerRoot)
-  mkdirSync(dir, { recursive: true })
-  writeFileSync(join(dir, `${basename(wtPath)}.json`), `${JSON.stringify(record, null, 2)}\n`)
-  return record
 }
 
-// Tunnel identity is a per-consumer singleton unless the consumer opts into
-// `dev.perWorktreeTunnel`, which rewrites the hostname per slug (wt-env-sync.ts).
-// Without that opt-in, a worktree that inherits these keys does not get its own
-// tunnel — it races the main checkout for the same hostname and silently
-// hijacks its traffic.
-//
-// This only reports; it never edits the copied env files. wt-env-sync.ts holds
-// the line that non-opt-in consumers get a byte-identical copy (see
-// test/wt-env-sync-per-worktree-tunnel.test.ts), and a second rewriter here
-// would break exactly the consumers that decided not to opt in.
+/**
+ * Allocate this worktree's dev-port offset and persist it. Returns the record,
+ * or null when the consumer declares no dev ports / both pools are exhausted.
+ */
+function allocateWorktreeDevPorts(consumerRoot, wtPath) {
+  return allocateWorktreeDevPortsIn(
+    consumerRoot,
+    wtPath,
+    readDeclaredDevPorts(consumerRoot),
+    readWorktreeBand(consumerRoot),
+  )
+}
+
 const TUNNEL_ENV_KEYS = new Set(['TUNNEL_HOSTNAME', 'TUNNEL_NAME', 'CLOUDFLARE_API_KEY'])
 
 /**
@@ -1979,7 +1891,7 @@ async function cmdReclaimStale() {
     }
   }
 
-  const capacity = devPortCapacity(declared)
+  const capacity = devPortCapacity(declared, readWorktreeBand(consumerRoot))
   const remaining = holders.length - freed
   console.log(`\nReclaimed ${freed} slot(s). ${remaining}/${capacity} still held.`)
 }

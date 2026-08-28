@@ -411,7 +411,8 @@ mutation testing 讓**存活的突變體**直接指出哪個邊界沒被釘住�
   （靜態讀 consumer commit 的 `.clade/mutation-summary.json`，**不執行**任何測試）
 
 > 兩條都是**絕對路徑**：cookbook 與 audit script 只存在於 clade，不散播副本到 consumer，
-> 相對路徑在 consumer session 會解到自己的 repo 而落空（同 [[evlog-investigate]] 的理由）。
+> 相對路徑在 consumer session 會解到自己的 repo 而落空（同 evlog-investigate 的理由 ——
+> 該規約在 `rules/modules/capabilities/evlog/`，未宣告 evlog 的 repo 沒有它，故此處不用 wikilink）。
 - **NEVER** 把 mutation score 變成常駐 KPI —— 一旦它成為被追的數字，產出就會從
   「想清楚邊界」退化成「對每個中間值下 assertion」，測試變脆、重構全紅
 

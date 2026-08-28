@@ -133,5 +133,5 @@ review:ui (round N+1, FINAL) — user 對既有 + 新增 verify item 一次性�
 - `archive-commit-order`（CLAUDE.md「Spectra Change 收尾：先 archive 再 /commit」段，source `claude-md/core-snippets/archive-commit-order.md`）— 收尾順序唯一真相：先 archive 再單一 commit；本 § sequence 對齊此
 - [[worktree-default]] §5 — worktree v3 atomic landing：`/spectra-archive` Step 0 merge-back → user 在 main `/commit`
 - [[proactive-skills.ingest-triggers]] § review:ui 觸發 ingest 的後續順序
-- `plugins/hub-core/skills/spectra-ingest/SKILL.md` Step 9 Summary
-- `plugins/hub-core/skills/spectra-apply/SKILL.md` 末段「apply 完成後 review:ui」
+- `plugins/hub-capabilities-openspec/skills/spectra-ingest/SKILL.md` Step 9 Summary
+- `plugins/hub-capabilities-openspec/skills/spectra-apply/SKILL.md` 末段「apply 完成後 review:ui」

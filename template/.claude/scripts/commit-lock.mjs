@@ -35,7 +35,10 @@ import { hostname, userInfo } from 'node:os'
 // 本檔是散播到 consumer `.claude/scripts/` 的 .mjs，consumer 端沒有那支 TS lib
 // 可以 import，因此只能內聯一份。改動任一邊 MUST 同步另一邊。
 const RUNTIME_PROBES = [
-  ['claude', ['CLAUDE_PROJECT_DIR', 'CLAUDE_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CONVERSATION_ID']],
+  [
+    'claude',
+    ['CLAUDE_PROJECT_DIR', 'CLAUDE_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CONVERSATION_ID'],
+  ],
   ['codex', ['CODEX_SESSION_ID', 'CODEX_AGENT_NAME', 'CODEX_HOME']],
   ['opencode', ['OPENCODE_SESSION_ID', 'OPENCODE_AGENT_ID', 'OPENCODE_HOME']],
   ['copilot', ['COPILOT_AGENT_ID', 'GITHUB_COPILOT_CHAT']],
@@ -237,7 +240,13 @@ function release() {
   // 而症狀（兩個 session 同時跑 0-A/0-C）要到很後面才看得出來。
   const existing = readLock()
   const mySessionId = detectSessionId()
-  if (existing && !existing._corrupt && existing.sessionId && mySessionId && existing.sessionId !== mySessionId) {
+  if (
+    existing &&
+    !existing._corrupt &&
+    existing.sessionId &&
+    mySessionId &&
+    existing.sessionId !== mySessionId
+  ) {
     console.error('[/commit lock] ⛔ 這把鎖不是本 session 的，拒絕釋放')
     console.error(formatLock(existing))
     console.error('')

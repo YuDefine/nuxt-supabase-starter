@@ -494,7 +494,7 @@ Claude Code session 收到 spectra propose 請求時：
    4. 結束後 `spectra park <change>`，回報 artifacts list + cross-check 結果
 3. **MUST** 主線是 quality gate — 不要把所有事推給 pi 後直接結束
 
-詳細流程見 `plugins/hub-core/skills/spectra-propose/SKILL.md` Step 0。
+詳細流程見 `plugins/hub-capabilities-openspec/skills/spectra-propose/SKILL.md` Step 0。
 
 ## Spectra Apply Phase Dispatch（具體做法）
 

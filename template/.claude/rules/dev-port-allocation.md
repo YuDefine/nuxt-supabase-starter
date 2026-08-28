@@ -108,6 +108,7 @@ Wrapper 把這條鏈在第一步切斷：token verify 失敗 → log warn → �
 ### 3. Registry 唯一性
 
 - **MUST** 新 consumer 進 `registry/consumers.json` 必須認領未用的 +10 號 port（3000, 3010, 3020, …）
+  **以及**一段未用的 `worktree_band`（4200–4899 區，50 個一段）
 - **NEVER** 兩個 consumer 在 registry 取同 `dev_ports.nuxt` 值
 - **MUST** 改 port 必須先在 clade `registry/consumers.json` commit + publish + propagate，再改 consumer 端的 dev script / tunnel config
 - **MUST** 新 base 與任一既有 base 相距 **≥10**（`dev-port-audit.ts` 報 `band-spacing` CONFLICT）— 間距不是排版習慣，base+1..base+9 是該 consumer worktree 的 port 池，見 §4
@@ -116,14 +117,37 @@ Wrapper 把這條鏈在第一步切斷：token verify 失敗 → log warn → �
 
 [[worktree-default]] §1 要求任何動 tracked file 的工作都在獨立 worktree 執行，所以「一個 consumer 同時只有一個 dev server」從來不成立。同一 consumer 的 N 個 worktree 各跑 dev，撞的是 §1 那個**唯一**的 registry port。
 
-分配規則：**worktree 的 port = 各宣告 port + 一個 worktree 專屬 offset N**，N 取自 `[1, 9]`。
+分配規則：**worktree 的 port = 各宣告 port + 一個 worktree 專屬 offset N**。N 依序取自兩個池：
+
+1. **base 池** `[1, 9]` —— registry 把各 base 排成 +10 間距，中間這 9 個號碼天然屬於它
+2. **worktree band** —— registry `dev_ports.worktree_band`，4200–4899 區每個 consumer 各 50 個號碼
+
+base 池只有 9 格，**而單一 consumer 開到十幾條 worktree 是常態**（2026-08-28 實測：<consumer-b> 15 條）。
+只有 base 池時，第 10 條之後的 worktree 分不到號碼，呼叫端就退回 base port —— 那台 dev server
+**起得來、health check 過、畫面正常**，只是服務的是別條 worktree 的 code。band 存在的唯一理由
+是讓那個 fallback 永遠不必發生。
 
 - **MUST** worktree 內用 `node vendor/scripts/wt-helper.ts dev [<alias>]` 起 dev server，**NEVER** 在 worktree 內跑 `pnpm dev`（那會吃 `package.json` 寫死的 base port，直接撞 main）
 - **MUST** main working tree 維持 §1 的顯式宣告不變 — `package.json` 的 `--port <base 字面數字>` 一個字都不改。offset 只存在於 worktree，由 `wt-helper` 在 `wt-helper add` 時分配
-- **NEVER** 手動挑 worktree port。offset 由 `pickDevPortOffset` 算，它同時排除三件事：mapped port 超出 `[base, base+9]`（會踩到下一個 consumer 的 base）、mapped port 撞到本 consumer 另一個宣告 port（<consumer-a> 宣告 3040 + 3045，offset 5 會讓 `<client-a>` 蓋掉 `shared`）、offset 已被 sibling worktree 佔用
+- **MUST** 分配與讀取都走 `vendor/scripts/lib/worktree-dev-port.ts`（唯一 SoT）。**NEVER** 在任何
+  消費端自己算一份 —— 2026-08-28 之前 `wt-helper` 自己分配、`review-gui` 自己用 registry base
+  port，兩份判定各自自洽，結果是 review-gui 把每一條 worktree 的 dev server 都起在 main 的號碼上
+- **NEVER** 手動挑 worktree port。offset 由 `pickDevPortOffset`（base 池）與 `pickBandPortOffset`
+  （band）算，它同時排除三件事：mapped port 超出 `[base, base+9]`（會踩到下一個 consumer 的 base）、mapped port 撞到本 consumer 另一個宣告 port（<consumer-a> 宣告 3040 + 3045，offset 5 會讓 `<client-a>` 蓋掉 `shared`）、offset 已被 sibling worktree 佔用
 - 宣告多個 port 的 consumer **帶寬較窄**：天花板由最高的宣告 port 決定（<consumer-a> 只有 N ∈ 1..4，不是 1..9）
 - Offset 記錄在 `~/.cache/clade/dev-port/<consumer>/<slug>.json`，**不**寫進 repo（`.clade/` 在多數 consumer 未被 gitignore，寫進去會讓每個 worktree 帶一個 untracked 檔進 merge-back / publish 的 dirty 判定）。worktree 目錄消失即釋放槽位，不需要手動回收
-- 帶寬用盡時 `wt-helper dev` **fail-loud 拒絕啟動**，**NEVER** fallback 到 base port — 那正是本節要防的撞車
+- 兩池都用盡時 `wt-helper dev` **fail-loud 拒絕啟動**，**NEVER** fallback 到 base port — 那正是本節要防的撞車
+- **MUST** review-gui 的預覽連結、dev server 監看、「起 dev server」按鈕一律走同一份分配
+  （`buildConsumerPortMap` 帶 worktree 參數）。沒有分配紀錄的舊 worktree **當場配一個**，
+  **NEVER** 退回 base port
+- **NEVER** 用 `pnpm <script> -- --port <N>` 起 worktree 的 dev server（多出來的 `--` 會讓 Nuxt
+  丟掉 port，落回 script 寫死的 base port，見 §1）；正確寫法是 `pnpm <script> --port <N>`
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | `dev_ports.worktree_band` 之間互相重疊、蓋到任一 consumer 的 base、或伸進 dev-router 的 3300–3510 → `scripts/dev-port-audit.ts` 報 `worktree-band` CONFLICT、**exit 1** |
+| 消費端 | `scripts/dev-port-audit.ts`（clade 主線改 registry 時跑）＋ `vendor/scripts/lib/worktree-dev-port.ts` 的分配器（band 是它唯一的第二個池） |
+| 載入路徑 | 本節（`rules/core/dev-port-allocation.md`，paths-gated 於 `registry/consumers.json`——加新 consumer / 改 band 正是在改那個檔） |
 
 #### Tunnel 在 worktree 內
 
@@ -153,21 +177,23 @@ Tunnel hostname 是 **per-consumer 單一資源**（§2.5 的 `<consumer-id>-dev
 
 ## 當前分配（snapshot，以 registry 為準）
 
-| consumer | dev_ports.nuxt |
-| --- | --- |
-| <consumer-a> | 3040 |
-| nuxt-supabase-starter | 3020 |
-| <consumer-c> | 3010 |
-| <consumer-d> | 3060 |
-| <consumer-b> | 3000 |
-| <consumer-k> | 3050 |
-| <consumer-i> | 3070 |
-| <consumer-l> | 3080 |
-| <consumer-e> | 3090 |
-| <consumer-g> | 3100 |
-| clade | — (source-of-truth，非 Nuxt consumer) |
+| consumer | dev_ports.nuxt | worktree_band |
+| --- | --- | --- |
+| <consumer-a> | 3040 | 4200–4249 |
+| nuxt-supabase-starter | 3020 | 4250–4299 |
+| <consumer-c> | 3010 | 4300–4349 |
+| <consumer-d> | 3060 | 4350–4399 |
+| <consumer-b> | 3000 | 4400–4449 |
+| <consumer-k> | 3050 | 4450–4499 |
+| <consumer-i> | 3070 | 4500–4549 |
+| <consumer-l> | 3080 | 4550–4599 |
+| <consumer-e> | 3090 | 4650–4699 |
+| <consumer-g> | 3100 | 4600–4649 |
+| <consumer-j> | 3110 | 4700–4749 |
+| <consumer-f> | 3030 | 4750–4799 |
+| clade | — (source-of-truth，非 Nuxt consumer) | — |
 
-下一個可用：**3110**（快照，以 registry/consumers.json dev_ports 為準）。
+下一個可用：base **3120**、band **4800–4849**（快照，以 registry/consumers.json dev_ports 為準）。
 
 ## Anti-pattern
 

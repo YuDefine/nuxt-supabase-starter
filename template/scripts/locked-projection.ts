@@ -72,7 +72,7 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // NEVER widen to `scripts/lib/`: consumers author their own files there
       // (<consumer-a> `common.sh` / `read-infra-manifest.mjs`, <consumer-d> `vue-component-resolution.ts`),
       // and matching the whole dir would mark those clade-managed → auto-reset clobbers them.
-      String.raw`scripts/lib/(evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|json-unknown)\.(mjs|mts|ts)$`,
+      String.raw`scripts/lib/(evidence-store|detect-runtime|wt-env-bootstrap-runner|dev-workspace|json-unknown|worktree-dev-port)\.(mjs|mts|ts)$`,
       // json-unknown.ts 第二條 dest：vendor/review-rules/scan.ts 以
       // `../scripts/lib/json-unknown.ts` 解析到 vendor/scripts/lib/。
       // NEVER 放寬成 `vendor/scripts/lib/`——那個目錄在 clade home 是源。

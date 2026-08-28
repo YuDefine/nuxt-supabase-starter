@@ -168,9 +168,11 @@ oxfmt 不會自動 fallback 讀 `.oxfmtignore`（只有 `.prettierignore` / `.gi
 **不需要 config 就能運作**（它的預設值本身就是一套完整風格），所以 binary 只要在 PATH 上，
 任何人跑一次就會把整檔改成互斥風格（單引號無分號 → 雙引號加分號），而且 **exit 0、零警告**。
 
-2026-08-28 fleet 掃描：**<consumer-a> 與 <consumer-b>** 的 `node_modules/.bin/prettier` 是
-`@nuxt/hints@1.1.4` 帶進來的 `prettier@3.9.6`（`.npmrc` 的 `shamefully-hoist` 提上來），
-其餘 13 個 repo 無。同日 <consumer-a> 實際踩到：**586 行假 diff**。
+2026-08-28 registry-driven 掃描（14 個 consumer）：**<consumer-a>、<consumer-b>、nuxt-supabase-starter** 的
+`node_modules/.bin/prettier` 是 `@nuxt/hints` 帶進來的（`.npmrc` 的 `shamefully-hoist` 提上來），
+其餘 11 個無。同日 <consumer-a> 實際踩到：**586 行假 diff**。
+
+starter 命中的意義與另外兩台不同：**每個從它 scaffold 出來的新 consumer 都繼承這支 binary**。
 
 - **NEVER** 在本 fleet 的任何 repo 執行 prettier（`npx` / `pnpm exec` / `node_modules/.bin/` /
   裸命令都一樣）。格式化一律走 `pnpm format`（全 repo）或 `pnpm exec vp fmt --write <file>`（單檔）
@@ -219,7 +221,7 @@ catalog:
 
 - 全域版本是 user 機器狀態，跨機器、跨 CI runner 不一致 → `vp lint` / `vp fmt` 行為漂移。CI 跟 dev 抓到不同 lint violation 是常見實證踩坑（user 升全域 → 突然某條 rule 變嚴 → dev 過 / CI 紅）。
 - vp bundle 的 oxlint / oxfmt 版本由 vp `dependencies` 嚴格 pin（`=1.63.0` / `=0.48.0` 之類），等同 vp 版本 = 工具鏈確定版本。vp 沒釘 = 工具鏈沒釘。
-- consumer 端升 vp **MUST** 走 [`dep-upgrade`](../../plugins/hub-core/skills/dep-upgrade/SKILL.md) skill 的 § Outdated mode（per-package commit + bisect-friendly + 走品質閘門），不是 user 跑 `pnpm add -g vite-plus@latest` 偷偷升所有 consumer。
+- consumer 端升 vp **MUST** 走 [`dep-upgrade`](../../plugins/hub-ecosystem-node/skills/dep-upgrade/SKILL.md) skill 的 § Outdated mode（per-package commit + bisect-friendly + 走品質閘門），不是 user 跑 `pnpm add -g vite-plus@latest` 偷偷升所有 consumer。
 - 跨 consumer 工具鏈 lockstep 是 clade governance 的前提（[`code-style.md`](./code-style.md) § Governance），全域裝法繞過了這層治理。
 
 #### MUST
