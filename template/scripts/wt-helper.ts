@@ -35,6 +35,10 @@
  *                    squash. When some paths still differ, they are listed and
  *                    --accept-landed is the explicit exit — it pins the tip as
  *                    refs/wt-accepted-landed/<slug> before discarding the delta.
+ *                    --work-done files a flow `work.done` claim against the
+ *                    ambient $CLADE_WORK_ID; requires --verification and is
+ *                    refused with --dry-run. Opt-in on purpose: landing one
+ *                    branch is a smaller claim than "this work is finished".
  *   land-pending <slug> [opts]
  *                    Alias for merge-back. Semantic marker for migrating
  *                    grandfathered worktrees from the pre-atomic flow
@@ -117,6 +121,8 @@ interface WtOptions {
   baselineStashName?: string
   show?: string
   taskSummary?: string
+  workDone?: boolean
+  verification?: string
   expectedPaths?: string
   agent?: string
   minimalStashPaths?: string[]
@@ -644,11 +650,17 @@ function runOxfmtStdin(text, filePath, cwd) {
 // **must never land on main**. Excluded from the WIP gate entirely — neither
 // blocked nor auto-committed.
 //
-// Today this is exactly one case: cmdAdd flips the worktree's `.npmrc`
-// `verify-deps-before-run` from `warn` to `install` (see the "Flip
+// Today this is exactly one case: cmdAdd flips the worktree's
+// `verifyDepsBeforeRun` from `warn` to `install` (see the "Flip
 // verify-deps-before-run" block in cmdAdd — main deliberately keeps `warn` to
 // avoid postinstall on ctrl+c, worktrees take `install` so dep desync
-// auto-repairs). That leaves every worktree permanently showing ` M .npmrc`,
+// auto-repairs).
+//
+// **兩個檔都要認（TD-723 遷移期）**：SoT 已從 `.npmrc` 搬到 `pnpm-workspace.yaml`
+// （pnpm 11 不再讀 `.npmrc` 的非 auth 設定），但既有 worktree 與尚未跑過
+// `ensureCladePnpmSettings` 的 consumer 還停在舊檔。只認一個，另一個的 drift 就會
+// 被算成 user WIP 並擋住 merge-back —— 那正是本函式存在的原因。
+// That leaves every worktree permanently showing ` M` on one of them,
 // which the pre-flight then reports as user WIP and refuses to merge-back on
 // — i.e. wt-helper's own bootstrap blocks wt-helper's own landing path
 // (<consumer-a> TD-252, hit by all 4 lanes on 2026-07-26).
@@ -661,8 +673,15 @@ function runOxfmtStdin(text, filePath, cwd) {
 // Narrow by construction: returns true only when normalising that single line
 // makes HEAD and the working tree byte-identical. Any other edit to `.npmrc`
 // (a real user change) still falls through to the WIP gate.
+// key 名兩邊不同（ini kebab vs yaml camel），所以行形狀 per-file 決定。
+const TOOL_MANAGED_SETTING_LINE = {
+  '.npmrc': /^verify-deps-before-run=(warn|install)$/m,
+  'pnpm-workspace.yaml': /^verifyDepsBeforeRun:[ \t]*(warn|install)$/m,
+}
+
 function isToolManagedDrift(wtPath, filePath) {
-  if (filePath !== '.npmrc') return false
+  const LINE = TOOL_MANAGED_SETTING_LINE[filePath]
+  if (!LINE) return false
   let headText
   try {
     headText = execFileSync('git', ['show', `HEAD:${filePath}`], {
@@ -684,14 +703,13 @@ function isToolManagedDrift(wtPath, filePath) {
   // **方向敏感**：只認 cmdAdd bootstrap 造成的 `warn` → `install`。
   // 反方向（HEAD 是 `install`、working tree 是 `warn`）是 user 手動把它改回來——那是**真的
   // user WIP**。若把兩個方向都當 tool-managed 放行，等於繞過 WIP 保護，cleanup 會靜默刪掉它。
-  const LINE = /^verify-deps-before-run=(warn|install)$/m
   const headMatch = headText.match(LINE)
   const currentMatch = currentText.match(LINE)
   if (!headMatch || !currentMatch) return false
   if (headMatch[1] !== 'warn' || currentMatch[1] !== 'install') return false
 
   // 該行以外的內容必須逐位元組相同——同一次編輯若還動了別的行，整份就當 user WIP。
-  const blank = (s) => s.replace(LINE, 'verify-deps-before-run=<tool-managed>')
+  const blank = (s) => s.replace(LINE, '<tool-managed-verify-deps-before-run>')
   return blank(headText) === blank(currentText)
 }
 
@@ -1702,17 +1720,33 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
       console.error(`  deps: skipped (${e.message ?? e})`)
     }
 
-    // Flip verify-deps-before-run to install in worktree .npmrc
+    // Flip verify-deps-before-run to install (worktree-only).
+    //
+    // SoT 是 `pnpm-workspace.yaml`（TD-723）。`.npmrc` 那條**只在 yaml 沒有這個 key 時**
+    // 才走 —— 遷移期的 consumer 還停在舊檔，而 pnpm 10 兩邊都讀。yaml 有 key 時 NEVER
+    // 再翻 `.npmrc`：pnpm 11 根本不讀它，翻了只會製造一個永遠對不上的第二來源。
     try {
-      const npmrcPath = join(wtPath, '.npmrc')
-      if (existsSync(npmrcPath)) {
-        const content = readFileSync(npmrcPath, 'utf8')
-        if (content.includes('verify-deps-before-run=warn')) {
-          writeFileSync(
-            npmrcPath,
-            content.replace('verify-deps-before-run=warn', 'verify-deps-before-run=install'),
-          )
-          console.log('  deps: .npmrc verify-deps-before-run → install (worktree-only)')
+      const yamlPath = join(wtPath, 'pnpm-workspace.yaml')
+      const yamlLine = /^verifyDepsBeforeRun:[ \t]*warn[ \t]*$/m
+      const yamlText = existsSync(yamlPath) ? readFileSync(yamlPath, 'utf8') : null
+      const yamlHasKey = yamlText !== null && /^verifyDepsBeforeRun:/m.test(yamlText)
+
+      if (yamlHasKey) {
+        if (yamlLine.test(yamlText)) {
+          writeFileSync(yamlPath, yamlText.replace(yamlLine, 'verifyDepsBeforeRun: install'))
+          console.log('  deps: pnpm-workspace.yaml verifyDepsBeforeRun → install (worktree-only)')
+        }
+      } else {
+        const npmrcPath = join(wtPath, '.npmrc')
+        if (existsSync(npmrcPath)) {
+          const content = readFileSync(npmrcPath, 'utf8')
+          if (content.includes('verify-deps-before-run=warn')) {
+            writeFileSync(
+              npmrcPath,
+              content.replace('verify-deps-before-run=warn', 'verify-deps-before-run=install'),
+            )
+            console.log('  deps: .npmrc verify-deps-before-run → install (worktree-only)')
+          }
         }
       }
     } catch {}
@@ -3273,7 +3307,7 @@ async function cmdCleanup(slug, opts) {
   // Tool-managed drift MUST be excluded here for the same reason merge-back's WIP gate
   // excludes it (see isToolManagedDrift) — and the two gates MUST agree, or atomic
   // merge-back breaks in half: cmdMergeBack squashes successfully, then calls cmdCleanup,
-  // which still counts `.npmrc` as uncommitted and refuses. Result is
+  // which still counts that file as uncommitted and refuses. Result is
   // "absorbed into main (cleanup skipped/failed)" on **every** lane, each needing a manual
   // --force-discard-uncommitted to finish (<consumer-a>'s 4 lanes, 2026-07-26).
   //
@@ -3456,7 +3490,24 @@ async function cmdCleanup(slug, opts) {
 async function cmdMergeBack(slug, opts: WtOptions = {}) {
   if (!slug) {
     throw new Error(
-      'Usage: wt-helper merge-back <slug> [--dry-run] [--auto-stash] [--include-worktree-wip] [--no-cleanup] [--noop-if-missing] [--skip-pre-sync]',
+      'Usage: wt-helper merge-back <slug> [--dry-run] [--auto-stash] [--include-worktree-wip] [--no-cleanup] [--noop-if-missing] [--skip-pre-sync] [--work-done --verification <one line>]',
+    )
+  }
+  // Refused before anything moves, not after the squash: a merge-back that lands and *then*
+  // discovers it cannot file the claim leaves the caller with no way to re-run it — the worktree
+  // and branch are gone by the end of this function. Same fail-closed shape as
+  // `herdr-session-handoff.ts --work-done` (a completion claim with no evidence is worse than
+  // none) and as `flow done`'s own refusal; three doors into `work.done`, one gate.
+  if (opts.workDone && !opts.verification?.trim()) {
+    throw new Error(
+      "merge-back --work-done requires --verification '<how it was verified>': a completion claim " +
+        'with no evidence is worse than none (rules/core/flow-work-tracking.md § R1)',
+    )
+  }
+  if (opts.workDone && opts.dryRun) {
+    throw new Error(
+      'merge-back --work-done is not accepted with --dry-run: a dry run lands nothing, so there is ' +
+        'nothing for the claim to be about',
     )
   }
   const cleanSlug = makeSlugSafe(slug)
@@ -4346,6 +4397,95 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
     )
   }
 
+  // TD-684 Phase 0 — merge-back is one of the three closing rituals where an agent is already
+  // declaring a piece of work finished while holding the R1 evidence for it, so this is where
+  // `work.done` costs nothing extra to file. Without it the funnel starves upstream: every
+  // acceptance UI improvement downstream has nothing to show, because the terminal state was
+  // never pressed (2026-08-28 measured: 「已收 0」 on a 112-work-item spine).
+  //
+  // Opt-in, copying `herdr-session-handoff.ts --work-done` rather than inventing a second shape.
+  // The reason is the same one that flag documents: landing one worktree branch is a strictly
+  // smaller claim than "the work this branch belonged to is done" — a work item legitimately
+  // spans several worktrees, and making it automatic would upgrade every merge-back into a
+  // completion claim nobody made.
+  //
+  // The verification the caller typed is kept verbatim and the observed landing facts are
+  // APPENDED, never substituted: the tool knows things the caller cannot restate honestly
+  // (whether the squash actually landed, whether the index is still uncommitted), and a reader
+  // deciding whether to accept needs both halves. The staged-pending count in particular is the
+  // one fact that would otherwise make this a premature done — merge-back stages but does not
+  // commit, so `absorbed into main` is not yet `committed on main`.
+  //
+  // Fail-open by construction, for the same reason as `cmdAdd`'s openWork: `vendor/scripts/flow/`
+  // is clade-home-only while wt-helper itself is projected into every consumer, so the import is
+  // dynamic and every failure path is a warn. NEVER let this gate the landing — main's index is
+  // already written by the time we get here.
+  if (opts.workDone) {
+    const ambientWorkId = process.env.CLADE_WORK_ID?.trim()
+    if (!ambientWorkId) {
+      console.warn(
+        `merge-back: --work-done skipped — no ambient CLADE_WORK_ID.\n` +
+          `             NEVER mint a work id here just to have somewhere to file the claim: a work\n` +
+          `             item born at its own completion is a row on /flow nobody ever needed.`,
+      )
+    } else {
+      const observed = [
+        absorbedByOtherPath
+          ? `already in main via another path (nothing squashed)`
+          : `squash landed on main`,
+        cleanupDone ? 'worktree cleaned' : 'cleanup skipped/failed',
+        stagedPaths.length > 0
+          ? `${stagedPaths.length} path(s) STAGED, not yet committed`
+          : 'nothing left staged',
+        stashRef ? `blockers stashed as ${stashRef}` : null,
+      ].filter(Boolean)
+      try {
+        const { markWorkDone } = await import(new URL('./flow/emit.ts', import.meta.url).href)
+        // `substrate` is a closed enum in vendor/signals/schema.json and `git` is the honest
+        // member: the observable act this claim is about is the squash. NEVER invent a
+        // `wt-helper` value here — the validator rejects unknown members, and a rejected write
+        // is silent apart from one stderr line (2026-08-28: the first cut of this code did
+        // exactly that and still printed "filed"). `actor` is the free-form field; the tool name
+        // belongs there.
+        const res = markWorkDone({
+          work_id: ambientWorkId,
+          verification: `${opts.verification.trim()} — merge-back ${cleanSlug}: ${observed.join('; ')}`,
+          verifiedBy: 'wt-helper',
+          actor: opts.agent ?? 'wt-helper',
+          substrate: 'git',
+          payload: {
+            slug: cleanSlug,
+            absorbed_by_other_path: absorbedByOtherPath,
+            cleanup_done: cleanupDone,
+            staged_pending: stagedPaths.length,
+            stash_ref: stashRef ?? null,
+          },
+          cwd: consumerRoot,
+        })
+        // MUST branch on `written`. `markWorkDone` returns `{written:false, errors}` on a
+        // validator refusal instead of throwing, so a bare call followed by a success line
+        // reports a claim that was never filed — indistinguishable, in the terminal, from one
+        // that was.
+        console.log('')
+        if (res?.written) {
+          console.log(`merge-back: flow work.done filed for ${ambientWorkId}`)
+          console.log(
+            `  Acceptance is a human's: node vendor/scripts/flow/flow.ts accept ${ambientWorkId} --reason '<why>'`,
+          )
+        } else {
+          console.error(
+            `merge-back: flow work.done REFUSED for ${ambientWorkId} — ` +
+              `${(res?.errors ?? []).map((e) => e.code ?? String(e)).join(',') || 'unknown'}.\n` +
+              `             The landing itself is unaffected; the claim was not filed. File it by hand:\n` +
+              `             node vendor/scripts/flow/flow.ts done ${ambientWorkId} --verification '<...>'`,
+          )
+        }
+      } catch (e) {
+        console.error(`note: flow work.done skipped (fail-open): ${e?.message ?? e}`)
+      }
+    }
+  }
+
   if (stashRef) {
     console.log('')
     console.log(`Reconcile blocker stash for '${cleanSlug}':`)
@@ -4529,6 +4669,7 @@ async function main() {
     '--baseline-stash-name',
     '--show',
     '--task-summary',
+    '--verification',
   ])
   const flags = new Set()
   const values = {}
@@ -4574,6 +4715,8 @@ async function main() {
     baselineStashName: values['--baseline-stash-name'],
     show: values['--show'],
     taskSummary: values['--task-summary'],
+    workDone: flags.has('--work-done'),
+    verification: values['--verification'],
   }
 
   switch (sub) {
@@ -4671,6 +4814,18 @@ async function main() {
       console.error('    --dry-run               preview blockers + worktree WIP without acting')
       console.error(
         '    --auto-stash            stash main blockers as wt-merge-block/<slug>/<ISO>',
+      )
+      console.error(
+        '    --work-done             file a flow `work.done` claim for ambient $CLADE_WORK_ID',
+      )
+      console.error(
+        '    --verification <line>   required with --work-done: how it was verified. The observed',
+      )
+      console.error(
+        '                            landing facts (squashed / cleaned / staged-pending) are',
+      )
+      console.error(
+        '                            appended to it, never substituted. Refused with --dry-run.',
       )
       console.error(
         '    --include-worktree-wip  auto-amend uncommitted worktree edits into branch HEAD',

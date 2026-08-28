@@ -152,6 +152,32 @@ if [[ "$MODE" == "workflow" ]]; then
     IS_HEAD=$([[ "$COMMIT" == "$(git rev-parse HEAD 2>/dev/null)" ]] && echo yes || echo no)
     echo "[watch] target commit ${COMMIT:0:8} = \"$SUBJECT\" (tags: ${AT_TAGS:--}, is-HEAD: $IS_HEAD)"
   fi
+  # ---- pre-flight：先確定 workflow 識別字串真的存在 ----------------------------
+  # `gh run list -w X` 只認 workflow **檔名**（ci.yml）或**逐字 display name**（name: 欄位）。
+  # display name 是自由文字、與檔名無關，所以憑印象填一個像 "CI" 的簡稱是常見失手。
+  # 那種錯**永遠不會自己好**，但下面的迴圈把 gh 的非零 exit 一律送進 bump_err（那是為 API
+  # 抖動設計的重試路徑），於是重試 3 次後回一個通用 UNAVAILABLE，訊息與「gh 掛了 / 沒授權」
+  # 同形，讀的人會去查 gh 狀態而不是回頭看自己傳了什麼字串
+  # （2026-08-28 <consumer-b> v1.272.0 實證：傳 "CI"，實際檔名 ci.yml / display name "CI / Deploy"）。
+  # 這裡把不可恢復的錯誤從重試路徑移出去，並讓失敗訊息自帶正確答案。
+  # jq 缺席時整段跳過：沒有 jq 就判不出名稱在不在，而「判不出」MUST fail-open 交回下面的
+  # 迴圈——若照舊往下走，`jq -e` 的非零 exit 會被讀成「名稱不存在」，把**正確**的名稱擋掉，
+  # 而那個錯誤訊息會信誓旦旦地列出一份它其實沒解析成功的清單。
+  # `--all -L 200`：gh 預設只列 active 且筆數有上限，workflow 多的 repo 會漏掉合法名稱。
+  WF_LIST=''
+  if command -v jq >/dev/null 2>&1; then
+    WF_LIST=$(gh workflow list ${RARGS[@]+"${RARGS[@]}"} --all -L 200 --json name,path 2>&1) || WF_LIST=''
+  fi
+  if [[ -n "$WF_LIST" ]] && printf '%s' "$WF_LIST" | jq -e 'type == "array"' >/dev/null 2>&1; then
+    if ! printf '%s' "$WF_LIST" | jq -e --arg t "$TARGET" \
+         'any(.[]; .name == $t or (.path | endswith("/" + $t)) or (.path == $t))' >/dev/null 2>&1; then
+      AVAIL=$(printf '%s' "$WF_LIST" | jq -r '[.[] | "\(.name) [\(.path | split("/") | last)]"] | join(", ")' 2>/dev/null)
+      echo "RESULT: UNAVAILABLE (workflow '$TARGET' 不存在；可用：${AVAIL:-<列不出來>}。傳 workflow 檔名最穩，display name 會漂)"
+      exit 2
+    fi
+  fi
+  # gh workflow list 失敗 / jq 缺席 / 輸出不是 JSON 陣列 → fail-open，交給下面的迴圈照舊處理
+
   echo "[watch] resolving run: workflow='$TARGET' branch='${BRANCH:-*}' commit='${COMMIT:-*}' createdAt>=$SINCE"
   while [[ -z "$RUN_ID" ]]; do
     check_deadline

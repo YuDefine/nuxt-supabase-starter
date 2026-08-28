@@ -436,6 +436,8 @@ helper 在單一 Node process 內完成 handoff-scan → repo-local 同目錄 te
 
   **`--run-selfverify` MUST 帶 `--selfverify-cache`**：全套一次 ~26 秒 / ~384KB 輸出，而 2026-08-06～13 的 round 70–75 **六輪 verdict 逐項相同**——每輪重跑換到的資訊量是 0 bit。快取 key =（audit script 內容 + `docs/tech-debt.md` 內容 + git HEAD），輸入不變就回上次結果並標 `cached: true`。實測冷跑 26s → 熱跑 **0.12s**；TD 檔一改立即失效（實測 0/47 命中），不是恆命中。
 
+  **`--run-selfverify` MUST 同時帶 `--selfverify-queue`**：`-until-` 條目的自驗現在也在掃描範圍內（它們的解凍條件先前**沒有任何東西**在評估——轉列那一刻就離開了所有佇列視野）。這個旗標把「probe 輸出跟上次比變了」送進待拍板佇列，**fire-once**：同一個變動只問一次，沒變就完全不出聲，所以它不會製造每輪重報。**NEVER** 因為「這輪 verdict 看起來都一樣」就省掉它——看起來一樣正是它要接的那半，人眼六輪逐項相同的同時 TD-280 的實際輸出已經從 6 none 變成 8 none。快取命中時它自動跳過（拿上一次的結果比基線等於拿基線跟自己比），不必手動判。
+
   **NEVER 改成「N 輪跑一次」**：calendar-based skip 會讓真實改動落在跳過窗口內溜過去，然後搭著 propagate 散到全 registry consumer 才被發現。輸入不變時跳過在數學上無資訊損失，輪次計數跳過不是。**已知邊界**：48 條 probe 有一部分量的是**活狀態**（檔案數、目錄體積），git HEAD 涵蓋 repo 內變動但涵蓋不到 repo 外的環境漂移——所以它是 opt-in，判斷這一輪能不能接受這個邊界是呼叫端的責任。
 
   **`blocked-attended-only` 一律跳過**（unattended）：它的定義就是「本迴圈拿不到出口」，撈進 candidate list 只會每輪重新判定一次再放棄。attended 模式照撈——那正是它等的東西。判準與防濫用見 clade `.claude/rules/local/tech-debt-hygiene.md` § Invariant 12。

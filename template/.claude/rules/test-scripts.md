@@ -131,7 +131,8 @@ Consumer 在 `registry/consumers.json` 標 `improvement_loop_enabled: true` 時�
 
 `lint` / `typecheck` 同理。詳細採用收益 + 快速 diff + anti-pattern：見 `vendor/snippets/clade-gate-package-scripts/README.md`。
 
-採用屬 consumer 自治區（per [[clade-role-and-todo-discipline]]），clade 主線不替 consumer 拆步驟；本 § 僅 advisory pointer 讓 consumer agent 在改 test scripts 時看到該 cookbook。
+採用由 consumer 的 session 決定，clade 稽核命中時 **MUST relay 給它**（per
+[[clade-role-and-todo-discipline]] § Consumer 工作命中時 MUST relay），主線不替 consumer 拆步驟；本 § 僅 advisory pointer 讓 consumer agent 在改 test scripts 時看到該 cookbook。
 
 ## MUST：重寫已包 clade-gate 的 script 時保留前綴
 

@@ -420,4 +420,6 @@ Self-hosted runner 的 working dir 是 `actions/checkout` clone 的乾淨 repo�
 | <consumer-k> | self-hosted, gh-runner-lxc | ❌（仍 `cache: pnpm`） | ❌ | — |
 | <consumer-l> | self-hosted, gh-runner-lxc | ✅ | ✅ | GitHub OIDC + VOID_PROJECT |
 
-<consumer-l> 的 `.github/workflows/deploy.yml` 是 current void.cloud + GitHub OIDC reference；<consumer-i> / <consumer-k> 的遷移屬 consumer 自家工作（clade 只散播標準 + 稽核，不替 consumer 改 workflow）。
+<consumer-l> 的 `.github/workflows/deploy.yml` 是 current void.cloud + GitHub OIDC reference；<consumer-i> / <consumer-k> 的遷移由該 consumer 的 session 執行，clade 稽核命中時 **MUST relay 給它**
+（per [[clade-role-and-todo-discipline]] § Consumer 工作命中時 MUST relay）——散播標準 + 稽核 + 送達是
+clade 的，改 workflow 是它的。

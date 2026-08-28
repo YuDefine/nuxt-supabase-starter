@@ -73,7 +73,9 @@ MUST 抽成具名函式，讓上層函式讀起來是一份目錄而不是實作
 與預定修法。`// oxlint-disable-next-line import/no-cycle` 出現在 diff 裡，`/code-review` 會擋。
 
 **既有 cycle 涉及檔數 > 20 的 consumer** 是唯一的降級情境——這種規模的 cycle 是結構性的，逐檔
-boy-scout 修不動。降級 recipe（consumer 自家 session 執行，clade 不代勞）：
+boy-scout 修不動。降級 recipe（**relay 給該 consumer 的 session 執行**，clade 主線不代勞——per
+[[clade-role-and-todo-discipline]] § Consumer 工作命中時 MUST relay；「不代勞」說的是不親手改，
+**NEVER** 是不送過去）：
 
 ```typescript
 // vite.config.ts —— business overrides 區塊

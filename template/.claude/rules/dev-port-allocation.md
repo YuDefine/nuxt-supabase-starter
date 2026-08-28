@@ -148,7 +148,7 @@ Tunnel hostname 是 **per-consumer 單一資源**（§2.5 的 `<consumer-id>-dev
 | --- | --- |
 | 新 consumer 進 registry | 取下一個未用 +10 號（目前 3000–3100 已用，下一個是 3110；快照，以 registry/consumers.json dev_ports 為準） |
 | 既有 consumer 改 port | 先改 clade registry → publish patch → propagate → 改 consumer 自家 dev script + tunnel port |
-| Audit 報 DRIFT | consumer user 在 consumer 自家 session 改 dev script / tunnel port 對齊 registry；clade 主線不替 consumer 執行 |
+| Audit 報 DRIFT | **relay DRIFT 明細給該 consumer 的 session** 改 dev script / tunnel port 對齊 registry（per [[clade-role-and-todo-discipline]] § Consumer 工作命中時 MUST relay）；clade 主線不代改，但 **NEVER** 只出表就結束 |
 | Audit 報 CONFLICT（兩 consumer 同 port） | clade 主線立即解：選一個 consumer 改用未用 +10 號，registry commit + publish + propagate |
 
 ## 當前分配（snapshot，以 registry 為準）

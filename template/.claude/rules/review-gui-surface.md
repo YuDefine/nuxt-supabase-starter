@@ -439,10 +439,28 @@ jq '.image.shareOfToolResultTokens, .image.shareOfToolResultChars' out.json
    `requestDecision` 在事件被 validator 拒收時**照樣回一個 handle**。只信 handle 的結果是每輪
    無聲重試、佇列永遠是空的，而 log 說一切正常。`syncDecisions` 的 `unwritten` 欄位是這條的實作。
 
-6. **問卷模式只收第 1 類，且只在球在人這邊時收。** `/decisions` 預設的問卷 view 一題一畫面
-   連續作答，收進牌堆的 **MUST** 只有 `category === 'ruling'` 且 `awaiting_clarification`
-   為 false 的題。這是上面 NEVER 第 3 條在新 view 的同一條線：第 2/3/4 類是狀態不是問題，
-   而球在 agent 手上的題現在作答等於回答一個自己剛說看不懂的問題。
+6. **問卷模式只收可回答的兩類，且只在球在人這邊時收。** `/decisions` 預設的問卷 view 一題一
+   畫面連續作答，收進牌堆的 **MUST** 只有 `category` 是 `ruling` 或 `review`、且
+   `awaiting_clarification` 為 false 的題。這是上面 NEVER 第 3 條在新 view 的同一條線：其餘三桶
+   回不掉，而球在 agent 手上的題現在作答等於回答一個自己剛說看不懂的問題。
+
+   **判準是「回一則短訊結不結得掉」，NEVER 是「可不可逆」、也 NEVER 是「重不重要」。**
+   2026-08-28 之前 `review` 被歸在 `irreversible`（現 `human-action`），於是 7 條做完等驗收的
+   工作在每個渲染端都印「這條是狀態不是問題」，躺了 10.8–16.6 小時；同一頁的頁首還同時顯示
+   「卡在人類 gate 的 0 件」。名單要加新 category 時**回到那個判準**，NEVER 照桶名的語感歸類。
+
+   **被退回補件的可回答列 MUST 在問卷 view 留下計數。** 它們因 `awaiting_clarification` 離開
+   牌堆，又因為「可回答」不算進 `readonlyCount`，兩個既有計數都數不到——沒有 `handedBackCount`
+   那一行，自動退回會讓佇列自己清空而不說清空到哪去，那是「我看不懂我要幹嘛」的另一種形狀。
+
+   `review` 另有一條前置：**缺證據時（`missing-evidence` 未清）MUST NOT 渲染可按的「通過」**——
+   一顆按得下去的通過配上沒有東西可看，是在請人蓋一個他無法負責的章。
+
+   **措辭綁的是事實，NEVER 綁 flag。** 寫成「`needs_evidence` 為 true 時不渲染」是一句更弱的
+   話：它可以靠**讓 flag 變 false** 來滿足。實際發生過——`needsEvidence()` 一度借用
+   `needsOptions` 的 clarification guard，於是條目被退回補件的那一刻 flag 就落下，規約字面上
+   滿足了，畫面上長出一顆可按的通過配零證據。ruling 側同一個 guard 無害只是因為它的 radio
+   蓋在空的 options 陣列上，而 review 的通過／退回是掃描端**永遠**合成的。
 7. **鎖是兩種強度，畫面 MUST 說出是哪一種。** 問卷點下選項就寫檔，沒有送出前的預覽——防誤觸
    的東西換成了「按錯了改得回來」（`decision.revise`）。所以答案能不能改就是這個交換的全部：
    - `pickup`：有 agent 跑過 `flow answers --claim` 說它接手了。**硬鎖，NEVER 提供覆寫**
@@ -479,7 +497,7 @@ jq '.image.shareOfToolResultTokens, .image.shareOfToolResultChars' out.json
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | `/decisions` 佇列出現**新的** `ruling` 項。**只推第 1 類**——其餘三類用最吵的管道送唯讀清單，結果是使用者關掉推播。首次啟動（seen 檔不存在）**NEVER 推播**，只種下當前 span id：實測 fleet 首掃 38 件，當成新項會一次送出三十幾則 |
+| 觸發條件 | `/decisions` 佇列出現**新的**可回答項（`ruling` 或 `review`）。**只推可回答的**——三個狀態類用最吵的管道送唯讀清單，結果是使用者關掉推播。首次啟動（seen 檔不存在）**NEVER 推播**，只種下當前 span id：實測 fleet 首掃 38 件，當成新項會一次送出三十幾則 |
 | 消費端 | Charles 的行動裝置（Web Push）。點通知直接落在 `/decisions#<span_id>` 那一題 |
 | 載入路徑 | 本節（`rules/core/review-gui-surface.md`，paths-gated 於 `vendor/scripts/flow/decision*.ts`）；實作在 `vendor/review-gui-web/server/plugins/decision-watch.ts` |
 

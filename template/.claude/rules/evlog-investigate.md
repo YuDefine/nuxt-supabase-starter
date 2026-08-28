@@ -117,7 +117,9 @@ Cookbook 絕對路徑：`~/offline/clade/vendor/snippets/evlog-investigate/`（p
 若 consumer 的 prod **沒有可查詢的 durable drain**（只有 `createFsDrain` —— Workers VFS 不 durable、FS reader 在 Workers 也讀不到；或根本沒 drain），這條調查協定**無法執行** —— 寫再多 wide event 也撈不出來。
 
 - 這是**前提失敗**，不是 nicety：`evlog-adoption-audit.ts` 的 investigation-readiness 欄位會把這類 consumer 標 ⛔ red。
-- 補強（接 Sentry / Axiom / OTLP / Postgres durable drain）屬 consumer 自治區，走 `docs/d-pattern-master-plan.md` 各 consumer 的 prod-drain plan + `evlog-adoption` rule 的 drain pipeline 規範。clade 主線只稽核 + 出表，不替 consumer 接 drain。
+- 補強（接 Sentry / Axiom / OTLP / Postgres durable drain）屬 consumer 自治區，走 `docs/d-pattern-master-plan.md` 各 consumer 的 prod-drain plan + `evlog-adoption` rule 的 drain pipeline 規範。clade 主線稽核 + 出表 + **把 findings relay 給該 consumer 的 session**（per
+[[clade-role-and-todo-discipline]] § Consumer 工作命中時 MUST relay），不替 consumer 接 drain。
+標 ⛔ red 而沒有 relay 的稽核，下一輪還會標同一個 ⛔。
 
 ## 與寫入側 rule 的分工
 

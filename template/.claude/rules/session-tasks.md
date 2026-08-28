@@ -156,7 +156,7 @@ pgrep -af 'claude --print.*[-]-runner-child'  # 它的當輪 child（runner 正�
 | **前景 agent session** | 第 1 步命中 pane 且 `agent_status` 隨時間變動、第 3 步無命中 | `SendMessage` ／ `herdr agent prompt` 主動協調（請它先 commit、或告知你要 publish）。對方寫入在數十秒內且看得出正要落地 → **等它落地**，等待本身就是動作 |
 | **人類正在編輯** | 第 1、3 步都無命中，但檔案 mtime 持續更新 | 代為分組 commit（`git commit --only -- <paths>`）；半成品訊號命中才 stash |
 
-判出是哪一種之後就**自己執行對應動作**，**NEVER** 把已經判得出來的並行爭用用 `AskUserQuestion` 退回給 user。
+判出是哪一種之後就**自己執行對應動作**，**NEVER** 把已經判得出來的並行爭用退回給 user。**退回的門有三個，三個都不通**：`AskUserQuestion`、`flow ask`、herdr `--complete blocked --decision`。門長什麼樣不改變它是退回——2026-08-27 <consumer-a> 那題（「兩個 session 在同一個 worktree 跑同一批 dep-upgrade，要留哪一個？」）走的是第三個門，於是它在 `AskUserQuestion` 的 NEVER 底下讀起來像沒被禁。**探測與協商是 agent 的工作，只有「談過了、對方怎麼回」之後仍談不攏的那一題才是人的**，而那題的 `--decision` MUST 寫明已探測、對方怎麼回。
 
 **「等」是上表三個動作之一，NEVER 是「判不出來」的同義詞。** 2026-08-20 於 `~/offline/clade` 實測：merge-back dry-run 報 `docs/tech-debt.md` dirty，第 1 步命中一個前景 session、`git diff` 是別人 16 秒前新增的 TD entry 且缺 `## Restart brief`（半成品訊號命中）——正解是**等它自己 land**（實測 10 秒），代 commit 會把半成品寫進 history、stash 會奪走它正在寫的檔。寫「等」時 **MUST 指名等到哪一個可觀察事件**，**NEVER** 只寫「等對方收手」。
 
@@ -174,7 +174,7 @@ pgrep -af 'claude --print.*[-]-runner-child'  # 它的當輪 child（runner 正�
 | 「我 SendMessage 問它一下就好」（對方是 runner 時） | runner child 是 `claude --print`，沒有 pane 也不讀訊息；那個 idle pane 收到訊息不會轉達給背景 process |
 | 「等對方收手就好」 | 對 unattended runner 是等數小時。「等」MUST 綁一個可觀察事件才算動作 |
 
-**Red Flags（發現自己在寫這幾句就停下來跑 Step 0）**：正要列出「等對方收手／stash 強推／我去問那個 session」這組選項；正要用 `AskUserQuestion` 問並行爭用怎麼辦；正要在「對方是誰」還是未知數的狀態下往下決策。
+**Red Flags（發現自己在寫這幾句就停下來跑 Step 0）**：正要列出「等對方收手／stash 強推／我去問那個 session」這組選項；正要用 `AskUserQuestion` 問並行爭用怎麼辦；正要把「哪個 session／pane／worktree 該留下」寫進 `flow ask --question` 或 `--complete blocked --decision`；正要在「對方是誰」還是未知數的狀態下往下決策。
 
 **爭用訊號帶得出 pid 時（advisory lock、process 訊息）走 pid，NEVER 退回 cwd 過濾**：第 1 步的 cwd 前綴在同一 repo 同時有多個 pane 時過濾不出唯一解，而 pid 經 `ps` 祖先鏈直達 `claude … --session-id`，是精確對映。做法與「持有者正在跑同一條冪等流程時搭它的車」見 [[pitfall-pipeline-lock-contention-raced-instead-of-probed]]。
 

@@ -467,7 +467,10 @@ if [ -f "$TASKS_FILE" ]; then
   if [ "$HAS_MIGRATION_TASK" -gt 0 ] && [ "$HAS_TYPES_TASK" -eq 0 ]; then
     ENUM_HINT=0
     if [ -d "$SPECS_DIR" ]; then
-      ENUM_HINT=$(grep -rciE 'enum|new type' "$SPECS_DIR" 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')
+      # `|| true` 不可省：本檔是 `set -euo pipefail`，而 grep 零命中回 exit 1、pipefail 讓整條
+      # pipeline 跟著回 1，於是這個指令替換會直接殺掉整支 script —— 死在 Check 5 中途、
+      # 完全沒有輸出、Check 6 之後一條都沒跑。同檔其他 grep 都帶這個守衛，只有這行漏了。
+      ENUM_HINT=$(grep -rciE 'enum|new type' "$SPECS_DIR" 2>/dev/null | awk -F: '{s+=$2} END {print s+0}' || true)
     fi
     if [ "$ENUM_HINT" -gt 0 ]; then
       FINDINGS+=("tasks 有 migration 但缺 ${SUX_TYPES_PRIMARY} 同步 task — spec 提到 enum / type 擴張，tasks 沒列對應更新任務。
