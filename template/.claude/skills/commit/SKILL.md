@@ -26,7 +26,11 @@ $ARGUMENTS
 node .claude/scripts/commit-lock.mjs acquire
 ```
 
-失敗（exit 1）代表另一個 session 正在跑 `/commit` → **停下**，向使用者回報鎖資訊，**不要**自行 `rm` 清鎖或重試。
+失敗（exit 1）時**照它印出的「處置」段做**——那段是依鎖上的持有者身分算出來的、由上往下第一個成立的動作，且每一列都是本 session 自己做得到的：herdr pane 對話 → `SendMessage` → 等 stale 自動清 → 才輪到回報 user。
+
+**NEVER 一撞鎖就問 user。** 使用者要的是「鎖上看得到持有者是誰、怎麼聯絡」然後自行協商；把鎖資訊原樣貼給 user 請他裁決，只在腳本自己判定「無從對話」（鎖上沒有 session id）那一格才成立。**NEVER** 自行 `rm` 鎖檔繞過。
+
+腳本已自動處理的兩格，撞到時不必做任何事：**本 session 的遺留鎖**（session id 相符，`/commit` 被中斷留下的）會自動回收；**stale 鎖**（超過閾值）也會自動清。所以「PID 看起來死了」**NEVER** 是清鎖的理由——每個 Bash tool call 都換 pid，pid 從來就判不出存活，判據是 session id。
 
 成功後此 session 取得獨占權，直到最後一步釋放。**中斷處理**：若 `/commit` 流程中途失敗 / 使用者中斷，仍**必須**在終止前呼叫 `node .claude/scripts/commit-lock.mjs release`；漏釋放的鎖會在 30 分鐘後被下次 acquire 自動清除（可用 `COMMIT_LOCK_STALE_MINUTES` 調整）。
 
