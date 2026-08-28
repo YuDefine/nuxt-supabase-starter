@@ -115,6 +115,32 @@ try { src = readFileSync(routeFile, 'utf8') } catch (err) {
 
 > **為什麼測試接不住**：現有測試測的是 graceful degradation 的**結果**，不是 degradation 有沒有**留下痕跡**。「回 null 不 throw」在單元測試裡看起來永遠是對的——那正是它通過的原因。要接住得對每個 `catch → 空值` 點注入失敗，斷言 diagnostic 存在。（per [[pitfall-silent-null-renders-failure-as-absence]]）
 
+## 型別宣告 NEVER 代替驗證：把假設搬家不等於查證（MUST）
+
+**核心命題**：把未經驗證的形狀假設從 consume site 移到宣告處（`as unknown as X` → `.overrideTypes<X>()`、
+`satisfies`、手寫 `interface`），會讓靜態檢查由紅轉綠，**而驗證的總量是零**。搬完之後看起來像已治理，
+這正是它比原本那個 `as unknown as` 更危險的地方——原本那個至少長得可疑。
+
+**每一次**把型別從 consume site 搬到宣告處時，**MUST** 先對那個型別的**每一個**欄位查出執行期實際形狀，
+不是只查「看起來可疑的那幾個」。查不到就 **NEVER** 宣告——留著原本的斷言，它至少誠實。
+
+最常踩的一格是 **PostgREST embed 的基數**：多對一執行期是**物件**，一對多才是**陣列**。
+`overrideTypes` 是純編譯期的——宣告成陣列，TypeScript 只會忠實地要求 consume site 補 `[0]`，
+而 `物件[0]` 恆為 `undefined`，後面每一個 `?.` 都乖乖吞掉它。
+
+- 判基數的唯一決定性依據是 migration 的 `REFERENCES`（FK 欄位長在哪一張表上）。
+  **NEVER** 從既有型別、變數命名或複數形推——generated types 裡一對多關聯常是陣列，形狀相近、肉眼難分
+- 查法、四條 NEVER、override 型別的正確寫法：`~/offline/clade/vendor/snippets/postgrest-embed-cardinality/`
+
+**NEVER 把「typecheck 0 error + doctor 100/100 + 測試全綠」讀成這批改動安全**——這幾道關卡對
+「宣告與執行期形狀不一致」全部結構性盲：typecheck 依你的宣告推導、doctor 檢查的是有沒有 chained
+assertion 而不是宣告的形狀對不對、既有測試斷言的是「回應有回來」而不是「回應裡有東西」。
+它們同時綠不是幾個獨立證據，是同一個盲點的幾份副本。
+
+> 2026-08-28 實證（[[pitfall-overridetypes-declares-many-to-one-embed-as-array]]）：一次 111 檔的
+> 機械修正把 5 檔 12 處多對一 embed 宣告成陣列，員工／專案／合約／收款人欄位靜默清空，
+> 其中一條可能讓離職後月份仍被納入薪資計算，而上述四道關卡同時綠。
+
 ## CLI script 的 stdout 收尾：會被 pipe 消費就 MUST 等 flush（MUST）
 
 **核心命題**：Node 的 `process.stdout` 導向 **pipe** 時是非同步寫入、導向**檔案**時是同步寫入。

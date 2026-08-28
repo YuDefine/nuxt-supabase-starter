@@ -47,7 +47,7 @@ tasks/
 
 ### 建檔的同一步順路鑄 work id（MUST）
 
-建完 tasks 檔的同一步 **MUST** 讓這件事在 /flow 上有名字：
+建完 tasks 檔的同一步 **MUST** 讓這件事在 /board 上有名字：
 
 ```bash
 node ~/offline/clade/vendor/scripts/flow/flow.ts open <slug> \
@@ -60,7 +60,7 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts open <slug> \
 正是 79% 事件掛在 `orphan-` 名下的成因（clade 2026-08-27 實測）。
 
 鑄名 **fail-open**：clade home 不在、node 不在、指令非 0 exit，都**NEVER** 擋建檔或擋開工——
-照常做事，這件事在 /flow 上叫 `未命名工作` 而已。
+照常做事，這件事在 /board 上叫 `未命名工作` 而已。
 
 權威的對應由 `work.open` 的 `origin_ref: tasks:<路徑>` 承載——spine 指向 tasks 檔，這個方向由
 工具在 emit 當下寫入、append-only。反方向的檔頭 `work_id:` 是**選填索引**，維持選填的理由與

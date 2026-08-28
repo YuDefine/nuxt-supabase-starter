@@ -3,7 +3,7 @@ description: flow spine 的 work 生命週期契約——一件 work 何時誕�
 paths:
   - 'vendor/scripts/flow/**'
   - '.clade/flow/**'
-  - 'vendor/review-gui-web/pages/flow.vue'
+  - 'vendor/review-gui-web/pages/board.vue'
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -106,7 +106,7 @@ Local edits will be reverted by the next sync.
 | work 類型 | 驗收者 | 怎麼落 spine |
 | --- | --- | --- |
 | `notion:` origin | **客戶**（board 狀態欄本來就是他們的驗收介面） | `notion-board reconcile` 讀到客戶側狀態進終態 → emit `work.accept {accepted_by: 'customer', reason: <狀態值>}` |
-| 其餘全部（`td:` / `tasks:` / `handoff:` / `im:`） | 人，經 /flow 驗收按鈕或 `flow accept <id> --reason` | `reason` 必填 |
+| 其餘全部（`td:` / `tasks:` / `handoff:` / `im:`） | 人，經 /board 驗收按鈕或 `flow accept <id> --reason` | `reason` 必填 |
 
 `work.accept` / `work.drop` **NEVER** 由 agent 代按。上表每一格都綁在一個已經有人在跑的動作上——這是它與 work-loop `decisions{}` 那個 39 筆全 null 的 `answeredAt` 欄位的唯一差異：欄位存在不等於有人負責填它。
 
