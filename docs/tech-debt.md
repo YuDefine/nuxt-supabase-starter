@@ -23,6 +23,7 @@
 | TD-009 | 參考 app 仍釘在停更的 `@onmax/nuxt-better-auth`          | mid      | done   | 2026-08-24         | —     |
 | TD-010 | 參考 app 的 email 登入被自家 nuxt-security CSRF 擋在 403 | mid      | open   | 2026-08-24         | —     |
 | TD-011 | clade 投影的 auth rule / skill 仍寫舊套件名             | low      | open   | 2026-08-24         | —     |
+| TD-012 | `template/package.json` 的 `lint` script guard 吃不掉附加參數 | mid      | open   | 2026-08-29         | —     |
 
 ---
 
@@ -739,3 +740,43 @@ gate 在 server middleware，與 auth 模組版本無關 —— 舊 `@onmax` 版
 
 **NEVER** 在 consumer 端直接改這幾個檔 —— 下次 `hub:sync` 會被蓋回去。
 
+---
+
+## TD-012 — `template/package.json` 的 `lint` script guard 吃不掉附加參數
+
+**Status**: open
+**Priority**: mid
+**Discovered**: 2026-08-29 — TD-685 heavy gate guard 回歸修正時發現同形狀殘留
+**Location**: `template/package.json`（`lint` script）
+
+### Problem
+
+`lint` 目前寫成裸 `if … fi` guard：
+
+```
+"lint": "if test -x .clade/bin/clade-gate; then .clade/bin/clade-gate run lint -- vp lint --deny-warnings; else vp lint --deny-warnings; fi"
+```
+
+pnpm 把使用者的附加參數接在整條 script 尾端，實際執行的是 `… fi <args>`，shell 直接回
+`sh: 1: Syntax error: word unexpected`。因此 `pnpm lint <file>`、`pnpm lint --fix` 一律炸掉；
+不帶參數的 `pnpm lint` 才正常。
+
+`typecheck` / `test` / `build` 的同一個缺陷已於 commit `dd2b122e` 修掉；`lint` 因該次工作的
+scope 邊界（「只改 typecheck / test / build，不要動別的 script」）刻意留下。
+
+### Fix approach
+
+套用與 `dd2b122e` 相同的形狀：
+
+```
+"lint": "sh -c 'if test -x .clade/bin/clade-gate; then exec .clade/bin/clade-gate run lint -- vp lint --deny-warnings \"$@\"; else exec vp lint --deny-warnings \"$@\"; fi' --"
+```
+
+三個要點缺一不可：整條包進 `sh -c '…' --`（結尾 `--` 讓 pnpm 的參數變成 `sh` 的位置參數）、
+兩個分支都要 `"$@"`、用 `exec` 讓 exit code 與訊號穿透。
+
+### Acceptance
+
+1. `pnpm lint --help` 看得到 `vp lint` 自己的輸出，且不是 `sh: Syntax error`
+2. `pnpm lint` 不帶參數仍 exit 0
+3. lint 失敗時 exit code 為非零（`exec` 穿透驗證）
