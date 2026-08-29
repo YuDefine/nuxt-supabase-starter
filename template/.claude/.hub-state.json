@@ -23,7 +23,7 @@
     "rules/coupling-cohesion.md": "f053a06cab3d944e",
     "rules/db-preview-env.md": "73fe958523f5663e",
     "rules/db-reset-coordination.md": "2b78367fcbaee587",
-    "rules/decision-authoring.md": "bda1d38b20db1649",
+    "rules/decision-authoring.md": "f6aca6efe62d5419",
     "rules/deploy-env-identity.md": "ef4a0470d92557d7",
     "rules/dev-port-allocation.md": "dfad3724b6a33f5e",
     "rules/dev-tunnel-convention.md": "3fe8f6c505f22e77",

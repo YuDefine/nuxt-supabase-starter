@@ -136,6 +136,43 @@ tech-debt 的 `### 需要 Charles`、tasks 的 `deferred-user-only`。寫進那�
 > 規約承諾可回答、實作交付不可回答，兩邊各自自洽了好幾個月。**改分桶語義時 MUST 同時改這張表
 > 與 `categoryOfHeading()`**——它們是同一件事的兩半，只改一半不會有任何東西報錯。
 
+## 「通過」有兩種，NEVER 讓佇列那一種代替另一種
+
+同一條 change 有兩個各自獨立的通過，它們的**終點不同**：
+
+| 哪一種 | 誰記錄 | 一句「通過」結掉的是什麼 |
+| --- | --- | --- |
+| 佇列的 `Ready for review` → `通過` | spine 上的 span，答完那條就離開 `\my` / `/decisions` | **方向 OK、可以進 review inbox** |
+| `tasks.md` 的 `[review:ui]` checkbox | 那個 checkbox 自己，經 /review inbox 寫回 | **人真的在瀏覽器把那一頁開起來看過了** |
+
+**答佇列 NEVER 等於驗收。** 2026-08-29 <consumer-a> 實測：四條 ready-for-review 全部已被答
+「A. 通過」（span `c99f0d2acd529afc` / `07635ab2db246bc5` / `8bef7118645c7121` /
+`5ad93c75982be99c`），而 `retire-legacy-employee-route-cluster` 的 9 項 `[review:ui]`
+（`#1 /my/clock` 到 `#9 /my/salary`）一項都沒勾。答完那條就從佇列消失，9 項留在
+`tasks.md`，**沒有任何畫面會再提醒任何人**——真正 user-only 的驗收工作靜默消失了。
+
+所以寫 `Ready for review` 條目時：**條目指向的 change 若還有沒勾的 `[review:ui]`，那條
+NEVER 是佇列的題。** 掃描端會偵測到並掛 `belongs-on-review`，且**不**替它合成 通過／退回
+——一鍵通過正是讓瀏覽器驗收靜默消失的那個按鈕。條目照樣留在佇列（**NEVER** 擋掉：擋在
+佇列外會讓做完的工作徹底隱形，同上一節的理由），但它渲染成沒有選項的條目，lint 說明那條
+的 verdict 在哪裡。
+
+**偵測讀的是 checkbox，NEVER 是散文。** 舊版只認「條目本文同時出現『人工檢查』四個字 ＋
+change 名字」——那問的是**作者有沒有打那三個字**，而上面四條全部沒打、全部逃掉。判準
+MUST 是 `openspec/changes/<name>/tasks.md` 裡還有幾項未勾的 `[review:ui]`：那是「這件事
+驗了沒」本身，不是它的代理。判定器 `changesWithOpenManualReview()`
+（`vendor/scripts/flow/decision-sources.ts`）。
+
+**NEVER 把未勾的 `[review:ui]` 各開一條進佇列。** 一條 change 的 17 項瀏覽器驗收是**一趟**
+差事，拆成 17 列就是 17 則推播問同一件事——同 `scanTasks` 對 deferred 子步驟已經寫明的理由。
+它們的家是 /review inbox，不是這裡。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 條目指向的 live change 有 ≥1 項未勾 `[review:ui]` → `belongs-on-review` lint ＋ 不合成 通過／退回。**warn-only，不 block** |
+| 消費端 | 寫該條目的 agent（看到 lint 就把它移回 /review 流程）＋ `/decisions` 與 `flow pending` 上的 Charles（看到沒有通過鍵就知道要去 /review 逐條驗） |
+| 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`） |
+
 ## 🟡 / ✅ 標記
 
 `- 🔴` / `- 🟡` 是「還沒解決」；`- ✅` 與 `- [x]` 是已完結，掃描器跳過。**答案落檔不會刪掉來源
