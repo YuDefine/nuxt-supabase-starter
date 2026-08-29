@@ -214,6 +214,37 @@ cross-consumer 集中模式，只從 clade home 起，該 cwd 約束對 agent �
 - ❌ 手寫 `<consumer-id>` 靠印象——registry 是唯一真相源
 
 
+## 判定後的游標落點（hard rule）
+
+判定送出成功後 review-gui **MUST** 把游標落在**同一條 change 的下一項**；同 change 判完才退到
+同專案的其他 change；整個專案判完才輪到 inbox 第一項。
+
+這條之所以要寫成 rule：cross mode 的 inbox 是**跨 consumer 串接**的單一陣列，第 0 項屬於哪個
+consumer 純粹由排序決定。判定完的那一項會從 inbox 消失，所以「保住原本的游標 id」必然失敗——
+舊實作在那個時刻直接落到 index 0，於是判完 <consumer-b> 一項就跳去 <consumer-a> 的第一條，而畫面上完全看不出
+換了專案（2026-08-29 回報）。使用者以為自己還在同一條 change 裡，對著別家的 item 按下一個通過。
+
+### MUST
+
+1. 落點候選 **MUST 在送出寫入之前**、以當下的 `items` 算好（`successorCandidates()`）。
+   寫入是 await 的，那段期間 SSE domain event 或 visibilitychange 都可能觸發 `loadInbox()`
+   把 `items` 換掉；換掉之後再算候選只會拿到空陣列，游標又落回 index 0。
+2. 判定成功後 **MUST 先用本地清單前進**，inbox reconcile 丟背景。`/api/inbox` 要掃每張 change
+   的 detail（實測 3.5 秒起跳、尖峰 20 秒以上），await 它等於把那段時間整個掛在「通過」按鈕的
+   loading 上——使用者看到的是「寫入很慢」，而寫入其實早就回來了。
+3. 判定成功 **MUST 給 toast**，且 toast 標題 **NEVER 與常駐「上一項已…／改回來」列同字**：
+   同字時 `getByText` 會一次命中 inline 段落、toast 標題與 aria-live 鏡像三個節點，Playwright
+   strict mode 直接判違規。文案上兩者也該分工——toast 說「剛才發生了什麼」，常駐列說
+   「哪一項還可以改回來」。
+
+### NEVER
+
+- ❌ 判定後把游標交給「重載完 inbox 再看看落在哪」——那不是落點策略，是把落點交給排序決定
+- ❌ 在 `advancePast()` 之類的本地前進裡動 `waiting`：它是 `countWaitingChanges()`，數的是
+  **bucket 不在 user-ball 的 change 數**（球在 Claude 那邊的條數），跟 inbox 有幾個 item 無關。
+  判定一項就減一會報出假數字，而且 issue 判定實際上會讓它往上走、方向相反
+
+
 ## Annotation Format Contract
 
 review-gui parser 對 annotation key 和 status tag **嚴格字面匹配**。寫錯 = silent malformed（item 卡 `evidenceMissing`、bucket 不收斂）。

@@ -121,6 +121,8 @@ interface WtOptions {
   baselineStashName?: string
   show?: string
   taskSummary?: string
+  /** `<scheme>:<id>` naming the work this worktree serves — `td:TD-787`, `notion:<uuid>`. */
+  origin?: string
   workDone?: boolean
   verification?: string
   expectedPaths?: string
@@ -1565,13 +1567,55 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
         .replace(/^-+|-+$/g, '')
         .slice(0, 48)
         .replace(/-+$/, '')
+      /*
+       * TD-787 — OPENING A WORKTREE IS TRANSPORT, NOT A PIECE OF WORK.
+       *
+       * This branch minted 33 of clade's 42 named work items, each a ROOT card whose origin was
+       * `wt:<slug>` — the tree it was created in, never the thing it was created FOR. So the board
+       * filled with cards named after transport, and "is TD-709 fixed?" had nothing to join on.
+       *
+       * `--origin td:TD-NNN` is the one flag that makes this card the WORK's card. Without it the
+       * card is still minted (a worktree already exists on disk; telemetry NEVER gates it) but it
+       * is MARKED, and the正路 is printed. NEVER widen this to accept `wt:` as an origin scheme:
+       * `wt:` records the transport, which is exactly the semantics this TD exists to remove.
+       */
+      /*
+       * The scheme is checked against the SAME list `flow open --origin` checks (`REF_SCHEMES`),
+       * imported rather than restated: a second copy of the whitelist drifts, and a typo'd scheme
+       * folds into a work item whose origin can never be joined against anything.
+       *
+       * A bad scheme degrades to 未歸屬 with a loud line. NEVER let it abort: the worktree is
+       * already on disk, and a telemetry mint that takes the transport down inverts the contract.
+       */
+      const { parseRef, REF_SCHEMES } = await import(
+        new URL('./flow/answer.ts', import.meta.url).href
+      )
+      let origin = String(opts.origin ?? '').trim() || null
+      if (origin && !parseRef(origin)?.scheme) {
+        console.error(
+          `note: --origin ${origin} 的 scheme 不在 ${REF_SCHEMES.join(' | ')} 之內，當成未歸屬處理`,
+        )
+        origin = null
+      }
+      const unattributed = origin === null
       const { work_id } = openWork({
         slug: workSlug || cleanSlug,
         actor: opts.agent ?? 'claude-code',
-        payload: { origin_kind: 'wt', origin_ref: `wt:${cleanSlug}`, title: opts.taskSummary },
+        origin,
+        title: opts.taskSummary ?? null,
+        payload: unattributed
+          ? { unattributed: true, worktree_slug: cleanSlug }
+          : { worktree_slug: cleanSlug },
         cwd: consumerRoot,
       })
-      console.log(`  Work: ${work_id}`)
+      console.log(`  Work: ${work_id}${unattributed ? '（未歸屬）' : ` (${origin})`}`)
+      if (unattributed) {
+        console.error(
+          `note: 這個 worktree 不屬於任何已知工作（沒有 CLADE_WORK_ID、也沒有 --origin），卡片標為「未歸屬」。\n` +
+            `      正路：node vendor/scripts/flow/flow.ts open <slug> --origin td:TD-NNN，export CLADE_WORK_ID 之後再 wt add；\n` +
+            `      或這次就帶 wt-helper.ts add <slug> --task-summary '<一句話>' --origin td:TD-NNN`,
+        )
+      }
       console.error(`export CLADE_WORK_ID=${work_id}`)
     } catch (e) {
       console.error(`note: flow work open skipped (fail-open): ${e?.message ?? e}`)
@@ -4581,6 +4625,7 @@ async function main() {
     '--baseline-stash-name',
     '--show',
     '--task-summary',
+    '--origin',
     '--verification',
   ])
   const flags = new Set()
@@ -4627,6 +4672,7 @@ async function main() {
     baselineStashName: values['--baseline-stash-name'],
     show: values['--show'],
     taskSummary: values['--task-summary'],
+    origin: values['--origin'],
     workDone: flags.has('--work-done'),
     verification: values['--verification'],
   }
@@ -4728,6 +4774,9 @@ async function main() {
         '    --auto-stash            stash main blockers as wt-merge-block/<slug>/<ISO>',
       )
       console.error(
+        '    --origin <scheme>:<id>  name the WORK this tree serves (td:TD-787, notion:<uuid>).',
+        '                            Without it — and without an ambient $CLADE_WORK_ID — the card',
+        '                            is minted but marked 未歸屬 (TD-787).',
         '    --work-done             file a flow `work.done` claim for ambient $CLADE_WORK_ID',
       )
       console.error(

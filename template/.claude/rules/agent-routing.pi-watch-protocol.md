@@ -667,19 +667,31 @@ Codex session 收到 `$spectra-apply`（或任何要它執行 spectra-apply 流�
 
 ```
 Sol      → sol-cursor（cursor/gpt-5.6-sol@272k）→ Opus 主線
-Gemini   → luna → luna-cursor（cursor/gpt-5.6-luna@272k）→ grok-xai（xai/grok-4.6）→ Claude Haiku
-Luna     → luna-cursor → grok-xai → Claude Haiku   # 第一手只在 Gemini hop 不可用時
+Gemini   → luna → luna-cursor（cursor/gpt-5.6-luna@272k）→ grok-xai（xai/grok-4.6）→ grok-cursor（cursor/grok-4.6）→ Claude Haiku
+Luna     → luna-cursor → grok-xai → grok-cursor → Claude Haiku   # 第一手只在 Gemini hop 不可用時
 Grok-xai → grok-cursor（cursor/grok-4.6）→ Claude Sonnet
 ```
 
 **鏈上的每一跳都是換配額池，不是降檔。** 判準是那一跳有**獨立計量**的配額，不是「它是同一個 model」。
 
-**`grok-cursor` 只在 grok 鏈出現，NEVER 接在 luna 鏈後面**（2026-08-19 Charles 拍板）。成因：Cursor 那一跳
-經 Cursor API key 取用，計入 Ultra 方案的 **`Other Models`** bucket（2026-08-19 Charles 實測確認；
-on-demand spending 已關，用完就是硬停），**不是**先前規約寫的「`composer + grok` 獨立閒置 bucket」。
-`Other Models` 是 Claude / GPT / Gemini 共用的那個 $400 桶——**派一發 `grok-cursor` 就是從同一個桶裡
-扣**，而訂閱內含、專給 Cursor Grok 與 Composer 的 `Cursor Models` bucket 走 API key 根本碰不到。luna 鏈的最後一個換池機會因此是 `grok-xai`（xAI OAuth，完全獨立），
-再耗盡就進 Claude 終點。**NEVER** 從「grok 鏈還有 `grok-cursor` 這一跳」推論 luna 鏈也能用它。
+**`grok-cursor` 兩條鏈都走得到**（2026-08-29 Charles 重拍，推翻 2026-08-19 的 luna 鏈禁令）。
+2026-08-19 的成因句寫的是「經 API key 取用就計入 Ultra 的 `Other Models` $400 桶，而訂閱內含的
+`Cursor Models` bucket 走 API key 根本碰不到」，據此把 luna 鏈的最後一個換池機會鎖在 `grok-xai`。
+
+**那句話對現況已不成立，證據是同一把 key 上的差分**：2026-08-29 逐一實測，`Other Models` 桶裡的
+每一個模型（`gpt-5.6-sol@272k` / `gpt-5.6-luna@272k` / `gpt-5.3-codex` / `claude-*` / `gemini-3.1-pro` /
+`kimi-k2.7-code`）全部回 `You've hit your usage limit`，而 `grok-4.6` 與 `composer-2.5` 照常回應。
+若 grok 真從同一個桶扣，它應與其他模型同死。**「pi 走 OAuth 所以沒碰到 API-key 計費路徑」這條
+和解解釋已被排除**：`~/.pi/agent/auth.json` 的 cursor entry 是 `{type: "api_key", key: "crsr_..."}`，
+與 xai／openai-codex／gemini 的 OAuth 三件組形狀不同——那次實測走的就是 API key。
+
+**「當時就錯」還是「後來 Cursor 改了計費」，從現在的行為分不出來**，要 Cursor dashboard 的歷史
+計費事件才能定性。**NEVER** 把本次改動寫成「證明了 08-19 是錯的」——被推翻的是**那句話對現況的
+描述**，不是它當時的取證。
+
+**重拍的即時價值在中段兩跳全滅**：`luna-cursor`（usage limit）與 `grok-xai`（403 credits）同時死掉時，
+舊鏈的 gemini／luna 耗盡等於**直落 Claude Haiku**，`sol-cursor` 同死則讓 sol exit 4 **直回 Opus 主線**——
+降級鏈的存在意義正是不要在這種時候把工作推回最貴的那一格。
 
 **跨 model 家族的跳只有 luna 鏈有，是具名例外不是通則。** 新增跨家族跳 MUST Charles 逐鏈拍板，
 准入三條連言是**申請門檻**，**NEVER** 由它自動導出（必要條件不是充分條件）；逐條判準與取證見

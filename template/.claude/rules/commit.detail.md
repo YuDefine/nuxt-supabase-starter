@@ -361,22 +361,49 @@ user 不成立**，結果是 stash 單調遞增、owner 資訊隨時間流失，
 
 ```bash
 git fetch origin main && git merge --ff-only origin/main   # 1. 先同步，不是先確認
-git rev-list --count HEAD..origin/main                     # 2. 必須回 0
+git rev-list --left-right --count origin/main...HEAD       # 2. 必須回 `0	0`
 git tag v<x.y.z> && git push origin v<x.y.z>               # 3. 才打、才推
 ```
 
-第 2 步回非 0 就是**還沒到能打 tag 的狀態**——`git tag` 不會警告、`git push` 不會警告，
-唯一的回饋是後來 CI 那份長得像回歸的紅。
+第 2 步**兩個數字都要是 0**，它們是兩個獨立的失敗模式：
+
+輸出是 `<左>	<右>`：**左** = `origin/main` 獨有的 commit 數（HEAD 落後幾個），
+**右** = HEAD 獨有的 commit 數（HEAD 超前幾個）。
+
+| 非 0 的那一邊 | 意思 | 後果 |
+| --- | --- | --- |
+| 左（等同 `git rev-list --count HEAD..origin/main`） | 本機**落後** origin/main | tag 指向舊樹，CI 紅在具名 test，與真實回歸同形 |
+| 右（等同 `git rev-list --count origin/main..HEAD`） | 本機有**還沒推上去**的 commit | tag 指向 origin 上不存在的樹，別人 clone 後 checkout 該 tag 會失敗 |
+
+**只驗落後那一邊是不夠的**——`git merge --ff-only origin/main` 在本機超前時是 no-op、
+不報錯，於是「落後 = 0」照樣成立，而 tag 就打在了一棵還沒推上去的樹上。那時下游的
+SHA gate 擋得住部署，卻擋不住錯誤的 tag 已經推出去（tag 是不可變的對外物件，撤回代價
+遠高於部署被擋）。
+
+嫌 `--left-right` 難讀就分成兩條，語義相同：
+
+```bash
+git rev-list --count HEAD..origin/main    # 必須回 0（沒落後）
+git rev-list --count origin/main..HEAD    # 必須回 0（沒有還沒推上去的 commit）
+```
+
+任一步回非 0 就是**還沒到能打 tag 的狀態**——`git tag` 不會警告、`git push` 不會警告，
+唯一的回饋是後來 CI 那份長得像回歸的紅，或別人 clone 之後才發現 tag 指向不存在的樹。
 
 ### 機械 gate 與它的邊界
 
-`vendor/scripts/pre-push/checks/tag-position.sh` 在 pre-push 階段擋下落後的 tag（push 不含 tag
-時零成本 no-op）。它**只在 consumer 的 `.husky/pre-push` 已接線時生效**，且 `--no-verify` 可繞過——
-所以上面那三步是規約，gate 是兜底，**NEVER 反過來**。
+`vendor/scripts/pre-push/checks/tag-position.sh` 在 pre-push 階段擋下**兩個方向**的錯位
+（push 不含 tag 時零成本 no-op）。它**只在 consumer 的 `.husky/pre-push` 已接線時生效**，
+且 `--no-verify` 可繞過——所以上面那三步是規約，gate 是兜底，**NEVER 反過來**。
 
 `CLADE_ALLOW_STALE_TAG=1` 的唯一合法用途：**刻意**在舊 commit 上打 hotfix release tag，且已知
 該 tag 那棵樹不含 main 後續改動。**NEVER** 用它讓一個「不知道為什麼被擋」的 push 過關——
 那個「不知道為什麼」就是這條 gate 唯一要抓的東西。
+
+**它只覆蓋落後那一邊，NEVER 對超前那一邊生效**——兩者語義相反（一個是「我知道這是舊樹」，
+另一個是「這棵樹還不存在於 origin」），共用會把逃生口變成雙向萬能鑰匙。超前被擋時沒有逃生口，
+也不需要：正解就是 `git push origin main` 之後再推 tag。合法的 hotfix 不會命中超前那一邊——
+舊 commit 是 `origin/main` 的祖先，反方向 count 恆為 0。
 
 ### CI 紅在 tag-triggered run 時，第一件事
 

@@ -62,6 +62,21 @@ node ~/offline/clade/vendor/scripts/flow/flow.ts open <slug> \
 鑄名 **fail-open**：clade home 不在、node 不在、指令非 0 exit，都**NEVER** 擋建檔或擋開工——
 照常做事，這件事在 /board 上叫 `未命名工作` 而已。
 
+**機械兜底**：`post-edit-task-file-work-open.sh`（PostToolUse `Edit|Write`）在 tasks 檔寫完的當下
+就地判，沒有具名 work item 就印出**填好本檔路徑與 slug 的**那條指令。它只印不擋，也**不代你鑄**——
+`--title` 要說「這件事要解決什麼」，而只有剛寫完檔的那個 agent 知道；hook 生得出來的 title 只會是
+slug 的重述，那正是這條規約要修的東西（一個不指涉任何東西的名字）。
+
+**NEVER** 把 hook 沒出聲讀成「這件工作已經有名字」：它認得的兩個訊號是「檔頭有 `work_id:`」與
+「spine 上有 `origin_ref: tasks:<本檔路徑>`」，ambient `CLADE_WORK_ID` 也讓它靜默（那代表本 session
+的工作已經開過，這個檔併進去而不是另開一件）。三者都不是「有 title」的證明。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 新建 / 編輯 `tasks/*.md`（`archive/` 與 `lessons.md` 除外）且三個靜默訊號都不成立 → 印出鑄名指令。**warn-only，不 block**——擋一次 tasks 檔寫入來換一筆遙測，正好把整條脊椎的優先序顛倒過來（工作大於工作的紀錄，emit 全線 fail-open 同一個理由） |
+| 消費端 | 剛寫完 tasks 檔的那個 agent（照著跑那條指令）；成效由既有的 R3 orphan 佔比訊號量測，不另建 metric |
+| 載入路徑 | 本節（散播到 consumer `.claude/rules/session-tasks.operations.md`）＋ hook 本身（`plugins/hub-core/hooks/hooks.json`，consumer 端隨 plugin 生效） |
+
 權威的對應由 `work.open` 的 `origin_ref: tasks:<路徑>` 承載——spine 指向 tasks 檔，這個方向由
 工具在 emit 當下寫入、append-only。反方向的檔頭 `work_id:` 是**選填索引**，維持選填的理由與
 它的機械消費端見下方 § 寫入規約補充第三條；**NEVER** 因為現在鑄名了就把它改成強制欄位。

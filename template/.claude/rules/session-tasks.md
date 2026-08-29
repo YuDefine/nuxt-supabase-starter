@@ -125,11 +125,14 @@ session —— 把閂交給它等於沒有閂。
 
 `git status` dirty、mtime 在數十秒內、`.clade/claims/` 有沒有活 claim——這些觀測值在**人類正在編輯**、**前景 agent session**、**背景 unattended runner** 三種情況下**完全相同**。檔案層跑得再完整都停在同一個岔路口；判不出來**不是**「該 user 拍板」的訊號，是還有一層沒探。
 
-### Step 0（三步，順序不可調換）
+### Step 0（四步，順序不可調換）
 
-**每一次**檔案層探測回報「有另一個 actor 正在寫」都 MUST 跑完這三步再決定動作——不是只有 publish 被擋那次，ad-hoc commit、worktree merge-back、stash 判定、gate 撞紅同樣適用。
+**每一次**檔案層探測回報「有另一個 actor 正在寫」都 MUST 跑完這四步再決定動作——不是只有 publish 被擋那次，ad-hoc commit、worktree merge-back、stash 判定、gate 撞紅同樣適用。
 
 ```bash
+# 0) 誰寫的（零訊息、跨 cwd）：<project-dir> 就是對方 cwd。MUST 再篩「寫入型 tool_use ＋
+#    落在爭用檔 mtime 時間窗」，再用 agent_session.value 對回 pane
+cd ~/.claude-work/projects && grep -l '<檔名或獨特字串>' */*.jsonl
 # 1) 誰在這個 repo 家族上工作（linked worktree 的 cwd 是 <repo>-wt/*，MUST 用前綴比對而非等值）
 herdr agent list | python3 -c '
 import json,sys
@@ -143,6 +146,8 @@ herdr agent read <pane_id> --source recent-unwrapped --lines 70
 pgrep -af 'work-loop/[r]unner\.sh'            # runner 本體
 pgrep -af 'claude --print.*[-]-runner-child'  # 它的當輪 child（runner 正在換輪時只剩這個在）
 ```
+
+**第 0 步 MUST 跑在第 1 步之前，命中就直接問那一個 pane，NEVER 問候選集。** 第 1 步的 cwd 前綴給的是**候選**，**NEVER 當成完整母體**——跨 repo 寫入者結構上不在裡面，候選集全回「不是我的」只代表「母體可能不含答案」，**NEVER** 是「已排除完畢」。只 grep 檔名會假陽性（查的人自己也命中）。盲區與實證見 [[concurrent-session-probe]] § 入口 A 第 0 步。
 
 **`agent_status: idle` NEVER 等於「對方收手了」。** 它只表示那個 pane 的互動 agent 正在等輸入，對「它掛的背景 process 停了沒」零訊號——2026-08-19 那個 pane 就是 `idle`，背後的 runner 還有 19 輪要跑。**判出 idle 之後 MUST 再跑第 3 步**，不得因為「看起來已經停了」跳過。
 
@@ -170,11 +175,12 @@ pgrep -af 'claude --print.*[-]-runner-child'  # 它的當輪 child（runner 正�
 | --- | --- |
 | 「探測都跑完了還是判不出來，這題該 user 拍板」 | 跑完的是檔案層。Step 0 三步跑完了嗎？沒跑完就不叫探測完 |
 | 「pane 顯示 idle，對方應該收手了」 | `idle` 只描述互動 agent。2026-08-19 那個 idle pane 背後的 runner 還有 19 輪 |
+| 「我問了 N 個 pane，全說不是他們」 | 你問的是 cwd 篩出來的候選集。第 0 步跑了嗎 |
 | 「先 stash 起來比較安全，之後再還原」 | 對 unattended runner 是腰斬當輪產出，對前景 session 是奪走它正在寫的檔。stash 只在「對方是人且已停手」時安全 |
 | 「我 SendMessage 問它一下就好」（對方是 runner 時） | runner child 是 `claude --print`，沒有 pane 也不讀訊息；那個 idle pane 收到訊息不會轉達給背景 process |
 | 「等對方收手就好」 | 對 unattended runner 是等數小時。「等」MUST 綁一個可觀察事件才算動作 |
 
-**Red Flags（發現自己在寫這幾句就停下來跑 Step 0）**：正要列出「等對方收手／stash 強推／我去問那個 session」這組選項；正要用 `AskUserQuestion` 問並行爭用怎麼辦；正要把「哪個 session／pane／worktree 該留下」寫進 `flow ask --question` 或 `--complete blocked --decision`；正要在「對方是誰」還是未知數的狀態下往下決策。
+**Red Flags（發現自己在寫這幾句就停下來跑 Step 0）**：正要對多個候選 pane 逐一送同一則探測；正要列出「等對方收手／stash 強推／我去問那個 session」這組選項；正要用 `AskUserQuestion` 問並行爭用怎麼辦；正要把「哪個 session／pane／worktree 該留下」寫進 `flow ask --question` 或 `--complete blocked --decision`；正要在「對方是誰」還是未知數的狀態下往下決策。
 
 **爭用訊號帶得出 pid 時（advisory lock、process 訊息）走 pid，NEVER 退回 cwd 過濾**：第 1 步的 cwd 前綴在同一 repo 同時有多個 pane 時過濾不出唯一解，而 pid 經 `ps` 祖先鏈直達 `claude … --session-id`，是精確對映。做法與「持有者正在跑同一條冪等流程時搭它的車」見 [[pitfall-pipeline-lock-contention-raced-instead-of-probed]]。
 

@@ -13,7 +13,7 @@ Local edits will be reverted by the next sync.
 
 ## 證據鑑別力（先於下方每一條 NEVER / MUST）
 
-驗收引用的證據 E，MUST 能回答「若被驗命題為假，E 會長什麼不一樣？」——答不出或答案是「一樣」→ E 不是證據，換一個在兩個世界會分岔的觀測。**status code、exit code、「檔案存在」、工具自我宣告、來自常數宣告而非量測的數字，預設視為未分岔訊號**。MUST 11 / 16 是本條的兩個實例；新形態回到上面那句自判。降級路徑觸發時 MUST loud（warning / health degraded），讓假世界主動分岔。實證三例見 [[pitfall-empty-state-screenshot-has-no-discriminating-power]]。
+驗收引用的證據 E，MUST 能回答「若被驗命題為假，E 會長什麼不一樣？」——答不出或答案是「一樣」→ E 不是證據，換一個在兩個世界會分岔的觀測。**status code、exit code、「檔案存在」、工具自我宣告、來自常數宣告而非量測的數字，預設視為未分岔訊號**。MUST 11 / 16 / 19 是本條的三個實例；新形態回到上面那句自判。降級路徑觸發時 MUST loud（warning / health degraded），讓假世界主動分岔。實證三例見 [[pitfall-empty-state-screenshot-has-no-discriminating-power]]。
 
 **摘要值（hash / 行數 / 檔案數 / diff 大小）同屬未分岔訊號**：`sha256sum` / `md5sum` / `wc -l` 這類全域函式對空輸入不報錯、照樣回一個外觀正常的值，於是「上游命令死掉」與「內容真的是空的」在它的輸出裡完全相同。**每一次**拿 hash 或 count 當證據，MUST 先驗產生它的那條 pipeline 的 exit code 與非空性；**NEVER** 從摘要值反推成因。逐字反開脫：「hash 有值代表命令成功了」——`[ -n "$(printf '' | sha256sum)" ]` 恆真（空輸入的 sha256 就是 `e3b0c442…`），那道 guard 讀起來在防空值、實際永遠通過。實證見 [[pitfall-hash-of-empty-stdout-collapses-distinct-causes]]。
 
@@ -181,6 +181,11 @@ baseline 只存在於某次 session 記憶裡時，下一個讀 gate 的人算�
     | 「同一條指令我跑過兩次，結果一樣」 | (a) 的漂移可以連續兩次相同；穩定不是正確 |
     | 「`rg -l` 比較快，先用它掃一遍」 | 當粗篩可以，寫進判準就是 (b)。粗篩結果 NEVER 直接當結論 |
     | 「探針回 0，正好符合我的判斷」 | 那正是 (c) 要擋的一格——符合預期的空輸出最不會被複驗 |
+
+19. **拿 body 下結論前 MUST 先讀 final URL 與狀態碼（hard rule）**：curl 帶
+    `-w '%{http_code} %{url_effective}'` 取回兩值先讀。`url_effective` 不是你請求的路徑時
+    （被 auth 攔到登入頁即是），body 的 grep 與計數**零訊號**，**NEVER** 當任何動作的前提，
+    尤其 **NEVER** 當重跑 deploy、切 symlink、重啟服務的理由。全文見 [[TD-783]]。
 
 ## 派工前的主線預檢責任
 

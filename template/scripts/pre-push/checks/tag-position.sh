@@ -81,18 +81,46 @@ fi
 
 # --- 比對 -----------------------------------------------------------------
 stale=0
+ahead=0
 for i in "${!tag_shas[@]}"; do
   sha="${tag_shas[$i]}"
   name="${tag_names[$i]}"
   # tag object → 解到它指向的 commit
   commit="$(git rev-parse --quiet --verify "${sha}^{commit}" 2>/dev/null || true)"
   [[ -n "$commit" ]] || continue
-  behind="$(git rev-list --count "$commit..origin/$default_branch" 2>/dev/null || echo 0)"
-  if [[ "$behind" != "0" ]]; then
-    echo "[clade pre-push] ✗ tag-position: tag '$name' 落後 origin/$default_branch $behind 個 commit" >&2
+  behind_n="$(git rev-list --count "$commit..origin/$default_branch" 2>/dev/null || echo 0)"
+  if [[ "$behind_n" != "0" ]]; then
+    echo "[clade pre-push] ✗ tag-position: tag '$name' 落後 origin/$default_branch $behind_n 個 commit" >&2
     stale=1
   fi
+  # 反方向：tag 指向的 commit 含 origin/<default> 沒有的東西 = 這棵樹還沒推上去。
+  # 與 behind 是獨立的失敗模式，不共用 CLADE_ALLOW_STALE_TAG —— 那個逃生口的語義是
+  # 「我知道這是舊 commit，我就是要在它上面打 hotfix tag」，對「tag 比 origin 新」不成立。
+  # 合法的 hotfix（打在舊 commit 上）不會命中這裡：舊 commit 是 origin/<default> 的祖先，
+  # 反方向 count 恆為 0。
+  ahead_n="$(git rev-list --count "origin/$default_branch..$commit" 2>/dev/null || echo 0)"
+  if [[ "$ahead_n" != "0" ]]; then
+    echo "[clade pre-push] ✗ tag-position: tag '$name' 含 origin/$default_branch 沒有的 $ahead_n 個 commit" >&2
+    ahead=1
+  fi
 done
+
+if [[ "$ahead" != "0" ]]; then
+  cat >&2 <<'MSG'
+
+  tag 打在還沒推上去的 commit 上。tag 一旦推出去，它就指向一棵 origin 上不存在的樹：
+  別人 clone 之後 checkout 這個 tag 會失敗，而 tag-triggered workflow 檢出的正是那棵樹。
+
+  這不是 stale tag 的反面，是另一個失敗模式——CLADE_ALLOW_STALE_TAG 對它無效，也不該有效。
+
+  修法（先把 commit 推上去，再推 tag）：
+
+    git push origin main
+    git push origin <tag>
+
+MSG
+  exit 1
+fi
 
 [[ "$stale" == "0" ]] && exit 0
 
