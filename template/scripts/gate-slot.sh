@@ -55,7 +55,23 @@ fi
 
 command -v flock >/dev/null 2>&1 || exec "$@"
 
-LOCK_DIR=${CLADE_GATE_LOCK_DIR:-${XDG_RUNTIME_DIR:-/tmp}/clade-gates}
+# LOCK_DIR 決定「全機 semaphore 的命名空間」。NEVER 直接退 /tmp —— cron / systemd
+# service / daemon 起的 gate 沒有 XDG_RUNTIME_DIR，會落到 /tmp/clade-gates 形成**第二套
+# 獨立 semaphore**，全機上限靜默變成 2N，而且兩邊各自看起來都正常運作。用 id -u 推導
+# /run/user/<uid>，只有它真的不存在才退 /tmp（TD-685）。
+_default_lock_dir() {
+  if [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -d "$XDG_RUNTIME_DIR" ]; then
+    printf '%s/clade-gates' "$XDG_RUNTIME_DIR"
+    return
+  fi
+  _uid=$(id -u 2>/dev/null || echo '')
+  if [ -n "$_uid" ] && [ -d "/run/user/$_uid" ]; then
+    printf '/run/user/%s/clade-gates' "$_uid"
+    return
+  fi
+  printf '/tmp/clade-gates'
+}
+LOCK_DIR=${CLADE_GATE_LOCK_DIR:-$(_default_lock_dir)}
 mkdir -p "$LOCK_DIR" 2>/dev/null || exec "$@"
 
 SLOTS=${CLADE_HEAVY_GATE_SLOTS:-2}
@@ -65,7 +81,10 @@ esac
 [ "$SLOTS" -lt 1 ] && SLOTS=1
 [ "$SLOTS" -gt 8 ] && SLOTS=8
 
-WAIT_TIMEOUT=${CLADE_GATE_WAIT_TIMEOUT:-1800}
+# slots 降到 1 的機器上佇列會變深（一套 typecheck 3–8 分鐘，3–4 個 waiter 要排得完），
+# 1800s 會讓品質 gate 變成隨機 exit 75。NEVER 改成無限等 —— 逾時的 holder 診斷是唯一
+# 會留下現場的東西。
+WAIT_TIMEOUT=${CLADE_GATE_WAIT_TIMEOUT:-3600}
 case "$WAIT_TIMEOUT" in
   '' | *[!0-9]*) WAIT_TIMEOUT=1800 ;;
 esac
@@ -93,15 +112,34 @@ print_holder_diag() {
     printf 'holder process(es):\n' >&2
     for pid in $holder_pids; do
       printf '  pid=%s\n' "$pid" >&2
-      ps -o pid=,ppid=,etime=,time=,args= -p "$pid" 2>/dev/null | while IFS= read -r line; do
+      # NEVER 印完整 command line：agent 起的 gate 其 argv 可能帶 token / API key，而這段
+      # 診斷會落進 CI log 與 session transcript（TD-685）。判孤兒需要的是 etime vs CPU time
+      # 的落差與 PPID，不是完整參數 —— 要看參數的人自己去 `ps -p <pid> -o args=`，那是有
+      # 意識的動作，不是被動落進 log。cwd 不含祕密，且是判「這是哪個 repo 的 gate」最有用的一格。
+      ps -o pid=,ppid=,etime=,time=,comm= -p "$pid" 2>/dev/null | while IFS= read -r line; do
         printf '    %s\n' "$line" >&2
       done
+      printf '    cwd=%s\n' "$(readlink "/proc/$pid/cwd" 2>/dev/null || echo unknown)"
     done
   else
     printf 'holder: (no process found on lock — may have just released)\n' >&2
   fi
   printf '──────────────────────────\n' >&2
 }
+
+# ── 等待期間的訊號處置（TD-685）──────────────────────────────────────────
+# 沒有 trap 時，waiter 卡在下面的 `until acquire_slot; do sleep 2; done` 輪詢迴圈裡，
+# Ctrl-C **不會**讓它離開 —— 2026-08-29 實測：送 SIGINT 後 waiter 存活，等 holder 釋放
+# 後照樣執行了 inner command。使用者以為自己取消了，實際上那份工作照跑。
+#
+# 這裡只管**等待階段**。取到 slot 之後走 exec，行程映像被換掉、trap 一併消失，
+# 訊號由 inner command 自己處置 —— 那正是想要的（NEVER 讓閘門攔截 gate 自己的 Ctrl-C）。
+_gate_abort() {
+  printf '\ngate-slot: 收到 %s，放棄等待 slot（inner command 未執行）\n' "$1" >&2
+  exit "$2"
+}
+trap '_gate_abort SIGINT 130' INT
+trap '_gate_abort SIGTERM 143' TERM
 
 if [ "$mode" = wait ]; then
   if ! flock -w "$WAIT_TIMEOUT" 9; then
@@ -146,4 +184,25 @@ if ! acquire_slot; then
 fi
 
 export CLADE_GATE_SLOT_HELD=1
+
+# ── holder 端自願上界 ──────────────────────────────────────────────────────
+# slot 數降到 1 之後，孤兒 holder 的代價從「半容量」升級成「全機 heavy gate 停擺」
+# （pitfall 2026-08-22：一支十小時的 nuxt typecheck 孤兒把 repo lock 佔住，PPID=1、
+# CPU time 46s）。這裡給 holder 自己一個上界讓它自我釋放。
+#
+# 這與已否決的「從外面 kill 判定為 stale 的 holder」不是同一件事：那條被否決是因為
+# 低 CPU 不蘊含卡死，會誤殺別 session 正在跑的品質 gate。本段是**同一個行程自己**帶進來的
+# 上界，沒有任何判斷、不看 CPU、不猜狀態，到點就結束自己。
+#
+# exec 而非背景執行：保住 TTY、保住 process group（Ctrl-C 照常送達）、鎖的 fd 由
+# timeout 行程持有，它結束時一併釋放。逾時回 124（`timeout` 的標準碼）—— 與 exit 75
+# 同型的「這是閘門說的話，不是 gate 說的話」，語義寫在 rules/core 與本註解。
+# CLADE_HEAVY_GATE_MAX_RUNTIME=0 關閉。
+MAX_RUNTIME=${CLADE_HEAVY_GATE_MAX_RUNTIME:-3600}
+case "$MAX_RUNTIME" in
+  '' | *[!0-9]*) MAX_RUNTIME=3600 ;;
+esac
+if [ "$MAX_RUNTIME" -gt 0 ] && command -v timeout >/dev/null 2>&1; then
+  exec timeout --signal=TERM --kill-after=30 "$MAX_RUNTIME" "$@"
+fi
 exec "$@"

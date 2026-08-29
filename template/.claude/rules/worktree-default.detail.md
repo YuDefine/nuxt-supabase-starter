@@ -1,6 +1,6 @@
 ---
-description: Worktree 全文規約（§1 pre-fork baseline guard 四條契約與 archive-on-main clobber 窗口、§3 命名與位置、§4 與 propagate 的互動、§5 commit 階段、§5.5 merge-back ceremony 與 claim guard scope、§6–§11 工具與 troubleshooting 索引）；always-load 的薄 pointer 在 [[worktree-default]]，觸發時機是「送出 wt-helper add / merge-back / 任何 worktree 操作之前」，由 [[worktree-default]] 的 MUST-Read 指針叫醒
-paths: ['vendor/scripts/wt-helper.ts', 'scripts/wt-helper.ts', 'vendor/scripts/stash-reconcile.ts', 'scripts/stash-reconcile.ts', '**/WORKTREE-BRIEF.md']
+description: Worktree 全文規約（§1 pre-fork baseline guard 四條契約與 archive-on-main clobber 窗口、§3 命名與位置、§4 與 propagate 的互動、§5 commit 階段、§5.5 merge-back ceremony 與 claim guard scope、§5.5.1 pre-archive gate 的掃描根目錄、§6–§11 工具與 troubleshooting 索引）；always-load 的薄 pointer 在 [[worktree-default]]，觸發時機是「送出 wt-helper add / merge-back / 任何 worktree 操作之前」，由 [[worktree-default]] 的 MUST-Read 指針叫醒
+paths: ['vendor/scripts/wt-helper.ts', 'scripts/wt-helper.ts', 'vendor/scripts/stash-reconcile.ts', 'scripts/stash-reconcile.ts', '**/WORKTREE-BRIEF.md', '**/hooks/pre-archive-*.sh', '**/spectra-advanced/archive-gate.sh', '**/spectra-advanced/design-gate.sh', '**/spectra-advanced/followup-gate.sh']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -108,6 +108,49 @@ v3 atomic landing：`/wt` 跑完 subagent 在 worktree commit、worktree+branch 
 `wt-helper merge-back <slug>` 是 atomic landing 核心命令。`--auto-stash` 實為 **bulk-stash**（捲走 main **全部** dirty，不只 blockers）→ claim guard 檢查範圍 **MUST ⊇** 全部將被捲走的 dirty，撞別 session 認領 → **fail-loud STOP**。`git stash push` 必 verify create（乾淨 tree 不丟 exception）。
 
 > 完整 flags / claim guard scope / stash reconcile 詳見 [[worktree-default.commit-ceremony]] § Merge-back ceremony。
+
+### §5.5.1 Pre-archive gate 掃的是 change 所在的 worktree，NEVER 是 cwd
+
+四道 pre-archive gate（`pre-archive-ux-gate.sh` / `-evidence-` / `-design-` / `-followup-`）是
+`PreToolUse:Skill` hook，**跑在 `/spectra-archive` Step 0 的 `wt-helper merge-back` 之前**。
+在 merge-back 之前，一個在 worktree 裡實作的 change **完全沒有**任何內容在 main：main 的
+`tasks.md` 還是 propose 當時那份（零 annotation），screenshots 一張都不在。
+
+所以 gate 若掃 cwd（main），對**每一個**走 worktree 的 change 都會報「item 缺 evidence」
+與「Journey URL 沒對應到 git diff」。而 [[worktree-default]] §1 規定要動 code 就 MUST 走
+worktree —— 這不是邊角，是**每次第一次 archive 的必然結果**。
+
+**MUST**：gate 先解析 change 所在的 worktree，把那棵樹當掃描根目錄。實作是共用 helper
+`plugins/hub-core/hooks/_change-source-root.sh`（consumer 端投影為 `.claude/hooks/`），
+它呼叫 `wt-helper resolve <slug>`。
+
+**NEVER 在別處重寫那個 find。** `wt-helper resolve` 與 `merge-back` 共用
+`findSessionWorktreeForSlug()` —— 同一份 matcher 才保證「gate 驗過的那棵樹」就是
+「Step 0 要 land 進去的那棵樹」。兩份會漂，而漂開之後的症狀是 **gate 綠、archive 成功、
+內容不對**，事後從任何紀錄都看不出來。
+
+**這條與「把 gate 移到 merge-back 之後」是二擇一，NEVER 兩邊都留。** 已選 gate 自解析；
+`/spectra-archive` Step 5.5 的 post-merge-back 重跑照舊保留，但那是 Check 4（manual-review
+kind）的唯一執行點，**不是**本條的替代方案——把 pre-skill 位置整個拿掉會讓「evidence 根本
+沒收集」的 change 先 merge-back、先毀掉 worktree，才在 Step 5.5 被擋。
+
+**Fail-open by construction**：解析不到 worktree（change 在 main 上做完、worktree 已被
+merge-back 清掉、consumer 尚未散播到 `wt-helper resolve`）一律回退 cwd = 修改前的行為。
+`wt-helper resolve` 的 exit 3 是「沒有 worktree」，**NEVER** 讀成失敗而擋下 archive。
+
+**本節刻意不在 always-load 留 pointer。** 它的義務只在「有人要改 gate / 加第五支 hook」時發作，
+而那一刻本檔已經被 `paths:` 叫醒（四支 gate script 都在裡面）；再加上
+`test/pre-archive-gate-scans-change-worktree.test.ts` 最後一條在漏接時直接紅。
+兩層都綁在會發生的事件上，常駐一行 283 bytes 買不到第三層——那正是 always-load budget
+要擋的那種「看起來是淨改善」的增量。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | gate 掃到的根目錄 ≠ cwd 時，helper 在 stderr 印一行 `[pre-archive] scanning worktree for '<change>': <path>`。**informational — 不改變任何 gate 的 exit code**；它存在是因為「沒有人報過掃了哪一棵樹」正是這個 bug 隱形的原因 |
+| 消費端 | 四道 pre-archive hook（每次 `/spectra-archive` 必經）；讀到那行的 agent 用它確認 gate 看的是對的樹 |
+| 載入路徑 | 本節（`rules/core/worktree-default.detail.md`，paths-gated 於 `wt-helper.ts` 與四支 gate script——改解析器或改 gate 時載入）＋ 上述 regression test 的機械兜底 |
+
+對應 pitfall：[[pitfall-pre-archive-gate-scans-main-not-change-worktree]]。
 
 ## §6 操作工具：`/wt`、`wt-helper.ts`、`stash-reconcile.ts`
 

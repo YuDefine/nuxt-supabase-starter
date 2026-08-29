@@ -95,6 +95,8 @@ import {
   genSessionId,
   readActiveClaims,
   writeClaim,
+  claimConflictsForPath,
+  formatClaimConflict,
 } from './claim-helper.ts'
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
 import { isLockedProjectionPath, isLockedProjectionPathFor } from './locked-projection.ts'
@@ -302,6 +304,61 @@ function sessionWorktrees(cwd) {
   return parseWorktreeList(out).filter(
     (w) => w.branch && w.branch.startsWith('refs/heads/session/'),
   )
+}
+
+/**
+ * 一個 change slug 對應到哪一棵 session worktree —— **這是全 fleet 唯一的那份 matcher**。
+ *
+ * 為什麼要是唯一的：`spectra-archive` Step 0 用它決定「要把哪一棵樹 merge-back 進 main」，
+ * 而 pre-archive 的四道 gate 用它決定「要掃哪一棵樹」。兩邊只要各寫一份，就會出現
+ * 「gate 驗過的那棵樹」與「Step 0 land 進去的那棵樹」不是同一棵——而那種不一致事後
+ * 完全看不出來（gate 綠、archive 成功、內容不對）。**NEVER** 在別處重寫這個 find。
+ *
+ * 回 `null` 代表這個 change 沒有 session worktree（在 main 上做完的 change，或 worktree
+ * 已被 merge-back 清掉）——那時 main 就是正解，呼叫端照 main 走即可。
+ */
+export function findSessionWorktreeForSlug(consumerRoot, cleanSlug) {
+  const wts = sessionWorktrees(consumerRoot)
+  return (
+    wts.find(
+      (w) => w.path.endsWith(`/${cleanSlug}`) && w.branch && w.branch.endsWith(`-${cleanSlug}`),
+    ) ?? null
+  )
+}
+
+/**
+ * `wt-helper resolve <slug>` —— 給 shell gate 用的解析入口。
+ *
+ * 印出該 change 所在 worktree 的絕對路徑（找不到就什麼都不印）。exit code 刻意分三態，
+ * 讓呼叫端能區分「沒有 worktree」與「這支根本跑不起來」：
+ *   0 = 找到，stdout 是 worktree 路徑
+ *   3 = 沒有對應的 session worktree（**不是錯誤**，main 就是正解）
+ *   1 = 真的出錯（不在 git repo、slug 不合法…）
+ *
+ * **NEVER 把 3 讀成失敗而 fail-closed**：change 在 main 上做完是完全正常的路徑（SKILL.md
+ * 的 in-main-done archive），把它擋掉會讓沒開 worktree 的 change 一律 archive 不了。
+ */
+async function cmdResolve(slug, opts: WtOptions = {}) {
+  if (!slug) {
+    throw new Error('Usage: wt-helper resolve <slug> [--json]')
+  }
+  const cleanSlug = makeSlugSafe(slug)
+  const consumerRoot = findConsumerRoot()
+  const target = findSessionWorktreeForSlug(consumerRoot, cleanSlug)
+  if (opts.json) {
+    console.log(
+      JSON.stringify({
+        slug: cleanSlug,
+        found: Boolean(target),
+        path: target?.path ?? null,
+        branch: target?.branch?.replace('refs/heads/', '') ?? null,
+        consumerRoot,
+      }),
+    )
+  } else if (target) {
+    console.log(target.path)
+  }
+  if (!target) process.exitCode = 3
 }
 
 async function prompt(question) {
@@ -516,6 +573,34 @@ function detectSharedTunnelRisk(root) {
 
 // matchClaimGlob / classifyDirtyPaths moved to ./claim-helper.ts (TD-435) so
 // every tool that moves a working tree shares one ownership predicate.
+
+/**
+ * The de-dup ask ("回我一聲你已經動筆了沒") that used to be broadcast, answered locally at the one
+ * moment it is cheap: opening the worktree. Warn-only and best-effort — an overlap is a reason to
+ * talk, NEVER a reason to refuse to open a tree (TD-794 刀 4).
+ *
+ * Silent when there is no overlap. That is the contract, not an optimisation.
+ */
+function warnOnClaimOverlap(consumerRoot: string, declaredPaths: string[], myWorktree: string) {
+  if (declaredPaths.length === 0) return
+  try {
+    const seen = new Set<string>()
+    const lines: string[] = []
+    for (const p of declaredPaths) {
+      for (const c of claimConflictsForPath(consumerRoot, p, { myWorktree })) {
+        const key = `${c.session_id}:${c.path}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        lines.push(`  ${formatClaimConflict(c)}`)
+      }
+    }
+    if (lines.length === 0) return
+    console.error('  claim overlap — 這棵樹宣告的範圍與別的活 claim 交集：')
+    for (const l of lines.slice(0, 3)) console.error(l)
+  } catch {
+    // 協調訊號 NEVER 擋開樹
+  }
+}
 
 function formatActiveSessionsForError(claims) {
   if (claims.length === 0) return '  (none)'
@@ -903,7 +988,7 @@ export function linkGitignoredRuntimeFiles(consumerRoot, wtPath, names = GITIGNO
 }
 
 const ADD_USAGE =
-  'Usage: wt-helper add <slug> --task-summary <text> [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>] [--skip-prefork-audit] [--include-unrelated-dirty]'
+  'Usage: wt-helper add <slug> --task-summary <text> [--expected-paths <comma>] [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>] [--skip-prefork-audit] [--include-unrelated-dirty]'
 
 async function cmdAdd(slug, opts: WtOptions = {}) {
   if (!slug) {
@@ -1395,7 +1480,13 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
   // SessionStart heartbeat hook refreshes; cleanup / successful merge-back
   // drops the claim. See rules/core/session-claims.md.
   try {
-    const expectedPaths = String(opts.expectedPaths ?? '')
+    // `--expected-paths` had a field and a reader and no flag: `opts.expectedPaths` was never
+    // assigned by the arg parser, so every claim ever written here got `[]`. That is the other
+    // half of "22/22 empty" — the half that no amount of discipline would have fixed (TD-794 刀 4).
+    //
+    // `--baseline-scope-paths` seeds it when `--expected-paths` is absent: that flag already
+    // names the files this worktree is being opened to carry, so reusing it adds zero obligation.
+    const expectedPaths = String(opts.expectedPaths ?? opts.baselineScopePaths ?? '')
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
@@ -1410,6 +1501,8 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
       task_summary: opts.taskSummary ?? null,
     })
     console.log(`  Claim: ${claim.session_id} (.clade/claims/${claim.session_id}.json)`)
+    if (claim.work_id) console.log(`  Work:  ${claim.work_id}`)
+    warnOnClaimOverlap(consumerRoot, expectedPaths, wtPath)
   } catch (e) {
     console.error(`note: claim write skipped: ${e.message ?? e}`)
   }
@@ -3473,10 +3566,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   if (lockStatus.cleaned) {
     console.error(`⚠ rm'd stale .git/index.lock — proceeding`)
   }
-  const wts = sessionWorktrees(consumerRoot)
-  const target = wts.find(
-    (w) => w.path.endsWith(`/${cleanSlug}`) && w.branch && w.branch.endsWith(`-${cleanSlug}`),
-  )
+  const target = findSessionWorktreeForSlug(consumerRoot, cleanSlug)
   if (!target) {
     if (opts.noopIfMissing) {
       console.log(`merge-back: no session worktree for ${cleanSlug} (no-op)`)
@@ -4625,6 +4715,7 @@ async function main() {
     '--baseline-stash-name',
     '--show',
     '--task-summary',
+    '--expected-paths',
     '--origin',
     '--verification',
   ])
@@ -4672,6 +4763,7 @@ async function main() {
     baselineStashName: values['--baseline-stash-name'],
     show: values['--show'],
     taskSummary: values['--task-summary'],
+    expectedPaths: values['--expected-paths'],
     origin: values['--origin'],
     workDone: flags.has('--work-done'),
     verification: values['--verification'],
@@ -4699,6 +4791,9 @@ async function main() {
     case 'merge-back':
       await cmdMergeBack(positional[0], opts)
       return
+    case 'resolve':
+      await cmdResolve(positional[0], opts)
+      return
     case 'land-pending':
       await cmdLandPending(positional[0], opts)
       return
@@ -4716,7 +4811,7 @@ async function main() {
       return
     default:
       console.error(
-        'Usage: wt-helper <add|detect-main-dirty|list|prune|reclaim-stale|cleanup|merge-back|land-pending|rescue|orphan-prune|sweep-siblings|dev> [args]',
+        'Usage: wt-helper <add|detect-main-dirty|list|prune|reclaim-stale|cleanup|merge-back|resolve|land-pending|rescue|orphan-prune|sweep-siblings|dev> [args]',
       )
       console.error('')
       console.error(
@@ -4768,6 +4863,14 @@ async function main() {
       console.error('  reclaim-stale             Free dev-port slots held by stale worktrees')
       console.error('  cleanup <slug>            Remove worktree (gated by --force +')
       console.error('                            --force-discard-unland; pre-checks both)')
+      console.error(
+        '  resolve <slug>            Print the session worktree path owning <slug> (exit 3 = none,',
+      )
+      console.error(
+        '                            meaning main is authoritative). Same matcher merge-back uses,',
+      )
+      console.error('                            so gates scan exactly the tree Step 0 will land.')
+      console.error('    --json                  emit {slug,found,path,branch,consumerRoot}')
       console.error('  merge-back <slug>         Atomic squash into main + cleanup; flags:')
       console.error('    --dry-run               preview blockers + worktree WIP without acting')
       console.error(

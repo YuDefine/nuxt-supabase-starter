@@ -1,6 +1,6 @@
 ---
 description: 多 session 並行下「哪些路徑屬於別 session 還活著的工作」的判定規格——claim 檔 schema、寫 / refresh / drop 時機、誰讀、stale 處理、claim-helper CLI，以及 ownership provenance journal 的寫入時證據與 other-live / orphan / unknown 三分類
-paths: ['.clade/claims/**', 'plugins/hub-core/hooks/pre-bash-ownership-stamp.sh', 'scripts/claim-helper.ts', 'scripts/spectra-advanced/claim*.ts', 'scripts/spectra-advanced/claims-lib.ts', 'scripts/spectra-advanced/release-work.ts', 'vendor/scripts/claim-helper.ts', 'vendor/scripts/ownership-journal.ts', 'vendor/scripts/flow/who.ts', '.clade/ownership/**', 'plugins/hub-core/hooks/post-tool-ownership-journal.sh', 'vendor/scripts/spectra-advanced/claim*.ts', 'vendor/scripts/spectra-advanced/claims-lib.ts', 'vendor/scripts/spectra-advanced/release-work.ts']
+paths: ['.clade/claims/**', 'plugins/hub-core/hooks/pre-bash-ownership-stamp.sh', 'scripts/claim-helper.ts', 'scripts/spectra-advanced/claim*.ts', 'scripts/spectra-advanced/claims-lib.ts', 'scripts/spectra-advanced/release-work.ts', 'vendor/scripts/claim-helper.ts', 'vendor/scripts/ownership-journal.ts', 'vendor/scripts/flow/who.ts', '.clade/ownership/**', 'plugins/hub-core/hooks/post-tool-ownership-journal.sh', 'plugins/hub-core/hooks/pre-edit-claim-conflict.sh', 'vendor/scripts/spectra-advanced/claim*.ts', 'vendor/scripts/spectra-advanced/claims-lib.ts', 'vendor/scripts/spectra-advanced/release-work.ts']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -28,6 +28,7 @@ Local edits will be reverted by the next sync.
   "branch": "session/<date>-<slug>",
   "change_id": "<slug>",
   "expected_paths": ["server/api/foo/**", "layers/bar/**"],
+  "work_id": "W-2026-08-29-<slug>",
   "last_heartbeat": "<iso>",
   "expires_at": "<iso, started+24h>"
 }
@@ -35,6 +36,7 @@ Local edits will be reverted by the next sync.
 
 - `session_id` 純 ID（由 `claim-helper.ts` 生成；含 timestamp + random + hostname 片段）
 - `expected_paths` 是這個 session 預期會碰的檔案 glob（可空，越精確越好）。**實測恆為 `[]`** —— 所以讀 claim 的那一側 **MUST** 走 § 3.3 的導出值，**NEVER** 只讀這個欄位就下「這棵樹沒碰任何檔」的結論
+- `work_id` 是這個 session 正在執行的 flow work item（TD-794 刀 4）。由 `writeClaim()` 從 ambient `CLADE_WORK_ID` 自動帶入 —— **NEVER** 改成要每個呼叫端記得傳：`expected_paths` 就是那樣變成 22/22 全空的。舊 claim 沒有這個欄位是正常態，讀側 **NEVER** 把它當必填
 - `expires_at` = `last_heartbeat + 24h`；過期 claim 視為失活，prune 階段會自動刪
 
 ## 2. Claim 寫 / refresh / drop 時機
@@ -186,6 +188,49 @@ join 回 claim，宣告值與導出值並存，每一列帶 `via: 'declared' | '
 | `wt-helper.ts` stash namespace | Phase 7：stash slug 帶 session_id |
 | `flow who` / `herdr-patrol` | 人與 agent 查「現在誰持有什麼」的同一份 JSON |
 
+### 3.4 動筆之前的消費端（TD-794 刀 4）
+
+`claim-helper.ts` 的 `claimConflictsForPath()` 回答一個路徑的一題：「別人的活 claim 已經涵蓋這個檔了嗎」。
+消費端是 PreToolUse hook `pre-edit-claim-conflict.sh`（`Edit|Write`），命中才遞**一行**給要動筆的人。
+
+在它之前，claim registry 有寫入端、有契約、有 heartbeat、有 journal，而**沒有任何動作在動筆之前讀它**。
+於是持有者只剩兩個選擇：沉默（別人重工），或廣播（N 份 token、N-1 份純浪費）。理性選擇是廣播——
+所以 **NEVER 把那個廣播記成紀律問題**，要求他「下次別廣播」只會把他推回沉默那一邊，而那更糟。
+
+三條，**NEVER 放寬任何一條**：
+
+| 邊界 | 逐字 | 放寬會怎樣 |
+| --- | --- | --- |
+| 只有 `declared` 與 `derived-hook` 出聲 | journal 的 `mtime-diff` 列 **NEVER** 用來出聲 | 見下方量測：一個大多時候是錯的告警會訓練所有人跳過它，連同那 4.6% 真陽性一起丟掉 |
+| 文案 MUST 帶 `via` | `[via=declared]`（有人說會碰）與 `[via=derived-hook]`（有人確實碰過）要看得出差別 | 兩者要的答案不同——宣告會過期，寫入不會 |
+| 無命中 = 零輸出、exit 0 | 沒有「查過了，沒事」這種訊息 | 無事發生時仍要人讀一段字，就是同一個廣播換個地方發 |
+
+**為什麼 `mtime-diff` 被排除**（clade 自身 journal 實測，2026-08-29，1748 列 / 3.6 天 / 85 個 session）：
+
+| 量到的 | 數字 |
+| --- | --- |
+| `attribution: mtime-diff` 的佔比 | 1670 / 1748 = **95.5%** |
+| 其中可由同路徑 `hook` 列裁決的部分，**歸錯 session** 的比率 | 14/16 = **87.5%**（±60s）／26/28 = 92.9%（±300s） |
+| `mtime-diff` 列中「同一路徑同一分鐘內有 ≥2 個 session」的比率 | 1075 / 1670 = **64.4%** |
+| 來自單次 Bash 一口氣掃出 >5 個路徑的列 | 851 / 1670 = 51% |
+
+**NEVER 用「提高召回」當理由把 `mtime-diff` 收進來。** 召回問題的根因在上游——Bash 寫入靠時間窗歸因，
+是因為沒有東西告訴 hook 動了哪個檔。把那個窗口收窄（或讓 Bash 寫入說得出路徑），這裡自動就收得到；
+改為放寬消費端，只是把一個已知會錯的訊號變成一個被信任的訊號。
+
+**NEVER 讓 hook 補 `permissionDecision`。** 它是 warn 不是 block：爭用的正解是兩個 session 談，
+不是機器替其中一方否決另一方。同理 **NEVER** 在命中時把整段來源溯及塞給對方——遞的是一行，
+一段散文只是把廣播的污染改成點對點投遞。
+
+**導出值一律不回寫**（§ 3.3 鐵律）。機械驗法：hook 跑過之後 claim 檔的內容與 mtime 皆不變
+（`test/claim-conflict-consumer.test.ts` 釘住這條）。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 目標路徑落在別人活 claim 的 `declared` 或 `derived-hook` 範圍內 → 遞一行（最多 3 行）。**warn-only，NEVER block** |
+| 消費端 | 正要 Edit / Write 的那個 agent（本節）；`wt-helper add` 開樹時對宣告範圍做同一查詢 |
+| 載入路徑 | 本節（`rules/core/session-claims.md`，paths-gated 於 `.clade/claims/**`、`vendor/scripts/claim-helper.ts`、`plugins/hub-core/hooks/pre-edit-claim-conflict.sh`） |
+
 ## 4. 儲存與 gitignore
 
 - 位置：consumer-local `.clade/claims/<session-id>.json`
@@ -218,4 +263,10 @@ node scripts/claim-helper.ts refresh <session-id>
 node scripts/claim-helper.ts refresh-by-cwd     # 由 SessionStart hook 跑
 node scripts/claim-helper.ts drop <session-id>
 node scripts/claim-helper.ts prune              # 清過期
+node scripts/claim-helper.ts conflicts <repo-relative-path> [--worktree <abs>] [--json]
+                                                # 動筆前的一路徑查詢（§ 3.4）。exit 3 = 有衝突，
+                                                # 0 = 沒有。3 而不是 1：查詢失敗與查到衝突
+                                                # NEVER 共用一個 exit code
 ```
+
+`add` 另接 `--work-id <id>`；不給就吃 ambient `CLADE_WORK_ID`。

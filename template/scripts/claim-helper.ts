@@ -48,6 +48,12 @@ interface Claim {
   change_id: string | null
   expected_paths: string[]
   task_summary: string | null
+  /**
+   * The flow work item this session is executing (TD-794 刀 4). Optional on the type because
+   * the stream is append-only and every claim written before 2026-08-29 lacks it — NEVER make
+   * it required, that would make `isClaim` reject the existing files instead of the new ones.
+   */
+  work_id?: string | null
   last_heartbeat: string
   expires_at: string
 }
@@ -74,6 +80,7 @@ interface ParsedFlags {
   'change-id'?: string
   'expected-paths'?: string
   'task-summary'?: string
+  'work-id'?: string
   all?: true
   [key: string]: string | true | undefined
 }
@@ -114,6 +121,24 @@ export function findConsumerRoot(cwd = process.cwd()) {
   }
 }
 
+/**
+ * Absolute toplevel of the tree `cwd` sits in — the linked worktree when inside one, NOT the
+ * consumer root. That distinction is the whole join key for claims: `findConsumerRoot()` maps
+ * every worktree back to one root, which is right for locating `.clade/`, and wrong for asking
+ * "which tree am I".
+ */
+export function gitToplevel(cwd = process.cwd()): string | null {
+  try {
+    return execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+  } catch {
+    return null
+  }
+}
+
 function ensureClaimsDir(consumerPath) {
   const dir = claimsDir(consumerPath)
   if (!existsSync(dir)) {
@@ -147,6 +172,10 @@ export function writeClaim(consumerPath, partial: ClaimInput) {
     change_id: partial.change_id ?? null,
     expected_paths: partial.expected_paths ?? [],
     task_summary: partial.task_summary ?? null,
+    // Ambient fallback lives HERE and not in each caller on purpose: this is the single write
+    // point for claims, so filling it here is a one-place guarantee. Wiring it per call site is
+    // how `expected_paths` ended up 22/22 empty — the flag existed, nobody passed it.
+    work_id: partial.work_id ?? (process.env.CLADE_WORK_ID?.trim() || null),
     last_heartbeat: now,
     expires_at: expiresFromNow(),
   }
@@ -299,18 +328,188 @@ export function derivedClaimPaths(
   claim: Claim,
   journal: ReturnType<typeof readJournal>,
   { sessions }: { sessions?: Set<string> | null } = {},
-): { paths: string[]; live: boolean } {
-  if (!claim.worktree_path) return { paths: [], live: false }
+): { paths: string[]; live: boolean; evidence: Map<string, DerivedPathEvidence> } {
+  const empty = { paths: [], live: false, evidence: new Map<string, DerivedPathEvidence>() }
+  if (!claim.worktree_path) return empty
   const mine = journal.filter((e) => e.worktree === claim.worktree_path)
-  if (mine.length === 0) return { paths: [], live: false }
+  if (mine.length === 0) return empty
   let liveness
   try {
     liveness = writerLiveness(mine[mine.length - 1], { sessions })
   } catch {
-    return { paths: [], live: false }
+    return empty
   }
-  if (liveness.verdict !== 'alive') return { paths: [], live: false }
-  return { paths: [...new Set(mine.map((e) => e.path))].toSorted(), live: true }
+  if (liveness.verdict !== 'alive') return empty
+  // Per-path evidence, carried out alongside the paths (TD-794 刀 4). `attribution` is the
+  // journal's own confidence label and every consumer MUST read it — dropping it is what let a
+  // 95%-inference signal be used as if it were direct evidence, misleading two sessions in one
+  // day (pitfall-coordination-state-broadcast-because-no-consumer-reads-the-claim).
+  //
+  // A path written by BOTH mechanisms resolves to `hook`: a hook row is the harness naming the
+  // file, so it settles the question that the mtime window only guesses at.
+  const evidence = new Map<string, DerivedPathEvidence>()
+  for (const e of mine) {
+    const prior = evidence.get(e.path)
+    if (prior && prior.attribution === 'hook' && e.attribution !== 'hook') continue
+    if (prior && prior.attribution === e.attribution && prior.ts >= e.ts) continue
+    evidence.set(e.path, { attribution: e.attribution, ts: e.ts, pane_id: e.pane_id })
+  }
+  return { paths: [...evidence.keys()].toSorted(), live: true, evidence }
+}
+
+/** Why one derived path is in a claim's effective range, and how much that reason is worth. */
+export interface DerivedPathEvidence {
+  attribution: 'hook' | 'mtime-diff'
+  /** ISO timestamp of the write this evidence comes from. */
+  ts: string
+  pane_id: string | null
+}
+
+/**
+ * The one-path read side of the claim registry: "is anyone else's live claim already covering
+ * this file?" (TD-794 刀 4). Powers the `pre-edit-claim-conflict` PreToolUse hook.
+ *
+ * ## Why `mtime-diff` evidence is admitted but NEVER raises a conflict
+ *
+ * `.clade/ownership/journal.jsonl` labels every row with how the path was attributed, and the
+ * two labels are not two grades of the same thing — measured on clade's own journal
+ * (1748 rows / 3.6 days / 85 sessions, 2026-08-29):
+ *
+ * | metric | value |
+ * | --- | --- |
+ * | rows attributed by `mtime-diff` | 1670 / 1748 = 95.5% |
+ * | of the `mtime-diff` rows a same-path `hook` row can adjudicate, share attributed to the WRONG session | 14/16 = 87.5% (±60s window); 26/28 = 92.9% (±300s) |
+ * | `mtime-diff` rows where ≥2 distinct sessions claim the same path inside ±60s | 1075 / 1670 = 64.4% |
+ * | `mtime-diff` rows arriving in bursts of >5 paths from one Bash call | 851 / 1670 = 51% |
+ *
+ * A PreToolUse warning built on that would be wrong roughly two times in three, and a warning
+ * that is usually wrong does not merely fail to help — it trains everyone to skip reading it,
+ * which throws away the 4.6% of rows that are direct evidence too. So the admission rule is:
+ * **`declared` and `derived-hook` raise a conflict; `mtime-diff`-only coverage stays silent.**
+ *
+ * NEVER "fix" the recall by admitting `mtime-diff` here. The recall problem is upstream — Bash
+ * writes are attributed by a time window because nothing tells the hook which file was written.
+ * Narrow that window (or make Bash writes nameable) and this function admits them for free.
+ * Widening the consumer instead converts a known-bad signal into a trusted one.
+ */
+export interface ClaimConflict {
+  path: string
+  via: 'declared' | 'derived-hook'
+  session_id: string
+  work_id: string | null
+  task_summary: string | null
+  change_id: string | null
+  branch: string | null
+  worktree_path: string | null
+  pane_id: string | null
+  /** ISO — declared: when the claim opened; derived: the write that put the path in range. */
+  since: string
+}
+
+export function claimConflictsForPath(
+  consumerRoot: string,
+  relPath: string,
+  {
+    myWorktree = null,
+    mySessionId = null,
+    sessions,
+    journal,
+    claims,
+  }: {
+    myWorktree?: string | null
+    mySessionId?: string | null
+    sessions?: Set<string> | null
+    journal?: ReturnType<typeof readJournal>
+    claims?: Claim[]
+  } = {},
+): ClaimConflict[] {
+  let entries = journal
+  if (entries === undefined) {
+    try {
+      entries = readJournal(consumerRoot)
+    } catch {
+      entries = []
+    }
+  }
+  let active = claims
+  if (active === undefined) {
+    try {
+      active = readActiveClaims(consumerRoot)
+    } catch {
+      active = []
+    }
+  }
+  let live = sessions
+  if (live === undefined) {
+    try {
+      live = liveSessionIds()
+    } catch {
+      live = null
+    }
+  }
+  const out: ClaimConflict[] = []
+  for (const claim of active) {
+    // Self-exclusion is by worktree FIRST, because that is the only key that actually joins:
+    // a claim's `session_id` comes from `genSessionId()` and the harness's comes from the hook
+    // payload — two namespaces that never compare equal (session-claims.md § 3.3).
+    if (myWorktree && claim.worktree_path === myWorktree) continue
+    if (mySessionId && claim.session_id === mySessionId) continue
+    const declared = (claim.expected_paths ?? []).some((pat) => matchClaimGlob(relPath, pat))
+    if (declared) {
+      const last = entries.findLast((e) => e.worktree === claim.worktree_path)
+      out.push({
+        path: relPath,
+        via: 'declared',
+        session_id: claim.session_id,
+        work_id: claim.work_id ?? null,
+        task_summary: claim.task_summary ?? null,
+        change_id: claim.change_id ?? null,
+        branch: claim.branch ?? null,
+        worktree_path: claim.worktree_path,
+        pane_id: last?.pane_id ?? null,
+        since: claim.started_at,
+      })
+      continue
+    }
+    const derived = derivedClaimPaths(claim, entries, { sessions: live })
+    const ev = derived.evidence.get(relPath)
+    if (!ev || ev.attribution !== 'hook') continue
+    out.push({
+      path: relPath,
+      via: 'derived-hook',
+      session_id: claim.session_id,
+      work_id: claim.work_id ?? null,
+      task_summary: claim.task_summary ?? null,
+      change_id: claim.change_id ?? null,
+      branch: claim.branch ?? null,
+      worktree_path: claim.worktree_path,
+      pane_id: ev.pane_id,
+      since: ev.ts,
+    })
+  }
+  return out
+}
+
+/**
+ * One line per conflict — the whole message budget. NEVER expand this into the broadcast it
+ * replaces: handing the conflicting agent a paragraph of provenance is the same pollution the
+ * broadcast was, just addressed to one reader instead of N.
+ *
+ * `[via=...]` is not decoration. Without it `declared` (someone said they would touch this) and
+ * `derived-hook` (someone demonstrably did) read identically, and they call for different
+ * answers — a declaration can be stale, a write cannot.
+ */
+export function formatClaimConflict(c: ClaimConflict, now = Date.now()): string {
+  const hours = Math.max(0, Math.round((now - new Date(c.since).getTime()) / 3600_000))
+  const age = hours < 1 ? '不到 1h' : `${hours}h`
+  const who = c.pane_id ? `pane ${c.pane_id}` : `session ${c.session_id}（無 pane）`
+  const work = c.work_id ? `work ${c.work_id}` : 'work 未歸屬'
+  const what = c.task_summary ?? c.change_id ?? '(claim 沒寫 task_summary)'
+  const verb = c.via === 'declared' ? '宣告為工作範圍' : '實際寫入過'
+  const probe = c.pane_id
+    ? `先 herdr agent prompt ${c.pane_id} 協商`
+    : `先 node vendor/scripts/flow/flow.ts who 找持有者`
+  return `⚠ ${c.path} 在 ${age} 前被 ${who}（${work}：${what}）${verb} [via=${c.via}]——${probe}，或確認該 claim 已停用（node vendor/scripts/claim-helper.ts drop ${c.session_id}）`
 }
 
 /**
@@ -573,6 +772,7 @@ if (invokedAsCli()) {
         change_id: flags['change-id'] ?? null,
         expected_paths: flags['expected-paths']?.split(',').filter(Boolean) ?? [],
         task_summary: flags['task-summary'] ?? null,
+        work_id: flags['work-id'] ?? null,
       })
       console.log(`claim written: ${claim.session_id}`)
       console.log(JSON.stringify(claim, null, 2))
@@ -601,6 +801,28 @@ if (invokedAsCli()) {
       const claims = readActiveClaims(consumerPath, { includeExpired: flags.all === true })
       console.log(`active claims in ${consumerPath}: ${claims.length}`)
       console.log(formatClaimsSummary(claims, { consumerRoot: consumerPath }))
+    } else if (cmd === 'conflicts') {
+      // Read side for the PreToolUse hook. `--json` so the hook never parses prose;
+      // exit 3 (not 1) on a hit so "someone else holds this" is distinguishable from
+      // "the query itself failed" — a hook that cannot tell those apart fails the wrong way.
+      const flags = parseFlags(rest.filter((a) => a.startsWith('--')))
+      const target = rest.find((a) => !a.startsWith('--'))
+      if (!target) {
+        console.error(
+          'usage: claim-helper conflicts <repo-relative-path> [--worktree <abs>] [--json]',
+        )
+        process.exit(1)
+      }
+      const rows = claimConflictsForPath(consumerPath, target, {
+        myWorktree:
+          typeof flags.worktree === 'string' ? flags.worktree : gitToplevel(process.cwd()),
+      })
+      if (flags.json === true) {
+        console.log(JSON.stringify(rows))
+      } else {
+        for (const row of rows) console.log(formatClaimConflict(row))
+      }
+      process.exit(rows.length > 0 ? 3 : 0)
     } else if (cmd === 'prune') {
       const n = pruneExpired(consumerPath)
       console.log(`pruned ${n} expired claim(s)`)
@@ -616,7 +838,9 @@ if (invokedAsCli()) {
       const refreshed = refreshClaim(consumerPath, claim.session_id)
       console.log(`refreshed: ${refreshed.session_id} (expires ${refreshed.expires_at})`)
     } else {
-      console.error('usage: claim-helper [list|add|refresh|refresh-by-cwd|drop|prune] ...')
+      console.error(
+        'usage: claim-helper [list|add|refresh|refresh-by-cwd|drop|prune|conflicts] ...',
+      )
       process.exit(1)
     }
   } catch (e) {

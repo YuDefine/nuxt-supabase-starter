@@ -538,3 +538,112 @@ pnpm exec vp fmt --migrate=prettier  # 從既有 prettier config 遷移（若有
 - `scripts/audit-tooling-drift.ts` Phase 2：併入 `.eslintrc*` / `.prettierrc*` / `eslint.config.*` / `prettier.config.*` 等禁用 **config 檔**的存在性掃描（dep 層已由 `eslintDeps` signal 涵蓋；config 檔層目前 sync-rules.ts 只認 `.prettierignore` 一條）
 - pre-commit hook 加 check：偵測到 eslint/prettier config 進 staging 直接擋
 - CI workflow 同步檢查
+
+## Heavy gate 准入控制（機器層並行上限）
+
+一台機器上跑 N 個 agent session 時，heavy gate（`typecheck` / `test` / `test-mutation` /
+`build`）各自吃 2–4 GiB RAM 與整顆核心。閘門是 `vendor/scripts/gate-slot.sh`
+（consumer 投影 `scripts/gate-slot.sh`），入口是 `bin/clade-gate`。
+
+**heavy job MUST 經 `clade-gate run <label> -- <cmd>` 才受閘。** 光把 label 加進
+`CLADE_HEAVY_GATES` 不會讓任何東西受閘 —— package.json 裡那條 script 沒寫成 `clade-gate run`
+的形式，它就是直呼 binary，閘門從頭到尾不知道它存在。2026-08-29 事故當下 <consumer-b> 的 `build`
+正是這個狀態：不經閘門，且 heap 上限（8192）比 typecheck（4096）更高。
+
+| script | MUST 寫成 |
+| --- | --- |
+| `typecheck` | `clade-gate run typecheck -- <nuxt typecheck / vue-tsc …>` |
+| `test`（含 coverage） | `clade-gate run test -- <vitest / vp test …>` |
+| `test:mutation` | `clade-gate run test-mutation -- <stryker …>` |
+| `build` | `clade-gate run build -- <nuxt build / vite build …>` |
+
+**這一格有稽核**：`node scripts/audit-gate-coverage.ts` § 3b 逐 consumer 印出上表四條 script
+的受閘狀態，`✗ 未受閘` 就是 script 沒寫成 `clade-gate run` 的形式。它會跟著 `pnpm build:xxx`
+這種轉呼往下解一層以上，所以間接寫法不會被誤報。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 任一 consumer 的 heavy script 已定義但未經 `clade-gate run <label>` → 進該 audit 的 Warnings 段。**warn-only，不 block**：改 script 是 consumer 自治區的動作，擋 clade 自己的 publish 是錯的施力點（同 `audit-lockfile-staleness`） |
+| 消費端 | `/clade-health enforcement`（每輪跑 `node scripts/audit-gate-coverage.ts`）；findings 進 HANDOFF 稽核段並 relay 給對應 consumer 的 session |
+| 載入路徑 | 本節（`rules/core/code-style.toolchain.md`，consumer 端投影為 `.claude/rules/code-style.toolchain.md`） |
+
+**單檔測試 / 小範圍 lint NEVER 包進 heavy label**。`test:file` / `test:unit` / `lint` /
+`format:check` 直呼工具即可 —— heavy 與 light 的區分**就是** label 有沒有進
+`CLADE_HEAVY_GATES`，不需要第二套分類。
+
+### 三個 exit code 說的是不同層的話
+
+| code | 誰說的 | 意思 |
+| --- | --- | --- |
+| 75 | `gate-slot.sh`（`BUSY`） | 等不到 slot / `try` 模式取不到。**inner command 從未執行**，不是 gate 失敗 |
+| 124 | `timeout`（holder 端自願上界） | inner command 跑超過 `CLADE_HEAVY_GATE_MAX_RUNTIME`（預設 3600s）被結束 |
+| 130 / 143 | `gate-slot.sh` 的等待期 trap | waiter 在**排隊期間**收到 SIGINT / SIGTERM，inner command 未執行 |
+
+**NEVER 把這四個讀成品質 gate 失敗**，也 NEVER 用「調大 timeout」「加 `--skip`」
+「改 `--max-old-space-size`」去回應它們 —— 那是對著錯誤的層施力（見
+[[pitfall-heavy-gate-exit-75-reads-as-typecheck-failure]]，該次誤診把 heap 調到 8192 後回退）。
+
+### 機器層調參 NEVER 寫死進 script 預設
+
+同一份 script 散播到全 fleet，每台機器的核心數、同時 session 數、CI 硬體都不同。
+所有上限一律走 env，由機器自己設（desk 放
+`~/.config/environment.d/60-clade-heavy-job-admission.conf` ＋ `~/.zshrc`，兩份要一起改）：
+
+| env | desk 值 | 沒設時 |
+| --- | --- | --- |
+| `CLADE_HEAVY_GATE_SLOTS` | `1` | 2（clamp 1..8） |
+| `CLADE_OXC_THREADS` | `2` | **不注入** —— oxlint / oxfmt 用滿全部核心 |
+| `CLADE_VITEST_MAX_WORKERS` | `2` | **不注入** —— vitest 用滿全部核心 |
+| `CLADE_GATE_WAIT_TIMEOUT` | 預設 | 3600s |
+| `CLADE_HEAVY_GATE_MAX_RUNTIME` | 預設 | 3600s（`0` 關閉） |
+
+後兩個 env 的注入在 `bin/vp` shim，三條件全中才動：env 有設且是正整數、子命令是
+`lint`/`fmt`/`test`、**使用者沒有自己帶那個旗標**。`--threads` 實測穿透到 oxc 底層
+（`vp fmt` 預設 403% CPU、`--threads=2` 為 198%，thread 數差正好 nproc−2），
+**NEVER** 只看 argv 有那個字串就當它生效。
+
+### `vp check` 收不到 threads 上限（已知殘餘）
+
+`vp check --threads=N` 回 `Unexpected argument '--threads'`（2026-08-29 vp v0.3.0 實測）。
+上限只覆蓋**直呼**的 `vp lint` / `vp fmt` / `vp test`。所以：
+
+| package.json 的 check 形狀 | 受不受 threads 上限 |
+| --- | --- |
+| `pnpm format:check && pnpm lint && …`（各自是 `vp fmt` / `vp lint`） | **受** |
+| 單一 `vp check` | **不受** —— 內部扇出到全部核心 |
+
+**NEVER 為了讓它受控就把 `vp check` 拆成兩條**：那會讓 consumer 的 check 語義與 vp 的
+官方入口分岔。要嘛接受這一格（clade 自身 995 檔 fmt 7.4s，代價可承受），要嘛等上游支援。
+
+### 長駐 dev server 不是 gate —— 閘門結構上攔不到它
+
+`nuxt dev` / `wrangler dev` / `vite` 不經過任何 gate，所以**加再多 heavy label 都攔不到**。
+而起它的 session 死掉後它被 init 收養（`ppid=1`）繼續跑，落在無上限的 login session scope，
+沒有任何人會回來收 —— 2026-08-29 實測：撤離釋放 10.9 GB，26 分鐘內被兩支 `ppid=1` 的 workerd
+吃掉 6.9 GB，而它們的 `cwd` 已經是 `(deleted)`，服務的 worktree 早就不存在。
+
+處置走 `vendor/snippets/scoped-dev-server/`（host-specific，貼進 **`~/.zshenv`**）。
+
+**MUST 是 `.zshenv`，NEVER 是 `.zshrc`。** `.zshrc` 只在互動 shell 執行，而 agent 執行指令走的是
+**非互動** shell —— 放 `.zshrc` 的東西 agent 一個都拿不到，**而 `cat ~/.zshrc` 看起來完全正常**。
+這條對 env 與函式同樣成立：2026-08-29 實測三個 `CLADE_*` 上限「設了但沒生效」，
+`~/.config/environment.d/` 那份也沒有（它要 manager 重載，且只影響之後起的 unit）。
+**NEVER 用「設定檔裡有這一行」推論它生效**，MUST 實跑 `zsh -c 'printenv <VAR>'` 驗一次。
+
+**NEVER 讀成「從此不會有 orphan」**：scope 的語義本來就是「起它的 shell 死了，裡面的行程繼續跑」。
+它換到的是**有界且具名**（吃得到 slice 上限、`systemctl --user list-units --type=scope` 叫得動），
+不是自動回收。
+
+### NEVER 用 slots 數量近似記憶體
+
+slot 是計數，不是權重：兩個 300 MB 的 job 與兩個 3 GiB 的 job 在它眼中相同。
+**記憶體的權重機制是 cgroup**（`agent-workloads.slice` 的 `MemoryMax` ＋ 每個 session
+scope 的 `MemoryMax`），不是 slot 數。想讓「便宜的 heavy 可以併跑」時正解是**分池**
+（各池一把鎖、每個 job 只取一池），**NEVER** 做成多單位計數 semaphore —— 在檔案鎖上
+實作部分持有會死鎖（A 持 1 個等第 2 個、B 同樣）。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 取不到 slot → 排隊（`wait`）或 exit 75（`try`）。**排隊不失敗**：硬 block 會逼人加逃生口，而逃生口常設等於閘門失效 |
+| 消費端 | 每一次 `pnpm typecheck` / `test` / `build`（經 `clade-gate` 的必經點，全 fleet 已投影）；孤兒 holder 的判讀由逾時診斷輸出交給人 |
+| 載入路徑 | 本節（`rules/core/code-style.toolchain.md`，paths-gated 於 `package.json` / `vite.config.*` / `tsconfig*.json` —— 接 heavy gate 的 script 就寫在那些檔裡） |

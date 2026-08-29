@@ -16,6 +16,7 @@ Dev-login routes are local/test-only auth bypasses for screenshot automation, E2
 
 ## MUST
 
+- **MUST 先讀 `~/offline/clade/docs/conventions/dev-login.md`** 再改本檔涵蓋的任何路徑——本 rule 管的是「route 要不要 fail closed」，而**開啟畫面連結能不能用**由那份 convention 的三個 gate 旗標（`loopbackOnly` / `emailRequired` / POST-only）決定：本機契約 MUST 先判旗標、後判 origin 偏好，loopback-gated 的 route 從 tunnel 打必 404。review-gui PWA 的 skip-auth GET 契約（MUST 是 GET、MUST NOT 做 loopback gate、種完 session MUST `sendRedirect` 到檢驗起點）也只在那份 convention 裡有全文。
 - **MUST** fail closed with 404 outside the intended local/e2e runtime.
 - **MUST** use `import.meta.dev` when the route only needs `nuxt dev`; use an explicit env/runtime local gate only when E2E runs against a production build or Workers local runtime.
 - **MUST** ensure production deploy config never enables the dev-login gate (`NUXT_E2E_TESTING`, `NUXT_KNOWLEDGE_ENVIRONMENT=local`, or project equivalent).

@@ -193,10 +193,11 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 撞到 mixed commit / commit scope drift（`git show --stat HEAD` 含預期外 file）後，agent **MUST**：
 
 1. **STOP + 列現狀**（動 git history 前先看清楚：`git log` / `git reflog` / 活躍 session 偵測 / `git stash list`）
-2. **AskUserQuestion 給 user 拍板**，選項至少含：(A) **接受 mixed commit + 登記 cleanup**（最安全）、(B) **立即 reset/rebase 修復**（user **MUST** 對 race risk 知情同意）、(C) **等並行 session 收斂再評估**
-3. **NEVER** 自行跑 `git reset --soft HEAD~N` / `git rebase -i HEAD~N`（**任何 relative reference**）— `HEAD~N` 在 race window 內可能指到別 session 的 commit（多次實證）
-4. user 選 (B) → **MUST** 用 **specific SHA reference** 且**先**建 backup tag 保險；**NEVER** 在並行 session 活躍時跑 `git rebase` split mixed commit
-5. 撞坑後亦 **MUST** 在 [`docs/pitfalls/`](../../docs/pitfalls/) 對應 entry 加 regression evidence section
+2. **偵測到的持有者是前景 agent session → MUST 先對話再拍板**：送 `herdr agent prompt <對方 pane_id> "<四項>"` 問它那筆 commit 的範圍、還要多久 land、要不要一起收拾。**這一步排在下一步之前** —— 一則 prompt 問得出「那 28 行是不是你的」，而 `AskUserQuestion` 只會把這個問題轉給不在現場的人。持有者是 unattended runner、或 Step 1 判不出持有者時跳過本步。逐字範本見 `vendor/snippets/concurrent-session-probe/README.md` § 探測之後：協商（negotiate）
+3. **AskUserQuestion 給 user 拍板**，選項至少含：(A) **接受 mixed commit + 登記 cleanup**（最安全）、(B) **立即 reset/rebase 修復**（user **MUST** 對 race risk 知情同意）、(C) **等並行 session 收斂再評估**
+4. **NEVER** 自行跑 `git reset --soft HEAD~N` / `git rebase -i HEAD~N`（**任何 relative reference**）— `HEAD~N` 在 race window 內可能指到別 session 的 commit（多次實證）
+5. user 選 (B) → **MUST** 用 **specific SHA reference** 且**先**建 backup tag 保險；**NEVER** 在並行 session 活躍時跑 `git rebase` split mixed commit
+6. 撞坑後亦 **MUST** 在 [`docs/pitfalls/`](../../docs/pitfalls/) 對應 entry 加 regression evidence section
 
 完整 6 步操作流程 + 命令塊 + backup tag 模板：`~/offline/clade/vendor/snippets/git-recovery/README.md`；cross-ref [[pitfall-consumer-ad-hoc-commit-eats-other-session-staged]] § Regression Evidence。
 
@@ -333,6 +334,7 @@ user 不成立**，結果是 stash 單調遞增、owner 資訊隨時間流失，
 1. **`/commit` 本身壞掉** — command 檔被改壞、依賴的 agent 不可用時的救火
 2. **Merge commit / rebase resolution** — `git merge` / `git rebase --continue` 的自動 commit
 3. **`git revert` 既有 commit** — 還原已 push 的 commit，無需重跑品質檢查。**僅**適用於使用者**主動**指明要 revert 哪個 commit（例如 `git revert abc1234`）；**NEVER** 主線自行提議 revert，也**NEVER** 用 `git revert` 處理 uncommitted WIP（一律走「WIP 阻礙處理」的 stash + handoff）
+4. **clade propagate 的投影交付 commit** — `~/offline/clade/scripts/propagate.ts` 在每個 consumer 建的 `🧹 chore: 升級 clade 至 vX.Y.Z` / `🧹 chore: 同步 clade vendor/rules 至 vX.Y.Z`。**這是刻意設計，不是漏網**：內容全部是 clade 端已過 24 道 publish gate 的投影檔，consumer 端再跑一次 `/commit` 的 0-A review / 0-C check 只是對同一份內容重複審查；而 propagate 是一趟跨全 registry 的動作，逐台等人拍板等於這條散播管線不存在。**範圍僅限 propagate 自己寫的那一個 commit**——它的 push 由 `shouldPush()` 把關，branch 上有任何不是本趟建的未推 commit 就 `push-withheld` 並要求人工 `git push`（[[pitfall-fleet-propagate-pushes-deliberately-unpushed-commits]]）。**NEVER** 把本例外讀成「自動化工具都可以直接 commit」：它點名的是這一支 script 的這一種 subject，其他任何自動 commit 都不在內
 
 例外情境外，一律走 `/commit`。
 

@@ -445,6 +445,7 @@ function usage() {
 用法：
   node scan.mjs [--staged|--all] [--layer pre-commit|ratchet|all] [--ratchet]
                 [--include <glob>]... [--write-baseline] [--json] [--help]
+  node scan.mjs --relevant-from <file> [--layer ...]   # 這批 changed paths 值不值得掃（exit 0=值得 / 3=不值得）
 
 範例：
   node scan.mjs --staged --layer pre-commit                 # pre-commit hook
@@ -486,6 +487,12 @@ function main() {
   const wantWriteBaseline = argv.includes('--write-baseline')
   const wantJson = argv.includes('--json')
 
+  const relevantIdx = argv.indexOf('--relevant-from')
+  const relevantFrom = relevantIdx >= 0 ? (argv[relevantIdx + 1] ?? '') : ''
+  if (relevantIdx >= 0 && !relevantFrom) {
+    throw new UsageError('--relevant-from 需要一個檔案路徑參數')
+  }
+
   const consumerRoot = resolveConsumerRoot()
   const patternsPath = join(consumerRoot, 'vendor', 'review-rules', 'patterns.json')
 
@@ -508,6 +515,25 @@ function main() {
   const data = isRecord(dataRaw) ? dataRaw : {}
   const allRules: Rule[] = Array.isArray(data.rules) ? (data.rules as Rule[]) : []
   const rules = allRules.filter((r) => layer === 'all' || (r.layer || 'pre-commit') === layer)
+
+  // --relevant-from <file>：讀一份 newline-separated 的路徑清單（pre-push runner 算出的本次
+  // push changed paths），回答「這批路徑裡有沒有任何一個命中任一條規則的 fileGlob」。
+  //   exit 0 = 有（呼叫端 MUST 照原樣跑完整全站掃描，NEVER 只掃這幾個檔——ratchet 的
+  //            設計目的就是回溯全站存量）
+  //   exit 3 = 沒有（呼叫端可以整支 skip）
+  // 存在的理由：規則的 fileGlob 由 patterns.json 決定，且會改。runner 那邊 NEVER 複製一份
+  // matcher —— 那是第二份判定，會與這裡漂開，而漂開的那一刻它給的是「已經判過」的錯覺。
+  if (relevantFrom) {
+    const listed = readFileSync(relevantFrom, 'utf8')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+    const hit = listed.some((f) =>
+      rules.some((r) => matchFileGlob(f, r.fileGlob || LEGACY_VUE_GLOB)),
+    )
+    process.exitCode = hit ? 0 : 3
+    return
+  }
 
   const files =
     fileset === 'staged'

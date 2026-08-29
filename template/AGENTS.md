@@ -131,13 +131,15 @@ Changes can be parked（暫存）— temporarily moved out of `openspec/changes/
 <!-- CLADE:SNIPPET:worktree-default:START -->
 ## Session-level Worktree
 
-要動 code 的工作（implement / fix / refactor / migration）**MUST** 在獨立 git worktree 內執行，**NEVER** 直接在 main 改。操作走 `/wt <task>`：`/wt` 建 worktree、dispatch subagent 進去做事、主線 squash-merge 回 main 的 working tree、cleanup worktree。主線 chat session cwd 全程不動 — user 不必開新 terminal、不必手動跑任何 `git worktree` 子命令。
+要動 code 的工作（implement / fix / refactor / migration）**MUST** 在獨立 git worktree 內執行，**NEVER** 直接在 main 改。操作走 `/wt <task>`（建 worktree → dispatch subagent → squash-merge 回 main → cleanup；主線 cwd 全程不動）。
 
 - **Read-only session**（grep / 看 log / 解釋 code，不寫檔）**MAY** 留在 main worktree。
 - **Silent branch 禁令**：**NEVER** 跑 `git checkout -b` / `git branch <name>` 或任何會建新 ref 的指令，**除非**先取得 user 明確同意。`/wt` 用的 `session/<date-slug>` 是唯一例外（`/wt` 呼叫本身就是授權）。
-- **階段間 setup chore 主線自己跑**：subagent 兩個階段之間若要在 worktree 跑 local-only setup（`pnpm install` / `db:*` / `lint` / `test`），主線 **MUST** 用 Bash `cd <worktree-path> && <cmd>` 一行式跑掉（獨立子 shell，不動 session cwd），**NEVER** 把指令清單貼給 user 叫他切過去跑。真 destructive 操作（prod migration / `git push --force` / secrets / outbound 訊息 / shared infra）仍需 user 拍板。
+- **階段間 setup chore 主線自己跑**：subagent 兩個階段之間若要在 worktree 跑 local-only setup（`pnpm install` / `db:*` / `lint` / `test`），主線 **MUST** 用 Bash `cd <worktree-path> && <cmd>` 一行式跑掉（獨立子 shell，不動 session cwd），**NEVER** 把指令清單貼給 user 叫他切過去跑。真 destructive 操作仍需 user 拍板。
 
-哪些 skill 例外在 main 跑、`/wt` 全部 invocation forms、merge-back 的 atomic-landing 約束、squash conflict 與 cleanup 失敗的 fallback，見 `.claude/rules/worktree-default.md` — 那份是 always-load，同一個 session 內已經在你的 context 裡，**不要**在這裡複述。
+例外 skill、`/wt` forms、merge-back 的 atomic-landing 約束、squash conflict／cleanup 失敗的 fallback、`--force-discard-uncommitted` 的防遺失前置，全在 `.claude/rules/worktree-default.md`，不複述。
+
+**NEVER 假設那份已載入**：AI Agent always-load 直接用；**Codex / Pi 等只讀 `AGENTS.md` 的 agent 不會自動載入 `.claude/rules/`**，動 worktree（開 / merge-back / cleanup / `--force`）前 **MUST** 先 `cat` 它——未 commit WIP 的防遺失約束只在裡面。
 <!-- CLADE:SNIPPET:worktree-default:END -->
 
 <!-- CLADE:SNIPPET:evlog-prod-triage:START -->
@@ -176,7 +178,7 @@ Opus 5 的預設輸出比前代長，且 `effort` 只調思考量、不調輸出
 <!-- CLADE:SNIPPET:ui-invariants:START -->
 ## UI Invariants
 
-UI 不變式的生效檔由 resolver 依序找：consumer `docs/UI-INVARIANTS.md` → `docs/ui-invariants.md` → `.claude/ui-invariants.md` → clade baseline template（`~/offline/clade/claude-md/core-snippets/ui-invariants.template.md`）。查目前生效的是哪一份：`node vendor/scripts/ui-invariants-resolve.ts`。
+UI 不變式的生效檔由 resolver 依序找：consumer `docs/UI-INVARIANTS.md` → `docs/ui-invariants.md` → `.claude/ui-invariants.md` → clade baseline template（`~/offline/clade/claude-md/core-snippets/ui-invariants.template.md`）。查目前生效的是哪一份：`node ~/offline/clade/vendor/scripts/ui-invariants-resolve.ts`。
 
 clade baseline 維護 5 條 universal invariant（整欄塌縮 / lookup 解析率 / page load 4xx-5xx / row count vs seed / 不可逆操作要確認框）。要加業務專屬條目，**MUST** 先把 template 複製成自家 `docs/UI-INVARIANTS.md` 再於 `## Consumer-specific invariants` 追加，**NEVER** 改 universal 那 5 條 —— 它們由 clade 散播時保持對齊。
 <!-- CLADE:SNIPPET:ui-invariants:END -->

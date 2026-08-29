@@ -37,7 +37,6 @@ blob-report/
 .nuxtrc
 
 # Screenshots
-screenshots/
 temp/
 
 # Spectra runtime state (keep .spectra.yaml and folder skeleton)
@@ -91,3 +90,5 @@ openspec/.vector-search.db*
 .spectra/evidence/*.bak*
 
 .clade/flow/
+
+/screenshots/
