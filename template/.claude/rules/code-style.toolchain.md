@@ -557,13 +557,38 @@ pnpm exec vp fmt --migrate=prettier  # 從既有 prettier config 遷移（若有
 | `test:mutation` | `clade-gate run test-mutation -- <stryker …>` |
 | `build` | `clade-gate run build -- <nuxt build / vite build …>` |
 
+### Guard 要寫成 arg-safe 形狀，NEVER 裸 `if … fi`
+
+`clade-gate` 不一定存在（CI 用沒有 clade 的 self-hosted runner、投影未到位的新 repo），
+所以 script 常包一層 fallback guard。**裸寫的 guard 會吃不掉附加參數**：
+
+```jsonc
+// ❌ pnpm 把使用者的參數接在整條 script 尾端 → 實跑是 `… fi --run` → Syntax error
+"test": "if test -x .clade/bin/clade-gate; then .clade/bin/clade-gate run test -- vp test; else vp test; fi"
+
+// ✅
+"test": "sh -c 'if test -x .clade/bin/clade-gate; then exec .clade/bin/clade-gate run test -- vp test \"$@\"; else exec vp test \"$@\"; fi' --"
+```
+
+三個要點缺一還是壞的：整條包進 `sh -c '…'` 且**結尾的 `--`** 讓附加參數變成位置參數；
+**兩個分支都要 `"$@"`**；`exec` 讓 exit code 與訊號直接穿透。
+
+**不需要 fallback 的 repo 用直呼形式即可**（`.clade/bin/clade-gate run test -- vp test`）——
+參數自然接在最後，本來就沒問題。**NEVER 為了「看起來比較安全」給每個 repo 都加 guard**。
+
+**這個壞形狀的訊號極弱，所以要靠稽核而不是靠人看出來**：`pnpm test` 單獨跑正常、CI 綠、
+`--stat` 正常，只有 `pnpm test <檔名>` 這種用法才炸，而錯誤訊息 `sh: 1: Syntax error: word
+unexpected` 指向 shell、完全看不出真因。2026-08-29 TD-685 relay 實測：**5 個 consumer 的
+session 各自獨立寫出同一個壞形狀**，只有一個（<consumer-j>）在 review 階段實跑帶參數的形式
+才抓到。§ 3b 的 `⚠ 吃不掉參數` 就是這一格。
+
 **這一格有稽核**：`node scripts/audit-gate-coverage.ts` § 3b 逐 consumer 印出上表四條 script
 的受閘狀態，`✗ 未受閘` 就是 script 沒寫成 `clade-gate run` 的形式。它會跟著 `pnpm build:xxx`
 這種轉呼往下解一層以上，所以間接寫法不會被誤報。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | 任一 consumer 的 heavy script 已定義但未經 `clade-gate run <label>` → 進該 audit 的 Warnings 段。**warn-only，不 block**：改 script 是 consumer 自治區的動作，擋 clade 自己的 publish 是錯的施力點（同 `audit-lockfile-staleness`） |
+| 觸發條件 | 任一 consumer 的 heavy script 已定義但未經 `clade-gate run <label>`（表格 `✗ 未受閘`），或有受閘但 guard 是裸 `if … fi`（表格 `⚠ 吃不掉參數`）→ 進該 audit 的 Warnings 段。**warn-only，不 block**：改 script 是 consumer 自治區的動作，擋 clade 自己的 publish 是錯的施力點（同 `audit-lockfile-staleness`） |
 | 消費端 | `/clade-health enforcement`（每輪跑 `node scripts/audit-gate-coverage.ts`）；findings 進 HANDOFF 稽核段並 relay 給對應 consumer 的 session |
 | 載入路徑 | 本節（`rules/core/code-style.toolchain.md`，consumer 端投影為 `.claude/rules/code-style.toolchain.md`） |
 

@@ -114,6 +114,6 @@ Log讓代答可審計，也讓問題密度成為brief品質訊號。
 | 場景 | 處理 |
 | --- | --- |
 | `codex-review-safe.sh` | 問問題代表review prompt或snapshot不足；修prompt後重新跑wrapper，不走coding dispatcher。 |
-| WebSearch routing | 問題罕見；補足查詢條件後以新label重派。 |
+| External web retrieval routing（WebSearch／WebFetch） | 問題罕見；補足查詢條件後以新label重派。 |
 | Runtime quota | exit 4不是input intercept；依quota fallback紀律處理。 |
 | Pi spawn／protocol故障且無assistant text | exit 3機械故障；不要捏造問題或答案。 |

@@ -36,7 +36,7 @@
     "hub:vendor": "node ${CLADE_HOME:-$HOME/offline/clade}/scripts/sync-vendor.ts",
     "hub:vendor:check": "node ${CLADE_HOME:-$HOME/offline/clade}/scripts/sync-vendor.ts --check",
     "hub:vendor:force": "node ${CLADE_HOME:-$HOME/offline/clade}/scripts/sync-vendor.ts --force",
-    "lint": "if test -x .clade/bin/clade-gate; then .clade/bin/clade-gate run lint -- vp lint --deny-warnings; else vp lint --deny-warnings; fi",
+    "lint": "sh -c 'if test -x .clade/bin/clade-gate; then exec .clade/bin/clade-gate run lint -- vp lint --deny-warnings \"$@\"; else exec vp lint --deny-warnings \"$@\"; fi' --",
     "postgrest:ready": "node scripts/postgrest-ready-gate.mjs",
     "postgrest:risk": "node scripts/postgrest-migration-risk.mjs",
     "postgrest:smoke": "node scripts/postgrest-smoke.mjs",

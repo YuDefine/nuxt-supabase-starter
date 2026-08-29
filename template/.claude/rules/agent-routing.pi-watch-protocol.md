@@ -16,7 +16,7 @@ Local edits will be reverted by the next sync.
 
 ## Pi 派工的標準流程（所有 routing 共用）
 
-派**任何** Pi 席位出去工作**一律走 `vendor/scripts/pi-dispatch.ts`**——`sol` / `luna`（provider `openai-codex`；`terra` 可解析但 2026-08-11 起 **NEVER** 派）、`sol-cursor` / `luna-cursor` / `grok-cursor`（provider `cursor`）、`grok-xai`（provider `xai`）**每一格都走這個入口**，沒有例外。
+派**任何** Pi 席位出去工作**一律走 `vendor/scripts/pi-dispatch.ts`**——`gemini`（provider `google-gemini-cli`）、`sol` / `luna`（provider `openai-codex`；`terra` 可解析但 2026-08-11 起 **NEVER** 派）、`sol-cursor` / `luna-cursor` / `grok-cursor`（provider `cursor`）、`grok-xai`（provider `xai`）**每一格都走這個入口**，沒有例外。
 
 要指 `openai-codex` 那組席位時寫 **codex-pool**，那個區分只在配額鏈與計價成立；派工管道一律稱 pi。
 
@@ -36,7 +36,7 @@ Local edits will be reverted by the next sync.
      --brief /tmp/pi-<topic>-<slug>-prompt.md \
      --cwd <cwd> \
      --label <topic>-<slug> \
-     --model <sol|sol-cursor|luna|luna-cursor|grok-xai|grok-cursor> --effort <low|medium|high|xhigh|max> \
+     --model <sol|sol-cursor|gemini|luna|luna-cursor|grok-xai|grok-cursor> --effort <low|medium|high|xhigh|max> \
      --route <routing-table|claude-delegate-sub|fallback-chain|manual> \
      --tier-basis <table-row|five-conjunct|adjudication|delegate-sub|quota-fallback|manual> \
      [--table-row <routing-row>] [--retry-of <prior-label>] [--chain-origin <sol|luna|grok-xai>]
@@ -46,7 +46,7 @@ Local edits will be reverted by the next sync.
    終點的 Claude 檔位按**起點**分（luna→`haiku`、grok-xai→`sonnet`）。不帶且 `--retry-of` 也回溯不到起點時，
    dispatcher 的 exit 4 回 unresolved 而不猜檔位。其餘 model 起點唯一，不必帶。
 
-   Dispatcher 固定用 Pi JSON mode、ephemeral session與 machine-safe extension profile，provider 由 `--model` 決定（`openai-codex` / `cursor` / `xai`）；model、effort、routing attribution與 exit code由這個入口統一驗證。MCP extension存在時由 dispatcher明確載入，interactive `cx` extension不會進 machine dispatch。
+   Dispatcher 固定用 Pi JSON mode、ephemeral session與 machine-safe extension profile，provider 由 `--model` 決定（`google-gemini-cli` / `openai-codex` / `cursor` / `xai`）；model、effort、routing attribution與 exit code由這個入口統一驗證。MCP extension存在時由 dispatcher明確載入，interactive `cx` extension不會進 machine dispatch。
 
 3. 立刻簡短回報 bash job ID 給使用者
 4. 立刻啟動 **Pi Watch Protocol**（見下節 § 監看排程）— notification-only（主線 idle 等通知，只下**一個** ~1500s 安全網 fallback 防罕見 hang-type 失敗）。**禁止**啟動每 3 分鐘短輪詢（無謂 turn 重燒 context）。**禁止**任何 subagent 中介 dispatch（per `agent-routing.md` § Dispatch 入口）
@@ -57,7 +57,7 @@ Local edits will be reverted by the next sync.
 
 | Routing | `<topic>` | `<cwd>` | reasoning effort | 預期動作 | Plan-first | Commit Prohibition |
 | --- | --- | --- | --- | --- | --- | --- |
-| WebSearch | `websearch` | `/tmp` | `medium` | 純讀（搜尋網頁/查文件） | 否 | N/A（不寫檔） |
+| External web retrieval（WebSearch／WebFetch） | `external-web` | `/tmp` | `low` | 純讀（搜尋網頁／抓公開 URL／查外部文件）；第一跳 Gemini，第二跳 Luna | 否 | N/A（不寫檔） |
 | Spectra propose（draft） | `spectra-propose` | consumer repo root | `xhigh` | 寫 spec/proposal 到 `openspec/changes/<change>/`（主線之後 cross-check） | **是** | **是** |
 | Spectra apply phase（非 Design Review、非 UI view） | `spectra-apply-<phase-id>` | consumer repo root | `high` | 完成單一 phase 內所有 tasks，回報 tasks.md checkbox 狀態 | **是** | **是** |
 
@@ -718,8 +718,9 @@ dispatch 注入 fail-closed 段，要求回覆帶一行 `PRECONDITIONS_VERIFIED:
 3. **Luna exit 4 → 換池到 Cursor**：`--model luna-cursor --route fallback-chain --tier-basis quota-fallback --retry-of <luna-label>`。這是同一檔智力、另一個配額池，不是降檔。
 4. **luna-cursor exit 4 → `--model grok-xai --chain-origin luna`** 同 effort 重派（`--route fallback-chain --tier-basis quota-fallback --retry-of <luna-cursor-label>`）。**`--chain-origin` 在這格 MUST 帶**——`grok-xai` 是兩條鏈共用的一格，起點決定它耗盡後是終止還是續走 `grok-cursor`，不帶就判不出來。
 5. **grok-xai exit 4（luna 鏈）→ 這條鏈到此為止**，才動 Claude subagent，且**只接 `haiku`**（顯式帶，per § Subagent 回報契約第 4 條），**NEVER** 升 `sonnet`。**NEVER** 在這裡續派 `--model grok-cursor`——那一跳只屬於 grok 鏈，理由見上方 `grok-cursor` 段。
-6. **Grok 鏈自己的路徑**（`web-search` 列；`screenshot-review-verify` 2026-08-22 起 Claude-only，不再屬於本鏈）：`grok-xai` exit 4 → `--model grok-cursor --chain-origin grok-xai` 重派一次；再 exit 4 才動 Claude subagent，且**只接 `sonnet`**，**NEVER** 降 `haiku`。
-7. Claude 接走時 session 結尾 **MUST** 回報「本 session 因配額耗盡，由 Claude 執行 N 個本應外派的 change」；有 runtime reset 資訊再附上，沒有就明說 unavailable。
+6. **Grok 鏈自己的路徑**（以 `grok-xai` 為第一手的 repo-scan rows）：`grok-xai` exit 4 → `--model grok-cursor --chain-origin grok-xai` 重派一次；再 exit 4 才動 Claude subagent，且**只接 `sonnet`**，**NEVER** 降 `haiku`。
+7. **External-web row是具名二跳例外，NEVER 進上面的generic Gemini／Luna鏈**：第一跳是`--model gemini --effort low --route routing-table --tier-basis table-row --table-row web-search --decision-id <id>`；exit 2／3／4且無usable final text時，第二跳是同decision的`--model luna --effort low --route fallback-chain --tier-basis quota-fallback --retry-of <gemini-label>`。Luna usable就使用結果；Luna exit 3／4後，matching built-in `WebSearch`／`WebFetch`只憑同reason authoritative receipt放行。NEVER續到`luna-cursor`／Grok／Claude subagent。
+8. Claude 接走時 session 結尾 **MUST** 回報「本 session 因配額耗盡，由 Claude 執行 N 個本應外派的 change」；有 runtime reset 資訊再附上，沒有就明說 unavailable。
 
 ## Dispatch 資料邊界（全文）
 

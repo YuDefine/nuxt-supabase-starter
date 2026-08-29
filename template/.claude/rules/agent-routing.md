@@ -157,7 +157,7 @@ redaction（`vendor/signals/redact.mjs`）只作用在 signal payload、**dispat
 
 ## Routing Table
 
-> **Pi 派工是 (model, effort) 二維**，model 維合法值：`sol`、`sol-cursor`、`gemini`、`luna`、`luna-cursor`、`grok-xai`、`grok-cursor`（`grok` 是 `grok-cursor` 的向後相容別名）。同一 tier 的 `-cursor` 變體是**換配額池、不換檔位**，只在配額降級鏈上出現，**NEVER** 拿它當第一手選擇——**具名例外只有四個 repo-scan 列與 `web-search` 列的 `grok-cursor`**（成因與撤銷 probe 見 rationale）。**NEVER** 據此推論其他 tier 或其他列也能提第一手。**Routing Table 已列明檔位的類別照列派**（多數列為 `--model sol`，分級靠 `--effort`；web-search 列列明 `grok-cursor`；screenshot-verify 列 2026-08-22 起 Claude-only，見〔`screenshot-review-verify`〕）；**原本會派 Claude subagent 的委派工作**（原判 `sonnet`／`haiku`）依 § Claude 委派的 model 檔位 轉派 `--model gemini`（額度耗盡才回 `luna`）。**NEVER 派 `--model terra`**（2026-08-11 拍板；dispatcher 仍認得它是**能力**不是政策，理由見 rationale）。**NEVER** 把 Cursor catalog 的 `gemini-3.7-flash` 當這一跳——那是 Ultra `Other Models` 桶。
+> **Pi 派工是 (model, effort) 二維**，model 維合法值：`sol`、`sol-cursor`、`gemini`、`luna`、`luna-cursor`、`grok-xai`、`grok-cursor`（`grok` 是 `grok-cursor` 的向後相容別名）。同一 tier 的 `-cursor` 變體是**換配額池、不換檔位**，只在配額降級鏈上出現，**NEVER** 拿它當第一手選擇——具名例外只有四個 repo-scan 列。**NEVER** 據此推論其他 tier 或其他列也能提第一手。**Routing Table 已列明檔位的類別照列派**（多數列為 `--model sol`；external-web 列固定 bare `--model gemini`；screenshot-verify 列 2026-08-22 起 Claude-only，見〔`screenshot-review-verify`〕）；**原本會派 Claude subagent 的委派工作**（原判 `sonnet`／`haiku`）依 § Claude 委派的 model 檔位轉派 `--model gemini`（額度耗盡才回 `luna`）。**NEVER 派 `--model terra`**（2026-08-11 拍板；dispatcher 仍認得它是**能力**不是政策，理由見 rationale）。External-web 第一手的 bare `gemini` 解析到 Gemini CLI provider；**NEVER** 改傳 Cursor catalog 的完整 `gemini-3.7-flash` slug 冒充同一跳。
 >
 > **`*-cursor` NEVER 接要讀 cwd 以外路徑的任務**（cursor 池的 `$HOME` / `/tmp` 是空 tmpfs，拿到的是**與真結果同形**的全 missing 表）。配額鏈走到那一格時，brief 指涉 cwd 以外路徑就**跳過該格**進終端步驟——判的是**這份 brief**，不是列名。`pi-dispatch.ts` 會掃 brief 拒跑（exit 1），但它只看得到 brief 寫出來的路徑，**NEVER** 拿它當自己不必判的理由。**NEVER** 用 `PI_CURSOR_SANDBOX_BIND` 繞過。成因與實測見 `docs/tech-debt.md` § TD-541。
 >
@@ -186,7 +186,7 @@ redaction（`vendor/signals/redact.mjs`）只作用在 signal payload、**dispat
 
 | 工作類別 | 由誰執行 | 為什麼 |
 | --- | --- | --- |
-| 〔`web-search`〕 **Web search**（即時資料 / 外部資訊查詢） | **Pi `--model grok-cursor --effort low`**（`cursor/grok-4.6`）。exit 4 → `--model grok-xai` 同 effort 重派一次 | 2026-08-29 第一手轉池（xai 403 `run out of credits`；cursor 池 web 取回 n=2 取證見 rationale § web-search 列轉 grok-cursor）。**來源可信度裁決仍是本列工作的一部分**——查不到就回「查不到」，NEVER 拿二手彙整頁的數字充數。 |
+| 〔`web-search`〕 **External web retrieval**（`WebSearch`／`WebFetch`） | **Pi bare `gemini low` → linked `luna low` → matching receipt 才放行同種 built-in tool** | 兩支工具共用 machine row；查不到就回「查不到」，NEVER 拿二手彙整頁充數。 |
 | 〔`code-review`〕 **Code review（commit 0-A）** | **(1) `simplify` + (2) Pi review xhigh（GPT-5.6-sol，經 codex-review-safe.sh），(3) 0-A.1 出 Critical / Major 時條件升 max** | 跨模型互補盲點。effort 的 SoT 是 `commit/gates.md` § 0-A 與 `codex-review-safe.sh` 的 default；流程見 commit SKILL Step 0-A。 |
 | 〔`spectra`〕 **Spectra `propose` / `apply` 各階段（draft / cross-check / phase 粒度 / UI view phase）** | 見 reference § Spectra Routing Table | spectra 專屬 routing 在 path-scoped reference（碰 `openspec/changes/**` 時載入）。**不變的契約**：UI view phase 與 Design Review **都永不外派**（主線 Opus 自己做）；propose 的 cross-check / final check **一律主線跑**。 |
 | 〔`spectra-phase-implementation`〕 **Spectra Apply Class C phase 語意實作** | **Pi `--model sol --effort high` via 泛用 dispatcher** | schema／migration／API／backend／非 view frontend phase 的預設 carrier；Plan-first、task→file、view guard、scope、one-phase-one-commit 與 L0–L2 gate 不因 carrier 統一而放寬。**NEVER 轉 grok**（見 reference § Spectra Routing Table）。 |
@@ -329,15 +329,16 @@ Routing Table 決定誰**寫** code，本節決定誰**持有長 session**（成
 「派給誰」，那兩節回答「這條 change 該怎麼切、哪些 phase 不准外派」，Routing Table 答不出來。
 先判 residency（§ Orchestration Residency）仍是這兩節的前置。
 
-## WebSearch Handoff（決策層）
+## External web retrieval Handoff（決策層）
 
-1. **NEVER** 直接呼叫 Claude Code 內建的 `WebSearch` 工具
-2. **MUST** 走 reference 檔的「Pi 派工的標準流程」，參數：`<topic>=websearch`、`<cwd>=/tmp`、`-c model_reasoning_effort=medium`
-3. prompt 固定含：問題 + 期望輸出格式
+**違反字面就是違反精神：每一次 `WebSearch` 與 `WebFetch` 都先走 external-web decision gate。**
 
-**例外清單是窮舉的**（可直接處理）：本機檔案查詢（Read / Grep）、使用者明確要求「直接用 WebSearch」、Codex 已是當前 runtime、`WebFetch` 抓單一已知 URL。**不在這四條上的一律 handoff** —— 查詢多簡單、多趕時間、啟動開銷多不成比例，都不構成第五條例外。
+1. **NEVER** 直接呼叫 Claude Code 內建的 `WebSearch` 或 `WebFetch`；照 gate 印出的 decision-linked 指令依序走 bare `gemini low` → bare `luna low` → matching receipt 才放行原tool kind與candidate。完整旗標、exit transition與receipt契約見 [[agent-routing.pi-watch-protocol]] § External web retrieval。
+2. query／公開URL／fetch prompt只以hash進state／receipt；含credential、signed token、private-network或secret material時fail closed，Pi與direct built-in都不放行，改用authenticated first-party connector或本機redacted source。
 
-**NEVER 拿本規約的 rationale 推翻本規約的字面。**「成本/品質最佳化」是這條規則存在的理由，不是可以就地自我豁免的判準 —— 照那個推法，任何一次 handoff 都論證得成「這次不划算」。三句逐字開脫與各自為什麼不成立，見 rationale § WebSearch 的開脫逐字實錄。
+**例外清單是窮舉的**：**唯一的一般 waiver** 是使用者明確要求direct built-in web tooling，且`user-explicit-mainline` receipt綁定原tool kind與candidate。「單一已知URL」不是例外。
+
+**NEVER 拿本規約的 rationale 推翻本規約的字面。** 壓力測試見`vendor/snippets/rule-authoring/scenarios/web{search,fetch}-direct-call.md`。
 
 ## 配額邊界（決策層）
 
