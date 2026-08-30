@@ -303,7 +303,7 @@ function validateJsonOutput(
 }
 
 function probeCurrentTarget(change: string, currentRoot: string, candidateRoots: string[]): void {
-  const probe = spawnSync('spectra', ['status', '--change', change, '--json'], {
+  const probe = spawnSync('spectra', ['instructions', 'apply', '--change', change, '--json'], {
     cwd: currentRoot,
     encoding: 'utf8',
     env: process.env,
@@ -510,13 +510,15 @@ function main(): void {
   }
 
   const duplicateCandidates = target.candidates.length > 1
-  const isReadOnlyJson =
-    spectraArgs.includes('--json') &&
-    (spectraArgs[0] === 'status' || spectraArgs[0] === 'instructions')
+  const isJson = spectraArgs.includes('--json')
+  const isStatusJson = isJson && spectraArgs[0] === 'status'
+  const isInstructionsJson = isJson && spectraArgs[0] === 'instructions'
   const canProbeBeforeMutation =
     Boolean(taskId) || spectraArgs[0] === 'in-progress' || spectraArgs[0] === 'validate'
-  if (duplicateCandidates && !isReadOnlyJson) {
-    if (!canProbeBeforeMutation) {
+  if (duplicateCandidates) {
+    if (isStatusJson || canProbeBeforeMutation) {
+      probeCurrentTarget(change, target.currentRoot, target.candidateRoots)
+    } else if (!isInstructionsJson) {
       fail({
         code: 'TARGET_AMBIGUOUS',
         message: 'destructive Spectra command requires a unique on-disk change candidate',
@@ -525,7 +527,6 @@ function main(): void {
         candidates: target.candidateRoots,
       })
     }
-    probeCurrentTarget(change, target.currentRoot, target.candidateRoots)
   }
 
   const before = new Map<string, { tasks: FileSnapshot; sidecar: FileSnapshot }>()
@@ -553,9 +554,9 @@ function main(): void {
 
   const stdout = child.stdout ?? ''
   const stderr = child.stderr ?? ''
-  if (spectraArgs.includes('--json') && stdout.trim()) {
-    validateJsonOutput(stdout, target.currentRoot, change, duplicateCandidates)
-  } else if (spectraArgs.includes('--json') && duplicateCandidates && child.status === 0) {
+  if (isJson && stdout.trim()) {
+    validateJsonOutput(stdout, target.currentRoot, change, duplicateCandidates && !isStatusJson)
+  } else if (isJson && duplicateCandidates && child.status === 0) {
     fail({
       code: 'TARGET_AMBIGUOUS',
       message: 'Spectra JSON output was empty, so the duplicate target cannot be proven',
