@@ -362,8 +362,12 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
   --cwd <worktree-path> \
   --label dep-upgrade-<pkg>-low \
   --model grok-xai --effort low \
+  --workspace-access mutation \
   --route manual --tier-basis manual
 ```
+
+這是workspace mutation dispatch。Runtime quota／provider failure後，**每一個**retry都MUST逐字採用dispatcher payload的`next_step`（含`--retry-of`與`--workspace-access mutation`）；NEVER自行改派`grok-cursor`、`luna-cursor`或`sol-cursor`。Linked worktree visibility與writable sandbox是兩個predicate，擴大cwd不會讓Cursor carrier合法。
+
 
 `run_in_background=true` 回傳 `<task-id>` 後，立刻記錄 owner / deadline（deadline 取值依 [[agent-routing]] § deadline 怎麼取），並排 180s（[[agent-routing.pi-watch-protocol]] § ScheduleWakeup 用法守則 的具名例外）canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=dep-upgrade:<pkg>:low deadline=<ISO>...` inert control wakeup（per [[agent-routing.pi-watch-protocol]]）。控制 turn 只准 `TaskOutput(block=false)`、重排同一 inert prompt或排 lifecycle intervention；**NEVER** 放 upgrade prompt、讀 output tail或做 package mutation。terminal notification 到達後先 claim task id，再讀結果並停止 wakeup。
 
@@ -389,7 +393,7 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
 - 一樣的 Git Baseline / Commit Authorization 硬指令
 - Commit message format `🧹 chore: wt upgrade-<pkg>-<from>→<to> (researched <issue-url-slug>)`
 
-Dispatch（同 O.2.2 但 `model_reasoning_effort=high`）+ watch（high 跑得更久，但節奏不變：notification-only + 單一安全網 fallback，節奏以 [[agent-routing.pi-watch-protocol]] § `ScheduleWakeup` 用法守則 為準）。
+Dispatch（同 O.2.2，保留 `--workspace-access mutation`，只把 `--effort` 改成 `high`）+ watch（high 跑得更久，但節奏不變：notification-only + 單一安全網 fallback，節奏以 [[agent-routing.pi-watch-protocol]] § `ScheduleWakeup` 用法守則 為準）。
 
 ### O.2.5 research 仍失敗 → AskUserQuestion
 

@@ -5,9 +5,9 @@
  * Fail-closed integration guard for closed-source kaochenlong/spectra-app v2.3.1.
  *
  * The upstream Wine CLI has no explicit project/worktree selector. This wrapper
- * delegates only when the requested change exists in exactly one registered
- * worktree and that worktree is the current git root. JSON paths and `task done`
- * mutations are verified before any child output is released to the caller.
+ * proves read-only targets from returned artifact paths, probes the target before
+ * ambiguous mutations, and verifies filesystem mutation postconditions before
+ * any child output is released to the caller.
  */
 
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -149,10 +149,15 @@ function worktreeRoots(currentRoot: string): string[] {
   return [...new Set(roots)]
 }
 
-function resolveTarget(change: string): {
+function resolveTarget(
+  change: string,
+  allowMissingCurrent = false,
+): {
   currentRoot: string
   commonDir: string
   worktrees: WorktreeRecord[]
+  candidates: WorktreeRecord[]
+  candidateRoots: string[]
 } {
   const reportedRoot = git(process.cwd(), ['rev-parse', '--show-toplevel'])
   const currentRoot = canonicalPath(reportedRoot, process.cwd())
@@ -194,16 +199,10 @@ function resolveTarget(change: string): {
   const candidateRoots = candidates.map((entry) => entry.root)
   const currentChange = canonicalPath(join(currentRoot, SPEC_DIR, 'changes', change), currentRoot)
 
-  if (candidates.length > 1) {
-    fail({
-      code: 'TARGET_AMBIGUOUS',
-      message: 'closed-source Spectra v2.3.1 target cannot be uniquely proven before execution',
-      change,
-      currentRoot,
-      candidates: candidateRoots,
-    })
-  }
   if (!isDirectory(currentChange)) {
+    if (allowMissingCurrent && candidates.length === 0) {
+      return { currentRoot, commonDir, worktrees, candidates, candidateRoots }
+    }
     fail({
       code: candidates.length === 1 ? 'TARGET_FOREIGN' : 'TARGET_MISSING',
       message:
@@ -224,19 +223,22 @@ function resolveTarget(change: string): {
       candidates: [],
     })
   }
-  const candidate = candidates[0]
-  if (candidate.root !== currentRoot || candidate.commonDir !== commonDir) {
+  const currentCandidate = candidates.find((entry) => entry.root === currentRoot)
+  if (!currentCandidate || currentCandidate.commonDir !== commonDir) {
     fail({
       code: 'TARGET_FOREIGN',
       message:
-        'the unique change candidate is not the current worktree in the current git common-dir',
+        'the requested change is not present in the current worktree and current git common-dir',
       change,
       currentRoot,
       candidates: candidateRoots,
-      details: { currentCommonDir: commonDir, candidateCommonDir: candidate.commonDir },
+      details: {
+        currentCommonDir: commonDir,
+        candidateCommonDir: currentCandidate?.commonDir ?? null,
+      },
     })
   }
-  return { currentRoot, commonDir, worktrees }
+  return { currentRoot, commonDir, worktrees, candidates, candidateRoots }
 }
 
 function collectPathValues(value: unknown, activeField: string | null, out: string[]): void {
@@ -254,7 +256,12 @@ function collectPathValues(value: unknown, activeField: string | null, out: stri
   }
 }
 
-function validateJsonOutput(stdout: string, currentRoot: string, change: string): void {
+function validateJsonOutput(
+  stdout: string,
+  currentRoot: string,
+  change: string,
+  requireChangeEvidence = false,
+): void {
   let body: unknown
   try {
     body = JSON.parse(stdout)
@@ -269,6 +276,8 @@ function validateJsonOutput(stdout: string, currentRoot: string, change: string)
   }
   const paths: string[] = []
   collectPathValues(body, null, paths)
+  const currentChange = canonicalPath(join(currentRoot, SPEC_DIR, 'changes', change), currentRoot)
+  let hasChangeEvidence = false
   for (const rawPath of paths) {
     const path = canonicalPath(rawPath, currentRoot)
     if (!isContained(currentRoot, path)) {
@@ -281,6 +290,62 @@ function validateJsonOutput(stdout: string, currentRoot: string, change: string)
         details: { path: rawPath, canonicalPath: path },
       })
     }
+    if (isContained(currentChange, path)) hasChangeEvidence = true
+  }
+  if (requireChangeEvidence && !hasChangeEvidence) {
+    fail({
+      code: 'TARGET_AMBIGUOUS',
+      message: 'Spectra JSON did not include a current change artifact path that proves its target',
+      change,
+      currentRoot,
+    })
+  }
+}
+
+function probeCurrentTarget(change: string, currentRoot: string, candidateRoots: string[]): void {
+  const probe = spawnSync('spectra', ['status', '--change', change, '--json'], {
+    cwd: currentRoot,
+    encoding: 'utf8',
+    env: process.env,
+    maxBuffer: 16 * 1024 * 1024,
+  })
+  if (probe.error) {
+    fail({
+      code: 'SPECTRA_EXEC_FAILED',
+      message: 'Spectra target probe could not be started',
+      change,
+      currentRoot,
+      candidates: candidateRoots,
+      details: probe.error.message,
+    })
+  }
+  if (probe.status !== 0 || !(probe.stdout ?? '').trim()) {
+    fail({
+      code: 'TARGET_AMBIGUOUS',
+      message: 'read-only Spectra target probe did not return usable JSON',
+      change,
+      currentRoot,
+      candidates: candidateRoots,
+      details: { status: probe.status, stderr: probe.stderr ?? '' },
+    })
+  }
+  validateJsonOutput(probe.stdout ?? '', currentRoot, change, true)
+}
+
+function verifyUnpark(change: string, currentRoot: string, worktrees: WorktreeRecord[]): void {
+  const restoredRoots = worktrees
+    .filter((entry) =>
+      isDirectory(canonicalPath(join(entry.root, SPEC_DIR, 'changes', change), entry.root)),
+    )
+    .map((entry) => entry.root)
+  if (restoredRoots.length !== 1 || restoredRoots[0] !== currentRoot) {
+    fail({
+      code: 'MUTATION_POSTCONDITION',
+      message: 'Spectra unpark did not restore the change exclusively into the current worktree',
+      change,
+      currentRoot,
+      candidates: restoredRoots,
+    })
   }
 }
 
@@ -423,7 +488,17 @@ function verifyTaskDone(
 
 function main(): void {
   const { change, spectraArgs } = parseArgs(process.argv.slice(2))
-  const target = resolveTarget(change)
+  const isUnpark = spectraArgs[0] === 'unpark'
+  const target = resolveTarget(change, isUnpark)
+  if (isUnpark && target.candidates.length > 0) {
+    fail({
+      code: 'TARGET_AMBIGUOUS',
+      message: 'unpark requires the named change to have no on-disk artifact candidate',
+      change,
+      currentRoot: target.currentRoot,
+      candidates: target.candidateRoots,
+    })
+  }
   const taskId = taskDoneId(spectraArgs)
   if (spectraArgs[0] === 'task' && spectraArgs[1] === 'done' && !taskId) {
     fail({
@@ -432,6 +507,25 @@ function main(): void {
       change,
       currentRoot: target.currentRoot,
     })
+  }
+
+  const duplicateCandidates = target.candidates.length > 1
+  const isReadOnlyJson =
+    spectraArgs.includes('--json') &&
+    (spectraArgs[0] === 'status' || spectraArgs[0] === 'instructions')
+  const canProbeBeforeMutation =
+    Boolean(taskId) || spectraArgs[0] === 'in-progress' || spectraArgs[0] === 'validate'
+  if (duplicateCandidates && !isReadOnlyJson) {
+    if (!canProbeBeforeMutation) {
+      fail({
+        code: 'TARGET_AMBIGUOUS',
+        message: 'destructive Spectra command requires a unique on-disk change candidate',
+        change,
+        currentRoot: target.currentRoot,
+        candidates: target.candidateRoots,
+      })
+    }
+    probeCurrentTarget(change, target.currentRoot, target.candidateRoots)
   }
 
   const before = new Map<string, { tasks: FileSnapshot; sidecar: FileSnapshot }>()
@@ -460,7 +554,15 @@ function main(): void {
   const stdout = child.stdout ?? ''
   const stderr = child.stderr ?? ''
   if (spectraArgs.includes('--json') && stdout.trim()) {
-    validateJsonOutput(stdout, target.currentRoot, change)
+    validateJsonOutput(stdout, target.currentRoot, change, duplicateCandidates)
+  } else if (spectraArgs.includes('--json') && duplicateCandidates && child.status === 0) {
+    fail({
+      code: 'TARGET_AMBIGUOUS',
+      message: 'Spectra JSON output was empty, so the duplicate target cannot be proven',
+      change,
+      currentRoot: target.currentRoot,
+      candidates: target.candidateRoots,
+    })
   }
   if (child.status !== 0) {
     if (stdout) process.stdout.write(stdout)
@@ -468,6 +570,7 @@ function main(): void {
     process.exit(child.status ?? 1)
   }
   if (taskId) verifyTaskDone(change, taskId, target.currentRoot, target.worktrees, before)
+  if (isUnpark) verifyUnpark(change, target.currentRoot, target.worktrees)
 
   if (stdout) process.stdout.write(stdout)
   if (stderr) process.stderr.write(stderr)

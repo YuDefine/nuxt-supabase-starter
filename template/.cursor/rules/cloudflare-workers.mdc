@@ -1,6 +1,6 @@
 ---
 description: "Cloudflare Workers / NuxtHub gating + wrangler.jsonc 格式統一 + deploy 命令規約（dual-track：wrangler-action / void.cloud）。依 DB 選擇分派（D1 → NuxtHub mandatory；Supabase / 外部 DB → 禁帶 @nuxthub/core dep），杜絕 unused NuxtHub dep 污染、wrangler 檔格式 drift、以及 void.cloud track 的 compat_flags 致命誤配"
-globs: ["'wrangler.{toml", "jsonc}'", "void.json", "nuxt.config.*", "package.json", ".github/workflows/**/*.yml"]
+globs: ["wrangler.{toml,jsonc}", "void.json", "nuxt.config.*", "package.json", ".github/workflows/**/*.yml"]
 alwaysApply: false
 ---
 <!--

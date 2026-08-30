@@ -1,6 +1,6 @@
 ---
 description: "有 UI 的 consumer 定義或變更 i18n 涵蓋範圍、硬編碼語言 surface、翻譯 lint 與 server error localization 邊界時適用"
-globs: ["DESIGN.md", "docs/decisions/**", "'app/**/*.{vue", "ts", "tsx", "jsx}'", "'packages/*/app/**/*.{vue", "ts", "tsx", "jsx}'", "'components/**/*.{vue", "ts", "tsx", "jsx}'", "'packages/*/components/**/*.{vue", "ts", "tsx", "jsx}'", "'src/**/*.{vue", "ts", "tsx", "jsx}'", "'packages/*/src/**/*.{vue", "ts", "tsx", "jsx}'", "i18n/**", "packages/*/i18n/**", "locales/**", "packages/*/locales/**", "server/**/*.ts", "packages/*/server/**/*.ts"]
+globs: ["DESIGN.md", "docs/decisions/**", "app/**/*.{vue,ts,tsx,jsx}", "packages/*/app/**/*.{vue,ts,tsx,jsx}", "components/**/*.{vue,ts,tsx,jsx}", "packages/*/components/**/*.{vue,ts,tsx,jsx}", "src/**/*.{vue,ts,tsx,jsx}", "packages/*/src/**/*.{vue,ts,tsx,jsx}", "i18n/**", "packages/*/i18n/**", "locales/**", "packages/*/locales/**", "server/**/*.ts", "packages/*/server/**/*.ts"]
 alwaysApply: false
 ---
 <!--

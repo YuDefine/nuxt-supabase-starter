@@ -797,6 +797,7 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
   --var <key>=<value> ...（依 template 變數表填：check 命令、失敗摘要 / log 等） \
   --var max_iterations=2 \
   --label commit-0c-<slug> --model grok-xai --effort high \
+  --workspace-access mutation \
   --route routing-table --tier-basis table-row --table-row commit-0c-fix-verify
 ```
 
@@ -809,7 +810,7 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
 
 1. grok dispatch 回 `fail` / `uncertain` / exit 2（2 輪用盡或自報修不到）
 2. grok 報 `pass` 但主線重跑 `pnpm check`（+ test / doctor）仍紅
-3. grok-xai 與 grok-cursor 都 exit 4（配額鏈走完；本列終點是 sol 升級列，**NEVER** 退回 Claude）
+3. grok-xai exit 4（本列是 mutation，dispatcher payload 跳過 grok-cursor 並指向 sol 升級列；**NEVER** 退回 Claude）
 
 ```bash
 node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
@@ -817,6 +818,7 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
   --var <key>=<value> ...（帶 grok 留下的 remaining_failures） \
   --var max_iterations=none \
   --label commit-0c-<slug>-sol --model sol --effort high \
+  --workspace-access mutation \
   --route routing-table --tier-basis table-row --table-row commit-0c-fix-verify-escalate \
   --retry-of commit-0c-<grok-slug>
 ```
@@ -826,10 +828,8 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
 
 （背景跑、stdout 單一 JSON；exit 0=全綠 / 2=修不到全綠（業務 fail）/ 3=機械故障 / 4=quota。
 exit 3 → 機械故障，主線 fallback foreground 自跑 fix loop，**不分 grok / sol**；
-exit 4 在 grok 第一手 → `--model grok-cursor` 同 effort 重派（`-cursor` 變體的適用邊界受 TD-520
-限制：**NEVER** 用於不可信第三方 code 或會接觸 secrets／prod 憑證的內容；0-A.1 review gate
-已明文排除，見 `commit/gates.md` § 0-A.1），兩池都 4 則走上方升級列，**NEVER** 當成機械故障；
-exit 4 在 sol 升級列 → 依 [[agent-routing]] § 配額耗盡時的 fallback 紀律走 `--model sol-cursor`；
+exit 4 在 grok 第一手 → 逐字採用dispatcher payload，跳過`grok-cursor`並走上方sol升級列，**NEVER**當成機械故障；
+exit 4 在 sol 升級列 → 同樣照payload跳過`sol-cursor`，由Opus主線接手fix loop；
 exit 2 在 grok 第一手 → 走升級列；exit 2 在 sol 升級列 → 失敗摘要回主線判斷，**不**重派同一 brief。）
 
 **4.8-aware 範圍明寫**：**每一輪** 0-C 失敗都先做 dispatch 評估（含匯合修正 / 大改動回扣後重跑 0-C 又紅的輪次），不是只有第一輪。

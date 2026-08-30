@@ -1,6 +1,6 @@
 ---
 description: "寫 code 當下的 TypeScript 語法限制（type stripping 擋不掉的三條）、副檔名與 import specifier 規則、命名與註解（機器擋不住的那一半）、用 vp 命令驗證；工具鏈設定治理在 code-style.toolchain"
-globs: ["'**/*.{js", "ts", "vue", "jsx", "tsx", "mjs", "cjs", "mts", "cts}'"]
+globs: ["**/*.{js,ts,vue,jsx,tsx,mjs,cjs,mts,cts}"]
 alwaysApply: false
 ---
 <!--

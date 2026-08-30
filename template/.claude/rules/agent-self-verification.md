@@ -44,7 +44,7 @@ Local edits will be reverted by the next sync.
 | `pnpm check` exit 0 | ❌ 若它固定 exit 1 |
 | `pnpm check` 的 `<本次觸及的檔>` 區段零新增 finding（baseline 見 `<記在哪>`） | ✅ |
 
-**NEVER 用「repo-wide 指令 exit 0」當 gate，除非你剛剛實跑過、它現在就是 0。** 沒跑過就寫上去的
+**NEVER 用「repo-wide 指令 exit 0」當 gate，除非你剛剛實跑過、它現在就是 0。** <!-- nuance-clause-reviewed: 2026-08-29 — 例外的 predicate 是「剛剛實跑過」，可觀察；判準（跑哪一條、baseline 記在哪）落在同節上方那張表，不在同一行 --> 沒跑過就寫上去的
 repo-wide 綠燈，在紅 baseline 的 repo 裡與「工作沒做完」外觀完全相同：接手的人（或無人值守迴圈）
 每一輪跑一次、每一輪紅、每一輪判成未完成，而**真正的工作可能早就做完了**。這不是嚴格，是把一條
 item 永久釘死。

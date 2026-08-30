@@ -119,7 +119,7 @@ preview proxy 路徑由 `previewPathFor(devPort, path)` 決定（`vendor/scripts
 prefix `/__preview`）；`verify-url-check.ts` 的 `parseUrl` 會剝掉 `/__preview/<port>` 再比對 route tree，
 所以寫 canonical HTTPS **不會**觸發 `VERIFY_URL_ROUTE_MISSING`。
 
-**NEVER 把「沒有公開 origin」寫進 item annotation 當成退回 user 的待辦**，除非已實測過下面三條全落空：
+**NEVER 把「沒有公開 origin」寫進 item annotation 當成退回 user 的待辦**，除非已實測過下面三條全落空： <!-- nuance-clause-reviewed: 2026-08-29 — 例外綁「下面三條」，判準逐字寫在緊接的 fenced bash 裡，是可執行的；只是不在同一行 -->
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' --max-time 5  http://127.0.0.1:<devPort>/

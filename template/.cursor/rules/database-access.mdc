@@ -1,6 +1,6 @@
 ---
 description: "資料庫存取模式（Supabase client/server 分工）"
-globs: ["\"app/**/*.{vue", "ts}\"", "\"packages/*/app/**/*.{vue", "ts}\"", "server/**/*.ts", "packages/*/server/**/*.ts"]
+globs: ["app/**/*.{vue,ts}", "packages/*/app/**/*.{vue,ts}", "server/**/*.ts", "packages/*/server/**/*.ts"]
 alwaysApply: false
 ---
 <!--

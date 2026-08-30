@@ -1,6 +1,6 @@
 ---
 description: "開發規範（TDD, coding style, UI reuse）"
-globs: ["'app/**/*.{vue", "ts}'", "'packages/*/app/**/*.{vue", "ts}'", "server/**/*.ts", "packages/*/server/**/*.ts", "test/**/*.ts", "packages/*/test/**/*.ts", "shared/**/*.ts", "packages/*/shared/**/*.ts", "package.json"]
+globs: ["app/**/*.{vue,ts}", "packages/*/app/**/*.{vue,ts}", "server/**/*.ts", "packages/*/server/**/*.ts", "test/**/*.ts", "packages/*/test/**/*.ts", "shared/**/*.ts", "packages/*/shared/**/*.ts", "package.json"]
 alwaysApply: false
 ---
 <!--

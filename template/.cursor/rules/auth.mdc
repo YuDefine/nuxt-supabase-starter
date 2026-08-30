@@ -1,6 +1,6 @@
 ---
 description: "認證相關程式碼（login, session, user, auth）"
-globs: ["'app/**/*.{vue", "ts}'", "'packages/*/app/**/*.{vue", "ts}'", "server/**/*.ts", "packages/*/server/**/*.ts"]
+globs: ["app/**/*.{vue,ts}", "packages/*/app/**/*.{vue,ts}", "server/**/*.ts", "packages/*/server/**/*.ts"]
 alwaysApply: false
 ---
 <!--

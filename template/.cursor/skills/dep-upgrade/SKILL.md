@@ -111,6 +111,8 @@ gate 沒有 `--allow-main` escape hatch，這是刻意的。
 
 > **Authoring source**：`~/offline/clade/vendor/snippets/pi-upgrade-prompts/{first-pass,research}.md`（clade-only，不散播）。下方 § A § B inline 是 plugin cache 副本，**改其中一處時兩邊都要同步**。未來會由 TD-129 dispatch script 機械化渲染。
 
+First-pass與research的**每一份**生成prompt都MUST包含`workspace_access: mutation`段；這是carrier capability，不是任務摘要。Dispatcher首跳用`--workspace-access mutation`，每一個retry照exit payload保留該值並排除所有`*-cursor`。
+
 ## § A — First-pass 派工 prompt（per-package）
 
 主線 / subagent 在生 prompt 時用 substitution：
@@ -127,6 +129,10 @@ gate 沒有 `--allow-main` escape hatch，這是刻意的。
 [DELEGATED-BY-CLAUDE-CODE]
 
 # Task: 升級 <pkg> 從 <from> 到 <to>
+
+## Workspace Capability
+
+`workspace_access: mutation`。這份 brief 會修改 working tree、lockfile、Git index 並建立 commit；dispatcher 與每一個 quota fallback 都 **MUST** 保留 `--workspace-access mutation`。**NEVER** 選 `grok-cursor`、`luna-cursor` 或 `sol-cursor`；它們只承接 readonly inspection／review。
 
 你在 worktree `<wt-path>`（branch `<branch>`）跑。Package manager 是 `<PM>`。
 
@@ -233,6 +239,10 @@ Release: <release_url>
 
 # Task: 升級 <pkg> 從 <from> 到 <to>（research mode）
 
+## Workspace Capability
+
+`workspace_access: mutation`。這份 brief 會修改 working tree、lockfile、Git index 並建立 commit；dispatcher 與每一個 quota fallback 都 **MUST** 保留 `--workspace-access mutation`。**NEVER** 選 `grok-cursor`、`luna-cursor` 或 `sol-cursor`；它們只承接 readonly inspection／review。
+
 Medium 已經失敗一次。失敗 tail：
 
 \`\`\`
@@ -305,6 +315,7 @@ WHY_STUCK: <一句話為什麼即使查到資訊也卡住>
 - **NEVER** 把 merge-back 當「下一步」丟給 user 自己跑（per [[worktree-default]] §5）
 - pi 派工 prompt 第一行 MUST 含 `[DELEGATED-BY-CLAUDE-CODE]` marker（codex 端 Runtime Gate 驗證此 marker 存在）
 - **NEVER** 派 pi 時把 sandbox 換成 `read-only` / `workspace-write`（會擋 MCP）
+- **NEVER** 把上列Pi sandbox mode與`workspace_access`混為一談：dep-upgrade一律是`mutation`，fallback排除每一個`*-cursor`；Cursor readonly security boundary不為升版放寬
 - **NEVER** `git add -A` / `git add .` 在 main — 一律 selective stage
 
 Mode-specific 禁止事項見 [outdated-mode.md](outdated-mode.md)、[fleet-mode.md](fleet-mode.md) 與 [skills-mode.md](skills-mode.md) 尾段。

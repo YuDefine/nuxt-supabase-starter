@@ -656,21 +656,31 @@ Codex session 收到 `$spectra-apply`（或任何要它執行 spectra-apply 流�
 > 從 [[agent-routing]] 同名 § 下推（2026-08-19，TD-540）。always-load 側留 thin pointer ＋ payload
 > 算不出來的三條 NEVER；**要新增或改動任何一跳 MUST 讀完本節**。
 
-配額耗盡（exit 4）**MUST** 依工作原本的檔位走對應鏈，命中即停。**NEVER** 把 Sol 的活降成 Luna——那是拿修舊系統的座位去接 flagship 工作。
+配額耗盡（exit 4）**MUST** 依工作原本的檔位與 `workspace_access` 走 dispatcher payload，命中即停。**NEVER** 把 Sol 的活降成 Luna——那是拿修舊系統的座位去接 flagship 工作。下列完整鏈是 `readonly` 形狀；`mutation` 形狀由 dispatcher 機械略過其中每一個 `*-cursor`，caller **NEVER** 自己重建下一跳。
 
 **適用範圍是所有 pi 呼叫點，不只 dispatcher 派工**——含 `/commit` 0-A.1 的跨模型 review gate（該 gate 的具體分支見 commit skill 的 gates.md § 0-A.1）。review gate 尤其吃這條：它的**存在理由**就是不能由主線同池模型自審，所以「撞額度就改派 Claude subagent 補位」形式上補了位、實質上讓 gate 變空。
 
 **但 review gate 目前走不了 `-cursor` 這一跳**：TD-520 已確認 cursor 池的模型同 UID 且有 unrestricted Shell，而 review 的 prompt 內嵌待審 changeset。在拿到 OS 層隔離前，0-A.1 撞配額的處置是主線自 review ＋ 明示 gate 未達成 ＋ 登記待補，**不是**換池。這是「鏈的形狀正確、但這一跳對這個用途不安全」，不是降級鏈本身有問題。
 
-限制範圍是餘下的兩個 `-cursor` 跳（`sol-cursor`、`luna-cursor`）；luna 鏈的 `grok-xai` 跳能不能承接 0-A.1 **尚未評估**，
+限制範圍是餘下的三個 `-cursor` 跳（`sol-cursor`、`luna-cursor`、`grok-cursor`）；luna 鏈的 `grok-xai` 跳能不能承接 0-A.1 **尚未評估**，
 **NEVER** 從「它不是 cursor」推論「review gate 可以走它」。
 
+```text
+readonly:
+  Sol      → sol-cursor（cursor/gpt-5.6-sol@272k）→ Opus 主線
+  Gemini   → luna → luna-cursor（cursor/gpt-5.6-luna@272k）→ grok-xai（xai/grok-4.6）→ grok-cursor（cursor/grok-4.6）→ Claude Haiku
+  Luna     → luna-cursor → grok-xai → grok-cursor → Claude Haiku
+  Grok-xai → grok-cursor（cursor/grok-4.6）→ Claude Sonnet
+mutation:
+  Sol      → Opus 主線
+  Gemini   → luna → grok-xai → Claude Haiku
+  Luna     → grok-xai → Claude Haiku
+  Grok-xai → Claude Sonnet
 ```
-Sol      → sol-cursor（cursor/gpt-5.6-sol@272k）→ Opus 主線
-Gemini   → luna → luna-cursor（cursor/gpt-5.6-luna@272k）→ grok-xai（xai/grok-4.6）→ grok-cursor（cursor/grok-4.6）→ Claude Haiku
-Luna     → luna-cursor → grok-xai → grok-cursor → Claude Haiku   # 第一手只在 Gemini hop 不可用時
-Grok-xai → grok-cursor（cursor/grok-4.6）→ Claude Sonnet
-```
+
+`workspace_access` 的來源只有三條：concrete table row 由 `pi-routing-policy.ts` 推導；manual caller 顯式帶 `--workspace-access readonly|mutation`；fallback 以 `--retry-of` 從 ledger 繼承。Dispatcher 把 effective value 寫進 ledger／flow／exit payload，`next_step` 也帶回 capability。**每一個**會修改 working tree、lockfile、Git index 或建立 commit 的 caller都 **MUST** 宣告 `mutation`；無法判定時，Cursor admission與指向 Cursor 的下一跳都 fail closed。
+
+具名mutation override也由同一個policy提供：`commit-0c-fix-verify`的grok-xai quota exit不走generic Sonnet終點，而是跳過grok-cursor進`commit-0c-fix-verify-escalate` sol列；caller仍只讀payload，不自建例外。
 
 **鏈上的每一跳都是換配額池，不是降檔。** 判準是那一跳有**獨立計量**的配額，不是「它是同一個 model」。
 
@@ -699,9 +709,9 @@ rationale § luna 鏈的跨家族跳。**sol 鏈第 2 條不中**，且 flagship
 的 NEVER 轉 grok 是**獨立 veto、不進連言協商**，那條 NEVER **含 fallback 路徑，配額耗盡不是豁免條件**。
 sol 鏈維持兩跳，**NEVER** 跨去 grok、**更 NEVER** 降成 luna——「luna 鏈都插了」不是理由。
 
-**終點的 Claude 檔位按鏈的「起點」對齊，不是按耗盡的那一格**：`grok-xai` 是兩條鏈共用的一格，
-luna 起點 → 在這格就終止、接 `haiku`；grok 起點 → 續走 `grok-cursor`、耗盡才接 `sonnet`。
-dispatcher 對 `grok-xai` 這格 required `--chain-origin`（**起點決定的是下一跳，不只是終點檔位**），
+**終點的 Claude 檔位按鏈的「起點」對齊，不是按耗盡的那一格**：`grok-xai` 是兩條鏈共用的一格。
+luna 起點的 readonly 鏈續走 `grok-cursor`、耗盡才接 `haiku`，mutation 鏈則在 `grok-xai` 後跳過 Cursor 直接接 `haiku`；grok 起點的 readonly 鏈同樣續走 `grok-cursor`、耗盡接 `sonnet`，mutation 鏈直接接 `sonnet`。
+dispatcher 對 `grok-xai` 這格 required `--chain-origin`（**起點決定的是下一跳與終點檔位**），
 起點不可解時 `next_tier` 回 null 並明說 unresolved 而**不猜**。
 
 **grok 接手 luna 鏈時的補償控制**：grok 有已取證的 fail-open（前置契約未滿足時自報 `status: pass`，
@@ -713,12 +723,12 @@ dispatch 注入 fail-closed 段，要求回覆帶一行 `PRECONDITIONS_VERIFIED:
 
 **降 effort 不是降級鏈的一步**：配額按 **model** 記，Sol 撞 usage limit 時 `--effort low` 重試撞的是**同一個** limit。effort 分級是品質 / 成本維度，**NEVER** 拿它當配額耗盡的應對。
 
-1. **Sol exit 4 → `--model sol-cursor` 換池**（`cursor/gpt-5.6-sol`，`--route fallback-chain --tier-basis quota-fallback --retry-of <sol-label>`）；**sol-cursor 再 exit 4 才回 Opus 主線**。record reason 含 `quota-exhausted`。**NEVER** `--model luna` 或 `--model gemini` 重試——換池不是降檔，降檔才是。
-2. **Gemini exit 4／catalog 無 `gemini-3.7-flash`／OAuth 未就緒 → `--model luna --route fallback-chain --tier-basis quota-fallback --retry-of <gemini-label>`**。**NEVER** 靜默改用舊 Flash。Gemini origin 在 `resolveChainOrigin` 視為 luna-class（終點仍 Haiku）。
-3. **Luna exit 4 → 換池到 Cursor**：`--model luna-cursor --route fallback-chain --tier-basis quota-fallback --retry-of <luna-label>`。這是同一檔智力、另一個配額池，不是降檔。
-4. **luna-cursor exit 4 → `--model grok-xai --chain-origin luna`** 同 effort 重派（`--route fallback-chain --tier-basis quota-fallback --retry-of <luna-cursor-label>`）。**`--chain-origin` 在這格 MUST 帶**——`grok-xai` 是兩條鏈共用的一格，起點決定它耗盡後是終止還是續走 `grok-cursor`，不帶就判不出來。
-5. **grok-xai exit 4（luna 鏈）→ 這條鏈到此為止**，才動 Claude subagent，且**只接 `haiku`**（顯式帶，per § Subagent 回報契約第 4 條），**NEVER** 升 `sonnet`。**NEVER** 在這裡續派 `--model grok-cursor`——那一跳只屬於 grok 鏈，理由見上方 `grok-cursor` 段。
-6. **Grok 鏈自己的路徑**（以 `grok-xai` 為第一手的 repo-scan rows）：`grok-xai` exit 4 → `--model grok-cursor --chain-origin grok-xai` 重派一次；再 exit 4 才動 Claude subagent，且**只接 `sonnet`**，**NEVER** 降 `haiku`。
+1. **Sol exit 4**：`readonly` payload 指向 `sol-cursor`；`mutation` payload跳過該格，直接回該鏈終點（一般工作是 Opus主線，gate-output row是Fable）。**NEVER**改派Luna或Gemini。
+2. **Gemini exit 4／catalog miss／OAuth未就緒**：先到`luna`，兩種capability相同；帶`--retry-of <gemini-label>`，Gemini origin視為luna-class。
+3. **Luna exit 4**：`readonly` payload到`luna-cursor`；`mutation` payload跳過它到`grok-xai --chain-origin luna`。Caller **MUST**照`next_step`，NEVER因為同base tier自行補回Cursor。
+4. **luna-cursor exit 4**（只可能是readonly鏈）→ `grok-xai --chain-origin luna`同effort重派；`--chain-origin`在共享格MUST帶。
+5. **grok-xai exit 4（luna鏈）**：`readonly` payload續到`grok-cursor`，該格耗盡才接Claude `haiku`；`mutation` payload直接跳過`grok-cursor`接`haiku`。兩者終點都 **NEVER** 升`sonnet`。
+6. **Grok鏈自己的路徑**：`readonly` 的`grok-xai` exit 4 → `grok-cursor --chain-origin grok-xai`，再耗盡接Claude `sonnet`；`mutation`直接跳過`grok-cursor`接`sonnet`，**NEVER**降`haiku`。具名例外`commit-0c-fix-verify`由policy payload改接sol升級列。
 7. **External-web row是具名二跳例外，NEVER 進上面的generic Gemini／Luna鏈**：第一跳是`--model gemini --effort low --route routing-table --tier-basis table-row --table-row web-search --decision-id <id>`；exit 2／3／4且無usable final text時，第二跳是同decision的`--model luna --effort low --route fallback-chain --tier-basis quota-fallback --retry-of <gemini-label>`。Luna usable就使用結果；Luna exit 3／4後，matching built-in `WebSearch`／`WebFetch`只憑同reason authoritative receipt放行。NEVER續到`luna-cursor`／Grok／Claude subagent。
 8. Claude 接走時 session 結尾 **MUST** 回報「本 session 因配額耗盡，由 Claude 執行 N 個本應外派的 change」；有 runtime reset 資訊再附上，沒有就明說 unavailable。
 
@@ -782,9 +792,11 @@ redaction 只在 signal payload 上強制（`vendor/signals/redact.mjs`），**d
 
 > 本節是 [[agent-routing]] § 配額邊界 下推的兩段。**判「這個 codex-primary verdict 要不要真的 dispatch」之前，以及要動配額鏈 `-cursor` 那一跳之前，MUST 先讀本節。**
 
-### `-cursor` 那一跳的准入（材料來源，非使用者意願）
+### `-cursor` 那一跳的准入（workspace capability ＋材料來源）
 
-門檻是機械的、兩層都會擋：repo 不在 `registry/consumers.json` 內 → runtime 拒跑（`errorClass: material-origin-refused`）；repo 是自家的但 branch 上有從未在 origin 預設分支出現過的作者（第三方 PR 的形狀）→ `codex-review-safe.sh` exit 7。**NEVER** 用 env var / flag / 提示語把它做成可繞過的形式——那三種都是「綁使用者意願」的變體（TD-534）。
+第一層是workspace capability：只有`readonly`可進Cursor；`mutation`與unknown都fail closed。這一層與cwd visibility獨立——即使所有路徑都在cwd內，cwd仍是`--ro-bind`。**NEVER**加writable bind把mutation硬塞進Cursor。
+
+第二層才是材料來源，而且門檻是機械的、兩層都會擋：repo 不在 `registry/consumers.json` 內 → runtime 拒跑（`errorClass: material-origin-refused`）；repo 是自家的但 branch 上有從未在 origin 預設分支出現過的作者（第三方 PR 的形狀）→ `codex-review-safe.sh` exit 7。**NEVER** 用 env var / flag / 提示語把它做成可繞過的形式——那三種都是「綁使用者意願」的變體（TD-534）。
 
 ### 最小 dispatch 門檻（避免瑣碎 override）
 

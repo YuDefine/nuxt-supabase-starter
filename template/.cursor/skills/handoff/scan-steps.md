@@ -224,14 +224,15 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff next — clade <version> scan_
 
 讀 §2B.1a 那次 `handoff-scan.ts --json` 輸出的 `techDebtHygiene` 段（掃當前 consumer 自家 `docs/tech-debt.md`，與 clade SoT 無關）。本 sub-step 前未跑過 scan 時補跑同一指令。
 
-五條訊號 **MUST** 各自處置，**NEVER** 只看其中一條：
+六條訊號 **MUST** 各自處置，**NEVER** 只看其中一條：
 
 | 訊號 | check | 意義 | 處置 |
 | --- | --- | --- | --- |
 | **staleOpen** | `tech-debt-stale:<TD-NNN>`（warn） | open/pending TD 的 `Discovered` > 60d 且無 `### Resolution` / 近期 `Last reviewed` — 「開了就忘」候選 | 列進 §2B.2 outstanding **並標記為最高優先**（age 越大越前）。推薦 user 三選一：做掉 + 補 `### Resolution` / 改 `Status: wontfix` + 理由 / 加 `**Last reviewed**: <today>` 重置 SLA。**NEVER** 默默放回清單尾巴 |
 | **aging** | `tech-debt-aging:<TD-NNN>`（warn） | open/pending TD 的 `Discovered` > 14d，含被 `Last reviewed` snooze 的 — 「正在老化」候選 | 列進 §2B.2 outstanding（排在 stale 之後、一般項目之前）。**MUST 主動追問 user 卡關原因**（見 § anti-snooze）。對 `snoozed: true` 的項目**明確指出** `Last reviewed` 不等於解決 — 「已 stamp Last reviewed 但仍無 Resolution，應推進或 wontfix」 |
 | **evidenceStale** | `tech-debt-evidence-stale:<TD-NNN>`（warn） | open TD 的 `Location` 路徑在 `Discovered` 之後被 commit 過 — 「敘述可能已不成立」候選。與 staleOpen 正交：staleOpen 問「放多久了」，本條問「還成不成立」 | **MUST 逐條讀該 entry 對照現況後才列 outstanding**，NEVER 直接把它當成待辦推給 user。三種結果：① 事情已做完 → 補 `### Resolution` + 改 `Status`，**不**列 outstanding；② 敘述過期但問題還在 → 更正敘述（保留原文供追溯），再列 outstanding；③ 確認仍成立 → 加 `**Last reviewed**: <today>`，照常列。**這是啟發式不是判決** — 路徑被動過也可能與該 TD 主題無關 |
-| **closedBloat** | `tech-debt-closed-bloat`（warn，closed TD ≥ 門檻時觸發） | done/resolved/wontfix 的 closed TD 仍躺 `docs/tech-debt.md` 主檔 | **MUST** 跑 `node "$HOME/offline/clade/vendor/scripts/rotate-closed-bloat.ts"`（搬全部 rotatable，不是啃到門檻下；noop 時 stdout 是 `noop`）。**NEVER** `AskUserQuestion`。retained（`*-until-*` 或 `### 重訪條件` / `### Defer 條件`）由 script 排除，訊息的 `retained` 欄列出。Park 不執行 |
+| **archivedRetained** | `tech-debt-archived-retained`（fail） | `docs/archives/tech-debt-closed-*.md` 內出現帶 re-activation 契約的 TD；trigger 留在 archive 裡，後續盤點看不見 | 依 §2B.1a 的 fail 契約停止；按 detail 的 TD id／archive path 搬回 `docs/tech-debt.md`。判準與 rotation 共用：`*-until-*`、`### 重訪條件` / `### Defer 條件`、`**Signal**:` 任一命中 |
+| **closedBloat** | `tech-debt-closed-bloat`（warn，closed TD ≥ 門檻時觸發） | done/resolved/wontfix 的 closed TD 仍躺 `docs/tech-debt.md` 主檔 | **MUST** 跑 `node "$HOME/offline/clade/vendor/scripts/rotate-closed-bloat.ts"`（搬全部 rotatable，不是啃到門檻下；noop 時 stdout 是 `noop`）。**NEVER** `AskUserQuestion`。retained（`*-until-*`、`### 重訪條件` / `### Defer 條件`、`**Signal**:`）由 script 排除，訊息的 `retained` 欄列出。Park 不執行 |
 | **entryOversize** | `tech-debt-entry-oversize`（warn，任一 open TD > `raw.oversizeThreshold` 行時觸發） | **open** TD 單條正文過長。rotate 只吃 closed，對 open 零覆蓋 — <consumer-b> 實測 4986 行主檔裡 4807 行是 open，主檔體積的長期成長全在這裡 | 產出**下推**建議（**不是砍字**）：把長篇 root-cause 敘事搬到 `$MAIN_WT_PATH/docs/archives/tech-debt-bodies.md`，主檔留 metadata block（`Status` / `Discovered` / `Class` / `Location`）+ 摘要一段 + pointer。逐條見 `raw.oversize[]`（含 `lines` / `overBy` / `lineNo`）。**用 `AskUserQuestion` 讓 user 拍板**（同 §2B.1b rotate plan 模式：A 套用 / B 跳過 / C 手動），user 選 A 才動檔。**MUST 保留 metadata block 原封不動** — `audit-tech-debt-hygiene.ts` 的 Invariant 2 / 3 / 6 全靠它，搬走 `Location` 會讓那三條同時失效 |
 
 **closedBloat 的幅度由 script 一次搬完全部 rotatable 承載**，不再走 (A) 選項。
@@ -255,7 +256,7 @@ closedBloat 的 retained 例外與 entryOversize 兩者的正文都落**同一�
 - **re-activation SOP**：`tech-debt-bodies.md` 是 append-only。trigger 命中時 **NEVER 把正文搬回主檔** — 就地把 stub 的 `Status` 改回 open 並補上新 context，archive 內的正文留作歷史紀錄。搬回去會同時破壞 append-only 與 Invariant 1 的編號帳
 - **NEVER 對 consumer 代做**：本 skill 只產出建議 + `AskUserQuestion`；實際搬檔在哪個 repo 就由那個 repo 的 session 自己執行
 
-**判定 SoT**：`techDebtHygiene.raw`（`stale[]` 含 `discAge` / `lineNo`；`aging[]` 含 `discAge` / `reviewAge` / `snoozed`；`open[]` 含**全部** open entry 的 `id` / `title` / `lineNo` / `lines` / `discovered` / `location`；`oversize[]` 含 `lines` / `overBy`；`closed[]` 含 `status` / `lines`；`closedCount` / `closedLines`）。**NEVER** 從 `docs/tech-debt.md` 既有 narrative 或目測推測 — scan output 才是 SoT。
+**判定 SoT**：`techDebtHygiene.raw`（`archivedRetained[]` 含 `id` / `archivePath` / `lineNo` / `reasons`；`stale[]` 含 `discAge` / `lineNo`；`aging[]` 含 `discAge` / `reviewAge` / `snoozed`；`open[]` 含**全部** open entry 的 `id` / `title` / `lineNo` / `lines` / `discovered` / `location`；`oversize[]` 含 `lines` / `overBy`；`closed[]` 含 `status` / `lines`；`closedCount` / `closedLines`）。**NEVER** 從 `docs/tech-debt.md` 既有 narrative 或目測推測 — scan output 才是 SoT。
 
 **`park` 跑時不執行本 sub-step** — `park` 是「靜默寫入交接」，本 scan 為 §2B.2 outstanding 盤點與 rotate 推薦服務，`park` 無推薦階段。
 

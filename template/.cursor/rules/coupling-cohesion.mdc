@@ -1,6 +1,6 @@
 ---
 description: "耦合與內聚的三層分工——import cycle / barrel 的 gate 判讀、server 碼跨界 import、跨檔重複 discriminant switch、audit 表的 NO-SCAN 語意、Review 層函式契約、第三方 SDK 邊界"
-globs: ["'**/*.{ts", "tsx", "mts", "cts", "vue}'"]
+globs: ["**/*.{ts,tsx,mts,cts,vue}"]
 alwaysApply: false
 ---
 <!--
