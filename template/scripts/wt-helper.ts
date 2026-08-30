@@ -99,7 +99,7 @@ import {
   formatClaimConflict,
 } from './claim-helper.ts'
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
-import { isLockedProjectionPath, isLockedProjectionPathFor } from './locked-projection.ts'
+import { isLockedProjectionPathFor } from './locked-projection.ts'
 import { runWtEnvBootstrap } from './lib/wt-env-bootstrap-runner.ts'
 
 interface WtOptions {
@@ -567,8 +567,8 @@ function detectSharedTunnelRisk(root) {
 }
 
 // Paths under clade-managed projection control are matched by
-// LOCKED_PROJECTION_RE / isLockedProjectionPath imported from
-// `./locked-projection.mjs` (single source of truth shared with the clade
+// LOCKED_PROJECTION_RE / isLockedProjectionPathFor imported from
+// `./locked-projection.ts` (single source of truth shared with the clade
 // _validate-manifests.ts cross-check — see Phase 6 / closes TD-018).
 
 // matchClaimGlob / classifyDirtyPaths moved to ./claim-helper.ts (TD-435) so
@@ -1412,7 +1412,9 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
           }
         }
 
-        const nonProjection = [...baselinePaths].filter((p) => !isLockedProjectionPath(p))
+        const nonProjection = [...baselinePaths].filter(
+          (p) => !isLockedProjectionPathFor(consumerRoot, p),
+        )
         if (nonProjection.length > 0) {
           const sample = nonProjection.slice(0, 5).join(', ')
           const more = nonProjection.length > 5 ? `, ... +${nonProjection.length - 5} more` : ''
@@ -2904,9 +2906,9 @@ export function syncWorktreeWithMain(wtPath, branchName, slug) {
   // can resolve safely without user judgement:
   //
   //   1. LOCKED projection paths (`.claude/`, `.agents/`, `.codex/`,
-  //      `.claude/hub.json`, etc. — see locked-projection.ts):
-  //      main is SoT. Wt-side edits are propagate residue, never user
-  //      intent. Take main version.
+  //      Cursor projector dest, `.claude/hub.json`, etc. — see
+  //      locked-projection.ts). Handwritten `.cursor/` 與 Cursor 自管目錄
+  //      不在此列。main is SoT for generated files. Take main version.
   //
   //   2. `openspec/changes/archive/**` paths: spectra-archive flow moves
   //      change folders INTO archive (one-way). Wt has no legitimate
@@ -2946,7 +2948,7 @@ export function syncWorktreeWithMain(wtPath, branchName, slug) {
     conflicted = readConflicted()
   }
 
-  runResolvePass(isLockedProjectionPath, 'LOCKED projection', 'locked')
+  runResolvePass((p) => isLockedProjectionPathFor(wtPath, p), 'LOCKED projection', 'locked')
   runResolvePass(isArchivePathConflict, 'openspec archive', 'archive')
 
   // If auto-resolve cleared every conflict, finalize the merge commit.

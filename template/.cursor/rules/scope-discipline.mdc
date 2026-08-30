@@ -121,16 +121,21 @@ Local edits will be reverted by the next sync.
 
 最常見情境：`/commit` 跑 review / lint / typecheck / test 發現問題 → `commit.md` 規約「MUST 修，NEVER 以建議性質 / 不在本次範圍為由跳過」→ 但修法會動到別 session in-flight WIP（典型：`HANDOFF.md`、別 session 的 `tasks/<...>.md`、其他 active change 的 artifact）→ 撞上「不擅改他人成果」。
 
-此時 **MUST** 用 `AskUserQuestion` 帶以下兩個固定選項：
+此時 **MUST** 先跑 [[session-tasks]] § 並行爭用 的 Step 0 判出持有者性質，再依下列**三個固定選項**處置。順序是規約的一部分：**A0 排在 A / B 之前**，A / B 只在 A0 判定不適用、或 A0 已送出而爭用未解時才輪到。
 
-- **A. 馬上修，回 flow 繼續** — 在當前 session 直接編輯該 WIP 檔，原 flow（`/commit` / `/spectra-archive` / 等）繼續走完。前提：user 確認該編輯不會跟別 session 的修改互踩（或別 session 已結束）
+- **A0. 先跟持有者對話**（Step 0 判出持有者是**前景 agent session** 時 MUST 先走這一支）— 送 `herdr agent prompt <對方 pane_id> "<四項>"`，四項內容與逐字範本見 [[concurrent-session-probe]] § 探測之後：協商（negotiate）。依對方回覆分流：對方說它正要 land → 等它落地再重跑當前 flow；對方說那批無主 → 進 A；對方說它要接手 → 進 B，且 TD 內文 MUST 寫明接手者是誰。送出後 MUST 指名等到哪一個可觀察事件（對方回覆、或那幾個檔不再 dirty），上限 5 分鐘，逾時升級路徑同該 cookbook。Step 0 判出持有者是 **unattended runner**（那個 pane 的 idle 是在等人類，寫檔的是背景 process）、或判不出持有者時，A0 不適用，直接看 A / B
+- **A. 馬上修，回 flow 繼續** — 在當前 session 直接編輯該 WIP 檔，原 flow（`/commit` / `/spectra-archive` / 等）繼續走完。前提：A0 已送出且對方不反對（或 A0 不適用），且 user 確認該編輯不會跟別 session 的修改互踩（或別 session 已結束）
 - **B. 登 TD，放棄當前 flow** — 把問題寫進 `docs/tech-debt.md`（編號 `TD-NNN`），當前 flow **立即中止**（commit 不繼續、archive 不繼續），等別 session 結束後由 user 決定何時處理；已成功 commit 的 group 保留不動
+
+**A 與 B 之間的二選一 MUST 用 `AskUserQuestion` 交給 user；A0 不進 `AskUserQuestion`**——它是本 session 自己送得出去的動作，不是要 user 拍板的選項。
 
 **選 B 之前 MUST 先跑 [[session-tasks]] § 並行爭用 的 Step 0 確認「別 session」真的會結束。** 對方是 unattended runner 時它不會在可預期時間內停，「等它結束」等於把 flow 無限期掛起——判出是 runner 就直接登 TD 並讓位，**NEVER** 把中止理由寫成「等對方結束」。
 
-**NEVER** 自行二選一、自行 commit 略過該檔、自行用「不在 scope」當理由跳過 — 這兩條都是觸發 AskUserQuestion 的合法分支，不是 Claude 主線可單方決定的事。
+**NEVER** 在 A0 尚未發生時就開 `AskUserQuestion` — 持有者是前景 agent session 時，跳過 `herdr agent prompt` 直接把 A / B 丟給 user，就是這條要擋的。「我不動別人的檔」**NEVER** 讀成「我什麼都不做」：不動檔與不溝通是兩件事，本節要求的只有前者。
 
-**為什麼預先固化 A/B**：這個衝突在 `/commit` 流程裡會反覆出現（review agent 跑出 nitpick → 落在 HANDOFF 是常態）。每次重新發明選項會讓 Claude 傾向「自行解讀」而不是嚴格走 AskUserQuestion；預先固化 = 把分支變成 reflex，不留發揮空間。
+**NEVER** 自行在 A 與 B 之間二選一、自行 commit 略過該檔、自行用「不在 scope」當理由跳過 — A0 解鎖的是**對話**，不是**代替 user 拍板**。
+
+**為什麼預先固化 A0/A/B**：這個衝突在 `/commit` 流程裡會反覆出現（review agent 跑出 nitpick → 落在 HANDOFF 是常態）。每次重新發明選項會讓 Claude 傾向「自行解讀」而不是嚴格走這三支；預先固化 = 把分支變成 reflex，不留發揮空間。清單裡少一支 A0 的後果不是「少一個選項」，是**清單本身的形狀在把決策往人推**（[[pitfall-cross-session-blocker-escalated-to-human-instead-of-peer]]）。
 
 ## 破壞性指令的 guardrails
 

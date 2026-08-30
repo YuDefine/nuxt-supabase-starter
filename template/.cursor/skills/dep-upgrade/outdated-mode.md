@@ -8,9 +8,15 @@
 | Item kind | 來源 | 動的檔 | 真驗證 |
 | --- | --- | --- | --- |
 | `npm` | `pnpm outdated` | `package.json` + lockfile（+ callsite） | typecheck / build / test（本機） |
+| `npm` (catalog) | `pnpm outdated`（catalog-pinned 套件） | `pnpm-workspace.yaml`（`catalog:` + `overrides:`）+ lockfile | 同上 |
 | `action` | `.github/workflows/**` + `.github/actions/**` 的 `uses:` | workflow / composite action YAML | **push 後 CI 綠燈**（Step O.4） |
 
 `action` item 併進本 mode 而非獨立 skill，是因為它跟 npm 升級共用同一套 worktree gate、per-item commit boundary、changelog pre-scan 與 merge-back 收尾——差別只在「改哪個檔」與「怎麼驗」。
+
+**catalog-pinned 套件的兩條硬規則**（fleet 14 consumer 中 9 個用 `pnpm-workspace.yaml` 的 `catalog:`）：
+
+- `catalog:` 條目與 `overrides:` 條目 **MUST 同步改**——兩者共同釘選同一個版本，改一邊忘一邊 = lockfile 不動
+- `npm:` alias 條目（如 `vite: npm:@voidzero-dev/vite-plus-core@^0.3.0`）的版號追的是 **alias 目標 package**，不是 alias 名——`pnpm outdated` 報的也是目標 package 版本
 
 ## 何時用 / 不適用（Outdated mode）
 
@@ -23,7 +29,6 @@
 **不適用**：
 - 單一套件、單行升版（`pnpm add foo@latest` 自己跑更快）
 - 整個 framework migration（Nuxt / Next / React major bump 需要專屬的 migration plan，不是逐套件 loop 能處理）
-- monorepo 跨 workspace catalog 升版（先用 [[evlog-catalogs]] 派工方式處理 catalog）
 
 ### Actions 升級為什麼在這裡（而不是 Dependabot）
 
@@ -183,7 +188,7 @@ gh release view "v<latest_major_tag>" --repo <owner>/<repo> --json url -q .url
 gh release view v<to> --repo <owner>/<repo> --json body -q .body > /tmp/dep-prescan-<pkg-slug>.md
 ```
 
-- `gh` 失敗（private repo / rate limit / 無 release）→ 若 `source: "changelog_md"`，用 WebFetch 拿 changelog URL → 否則標 `unknown`
+- `gh` 失敗（private repo / rate limit / 無 release）→ 若 `source: "changelog_md"`，依 `web-search` external-web row 取 changelog URL → 否則標 `unknown`
 - 寫出的檔可在 O.2.1 pi prompt builder 復用
 
 **action items**：同上 `gh release view`，寫到 `/tmp/dep-prescan-action-<owner>-<repo>.md`。Actions 通常有良好的 release notes（GitHub 官方 + 大社群維護者），fetch 失敗率低。
@@ -635,11 +640,11 @@ done
 Action 升版的「真驗證」**只能**在 CI 跑——本機沒有 GitHub Actions runner。push 後 **MUST** 派 CI watcher（per AGENTS.md § Post-Push CI Watcher）監看 consumer 的主要 CI workflow：
 
 ```bash
-bash .cursor/scripts/gh-ci-watch.sh workflow "<primary CI workflow name>" \
+bash .cursor/scripts/gh-ci-watch.sh workflow <primary-ci-workflow>.yml \
   --commit "$(git rev-parse HEAD)"
 ```
 
-- `<primary CI workflow name>` 從 `.github/workflows/` 找主要 CI workflow（通常是 `ci.yml` 或 `_ci-reusable.yml` 被 caller 觸發的那條）
+- `<primary-ci-workflow>.yml` 是 `.github/workflows/` 底下的**檔名**（通常 `ci.yml`，或 `_ci-reusable.yml` 被 caller 觸發的那條）。**NEVER 傳 workflow 的 display name 或自己想的簡稱** —— display name 與檔名無關且隨時可被編輯，傳錯時 script 會 exit 2 並列出可用清單（見 `/gh-ci-watch` § 場景 B）
 - 用 `run_in_background=true` 派出
 - Watcher 完成後走 AGENTS.md 既定分流（success → 一行報完、failure → AskUserQuestion 二選一）
 

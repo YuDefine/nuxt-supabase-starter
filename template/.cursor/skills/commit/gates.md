@@ -88,7 +88,17 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
   3. 確認別 session 沒在跑後再繼續
 ```
 
-接著用 **AskUserQuestion** 二擇一：
+接著 **MUST 先跑 [[session-tasks]] § 並行爭用 的 Step 0** 判出持有者性質（`herdr agent list` 過濾 cwd → `herdr agent read` → `pgrep -af 'work-loop/[r]unner\.sh'`），再依下表決定動作。**NEVER** 從 warn block 直接跳到 `AskUserQuestion`：
+
+| Step 0 判出持有者是 | 這裡做什麼 |
+| --- | --- |
+| **前景 agent session** | **① 先 `herdr agent prompt <pane_id> "<四項>"` 通知對方**——這一步排在等候重試 / 強制繼續 / 問 user **之前**。訊息 MUST 含的四項與逐字範本見 [[concurrent-session-probe]] § 探測之後：協商（negotiate）。**② 依對方回覆分流**：對方說它正要 land → 等到它 commit 落地再重跑 0-Coord；對方說那批無主 → 直接進 Step 0-Scope；對方說它要接手 → 釋放 commit-lock 後 STOP。**③ 對方沒回應，才落到下面的 `AskUserQuestion`** |
+| **unattended runner**（`pgrep` 命中且 `/proc/<pid>/cwd` 是本 repo） | 對話不適用——runner child 是 `claude --print`，沒有 pane 也不讀訊息，那個 idle pane 收到訊息不會轉達給背景 process。退出 /commit 並登記本輪需求，**NEVER** 對它 prompt、**NEVER** 搶 |
+| **人類正在編輯**，或 Step 0 判不出持有者 | 才走下面的 `AskUserQuestion` |
+
+送出 `herdr agent prompt` 之後 **MUST 指名等到哪一個可觀察事件**（對方回覆、或 `git status` 那幾個檔消失），**NEVER** 只寫「等對方回」就無限期掛著；等待上限與逾時升級路徑見 [[concurrent-session-probe]] § 探測之後：協商（negotiate）。
+
+落到上表第三列（或第一列的 ③）時，用 **AskUserQuestion** 二擇一：
 
 - **選項 A**：`label: "等候重試"`, `description: "退出 /commit，等 60 秒後重跑（推薦：避開 staged 污染風險）"`
 - **選項 B**：`label: "強制繼續"`, `description: "接受 staged 污染風險繼續跑 Step 0-Scope（user 確認別 session 已結束時用）"`
@@ -99,7 +109,9 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 - **NEVER** 把 Step 0-Coord 升級為 hard block；偽陽性 / 別 session 剛好結束的場景太多，warn-and-ask 是當前正解
 - **NEVER** 嘗試自動 `rm .git/index.lock` 或清掉 sidecar — 那是別 session 的 SoT，誤刪比繼續跑風險更高
-- **NEVER** 跳過 AskUserQuestion 自行決定繼續 — 命中時 user 必須親自選 A/B
+- **NEVER** 在**未經對話**的情況下自行決定繼續 — 持有者是前景 agent session 時，跳過 `herdr agent prompt` 直接選 A 或 B 都算違反
+- **NEVER** 在對話**尚未發生**時就開 `AskUserQuestion` — 「我不動別人的檔」**NEVER** 讀成「我什麼都不做」，不動檔與不溝通是兩件事，而本 gate 要求的只有前者
+- 落到上表第三列（人類編輯 / 判不出持有者）之後，**NEVER** 跳過 AskUserQuestion 自行決定繼續 — 該情況下 user 必須親自選 A/B
 
 > 同類 race 也存在於 **ad-hoc commit**（不走本 skill 的單檔 commit、HANDOFF 補一行就 commit、修 typo 就 commit 等）。預防規約見 `rules/core/commit.md` § Ad-hoc commit 必走 `git commit --only -- <paths>`。
 
@@ -363,22 +375,22 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 ---
 
-## § 0-A: 程式碼審查（simplify → Codex xhigh → 條件升 Codex max + Fable code-review max）
+## § 0-A: 程式碼審查（simplify → 0-A.1 → 條件式 0-A.2）
 
 **審查策略**：
 
 1. 主線先跑 `simplify` skill —— 它看 reuse / 精簡 / 過度設計 / altitude 這條軸，Pi review 不會抓。先處理掉避免後續 pi 重複指出
-2. 接著（若 fast-path 不命中）以背景方式跑 Pi review xhigh（GPT-5.6-sol）—— 跨模型抓 bug / 邏輯 / 安全，盲點與 simplify / Claude 主線不同。**啟動後立即進入並行階段（見主檔「0-A/B/C 並行策略」）**，主線同步推進 0-C 並派 0-B subagent
-3. 0-A.1 出現 Critical / Major → 進入 0-A.2 兩步驟：先派 Pi GPT-5.6-sol max 深度 review，再由 Fable（`claude-fable-5`）跑 `code-review` agent max，拿著 pi 的回饋做最終決策
+2. 接著（若 fast-path 不命中）以背景方式跑 GPT-5.6-sol via Pi（effort: xhigh）執行 review—— 跨模型抓 bug / 邏輯 / 安全，盲點與 simplify / Claude 主線不同。**啟動後立即進入並行階段（見主檔「0-A/B/C 並行策略」）**，主線同步推進 0-C 並派 0-B subagent
+3. 0-A.1 出現 Critical / Major → 進入 0-A.2 兩步驟：先派 GPT-5.6-sol via Pi（effort: max）做深度 review，再由 Claude Fable 5（`claude-fable-5`，effort: max）跑 `code-review` agent，拿著 pi 的回饋做最終決策
 4. 修正一律由 AI Agent 主線執行；所有並行軸的 finding 匯合後一次性修正
 
 **模型分工**：
 
 | 步驟 | 模型 | Effort | 職責 |
 | --- | --- | --- | --- |
-| 0-A.1 | Pi GPT-5.6-sol | xhigh | 跨模型盲點互補，抓 bug / 邏輯 / 安全 |
-| 0-A.2 Step 1 | Pi GPT-5.6-sol | max | 深度搜尋所有可能問題 |
-| 0-A.2 Step 2 | Fable `claude-fable-5` | max | 拿 pi finding 做最終裁決 |
+| 0-A.1 | GPT-5.6-sol via Pi | xhigh | 跨模型盲點互補，抓 bug / 邏輯 / 安全 |
+| 0-A.2 Step 1 | GPT-5.6-sol via Pi | max | 深度搜尋所有可能問題 |
+| 0-A.2 Step 2 | Claude Fable 5 (`claude-fable-5`) | max | 拿 pi finding 做最終裁決 |
 
 ### 0-A dispatch 禁令（2026-08-22 從 [[agent-routing]] § 必禁事項 下推，TD-590）
 
@@ -422,7 +434,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 - **命中** → 輸出 `⏭️ 0-A.1/0-A.2 跳過（fast-path: diff <20 行、限 doc/config、無敏感路徑）`，進入 0-B/0-C 並行
 - **不命中** → 進入 0-A.1
 
-### 0-A.1 — Pi GPT-5.6-sol review (xhigh)，背景（並行軸 A）
+### 0-A.1 — GPT-5.6-sol via Pi（effort: xhigh），背景（並行軸 A）
 
 **Watch contract**：背景啟動（`run_in_background: true`）取得 `<task-id>` 後，同一 turn 記錄 owner / deadline（deadline 取值依 [[agent-routing]] § deadline 怎麼取） 並排 180s（[[agent-routing.pi-watch-protocol]] § ScheduleWakeup 用法守則 的具名例外）canonical `ASYNC_KEEPALIVE_CONTROL task=<task-id> owner=commit:codex-review deadline=<ISO>...` inert control wakeup；控制 turn 只准 `TaskOutput(block=false)`、重排同一訊息或排 lifecycle intervention，**NEVER** 讀 review output、重播 review 指令或做 mutation。實際 findings 只在 terminal notification + task-id claim 後讀取。啟動背景 process 後 MUST 立即進入並行階段，啟動 0-B（條件觸發）與 0-C。
 
@@ -472,6 +484,35 @@ runner 比對 pi session 事件的 cwd 與 `--cwd`，realpath 不符即 exit 5�
 
 script 在 runner 前後各拍一次 worktree snapshot（HEAD + 暫存 index 的 `git write-tree` 單一 tree hash——原生涵蓋內容、executable bit、symlink target、binary，純 git 可攜——+ `git status --porcelain=v2`），不一致即 exit 6 並在 stderr 印出 `git diff-tree` 的逐檔明細。runner 的 verdict 先落檔、**通過 after-check 才放行到 stdout**——exit 6 時 verdict 被扣住不輸出，只認 heading / 表格的機械檢查不會誤判通過。baseline 拍在 changeset 收集**之前**（拍在之後的話，收集期間的並行修改會被寫進 baseline，review 過的是一份 stale changeset 而檢查靜默）。snapshot 本身 fail-closed：任一步 git 失敗即 exit 6（unborn HEAD 是合法狀態、不觸發），NEVER 留下「前後同樣殘缺所以比對通過」的假綠。
 
+##### 處置：歸因先，重跑前先換場地
+
+exit 6 的 stderr 已經把改動**歸因**成兩類（受審 changeset 內的路徑 / changeset 外的路徑）。
+**MUST** 先讀那份明細定性，**NEVER** 直接重跑 —— 蓄意 mutation 與並行 session 的正當編輯在
+exit code 上長得一樣，而前者要停下來查，後者只是場地選錯了。
+
+定性為**並行 session 的正當編輯**時，原樣重跑會撞同一件事：多人同時在 main 上工作，
+review 期間沒有人改檔的機率隨 session 數遞減。改在**隔離的 detached worktree** 內跑，
+changeset 就只含自己這批：
+
+```bash
+git worktree add --detach /tmp/<repo>-<slug>-review HEAD
+cd /tmp/<repo>-<slug>-review && git apply <自己這批的 patch>
+cd /tmp/<repo>-<slug>-review && bash <repo>/.cursor/scripts/codex-review-safe.sh xhigh
+```
+
+patch 取自 `git diff --cached -- <自己的路徑>`（或 `git diff`），**MUST** 用路徑限定 ——
+那同時解掉第二個問題：在 main 直接跑，changeset 會含**所有** session 的 dirty 檔，
+pi 讀的是一份混雜的 diff，findings 也會混進別人的檔。
+
+2026-08-27 <consumer-b> 實測（main 上 4 個 session 並行）：在 main 跑是 49 檔 / 5307 行且連續兩次
+被扣住；同一批改動移到 detached worktree 後是 4 檔 / 593 行，跑三輪都沒再觸發。
+
+三件事別搞混：
+
+- 這**不是**繞過 exit 6。隔離 worktree 內的 snapshot 檢查照跑，只是沒有別人會去動它
+- 這**不放寬**任何判準。定性為蓄意 mutation 或定不出性時，仍是停下來查，**NEVER** 換場地重跑當作解決
+- worktree 用完 **MUST** `git worktree remove`，**NEVER** 留著累積（它會進下一次 `/handoff` 的 audit）
+
 **write-tree 換法解的是可攜性與覆蓋率，不是安全性。** 它移除了 GNU coreutils 依賴、把 executable bit 與 symlink target 收進覆蓋範圍，但 `git write-tree` 一樣走 PATH 上的 `git` —— 「同 UID 對手可劫持度量工具本身」的問題，換 tree hash **一點都沒解**。**NEVER** 把 snapshot 實作的改良讀成安全等級提升；封口的是 bwrap（TD-524，已落地，見下）。
 
 **這是偵測控制，不是安全邊界 —— 別讓下一個人把它當 sandbox 用。** 它為什麼結構性無效的原論證是：同 UID 的對手可以竄改 `$WORK_DIR` baseline、劫持 PATH 上的 `git` 本身，任何 script 內的事後比對都騙得過（0-A.2 review 2026-08-19 定案）。**那條論證對 cursor 池自 TD-524 起不再成立**——它已經不在呼叫者的 UID 檔案空間裡（見下）。但本檢查的定位**不變**：它從來就不是靠對抗性強度存在的，改變的是它不再是 cursor 池唯一的那道。它可靠接住的是**非對抗**的三類：並行 session 在 review 期間的編輯 / commit（實測發生率最高）、模型無惡意的誤寫事故、default 池 pi 層 enforcement 的回歸。它擋不住的包括：蓄意 mutation 後湮滅痕跡、資料外洩（WebFetch / MCP 送出去）、對其他 repo 或 `$HOME` 的破壞、以及**先改再還原**。
@@ -502,8 +543,8 @@ script 在 runner 前後各拍一次 worktree snapshot（HEAD + 暫存 index 的
 讀完 pi 輸出後依 **pi 自己輸出的 severity 標記**分情境處理（**此時 0-B / 0-C 應已並行完成或在收尾**）：
 
 - **MUST** 檢查輸出含完整 `## Semantic Verdict` 表且覆蓋 patterns.json semantic 全部 id——缺表或缺列＝review 不完整，重跑 0-A.1，NEVER 當作通過
-- **無 issue** → 輸出 `✅ 0-A.1 通過（Codex xhigh 無 issue）`，**跳過 0-A.2**，進入「並行匯合」
-- **僅 Minor / Info 級 issue** → 主線逐一修完，輸出 `✅ 0-A.1 通過（Codex xhigh 僅 Minor/Info 已修）`，**跳過 0-A.2**，進入「並行匯合」
+- **無 issue** → 輸出 `✅ 0-A.1 通過（GPT-5.6-sol via Pi（effort: xhigh）無 issue）`，**跳過 0-A.2**，進入「並行匯合」
+- **僅 Minor / Info 級 issue** → 主線逐一修完，輸出 `✅ 0-A.1 通過（GPT-5.6-sol via Pi（effort: xhigh）僅 Minor/Info 已修）`，**跳過 0-A.2**，進入「並行匯合」
 - **出現 Critical / Major 級 issue** → 主線逐一修完，**MUST** 進入 0-A.2
 
 > **0-A.2 審的是「修正本身」，不是「還沒修的 finding」。** 修完 Critical / Major 之後 0-A.2 **仍然 MUST 跑**——0-A.1 的修法是全新、未經任何跨模型審查的 code，**NEVER** 假設它比原本的版本安全。
@@ -541,13 +582,13 @@ PRE-EXISTING — 未觸碰：<file>:<line>（舉證本次 diff 不含此檔／�
 
 登記走 `docs/tech-debt.md` 開 TD（跨 session 要追）或 `HANDOFF.md`（下一 session 就會碰），**NEVER** 只在 chat 講一句。「已經跟 user 說了」不算登記——chat 不是 session 之間的傳遞介面。
 
-### 0-A.2 — Pi max + Fable code-review max（兩步驟，條件觸發）
+### 0-A.2 — 深度 review + 跨模型裁決（兩步驟，條件觸發）
 
 **僅在 0-A.1 出現 Critical / Major 級 issue 時執行**，其他情況一律跳過。
 
 0-A.2 分兩步驟，先用 Pi 深度 review，再用 Fable 拿 pi 回饋做最終裁決：
 
-**Step 1 — Pi GPT-5.6-sol review (max)**：
+**Step 1 — GPT-5.6-sol via Pi（effort: max）**：
 
 ```bash
 .cursor/scripts/codex-review-safe.sh max
@@ -557,12 +598,12 @@ Pi 完成後，**把完整輸出存到變數**（後續餵給 Fable）。
 
 **Verdict-presence check**（TD-246 — 防 context exhaustion 靜默跳過 review）：
 
-Pi max 完成後 **MUST** 檢查輸出是否含 `## Review Verdict` heading。兩條路：
+GPT-5.6-sol via Pi（effort: max）完成後 **MUST** 檢查輸出是否含 `## Review Verdict` heading。兩條路：
 
 - **含 `## Review Verdict`** → 正常進 Step 2（Fable 裁決）
-- **缺 `## Review Verdict`**（context exhaustion / 輸出截斷 / 任何非正常完成）→ **MUST** 向 user 報 warning「⚠ Pi max context exhaustion — 未產出 Review Verdict，fallback to 0-A.1 findings」，然後 **fallback**：跳過 Step 2 的 Pi 輸出，改用 0-A.1 xhigh findings 直接餵 Fable code-review agent 做裁決（prompt 改為「你收到 Pi GPT-5.6-sol (xhigh effort) 對本次 diff 的 review 結果」+ 0-A.1 輸出）。**NEVER** 重跑 `codex-review-safe.sh max`（context exhaustion 大概率重現）、**NEVER** 靜默跳過 0-A.2 當作通過。
+- **缺 `## Review Verdict`**（context exhaustion / 輸出截斷 / 任何非正常完成）→ **MUST** 向 user 報 warning「⚠ GPT-5.6-sol via Pi（effort: max）context exhaustion — 未產出 Review Verdict，fallback to 0-A.1 findings」，然後 **fallback**：跳過 Step 2 的 Pi 輸出，改用 0-A.1 xhigh findings 直接餵 Fable code-review agent 做裁決（prompt 改為「你收到 GPT-5.6-sol via Pi（effort: xhigh）對本次 diff 的 review 結果」+ 0-A.1 輸出）。**NEVER** 重跑 `codex-review-safe.sh max`（context exhaustion 大概率重現）、**NEVER** 靜默跳過 0-A.2 當作通過。
 
-**Step 2 — Fable `code-review` agent (max)**：
+**Step 2 — Claude Fable 5（effort: max）— `code-review` agent**：
 
 派 `code-review` agent（`subagent_type: "code-review"`、`model: "fable"`），prompt 包含：
 
@@ -573,7 +614,7 @@ Pi max 完成後 **MUST** 檢查輸出是否含 `## Review Verdict` heading。�
 Agent prompt 範本：
 
 ```
-你收到 Pi GPT-5.6-sol (max effort) 對本次 working tree diff 的 review 結果。你的職責是做最終裁決。
+你收到 GPT-5.6-sol via Pi（effort: max）對本次 working tree diff 的 review 結果。你的職責是做最終裁決。
 
 ## Pi Review 結果
 
@@ -606,16 +647,16 @@ Agent prompt 範本：
 
 驗收完才判斷：
 
-- **無 real issue**（全部 dismissed **且逐條附反證**，或無新發現）→ 輸出 `✅ 0-A.2 通過（Pi max + Fable max 無 real issue）`，進入「並行匯合」
+- **無 real issue**（全部 dismissed **且逐條附反證**，或無新發現）→ 輸出 `✅ 0-A.2 通過（GPT-5.6-sol via Pi（effort: max）+ Claude Fable 5（effort: max）無 real issue）`，進入「並行匯合」
 - **有 real issue** → 主線依 Fable 的裁決逐一修正，修完**直接進入「並行匯合」**（最多到 0-A.2，不做第 3 輪）
 
-**為什麼兩步驟**：Pi（GPT-5.6-sol）和 Fable（claude-fable-5）模型盲點不同。Pi max 負責深度搜尋——用最高推理深度翻出所有可能問題；Fable max 負責裁決——以不同模型族的視角判定哪些是 real issue，過濾 false positive，並找 pi 漏掉的問題。這比同一模型跑兩輪更有效。
+**為什麼兩步驟**：GPT-5.6-sol 與 Claude Fable 5（`claude-fable-5`）的模型盲點不同。GPT-5.6-sol via Pi（effort: max）負責深度搜尋——用最高推理深度翻出所有可能問題；Claude Fable 5（effort: max）負責裁決——以不同模型族的視角判定哪些是 real issue，過濾 false positive，並找 pi 漏掉的問題。這比同一模型跑兩輪更有效。
 
 ### 0-A/B/C/D 並行匯合（收口檢查）
 
 三軸完成後合併狀態檢查 + 條件觸發 0-D：
 
-1. 0-A（Codex xhigh，or 條件升 Codex max + Fable code-review max，or fast-path skipped）：通過
+1. 0-A（GPT-5.6-sol via Pi（effort: xhigh），or 條件升 GPT-5.6-sol via Pi（effort: max）+ Claude Fable 5（effort: max），or fast-path skipped）：通過
 2. 0-B（screenshot review）：通過或跳過
 3. 0-C（pnpm check + pnpm test + pnpm run doctor）：全綠
 4. 0-D（doc alignment）：通過或跳過
@@ -639,7 +680,7 @@ node .cursor/scripts/0a-metrics.mjs record \
 它落一筆進 `.clade/0a-metrics.jsonl`（gitignored 的本地 telemetry）並印出匯合行：
 
 ```text
-✅ 0-A/B/C/D 並行匯合通過（Codex xhigh、screenshot skip、check 全綠、doc skip）
+✅ 0-A/B/C/D 並行匯合通過（GPT-5.6-sol via Pi（effort: xhigh）、screenshot skip、check 全綠、doc skip）
 ```
 
 **匯合行只能由本 script 產出**是刻意的結構耦合——漏跑就沒有那行輸出，比規約寫「MUST 記錄」更難靜默漏掉。
@@ -656,9 +697,9 @@ node .cursor/scripts/0a-metrics.mjs record \
 - **NEVER** 用「不在本次範圍」跳過 finding —— 該判定只有走 § 0-A.1「finding 的三類分流」判為**純舊碼**、且三行舉證逐行寫齊才成立；缺任一行照 severity 修
 - **NEVER** 在 fast-path 條件未完全滿足時提早跳過 pi review —— 三條件 AND，任一不滿足都跑
 - **NEVER** 做第 3 輪 review（會無限拖長 commit 流程；0-A.1 + 0-A.2 兩輪處理不完代表變更太大，應先 split）
-- **NEVER** 因 0-A.1 抓到 Critical/Major 後跳過 0-A.2 —— 一律進入 Pi max + Fable max 驗證
+- **NEVER** 因 0-A.1 抓到 Critical/Major 後跳過 0-A.2 —— 一律進入 GPT-5.6-sol via Pi（effort: max）+ Claude Fable 5（effort: max）驗證
 - **NEVER** 用主線自判把 pi 標的 Major / Critical 降級成 Minor 來跳過 0-A.2 —— severity 以 pi 輸出為準
-- **NEVER** 跳過 0-A.2 的 Fable 步驟只跑 Pi max —— 兩步驟綁定，缺 Fable 裁決 = 0-A.2 未完成
+- **NEVER** 跳過 0-A.2 的 Claude Fable 5 步驟、只跑 GPT-5.6-sol via Pi（effort: max）——兩步驟綁定，缺 Fable 裁決 = 0-A.2 未完成
 - **NEVER** 把 heavy gate 的 `exit 75` 讀成 gate 本身失敗（typecheck 掛了 / OOM / 該調 heap） —— 75 是 `gate-slot.sh` 的 `EX_TEMPFAIL`，代表等不到 slot、inner command 從未執行。判準是 `grep -c "error TS"` 回 0；接著查 lock holder 並比 CPU time vs elapsed。三步診斷與逃生口見 [[pitfall-heavy-gate-exit-75-reads-as-typecheck-failure]]。**NEVER** 用調大 `--max-old-space-size` 或 `CLADE_GATE_WAIT_TIMEOUT` 回應它 —— 兩者都是對著錯誤的層施力
 
 ---
@@ -819,7 +860,7 @@ exit 2 在 grok 第一手 → 走升級列；exit 2 在 sol 升級列 → 失敗
 
 1. diff 觸及 `docs/**` 本身
 2. diff 觸及 `rules/core/**` / `rules/modules/**` / `vendor/snippets/**`（標準層有變 → docs 可能需同步）
-3. diff 觸及 `scripts/*-audit.mjs`（audit signal 變更 → `docs/rule-enforcement-matrix.md` 或 `docs/dev-guide.md` 可能需更新）
+3. diff 觸及 `scripts/*-audit.mjs`（audit signal 變更 → `registry/audits.json` 的 `cadence` / `consumers` 或 `docs/dev-guide.md` 可能需更新）
 4. diff 觸及 `[packages/<pkg>/]{server/api,server/utils,server/routes,app/components,app/pages,composables}/**` 或 `[packages/<pkg>/]nuxt.config.ts`（業務碼 / 框架設定有變 → consumer docs/ 可能需對齊）
 5. diff 含 bug fix（commit message 含 `fix` type）→ pitfall 覆蓋檢查
 

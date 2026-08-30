@@ -187,7 +187,7 @@ redaction（`vendor/signals/redact.mjs`）只作用在 signal payload、**dispat
 | 工作類別 | 由誰執行 | 為什麼 |
 | --- | --- | --- |
 | 〔`web-search`〕 **External web retrieval**（`WebSearch`／`WebFetch`） | **Pi bare `gemini low` → linked `luna low` → matching receipt 才放行同種 built-in tool** | 兩支工具共用 machine row；查不到就回「查不到」，NEVER 拿二手彙整頁充數。 |
-| 〔`code-review`〕 **Code review（commit 0-A）** | **(1) `simplify` + (2) Pi review xhigh（GPT-5.6-sol，經 codex-review-safe.sh），(3) 0-A.1 出 Critical / Major 時條件升 max** | 跨模型互補盲點。effort 的 SoT 是 `commit/gates.md` § 0-A 與 `codex-review-safe.sh` 的 default；流程見 commit SKILL Step 0-A。 |
+| 〔`code-review`〕 **Code review（commit 0-A）** | **(1) `simplify` + (2) GPT-5.6-sol via Pi（effort: xhigh，經 codex-review-safe.sh），(3) 0-A.1 出 Critical / Major 時條件升 max** | 跨模型互補盲點。effort 的 SoT 是 `commit/gates.md` § 0-A 與 `codex-review-safe.sh` 的 default；流程見 commit SKILL Step 0-A。 |
 | 〔`spectra`〕 **Spectra `propose` / `apply` 各階段（draft / cross-check / phase 粒度 / UI view phase）** | 見 reference § Spectra Routing Table | spectra 專屬 routing 在 path-scoped reference（碰 `openspec/changes/**` 時載入）。**不變的契約**：UI view phase 與 Design Review **都永不外派**（主線 Opus 自己做）；propose 的 cross-check / final check **一律主線跑**。 |
 | 〔`spectra-phase-implementation`〕 **Spectra Apply Class C phase 語意實作** | **Pi `--model sol --effort high` via 泛用 dispatcher** | schema／migration／API／backend／非 view frontend phase 的預設 carrier；Plan-first、task→file、view guard、scope、one-phase-one-commit 與 L0–L2 gate 不因 carrier 統一而放寬。**NEVER 轉 grok**（見 reference § Spectra Routing Table）。 |
 | 〔`spectra-phase-prescan`〕 **Spectra Apply 已封閉 phase 的 read-only fact extraction** | **Pi `--model gemini --effort low` via 泛用 dispatcher** | 只抽事實不做裁決，矛盾回 `needs_reconciliation`；範圍與 exit 4 分流見 reference § Spectra Routing Table。 |

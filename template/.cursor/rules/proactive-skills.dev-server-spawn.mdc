@@ -19,6 +19,8 @@ Local edits will be reverted by the next sync.
 
 本 fleet 的終端多工器唯一標準是 **herdr**。**NEVER** 用 `tmux` 或 `zellij` 起任何 session、window、pane 或長駐 process——這條涵蓋**每一種**用途，不限 dev server：review-gui、ad-hoc 背景 job、跑 migration、看 log、暫存一個 shell，全部在內。
 
+這個 multiplexer choice 是 **universal contract**，consumer local rule **不得**重新選擇、覆寫、放寬或提供 fallback multiplexer。Local rule 只能補充該專案的 entrypoint、lease、port / network、OAuth pin、tunnel 與「是否允許 agent 自起」等 constraints；若 local rule 寫了 `tmux` / `zellij` 或其他持久層，該段無效，仍以本節的 herdr-only 標準為準。
+
 | 你要做的事 | 走哪 |
 | --- | --- |
 | 起長駐 dev server | `node scripts/dev-session.ts`（durability = herdr Tab） |

@@ -24,7 +24,7 @@ Local edits will be reverted by the next sync.
 
 ## 自定義 Review 清單熱區
 
-> enforcement: mechanical(raw-img-tag, ubadge-size-ban, ubadge-size-ban-config, client-side-mutation, dark-mode-hardcoded-color, dark-mode-dark-prefix, dark-mode-semantic-color, overlay-width-class) + semantic(form-validation, error-localization, overlay-body-slot)
+> enforcement: mechanical(raw-img-tag, ubadge-size-ban, ubadge-size-ban-config, text-size-floor, interactive-size-floor, client-side-mutation, dark-mode-hardcoded-color, dark-mode-dark-prefix, dark-mode-semantic-color, overlay-width-class) + semantic(form-validation, error-localization, overlay-body-slot)
 
 若本次變更包含下列路徑，**MUST** 逐條套用對應 checklist：
 
@@ -194,9 +194,9 @@ grep -En "'import/no-cycle':\s*'warn'" vite.config.ts
 
 ## Nuxt 效能規約
 
-> enforcement: mechanical(fontsource-bare-import, lazy-atomic-component, nuxtimg-missing-sizes, heavy-lib-client-static-import) + semantic(lazy-hydration-strategy, nitro-cache-auth-safety)
+> enforcement: mechanical(fontsource-bare-import, lazy-atomic-component, nuxtimg-missing-sizes, heavy-lib-client-static-import, colada-query-missing-signal) + semantic(lazy-hydration-strategy, nitro-cache-auth-safety)
 
-規約本體見 [[nuxt-data-perf]]（HR-\* 高頻 / SR-\* 渲染兩組，條號以該檔為準）。本節只列**機械層抓不到、需 reviewer 讀 context 判斷**的三類，機械可檢部分已由 `patterns.json` 承擔。
+規約本體見 [[nuxt-data-perf]]（HR-\* 高頻 / SR-\* 渲染兩組，條號以該檔為準）。本節只列**機械層抓不到、需 reviewer 讀 context 判斷**的四類，機械可檢部分已由 `patterns.json` 承擔。
 
 ### 1. Lazy 元件：先問該不該 lazy，再問有沒有 strategy
 
@@ -247,3 +247,33 @@ Nuxt 官方立場：**Avoid delayed hydration for critical, above-the-fold conte
 ### 4. 字型宣告單一來源
 
 `@fontsource/*` bare import 只給 weight 400（Fontsource 官方預設）；用到 `font-medium` / `font-semibold` / `font-bold` 卻沒載對應 weight，瀏覽器會合成粗體，CJK faux bold 筆畫糊化。機械層 `fontsource-bare-import` 已擋 CSS `@import`；reviewer 補判斷**跨檔的雙重宣告**——`nuxt.config` 的 `fonts.families` 與 CSS `@import` 同時宣告同一字型，機械層看單行看不出來。
+
+### 5. 取消訊號：機械層只看得到零參數那一種
+
+機械層 `colada-query-missing-signal` 只抓 `query: () =>` / `query: async () =>` 這種**零參數**寫法。Reviewer 補判斷 diff 內另外三種它看不到的（規約 [[nuxt-data-perf]] HR-6 / HR-7 / SR-9）：
+
+| 檢查 | 違規長相 | 正解 |
+| --- | --- | --- |
+| query 有參數但沒用 signal | `query: ({ entry }) => $fetch(url)` | `query: ({ signal }) => $fetch(url, { signal })` |
+| 共用 client 覆寫既有 signal | `onRequest({ options }) { options.signal = mine }` | `AbortSignal.any([options.signal, mine])`，或既有就跳過注入 |
+| 拿取消當寫入防重 | 提交前 `cancelQueries` / `abortKey` 再 `mutate()` | 按鈕 disabled ＋ idempotency key（HR-7） |
+| 取消被上報成 error 或被靜默吞掉 | `captureException(err)` 不分流；或 `if (isAbort) return` 什麼都不留 | `err.name === 'AbortError'` 分流 ＋ 留計數 / debug log（SR-9） |
+
+判斷依據：Colada 的 abort 是無條件的（每次 `fetch()` ＋ 最後一個 dep 移除時各一處），signal 沒貫通到 `$fetch` 就整條打空。**NEVER** 因為「已經用 Colada」或「已經是預設 `dedupe: 'cancel'`」就判定頻寬已省。
+
+## 註解機械層（brace tag / 檔頭 changelog）
+
+> enforcement: mechanical(closing-brace-tag, file-header-changelog)
+
+機械層掃 `.ts`（warning，不擋 commit）：`} // end` 與檔頭 `@author` / `Modified by` /
+`Change log`。banner 分隔線（`// ====` / `// ----`）**不進機械**——誤判率與複跑指令見
+[[code-style]] § 註解，改由 review checklist 接。`.vue` `<script>` 與「註解何時該寫」同樣走
+`code-review` agent 程式碼品質 checklist。判準全文見 [[code-style]] § 註解 與
+[[coupling-cohesion]] § Review 層 checklist。
+
+Reviewer 補判斷機械層看不到的：
+
+- banner 分隔線（`// ====` / `// ----`）——把被切開的區塊抽成具名函式
+- commented-out code（通用正則誤判率太高，不進 patterns.json）
+- 註解與 code 不符——錯的註解 MUST 當場刪
+- workaround 註解缺 `@followup[TD-xxx]`

@@ -34,12 +34,44 @@ stash audit 的寫入欄位。**`park` / `next` 都會走到 Step 3**，本檔�
 | `mergedToMain: false` + `openspec/changes/archive/<slug>/` 存在 | `archived-change` | `verify-then-cleanup` — change 已 archive 但 branch 未 merged-into-main，先 `git log -1 <branch>` 檢視 commits 是否已含在 archive squash；若是 → `wt-helper cleanup <slug>` |
 | `mergedToMain: false` + `openspec/changes/<slug>/` 仍 active + `daysOld > 7` | `active-stale` | `merge-back-or-resume` — 依 mergeBackSafety 分流（`landable` → 直接 merge-back；`ptb-*` → Step 2B.4.5） |
 | `mergedToMain: false` + change 仍 active + `daysOld <= 7` | `active-fresh` | `keep` — 在用中；若需 land 仍依 mergeBackSafety 分流 |
-| `mergedToMain: false` + 兩個 change 目錄都不在 + `aheadCount > 0` | `unlanded` | `merge-back-or-resume` — branch 有未進 main 的 commit，`git log --oneline main..<branch>` 檢視後決定 merge-back 或續做 |
+| `mergedToMain: false` + 兩個 change 目錄都不在 + `aheadCount > 0` + `contentLanded: 'no' \| 'unknown'` | `unlanded` | `merge-back-or-resume` — branch 有未進 main 的 commit，`git log --oneline main..<branch>` 檢視後決定 merge-back 或續做 |
+| 同上 + `contentLanded: 'yes'` | `unlanded-content-landed` | `verify-then-cleanup` — ancestry 說未 land，但候選 commit 的**內容已 100% 在 main**（squash-merge 的常態）。**NEVER 對它跑 merge-back** |
+| 同上 + `contentLanded: 'partial'` | `unlanded-partial` | `merge-back-or-resume` — 一部分內容已在 main。**MUST 逐檔人工比對，NEVER 整包 merge-back** —— 已落地那半在 main 上可能更新，整包套會覆蓋掉它 |
 | `mergedToMain: false` + 兩個 change 目錄都不在 + `aheadCount === 0` + `userWip > 0` | `orphan-with-wip` | `verify-then-cleanup` — 沒有 commit 會遺失，但未 commit 檔會。**MUST** 先走 [[wip-orphan-recovery]] SOP |
 | `mergedToMain: false` + 兩個 change 目錄都不在 + `aheadCount === 0` + `userWip === 0` | `orphan` | `cleanup` — 0 ahead + 0 WIP，無 commit 可遺失（可證，非啟發式） |
 | `mergedToMain: false` + 兩個 change 目錄都不在 + `aheadCount` 取不到 | `unlanded-unknown` | `verify-then-cleanup` — 取值失敗，**NEVER** 當成空 branch；先手動 `git log --oneline main..<branch>` 確認 |
+| 任一條件 + `hasActiveClaim: true` + `userWip > 0` | `active-session-wip` | `keep` — 有活著的 session claim，未 commit 內容屬該 session。**NEVER** 當 orphan 接手，per [[wip-orphan-recovery]] 禁止事項第一條；原判定留在 `underlyingKind` |
+| 任一條件 + `hasActiveClaim: true` + `userWip === 0` | `active-session-claimed` | `keep` — 有活著的 session claim，此刻剛好 0 檔未 commit。**`userWip` 是瞬時值，NEVER 讀成「這條 worktree 沒有主人」**；原判定留在 `underlyingKind` |
+
+**`aheadCount` 是 ancestry，NEVER 單獨拿它當「這條 wt 有沒有工作」的答案。** fleet 大半是
+squash-merge repo，那裡的 branch 在內容進 main 之後 `main..<branch>` 仍恆 > 0 —— 只憑 ancestry
+判就是「所有久放 worktree 一律報 `unlanded`」，而過報的代價不是多一行字，是它**誘導後手對
+「其實沒東西」的 worktree 跑 merge-back**。所以 `aheadCount > 0` 之後 MUST 再問 `contentLanded`：
+`branchContentLanded()` 取 `merge-base(main,<branch>)..<branch>` 的新增行，逐檔比對
+`main:<file>` 的逐字命中率（同 `mainTextFor` 的 basename fallback，接得住改名落地）。
+
+**粒度是行，NEVER 是 commit。** unmanaged 那半的 `trueUnlandedCommits` 是 per-commit 全稱判定
+（commit 內任一檔命中率 < 0.8 → 整個 commit 判未落地），拿來當 managed worktree 的三分依據會
+塌回兩分：一條 branch 只要有一個本來就不會進 main 的檔（`openspec/changes/<name>/proposal.md`
+這種 change metadata），整條就報 `no`。2026-08-29 <consumer-a> 實測 `v1-migration-status-fix`：
+per-commit 判 `no`，行粒度判 **87.6%（367/419 行）= `partial`** —— 而 `partial` 是那條唯一正確
+的處置。
+
+**三分之後 NEVER 再塌回兩分。** `partial` 與 `no` 的處置不同：87.6% 那條整包 merge-back 會用
+branch 的舊版覆蓋 main 上已經更新過的內容。`unknown`（取不到 merge-base / diff）同樣 **NEVER**
+讀成 `no` —— 取值失敗與真的沒落地事後不可區分，把它讀成 `no` 是把靜默變成一個看起來像發現的斷言。
+
+**低端門檻是 0.10 而不是 0，這是刻意的。** 長度 ≥ 12 的 import 行、boilerplate、共用字串會在任何
+兩個檔之間偶然命中：<consumer-a> `td275-audit-log-entity-id-filter` 18 行裡有 1 行（5.6%）是這種命中，
+而它實際完全未落地。門檻設 0 會把它報成 `partial`，而 `partial` 的處置是逐檔人工比對 ——
+用一個雜訊換走一個人的十分鐘。高端是 0.98：門檻不對稱地貼近兩端，寧可把「幾乎全落地」丟進
+`partial`，**NEVER** 反過來把 `partial` 讀成 `yes`。
 
 **`openspec/` 不存在的 repo（clade 自己、任何走 plan mode 的 consumer）：上表 `active-*` 與 `archived-change` 三列不適用** —— 那三列的判準是 `openspec/changes/<slug>/` 與 `archive/<slug>/` 的 `existsSync`，目錄整個不在時恆為 false。這不是判定漏了，是 `aheadCount` 那四列接手。TD-297 之前這四種狀態全部塌縮成單一個 `orphan`，而 `orphan` 讀起來是「沒人要的殘骸」，實際可能是別 session 正在做的活躍工作。
+
+**claim 覆寫優先於上表全部 9 列，且不與 `userWip` 合取（TD-629）。** 兩個量測的時間語意不同：claim 有 TTL、描述一**段區間**；`userWip` 是 scan 那一刻的**瞬時**值。用瞬間去 gate 區間，live session 剛好在兩次寫入之間被掃到就落進 `mergedToMain: true` + `userWip: 0` 那列，拿到 `merged` / `cleanup` —— 對一個正被使用的 worktree 建議**永久刪除**。2026-08-24 實證：`clade-wt/td623-624-pitfalls` 被這樣判過，Charles 依 audit 段拍板回收，接住它的是 `wt-helper cleanup` 自己的 gate（該 wt 當時有 4 個未 commit 檔、475 行 pitfall 全文）。**audit 段的文字本身零保護 —— 人會照它拍板。**
+
+`underlyingKind` 照 TD-412 的約定不丟：claim 說的是「現在別碰」，不是「這條 branch 沒有未 land 的工作」，兩件事都要留給讀者。**NEVER** 把修法寫成「多量一次 `userWip` 取聯集」—— 那只把窗口縮小，區間內任一安靜點一樣漏。
 
 script 已額外掃 `git worktree list --porcelain`：linked worktree 不在 wt-helper list 結果裡（即不在 `~/offline/<consumer>-wt/<slug>/` 規約路徑）→ 列進 `raw.unmanagedWorktrees`，對應 check 標 `n/a` → `manual review`（非規約 worktree，user 自管，audit 只記不建議動）。
 

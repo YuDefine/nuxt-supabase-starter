@@ -40,14 +40,14 @@ glob 掛著 `md` 而讓編輯 markdown 也拉進整份規約（該規約自己�
 
 ## Governance — lint / fmt 設定改在哪
 
-**跨 consumer 統一的 baseline**（oxlint rules / oxfmt 風格 / 共用 ignore patterns）**MUST** 改在 clade 中央倉 `vendor/oxc-shared/preset.mjs`，再 `node scripts/publish.ts <bump> && node scripts/propagate.ts` 散播到所有 consumer。**NEVER** 在 consumer 端的 `vendor/oxc-shared/preset.mjs` 投影副本直接改 — 下次 propagate 會覆蓋，且各 consumer 會 silently drift。
+**跨 consumer 統一的 baseline**（oxlint rules / oxfmt 風格 / 共用 ignore patterns）**MUST** 改在 clade 中央倉 `vendor/oxc-shared/preset.ts`，再 `node scripts/publish.ts <bump> && node scripts/propagate.ts` 散播到所有 consumer。**NEVER** 在 consumer 端的 `vendor/oxc-shared/preset.ts` 投影副本直接改 — 下次 propagate 會覆蓋，且各 consumer 會 silently drift。
 
 **consumer 自家業務 override**（單一 consumer 因第三方套件需要關掉某條 rule、或自家業務需要加 ignore path）寫在該 consumer 的 `vite.config.ts` 內、`spread baseline 之後`的 override block，**禁止**整段 inline 重寫 baseline（會 silently drift）。範例見下方 § `vite.config.ts` 必備欄位。
 
 判斷流程：
 
 1. 「這條規則 / 風格 / ignore 是否每個 consumer 都該套？」
-   - 是 → clade `vendor/oxc-shared/preset.mjs`（baseline）
+   - 是 → clade `vendor/oxc-shared/preset.ts`（baseline）
    - 否，只有單一 consumer 需要 → 該 consumer 自家 `vite.config.ts` override block
 2. 不確定 → 預設放 clade baseline（過鬆比過嚴容易補；先散播再個別 override 比反向收斂容易）
 
@@ -55,7 +55,7 @@ glob 掛著 `md` 而讓編輯 markdown 也拉進整份規約（該規約自己�
 
 clade 投影進 consumer 的路徑（`vendor/**`、`.claude/**`、`.clade/**`、`.spectra/**`）在 consumer 端是 `chmod 444` 的 LOCKED 副本。**consumer 修不了裡面的 lint / fmt 違規** —— 修法只能回 clade 改源檔再 propagate。
 
-所以「這些路徑要不要送進 lint / fmt」**MUST** 由 `vendor/oxc-shared/preset.mjs` 的 `PROJECTION_EXCLUDES` 一處決定。
+所以「這些路徑要不要送進 lint / fmt」**MUST** 由 `vendor/oxc-shared/preset.ts` 的 `PROJECTION_EXCLUDES` 一處決定。
 
 - **NEVER** 在任何 consumer 的 `vite.config.ts` 自行 inline 投影層排除路徑（`'vendor/**'`、`'.cursor/rules/**'` …）。那不是 override，是在補 preset 的洞 —— 補了的 consumer 看起來沒事，沒補的那個下次就是 CI red，而且它自己解不掉
 - **NEVER** 用「加一個 `.oxfmtignore` 就好」代替修 preset。同一個洞多一種擋法，只會讓 fleet 更難看出源頭少了什麼
@@ -64,6 +64,48 @@ clade 投影進 consumer 的路徑（`vendor/**`、`.claude/**`、`.clade/**`、
 唯一例外是 clade 自己 —— `vendor/` 在那裡是原始碼而非投影，clade 的 `vite.config.ts` 因此把 `vendor/**` 濾回來。這個例外只有一處、有註解，且由 audit 認得。
 
 機械檢查：`node scripts/audit-governance-drift.ts` check 10 掃 clade + 全 consumer 的 `vite.config.ts`，preset 未涵蓋的 inline 排除路徑會 fail。對應 [[pitfall-projection-excludes-not-in-shared-preset]]。
+
+#### `staged` 區塊的排除清單也 MUST 讀 `PROJECTION_EXCLUDES`
+
+上面那條管的是 `lint.ignorePatterns` / `fmt.ignorePatterns`。**`staged` 那一格是獨立的第二處**——
+`vp staged` 不讀 `ignorePatterns` 決定要不要把檔案送進命令，它照 glob 把 staged 檔原樣交出去。
+
+- **MUST** 讓 `staged` 區塊的過濾邏輯追溯得到 `vendor/oxc-shared/preset.ts` 匯出的
+  `PROJECTION_EXCLUDES`（直接用它，或用由它推導出的 helper）
+- **NEVER** 在 `staged` 手寫一份平行的投影層目錄清單。preset 一補條目、這裡沒跟上，
+  那個目錄的檔一進 staged 就整個 pre-commit 掛
+- **NEVER** 把「檔案別處的註解提過 `PROJECTION_EXCLUDES`」當成已經濾了——註解不過濾任何檔案
+
+```ts
+import { defineConfig } from 'vite-plus'
+import { fmtBase, lintBase, PROJECTION_EXCLUDES } from './vendor/oxc-shared/preset.ts'
+
+const projectionPrefixes = PROJECTION_EXCLUDES.map((p) => p.replace(/\/\*\*$/, '/'))
+const isProjection = (f: string) => projectionPrefixes.some((d) => f.includes(`/${d}`) || f.startsWith(d))
+
+export default defineConfig({
+  staged: {
+    '*.{js,ts,vue}': (files: string[]) => {
+      const lintable = files.filter((f) => !f.endsWith('.d.ts') && !isProjection(f))
+      if (lintable.length === 0) return ['true']
+      return [`vp lint --fix ${lintable.join(' ')}`, `vp fmt ${lintable.join(' ')}`]
+    },
+  },
+})
+```
+
+**為什麼平時不炸、propagate 一定炸**：`vp lint` / `vp fmt` 對「輸入路徑**全部**被 ignore」
+回 exit 1，訊息是 `No files found to lint`——看起來像路徑打錯，不像被 ignore。consumer 自己
+commit 時 staged 混有業務檔，有東西可 lint 就不報錯；而 `propagate.ts` 走 partial-commit
+（`git commit --only -- <clade-paths>`），**它 commit 的必然全是投影檔**。沒濾的 consumer
+每一趟 propagate 都站在觸發線上，只差那輪有沒有動到被 ignore 的路徑（2026-08-25 v1.11.80：
+<consumer-i> 只 staged 到 `.clade/vendor/scripts/flow/{flow,serve}.ts`，pre-commit 掛、
+propagate 回 `failed`，而同樣的洞當時在另外 7 台開著）。
+
+機械檢查：`node scripts/audit-governance-drift.ts` check 16 掃 clade + 全 consumer 的
+`vite.config.ts`（含 `template/`），有 `staged` 區塊卻追溯不到 `PROJECTION_EXCLUDES` 的落點
+列進 offenders；沒有 `staged` 區塊的列 `not_applicable`（沒有 hook 就沒有這個洞）。
+本 check **不擋 publish**——違規落在 consumer 自治區的 `vite.config.ts`，clade 主線不代改。
 
 ## 禁止事項（NEVER）
 
@@ -105,6 +147,35 @@ oxfmt 不會自動 fallback 讀 `.oxfmtignore`（只有 `.prettierignore` / `.gi
 
 例外：當第三方套件（如 husky / lint-staged）的 peer dependency 強制要求時，可保留，但**不該被 user code 直接呼叫**。`@nuxt/eslint` 是 opt-in module（不是任何套件的強制 peer dep），不適用此例外 — 直接移除。
 
+#### 上面兩條都攔不到 binary：`node_modules/.bin/prettier` 仍可執行
+
+上面禁的是 **config 檔**與**直接安裝**，兩條都不管 **transitive dependency**。而 prettier
+**不需要 config 就能運作**（它的預設值本身就是一套完整風格），所以 binary 只要在 PATH 上，
+任何人跑一次就會把整檔改成互斥風格（單引號無分號 → 雙引號加分號），而且 **exit 0、零警告**。
+
+2026-08-28 registry-driven 掃描（14 個 consumer）：**<consumer-a>、<consumer-b>、nuxt-supabase-starter** 的
+`node_modules/.bin/prettier` 是 `@nuxt/hints` 帶進來的（`.npmrc` 的 `shamefully-hoist` 提上來），
+其餘 11 個無。同日 <consumer-a> 實際踩到：**586 行假 diff**。
+
+starter 命中的意義與另外兩台不同：**每個從它 scaffold 出來的新 consumer 都繼承這支 binary**。
+
+- **NEVER** 在本 fleet 的任何 repo 執行 prettier（`npx` / `pnpm exec` / `node_modules/.bin/` /
+  裸命令都一樣）。格式化一律走 `pnpm format`（全 repo）或 `pnpm exec vp fmt --write <file>`（單檔）
+- **NEVER** 為了讓禁令生效去移除 `@nuxt/hints` —— 它是 Nuxt 系的正常依賴，不是這條坑的錯
+- **NEVER** 把 `.bin/prettier` 存在接成 `pnpm check` 的 fail —— 它是移不掉的 transitive dep，
+  那條 check 會讓兩台 CI 永久紅，而永久紅的 gate 是噪音不是攔阻
+
+攔阻掛在**動作**上：`plugins/hub-core/hooks/pre-bash-prettier-invocation-gate.sh`
+（PreToolUse:Bash）在命令位置比對到 prettier 時 exit 2 並指回 `pnpm format`。
+它是**絆索不是牆** —— 只看得到 AI Agent 的 Bash tool call，user 在自己 terminal 手打
+完全碰不到它。**NEVER** 把它存在讀成「這個 repo 已經不可能被 prettier 改壞」。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 命令位置出現 prettier × 目標 repo 有 `.oxfmtignore` / `.claude/hub.json` / `package.json` 依賴 `vite-plus` → **exit 2 擋下**。逃生門 `CLADE_ALLOW_PRETTIER=1`（給「只是要在文件裡寫下這個字串」用） |
+| 消費端 | 每一次 Bash tool call（fleet 全 consumer + clade home，隨 `hooks.json` 散播）；回歸測試 `test/pre-bash-prettier-invocation-gate.test.ts` |
+| 載入路徑 | 本節（`rules/core/code-style.toolchain.md`，consumer 端投影為 `.cursor/rules/code-style.toolchain.mdc`）；成因與 fleet 掃描見 `docs/pitfalls/2026-08-28-banned-tool-binary-still-on-path.md` |
+
 ### 禁止依賴全域 vite-plus（hard rule）
 
 `vite-plus`（vp）**MUST** 安裝為 consumer 的 per-project devDependency 並 pin 具體版本。**禁止**僅依賴全域 `pnpm add -g vite-plus` 而 consumer `package.json` 不列。
@@ -135,7 +206,7 @@ catalog:
 
 - 全域版本是 user 機器狀態，跨機器、跨 CI runner 不一致 → `vp lint` / `vp fmt` 行為漂移。CI 跟 dev 抓到不同 lint violation 是常見實證踩坑（user 升全域 → 突然某條 rule 變嚴 → dev 過 / CI 紅）。
 - vp bundle 的 oxlint / oxfmt 版本由 vp `dependencies` 嚴格 pin（`=1.63.0` / `=0.48.0` 之類），等同 vp 版本 = 工具鏈確定版本。vp 沒釘 = 工具鏈沒釘。
-- consumer 端升 vp **MUST** 走 [`dep-upgrade`](../../plugins/hub-core/skills/dep-upgrade/SKILL.md) skill 的 § Outdated mode（per-package commit + bisect-friendly + 走品質閘門），不是 user 跑 `pnpm add -g vite-plus@latest` 偷偷升所有 consumer。
+- consumer 端升 vp **MUST** 走 [`dep-upgrade`](../../plugins/hub-ecosystem-node/skills/dep-upgrade/SKILL.md) skill 的 § Outdated mode（per-package commit + bisect-friendly + 走品質閘門），不是 user 跑 `pnpm add -g vite-plus@latest` 偷偷升所有 consumer。
 - 跨 consumer 工具鏈 lockstep 是 clade governance 的前提（[`code-style.md`](./code-style.md) § Governance），全域裝法繞過了這層治理。
 
 #### MUST
@@ -154,6 +225,31 @@ catalog:
 #### 對應偵測
 
 `scripts/audit-tooling-drift.ts` 提供 `viteplusLocal` signal（diagnostic-only，exit code 永遠 0），對每個 consumer 讀 `package.json` 看 `vite-plus` 是否 pinned-local。
+
+#### `setup-vp` 的 `version` input 換的是 global CLI，不是 `vp run` 用的工具鏈（hard rule）
+
+上面整節講「不要只依賴全域 vp」。本小節是它的反向那一半：**釘了全域也沒用**。
+
+`vp` 有兩層版本，各自獨立：
+
+| 層 | 誰決定 | 帶哪個 oxfmt / oxlint |
+| --- | --- | --- |
+| global `vp` CLI | `setup-vp` 的 `version` input，或本機全域安裝 | 該 CLI 自己 bundle 的 |
+| `vp run <script>` 實際執行的工具鏈 | **`package.json` 的 `vite-plus` devDependency** | local `vite-plus` bundle 的 |
+
+- **NEVER 用 `setup-vp` 的 `version` input 解決工具鏈版本不一致**——它只換第一層，
+  `vp run format:check` 走的永遠是第二層。釘 global 之後症狀一模一樣，而排查方向會被帶偏。
+- **要換工具鏈就升 devDependency**：`pnpm add -D vite-plus@<帶所需 oxfmt 的版本>`，
+  並**移除** workflow 的 `version` pin——`setup-vp` 的預設行為就是從 lockfile 解析，那是對的。
+- **`vp --version` 的輸出 MUST 讀完兩層**。只看第一行 `vp vX.Y.Z` 會得出「版本已對齊」的
+  錯誤結論；`Local vite-plus:` 與 `Tools:` 那兩段才是 `vp run` 的實際版本。
+
+升 vite-plus 連帶會撞的兩件事（**MUST 一起處理**，否則 CI 仍紅）：oxlint 同時升版可能對既有
+code 產生新 finding；pnpm 的 `minimumReleaseAge` 會擋當天發布的版本，需要在
+`pnpm-workspace.yaml` 補 `minimumReleaseAgeExclude`——`pnpm add` 會在 local 自動加，
+但那是它改了 working tree，`git commit --only` 沒帶上該檔就不會進 commit。
+
+實證見 [[pitfall-setup-vp-version-pins-cli-not-local-toolchain]]。
 
 #### 真實事故參考
 
@@ -213,15 +309,44 @@ consumer 端 LOCKED projection 的 ignore 機制設計：
 
 ## 必須事項（MUST）
 
+### 改 `catalog:` / `overrides:` 之後，收尾 MUST 驗 lockfile 本身
+
+改動 `pnpm-workspace.yaml` 的 `catalog:` / `overrides:`（或 `package.json` 的 `pnpm.overrides`）之後，
+**MUST** 在同一個收尾動作裡讀 `pnpm-lock.yaml` **本身**，確認它記的值等於你剛寫進 manifest 的值：
+
+```bash
+awk '/^overrides:/{f=1;next} f&&/^[^[:space:]]/{exit} f' pnpm-lock.yaml   # 值須等於 manifest
+awk '/^catalog:/{f=1;next}   f&&/^[^[:space:]]/{exit} f' pnpm-lock.yaml
+```
+
+值對不上 = lockfile 沒被改寫。修法是把 pnpm 的 up-to-date 短路條件消掉，**不是**再換一個旗標：
+
+```bash
+rm -rf node_modules && pnpm install     # 這次才會真的 resolve 並改寫 lockfile
+```
+
+**NEVER 用下列任一項代替上面那條驗證** —— 三者在整個失敗期間都是「對的」，而 lockfile 是錯的：
+
+- `pnpm install` / `--force` / `--lockfile-only` / `--frozen-lockfile` 回 `Already up to date`。
+  **四者共用同一道以 node_modules 為判準的短路，所以「四個旗標都試過了」不是四個獨立證據，是同一個
+  證據被問了四次**——包含 `--frozen-lockfile`，它的存在理由就是不一致時 fail，而這裡它回 exit 0
+- `node_modules/<pkg>/package.json` 的版本。node_modules 已經是新版**正是**短路成立的原因
+- `git diff` 乾淨。lockfile 沒被動過，diff 當然乾淨——那是症狀不是通過
+
+本地端錯過它不會有任何紅燈：CI 在 fresh checkout 會照著舊 lockfile 老老實實裝**舊版**，跑出來的相依樹
+與本機不同而兩邊都不出聲。fleet 層的事後偵測跑 `node scripts/audit-lockfile-staleness.ts`（clade home），
+成因與控制實驗見 [[pitfall-pnpm-up-to-date-attests-node-modules-not-lockfile]]。
+
+
 ### `vite.config.ts` 必備欄位（跨 consumer 統一，避免 propagate drift）
 
 clade 散播檔（`vendor/scripts/*.ts`、`scripts/spectra-advanced/*`、`.github/actions/*`）會進到每個 consumer 的 `vp fmt` 掃描範圍。若 clade 與 consumer 的 `vite.config.ts` fmt 設定不一致，consumer 端 `vp fmt --check` 會把 clade 寫出的程式重排成 consumer 風格 → 形成 LOCKED 檔被改動 → CI 紅燈或下次 propagate 出現 drift commit。
 
-**MUST** 從 clade 散播的 `vendor/oxc-shared/preset.mjs` import baseline 並 spread merge：
+**MUST** 從 clade 散播的 `vendor/oxc-shared/preset.ts` import baseline 並 spread merge：
 
 ```ts
 import { defineConfig } from 'vite-plus'
-import { lintBase, fmtBase } from './vendor/oxc-shared/preset.mjs'
+import { lintBase, fmtBase } from './vendor/oxc-shared/preset.ts'
 
 export default defineConfig({
   resolve: { alias: [/* consumer build config */] },
@@ -230,7 +355,7 @@ export default defineConfig({
     ...lintBase,
     rules: {
       ...lintBase.rules,
-      // 業務 override 僅放這裡（屬於 baseline 的請改 preset.mjs，跨 consumer 統一）
+      // 業務 override 僅放這裡（屬於 baseline 的請改 preset.ts，跨 consumer 統一）
       'unicorn/no-thenable': 'off', // supabase PostgREST mock builder chain
     },
     ignorePatterns: [...lintBase.ignorePatterns, '.wrangler/'],
@@ -245,7 +370,7 @@ export default defineConfig({
 })
 ```
 
-baseline 內容（自 `vendor/oxc-shared/preset.mjs`）：
+baseline 內容（自 `vendor/oxc-shared/preset.ts`）：
 
 - `fmt`: `semi: false`, `singleQuote: true`, `printWidth: 100`, `tabWidth: 2`, `trailingComma: 'all'`, `quoteProps: 'as-needed'`, `arrowParens: 'always'`, `endOfLine: 'lf'`, `htmlWhitespaceSensitivity: 'css'`, `vueIndentScriptAndStyle: true`, `experimentalSortPackageJson: { sortScripts: true }`
 - `lint.categories`: `correctness:error` / `suspicious:warn` / `perf:warn` / `pedantic|style|restriction|nursery:off`
@@ -257,7 +382,7 @@ baseline 內容（自 `vendor/oxc-shared/preset.mjs`）：
 **禁止**：
 
 - 直接 inline 寫 `lint:` / `fmt:` 全部欄位而不 import preset — 哪天 preset 升版（例：oxlint patch 升 `no-underscore-dangle` 從 warn 升 error 要在 preset 反制），consumer 就會 silently drift。
-- 在 consumer 端的 `vendor/oxc-shared/preset.mjs` 投影檔直接改 — 下次 propagate 會覆蓋。要改 baseline → cd 到 clade 改 `vendor/oxc-shared/preset.mjs` 再 propagate。
+- 在 consumer 端的 `vendor/oxc-shared/preset.ts` 投影檔直接改 — 下次 propagate 會覆蓋。要改 baseline → cd 到 clade 改 `vendor/oxc-shared/preset.ts` 再 propagate。
 
 
 # Lint（修復可自動修復的問題）
@@ -278,23 +403,39 @@ bash scripts/pre-commit/runner.sh
 
 > `--ignore-path .oxfmtignore` 對投影層而言已是**歷史包袱** —— preset 的 `PROJECTION_EXCLUDES` 已經排除 `vendor/**` / `.claude/**` / `.clade/**` / `.spectra/**`，裸打 `vp fmt` 不會再掃到 LOCKED 檔（per § 投影層排除清單集中在 preset）。`.oxfmtignore` 只保留給該 consumer 自家、與投影層無關的路徑；沒有這種路徑就不必有這個檔。
 
-### lint-staged 配置（若用 husky）
+### staged 配置：一行 re-export，NEVER 手寫排除陣列
 
-`.lintstagedrc.cjs`：
+投影層的排除清單 **MUST** 追溯得到 preset 的 `PROJECTION_EXCLUDES`。預設形狀是 `vite.config.ts` 直接用 preset 匯出的 `stagedBase`：
 
-```js
-module.exports = {
-  '*.{js,ts,vue,jsx,tsx}': ['vp lint --fix', 'vp fmt --ignore-path .oxfmtignore'],
-  '*.md': (files) => {
-    const allowed = files.filter(
-      (f) => !f.startsWith('.cursor/rules/') && !f.startsWith('.cursor/skills/') && !f.startsWith('.cursor/hooks/')
-    )
-    return allowed.length ? [`vp fmt --ignore-path .oxfmtignore ${allowed.join(' ')}`] : []
-  },
-}
+```ts
+import { defineConfig } from 'vite-plus'
+import { fmtBase, lintBase, stagedBase } from './vendor/oxc-shared/preset.ts'
+
+export default defineConfig({
+  lint: { ...lintBase },
+  fmt: { ...fmtBase },
+  staged: stagedBase,
+})
 ```
 
-`.claude/{rules,skills,hooks}/` 由 clade 治理（chmod 444），lint-staged 必須排除。雙重保險：shell-side filter + `--ignore-path .oxfmtignore`。
+需要自訂 glob 時改用 preset 匯出的 `isProjectionPath` 自己組，一樣算接上這條 MUST：
+
+```ts
+import { isProjectionPath } from './vendor/oxc-shared/preset.ts'
+
+export default defineConfig({
+  staged: {
+    '*': (files) => {
+      const t = files.filter((f) => !isProjectionPath(f))
+      return t.length > 0 ? [`vp check --fix ${t.map((f) => JSON.stringify(f)).join(' ')}`] : []
+    },
+  },
+})
+```
+
+**NEVER 手寫一份平行的目錄清單**（`f.startsWith('.cursor/rules/') && …` 那種形狀）。手寫清單必然漂移：它只長出「當下踩到的那個目錄」，而 `PROJECTION_EXCLUDES` 現在有七條（`.claude/` `.clade/` `.spectra/` `vendor/` `.agents/` `.codex/` `.cursor/`）。nuxt-supabase-starter 漏 `vendor/` 連擋三次交付（[[TD-310]]）；<consumer-i> 漏 `.clade/` 讓 v1.11.94 propagate 連兩趟 `failed`（[[TD-670]]、[[TD-770]]）。preset 這份清單一改，所有 re-export 的 consumer 自動跟上。
+
+漏濾的症狀認得出來但不像成因：`vp lint` / `vp fmt` 對「輸入路徑**全部**被 ignore」回 **exit 1**，訊息是 `No files found to lint` —— 看起來像路徑打錯，不像被 ignore 排除。
 
 > ⚠️ **NEVER** 用 `oxlint --fix` / `oxfmt` 直接呼叫（見上節「禁止在 lint-staged ... 中呼叫 eslint / prettier」的注意事項）。`vp lint` / `vp fmt` 是唯一正確入口。
 
@@ -371,7 +512,7 @@ pnpm exec vp fmt --migrate=prettier  # 從既有 prettier config 遷移（若有
 - `scripts/lib/oxfmtignore-governance.ts` 在 `pnpm hub:bootstrap` 時主動刪除舊 `.prettierignore`（self-healing）
 - `pnpm hub:check` 包含上述 drift signal，consumer 端 CI 應啟用此 job
 - `scripts/audit-tooling-drift.ts`（v1.3.19）：掃每個 consumer 的 `vite.config.ts` 對齊狀態。報兩個 signal：
-  1. **presetImport** — 是否從 `./vendor/oxc-shared/preset.mjs` import `lintBase` + `fmtBase`
+  1. **presetImport** — 是否從 `./vendor/oxc-shared/preset.ts` import `lintBase` + `fmtBase`
   2. **inlineDrift** — 未 import preset 時，inline 寫死的 fmt baseline 欄位（`trailingComma`、`semi`、`singleQuote`、`printWidth` 等 11 項）與 baseline 不一致的 entries
   - 用法：`node scripts/audit-tooling-drift.ts [--markdown|--json]`；diagnostic-only，exit code 永遠 0；HANDOFF §4 baseline 由此 script 維護
   - 後續擴充至 7 個 signal（`structuralDrift` / `strayDotfiles` / `viteplusLocal` / `pnpmOrphans` / `eslintDeps`）
@@ -382,3 +523,137 @@ pnpm exec vp fmt --migrate=prettier  # 從既有 prettier config 遷移（若有
 - `scripts/audit-tooling-drift.ts` Phase 2：併入 `.eslintrc*` / `.prettierrc*` / `eslint.config.*` / `prettier.config.*` 等禁用 **config 檔**的存在性掃描（dep 層已由 `eslintDeps` signal 涵蓋；config 檔層目前 sync-rules.ts 只認 `.prettierignore` 一條）
 - pre-commit hook 加 check：偵測到 eslint/prettier config 進 staging 直接擋
 - CI workflow 同步檢查
+
+## Heavy gate 准入控制（機器層並行上限）
+
+一台機器上跑 N 個 agent session 時，heavy gate（`typecheck` / `test` / `test-mutation` /
+`build`）各自吃 2–4 GiB RAM 與整顆核心。閘門是 `vendor/scripts/gate-slot.sh`
+（consumer 投影 `scripts/gate-slot.sh`），入口是 `bin/clade-gate`。
+
+**heavy job MUST 經 `clade-gate run <label> -- <cmd>` 才受閘。** 光把 label 加進
+`CLADE_HEAVY_GATES` 不會讓任何東西受閘 —— package.json 裡那條 script 沒寫成 `clade-gate run`
+的形式，它就是直呼 binary，閘門從頭到尾不知道它存在。2026-08-29 事故當下 <consumer-b> 的 `build`
+正是這個狀態：不經閘門，且 heap 上限（8192）比 typecheck（4096）更高。
+
+| script | MUST 寫成 |
+| --- | --- |
+| `typecheck` | `clade-gate run typecheck -- <nuxt typecheck / vue-tsc …>` |
+| `test`（含 coverage） | `clade-gate run test -- <vitest / vp test …>` |
+| `test:mutation` | `clade-gate run test-mutation -- <stryker …>` |
+| `build` | `clade-gate run build -- <nuxt build / vite build …>` |
+
+### Guard 要寫成 arg-safe 形狀，NEVER 裸 `if … fi`
+
+`clade-gate` 不一定存在（CI 用沒有 clade 的 self-hosted runner、投影未到位的新 repo），
+所以 script 常包一層 fallback guard。**裸寫的 guard 會吃不掉附加參數**：
+
+```jsonc
+// ❌ pnpm 把使用者的參數接在整條 script 尾端 → 實跑是 `… fi --run` → Syntax error
+"test": "if test -x .clade/bin/clade-gate; then .clade/bin/clade-gate run test -- vp test; else vp test; fi"
+
+// ✅
+"test": "sh -c 'if test -x .clade/bin/clade-gate; then exec .clade/bin/clade-gate run test -- vp test \"$@\"; else exec vp test \"$@\"; fi' --"
+```
+
+三個要點缺一還是壞的：整條包進 `sh -c '…'` 且**結尾的 `--`** 讓附加參數變成位置參數；
+**兩個分支都要 `"$@"`**；`exec` 讓 exit code 與訊號直接穿透。
+
+**不需要 fallback 的 repo 用直呼形式即可**（`.clade/bin/clade-gate run test -- vp test`）——
+參數自然接在最後，本來就沒問題。**NEVER 為了「看起來比較安全」給每個 repo 都加 guard**。
+
+**這個壞形狀的訊號極弱，所以要靠稽核而不是靠人看出來**：`pnpm test` 單獨跑正常、CI 綠、
+`--stat` 正常，只有 `pnpm test <檔名>` 這種用法才炸，而錯誤訊息 `sh: 1: Syntax error: word
+unexpected` 指向 shell、完全看不出真因。2026-08-29 TD-685 relay 實測：**5 個 consumer 的
+session 各自獨立寫出同一個壞形狀**，只有一個（<consumer-j>）在 review 階段實跑帶參數的形式
+才抓到。§ 3b 的 `⚠ 吃不掉參數` 就是這一格。
+
+**這一格有稽核**：`node scripts/audit-gate-coverage.ts` § 3b 逐 consumer 印出上表四條 script
+的受閘狀態，`✗ 未受閘` 就是 script 沒寫成 `clade-gate run` 的形式。它會跟著 `pnpm build:xxx`
+這種轉呼往下解一層以上，所以間接寫法不會被誤報。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 任一 consumer 的 heavy script 已定義但未經 `clade-gate run <label>`（表格 `✗ 未受閘`），或有受閘但 guard 是裸 `if … fi`（表格 `⚠ 吃不掉參數`）→ 進該 audit 的 Warnings 段。**warn-only，不 block**：改 script 是 consumer 自治區的動作，擋 clade 自己的 publish 是錯的施力點（同 `audit-lockfile-staleness`） |
+| 消費端 | `/clade-health enforcement`（每輪跑 `node scripts/audit-gate-coverage.ts`）；findings 進 HANDOFF 稽核段並 relay 給對應 consumer 的 session |
+| 載入路徑 | 本節（`rules/core/code-style.toolchain.md`，consumer 端投影為 `.cursor/rules/code-style.toolchain.mdc`） |
+
+**單檔測試 / 小範圍 lint NEVER 包進 heavy label**。`test:file` / `test:unit` / `lint` /
+`format:check` 直呼工具即可 —— heavy 與 light 的區分**就是** label 有沒有進
+`CLADE_HEAVY_GATES`，不需要第二套分類。
+
+### 三個 exit code 說的是不同層的話
+
+| code | 誰說的 | 意思 |
+| --- | --- | --- |
+| 75 | `gate-slot.sh`（`BUSY`） | 等不到 slot / `try` 模式取不到。**inner command 從未執行**，不是 gate 失敗 |
+| 124 | `timeout`（holder 端自願上界） | inner command 跑超過 `CLADE_HEAVY_GATE_MAX_RUNTIME`（預設 3600s）被結束 |
+| 130 / 143 | `gate-slot.sh` 的等待期 trap | waiter 在**排隊期間**收到 SIGINT / SIGTERM，inner command 未執行 |
+
+**NEVER 把這四個讀成品質 gate 失敗**，也 NEVER 用「調大 timeout」「加 `--skip`」
+「改 `--max-old-space-size`」去回應它們 —— 那是對著錯誤的層施力（見
+[[pitfall-heavy-gate-exit-75-reads-as-typecheck-failure]]，該次誤診把 heap 調到 8192 後回退）。
+
+### 機器層調參 NEVER 寫死進 script 預設
+
+同一份 script 散播到全 fleet，每台機器的核心數、同時 session 數、CI 硬體都不同。
+所有上限一律走 env，由機器自己設（desk 放
+`~/.config/environment.d/60-clade-heavy-job-admission.conf` ＋ `~/.zshrc`，兩份要一起改）：
+
+| env | desk 值 | 沒設時 |
+| --- | --- | --- |
+| `CLADE_HEAVY_GATE_SLOTS` | `1` | 2（clamp 1..8） |
+| `CLADE_OXC_THREADS` | `2` | **不注入** —— oxlint / oxfmt 用滿全部核心 |
+| `CLADE_VITEST_MAX_WORKERS` | `2` | **不注入** —— vitest 用滿全部核心 |
+| `CLADE_GATE_WAIT_TIMEOUT` | 預設 | 3600s |
+| `CLADE_HEAVY_GATE_MAX_RUNTIME` | 預設 | 3600s（`0` 關閉） |
+
+後兩個 env 的注入在 `bin/vp` shim，三條件全中才動：env 有設且是正整數、子命令是
+`lint`/`fmt`/`test`、**使用者沒有自己帶那個旗標**。`--threads` 實測穿透到 oxc 底層
+（`vp fmt` 預設 403% CPU、`--threads=2` 為 198%，thread 數差正好 nproc−2），
+**NEVER** 只看 argv 有那個字串就當它生效。
+
+### `vp check` 收不到 threads 上限（已知殘餘）
+
+`vp check --threads=N` 回 `Unexpected argument '--threads'`（2026-08-29 vp v0.3.0 實測）。
+上限只覆蓋**直呼**的 `vp lint` / `vp fmt` / `vp test`。所以：
+
+| package.json 的 check 形狀 | 受不受 threads 上限 |
+| --- | --- |
+| `pnpm format:check && pnpm lint && …`（各自是 `vp fmt` / `vp lint`） | **受** |
+| 單一 `vp check` | **不受** —— 內部扇出到全部核心 |
+
+**NEVER 為了讓它受控就把 `vp check` 拆成兩條**：那會讓 consumer 的 check 語義與 vp 的
+官方入口分岔。要嘛接受這一格（clade 自身 995 檔 fmt 7.4s，代價可承受），要嘛等上游支援。
+
+### 長駐 dev server 不是 gate —— 閘門結構上攔不到它
+
+`nuxt dev` / `wrangler dev` / `vite` 不經過任何 gate，所以**加再多 heavy label 都攔不到**。
+而起它的 session 死掉後它被 init 收養（`ppid=1`）繼續跑，落在無上限的 login session scope，
+沒有任何人會回來收 —— 2026-08-29 實測：撤離釋放 10.9 GB，26 分鐘內被兩支 `ppid=1` 的 workerd
+吃掉 6.9 GB，而它們的 `cwd` 已經是 `(deleted)`，服務的 worktree 早就不存在。
+
+處置走 `vendor/snippets/scoped-dev-server/`（host-specific，貼進 **`~/.zshenv`**）。
+
+**MUST 是 `.zshenv`，NEVER 是 `.zshrc`。** `.zshrc` 只在互動 shell 執行，而 agent 執行指令走的是
+**非互動** shell —— 放 `.zshrc` 的東西 agent 一個都拿不到，**而 `cat ~/.zshrc` 看起來完全正常**。
+這條對 env 與函式同樣成立：2026-08-29 實測三個 `CLADE_*` 上限「設了但沒生效」，
+`~/.config/environment.d/` 那份也沒有（它要 manager 重載，且只影響之後起的 unit）。
+**NEVER 用「設定檔裡有這一行」推論它生效**，MUST 實跑 `zsh -c 'printenv <VAR>'` 驗一次。
+
+**NEVER 讀成「從此不會有 orphan」**：scope 的語義本來就是「起它的 shell 死了，裡面的行程繼續跑」。
+它換到的是**有界且具名**（吃得到 slice 上限、`systemctl --user list-units --type=scope` 叫得動），
+不是自動回收。
+
+### NEVER 用 slots 數量近似記憶體
+
+slot 是計數，不是權重：兩個 300 MB 的 job 與兩個 3 GiB 的 job 在它眼中相同。
+**記憶體的權重機制是 cgroup**（`agent-workloads.slice` 的 `MemoryMax` ＋ 每個 session
+scope 的 `MemoryMax`），不是 slot 數。想讓「便宜的 heavy 可以併跑」時正解是**分池**
+（各池一把鎖、每個 job 只取一池），**NEVER** 做成多單位計數 semaphore —— 在檔案鎖上
+實作部分持有會死鎖（A 持 1 個等第 2 個、B 同樣）。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 取不到 slot → 排隊（`wait`）或 exit 75（`try`）。**排隊不失敗**：硬 block 會逼人加逃生口，而逃生口常設等於閘門失效 |
+| 消費端 | 每一次 `pnpm typecheck` / `test` / `build`（經 `clade-gate` 的必經點，全 fleet 已投影）；孤兒 holder 的判讀由逾時診斷輸出交給人 |
+| 載入路徑 | 本節（`rules/core/code-style.toolchain.md`，paths-gated 於 `package.json` / `vite.config.*` / `tsconfig*.json` —— 接 heavy gate 的 script 就寫在那些檔裡） |

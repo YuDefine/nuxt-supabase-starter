@@ -16,9 +16,21 @@ Local edits will be reverted by the next sync.
 
 ## 證據鑑別力（先於下方每一條 NEVER / MUST）
 
-驗收引用的證據 E，MUST 能回答「若被驗命題為假，E 會長什麼不一樣？」——答不出或答案是「一樣」→ E 不是證據，換一個在兩個世界會分岔的觀測。**status code、exit code、「檔案存在」、工具自我宣告、來自常數宣告而非量測的數字，預設視為未分岔訊號**。MUST 11 / 16 是本條的兩個實例；新形態回到上面那句自判。降級路徑觸發時 MUST loud（warning / health degraded），讓假世界主動分岔。實證三例見 [[pitfall-empty-state-screenshot-has-no-discriminating-power]]。
+驗收引用的證據 E，MUST 能回答「若被驗命題為假，E 會長什麼不一樣？」——答不出或答案是「一樣」→ E 不是證據，換一個在兩個世界會分岔的觀測。**status code、exit code、「檔案存在」、工具自我宣告、來自常數宣告而非量測的數字，預設視為未分岔訊號**。MUST 11 / 16 / 19 是本條的三個實例；新形態回到上面那句自判。降級路徑觸發時 MUST loud（warning / health degraded），讓假世界主動分岔。實證三例見 [[pitfall-empty-state-screenshot-has-no-discriminating-power]]。
 
 **摘要值（hash / 行數 / 檔案數 / diff 大小）同屬未分岔訊號**：`sha256sum` / `md5sum` / `wc -l` 這類全域函式對空輸入不報錯、照樣回一個外觀正常的值，於是「上游命令死掉」與「內容真的是空的」在它的輸出裡完全相同。**每一次**拿 hash 或 count 當證據，MUST 先驗產生它的那條 pipeline 的 exit code 與非空性；**NEVER** 從摘要值反推成因。逐字反開脫：「hash 有值代表命令成功了」——`[ -n "$(printf '' | sha256sum)" ]` 恆真（空輸入的 sha256 就是 `e3b0c442…`），那道 guard 讀起來在防空值、實際永遠通過。實證見 [[pitfall-hash-of-empty-stdout-collapses-distinct-causes]]。
+
+## 否定命題 MUST 先做陽性對照（先於下方每一條具名處方）
+
+**結論形式是「沒有 X」時，MUST 先對量測工具做一次陽性對照**——用一個**已知存在**的目標跑**同一條指令**，確認它回得出非空。**回空就是工具壞了，不是「沒有 X」。** 對照沒跑，那個「沒有」不是證據，**NEVER** 拿它當任何動作的前提（起 publish、判 lane 空、判沒人在跑、判無違規）。
+
+**這條排在所有具名處方之前，不與它們並列**，理由只有一條：**它不要求你事先知道那個特定的坑。** 具名處方（`find` 加 `-L`、比對 `exe` 不比對 `comm`、進程列表不加 `| head -N`）擋的是已知的坑，而**會出事的每一次，都是不知道的那一次**。陽性對照擋的是「這個工具現在到底活著沒有」——後者不成立時，前者全部沒有意義。
+
+逐字反開脫：「指令跑完了、沒報錯、回空，所以確實沒有」——空輸出與工具壞掉在 stdout 上完全同形，而**否定命題只能用「找不到」來證，所以這一整類對假陽性與假陰性都零抵抗**。假訊號不是讓你少知道一件事，是讓你知道一件相反的事。
+
+**誠實邊界**：陽性對照證的是**工具活著**，不是 **pattern 寫對**——它擋不住「工具對目標 A 有效、對目標 B 無效」。**NEVER** 把對照通過讀成「這次的查詢是對的」。
+
+**判「某個程式在不在跑」時 MUST 貼 [[process-probe]] 的 `is-running.sh`，NEVER 現場自組 `pgrep` / `ps | grep`**：`pgrep -f` 比對整條 cmdline，量的是「有沒有人提到這個字」；該腳本內建兩段對照並把「沒有在跑」（exit 1）與「量不出來」（exit 2）分成不同 exit code。裸 `pgrep` 把這兩個結論折成同一個空輸出。
 
 > 本 rule 的成因（根因同質的 pitfall 群）見 `docs/rule-rationale/agent-self-verification.md`。
 
@@ -138,6 +150,45 @@ baseline 只存在於某次 session 記憶裡時，下一個讀 gate 的人算�
     | 「exit 0 就是成功」 | `cmd \| tail` 的 exit 屬於 tail |
 
     **Red Flag**：正要把 publish / audit / gate 接到 `\| tail` / `\| head`，或用 `&&` 把前置檢查和主指令串成一行再截斷。純查詢（`git log \| head -5`）不在本條。副作用指令被 `head` 腰斬是另一條，見 MUST 4 與 [[pitfall-sigpipe-truncates-side-effecting-script]]。（per [[pitfall-chained-command-tail-truncation-hides-failure]]／[[TD-461]]）
+
+18. **拿計數 / 探針當證據前 MUST 過三條前提（hard rule）**：MUST 11 管的是「零命中不等於不存在」，
+    本條管的是**非零**的那一半——數字印出來了、exit 0、量級看起來合理，而它量的根本不是命題問的東西。
+    三條各自的失效都是靜默的，**每一次**把數字寫進結論、`### 自驗`、TD entry 或 gate 判準之前
+    都要過，不是只在「數字看起來可疑」的時候過。
+
+    - **(a) 搜尋路徑清單 MUST 不含互為 symlink 的目錄。** ripgrep / grep 依 inode 去重，路徑清單
+      同時含 symlink 目錄與其目標時計數靜默偏低，且隨走訪順序在多次執行間漂移（clade home 實測
+      同一條指令 116 vs 208，而該 symlink 目錄單獨只有 4）。可疑時跑三跑法——分別量 A（合併）、
+      B、C 兩個子路徑，`B + C != A` 即為去重生效。**NEVER** 因為「兩次都跑得出數字」就當它穩定：
+      漂移的兩次都是 exit 0。（per [[pitfall-rg-symlink-target-dedup-undercounts]]）
+
+    - **(b) 判定單位 MUST 與命題單位同級。** 命題問「還有幾**處**不合形狀」時，`rg -l` / `comm`
+      這類**以整個檔為判定單位**的指令當粗篩可以，當**判準** NEVER 可以——同一個檔在別處為別的
+      用途出現過一次目標 pattern，整支就被判安全，而真正要看的那一處是舊形狀。判準 MUST 綁到與
+      命題同級的儀器：逐 occurrence 的 `rg -o`，或直接跑 test。實證：TD-462 三次檔案層計數
+      （22 / 22 / 23）全數漏掉 `scripts/audit-rule-authoring.ts` L833 的舊形狀守衛，window 層的
+      test 一跑就抓到。
+
+    - **(c) 探針寫進 `### 自驗` 之前 MUST 先跑一次 control。** 餵一個**真答案已知為非空**的輸入，
+      確認這條指令印得出非空結果，再拿它去量預期為 0 的那一次。只跑「預期回 0」那一次時，
+      **壞探針與真陰性外觀完全相同**：exit 0、stdout 空、只有 stderr 帶訊號，而覆核者與
+      `audit-tech-debt-hygiene.ts --run-selfverify` 的 `shim-dropped-flag` 判準都只在**它自己**
+      執行的那一面有效——覆核者在 Bash tool 裡自己下的那一次，機械面結構上零覆蓋。
+      **NEVER** 靠「我記得這個 flag 會不會被吃掉」推論：改寫是**形狀相依**的，同一個 flag 裸跑被
+      忽略（空輸出、exit 0）、接了 pipe 完全正常、帶 compound predicate 則拒跑 exit 1，三種形狀
+      三種答案。
+
+    | 讀到自己在想 | 現實 |
+    | --- | --- |
+    | 「數字跑出來了，跟預期差不多」 | 差不多是對**你以為它在量什麼**而言；三條前提量的正是「它在量什麼」 |
+    | 「同一條指令我跑過兩次，結果一樣」 | (a) 的漂移可以連續兩次相同；穩定不是正確 |
+    | 「`rg -l` 比較快，先用它掃一遍」 | 當粗篩可以，寫進判準就是 (b)。粗篩結果 NEVER 直接當結論 |
+    | 「探針回 0，正好符合我的判斷」 | 那正是 (c) 要擋的一格——符合預期的空輸出最不會被複驗 |
+
+19. **拿 body 下結論前 MUST 先讀 final URL 與狀態碼（hard rule）**：curl 帶
+    `-w '%{http_code} %{url_effective}'` 取回兩值先讀。`url_effective` 不是你請求的路徑時
+    （被 auth 攔到登入頁即是），body 的 grep 與計數**零訊號**，**NEVER** 當任何動作的前提，
+    尤其 **NEVER** 當重跑 deploy、切 symlink、重啟服務的理由。全文見 [[TD-783]]。
 
 ## 派工前的主線預檢責任
 

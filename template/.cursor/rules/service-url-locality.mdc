@@ -1,0 +1,86 @@
+---
+description: "app 與它的 backing service（Supabase / PostgREST / storage）跑在同一個內網、而該 service 另有對外域名時，決定 server 端與 client 端各該讀哪個 URL；症狀是每支碰 DB 的 API 都慢一點（全部 200、只是慢），或圖片只有外部使用者載不到"
+globs: ["nuxt.config.*", "server/**/*.ts", "packages/*/server/**/*.ts", "packages/**/server/**/*.ts", ".github/workflows/**", "**/*.env.example", "wrangler.toml", "wrangler.jsonc"]
+alwaysApply: false
+---
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/core/service-url-locality.md
+Edit at: $CLADE_HOME
+Local edits will be reverted by the next sync.
+-->
+
+
+# Service URL Locality（server 端與 client 端讀的是兩個不同的值）
+
+> Pitfall：[[pitfall-one-service-url-two-audiences-server-vs-client]]（<consumer-j> 2026-08-26、
+> <consumer-b> 2026-07-02 / 2026-07-21）。機械訊號：`node scripts/service-url-locality-audit.ts`
+> （warn-only、exit 0、接 `pnpm audit:manual`）。
+
+## 適用條件（可觀察 predicate）
+
+三條全中才適用：
+
+1. backing service 是 **self-host**（自架 Supabase / PostgREST / storage / 任何 HTTP service）
+2. 該 service 另有**對外域名**（Cloudflare Tunnel / 反向代理 / CDN）
+3. 跑 app 的機器與該 service **同內網**（`getent hosts` 查得到 RFC1918 位址，或兩者在同一機房 / 同一 Proxmox 節點）
+
+第 1 或 3 不成立（雲端 Supabase、app 與 DB 非同網段）→ 本規約整條不適用，server 與 client 填同一個公網
+URL 是正確的。
+
+## 不變量
+
+適用條件成立時：
+
+- server 端與 client 端的 service URL **本來就該是兩個不同的值**。填成一樣要當紅旗處理，
+  **NEVER** 讀成「設定一致」——那是兩個正確性要求相反的消費端共用了一個欄位
+- **每一處**產生對外絕對 URL 的程式碼（不是只有最後改的那一處、不是只有 storage 那一支）
+  **MUST** 讀獨立的對外 base 變數
+- DB **MUST** 只存 storage path，對外 URL 在讀取時才 resolve
+
+## 三個值，不是兩個
+
+| 用途 | 值 | 誰讀 |
+| --- | --- | --- |
+| server → DB / PostgREST | 內網位址（`http://<lan-ip>:<port>`） | server 端 client instance |
+| 瀏覽器 → service | 對外域名 | `runtimeConfig.public` |
+| 產生 storage 對外 URL 的固定 base | 對外域名，**獨立變數** | resolve 時 |
+
+```ts
+// nuxt.config.ts —— fallback 落在寫死的對外域名上
+supabaseStorageUrl:
+  process.env.NUXT_PUBLIC_SUPABASE_STORAGE_URL || 'https://<對外域名>',
+```
+
+**NEVER** 把對外 URL base 的 fallback 串回 server 端變數：
+
+```ts
+// ❌ 每一個這樣的式子都是形態 2 的火藥
+const base = process.env.NUXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+```
+
+合格的判準是**失效方向**：漏設環境變數時，寫死對外域名的版本會「用了預設的正確值」，
+串回 server 端變數的版本會「安靜地把內網 host 寫進 DB」——後者改回設定不會修好既有列，
+要另外跑 migration 正規化。
+
+## 兩個方向都沒有 failing signal
+
+| 填法 | 症狀 | 為什麼測不出來 |
+| --- | --- | --- |
+| server 端填對外域名 | 每支碰 DB 的 API 都慢一點，慢的量與 round trip 次數成正比 | 全部 200。typecheck / unit / E2E 全綠 |
+| 對外 URL base 讀到內網值 | 只有**外部**使用者破圖 | 內網瀏覽器連得上，開發與內網驗收看不到；破圖不進 error log |
+
+**NEVER 拿 CI 綠燈當本規約的證據**：CI 跑在雲端 runner 上，那裡沒有 LAN 捷徑，兩個值**確實**
+該相同——CI 環境下的正確設定，正是 self-host 環境下的錯誤設定。
+
+## 驗證（適用條件成立時 MUST 實跑）
+
+在**跑 app 的那台機器上**：
+
+```bash
+node scripts/service-url-locality-audit.ts --runtime \
+  --env-file /etc/<app>/*.env --lan-probe http://<lan-ip>:<port>/rest/v1/
+```
+
+`OFF_LAN` = server 端 URL 解析到公網而本機身處 LAN。改完之後 **MUST** 用實測數字確認
+（<consumer-j>：`/api/health` 的 DB 段 590–660ms → 13–73ms），**NEVER** 只憑「設定改了」宣告修好。

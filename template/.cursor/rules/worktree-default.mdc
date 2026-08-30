@@ -83,6 +83,20 @@ User 報告看不到 worktree 改動（「看不到變化」「沒反映」「de
 
 > §5 commit 階段、§5.5 merge-back ceremony 的全文在 [[worktree-default.detail]]。
 
+## §6 共享資源池 stale 判定與機械 reclaim
+
+Dev-port slot 池滿時，**MUST** 跑 `wt-helper reclaim-stale` 釋放 stale slot，**NEVER** 把池滿當 blocker 退回 user 或停在「slot 仍滿」不動。
+
+三層判定（`enrichWorktree` 的 `staleness` 欄位）：
+
+| 層 | 判準 | 動作 |
+| --- | --- | --- |
+| stale | worktree 已 merged，或 brief status 為 archived/completed/done/landed/merged | `reclaim-stale` 自動刪 dev-port record，釋放 slot |
+| live | brief status 為 active/in-progress/wip/dispatched/pending **且** last commit < 30min | 不動 |
+| unknown | 以上都不是 | attended → `AskUserQuestion`；unattended → packaging（不略過也不殺） |
+
+`reclaim-stale` 只刪 `~/.cache/clade/dev-port/<consumer>/<slug>.json`，**不刪** worktree 目錄。worktree cleanup 是獨立步驟（`prune` / `cleanup`）。
+
 ## 相關規則
 
 - [[wt]] — `/wt` skill 完整使用手冊（含 Step 0 resume detection、Step 1.5 寫 brief、Form 4 resume）

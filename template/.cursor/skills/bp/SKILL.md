@@ -46,6 +46,8 @@ Q1 最後一支是**不收**的出口：`\bp` 送進來的實踐若只對一個 
 
 Q3 最後一支最常被漏掉：**一條實踐若存在「推薦做法 vs 過渡做法」的分歧，它 MUST 進 `registry/conventions.json`**——那是唯一機讀的最佳實踐目錄，沒進去的條目 `plan` 與 `check` 兩個 mode 都抓不到，等於登記了卻不會被套用。
 
+Q2 / Q3 判到 `docs/` 之後**還有一層**：`docs/` 有 13 個子目錄，落哪一個以 `docs/README.md` 為 SoT——它定義各子目錄的准入 predicate、三組易混淆目錄的判準與掃描面契約，設計上就是給本 skill 判落點用的。**判到 `docs/` 就 MUST 讀它**，**NEVER** 憑目錄名字猜，也 **NEVER** 把那些 predicate 複製進本檔（複本必漂移，正是該憲章 § 維護 要防的）。
+
 完整 Q1×Q2×Q3 對照表、縱向下推三分法（留原處 / `docs/rule-rationale/` / 新建 conditional rule）、以及各落點的散播機制，見 `references/placement-routing.md`。**判不出來時 MUST 讀它**，不要憑印象猜。
 
 ### Step 3 — 回報，等確認

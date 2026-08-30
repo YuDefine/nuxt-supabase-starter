@@ -1,5 +1,5 @@
 ---
-description: "Testing anti-patterns to avoid — mock 濫用、test-only production methods、不完整 mock、E2E fixture 寫死絕對日期"
+description: "Testing anti-patterns to avoid — mock 濫用、test-only production methods、不完整 mock、E2E fixture 寫死絕對日期、測試碼品質低於生產碼、測試結構契約"
 alwaysApply: true
 ---
 <!--
@@ -405,7 +405,8 @@ mutation testing 讓**存活的突變體**直接指出哪個邊界沒被釘住�
   （靜態讀 consumer commit 的 `.clade/mutation-summary.json`，**不執行**任何測試）
 
 > 兩條都是**絕對路徑**：cookbook 與 audit script 只存在於 clade，不散播副本到 consumer，
-> 相對路徑在 consumer session 會解到自己的 repo 而落空（同 [[evlog-investigate]] 的理由）。
+> 相對路徑在 consumer session 會解到自己的 repo 而落空（同 evlog-investigate 的理由 ——
+> 該規約在 `rules/modules/capabilities/evlog/`，未宣告 evlog 的 repo 沒有它，故此處不用 wikilink）。
 - **NEVER** 把 mutation score 變成常駐 KPI —— 一旦它成為被追的數字，產出就會從
   「想清楚邊界」退化成「對每個中間值下 assertion」，測試變脆、重構全紅
 
@@ -482,6 +483,39 @@ property-based testing、不需跑 N 輪迴圈 —— 累積狀態是**資料**�
 - 斷言的是**算式原文**（`expect(body).toContain('v_available := …')`）而不是算式的**結果** ——
   見下方 § 對設定檔原文的斷言，標的是行為本身
 
+## Anti-Pattern 8: 測試碼品質低於生產碼
+
+**The violation:**
+
+測試裡複製生產碼不願意寫的捷徑——單字母名、magic number、一條測試塞三個概念、fixture 直接
+new 出底層 SDK client。一開始綠，三個月後沒人敢改，然後被 `.skip`，最後被刪。
+
+**Why this is wrong:**
+
+- 髒測試會先變成維護負擔、再被 skip、最後被刪
+- 測試被刪之後，生產碼失去唯一的安全網
+- 「測試碼比較短、可以隨便寫」把安全網的承載力寫進例外條款
+
+**The fix:**
+
+測試碼遵守與生產碼同一套命名 / 結構契約（見下方 § 測試結構契約）。測試變髒的當下 MUST 先整理
+再加下一條，NEVER 用「先讓它綠」把髒寫進去。
+
+### Gate Function
+
+```
+BEFORE 宣告一條測試寫完:
+  Ask: "六個月後，失敗訊息能讓一個沒寫過這條的人指出壞掉的是哪一個能力嗎？"
+
+  IF no:
+    STOP - 這條測試還沒寫完。拆概念、換名字、或抽 domain helper。
+
+  Ask: "我會不會因為它太難改而 skip 它？"
+
+  IF yes:
+    STOP - 先讓它變好改，再讓它綠。
+```
+
 ## When Mocks Become Too Complex
 
 **Warning signs:**
@@ -495,6 +529,12 @@ property-based testing、不需跑 N 輪迴圈 —— 累積狀態是**資料**�
 
 ## TDD Prevents These Anti-Patterns
 
+**TDD 三法則**（寫任何生產碼之前，**每一條**都適用，不是只處理「看起來比較重要的那個模組」）：
+
+1. **先有失敗測試才寫生產碼**——沒有紅燈就沒有下一步
+2. **測試只寫到剛好失敗**（含編譯失敗）——不要一次把整個 spec 寫完再實作
+3. **生產碼只寫到剛好通過**——不要順便把「下次會用到」的分支寫進去
+
 **Why TDD helps:**
 
 1. **Write test first** → Forces you to think about what you're actually testing
@@ -503,6 +543,33 @@ property-based testing、不需跑 N 輪迴圈 —— 累積狀態是**資料**�
 4. **Real dependencies** → You see what the test actually needs before mocking
 
 **If you're testing mock behavior, you violated TDD** - you added mocks without watching test fail against real code first.
+
+## 測試結構契約
+
+失敗時能不能立刻指出壞掉的是哪一個能力——本節三條都在服務這個問題。本節純 review 層，
+無機械訊號。
+
+### Fast / Isolated / Repeatable / Self-validating / Timely
+
+**每一條**測試 MUST 同時滿足：
+
+| | 意思 | 可觀察判準 |
+| --- | --- | --- |
+| Fast | 幾秒內跑完 | 診斷過程會跑幾十次；慢的抽去 integration / e2e |
+| Isolated | 不依賴執行順序、不共享可變狀態 | 單獨跑與整包跑結果相同 |
+| Repeatable | 任何環境、任何時間點結果相同 | 見下方 E2E fixture 時間錨點；無網路、無鐘點、無亂數未 seed |
+| Self-validating | 失敗 = 非 0 exit，不靠人看 log | 沒有「跑完自己看輸出對不對」 |
+| Timely | 與生產碼同時寫 | 見上方 TDD 三法則 |
+
+### 一個測試只驗一個概念
+
+`it('creates user, sends mail, and updates audit log')` 失敗時看不出壞的是哪一件。MUST 拆成三條。
+共用的 setup 抽 helper，不要靠把三件事塞進同一條來「少寫 setup」。
+
+### Build-Operate-Check
+
+每條測試 MUST 看得出三段：準備資料 → 執行被測動作 → 斷言。低階 fixture（直接組 SDK client、
+手寫 SQL row）MUST 抽成 domain helper（`givenPendingOrder()`），讓 Build 段讀起來是領域語言。
 
 ## Quick Reference
 
@@ -515,6 +582,9 @@ property-based testing、不需跑 N 輪迴圈 —— 累積狀態是**資料**�
 | Tests as afterthought           | TDD - tests first                             |
 | Boundary values not tested      | Enumerate null/empty/zero/max+1 boundaries; trace actual client payload |
 | Accumulated invariant not pinned | 先把「歷史聚合量的上界」寫進 spec，再用帶已累積 history rows 的 static fixture 釘住 |
+| 測試碼品質低於生產碼            | 測試遵守同一套命名／結構；髒了先整理再加下一條 |
+| 一條測試塞多個概念              | 拆成一概念一條；失敗訊息要指得出能力 |
+| 測試看不出 Build-Operate-Check  | 三段寫清楚；低階 fixture 抽成 domain helper |
 | Over-complex mocks              | Consider integration tests                    |
 
 ## Red Flags
@@ -580,6 +650,26 @@ E2E test coverage 不該用「跑了幾條」當 KPI，也不該用「按鈕能�
 - 資料 deletion / soft-delete logic
 
 其他 change 為**建議**而非強制。違反靠 reviewer 在 manual-review tier 1/2 攔截，不靠 CI gate（會誤殺 typo fix）。
+
+### 機械訊號（warn-only，TD-636）
+
+```bash
+node vendor/scripts/audit-risk-path-coverage.ts        # 恆 exit 0
+```
+
+diff 命中上列五類任一時，驗作用中 change 的 design.md / proposal.md 有 § Risk paths，**且該節引用的
+測試檔真的存在**。只驗章節在不在會被 pro forma 生一段騙過——那正是「全部打勾但沒人看」的機械版。
+
+**這支 NEVER 升成 blocking。** 上一段反對的是**無條件** CI gate；本支是條件觸發，五類全部是 diff
+路徑可偵測的，碰不到 typo fix，所以原理由對它不適用——但反過來說，一旦讓它擋 PR，那個理由就重新成立。
+findings 是 review 的**對話起點**，不是通過條件。
+
+**綠燈 NEVER 讀成「風險路徑覆蓋足夠」**：它只證明「有宣告、宣告指的檔在」，測得對不對只有人能判。
+
+**上線 baseline 是 0，這是預期值不是異常。** 2026-08-24 實測三個 consumer 共 75 條 change
+（9 active + 66 archived）——**沒有任何一份**寫過 § Risk paths。本節 2026-05 上線至今未被遵守過一次，
+所以接上訊號後高風險 change 幾乎必然報 finding。**NEVER** 因為「一片紅」就把這支關掉或降級：
+那個紅正是它被建立的理由，也是「規約存在 ≠ 規約生效」最直接的讀數。
 
 ## E2E fixture 的時間錨點 MUST 相對於執行當下
 

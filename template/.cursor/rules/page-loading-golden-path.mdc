@@ -124,7 +124,9 @@ blockingAwaitUseFetch     pages 內頂層 await useFetch 命中數（越低越�
 usePageLoadingPresent     是否有 Tier 3 usePageLoading composable（Y/—）
 ```
 
-各 consumer 落地由自家 session 處理（per clade-role-and-todo-discipline）；clade 主線只散播標準 + 出表。
+各 consumer 落地 **MUST relay 給該 consumer 的 session**（per [[clade-role-and-todo-discipline]]
+§ Consumer 工作命中時 MUST relay）；clade 主線 own 散播標準 + 出表 + **把表送到**，
+**NEVER** 停在「出了表」。
 
 ## Tier 2.5 Mechanical Enforcement（4 層，對齊 nuxt-ui-native-picker-ban）
 

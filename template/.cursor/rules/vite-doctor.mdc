@@ -21,7 +21,7 @@ vite-doctor 掃描 Nuxt/Vue/Vite/Nitro 專案，在 review 前偵測 hydration�
 2. **Nuxt consumer 必啟用 module**：在 `nuxt.config.ts` 加入 `vite-doctor/nuxt`，使用 clade 共用 preset：
 
    ```typescript
-   import { doctorConfig } from './vendor/doctor-shared/preset.mjs'
+   import { doctorConfig } from './vendor/doctor-shared/preset.ts'
 
    export default defineNuxtConfig({
      modules: [
@@ -44,4 +44,4 @@ vite-doctor scan . --rules "nuxt/hydration/*"  # 只跑特定規則
 
 ## Baseline 管理
 
-共用 rule severity 在 `~/offline/clade/vendor/doctor-shared/preset.mjs`（clade 治理），改了走標準 publish + propagate。Consumer 端 `vendor/doctor-shared/` 是投影副本。
+共用 rule severity 在 `~/offline/clade/vendor/doctor-shared/preset.ts`（clade 治理），改了走標準 publish + propagate。Consumer 端 `vendor/doctor-shared/` 是投影副本。

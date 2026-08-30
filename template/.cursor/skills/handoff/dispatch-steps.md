@@ -16,7 +16,7 @@ SKILL.md § 2B.3 / 2B.4 / 2B.4.5 / 2B.5 的完整規約：outstanding 的 serial
 **Serial 訊號**（任一成立 → serial）：
 - 同檔 / 同 module 內順序改動
 - 同一 spectra change 內 phase 間有依賴（phase B 依賴 phase A 落地）
-- 共享 mutex 資源：DB migration、單一 config 檔、單一 secret rotation
+- 共享 mutex 資源：DB migration、單一 config 檔、單一 secret rotation、同一 `package.json` / lockfile 的 dep upgrades
 - 後一步的設計需要前一步的結果（探索結論決定後續方向）
 
 **Parallel 訊號**（全成立 → parallel candidate）：

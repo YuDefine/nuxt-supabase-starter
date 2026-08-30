@@ -193,4 +193,6 @@ creds、port 可能不同的乾淨 CI 機器上，會起來嗎？」**
 exit 0）掃每個 consumer 的 playwright config，語意感知 CI 條件分支：`webServer.command` 含
 dev-server 反模式關鍵字（`pnpm dev` / `concurrently` / `dev-tunnel` / `tunnel`）**且無
 `process.env.CI ?` 分支** → 報 `playwright.webserver_ci_unsafe`；`reuseExistingServer: true`
-→ 次級 warn。落地由 consumer 自家 session 處理（per [[clade-role-and-todo-discipline]]）。
+→ 次級 warn。落地 **MUST relay 給該 consumer 的 session**（per [[clade-role-and-todo-discipline]]
+§ Consumer 工作命中時 MUST relay；brief 只給 findings + 本 rule pointer + 驗收標準，**NEVER** 替它
+拆步驟）。**NEVER** 讓義務停在「出了 warn」——那不會讓任何 session 去修它。

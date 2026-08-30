@@ -415,7 +415,7 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleWake
 
 ## Spectra Routing Table
 
-從 [[agent-routing]] § Routing Table 移出（2026-07-31）——這五列只在 spectra flow 內成立，主檔留一列 stub 指這裡。**UI view phase 與 Design Review 都永不外派（主線 Opus 5 xhigh 自己做）**、**propose 的 cross-check / final check 一律主線跑**這兩條契約主檔仍帶著。
+從 [[agent-routing]] § Routing Table 移出（2026-07-31）——這五列只在 spectra flow 內成立，主檔留一列 stub 指這裡。**UI view phase 與 Design Review 都永不外派（主線 Claude Opus 5（effort: xhigh）自己做）**、**propose 的 cross-check / final check 一律主線跑**這兩條契約主檔仍帶著。
 
 **派工時 `--table-row` 要填哪一列**：本節的類別名不是 row 名。裸 `--table-row spectra` 在 `TABLE_ROW_POLICIES` 是 `model: null`（因為下表五列檔位各異，一個 row 表達不了），dispatcher 一律拒絕。對照表：
 
@@ -431,10 +431,10 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleWake
 
 | 工作類別 | 由誰執行 | 為什麼 |
 | --- | --- | --- |
-| **Spectra `propose` 階段（draft）** | **使用者選單三選一**：A Pi GPT-5.6-sol max draft（預設/推薦）／ B 三模型交叉：Claude Fable 5 xhigh draft ＋ Pi GPT-5.6-sol max review／ C 純 Claude | 預設跳三選一選單；使用者明確指定路徑時跳過。詳見 `spectra-propose` Step 0。 |
-| **Spectra `propose` cross-check / final check** | **主線 Claude Fable 5 xhigh** | 主線 = quality gate（A 的 cross-check、B 的 final check 都由主線跑），不只是 dispatcher。 |
-| **Spectra `apply`（非 Design Review、非 UI view phase，phase 粒度）** | **Pi GPT-5.6-sol high** | medium 漏 schema drift 風險高；phase 粒度避免 round-trip。 |
-| **Spectra `apply` UI view phase（component / page / view / layout / styling）+ Section 7（Design Review）** | **主線 Claude Opus 5 xhigh 自己做，永不派 pi**（UI view 實作與 Design Review 都是；實作完主線照跑 Step 6c / 6d 與 Design Review gate） | 視覺 / 互動 / a11y 與 Design skill 緊耦合，實作與品質判定分不開。非 view 的 frontend 不在此範圍，仍走 sol（範圍同 § Spectra Apply Phase Dispatch C 類）。 |
+| **Spectra `propose` 階段（draft）** | **使用者選單三選一**：A GPT-5.6-sol via Pi（effort: max）負責 draft（預設/推薦）／ B 三模型交叉：Claude Fable 5（effort: xhigh）負責 draft ＋ GPT-5.6-sol via Pi（effort: max）負責 review／ C 純 Claude | 預設跳三選一選單；使用者明確指定路徑時跳過。詳見 `spectra-propose` Step 0。 |
+| **Spectra `propose` cross-check / final check** | **主線 Claude Fable 5（effort: xhigh）** | 主線 = quality gate（A 的 cross-check、B 的 final check 都由主線跑），不只是 dispatcher。 |
+| **Spectra `apply`（非 Design Review、非 UI view phase，phase 粒度）** | **GPT-5.6-sol via Pi（effort: high）** | medium 漏 schema drift 風險高；phase 粒度避免 round-trip。 |
+| **Spectra `apply` UI view phase（component / page / view / layout / styling）+ Section 7（Design Review）** | **主線 Claude Opus 5（effort: xhigh）自己做，永不派 pi**（UI view 實作與 Design Review 都是；實作完主線照跑 Step 6c / 6d 與 Design Review gate） | 視覺 / 互動 / a11y 與 Design skill 緊耦合，實作與品質判定分不開。非 view 的 frontend 不在此範圍，仍走 sol（範圍同 § Spectra Apply Phase Dispatch C 類）。 |
 | **spectra-apply Step 8a self-collect (a)(b)**（dev-login allow-list 小 mod + service_role DB query 證 data shape） | **Pi `--model sol --effort low` via 泛用 dispatcher** | PoC 已實證 pi 能跑完整 evidence chain；annotation 寫回 tasks.md 維持主線。詳見 spectra-apply SKILL Step 8a。 |
 
 ## Orchestration Residency — 機械 Enforcement（residency-classify + archive-gate Check 8）
@@ -476,7 +476,7 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleWake
 
 
 1. **MUST** 預設跳三選一 dispatch 選單（A Pi draft + 主線 cross-check／B 三模型交叉：Fable draft + Pi review + 主線 final check／C 純 Claude）。使用者**明確**指定路徑（「純 Claude propose」「不要派 pi」「用 Fable」「用 pi」等）時跳過選單直接走。詳見 `spectra-propose` Step 0
-2. **MUST** 主線是 quality gate — A 的 cross-check 與 B 的 final check 都由主線 Fable 5 xhigh 跑
+2. **MUST** 主線是 quality gate — A 的 cross-check 與 B 的 final check 都由主線 Claude Fable 5（effort: xhigh）跑
 3. **NEVER** 把 cross-check / final check 的修補丟回 pi — 主線自己 Edit 修
 
 Claude Code session 收到 spectra propose 請求時：
@@ -484,7 +484,7 @@ Claude Code session 收到 spectra propose 請求時：
 1. **NEVER** 用 AskUserQuestion 問 A/B（除非使用者**明確**要求「純 Claude propose」或「不要派 pi」）
 2. **MUST** 預設走「Pi draft + 主線 cross-check」流程：
    1. 主線解析 change name + requirement
-   2. 派 background pi GPT-5.6-sol max draft（走「Pi 派工的標準流程」）
+   2. 派 background GPT-5.6-sol via Pi（effort: max）負責 draft（走「Pi 派工的標準流程」）
    3. 收到 `<task-notification status=completed>` 後，主線 **MUST** 依序：
       - Read pi 產出的 proposal.md / design.md / tasks.md
       - 跑 `bash scripts/spectra-advanced/post-propose-check.sh <change>`（檢查 User Journeys / Affected Entity Matrix / Implementation Risk Plan / Design Review 7 步）
@@ -505,7 +505,7 @@ Claude Code session 收到 spectra propose 請求時：
 
 執行 `spectra-apply` 時 phase 粒度派 pi。**三條契約**：
 
-1. **Design Review phase 與 UI view phase 一律主線 Opus 5 xhigh 自己做，永不外派**——**NEVER** 派 Pi 任一 model，**NEVER** 派 Claude subagent，**NEVER** 因為 phase 大、時間晚、管線現成就轉派（UI view 實作完主線照跑該 phase 的機械檢查與 Design Review gate）。其他 phase（schema / migration / API server / CLI / 純 backend / 非 view 的 frontend / unit test / docs）以泛用 dispatcher 的 `spectra-phase-implementation` row 派 background Pi Sol high；**每一個**符合封閉來源 extraction predicate 的 prescan 才可另走 `spectra-phase-prescan` Gemini low，且不得取代 Sol 實作
+1. **Design Review phase 與 UI view phase 一律主線 Claude Opus 5（effort: xhigh）自己做，永不外派**——**NEVER** 派 Pi 任一 model，**NEVER** 派 Claude subagent，**NEVER** 因為 phase 大、時間晚、管線現成就轉派（UI view 實作完主線照跑該 phase 的機械檢查與 Design Review gate）。其他 phase（schema / migration / API server / CLI / 純 backend / 非 view 的 frontend / unit test / docs）以泛用 dispatcher 的 `spectra-phase-implementation` row 派 GPT-5.6-sol via Pi（effort: high）；**每一個**符合封閉來源 extraction predicate 的 prescan 才可另走 `spectra-phase-prescan` Gemini via Pi（effort: low），且不得取代 Sol 實作
 2. **混雜 phase**（同一 phase 摻了 view 與非 view）：**已開工** → 主線整個 phase 自己做，不重切、不派 pi；**未開工** → **STOP** 請使用者跑 `/spectra-ingest <change>` 重切
 3. **禁止**主線自行修改 tasks.md 的 phase 結構（屬 ingest 範圍）
 
@@ -516,11 +516,11 @@ A/B/C 三類的完整判定條件（含 view 層檔案路徑清單）與 C 類�
 1. Read tasks.md，按 `## N.` 切分 phase
 2. **每個 phase 三類分類**（依序判定，命中即停）：
    - **A. Design Review phase**：標題含 "Design Review" 或內容含 `/design improve` / `/impeccable audit` / `/impeccable *` / `review-screenshot`
-     → **主線 Claude Opus 5 xhigh 自己做，永不派 pi**
+     → **主線 Claude Opus 5（effort: xhigh）自己做，永不派 pi**
    - **B. UI view phase**：phase 內任一 task 描述/路徑指涉 view 層檔案——`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且該 phase 沒有摻入非 view 的 frontend / backend 工作**（store / hook / API client / type / util / migration / API server）
-     → **主線 Claude Opus 5 xhigh 自己做，永不派 pi**。實作完、該 phase commit / 標 done 之前，照跑 SKILL Step 6c / 6d 檢查與 Design Review gate
+     → **主線 Claude Opus 5（effort: xhigh）自己做，永不派 pi**。實作完、該 phase commit / 標 done 之前，照跑 SKILL Step 6c / 6d 檢查與 Design Review gate
    - **C. 其他 phase**：上述兩類以外（schema、migration、API server、CLI、純 backend、frontend 但非 view 的 store / hook / API client / type / util、unit test、docs）
-     → **派 background pi GPT-5.6-sol high 做完整 phase**
+     → **派 GPT-5.6-sol via Pi（effort: high）做完整 phase**
 3. **混雜 phase fallback**（A、B 都不是純 view、又混雜 view 與非 view 工作）：
    - **看該 phase 是否已開工**（任一 task `[x]` 或 git history 顯示 phase 內檔案已被改）：
      - **已開工** → **主線整個 phase 自己做**（safety fallback；不重切，不派 pi）

@@ -19,7 +19,7 @@ Local edits will be reverted by the next sync.
 
 Gate chain 是一組**有序、確定性、機器可判定**的驗證指令。每條指令的 exit code 是唯一判定依據：exit 0 = PASS，non-zero = FAIL。
 
-**每個 consumer MUST 在 `.cursor/rules/local/verify-commands.md` 定義自己的 gate chain。** clade 定義標準（本規約），consumer 定義內容（各自的 test runner、port、health endpoint）。
+**每個 consumer MUST 在 `.cursor/rules/local/verify-commands.mdc` 定義自己的 gate chain。** clade 定義標準（本規約），consumer 定義內容（各自的 test runner、port、health endpoint）。
 
 ### Gate chain 層級
 
@@ -34,7 +34,7 @@ Gate chain 是一組**有序、確定性、機器可判定**的驗證指令。�
 
 ### Consumer verify-commands.md 範本
 
-Consumer 端 `.cursor/rules/local/verify-commands.md` MUST 至少定義 L0–L2：
+Consumer 端 `.cursor/rules/local/verify-commands.mdc` MUST 至少定義 L0–L2：
 
 ```markdown
 # Verify Commands

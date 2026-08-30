@@ -1,5 +1,5 @@
 ---
-description: "寫 code 當下的 TypeScript 語法限制（type stripping 擋不掉的三條）、副檔名與 import specifier 規則、用 vp 命令驗證；工具鏈設定治理在 code-style.toolchain"
+description: "寫 code 當下的 TypeScript 語法限制（type stripping 擋不掉的三條）、副檔名與 import specifier 規則、命名與註解（機器擋不住的那一半）、用 vp 命令驗證；工具鏈設定治理在 code-style.toolchain"
 globs: ["'**/*.{js", "ts", "vue", "jsx", "tsx", "mjs", "cjs", "mts", "cts}'"]
 alwaysApply: false
 ---
@@ -108,13 +108,39 @@ try { src = readFileSync(routeFile, 'utf8') } catch (err) {
 }
 ```
 
-**三態 NEVER 塌成布林**：「沒有」與「問不出來」是兩件事。探測類函式回 `none`（確認沒有）/ `unknown`（有但問不出身分）/ `known`，`unknown` **MUST** 照樣出警示——**「不知道」不等於「沒問題」**。
+**三態 NEVER 塌成布林**：「沒有」與「問不出來」是兩件事。探測類函式回 `none`（確認沒有）/ `unknown`（有但問不出身分）/ `known`，`unknown` **MUST** 照樣出警示——**「不知道」不等於「沒問題」**。本節已覆蓋「空值同時代表兩件事」；**NEVER** 另立一條「禁止回 null」——三態才是形狀。
 
 **全域掃描的前置條件讀不到 MUST `throw` + 非 0 exit，NEVER 回空結果**：`consumers.local` 之類的清單來源讀不到時回 `total 0`，跟「掃過了、fleet 乾淨」在輸出上一模一樣。這條對**新寫的** script 同樣適用——2026-08-02 當天寫的新 audit script 自己就犯了一次。
 
 **子程序 / 多出口的失敗 MUST 在單一出口收**：二十個 `return 'failed'` 前面各印一行 `✘ <原因>`，卻沒有一個寫進 `metrics.error`，結尾摘要就會印「（無 error 記錄）」。修法是在 log 的**單一出口**認出 `✘` 前綴時寫進 error 集合，**NEVER** 逐個出口補。
 
 > **為什麼測試接不住**：現有測試測的是 graceful degradation 的**結果**，不是 degradation 有沒有**留下痕跡**。「回 null 不 throw」在單元測試裡看起來永遠是對的——那正是它通過的原因。要接住得對每個 `catch → 空值` 點注入失敗，斷言 diagnostic 存在。（per [[pitfall-silent-null-renders-failure-as-absence]]）
+
+## 型別宣告 NEVER 代替驗證：把假設搬家不等於查證（MUST）
+
+**核心命題**：把未經驗證的形狀假設從 consume site 移到宣告處（`as unknown as X` → `.overrideTypes<X>()`、
+`satisfies`、手寫 `interface`），會讓靜態檢查由紅轉綠，**而驗證的總量是零**。搬完之後看起來像已治理，
+這正是它比原本那個 `as unknown as` 更危險的地方——原本那個至少長得可疑。
+
+**每一次**把型別從 consume site 搬到宣告處時，**MUST** 先對那個型別的**每一個**欄位查出執行期實際形狀，
+不是只查「看起來可疑的那幾個」。查不到就 **NEVER** 宣告——留著原本的斷言，它至少誠實。
+
+最常踩的一格是 **PostgREST embed 的基數**：多對一執行期是**物件**，一對多才是**陣列**。
+`overrideTypes` 是純編譯期的——宣告成陣列，TypeScript 只會忠實地要求 consume site 補 `[0]`，
+而 `物件[0]` 恆為 `undefined`，後面每一個 `?.` 都乖乖吞掉它。
+
+- 判基數的唯一決定性依據是 migration 的 `REFERENCES`（FK 欄位長在哪一張表上）。
+  **NEVER** 從既有型別、變數命名或複數形推——generated types 裡一對多關聯常是陣列，形狀相近、肉眼難分
+- 查法、四條 NEVER、override 型別的正確寫法：`~/offline/clade/vendor/snippets/postgrest-embed-cardinality/`
+
+**NEVER 把「typecheck 0 error + doctor 100/100 + 測試全綠」讀成這批改動安全**——這幾道關卡對
+「宣告與執行期形狀不一致」全部結構性盲：typecheck 依你的宣告推導、doctor 檢查的是有沒有 chained
+assertion 而不是宣告的形狀對不對、既有測試斷言的是「回應有回來」而不是「回應裡有東西」。
+它們同時綠不是幾個獨立證據，是同一個盲點的幾份副本。
+
+> 2026-08-28 實證（[[pitfall-overridetypes-declares-many-to-one-embed-as-array]]）：一次 111 檔的
+> 機械修正把 5 檔 12 處多對一 embed 宣告成陣列，員工／專案／合約／收款人欄位靜默清空，
+> 其中一條可能讓離職後月份仍被納入薪資計算，而上述四道關卡同時綠。
 
 ## CLI script 的 stdout 收尾：會被 pipe 消費就 MUST 等 flush（MUST）
 
@@ -196,4 +222,93 @@ async function writeThenExit(payload: string, code: number): Promise<never> {
 繞過：
   - 若有不可避免的 peer dependency 需求，加 <bypass marker> 並在
     docs/decisions/YYYY-MM-DD-<topic>.md 記錄理由
+```
+
+## 命名：機器擋不住的那一半
+
+oxlint 判不了 `accountList` 到底是不是 List。本節純 review 層，無機械訊號；消費端是
+`code-review` agent 的程式碼品質 checklist。
+
+### 名字要能回答「為什麼」
+
+一個名字若需要旁邊那行註解才看得懂，MUST 改名到那行註解變成冗詞。**每一個**需要「翻譯」
+才能讀的名字都算——不是只處理「看起來最怪的那幾個」。
+
+```ts
+const d = 86400 // 一天的秒數     // ❌ 註解在做名字該做的事
+const SECONDS_PER_DAY = 86400    // ✅
+```
+
+### NEVER 讓名字對型別說謊
+
+名字帶 `List` / `Map` / `Count` / `isX` / `hasX` 時，值 MUST 真的是那個型別。型別系統擋得住
+`accountList: Account`，擋不住 `accountList: AccountBag`。
+
+```ts
+const accountList: AccountBag = bag  // ❌ 名字說 List，值是 Bag
+const accounts: AccountBag = bag     // ✅
+const isReady = 0                    // ❌ isX 不是 boolean
+```
+
+### 可搜尋 > 簡短
+
+magic number 與單字母名 MUST 換成可 grep 的具名常數。一行 lambda 的參數（`.map(x => x.id)`）除外。
+
+```ts
+if (status === 3) wait(5000)   // ❌ 3 與 5000 搜不到語意
+const STATUS_PENDING = 3
+const RETRY_DELAY_MS = 5000
+```
+
+### NEVER 用這三種名字
+
+- Hungarian 前綴（`strName` / `iCount` / `bReady`）——型別系統已經在講型別
+- 不可發音的縮寫（`genymdhms` / `btnMgr`）
+- 只差 `Info` / `Data` / `2` 的一對名字（`User` vs `UserInfo`、`load` vs `load2`）
+
+判準：caller 不必打開實作就能選對哪一個。選不出來 = 這組名字還沒取完。
+
+## 註解：預設不寫，寫了就要對
+
+本節判準面由人遵守。closing-brace tag（`} // end`）與檔頭 changelog / `@author` 由
+`vendor/review-rules/patterns.json` 機械掃（warning）。banner 分隔線（`// ====` /
+`// ----`）留在 review 層：單行 `[-=]{4,}` 會把 fleet 既有章節分隔線整批當違規，誤判率
+不可接受，不進機械。消費端還有 `code-review` agent 的程式碼品質 checklist。
+
+複跑（在任一 consumer 根目錄；排除 `vendor/`）：
+
+```bash
+git ls-files '*.ts' | grep -v '^vendor/' | xargs -r grep -E '^[[:space:]]*//[[:space:]]*[-=]{4,}[[:space:]]*$' | wc -l
+# 2026-08-25 快照：<consumer-b> 1036 / <consumer-a> 119 / clade 54 / starter 6
+```
+
+
+### 註解預設不寫
+
+想寫註解解釋一段複雜布林邏輯時，MUST 先抽成具名 local variable 或 helper。抽出後還需要註解
+才看得懂的，才寫。
+
+```ts
+// ❌ 註解在翻譯布林
+// 員工在職且通過考核，或主管特批
+if ((e.status === 'active' && e.score >= 80) || e.override) { ... }
+
+// ✅ 名字就是註解
+const eligible = e.status === 'active' && e.score >= PASSING_SCORE
+if (eligible || e.override) { ... }
+```
+
+### 寫了就 MUST 100% 對
+
+註解描述的行為與 code 不符時 MUST 當場刪掉，NEVER 留著。錯的註解比沒有註解更糟。
+
+### 值得寫的三種
+
+1. **非直覺 workaround 的成因與移除條件**。MUST 帶 `@followup[TD-xxx]`——接
+   [[follow-up-register]] 既有 marker，NEVER 自創一套 issue ID 慣例。
+2. **public API 的 param / return / throws**（給不讀實作的 caller）
+3. **測試裡對慣例值（`-1` / `0` / `1`）的語意翻譯**
+
+```ts
+// @followup[TD-412] stripe SDK 在空字串 idempotencyKey 會 400，空值改傳 undefined。升級後刪。
 ```

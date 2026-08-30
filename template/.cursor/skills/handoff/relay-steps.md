@@ -17,6 +17,8 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 
 「1 件」包含**多件但彼此 serial** 的情況：動同一批檔、有 phase 依賴、共享 mutex 資源的工作 **MUST** 合併成一份 brief 走 relay，由 successor 依序推進，**NEVER** 拆成 N 個 worker 同時跑。
 
+本條是 [[agent-routing]] § 派多少 的實例。該節多管一種本條字面擋不住的形狀：把 serial 鏈切成「worker ＋ 主線自己留著後半段」——沒有第二個 worker，本條不會 fire。
+
 `CLADE_DISPATCH_ID` 非空（本 session 自己是被派出來的 child）時 relay **照常適用**——helper 對 relay 開了 nested 缺口，因為 relay 做的是把位置橫向移交、自己站下來，與那道 guard 要防的責任樹擴張相反。**NEVER** 因為身在 coordinated child 就改走 `--recover-orphan`：那是「parent 已死、由 child 補救」的路徑，而 relay 的前提正好相反——parent（本 session）還活著，親自簽字交出位置。
 
 ## 1. 建 durable thin brief
@@ -26,7 +28,40 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 - brief **MUST** 寫明「你是繼任者，不是被派出去做一件子工作的 worker」，以及本 session 交棒的理由（context 耗盡／工作已全部移交）。
 - 本 session 若手上還有 in-flight dispatch，brief **MUST** 逐個列出它們的 dispatch id、在做什麼、預期什麼 outcome。helper 會把 coordinator 身分轉過去，但**它轉的是權限，不是脈絡**。
 
+## 1.5 spine 收尾（ambient `CLADE_WORK_ID` 非空時 MUST，空則整步跳過）
+
+`park` 有 SKILL.md Step 3b，`relay` 一直沒有對應的一步——而 relay 是收工的四個 arg 之一，
+本 session 走到這裡同樣是「一段工作結束了」。缺這一步的後果不是少一筆紀錄，是**漏斗上游餓死**：
+2026-08-28 實測整條脊椎的「已收」欄恆為 0，終態從來沒有被按過，因為沒有任何必經收尾點會去按它。
+
+**MUST 先判這一題再往下**，二擇一，判準是**你正在交出去的 brief 裡寫的是不是同一件事**：
+
+| 可觀察 predicate | 動作 |
+| --- | --- |
+| successor 接手的是**同一件** work（brief 寫的是本 session 沒做完的那件事的續集） | **NEVER emit `work.done`**。work id 走 `dispatchEnv` 繼承過去，successor 是同一件事的延續，這裡不切分（[[flow-work-tracking]] § 一件 work 是什麼）。**整步跳過，不必 emit 任何東西** |
+| ambient work **本身已經做完**，而 brief 交出去的是**另一件**工作 | 先宣告完成再派： |
+
+```bash
+# 只在上表第 2 列適用
+node ~/offline/clade/vendor/scripts/flow/flow.ts done "$CLADE_WORK_ID" \
+  --verification '<跑了什麼、輸出是什麼——一句可查證的實跑摘要>'
+```
+
+`--verification` 是整套設計唯一的 fail-closed 欄位：缺了 CLI 直接拒寫。**NEVER** 拿
+「已完成」「測試通過」這類無指涉的句子填它——那兩句正是這道 gate 要擋的東西
+（[[flow-work-tracking]] § R1）。
+
+**MUST 排在 Step 2 之前**：`relay_dispatched` 之後本 session **NEVER 再開任何新工作段**，
+而補一筆 done 需要你還在判斷位置上。逐字反開脫：「派完再順手補一筆」——那時 pane 已經交出去了。
+
+沒有 ambient work（env 是空的）→ **整步跳過**，**NEVER** 為了留紀錄而現鑄一個新 work：
+一件從沒被指認過的事，在收工這一刻鑄名只會在 /board 上多一列生下來就結束的工作。
+
+指令 **fail-open**：非 0 exit **NEVER** 擋 relay 的其餘步驟，照常交棒。
+
 ## 2. 只走 canonical helper
+
+⛔ **先過 [dispatch-common.md](dispatch-common.md) § 1 的 `--cwd` 佔用探測**——successor 的 `--cwd` 指向既存工作區時，與 fanout worker 適用同一道 gate。
 
 ```bash
 node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \

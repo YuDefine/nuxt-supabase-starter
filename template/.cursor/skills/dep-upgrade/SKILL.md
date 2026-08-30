@@ -27,6 +27,7 @@ skill 開頭依輸入分流，**不要記三個 skill 名**。
 | 給 GitHub release URL（`https://github.com/.../releases/tag/v<ver>`） | clade home | **Fleet** | § Fleet · Step F.1 |
 | 給 `<pkg>@<ver>` / `<pkg> v<ver>` / `<pkg> <ver>` | clade home | **Fleet** | § Fleet · Step F.1 |
 | 給純 pkg name（「升 @nuxt/ui」、「無腦升 X」） | clade home | **Fleet + Discovery** | § Fleet · Step F.1 |
+| 給 package manager / runtime 本身（「升 pnpm」、「fleet packageManager 統一」、「Node 版本統一」） | clade home | **Fleet · Toolchain** | § Fleet · Step F.1，**再讀 fleet-mode.md § Toolchain sweep 分支** |
 | `/dep-upgrade skills`，或提到 **skill** 上游 / 落後 / 新增（「supabase skill 上游更新了我們有跟嗎」「掃一下 skill 有沒有落後」） | clade home | **Skills** | § Skills · Step S.1 |
 | 無參數但 cwd = clade home | — | STOP + 問意圖 | 見下方 § Disambiguation |
 
@@ -87,6 +88,7 @@ gate 沒有 `--allow-main` escape hatch，這是刻意的。
 - ✅ 每個 consumer 各自開 worktree（per [[worktree-default]]），不在 main 直接動
 - ✅ 每個 consumer 一個 atomic commit，依該 consumer `registry/consumers.json` 的 `workflow_model` 走（trunk-based 直接 push、pr-merge-based 開 PR）
 - ✅ 一次 sweep 只處理「**一個套件 × 一個 target version**」，不跨多套件 / 多 release 混在同一 sweep
+- ✅ Toolchain sweep（pnpm / Node 自身）額外一條：target **MUST 是 `latest` dist-tag 指到的版本**，pre-release tag 一律不進 fleet（toolchain 壞掉是全 consumer 同時無法 build，不像單一套件只影響用到它的地方）
 - ✅ 命中該套件的 consumer 才動；沒命中的 consumer **NEVER** 順便動其他東西
 
 **禁止帶搭**（即使在 Fleet 編排內也禁）：
@@ -101,7 +103,7 @@ gate 沒有 `--allow-main` escape hatch，這是刻意的。
 - consumer 自家業務 bug fix / feature
 - 「我覺得 N 個 consumer 該統一寫法」這種 clade 發想的改動 — 仍是「替 consumer 規劃實作」反模式
 
-**觸發判定**：能不能在 upstream release notes / changelog 找到「導致這個 mod 的具體 BC clause」。找不到，就不在 carve-out 範圍內，照原規則走（consumer 自家 session 處理）。
+**觸發判定**：能不能在 upstream release notes / changelog 找到「導致這個 mod 的具體 BC clause」。找不到，就不在 carve-out 範圍內，照原規則走：**relay 給該 consumer 的 session**（per [[clade-role-and-todo-discipline]] § Consumer 工作命中時 MUST relay），主線不徒手 sweep。
 
 ---
 

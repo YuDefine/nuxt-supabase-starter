@@ -26,15 +26,19 @@ $ARGUMENTS
 node .claude/scripts/commit-lock.mjs acquire
 ```
 
-失敗（exit 1）代表另一個 session 正在跑 `/commit` → **停下**，向使用者回報鎖資訊，**不要**自行 `rm` 清鎖或重試。
+失敗（exit 1）時**照它印出的「處置」段做**——那段是依鎖上的持有者身分算出來的、由上往下第一個成立的動作，且每一列都是本 session 自己做得到的：herdr pane 對話 → `SendMessage` → 等 stale 自動清 → 才輪到回報 user。
+
+**NEVER 一撞鎖就問 user。** 使用者要的是「鎖上看得到持有者是誰、怎麼聯絡」然後自行協商；把鎖資訊原樣貼給 user 請他裁決，只在腳本自己判定「無從對話」（鎖上沒有 session id）那一格才成立。**NEVER** 自行 `rm` 鎖檔繞過。
+
+腳本已自動處理的兩格，撞到時不必做任何事：**本 session 的遺留鎖**（session id 相符，`/commit` 被中斷留下的）會自動回收；**stale 鎖**（超過閾值）也會自動清。所以「PID 看起來死了」**NEVER** 是清鎖的理由——每個 Bash tool call 都換 pid，pid 從來就判不出存活，判據是 session id。
 
 成功後此 session 取得獨占權，直到最後一步釋放。**中斷處理**：若 `/commit` 流程中途失敗 / 使用者中斷，仍**必須**在終止前呼叫 `node .claude/scripts/commit-lock.mjs release`；漏釋放的鎖會在 30 分鐘後被下次 acquire 自動清除（可用 `COMMIT_LOCK_STALE_MINUTES` 調整）。
 
 ## Step 0-Coord: Cross-Session Staged Pollution Detection
 
-跑 3 個 detection signal（index.lock mtime、publish stash sidecar、wt-helper baseline stash）warn-only 偵測別 session 的 staging 活動。全部 silent → 直接進 Step 0-Scope。任一命中 → AskUserQuestion 二擇一（等候重試 / 強制繼續）。
+跑 3 個 detection signal（index.lock mtime、publish stash sidecar、wt-helper baseline stash）warn-only 偵測別 session 的 staging 活動。全部 silent → 直接進 Step 0-Scope。任一命中 → 先判持有者性質，持有者是**前景 agent session** 時 **MUST 先 `herdr agent prompt` 跟它對話**，對方沒回應才輪到 AskUserQuestion 二擇一。
 
-觸發 0-Coord 命中時 **MUST** 先完整讀 [gates.md](gates.md) § 0-Coord 的 signal 定義與命中處置流程再繼續。
+觸發 0-Coord 命中時 **MUST** 先完整讀 [gates.md](gates.md) § 0-Coord 的 signal 定義與命中處置流程再繼續——**NEVER** 憑本段摘要直接開 `AskUserQuestion`，對話那一步只寫在 gates.md 的分流表裡。
 
 ## Step 0-Pi: 派 pi 跑 commit 工作時的路由規約
 
@@ -120,11 +124,11 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 0-A.0 simplify（序跑）
   -> [Fast-path?] YES -> skip 0-A.1/0-A.2，0-B/0-C 並行
                   NO  -> 並行 fan-out:
-                           軸 A: 0-A.1 Codex xhigh（背景）
+                           軸 A: 0-A.1 GPT-5.6-sol via Pi（effort: xhigh），背景
                            軸 B: 0-B screenshot-review（條件觸發）
                            軸 C: 0-C pnpm check（主線 foreground）
                          -> 匯合 -> 0-D -> 0-E -> 0-F -> 條件觸發 0-A.2
-                         -> [累計修正 >50 行 or >5 檔 -> 重跑 Codex xhigh]
+                         -> [累計修正 >50 行 or >5 檔 -> 重跑 GPT-5.6-sol via Pi（effort: xhigh）]
 ```
 
 **啟動順序（在同一個 assistant 回合內完成）**：
@@ -156,7 +160,7 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 每個 gate 的完整執行流程（bash scripts、trigger 條件、fix loop、pi offload）見 [gates.md](gates.md)。執行任一 gate 前 **MUST** 先讀對應 §。
 
-- **0-A 程式碼審查**：simplify（0-A.0，序跑）→ Codex xhigh（0-A.1，背景）→ 條件升 Codex max + Fable code-review max（0-A.2）。詳見 [gates.md](gates.md) § 0-A。
+- **0-A 程式碼審查**：simplify（0-A.0，序跑）→ GPT-5.6-sol via Pi（effort: xhigh；0-A.1，背景）→ 條件升 GPT-5.6-sol via Pi（effort: max）+ Claude Fable 5（effort: max；0-A.2 裁決）。詳見 [gates.md](gates.md) § 0-A。
 - **0-B UI Design Review**：條件觸發（`.vue` template 變更 + 視覺影響）。詳見 [gates.md](gates.md) § 0-B。
 - **0-C CI 等效檢查**：`pnpm check` + `pnpm test` + `pnpm run doctor`，全綠才過。詳見 [gates.md](gates.md) § 0-C。
 - **0-D Doc Alignment**：條件觸發（diff 觸及 docs / rules / snippets / audit / 業務碼 / pitfall）。詳見 [gates.md](gates.md) § 0-D。
@@ -175,14 +179,15 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 **每一次** `/commit` 都 MUST 跑這一步的觸發判定 —— 判定本身無條件，判定**結果**才決定要不要做事：
 
 ```bash
-git status --porcelain | grep -Eq 'supabase/migrations/|\.types\.ts' && echo HAS || echo NO
+git status --porcelain | grep -Eq 'supabase/.*\.sql|supabase/migrations/|\.types\.ts' && echo HAS || echo NO
 ```
 
 - `NO` → 本 repo 這次沒動到 migrations 或 types，**直接進 Step 2**，不需要讀任何東西。
-- `HAS` → **MUST** 先完整讀 [schema-sync.md](schema-sync.md) 並照其中 Step 1.1–1.3 走完，再進 Step 2。
+- `HAS` → **MUST** 先完整讀 [schema-sync.md](schema-sync.md) 並照其中 Step 1.1–1.5 **每一步**走完，再進 Step 2。
+  Step 1.4（SQL lint）與 1.5（advisors）在 1.3 的 reset 之後跑，**NEVER** 做完 types 比對就當 Step 1 結束。
 
 上面這條判定刻意寬鬆（寧可誤送進 reference 也不漏），精確判定與完整流程都在 reference 檔裡。
-**NEVER** 憑印象自行重建重置 / 比對流程 —— `pnpm db:reset` 與 `supabase db reset` 的分支、
+**NEVER** 憑印象自行重建重置 / 比對 / lint 流程 —— `pnpm db:reset` 與 `supabase db reset` 的分支、
 `cp` 備份先於重置的順序、自訂 `config.dbTypesPath` 的解析，寫錯任一條都會靜默放行不一致的 schema。
 
 ## Step 2: 檢查變更狀態

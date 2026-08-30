@@ -82,7 +82,7 @@ machine check 分離把這件事結構化了，非 spectra 路徑沒有那個結
 - **分組同主流程**：**每一個** candidate 依上表落進 [dispatch-topology.md](dispatch-topology.md) 的
   四組之一——code task / spectra 引用 → 扇出組（**與 spectra item 共用**同一個 ≤4 in-flight 上限），
   investigation → 主線即時組。非 spectra 工作不是獨立於四組之外的第五條路徑
-- **Commit 紀律同主流程**：`git commit --only -- <paths>`，每個 item 獨立 commit
+- **Commit 紀律同主流程**：落地 main 時路徑全在 [[commit.detail]] 白名單 → `git commit --only -- <paths>`；任一不在 → invoke `/commit`。每個 item 獨立 commit。卡人工檢查 → packaging，**NEVER** `--only` 繞 0-A
 - **完成後 MUST 更新來源檔**：勾 `[x]` 或補完成摘要，讓下一輪不重複做
 - **Error handling 同主流程**：失敗 → log + skip + `failStreak` +1
 - **NEVER** 自創 spectra change —— 只做已登記的工作；規模需開 change 的 → packaging 成決策題，

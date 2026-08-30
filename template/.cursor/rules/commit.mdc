@@ -18,7 +18,7 @@ Local edits will be reverted by the next sync.
 
 本檔只常駐兩件東西：**commit 的強制入口**與 **WIP 處置禁令 / 話術關鍵詞表**（破壞性動作在任何 session 都可能發生，那張表必須每一輪都在視窗內）。其餘全文在 `rules/core/commit.detail.md`（path-scoped，glob 只涵蓋 `HANDOFF.md` / `tasks/**` / `.clade/claims/**` / `.clade/work-loop/**`——它的觸發是下一行那個具名時機，不是編輯檔案順帶載入）。
 
-**下任何 `git commit` / `git add` / `git stash` / `/commit` 之前，MUST 先讀 [[commit.detail]]**——沒讀到就等於沒有 gate 清單、沒有 `--only` 紀律、沒有 recovery 流程。
+**下任何 `git commit` / `git add` / `git stash` / `git tag` / `git push --tags` / `/commit` 之前，MUST 先讀 [[commit.detail]]**——沒讀到就等於沒有 gate 清單、沒有 `--only` 紀律、沒有 recovery 流程。
 
 | 搬走的段 | 去 [[commit.detail]] 的 § |
 | --- | --- |
@@ -32,6 +32,28 @@ Local edits will be reverted by the next sync.
 | 禁止事項（`--amend` / `--no-verify` / doctor 等） | § 禁止事項 |
 | Stash 自動處置 gate | § Stash 自動處置 gate |
 | 例外（極少）、Commit 分組與訊息規範、搭配 | § 例外（極少）起 |
+
+## pre-commit hook 三條紀律（always-load；hook 是 fleet 預設形態）
+
+三條各綁一個**下指令當下看得到**的 predicate，**每一個**有 `.husky/pre-commit` 的 repo 都適用——
+不是只有「hook 看起來很慢」的那些，也不是只對最後一次 commit。
+
+1. **repo 存在 `.husky/pre-commit` → `git commit` MUST 走 `run_in_background: true`。**
+   前景呼叫被 tool timeout kill 時，index 已 staged 而 commit 沒落地，外觀與「commit 失敗」
+   逐字相同；照那個外觀重跑，是在一個**不同的起始狀態**上再跑一次。**NEVER** 用「這個 repo 的
+   hook 平常很快」略過——快慢是上一次的觀測，`.husky/pre-commit` 存在與否才是這一次的事實。
+
+2. **commit 後 `git status` 出現 `MM` → MUST 先跑 `git diff HEAD -- <path>` 再決定。**
+   輸出為空 = HEAD 已經是對的，只是 index 留著 hook 改寫前的 blob，`git restore --staged <path>`
+   即可；**NEVER** 直接補一個 formatting commit——那會把一個不存在的差異寫進 history。
+
+3. **格式化 MUST 用 repo 自己的 formatter script**（`package.json` 的 `format` / `fmt` script，
+   或該 repo 文件指名的那一支）。判準是「這個 repo 用哪一支」，**NEVER** 是「我慣用哪一支」：
+   對 oxfmt repo 跑別的 formatter 會產生風格互斥（單引號無分號 ↔ 雙引號加分號），每次 commit 後
+   hook 都把工作區改回去，看起來像 hook 壞掉。
+
+> 成因與 <consumer-a> 實測（hook > 2 分鐘、被 tool timeout kill）見
+> [[pitfall-pre-commit-hook-outlives-tool-timeout-and-rewrites-staged-files]]。
 
 ## 禁止事項 — WIP 處置禁令（嚴格；always-load，NEVER 下推）
 

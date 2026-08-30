@@ -449,13 +449,13 @@ user 看得到那個 pane，接手 agent 可以用 `AskUserQuestion` 讓 user �
 | --- | --- | --- |
 | 沒有要派的工作，只需登記未完項 | `/handoff park` | 0 個 pane |
 | 1 件工作，或多件但彼此 **serial**（動同一批檔／有 phase 依賴／共享 mutex 資源） | `/handoff relay` | 1 個 successor，繼承整個位置 |
-| N ≥ 2 件工作，四條 parallel rubric **全成立**（檔案不重疊、無 phase 依賴、無共享 mutex、可獨立驗證） | `/handoff fanout` | N 個 worker + 1 個 successor 繼承它們 |
+| N ≥ 2 件工作，四條 parallel rubric **全成立**（檔案不重疊、無 phase 依賴、無共享 mutex、可獨立驗證） | `/handoff fanout` | N 個 worker + 1 個 successor，各自位於獨立 Tab；successor 繼承它們 |
 | 還不知道有幾件——要先跑 health gate／worktree／TD hygiene 盤點 | `/handoff next` | 盤點後落到上面三者之一 |
 
 **NEVER 因為「一件一個 pane 比較整齊」把 serial 工作拆成 N 個 worker**——它們會同時改同一批檔。
 **NEVER** 把 serial 鏈切成「worker 拿前半段、主線自己留後半段」——本表只數 pane，那種切法在這裡不會 fire，判準在 [[agent-routing]] § 派多少。
 **NEVER 因為「合成一份 brief 比較省事」把 N 件真正獨立的工作塞給單一 successor 依序做**——那放棄了
-平行性，而 fanout 的成本只是多一個 pane。
+平行性，而 fanout 的 topology 本來就是每個不同主題各佔一個 Tab。
 
 **任何一個 arg 都不要求本 session 留下來盯著。** 交出去之後本 session 的下一個動作只能是結束回合：
 **NEVER** 續推 brief 裡的工作、**NEVER** 輪詢接手 pane、**NEVER** 讀它的 lifecycle 猜進度、

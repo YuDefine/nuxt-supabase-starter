@@ -67,13 +67,27 @@ archive skill 寫入時用以下格式（每 entry 由 HTML marker 包圍，便�
 - 多條 deferred entry 在同段內並列，順序依 deferred-at 升冪
 - `/handoff` skill Mode B 整理階段 **NEVER** 動此段（由 `/spectra-archive` Resume mode 獨自 maintain）
 
+## `[discuss]` 不進 review-gui（hard rule）
+
+`[discuss]` 與 `(awaiting-user-decision:)` **NEVER** 出現在 PWA inbox，也 **NEVER** 在 GUI 上提供 ✓/⚠。人眼驗收只處理畫面。
+
+| 狀態 | Surface |
+| --- | --- |
+| 商業／prod 授權，packet 已備妥（`(awaiting-user-decision:)`） | work-loop `awaiting[]` + AskUserQuestion（attended）／Packaging SOP（unattended）。`\my` 看得到。 |
+| archive 當下還未勾的 `[discuss]` | spectra-archive Step 2.5 walkthrough（本檔上方） |
+| External signal pending | Defer-to-HANDOFF（本檔上方），不是 inbox |
+
+2026-07-30 曾為了「bucket 沒有 GUI exit」把 confirmation gate 打開；2026-08-25 Charles 在 dual-track #6 否決：人看不懂要驗什麼，badge 寫 `discuss` 沒有畫面可點。Exit 改回對話。
+
+`itemBelongsOnReviewInbox` 對 `isAwaitingUserDecision` 與 `kinds.includes('discuss')` 回 false。`manualReviewItemRequiresUserConfirmation` 同。
+
 ## 混合 kind change
 
 一個 change 同時含未勾 `[verify:*]` + `[discuss]` + `[review:ui]` items 時，**MUST** 依以下順序執行（早→晚，讓 user 拿到的 review GUI 內容最完整）：
 
 1. **apply 階段** — Step 8a Verify Channel Pass：主線依 `e2e → api → ui` 跑 verify channels，寫 `(verified-e2e:)` / `(verified-api:)` / `(verified-ui:)` annotations；automatic-only items 由 helper 自動勾 `[x]`
-2. **archive 階段 Step 2.5** — Discuss Items Walkthrough：Claude 主動準備 `[discuss]` evidence、與 user 討論
-3. **archive 階段 review GUI** — `pnpm review:ui` 一次處理所有未勾 `[review:ui]` + `[verify:ui]` items（user 在 GUI 看 evidence/screenshot 點 OK / Issue / Skip）
+2. **Discuss** — 能現在拍板的（packet 已備妥／internal evidence 齊）走 work-loop `awaiting[]`；其餘等 archive Step 2.5 walkthrough。**NEVER** 塞進 review-gui
+3. **archive 階段 review GUI** — 只處理未勾 `[review:ui]`（以及 TD-658 範圍內、人要點 OK 的 `[verify:ui]`）。User 在 GUI 看 evidence/screenshot 點 OK / Issue / Skip
 
 spectra orchestrator Archive Flow Step 1 已內建這個分流邏輯。
 
@@ -120,5 +134,5 @@ review:ui (round N+1, FINAL) — user 對既有 + 新增 verify item 一次性�
 - `archive-commit-order`（AGENTS.md「Spectra Change 收尾：先 archive 再 /commit」段，source `claude-md/core-snippets/archive-commit-order.md`）— 收尾順序唯一真相：先 archive 再單一 commit；本 § sequence 對齊此
 - [[worktree-default]] §5 — worktree v3 atomic landing：`/spectra-archive` Step 0 merge-back → user 在 main `/commit`
 - [[proactive-skills.ingest-triggers]] § review:ui 觸發 ingest 的後續順序
-- `plugins/hub-core/skills/spectra-ingest/SKILL.md` Step 9 Summary
-- `plugins/hub-core/skills/spectra-apply/SKILL.md` 末段「apply 完成後 review:ui」
+- `plugins/hub-capabilities-openspec/skills/spectra-ingest/SKILL.md` Step 9 Summary
+- `plugins/hub-capabilities-openspec/skills/spectra-apply/SKILL.md` 末段「apply 完成後 review:ui」

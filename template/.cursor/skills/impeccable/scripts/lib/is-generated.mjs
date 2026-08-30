@@ -14,17 +14,17 @@
  *      within the first ~300 characters — catches non-git projects.
  */
 
-import { execSync } from 'node:child_process'
-import fs from 'node:fs'
-import path from 'node:path'
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 
-const HEADER_SCAN_BYTES = 300
+const HEADER_SCAN_BYTES = 300;
 const HEADER_MARKERS = [
   /@generated\b/i,
   /\bGENERATED\s+FILE\b/,
   /\bAUTO-?GENERATED\b/i,
   /\bDO\s+NOT\s+EDIT\b/i,
-]
+];
 
 /**
  * @param {string} filePath - absolute or cwd-relative path
@@ -32,43 +32,42 @@ const HEADER_MARKERS = [
  * @param {string} [options.cwd] - project root (defaults to process.cwd())
  */
 export function isGeneratedFile(filePath, options = {}) {
-  const cwd = options.cwd || process.cwd()
-  const absPath = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath)
+  const cwd = options.cwd || process.cwd();
+  const absPath = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
 
-  if (isGitIgnored(absPath, cwd)) return true
-  if (hasGeneratedHeader(absPath)) return true
-  return false
+  if (isGitIgnored(absPath, cwd)) return true;
+  if (hasGeneratedHeader(absPath)) return true;
+  return false;
 }
 
 function isGitIgnored(absPath, cwd) {
   try {
-    execSync(`git check-ignore --quiet ${JSON.stringify(absPath)}`, {
+    // argv form, never a shell: this runs on every file the live-mode source
+    // walk reaches, so a hostile filename embedding $(...) or backticks must
+    // not be interpretable (issue #476). JSON.stringify is not shell quoting.
+    execFileSync('git', ['check-ignore', '--quiet', absPath], {
       cwd,
       stdio: 'ignore',
-    })
-    return true // exit 0 = ignored
+    });
+    return true; // exit 0 = ignored
   } catch (err) {
     // Exit code 1 = not ignored. Exit code 128 = not a git repo or other error.
     // In both cases, treat as "not known to be ignored."
-    return false
+    return false;
   }
 }
 
 function hasGeneratedHeader(absPath) {
-  let fd
+  let fd;
   try {
-    fd = fs.openSync(absPath, 'r')
-    const buf = Buffer.alloc(HEADER_SCAN_BYTES)
-    const bytesRead = fs.readSync(fd, buf, 0, HEADER_SCAN_BYTES, 0)
-    const head = buf.slice(0, bytesRead).toString('utf-8')
-    return HEADER_MARKERS.some((re) => re.test(head))
+    fd = fs.openSync(absPath, 'r');
+    const buf = Buffer.alloc(HEADER_SCAN_BYTES);
+    const bytesRead = fs.readSync(fd, buf, 0, HEADER_SCAN_BYTES, 0);
+    const head = buf.slice(0, bytesRead).toString('utf-8');
+    return HEADER_MARKERS.some((re) => re.test(head));
   } catch {
-    return false
+    return false;
   } finally {
-    if (fd !== undefined) {
-      try {
-        fs.closeSync(fd)
-      } catch {}
-    }
+    if (fd !== undefined) { try { fs.closeSync(fd); } catch {} }
   }
 }

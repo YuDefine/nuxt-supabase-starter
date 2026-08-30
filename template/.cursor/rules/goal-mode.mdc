@@ -84,7 +84,7 @@ work-loop 的無人值守模式（`--unattended` / runner）一律 dispatch、NE
 切換動作：
 
 1. **立即停手**，**NEVER** 再下任何 tool call 嘗試「再推一下看看」
-2. 向 user 明確說：「Goal #X #Y 是 user-bound，agent 無法達成，建議現在跑 `/handoff` 把剩餘工作登記到 HANDOFF.md」
+2. 向 user 明確說：「Goal #X #Y 是 user-bound，agent 無法達成，建議現在跑 `/handoff` 把剩餘工作交出去」——`/handoff` 自己判 relay / fanout / park，**NEVER** 預先把它講成「登記到 HANDOFF.md」：混在裡面的 agent 做得完的殘項會被那句話一起 park 掉
 3. 跑 `/handoff` skill 把未完項升級到 `HANDOFF.md` / `docs/tech-debt.md` / `openspec/changes/`
 4. 由 user 決定是否關掉 /goal 模式
 
@@ -94,7 +94,7 @@ work-loop 的無人值守模式（`--unattended` / runner）一律 dispatch、NE
 ⏺ Agent 端 #3/#4 達成。#1（archive）#2（TD-061 commit）需 user 親跑 dev server
    驗證 + 親自 commit，agent 不能達成。
 
-   偵測到 /goal 卡關。建議現在跑 /handoff 把 #1 #2 登記到 HANDOFF.md，
+   偵測到 /goal 卡關。建議現在跑 /handoff 把 #1 #2 交出去（它會判 relay / fanout / park），
    並關閉 /goal 模式。我直接幫你跑 /handoff？
 ```
 

@@ -1,0 +1,291 @@
+---
+description: "寫一條「要 Charles 拍板／驗收」的登記簿條目時，那條 bullet 要長成什麼形狀——區段 heading 的語義與分桶、拍板題的選項寫法、Ready for review 的三欄契約、🟡/✅ 標記；編輯 HANDOFF.md / docs/tech-debt.md / work-loop state 時 path-scoped 載入"
+globs: ["HANDOFF.md", "packages/*/HANDOFF.md", "docs/tech-debt.md", "packages/*/docs/tech-debt.md", ".clade/work-loop/state.json"]
+alwaysApply: false
+---
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/core/decision-authoring.md
+Edit at: $CLADE_HOME
+Local edits will be reverted by the next sync.
+-->
+
+
+# 待拍板條目的寫法
+
+**這一份是寫的人讀的。** 讀的人那一份是 [[review-gui-surface]] § `\my` 的四個檔案來源——
+它規範掃描器與頁面，本檔規範**被掃的那條 bullet**。選項的 canonical 形狀以本檔為準，
+[[review-gui-surface]] MUST 4 指過來。
+
+你寫進 `HANDOFF.md` / `docs/tech-debt.md` 的一條待拍板 bullet，60 秒內會被
+`vendor/scripts/flow/decision-sources.ts` 掃進 spine，出現在 `https://review-gui.<maintainer-domain>/decisions`
+和 `\my` 兩個畫面上。Charles 多半在手機上讀它。**寫的人與答的人不是同一個人，中間隔著一個
+解析器**——本檔存在的唯一理由是讓這三方對同一條 bullet 的理解一致。
+
+## 拍板題的形狀（正向契約）
+
+一條要 Charles 拍板的 bullet **是**這四個部件，照這個順序：
+
+```markdown
+- 🔴 **一句話問句** —— 為什麼需要你拍板（一句）
+  - **A（推薦）第一案** —— 這樣做會怎樣
+  - **B 第二案** —— 這樣做會怎樣
+  - **C 第三案** —— 這樣做會怎樣
+```
+
+| 部件 | 契約 |
+| --- | --- |
+| 問句 | 第一段 `**粗體**`。`source_id` 由它導出，所以**改寫它 = 換一題**（見下方 § 改寫與重問） |
+| 選項 | 2–4 條，**MUST 從 A 起連續**，推薦的排第一並標「（推薦）」 |
+| 每條選項 | 一句「這樣做會怎樣」，不是名詞短語 |
+| 縮排 | 選項是問句的 sibling bullets，彼此相鄰、同縮排 |
+
+**沒有選項的拍板題 MUST 改寫成「這題要給值」並逐項列出要填什麼**，兩者都不成立就不要放進
+待拍板區段。三者皆非的條目會以一個空白輸入框出現在手機上，看起來像可以回答，實際上不能。
+
+### 選項行的兩種粗體寫法都可以
+
+```markdown
+  - **A**（推薦）—— 收進 rules/core/     ← 粗體只包字母
+  - **A（推薦）收進 rules/core/**        ← 粗體包整段
+```
+
+兩種都解析得到。2026-08-27 之前只認第一種，而 fleet 幾乎只寫第二種——這是**解析器**遷就
+寫法，不是寫法遷就解析器。
+
+**這不代表「怎麼寫都行」**。以下每一種都解析不到，靜默退化成自由填答：
+
+| 寫法 | 為什麼收不到 |
+| --- | --- |
+| `或者可以 X，也可以 Y` | 散文。**NEVER** 從散文猜選項——猜錯的選項被點下去就是一個沒人想要的答案被落檔 |
+| `- **A 這樣做**` / `- **D 那樣做**` | 字母不連續。整組丟棄，**不會**只收兩條——兩條未知 N 的選項是沒人被問過的選擇題 |
+| `- **A 只有這條**` | 一條不是選擇題 |
+| A 在段落開頭、B 在六段之後 | 選項是相鄰的 sibling bullets，隔太遠的兩個粗體字母是散文 |
+| `- **A 方案已採用**` / `- **B 案已否決**` | 在敘述已經決定的事。待拍板區段裡 **NEVER** 放已拍板的紀錄 |
+
+## 區段 heading 與分桶
+
+掃描器用 heading 決定這條 bullet 落到 `\my` 的哪一桶。**MUST** 用下列語義，**NEVER** 自創同義詞：
+
+| heading 語義 | 桶 | 什麼進得去 |
+| --- | --- | --- |
+| `Awaiting Charles`（球在 Charles 手上） | `ruling` | 要拍板的選擇題，或要給值的題 |
+| `Ready for review`（做完了，等看一眼） | `review` | 已完成、等驗收的工作。**MUST 帶三欄**，見下節 |
+| `需要 Charles 執行` | `human-action` | 只有人做得到、而**終點不是一句回覆**的動作（實體硬體、線上帳號、密鑰輪替） |
+| loop 結構性推不動 | `loop-structural` | agent 反覆撞同一堵牆，要人改結構 |
+| **跨 repo** | **不進佇列** | 見下 |
+| **`Blocked`** | **不進佇列** | 見下 |
+
+**分桶的軸只有一條：這一列怎麼離開佇列。** NEVER 是重要性、也 NEVER 是可逆性。
+
+- 被**一句短回覆**結掉 → `ruling` / `review`（編 `Qn`、給輸入框）
+- 被**別處的一個動作**結掉 → `human-action`（給動作行，不給編號）
+- 被**結構改動**結掉 → `loop-structural`
+
+「可回答」是這條軸的**衍生屬性**（`ANSWERABLE`），**NEVER** 是第二條正交的軸——把它讀成正交
+會讓下一個加 category 的人去做一個 2×2 矩陣，而那個矩陣有兩格是空的。`human-action` 這個名字 2026-08-28 取代 `irreversible`——
+舊名描述的是 heading 規則而不是讀的人要做什麼。spine 是 append-only，舊 span 上的 `irreversible`
+由 `bucketOf` 在渲染時摺進 `human-action`，**NEVER** 改寫既有 span 的 `category`。
+
+**跨 repo 與 `Blocked` 兩個區段 NEVER 進佇列。** 跨 repo 2026-08-27 起回 `null`：那裡的條目是
+「本 repo 不修 / 已移交」的紀錄，沒有裁決可下（實測一次進了 15 題）。`Blocked` 2026-08-28 起
+同樣回 `null`，理由同型——它敘述的是**工作為什麼停住**，球依 fleet 自己的慣例不在讀者手上；
+實測 15 列有 9 列來自它，**零列寫得出 Charles 的動作**。
+
+**NEVER 把 `Blocked` 重新收進來，也 NEVER 改用區段內文的關鍵字啟發式。** 真的要人動手時，
+fleet 已經有明確的家：`Awaiting Charles`（拍板）、`Ready for review`（驗收）、
+tech-debt 的 `### 需要 Charles`、tasks 的 `deferred-user-only`。寫進那四個之一，不要寫在 `Blocked`
+底下期待有人看到。
+
+## `Ready for review` 的三欄（正向契約）
+
+**每一個** consumer 的 **每一條** `Ready for review` 條目，**MUST** 在它自己的 bullet 底下帶滿
+這三行——不是「盡量」、不是「重要的那幾條」、不是「等有空補」：
+
+```markdown
+- [ ] **<change 名或一句標題>**
+  - 改了什麼: <一句，講行為不是講檔名>
+  - 證據: <可點的東西——preview URL / commit hash / repo 相對路徑>
+  - 退回會怎樣: <一句，講退回的代價>
+```
+
+**分不出 `review` 還是 `human-action` 時，問這一題：證據能不能被壓成「30 秒可開的東西」。**
+能（preview URL / commit / 一段輸出）→ `review`。不能——要人手、要實體裝置、要只有你有的帳號
+——→ `human-action`。<consumer-a> 的 LINE 手機真機驗收是後者：它的終點是「你拿手機做一件事」，verdict
+只是副產物，寫進 `Ready for review` 會永遠掛 `missing-evidence` 而無限退回（手機握在手上這件事
+沒辦法變成可點證據）。
+
+三欄各自回答驗收的人在回覆之前一定要先答的一個問題：**我在不在乎**（改了什麼）、**我三十秒內
+看得完嗎**（證據）、**我說不的代價是什麼**（退回會怎樣）。缺任一欄這條就驗不了，所以
+**NEVER** 放寬成「三選一」或「有寫就好」。
+
+**證據 NEVER 寫「見 HANDOFF」、change 名字、或任何要對方再跳一次的指標。** 那正是這條契約要
+刪掉的成本：2026-08-28 實測，佇列上 7 條 ready-for-review 全部只有標題與一個 carrier 路徑，
+每條都要人自己去開 repo、找 change、跑起來，於是每條都躺了 10.8–16.6 小時沒人動。
+
+三欄沒寫齊的條目**照樣進佇列**，但會掛上 `missing-evidence` 並由掃描端自動退回給你補件。
+**這是刻意的**：擋在佇列外會讓做完的工作徹底隱形——你不會發現自己少填，Charles 不會知道有東西
+在等——比一條躺著的列更糟。
+
+> 這一節之前不存在，而上面那張表當時寫著 `Ready for review` → `ruling`（可回答），
+> `categoryOfHeading()` 實際回的卻是 `irreversible`（每個渲染端都印「這條是狀態不是問題」）。
+> 規約承諾可回答、實作交付不可回答，兩邊各自自洽了好幾個月。**改分桶語義時 MUST 同時改這張表
+> 與 `categoryOfHeading()`**——它們是同一件事的兩半，只改一半不會有任何東西報錯。
+
+## 「通過」有兩種，NEVER 讓佇列那一種代替另一種
+
+同一條 change 有兩個各自獨立的通過，它們的**終點不同**：
+
+| 哪一種 | 誰記錄 | 一句「通過」結掉的是什麼 |
+| --- | --- | --- |
+| 佇列的 `Ready for review` → `通過` | spine 上的 span，答完那條就離開 `\my` / `/decisions` | **方向 OK、可以進 review inbox** |
+| `tasks.md` 的 `[review:ui]` checkbox | 那個 checkbox 自己，經 /review inbox 寫回 | **人真的在瀏覽器把那一頁開起來看過了** |
+
+**答佇列 NEVER 等於驗收。** 2026-08-29 <consumer-a> 實測：四條 ready-for-review 全部已被答
+「A. 通過」（span `c99f0d2acd529afc` / `07635ab2db246bc5` / `8bef7118645c7121` /
+`5ad93c75982be99c`），而 `retire-legacy-employee-route-cluster` 的 9 項 `[review:ui]`
+（`#1 /my/clock` 到 `#9 /my/salary`）一項都沒勾。答完那條就從佇列消失，9 項留在
+`tasks.md`，**沒有任何畫面會再提醒任何人**——真正 user-only 的驗收工作靜默消失了。
+
+所以寫 `Ready for review` 條目時：**條目指向的 change 若還有沒勾的 `[review:ui]`，那條
+NEVER 是佇列的題。** 掃描端會偵測到並掛 `belongs-on-review`，且**不**替它合成 通過／退回
+——一鍵通過正是讓瀏覽器驗收靜默消失的那個按鈕。條目照樣留在佇列（**NEVER** 擋掉：擋在
+佇列外會讓做完的工作徹底隱形，同上一節的理由），但它渲染成沒有選項的條目，lint 說明那條
+的 verdict 在哪裡。
+
+**偵測讀的是 checkbox，NEVER 是散文。** 舊版只認「條目本文同時出現『人工檢查』四個字 ＋
+change 名字」——那問的是**作者有沒有打那三個字**，而上面四條全部沒打、全部逃掉。判準
+MUST 是 `openspec/changes/<name>/tasks.md` 裡還有幾項未勾的 `[review:ui]`：那是「這件事
+驗了沒」本身，不是它的代理。判定器 `changesWithOpenManualReview()`
+（`vendor/scripts/flow/decision-sources.ts`）。
+
+**NEVER 把未勾的 `[review:ui]` 各開一條進佇列。** 一條 change 的 17 項瀏覽器驗收是**一趟**
+差事，拆成 17 列就是 17 則推播問同一件事——同 `scanTasks` 對 deferred 子步驟已經寫明的理由。
+它們的家是 /review inbox，不是這裡。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 條目指向的 live change 有 ≥1 項未勾 `[review:ui]` → `belongs-on-review` lint ＋ 不合成 通過／退回。**warn-only，不 block** |
+| 消費端 | 寫該條目的 agent（看到 lint 就把它移回 /review 流程）＋ `/decisions` 與 `flow pending` 上的 Charles（看到沒有通過鍵就知道要去 /review 逐條驗） |
+| 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`） |
+
+## 🟡 / ✅ 標記
+
+`- 🔴` / `- 🟡` 是「還沒解決」；`- ✅` 與 `- [x]` 是已完結，掃描器跳過。**答案落檔不會刪掉來源
+bullet**（`answer.ts` 是 append），所以**答完之後 MUST 自己把那條標成完結**，否則它會一直留在
+檔案裡——它不會被重問（`source_id` 已記錄答過），但下一個讀這份檔的人分不出來。
+
+## 新問題優先走 `flow ask`
+
+要問的題**現在**就成形時，直接開 span，不必等 60 秒掃描：
+
+```bash
+node vendor/scripts/flow/flow.ts ask \
+  --question '<問句>' \
+  --option 'A（推薦）第一案 —— 這樣做會怎樣' \
+  --option 'B 第二案 —— 這樣做會怎樣' \
+  --recommended 'A（推薦）第一案 —— 這樣做會怎樣' \
+  --carrier HANDOFF.md
+```
+
+問句走 `--question`（**不是** positional），選項走可重複的 `--option`（一條一個旗標，選項本文
+含逗號是常態）。字母前綴與「（推薦）」由寫入端剝掉，卡片依索引自己編號。
+
+檔案來源是給「本來就要寫進登記簿」的題用的。兩條路徑寫進的是同一個佇列。
+
+### 從 dispatch 出去的 pane 走 `--complete blocked`
+
+pane 裡問的題不經這支 CLI，走的是 completion handshake，選項一樣 MUST 走旗標：
+
+```bash
+node vendor/scripts/herdr-session-handoff.ts --complete blocked \
+  --summary '<目前狀態>' \
+  --decision '<只問一個具體問題>' \
+  --decision-option 'A …' --decision-option 'B …' \
+  [--decision-recommended 'A …']
+```
+
+### NEVER 把選項寫進問句本文
+
+`要留哪一個？(A) 留 X (B) 停 Y` 這種寫法，`options` 是空的——`/decisions` 依 `options` 決定畫
+按鈕還是空白輸入框，於是那題在手機上退化成自由填答，答的人得自己把字母打回去，落檔紀錄也
+對不回是哪一個字母。兩個入口都會擋（問句本文有「從 A 起連續」的字母、卻沒帶任何選項時直接
+拒絕）；擋不到的變體同樣禁止——**選項的載體是旗標，不是句子**。
+
+> 2026-08-27 <consumer-a> 實測：一題 A/B 的 dep-upgrade 爭用題以空白輸入框出現在手機上。成因不是
+> 寫的人偷懶——當時 `--complete blocked` **根本沒有**帶選項的通道，而本節的 `flow ask` 範例寫的是
+> 一個 CLI 不接受的形狀（positional 問句 ＋ 未宣告的 `--option`），照抄會靜默掉光選項。
+
+### NEVER 把該協調的事開成拍板題
+
+「哪個 session／pane／worktree 該留下」「誰先 commit」這類題**球在 agent 手上**，不是裁決。
+MUST 先跑 [[session-tasks]] § 並行爭用 的 Step 0 判出持有者，再對那個 pane 送一則
+`herdr agent prompt` 問它還要多久 land／要不要合併。談過之後仍談不攏的那一題才進佇列，且
+問句 MUST 寫明已探測、對方怎麼回。
+
+### NEVER 把 live change 的 `## 人工檢查` 寫成登記簿條目
+
+逐條看證據、勾 `[x]`、寫 `[issue]` 退回，是 **`/review` 的職責**——它有 preview 入口、evidence
+檢視、以及寫回 `tasks.md` 的能力，`/decisions` 三樣都沒有。所以 `HANDOFF.md` /
+`docs/tech-debt.md` 的條目 **NEVER** 承載「去把 `<change>` 的 `## 人工檢查` 逐條確認」。
+
+那條 bullet 只會在兩種狀態下被寫出來，兩種的處置都不是留在登記簿上：
+
+| 那個 change 現在的 bucket | 這條 bullet 是什麼 | MUST |
+| --- | --- | --- |
+| `changeBelongsOnReviewInbox` 回 **true**（票已經在 `/review` 上） | 重複——同一個勾由兩個畫面各要一次 | 刪掉這條 bullet |
+| 回 **false**（`readyForEvidence` / `applyInProgress` 這類 **Claude 球**的桶） | 繞道——票進不了 inbox，於是改用登記簿叫人做 | 補齊缺的 evidence 讓它進 inbox，**再**刪掉這條 |
+
+**判之前 MUST 實跑**，NEVER 從「我記得它已經做完了」推斷：
+
+```bash
+cd ~/offline/clade && node --input-type=module -e "
+const m = await import('./vendor/scripts/review-gui.ts')
+for (const c of await m.listPendingChanges('<repo>'))
+  console.log(c.name, c.bucket, JSON.stringify(c.evidenceMissing?.map(e => e.itemId)))
+"
+```
+
+**NEVER 代勾 `## 人工檢查` 的 checkbox 讓這條消失**——沒有人確認的 `[x]` 一律是 false-green
+（per `agent-self-verification` MUST 8）。那是唯一比繞道更糟的收法：繞道至少還看得見。
+
+**已封存的 change 不在此列。** `openspec/changes/archive/**` 的 `## 人工檢查` 在 `/review` 上
+沒有 surface，它進 `/decisions` 是正確路由——那條路由由 `tasks.md` 上的 `(deferred-user-only:)`
+標記承載（見 [[review-gui-surface]]），**NEVER** 改用登記簿 bullet 去補一條它漏掉的。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 條目文字同時含 `人工檢查` 與某個 **live** change 的目錄名 → `belongs-on-review` lint ＋ `decision-sync` 自動退回給作者。**warn-only，不 block**——擋在佇列外會讓繞道變隱形，比一條掛著 lint 的列更糟（同 `missing-evidence` 的理由） |
+| 消費端 | 寫該條目的 agent（收自動退回，照上表處置）＋ `/decisions` 與 `flow pending` 上的 Charles（看到 `✎ 這條把 live change 的 ## 人工檢查 寫成 HANDOFF 條目` 可以跳過不讀） |
+| 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`——寫那條 bullet 正是在編輯這兩個檔） |
+
+> 2026-08-28 成因：<consumer-j> 的 `product-save-hardening` 四條 `## 人工檢查` 都宣告
+> `[verify:api+ui]`，實際每條只寫了一種 evidence，於是 change 停在 `readyForEvidence`
+> （`changeBelongsOnReviewInbox` 回 false，那是**Claude 球**的桶，刻意不畫進 inbox）。
+> 作者拿不到 `/review` 的票，就把「五條逐項確認」寫成 `## 需要 Charles 執行` 的 bullet——
+> 於是它以「要我動手」出現在 `/decisions`，而 Charles 在那裡連要看什麼都打不開。
+> **繞道的成因不是不懂分工，是 `/review` 收不進來**，所以本節的第二列要求先補 evidence、
+> 而不是只要求刪 bullet。
+
+## 改寫與重問
+
+`source_id` 由 identity（檔案 + 問句）導出，**不由內容**。因此：
+
+- **改寫說明、補一段 context、調整選項文字 → 同一題**，不會重問，佇列上那題的選項會在下一次
+  掃描就地更新（`decision-sync.ts` 的 amend）
+- **改寫問句本身 → 換一題**：舊的撤回、新的重開。要重問就改問句；**NEVER** 為了讓它重新出現
+  而刪掉再貼回——刪掉那一刻它會被記成 `retracted`（來源消失），不是被裁決
+
+## 編輯既有不合格條目時 MUST 順手轉正
+
+**每一次**編輯一條已經在待拍板區段、但不符本檔形狀的 bullet 時，都 MUST 一併把它改成合格形狀，
+不是只改你本來要改的那一部分。這條對**每一條**這樣的 bullet 生效，不是只有你正在處理的那一條。
+
+`/decisions` 卡片與 `\my` 輸出會對這類條目印一行 `✎ 來源檔有幾行差一點就是選項`——那一行的
+收件人就是下一個編輯該檔的 agent，也就是你。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | item 落 ruling 桶且無選項（`no-options-under-ruling`）、body 含差一點就解析成功的行（`near-miss-option-line`），或 item 落 review 桶而三欄沒寫齊 / 證據不可點（`missing-evidence`）。**三者都 warn-only，不 block**——HANDOFF 是高頻活文件，把寫法卡在寫入路徑上換到的是一個 bypass flag，不是更好的 bullet。`missing-evidence` 另外由掃描端自動 `requestClarification` 退回給 agent 補件（`EVIDENCE_REQUEST_TEXT`），球當場換手，不必等人在手機上看到 |
+| 消費端 | `/decisions` 卡片（答題的 Charles）＋ `flow pending` 輸出（下一個編輯該檔的 agent） |
+| 載入路徑 | 本檔，paths-gated 到 `HANDOFF.md` / `docs/tech-debt.md` / work-loop state——也就是寫這種條目的當下 |

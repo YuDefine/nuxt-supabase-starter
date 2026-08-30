@@ -74,3 +74,69 @@ diff "$TYPES_BEFORE" "$TYPES"
 有差異 → **停止 commit**，提示使用者依差異建立對應 migration 或還原 `$TYPES`。
 
 > **遠端 LXC 模式注意**：`pnpm db:types` 通常**直接寫入** `$TYPES` 不輸出 stdout，所以**不能**用 `> "$TYPES_BEFORE"` 重導向取值（一定要先 `cp` 備份再 `pnpm db:reset`）。
+
+## Step 1.4 — SQL lint（hard block）
+
+**無條件跑**。Step 1.3 的 reset 剛把 DB 刷到「migrations 全部重放一次」的狀態，這是 lint 唯一
+量得準的時刻——觸發判定、SSH 連線、reset 三樣成本都已經付掉，這一步的邊際成本接近零。
+
+```bash
+if node -e "process.exit(require('./package.json').scripts?.['db:lint'] ? 0 : 1)" 2>/dev/null; then
+  pnpm db:lint
+else
+  supabase db lint --level warning --local
+fi
+```
+
+**輸出非空 → 停止 commit。** `--level warning` 是零容忍門檻，**不分級**：分級需要維護一份
+「已知可忽略」baseline 清單，那是會跟現實漂開的第二份平行文件。
+
+**NEVER** 以「這條 warning 不是本次 diff 引入」「是既有 debt」為由放行——比照 0-C 的 doctor
+紀律，gate 不區分新舊。既有 warning 的一次性清理屬 consumer 落地工作，清完之後這條 gate 對
+日常 commit 就是靜默通過。
+
+### 缺 `db:lint` script → block（比照 0-E 的 `@evlog/cli` 必裝）
+
+`package.json` 沒有 `db:lint` 且 `supabase db lint` 不可用（self-hosted 專案本機不能直連）時，
+印下列訊息、釋放 commit-lock（`node .claude/scripts/commit-lock.mjs release`）並 STOP：
+
+```text
+⛔ Step 1.4 失敗 — db:lint 未接線
+
+這個 repo 有 supabase/migrations/ 但沒有 db:lint script，SQL 層完全沒有檢測。
+
+安裝步驟：
+  1. 複製 ~/offline/clade/vendor/snippets/supabase-ci/db-lint.sh.template 到 scripts/
+  2. 在 package.json scripts 加入：
+       "db:lint": "bash ./scripts/db-lint.sh"
+  3. 重跑 /commit
+
+詳見 vendor/snippets/supabase-ci/README.md
+```
+
+**NEVER** 因為「這個 repo 一直沒有 lint 也沒出事」就跳過本 gate 繼續跑 Step 2。
+
+## Step 1.5 — advisors（advisory，但輸出 MUST 讀）
+
+```bash
+supabase db advisors --local 2>/dev/null || echo "SKIP: CLI < v2.81.3，改用 MCP get_advisors"
+```
+
+**這一步 exit code 不擋 commit**——`supabase db advisors` 沒有文件化的輸出契約與 exit code 語義，
+做成 hard gate 會 flaky，而 flaky gate 的下場是被繞過，比 advisory 更糟。CLI 版本不足時退到 MCP
+`get_advisors`；兩者都不可用就印一行說明繼續，**不擋**。
+
+**但輸出 MUST 讀，且義務是逐條的**：
+
+- **每一條** security 類 finding（RLS disabled、policy exists but RLS disabled、security definer
+  view、auth.users 暴露、function search_path 未設等）**MUST** 在本次 commit 當場修掉，或在
+  `docs/tech-debt.md` 登一條 entry 並在完成報告寫明編號。**兩者都沒有就不准進 Step 2。**
+- **performance 類 finding**（unindexed FK、unused index、auth_rls_initplan、multiple permissive
+  policies）純參考，不強制處置。
+
+**「每一條」是字面意思，不是「處理最嚴重的那條」也不是「處理本次 diff 相關的那條」。**
+advisors 回 5 條 security finding 就要 5 條都有著落（修掉或登 TD），**NEVER** 修一條就往下走。
+
+> 為什麼不把 advisors 交給 Dashboard：官方文件把 advisors 定位成 Dashboard 巡檢面板，那個擺法的
+> 前提是 hosted 專案——self-hosted Studio 沒有這兩個面板，照抄官方等於這個訊號沒有任何消費端。
+> 本步驟的消費端就是**正在跑 `/commit` 的 agent**。

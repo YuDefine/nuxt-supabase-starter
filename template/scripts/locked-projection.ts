@@ -1,4 +1,3 @@
-// 🔒 LOCKED — managed by clade · Source: vendor/scripts/locked-projection.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/locked-projection.ts
 /**
  * locked-projection.ts — canonical regex for clade-managed projection paths.
  *
@@ -14,13 +13,16 @@
  * Categories covered:
  *   - Rule / skill / command / agent / hook / scripts injected via sync-rules
  *     into `.claude/<dir>/`
- *   - Derived agent projections at `.agents/`, `.codex/`
+ *   - Derived agent projections at `.agents/`, `.codex/`，以及 Cursor
+ *     projector dest（`.cursor/{rules,commands,agents,skills,hooks,scripts}/` +
+ *     三個頂層 JSON）。**不是**整棵 `.cursor/`——plugins / projects / plans 等是
+ *     Cursor 自管，手寫 rule 靠 `isLockedProjectionPathFor` 讀 banner。
  *   - Plumbing JSON: `.claude/hub.json`, `.claude/.hub-state.json`,
  *     `.claude/sync-to-codex.config.json`
  *   - Improvement-loop infra: `.clade/bin/`, `.clade/signals/`, `.clade/vendor/`
  *   - Vendored scripts at `scripts/` (wt-helper, claim-helper, stash-reconcile,
  *     review-gui, audit-test-scripts, handoff-drift-scan, wip-dirty,
- *     git-merge-clade-regenerate, spectra-archive-sidecar, dev-singleton)
+ *     git-merge-clade-regenerate, spectra-target-guard, spectra-archive-sidecar, dev-singleton)
  *   - Recursive vendored script trees: `scripts/spectra-advanced/`,
  *     `scripts/pre-commit/`, `scripts/pre-push/`
  *   - Snippets / shared presets: `vendor/snippets/`, `vendor/oxc-shared/`
@@ -41,8 +43,20 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+
+const LOCKED_BANNER_SIGNATURE = '🔒 LOCKED — managed by clade'
+
+/** Cursor CLI 自管目錄 — sync-to-cursor 的 CURSOR_OWNED_USER_ENTRIES，不得當投影。 */
+const CURSOR_OWNED_USER_RE =
+  /^\.cursor\/(plugins|projects|skills-cursor|subagents|plans|sandbox-policies)(\/|$)/
+
+/** JSON 注不了 banner；project-level 由 sync-to-cursor 覆寫。 */
+const CURSOR_PROJECTOR_JSON_RE = /^\.cursor\/(hooks|cli|mcp)\.json$/
+
+/** sync-to-cursor 會寫入的目錄（與 CURSOR_MANAGED_ENTRIES 對齊）。 */
+const CURSOR_PROJECTOR_DEST_RE = /^\.cursor\/(rules|commands|agents|skills|hooks|scripts)\//
 
 export const LOCKED_PROJECTION_RE = new RegExp(
   '^(' +
@@ -52,6 +66,10 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // Derived agent projections
       String.raw`\.agents/`,
       String.raw`\.codex/`,
+      // Cursor projector dest only — NEVER `\.cursor/` wholesale（會把
+      // plugins/projects/plans 與手寫 rule 判成 LOCKED，merge-back 吃掉 Cursor WIP）。
+      String.raw`\.cursor/(rules|commands|agents|skills|hooks|scripts)/`,
+      String.raw`\.cursor/(hooks|cli|mcp)\.json$`,
       // Plumbing JSON files
       String.raw`\.claude/(hub\.json|\.hub-state\.json|sync-to-codex\.config\.json)$`,
       // Improvement-loop infra (.clade/)
@@ -61,7 +79,7 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // 自家檔——與 `scripts/lib/` 那種混住的目錄不同，可以整目錄匹配。
       String.raw`\.clade/(bin|signals|vendor|scripts|registry)/`,
       // Vendored script entry points (scripts/)
-      String.raw`scripts/(wt-helper|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|audit-risk-path-coverage|audit-clade-leak|deploy-trigger-check|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|spectra-archive-sidecar|dev-singleton|dev-router|dev-session|db-lease|db-reset-peer-coordination|ownership-journal|shell-safety-check)\.(mjs|mts|ts)$`,
+      String.raw`scripts/(wt-helper|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|audit-risk-path-coverage|audit-clade-leak|deploy-trigger-check|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|spectra-target-guard|spectra-archive-sidecar|dev-singleton|dev-router|dev-session|db-lease|db-reset-peer-coordination|ownership-journal|shell-safety-check)\.(mjs|mts|ts)$`,
       // Heavy-gate 併發閘門（bash helper，非 .mjs/.ts 家族，故單列一條）
       String.raw`scripts/gate-slot\.sh$`,
       // codebase-memory index 的 lock + MemoryMax wrapper（同上，bash helper 單列一條）
@@ -99,7 +117,38 @@ export const LOCKED_PROJECTION_RE = new RegExp(
     ')',
 )
 
-export const isLockedProjectionPath = (p) => LOCKED_PROJECTION_RE.test(p)
+export const isLockedProjectionPath = (p) => {
+  if (CURSOR_OWNED_USER_RE.test(p)) return false
+  return LOCKED_PROJECTION_RE.test(p)
+}
+
+function fileHasLockedBanner(absPath) {
+  try {
+    return readFileSync(absPath, 'utf8').slice(0, 2048).includes(LOCKED_BANNER_SIGNATURE)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 與 sync-to-cursor `removeManagedEntry` 同一所有權：skill 以 SKILL.md banner 代表整棵樹；
+ * 其餘檔看自身 banner；JSON 三檔靠路徑；Cursor 自管目錄永遠不是投影。
+ */
+function isCursorGeneratedProjection(repoRoot, p) {
+  if (CURSOR_OWNED_USER_RE.test(p)) return false
+  if (CURSOR_PROJECTOR_JSON_RE.test(p)) return true
+  if (!CURSOR_PROJECTOR_DEST_RE.test(p)) return false
+
+  const abs = join(repoRoot, p)
+  const parts = p.split('/')
+  if (parts[0] === '.cursor' && parts[1] === 'skills' && parts.length >= 3) {
+    const skillMd = join(repoRoot, '.cursor', 'skills', parts[2], 'SKILL.md')
+    if (existsSync(skillMd)) return fileHasLockedBanner(skillMd)
+  }
+
+  if (!existsSync(abs)) return true
+  return fileHasLockedBanner(abs)
+}
 
 /**
  * clade home 內「看起來像投影、其實是源檔」的路徑（TD-344）。
@@ -127,6 +176,9 @@ const CLADE_OWN_SOURCE_RE = new RegExp(
       String.raw`AGENTS\.md$`,
       String.raw`CLAUDE\.md$`,
       String.raw`commitlint\.config\.ts$`,
+      // clade home 手寫的 Cursor 主線 residency，沒有 LOCKED banner。
+      // `.cursor/` 整目錄在 consumer 是 sync-to-cursor 生成物，但這一檔是源。
+      String.raw`\.cursor/rules/cursor-model-residency\.mdc$`,
     ].join('|') +
     ')',
 )
@@ -176,6 +228,9 @@ export function isCladeSourceRepo(repoRoot) {
  * 交叉檢查）**不該**改用這支——那個問題的答案與 repo 身分無關。
  */
 export function isLockedProjectionPathFor(repoRoot, p) {
+  if (CURSOR_OWNED_USER_RE.test(p)) return false
   if (CLADE_OWN_SOURCE_RE.test(p) && isCladeSourceRepo(repoRoot)) return false
-  return LOCKED_PROJECTION_RE.test(p)
+  if (!LOCKED_PROJECTION_RE.test(p)) return false
+  if (p.startsWith('.cursor/')) return isCursorGeneratedProjection(repoRoot, p)
+  return true
 }

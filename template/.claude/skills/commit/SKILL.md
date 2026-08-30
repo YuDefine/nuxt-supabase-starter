@@ -124,11 +124,11 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 0-A.0 simplify（序跑）
   -> [Fast-path?] YES -> skip 0-A.1/0-A.2，0-B/0-C 並行
                   NO  -> 並行 fan-out:
-                           軸 A: 0-A.1 Codex xhigh（背景）
+                           軸 A: 0-A.1 GPT-5.6-sol via Pi（effort: xhigh），背景
                            軸 B: 0-B screenshot-review（條件觸發）
                            軸 C: 0-C pnpm check（主線 foreground）
                          -> 匯合 -> 0-D -> 0-E -> 0-F -> 條件觸發 0-A.2
-                         -> [累計修正 >50 行 or >5 檔 -> 重跑 Codex xhigh]
+                         -> [累計修正 >50 行 or >5 檔 -> 重跑 GPT-5.6-sol via Pi（effort: xhigh）]
 ```
 
 **啟動順序（在同一個 assistant 回合內完成）**：
@@ -160,7 +160,7 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 每個 gate 的完整執行流程（bash scripts、trigger 條件、fix loop、pi offload）見 [gates.md](gates.md)。執行任一 gate 前 **MUST** 先讀對應 §。
 
-- **0-A 程式碼審查**：simplify（0-A.0，序跑）→ Codex xhigh（0-A.1，背景）→ 條件升 Codex max + Fable code-review max（0-A.2）。詳見 [gates.md](gates.md) § 0-A。
+- **0-A 程式碼審查**：simplify（0-A.0，序跑）→ GPT-5.6-sol via Pi（effort: xhigh；0-A.1，背景）→ 條件升 GPT-5.6-sol via Pi（effort: max）+ Claude Fable 5（effort: max；0-A.2 裁決）。詳見 [gates.md](gates.md) § 0-A。
 - **0-B UI Design Review**：條件觸發（`.vue` template 變更 + 視覺影響）。詳見 [gates.md](gates.md) § 0-B。
 - **0-C CI 等效檢查**：`pnpm check` + `pnpm test` + `pnpm run doctor`，全綠才過。詳見 [gates.md](gates.md) § 0-C。
 - **0-D Doc Alignment**：條件觸發（diff 觸及 docs / rules / snippets / audit / 業務碼 / pitfall）。詳見 [gates.md](gates.md) § 0-D。

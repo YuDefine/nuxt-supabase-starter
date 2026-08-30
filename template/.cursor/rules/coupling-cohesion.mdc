@@ -1,5 +1,5 @@
 ---
-description: "耦合與內聚的三層分工——import cycle / barrel 的 gate 判讀、server 碼跨界 import、跨檔重複 discriminant switch、audit 表的 NO-SCAN 語意"
+description: "耦合與內聚的三層分工——import cycle / barrel 的 gate 判讀、server 碼跨界 import、跨檔重複 discriminant switch、audit 表的 NO-SCAN 語意、Review 層函式契約、第三方 SDK 邊界"
 globs: ["'**/*.{ts", "tsx", "mts", "cts", "vue}'"]
 alwaysApply: false
 ---
@@ -28,6 +28,41 @@ ISP 自動成立大半），為它們寫 checklist 只會產出無法判定的�
 **Signal 層的輸出 NEVER 當 gate 用**：跨檔規則在 staged-only 情境算不準，把它接進 pre-commit 只會
 產出「改一行擋十次」的體驗，然後大家學會加 disable comment。
 
+## Review 層 checklist
+
+本節純 review 層，無機械訊號。消費端是 `code-review` agent 的程式碼品質 checklist。規模門檻
+（`max-params` / `max-lines` / `complexity`）不在本節、也不在 gate——理由見下方
+§ 為什麼 gate 只有兩條規則。
+
+**與 § Shotgun surgery 的關係**：本節管「一個函式做了幾件語意上不同的事」；Shotgun surgery 管
+「同一個 discriminant 散落 ≥3 個檔」。兩層互補，不重複判準。
+
+### 一個函式只做命令或只做查詢
+
+一個函式 MUST 只做命令（改狀態）或只做查詢（回答案），NEVER 兩者兼具。
+
+**NEVER 讓 query / check 型函式藏副作用**：`checkPassword` NEVER 順手初始化 session。名字說得出來
+的操作 MUST 是它做的全部。
+
+### NEVER 用 boolean flag 參數切換行為
+
+`createUser(data, isAdmin)` 把「這個函式做兩件事」藏進 call site。MUST 拆成兩個具名函式
+（`createAdminUser` / `createMemberUser`）。
+
+這條管的是**切換行為的 flag**，不是「選項物件裡的 boolean 欄位」。`{ dryRun: true }` 這種不改
+呼叫哪條路徑的選項，不是本條的對象。
+
+### 函式內分段註解 = extract-method 警報
+
+函式體內出現 `// Validation` / `// Calculation` / `// Persist` 這類分段標籤時，每個被標籤的區塊
+MUST 抽成具名函式，讓上層函式讀起來是一份目錄而不是實作。區塊順序 MUST 讓呼叫端由上往下讀就能
+跟上故事——先做什麼、再做什麼，不要先跳進細節。
+
+### 參數順序有歧義時包成參數物件
+
+`fn(user, true, 3)` 這種位置參數，caller 對不到第 2、第 3 個是什麼時，MUST 改成參數物件。
+**NEVER** 把參數個數寫成 0–2 的硬門檻——§ 為什麼 gate 只有兩條規則 已用對照專案否決 `max-params`。
+
 ## Gate 判讀
 
 `import/no-cycle` 炸了代表兩個模組互相依賴對方的**具體實作**。兩條標準拆法：
@@ -39,7 +74,9 @@ ISP 自動成立大半），為它們寫 checklist 只會產出無法判定的�
 與預定修法。`// oxlint-disable-next-line import/no-cycle` 出現在 diff 裡，`/code-review` 會擋。
 
 **既有 cycle 涉及檔數 > 20 的 consumer** 是唯一的降級情境——這種規模的 cycle 是結構性的，逐檔
-boy-scout 修不動。降級 recipe（consumer 自家 session 執行，clade 不代勞）：
+boy-scout 修不動。降級 recipe（**relay 給該 consumer 的 session 執行**，clade 主線不代勞——per
+[[clade-role-and-todo-discipline]] § Consumer 工作命中時 MUST relay；「不代勞」說的是不親手改，
+**NEVER** 是不送過去）：
 
 ```typescript
 // vite.config.ts —— business overrides 區塊
@@ -123,3 +160,24 @@ git log --since=2026-07-06T00:00:00 --until=2026-08-06T00:00:00 --name-only --pr
 本證據決定：gate 層收哪幾條規則。
 本證據不決定：要不要管內聚——**NEVER** 拿本節當「規模與複雜度不必管」的理由，那部分移到 Review 層
 由人判讀，不是消失了。
+
+## 第三方邊界
+
+本節補 § 三層分工 宣告的 D（依賴方向）裡「domain code 對第三方 SDK」那一半。server / client
+邊界見上方 § Server / Client 邊界。操作範本：`~/offline/clade/vendor/snippets/third-party-boundary/`。
+
+本節純 review 層，無機械訊號。目前無 audit script。
+
+### 第三方 SDK MUST 包在自己的 wrapper 後面
+
+讓上游 breaking change 的修改面收斂到單一檔。可觀察判準：**upstream 這支 API 改簽名，要動幾個檔？
+> 1 就是沒有邊界。**
+
+這條管的是 **domain / 業務層** 對 SDK 的依賴，不是「專案裡每一個檔都不准 import `stripe`」。
+adapter 檔本身 MUST import SDK；業務函式 MUST 只看到自家 interface。
+
+### 邊界上 MUST 把 vendor 的例外型別翻譯成自家 domain 例外
+
+NEVER 讓 `PostgrestError` / `StripeError` 這類型別出現在 domain 層的 `catch`。與
+[[error-handling]] § PostgREST 錯誤碼診斷互補：那邊講在邊界上怎麼判讀那些碼，本條講判讀完之後
+不准讓它們往上漏。

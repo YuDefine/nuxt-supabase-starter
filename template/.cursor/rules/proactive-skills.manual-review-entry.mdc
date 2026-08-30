@@ -1,5 +1,5 @@
 ---
-description: "進入 tasks.md `## 人工檢查` 階段的入口規約——auto-triage 三類 pending item 的推進路徑、mechanical readiness gate 的 exit code 判讀、review-gui 引導與 fallback、`[discuss]` item 的歸屬"
+description: "進入 tasks.md `## 人工檢查` 階段的入口規約——auto-triage 三類 pending item 的推進路徑、mechanical readiness gate 的 exit code 判讀、交付入口前置查詢（先問服務不問 config）、review-gui 引導與 fallback、`[discuss]` item 的歸屬"
 globs: ["openspec/changes/**"]
 alwaysApply: false
 ---
@@ -44,16 +44,104 @@ Local edits will be reverted by the next sync.
 正確流程：
 
 1. **Auto-triage first**：推進所有 Claude 可處理的 pending items（fix-requested / evidence missing / issue triage）
-2. **首選（DEFAULT）**：auto-triage 後 `bucket=ready` → **先跑 `systemctl is-active review-gui`**：
-   - **`active`**（常態）→ **NEVER** 叫 user 跑任何啟動指令，直接給 deep-link
-     `http://127.0.0.1:5174/review/<consumer-id>:<change-name>`（要指到某條 item 就加 `?item=%23N.M`；
-     user 不在本機就換 host 成 `https://review-gui.<maintainer-domain>`）
-   - **非 `active`** → 才回「從 **clade home**（`~/offline/clade`）執行 `pnpm review` 開本地 GUI 驗收」
-     （聚合機制與 cwd 規約見 [[review-gui-surface]]）
+2. **首選（DEFAULT）**：auto-triage 後 `bucket=ready` → **先跑 § 交付入口前置查詢的兩條指令**（`review-gui-service.sh status` ＋ `curl /api/changes`）：
+   - **第 1 條 exit 0 且第 2 條印出了自己那條 `changeKey`**（常態）→ **NEVER** 叫 user 跑任何啟動指令，
+     直接照 § 交付入口前置查詢表格第 1 列給 URL（host ＋ API 回的 `reviewPath`，要指到某條 item 就加
+     `?item=%23N.M`）。**NEVER** 在此另行憑印象拼一次 URL
+   - **exit ≠ 0，或清單裡沒有自己那條** → 走 § 交付入口前置查詢的第 2、3 列：**自己**把服務帶起來 /
+     重生 `consumers.local` 再給 URL，**NEVER** 把啟動指令交給 user（聚合機制與 cwd 規約見
+     [[review-gui-surface]]）
 
    兩條路都是給完 URL 後等使用者跑完 GUI 流程回報再繼續。完整格式、encode 規則與 NEVER 清單見
    [[review-gui-surface]] § Inline Review-GUI Deep-Link。
 3. **Fallback**（GUI 不可用時）：截圖 → 逐項展示 → 使用者回覆 OK / 問題 / skip → 依答覆更新 checkbox
+
+## 交付入口前置查詢（MUST）
+
+**誰要讀本節**：交付驗收入口給人的那個角色，**不是**動 `openspec/changes/**` 的那個角色。本檔 frontmatter 的 `paths` 是 path-scoped 觸發，而在 `/wt` 親子拆分下，開那些檔的是 worktree subagent、交付 URL 的是主線 orchestrator——主線整段 session 可能一個 `openspec/changes/**` 檔都沒開，規約於是對**唯一會犯這個錯的角色**不載入。因此：**要交付人工檢查入口時，MUST 主動載入本檔**，NEVER 等 path 觸發（2026-08-24 <consumer-a> `employee-backpay-request` 實證：主線未載入本檔，跳過下方兩條指令直接自建平行 GUI）。
+
+把人工檢查入口交給人之前，**MUST 先問「現在有沒有服務在提供入口」**，再問「PWA inbox 有沒有這條、人點下去會不會落到這條」。這是查表不是推理，兩條指令逐字：
+
+```bash
+bash ~/offline/clade/ops/review-gui-service.sh status          # 判 exit code，不要逐行比對字串
+node ~/offline/clade/vendor/scripts/review-handoff-url.ts resolve \
+  --change <change-name> [--item '#N']
+```
+
+**第 1 條 MUST 判 exit code，NEVER 拿單一行字串當結論**：它的輸出是多行（`enabled` / GUI unit 的 `active` / dispatch-pickup 的 `not-found` 與 `inactive` / `ss` 表 / 健康 JSON），裡面本來就同時出現 `active` 與 `inactive`。**exit 0 就是服務健全**（末行為 `{"ok":true,"authRequired":false}`）。
+
+**第 2 條打的是 live `/api/inbox`**，不是 isolated `--scan --repo`、也不是 `/api/changes` 的 `reviewPath`。stdout 的 `review_url` 才是人開得了的入口（含 consumer prefix 與 `?item=`）。**exit 1 = 不在待判清單**（典型：只剩 `[verify:ui]`、bucket=`feedbackGiven`）→ **NEVER 貼 URL**，把 JSON 的 `reason` / `bucket` / `hint` 原樣告訴人。
+
+| 兩條指令的結果 | 交付什麼 |
+| --- | --- |
+| 第 1 條 exit 0，且第 2 條 exit 0 | 給人的 URL = stdout 的 `review_url`。**NEVER** 換成 `127.0.0.1` / Tailscale IPv4 / `*.ts.net`、**NEVER** 改貼 `--scan --repo` 的無 prefix `reviewUrl`。**這是常態** |
+| 第 1 條 exit 0，第 2 條 exit 1 `not-in-inbox` / `item-not-in-inbox` | 不給連結。報告 JSON。人在 PWA 點下去會落到別張的第一項 |
+| 第 1 條 exit 0，第 2 條 `service-unreachable` | 第 1 條說服務活著但 inbox 打不到 → 自己 `review-gui-service.sh install` 再重跑第 2 條 |
+| 第 1 條 exit ≠ 0 | 自己用 `bash ~/offline/clade/ops/review-gui-service.sh install` 把服務帶起來（該子命令自帶 `systemctl restart` 與健康等待），再回到上面幾列 |
+
+**NEVER 因為「主 checkout 的 `tasks.md` 看起來是舊的」就自建一台平行 GUI。** 共用 review-gui **本來就會解析 worktree**：`/api/changes/<changeKey>` 回的 `sourceRoot` 會指向該 change 的 session worktree、`worktreeSlug` 會帶 slug，item 勾選狀態讀的是 worktree 那份。「主 checkout 資料過時」因此不成立為「共用服務給不出正確畫面」的理由——那是**推理**，而本節第一句就要求查表。自建的那台只在本機可達（`127.0.0.1:<derived-port>`），等於把已經修好的坑重踩一次。
+
+**NEVER 從 consumer 自己的 config 推論入口不存在。** `nuxt.config.ts` 沒掛 tunnel plugin、`consumer-meta.json` 的 `deploy.prodUrl` 是 null——這兩件事跟 review-gui 有沒有在跑**無關**：它是跨 consumer 共用服務，consumer 清單來自 clade 的 `consumers.local`，不由任何 consumer 的 config 描述。這類 negative search 不成立為 absence 證據（[[agent-self-verification]] MUST 11）。
+
+**NEVER 交付 `cd <path> && <cmd>`。** 逐字實錄：「`cd ~/offline/<consumer-j>-wt/kiosk-google-allowlist && pnpm review:ui`」——那是指令不是位址（要 user 自己執行才生得出畫面）、`127.0.0.1` 只在跑 dev server 的那台機器上有意義、且綁在會過期的 agent lease 上。同理 **NEVER 交付 `https://review-gui.<tailnet>.ts.net/`**：pairing token 已停用（`ops/review-gui-service.sh` 的 `pairing_retired()`），那條會停在配對畫面。
+
+**Iron Law：給人的驗收入口永遠是 `review-handoff-url.ts resolve` exit 0 的 `review_url`。違反字面就是違反精神。**
+
+| 藉口 | 現實 |
+| --- | --- |
+| 「user 在本機」 | iPad / 外出裝置上的 `127.0.0.1` 是裝置自己，不是桌機 |
+| 「scan 印的是 127.0.0.1 所以照抄」 | isolated `--scan --repo` 的 `reviewUrl` 常缺 consumer prefix；loopback 在 `probeUrl` |
+| 「`/api/changes` 有 `reviewPath` 就貼」 | 那條 URL 在 PWA inbox 裡找不到時，畫面會落到別張的第一項 |
+| 「Tailscale DNS 也是 HTTPS」 | `review-gui.<tailnet>.ts.net` pairing 已停用，會停在配對畫面 |
+
+**Red Flags**：正要把 `127.0.0.1:5174/review`、Tailscale IPv4、`*.ts.net`、或**沒有 `consumer:` prefix** 的 `/review/<change>` 貼進給人看的訊息。
+
+### 同一條 Iron Law 管 item 敘述**內文**的 URL
+
+上面管的是 review-gui 入口本身。**`## 人工檢查` item 敘述裡指向被驗 app 的那條 URL 同樣適用**——
+`[review:ui]` item 是寫給**人**照著做的，敘述裡的 `http://localhost:<port>/...` 在他手上那台
+iPad／手機上指向裝置自己，跟交付一條 loopback 入口是同一個錯誤，只是換了個載體。
+
+| item channel | 敘述裡的 URL |
+| --- | --- |
+| `[review:ui]`（人親自跑） | **MUST** 走下面那道階梯的 HTTPS origin，第 1 列優先 |
+| `[verify:ui]` / `[verify:e2e]` / `[verify:api]`（agent 跑） | `http://localhost:<devPort>/...` 合法——執行者就在這台機器上 |
+
+`[review:ui]` 的 host 階梯（與 [[manual-review.data-readiness]] § 通則 § 1 同一道，兩份 MUST 不得分岔）：
+
+1. 該 consumer 對應 `.env*` 有 `TUNNEL_HOSTNAME=<host>` → `https://<host>/<path>`。tunnel 本來就是真 HTTPS 公開 origin，優先用它
+2. 沒設 `TUNNEL_HOSTNAME` → review-gui preview proxy：`https://review-gui.<maintainer-domain>/__preview/<devPort>/<path>`（`<devPort>` 取自 `registry/consumers.json` 的 `dev_ports.nuxt`）
+3. `http://localhost:<port>` **只給 agent 自己探測**，**NEVER** 出現在給人的 item 敘述裡
+
+**NEVER** 因為「本 consumer 沒有 tunnel」就退回第 3 列——那正是階梯第 2 列存在的理由。
+
+preview proxy 路徑由 `previewPathFor(devPort, path)` 決定（`vendor/scripts/review-gui.preview-proxy.ts`，
+prefix `/__preview`）；`verify-url-check.ts` 的 `parseUrl` 會剝掉 `/__preview/<port>` 再比對 route tree，
+所以寫 canonical HTTPS **不會**觸發 `VERIFY_URL_ROUTE_MISSING`。
+
+**NEVER 把「沒有公開 origin」寫進 item annotation 當成退回 user 的待辦**，除非已實測過下面三條全落空：
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' --max-time 5  http://127.0.0.1:<devPort>/
+curl -s -o /dev/null -w '%{http_code}\n' --max-time 8  https://review-gui.<maintainer-domain>/
+curl -s -o /dev/null -w '%{http_code}\n' --max-time 5  http://127.0.0.1:5174/__preview/<devPort>/
+```
+
+第 2 條回 302 到 `cloudflareaccess.com` = tunnel 活著（per `review-gui.preview-origin.ts` 的
+`probePublicPreviewOrigin`），**不是**失敗。consumer 的 `.env` 沒有 `TUNNEL_HOSTNAME`、
+`deploy.prodUrl` 為 null **都不構成證據**——那描述的是 consumer 自己的部署，跟 review-gui 的
+公開 origin 無關。逐字反開脫：「本 consumer 沒有設 tunnel，所以 iPad 連不到，實機檢查前要先給
+那台 iPad 一個連得到的 origin」——那條 origin 早就在了，三條 curl 一跑就知道。
+
+### 能力真的缺席時怎麼講（照抄）
+
+三列全部落空——服務帶不起來，且該 consumer 自己也沒有 HTTPS 入口——才交付這段，**NEVER** 退回貼指令：
+
+```text
+目前給不出可直接開啟的驗收連結：review-gui 服務 <status 逐字輸出>，本 consumer 也無自有 HTTPS 入口
+（無 tunnel、無 tailnet cert）。待驗的是 <change-name> 的 <N> 條 [review:ui]，已 bucket=ready。
+入口能力補齊方式見 pitfall-review-entry-degraded-to-local-shell-command § Fix Recipe。
+```
 
 ## `[discuss]` items 不在 review:ui 主流程
 
@@ -65,4 +153,6 @@ review-gui 對純 D-only pending 的 change 自動歸「🗓 等 archive walkthr
 
 ## Inline Review-GUI Deep-Link（hard rule）
 
-完整 deep-link 規約（service 常駐判定、URL 三層格式、cross-consumer prefix、itemId encode、NEVER 清單）詳見 [[review-gui-surface]] § Inline Review-GUI Deep-Link。核心 one-liner：引導使用者到 review-gui 時，**MUST** 在 chat 訊息中給出 `http://127.0.0.1:5174/review/<consumer-id>:<change-name>` deep-link，**NEVER** 給裸 `/review` 或根路徑 `/`。
+核心 one-liner：引導使用者到 review-gui 時，**MUST** 在 chat 訊息中給出**指到該條 change 的** deep-link，**NEVER** 給裸 `/review` 或根路徑 `/`。
+
+deep-link 怎麼組（host ＋ `/api/changes` 回的 `reviewPath`）以本檔 § 交付入口前置查詢為準，**NEVER** 憑 `<consumer-id>:<change-name>` 樣式自己拼。URL 三層格式、cross-consumer prefix、itemId encode、NEVER 清單見 [[review-gui-surface]] § Inline Review-GUI Deep-Link；service 判定與交付路徑仍以本檔 § 交付入口前置查詢為準（該檔已於 2026-08-24 對齊）。

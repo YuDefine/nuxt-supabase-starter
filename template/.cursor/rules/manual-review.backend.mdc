@@ -191,7 +191,10 @@ Helper 掃描 priority：**repo root canonical → repo root legacy → repo roo
 
 Detection 確認 missing **且** consumer 對應 auth-module 有 cookbook template 時，agent **MUST** scaffold（per `agent-routing.md` Routing Table § Dev/test admin session cookie 取得 row）— **NEVER** 要求 user 走 Google OAuth + DevTools 複製 cookie。
 
-Cookbook template 不存在的情境（如 nuxt-auth-utils + libsql-drizzle，當前 cookbook 只有 supabase-flavored template）：留給對應 consumer session opt-in，**不**機械 scaffold（per `clade-role-and-todo-discipline.md § clade 主線不替 consumer 規劃實作`）。Track via `docs/tech-debt.md`（當前 entry: TD-158）。
+Cookbook template 不存在的情境（如 nuxt-auth-utils + libsql-drizzle，當前 cookbook 只有 supabase-flavored template）：**relay 給對應 consumer 的 session 決定 opt-in**（per `clade-role-and-todo-discipline.md`
+§ Consumer 工作命中時 MUST relay），**不**機械 scaffold。**NEVER** 改用「登記到 `docs/tech-debt.md`
+然後結束」——本行 2026-08-28 之前正是那樣寫的（`Track via docs/tech-debt.md（當前 entry: TD-158）`），
+而 TD-158 現在 grep 不到：登記型停手的接手機制斷掉時，斷掉本身不會發出任何聲音。
 
 ### `[review:ui]` flow（真的需要人）
 

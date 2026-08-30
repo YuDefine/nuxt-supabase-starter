@@ -9,6 +9,7 @@
 - 使用者貼出 GitHub release URL（例：`https://github.com/nuxt/ui/releases/tag/v4.8.0`），想跨 consumer 升版
 - 想用同一個 changelog 在多個 consumer 套用同樣的 BC 修正（rename / removal / signature / config schema）
 - 想要「全部 OK 才一起 land」的統一 push gate
+- **跨 consumer 統一 toolchain 版本**（pnpm / Node 自身）→ 走 § Toolchain sweep 分支
 
 **不適用**：
 - **單 consumer** ad-hoc 升版（直接在該 consumer 走 § Outdated mode 或 `pnpm add` 更快）
@@ -40,6 +41,7 @@ test -f registry/consumers.json -a -f consumers.local
 | `<pkg>@<ver>` 形式（例：`@nuxt/ui@4.8.0`） | pkg + version 直接拆；release_url 從 npm registry discover（見下方） |
 | `<pkg> v<ver>` / `<pkg> <ver>` 空白分隔（例：「升 @nuxt/ui v4.8.0」） | 同上 |
 | **純套件名（無腦升級，例：「升 @nuxt/ui」、「全 consumer 升 @nuxt/ui 到最新」）** | discover latest + release URL（見下方） |
+| **toolchain（例：「升 pnpm」「fleet packageManager 統一」「Node 版本統一」）** | 同上 discover，但 sweep 走 § Toolchain sweep 分支（見本檔末），**MUST** 先讀該節再進 Step F.2 |
 
 ### F.1.3 Discovery — 無腦升級自動補欄位
 
@@ -84,7 +86,7 @@ Discovery 內部 fallback chain：
 gh release view v<target_version> --repo <owner>/<repo> --json body,name,tagName,publishedAt > /tmp/dep-fleet-release-<pkg-slug>.json
 ```
 
-`gh` 認證已配置時 quota 寬鬆；不行才退到 WebFetch。**禁止** scrape release notes 之外的東西（issues / discussions / PRs 是 Step F.5 high-research subagent 的工作）。
+`gh` 認證已配置時 quota 寬鬆；不行才依 `web-search` external-web row 抓公開 changelog URL。**禁止** scrape release notes 之外的東西（issues / discussions / PRs 是 Step F.5 high-research subagent 的工作）。
 
 ### F.2.2 LLM 解析 release notes → 結構化
 
@@ -112,6 +114,11 @@ gh release view v<target_version> --repo <owner>/<repo> --json body,name,tagName
 **解析守則**：
 
 - `category` 必填、必須是上面列的五個之一；不確定就用 `signature`
+- **Toolchain sweep 多一個合法值 `toolchain-config`**：BC 的 affected surface 是**設定 key**
+  （`.npmrc` / `pnpm-workspace.yaml` / CI workflow 的欄位）而不是 code symbol。這類 BC 的
+  `affected_apis` 填**設定 key 名**（例：`onlyBuiltDependencies`、`shamefully-hoist`），
+  由 Step F.T.3 拿去比對 scan 回報的 config surface，**NEVER** 拿去 codebase-memory-mcp
+  ——它對設定檔的 key 零訊號，查了會得到「0 callsite」這個假陰性
 - `affected_apis` 是要拿去 codebase-memory-mcp `search_graph` 的字串 — 必須是**真實的可搜尋符號**，不要寫人話
 - `before` / `after` 給 pi 看的範例，**MUST** 是可貼上的 code snippet
 - 找不到任何 BC → 全部 `breaking_changes: []`，跳到 Step F.3.5「無 BC fast path」
@@ -139,7 +146,17 @@ gh release view v<target_version> --repo <owner>/<repo> --json body,name,tagName
 node vendor/scripts/dep-fleet-scan.ts --pkg "<pkg>" --target "<target_version>" > /tmp/dep-fleet-scan-<pkg-slug>.json
 ```
 
+**Toolchain sweep 改用**（其餘 Step F.3 判定相同）：
+
+```bash
+node vendor/scripts/dep-fleet-scan.ts --toolchain "<name>" --target "<target_version>" > /tmp/dep-fleet-scan-<pkg-slug>.json
+```
+
 挑出 `found: true` 的當作 hit consumer 名單。
+
+**Toolchain mode 的 `found` 由 lockfile 偵測決定，不是 `packageManager` 欄位**——欄位缺席會回
+`version_gap: "absent"` 且 `found: true`，那是**要修的 finding**（未鎖版），**NEVER** 讀成 miss
+或 skip 掉。它在 plan table 顯示為「unpinned → 補欄位」。
 
 **Skip 條件**（hit 但不該 sweep 的 consumer）：
 
@@ -174,6 +191,9 @@ node vendor/scripts/dep-fleet-scan.ts --pkg "<pkg>" --target "<target_version>" 
 **Idempotency 設計**：「無腦升級」連跑兩次第二次必走 0-sweep fast path（第一次升完所有 active consumer 都到 latest，第二次掃出 gap=same）。
 
 ## Step F.4 — Callsite 預掃（codebase-memory-mcp）
+
+> **Toolchain sweep 跳過本步**，改跑 § Toolchain sweep 分支 Step F.T.3（config surface 比對）。
+> 成因：config 型 BC 的 affected surface 是設定 key，MCP 對它零訊號。
 
 對每個 hit consumer × 每條 BC 的 `affected_apis[]`：
 
@@ -286,7 +306,7 @@ AskUserQuestion 提供四個選項：
 per Parallel Subagent Fan-out 紀律（user-global AGENTS.md；回報契約見 [[agent-routing]] § Subagent 回報契約），每個 hit consumer 一個**長駐**（name 參數）subagent，**thin brief**（3–5K）只包含：
 
 - Brief JSON 檔路徑：`/tmp/dep-fleet-brief-<pkg-slug>-<consumer-id>.json`（subagent 自己 Read）
-- Consumer worktree 還沒開時的指令：`cd <consumer_path> && node scripts/wt-helper.ts add upgrade-<pkg-slug>-<YYYYMMDD> --baseline-strategy stash`
+- Consumer worktree 還沒開時的指令：`cd <consumer_path> && node scripts/wt-helper.ts add upgrade-<pkg-slug>-<YYYYMMDD> --task-summary "upgrade <pkg> to <version>" --baseline-strategy stash`
 - 跑 § Outdated mode changelog-aware 子流程的指示
 - 回報格式
 
@@ -305,9 +325,9 @@ Brief JSON：`/tmp/dep-fleet-brief-<pkg-slug>-<consumer-id>.json`
 ## 工作流程
 
 1. `cd <consumer_path>`
-2. 開 worktree：`node scripts/wt-helper.ts add upgrade-<pkg-slug>-<YYYYMMDD> --baseline-strategy stash`
+2. 開 worktree：`node scripts/wt-helper.ts add upgrade-<pkg-slug>-<YYYYMMDD> --task-summary "upgrade <pkg> to <version>" --baseline-strategy stash`
 3. 跑 dep-upgrade § Outdated mode changelog-aware 子流程：
-   - 讀 `~/offline/clade/plugins/hub-core/skills/dep-upgrade/outdated-mode.md`（Outdated mode 步驟）+ `~/offline/clade/plugins/hub-core/skills/dep-upgrade/SKILL.md` § Pi prompt templates
+   - 讀 `~/offline/clade/plugins/hub-ecosystem-node/skills/dep-upgrade/outdated-mode.md`（Outdated mode 步驟）+ `~/offline/clade/plugins/hub-ecosystem-node/skills/dep-upgrade/SKILL.md` § Pi prompt templates
    - 跳過 Step O.1（target / version 由 brief 取）
    - 跑 Step O.2.1：用 § A medium 模板 + brief 內 BC 渲染 `<changelog-block>` + brief 內 callsites
    - 跑 Step O.2.2：pi dispatch（medium）
@@ -428,6 +448,126 @@ git push origin <current_branch>                         # trunk-based 都是 pu
 
 ---
 
+# § Toolchain sweep 分支（packageManager / runtime）
+
+Sweep 目標是**跑 build 的工具本身**（pnpm / npm / yarn / bun、Node runtime），而不是
+`dependencies` 裡的套件。宣告位置是 `packageManager` 欄位、`engines.node`、`.nvmrc`、
+CI 的 `node-version`——全都不在 dep map 裡。
+
+**進入判定**：user 要 sweep 的名字是 package manager 或 runtime 本身（「升 pnpm」「fleet
+packageManager 統一」「Node 版本統一」）。命中就在 Step F.1.2 解析完之後、進 Step F.2 之前
+先讀完本節。
+
+## 與主流程的五處差異（其餘照 Step F.1–F.8）
+
+| # | 主流程 | Toolchain sweep |
+| --- | --- | --- |
+| 1 | scan dep map，`found:false` = miss | scan top-level scalar；**`packageManager` 缺席是 finding（`gap: absent`），不是 miss** |
+| 2 | BC affected surface = code symbol，用 codebase-memory-mcp 掃 callsite | BC affected surface = **設定 key**，用 Step F.T.3 比對 scan 回的 config surface。**NEVER** 送 MCP |
+| 3 | 升版動作 = `<PM> add <pkg>@<ver>` | 升版動作 = **改 `packageManager` 欄位 + 重跑 install 重生 lockfile**（見 F.T.4） |
+| 4 | 驗證 = typecheck / build / test | **MUST 多一道 `install --frozen-lockfile`**：換 PM 大版可能改 lockfile / store format，只跑 typecheck 抓不到 |
+| 5 | 適用 `catalog:` 間接解析 | 不適用——`packageManager` 沒有 catalog 語意 |
+
+**其餘全部照舊**，尤其這三條不因為「只是改一個欄位」而放寬：Step F.5 plan gate、Step F.8.2
+push gate、每個 consumer 各自 worktree + atomic commit。逐字反開脫：「toolchain sweep 只改
+一行字串，不必開 worktree」——它連帶重生 lockfile，那是這個 repo 最容易被並行 session 撞的檔。
+
+## Step F.T.1 — Target 版本的穩定性自查（進 Step F.2 之前）
+
+```bash
+npm view <name> dist-tags --json
+```
+
+**MUST** 確認 `--target` 就是 `latest` 指到的版本。落在 `next-*` / `beta` / `rc` 這類 pre-release
+tag 的版本 **NEVER** 進 fleet sweep——那是上游還沒把它當穩定版推的訊號，而 toolchain 壞掉會讓
+**全部** consumer 同時無法 build，不像單一套件壞掉只影響用到它的地方。
+
+User 明確指名要升某個 pre-release 版本時：**MUST** 先回報「該版本目前只掛在 `<tag>`、`latest`
+是 `<X>`」並等拍板，**NEVER** 自行照做也 **NEVER** 自行改成 latest 就開跑。
+
+## Step F.T.2 — Runtime 門檻自查
+
+Toolchain 大版常帶 runtime 下限（例：pnpm 11 要 Node 22+）。從 release notes 抽出下限後，
+對 scan 回報的三個來源逐一比對，**三個都要看**：
+
+| 來源 | scan 欄位 | 沒過的後果 |
+| --- | --- | --- |
+| `engines.node` | `toolchain.engines_node` | 本機裝得起來，但 `engines` 宣告變成謊話 |
+| `.nvmrc` / `.node-version` | `toolchain.node_version_files` | 開發者本機切到不支援的版本 |
+| CI workflow 的 `node-version` | `toolchain.config_surface.ci_node_versions` | **CI 當場紅**，且 matrix job 只有一格紅時很像 flaky |
+
+**NEVER 只看 `engines.node` 就判「runtime 門檻已滿足」**——CI 的 matrix 常保留舊版本格，
+而那格正是唯一會炸的地方。scan 對每個 `node-version` 出現位置回報 `file` + `line`，
+逐格判，**NEVER** 只看 distinct 值的集合。
+
+## Step F.T.3 — Config surface 比對（取代 Step F.4 callsite 預掃）
+
+Step F.2.2 解析出的 `toolchain-config` 類 BC，其 `affected_apis` 是設定 key 名。拿它們去比對
+scan 回報的 config surface：
+
+| BC 形狀 | 比對什麼 | 命中後 brief 要帶 |
+| --- | --- | --- |
+| 設定被移除 / 改名 | `workspace_yaml_top_keys` ∩ `affected_apis` | 舊 key → 新 key 的 `before` / `after` YAML 片段 |
+| 設定來源搬家（例：不再從 `.npmrc` 讀） | `npmrc_keys.other`（scan 已把 auth/registry 分開） | 要搬的 key 清單 + 目的地檔案 |
+| 預設值改變 | 該 key **不在**現場 config（沒寫 = 吃新預設） | 新預設值 + 明說「沒寫等於行為改變」 |
+
+**第三列最容易漏**：前兩列是「現場有東西要改」，第三列是「現場什麼都沒有」——用「grep 不到
+所以不受影響」判定會 100% 漏掉它，而它恰好是**行為靜默改變**的那一類。逐字反開脫：
+「這個 key 全 fleet 都沒設，所以這條 BC 不影響我們」。
+
+`.npmrc` 的 auth/registry 分類是 scan 的**啟發式**（比對 `//` 前綴、`_authToken` 尾綴、
+已知 key 清單）。**NEVER** 把它讀成上游的判定——邊界案例（自訂 scope 設定）要自己開檔確認。
+
+Brief JSON 在主流程 schema 上多這一段：
+
+```json
+{
+  "sweep_kind": "toolchain",
+  "toolchain": {
+    "declared": "pnpm@10.33.4",
+    "target": "11.24.0",
+    "gap": "major",
+    "runtime_floor": { "node": ">=22" },
+    "config_migrations": [
+      { "from_file": ".npmrc", "keys": ["shamefully-hoist"], "to_file": "pnpm-workspace.yaml" },
+      { "from_key": "onlyBuiltDependencies", "to_key": "allowBuilds", "before": "...", "after": "..." }
+    ],
+    "default_changes": [{ "key": "minimumReleaseAge", "new_default": "1440", "impact": "..." }]
+  }
+}
+```
+
+## Step F.T.4 — Subagent brief 的升版步驟（取代 § F.6.1 的第 3 步）
+
+```markdown
+## 升版步驟（toolchain）
+
+1. 改 `package.json` 的 `packageManager` 欄位為 `<name>@<target>`
+   （欄位原本不存在 → 新增；這是 brief 裡 `gap: "absent"` 的 consumer 要做的事）
+2. 套用 brief 的 `config_migrations`：逐條搬 / 改名設定 key，**只動 brief 列到的 key**
+3. 對 brief 的 `default_changes` 逐條判：要維持舊行為就顯式寫回舊值，要接受新預設就在
+   回報裡明說接受了哪幾條——**NEVER** 靜默略過（那會讓行為改變沒有任何人看過）
+4. `corepack use <name>@<target>` 或該 PM 的等價指令，確認 CLI 真的切到目標版本
+5. 重跑 install 重生 lockfile
+6. **MUST** `<PM> install --frozen-lockfile` 驗一次：紅的代表 lockfile 沒收斂，回報 FAILURE
+7. typecheck + build
+8. 全綠後 commit
+```
+
+工作範圍：`package.json` + lockfile + brief 列到的 config 檔（`.npmrc` /
+`pnpm-workspace.yaml` / CI workflow）。**NEVER** 順手動 brief 沒列到的設定。
+
+## Step F.T.5 — clade home 自己不在 `consumers.local` 裡
+
+`consumers.local` 只列 consumer，**clade 自己不在裡面**——所以 scan 的 hit 名單天然不含 clade，
+而 clade 自己也有 `packageManager`。Toolchain sweep **MUST** 在摘要裡單獨列一行 clade 自身的
+現況與處置，**NEVER** 讓它因為不在名單裡就靜默落後。
+
+clade 自身的升版走 clade home 自己的 worktree + [[clade-publish]]，**不**混進 fleet sweep 的
+per-consumer commit（那會違反 carve-out 的「不把標準層改動混進 dep migration commit」）。
+
+---
+
 # 禁止事項（Fleet mode 限定）
 
 - Fleet mode MUST 在 clade home 執行（Step F.1.1 preflight 保證）
@@ -439,3 +579,6 @@ git push origin <current_branch>                         # trunk-based 都是 pu
 - **NEVER** 對 `business_activity: "paused"` 的 consumer 動手（即使 found: true）
 - **NEVER** 主線替 subagent 改 worktree 內檔
 - **NEVER** 把 unrelated 套件 / refactor / cleanup 搭便車進來（per carve-out 紅線）
+- **NEVER** 把 pre-release tag（`next-*` / `beta` / `rc`）的 toolchain 版本推進 fleet sweep（per Step F.T.1）
+- **NEVER** 對 toolchain sweep 用 codebase-memory-mcp 掃 config 型 BC——回的 0 callsite 是假陰性（per Step F.T.3）
+- **NEVER** 因為「只改一行 `packageManager`」就跳過 worktree / plan gate / push gate（per § 五處差異）

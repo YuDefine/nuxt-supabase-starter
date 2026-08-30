@@ -39,6 +39,43 @@ create-only 的成功 receipt 是 `dispatched`，**不是** `relay_dispatched`�
 
 > relay 開出來的 successor **不帶** `CLADE_DISPATCH_ID`（helper 刻意不注入 correlation env，見 L2653 註解與 TD-547），所以它是 main line、可以自由 fanout。被 fanout 派出去的 **worker 帶**該 env，因此 worker 只能 relay，不能再 fanout。
 
+### `--cwd` 指向既存工作區時的佔用探測（fail closed）
+
+上一節判「本 session 能不能派」，本節判「**目標能不能收**」。兩者互不替代。
+
+**觸發 predicate**：`--cwd` 指向的目錄**不是本 session 建立的**，且已存在——典型是 `<repo>-wt/<slug>` linked worktree、或任何非空的既有 checkout。本 session 剛用 `/wt` 建出來的乾淨 worktree 不觸發。
+
+命中就 **MUST 依序**跑三步，**任一步命中、或 ownership 判不出來 → NEVER 派，改走 [[concurrent-session-probe]] § 探測之後：協商**：
+
+```bash
+# (a) 耐久訊號 —— 唯一不受 process 時序影響的一步，NEVER 跳過
+grep -nE '<該 worktree 的 slug>' <目標 repo>/HANDOFF.md   # ownership / parking / 「由某 session 持有」條目
+ls <目標 repo>/.clade/claims/ 2>/dev/null                  # 活 claim
+```
+
+```bash
+# (b) session 層 —— concurrent-session-probe 入口 A 三步，第 3 步無條件必跑
+```
+
+```bash
+# (c) 檔案層新鮮度
+git -C <該 worktree> status --porcelain     # 非空 = 有人正在寫
+git -C <該 worktree> log -1 --format=%cr    # 最後一筆 commit 幾分鐘前？
+```
+
+**(a) 不可省，而且它排第一是有理由的**：(b) 與 (c) 都是 point-in-time 量測，對「兩個 item 之間什麼都不跑」的迴圈型 runner 有結構性 race（見 [[concurrent-session-probe]] 入口 A 第 3 步的盲區聲明）。HANDOFF 的 ownership 條目與 `.clade/claims/` 是**耐久**的——它們在 runner 睡覺時仍然存在。
+
+**三步全空 ≠ 沒人在動。** 對非本 session 建立的既存工作區，三步全空只證明「此刻沒抓到」，預設仍是 **fail closed**：要嘛在目標 repo 的 HANDOFF 找到明確的「無人持有」記載，要嘛跑協商拿到對方的信號，兩者都沒有就 NEVER 派。
+
+逐字反開脫（想到這些就是本節正要被違反）：
+
+- 「HANDOFF 上面是有寫 ownership 不明，但那是上一輪的事了」
+- 「`ps` 掃過沒東西，應該沒人在跑」
+- 「worktree 是我們自己 repo 的，不會有外人」
+- 「先派下去，撞到再說 —— 反正 worker 會 STOP」
+
+最後一條特別要擋：worker 的 STOP 條款是**事故發生後**的損害控制，不是預防。2026-08-28 實測，撞上時 `package.json` / `pnpm-lock.yaml` 已經被兩邊併發寫過，混合 commit 已經 land，per-item bisect 已經失效——worker 停手停不掉已經發生的事。
+
 ## 2. 建 durable thin brief
 
 1. 從當前 `TaskList` 與對話脈絡盤點**本 session**未完成工作、已驗 evidence、失敗 gate、安全邊界與下一個 bounded action。
@@ -48,6 +85,24 @@ create-only 的成功 receipt 是 `dispatched`，**不是** `relay_dispatched`�
 5. prompt 只指向 durable brief，並明寫「先讀 brief 與 repo 規約，再自行續跑；gate 失敗即停，不向原 session 輪詢」。
 6. worker brief（`fanout` 的每一份）**MUST** 寫明：做完自己那段卻留下殘工時，把殘工另寫一份 durable
    brief，並用 `--complete success --followup-brief <absolute-path>` 帶回來——見 § 6。
+
+6b. worker brief **MUST** 同時寫明相反的那一半：**那段工作就是整件 work 的最後一步、沒有殘工**時，
+   收尾改帶 `--work-done --verification '<一句可查證的實跑摘要>'`。helper 已經支援這兩個旗標，
+   缺的一直是「有人被告知要用它」——2026-08-28 實測整條脊椎的「已收」欄恆為 0，六態的終態從來
+   沒有被按過，而每一個 worker 收尾時手上都握著按它所需的憑證。
+
+   三條機械限制由 helper 自己擋，**NEVER** 在 brief 裡改寫它們：只接受 `--complete success`；
+   `--verification` 缺或空就拒（[[flow-work-tracking]] § R1 的唯一 fail-closed 點）；與
+   `--followup-brief` **互斥**——殘工與完成宣稱不能同時為真，而那份 followup brief 正是還有殘工
+   的證據。
+
+   **NEVER 讓 worker 預設帶 `--work-done`。** pane 回 `success` 說的是「這個 pane 做完了被派來做
+   的事」，那是比「這件 work 完成了」**嚴格更小**的宣稱——一件 work 常橫跨數個 pane。自動升級等於
+   替沒人做過的宣稱簽名。opt-in 明示是刻意的。
+
+7. brief 的**範圍**依 [[agent-routing]] § 派多少 判定：與被派工作構成串行鏈的環，預設一起寫進同一份 brief。
+   brief 裡出現「X 由主線處理」「不要做 X」這類句子時，**MUST** 能具名說出主線做 X 需要 worker 沒有的什麼；
+   說不出來就刪掉那句、把 X 寫進 brief。
 
 **NEVER** 把完整 transcript、token、cookie、credential 或與工作無關的 dirty state 塞進 brief。
 
@@ -63,6 +118,27 @@ receipt 的 `pane_label_applied` **為 `false`，或這個欄位根本不存在*
 
 **判 receipt 時 MUST 讀 `pane_id` 的 workspace 前綴**（`wE:pG` 的 workspace 是 `wE`），**NEVER** 只看 label 就認定放對地方——label 對「pane 落在哪個 workspace」零訊號。
 
+### 3.1 Launcher inherit（relay / fanout / 任何 identity-bound dispatch）
+
+user **沒**點名別的 launcher 時，successor／worker 用**當前這格實際在跑的**（`ANTHROPIC_DEFAULT_*` 的 `ccg-` / `ccx-` / `ccagy-` prefix）。helper 自己重判，agent **NEVER** 在 `--relay` 上帶 `--launcher`（identity-bound 不收該旗標）。
+
+`CLADE_CLAUDE_LAUNCHER` 是當初 dispatch 注入 pane 的 marker，`/clear` 之後同一格可能已換成別的 binary，marker 不會跟著改。**NEVER** 把它當 SoT。
+
+| 可觀察 predicate | launcher |
+| --- | --- |
+| `ANTHROPIC_DEFAULT_OPUS_MODEL`（或 sonnet／haiku）以 `ccg-` 開頭，且 `ANTHROPIC_BASE_URL=http://127.0.0.1:8317` | `ccg` |
+| 同上，prefix `ccx-` / `ccagy-` | `ccx` / `ccagy` |
+| 沒有 live model prefix，才退到 `CLADE_CLAUDE_LAUNCHER` 或 `CLAUDE_CONFIG_DIR` | 退路，不是優先 |
+
+**例外**：user 白紙黑字點名另一個 launcher（「用 ccw」「派給 ccx」）→ create-only `--launcher <那個>`。沒點名就不要換。
+
+**Rationalization table**：
+
+| 藉口 | 現實 |
+| --- | --- |
+| 「這格 `CLADE_CLAUDE_LAUNCHER=ccw`，relay 繼承它才對」 | 那是 W1 被派出來時注入的。`/clear` 後跑的是 `ccg-opus`，繼承 marker 等於把 ccg session 的工作交給 ccw |
+| 「`--relay` 不能帶 `--launcher`，所以只好吃 env」 | helper 會從 live model 重判。不能帶旗標不是「用過期 marker」的理由 |
+
 ## 4. Runtime cleanup
 
 盤點**本 session 自己啟動**的每一個 background task、subagent、monitor、dev server 與 shell：
@@ -75,7 +151,20 @@ receipt 的 `pane_label_applied` **為 `false`，或這個欄位根本不存在*
 
 successor 繼承的是整個位置，所以「接手後仍需要」的範圍比直覺寬，**NEVER** 因為「我要收工了」就一律停掉。無法確認 ownership 時先保留並在 receipt 標明，不以猜測做破壞性 cleanup。
 
-**本 pane 由 successor 回收，不由本 session 自己關。** successor 讀完 brief、確認繼承後會跑 `--reclaim <本 pane> --verified`，那一步同時把本 session 的 scrollback 落盤存證。本 session 自己 close 就是拿 lifecycle 當 completion，也會毀掉那份 scrollback。
+**本 pane 誰來關，依 receipt 分流 —— NEVER 無條件套用其中一條。**
+
+| receipt | 本 pane 的歸宿 |
+| --- | --- |
+| `relay_dispatched`（Herdr 內交棒，**有** predecessor record） | **由 successor 回收，NEVER 自己關。** successor 讀完 brief、確認繼承後跑 `--reclaim <本 pane> --verified`，那一步同時把 scrollback 落盤存證。本 session 自己 close 就是拿 lifecycle 當 completion，也會毀掉那份 scrollback |
+| `dispatched`（create-only，**無** predecessor record） | **MUST 自己收尾關閉。** 沒有任何人會來 reclaim 它 —— 這條路徑不寫 predecessor record（§ 5 的表逐字承認「NEVER 填本 pane id 或 predecessor（沒有）」），所以「等 successor 回收」在這裡等的是一個不存在的角色 |
+
+**create-only 自關不毀證據**：scrollback 由 helper 落在 `~/.cache/clade/dispatch-log/<dispatch_id>.log`，
+與 pane 是否存活無關。上一列那條「自己 close 會毀掉 scrollback」的理由**只對 relay 成立**
+（那份存證是 `--reclaim` 那一步寫的），**NEVER** 把它外推到 create-only 來論證不該自關。
+
+> 2026-08-28 實證：user 點名 `ccw` → 依 § 3.1 例外必須走 create-only → 本節原本的無條件措辭
+> 讓來源 pane 在收工後繼續留著接收訊息，而規約同時禁止它自己關。**清理責任被指派給一個在該分支
+> 上不存在的角色**，pane 因此無限期存活。user 逐字回報：「我希望收工就自己關掉，不要再留下來接收訊息」。
 
 ## 4.1 Parent worktree lifecycle
 
@@ -104,7 +193,7 @@ helper receipt 中的 `retained: false` 只描述 child pane，**NEVER** 拿它�
 | --- | --- |
 | 首行 | 內部 relay／fanout：逐字包含 `目前這裡收工；位置已交給 successor。` 外部 create-only：逐字包含 `目前這裡收工；已派出 successor pane。` |
 | Relay receipt | 僅 `relay_dispatched`：successor workspace／tab／pane／Claude session、本 pane id、`predecessor_dispatch_id`、`relayed_dispatch_ids`（沒有就明寫「無」） |
-| Dispatch receipt | 僅外部／bare `dispatched`：successor workspace／tab／pane／Claude session／`dispatch_id`。**NEVER** 填本 pane id 或 predecessor（沒有） |
+| Dispatch receipt | 僅外部／bare `dispatched`：successor workspace／tab／pane／Claude session／`dispatch_id`。**NEVER** 填本 pane id 或 predecessor（沒有）。**MUST** 另註明本 pane 將自行關閉（§ 4 create-only 那列），**NEVER** 寫成「等 successor 回收」 |
 | Worker receipt | **只有 `fanout`**：逐筆列 dispatch_id、label、pane、在做什麼 |
 | 工作摘要 | durable brief 路徑與一句主題 |
 | Runtime cleanup | 已停止項目；保留項目逐一寫用途與對應 pane。兩者皆空也明寫「無」 |

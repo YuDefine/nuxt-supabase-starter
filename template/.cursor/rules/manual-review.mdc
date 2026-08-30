@@ -21,7 +21,7 @@ Local edits will be reverted by the next sync.
 > | [[manual-review.backend]] | `server/**`、`test/**`、`e2e/**`、`supabase/**` | Backend-only change 規約 + 標準流程 verify channels + review:ui flow |
 > | [[manual-review.data-readiness]] | `openspec/changes/**/proposal.md`、`tasks.md` | Pre-Review Data Readiness + step actionability + `@no-manual-review-check` marker + 截圖檔名配對 |
 > | [[manual-review.evidence]] | `openspec/changes/**/tasks.md`、`docs/manual-review-archive.md` | 給 propose/spec 寫作者 + Kind 分類指引 + 反例 + `@no-screenshot` marker + annotation / marker 細節（claude-analyzed、awaiting-user-decision、@evidence-via-manual-review、@apply-blocked、ADR、真相層責任分工） |
-> | [[manual-review.discuss]] | `openspec/changes/**/tasks.md`、`plugins/hub-core/skills/spectra-archive/**`、`HANDOFF.md` | `[discuss]` flow + Defer-to-HANDOFF + Resume mode + HANDOFF.md schema + 混合 kind change + 人工檢查時機詳解 |
+> | [[manual-review.discuss]] | `openspec/changes/**/tasks.md`、`plugins/hub-capabilities-openspec/skills/spectra-archive/**`、`HANDOFF.md` | `[discuss]` flow + Defer-to-HANDOFF + Resume mode + HANDOFF.md schema + 混合 kind change + 人工檢查時機詳解 |
 
 ## 這套機制在解什麼問題（先讀，決定你該不該用它）
 

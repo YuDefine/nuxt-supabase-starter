@@ -119,6 +119,7 @@ Before creating a new worktree, check if one already exists at the expected path
 
 ```bash
 node scripts/wt-helper.ts add <slug> \
+  --task-summary "<一句話：這棵樹要做什麼>" \
   --precheck-baseline \
   --baseline-strategy stash
 ```
@@ -348,7 +349,7 @@ These remain explicit later actions (archive + commit).
 If the user types just `/wt fix-auth` (no description, no `:`-prefixed next-skill), prompt the user to clarify whether they want:
 
 - An ad-hoc task in a new worktree (ask for the task description).
-- A long-lived worktree session (deprecated via `/wt`; suggest `node scripts/wt-helper.ts add fix-auth` + opening a fresh session in the resulting path).
+- A long-lived worktree session (deprecated via `/wt`; suggest `node scripts/wt-helper.ts add fix-auth --task-summary "<一句話>"` + opening a fresh session in the resulting path).
 
 Do NOT silently build a worktree with no task — that's the deprecated v1 behavior and is gone.
 

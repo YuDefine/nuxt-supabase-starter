@@ -16,7 +16,7 @@ Local edits will be reverted by the next sync.
 ## A. 執行面（16 條）
 
 1. **不搶 working tree** —— tracked code 改動一律走 `/wt <slug>` worktree subagent；主線只做唯讀調查與單檔文字編輯
-2. **commit 走 `--only`** —— `git commit --only -m "…" -- <paths>`。**NEVER** `git add` + `git commit` 兩段式（會吞掉別 session 預 stage 的內容）
+2. **落地 main 的 commit 看路徑，不是一律 `--only`** —— 路徑全在 `rules/core/commit.detail.md` § `--only` 適用範圍白名單（HANDOFF / tech-debt / tasks / artifact-tick 等）→ `git commit --only -m "…" -- <paths>`。任一路徑不在白名單（source / migration / plugin / 任何程式碼）→ **MUST** invoke `/commit`。兩種都 **NEVER** `git add` + `git commit` 兩段式（會吞掉別 session 預 stage 的內容）。work-loop / unattended / 「護欄寫過一律 `--only`」**NEVER** 是跳過 `/commit` 的理由；卡人工檢查 → packaging，**NEVER** 用 `--only` 繞 0-A
 3. **每個 item 獨立 commit** —— 不把多個 item 的改動混進同一 commit
 4. **不 force push** —— 所有 git 操作 safe，無 `--force`
 5. **動標準層 MUST 散播完畢** —— `rules/`、`plugins/hub-core/`、`AGENTS.md`、`vendor/`。**可以改**（2026-08-05 Charles 授權），但改完 **MUST** 走 `/clade-publish` Step 1–9 把它推到 consumer，**NEVER** 改完擱著等人來散。做不到就別動它
@@ -81,7 +81,8 @@ carve-out 之前護欄 7 沒有例外 → 那條答案 unattended runner 永遠�
 ```text
 ## 硬性約束（違反任一條即停手回報，不要自行判斷例外）
 
-- commit 一律 `git commit --only -m "…" -- <你改的檔案路徑>`；NEVER `git add` + `git commit` 兩段式
+- 在 worktree 內 commit 用 `git commit --only -m "…" -- <你改的檔案路徑>`；NEVER `git add` + `git commit` 兩段式
+- NEVER 在 worktree 內跑 `/commit` 或 `git push origin main`——落地 main 是主線 harvest / archive 之後的 `/commit`
 - NEVER `git push --force` / `--force-with-lease`
 - 標準層（rules/、plugins/hub-core/、AGENTS.md）只改**本 brief 所有權清單逐條列出的**那幾個檔；
   清單沒列的標準層檔 NEVER 改。帶 `🔒 LOCKED — managed by clade` banner 的檔一律 NEVER 改，
@@ -137,6 +138,11 @@ carve-out 之前護欄 7 沒有例外 → 那條答案 unattended runner 永遠�
 - ❌「這條寫得很清楚了，他看 HANDOFF 就會答」— HANDOFF 不會主動出現在他面前，那正是累積的成因
 - ❌「答案我先記著，Step 7 一起寫」— 下一輪是新 process。沒落檔＝沒答
 
+**跳過 /commit 類**：
+
+- ❌「護欄說 commit 走 `--only`」— 那是 worktree 內與白名單；產品落地 main 是 `/commit`
+- ❌「loop 無人值守不能跑 /commit」— 卡人工檢查就 packaging，NEVER `--only` 繞 0-A
+
 **提早收工類**：
 
 - ❌「本輪無 actionable = 完成」— 只代表這輪 scan 沒新東西
@@ -157,6 +163,7 @@ carve-out 之前護欄 7 沒有例外 → 那條答案 unattended runner 永遠�
 - 正要對 `rules/` 或 `plugins/hub-core/` 底下的檔下 Edit / Write
 - 正要跑 `publish.ts` / `propagate.ts` / `git push --force` / `wrangler deploy` / `supabase db push`
 - 正要 `git add` 之後接 `git commit`
+- 正要在 main 上對白名單外路徑跑 `git commit --only`（該走 `/commit`）
 - 正要對 `.clade/work-loop/lock` 下 Write / Edit / `printf` / `echo` / `rm`（鎖檔只由 `work-loop-lock.ts` 讀寫）
 - state 檔的 `inFlight` 非空，但你正在寫 Step 7
 - state 檔的 `awaiting[]` 非空、本輪是 attended，而你正要進 Step 3 分類

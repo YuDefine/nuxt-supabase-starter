@@ -64,6 +64,8 @@ Local edits will be reverted by the next sync.
 
 真正該防的是**請求放大**：無 debounce 的輸入框（每個 keystroke 一個請求）、迴圈內逐筆 await 的 N+1 fan-out、in-flight 不 abort 的舊請求堆積。
 
+最後一項的取消**預設就會發生**，但要真的省下頻寬還有一個前提：`signal` 必須貫通到 HTTP client，見 HR-6。
+
 ### HR-3 reference data MUST 有 cache 策略
 
 下拉選單選項、category 列表、config、user profile 等**讀完很少變的資料**：
@@ -98,6 +100,41 @@ Cookbook 範本：`~/offline/clade/vendor/snippets/nuxt-data-perf/query-keys.ts`
 
 - ❌ mutation 後手動 `refetch()` — 只 refresh 當前 component，其他讀同 key 的 component 不會更新
 - ✅ `onSettled: () => queryCache.invalidateQueries({ key: domainKeys.all })` — 全域 cache 一致
+
+### HR-6 取消訊號 MUST 貫通到 HTTP client
+
+**每一個** query function / data-fetching handler 都 MUST 接住框架給的 `signal` 並傳進 HTTP client 的請求選項——**每一個**，不是只處理慢的或大 payload 的那幾個 endpoint。
+
+- ❌ `useQuery({ key: reportKeys.daily(), query: () => $fetch('/api/report/daily') })`
+- ✅ `useQuery({ key: reportKeys.daily(), query: ({ signal }) => $fetch('/api/report/daily', { signal }) })`
+- ✅ `useAsyncData('report', (_app, { signal }) => $fetch('/api/report', { signal }))`
+
+**取消是預設行為，沒接 signal 就是空包彈。** Pinia Colada 在兩處無條件呼叫 `abortController.abort()`：`fetch()` 每次都先砍掉前一個 pending call；最後一個 dep 移除（元件卸載、key 變更）進 gc 排程時砍掉 pending。兩處都**沒有**「query 有沒有用到 signal」的條件判斷——槍一定開，`query` 沒把 signal 傳下去就打不中任何東西，瀏覽器照樣把整個 response body 下載完。複驗（`@pinia/colada` 1.4.2 快照）：
+
+```bash
+grep -n "abortController.abort()" node_modules/@pinia/colada/dist/index.mjs
+```
+
+**共用 HTTP client 的 request interceptor NEVER 覆寫已存在的 `signal`。** 既有 signal 時 MUST 用 `AbortSignal.any([...])` 合併，或跳過注入。全域注入自己的 controller 會把框架給的 signal 蓋掉，上面兩處 abort 對該請求從此無效。
+
+- ❌ `$fetch.create({ onRequest({ options }) { options.signal = mine.signal } })`
+- ✅ `options.signal = options.signal ? AbortSignal.any([options.signal, mine.signal]) : mine.signal`
+
+**新增全域 abort manager 模組**（Map / Set 追蹤 controller ＋ interceptor 全域注入）前，MUST 在 PR 描述逐條寫出框架內建機制不涵蓋該場景的 predicate——Colada 上述兩處自動 abort、Nuxt `useAsyncData` 預設 `dedupe: 'cancel'`、handler 第二參數的 `signal`。列不出即 NEVER 新增：它是重造輪子，且必定踩上一段的覆寫問題。
+
+Cookbook 範本：`~/offline/clade/vendor/snippets/nuxt-data-perf/colada-query-signal.ts`
+
+### HR-7 NEVER 用取消當寫入的重複提交防護
+
+**每一個**非冪等寫入（POST / PUT / PATCH / DELETE、`useMutation`）**NEVER** 用 abort / cancel 當重複提交防護。取消砍掉的是**前端的等待**，server 可能已經執行完寫入——使用者看到「沒送出」，帳已經入了。
+
+防重三選一：server 依 idempotency key 去重、按鈕 `disabled` 綁 `isLoading` / `asyncStatus === 'loading'`（HR-2 已要求）、server-side dedup。
+
+- ❌ `handleSubmit() { abortKey('form/submit'); submitForm() }`
+- ❌ 提交前先 `cancelQueries` / `mutationCache.cancel` 當防重
+- ✅ 按鈕 disabled ＋ 寫入帶 idempotency key
+
+Colada 的 `useMutation` 不建 `AbortController`、也不自動取消 in-flight mutation（`useQuery` 兩者都做）。這個不對稱是刻意的，**NEVER** 自己補上。複驗（1.4.2 快照）：mutation cache 區段 `grep -c 'abort' ` 為 0。
 
 ## Should Rules（非 hard，但稽核會標）
 
@@ -169,6 +206,12 @@ routeRules: {
 
 > 部署在 Cloudflare Workers 的 consumer 另需確認 `image.provider` 有正確解析——preset 選錯會讓 provider 退化成 `none`，`<NuxtImg>` 等同裸 `<img>`，所有優化設定靜默失效。
 
+### SR-9 取消事件 MUST 與錯誤分流，且 MUST 留下訊號
+
+**每一處**錯誤處理（`catch` / HTTP client interceptor / error-reporting hook）MUST 把取消從錯誤中分流出來，**NEVER** 上報成 error——`$fetch` / ofetch 的取消是 `err.name === 'AbortError'`。不分流會讓 error rate 被正常的路由切換灌水，後端 access log 同時湧現 499 污染 success-rate SLO。
+
+反向同樣禁止：interceptor **NEVER** 把取消整個吞掉。誤砍（不該被取消的請求被取消）與正常取消在錯誤物件上同形，靜默 return 之後誤砍永遠不可見。MUST 留一個可觀測訊號（計數 metric 或 debug log），量本身就是要監控的指標。
+
 ## Server 端與資源層
 
 ### SR-6 Nitro 快取 MUST 先過認證邊界
@@ -236,6 +279,16 @@ Enforcement：機械層 `fontsource-bare-import`（error）擋單行 bare import
 
 Cookbook 範本：`~/offline/clade/vendor/snippets/nuxt-data-perf/stale-time.ts`
 
+### Abort 語意：Colada vs Nuxt dedupe（兩套機制、同一個前提）
+
+| | 何時開槍 | 可否關掉 | 前提 |
+| --- | --- | --- | --- |
+| Colada `useQuery` | 每次 `fetch()` 砍前一個 pending；最後一個 dep 移除進 gc 排程時砍 pending | 無 opt-out | `query` 必須把 `signal` 傳進 `$fetch`（HR-6） |
+| Nuxt `useAsyncData` / `useFetch` | 預設 `dedupe: 'cancel'`——新請求取消同 key 的舊請求 | `dedupe: 'defer'`（HR-2 的條件） | handler 第二參數的 `signal` 必須傳進 `$fetch`（HR-6） |
+| Colada `useMutation` | **不開槍**（不建 controller） | — | 寫入不該被取消，見 HR-7 |
+
+兩套的差別在**何時**與**能不能關**，前提是同一個：signal 沒貫通，兩套都只是改變 promise 的處置，網路請求照樣跑完。**NEVER** 把「已經用了 Colada / 已經是預設 `'cancel'`」讀成「頻寬已經省下來了」。
+
 ### Query 檔案組織
 
 推薦 `queries/<domain>.ts` 一個 domain 一個檔，內含：
@@ -300,6 +353,7 @@ async function handleSubmit() {
 3. ✅ 這是 reference data（下拉選單、config、category）嗎？→ 需要 `staleTime` 或 `getCachedData`（HR-3）
 4. ✅ key 是 magic string 還是來自 factory？→ 必須用 factory（HR-4）
 5. ✅ 如果是 mutation，有沒有接 `invalidateQueries`？→ 必須有（HR-5）
+6. ✅ query / handler 有接住 `signal` 並傳進 `$fetch` 嗎？→ 沒接的話框架的 abort 全打空（HR-6）；如果是寫入，有沒有拿取消當防重？→ 不可以（HR-7）
 
 **不需要逐次跟 user 報告自查結果**，但如果發現自己剛寫的 code 違反任何一條，**立刻修正後再繼續**。
 

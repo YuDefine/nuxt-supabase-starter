@@ -381,7 +381,7 @@ If you use `createError({ ..., internal: { ... } })` without calling `log.error(
 
 - Use generic messages like "Error" or "Failed"
 - Leak sensitive data (passwords, tokens, PII)
-- Expect `internal` in HTTP JSON or in `parseError()` — it is for server logs and drains only
+- Expect `internal` in HTTP JSON or in `parseError()`. It is for server logs and drains only
 - Make `why` and `message` identical
 - Suggest fixes that aren't actually possible
 - Create errors without any context
@@ -439,7 +439,7 @@ try {
 
 ## Error Message Templates
 
-Common patterns -- adapt fields to each specific case:
+Common patterns, with the fields adapted to each case:
 
 | Pattern | Status | Fields |
 |---------|--------|--------|

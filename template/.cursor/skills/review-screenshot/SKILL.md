@@ -109,6 +109,6 @@ agent 交回的 manifest 已含 `discriminating` 欄，但**主線 MUST 自行�
 
 ## 注意事項
 
-- **四個模式**（verify / archive QA / commit 0-B / ad-hoc）一律由主線直派 pi Grok-4.6 low（`--model grok-xai`）；sonnet wrapper 只在 dispatcher exit 3 後開，且 subagent **NEVER** 在自己 sandbox 內呼叫 codex CLI
+- **四個模式**（verify / archive QA / commit 0-B / ad-hoc）一律由主線直派 `screenshot-review` Claude subagent（`Agent` tool，`subagent_type: screenshot-review`）；**NEVER** 派 Pi 任一 model，也 **NEVER** 讓 subagent 再轉派
 - 主 session **不需要**自己跑截圖命令
 - 主 session **不需要**決定用哪個工具 — agent 依 rule 判斷

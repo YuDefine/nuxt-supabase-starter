@@ -5,7 +5,7 @@ alwaysApply: false
 ---
 <!--
 🔒 LOCKED — managed by clade
-Source: rules/core/nuxt-dev-watch.md
+Source: rules/modules/framework/nuxt/nuxt-dev-watch.md
 Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
@@ -87,7 +87,9 @@ Local edits will be reverted by the next sync.
 | `MISSING` | `nuxt.config.ts` 完全沒設 `ignore` 或 `vite.server.watch.ignored` |
 | `N/A` | consumer 沒 `nuxt.config.ts`（非 Nuxt consumer） |
 
-Diagnostic-only（exit 0）；consumer 端落地由 consumer 自家 session 處理（per [[clade-role-and-todo-discipline]]）。
+Diagnostic-only（exit 0）；consumer 端落地 **MUST relay 給該 consumer 的 session**（per
+[[clade-role-and-todo-discipline]] § Consumer 工作命中時 MUST relay；brief 只給 findings + pointer +
+驗收，**NEVER** 替它拆步驟）。exit 0 說的是「這支不擋你」，**NEVER** 讀成「所以不必送出去」。
 
 ## 與其他 rule 的關係
 

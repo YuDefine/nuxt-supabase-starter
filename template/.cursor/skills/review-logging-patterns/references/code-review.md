@@ -5,27 +5,36 @@ Use this checklist when reviewing code for logging best practices and evlog adop
 
 ## Prefer `evlog map` when you can
 
-On **Nuxt, Nitro, Next.js App Router, and TanStack Start**, start with `@evlog/cli` if the user is open to it — one command finds dark entry points and names the fixes:
+On **Nuxt, Nitro, Next.js App Router, and TanStack Start**, start with `@evlog/cli` if the user is open to it: one command finds dark entry points and names the fixes:
 
 ```bash
 npx @evlog/cli map --no-write
 npx @evlog/cli map <file> --no-write   # suggested shape for one entry point
 ```
 
-Map rule ids (requirements that move the score) map to the anti-patterns below:
+**Requirements** (move the score) map to the anti-patterns below:
 
-| Map rule id | What it expects | Related anti-pattern |
-|-------------|-----------------|----------------------|
-| `wide-event` | `useLogger()` / request logger | No logging in handlers |
-| `context` | `log.set(...)` | Flat / missing request context |
-| `structured-errors` | `createError({ why, fix })` | `throw new Error('...')` |
-| `error-handling` | log or rethrow in `catch` | `console.error(e); throw e` |
-| `audit` | `log.audit(...)` on sensitive routes | Missing audit on auth/billing |
-| `page-error-handling` | fetch error handling on pages | Unhandled page fetches |
+| Map rule id | Weight | What it expects | Related anti-pattern |
+|-------------|--------|-----------------|----------------------|
+| `wide-event` | 40 | `useLogger()` / request logger | No logging in handlers |
+| `audit` | 25 | `log.audit(...)` on sensitive routes | Missing audit on auth/billing |
+| `structured-errors` | 20 | `createError({ why, fix })` | `throw new Error('...')` |
+| `page-error-handling` | 20 | fetch error handling on pages | Unhandled page fetches |
+| `context` | 15 | `log.set(...)` | Flat / missing request context |
+| `error-handling` | 15 | log or rethrow in `catch` | `console.error(e); throw e` |
+
+**Opportunities** (never cost points; fire only when the project already uses the feature). Surface them as suggestions, not defects:
+
+| Map rule id | Fires when | Related skill section |
+|-------------|-----------|-----------------------|
+| `error-catalog` | A catalog is declared and the same inline error appears in 2+ files | Related Capabilities → catalogs |
+| `audit-coverage` | The project records audits and a state-changing handler has none | Audit logs |
+| `ai-logging` | `ai` is a dependency and the AI SDK is called without `evlog/ai` | AI SDK Integration |
+| `auth-identity` | `better-auth` is a dependency without `evlog/better-auth` | Related Capabilities → Better Auth |
 
 Full rule reference: https://www.evlog.dev/cli/rules
 
-Map tells you the **shape** is present — not that the context is useful at runtime. Keep the scans below for frameworks without adapters, for quality of context, drains, redaction, and AI SDK usage. If the user skips the CLI, use this checklist alone.
+Map tells you the **shape** is present, not that the context is useful at runtime. Keep the scans below for frameworks without adapters, for quality of context, drains, redaction, and AI SDK usage. If the user skips the CLI, use this checklist alone.
 
 ## Quick Scan
 

@@ -3,7 +3,7 @@
 
 **Goal:** Zero to polished UI. Establish design foundations, run decision pages, then build.
 
-Loop / payload / skip 的 SoT 是 [decision-page.md](decision-page.md)。本檔只寫 `new` 的順序與 plan 形狀，**NEVER** 複製 `--start` / `--wait`。
+Loop / payload / skip 的 SoT 是 [decision-page.md](decision-page.md)。本檔只寫 `new` 的順序與 plan 形狀，**NEVER** 複製 `flow ask` / 收答案的 loop。
 
 ## 1. Gather Context
 

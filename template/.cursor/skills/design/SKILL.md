@@ -7,35 +7,37 @@ permission_tier: draft
 
 # Design Orchestrator
 
-You are a design director coordinating specialized design skills. Your job: **assess → diagnose → decision pages → plan**. You do NOT implement UI. You DO run the decision pages in [decision-page.md](decision-page.md) when their skip predicates miss — lottery + local `serve-question` page **via Tailscale URL**, not a chat A/B and not `127.0.0.1` as the user-facing link. After the world / register / components / sequence are pinned, you produce the remaining skill plan and invoke the chosen `/impeccable …` sequence. **MUST Read [decision-page.md](decision-page.md) before any user-facing choice.**
+You are a design director coordinating specialized design skills. Your job: **assess → diagnose → decision pages → plan**. You do NOT implement UI. You DO run the decision pages in [decision-page.md](decision-page.md) when their skip predicates miss — write the payload, then hang it on the decision queue with `flow ask --question-page`, and give the user **`https://review-gui.<maintainer-domain>/decisions`**. Never a chat A/B, and never a `host:port` URL of your own — you do not start the question server, `/decisions` does, at the moment the card is opened. After the world / register / components / sequence are pinned, you produce the remaining skill plan and invoke the chosen `/impeccable …` sequence. **MUST Read [decision-page.md](decision-page.md) before any user-facing choice.**
 
 ## Prerequisites（必裝第三方 skill）
 
 本 skill 是 orchestrator：決策頁自己跑（[decision-page.md](decision-page.md)），UI 實作交由第三方 skill。Clade 不自動安裝這些 skill，consumer 首次使用前 **MUST** 手動安裝。
 
-### 1. pbakaus/impeccable（對齊 v4.0.4）
+### 1. pbakaus/impeccable（對齊 v4.1.1）
 
-impeccable 是 1 個 skill 含 23 個 sub-command：`craft`（**v4 起為 deprecated alias**，見下）/ shape / **init** / document / extract / critique / audit / polish / bolder / quieter / distill / harden / onboard / animate / colorize / typeset / layout / delight / overdrive / clarify / adapt / optimize / live（不含 `pin` / `unpin` / `hooks` 三個 management 命令，作者標註 "Plus three management commands"，不算 sub-command）。另有 subagent（不是 sub-command）`impeccable_asset_producer` / `impeccable_manual_edit_applier` / `impeccable_documenter` / `impeccable_finish_reviewer`；前兩者僅在具 native `image_gen` 的 Codex harness 可用，AI Agent 用不到。
+impeccable 是 1 個 skill 含 23 個 sub-command：`craft`（**v4 起為 deprecated alias**，見下）/ shape / **init** / document / extract / critique / audit / polish / bolder / quieter / distill / harden / onboard / animate / colorize / typeset / layout / delight / overdrive / clarify / adapt / optimize / live（不含 `pin` / `unpin` / `hooks` 三個 management 命令，作者標註 "Plus three management commands"，不算 sub-command；v4.1 另有 `doctor`，同樣是 management，clade plan 不排）。另有 subagent（不是 sub-command）`impeccable_asset_producer` / `impeccable_manual_edit_applier` / `impeccable_documenter` / `impeccable_finish_reviewer`；前兩者僅在具 native `image_gen` 的 Codex harness 可用，AI Agent 用不到。
 
-> **Clade 對齊版本：`skill-v4.0.4`**（2026-08-02 從 v3.9.1 升級；GitHub release: <https://github.com/pbakaus/impeccable/releases/tag/skill-v4.0.4>）
+> **Clade 對齊版本：`skill-v4.1.1`**（2026-08-25 從 v4.0.4 升級；GitHub release: <https://github.com/pbakaus/impeccable/releases/tag/skill-v4.1.1>）
 >
-> **v3.9.1 → v4.0.4 對 clade plan 的實際衝擊：只有一條。** 逐條比對過 v4.0.4 Commands table，**23 個 sub-command 的集合與 v3.9.1 完全相同**——所以本檔各 mode 排出來的 `/impeccable <sub>` 指令全部仍然有效，不需要改寫 plan 形態。唯一變動是 `craft` 從正常 Build command 降為「deprecated alias for an ordinary new-work request」：v4 會自行判斷這是 blank slate / 新頁 / 加 section / 重設計 / 局部細修的哪一種，不再需要指定。**clade plan NEVER 輸出 `/impeccable craft`**，改為直接描述目標介面。
+> **v4.0.4 → v4.1.1 對 clade plan 的實際衝擊：零條指令。** 逐條比對過 HEAD Commands table，**23 個 sub-command 的集合與 v4.0.4 完全相同**——本檔各 mode 排出來的 `/impeccable <sub>` 指令全部仍然有效，不需要改寫 plan 形態。`craft` 維持 deprecated alias：**clade plan NEVER 輸出 `/impeccable craft`**，改為直接描述目標介面。
 >
-> **v4 另有新增的 Setup 步驟**（不是 BC，但不做會少掉 context）：每個 session 首次使用前跑一次 `node <impeccable>/scripts/context.mjs --target <path>`。路徑解析與決策頁相同，見 [decision-page.md](decision-page.md)（copy `.cursor/skills/impeccable`、symlink `.agents/skills/impeccable`、Cursor `.cursor/skills/impeccable`）。它載入 PRODUCT.md / DESIGN.md 與對應 surface brief。**只跑一次，不要重跑**。
+> `/design` 決策頁契約（[decision-page.md](decision-page.md)）同樣相容：`serve-question.mjs` 的 `--schema` / `--start` / `--wait` / `--update` / `--key` / `--payload` 與 exit 0/2/3/4、stdout `QUESTION URL` / `QUESTION KEY` / `ANSWER:` 都還在（`--start` 現在由 `/decisions` 呼叫，不由 agent；agent 只用 `--schema`）。HEAD 只**加**了 `--idle-grace` / `--page-inset` / `--register` / `--reroll`，沒刪既有旗標。`concept-seed.mjs` 同樣只加 `--kind` / `--register` / `--schema`。4.1.0 把決策頁的 sketch 換成 full-fidelity comp，那是 serve-question 內部渲染；ANSWER JSON 仍帶 `optionId` / `steer`，sketch 欄位若有就讀、沒有就略過。
+>
+> **v4 的 Setup 步驟**（不是 BC，但不做會少掉 context）：每個 session 首次使用前跑一次 `node <impeccable>/scripts/context.mjs --target <path>`。路徑解析與決策頁相同，見 [decision-page.md](decision-page.md)（copy `.cursor/skills/impeccable`、symlink `.agents/skills/impeccable`、Cursor `.cursor/skills/impeccable`）。它載入 PRODUCT.md / DESIGN.md 與對應 surface brief。**只跑一次，不要重跑**。
 >
 > `/design` **直接呼叫**同一棵樹的 `concept-seed.mjs` 與 `serve-question.mjs`。找不到 → STOP 去裝，**NEVER** 用聊天問答代替決策頁。
 >
-> v3.1.0 → v3.9.1 的 8 條累積 user-facing 行為已折進本檔 Step 1.6 / 2.5 / 6 的對應段落。**要升降版、或要查本檔某條規範的上游出處時 MUST 讀 `references/impeccable-install.md`**；跑一次 design pass 不需要讀。Consumer 不自行升版，由 clade 統一更新再 propagate。
+> v3.1.0 → v4.0.4 的累積 user-facing 行為已折進本檔 Step 1.6 / 2.5 / 6 的對應段落。**要升降版、或要查本檔某條規範的上游出處時 MUST 讀 `references/impeccable-install.md`**；跑一次 design pass 不需要讀。Consumer 不自行升版，由 clade 統一更新再 propagate。
 
 ```bash
 npx skills add pbakaus/impeccable --agent claude-code --copy -y
 ```
 
-**檢查**：`grep -m1 '^version:' .cursor/skills/impeccable/SKILL.md` 應為 `version: 4.0.4`；SKILL.md 的 `shasum -a 256` 應為 `a1ea82ce80f4db6f53757a84fc37b639fdc2354ca25e54a30ab6d45dcf944628`。
+**檢查**：`grep -m1 '^version:' .cursor/skills/impeccable/SKILL.md` 應為 `version: 4.1.1`；SKILL.md 的 `shasum -a 256` 應為 `9d124382509eb15da0862f145bca0e53be00aaddb05272e4efc9a0832de048a9`。
 
 > **版本判定改看 frontmatter，不是只看 hash。** v4 起 SKILL.md 帶 `version:` frontmatter，直接讀得到；hash 仍列著是為了偵測同版本內的內容漂移。
 >
-> `npx skills add` 拉的是 default branch HEAD，**不保證等於 latest release**——2026-08-02 實測兩者恰好都是 4.0.4，那是巧合不是保證。上游推了新 commit 但還沒發 release 時，裝到的會是未發布內容；`npx skills check` 可對齊 release tag，但它會把 `.cursor/skills/<skill>` 改成 symlink → `.agents/skills/`，與本檔 copy mode 的前提衝突。**判定漂移一律以上面兩條檢查為準**，發現不符再決定要不要動。
+> `npx skills add` 拉的是 default branch HEAD，**不保證等於 latest release**——2026-08-25 實測 HEAD frontmatter 是 4.1.1（與 `skill-v4.1.1` tag 同號），那是這次的事實不是保證。上游推了新 commit 但還沒發 release 時，裝到的會是未發布內容；`npx skills check` 可對齊 release tag，但它會把 `.cursor/skills/<skill>` 改成 symlink → `.agents/skills/`，與本檔 copy mode 的前提衝突。**判定漂移一律以上面兩條檢查為準**，發現不符再決定要不要動。
 
 **新 consumer 安裝 / 升降版操作流程**：見 `references/impeccable-install.md`（含標準 install-skills.sh snippet、copy vs symlink mode、vp-staged 已知衝突繞法）。
 

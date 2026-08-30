@@ -86,5 +86,8 @@ RLS policy 裡的 `auth.uid()` 能取到值，前提是**該 request 攜帶 Supa
 ## 相關規則
 
 - [[rls-policy]]：RLS policy 撰寫規範（含 GRANT 驗證段）
-- [[evlog-adoption]]：evlog 結構化 logging
+- evlog 結構化 logging：`rules/modules/capabilities/evlog/evlog-adoption.md`
+  （capability 模組 —— 宣告 `capabilities: ["evlog"]` 的 consumer 才投影得到。
+  這裡刻意不用 wikilink：本檔留在 core、對每個 consumer 都投影，而 target 不是，
+  寫成 wikilink 會在沒有 evlog 的 repo 變成死鏈。同下一行 auth module 的寫法）
 - Auth module variants：`rules/modules/auth/{supabase-self-hosted,better-auth,nuxt-auth-utils}/`

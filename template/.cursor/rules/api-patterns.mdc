@@ -180,6 +180,70 @@ Template 預設部署到 **Cloudflare Workers**（`nitro.preset: 'cloudflare_mod
 - **NEVER** 用 Node.js-only API（`Buffer`, `process.env` 部分、`fs`）— 改用 Web Standard API
 - **Env 存取**：透過 `useRuntimeConfig()` 或 `event.context.cloudflare.env`，**NEVER** 用 `process.env`
 
+## Mutation 語意完整性
+
+本節管的是「**請求成功了，但沒做到使用者以為的事**」——三條都不會 throw、不進 error log，前端收到 2xx 後顯示「已儲存 / 已套用」，實際狀態與畫面分歧。
+
+### Partial update NEVER 用 truthy 判斷欄位有沒有提供
+
+**每一個** partial update handler（PATCH / 局部 PUT）都 **MUST** 用「**該 key 是否存在於 payload**」決定要不要寫，**NEVER** 用該值的 truthiness。
+
+`if (body.note) updates.note = body.note` 會吞掉 `''`、`0`、`false` —— 使用者「清空備註」「把數量改成 0」「把開關關掉」全部靜默失效，而 handler 回 200、前端顯示已儲存，重新整理才會發現什麼都沒變。
+
+```ts
+// ❌ 清空欄位靜默失效
+if (body.note) updates.note = body.note
+
+// ✅ 存在性判斷
+if ('note' in body) updates.note = body.note
+// ✅ 或讓 Zod 承擔：.partial() 後未提供的 key 本來就不在物件裡
+const updates = UpdateSchema.partial().parse(body)
+```
+
+**NEVER** 用「反正前端一定會帶完整物件」當理由跳過 —— 那把契約押在呼叫端，而 API 的其他呼叫端（行動裝置、腳本、未來的自己）不受那個假設約束。
+
+**每一個**含可清空欄位的 handler 都 **MUST** 有一條 regression test 斷言「送 `''` 之後讀回來是 `''`」，不是只對其中一支補。
+
+### 未知 query 參數 MUST 回 400，NEVER 靜默忽略
+
+**每一個**接受 query string 的 handler 的 Zod schema 都 **MUST** 加 `.strict()`。
+
+靜默忽略未知 key 時，前端把 `?status=active` 打錯成 `?state=active`，後端回的是**未過濾**的完整清單，而前端 filter UI 顯示「已套用」。使用者拿到一份宣稱過濾過、實際沒有的資料 —— 這比回 400 嚴重，因為 400 至少看得見。
+
+```ts
+// ❌ 未知 key 被丟掉，錯字無聲
+const q = await getValidatedQuery(event, z.object({ status: z.string().optional() }).parse)
+
+// ✅ 未知 key → ZodError → 400
+const q = await getValidatedQuery(event, z.object({ status: z.string().optional() }).strict().parse)
+```
+
+確定要接受的附加參數（分頁、追蹤參數）**MUST** 逐個寫進 schema 當 optional 欄位，**NEVER** 為了放行它們而拿掉 `.strict()` —— 那等於放行整個未知集合。
+
+### 業務期限 / 數量上限 MUST 在 server 擋
+
+前端的 `max` / `min` / `disabled` / 日期選擇器範圍 **NEVER** 構成 gate —— 它們是提示，不是約束。
+
+**每一條**寫進產品規格的業務上限（試用天數、方案額度、單筆數量上限、有效期限、可選日期範圍）都 **MUST** 在 server handler 內驗證，即使前端已經擋過。繞過不需要任何攻擊技巧：改 DevTools、直接打 API、用舊版前端快取、時區讓邊界日期偏一天。
+
+實際形狀是「規格寫上限 N，資料庫裡有一筆是 N 的數倍，而 server 從來沒檢查過」—— 沒有任何一次請求失敗過，所以也沒有任何訊號。
+
+**Zod schema 是最短的落點**：`z.number().int().max(N)`、`z.coerce.date().refine(d => diffDays(now, d) <= N)`。**NEVER** 把這類檢查只寫在前端 composable。
+
+> **字串長度**那一半不在本條 —— 見 `framework/nuxt/nuxt-form-validation.md` § maxlength（UI truncate 與後端 validation 的一致性）。本條只管日期 / 時長 / 數值的**業務規則**上限。
+
+### 稽核
+
+```bash
+node scripts/audit-mutation-semantics.ts    # warn-only
+```
+
+**觸發條件**：informational — 不觸發任何東西。命中 **NOT** 等於違規：欄位若是 NOT NULL 且業務上不可清空，truthy 與存在性判斷等價；逐筆判讀是人的工作。
+
+**消費端**：clade 主線 fleet 稽核（`pnpm audit:manual`）、consumer 主線由本檔 `paths` gate 載入後自行對照。
+
+它只量得到前兩條的形狀。**第三條（業務上限 MUST server 擋）本 script 零訊號** —— 上限值本身是業務常數，grep 不出「這個常數有沒有對應的 server 檢查」。**NEVER** 把前兩欄回 0 讀成三條都遵守了。
+
 ## Audit Logs
 
 Audit table 命名、欄位、hash chain、RLS、helper 統一規約見：

@@ -42,8 +42,18 @@ bash .cursor/scripts/gh-ci-watch.sh run <run-id>
 
 ### 場景 B — 盯某 workflow 最新一條 run（push 後標準場景）
 
+**workflow 識別字串一律傳檔名（`ci.yml`），NEVER 傳 display name 或自己想的簡稱。**
+`gh run list -w` 只認兩種形式：workflow **檔名**，或 `name:` 欄位的**逐字** display name。
+display name 是自由文字、跟檔名無關（`ci.yml` 的 name 常是 `CI / Deploy`），而且隨時可被編輯 ——
+檔名要改得動 git。傳錯時 script 自 2026-08-28 起在進輪詢前就 fail fast：exit 2 並把該 repo
+實際的 workflow 清單印進 `RESULT:` 行；先前是被當成 API 抖動重試 3 次後回通用 `UNAVAILABLE`，
+訊息與「gh 掛了 / 沒授權」同形（<consumer-b> v1.272.0 實證，見
+[[pitfall-gh-ci-watch-workflow-display-name-guess-fails-opaquely]]）。名字拿不準就先跑
+`gh workflow list`，或直接用場景 A 的 `run <run-id>`。
+
+
 ```bash
-bash .cursor/scripts/gh-ci-watch.sh workflow "Deploy Staging" --branch main
+bash .cursor/scripts/gh-ci-watch.sh workflow deploy-staging.yml --branch main
 ```
 
 - **run 尚未建立也可以直接派**：`/commit` 是 `git push --tags` 先、`git push main` 後，staging run 可能還不存在——script 把「查無 run」視為 pending 繼續等（預設只認腳本啟動前 120s 之後建立的 run，可用 `--since <ISO8601>` 調整）
@@ -51,7 +61,7 @@ bash .cursor/scripts/gh-ci-watch.sh workflow "Deploy Staging" --branch main
 - **tag 觸發的 workflow MUST 用 `--tag v<version>`，NEVER 用 `--branch main`**：tag 觸發的 run 其 `headBranch` 是 **tag 名**不是 `main`，`--branch main` 對它永遠篩不到 run → watcher 一路 pending 到 `WATCH_TIMEOUT` exit 3，即使該 run 其實是綠的（2026-07-25 <consumer-b> v1.250.0 實證）
 
 ```bash
-bash .cursor/scripts/gh-ci-watch.sh workflow "CI / Deploy" --tag "v$(node -p 'require("./package.json").version')"
+bash .cursor/scripts/gh-ci-watch.sh workflow ci.yml --tag "v$(node -p 'require("./package.json").version')"
 ```
 
 ### 目標 ref MUST pin 在你剛推的那一個（hard rule）
@@ -77,7 +87,7 @@ script 會在第一行回顯目標 commit 的 subject、所屬 tag 與是否為�
 ### 場景 C — 等某 SHA 的某 workflow 出結果
 
 ```bash
-bash .cursor/scripts/gh-ci-watch.sh workflow "Deploy Production" --commit "$DEPLOY_SHA"
+bash .cursor/scripts/gh-ci-watch.sh workflow deploy-production.yml --commit "$DEPLOY_SHA"
 ```
 
 `$DEPLOY_SHA` 是 push **之前**就存下來的（見上方 § 目標 ref MUST pin 在你剛推的那一個）。已經有 tag 時改用 `--tag` 更省事。
@@ -89,7 +99,7 @@ bash .cursor/scripts/gh-ci-watch.sh workflow "Deploy Production" --commit "$DEPL
 ### 場景 D — 完成後順帶抓證據行
 
 ```bash
-bash .cursor/scripts/gh-ci-watch.sh workflow "Deploy Staging" --branch main \
+bash .cursor/scripts/gh-ci-watch.sh workflow deploy-staging.yml --branch main \
   --evidence-grep 'Deploy complete|digest: sha256'
 ```
 
@@ -112,7 +122,8 @@ Terminal report 一律自帶：`RESULT:` 行、run URL、各 job 耗時（`--jso
 | --- | --- | --- |
 | 0 | `success` | 一行回報綠燈 + run URL，結束話題 |
 | 1 | `failure` / `cancelled`（無 successor）/ `timed_out` / `startup_failure` / ... | 讀同段輸出的 `--log-failed` 節錄，進失敗處置流程（post-push 場景見 AGENTS.md「Post-Push CI Watcher」段的 AskUserQuestion 二選一） |
-| 2 | `UNAVAILABLE (<原因>)` | gh 不存在 / 未登入 / API 連續失敗——一行回報略過，**NEVER** 追問 user |
+| 2 | `UNAVAILABLE (workflow '<X>' 不存在；可用：…)` | **名稱傳錯，不是環境問題。**照訊息列出的清單挑**檔名**重派一次，**NEVER** 當成「watcher 起不來」略過——那會讓這次 push 完全沒有 CI 驗證 |
+| 2 | `UNAVAILABLE (<其他原因>)` | gh 不存在 / 未登入 / API 連續失敗——一行回報略過，**NEVER** 追問 user |
 | 3 | `WATCH_TIMEOUT` | run 可能仍在跑（輸出含最後已知狀態 + run id）。可再派一輪 `run <run-id>` 續盯，或依場景處置 |
 
 ## 查詢：canonical 命令（一次性，前景跑即可）

@@ -17,7 +17,7 @@ Local edits will be reverted by the next sync.
 
 ## Pi 派工的標準流程（所有 routing 共用）
 
-派**任何** Pi 席位出去工作**一律走 `vendor/scripts/pi-dispatch.ts`**——`sol` / `luna`（provider `openai-codex`；`terra` 可解析但 2026-08-11 起 **NEVER** 派）、`sol-cursor` / `luna-cursor` / `grok-cursor`（provider `cursor`）、`grok-xai`（provider `xai`）**每一格都走這個入口**，沒有例外。
+派**任何** Pi 席位出去工作**一律走 `vendor/scripts/pi-dispatch.ts`**——`gemini`（provider `google-gemini-cli`）、`sol` / `luna`（provider `openai-codex`；`terra` 可解析但 2026-08-11 起 **NEVER** 派）、`sol-cursor` / `luna-cursor` / `grok-cursor`（provider `cursor`）、`grok-xai`（provider `xai`）**每一格都走這個入口**，沒有例外。
 
 要指 `openai-codex` 那組席位時寫 **codex-pool**，那個區分只在配額鏈與計價成立；派工管道一律稱 pi。
 
@@ -37,7 +37,7 @@ Local edits will be reverted by the next sync.
      --brief /tmp/pi-<topic>-<slug>-prompt.md \
      --cwd <cwd> \
      --label <topic>-<slug> \
-     --model <sol|sol-cursor|luna|luna-cursor|grok-xai|grok-cursor> --effort <low|medium|high|xhigh|max> \
+     --model <sol|sol-cursor|gemini|luna|luna-cursor|grok-xai|grok-cursor> --effort <low|medium|high|xhigh|max> \
      --route <routing-table|claude-delegate-sub|fallback-chain|manual> \
      --tier-basis <table-row|five-conjunct|adjudication|delegate-sub|quota-fallback|manual> \
      [--table-row <routing-row>] [--retry-of <prior-label>] [--chain-origin <sol|luna|grok-xai>]
@@ -47,7 +47,7 @@ Local edits will be reverted by the next sync.
    終點的 Claude 檔位按**起點**分（luna→`haiku`、grok-xai→`sonnet`）。不帶且 `--retry-of` 也回溯不到起點時，
    dispatcher 的 exit 4 回 unresolved 而不猜檔位。其餘 model 起點唯一，不必帶。
 
-   Dispatcher 固定用 Pi JSON mode、ephemeral session與 machine-safe extension profile，provider 由 `--model` 決定（`openai-codex` / `cursor` / `xai`）；model、effort、routing attribution與 exit code由這個入口統一驗證。MCP extension存在時由 dispatcher明確載入，interactive `cx` extension不會進 machine dispatch。
+   Dispatcher 固定用 Pi JSON mode、ephemeral session與 machine-safe extension profile，provider 由 `--model` 決定（`google-gemini-cli` / `openai-codex` / `cursor` / `xai`）；model、effort、routing attribution與 exit code由這個入口統一驗證。MCP extension存在時由 dispatcher明確載入，interactive `cx` extension不會進 machine dispatch。
 
 3. 立刻簡短回報 bash job ID 給使用者
 4. 立刻啟動 **Pi Watch Protocol**（見下節 § 監看排程）— notification-only（主線 idle 等通知，只下**一個** ~1500s 安全網 fallback 防罕見 hang-type 失敗）。**禁止**啟動每 3 分鐘短輪詢（無謂 turn 重燒 context）。**禁止**任何 subagent 中介 dispatch（per `agent-routing.md` § Dispatch 入口）
@@ -58,7 +58,7 @@ Local edits will be reverted by the next sync.
 
 | Routing | `<topic>` | `<cwd>` | reasoning effort | 預期動作 | Plan-first | Commit Prohibition |
 | --- | --- | --- | --- | --- | --- | --- |
-| WebSearch | `websearch` | `/tmp` | `medium` | 純讀（搜尋網頁/查文件） | 否 | N/A（不寫檔） |
+| External web retrieval（WebSearch／WebFetch） | `external-web` | `/tmp` | `low` | 純讀（搜尋網頁／抓公開 URL／查外部文件）；第一跳 Gemini，第二跳 Luna | 否 | N/A（不寫檔） |
 | Spectra propose（draft） | `spectra-propose` | consumer repo root | `xhigh` | 寫 spec/proposal 到 `openspec/changes/<change>/`（主線之後 cross-check） | **是** | **是** |
 | Spectra apply phase（非 Design Review、非 UI view） | `spectra-apply-<phase-id>` | consumer repo root | `high` | 完成單一 phase 內所有 tasks，回報 tasks.md checkbox 狀態 | **是** | **是** |
 
@@ -416,7 +416,7 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleWake
 
 ## Spectra Routing Table
 
-從 [[agent-routing]] § Routing Table 移出（2026-07-31）——這五列只在 spectra flow 內成立，主檔留一列 stub 指這裡。**UI view phase 與 Design Review 都永不外派（主線 Opus 5 xhigh 自己做）**、**propose 的 cross-check / final check 一律主線跑**這兩條契約主檔仍帶著。
+從 [[agent-routing]] § Routing Table 移出（2026-07-31）——這五列只在 spectra flow 內成立，主檔留一列 stub 指這裡。**UI view phase 與 Design Review 都永不外派（主線 Claude Opus 5（effort: xhigh）自己做）**、**propose 的 cross-check / final check 一律主線跑**這兩條契約主檔仍帶著。
 
 **派工時 `--table-row` 要填哪一列**：本節的類別名不是 row 名。裸 `--table-row spectra` 在 `TABLE_ROW_POLICIES` 是 `model: null`（因為下表五列檔位各異，一個 row 表達不了），dispatcher 一律拒絕。對照表：
 
@@ -432,10 +432,10 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleWake
 
 | 工作類別 | 由誰執行 | 為什麼 |
 | --- | --- | --- |
-| **Spectra `propose` 階段（draft）** | **使用者選單三選一**：A Pi GPT-5.6-sol max draft（預設/推薦）／ B 三模型交叉：Claude Fable 5 xhigh draft ＋ Pi GPT-5.6-sol max review／ C 純 Claude | 預設跳三選一選單；使用者明確指定路徑時跳過。詳見 `spectra-propose` Step 0。 |
-| **Spectra `propose` cross-check / final check** | **主線 Claude Fable 5 xhigh** | 主線 = quality gate（A 的 cross-check、B 的 final check 都由主線跑），不只是 dispatcher。 |
-| **Spectra `apply`（非 Design Review、非 UI view phase，phase 粒度）** | **Pi GPT-5.6-sol high** | medium 漏 schema drift 風險高；phase 粒度避免 round-trip。 |
-| **Spectra `apply` UI view phase（component / page / view / layout / styling）+ Section 7（Design Review）** | **主線 Claude Opus 5 xhigh 自己做，永不派 pi**（UI view 實作與 Design Review 都是；實作完主線照跑 Step 6c / 6d 與 Design Review gate） | 視覺 / 互動 / a11y 與 Design skill 緊耦合，實作與品質判定分不開。非 view 的 frontend 不在此範圍，仍走 sol（範圍同 § Spectra Apply Phase Dispatch C 類）。 |
+| **Spectra `propose` 階段（draft）** | **使用者選單三選一**：A GPT-5.6-sol via Pi（effort: max）負責 draft（預設/推薦）／ B 三模型交叉：Claude Fable 5（effort: xhigh）負責 draft ＋ GPT-5.6-sol via Pi（effort: max）負責 review／ C 純 Claude | 預設跳三選一選單；使用者明確指定路徑時跳過。詳見 `spectra-propose` Step 0。 |
+| **Spectra `propose` cross-check / final check** | **主線 Claude Fable 5（effort: xhigh）** | 主線 = quality gate（A 的 cross-check、B 的 final check 都由主線跑），不只是 dispatcher。 |
+| **Spectra `apply`（非 Design Review、非 UI view phase，phase 粒度）** | **GPT-5.6-sol via Pi（effort: high）** | medium 漏 schema drift 風險高；phase 粒度避免 round-trip。 |
+| **Spectra `apply` UI view phase（component / page / view / layout / styling）+ Section 7（Design Review）** | **主線 Claude Opus 5（effort: xhigh）自己做，永不派 pi**（UI view 實作與 Design Review 都是；實作完主線照跑 Step 6c / 6d 與 Design Review gate） | 視覺 / 互動 / a11y 與 Design skill 緊耦合，實作與品質判定分不開。非 view 的 frontend 不在此範圍，仍走 sol（範圍同 § Spectra Apply Phase Dispatch C 類）。 |
 | **spectra-apply Step 8a self-collect (a)(b)**（dev-login allow-list 小 mod + service_role DB query 證 data shape） | **Pi `--model sol --effort low` via 泛用 dispatcher** | PoC 已實證 pi 能跑完整 evidence chain；annotation 寫回 tasks.md 維持主線。詳見 spectra-apply SKILL Step 8a。 |
 
 ## Orchestration Residency — 機械 Enforcement（residency-classify + archive-gate Check 8）
@@ -477,7 +477,7 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleWake
 
 
 1. **MUST** 預設跳三選一 dispatch 選單（A Pi draft + 主線 cross-check／B 三模型交叉：Fable draft + Pi review + 主線 final check／C 純 Claude）。使用者**明確**指定路徑（「純 Claude propose」「不要派 pi」「用 Fable」「用 pi」等）時跳過選單直接走。詳見 `spectra-propose` Step 0
-2. **MUST** 主線是 quality gate — A 的 cross-check 與 B 的 final check 都由主線 Fable 5 xhigh 跑
+2. **MUST** 主線是 quality gate — A 的 cross-check 與 B 的 final check 都由主線 Claude Fable 5（effort: xhigh）跑
 3. **NEVER** 把 cross-check / final check 的修補丟回 pi — 主線自己 Edit 修
 
 AI Agent session 收到 spectra propose 請求時：
@@ -485,7 +485,7 @@ AI Agent session 收到 spectra propose 請求時：
 1. **NEVER** 用 AskUserQuestion 問 A/B（除非使用者**明確**要求「純 Claude propose」或「不要派 pi」）
 2. **MUST** 預設走「Pi draft + 主線 cross-check」流程：
    1. 主線解析 change name + requirement
-   2. 派 background pi GPT-5.6-sol max draft（走「Pi 派工的標準流程」）
+   2. 派 background GPT-5.6-sol via Pi（effort: max）負責 draft（走「Pi 派工的標準流程」）
    3. 收到 `<task-notification status=completed>` 後，主線 **MUST** 依序：
       - Read pi 產出的 proposal.md / design.md / tasks.md
       - 跑 `bash scripts/spectra-advanced/post-propose-check.sh <change>`（檢查 User Journeys / Affected Entity Matrix / Implementation Risk Plan / Design Review 7 步）
@@ -495,7 +495,7 @@ AI Agent session 收到 spectra propose 請求時：
    4. 結束後 `spectra park <change>`，回報 artifacts list + cross-check 結果
 3. **MUST** 主線是 quality gate — 不要把所有事推給 pi 後直接結束
 
-詳細流程見 `plugins/hub-core/skills/spectra-propose/SKILL.md` Step 0。
+詳細流程見 `plugins/hub-capabilities-openspec/skills/spectra-propose/SKILL.md` Step 0。
 
 ## Spectra Apply Phase Dispatch（具體做法）
 
@@ -506,7 +506,7 @@ AI Agent session 收到 spectra propose 請求時：
 
 執行 `spectra-apply` 時 phase 粒度派 pi。**三條契約**：
 
-1. **Design Review phase 與 UI view phase 一律主線 Opus 5 xhigh 自己做，永不外派**——**NEVER** 派 Pi 任一 model，**NEVER** 派 Claude subagent，**NEVER** 因為 phase 大、時間晚、管線現成就轉派（UI view 實作完主線照跑該 phase 的機械檢查與 Design Review gate）。其他 phase（schema / migration / API server / CLI / 純 backend / 非 view 的 frontend / unit test / docs）以泛用 dispatcher 的 `spectra-phase-implementation` row 派 background Pi Sol high；**每一個**符合封閉來源 extraction predicate 的 prescan 才可另走 `spectra-phase-prescan` Gemini low，且不得取代 Sol 實作
+1. **Design Review phase 與 UI view phase 一律主線 Claude Opus 5（effort: xhigh）自己做，永不外派**——**NEVER** 派 Pi 任一 model，**NEVER** 派 Claude subagent，**NEVER** 因為 phase 大、時間晚、管線現成就轉派（UI view 實作完主線照跑該 phase 的機械檢查與 Design Review gate）。其他 phase（schema / migration / API server / CLI / 純 backend / 非 view 的 frontend / unit test / docs）以泛用 dispatcher 的 `spectra-phase-implementation` row 派 GPT-5.6-sol via Pi（effort: high）；**每一個**符合封閉來源 extraction predicate 的 prescan 才可另走 `spectra-phase-prescan` Gemini via Pi（effort: low），且不得取代 Sol 實作
 2. **混雜 phase**（同一 phase 摻了 view 與非 view）：**已開工** → 主線整個 phase 自己做，不重切、不派 pi；**未開工** → **STOP** 請使用者跑 `/spectra-ingest <change>` 重切
 3. **禁止**主線自行修改 tasks.md 的 phase 結構（屬 ingest 範圍）
 
@@ -517,11 +517,11 @@ A/B/C 三類的完整判定條件（含 view 層檔案路徑清單）與 C 類�
 1. Read tasks.md，按 `## N.` 切分 phase
 2. **每個 phase 三類分類**（依序判定，命中即停）：
    - **A. Design Review phase**：標題含 "Design Review" 或內容含 `/design improve` / `/impeccable audit` / `/impeccable *` / `review-screenshot`
-     → **主線 Claude Opus 5 xhigh 自己做，永不派 pi**
+     → **主線 Claude Opus 5（effort: xhigh）自己做，永不派 pi**
    - **B. UI view phase**：phase 內任一 task 描述/路徑指涉 view 層檔案——`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且該 phase 沒有摻入非 view 的 frontend / backend 工作**（store / hook / API client / type / util / migration / API server）
-     → **主線 Claude Opus 5 xhigh 自己做，永不派 pi**。實作完、該 phase commit / 標 done 之前，照跑 SKILL Step 6c / 6d 檢查與 Design Review gate
+     → **主線 Claude Opus 5（effort: xhigh）自己做，永不派 pi**。實作完、該 phase commit / 標 done 之前，照跑 SKILL Step 6c / 6d 檢查與 Design Review gate
    - **C. 其他 phase**：上述兩類以外（schema、migration、API server、CLI、純 backend、frontend 但非 view 的 store / hook / API client / type / util、unit test、docs）
-     → **派 background pi GPT-5.6-sol high 做完整 phase**
+     → **派 GPT-5.6-sol via Pi（effort: high）做完整 phase**
 3. **混雜 phase fallback**（A、B 都不是純 view、又混雜 view 與非 view 工作）：
    - **看該 phase 是否已開工**（任一 task `[x]` 或 git history 顯示 phase 內檔案已被改）：
      - **已開工** → **主線整個 phase 自己做**（safety fallback；不重切，不派 pi）
@@ -668,19 +668,31 @@ Codex session 收到 `$spectra-apply`（或任何要它執行 spectra-apply 流�
 
 ```
 Sol      → sol-cursor（cursor/gpt-5.6-sol@272k）→ Opus 主線
-Gemini   → luna → luna-cursor（cursor/gpt-5.6-luna@272k）→ grok-xai（xai/grok-4.6）→ Claude Haiku
-Luna     → luna-cursor → grok-xai → Claude Haiku   # 第一手只在 Gemini hop 不可用時
+Gemini   → luna → luna-cursor（cursor/gpt-5.6-luna@272k）→ grok-xai（xai/grok-4.6）→ grok-cursor（cursor/grok-4.6）→ Claude Haiku
+Luna     → luna-cursor → grok-xai → grok-cursor → Claude Haiku   # 第一手只在 Gemini hop 不可用時
 Grok-xai → grok-cursor（cursor/grok-4.6）→ Claude Sonnet
 ```
 
 **鏈上的每一跳都是換配額池，不是降檔。** 判準是那一跳有**獨立計量**的配額，不是「它是同一個 model」。
 
-**`grok-cursor` 只在 grok 鏈出現，NEVER 接在 luna 鏈後面**（2026-08-19 Charles 拍板）。成因：Cursor 那一跳
-經 Cursor API key 取用，計入 Ultra 方案的 **`Other Models`** bucket（2026-08-19 Charles 實測確認；
-on-demand spending 已關，用完就是硬停），**不是**先前規約寫的「`composer + grok` 獨立閒置 bucket」。
-`Other Models` 是 Claude / GPT / Gemini 共用的那個 $400 桶——**派一發 `grok-cursor` 就是從同一個桶裡
-扣**，而訂閱內含、專給 Cursor Grok 與 Composer 的 `Cursor Models` bucket 走 API key 根本碰不到。luna 鏈的最後一個換池機會因此是 `grok-xai`（xAI OAuth，完全獨立），
-再耗盡就進 Claude 終點。**NEVER** 從「grok 鏈還有 `grok-cursor` 這一跳」推論 luna 鏈也能用它。
+**`grok-cursor` 兩條鏈都走得到**（2026-08-29 Charles 重拍，推翻 2026-08-19 的 luna 鏈禁令）。
+2026-08-19 的成因句寫的是「經 API key 取用就計入 Ultra 的 `Other Models` $400 桶，而訂閱內含的
+`Cursor Models` bucket 走 API key 根本碰不到」，據此把 luna 鏈的最後一個換池機會鎖在 `grok-xai`。
+
+**那句話對現況已不成立，證據是同一把 key 上的差分**：2026-08-29 逐一實測，`Other Models` 桶裡的
+每一個模型（`gpt-5.6-sol@272k` / `gpt-5.6-luna@272k` / `gpt-5.3-codex` / `claude-*` / `gemini-3.1-pro` /
+`kimi-k2.7-code`）全部回 `You've hit your usage limit`，而 `grok-4.6` 與 `composer-2.5` 照常回應。
+若 grok 真從同一個桶扣，它應與其他模型同死。**「pi 走 OAuth 所以沒碰到 API-key 計費路徑」這條
+和解解釋已被排除**：`~/.pi/agent/auth.json` 的 cursor entry 是 `{type: "api_key", key: "crsr_..."}`，
+與 xai／openai-codex／gemini 的 OAuth 三件組形狀不同——那次實測走的就是 API key。
+
+**「當時就錯」還是「後來 Cursor 改了計費」，從現在的行為分不出來**，要 Cursor dashboard 的歷史
+計費事件才能定性。**NEVER** 把本次改動寫成「證明了 08-19 是錯的」——被推翻的是**那句話對現況的
+描述**，不是它當時的取證。
+
+**重拍的即時價值在中段兩跳全滅**：`luna-cursor`（usage limit）與 `grok-xai`（403 credits）同時死掉時，
+舊鏈的 gemini／luna 耗盡等於**直落 Claude Haiku**，`sol-cursor` 同死則讓 sol exit 4 **直回 Opus 主線**——
+降級鏈的存在意義正是不要在這種時候把工作推回最貴的那一格。
 
 **跨 model 家族的跳只有 luna 鏈有，是具名例外不是通則。** 新增跨家族跳 MUST Charles 逐鏈拍板，
 准入三條連言是**申請門檻**，**NEVER** 由它自動導出（必要條件不是充分條件）；逐條判準與取證見
@@ -707,8 +719,9 @@ dispatch 注入 fail-closed 段，要求回覆帶一行 `PRECONDITIONS_VERIFIED:
 3. **Luna exit 4 → 換池到 Cursor**：`--model luna-cursor --route fallback-chain --tier-basis quota-fallback --retry-of <luna-label>`。這是同一檔智力、另一個配額池，不是降檔。
 4. **luna-cursor exit 4 → `--model grok-xai --chain-origin luna`** 同 effort 重派（`--route fallback-chain --tier-basis quota-fallback --retry-of <luna-cursor-label>`）。**`--chain-origin` 在這格 MUST 帶**——`grok-xai` 是兩條鏈共用的一格，起點決定它耗盡後是終止還是續走 `grok-cursor`，不帶就判不出來。
 5. **grok-xai exit 4（luna 鏈）→ 這條鏈到此為止**，才動 Claude subagent，且**只接 `haiku`**（顯式帶，per § Subagent 回報契約第 4 條），**NEVER** 升 `sonnet`。**NEVER** 在這裡續派 `--model grok-cursor`——那一跳只屬於 grok 鏈，理由見上方 `grok-cursor` 段。
-6. **Grok 鏈自己的路徑**（`web-search` 列；`screenshot-review-verify` 2026-08-22 起 Claude-only，不再屬於本鏈）：`grok-xai` exit 4 → `--model grok-cursor --chain-origin grok-xai` 重派一次；再 exit 4 才動 Claude subagent，且**只接 `sonnet`**，**NEVER** 降 `haiku`。
-7. Claude 接走時 session 結尾 **MUST** 回報「本 session 因配額耗盡，由 Claude 執行 N 個本應外派的 change」；有 runtime reset 資訊再附上，沒有就明說 unavailable。
+6. **Grok 鏈自己的路徑**（以 `grok-xai` 為第一手的 repo-scan rows）：`grok-xai` exit 4 → `--model grok-cursor --chain-origin grok-xai` 重派一次；再 exit 4 才動 Claude subagent，且**只接 `sonnet`**，**NEVER** 降 `haiku`。
+7. **External-web row是具名二跳例外，NEVER 進上面的generic Gemini／Luna鏈**：第一跳是`--model gemini --effort low --route routing-table --tier-basis table-row --table-row web-search --decision-id <id>`；exit 2／3／4且無usable final text時，第二跳是同decision的`--model luna --effort low --route fallback-chain --tier-basis quota-fallback --retry-of <gemini-label>`。Luna usable就使用結果；Luna exit 3／4後，matching built-in `WebSearch`／`WebFetch`只憑同reason authoritative receipt放行。NEVER續到`luna-cursor`／Grok／Claude subagent。
+8. Claude 接走時 session 結尾 **MUST** 回報「本 session 因配額耗盡，由 Claude 執行 N 個本應外派的 change」；有 runtime reset 資訊再附上，沒有就明說 unavailable。
 
 ## Dispatch 資料邊界（全文）
 

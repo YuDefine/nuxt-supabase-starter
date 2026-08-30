@@ -1,6 +1,6 @@
 ---
 name: "code-review"
-description: "Code review — PR review 或 commit 0-A.2 裁決（Fable max，拿 pi 回饋做最終判定）"
+description: "Code review — PR review 或 commit 0-A.2 裁決；由 Claude Fable 5 執行，effort 為 max，拿 Pi 回饋做最終判定"
 model: inherit
 ---
 
@@ -79,6 +79,10 @@ git diff main...HEAD
 - [ ] 優先使用 `interface` 而非 `type`
 - [ ] 無 console.log 或 debugger 殘留
 - [ ] 無未使用的 imports 或變數
+- [ ] 名字不對型別說謊（`List` / `Map` / `Count` / `isX` / `hasX` 與值的型別一致）
+- [ ] 無 magic number 與單字母名（一行 lambda 參數除外）
+- [ ] 函式內分段註解（`// Validation` 等）= extract-method 警報
+- [ ] 無 commented-out code、無檔頭 changelog / banner 分隔線
 
 #### 🧪 測試 (Testing)
 

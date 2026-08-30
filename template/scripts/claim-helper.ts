@@ -27,7 +27,7 @@ import { hostname } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isRecord } from './lib/json-unknown.ts'
-import { isLockedProjectionPath } from './locked-projection.ts'
+import { isLockedProjectionPathFor } from './locked-projection.ts'
 import {
   lastWriterByPath,
   liveSessionIds,
@@ -628,7 +628,7 @@ export function classifyDirtyPaths(
     }
   }
   for (const p of paths) {
-    if (isLockedProjectionPath(p)) {
+    if (isLockedProjectionPathFor(consumerRoot, p)) {
       locked.push({ path: p })
       continue
     }

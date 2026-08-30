@@ -13,34 +13,34 @@ import {
   detectTanStackStartProject,
   removeTanStackLiveAdapter,
   unpatchTanStackRoot,
-} from '../tanstack-adapter.mjs'
+} from '../tanstack-adapter.mjs';
 
 export const tanstackStart = {
   name: 'tanstack-start',
 
   detect(cwd) {
-    return detectTanStackStartProject(cwd)
+    return detectTanStackStartProject(cwd);
   },
 
   inject: {
     kind: 'adapter',
 
     apply({ cwd, port, token, project }) {
-      return applyTanStackLiveAdapter({ cwd, port, token, project })
+      return applyTanStackLiveAdapter({ cwd, port, token, project });
     },
 
     remove({ cwd, project }) {
-      return removeTanStackLiveAdapter({ cwd, project })
+      return removeTanStackLiveAdapter({ cwd, project });
     },
 
     // The mount component's extension follows the root route's, so the path
     // cannot live in the static ignore list.
     ignorePatterns(project) {
-      return project?.componentFile ? [project.componentFile] : []
+      return project?.componentFile ? [project.componentFile] : [];
     },
 
     artifacts({ project }) {
-      if (!project) return []
+      if (!project) return [];
       return [
         {
           kind: 'created',
@@ -54,7 +54,7 @@ export const tanstackStart = {
           patch: 'tanstack-root',
           markers: [TANSTACK_MARKER_OPEN],
         },
-      ]
+      ];
     },
 
     unpatch: {
@@ -68,4 +68,4 @@ export const tanstackStart = {
     styleMode: 'scoped',
     commentSyntax: 'jsx',
   },
-}
+};

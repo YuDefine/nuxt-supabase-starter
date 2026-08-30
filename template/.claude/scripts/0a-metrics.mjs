@@ -143,10 +143,10 @@ function record(args) {
 
   const codexLabel =
     codex === 'fast-path-skip'
-      ? 'Codex 跳過（fast-path）'
+      ? 'GPT-5.6-sol via Pi 跳過（fast-path）'
       : codex === 'xhigh+max+fable'
-        ? 'Codex xhigh+max+Fable'
-        : 'Codex xhigh'
+        ? 'GPT-5.6-sol via Pi（effort: xhigh → max）+ Claude Fable 5（effort: max）'
+        : 'GPT-5.6-sol via Pi（effort: xhigh）'
   console.log(
     `✅ 0-A/B/C/D 並行匯合通過（${codexLabel}、screenshot ${row.screenshot}、check 全綠、doc ${row.doc}）`,
   )
