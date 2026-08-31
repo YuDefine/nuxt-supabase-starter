@@ -120,7 +120,7 @@ receipt 的 `pane_label_applied` **為 `false`，或這個欄位根本不存在*
 
 ### 3.1 Launcher inherit（relay / fanout / 任何 identity-bound dispatch）
 
-user **沒**點名別的 launcher 時，successor／worker 用**當前這格實際在跑的**（`ANTHROPIC_DEFAULT_*` 的 `ccg-` / `ccx-` / `ccagy-` prefix）。helper 自己重判，agent **NEVER** 在 `--relay` 上帶 `--launcher`（identity-bound 不收該旗標）。
+user **沒**點名別的 launcher 時，successor／worker 用**當前這格實際在跑的**（`ANTHROPIC_DEFAULT_*` 的 `ccg-` / `ccx-` / `ccagy-` prefix）。helper 自己重判。**NEVER** 沒點名就在 `--relay` 上帶 `--launcher`。
 
 `CLADE_CLAUDE_LAUNCHER` 是當初 dispatch 注入 pane 的 marker，`/clear` 之後同一格可能已換成別的 binary，marker 不會跟著改。**NEVER** 把它當 SoT。
 
@@ -130,14 +130,24 @@ user **沒**點名別的 launcher 時，successor／worker 用**當前這格實�
 | 同上，prefix `ccx-` / `ccagy-` | `ccx` / `ccagy` |
 | 沒有 live model prefix，才退到 `CLADE_CLAUDE_LAUNCHER` 或 `CLAUDE_CONFIG_DIR` | 退路，不是優先 |
 
-**例外**：user 白紙黑字點名另一個 launcher（「用 ccw」「派給 ccx」）→ create-only `--launcher <那個>`。沒點名就不要換。
+**例外**（兩條 dispatch 入口，簽署身分不變）：
+
+| 可觀察 predicate | 帶什麼 |
+| --- | --- |
+| user 白紙黑字點名另一個 **successor** launcher（「successor 走 ccg」「用 ccw 接手」） | `--relay --launcher <那個>` |
+| user 白紙黑字點名另一個 launcher，且這次是 create-only（「用 ccw」「派給 ccx」） | create-only `--launcher <那個>` |
+
+沒點名就不要帶 `--launcher`。`--launcher` 只覆蓋 successor／child 的 binary 與 `CLADE_CLAUDE_LAUNCHER` marker，**不改** current pane 的簽署身分——誰能簽 relay 仍由 `HERDR_ENV`、current pane、exact Claude session 驗證。
+
+`--reclaim` / `--complete` / `--continue` / `--adjudicate` / `--recover-orphan` / `--parent-pane` **NEVER** 帶 `--launcher`。
 
 **Rationalization table**：
 
 | 藉口 | 現實 |
 | --- | --- |
 | 「這格 `CLADE_CLAUDE_LAUNCHER=ccw`，relay 繼承它才對」 | 那是 W1 被派出來時注入的。`/clear` 後跑的是 `ccg-opus`，繼承 marker 等於把 ccg session 的工作交給 ccw |
-| 「`--relay` 不能帶 `--launcher`，所以只好吃 env」 | helper 會從 live model 重判。不能帶旗標不是「用過期 marker」的理由 |
+| 「帶 `--launcher` 才能簽 relay／改了簽署身分」 | 簽署仍是 `HERDR_ENV` + current pane + exact Claude session。`--launcher` 只選 successor binary |
+| 「沒點名，但我自己想把 ccx successor 換成 ccg」 | 沒點名就繼承 live model。**NEVER** 因為「canonical 是 ccg」就自行帶 `--launcher` |
 
 ## 4. Runtime cleanup
 
