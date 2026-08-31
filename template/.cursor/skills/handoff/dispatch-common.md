@@ -18,7 +18,7 @@ command -v herdr
 | `HERDR_ENV` | 允許 | 拒絕 |
 | --- | --- | --- |
 | `= 1`（在 Herdr pane 內） | 全部：dispatch / relay / reclaim / complete / harvest | — |
-| 空（Cursor、Codex、一般 shell） | create-only dispatch（`--cwd --label --prompt`／`--prompt-file`，外部 caller MUST 明示仍支援的 `--launcher cc`／`ccw`／`cx`）**加上** harvest（`--coordinate`／`--coordinate-resume`）。拓樸永遠是 Tab／workspace，**忽略** inherited `HERDR_PANE_ID` | `--relay` / `--reclaim` / `--complete` / `--continue` / `--recover-orphan` / `--parent-pane` → `not_in_herdr` |
+| 空（Cursor、Codex、一般 shell） | create-only dispatch（`--cwd --label --prompt`／`--prompt-file`）**加上** harvest（`--coordinate`／`--coordinate-resume`）。可辨識 live runtime 時不帶 `--launcher`、原生繼承；辨識不到或 helper 不支援同 runtime 時 fail closed。只有 user 當次明確點名不同 runtime 才帶 `--launcher`。拓樸永遠是 Tab／workspace，**忽略** inherited `HERDR_PANE_ID` | `--relay` / `--reclaim` / `--complete` / `--continue` / `--recover-orphan` / `--parent-pane` → `not_in_herdr` |
 
 **NEVER** 在 Cursor 裡 `export HERDR_ENV=1` 或假裝自己是 focused pane。那會讓 split／reclaim 打到使用者當下盯著的工作。
 
@@ -120,7 +120,9 @@ receipt 的 `pane_label_applied` **為 `false`，或這個欄位根本不存在*
 
 ### 3.1 Launcher inherit（relay / fanout / 任何 identity-bound dispatch）
 
-user **沒**點名別的 launcher 時，successor／worker MUST 用**當前這格實際在跑的 runtime**。helper 自己從 live process identity 重判：`cx → cx`、`cc → cc`、`ccw → ccw`、`ccg → ccg`、`ccagy → ccagy`。**NEVER** 沒點名就在 `--relay` 上帶 `--launcher`。
+user **沒**點名別的 launcher 時，successor／worker MUST 用**當前這格實際在跑的 runtime**。helper 自己從 live process identity 重判：`cx → cx`、`cc → cc`、`ccw → ccw`、`ccg → ccg`、`ccagy → ccagy`。這是 handoff 的 runtime affinity hard rule：**agent-routing、工作類型、模型能力、成本與 repo 預設都無權覆蓋**。**NEVER** 沒點名就在 relay、fanout worker 或外部 create-only handoff 上帶 `--launcher`。
+
+當前 runtime 無法辨識，或 helper 不支援建立同 runtime successor 時，**MUST fail closed**：保留 brief 與 pane、回報 blocker。**NEVER** fallback 到 `cc`／`ccw`，也 NEVER 把「至少派得出去」當成跨 runtime 的授權。
 
 `cx` 的 live identity 是 `PI_CODING_AGENT=true` 加非空 `PI_SESSION_ID`，優先於任何繼承的 Claude marker。helper 以 `cx --session-id <fresh-id>` 建立互動式 Pi successor；Herdr 回報的 Pi JSONL session path 會正規化回該 fresh id，再走與 Claude 相同的 exact-session ownership gate。
 
@@ -143,7 +145,7 @@ user **沒**點名別的 launcher 時，successor／worker MUST 用**當前這�
 | user 白紙黑字點名另一個**仍支援的 successor launcher**（「successor 走 cx」「用 ccw 接手」） | `--relay --launcher <那個>` |
 | user 白紙黑字點名另一個仍支援的 launcher，且這次是 create-only（「用 cx」） | create-only `--launcher <那個>` |
 
-沒點名就不要帶 `--launcher`。`--launcher` 只覆蓋 successor／child 的 binary 與相容 marker，**不改** current pane 的簽署身分——誰能簽 relay 仍由 `HERDR_ENV`、current pane、exact runtime session（Claude 或 Pi）驗證。`--launcher ccx` 一律回 `retired_launcher`；`cx`、`ccg` 維持完整支援。
+沒點名就不要帶 `--launcher`。user 說「handoff／relay／fanout」本身**不等於**授權換 runtime；必須在當次要求中明確點名目標 launcher。`--launcher` 只覆蓋 successor／child 的 binary 與相容 marker，**不改** current pane 的簽署身分——誰能簽 relay 仍由 `HERDR_ENV`、current pane、exact runtime session（Claude 或 Pi）驗證。`--launcher ccx` 一律回 `retired_launcher`；`cx`、`ccg` 維持完整支援。
 
 `--reclaim` / `--complete` / `--continue` / `--adjudicate` / `--recover-orphan` / `--parent-pane` **NEVER** 帶 `--launcher`。
 
@@ -154,6 +156,8 @@ user **沒**點名別的 launcher 時，successor／worker MUST 用**當前這�
 | 「這格 `CLADE_CLAUDE_LAUNCHER=ccw`，relay 繼承它才對」 | 那是 W1 被派出來時注入的。當前若有 live Pi identity，繼承 marker 等於把 cx session 的工作交給 ccw |
 | 「帶 `--launcher` 才能簽 relay／改了簽署身分」 | 簽署仍是 `HERDR_ENV` + current pane + exact runtime session。`--launcher` 只選 successor binary |
 | 「沒點名，但我自己想把 cx successor 換成 ccw」 | live runtime 是 SoT；只有 user 明確點名另一個仍支援的 launcher 才覆蓋 |
+| 「agent-routing 判這類工作更適合 cc／ccw」 | routing 可決定 bounded executor，不能改 handoff successor／worker 的 runtime affinity；要跨 runtime 必須由 user 當次明示 |
+| 「當前 runtime 辨識不到，先 fallback 到 ccw 至少能接」 | 辨識失敗是 blocker，不是授權；handoff 必須 fail closed |
 
 ## 4. Runtime cleanup
 

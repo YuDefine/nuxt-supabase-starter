@@ -51,7 +51,7 @@ Step 1 兩層判定**之前**先判 —— Step 1 只問「有幾件工作、幾
 
 ### 可觀察 predicate（用訊號，NEVER 憑感覺估）
 
-門檻取 [[session-tasks]] § Session context 預算的 launcher profile（`cc/ccw` 300k／500k；`ccg` 400k／450k；native work-loop runner child 500k／600k）。`ccx` 已退役：既有 session 不再走 numeric gate 產生 ccx successor；其殘工改交給 `cx` 或在需要 AI Agent harness 時建立 `cc`／`ccw` session。當前 runtime 已是 `cx` 時，relay／fanout 原生繼承 `cx`，不降級成 Claude launcher。判定材料只認下列三種**在 transcript 裡看得到**的訊號：
+門檻取 [[session-tasks]] § Session context 預算的 launcher profile（`cc/ccw` 300k／500k；`ccg` 400k／450k；native work-loop runner child 500k／600k）。`ccx` 已退役：live `ccx` handoff fail closed，不自行改派其他 runtime；只有 user 明確點名時才可改交仍支援的 launcher。所有其餘 runtime 的 relay／fanout 都原生繼承當前 session（`cx → cx`、`cc → cc`、`ccw → ccw`、`ccg → ccg`、`ccagy → ccagy`），工作 routing 不得覆蓋。判定材料只認下列三種**在 transcript 裡看得到**的訊號：
 
 1. `session-context-budget-warn` hook 已在本 session 響過（它逐字報「session context 已達 Nk」）
 2. user 在訊息裡明講了 context 用量（「目前已經 43%」「快滿了」）

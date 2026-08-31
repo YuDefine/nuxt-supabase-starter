@@ -7,7 +7,7 @@
 
 成功事件是 helper 回傳 **`relay_dispatched`**，且 `relayed_dispatch_ids` 逐筆對得上你派出去的 worker。**不是**「worker 完成了工作」——那不再是本 session 的事。
 
-Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、parent worktree lifecycle、收工訊息契約全部依 [dispatch-common.md](dispatch-common.md)，本檔不重述。
+Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、parent worktree lifecycle、收工訊息契約全部依 [dispatch-common.md](dispatch-common.md)，本檔不重述。§ 2 workers 與 § 4 successor 都受其中 § 3.1 runtime affinity 約束：預設全部與當前 session 同 runtime，只有 user 當次明確點名才可跨 runtime。
 
 ## 0. 先判該不該用 fanout
 
