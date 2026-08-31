@@ -274,19 +274,19 @@ Hook / human review 偵測到違反時，輸出格式統一：
 
 > 本節是 [[session-tasks]] § Session context 預算 的下推正文。觸發錨是 `session-context-budget-warn.sh` 在收工線上的提示，不是本檔的 `paths:`——「收工」不對應任何檔案路徑。母檔常駐 Iron Law ＋ 兩級門檻表 ＋ 具名時機指針。
 
-### 收工三步（越過 500k 那一級 MUST，順序不可調換）
+### 收工三步（越過該 launcher 的 hard tier MUST，順序不可調換）
 
 1. **先把殘工派出去**（transport 走 § Herdr session transport）。**判準是「有幾件可平行的工作」**：1 件（含多件但彼此 serial）走 `/handoff relay`，全部寫進同一份 brief 交給 successor 依序推進；N ≥ 2 件可平行走 `/handoff fanout`，各派一個 worker pane 再交棒給 successor 繼承它們。兩者本 session 都隨即收工（判準見 § 派幾個 pane —— 先判這一題）
 2. 剩下**派不出去**的才寫進 `tasks/<date>-<slug>.md`（或 `HANDOFF.md` / `docs/tech-debt.md`），且**逐條寫明它派不出去的具體外部條件**，格式走下面的 § 外部條件逐字格式
 3. 收工，收工訊息走 § 收工訊息契約
 
-本三步適用**每一個**越過 500k 的 session、**所有** consumer，且**每一項**殘工都要各自過第 1 步——
+本三步適用**每一個**越過其 launcher hard tier 的 session、**所有** consumer，且**每一項**殘工都要各自過第 1 步——
 不是「挑一項派掉、其餘登記」。
 
 **NEVER 把第 2 步當成第 1 步的替代品。** 逐字反開脫：「已經寫進交接檔了」「未完項都登記好了，
 留給下一個 session」「下個 session 接手時看得到」——這幾句描述的是第 2 步做完，對第 1 步零訊號。
 
-**context 越滿，dispatch 的相對價值越高**：那些 token 每一個 turn 都重讀一次。500k 那一級是**最該派**
+**context 越滿，dispatch 的相對價值越高**：那些 token 每一個 turn 都重讀一次。hard tier 是**最該派**
 的時刻，**NEVER** 讀成「已經沒有餘裕再派了」。
 
 **每一次派工都 MUST 以 successor 收尾**（`relay` 本身就是，`fanout` 的最後一步是 `--relay`）。
@@ -318,7 +318,7 @@ patrol 只印出「這筆該有人收」，它不是收割者。
 派工理由，不是第 2 步的登記理由。
 
 **為什麼要逐字 marker**：這一步是本節唯一有機械回饋的地方。`node scripts/audit-close-out-dispatch.ts`
-掃「越過 500k、已收工、0 個 dispatch record、tasks 卻有未勾項沒帶這個 marker」的 session；
+掃「越過各 transcript 對應 launcher hard tier、已收工、0 個 dispatch record、tasks 卻有未勾項沒帶這個 marker」的 session；
 marker 是它區分「合法登記」與「該派沒派」的唯一輸入。不寫 marker 的合法登記會被報成 VIOLATION，
 而那正是本 script 存在的理由——沒有它，第 1 步被跳過時整條規約在機器層零訊號（TD-499）。
 
@@ -358,11 +358,10 @@ marker 是它區分「合法登記」與「該派沒派」的唯一輸入。不�
 
 **寫收工訊息之前先判：這次真的需要重開嗎？**
 
-**先過門檻閘（MUST，先於下表）：已越過第二級收工線（一般 session 500k／work-loop runner
-child 600k）時，下表第 1 列（`/compact` 續同一個 session）整列不適用**——那一級只有一條出口：
+**先過門檻閘（MUST，先於下表）：已越過該 launcher 的 hard tier 時，下表第 1 列（`/compact` 續同一個 session）整列不適用**——那一級只有一條出口：
 把殘工派出去（`relay`／`fanout`）、派不出去的登記、收工（§ 收工三步）。**NEVER** 用「還在
 同一個任務裡」「只是跨了 phase 斷點」「compact 走 cache 比較便宜」「compact 完 user 零重述」
-把第 1 列讀回來——這幾句在 500k 之後**全部仍為真**，它們正是本閘要擋的東西。
+把第 1 列讀回來——這幾句在 hard tier 之後**全部仍為真**，它們正是本閘要擋的東西。
 
 compact 壓掉的是敘事，**壓完之後每一 turn 仍重讀壓縮後的整份 context**，而收工線買的是
 「successor 從 fresh context 起跑」——這兩件事不可互相替代，**NEVER** 拿 compact 當收工線的
@@ -370,15 +369,15 @@ compact 壓掉的是敘事，**壓完之後每一 turn 仍重讀壓縮後的整�
 
 | 可觀察 predicate | 動作 |
 | --- | --- |
-| 還在**同一個**任務裡（只是做久了、或跨了 phase 斷點），**且未越過第二級收工線** | **`/compact` 續同一個 session。NEVER 收工開新 session。** warm 時 compact 讀舊 prefix 走 cache，官方文檔逐字：`costs a fraction of what the context size suggests`；而且 user 零重述 |
+| 還在**同一個**任務裡（只是做久了、或跨了 phase 斷點），**且未越過該 launcher 的 hard tier** | **`/compact` 續同一個 session。NEVER 收工開新 session。** warm 時 compact 讀舊 prefix 走 cache，官方文檔逐字：`costs a fraction of what the context size suggests`；而且 user 零重述 |
 | 換 repo / 換不相關主題 / 已登記的中大型工作確實需要乾淨 session | invoke `/handoff relay <task pointer>`（N 件可平行則 `/handoff fanout`），由主線依下一節自行完成 Herdr transport，收工訊息走下面的 **A** |
 | 這批工作真的結束、沒有未完項 | 直接收工走下面的 **B**，**NEVER** 建立空的接手 session |
 | 剩餘工作可無人值守跑完 | 主線直接啟動該 repo 的 runner，**優先於**開新 session；回報 runner receipt，不把指令交給 user |
 
-第 2 列的「換不相關主題」**每一次**都跑這三條，**三條全中才算不相關**：(1) thin brief 只引 durable 檔就寫得完，不需引「只存在於本對話」的結論；(2) 不共享當前任務**未 commit** 的 working tree 狀態；(3) 已有、或當場先登一條屬於它自己的 durable 條目。**任一條不中＝仍是同一任務，走第 1 列 `/compact`**——但這條 fallback 同受上面的門檻閘管：已越過第二級收工線時第 1 列不存在，仍走第 2 列 `relay`／`fanout`。
+第 2 列的「換不相關主題」**每一次**都跑這三條，**三條全中才算不相關**：(1) thin brief 只引 durable 檔就寫得完，不需引「只存在於本對話」的結論；(2) 不共享當前任務**未 commit** 的 working tree 狀態；(3) 已有、或當場先登一條屬於它自己的 durable 條目。**任一條不中＝仍是同一任務，走第 1 列 `/compact`**——但這條 fallback 同受上面的門檻閘管：已越過該 launcher 的 hard tier 時第 1 列不存在，仍走第 2 列 `relay`／`fanout`。
 
 **門檻未過時，NEVER 把「context 大了」直接讀成「該收工開新 session」。** 該區間的判定走上面
-三條，**context 大小本身不是其中任何一條**。越過第二級收工線之後這句不再適用——那一級的門檻
+三條，**context 大小本身不是其中任何一條**。越過該 launcher 的 hard tier 之後這句不再適用——那一級的門檻
 閘就是由 context 大小觸發的，且它只留 `relay`／`fanout` 一條出口。
 
 #### Worktree lifecycle close gate（A／B 共用）

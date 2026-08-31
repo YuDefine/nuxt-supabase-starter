@@ -51,8 +51,7 @@ Step 1 兩層判定**之前**先判 —— Step 1 只問「有幾件工作、幾
 
 ### 可觀察 predicate（用訊號，NEVER 憑感覺估）
 
-門檻取 [[session-tasks]] § Session context 預算 的兩級（一般 session 300k／500k；work-loop
-runner child 500k／600k），判定材料只認下列三種**在 transcript 裡看得到**的訊號：
+門檻取 [[session-tasks]] § Session context 預算的 launcher profile（`cc/ccw` 300k／500k；`ccx` 150k／180k；`ccg` 300k／400k；native work-loop runner child 500k／600k），判定材料只認下列三種**在 transcript 裡看得到**的訊號：
 
 1. `session-context-budget-warn` hook 已在本 session 響過（它逐字報「session context 已達 Nk」）
 2. user 在訊息裡明講了 context 用量（「目前已經 43%」「快滿了」）
@@ -65,8 +64,8 @@ runner child 500k／600k），判定材料只認下列三種**在 transcript 裡
 
 | 可觀察 predicate | 動作 |
 | --- | --- |
-| 已過**第二級收工線**（500k／600k） | **跳過** 2B.0–2B.1.9 全部 scan（盤點本身有價值，但要由乾淨 session 做），改依**當前已知**的殘工件數直接落 `relay`／`fanout`；**每一項**都講得出具體外部條件時才 `park`（仍受 § park gate 管）。**NEVER** 因為「已經滿了、沒餘裕再派」就直接 `park` —— [[session-tasks.operations]] § 收工三步逐字：context 越滿，dispatch 的相對價值越高，那一級是**最該派**的時刻 |
-| 已過**第一級門檻**（300k／500k） | **NEVER 落 `next`**。改依 Step 1 第二層的件數判：≥1 件派得出去 → `relay`（1 件或多件 serial）／`fanout`（N 件可平行）；0 件 → `park` |
+| 已過**該 launcher 的 hard tier** | **跳過** 2B.0–2B.1.9 全部 scan（盤點本身有價值，但要由乾淨 session 做），改依**當前已知**的殘工件數直接落 `relay`／`fanout`；**每一項**都講得出具體外部條件時才 `park`（仍受 § park gate 管）。**NEVER** 因為「已經滿了、沒餘裕再派」就直接 `park` —— [[session-tasks.operations]] § 收工三步逐字：context 越滿，dispatch 的相對價值越高，那一級是**最該派**的時刻 |
+| 已過**該 launcher 的 soft tier** | **NEVER 落 `next`**。改依 Step 1 第二層的件數判：≥1 件派得出去 → `relay`（1 件或多件 serial）／`fanout`（N 件可平行）；0 件 → `park` |
 | 未過門檻 | 不改道，照 Step 1 兩層判定 |
 
 被本 gate 改道時 **MUST** 在宣布偵測結果那句話裡寫出來，例：「偵測到 `relay`（Step 0.5：context

@@ -105,6 +105,21 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 
 **NEVER 拿 grep 回 0 當「規約已生效」**：`rg -c "template/"` 只證明源檔沒有那個字串，對「rule 到底有沒有被載入」零訊號。要驗載入走 `InstructionsLoaded` hook（手法見 [[pitfall-skill-invoke-does-not-trigger-paths-gate]] § Detection）。
 
+## Codex delivery coverage（MUST）
+
+`.cursor/rules/**/*.md` 是 Claude 與 Codex 共用 SoT；**每一條** rule 都 MUST 有可執行的 Codex delivery，不以「AGENTS.md 有大意」或「agent 應該會自己搜尋」代替送達。
+
+`sync-to-codex` 的固定分類只有兩種：沒有 `paths:` → `always-hook`（SessionStart / SubagentStart / compact 回灌）；有合法 `paths:` → `path-hook`（matching PreToolUse 注入，first matching patch 先 deny 一次）。`paths:` 存在但空白或 malformed 必須讓 sync fail closed，**NEVER** 降成 always-load 或靜默略過。
+
+完成 rule 增修後 MUST 實跑：
+
+```bash
+node scripts/sync-to-codex.ts --no-health-check
+node scripts/audit-codex-rule-coverage.ts --check-manifest
+```
+
+第二條須回 `PASS N/N`；coverage manifest 是 `.codex/hooks/scoped-rules.coverage.json` 的 derived evidence，**NEVER** 手改。loader／trust／compact／subagent 的完整契約見 `docs/codex-scoped-rules.md`。
+
 ## 可變事實指 SoT，不 inline（MUST）
 
 規約 prose 內**NEVER** 寫死會隨時間變的事實——consumer 數量、版本號、檔案行數、百分比。一律指 SoT（`registry/consumers.json`、audit script 實跑）；歷史快照要標「(YYYY-MM 快照)」。實證：fleet 規模「5」曾同時存在於 6 份文件，registry 實際 12——每份 inline 快照都是一顆漂移地雷（2026-07-05 語料掃描）。

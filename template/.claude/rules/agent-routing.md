@@ -373,13 +373,16 @@ always-load 只留 payload **算不出來**的三條判斷：
 
 - **NEVER** 把 Sol 的活降成 Luna——鏈上每一跳是**換配額池**，不是降檔
 - **NEVER** 拿 `--effort low` 重試當配額應對——配額按 **model** 記，同一個 model 撞的是同一個 limit
-- **輸出本身就是 gate 的工作，鏈的終點是 Fable，NEVER 是主線自審**。判準見
+- **輸出本身就是 gate 的工作，鏈的終點 NEVER 是主線自審**。判準見
   `vendor/scripts/pi-routing-policy.ts` 的 `GATE_OUTPUT_ROWS`（`code-review` /
-  `security-review` / `spectra-prehandoff-judge`）——那一組與 § NEVER 降檔的形狀 第一條同源，
-  **MUST 一起改**。理由是這類工作沒有「誰做都行」這個性質：產出 changeset 的那條主線回頭審自己，
-  跟同家族模型代審一樣，gate 形式上補了位、實質是空的。因此 sol 鏈耗盡時 dispatcher 的
-  `next_step` 對這些 row 指向 **Fable subagent**（`--model fable`，effort `max`），
-  對其餘 row 才維持 Opus 主線。`-cursor` 那一跳照走，它換的是配額池不是家族。
+  `security-review` / `spectra-artifact-review` / `spectra-prehandoff-judge`）——那一組與
+  § NEVER 降檔的形狀 第一條同源，**MUST 一起改**。理由是這類工作沒有「誰做都行」這個性質：
+  產出 changeset 的那條主線回頭審自己，gate 形式上補了位、實質是空的。一般 gate row 在 Sol
+  兩池耗盡後由 dispatcher 指向 **Fable subagent**（`--model fable`，effort `max`）；
+  `PI_GATE_UNMET_ON_SOL_EXHAUSTION_ROWS` 是更嚴格的子集：`spectra-artifact-review` 的 reviewed
+  draft 本來就由 Fable family 產生，因此 payload 必須回 `gate_met:false` 與
+  `durable_follow_up_required:true`，caller 建立 durable follow-up，Fable／Opus／Luna／Grok
+  都不得補位。其餘非 gate row 才維持 Opus 主線。`-cursor` 那一跳照走，它換的是配額池不是家族。
   **Cursor runtime 例外**：Fable／Opus subagent 不得改用 Cursor Task 的非 grok-4.6 `model`；改走 § Cursor runtime 主線 residency 的 Herdr create-only `cc`／`ccw`
 - `-cursor` 那一跳先過 workspace capability：`mutation` 一律跳過、`readonly` 才繼續判材料來源與 cwd visibility。材料來源的准入 **MUST 綁在待審材料本身，NEVER 綁在使用者意願**（TD-534）；兩層機械門檻與「NEVER 做成可繞過的形式」全文在下面那條指針指的那一節
 

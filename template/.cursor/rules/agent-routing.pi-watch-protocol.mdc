@@ -416,13 +416,14 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleWake
 
 ## Spectra Routing Table
 
-從 [[agent-routing]] § Routing Table 移出（2026-07-31）——這五列只在 spectra flow 內成立，主檔留一列 stub 指這裡。**UI view phase 與 Design Review 都永不外派（主線 Claude Opus 5（effort: xhigh）自己做）**、**propose 的 cross-check / final check 一律主線跑**這兩條契約主檔仍帶著。
+從 [[agent-routing]] § Routing Table 移出（2026-07-31）——這六列只在 spectra flow 內成立，主檔留一列 stub 指這裡。**UI view phase 與 Design Review 都永不外派（主線 Claude Opus 5（effort: xhigh）自己做）**、**propose 的 cross-check / final check 一律主線跑**這兩條契約主檔仍帶著。
 
-**派工時 `--table-row` 要填哪一列**：本節的類別名不是 row 名。裸 `--table-row spectra` 在 `TABLE_ROW_POLICIES` 是 `model: null`（因為下表五列檔位各異，一個 row 表達不了），dispatcher 一律拒絕。對照表：
+**派工時 `--table-row` 要填哪一列**：本節的類別名不是 row 名。裸 `--table-row spectra` 在 `TABLE_ROW_POLICIES` 是 `model: null`（因為下表六列檔位各異，一個 row 表達不了），dispatcher 一律拒絕。對照表：
 
 | 本表類別 | `--table-row` |
 | --- | --- |
-| propose draft（選項 A / B 的 pi 段）、ingest draft | `spectra-artifact-draft`（sol max） |
+| propose draft（選項 A 的 Pi 段）、ingest draft | `spectra-artifact-draft`（sol max；workspace mutation） |
+| propose review（選項 B 的 Pi findings gate） | `spectra-artifact-review`（sol max；workspace readonly） |
 | apply 非 view phase | `spectra-phase-implementation`（sol high） |
 | apply 已封閉 phase 的 read-only 抽取 | `spectra-phase-prescan`（gemini low） |
 | pre-handoff E.1 收集 | `spectra-prehandoff-collect`（grok-xai medium） |
@@ -725,6 +726,7 @@ dispatch 注入 fail-closed 段，要求回覆帶一行 `PRECONDITIONS_VERIFIED:
 **降 effort 不是降級鏈的一步**：配額按 **model** 記，Sol 撞 usage limit 時 `--effort low` 重試撞的是**同一個** limit。effort 分級是品質 / 成本維度，**NEVER** 拿它當配額耗盡的應對。
 
 1. **Sol exit 4**：`readonly` payload 指向 `sol-cursor`；`mutation` payload跳過該格，直接回該鏈終點（一般工作是 Opus主線，gate-output row是Fable）。**NEVER**改派Luna或Gemini。
+   - **具名例外 `spectra-artifact-review`**：它是 readonly，第一池照樣到 `sol-cursor`；第二池也耗盡時 dispatcher payload MUST 帶 `gate_met:false` 與 `durable_follow_up_required:true`。產出 draft 的 Fable family與 Opus main line都不是獨立 review carrier，caller MUST 明示 gate未達成並建立 durable follow-up，**NEVER** 以任何 Claude review、Luna或Grok補位。
 2. **Gemini exit 4／catalog miss／OAuth未就緒**：先到`luna`，兩種capability相同；帶`--retry-of <gemini-label>`，Gemini origin視為luna-class。
 3. **Luna exit 4**：`readonly` payload到`luna-cursor`；`mutation` payload跳過它到`grok-xai --chain-origin luna`。Caller **MUST**照`next_step`，NEVER因為同base tier自行補回Cursor。
 4. **luna-cursor exit 4**（只可能是readonly鏈）→ `grok-xai --chain-origin luna`同effort重派；`--chain-origin`在共享格MUST帶。

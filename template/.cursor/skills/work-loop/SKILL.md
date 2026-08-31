@@ -148,7 +148,7 @@ route 表判完「這個 loop 由誰承載」之後、**跑 Step 2 的 scan 之�
 
 | 可觀察 predicate | 動作 |
 | --- | --- |
-| 本 session 已收到過 context budget 提示（`session-context-budget-warn.sh` 的 300k / 500k 任一級） | **改走 `runner.sh`**——主線用 `Bash(run_in_background=true)` 起它，起跑形狀與收尾走 § 起 runner 的形狀與收尾契約 (a)–(e)（含 cache-keepalive heartbeat 與 per-round Monitor），回報 log 路徑後結束本輪。**NEVER** 先跑 scan |
+| 本 session 已收到過 context budget 提示（`session-context-budget-warn.sh` 依 launcher profile 報出的 soft / hard 任一級） | **改走 `runner.sh`**——主線用 `Bash(run_in_background=true)` 起它，起跑形狀與收尾走 § 起 runner 的形狀與收尾契約 (a)–(e)（含 cache-keepalive heartbeat 與 per-round Monitor），回報 log 路徑後結束本輪。**NEVER** 先跑 scan |
 | 本輪由 `runner.sh` 起（`claude --print`），**或** 本 skill 是本 session 的第一個工作段 | headroom 充足，照常取鎖進 Step 1 |
 | in-session、本 session 已做過別的工作、但還沒收到提示 | 照常進 Step 1，但 route 表「判不出來」那列**改判為 `runner.sh`**——餘裕不明時保守側是換載體 |
 

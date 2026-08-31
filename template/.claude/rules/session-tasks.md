@@ -29,7 +29,7 @@ session 結束時對每個未完項**升級或刪，二擇一**，不留著。
 
 ## Session context 預算（MUST）
 
-**Iron Law：越過收工線就收工，不是「等這件做完再說」。而收工線是第二級，不是第一次響的那個門檻。**（一般 session 兩級是 300k / 500k；work-loop runner child 是 500k / 600k，見下表。）
+**Iron Law：越過收工線就收工，不是「等這件做完再說」。而收工線是該 launcher 的 hard tier，不是第一次響的 soft tier。**（門檻見下表。）
 
 本節適用**每一個** session、**所有** consumer——不是只有覺得跑很久的那次。
 
@@ -45,7 +45,7 @@ and the history is valuable"*（[best-practices](https://code.claude.com/docs/en
 | --- | --- | --- |
 | 換到**不相關**的任務 / 換 repo / 換主題 | `/clear`，或收工開新 session | 官方 best-practices § Manage context aggressively 逐字 `Run /clear between unrelated tasks` |
 | 同一個問題已經糾正 **≥2 次** | `/clear` 重來，把學到的寫進更好的初始 prompt。**NEVER** 在同一段壞掉的 context 上繼續第三次 | 同上 § Course-correct 逐字 |
-| 一個 phase / 工作段做完的自然斷點，**且未越過第二級收工線** | `/compact`——**NEVER** 直接跳到「收工開新 session」，見 § 收工訊息契約。越過第二級收工線之後 `/compact` 不再是選項（見該節門檻閘） | 官方 [context-window](https://code.claude.com/docs/en/context-window) 逐字 `before a long new task` |
+| 一個 phase / 工作段做完的自然斷點，**且未越過該 launcher 的 hard tier** | `/compact`——**NEVER** 直接跳到「收工開新 session」，見 § 收工訊息契約。越過該 launcher 的 hard tier 之後 `/compact` 不再是選項（見該節門檻閘） | 官方 [context-window](https://code.claude.com/docs/en/context-window) 逐字 `before a long new task` |
 | 品質退化訊號：開始忘記早前指令、重複犯同一個錯、回答明顯變差 | `/compact` 或收工 | 同上逐字 `when context starts affecting performance` |
 | **深在同一個複雜問題中、history 有價值** | **續跑。NEVER 因為 token 數字切** | 官方 best-practices § Develop your intuition 逐字 |
 
@@ -66,9 +66,9 @@ new session`）。
 > 頁：terminal-only 命令在 `-p` 模式不可用），但**也不需要**——每次 `claude -p` 本身就是新
 > session，依上述等價性沒有多付任何成本。**NEVER** 把「runner 不能 `/clear`」當成 runner 的缺陷。
 
-**300k / 500k 是兜底上限，不是切點建議**（Charles 2026-08-06 round 27 拍板；2026-08-07 顧問查證後
-維持原值）。它們的正當性**不**來自「官方建議這個數字」——官方不建議任何數字——而來自
-「predicate 全沒觸發時仍需要一條 hard stop」。**NEVER** 把這兩個數字讀成「跑到這裡就該切」，
+**launcher profile 是兜底上限，不是切點建議**（native 300k / 500k 由 Charles 2026-08-06 round 27 拍板；
+ccx / ccg profile 由 2026-08-31 的 auto-compact 實測收斂）。它們的正當性**不**來自「官方建議這個數字」——
+官方不建議任何數字——而來自「predicate 全沒觸發時仍需要一條 hard stop」。**NEVER** 把 profile 讀成「跑到這裡就該切」，
 那會讓上表第五列（該續跑的那列）永遠輪不到。
 
 > **NEVER** 拿社群單一來源的數字推翻 user 拍板的門檻——一個曾據此提出的 300k→200k 下修提案，
@@ -76,20 +76,26 @@ new session`）。
 
 **兩級語義不同，NEVER 當成同一件事的兩個強度**（Charles 2026-08-06 round 27 拍板）：
 
+| launcher profile | soft tier | hard tier | hard repeat |
+| --- | ---: | ---: | ---: |
+| `cc` / `ccw` | 300k | 500k | +100k |
+| `ccx` | 150k | 180k | +20k |
+| `ccg` | 300k | 400k | +50k |
+| native work-loop runner child | 500k | 600k | +100k |
+
 | 可觀察 predicate | MUST |
 | --- | --- |
-| session context 越過 **300k** | **NEVER** 開新的**大**工作段（新的 change / 新的多檔重構 / 新的 spectra phase / **invoke 一個本 session 還沒載過的 skill**）；手上這件做完就收。**小 item 照做**——單檔文字修正、補一條 TD、勾一個 checkbox、回答一個問題不受本級限制 |
-| session context 越過 **500k** | **現在**收工，走下面 § 收工三步（先派、後登記、再收工）。手上若是不可分割的驗證迴圈，跑完那一輪就切。**NEVER 用 `/compact` 續跑代替收工**——這一級唯一的出口是 `relay`／`fanout`，判準見 [[session-tasks.operations]] § 收工訊息契約 的門檻閘 |
+| session context 越過**該 launcher 的 soft tier** | **NEVER** 開新的**大**工作段（新的 change / 新的多檔重構 / 新的 spectra phase / **invoke 一個本 session 還沒載過的 skill**）；手上這件做完就收。**小 item 照做**——單檔文字修正、補一條 TD、勾一個 checkbox、回答一個問題不受本級限制 |
+| session context 越過**該 launcher 的 hard tier** | **現在**收工，走下面 § 收工三步（先派、後登記、再收工）。手上若是不可分割的驗證迴圈，跑完那一輪就切。**NEVER 用 `/compact` 續跑代替收工**——這一級唯一的出口是 `relay`／`fanout`，判準見 [[session-tasks.operations]] § 收工訊息契約 的門檻閘 |
 | 正在跑不可分割的驗證迴圈（單一 test run / 單一 migration） | 跑完再切。**NEVER** 拿「等一下還有事要做」把它延伸成新工作段 |
-| **本輪是 work-loop runner child**（`WORK_LOOP_RUNNER_CHILD=1`，由 `runner.sh` 設） | 上面兩級改讀 **500k / 600k**，語義完全不變（500k = 不要再開大工作段、600k = 現在收工）。Charles 2026-08-12 拍板，TD-375 |
+| **本輪是 work-loop runner child**（`WORK_LOOP_RUNNER_CHILD=1`，由 `runner.sh` 設） | 只有 native `cc` / `ccw` 改讀 **500k / 600k**；gateway child 仍走自己的 launcher profile，NEVER 用 runner marker 越過 auto-compact 物理上限 |
 
-**runner child 的兩級為什麼不同。** runner child 每輪是 `claude --print` 起的**全新 process**、跨輪不累積——起始載入量是它的**固定成本**，不是累積量，而實測起始就已越過第一級（取證見 rationale）。**NEVER 把 500k / 600k 套到 in-session `/loop`**——那條路徑的 context 真的跨輪累積，前提成立。判別只認 `runner.sh` 設的那個 env，**NEVER** 從「感覺像無人值守」推斷。
+**runner child 的 native profile 為什麼不同。** runner child 每輪是 `claude --print` 起的**全新 process**、跨輪不累積——起始載入量是它的**固定成本**，不是累積量，而實測起始就已越過 native soft tier（取證見 rationale）。**NEVER 把 500k / 600k 套到 in-session `/loop` 或 gateway child**——前者 context 真的跨輪累積，後者先受較小 auto-compact window 約束。判別只認 `runner.sh` 設的 env 與 launcher resolver，**NEVER** 從「感覺像無人值守」推斷。
 
-**NEVER 把 300k 那級讀成「什麼都不能開」。** 舊版第一級綁「NEVER 開新的工作段」，對 `/work-loop` 這類一個接一個開 item 的 loop 等於硬停（兩輪腰斬實證見 rationale）。**改的不是數字算錯，是那一級的語義訂錯了**；把 300k 讀回「什麼都不能開」等於把這次拍板退回它要修的狀態。
+**NEVER 把 soft tier 讀成「什麼都不能開」。** 舊版第一級綁「NEVER 開新的工作段」，對 `/work-loop` 這類一個接一個開 item 的 loop 等於硬停（兩輪腰斬實證見 rationale）。**改的不是數字算錯，是那一級的語義訂錯了**；把 300k 讀回「什麼都不能開」等於把這次拍板退回它要修的狀態。
 
 門檻是 `session-context-budget-warn.sh`（PostToolUse hook）機械報出來的，本節是它引用的 SoT：
-**300k 響一次、500k 起每 +100k 再響一次**；runner child 同形狀但整組平移成 **500k 響一次、
-600k 起每 +100k 再響一次**。提示走 exit 2 —— PostToolUse 的 exit 0 stderr
+**每個 launcher 在 soft tier 響一次、hard tier 起依 profile 的 repeat 步長再響**；native runner child 才改讀 **500k / 600k / +100k**。提示走 exit 2 —— PostToolUse 的 exit 0 stderr
 只進 debug log，agent 永遠看不到（實錄見 rationale）。
 
 **門檻 NEVER 可由 env / flag 放寬**（曾有的兩個覆寫變數已移除）：門檻是判定 agent 行為合不合格的
@@ -103,7 +109,7 @@ session —— 把閂交給它等於沒有閂。
 
 ### 收工正文在 [[session-tasks.operations]]（具名時機 MUST-Read）
 
-**越過第二級收工線（一般 session 500k／runner child 600k）之後、寫出任何收工訊息之前，MUST 先讀
+**越過該 launcher 的 hard tier 之後、寫出任何收工訊息之前，MUST 先讀
 [[session-tasks.operations]] § 收工**——沒讀到就沒有收工三步的順序、沒有收工訊息契約的部件表、
 沒有 Herdr transport 的 canonical helper 與 `fanout` 的 worker-before-relay 硬約束。
 
