@@ -21,14 +21,26 @@ vite-doctor 掃描 Nuxt/Vue/Vite/Nitro 專案，在 review 前偵測 hydration�
 2. **Nuxt consumer 必啟用 module**：在 `nuxt.config.ts` 加入 `vite-doctor/nuxt`，使用 clade 共用 preset：
 
    ```typescript
-   import { doctorConfig } from './vendor/doctor-shared/preset.ts'
+   import { doctorRules } from './vendor/doctor-shared/preset'
 
    export default defineNuxtConfig({
      modules: [
-       ['vite-doctor/nuxt', doctorConfig],
+       ['vite-doctor/nuxt', { config: { rules: doctorRules } }],
      ],
    })
    ```
+
+   import **NEVER 帶 `.ts` 副檔名** —— `nuxt.config.ts` 在 `nuxi typecheck` 的 program 內，
+   帶副檔名在 Nuxt 4.4.x 是 `TS5097`，會擋死**所有** push（見 `rules/core/code-style.md`
+   § 三條語法限制）。本行 2026-08-29 修正：原範例寫的是 `preset.ts`，與 preset 檔頭自己的
+   警告相反。
+
+   **接上 module 才算數，vendored 了 preset 不算。** CLI 的 `vite-doctor scan` 只從 Nuxt
+   manifest 的 `doctorConfig` 讀 rule 設定；module 沒接，那份 preset 就只是一個沒有人 import
+   的檔案，掃描跑的是 vite-doctor **內建預設**。這個失敗**靜默且反向**：doctor 照跑、照打分、
+   照 exit 0/1，只是量的是別的規則集，而內建預設比 clade baseline 寬鬆的那幾格會讓分數**更好看**。
+   **NEVER** 從「doctor 有輸出」「分數很高」「CI 綠」推論 baseline 生效 —— 判定器是
+   `scripts/audit-tooling-drift.ts` 的 1c（`doctorBaselineWiring`）。
 
 3. **CI gate**：`pnpm run doctor` 必須綠燈（`--max-warnings 0`）。**MUST** 帶 `run`，**NEVER** 裸打 `pnpm doctor` — `doctor` 撞 pnpm 內建子命令，裸打跑的是 pnpm 自家 doctor（檢查 pnpm 環境）並 silent exit 0，`scripts.doctor` 的 vite-doctor scan 永遠不執行、errors 不被 enforce
 4. **覆寫規則**須有理由：per-consumer override 只用於確實不適用的規則（如不使用 `@nuxt/ui` 時關閉 `nuxt/ui/*`）
