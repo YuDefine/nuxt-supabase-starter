@@ -51,7 +51,7 @@ Step 1 兩層判定**之前**先判 —— Step 1 只問「有幾件工作、幾
 
 ### 可觀察 predicate（用訊號，NEVER 憑感覺估）
 
-門檻取 [[session-tasks]] § Session context 預算的 launcher profile（`cc/ccw` 300k／500k；`ccx` 150k／180k；`ccg` 300k／400k；native work-loop runner child 500k／600k），判定材料只認下列三種**在 transcript 裡看得到**的訊號：
+門檻取 [[session-tasks]] § Session context 預算的 launcher profile（`cc/ccw` 300k／500k；`ccg` 400k／450k；native work-loop runner child 500k／600k）。`ccx` 已退役：既有 session 不再走 numeric gate 產生 ccx successor；其殘工改由 Pi dispatcher 送往 `cx` runtime，或在需要 AI Agent harness 時建立 `cc`／`ccw` session。判定材料只認下列三種**在 transcript 裡看得到**的訊號：
 
 1. `session-context-budget-warn` hook 已在本 session 響過（它逐字報「session context 已達 Nk」）
 2. user 在訊息裡明講了 context 用量（「目前已經 43%」「快滿了」）

@@ -442,16 +442,16 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleWake
 
 從 [[agent-routing]] § Orchestration Residency 移出（2026-07-31；四步做法於 2026-08-22 一併下推，TD-590）。Residency 的**判定條件**（Codex-primary A/B 進入條件、Claude-primary 五條）留在主檔；本節是它的執行步驟與機械強制點，只在 spectra-apply 開工時用得到。
 
-**Codex-primary 的四步做法（change 粒度，不是 phase 粒度）**：
+**Codex-primary 的四步做法（change 粒度 residency；phase 粒度 executor）**：
 
-1. 主線**一次** dispatch 整條 change 的**所有**非 view phase 給單一 background pi（prompt 列全部 phase + acceptance + Plan-first + Commit Authorization；模板見 § Pi 派工的標準流程）。**NEVER** 一個一個 phase 派（phase 粒度是 Claude-primary 才用）。
-2. Dispatch 後 **notification-only watch**（§ 監看排程）——**不**逐 phase cross-check、**不**短輪詢。
-3. 完工通知後**一次** change 粒度 cross-check：commit 數 / format、view-layer drift + scope discipline（§ Spectra Apply Phase Dispatch Step 5）、typecheck + test。
-4. 主線**自己**跑 Section 7 Design Review（永不派 pi），再進 `/commit` 0-A gate。
+1. 若 apply 從 Claude Code 起手，主線**一次** dispatch 整條 change 給單一 background Pi／`cx` carrier（prompt 列全部 phase + acceptance + Plan-first + Commit Authorization；模板見 § Pi 派工的標準流程）。若本身已在 Pi／`cx`，直接持有 carrier，**NEVER** recursive dispatch 自己。
+2. Carrier 依 phase class 選 executor：非 view phase 在同一 Pi carrier 實作；UI view／Design Review 等需要 Claude harness 的 bounded phase，走 Herdr create-only `--launcher cc`／`ccw` + `--coordinate`，收回結構化結果後繼續。**ccg 保持可用**：從 ccg 起手時只把 apply carrier交 Pi，不停用 ccg launcher。
+3. 外部 phase 執行期間只做 notification-only coordination；收回後在 carrier 做 phase boundary check，全部完成再做一次 change 粒度 cross-check：commit 數 / format、view-layer drift + scope discipline（§ Spectra Apply Phase Dispatch Step 5）、typecheck + test。
+4. Section 7 Design Review 仍由 Claude Opus executor 完成，再由 carrier 進 `/commit` 0-A gate。Pi 的 `--session` 是選既有 session，與 Claude 的 `--session-id` 不同；NEVER 把 `cx` 塞進 Herdr helper 的 Claude launcher slot。
 
-把關移到邊界：兩道 gate（`/commit` 0-A + archive Design Review）作用在最終 diff 上。
+把關移到 phase 與 change 邊界：`/commit` 0-A + archive Design Review 作用在最終 diff 上。
 
-**為什麼**：該節上線 6 天實測（2026-06-11 audit），eligible change 採用率僅 1/3 — 兩條純非-view change 仍由主線自做、0 dispatch。文字規約對 routing 自律無效，故比照 Check 7 / E.1 先例補機械強制點。
+**為什麼**：resident carrier 與 phase capability 是兩個維度。用「含 UI」把整條 apply 留在 Claude Code，會讓大 change 的全歷史一直支付 Claude Code resident floor；ccx 的 272k window 已把這個失敗放大到無法完成工作。
 
 - spectra-apply 開工後、任何 dispatch 決策前，**MUST** 跑 `node ~/offline/clade/vendor/scripts/residency-classify.ts classify --change openspec/changes/<change>` 拿機械 verdict
 - **MUST** 立刻 record decision：`node ~/offline/clade/vendor/scripts/residency-classify.ts record --consumer-path . --change <change> --verdict <v> --executor <codex|claude> [--reason ...]` → 落 `.spectra/residency-ledger.jsonl`
@@ -502,37 +502,37 @@ Claude Code session 收到 spectra propose 請求時：
 ### 決策層契約（2026-08-19 從 [[agent-routing]] 下推，TD-540）
 
 
-> **先判 residency**（§ Orchestration Residency）：符合 Codex-primary 進入條件 → change 粒度單次 dispatch + notification-only，**不要**逐 phase 派工；以下限 **Claude-primary** 場景。
+> **先判 residency**（§ Orchestration Residency）：tasks.md 已定稿的 apply 由 Codex-primary 持有 change-level orchestration；以下 phase 規則只決定 bounded executor，**不改 residency**。從 Claude Code 起手時先單次 dispatch 整條 change 給 Pi carrier；已在 Pi／`cx` 時直接續跑，NEVER recursive dispatch。
 
-執行 `spectra-apply` 時 phase 粒度派 pi。**三條契約**：
+執行 `spectra-apply` 時按 phase 選 executor。**三條契約**：
 
-1. **Design Review phase 與 UI view phase 一律主線 Claude Opus 5（effort: xhigh）自己做，永不外派**——**NEVER** 派 Pi 任一 model，**NEVER** 派 Claude subagent，**NEVER** 因為 phase 大、時間晚、管線現成就轉派（UI view 實作完主線照跑該 phase 的機械檢查與 Design Review gate）。其他 phase（schema / migration / API server / CLI / 純 backend / 非 view 的 frontend / unit test / docs）以泛用 dispatcher 的 `spectra-phase-implementation` row 派 GPT-5.6-sol via Pi（effort: high）；**每一個**符合封閉來源 extraction predicate 的 prescan 才可另走 `spectra-phase-prescan` Gemini via Pi（effort: low），且不得取代 Sol 實作
-2. **混雜 phase**（同一 phase 摻了 view 與非 view）：**已開工** → 主線整個 phase 自己做，不重切、不派 pi；**未開工** → **STOP** 請使用者跑 `/spectra-ingest <change>` 重切
-3. **禁止**主線自行修改 tasks.md 的 phase 結構（屬 ingest 範圍）
+1. **Design Review phase 與 UI view phase 的 executor 一律是 Claude Opus 5（effort: xhigh）**——Claude carrier 時主線自己做；Pi carrier 時用 Herdr create-only `cc`／`ccw` 派 bounded phase。**NEVER** 由 Pi 實作、**NEVER** 因為 phase 大或管線現成就改變 executor。其他 phase（schema / migration / API server / CLI / 純 backend / 非 view frontend / unit test / docs）由同一 Pi carrier 直接實作；只有帶 user override 的 Claude carrier 才以泛用 dispatcher 的 `spectra-phase-implementation` row 派 GPT-5.6-sol via Pi（effort: high）。符合封閉來源 extraction predicate 的 prescan 才可另走 `spectra-phase-prescan` Gemini via Pi（effort: low），且不得取代 Sol 實作
+2. **混雜 phase**（同一 phase 摻了 view 與非 view）：**已開工** → 整個 phase 交給 Claude Opus executor，不重切、不由 Pi 實作；**未開工** → **STOP** 請使用者跑 `/spectra-ingest <change>` 重切
+3. **禁止**carrier 自行修改 tasks.md 的 phase 結構（屬 ingest 範圍）
 
 A/B/C 三類的完整判定條件（含 view 層檔案路徑清單）與 C 類派工細節（共用 template／schema、dispatcher metadata、watch、drift 檢查、收尾驗證）見 reference § Spectra Apply Phase Dispatch（具體做法）。
 
-執行 `spectra-apply` 時，phase 粒度派 pi 的具體 dispatch 步驟：
+執行 `spectra-apply` 時，carrier 按 phase capability 選 executor 的具體步驟：
 
 1. Read tasks.md，按 `## N.` 切分 phase
 2. **每個 phase 三類分類**（依序判定，命中即停）：
    - **A. Design Review phase**：標題含 "Design Review" 或內容含 `/design improve` / `/impeccable audit` / `/impeccable *` / `review-screenshot`
-     → **主線 Claude Opus 5（effort: xhigh）自己做，永不派 pi**
+     → **Claude Opus 5（effort: xhigh）executor 自己做，永不由 Pi 實作**。Claude carrier 直接做；Pi carrier 用 Herdr create-only `--launcher cc`／`ccw` + `--coordinate` 派 bounded phase並收回結果
    - **B. UI view phase**：phase 內任一 task 描述/路徑指涉 view 層檔案——`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且該 phase 沒有摻入非 view 的 frontend / backend 工作**（store / hook / API client / type / util / migration / API server）
-     → **主線 Claude Opus 5（effort: xhigh）自己做，永不派 pi**。實作完、該 phase commit / 標 done 之前，照跑 SKILL Step 6c / 6d 檢查與 Design Review gate
+     → **Claude Opus 5（effort: xhigh）executor 自己做，永不由 Pi 實作**。Claude carrier 直接做；Pi carrier用同一條 bounded Herdr transport。實作完、該 phase commit / 標 done 之前，照跑 SKILL Step 6c / 6d 檢查與 Design Review gate
    - **C. 其他 phase**：上述兩類以外（schema、migration、API server、CLI、純 backend、frontend 但非 view 的 store / hook / API client / type / util、unit test、docs）
-     → **派 GPT-5.6-sol via Pi（effort: high）做完整 phase**
+     → **Pi／`cx` carrier 直接以 GPT-5.6-sol（effort: high）做完整 phase**；只有 user override 讓 Claude 持有 carrier 時才派 Pi
 3. **混雜 phase fallback**（A、B 都不是純 view、又混雜 view 與非 view 工作）：
    - **看該 phase 是否已開工**（任一 task `[x]` 或 git history 顯示 phase 內檔案已被改）：
-     - **已開工** → **主線整個 phase 自己做**（safety fallback；不重切，不派 pi）
-     - **未開工** → **STOP**，回覆使用者：「phase `<N>. <title>` 同時混雜 UI view 與非 UI 工作，違反新版 Phase Dispatch 規則。請改跑 `/spectra-ingest <change>` 把 UI view tasks 與其他 tasks 切成獨立 phase 後再 `/spectra-apply`。」**禁止**主線自行修改 tasks.md phase 結構（這屬 ingest 範圍，避免 propose / apply 邊界混淆）
-4. 每個 C 類（Pi）派工：
+     - **已開工** → **整個 phase 由 Claude Opus executor 做**（safety fallback；不重切，不由 Pi 實作）
+     - **未開工** → **STOP**，回覆使用者：「phase `<N>. <title>` 同時混雜 UI view 與非 UI 工作，違反新版 Phase Dispatch 規則。請改跑 `/spectra-ingest <change>` 把 UI view tasks 與其他 tasks 切成獨立 phase 後再 `/spectra-apply`。」**禁止**carrier 自行修改 tasks.md phase 結構（這屬 ingest 範圍，避免 propose / apply 邊界混淆）
+4. C 類只有在 Claude carrier override 下才派 Pi；Pi carrier 直接做。需要派工時：
    - prompt **第一行 MUST** 是 `[DELEGATED-BY-CLAUDE-CODE]` marker（Codex 端 Runtime Gate 會驗，缺 marker 會被擋掉，見下節）
    - prompt 內容：phase 標題、該 phase 全部 tasks、相關 design.md / specs / tasks 段落、acceptance criteria、`spectra task done <change> <task-id>` 完成標記指令
    - prompt 內**MUST**附帶硬指令：「**禁止**修改 view 層檔案（`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss`）；若 task 需要 view 層改動，回報 'view layer change required, defer to main thread' 並跳過該 task」
    - `<topic>=spectra-apply-<phase-id>`、`<cwd>=consumer repo root`、`-c model_reasoning_effort=high`
-5. 收到 `<task-notification status=completed>` 後，主線 **MUST**（pi 已在 worktree 自 commit per § Commit Authorization）：
-   - Read pi stdout 的 `PHASE_X_RESULT` + Plan section（事前公開的思路）
+5. 外派 phase 收到 completion 後，carrier **MUST**（executor 已在 worktree 自 commit per § Commit Authorization）：
+   - Read executor stdout 的 `PHASE_X_RESULT` + Plan section（事前公開的思路）
    - Read tasks.md 確認該 phase 所有 checkbox 已勾
    - **Phase boundary 對齊**：`git -C <wt> log main..HEAD --oneline` — confirm exactly one new commit per dispatched phase, format `🧹 chore: wt <change>-phase-<N> — ...`。多 commit / missing commit / format 不符 → **AskUserQuestion**：[1] 主線 squash pi 的多 commits / [2] `git -C <wt> reset --soft main` 退 staging 重派 / [3] 中止
    - **View-layer drift double-check**：pi 端 self-check 命中時應已 abort，主線此處再驗一次保險：
@@ -546,7 +546,7 @@ A/B/C 三類的完整判定條件（含 view 層檔案路徑清單）與 C 類�
    - **Scope discipline cross-check**：`git -C <wt> diff main..HEAD --name-only` 對比 prompt 內 scope 宣告；超出範圍 → AskUserQuestion 處理
    - **Sanity check**（typecheck、相關 test）
    - 若有遺漏 → **AskUserQuestion**：[1] 主線在 worktree 內 commit 補丁 / [2] reset 重派 pi / [3] 中止
-6. 全部 phases 完成後，主線**自己**跑 Section 7 Design Review（不派出去）
+6. 全部 phases 完成後，以 Claude Opus executor 跑 Section 7 Design Review；Pi carrier 經 bounded Herdr transport 收回結果，仍由同一 carrier 完成 change 收尾
 
 ## screenshot-review Verify Mode Dispatch & Watch Protocol
 

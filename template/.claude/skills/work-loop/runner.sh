@@ -71,7 +71,8 @@ NODE_PLAIN="env FORCE_COLOR=0 NO_COLOR=1 node"
 # child 跟起 runner 的那條入口走同一條帳號，不是永遠剝成官方 CC。
 #
 #   cc  / ccw → 官方 CC（剝 gateway 變數，與 ~/.zshrc 的 cc / ccw wrapper 對齊）
-#   ccg / ccx / ccagy → claudeg / claudex / claudeagy（wrapper 會釘 --model ccg-opus / ccx-opus / ccagy-opus 並設 500K / 272K / 200K）
+#   ccg / ccagy → claudeg / claudeagy（wrapper 會釘 --model ccg-opus / ccagy-opus）
+#   ccx → 已退役，fail-closed；NEVER 產生新的 claudex child
 #
 # 2026-08-19 曾一律剝成官方 CC：當時 child 繼承 CCG env 卻呼叫裸 `claude --print`
 # （沒有 --model ccg-opus），gateway 把預設 opus 路由到 Codex channel 的 `claude-opus-5`，
@@ -80,7 +81,7 @@ NODE_PLAIN="env FORCE_COLOR=0 NO_COLOR=1 node"
 # 官方額度與 gateway 額度不是同一池。修法是「起源是 ccg 就用 claudeg」，不是永遠剝掉。
 #
 # NEVER 改用 `env -i`：child 需要 HOME / PATH / TERM / CLAUDE_CONFIG_DIR。
-# NEVER 對 ccg/ccx/ccagy 起源改回裸 `claude --print` 還留著 gateway env —— 那就是 08-19 的 429。
+# NEVER 對 ccg/ccagy 起源改回裸 `claude --print` 還留著 gateway env —— 那就是 08-19 的 429。
 # NEVER 拿 `--skip-preflight` 當本問題的修法。
 CHILD_ENV=(
   env
@@ -112,9 +113,14 @@ detect_origin_launcher() {
 }
 
 ORIGIN="$(detect_origin_launcher)"
+if [ "$ORIGIN" = "ccx" ]; then
+  printf '%s\n' \
+    'ERROR: ccx is retired; work-loop will not create a new claudex child.' \
+    'Run GPT/Codex work through the Pi dispatcher (`cx` runtime), or start the loop from cc/ccw when Claude Code is required.' >&2
+  exit 2
+fi
 case "$ORIGIN" in
   ccg) CHILD_BIN="$HOME/.local/bin/claudeg" ;;
-  ccx) CHILD_BIN="$HOME/.local/bin/claudex" ;;
   ccagy) CHILD_BIN="$HOME/.local/bin/claudeagy" ;;
   *)   CHILD_BIN="claude" ;;
 esac
@@ -502,7 +508,7 @@ Do not claim success unless the command completed. No other tool calls." 2>&1)"
 }
 
 run_preflight() {
-  if [ "$ORIGIN" = ccg ] || [ "$ORIGIN" = ccx ] || [ "$ORIGIN" = ccagy ]; then
+  if [ "$ORIGIN" = ccg ] || [ "$ORIGIN" = ccagy ]; then
     [ -x "$CHILD_BIN" ] || preflight_fail "起源是 $ORIGIN 但找不到可執行的 $CHILD_BIN"
   else
     command -v claude >/dev/null 2>&1 || preflight_fail "PATH 上找不到 claude"

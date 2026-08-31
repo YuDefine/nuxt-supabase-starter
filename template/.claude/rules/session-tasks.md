@@ -67,7 +67,7 @@ new session`）。
 > session，依上述等價性沒有多付任何成本。**NEVER** 把「runner 不能 `/clear`」當成 runner 的缺陷。
 
 **launcher profile 是兜底上限，不是切點建議**（native 300k / 500k 由 Charles 2026-08-06 round 27 拍板；
-ccx / ccg profile 由 2026-08-31 的 auto-compact 實測收斂）。它們的正當性**不**來自「官方建議這個數字」——
+ccg profile 由 2026-08-31 的 auto-compact 實測收斂；ccx 同日退役，不再接受新 session）。它們的正當性**不**來自「官方建議這個數字」——
 官方不建議任何數字——而來自「predicate 全沒觸發時仍需要一條 hard stop」。**NEVER** 把 profile 讀成「跑到這裡就該切」，
 那會讓上表第五列（該續跑的那列）永遠輪不到。
 
@@ -79,9 +79,12 @@ ccx / ccg profile 由 2026-08-31 的 auto-compact 實測收斂）。它們的正
 | launcher profile | soft tier | hard tier | hard repeat |
 | --- | ---: | ---: | ---: |
 | `cc` / `ccw` | 300k | 500k | +100k |
-| `ccx` | 150k | 180k | +20k |
-| `ccg` | 300k | 400k | +50k |
+| `ccg` | 400k | 450k | +50k |
 | native work-loop runner child | 500k | 600k | +100k |
+
+`ccx` 已退役：新入口與新 successor 都 fail-closed；既有 process 只做 drain，不再套 numeric
+收工線逼它建立另一個 ccx session。GPT／Codex 工作走 `cx`（Pi），需要 Claude Code harness
+才走 `cc`／`ccw`。歷史 transcript 的 `ccx` 歸因仍保留在 audit 層，退役不等於改寫歷史。
 
 | 可觀察 predicate | MUST |
 | --- | --- |
@@ -95,7 +98,7 @@ ccx / ccg profile 由 2026-08-31 的 auto-compact 實測收斂）。它們的正
 **NEVER 把 soft tier 讀成「什麼都不能開」。** 舊版第一級綁「NEVER 開新的工作段」，對 `/work-loop` 這類一個接一個開 item 的 loop 等於硬停（兩輪腰斬實證見 rationale）。**改的不是數字算錯，是那一級的語義訂錯了**；把 300k 讀回「什麼都不能開」等於把這次拍板退回它要修的狀態。
 
 門檻是 `session-context-budget-warn.sh`（PostToolUse hook）機械報出來的，本節是它引用的 SoT：
-**每個 launcher 在 soft tier 響一次、hard tier 起依 profile 的 repeat 步長再響**；native runner child 才改讀 **500k / 600k / +100k**。提示走 exit 2 —— PostToolUse 的 exit 0 stderr
+**每個仍可啟動的 launcher在 soft tier 響一次、hard tier 起依 profile 的 repeat 步長再響**；native runner child 才改讀 **500k / 600k / +100k**。提示走 exit 2 —— PostToolUse 的 exit 0 stderr
 只進 debug log，agent 永遠看不到（實錄見 rationale）。
 
 **門檻 NEVER 可由 env / flag 放寬**（曾有的兩個覆寫變數已移除）：門檻是判定 agent 行為合不合格的

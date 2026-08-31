@@ -72,11 +72,11 @@ preflight 探針與每輪 child 的 **launcher 跟起 runner 的入口對齊**�
 | `cc` | 剝 gateway 變數後 `claude --print` | 官方個人（`~/.claude`） |
 | `ccw` | 同上，`CLAUDE_CONFIG_DIR=~/.claude-work` | 官方工作 |
 | `ccg` | `claudeg --print`（釘 `--model ccg-opus`） | gateway / Grok |
-| `ccx` | `claudex --print`（釘 `--model ccx-opus`） | gateway / GPT |
+| `ccx` | **拒絕起跑**；不建立 `claudex` child | retired；GPT／Codex 工作走 Pi dispatcher |
 | `ccagy` | `claudeagy --print`（釘 `--model ccagy-opus`） | gateway / Antigravity |
 
 判定看 `ANTHROPIC_DEFAULT_OPUS_MODEL` 是否 `ccagy-*` / `ccg-*` / `ccx-*`，再看 `CLAUDE_CONFIG_DIR` 是否
-`~/.claude-work`，其餘當 `cc`。**NEVER** 從 CCG pane 起 runner 卻剝成官方 CC —— 兩池額度
+`~/.claude-work`，其餘當 `cc`。命中 `ccx-*` 只用來 fail-closed，NEVER fallback 到裸 `claude` 或建立新 ccx child。**NEVER** 從 CCG pane 起 runner 卻剝成官方 CC —— 兩池額度
 不是同一個，2026-08-20 實測剝完撞 `You've hit your session limit · resets 5am`，gateway 還有額度。
 
 2026-08-19 的 gateway 429（`claude-opus-5` cooling down）是「繼承 CCG env 卻呼叫裸

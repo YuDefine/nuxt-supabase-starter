@@ -311,19 +311,20 @@ Routing Table 決定誰**寫** code，本節決定誰**持有長 session**（成
 
 **進入條件**（A 或 B 命中即走）：
 
-- **A. 純非-view change**：整條 change **沒有任何 UI view phase**（view 檔案判準同 [[agent-routing.pi-watch-protocol]] § Spectra Apply Phase Dispatch B 類）**且** tasks.md 已定稿——工作性質是「執行已知計畫」。
+- **A. Spectra apply 已可執行**：tasks.md 已定稿，工作性質已從「釐清需求」進入「執行已知計畫」。是否含 UI view phase **不參與 residency 判定**；它只決定 bounded phase executor。
 - **B. 機械式 sweep**：lint fix / dep upgrade / rename / cross-file refactor / test 修復 / codemod，即使無正式 tasks.md。
 
-**做法是 change 粒度不是 phase 粒度**：一次 dispatch 整條 change 的所有非 view phase 給單一 background pi，**NEVER** 一個一個 phase 派。四步做法（dispatch / notification-only watch / change 粒度 cross-check / 主線自跑 Design Review）全文在 reference § Orchestration Residency — 機械 Enforcement，**開工 dispatch 之前 MUST 先讀那一節**。
-### Claude-primary（以下任一命中即留主線）
+**長 session carrier 與 phase executor 是兩題。** Codex-primary 持有 change-level orchestration、tasks 狀態與跨 phase 歷史；UI／Design Review／其他需 Claude harness 的 bounded phase 仍依 § Spectra Apply Phase Dispatch 交給 `cc`／`ccw`，完成後把結構化結果送回 carrier。**NEVER** 用「含 UI」直接推出「整條長 session 留在 Claude Code」——那會把 Claude Code 的 resident floor 與整條 apply 歷史綁在一起，正是 ccx 退役暴露的失敗形狀。
 
-- **UI view 工作**（per § 派不派 不外派清單 —— 實作與品質判定都留主線 Opus，永不外派）
-- **架構 / 設計決策、需求模糊**——先 plan mode 釐清
-- **安全敏感** / 需 tight review loop 的 change
+**做法是 change 粒度不是把每個非-view phase各開一個新 carrier**：一次由單一 Codex-primary session 持有整條 change；各 phase 的實作者照 capability routing 決定。四步做法（dispatch / notification-only watch / change 粒度 cross-check / bounded Claude phase 回收）全文在 reference § Orchestration Residency — 機械 Enforcement，**開工 dispatch 之前 MUST 先讀那一節**。
+### Claude-primary（在 apply 前的決策／探索階段，以下任一命中即留主線）
+
+- **架構 / 設計決策、需求模糊**——先 plan mode 釐清，tasks.md 未定稿就還不是 apply residency
+- **安全敏感** / 需 tight review loop、且尚未收斂成可執行 tasks 的 change
 - **clade routing / 規則知識**的編輯
 - **路徑未知的探索式 debug**
 
-個別 phase 仍可派 pi → 走 § Spectra Propose / Apply Dispatch 指向的那兩節。
+進入 apply 後，個別 phase executor 仍走 § Spectra Propose / Apply Dispatch；那張表決定誰實作，不反向改寫 residency。
 
 ### 機械 Enforcement
 
