@@ -386,16 +386,11 @@ function snapshotMutationFiles(
 function checkboxStates(text: string | null): Map<string, boolean> {
   const states = new Map<string, boolean>()
   for (const line of (text ?? '').split('\n')) {
-    const match = line.match(/^\s*[-*]\s+\[([ xX])\]\s+(\S+)(?:\s|$)/)
+    const match = line.match(/^\s*[-*]\s+\[([ xX])\](?:\s|$)/)
     if (!match) continue
-    if (states.has(match[2])) {
-      fail({
-        code: 'MUTATION_POSTCONDITION',
-        message: 'tasks.md contains duplicate task ids, so the requested checkbox cannot be proven',
-        details: { taskId: match[2] },
-      })
-    }
-    states.set(match[2], match[1].toLowerCase() === 'x')
+    // Spectra's `task done <id>` uses the checkbox's one-based ordinal, not the
+    // source-authored label that follows it (`1.2`, or `[P] 1.2` for parallel tasks).
+    states.set(String(states.size + 1), match[1].toLowerCase() === 'x')
   }
   return states
 }

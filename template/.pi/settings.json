@@ -1,7 +1,7 @@
 {
   "packages": [
     {
-      "source": "git:github.com/YuDefine/clade@v1.11.108",
+      "source": "git:github.com/YuDefine/clade@v1.11.109",
       "skills": [
         "plugins/hub-core/skills",
         "plugins/hub-db-schema-supabase/skills",
