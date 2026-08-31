@@ -12,7 +12,15 @@
 
 import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 const SPEC_DIR = 'openspec'
@@ -27,6 +35,10 @@ interface GuardError {
   candidates?: string[]
   details?: unknown
 }
+
+type MutationRollback = () => void
+
+let activeRollback: MutationRollback | null = null
 
 interface ParsedArgs {
   change: string
@@ -46,8 +58,33 @@ interface FileSnapshot {
   text: string | null
 }
 
+function rollbackActiveMutation(): { attempted: boolean; error?: string } {
+  const rollback = activeRollback
+  activeRollback = null
+  if (!rollback) return { attempted: false }
+  try {
+    rollback()
+    return { attempted: true }
+  } catch (error) {
+    return { attempted: true, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
 function fail(error: GuardError): never {
-  process.stderr.write(`${JSON.stringify({ kind: 'spectra-target-guard-error', ...error })}\n`)
+  const rollback = rollbackActiveMutation()
+  process.stderr.write(
+    `${JSON.stringify({
+      kind: 'spectra-target-guard-error',
+      ...error,
+      ...(rollback.attempted
+        ? {
+            rollback: rollback.error
+              ? { status: 'failed', error: rollback.error }
+              : { status: 'restored' },
+          }
+        : {}),
+    })}\n`,
+  )
   process.exit(ERROR_EXIT)
 }
 
@@ -359,16 +396,18 @@ function snapshot(path: string): FileSnapshot {
   }
 }
 
-function snapshotMutationFiles(
+function mutationPaths(
   root: string,
   change: string,
   currentRoot: string,
-): { tasks: FileSnapshot; sidecar: FileSnapshot } {
-  const tasksPath = canonicalPath(join(root, SPEC_DIR, 'changes', change, 'tasks.md'), root)
-  const sidecarPath = canonicalPath(join(root, '.spectra', 'touched', `${change}.json`), root)
+): { tasks: string; sidecar: string } {
+  const paths = {
+    tasks: canonicalPath(join(root, SPEC_DIR, 'changes', change, 'tasks.md'), root),
+    sidecar: canonicalPath(join(root, '.spectra', 'touched', `${change}.json`), root),
+  }
   for (const [label, path] of [
-    ['tasks.md', tasksPath],
-    ['touched sidecar', sidecarPath],
+    ['tasks.md', paths.tasks],
+    ['touched sidecar', paths.sidecar],
   ] as const) {
     if (!isContained(root, path)) {
       fail({
@@ -380,7 +419,36 @@ function snapshotMutationFiles(
       })
     }
   }
-  return { tasks: snapshot(tasksPath), sidecar: snapshot(sidecarPath) }
+  return paths
+}
+
+function snapshotMutationFiles(
+  root: string,
+  change: string,
+  currentRoot: string,
+): { tasks: FileSnapshot; sidecar: FileSnapshot } {
+  const paths = mutationPaths(root, change, currentRoot)
+  return { tasks: snapshot(paths.tasks), sidecar: snapshot(paths.sidecar) }
+}
+
+function restoreSnapshot(path: string, saved: FileSnapshot): void {
+  if (!saved.exists) {
+    rmSync(path, { force: true })
+    return
+  }
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, saved.text ?? '')
+}
+
+function restoreMutationFiles(
+  root: string,
+  change: string,
+  currentRoot: string,
+  saved: { tasks: FileSnapshot; sidecar: FileSnapshot },
+): void {
+  const paths = mutationPaths(root, change, currentRoot)
+  restoreSnapshot(paths.tasks, saved.tasks)
+  restoreSnapshot(paths.sidecar, saved.sidecar)
 }
 
 function checkboxStates(text: string | null): Map<string, boolean> {
@@ -408,6 +476,11 @@ function taskDoneId(args: string[]): string | null {
   return positionals.at(-1) ?? null
 }
 
+function recoverTaskDoneId(args: string[]): string | null {
+  if (args[0] !== 'task' || args[1] !== 'recover-done') return null
+  return args.length === 3 && /^\d+$/.test(args[2]) ? args[2] : null
+}
+
 function sidecarContainsTask(text: string | null, change: string, taskId: string): boolean {
   if (!text) return false
   try {
@@ -415,11 +488,90 @@ function sidecarContainsTask(text: string | null, change: string, taskId: string
     return (
       body?.change === change &&
       Array.isArray(body?.touched) &&
-      body.touched.some((entry) => String(entry?.task_id) === taskId)
+      body.touched.some((entry: unknown) =>
+        Boolean(
+          entry && typeof entry === 'object' && String(Reflect.get(entry, 'task_id')) === taskId,
+        ),
+      )
     )
   } catch {
     return false
   }
+}
+
+function uncheckedTaskText(text: string, taskId: string): string {
+  const targetOrdinal = Number(taskId)
+  let ordinal = 0
+  let recovered = false
+  const next = text
+    .split('\n')
+    .map((line) =>
+      line.replace(/^(\s*[-*]\s+\[)([ xX])(\])(?=\s|$)/, (all, prefix, state, suffix) => {
+        ordinal += 1
+        if (ordinal !== targetOrdinal) return all
+        if (String(state).toLowerCase() !== 'x') return all
+        recovered = true
+        return `${prefix} ${suffix}`
+      }),
+    )
+    .join('\n')
+  if (!recovered) {
+    fail({
+      code: 'RECOVERY_PRECONDITION',
+      message: `task ${taskId} is not a checked checkbox that can be recovered`,
+    })
+  }
+  return next
+}
+
+function recoveredSidecarText(text: string, change: string, taskId: string): string {
+  let body: unknown
+  try {
+    body = JSON.parse(text)
+  } catch (error) {
+    fail({
+      code: 'RECOVERY_PRECONDITION',
+      message: 'touched sidecar is not valid JSON',
+      change,
+      details: error instanceof Error ? error.message : String(error),
+    })
+  }
+  if (!body || typeof body !== 'object' || Reflect.get(body, 'change') !== change) {
+    fail({
+      code: 'RECOVERY_PRECONDITION',
+      message: 'touched sidecar does not belong to the requested change',
+      change,
+    })
+  }
+  const touched = Reflect.get(body, 'touched')
+  if (!Array.isArray(touched)) {
+    fail({
+      code: 'RECOVERY_PRECONDITION',
+      message: 'touched sidecar has no task records',
+      change,
+    })
+  }
+  const matches = touched.filter(
+    (entry) =>
+      entry && typeof entry === 'object' && String(Reflect.get(entry, 'task_id')) === taskId,
+  )
+  if (matches.length !== 1) {
+    fail({
+      code: 'RECOVERY_PRECONDITION',
+      message: 'touched sidecar must contain exactly one record for the interrupted task',
+      change,
+      details: { taskId, matches: matches.length },
+    })
+  }
+  Reflect.set(
+    body,
+    'touched',
+    touched.filter(
+      (entry) =>
+        !(entry && typeof entry === 'object' && String(Reflect.get(entry, 'task_id')) === taskId),
+    ),
+  )
+  return `${JSON.stringify(body, null, 2)}\n`
 }
 
 function verifyTaskDone(
@@ -481,6 +633,95 @@ function verifyTaskDone(
   }
 }
 
+function recoverInterruptedTaskDone(
+  change: string,
+  taskId: string,
+  currentRoot: string,
+  worktrees: WorktreeRecord[],
+): void {
+  const before = new Map<string, { tasks: FileSnapshot; sidecar: FileSnapshot }>()
+  for (const worktree of worktrees) {
+    before.set(worktree.root, snapshotMutationFiles(worktree.root, change, currentRoot))
+  }
+  const beforeCurrent = before.get(currentRoot)
+  if (!beforeCurrent?.tasks.text || !beforeCurrent.sidecar.text) {
+    fail({
+      code: 'RECOVERY_PRECONDITION',
+      message: 'recovery requires existing tasks.md and touched sidecar snapshots',
+      change,
+      currentRoot,
+      details: { taskId },
+    })
+  }
+  if (checkboxStates(beforeCurrent.tasks.text).get(taskId) !== true) {
+    fail({
+      code: 'RECOVERY_PRECONDITION',
+      message: `task ${taskId} is not checked in the current worktree`,
+      change,
+      currentRoot,
+    })
+  }
+  const nextTasks = uncheckedTaskText(beforeCurrent.tasks.text, taskId)
+  const nextSidecar = recoveredSidecarText(beforeCurrent.sidecar.text, change, taskId)
+  const currentPaths = mutationPaths(currentRoot, change, currentRoot)
+
+  activeRollback = () => {
+    for (const worktree of worktrees) {
+      const saved = before.get(worktree.root)
+      if (saved) restoreMutationFiles(worktree.root, change, currentRoot, saved)
+    }
+  }
+  try {
+    writeFileSync(currentPaths.tasks, nextTasks)
+    writeFileSync(currentPaths.sidecar, nextSidecar)
+  } catch (error) {
+    fail({
+      code: 'RECOVERY_FAILED',
+      message: 'interrupted task recovery could not write the restored snapshots',
+      change,
+      currentRoot,
+      details: error instanceof Error ? error.message : String(error),
+    })
+  }
+
+  const afterCurrent = snapshotMutationFiles(currentRoot, change, currentRoot)
+  const beforeStates = checkboxStates(beforeCurrent.tasks.text)
+  const afterStates = checkboxStates(afterCurrent.tasks.text)
+  const failures: string[] = []
+  for (const id of new Set([...beforeStates.keys(), ...afterStates.keys()])) {
+    const expected = id === taskId ? false : beforeStates.get(id)
+    if (afterStates.get(id) !== expected)
+      failures.push(`unexpected recovered checkbox state for task ${id}`)
+  }
+  if (sidecarContainsTask(afterCurrent.sidecar.text, change, taskId)) {
+    failures.push('recovered touched sidecar still records the interrupted task')
+  }
+  for (const worktree of worktrees) {
+    if (worktree.root === currentRoot) continue
+    const saved = before.get(worktree.root)
+    const after = snapshotMutationFiles(worktree.root, change, currentRoot)
+    if (
+      after.tasks.exists !== saved?.tasks.exists ||
+      after.tasks.hash !== saved?.tasks.hash ||
+      after.sidecar.exists !== saved?.sidecar.exists ||
+      after.sidecar.hash !== saved?.sidecar.hash
+    ) {
+      failures.push(`foreign worktree mutation detected at ${worktree.root}`)
+    }
+  }
+  if (failures.length > 0) {
+    fail({
+      code: 'RECOVERY_FAILED',
+      message: 'interrupted task recovery postconditions failed',
+      change,
+      currentRoot,
+      details: { taskId, failures },
+    })
+  }
+  activeRollback = null
+  process.stdout.write(`${JSON.stringify({ change, task_id: taskId, status: 'recovered' })}\n`)
+}
+
 function main(): void {
   const { change, spectraArgs } = parseArgs(process.argv.slice(2))
   const isUnpark = spectraArgs[0] === 'unpark'
@@ -495,6 +736,7 @@ function main(): void {
     })
   }
   const taskId = taskDoneId(spectraArgs)
+  const recoveryTaskId = recoverTaskDoneId(spectraArgs)
   if (spectraArgs[0] === 'task' && spectraArgs[1] === 'done' && !taskId) {
     fail({
       code: 'USAGE_ERROR',
@@ -503,6 +745,18 @@ function main(): void {
       currentRoot: target.currentRoot,
     })
   }
+  if (spectraArgs[0] === 'task' && spectraArgs[1] === 'recover-done') {
+    if (!recoveryTaskId) {
+      fail({
+        code: 'USAGE_ERROR',
+        message: 'task recover-done requires exactly one numeric checkbox ordinal',
+        change,
+        currentRoot: target.currentRoot,
+      })
+    }
+    recoverInterruptedTaskDone(change, recoveryTaskId, target.currentRoot, target.worktrees)
+    return
+  }
 
   const duplicateCandidates = target.candidates.length > 1
   const isJson = spectraArgs.includes('--json')
@@ -510,9 +764,11 @@ function main(): void {
   const isInstructionsJson = isJson && spectraArgs[0] === 'instructions'
   const canProbeBeforeMutation =
     Boolean(taskId) || spectraArgs[0] === 'in-progress' || spectraArgs[0] === 'validate'
+  let targetProvenBeforeMutation = false
   if (duplicateCandidates) {
     if (isStatusJson || canProbeBeforeMutation) {
       probeCurrentTarget(change, target.currentRoot, target.candidateRoots)
+      targetProvenBeforeMutation = true
     } else if (!isInstructionsJson) {
       fail({
         code: 'TARGET_AMBIGUOUS',
@@ -528,6 +784,12 @@ function main(): void {
   if (taskId) {
     for (const worktree of target.worktrees) {
       before.set(worktree.root, snapshotMutationFiles(worktree.root, change, target.currentRoot))
+    }
+    activeRollback = () => {
+      for (const worktree of target.worktrees) {
+        const saved = before.get(worktree.root)
+        if (saved) restoreMutationFiles(worktree.root, change, target.currentRoot, saved)
+      }
     }
   }
 
@@ -549,25 +811,51 @@ function main(): void {
 
   const stdout = child.stdout ?? ''
   const stderr = child.stderr ?? ''
-  if (isJson && stdout.trim()) {
-    validateJsonOutput(stdout, target.currentRoot, change, duplicateCandidates && !isStatusJson)
-  } else if (isJson && duplicateCandidates && child.status === 0) {
-    fail({
-      code: 'TARGET_AMBIGUOUS',
-      message: 'Spectra JSON output was empty, so the duplicate target cannot be proven',
-      change,
-      currentRoot: target.currentRoot,
-      candidates: target.candidateRoots,
-    })
-  }
   if (child.status !== 0) {
+    const rollback = rollbackActiveMutation()
     if (stdout) process.stdout.write(stdout)
     if (stderr) process.stderr.write(stderr)
+    if (rollback.error) {
+      process.stderr.write(
+        `${JSON.stringify({
+          kind: 'spectra-target-guard-error',
+          code: 'ROLLBACK_FAILED',
+          message: 'Spectra failed and its task mutation snapshots could not be restored',
+          change,
+          currentRoot: target.currentRoot,
+          details: rollback.error,
+        })}\n`,
+      )
+      process.exit(ERROR_EXIT)
+    }
     process.exit(child.status ?? 1)
   }
+
+  // Mutation postconditions run before output validation. Any later guard failure
+  // still owns the snapshots and therefore restores the task + sidecar atomically.
   if (taskId) verifyTaskDone(change, taskId, target.currentRoot, target.worktrees, before)
   if (isUnpark) verifyUnpark(change, target.currentRoot, target.worktrees)
+  if (isJson && stdout.trim()) {
+    validateJsonOutput(
+      stdout,
+      target.currentRoot,
+      change,
+      duplicateCandidates && !isStatusJson && !targetProvenBeforeMutation,
+    )
+  } else if (isJson) {
+    const targetStillUnproven = duplicateCandidates && !targetProvenBeforeMutation
+    fail({
+      code: targetStillUnproven ? 'TARGET_AMBIGUOUS' : 'OUTPUT_INVALID',
+      message: targetStillUnproven
+        ? 'Spectra JSON output was empty, so the duplicate target cannot be proven'
+        : 'Spectra --json output was empty; buffered output was withheld',
+      change,
+      currentRoot: target.currentRoot,
+      ...(targetStillUnproven ? { candidates: target.candidateRoots } : {}),
+    })
+  }
 
+  activeRollback = null
   if (stdout) process.stdout.write(stdout)
   if (stderr) process.stderr.write(stderr)
 }
