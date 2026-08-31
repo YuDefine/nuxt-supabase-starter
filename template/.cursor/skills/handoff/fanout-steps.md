@@ -90,7 +90,7 @@ receipt 回 `relay_dispatched` 後，**MUST** 把 `relayed_dispatch_ids` 與 § 
 | receipt | 動作 |
 | --- | --- |
 | `relay_dispatched` | 過 § 4 比對 gate → 收工訊息 **A**（含 Worker receipt 段） |
-| `relay_refused` | 本 session 的 exact Claude session 無法辨識，或沒有可交出的 pane。**已派出去的 N 個 worker 現在無人繼承**：保留 durable task 與所有 pane，回具體 blocker 並列出那 N 筆 dispatch_id，**NEVER** 改用 raw `herdr` 指令繞過、**NEVER** 收工 |
+| `relay_refused` | 本 session 的 exact runtime session（Claude 或 Pi）無法辨識，或沒有可交出的 pane。**已派出去的 N 個 worker 現在無人繼承**：保留 durable task 與所有 pane，回具體 blocker 並列出那 N 筆 dispatch_id，**NEVER** 改用 raw `herdr` 指令繞過、**NEVER** 收工 |
 | `transport_error`／其他 preflight failure | 同上 |
 
 `relay_dispatched` 之後 **NEVER** 再開任何新工作段。細則見 [dispatch-common.md](dispatch-common.md) § 5 兩者共通。

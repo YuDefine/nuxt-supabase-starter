@@ -18,7 +18,7 @@ command -v herdr
 | `HERDR_ENV` | 允許 | 拒絕 |
 | --- | --- | --- |
 | `= 1`（在 Herdr pane 內） | 全部：dispatch / relay / reclaim / complete / harvest | — |
-| 空（Cursor、Codex、一般 shell） | create-only dispatch（`--cwd --label --prompt`／`--prompt-file`，Cursor MUST 加 `--launcher cc` 或 `ccw`）**加上** harvest（`--coordinate`／`--coordinate-resume`）。拓樸永遠是 Tab／workspace，**忽略** inherited `HERDR_PANE_ID` | `--relay` / `--reclaim` / `--complete` / `--continue` / `--recover-orphan` / `--parent-pane` → `not_in_herdr` |
+| 空（Cursor、Codex、一般 shell） | create-only dispatch（`--cwd --label --prompt`／`--prompt-file`，外部 caller MUST 明示仍支援的 `--launcher cc`／`ccw`／`cx`）**加上** harvest（`--coordinate`／`--coordinate-resume`）。拓樸永遠是 Tab／workspace，**忽略** inherited `HERDR_PANE_ID` | `--relay` / `--reclaim` / `--complete` / `--continue` / `--recover-orphan` / `--parent-pane` → `not_in_herdr` |
 
 **NEVER** 在 Cursor 裡 `export HERDR_ENV=1` 或假裝自己是 focused pane。那會讓 split／reclaim 打到使用者當下盯著的工作。
 
@@ -120,27 +120,30 @@ receipt 的 `pane_label_applied` **為 `false`，或這個欄位根本不存在*
 
 ### 3.1 Launcher inherit（relay / fanout / 任何 identity-bound dispatch）
 
-user **沒**點名別的 launcher 時，successor／worker通常用**當前這格實際在跑的**（`ANTHROPIC_DEFAULT_*` 的 `ccg-` / `ccagy-` prefix）。helper 自己重判。**NEVER** 沒點名就在 `--relay` 上帶 `--launcher`。
+user **沒**點名別的 launcher 時，successor／worker MUST 用**當前這格實際在跑的 runtime**。helper 自己從 live process identity 重判：`cx → cx`、`cc → cc`、`ccw → ccw`、`ccg → ccg`、`ccagy → ccagy`。**NEVER** 沒點名就在 `--relay` 上帶 `--launcher`。
 
-`ccx` 是退役例外：helper 仍辨識 live `ccx-*`，只為了回 `retired_launcher`，**NEVER** 再建立 ccx successor。既有 ccx session 的 GPT／Codex 殘工走 Pi dispatcher；需要互動式 AI Agent harness 的工作改走 create-only `--launcher cc`／`ccw`。Pi 的 session CLI 是 `--session` 指向既有 session，與 Claude 的預建 `--session-id` 契約不同，NEVER 把 `cx` 字串硬塞進本 helper 的 Claude launcher slot。
+`cx` 的 live identity 是 `PI_CODING_AGENT=true` 加非空 `PI_SESSION_ID`，優先於任何繼承的 Claude marker。helper 以 `cx --session-id <fresh-id>` 建立互動式 Pi successor；Herdr 回報的 Pi JSONL session path 會正規化回該 fresh id，再走與 Claude 相同的 exact-session ownership gate。
 
-`CLADE_CLAUDE_LAUNCHER` 是當初 dispatch 注入 pane 的 marker，`/clear` 之後同一格可能已換成別的 binary，marker 不會跟著改。**NEVER** 把它當 SoT。
+`ccx` 是退役例外：helper 仍辨識 live `ccx-*`，只為了回 `retired_launcher`，**NEVER** 再建立 ccx successor。需要 GPT／Codex successor 時可由 user 明示 `--launcher cx`；當前已是 cx 時不帶旗標即原生繼承。
+
+`CLADE_CLAUDE_LAUNCHER` 是當初 dispatch 注入 pane 的相容 marker，`/clear` 之後同一格可能已換成別的 binary，marker 不會跟著改。**NEVER** 把它當 SoT。
 
 | 可觀察 predicate | launcher |
 | --- | --- |
+| `PI_CODING_AGENT=true` 且 `PI_SESSION_ID` 非空 | `cx` |
 | `ANTHROPIC_DEFAULT_OPUS_MODEL`（或 sonnet／haiku）以 `ccg-` 開頭，且 `ANTHROPIC_BASE_URL=http://127.0.0.1:8317` | `ccg` |
 | 同上，prefix `ccagy-` | `ccagy` |
 | 同上，prefix `ccx-` | `retired_launcher`，不建立 pane |
-| 沒有 live model prefix，才退到 `CLADE_CLAUDE_LAUNCHER` 或 `CLAUDE_CONFIG_DIR` | 退路，不是優先 |
+| 沒有 live runtime identity，才退到 `CLADE_CLAUDE_LAUNCHER` 或 `CLAUDE_CONFIG_DIR` | 退路，不是優先 |
 
 **例外**（兩條 dispatch 入口，簽署身分不變）：
 
 | 可觀察 predicate | 帶什麼 |
 | --- | --- |
-| user 白紙黑字點名另一個**仍支援的 successor launcher**（「successor 走 ccg」「用 ccw 接手」） | `--relay --launcher <那個>` |
-| user 白紙黑字點名另一個仍支援的 launcher，且這次是 create-only（「用 ccw」） | create-only `--launcher <那個>` |
+| user 白紙黑字點名另一個**仍支援的 successor launcher**（「successor 走 cx」「用 ccw 接手」） | `--relay --launcher <那個>` |
+| user 白紙黑字點名另一個仍支援的 launcher，且這次是 create-only（「用 cx」） | create-only `--launcher <那個>` |
 
-沒點名就不要帶 `--launcher`。`--launcher` 只覆蓋 successor／child 的 binary 與 `CLADE_CLAUDE_LAUNCHER` marker，**不改** current pane 的簽署身分——誰能簽 relay 仍由 `HERDR_ENV`、current pane、exact Claude session 驗證。`--launcher ccx` 一律回 `retired_launcher`；`ccg` 則維持完整支援。
+沒點名就不要帶 `--launcher`。`--launcher` 只覆蓋 successor／child 的 binary 與相容 marker，**不改** current pane 的簽署身分——誰能簽 relay 仍由 `HERDR_ENV`、current pane、exact runtime session（Claude 或 Pi）驗證。`--launcher ccx` 一律回 `retired_launcher`；`cx`、`ccg` 維持完整支援。
 
 `--reclaim` / `--complete` / `--continue` / `--adjudicate` / `--recover-orphan` / `--parent-pane` **NEVER** 帶 `--launcher`。
 
@@ -148,9 +151,9 @@ user **沒**點名別的 launcher 時，successor／worker通常用**當前這�
 
 | 藉口 | 現實 |
 | --- | --- |
-| 「這格 `CLADE_CLAUDE_LAUNCHER=ccw`，relay 繼承它才對」 | 那是 W1 被派出來時注入的。`/clear` 後跑的是 `ccg-opus`，繼承 marker 等於把 ccg session 的工作交給 ccw |
-| 「帶 `--launcher` 才能簽 relay／改了簽署身分」 | 簽署仍是 `HERDR_ENV` + current pane + exact Claude session。`--launcher` 只選 successor binary |
-| 「沒點名，但我自己想把 ccx successor 換成 ccg」 | ccx 預設 fail closed；若 user 明確點名仍支援的 ccg successor，才用 `--relay --launcher ccg` |
+| 「這格 `CLADE_CLAUDE_LAUNCHER=ccw`，relay 繼承它才對」 | 那是 W1 被派出來時注入的。當前若有 live Pi identity，繼承 marker 等於把 cx session 的工作交給 ccw |
+| 「帶 `--launcher` 才能簽 relay／改了簽署身分」 | 簽署仍是 `HERDR_ENV` + current pane + exact runtime session。`--launcher` 只選 successor binary |
+| 「沒點名，但我自己想把 cx successor 換成 ccw」 | live runtime 是 SoT；只有 user 明確點名另一個仍支援的 launcher 才覆蓋 |
 
 ## 4. Runtime cleanup
 
@@ -205,8 +208,8 @@ helper receipt 中的 `retained: false` 只描述 child pane，**NEVER** 拿它�
 | 部件 | 契約 |
 | --- | --- |
 | 首行 | 內部 relay／fanout：逐字包含 `目前這裡收工；位置已交給 successor。` 外部 create-only：逐字包含 `目前這裡收工；已派出 successor pane。` |
-| Relay receipt | 僅 `relay_dispatched`：successor workspace／tab／pane／Claude session、本 pane id、`predecessor_dispatch_id`、`relayed_dispatch_ids`（沒有就明寫「無」） |
-| Dispatch receipt | 僅外部／bare `dispatched`：successor workspace／tab／pane／Claude session／`dispatch_id`。**NEVER** 填本 pane id 或 predecessor（沒有）。**MUST** 另註明本 pane 將自行關閉（§ 4 create-only 那列），**NEVER** 寫成「等 successor 回收」 |
+| Relay receipt | 僅 `relay_dispatched`：successor workspace／tab／pane／runtime session、本 pane id、`predecessor_dispatch_id`、`relayed_dispatch_ids`（沒有就明寫「無」） |
+| Dispatch receipt | 僅外部／bare `dispatched`：successor workspace／tab／pane／runtime session／`dispatch_id`。**NEVER** 填本 pane id 或 predecessor（沒有）。**MUST** 另註明本 pane 將自行關閉（§ 4 create-only 那列），**NEVER** 寫成「等 successor 回收」 |
 | Worker receipt | **只有 `fanout`**：逐筆列 dispatch_id、label、pane、在做什麼 |
 | 工作摘要 | durable brief 路徑與一句主題 |
 | Runtime cleanup | 已停止項目；保留項目逐一寫用途與對應 pane。兩者皆空也明寫「無」 |

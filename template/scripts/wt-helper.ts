@@ -67,6 +67,7 @@ import {
   chmodSync,
   closeSync,
   constants as fsConstants,
+  cpSync,
   copyFileSync,
   existsSync,
   lstatSync,
@@ -1510,6 +1511,21 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
   }
 
   setupBriefExclude(wtPath)
+
+  // `.agents/` 是 Codex 與 Pi 共用的 generated skill projection，但通常不進 git；
+  // `git worktree add` 因此不會帶過去。clade Pi package 本身刻意 extensions-only，
+  // 若這裡漏複製，新 worktree 會在無 collision 的同時也失去 project skills。
+  // 複製 fork 當下 main 的完整 projection，讓兩個 runtime 都只讀同一份來源。
+  try {
+    const agentsSrc = join(consumerRoot, '.agents')
+    const agentsDst = join(wtPath, '.agents')
+    if (existsSync(agentsSrc) && !existsSync(agentsDst)) {
+      cpSync(agentsSrc, agentsDst, { recursive: true })
+      console.log('  agent-projection: copied .agents from main')
+    }
+  } catch (e) {
+    console.error(`note: .agents projection copy skipped: ${e?.message ?? e}`)
+  }
 
   // TD-321: `.clade/bin/` 整個在 consumer .gitignore 內，而 `git worktree` fork 只帶
   // tracked 檔案 —— 新 worktree 因此沒有 clade-gate，`pnpm test`（直接呼叫

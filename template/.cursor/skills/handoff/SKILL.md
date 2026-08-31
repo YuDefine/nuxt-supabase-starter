@@ -11,7 +11,7 @@ permission_tier: action
 
 # /handoff
 
-> **Cursor 主線：`relay` 與 `fanout` 不適用。** 命中任一即停這兩格——系統提示自稱 Cursor；Task tool 的 model 清單含 `claude-opus-5` / `composer-2.5` / `gpt-5.6-sol` / `grok-4.5`；env 有 `CURSOR_SESSION_ID` 或 `CURSOR_TRACE_ID`。**NEVER** 開 successor pane 並輸出「目前這裡收工」。裸 `/handoff` 若第二層會落到 `relay`／`fanout`，改為主線自己做完（不收工）。user 顯式打 `relay`／`fanout` 同樣改道，只准主線做完或 `park`（0 pane、只登記）。`next` 的盤點可跑；2B.5 若要開 successor pane 則不開，改主線做或 `park`。Herdr `--relay` 是另一個旗標，效果同為主線收工，同樣不准。`park` 仍適用。本 skill 其餘步驟是 AI Agent 主線的交接機器。
+> **Cursor 主線：`relay` 與 `fanout` 不適用。** 命中任一即停這兩格——系統提示自稱 Cursor；Task tool 的 model 清單含 `claude-opus-5` / `composer-2.5` / `gpt-5.6-sol` / `grok-4.5`；env 有 `CURSOR_SESSION_ID` 或 `CURSOR_TRACE_ID`。**NEVER** 開 successor pane 並輸出「目前這裡收工」。裸 `/handoff` 若第二層會落到 `relay`／`fanout`，改為主線自己做完（不收工）。user 顯式打 `relay`／`fanout` 同樣改道，只准主線做完或 `park`（0 pane、只登記）。`next` 的盤點可跑；2B.5 若要開 successor pane 則不開，改主線做或 `park`。Herdr `--relay` 是另一個旗標，效果同為主線收工，同樣不准。`park` 仍適用。本 skill 其餘步驟是 Herdr 內互動式主線（AI Agent 或 Pi/cx）的交接機器；runtime 繼承契約見 [dispatch-common.md](dispatch-common.md) § 3.1。
 
 Session 交接管理。**四個 arg，全部以「本 session 收工」結束**；差別只在**開幾個 pane**。裸 `/handoff` 自己判該用哪一個——先判當前 session 有沒有未交辦工作，再判其中幾件派得出去。
 
@@ -51,7 +51,7 @@ Step 1 兩層判定**之前**先判 —— Step 1 只問「有幾件工作、幾
 
 ### 可觀察 predicate（用訊號，NEVER 憑感覺估）
 
-門檻取 [[session-tasks]] § Session context 預算的 launcher profile（`cc/ccw` 300k／500k；`ccg` 400k／450k；native work-loop runner child 500k／600k）。`ccx` 已退役：既有 session 不再走 numeric gate 產生 ccx successor；其殘工改由 Pi dispatcher 送往 `cx` runtime，或在需要 AI Agent harness 時建立 `cc`／`ccw` session。判定材料只認下列三種**在 transcript 裡看得到**的訊號：
+門檻取 [[session-tasks]] § Session context 預算的 launcher profile（`cc/ccw` 300k／500k；`ccg` 400k／450k；native work-loop runner child 500k／600k）。`ccx` 已退役：既有 session 不再走 numeric gate 產生 ccx successor；其殘工改交給 `cx` 或在需要 AI Agent harness 時建立 `cc`／`ccw` session。當前 runtime 已是 `cx` 時，relay／fanout 原生繼承 `cx`，不降級成 Claude launcher。判定材料只認下列三種**在 transcript 裡看得到**的訊號：
 
 1. `session-context-budget-warn` hook 已在本 session 響過（它逐字報「session context 已達 Nk」）
 2. user 在訊息裡明講了 context 用量（「目前已經 43%」「快滿了」）

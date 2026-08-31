@@ -43,15 +43,26 @@ Local edits will be reverted by the next sync.
 **沒有選項的拍板題 MUST 改寫成「這題要給值」並逐項列出要填什麼**，兩者都不成立就不要放進
 待拍板區段。三者皆非的條目會以一個空白輸入框出現在手機上，看起來像可以回答，實際上不能。
 
-### 選項行的兩種粗體寫法都可以
+### 選項行的三種粗體寫法都可以
 
 ```markdown
   - **A**（推薦）—— 收進 rules/core/     ← 粗體只包字母
   - **A（推薦）收進 rules/core/**        ← 粗體包整段
+  - **A（推薦）**：收進 rules/core/      ← 粗體包字母與標記，正文在外
 ```
 
-兩種都解析得到。2026-08-27 之前只認第一種，而 fleet 幾乎只寫第二種——這是**解析器**遷就
-寫法，不是寫法遷就解析器。
+三種都解析得到。2026-08-27 之前只認第一種，而 fleet 幾乎只寫第二種；第三種到 2026-08-29
+之前**匹配得到但讀錯**——手機上顯示成 `A. ：收進 rules/core/（推薦）`，冒號外洩、推薦標記被
+搬到句尾。這是**解析器**遷就寫法，不是寫法遷就解析器。
+
+### 選項換行沒有關係，但 NEVER 讓它跨出縮排
+
+一條選項寫不下換行，續行照樣算同一條選項——**條件是續行縮排比該 bullet 深、且自己不是
+新的 list item**。2026-08-29 之前續行整段丟失：<consumer-a> 的 A 案在手機上停在
+「…改記到 TD-296 —— 折進去要動」，說明代價的那半句在下一行，沒有刪節號、沒有任何訊號。
+**在被截斷的選項之間拍板，比排版難看嚴重得多。**
+
+續行上限 3 行。要寫更長就把它拆成問句本文的說明——選項是按鈕的標籤，不是段落。
 
 **這不代表「怎麼寫都行」**。以下每一種都解析不到，靜默退化成自由填答：
 
@@ -205,6 +216,41 @@ node vendor/scripts/herdr-session-handoff.ts --complete blocked \
   [--decision-recommended 'A …']
 ```
 
+### 一個拍板題 = 一個問題。底下的 bullet 是**選項**，NEVER 是**項目**
+
+```markdown
+- [ ] 🟡 **兩條 TD 的 Status 要不要照建議改？**（回「兩條都改」或逐條指定即可）
+  - **TD-309 → `done`（推薦）**：…
+  - **TD-305 → `wontfix-until-signal`（推薦）**：…
+```
+
+這是 2026-08-29 <consumer-a> 的原文，兩個**互不相干**的 TD 綁成一題。它同時壞在兩層：
+
+- **語義層**：那兩條 bullet 是要處理的**項目**，不是同一個問題的**替代方案**。答「A」在這裡
+  沒有意義——沒有 A。問句自己也知道，所以它補了一句「或逐條指定即可」，那句話正是
+  「這其實是兩題」的自白
+- **機械層**：`TD-309` / `TD-305` 不是 A/B，整組解析不到，這題以**空白輸入框**上手機
+
+**MUST 拆成兩題**，各自帶自己的 A/B。「合成一題比較省 Charles 的時間」是反的：省下的是**寫的人**
+按兩次 `flow ask` 的時間，付出的是答的人在一個空白框裡自己組織兩件事的答案。
+
+### 在 chat 渲染過的 `Qn` 選項 MUST 同一個 turn 落 carrier
+
+在對話裡把一題渲染成 `Q1` + A/B/C，**那不是登記**。`\my` 與 `/decisions` 讀的是 spine，
+spine 讀的是 carrier；chat 不在這條路徑上的任何一段。
+
+2026-08-29 實測：agent 在對話裡給了排序過的 A/B，carrier 上那條 bullet 沒有任何選項行，
+spine 上 `options: []`，手機上是一個空白輸入框。**寫的人看得到自己給過選項，答的人看不到**——
+這正是本檔開頭那句「寫的人與答的人不是同一個人」最貴的一種形式。
+
+**MUST 同一個 turn 兩邊都寫**：對話裡渲染的那組選項，逐字寫進 carrier 的 bullet（或直接
+`flow ask --option`）。**NEVER** 想著「等下再補進 HANDOFF」——`flow sources` 60 秒後就掃過去了，
+它掃到的是那一刻的檔案，不是你的打算。
+
+沒補的下場不是靜默：ingest 端偵測得到「這題進來時沒有選項」，會用 `ask-options` 把它退回，
+而**退回的對象就是你**。退回停在佇列上不會自己解決（實測停了 3.2 小時），手機上留著一張
+答不了的卡。
+
 ### NEVER 把選項寫進問句本文
 
 `要留哪一個？(A) 留 X (B) 停 Y` 這種寫法，`options` 是空的——`/decisions` 依 `options` 決定畫
@@ -266,6 +312,56 @@ for (const c of await m.listPendingChanges('<repo>'))
 > 於是它以「要我動手」出現在 `/decisions`，而 Charles 在那裡連要看什麼都打不開。
 > **繞道的成因不是不懂分工，是 `/review` 收不進來**，所以本節的第二列要求先補 evidence、
 > 而不是只要求刪 bullet。
+
+## 答案落檔失敗不再是靜默的（`answer-not-filed`）
+
+Carrier 是**別的 session 也在寫的檔**。人在手機上答題的同時，某條 session 可能正在重寫
+`## ⏳ Awaiting Charles` 整段——答案剛附上去就被整段覆寫掉了。寫入端回報成功，spine 上
+一切正常，而讀那個檔的 agent 什麼都沒看到。
+
+2026-08-29 <consumer-a> span `ee92949d75fa703c` 實測：答一次、改兩次，三次都沒進過 git 歷史；
+agent 兩小時內三度把同一題當「等你拍板」重報，最後是 Charles 自己去 `/decisions` 看不到
+自己的答案才發現。
+
+現在 `flow status --stalled`（每個 attended session 開頭自動跑）會把這種狀態列成
+`answer-not-filed` 一行，並印出重新歸檔的指令：
+
+```bash
+node vendor/scripts/flow/flow.ts relend <span_id>
+```
+
+`relend` **不收新答案**——答案在 spine 上一直是對的，壞掉的是檔案；它從 spine 重建那個區塊
+放回去。重跑是 no-op，不會疊出第二份。
+
+**NEVER 因為看到這一行就去要人重答一次。** 答案完好，要修的是投遞不是提問。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 已答（非 retracted）× 有指定 carrier × repo 內找不到它的決策紀錄區塊 × 超過 10 分鐘寬限 → `flow status --stalled` 列一行、exit 3。**warn-only，不 block** |
+| 消費端 | SessionStart 的 `session-start-stalled.sh`（每個 attended session 開頭）；讀到就照 `relend` 指令處置 |
+| 載入路徑 | 本節；停滯輸出自帶 action 句，不需要先知道要去看 |
+
+**判準是「有沒有決策紀錄區塊」，NEVER 是「有沒有提到那個 span id」**：一條被寫成事故報告的
+span id 到處都是，而那些檔案裡沒有答案。已歸檔（區塊搬進 `docs/archives/`）算已落檔——
+只看 carrier 一個檔會讓每一條歸檔過的決策永遠報警，而會叫的警報等於不會叫的警報。
+
+## 寫入當下就會提醒你沒帶選項
+
+寫完 `HANDOFF.md` / `docs/tech-debt.md` 的當下，PostToolUse hook 會就地判「這題是 ruling
+但沒有選項」，並把 `OPTIONS_REQUEST_TEXT` 原文印回同一個 session。
+
+它與佇列端的 lint、ingest 端的 `ask-options` 退回**是同一個判準的三個時刻**，前兩者都是對的、
+也都太晚：到那時題目已經在手機上長成空白輸入框，而唯一五秒鐘就能修好的人——選項還在自己
+context 裡的那個 agent——已經走了。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 剛寫入的檔裡有 `no-options-under-ruling` 的條目 → 印到 stderr。**warn-only，一律 exit 0，NEVER 擋下 Edit**——`HANDOFF.md` 是高頻活文件，擋寫入買到的是繞過旗標不是更好的 bullet |
+| 消費端 | 剛寫下那條 bullet 的 agent（本節）；判準與措辭走 `vendor/scripts/flow/decision-lint.ts` → `decision-sources.ts` 的 scanner ＋ `decisions.ts` 的 `OPTIONS_REQUEST_TEXT` |
+| 載入路徑 | 本檔（paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`，編輯當下載入）＋ hook 自身的輸出 |
+
+**NEVER 在 hook 裡自己解析 markdown。** 第二份 matcher 遲早與佇列給出不同答案，而不一致的
+那一次會教讀者「這個提示是雜訊」。
 
 ## 改寫與重問
 
