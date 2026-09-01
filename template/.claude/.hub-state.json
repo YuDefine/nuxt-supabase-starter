@@ -3,9 +3,10 @@
   "rulesProjection": "copy",
   "checksums": {
     "rules/agent-routing.keepalive-wake.md": "3d03b5582ff8c939",
-    "rules/agent-routing.md": "8be0cb78accf0a3b",
+    "rules/agent-routing.md": "7b473e3de128578f",
     "rules/agent-routing.pi-input-intercept.md": "6f92e6911ba17440",
     "rules/agent-routing.pi-watch-protocol.md": "4aa4d024916b7152",
+    "rules/agent-routing.routing-table-rationale.md": "ea74107032baf401",
     "rules/agent-self-verification.md": "b87e52eb979b1785",
     "rules/agent-self-verification.screenshot-evidence.md": "9bd14cd93f94d0c2",
     "rules/audit-pattern.md": "69856e1bb2377882",
