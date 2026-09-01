@@ -481,6 +481,12 @@ interface TaskDoneRecovery {
   mode: 'recorded' | 'checkbox-only'
 }
 
+interface VerificationDone {
+  taskId: string
+  evidencePaths: string[]
+  command: string[]
+}
+
 function taskDoneRecovery(args: string[]): TaskDoneRecovery | null {
   if (args[0] !== 'task' || args[1] !== 'recover-done') return null
   if (args.length === 3 && /^\d+$/.test(args[2])) {
@@ -490,6 +496,65 @@ function taskDoneRecovery(args: string[]): TaskDoneRecovery | null {
     return { taskId: args[3], mode: 'checkbox-only' }
   }
   return null
+}
+
+function verificationDone(args: string[], change: string): VerificationDone | null {
+  if (args[0] !== 'task' || args[1] !== 'verify-done') return null
+  const commandSeparator = args.indexOf('--', 2)
+  if (commandSeparator === -1 || commandSeparator === args.length - 1) {
+    fail({
+      code: 'USAGE_ERROR',
+      message: 'task verify-done requires -- followed by an evidence command',
+      change,
+    })
+  }
+
+  const positionals: string[] = []
+  const evidencePaths: string[] = []
+  let explicitVerificationOnly = false
+  let embeddedChange = ''
+  for (let index = 2; index < commandSeparator; index += 1) {
+    const arg = args[index]
+    if (arg === '--change' || arg === '--evidence-path') {
+      const value = args[index + 1]
+      if (!value || value.startsWith('--')) {
+        fail({ code: 'USAGE_ERROR', message: `${arg} requires a value`, change })
+      }
+      if (arg === '--change') embeddedChange = value
+      else evidencePaths.push(value)
+      index += 1
+      continue
+    }
+    if (arg === '--verification-only') {
+      explicitVerificationOnly = true
+      continue
+    }
+    if (arg.startsWith('-')) {
+      fail({ code: 'USAGE_ERROR', message: `unsupported task verify-done option: ${arg}`, change })
+    }
+    positionals.push(arg)
+  }
+
+  if (
+    embeddedChange !== change ||
+    !explicitVerificationOnly ||
+    positionals.length !== 1 ||
+    !/^\d+$/.test(positionals[0]) ||
+    evidencePaths.length === 0 ||
+    new Set(evidencePaths).size !== evidencePaths.length
+  ) {
+    fail({
+      code: 'USAGE_ERROR',
+      message:
+        'task verify-done requires --change <name> <numeric ordinal> --verification-only, unique --evidence-path values, and -- <command>',
+      change,
+    })
+  }
+  return {
+    taskId: positionals[0],
+    evidencePaths,
+    command: args.slice(commandSeparator + 1),
+  }
 }
 
 function sidecarContainsTask(text: string | null, change: string, taskId: string): boolean {
@@ -508,6 +573,34 @@ function sidecarContainsTask(text: string | null, change: string, taskId: string
   } catch {
     return false
   }
+}
+
+function checkedTaskText(text: string, taskId: string): { text: string; description: string } {
+  const targetOrdinal = Number(taskId)
+  let ordinal = 0
+  let description = ''
+  const next = text
+    .split('\n')
+    .map((line) =>
+      line.replace(
+        /^(\s*[-*]\s+\[)([ xX])(\])(?=\s|$)(.*)$/,
+        (all, prefix, state, suffix, remainder) => {
+          ordinal += 1
+          if (ordinal !== targetOrdinal) return all
+          if (String(state).toLowerCase() === 'x') return all
+          description = String(remainder).trim()
+          return `${prefix}x${suffix}${remainder}`
+        },
+      ),
+    )
+    .join('\n')
+  if (!description) {
+    fail({
+      code: 'VERIFICATION_PRECONDITION',
+      message: `task ${taskId} is not an unchecked checkbox that can be completed`,
+    })
+  }
+  return { text: next, description }
 }
 
 function uncheckedTaskText(text: string, taskId: string): string {
@@ -599,6 +692,258 @@ function recoveredSidecarText(
     ),
   )
   return `${JSON.stringify(body, null, 2)}\n`
+}
+
+function completeVerificationTask(
+  change: string,
+  completion: VerificationDone,
+  currentRoot: string,
+  worktrees: WorktreeRecord[],
+): void {
+  const before = new Map<string, { tasks: FileSnapshot; sidecar: FileSnapshot }>()
+  for (const worktree of worktrees) {
+    before.set(worktree.root, snapshotMutationFiles(worktree.root, change, currentRoot))
+  }
+  const beforeCurrent = before.get(currentRoot)
+  if (!beforeCurrent?.tasks.text || !beforeCurrent.sidecar.text) {
+    fail({
+      code: 'VERIFICATION_PRECONDITION',
+      message: 'verification-only completion requires existing tasks.md and touched sidecar',
+      change,
+      currentRoot,
+    })
+  }
+  if (git(currentRoot, ['status', '--porcelain=v1', '--untracked-files=all'])) {
+    fail({
+      code: 'VERIFICATION_PRECONDITION',
+      message: 'verification-only completion requires a clean tracked and untracked worktree',
+      change,
+      currentRoot,
+    })
+  }
+
+  const checked = checkedTaskText(beforeCurrent.tasks.text, completion.taskId)
+  const evidenceCommand = [basename(completion.command[0]), ...completion.command.slice(1)].join(
+    ' ',
+  )
+  if (!checked.description.includes(`\`${evidenceCommand}\``)) {
+    fail({
+      code: 'VERIFICATION_PRECONDITION',
+      message: 'evidence command must exactly match a backticked command in the task description',
+      change,
+      currentRoot,
+      details: { taskId: completion.taskId, evidenceCommand },
+    })
+  }
+  let sidecar: unknown
+  try {
+    sidecar = JSON.parse(beforeCurrent.sidecar.text)
+  } catch (error) {
+    fail({
+      code: 'VERIFICATION_PRECONDITION',
+      message: 'touched sidecar is not valid JSON',
+      change,
+      details: error instanceof Error ? error.message : String(error),
+    })
+  }
+  if (!sidecar || typeof sidecar !== 'object' || Reflect.get(sidecar, 'change') !== change) {
+    fail({
+      code: 'VERIFICATION_PRECONDITION',
+      message: 'touched sidecar does not belong to the requested change',
+      change,
+    })
+  }
+  const touched = Reflect.get(sidecar, 'touched')
+  if (
+    !Array.isArray(touched) ||
+    sidecarContainsTask(beforeCurrent.sidecar.text, change, completion.taskId)
+  ) {
+    fail({
+      code: 'VERIFICATION_PRECONDITION',
+      message: 'verification-only completion requires prior records and zero records for this task',
+      change,
+      details: { taskId: completion.taskId },
+    })
+  }
+
+  const canonicalEvidence = new Map<string, FileSnapshot>()
+  for (const evidencePath of completion.evidencePaths) {
+    if (isAbsolute(evidencePath) || evidencePath.split(/[\\/]/).includes('..')) {
+      fail({
+        code: 'VERIFICATION_PRECONDITION',
+        message: 'evidence paths must be safe worktree-relative paths',
+        change,
+        details: { evidencePath },
+      })
+    }
+    const absolute = canonicalPath(evidencePath, currentRoot)
+    if (!isContained(currentRoot, absolute) || !existsSync(absolute) || isDirectory(absolute)) {
+      fail({
+        code: 'VERIFICATION_PRECONDITION',
+        message: 'each evidence path must resolve to an existing file in the current worktree',
+        change,
+        details: { evidencePath },
+      })
+    }
+    try {
+      execFileSync('git', ['ls-files', '--error-unmatch', '--', evidencePath], {
+        cwd: currentRoot,
+        stdio: ['ignore', 'ignore', 'ignore'],
+      })
+    } catch {
+      fail({
+        code: 'VERIFICATION_PRECONDITION',
+        message: 'each evidence path must be tracked by git',
+        change,
+        details: { evidencePath },
+      })
+    }
+    const attributed = touched.some(
+      (entry: unknown) =>
+        entry &&
+        typeof entry === 'object' &&
+        String(Reflect.get(entry, 'task_id')) !== completion.taskId &&
+        Array.isArray(Reflect.get(entry, 'files')) &&
+        Reflect.get(entry, 'files').includes(evidencePath),
+    )
+    if (!attributed) {
+      fail({
+        code: 'VERIFICATION_PRECONDITION',
+        message: 'each evidence path must already be attributed to another task',
+        change,
+        details: { evidencePath },
+      })
+    }
+    canonicalEvidence.set(absolute, snapshot(absolute))
+  }
+
+  const evidence = spawnSync(completion.command[0], completion.command.slice(1), {
+    cwd: currentRoot,
+    encoding: 'utf8',
+    env: process.env,
+    maxBuffer: 16 * 1024 * 1024,
+  })
+  if (evidence.error || evidence.status !== 0) {
+    if (evidence.stdout) process.stderr.write(evidence.stdout)
+    if (evidence.stderr) process.stderr.write(evidence.stderr)
+    fail({
+      code: 'VERIFICATION_FAILED',
+      message: 'verification evidence command did not exit successfully',
+      change,
+      currentRoot,
+      details: { status: evidence.status, error: evidence.error?.message },
+    })
+  }
+  if (git(currentRoot, ['status', '--porcelain=v1', '--untracked-files=all'])) {
+    fail({
+      code: 'VERIFICATION_POSTCONDITION',
+      message: 'verification evidence command changed the worktree',
+      change,
+      currentRoot,
+    })
+  }
+  for (const [absolute, saved] of canonicalEvidence) {
+    const after = snapshot(absolute)
+    if (after.exists !== saved.exists || after.hash !== saved.hash) {
+      fail({
+        code: 'VERIFICATION_POSTCONDITION',
+        message: 'verification evidence command changed an evidence file',
+        change,
+        currentRoot,
+        details: { evidencePath: relative(currentRoot, absolute) },
+      })
+    }
+  }
+  for (const worktree of worktrees) {
+    const saved = before.get(worktree.root)
+    const after = snapshotMutationFiles(worktree.root, change, currentRoot)
+    if (
+      after.tasks.exists !== saved?.tasks.exists ||
+      after.tasks.hash !== saved?.tasks.hash ||
+      after.sidecar.exists !== saved?.sidecar.exists ||
+      after.sidecar.hash !== saved?.sidecar.hash
+    ) {
+      fail({
+        code: 'VERIFICATION_POSTCONDITION',
+        message: 'verification evidence command changed task bookkeeping',
+        change,
+        currentRoot,
+        details: { worktreeRoot: worktree.root },
+      })
+    }
+  }
+
+  touched.push({
+    task_id: completion.taskId,
+    task_desc: checked.description,
+    files: completion.evidencePaths,
+  })
+  const currentPaths = mutationPaths(currentRoot, change, currentRoot)
+  activeRollback = () => {
+    for (const worktree of worktrees) {
+      const saved = before.get(worktree.root)
+      if (saved) restoreMutationFiles(worktree.root, change, currentRoot, saved)
+    }
+  }
+  try {
+    writeFileSync(currentPaths.tasks, checked.text)
+    writeFileSync(currentPaths.sidecar, `${JSON.stringify(sidecar, null, 2)}\n`)
+  } catch (error) {
+    fail({
+      code: 'VERIFICATION_FAILED',
+      message: 'verification-only completion could not write task bookkeeping',
+      change,
+      currentRoot,
+      details: error instanceof Error ? error.message : String(error),
+    })
+  }
+
+  const afterCurrent = snapshotMutationFiles(currentRoot, change, currentRoot)
+  const failures: string[] = []
+  const beforeStates = checkboxStates(beforeCurrent.tasks.text)
+  const afterStates = checkboxStates(afterCurrent.tasks.text)
+  for (const id of new Set([...beforeStates.keys(), ...afterStates.keys()])) {
+    const expected = id === completion.taskId ? true : beforeStates.get(id)
+    if (afterStates.get(id) !== expected) failures.push(`unexpected checkbox state for task ${id}`)
+  }
+  if (!sidecarContainsTask(afterCurrent.sidecar.text, change, completion.taskId)) {
+    failures.push('current touched sidecar did not record the verification-only task')
+  }
+  for (const worktree of worktrees) {
+    if (worktree.root === currentRoot) continue
+    const saved = before.get(worktree.root)
+    const after = snapshotMutationFiles(worktree.root, change, currentRoot)
+    if (
+      after.tasks.exists !== saved?.tasks.exists ||
+      after.tasks.hash !== saved?.tasks.hash ||
+      after.sidecar.exists !== saved?.sidecar.exists ||
+      after.sidecar.hash !== saved?.sidecar.hash
+    ) {
+      failures.push(`foreign worktree mutation detected at ${worktree.root}`)
+    }
+  }
+  if (failures.length > 0) {
+    fail({
+      code: 'VERIFICATION_POSTCONDITION',
+      message: 'verification-only completion postconditions failed',
+      change,
+      currentRoot,
+      details: { taskId: completion.taskId, failures },
+    })
+  }
+
+  activeRollback = null
+  if (evidence.stdout) process.stderr.write(evidence.stdout)
+  if (evidence.stderr) process.stderr.write(evidence.stderr)
+  process.stdout.write(
+    `${JSON.stringify({
+      change,
+      task_id: completion.taskId,
+      status: 'done',
+      completion: 'verification-only',
+      evidence_paths: completion.evidencePaths,
+    })}\n`,
+  )
 }
 
 function verifyTaskDone(
@@ -779,6 +1124,7 @@ function main(): void {
   }
   const taskId = taskDoneId(spectraArgs)
   const recovery = taskDoneRecovery(spectraArgs)
+  const verification = verificationDone(spectraArgs, change)
   if (spectraArgs[0] === 'task' && spectraArgs[1] === 'done' && !taskId) {
     fail({
       code: 'USAGE_ERROR',
@@ -798,6 +1144,10 @@ function main(): void {
       })
     }
     recoverInterruptedTaskDone(change, recovery, target.currentRoot, target.worktrees)
+    return
+  }
+  if (verification) {
+    completeVerificationTask(change, verification, target.currentRoot, target.worktrees)
     return
   }
 
