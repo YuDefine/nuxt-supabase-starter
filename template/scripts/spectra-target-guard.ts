@@ -1,30 +1,42 @@
 #!/usr/bin/env node
-// 🔒 LOCKED — managed by clade · Source: vendor/scripts/spectra-target-guard.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/spectra-target-guard.ts
+// 🔒 LOCKED — managed by clade · Source: plugins/hub-capabilities-openspec/scripts/spectra-target-guard.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/plugins/hub-capabilities-openspec/scripts/spectra-target-guard.ts
 
 /**
  * Fail-closed integration guard for closed-source kaochenlong/spectra-app v2.3.1.
  *
- * The upstream Wine CLI has no explicit project/worktree selector. This wrapper
- * proves read-only targets from returned artifact paths, probes the target before
- * ambiguous mutations, and verifies filesystem mutation postconditions before
- * any child output is released to the caller.
+ * Spectra has no explicit project/worktree selector. This wrapper anchors every
+ * targeted invocation to the current git root, requires path-bearing evidence,
+ * serializes probes and mutations per git common-dir, and verifies that no
+ * sibling worktree was changed before releasing buffered child output.
  */
 
 import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
   existsSync,
+  linkSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   realpathSync,
+  renameSync,
   rmSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 const SPEC_DIR = 'openspec'
-const PATH_FIELDS = new Set(['worktreePath', 'changeDir', 'contextFiles'])
+const PATH_FIELDS = new Set([
+  'worktreePath',
+  'projectPath',
+  'rootPath',
+  'changeDir',
+  'contextFiles',
+  'outputPath',
+  'path',
+])
 const ERROR_EXIT = 2
 
 interface GuardError {
@@ -34,15 +46,24 @@ interface GuardError {
   currentRoot?: string
   candidates?: string[]
   details?: unknown
+  rollback?: { status: 'restored' | 'failed'; error?: string }
 }
-
-type MutationRollback = () => void
-
-let activeRollback: MutationRollback | null = null
 
 interface ParsedArgs {
   change: string
   spectraArgs: string[]
+}
+
+type CommandKind =
+  | 'global-read-only'
+  | 'existing-read-only'
+  | 'local-mutation'
+  | 'lifecycle-mutation'
+  | 'create-before-target'
+
+interface CommandClass {
+  kind: CommandKind
+  operation: string
 }
 
 interface WorktreeRecord {
@@ -52,11 +73,50 @@ interface WorktreeRecord {
   hasChange: boolean
 }
 
+interface TargetContext {
+  currentRoot: string
+  commonDir: string
+  currentChangeDir: string
+  worktrees: WorktreeRecord[]
+  candidates: WorktreeRecord[]
+}
+
+interface ChildResult {
+  status: number
+  stdout: string
+  stderr: string
+}
+
 interface FileSnapshot {
   exists: boolean
   hash: string | null
   text: string | null
 }
+
+interface TreeSnapshot {
+  files: Map<string, string>
+}
+
+interface RelevantSnapshot {
+  active: TreeSnapshot
+  tasks: FileSnapshot
+  sidecar: FileSnapshot
+  specs: TreeSnapshot
+  archive: TreeSnapshot
+}
+
+interface ParkBinding {
+  version: 1
+  change: string
+  root: string
+  commonDir: string
+  artifactHash: string
+  createdAt: string
+}
+
+type MutationRollback = () => void
+
+let activeRollback: MutationRollback | null = null
 
 function rollbackActiveMutation(): { attempted: boolean; error?: string } {
   const rollback = activeRollback
@@ -70,22 +130,32 @@ function rollbackActiveMutation(): { attempted: boolean; error?: string } {
   }
 }
 
+class GuardFailure extends Error {
+  readonly detail: GuardError
+
+  constructor(detail: GuardError) {
+    super(detail.message)
+    this.detail = detail
+  }
+}
+
+class ChildExit extends Error {
+  readonly status: number
+
+  constructor(status: number) {
+    super(`Spectra exited with status ${status}`)
+    this.status = status
+  }
+}
+
 function fail(error: GuardError): never {
   const rollback = rollbackActiveMutation()
-  process.stderr.write(
-    `${JSON.stringify({
-      kind: 'spectra-target-guard-error',
-      ...error,
-      ...(rollback.attempted
-        ? {
-            rollback: rollback.error
-              ? { status: 'failed', error: rollback.error }
-              : { status: 'restored' },
-          }
-        : {}),
-    })}\n`,
-  )
-  process.exit(ERROR_EXIT)
+  if (rollback.attempted) {
+    error.rollback = rollback.error
+      ? { status: 'failed', error: rollback.error }
+      : { status: 'restored' }
+  }
+  throw new GuardFailure(error)
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -93,7 +163,8 @@ function parseArgs(argv: string[]): ParsedArgs {
   if (separator === -1) {
     fail({
       code: 'USAGE_ERROR',
-      message: 'usage: node scripts/spectra-target-guard.ts --change <name> -- <spectra args...>',
+      message:
+        'usage: node .claude/scripts/spectra-target-guard.ts --change <name> -- <spectra args...>',
     })
   }
   const wrapperArgs = argv.slice(0, separator)
@@ -114,6 +185,120 @@ function parseArgs(argv: string[]): ParsedArgs {
     })
   }
   return { change, spectraArgs }
+}
+
+function classifyCommand(args: string[]): CommandClass {
+  const [first, second] = args
+  if (first === 'list' || first === 'search') {
+    if (args.includes('--change')) {
+      fail({
+        code: 'USAGE_ERROR',
+        message: 'global Spectra commands must not carry a targeted --change flag',
+        details: { args },
+      })
+    }
+    return { kind: 'global-read-only', operation: first }
+  }
+  if (first === 'instructions' && args.includes('--skill')) {
+    if (args.includes('--change')) {
+      fail({
+        code: 'USAGE_ERROR',
+        message: 'instructions --skill cannot be combined with targeted --change',
+        details: { args },
+      })
+    }
+    return { kind: 'global-read-only', operation: 'instructions-skill' }
+  }
+  if (first === 'status' || first === 'analyze' || first === 'validate' || first === 'drift') {
+    return { kind: 'existing-read-only', operation: first }
+  }
+  if (first === 'instructions') {
+    return { kind: 'existing-read-only', operation: 'instructions' }
+  }
+  if (first === 'task' && second === 'done') {
+    return { kind: 'local-mutation', operation: 'task-done' }
+  }
+  if (first === 'task' && second === 'verify-done') {
+    return { kind: 'local-mutation', operation: 'task-verify-done' }
+  }
+  if (first === 'task' && second === 'recover-done') {
+    return { kind: 'local-mutation', operation: 'task-recover-done' }
+  }
+  if (first === 'new' && second === 'artifact') {
+    return { kind: 'local-mutation', operation: 'new-artifact' }
+  }
+  if (first === 'in-progress' && second === 'add') {
+    return { kind: 'local-mutation', operation: 'in-progress-add' }
+  }
+  if (first === 'new' && second === 'change') {
+    return { kind: 'create-before-target', operation: 'new-change' }
+  }
+  if (first === 'park' || first === 'unpark' || first === 'archive' || first === 'sync') {
+    return { kind: 'lifecycle-mutation', operation: first }
+  }
+  fail({
+    code: 'USAGE_ERROR',
+    message: 'unsupported Spectra command class; update the guard contract before delegation',
+    details: { args },
+  })
+}
+
+function validateCommandBinding(change: string, args: string[], command: CommandClass): void {
+  if (
+    command.kind === 'global-read-only' ||
+    command.operation === 'task-verify-done' ||
+    command.operation === 'task-recover-done'
+  )
+    return
+
+  const flagValues: string[] = []
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] !== '--change') continue
+    const value = args[index + 1]
+    if (!value || value.startsWith('-')) {
+      fail({
+        code: 'USAGE_ERROR',
+        message: 'child --change flag requires the guarded change name',
+        change,
+        details: { args },
+      })
+    }
+    flagValues.push(value)
+  }
+
+  const positionalByOperation: Partial<Record<string, string | undefined>> = {
+    analyze: args[1],
+    validate: args[1],
+    drift: args[1],
+    park: args[1],
+    unpark: args[1],
+    archive: args[1],
+    sync: args[1],
+    'in-progress-add': args[2],
+    'new-change': args[2],
+  }
+  const positional = positionalByOperation[command.operation]
+  const requiresFlag = new Set(['status', 'instructions', 'task-done', 'new-artifact']).has(
+    command.operation,
+  )
+  const boundValues = positional ? [...flagValues, positional] : flagValues
+
+  if ((requiresFlag && flagValues.length === 0) || (!requiresFlag && !positional)) {
+    fail({
+      code: 'USAGE_ERROR',
+      message: 'child command does not identify the guarded change',
+      change,
+      details: { operation: command.operation, args },
+    })
+  }
+  if (boundValues.some((value) => value !== change)) {
+    fail({
+      code: 'TARGET_UNPROVEN',
+      message: 'wrapper and child command name different changes',
+      change,
+      details: { operation: command.operation, childChanges: boundValues, args },
+    })
+  }
 }
 
 function git(cwd: string, args: string[]): string {
@@ -179,23 +364,17 @@ function worktreeRoots(currentRoot: string): string[] {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   })
-  const roots = output
-    .split('\0')
-    .filter((field) => field.startsWith('worktree '))
-    .map((field) => canonicalPath(field.slice('worktree '.length), currentRoot))
-  return [...new Set(roots)]
+  return [
+    ...new Set(
+      output
+        .split('\0')
+        .filter((field) => field.startsWith('worktree '))
+        .map((field) => canonicalPath(field.slice('worktree '.length), currentRoot)),
+    ),
+  ]
 }
 
-function resolveTarget(
-  change: string,
-  allowMissingCurrent = false,
-): {
-  currentRoot: string
-  commonDir: string
-  worktrees: WorktreeRecord[]
-  candidates: WorktreeRecord[]
-  candidateRoots: string[]
-} {
+function resolveTarget(change: string): TargetContext {
   const reportedRoot = git(process.cwd(), ['rev-parse', '--show-toplevel'])
   const currentRoot = canonicalPath(reportedRoot, process.cwd())
   const commonDir = canonicalPath(git(currentRoot, ['rev-parse', '--git-common-dir']), currentRoot)
@@ -214,6 +393,19 @@ function resolveTarget(
 
   const worktrees = roots.map((root): WorktreeRecord => {
     const candidateCommon = canonicalPath(git(root, ['rev-parse', '--git-common-dir']), root)
+    if (candidateCommon !== commonDir) {
+      fail({
+        code: 'TARGET_FOREIGN',
+        message: 'a registered worktree resolves to a different git common-dir',
+        change,
+        currentRoot,
+        details: {
+          worktreeRoot: root,
+          currentCommonDir: commonDir,
+          candidateCommonDir: candidateCommon,
+        },
+      })
+    }
     const changeDir = canonicalPath(join(root, SPEC_DIR, 'changes', change), root)
     const hasChange = isDirectory(changeDir)
     if (hasChange && !isContained(root, changeDir)) {
@@ -225,57 +417,218 @@ function resolveTarget(
         details: { worktreeRoot: root, canonicalChangeDir: changeDir },
       })
     }
-    return {
-      root,
-      commonDir: candidateCommon,
-      changeDir,
-      hasChange,
-    }
+    return { root, commonDir: candidateCommon, changeDir, hasChange }
   })
-  const candidates = worktrees.filter((entry) => entry.hasChange)
-  const candidateRoots = candidates.map((entry) => entry.root)
-  const currentChange = canonicalPath(join(currentRoot, SPEC_DIR, 'changes', change), currentRoot)
 
-  if (!isDirectory(currentChange)) {
-    if (allowMissingCurrent && candidates.length === 0) {
-      return { currentRoot, commonDir, worktrees, candidates, candidateRoots }
-    }
-    fail({
-      code: candidates.length === 1 ? 'TARGET_FOREIGN' : 'TARGET_MISSING',
-      message:
-        candidates.length === 1
-          ? 'the requested change exists only in a foreign registered worktree'
-          : 'the requested change does not exist in the current registered worktree set',
-      change,
-      currentRoot,
-      candidates: candidateRoots,
-    })
-  }
-  if (candidates.length === 0) {
-    fail({
-      code: 'TARGET_MISSING',
-      message: 'the current change directory was not found among registered worktrees',
-      change,
-      currentRoot,
-      candidates: [],
-    })
-  }
-  const currentCandidate = candidates.find((entry) => entry.root === currentRoot)
-  if (!currentCandidate || currentCandidate.commonDir !== commonDir) {
+  const currentChangeDir = canonicalPath(
+    join(currentRoot, SPEC_DIR, 'changes', change),
+    currentRoot,
+  )
+  if (isDirectory(currentChangeDir) && !isContained(currentRoot, currentChangeDir)) {
     fail({
       code: 'TARGET_FOREIGN',
-      message:
-        'the requested change is not present in the current worktree and current git common-dir',
+      message: 'the current change directory resolves outside the current worktree',
       change,
       currentRoot,
-      candidates: candidateRoots,
-      details: {
-        currentCommonDir: commonDir,
-        candidateCommonDir: currentCandidate?.commonDir ?? null,
-      },
+      details: { canonicalChangeDir: currentChangeDir },
     })
   }
-  return { currentRoot, commonDir, worktrees, candidates, candidateRoots }
+  return {
+    currentRoot,
+    commonDir,
+    currentChangeDir,
+    worktrees,
+    candidates: worktrees.filter((entry) => entry.hasChange),
+  }
+}
+
+function requireExistingTarget(change: string, target: TargetContext): void {
+  if (isDirectory(target.currentChangeDir)) return
+  const candidates = target.candidates.map((entry) => entry.root)
+  fail({
+    code: candidates.length > 0 ? 'TARGET_FOREIGN' : 'TARGET_MISSING',
+    message:
+      candidates.length > 0
+        ? 'the requested change exists only in sibling worktrees, not the current root'
+        : 'the requested change does not exist in the current worktree set',
+    change,
+    currentRoot: target.currentRoot,
+    candidates,
+  })
+}
+
+function lockPath(commonDir: string): string {
+  return join(commonDir, 'clade-spectra-target-guard.lock')
+}
+
+function pidAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
+
+function acquireLock(target: TargetContext, change: string): () => void {
+  const path = lockPath(target.commonDir)
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const temporary = `${path}.${process.pid}.tmp`
+    try {
+      writeFileSync(
+        temporary,
+        JSON.stringify({
+          pid: process.pid,
+          change,
+          root: target.currentRoot,
+          createdAt: new Date().toISOString(),
+        }),
+        { flag: 'wx', mode: 0o600 },
+      )
+      try {
+        linkSync(temporary, path)
+      } finally {
+        unlinkSync(temporary)
+      }
+      return () => {
+        try {
+          const body = JSON.parse(readFileSync(path, 'utf8'))
+          if (body?.pid === process.pid) unlinkSync(path)
+        } catch {}
+      }
+    } catch (error) {
+      try {
+        if (existsSync(temporary)) unlinkSync(temporary)
+      } catch {}
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+      let stale = false
+      let owner: unknown = null
+      try {
+        owner = JSON.parse(readFileSync(path, 'utf8'))
+        stale = !pidAlive(Number((owner as { pid?: unknown }).pid))
+      } catch {
+        stale = true
+      }
+      if (stale && attempt === 0) {
+        unlinkSync(path)
+        continue
+      }
+      fail({
+        code: 'TARGET_LOCKED',
+        message: 'another guarded Spectra invocation owns this git common-dir',
+        change,
+        currentRoot: target.currentRoot,
+        details: { lockPath: path, owner },
+      })
+    }
+  }
+  fail({ code: 'TARGET_LOCKED', message: 'failed to acquire Spectra target lock', change })
+}
+
+function isolatedSpectraArgs(cwd: string, args: string[]): string[] {
+  let roots: string[]
+  try {
+    roots = worktreeRoots(cwd)
+  } catch (error) {
+    fail({
+      code: 'ISOLATION_FAILED',
+      message: 'Spectra child isolation could not enumerate registered worktrees',
+      currentRoot: cwd,
+      details: error instanceof Error ? error.message : String(error),
+    })
+  }
+
+  const foreignRoots = roots.filter((root) => root !== cwd)
+  for (const foreignRoot of foreignRoots) {
+    if (isContained(foreignRoot, cwd) || isContained(cwd, foreignRoot)) {
+      fail({
+        code: 'ISOLATION_FAILED',
+        message: 'nested git worktrees cannot be isolated without hiding the current root',
+        currentRoot: cwd,
+        details: { foreignRoot },
+      })
+    }
+  }
+
+  const sandbox = [
+    '--die-with-parent',
+    '--new-session',
+    '--ro-bind',
+    '/',
+    '/',
+    '--dev-bind',
+    '/dev',
+    '/dev',
+    '--proc',
+    '/proc',
+  ]
+  if (isDirectory('/tmp')) sandbox.push('--bind', '/tmp', '/tmp')
+
+  const home = process.env.HOME
+  const writableRuntimePaths = [
+    process.env.WINEPREFIX,
+    home ? join(home, '.local', 'share', 'spectra', 'wine') : undefined,
+    process.env.XDG_RUNTIME_DIR,
+  ]
+  for (const path of new Set(
+    writableRuntimePaths.filter((value): value is string => Boolean(value)),
+  )) {
+    if (isDirectory(path)) sandbox.push('--bind', path, path)
+  }
+
+  for (const foreignRoot of foreignRoots) {
+    sandbox.push('--ro-bind', foreignRoot, foreignRoot)
+    const foreignChanges = join(foreignRoot, SPEC_DIR, 'changes')
+    if (isDirectory(foreignChanges)) sandbox.push('--tmpfs', foreignChanges)
+  }
+  if (!isContained('/tmp', cwd)) sandbox.push('--bind', cwd, cwd)
+  sandbox.push('--chdir', cwd, '--', 'spectra', ...args)
+  return sandbox
+}
+
+function runSpectra(cwd: string, args: string[]): ChildResult {
+  const input = args.includes('--stdin') ? readFileSync(0) : undefined
+  const bwrap = process.env.SPECTRA_TARGET_GUARD_BWRAP || 'bwrap'
+  const child = spawnSync(bwrap, isolatedSpectraArgs(cwd, args), {
+    cwd,
+    encoding: 'utf8',
+    env: process.env,
+    input,
+    maxBuffer: 16 * 1024 * 1024,
+  })
+  if (child.error) {
+    fail({
+      code: 'ISOLATION_FAILED',
+      message: 'Spectra child isolation could not be started',
+      currentRoot: cwd,
+      details: child.error.message,
+    })
+  }
+  const stderr = child.stderr ?? ''
+  if ((child.status ?? 1) !== 0 && /^bwrap:/m.test(stderr)) {
+    fail({
+      code: 'ISOLATION_FAILED',
+      message: 'bubblewrap could not establish the Spectra child filesystem view',
+      currentRoot: cwd,
+      details: stderr.trim(),
+    })
+  }
+  return { status: child.status ?? 1, stdout: child.stdout ?? '', stderr }
+}
+
+function parseJson(result: ChildResult, change: string, currentRoot: string): unknown {
+  try {
+    return JSON.parse(result.stdout)
+  } catch (error) {
+    fail({
+      code: 'OUTPUT_INVALID',
+      message: 'Spectra --json output was not valid JSON; buffered output was withheld',
+      change,
+      currentRoot,
+      details: error instanceof Error ? error.message : String(error),
+    })
+  }
 }
 
 function collectPathValues(value: unknown, activeField: string | null, out: string[]): void {
@@ -293,121 +646,186 @@ function collectPathValues(value: unknown, activeField: string | null, out: stri
   }
 }
 
-function validateJsonOutput(
-  stdout: string,
-  currentRoot: string,
-  change: string,
-  requireChangeEvidence = false,
-): void {
-  let body: unknown
-  try {
-    body = JSON.parse(stdout)
-  } catch (error) {
+function attestBody(body: unknown, target: TargetContext, change: string): string[] {
+  const rawPaths: string[] = []
+  collectPathValues(body, null, rawPaths)
+  if (rawPaths.length === 0) {
     fail({
-      code: 'OUTPUT_INVALID',
-      message: 'Spectra --json output was not valid JSON; buffered output was withheld',
+      code: 'TARGET_UNPROVEN',
+      message: 'Spectra returned valid JSON without path-bearing target evidence',
       change,
-      currentRoot,
-      details: error instanceof Error ? error.message : String(error),
+      currentRoot: target.currentRoot,
     })
   }
-  const paths: string[] = []
-  collectPathValues(body, null, paths)
-  const currentChange = canonicalPath(join(currentRoot, SPEC_DIR, 'changes', change), currentRoot)
-  let hasChangeEvidence = false
-  for (const rawPath of paths) {
-    const path = canonicalPath(rawPath, currentRoot)
-    if (!isContained(currentRoot, path)) {
+  const paths = rawPaths.map((rawPath) => canonicalPath(rawPath, target.currentRoot))
+  for (let index = 0; index < paths.length; index += 1) {
+    if (!isContained(target.currentRoot, paths[index])) {
       fail({
         code: 'TARGET_FOREIGN',
         message:
-          'Spectra returned an artifact path outside the current worktree; output was withheld',
+          'Spectra returned a path outside the current worktree; buffered output was withheld',
         change,
-        currentRoot,
-        details: { path: rawPath, canonicalPath: path },
+        currentRoot: target.currentRoot,
+        details: { path: rawPaths[index], canonicalPath: paths[index] },
       })
     }
-    if (isContained(currentChange, path)) hasChangeEvidence = true
   }
-  if (requireChangeEvidence && !hasChangeEvidence) {
-    fail({
-      code: 'TARGET_AMBIGUOUS',
-      message: 'Spectra JSON did not include a current change artifact path that proves its target',
-      change,
-      currentRoot,
-    })
-  }
+  return paths
 }
 
-function probeCurrentTarget(change: string, currentRoot: string, candidateRoots: string[]): void {
-  const probe = spawnSync('spectra', ['instructions', 'apply', '--change', change, '--json'], {
-    cwd: currentRoot,
-    encoding: 'utf8',
-    env: process.env,
-    maxBuffer: 16 * 1024 * 1024,
+function tryAttestationProbe(
+  target: TargetContext,
+  change: string,
+  artifact: string,
+): unknown | null {
+  const result = runSpectra(target.currentRoot, [
+    'instructions',
+    artifact,
+    '--change',
+    change,
+    '--json',
+  ])
+  if (result.status !== 0 || !result.stdout.trim()) return null
+  let body: unknown
+  try {
+    body = JSON.parse(result.stdout)
+  } catch {
+    return null
+  }
+  const paths: string[] = []
+  collectPathValues(body, null, paths)
+  return paths.length > 0 ? body : null
+}
+
+function attestExistingTarget(target: TargetContext, change: string): string[] {
+  for (const artifact of ['apply', 'proposal']) {
+    const body = tryAttestationProbe(target, change, artifact)
+    if (body) return attestBody(body, target, change)
+  }
+  fail({
+    code: 'TARGET_UNPROVEN',
+    message: 'path-bearing Spectra attestation could not be obtained for the current target',
+    change,
+    currentRoot: target.currentRoot,
   })
-  if (probe.error) {
-    fail({
-      code: 'SPECTRA_EXEC_FAILED',
-      message: 'Spectra target probe could not be started',
-      change,
-      currentRoot,
-      candidates: candidateRoots,
-      details: probe.error.message,
-    })
-  }
-  if (probe.status !== 0 || !(probe.stdout ?? '').trim()) {
-    fail({
-      code: 'TARGET_AMBIGUOUS',
-      message: 'read-only Spectra target probe did not return usable JSON',
-      change,
-      currentRoot,
-      candidates: candidateRoots,
-      details: { status: probe.status, stderr: probe.stderr ?? '' },
-    })
-  }
-  validateJsonOutput(probe.stdout ?? '', currentRoot, change, true)
 }
 
-function verifyUnpark(change: string, currentRoot: string, worktrees: WorktreeRecord[]): void {
-  const restoredRoots = worktrees
-    .filter((entry) =>
-      isDirectory(canonicalPath(join(entry.root, SPEC_DIR, 'changes', change), entry.root)),
-    )
-    .map((entry) => entry.root)
-  if (restoredRoots.length !== 1 || restoredRoots[0] !== currentRoot) {
-    fail({
-      code: 'MUTATION_POSTCONDITION',
-      message: 'Spectra unpark did not restore the change exclusively into the current worktree',
-      change,
-      currentRoot,
-      candidates: restoredRoots,
-    })
-  }
-}
-
-function snapshot(path: string): FileSnapshot {
+function snapshotFile(path: string): FileSnapshot {
   if (!existsSync(path)) return { exists: false, hash: null, text: null }
   const text = readFileSync(path, 'utf8')
+  return { exists: true, hash: createHash('sha256').update(text).digest('hex'), text }
+}
+
+function snapshotTree(root: string): TreeSnapshot {
+  const files = new Map<string, string>()
+  if (!existsSync(root)) return { files }
+  const visit = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name)
+      if (entry.isSymbolicLink()) {
+        const canonical = canonicalPath(path, root)
+        if (!isContained(root, canonical)) {
+          fail({
+            code: 'TARGET_FOREIGN',
+            message: 'a mutation snapshot path escapes its worktree through a symlink',
+            details: { path, canonicalPath: canonical },
+          })
+        }
+      }
+      if (entry.isDirectory()) visit(path)
+      else if (entry.isFile()) {
+        const rel = relative(root, path)
+        files.set(rel, createHash('sha256').update(readFileSync(path)).digest('hex'))
+      }
+    }
+  }
+  visit(root)
+  return { files }
+}
+
+function treeHash(tree: TreeSnapshot): string {
+  return createHash('sha256')
+    .update(
+      [...tree.files.entries()]
+        .toSorted(([a], [b]) => a.localeCompare(b))
+        .map(([p, h]) => `${p}\0${h}\n`)
+        .join(''),
+    )
+    .digest('hex')
+}
+
+function snapshotRelevant(root: string, change: string): RelevantSnapshot {
   return {
-    exists: true,
-    hash: createHash('sha256').update(text).digest('hex'),
-    text,
+    active: snapshotTree(join(root, SPEC_DIR, 'changes', change)),
+    tasks: snapshotFile(join(root, SPEC_DIR, 'changes', change, 'tasks.md')),
+    sidecar: snapshotFile(join(root, '.spectra', 'touched', `${change}.json`)),
+    specs: snapshotTree(join(root, SPEC_DIR, 'specs')),
+    archive: snapshotTree(join(root, SPEC_DIR, 'changes', 'archive')),
+  }
+}
+
+function snapshotAll(target: TargetContext, change: string): Map<string, RelevantSnapshot> {
+  return new Map(
+    target.worktrees.map((worktree) => [worktree.root, snapshotRelevant(worktree.root, change)]),
+  )
+}
+
+function sameTree(a: TreeSnapshot, b: TreeSnapshot): boolean {
+  return treeHash(a) === treeHash(b)
+}
+
+function verifyForeignUnchanged(
+  target: TargetContext,
+  change: string,
+  before: Map<string, RelevantSnapshot>,
+): void {
+  const failures: string[] = []
+  for (const worktree of target.worktrees) {
+    if (worktree.root === target.currentRoot) continue
+    const previous = before.get(worktree.root)
+    const after = snapshotRelevant(worktree.root, change)
+    if (
+      !previous ||
+      !sameTree(previous.active, after.active) ||
+      previous.sidecar.exists !== after.sidecar.exists ||
+      previous.sidecar.hash !== after.sidecar.hash ||
+      !sameTree(previous.specs, after.specs) ||
+      !sameTree(previous.archive, after.archive)
+    ) {
+      failures.push(worktree.root)
+    }
+  }
+  if (failures.length > 0) {
+    fail({
+      code: 'MUTATION_POSTCONDITION',
+      message: 'Spectra mutated foreign worktree state; the scene was preserved for investigation',
+      change,
+      currentRoot: target.currentRoot,
+      details: { foreignRoots: failures },
+    })
   }
 }
 
 function mutationPaths(
   root: string,
   change: string,
-  currentRoot: string,
+  _currentRoot?: string,
 ): { tasks: string; sidecar: string } {
-  const paths = {
+  return {
     tasks: canonicalPath(join(root, SPEC_DIR, 'changes', change, 'tasks.md'), root),
     sidecar: canonicalPath(join(root, '.spectra', 'touched', `${change}.json`), root),
   }
+}
+
+function snapshotMutationFiles(
+  root: string,
+  change: string,
+  currentRoot: string,
+): { tasks: FileSnapshot; sidecar: FileSnapshot } {
+  const { tasks, sidecar } = mutationPaths(root, change)
   for (const [label, path] of [
-    ['tasks.md', paths.tasks],
-    ['touched sidecar', paths.sidecar],
+    ['tasks.md', tasks],
+    ['touched sidecar', sidecar],
   ] as const) {
     if (!isContained(root, path)) {
       fail({
@@ -419,16 +837,7 @@ function mutationPaths(
       })
     }
   }
-  return paths
-}
-
-function snapshotMutationFiles(
-  root: string,
-  change: string,
-  currentRoot: string,
-): { tasks: FileSnapshot; sidecar: FileSnapshot } {
-  const paths = mutationPaths(root, change, currentRoot)
-  return { tasks: snapshot(paths.tasks), sidecar: snapshot(paths.sidecar) }
+  return { tasks: snapshotFile(tasks), sidecar: snapshotFile(sidecar) }
 }
 
 function restoreSnapshot(path: string, saved: FileSnapshot): void {
@@ -446,9 +855,8 @@ function restoreMutationFiles(
   currentRoot: string,
   saved: { tasks: FileSnapshot; sidecar: FileSnapshot },
 ): void {
-  const paths = mutationPaths(root, change, currentRoot)
-  restoreSnapshot(paths.tasks, saved.tasks)
-  restoreSnapshot(paths.sidecar, saved.sidecar)
+  restoreSnapshot(join(root, SPEC_DIR, 'changes', change, 'tasks.md'), saved.tasks)
+  restoreSnapshot(join(root, '.spectra', 'touched', `${change}.json`), saved.sidecar)
 }
 
 function checkboxStates(text: string | null): Map<string, boolean> {
@@ -564,11 +972,7 @@ function sidecarContainsTask(text: string | null, change: string, taskId: string
     return (
       body?.change === change &&
       Array.isArray(body?.touched) &&
-      body.touched.some((entry: unknown) =>
-        Boolean(
-          entry && typeof entry === 'object' && String(Reflect.get(entry, 'task_id')) === taskId,
-        ),
-      )
+      body.touched.some((entry: { task_id?: unknown }) => String(entry?.task_id) === taskId)
     )
   } catch {
     return false
@@ -814,7 +1218,7 @@ function completeVerificationTask(
         details: { evidencePath },
       })
     }
-    canonicalEvidence.set(absolute, snapshot(absolute))
+    canonicalEvidence.set(absolute, snapshotFile(absolute))
   }
 
   const evidence = spawnSync(completion.command[0], completion.command.slice(1), {
@@ -843,7 +1247,7 @@ function completeVerificationTask(
     })
   }
   for (const [absolute, saved] of canonicalEvidence) {
-    const after = snapshot(absolute)
+    const after = snapshotFile(absolute)
     if (after.exists !== saved.exists || after.hash !== saved.hash) {
       fail({
         code: 'VERIFICATION_POSTCONDITION',
@@ -880,10 +1284,8 @@ function completeVerificationTask(
   })
   const currentPaths = mutationPaths(currentRoot, change, currentRoot)
   activeRollback = () => {
-    for (const worktree of worktrees) {
-      const saved = before.get(worktree.root)
-      if (saved) restoreMutationFiles(worktree.root, change, currentRoot, saved)
-    }
+    const saved = before.get(currentRoot)
+    if (saved) restoreMutationFiles(currentRoot, change, currentRoot, saved)
   }
   try {
     writeFileSync(currentPaths.tasks, checked.text)
@@ -947,59 +1349,41 @@ function completeVerificationTask(
 }
 
 function verifyTaskDone(
+  target: TargetContext,
   change: string,
   taskId: string,
-  currentRoot: string,
-  worktrees: WorktreeRecord[],
-  before: Map<string, { tasks: FileSnapshot; sidecar: FileSnapshot }>,
+  before: Map<string, RelevantSnapshot>,
 ): void {
-  const afterCurrent = snapshotMutationFiles(currentRoot, change, currentRoot)
-  const afterTasks = afterCurrent.tasks
-  const afterSidecar = afterCurrent.sidecar
-  const beforeCurrent = before.get(currentRoot)
-  const beforeStates = checkboxStates(beforeCurrent?.tasks.text ?? null)
+  const previous = before.get(target.currentRoot)
+  const tasksPath = join(target.currentChangeDir, 'tasks.md')
+  const afterTasks = snapshotFile(tasksPath)
+  const afterSidecar = snapshotFile(
+    join(target.currentRoot, '.spectra', 'touched', `${change}.json`),
+  )
+  const beforeStates = checkboxStates(previous?.tasks.text ?? null)
   const afterStates = checkboxStates(afterTasks.text)
   const failures: string[] = []
-
   if (beforeStates.get(taskId) !== false || afterStates.get(taskId) !== true) {
-    failures.push(`task ${taskId} did not change from unchecked to checked in current tasks.md`)
+    failures.push(`task ${taskId} did not change from unchecked to checked`)
   }
-  const allTaskIds = new Set([...beforeStates.keys(), ...afterStates.keys()])
-  for (const id of allTaskIds) {
+  for (const id of new Set([...beforeStates.keys(), ...afterStates.keys()])) {
     if (id !== taskId && beforeStates.get(id) !== afterStates.get(id)) {
       failures.push(`unexpected checkbox change for task ${id}`)
     }
   }
   if (
     !afterSidecar.exists ||
-    afterSidecar.hash === beforeCurrent?.sidecar.hash ||
+    afterSidecar.hash === previous?.sidecar.hash ||
     !sidecarContainsTask(afterSidecar.text, change, taskId)
   ) {
     failures.push('current touched sidecar did not record the requested task')
   }
-
-  for (const worktree of worktrees) {
-    if (worktree.root === currentRoot) continue
-    const previous = before.get(worktree.root)
-    const foreignAfter = snapshotMutationFiles(worktree.root, change, currentRoot)
-    const foreignTasks = foreignAfter.tasks
-    const foreignSidecar = foreignAfter.sidecar
-    if (
-      foreignTasks.exists !== previous?.tasks.exists ||
-      foreignTasks.hash !== previous?.tasks.hash ||
-      foreignSidecar.exists !== previous?.sidecar.exists ||
-      foreignSidecar.hash !== previous?.sidecar.hash
-    ) {
-      failures.push(`foreign worktree mutation detected at ${worktree.root}`)
-    }
-  }
-
   if (failures.length > 0) {
     fail({
       code: 'MUTATION_POSTCONDITION',
       message: 'Spectra task done mutation could not be proven local and complete',
       change,
-      currentRoot,
+      currentRoot: target.currentRoot,
       details: { taskId, failures },
     })
   }
@@ -1039,10 +1423,8 @@ function recoverInterruptedTaskDone(
   const currentPaths = mutationPaths(currentRoot, change, currentRoot)
 
   activeRollback = () => {
-    for (const worktree of worktrees) {
-      const saved = before.get(worktree.root)
-      if (saved) restoreMutationFiles(worktree.root, change, currentRoot, saved)
-    }
+    const saved = before.get(currentRoot)
+    if (saved) restoreMutationFiles(currentRoot, change, currentRoot, saved)
   }
   try {
     writeFileSync(currentPaths.tasks, nextTasks)
@@ -1109,148 +1491,455 @@ function recoverInterruptedTaskDone(
   )
 }
 
-function main(): void {
-  const { change, spectraArgs } = parseArgs(process.argv.slice(2))
-  const isUnpark = spectraArgs[0] === 'unpark'
-  const target = resolveTarget(change, isUnpark)
-  if (isUnpark && target.candidates.length > 0) {
-    fail({
-      code: 'TARGET_AMBIGUOUS',
-      message: 'unpark requires the named change to have no on-disk artifact candidate',
-      change,
-      currentRoot: target.currentRoot,
-      candidates: target.candidateRoots,
-    })
-  }
-  const taskId = taskDoneId(spectraArgs)
-  const recovery = taskDoneRecovery(spectraArgs)
-  const verification = verificationDone(spectraArgs, change)
-  if (spectraArgs[0] === 'task' && spectraArgs[1] === 'done' && !taskId) {
-    fail({
-      code: 'USAGE_ERROR',
-      message: 'task done requires a task id after --change <name>',
-      change,
-      currentRoot: target.currentRoot,
-    })
-  }
-  if (spectraArgs[0] === 'task' && spectraArgs[1] === 'recover-done') {
-    if (!recovery) {
-      fail({
-        code: 'USAGE_ERROR',
-        message:
-          'task recover-done requires either <numeric ordinal> or --checkbox-only <numeric ordinal>',
-        change,
-        currentRoot: target.currentRoot,
-      })
-    }
-    recoverInterruptedTaskDone(change, recovery, target.currentRoot, target.worktrees)
-    return
-  }
-  if (verification) {
-    completeVerificationTask(change, verification, target.currentRoot, target.worktrees)
-    return
-  }
-
-  const duplicateCandidates = target.candidates.length > 1
-  const isJson = spectraArgs.includes('--json')
-  const isStatusJson = isJson && spectraArgs[0] === 'status'
-  const isInstructionsJson = isJson && spectraArgs[0] === 'instructions'
-  const canProbeBeforeMutation =
-    Boolean(taskId) || spectraArgs[0] === 'in-progress' || spectraArgs[0] === 'validate'
-  let targetProvenBeforeMutation = false
-  if (duplicateCandidates) {
-    if (isStatusJson || canProbeBeforeMutation) {
-      probeCurrentTarget(change, target.currentRoot, target.candidateRoots)
-      targetProvenBeforeMutation = true
-    } else if (!isInstructionsJson) {
-      fail({
-        code: 'TARGET_AMBIGUOUS',
-        message: 'destructive Spectra command requires a unique on-disk change candidate',
-        change,
-        currentRoot: target.currentRoot,
-        candidates: target.candidateRoots,
-      })
-    }
-  }
-
-  const before = new Map<string, { tasks: FileSnapshot; sidecar: FileSnapshot }>()
-  if (taskId) {
-    for (const worktree of target.worktrees) {
-      before.set(worktree.root, snapshotMutationFiles(worktree.root, change, target.currentRoot))
-    }
-    activeRollback = () => {
-      for (const worktree of target.worktrees) {
-        const saved = before.get(worktree.root)
-        if (saved) restoreMutationFiles(worktree.root, change, target.currentRoot, saved)
-      }
-    }
-  }
-
-  const child = spawnSync('spectra', spectraArgs, {
-    cwd: target.currentRoot,
-    encoding: 'utf8',
-    env: process.env,
-    maxBuffer: 16 * 1024 * 1024,
-  })
-  if (child.error) {
-    fail({
-      code: 'SPECTRA_EXEC_FAILED',
-      message: 'Spectra executable could not be started',
-      change,
-      currentRoot: target.currentRoot,
-      details: child.error.message,
-    })
-  }
-
-  const stdout = child.stdout ?? ''
-  const stderr = child.stderr ?? ''
-  if (child.status !== 0) {
-    const rollback = rollbackActiveMutation()
-    if (stdout) process.stdout.write(stdout)
-    if (stderr) process.stderr.write(stderr)
-    if (rollback.error) {
-      process.stderr.write(
-        `${JSON.stringify({
-          kind: 'spectra-target-guard-error',
-          code: 'ROLLBACK_FAILED',
-          message: 'Spectra failed and its task mutation snapshots could not be restored',
-          change,
-          currentRoot: target.currentRoot,
-          details: rollback.error,
-        })}\n`,
-      )
-      process.exit(ERROR_EXIT)
-    }
-    process.exit(child.status ?? 1)
-  }
-
-  // Mutation postconditions run before output validation. Any later guard failure
-  // still owns the snapshots and therefore restores the task + sidecar atomically.
-  if (taskId) verifyTaskDone(change, taskId, target.currentRoot, target.worktrees, before)
-  if (isUnpark) verifyUnpark(change, target.currentRoot, target.worktrees)
-  if (isJson && stdout.trim()) {
-    validateJsonOutput(
-      stdout,
-      target.currentRoot,
-      change,
-      duplicateCandidates && !isStatusJson && !targetProvenBeforeMutation,
-    )
-  } else if (isJson) {
-    const targetStillUnproven = duplicateCandidates && !targetProvenBeforeMutation
-    fail({
-      code: targetStillUnproven ? 'TARGET_AMBIGUOUS' : 'OUTPUT_INVALID',
-      message: targetStillUnproven
-        ? 'Spectra JSON output was empty, so the duplicate target cannot be proven'
-        : 'Spectra --json output was empty; buffered output was withheld',
-      change,
-      currentRoot: target.currentRoot,
-      ...(targetStillUnproven ? { candidates: target.candidateRoots } : {}),
-    })
-  }
-
-  activeRollback = null
-  if (stdout) process.stdout.write(stdout)
-  if (stderr) process.stderr.write(stderr)
+function changedTreePaths(before: TreeSnapshot, after: TreeSnapshot): string[] {
+  const paths = new Set([...before.files.keys(), ...after.files.keys()])
+  return [...paths].filter((path) => before.files.get(path) !== after.files.get(path)).toSorted()
 }
 
-main()
+function expectedArtifactPath(args: string[], target: TargetContext): string | null {
+  if (args[0] !== 'new' || args[1] !== 'artifact') return null
+  const artifact = args[2]
+  if (artifact === 'proposal') return join(target.currentChangeDir, 'proposal.md')
+  if (artifact === 'design') return join(target.currentChangeDir, 'design.md')
+  if (artifact === 'tasks') return join(target.currentChangeDir, 'tasks.md')
+  if (artifact === 'spec' && args[3])
+    return join(target.currentChangeDir, 'specs', args[3], 'spec.md')
+  return null
+}
+
+function ensureNewArtifactPrecondition(
+  target: TargetContext,
+  change: string,
+  args: string[],
+): void {
+  const expected = expectedArtifactPath(args, target)
+  if (
+    !expected ||
+    !isContained(target.currentChangeDir, canonicalPath(expected, target.currentRoot))
+  ) {
+    fail({
+      code: 'TARGET_UNPROVEN',
+      message: 'the expected artifact path could not be derived from the guarded command',
+      change,
+      currentRoot: target.currentRoot,
+      details: { args },
+    })
+  }
+  if (existsSync(expected)) {
+    fail({
+      code: 'MUTATION_POSTCONDITION',
+      message: 'new artifact refuses to overwrite an existing current artifact',
+      change,
+      currentRoot: target.currentRoot,
+      details: { expected: relative(target.currentChangeDir, expected) },
+    })
+  }
+}
+
+function verifyNewArtifact(
+  target: TargetContext,
+  change: string,
+  args: string[],
+  before: Map<string, RelevantSnapshot>,
+): void {
+  const expected = expectedArtifactPath(args, target)
+  if (
+    !expected ||
+    !isContained(target.currentChangeDir, canonicalPath(expected, target.currentRoot))
+  ) {
+    fail({
+      code: 'TARGET_UNPROVEN',
+      message: 'the expected artifact path could not be derived from the guarded command',
+      change,
+      currentRoot: target.currentRoot,
+      details: { args },
+    })
+  }
+  const previous = before.get(target.currentRoot)?.active ?? { files: new Map() }
+  const after = snapshotTree(target.currentChangeDir)
+  const changed = changedTreePaths(previous, after)
+  const expectedRel = relative(target.currentChangeDir, expected)
+  if (changed.length !== 1 || changed[0] !== expectedRel || !existsSync(expected)) {
+    fail({
+      code: 'MUTATION_POSTCONDITION',
+      message: 'new artifact changed paths outside the expected current artifact',
+      change,
+      currentRoot: target.currentRoot,
+      details: { expected: expectedRel, changed },
+    })
+  }
+}
+
+function containsChange(value: unknown, change: string): boolean {
+  if (value === change) return true
+  if (Array.isArray(value)) return value.some((entry) => containsChange(entry, change))
+  if (!value || typeof value !== 'object') return false
+  return Object.values(value).some((entry) => containsChange(entry, change))
+}
+
+function changeStatus(value: unknown, change: string): string | null {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const status = changeStatus(entry, change)
+      if (status) return status
+    }
+    return null
+  }
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  if (record.name === change && typeof record.status === 'string') return record.status
+  for (const entry of Object.values(record)) {
+    const status = changeStatus(entry, change)
+    if (status) return status
+  }
+  return null
+}
+
+function queryJson(target: TargetContext, args: string[], change: string): unknown {
+  const result = runSpectra(target.currentRoot, args)
+  if (result.status !== 0 || !result.stdout.trim()) {
+    fail({
+      code: 'TARGET_UNPROVEN',
+      message: 'Spectra postcondition query failed',
+      change,
+      currentRoot: target.currentRoot,
+      details: { args, status: result.status },
+    })
+  }
+  return parseJson(result, change, target.currentRoot)
+}
+
+function verifyInProgress(target: TargetContext, change: string): void {
+  const body = queryJson(target, ['list', '--json'], change)
+  const status = changeStatus(body, change)
+  if (status !== 'in-progress') {
+    fail({
+      code: 'MUTATION_POSTCONDITION',
+      message: 'in-progress add did not leave the requested change in in-progress state',
+      change,
+      currentRoot: target.currentRoot,
+      details: { observedStatus: status },
+    })
+  }
+  attestExistingTarget(target, change)
+}
+
+function bindingDir(commonDir: string): string {
+  return join(commonDir, 'clade-spectra-target-bindings')
+}
+
+function bindingPath(commonDir: string, change: string): string {
+  return join(bindingDir(commonDir), `${change}.json`)
+}
+
+function writeBinding(target: TargetContext, change: string, artifactHash: string): void {
+  const dir = bindingDir(target.commonDir)
+  mkdirSync(dir, { recursive: true })
+  const path = bindingPath(target.commonDir, change)
+  const temporary = `${path}.${process.pid}.tmp`
+  const binding: ParkBinding = {
+    version: 1,
+    change,
+    root: target.currentRoot,
+    commonDir: target.commonDir,
+    artifactHash,
+    createdAt: new Date().toISOString(),
+  }
+  writeFileSync(temporary, `${JSON.stringify(binding, null, 2)}\n`, { mode: 0o600 })
+  renameSync(temporary, path)
+}
+
+function readBinding(target: TargetContext, change: string): ParkBinding {
+  const path = bindingPath(target.commonDir, change)
+  let binding: ParkBinding
+  try {
+    binding = JSON.parse(readFileSync(path, 'utf8'))
+  } catch (error) {
+    fail({
+      code: 'TARGET_UNPROVEN',
+      message: 'unpark requires a clade-owned park binding for the current root',
+      change,
+      currentRoot: target.currentRoot,
+      details: error instanceof Error ? error.message : String(error),
+    })
+  }
+  if (
+    binding.version !== 1 ||
+    binding.change !== change ||
+    canonicalPath(binding.root, target.currentRoot) !== target.currentRoot ||
+    canonicalPath(binding.commonDir, target.currentRoot) !== target.commonDir
+  ) {
+    fail({
+      code: 'TARGET_FOREIGN',
+      message: 'the park binding belongs to another worktree or git common-dir',
+      change,
+      currentRoot: target.currentRoot,
+      details: binding,
+    })
+  }
+  return binding
+}
+
+function parkedContains(target: TargetContext, change: string): boolean {
+  const body = queryJson(target, ['list', '--parked', '--json'], change)
+  return containsChange(body, change)
+}
+
+function findArchiveDirs(root: string, change: string): string[] {
+  const archiveRoot = join(root, SPEC_DIR, 'changes', 'archive')
+  if (!isDirectory(archiveRoot)) return []
+  return readdirSync(archiveRoot, { withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isDirectory() && (entry.name === change || entry.name.endsWith(`-${change}`)),
+    )
+    .map((entry) => join(archiveRoot, entry.name))
+}
+
+function verifyPark(
+  target: TargetContext,
+  change: string,
+  before: Map<string, RelevantSnapshot>,
+): void {
+  if (isDirectory(target.currentChangeDir) || !parkedContains(target, change)) {
+    fail({
+      code: 'MUTATION_POSTCONDITION',
+      message: 'park did not remove the current active target and register it as parked',
+      change,
+      currentRoot: target.currentRoot,
+    })
+  }
+  const artifactHash = treeHash(before.get(target.currentRoot)?.active ?? { files: new Map() })
+  writeBinding(target, change, artifactHash)
+}
+
+function verifyUnpark(target: TargetContext, change: string, binding: ParkBinding): void {
+  if (!isDirectory(target.currentChangeDir) || parkedContains(target, change)) {
+    fail({
+      code: 'MUTATION_POSTCONDITION',
+      message: 'unpark did not restore the current active target and clear its parked entry',
+      change,
+      currentRoot: target.currentRoot,
+    })
+  }
+  const restoredHash = treeHash(snapshotTree(target.currentChangeDir))
+  if (restoredHash !== binding.artifactHash) {
+    fail({
+      code: 'MUTATION_POSTCONDITION',
+      message: 'unpark restored artifacts whose hash does not match the park binding',
+      change,
+      currentRoot: target.currentRoot,
+      details: { expected: binding.artifactHash, actual: restoredHash },
+    })
+  }
+  attestExistingTarget(target, change)
+  unlinkSync(bindingPath(target.commonDir, change))
+}
+
+function verifyArchive(target: TargetContext, change: string): void {
+  if (
+    isDirectory(target.currentChangeDir) ||
+    findArchiveDirs(target.currentRoot, change).length === 0
+  ) {
+    fail({
+      code: 'MUTATION_POSTCONDITION',
+      message: 'archive did not move the requested change into the current root archive',
+      change,
+      currentRoot: target.currentRoot,
+    })
+  }
+}
+
+function ensureCreatePrecondition(target: TargetContext, change: string): void {
+  if (target.candidates.length > 0 || parkedContains(target, change)) {
+    fail({
+      code: 'TARGET_UNPROVEN',
+      message: 'new change requires the name to be absent from every active and parked target',
+      change,
+      currentRoot: target.currentRoot,
+      candidates: target.candidates.map((entry) => entry.root),
+    })
+  }
+}
+
+function verifyNewChange(target: TargetContext, change: string): void {
+  const currentExists = isDirectory(target.currentChangeDir)
+  const foreign = target.worktrees.filter(
+    (worktree) =>
+      worktree.root !== target.currentRoot &&
+      isDirectory(join(worktree.root, SPEC_DIR, 'changes', change)),
+  )
+  if (!currentExists || foreign.length > 0) {
+    fail({
+      code: 'MUTATION_POSTCONDITION',
+      message: 'new change was not created exclusively in the current root',
+      change,
+      currentRoot: target.currentRoot,
+      details: { currentExists, foreignRoots: foreign.map((entry) => entry.root) },
+    })
+  }
+  attestExistingTarget(target, change)
+}
+
+function emitChild(result: ChildResult): never | void {
+  if (result.status !== 0) {
+    const rollback = rollbackActiveMutation()
+    if (result.stdout) process.stdout.write(result.stdout)
+    if (result.stderr) process.stderr.write(result.stderr)
+    if (rollback.error) {
+      fail({
+        code: 'ROLLBACK_FAILED',
+        message: 'Spectra failed and current task bookkeeping could not be restored',
+        details: rollback.error,
+      })
+    }
+    throw new ChildExit(result.status)
+  }
+  if (result.stdout) process.stdout.write(result.stdout)
+  if (result.stderr) process.stderr.write(result.stderr)
+}
+
+function main(): void {
+  const { change, spectraArgs } = parseArgs(process.argv.slice(2))
+  const command = classifyCommand(spectraArgs)
+  validateCommandBinding(change, spectraArgs, command)
+  const target = resolveTarget(change)
+  const release = acquireLock(target, change)
+  try {
+    if (command.kind === 'global-read-only') {
+      emitChild(runSpectra(target.currentRoot, spectraArgs))
+      return
+    }
+
+    if (command.operation === 'unpark') {
+      const binding = readBinding(target, change)
+      if (!parkedContains(target, change)) {
+        fail({
+          code: 'TARGET_UNPROVEN',
+          message: 'the bound change is not present in the parked registry',
+          change,
+          currentRoot: target.currentRoot,
+        })
+      }
+      const before = snapshotAll(target, change)
+      const result = runSpectra(target.currentRoot, spectraArgs)
+      verifyForeignUnchanged(target, change, before)
+      if (result.status !== 0) emitChild(result)
+      verifyUnpark(target, change, binding)
+      emitChild(result)
+      return
+    }
+
+    if (command.kind === 'create-before-target') {
+      ensureCreatePrecondition(target, change)
+      const before = snapshotAll(target, change)
+      const result = runSpectra(target.currentRoot, spectraArgs)
+      verifyForeignUnchanged(target, change, before)
+      if (result.status !== 0) emitChild(result)
+      verifyNewChange(target, change)
+      emitChild(result)
+      return
+    }
+
+    requireExistingTarget(change, target)
+
+    if (command.kind === 'existing-read-only' && spectraArgs.includes('--json')) {
+      const result = runSpectra(target.currentRoot, spectraArgs)
+      if (result.status !== 0) emitChild(result)
+      const body = parseJson(result, change, target.currentRoot)
+      const paths: string[] = []
+      collectPathValues(body, null, paths)
+      if (paths.length > 0) attestBody(body, target, change)
+      else attestExistingTarget(target, change)
+      emitChild(result)
+      return
+    }
+
+    if (command.operation === 'task-recover-done') {
+      const recovery = taskDoneRecovery(spectraArgs)
+      if (!recovery) {
+        fail({
+          code: 'USAGE_ERROR',
+          message:
+            'task recover-done requires either <numeric ordinal> or --checkbox-only <numeric ordinal>',
+          change,
+          currentRoot: target.currentRoot,
+        })
+      }
+      recoverInterruptedTaskDone(change, recovery, target.currentRoot, target.worktrees)
+      return
+    }
+    if (command.operation === 'task-verify-done') {
+      const verification = verificationDone(spectraArgs, change)
+      if (!verification) {
+        fail({
+          code: 'USAGE_ERROR',
+          message: 'task verify-done requires explicit verification-only evidence',
+          change,
+          currentRoot: target.currentRoot,
+        })
+      }
+      completeVerificationTask(change, verification, target.currentRoot, target.worktrees)
+      return
+    }
+
+    attestExistingTarget(target, change)
+    if (command.kind === 'existing-read-only') {
+      emitChild(runSpectra(target.currentRoot, spectraArgs))
+      return
+    }
+
+    const taskId = command.operation === 'task-done' ? taskDoneId(spectraArgs) : null
+    if (command.operation === 'task-done' && !taskId) {
+      fail({
+        code: 'USAGE_ERROR',
+        message: 'task done requires a task id after --change <name>',
+        change,
+        currentRoot: target.currentRoot,
+      })
+    }
+    if (command.operation === 'new-artifact') {
+      ensureNewArtifactPrecondition(target, change, spectraArgs)
+    }
+    const before = snapshotAll(target, change)
+    if (command.operation === 'task-done') {
+      activeRollback = () => {
+        const saved = before.get(target.currentRoot)
+        if (saved) restoreMutationFiles(target.currentRoot, change, target.currentRoot, saved)
+      }
+    }
+    const result = runSpectra(target.currentRoot, spectraArgs)
+    verifyForeignUnchanged(target, change, before)
+    if (result.status !== 0) emitChild(result)
+
+    if (command.operation === 'task-done') {
+      verifyTaskDone(target, change, taskId!, before)
+      if (spectraArgs.includes('--json')) parseJson(result, change, target.currentRoot)
+      activeRollback = null
+    } else if (command.operation === 'new-artifact')
+      verifyNewArtifact(target, change, spectraArgs, before)
+    else if (command.operation === 'in-progress-add') verifyInProgress(target, change)
+    else if (command.operation === 'park') verifyPark(target, change, before)
+    else if (command.operation === 'archive') verifyArchive(target, change)
+    else if (command.operation === 'sync') attestExistingTarget(target, change)
+
+    emitChild(result)
+  } finally {
+    release()
+  }
+}
+
+try {
+  main()
+} catch (error) {
+  if (error instanceof GuardFailure) {
+    process.stderr.write(
+      `${JSON.stringify({ kind: 'spectra-target-guard-error', ...error.detail })}\n`,
+    )
+    process.exitCode = ERROR_EXIT
+  } else if (error instanceof ChildExit) {
+    process.exitCode = error.status
+  } else {
+    throw error
+  }
+}
