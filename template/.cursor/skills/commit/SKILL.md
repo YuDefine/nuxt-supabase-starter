@@ -116,6 +116,11 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 ## Step 0: 品質檢查
 
+先判斷 Step 0-Scope 的本次變更是否命中 [`review-tiers.md`](../../../../rules/core/review-tiers.md)
+Tier 3；命中才執行官方 Codex Security path scan。觸發時 **MUST** 先完整讀
+[gates.md](gates.md) § 0-S 的範圍、成本上限與 exit 分流再繼續。未命中則跳過，進入一般
+cross-model code review。完整 repository baseline 保持 operator 明確觸發，不屬於 `/commit`。
+
 ### 0-A/B/C/D 並行策略（總時長省 ~45% 的關鍵）
 
 0-A.0 `simplify` **必序跑且永遠第一**（會刪死碼 / 精簡，否則後續 pi 白檢即將刪除 / 改寫的 code）。**simplify 完成後，0-A.1 / 0-B / 0-C 三軸 MUST 並行**（除非 fast-path 跳過 0-A.1），不可串行：

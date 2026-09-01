@@ -375,6 +375,41 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 ---
 
+## § 0-S: Codex Security 敏感路徑掃描（條件觸發、attended hard gate）
+
+Step 0-Scope 確認本次 WIP 後，依 [`review-tiers.md`](../../../../rules/core/review-tiers.md)
+Tier 3 判定：migration / schema / auth / permission / RLS / raw SQL / billing / security-critical
+任一類別命中就觸發；純 docs、一般業務邏輯與非敏感重構跳過。本判定涵蓋本次 `/commit` 的
+**每一個** changed path，不只主線 agent 自己改的檔。
+
+觸發時只把命中的 repo-relative path 傳給官方 scanner；若敏感檔已刪除，改傳最近一層仍存在的
+parent directory，讓刪除造成的邊界變化仍有上下文可分析：
+
+```bash
+CLADE_ROOT="${CLADE_HOME:-$HOME/offline/clade}"
+node "$CLADE_ROOT/scripts/security-scan.ts" path \
+  --target "$(git rev-parse --show-toplevel)" \
+  --max-cost 3 \
+  --path <sensitive-path-1> [--path <sensitive-path-2> ...]
+```
+
+固定版尚未安裝時，先跑一次 `node "$CLADE_ROOT/scripts/security-scan.ts" setup`，再重跑同一個
+path scan。這個 setup 是 idempotent operator setup，不把 scanner 加進 consumer dependency graph。
+
+### Exit 分流
+
+| exit | 處置 |
+| --- | --- |
+| `0` | coverage complete 且無 High / Critical finding；輸出 `✅ 0-S 通過`，進 0-A。 |
+| `1` | 有 High / Critical finding；停止本次 commit，列出 report path 與 findings，修正後重跑 0-S。 |
+| `2` | coverage incomplete、auth / tool / infrastructure failure 或成本上限中止；停止本次 commit並如實回報，**NEVER** 宣稱掃描乾淨。 |
+
+Git pre-commit hook 只跑快速 LOCKED drift check。完整 repository 掃描另由 operator 明確執行
+`node "$CLADE_ROOT/scripts/security-scan.ts" baseline --target <repo> --max-cost 15`；它不會因一般
+commit 自動啟動，也不由 path scan 冒充。
+
+---
+
 ## § 0-A: 程式碼審查（simplify → 0-A.1 → 條件式 0-A.2）
 
 **審查策略**：
