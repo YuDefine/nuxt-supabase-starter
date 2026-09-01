@@ -62,13 +62,13 @@ uncommitted 變更
 `vendor/snippets/git-recovery/` § 並行 staged 的歸屬探測，分流判準見 [[scope-discipline]]
 § 歸屬探測前置（**NEVER** 在本檔複製那些命令，會漂）。
 
-- 四條**全部給得出答案** ⇒ 不算衝突：`/commit` 場景照上面決策樹預設全納入、Step 3 分組；ad-hoc
-  場景自行 `git commit --only -- <自己的 paths>` 隔離。兩者都在收尾一句話說明歸屬與隔離方式
-- 任一條答不出來、或探測顯示雙方改到**同一檔的同一段**（`--only` 隔離不掉）⇒ 才走
+- 四條**全部給得出答案** ⇒ 不算衝突：下一步是等 **user 在 main 觸發** `/commit`（決策樹全包、Step 3 分組）。**NEVER** 把這一格讀成 ad-hoc `--only` 只收「自己的檔」。`--only` 隔離只適用下節白名單 ad-hoc；merge-back / archive 收割進 main 的檔不是 ad-hoc
+- 任一條答不出來、或探測顯示雙方改到**同一檔的同一段**（分組也拆不開）⇒ 才走
   [[scope-discipline]] § Rule 衝突解法
 
-**NEVER** 把「這批看起來是別 session 的」當成停下來問 user 的理由——那與上面決策樹「不認得來源
-不是阻礙」是同一件事，探測沒跑就等於還沒判。
+**NEVER** 把「這批看起來是別 session 的」當成停下來問 user、或當成從 index 切開的理由——那與決策樹「不認得來源不是阻礙」是同一件事。探測沒跑就等於還沒判；跑完了若只是兩批不同檔 → 同一輪 `/commit` 分組全收。
+
+**NEVER** 為了「不要吃到別人 staged」而 `git restore --staged` / `git reset HEAD -- <path>` / 把 squash 檔改回 untracked。那是切開，不是保護。user 觸發的 `/commit` 本來就該全包；從 index 拿掉等於取消全包。
 
 **理由**：品質閘門成本高，WIP 分次 commit = 多跑一次閘門；stash 把工作往後推，但保留可恢復 + HANDOFF paper trail，等同「延後」而非「丟棄」；任何 `git restore` / `git checkout --` / `git reset` / `git revert` 都會**永久毀掉使用者的 WIP**（見「WIP 處置禁令」）。
 
@@ -76,7 +76,7 @@ uncommitted 變更
 
 **`/commit` MUST 在 main worktree 跑、NEVER 在 session worktree 內跑**。
 
-Worktree 完成驗證後的標準收尾（詳見 [[worktree-default]] §5）：**主線自動執行** selective stash → 跨 worktree pop → cleanup（**不切** session cwd）。完成後主線直接在 main cwd invoke `/commit`；若既有 session boundary 要求乾淨 main session，就依 [[session-tasks.operations]] § Herdr session transport 自行 dispatch `/commit` 並回 receipt，**NEVER** 叫 user 開 main session。
+Worktree 完成驗證後的標準收尾（詳見 [[worktree-default]] §5）：**主線自動執行** selective stash → 跨 worktree pop → cleanup（**不切** session cwd）。diff 留在 main working tree / index，**等 user 觸發** `/commit`（全包）。**NEVER** 自動 invoke `/commit`。**NEVER** 因為 main 已有別 session WIP 就把剛落地的檔從 index 拿掉。**NEVER** 叫 user 開 main session（cwd 已在 main）。若 user 已觸發 `/commit` 且 session boundary 要求換 pane，才依 [[session-tasks.operations]] § Herdr session transport 搬過去。
 
 - 預檢：pop 前 `git -C <main> status --porcelain` 非空 → 中止 closure、stash entry 保留、提示 user 處理 main 端 WIP
 - Cleanup 安全性依賴 selective stash 列舉完整性（漏列檔永久丟）；pop 失敗 **NEVER** 跑 cleanup（改動還沒進 main）
@@ -208,7 +208,15 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 
 ### 隔離 worktree ≠ 繞過 /commit（hard rule）
 
-main 髒 / 有別 session WIP 不能直接跑 `/commit`（會吃別人 staged）→ 正解是**在乾淨隔離 worktree 內跑 `/commit`**，**NEVER** 用「隔離 worktree + raw `git commit` + `git push origin main`」把 substantive change 繞過 0-A review 推上 origin/main。隔離 worktree 是多 session 安全手段、不是 review 豁免。判別走下節的路徑白名單，**NEVER** 靠「這批算不算小」自評；`\do-all` / 時間壓力 **NEVER** 是跳 gate 的理由。work-loop / unattended / 「護欄說一律 `--only`」同樣不是。實證：[[pitfall-isolated-worktree-raw-commit-push-bypasses-commit-gate]]
+`/commit` **只在 main**、**只由 user 觸發**、觸發後 **全包**（上節決策樹）。main 髒、index 裡有別 session 的 staged、剛 merge-back 的檔跟別人的 WIP 混在一起——**都不是**「不要跑 `/commit`」或「先把我的檔切出去」的理由。
+
+本節禁的是另一件事：用隔離 worktree + raw `git commit` + `git push origin main` 把 substantive change 繞過 0-A。隔離 worktree 是實作時的多 session 安全手段，**不是** review 豁免，也 **不是** 把 `/commit` 從 main 搬走的理由（`/commit` MUST 在 main，見上節）。
+
+- **NEVER** 以「會吃別人 staged」為由跳過 user 已要的 `/commit`，或自行把檔從 index unstage
+- **NEVER** 以「main 髒」為由改在隔離 worktree 跑 `/commit` 或 raw `git commit`
+- **NEVER** 用隔離 worktree + raw `git commit` + `git push origin main` 繞過 0-A
+
+判別走下節的路徑白名單，**NEVER** 靠「這批算不算小」自評；`\do-all` / 時間壓力 **NEVER** 是跳 gate 的理由。work-loop / unattended / 「護欄說一律 `--only`」同樣不是。實證：[[pitfall-isolated-worktree-raw-commit-push-bypasses-commit-gate]]
 
 ### `--only` 適用範圍 = 路徑白名單（hard rule）
 
@@ -226,7 +234,7 @@ main 髒 / 有別 session WIP 不能直接跑 `/commit`（會吃別人 staged）
 
 **白名單外的一切改動 MUST 走 `/commit`**，包含但不限於：`rules/**`、`scripts/**`、`vendor/scripts/**`、`plugins/**`、`claude-md/**`、`registry/**`、任何 source code。改動落在白名單內外**混合**時，整批走 `/commit`——**NEVER** 拆成「白名單那半用 `--only` 先送」。
 
-**work-loop 不是例外。** HANDOFF / tech-debt 短更走本表 `--only`；merge-back / archive / 非 spectra 收割後的產品落地走 `/commit`。護欄原文若寫「一律 `--only`」，以本節為準。機械層：`pre-bash-git-commit-only-whitelist.sh` 在 main 上擋白名單外的 `--only`（`/commit` 的 `Via: /commit` trailer 放行）。
+**work-loop 不是例外。** HANDOFF / tech-debt 短更走本表 `--only`；merge-back / archive / 非 spectra 收割後的產品落地走 **user 觸發的** `/commit`（全包，含當時 index 上別人已 staged 的檔）。**NEVER** 對那批跑 ad-hoc `--only` 只收「自己的」幾檔。護欄原文若寫「一律 `--only`」，以本節為準。機械層：`pre-bash-git-commit-only-whitelist.sh` 在 main 上擋白名單外的 `--only`（`/commit` 的 `Via: /commit` trailer 放行）。
 
 **「純 typo」不是跨路徑的例外**。它只在白名單路徑內成立，且僅限散文本身的錯字。**NEVER** 拿它包裝：規約措辭修正（改的是 MUST / NEVER 的語意）、程式識別字重命名、註解以外的任何程式碼改動——這三類即使一個字元也走 `/commit`。
 

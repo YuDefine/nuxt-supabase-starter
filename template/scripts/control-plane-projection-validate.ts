@@ -27,12 +27,20 @@ function sha256(value: string | unknown): string {
     .digest('hex')}`
 }
 
+function parseJsonRecord(raw: string): Record<string, any> {
+  const value: unknown = JSON.parse(raw)
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('expected JSON object')
+  }
+  return value as Record<string, any>
+}
+
 function readJsonLines(path: string): Array<Record<string, any>> {
   if (!existsSync(path)) return []
   return readFileSync(path, 'utf8')
     .split('\n')
     .filter(Boolean)
-    .map((line) => JSON.parse(line) as Record<string, any>)
+    .map((line) => parseJsonRecord(line))
 }
 
 function canonicalInputs(changeId: string): {
@@ -42,9 +50,9 @@ function canonicalInputs(changeId: string): {
   evidenceCount: number
   decisionCount: number
 } {
-  const source = JSON.parse(
+  const source = parseJsonRecord(
     readFileSync(join(controlPlaneRoot, 'intent', `${changeId}.json`), 'utf8'),
-  ) as Record<string, any>
+  )
   const allEvents = readJsonLines(join(repoRoot, '.clade', 'flow', 'events.jsonl'))
   const workIds = new Set(
     allEvents
@@ -99,7 +107,7 @@ if (existsSync(changesRoot)) {
       continue
     }
     try {
-      const projection = JSON.parse(readFileSync(sidecarPath, 'utf8')) as {
+      const projection = parseJsonRecord(readFileSync(sidecarPath, 'utf8')) as {
         change_id?: string
         checkpoint?: Record<string, any>
       }
