@@ -45,6 +45,8 @@ skill 由 `.claude/hub.json` 的 `modules` 決定裝哪些。下表的條目帶�
 
 - **遇到 bug / 異常行為** →〔openspec〕`/spectra-debug`（四階段系統化 debug）
 - **要看 UI 畫面 / 截圖驗證** → `/review-screenshot`（統一截圖入口，派遣 screenshot-review agent；不要在主 session 直接跑截圖命令）
+- **專案還沒有可重跑的 app control／feature map** → `/verification-create`（建立 consumer-owned `verify-<app>` skill）
+- **既有 verification skill／feature map 要對帳 source 與 live behavior** → `/verification-maintain`（`clean` 是零 branch／零 commit／零 PR 的成功結果）
 - **要動 code 而還在 main working tree** → `/wt`（開 worktree 隔離；`/wt A: ... B: ...` 可並行多條 task）
 - **implementation plan 內有多個獨立 task 想並行** → `/subagent-dev`（同 session 派 subagent；跨 change 的並行仍走 `/wt`）
 - **session 要收尾 / 交接** → `/handoff`（有 in-progress 工作寫交接；沒有則整理 HANDOFF.md 推薦 outstanding）

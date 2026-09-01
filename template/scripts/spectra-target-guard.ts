@@ -476,9 +476,20 @@ function taskDoneId(args: string[]): string | null {
   return positionals.at(-1) ?? null
 }
 
-function recoverTaskDoneId(args: string[]): string | null {
+interface TaskDoneRecovery {
+  taskId: string
+  mode: 'recorded' | 'checkbox-only'
+}
+
+function taskDoneRecovery(args: string[]): TaskDoneRecovery | null {
   if (args[0] !== 'task' || args[1] !== 'recover-done') return null
-  return args.length === 3 && /^\d+$/.test(args[2]) ? args[2] : null
+  if (args.length === 3 && /^\d+$/.test(args[2])) {
+    return { taskId: args[2], mode: 'recorded' }
+  }
+  if (args.length === 4 && args[2] === '--checkbox-only' && /^\d+$/.test(args[3])) {
+    return { taskId: args[3], mode: 'checkbox-only' }
+  }
+  return null
 }
 
 function sidecarContainsTask(text: string | null, change: string, taskId: string): boolean {
@@ -524,7 +535,11 @@ function uncheckedTaskText(text: string, taskId: string): string {
   return next
 }
 
-function recoveredSidecarText(text: string, change: string, taskId: string): string {
+function recoveredSidecarText(
+  text: string,
+  change: string,
+  recovery: TaskDoneRecovery,
+): string | null {
   let body: unknown
   try {
     body = JSON.parse(text)
@@ -553,22 +568,34 @@ function recoveredSidecarText(text: string, change: string, taskId: string): str
   }
   const matches = touched.filter(
     (entry) =>
-      entry && typeof entry === 'object' && String(Reflect.get(entry, 'task_id')) === taskId,
+      entry &&
+      typeof entry === 'object' &&
+      String(Reflect.get(entry, 'task_id')) === recovery.taskId,
   )
-  if (matches.length !== 1) {
+  const expectedMatches = recovery.mode === 'checkbox-only' ? 0 : 1
+  if (matches.length !== expectedMatches) {
     fail({
       code: 'RECOVERY_PRECONDITION',
-      message: 'touched sidecar must contain exactly one record for the interrupted task',
+      message:
+        recovery.mode === 'checkbox-only'
+          ? 'checkbox-only recovery requires zero touched records for the interrupted task'
+          : 'touched sidecar must contain exactly one record for the interrupted task',
       change,
-      details: { taskId, matches: matches.length },
+      details: { taskId: recovery.taskId, matches: matches.length, expectedMatches },
     })
   }
+  if (recovery.mode === 'checkbox-only') return null
+
   Reflect.set(
     body,
     'touched',
     touched.filter(
       (entry) =>
-        !(entry && typeof entry === 'object' && String(Reflect.get(entry, 'task_id')) === taskId),
+        !(
+          entry &&
+          typeof entry === 'object' &&
+          String(Reflect.get(entry, 'task_id')) === recovery.taskId
+        ),
     ),
   )
   return `${JSON.stringify(body, null, 2)}\n`
@@ -635,10 +662,11 @@ function verifyTaskDone(
 
 function recoverInterruptedTaskDone(
   change: string,
-  taskId: string,
+  recovery: TaskDoneRecovery,
   currentRoot: string,
   worktrees: WorktreeRecord[],
 ): void {
+  const { taskId } = recovery
   const before = new Map<string, { tasks: FileSnapshot; sidecar: FileSnapshot }>()
   for (const worktree of worktrees) {
     before.set(worktree.root, snapshotMutationFiles(worktree.root, change, currentRoot))
@@ -662,7 +690,7 @@ function recoverInterruptedTaskDone(
     })
   }
   const nextTasks = uncheckedTaskText(beforeCurrent.tasks.text, taskId)
-  const nextSidecar = recoveredSidecarText(beforeCurrent.sidecar.text, change, taskId)
+  const nextSidecar = recoveredSidecarText(beforeCurrent.sidecar.text, change, recovery)
   const currentPaths = mutationPaths(currentRoot, change, currentRoot)
 
   activeRollback = () => {
@@ -673,7 +701,7 @@ function recoverInterruptedTaskDone(
   }
   try {
     writeFileSync(currentPaths.tasks, nextTasks)
-    writeFileSync(currentPaths.sidecar, nextSidecar)
+    if (nextSidecar !== null) writeFileSync(currentPaths.sidecar, nextSidecar)
   } catch (error) {
     fail({
       code: 'RECOVERY_FAILED',
@@ -693,7 +721,14 @@ function recoverInterruptedTaskDone(
     if (afterStates.get(id) !== expected)
       failures.push(`unexpected recovered checkbox state for task ${id}`)
   }
-  if (sidecarContainsTask(afterCurrent.sidecar.text, change, taskId)) {
+  if (recovery.mode === 'checkbox-only') {
+    if (
+      afterCurrent.sidecar.exists !== beforeCurrent.sidecar.exists ||
+      afterCurrent.sidecar.hash !== beforeCurrent.sidecar.hash
+    ) {
+      failures.push('checkbox-only recovery changed the current touched sidecar')
+    }
+  } else if (sidecarContainsTask(afterCurrent.sidecar.text, change, taskId)) {
     failures.push('recovered touched sidecar still records the interrupted task')
   }
   for (const worktree of worktrees) {
@@ -719,7 +754,14 @@ function recoverInterruptedTaskDone(
     })
   }
   activeRollback = null
-  process.stdout.write(`${JSON.stringify({ change, task_id: taskId, status: 'recovered' })}\n`)
+  process.stdout.write(
+    `${JSON.stringify({
+      change,
+      task_id: taskId,
+      status: 'recovered',
+      ...(recovery.mode === 'checkbox-only' ? { recovery: 'checkbox-only' } : {}),
+    })}\n`,
+  )
 }
 
 function main(): void {
@@ -736,7 +778,7 @@ function main(): void {
     })
   }
   const taskId = taskDoneId(spectraArgs)
-  const recoveryTaskId = recoverTaskDoneId(spectraArgs)
+  const recovery = taskDoneRecovery(spectraArgs)
   if (spectraArgs[0] === 'task' && spectraArgs[1] === 'done' && !taskId) {
     fail({
       code: 'USAGE_ERROR',
@@ -746,15 +788,16 @@ function main(): void {
     })
   }
   if (spectraArgs[0] === 'task' && spectraArgs[1] === 'recover-done') {
-    if (!recoveryTaskId) {
+    if (!recovery) {
       fail({
         code: 'USAGE_ERROR',
-        message: 'task recover-done requires exactly one numeric checkbox ordinal',
+        message:
+          'task recover-done requires either <numeric ordinal> or --checkbox-only <numeric ordinal>',
         change,
         currentRoot: target.currentRoot,
       })
     }
-    recoverInterruptedTaskDone(change, recoveryTaskId, target.currentRoot, target.worktrees)
+    recoverInterruptedTaskDone(change, recovery, target.currentRoot, target.worktrees)
     return
   }
 
