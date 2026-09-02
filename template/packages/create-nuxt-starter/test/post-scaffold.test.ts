@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { consola } from 'consola'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  buildMintGatePlaybooksArgs,
   buildRegisterConsumerArgs,
   maybeRegisterConsumer,
   readPendingBuildApprovals,
@@ -64,6 +65,27 @@ describe('Clade registry handoff', () => {
       'pre-production',
       '--dev-port',
       '3120',
+    ])
+  })
+
+  it('mint gate playbooks keeps consumer-root as one argv element', () => {
+    expect(
+      buildMintGatePlaybooksArgs(
+        '/clade/scripts/mint-gate-playbooks.ts',
+        '/projects/customer portal',
+        'customer-portal',
+        3120,
+      ),
+    ).toEqual([
+      '/clade/scripts/mint-gate-playbooks.ts',
+      '--consumer-root',
+      '/projects/customer portal',
+      '--consumer',
+      'customer-portal',
+      '--dev-port',
+      '3120',
+      '--oauth-origin',
+      'http://127.0.0.1:3120',
     ])
   })
 

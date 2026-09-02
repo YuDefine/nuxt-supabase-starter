@@ -50,6 +50,11 @@ describe('scaffold: base-only (no features)', () => {
     expect(existsSync(join(targetDir, '.scaffold-cleanup'))).toBe(false)
     expect(existsSync(join(targetDir, 'scripts', 'compress-skill-descriptions.sh'))).toBe(true)
     expect(existsSync(join(targetDir, 'scripts', 'templates', 'clean', 'README.md'))).toBe(true)
+    expect(existsSync(join(targetDir, 'docs', 'playbooks', 'README.md'))).toBe(true)
+    expect(readFileSync(join(targetDir, 'docs', 'playbooks', 'README.md'), 'utf-8')).toContain(
+      '## Browser 分流',
+    )
+    expect(readFileSync(join(targetDir, 'HANDOFF.md'), 'utf-8')).toContain('## User-gate board')
 
     const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf-8'))
     expect(pkg.name).toBe('base-only')

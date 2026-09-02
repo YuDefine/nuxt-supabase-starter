@@ -208,6 +208,12 @@ export async function postScaffold(
     consumerRegistered = await maybeRegisterConsumer(cladeRoot, targetDir, opts)
   }
 
+  // 6b. Mint gate playbook pack（缺才寫）。template 已帶一份 placeholder pack；
+  // clade 有 mint script 時再填 consumer / port。沒有 script（尚未 publish）不算失敗。
+  if (cladeRoot) {
+    maybeMintGatePlaybooks(cladeRoot, targetDir, opts)
+  }
+
   // 7. Wire pre-commit hook (idempotent; opt-out via --no-wire-pre-commit)
   let preCommitWired = false
   if (cladeRoot && opts.wirePreCommit) {
@@ -323,6 +329,40 @@ export function buildRegisterConsumerArgs(
     '--dev-port',
     String(devPort),
   ]
+}
+
+export function buildMintGatePlaybooksArgs(
+  script: string,
+  targetDir: string,
+  consumerSlug: string,
+  devPort?: number | 'auto',
+): string[] {
+  const args = [script, '--consumer-root', targetDir, '--consumer', consumerSlug]
+  if (typeof devPort === 'number') {
+    args.push('--dev-port', String(devPort), '--oauth-origin', `http://127.0.0.1:${devPort}`)
+  }
+  return args
+}
+
+export function maybeMintGatePlaybooks(
+  cladeRoot: string,
+  targetDir: string,
+  opts: Pick<PostScaffoldOptions, 'devPort'>,
+): boolean {
+  const script = join(cladeRoot, 'scripts', 'mint-gate-playbooks.ts')
+  if (!existsSync(script)) {
+    consola.info('Clade checkout 尚無 mint-gate-playbooks.ts — 使用 template 內建 pack')
+    return false
+  }
+  const args = buildMintGatePlaybooksArgs(script, targetDir, basename(targetDir), opts.devPort)
+  try {
+    execFileSync('node', args, { cwd: cladeRoot, stdio: 'pipe' })
+    consola.success('gate playbook pack 已 mint（缺才寫）')
+    return true
+  } catch (error) {
+    consola.warn(`mint gate playbook pack 失敗：${(error as Error).message}`)
+    return false
+  }
 }
 
 export interface PreflightOutcome {

@@ -97,6 +97,7 @@ export function assembleProject(
   copyScripts(targetDir, selectedFeatureIds, agentTargets)
   copyWorkflows(targetDir, selectedFeatureIds)
   copyVerifyDocs(targetDir, selectedFeatureIds)
+  copyGatePlaybookPack(targetDir)
 
   // 9. Copy Spectra ecosystem files
   copySpectraWorkflows(targetDir)
@@ -1426,6 +1427,22 @@ function copyVerifyDocs(targetDir: string, feats: string[]): void {
   if (has(feats, 'pinia')) files.push('PINIA_ARCHITECTURE.md', 'CACHE_STRATEGY.md')
 
   copyFilesList(join(STARTER_ROOT, 'docs', 'verify'), join(targetDir, 'docs', 'verify'), files)
+}
+
+function copyGatePlaybookPack(targetDir: string): void {
+  const src = join(STARTER_ROOT, 'docs', 'playbooks')
+  if (!existsSync(src)) return
+  copyDirectory(src, join(targetDir, 'docs', 'playbooks'))
+  const checklist = join(STARTER_ROOT, 'docs', 'NEW_PROJECT_CHECKLIST.md')
+  if (existsSync(checklist)) {
+    mkdirSync(join(targetDir, 'docs'), { recursive: true })
+    cpSync(checklist, join(targetDir, 'docs', 'NEW_PROJECT_CHECKLIST.md'))
+  }
+  const handoff = join(STARTER_ROOT, 'HANDOFF.md')
+  const destHandoff = join(targetDir, 'HANDOFF.md')
+  if (existsSync(handoff) && !existsSync(destHandoff)) {
+    cpSync(handoff, destHandoff)
+  }
 }
 
 // --- CLAUDE.md generation ---

@@ -613,6 +613,41 @@ function checkNuxtUiCss() {
   )
 }
 
+function checkGatePlaybookPack() {
+  const required = [
+    'docs/playbooks/README.md',
+    'docs/playbooks/PROGRESS.md',
+    'docs/playbooks/GATE-TODOS.md',
+    'docs/playbooks/01-lxc-and-tailscale.md',
+    'docs/playbooks/02-ssh-config.md',
+    'docs/playbooks/03-google-oauth.md',
+    'docs/playbooks/04-deploy-prod-db.md',
+    'docs/playbooks/05-post-gate-verify.md',
+  ]
+  const missing = required.filter((rel) => !existsSync(join(ROOT, rel)))
+  const readme = existsSync(join(ROOT, 'docs/playbooks/README.md'))
+    ? readFileSync(join(ROOT, 'docs/playbooks/README.md'), 'utf8')
+    : ''
+  const handoff = existsSync(join(ROOT, 'HANDOFF.md'))
+    ? readFileSync(join(ROOT, 'HANDOFF.md'), 'utf8')
+    : ''
+  const problems = []
+  if (missing.length) problems.push(`缺 ${missing.join(', ')}`)
+  if (!readme.includes('## Browser 分流')) problems.push('README 缺 § Browser 分流')
+  if (!handoff.includes('## User-gate board')) problems.push('HANDOFF 缺 ## User-gate board')
+  if (problems.length === 0) {
+    record('gate-playbook-pack', '新專案 gate playbook pack 齊全', 'OK')
+    return
+  }
+  record(
+    'gate-playbook-pack',
+    '新專案 gate playbook pack 齊全',
+    'FAIL',
+    problems.join('；'),
+    'node "$CLADE_HOME/scripts/mint-gate-playbooks.ts" --consumer-root "$PWD" --consumer <slug> --dev-port <port>',
+  )
+}
+
 function checkPnpmCheck() {
   if (!FULL_MODE) {
     record(
@@ -647,6 +682,7 @@ checkPreCommitWired()
 checkHubDrift()
 checkResidualKeywords()
 checkNuxtUiCss()
+checkGatePlaybookPack()
 checkPnpmCheck()
 
 const failCount = results.filter((r) => r.status === 'FAIL').length
