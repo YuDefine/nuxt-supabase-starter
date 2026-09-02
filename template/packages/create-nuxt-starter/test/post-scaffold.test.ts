@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,6 +8,7 @@ import {
   buildMintGatePlaybooksArgs,
   buildRegisterConsumerArgs,
   maybeRegisterConsumer,
+  maybeWriteConsumerMeta,
   readPendingBuildApprovals,
   resolveCladeInitScript,
   resolveSyncToCursorScript,
@@ -228,6 +230,38 @@ describe('sync-to-cursor 解析', () => {
     expect(
       resolveSyncToCursorScript(mkdtempSync(join(tmpdir(), 'sync-cursor-none-'))),
     ).toBeUndefined()
+  })
+})
+
+describe('consumer-meta 寫入', () => {
+  it('clade 還沒有 script 時略過、不炸', () => {
+    const cladeRoot = mkdtempSync(join(tmpdir(), 'meta-clade-missing-'))
+    const targetDir = mkdtempSync(join(tmpdir(), 'meta-target-missing-'))
+    expect(maybeWriteConsumerMeta(cladeRoot, targetDir)).toBe(false)
+  })
+
+  it('在目標 repo 的 cwd 以 --write --force 呼叫', () => {
+    const cladeRoot = mkdtempSync(join(tmpdir(), 'meta-clade-'))
+    const targetDir = mkdtempSync(join(tmpdir(), 'meta-target-'))
+    mkdirSync(join(cladeRoot, 'scripts'), { recursive: true })
+    writeFileSync(
+      join(cladeRoot, 'scripts', 'scaffold-consumer-meta.ts'),
+      [
+        "const { writeFileSync } = require('node:fs')",
+        "const { join } = require('node:path')",
+        'writeFileSync(join(process.cwd(), "meta-invocation.json"), JSON.stringify({',
+        '  cwd: process.cwd(),',
+        '  argv: process.argv.slice(2),',
+        '}))',
+        '',
+      ].join('\n'),
+    )
+    execFileSync('git', ['init'], { cwd: targetDir, stdio: 'pipe' })
+
+    expect(maybeWriteConsumerMeta(cladeRoot, targetDir)).toBe(true)
+    const invocation = JSON.parse(readFileSync(join(targetDir, 'meta-invocation.json'), 'utf-8'))
+    expect(invocation.cwd).toBe(targetDir)
+    expect(invocation.argv).toEqual([targetDir, '--write', '--force'])
   })
 })
 

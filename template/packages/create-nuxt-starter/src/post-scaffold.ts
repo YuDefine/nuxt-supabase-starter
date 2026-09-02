@@ -189,6 +189,11 @@ export async function postScaffold(
     if (!adoptingRepo) {
       execFileSync('git', ['init'], { cwd: targetDir, stdio: 'pipe' })
     }
+    // git init 之後才寫：scaffold-consumer-meta --write 用 cwd 的 git root 判定 invokerOwns。
+    // 必須在 git add 之前，否則 initial commit 會漏掉這份身分檔。
+    if (cladeRoot) {
+      maybeWriteConsumerMeta(cladeRoot, targetDir)
+    }
     execFileSync('git', ['add', '-A'], { cwd: targetDir, stdio: 'pipe' })
     execFileSync(
       'git',
@@ -363,6 +368,26 @@ export function buildMintGatePlaybooksArgs(
     args.push('--dev-port', String(devPort), '--oauth-origin', `http://127.0.0.1:${devPort}`)
   }
   return args
+}
+
+/** Strip 掉 starter 自己的 consumer-meta 之後，用這個 repo 的身分重產一份。 */
+export function maybeWriteConsumerMeta(cladeRoot: string, targetDir: string): boolean {
+  const script = join(cladeRoot, 'scripts', 'scaffold-consumer-meta.ts')
+  if (!existsSync(script)) {
+    consola.info('Clade checkout 尚無 scaffold-consumer-meta.ts — 略過 consumer-meta')
+    return false
+  }
+  try {
+    execFileSync('node', [script, targetDir, '--write', '--force'], {
+      cwd: targetDir,
+      stdio: 'pipe',
+    })
+    consola.success('consumer-meta 已依本 repo 身分寫入')
+    return true
+  } catch (error) {
+    consola.warn(`寫入 consumer-meta 失敗：${(error as Error).message}`)
+    return false
+  }
 }
 
 export function maybeMintGatePlaybooks(

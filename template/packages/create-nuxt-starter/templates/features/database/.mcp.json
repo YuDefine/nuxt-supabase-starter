@@ -1,5 +1,9 @@
 {
   "mcpServers": {
+    "codebase-memory-mcp": {
+      "type": "stdio",
+      "command": "codebase-memory-mcp"
+    },
     "local-supabase": {
       "type": "http",
       "url": "http://localhost:54321/mcp"

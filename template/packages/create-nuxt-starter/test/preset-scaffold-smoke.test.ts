@@ -111,6 +111,13 @@ describe('preset smoke: 5 個 stack preset 各跑 assembleProject', () => {
     expect(pkg.dependencies['wrangler']).toBeUndefined()
     // ci-advanced workflow file should be scaffolded under .github/workflows
     expect(existsSync(join(targetDir, '.github', 'workflows'))).toBe(true)
+    expect(existsSync(join(targetDir, 'SECURITY.md'))).toBe(true)
+    expect(existsSync(join(targetDir, '.claude', 'consumer-meta.json'))).toBe(false)
+    const mcp = JSON.parse(readFileSync(join(targetDir, '.mcp.json'), 'utf-8'))
+    expect(mcp.mcpServers['codebase-memory-mcp']).toMatchObject({
+      type: 'stdio',
+      command: 'codebase-memory-mcp',
+    })
   })
 
   it('minimal scaffolds project without auth / database / monitoring / ui', () => {
@@ -142,6 +149,8 @@ describe('preset smoke: 5 個 stack preset 各跑 assembleProject', () => {
       expect(existsSync(join(targetDir, 'app', 'app.vue'))).toBe(true)
       expect(existsSync(join(targetDir, '.env.example'))).toBe(true)
       expect(existsSync(join(targetDir, '.claude', 'settings.json'))).toBe(true)
+      expect(existsSync(join(targetDir, 'SECURITY.md'))).toBe(true)
+      expect(existsSync(join(targetDir, '.claude', 'consumer-meta.json'))).toBe(false)
     }
   })
 })

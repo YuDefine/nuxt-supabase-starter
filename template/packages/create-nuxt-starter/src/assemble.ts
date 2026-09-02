@@ -86,6 +86,7 @@ export function assembleProject(
     copyTemplateCursorAssets(targetDir)
   }
   copyTemplateGitHubAssets(targetDir)
+  copySecurityPolicy(targetDir)
 
   // 8. Layer feature-gated assets and generated settings on top.
   copyClaudeCodeAssets(targetDir, selectedFeatureIds)
@@ -208,6 +209,12 @@ function copyDirectoryFiltered(src: string, dest: string, exclude: Set<string>):
 
 function copyTemplateClaudeAssets(targetDir: string): void {
   copyDirectory(join(STARTER_ROOT, '.claude'), join(targetDir, '.claude'))
+}
+
+function copySecurityPolicy(targetDir: string): void {
+  const src = join(STARTER_ROOT, 'SECURITY.md')
+  if (!existsSync(src)) return
+  cpSync(src, join(targetDir, 'SECURITY.md'))
 }
 
 function copyTemplateCursorAssets(targetDir: string): void {

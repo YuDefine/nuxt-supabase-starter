@@ -26,6 +26,12 @@
       "required": false
     },
     {
+      "path": ".claude/consumer-meta.json",
+      "reason": "starter-identity-leak",
+      "consumers": ["scaffolder"],
+      "required": false
+    },
+    {
       "path": ".clade",
       "reason": "projection-metadata",
       "consumers": ["create-clean", "scaffolder"],
