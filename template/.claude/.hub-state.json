@@ -3,7 +3,7 @@
   "rulesProjection": "copy",
   "checksums": {
     "rules/agent-routing.keepalive-wake.md": "3d03b5582ff8c939",
-    "rules/agent-routing.md": "ca5aa3fc70acfdaa",
+    "rules/agent-routing.md": "1e52bac9dd55c1b9",
     "rules/agent-routing.pi-input-intercept.md": "6f92e6911ba17440",
     "rules/agent-routing.pi-watch-protocol.md": "ece9f37e58ad7312",
     "rules/agent-routing.routing-table-rationale.md": "ea74107032baf401",

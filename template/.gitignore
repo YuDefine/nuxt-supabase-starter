@@ -92,3 +92,9 @@ openspec/.vector-search.db*
 .clade/flow/
 
 /screenshots/
+
+.clade/*
+!.clade/ai-control-plane/
+.clade/ai-control-plane/*
+!.clade/ai-control-plane/intent/
+!.clade/ai-control-plane/human-decisions.jsonl

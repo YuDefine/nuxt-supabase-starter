@@ -24,7 +24,7 @@ permission_tier: action
 | `new` | 目標 repo 尚不存在，或使用者要求從 starter 建立 | project name + target path | scaffolded project + registered consumer + ready report |
 | `adopt` | repo 已存在，但 Clade registry 查不到 | existing repo path | registered consumer + ready report |
 
-若 repo 已在 `registry/consumers.json`，停止 onboarding，改回該 consumer 的一般工作流。若使用者只要候選標準、不授權寫入，呼叫 `/bp plan` 後交付 plan，不繼續本 skill。
+若 repo 已在 `registry/consumers.json`，停止 onboarding，改回該 consumer 的一般工作流。**例外**：使用者明確授權把該 consumer 清掉從 starter 重建——先從 registry 拿掉該列、跑 `bootstrap-consumers-local.ts`、拆 linked worktree、空掉 target path，再走 `new`。不要把 registry 衝突讀成「改回一般工作流」。若使用者只要候選標準、不授權寫入，呼叫 `/bp plan` 後交付 plan，不繼續本 skill。
 
 </decision_boundary>
 
@@ -74,10 +74,13 @@ optional_conventions:
 pnpm --dir "$NUXT_STARTER_HOME/template/packages/create-nuxt-starter" dev <project-name> \
   --yes --preset <starter-preset> --agents <agent-targets> \
   --repo-id <owner/repo> --workflow-model <workflow-model> \
-  --business-activity <business-activity> --dev-port <port>
+  --business-activity <business-activity> --dev-port <port> \
+  --deploy-track <deploy_track>
 ```
 
-需要 feature override 才加 `--auth` / `--db` / `--ci` / `--evlog-preset` / `--with` / `--without`。starter CLI 已負責組裝、dependency install、local `init-consumer.ts` 與初始 git；失敗時保留原始輸出，修 root cause 後重跑，不把半成品宣告成 consumer。
+主機 `pnpm --version` **MUST** 等於 starter `template/package.json` 的 `packageManager`（fleet 現為 `pnpm@11.24.0`）。對不上時升那個欄位、CI `corepack prepare` pin 與 lockfile，**NEVER** 改走 `tsx src/cli.ts` 繞過。`deploy_track` 來自 intake；`self-hosted-node` 無公網 HTTPS prod DB 時是 `none`，**NEVER** 默默抄 `wrangler-action`。
+
+需要 feature override 才加 `--auth` / `--db` / `--ci` / `--evlog-preset` / `--with` / `--without`。starter CLI 已負責組裝、dependency install、local `init-consumer.ts`、registry 登記（含 `--deploy-track` / `--db-runtime`）與初始 git；失敗時保留原始輸出，修 root cause 後重跑，不把半成品宣告成 consumer。
 
 scaffold / adopt 後 **MUST mint gate playbook pack**（缺才寫、idempotent）：
 
@@ -112,6 +115,8 @@ node "$CLADE_HOME/scripts/bootstrap-project.ts" \
   --workflow-model <trunk-based|pr-merge-based> \
   --business-activity <pre-production|active|paused> \
   --dev-port <port|auto> \
+  --deploy-track <wrangler-action|void-cloud|node-server|none> \
+  --db-runtime <cf-workers|supabase-self-hosted> \
   --json
 ```
 

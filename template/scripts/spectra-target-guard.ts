@@ -26,6 +26,43 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+
+// control-plane: begin
+/**
+ * The control-plane denial matrix (§10.6 item 3) has exactly one implementation, in
+ * `ai-control-plane-profile.ts`. This guard resolves it at run time rather than importing
+ * it statically because the two files land in different places on the two sides: in clade
+ * the guard is `plugins/hub-capabilities-openspec/scripts/` and the library is
+ * `vendor/scripts/`; in a consumer the guard is `scripts/` and the library is
+ * `.clade/vendor/scripts/` (the flow closure in `scripts/lib/vendor-targets.ts`).
+ *
+ * Unresolvable → the check is skipped, not failed. A consumer without the control-plane
+ * projection cannot own a control-plane change, and failing closed there would break every
+ * Spectra call in repositories that have nothing to do with this.
+ */
+const guardHere = dirname(fileURLToPath(import.meta.url))
+const controlPlaneProfilePath = [
+  join(guardHere, '..', '..', '..', 'vendor', 'scripts', 'ai-control-plane-profile.ts'),
+  join(guardHere, '..', '.clade', 'vendor', 'scripts', 'ai-control-plane-profile.ts'),
+].find((candidate) => existsSync(candidate))
+const controlPlane = controlPlaneProfilePath
+  ? ((await import(pathToFileURL(controlPlaneProfilePath).href)) as {
+      SPECTRA_GATE_POINTER: string
+      decideSpectraGate: (input: {
+        subcommand: string
+        target: string | null
+        boundProfile: 'spectra-v1' | 'opsx-v2' | null
+      }) => {
+        decision: 'allow' | 'deny'
+        code: string | null
+        change: string | null
+        profile: string | null
+      }
+      readBoundProfile: (repoRoot: string, target: string | null) => 'spectra-v1' | 'opsx-v2' | null
+    })
+  : null
+// control-plane: end
 
 const SPEC_DIR = 'openspec'
 const PATH_FIELDS = new Set([
@@ -1799,9 +1836,77 @@ function emitChild(result: ChildResult): never | void {
   if (result.stderr) process.stderr.write(result.stderr)
 }
 
+// control-plane: begin
+/**
+ * Map the guard's own command taxonomy onto the control-plane denial matrix
+ * (§10.6 item 3). The matrix itself lives in `ai-control-plane-profile.ts`; this is only
+ * the vocabulary bridge, so the guard and the `PreToolUse` hook cannot drift apart.
+ */
+function controlPlaneSubcommand(command: CommandClass): string {
+  if (command.operation === 'new-change') return 'new-change'
+  if (command.operation === 'new-artifact') return 'new-artifact'
+  if (command.operation.startsWith('task')) return 'task'
+  if (command.operation === 'in-progress-add') return 'in-progress'
+  if (command.operation === 'instructions-skill') return 'instructions'
+  return command.operation
+}
+
+/**
+ * The repository root, asked of git rather than assumed to be the working directory.
+ *
+ * The intent source lives at a repo-relative path, so reading it from a subdirectory used to
+ * find nothing and report the change as unbound — the guard and the hook, which resolves the
+ * root from `CLAUDE_PROJECT_DIR`, would then answer differently about the same command
+ * (§10.6 item 3 asks them to read the same file).
+ *
+ * Non-fatal on purpose: outside a git worktree there is no root to find, and this gate is
+ * not the place to decide that. `resolveTarget` reaches the same question a moment later and
+ * fails there with its own diagnosis.
+ */
+function controlPlaneRepoRoot(): string {
+  try {
+    return execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim()
+  } catch {
+    return process.cwd()
+  }
+}
+
+/**
+ * Deny Spectra writers that target a control-plane change, before the guard touches
+ * anything.
+ *
+ * Strictly read-only and side-effect free (§10.6 item 5): it reads at most one committed
+ * intent source and creates no file, no directory and no lock. It runs before
+ * `resolveTarget`, which is the first thing in the guard that walks the worktree.
+ */
+function assertControlPlaneAllows(change: string, command: CommandClass): void {
+  if (!controlPlane) return
+  const decision = controlPlane.decideSpectraGate({
+    subcommand: controlPlaneSubcommand(command),
+    target: change,
+    boundProfile: controlPlane.readBoundProfile(controlPlaneRepoRoot(), change),
+  })
+  if (decision.decision === 'allow') return
+  process.stderr.write(
+    `${JSON.stringify({
+      code: decision.code,
+      change: decision.change,
+      profile: decision.profile,
+      pointer: controlPlane.SPECTRA_GATE_POINTER,
+    })}\n`,
+  )
+  process.exit(ERROR_EXIT)
+}
+// control-plane: end
+
 function main(): void {
   const { change, spectraArgs } = parseArgs(process.argv.slice(2))
   const command = classifyCommand(spectraArgs)
+  assertControlPlaneAllows(change, command)
   validateCommandBinding(change, spectraArgs, command)
   const target = resolveTarget(change)
   const release = acquireLock(target, change)
