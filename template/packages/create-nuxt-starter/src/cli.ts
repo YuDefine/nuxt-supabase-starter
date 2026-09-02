@@ -504,6 +504,12 @@ const main = defineCommand({
       description: 'Centrally allocated Nuxt development port',
       required: false,
     },
+    'deploy-track': {
+      type: 'string',
+      description:
+        'Clade deploy-track: wrangler-action | void-cloud | node-server | none（self-hosted 無公網 HTTPS prod DB 時必須 none）',
+      required: false,
+    },
     'wire-pre-commit': {
       type: 'boolean',
       description:
@@ -544,6 +550,18 @@ const main = defineCommand({
     // `auto` 由 Clade 依 fleet 慣例配號，本地不解析成數字。
     const devPortAuto = devPortRaw === 'auto'
     const devPort = devPortRaw === undefined || devPortAuto ? undefined : Number(devPortRaw)
+    const deployTrackRaw = args['deploy-track'] as string | undefined
+    const deployTracks = new Set(['wrangler-action', 'void-cloud', 'node-server', 'none'])
+    if (deployTrackRaw && !deployTracks.has(deployTrackRaw)) {
+      consola.error('--deploy-track 必須是 wrangler-action | void-cloud | node-server | none')
+      process.exit(1)
+    }
+    const deployTrack = deployTrackRaw as
+      | 'wrangler-action'
+      | 'void-cloud'
+      | 'node-server'
+      | 'none'
+      | undefined
     if (repoId && !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoId)) {
       consola.error('--repo-id 格式必須是 owner/repo')
       process.exit(1)
@@ -646,6 +664,8 @@ const main = defineCommand({
     // Display summary and confirm
     displaySummary(selections)
 
+    const cladeModules = inferCladeModules(selections.features, selections.dbStack)
+
     if (adoptState.kind === 'adoptable') {
       // 顯示解析後的目錄名，不是使用者打的字面值 —— 既有 repo 的正確咒語是
       // 專案名填 `.`，而「偵測到既有 repo「.」」讀起來像是 CLI 搞錯了。
@@ -676,6 +696,8 @@ const main = defineCommand({
           workflowModel: workflowModel as 'trunk-based' | 'pr-merge-based',
           businessActivity: businessActivity as 'pre-production',
           devPort: devPortAuto ? 'auto' : devPort,
+          deployTrack,
+          dbRuntime: cladeModules.dbRuntime,
         })
         if (preflight.status === 'rejected') {
           consola.error('Clade fleet 登記預檢未過，未建立任何檔案：')
@@ -708,32 +730,28 @@ const main = defineCommand({
     }
 
     // Post-scaffold
-    await postScaffold(
-      targetDir,
-      pkgName,
-      invocationCwd,
-      inferCladeModules(selections.features, selections.dbStack),
-      {
-        yes: args.yes as boolean,
-        registerConsumer: args['register-consumer'] as boolean,
-        wirePreCommit: args['wire-pre-commit'] as boolean,
-        cloneClade: args['clone-clade'] as boolean,
-        installDeps: args.install as boolean,
-        existingGitRepo: adoptState?.hasGitRepo === true,
-        deployTarget: selections.deploymentTarget,
-        dbStack: selections.dbStack,
-        repoId,
-        workflowModel: workflowModel as 'trunk-based' | 'pr-merge-based',
-        businessActivity: businessActivity as
-          | 'pre-production'
-          | 'active'
-          | 'maintenance'
-          | 'paused'
-          | 'auto',
-        devPort: devPortAuto ? 'auto' : devPort,
-        agentTargets: selections.agentTargets,
-      },
-    )
+    await postScaffold(targetDir, pkgName, invocationCwd, cladeModules, {
+      yes: args.yes as boolean,
+      registerConsumer: args['register-consumer'] as boolean,
+      wirePreCommit: args['wire-pre-commit'] as boolean,
+      cloneClade: args['clone-clade'] as boolean,
+      installDeps: args.install as boolean,
+      existingGitRepo: adoptState?.hasGitRepo === true,
+      deployTarget: selections.deploymentTarget,
+      dbStack: selections.dbStack,
+      repoId,
+      workflowModel: workflowModel as 'trunk-based' | 'pr-merge-based',
+      businessActivity: businessActivity as
+        | 'pre-production'
+        | 'active'
+        | 'maintenance'
+        | 'paused'
+        | 'auto',
+      devPort: devPortAuto ? 'auto' : devPort,
+      deployTrack,
+      dbRuntime: cladeModules.dbRuntime,
+      agentTargets: selections.agentTargets,
+    })
   },
 })
 

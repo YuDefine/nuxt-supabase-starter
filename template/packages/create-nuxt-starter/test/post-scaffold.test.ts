@@ -68,6 +68,36 @@ describe('Clade registry handoff', () => {
     ])
   })
 
+  it('forwards deploy-track and db-runtime when provided', () => {
+    expect(
+      buildRegisterConsumerArgs(
+        '/clade/scripts/register-consumer.ts',
+        '/projects/<consumer-e>',
+        '<client-b>/<consumer-e>',
+        'trunk-based',
+        'pre-production',
+        3090,
+        { deployTrack: 'none', dbRuntime: 'supabase-self-hosted' },
+      ),
+    ).toEqual([
+      '/clade/scripts/register-consumer.ts',
+      '--consumer',
+      '/projects/<consumer-e>',
+      '--repo-id',
+      '<client-b>/<consumer-e>',
+      '--workflow-model',
+      'trunk-based',
+      '--business-activity',
+      'pre-production',
+      '--dev-port',
+      '3090',
+      '--deploy-track',
+      'none',
+      '--db-runtime',
+      'supabase-self-hosted',
+    ])
+  })
+
   it('mint gate playbooks keeps consumer-root as one argv element', () => {
     expect(
       buildMintGatePlaybooksArgs(

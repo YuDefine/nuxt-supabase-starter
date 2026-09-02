@@ -240,7 +240,7 @@ pnpm dev          # 開啟 http://localhost:3000 看 Demo
 | 工具         | 版本               | 安裝方式                                                           |
 | ------------ | ------------------ | ------------------------------------------------------------------ |
 | Node.js      | 18+（建議 24 LTS） | [nodejs.org](https://nodejs.org/)                                  |
-| pnpm         | 9+                 | `corepack enable && corepack prepare pnpm@latest --activate`       |
+| pnpm         | 與 `template/package.json` 的 `packageManager` 相同（現為 11.24.0） | `corepack enable && corepack prepare pnpm@11.24.0 --activate` |
 | Docker       | -                  | [docker.com](https://www.docker.com/)                              |
 | Supabase CLI | -                  | macOS: `brew install supabase/tap/supabase`                        |
 |              |                    | Windows: `scoop install supabase`（[Scoop](https://scoop.sh/)）    |

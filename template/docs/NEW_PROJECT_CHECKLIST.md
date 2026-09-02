@@ -32,7 +32,7 @@ pnpm verify:starter --full
 | 項目                         | Verify                                                                                   | Fix                                                                    |
 | ---------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | Node.js ≥ 18                 | `node -v`                                                                                | 安裝 Node 18+（建議 24 LTS）                                           |
-| pnpm ≥ 9                     | `pnpm --version`                                                                         | `corepack enable && corepack prepare pnpm@latest --activate`           |
+| pnpm 與 `package.json` 的 `packageManager` 相同 | `pnpm --version` 對得上 `node -p "require('./package.json').packageManager"` | `corepack enable && corepack prepare pnpm@11.24.0 --activate` |
 | Docker daemon 運作中         | `docker info`                                                                            | 啟動 Docker Desktop / OrbStack                                         |
 | Supabase CLI                 | `supabase --version`                                                                     | `brew install supabase/tap/supabase`                                   |
 | Claude Code CLI              | `claude --version`                                                                       | `curl -fsSL https://claude.ai/install.sh \| sh`                        |

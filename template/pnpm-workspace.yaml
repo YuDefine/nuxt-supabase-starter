@@ -5,18 +5,24 @@ catalog:
 packages:
   - 'packages/*'
 
-ignoredBuiltDependencies:
-  - '@parcel/watcher'
-  - '@prisma/client'
-  - '@prisma/engines'
-  - '@sentry/cli'
-  - better-sqlite3
-  - esbuild
-  - maplibre-gl
-  - prisma
-  - sharp
-  - vue-demi
-  - workerd
+# Agent / CI 沒有 TTY 時，pnpm 11 遇到要清 node_modules 會 ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY 讓 husky 死掉。
+confirmModulesPurge: false
+
+# pnpm v11 移除 ignoredBuiltDependencies；未表態的 build script 會讓 install 退出碼 1。
+# SoT 形狀見 packages/create-nuxt-starter/templates/base/pnpm-workspace.yaml。
+allowBuilds:
+  '@parcel/watcher': true
+  '@prisma/client': true
+  '@prisma/engines': true
+  '@sentry/cli': true
+  better-sqlite3: true
+  esbuild: true
+  maplibre-gl: true
+  prisma: true
+  sharp: true
+  vue-demi: true
+  workerd: true
+
 overrides:
   vite: 'catalog:'
   vitest: 'catalog:'

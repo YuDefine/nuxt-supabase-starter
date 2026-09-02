@@ -50,6 +50,8 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-app \
     --without testing-full,testing-vitest
 ```
 
+此 CLI 走 workspace root `template/package.json` 的 `packageManager`。主機 `pnpm --version` 必須與該欄位相同（現為 `pnpm@11.24.0`）。對不上時升那個欄位與 CI `corepack prepare` pin，再重跑 install；**不要**改走 `tsx src/cli.ts` 繞過。
+
 ### 非互動參數
 
 - `--preset`：`cloudflare-supabase`（預設）| `cloudflare-nuxthub-ai` | `vercel-supabase` | `self-hosted-node` | `minimal`
@@ -60,6 +62,8 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-app \
 - `--with`：逗號分隔 feature id，加入功能
 - `--without`：逗號分隔 feature id，移除功能（含跳過 testing：`--without testing-full,testing-vitest`）
 - `--minimal`：從空白功能集開始（新版改用 `--preset minimal` 更明確）
+- `--dev-port`：Clade 配號；可 `auto`
+- `--deploy-track`：`wrangler-action` | `void-cloud` | `node-server` | `none`（self-hosted 無公網 HTTPS prod DB 時必須 `none`）
 
 #### 破壞性變更（舊版使用者）
 

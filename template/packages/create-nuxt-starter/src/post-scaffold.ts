@@ -35,6 +35,10 @@ export interface PostScaffoldOptions {
   businessActivity?: 'pre-production' | 'active' | 'maintenance' | 'paused' | 'auto'
   /** `auto` 交給 Clade 依 fleet 慣例配號（3000 起、每 10 一階）。 */
   devPort?: number | 'auto'
+  /** 寫進 registry `deploy-track`；self-hosted 無公網 HTTPS prod DB 時必須是 `none`。 */
+  deployTrack?: 'wrangler-action' | 'void-cloud' | 'node-server' | 'none'
+  /** 寫進 registry `db-runtime`，與 hub.json modules 對齊。 */
+  dbRuntime?: CladeModules['dbRuntime']
   /**
    * 就地展開到既有 git repo 時設 true：不重跑 `git init`，commit message 也
    * 改成「加入 starter」而非「initial scaffold」——那個 repo 的第一個 commit
@@ -315,8 +319,12 @@ export function buildRegisterConsumerArgs(
   workflowModel: 'trunk-based' | 'pr-merge-based',
   businessActivity: 'pre-production' | 'active' | 'maintenance' | 'paused' | 'auto',
   devPort: number | 'auto',
+  extras?: {
+    deployTrack?: PostScaffoldOptions['deployTrack']
+    dbRuntime?: PostScaffoldOptions['dbRuntime']
+  },
 ): string[] {
-  return [
+  const args = [
     script,
     '--consumer',
     targetDir,
@@ -329,6 +337,13 @@ export function buildRegisterConsumerArgs(
     '--dev-port',
     String(devPort),
   ]
+  if (extras?.deployTrack) {
+    args.push('--deploy-track', extras.deployTrack)
+  }
+  if (extras?.dbRuntime) {
+    args.push('--db-runtime', extras.dbRuntime)
+  }
+  return args
 }
 
 export function buildMintGatePlaybooksArgs(
@@ -382,7 +397,10 @@ export interface PreflightOutcome {
 export function preflightCladeRegistration(
   cladeRoot: string,
   targetDir: string,
-  opts: Pick<PostScaffoldOptions, 'repoId' | 'workflowModel' | 'businessActivity' | 'devPort'>,
+  opts: Pick<
+    PostScaffoldOptions,
+    'repoId' | 'workflowModel' | 'businessActivity' | 'devPort' | 'deployTrack' | 'dbRuntime'
+  >,
 ): PreflightOutcome {
   if (!opts.repoId) return { status: 'skipped', reason: '未給 --repo-id' }
 
@@ -397,6 +415,7 @@ export function preflightCladeRegistration(
       opts.workflowModel ?? 'trunk-based',
       opts.businessActivity ?? 'pre-production',
       opts.devPort ?? 'auto',
+      { deployTrack: opts.deployTrack, dbRuntime: opts.dbRuntime },
     ),
     '--preflight',
     '--json',
@@ -458,6 +477,7 @@ export async function maybeRegisterConsumer(
     workflowModel,
     businessActivity,
     opts.devPort,
+    { deployTrack: opts.deployTrack, dbRuntime: opts.dbRuntime },
   )
   try {
     execFileSync('node', args, { cwd: cladeRoot, stdio: 'pipe' })

@@ -7,6 +7,7 @@
 # 連 commit 都跟著失敗 —— 一個 key 缺席會同時打掉安裝、投影、提交三件事。
 #
 # 這些都是知名 OSS（native binding 或 wasm 編譯）。若要收緊，把對應 key 改 false。
+confirmModulesPurge: false
 allowBuilds:
   '@parcel/watcher': true
   # nitropack → db0 傳遞依賴，任何 Nuxt 專案都會有，與選了什麼 feature 無關。
