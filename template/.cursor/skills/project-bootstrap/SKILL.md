@@ -79,6 +79,17 @@ pnpm --dir "$NUXT_STARTER_HOME/template/packages/create-nuxt-starter" dev <proje
 
 需要 feature override 才加 `--auth` / `--db` / `--ci` / `--evlog-preset` / `--with` / `--without`。starter CLI 已負責組裝、dependency install、local `init-consumer.ts` 與初始 git；失敗時保留原始輸出，修 root cause 後重跑，不把半成品宣告成 consumer。
 
+scaffold / adopt 後 **MUST mint gate playbook pack**（缺才寫、idempotent）：
+
+```bash
+node "$CLADE_HOME/scripts/mint-gate-playbooks.ts" \
+  --consumer-root <target-path> \
+  --consumer <slug> \
+  --dev-port <port>
+```
+
+產物：`docs/playbooks/README.md`（含 § Browser 分流）+ `PROGRESS.md` + `GATE-TODOS.md` + 01–05、HANDOFF `## User-gate board`。缺 pack 不算 bootstrap 完成。`bootstrap-project.ts` 已含這一步；本節是 skill 自己跑 scaffold 後、進 Step 4 之前的補齊。
+
 ### `adopt`
 
 依 `.claude/hub.json` 或實際 stack 組出 module flags，先 dry-run：
@@ -92,7 +103,7 @@ dry-run 無錯後移除 `--dry-run` 執行。現有 `.claude/hub.json` 只有在
 
 ## 4. 登記 registry 並跑 onboarding gate
 
-registry 登記 → consumer-meta 建議 → `bp-scan` 標準候選 → readiness gate → golden-path adoption，這五步之間沒有判斷、只有順序與 exit code 判讀，已收成一支：
+registry 登記 → mint gate playbook pack → hub:vendor → readiness（紅則 `--force` 再 sync）→ new-project readiness → golden-path → convention depends_on gate。這幾步之間沒有判斷、只有順序與 exit code 判讀，已收成一支：
 
 ```bash
 node "$CLADE_HOME/scripts/bootstrap-project.ts" \
@@ -104,13 +115,13 @@ node "$CLADE_HOME/scripts/bootstrap-project.ts" \
   --json
 ```
 
-**NEVER 逐條複述那五個指令**——複述會漂，而漂掉的那一步在報告上與跑過無法區分。`--dev-port auto` 依 fleet 慣例（3000 起、每 10 一階）配下一個空號；`--skip-registry` 用於已登記的 repo。
+**NEVER 逐條複述那些指令**——複述會漂，而漂掉的那一步在報告上與跑過無法區分。`--dev-port auto` 依 fleet 慣例（3000 起、每 10 一階）配下一個空號；`--skip-registry` 用於已登記的 repo。
 
 exit code：`0` 全綠 / `1` 用法錯誤或 registry 登記失敗 / `2` 有 gate 紅燈。`result` 三值：`READY`（全跑全綠）、`READY_PARTIAL`（有 step 被跳過——**NEVER** 讀成 READY）、`BLOCKED`。
 
 同一組 `consumer_id + repo_id + path` 重跑是 idempotent。任一識別欄位指向不同 entry 時該支會停下並回報 conflict，不覆寫既有 consumer。
 
-這支**不修東西**，只跑 gate 並如實回報。紅燈時修 root cause 後重跑，**NEVER** 把 `BLOCKED` 當成「大致完成」。
+這支**不修業務 code**，只跑 gate 並如實回報。例外：mint 缺的 playbook pack，以及 readiness 紅時再跑一次 `sync-vendor --force`。**`hub:vendor` 成功訊息不算證據**，必須 `audit-consumer-readiness.ts --gate` exit 0。紅燈時修 root cause 後重跑，**NEVER** 把 `BLOCKED` 當成「大致完成」。
 
 ## 5. 核對 meta 與 convention declarations
 
@@ -121,6 +132,8 @@ Step 4 的 `consumer-meta` 與 `bp-scan` 兩步只**產出建議**，採用與�
 - `not-applicable`：在 registry 明確宣告，附可觀察理由。
 
 不得把未拍板的 business variant 猜成 `compliant`。
+
+**安全憲法（`security-policy` convention）在這一步落地**：starter 的 `template/SECURITY.md` 是 user-owned 實填範例，`new` mode 已經帶進來——逐段核對 intake（攻擊入口是否多了 webhook / 公開表單、授權模型是 user-owned 還是 tenant-scoped、`.env.example` 的 key 名有沒有增減），tenant-scoped 就改用 `$CLADE_HOME/vendor/snippets/security-policy/SECURITY.template.tenant-scoped.md` 重填。`adopt` mode 沒有這份檔時從範本建。五段齊、不變量 ≥ 5 且每條 `enforced by` 是 `audit-new-project-readiness.ts` 與 `audit-security-policy.ts` 的判準；首次 baseline 掃描消耗 ChatGPT 額度，先量地板（`commit/security-scan.md` § 先量地板）再跑，跑不了就在 registry 宣告 `security-policy: scan-only` 並登 TD。
 
 ## 6. 跑 completion contract
 
@@ -153,7 +166,7 @@ publish 後再次在 target repo 跑 readiness gate 與 `pnpm hub:check`，確�
 4. `Evidence`：每個 completion gate 的 invocation、exit、關鍵 verdict。
 5. `External setup`：只列無法由本 session 完成、且綁具體外部資源的項目；沒有就省略。
 
-`READY` 必須同時具備 registry entry、`consumers.local` derived entry、readiness `READY`、`bp-scan` 無未處理 required item、project gates 綠燈、Clade publish/propagate 完成。缺任何一項只能輸出 `BLOCKED`，並標出停在哪個 predicate。
+`READY` 必須同時具備 registry entry、`consumers.local` derived entry、readiness `READY`、gate playbook pack、`bp-scan` 無未處理 required item、project gates 綠燈、Clade publish/propagate 完成。缺任何一項只能輸出 `BLOCKED`，並標出停在哪個 predicate。
 
 </output_contract>
 

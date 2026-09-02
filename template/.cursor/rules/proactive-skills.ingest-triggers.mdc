@@ -71,7 +71,7 @@ Apply 階段中偵測到以下任一信號 → 必須立即處理：
 
 - **NEVER** 直接打字要 user 手動取 cookie（「請取 ADMIN_COOKIE / 開 Chrome → Google OAuth → DevTools 翻 Cookies → 複製 `nuxt-session=...` 貼回給我」）— 這把 baseline 缺誤翻成「user 自己手動 OAuth」，消耗 user 30+ min 介入、且對 fixture 第二位 admin（非真 Google 帳號）這條路完全無解
 - **MUST** 第一動作走 scaffold-first：辨識 consumer auth module（`nuxt-auth-utils` / `supabase-self-hosted` / `better-auth`）→ 依 clade cookbook（`~/offline/clade/rules/modules/auth/<auth-module>/dev-login.md` + `~/offline/clade/vendor/snippets/dev-auth/templates/`）scaffold `_dev-login.get.ts`（gated by `import.meta.dev` + loopback）→ typecheck + smoke curl 自驗 → 才進 evidence collection
-- reference impl：<consumer-a> / <consumer-b> / <consumer-d> / <consumer-k> 既有 dev-login route
+- reference impl：<consumer-a> / <consumer-b> / <consumer-d> / <consumer-j> 既有 dev-login route
 
 完整 hard rule（含 scaffold gate template、AskUserQuestion 兩選項）見 [[manual-review]] § Pre-verify baseline 假設 + Dev-login route missing → scaffold-first。對應 [[pitfall-agent-asks-user-cookie-skipping-dev-login-scaffold]]。
 

@@ -96,7 +96,7 @@ fi
 
 Persistent runner（LXC / VM，跨 job 保留檔案系統）與 GitHub-hosted runner（每次全新容器）對「會自我更新的 action」反應不同：GitHub-hosted 上自我更新的副作用隨容器一起消失，persistent runner 上會留下來污染下一個 job。
 
-- **MUST** `pnpm/action-setup` 在 self-hosted runner 釘 **v5**。v6 會自我更新 pnpm，在 persistent runner 上把既有安裝改壞。實證：<consumer-k> `5213e8f` 與 <consumer-i> 同日各自從 v6 回退 v5
+- **MUST** `pnpm/action-setup` 在 self-hosted runner 釘 **v5**。v6 會自我更新 pnpm，在 persistent runner 上把既有安裝改壞。實證：<consumer-j> `5213e8f` 與 co-purchase 同日各自從 v6 回退 v5
 - **MUST** 升任何「會在 runner 上安裝/更新工具」的 action 大版之前，先問「這個 action 有沒有自我更新行為？persistent runner 上它留下什麼？」——GitHub-hosted 綠燈**不是** self-hosted 也會綠的證據
 - 範本與完整 CI workflow 見 `vendor/snippets/cloudflare-workers/self-hosted-runner-ci.workflow.yml.template`
 

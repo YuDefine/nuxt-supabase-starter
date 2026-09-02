@@ -13,8 +13,10 @@
 | Registry/local parity | `node $CLADE_HOME/scripts/bootstrap-consumers-local.ts --check` | exit 0 |
 | Best-practice plan | `bootstrap-project.ts` 的 `bp-scan` step（**NEVER** 另跑一次充當證據） | required-and-detectable 無 pending；variant-choice 都有 decision |
 | Golden paths | `bootstrap-project.ts` 的 `golden-path` step | applicable rows `OK`；`N/A` 有 predicate |
+| Security policy | `node $CLADE_HOME/scripts/audit-security-policy.ts --consumers <path>` | `sections` 與 `invariants` 兩格 `0/n`；`freshness` 格 `1/1` 時 MUST 登 TD（首次 baseline 待跑）並在 registry 宣告 `scan-only`，**NEVER** 讀成通過 |
 | Publish | `/clade-publish` 的 Step 1–9 | publish + target propagate 成功 |
 | Post-publish | target 再跑 readiness + `pnpm hub:check` | 兩者 exit 0 |
+| Gate playbook pack | `docs/playbooks/README.md` 含 `## Browser 分流`；`PROGRESS.md` + `GATE-TODOS.md` + 01–05 都在；`HANDOFF.md` 有 `## User-gate board` | 缺任一檔或 heading → 跑 `mint-gate-playbooks.ts`（缺才寫）。沒有這包不算 bootstrap 完成 |
 
 ## Failure handling
 
@@ -22,6 +24,6 @@
 - registry exact match：視為 idempotent，繼續 parity/audit。
 - registry id 或 repo_id collision：停止，列出既有與 proposed entry，等待使用者決定 rename 或接管。
 - dependency install fail：保留 lockfile與完整 stderr；修根因後重跑 install + verify，不刪 target 重生以掩蓋問題。
-- readiness 第一次未齊：依 gaps 補 projection，再跑到 gate 綠；單看 `hub:vendor` 成功訊息不算證據。
+- readiness 第一次未齊：依 gaps 補 projection，再跑到 gate 綠；單看 `hub:vendor` 成功訊息不算證據。`bootstrap-project.ts` 會在 readiness 紅時自動 `sync-vendor --force` 再跑一次 readiness；仍紅才是真缺口。
 - `bootstrap-project.ts` 回 exit 2：`steps[]` 裡 `status: FAIL` 的那筆 `detail` 已是該 gate 的最後一行判決（多為可直接照做的 fix 指令）；修 root cause 後整支重跑，**NEVER** 只補跑失敗的那一步。
 - cloud/remote setup 未授權：標 `BLOCKED` 並列精確資源與所需 authority，不把 local-ready 說成 fleet-ready。

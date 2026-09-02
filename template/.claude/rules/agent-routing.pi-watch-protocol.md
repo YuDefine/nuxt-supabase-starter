@@ -221,7 +221,7 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
 
 ### Routing threshold 與 Claude Agent dispatch gate
 
-Main-thread 同一 prompt segment 的第 3 個高信心 readonly Bash、第 5 個 distinct textual Read，或第一次 Read 501+ 行文字檔會在執行前 block，訊息帶 `decision_id`。Gate 只計高信心事件；compound Bash 一次只計一筆，mutation／build／test／unknown command 不計，含 `agent_id` 的 child hook event 本輪全部 skip。
+Main-thread 同一 prompt segment 的第 3 個高信心 readonly Bash、第 5 個 distinct textual Read，或第一次 Read 501+ 行文字檔會在執行前 block，訊息帶 `decision_id`。Gate 只計高信心事件；compound Bash 一次只計一筆，mutation／build／test／unknown command 不計，含 `agent_id` 的 child hook event 本輪全部 skip。**Cursor 主線例外**：IDE browser / `cursor-app-control`（全部 `browser_*`、`CallDynamicTool` 這兩個 namespace）**不走**這條 `read-heavy-scan` latch；命中 Cursor 環境時 handshake fail-open，不 mint Claude-Code decision。
 
 同一 helper 也攔直接 `Agent(subagent_type: Explore|general-purpose, model: haiku|sonnet)`（省略 `subagent_type` 時視為預設 `general-purpose`）：第一次呼叫即建立 `claude-agent-dispatch` decision，不等 Read／Bash threshold。這條只攔主線顯式降檔委派；其他 agent type、model 省略（繼承主線）與 Opus 不在此 gate 的機械範圍。
 
@@ -787,7 +787,7 @@ redaction 只在 signal payload 上強制（`vendor/signals/redact.mjs`），**d
 | --- | --- |
 | **NEVER** 派 pi 跑 spectra-apply phase 而 prompt 內漏 Commit Authorization 段（一 phase 一 commit / `🧹 chore: wt <change>-phase-<N>` format / hook 必跑禁 `--no-verify` / commit 前自驗 view-layer + scope） | 缺這段 pi 會混 commit、撞 commitlint hook |
 | **NEVER** 派 Pi 寫 code（spectra-propose draft / spectra-apply phase）而 prompt 漏掉 Plan-first 硬指令 | 沒 plan 主線只能從 diff 反推；pi 寫完 plan 必須立刻續跑 |
-| **NEVER** 派 general-purpose / worktree / 臨時 Claude subagent 自跑 playwright / agent-browser 收 verify:ui evidence | 唯一入口是 `screenshot-review` 這支**具名** agent（2026-08-22 起本 channel Claude-only，**NEVER** 派 Pi）。本列擋的是「繞過具名 agent」，**NEVER** 因收回 Pi 外派而讀成放寬。（audit 實證見 rationale § verify:ui bypass 的 audit 實證）**機械 backstop**：主線消費完 subagent 的 JSON 後跑 `verify-ui-receipt.ts` 落 receipt（`.spectra/verify-ui-dispatch-ledger.jsonl`），archive-gate Check 9 逐 item 比對，缺 receipt 且缺 `UNCERTAIN(dispatcher-error)` 痕跡 → block。**該 gate 擋的是 drift，NEVER 是對抗性偽造**——過 gate **NEVER** 讀成「evidence 來源已被證實」 |
+| **NEVER** 派 general-purpose / worktree / 臨時 Claude subagent 自跑 playwright / agent-browser 收 verify:ui evidence | 唯一入口是 `screenshot-review` 這支**具名** agent（2026-08-22 起本 channel Claude-only，**NEVER** 派 Pi）。本列擋的是「繞過具名 agent」，**NEVER** 因收回 Pi 外派而讀成放寬。**Cursor 例外**：開 Google / Tailscale 登入頁與 `cursor-ide-browser` 操作留 Cursor 主線，**NEVER** 派沒有該 MCP 的 subagent（含 screenshot-review）去開 IDE browser。 |
 | pi **MUST** 由**該層編排者**在其自身 sandbox 內直接 Bash `run_in_background` 派出（含泛用 dispatcher）：主線是編排者時由主線派；`/wt` Form 3 / Form 4 的 worktree subagent 執行它被指派的 next-skill 時（`/spectra-apply` 的 Step 6b Class C、Step 8a verify channel、pre-handoff checks；`/spectra-debug` 的診斷 / repro dispatch；以及 next-skill `references/` 各層的每一處 pi 派工）由**該 subagent** 派 | 例外的**准入條件**是該編排者自跑完整 Pi Watch Protocol（notification-only + 安全網 fallback，per [[agent-routing.pi-watch-protocol]] § 監看排程）——做不到就退回上一列的薄中介禁令。編排者**以外**的任何一層對這些 pi **零探針**（per 同檔 § 跨 sandbox 可見度約束 v2）。**本列的範圍只及 `/wt` Form 3 / Form 4 開出的 worktree subagent**，**NEVER** 外推成「任意 Agent tool subagent 都可以派 pi」 |
 
 ## 配額與 residency 的下推兩段

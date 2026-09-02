@@ -37,7 +37,7 @@ const PROBES: ReadonlyArray<readonly [KnownRuntime, readonly string[]]> = [
   ['codex', ['CODEX_SESSION_ID', 'CODEX_AGENT_NAME', 'CODEX_HOME']],
   ['opencode', ['OPENCODE_SESSION_ID', 'OPENCODE_AGENT_ID', 'OPENCODE_HOME']],
   ['copilot', ['COPILOT_AGENT_ID', 'GITHUB_COPILOT_CHAT']],
-  ['cursor', ['CURSOR_SESSION_ID', 'CURSOR_TRACE_ID']],
+  ['cursor', ['CURSOR_SESSION_ID', 'CURSOR_TRACE_ID', 'CURSOR_CONVERSATION_ID', 'CURSOR_AGENT']],
 ]
 
 /** session id 的取值順序（跨 runtime）。 */
@@ -46,6 +46,7 @@ const SESSION_ID_KEYS = [
   'CLAUDE_CODE_SESSION_ID',
   'CODEX_SESSION_ID',
   'OPENCODE_SESSION_ID',
+  'CURSOR_CONVERSATION_ID',
   'CURSOR_SESSION_ID',
 ] as const
 

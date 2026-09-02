@@ -82,7 +82,7 @@ node ~/offline/clade/vendor/scripts/review-handoff-url.ts resolve \
 
 **NEVER 從 consumer 自己的 config 推論入口不存在。** `nuxt.config.ts` 沒掛 tunnel plugin、`consumer-meta.json` 的 `deploy.prodUrl` 是 null——這兩件事跟 review-gui 有沒有在跑**無關**：它是跨 consumer 共用服務，consumer 清單來自 clade 的 `consumers.local`，不由任何 consumer 的 config 描述。這類 negative search 不成立為 absence 證據（[[agent-self-verification]] MUST 11）。
 
-**NEVER 交付 `cd <path> && <cmd>`。** 逐字實錄：「`cd ~/offline/<consumer-j>-wt/kiosk-google-allowlist && pnpm review:ui`」——那是指令不是位址（要 user 自己執行才生得出畫面）、`127.0.0.1` 只在跑 dev server 的那台機器上有意義、且綁在會過期的 agent lease 上。同理 **NEVER 交付 `https://review-gui.<tailnet>.ts.net/`**：pairing token 已停用（`ops/review-gui-service.sh` 的 `pairing_retired()`），那條會停在配對畫面。
+**NEVER 交付 `cd <path> && <cmd>`。** 逐字實錄：「`cd ~/offline/<consumer-i>-wt/kiosk-google-allowlist && pnpm review:ui`」——那是指令不是位址（要 user 自己執行才生得出畫面）、`127.0.0.1` 只在跑 dev server 的那台機器上有意義、且綁在會過期的 agent lease 上。同理 **NEVER 交付 `https://review-gui.<tailnet>.ts.net/`**：pairing token 已停用（`ops/review-gui-service.sh` 的 `pairing_retired()`），那條會停在配對畫面。
 
 **Iron Law：給人的驗收入口永遠是 `review-handoff-url.ts resolve` exit 0 的 `review_url`。違反字面就是違反精神。**
 

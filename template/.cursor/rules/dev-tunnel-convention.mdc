@@ -39,7 +39,7 @@ Local edits will be reverted by the next sync.
 
 **權威來源**：
 - 規約 + 三種錯誤 token 來源對照表：[[dev-port-allocation]] § 2.5（含 `.env.local` 三件套範本）
-- Token 來源：<consumer-k> `.env.local` 的 `CLOUDFLARE_API_KEY`（既有可用）/ Notion `Scrects`（待補 cfat_）
+- Token 來源：<consumer-j> `.env.local` 的 `CLOUDFLARE_API_KEY`（既有可用）/ Notion `Scrects`（待補 cfat_）
 
 **Pitfall**：[[pitfall-vite-plugin-cloudflare-tunnel-token-scope]]
 

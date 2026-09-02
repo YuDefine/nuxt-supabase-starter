@@ -77,6 +77,19 @@ Cursor 派出 Herdr 之後 MUST `--coordinate` 或 `--coordinate-resume` 等到 
 
 全域注入走 Cursor **User Rules**（Customize → Rules，「Cursor 主線只留 Grok 4.6」）。專案 `.cursor/rules/` 只罩該 repo；**NEVER** 靠 consumer `AGENTS.md` snippet 當全域通道——那會讓 AI Agent session 付 always-load 預算。
 
+### Cursor 環境的 browser 載體（hard rule）
+
+命中本節 predicate（或 env 有 `CURSOR_AGENT=1` / `CURSOR_SESSION_ID` / `CURSOR_TRACE_ID` / `CURSOR_CONVERSATION_ID`；工具清單含 `cursor-app-control` / `cursor-ide-browser`）時：
+
+- 開網頁 **MUST** 走 Mac Cursor 的 `cursor-ide-browser`（`browser_tabs` → `browser_navigate` → 既有 tab 先 `browser_lock` → snapshot / 點 / 填 → 結束才 unlock）。這是 IDE browser，不是系統瀏覽器。
+- **NEVER** 用 `open_resource` 開 `https://`：那會打開外部／系統瀏覽器，是錯的載體。
+- **NEVER** 因 clade routing gate、`agent-browser` 措辭、或 § External web retrieval 的「NEVER 直接 WebSearch」改走 Playwright / `agent-browser`。Google 會趕到 `accounts.google.com` 且 URL 含 `signin/rejected`。`cursor-ide-browser` **不是** `WebSearch` / `WebFetch`。
+- 開 Google / Tailscale 登入頁 **MUST** 留 Cursor 主線。**NEVER** 派沒有 `cursor-ide-browser` MCP 的 Task / subagent 去假裝操控 Chromium。
+- 主線 catalog 沒有該 MCP 時：報缺載體，**NEVER** 改走 `open_resource` 或 `agent-browser`，**NEVER** 複製 `~/.cursor/projects/*/mcps/cursor-ide-browser/`（假陽性），**NEVER** 寫進 `~/.cursor/mcp.json`（內建 server 寫不出來）。本機 `127.0.0.1` callback 才要 port forward。
+- **Clade routing gate / Pi handshake NEVER 讓 Cursor 主線無法呼叫 `cursor-ide-browser`。** 豁免清單與 fail-open 契約在 `plugins/hub-core/hooks/pre-tool-routing-gate.sh` 檔頭，由 `test/pi-routing-gate.test.ts` 釘住。
+
+非 Cursor（AI Agent 等）才走 `agent-browser`。
+
 ## 停下來要人做之前（agent 與人的邊界，先於一切派工判定）
 
 上一節決定「主線做還是派出去」，本節決定**更前面**的一件事：這件事到底該不該離開 agent。
@@ -345,6 +358,8 @@ Routing Table 決定誰**寫** code，本節決定誰**持有長 session**（成
 2. query／公開URL／fetch prompt只以hash進state／receipt；含credential、signed token、private-network或secret material時fail closed，Pi與direct built-in都不放行，改用authenticated first-party connector或本機redacted source。
 
 **例外清單是窮舉的**：**唯一的一般 waiver** 是使用者明確要求direct built-in web tooling，且`user-explicit-mainline` receipt綁定原tool kind與candidate。「單一已知URL」不是例外。
+
+**本節射程只涵蓋 AI Agent 內建的 `WebSearch` / `WebFetch`。** `cursor-ide-browser`（`browser_navigate` 等）與 `cursor-app-control` **不是**這兩支 tool，**NEVER** 套本節去擋 IDE browser。Cursor 環境的開頁契約見 § Cursor 環境的 browser 載體。
 
 **NEVER 拿本規約的 rationale 推翻本規約的字面。** 壓力測試見`vendor/snippets/rule-authoring/scenarios/web{search,fetch}-direct-call.md`。
 

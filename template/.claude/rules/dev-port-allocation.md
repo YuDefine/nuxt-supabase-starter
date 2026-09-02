@@ -43,7 +43,7 @@ Local edits will be reverted by the next sync.
 
 凡 consumer 用 `vite-plugin-cloudflare-tunnel` 開 dev tunnel：
 
-- **MUST** Hostname 走 `<consumer-id>-dev.<maintainer-domain>`（org convention；既有對齊：`<consumer-k>-dev` / `<consumer-b>-dev` / `<consumer-a>-shared-dev` / `<consumer-i>-dev`）
+- **MUST** Hostname 走 `<consumer-id>-dev.<maintainer-domain>`（org convention；既有對齊：`<consumer-j>-dev` / `<consumer-b>-dev` / `<consumer-a>-shared-dev` / `co-purchase-dev`）
 - **NEVER** 自由發揮挑其他 zone（如 `bigbyteedu.com` / 個人域名）— 即使 DNS / tunnel 建得起來，plugin 仍會因 token-zone account 不匹配 403 crash Nuxt
 - **MUST** `.env.local` 設三件套：
 
@@ -54,7 +54,7 @@ Local edits will be reverted by the next sync.
   ```
 
 - **MUST** Token 用 `cfat_*` account API token，**絕非** `cfut_*`（Worker token）或 `r_*`（cert.pem 簽發的 tunnel-scoped token）
-  - 來源 1：<consumer-k> `.env.local` 的 `CLOUDFLARE_API_KEY`（既有可用）
+  - 來源 1：<consumer-j> `.env.local` 的 `CLOUDFLARE_API_KEY`（既有可用）
   - 來源 2：Notion `Scrects` → Cloudflare → YuDefine（待補；目前只列 cfut_）
   - 必備權限：`Cloudflare Tunnel:Edit`（account）+ `SSL and Certificates:Edit`（zone）+ `DNS:Edit`（zone）
   - **必要**：`SSL and Certificates:Edit` — plugin `dist/index.mjs:617` 必跑 `/zones/<id>/ssl/certificate_packs` GET 確認 edge cert，403 會 re-throw crash Nuxt（即使 Cloudflare Universal SSL 已涵蓋）
@@ -97,7 +97,7 @@ Wrapper 把這條鏈在第一步切斷：token verify 失敗 → log warn → �
 凡量測透過 `vite-plugin-cloudflare-tunnel` 開的 dev tunnel 頁面載入效能（人工或 agent CDP）：
 
 - **NEVER** 量測前 `clearBrowserCache` / `setCacheDisabled(true)` — 會強制走全新冷載入，把瀏覽器本機快取的 immutable dep 全部重抓。Vite dev 對 `?v=<hash>` 的 node_modules dep 送 `Cache-Control: max-age=31536000, immutable`；一個 Nuxt + @nuxt/ui v4 dev 頁面拆成 ~300–950 個 ES module 請求，cold 經 tunnel 逐一往返受 cloudflared 並發吞吐限制 → 30–60s，量測窗內看似 `pending` / hang
-- **MUST** 量「warm」反映日常情境：第一次載入 populate 瀏覽器快取（不計時）→ 第二次載入（不清快取）量 hydrate 時間。warm 數秒內 hydrate（實測 <consumer-i> 6.3s）= 正常；只有全新裝置 / 快取過期 / 無痕才會慢
+- **MUST** 量「warm」反映日常情境：第一次載入 populate 瀏覽器快取（不計時）→ 第二次載入（不清快取）量 hydrate 時間。warm 數秒內 hydrate（實測 co-purchase 6.3s）= 正常；只有全新裝置 / 快取過期 / 無痕才會慢
 - **NEVER** 把 cold 載入慢判成 tunnel 壞掉 → 一路試 CF cache rule `cache:false` / cloudflared `--protocol http2` / `keepAliveConnections` / 移 plugin / 降版（實證全無效）。慢 vs 快是 cache-warmth 連續譜，不是 broken 二元判斷
 - **MAY** 減少 cold-load 模組數：`import { x } from '@nuxt/ui/locale'` barrel import 會拉進整包 62 語言檔；改公開 subpath deep-import（`import x from '@nuxt/ui/runtime/locale/<lang>.js'`）只載需要的 locale
 
@@ -184,12 +184,12 @@ Tunnel hostname 是 **per-consumer 單一資源**（§2.5 的 `<consumer-id>-dev
 | <consumer-c> | 3010 | 4300–4349 |
 | <consumer-d> | 3060 | 4350–4399 |
 | <consumer-b> | 3000 | 4400–4449 |
-| <consumer-k> | 3050 | 4450–4499 |
-| <consumer-i> | 3070 | 4500–4549 |
-| <consumer-l> | 3080 | 4550–4599 |
+| <consumer-j> | 3050 | 4450–4499 |
+| co-purchase | 3070 | 4500–4549 |
+| <consumer-k> | 3080 | 4550–4599 |
 | <consumer-e> | 3090 | 4650–4699 |
 | <consumer-g> | 3100 | 4600–4649 |
-| <consumer-j> | 3110 | 4700–4749 |
+| <consumer-i> | 3110 | 4700–4749 |
 | <consumer-f> | 3030 | 4750–4799 |
 | clade | — (source-of-truth，非 Nuxt consumer) | — |
 

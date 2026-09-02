@@ -69,7 +69,7 @@
  *
  * 2026-07-28: that is exactly how `nuxt-supabase-starter` Template CI broke on
  * `vp fmt --check` over `vendor/snippets/manual-review-enforcement/patterns.json`
- * — <consumer-k> and <consumer-i> had each independently patched `vendor/**`
+ * — <consumer-j> and co-purchase had each independently patched `vendor/**`
  * into their own vite.config.ts, which hid the gap instead of closing it.
  * `scripts/audit-governance-drift.ts` check 10 now fails on any config that
  * re-inlines one of these, so the next gap surfaces before a consumer does.
@@ -183,7 +183,7 @@ export function isProjectionPath(file: string): boolean {
  * 為什麼一定要濾：`vp lint` / `vp fmt` 對「輸入路徑**全部**被 ignore」回 exit 1，訊息是
  * `No files found to lint`，長得像路徑打錯。而 `propagate.ts` 走
  * `git commit --only -- <clade-paths>`，它 commit 的**必然全是投影檔** —— 沒濾的 consumer
- * 每一趟 propagate 都站在觸發線上（2026-08-26 v1.11.84：<consumer-i> 整個 pre-commit 掛，
+ * 每一趟 propagate 都站在觸發線上（2026-08-26 v1.11.84：co-purchase 整個 pre-commit 掛，
  * propagate 回 failed，TD-670）。
  *
  * **NEVER 在這裡加 `'*.md'` 那一格**：`fmtBase.ignorePatterns` 含 `'**\/*.md'`，所以

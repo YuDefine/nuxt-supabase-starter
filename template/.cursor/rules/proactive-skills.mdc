@@ -137,9 +137,11 @@ Auto-triage 的三類 pending item 路由、`[discuss]` item 的歸屬、review-
 
 詳見 [[screenshot-strategy]]。
 
-### agent-browser Worktree Verify Auth（hard rule）
+### Browser Worktree Verify Auth（hard rule）
 
-agent-browser 開 auth-protected URL 前 **MUST** 完成 pre-auth（port 3000 singleton + `__test-login?role=admin&email=...`），**NEVER** 截到空白頁後才開始診斷 auth。完整 cookbook 見 `~/offline/clade/vendor/snippets/agent-browser-auth/README.md`。Pitfall ref: `docs/pitfalls/2026-06-24-agent-browser-auth-blank-page-on-alt-port.md`。
+開 auth-protected URL 前 **MUST** 完成 pre-auth（port 3000 singleton + `__test-login?role=admin&email=...`），**NEVER** 截到空白頁後才開始診斷 auth。
+
+**載體**：Cursor 環境用 `cursor-ide-browser` 開同一個 `__test-login` URL；非 Cursor 才 `agent-browser`。完整 cookbook 見 `~/offline/clade/vendor/snippets/agent-browser-auth/README.md`（開頭有 Cursor 分流）。Pitfall ref: `docs/pitfalls/2026-06-24-agent-browser-auth-blank-page-on-alt-port.md`。
 
 ## Knowledge And Decisions
 

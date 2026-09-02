@@ -99,7 +99,7 @@ export default defineConfig({
 commit 時 staged 混有業務檔，有東西可 lint 就不報錯；而 `propagate.ts` 走 partial-commit
 （`git commit --only -- <clade-paths>`），**它 commit 的必然全是投影檔**。沒濾的 consumer
 每一趟 propagate 都站在觸發線上，只差那輪有沒有動到被 ignore 的路徑（2026-08-25 v1.11.80：
-<consumer-i> 只 staged 到 `.clade/vendor/scripts/flow/{flow,serve}.ts`，pre-commit 掛、
+co-purchase 只 staged 到 `.clade/vendor/scripts/flow/{flow,serve}.ts`，pre-commit 掛、
 propagate 回 `failed`，而同樣的洞當時在另外 7 台開著）。
 
 機械檢查：`node scripts/audit-governance-drift.ts` check 16 掃 clade + 全 consumer 的
@@ -434,7 +434,7 @@ export default defineConfig({
 })
 ```
 
-**NEVER 手寫一份平行的目錄清單**（`f.startsWith('.cursor/rules/') && …` 那種形狀）。手寫清單必然漂移：它只長出「當下踩到的那個目錄」，而 `PROJECTION_EXCLUDES` 現在有七條（`.claude/` `.clade/` `.spectra/` `vendor/` `.agents/` `.codex/` `.cursor/`）。nuxt-supabase-starter 漏 `vendor/` 連擋三次交付（[[TD-310]]）；<consumer-i> 漏 `.clade/` 讓 v1.11.94 propagate 連兩趟 `failed`（[[TD-670]]、[[TD-770]]）。preset 這份清單一改，所有 re-export 的 consumer 自動跟上。
+**NEVER 手寫一份平行的目錄清單**（`f.startsWith('.cursor/rules/') && …` 那種形狀）。手寫清單必然漂移：它只長出「當下踩到的那個目錄」，而 `PROJECTION_EXCLUDES` 現在有七條（`.claude/` `.clade/` `.spectra/` `vendor/` `.agents/` `.codex/` `.cursor/`）。nuxt-supabase-starter 漏 `vendor/` 連擋三次交付（[[TD-310]]）；co-purchase 漏 `.clade/` 讓 v1.11.94 propagate 連兩趟 `failed`（[[TD-670]]、[[TD-770]]）。preset 這份清單一改，所有 re-export 的 consumer 自動跟上。
 
 漏濾的症狀認得出來但不像成因：`vp lint` / `vp fmt` 對「輸入路徑**全部**被 ignore」回 **exit 1**，訊息是 `No files found to lint` —— 看起來像路徑打錯，不像被 ignore 排除。
 
@@ -517,7 +517,7 @@ pnpm exec vp fmt --migrate=prettier  # 從既有 prettier config 遷移（若有
   2. **inlineDrift** — 未 import preset 時，inline 寫死的 fmt baseline 欄位（`trailingComma`、`semi`、`singleQuote`、`printWidth` 等 11 項）與 baseline 不一致的 entries
   - 用法：`node scripts/audit-tooling-drift.ts [--markdown|--json]`；diagnostic-only，exit code 永遠 0；HANDOFF §4 baseline 由此 script 維護
   - 後續擴充至 7 個 signal（`structuralDrift` / `strayDotfiles` / `viteplusLocal` / `pnpmOrphans` / `eslintDeps`）
-- `scripts/audit-tooling-drift.ts` `eslintDeps` signal：掃每個 consumer `package.json` deps/devDeps 是否含本節禁用的 eslint / prettier 套件（`eslint` / `@nuxt/eslint*` / `@typescript-eslint/*` / `eslint-config-*` / `eslint-plugin-*` / `prettier` / `prettier-plugin-*`）→ 列為 `forbidden-deps-present`。warn-only，源於 <consumer-k> + <consumer-i> 採 Vite+ 後移除 `@nuxt/eslint`
+- `scripts/audit-tooling-drift.ts` `eslintDeps` signal：掃每個 consumer `package.json` deps/devDeps 是否含本節禁用的 eslint / prettier 套件（`eslint` / `@nuxt/eslint*` / `@typescript-eslint/*` / `eslint-config-*` / `eslint-plugin-*` / `prettier` / `prettier-plugin-*`）→ 列為 `forbidden-deps-present`。warn-only，源於 <consumer-j> + co-purchase 採 Vite+ 後移除 `@nuxt/eslint`
 
 ### 建議擴充（尚未實作）
 
@@ -565,7 +565,7 @@ pnpm exec vp fmt --migrate=prettier  # 從既有 prettier config 遷移（若有
 **這個壞形狀的訊號極弱，所以要靠稽核而不是靠人看出來**：`pnpm test` 單獨跑正常、CI 綠、
 `--stat` 正常，只有 `pnpm test <檔名>` 這種用法才炸，而錯誤訊息 `sh: 1: Syntax error: word
 unexpected` 指向 shell、完全看不出真因。2026-08-29 TD-685 relay 實測：**5 個 consumer 的
-session 各自獨立寫出同一個壞形狀**，只有一個（<consumer-j>）在 review 階段實跑帶參數的形式
+session 各自獨立寫出同一個壞形狀**，只有一個（<consumer-i>）在 review 階段實跑帶參數的形式
 才抓到。§ 3b 的 `⚠ 吃不掉參數` 就是這一格。
 
 **這一格有稽核**：`node scripts/audit-gate-coverage.ts` § 3b 逐 consumer 印出上表四條 script

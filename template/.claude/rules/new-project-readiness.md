@@ -58,7 +58,7 @@ Local edits will be reverted by the next sync.
 
 | check | 事故 |
 | --- | --- |
-| `consumer-meta.identity` | 2026-08-24 <consumer-i>：`.claude/consumer-meta.json` 整份從 nuxt-supabase-starter 複製來，consumerId 冒名、auth/database/deploy 全 none。release-gate 判 undeclared，verification-lease／db-reset-coordination／dev-server-spawn 全部讀到與事實相反的宣告 |
+| `consumer-meta.identity` | 2026-08-24 co-purchase：`.claude/consumer-meta.json` 整份從 nuxt-supabase-starter 複製來，consumerId 冒名、auth/database/deploy 全 none。release-gate 判 undeclared，verification-lease／db-reset-coordination／dev-server-spawn 全部讀到與事實相反的宣告 |
 | `artifacts.not-tracked` | 同上：`coverage/` 進版控，`vitest --coverage` 每跑一次重寫整棵目錄，44 檔 5999 行填滿 code review 的 6000 行 budget——該次 review 一行產品程式碼都沒讀到，卻輸出了外觀正常的 verdict |
 | `cloudflare.compat-flags` | 同上：Nuxt(framework) 的 `compatibility_flags` 缺 `no_nodejs_compat_v2`。[[cloudflare-workers]] §3.2 早就是 hard rule，缺的是有人擋 |
 | `cloudflare.local-dev-binding-declared` | 同上 TD-003：wrangler ↔ workerd handshake 永久 hang，Nitro 的 cloudflare-dev plugin 把失敗 `.catch()` 成空 stub env——失敗與「這個專案沒有 binding」外觀相同，所有碰 D1／R2 的 route 回 500，22 條人工檢查一格都驗不了 |

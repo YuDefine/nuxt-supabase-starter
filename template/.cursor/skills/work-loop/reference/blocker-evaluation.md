@@ -69,9 +69,9 @@ HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
 **NEVER** 寫「需 attended」這種形容詞——形容詞每一輪都會被重新「發現」一次，而 predicate 有解除條件、
 可以進 [blocker-ledger.md](blocker-ledger.md) 查表，下一輪不必重判。
 
-#### 2026-08-22 端到端實測（<consumer-k>）——為什麼現在只剩三條
+#### 2026-08-22 端到端實測（<consumer-j>）——為什麼現在只剩三條
 
-首版有 probe 1–3（第 3 條量 dispatcher binary），2026-08-22 在 <consumer-k>
+首版有 probe 1–3（第 3 條量 dispatcher binary），2026-08-22 在 <consumer-j>
 （`shape: canonical`、`emailRequired: false`、`stackHint: libsql-drizzle`）跑完整鏈路：
 
 - **鏈路本身是通的**：dev-session 起 3050 → 手組 items（2 個真 `[verify:ui]` item）→ collector

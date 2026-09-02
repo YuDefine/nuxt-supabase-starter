@@ -11,6 +11,10 @@ Local edits will be reverted by the next sync.
 
 此規則優先於個別 skill 內嵌的「請 user 確認」捷徑指示；every session always-load。
 
+## Browser 載體（Cursor vs 非 Cursor）
+
+開網頁／截圖／登入頁之前 **MUST 先讀 [[agent-routing]] § Cursor 環境的 browser 載體**——環境 predicate、該用哪個載體、以及全部 NEVER 都在那一節。**不要寫死 `agent-browser`。** 本檔 **NEVER** 複寫該節內文：L69 同型複本曾寫成相反方向、隨投影散到全 fleet 十一個 consumer。
+
 ## 證據鑑別力（先於下方每一條 NEVER / MUST）
 
 驗收引用的證據 E，MUST 能回答「若被驗命題為假，E 會長什麼不一樣？」——答不出或答案是「一樣」→ E 不是證據，換一個在兩個世界會分岔的觀測。**status code、exit code、「檔案存在」、工具自我宣告、來自常數宣告而非量測的數字，預設視為未分岔訊號**。MUST 11 / 16 / 19 是本條的三個實例；新形態回到上面那句自判。降級路徑觸發時 MUST loud（warning / health degraded），讓假世界主動分岔。實證三例見 [[pitfall-empty-state-screenshot-has-no-discriminating-power]]。
@@ -87,7 +91,7 @@ baseline 只存在於某次 session 記憶裡時，下一個讀 gate 的人算�
 2. **撞 baseline functional gap** → 走 [[main-self-collect-fallback-chain]] 四層：
    - (a) 擴 dev-login route allow-list
    - (b) service_role direct DB query 證 data shape（annotation 標 `direct-db-shape`）
-   - (c) 主線自起 dev server + agent-browser self-login
+   - (c) 主線自起 dev server + 依環境開 browser self-login（Cursor → `cursor-ide-browser`；非 Cursor → `agent-browser`）
    - (d) 派 screenshot-review codex `mode: verify`
 3. **寫 `(deferred: ...)` annotation MUST 含 failure trail**：逐層列出 (a)(b)(c)(d) 的嘗試結果，缺任一層就不是合格 annotation。逐字範例見 [[agent-self-verification.screenshot-evidence]] MUST 3。
 4. **工具呼叫前 verify CLI contract**：對 vendor script / external CLI，呼叫前 grep `Usage:` / `--help` / source 確認 flag / stdin / env var。`Usage:` 出現在 stderr = argv 錯，root cause 在 dispatcher source，**不**是 user 端設定。
@@ -95,7 +99,7 @@ baseline 只存在於某次 session 記憶裡時，下一個讀 gate 的人算�
    **`--help` 不是天生安全的探測手段。** 對**沒有**解析 `--help`、也**沒有** unknown-flag 檢查的 script，`--help` 等同無參數執行 —— 探測動作本身就是那個危險動作。因此 **MUST 先讀 source 確認它對 unknown flag 的處置**（報錯退出？忽略照跑？）再決定怎麼探測；shim 檔要一路追到實作端（45 行的轉呼叫 shim 看起來人畜無害，危險的是它背後那支實作）。**NEVER** 對這類 script 用 `| head -N` 限制輸出量 —— 那會把它腰斬在中途（per [[checker-contract]] § 上游具副作用時，提前退出命令會把它腰斬）。
 5. **verify:ui / verify:e2e evidence 的 fixture MUST 在 seed.sql**：fixture 缺就先寫進 `seed.sql` → `pnpm supabase:sync` → `pnpm db:reset` 再拍。**NEVER** 用 `curl POST` / `$fetch` / form submit 臨時建 ephemeral data 拍截圖。理由與流程見 [[agent-self-verification.screenshot-evidence]] MUST 5。
 6. **Worktree .env 驗證（hard rule）**：在 worktree 做 verify channel evidence collection 時，item 依賴的 env var **MUST** 先 `grep -i '<VAR_NAME>' .env.local` 確認存在且有值，**NEVER** 假設 worktree env 缺失而寫 `blocked on <VAR>`。繼承機制與成本對比見 [[agent-self-verification.screenshot-evidence]] MUST 6。
-7. **截圖 + 驗證不可分割（atomic screenshot-then-verify，hard rule）**：`agent-browser screenshot` / Playwright screenshot **MUST** 在同一個 Bash 呼叫內緊接驗證，**NEVER** 分成兩個獨立 tool call（分開 = 中間可被跳過）。驗證失敗 = 截圖作廢，**MUST** 修根因後重拍，**NEVER** 帶著失敗截圖寫 annotation。**(a)–(e) 五層的 canonical bash、逐項驗法與 auth 非 200 立即停手，見 [[agent-self-verification.screenshot-evidence]] MUST 7 —— 開始收截圖 evidence 之前 MUST 先讀那一節。**
+7. **截圖 + 驗證不可分割（atomic screenshot-then-verify，hard rule）**：Cursor 環境用 `cursor-ide-browser` 的 snapshot／screenshot **MUST** 與驗證同一輪、不可分割；非 Cursor 的 `agent-browser screenshot` / Playwright screenshot **MUST** 在同一個 Bash 呼叫內緊接驗證，**NEVER** 分成兩個獨立 tool call（分開 = 中間可被跳過）。驗證失敗 = 截圖作廢，**MUST** 修根因後重拍，**NEVER** 帶著失敗截圖寫 annotation。**(a)–(e) 五層的 canonical bash、逐項驗法與 auth 非 200 立即停手，見 [[agent-self-verification.screenshot-evidence]] MUST 7 —— 開始收截圖 evidence 之前 MUST 先讀那一節。**
 
 8. **review:ui 既有 `[x]` 需 agent 自拍 evidence 佐證（hard rule）**：archive / 收尾前，任何 `[review:ui]` 的既有 `[x]` 若無對應 agent 自拍 screenshot evidence → 一律視為 **false-green**。主線 **MUST** 無視 checkbox state 自拍自驗，**NEVER** 假設 user 手上有截圖、**NEVER** 信任前 session 代勾。evidence 路徑格式、「自拍是 bug-catcher」與 route mapping 延伸規約見 [[agent-self-verification.screenshot-evidence]] MUST 8。
 
@@ -103,7 +107,7 @@ baseline 只存在於某次 session 記憶裡時，下一個讀 gate 的人算�
 
 10. **部署宣稱需交叉核對**：宣稱部署平台 / runtime 時，**MUST** 核對 `.github/workflows/` deploy job + deploy config（`wrangler.toml` / `Dockerfile`）+ `package.json` scripts。**NEVER** 只引單一 `docs/` 文件。
 
-    **開始調查 production 之前先釘 canonical tuple**：讀任何設定 / 查任何 log / 提任何修正**之前**，**MUST** 先確認四項並寫出來——repo、framework、hosting platform、domain。**NEVER** 從當前工作目錄推斷是哪個 production 專案：cwd 只說明你在哪個 checkout 裡，不說明它部署到哪、甚至不說明它有沒有部署。四項有任一項答不出來，就還沒到可以動手的階段。（<consumer-l> 2026-07-14 實證）
+    **開始調查 production 之前先釘 canonical tuple**：讀任何設定 / 查任何 log / 提任何修正**之前**，**MUST** 先確認四項並寫出來——repo、framework、hosting platform、domain。**NEVER** 從當前工作目錄推斷是哪個 production 專案：cwd 只說明你在哪個 checkout 裡，不說明它部署到哪、甚至不說明它有沒有部署。四項有任一項答不出來，就還沒到可以動手的階段。（<consumer-k> 2026-07-14 實證）
 
 11. **Negative search 不成立為證據（hard rule）**：下「零命中 / 不存在 / 只有 N 個」的結論前，**MUST** 先用一個已知會命中的樣本驗過 pattern（known-positive control），並在結論裡寫出「此 pattern 對 `<已知樣本>` 命中」——寫不出來，零命中就不是證據。**NEVER** 把「我 grep 過了」當成 absence 的證明：pattern 寫錯、資料形狀誤判（表格儲存格繼承 / 多種寫法 / 跨行屬性 / 別名 import）、未言明的假設偷偷收窄範圍，三者的輸出**都是零命中**，跟真的不存在外觀完全相同，而換一個工具重跑同一個 pattern 驗不到任何一項。有 structured output（`--json` / `--format json`）時優先用它取代文字 grep；更前一步是先問「有沒有不需要數的判準」（例：gate 已設 `severity: CRITICAL,HIGH`，則輸出的每一條依定義都是 HIGH，根本不必數）。（per [[pitfall-narrow-grep-absence-treated-as-proof]]）
 
@@ -119,10 +123,12 @@ baseline 只存在於某次 session 記憶裡時，下一個讀 gate 的人算�
 
 16. **驗收對象需要登入態時，MUST 用真瀏覽器走到底並斷言登入後狀態（hard rule）**：只要被驗的流程**需要 session 才會顯示正確結果**（登入後頁面、帶權限的 API 經瀏覽器呼叫、任何「登入 → 跳轉 → 落地頁」鏈路），**MUST** 用真瀏覽器點完整條鏈路，並斷言**登入後**的 DOM 狀態——不是斷言狀態碼、不是斷言 `href` 字串。可觀察的最小斷言組：落地頁 `location.href` 是預期路徑、`document.querySelector('input[type=password]')` 為 `null`、以及一個只有登入後才存在的元素。
 
-    ```bash
-    agent-browser open '<login-url>'
-    agent-browser eval "JSON.stringify({url: location.href, hasLoginForm: !!document.querySelector('input[type=password]')})"
-    ```
+ Cursor 環境用 `cursor-ide-browser` 的 snapshot / `browser_cdp` Runtime.evaluate；非 Cursor 才用：
+
+ ```bash
+ agent-browser open '<login-url>'
+ agent-browser eval "JSON.stringify({url: location.href, hasLoginForm: !!document.querySelector('input[type=password]')})"
+ ```
 
     **NEVER** 拿 curl 的狀態碼當帶認證流程的證據：curl 完全不理會 cookie 的 `Secure` 屬性，所以經 plain-HTTP origin 登入時「302 → redirect target → 落地頁 200」三個訊號**全部正常**，而瀏覽器早已把 cookie 靜默丟棄。`SameSite` 與 secure-context-only 的 Web API 同型（機制全文見 rationale）。
 

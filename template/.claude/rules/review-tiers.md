@@ -19,6 +19,7 @@ Local edits will be reverted by the next sync.
 - **Tier 1**：小型、低風險、非敏感變更
 - **Tier 2**：中型以上功能變更、跨多檔案、行為可能回歸
 - **Tier 3**：高風險變更，例如 migration / auth / permission / RLS / raw SQL / billing / security
+  - `SECURITY.md`（安全憲法）本身是 Tier 3 路徑；動任何 Tier 3 路徑前先對照它的 § 安全不變量（形狀契約見 [[security-policy]]）
 
 ## 觸發判斷
 

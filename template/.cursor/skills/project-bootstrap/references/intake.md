@@ -23,6 +23,8 @@
 | `cloudflare-nuxthub-ai` | NuxtHub D1 | Cloudflare Workers | Better Auth | simple | nuxthub-ai | `db-schema=cf-d1`, `db-runtime=cf-workers`, `runtime=cf-workers` |
 | `vercel-supabase` | Supabase | Vercel | nuxt-auth-utils | simple | baseline | `db-schema=supabase`, `db-runtime=cf-workers`, `runtime=vercel-node` |
 | `self-hosted-node` | Supabase | Node server | nuxt-auth-utils | advanced | baseline | `db-schema=supabase-self-hosted`, `db-runtime=supabase-self-hosted`, `runtime=nitro-self-hosted` |
+
+`self-hosted-node` 的 `deploy_track` **NEVER** 默默抄 `wrangler-action`。無公網 HTTPS prod DB URL → `deployTrigger=none`，deploy-track **不得**宣告 `compliant`。`verify-channels=full` 需要 `dev-login=adopted`；dev-login 仍 `none` 時宣告 full 必須 fail-loud。
 | `minimal` | none at scaffold | Cloudflare Workers | none | simple | none | 只適合明確要求最小專案；後續加 DB/auth 時重跑 module review |
 
 starter source of truth 是 `packages/create-nuxt-starter/src/presets.ts` 與 CLI `--help`；表格和實跑不一致時以 source/CLI 為準，停止並修本 reference。
@@ -33,6 +35,7 @@ starter source of truth 是 `packages/create-nuxt-starter/src/presets.ts` 與 CL
 
 - `user-lifecycle`：系統會管理可停用/離職/刪除的正式使用者時才選。
 - `audit-trail`：法遵、不可竄改證據或高價值交易需要時才選 d-pattern。
-- `deploy-track`：starter preset 已決定初值；若實際部署平台不同才覆寫。
+- `deploy-track`：starter preset 已決定初值；若實際部署平台不同才覆寫。`self-hosted-node` **NEVER** 抄 `wrangler-action`。無公網 HTTPS prod DB → 保持 `deployTrigger=none`，deploy-track 不得 `compliant`。
+- `verify-channels`：不得在 `dev-login` 仍 `none` 時宣告 `full`（hard dependency；`convention-conformance-audit.ts --gate` 會擋）。
 - `preview_db` / `data_branching`：團隊已要求 PR 隔離資料環境時才升級，否則先 `none`。
 - `canary_eligible`：只有壞掉不會擋到人的 repo 才設 true，不以「新專案」自行推論。

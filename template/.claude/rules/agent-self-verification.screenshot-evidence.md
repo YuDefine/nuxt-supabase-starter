@@ -16,6 +16,8 @@ Local edits will be reverted by the next sync.
 
 主檔的四條一句話 MUST 是契約，本檔是它們的執行細節與 canonical pattern。兩邊衝突時以主檔為準。
 
+**載體分流**（與主檔 § Browser 載體、[[agent-routing]] § Cursor 環境的 browser 載體 同一契約）：Cursor 環境用 `cursor-ide-browser`；非 Cursor 才用下方 `agent-browser` canonical bash。**NEVER** 在 Cursor 主線把本檔的 `agent-browser` 指令讀成唯一合法路徑。
+
 ## MUST 3 — `(deferred: ...)` annotation 的 failure trail 格式
 
 逐層列出 (a)(b)(c)(d) 的嘗試結果。逐字範例：
@@ -43,7 +45,7 @@ Step 8a evidence collection 發現 seed 缺 fixture（verify item 引用的 enti
 
 ## MUST 7 — 截圖 + 驗證不可分割（atomic screenshot-then-verify）
 
-`agent-browser screenshot` / Playwright screenshot **MUST** 在同一個 Bash 呼叫內緊接驗證，**NEVER** 分成兩個獨立 tool call（分開 = 中間可被跳過）。驗證失敗 = 截圖作廢，**MUST** 修根因後重拍，**NEVER** 帶著失敗截圖寫 annotation。
+`agent-browser screenshot` / Playwright screenshot **MUST** 在同一個 Bash 呼叫內緊接驗證，**NEVER** 分成兩個獨立 tool call（分開 = 中間可被跳過）。驗證失敗 = 截圖作廢，**MUST** 修根因後重拍，**NEVER** 帶著失敗截圖寫 annotation。Cursor 環境改走 `cursor-ide-browser` 的 snapshot／screenshot，同一輪內完成驗證，**NEVER** 因此改派 Playwright。
 
 **Canonical pattern（agent-browser，直接複製）**：
 
@@ -91,7 +93,7 @@ echo "PASS: ${SIZE} bytes + DOM verified"
 
 ## MUST 8 — review:ui 既有 `[x]` 需 agent 自拍 evidence 佐證
 
-archive / 收尾前，任何 `[review:ui]` 的既有 `[x]` 若無對應 agent 自拍 screenshot evidence（`screenshots/local/<change>/#<id>-*.png`）→ 一律視為 **false-green**。主線 **MUST** 無視 checkbox state，自起 dev server + agent-browser 自拍自驗（跨 session 也自足），**NEVER** 假設 user 手上有截圖、**NEVER** 信任前 session 代勾。
+archive / 收尾前，任何 `[review:ui]` 的既有 `[x]` 若無對應 agent 自拍 screenshot evidence（`screenshots/local/<change>/#<id>-*.png`）→ 一律視為 **false-green**。主線 **MUST** 無視 checkbox state，自起 dev server + 依環境自拍自驗（Cursor → `cursor-ide-browser`；非 Cursor → `agent-browser`；跨 session 也自足），**NEVER** 假設 user 手上有截圖、**NEVER** 信任前 session 代勾。
 
 **「自拍」動作本身是 bug-catcher** — 要拍就得真的開該頁 / 操作該流程，一開就撞出被 checkbox 掩蓋的 bug（route 404 / mapping mismatch / 空狀態）。
 

@@ -17,9 +17,12 @@ Local edits will be reverted by the next sync.
 
 ## 工具選擇
 
+Cursor 環境（見 [[agent-routing]] § Cursor 環境的 browser 載體）**MUST** 用 `cursor-ide-browser`，本表的 `agent-browser` / Playwright 列只適用非 Cursor。**NEVER** 在 Cursor 主線把本表讀成「必須 agent-browser」。
+
 | 工具 | 何時優先使用 | 特性 |
 | --- | --- | --- |
-| `agent-browser`（自管 persistent-profile Chromium，CDP） | 一次性驗收、探索、debug、人工檢查 | 快、互動成本低、persistent profile 繼承登入 cookie、平行 `--session` 原生隔離、CLI + MCP 雙模 |
+| `cursor-ide-browser` | **Cursor 主線**開頁、登入、截圖 | IDE 可控 Chromium；Google 不會 `signin/rejected` |
+| `agent-browser`（自管 persistent-profile Chromium，CDP） | 非 Cursor 的一次性驗收、探索、debug、人工檢查 | 快、互動成本低、persistent profile 繼承登入 cookie、平行 `--session` 原生隔離、CLI + MCP 雙模 |
 | Playwright CLI / spec | 響應式、多 viewport、跨瀏覽器、多分頁、CI 回歸 | 可重現、可沉澱 |
 
 ## Browser automation 工具路由（三條線別混）

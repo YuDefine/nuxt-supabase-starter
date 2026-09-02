@@ -309,7 +309,7 @@ for (const c of await m.listPendingChanges('<repo>'))
 | 消費端 | 寫該條目的 agent（收自動退回，照上表處置）＋ `/decisions` 與 `flow pending` 上的 Charles（看到 `✎ 這條把 live change 的 ## 人工檢查 寫成 HANDOFF 條目` 可以跳過不讀） |
 | 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`——寫那條 bullet 正是在編輯這兩個檔） |
 
-> 2026-08-28 成因：<consumer-j> 的 `product-save-hardening` 四條 `## 人工檢查` 都宣告
+> 2026-08-28 成因：<consumer-i> 的 `product-save-hardening` 四條 `## 人工檢查` 都宣告
 > `[verify:api+ui]`，實際每條只寫了一種 evidence，於是 change 停在 `readyForEvidence`
 > （`changeBelongsOnReviewInbox` 回 false，那是**Claude 球**的桶，刻意不畫進 inbox）。
 > 作者拿不到 `/review` 的票，就把「五條逐項確認」寫成 `## 需要 Charles 執行` 的 bullet——

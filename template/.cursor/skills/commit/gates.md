@@ -389,24 +389,37 @@ parent directory，讓刪除造成的邊界變化仍有上下文可分析：
 CLADE_ROOT="${CLADE_HOME:-$HOME/offline/clade}"
 node "$CLADE_ROOT/scripts/security-scan.ts" path \
   --target "$(git rev-parse --show-toplevel)" \
-  --max-cost 3 \
+  --effort high \
+  --max-cost <該 repo 的 preflight 地板 + 2，見 security-scan.md § 先量地板> \
   --path <sensitive-path-1> [--path <sensitive-path-2> ...]
 ```
+
+wrapper 在 target 有 `SECURITY.md`（安全憲法，[`security-policy.md`](../../../../rules/core/security-policy.md)）
+時自動加 `--knowledge-base`，ledger 落在 target 自家 `docs/evidence/security-scan-ledger.jsonl`
+——**那個 ledger 檔併入本次 commit 的 selective stage**，不留成 dirty。target 沒有 `SECURITY.md`
+時 wrapper 印一行 pointer 後照掃（warn，不擋）；本次 Tier 3 path 含 `SECURITY.md` 本身時，
+掃完 MUST 重跑 `baseline`（憲法改了、舊 baseline 即過期）。
 
 固定版尚未安裝時，先跑一次 `node "$CLADE_ROOT/scripts/security-scan.ts" setup`，再重跑同一個
 path scan。這個 setup 是 idempotent operator setup，不把 scanner 加進 consumer dependency graph。
 
 ### Exit 分流
 
-| exit | 處置 |
-| --- | --- |
-| `0` | coverage complete 且無 High / Critical finding；輸出 `✅ 0-S 通過`，進 0-A。 |
-| `1` | 有 High / Critical finding；停止本次 commit，列出 report path 與 findings，修正後重跑 0-S。 |
-| `2` | coverage incomplete、auth / tool / infrastructure failure 或成本上限中止；停止本次 commit並如實回報，**NEVER** 宣稱掃描乾淨。 |
+exit 是 fail-closed 判定，`failure_class`（stdout 與 ledger 皆有）說明**為什麼**；兩者一起讀。
+放行條件與 `--max-cost` 怎麼給，見 [security-scan.md](security-scan.md)。
+
+| exit | failure_class | 處置 |
+| --- | --- | --- |
+| `0` | `none` | coverage complete 且無 High / Critical finding；輸出 `✅ 0-S 通過`，進 0-A。 |
+| `1` | `findings-at-or-above-threshold` | 有 High / Critical finding；停止本次 commit，列出 report path 與 findings，修正後重跑 0-S。 |
+| `2` | `coverage-incomplete` | 掃描跑了但沒掃完；停止本次 commit 並如實回報，**NEVER** 宣稱掃描乾淨。 |
+| `2` | `tool-failure-no-artifacts` / `tool-timeout` | 工具故障，本次掃描等於沒發生；**MUST** 走 security-scan.md § 工具故障放行 的 `AskUserQuestion`，**NEVER** 自行放行或宣稱掃過。 |
+
+exit `1` 的每一條 High / Critical finding **MUST** 先走 `security-evidence finding`（Severity / Confidence / Coverage / Proof Gap 判讀），verdict 是 `accept` 或 `needs more validation` 才登 TD 並修；`unsupported` 記進 report 不修。**NEVER** 看到 High 標籤就直接改 code。
 
 Git pre-commit hook 只跑快速 LOCKED drift check。完整 repository 掃描另由 operator 明確執行
-`node "$CLADE_ROOT/scripts/security-scan.ts" baseline --target <repo> --max-cost 15`；它不會因一般
-commit 自動啟動，也不由 path scan 冒充。
+`node "$CLADE_ROOT/scripts/security-scan.ts" baseline --target <repo> --max-cost <見 security-scan.md>`；
+它不會因一般 commit 自動啟動，也不由 path scan 冒充。
 
 ---
 
