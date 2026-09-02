@@ -1,14 +1,9 @@
 {
   "packages": [
     {
-      "source": "git:github.com/YuDefine/clade@v1.11.109",
-      "skills": [
-        "plugins/hub-core/skills",
-        "plugins/hub-db-schema-supabase/skills",
-        "plugins/hub-ecosystem-node/skills",
-        "plugins/hub-framework-nuxt/skills",
-        "plugins/hub-runtime-cf-workers/skills"
-      ]
+      "source": "git:github.com/YuDefine/clade@v1.12.6",
+      "skills": [],
+      "extensions": []
     }
   ]
 }
