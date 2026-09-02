@@ -33,7 +33,7 @@ impeccable 是 1 個 skill 含 23 個 sub-command：`craft`（**v4 起為 deprec
 npx skills add pbakaus/impeccable --agent claude-code --copy -y
 ```
 
-**檢查**：`grep -m1 '^version:' .cursor/skills/impeccable/SKILL.md` 應為 `version: 4.1.1`；SKILL.md 的 `shasum -a 256` 應為 `9d124382509eb15da0862f145bca0e53be00aaddb05272e4efc9a0832de048a9`。
+**檢查**：`grep -m1 '^version:' .cursor/skills/impeccable/SKILL.md`，與上方對齊版本比對。**NEVER** 在本檔 inline 內容 hash——上游 HEAD 會動，而 inline 的那份沒有任何東西會來更新它。不符 → 跑 `references/impeccable-install.md § 升降版流程`，**NEVER** 直接改本檔的數字讓它「看起來對」。
 
 > **版本判定改看 frontmatter，不是只看 hash。** v4 起 SKILL.md 帶 `version:` frontmatter，直接讀得到；hash 仍列著是為了偵測同版本內的內容漂移。
 >

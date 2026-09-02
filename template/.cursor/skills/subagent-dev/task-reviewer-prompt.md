@@ -120,7 +120,7 @@ Agent tool (general-purpose):
 ```
 
 **Placeholders:**
-- `[MODEL]` — REQUIRED
+- `[MODEL]` — 預設省略（繼承主線）；只有併發 / auth / RLS 類才顯式填 `opus`
 - `[BRIEF_FILE]` — implementer 用的同一份 brief 檔
 - `[GLOBAL_CONSTRAINTS]` — 從 plan Global Constraints / spec **逐字**複製的 binding requirements（exact values / formats / 元件間關係；process 規則不用，模板已內建）
 - `[REPORT_FILE]` — implementer 的 report 檔

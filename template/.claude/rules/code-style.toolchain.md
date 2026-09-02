@@ -400,6 +400,7 @@ baseline 內容（自 `vendor/oxc-shared/preset.ts`）：
 - 在 consumer 端的 `vendor/oxc-shared/preset.ts` 投影檔直接改 — 下次 propagate 會覆蓋。要改 baseline → cd 到 clade 改 `vendor/oxc-shared/preset.ts` 再 propagate。
 
 
+```bash
 # Lint（修復可自動修復的問題）
 pnpm vp lint --fix
 

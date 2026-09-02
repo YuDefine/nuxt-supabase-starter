@@ -207,7 +207,7 @@ Consumer 的 CSP 設定 = **baseline**（上方 11 欄位）+ **所有用到的 
 ```ts
 'connect-src': [
   // ... baseline + 其他 ...
-  ...(process.dev ? ['ws:', 'wss:'] : []),  // dev-only：tunnel HMR
+  ...(import.meta.dev ? ['ws:', 'wss:'] : []),  // dev-only：tunnel HMR
 ],
 ```
 

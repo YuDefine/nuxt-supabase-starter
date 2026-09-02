@@ -12,7 +12,6 @@ Local edits will be reverted by the next sync.
 
 # Tech Debt Routing
 
-繁體中文
 
 **核心命題**：發現問題時要先問「修法落在哪一層」，再決定 TD 登記位置。否則同一條問題會在各 consumer 各自登一遍、互相不知道、修也修不完整。
 

@@ -313,7 +313,7 @@ Stack: Pinia Colada 1.3.1 + useFetch (mixed)
 
 ### Layer 1 — Rule Self-check Gate（寫 code 時）
 
-Rule 內含：**每次寫完新的 useFetch / useQuery / $fetch 呼叫後，MUST 對照 HR-1~HR-5 自查**。4.8 會字面遵守此指令。
+Rule 內含：**每次寫完新的 useFetch / useQuery / $fetch 呼叫後，MUST 對照 HR-1~HR-5 自查**。這條靠主線的字面遵守生效，沒有機械 gate 接住它——Layer 2 / 3 才是兜底。
 
 ### Layer 2 — Code Review Cross-check（review 時）
 

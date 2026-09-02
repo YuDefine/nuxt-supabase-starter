@@ -1138,7 +1138,7 @@ git add evlog.map.json
 
 ## § 0-F: 最佳實踐交叉比對（條件觸發、主線 foreground）
 
-clade 有 13 條登記在 `registry/conventions.json` 的最佳實踐、58 個 cookbook。0-F 問的是「這次新增的東西，是不是既有資產已經涵蓋 / 該不該登記進去」——不問就會出現「登記了一大堆，實作還是各做各的」。
+clade 在 `registry/conventions.json` 登記了一批最佳實踐，`vendor/snippets/` 有對應 cookbook（數量由 bp-scan 實跑輸出，本檔不 inline）。0-F 問的是「這次新增的東西，是不是既有資產已經涵蓋 / 該不該登記進去」——不問就會出現「登記了一大堆，實作還是各做各的」。
 
 ### 觸發條件
 

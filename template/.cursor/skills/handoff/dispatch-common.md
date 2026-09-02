@@ -31,13 +31,13 @@ create-only 的成功 receipt 是 `dispatched`，**不是** `relay_dispatched`�
 | 空（main line session） | 照常 | 照常 |
 | 非空（coordinated child） | 照常——helper 對 relay 開了 nested 缺口 | **STOP，改走 `relay`** |
 
-`fanout` 的第一個動作是裸 dispatch，而 helper 對 coordinated child 的裸 dispatch 一律回 `nested_dispatch_refused`（`herdr-session-handoff.ts` L2456）。那道 guard 防的是**責任樹擴張**——一個還欠著 outcome 的 child 又生出更多工作。`relay` 是唯一缺口，因為它做的是相反的事：把位置橫向移交、自己站下來。
+`fanout` 的第一個動作是裸 dispatch，而 helper 對 coordinated child 的裸 dispatch 一律回 `nested_dispatch_refused`（`herdr-session-handoff.ts`，grep `status: 'nested_dispatch_refused'`；NEVER 在跨檔引用寫行號，用 grep 得到的唯一字串當錨點）。那道 guard 防的是**責任樹擴張**——一個還欠著 outcome 的 child 又生出更多工作。`relay` 是唯一缺口，因為它做的是相反的事：把位置橫向移交、自己站下來。
 
 **NEVER** 為了讓 fanout 在 child 內跑起來而去取 `--recovery-token`：orphan recovery 的前提是 **parent 已死**，拿它繞過一道針對「parent 還活著」設計的 guard 是偽造前提。逐字反開脫：「反正 recovery token 拿得到」「這個 parent 大概也不會來收了」。
 
 本 session 若持有尚未回報的 `--complete` 義務（它是被 dispatch 出來的 child，而 coordinator 還在等 outcome），**MUST 先回報 outcome 再 relay**，不得把未結的 handshake 一起丟給 successor。
 
-> relay 開出來的 successor **不帶** `CLADE_DISPATCH_ID`（helper 刻意不注入 correlation env，見 L2653 註解與 TD-547），所以它是 main line、可以自由 fanout。被 fanout 派出去的 **worker 帶**該 env，因此 worker 只能 relay，不能再 fanout。
+> relay 開出來的 successor **不帶** `CLADE_DISPATCH_ID`（helper 刻意不注入 correlation env，見該檔 grep `TD-547` 的註解段），所以它是 main line、可以自由 fanout。被 fanout 派出去的 **worker 帶**該 env，因此 worker 只能 relay，不能再 fanout。
 
 ### `--cwd` 指向既存工作區時的佔用探測（fail closed）
 

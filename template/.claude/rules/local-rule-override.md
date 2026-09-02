@@ -12,7 +12,6 @@ Local edits will be reverted by the next sync.
 
 # Consumer local rule override declaration
 
-繁體中文
 
 `.claude/rules/local/*.md` 是 consumer 自治區（不被 clade sync-rules 覆蓋）。當 local rule **明知**要覆蓋 / 收緊 / 鬆綁 clade 散播下來的 `rules/core/*.md` 規約時，**MUST** 在檔頭前 10 行內加一行 markdown blockquote 宣告：
 

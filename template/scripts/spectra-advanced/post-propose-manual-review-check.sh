@@ -101,14 +101,8 @@ fi
 BYPASS_PATTERN=$(jq -r '.bypass.marker' "$PATTERNS_FILE")
 BYPASS_REGEX="${BYPASS_PATTERN}\\[([^][]+)\\]([[:space:]]+@no-screenshot)?[[:space:]]*\$"
 
-# Per-line bypass evaluation.
-# Returns the bypass reason on stdout if the line is bypassed, else empty.
-extract_bypass_reason() {
-  local line="$1"
-  if [[ "$line" =~ ${BYPASS_REGEX} ]]; then
-    printf '%s' "${BASH_REMATCH[1]}"
-  fi
-}
+# Per-line bypass evaluation happens once in the precomputation pass below
+# (line_bypass[]) — patterns and the URL check both read that array.
 
 # Detect whether a parent line has scoped sub-items in the block.
 # Args: parent line index (0-based into manual_block_lines)
@@ -297,24 +291,106 @@ run_page_display_check() {
 # Load pattern count.
 PATTERN_COUNT=$(jq '.patterns | length' "$PATTERNS_FILE")
 
+# ---------------------------------------------------------------------------
+# Per-line precomputation — done ONCE, outside the pattern loop.
+#
+# The pattern loop below is patterns × lines. Doing the checkbox test, the
+# annotation strip, the bypass probe and the kind-marker extraction inside it
+# forked 4–5 subprocesses per (pattern, line) pair — ~5,000 forks for a
+# 92-line ## 人工檢查 block (<consumer-a> line-messaging-interaction: 41 s idle, past
+# 120 s under manual-review-audit fan-out). Everything that depends only on the
+# line is computed here with bash builtins (plus one batched sed), and each
+# pattern then runs a single grep over the whole block.
+# ---------------------------------------------------------------------------
+declare -a line_is_item=()      # 1 if `- [ ]` / `- [x]` checkbox line
+declare -a line_bypass=()       # bypass reason (non-empty ⇒ skip all patterns)
+declare -a line_kind=()         # leading kind marker without brackets, e.g. review:ui
+declare -a line_stripped=()     # line minus (verified-*: …) annotations + trailing markers
+
+# Strip (verified-*: ...) annotations + trailing markers before primary regex.
+# Verified annotations are evidence/metadata recorded during verification —
+# jargon there reflects DOM truth at verify time (e.g., `dom=weekly_target
+# 尚未設定 visible` is the real screen state), not authoring drift in the
+# description. Trailing markers (@followup, @no-screenshot, @no-manual-
+# review-check) are metadata too. Patterns evaluate item description only.
+# One sed over the whole block; lines were read with `read -r`, so input and
+# output lines map 1:1 (guarded below).
+while IFS= read -r stripped || [ -n "$stripped" ]; do
+  line_stripped+=("$stripped")
+done < <(printf '%s\n' "${manual_block_lines[@]}" | sed -E \
+  -e 's/\(verified-[a-z]+:[^)]*\)//g' \
+  -e 's/@followup\[[^]]*\]//g' \
+  -e 's/@no-screenshot//g' \
+  -e 's/@no-manual-review-check(\[[^]]*\])?//g')
+if [ "${#line_stripped[@]}" -ne "${#manual_block_lines[@]}" ]; then
+  echo "✗ post-propose-manual-review-check: internal error — stripped line count ${#line_stripped[@]} ≠ block line count ${#manual_block_lines[@]}" >&2
+  exit 1
+fi
+
+CHECKBOX_REGEX='^[[:space:]]*-[[:space:]]*\[[ xX]\]'
+# Match all legal markers: review:ui / verify:api / verify:e2e (digit) /
+# verify:e2e+ui (multi-channel) / bare discuss (no colon). The `:[a-z0-9+]+`
+# group is optional so `[discuss]` matches; `0-9` covers `e2e`.
+KIND_MARKER_REGEX='\[(review|verify|discuss)(:[a-z0-9+]+)?\]'
+
+for idx in "${!manual_block_lines[@]}"; do
+  line="${manual_block_lines[$idx]}"
+  line_is_item[$idx]=0
+  line_bypass[$idx]=""
+  line_kind[$idx]=""
+  # Blank / non-checkbox lines never take part in pattern checks.
+  [[ "$line" =~ $CHECKBOX_REGEX ]] || continue
+  line_is_item[$idx]=1
+  # Bypass check — skip evaluation and emit info log once per line.
+  if [[ "$line" =~ ${BYPASS_REGEX} ]]; then
+    line_bypass[$idx]="${BASH_REMATCH[1]}"
+    echo "[info] tasks.md:${manual_block_lineno[$idx]} bypass: ${BASH_REMATCH[1]}" >&2
+    continue
+  fi
+  if [[ "$line" =~ $KIND_MARKER_REGEX ]]; then
+    kind="${BASH_REMATCH[0]}"
+    kind="${kind#[}"
+    line_kind[$idx]="${kind%]}"
+  fi
+done
+
 # Findings buffer.
 declare -a findings=()
 
+# Field separator for the one-jq-call-per-pattern read below (ASCII RS, 0x1e).
+# NUL would be cleaner but jq cannot emit it; RS never appears in patterns.json.
+PATTERN_FIELD_SEP=$(printf '\036')
+
 for i in $(seq 0 $((PATTERN_COUNT - 1))); do
-  CODE=$(jq -r ".patterns[$i].code" "$PATTERNS_FILE")
-  REGEX=$(jq -r ".patterns[$i].regex" "$PATTERNS_FILE")
-  REGEX_FLAGS=$(jq -r ".patterns[$i].regexFlags // \"\"" "$PATTERNS_FILE")
-  DESC=$(jq -r ".patterns[$i].description" "$PATTERNS_FILE")
-  REMEDIATION=$(jq -r ".patterns[$i].remediation" "$PATTERNS_FILE")
-  ANCHOR=$(jq -r ".patterns[$i].anchor" "$PATTERNS_FILE")
-  REQ_PRESENCE=$(jq -r ".patterns[$i].requiresPresenceOf // \"\"" "$PATTERNS_FILE")
-  REQ_ABSENCE=$(jq -r ".patterns[$i].requiresAbsenceOf // \"\"" "$PATTERNS_FILE")
-  REQ_PRESENCE_SCOPE=$(jq -r ".patterns[$i].requiresPresenceOfScope // \"\"" "$PATTERNS_FILE")
-  REQ_ABSENCE_SCOPE=$(jq -r ".patterns[$i].requiresAbsenceOfScope // \"\"" "$PATTERNS_FILE")
-  APPLIES_TO=$(jq -r ".patterns[$i].appliesTo // \"\"" "$PATTERNS_FILE")
+  # One jq call per pattern (was 13). Fields are RS-delimited so a multi-line
+  # description / remediation would still round-trip intact.
+  P=()
+  while IFS= read -r -d "$PATTERN_FIELD_SEP" field; do
+    P+=("$field")
+  done < <(jq -j --argjson i "$i" --arg sep "$PATTERN_FIELD_SEP" '.patterns[$i] | [
+      .code, .regex, (.regexFlags // ""), .description, .remediation, .anchor,
+      (.requiresPresenceOf // ""), (.requiresAbsenceOf // ""),
+      (.requiresPresenceOfScope // ""), (.requiresAbsenceOfScope // ""),
+      (.appliesTo // ""), ((.requiresKindIn // []) | join("|"))
+    ] | .[] | tostring + $sep' "$PATTERNS_FILE")
+  if [ "${#P[@]}" -ne 12 ]; then
+    echo "✗ post-propose-manual-review-check: internal error — pattern[$i] yielded ${#P[@]} fields (expected 12)" >&2
+    exit 1
+  fi
+  CODE="${P[0]}"
+  REGEX="${P[1]}"
+  REGEX_FLAGS="${P[2]}"
+  DESC="${P[3]}"
+  REMEDIATION="${P[4]}"
+  ANCHOR="${P[5]}"
+  REQ_PRESENCE="${P[6]}"
+  REQ_ABSENCE="${P[7]}"
+  REQ_PRESENCE_SCOPE="${P[8]}"
+  REQ_ABSENCE_SCOPE="${P[9]}"
+  APPLIES_TO="${P[10]}"
   # requiresKindIn: pipe-joined allowed kinds (e.g. "review:ui" or "review:ui|verify:ui").
   # Empty string means no kind filter.
-  KIND_FILTER=$(jq -r ".patterns[$i].requiresKindIn // [] | join(\"|\")" "$PATTERNS_FILE")
+  KIND_FILTER="${P[11]}"
 
   # Build grep flags. `i` flag → case-insensitive.
   grep_flags='-E'
@@ -322,60 +398,35 @@ for i in $(seq 0 $((PATTERN_COUNT - 1))); do
     grep_flags="$grep_flags -i"
   fi
 
-  for idx in "${!manual_block_lines[@]}"; do
+  # Primary regex match — ONE grep over the whole stripped block (so annotation
+  # jargon doesn't fire). `-n` returns 1-based positions = array index + 1.
+  # grep exits 1 on no match; `|| true` keeps `set -e -o pipefail` quiet.
+  matched_pos=$(printf '%s\n' "${line_stripped[@]}" | grep $grep_flags -n -- "$REGEX" | cut -d: -f1) || true
+  [ -z "$matched_pos" ] && continue
+
+  for pos in $matched_pos; do
+    idx=$((pos - 1))
     line="${manual_block_lines[$idx]}"
     real_lineno="${manual_block_lineno[$idx]}"
 
     # Skip blank or non-checkbox lines for pattern checks unless pattern explicitly targets them.
-    [ -z "$(printf '%s' "$line" | tr -d '[:space:]')" ] && continue
-    if ! printf '%s\n' "$line" | grep -qE '^[[:space:]]*-[[:space:]]*\[[ xX]\]'; then
-      continue
-    fi
+    [ "${line_is_item[$idx]}" = 1 ] || continue
 
     # Apply appliesTo restriction.
     if [ "$APPLIES_TO" = "parentLineOnly" ] && is_scoped_child "$line"; then
       continue
     fi
 
-    # Bypass check — skip evaluation and emit info log once per line (across all patterns).
-    bypass_reason=$(extract_bypass_reason "$line")
-    if [ -n "$bypass_reason" ]; then
-      # Emit once per line — but here we iterate patterns × lines, so guard.
-      if [ "$i" -eq 0 ]; then
-        echo "[info] tasks.md:${real_lineno} bypass: ${bypass_reason}" >&2
-      fi
-      continue
-    fi
-
-    # Strip (verified-*: ...) annotations + trailing markers before primary regex.
-    # Verified annotations are evidence/metadata recorded during verification —
-    # jargon there reflects DOM truth at verify time (e.g., `dom=weekly_target
-    # 尚未設定 visible` is the real screen state), not authoring drift in the
-    # description. Trailing markers (@followup, @no-screenshot, @no-manual-
-    # review-check) are metadata too. Patterns evaluate item description only.
-    stripped_line=$(printf '%s\n' "$line" | sed -E \
-      -e 's/\(verified-[a-z]+:[^)]*\)//g' \
-      -e 's/@followup\[[^]]*\]//g' \
-      -e 's/@no-screenshot//g' \
-      -e 's/@no-manual-review-check(\[[^]]*\])?//g')
-
-    # Primary regex match (on stripped line so annotation jargon doesn't fire).
-    if ! printf '%s\n' "$stripped_line" | grep $grep_flags -q -- "$REGEX"; then
-      continue
-    fi
+    # Bypassed lines skip every pattern (info log already emitted above).
+    [ -n "${line_bypass[$idx]}" ] && continue
 
     # requiresKindIn: pattern only fires when item's leading kind marker is in the allowed list.
     # Example: MULTI_STEP_NOT_SCOPED uses requiresKindIn: ["review:ui"] so it doesn't over-fire
     # on [verify:api] / [verify:api+ui] / [verify:e2e] items (verify channels — agent runs the
     # round-trip itself, not the user; arrow chains there describe agent-verifiable evidence).
     if [ -n "$KIND_FILTER" ]; then
-      # Match all legal markers: review:ui / verify:api / verify:e2e (digit) /
-      # verify:e2e+ui (multi-channel) / bare discuss (no colon). The `:[a-z0-9+]+`
-      # group is optional so `[discuss]` matches; `0-9` covers `e2e`. `|| true`
-      # keeps an unmatched/malformed line from tripping `set -e` before the
-      # `-z "$ITEM_KIND"` continue-guard below can handle it.
-      ITEM_KIND=$(printf '%s\n' "$line" | grep -oE '\[(review|verify|discuss)(:[a-z0-9+]+)?\]' | head -1 | tr -d '[]' || true)
-      if [ -z "$ITEM_KIND" ] || ! printf '%s\n' "$ITEM_KIND" | grep -qE "^(${KIND_FILTER})$"; then
+      ITEM_KIND="${line_kind[$idx]}"
+      if [ -z "$ITEM_KIND" ] || ! [[ "$ITEM_KIND" =~ ^(${KIND_FILTER})$ ]]; then
         continue
       fi
     fi
@@ -399,7 +450,13 @@ for i in $(seq 0 $((PATTERN_COUNT - 1))); do
       if [ "$REQ_PRESENCE_SCOPE" = "group" ]; then
         presence_scope=$(group_block_for "$idx")
       fi
-      if printf '%s\n' "$presence_scope" | grep -E -q -- "$REQ_PRESENCE"; then
+      # Here-string, NOT `printf | grep -q`: with `set -o pipefail`, grep -q
+      # exits on the first match while printf may still be writing a multi-KB
+      # group block → printf dies of SIGPIPE (141) → the pipeline is "false" →
+      # the guard is skipped and a phantom finding fires. Measured: 8 KB block
+      # ≈ 1 % false-negative, 64 KB ≈ 50 % (the "transient UI_ITEM_NO_URL"
+      # hits on 18 KB #N groups were exactly this).
+      if grep -E -q -- "$REQ_PRESENCE" <<< "$presence_scope"; then
         continue
       fi
     fi
@@ -410,7 +467,7 @@ for i in $(seq 0 $((PATTERN_COUNT - 1))); do
       if [ "$REQ_ABSENCE_SCOPE" = "group" ]; then
         absence_scope=$(group_block_for "$idx")
       fi
-      if printf '%s\n' "$absence_scope" | grep -E -q -- "$REQ_ABSENCE"; then
+      if grep -E -q -- "$REQ_ABSENCE" <<< "$absence_scope"; then
         continue
       fi
     fi
@@ -461,11 +518,12 @@ done
 # deliberately NOT a patterns.json regex (that schema is text-only, no filesystem).
 # ---------------------------------------------------------------------------
 e2e_items=()
+E2E_ITEM_REGEX='^[[:space:]]*-[[:space:]]*\[ \].*\[verify:([a-z0-9]+\+)*e2e(\+[a-z0-9]+)*\]'
 for idx in "${!manual_block_lines[@]}"; do
   line="${manual_block_lines[$idx]}"
   # Unchecked checkbox whose [verify:...] kind marker lists e2e as a channel
   # (covers [verify:e2e], [verify:e2e+ui], [verify:api+e2e], [verify:e2e+api+ui]).
-  if printf '%s\n' "$line" | grep -qE '^[[:space:]]*-[[:space:]]*\[ \].*\[verify:([a-z0-9]+\+)*e2e(\+[a-z0-9]+)*\]'; then
+  if [[ "$line" =~ $E2E_ITEM_REGEX ]]; then
     e2e_items+=("tasks.md:${manual_block_lineno[$idx]}")
   fi
 done
@@ -510,8 +568,8 @@ if command -v node >/dev/null 2>&1 && [ -f "$URL_CHECK_HELPER" ]; then
     [ "$url_check_enabled" = true ] || break
     line="${manual_block_lines[$idx]}"
     real_lineno="${manual_block_lineno[$idx]}"
-    printf '%s\n' "$line" | grep -qE '^[[:space:]]*-[[:space:]]*\[[ xX]\]' || continue
-    [ -n "$(extract_bypass_reason "$line")" ] && continue
+    [ "${line_is_item[$idx]}" = 1 ] || continue
+    [ -n "${line_bypass[$idx]}" ] && continue
     # root-relative path 必須落在 word boundary（行首 / 空白 / backtick / 左括號）
     # 之後才算 URL。少了這條約束，中文技術描述裡的斜線列舉
     # （loading/disabled、visual/a11y、ids/counts/policyVersion-like）與相對檔案

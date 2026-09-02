@@ -27,7 +27,7 @@ Local edits will be reverted by the next sync.
 
 Reference: `docs/api/API_DESIGN_GUIDE.md` — 完整 API 設計指南含進階模式
 
-> 本檔為 starter template 的預設規則，複製出去後依專案實際使用調整。
+> 本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.cursor/rules/local/`；要改本檔請回 clade 源檔並 propagate。
 
 ## OWASP API Authorization
 

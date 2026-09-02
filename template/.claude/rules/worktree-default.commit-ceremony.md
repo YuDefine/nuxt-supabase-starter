@@ -18,7 +18,6 @@ Local edits will be reverted by the next sync.
 
 > Path-scoped detail of [[worktree-default]] §5 / §5.5 / §6。核心 always-load 規約在母檔 worktree-default.md。
 
-繁體中文
 
 ## §5 Commit 階段：subagent commit → archive 吸收 → user `/commit`
 

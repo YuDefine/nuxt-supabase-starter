@@ -49,7 +49,7 @@ Local edits will be reverted by the next sync.
    把 active changes 的 `bucket` / `pending` / `userActionPending` 寫進 HANDOFF.md `## Review-gui Readiness` §。Outstanding steps（2B.2–2B.4）**MUST** 引用 scan result，**禁止**從 HANDOFF.md narrative 或 tasks.md leaf count 推測 review-gui bucket。
 2. **Compound item evidence**：一個 `[verify:ui]` / `[review:ui]` item 含多 visual state（hover / focus / before-after / step1→step2）→ **MUST** 採以下之一：
    - **拆 scoped sub-items**：`#N.M` 各帶獨立 `[verify:ui]` + 獨立 `(verified-ui: ...)` annotation
-   - **Multi-screenshot annotation**：使用 `screenshots=path1,path2[,path3]` annotation form（待 review-gui parser 支援後）
+   - **同 `(itemId, kind)` 多次 `evidence-store.ts --write`**（sidecar append-only），或拆成 scoped sub-items 各自 `--write`。**NEVER** 寫複數 key `screenshots=`——parser 不認，見 § Annotation Format Contract
 
    單 screenshot 對應多 state 是**反模式**：archive-gate 會把 item 翻 `[x]` 造成 silent miss。
 3. **Impl gate（已 enforced）**：review-gui detail page mutation handler 已 gate impl 完成率 < `APPLY_COMPLETE_THRESHOLD` (0.90) 時 422 拒收。Surface agent **MUST** 依賴此 gate，**禁止**在 detail page client-side 繞過或重刻 mutation。
@@ -462,7 +462,7 @@ jq '.image.shareOfToolResultTokens, .image.shareOfToolResultChars' out.json
    `requestDecision` 在事件被 validator 拒收時**照樣回一個 handle**。只信 handle 的結果是每輪
    無聲重試、佇列永遠是空的，而 log 說一切正常。`syncDecisions` 的 `unwritten` 欄位是這條的實作。
 
-6. **問卷模式只收可回答的兩類，且只在球在人這邊時收。** `/decisions` 預設的問卷 view 一題一
+9. **問卷模式只收可回答的兩類，且只在球在人這邊時收。** `/decisions` 預設的問卷 view 一題一
    畫面連續作答，收進牌堆的 **MUST** 只有 `category` 是 `ruling` 或 `review`、且
    `awaiting_clarification` 為 false 的題。這是上面 NEVER 第 3 條在新 view 的同一條線：其餘三桶
    回不掉，而球在 agent 手上的題現在作答等於回答一個自己剛說看不懂的問題。
@@ -484,7 +484,7 @@ jq '.image.shareOfToolResultTokens, .image.shareOfToolResultChars' out.json
    `needsOptions` 的 clarification guard，於是條目被退回補件的那一刻 flag 就落下，規約字面上
    滿足了，畫面上長出一顆可按的通過配零證據。ruling 側同一個 guard 無害只是因為它的 radio
    蓋在空的 options 陣列上，而 review 的通過／退回是掃描端**永遠**合成的。
-7. **鎖是兩種強度，畫面 MUST 說出是哪一種。** 問卷點下選項就寫檔，沒有送出前的預覽——防誤觸
+10. **鎖是兩種強度，畫面 MUST 說出是哪一種。** 問卷點下選項就寫檔，沒有送出前的預覽——防誤觸
    的東西換成了「按錯了改得回來」（`decision.revise`）。所以答案能不能改就是這個交換的全部：
    - `pickup`：有 agent 跑過 `flow answers --claim` 說它接手了。**硬鎖，NEVER 提供覆寫**
    - `follow-up`：推論——答案之後同一個 `work_id` 又開了非 point、非 `decision.*` 的 span。
@@ -492,7 +492,7 @@ jq '.image.shareOfToolResultTokens, .image.shareOfToolResultChars' out.json
 
    **NEVER** 把兩者渲染成同一句話。它們的證據強度差一個量級，而使用者要據此決定要不要動一個
    可能已經被執行的答案。
-8. **讀答案的 agent MUST 跑 `flow answers --claim`。** 落檔的答案沒有讀者紀錄：在這條之前
+11. **讀答案的 agent MUST 跑 `flow answers --claim`。** 落檔的答案沒有讀者紀錄：在這條之前
    ，「有沒有人看過這個答案」在 spine 上完全不存在，而 `follow-up` 推論對**新 process** 讀答案
    的情形結構性失效（`resolveWorkId` 為每個新 process mint 一個無關的 orphan work id）。
    所以硬鎖只有這一條路徑產得出來——**NEVER** 拿「推論鎖還在」當略過 claim 的理由，那條推論
@@ -500,8 +500,8 @@ jq '.image.shareOfToolResultTokens, .image.shareOfToolResultChars' out.json
 
 ### NEVER
 
-- ❌ 把 `follow-up`（推測）鎖渲染成 `pickup`（宣告）鎖，或反過來——見 MUST 7
-- ❌ 讓問卷模式收第 2/3/4 類或 `awaiting_clarification` 的題（見 MUST 6）
+- ❌ 把 `follow-up`（推測）鎖渲染成 `pickup`（宣告）鎖，或反過來——見 MUST 10
+- ❌ 讓問卷模式收第 2/3/4 類或 `awaiting_clarification` 的題（見 MUST 9）
 - ❌ 對 `--apply` 以外的路徑寫 spine。`flow sources` 預設 dry —— 寫入是 14 個 repo 的副作用，
   安全的呼叫法必須是短的那個
 - ❌ 在 `CLADE_FLOW_EVENTS` 下跑對帳。它把所有 repo 的 spine 指向同一個檔，對帳會把別 repo

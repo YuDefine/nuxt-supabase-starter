@@ -24,7 +24,7 @@ Local edits will be reverted by the next sync.
 - **MUST** run `supabase db advisors`（CLI v2.81.3+；版本不足退 MCP `get_advisors`）並**逐條**處置 security 類 finding — 見下方 § Lint 與 advisors 的處置義務
 
 
-> 本檔為 starter template 的預設規則，複製出去後依專案實際使用調整。
+> 本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.claude/rules/local/`；要改本檔請回 clade 源檔並 propagate。
 
 ## Lint 與 advisors 的處置義務
 

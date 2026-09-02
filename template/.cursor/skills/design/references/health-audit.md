@@ -123,7 +123,7 @@ Trigger 用語：「健康檢查 / 體檢 / 重構評估 / 技術債盤點 / 全
 ## 5. Propose funnel（收尾，必做）
 
 1. 呈報 **Deep Health Report + 重構 roadmap** 給 user。
-2. **讓 user 挑**最高優先 wave——開 Health wave 決策頁（[decision-page.md](../decision-page.md) § Health wave）。**NEVER** 「用 AskUserQuestion 或直接問」；AskUserQuestion 只在 serve-question exit 2 / 4。
+2. **讓 user 挑**最高優先 wave——開 Health wave 決策頁（[decision-page.md](../decision-page.md) § Health wave）。**NEVER** 「用 AskUserQuestion 或直接問」。
 3. 對選定 wave 跑 **`/spectra-propose`** → 產生 `openspec/changes/<name>/`（proposal + tasks + specs）。brief 帶入該 wave 的 findings + file:line 證據 + 「卓越 delta」驗收標準。
 4. **多 wave**：propose 第一個；其餘 wave 登 `ROADMAP.md`（Next Moves）或 `docs/tech-debt.md`（TD-NNN），不一次開一堆 change。
 5. **Persist report**：寫 `docs/health-audit-<YYYY-MM-DD>.md`（consumer 端）。與 Step 6 spectra `design-review.md` 邊界分清：health report 是全棧體檢快照；design-review.md 是單一 change 的 UI deliverable — 兩者並存，health report 可被 propose 出來的 change 引用。

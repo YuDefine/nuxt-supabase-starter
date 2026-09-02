@@ -349,9 +349,3 @@ B → A（NuxtHub → void.cloud）是 fleet 主要遷移方向（10 phase，已
 
 `/yudefine-deploy` 不限制單一 target — 同一 fleet 內可混合多種 deploy 派。Step 0 詢問是「該專案此次的選擇」，不會把 fleet 鎖死成單一 track。
 
-## 變更歷史
-
-- **2026-07-14**: centralize 到 clade `hub-runtime-cf-workers` plugin；current baseline 升至 void 0.10 + GitHub OIDC，退役長效 `VOID_TOKEN`、`void secret set` 與 void-sdk/void#52 patch；legacy compat workaround 明確 version-gate。
-- **2026-05-27 PM**: A.3.1 compat flags 規約改成依 appType 分流（framework type 必 配置 3，配置 2 對 Nitro 不可用）；新增 A.3.6 patch-void-deploy postinstall hook hard rule（drizzle schema consumer 必裝，per void-sdk/void#52）；A.3.7 重編號（原 A.3.6 pnpm 保留字）；A.7 注意事項加 framework type 配置 2 警告 + missing patch 撞 internal error 線索；fleet table 更新 <consumer-l> 配置 2 → 3 + co-purchase 完成遷移。實證：<consumer-l> 2026-05-27 first-ever CI deploy 成功（之前 prod live 是 user 本機 manual deploy）。
-- **2026-05-27**: 大幅瘦身（732 → ~430 行）。Track A 平台 SOP 全部委派給 official `void` skill + `void mcp`；本 skill 只保留 YuDefine fleet 政策層（compat flags hard rule、<maintainer-domain> zone DNS、CF token、consumer table、scripts naming pitfall）。新增 A.3.6 `pnpm deploy` 撞保留字、A.3.2 `compatibility_date` 對齊。
-- **2026-05-26**: Track A void.cloud 段內容首次從 co-purchase 遷移實證濃縮成 B → A runbook。新增 dual-track 結構（A void.cloud / B own CF）。

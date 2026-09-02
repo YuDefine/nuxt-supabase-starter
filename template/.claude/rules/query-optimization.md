@@ -12,7 +12,7 @@ Local edits will be reverted by the next sync.
 
 # Query Optimization
 
-> 本檔為 starter template 的預設規則，複製出去後依專案實際使用調整。
+> 本檔是 clade 投影，**NEVER** 就地編輯。專案特化寫進自家 `.claude/rules/local/`；要改本檔請回 clade 源檔並 propagate。
 
 RLS 會放大任何 N+1 或 full scan。**MUST** 在以下情境先跑 `EXPLAIN ANALYZE` 再合併：
 

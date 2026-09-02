@@ -402,7 +402,7 @@ https://review-gui.<maintainer-domain>/review/<consumer-id>:<change-name>
 從以下來源蒐集 outstanding 工作。**所有 active item 一律列入盤點並推薦處理** — drift scan 的 `active-section-stale`（14d）是 escalation threshold，不是 grace period；未超過 14d 的 active item **同樣 MUST 列入 outstanding**，不得因「尚未觸發 stale signal」而省略或降低優先序。
 
 - 整理後的 `HANDOFF.md`
-- 未解決的 TD-NNN — 三層來源**全部**取自 §2B.1a 落檔的 `techDebtHygiene.raw`（`jq '.techDebtHygiene.raw' "$SCAN"`）。**NEVER 為了列 outstanding 整讀 `docs/tech-debt.md` 主檔** —— 該檔實測 clade 239 KB / <consumer-b> 322 KB，整讀一次就吃掉本 skill 大半預算，而 raw 已含排序所需的全部欄位。需要某一條的細節時用 raw 的 `lineNo` **定點 Read**（`offset` + `limit`），不整檔載入。優先序分三層，**MUST** 依此排序，**NEVER** 平鋪混在一起（這是「堆積然後忘記」的根因）：
+- 未解決的 TD-NNN — 三層來源**全部**取自 §2B.1a 落檔的 `techDebtHygiene.raw`（`jq '.techDebtHygiene.raw' "$SCAN"`）。**NEVER 為了列 outstanding 整讀 `docs/tech-debt.md` 主檔** —— 該檔已在數百 KB 量級（要當前值跑 `wc -c docs/tech-debt.md`），整讀一次就吃掉本 skill 大半預算，而 raw 已含排序所需的全部欄位。需要某一條的細節時用 raw 的 `lineNo` **定點 Read**（`offset` + `limit`），不整檔載入。優先序分三層，**MUST** 依此排序，**NEVER** 平鋪混在一起（這是「堆積然後忘記」的根因）：
   1. **stale**（`techDebtHygiene.raw.stale[]`，>60d 無 Last reviewed）— 最高優先，`discAge` 越大越前。每條 **MUST** 附三選一（做掉 / wontfix / stamp Last reviewed），但 stamp Last reviewed 列為最後選項，不推薦
   2. **aging**（`techDebtHygiene.raw.aging[]`，>14d 含被 snooze 的）— 第二優先，`discAge` 越大越前。每條 **MUST** 主動追問 blocker：「什麼卡關？能現在推進嗎？」。對 `snoozed: true` 的項目明確指出「已 stamp Last reviewed 但仍未解決 — 不應再延期」
   3. **其他 open TD** — 取 `raw.open[]` 扣掉已在前兩層的 id，按 `discovered` 排序，正常列入 outstanding：

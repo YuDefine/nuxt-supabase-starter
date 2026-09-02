@@ -357,10 +357,6 @@ Do NOT silently build a worktree with no task — that's the deprecated v1 behav
 
 If `git rev-parse --git-dir` shows `/worktrees/`, refuse to invoke `/wt`. The current worktree IS the workspace. Tell the user: "Already inside worktree <name>; do the work here. Use `/wt` only from the main worktree."
 
-### Token `--dispatch-from-handoff` appears in args
-
-The flag from the previous `/wt` design is removed. If it appears in args, treat the token literally (it has no special meaning). Parent cwd never migrates regardless.
-
 ### Subagent commits but you can't tell if the task fully succeeded
 
 The subagent's reported status is the authority. If it says "done", proceed to squash. If the subagent's commits exist but it failed to report cleanly, treat as failure (preserve worktree, report ambiguity).

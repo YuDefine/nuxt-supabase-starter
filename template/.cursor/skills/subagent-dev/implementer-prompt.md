@@ -48,16 +48,12 @@ Agent tool (general-purpose)  ← 僅 opus / gate-receipt 改派時使用
 
     Work from: [directory]
 
-    **While you work:** If you encounter something unexpected or unclear, **ask questions**.
-    It's always OK to pause and clarify. Don't guess or make assumptions.
-
     While iterating, run the focused test for what you're changing; run the
     full suite once before committing, not after every edit.
 
     ## Code Organization
 
-    You reason best about code you can hold in context at once, and your edits are more
-    reliable when files are focused. Keep this in mind:
+    Keep files focused — one clear responsibility per file:
     - Follow the file structure defined in the plan
     - Each file should have one clear responsibility with a well-defined interface
     - If a file you're creating is growing beyond the plan's intent, stop and report
@@ -69,8 +65,7 @@ Agent tool (general-purpose)  ← 僅 opus / gate-receipt 改派時使用
 
     ## When You're in Over Your Head
 
-    It is always OK to stop and say "this is too hard for me." Bad work is worse than
-    no work. You will not be penalized for escalating.
+    **Escalate rather than guess.** Report BLOCKED or NEEDS_CONTEXT when:
 
     **STOP and escalate when:**
     - The task requires architectural decisions with multiple valid approaches

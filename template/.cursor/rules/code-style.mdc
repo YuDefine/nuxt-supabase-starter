@@ -189,7 +189,6 @@ async function writeThenExit(payload: string, code: number): Promise<never> {
 
 ## 用 vp 命令做 lint / format
 
-```bash
 ## 心智模型
 
 | 情境 | 工具 | 命令 |

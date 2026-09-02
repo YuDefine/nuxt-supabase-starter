@@ -12,7 +12,6 @@ Local edits will be reverted by the next sync.
 
 > **無 frontmatter — unconditional always-load**。規約必須在每個會改 code 的 session Read 任何檔之前生效。
 
-繁體中文
 
 **核心命題**：multi-session 並行開發共用單一 working tree，staged 區、branch HEAD、partial WIP 都會跨 session 滲漏。
 

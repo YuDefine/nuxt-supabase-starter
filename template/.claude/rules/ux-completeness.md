@@ -231,7 +231,7 @@ backend-only change 的 `## 人工檢查` **MUST** 只保留 `[discuss]` kind �
 
 上述三類 **MUST** 標 `[discuss]` marker；spectra-archive Step 2.5 walkthrough 流程下由 Claude 主動準備 evidence 與使用者討論。**user-facing change 也可對個別 item 標 `[discuss]`**（例：純資料修復 task 雖屬於含 UI 的 change，但實際驗證仰賴 evidence 而非 round-trip）— 此時不需 `**No user-facing journey**` 宣告，逐項標 marker 即可。
 
-**user-facing change 的主流 marker 是 `[verify:auto]`（agent 用 agent-browser 自跑 UI round-trip）跟 `[review:ui]`（真的需要人）**。三 kind 完整定義 + 「真的需要人」白名單 + 「agent 可自跑」白名單見 `manual-review.md`「Item Kind Marker」+「Kind 分類指引」。本檔的 backend-only 規約屬於 `[discuss]` 子集，不影響 user-facing change 的 kind 分流。
+**user-facing change 的主流 marker 是 `[verify:e2e]` / `[verify:api]` / `[verify:ui]`（agent 自跑，channel 由能不能用 spec / curl / final-state screenshot 重現決定）跟 `[review:ui]`（真的需要人）**。`[verify:auto]` 已 DEPRECATED，新項目 NEVER 使用（見 [[manual-review]] § Item Kind Marker）。三 kind 完整定義 + 「真的需要人」白名單 + 「agent 可自跑」白名單見 `manual-review.md`「Item Kind Marker」+「Kind 分類指引」。本檔的 backend-only 規約屬於 `[discuss]` 子集，不影響 user-facing change 的 kind 分流。
 
 **MUST NOT** 把以下項目放進 `## 人工檢查`（即使該 change 是 backend-only）：
 

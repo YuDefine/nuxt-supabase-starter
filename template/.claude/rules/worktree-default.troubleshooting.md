@@ -18,7 +18,6 @@ Local edits will be reverted by the next sync.
 
 > Path-scoped detail of [[worktree-default]] §7–§11。核心 always-load 規約在母檔 worktree-default.md。
 
-繁體中文
 
 ## §7 升級路徑與 grandfathered worktree
 

@@ -171,7 +171,7 @@ Tunnel hostname 是 **per-consumer 單一資源**（§2.5 的 `<consumer-id>-dev
 
 | 情境 | 動作 |
 | --- | --- |
-| 新 consumer 進 registry | 取下一個未用 +10 號（目前 3000–3100 已用，下一個是 3110；快照，以 registry/consumers.json dev_ports 為準） |
+| 新 consumer 進 registry | 取 `registry/consumers.json` 內 `dev_ports.base` 最大值 +10（SoT 是 registry，本檔不 inline 現值） |
 | 既有 consumer 改 port | 先改 clade registry → publish patch → propagate → 改 consumer 自家 dev script + tunnel port |
 | Audit 報 DRIFT | **relay DRIFT 明細給該 consumer 的 session** 改 dev script / tunnel port 對齊 registry（per [[clade-role-and-todo-discipline]] § Consumer 工作命中時 MUST relay）；clade 主線不代改，但 **NEVER** 只出表就結束 |
 | Audit 報 CONFLICT（兩 consumer 同 port） | clade 主線立即解：選一個 consumer 改用未用 +10 號，registry commit + publish + propagate |
@@ -194,7 +194,7 @@ Tunnel hostname 是 **per-consumer 單一資源**（§2.5 的 `<consumer-id>-dev
 | <consumer-f> | 3030 | 4750–4799 |
 | clade | — (source-of-truth，非 Nuxt consumer) | — |
 
-下一個可用：base **3120**、band **4800–4849**（快照，以 registry/consumers.json dev_ports 為準）。
+下一個可用 base / band 一律現算：讀 `registry/consumers.json` 的 `dev_ports`，取最大 base +10、最大 band 上界 +1 起算 50 個。
 
 ## Anti-pattern
 
