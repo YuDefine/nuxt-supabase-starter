@@ -165,7 +165,7 @@ cross-model code review。完整 repository baseline 保持 operator 明確觸�
 
 每個 gate 的完整執行流程（bash scripts、trigger 條件、fix loop、pi offload）見 [gates.md](gates.md)。執行任一 gate 前 **MUST** 先讀對應 §。
 
-- **0-A 程式碼審查**：simplify（0-A.0，序跑）→ GPT-5.6-sol via Pi（effort: xhigh；0-A.1，背景）→ 條件升 GPT-5.6-sol via Pi（effort: max）+ Claude Fable 5（effort: max；0-A.2 裁決）。詳見 [gates.md](gates.md) § 0-A。
+- **0-A 程式碼審查**：simplify（0-A.0，序跑）→ GPT-5.6-sol via Pi（effort: xhigh；0-A.1，背景）→ 條件升 GPT-5.6-sol via Pi（effort: max）+ Claude Fable 5.1（effort: max；0-A.2 裁決）。詳見 [gates.md](gates.md) § 0-A。
 - **0-B UI Design Review**：條件觸發（`.vue` template 變更 + 視覺影響）。詳見 [gates.md](gates.md) § 0-B。
 - **0-C CI 等效檢查**：`pnpm check` + `pnpm test` + `pnpm run doctor`，全綠才過。詳見 [gates.md](gates.md) § 0-C。
 - **0-D Doc Alignment**：條件觸發（diff 觸及 docs / rules / snippets / audit / 業務碼 / pitfall）。詳見 [gates.md](gates.md) § 0-D。

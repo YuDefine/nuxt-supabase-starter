@@ -432,8 +432,8 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleWake
 
 | 工作類別 | 由誰執行 | 為什麼 |
 | --- | --- | --- |
-| **Spectra `propose` 階段（draft）** | **使用者選單三選一**：A GPT-5.6-sol via Pi（effort: max）負責 draft（預設/推薦）／ B 三模型交叉：Claude Fable 5（effort: xhigh）負責 draft ＋ GPT-5.6-sol via Pi（effort: max）負責 review／ C 純 Claude | 預設跳三選一選單；使用者明確指定路徑時跳過。詳見 `spectra-propose` Step 0。 |
-| **Spectra `propose` cross-check / final check** | **主線 Claude Fable 5（effort: xhigh）** | 主線 = quality gate（A 的 cross-check、B 的 final check 都由主線跑），不只是 dispatcher。 |
+| **Spectra `propose` 階段（draft）** | **使用者選單三選一**：A GPT-5.6-sol via Pi（effort: max）負責 draft（預設/推薦）／ B 三模型交叉：Claude Fable 5.1（effort: xhigh）負責 draft ＋ GPT-5.6-sol via Pi（effort: max）負責 review／ C 純 Claude | 預設跳三選一選單；使用者明確指定路徑時跳過。詳見 `spectra-propose` Step 0。 |
+| **Spectra `propose` cross-check / final check** | **主線 Claude Fable 5.1（effort: xhigh）** | 主線 = quality gate（A 的 cross-check、B 的 final check 都由主線跑），不只是 dispatcher。 |
 | **Spectra `apply`（非 Design Review、非 UI view phase，phase 粒度）** | **GPT-5.6-sol via Pi（effort: high）** | medium 漏 schema drift 風險高；phase 粒度避免 round-trip。 |
 | **Spectra `apply` UI view phase（component / page / view / layout / styling）+ Section 7（Design Review）** | **主線 Claude Opus 5（effort: xhigh）自己做，永不派 pi**（UI view 實作與 Design Review 都是；實作完主線照跑 Step 6c / 6d 與 Design Review gate） | 視覺 / 互動 / a11y 與 Design skill 緊耦合，實作與品質判定分不開。非 view 的 frontend 不在此範圍，仍走 sol（範圍同 § Spectra Apply Phase Dispatch C 類）。 |
 | **spectra-apply Step 8a self-collect (a)(b)**（dev-login allow-list 小 mod + service_role DB query 證 data shape） | **Pi `--model sol --effort low` via 泛用 dispatcher** | PoC 已實證 pi 能跑完整 evidence chain；annotation 寫回 tasks.md 維持主線。詳見 spectra-apply SKILL Step 8a。 |
@@ -477,7 +477,7 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleWake
 
 
 1. **MUST** 預設跳三選一 dispatch 選單（A Pi draft + 主線 cross-check／B 三模型交叉：Fable draft + Pi review + 主線 final check／C 純 Claude）。使用者**明確**指定路徑（「純 Claude propose」「不要派 pi」「用 Fable」「用 pi」等）時跳過選單直接走。詳見 `spectra-propose` Step 0
-2. **MUST** 主線是 quality gate — A 的 cross-check 與 B 的 final check 都由主線 Claude Fable 5（effort: xhigh）跑
+2. **MUST** 主線是 quality gate — A 的 cross-check 與 B 的 final check 都由主線 Claude Fable 5.1（effort: xhigh）跑
 3. **NEVER** 把 cross-check / final check 的修補丟回 pi — 主線自己 Edit 修
 
 Claude Code session 收到 spectra propose 請求時：

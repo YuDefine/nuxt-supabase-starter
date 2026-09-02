@@ -146,7 +146,7 @@ function record(args) {
     codex === 'fast-path-skip'
       ? 'GPT-5.6-sol via Pi 跳過（fast-path）'
       : codex === 'xhigh+max+fable'
-        ? 'GPT-5.6-sol via Pi（effort: xhigh → max）+ Claude Fable 5（effort: max）'
+        ? 'GPT-5.6-sol via Pi（effort: xhigh → max）+ Claude Fable 5.1（effort: max）'
         : 'GPT-5.6-sol via Pi（effort: xhigh）'
   console.log(
     `✅ 0-A/B/C/D 並行匯合通過（${codexLabel}、screenshot ${row.screenshot}、check 全綠、doc ${row.doc}）`,

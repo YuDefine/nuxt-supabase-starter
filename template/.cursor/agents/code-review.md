@@ -1,6 +1,6 @@
 ---
 name: "code-review"
-description: "Code review — PR review 或 commit 0-A.2 裁決；由 Claude Fable 5 執行，effort 為 max，拿 Pi 回饋做最終判定"
+description: "Code review — PR review 或 commit 0-A.2 裁決；由 Claude Fable 5.1 執行，effort 為 max，拿 Pi 回饋做最終判定"
 model: inherit
 ---
 

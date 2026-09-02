@@ -416,7 +416,7 @@ commit 自動啟動，也不由 path scan 冒充。
 
 1. 主線先跑 `simplify` skill —— 它看 reuse / 精簡 / 過度設計 / altitude 這條軸，Pi review 不會抓。先處理掉避免後續 pi 重複指出
 2. 接著（若 fast-path 不命中）以背景方式跑 GPT-5.6-sol via Pi（effort: xhigh）執行 review—— 跨模型抓 bug / 邏輯 / 安全，盲點與 simplify / Claude 主線不同。**啟動後立即進入並行階段（見主檔「0-A/B/C 並行策略」）**，主線同步推進 0-C 並派 0-B subagent
-3. 0-A.1 出現 Critical / Major → 進入 0-A.2 兩步驟：先派 GPT-5.6-sol via Pi（effort: max）做深度 review，再由 Claude Fable 5（`claude-fable-5`，effort: max）跑 `code-review` agent，拿著 pi 的回饋做最終決策
+3. 0-A.1 出現 Critical / Major → 進入 0-A.2 兩步驟：先派 GPT-5.6-sol via Pi（effort: max）做深度 review，再由 Claude Fable 5.1（`claude-fable-5-1`，effort: max）跑 `code-review` agent，拿著 pi 的回饋做最終決策
 4. 修正一律由 AI Agent 主線執行；所有並行軸的 finding 匯合後一次性修正
 
 **模型分工**：
@@ -425,7 +425,7 @@ commit 自動啟動，也不由 path scan 冒充。
 | --- | --- | --- | --- |
 | 0-A.1 | GPT-5.6-sol via Pi | xhigh | 跨模型盲點互補，抓 bug / 邏輯 / 安全 |
 | 0-A.2 Step 1 | GPT-5.6-sol via Pi | max | 深度搜尋所有可能問題 |
-| 0-A.2 Step 2 | Claude Fable 5 (`claude-fable-5`) | max | 拿 pi finding 做最終裁決 |
+| 0-A.2 Step 2 | Claude Fable 5.1 (`claude-fable-5-1`) | max | 拿 pi finding 做最終裁決 |
 
 ### 0-A dispatch 禁令（2026-08-22 從 [[agent-routing]] § 必禁事項 下推，TD-590）
 
@@ -489,7 +489,7 @@ exit 4 的處置是**照鏈往下走**，逐格都換池、不換家族：
 
 1. `.cursor/scripts/codex-review-safe.sh xhigh --pool cursor` —— 同檔換 Cursor 的 sol 座位。
    script 自己的 exit-4 `NEXT:` 行就是印這一條
-2. cursor 池也 exit 4 → **派 Fable（`claude-fable-5`）`code-review` agent 接手**，
+2. cursor 池也 exit 4 → **派 Fable（`claude-fable-5-1`）`code-review` agent 接手**，
    它是 sol 鏈的正規終點（見 [[agent-routing]] § 配額耗盡時的 fallback 紀律 的
    gate-output 那條）。routing gate 認得這一格：`code-review` 屬 `GATE_OUTPUT_ROWS`，
    delegate tier 是 fable，**不必 waive**
@@ -638,7 +638,7 @@ GPT-5.6-sol via Pi（effort: max）完成後 **MUST** 檢查輸出是否含 `## 
 - **含 `## Review Verdict`** → 正常進 Step 2（Fable 裁決）
 - **缺 `## Review Verdict`**（context exhaustion / 輸出截斷 / 任何非正常完成）→ **MUST** 向 user 報 warning「⚠ GPT-5.6-sol via Pi（effort: max）context exhaustion — 未產出 Review Verdict，fallback to 0-A.1 findings」，然後 **fallback**：跳過 Step 2 的 Pi 輸出，改用 0-A.1 xhigh findings 直接餵 Fable code-review agent 做裁決（prompt 改為「你收到 GPT-5.6-sol via Pi（effort: xhigh）對本次 diff 的 review 結果」+ 0-A.1 輸出）。**NEVER** 重跑 `codex-review-safe.sh max`（context exhaustion 大概率重現）、**NEVER** 靜默跳過 0-A.2 當作通過。
 
-**Step 2 — Claude Fable 5（effort: max）— `code-review` agent**：
+**Step 2 — Claude Fable 5.1（effort: max）— `code-review` agent**：
 
 派 `code-review` agent（`subagent_type: "code-review"`、`model: "fable"`），prompt 包含：
 
@@ -682,16 +682,16 @@ Agent prompt 範本：
 
 驗收完才判斷：
 
-- **無 real issue**（全部 dismissed **且逐條附反證**，或無新發現）→ 輸出 `✅ 0-A.2 通過（GPT-5.6-sol via Pi（effort: max）+ Claude Fable 5（effort: max）無 real issue）`，進入「並行匯合」
+- **無 real issue**（全部 dismissed **且逐條附反證**，或無新發現）→ 輸出 `✅ 0-A.2 通過（GPT-5.6-sol via Pi（effort: max）+ Claude Fable 5.1（effort: max）無 real issue）`，進入「並行匯合」
 - **有 real issue** → 主線依 Fable 的裁決逐一修正，修完**直接進入「並行匯合」**（最多到 0-A.2，不做第 3 輪）
 
-**為什麼兩步驟**：GPT-5.6-sol 與 Claude Fable 5（`claude-fable-5`）的模型盲點不同。GPT-5.6-sol via Pi（effort: max）負責深度搜尋——用最高推理深度翻出所有可能問題；Claude Fable 5（effort: max）負責裁決——以不同模型族的視角判定哪些是 real issue，過濾 false positive，並找 pi 漏掉的問題。這比同一模型跑兩輪更有效。
+**為什麼兩步驟**：GPT-5.6-sol 與 Claude Fable 5.1（`claude-fable-5-1`）的模型盲點不同。GPT-5.6-sol via Pi（effort: max）負責深度搜尋——用最高推理深度翻出所有可能問題；Claude Fable 5.1（effort: max）負責裁決——以不同模型族的視角判定哪些是 real issue，過濾 false positive，並找 pi 漏掉的問題。這比同一模型跑兩輪更有效。
 
 ### 0-A/B/C/D 並行匯合（收口檢查）
 
 三軸完成後合併狀態檢查 + 條件觸發 0-D：
 
-1. 0-A（GPT-5.6-sol via Pi（effort: xhigh），or 條件升 GPT-5.6-sol via Pi（effort: max）+ Claude Fable 5（effort: max），or fast-path skipped）：通過
+1. 0-A（GPT-5.6-sol via Pi（effort: xhigh），or 條件升 GPT-5.6-sol via Pi（effort: max）+ Claude Fable 5.1（effort: max），or fast-path skipped）：通過
 2. 0-B（screenshot review）：通過或跳過
 3. 0-C（pnpm check + pnpm test + pnpm run doctor）：全綠
 4. 0-D（doc alignment）：通過或跳過
@@ -727,14 +727,14 @@ node .cursor/scripts/0a-metrics.mjs record \
 **紀律禁止項**（每條皆對應壓力下違規模式或已知 rationalization）：
 
 - **NEVER** 跳過 0-A.0（simplify 是常駐第一步，不視變更大小例外）
-- **NEVER** 改用其他模型（Pi 席位必須 `gpt-5.6-sol`、Fable 必須 `claude-fable-5`）
+- **NEVER** 改用其他模型（Pi 席位必須 `gpt-5.6-sol`、Fable 必須 `claude-fable-5-1`）
 - **NEVER** 把 pi 列出的問題判定為「建議性質」而跳過 —— 一律修
 - **NEVER** 用「不在本次範圍」跳過 finding —— 該判定只有走 § 0-A.1「finding 的三類分流」判為**純舊碼**、且三行舉證逐行寫齊才成立；缺任一行照 severity 修
 - **NEVER** 在 fast-path 條件未完全滿足時提早跳過 pi review —— 三條件 AND，任一不滿足都跑
 - **NEVER** 做第 3 輪 review（會無限拖長 commit 流程；0-A.1 + 0-A.2 兩輪處理不完代表變更太大，應先 split）
-- **NEVER** 因 0-A.1 抓到 Critical/Major 後跳過 0-A.2 —— 一律進入 GPT-5.6-sol via Pi（effort: max）+ Claude Fable 5（effort: max）驗證
+- **NEVER** 因 0-A.1 抓到 Critical/Major 後跳過 0-A.2 —— 一律進入 GPT-5.6-sol via Pi（effort: max）+ Claude Fable 5.1（effort: max）驗證
 - **NEVER** 用主線自判把 pi 標的 Major / Critical 降級成 Minor 來跳過 0-A.2 —— severity 以 pi 輸出為準
-- **NEVER** 跳過 0-A.2 的 Claude Fable 5 步驟、只跑 GPT-5.6-sol via Pi（effort: max）——兩步驟綁定，缺 Fable 裁決 = 0-A.2 未完成
+- **NEVER** 跳過 0-A.2 的 Claude Fable 5.1 步驟、只跑 GPT-5.6-sol via Pi（effort: max）——兩步驟綁定，缺 Fable 裁決 = 0-A.2 未完成
 - **NEVER** 把 heavy gate 的 `exit 75` 讀成 gate 本身失敗（typecheck 掛了 / OOM / 該調 heap） —— 75 是 `gate-slot.sh` 的 `EX_TEMPFAIL`，代表等不到 slot、inner command 從未執行。判準是 `grep -c "error TS"` 回 0；接著查 lock holder 並比 CPU time vs elapsed。三步診斷與逃生口見 [[pitfall-heavy-gate-exit-75-reads-as-typecheck-failure]]。**NEVER** 用調大 `--max-old-space-size` 或 `CLADE_GATE_WAIT_TIMEOUT` 回應它 —— 兩者都是對著錯誤的層施力
 
 ---
