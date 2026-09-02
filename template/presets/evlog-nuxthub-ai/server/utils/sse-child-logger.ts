@@ -48,7 +48,7 @@ interface ForkChildLoggerOptions {
  */
 export function forkChildLogger<T extends object = Record<string, unknown>>(
   event: H3Event,
-  options: ForkChildLoggerOptions,
+  options: ForkChildLoggerOptions & { fields?: T },
 ): RequestLogger<T> {
   const parent = useLogger(event)
   const parentCtx = parent.getContext()
@@ -63,13 +63,15 @@ export function forkChildLogger<T extends object = Record<string, unknown>>(
   )
 
   // 真實 FieldContext = DeepPartial<Omit<T, keyof InternalFields>> & InternalFields；
-  // 用 unknown 中介 cast 避免 Partial<T> 不對齊（M3a-<consumer-c> 修正）
-  child.set({
+  // 單一 assertion：set 的 payload 與 Partial<T> 不對齊（M3a-<consumer-c> 修正）
+  const childFields: Parameters<typeof child.set>[0] = {
     operation: options.operation,
     _parentRequestId: typeof parentCtx.requestId === 'string' ? parentCtx.requestId : undefined,
     user: options.user,
     ...options.metadata,
-  } as unknown as Parameters<typeof child.set>[0])
+    ...options.fields,
+  } as Parameters<typeof child.set>[0]
+  child.set(childFields)
 
   return child
 }
