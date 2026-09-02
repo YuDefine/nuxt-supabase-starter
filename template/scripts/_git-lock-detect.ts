@@ -144,7 +144,7 @@ export function ensureNoStaleIndexLock(repoRoot, opts = {}) {
  *
  * 兩者疊起來讓 `reason: 'active-process'` 在一台常態有 6+ 個 agent session 的機器上幾乎
  * 恆真，於是 propagate 對某個 consumer 可以無限期 `failed`，而輸出看起來像「有人正在動
- * 那棵樹」（v1.11.94 對 nuxt-supabase-starter 連兩趟）。
+ * 那棵樹」（v1.11.94 對同一 consumer 連兩趟）。
  *
  * NEVER 改成放寬 `thresholdMs` 或拿掉這條判準：前者只延後同一個假陽性，後者把永久卡住
  * 換成資料損毀風險。要修的是它量錯了對象。

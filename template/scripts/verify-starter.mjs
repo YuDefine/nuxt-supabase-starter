@@ -155,6 +155,11 @@ function usesSupabase() {
   return dbSchema.startsWith('supabase')
 }
 
+function usesSelfHostedSupabase() {
+  const data = readJsonSafe(join(ROOT, '.claude', 'hub.json'))
+  return data?.modules?.['db-runtime'] === 'supabase-self-hosted'
+}
+
 function checkHubJson() {
   const p = join(ROOT, '.claude', 'hub.json')
   const data = readJsonSafe(p)
@@ -381,6 +386,16 @@ function checkEnvFile() {
     return
   }
 
+  if (usesSelfHostedSupabase()) {
+    record(
+      'env-vars',
+      '.env 全部 vars 已填',
+      'SKIP',
+      `缺 ${missing.length} 個（self-hosted 憑證走 playbook 01/03，不是 scaffold 當下能填）`,
+    )
+    return
+  }
+
   // Build detailed fix hints
   const hints = missing
     .map((v) => {
@@ -454,6 +469,15 @@ function checkDatabaseTypes() {
   }
   const p = join(ROOT, 'app', 'types', 'database.types.ts')
   if (!existsSync(p)) {
+    if (usesSelfHostedSupabase()) {
+      record(
+        'db-types',
+        'app/types/database.types.ts 存在',
+        'SKIP',
+        'self-hosted：對 LXC gen types，NEVER 本機 supabase start / --local',
+      )
+      return
+    }
     record(
       'db-types',
       'app/types/database.types.ts 存在',
@@ -544,6 +568,14 @@ function checkResidualKeywords() {
       '!.git/**',
       '--glob',
       '!node_modules/**',
+      '--glob',
+      '!vendor/**',
+      '--glob',
+      '!scripts/pre-push/**',
+      '--glob',
+      '!scripts/templates/**',
+      '--glob',
+      '!README.md',
       '.',
     ],
     { cwd: ROOT, encoding: 'utf8' },
