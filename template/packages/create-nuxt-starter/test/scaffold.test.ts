@@ -58,6 +58,7 @@ describe('scaffold: base-only (no features)', () => {
 
     const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf-8'))
     expect(pkg.name).toBe('base-only')
+    expect(pkg.packageManager).toBe('pnpm@11.24.0')
     expect(pkg.dependencies.nuxt).toBeDefined()
   })
 

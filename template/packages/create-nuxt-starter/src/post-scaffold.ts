@@ -256,6 +256,12 @@ export async function postScaffold(
       '  pnpm dev                 # 啟動開發伺服器',
       '  pnpm verify:starter      # 檢查 scaffold 狀態',
     )
+  } else if (cladeModules.dbRuntime === 'supabase-self-hosted') {
+    nextSteps.push(
+      '  docs/playbooks/01-lxc-and-tailscale.md  # 重用既有 CT；NEVER 本機 supabase start',
+      '  pnpm dev                 # 啟動開發伺服器',
+      '  pnpm verify:starter      # 檢查 scaffold 狀態',
+    )
   } else {
     nextSteps.push(
       '  pnpm run setup           # 檢查環境 → 啟動 Supabase → 產生型別',
