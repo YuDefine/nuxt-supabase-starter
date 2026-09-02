@@ -8,6 +8,7 @@ import {
   buildMintGatePlaybooksArgs,
   buildRegisterConsumerArgs,
   maybeRegisterConsumer,
+  maybeSyncVendor,
   maybeWriteConsumerMeta,
   readPendingBuildApprovals,
   resolveCladeInitScript,
@@ -265,6 +266,14 @@ describe('consumer-meta 寫入', () => {
   })
 })
 
+describe('vendor 投影', () => {
+  it('clade 還沒有 sync-vendor 時略過、不炸', () => {
+    const cladeRoot = mkdtempSync(join(tmpdir(), 'vendor-clade-missing-'))
+    const targetDir = mkdtempSync(join(tmpdir(), 'vendor-target-missing-'))
+    expect(maybeSyncVendor(cladeRoot, targetDir)).toBe(false)
+  })
+})
+
 describe('first-run marker', () => {
   // marker 的 instructions 曾以「詳見 docs/AGENTS.md」收尾，但那份文件在 starter 的
   // template/docs/ 底下、scaffold 不複製（只複製 root AGENTS.md）—— 每個 scaffold
@@ -298,5 +307,10 @@ describe('first-run marker', () => {
         `marker 叫人跑 pnpm ${name}，但 assemble 沒產這條`,
       ).toBe(true)
     }
+  })
+
+  it('initial commit 設 HUSKY=0，避免剛 wire 的 hook 擋 bootstrap commit', () => {
+    const src = readFileSync(join(import.meta.dirname, '..', 'src', 'post-scaffold.ts'), 'utf-8')
+    expect(src).toContain("HUSKY: '0'")
   })
 })

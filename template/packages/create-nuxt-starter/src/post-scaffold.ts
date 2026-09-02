@@ -182,33 +182,19 @@ export async function postScaffold(
     }
   }
 
-  // 5. Initialize git
+  // 5. git init（先不 commit：husky / playbooks / vendor 都還會寫檔）
   const adoptingRepo = opts.existingGitRepo === true
-  consola.start(adoptingRepo ? '正在提交 starter 檔案...' : '正在初始化 Git...')
   try {
     if (!adoptingRepo) {
+      consola.start('正在初始化 Git...')
       execFileSync('git', ['init'], { cwd: targetDir, stdio: 'pipe' })
     }
-    // git init 之後才寫：scaffold-consumer-meta --write 用 cwd 的 git root 判定 invokerOwns。
-    // 必須在 git add 之前，否則 initial commit 會漏掉這份身分檔。
-    if (cladeRoot) {
-      maybeWriteConsumerMeta(cladeRoot, targetDir)
-    }
-    execFileSync('git', ['add', '-A'], { cwd: targetDir, stdio: 'pipe' })
-    execFileSync(
-      'git',
-      [
-        'commit',
-        '-m',
-        adoptingRepo
-          ? 'chore: scaffold nuxt starter into existing repo'
-          : 'chore: initial project scaffold',
-      ],
-      { cwd: targetDir, stdio: 'pipe' },
-    )
-    consola.success(adoptingRepo ? 'starter 檔案已提交（既有歷史保留）！' : 'Git 初始化完成！')
   } catch {
-    consola.warn(adoptingRepo ? 'Git 提交失敗，請手動執行。' : 'Git 初始化失敗，請手動執行。')
+    consola.warn('Git 初始化失敗，請手動執行。')
+  }
+
+  if (cladeRoot) {
+    maybeWriteConsumerMeta(cladeRoot, targetDir)
   }
 
   // 6. Register as clade consumer (idempotent; opt-out via --no-register-consumer)
@@ -223,10 +209,41 @@ export async function postScaffold(
     maybeMintGatePlaybooks(cladeRoot, targetDir, opts)
   }
 
+  if (cladeRoot) {
+    maybeSyncVendor(cladeRoot, targetDir)
+  }
+
   // 7. Wire pre-commit hook (idempotent; opt-out via --no-wire-pre-commit)
   let preCommitWired = false
   if (cladeRoot && opts.wirePreCommit) {
     preCommitWired = await maybeWirePreCommit(cladeRoot, targetDir, opts.yes)
+  }
+
+  if (pnpmInstalled) {
+    try {
+      execFileSync('pnpm', ['exec', 'vp', 'fmt'], { cwd: targetDir, stdio: 'pipe' })
+    } catch {
+      consola.warn('scaffold 收尾 vp fmt 失敗 — 第一次 pnpm check 可能會改寫檔案')
+    }
+  }
+
+  consola.start(adoptingRepo ? '正在提交 starter 檔案...' : '正在提交 initial scaffold...')
+  try {
+    execFileSync('git', ['add', '-A'], { cwd: targetDir, stdio: 'pipe' })
+    execFileSync(
+      'git',
+      [
+        'commit',
+        '-m',
+        adoptingRepo
+          ? 'chore: scaffold nuxt starter into existing repo'
+          : 'chore: initial project scaffold',
+      ],
+      { cwd: targetDir, stdio: 'pipe', env: { ...process.env, HUSKY: '0' } },
+    )
+    consola.success(adoptingRepo ? 'starter 檔案已提交（既有歷史保留）！' : 'Git 初始化完成！')
+  } catch {
+    consola.warn(adoptingRepo ? 'Git 提交失敗，請手動執行。' : 'Git 提交失敗，請手動執行。')
   }
 
   // 8. Write .claude/.first-run marker — AI session 第一次進此專案時讀此檔，
@@ -386,6 +403,23 @@ export function maybeWriteConsumerMeta(cladeRoot: string, targetDir: string): bo
     return true
   } catch (error) {
     consola.warn(`寫入 consumer-meta 失敗：${(error as Error).message}`)
+    return false
+  }
+}
+
+/** hub:vendor 在 initial commit 之後跑會留下整棵 vendor/ untracked。 */
+export function maybeSyncVendor(cladeRoot: string, targetDir: string): boolean {
+  const script = join(cladeRoot, 'scripts', 'sync-vendor.ts')
+  if (!existsSync(script)) {
+    consola.info('Clade checkout 尚無 sync-vendor.ts — 略過 vendor 投影')
+    return false
+  }
+  try {
+    execFileSync('node', [script], { cwd: targetDir, stdio: 'pipe' })
+    consola.success('vendor 投影已寫入')
+    return true
+  } catch (error) {
+    consola.warn(`vendor 投影失敗：${(error as Error).message}`)
     return false
   }
 }
