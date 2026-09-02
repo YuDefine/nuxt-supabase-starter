@@ -60,6 +60,10 @@ Step 1 兩層判定**之前**先判 —— Step 1 只問「有幾件工作、幾
 三者皆無 → 視為未過門檻，照 Step 1 正常判。**NEVER** 因為「感覺跑很久了」就自行判定過門檻，
 也 **NEVER** 因為「還沒看到 hook」就無視 user 明講的百分比。
 
+**身分豁免照 [[session-tasks]] § 身分豁免**：in-process subagent、Herdr 顧問 pane
+（`CLADE_ADVISORY_SESSION=1`）、Fable 系列主線不受本 gate 約束 —— hook 對它們根本不響，
+所以訊號 1 天然不會出現；訊號 2／3 命中時仍不改道。**NEVER** 從工作性質自評身分。
+
 ### 分流
 
 | 可觀察 predicate | 動作 |

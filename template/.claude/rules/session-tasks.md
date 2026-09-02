@@ -97,6 +97,25 @@ ccg profile 由 2026-08-31 的 auto-compact 實測收斂；ccx 同日退役，�
 
 **NEVER 把 soft tier 讀成「什麼都不能開」。** 舊版第一級綁「NEVER 開新的工作段」，對 `/work-loop` 這類一個接一個開 item 的 loop 等於硬停（兩輪腰斬實證見 rationale）。**改的不是數字算錯，是那一級的語義訂錯了**；把 300k 讀回「什麼都不能開」等於把這次拍板退回它要修的狀態。
 
+### 身分豁免：三種身分不受本線約束（Charles 2026-09-02 拍板）
+
+收工線買的是「successor 從 fresh context 起跑」，它的前提是**這個 session 有東西可以交**。
+下面三種身分都不成立 —— 對它們發收工提示，是要求一個交不出東西的收件人去執行收工三步：
+
+| 身分 | 機械 marker（hook 認的就是這個） |
+| --- | --- |
+| in-process subagent（`Agent` tool：Explore / Plan / general-purpose / fable 顧問…） | PostToolUse payload 的 `agent_id` / `agent_type`（2026-09-02 probe 實測：主線 payload 完全沒有這兩個 key） |
+| Herdr 派出去的顧問 pane | `CLADE_ADVISORY_SESSION=1`，由 `herdr-session-handoff.ts --advisory` 注入 |
+| Fable 系列主線 | transcript 尾端的 `"model":"claude-fable*"` |
+
+**NEVER 從工作性質自評身分。** 逐字反開脫：「我這個主線 session 現在做的事很像顧問
+（只是讀 code 給建議）」—— 不算，判別只認上面三個 marker。主線就算整輪只讀不寫，
+它仍然有殘工要派、仍然受兩級門檻約束。
+
+**這三條 NEVER 是下一段那條「門檻 NEVER 可由 env 放寬」的破口**：它們與 runner-child marker
+同型 —— 宣告的是**執行身分**，不是門檻數值。兩組門檻數字仍寫死在 hook 裡，要放寬仍然只有
+改 hook 一途。**NEVER** 反過來拿本節論證「所以門檻也可以由 env 調」。
+
 門檻是 `session-context-budget-warn.sh`（PostToolUse hook）機械報出來的，本節是它引用的 SoT：
 **每個仍可啟動的 launcher在 soft tier 響一次、hard tier 起依 profile 的 repeat 步長再響**；native runner child 才改讀 **500k / 600k / +100k**。提示走 exit 2 —— PostToolUse 的 exit 0 stderr
 只進 debug log，agent 永遠看不到（實錄見 rationale）。
