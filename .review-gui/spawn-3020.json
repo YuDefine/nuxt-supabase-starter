@@ -1,0 +1,9 @@
+{
+  "requestedPort": 3020,
+  "heardPort": null,
+  "message": "port 3020 已被非本 session 的程序占用（PID 729418）：listener 不是 dev server 型態（node /tmp/claude-1000/fakeplain/plainsvc.js）",
+  "herdrTab": null,
+  "pid": 729909,
+  "updatedAt": "2026-09-02T01:53:12.380Z",
+  "status": "failed"
+}

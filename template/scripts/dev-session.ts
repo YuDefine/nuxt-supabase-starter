@@ -79,6 +79,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   writeFileSync,
   unlinkSync,
@@ -95,6 +96,9 @@ import {
   describeBackingServiceGap,
 } from './lib/wt-env-bootstrap-runner.ts'
 import { chooseDevWorkspace } from './lib/dev-workspace.ts'
+// 分配模型的 SoT。base 池寬度 NEVER 在本檔另外定義一次——第二份常數與分配器漂開時，
+// 回收會殺到合法的 dev server。
+import { DEV_PORT_BAND } from './lib/worktree-dev-port.ts'
 
 const LEASE_DIR = tmpdir()
 const READY_TIMEOUT_MS = 90_000
@@ -597,6 +601,314 @@ function listeningPortsForCwd(cwd) {
     }
   }
   return [...new Set(ports)]
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// 外來占用分類（foreign-misbound → 自動回收）
+//
+// 為什麼是分類而不是一律 refuse：port 的**分配**層早就切乾淨了（registry/consumers.json
+// 給每個 consumer 一個 base + base+1..+9 + 一段 50 號的 worktree band），缺的只有
+// **runtime enforcement** —— 沒有任何東西擋「process 綁到不屬於它的 port」。而原本那句
+// 「先確認該程序是什麼」就是「agent 回頭問人怎麼搶回來」的唯一來源，儘管它有能力自己判：
+// listener 的 /proc/<pid>/cwd 指得出它屬於哪個 consumer，registry 說得出那個 port 屬於誰。
+//
+// 2026-09-02 實例：<consumer-b> 要收 evidence，3000 被 <consumer-a> 的一支重複 nuxt dev 佔著
+// （cmdline 寫 `--port 3040`、實際聽 3000、cwd 在 <consumer-a>），而 <consumer-a> 現役的 3040 由另一支
+// pid 持有。分配層對這件事完全正確，沒有任何一層在 runtime 說「你綁錯了」。
+//
+// **判得出「它綁錯了」才回收，判不出一律維持 refuse。** 缺一即非 foreign-misbound：
+// registry 讀得到 / self 與 owner 都解得出且不同 / listener 是 dev server 型態 /
+// port 屬於 self / port 不屬於 owner / 沒有人類租約持有它。
+// **NEVER** 把任何一條改成「大概是」——回收是破壞性動作，多問一次的成本遠低於殺掉別人
+// 正在收 evidence 的 dev server。
+
+/** review-gui 的常駐 port。它是驗收介面本身，殺掉等於把眼睛挖掉。 */
+const RECLAIM_NEVER_PORTS = new Set([5174])
+/** 常駐服務的 cmdline 特徵。dev-router 是 3000 的 L4 前門，回收它會斷掉所有 worktree 的 tunnel。 */
+const RECLAIM_NEVER_CMD_RE = /review-gui|dev-router/
+/**
+ * dev server 型態。**這是前置條件不是加分項**：不匹配一律維持 refuse ——
+ * 一個判不出是什麼的 listener，唯一安全的處置是問人。
+ */
+const DEV_SERVER_CMD_RE =
+  /(?:^|[\s/])(?:nuxt|nuxi|vite|next|astro)(?:[\s/]|$)|node[\s/][^\s]*.*\bdev\b/
+
+/** 這個 pid 的 cmdline（NUL → space）。讀不到回 null（pid 已消失 / 沒權限）。 */
+function procCmdline(pid) {
+  if (!pid) return null
+  try {
+    return readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean).join(' ')
+  } catch {
+    return null
+  }
+}
+
+/** 這個 pid 的 cwd（realpath）。讀不到回 null。 */
+function procCwd(pid) {
+  if (!pid) return null
+  try {
+    return realpathSync(`/proc/${pid}/cwd`)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * clade registry 目錄。consumer 端跑的是投影副本（`<consumer>/scripts/dev-session.ts`），
+ * 上推三層找不到 registry，所以 fallback 到 clade home —— 與 review-gui.ts /
+ * audit-screenshot-*.ts 同一個 fallback 慣例。找不到回 null，分類器據此退回 refuse。
+ */
+let registryDirCache
+function cladeRegistryDir() {
+  if (registryDirCache !== undefined) return registryDirCache
+  const cands = []
+  if (process.env.CLADE_HOME) cands.push(join(process.env.CLADE_HOME, 'registry'))
+  cands.push(resolve(fileURLToPath(import.meta.url), '..', '..', '..', 'registry'))
+  if (process.env.HOME) cands.push(join(process.env.HOME, 'offline', 'clade', 'registry'))
+  registryDirCache = cands.find((d) => existsSync(join(d, 'consumers.json'))) ?? null
+  return registryDirCache
+}
+
+/**
+ * 每個 consumer 的地盤：檔案系統 root（含 `<id>-wt/` 底下的 worktree）＋ port 分配。
+ *
+ * port 分配兩段，與 lib/worktree-dev-port.ts 的分配模型同源（base 池 `base..base+9`、
+ * band 4200 區，`DEV_PORT_BAND` 直接 import 自那支）：**NEVER** 在這裡自己發明第三段 ——
+ * 多一段就是第二份 matcher，它與真正的分配器漂開的那一刻，回收會殺到合法的 dev server。
+ */
+/**
+ * consumer 的 checkout 都排在同一層（`<offlineRoot>/<id>` 與
+ * `<offlineRoot>/<id>-wt/<slug>`，見 wt-helper.ts）。registry 在 `<cladeRoot>/registry/`，
+ * 所以 offline root 是 clade root 的上一層 —— **除非 clade root 自己就是一條 worktree**。
+ *
+ * 這一格是實測抓到的：本檔在 `~/offline/clade-wt/<slug>/vendor/scripts/` 跑時，上推兩層
+ * 得到 `~/offline/clade-wt`，於是**每一個** consumer root 都指向不存在的路徑、
+ * territoryForCwd 對所有 cwd 回 null、分類器一律退回 refuse。而它的失敗是**靜默**的：
+ * refuse 本來就是預設行為，沒有任何訊號說「分類器其實從來沒運作過」。
+ * 而 dev server 正是最常從 worktree 起的東西 —— 錯的那一格就是唯一會用到的那一格。
+ *
+ * **NEVER** 寫死 `~/offline`：clade 可以被 clone 到任何位置，寫死之後這條判準在別台機器上
+ * 同樣會靜默失效。
+ */
+export function offlineRootFromRegistryDir(registryDir) {
+  const cladeRoot = resolve(registryDir, '..')
+  const parent = resolve(cladeRoot, '..')
+  return basename(parent).endsWith('-wt') ? resolve(parent, '..') : parent
+}
+
+export function consumerTerritories() {
+  const dir = cladeRegistryDir()
+  if (!dir) return null
+  let list
+  try {
+    list = JSON.parse(readFileSync(join(dir, 'consumers.json'), 'utf8'))?.consumers
+  } catch {
+    return null
+  }
+  if (!Array.isArray(list)) return null
+  let metaConsumers = {}
+  try {
+    metaConsumers =
+      JSON.parse(readFileSync(join(dir, 'consumers-meta.json'), 'utf8'))?.consumers ?? {}
+  } catch {
+    /* 多 app 宣告缺席時退回 dev_ports.nuxt */
+  }
+  const offlineRoot = offlineRootFromRegistryDir(dir)
+  const territories = []
+  for (const c of list) {
+    const id = c?.consumer_id
+    if (!id) continue
+    const bases = new Set<number>()
+    if (Number.isInteger(c?.dev_ports?.nuxt)) bases.add(c.dev_ports.nuxt)
+    for (const p of metaConsumers?.[id]?.declared?.dev?.ports ?? []) {
+      if (Number.isInteger(p?.port)) bases.add(p.port)
+    }
+    const ports = new Set<number>()
+    for (const b of bases) for (let n = b; n <= b + DEV_PORT_BAND; n++) ports.add(n)
+    const band = c?.dev_ports?.worktree_band
+    territories.push({
+      id,
+      roots: [join(offlineRoot, id), join(offlineRoot, `${id}-wt`)],
+      ports,
+      bands: Array.isArray(band) && band.length === 2 ? [[band[0], band[1]]] : [],
+    })
+  }
+  return territories
+}
+
+export function ownsPort(territory, port) {
+  if (territory.ports.has(port)) return true
+  return territory.bands.some(([lo, hi]) => port >= lo && port <= hi)
+}
+
+/**
+ * 這個 cwd 落在哪個 consumer 的地盤。取**最長**匹配 root：`~/offline/<consumer-h>` 與
+ * `~/offline/<consumer-h>` 兩個 root 都是 registry 成員，短的先命中就會把
+ * platform 的 worktree 判成 <consumer-h> 的。
+ */
+export function territoryForCwd(territories, cwd) {
+  if (!cwd) return null
+  let best = null
+  let bestLen = -1
+  for (const t of territories) {
+    for (const root of t.roots) {
+      let r = root
+      try {
+        r = realpathSync(root)
+      } catch {
+        /* root 不存在（consumer 沒 clone 到本機）也照樣字串比對 */
+      }
+      if ((cwd === r || cwd.startsWith(r + '/')) && r.length > bestLen) {
+        best = t
+        bestLen = r.length
+      }
+    }
+  }
+  return best
+}
+
+/**
+ * 這個 pid / port 是不是某個**人類** lease 的 dev server。人類租約無界、NEVER 自動回收
+ *（見檔頭 broker 段）—— 而 step 2 的 lease gate 只看 `(self consumer, port)` 那一把，
+ * 對「人在別的 consumer id 底下持有這台」完全盲。回收前 MUST 自己掃一次整個 LEASE_DIR。
+ *
+ * 掃不到（讀不了目錄）時回一個 sentinel 而不是 null —— 判不出來要 fail closed。
+ */
+export function humanLeaseHolding(pid, port) {
+  let files
+  try {
+    files = readdirSync(LEASE_DIR).filter((f) => f.endsWith('-verification-lease.json'))
+  } catch {
+    return { holder: { kind: 'unknown', label: 'lease 目錄讀不到，保守視為有人持有' } }
+  }
+  for (const f of files) {
+    let lease
+    try {
+      lease = JSON.parse(readFileSync(join(LEASE_DIR, f), 'utf8'))
+    } catch {
+      continue
+    }
+    const d = lease?.devServer
+    if (!d) continue
+    const matches =
+      (pid && Number(d.pid) === Number(pid)) || (port && Number(d.port) === Number(port))
+    if (!matches) continue
+    // 無界租約（`expiresAt === null`）即人類租約 —— 兩個判準同源，見 writeLease。
+    if (lease?.holder?.kind === 'human' || lease?.expiresAt === null) return lease
+  }
+  return null
+}
+
+/**
+ * 外來占用分類。`foreign-misbound` 才回收；其餘一律讓 caller 維持 refuse 並印出 `why`。
+ */
+export function classifySquatter({ port, pid, selfConsumerId, territories: injected = null }) {
+  // owner / cwd / cmd 在每一個分支都出現，缺席時填 null —— 讓 caller 拿到單一形狀，
+  // NEVER 讓「判不出來」與「這個欄位不存在」變成兩種要各自處理的情況。
+  const nope = (verdict, why) => ({ verdict, why, owner: null, cwd: null, cmd: null })
+  const n = Number(port)
+  if (!pid) return nope('unknown', 'listener pid 查不到')
+  if (RECLAIM_NEVER_PORTS.has(n)) return nope('protected', `port ${n} 是 review-gui 的常駐號碼`)
+  const cmd = procCmdline(pid)
+  if (!cmd) return nope('unknown', `讀不到 PID ${pid} 的 cmdline`)
+  if (RECLAIM_NEVER_CMD_RE.test(cmd))
+    return nope('protected', 'listener 是 review-gui / dev-router 常駐服務')
+  if (!DEV_SERVER_CMD_RE.test(cmd))
+    return nope('unknown', `listener 不是 dev server 型態（${cmd.slice(0, 120)}）`)
+  if (!selfConsumerId)
+    return nope('unknown', '本 session 的 consumer_id 解不出（缺 --consumer-meta）')
+  const territories = injected ?? consumerTerritories()
+  if (!territories) return nope('unknown', 'clade registry 讀不到，無法判 port 歸屬')
+  const self = territories.find((t) => t.id === selfConsumerId)
+  if (!self) return nope('unknown', `registry 沒有 consumer ${selfConsumerId}`)
+  const cwd = procCwd(pid)
+  if (!cwd) return nope('unknown', `讀不到 PID ${pid} 的 cwd`)
+  const owner = territoryForCwd(territories, cwd)
+  if (!owner) return nope('unknown', `PID ${pid} 的 cwd 不屬於任何 registry consumer（${cwd}）`)
+  if (owner.id === selfConsumerId)
+    return nope('unknown', `PID ${pid} 的 cwd 也屬於 ${selfConsumerId}，不是外來程序`)
+  if (!ownsPort(self, n)) return nope('unknown', `port ${n} 不在 ${selfConsumerId} 的分配內`)
+  if (ownsPort(owner, n))
+    return nope('unknown', `port ${n} 也在 ${owner.id} 的分配內，兩邊都宣告 → 交給人判`)
+  const human = humanLeaseHolding(pid, n)
+  if (human)
+    return nope(
+      'human-lease',
+      `PID ${pid} 由人類租約持有（${human.holder?.label ?? human.holder?.kind}）`,
+    )
+  return {
+    verdict: 'foreign-misbound',
+    why: `${owner.id} 的程序綁到 ${selfConsumerId} 的 port ${n}`,
+    owner,
+    cwd,
+    cmd,
+  }
+}
+
+/**
+ * SIGTERM → 等 5s → SIGKILL。回 true 代表 port 真的放掉了。
+ *
+ * 等待綁「port 不再有人聽」這個可觀察事件，**NEVER** 只等 pid 消失 —— dev server 的
+ * child 才是真正持有 socket 的那一個，parent 先走不代表 port 放掉了。每一輪重解一次
+ * listener pid，正是為了在 parent 死後打到那個 child。
+ */
+export async function reclaimSquatter(port, firstPid) {
+  const rounds: [NodeJS.Signals, number][] = [
+    ['SIGTERM', 5_000],
+    ['SIGKILL', 3_000],
+  ]
+  for (const [sig, waitMs] of rounds) {
+    if (!portListening(port)) return true
+    const pid = Number(portPid(port)) || Number(firstPid)
+    try {
+      process.kill(pid, sig)
+    } catch {
+      /* 已經不在 */
+    }
+    const deadline = Date.now() + waitMs
+    while (Date.now() < deadline) {
+      await sleep(250)
+      if (!portListening(port)) return true
+    }
+  }
+  return !portListening(port)
+}
+
+/**
+ * 殺掉本 cwd 底下綁到「不是請求的那個 port」的 listener，回報殺了哪些、跳過哪些。
+ *
+ * 治本那半。上游沒有 `strictPort`：Nuxt / listhen 在請求的 port 被佔住時**靜默換一個**，
+ * 而換到的號碼幾乎必然屬於別人 —— registry 把各 consumer 的 base 排成 +10 間距，中間的
+ * 空號全是別人的地盤。2026-09-02 實證：<consumer-a> 請求 3040（被自家 worktree 的 dev server
+ * 佔著）→ 靜默落到 3000 → 撞進 <consumer-b> 的分配，<consumer-b> 那邊收不了 evidence。
+ *
+ * 所以偵測到 heard ≠ requested 時 **MUST 殺掉再 fail，NEVER 只 fail 留著它**：留著的那支
+ * 會一直佔著別人的號碼，而下一次起 dev 只會再撞一次同一個 fallback ——「只 fail」把一次
+ * 意外變成一個常駐的衝突源。事後偵測 + 殺是這裡唯一可行的 enforcement。
+ *
+ * **保護判準與 classifySquatter 同一組常數**（`RECLAIM_NEVER_*` / `DEV_SERVER_CMD_RE`）：
+ * 同一個 cwd 底下不是只有 dev server —— review-gui 從 consumer root 起就跟它同 cwd，
+ * 在這裡自己寫第二套「哪些不能殺」等於保證兩邊有一天會漂開。
+ */
+export async function killStrayListeners(cwd, requestedPort) {
+  const stray = listeningPortsForCwd(cwd).filter((p) => p !== requestedPort)
+  const killed = []
+  const spared = []
+  for (const p of stray) {
+    const pid = portPid(p)
+    const cmd = procCmdline(pid) ?? ''
+    if (RECLAIM_NEVER_PORTS.has(p) || RECLAIM_NEVER_CMD_RE.test(cmd)) {
+      spared.push({ port: p, pid, why: 'review-gui / dev-router 常駐服務' })
+      continue
+    }
+    if (!DEV_SERVER_CMD_RE.test(cmd)) {
+      spared.push({ port: p, pid, why: '不是 dev server 型態' })
+      continue
+    }
+    if (await reclaimSquatter(p, pid)) killed.push({ port: p, pid })
+    else spared.push({ port: p, pid, why: 'SIGKILL 後仍在聽' })
+  }
+  return { stray, killed, spared }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1223,22 +1535,41 @@ async function runLaunch(o, meta, port) {
     }
   }
 
-  // 2.5) 外來占用檢查。走到這裡代表沒有可 reuse 的活 session，所以 port 若已經有人在聽，
+  // 2.5) 外來占用分類。走到這裡代表沒有可 reuse 的活 session，所以 port 若已經有人在聽，
   // 那個 listener 一定不是我們起的。不擋的話：新 session 內的 dev 撞 EADDRINUSE 立刻死，
   // 但 step 4 的 ready loop 第一次 poll 就看到 listener → 宣告 ready + 寫 lease，
   // caller 於是在別的程序上收 evidence，而 lease 指向一個我們並不擁有的 dev server。
+  //
+  // **擋不等於問人。** classifySquatter 判得出「別的 consumer 的 dev server 綁到了本
+  // consumer 的號碼」（foreign-misbound）時直接回收 —— 那件事 registry 早就有答案，
+  // 把它變成一個問題丟回給 user 是這條路徑唯一的成本來源。判不出來才 refuse，
+  // 而 refuse 的訊息現在會帶上 `why`：說不出哪一條前提沒過的 refuse 等於沒說明。
   if (port && portListening(port)) {
     const squatter = portPid(port)
-    err(`[dev-session] port ${port} 已被非本 session 的程序占用（PID ${squatter}）`)
-    err(`  同名 herdr Tab（${sessionName}）不存在，因此這不是可 reuse 的 durable session。`)
-    err(`  先確認該程序是什麼，再擇一處理：`)
-    err(`    - 若是舊的 dev server：node scripts/dev-session.ts stop --session ${sessionName}`)
-    err(`    - 若是別的服務：換 port（--port <n>）或自行停掉該程序`)
-    writeSpawnStatus(o.cwd, port, {
-      status: 'failed',
-      message: `port ${port} 已被非本 session 的程序占用（PID ${squatter}）`,
-    })
-    process.exit(1)
+    const verdict = classifySquatter({ port, pid: squatter, selfConsumerId: consumerId })
+    if (verdict.verdict === 'foreign-misbound') {
+      out(
+        `[dev-session] 回收 ${verdict.owner.id}:${squatter}（cwd ${verdict.cwd}）綁錯 port ${port}`,
+      )
+      if (!(await reclaimSquatter(port, squatter))) {
+        const msg = `port ${port} 上 ${verdict.owner.id} 的程序（PID ${squatter}）SIGKILL 後仍在聽`
+        err(`[dev-session] ${msg}`)
+        writeSpawnStatus(o.cwd, port, { status: 'failed', message: msg })
+        process.exit(1)
+      }
+    } else {
+      err(`[dev-session] port ${port} 已被非本 session 的程序占用（PID ${squatter}）`)
+      err(`  不自動回收：${verdict.why}`)
+      err(`  同名 herdr Tab（${sessionName}）不存在，因此這不是可 reuse 的 durable session。`)
+      err(`  先確認該程序是什麼，再擇一處理：`)
+      err(`    - 若是舊的 dev server：node scripts/dev-session.ts stop --session ${sessionName}`)
+      err(`    - 若是別的服務：換 port（--port <n>）或自行停掉該程序`)
+      writeSpawnStatus(o.cwd, port, {
+        status: 'failed',
+        message: `port ${port} 已被非本 session 的程序占用（PID ${squatter}）：${verdict.why}`,
+      })
+      process.exit(1)
+    }
   }
 
   // 3) 起 background Tab（不搶焦點）+ 把 dev 命令丟進它的 pane
@@ -1290,14 +1621,20 @@ async function runLaunch(o, meta, port) {
       })
       return
     }
-    const heard = listeningPortsForCwd(o.cwd).filter((p) => p !== port)
-    if (heard.length) {
-      const msg = `請求 ${port}、聽到 ${heard[0]}`
-      err(`⚠ ${msg}。session ${sessionName} 保留供檢查：`)
+    // 請求 A、聽到 B：上游靜默換 port 了。**殺掉再 fail** —— 留著它就是留下一個佔著
+    // 別人號碼的常駐衝突源（見 killStrayListeners 的成因段）。
+    const strayPorts = listeningPortsForCwd(o.cwd).filter((p) => p !== port)
+    if (strayPorts.length) {
+      const { killed, spared } = await killStrayListeners(o.cwd, port)
+      const msg = `請求 ${port}、聽到 ${strayPorts[0]}（上游沒有 strictPort，靜默換了號碼）`
+      err(`⚠ ${msg}`)
+      for (const k of killed) err(`  已殺掉綁錯號碼的 listener：port ${k.port}（PID ${k.pid}）`)
+      for (const sp of spared) err(`  保留 port ${sp.port}（PID ${sp.pid}）：${sp.why}`)
+      err(`  真因通常是請求的 ${port} 當時被別人佔著。session ${sessionName} 保留供檢查：`)
       err(`  herdr tab focus ${tab.tabId}（看 dev 卡在哪）`)
       writeSpawnStatus(o.cwd, port, {
         status: 'failed',
-        heardPort: heard[0],
+        heardPort: strayPorts[0],
         message: msg,
         herdrTab: tab.tabId,
       })
