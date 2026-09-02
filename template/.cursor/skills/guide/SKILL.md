@@ -81,5 +81,5 @@ skill 由 `.claude/hub.json` 的 `modules` 決定裝哪些。下表的條目帶�
 ## Commit 相關邊界
 
 - 一般 commit 一律 `/commit`（多閘門品質流程）
-- spectra change 檔案的專屬 commit **同樣走 `/commit`**，在 argument 寫明「只 commit `openspec/changes/<name>/` 與該 change 觸動的實作檔」——`/spectra-commit` 已停用（PreToolUse hook fail-closed），**NEVER** 改派
+- spectra change 檔案的專屬 commit **同樣走 `/commit`**，在 argument 寫明「只 commit `openspec/changes/<name>/` 與該 change 觸動的實作檔」——`/spectra-commit` 已自 clade 移除（consumer 若由 `spectra init` 帶入上游版，PreToolUse hook 仍 fail-closed），**NEVER** 改派
 - 兩者都用 `git commit --only` 隔離別 session 的 staged 內容——不要繞過 skill 手打 `git add + git commit`

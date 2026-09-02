@@ -198,7 +198,7 @@ model-invoked skill（frontmatter 省略 `disable-model-invocation`）付**conte
 
 判準綁可觀察 predicate：**有沒有另一支 skill 會被同一批觸發詞吸過來？** 有就 MUST 寫，沒有就不必寫。`audit-rule-authoring.ts` 的 `skill-trigger-collision` 訊號列出的每一對，兩邊都該有指向對方的 boundary。
 
-clade 自家正例：`notion-board` 的「**NOT for** 主動建立一張新的決策題 ticket 去問客戶拍板——那是 outbound，走 /notion-ticket」、`codex-drive` 的「**NOT for** 小修改（Claude Code 直接做更快）、已有 Spectra 的專案、或純 review 工作」。兩者都做到「講出相鄰場景 + 指名去處」，只寫「NOT for 小修改」而不說去哪，agent 仍得自己猜。
+clade 自家正例：`notion-board` 的「**NOT for** 主動建立一張新的決策題 ticket 去問客戶拍板——那是 outbound，走 /notion-ticket」、`verification-create` / `verification-maintain` 互指的「**NOT for** maintenance」/「**NOT for** setup」。兩者都做到「講出相鄰場景 + 指名去處」，只寫「NOT for 小修改」而不說去哪，agent 仍得自己猜。
 
 出處：`openai/codex-security` 的 skill 集（2026-08 快照）——階段型 skill（finding-discovery / validation / attack-path-analysis / threat-model）每一支 description 都帶「Do not use as the primary trigger for full PR, commit, branch, patch, or repository scans」，把「頂層入口 vs 階段內部」這條邊界寫死在 description 而非 body。稽核見 § 稽核 的 `desc-no-negative-boundary`。
 

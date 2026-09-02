@@ -185,7 +185,7 @@ join 回 claim，宣告值與導出值並存，每一列帶 `via: 'declared' | '
 | `scripts/publish.ts` (clade) | 跨 consumer scan，warn 「別 session 還活著」；`ensureCleanOrAutoStash` 在**所有** dirty 分支之前跑 `classifyDirtyPaths`，`otherSession` 非空即 fail-loud |
 | `scripts/propagate.ts` (clade) | per-consumer warn 同上 |
 | `wt-helper.ts merge-back` | Phase 3 audit：偵測「main dirty 屬於別 session 路徑」 |
-| `/commit` skill（走 [[commit]]；spectra-commit 已停用，不是替代路徑） | Phase 4 partition：別 session 路徑 fail-closed |
+| `/commit` skill（走 [[commit]]；spectra-commit 已移除，不是替代路徑） | Phase 4 partition：別 session 路徑 fail-closed |
 | `wt-helper.ts` stash namespace | Phase 7：stash slug 帶 session_id |
 | `flow who` / `herdr-patrol` | 人與 agent 查「現在誰持有什麼」的同一份 JSON |
 

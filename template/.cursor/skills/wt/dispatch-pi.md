@@ -178,7 +178,7 @@ When Step 1.8 routes to analysis/debug, use `pi-dispatch.ts` with the appropriat
    `read-heavy-scan` row, which names gemini, and dispatched sol unchallenged). If you cannot name the
    row, you did not consult the table — pick a different basis rather than guessing a row name.
 
-   **effort 分級**：同 `/codex-drive analyze` / `/codex-drive debug` 各自的分級表。
+   **effort 分級**：依 `rules/core/agent-routing.md` § Routing Table 的 effort 六維表（`low` 是 Routing Table 類別預設檔；命中任一維即升檔）。
 
 4. **Report dispatch to user immediately** — print one block right after `Bash run_in_background`:
 

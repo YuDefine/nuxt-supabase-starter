@@ -95,6 +95,9 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // `../scripts/lib/json-unknown.ts` 解析到 vendor/scripts/lib/。
       // NEVER 放寬成 `vendor/scripts/lib/`——那個目錄在 clade home 是源。
       String.raw`vendor/scripts/lib/json-unknown\.ts$`,
+      // per-worktree dev DB 實作整目錄。只散給宣告 capability `worktree-db` 的 consumer，
+      // 但 LOCKED 判定與 gate 無關 —— 覆蓋率交叉檢查看的是聯集（projection-universe）。
+      String.raw`vendor/scripts/worktree-db/`,
       // Snippets / shared presets
       String.raw`vendor/(snippets|oxc-shared|doctor-shared|review-rules|husky)/`,
       // prepare-commit-msg 掛載點 —— 逐檔列出，**NEVER** 放寬成 `\.husky/`：
@@ -173,6 +176,9 @@ const CLADE_OWN_SOURCE_RE = new RegExp(
       // json-unknown.ts 源檔在 vendor/scripts/lib/；LOCKED_PROJECTION_RE 為
       // consumer dest 加了同路徑之後，沒有這一列 clade home 會把自己的源當投影。
       String.raw`vendor/scripts/lib/json-unknown\.ts$`,
+      // 同上：clade home 的 vendor/scripts/worktree-db/ 是源檔。只加 LOCKED 那列而漏掉
+      // 這一列，clade home 會把自己這 8.7K 行的源當投影過濾掉，改動不再算 user WIP。
+      String.raw`vendor/scripts/worktree-db/`,
       String.raw`AGENTS\.md$`,
       String.raw`CLAUDE\.md$`,
       String.raw`commitlint\.config\.ts$`,
