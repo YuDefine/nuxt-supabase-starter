@@ -59,6 +59,11 @@ export interface BackingServiceProbe {
   supabaseUrl?: string
   /** applicable:false 時的原因，供 verbose log；NEVER 拿它當使用者面的錯誤訊息。 */
   skipReason?: string
+  /**
+   * shim 缺席的成因是「本 worktree 的 branch 過時」而非「此 consumer 無拓樸」。
+   * 這一格是唯一分辨得了兩者的訊號 —— 兩者的 `applicable` 都是 false，外觀完全相同。
+   */
+  staleBranch?: boolean
 }
 
 /**
@@ -184,6 +189,37 @@ function toProbe(raw: unknown): BackingServiceProbe {
 }
 
 /**
+ * default branch 上有沒有 bootstrap shim。有、而本 worktree 的 checkout 沒有 = branch 過時。
+ *
+ * **NEVER 讓它 throw** —— 它只跑在 `probeBackingService` 的 fail-open 路徑上，一個判不出來的
+ * git 狀態（沒有 remote、default branch 名字非慣例、repo 剛 init）本來就該退回「無拓樸」，
+ * 而不是把 dev server 擋在啟動前。
+ */
+function defaultBranchHasBootstrapShim(worktreePath: string): { branch: string } | null {
+  const git = (args: string[]) => {
+    try {
+      const r = spawnSync('git', ['-C', worktreePath, ...args], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
+      return r.status === 0 ? (r.stdout ?? '').trim() : null
+    } catch {
+      return null
+    }
+  }
+  const head = git(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'])
+  const candidates = [head, 'main', 'master'].filter((b): b is string => Boolean(b))
+  for (const branch of candidates) {
+    for (const ext of ['ts', 'mjs']) {
+      if (git(['cat-file', '-e', `${branch}:scripts/wt-env-bootstrap.${ext}`]) !== null) {
+        return { branch }
+      }
+    }
+  }
+  return null
+}
+
+/**
  * Fail-open 的 `status` 探針，給 dev-server 啟動路徑用。
  *
  * **NEVER 讓這個函式 throw** —— 它跑在每一次 dev server 啟動前，而絕大多數 consumer 根本
@@ -202,7 +238,23 @@ export function probeBackingService(
     // 上擋人沒有意義（那個修法是改檔名，不是起 server 的人當下能做的）。
     return { applicable: false, skipReason: (e as Error)?.message ?? String(e) }
   }
-  if (!script) return { applicable: false, skipReason: 'no scripts/wt-env-bootstrap.{ts,mjs}' }
+  if (!script) {
+    // shim 缺席有兩個成因，`applicable:false` 對兩者完全同形：此 consumer 沒有 per-worktree
+    // 拓樸（正常，絕大多數），或**本 worktree 的 branch 過時**（拓樸已進 default branch，
+    // 這棵還沒 merge）。後者實測 2026-09-02 在 <consumer-a> 佔 30 棵中的 27 棵，全部零訊號。
+    //
+    // 判準刻意**不**讀 `.claude/hub.json` 的 capability —— 那個檔本身是 tracked、
+    // 一樣 branch-dependent，過時的 branch 上它也還沒宣告 `worktree-db`，於是最該出聲的
+    // 那一格恰好判不出來。改問 git：default branch 上有 shim、本 checkout 沒有 = branch 過時。
+    const stale = defaultBranchHasBootstrapShim(worktreePath)
+    return stale
+      ? {
+          applicable: false,
+          staleBranch: true,
+          skipReason: `${stale.branch} 有 scripts/wt-env-bootstrap.* 而本 worktree 沒有 — 這棵的 branch 過時，merge ${stale.branch} 即可取得 per-worktree 拓樸`,
+        }
+      : { applicable: false, skipReason: 'no scripts/wt-env-bootstrap.{ts,mjs}' }
+  }
 
   const run = (opts.spawnSyncImpl ?? spawnSync) as WtEnvBootstrapRunner
   let result: WtEnvBootstrapRunResult
