@@ -97,3 +97,30 @@ sqlite3 "$DB" "select id,status,phase,started_at,seal_manifest_digest is null fr
 
 `--auth chatgpt` 下額度耗盡會直接印 `You've hit your usage limit`，那與上述缺陷是兩回事——
 前者換時間就能重跑，後者換多少額度都一樣。**NEVER** 把額度耗盡記成 `tool-failure` 的證據。
+
+## `baseline --components`（分件，opt-in）
+
+whole-repo baseline 撞成本上限時的另一條路：先讓 CLI 產 component plan，再逐件序列跑
+（`--workers 1`），每批帶的 `--max-cost` 是**剩餘預算**而不是同一個數字。達上限、或某件回報的
+成本解析不出來，就停止排程並回 exit 2 `coverage incomplete`——**NEVER** 讓它繼續排下一件。
+
+```bash
+node "$CLADE_ROOT/scripts/security-scan.ts" baseline --components --target <repo> --max-cost 15
+```
+
+**它 NEVER 是 `baseline` 的預設**，兩個上游語義決定這件事：
+
+| 事實 | 出處 | 後果 |
+| --- | --- | --- |
+| `scan-components` 只跑 **standard** mode，沒有 `--mode` | README § Scan project components | 當預設等於把 baseline 從 deep 靜默降級；ledger 唯一一筆成功的 baseline 正是 deep，兩者不可比 |
+| `--max-cost` 是**每個 component** 判上限，且**不含 planning 與 matching** | README 第 415 行 | wrapper 的全域上限是模擬出來的，實際花費上界高於你給的數字 |
+
+所以分件 row 帶 `scan_strategy: components` ＋ `scan_mode: standard`，whole-repo row 帶
+`repository` ＋ `deep`。**NEVER** 拿兩種 row 的 coverage 或成本互相比較，也 NEVER 拿分件的
+exit 0 當「這個 repo 的季度完整掃描做過了」——它的深度不同。
+
+`cost_limit_semantics` 欄位逐字寫著上限的洞，**NEVER** 把它讀成硬上限。
+
+> README 第 160 行那句「`preflight` 不啟動 Codex、不走網路」講的是 **SDK API 與 CLI `--dry-run`
+> 的本機輸入檢查**，不是上一節那個燒預算的掃描 preflight 階段——同名不同物。
+> **NEVER** 拿它推論「preflight 不花錢」而放寬 `--max-cost`。
