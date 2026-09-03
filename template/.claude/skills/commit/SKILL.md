@@ -111,7 +111,7 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 僅在 `main` / `master` branch 觸發的兩道 gate，非 main/master → 兩道都 skip 進 Step 0：
 
-- **0-MR 人工檢查 Gate**：本次 commit 觸及 in-progress spectra change 時觸發。觸發時 **MUST** 先完整讀 [gates.md](gates.md) § 0-MR 的判定流程、auto-triage 路由表與禁止項再繼續。
+- **0-MR 人工檢查 Gate**：本次 commit 觸及 in-progress spectra change 時觸發。觸發時 **MUST** 先完整讀 [gates.md](gates.md) § 0-MR 的判定流程、auto-triage 路由表與禁止項再繼續。判定粒度是 **pathspec 交集**：BLOCK change 只 withheld 自己的 `openspec/changes/<X>/**`，其餘 group 照常走 Step 3 / Step 4（gates.md § 0-MR step 6）。
 - **0-Archive-Coupling Partial Archive Gate**：本次 commit 有 spectra change staged-delete 時觸發。觸發時 **MUST** 先完整讀 [gates.md](gates.md) § 0-Archive-Coupling 的驗證流程、trailing slash hard rule 與禁止項再繼續。
 
 ## Step 0: 品質檢查
@@ -241,7 +241,8 @@ git diff --stat                 # 僅輔助看 tracked 改動規模；NEVER 當�
 
 - **Untracked 非 ignored 檔（`??`）一律納入分組**，通常自成獨立 `chore` group（除非語義明確屬於某 feat / fix group）
 - 看到 `??` 開頭的檔想加 `.gitignore` 消掉時 **STOP**：先問「這本來就該 ignore（build artifact / runtime state），還是我在逃避 commit？」逃避 commit 而 gitignore = 把該入庫的東西藏掉，方向反了（詳見 [[wip-orphan-recovery]] § 反射性 gitignore 禁令）
-- **parked change 的 deletion 一律排除，不進任何 group**（這是「全部變更都要入庫」的唯一機械例外）：
+- **0-MR withheld scope 內的路徑不進任何 group**（gates.md § 0-MR step 6 印出的 `openspec/changes/<X>/**`）：它們留在 working tree，Step 5-A 登記進 HANDOFF。這與下一條並列為「全部變更都要入庫」的兩個機械例外
+- **parked change 的 deletion 一律排除，不進任何 group**：
 
   ```bash
   PARKED=$(pnpm exec spectra list --parked --json 2>/dev/null \
@@ -274,6 +275,14 @@ git show --stat HEAD | tail -3   # MUST verify scope == expected files
 ```
 
 Untracked file 例外：須先 `git add <untracked>` 再 `git commit --only -- <both-paths>` — scope 仍受 `--only` 過濾。
+
+0-MR 有 withheld scope 時，**每個 group 的 `git commit --only` 之前 MUST** 先跑（gates.md § 0-MR step 6）：
+
+```bash
+node ~/offline/clade/vendor/scripts/commit-mr-gate.ts intersect --block <X> [--block <Y>] -- <files>
+```
+
+exit 1 → stdout 列的路徑落在 withheld scope，該 group **NEVER** commit；移出那些路徑後重跑，剩餘才 commit。
 
 ## Step 5: 更新 HANDOFF.md 與 ROADMAP
 

@@ -121,7 +121,7 @@ Terminal report 一律自帶：`RESULT:` 行、run URL、各 job 耗時（`--jso
 | exit | RESULT | 主線處置 |
 | --- | --- | --- |
 | 0 | `success` | 一行回報綠燈 + run URL，結束話題 |
-| 1 | `failure` / `cancelled`（無 successor）/ `timed_out` / `startup_failure` / ... | 讀同段輸出的 `--log-failed` 節錄，進失敗處置流程（post-push 場景見 AGENTS.md「Post-Push CI Watcher」段的 AskUserQuestion 二選一） |
+| 1 | `failure` / `cancelled`（無 successor）/ `timed_out` / `startup_failure` / ... | 讀同段輸出的 `--log-failed` 節錄，進失敗處置流程（post-push 場景見下表『Push 後政策』） |
 | 2 | `UNAVAILABLE (workflow '<X>' 不存在；可用：…)` | **名稱傳錯，不是環境問題。**照訊息列出的清單挑**檔名**重派一次，**NEVER** 當成「watcher 起不來」略過——那會讓這次 push 完全沒有 CI 驗證 |
 | 2 | `UNAVAILABLE (<其他原因>)` | gh 不存在 / 未登入 / API 連續失敗——一行回報略過，**NEVER** 追問 user |
 | 3 | `WATCH_TIMEOUT` | run 可能仍在跑（輸出含最後已知狀態 + run id）。可再派一輪 `run <run-id>` 續盯，或依場景處置 |
@@ -173,6 +173,6 @@ gh api "/repos/<owner>/<repo>/actions/runs?status=queued" --jq '.workflow_runs[]
 
 | 主題 | 位置 |
 | --- | --- |
-| Push 後何時觸發監看、綠燈/紅燈後主線的處置政策（AskUserQuestion / HANDOFF 登記） | consumer AGENTS.md 注入段「Post-Push CI Watcher」（source: `claude-md/core-snippets/post-push-ci-watch.md`） |
+| Push 後何時觸發監看、綠燈/紅燈後主線的處置政策（AskUserQuestion / HANDOFF 登記） | 本 skill § Push 後政策：`git push` 成功且 repo 含 `.github/workflows/*.yml` 時 MUST 立刻派 watcher；`success` → 一行報 `v<version> CI 綠燈 — <runUrl>` 後結束；失敗類 → `AskUserQuestion` 二選一 `[1] 立刻 root-cause + 修` / `[2] 登記 HANDOFF.md`（`- [ ] [<date>] v<version> CI <fail|timeout> — <job>` + Run URL + 根因猜測）；`UNAVAILABLE` → 一行報略過 |
 | Script 本體 | `plugins/hub-core/scripts/gh-ci-watch.sh`（投影至 consumer `.cursor/scripts/`） |
 | 背景派工通用回報契約 | `rules/core/agent-routing.md` § Subagent 回報契約 |

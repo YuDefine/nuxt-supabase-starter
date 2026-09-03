@@ -83,6 +83,7 @@ Local edits will be reverted by the next sync.
 ### 禁止事項
 
 - **NEVER** 在 `bucket ≠ ready` 時引導 user 到 review-gui（per [[review-gui-surface]] MUST 9）— 含 `/commit` 0-MR block、spectra-apply Step 8b handoff、session 結尾回報等所有場景
+- `/commit` 0-MR 對一條 change 判 BLOCK 時，withheld 的只有該 change 的 `openspec/changes/<X>/**`（pathspec 交集，`/commit` gates.md § 0-MR 判定粒度）。其他 group 放行是 commit 粒度的事，**NEVER** 讀成該 change 的人工檢查已完成——archive gate 與 auto-triage 對它一條沒少
 - **NEVER** 在 ingest 完、apply 還沒跑時引導 user 回 review-gui 評估 OK/Issue/Skip
 - **NEVER** 在 (C) 路徑中段（ingest 跟 apply 之間、或 fix 跟 ingest 之間）跑 `/commit`
 - **NEVER** 在 `/spectra-archive` **之前**跑 `/commit` 收 fix — 先 archive 再單一 commit，對齊 `archive-commit-order`

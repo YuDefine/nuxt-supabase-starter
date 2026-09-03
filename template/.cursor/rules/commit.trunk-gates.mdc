@@ -72,13 +72,15 @@ Local edits will be reverted by the next sync.
 
 只滿足其一不擋（純 propose 未動工、或實作完且人工檢查全綠，都允許 commit）。判定流程、fail-fast 位置見 `.cursor/skills/commit/SKILL.md` Step 0-MR。
 
+**擋的粒度是 pathspec 交集，不是 repo 級 freeze**（TD-897）：一條 change 判 BLOCK，被 withheld 的是落在 `openspec/changes/<X>/**` 的路徑；同一次 `/commit` 其餘 group 的 `git commit --only -- <pathspec>` 照常落地。pathspec 只接受具名檔或 change 目錄以下的路徑——祖先目錄（`.`、`openspec`、`openspec/changes`）、glob、`:` magic、絕對路徑一律視為交集擋下，空 pathspec 恆擋。判定式與理由在 `plugins/hub-core/skills/commit/gates.md` § 0-MR「判定粒度」；其他 group 放行 **NEVER** 讀成該 change 已驗收，auto-triage 與 archive gate 一條沒少。
+
 ### 為何加條件 0（worktree 未 land 即 SKIP）
 
 v3 atomic-landing（[[worktree-default.commit-ceremony]] §5）下，實作 code 留在 worktree branch 直到 `/spectra-archive` 觸發 `merge-back`。此期間會出現在 main 的該 change 檔案**只有** `tasks.md` 的 annotation / 勾選更新 —— 那正是人工檢查流程自己的產物。對它擋 commit 擋不到任何未驗收 code，只會把同批 dirty 的無關檔案一起連坐。
 
 實證（<consumer-b> 2026-08-21）：main 9 個 dirty 檔中僅 `openspec/changes/shipment-loading-per-box-capacity/tasks.md` 觸發 gate，該 change 的 code 全在 `mergedToMain:false` 的 worktree 內，卻連帶卡住 `docs/tech-debt.md`、`nuxt.config.ts`、`shared/schemas/*` 等 8 個無關檔。
 
-條件 0 **不放寬任何驗收標準**：code 一旦 merge-back 進 main，條件 0 即不成立，條件 1 / 2 的 BLOCK 照舊；而 merge-back 由 `/spectra-archive` 觸發，archive gate 本身就要求人工檢查完成 —— 順序上擋得比本 gate 更早。
+條件 0 **不放寬任何驗收標準**：code 一旦 merge-back 進 main，條件 0 即不成立，條件 1 / 2 的 BLOCK 照舊（該 change 的 `openspec/changes/<X>/**` withheld、auto-triage 照跑）。merge-back 不只由 `/spectra-archive` 觸發——0-MR auto-triage 的 `（fix-requested）` 路徑也會 merge-back，早於 archive；已 land 的 code 本 gate 任何粒度都擋不到它上 production，看 MR 狀態的只有 archive gate（擋 archive）與 `/commit` Step 6-B 的發版提問（`tag-v` / `manual` 拓樸），`push-main` 拓樸下 push 即部署。
 
 ### 為何 gate 在這
 

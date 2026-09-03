@@ -52,7 +52,7 @@ has_sidecar_evidence() {
 }
 
 # Extract ## 人工檢查 section
-SECTION=$(awk '/^## 人工檢查/{found=1; next} /^## /{if(found) exit} found{print}' "$TASKS")
+SECTION=$(awk '/^## *([0-9]+\. *)?人工檢查/{found=1; next} /^## /{if(found) exit} found{print}' "$TASKS")
 if [ -z "$SECTION" ]; then
   echo "✓ No ## 人工檢查 section — nothing to check" >&2
   exit 0

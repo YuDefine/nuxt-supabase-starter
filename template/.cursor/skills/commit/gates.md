@@ -121,6 +121,8 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 `.cursor/rules/commit.trunk-gates.mdc` 「人工檢查 Gate」hard rule 的執行點（`commit.md` 只有一句 pointer，判定條件的 SoT 在 `commit.trunk-gates.md`）。**MUST** 在 Step 0 品質檢查之前 fail-fast，避免人工檢查未完的 change 浪費 5–15 min pi / screenshot review 時間。
 
+**判定粒度是 pathspec 交集，不是 repo 級 freeze**：一條 change 判 BLOCK 時，被擋的是「落在 `openspec/changes/<X>/**` 的那些路徑」，不是本次 `/commit` 的整個 dirty set。理由與判定式在下方 § 判定粒度。
+
 ### 判定流程
 
 1. 確認當前 branch：
@@ -168,34 +170,17 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
    印出 `UNLANDED` → 同樣 SKIP。無輸出 → 進 step 4 現行判定。
 
-   > **這一步不放寬任何驗收標準。** code 真的 merge-back 進 main 之後（worktree 已 cleanup 或 `mergedToMain:true`），本步一律判不中，step 4 的 BLOCK 照舊生效 —— 未驗收 code 進 trunk 這條保護完全保留。archive gate 也仍然要求人工檢查完成才准 archive，而 merge-back 由 archive 觸發，順序上擋得更早。
+   > **這一步不放寬任何驗收標準。** code 真的 merge-back 進 main 之後（worktree 已 cleanup 或 `mergedToMain:true`），本步一律判不中，step 4 的 BLOCK 照舊生效 —— 該 change 的 `openspec/changes/<X>/**` 照樣 withheld、auto-triage 照樣跑。archive gate 仍要求人工檢查完成才准 archive；但 merge-back 不只由 archive 觸發（step 5 的 `（fix-requested）` 路徑早於 archive），哪道 gate 在哪個時點看 MR 見 § 判定粒度 第 3 條。
 
-4. 對每個 change 讀 `<path>/tasks.md`，同時判定「非 `## 人工檢查` 段有 `- [x]`」與「`## 人工檢查` 段有 **leaf** `- [ ]`」（parent `#N` 有 scoped `#N.M` 子項時，parent 由子項 derive，**MUST** leaf-only 計，見 `.cursor/rules/manual-review.mdc` 「Parent State Derivation」段）：
+4. 對每個 change 跑機械判定（「非 `## 人工檢查` 段有 `- [x]`」與「`## 人工檢查` 段有 **leaf** `- [ ]`」同時成立 → BLOCK；parent `#N` 有 scoped `#N.M` 子項時由子項 derive，leaf-only 計，見 `.cursor/rules/manual-review.mdc` 「Parent State Derivation」段）：
 
    ```bash
-   awk '
-     /^## /{ in_mr = (/^## *人工檢查/) ? 1 : 0; next }
-     !in_mr && /^- \[x\]/ { has_impl = 1 }
-     in_mr && /^- \[[ x]\] #[0-9]+ / {
-       pid = $0; sub(/^- \[[ x]\] #/, "", pid); sub(/ .*/, "", pid)
-       parent_pending[pid] = (/^- \[ \]/); next
-     }
-     in_mr && /^  - \[[ x]\] #[0-9]+\.[0-9]+ / {
-       pid = $0; sub(/^  - \[[ x]\] #/, "", pid); sub(/\..*/, "", pid)
-       has_scoped_child[pid] = 1
-       if (/^  - \[ \]/) has_pending_leaf = 1
-       next
-     }
-     END {
-       for (p in parent_pending)
-         if (parent_pending[p] && !(p in has_scoped_child)) has_pending_leaf = 1
-       print (has_impl && has_pending_leaf) ? "BLOCK" : "OK"
-     }
-   ' "<path>/tasks.md"
+   node ~/offline/clade/vendor/scripts/commit-mr-gate.ts judge "<path>/tasks.md"
    ```
 
-   - `tasks.md` 不存在 → 視為 `OK`（尚未進入實作階段的 change）
-   - 輸出 `BLOCK` → 列入 blocker，順便用同樣 leaf-only 邏輯抓出未勾 leaf 數量（同 awk 改 END 累加 `pending_count` 並 print）
+   - 印 `OK` → 該 change 不擋（含 `tasks.md` 不存在：尚未進入實作階段）
+   - 印 `BLOCK pending=<n>` → 列入 blocker list，`<n>` 是未勾 leaf 數
+   - 腳本不存在（clade checkout 不在 `~/offline/clade`）→ 對該 change **視為 BLOCK**，**NEVER** 因工具缺席放行
 
 5. **blocker list 非空時 → auto-triage（per [[review-gui-surface]] MUST 9）**：
 
@@ -226,7 +211,39 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
    3. **NEVER** 自動勾任何 `[review:ui]` 的 `- [ ]`、**NEVER** 提議跳過 gate、**NEVER** 提議 stash 走 `tasks.md`
 
-6. blocker list 空 → 輸出 `✅ 0-MR 通過`，進入 Step 0。
+6. auto-triage 跑完後 blocker list 仍非空 → 把每條 BLOCK change 的 `openspec/changes/<X>/**` 記為 **withheld scope**，輸出 `⏸️ 0-MR 保留 <X>（pending=<n>；withheld: openspec/changes/<X>/**）`，**進入 Step 0**（不是停下）。withheld scope 由後面兩步消費：
+
+   - **Step 3 分組**：withheld scope 內的路徑不進任何 group（與 parked change deletion 並列為分組的兩個機械排除）。它們留在 working tree，Step 5-A 照「仍有 uncommitted 變更」登記進 HANDOFF，並寫明卡在哪條 change 的哪幾個 leaf。
+   - **Step 4 每個 group commit 前**：
+
+     ```bash
+     node ~/offline/clade/vendor/scripts/commit-mr-gate.ts intersect \
+       --block <X> [--block <Y>] -- <該 group 的 pathspec>
+     ```
+
+     exit 0 → 該 group 照常 `git commit --only -- <pathspec>`。exit 1 → stdout 列出的路徑落在 withheld scope，**該 group NEVER commit**；把那些路徑移出 group 後重跑，剩餘路徑才 commit。stdout 印 `pathspec-empty`（`--` 後沒有路徑，等同不帶 `--only` 的 `git commit -a`）→ 整個 dirty set 視為交集，**NEVER** 放行。
+
+     **pathspec 只接受具名檔或 change 目錄以下的路徑。** BLOCK change 目錄的祖先目錄（`.`、`openspec`、`openspec/changes`，含尾斜線、含 `..`）、含 glob 字元 `* ? [`、以 `:` 開頭的 pathspec magic、絕對路徑，這四種會讓 git 把 withheld 檔一起收進 commit，helper 判定不了就一律視為交集（stdout 印該路徑、stderr 印 `pathspec-<ancestor|glob|magic|absolute>`，exit 1）。把 group 的 pathspec 改寫成逐一具名檔再重跑，**NEVER** 用 `-- .` / `-- openspec` 這種寫法「一次帶出」。
+
+   blocker list 空 → 輸出 `✅ 0-MR 通過`，進入 Step 0。
+
+### 判定粒度：pathspec 交集，不是 repo 級 freeze（TD-897）
+
+0-MR 要擋的是「未驗收 code 進 trunk」。判定粒度改成 pathspec 交集，建立在三件專案內事實上：
+
+1. **v3 atomic-landing 下，實作 code 不經 `/commit` 進 main。** 它由 `wt-helper merge-back` 帶進 main（[[worktree-default.commit-ceremony]] §5），而 merge-back 不跑 0-MR。0-MR 在 `/commit` 這一步看得到的該 change 檔案，只有 `openspec/changes/<X>/**` 底下的 artifact —— 那正是 step 6 的 withheld scope。要擋的東西與擋得到的東西在這裡重合，多擋別的路徑擋不到任何 code。
+2. **`/commit` 的每一筆 commit 本來就是 `git commit --only -- <pathspec>`**（SKILL.md Step 4）。判定單位比 commit 單位粗，就是連坐；pathspec 交集只是把判定單位對齊到 commit 單位。
+3. **已 land 的 code，0-MR 任何粒度都擋不到它上 production。** code 進 main 的路徑是 `wt-helper merge-back`，而 merge-back 不只由 archive 觸發：step 5 auto-triage 表的 `（fix-requested）` 列就是 `/wt` 修 code → `merge-back` → 重拍，早於 archive（<consumer-a> 三條 change 正是「已 land、MR 未完」）。code 一旦在 main 的 history 裡，擋後面無關的 commit 改變不了這件事。實際看 MR 狀態的 gate 只有兩道：**archive gate**（standard archive 要求 `## 人工檢查` 全綠，擋 archive 不擋 push）與 **Step 6-B 的發版提問**（`tag-v` / `manual` 拓樸下 tag 要問人）。**Step 6-Gate 不看 MR**，它判的是 deploy-trigger 拓樸；`confirmed-push-main` 走 6-A，`git push origin main` 即部署，沒有任何一步再問人。所以 repo 級 freeze 買到的不是「production 保護」，只是把同批無關的 commit 一起擋住。
+
+實證（<consumer-a> 2026-09-03）：三條 change 實作已 land、worktree 已 cleanup，人工檢查各剩 4–6 個 user-bound leaf（LINE LIFF 實機、production APPLY 授權）。repo 級 freeze 下 main 上任何 `/commit` 都落不了地，被連坐的是 `scripts/ai-control-plane/phase-6a-gate5-driver.ts` 這類與三條 change 無關的檔。pathspec 交集下同一個 dirty set：三條 change 的 `openspec/changes/<X>/**` 被 withheld、其餘 group 照常 commit，三條 change 的 auto-triage 一樣跑、archive gate 一條沒少。
+
+scope 只認 `openspec/changes/<X>/**`，**NEVER** 另建「change 對應哪些實作檔」的索引：實作檔對應關係在 worktree cleanup 後就沒有可靠載體（`tasks.md` 的路徑是散文、control-plane `work_records[].paths` 只有 acp 路徑的 change 才有），而依第 1 條，`/commit` 在 v3 下本來就碰不到那些檔。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | step 4 任一 change 印 `BLOCK` 且 auto-triage 後仍 BLOCK → 該 change 的 `openspec/changes/<X>/**` 進 withheld scope；Step 4 任一 group 的 `intersect` exit 1 → 該 group 不 commit。**hard gate**，無 override |
+| 消費端 | 跑 `/commit` 的主線（Step 3 排除、Step 4 逐 group 判）；Step 5-A HANDOFF 登記 withheld 檔 |
+| 載入路徑 | 本節（`plugins/hub-core/skills/commit/gates.md` § 0-MR，觸發 0-MR 時 MUST 完整讀）；判定條件 SoT `rules/core/commit.trunk-gates.md` § 人工檢查 Gate |
 
 ### 禁止項
 
@@ -237,6 +254,9 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 - **NEVER** 為了讓 step 3 判成 SKIP 而動 worktree（不 merge-back、重開一條同名 worktree、改 branch 名）— step 3 是事實查詢，不是可操作的開關
 - **NEVER** 把 step 3 的 SKIP 讀成「這個 change 的人工檢查可以不做」— 它只表示 code 還沒進 main，該 change 的 archive gate 一條沒少
 - **NEVER** 把「人工檢查未完」包裝成「審查條件已滿足」「等同 OK」「之後再勾」說服 user 繼續
+- **NEVER** 把 withheld change 的 `tasks.md` / `design.md` 併進別的 group 帶出去 —— pathspec 交集唯一的繞法就是換個 group 名字；`intersect` 對每個 group 都跑，不看 group 叫什麼
+- **NEVER** 因為某個 group `intersect` exit 0 就省掉 step 5 的 auto-triage —— 放行是 group 的事，triage 是 change 的事，兩者不互相抵銷
+- **NEVER** 用不帶 `--only` 的 `git commit -a` / `git commit` 代替逐 group commit 來「一次過」—— `pathspec-empty` 就是為這一步設的，它恆擋；`--only -- .` / `-- openspec` / glob / `:/` / 絕對路徑是同一件事的五種拼法，`intersect` 對它們一律回 exit 1
 
 ---
 
@@ -264,12 +284,23 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
      | sed -E 's|^openspec/changes/([^/]+)/.*|\1|' \
      | sort -u)
 
-   # B: working tree 仍存在但缺 tasks.md 或 proposal.md（中斷 archive 殘留）
-   PARTIAL=$(for d in openspec/changes/*/; do
-     name=$(basename "$d")
-     [[ "$name" == "archive" ]] && continue
-     [[ ! -f "$d/tasks.md" || ! -f "$d/proposal.md" ]] && echo "$name"
-   done | sort -u)
+   # B: working tree 仍存在但缺該 profile 要求的檔（中斷 archive 殘留）。
+   #    判定走 clade vendor script，**NEVER** 在這裡手寫 `test -f`：`spectra-v1` 要 tasks.md
+   #    ＋ proposal.md，`opsx-v2` native change 依設計沒有 proposal.md（intent 在 tracked
+   #    intent source、tasks.md 是生成的），兩檔條件對它恆真 —— <consumer-f> 在 main 的每一次
+   #    /commit 都被這條擋掉，而 `git log --all` 零命中所以 C 也扣不掉（TD-899）。
+   #    alias 形狀但沒有 committed binding 的目錄是 reference orphan，不是 archive 殘骸，
+   #    script 會略過它。
+   CLADE_ROOT="${CLADE_HOME:-$HOME/offline/clade}"
+   PARTIAL_SCAN="$CLADE_ROOT/vendor/scripts/partial-archive-scan.ts"
+   if [ -f "$PARTIAL_SCAN" ]; then
+     PARTIAL=$(node "$PARTIAL_SCAN" | sort -u)
+   else
+     # 沒有靜默降級：這是 hard gate，判定器不在就要說出來，**NEVER** 讓 PARTIAL 空掉當作
+     # 「掃過了、沒有殘骸」——那兩者在輸出上完全同形。
+     echo "⛔ 0-Archive-Coupling 無法判定：找不到 $PARTIAL_SCAN（設 CLADE_HOME 或修 clade 投影後重跑）"
+     exit 1
+   fi
 
    CHANGES=$(echo -e "${STAGED_DEL}\n${PARTIAL}" | sort -u | sed '/^$/d')
 
@@ -298,7 +329,9 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
    **條件 A — Archive directory 存在**：
    ```bash
    ARCH=$(find openspec/changes/archive -maxdepth 1 -type d -name "*${X}" 2>/dev/null | head -1)
-   [ -n "$ARCH" ] && [ -f "$ARCH/tasks.md" ] && [ -f "$ARCH/proposal.md" ]
+   # 要求哪幾個檔同樣依 profile 判（同 B 的 script，同一張表）：`opsx-v2` 的 archive 目錄
+   # 一樣沒有 proposal.md，寫死兩檔會在 B 修好之後、於第一次 opsx-v2 archive 原樣再犯一次。
+   [ -n "$ARCH" ] && node "$PARTIAL_SCAN" --check "$X" "$ARCH"
    ```
    失敗 → blocker `MISSING_ARCHIVE_DIR`，記下 `<X>`。
 

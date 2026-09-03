@@ -618,12 +618,12 @@ if [ -f "$TASKS_FILE" ]; then
   while IFS= read -r line; do
     LINE_NUM=$((LINE_NUM + 1))
     # Enter manual review section
-    if [[ "$line" =~ ^##[[:space:]]+人工檢查 ]]; then
+    if [[ "$line" =~ ^##[[:space:]]+([0-9]+\.[[:space:]]*)?人工檢查 ]]; then
       IN_MR=true
       continue
     fi
     # Exit on next H2
-    if [ "$IN_MR" = true ] && [[ "$line" =~ ^##[[:space:]] ]] && ! [[ "$line" =~ ^##[[:space:]]+人工檢查 ]]; then
+    if [ "$IN_MR" = true ] && [[ "$line" =~ ^##[[:space:]] ]] && ! [[ "$line" =~ ^##[[:space:]]+([0-9]+\.[[:space:]]*)?人工檢查 ]]; then
       break
     fi
     [ "$IN_MR" = true ] || continue
@@ -714,11 +714,11 @@ if [ -f "$TASKS_FILE" ]; then
 
     _IN_MR_6B=false
     while IFS= read -r _line_6b; do
-      if [[ "$_line_6b" =~ ^##[[:space:]]+人工檢查 ]]; then
+      if [[ "$_line_6b" =~ ^##[[:space:]]+([0-9]+\.[[:space:]]*)?人工檢查 ]]; then
         _IN_MR_6B=true
         continue
       fi
-      if [ "$_IN_MR_6B" = true ] && [[ "$_line_6b" =~ ^##[[:space:]] ]] && ! [[ "$_line_6b" =~ ^##[[:space:]]+人工檢查 ]]; then
+      if [ "$_IN_MR_6B" = true ] && [[ "$_line_6b" =~ ^##[[:space:]] ]] && ! [[ "$_line_6b" =~ ^##[[:space:]]+([0-9]+\.[[:space:]]*)?人工檢查 ]]; then
         break
       fi
       [ "$_IN_MR_6B" = true ] || continue
@@ -871,12 +871,12 @@ if [ "$PRE_SKILL" != "true" ] && [ -f "$TASKS_FILE" ]; then
     UNPROVEN_VUI=()
     IN_MR_VUI=false
     while IFS= read -r line; do
-      if [[ "$line" =~ ^##[[:space:]]+人工檢查 ]]; then
+      if [[ "$line" =~ ^##[[:space:]]+([0-9]+\.[[:space:]]*)?人工檢查 ]]; then
         IN_MR_VUI=true
         continue
       fi
       if [ "$IN_MR_VUI" = true ] && [[ "$line" =~ ^##[[:space:]] ]] &&
-        ! [[ "$line" =~ ^##[[:space:]]+人工檢查 ]]; then
+        ! [[ "$line" =~ ^##[[:space:]]+([0-9]+\.[[:space:]]*)?人工檢查 ]]; then
         break
       fi
       [ "$IN_MR_VUI" = true ] || continue

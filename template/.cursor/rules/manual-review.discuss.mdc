@@ -120,7 +120,7 @@ review:ui (round N+1, FINAL) — user 對既有 + 新增 verify item 一次性�
 單一 /commit — 一次包 fix + ingest 產出 spec + apply phase code + archive rename + spec snapshot
 ```
 
-> **收尾順序對齊 `archive-commit-order`（AGENTS.md「Spectra Change 收尾：先 archive 再 /commit」段，source `claude-md/core-snippets/archive-commit-order.md`）**：commit **MUST** 在 `/spectra-archive` 之後。理由：archive 本身會產出 directory rename + spec delta 等**新的未 commit 改動**，若先 commit fix、archive 之後勢必還要第二個 commit 收 bookkeeping —— 那正是本 § 想避免的「雙 commit / 雙 0-A/B/C 慢路徑」。唯一達成單一 commit 的順序是 **archive 先、commit 後**。worktree v3 模型同此：`/spectra-archive` Step 0 先 atomic merge-back，user 再在 main 跑 `/commit`（見 [[worktree-default]] §5）。
+> **收尾順序對齊 `archive-commit-order`**：commit **MUST** 在 `/spectra-archive` 之後。理由：archive 本身會產出 directory rename + spec delta 等**新的未 commit 改動**，若先 commit fix、archive 之後勢必還要第二個 commit 收 bookkeeping —— 那正是本 § 想避免的「雙 commit / 雙 0-A/B/C 慢路徑」。唯一達成單一 commit 的順序是 **archive 先、commit 後**。worktree v3 模型同此：`/spectra-archive` Step 0 先 atomic merge-back，user 再在 main 跑 `/commit`（見 [[worktree-default]] §5）。
 
 ### 例外
 
@@ -131,7 +131,7 @@ review:ui (round N+1, FINAL) — user 對既有 + 新增 verify item 一次性�
 
 ### Cross-ref
 
-- `archive-commit-order`（AGENTS.md「Spectra Change 收尾：先 archive 再 /commit」段，source `claude-md/core-snippets/archive-commit-order.md`）— 收尾順序唯一真相：先 archive 再單一 commit；本 § sequence 對齊此
+- `archive-commit-order` — 收尾順序唯一真相：先 archive 再單一 commit；本 § sequence 對齊此
 - [[worktree-default]] §5 — worktree v3 atomic landing：`/spectra-archive` Step 0 merge-back → user 在 main `/commit`
 - [[proactive-skills.ingest-triggers]] § review:ui 觸發 ingest 的後續順序
 - `plugins/hub-capabilities-openspec/skills/spectra-ingest/SKILL.md` Step 9 Summary

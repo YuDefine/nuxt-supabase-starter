@@ -127,8 +127,8 @@ tech-debt 的 `### 需要 Charles`、tasks 的 `deferred-user-only`。寫進那�
 **分不出 `review` 還是 `human-action` 時，問這一題：證據能不能被壓成「30 秒可開的東西」。**
 能（preview URL / commit / 一段輸出）→ `review`。不能——要人手、要實體裝置、要只有你有的帳號
 ——→ `human-action`。<consumer-a> 的 LINE 手機真機驗收是後者：它的終點是「你拿手機做一件事」，verdict
-只是副產物，寫進 `Ready for review` 會永遠掛 `missing-evidence` 而無限退回（手機握在手上這件事
-沒辦法變成可點證據）。
+只是副產物，寫進 `Ready for review` 會永遠掛 `missing-evidence` 而**永遠進不了佇列**（手機握在
+手上這件事沒辦法變成可點證據），於是那件事從所有畫面上消失。
 
 三欄各自回答驗收的人在回覆之前一定要先答的一個問題：**我在不在乎**（改了什麼）、**我三十秒內
 看得完嗎**（證據）、**我說不的代價是什麼**（退回會怎樣）。缺任一欄這條就驗不了，所以
@@ -138,9 +138,15 @@ tech-debt 的 `### 需要 Charles`、tasks 的 `deferred-user-only`。寫進那�
 刪掉的成本：2026-08-28 實測，佇列上 7 條 ready-for-review 全部只有標題與一個 carrier 路徑，
 每條都要人自己去開 repo、找 change、跑起來，於是每條都躺了 10.8–16.6 小時沒人動。
 
-三欄沒寫齊的條目**照樣進佇列**，但會掛上 `missing-evidence` 並由掃描端自動退回給你補件。
-**這是刻意的**：擋在佇列外會讓做完的工作徹底隱形——你不會發現自己少填，Charles 不會知道有東西
-在等——比一條躺著的列更糟。
+三欄沒寫齊的條目**不會進佇列**：ingest 端判到 `missing-evidence` 就**拒鑄 span**，改在
+`flow sources` 與 `handoff-scan` 印一行退件（`HANDOFF.md:<行>` ＋ 缺什麼），收件人是你。
+補齊之後下一趟掃描自己會開，**NEVER** 需要任何人去解鎖。
+
+> 2026-09-03 Charles 拍板改成這樣（TD-904）。原本的做法是照樣鑄 span、再對它注入一段
+> 「請補三欄」的模板文字要求 agent 補件，逐字的裁定是**那是治標**：一條沒寫完的題在佇列上
+> 長成一顆按得下去的「通過」配零證據，而注入的那段字讓 `/decisions` 上大量出現不是 Charles
+> 打的文字。「做完的工作徹底隱形」那個顧慮由退件行接住——它印在寫的人看得到的地方，
+> 而不是印在拿手機的人看得到的地方。
 
 > 這一節之前不存在，而上面那張表當時寫著 `Ready for review` → `ruling`（可回答），
 > `categoryOfHeading()` 實際回的卻是 `irreversible`（每個渲染端都印「這條是狀態不是問題」）。
@@ -368,9 +374,9 @@ spine 上 `options: []`，手機上是一個空白輸入框。**寫的人看得�
 `flow ask --option`）。**NEVER** 想著「等下再補進 HANDOFF」——`flow sources` 60 秒後就掃過去了，
 它掃到的是那一刻的檔案，不是你的打算。
 
-沒補的下場不是靜默：ingest 端偵測得到「這題進來時沒有選項」，會用 `ask-options` 把它退回，
-而**退回的對象就是你**。退回停在佇列上不會自己解決（實測停了 3.2 小時），手機上留著一張
-答不了的卡。
+沒補的下場不是靜默，但也**不是「晚一點會被問到」**：ingest 端偵測得到「這題進來時沒有選項」，
+會**拒鑄 span**（TD-904）。那一題不會出現在 `/decisions`、不會出現在 `\my`、不會推播——
+它只會出現在 `flow sources` 的退件行上，而**那一行的收件人就是你**。不補等於這題永遠沒被問過。
 
 ### NEVER 把選項寫進問句本文
 
@@ -422,8 +428,8 @@ for (const c of await m.listPendingChanges('<repo>'))
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | 條目文字同時含 `人工檢查` 與某個 **live** change 的目錄名 → `belongs-on-review` lint ＋ `decision-sync` 自動退回給作者。**warn-only，不 block**——擋在佇列外會讓繞道變隱形，比一條掛著 lint 的列更糟（同 `missing-evidence` 的理由） |
-| 消費端 | 寫該條目的 agent（收自動退回，照上表處置）＋ `/decisions` 與 `flow pending` 上的 Charles（看到 `✎ 這條把 live change 的 ## 人工檢查 寫成 HANDOFF 條目` 可以跳過不讀） |
+| 觸發條件 | 條目文字同時含 `人工檢查` 與某個 **live** change 的目錄名 → `belongs-on-review` lint ＋ 不合成 通過／退回。**warn-only，不 block，且 NEVER 拒鑄 span**——這一碼是**路由**錯誤不是寫法錯誤（那一列寫得好好的，只是填錯了 surface），擋在佇列外會讓繞道變隱形，比一條掛著 lint 的列更糟 |
+| 消費端 | 寫該條目的 agent（在 `/decisions` 與 `flow pending` 的 `✎` 評語上看到，照上表處置）＋ Charles（看到那一行可以跳過不讀）。**2026-09-03 起不再對它注入任何文字**（TD-904）：該說的話由 `LINT_NOTES['belongs-on-review']` 在兩個渲染端說，NEVER 由 agent 寫一段話進人的佇列 |
 | 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`——寫那條 bullet 正是在編輯這兩個檔） |
 
 > 2026-08-28 成因：<consumer-i> 的 `product-save-hardening` 四條 `## 人工檢查` 都宣告
@@ -471,9 +477,9 @@ span id 到處都是，而那些檔案裡沒有答案。已歸檔（區塊搬進
 寫完 `HANDOFF.md` / `docs/tech-debt.md` 的當下，PostToolUse hook 會就地判「這題是 ruling
 但沒有選項」，並把 `OPTIONS_REQUEST_TEXT` 原文印回同一個 session。
 
-它與佇列端的 lint、ingest 端的 `ask-options` 退回**是同一個判準的三個時刻**，前兩者都是對的、
-也都太晚：到那時題目已經在手機上長成空白輸入框，而唯一五秒鐘就能修好的人——選項還在自己
-context 裡的那個 agent——已經走了。
+它與佇列端的 lint、ingest 端的拒收**是同一個判準的三個時刻**，而它是唯一**還能補救**的那一個：
+ingest 拒收之後那題不存在，沒有任何畫面會再提醒任何人；而唯一五秒鐘就能修好的人——選項還在
+自己 context 裡的那個 agent——正是現在讀到這段提示的你。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
@@ -503,6 +509,6 @@ context 裡的那個 agent——已經走了。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | item 落 ruling 桶且無選項（`no-options-under-ruling`）、body 含差一點就解析成功的行（`near-miss-option-line`），或 item 落 review 桶而三欄沒寫齊 / 證據不可點（`missing-evidence`）。**三者都 warn-only，不 block**——HANDOFF 是高頻活文件，把寫法卡在寫入路徑上換到的是一個 bypass flag，不是更好的 bullet。`missing-evidence` 另外由掃描端自動 `requestClarification` 退回給 agent 補件（`EVIDENCE_REQUEST_TEXT`），球當場換手，不必等人在手機上看到 |
-| 消費端 | `/decisions` 卡片（答題的 Charles）＋ `flow pending` 輸出（下一個編輯該檔的 agent） |
+| 觸發條件 | item 落 ruling 桶且無選項（`no-options-under-ruling`）、body 含差一點就解析成功的行（`near-miss-option-line`），或 item 落 review 桶而三欄沒寫齊 / 證據不可點（`missing-evidence`）。**寫入路徑上三者都 warn-only、不 block**——HANDOFF 是高頻活文件，把寫法卡在寫入路徑上換到的是一個 bypass flag，不是更好的 bullet。**ingest 路徑上前者與後者拒鑄 span**（`decision-sync.ts` 的 `REJECTING_LINTS`）：那一題不進佇列，改成 `flow sources` 與 `handoff-scan` 的一行退件，計入 `flow sources` 的 exit code。`near-miss-option-line` 是**評語不是退件碼**，NEVER 拿它擋 ingest |
+| 消費端 | 寫那條 bullet 的 carrier 作者——退件的收件人是他，因為只有他改得動；＋ `/decisions` 卡片與 `flow pending` 上的 Charles（那裡只剩合格的題） |
 | 載入路徑 | 本檔，paths-gated 到 `HANDOFF.md` / `docs/tech-debt.md` / work-loop state——也就是寫這種條目的當下 |
