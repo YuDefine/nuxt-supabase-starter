@@ -51,6 +51,56 @@ Local edits will be reverted by the next sync.
 
 **NEVER** 用「這件事很明顯做完了」「pane 回 success 就是做完」跳過憑證——那兩句話正是這條 gate 要擋的東西，而它們在 emit 端一律得到同一個拒寫。
 
+### 憑證是 commit 時，MUST 已經 push（warn-only，不 block）
+
+`--artifact commit:<sha>` 指向一個**只存在於你這台機器**的 sha 時，驗收的人拿到的是一張 fetch
+不到的收據。所以 `flow done` 在登記當下量一次（`git cat-file -e` ＋ `git branch -r --contains`），
+量不到就在 payload 標 `unverified_artifact: true`。
+
+| 這件事 | 會怎樣 |
+| --- | --- |
+| 登記本身 | **照樣寫入**。「憑證還沒推上去」是一個真的完成宣稱的一個真的屬性，不是一次無效的登記 |
+| 驗收佇列 | 那一列**不排**——沒有可驗的東西時請人驗收，是在請他蓋一個他看不到的章 |
+| 24 小時後 | `flow status --stalled` 出 `done-unverified`，印出重跑的指令 |
+| push 之後 | 重跑一次 `flow done <id> --verification '<同一句>'`，fold 是 last-write-wins，標記就清了 |
+
+**NEVER 把它改成拒寫。** 這是 R1 那條 fail-closed 的**反面**而且刻意如此：`verification` 缺席
+時拒寫，是因為寬鬆的 done 讓驗收建立在假的完成上；而憑證未 push 只是**還沒到**，擋下它換來的
+是有人先 push 一個空 commit 再回來打 `flow done`。
+
+**NEVER 用 `git ls-remote` 之類的網路呼叫來「驗得更準」。** 那會讓一次登記在離線時卡住，而它的
+失敗與「這個 sha 沒 push」長得一樣。remote-tracking ref 是本機的、上一次 fetch 當下的事實——
+它會落後（於是偶爾多標一次，下次重跑就清掉），但 **NEVER** 誤報成功。
+
+**沒有 commit artifact 時這條零訊號**：`url:` / `file:` / `--no-artifact --reason` 都不觸發它。
+**NEVER** 把「不適用」讀成「有問題」——被標成憑證未驗的 `url:` 工作會讓讀的人去找一個不存在的 sha。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 有 commit artifact 且一個都驗不出已 push → payload 標 `unverified_artifact`、stderr 印下一步、驗收列不排。**warn-only，不 block**；git 本身問不出來時 fail-open（不標） |
+| 消費端 | 打 `flow done` 的那個人（當下 stderr）；`buildDecisionQueue` 的驗收列（`pendingAcceptItems`）；`flow status --stalled` 與 `/decisions` 的 `done-unverified`（>24h） |
+| 載入路徑 | 本節（散播到 consumer `.claude/rules/flow-work-tracking.md`）；判定器 `vendor/scripts/flow/landing.ts` 的 `unverifiedCommitArtifacts`，與 R1 的出版證據共用同一份「已 push」判準 |
+
+### dispatch 還沒回報時，驗收列同樣不排
+
+`work.done` 與 dispatch 的完成握手是**兩個獨立寫入**，所以一張卡可以在派出去的 pane 還在跑的
+時候就 `done`——2026-09-03 實測 `<consumer-a>/d7-phase5b-closeout`，worker 派出去 6 分鐘、驗收列已經
+在人的佇列上。判準是這件工作**還有沒有沒收的 span**（`session_transport` 未 end 即未回報），
+不是「有沒有一個叫 dispatch 的東西」。
+
+**NEVER** 把它讀成「工作沒做完」：那一列只是**還不能問**，工作可能真的做完了。回報之後下一輪
+佇列就把它排出來，什麼都不用補。
+
+**NEVER 用「有沒有沒 end 的 span」代替「有沒有沒 end 的 `session_transport`」。** 兩者差的不是
+嚴格程度是**對象**：一件工作底下掛著一題沒人回的 `decision.request` 時，寬的那個判準會讓它的
+驗收列**永久**消失，而且沒有任何 stall shape 指名這件事（`unharvested` 只涵蓋 dispatch record
+還在的情形）。2026-09-03 replay 實測命中一件。被這一格擋下來的工作 **MUST 在佇列上列名**——
+一列從佇列上消失而沒有任何東西說它為什麼消失，與從來沒被掃到長得一模一樣。
+
+**列名的載體是合併卡，不到合併門檻時是第一列驗收列**，兩條路徑共用**同一份**文字（判定器
+`decisions.ts` 的 `transportHeldLines`）。**NEVER** 讓其中一條路徑靜默：被擋住的工作要不要被
+看見，與這一批剛好有幾件無關。
+
 ## R2 入口鑄名索引（informational — 不觸發任何東西）
 
 義務燒在各入口的 code path 裡，本表只給**未來新增入口的開發者**一份對照。新增一個「事情從這裡誕生」的入口時照同一個形狀鑄名。

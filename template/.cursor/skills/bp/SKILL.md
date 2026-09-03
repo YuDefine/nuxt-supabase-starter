@@ -78,9 +78,11 @@ Q2 / Q3 判到 `docs/` 之後**還有一層**：`docs/` 有 13 個子目錄，�
 
 ```bash
 node ~/offline/clade/scripts/bp-scan.ts --plan --repo <目標 repo 絕對路徑>
+# 尚無 hub.json（溝通期）時：
+node ~/offline/clade/scripts/bp-scan.ts --plan --json --modules '<hub.json modules JSON>'
 ```
 
-讀該 repo `.claude/hub.json` 的 `modules` + clade `registry/conventions.json`，輸出這個 stack 該套用的 convention、各自的 `rule_refs` / `snippet_refs` / `doc_ref`，與現況 adoption。
+有 hub.json 就讀它的 `modules`；沒有就餵 `--modules`。再對 clade `registry/conventions.json` 輸出這個 stack 該套用的 convention、各自的 `rule_refs` / `snippet_refs` / `doc_ref`，與現況 adoption。plugin/rule/skill 清單不在這裡——那是 `projectionPlan({ cladeRoot, manifest })`。
 
 **輸出是候選不是指令**：逐條跟使用者確認要不要套，**NEVER** 自行對 consumer 業務檔動手（per `clade-role-and-todo-discipline` § 反模式）。
 

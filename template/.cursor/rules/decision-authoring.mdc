@@ -180,11 +180,100 @@ MUST 是 `openspec/changes/<name>/tasks.md` 裡還有幾項未勾的 `[review:ui
 | 消費端 | 寫該條目的 agent（看到 lint 就把它移回 /review 流程）＋ `/decisions` 與 `flow pending` 上的 Charles（看到沒有通過鍵就知道要去 /review 逐條驗） |
 | 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`） |
 
+## 驗收：已經出版的，NEVER 再問一次
+
+一件 work 做完之後佇列會問「驗收？」。但那件工作若**已經隨版本 tag 出版、散播到全 fleet 且零
+失敗**，再問人的就不是一個決定，是一個已經發生的事實。2026-09-03 實測：41 條待拍板裡有 18 條
+是這個形狀（Phase 3.5 / C / 5a / 4′ / TD-853…，全部隨 v1.11.130–v1.12.8 出版）。
+
+所以佇列自己把它收下：`flow sources --apply` 對每件 `done` 的工作查三格證據，三格全中就寫一筆
+`work.accept`（`actor: system`、`reason: landed <tag>`、`payload.accepted_by: 'landing'`），那一列
+從此不再出現。三格是：
+
+1. `commit:<sha>` 這個憑證在本 repo 存在
+2. 它已經 push（至少一個 remote-tracking ref 包含它）
+3. 它落在一個 `v<semver>` tag 裡，而**那一版的 propagate journal 有紀錄、且每一台 consumer 都真的
+   收到了那一版**
+
+**代替人按的是證據，NEVER 是判斷。** 三格全部由 git 與 propagate 自己的 journal 回答，沒有一格
+是誰的意見。`flow accept`（人按的那條路徑）行為完全不變。
+
+**NEVER 對沒有 landing 證據的 work 自動 accept**，包括「我看它做完了」「pane 回 success 了」
+「commit 已經在 main 上了」——最後那句最像：進了 main 不等於出版，而**沒有第 3 格的 accept
+正是這條規則存在要防的東西**。
+
+**NEVER 把「找不到證據」讀成「大概沒事」。** 判定 fail-closed：三格缺一就照樣問人。第 3 格的
+journal **0 筆不是零失敗**——目錄不存在代表「這一版沒有散播紀錄」，而不是「散播得很乾淨」。
+
+第 3 格的 status 判定 **MUST 是 allow-list**（「只有這幾種算送達」），**NEVER 是 deny-list**
+（「這幾種算失敗」）：漏列一種的預設就是放行，而放行的那一邊是一個終態、append-only 的
+`work.accept`。逐字只有兩種算送達：
+
+- `bumped` —— commit 建了、push 了、remote 確認過
+- `skipped` **且那台 consumer 的 origin 上那份 `.claude/hub.json` 版本已到達該 tag**——`skipped`
+  在 journal 裡分不出五種來源（缺 hub.json / `--resume` 已驗 / unmerged / dirty / 無 drift），
+  所以去問那台自己停在哪一版。**全 skipped 而版本沒到 = 無證據**。版本讀的是
+  `git show @{upstream}:.claude/hub.json`，**NEVER** 讀磁碟、**也 NEVER** 讀 HEAD：
+  - 磁碟：propagate 先寫 hub.json 才跑投影同步，同步失敗時磁碟領先而那台的 origin 什麼都沒收到
+  - HEAD：journal 是整檔覆寫，同一版第二趟跑時那一列會從 `push-withheld` 被蓋成 `skipped`；
+    此時 HEAD 到版而 origin 從頭到尾沒收到，`push-withheld` 判成無證據、換個 status 名字就放行
+  - **NEVER** 改寫成「HEAD 到版 ＋ HEAD 已 push」：consumer 的 main 領先 origin 幾個本機 commit
+    是常態（2026-09-03 實測 fleet 只有 <consumer-b> 的 HEAD 在 remote-tracking ref 內），那樣寫會對每一台
+    回 false，而衰減成永遠 false 的判準與「沒有實作」事後不可區分
+  - 沒設 upstream / 讀不到 → 無證據（fail-closed）。remote-tracking ref 落後的方向是少報送達
+
+其餘全部不算，包含 `push-unconfirmed`（commit 在本地、origin 沒收到）、`bumped-local`（投影落地
+但沒 commit）、`push-withheld`（刻意不 push）。**NEVER** 用「那一趟是 `--no-push`，不算它的錯」
+放行 `push-withheld`：一趟沒有 push 的 propagate 就是沒把東西送到 consumer 的 origin，那一版
+**沒有證據是正確的量測**，不是待修的缺陷。
+
+沒有 landing 證據的驗收列（consumer 端工作、docs-only、還沒發版的）**同一個 repo 合併成一張卡**：
+一次問「全收 / 逐條 / 還沒」，選「逐條」才展開成 N 題。**NEVER** 把合併讀成「一次收掉一批沒看過
+的東西」——卡片逐條列出是哪幾件，而「逐條」是三個選項之一。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 三格證據全中 → `flow sources --apply` 寫 `work.accept`，佇列不再排那一列。**不 block**，只少問 |
+| 消費端 | `flow pending` 與 `/decisions`（同一支 `buildDecisionQueue`）；`flow accept` 保留給人 |
+| 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`）；判定器 `vendor/scripts/flow/landing.ts` |
+
 ## 🟡 / ✅ 標記
 
 `- 🔴` / `- 🟡` 是「還沒解決」；`- ✅` 與 `- [x]` 是已完結，掃描器跳過。**答案落檔不會刪掉來源
 bullet**（`answer.ts` 是 append），所以**答完之後 MUST 自己把那條標成完結**，否則它會一直留在
 檔案裡——它不會被重問（`source_id` 已記錄答過），但下一個讀這份檔的人分不出來。
+
+### 自述結案 = 離開待拍板段
+
+條目本文自己說了「已拍板 A」「已完結，供後續參考」「已隨 relay-4 落地」，那一條就不是題目，
+即使它還坐在待拍板 heading 底下。掃描端據此判 `self-closed`，**不鑄 span**——那條進不了佇列。
+
+**NEVER 把 `self-closed` 讀成「所以不用管它」。** 它會一直被掃到、一直被判成結案、一直不進
+佇列，直到有人把它搬走：`flow sources` 每輪印一行「N 條自述結案的條目仍在待拍板段」，收件人
+就是下一個編那份檔的人。**MUST 搬到參考段或刪掉**，理由與上一段是同一條——留在原地的話，
+下一個讀這份檔的人分不出它是不是還在等誰。
+
+判準只讀**標題 ＋ 第一段**（空行之前的內文），而且要求**沒有**未勾的 checkbox、**沒有**未答的
+選項。三個條件同時成立才算：一條寫著「已拍板 A，接下來要決定 B / C」的條目仍然是題目，而只看關鍵字會把它吃掉。整條 body
+搜也不行——一條真的在問「要不要照上次那個已拍板的做法辦」的題會因為引用自己的歷史而被判成結案。
+兩道否決與只讀第一段是同一條理由：**被誤判的代價是一題永遠不會被問，比多問一題重得多。**
+
+題目訊號**只算結案語之後、同一行內**的那幾個疑問詞。結案語之前的「是否 / 要不要」描述的是被
+結掉的那個題目本身（「當場查額度**是否**恢復 —— 已拍板 A」是結案，不是提問），換行之後的那些
+在描述作法（「看 `usageExceeded` **是否**轉 false」是一個動作）。**明說「接下來要決定 / 待你
+拍板」的跨行照樣算**——那幾個詞沒有第二種讀法。
+**NEVER 加關鍵字啟發式擴充這張表**——同 `docs/tech-debt.md` 那條 NEVER 的理由：「拍板」二字在
+登記簿裡出現幾十次，幾乎全是在講別的條目。
+
+agent 代收也有正路了：`flow dismiss <span_id> --reason '<為什麼不再需要人>' [--repo <name>]`
+寫一筆 `decision.dismiss` 並在 carrier 條目行首加 `✅ dismissed: `。**NEVER** 手動去改 carrier
+的那一行而不寫事件——一條從佇列上消失而沒有任何東西寫下來的題，與從來沒被掃到長得一模一樣。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 標題＋第一段命中結案語 ＋ 無未勾 checkbox ＋ 無未答選項 → 標 `self-closed`、不鑄 span、`flow sources` 印一行計數。**warn-only，不 block** |
+| 消費端 | 寫 / 編那份 carrier 的 agent（看到那一行就搬段或刪）；`flow pending` 與 `/decisions`（少一條問不到人的題） |
+| 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`）；判定器 `vendor/scripts/flow/decision-sources.ts` 的 `isSelfClosed`，對帳在 `decision-sync.ts` |
 
 ## 新問題優先走 `flow ask`
 
@@ -213,8 +302,36 @@ node vendor/scripts/herdr-session-handoff.ts --complete blocked \
   --summary '<目前狀態>' \
   --decision '<只問一個具體問題>' \
   --decision-option 'A …' --decision-option 'B …' \
-  [--decision-recommended 'A …']
+  [--decision-recommended 'A …'] \
+  [--decision-for coordinator|charles]
 ```
+
+#### `--decision-for` —— 這題問誰，預設 coordinator
+
+**你有 parent。** 一個 dispatch 出去的 pane 問的題，絕大多數是它的 coordinator 當場裁決得了的
+——而在這個旗標之前，每一題都被路由到 Charles 的 `/decisions`。2026-09-03 實測：<consumer-a> worker 問
+「要不要修 CI 兩條紅燈」，coordinator 當場裁決、clade 修掉、隨 v1.12.8 出版，那一題還掛在人的
+佇列上。
+
+| 值 | 這題會怎樣 |
+| --- | --- |
+| `coordinator`（預設） | 照樣鑄 `decision.request`（`payload.audience: 'coordinator'`）、照樣送控制訊息喚醒 parent pane，但**不在** `/decisions` 與 `flow pending` 的預設佇列上（`--audience all` 才顯示） |
+| `charles` | 進人的佇列。parent pane 還活著時 helper 印一行 warn（不擋） |
+
+**MUST `--decision-for charles` 的判準是「這題只有 Charles 答得了」**——實機、線上帳號、對外
+承諾、密鑰、不可逆且他要負責的。**NEVER** 因為「這題比較重要」就寫 `charles`：重要與該問誰
+無關，而佇列被不需要他的題塞滿，代價是他不再讀它。
+
+**coordinator 的題照樣是 span，這一點 NEVER 拿掉。** 它被藏起來的只有「Charles 的那一頁」；
+`answer-not-filed` 與各種停滯偵測照樣看得到它。所以 **parent 回答之後 MUST 跑
+`flow answer <span_id> --answer '<答案>'`**——在 pane 裡口頭裁決而不落 `flow answer`，那一題會
+以 `answer-not-filed` 的形狀躺在停滯清單上，而回答它的人以為自己已經答完了。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | `--decision-for charles` 且 parent pane 的 wake 真的送達 → helper 收據帶 `warning`。**warn-only，不擋**：有些題就是要人，coordinator 在場不改變這件事 |
+| 消費端 | worker（填欄位）、coordinator（收控制訊息並 `flow answer`）、`/decisions` 與 `flow pending`（預設只顯示 `audience: charles`） |
+| 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`）＋ `rules/core/session-tasks.operations.md` § Herdr session transport；helper 的 completion handshake 樣板每次 dispatch 逐字帶給 worker |
 
 ### 一個拍板題 = 一個問題。底下的 bullet 是**選項**，NEVER 是**項目**
 

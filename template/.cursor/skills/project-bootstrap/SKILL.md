@@ -24,15 +24,37 @@ permission_tier: action
 | `new` | 目標 repo 尚不存在，或使用者要求從 starter 建立 | project name + target path | scaffolded project + registered consumer + ready report |
 | `adopt` | repo 已存在，但 Clade registry 查不到 | existing repo path | registered consumer + ready report |
 
-若 repo 已在 `registry/consumers.json`，停止 onboarding，改回該 consumer 的一般工作流。**例外**：使用者明確授權把該 consumer 清掉從 starter 重建——先從 registry 拿掉該列、跑 `bootstrap-consumers-local.ts`、拆 linked worktree、空掉 target path，再走 `new`。不要把 registry 衝突讀成「改回一般工作流」。若使用者只要候選標準、不授權寫入，呼叫 `/bp plan` 後交付 plan，不繼續本 skill。
+若 repo 已在 `registry/consumers.json`，停止 onboarding，改回該 consumer 的一般工作流。**例外**：使用者明確授權把該 consumer 清掉從 starter 重建。可重複的 playground 重建走 `node "$CLADE_HOME/scripts/rescaffold-playground.ts"`（預設 <consumer-e> / `--db-host existing-server`；`--dry-run` 只印步驟；`--skip-gates` 只驗 CLI）。不要自己複述 unregister / rm / CLI 順序——那支腳本是這條路徑的 SoT。不要把 registry 衝突讀成「改回一般工作流」。若使用者只要候選標準、不授權寫入，呼叫 `/bp plan` 後交付 plan，不繼續本 skill。
 
 </decision_boundary>
+
+## Playground quality loop
+
+標準必須先在 **clade + starter** 落地；playground（現為 <consumer-e>）只拿來驗證。`bootstrap-project result=READY` **不是**滿意——文件、CLI、AI 指引、資訊揭露、配套檔、`/bp` required 沒自動落地，都算缺口。
+
+每一輪（腳本內**不**無限 loop）：
+
+1. 看：`node "$CLADE_HOME/scripts/inspect-new-project-round.ts" --consumer <target>`
+2. 記：機讀缺口進 `tasks/new-project-quality-loop.jsonl`；質性偏差（doc / cli / ai-guidance / disclosure）同一 schema 補一筆
+3. 修：**只改 clade 或 starter**。playground 當源頭改完不算
+4. 清：`node "$CLADE_HOME/scripts/rescaffold-playground.ts"`（會再 inspect）
+5. 對 ledger：過的 finding 關掉；還沒過的下一輪繼續
+
+停手：inspect `errorCount=0` **且** ledger 沒有未關的質性缺口 **且** 使用者說滿意。Campaign SoT：`tasks/2026-09-03-0018-new-project-quality-loop.md`。
 
 <workflow>
 
 ## 1. 建 intake sheet
 
-先讀 `references/intake.md`。從使用者訊息、目標 repo、git remote、`.claude/hub.json` 與 starter preset 推導欄位；只有無法安全推導的 material choice 才問。
+先讀 `references/intake.md`，再 Read starter 的問題樹 SoT：
+
+`$NUXT_STARTER_HOME/template/packages/create-nuxt-starter/src/question-catalog.ts`
+
+（沒設環境變數就 `$HOME/offline/nuxt-supabase-starter/template/packages/create-nuxt-starter/src/question-catalog.ts`）
+
+AI 不經 CLI、改用對話引導時，MUST 用該檔的 `prompt` 與 `options[].label` 問每一題 `when` 為真的 id。使用者訊息裡已經答過的可以跳過。**NEVER** 另寫 LXC / <consumer-b> / CT 選項標籤。catalog 題**不是**「只有無法安全推導的才問」——那句只適用 catalog 以外的 business variant。
+
+`--yes` **只能**在適用的 catalog 題都有答案之後組 flags。缺 `--db-host`（Supabase 軌）就不要跑 CLI；CLI 會 fail-loud。
 
 輸出並確認一次 intake sheet：
 
@@ -40,8 +62,10 @@ permission_tier: action
 mode:
 project_name:
 target_path:
-repo_id:
 starter_preset:
+db_host:
+register_fleet:
+repo_id:
 starter_overrides:
 agent_targets:
 workflow_model:
@@ -51,7 +75,32 @@ business_activity:
 optional_conventions:
 ```
 
-`repo_id` 是 registry 必填；existing repo 優先由 `git remote get-url origin` 推導。新 repo 未建立 remote 時，先向使用者取得 `<owner>/<repo>`。建立 GitHub repo、Supabase cloud project、Cloudflare/Vercel project 或 secrets 都是額外外部副作用，只有使用者明確要求才執行。
+`repo_id` 在 `register_fleet=yes` 時必填。existing repo 優先由 `git remote get-url origin` 推導。建立 GitHub repo、雲端資料庫、部署專案或 secrets 都是額外外部副作用，只有使用者明確要求才執行。
+
+### 溝通期 BOM（尚無 hub.json）
+
+intake 拍板 stack 之後、寫第一個檔之前，先出一張 **BOM**：conventions 一列、plugin/rule/skill 一列。這不是 catalog 題、也不是 `ai-guidance:catalog-vs-cli`。**NEVER** 自寫第二份投影模擬。**NEVER** 自動 `/bp record` 把 candidate 寫進 consumer 業務檔——輸出是候選，採用仍是判斷。
+
+**Conventions**（`bp-scan` 的建議挑選邏輯不准改；缺 hub.json 時餵 `--modules`）：
+
+```bash
+node "$CLADE_HOME/scripts/bp-scan.ts" --plan --json --modules '<prospective hub.json modules JSON>'
+```
+
+`--modules` 是 hub.json `modules` 物件（可含 `profile`）。starter preset → 軸值用 `references/intake.md` 的 Clade runtime direction，不要另解。
+
+**Plugins / rules / skills**（同一份 prospective manifest，呼叫既有 `projectionPlan`）：
+
+```js
+import { projectionPlan } from '$CLADE_HOME/scripts/audit-projection-invariant.ts'
+import { resolveParsed } from '$CLADE_HOME/scripts/lib/resolve-manifest.ts'
+
+const manifest = resolveParsed({ version: '0.0.0', modules: /* 同上 --modules */ })
+const bom = await projectionPlan({ cladeRoot: process.env.CLADE_HOME, manifest })
+// bom.plugins / bom.rules / bom.skills
+```
+
+把兩份輸出併進 intake sheet 給使用者看。catalog 題（db-host / register-fleet / deploy-track…）仍只問 `question-catalog.ts`，不要跟 BOM 列混成一張表。
 
 ## 2. 建 session state 與隔離工作區
 
@@ -73,12 +122,13 @@ optional_conventions:
 ```bash
 pnpm --dir "$NUXT_STARTER_HOME/template/packages/create-nuxt-starter" dev <project-name> \
   --yes --preset <starter-preset> --agents <agent-targets> \
+  --db-host <this-machine|existing-server> \
   --repo-id <owner/repo> --workflow-model <workflow-model> \
   --business-activity <business-activity> --dev-port <port> \
   --deploy-track <deploy_track>
 ```
 
-主機 `pnpm --version` **MUST** 等於 starter `template/package.json` 的 `packageManager`（fleet 現為 `pnpm@11.24.0`）。對不上時升那個欄位、CI `corepack prepare` pin 與 lockfile，**NEVER** 改走 `tsx src/cli.ts` 繞過。`deploy_track` 來自 intake；`self-hosted-node` 無公網 HTTPS prod DB 時是 `none`，**NEVER** 默默抄 `wrangler-action`。
+主機 `pnpm --version` **MUST** 等於 starter `template/package.json` 的 `packageManager`（fleet 現為 `pnpm@11.24.0`）。對不上時升那個欄位、CI `corepack prepare` pin 與 lockfile，**NEVER** 改走 `tsx src/cli.ts` 繞過。`deploy_track` 來自 intake；`self-hosted-node` 無公網 HTTPS prod DB 時是 `none`，**NEVER** 默默抄 `wrangler-action`。`db_host` 來自 catalog：Supabase 軌沒有這格就不要 `--yes`。`register_fleet=no` 時加 `--no-register-consumer` 並拿掉 `--repo-id`。
 
 需要 feature override 才加 `--auth` / `--db` / `--ci` / `--evlog-preset` / `--with` / `--without`。starter CLI 已負責組裝、dependency install、local `init-consumer.ts`、registry 登記（含 `--deploy-track` / `--db-runtime`）與初始 git；失敗時保留原始輸出，修 root cause 後重跑，不把半成品宣告成 consumer。
 

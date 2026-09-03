@@ -70,7 +70,7 @@ SET search_path = public           -- 禁止！
 
 ### Step 4: 本地測試與類型產生（自動）
 
-依序執行以下步驟，任何步驟失敗則停止並顯示錯誤。**MUST** 透過 package.json 偵測 consumer 是用本機 Docker Supabase 還是遠端 LXC（via `pnpm db:*` wrapper）。
+依序執行以下步驟，任何步驟失敗則停止並顯示錯誤。**MUST** 透過 package.json 偵測 consumer 是走遠端 wrapper（`pnpm db:*`，含 existing-server / self-hosted）還是本機 Docker。**NEVER** 看到遠端 wrapper 就改跑本機 `supabase start`。
 
 ```bash
 # 從 package.json 讀 types 路徑（若有自訂）；fallback 到 conventional locations
@@ -89,15 +89,15 @@ TYPES=$(node -e "
   console.log(path);
 ")
 
-USE_LXC=$(node -e "process.exit(require('./package.json').scripts?.['db:reset'] ? 0 : 1)" 2>/dev/null && echo yes || echo no)
+USE_DB_WRAPPER=$(node -e "process.exit(require('./package.json').scripts?.['db:reset'] ? 0 : 1)" 2>/dev/null && echo yes || echo no)
 
-if [ "$USE_LXC" = yes ]; then
-  # 遠端 LXC Supabase 模式（consumer 提供 pnpm db:* wrapper；db:reset 內部會跑 db:types 寫到 $TYPES）
+if [ "$USE_DB_WRAPPER" = yes ]; then
+  # 遠端 / existing-server：走 pnpm db:*（wrapper 會擋本機 Docker；db:reset 內部跑 db:types 寫到 $TYPES）
   pnpm db:reset
   pnpm db:lint        # 安全檢查（必須零警告）
   pnpm typecheck
 else
-  # 本機 Docker Supabase 模式
+  # 本機 Docker（this-machine；沒有 pnpm db:reset wrapper）
   supabase db reset
   supabase db lint --level warning
   # 直接重導向到 $TYPES — 不用 tee（pipeline 會吞 supabase gen types 失敗狀態）
@@ -106,7 +106,7 @@ else
 fi
 ```
 
-**自動產生類型**：LXC 模式由 `pnpm db:reset` 內部呼叫 `db:types`；Docker 模式由 `supabase gen types` 寫入 `$TYPES`（自動偵測自 `package.json.config.dbTypesPath` 或 conventional locations）。Consumer 自訂 types 路徑時應設於 `package.json` `config.dbTypesPath`，**MUST** 同步在 `db:types` script 內引用同一路徑（避免 LXC/Docker 模式寫到不同檔）。
+**自動產生類型**：遠端 wrapper 由 `pnpm db:reset` 內部呼叫 `db:types`；本機 Docker 由 `supabase gen types` 寫入 `$TYPES`（自動偵測自 `package.json.config.dbTypesPath` 或 conventional locations）。Consumer 自訂 types 路徑時應設於 `package.json` `config.dbTypesPath`，**MUST** 同步在 `db:types` script 內引用同一路徑（避免兩種模式寫到不同檔）。
 
 **錯誤處理**：
 
@@ -133,7 +133,7 @@ fi
 
 下一步：
 - 測試功能是否正常
-- 準備好後依 consumer 部署模式推送（LXC: `pnpm supabase:sync`；Docker: `supabase db push`）
+- 準備好後依 consumer 部署模式推送（遠端 wrapper: `pnpm supabase:sync`；本機 Docker: `supabase db push`）
 ```
 
 ## 安全檢查清單

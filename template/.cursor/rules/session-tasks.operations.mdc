@@ -489,8 +489,14 @@ receipt 出現 `model_prose_conflict` 就是 brief 與 argv 不一致，改帶 `
 
 每一個被派出去的 **worker** 都 **MUST** 在正常 final response 前透過 helper 回報與 dispatch／pane／
 Claude session identity 相關聯的 `success | blocked | failed | unknown` outcome；`blocked` 必須帶一個
-具體 user decision。**NEVER** 把 secret 寫進 Herdr argv、prompt metadata、receipt、summary、decision、
+具體 decision。**NEVER** 把 secret 寫進 Herdr argv、prompt metadata、receipt、summary、decision、
 log、rule 或 fixture。
+
+**`blocked` 的題 MUST 標明問誰**（`--decision-for coordinator|charles`，預設 `coordinator`）。
+判準、兩個值各自會怎樣、以及「coordinator 回答之後 MUST 跑 `flow answer`」在
+[[decision-authoring]] § `--decision-for`，**此處不複述**——那一份是寫拍板題的人讀的，
+本節只記它是 completion 契約的一部分。**NEVER** 把預設讀成「所以不必想」：預設對應的是常見
+情形（你有 parent），而寫 `charles` 是一個要打出來的字，打之前先問「這題只有他答得了嗎」。
 
 ### successor 怎麼收割它繼承的 worker
 
