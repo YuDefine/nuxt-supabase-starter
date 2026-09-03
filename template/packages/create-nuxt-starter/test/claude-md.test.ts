@@ -14,36 +14,14 @@ afterEach(() => {
   if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true, force: true })
 })
 
-describe('generateClaudeMd: 極簡契約（只留 rules 載不到的內容）', () => {
-  it('留 SPECTRA marker 與 Language，其餘規約交給 .claude/rules', () => {
+describe('generateClaudeMd: 空殼契約', () => {
+  it('只有一行標題；規約在 .claude/rules，路由在 skill description', () => {
     generateClaudeMd(TEST_DIR)
     const text = readFileSync(join(TEST_DIR, 'CLAUDE.md'), 'utf8')
-
-    expect(text).toContain('<!-- SPECTRA:START v1.0.2 -->')
-    expect(text).toContain('<!-- SPECTRA:END -->')
-    expect(text).toContain('## Language')
-    expect(text).toContain('.claude/rules/local/verify-commands.md')
-
-    for (const banned of [
-      'Proactive Skill Orchestra',
-      '## Stack',
-      '## Commands',
-      '## CRITICAL RULES',
-      '### Auth',
-      '### Migration',
-      '### RLS Policy',
-      '### 截圖調試',
-      '### Development',
-      '## Project Structure',
-      '## Automation Triggers',
-      '## AI Skills',
-      'supabase db reset',
-    ]) {
-      expect(text, `CLAUDE.md 不該再含「${banned}」，該段已由 .claude/rules 承載`).not.toContain(
-        banned,
-      )
+    expect(text).toBe('# CLAUDE.md\n')
+    expect(Buffer.byteLength(text, 'utf8')).toBeLessThanOrEqual(16)
+    for (const banned of ['SPECTRA:START', '## Language', 'CLADE:SNIPPET', 'verify-commands.md']) {
+      expect(text).not.toContain(banned)
     }
-
-    expect(Buffer.byteLength(text, 'utf8')).toBeLessThan(2560)
   })
 })

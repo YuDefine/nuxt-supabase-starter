@@ -1485,66 +1485,11 @@ function copyGatePlaybookPack(targetDir: string): void {
   }
 }
 
-// --- CLAUDE.md generation ---
-//
-// 極簡契約：本檔只留 .claude/rules/ 載不到的內容。開發約定、auth、DB、migration、
-// 截圖驗證、TDD 全由 clade 投影的 rules 承載（Claude Code 自動載入；Codex / Cursor
-// 讀 sync-to-codex 產生的 AGENTS.md）。SPECTRA marker 區塊由 spectra CLI 擁有，
-// 內容對齊 `spectra init --tools claude` 輸出，marker version 跟著 spectra 升版。
-
+// CLAUDE.md 是空殼（2026-09-03 裁決）：規約全在 .claude/rules/（Claude Code 自動載入、
+// Codex / Cursor 讀 AGENTS.md 投影），skill 路由在各 skill 的 description。
+// 唯一硬條件：檔案存在且非空 —— clade sync-to-codex 用它當 AGENTS.md 的 source（空檔會 fail）。
 export function generateClaudeMd(targetDir: string): void {
-  const sections: string[] = []
-
-  sections.push('<!-- SPECTRA:START v1.0.2 -->')
-  sections.push('')
-  sections.push('# Spectra Instructions')
-  sections.push('')
-  sections.push(
-    'This project uses Spectra for Spec-Driven Development(SDD). Specs live in `openspec/specs/`, change proposals in `openspec/changes/`.',
-  )
-  sections.push('')
-  sections.push('## Use `/spectra-*` skills when:')
-  sections.push('')
-  sections.push('- A discussion needs structure before coding → `/spectra-discuss`')
-  sections.push('- User wants to plan, propose, or design a change → `/spectra-propose`')
-  sections.push('- Tasks are ready to implement → `/spectra-apply`')
-  sections.push("- There's an in-progress change to continue → `/spectra-ingest`")
-  sections.push('- User asks about specs or how something works → `/spectra-ask`')
-  sections.push('- Implementation is done → `/spectra-archive`')
-  sections.push('- Commit only files related to a specific change → `/spectra-commit`')
-  sections.push('')
-  sections.push('## Workflow')
-  sections.push('')
-  sections.push('discuss? → propose → apply ⇄ ingest → archive')
-  sections.push('')
-  sections.push('- `discuss` is optional — skip if requirements are clear')
-  sections.push('- Requirements change mid-work? Plan mode → `ingest` → resume `apply`')
-  sections.push('')
-  sections.push('## Parked Changes')
-  sections.push('')
-  sections.push(
-    "Changes can be parked（暫存）— temporarily moved out of `openspec/changes/`. Parked changes won't appear in `spectra list` but can be found with `spectra list --parked`. To restore: `spectra unpark <name>`. The `/spectra-apply` and `/spectra-ingest` skills handle parked changes automatically.",
-  )
-  sections.push('')
-  sections.push('<!-- SPECTRA:END -->')
-  sections.push('')
-
-  sections.push('# CLAUDE.md')
-  sections.push('')
-  sections.push('## Language')
-  sections.push('')
-  sections.push('**YOU MUST** respond in 繁體中文 (zh-TW). **NEVER** use 簡體中文 (zh-CN).')
-  sections.push('')
-  sections.push('## 本檔只留 rules 載不到的內容')
-  sections.push('')
-  sections.push(
-    '- 開發約定、auth、DB、migration、截圖驗證、TDD 全在 `.claude/rules/`（Claude Code 自動載入；Codex / Cursor 讀 `AGENTS.md` 投影）。',
-  )
-  sections.push('- 本 repo 特有的 verify 指令在 `.claude/rules/local/verify-commands.md`。')
-  sections.push('- **NEVER** 把已由 rules / skills 承載的內容複製回本檔。')
-  sections.push('')
-
-  writeFileSync(join(targetDir, 'CLAUDE.md'), sections.join('\n'))
+  writeFileSync(join(targetDir, 'CLAUDE.md'), '# CLAUDE.md\n')
 }
 
 // --- Spectra ecosystem ---
