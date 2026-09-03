@@ -211,6 +211,32 @@ function copyTemplateClaudeAssets(targetDir: string): void {
   copyDirectory(join(STARTER_ROOT, '.claude'), join(targetDir, '.claude'))
 }
 
+function pruneWrongStackSkillDirs(targetDir: string, selectedFeatureIds: string[]): void {
+  const drop = new Set<string>()
+  if (!selectedFeatureIds.includes('auth-better-auth')) {
+    drop.add('nuxt-better-auth')
+    drop.add('better-auth-best-practices')
+    drop.add('better-auth-security-best-practices')
+  }
+  if (
+    !selectedFeatureIds.includes('deploy-cloudflare') &&
+    !selectedFeatureIds.includes('deploy-void')
+  ) {
+    drop.add('wrangler')
+    drop.add('workers-best-practices')
+    drop.add('nuxthub')
+  }
+  if (drop.size === 0) return
+  for (const rel of ['.claude/skills', '.cursor/skills', '.agents/skills']) {
+    const dir = join(targetDir, rel)
+    if (!existsSync(dir)) continue
+    for (const name of drop) {
+      const skillDir = join(dir, name)
+      if (existsSync(skillDir)) rmSync(skillDir, { recursive: true, force: true })
+    }
+  }
+}
+
 function copySecurityPolicy(targetDir: string): void {
   const src = join(STARTER_ROOT, 'SECURITY.md')
   if (!existsSync(src)) return
@@ -356,7 +382,7 @@ export function generatePackageJson(
     basePkg.scripts['db:reset'] = 'bash ./scripts/db-reset.sh && pnpm db:types'
     basePkg.scripts['db:drizzle:pull'] = 'drizzle-kit pull --config=drizzle.config.ts'
     basePkg.scripts['db:drizzle:studio'] = 'drizzle-kit studio --config=drizzle.config.ts'
-    basePkg.scripts['db:lint'] = 'supabase db lint --level warning'
+    basePkg.scripts['db:lint'] = 'bash ./scripts/db-lint.sh'
     basePkg.scripts['db:types'] = 'bash ./scripts/db-types.sh'
     basePkg.scripts['db:backup'] = 'bash ./scripts/backup-supabase.sh'
     basePkg.scripts['supabase:sync'] = 'bash ./scripts/supabase-sync.sh'
@@ -721,6 +747,8 @@ function copyClaudeCodeAssets(targetDir: string, selectedFeatureIds: string[]): 
     'vue-testing-best-practices',
     'nuxt',
     'vitest',
+    'vueuse-functions',
+    'vitepress',
     'test-driven-development',
     'review-rules',
     'review-screenshot',
@@ -809,6 +837,11 @@ function copyClaudeCodeAssets(targetDir: string, selectedFeatureIds: string[]): 
       copyDirectoryFiltered(src, dest, skillExclude)
     }
   }
+
+  // copyTemplateClaudeAssets / Cursor / Codex 會先整包拷 starter 自己的
+  // skills（含 better-auth、wrangler、nuxthub）。上面只 overlay 選中的，
+  // 不刪未選的 → 新專案第一眼像裝了錯 stack。依本專案 allowlist 砍掉其餘目錄。
+  pruneWrongStackSkillDirs(targetDir, selectedFeatureIds)
 
   // Copy agents
   const agents = ['code-review.md', 'check-runner.md']

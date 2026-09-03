@@ -164,7 +164,7 @@ pnpm --filter create-nuxt-starter dev -- /path/to/my-app
 
 # 非互動 — 一行直達指定 preset
 pnpm --filter create-nuxt-starter dev -- /path/to/my-app \
-  --yes --preset cloudflare-supabase
+  --yes --preset cloudflare-supabase --db-host this-machine --no-register-consumer
 ```
 
 Stack preset：`cloudflare-supabase`（預設）/ `cloudflare-nuxthub-ai` / `vercel-supabase` / `self-hosted-node` / `minimal`。

@@ -3,6 +3,7 @@
 # Usage: pnpm supabase:check
 set -euo pipefail
 source "$(dirname "$0")/lib/common.sh"
+refuse_local_db_if_existing_server
 
 echo "Checking Supabase connectivity..."
 echo ""

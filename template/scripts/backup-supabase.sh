@@ -3,6 +3,7 @@
 # Usage: pnpm db:backup
 set -euo pipefail
 source "$(dirname "$0")/lib/common.sh"
+refuse_local_db_if_existing_server
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"

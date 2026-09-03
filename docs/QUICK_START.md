@@ -83,11 +83,14 @@ bash scripts/create-fast-project.sh temp/my-product \
 pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 	--yes \
 	--preset cloudflare-nuxthub-ai \
+	--no-register-consumer \
 	--with charts,image
 
 # 或從預設 cloudflare-supabase preset 微調
 pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 	--yes \
+	--db-host this-machine \
+	--no-register-consumer \
 	--auth better-auth \
 	--with charts,monitoring,image \
 	--without testing-full,testing-vitest
@@ -299,7 +302,7 @@ echo 'pnpm hub:check' >> .husky/pre-commit
 **自動登記到本機 consumers 清單**：scaffold CLI 預設會把新專案的絕對路徑 append 到 `${CLADE_HOME:-$HOME/offline/clade}/consumers.local`，未來中央倉 `propagate.mjs` 發新版時才會推到這裡：
 
 - 互動模式：跑到 git init 之後會問一次（預設 yes，按 enter 就過）
-- 非互動模式（`--yes` / `bash scripts/create-fast-project.sh`）：直接登記
+- 非互動模式：`--yes` 或 `--preset` / `--auth` 等旗標跳過互動時，預設要登記，必須再帶 `--repo-id` 等 catalog 題；本機試跑用 `--no-register-consumer`（`create-fast-project.sh` 已帶）
 - 不想登記：加 `--no-register-consumer`（例如臨時測試專案）
 - 已登記過（重跑 scaffold 到同一路徑）：自動偵測並跳過，不會重複寫入
 

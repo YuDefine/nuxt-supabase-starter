@@ -7,5 +7,5 @@
 ## mint
 
 - **pack-minted** · `mint-gate-playbooks.ts` 寫入本目錄 + HANDOFF board
-  - consumer=`{{CONSUMER}}` port=`{{DEV_PORT}}` host=`{{TAILSCALE_HOSTNAME}}` lxc=`{{LXC_ID}}`
+  - consumer=`{{CONSUMER}}` port=`{{DEV_PORT}}` host=`{{TAILSCALE_HOSTNAME}}`
   - NEVER touch `{{NEVER_TOUCH_PEER}}`

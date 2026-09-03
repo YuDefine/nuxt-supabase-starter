@@ -142,7 +142,7 @@ cross-model code review。完整 repository baseline 保持 operator 明確觸�
    - **命中** → 跳過 0-A.1/0-A.2，0-B/0-C 並行（同回合 fan-out）
    - **不命中** → **MUST** 用單一回合的多個 tool call 並行啟動：
      - Bash `codex-review-safe.sh xhigh`（`run_in_background: true`）→ 拿到 background bash id
-     - `Agent` tool 派 `screenshot-review` Claude subagent（若 0-B 觸發條件成立；model 以 [[agent-routing]] § Routing Table〔`screenshot-review-verify`〕列為準）
+     - `Agent` tool 派 `screenshot-review` Claude subagent（若 0-B 觸發條件成立；model 以 [[agent-routing.routing-table]]〔`screenshot-review-verify`〕列為準（該列的硬禁令在 [[agent-routing]] § Routing 硬禁令））
      - Bash `pnpm check`（foreground，主線同步跑）
 2. 主線 foreground 0-C 完成後 → poll 軸 A、等軸 B 回收
 3. 三軸全部 done 才進入修正合併

@@ -11,6 +11,7 @@ dist/
 .env
 .env.*
 !.env.example
+!.env.test
 
 # IDE
 .idea/

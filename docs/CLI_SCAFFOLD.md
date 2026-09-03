@@ -34,17 +34,20 @@ bash scripts/create-fast-project.sh temp/my-app
 # 在 repo 根目錄
 pnpm --dir template/packages/create-nuxt-starter dev temp/my-app
 
-# 非互動模式（使用預設配置）
-pnpm --dir template/packages/create-nuxt-starter dev temp/my-app --yes
+# 非互動模式（使用預設配置）—— Supabase 軌仍必須回答資料庫跑在哪
+pnpm --dir template/packages/create-nuxt-starter dev temp/my-app --yes --db-host this-machine --no-register-consumer
 
 # 非互動模式（用 stack preset 一行直達）
 pnpm --dir template/packages/create-nuxt-starter dev temp/my-app \
     --yes \
-    --preset cloudflare-nuxthub-ai
+    --preset cloudflare-nuxthub-ai \
+    --no-register-consumer
 
 # 非互動模式（自訂微調）
 pnpm --dir template/packages/create-nuxt-starter dev temp/my-app \
     --yes \
+    --db-host this-machine \
+    --no-register-consumer \
     --auth better-auth \
     --with charts,monitoring \
     --without testing-full,testing-vitest
@@ -57,7 +60,8 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-app \
 - `--preset`：`cloudflare-supabase`（預設）| `cloudflare-nuxthub-ai` | `vercel-supabase` | `self-hosted-node` | `minimal`
 - `--auth`：`nuxt-auth-utils` | `better-auth` | `none`（覆蓋 preset 的 auth 預設）
 - `--ci`：`simple` | `advanced`（覆蓋 preset 的 ci 預設）
-- `--db`：`supabase` | `nuxthub-d1`（覆蓋 preset 的 dbStack）
+- `--db`：`supabase` | `nuxthub-d1` | `void-d1`（覆蓋 preset 的 dbStack）
+- `--db-host`：`this-machine` | `existing-server`（Supabase 軌必填；`--yes` 不可省略）
 - `--evlog-preset`：`none` | `baseline` | `d-pattern-audit` | `nuxthub-ai`（覆蓋 preset 的 evlog）
 - `--with`：逗號分隔 feature id，加入功能
 - `--without`：逗號分隔 feature id，移除功能（含跳過 testing：`--without testing-full,testing-vitest`）
@@ -99,7 +103,14 @@ CLI 傳入舊值時會 fail 並提示等價寫法。
 7. 測試框架（Vitest + Playwright / 僅 Vitest / 不需要）
 8. AI runtime（多選：claude-code / codex / cursor）
 
-被 preset 決定的 prompt（資料庫 / 部署目標 / 監控 / CI 模式 / evlog preset / DB stack）會直接跳過。
+被 preset 決定的 prompt（資料庫種類 / 部署目標 / 監控 / CI 模式 / evlog preset / DB stack）會直接跳過。
+
+接著問 **問題樹尾巴**（`src/question-catalog.ts`，AI 引導必須問同一組）：
+
+- 開發時資料庫要跑在哪（僅 Supabase 軌）：這台電腦 Docker，或連到已在跑的伺服器
+- 要不要登記進共用名單；要的話繼續問 GitHub 名稱、怎麼進正式版、專案階段、port、上線方式
+
+`--yes` 或 `--preset` / `--auth` 等旗標非互動不能拿預設值略過這些題；Supabase 軌沒有 `--db-host` 會直接失敗。要登記進 fleet 時 `--repo-id` / `--workflow-model` / `--business-activity` / `--dev-port` / `--deploy-track` 也必須是 flag，否則加 `--no-register-consumer`。
 
 選 `custom` 時走完整 15-prompt 路徑：
 

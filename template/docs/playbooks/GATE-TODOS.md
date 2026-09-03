@@ -4,7 +4,7 @@
 
 | id | content | status |
 | --- | --- | --- |
-| `gate-01-lxc-tailscale` | SOP 01 LXC/Tailscale — `docs/playbooks/01-lxc-and-tailscale.md` | pending |
+| `gate-01-dev-database` | SOP 01 連到已在跑的開發資料庫 — `docs/playbooks/01-dev-database.md` | pending |
 | `gate-02-ssh-config` | SOP 02 SSH config — `docs/playbooks/02-ssh-config.md` | pending |
 | `gate-03-oauth` | SOP 03 Google OAuth — `docs/playbooks/03-google-oauth.md` | pending |
 | `gate-04-deploy-prod-db` | SOP 04 deploy/prod DB — `docs/playbooks/04-deploy-prod-db.md` | pending |

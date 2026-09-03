@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { consola } from 'consola'
@@ -12,7 +12,14 @@ import {
   maybeWriteConsumerMeta,
   readPendingBuildApprovals,
   resolveCladeInitScript,
+  resolveSupabaseDevNextSteps,
   resolveSyncToCursorScript,
+  rewriteEnvFilesForDbHost,
+  rewriteFirstGlanceAuthDocs,
+  rewriteFirstGlanceDocsForDbHost,
+  rewriteGeneratedPort,
+  maybeWriteRootReadme,
+  stripOrphanPostMigrationHook,
 } from '../src/post-scaffold'
 
 const TEST_DIR = mkdtempSync(join(tmpdir(), 'post-scaffold-test-'))
@@ -312,5 +319,420 @@ describe('first-run marker', () => {
   it('initial commit 設 HUSKY=0，避免剛 wire 的 hook 擋 bootstrap commit', () => {
     const src = readFileSync(join(import.meta.dirname, '..', 'src', 'post-scaffold.ts'), 'utf-8')
     expect(src).toContain("HUSKY: '0'")
+  })
+})
+
+describe('resolveSupabaseDevNextSteps', () => {
+  it('existing-server 連既有伺服器，不要本機 setup', () => {
+    const lines = resolveSupabaseDevNextSteps({ dbHost: 'existing-server' })
+    expect(lines.join('\n')).toContain('不要在這台電腦再起一份')
+    expect(lines.join('\n')).not.toContain('pnpm run setup')
+  })
+
+  it('this-machine 走本機 setup', () => {
+    const lines = resolveSupabaseDevNextSteps({
+      dbHost: 'this-machine',
+      dbRuntime: 'supabase-self-hosted',
+    })
+    expect(lines.join('\n')).toContain('pnpm run setup')
+    expect(lines.join('\n')).not.toContain('playbooks/01')
+  })
+})
+
+describe('rewriteEnvFilesForDbHost', () => {
+  it('existing-server 清掉本機 Docker 預設值', () => {
+    const dir = join(TEST_DIR, 'env-host')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(
+      join(dir, '.env.example'),
+      '# --- Supabase ---\nSUPABASE_URL=http://127.0.0.1:54321\nDATABASE_URL=postgres://postgres:postgres@127.0.0.1:54322/postgres\nNUXT_PUBLIC_SITE_URL=http://localhost:3000\n',
+    )
+    writeFileSync(
+      join(dir, '.env.test'),
+      'SUPABASE_URL=http://127.0.0.1:54321\nDATABASE_URL=postgres://postgres:postgres@127.0.0.1:54322/postgres\n',
+    )
+    rewriteEnvFilesForDbHost(dir, 'existing-server', 3090)
+    const example = readFileSync(join(dir, '.env.example'), 'utf8')
+    expect(example).not.toContain('127.0.0.1:54321')
+    expect(example).toContain('不要填本機 Docker')
+    expect(example).toContain('http://localhost:3090')
+    const envTest = readFileSync(join(dir, '.env.test'), 'utf8')
+    expect(envTest).not.toContain('127.0.0.1:54321')
+    expect(envTest).not.toContain('127.0.0.1:54322')
+    expect(envTest).toContain('不要填本機 Docker')
+  })
+
+  it('existing-server 的 .gitignore 放行 .env.test', () => {
+    const dir = join(TEST_DIR, 'env-gitignore')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, '.gitignore'), '.env\n.env.*\n!.env.example\n')
+    rewriteEnvFilesForDbHost(dir, 'existing-server')
+    expect(readFileSync(join(dir, '.gitignore'), 'utf8')).toContain('!.env.test')
+  })
+})
+
+describe('rewriteFirstGlanceDocsForDbHost', () => {
+  it('existing-server 的 QUICK_START 不再叫人 supabase start', () => {
+    const dir = join(TEST_DIR, 'docs-host')
+    mkdirSync(join(dir, 'docs', 'verify'), { recursive: true })
+    writeFileSync(
+      join(dir, 'docs', 'verify', 'QUICK_START.md'),
+      readFileSync(join(import.meta.dirname, '../../../docs/verify/QUICK_START.md'), 'utf8'),
+    )
+    writeFileSync(
+      join(dir, 'docs', 'NEW_PROJECT_CHECKLIST.md'),
+      readFileSync(join(import.meta.dirname, '../../../docs/NEW_PROJECT_CHECKLIST.md'), 'utf8'),
+    )
+    writeFileSync(
+      join(dir, 'docs', 'verify', 'ENVIRONMENT_VARIABLES.md'),
+      readFileSync(
+        join(import.meta.dirname, '../../../docs/verify/ENVIRONMENT_VARIABLES.md'),
+        'utf8',
+      ),
+    )
+    writeFileSync(
+      join(dir, 'docs', 'TROUBLESHOOTING.md'),
+      readFileSync(join(import.meta.dirname, '../../../docs/TROUBLESHOOTING.md'), 'utf8'),
+    )
+    writeFileSync(
+      join(dir, 'docs', 'verify', 'README.md'),
+      readFileSync(join(import.meta.dirname, '../../../docs/verify/README.md'), 'utf8'),
+    )
+    writeFileSync(
+      join(dir, 'docs', 'verify', 'SUPABASE_MIGRATION_GUIDE.md'),
+      readFileSync(
+        join(import.meta.dirname, '../../../docs/verify/SUPABASE_MIGRATION_GUIDE.md'),
+        'utf8',
+      ),
+    )
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ name: 'docs-host', dependencies: { 'nuxt-auth-utils': '0.5.30' } }),
+    )
+    writeFileSync(
+      join(dir, 'CLAUDE.md'),
+      '```bash\nsupabase db reset    # Reset + apply all migrations\n```\n- After migration: `supabase db reset` → `db lint` → `gen types` → `typecheck`\n| Migration created  | `db reset` → `db lint` → `gen types` → `typecheck` |\n',
+    )
+    writeFileSync(
+      join(dir, 'docs', 'verify', 'DATABASE_OPTIMIZATION.md'),
+      readFileSync(
+        join(import.meta.dirname, '../../../docs/verify/DATABASE_OPTIMIZATION.md'),
+        'utf8',
+      ),
+    )
+    writeFileSync(
+      join(dir, 'docs', 'verify', 'SELF_HOSTED_SUPABASE.md'),
+      readFileSync(
+        join(import.meta.dirname, '../../../docs/verify/SELF_HOSTED_SUPABASE.md'),
+        'utf8',
+      ),
+    )
+    writeFileSync(
+      join(dir, '.mcp.json'),
+      JSON.stringify({
+        mcpServers: {
+          'codebase-memory-mcp': { command: 'codebase-memory-mcp' },
+          'local-supabase': { type: 'http', url: 'http://localhost:54321/mcp' },
+        },
+      }),
+    )
+    mkdirSync(join(dir, '.cursor'), { recursive: true })
+    mkdirSync(join(dir, '.claude'), { recursive: true })
+    writeFileSync(
+      join(dir, '.cursor', 'mcp.json'),
+      JSON.stringify({
+        mcpServers: {
+          'local-supabase': { type: 'http', url: 'http://localhost:54321/mcp' },
+        },
+      }),
+    )
+    writeFileSync(
+      join(dir, '.claude', 'settings.json'),
+      JSON.stringify({
+        enabledMcpjsonServers: ['local-supabase'],
+        permissions: { allow: ['mcp__local-supabase__list_tables', 'Bash(ls:*)'] },
+        hooks: {
+          PostToolUse: [
+            { matcher: 'mcp__local-supabase__apply_migration', hooks: [] },
+            { matcher: 'Edit|Write', hooks: [] },
+          ],
+        },
+      }),
+    )
+    rewriteFirstGlanceDocsForDbHost(dir, 'existing-server', 3090)
+    rewriteFirstGlanceAuthDocs(dir)
+    const quick = readFileSync(join(dir, 'docs', 'verify', 'QUICK_START.md'), 'utf8')
+    expect(quick).not.toMatch(/```bash\nsupabase start/)
+    expect(quick).toContain('01-dev-database.md')
+    expect(quick).toContain('localhost:3090')
+    expect(quick).not.toContain('localhost:3000')
+    const checklist = readFileSync(join(dir, 'docs', 'NEW_PROJECT_CHECKLIST.md'), 'utf8')
+    expect(checklist).not.toContain('supabase stop && supabase start')
+    expect(checklist).toContain('localhost:3090')
+    expect(checklist).not.toContain('localhost:3000')
+    const envVars = readFileSync(join(dir, 'docs', 'verify', 'ENVIRONMENT_VARIABLES.md'), 'utf8')
+    expect(envVars).not.toContain('127.0.0.1:54321')
+    expect(envVars).toContain('01-dev-database.md')
+    expect(envVars).toContain('localhost:3090')
+    const troubleshooting = readFileSync(join(dir, 'docs', 'TROUBLESHOOTING.md'), 'utf8')
+    expect(troubleshooting).toContain('01-dev-database.md')
+    expect(troubleshooting).toContain('NEVER')
+    const verifyReadme = readFileSync(join(dir, 'docs', 'verify', 'README.md'), 'utf8')
+    expect(verifyReadme).not.toContain('../FAQ.md')
+    expect(verifyReadme).not.toContain('@nuxtjs/better-auth')
+    expect(verifyReadme).toContain('nuxt-auth-utils')
+    expect(verifyReadme).not.toContain('Local-First')
+    const migration = readFileSync(
+      join(dir, 'docs', 'verify', 'SUPABASE_MIGRATION_GUIDE.md'),
+      'utf8',
+    )
+    expect(migration).not.toContain('supabase gen types typescript --local')
+    expect(migration).toContain('NEVER')
+    expect(migration).not.toMatch(/^supabase db reset$/m)
+    expect(verifyReadme).not.toContain('務必附上 `supabase db reset` 可成功的證明')
+    const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8')
+    expect(claude).not.toContain('supabase db reset    # Reset + apply all migrations')
+    expect(claude).not.toMatch(/\| Migration created\s+\|\s+`db reset`/)
+    expect(claude).toContain('NEVER 本機 db reset')
+    const dbOpt = readFileSync(join(dir, 'docs', 'verify', 'DATABASE_OPTIMIZATION.md'), 'utf8')
+    expect(dbOpt).not.toContain('supabase gen types typescript --local')
+    const selfHosted = readFileSync(join(dir, 'docs', 'verify', 'SELF_HOSTED_SUPABASE.md'), 'utf8')
+    expect(selfHosted).not.toContain('# 3. 本地測試\nsupabase db reset')
+    expect(selfHosted).not.toContain('http://localhost:54321/mcp')
+    const mcp = JSON.parse(readFileSync(join(dir, '.mcp.json'), 'utf8')) as {
+      mcpServers?: Record<string, unknown>
+    }
+    expect(mcp.mcpServers?.['local-supabase']).toBeUndefined()
+    expect(JSON.stringify(mcp)).not.toContain('localhost:54321')
+    const cursorMcp = JSON.parse(readFileSync(join(dir, '.cursor', 'mcp.json'), 'utf8')) as {
+      mcpServers?: Record<string, unknown>
+    }
+    expect(cursorMcp.mcpServers?.['local-supabase']).toBeUndefined()
+    expect(cursorMcp.mcpServers?.['codebase-memory-mcp']).toEqual({
+      command: 'codebase-memory-mcp',
+    })
+    const settings = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8')) as {
+      enabledMcpjsonServers?: string[]
+      permissions?: { allow?: string[] }
+      hooks?: { PostToolUse?: Array<{ matcher?: string }> }
+    }
+    expect(settings.enabledMcpjsonServers ?? []).not.toContain('local-supabase')
+    expect(settings.permissions?.allow).toEqual(['Bash(ls:*)'])
+    expect(settings.hooks?.PostToolUse?.map((item) => item.matcher)).toEqual(['Edit|Write'])
+    mkdirSync(join(dir, '.claude', 'hooks'), { recursive: true })
+    mkdirSync(join(dir, '.codex', 'hooks'), { recursive: true })
+    writeFileSync(
+      join(dir, '.claude', 'hooks', 'post-migration-gen-types.sh'),
+      '#!/bin/bash\n# 觸發條件: mcp__local-supabase__apply_migration 完成後\npnpm db:types\n',
+    )
+    writeFileSync(
+      join(dir, '.codex', 'hooks', 'post-migration-gen-types.sh'),
+      '#!/bin/bash\n# 觸發條件: mcp__local-supabase__apply_migration 完成後\npnpm db:types\n',
+    )
+    writeFileSync(
+      join(dir, '.claude', 'hub.json'),
+      JSON.stringify({ localHooks: ['post-migration-gen-types.sh'] }),
+    )
+    writeFileSync(
+      join(dir, '.codex', 'config.toml'),
+      'includeGitInstructions = false\nenabledMcpjsonServers = ["local-supabase", "chrome-devtools-mcp"]\n\n[enabledPlugins]\n"hub-runtime-cf-workers@clade" = true\n',
+    )
+    writeFileSync(
+      join(dir, '.codex', 'hooks.json'),
+      JSON.stringify({
+        hooks: {
+          PostToolUse: [{ matcher: 'mcp__local-supabase__apply_migration', hooks: [] }],
+        },
+      }),
+    )
+    writeFileSync(
+      join(dir, '.cursor', 'cli.json'),
+      JSON.stringify({
+        permissions: { allow: ['Mcp(local-supabase:list_tables)', 'Shell(ls)'] },
+      }),
+    )
+    rewriteFirstGlanceDocsForDbHost(dir, 'existing-server', 3090)
+    const codexConfig = readFileSync(join(dir, '.codex', 'config.toml'), 'utf8')
+    expect(codexConfig).not.toContain('local-supabase')
+    expect(codexConfig).toContain('chrome-devtools-mcp')
+    const codexHooks = JSON.parse(readFileSync(join(dir, '.codex', 'hooks.json'), 'utf8')) as {
+      hooks?: { PostToolUse?: Array<{ matcher?: string }> }
+    }
+    expect(codexHooks.hooks?.PostToolUse ?? []).toEqual([])
+    const cursorCli = JSON.parse(readFileSync(join(dir, '.cursor', 'cli.json'), 'utf8')) as {
+      permissions?: { allow?: string[] }
+    }
+    expect(cursorCli.permissions?.allow).toEqual(['Shell(ls)'])
+    expect(existsSync(join(dir, '.claude', 'hooks', 'post-migration-gen-types.sh'))).toBe(false)
+    expect(existsSync(join(dir, '.codex', 'hooks', 'post-migration-gen-types.sh'))).toBe(false)
+    const hub = JSON.parse(readFileSync(join(dir, '.claude', 'hub.json'), 'utf8')) as {
+      localHooks?: string[]
+    }
+    expect(hub.localHooks ?? []).not.toContain('post-migration-gen-types.sh')
+    expect(checklist).not.toContain('WORKFLOW.md')
+    expect(checklist).not.toContain('DEV_RECIPES.md')
+    expect(checklist).toContain('verify/QUICK_START.md')
+  })
+
+  it('this-machine 不刪 post-migration hook', () => {
+    const dir = join(TEST_DIR, 'hook-keep')
+    mkdirSync(join(dir, '.claude', 'hooks'), { recursive: true })
+    mkdirSync(join(dir, '.codex', 'hooks'), { recursive: true })
+    const claudeHook = join(dir, '.claude', 'hooks', 'post-migration-gen-types.sh')
+    const codexHook = join(dir, '.codex', 'hooks', 'post-migration-gen-types.sh')
+    writeFileSync(claudeHook, '#!/bin/bash\n')
+    writeFileSync(codexHook, '#!/bin/bash\n')
+    stripOrphanPostMigrationHook(dir, 'this-machine')
+    expect(existsSync(claudeHook)).toBe(true)
+    expect(existsSync(codexHook)).toBe(true)
+  })
+
+  it('existing-server 的 e2e.yml / config.toml 標明本機不要 supabase start', () => {
+    const dir = join(TEST_DIR, 'workflow-host')
+    mkdirSync(join(dir, '.github', 'workflows'), { recursive: true })
+    mkdirSync(join(dir, 'supabase'), { recursive: true })
+    writeFileSync(
+      join(dir, '.github', 'workflows', 'e2e.yml'),
+      '# Advanced E2E\nname: E2E Tests\n\njobs:\n  e2e:\n    steps:\n      - run: supabase start\n',
+    )
+    writeFileSync(
+      join(dir, '.github', 'workflows', 'ci.yml'),
+      '# 並把 runs-on 改成 self-hosted，同時移除 supabase start 步驟\nname: CI\n',
+    )
+    writeFileSync(join(dir, 'supabase', 'config.toml'), '[api]\nport = 54321\n')
+    rewriteFirstGlanceDocsForDbHost(dir, 'existing-server')
+    const e2e = readFileSync(join(dir, '.github', 'workflows', 'e2e.yml'), 'utf8')
+    expect(e2e).toContain('supabase start')
+    expect(e2e).toContain('本機 NEVER supabase start')
+    const ci = readFileSync(join(dir, '.github', 'workflows', 'ci.yml'), 'utf8')
+    expect(ci).toContain('本機 NEVER supabase start')
+    const config = readFileSync(join(dir, 'supabase', 'config.toml'), 'utf8')
+    expect(config).toContain('port = 54321')
+    expect(config).toContain('本機 NEVER supabase start')
+  })
+})
+
+describe('rewriteFirstGlanceAuthDocs', () => {
+  it('nuxt-auth-utils 時 SCREENSHOT_GUIDE 與 ENVIRONMENT_VARIABLES 不再寫 better-auth', () => {
+    const dir = join(TEST_DIR, 'auth-docs')
+    mkdirSync(join(dir, 'docs', 'verify'), { recursive: true })
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ name: 'auth-docs', dependencies: { 'nuxt-auth-utils': '0.5.30' } }),
+    )
+    writeFileSync(
+      join(dir, 'docs', 'verify', 'SCREENSHOT_GUIDE.md'),
+      readFileSync(join(import.meta.dirname, '../../../docs/verify/SCREENSHOT_GUIDE.md'), 'utf8'),
+    )
+    writeFileSync(
+      join(dir, 'docs', 'verify', 'ENVIRONMENT_VARIABLES.md'),
+      readFileSync(
+        join(import.meta.dirname, '../../../docs/verify/ENVIRONMENT_VARIABLES.md'),
+        'utf8',
+      ),
+    )
+    writeFileSync(
+      join(dir, 'docs', 'verify', 'README.md'),
+      readFileSync(join(import.meta.dirname, '../../../docs/verify/README.md'), 'utf8'),
+    )
+    writeFileSync(
+      join(dir, 'docs', 'verify', 'AUTH_INTEGRATION.md'),
+      readFileSync(join(import.meta.dirname, '../../../docs/verify/AUTH_INTEGRATION.md'), 'utf8'),
+    )
+    writeFileSync(
+      join(dir, 'docs', 'NEW_PROJECT_CHECKLIST.md'),
+      readFileSync(join(import.meta.dirname, '../../../docs/NEW_PROJECT_CHECKLIST.md'), 'utf8'),
+    )
+    mkdirSync(join(dir, 'scripts'), { recursive: true })
+    writeFileSync(
+      join(dir, 'scripts', 'check-skills.sh'),
+      readFileSync(join(import.meta.dirname, '../../../scripts/check-skills.sh'), 'utf8'),
+    )
+    writeFileSync(
+      join(dir, 'SECURITY.md'),
+      readFileSync(join(import.meta.dirname, '../../../SECURITY.md'), 'utf8'),
+    )
+    rewriteFirstGlanceAuthDocs(dir)
+    const screenshot = readFileSync(join(dir, 'docs', 'verify', 'SCREENSHOT_GUIDE.md'), 'utf8')
+    expect(screenshot).toContain('本專案使用 nuxt-auth-utils')
+    expect(screenshot).toContain('Google OAuth')
+    expect(screenshot).not.toContain('支援 email/password 登入')
+    const envVars = readFileSync(join(dir, 'docs', 'verify', 'ENVIRONMENT_VARIABLES.md'), 'utf8')
+    expect(envVars).toContain('本系統使用 **nuxt-auth-utils**')
+    expect(envVars).not.toContain('本系統使用 **@nuxtjs/better-auth**')
+    const verifyReadme = readFileSync(join(dir, 'docs', 'verify', 'README.md'), 'utf8')
+    expect(verifyReadme).not.toContain('@nuxtjs/better-auth')
+    const authIntegration = readFileSync(join(dir, 'docs', 'verify', 'AUTH_INTEGRATION.md'), 'utf8')
+    expect(authIntegration).toContain('本專案已選 **nuxt-auth-utils**')
+    expect(authIntegration).not.toContain('建立專案時二擇一')
+    expect(authIntegration).not.toContain('**better-auth 額外檔案：**')
+    expect(authIntegration).toContain('另一方案（本專案未採用）')
+    const checklist = readFileSync(join(dir, 'docs', 'NEW_PROJECT_CHECKLIST.md'), 'utf8')
+    expect(checklist).not.toContain('nuxt-better-auth')
+    expect(checklist).not.toContain('如選了 better-auth')
+    expect(checklist).toContain('nuxt-auth-utils')
+    const checkSkills = readFileSync(join(dir, 'scripts', 'check-skills.sh'), 'utf8')
+    expect(checkSkills).not.toContain('nuxt-better-auth')
+    expect(checkSkills).toContain('nuxt-auth-utils')
+    const securityMd = readFileSync(join(dir, 'SECURITY.md'), 'utf8')
+    expect(securityMd).not.toContain('Better Auth')
+    expect(securityMd).not.toContain('login.post.ts')
+    expect(securityMd).not.toContain('BETTER_AUTH_SECRET')
+    expect(securityMd).toContain('nuxt-auth-utils')
+    expect(securityMd).toContain('_dev-login.get.ts')
+  })
+})
+
+describe('maybeWriteRootReadme', () => {
+  it('缺 README 時寫一份，且 existing-server 不叫 supabase start', () => {
+    const dir = join(TEST_DIR, 'readme-host')
+    mkdirSync(dir, { recursive: true })
+    maybeWriteRootReadme(dir, '<consumer-e>', 'existing-server')
+    const readme = readFileSync(join(dir, 'README.md'), 'utf8')
+    expect(readme).toContain('# <consumer-e>')
+    expect(readme).not.toMatch(/```bash[\s\S]*supabase start/)
+    expect(readme).toContain('NEVER')
+    expect(readme).toContain('01-dev-database.md')
+    maybeWriteRootReadme(dir, 'OTHER', 'existing-server')
+    expect(readFileSync(join(dir, 'README.md'), 'utf8')).toContain('# <consumer-e>')
+  })
+})
+
+describe('rewriteGeneratedPort', () => {
+  it('OAuth 與 Playwright 對齊 --dev-port', () => {
+    const dir = join(TEST_DIR, 'port-host')
+    mkdirSync(join(dir, 'docs', 'verify'), { recursive: true })
+    writeFileSync(
+      join(dir, 'docs', 'verify', 'OAUTH_SETUP.md'),
+      '| 本地開發   | `http://localhost:3000/auth/google` |\n- 本地開發使用 `http://localhost:3000`\n',
+    )
+    writeFileSync(
+      join(dir, 'docs', 'verify', 'SCREENSHOT_GUIDE.md'),
+      '- Dev server 運行中（預設 port 3000）\n',
+    )
+    writeFileSync(
+      join(dir, 'playwright.config.ts'),
+      "baseURL: 'http://localhost:3000',\n    port: 3000,\n",
+    )
+    writeFileSync(
+      join(dir, 'package.json'),
+      JSON.stringify({ name: 'port-host', scripts: { dev: 'nuxt dev --dotenv .env -o' } }),
+    )
+    rewriteGeneratedPort(dir, 3090)
+    const oauth = readFileSync(join(dir, 'docs', 'verify', 'OAUTH_SETUP.md'), 'utf8')
+    expect(oauth).toContain('localhost:3090')
+    expect(oauth).not.toContain('localhost:3000')
+    const screenshot = readFileSync(join(dir, 'docs', 'verify', 'SCREENSHOT_GUIDE.md'), 'utf8')
+    expect(screenshot).toContain('預設 port 3090')
+    expect(screenshot).not.toContain('預設 port 3000')
+    const playwright = readFileSync(join(dir, 'playwright.config.ts'), 'utf8')
+    expect(playwright).toContain('http://localhost:3090')
+    expect(playwright).toContain('port: 3090')
+    expect(playwright).not.toContain('port: 3000')
+    const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as {
+      scripts?: { dev?: string }
+    }
+    expect(pkg.scripts?.dev).toContain('--port 3090')
+    expect(pkg.scripts?.dev).toContain('nuxt dev --dotenv .env -o')
   })
 })

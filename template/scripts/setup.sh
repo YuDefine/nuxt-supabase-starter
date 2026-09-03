@@ -273,6 +273,12 @@ if [ -f .env ]; then
   _mode=$(grep '^SUPABASE_MODE=' .env 2>/dev/null | cut -d'=' -f2-)
   [ -n "$_mode" ] && SUPABASE_MODE="$_mode"
 fi
+if [ -f .claude/scaffold-answers.json ] && grep -q '"dbHost"[[:space:]]*:[[:space:]]*"existing-server"' .claude/scaffold-answers.json; then
+  echo "ℹ️  scaffold-answers dbHost=existing-server — 不本機 supabase start"
+  echo "   下一步：docs/playbooks/01-dev-database.md"
+  echo ""
+  SUPABASE_MODE=remote
+fi
 
 if [ "$SUPABASE_MODE" = "remote" ]; then
   # --- 遠端模式 ---

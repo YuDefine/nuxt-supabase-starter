@@ -10,7 +10,7 @@ HANDOFF `## User-gate board` 是狀態 SoT。本目錄是 **AI session 逐步執
 
 | todo id | playbook |
 | --- | --- |
-| `gate-01-lxc-tailscale` | [01-lxc-and-tailscale.md](./01-lxc-and-tailscale.md) |
+| `gate-01-dev-database` | [01-dev-database.md](./01-dev-database.md) |
 | `gate-02-ssh-config` | [02-ssh-config.md](./02-ssh-config.md) |
 | `gate-03-oauth` | [03-google-oauth.md](./03-google-oauth.md) |
 | `gate-04-deploy-prod-db` | [04-deploy-prod-db.md](./04-deploy-prod-db.md) |

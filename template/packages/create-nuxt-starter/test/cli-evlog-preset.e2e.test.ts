@@ -44,6 +44,14 @@ function runCli(args: string[]) {
   })
 }
 
+const YES_LOCAL = [
+  '--yes',
+  '--no-install',
+  '--db-host',
+  'this-machine',
+  '--no-register-consumer',
+] as const
+
 beforeAll(() => {
   execFileSync('npx', ['tsdown', 'src/cli.ts', '--format', 'esm', '--out-dir', 'dist'], {
     cwd: PKG_ROOT,
@@ -56,7 +64,7 @@ afterAll(cleanTestDir)
 
 describe('dist/cli.js --evlog-preset (end-to-end)', () => {
   it('baseline 產出 evlog plugin 三件套與 identity helper', { timeout: 120_000 }, () => {
-    const result = runCli(['e2e-baseline', '--yes', '--no-install', '--evlog-preset', 'baseline'])
+    const result = runCli(['e2e-baseline', ...YES_LOCAL, '--evlog-preset', 'baseline'])
     expect(result.status).toBe(0)
 
     const target = join(TEST_DIR, 'e2e-baseline')
@@ -69,7 +77,7 @@ describe('dist/cli.js --evlog-preset (end-to-end)', () => {
   })
 
   it('none 產出乾淨專案，沒有任何 evlog plugin', { timeout: 120_000 }, () => {
-    const result = runCli(['e2e-none', '--yes', '--no-install', '--evlog-preset', 'none'])
+    const result = runCli(['e2e-none', ...YES_LOCAL, '--evlog-preset', 'none'])
     expect(result.status).toBe(0)
 
     const target = join(TEST_DIR, 'e2e-none')
@@ -90,13 +98,33 @@ describe('dist/cli.js --evlog-preset (end-to-end)', () => {
   })
 
   it('--yes 在非 TTY stdin 底下不觸發 prompt（TD-003 回歸鎖）', { timeout: 120_000 }, () => {
-    const result = runCli(['e2e-non-tty', '--yes', '--no-install', '--evlog-preset', 'baseline'])
+    const result = runCli(['e2e-non-tty', ...YES_LOCAL, '--evlog-preset', 'baseline'])
 
     // uv_tty_init EINVAL 是這條回歸的具體症狀：曾經必須靠 `script -q /dev/null`
     // 包一層才跑得動，修好之後 stdin 是不是 TTY 都不該影響 --yes。
     expect(`${result.stdout}${result.stderr}`).not.toContain('TTY initialization failed')
     expect(result.status).toBe(0)
     expect(existsSync(join(TEST_DIR, 'e2e-non-tty', 'package.json'))).toBe(true)
+  })
+
+  it('--yes 選了 Supabase 卻沒 --db-host 必須失敗且不建目錄', { timeout: 60_000 }, () => {
+    const result = runCli(['e2e-no-db-host', '--yes', '--no-install'])
+    expect(result.status).not.toBe(0)
+    expect(`${result.stdout}${result.stderr}`).toContain('--db-host')
+    expect(existsSync(join(TEST_DIR, 'e2e-no-db-host'))).toBe(false)
+  })
+
+  it('--yes 有 --db-host 但沒登記 flag 必須失敗且不建目錄', { timeout: 60_000 }, () => {
+    const result = runCli([
+      'e2e-no-register-flags',
+      '--yes',
+      '--no-install',
+      '--db-host',
+      'this-machine',
+    ])
+    expect(result.status).not.toBe(0)
+    expect(`${result.stdout}${result.stderr}`).toContain('--repo-id')
+    expect(existsSync(join(TEST_DIR, 'e2e-no-register-flags'))).toBe(false)
   })
 })
 
@@ -109,13 +137,25 @@ describe('dist/cli.js 的落點只看實際 cwd（TD-007 回歸）', () => {
     delete env.INIT_CWD
 
     try {
-      const result = spawnSync(process.execPath, [CLI, 'cwd-probe', '--yes', '--no-install'], {
-        cwd: isolated,
-        encoding: 'utf-8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-        timeout: 90_000,
-        env,
-      })
+      const result = spawnSync(
+        process.execPath,
+        [
+          CLI,
+          'cwd-probe',
+          '--yes',
+          '--no-install',
+          '--db-host',
+          'this-machine',
+          '--no-register-consumer',
+        ],
+        {
+          cwd: isolated,
+          encoding: 'utf-8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 90_000,
+          env,
+        },
+      )
 
       expect(result.status).toBe(0)
       expect(existsSync(join(isolated, 'cwd-probe'))).toBe(true)

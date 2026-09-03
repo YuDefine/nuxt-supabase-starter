@@ -3,9 +3,10 @@
 # Usage: pnpm supabase:sync
 set -euo pipefail
 source "$(dirname "$0")/lib/common.sh"
+refuse_local_db_if_existing_server
 
 if ! is_remote; then
-  echo "ℹ️  本地模式不需要 sync（直接使用 supabase db reset）"
+  echo "ℹ️  本地模式不需要 sync（直接使用 pnpm db:reset）"
   exit 0
 fi
 

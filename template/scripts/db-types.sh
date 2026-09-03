@@ -3,6 +3,7 @@
 # Usage: pnpm db:types
 set -euo pipefail
 source "$(dirname "$0")/lib/common.sh"
+refuse_local_db_if_existing_server
 
 OUTPUT_FILE="$(dirname "$0")/../app/types/database.types.ts"
 TMP_FILE="$(mktemp)"
