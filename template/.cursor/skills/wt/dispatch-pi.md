@@ -73,7 +73,7 @@ When Step 1.8 routes to Pi for coding work, use `Bash run_in_background=true` to
 
    | 可觀察 predicate | model / effort | `--route` / `--tier-basis` |
    | --- | --- | --- |
-   | 命中 [[agent-routing]] § Routing Table 某列 | 照該列逐字（含 `grok-xai` 的列） | `routing-table` / `table-row` ＋ `--table-row <row>` |
+   | 命中 [[agent-routing.routing-table]] 某列 | 照該列逐字（含 `grok-xai` 的列） | `routing-table` / `table-row` ＋ `--table-row <row>` |
    | Step 1.8 判為 **UI view implementation** | **不派**——回 Step 1.8，主線自己在 worktree 內做 | 本表沒有這一格 |
    | 本次工作**原本會派 Claude subagent**（原判 `sonnet`） | `--model gemini --effort high` | `claude-delegate-sub` / `delegate-sub` |
    | 本次工作**原本會派 Claude subagent**（原判 `haiku`） | `--model gemini --effort low` | `claude-delegate-sub` / `delegate-sub` |
@@ -178,7 +178,7 @@ When Step 1.8 routes to analysis/debug, use `pi-dispatch.ts` with the appropriat
    `read-heavy-scan` row, which names gemini, and dispatched sol unchallenged). If you cannot name the
    row, you did not consult the table — pick a different basis rather than guessing a row name.
 
-   **effort 分級**：依 `rules/core/agent-routing.md` § Routing Table 的 effort 六維表（`low` 是 Routing Table 類別預設檔；命中任一維即升檔）。
+   **effort 分級**：依 `rules/core/agent-routing.routing-table.md` § effort 檔位對照（六維判準在 `agent-routing.md` § Routing Table）（`low` 是 Routing Table 類別預設檔；命中任一維即升檔）。
 
 4. **Report dispatch to user immediately** — print one block right after `Bash run_in_background`:
 
