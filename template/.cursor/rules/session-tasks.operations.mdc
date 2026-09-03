@@ -469,6 +469,14 @@ helper（`relay` 用 `--relay`；`fanout` 先對每件工作跑一次裸 dispatc
 由 helper 統一 provision、fresh Claude session identity、prompt delivery、in-flight dispatch 的
 coordinator 身分轉移，以及寫出讓 successor 回收本 pane 的 predecessor record。
 
+**child 的 model 只由 `--model` 決定，NEVER 由 brief 正文決定。** 每一次會開新 Claude pane 的呼叫
+（裸 dispatch、`--relay`、recovery 重派）**MUST** 帶 `--model <slug>` 或 `--model inherit`，缺就
+`usage_error`。Claude session 無法自己換 model，brief 裡寫「worker 維持 Opus 5」對收件的 session 是
+不可執行的句子，pane 會照該 launcher settings.json 的預設起（2026-09-02 實例：brief 全寫 Opus 5、
+沒帶 `--model`，整批 ccw worker 都是 Fable）。派完 **MUST** 對 receipt 的 `claude_model` 核對意圖；
+receipt 出現 `model_prose_conflict` 就是 brief 與 argv 不一致，改帶 `--model <slug>` 重派，
+**NEVER** 靠改 brief 措辭解決。要 successor 與本 session 同款就 `--model inherit`；要換檔位就給 slug。
+
 **`fanout` 的順序是硬約束**：`--relay` 轉移的是它**執行那一刻**掃到的 in-flight dispatch。relay 之後
 才派的 worker 不會被任何人繼承，而本 pane 隨即被 successor 回收——那筆 worker 直接變成 orphan。
 **NEVER** 邊派邊 relay，**NEVER** relay 之後補派。漏掉的要補，只有一條路：由 successor 去派。
