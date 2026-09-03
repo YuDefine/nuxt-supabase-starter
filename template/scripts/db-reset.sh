@@ -3,6 +3,7 @@
 # Usage: pnpm db:reset
 set -euo pipefail
 source "$(dirname "$0")/lib/common.sh"
+refuse_local_db_if_existing_server
 
 if is_remote; then
   require_ssh

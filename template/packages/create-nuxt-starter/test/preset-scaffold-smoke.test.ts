@@ -46,6 +46,12 @@ describe('preset smoke: 5 個 stack preset 各跑 assembleProject', () => {
     expect(pkg.dependencies['evlog']).toBeDefined()
     expect(config).toContain('@nuxtjs/supabase')
     expect(config).toContain('evlog/nuxt')
+    expect(
+      existsSync(
+        join(targetDir, 'supabase', 'migrations', '20260819021500_create_evlog_events.sql'),
+      ),
+    ).toBe(true)
+    expect(existsSync(join(targetDir, 'app', 'types', 'database.types.ts'))).toBe(true)
   })
 
   it('cloudflare-nuxthub-ai produces NuxtHub D1 + Better Auth + nuxthub-ai evlog', () => {
@@ -113,6 +119,12 @@ describe('preset smoke: 5 個 stack preset 各跑 assembleProject', () => {
     expect(existsSync(join(targetDir, '.github', 'workflows'))).toBe(true)
     expect(existsSync(join(targetDir, 'SECURITY.md'))).toBe(true)
     expect(existsSync(join(targetDir, '.claude', 'consumer-meta.json'))).toBe(false)
+    expect(
+      existsSync(
+        join(targetDir, 'supabase', 'migrations', '20260819021500_create_evlog_events.sql'),
+      ),
+    ).toBe(true)
+    expect(existsSync(join(targetDir, 'app', 'types', 'database.types.ts'))).toBe(true)
     const mcp = JSON.parse(readFileSync(join(targetDir, '.mcp.json'), 'utf-8'))
     expect(mcp.mcpServers['codebase-memory-mcp']).toMatchObject({
       type: 'stdio',

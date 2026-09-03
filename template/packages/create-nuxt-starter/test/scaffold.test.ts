@@ -111,6 +111,19 @@ describe('scaffold: base-only (no features)', () => {
     )
   })
 
+  it('nuxt-auth-utils + node 不留下 better-auth / wrangler / nuxthub skill', () => {
+    const targetDir = join(TEST_DIR, 'auth-utils-skills')
+    assembleProject(targetDir, ['auth-nuxt-utils', 'database', 'ui'], 'auth-utils-skills')
+    expect(existsSync(join(targetDir, '.claude', 'skills', 'nuxt-auth-utils'))).toBe(true)
+    expect(existsSync(join(targetDir, '.claude', 'skills', 'nuxt-better-auth'))).toBe(false)
+    expect(existsSync(join(targetDir, '.claude', 'skills', 'better-auth-best-practices'))).toBe(
+      false,
+    )
+    expect(existsSync(join(targetDir, '.claude', 'skills', 'wrangler'))).toBe(false)
+    expect(existsSync(join(targetDir, '.claude', 'skills', 'nuxthub'))).toBe(false)
+    expect(existsSync(join(targetDir, '.claude', 'skills', 'workers-best-practices'))).toBe(false)
+  })
+
   it('uses setup script that never auto-deletes starter repos', () => {
     const targetDir = join(TEST_DIR, 'base-only-setup')
     assembleProject(targetDir, [], 'base-only-setup')

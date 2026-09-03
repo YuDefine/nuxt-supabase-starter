@@ -1,19 +1,19 @@
-# SOP 01 — LXC {{LXC_ID}} 與 Tailscale
+# SOP 01 — 連到已在跑的開發資料庫
 
-**Todo id**：`gate-01-lxc-tailscale`  
-**路徑**：`docs/playbooks/01-lxc-and-tailscale.md`  
-**看板 id**：`lxc-tailscale`
+**Todo id**：`gate-01-dev-database`  
+**路徑**：`docs/playbooks/01-dev-database.md`  
+**看板 id**：`dev-database`
 
-開場白：「現在跑 `gate-01-lxc-tailscale`（本檔）。Ready 全綠才進 Turn 1。」
+開場白：「現在跑 `gate-01-dev-database`（本檔）。Ready 全綠才進 Turn 1。」
 
 ## Applicability（N/A 先判）
 
-本 SOP 只在遠端 self-hosted Supabase CT 上才跑。
+本 SOP 只在開發資料庫跑在**另一台已在跑的伺服器**時才跑。這台電腦不要再起一份。
 
 | probe | 真（跑 Turns） | 假（N/A → verified） |
 | --- | --- | --- |
 | `.claude/hub.json` 的 `modules["db-runtime"]` | `supabase-self-hosted` | 其他值或檔不存在 |
-| 本機有沒有在跑 `supabase start` 當 DB | 沒有（DB 在遠端 LXC） | 本機 Docker Supabase 就是這專案的 DB |
+| 本機有沒有在跑 `supabase start` 當 DB | 沒有（DB 在已在跑的伺服器） | 本機 Docker 就是這專案的 DB |
 
 假：看板 `verified`，PROGRESS 寫 `N/A — db-runtime=<value>`，todo completed。**不要**跑 `pct`。
 
@@ -23,7 +23,7 @@
 | --- | --- | --- |
 | 在獨立 worktree，不在 consumer main 改 infra | `git rev-parse --abbrev-ref HEAD` 含 session slug | 在 main 改 |
 | {{NEVER_TOUCH_PEER}} 仍可當陽性對照 | `ssh -o BatchMode=yes {{PEER_HOSTNAME}} hostname` exit 0 且 stdout **不是** `{{TAILSCALE_HOSTNAME}}` | 連對照節點失敗 — 先修本機 Tailscale，**不要**動對照節點設定 |
-| 看板列存在 | HANDOFF 有 `lxc-tailscale` | 先補看板，不要直接 pct |
+| 看板列存在 | HANDOFF 有 `dev-database` | 先補看板，不要直接 pct |
 
 ## NEVER
 
@@ -42,7 +42,7 @@
 
 **失敗下一 turn**：全部 255 → 換 identity / LAN / 從陽性對照節點跳，不要叫人開瀏覽器。
 
-### Turn 2 — CT 死活
+### Turn 2 — 容器死活
 
 **跑**（用 Turn 1 成功的跳板）：`pct status {{LXC_ID}}`
 
@@ -53,7 +53,7 @@
 | `Configuration file does not exist` | **停手**回報，不要 clone |
 | 跳板又 255 | 回 Turn 1 |
 
-### Turn 3 — Tailscale 現況（CT 內）
+### Turn 3 — Tailscale 現況（容器內）
 
 **跑**：`pct exec {{LXC_ID}} -- tailscale status --json` 再抽 `Self.HostName` + `BackendState`。
 
@@ -65,7 +65,7 @@
 
 ### Turn 4 — Wipe-state 後 `up`（禁止 logout）
 
-**跑**（CT {{LXC_ID}} 內）：`tailscale down` → stop tailscaled → 刪 `/var/lib/tailscale/tailscaled.state` → start → `tailscale up --hostname={{TAILSCALE_HOSTNAME}} --reset=false`。
+**跑**（容器 {{LXC_ID}} 內）：`tailscale down` → stop tailscaled → 刪 `/var/lib/tailscale/tailscaled.state` → start → `tailscale up --hostname={{TAILSCALE_HOSTNAME}} --reset=false`。
 
 **等**：stdout 出現**新的** `https://login.tailscale.com/a/…`，或直接 `BackendState=Running`。
 

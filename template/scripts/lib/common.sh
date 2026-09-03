@@ -19,6 +19,22 @@ SUPABASE_MODE="${SUPABASE_MODE:-local}"
 DEV_SSH_HOST="${DEV_SSH_HOST:-}"
 DEV_PROJECT_DIR="${DEV_PROJECT_DIR:-}"
 
+_COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_PROJECT_ROOT="$(cd "$_COMMON_DIR/../.." && pwd)"
+
+scaffold_answers_existing_server() {
+  local answers="$_PROJECT_ROOT/.claude/scaffold-answers.json"
+  [ -f "$answers" ] && grep -q '"dbHost"[[:space:]]*:[[:space:]]*"existing-server"' "$answers"
+}
+
+refuse_local_db_if_existing_server() {
+  if scaffold_answers_existing_server && ! is_remote; then
+    echo "❌ scaffold-answers dbHost=existing-server。NEVER 本機 supabase start / db reset / gen types --local。" >&2
+    echo "   跑 docs/playbooks/01-dev-database.md，或設 SUPABASE_MODE=remote + DEV_SSH_HOST。" >&2
+    exit 1
+  fi
+}
+
 is_remote() {
   [[ "$SUPABASE_MODE" == "remote" ]]
 }

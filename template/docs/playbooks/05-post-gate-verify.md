@@ -10,7 +10,7 @@
 
 | 列 | 必須 |
 | --- | --- |
-| `lxc-tailscale` | `verified` |
+| `dev-database` | `verified` |
 | `ssh-config` | `verified` |
 | `google-oauth` | `verified` |
 | `deploy-prod-db` | `verified`（選項 2 predicate）或仍未升選項 1 |

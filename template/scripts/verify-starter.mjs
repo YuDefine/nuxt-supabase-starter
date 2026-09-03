@@ -241,116 +241,136 @@ function checkPackageJson() {
   }
 }
 
-// Provider console URL + 取值提示。Key 為 .env var 前綴 / 完整名稱。
-const ENV_VAR_HINTS = {
-  // Supabase
-  SUPABASE_URL: {
+function expectedDevSiteNote() {
+  const meta = readJsonSafe(join(ROOT, '.claude', 'consumer-meta.json'))
+  const port = meta?.dev?.ports?.[0]?.port
+  const site =
+    typeof port === 'number' ? `http://localhost:${port}` : 'registry 的 dev port（不要預設 3000）'
+  return `dev: ${site}；prod: 正式網域；OAuth callback 必須對齊`
+}
+
+function supabaseUrlHint() {
+  if (usesExistingServerDatabase()) {
+    return {
+      provider: 'Supabase',
+      url: '已在跑的伺服器 API URL',
+      note: '見 docs/playbooks/01-dev-database.md；不要填本機 Docker',
+    }
+  }
+  return {
     provider: 'Supabase',
-    url: 'http://127.0.0.1:54321（本機）/ Supabase Dashboard → Settings → API → Project URL',
+    url: '本機 supabase status 的 API URL / Dashboard → Settings → API → Project URL',
     note: '本機跑 supabase status 取得',
-  },
-  SUPABASE_KEY: {
-    provider: 'Supabase',
-    url: 'supabase status 輸出的 anon key',
-    note: '本機 supabase status / Dashboard → Settings → API → anon public',
-  },
-  SUPABASE_SECRET_KEY: {
-    provider: 'Supabase',
-    url: 'supabase status 輸出的 service_role key',
-    note: '本機 supabase status / Dashboard → Settings → API → service_role（保密）',
-  },
-  NUXT_PUBLIC_SUPABASE_URL: {
-    provider: 'Supabase',
-    url: '同 SUPABASE_URL',
-    note: '前端用，會打包進 client bundle',
-  },
-  NUXT_PUBLIC_SUPABASE_KEY: {
-    provider: 'Supabase',
-    url: '同 SUPABASE_KEY',
-    note: '前端用 anon key',
-  },
+  }
+}
 
-  // Auth secrets
-  BETTER_AUTH_SECRET: {
-    provider: 'self-generated',
-    url: '本機產生',
-    note: 'openssl rand -base64 32',
-  },
-  NUXT_SESSION_PASSWORD: {
-    provider: 'self-generated',
-    url: '本機產生',
-    note: 'openssl rand -base64 32（≥32 字元）',
-  },
+// Provider console URL + 取值提示。Key 為 .env var 前綴 / 完整名稱。
+function envVarHints() {
+  return {
+    // Supabase
+    SUPABASE_URL: supabaseUrlHint(),
+    SUPABASE_KEY: {
+      provider: 'Supabase',
+      url: 'supabase status 輸出的 anon key',
+      note: '本機 supabase status / Dashboard → Settings → API → anon public',
+    },
+    SUPABASE_SECRET_KEY: {
+      provider: 'Supabase',
+      url: 'supabase status 輸出的 service_role key',
+      note: '本機 supabase status / Dashboard → Settings → API → service_role（保密）',
+    },
+    NUXT_PUBLIC_SUPABASE_URL: {
+      provider: 'Supabase',
+      url: '同 SUPABASE_URL',
+      note: '前端用，會打包進 client bundle',
+    },
+    NUXT_PUBLIC_SUPABASE_KEY: {
+      provider: 'Supabase',
+      url: '同 SUPABASE_KEY',
+      note: '前端用 anon key',
+    },
 
-  // OAuth providers
-  NUXT_OAUTH_GOOGLE_CLIENT_ID: {
-    provider: 'Google Cloud',
-    url: 'https://console.cloud.google.com/apis/credentials',
-    note: 'Create OAuth 2.0 Client ID → Web application → Authorized redirect URIs 加 {NUXT_PUBLIC_SITE_URL}/api/auth/callback/google',
-  },
-  NUXT_OAUTH_GOOGLE_CLIENT_SECRET: {
-    provider: 'Google Cloud',
-    url: '同上 Client ID 詳情頁',
-    note: '建立 Client ID 時一併取得',
-  },
-  NUXT_OAUTH_GITHUB_CLIENT_ID: {
-    provider: 'GitHub',
-    url: 'https://github.com/settings/developers',
-    note: 'New OAuth App → Authorization callback URL: {NUXT_PUBLIC_SITE_URL}/api/auth/callback/github',
-  },
-  NUXT_OAUTH_GITHUB_CLIENT_SECRET: {
-    provider: 'GitHub',
-    url: '同上 OAuth App 詳情頁',
-    note: '建立後點 Generate a new client secret',
-  },
-  NUXT_OAUTH_LINE_CLIENT_ID: {
-    provider: 'LINE Developers',
-    url: 'https://developers.line.biz/console/',
-    note: 'Create channel → Channel ID',
-  },
-  NUXT_OAUTH_LINE_CLIENT_SECRET: {
-    provider: 'LINE Developers',
-    url: '同上 Channel 詳情頁',
-    note: 'Channel secret',
-  },
+    // Auth secrets
+    BETTER_AUTH_SECRET: {
+      provider: 'self-generated',
+      url: '本機產生',
+      note: 'openssl rand -base64 32',
+    },
+    NUXT_SESSION_PASSWORD: {
+      provider: 'self-generated',
+      url: '本機產生',
+      note: 'openssl rand -base64 32（≥32 字元）',
+    },
 
-  // Site config
-  NUXT_PUBLIC_SITE_URL: {
-    provider: 'self-config',
-    url: '依部署環境決定',
-    note: 'dev: http://localhost:3000；prod: 正式網域；OAuth callback 必須對齊',
-  },
+    // OAuth providers
+    NUXT_OAUTH_GOOGLE_CLIENT_ID: {
+      provider: 'Google Cloud',
+      url: 'https://console.cloud.google.com/apis/credentials',
+      note: 'Create OAuth 2.0 Client ID → Web application → Authorized redirect URIs 加 {NUXT_PUBLIC_SITE_URL}/api/auth/callback/google',
+    },
+    NUXT_OAUTH_GOOGLE_CLIENT_SECRET: {
+      provider: 'Google Cloud',
+      url: '同上 Client ID 詳情頁',
+      note: '建立 Client ID 時一併取得',
+    },
+    NUXT_OAUTH_GITHUB_CLIENT_ID: {
+      provider: 'GitHub',
+      url: 'https://github.com/settings/developers',
+      note: 'New OAuth App → Authorization callback URL: {NUXT_PUBLIC_SITE_URL}/api/auth/callback/github',
+    },
+    NUXT_OAUTH_GITHUB_CLIENT_SECRET: {
+      provider: 'GitHub',
+      url: '同上 OAuth App 詳情頁',
+      note: '建立後點 Generate a new client secret',
+    },
+    NUXT_OAUTH_LINE_CLIENT_ID: {
+      provider: 'LINE Developers',
+      url: 'https://developers.line.biz/console/',
+      note: 'Create channel → Channel ID',
+    },
+    NUXT_OAUTH_LINE_CLIENT_SECRET: {
+      provider: 'LINE Developers',
+      url: '同上 Channel 詳情頁',
+      note: 'Channel secret',
+    },
 
-  // Sentry / monitoring
-  SENTRY_AUTH_TOKEN: {
-    provider: 'Sentry',
-    url: 'https://sentry.io/settings/account/api/auth-tokens/',
-    note: 'Create Token，scope 至少 project:releases',
-  },
-  NUXT_PUBLIC_SENTRY_DSN: {
-    provider: 'Sentry',
-    url: 'Sentry → Settings → Projects → <project> → Client Keys (DSN)',
-    note: '前端用，可公開',
-  },
+    // Site config
+    NUXT_PUBLIC_SITE_URL: {
+      provider: 'self-config',
+      url: '依部署環境決定',
+      note: expectedDevSiteNote(),
+    },
 
-  // Cloudflare
-  CLOUDFLARE_API_TOKEN: {
-    provider: 'Cloudflare',
-    url: 'https://dash.cloudflare.com/profile/api-tokens',
-    note: 'Create Token → Edit Cloudflare Workers template',
-  },
-  CLOUDFLARE_ACCOUNT_ID: {
-    provider: 'Cloudflare',
-    url: 'https://dash.cloudflare.com/',
-    note: '右側欄位顯示 Account ID',
-  },
+    // Sentry / monitoring
+    SENTRY_AUTH_TOKEN: {
+      provider: 'Sentry',
+      url: 'https://sentry.io/settings/account/api/auth-tokens/',
+      note: 'Create Token，scope 至少 project:releases',
+    },
+    NUXT_PUBLIC_SENTRY_DSN: {
+      provider: 'Sentry',
+      url: 'Sentry → Settings → Projects → <project> → Client Keys (DSN)',
+      note: '前端用，可公開',
+    },
+
+    // Cloudflare
+    CLOUDFLARE_API_TOKEN: {
+      provider: 'Cloudflare',
+      url: 'https://dash.cloudflare.com/profile/api-tokens',
+      note: 'Create Token → Edit Cloudflare Workers template',
+    },
+    CLOUDFLARE_ACCOUNT_ID: {
+      provider: 'Cloudflare',
+      url: 'https://dash.cloudflare.com/',
+      note: '右側欄位顯示 Account ID',
+    },
+  }
 }
 
 function describeMissingEnv(varName) {
-  // Exact match first
-  if (ENV_VAR_HINTS[varName]) return ENV_VAR_HINTS[varName]
-  // Prefix match for OAuth providers etc.
-  for (const [prefix, hint] of Object.entries(ENV_VAR_HINTS)) {
+  const hints = envVarHints()
+  if (hints[varName]) return hints[varName]
+  for (const [prefix, hint] of Object.entries(hints)) {
     if (varName.startsWith(prefix)) return hint
   }
   return null
@@ -671,7 +691,7 @@ function checkGatePlaybookPack() {
     'docs/playbooks/README.md',
     'docs/playbooks/PROGRESS.md',
     'docs/playbooks/GATE-TODOS.md',
-    'docs/playbooks/01-lxc-and-tailscale.md',
+    'docs/playbooks/01-dev-database.md',
     'docs/playbooks/02-ssh-config.md',
     'docs/playbooks/03-google-oauth.md',
     'docs/playbooks/04-deploy-prod-db.md',
