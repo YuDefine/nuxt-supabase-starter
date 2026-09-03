@@ -38,7 +38,13 @@ import {
   type EvlogPreset,
   type UserSelections,
 } from './types'
-import { questionById, usesSupabaseDatabase } from './question-catalog'
+import {
+  flagsPresent,
+  formatMissingYesFlags,
+  missingYesFlags,
+  questionById,
+  usesSupabaseDatabase,
+} from './question-catalog'
 
 type CliAuth = 'nuxt-auth-utils' | 'better-auth' | 'none'
 type CliCi = 'simple' | 'advanced'
@@ -683,6 +689,13 @@ const main = defineCommand({
             nonInteractive: true,
           },
         )
+        const register = (args['register-consumer'] as boolean) !== false
+        const missing = missingYesFlags({
+          hasSupabase: usesSupabaseDatabase(selections.dbStack, selections.features),
+          register,
+          present: flagsPresent(process.argv),
+        })
+        if (missing.length > 0) failValidation(formatMissingYesFlags(missing))
       } catch (error) {
         consola.error((error as Error).message)
         process.exit(1)

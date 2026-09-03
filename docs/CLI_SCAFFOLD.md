@@ -35,17 +35,19 @@ bash scripts/create-fast-project.sh temp/my-app
 pnpm --dir template/packages/create-nuxt-starter dev temp/my-app
 
 # 非互動模式（使用預設配置）—— Supabase 軌仍必須回答資料庫跑在哪
-pnpm --dir template/packages/create-nuxt-starter dev temp/my-app --yes --db-host this-machine
+pnpm --dir template/packages/create-nuxt-starter dev temp/my-app --yes --db-host this-machine --no-register-consumer
 
 # 非互動模式（用 stack preset 一行直達）
 pnpm --dir template/packages/create-nuxt-starter dev temp/my-app \
     --yes \
-    --preset cloudflare-nuxthub-ai
+    --preset cloudflare-nuxthub-ai \
+    --no-register-consumer
 
 # 非互動模式（自訂微調）
 pnpm --dir template/packages/create-nuxt-starter dev temp/my-app \
     --yes \
     --db-host this-machine \
+    --no-register-consumer \
     --auth better-auth \
     --with charts,monitoring \
     --without testing-full,testing-vitest
@@ -108,7 +110,7 @@ CLI 傳入舊值時會 fail 並提示等價寫法。
 - 開發時資料庫要跑在哪（僅 Supabase 軌）：這台電腦 Docker，或連到已在跑的伺服器
 - 要不要登記進共用名單；要的話繼續問 GitHub 名稱、怎麼進正式版、專案階段、port、上線方式
 
-`--yes` 不能拿預設值略過這些題；Supabase 軌沒有 `--db-host` 會直接失敗。
+`--yes` 或 `--preset` / `--auth` 等旗標非互動不能拿預設值略過這些題；Supabase 軌沒有 `--db-host` 會直接失敗。要登記進 fleet 時 `--repo-id` / `--workflow-model` / `--business-activity` / `--dev-port` / `--deploy-track` 也必須是 flag，否則加 `--no-register-consumer`。
 
 選 `custom` 時走完整 15-prompt 路徑：
 

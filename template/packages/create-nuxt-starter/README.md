@@ -9,7 +9,7 @@ Interactive CLI to scaffold a Nuxt + Supabase project from this starter template
 pnpm create nuxt-supabase-starter my-app
 
 # non-interactive (帶 flag)。Supabase 軌必須回答資料庫跑在哪
-pnpm create nuxt-supabase-starter my-app --yes --db-host this-machine
+pnpm create nuxt-supabase-starter my-app --yes --db-host this-machine --no-register-consumer
 pnpm create nuxt-supabase-starter my-app --auth nuxt-auth-utils --ci simple --db-host this-machine
 
 # 一次完成 Clade fleet identity（Clade checkout 必須可被找到）
@@ -17,7 +17,9 @@ pnpm create nuxt-supabase-starter my-app --yes \
   --db-host this-machine \
   --repo-id YuDefine/my-app \
   --workflow-model trunk-based \
-  --dev-port 3120
+  --business-activity pre-production \
+  --dev-port 3120 \
+  --deploy-track none
 ```
 
 ## Flags

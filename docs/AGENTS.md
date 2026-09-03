@@ -45,7 +45,7 @@ scaffold CLI（`create-nuxt-starter`）已盡量機械化，AI 可全自動完�
 | 從 clade 拉 rules/skills/hooks | ✅ postinstall 自動跑 bootstrap-hub | 不必介入 |
 | 投影 `.codex/.agents/AGENTS.md` | ✅ 自動 | 不必介入 |
 | `git init` + 首個 commit | ✅ 自動 | 不必介入 |
-| 登記到 `consumers.local` | ✅ `--yes` 模式自動，互動模式 prompt | `--yes` 跳過 prompt 即可 |
+| 登記到 `consumers.local` | ✅ `--yes` / 旗標非互動帶齊登記題 flags 才登記；否則 `--no-register-consumer` | 不可拿預設值略過 catalog 題 |
 | wire pre-commit hook | ✅ `--yes` 模式自動，互動模式 prompt | 同上 |
 | 找不到 clade | ⚠️ warn 但不擋 | 提示使用者 `git clone git@github.com:YuDefine/clade.git ~/offline/clade` 後重跑 |
 | 填 OAuth credentials（`.env`） | ❌ 需使用者去 provider console 申請 | 列出缺哪些 var、提示填入位置；**不可代填** |

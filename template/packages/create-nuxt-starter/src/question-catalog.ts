@@ -3,7 +3,7 @@
  *
  * CLI 互動模式逐題問這裡的 `prompt`。AI 不經 CLI、改用對話引導時，MUST 問
  * 同一組 `id`（適用條件 `when` 為真的才問），使用者訊息裡已經答過的可以跳過。
- * `--yes` 只代表「答案已齊、不要再出現 TTY prompt」，不是「用預設值略過沒問的題」。
+ * `--yes` 或旗標非互動（`--preset` / `--auth` 等）只代表「答案已齊、不要再出現 TTY prompt」，不是「用預設值略過沒問的題」。
  */
 import { type DbHost, type DbStack } from './types'
 
@@ -129,4 +129,34 @@ export function usesSupabaseDatabase(
   features: readonly string[],
 ): boolean {
   return dbStack === 'supabase' && features.includes('database')
+}
+
+/** `--yes` / 旗標非互動時 argv 裡出現過的 flag（含 `--no-register-consumer`）。 */
+export function flagsPresent(argv: readonly string[]): Set<string> {
+  const flags = new Set<string>()
+  for (const token of argv) {
+    if (token.startsWith('--')) flags.add(token.split('=')[0] ?? token)
+  }
+  return flags
+}
+
+/**
+ * `--yes` / 旗標非互動缺的 catalog 題。`register-fleet` 用 `--no-register-consumer` 當「不要」；
+ * 沒寫那支就當成要登記，後面的 register 題必須已是 flag。
+ */
+export function missingYesFlags(ctx: {
+  hasSupabase: boolean
+  register: boolean
+  present: ReadonlySet<string>
+}): CatalogQuestion[] {
+  return applicableQuestions(ctx).filter((question) => {
+    if (question.id === 'register-fleet') return false
+    return !ctx.present.has(question.flag)
+  })
+}
+
+export function formatMissingYesFlags(missing: readonly CatalogQuestion[]): string {
+  return missing
+    .map((question) => `--yes / 旗標模式不能略過「${question.prompt}」。請加 ${question.flag}`)
+    .join('\n')
 }

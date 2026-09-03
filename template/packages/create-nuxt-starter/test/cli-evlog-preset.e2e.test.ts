@@ -44,7 +44,13 @@ function runCli(args: string[]) {
   })
 }
 
-const YES_LOCAL = ['--yes', '--no-install', '--db-host', 'this-machine'] as const
+const YES_LOCAL = [
+  '--yes',
+  '--no-install',
+  '--db-host',
+  'this-machine',
+  '--no-register-consumer',
+] as const
 
 beforeAll(() => {
   execFileSync('npx', ['tsdown', 'src/cli.ts', '--format', 'esm', '--out-dir', 'dist'], {
@@ -107,6 +113,19 @@ describe('dist/cli.js --evlog-preset (end-to-end)', () => {
     expect(`${result.stdout}${result.stderr}`).toContain('--db-host')
     expect(existsSync(join(TEST_DIR, 'e2e-no-db-host'))).toBe(false)
   })
+
+  it('--yes 有 --db-host 但沒登記 flag 必須失敗且不建目錄', { timeout: 60_000 }, () => {
+    const result = runCli([
+      'e2e-no-register-flags',
+      '--yes',
+      '--no-install',
+      '--db-host',
+      'this-machine',
+    ])
+    expect(result.status).not.toBe(0)
+    expect(`${result.stdout}${result.stderr}`).toContain('--repo-id')
+    expect(existsSync(join(TEST_DIR, 'e2e-no-register-flags'))).toBe(false)
+  })
 })
 
 describe('dist/cli.js 的落點只看實際 cwd（TD-007 回歸）', () => {
@@ -120,7 +139,15 @@ describe('dist/cli.js 的落點只看實際 cwd（TD-007 回歸）', () => {
     try {
       const result = spawnSync(
         process.execPath,
-        [CLI, 'cwd-probe', '--yes', '--no-install', '--db-host', 'this-machine'],
+        [
+          CLI,
+          'cwd-probe',
+          '--yes',
+          '--no-install',
+          '--db-host',
+          'this-machine',
+          '--no-register-consumer',
+        ],
         {
           cwd: isolated,
           encoding: 'utf-8',

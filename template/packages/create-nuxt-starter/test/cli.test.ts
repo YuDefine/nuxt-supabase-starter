@@ -486,6 +486,13 @@ describe('question catalog', () => {
     )
   })
 
+  it('旗標非互動也跑 missingYesFlags，不只 --yes', () => {
+    const src = readFileSync(join(import.meta.dirname, '..', 'src', 'cli.ts'), 'utf-8')
+    const idx = src.indexOf('missingYesFlags({')
+    expect(idx).toBeGreaterThan(0)
+    expect(src.slice(Math.max(0, idx - 500), idx)).not.toMatch(/if \(args\.yes\) \{/)
+  })
+
   it('--db-host this-machine 寫進 selections', () => {
     const selections = buildSelectionsFromArgs({
       projectName: 'local-db',
