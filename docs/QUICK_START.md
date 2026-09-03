@@ -88,6 +88,7 @@ pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 # 或從預設 cloudflare-supabase preset 微調
 pnpm --dir template/packages/create-nuxt-starter dev temp/my-product \
 	--yes \
+	--db-host this-machine \
 	--auth better-auth \
 	--with charts,monitoring,image \
 	--without testing-full,testing-vitest

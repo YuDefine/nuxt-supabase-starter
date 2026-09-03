@@ -9,7 +9,7 @@ purpose: 把常見產品形態打包成「可直接複製」的 scaffold 命令�
 
 # Scaffold Recipes — 自然語言 → 直接命令
 
-> 每個 recipe 都是 `--yes` 全自動模式的完整命令。AI 解析使用者描述 → 找對應 recipe → 直接執行（取代互動 prompt）。
+> 每個 recipe 都是 `--yes` 全自動模式的完整命令。AI 必須先問完 `question-catalog.ts` 的適用題，再套 recipe；Supabase 軌一定要有 `--db-host`。`create-fast-project.sh` 預設 `--db-host this-machine`（這台電腦 Docker）。連到已在跑的伺服器時改傳 `--db-host existing-server`。
 
 ## 命令 prefix（共用）
 

@@ -11,7 +11,7 @@ import {
 import { homedir } from 'node:os'
 import { basename, dirname, join, relative } from 'node:path'
 import { consola } from 'consola'
-import { DEFAULT_DB_STACK, type DbStack } from './types'
+import { DEFAULT_DB_STACK, type DbHost, type DbStack } from './types'
 
 export interface CladeModules {
   auth: 'none' | 'better-auth' | 'nuxt-auth-utils' | 'supabase-self-hosted'
@@ -30,6 +30,8 @@ export interface PostScaffoldOptions {
   /** false 時跳過 `pnpm install`（CI / e2e 測試用；預設安裝）。 */
   installDeps?: boolean
   dbStack?: DbStack
+  /** 開發時資料庫跑在哪；決定收尾是本機 Docker 還是連既有伺服器。 */
+  dbHost?: DbHost
   repoId?: string
   workflowModel?: 'trunk-based' | 'pr-merge-based'
   businessActivity?: 'pre-production' | 'active' | 'maintenance' | 'paused' | 'auto'
@@ -76,6 +78,41 @@ export function readPendingBuildApprovals(targetDir: string): string[] {
     if (match) pending.push(match[1])
   }
   return pending
+}
+
+export function resolveSupabaseDevNextSteps(opts: {
+  dbHost?: DbHost
+  dbRuntime?: CladeModules['dbRuntime']
+}): string[] {
+  const existingServer =
+    opts.dbHost === 'existing-server' ||
+    (opts.dbHost === undefined && opts.dbRuntime === 'supabase-self-hosted')
+  if (existingServer) {
+    return [
+      '  docs/playbooks/01-lxc-and-tailscale.md  # 連到已在跑的資料庫；不要在這台電腦再起一份',
+      '  pnpm dev                 # 啟動開發伺服器',
+      '  pnpm verify:starter      # 檢查 scaffold 狀態',
+    ]
+  }
+  return [
+    '  pnpm run setup           # 檢查環境 → 在這台電腦啟動資料庫 → 產生型別',
+    '  pnpm dev                 # 啟動開發伺服器',
+  ]
+}
+
+function writeScaffoldAnswers(targetDir: string, dbHost: DbHost | undefined): void {
+  if (!dbHost) return
+  const claudeDir = join(targetDir, '.claude')
+  try {
+    mkdirSync(claudeDir, { recursive: true })
+    writeFileSync(
+      join(claudeDir, 'scaffold-answers.json'),
+      `${JSON.stringify({ dbHost }, null, 2)}\n`,
+      'utf8',
+    )
+  } catch (error) {
+    consola.warn(`寫 scaffold-answers.json 失敗：${(error as Error).message}`)
+  }
 }
 
 export async function postScaffold(
@@ -227,6 +264,8 @@ export async function postScaffold(
     }
   }
 
+  writeScaffoldAnswers(targetDir, opts.dbHost)
+
   consola.start(adoptingRepo ? '正在提交 starter 檔案...' : '正在提交 initial scaffold...')
   try {
     execFileSync('git', ['add', '-A'], { cwd: targetDir, stdio: 'pipe' })
@@ -278,16 +317,12 @@ export async function postScaffold(
       '  pnpm dev                 # 啟動開發伺服器',
       '  pnpm verify:starter      # 檢查 scaffold 狀態',
     )
-  } else if (cladeModules.dbRuntime === 'supabase-self-hosted') {
-    nextSteps.push(
-      '  docs/playbooks/01-lxc-and-tailscale.md  # 重用既有 CT；NEVER 本機 supabase start',
-      '  pnpm dev                 # 啟動開發伺服器',
-      '  pnpm verify:starter      # 檢查 scaffold 狀態',
-    )
   } else {
     nextSteps.push(
-      '  pnpm run setup           # 檢查環境 → 啟動 Supabase → 產生型別',
-      '  pnpm dev                 # 啟動開發伺服器',
+      ...resolveSupabaseDevNextSteps({
+        dbHost: opts.dbHost,
+        dbRuntime: cladeModules.dbRuntime,
+      }),
     )
   }
 

@@ -27,15 +27,18 @@ import {
   type PresetDefinition,
 } from './presets'
 import {
+  DB_HOSTS,
   DB_STACKS,
   DB_STACKS_WITHOUT_SUPABASE,
   DEFAULT_DB_STACK,
   EVLOG_PRESETS,
   type AgentRuntime,
+  type DbHost,
   type DbStack,
   type EvlogPreset,
   type UserSelections,
 } from './types'
+import { questionById, usesSupabaseDatabase } from './question-catalog'
 
 type CliAuth = 'nuxt-auth-utils' | 'better-auth' | 'none'
 type CliCi = 'simple' | 'advanced'
@@ -260,6 +263,34 @@ function resolveDbStack(evlogPreset: EvlogPreset, dbArg: DbStack | undefined): D
   return dbArg ?? DEFAULT_DB_STACK
 }
 
+export function applyCatalogFlags(
+  selections: UserSelections,
+  args: { dbHost?: string; nonInteractive: boolean },
+): UserSelections {
+  const dbHostRaw = args.dbHost
+  const supabase = usesSupabaseDatabase(selections.dbStack, selections.features)
+
+  if (dbHostRaw && !supabase) {
+    failValidation('--db-host 只在這個專案會用到 Supabase 時才有意義')
+  }
+
+  if (!supabase) return selections
+
+  if (dbHostRaw && DB_HOSTS.includes(dbHostRaw as DbHost)) {
+    return { ...selections, dbHost: dbHostRaw as DbHost }
+  }
+
+  if (args.nonInteractive) {
+    const q = questionById('db-host')
+    failValidation(
+      `--yes / 旗標模式不能略過「${q.prompt}」。\n` +
+        `請加 --db-host this-machine（這台電腦 Docker）或 --db-host existing-server（連到已在跑的伺服器）。`,
+    )
+  }
+
+  return selections
+}
+
 export function buildSelectionsFromArgs(args: {
   projectName: string
   auth?: string
@@ -435,7 +466,8 @@ const main = defineCommand({
     yes: {
       type: 'boolean',
       alias: 'y',
-      description: 'Use default selections (non-interactive)',
+      description:
+        'Skip TTY prompts. Applicable catalog answers must already be flags (e.g. --db-host).',
       default: false,
     },
     auth: {
@@ -538,45 +570,59 @@ const main = defineCommand({
       description: 'Database stack: supabase | nuxthub-d1 | void-d1 (default: supabase)',
       required: false,
     },
+    'db-host': {
+      type: 'string',
+      description:
+        'Where the Supabase database runs in development: this-machine | existing-server（Supabase 軌必填；--yes 不可省略）',
+      required: false,
+    },
   },
   async run({ args }) {
     const monorepoRoot = detectMonorepoRoot()
     const invocationCwd = getInvocationCwd(monorepoRoot)
     const projectName = args.dir as string | undefined
-    const repoId = args['repo-id'] as string | undefined
-    const workflowModel = (args['workflow-model'] as string | undefined) ?? 'trunk-based'
-    const businessActivity = (args['business-activity'] as string | undefined) ?? 'pre-production'
+    const workflowModelArg = (args['workflow-model'] as string | undefined) ?? 'trunk-based'
+    const businessActivityArg =
+      (args['business-activity'] as string | undefined) ?? 'pre-production'
     const devPortRaw = args['dev-port'] as string | undefined
     // `auto` 由 Clade 依 fleet 慣例配號，本地不解析成數字。
-    const devPortAuto = devPortRaw === 'auto'
-    const devPort = devPortRaw === undefined || devPortAuto ? undefined : Number(devPortRaw)
+    const devPortAutoArg = devPortRaw === 'auto'
+    const devPortArg = devPortRaw === undefined || devPortAutoArg ? undefined : Number(devPortRaw)
     const deployTrackRaw = args['deploy-track'] as string | undefined
     const deployTracks = new Set(['wrangler-action', 'void-cloud', 'node-server', 'none'])
     if (deployTrackRaw && !deployTracks.has(deployTrackRaw)) {
       consola.error('--deploy-track 必須是 wrangler-action | void-cloud | node-server | none')
       process.exit(1)
     }
-    const deployTrack = deployTrackRaw as
+    const dbHostArg = args['db-host'] as string | undefined
+    if (dbHostArg && !DB_HOSTS.includes(dbHostArg as DbHost)) {
+      consola.error('--db-host 必須是 this-machine 或 existing-server')
+      process.exit(1)
+    }
+    const deployTrackArg = deployTrackRaw as
       | 'wrangler-action'
       | 'void-cloud'
       | 'node-server'
       | 'none'
       | undefined
-    if (repoId && !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoId)) {
+    const repoIdArg = args['repo-id'] as string | undefined
+    if (repoIdArg && !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoIdArg)) {
       consola.error('--repo-id 格式必須是 owner/repo')
       process.exit(1)
     }
-    if (!['trunk-based', 'pr-merge-based'].includes(workflowModel)) {
+    if (!['trunk-based', 'pr-merge-based'].includes(workflowModelArg)) {
       consola.error('--workflow-model 必須是 trunk-based 或 pr-merge-based')
       process.exit(1)
     }
-    if (!['pre-production', 'active', 'maintenance', 'paused', 'auto'].includes(businessActivity)) {
+    if (
+      !['pre-production', 'active', 'maintenance', 'paused', 'auto'].includes(businessActivityArg)
+    ) {
       consola.error('--business-activity 值不合法')
       process.exit(1)
     }
     if (
-      devPort !== undefined &&
-      (!Number.isInteger(devPort) || devPort < 1024 || devPort > 65535)
+      devPortArg !== undefined &&
+      (!Number.isInteger(devPortArg) || devPortArg < 1024 || devPortArg > 65535)
     ) {
       consola.error('--dev-port 必須是 1024 到 65535 的整數，或 auto')
       process.exit(1)
@@ -612,25 +658,31 @@ const main = defineCommand({
       }
     }
 
-    let selections
+    let selections: UserSelections
 
     if (args.yes || hasCustomFlags) {
       // Non-interactive mode with defaults/custom flags
       const name = projectName || 'nuxt-app'
       try {
-        selections = buildSelectionsFromArgs({
-          projectName: name,
-          auth: args.auth as string | undefined,
-          ci: args.ci as string | undefined,
-          db: args.db as string | undefined,
-          with: args.with as string | undefined,
-          without: args.without as string | undefined,
-          minimal: args.minimal as boolean | undefined,
-          preset: args.preset as string | undefined,
-          fast: args.fast as boolean | undefined,
-          agents: args.agents as string | undefined,
-          evlogPreset: args['evlog-preset'] as string | undefined,
-        })
+        selections = applyCatalogFlags(
+          buildSelectionsFromArgs({
+            projectName: name,
+            auth: args.auth as string | undefined,
+            ci: args.ci as string | undefined,
+            db: args.db as string | undefined,
+            with: args.with as string | undefined,
+            without: args.without as string | undefined,
+            minimal: args.minimal as boolean | undefined,
+            preset: args.preset as string | undefined,
+            fast: args.fast as boolean | undefined,
+            agents: args.agents as string | undefined,
+            evlogPreset: args['evlog-preset'] as string | undefined,
+          }),
+          {
+            dbHost: dbHostArg,
+            nonInteractive: true,
+          },
+        )
       } catch (error) {
         consola.error((error as Error).message)
         process.exit(1)
@@ -683,19 +735,27 @@ const main = defineCommand({
       }
     }
 
+    const repoId = selections.repoId ?? repoIdArg
+    const workflowModel = selections.workflowModel ?? workflowModelArg
+    const businessActivity = selections.businessActivity ?? businessActivityArg
+    const deployTrack = selections.deployTrack ?? deployTrackArg
+    const resolvedDevPort = selections.devPort ?? (devPortAutoArg ? 'auto' : devPortArg)
+    const registerConsumer =
+      selections.registerFleet === false ? false : (args['register-consumer'] as boolean)
+
     // 給了 --repo-id 就是要求登記進 Clade fleet —— 那些約束（fleet base、
     // consumer_id / repo_id 衝突、dev port 撞號）在寫第一個檔之前就問得出來。
     // 不先問的話要等 scaffold + pnpm install 全部跑完才在最後一步 warn，
     // 而專案已經建在錯的位置上了。
     // --no-register-consumer 明示不登記，這時預檢沒有東西要保護。
-    if (repoId && args['register-consumer'] !== false) {
+    if (repoId && registerConsumer) {
       const cladeRoot = findCladeRoot()
       if (cladeRoot) {
         const preflight = preflightCladeRegistration(cladeRoot, targetDir, {
           repoId,
           workflowModel: workflowModel as 'trunk-based' | 'pr-merge-based',
           businessActivity: businessActivity as 'pre-production',
-          devPort: devPortAuto ? 'auto' : devPort,
+          devPort: resolvedDevPort,
           deployTrack,
           dbRuntime: cladeModules.dbRuntime,
         })
@@ -732,13 +792,14 @@ const main = defineCommand({
     // Post-scaffold
     await postScaffold(targetDir, pkgName, invocationCwd, cladeModules, {
       yes: args.yes as boolean,
-      registerConsumer: args['register-consumer'] as boolean,
+      registerConsumer,
       wirePreCommit: args['wire-pre-commit'] as boolean,
       cloneClade: args['clone-clade'] as boolean,
       installDeps: args.install as boolean,
       existingGitRepo: adoptState?.hasGitRepo === true,
       deployTarget: selections.deploymentTarget,
       dbStack: selections.dbStack,
+      dbHost: selections.dbHost,
       repoId,
       workflowModel: workflowModel as 'trunk-based' | 'pr-merge-based',
       businessActivity: businessActivity as
@@ -747,7 +808,7 @@ const main = defineCommand({
         | 'maintenance'
         | 'paused'
         | 'auto',
-      devPort: devPortAuto ? 'auto' : devPort,
+      devPort: resolvedDevPort,
       deployTrack,
       dbRuntime: cladeModules.dbRuntime,
       agentTargets: selections.agentTargets,

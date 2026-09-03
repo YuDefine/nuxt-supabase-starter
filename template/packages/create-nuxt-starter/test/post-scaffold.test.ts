@@ -12,6 +12,7 @@ import {
   maybeWriteConsumerMeta,
   readPendingBuildApprovals,
   resolveCladeInitScript,
+  resolveSupabaseDevNextSteps,
   resolveSyncToCursorScript,
 } from '../src/post-scaffold'
 
@@ -312,5 +313,22 @@ describe('first-run marker', () => {
   it('initial commit 設 HUSKY=0，避免剛 wire 的 hook 擋 bootstrap commit', () => {
     const src = readFileSync(join(import.meta.dirname, '..', 'src', 'post-scaffold.ts'), 'utf-8')
     expect(src).toContain("HUSKY: '0'")
+  })
+})
+
+describe('resolveSupabaseDevNextSteps', () => {
+  it('existing-server 連既有伺服器，不要本機 setup', () => {
+    const lines = resolveSupabaseDevNextSteps({ dbHost: 'existing-server' })
+    expect(lines.join('\n')).toContain('不要在這台電腦再起一份')
+    expect(lines.join('\n')).not.toContain('pnpm run setup')
+  })
+
+  it('this-machine 走本機 setup', () => {
+    const lines = resolveSupabaseDevNextSteps({
+      dbHost: 'this-machine',
+      dbRuntime: 'supabase-self-hosted',
+    })
+    expect(lines.join('\n')).toContain('pnpm run setup')
+    expect(lines.join('\n')).not.toContain('playbooks/01')
   })
 })

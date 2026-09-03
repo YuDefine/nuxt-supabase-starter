@@ -102,7 +102,7 @@ fi
 
 run_step \
   "scaffold project (non-interactive defaults)" \
-  node "$CLI_DIST" "$TARGET_DIR" --yes
+  node "$CLI_DIST" "$TARGET_DIR" --yes --db-host this-machine
 
 if [[ ! -f "$TARGET_DIR/package.json" ]]; then
   fail "missing package.json in scaffolded project"

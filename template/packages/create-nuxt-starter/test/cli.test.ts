@@ -4,7 +4,8 @@ import { join } from 'pathe'
 import { consola } from 'consola'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { assembleProject } from '../src/assemble'
-import { buildSelectionsFromArgs, inferCladeModules } from '../src/cli'
+import { applyCatalogFlags, buildSelectionsFromArgs, inferCladeModules } from '../src/cli'
+import { QUESTION_CATALOG } from '../src/question-catalog'
 import { promptUser } from '../src/prompts'
 
 const TEST_DIR = mkdtempSync(join(tmpdir(), 'cli-test-'))
@@ -165,6 +166,7 @@ describe('wizard dbStack selection', () => {
       'ci-simple',
       ['claude-code'],
       'nuxthub-ai',
+      'no',
     ]
     const prompt = vi.spyOn(consola, 'prompt').mockImplementation(async () => responses.shift())
 
@@ -365,6 +367,8 @@ describe('wizard preset picker', () => {
       'pinia', // state
       'full', // testing
       ['claude-code'], // agent targets
+      'this-machine',
+      'no',
     ]
     const prompt = vi.spyOn(consola, 'prompt').mockImplementation(async () => responses.shift())
 
@@ -376,9 +380,15 @@ describe('wizard preset picker', () => {
     expect(selections.features).toContain('monitoring')
     expect(selections.features).toContain('ci-simple')
     expect(selections.features).toContain('deploy-cloudflare')
+    expect(selections.dbHost).toBe('this-machine')
+    expect(selections.registerFleet).toBe(false)
 
     // short wizard 不該問被 preset 鎖死的 prompt
     const promptLabels = prompt.mock.calls.map(([message]) => message)
+    expect(promptLabels).toContain('開發時，資料庫要跑在哪裡？')
+    expect(promptLabels).toContain(
+      '要不要把這個專案登記進共用名單（之後才能自動檢查、配開發網址）？',
+    )
     expect(promptLabels).not.toContain('資料庫？')
     expect(promptLabels).not.toContain('部署目標？')
     expect(promptLabels).not.toContain('監控與錯誤追蹤？')
@@ -397,6 +407,7 @@ describe('wizard preset picker', () => {
       'none', // state
       'none', // testing
       ['claude-code'],
+      'no',
     ]
     vi.spyOn(consola, 'prompt').mockImplementation(async () => responses.shift())
 
@@ -419,6 +430,7 @@ describe('wizard preset picker', () => {
       'pinia',
       'full',
       ['claude-code'],
+      'no',
     ]
     vi.spyOn(consola, 'prompt').mockImplementation(async () => responses.shift())
 
@@ -443,5 +455,85 @@ describe('CLI help 與實際接受的值', () => {
     for (const stack of ['supabase', 'nuxthub-d1', 'void-d1']) {
       expect(dbHelp, `--db 的說明沒列 ${stack}`).toContain(stack)
     }
+  })
+
+  it('--db-host 的說明列出 this-machine 與 existing-server', () => {
+    const src = readFileSync(join(import.meta.dirname, '..', 'src', 'cli.ts'), 'utf-8')
+    expect(src).toContain("'db-host'")
+    expect(src).toContain('this-machine')
+    expect(src).toContain('existing-server')
+  })
+})
+
+describe('question catalog', () => {
+  it('wizard 透過 questionById 問 catalog，不把 prompt 字串寫死', () => {
+    const src = readFileSync(join(import.meta.dirname, '..', 'src', 'prompts.ts'), 'utf-8')
+    expect(src).toContain('questionById')
+    expect(src).toContain('q.prompt')
+    for (const question of QUESTION_CATALOG) {
+      expect(src, `prompts.ts 沒引用 catalog id ${question.id}`).toContain(`'${question.id}'`)
+    }
+  })
+
+  it('--yes 選了 Supabase 卻沒 --db-host 必須失敗', () => {
+    const selections = buildSelectionsFromArgs({
+      projectName: 'need-host',
+      preset: 'cloudflare-supabase',
+    })
+    expect(() => applyCatalogFlags(selections, { nonInteractive: true })).toThrow(/--db-host/)
+    expect(() => applyCatalogFlags(selections, { nonInteractive: true })).toThrow(
+      /開發時，資料庫要跑在哪裡/,
+    )
+  })
+
+  it('--db-host this-machine 寫進 selections', () => {
+    const selections = buildSelectionsFromArgs({
+      projectName: 'local-db',
+      preset: 'cloudflare-supabase',
+    })
+    expect(
+      applyCatalogFlags(selections, { dbHost: 'this-machine', nonInteractive: true }).dbHost,
+    ).toBe('this-machine')
+  })
+
+  it('沒有 Supabase 時不准帶 --db-host', () => {
+    const selections = buildSelectionsFromArgs({
+      projectName: 'nuxthub',
+      preset: 'cloudflare-nuxthub-ai',
+    })
+    expect(() =>
+      applyCatalogFlags(selections, { dbHost: 'this-machine', nonInteractive: true }),
+    ).toThrow(/只在這個專案會用到 Supabase/)
+  })
+
+  it('登記要長期維護時繼續問 GitHub 與上線方式', async () => {
+    const responses: unknown[] = [
+      'cloudflare-supabase',
+      'auth-nuxt-utils',
+      'ui',
+      'spa',
+      ['charts'],
+      'pinia',
+      'full',
+      ['claude-code'],
+      'existing-server',
+      'yes',
+      'acme/demo-app',
+      'trunk-based',
+      'pre-production',
+      'auto',
+      'none',
+    ]
+    vi.spyOn(consola, 'prompt').mockImplementation(async () => responses.shift())
+
+    const selections = await promptUser('fleet-wizard-app')
+
+    expect(selections.dbHost).toBe('existing-server')
+    expect(selections.registerFleet).toBe(true)
+    expect(selections.repoId).toBe('acme/demo-app')
+    expect(selections.workflowModel).toBe('trunk-based')
+    expect(selections.businessActivity).toBe('pre-production')
+    expect(selections.devPort).toBe('auto')
+    expect(selections.deployTrack).toBe('none')
   })
 })

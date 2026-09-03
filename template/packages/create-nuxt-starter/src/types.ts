@@ -4,6 +4,11 @@ export type EvlogPreset = 'none' | 'baseline' | 'd-pattern-audit' | 'nuxthub-ai'
 
 export type DbStack = 'supabase' | 'nuxthub-d1' | 'void-d1'
 
+/** 開發時 Supabase 跑在哪。與部署目標無關：自架 Node 仍可能在這台電腦 Docker 起一份。 */
+export type DbHost = 'this-machine' | 'existing-server'
+
+export const DB_HOSTS: readonly DbHost[] = ['this-machine', 'existing-server'] as const
+
 export const EVLOG_PRESETS: readonly EvlogPreset[] = [
   'none',
   'baseline',
@@ -62,4 +67,12 @@ export interface UserSelections {
   agentTargets: AgentRuntime[]
   evlogPreset: EvlogPreset
   dbStack: DbStack
+  /** 僅 Supabase 軌；互動模式必問，`--yes` 必須帶 `--db-host`。 */
+  dbHost?: DbHost
+  registerFleet?: boolean
+  repoId?: string
+  workflowModel?: 'trunk-based' | 'pr-merge-based'
+  businessActivity?: 'pre-production' | 'active' | 'maintenance' | 'paused' | 'auto'
+  devPort?: number | 'auto'
+  deployTrack?: 'wrangler-action' | 'void-cloud' | 'node-server' | 'none'
 }

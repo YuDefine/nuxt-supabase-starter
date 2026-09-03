@@ -160,6 +160,18 @@ function usesSelfHostedSupabase() {
   return data?.modules?.['db-runtime'] === 'supabase-self-hosted'
 }
 
+function readScaffoldAnswers() {
+  return readJsonSafe(join(ROOT, '.claude', 'scaffold-answers.json'))
+}
+
+/** 開發資料庫在別台伺服器時，不要叫人在這台電腦 `supabase start`。 */
+function usesExistingServerDatabase() {
+  const host = readScaffoldAnswers()?.dbHost
+  if (host === 'existing-server') return true
+  if (host === 'this-machine') return false
+  return usesSelfHostedSupabase()
+}
+
 function checkHubJson() {
   const p = join(ROOT, '.claude', 'hub.json')
   const data = readJsonSafe(p)
@@ -386,12 +398,12 @@ function checkEnvFile() {
     return
   }
 
-  if (usesSelfHostedSupabase()) {
+  if (usesExistingServerDatabase()) {
     record(
       'env-vars',
       '.env 全部 vars 已填',
       'SKIP',
-      `缺 ${missing.length} 個（self-hosted 憑證走 playbook 01/03，不是 scaffold 當下能填）`,
+      `缺 ${missing.length} 個（資料庫在已在跑的伺服器，憑證走連線設定，不是 scaffold 當下能填）`,
     )
     return
   }
@@ -424,6 +436,15 @@ function checkSupabaseRunning() {
       'Supabase 本地服務運作中',
       'SKIP',
       '本專案的 db-schema 不是 Supabase',
+    )
+    return
+  }
+  if (usesExistingServerDatabase()) {
+    record(
+      'supabase-running',
+      'Supabase 本地服務運作中',
+      'SKIP',
+      '資料庫在已在跑的伺服器，不要在這台電腦再起一份',
     )
     return
   }
@@ -469,12 +490,12 @@ function checkDatabaseTypes() {
   }
   const p = join(ROOT, 'app', 'types', 'database.types.ts')
   if (!existsSync(p)) {
-    if (usesSelfHostedSupabase()) {
+    if (usesExistingServerDatabase()) {
       record(
         'db-types',
         'app/types/database.types.ts 存在',
         'SKIP',
-        'self-hosted：對 LXC gen types，NEVER 本機 supabase start / --local',
+        '資料庫在已在跑的伺服器：對那台產生型別，不要在這台電腦 supabase start / --local',
       )
       return
     }

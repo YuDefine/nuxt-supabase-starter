@@ -8,12 +8,13 @@ Interactive CLI to scaffold a Nuxt + Supabase project from this starter template
 # wizard mode (對話式選擇)
 pnpm create nuxt-supabase-starter my-app
 
-# non-interactive (帶 flag)
-pnpm create nuxt-supabase-starter my-app --yes
-pnpm create nuxt-supabase-starter my-app --auth nuxt-auth-utils --ci simple
+# non-interactive (帶 flag)。Supabase 軌必須回答資料庫跑在哪
+pnpm create nuxt-supabase-starter my-app --yes --db-host this-machine
+pnpm create nuxt-supabase-starter my-app --auth nuxt-auth-utils --ci simple --db-host this-machine
 
 # 一次完成 Clade fleet identity（Clade checkout 必須可被找到）
 pnpm create nuxt-supabase-starter my-app --yes \
+  --db-host this-machine \
   --repo-id YuDefine/my-app \
   --workflow-model trunk-based \
   --dev-port 3120
@@ -23,7 +24,8 @@ pnpm create nuxt-supabase-starter my-app --yes \
 
 | Flag                  | Values                                                    | Description                                          |
 | --------------------- | --------------------------------------------------------- | ---------------------------------------------------- |
-| `--yes`, `-y`         | —                                                         | Skip wizard, use default selections                  |
+| `--yes`, `-y`         | —                                                         | Skip TTY. Catalog answers must already be flags      |
+| `--db-host`           | `this-machine` \| `existing-server`                        | Where Supabase runs in development (required if DB is Supabase) |
 | `--auth`              | `nuxt-auth-utils` \| `better-auth` \| `none`              | Auth provider                                        |
 | `--ci`                | `simple` \| `advanced`                                    | GitHub Actions CI mode                               |
 | `--preset`            | `default` \| `fast`                                       | Profile preset (fast skips testing)                  |

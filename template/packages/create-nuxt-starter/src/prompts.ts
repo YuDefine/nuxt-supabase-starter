@@ -3,18 +3,14 @@ import {
   DB_STACKS_WITHOUT_SUPABASE,
   DEFAULT_DB_STACK,
   type AgentRuntime,
+  type DbHost,
   type DbStack,
   type EvlogPreset,
   type UserSelections,
 } from './types'
+import { questionById, usesSupabaseDatabase } from './question-catalog'
 import { featureModules, getModuleById, resolveFeatureDependencies } from './features'
-import {
-  PRESETS,
-  applyPreset,
-  getPresetById,
-  type PresetDefinition,
-  type PresetId,
-} from './presets'
+import { PRESETS, applyPreset, getPresetById, type PresetDefinition } from './presets'
 
 function normalizePromptValues(values: unknown): string[] {
   if (!Array.isArray(values)) return []
@@ -300,7 +296,7 @@ async function promptUserPreset(
     consola.info(`自動加入相依功能：${names.join(', ')}`)
   }
 
-  return {
+  return promptCatalogTail({
     projectName,
     features: resolved,
     ssr: ssrEnabled,
@@ -309,7 +305,7 @@ async function promptUserPreset(
     agentTargets: resolvedAgentTargets,
     evlogPreset: preset.evlogPreset,
     dbStack: preset.dbStack,
-  }
+  })
 }
 
 // Full 15-prompt wizard — 走 custom 逃生口時使用。完全不受 preset 影響。
@@ -577,7 +573,7 @@ async function promptUserCustom(defaultProjectName?: string): Promise<UserSelect
     consola.info(`自動加入相依功能：${names.join(', ')}`)
   }
 
-  return {
+  return promptCatalogTail({
     projectName,
     features: resolved,
     ssr: ssrEnabled,
@@ -586,6 +582,91 @@ async function promptUserCustom(defaultProjectName?: string): Promise<UserSelect
     agentTargets: resolvedAgentTargets,
     evlogPreset: evlogPresetChoice,
     dbStack,
+  })
+}
+
+async function promptCatalogSelect(id: string): Promise<string> {
+  const q = questionById(id)
+  if (!q.options) throw new Error(`catalog ${id} 沒有 options`)
+  if (q.hint) consola.info(q.hint)
+  const value = (await consola.prompt(q.prompt, {
+    type: 'select',
+    options: q.options.map((option) => ({ label: option.label, value: option.value })),
+  })) as string
+  if (typeof value === 'symbol') process.exit(0)
+  return value
+}
+
+async function promptCatalogText(id: string, placeholder: string): Promise<string> {
+  const q = questionById(id)
+  if (q.hint) consola.info(q.hint)
+  const value = (await consola.prompt(q.prompt, {
+    type: 'text',
+    placeholder,
+  })) as string
+  if (typeof value === 'symbol') process.exit(0)
+  return value
+}
+
+/**
+ * CLI 與 AI 共用的問題樹尾巴。preset / custom wizard 問完 stack 之後，
+ * 仍要問「資料庫跑在哪」與「要不要登記」——這些不是 preset 能代替的。
+ */
+async function promptCatalogTail(partial: UserSelections): Promise<UserSelections> {
+  let dbHost: DbHost | undefined
+  if (usesSupabaseDatabase(partial.dbStack, partial.features)) {
+    dbHost = (await promptCatalogSelect('db-host')) as DbHost
+  }
+
+  const registerChoice = await promptCatalogSelect('register-fleet')
+  if (registerChoice !== 'yes') {
+    return { ...partial, dbHost, registerFleet: false }
+  }
+
+  let repoId = (await promptCatalogText('repo-id', 'owner/專案名')).trim()
+  while (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoId)) {
+    consola.error('格式必須是 owner/專案名，例如 acme/my-app')
+    repoId = (await promptCatalogText('repo-id', 'owner/專案名')).trim()
+  }
+
+  const workflowModel = (await promptCatalogSelect('workflow-model')) as
+    | 'trunk-based'
+    | 'pr-merge-based'
+  const businessActivity = (await promptCatalogSelect('business-activity')) as
+    | 'pre-production'
+    | 'active'
+    | 'maintenance'
+    | 'paused'
+  const portChoice = await promptCatalogSelect('dev-port')
+  let devPort: number | 'auto' = 'auto'
+  if (portChoice === 'custom') {
+    const raw = (await consola.prompt('請輸入 port（1024–65535）：', {
+      type: 'text',
+      placeholder: '3090',
+    })) as string
+    if (typeof raw === 'symbol') process.exit(0)
+    const parsed = Number(raw)
+    if (!Number.isInteger(parsed) || parsed < 1024 || parsed > 65535) {
+      consola.error('port 必須是 1024 到 65535 的整數')
+      process.exit(1)
+    }
+    devPort = parsed
+  }
+  const deployTrack = (await promptCatalogSelect('deploy-track')) as
+    | 'wrangler-action'
+    | 'void-cloud'
+    | 'node-server'
+    | 'none'
+
+  return {
+    ...partial,
+    dbHost,
+    registerFleet: true,
+    repoId,
+    workflowModel,
+    businessActivity,
+    devPort,
+    deployTrack,
   }
 }
 
@@ -599,6 +680,11 @@ export function displaySummary(selections: UserSelections): void {
   consola.log(`   專案名稱：${displayName}`)
   consola.log(`   AI Runtime：${selections.agentTargets.join(', ')}`)
   consola.log(`   DB stack：${selections.dbStack}`)
+  if (selections.dbHost) {
+    consola.log(
+      `   開發資料庫：${selections.dbHost === 'this-machine' ? '這台電腦' : '已在跑的伺服器'}`,
+    )
+  }
   consola.log(`   evlog preset：${selections.evlogPreset}`)
   consola.log(`   功能：`)
 

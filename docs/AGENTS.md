@@ -55,7 +55,7 @@ scaffold CLI（`create-nuxt-starter`）已盡量機械化，AI 可全自動完�
 
 > 完整 recipe（10 種常見產品形態打包成可直接複製的命令）：[SCAFFOLD_RECIPES.md](SCAFFOLD_RECIPES.md)。先去那裡找對應 recipe，找不到再用下方對照表合成。
 
-使用者用自然語言描述需求時，AI 應直接組合 flag 跑 non-interactive scaffold（`--yes`），而非進互動 prompt。
+使用者用自然語言描述需求時，AI **MUST 先問** `template/packages/create-nuxt-starter/src/question-catalog.ts` 裡適用的題（用該檔的 prompt / 選項原文）。答案齊了才能組 `--yes` flags。**NEVER** 用 `--yes` 略過沒問過的 catalog 題。沒有 TTY 時用對話問同一組題，不要假裝 CLI 會自己填。
 
 | 使用者描述關鍵字 | 對應 flag |
 |---|---|

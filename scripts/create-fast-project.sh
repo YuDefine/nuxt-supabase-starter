@@ -100,6 +100,7 @@ if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
   node "$CLI_DIST" \
     "$TARGET_DIR" \
     --yes \
+    --db-host this-machine \
     --without testing-full,testing-vitest \
     --auth "$AUTH_MODE" \
     "${EXTRA_ARGS[@]}"
@@ -107,6 +108,7 @@ else
   node "$CLI_DIST" \
     "$TARGET_DIR" \
     --yes \
+    --db-host this-machine \
     --without testing-full,testing-vitest \
     --auth "$AUTH_MODE"
 fi
