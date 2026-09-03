@@ -74,7 +74,7 @@ export function assembleProject(
 
   // 6. Generate runtime docs
   if (hasAgent(agentTargets, 'claude-code')) {
-    generateClaudeMd(targetDir, selectedFeatureIds)
+    generateClaudeMd(targetDir)
   }
 
   // 7. Copy shared template assets first so scaffold inherits template updates.
@@ -1486,19 +1486,15 @@ function copyGatePlaybookPack(targetDir: string): void {
 }
 
 // --- CLAUDE.md generation ---
+//
+// 極簡契約：本檔只留 .claude/rules/ 載不到的內容。開發約定、auth、DB、migration、
+// 截圖驗證、TDD 全由 clade 投影的 rules 承載（Claude Code 自動載入；Codex / Cursor
+// 讀 sync-to-codex 產生的 AGENTS.md）。SPECTRA marker 區塊由 spectra CLI 擁有，
+// 內容對齊 `spectra init --tools claude` 輸出，marker version 跟著 spectra 升版。
 
-export function generateClaudeMd(targetDir: string, selectedFeatureIds: string[]): void {
-  const hasAuthUtils = selectedFeatureIds.includes('auth-nuxt-utils')
-  const hasBetterAuth = selectedFeatureIds.includes('auth-better-auth')
-  const hasDatabase = selectedFeatureIds.includes('database')
-
-  const authModule = hasAuthUtils ? 'nuxt-auth-utils' : hasBetterAuth ? '@nuxtjs/better-auth' : null
-
-  const authSkill = hasAuthUtils ? '`nuxt-auth-utils`' : hasBetterAuth ? '`nuxt-better-auth`' : ''
-
+export function generateClaudeMd(targetDir: string): void {
   const sections: string[] = []
 
-  // Spectra Instructions（內容對齊 spectra binary 生成的 CLAUDE.md template；marker version 跟著 spectra 升版）
   sections.push('<!-- SPECTRA:START v1.0.2 -->')
   sections.push('')
   sections.push('# Spectra Instructions')
@@ -1533,211 +1529,20 @@ export function generateClaudeMd(targetDir: string, selectedFeatureIds: string[]
   sections.push('<!-- SPECTRA:END -->')
   sections.push('')
 
-  // Proactive Skill Orchestra
-  sections.push('# Proactive Skill Orchestra')
-  sections.push('')
-  sections.push(
-    '**所有 Spectra sub-skill 與 Design skill 依 `.claude/rules/proactive-skills.md` 自主觸發，不需使用者手動指定。**',
-  )
-  sections.push('')
-
-  // Header
   sections.push('# CLAUDE.md')
   sections.push('')
   sections.push('## Language')
   sections.push('')
   sections.push('**YOU MUST** respond in 繁體中文 (zh-TW). **NEVER** use 簡體中文 (zh-CN).')
   sections.push('')
-
-  // Stack
-  const stack = ['Nuxt 4', 'Vue 3 (Composition API + `<script setup>`)', 'TypeScript']
-  if (selectedFeatureIds.includes('ui')) stack.push('Tailwind CSS', 'Nuxt UI')
-  if (selectedFeatureIds.includes('pinia')) stack.push('Pinia')
-  if (selectedFeatureIds.includes('vueuse')) stack.push('VueUse')
-  if (hasDatabase) stack.push('Supabase (PostgreSQL)')
-  if (authModule) stack.push(authModule)
-
-  sections.push('## Stack')
+  sections.push('## 本檔只留 rules 載不到的內容')
   sections.push('')
-  sections.push(stack.join(', '))
+  sections.push(
+    '- 開發約定、auth、DB、migration、截圖驗證、TDD 全在 `.claude/rules/`（Claude Code 自動載入；Codex / Cursor 讀 `AGENTS.md` 投影）。',
+  )
+  sections.push('- 本 repo 特有的 verify 指令在 `.claude/rules/local/verify-commands.md`。')
+  sections.push('- **NEVER** 把已由 rules / skills 承載的內容複製回本檔。')
   sections.push('')
-
-  // Commands
-  sections.push('## Commands')
-  sections.push('')
-  sections.push('```bash')
-  sections.push('pnpm dev             # Already running. NEVER start')
-  if (selectedFeatureIds.includes('quality')) {
-    sections.push('pnpm check           # format + lint + typecheck')
-    sections.push('pnpm lint            # Lint only')
-    sections.push('pnpm format          # Format only')
-  }
-  sections.push('pnpm typecheck       # Type check only')
-  if (
-    selectedFeatureIds.includes('testing-full') ||
-    selectedFeatureIds.includes('testing-vitest')
-  ) {
-    sections.push('pnpm test            # All tests + coverage')
-  }
-  if (hasDatabase) {
-    sections.push('supabase db reset    # Reset + apply all migrations')
-    sections.push('supabase db lint --level warning  # Security check')
-  }
-  sections.push('```')
-  sections.push('')
-
-  // Critical Rules
-  sections.push('## CRITICAL RULES')
-  sections.push('')
-
-  if (authModule) {
-    sections.push('### Auth')
-    sections.push('')
-    sections.push(`**USE** \`useUserSession()\` from \`${authModule}\``)
-    if (hasDatabase) {
-      sections.push('**NEVER** use `useSupabaseUser()` or any Supabase Auth API')
-    }
-    sections.push('')
-  }
-
-  if (hasDatabase) {
-    sections.push('### Database Access Pattern')
-    sections.push('')
-    sections.push('- **Client**: READ only via `useSupabaseClient<Database>()` + `.select()`')
-    sections.push('- **Server**: ALL writes via `/api/v1/*` endpoints')
-    sections.push('- **NEVER** `.insert()/.update()/.delete()/.upsert()` from client')
-    sections.push('')
-
-    sections.push('### Migration')
-    sections.push('')
-    sections.push('- **MUST** use `supabase migration new <name>` to create')
-    sections.push('- **NEVER** create .sql files manually or via Write tool')
-    sections.push("- **MUST** `SET search_path = ''` in ALL database functions")
-    sections.push('- **NEVER** modify or delete applied migrations')
-    sections.push('- After migration: `supabase db reset` → `db lint` → `gen types` → `typecheck`')
-    sections.push('')
-
-    sections.push('### RLS Policy')
-    sections.push('')
-    sections.push('API writes **MUST** include service_role bypass:')
-    sections.push('')
-    sections.push('```sql')
-    sections.push("(SELECT auth.role()) = 'service_role' OR <user_condition>")
-    sections.push('```')
-    sections.push('')
-  }
-
-  if (hasAuthUtils || hasBetterAuth) {
-    sections.push('### 截圖調試')
-    sections.push('')
-    if (hasAuthUtils) {
-      sections.push(
-        '- **Auth**：先導航到 `GET /auth/_dev-login`（dev-only route，自動建立 session），canonical query：`?as=<role>` 指定角色／場景、`?email=<email>` 指定使用者、`?redirect=<safePath>` 指定起始頁（同站 path）',
-      )
-      sections.push(
-        '- `?role=` 是舊別名，新 test/spec 一律用 `?as=`；route 是 lookup-only，必須先 seed 對應使用者',
-      )
-    }
-    if (hasBetterAuth) {
-      sections.push(
-        '- **Auth**：先 `POST /api/_dev/login` body `{ email, password?, as? }`（dev-only route，回 Set-Cookie 建立 session），確認 200 後再導航到目標頁面；此 route 故意沒有 `redirect` 參數',
-      )
-      sections.push('- `as=admin` 必須 email 在 `ADMIN_EMAIL_ALLOWLIST` 內；非 local 環境一律 404')
-    }
-    sections.push('- Dev server 已經在跑，自己用 `ps aux | grep nuxt` 找 port，不要問')
-    sections.push('- 截圖完成後 `browser-use close` 關閉瀏覽器')
-    sections.push('- **NEVER** patch `auth.global.ts` — 一律用 dev-login route')
-    sections.push('')
-  }
-
-  sections.push('### Development')
-  sections.push('')
-  sections.push('- **ALWAYS** TDD: Red → Green → Refactor')
-  sections.push('- **NEVER** `.skip` or comment out tests')
-  if (selectedFeatureIds.includes('ui')) {
-    sections.push('- **ALWAYS** Tailwind classes, NEVER manual CSS')
-  }
-  sections.push('- **ALWAYS** named exports, NEVER default exports')
-  sections.push('- **ALWAYS** Composition API + `<script setup>`, NEVER Options API')
-  sections.push('')
-
-  // Project Structure
-  sections.push('## Project Structure')
-  sections.push('')
-  sections.push('```')
-  sections.push('app/')
-  sections.push('├── pages/           # File-based routing')
-  sections.push('├── components/      # Vue components')
-  sections.push('├── composables/     # Vue composables')
-  if (selectedFeatureIds.includes('pinia')) {
-    sections.push('├── stores/          # Pinia stores')
-    sections.push('├── queries/         # Pinia Colada queries')
-  }
-  sections.push('└── types/           # TypeScript types')
-  sections.push('')
-  sections.push('server/')
-  if (hasDatabase) {
-    sections.push('├── api/v1/          # Business API')
-  }
-  if (authModule) {
-    sections.push('├── api/auth/        # Auth API')
-  }
-  sections.push('└── utils/           # Server utilities')
-  sections.push('')
-  if (hasDatabase) {
-    sections.push('supabase/migrations/ # DB migrations (CLI only)')
-  }
-  sections.push('openspec/            # Spectra specs & changes')
-  sections.push('test/')
-  sections.push('├── unit/            # Unit tests (*.test.ts)')
-  sections.push('└── nuxt/            # Nuxt env tests (*.nuxt.test.ts)')
-  sections.push('```')
-  sections.push('')
-
-  // Automation Triggers
-  sections.push('## Automation Triggers')
-  sections.push('')
-  sections.push('| Trigger | Action |')
-  sections.push('|---------|--------|')
-  sections.push('| `/commit` | Run `pnpm check` → commit |')
-  sections.push('| `/ship` | check → push → create PR |')
-  sections.push('| `/spectra:propose` | 建立變更提案 |')
-  sections.push('| `/spectra:apply` | 執行任務 |')
-  if (hasDatabase) {
-    sections.push('| Migration created | `db reset` → `db lint` → `gen types` → `typecheck` |')
-  }
-  sections.push('| New feature | TDD: Red → Green → Refactor |')
-  sections.push('')
-
-  // AI Skills — list all skills that are copied into the project
-  const skillRows: string[] = []
-  skillRows.push('| Vue components | `vue` |')
-  skillRows.push('| Nuxt routing/server | `nuxt` |')
-  if (selectedFeatureIds.includes('ui')) {
-    skillRows.push('| UI components | `nuxt-ui` |')
-    skillRows.push('| UI 設計規劃 | `/design` |')
-    skillRows.push('| 建構前端介面 | `/impeccable craft` |')
-  }
-  if (authSkill) skillRows.push(`| Auth | ${authSkill} |`)
-  if (selectedFeatureIds.includes('vueuse')) skillRows.push('| VueUse | `vueuse` |')
-  if (hasDatabase) {
-    skillRows.push('| Server API | `server-api` |')
-    skillRows.push('| Migration | `supabase-migration` |')
-    skillRows.push('| RLS | `supabase-rls` |')
-    skillRows.push('| Postgres | `supabase-arch` |')
-  }
-  if (selectedFeatureIds.includes('pinia')) skillRows.push('| Pinia Store | `pinia-store` |')
-  skillRows.push('| TDD | `test-driven-development` |')
-  skillRows.push('| 截圖驗證 | `review-screenshot` |')
-
-  if (skillRows.length > 0) {
-    sections.push('## AI Skills')
-    sections.push('')
-    sections.push('| Task | Skill |')
-    sections.push('|------|-------|')
-    sections.push(...skillRows)
-    sections.push('')
-  }
 
   writeFileSync(join(targetDir, 'CLAUDE.md'), sections.join('\n'))
 }
