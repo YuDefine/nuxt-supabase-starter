@@ -94,7 +94,7 @@ for i in "${!tag_shas[@]}"; do
     stale=1
   fi
   # 反方向：tag 指向的 commit 含 origin/<default> 沒有的東西 = 這棵樹還沒推上去。
-  # 與 behind 是獨立的失敗模式，不共用 CLADE_ALLOW_STALE_TAG —— 那個逃生口的語義是
+  # 與 behind 是獨立的失敗模式，規約上不准共用 CLADE_ALLOW_STALE_TAG —— 那個逃生口的語義是
   # 「我知道這是舊 commit，我就是要在它上面打 hotfix tag」，對「tag 比 origin 新」不成立。
   # 合法的 hotfix（打在舊 commit 上）不會命中這裡：舊 commit 是 origin/<default> 的祖先，
   # 反方向 count 恆為 0。
@@ -108,10 +108,13 @@ done
 if [[ "$ahead" != "0" ]]; then
   cat >&2 <<'MSG'
 
-  tag 打在還沒推上去的 commit 上。tag 一旦推出去，它就指向一棵 origin 上不存在的樹：
-  別人 clone 之後 checkout 這個 tag 會失敗，而 tag-triggered workflow 檢出的正是那棵樹。
+  tag 打在還沒推上去的 commit 上。tag 一旦推出去，它指向的 commit 就不在
+  origin/<default branch> 的可達範圍內：main 之後只要 rebase，這個已公開的 tag 就得被改寫，
+  而 tag-triggered workflow 檢出的正是那棵沒人在維護的樹。
 
-  這不是 stale tag 的反面，是另一個失敗模式——CLADE_ALLOW_STALE_TAG 對它無效，也不該有效。
+  這不是 stale tag 的反面，是另一個失敗模式——CLADE_ALLOW_STALE_TAG 規約上不准用來放行它。
+  （那個逃生口的判斷排在方向計算之前，機械上兩個方向一起放行；擋住這一邊的是規約，不是這支
+  script，所以 NEVER 設它來過關。）
 
   修法（先把 commit 推上去，再推 tag）：
 
@@ -134,6 +137,11 @@ cat >&2 <<'MSG'
     git fetch origin main && git merge --ff-only origin/main
     git tag -d <tag>
     git tag <tag>
+
+  ⚠ 這個修法只適用於「tag 本來就打錯位置」。如果這個 tag 是你這次發版剛打的、而落後是因為
+    別的 session 在你推完 main 之後又 push 了 main —— NEVER 照上面重打：那會把同一個版本號
+    打在別人的 commit 上。正解是在新的 HEAD 上重跑一次發版序列（重新 bump 版本號），
+    見 commit skill § Step 6-A 復原段裡「被 tag-position 以落後擋下」那一格。
 
   真的要在舊 commit 上打 tag（hotfix release）才用：CLADE_ALLOW_STALE_TAG=1 git push origin <tag>
 

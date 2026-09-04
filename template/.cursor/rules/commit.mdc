@@ -18,7 +18,7 @@ Local edits will be reverted by the next sync.
 
 本檔只常駐兩件東西：**commit 的強制入口**與 **WIP 處置禁令 / 話術關鍵詞表**（破壞性動作在任何 session 都可能發生，那張表必須每一輪都在視窗內）。其餘全文在 `rules/core/commit.detail.md`（path-scoped，glob 只涵蓋 `HANDOFF.md` / `tasks/**` / `.clade/claims/**` / `.clade/work-loop/**`——它的觸發是下一行那個具名時機，不是編輯檔案順帶載入）。
 
-**下任何 `git commit` / `git add` / `git stash` / `git tag` / `git push --tags` / `/commit` 之前，MUST 先讀 [[commit.detail]]**——沒讀到就等於沒有 gate 清單、沒有 `--only` 紀律、沒有 recovery 流程。
+**下任何 `git commit` / `git add` / `git stash` / `git tag` / `git push --tags` / `git push origin v<版本>` / `/commit` 之前，MUST 先讀 [[commit.detail]]**——沒讀到就等於沒有 gate 清單、沒有 `--only` 紀律、沒有 recovery 流程。
 
 | 搬走的段 | 去 [[commit.detail]] 的 § |
 | --- | --- |

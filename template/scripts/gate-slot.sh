@@ -120,6 +120,24 @@ print_holder_diag() {
         printf '    %s\n' "$line" >&2
       done
       printf '    cwd=%s\n' "$(readlink "/proc/$pid/cwd" 2>/dev/null || echo unknown)"
+      # cgroup 節流三格（TD-909）：2026-09-03 那次的 holder 不是 I/O bound 也不是 CPU
+      # bound —— 它卡在 `__mem_cgroup_handle_over_high`，因為它繼承了呼叫端 session 的
+      # scope（`memory.high` 6 GiB）而不是自己的。當時要靠一輪人工鑑識才問出「scope 是誰的」，
+      # 而那三格全都在 /proc 裡、印出來零成本。**印、不判、不殺** —— 判定仍歸讀的人。
+      local holder_wchan holder_scope holder_high
+      holder_wchan=$(cat "/proc/$pid/wchan" 2>/dev/null || echo unknown)
+      holder_scope=$(awk -F/ '{print $NF}' "/proc/$pid/cgroup" 2>/dev/null | tail -1)
+      printf '    wchan=%s\n' "${holder_wchan:-unknown}" >&2
+      printf '    cgroup-scope=%s\n' "${holder_scope:-unknown}" >&2
+      holder_high=$(awk '/^high /{print $2}' \
+        "/sys/fs/cgroup$(awk -F: '{print $3}' "/proc/$pid/cgroup" 2>/dev/null | tail -1)/memory.events" \
+        2>/dev/null)
+      [ -n "$holder_high" ] && printf '    memory.events high=%s\n' "$holder_high" >&2
+      if [ "$holder_wchan" = "__mem_cgroup_handle_over_high" ]; then
+        printf '    ⚠ 此刻正被 cgroup memory.high 節流。這是瞬時狀態，單次取樣命中\n' >&2
+        printf '      NEVER 讀成「卡死了、可以放掉它的 slot」——每個吃記憶體的行程都會經過\n' >&2
+        printf '      這個 path（上面的 high 計數就是進出次數）。要判的是 scope 對不對。\n' >&2
+      fi
     done
   else
     printf 'holder: (no process found on lock — may have just released)\n' >&2
@@ -202,7 +220,52 @@ MAX_RUNTIME=${CLADE_HEAVY_GATE_MAX_RUNTIME:-3600}
 case "$MAX_RUNTIME" in
   '' | *[!0-9]*) MAX_RUNTIME=3600 ;;
 esac
+
+# ── 記憶體天花板：自己的 cgroup，不繼承呼叫端的（TD-909）────────────────────
+# 併發天花板（上面的 slot semaphore）與記憶體天花板是同一個不變式的兩半：
+# 「一個 heavy gate 該吃多少這台機器」。拆到兩個檔就會出現「有些路徑有上限、
+# 有些沒有」的靜默半套 —— 2026-09-03 的事故正是那個形狀：clade 的 propagate 對
+# consumer push，consumer 的 pre-push typecheck 於是跑在 **clade session 的** scope
+# 裡（memory.high 6 GiB），撞線後被 kernel 節流成 livelock。
+#
+# `MemoryMax` 是這一段的重點，不是 `MemoryHigh`。事故當下 memory.max 是 8 GiB 而
+# 用量停在 6.66 GiB —— **永遠不會 OOM kill**，只會無限節流，最壞情況是「不終止」。
+# 給了 Max 之後最壞情況降級成「被 kernel 殺掉，有明確 exit signal」。
+# **NEVER 只給 MemoryHigh** —— 那只是把同一個 livelock 搬進私有 cgroup，症狀一模一樣。
+# MemorySwapMax=0：允許 swap 等於把節流換成慢一千倍地跑，同樣不會終止。
+#
+# `--scope`（不是 service）是刻意的：實測 scope 下 pgid 與 sid 都不變、命令是呼叫端的
+# 直接子行程，所以呼叫端的 `process.kill(-pid)` 群組殺照樣送達。**NEVER 改成 service
+# 模式** —— 那會 reparent 到 user manager，真的斬斷群組殺。
+#
+# systemd --user 不可用時（容器 / 非 systemd）無聲降級成裸 exec：少了天花板，
+# 併發閘門仍在。predicate 逐字沿用 cbm-index.sh 已驗證過的那一條，NEVER 另發明第二套。
+GATE_MEM_HIGH=${CLADE_HEAVY_GATE_MEM_HIGH:-6G}
+GATE_MEM_MAX=${CLADE_HEAVY_GATE_MEM_MAX:-7G}
+
+# scope 可用時把整棵 holder tree 包進去。**NEVER 改成 exec 回 "$0"** —— 那會走上面
+# 第 51 行的 CLADE_GATE_SLOT_HELD short-circuit，那條路徑直接 exec 不帶 timeout，
+# MAX_RUNTIME 會靜默消失，而外觀與正常執行完全相同。
+mem_scope_available() {
+  [ "${CLADE_HEAVY_GATE_MEM_SCOPE:-1}" = '1' ] || return 1
+  command -v systemd-run >/dev/null 2>&1 || return 1
+  case "$(systemctl --user is-system-running 2>/dev/null)" in
+    running | degraded) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 if [ "$MAX_RUNTIME" -gt 0 ] && command -v timeout >/dev/null 2>&1; then
-  exec timeout --signal=TERM --kill-after=30 "$MAX_RUNTIME" "$@"
+  set -- timeout --signal=TERM --kill-after=30 "$MAX_RUNTIME" "$@"
 fi
+
+if mem_scope_available; then
+  # scope 包在 timeout 外面 —— 逃出去的孫行程也在同一個 cgroup 裡，
+  # 這正是 2026-09-03 那隻 reparent 到 pid 1 的 vue-tsc 逃掉的那一格。
+  # flock 的 fd 在此之前就取得，scope 下照常繼承，鎖隨行程結束釋放的性質不變。
+  exec systemd-run --user --scope -q \
+    -p MemoryHigh="$GATE_MEM_HIGH" -p MemoryMax="$GATE_MEM_MAX" -p MemorySwapMax=0 \
+    "$@"
+fi
+
 exec "$@"

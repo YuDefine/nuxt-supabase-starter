@@ -1,0 +1,14 @@
+# managed-by: clade ai-control-plane (TD-875)
+# Runtime products only. `intent/` and `human-decisions.jsonl` are tracked canonical state.
+captures/
+intent-revisions/
+locks/
+projections/
+quarantine/
+reports/
+archive.jsonl
+evidence.jsonl
+*-events.jsonl
+*.lock
+!intent/
+!human-decisions.jsonl

@@ -1,5 +1,5 @@
 ---
-description: Commit 全文規約（gate 清單、Single Session Lock、WIP 處置決策樹、main worktree 預設位置、ad-hoc `git commit --only` 紀律與 Verify / Recovery、路徑白名單、trunk hard gate、Stash 自動處置 gate、分組與訊息規範、Tag 位置 release hard gate）；always-load 的薄 pointer 在 [[commit]]，觸發時機是「下任何 git commit / git add / git stash / git tag / git push --tags / /commit 之前」，由 [[commit]] 的 MUST-Read 指針叫醒
+description: Commit 全文規約（gate 清單、Single Session Lock、WIP 處置決策樹、main worktree 預設位置、ad-hoc `git commit --only` 紀律與 Verify / Recovery、路徑白名單、trunk hard gate、Stash 自動處置 gate、分組與訊息規範、Tag 位置 release hard gate）；always-load 的薄 pointer 在 [[commit]]，觸發時機是「下任何 git commit / git add / git stash / git tag / git push --tags / git push origin v<版本> / /commit 之前」，由 [[commit]] 的 MUST-Read 指針叫醒
 paths: ['HANDOFF.md', 'tasks/**', '.clade/claims/**', '.clade/work-loop/**']
 ---
 <!--
@@ -383,7 +383,7 @@ git tag v<x.y.z> && git push origin v<x.y.z>               # 3. 才打、才推
 | 非 0 的那一邊 | 意思 | 後果 |
 | --- | --- | --- |
 | 左（等同 `git rev-list --count HEAD..origin/main`） | 本機**落後** origin/main | tag 指向舊樹，CI 紅在具名 test，與真實回歸同形 |
-| 右（等同 `git rev-list --count origin/main..HEAD`） | 本機有**還沒推上去**的 commit | tag 指向 origin 上不存在的樹，別人 clone 後 checkout 該 tag 會失敗 |
+| 右（等同 `git rev-list --count origin/main..HEAD`） | 本機有**還沒推上去**的 commit | tag 指向的 commit 不在 `origin/main` 的可達範圍內，main 一 rebase 就得改寫已公開的 tag |
 
 **只驗落後那一邊是不夠的**——`git merge --ff-only origin/main` 在本機超前時是 no-op、
 不報錯，於是「落後 = 0」照樣成立，而 tag 就打在了一棵還沒推上去的樹上。那時下游的
@@ -398,7 +398,7 @@ git rev-list --count origin/main..HEAD    # 必須回 0（沒有還沒推上去�
 ```
 
 任一步回非 0 就是**還沒到能打 tag 的狀態**——`git tag` 不會警告、`git push` 不會警告，
-唯一的回饋是後來 CI 那份長得像回歸的紅，或別人 clone 之後才發現 tag 指向不存在的樹。
+唯一的回饋是後來 CI 那份長得像回歸的紅，或別人事後才發現 tag 指向的 commit 不在 main 的線上。
 
 ### 機械 gate 與它的邊界
 
@@ -406,18 +406,24 @@ git rev-list --count origin/main..HEAD    # 必須回 0（沒有還沒推上去�
 （push 不含 tag 時零成本 no-op）。它**只在 consumer 的 `.husky/pre-push` 已接線時生效**，
 且 `--no-verify` 可繞過——所以上面那三步是規約，gate 是兜底，**NEVER 反過來**。
 
-接了這道 gate 的 repo，發版的推送順序 **MUST 是 main 先、tag 後**（tag 指向的 commit 得先存在於
-`origin/<default branch>`）。判定與兩種順序的對照表在 `plugins/hub-core/skills/commit/SKILL.md`
-§ Step 6-A，**此處不複述**。
+發版的推送順序 **無條件 MUST 是 main 先、tag 後**（tag 指向的 commit 得先存在於
+`origin/<default branch>`）——這是上面三步序列的直接推論，**與這個 repo 有沒有接這道 gate 無關**：
+沒接的 repo 只是少了兜底，規約本身沒有變。完整序列、失敗復原與推 tag 後的觸發確認在
+`plugins/hub-core/skills/commit/SKILL.md` § Step 6-A，**此處不複述**。
 
 `CLADE_ALLOW_STALE_TAG=1` 的唯一合法用途：**刻意**在舊 commit 上打 hotfix release tag，且已知
 該 tag 那棵樹不含 main 後續改動。**NEVER** 用它讓一個「不知道為什麼被擋」的 push 過關——
 那個「不知道為什麼」就是這條 gate 唯一要抓的東西。
 
-**它只覆蓋落後那一邊，NEVER 對超前那一邊生效**——兩者語義相反（一個是「我知道這是舊樹」，
-另一個是「這棵樹還不存在於 origin」），共用會把逃生口變成雙向萬能鑰匙。超前被擋時沒有逃生口，
-也不需要：正解就是 `git push origin main` 之後再推 tag。合法的 hotfix 不會命中超前那一邊——
+**它只准用在落後那一邊，NEVER 拿它放行超前那一邊**——兩者語義相反（一個是「我知道這是舊樹」，
+另一個是「這棵樹還不存在於 origin」），共用等於把逃生口變成雙向萬能鑰匙。超前被擋時的正解是
+`git push origin main` 之後再推 tag，沒有別的出路。合法的 hotfix 不會命中超前那一邊——
 舊 commit 是 `origin/main` 的祖先，反方向 count 恆為 0。
+
+**這條是政策，NEVER 讀成 script 會替你擋。** `tag-position.sh` 的逃生口判斷排在方向計算
+**之前**（`CLADE_ALLOW_STALE_TAG` 一設就直接 exit 0），所以它機械上對兩個方向一視同仁——
+2026-09-04 實測：tag 超前 origin/main 一個 commit，未設回 exit 1、設了回「已設，放行」exit 0。
+本節此前逐字寫著「它只覆蓋落後那一邊」，那是對機制的錯誤描述；結論不變，理由句已更正。
 
 ### CI 紅在 tag-triggered run 時，第一件事
 

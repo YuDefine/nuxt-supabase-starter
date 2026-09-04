@@ -192,7 +192,7 @@ if [[ "$MODE" == "workflow" ]]; then
     ERRS=0
     RUN_ID="$OUT"
     if [[ -z "$RUN_ID" ]]; then
-      # run 尚未建立（tag push 先、main push 後的窗口）→ pending，繼續等
+      # run 尚未建立（push 送達到 run 建立之間的窗口；發版序列是 main push 先、tag push 後）→ pending，繼續等
       sleep "$INTERVAL"
     fi
   done

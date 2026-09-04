@@ -12,6 +12,8 @@ Local edits will be reverted by the next sync.
 -->
 
 
+<!-- never-density-reviewed: 2026-09-04 — 全檔 20 條逐條覆核過（不是只看本次新增的）。**這裡刻意不寫行號**：每次編輯本檔行號就漂一次，寫了只會讓下一個覆核的人拿一組對不上的座標去找。以錨點文字定位——(a) Step 2 「丟棄 WIP 的委婉說法」那個 7-run，每一行點名一種不同的說法，合併就失去反開脫作用；(b) 「不要把 WIP 併進來」那條規則掛在兩個不同的 AskUserQuestion 上，各自在使用點才讀得到，不能只留一處；(c) 其餘 13 條各自是該禁令在全檔的唯一出處。Step 6-A 本次新增的 4 條已先收斂掉 3 條重複的「NEVER 再 bump」與 1 條重複的逃生口禁令，剩下的每一條對應一個實測過的失敗模式。-->
+
 ## User Input
 
 ```text
@@ -331,7 +333,7 @@ node scripts/deploy-trigger-check.ts
 
 **NEVER 因為「這個 repo 我記得是 push-main」就跳過這條查詢。**推錯的方向是不可逆的（tag 一推出去 production 就開始跑）。
 
-> `status=` 那一行同時是 finding 來源：`undeclared`（缺 `deploy.deployTrigger`）、`mismatch`（宣告與 workflow 矛盾）、`unconfirmable`（同一個 workflow 內 main push 與 tag push 各部一個環境，宣告要填 **production** 的那個）。**列進 Step 7 完成報告**，但 **NEVER** 在本次 `/commit` 順手改它——那是獨立的宣告修正，要單獨走。
+> `status=` 那一行同時是 finding 來源：`undeclared`（缺 `deploy.deployTrigger`）、`mismatch`（宣告與 workflow 矛盾）、`unconfirmable`（`derived=ambiguous`：deploy workflow 掛了 ≥2 種觸發，宣告要填 **production** 的那個；或 `derived=none`：根本找不到 deploy workflow——後者不是宣告寫錯，是沒有東西可宣告）。**列進 Step 7 完成報告**，但 **NEVER** 在本次 `/commit` 順手改它——那是獨立的宣告修正，要單獨走。
 
 ## Step 6-A: 版本號升級與 Deploy Commit（`push-main` 專用）
 
@@ -353,48 +355,183 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 Via: /commit
 EOF
 )" -- package.json &&      # pnpm-lock.yaml 若一起 bump 就一併列進 pathspec
-  pnpm tag &&
-  git push origin --tags &&
-  git push origin main
+  git push origin main &&
+  git tag "v{新版本號}" &&
+  git push origin "v{新版本號}"
 ```
 
 `--only` 與 `&&` 兩件都不是風格：
 
 - **`git add` ＋ 裸 `git commit` 會把 index 裡別的東西一起收進 deploy commit**——被 gate 刻意擋下不 commit 的檔、別 session 預 stage 的檔都算。那正是 `rules/core/commit.detail.md` § Ad-hoc commit 要求 `--only` 的原因，deploy commit 不是例外。
-- **沒有 `&&` 時 commit 失敗照樣往下跑 `pnpm tag`，tag 就建在上一個 commit 上**（<consumer-b> v1.275.1，2026-09-03 實測：deploy commit 被 pre-commit gate 擋下 exit 1，tag 仍建出來，救回要刪 tag、`--only` 重 commit、重建 tag）。後果不對稱——commit 失敗是本機的事，tag 建錯是對外的事。
+- **沒有 `&&` 時 commit 失敗照樣往下跑打 tag 那一步，tag 就建在上一個 commit 上**（<consumer-b> v1.275.1，2026-09-03 實測：deploy commit 被 pre-commit gate 擋下 exit 1，tag 仍建出來，救回要刪 tag、`--only` 重 commit、重建 tag）。後果不對稱——commit 失敗是本機的事，tag 建錯是對外的事。
 
-**`pnpm tag` 之前 MUST 確認 tip 就是這次的 deploy commit**，不要靠上一條指令「看起來成功了」：
+**tag 打在 main push 之後不是順手排的**：`rules/core/commit.detail.md` § Tag 位置 要求打 tag 當下
+`git rev-list --count origin/main..HEAD` 必須是 0。先打再推 main 的話，打 tag 的那一刻這個數字
+非 0（Step 4 的分組 commit、Step 5 的 HANDOFF/ROADMAP commit、本步驟的 deploy commit 都還沒推）——順序倒過來就同時滿足了那三步，而且競態時本機根本還沒有 tag 要刪。
+
+**不照上面整條 `&&` 串一次貼、而是分步驟手打時，打 tag 之前 MUST 確認 tip 就是這次的 deploy
+commit**（串成一條時由 `&&` 保證，不必另外跑）：
 
 ```bash
 git log -1 --format=%s     # MUST 是 🚀 deploy: 發布新版本 v{新版本號}
 ```
 
-`pnpm tag` 在目前 tip（Step 5 的 HANDOFF/ROADMAP commit 與本步驟的 deploy commit 都已在同一條線上）建立 `v{版本號}` local tag。
+`git tag` 在目前 tip（Step 5 的 HANDOFF/ROADMAP commit 與本步驟的 deploy commit 都已在同一條線上）建立 `v{版本號}` **local** tag。
 
-### 推送順序 MUST 先判這一題
+**這裡 NEVER 用 `pnpm tag`**，即使該 repo 有這支 script。它在多數 consumer 上**自己就會 push**——2026-09-04 實測 `package.json` 的 `scripts.tag`：<consumer-a> / <consumer-d> / <consumer-c> 都是 `git tag v… && git push origin --tags`（只有 <consumer-b> 是純本機 `git tag`）。把它放在樣板裡，tag 會在 main 之前送出去，`tag-position` 當場擋下、`&&` 整條中止，**main 與 tag 兩個都沒上去**——正是 TD-906 那個死鎖。逐字反開脫：「這個 repo 的 `pnpm tag` 我記得只打本機」——那正是要量的東西，而 `git tag` 在四個 repo 上行為相同，量都不必量。
 
-**NEVER 直接照上面樣板的順序打**——先量這個 repo 有沒有接 `tag-position` pre-push check：
+### 推送順序：無條件 main 先、tag 後
 
-```bash
-grep -c tag-position .husky/pre-push   # 回 ≥1 = 有接
-```
+推的是**具名 tag**（`git push origin "v<版本>"`），**NEVER `git push origin --tags`**——
+`--tags` 推的是本機所有 tag，這次要送出去的是哪一個由本機殘留決定，不由這次發版決定。
+（這條約束的是**本步驟**這條發版序列。clade 自家的 `/clade-publish` 是另一套 SOP：`scripts/publish.ts`
+會**印出**一條 `git push --tags` 當作下一步指令，順序同樣是 main 先，只是用了 `--tags` 寫法，不受本條管。）
 
-| 量到的 | 推送順序 |
-| --- | --- |
-| `.husky/pre-push` 含 `tag-position`（或該 repo 另有「tag 指向的 commit 必須已在 origin」的檢查） | **main 先、tag 後**：`git push origin main && git push origin --tags` |
-| 沒有接 | **tags 先、main 後**（上面樣板的順序）——tag 先送達讓 production 部署優先觸發，main 隨後送達讓 staging 對同一個 SHA 做事後驗證 |
+順序**無條件**是 main 先、tag 後，依 `rules/core/commit.detail.md` § Tag 位置——那條規約
+無條件要求 push tag 前不得有未推 commit，與這個 repo 接了什麼 pre-push check 無關。
+`vendor/scripts/pre-push/checks/tag-position.sh` 是它的機械兜底，tags-first 必定被擋
+（<consumer-b> v1.275.1、<consumer-a> v0.111.0 實測）。**NEVER 先量這個 repo 有沒有接 `tag-position`
+再決定順序**——沒接的 repo 只是少了兜底，規約本身沒有變。
 
-`tag-position` 擋的是「tag 指向的 commit 含 `origin/<default branch>` 沒有的東西」（`vendor/scripts/pre-push/checks/tag-position.sh`）。tags-first 時 deploy commit 還沒上 remote，這條**必定**命中：第一趟 push 直接 exit 1、tag 一個都沒上去，要先推 main 再單推 tag 才過（<consumer-b> v1.275.1，2026-09-03 實測）。**NEVER** 為了保住 tags-first 用 `--no-verify` 或 `CLADE_ALLOW_STALE_TAG` 繞過它——那個逃生口對這個方向本來就無效（見該 script 逐字說明），而 tag 指向 origin 上不存在的樹是推出去就收不回的對外物件。
+**被 `tag-position` 以「超前」擋下的 push，NEVER 用 `--no-verify` 或 `CLADE_ALLOW_STALE_TAG`
+過關**：tag 指向 origin 上還不存在的樹，是推出去就收不回的對外物件。
 
-**main 先不牴觸 deploy-gate 的「發版窗口內不 push main」**：那條防的是**別的**工作在窗口內 push，取消掉發版 SHA 的 staging run。發版序列自己的那一次 main push 是窗口的**起點**，不是窗口內的干擾。
+它是**政策，不是機械保證**——所以「反正 script 會攔」不成立：`CLADE_ALLOW_STALE_TAG` 在
+`tag-position.sh` 裡的判斷排在方向計算**之前**，設了就兩個方向一起放行（2026-09-04 實測：tag
+超前 origin/main 一個 commit，未設回 exit 1、設了回「已設，放行」exit 0）。擋住超前方向的只有
+上面那條規約本身。
 
-沒接 `tag-position` 時，順序之所以有差，只在該 repo 的 staging workflow 掛了 `push: branches: [main]` 觸發時才成立——那種拓樸下 main 先送達會讓 staging 先跑、production 落後。**若該 repo 的 workflow 只掛 `push: tags:`（main push 不觸發任何 workflow），兩者順序沒有行為差異**，照上面寫法即可，不需要為此改動 workflow。判定法：`grep -A3 '^on:' .github/workflows/*.yml` 看有沒有 `branches:` 觸發。這套 production-first 節奏的完整設計、race 與 recovery 見 `~/offline/clade/vendor/snippets/deploy-gate/README.md`。
+（`tag-position` 也擋「落後」方向，那一邊**有**合法用途——刻意在舊 commit 上打 hotfix release
+tag——判準見 `rules/core/commit.detail.md` § 機械 gate 與它的邊界，**NEVER** 把本條讀成連那一邊
+也一起禁掉。）
 
-**兩段 push 之間失敗的復原**（以下寫的是 tags-first 的方向；走 main-first 分支時失敗方向相反：main 已上、tag 沒上，production 尚未被觸發、主線也沒分叉，直接重推 tag 即可，**NEVER** 為了「趕快觸發部署」改回 tags-first）：`git push origin --tags` 成功但 `git push origin main` 失敗（權限／競態／網路）時，production 已被 tag 觸發、但 remote main 還沒有該版本 → 部署與主線分叉。**MUST** 立刻重試 `git push origin main`；若因競態被拒（remote 有新 commit），**MUST** `git pull --rebase` 後重推，**NEVER** 用 `--force`（會把別人的 commit 從 remote 抹掉）。重推前不要動已推出的 tag——tag 指向的 SHA 必須保持與最終 main 一致，rebase 後若 SHA 變了，**MUST** 刪除並重建 tag（`git push origin :refs/tags/v<版本>` 後重跑 `pnpm tag` 與 push）。
+**main 先不牴觸 deploy-gate 的「發版窗口內不 push main」**：那條防的是**別的**工作在窗口內 push，取消掉發版 SHA 的 staging run。發版序列自己的那一次 main push 是窗口的**起點**，不是窗口內的干擾。窗口的完整定義見 `~/offline/clade/vendor/snippets/deploy-gate/README.md` § 操作規約，race 與 gate 的 recovery 見同檔的 § 這道 gate 有一個消不掉的 race 與 § Recovery。
 
-> 2026-06-03 v1.185.1 那次的前提要看清楚，別讓它跟上面的 `tag-position` 分支互相打架：當時是「main 先、tags 後」分兩步推送**同一個 SHA**，GitHub 先收到 main commit SHA、再收到指向同 SHA 的 tag，有機率不觸發 `push:tags` workflow。它描述的是**觸發**，`tag-position` 擋的是**tag 位置**，兩者不是同一件事的兩面。
+**tag-only 那趟 push 會讓 pre-push 全套 8 支照跑**：`vendor/scripts/pre-push/runner.sh`
+在只推 tag 時算不出 changed paths，刻意 fail-open 成全跑（該檔 `PATH_FILTER_ACTIVE` 的 `else`
+分支印出「算不出 changed paths（新 branch 首推 / 手動執行 / 只推 tag）→ 全部照跑」）。8 支並行，
+wall time 由最慢的單一 check 決定（該檔自述 <consumer-b> 實測 `nuxt-typecheck` 57.9s）。這是 main-first
+的已知成本，**NEVER** 用 `--no-verify` 省它。
+
+**序列中途失敗的復原**（七格都要會）。**先問一句：這個版本號的 tag 已經推出去了嗎**
+（`git ls-remote --tags origin "v<版本>"`，有輸出就是已公開）——沒公開的 tag 怎麼刪重打都是本機
+的事，已公開的 tag 是對外物件，**NEVER** 拿下面任何一格當作刪遠端 tag 的授權（唯一的例外是本節
+最後那段 2026-06-03 的「tag 推出去了但 workflow 沒觸發」，那裡刪並重推的是**同一個 SHA 上的同名
+tag**，內容不變）。
+
+**下面每一格都適用的一條**：`pnpm version` 跑在 `&&` 串**之前**，所以進到任何一格時版本號都已經
+bump 過了——**NEVER 因為「重跑一次比較乾淨」而再 bump 一次**。每一格都是**從失敗的那一步接著做**，
+只有明寫「改用下一個版本號」的那幾格才重新 bump。
+
+- **`git commit --only` 這一步就失敗**（典型：pre-commit gate 擋下，<consumer-b> v1.275.1 實測）→ 版本號
+  **還在 working tree 上**（見上面那條共通規則）。照 gate 的訊息修好之後，只重跑
+  `git commit --only … && git push origin main && git tag … && git push origin …` 這一串。**修正若動到 `package.json` 以外的檔**，
+  那個 `--only … -- package.json` 的 pathspec 會把它們留在 working tree（下一趟 push 多半再被同一支
+  gate 擋下）——**MUST** 決定它們要不要一起進 deploy commit，要就把路徑加進 pathspec，不要就先另外
+  commit 掉。**若 `git commit --only` 的失敗訊息是「nothing to commit」或「no changes added to commit」**（後者出現在 `package.json` 已 commit、但別的檔還 dirty 時），代表上一趟其實已經 commit
+  成功了（版本號已在 HEAD、不在 working tree）——這一格的前提不成立，**MUST** 跳到下一格從
+  `git push origin main` 接著做。
+- **`git push origin main` 這一步失敗**（競態／權限／網路／被某支 pre-push check 擋下）→ 此時
+  tag 還沒打、什麼都還沒公開，沒有對外的東西要救。但 deploy commit **已經建好了**——從頭重跑本步驟
+  會再建一個 `🚀 deploy:` commit 並跳掉一個版本號，正好製造 Step 6-B 警告的「main 上有發布 vX 卻沒有
+  tag」。**MUST 從失敗的那一步接著做**：照錯誤訊息修好之後跑 `git push origin main && git tag "v{新版本號}" && git push origin "v{新版本號}"`。
+  **這一串沒有 commit 那一節，所以上面那條「tip 必須是這次的 deploy commit」不再由 `&&` 保證——
+  接之前 MUST 自己跑一次 `git log -1 --format=%s`**。修 pre-push check 通常會多出新的 commit，
+  那時 tip 已經不是 deploy commit 了：要嘛把修正 squash 進 deploy commit，要嘛接受 tag 打在新的
+  tip（deploy commit 訊息仍寫著同一個版本號，內容多了那次修正——可以，但 MUST 是你**知道**的選擇）。
+  競態（remote 有新 commit）**MUST** `git pull --rebase` 後再接這一串，**NEVER** 用 `--force`
+  （會把別人的 commit 從 remote 抹掉）。
+- **main 已上、推 tag 失敗（權限／網路）** → 主線沒有分叉，**直接重推 tag** 即可，**NEVER** 為了
+  「趕快觸發部署」改回 tags-first。**NEVER 把這一格讀成「部署還沒開始，慢慢來」**：走到 6-A 的
+  一般路徑是 `confirmed-push-main`，那個形狀下**剛才那次 main push 就是部署**（見 Step 6-Gate 的
+  判定表）——tag 在這裡是紀錄，不是觸發器。重推之前若 remote main 又前進了，會落到下面「被
+  `tag-position` 以落後擋下」那一格。
+- **`git tag` 這一步就失敗**（exit 128：同名 tag 本機已存在，多半是上一趟沒收乾淨）→ 此時 main
+  已上、tag 沒建，**NEVER** 直接「重推 tag」（那會把本機那個指向舊 commit 的同名 tag 推出去）。
+  先 `git ls-remote --tags origin "v<版本>"` 問 remote——**`git show-ref` 只看得到本機，答不了這一題**。
+  remote 沒有 → 是廢棄的本機殘留，`git tag -d` 後重打；remote 已經有 → 這個版本號已經發過，
+  **MUST** 改用下一個版本號（`pnpm version patch --no-git-tag-version` 重跑本步驟——**NEVER 漏掉那個旗標**，裸 `pnpm version` 會順手建 commit 與 tag，正好把你送回這一格），**NEVER** 刪遠端 tag 去讓路。
+  main 上那個沒有 tag 的 `🚀 deploy: … v<舊版本>` commit **MUST** 照下面最後一格的做法留一行說明。
+- **main 已上、推 tag 被 `tag-position` 以外的 pre-push check 擋下** → tag-only 那趟會把 8 支全跑
+  （見上段），所以擋你的可能是 lint / typecheck / ratchet 任何一支。**MUST 照那支自己的訊息修好
+  再推 tag**，**NEVER** 用 `--no-verify` 繞過（main 已經公開，這時候放行等於讓 tag 指向一棵沒
+  過 gate 的樹）。**修正若產生了新的 commit（修 lint / typecheck 幾乎必然如此），MUST 先
+  `git push origin main` 把它們推上去，再推 tag**——tag 要指向的就是修完之後的那棵樹。
+  推完 main 之後若 remote main 又被別人前進了，才落到下面「被 `tag-position` 以落後擋下」那一格；
+  **NEVER 帶著本機未推的 commit 直接走進那一格**，它的 `git merge --ff-only origin/main` 在那個
+  狀態下必定回 `Not possible to fast-forward`。
+- **main 已上、`git tag` 也成功，但推 tag 被 remote 以 `! [rejected] … (already exists)` 拒絕**
+  → 這個版本號的 tag **已經在 remote 上**（`tag-position` 只看本機與 `origin/<default branch>`
+  的關係，不看 remote 有沒有同名 tag，所以它會放行）。成因典型是先前某趟 `--tags` 殘留、或
+  另一個 clone／worktree 已經推過。**NEVER** 反覆重推（會一直被同一個理由拒絕），**NEVER**
+  刪遠端 tag 讓路——**MUST** 改用下一個版本號（同樣帶 `--no-git-tag-version`）重跑本步驟，並照下面最後一格的做法替 main 上那個
+  沒有 tag 的 `🚀 deploy: … v<舊版本>` commit 留一行說明。
+- **main 已上、但推 tag 被 `tag-position` 以「落後」擋下** → 代表**別的 session 在你推 main 與推
+  tag 之間又 push 了 main**（那本身違反 deploy-gate 的「發版窗口內不 push main」——窗口從**發版序列自己的那一次 main push** 起算，見上面那段與 `vendor/snippets/deploy-gate/README.md` § 操作規約）。
+  正解是**在新的 HEAD 上重跑一次發版序列**：`git tag -d "v<舊版本>"`（本機那個沒公開的，刪掉）
+  → `git fetch origin main && git merge --ff-only origin/main`（**先併進來，否則下一步 push 必被
+  non-fast-forward 拒絕**）→ `pnpm version patch --no-git-tag-version` → 新的 deploy commit →
+  push main → 打**新版本號**的 tag → 推 tag；那些插進來的 commit 就一起出這一版。
+  main 上會留下一個沒有對應 tag 的 `🚀 deploy: 發布新版本 v<舊版本>` commit——**MUST** 在新的
+  deploy commit 訊息或 HANDOFF 裡寫一行「v<舊版本> 未發版，內容併入 v<新版本>」，否則下一個
+  接手的人會照 Step 6-B 的理由誤判已發版。
+  **NEVER** `git tag -d` 之後把**同一個版本號**重打在別人的 commit 上（版本號與內容從此對不起來），
+  **NEVER** 用 `CLADE_ALLOW_STALE_TAG` 過關——那個逃生口只留給「刻意在舊 commit 上打 hotfix
+  release tag」，把它用在這裡就是拿它繞過一個你其實看得懂的攔阻。
+
+> 2026-06-03 v1.185.1 實證：「main 先、tag 後」分兩步推送**同一個 SHA** 時，GitHub 先收到 main
+> commit SHA、再收到指向同一 SHA 的 tag，有機率不觸發 `push:tags` workflow。修法是刪掉並重推
+> 同名 tag（`git push origin :refs/tags/v<版本>` → `git tag -d "v<版本>"` → `git tag "v<版本>"` →
+> `git push origin "v<版本>"`）。
 >
-> 所以走 main-first 分支、且該 repo 的 production 由 tag 觸發時，**MUST** 在 push tag 之後實際確認 workflow 有跑起來（`gh run list --workflow <production workflow> --limit 3`，看有沒有這個 tag 的 run）。沒觸發時的修法是刪掉並重推同名 tag（`git push origin :refs/tags/v<版本>` 後重跑 `pnpm tag` 與 push），**NEVER** 改回 tags-first 去繞過 `tag-position`。
+> 因此**只要這次推的 tag 會觸發任何 workflow**，就 MUST 在推 tag 之後實際確認它跑起來了。
+> 純 `push-main` 形狀（Step 6-Gate 回 `confirmed-push-main`，也就是走到本步驟的一般路徑）沒有
+> tag-triggered run，這一格標「不適用」即可；真正會命中的是 **6-B 選 `[1]` 後回頭執行本步驟**
+> 的形狀，以及 6-Gate 的 `derived=ambiguous`（deploy workflow 掛了 ≥2 種觸發——同一支同時吃 main push 與 tag push，或兩支各吃一種）。
+> **NEVER** 因為「本步驟叫 `push-main` 專用」就把這段當成永遠不必做——判「這次的 tag 觸不觸發」
+> 看的是 6-Gate 印出來的 **`derived=`**，不是本步驟的標題，也**不是 `status=`**：
+> `status=unconfirmable` 同時涵蓋兩種完全相反的形狀——`derived=ambiguous`（deploy workflow 掛了
+> ≥2 種觸發，**tag 會觸發**，這一格要確認）與 `derived=none`（**根本沒有 deploy workflow**，tag
+> 什麼都不會觸發，這一格「不適用」）。把兩者當成同一件事，在 `none` 那格會讓你對一個**已公開**的
+> tag 執行刪除重推——本節唯一不可逆的動作——去追一條本來就不存在的 run。
+> **判定用「哪些要做」而不是「哪些不做」**——`derived=` 只有六個值，其中**只有 `tag-v` 與
+> `ambiguous` 代表這次的 tag 真的會觸發**，要走下面的確認：
+>
+> | `derived=` | tag 會觸發嗎 | 這一段 |
+> | --- | --- | --- |
+> | `tag-v` / `ambiguous` | 會 | **MUST 確認** |
+> | `push-main` / `pr-merge` / `manual` / `none` | 不會 | **NEVER 進入確認與重推**，Step 7 標「不適用（`derived=<值>`）」 |
+>
+> **NEVER 反過來背成一張「不適用」清單**：那張清單漏一個值，漏掉的那格就會把你送去對一個
+> **已公開**的 tag 執行刪除重推，去追一條本來就不存在的 run。`push-main` / `pr-merge` / `manual`
+> 都會經由 6-B 的 `[1]` 回頭跑本步驟，不是只有 `confirmed-push-main` 才走得到這裡。確認時 **MUST 用 tag 名過濾**——`-w <production workflow>` 之後，同一個 SHA 上仍可能混進 main push 觸發的**同一支** workflow 的 run：
+>
+> ```bash
+> for i in $(seq 7); do
+>   gh run list --workflow <production workflow> --limit 10 \
+>     --json headBranch,event,status,createdAt \
+>     --jq '[.[] | select(.headBranch == "v<版本>")]' | tee /dev/stderr | grep -q headBranch && break
+>   if [ "$i" -lt 7 ]; then sleep 10; fi
+> done
+> ```
+>
+> **同一個 workflow 同時由 main push 與 tag push 觸發時（6-Gate 的 `unconfirmable` 形狀），
+> NEVER 用 `gh-ci-watch.sh --tag` 代替上面這段**：那個旗標把 tag 解析成 SHA 再用 `-c <SHA>` 過濾
+> （`TAG_SHA=$(git rev-parse …)`），而 main-first 之下兩條 run **本來就在同一個 SHA 上**——它分不開
+> 兩者，於是「tag 沒觸發」會被 main 那條 run 報成綠。（純 `tag-v` 形狀下 main push 不會產生這個
+> workflow 的 run，`--tag` 是對的——那正是 gh-ci-watch skill 逐字要求用 `--tag` 的情境。）
+>
+> 也 **NEVER 換成 `gh-ci-watch.sh --branch "v<版本>" --timeout 60`** 當「等價寫法」：那支要輪到
+> **終態**才回，production run 幾乎不可能在 60 秒內跑完，於是正常情況也回 `WATCH_TIMEOUT` exit 3；
+> 它的 `--branch` 模式還自帶 `SINCE = now-120s` 的時間窗與 ≥30s 的輪詢間隔。這裡要問的只是
+> 「run 建立了沒」，用上面那圈就好；要看部署**跑完**才用 gh-ci-watch。
+>
+> **判「未觸發」之前 MUST 先確認 `gh` 本身是好的**（`gh auth status` 或看上面那圈有沒有印出錯誤）：
+> auth／網路壞掉時 stdout 一樣是空的，而空與「沒觸發」在這裡長得完全一樣——照著往下走就是對一個
+> **已經公開**的 tag 做刪除重推，正好是本節唯一被特別授權、也唯一不可逆的動作。
+>
+> **`gh` 正常、且輪詢滿 60 秒（t=0 起每 10 秒一次，共 7 次）仍查不到該 tag 的 run，才判未觸發**，再走上面的刪並重推，**NEVER** 改回 tags-first
+> 去繞過 `tag-position`。
 
 ## Step 6-B: 停在 push main，發版另問（`tag-v` / `manual` / `unknown`）
 
@@ -405,7 +542,7 @@ grep -c tag-position .husky/pre-push   # 回 ≥1 = 有接
 - ❌ `pnpm version <patch|minor>` —— 未發版就不該有版本號 bump
 - ❌ `🚀 deploy:` commit —— main 上出現「發布新版本 vX」卻沒有對應 tag，會讓下一個接手的人誤判已發版
 - ❌ `pnpm tag` / `git tag`
-- ❌ `git push origin --tags`
+- ❌ `git push origin --tags` / `git push origin v<版本>`（推 tag 就是發版，不論用哪種寫法）
 
 ### 6-B.0: 先判 `git push origin main` 本身是不是部署（**先於 push**）
 
@@ -435,7 +572,7 @@ git push origin main
 
 `git push origin main` 完成後（6-B.0 判定可直接推，或使用者選了 `[1]`），**MUST** 用 `AskUserQuestion` 問使用者是否現在發版，二選一：
 
-- **`[1] 現在發版`** → **MUST 先讀該 repo 的 `HANDOFF.md` 發版段與 `.github/workflows/`**，確認有沒有固定發版路徑（例：先跑 precheck workflow 拿到 `SAFE` 才授權 deploy、staging-gate 要求同 SHA 的 staging 已綠）。**有固定路徑就照它走，NEVER 直接 `git push origin --tags` 蓋過去**；沒有固定路徑才回頭執行 6-A 的 bump / tag / push tags
+- **`[1] 現在發版`** → **MUST 先讀該 repo 的 `HANDOFF.md` 發版段與 `.github/workflows/`**，確認有沒有固定發版路徑（例：先跑 precheck workflow 拿到 `SAFE` 才授權 deploy、staging-gate 要求同 SHA 的 staging 已綠）。**有固定路徑就照它走，NEVER 直接 `git push origin --tags` 蓋過去**；沒有固定路徑才回頭執行 6-A 的 bump / tag / push main 與 tag
 - **`[2] 先不發版`** → 本次到此為止。**MUST** 在 Step 5 的 HANDOFF 裡登記「已 land 未發版」：寫明哪幾個 commit、下次發版該升 major/minor/patch、以及不發版的理由（若使用者有給）
 
 **NEVER 把「使用者沒有回應」讀成 `[1]`。** 這條問題沒有安全的預設值——`tag-v` 的預設值是「對 production 跑 migration」。
@@ -465,9 +602,9 @@ node ~/offline/clade/vendor/scripts/notion-sync.ts release \
 - [ ] 每個 commit scope 驗證：貼各 commit 的 `git show --stat <hash> | tail -3` 輸出（changed files 數 vs 預期不符 → 回 Step 4 處置，不出報告）
 - [ ] Step 0 品質檢查結論：貼 0-A / 0-C 的結論行（條件未觸發的軸標明「未觸發＋原因」）
 - [ ] Step 6-Gate 判定：貼 `deploy-trigger-check.ts` 的實際輸出（含 `verdict=` / `status=` / `detail=`），並標明走 6-A 還是 6-B（`status=` 不是 `confirmed` 時 MUST 一併把 `detail=` 列成 finding）
-- [ ] push / tag 結果：走 6-A 貼 `git push --tags` 與 `git push origin main` 兩者輸出；走 6-B 貼 `git push origin main` 輸出 ＋ 使用者對發版問題的選擇（本次不 push 則標明原因）
+- [ ] push / tag 結果：走 6-A 貼 `git push origin main` 與 `git push origin v<版本>` 兩者輸出（順序即實際執行順序），`derived=` 是 `tag-v` / `ambiguous` 時另貼 `gh run list` 顯示該 tag 的 run 已排入（其餘四個 `derived=` 值都沒有 tag-triggered run，標明「不適用（`derived=<值>`）」即可）；走 6-B 貼 `git push origin main` 輸出 ＋ 使用者對發版問題的選擇（本次不 push 則標明原因）
 
-三格證據放進完成報告的 `Evidence` 段。
+以上證據放進完成報告的 `Evidence` 段——**照下面樣板的行逐行對應，不是固定三格**（checklist 的最後一格在樣板裡拆成 `push:` 與 `deploy-trigger:` 兩行）。
 
 走 6-B 且使用者選「先不發版」時，完成報告 **MUST** 把「版本 / Tag」兩行改成 `未發版（verdict=needs-approval / status=<值>，已 push main，發版待人拍板）`，**NEVER** 沿用下面樣板的「已建立並推送」字樣。
 
@@ -487,7 +624,8 @@ Evidence:
 - scope: <各 git show --stat 摘尾>
 - checks: <0-A/0-C 結論行或未觸發原因>
 - release-gate: verdict=<實際輸出> status=<實際輸出> → 走 Step 6-<A|B>
-- push: <git push --tags 與 git push origin main 摘尾>
+- push: <git push origin main 與 git push origin v<版本> 摘尾>
+- deploy-trigger: <`derived=` 是 tag-v / ambiguous 才貼 gh run list 過濾該 tag 的 run 摘尾；其餘 derived= 值與走 6-B 未發版時寫「不適用（derived=<值>）」>
 ```
 
 ## Step 8: 自動銜接 /ship（條件觸發）
