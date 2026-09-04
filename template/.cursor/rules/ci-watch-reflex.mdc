@@ -1,0 +1,15 @@
+---
+alwaysApply: true
+---
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/core/ci-watch-reflex.md
+Edit at: $CLADE_HOME
+Local edits will be reverted by the next sync.
+-->
+
+# CI Watch 反射
+
+`git push` 成功後，若 repo 含 `.github/workflows/`，**MUST** 立刻 invoke `/gh-ci-watch` skill 派出 CI watcher。
+
+協定、指令樣板、exit code 對照表：`plugins/hub-core/skills/gh-ci-watch/SKILL.md`。

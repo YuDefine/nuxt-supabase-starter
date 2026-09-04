@@ -1,0 +1,12 @@
+<!--
+🔒 LOCKED — managed by clade
+Source: rules/core/evlog-triage-reflex.md
+Edit at: $CLADE_HOME
+Local edits will be reverted by the next sync.
+-->
+
+# Prod 症狀 → 先查 evlog
+
+repo 有 evlog 投影（`.claude/rules/evlog-investigate.md`）時，prod / staging runtime 症狀的**第一個證據動作 MUST 是查 evlog wide event**，先於 grep code。
+
+協定與 recipe：`rules/modules/capabilities/evlog/evlog-investigate.md`。
