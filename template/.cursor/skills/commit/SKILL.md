@@ -343,8 +343,7 @@ node scripts/deploy-trigger-check.ts
 建立 deploy commit：
 
 ```bash
-git add package.json
-git commit -m "$(cat <<'EOF'
+git commit --only -m "$(cat <<'EOF'
 🚀 deploy: 發布新版本 v{新版本號}
 
 - 功能描述一
@@ -353,19 +352,49 @@ git commit -m "$(cat <<'EOF'
 Co-Authored-By: Claude <noreply@anthropic.com>
 Via: /commit
 EOF
-)"
-pnpm tag
-git push origin --tags
-git push origin main
+)" -- package.json &&      # pnpm-lock.yaml 若一起 bump 就一併列進 pathspec
+  pnpm tag &&
+  git push origin --tags &&
+  git push origin main
 ```
 
-`pnpm tag` 在目前 tip（Step 5 的 HANDOFF/ROADMAP commit 與本步驟的 deploy commit 都已在同一條線上）建立 `v{版本號}` local tag。**推送順序 MUST 是先 `git push origin --tags`、再 `git push origin main`**——tag 先送達讓 production 部署優先觸發，main 隨後送達讓 staging 對同一個 SHA 做事後驗證。**NEVER** 把順序倒過來變成 main 先、tags 後。
+`--only` 與 `&&` 兩件都不是風格：
 
-順序之所以有差，只在該 repo 的 staging workflow 掛了 `push: branches: [main]` 觸發時才成立——那種拓樸下 main 先送達會讓 staging 先跑、production 落後。**若該 repo 的 workflow 只掛 `push: tags:`（main push 不觸發任何 workflow），兩者順序沒有行為差異**，照上面寫法即可，不需要為此改動 workflow。判定法：`grep -A3 '^on:' .github/workflows/*.yml` 看有沒有 `branches:` 觸發。這套 production-first 節奏的完整設計、race 與 recovery 見 `~/offline/clade/vendor/snippets/deploy-gate/README.md`。
+- **`git add` ＋ 裸 `git commit` 會把 index 裡別的東西一起收進 deploy commit**——被 gate 刻意擋下不 commit 的檔、別 session 預 stage 的檔都算。那正是 `rules/core/commit.detail.md` § Ad-hoc commit 要求 `--only` 的原因，deploy commit 不是例外。
+- **沒有 `&&` 時 commit 失敗照樣往下跑 `pnpm tag`，tag 就建在上一個 commit 上**（<consumer-b> v1.275.1，2026-09-03 實測：deploy commit 被 pre-commit gate 擋下 exit 1，tag 仍建出來，救回要刪 tag、`--only` 重 commit、重建 tag）。後果不對稱——commit 失敗是本機的事，tag 建錯是對外的事。
 
-**兩段 push 之間失敗的復原**：`git push origin --tags` 成功但 `git push origin main` 失敗（權限／競態／網路）時，production 已被 tag 觸發、但 remote main 還沒有該版本 → 部署與主線分叉。**MUST** 立刻重試 `git push origin main`；若因競態被拒（remote 有新 commit），**MUST** `git pull --rebase` 後重推，**NEVER** 用 `--force`（會把別人的 commit 從 remote 抹掉）。重推前不要動已推出的 tag——tag 指向的 SHA 必須保持與最終 main 一致，rebase 後若 SHA 變了，**MUST** 刪除並重建 tag（`git push origin :refs/tags/v<版本>` 後重跑 `pnpm tag` 與 push）。
+**`pnpm tag` 之前 MUST 確認 tip 就是這次的 deploy commit**，不要靠上一條指令「看起來成功了」：
 
-> 這跟 2026-06-03 v1.185.1 那次的問題方向不同：當時是「main 先、tags 後」分兩步推送，GitHub 先收到 main commit SHA、再收到指向同 SHA 的 tag，有機率不觸發 `push:tags` workflow。本步驟採用的 tags-first 順序不落入那個情境，是刻意設計。
+```bash
+git log -1 --format=%s     # MUST 是 🚀 deploy: 發布新版本 v{新版本號}
+```
+
+`pnpm tag` 在目前 tip（Step 5 的 HANDOFF/ROADMAP commit 與本步驟的 deploy commit 都已在同一條線上）建立 `v{版本號}` local tag。
+
+### 推送順序 MUST 先判這一題
+
+**NEVER 直接照上面樣板的順序打**——先量這個 repo 有沒有接 `tag-position` pre-push check：
+
+```bash
+grep -c tag-position .husky/pre-push   # 回 ≥1 = 有接
+```
+
+| 量到的 | 推送順序 |
+| --- | --- |
+| `.husky/pre-push` 含 `tag-position`（或該 repo 另有「tag 指向的 commit 必須已在 origin」的檢查） | **main 先、tag 後**：`git push origin main && git push origin --tags` |
+| 沒有接 | **tags 先、main 後**（上面樣板的順序）——tag 先送達讓 production 部署優先觸發，main 隨後送達讓 staging 對同一個 SHA 做事後驗證 |
+
+`tag-position` 擋的是「tag 指向的 commit 含 `origin/<default branch>` 沒有的東西」（`vendor/scripts/pre-push/checks/tag-position.sh`）。tags-first 時 deploy commit 還沒上 remote，這條**必定**命中：第一趟 push 直接 exit 1、tag 一個都沒上去，要先推 main 再單推 tag 才過（<consumer-b> v1.275.1，2026-09-03 實測）。**NEVER** 為了保住 tags-first 用 `--no-verify` 或 `CLADE_ALLOW_STALE_TAG` 繞過它——那個逃生口對這個方向本來就無效（見該 script 逐字說明），而 tag 指向 origin 上不存在的樹是推出去就收不回的對外物件。
+
+**main 先不牴觸 deploy-gate 的「發版窗口內不 push main」**：那條防的是**別的**工作在窗口內 push，取消掉發版 SHA 的 staging run。發版序列自己的那一次 main push 是窗口的**起點**，不是窗口內的干擾。
+
+沒接 `tag-position` 時，順序之所以有差，只在該 repo 的 staging workflow 掛了 `push: branches: [main]` 觸發時才成立——那種拓樸下 main 先送達會讓 staging 先跑、production 落後。**若該 repo 的 workflow 只掛 `push: tags:`（main push 不觸發任何 workflow），兩者順序沒有行為差異**，照上面寫法即可，不需要為此改動 workflow。判定法：`grep -A3 '^on:' .github/workflows/*.yml` 看有沒有 `branches:` 觸發。這套 production-first 節奏的完整設計、race 與 recovery 見 `~/offline/clade/vendor/snippets/deploy-gate/README.md`。
+
+**兩段 push 之間失敗的復原**（以下寫的是 tags-first 的方向；走 main-first 分支時失敗方向相反：main 已上、tag 沒上，production 尚未被觸發、主線也沒分叉，直接重推 tag 即可，**NEVER** 為了「趕快觸發部署」改回 tags-first）：`git push origin --tags` 成功但 `git push origin main` 失敗（權限／競態／網路）時，production 已被 tag 觸發、但 remote main 還沒有該版本 → 部署與主線分叉。**MUST** 立刻重試 `git push origin main`；若因競態被拒（remote 有新 commit），**MUST** `git pull --rebase` 後重推，**NEVER** 用 `--force`（會把別人的 commit 從 remote 抹掉）。重推前不要動已推出的 tag——tag 指向的 SHA 必須保持與最終 main 一致，rebase 後若 SHA 變了，**MUST** 刪除並重建 tag（`git push origin :refs/tags/v<版本>` 後重跑 `pnpm tag` 與 push）。
+
+> 2026-06-03 v1.185.1 那次的前提要看清楚，別讓它跟上面的 `tag-position` 分支互相打架：當時是「main 先、tags 後」分兩步推送**同一個 SHA**，GitHub 先收到 main commit SHA、再收到指向同 SHA 的 tag，有機率不觸發 `push:tags` workflow。它描述的是**觸發**，`tag-position` 擋的是**tag 位置**，兩者不是同一件事的兩面。
+>
+> 所以走 main-first 分支、且該 repo 的 production 由 tag 觸發時，**MUST** 在 push tag 之後實際確認 workflow 有跑起來（`gh run list --workflow <production workflow> --limit 3`，看有沒有這個 tag 的 run）。沒觸發時的修法是刪掉並重推同名 tag（`git push origin :refs/tags/v<版本>` 後重跑 `pnpm tag` 與 push），**NEVER** 改回 tags-first 去繞過 `tag-position`。
 
 ## Step 6-B: 停在 push main，發版另問（`tag-v` / `manual` / `unknown`）
 

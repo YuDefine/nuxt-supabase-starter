@@ -68,17 +68,21 @@ pnpm spectra:roadmap
 5-C/5-D 修改的是 tracked 檔（`HANDOFF.md`、`openspec/ROADMAP.md`），**MUST** 在此處 commit 進去，否則 working tree 會 dirty、Step 6-A 的 deploy commit 也不含這次的交接狀態。
 
 ```bash
-# 只 stage 5-C/5-D 動到的檔，避免誤包其他 WIP（commit 流程預設不該再撿東西）
-git add HANDOFF.md openspec/ROADMAP.md 2>/dev/null || true
+# 只收 5-C/5-D 動到的檔。git add ＋ 裸 git commit 會把 index 裡別的東西一起帶走（含別
+# session 預 stage 的），所以這裡走 --only —— 同 rules/core/commit.detail.md § Ad-hoc commit。
+paths=()
+for f in HANDOFF.md openspec/ROADMAP.md; do
+  git ls-files --error-unmatch "$f" >/dev/null 2>&1 && paths+=("$f")
+done
 
 # 若沒實際變動（HANDOFF 不需更新、ROADMAP 已 current），跳過 commit
-if ! git diff --cached --quiet -- HANDOFF.md openspec/ROADMAP.md 2>/dev/null; then
-  git commit -m "$(cat <<'EOF'
+if [ ${#paths[@]} -gt 0 ] && ! git diff --quiet -- "${paths[@]}"; then
+  git commit --only -m "$(cat <<'EOF'
 📝 docs(handoff): 更新 commit 後交接狀態
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 EOF
-)"
+)" -- "${paths[@]}"
   git log -1 --oneline
 fi
 ```

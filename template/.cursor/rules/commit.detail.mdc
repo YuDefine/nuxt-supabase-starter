@@ -407,6 +407,10 @@ git rev-list --count origin/main..HEAD    # 必須回 0（沒有還沒推上去�
 （push 不含 tag 時零成本 no-op）。它**只在 consumer 的 `.husky/pre-push` 已接線時生效**，
 且 `--no-verify` 可繞過——所以上面那三步是規約，gate 是兜底，**NEVER 反過來**。
 
+接了這道 gate 的 repo，發版的推送順序 **MUST 是 main 先、tag 後**（tag 指向的 commit 得先存在於
+`origin/<default branch>`）。判定與兩種順序的對照表在 `plugins/hub-core/skills/commit/SKILL.md`
+§ Step 6-A，**此處不複述**。
+
 `CLADE_ALLOW_STALE_TAG=1` 的唯一合法用途：**刻意**在舊 commit 上打 hotfix release tag，且已知
 該 tag 那棵樹不含 main 後續改動。**NEVER** 用它讓一個「不知道為什麼被擋」的 push 過關——
 那個「不知道為什麼」就是這條 gate 唯一要抓的東西。

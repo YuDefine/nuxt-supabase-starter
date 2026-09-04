@@ -249,8 +249,22 @@ node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \
   --complete success --summary '<已完成與驗證>' --followup-brief <absolute-brief-path>
 ```
 
+**那份 brief 的首段 MUST 逐字帶上這一句**（TD-908）：
+
+> 本 brief 是**工作指令**，不是待辦盤點。`\nx` / `\my` / 收工判定不適用於剛被派出的 pane——
+> 即使 brief 讀起來像「已完成 ＋ 剩餘」清單也一樣。MUST 先把 brief 的每一項實際做完再回報。
+
+殘工 brief 天生長成「已完成 ＋ 剩餘」兩段——那正是收工盤點的形狀，所以下一棒會把它讀成一題
+「現在該做什麼」而不是一份工作指令，然後零工作就把上一棒的 summary 原樣回報成 success
+（<consumer-a> 2026-09-03 同一輪兩次命中）。dispatch 時 helper 會在 prompt 最前面注入同一句，但
+**brief 檔本身也要有**：它會被獨立讀（relay successor 逐字帶路徑、收割者自己開檔看），
+那些場合沒有 helper 的注入。
+
 helper 對這個欄位是 fail-closed 的：非絕對路徑、檔案不存在、不是普通檔、空檔、或搭配 `success`
-以外的 outcome，一律 `usage_error` 而**不**寫任何 durable state。它也與 `--successor-receipt` 互斥——
+以外的 outcome，一律 `usage_error` 而**不**寫任何 durable state。它在 `success` 的 `summary` 與
+`followup_brief` **逐字等於同 parent 上一筆 completion** 時也會拒收（`completion_refused`，
+`reason: duplicate-of <dispatch-id>`）——那是上面那個誤讀的機械兜底，撞到它代表這一棒還沒說出
+自己做了什麼。它也與 `--successor-receipt` 互斥——
 已經有 live successor 接手時，那份殘工已經有主人了。
 
 **NEVER** 自己 fanout 去派那一跳（helper 回 `nested_dispatch_refused`）。**NEVER** 因為「順手做完比較快」

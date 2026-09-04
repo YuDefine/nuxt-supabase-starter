@@ -17,6 +17,7 @@
 | Publish | `/clade-publish` 的 Step 1–9 | publish + target propagate 成功 |
 | Post-publish | target 再跑 readiness + `pnpm hub:check` | 兩者 exit 0 |
 | Gate playbook pack | `docs/playbooks/README.md` 含 `## Browser 分流`；`PROGRESS.md` + `GATE-TODOS.md` + 01–05 都在；`HANDOFF.md` 有 `## User-gate board` | 缺任一檔或 heading → 跑 `mint-gate-playbooks.ts`（缺才寫）。沒有這包不算 bootstrap 完成 |
+| Impeccable follow-up（僅 UI／有前端） | `references/impeccable-follow-up.md` 逐 id；`inspect-new-project-round.ts` 的 `designPending` | 每一缺項都已向 user 追問並落地，或有書面 N/A。`designPending` 非空 → **不准** `READY`。只說「記得裝 impeccable」不算過 |
 
 ## Failure handling
 

@@ -102,6 +102,8 @@ const bom = await projectionPlan({ cladeRoot: process.env.CLADE_HOME, manifest }
 
 把兩份輸出併進 intake sheet 給使用者看。catalog 題（db-host / register-fleet / deploy-track…）仍只問 `question-catalog.ts`，不要跟 BOM 列混成一張表。
 
+UI／有前端（`@nuxt/ui`、或 Nuxt 且有 pages）：BOM 出完後 Read `references/impeccable-follow-up.md`。那是**追問契約**，不是 catalog。**MUST** 缺哪項問哪項直到齊；**NEVER** 只寫「記得裝 impeccable」就過。品牌／theme／tokens **不准**加成 catalog 題（會跟 `ai-guidance:catalog-vs-cli` 衝突）。
+
 ## 2. 建 session state 與隔離工作區
 
 在 Clade 建本 session 的 `tasks/<timestamp>-project-bootstrap.md`，記錄 intake、phase 與 evidence。Clade 中央倉若會改 registry 或 skill source，依 clade-home worktree 規約進獨立 worktree；existing target repo 若會改 code，依該 repo 的 worktree 規約隔離。
@@ -142,6 +144,8 @@ node "$CLADE_HOME/scripts/mint-gate-playbooks.ts" \
 ```
 
 產物：`docs/playbooks/README.md`（含 § Browser 分流）+ `PROGRESS.md` + `GATE-TODOS.md` + 01–05、HANDOFF `## User-gate board`。缺 pack 不算 bootstrap 完成。`bootstrap-project.ts` 已含這一步；本節是 skill 自己跑 scaffold 後、進 Step 4 之前的補齊。
+
+UI consumer **開好後 MUST 跑 `/design new`**（載入 hub-core `design` orchestrator）。接著按 `references/impeccable-follow-up.md` 追問到齊。缺項未問完 **不准**把本 skill 收成 `READY`。
 
 ### `adopt`
 
@@ -221,7 +225,7 @@ publish 後再次在 target repo 跑 readiness gate 與 `pnpm hub:check`，確�
 4. `Evidence`：每個 completion gate 的 invocation、exit、關鍵 verdict。
 5. `External setup`：只列無法由本 session 完成、且綁具體外部資源的項目；沒有就省略。
 
-`READY` 必須同時具備 registry entry、`consumers.local` derived entry、readiness `READY`、gate playbook pack、`bp-scan` 無未處理 required item、project gates 綠燈、Clade publish/propagate 完成。缺任何一項只能輸出 `BLOCKED`，並標出停在哪個 predicate。
+`READY` 必須同時具備 registry entry、`consumers.local` derived entry、readiness `READY`、gate playbook pack、`bp-scan` 無未處理 required item、project gates 綠燈、Clade publish/propagate 完成。UI／有前端還要 `impeccable-follow-up.md` 各項齊（或書面 N/A）且 inspect `designPending` 為空。缺任何一項只能輸出 `BLOCKED`，並標出停在哪個 predicate。
 
 </output_contract>
 
