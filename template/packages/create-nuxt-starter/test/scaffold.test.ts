@@ -106,6 +106,9 @@ describe('scaffold: base-only (no features)', () => {
     const script = readFileSync(join(targetDir, 'scripts', 'install-skills.sh'), 'utf-8')
     expect(script).toContain('nuxt/ui')
     expect(script).toContain('pbakaus/impeccable')
+    expect(script).toContain('npx skills add pbakaus/impeccable $COPY_FLAGS')
+    expect(script).not.toContain('pbakaus/impeccable@$skill')
+    expect(script).not.toMatch(/for skill in \S*adapt\b/)
     expect(script).not.toMatch(
       /for skill in .*\b(arrange|extract|frontend-design|normalize|onboard|teach-impeccable)\b/,
     )

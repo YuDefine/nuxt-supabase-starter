@@ -780,34 +780,15 @@ function copyClaudeCodeAssets(targetDir: string, selectedFeatureIds: string[]): 
     )
   }
 
-  // UI — components + design skills
+  // UI — components + design skills（impeccable v4.1.1 單一 skill，不要再 copy v2 子目錄）
   if (selectedFeatureIds.includes('ui')) {
     skills.push(
       'nuxt-ui',
       'reka-ui',
       'motion',
-      // Design orchestration + sub-skills（impeccable v2.1）
       'design',
       'design-retro',
       'impeccable',
-      'adapt',
-      'animate',
-      'audit',
-      'bolder',
-      'clarify',
-      'colorize',
-      'critique',
-      'delight',
-      'distill',
-      'harden',
-      'layout',
-      'optimize',
-      'overdrive',
-      'polish',
-      'quieter',
-      'shape',
-      'typeset',
-      // UI workflow support
       'review-archive',
       'review-screenshot',
       'subagent-dev',
@@ -1344,34 +1325,25 @@ function generateInstallSkillsScript(targetDir: string, feats: string[]): void {
     lines.push('')
   }
 
-  // Impeccable Design Skills — only if ui
+  // Impeccable — only if ui（v4.1.1 單行，禁止 pbakaus/impeccable@$skill 迴圈）
   if (has(feats, 'ui')) {
-    const impeccableSkills = [
-      'impeccable',
-      'adapt',
-      'animate',
-      'audit',
-      'bolder',
-      'clarify',
-      'colorize',
-      'critique',
-      'delight',
-      'distill',
-      'harden',
-      'layout',
-      'optimize',
-      'overdrive',
-      'polish',
-      'quieter',
-      'shape',
-      'typeset',
-    ]
-    lines.push('# Impeccable Design Skills（pbakaus/impeccable）')
-    lines.push('echo "📦 Impeccable Design Skills..."')
-    lines.push(`for skill in ${impeccableSkills.join(' ')}; do`)
-    lines.push('  npx skills add pbakaus/impeccable@$skill $COPY_FLAGS')
+    lines.push('# Impeccable Design Skill（pbakaus/impeccable v4.1.1 — 單一 skill）')
+    lines.push('echo "📦 Impeccable Design Skill..."')
+    lines.push('npx skills add pbakaus/impeccable $COPY_FLAGS')
+    lines.push('echo "  ✓ Impeccable Design Skill 完成"')
+    lines.push('echo ""')
+    lines.push('# 清理 v1.x / v2.x deprecated sub-skill 目錄（v4 已合併為單一 skill）')
+    lines.push('DEPRECATED_DIR="$(pwd)/.claude/skills"')
+    lines.push(
+      'for legacy in adapt animate arrange audit bolder clarify colorize critique delight distill extract frontend-design harden layout normalize onboard optimize overdrive polish quieter shape teach-impeccable typeset; do',
+    )
+    lines.push(
+      '  if [ -d "$DEPRECATED_DIR/$legacy" ] && grep -qi impeccable "$DEPRECATED_DIR/$legacy/SKILL.md" 2>/dev/null; then',
+    )
+    lines.push('    echo "🧹 移除 deprecated sub-skill：$legacy"')
+    lines.push('    rm -rf "$DEPRECATED_DIR/$legacy"')
+    lines.push('  fi')
     lines.push('done')
-    lines.push('echo "  ✓ Impeccable Design Skills 完成"')
     lines.push('echo ""')
     lines.push('echo "📝 注意：design orchestrator 為手動管理，位於 .claude/skills/design/"')
     lines.push('echo ""')

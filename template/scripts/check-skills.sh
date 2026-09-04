@@ -68,9 +68,7 @@ done
 
 echo ""
 echo "🎨 Design Skills:"
-for skill in design frontend-design adapt animate arrange audit bolder clarify colorize \
-             critique delight distill extract harden normalize onboard optimize overdrive \
-             polish quieter teach-impeccable typeset; do
+for skill in design design-retro impeccable; do
   if [ -d "$SKILLS_DIR/$skill" ]; then
     echo "  ✓ $skill"
   fi
