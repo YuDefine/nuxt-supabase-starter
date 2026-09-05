@@ -1,5 +1,5 @@
 ---
-description: ad-hoc 工作開工前 MUST 先建 per-session task 檔——觸發條件、檔名格式、共享單檔禁令、session context 預算門檻
+description: ad-hoc 工作的追蹤載體、唯讀與指定產物邊界、共享單檔紀律、session context 預算門檻
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -11,17 +11,25 @@ Local edits will be reverted by the next sync.
 
 # Session Tasks
 
-開始任何 ad-hoc 工作（debug／配置調整／單檔 fix／勘查）且不走 spectra change 時，**MUST 先** `Write` `tasks/<YYYY-MM-DD-HHMM>-<slug>.md`（timestamp 取開工當下，slug 用 kebab-case），再動手。
+每一個 ad-hoc 工作先依當次授權選擇載體：
 
-本規約適用**所有** consumer。`tasks/` 目錄不存在**不代表**本 repo 未採用——直接建立即可。
+| 可觀察的任務範圍 | 追蹤與交付 |
+| --- | --- |
+| 明示唯讀、禁止寫檔，或只要求在對話交付盤點／計畫 | 在對話交付進度、證據及未解項；不建立 task 檔或為追蹤修改 repository／spine |
+| 只允許寫指定計畫／報告文件 | 在該文件追蹤進度；不另建 tasks 檔、不擴成實作或提交 |
+| 已授權本機修改的 ad-hoc 工作（debug／配置調整／單檔 fix），且不走 spectra change | **MUST 先**建立 `tasks/<YYYY-MM-DD-HHMM>-<slug>.md`，再修改業務檔；timestamp 取開工當下、slug 用 kebab-case |
+
+任務後續取得實作授權時，重新套用上表；先前的唯讀交付不代替實作追蹤。
+
+本規約適用**所有** consumer。命中上表建 task 檔那列時，`tasks/` 目錄不存在**不代表**本 repo 未採用——直接建立。
 
 拆得開的工作 **NEVER** 用共享單檔（`tasks/todo.md`、`tasks/notes.md`）——multi-session 並行會 lost update。一 session 一檔，只 `Edit` 自己那檔。
 
 **本質共享、拆不開的登記簿是例外，不是違規**——`HANDOFF.md`、`ROADMAP.md`、`docs/tech-debt.md`、`docs/pitfalls/**` 的價值來自所有人讀同一份，分檔等於取消它們存在的理由。那幾個檔的並行寫入紀律見 [[shared-file-concurrent-write]]（`paths:` gated，碰到該檔當下載入）。
 
-不建檔的代價：auto-compact 觸發後本 session 的工作狀態全失，task 檔是跨 compact 的主要狀態載體。
+已授權實作的 task 檔承載跨 compact 狀態；唯讀或指定文件任務沿用上表的交付載體。
 
-harness 的 `TaskCreate` / `TaskUpdate` 是**進度呈現**（讓使用者看到 in_progress／completed），不是狀態載體，**不替代也不免除**建 tasks 檔——收到 "consider using TaskCreate" 提醒、或要呼叫 `TaskCreate` 時，本 session 尚無 tasks 檔就**先建檔再呼叫**。
+harness 的 `TaskCreate` / `TaskUpdate` 是**進度呈現**。命中上表實作列時，它們**不替代也不免除**建 tasks 檔——收到 "consider using TaskCreate" 提醒、或要呼叫 `TaskCreate` 時，先確認本次實作已有 task 檔。工具提醒不新增文件、實作或提交授權。
 
 session 結束時對每個未完項**升級或刪，二擇一**，不留著。
 

@@ -22,14 +22,16 @@ Local edits will be reverted by the next sync.
 
 | 工作類型 | 應該放哪 | 理由 |
 | --- | --- | --- |
+| 明示唯讀／禁止寫檔，或只要對話中的盤點／計畫 | 對話中的進度與交付 | 寫 task 檔或 spine 不在任務範圍 |
+| 只允許指定計畫／報告文件 | 該指定文件 | 單一產物承載進度，不另外擴充寫入範圍 |
 | 大型結構化變更（涉及 spec、跨多檔、跨層、需要 design review） | spectra change（`openspec/changes/`） | 走完整 propose → apply → archive 流程 |
-| **Ad-hoc 小工作**（單一 debug、配置調整、單檔 fix、短勘查） | **`tasks/<id>.md`** | 比 spectra 輕一個量級 |
+| **已授權本機修改的 ad-hoc 小工作**（單一 debug、配置調整、單檔 fix） | **`tasks/<id>.md`** | 比 spectra 輕一個量級 |
 | 跨 session WIP 交接 | `HANDOFF.md` | session 結束時的「信件」 |
 | 中長期未來工作（不在當前 change scope） | `openspec/ROADMAP.md` `## Next Moves` | 排優先序的未來 backlog |
 | 範圍外技術債 / 未解決項長期追蹤 | `docs/tech-debt.md`（TD-NNN） | 永續 register |
 | 不需要追蹤的單一 prompt | 都不需要 | 直接做完即可 |
 
-**判斷準則**：不確定 → 先用 `tasks/<id>.md`；發現規模膨脹（要動 spec、要 design review、要跨多檔） → 升級到 spectra change，刪除原 tasks 檔。
+**判斷準則**：先按當次授權套用 [[session-tasks]] 的載體表；已允許本機修改而不確定追蹤形式時，先用 `tasks/<id>.md`。發現規模膨脹（要動 spec、要 design review、要跨多檔）時，依專案既有 workflow 升級追蹤；追蹤形式不擴大實作或發布授權。
 
 ---
 
@@ -154,6 +156,10 @@ slug 的重述，那正是這條規約要修的東西（一個不指涉任何東
 
 ## Plan
 
+目標：<可觀察的結果>
+授權範圍：<可讀／可寫的具體產物、是否含提交或外部動作>
+完成條件：<必要行為與驗證證據>
+
 - [ ] step 1
 - [ ] step 2
 
@@ -163,10 +169,12 @@ slug 的重述，那正是這條規約要修的東西（一個不指涉任何東
 
 ## Review
 
-（完成後填：實際做了什麼、有沒有偏離 plan、學到什麼）
+（完成後填：實際結果；執行過的命令與結果；未執行／不適用項及理由；剩餘範圍）
 ```
 
 最簡可只留 `Plan`；`Notes` / `Review` 視任務複雜度補。
+
+驗證命令取自當前專案 scripts、CI 或領域文件，並記錄必要前提。依改動影響選檢查，保留明文必跑的 gates；已通過的檢查僅在後續修改、失敗或未解疑慮影響它時重跑。工具退出成功、正文已送達與任務行為正確分別取證；未執行的檢查寫「未執行」，不寫成通過。
 
 ---
 
