@@ -34,6 +34,17 @@ BLOCKED=false
 MESSAGES=()
 CHANGE_NAME=$(basename "$CHANGE_DIR")
 
+NATIVE_OPSX=false
+if [[ "$CHANGE_NAME" =~ ^chg-[0-9a-hjkmnp-tv-z]{26}$ ]]; then
+  NATIVE_OPSX=true
+  NATIVE_GATE="$SCRIPT_DIR/../opsx-acceptance-cli.ts"
+  if [ ! -f "$NATIVE_GATE" ]; then
+    NATIVE_GATE="$(sux_repo_root)/.clade/vendor/scripts/opsx-acceptance-cli.ts"
+  fi
+  node "$NATIVE_GATE" "$(sux_repo_root)" "$CHANGE_NAME" || exit 2
+fi
+if [ "$NATIVE_OPSX" = true ]; then exit 0; fi
+
 HAS_UI=false
 if sux_tasks_has_ui_scope "$TASKS_FILE"; then
   HAS_UI=true

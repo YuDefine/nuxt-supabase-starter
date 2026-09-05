@@ -23,7 +23,7 @@ archive-on-main 例外讓未 commit 的 archive batch 躺在 **shared main**；`
 
 **MUST**（縮短 / 消除窗口）：
 
-- **archive 收尾的 follow-up fix（修測試 / 補 code / 加 migration）走 `/wt` 進隔離 worktree**，**NEVER** 在 main 累積多步 in-flight 工作等 commit；archive bookkeeping 本身才 MAY 在 main 跑。
+- **archive 收尾的 follow-up fix（修測試 / 補 code / 加 migration）走 `/wt` 進隔離 worktree**，**NEVER** 在 main 累積多步 in-flight 工作等 commit；OPSX archive bookkeeping 同樣在實作 worktree 完成。
 - `/commit` 因可恢復的 gate halt、batch 需進一步 code 改動才能過 gate 時，**SHOULD** 立即把 batch 移進隔離 worktree 修。
 - 跨多步在 main 累積 batch 且無法立刻 commit 時，**SHOULD** 寫 coarse claim 讓別 session 的 `otherSession` guard 看得到這批 dirty，commit 後 `drop`：
 
@@ -64,17 +64,9 @@ Phase 切換之間若需在 worktree 跑 **local-only** setup chore，主線 **M
 
 > **決定要 fork worktree 之後、送出 `wt-helper add` 之前，MUST 先讀 [[wt]] skill 的 `baseline-guard.md`**（SKILL.md Step 1 帶 MUST Read 指示；該 skill 由 hub-core plugin 提供，不在 consumer 的 `.cursor/skills/` 下）—— unmerged / clean / dirty 三路分流、`--baseline-scope-paths` 的對齊要求、stash strategy 的隱性風險與 `rescue` 救援、bulk-capture 的還原三步驟都在那裡。
 
-### Pre-flight guard 不適用範圍：spectra-propose
+### OPSX 建立需求同樣先隔離
 
-`spectra-propose` Step 11 的 `wt-helper add "<change-name>"` 呼叫**預設不帶** `--precheck-baseline`，整套 dirty / unmerged / scope guard **不適用**於 propose。理由：propose 全程只寫 `openspec/changes/<change-name>/`、跟 main 的 staged / modified / untracked 完全不撞檔；fork 基於 main HEAD commit，working tree state 留在 main；product code 要到 apply 階段才動。
-
-**操作守則**：
-
-- 看到 main dirty / staged / unmerged 時**直接** `/spectra-propose <name>`，**NEVER** 反射性建議 user 先 commit / stash / 詢問 staged 內容
-- 例外：若 user 的 staged / WIP **就在** `openspec/changes/<change-name>/` 子目錄裡（重跑同名 propose 的 path collision 場景），先 inspect、跟 user 對齊是否覆蓋
-
-> Anti-pattern 警示：別把這條鬆綁推廣到 `/spectra-apply` / `/spectra-ingest` / `/spectra-debug` — 這些 skill **會**寫 tracked product code，**仍須**走 §1 Pre-fork baseline guard。本例外**僅限** propose（fork 純粹為 apply 預備 worktree，不寫 product code）。
-
+OPSX create / revise 會寫 canonical intent、binding 與投影。每次呼叫前套用上面的 pre-fork baseline guard；已有 worktree 就沿用。既有來源先用 list / inspect 唯讀找身分，避免同名需求重建。
 
 ## §3 Worktree 命名與位置
 
@@ -99,7 +91,7 @@ Phase 切換之間若需在 worktree 跑 **local-only** setup chore，主線 **M
 
 ## §5 Commit 階段：subagent commit → archive 吸收 → user `/commit`
 
-v3 atomic landing：`/wt` 跑完 subagent 在 worktree commit、worktree+branch **保留**（不 squash 不 cleanup）；`/spectra-archive` Step 0 `wt-helper merge-back` atomic 吸收進 main，user 再在 main 跑 `/commit`。Skill-owned worktree（`/dep-upgrade` 等有清楚完成點）**MUST** 自主 merge-back，不丟回 user。**NEVER** 在 subagent prompt 叫它跑 `/commit` / 在 worktree `git push` / `/wt` 返回時 squash。
+`/wt` 返回時保留已 commit 的 worktree／branch。OPSX 在該樹完成目前 revision 的證據與人工 gate、archive 並 commit bookkeeping；主持者再照 [[worktree-default.commit-ceremony]] 序列落地。Skill-owned worktree（`/dep-upgrade` 等有清楚完成點）**MUST** 自主 merge-back，不丟回 user。**NEVER** 在 subagent prompt 叫它跑 `/commit` / 在 worktree `git push` / `/wt` 返回時 squash。
 
 > 完整 Codex 派工規約、auto merge-back contract、禁止項詳見 [[worktree-default.commit-ceremony]]（path-scoped：動 `openspec/changes/**` / `HANDOFF.md` / wt-helper 時載入）。
 
@@ -113,7 +105,7 @@ v3 atomic landing：`/wt` 跑完 subagent 在 worktree commit、worktree+branch 
 ### §5.5.1 Pre-archive gate 掃的是 change 所在的 worktree，NEVER 是 cwd
 
 四道 pre-archive gate（`pre-archive-ux-gate.sh` / `-evidence-` / `-design-` / `-followup-`）是
-`PreToolUse:Skill` hook，**跑在 `/spectra-archive` Step 0 的 `wt-helper merge-back` 之前**。
+legacy `PreToolUse:Skill` adapter；OPSX archive 由 `opsx-control` 直接呼叫既有 gate。兩條路徑都先驗實作樹，再進落地 ceremony。
 在 merge-back 之前，一個在 worktree 裡實作的 change **完全沒有**任何內容在 main：main 的
 `tasks.md` 還是 propose 當時那份（零 annotation），screenshots 一張都不在。
 
@@ -127,13 +119,10 @@ worktree —— 這不是邊角，是**每次第一次 archive 的必然結果**
 
 **NEVER 在別處重寫那個 find。** `wt-helper resolve` 與 `merge-back` 共用
 `findSessionWorktreeForSlug()` —— 同一份 matcher 才保證「gate 驗過的那棵樹」就是
-「Step 0 要 land 進去的那棵樹」。兩份會漂，而漂開之後的症狀是 **gate 綠、archive 成功、
+「要 land 進去的那棵樹」。兩份會漂，而漂開之後的症狀是 **gate 綠、archive 成功、
 內容不對**，事後從任何紀錄都看不出來。
 
-**這條與「把 gate 移到 merge-back 之後」是二擇一，NEVER 兩邊都留。** 已選 gate 自解析；
-`/spectra-archive` Step 5.5 的 post-merge-back 重跑照舊保留，但那是 Check 4（manual-review
-kind）的唯一執行點，**不是**本條的替代方案——把 pre-skill 位置整個拿掉會讓「evidence 根本
-沒收集」的 change 先 merge-back、先毀掉 worktree，才在 Step 5.5 被擋。
+**每次 OPSX archive 都先在實作樹跑既有 archive、evidence、design、followup gate 與目前 revision predicates，再做 bookkeeping。NEVER 先 merge-back 才收證據**：那會先刪掉唯一的實作 worktree，再被驗收攔下。
 
 **Fail-open by construction**：解析不到 worktree（change 在 main 上做完、worktree 已被
 merge-back 清掉、consumer 尚未散播到 `wt-helper resolve`）一律回退 cwd = 修改前的行為。
@@ -148,7 +137,7 @@ merge-back 清掉、consumer 尚未散播到 `wt-helper resolve`）一律回退 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | gate 掃到的根目錄 ≠ cwd 時，helper 在 stderr 印一行 `[pre-archive] scanning worktree for '<change>': <path>`。**informational — 不改變任何 gate 的 exit code**；它存在是因為「沒有人報過掃了哪一棵樹」正是這個 bug 隱形的原因 |
-| 消費端 | 四道 pre-archive hook（每次 `/spectra-archive` 必經）；讀到那行的 agent 用它確認 gate 看的是對的樹 |
+| 消費端 | OPSX archive adapter 與四道 legacy pre-archive hook；讀到那行的 agent 用它確認 gate 看的是對的樹 |
 | 載入路徑 | 本節（`rules/core/worktree-default.detail.md`，paths-gated 於 `wt-helper.ts` 與四支 gate script——改解析器或改 gate 時載入）＋ 上述 regression test 的機械兜底 |
 
 對應 pitfall：[[pitfall-pre-archive-gate-scans-main-not-change-worktree]]。
@@ -173,17 +162,13 @@ merge-back 清掉、consumer 尚未散播到 `wt-helper resolve`）一律回退 
 
 > 詳見 [[worktree-default.troubleshooting]] § spectra DB 跨 worktree。
 
-## §9.5 Spectra change artifact 必須活在 git
+## §9.5 需求與證據的持久性
 
-`Agent` tool subagent 的 ephemeral worktree（`.claude/worktrees/agent-*`）session 結束 GC，裡面 `spectra unpark` 的 artifacts 永久遺失。propose 收尾 **commit 進 git**；apply Step 2 unpark 移主線預先做；**NEVER** 假設 subagent cwd = `<consumer>-wt/<slug>/`（派工前 echo cwd 確認）。
+OPSX canonical intent、binding、投影與正式 evidence receipt 依各自儲存契約保留。每次 phase 完成後，先經 OPSX evidence command 寫入並回讀目前 revision，再 project 重建投影；tracked artifacts 在實作 worktree 限定路徑 commit。tasks.md 是投影，不能用手動勾選當完成證據。
 
-> 詳見 [[worktree-default.troubleshooting]] § artifact 活在 git。
+Legacy 原件經 OPSX history 唯讀回讀；未完需求以 supersedes／provenance 接續，NEVER 再跑 park／unpark 或覆寫歷史。派工前確認實際 cwd，持久證據不能只留在會 GC 的 ephemeral worktree。
 
-### §9.5.1 Phase-tick commit 紀律（TD-216）
-
-worktree subagent 完成每個 tasks.md phase section 的最後一個 `- [ ]` → `- [x]` 後 **MUST** commit tasks.md **與該 change 的 verify evidence sidecar `.spectra/evidence/<change-name>.jsonl`** 到 worktree branch（type 用 `📝 docs`，**NEVER** `📝 spectra`；**NEVER** 把這兩條以外的路徑加進這個 commit）—— 未 commit 的打勾與 receipt 都不會被 `merge-back --squash` 帶回 main。**每一個** phase-tick commit 都適用，不是只有跑過 verify 的那一次；sidecar 檔不存在時才可省略該路徑。
-
-> 指令逐字、commit-msg hook 的錯訊對不上真因、與 [[commit]] § artifact-tick 的例外關係詳見 [[worktree-default.troubleshooting]] §9.5.1。
+> 詳見 [[worktree-default.troubleshooting]] §9.5。
 
 ## §9.7 Artifact Reading SOP — 讀進度前先查 active worktree
 

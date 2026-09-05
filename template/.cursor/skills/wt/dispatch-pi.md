@@ -45,10 +45,10 @@ When Step 1.8 routes to Pi for coding work, use `Bash run_in_background=true` to
    - **允許** commit：`git add -- <files>` + `git commit -m "🧹 chore: wt <slug> — <short>"`
    - **MUST** selective stage — `git add -A` / `git add .` 會撈到 baseline
    - **NEVER** `git push` / `git stash` / `git commit --amend` / `--no-verify`
-   - **NEVER** 任何 main-bound ceremony：`/commit` / `/spectra-commit` /
-     `/spectra-archive` / `wt-helper merge-back` / `git merge --squash`。
+   - **NEVER** 任何 main-bound ceremony：`/commit` /
+     `wt-helper merge-back` / `git merge --squash`。
      你的權限止於 worktree 邊界 —— worktree 內的 commit 是你的，把它們 land
-     到 main 不是。做完 brief 最後一項**不等於**取得 archive 授權：回報 done 就停。
+     到 main 不是。做完 brief 最後一項**不等於**取得 archive 授權：OPSX archive 僅在 brief 明確包含且目前 revision gates 通過時執行；否則回報 done 就停。
    - commit 前 self-check：view-layer drift + scope discipline
 
    ## WORKTREE-BRIEF.md（**MUST** 更新）

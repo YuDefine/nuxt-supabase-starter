@@ -408,8 +408,7 @@ Foreground 路徑**不**寫 `inFlight`、不建 background task、也不 arm kee
 # runner.sh --allowedTools 放行的 Bash invocation（scan helper；closedBloat 另放行 rotate-closed-bloat.ts）。命令以 cwd 推導 repo，故不得把 repo
 # path（尤其含空白、引號或換行）插進 prompt / allowance。非 runner child 才用下列等價形狀。
 node "$HOME/offline/clade/vendor/scripts/work-loop-scan.ts"
-# spectra repo 才有 parked（無 openspec 時回空，屬正常）
-PARKED="$(spectra list --parked --json 2>/dev/null || echo '{}')"
+# 需求與 legacy 暫存來源由下方 OPSX history list 讀取。
 ```
 
 helper 在單一 Node process 內完成 handoff-scan → repo-local 同目錄 temp → JSON parse → git common dir owner
@@ -422,11 +421,17 @@ helper 在單一 Node process 內完成 handoff-scan → repo-local 同目錄 te
 
 **失敗 fallback**：script 不存在或回 error、**或 `SCAN-MISMATCH` / `MISSING`** → **STOP**，寫 HANDOFF 一行 `work-loop: scan failed at <ISO>`，跑 `work-loop-lock.ts release --session <id>` 後結束。`SCAN-MISMATCH` 表示讀到別 repo 的掃描結果（unattended 下危害最大：無人在旁審視就照它推進待辦）。**NEVER** 憑記憶或 HANDOFF 既有 narrative 猜待辦狀態。
 
+### 需求來源查詢
+
+本輪 `scan-latest.json` 的 `opsx` 欄位已由 scan helper 呼叫共同 `listOpsxHistory` 取得，後續沿用這份 inventory。runner child 不另起 Bash list 命令。互動模式單獨查詢時可執行 `node <opsx-cli> list --repo-root <repo> --json`；clade CLI 是 `vendor/scripts/opsx-control.ts`，consumer 是 `.clade/vendor/scripts/opsx-control.ts`。
+
+`entries`／`sources` 提供目前需求與明確 binding；`legacy_changes` 提供 SQLite 暫存來源。`legacy_store.status=missing` 表示此 repo 沒有該 store；`unsupported`／`corrupt` 表示來源讀取失敗，記錄具體錯誤並走補件，不能當作空清單。`truncated=true` 表示清單未完整，先處理可讀範圍與讀取缺口，不能宣告存量清零。
+
 ### 單一 candidate list，兩種 source
 
 | source | 來自 | 進 Step 3 走哪條 |
 | --- | --- | --- |
-| `spectra` | `reviewGuiReadiness.raw.entries[]` + `PARKED` 的 parked change | § 3.1a bucket 路由 |
+| `spectra` | OPSX list 的 `entries`／`sources`／`legacy_changes`（同一來源依明確 ID 去重）；review readiness 只補驗收資訊 | § 3.1a bucket 路由 |
 | `handoff` / `techdebt` / `roadmap` | `HANDOFF.md` 待辦段、`techDebtHygiene.raw`、`openspec/ROADMAP.md` | § 3.1b 分類表 |
 
 - **`HANDOFF.md`** —— 掃 `## In Progress` / `## Blocked` / `## Next Steps` / `## Outstanding` / `## Follow-up`（heading 名因 consumer 而異，靠 `##` / `###` 辨識）。`- [ ]` 未勾項 = 一個 candidate；`- [x]` 跳過；純文字段落視為單一 candidate
@@ -473,7 +478,7 @@ launcher 早就死了。分類之前先實跑一次，死掉的組直接標不�
 | dev-port | `node scripts/dev-session.ts status`（無此檔改 `dev-singleton.ts`） | exit 0 |
 | main | `node scripts/wt-helper.ts list`（**產地 clade home 在 `vendor/scripts/wt-helper.ts`** —— `scripts/` 是投影側路徑） | exit 0 |
 | 扇出 | 同上（`/wt` 靠 wt-helper 建 worktree） | exit 0 |
-| spectra item 存在時 | `spectra list --json` | exit 0 且吐得出 JSON |
+| 需求 item 存在時 | `node <opsx-cli> list --repo-root <repo> --json` | exit 0、JSON 可解析；來源狀態依 Step 2 判讀 |
 
 **非 0 的處置**（四步，缺一不可）：
 
@@ -523,45 +528,28 @@ launcher 早就死了。分類之前先實跑一次，死掉的組直接標不�
 
 **每一個** candidate 都 MUST 走完三步（3.1 分類 → 3.2 自主判定 → 3.3 分組），不是只對前幾條。
 
-### 3.1a spectra source — bucket 路由
+### 3.1a 需求 source — OPSX 接續
 
-| 優先 | Bucket | 代號 | 動作 |
-| --- | --- | --- | --- |
-| 0 | `done` | 3z | archive → merge-back → commit + push |
-| 1 | `feedbackGiven` | 3a | 處理 review feedback → 補 evidence |
-| 2 | `readyForEvidence` | 3b | 補 evidence annotation |
-| 3 | `awaitArchiveWalkthrough` | 3c | 跑 archive walkthrough |
-| 4 | `ready` + `userActionPending=0` | 3d | auto-archive + commit |
-| 5 | `ready` + `userActionPending>0` | 3e | 標 🟢 ready-for-review |
-| 5.5 | `parked` | 3h | unpark → apply |
-| 6 | `applyInProgress` | 3f | 繼續 apply |
-| 7 | `healthCheckNeeded` | 3g | 修 tasks.md 格式 |
-| 8 | `applyBlocked` | 3i | **先過 [blocker-ledger.md](reference/blocker-ledger.md) 三步查表**，沒命中才**評估 blocker**（[blocker-evaluation.md](reference/blocker-evaluation.md)） |
-| 9 | `awaitingUserDecision` | 3j | 同上查表，沒命中才**評估決策需求** |
-| — | `crossWtDirty` / `malformed` | — | 跳過（log） |
+掃描的 `spectra` source 名稱是既有 scan 的分類鍵。每一筆需求依本表接續，執行入口統一為 `/opsx`。
 
-**代號欄**是 reference 檔內部使用的 bucket 短碼（`3z` / `3f` / `3i` …）——它們在 reference 裡出現時
-指的就是本表這一列，不是另一套流程。
+| 可觀察狀態 | 動作與出口 |
+| --- | --- |
+| canonical OPSX source 與 binding 完整 | `/opsx <change-id>`：inspect → 當前 instructions → materialize → 執行／證據 → project → inspect。依原本風險政策完成 BDD 與獨立審查。 |
+| legacy active／parked／stashed，尚無 supersedes 映射 | 先用 history 讀原件：磁碟來源帶 `--path <path>`；store 來源帶 `--legacy-change-id <id>`。依 `/opsx` 的 intent 流程保留 provenance、digest 與未完驗收，建立承接 source 後接續同一目標。讀不到原件則保留具體 blocker。 |
+| 有 feedback／stale evidence／待 agent 驗證或討論 | 先處理每一項 agent 可做的工作、提交當前 revision 收據並重新 project；全部清除後才能呈現待人驗收。 |
+| 當前 evidence 與人的 gate 全通過，任務包含歸檔 | 走 `/opsx` archive 判定；歸檔成功後依 checkout workflow 合回並走 `/commit`，產品碼與 metadata 一起落地，再回讀證據。 |
+| 實作或驗收受阻 | 先讀 [blocker-ledger.md](reference/blocker-ledger.md) 查表，再診斷並補件；需人裁決才走 Decision packaging。 |
+| 生成投影過期或格式錯誤 | 先讀 canonical source／validator 錯誤，以 OPSX project 重建；修正來源後重驗，不直接勾寫生成 tasks。 |
 
-固定步驟的五個 bucket（`done` / `awaitArchiveWalkthrough` / `ready(0)` / `parked` / `healthCheckNeeded`）**MUST 讀 [simple-buckets.md](reference/simple-buckets.md) § 對應 bucket** 照步驟走——三條 ship 路徑的 commit pathspec 不同，憑印象跑會漏 commit 或誤納其他 change 的檔案。
+**MUST** 保留每一筆 legacy 未完需求，直到有可回讀的承接關係或明確處置。**NEVER** 呼叫 Spectra writer、unpark 或用修改歷史 checkbox 代替接續；歷史保存與需求完成是兩種結果。
 
-**Claude-actionable override（hard rule，bucket 之上的修正層）**：bucket 是粗粒度聚合。**每一條** change 在 bucket routing 之後、skip 之前 MUST 檢查 `issued` / `verifyClaudePendingCount` / `discussPendingCount` / `staleEvidenceCount`：
-
-```
-IF 任一 > 0:
-  → 有 Claude-actionable review work，先走對應處理邏輯 → 處理完 re-scan（bucket 會位移）
-  → 只有全部處理完、re-scan 確認 0 後，才能走 bucket 的 skip / ready-for-review 路徑
-ELSE:
-  → 走原 bucket routing
-```
-
-**`bucket=ready` 不等於 user-bound；`bucket=applyBlocked` 不等於 Claude 無事可做**（impl 卡 blocker ≠ review items 也卡）。2026-07-21 <consumer-a> 實證：5 個 issued items 被 `ready` bucket 掩蓋，loop 宣告 user-bound 然後 30min idle，user 在 review-gui 等一個不會來的接手。**「所有 change 卡 user action」這句話在 `issued>0` 時就是錯誤判斷。**
+`ready` 只是聚合提示。仍有 feedback、stale evidence 或 agent 可處理項時，先修復並重驗，不能因 ready badge 把工作交回給人。`applyInProgress` 的大小或進度不構成略過理由，依 `/opsx` instructions 推進可執行步驟。
 
 ### 3.1b 非 spectra source — 分類表
 
 **MUST Read [reference/non-spectra-dispatch.md](reference/non-spectra-dispatch.md)** 取分類表（code task / investigation / blocked / 模糊）與 **skip 合法理由窮舉 3 條 + 7 條不合法藉口逐字實錄**。**NEVER** 自創第 4 條 skip 理由。
 
-分類為 blocked 的 candidate 與 3.1a 的 bucket 8／9 走同一條路：**先過 [blocker-ledger.md](reference/blocker-ledger.md) 三步查表**，沒命中才逐條診斷。
+分類為 blocked 的 candidate 與 3.1a 的受阻需求走同一條路：**先過 [blocker-ledger.md](reference/blocker-ledger.md) 三步查表**，沒命中才逐條診斷。
 
 ### 3.2 自主判定（七條 AND）
 
@@ -608,7 +596,7 @@ runner.sh 另有 mechanical fail-closed：起跑前、每次 child launch 前，
 - 要改 tracked code → `/wt <slug>: <brief>`（扇出組，**≤4 in-flight**）
   - 這個 4 綁的 predicate 是「**每個 worker 各自 worktree**」——`/wt` 保證這件事，所以彼此不搶同一棵樹。
     **NEVER** 把 4 套到共享 working tree 的 dispatch 上（那條上限是 2，見 § dispatch 的三個不准）。
-- spectra change 的實作 → `/wt <change-name>: /spectra-apply <change-name>`
+- spectra change 的實作 → `/wt <change-name>: /opsx <change-id>`
 - 純唯讀調查 / 單檔文字改動 → 主線即時組（read-heavy 者先過 [dispatch-topology.md](reference/dispatch-topology.md) § 主線即時組的 pre-scan 前置判定派 pi，主線消費 report）
 - 記進 state 的 `inFlight`，`subagentsSpawned` +1
 
@@ -623,7 +611,7 @@ runner.sh 另有 mechanical fail-closed：起跑前、每次 child launch 前，
 
 **每一個** `/wt` brief **MUST 逐字內嵌** [guardrails.md](reference/guardrails.md) § C 的護欄區塊。subagent 是 fresh context，天然免疫主線 compaction——把安全執行面下沉到 subagent 是本設計對 governance decay 最可靠的一道。**NEVER** 只寫「照護欄做」這種 by-reference 指示。
 
-**NEVER 因 size / progress 跳過 dispatch**：`applyInProgress` 不管進度 0% 或 change 看起來多大，MUST dispatch——`/spectra-apply` 自管步驟粒度、phase、pause 與 blocker。「需要完整 session」「不適合 loop」都是違規。
+**NEVER 因 size / progress 跳過 dispatch**：`applyInProgress` 不管進度 0% 或 change 看起來多大，MUST dispatch——`/opsx` 依當前 instructions 管理步驟、pause 與 blocker。「需要完整 session」「不適合 loop」都是違規。
 
 ### 4b. 本輪承載不了的 item → 出口分流（dispatch 是 default，登記是付費 fallback）
 
@@ -904,7 +892,7 @@ git show --stat HEAD | tail -3   # 驗 scope；出現 .ts/.vue/.sql 等 → STOP
 | [state-write.md](reference/state-write.md) | 收到 `STATE_OK` 以外的**任何** token 時（Step 7.3） |
 | [productivity-gate.md](reference/productivity-gate.md) | 改准入／生產性判準之前（Step 0 § 開場准入判定、Step 6.3）——執行時不必讀 |
 | [decision-drain.md](reference/decision-drain.md) | **每一輪**（Step 2.7，hard rule） |
-| [simple-buckets.md](reference/simple-buckets.md)／[blocker-evaluation.md](reference/blocker-evaluation.md) | spectra item 命中固定步驟 bucket／`applyBlocked`・`awaitingUserDecision`（Step 3.1a） |
+| [blocker-evaluation.md](reference/blocker-evaluation.md) | 需求或文件待辦的 blocker 需要診斷（Step 3.1a） |
 | [blocker-ledger.md](reference/blocker-ledger.md) | **任一** blocked item 進評估之前（Step 3.1a 的**每一個** bucket／3.1b，不限 `applyBlocked`・`awaitingUserDecision` 兩列）、以及寫 `stoppedReason` 之前（Step 6.2） |
 | [non-spectra-dispatch.md](reference/non-spectra-dispatch.md) | 分類非 spectra candidate（Step 3.1b） |
 | [autonomy-predicate.md](reference/autonomy-predicate.md) | 判自主 / 做 packaging（Step 3.2 / 4b） |
@@ -918,6 +906,6 @@ git show --stat HEAD | tail -3   # 驗 scope；出現 .ts/.vue/.sql 等 → STOP
 
 - `/handoff` —— 本 skill 不取代它。`park`（登記）仍由 `/handoff` 做；本 skill 自動化的是 `next` 的「盤點 → 推薦 → 執行」，並在 unattended 下把 `AskUserQuestion` 換成 packaging
 - `/goal` —— attended 姊妹：user 在場、要逐項拍板 dispatch 優先序時用它
-- `/spectra-apply` / `/spectra-archive` —— spectra item 的實際執行者，本 skill 只編排不介入其內部流程
+- `/opsx` —— 需求實作、驗證與歸檔入口，本 skill 只編排不介入其內部流程
 - `/wt` —— 所有 tracked code 改動的 dispatch 入口
 - `/loop`（內建）—— interval 盲跑某 prompt、stateless 無 verifier。「每 N 分鐘重跑 X」用它；「狀態驅動推進待辦」用本 skill

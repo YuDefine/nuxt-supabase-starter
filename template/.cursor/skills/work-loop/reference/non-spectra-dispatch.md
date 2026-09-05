@@ -24,27 +24,15 @@ Local edits will be reverted by the next sync.
    - `## Next Moves` 下的 `###` 子段（每個子段 = 一個 candidate）
    - `## Active Changes` 下的 `### In progress` / `### Draft`（若未被 spectra scan 涵蓋）
 
-## Spectra change association（進入分類表前 MUST 跑）
+## 需求關聯（進入分類表前 MUST 跑）
 
-Step 2 scan 的 `entries[].name` + parked change names 合併成 active change name set。對 **每一個**
-非 spectra candidate，若其文字含該 set 中任一 name（**word boundary match，非 substring**；例如
-change name `fix-pinia` 命中「fix-pinia 的 Phase 3」但不命中「fix-pinata」）→ 改判為 `spectra`
-source，走 § 3.1a bucket 路由的 `applyInProgress`。
-
-此步驟在分類表之前跑，命中的 candidate **NEVER** 再走下方分類表的 code task / investigation /
-blocked / ambiguous 路由。
-
-**為什麼**：HANDOFF 條目通常用自然語言引用 change name（「完成 fix-pinia Phase 3」「A6 E2E 需要修」），
-不會寫死 `/spectra-apply fix-pinia`。靠字面路徑比對會漏掉這些 → 降級成 ad-hoc brief dispatch →
-spectra-apply 的 phase 結構、evidence 收集、verify cycle 全部丟失（2026-07 <consumer-a> 實證：A6 live E2E +
-fix-pinia remaining phases 被分類為 code task / investigation → 深度不足 → user 必須停 loop 開
-focused spectra-apply session 手動推）。
+以 Step 2 OPSX list 的明確 change ID、artifact path、source locator 與 work origin 比對每一筆文件待辦。可靠身分相同才交由 § 3.1a 接續，已在本輪需求清單者不重複 dispatch。只有相似標題或散文名稱時先建立候選關聯並核對原件，不自動合併工單。
 
 ## 分類與 dispatch
 
 | 類型 | 辨識方式 | Dispatch |
 | --- | --- | --- |
-| spectra change 引用 | 內容含 `/spectra-apply <name>` 或 `openspec/changes/<name>`，**或**文字命中 § Spectra change association 的 active change name | 走 3.1a `applyInProgress`（已被 Step 2 spectra source 涵蓋則跳過，防重複 dispatch） |
+| 需求引用 | 帶明確 change ID、artifact path 或 source/work identity | 走 3.1a OPSX 接續；保留原验收与证据政策，不另開 ad-hoc 根工單 |
 | code task（有明確檔案路徑 / 行為描述） | 含 `server/` / `app/` / `scripts/` / `.vue` / `.ts` / `.mjs` 等路徑，或含動詞（「改」「加」「修」「移除」「重構」） | worktree 內直接實作：`/wt <slug>: <brief>`，brief 從條目萃取 |
 | investigation / research | 含「調查」「確認」「檢查」「分析」「audit」 | 主線即時組直接執行（不需 worktree；read-heavy 者先過 [dispatch-topology.md](dispatch-topology.md) § 主線即時組的 pre-scan 前置判定），結果寫回對應條目 |
 | blocked / 需拍板 | 含「待 user」「待確認」「blocked」「需拍板」 | **NEVER 直接 skip** —— 走 [autonomy-predicate.md](autonomy-predicate.md) § Decision Packaging |
@@ -85,8 +73,7 @@ machine check 分離把這件事結構化了，非 spectra 路徑沒有那個結
 - **Commit 紀律同主流程**：落地 main 時路徑全在 [[commit.detail]] 白名單 → `git commit --only -- <paths>`；任一不在 → invoke `/commit`。每個 item 獨立 commit。卡人工檢查 → packaging，**NEVER** `--only` 繞 0-A
 - **完成後 MUST 更新來源檔**：勾 `[x]` 或補完成摘要，讓下一輪不重複做
 - **Error handling 同主流程**：失敗 → log + skip + `failStreak` +1
-- **NEVER** 自創 spectra change —— 只做已登記的工作；規模需開 change 的 → packaging 成決策題，
-  內容註明「建議 `/spectra-propose`」
+- 每筆需求建立依 [guardrails.md](guardrails.md) § 護欄 7 的來源授權判定；已授權且明確的需求接 OPSX，未授權新目標或產品歧義才 packaging。
 - **NEVER** 跨 consumer 操作 —— loop 仍限當前 repo
 
 **動標準層不再是 skip 理由**：`rules/` / `plugins/hub-core/` / `AGENTS.md` / `vendor/`（clade 端）

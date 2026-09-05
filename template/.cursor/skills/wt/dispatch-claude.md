@@ -71,13 +71,10 @@ Contract:
    require the subject to contain Chinese — check `commitlint.config.ts`.
 2. Do NOT run `git push` from the worktree. The session branch is short-lived.
 3. Do NOT run any main-bound ceremony from inside the worktree — **`/commit`,
-   `/spectra-commit`, `/spectra-archive`, `wt-helper merge-back`, `git merge
-   --squash`, or any other command that writes outside this worktree**. Your
-   authority ends at the worktree boundary: commits inside it are yours,
-   landing them on main is not. `/spectra-archive` in particular is main-bound
-   by design — its Step 0 runs `wt-helper merge-back`, so invoking it from here
-   silently crosses that boundary. Finishing the last task in the brief is
-   **not** authorization to archive; report done and stop.
+   `wt-helper merge-back`, `git merge --squash`, or any command that lands work
+   on main**. The coordinator owns landing. OPSX archive runs in the implementation
+   checkout only when the brief explicitly includes archive and its current-revision
+   gates pass; finishing implementation alone grants no archive authorization.
 4. When done, report back with:
    - Success: "done — commits: <SHA-list>, files: <count>". Optionally a one-line
      summary of what changed.
@@ -123,6 +120,6 @@ Update WORKTREE-BRIEF.md Progress as you work (check off items, add new ones).
 On completion: set frontmatter `status: done`.
 
 Contract: same as a fresh task — selective `git add`, no `git add -A`,
-no `git push`, no `/commit`, no `/spectra-archive`, no `merge-back`. Report
+no `git push`, no `/commit`, no `merge-back`; OPSX archive only if explicitly scoped. Report
 back with done/fail per the standard contract above.
 ```

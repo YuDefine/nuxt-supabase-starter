@@ -37,9 +37,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
  * `vendor/scripts/`; in a consumer the guard is `scripts/` and the library is
  * `.clade/vendor/scripts/` (the flow closure in `scripts/lib/vendor-targets.ts`).
  *
- * Unresolvable → the check is skipped, not failed. A consumer without the control-plane
- * projection cannot own a control-plane change, and failing closed there would break every
- * Spectra call in repositories that have nothing to do with this.
+ * Unresolvable → writers fail closed; classified read-only commands remain available.
  */
 const guardHere = dirname(fileURLToPath(import.meta.url))
 const controlPlaneProfilePath = [
@@ -1884,6 +1882,17 @@ function controlPlaneRepoRoot(): string {
  * `resolveTarget`, which is the first thing in the guard that walks the worktree.
  */
 function assertControlPlaneAllows(change: string, command: CommandClass): void {
+  if (
+    !controlPlane &&
+    command.kind !== 'global-read-only' &&
+    command.kind !== 'existing-read-only'
+  ) {
+    fail({
+      code: 'SPECTRA_RETIRED',
+      message: 'Spectra writers are retired; use OPSX.',
+      details: { change },
+    })
+  }
   if (!controlPlane) return
   const decision = controlPlane.decideSpectraGate({
     subcommand: controlPlaneSubcommand(command),

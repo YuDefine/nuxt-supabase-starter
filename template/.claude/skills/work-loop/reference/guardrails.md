@@ -21,38 +21,29 @@ Local edits will be reverted by the next sync.
 4. **不 force push** —— 所有 git 操作 safe，無 `--force`
 5. **動標準層 MUST 散播完畢** —— `rules/`、`plugins/hub-core/`、`CLAUDE.md`、`vendor/`。**可以改**（2026-08-05 Charles 授權），但改完 **MUST** 走 `/clade-publish` Step 1–9 把它推到 consumer，**NEVER** 改完擱著等人來散。做不到就別動它
 6. **不跨 consumer** —— loop 只操作當前 repo
-7. **不自創新 spectra change** —— 只做已登記的待辦；規模需開 change 的 → packaging 成決策題。**唯一例外見下方 § 護欄 7 的 decisions carve-out**
+7. **需求建立有來源授權** —— 每一筆 OPSX create 都依下方 § 護欄 7 的來源授權判定；未授權的新目標先 packaging，已授權需求依原身分與驗收接續。
 8. **不碰 user 的 stash** —— worktree / stash audit 只讀不寫
 9. **subagent scope verify** —— 每個 subagent 回報後 MUST 跑 `scripts/scope-verify.ts`，scope 外的實質改動 revert
 10. **Error isolation + 跨輪升級** —— 單一 item 失敗不停整個 loop；同 item `failStreak` ≥3 → Escalated，不再 dispatch。同錯重複該產出系統性修正，不是無限 retry。pi pre-scan 的 exit 4（quota）/ exit 3（機械故障）**NEVER** 記入 `failStreak` / `consecutiveDispatchFailures`——fallback 形狀見 `dispatch-topology.md` § pre-scan 的 exit code 分流
 11. **收割護欄** —— `inFlight` > 0 時**不是**停止狀態；lock 在此期間 **NEVER** 釋放。deadline 到達只進 `cancelling` / intervention，依 owner 的原生控制面取消並等待 terminal；terminal 確認前 NEVER 移除 ledger、記 fail-streak、重派或收割
 12. **每條停止路徑 MUST 跑 `work-loop-lock.ts release --session <id>`** —— 含失敗提早結束的路徑。**NEVER** 改用 Write tool 或 `rm` 直接動 `.clade/work-loop/lock`（per Step 0 § 互斥鎖 Iron Law）
 13. **Blocked / Decision item 先評估再處理** —— `applyBlocked` 走 blocker 鮮度判定、`awaitingUserDecision` 先嘗試自主解決（技術決策自決，只有商業決策才是真的 user-bound）。兩者都**不是**「永遠跳過」。見 `blocker-evaluation.md`
-14. **NEVER 因 size / progress 跳過 dispatch** —— `applyInProgress` 不管進度 0% 或 change 看起來多大，MUST dispatch；`/spectra-apply` 自管步驟粒度、phase、pause 與 blocker。「需要完整 session」「不適合 loop」= 違反本條
+14. **NEVER 因 size / progress 跳過 dispatch** —— `applyInProgress` 不管進度 0% 或 change 看起來多大，MUST dispatch；`/opsx` 依當前 instructions 管理步驟、pause 與 blocker。「需要完整 session」「不適合 loop」= 違反本條
 15. **Bucket ≠ ball ownership** —— `bucket=ready` 不等於 user-bound，`bucket=applyBlocked` 不等於 Claude 無事可做。**MUST** 在每條 change 的 bucket routing 後檢查 `issued` / `verifyClaudePendingCount` / `discussPendingCount` / `staleEvidenceCount`，任一 > 0 = 仍有工作。實證（2026-07-21 <consumer-a>）：bucket=`ready` + issued=5 → loop 宣告 user-bound + 30min idle，user 在 review-gui 等一個不會來的接手。**「所有 change 卡 user action」這句話在 `issued>0` 時就是錯誤判斷**
 16. **重複 invocation safe（三層）** —— 已 shipped 的 item 不出現在 scan；in-flight item 由 Step 2 的 claim 鮮度 filter 排除；整輪重疊由 Step 0 互斥鎖擋。**三層合起來才算 idempotent**——只靠「shipped 不再出現」不夠
 
-### 護欄 7 的 decisions carve-out（2026-08-12 Charles 拍板）
+### 護欄 7 的來源授權
 
-已 packaging 成決策題、Charles 也在 Step 2.7 (b) 答完的條目，答案本身可能就是「開 change」。
-carve-out 之前護欄 7 沒有例外 → 那條答案 unattended runner 永遠執行不了，決策原地停住。這與
-`decision-drain.md` 要修的 `awaiting` 單向累積**同型**，只是換一段管線：前者是問題端不出去，
-後者是答案回不來。
+每一筆建立或修訂需求，先判來源與範圍：
 
-**三條 predicate 全中才適用，任一不中 → 護欄 7 原文照舊**：
+| 來源證據 | 可做的事 |
+| --- | --- |
+| 使用者明確交付的對話（有 task/message reference）、已授權專案文件或指定既有 ticket，意圖與驗收明確 | 透過共同 intake／OPSX create 或 revise 建立可回讀的 source、binding 與 work；同一來源沿同一身分。 |
+| state decisions 帶 answeredAt，答案明確採納建立該需求 | 沿原 nextStep 的指定目標執行 OPSX；歷史 nextStep 用旧入口拼法時只映射到中立入口，保留原答案與來源。 |
+| 有來源但意圖或驗收不完整 | 留可見 intake 補件；先調查，仍需產品取捨時 packaging。 |
+| 沒有授權來源的新目標，或要擴張已授權範圍 | 先 packaging 取得具體裁決。 |
 
-1. 該 item 在 state `decisions` 有 entry 且帶 `answeredAt`
-2. 該 item 原 `awaiting[]` 條目的 `nextStep` 逐字寫出 `/spectra-propose <name>`，且
-   `decisions[<id>].answer` 指向的正是那個選項
-3. change 名稱**逐字取自**該 `nextStep`
-
-**NEVER**：
-
-- ❌ 對沒有 `decisions` entry 的 item 開 change —— 那是自創，護欄 7 原文照舊
-- ❌ 自己另取 change 名稱 —— 名稱不在 `nextStep` 裡，就代表這條沒有被拍板過
-- ❌ 把本 carve-out 外推到「開 change」以外的任何動作
-- ❌ 由 loop 自行擴充或再放寬本 carve-out —— 它放寬的是約束 agent 自身行為的門檻，命中
-  `autonomy-predicate.md` predicate 7，MUST 由 Charles 拍板
+**NEVER** 用相似標題合併來源、把歷史 park 視為完成、或以需求收錄授權推導對外建頁／留言／通知。自動啟動仍須通過專案開關、訂閱來源與唯一 owner gate；來源觀測不受自動開關影響。
 
 ---
 

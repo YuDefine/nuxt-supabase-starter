@@ -125,7 +125,7 @@ Fable 顧問檢討成長結構，**NEVER** 自行再壓一次。
 | 重複條目（同一事在 HANDOFF / tech-debt / ROADMAP 都有） | 留最該的位置，其他刪 |
 | 寫法違反當前專案規則（如 clade 自治區內 `consumer 自治區工作` violation） | 依規則重寫或刪除 |
 | 仍 valid 的稽核 baseline 表 / outstanding follow-up | 保留 |
-| `## Deferred discuss items` 段（含 `<!-- deferred-begin:...:... -->` markers） | **保留、禁動**：由 `/spectra-archive` Resume mode 獨自 maintain（依 marker 增刪 entry），`/handoff` 不可改寫、reorder、合併或刪除任何 entry |
+| `## Deferred discuss items` 段（含 `<!-- deferred-begin:...:... -->` markers） | **保留、禁動**：歷史來源待 OPSX 接續映射；處置由對應需求 owner 執行，`/handoff` 不可改寫、reorder、合併或刪除任何 entry |
 
 **MUST** 載入 `.cursor/rules/local/*.md` 內所有自治區規則。若有 `clade-role-and-todo-discipline.md` 之類 local rule 限定 HANDOFF 寫法，整理時必須遵守。
 
@@ -193,7 +193,7 @@ _Updated: <YYYY-MM-DD> /hub-core:handoff next — clade <version> scan_
 - `<changeKey>` | bucket=`<bucket>` | pending=N/total | userActionPending=K
   - bucket meaning hint：
     - `feedbackGiven` → 有 verify pending / issued feedback，需 agent 處理 evidence
-    - `awaitArchiveWalkthrough` → 純 `[discuss]` 待 `/spectra-archive` Step 2.5 walkthrough
+    - `awaitArchiveWalkthrough` → 仍缺討論／驗收證據，待 `/opsx` 依目前 instructions 補齊
     - `readyForEvidence` → apply 已完成但 evidence missing
     - `applyInProgress` → impl 未達 APPLY_COMPLETE_THRESHOLD
     - `applyBlocked` → impl 卡 `@apply-blocked` 外部 blocker（master 統計排除，但 **MUST 走 §2B.2.5 主動 triage**，不可 silently drop）

@@ -23,7 +23,7 @@ Local edits will be reverted by the next sync.
 
 | 來源 | 何時落地 | 怎麼 commit |
 | --- | --- | --- |
-| spectra change | `/spectra-archive` Step 0 merge-back 之後 | invoke `/commit` |
+| OPSX 需求 | 當前驗收／archive gate 通過後，依 checkout workflow 合回 | invoke `/commit` |
 | 非 spectra / Form-1 | harvest 後 `wt-helper merge-back <slug>` | invoke `/commit` |
 
 **NEVER** 用 `git commit --only` 把 source / migration / plugin 送上 main。`--only` 只給 [[commit.detail]] 白名單。卡 `/commit` 人工檢查 → packaging，**NEVER** `--only` 繞 0-A。

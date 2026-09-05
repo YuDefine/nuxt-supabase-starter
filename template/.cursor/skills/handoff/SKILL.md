@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Session 交接管理，四個 arg 全部以本 session 收工結束。Use when user types /handoff、/handoff park、/handoff relay、/handoff fanout、/handoff next，要把進度交給下一個 session、要一次把多件可平行的工作各派一個 pane，或本 session context 撐不住需要換人接手。NOT for 單純 commit 收尾（走 /commit），NOT for 歸檔已完成的 spectra change（走 /spectra-archive）。
+description: Session 交接管理，四個 arg 全部以本 session 收工結束。Use when user types /handoff、/handoff park、/handoff relay、/handoff fanout、/handoff next，要把進度交給下一個 session、要一次把多件可平行的工作各派一個 pane，或本 session context 撐不住需要換人接手。NOT for 單純 commit 收尾（走 /commit），NOT for 歸檔已完成的需求 change（走 /opsx）。
 license: MIT
 metadata:
   author: clade
@@ -206,7 +206,7 @@ fi
    | 被 blocker 卡住（缺權限 / 缺決策 / 等外部） | `HANDOFF.md` `## Blocked` |
    | 等待外部 signal（合約 / ramp 日期 / 第三方 API ready） | `docs/tech-debt.md` 建 `TD-NNN` |
    | 未來才做、可排優先序 | `openspec/ROADMAP.md` `## Next Moves` |
-   | 規模膨脹（要動 spec / design review / 跨多檔） | 新 spectra change（先 `/spectra-propose`） |
+   | 規模膨脹（要動 spec / design review / 跨多檔） | OPSX 需求（沿已授權來源建立或修訂；新增範圍先拍板） |
    | 純放棄 | 直接刪 |
 
 3. **寫入**：依分類 Edit / Write 對應檔案，path **MUST** 用 Step 1.5 解析出的 `$MAIN_WT_PATH/<rel>` 絕對路徑（即使當前 cwd 在 linked worktree）。格式與落點判準走下方 § HANDOFF 寫回契約（三條，寫入前逐條過）。HANDOFF.md `## In Progress` 條目 MUST 含：
@@ -215,7 +215,7 @@ fi
    - 主要檔案路徑（讓接手者直接跳）
    - 目前做到哪裡 / 還剩什麼
    - 已踩過的坑（避免下一 session 重踩）
-   - **若來自 [[worktree-default]] §8 死鎖**：額外加 Stop hook 攔點摘要、missing acceptance criterion、改過檔案的 selective stash ref（若有，例 `stash@{0}: <slug>-handoff`）、下一 session 接手指引（直接從 main 跑 `/<next-skill> <change-name>`，apply / ingest / debug 內建 worktree dispatch；若是 archive，直接從 main 跑 `/spectra-archive <change-name>`）
+   - **若來自 [[worktree-default]] §8 死鎖**：額外加 Stop hook 攔點摘要、missing acceptance criterion、改過檔案的 selective stash ref（若有，例 `stash@{0}: <slug>-handoff`）、下一 session 接手指引（沿明確 change/work/revision 接續 `/opsx`；實作先隔離 worktree，歸檔先驗當前 evidence 與人的 gate）
 3b. **spine 收尾（ambient `CLADE_WORK_ID` 非空時 MUST，空則整步跳過）**：park 是 attended session
    做完事情之後最常見的收尾點，所以「這件事完成了沒」這一問在這裡有答案，別處沒有。二擇一，
    依**步驟 1 盤點出的未完項是否還有要交接的殘工**判：
@@ -426,8 +426,8 @@ https://review-gui.<maintainer-domain>/review/<consumer-id>:<change-name>
 
 對每條 `applyBlocked` / `awaitingUserDecision` change **MUST** 做三件事：
 
-1. **抽 blocker 原因**：Read 該 change 的 `tasks.md`，grep `@apply-blocked[<reason>]` / `(awaiting-user-decision:<reason>)`，逐條列出**每個** blocked phase 的具體 reason（不是一句「blocked」帶過）。**MUST** 到 change 目錄實抽，**NEVER** 從 bucket 名或 HANDOFF 既有 narrative 推測原因。
-2. **辨識 startable 子集**（最關鍵）：一條 change 落 `applyBlocked` bucket 只代表它**含**至少一個 `@apply-blocked` phase，**不代表整條無事可做**。**MUST** 判斷 tasks.md 是否有**未 blocked、可現在開工的 phase / task**（典型：上游條件已解封但整條仍被 blocked marker 拖著）。有 startable 子集 → 依 [[goal-mode]] 規約**提供 dispatch 選項**（`/wt /spectra-apply <change>` 只做 unblocked phases），**NEVER** 因整條標 applyBlocked 就當 user-bound 擱置。
+1. **抽 blocker 原因**：OPSX 以 inspect／instructions 讀當前 work 與 revision 的具體 blocker；legacy 由中立 history 讀原件並保留來源關係。逐條列出每一個原因，**NEVER** 從 bucket 名或 HANDOFF 既有 narrative 推測。
+2. **辨識 startable 子集**（最關鍵）：一條 change 落 `applyBlocked` bucket 只代表它**含**至少一個 `@apply-blocked` phase，**不代表整條無事可做**。**MUST** 由當前 instructions 判斷是否有**未 blocked、可現在開工的 work**（典型：上游條件已解封但整條仍被 blocked marker 拖著）。有 startable 子集 → 依 [[goal-mode]] 規約**提供 dispatch 選項**（`/wt <slug>: /opsx <change-id>` 只做 unblocked phases），**NEVER** 因整條標 applyBlocked 就當 user-bound 擱置。
 3. **端出具體 user 決策**：把 blocker reason 中**真正需 user / owner 拍板**的具體題目（例：「work-order grain 二選一：`receiving_scans+process_tracking` vs `work_reports`」）逐條列進 outstanding，讓 user 當場能答，**NEVER** 只寫「等 owner 拍板」這種無法行動的模糊句。同時分辨哪些 blocker 是**外部依賴**（等 A 端 contract / 等別 change 先完成）— 這類才真的擱置，但仍 **MUST** 明列在等什麼。
 
 triage 結果併入 §2B.2 outstanding 清單（與 HANDOFF / tech-debt / ROADMAP 來源並列），進 §2B.3 serial/parallel 評估、§2B.4 推薦。
@@ -436,12 +436,12 @@ triage 結果併入 §2B.2 outstanding 清單（與 HANDOFF / tech-debt / ROADMA
 
 | blocker 類型 | 判定 | outstanding 處置 |
 | --- | --- | --- |
-| **有 startable 子集** | tasks.md 有未 blocked phase 可現在做 | 列 outstanding + 提供 `/wt /spectra-apply` dispatch 選項（只做 unblocked phases） |
+| **有 startable 子集** | 目前 instructions 有未 blocked work 可現在做 | 列 outstanding + 提供 `/wt <slug>: /opsx <change-id>` dispatch 選項（只做 unblocked phases） |
 | **需 user/owner 內部決策** | `@apply-blocked[需 owner 拍板: X]` 類 | 列 outstanding + **端出具體決策題**讓 user 當場答 |
 | **等外部依賴** | 等 A 端 contract / 等別 change 先完成 | 列 outstanding + 明列**在等什麼 signal**（對齊 [[goal-mode]] `@apply-blocked` 僅限真外部 blocker） |
 
 **NEVER**：
-- ❌ scan 抓到 applyBlocked change 卻不 Read 其 tasks.md 抽 blocker 原因
+- ❌ scan 抓到 applyBlocked change 卻不讀當前 instructions／歷史原件抽 blocker 原因
 - ❌ 把「含 blocked phase」等同「整條無 startable 工作」→ 漏掉可現在 dispatch 的子集
 - ❌ 只寫「等 owner 拍板 / 卡外部」而不端出**具體**決策題或**具體**等待 signal
 - ❌ 因 master 統計排除就把這兩類 bucket 從 outstanding / AskUserQuestion 選項中省略
@@ -522,7 +522,7 @@ cleanup —— `userWip > 0` 時 kind 要降級，而 `cleanup` 對未 commit �
 
 摘要：每條 `mergedToMain: false` 的 wt 由 `blockers` / `uncommitted` / `baselineRef` 三
 signal 推出 `landable` / `ptb-recoverable` / `ptb-unsafe` / `unclassified`；`ptb-unsafe`
-禁止 dispatch /spectra-archive，走 § 2B.4.5 分流。stash 對 `raw.stashes[*]` **每一筆**都
+禁止 dispatch OPSX archive，走 § 2B.4.5 分流。stash 對 `raw.stashes[*]` **每一筆**都
 要寫入，不過濾 archived-only 或 stale>7d。
 
 ### 3.3 寫入 HANDOFF.md
@@ -566,7 +566,6 @@ _Updated: <YYYY-MM-DD>_
 ## 與其他 skill 的銜接
 
 - `/commit` — park 升級 spectra change WIP 時，commit 走此 skill 的 selective stage（`/spectra-commit` 已停用，見 [[proactive-skills]] § Sub-skill 禁用清單）
-- `/spectra-propose` — park「規模膨脹」分類升級時，後續開新 change 入口
-- `/spectra-apply` — next `AskUserQuestion` user 選定起手 active change 後的執行入口
+- `/opsx` — 已授權需求建立／修訂、實作與驗證接續；brief 保留明確 change/work/revision
 - `/oops` — next 2B.0 sweep missed lessons 時的 dispatch 目標（pitfall / memory / lessons.md 三層分流；from `hub-maintenance-full` plugin，不在 starter consumer 內安裝）
 - `subagent-dev` — next `AskUserQuestion` user 選 parallel 後，subagent fan-out 由此 skill 執行

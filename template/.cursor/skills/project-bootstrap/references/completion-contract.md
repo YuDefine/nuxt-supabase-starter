@@ -19,6 +19,12 @@
 | Gate playbook pack | `docs/playbooks/README.md` 含 `## Browser 分流`；`PROGRESS.md` + `GATE-TODOS.md` + 01–05 都在；`HANDOFF.md` 有 `## User-gate board` | 缺任一檔或 heading → 跑 `mint-gate-playbooks.ts`（缺才寫）。沒有這包不算 bootstrap 完成 |
 | Impeccable follow-up（僅 UI／有前端） | `references/impeccable-follow-up.md` 逐 id；`inspect-new-project-round.ts` 的 `designPending` | scaffold 後 **agent 自己**載入追問契約、缺項問完並寫檔，或有書面 N/A。`designPending` 非空 → **不准** `READY`。只說「記得裝 impeccable」或叫人稍後打 slash command 都不算過 |
 
+## 需求交付證據
+
+- 所有新產出的 AI target 指引、package scripts、OpenSpec 設定與 CLI 預設一致指向 OPSX；target 實跑 help/list 成功，舊 writer 拒絕且未寫入。
+- 任務包含首件需求時，提交 source/change/work/revision、驗證 policy 與真實 evidence、archive 回讀、commit／deploy track。沒有部署的 track 明示未部署。
+- <consumer-e> 重建演練另附 playground 外的來源版本／建案答案／證據索引，覆蓋選擇性 BDD、普通測試、修訂失效與重驗；單次 scaffold 或 readiness 不計為完整交付。
+
 ## Failure handling
 
 - `init-consumer` 找不到：先驗 `$CLADE_HOME/scripts/init-consumer.ts`，不猜 `.mjs` 舊路徑。

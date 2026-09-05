@@ -20,7 +20,7 @@ stash audit 的寫入欄位。**`park` / `next` 都會走到 Step 3**，本檔�
 | --- | --- | --- |
 | `blockers == 0` + `uncommitted == 0` | `landable` | safe to merge-back |
 | `blockers > 0` 或 `uncommitted > 0`，且 `baselineRef` 存在 | `ptb-recoverable` | merge-back / rescue path 都 OK（pinned ref 是救援保險絲） |
-| `blockers > 0` 或 `uncommitted ≥ 100`，且 `baselineRef` 不存在 | `ptb-unsafe` | **禁止 dispatch /spectra-archive**；走 Step 2B.4.5 PTB-unsafe 快速分流 |
+| `blockers > 0` 或 `uncommitted ≥ 100`，且 `baselineRef` 不存在 | `ptb-unsafe` | **禁止 dispatch OPSX archive**；走 Step 2B.4.5 PTB-unsafe 快速分流 |
 | 表未覆蓋區（`blockers == 0`、`uncommitted` 1–99、無 `baselineRef`） | `unclassified`（check 標 `n/a` needs-judgment） | LLM 看 `raw.worktrees[]` 的 signal 自行判讀（小量 WIP 通常先 commit 進 wt 再 merge-back） |
 
 #### 3.1b Kind 判定表（與 mergeBackSafety 正交）

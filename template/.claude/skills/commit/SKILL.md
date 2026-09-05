@@ -247,18 +247,28 @@ git diff --stat                 # 僅輔助看 tracked 改動規模；NEVER 當�
 - **parked change 的 deletion 一律排除，不進任何 group**：
 
   ```bash
-  PARKED=$(pnpm exec spectra list --parked --json 2>/dev/null \
-    | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' | sort -u)
+  OPSX_CLI="scripts/opsx-legacy-store.ts"
+  [ -f vendor/scripts/opsx-legacy-store.ts ] && OPSX_CLI="vendor/scripts/opsx-legacy-store.ts"
+  OPSX_LIST=$(node "$OPSX_CLI" --repo-root "$PWD") || exit 1
+  PARKED=$(printf '%s' "$OPSX_LIST" | node -e '
+    let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+      const store=JSON.parse(s);
+      if(!store || !["available","missing"].includes(store.status)){
+        console.error("Legacy inventory incomplete: "+(store?.status??"unknown"));process.exit(1);
+      }
+      console.log(store.parked.map(x=>x.change_id).sort().join("\n"));
+    });
+  ') || exit 1
   # 分組時對每個 parked <name>，跳過所有 `openspec/changes/<name>/` 底下的 D 條目
   ```
 
   `spectra park` 把 artifacts 從 disk 移進 `.git/spectra-app/spectra.db` blob，所以整批檔案會顯示成
   deletion。那些檔**已經在 git 裡**（propose 收尾先 commit 才 park），把 deletion commit 出去等於
-  把剛落庫的 artifacts 從版本庫移除。`/spectra-apply` 會自行 unpark 還原它們。
+  把剛落庫的 artifacts 從版本庫移除。接續由 `/opsx` 讀取原件並建立承接關係，原始暫存資料維持唯讀。
 
   **NEVER** 把 parked change 的 deletion 當成「使用者刪掉了不要的檔」納入 group；**NEVER** 拿
   「全部變更都要入庫」當理由收它們 —— 那條規則的目的是不遺漏 user WIP，而這批不是 WIP，是
-  工具的暫存搬移。判別方式是機械的：名字在 `spectra list --parked` 裡就是。
+  工具的暫存搬移。判別方式是機械的：ID 在中立 reader 的 `legacy_store.parked` 裡就是。
 
 ## Step 4: 逐一執行 Commit
 

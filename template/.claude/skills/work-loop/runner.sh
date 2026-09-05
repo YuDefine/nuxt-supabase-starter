@@ -67,26 +67,19 @@ STOP_FILE="$REPO/.clade/work-loop/stop"
 # NEVER 改成在 runner 頂層 export FORCE_COLOR=0：那會一併關掉 child `claude --print` 的顏色。
 NODE_PLAIN="env FORCE_COLOR=0 NO_COLOR=1 node"
 
-# ── headless child 的發起點路由 ──────────────────────────────────────────────
-# child 跟起 runner 的那條入口走同一條帳號，不是永遠剝成官方 CC。
+# ── headless child 的帳號入口 ────────────────────────────────────────────────
+# 每一個 preflight / round 都交給 claude-account-routing.ts 機械選 cc 或 ccw；
+# runner 不把兩個帳號當成一個池，也不沿用 gateway / Pi / API-key launcher。
+# 起源若是 ccg、ccagy 或 ccx，直接 fail-closed，不產生新的 child。
 #
-#   cc  / ccw → 官方 CC（剝 gateway 變數，與 ~/.zshrc 的 cc / ccw wrapper 對齊）
-#   ccg / ccagy → claudeg / claudeagy（wrapper 會釘 --model ccg-opus / ccagy-opus）
-#   ccx → 已退役，fail-closed；NEVER 產生新的 claudex child
-#
-# 2026-08-19 曾一律剝成官方 CC：當時 child 繼承 CCG env 卻呼叫裸 `claude --print`
-# （沒有 --model ccg-opus），gateway 把預設 opus 路由到 Codex channel 的 `claude-opus-5`，
-# 429 被 preflight 報成「權限閘門拒絕」。真因是 launcher 不對，不是「CCG 起源不該走 gateway」。
-# 2026-08-20 從 CCG 起 runner、剝成官方 CC 後撞 `You've hit your session limit · resets 5am`：
-# 官方額度與 gateway 額度不是同一池。修法是「起源是 ccg 就用 claudeg」，不是永遠剝掉。
-#
-# NEVER 改用 `env -i`：child 需要 HOME / PATH / TERM / CLAUDE_CONFIG_DIR。
-# NEVER 對 ccg/ccagy 起源改回裸 `claude --print` 還留著 gateway env —— 那就是 08-19 的 429。
-# NEVER 拿 `--skip-preflight` 當本問題的修法。
+# NEVER 改用 `env -i`：child 需要 HOME / PATH / TERM。
+# NEVER 把 task 的 model / effort 偷換成帳號路由；安全清理與選槽在共同 adapter 完成。
 CHILD_ENV=(
   env
+  -u ANTHROPIC_API_KEY
   -u ANTHROPIC_BASE_URL
   -u ANTHROPIC_AUTH_TOKEN
+  -u ANTHROPIC_API_URL
   -u ANTHROPIC_DEFAULT_OPUS_MODEL
   -u ANTHROPIC_DEFAULT_SONNET_MODEL
   -u ANTHROPIC_DEFAULT_HAIKU_MODEL
@@ -100,10 +93,10 @@ CHILD_ENV=(
 )
 
 detect_origin_launcher() {
-  case "${ANTHROPIC_DEFAULT_OPUS_MODEL:-}" in
-    ccagy-*) echo ccagy; return ;;
-    ccg-*) echo ccg; return ;;
-    ccx-*) echo ccx; return ;;
+  case "${ANTHROPIC_DEFAULT_OPUS_MODEL:-}:${ANTHROPIC_DEFAULT_SONNET_MODEL:-}:${ANTHROPIC_DEFAULT_HAIKU_MODEL:-}" in
+    *ccagy-*) echo ccagy; return ;;
+    *ccg-*) echo ccg; return ;;
+    *ccx-*) echo ccx; return ;;
   esac
   if [ "${CLAUDE_CONFIG_DIR:-}" = "$HOME/.claude-work" ]; then
     echo ccw
@@ -113,16 +106,20 @@ detect_origin_launcher() {
 }
 
 ORIGIN="$(detect_origin_launcher)"
-if [ "$ORIGIN" = "ccx" ]; then
-  printf '%s\n' \
-    'ERROR: ccx is retired; work-loop will not create a new claudex child.' \
-    'Run GPT/Codex work through the Pi dispatcher (`cx` runtime), or start the loop from cc/ccw when Claude Code is required.' >&2
-  exit 2
-fi
 case "$ORIGIN" in
-  ccg) CHILD_BIN="$HOME/.local/bin/claudeg" ;;
-  ccagy) CHILD_BIN="$HOME/.local/bin/claudeagy" ;;
-  *)   CHILD_BIN="claude" ;;
+  cc|ccw) CHILD_BIN="claude" ;;
+  ccx)
+    printf '%s\n' \
+      'ERROR: ccx is retired; work-loop will not create a new child.' \
+      'Run GPT/Codex work through the Pi dispatcher (`cx` runtime), or start the loop from cc/ccw when Claude Code is required.' >&2
+    exit 2
+    ;;
+  *)
+    printf '%s\n' \
+      "ERROR: Subscription-only: unsupported Claude launcher origin $ORIGIN; use cc or ccw." \
+      'Gateway launchers are not valid Claude subscription slots.' >&2
+    exit 3
+    ;;
 esac
 QUARANTINE_FILE="$REPO/.clade/work-loop/orphan-quarantine.json"
 LOCK_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-lock.ts"
@@ -451,6 +448,24 @@ preflight_fail() {
   exit 3
 }
 
+# Source checkout runs its own helper; a consumer runs the explicitly projected helper. Never
+# silently fall back to a central checkout when the consumer projection is missing.
+UNATTENDED_HELPER=""
+select_unattended_helper() {
+  local projected="$REPO/.clade/vendor/scripts/flow/project-unattended.ts"
+  local source="$REPO/vendor/scripts/flow/project-unattended.ts"
+  if [ -f "$projected" ]; then
+    UNATTENDED_HELPER="$projected"
+  elif [ -f "$source" ]; then
+    UNATTENDED_HELPER="$source"
+  elif [ "$DRY_RUN" = 1 ]; then
+    UNATTENDED_HELPER="$projected"
+  else
+    echo "error: project-unattended helper is missing from consumer projection and source checkout" >&2
+    exit 3
+  fi
+}
+
 # GNU `timeout` 在 macOS 預設不存在。探針必須有上限，否則權限對話卡住會讓 runner 永遠停在 preflight。
 # 沒有 GNU/BSD timeout 時用 perl fork + alarm（exec 會清掉 alarm，所以不能 perl -e 'alarm; exec'）。
 with_timeout() {
@@ -492,7 +507,7 @@ preflight_headless_probe() {
     || preflight_fail "無法產生 headless proof nonce"
   proof_file="$REPO/.clade/work-loop/preflight-proof-$nonce"
   rm -f "$proof_file"
-  out="$(cd "$REPO" && with_timeout 300 "${CHILD_ENV[@]}" WORK_LOOP_RUNNER_CHILD=1 WORK_LOOP_SCAN_PREFLIGHT_NONCE="$nonce" "$CHILD_BIN" --print \
+  out="$(cd "$REPO" && with_timeout 300 node "$UNATTENDED_HELPER" "$REPO" "${CHILD_ENV[@]}" WORK_LOOP_RUNNER_CHILD=1 WORK_LOOP_SCAN_PREFLIGHT_NONCE="$nonce" "$CHILD_BIN" --print \
     --allowedTools "$SCAN_PREFLIGHT_RULE" --permission-mode "$PERM_MODE" \
     "Run exactly this command with the Bash tool: $SCAN_PREFLIGHT_CMD
 Do not claim success unless the command completed. No other tool calls." 2>&1)"
@@ -508,11 +523,7 @@ Do not claim success unless the command completed. No other tool calls." 2>&1)"
 }
 
 run_preflight() {
-  if [ "$ORIGIN" = ccg ] || [ "$ORIGIN" = ccagy ]; then
-    [ -x "$CHILD_BIN" ] || preflight_fail "起源是 $ORIGIN 但找不到可執行的 $CHILD_BIN"
-  else
-    command -v claude >/dev/null 2>&1 || preflight_fail "PATH 上找不到 claude"
-  fi
+  command -v claude >/dev/null 2>&1 || preflight_fail "PATH 上找不到 claude"
   command -v node >/dev/null 2>&1 || preflight_fail "PATH 上找不到 node"
 
   local probe="$REPO/.clade/work-loop/.preflight-probe"
@@ -612,6 +623,7 @@ if ! guard_runner_quarantine startup; then
 fi
 
 run_lock_gate
+select_unattended_helper
 
 if [ "$DRY_RUN" = 1 ] || [ "$SKIP_PREFLIGHT" = 1 ]; then
   echo "preflight 略過（$([ "$DRY_RUN" = 1 ] && echo --dry-run || echo --skip-preflight)）"
@@ -671,13 +683,15 @@ for i in $(seq 1 "$MAX_ROUNDS"); do
   cmd=("${CHILD_ENV[@]}" WORK_LOOP_RUNNER_CHILD=1 "WORK_LOOP_MIN_WAKEUP_SECONDS=$MIN_WAKEUP" CLADE_DISPATCH_ORIGIN=work-loop "CLADE_DISPATCH_ORIGIN_ID=$origin_id" "$CHILD_BIN" --print --add-dir "$WT_PARENT" --allowedTools "$CHILD_ALLOWED_TOOLS" --permission-mode "$PERM_MODE" "/work-loop --unattended --runner-child --linked-dispatch-mode foreground --min-wakeup-seconds $MIN_WAKEUP --scan-helper-command '$SCAN_HELPER_CMD'")
 
   if [ "$DRY_RUN" = 1 ]; then
-    echo "[dry-run] round $(next_round_label "$before"): ${cmd[*]}"
+    printf '[dry-run] round %s:' "$(next_round_label "$before")"
+    printf ' %q' node "$UNATTENDED_HELPER" "$REPO" "${cmd[@]}"
+    printf '\n'
     continue
   fi
 
   echo "== round $(next_round_label "$before") 起跑 ($ts_human) → $log"
   round_started_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  ( cd "$REPO" && "${cmd[@]}" ) >"$log" 2>&1
+  ( cd "$REPO" && node "$UNATTENDED_HELPER" "$REPO" "${cmd[@]}" ) >"$log" 2>&1
   rc=$?
 
   after="$(round_of)"

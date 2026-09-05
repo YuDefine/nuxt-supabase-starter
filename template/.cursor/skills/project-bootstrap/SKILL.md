@@ -207,6 +207,14 @@ cd <target-path> && pnpm check
 
 `adopt` mode 沒有 `verify:starter` 時以 consumer meta 的 lint/typecheck/test/build commands 替代，逐一記證據。
 
+### 新專案需求入口
+
+每個新產出在所選 AI targets 的指引與可執行投影中都採用 `/opsx`。以 target 的 `.clade/vendor/scripts/opsx-control.ts --help`／list 核對完整入口與歷史讀取；舊 writer 只能回退役錯誤且零寫入。預設指引、package scripts 與 OpenSpec 設定須一致，不能只驗 skill 目錄存在。
+
+使用者任務包含首件需求時，沿同一 source/change/work 完成 create → instructions/materialize → 風險選擇的測試／BDD → evidence/project → archive，另附真實 commit 與 deploy track 狀態。readiness READY 只結案建案檢查，不代替這條需求的交付證據。
+
+<consumer-e> playground 的本輪驗證資料保存於 playground 外，再以正式 rescaffold 路徑重建。驗一件需 BDD 的行為、一件普通測試即可的低風險行為，以及明示修訂造成舊證據失效、重驗後才能 archive；修正一律回 clade／starter，再用相同答案重新產生驗證。
+
 ## 7. Land 與 publish
 
 先提交 target repo 的 scaffold/onboarding commit，再提交 Clade registry/skill source。Clade worktree merge-back 後呼叫 `/clade-publish` 完成 publish + propagate；禁止在 worktree 內 publish。

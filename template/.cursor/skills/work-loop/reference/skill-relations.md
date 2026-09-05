@@ -31,8 +31,7 @@ cd ~/offline/<consumer> && \
 | handoff-scan.ts | Step 2 + Step 5 re-scan 的唯一狀態來源；輸出固定落 `.clade/work-loop/scan-latest.json`（覆蓋前 rotate 一份 `scan-prev.json`） |
 | work-loop-summary.ts | 把上面那份 scan 壓成十餘行摘要（只列非 pass 的 check）。**要回頭看 scan 就讀它，NEVER 重跑 scan** |
 | work-loop-state-write.ts | Step 7.3 落 state 的唯一寫入路徑（patch 淺層合併 + 原子換檔 + round 不得倒退）。**NEVER** 每輪自己生成一支 write-state script |
-| /spectra-apply | spectra source 的 `feedbackGiven` / `readyForEvidence` / `applyInProgress` dispatch（透過 /wt） |
-| /spectra-archive | `done` / `awaitArchiveWalkthrough` / `ready(0)` dispatch（直接，免 worktree） |
+| /opsx | 需求接續、revision-aware evidence 與 archive；條件依 SKILL.md § 3.1a |
 | /wt | worktree 建立 + dispatch subagent |
 | /handoff | 不直接調用（本 skill 自動化 handoff `next` 的「盤點 → 推薦 → 執行」，unattended 下把 AskUserQuestion 換成 packaging） |
 | **/goal** | **attended 版姊妹**：user 在場、要逐項拍板 dispatch 優先序（見 [[goal-mode]]）。想逐項拍板 → 用 /goal 不用本 skill |
@@ -40,8 +39,7 @@ cd ~/offline/<consumer> && \
 
 ## 不做
 
-- ❌ 自動建 spectra change（`/spectra-propose`）— 創建工作是 user 的職責。規模需開 change 的
-  待辦 → packaging 成決策題，內容註明建議 propose
+- ❌ 建立未授權的新目標；每筆需求依 [guardrails.md](guardrails.md) § 護欄 7 的來源授權判定。
 - ❌ Cross-consumer 編排 — per-consumer 各自一個 loop
 - ❌ 不可逆動作 — prod 部署 / 刪 branch / tag / 遠端資料 / 花錢的 API / 任何 `--force`
   （publish 與 propagate **不在**此列，見 [guardrails.md](guardrails.md) 護欄 19）

@@ -63,25 +63,17 @@ token 或路徑）僅供診斷，不是 proof；只用 `[ -f ]` 看檔案存在�
 
 探針誤判過嚴時走 `--skip-preflight`（`--dry-run` 自動略過 preflight 與待辦源健康門檻），**NEVER** 靠拿掉探針本身解決。`--skip-preflight` **不**略過互斥鎖門檻——鎖被持有不是探針誤判；`--dry-run` 略過互斥鎖門檻（只印指令，不該拒絕）。
 
-### headless child 跟發起點走同一條帳號
+### headless child 使用官方訂閱帳號
 
-preflight 探針與每輪 child 的 **launcher 跟起 runner 的入口對齊**：
+preflight 與每輪 child 都經 `project-unattended.ts` 檢查專案授權、需求版本及執行持有者，再由
+`claude-account-routing.ts` 驗證官方訂閱登入與最新 quota 快照，在 `cc`／`ccw` 間選擇可用帳號。
+`ccg`、`ccagy`、`ccx` 入口已退役，會拒絕起跑；GPT／Codex 工作經 Pi dispatcher。
 
-| 發起點 | child 呼叫 | 帳號 |
-| --- | --- | --- |
-| `cc` | 剝 gateway 變數後 `claude --print` | 官方個人（`~/.claude`） |
-| `ccw` | 同上，`CLAUDE_CONFIG_DIR=~/.claude-work` | 官方工作 |
-| `ccg` | `claudeg --print`（釘 `--model ccg-opus`） | gateway / Grok |
-| `ccx` | **拒絕起跑**；不建立 `claudex` child | retired；GPT／Codex 工作走 Pi dispatcher |
-| `ccagy` | `claudeagy --print`（釘 `--model ccagy-opus`） | gateway / Antigravity |
+第一次起跑需在 `/overview` 開啟該專案的自動開發，並確保 consumer 已接收 flow 投影、位於
+`consumers.local`、官方帳號已登入且 <consumer-f> 快照仍有效。缺少前置時錯誤會指出原因；
+`--skip-preflight` 只略過 headless 工具探針，不略過訂閱、版本或專案授權。
+`--dry-run` 只印完整控制入口與 child 指令，不要求 consumer 已安裝 helper。
 
-判定看 `ANTHROPIC_DEFAULT_OPUS_MODEL` 是否 `ccagy-*` / `ccg-*` / `ccx-*`，再看 `CLAUDE_CONFIG_DIR` 是否
-`~/.claude-work`，其餘當 `cc`。命中 `ccx-*` 只用來 fail-closed，NEVER fallback 到裸 `claude` 或建立新 ccx child。**NEVER** 從 CCG pane 起 runner 卻剝成官方 CC —— 兩池額度
-不是同一個，2026-08-20 實測剝完撞 `You've hit your session limit · resets 5am`，gateway 還有額度。
-
-2026-08-19 的 gateway 429（`claude-opus-5` cooling down）是「繼承 CCG env 卻呼叫裸
-`claude --print`、沒釘 `ccg-opus`」，gateway 把預設 opus 送到 Codex channel。修法是換 launcher
-為 `claudeg`，**不是**永遠剝掉。這種 preflight 失敗 **NEVER** 用 `--skip-preflight` 繞。
 ready-count helper 與 lock helper 缺席或輸出無法解析時**放行**：門檻是省成本的優化，NEVER 讓它變成起不了
 runner 的新故障。
 

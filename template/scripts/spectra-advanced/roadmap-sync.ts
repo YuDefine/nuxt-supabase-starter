@@ -13,10 +13,10 @@
  *     task completion % and the specs each change touches
  *   - "Parallel Tracks" — spec-collision analysis: independent (safe to run
  *     in parallel) / mutex (same spec touched) / blocked (explicit depends)
- *   - "Parked Changes" — sourced from `spectra list --parked --json`. Parked
- *     changes have their working directory removed but metadata persists in
- *     `.spectra/spectra.db`; this section keeps them visible so they don't
- *     fall off the roadmap until explicitly unparked or archived.
+ *   - "Parked Changes" — sourced from the read-only neutral legacy store.
+ *     Parked changes have their working directory removed but metadata persists
+ *     in the historical SQLite store; this section keeps them visible so they
+ *     don't fall off the roadmap until explicitly superseded or archived.
  *
  * What stays manual:
  *   - "Next Moves" — future intent captured during the spectra-discuss /
@@ -52,11 +52,18 @@
  * See docs/rules/ux-completeness.md and docs/ROADMAP.md for the workflow.
  */
 
-import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { collectClaims, type ClaimView } from './claims-lib.ts'
+import { readLegacyStore } from '../opsx-legacy-store.ts'
 
 // ---------------- constants ----------------
 
@@ -147,7 +154,7 @@ interface SyncReport {
   claims: ClaimView[]
   parallelism: ParallelismReport
   parked: ParkedChange[]
-  parkedSource: 'cli' | 'unavailable' | 'cli-error'
+  parkedSource: 'legacy' | 'missing' | 'unsupported' | 'corrupt'
   manualDrift: ManualDrift[]
   roadmapPath: string
   wrote: boolean
@@ -506,70 +513,31 @@ function analyzeParallelism(changes: ChangeInfo[]): ParallelismReport {
 
 // ---------------- parked changes ----------------
 
-interface ParkedRaw {
-  name: string
-  completedTasks?: number
-  totalTasks?: number
-  summary?: string
-}
-
 /**
- * Fetch the parked-change list via `spectra list --parked --json`. Parked
- * changes don't live on disk under openspec/changes/, so we can't scan them
- * the same way as active ones — the CLI is the authoritative source.
- *
- * Returns `{ parked: [], source: 'unavailable' }` when the spectra CLI isn't
- * on PATH or the call fails. We never crash the sync — a missing CLI just
- * means the Parked block can't be regenerated.
- *
- * Distinguishes two failure modes:
- *   - ENOENT (CLI not installed) → silent fallback. This is normal in fresh
- *     clones / CI environments where `pnpm install` doesn't ship spectra CLI.
- *     The caller will preserve the existing Parked block to avoid false
- *     stale signals in `--check` mode.
- *   - Other errors (CLI present but failed) → emit warning to stderr so
- *     real bugs (corrupt DB, JSON parse error, etc.) stay visible.
+ * Fetch parked metadata from the retired store's neutral, read-only reader.
+ * A failed read remains visible to callers so a corrupt or unsupported store
+ * cannot be mistaken for an empty parked list.
  */
-function collectParkedChanges(): {
+export function collectParkedChanges(targetRoot = repoRoot): {
   parked: ParkedChange[]
-  source: 'cli' | 'unavailable' | 'cli-error'
+  source: 'legacy' | 'missing' | 'unsupported' | 'corrupt'
 } {
-  try {
-    const raw = execFileSync('spectra', ['list', '--parked', '--json'], {
-      cwd: repoRoot,
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-    const parsed = JSON.parse(raw) as { parked?: ParkedRaw[] }
-    const list = parsed.parked ?? []
-    const parked = list
-      .filter((p): p is ParkedRaw => Boolean(p && typeof p.name === 'string'))
-      .map<ParkedChange>((p) => ({
-        name: p.name,
-        tasksDone: typeof p.completedTasks === 'number' ? p.completedTasks : 0,
-        tasksTotal: typeof p.totalTasks === 'number' ? p.totalTasks : 0,
-        summary: (p.summary ?? '').trim(),
+  const store = readLegacyStore(targetRoot)
+  if (store.status !== 'available') {
+    if (store.error)
+      console.warn(`roadmap-sync: legacy store ${store.status} — ${store.error.message}`)
+    return { parked: [], source: store.status }
+  }
+  return {
+    parked: store.parked
+      .map((p) => ({
+        name: p.change_id,
+        tasksDone: p.tasks_done ?? 0,
+        tasksTotal: p.tasks_total ?? 0,
+        summary: `legacy parked record (${p.state})`,
       }))
-      .toSorted((a, b) => a.name.localeCompare(b.name))
-    return { parked, source: 'cli' }
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code
-    // ENOENT = CLI not on PATH (fresh clone, CI without spectra installed).
-    // Stay silent — caller preserves existing Parked block; `--check` is
-    // intentionally lenient about parked drift in this case.
-    if (code === 'ENOENT') {
-      return { parked: [], source: 'unavailable' }
-    }
-    // CLI present but failed (nonzero exit, JSON parse error, broken DB, …).
-    // This is a *real* problem — surface it to stderr AND signal `cli-error`
-    // so `--check` can fail the gate instead of silently preserving stale
-    // parked data. Caller still preserves the existing block in the file so
-    // we don't write a mangled version, but the exit code reflects the bug.
-    console.warn(
-      `roadmap-sync: spectra CLI call failed — parked block will be preserved but ` +
-        `\`--check\` will fail until fixed (${(err as Error).message})`,
-    )
-    return { parked: [], source: 'cli-error' }
+      .toSorted((a, b) => a.name.localeCompare(b.name)),
+    source: 'legacy',
   }
 }
 
@@ -917,29 +885,26 @@ function renderParallelismBlock(report: ParallelismReport): string {
 
 function renderParkedBlock(
   parked: ParkedChange[],
-  source: 'cli' | 'unavailable' | 'cli-error',
+  source: 'legacy' | 'missing' | 'unsupported' | 'corrupt',
 ): string {
   const intro = [
     '## Parked Changes',
     '',
-    '> 已 `spectra park` 的 changes。檔案暫時從 `openspec/changes/` 移出，',
-    '> metadata 保留在 `.spectra/spectra.db`。`spectra unpark <name>` 可取回。',
+    '> 歷史 legacy store 中仍保留 metadata 的 changes。原件可能已從工作樹移出，',
+    '> 讀取結果只代表 historical record；接續前先建立原件 snapshot 與 provenance。',
     '',
   ]
 
-  if (source === 'unavailable') {
-    return [
-      ...intro,
-      '_spectra CLI unavailable — run `spectra list --parked` manually to inspect parked work._',
-    ]
+  if (source === 'missing') {
+    return [...intro, '_Legacy store unavailable — no historical parked records were read._']
       .join('\n')
       .trimEnd()
   }
 
-  if (source === 'cli-error') {
+  if (source === 'unsupported' || source === 'corrupt') {
     return [
       ...intro,
-      '_spectra CLI failed — run `spectra list --parked` manually to inspect parked work; investigate the warning emitted by `pnpm spectra:roadmap`._',
+      `_Legacy store ${source} — parked records were not treated as empty; investigate the warning emitted by roadmap sync._`,
     ]
       .join('\n')
       .trimEnd()
@@ -1117,7 +1082,7 @@ function syncRoadmap(): SyncReport {
   // failed). Avoids clobbering on-disk content. `--check` exit logic in main()
   // still distinguishes the two so silent preservation only applies to the
   // benign missing-CLI case.
-  if (parkedSource === 'unavailable' || parkedSource === 'cli-error') {
+  if (parkedSource !== 'legacy') {
     const existingParked = extractBetween(content, MARKERS.parkedStart, MARKERS.parkedEnd)
     if (existingParked !== null) {
       skipParkedReplace = true
@@ -1285,11 +1250,13 @@ function emitText(report: SyncReport): void {
   const parkedSegment =
     parkedCount > 0
       ? ` · ${parkedCount} parked`
-      : report.parkedSource === 'unavailable'
+      : report.parkedSource === 'missing'
         ? ' · parked unavailable'
-        : report.parkedSource === 'cli-error'
-          ? ' · parked CLI error'
-          : ''
+        : report.parkedSource === 'unsupported'
+          ? ' · parked store unsupported'
+          : report.parkedSource === 'corrupt'
+            ? ' · parked store corrupt'
+            : ''
   const claimsSegment =
     activeClaims > 0 || staleClaims > 0
       ? ` · ${activeClaims} claimed${staleClaims > 0 ? ` · ${staleClaims} stale claim${staleClaims === 1 ? '' : 's'}` : ''}`
@@ -1318,13 +1285,13 @@ function main(): void {
     }
     // `--check` mode exit codes:
     //   - drift detected (skipped='check-only' && !wrote)         → exit 1
-    //   - hard CLI error (parkedSource='cli-error')               → exit 1
-    //   - missing CLI on fresh clone (parkedSource='unavailable') → exit 0
+    //   - hard legacy-store error (unsupported/corrupt)            → exit 1
+    //   - missing legacy store on fresh clone                      → exit 0
     //     (intentionally lenient — see collectParkedChanges() ENOENT branch)
     if (cli.check) {
       const drift = report.skipped === 'check-only' && !report.wrote
-      const cliError = report.parkedSource === 'cli-error'
-      if (drift || cliError) {
+      const storeError = report.parkedSource === 'unsupported' || report.parkedSource === 'corrupt'
+      if (drift || storeError) {
         process.exit(1)
       }
     }
@@ -1335,4 +1302,14 @@ function main(): void {
   }
 }
 
-main()
+function invokedAsCli(): boolean {
+  const entry = process.argv[1]
+  if (!entry) return false
+  try {
+    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url))
+  } catch {
+    return entry === fileURLToPath(import.meta.url)
+  }
+}
+
+if (invokedAsCli()) main()

@@ -91,6 +91,16 @@ else
   }
 fi
 
+NATIVE_OPSX=false
+if [[ "$CHANGE_NAME" =~ ^chg-[0-9a-hjkmnp-tv-z]{26}$ ]]; then
+  NATIVE_OPSX=true
+  NATIVE_GATE="$SCRIPT_DIR/../opsx-acceptance-cli.ts"
+  if [ ! -f "$NATIVE_GATE" ]; then
+    NATIVE_GATE="$(sux_repo_root)/.clade/vendor/scripts/opsx-acceptance-cli.ts"
+  fi
+  node "$NATIVE_GATE" "$(sux_repo_root)" "$CHANGE_NAME" || exit 2
+fi
+
 PROPOSAL_FILE="$CHANGE_DIR/proposal.md"
 TASKS_FILE="$CHANGE_DIR/tasks.md"
 [ -f "$PROPOSAL_FILE" ] || exit 0
@@ -216,6 +226,8 @@ if command -v node >/dev/null 2>&1 && [ -f "$AUDIT_SCRIPT" ]; then
   fi
 fi
 
+# Generated OPSX tasks carry native evidence and decisions, validated above.
+if [ "$NATIVE_OPSX" = false ]; then
 # --- Check 4: Manual Review Kind Validation ---
 # Skipped under --pre-skill (see header comment): annotations are populated by
 # spectra-archive SKILL.md Step 3.5 walkthrough, which runs AFTER this hook.
@@ -929,6 +941,8 @@ verify:ui evidence 的唯一入口是 screenshot-review Claude subagent（agent-
     fi
   fi
 fi
+
+fi # legacy annotation checks
 
 # --- Output ---
 if [ "$BLOCKED" = true ]; then

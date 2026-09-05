@@ -309,8 +309,18 @@ scope 只認 `openspec/changes/<X>/**`，**NEVER** 另建「change 對應哪些�
    #    archive 殘骸。不減掉的話 gate 會對它報 MISSING_ARCHIVE_DIR，叫使用者去修一個從來
    #    不存在的 archive（<consumer-a> 2026-07-31 實證：propose 收尾 commit-to-git 後 park，兩張
    #    change 各 7 個檔全被判成殘骸）。
-   PARKED=$(pnpm exec spectra list --parked --json 2>/dev/null \
-     | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' | sort -u)
+   OPSX_CLI="scripts/opsx-legacy-store.ts"
+   [ -f vendor/scripts/opsx-legacy-store.ts ] && OPSX_CLI="vendor/scripts/opsx-legacy-store.ts"
+   OPSX_LIST=$(node "$OPSX_CLI" --repo-root "$PWD") || exit 1
+   PARKED=$(printf '%s' "$OPSX_LIST" | node -e '
+     let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+       const store=JSON.parse(s);
+       if(!store || !["available","missing"].includes(store.status)){
+         console.error("Legacy inventory incomplete: "+(store?.status??"unknown"));process.exit(1);
+       }
+       console.log(store.parked.map(x=>x.change_id).sort().join("\n"));
+     });
+   ') || exit 1
    if [ -n "$PARKED" ]; then
      EXCLUDED=$(comm -12 <(echo "$CHANGES") <(echo "$PARKED"))
      CHANGES=$(comm -23 <(echo "$CHANGES") <(echo "$PARKED"))
@@ -321,7 +331,7 @@ scope 只認 `openspec/changes/<X>/**`，**NEVER** 另建「change 對應哪些�
    結果為空 → 輸出 `⏭️ 0-Archive-Coupling 跳過（無 spectra change staged-delete 或殘留）`，進入 Step 0。
 
    > **parked ≠ 殘骸（hard rule）**：本 gate 只抓 partial `/spectra-archive` state。一個 change
-   > 同時出現在 deletion 清單與 `spectra list --parked` 時，**MUST** 判為 park 副作用並排除，
+   > 同時出現在 deletion 清單與中立 reader 的 `legacy_store.parked` 時，**MUST** 判為 park 副作用並排除，
    > **NEVER** 對它報 `MISSING_ARCHIVE_DIR` —— parked change 本來就不該有 archive dir。
 
 3. 對每個 change `<X>` 驗證**兩條件**：

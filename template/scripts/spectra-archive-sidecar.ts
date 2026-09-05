@@ -279,7 +279,7 @@ function cmdDetect(mainWt, args) {
       `⚠ spectra-archive interrupted: ${changeName} (phase=${phase}, ${ageSec}s ago)\n`,
     )
     process.stderr.write(
-      `  recovery: ${JSON.stringify({ cwd: mainWt, prompt: `/spectra-archive ${changeName} --resume` })}\n`,
+      `  recovery: ${JSON.stringify({ cwd: mainWt, prompt: `/opsx 唯讀檢查 legacy ${changeName} 的 archive checkpoint 與原件；用 history 確認來源、digest 與實際落地狀態，未完需求以 supersedes/provenance 接續。保留 sidecar 到恢復狀態已確認；不重啟 Spectra writer。` })}\n`,
     )
     process.stderr.write(
       '  handoff: coordinator resumes directly or through Herdr session transport\n',

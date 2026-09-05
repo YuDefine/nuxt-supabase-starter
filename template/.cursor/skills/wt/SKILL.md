@@ -1,6 +1,6 @@
 ---
 name: wt
-description: "Use when 使用者要開 worktree（隔離環境跑 task 不影響主 working tree），或並行做多條 task（/wt A: ... B: ...）。NOT for main-bound 操作（publish / propagate / spectra-archive），NOT for 只是要切 branch。"
+description: "Use when 使用者要開 worktree（隔離環境跑 task 不影響主 working tree），或並行做多條 task（/wt A: ... B: ...）。NOT for main-bound 操作（publish / propagate），NOT for 只是要切 branch。"
 license: MIT
 metadata:
   author: clade
@@ -11,11 +11,11 @@ permission_tier: action
 
 # /wt — orchestrate worktree task lifecycle
 
-`/wt` is the single entry point for "do work in a worktree". It builds the worktree, auto-routes the executor (Pi astra/luna for non-UI coding/analysis/debug, Claude subagent only for the Form 3/4 cases — see Step 1.8; UI view implementation is never dispatched at all), and reports — without squashing or cleaning up. The worktree branch holds the committed work until the corresponding spectra change is archived; `/spectra-archive` Step 0 (per [[worktree-default]] §5.5) runs `wt-helper merge-back` to atomically absorb the worktree into main, then `/commit` lands the result.
+`/wt` is the single entry point for "do work in a worktree". It builds the worktree, auto-routes the executor (Pi astra/luna for non-UI coding/analysis/debug, Claude subagent only for the Form 3/4 cases — see Step 1.8; UI view implementation is never dispatched at all), and reports — without squashing or cleaning up. The worktree branch holds committed work through OPSX verification and archive. The coordinator then follows [[worktree-default.commit-ceremony]] to merge one worktree and immediately commit its scoped result on main.
 
 This deferred-landing model guarantees main never carries half-done features between sessions: only fully-reviewed-and-archived changes touch main. The previous v2.0 behavior — `/wt` return time squash + cleanup — accumulated cross-session WIP in main and made `/commit` impossible whenever the 人工檢查 Gate triggered.
 
-The user's only follow-up action is the actual 人工檢查 decision（GUI 的 OK / Issue / Skip）。After that decision, the coordinator invokes `/spectra-archive <change>` and `/commit` itself. If either main-bound step requires a separate clean session, use [[session-tasks.operations]] § Herdr session transport and return the dispatch receipt; **NEVER** ask the user to open main or type either invocation.
+The user's only follow-up action is the actual 人工檢查 decision（GUI 的 OK / Issue / Skip）。After that decision, the coordinator completes OPSX archive in the implementation worktree, commits bookkeeping, then performs merge-back and `/commit` itself. If the landing ceremony requires a separate clean session, use [[session-tasks.operations]] § Herdr session transport and return the dispatch receipt; **NEVER** ask the user to open main or type either invocation.
 
 ## When to invoke
 
@@ -26,7 +26,7 @@ Non-UI tasks are automatically routed to Pi (cheaper, doesn't consume Claude con
 **Do not invoke `/wt`** in these cases:
 
 - The work is read-only AND trivial (quick grep, log inspection, code explanation that writes nothing and doesn't need structured evidence collection).
-- The skill being run is main-bound by design (`/spectra-archive`).
+- The operation is main-bound by design (clade publish / propagate).
 - cwd is already inside a session worktree (`git rev-parse --git-dir` contains `/worktrees/`). The current worktree is the workspace; do not nest.
 
 ## Invocation forms
@@ -71,8 +71,8 @@ Labels are arbitrary identifiers (A/B/C/feat-x/test-y). The skill normalizes the
 Example:
 
 ```
-/wt fix-auth: /spectra-apply fix-auth
-/wt evlog-dpattern: /spectra-ingest evlog-dpattern
+/wt fix-auth: /opsx 繼續實作已確認的 change ID
+/wt evlog-dpattern: /opsx 修訂已確認的 change ID
 ```
 
 This form is invoked by `/handoff` Mode B (per [[worktree-default]] §1 and [[handoff]] §2B.5) when the user has selected a worktree-requiring change from the outstanding-work list. The subagent inside the worktree runs `<next-skill>` as its first action.
@@ -212,7 +212,7 @@ Classify the task to choose the executor. The default routing is automatic; user
 
 3. **Non-UI coding work** → **Pi via the Pi dispatcher** (Step 2-pi)
    - Everything else: refactoring, adding tests, implementing features, fixing bugs, migrations, config changes, etc.
-   - Rationale: non-UI coding is the sweet spot for Pi — cheaper, doesn't consume Claude context, follows the same pi-watch-protocol already proven in `/commit` and `/spectra-apply`.
+   - Rationale: non-UI coding is the sweet spot for Pi — cheaper, doesn't consume Claude context, follows the same pi-watch-protocol already proven in `/commit` and OPSX execution.
 
 **Form-specific overrides**:
 - Form 3 (`/wt <slug>: /<next-skill>`): always Claude subagent — the subagent needs Skill tool access to invoke the next skill
@@ -279,7 +279,7 @@ After all tasks in the invocation have either completed (subagent committed) or 
 ```
 ✅ A (lru-cache) [pi]: committed — 5 files, 2 commits on branch session/<date>-lru-cache
    <one-line summary from pi stdout>
-   pending: /spectra-archive <change> will absorb via wt-helper merge-back
+   pending: coordinator verifies OPSX <change-id>, archives here, then lands via merge-back + main commit
 ✅ B (csv-tests) [claude]: subagent committed — 2 files added on branch session/<date>-csv-tests
 ✅ C (perf-audit) [pi:analyze]: JSON result — 8 findings, status: pass
    findings written to WORKTREE-BRIEF.md # Findings
@@ -287,14 +287,12 @@ After all tasks in the invocation have either completed (subagent committed) or 
    worktree preserved at ~/offline/<consumer>-wt/node-upgrade/
    branch: session/<date>-node-upgrade
 
-Pending worktrees: <N> (absorbed at /spectra-archive of matching change)
+Pending worktrees: <N> (retained until required verification and coordinator landing)
 ```
 
 The `[pi]` / `[claude]` / `[pi:analyze]` / `[pi:debug]` tag indicates which executor was used. This helps the user understand the execution path and cost profile.
 
-**Key shift from v2.0**: `/wt` no longer squashes or cleans up. Each worktree's branch carries committed work until its corresponding `/spectra-archive` run; archive Step 0 runs `wt-helper merge-back --auto-stash --noop-if-missing <change-name>` to atomically absorb + cleanup. This means main's working tree stays clean of in-progress work between sessions.
-
-For non-spectra ad-hoc tasks (Form 1 with no corresponding change), the user runs `wt-helper merge-back <slug>` manually when ready to land.
+`/wt` preserves each branch until the coordinator has verified the actual checkout. OPSX archive runs there and does not merge automatically. For both OPSX and ad-hoc work, the coordinator follows [[worktree-default.commit-ceremony]] within the existing authorization; each merge is immediately followed by its scoped main commit and verification.
 
 ## Failure handling
 
@@ -321,17 +319,17 @@ For Pi investigation failures (Step 2-pi-investigate), exit code 2 (business fai
 
 ### Squash conflicts (no longer at `/wt` time)
 
-Squash happens at archive time (Step 0 of `/spectra-archive`, calling `wt-helper merge-back`). Conflict handling lives there — see [[worktree-default]] §5.5 and `spectra-archive/SKILL.md` Step 0. `/wt` does not encounter squash conflicts because it never squashes.
+Squash occurs during coordinator landing after verification and the bookkeeping commit. Conflict handling follows [[worktree-default.commit-ceremony]] §5.5. `/wt` itself never squashes.
 
 ## After `/wt` completes
 
 Worktree(s) hold committed work on their session branches. Main's working tree is untouched.
 
-The user's next moves:
+The coordinator continues within the authorized goal:
 
-1. (Spectra change worktree) When the change is ready to archive, run `/spectra-archive <change-name>`. Step 0 absorbs the worktree via `wt-helper merge-back --auto-stash --noop-if-missing`. Subsequent archive gates inspect the post-squash state.
-2. (Ad-hoc Form-1 worktree) When ready to land, run `node scripts/wt-helper.ts merge-back <slug> --auto-stash`. The diff lands on main's working tree; main commit ceremony via `/commit`.
-3. Once one or more worktrees have been absorbed and main has accumulated diff, run `/commit` on main.
+1. For OPSX work, verify current-revision evidence and required human gates, archive in the implementation checkout, then commit bookkeeping.
+2. For each ready worktree, inspect the merge-back dry-run and concurrent ownership, perform the permitted merge, immediately commit its scoped result on main, and verify every changed file.
+3. Keep a worktree with a named owner and concrete blocking gate when verification or authorization is still pending.
 
 `/wt` does NOT:
 
@@ -367,7 +365,7 @@ The subagent's reported status is the authority. If it says "done", proceed to s
 - [[agent-routing.pi-watch-protocol]] — Pi dispatch standard, Watch Protocol, Plan-first / Git baseline / Commit Authorization hard rules.
 - [[handoff]] — Mode B dispatch path that invokes `/wt <slug>: /<next-skill>`.
 - [[session-tasks]] — shared `<YYYY-MM-DD-HHMM>-<slug>` naming convention.
-- [[scope-discipline]] — when a `/wt` task drifts beyond its slug's scope, open a separate `/wt` task or escalate to `/spectra-propose`.
+- [[scope-discipline]] — when a `/wt` task drifts beyond its slug's scope, open a separate `/wt` task or return to OPSX intent for an authorized scope revision.
 - [[pi-offload]] — template registry for analysis/debug dispatch (`~/offline/clade/vendor/snippets/pi-offload/`).
 
 ## Maintenance commands
@@ -383,6 +381,6 @@ node scripts/wt-helper.ts cleanup <slug> --force --force-discard-unland  # disca
 node scripts/stash-reconcile.ts                             # plan recovery for wt-merge-block/* stashes
 ```
 
-`merge-back` is the primary post-`/wt` action for ad-hoc Form-1 worktrees and for early-landing when needed. `/spectra-archive` calls it automatically as Step 0; users invoke it manually for non-spectra work.
+`merge-back` is the primary post-`/wt` action for ad-hoc Form-1 worktrees and for early-landing when needed. OPSX archive does not invoke it; the coordinator owns the verified landing ceremony.
 
 `cleanup --force --force-discard-unland` is for discarding unwanted worktrees (subagent fail, abandoned exploration). It permanently loses the branch's commits; use `merge-back` first to preserve the work.

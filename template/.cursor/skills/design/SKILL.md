@@ -74,19 +74,13 @@ Auto-detection logic:
 - **Active Spectra change with UI tasks** → `improve`（自動，不需問使用者）
 - When unclear → ask the user
 
-## Step 0.5: Spectra Context Detection
+## Step 0.5: 需求 Context Detection
 
-**在任何診斷之前**，檢查是否有 active Spectra change 可提供 context。
+診斷前以 OPSX 查詢目前需求。clade 用 `vendor/scripts/opsx-control.ts`，consumer 用 `.clade/vendor/scripts/opsx-control.ts`。
 
-1. 執行 `spectra list --json`（若 spectra CLI 可用）
-2. 若有 active change（state: `in-progress`）：
-   a. 讀取 `openspec/changes/<name>/proposal.md` 取得 change 的目的和範圍
-   b. 讀取 `openspec/changes/<name>/tasks.md` 識別 UI 相關 tasks（含 `.vue`、`pages/`、`components/`、`layouts/`）
-   c. 將這些 UI tasks 涉及的檔案/頁面作為 **diagnosis target**，無需另外問使用者
-   d. 在診斷輸出中標示：`Spectra Change: <name>`
-3. 若無 active change 或 spectra CLI 不可用：照舊流程（問使用者或 auto-detect）
-
-**效果**：/design 在 spectra-apply 期間被呼叫時，自動知道該看哪些頁面，不會亂猜或問多餘問題。
+1. 執行 `node <opsx-cli> list --repo-root <repo> --json`，沿使用者指定的 source／change ID 定位目前需求。
+2. 對已 bound 的 OPSX change 執行 inspect／instructions，從當前 work plan 找 UI 目標與驗收。legacy 原件由 history 讀取，只作來源背景。
+3. 診斷輸出附 change/work 與 revision。無可用需求時由專案文件及使用者目標定位頁面；查詢失敗說明具體錯誤，不把它當成沒有需求。
 
 ## Step 1: Check Foundation (ALL modes)
 

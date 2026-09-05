@@ -23,7 +23,7 @@ Local edits will be reverted by the next sync.
 
 **v3 atomic landing model**（取代 v2 「`/wt` 返回時 squash」）：
 
-`/wt` 跑完後 subagent 在 worktree branch 上有 commit，**worktree 連同 branch 保留**（不 squash 不 cleanup）。`/spectra-archive <change-name>` Step 0 跑 `wt-helper merge-back` 把 worktree atomic 吸收進 main + cleanup，再做 archive bookkeeping；user 之後在 main 跑 `/commit` 一次 commit 累積的 diff。
+`/wt` 返回時保留已 commit 的 worktree／branch。OPSX archive 在實作樹驗證並封存目前 revision；主持者提交 bookkeeping 後，序列合回 main 並立即限定路徑 commit。驗收、歸檔、落地與部署各自有證據。
 
 ### 為什麼從 v2 改 v3
 
@@ -38,13 +38,13 @@ v3 atomic landing 解這些：main 永遠 deployable；多 session 平行不污�
 
 1. **Subagent 在 worktree 內 commit**（`/wt` prompt template 強制）：`git add -- <scoped file>` selective stage（**禁止** `git add -A`） + `git commit -m "🧹 chore: wt <slug> — <short>"`，可多 commit，pre-commit / commit-msg hook 必跑。**NEVER**：`git push` / `/commit` / `/spectra-commit`。
 2. **`/wt` 返回時**：**不** squash，**不** cleanup。worktree + branch 保留，主線只報告 status。
-3. **`/spectra-archive <name>` Step 0 — atomic merge-back**：跑 `node scripts/wt-helper.ts merge-back <name> --auto-stash --noop-if-missing`（細節見 §5.5）。
-4. **Archive 後續 step**（gates / spec sync / screenshot sweep / folder mv）跑於 post-squash main，gate 檢查看到 merge 後結果。
-5. **User 在 main 跑 `/commit`**（時機 user 決定，可累積多 archive 再一次 commit）：selective stage + 0-A/B/C 品質閘門 + commit + push。Archive 後 tasks.md 已 mv 進 archive 子目錄，人工檢查 Gate 不擋。
+3. **OPSX 驗證與歸檔**：在實作 worktree 依 `/opsx` 的 `references/execution.md` 回讀目前 revision、證據與人工 gate，再執行 archive；未過的 gate 保持阻擋。
+4. **提交封存結果**：在該 worktree 限定路徑 commit 實作與 bookkeeping，檢查 clean、scope 及內容。archive 不自動 merge-back。
+5. **主持者序列落地**：先同步 main、檢查並行 WIP 與 merge-back dry-run；放行後只合一棵樹，立刻依 `/commit` 在 main 限定路徑 commit，驗每個檔的內容與 scope，再處理下一棵樹。既有授權不足時保留 worktree 與可審查結果，等待具體 gate。
 
 ### Ad-hoc Form-1 worktree（非 spectra change）
 
-無 `/spectra-archive` 觸發 merge-back，user 手動跑 `wt-helper merge-back <slug> --auto-stash` 後走 `/commit`。deferred-landing 是 `/wt` 的「通用 primitive」設計；**此例外只屬於 `/wt` 本身**，包裝 `/wt` 的 skill 走下面 Skill-owned 管轄。
+完成既有驗收後，由主持者按相同 dry-run／序列 merge-back／main commit 流程落地。deferred-landing 是 `/wt` 的「通用 primitive」設計；**此例外只屬於 `/wt` 本身**，包裝 `/wt` 的 skill 走下面 Skill-owned 管轄。
 
 ### Skill-owned worktree lifecycle（auto merge-back contract）
 
@@ -52,7 +52,7 @@ Skill 自己 fork worktree、有**清楚 end-of-skill 完成點**、**無下游 
 
 **符合**：`/dep-upgrade` § Outdated mode、機械化 codemod / bulk rename / 批次重構 skill。
 
-**不符合（保留 deferred-landing）**：`/wt` primitive、`/spectra-apply`（archive 吸收）、`/spectra-ingest`、`/spectra-debug`、`/spectra-propose`（不寫 product code）。
+**不符合（保留 deferred-landing）**：`/wt` primitive、仍有下游驗證／人工 gate 的 OPSX 實作與需求修訂。
 
 **Auto merge-back 標準流程 6 步**（cd 回 main → `merge-back --auto-stash` → baseline blocker 自清 → 真衝突 STOP + AskUserQuestion，**NEVER** 主線自決 → selective stage on main，**禁止** `git add -A` → **NEVER** 自動 `/commit`）+ 摘要彙報四要素（必印）+ 例外處理，完整命令見 `~/offline/clade/vendor/snippets/worktree-baseline/merge-back-ceremony.md` § Skill-owned auto merge-back 標準流程。**NEVER** 預設主動延遲 landing（user 明確說「先別 land」才 skip auto）。
 
@@ -62,12 +62,12 @@ Skill 自己 fork worktree、有**清楚 end-of-skill 完成點**、**無下游 
 - **NEVER** 在 `/wt` orchestration 自動跑 `/commit` 收尾 — 剝奪 user 對 commit 時機的控制
 - **NEVER** 在 worktree 內 `git push` session branch — 只會在 origin 留 stale ref
 - **NEVER** 在 `/wt` 返回時 squash（v3 核心改動 — squash 推延到 archive）
-- **NEVER** 略過 `/spectra-archive` Step 0 直接做 archive bookkeeping — gates 會跑於 false-clean main
+- **NEVER** 先合回 main 才驗 OPSX archive gate；gate 必須讀實作所在 checkout 與目前 revision
 - **NEVER** 用 `wt-helper cleanup <slug> --force --force-discard-unland` 不先跑 `merge-back` — 永久丟失 branch commits
 
 ## §5.5 Merge-back ceremony
 
-`wt-helper merge-back <slug>` 是 atomic landing 的核心命令，由 `/spectra-archive` Step 0 自動呼叫，或 user 手動呼叫。完整 flags 表與預設行為 7 步見 `~/offline/clade/vendor/snippets/worktree-baseline/merge-back-ceremony.md`；flags 詳見 `node vendor/scripts/wt-helper.ts merge-back --help`。
+`wt-helper merge-back <slug>` 是 atomic landing 的核心命令，由主持者在驗收與 bookkeeping commit 後呼叫。完整 flags 表與預設行為 7 步見 `~/offline/clade/vendor/snippets/worktree-baseline/merge-back-ceremony.md`；flags 詳見 `node vendor/scripts/wt-helper.ts merge-back --help`。
 
 ### Claim guard scope ⊇ bulk-stash scope（hard rule）
 

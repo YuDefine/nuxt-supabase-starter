@@ -471,69 +471,52 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`ScheduleWake
 | 〔`screenshot-match-analysis`〕 **截圖 vs item 要求的匹配判定**（`[verify:ui]` 收集完成後的 gate） | **Pi `--model astra --effort medium` via 泛用 dispatcher** | 收集與判定是兩個角色：收集走上一列 grok low（輸出不是 gate，錯了下游接得住），判定是 gate 且要擋「亂截圖搪塞」。**NEVER** 把兩者併成同一次 dispatch——那會讓 effort 不是單一值、檔位判不出來。留 astra 的理由是**樣本不足以轉**，不是 grok 守不住（取證見 rationale § gate 列與 reconciliation 列的 grok 取證）——**NEVER** 再拿「要最高推理力」當留列依據。要轉需補到 TD-509 列的 reps。 |
 | 〔`screenshot-review-verify`〕 **`screenshot-review` 全部模式**（`[verify:ui]` channel / archive 前視覺 QA / commit 0-B / ad-hoc 截圖） | **`Agent` tool，`subagent_type: screenshot-review`（Claude）。本列 NEVER 派 Pi 任一 model**——`grok-xai` / `grok-cursor` / `astra` / `gemini` / `luna` 一律不准，`pi-dispatch-screenshot-verify.ts` 已 fail-closed 拒跑 | 2026-08-22 Charles 拍板收回外派。**收回的理由不是 grok 拍不好**（兩 seat 同一個 `grok-4.6`），是兩條交付路徑各有不該付的代價：`xai` seat 無沙箱、完整工具集、完整網路；`cursor` seat 要拍到本機 dev server 就得在 default-deny egress 上開 RFC1918 例外。純機械取證不值這個價，判定本來就留主線。**NEVER** 把 [[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]] 讀成「Claude 收不了截圖」——那次成因是 wrapper 被設計成路由器卻決定當執行體，本列已把路由層拿掉、subagent 就是執行體。**NEVER** 恢復任何「subagent 再轉派」的形狀。四個模式一律適用；verify / archive / 0-B 三個模式的輸出仍是 gate。詳見 [[review-gui-surface]] § 為什麼只准 Claude subagent。 |
 
-## Spectra Propose Handoff（具體做法）
+## OPSX intent handoff
+
+需求建立與修訂經 `opsx` skill 的 `references/intent.md`；先查已有 change/work 身分，再形成有來源、驗收、impact 與 work plan 的 canonical intent。已授權的需求直接執行，缺少產品決議才送既有 decision queue。
+
+派工沿 Routing Table 的 draft／cross-check 分工；主線持有 quality gate，讀 draft、核對來源及驗收後自行修正。**NEVER** 把 cross-check / final check 的修補丟回 pi。每次 mutation 明確帶 repo、change_id 與預期 revision，create／revise 後回讀 binding 及 canonical source。UI scope 的設計與體驗驗收沿用既有 gate。
+
+每一個 Spectra writer 已退役；NEVER 以 park／analyze／直接編輯生成 tasks.md 替代 OPSX command。歷史需求以中性 history 讀取並保留 provenance。
+
+## OPSX work execution dispatch（具體做法）
 
 ### 決策層契約（2026-08-19 從 [[agent-routing]] 下推，TD-540）
 
 
-1. **MUST** 預設跳三選一 dispatch 選單（A Pi draft + 主線 cross-check／B 三模型交叉：Fable draft + Pi review + 主線 final check／C 純 Claude）。使用者**明確**指定路徑（「純 Claude propose」「不要派 pi」「用 Fable」「用 pi」等）時跳過選單直接走。詳見 `spectra-propose` Step 0
-2. **MUST** 主線是 quality gate — A 的 cross-check 與 B 的 final check 都由主線 Claude Fable 5.1（effort: xhigh）跑
-3. **NEVER** 把 cross-check / final check 的修補丟回 pi — 主線自己 Edit 修
+> **先判 residency**（§ Orchestration Residency）：canonical work plan 已定稿的實作 由 Codex-primary 持有 change-level orchestration；以下 phase 規則只決定 bounded executor，**不改 residency**。從 Claude Code 起手時依既有 routing 判定單次 dispatch 整條 change 給 Pi carrier；已在 Pi／`cx` 時直接續跑，NEVER recursive dispatch。
 
-Claude Code session 收到 spectra propose 請求時：
-
-1. **NEVER** 用 AskUserQuestion 問 A/B（除非使用者**明確**要求「純 Claude propose」或「不要派 pi」）
-2. **MUST** 預設走「Pi draft + 主線 cross-check」流程：
-   1. 主線解析 change name + requirement
-   2. 派 background GPT-6-astra via Pi（effort: medium）負責 draft（走「Pi 派工的標準流程」）
-   3. 收到 `<task-notification status=completed>` 後，主線 **MUST** 依序：
-      - Read pi 產出的 proposal.md / design.md / tasks.md
-      - 跑 `bash scripts/spectra-advanced/post-propose-check.sh <change>`（檢查 User Journeys / Affected Entity Matrix / Implementation Risk Plan / Design Review 7 步）
-      - 跑 `bash scripts/spectra-advanced/design-inject.sh <change>`（若 UI scope，提醒 7 步 template）
-      - **若 Design Review section 缺**：主線**自己**直接 Edit tasks.md 補完整 7 步 template（**不要**回 pi 修，太慢）
-      - 跑 `spectra analyze <change> --json` 確認無 Critical/Warning
-   4. 結束後 `spectra park <change>`，回報 artifacts list + cross-check 結果
-3. **MUST** 主線是 quality gate — 不要把所有事推給 pi 後直接結束
-
-詳細流程見 `plugins/hub-capabilities-openspec/skills/spectra-propose/SKILL.md` Step 0。
-
-## Spectra Apply Phase Dispatch（具體做法）
-
-### 決策層契約（2026-08-19 從 [[agent-routing]] 下推，TD-540）
-
-
-> **先判 residency**（§ Orchestration Residency）：tasks.md 已定稿的 apply 由 Codex-primary 持有 change-level orchestration；以下 phase 規則只決定 bounded executor，**不改 residency**。從 Claude Code 起手時先單次 dispatch 整條 change 給 Pi carrier；已在 Pi／`cx` 時直接續跑，NEVER recursive dispatch。
-
-執行 `spectra-apply` 時按 phase 選 executor。**三條契約**：
+依 OPSX work plan 執行時按 phase 選 executor。**三條契約**：
 
 1. **Design Review phase 與 UI view phase 的 executor 一律是 Claude Opus 5（effort: xhigh）**——Claude carrier 時主線自己做；Pi carrier 時用 Herdr create-only `cc`／`ccw` 派 bounded phase。**NEVER** 由 Pi 實作、**NEVER** 因為 phase 大或管線現成就改變 executor。其他 phase（schema / migration / API server / CLI / 純 backend / 非 view frontend / unit test / docs）由同一 Pi carrier 直接實作；只有帶 user override 的 Claude carrier 才以泛用 dispatcher 的 `spectra-phase-implementation` row 派 GPT-6-astra via Pi（effort: medium）。符合封閉來源 extraction predicate 的 prescan 才可另走 `spectra-phase-prescan` Gemini via Pi（effort: low），且不得取代 Astra 實作
-2. **混雜 phase**（同一 phase 摻了 view 與非 view）：**已開工** → 整個 phase 交給 Claude Opus executor，不重切、不由 Pi 實作；**未開工** → **STOP** 請使用者跑 `/spectra-ingest <change>` 重切
-3. **禁止**carrier 自行修改 tasks.md 的 phase 結構（屬 ingest 範圍）
+2. **混雜 phase**（同一 phase 摻了 view 與非 view）：**已開工** → 整個 phase 交給 Claude Opus executor，不重切、不由 Pi 實作；**未開工** → 停止該 phase 的執行，依 OPSX revise 調整 canonical work plan 的能力邊界，再重新 inspect
+3. **禁止**carrier 直接修改生成 tasks.md；結構調整經 digest-guarded OPSX revise 保留修訂紀錄
 
-A/B/C 三類的完整判定條件（含 view 層檔案路徑清單）與 C 類派工細節（共用 template／schema、dispatcher metadata、watch、drift 檢查、收尾驗證）見 reference § Spectra Apply Phase Dispatch（具體做法）。
+A/B/C 三類的完整判定條件（含 view 層檔案路徑清單）與 C 類派工細節（共用 template／schema、dispatcher metadata、watch、drift 檢查、收尾驗證）見本節的具體步驟。
 
-執行 `spectra-apply` 時，carrier 按 phase capability 選 executor 的具體步驟：
+依 OPSX work plan 執行時，carrier 按 phase capability 選 executor 的具體步驟：
 
-1. Read tasks.md，按 `## N.` 切分 phase
+1. 以 OPSX inspect／instructions 讀當前 canonical work plan、work_spec_id、依賴、revision 及驗收政策；tasks.md 僅供閱讀投影
 2. **每個 phase 三類分類**（依序判定，命中即停）：
    - **A. Design Review phase**：標題含 "Design Review" 或內容含 `/design improve` / `/impeccable audit` / `/impeccable *` / `review-screenshot`
      → **Claude Opus 5（effort: xhigh）executor 自己做，永不由 Pi 實作**。Claude carrier 直接做；Pi carrier 用 Herdr create-only `--launcher cc`／`ccw` + `--coordinate` 派 bounded phase並收回結果
    - **B. UI view phase**：phase 內任一 task 描述/路徑指涉 view 層檔案——`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss` / Tailwind class 變動，**且該 phase 沒有摻入非 view 的 frontend / backend 工作**（store / hook / API client / type / util / migration / API server）
-     → **Claude Opus 5（effort: xhigh）executor 自己做，永不由 Pi 實作**。Claude carrier 直接做；Pi carrier用同一條 bounded Herdr transport。實作完、該 phase commit / 標 done 之前，照跑 SKILL Step 6c / 6d 檢查與 Design Review gate
+     → **Claude Opus 5（effort: xhigh）executor 自己做，永不由 Pi 實作**。Claude carrier 直接做；Pi carrier用同一條 bounded Herdr transport。實作完、該 phase commit / 標 done 之前，照跑原 invariant／review-rules 檢查與 Design Review gate
    - **C. 其他 phase**：上述兩類以外（schema、migration、API server、CLI、純 backend、frontend 但非 view 的 store / hook / API client / type / util、unit test、docs）
      → **Pi／`cx` carrier 直接以 GPT-6-astra（effort: medium）做完整 phase**；只有 user override 讓 Claude 持有 carrier 時才派 Pi
 3. **混雜 phase fallback**（A、B 都不是純 view、又混雜 view 與非 view 工作）：
-   - **看該 phase 是否已開工**（任一 task `[x]` 或 git history 顯示 phase 內檔案已被改）：
+   - **看該 phase 是否已開工**（canonical attempt 已開始或 git history 顯示 phase 內檔案已被改）：
      - **已開工** → **整個 phase 由 Claude Opus executor 做**（safety fallback；不重切，不由 Pi 實作）
-     - **未開工** → **STOP**，回覆使用者：「phase `<N>. <title>` 同時混雜 UI view 與非 UI 工作，違反新版 Phase Dispatch 規則。請改跑 `/spectra-ingest <change>` 把 UI view tasks 與其他 tasks 切成獨立 phase 後再 `/spectra-apply`。」**禁止**carrier 自行修改 tasks.md phase 結構（這屬 ingest 範圍，避免 propose / apply 邊界混淆）
+     - **未開工** → 停止該 phase 的執行，經 OPSX revise 把 UI view 與非 view work spec 分開，再依新 revision 重讀 instructions。產品範圍未改時沿既有授權處理；需要新產品決議時送既有 decision queue。生成 tasks.md 保持唯讀。
+
 4. C 類只有在 Claude carrier override 下才派 Pi；Pi carrier 直接做。需要派工時：
    - prompt **第一行 MUST** 是 `[DELEGATED-BY-CLAUDE-CODE]` marker（Codex 端 Runtime Gate 會驗，缺 marker 會被擋掉，見下節）
-   - prompt 內容：phase 標題、該 phase 全部 tasks、相關 design.md / specs / tasks 段落、acceptance criteria、`spectra task done <change> <task-id>` 完成標記指令
+   - prompt 內容：phase 標題、該 phase 全部 tasks、相關 design.md / specs / tasks 段落、acceptance criteria、canonical change/work/attempt 身分、當前 revision、evidence 政策與 OPSX project／inspect 回讀方式
    - prompt 內**MUST**附帶硬指令：「**禁止**修改 view 層檔案（`.vue` / `.tsx` / `.jsx` / `app/pages/` / `app/components/` / `pages/` / `components/` / `views/` / `layouts/` / `.css` / `.scss`）；若 task 需要 view 層改動，回報 'view layer change required, defer to main thread' 並跳過該 task」
    - `<topic>=spectra-apply-<phase-id>`、`<cwd>=consumer repo root`、`-c model_reasoning_effort=high`
 5. 外派 phase 收到 completion 後，carrier **MUST**（executor 已在 worktree 自 commit per § Commit Authorization）：
    - Read executor stdout 的 `PHASE_X_RESULT` + Plan section（事前公開的思路）
-   - Read tasks.md 確認該 phase 所有 checkbox 已勾
+   - 以 OPSX inspect 確認該 phase 每個 work 的當前 revision 證據與完成狀態；NEVER 把 checkbox 或 process exit 0 當作完成憑證
    - **Phase boundary 對齊**：`git -C <wt> log main..HEAD --oneline` — confirm exactly one new commit per dispatched phase, format `🧹 chore: wt <change>-phase-<N> — ...`。多 commit / missing commit / format 不符 → **AskUserQuestion**：[1] 主線 squash pi 的多 commits / [2] `git -C <wt> reset --soft main` 退 staging 重派 / [3] 中止
    - **View-layer drift double-check**：pi 端 self-check 命中時應已 abort，主線此處再驗一次保險：
      ```bash
@@ -546,7 +529,7 @@ A/B/C 三類的完整判定條件（含 view 層檔案路徑清單）與 C 類�
    - **Scope discipline cross-check**：`git -C <wt> diff main..HEAD --name-only` 對比 prompt 內 scope 宣告；超出範圍 → AskUserQuestion 處理
    - **Sanity check**（typecheck、相關 test）
    - 若有遺漏 → **AskUserQuestion**：[1] 主線在 worktree 內 commit 補丁 / [2] reset 重派 pi / [3] 中止
-6. 全部 phases 完成後，以 Claude Opus executor 跑 Section 7 Design Review；Pi carrier 經 bounded Herdr transport 收回結果，仍由同一 carrier 完成 change 收尾
+6. 全部 phases 完成後，以 Claude Opus executor 跑 Design Review 並收取真實體驗驗收決議；Pi carrier 經 bounded Herdr transport 收回結果，仍由同一 carrier 完成 change 收尾
 
 ## screenshot-review Verify Mode Dispatch & Watch Protocol
 
