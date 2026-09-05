@@ -548,9 +548,22 @@ prompt-cache TTL與record年齡對ownership零訊號。一般 coordinated child�
 與 patrol 輸出裡完全無法分辨，而 `fanout` 一次就派 N 個，這件事在 fanout 下不是不便而是致命。helper
 缺 label 直接回 `usage_error`，不會建立任何東西。receipt 的 `pane_label_applied` 為 `false` **或欄位不存在**，
 兩者是同一格：都代表 pane 可能仍是預設標題，**MUST** 照實寫進收工訊息並當場補
-`herdr pane rename <pane-id> "[<pane-id>] <label>"`。**NEVER** 把欄位缺席讀成「這條路徑不適用」——
+`node ~/offline/clade/vendor/scripts/herdr-visible-identity.ts --pane <pane-id> --label "<任務名稱>"`，再回讀 pane 與 Tab。**NEVER** 把欄位缺席讀成「這條路徑不適用」——
 缺席正是這條契約實測唯一遇過的失敗形狀（58 筆 record：`false` 0 次、缺席 48 次）。斷言 **MUST** 寫成
 「欄位存在且為 `true`」，**NEVER** 寫成 `!== false`。
+
+每一個 AI 自建或改名的 Herdr pane／Tab 都套用同一契約，包含普通命令、開發服務、自動標題與日常 new/resume；不只限派工。入口固定連到 `default`。每個 pane 顯示 `[pane-id] 任務名稱`，新建 Tab 使用同名；split
+沿用已具名的主工作 Tab（保留主工作 ID）。對話回報同時給 ID 與任務名稱，讓使用者能直接對上畫面；
+機器 receipt 仍保留獨立 pane_id 欄位。resume 沿用任務名稱，前綴只留一次並對齊當前 pane ID。
+`herdr-visible-identity.ts` 在 launcher 執行前回讀兩層身分與名稱；helper 在 prompt 送達前再驗一次。
+任何一層失敗就停止該次啟動／送題，既有 runtime 不被終止。caller socket 不屬於 default 時先拒絕，
+避免把相同的 pane ID 送到另一個 server。日常 `cc/ccw/codex/cx` new/resume 也經同一 admission。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | default 身分不符、任務名稱為空／裸 ID／目錄名，或任一名稱回讀不符 → admission exit 2；派工 transport_error，停止啟動／送題 |
+| 消費端 | 日常 launcher 與 herdr-session-handoff；既有工作以 herdr-visible-identity.ts --audit 列出未具名項 |
+| 載入路徑 | 本節；runtime 檢查在 herdr-visible-identity.ts，共用於新開與 resume |
 
 **命名對了不代表放對地方——落點是另一條獨立契約。** dispatch 出去的 pane **MUST** 落在**目標 cwd
 所屬的 workspace**，不是呼叫者當下所在的 workspace。預設 `mode: "split"` 分割的是**呼叫者的 pane**，

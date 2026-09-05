@@ -102,7 +102,7 @@ const bom = await projectionPlan({ cladeRoot: process.env.CLADE_HOME, manifest }
 
 把兩份輸出併進 intake sheet 給使用者看。catalog 題（db-host / register-fleet / deploy-track…）仍只問 `question-catalog.ts`，不要跟 BOM 列混成一張表。
 
-UI／有前端（`@nuxt/ui`、或 Nuxt 且有 pages）：BOM 出完後 Read `references/impeccable-follow-up.md`。那是**追問契約**，不是 catalog。**MUST** 缺哪項問哪項直到齊；**NEVER** 只寫「記得裝 impeccable」就過。品牌／theme／tokens **不准**加成 catalog 題（會跟 `ai-guidance:catalog-vs-cli` 衝突）。
+UI／有前端（`@nuxt/ui`、或 Nuxt 且有 pages）：BOM 出完後 Read `references/impeccable-follow-up.md`。那是**追問契約**，不是 catalog。scaffold／projection 成功後（Step 3）agent **MUST 立刻自己載入**該檔並缺哪項問哪項直到齊、寫進檔。**NEVER** 只寫「記得裝 impeccable」就過，**NEVER** 把這段變成請人類手打 slash command。品牌／theme／tokens **不准**加成 catalog 題（會跟 `ai-guidance:catalog-vs-cli` 衝突）。
 
 ## 2. 建 session state 與隔離工作區
 
@@ -145,7 +145,7 @@ node "$CLADE_HOME/scripts/mint-gate-playbooks.ts" \
 
 產物：`docs/playbooks/README.md`（含 § Browser 分流）+ `PROGRESS.md` + `GATE-TODOS.md` + 01–05、HANDOFF `## User-gate board`。缺 pack 不算 bootstrap 完成。`bootstrap-project.ts` 已含這一步；本節是 skill 自己跑 scaffold 後、進 Step 4 之前的補齊。
 
-UI consumer **開好後 MUST 跑 `/design new`**（載入 hub-core `design` orchestrator）。接著按 `references/impeccable-follow-up.md` 追問到齊。缺項未問完 **不准**把本 skill 收成 `READY`。
+UI consumer（mode=`new`、有前端／impeccable 適用）scaffold／projection 成功後，agent **MUST 立刻自己載入** `references/impeccable-follow-up.md`，或內部 invoke hub-core `design` 的 new mode。這是 bootstrap **同一條流程的必經段**：對使用者缺哪項問哪項直到齊，並把答案寫進 `PRODUCT.md`／`DESIGN.md`／theme tokens。`/design new` 只是 agent 可呼叫的 skill 入口，**不是**人類必打指令。**NEVER** 把 design new mode 寫成人類必打的 slash 作業。缺項未問完、檔未寫齊 **不准**把本 skill 收成 `READY`。
 
 ### `adopt`
 

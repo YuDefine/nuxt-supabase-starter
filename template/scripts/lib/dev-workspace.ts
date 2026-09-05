@@ -16,6 +16,8 @@
  * caller 取好傳進來，才能在沒有 herdr server 的環境下測。
  */
 
+import { taskName } from '../herdr-visible-identity.ts'
+
 export type WorkspaceInfo = {
   workspace_id?: string
   label?: string | null
@@ -57,7 +59,7 @@ function isInside(path: string, root: string): boolean {
  * ambiguous → 永遠修不回去。
  */
 function isDevSessionPane(pane: PaneInfo): boolean {
-  return typeof pane.label === 'string' && pane.label.startsWith('dev-')
+  return typeof pane.label === 'string' && taskName(pane.label).startsWith('dev-')
 }
 
 function paneMatchesRoots(pane: PaneInfo, repoRoots: string[]): boolean {

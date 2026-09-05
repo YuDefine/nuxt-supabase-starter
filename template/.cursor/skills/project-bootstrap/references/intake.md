@@ -64,7 +64,7 @@ node "$CLADE_HOME/scripts/bp-scan.ts" --plan --json --modules '<modules JSON>'
 
 `--modules` 用上表 Clade runtime direction（加上 `auth` / `framework=nuxt`）。plugin / rule / skill 走 `projectionPlan({ cladeRoot, manifest })`（`scripts/audit-projection-invariant.ts`），manifest 用 `resolveParsed({ version, modules })`。不准另寫投影模擬。這張表不是 catalog 題；不要跟 `question-catalog.ts` 的選項混問。不要自動 `/bp record`。
 
-UI／有前端：BOM 之後立刻 Read `impeccable-follow-up.md`。逐 id 檢查；缺的 MUST 問 user 直到齊。**NEVER** 把那些題寫進 `question-catalog.ts` 或 CLI flags。
+UI／有前端：BOM 之後立刻 Read `impeccable-follow-up.md`。scaffold／projection 成功後 agent **MUST 自己**逐 id 檢查；缺的 MUST 問 user 直到齊並寫進檔。**NEVER** 把那些題寫進 `question-catalog.ts` 或 CLI flags。**NEVER** 把後續引導寫成請人類手打 slash command。
 
 ## `db_host` 答完之後
 

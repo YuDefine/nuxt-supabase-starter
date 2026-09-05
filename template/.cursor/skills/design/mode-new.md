@@ -29,7 +29,7 @@ Ask if not already clear（open-ended 蒐集，不是 pick-one，不開決策頁
 
 Foundation 未完成（缺 PRODUCT.md，或有 UI 卻缺 DESIGN.md）→ **STOP** 跑上表對應命令。**NEVER** 把 init 寫進 plan 當第一條就進 Decision Gates。
 
-新專案／bootstrap 剛開好的 UI consumer：完整配置追問清單 SoT 是 `project-bootstrap` 的 `references/impeccable-follow-up.md`（安裝路徑與版本、PRODUCT／DESIGN 欄位、theme tokens、`/design new`）。**MUST** 缺哪項問哪項直到齊；**NEVER** 默默跳過或只提醒「去裝 impeccable」。
+新專案／bootstrap 剛開好的 UI consumer：完整配置追問清單 SoT 是 `project-bootstrap` 的 `references/impeccable-follow-up.md`（安裝路徑與版本、PRODUCT／DESIGN 欄位、theme tokens、live-mode）。bootstrap **自己**在 scaffold 成功後載入本 mode／該契約，**MUST** 缺哪項問哪項直到齊並寫檔；**NEVER** 默默跳過、只提醒「去裝 impeccable」，或叫使用者手打本 skill 的 slash command。
 
 `/impeccable init` 在 v3 會從單次 codebase scan 引導建立 **PRODUCT.md**（必要：使用者、品牌、語氣、anti-references、strategic principles、register）和 **DESIGN.md**（必要：色彩、字體、層次、元件、layout 規格），並順帶配置 Live Mode config + 推薦下一步指令。後續涵蓋：
 

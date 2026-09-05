@@ -3,6 +3,8 @@
 
 本檔是 UI／有前端 consumer 的 **追問契約**。Catalog 題仍只問 `question-catalog.ts`；這裡**不是** catalog 題，也不是 `ai-guidance:catalog-vs-cli`。**NEVER** 把品牌／theme 寫進 starter CLI flags。
 
+**觸發點：** `project-bootstrap` 在 UI 新專案（mode=`new`、有前端／impeccable 適用）於 scaffold／projection 成功後，agent **MUST 立刻自己載入本檔**（或內部 invoke hub-core `design` 的 new mode），對使用者缺哪項問哪項直到齊，並把答案寫進 `PRODUCT.md`／`DESIGN.md`／theme tokens。這是 bootstrap **同一條流程的必經段**，不是可選作業。`/design new` 仍可當 skill 入口給 **agent 呼叫／bootstrap 內嵌**；對人類操作者不是必打指令。**NEVER** 叫使用者手打 slash command。
+
 **NEVER** 只說「記得裝 impeccable」就過。Agent MUST 對下列每一項檢查；已齊的跳過，缺的 **MUST 向 user 追問直到齊**，不准默默用預設、不准寫進 plan checklist 當「稍後再做」就繼續宣告 bootstrap `READY`。
 
 對齊來源：consumer／starter 的 impeccable **v4.1.1**、`plugins/hub-core/skills/design/SKILL.md` Prerequisites／Step 1、`plugins/hub-core/skills/design/references/impeccable-install.md`。
@@ -13,7 +15,7 @@ UI predicate：`@nuxt/ui`、或 Nuxt 且有 `pages/`／`app/pages/`、或已有 
 
 | id | 缺了要問什麼 | 齊的可觀察 predicate |
 | --- | --- | --- |
-| `design-new` | 開好 UI consumer 後要跑 `/design new`（orchestrator，不是自己手寫一頁） | 本 session 已 invoke `/design new`，或 user 明示本輪不做 UI 視覺（記 N/A 理由） |
+| `design-new` | Agent 自己載入 hub-core `design` new mode（orchestrator，不是自己手寫一頁、也不是叫人打 slash command），再依本表把缺欄問完並寫檔 | 本 session agent 已自行 invoke design new mode 並落地檔案，或 user 明示本輪不做 UI 視覺（記 N/A 理由） |
 | `plugin-design` | Claude plugin 要有 `design`（hub-core）；Cursor 對齊走 plugin 抄進 `.cursor/skills/design`，**不**靠把 `design` 加進 `CONSUMER_VISIBLE_SKILLS` 檔案投影（雙載） | `.cursor/skills/design/SKILL.md` 或 `.cursor/skills/design/SKILL.md` 或 `.agents/skills/design/SKILL.md` 其一存在 |
 | `impeccable-claude` | 要裝 impeccable 給 Claude | `.cursor/skills/impeccable/SKILL.md` 存在（copy 目錄或 symlink） |
 | `impeccable-agents` | Codex／多 agent 共用路徑 | `.agents/skills/impeccable/SKILL.md` 存在（symlink mode 常只在這裡有實體） |
@@ -33,12 +35,12 @@ UI predicate：`@nuxt/ui`、或 Nuxt 且有 `pages/`／`app/pages/`、或已有 
 | `design-typography` | 字體與尺度 | `DESIGN.md` 有 Typography |
 | `design-spacing` | 間距與 layout tokens | `DESIGN.md` 有 spacing／layout |
 | `design-components` | 元件慣例 | `DESIGN.md` 有 components |
-| `theme-tokens` | 實作層 theme | Nuxt UI：`app.config.ts` 有 `ui` key。否則 `design-system/MASTER.md` 或等價 CSS tokens |
+| `theme-tokens` | 實作層 theme | Nuxt UI：`app/app.config.ts`（Nuxt 4；根目錄 `app.config.ts` 為後援）有 **問過使用者後寫入** 的 `ui.colors`。Starter **不預設品牌色**（不准沿用、也不准假設藍／鋅）。空殼 `ui`、省略 `ui.colors`、或 scaffold 遺留的 `primary: 'blue'` + `neutral: 'zinc'` 都算未齊。否則 `design-system/MASTER.md` 或等價 CSS tokens |
 | `live-mode` | init 會帶的 Live Mode | `.impeccable/` 或 impeccable live 設定存在，或 user 明示本輪不安 Live |
 
 `pin`／`unpin`／`hooks`／`doctor` 是 management，**不是**本表必追項；user 問起才讀 `impeccable-install.md`。
 
-補正命令（仍要問人、不要默默跑完假裝齊）：缺 md → `/impeccable init`（有 UI code 缺 `DESIGN.md` → 先 `/impeccable document`）。缺安裝 → `impeccable-install.md` 標準 snippet（對齊既有 copy／symlink）。缺 `/design new` → 開好 repo 後立刻跑。
+補正命令（仍要問人、不要默默跑完假裝齊）：缺 md → agent 跑 `/impeccable init`（有 UI code 缺 `DESIGN.md` → 先 `/impeccable document`）。缺安裝 → `impeccable-install.md` 標準 snippet（對齊既有 copy／symlink）。缺 design foundation → scaffold 成功後 agent 立刻自己觸發 design new mode／本表追問並寫檔。**NEVER** 把補正寫成請人類手打 `/design new`。
 
 ## 與 catalog／BOM 的邊界
 

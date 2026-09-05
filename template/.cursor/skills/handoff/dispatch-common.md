@@ -112,7 +112,7 @@ git -C <該 worktree> log -1 --format=%cr    # 最後一筆 commit 幾分鐘前�
 
 **每一次** dispatch **MUST** 帶任務描述性 `--label`：**三種 topology（split／tab／workspace）都命名 pane**，建 Tab／workspace 時額外命名該 Tab／workspace。**NEVER** 只給 repo 名或倚賴預設值——同一 repo 派出去的多個 session 在 UI 與 patrol 輸出裡會完全無法分辨，而 `fanout` 一次就派 N 個，這件事在 fanout 下不是不便而是致命。helper 缺 label 直接回 `usage_error`，不建立任何東西。
 
-receipt 的 `pane_label_applied` **為 `false`，或這個欄位根本不存在**，兩者是同一格：都代表 pane 可能仍掛著預設標題，**MUST** 照實寫進收工訊息，並當場補 `herdr pane rename <pane-id> "[<pane-id>] <label>"`。**NEVER** 把欄位缺席讀成「這條路徑不適用」「這個 topology 不命名 pane」或「沒報就是沒問題」——實測 58 筆 dispatch record 裡 `false` 出現 0 次、欄位缺席 48 次，缺席正是這條契約唯一真正遇到的失敗形狀。
+receipt 的 `pane_label_applied` **為 `false`，或這個欄位根本不存在**，兩者是同一格：都代表 pane 可能仍掛著預設標題，**MUST** 照實寫進收工訊息，並當場補 `node ~/offline/clade/vendor/scripts/herdr-visible-identity.ts --pane <pane-id> --label "<任務名稱>"`。**NEVER** 把欄位缺席讀成「這條路徑不適用」「這個 topology 不命名 pane」或「沒報就是沒問題」——實測 58 筆 dispatch record 裡 `false` 出現 0 次、欄位缺席 48 次，缺席正是這條契約唯一真正遇到的失敗形狀。
 
 驗收與自查斷言 **MUST** 寫成「欄位存在且為 `true`」（`has("pane_label_applied") and .pane_label_applied == true`），**NEVER** 寫成 `!== false` / `!= false`——那會讓欄位缺席整批通過。
 

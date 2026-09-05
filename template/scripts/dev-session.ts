@@ -95,6 +95,11 @@ import {
   runWtEnvBootstrap,
   describeBackingServiceGap,
 } from './lib/wt-env-bootstrap-runner.ts'
+import {
+  assertDefaultHerdrCaller,
+  taskName,
+  verifyVisibleIdentity,
+} from './herdr-visible-identity.ts'
 import { chooseDevWorkspace } from './lib/dev-workspace.ts'
 // 分配模型的 SoT。base 池寬度 NEVER 在本檔另外定義一次——第二份常數與分配器漂開時，
 // 回收會殺到合法的 dev server。
@@ -127,6 +132,10 @@ function err(s) {
 }
 
 function sh(cmd, args, { allowFail = true } = {}) {
+  if (cmd === 'herdr') {
+    assertDefaultHerdrCaller()
+    args = ['--session', 'default', ...args]
+  }
   try {
     return execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
   } catch (e) {
@@ -952,7 +961,7 @@ function listHerdrTabs() {
   return panes
     .filter((p) => typeof p?.label === 'string' && p.label)
     .map((p) => ({
-      name: p.label,
+      name: taskName(p.label),
       tabId: p.tab_id,
       paneId: p.pane_id,
       workspaceId: p.workspace_id,
@@ -968,7 +977,7 @@ function listDevTabs() {
  * 由 caller 用 port + lease 的 devServer.pid 判定（見 cmdLaunch），或用
  * devProcessAlive() 直接問 herdr 前景程序。
  */
-function findSession(name) {
+export function findSession(name) {
   return listHerdrTabs().find((t) => t.name === name) || null
 }
 
@@ -1016,7 +1025,7 @@ function resolveDevWorkspaceId(consumerId, repoRoots) {
  * 目錄，對 Tab 歸屬零影響（2026-08-12 實證）。找不到該 consumer 的 workspace 就**建
  * 一個**，NEVER 退回不帶 `--workspace` 的寫法。
  */
-function createBackgroundTab(name, cwd, ownership) {
+export function createBackgroundTab(name, cwd, ownership) {
   const existing = findSession(name)
   if (existing) return { tabId: existing.tabId, paneId: existing.paneId }
 
@@ -1056,8 +1065,7 @@ function createBackgroundTab(name, cwd, ownership) {
 
   // create 的 --label 撐不過第一次 title 更新（見本區塊開頭）。rename 才是 identity 的落點：
   // pane 的給 findSession 用，tab 的給人在 UI 上認。
-  sh('herdr', ['pane', 'rename', paneId, name])
-  sh('herdr', ['tab', 'rename', tabId, name])
+  verifyVisibleIdentity(herdrJson, { paneId, tabId, label: name, cwd, nameTab: true })
   return { tabId, paneId }
 }
 

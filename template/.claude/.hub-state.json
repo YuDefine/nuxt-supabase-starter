@@ -68,7 +68,7 @@
     "rules/service-url-locality.md": "b472d7f3ad4d6a36",
     "rules/session-claims.md": "15eddfff8c524e11",
     "rules/session-tasks.md": "af8041995e86711f",
-    "rules/session-tasks.operations.md": "0ccd1c7d9d6c5ab4",
+    "rules/session-tasks.operations.md": "e7f06a5273102f63",
     "rules/shared-file-concurrent-write.md": "eba52f2ee3752dfb",
     "rules/shell-script-safety.md": "579e8f8685b55ca0",
     "rules/skill-management.md": "b35fcfe130a457d7",
