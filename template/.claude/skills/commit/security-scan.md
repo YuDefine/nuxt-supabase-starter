@@ -10,6 +10,33 @@ Local edits will be reverted by the next sync.
 `gates.md` § 0-S 的延伸檔。準備 Tier 3 掃描、選定提交批次或判讀掃描失敗時讀取。
 退出碼與 `failure_class` 維持既有放行契約；`failure_reason` 與 `failure_phase` 提供診斷，沒有新增自動放行路徑。
 
+## 掃描模型
+
+wrapper 固定預設模型為 `gpt-5.6-sol`，每次呼叫 scanner 都明確傳入模型；
+差異掃描與 `baseline` 都使用 `xhigh`。顯式 `--model`／`--effort` 可覆寫，
+空白模型會在啟動 scanner 前被拒絕；新 ledger 記錄本次指定模型，舊 row 的 null 保留為未知。
+這裡的模型是 Codex Security 的安全分析模型，與負責執行命令的代理模型分開。
+
+官方 CLI quickstart 的預設組合是 `gpt-5.6-sol + xhigh`，plugin quickstart 也推薦此組合以取得最佳掃描品質。
+Clade 的模型與推理強度預設採同一組合。來源：
+[CLI 模型與推理強度](https://learn.chatgpt.com/docs/security/cli#choose-a-model-and-reasoning-effort)、
+[plugin 品質建議](https://learn.chatgpt.com/docs/security/plugin#run-your-first-scan)。
+
+## Scanner 登入位置
+
+wrapper 固定使用 `${XDG_DATA_HOME:-$HOME/.local/share}/clade/codex-security-state`，
+與未指定 state directory 的裸 CLI 登入分開。修復 `auth-failure` 時使用相同位置與已安裝版本：
+
+```bash
+security_data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+CODEX_SECURITY_STATE_DIR="$security_data_home/clade/codex-security-state" \
+  "$security_data_home/clade/codex-security/0.1.25/node_modules/.bin/codex-security" login --device-auth
+```
+
+同一命令的尾端換成 `login status` 可讀取登入狀態；顯示已登入只代表有儲存的憑證，
+refresh 是否成功仍以新一次真實掃描為準。直接執行未帶 state directory 的 `npx … login`
+不會修復 wrapper 使用的那份登入；不複製憑證檔或改用 API key。
+
 ## 工具故障放行（僅 `tool-failure-no-artifacts` / `tool-timeout`）
 
 工具故障時，未掃描放行是人的決定。MUST 用 `AskUserQuestion` 二選一，**NEVER** 自行決定放行：
@@ -64,6 +91,8 @@ scanner stderr 在 `<output_dir>.stderr.log`，與 output directory 同層；sca
 
 ledger 記錄兩端 SHA、snapshot digest、scanner 版本及 `security_md_sha`，成本值附來源；
 缺成本資料以 null / unknown 表示，不寫成零或實際扣款。舊 row 缺新增欄位時視為未知。
+成本優先讀 manifest；缺值時讀官方 stderr 的停止訊息或最後進度估算，來源記為 `scanner-stderr`。
+停止訊息的成本優先於先前進度；美元停止線不當成已用成本，stderr 估算也不代表實際扣款。
 ledger 在 target 自家 `docs/evidence/security-scan-ledger.jsonl`（可由 `CLADE_SECURITY_SCAN_LEDGER` 覆寫），
 掃描後併入本批 selective commit。
 

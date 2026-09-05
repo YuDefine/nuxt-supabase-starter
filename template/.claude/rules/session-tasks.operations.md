@@ -591,6 +591,16 @@ Step 1–9 屬 `clade-publish` skill。
 | `status: nested_dispatch_refused` | 本 session 是 coordinated child，fanout 不適用。改走 `relay` |
 | transport / launcher / Herdr preflight 失敗 | 保留 durable task；能在本 session 合法完成就直接完成，否則回具體 blocker。**NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt |
 
+#### Helper 與 Herdr CLI 的能力邊界
+
+`not_in_herdr` 是 helper 的身分限制，不是 Herdr CLI 的能力或使用者授權判決。每一次因 helper 不支援而準備請使用者關閉／回收 pane 前，MUST 先查 `herdr --session default pane` 的 CLI 能力，按以下契約自行處理已授權範圍。
+
+1. 從本 task 的建立 receipt 取得確切 pane ID 與 session ID；用 `agent get` 核對相同 session，用 `pane read` 查實際工作結果。只處理本 task 建立且已成功、明確失敗或使用者明確取消的 pane。
+2. 將畫面證據存到可寫路徑並回讀成功，再核對一次 session 未更換且已停止工作；執行 `herdr --session default pane close <確切 pane ID>`，隨即 `pane get` 驗證已不存在。
+3. 回報的是「pane 已回收」及真實業務結果。沒有業務完成證據的失敗 pane 不標成功；重派前沿原 durable task 確認剩餘工作。
+
+這條路徑不偽造 `HERDR_ENV`，不代簽 relay／completion，也不解除 harness／permission 拒絕。身分不符、工作仍進行、歸屬不明或僅有 idle/done 而無結果證據時保留 pane 並查證。
+
 #### 已列明 gate 的短答（MUST）
 
 目前 gate 的 scope、targets 與動作已清楚列明後，user 回 `允許`、`可以`、`\sg` 或其他無歧義等價短答，**即完成那一個 gate**。**NEVER** 要求 user 複製、重述或重新貼完整 scope／授權句；下一個不同 gate 仍照常詢問。

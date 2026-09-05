@@ -9,9 +9,11 @@ import {
   openSync,
   realpathSync,
   writeFileSync,
+  writeSync,
+  rmSync,
 } from 'node:fs'
 import { constants, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 async function digest(path: string) {
@@ -27,7 +29,12 @@ async function digest(path: string) {
 /** Capture a single invocation before any presentation filter touches its output. */
 export async function runEvidence(
   command: string[],
-  options: { directory?: string; timeoutMs?: number } = {},
+  options: {
+    directory?: string
+    timeoutMs?: number
+    display?: boolean
+    displayBytes?: number
+  } = {},
 ) {
   if (!command.length) throw new Error('Expected a command after --')
   const directory = mkdtempSync(join(options.directory ?? tmpdir(), 'clade-evidence-'))
@@ -39,11 +46,32 @@ export async function runEvidence(
   let timedOut = false
   let spawnError: string | undefined
   const child = spawn(command[0]!, command.slice(1), {
-    stdio: ['ignore', out, err],
+    stdio: [
+      options.display ? 'inherit' : 'ignore',
+      options.display ? 'pipe' : out,
+      options.display ? 'pipe' : err,
+    ],
     detached: process.platform !== 'win32',
   })
-  closeSync(out)
-  closeSync(err)
+  let truncated = false
+  if (options.display) {
+    const capture = (fd: number, target: NodeJS.WriteStream) => {
+      let displayed = 0
+      return (chunk: Buffer) => {
+        let offset = 0
+        while (offset < chunk.length) offset += writeSync(fd, chunk, offset)
+        const remaining = Math.max(0, (options.displayBytes ?? 8000) - displayed)
+        if (remaining) target.write(chunk.subarray(0, remaining))
+        displayed += Math.min(remaining, chunk.length)
+        if (chunk.length > remaining) truncated = true
+      }
+    }
+    child.stdout!.on('data', capture(out, process.stdout))
+    child.stderr!.on('data', capture(err, process.stderr))
+  } else {
+    closeSync(out)
+    closeSync(err)
+  }
   function kill(signal: NodeJS.Signals) {
     if (!child.pid) return
     try {
@@ -72,6 +100,10 @@ export async function runEvidence(
     },
   )
   clearTimeout(timer)
+  if (options.display) {
+    closeSync(out)
+    closeSync(err)
+  }
   process.off('SIGINT', onInterrupt)
   process.off('SIGTERM', onTerminate)
   const receipt = {
@@ -82,6 +114,7 @@ export async function runEvidence(
     ...result,
     timedOut,
     spawnError,
+    truncated,
     stdout: await digest(stdout),
     stderr: await digest(stderr),
   }
@@ -103,12 +136,19 @@ function invokedAsCli() {
 
 if (invokedAsCli()) {
   const separator = process.argv.indexOf('--')
-  if (separator !== 2 || process.argv.length < 4) {
-    console.error('Usage: node run-evidence.ts -- <raw-command> [args...]')
+  const display = process.argv[2] === '--display'
+  if (separator !== (display ? 3 : 2) || process.argv.length <= separator + 1) {
+    console.error('Usage: node run-evidence.ts [--display] -- <raw-command> [args...]')
     process.exitCode = 2
   } else {
-    const result = await runEvidence(process.argv.slice(separator + 1))
-    console.log(JSON.stringify(result))
+    const result = await runEvidence(process.argv.slice(separator + 1), { display })
+    if (!display) console.log(JSON.stringify(result))
+    else if (result.code !== 0 || result.spawnError || result.truncated) {
+      console.error(
+        `\nclade evidence: ${result.receiptPath}${result.truncated ? ' (display truncated; raw streams complete)' : ''}`,
+      )
+      if (result.spawnError) console.error(result.spawnError)
+    } else rmSync(dirname(result.receiptPath), { recursive: true })
     process.exitCode = result.spawnError
       ? 127
       : (result.code ?? 128 + (result.signal ? constants.signals[result.signal] : 0))

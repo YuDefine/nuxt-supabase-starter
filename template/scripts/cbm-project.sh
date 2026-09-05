@@ -3,6 +3,9 @@
 # Shared identity for bootstrap, refresh, and explicit index calls. Source this file.
 cbm_resolve_project() {
   CBM_REPO=$(cd "${1:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}" 2>/dev/null && pwd -P) || return 1
+  local repository_root
+  repository_root=$(git -C "$CBM_REPO" rev-parse --show-toplevel 2>/dev/null) || repository_root=""
+  [[ -z "$repository_root" ]] || CBM_REPO=$(cd "$repository_root" && pwd -P)
   CBM_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/codebase-memory-mcp"
   CBM_PATH_ID=${CBM_REPO#/}
   CBM_PATH_ID=${CBM_PATH_ID//\//-}
@@ -43,5 +46,5 @@ cbm_alias_matches() {
 }
 
 cbm_is_temporary() {
-  case "$CBM_REPO" in /tmp/*|"$HOME"/.tmp/*) return 0 ;; *) return 1 ;; esac
+  case "$CBM_REPO" in /tmp|/tmp/*|"$HOME"/.tmp|"$HOME"/.tmp/*|"$HOME"/.cache/clade-publish-tmp|"$HOME"/.cache/clade-publish-tmp/*) return 0 ;; *) return 1 ;; esac
 }

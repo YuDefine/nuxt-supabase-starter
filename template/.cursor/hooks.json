@@ -3,9 +3,24 @@
   "hooks": {
     "postToolUse": [
       {
-        "command": "\"$(git rev-parse --show-toplevel)\"/.cursor/hooks/post-migration-gen-types.sh",
+        "command": "export CLADE_RUNTIME=cursor; \"${CURSOR_PROJECT_DIR:-$(git rev-parse --show-toplevel)}\"/.cursor/hooks/post-migration-gen-types.sh",
         "matcher": "MCP: .*apply_migration",
         "timeout": 30
+      },
+      {
+        "command": "CLADE_RUNTIME=cursor node \"${CURSOR_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/scripts/cbm-health.ts\" --hook PostToolUse",
+        "timeout": 5,
+        "matcher": "Shell"
+      }
+    ],
+    "sessionStart": [
+      {
+        "command": "export CLADE_RUNTIME=cursor; \"${CURSOR_PROJECT_DIR:-$(git rev-parse --show-toplevel)}\"/.cursor/hooks/_bootstrap-check.sh",
+        "timeout": 30
+      },
+      {
+        "command": "CLADE_RUNTIME=cursor node \"${CURSOR_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/scripts/cbm-health.ts\" --hook SessionStart",
+        "timeout": 5
       }
     ]
   }

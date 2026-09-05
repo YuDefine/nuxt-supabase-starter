@@ -423,7 +423,8 @@ Tier 3 判定：migration / schema / auth / permission / RLS / raw SQL / billing
 CLADE_ROOT="${CLADE_HOME:-$HOME/offline/clade}"
 node "$CLADE_ROOT/scripts/security-scan.ts" working-tree \
   --target "$(git rev-parse --show-toplevel)" \
-  --effort high \
+  --model gpt-5.6-sol \
+  --effort xhigh \
   --max-cost <本次診斷或掃描停止線> \
   --paths-file <本次批次清單>
 ```
