@@ -34,108 +34,33 @@ STATE_JSON="$PROJECT_ROOT/.claude/.hub-state.json"
 # 若 binary 存在且當前 repo 尚未 index，背景跑 fast index。
 # Silent skip on any error — 不阻擋 session 啟動。
 #
-# 名稱契約（2026-08-25 <consumer-b>）：agent 會傳 consumerId / basename（`<consumer-b>`），
-# MCP 預設卻用 path-derived id（`home-charles-offline-<consumer-b>`）。對不上時
-# search_graph 回 "project not found or not indexed"，且 available_projects
-# 只列前 64 筆 —— 真實名稱被藏住，agent 誤判「沒索引」而去 grep。
-# 因此：main checkout 用 short name 索引；SessionStart stdout 印出
-# `codebase-memory-mcp: project="…"` 讓 agent 不必猜。
-# 已存在的 path-derived 圖不要 VACUUM-INTO 改名：`nodes.project` FK 掛
-# `projects.name`，只改 PK 會讓 MCP 回 status=empty（nodes=0）。
+# Identity/readiness is shared with explicit indexing and post-commit refresh.
+# Main aliases are reused only when their stored root matches this checkout;
+# worktrees use path-derived IDs. A populated graph does not prove freshness.
 
 maybe_auto_index() {
-  # 安裝位置是 machine-local state：PATH 優先（homebrew / npm -g / mise 各有落點），
-  # ~/.local/bin 只是最後的 fallback。寫死單機路徑正是本 hook 要避免的 config drift，
-  # 見 docs/pitfalls/2026-05-18-consumer-mcp-codebase-memory-missing.md。
-  local bin
-  bin=$(command -v codebase-memory-mcp 2>/dev/null) || bin="${HOME}/.local/bin/codebase-memory-mcp"
-  [[ -x "$bin" ]] || return 0
-
-  local cache="${HOME}/.cache/codebase-memory-mcp"
-  local path_id short_name="" is_worktree=0
-  path_id=$(echo "$PROJECT_ROOT" | sed 's|^/||; s|/|-|g')
-
-  local git_dir git_common
-  git_dir=$(git -C "$PROJECT_ROOT" rev-parse --path-format=absolute --git-dir 2>/dev/null) || git_dir=""
-  git_common=$(git -C "$PROJECT_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || git_common=""
-  if [[ -n "$git_dir" && -n "$git_common" && "$git_dir" != "$git_common" ]]; then
-    is_worktree=1
-  fi
-
-  if [[ "$is_worktree" -eq 0 ]]; then
-    short_name=$(basename "$PROJECT_ROOT")
-    if [[ -f "$PROJECT_ROOT/.claude/consumer-meta.json" ]] && command -v jq >/dev/null 2>&1; then
-      local cid
-      cid=$(jq -r '.consumerId // empty' "$PROJECT_ROOT/.claude/consumer-meta.json" 2>/dev/null || true)
-      if [[ "$cid" =~ ^[A-Za-z0-9._-]+$ ]]; then
-        short_name=$cid
-      fi
+  local wrapper="" candidate script_dir
+  script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+  for candidate in "$script_dir/scripts/cbm-index.sh" \
+    "$PROJECT_ROOT/vendor/scripts/cbm-index.sh" "$PROJECT_ROOT/scripts/cbm-index.sh" \
+    "$PROJECT_ROOT/.clade/scripts/cbm-index.sh" "$HOME/offline/clade/vendor/scripts/cbm-index.sh"; do
+    if [[ -x "$candidate" && -f "$(dirname "$candidate")/cbm-project.sh" ]]; then
+      wrapper=$candidate
+      break
     fi
-  fi
-
-  # Ready = on-disk nodes>0。不 spawn 270MB CLI；也不只看檔案存在
-  # （空的 alias db 會讓 MCP 回 status=empty，比 not-found 更糟）。
-  cbm_node_count() {
-    local db="$cache/${1}.db"
-    [[ -f "$db" ]] || { echo 0; return 0; }
-    if command -v sqlite3 >/dev/null 2>&1; then
-      sqlite3 "$db" 'SELECT count(*) FROM nodes;' 2>/dev/null || echo 0
-    else
-      echo -1
-    fi
-  }
-
-  local ready_name="" ready_nodes=0 n
-  if [[ -n "$short_name" ]]; then
-    n=$(cbm_node_count "$short_name")
-    if [[ "$n" -gt 0 ]]; then
-      ready_name=$short_name
-      ready_nodes=$n
-    fi
-  fi
-  if [[ -z "$ready_name" ]]; then
-    n=$(cbm_node_count "$path_id")
-    if [[ "$n" -gt 0 ]]; then
-      ready_name=$path_id
-      ready_nodes=$n
-    elif [[ "$n" -eq -1 && -f "$cache/${path_id}.db" ]]; then
-      ready_name=$path_id
-      ready_nodes="?"
-    fi
-  fi
-
-  if [[ -n "$ready_name" ]]; then
-    printf 'codebase-memory-mcp: project="%s" status=ready nodes=%s\n' "$ready_name" "$ready_nodes"
+  done
+  [[ -n "$wrapper" ]] || return 0
+  source "$(dirname "$wrapper")/cbm-project.sh"
+  cbm_resolve_project "$PROJECT_ROOT" || return 0
+  cbm_is_temporary && return 0
+  if [[ "$CBM_NODES" -gt 0 ]]; then
+    printf 'codebase-memory-mcp: project="%s" status=ready nodes=%s (coverage/freshness unverified)\n' "$CBM_PROJECT" "$CBM_NODES"
     return 0
   fi
-
-  local payload
-  if [[ -n "$short_name" ]]; then
-    payload="{\"repo_path\":\"$PROJECT_ROOT\",\"mode\":\"fast\",\"name\":\"$short_name\"}"
-    printf 'codebase-memory-mcp: project="%s" status=indexing (fast, background)\n' "$short_name"
-  else
-    payload="{\"repo_path\":\"$PROJECT_ROOT\",\"mode\":\"fast\"}"
-    printf 'codebase-memory-mcp: project="%s" status=indexing (fast, background)\n' "$path_id"
-  fi
-  # 兩道保護，NEVER 拿掉（2026-08-27 事故，見
-  # docs/pitfalls/2026-08-27-cbm-auto-index-concurrent-oom.md）：
-  #   flock -n     —— 本 hook 在**每個 session 的每次 SessionStart** 觸發，而 ready 判定
-  #                   是 nodes>0。DB 一旦損毀，全部 session 同時判「未 index」→ 同一個 repo
-  #                   被 N 份併發 index。實測 25 份併發、5 份同時 index 同一個 repo。
-  #   MemoryMax    —— index worker 記憶體無界成長，工具自報的 budget_mb 對它自己沒有約束力。
-  #                   實測單一 worker anon-rss 衝到 16.2G、18 分鐘內 6 次 OOM kill，SIGKILL
-  #                   打斷 journal_mode=delete 的 SQLite 寫入 → DB 損毀 → 迴圈自我維持。
-  # 拿不到 lock 就放棄是正確語義：別人正在 index 同一個 repo，它跑完就是新的。
-  # payload 一字不動，short name 契約不受影響。
-  local lock="${TMPDIR:-/tmp}/cbm-index-${path_id}.lock"
-  if [[ "$(systemctl --user is-system-running 2>/dev/null)" =~ ^(running|degraded)$ ]]; then
-    nohup systemd-run --user --scope -q \
-      -p MemoryMax="${CBM_INDEX_MEM_MAX:-6G}" -p MemorySwapMax=0 -p CPUQuota="${CBM_INDEX_CPU_QUOTA:-200%}" \
-      flock -n "$lock" "$bin" cli index_repository "$payload" >/dev/null 2>&1 &
-  else
-    nohup flock -n "$lock" "$bin" cli index_repository "$payload" >/dev/null 2>&1 &
-  fi
-  disown
+  command -v codebase-memory-mcp >/dev/null 2>&1 || [[ -x "$HOME/.local/bin/codebase-memory-mcp" ]] || return 0
+  printf 'codebase-memory-mcp: project="%s" status=indexing (fast, background; results not ready yet)\n' "$CBM_PROJECT"
+  nohup "$wrapper" "$CBM_REPO" fast >/dev/null 2>&1 &
+  disown 2>/dev/null || true
 }
 
 maybe_auto_index
