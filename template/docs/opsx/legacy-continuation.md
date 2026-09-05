@@ -34,6 +34,6 @@ The OpenSpec CLI reports planning artifacts as incomplete. Canonical inspect add
 
 ## Landing
 
-The source bindings are committed. Runtime materialization currently belongs to the isolated checkout. After landing the source bindings, the starter session must materialize these same explicit work IDs in the canonical template checkout before the isolated checkout is removed. This preserves identity across the handoff.
+The source bindings landed in canonical main at `61b1b2a409237e1b3e188c6b28fa2ddd76311ffa`. All eight explicit work IDs were materialized in the canonical template checkout and compared with the isolated receipt before that checkout was removed. They remain queued for evidence revalidation. The handoff receipt is stored outside the repository at `<home>/offline/evidence/acp-project-delivery/2026-09-05/starter-continuation/canonical-materialization.json`; the isolated runtime backup is alongside it as `isolated-runtime.tar.gz`.
 
 External Sentry and database checks remain external prerequisites. The public-hygiene item is evidence revalidation of the 28 recorded completed rows, not a new business requirement.
