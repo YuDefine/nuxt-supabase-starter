@@ -49,6 +49,18 @@ describe('scaffold: base-only (no features)', () => {
     // validate-starter 是 starter repo 自身的 self-validation tool，17f080cf 起移回 root
     // .claude/commands/；scaffold 出去的專案不維護 starter，拿到它沒有意義。
     expect(existsSync(join(targetDir, '.claude', 'commands', 'validate-starter.md'))).toBe(false)
+    expect(existsSync(join(targetDir, '.spectra.yaml'))).toBe(false)
+    expect(existsSync(join(targetDir, 'skills-lock.json'))).toBe(false)
+    expect(existsSync(join(targetDir, '.agent', 'workflows'))).toBe(false)
+    expect(existsSync(join(targetDir, 'scripts', 'spectra-advanced'))).toBe(false)
+    expect(existsSync(join(targetDir, '.claude', 'rules', 'spectra-workflow.md'))).toBe(false)
+    expect(existsSync(join(targetDir, '.claude', 'rules', 'spectra-notion-coupling.md'))).toBe(
+      false,
+    )
+    expect(existsSync(join(targetDir, '.cursor', 'rules', 'spectra-workflow.mdc'))).toBe(false)
+    expect(existsSync(join(targetDir, '.cursor', 'rules', 'spectra-notion-coupling.mdc'))).toBe(
+      false,
+    )
     expect(existsSync(join(targetDir, '.scaffold-cleanup'))).toBe(false)
     expect(existsSync(join(targetDir, 'scripts', 'compress-skill-descriptions.sh'))).toBe(true)
     expect(existsSync(join(targetDir, 'scripts', 'templates', 'clean', 'README.md'))).toBe(true)
@@ -432,40 +444,28 @@ describe('scaffold: void.cloud 接線', () => {
   })
 })
 
-describe('scaffold: first-run 暖機流程的可執行性', () => {
-  // first-run marker 叫使用者跑的每一條 script MUST 真的存在於產出的 package.json。
-  // 這四支的檔案一直都被複製進專案，但 package.json 只寫了 roadmap 一條 ——
-  // 有檔沒入口比兩者都缺更難查：檔案明明在，指令卻 Command not found。
-  it('package.json 有 first-run 流程用到的 spectra script', () => {
-    const targetDir = join(TEST_DIR, 'spectra-scripts')
-    assembleProject(targetDir, [], 'spectra-scripts')
+describe('scaffold: first-run OPSX 暖機流程的可執行性', () => {
+  it('package.json 有 first-run 流程用到的 OPSX scripts', () => {
+    const targetDir = join(TEST_DIR, 'opsx-scripts')
+    assembleProject(targetDir, [], 'opsx-scripts')
 
     const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf-8'))
-    for (const name of [
-      'spectra:roadmap',
-      'spectra:claim',
-      'spectra:claims',
-      'spectra:followups',
-    ]) {
+    expect(pkg.devDependencies['@fission-ai/openspec']).toBe('1.12.0')
+    for (const name of ['opsx:status', 'opsx:list']) {
       expect(pkg.scripts[name]).toBeDefined()
+      expect(pkg.scripts[name]).toContain('node .clade/vendor/scripts/opsx-control.ts')
     }
+    expect(Object.keys(pkg.scripts).filter((name) => name.startsWith('spectra:'))).toEqual([])
   })
 
-  it('每個 spectra script 指到的檔案都真的被複製進專案', () => {
-    const targetDir = join(TEST_DIR, 'spectra-script-files')
-    assembleProject(targetDir, [], 'spectra-script-files')
+  it('base OpenSpec 設定使用中性的 OPSX profile', () => {
+    const targetDir = join(TEST_DIR, 'opsx-config')
+    assembleProject(targetDir, [], 'opsx-config')
 
-    const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf-8'))
-    const spectraScripts = Object.entries(pkg.scripts as Record<string, string>).filter(([k]) =>
-      k.startsWith('spectra:'),
-    )
-    expect(spectraScripts.length).toBeGreaterThan(0)
-
-    for (const [, cmd] of spectraScripts) {
-      const scriptPath = /(scripts\/[\w/.-]+)/.exec(cmd)?.[1]
-      expect(scriptPath, `無法從 "${cmd}" 取出 script 路徑`).toBeDefined()
-      expect(existsSync(join(targetDir, scriptPath!)), `${scriptPath} 沒被複製`).toBe(true)
-    }
+    const config = readFileSync(join(targetDir, 'openspec', 'config.yaml'), 'utf-8')
+    expect(config).toContain('schema: clade-control-plane-v1')
+    expect(config).toContain('node .clade/vendor/scripts/opsx-control.ts')
+    expect(config).not.toContain('schema: spec-driven')
   })
 })
 

@@ -1,0 +1,458 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/YuDefine/clade/blob/main/docs/contracts/ai-control-plane/v1/native-intent.schema.json",
+  "title": "AI control plane native intent artifacts v1",
+  "oneOf": [
+    { "$ref": "#/$defs/intake_batch" },
+    { "$ref": "#/$defs/clarification" },
+    { "$ref": "#/$defs/requirement_impact" },
+    { "$ref": "#/$defs/work_plan" },
+    { "$ref": "#/$defs/human_gate" },
+    { "$ref": "#/$defs/human_decision" },
+    { "$ref": "#/$defs/feature_map_reference" }
+  ],
+  "$defs": {
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "source_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "locator", "digest", "captured_at"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["file", "conversation", "plan", "api", "manual"] },
+        "locator": { "type": "string", "minLength": 1 },
+        "digest": { "$ref": "#/$defs/digest" },
+        "captured_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "typed_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "revision"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "change",
+            "requirement",
+            "scenario",
+            "work_spec",
+            "gate",
+            "evidence",
+            "projection"
+          ]
+        },
+        "id": { "type": "string", "minLength": 1 },
+        "revision": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "change_supersession": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One change-to-change supersession relation (plan §3.2 rule 6, §10.5), declared on the intent source. A rebuild under a new chg_ id is lossless only if what it replaced travels with it.",
+      "required": ["ref", "profile", "artifact_root", "digest"],
+      "properties": {
+        "ref": {
+          "allOf": [
+            { "$ref": "#/$defs/typed_ref" },
+            { "properties": { "type": { "const": "change" } } }
+          ]
+        },
+        "profile": { "type": "string", "enum": ["spectra-v1", "opsx-v2"] },
+        "artifact_root": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!(?:.*/)?\\.\\.(?:/|$))[^/\\\\]+(?:/[^/\\\\]+)*$",
+          "description": "Repository-relative POSIX path to the superseded change's artifacts: no leading slash, no backslash, no empty segment, no `..` segment. The same predicate `readChangeSupersessions` enforces at runtime — a root that escapes the repository pins the relation to one machine's layout."
+        },
+        "digest": {
+          "$ref": "#/$defs/digest",
+          "description": "Tree digest over artifact_root: sha256 of the canonical map <relative posix path> -> sha256(file bytes)."
+        }
+      }
+    },
+    "intake_batch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_type",
+        "schema_version",
+        "batch_id",
+        "change_id",
+        "change_revision",
+        "recorded_at",
+        "recorded_by",
+        "source",
+        "raw_text",
+        "source_quotes",
+        "supersedes_batch_id"
+      ],
+      "properties": {
+        "artifact_type": { "const": "intent.intake_batch" },
+        "schema_version": { "const": 1 },
+        "batch_id": { "type": "string", "pattern": "^inb_[A-Za-z0-9]+$" },
+        "change_id": { "type": "string", "pattern": "^chg_[A-Za-z0-9]+$" },
+        "change_revision": { "type": "integer", "minimum": 1 },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "recorded_by": { "const": "intent-controller" },
+        "source": { "$ref": "#/$defs/source_ref" },
+        "raw_text": { "type": "string", "minLength": 1 },
+        "source_quotes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "supersedes_batch_id": { "type": ["string", "null"], "pattern": "^inb_[A-Za-z0-9]+$" }
+      }
+    },
+    "clarification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_type",
+        "schema_version",
+        "clarification_id",
+        "change_id",
+        "change_revision",
+        "clarification_revision",
+        "question",
+        "answer",
+        "decision_id",
+        "source_batch_ids",
+        "recorded_at",
+        "recorded_by",
+        "supersedes_clarification_id"
+      ],
+      "properties": {
+        "artifact_type": { "const": "intent.clarification" },
+        "schema_version": { "const": 1 },
+        "clarification_id": { "type": "string", "pattern": "^clr_[A-Za-z0-9]+$" },
+        "change_id": { "type": "string", "pattern": "^chg_[A-Za-z0-9]+$" },
+        "change_revision": { "type": "integer", "minimum": 1 },
+        "clarification_revision": { "type": "integer", "minimum": 1 },
+        "question": { "type": "string", "minLength": 1 },
+        "answer": { "type": "string", "minLength": 1 },
+        "decision_id": { "type": "string", "pattern": "^dec_[A-Za-z0-9]+$" },
+        "source_batch_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^inb_[A-Za-z0-9]+$" }
+        },
+        "recorded_at": { "type": "string", "format": "date-time" },
+        "recorded_by": { "const": "intent-controller" },
+        "supersedes_clarification_id": {
+          "type": ["string", "null"],
+          "pattern": "^clr_[A-Za-z0-9]+$"
+        }
+      }
+    },
+    "requirement_impact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_type",
+        "schema_version",
+        "impact_id",
+        "change_id",
+        "requirement_id",
+        "requirement_revision",
+        "assessment_revision",
+        "source_batch_ids",
+        "source_quote",
+        "rationale",
+        "target",
+        "consistency",
+        "planner_owner",
+        "assessed_at",
+        "supersedes_impact_id"
+      ],
+      "properties": {
+        "artifact_type": { "const": "requirement.impact" },
+        "schema_version": { "const": 1 },
+        "impact_id": { "type": "string", "pattern": "^imp_[A-Za-z0-9]+$" },
+        "change_id": { "type": "string", "pattern": "^chg_[A-Za-z0-9]+$" },
+        "requirement_id": { "type": "string", "pattern": "^req_[A-Za-z0-9]+$" },
+        "requirement_revision": { "type": "integer", "minimum": 1 },
+        "assessment_revision": { "type": "integer", "minimum": 1 },
+        "source_batch_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^inb_[A-Za-z0-9]+$" }
+        },
+        "source_quote": { "type": "string", "minLength": 1 },
+        "rationale": { "type": "string", "minLength": 1 },
+        "target": { "$ref": "#/$defs/typed_ref" },
+        "consistency": {
+          "type": "string",
+          "enum": ["consistent", "inconsistent", "unknown", "superseded"]
+        },
+        "planner_owner": { "type": "string", "minLength": 1 },
+        "assessed_at": { "type": "string", "format": "date-time" },
+        "supersedes_impact_id": { "type": ["string", "null"], "pattern": "^imp_[A-Za-z0-9]+$" }
+      }
+    },
+    "work_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "work_spec_id",
+        "label",
+        "requirement_refs",
+        "depends_on",
+        "deliverable",
+        "verification_policy",
+        "owner_capability"
+      ],
+      "properties": {
+        "work_spec_id": { "type": "string", "pattern": "^wsp_[A-Za-z0-9]+$" },
+        "label": { "type": "string", "minLength": 1 },
+        "requirement_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/typed_ref" }
+        },
+        "depends_on": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^wsp_[A-Za-z0-9]+$" }
+        },
+        "deliverable": { "type": "string", "minLength": 1 },
+        "verification_policy": { "type": "string", "minLength": 1 },
+        "owner_capability": { "type": "string", "minLength": 1 }
+      }
+    },
+    "work_plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_type",
+        "schema_version",
+        "plan_id",
+        "change_id",
+        "intent_revision",
+        "plan_revision",
+        "generated_at",
+        "generated_by",
+        "source_artifact_ids",
+        "work_specs",
+        "supersedes_plan_revision"
+      ],
+      "properties": {
+        "artifact_type": { "const": "intent.work_plan" },
+        "schema_version": { "const": 1 },
+        "plan_id": { "type": "string", "pattern": "^wpl_[A-Za-z0-9]+$" },
+        "change_id": { "type": "string", "pattern": "^chg_[A-Za-z0-9]+$" },
+        "intent_revision": { "type": "integer", "minimum": 1 },
+        "plan_revision": { "type": "integer", "minimum": 1 },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "generated_by": { "const": "intent-controller" },
+        "source_artifact_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "work_specs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/work_spec" }
+        },
+        "supersedes_plan_revision": { "type": ["integer", "null"], "minimum": 1 }
+      }
+    },
+    "human_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_type",
+        "schema_version",
+        "gate_id",
+        "change_id",
+        "family",
+        "state",
+        "judgment",
+        "why_actionable",
+        "expected_behavior",
+        "actual_evidence",
+        "consequences",
+        "recommendation",
+        "controls",
+        "affected",
+        "response_url",
+        "recorded_at"
+      ],
+      "properties": {
+        "artifact_type": { "const": "human.gate" },
+        "schema_version": { "const": 1 },
+        "gate_id": { "type": "string", "pattern": "^gate_[A-Za-z0-9]+$" },
+        "change_id": { "type": "string", "pattern": "^chg_[A-Za-z0-9]+$" },
+        "family": {
+          "type": "string",
+          "enum": [
+            "product-ruling",
+            "experience-acceptance",
+            "external-action",
+            "exception-escalation"
+          ]
+        },
+        "state": { "type": "string", "enum": ["open", "expired", "cancelled"] },
+        "judgment": { "type": "string", "minLength": 1 },
+        "why_actionable": { "type": "string", "minLength": 1 },
+        "expected_behavior": { "type": "string", "minLength": 1 },
+        "actual_evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "locator"],
+            "properties": {
+              "label": { "type": "string", "minLength": 1 },
+              "locator": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "consequences": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["option", "outcome"],
+            "properties": {
+              "option": { "type": "string", "minLength": 1 },
+              "outcome": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "recommendation": { "type": ["string", "null"] },
+        "controls": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "options", "requested_fields"],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "choose-option",
+                "provide-value",
+                "accept-reject",
+                "confirm-action",
+                "recovery"
+              ]
+            },
+            "options": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            "requested_fields": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "affected": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["requirement_ids", "work_spec_ids"],
+          "properties": {
+            "requirement_ids": {
+              "type": "array",
+              "items": { "type": "string", "pattern": "^req_[A-Za-z0-9]+$" }
+            },
+            "work_spec_ids": {
+              "type": "array",
+              "items": { "type": "string", "pattern": "^wsp_[A-Za-z0-9]+$" }
+            }
+          }
+        },
+        "response_url": { "type": "string", "minLength": 1 },
+        "recorded_at": { "type": "string", "format": "date-time" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["controls"],
+            "properties": {
+              "controls": {
+                "required": ["mode"],
+                "properties": { "mode": { "const": "provide-value" } }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "controls": { "properties": { "requested_fields": { "minItems": 1 } } }
+            }
+          },
+          "else": {
+            "properties": {
+              "controls": { "properties": { "options": { "minItems": 1 } } }
+            }
+          }
+        }
+      ]
+    },
+    "human_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_type",
+        "schema_version",
+        "decision_id",
+        "gate_id",
+        "change_id",
+        "outcome",
+        "provided_fields",
+        "evidence_links",
+        "recorded_at"
+      ],
+      "properties": {
+        "artifact_type": { "const": "human.decision" },
+        "schema_version": { "const": 1 },
+        "decision_id": { "type": "string", "pattern": "^dec_[A-Za-z0-9]+$" },
+        "gate_id": { "type": "string", "pattern": "^gate_[A-Za-z0-9]+$" },
+        "change_id": { "type": "string", "pattern": "^chg_[A-Za-z0-9]+$" },
+        "outcome": { "type": "string", "minLength": 1 },
+        "provided_fields": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        },
+        "evidence_links": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "recorded_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "feature_map_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_type",
+        "schema_version",
+        "reference_id",
+        "change_id",
+        "feature_id",
+        "feature_map_locator",
+        "entry_point",
+        "subject_revision",
+        "digest",
+        "receipt_id",
+        "requirement_id",
+        "work_spec_id",
+        "recorded_at"
+      ],
+      "properties": {
+        "artifact_type": { "const": "verification.feature_map_reference" },
+        "schema_version": { "const": 1 },
+        "reference_id": { "type": "string", "pattern": "^fmr_[A-Za-z0-9]+$" },
+        "change_id": { "type": "string", "pattern": "^chg_[A-Za-z0-9]+$" },
+        "feature_id": { "type": "string", "pattern": "^feat_[A-Za-z0-9]+$" },
+        "feature_map_locator": { "type": "string", "minLength": 1 },
+        "entry_point": { "type": "string", "minLength": 1 },
+        "subject_revision": { "type": "integer", "minimum": 1 },
+        "digest": { "$ref": "#/$defs/digest" },
+        "receipt_id": { "type": ["string", "null"], "pattern": "^evd_[A-Za-z0-9]+$" },
+        "requirement_id": { "type": "string", "pattern": "^req_[A-Za-z0-9]+$" },
+        "work_spec_id": { "type": "string", "pattern": "^wsp_[A-Za-z0-9]+$" },
+        "recorded_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

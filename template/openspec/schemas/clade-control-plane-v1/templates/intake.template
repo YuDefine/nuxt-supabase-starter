@@ -1,0 +1,20 @@
+{
+  "artifact_type": "intent.intake_batch",
+  "schema_version": 1,
+  "batch_id": "inb_replace1",
+  "change_id": "chg_replace1",
+  "change_revision": 1,
+  "recorded_at": "2000-01-01T00:00:00.000Z",
+  "recorded_by": "intent-controller",
+  "source": {
+    "kind": "manual",
+    "locator": "replace-with-source-locator",
+    "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "captured_at": "2000-01-01T00:00:00.000Z"
+  },
+  "raw_text": "replace with the complete source intent",
+  "source_quotes": [
+    "replace with an exact source quote"
+  ],
+  "supersedes_batch_id": null
+}

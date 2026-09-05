@@ -1,0 +1,338 @@
+{
+  "profile_assignment": {
+    "artifact_type": "workflow_profile.assignment",
+    "schema_version": 1,
+    "assignment_id": "wpa_starterevlog20260905",
+    "change_id": "chg_01K4B8Q7M9N2P3R4S5T6V7W8X9",
+    "profile": "opsx-v2",
+    "assignment_revision": 1,
+    "assigned_at": "2026-09-05T09:38:24Z",
+    "assigned_by": "legacy-continuation-reader",
+    "source_digest": "sha256:6f60f6a08bef2f336a635bc02df903795e7011ea7d690373712c5422fdae7d53",
+    "first_work_created_at": null,
+    "supersedes_assignment_id": null
+  },
+  "native_artifacts": [
+    {
+      "artifact_type": "intent.intake_batch",
+      "schema_version": 1,
+      "batch_id": "inb_starterevlog20260905",
+      "change_id": "chg_01K4B8Q7M9N2P3R4S5T6V7W8X9",
+      "change_revision": 1,
+      "recorded_at": "2026-09-05T09:38:24Z",
+      "recorded_by": "legacy-continuation-reader",
+      "source": {
+        "kind": "legacy-continuation",
+        "locator": "openspec/changes/add-evlog-baseline-and-scaffolder-preset-flag",
+        "digest": "sha256:6f60f6a08bef2f336a635bc02df903795e7011ea7d690373712c5422fdae7d53",
+        "captured_at": "2026-09-05T09:38:24Z"
+      },
+      "raw_text": "Continuation of the legacy evlog baseline and scaffolder preset record. Preserve 28 checked rows as historical facts; carry the seven inventory-unchecked rows as explicit revalidation work and retain the exact legacy source tree via supersedes.",
+      "source_quotes": [
+        "Legacy inventory records 35 tasks total, 28 checked and 7 unchecked. The unchecked rows are carried below without changing the legacy tasks.md."
+      ],
+      "supersedes_batch_id": null
+    },
+    {
+      "artifact_type": "requirement.impact",
+      "schema_version": 1,
+      "impact_id": "imp_addevlogbaselineandscaffolderpresetflag1",
+      "change_id": "chg_01K4B8Q7M9N2P3R4S5T6V7W8X9",
+      "requirement_id": "req_addevlogbaselineandscaffolderpresetflag1",
+      "requirement_revision": 1,
+      "assessment_revision": 1,
+      "source_batch_ids": [
+        "inb_starterevlog20260905"
+      ],
+      "source_quote": "1.1 確認 starter working tree clean（user `assemble.ts` + `_dev-login.get.ts` WIP 先 commit / stash） — deferred: user WIP 留 unstaged，本 commit 走 selective stage 不影響",
+      "rationale": "Carry the recorded legacy row as an explicit evidence revalidation gate; do not alter its historical checkbox or infer completion.",
+      "target": {
+        "type": "work_spec",
+        "id": "wsp_addevlogbaselineandscaffolderpresetflag1",
+        "revision": 1
+      },
+      "consistency": "consistent",
+      "planner_owner": "legacy-continuation-reader",
+      "assessed_at": "2026-09-05T09:38:24Z",
+      "supersedes_impact_id": null
+    },
+    {
+      "artifact_type": "requirement.impact",
+      "schema_version": 1,
+      "impact_id": "imp_addevlogbaselineandscaffolderpresetflag2",
+      "change_id": "chg_01K4B8Q7M9N2P3R4S5T6V7W8X9",
+      "requirement_id": "req_addevlogbaselineandscaffolderpresetflag2",
+      "requirement_revision": 1,
+      "assessment_revision": 1,
+      "source_batch_ids": [
+        "inb_starterevlog20260905"
+      ],
+      "source_quote": "3.5 user wizard mode（不帶 flag）跑 scaffold；驗對話正確顯示 4 選項 — deferred：留 §5 #4 walkthrough 由 user 親自跑（涉及 interactive prompt，CI 自動跑也是測 prompts 邏輯）",
+      "rationale": "Carry the recorded legacy row as an explicit evidence revalidation gate; do not alter its historical checkbox or infer completion.",
+      "target": {
+        "type": "work_spec",
+        "id": "wsp_addevlogbaselineandscaffolderpresetflag2",
+        "revision": 1
+      },
+      "consistency": "consistent",
+      "planner_owner": "legacy-continuation-reader",
+      "assessed_at": "2026-09-05T09:38:24Z",
+      "supersedes_impact_id": null
+    },
+    {
+      "artifact_type": "requirement.impact",
+      "schema_version": 1,
+      "impact_id": "imp_addevlogbaselineandscaffolderpresetflag3",
+      "change_id": "chg_01K4B8Q7M9N2P3R4S5T6V7W8X9",
+      "requirement_id": "req_addevlogbaselineandscaffolderpresetflag3",
+      "requirement_revision": 1,
+      "assessment_revision": 1,
+      "source_batch_ids": [
+        "inb_starterevlog20260905"
+      ],
+      "source_quote": "#1 scaffold 一個 `pnpm create nuxt-supabase-starter test-app --evlog-preset baseline` 跑 `pnpm dev`，瀏覽器打 `http://localhost:3000` 觸發任何 endpoint，Sentry Logs 看到 wide event（含 actor / tenant / requestSize / userAgent / geo / traceContext 5 件套 enricher 命中）",
+      "rationale": "Carry the recorded legacy row as an explicit evidence revalidation gate; do not alter its historical checkbox or infer completion.",
+      "target": {
+        "type": "work_spec",
+        "id": "wsp_addevlogbaselineandscaffolderpresetflag3",
+        "revision": 1
+      },
+      "consistency": "consistent",
+      "planner_owner": "legacy-continuation-reader",
+      "assessed_at": "2026-09-05T09:38:24Z",
+      "supersedes_impact_id": null
+    },
+    {
+      "artifact_type": "requirement.impact",
+      "schema_version": 1,
+      "impact_id": "imp_addevlogbaselineandscaffolderpresetflag4",
+      "change_id": "chg_01K4B8Q7M9N2P3R4S5T6V7W8X9",
+      "requirement_id": "req_addevlogbaselineandscaffolderpresetflag4",
+      "requirement_revision": 1,
+      "assessment_revision": 1,
+      "source_batch_ids": [
+        "inb_starterevlog20260905"
+      ],
+      "source_quote": "#2 同 #1 但 `--evlog-preset d-pattern-audit`；除 #1 內容外，DB 內看到 `audit_logs` table 有 row（hash + prev_hash 不為 null）",
+      "rationale": "Carry the recorded legacy row as an explicit evidence revalidation gate; do not alter its historical checkbox or infer completion.",
+      "target": {
+        "type": "work_spec",
+        "id": "wsp_addevlogbaselineandscaffolderpresetflag4",
+        "revision": 1
+      },
+      "consistency": "consistent",
+      "planner_owner": "legacy-continuation-reader",
+      "assessed_at": "2026-09-05T09:38:24Z",
+      "supersedes_impact_id": null
+    },
+    {
+      "artifact_type": "requirement.impact",
+      "schema_version": 1,
+      "impact_id": "imp_addevlogbaselineandscaffolderpresetflag5",
+      "change_id": "chg_01K4B8Q7M9N2P3R4S5T6V7W8X9",
+      "requirement_id": "req_addevlogbaselineandscaffolderpresetflag5",
+      "requirement_revision": 1,
+      "assessment_revision": 1,
+      "source_batch_ids": [
+        "inb_starterevlog20260905"
+      ],
+      "source_quote": "#3 同 #1 但 `--evlog-preset nuxthub-ai`；NuxtHub D1 binding 後 `evlog_events` table 有 row + `event.ai.cost_usd` 寫入",
+      "rationale": "Carry the recorded legacy row as an explicit evidence revalidation gate; do not alter its historical checkbox or infer completion.",
+      "target": {
+        "type": "work_spec",
+        "id": "wsp_addevlogbaselineandscaffolderpresetflag5",
+        "revision": 1
+      },
+      "consistency": "consistent",
+      "planner_owner": "legacy-continuation-reader",
+      "assessed_at": "2026-09-05T09:38:24Z",
+      "supersedes_impact_id": null
+    },
+    {
+      "artifact_type": "requirement.impact",
+      "schema_version": 1,
+      "impact_id": "imp_addevlogbaselineandscaffolderpresetflag6",
+      "change_id": "chg_01K4B8Q7M9N2P3R4S5T6V7W8X9",
+      "requirement_id": "req_addevlogbaselineandscaffolderpresetflag6",
+      "requirement_revision": 1,
+      "assessment_revision": 1,
+      "source_batch_ids": [
+        "inb_starterevlog20260905"
+      ],
+      "source_quote": "#4 wizard mode 跑 `pnpm create nuxt-supabase-starter test-wizard`（不帶 flag），對話階段選「baseline」與「none」結果跟對應 flag 一致",
+      "rationale": "Carry the recorded legacy row as an explicit evidence revalidation gate; do not alter its historical checkbox or infer completion.",
+      "target": {
+        "type": "work_spec",
+        "id": "wsp_addevlogbaselineandscaffolderpresetflag6",
+        "revision": 1
+      },
+      "consistency": "consistent",
+      "planner_owner": "legacy-continuation-reader",
+      "assessed_at": "2026-09-05T09:38:24Z",
+      "supersedes_impact_id": null
+    },
+    {
+      "artifact_type": "requirement.impact",
+      "schema_version": 1,
+      "impact_id": "imp_addevlogbaselineandscaffolderpresetflag7",
+      "change_id": "chg_01K4B8Q7M9N2P3R4S5T6V7W8X9",
+      "requirement_id": "req_addevlogbaselineandscaffolderpresetflag7",
+      "requirement_revision": 1,
+      "assessment_revision": 1,
+      "source_batch_ids": [
+        "inb_starterevlog20260905"
+      ],
+      "source_quote": "#5 starter 自家（不 scaffold）跑 `pnpm dev` + `evlog-adoption-audit`，depth 顯示 5；block signals 全綠",
+      "rationale": "Carry the recorded legacy row as an explicit evidence revalidation gate; do not alter its historical checkbox or infer completion.",
+      "target": {
+        "type": "work_spec",
+        "id": "wsp_addevlogbaselineandscaffolderpresetflag7",
+        "revision": 1
+      },
+      "consistency": "consistent",
+      "planner_owner": "legacy-continuation-reader",
+      "assessed_at": "2026-09-05T09:38:24Z",
+      "supersedes_impact_id": null
+    },
+    {
+      "artifact_type": "intent.work_plan",
+      "schema_version": 1,
+      "plan_id": "wpl_addevlogbaselineandscaffolderpresetflag20260905",
+      "change_id": "chg_01K4B8Q7M9N2P3R4S5T6V7W8X9",
+      "intent_revision": 1,
+      "plan_revision": 1,
+      "generated_at": "2026-09-05T09:38:24Z",
+      "generated_by": "legacy-continuation-reader",
+      "source_artifact_ids": [
+        "inb_starterevlog20260905",
+        "imp_addevlogbaselineandscaffolderpresetflag1",
+        "imp_addevlogbaselineandscaffolderpresetflag2",
+        "imp_addevlogbaselineandscaffolderpresetflag3",
+        "imp_addevlogbaselineandscaffolderpresetflag4",
+        "imp_addevlogbaselineandscaffolderpresetflag5",
+        "imp_addevlogbaselineandscaffolderpresetflag6",
+        "imp_addevlogbaselineandscaffolderpresetflag7"
+      ],
+      "work_specs": [
+        {
+          "work_spec_id": "wsp_addevlogbaselineandscaffolderpresetflag1",
+          "label": "Revalidate starter tree baseline prerequisite",
+          "requirement_refs": [
+            {
+              "type": "requirement",
+              "id": "req_addevlogbaselineandscaffolderpresetflag1",
+              "revision": 1
+            }
+          ],
+          "depends_on": [],
+          "deliverable": "1.1 確認 starter working tree clean（user `assemble.ts` + `_dev-login.get.ts` WIP 先 commit / stash） — deferred: user WIP 留 unstaged，本 commit 走 selective stage 不影響",
+          "verification_policy": "legacy-evidence-revalidation-v1",
+          "owner_capability": "starter-maintainer"
+        },
+        {
+          "work_spec_id": "wsp_addevlogbaselineandscaffolderpresetflag2",
+          "label": "Revalidate interactive evlog preset wizard",
+          "requirement_refs": [
+            {
+              "type": "requirement",
+              "id": "req_addevlogbaselineandscaffolderpresetflag2",
+              "revision": 1
+            }
+          ],
+          "depends_on": [],
+          "deliverable": "3.5 user wizard mode（不帶 flag）跑 scaffold；驗對話正確顯示 4 選項 — deferred：留 §5 #4 walkthrough 由 user 親自跑（涉及 interactive prompt，CI 自動跑也是測 prompts 邏輯）",
+          "verification_policy": "scaffold-interactive-evidence-v1",
+          "owner_capability": "starter-maintainer"
+        },
+        {
+          "work_spec_id": "wsp_addevlogbaselineandscaffolderpresetflag3",
+          "label": "Revalidate baseline evlog Sentry wide event",
+          "requirement_refs": [
+            {
+              "type": "requirement",
+              "id": "req_addevlogbaselineandscaffolderpresetflag3",
+              "revision": 1
+            }
+          ],
+          "depends_on": [],
+          "deliverable": "#1 scaffold 一個 `pnpm create nuxt-supabase-starter test-app --evlog-preset baseline` 跑 `pnpm dev`，瀏覽器打 `http://localhost:3000` 觸發任何 endpoint，Sentry Logs 看到 wide event（含 actor / tenant / requestSize / userAgent / geo / traceContext 5 件套 enricher 命中）",
+          "verification_policy": "external-sentry-evidence-v1",
+          "owner_capability": "human-external"
+        },
+        {
+          "work_spec_id": "wsp_addevlogbaselineandscaffolderpresetflag4",
+          "label": "Revalidate d-pattern-audit database evidence",
+          "requirement_refs": [
+            {
+              "type": "requirement",
+              "id": "req_addevlogbaselineandscaffolderpresetflag4",
+              "revision": 1
+            }
+          ],
+          "depends_on": [],
+          "deliverable": "#2 同 #1 但 `--evlog-preset d-pattern-audit`；除 #1 內容外，DB 內看到 `audit_logs` table 有 row（hash + prev_hash 不為 null）",
+          "verification_policy": "external-database-evidence-v1",
+          "owner_capability": "human-external"
+        },
+        {
+          "work_spec_id": "wsp_addevlogbaselineandscaffolderpresetflag5",
+          "label": "Revalidate nuxthub-ai database evidence",
+          "requirement_refs": [
+            {
+              "type": "requirement",
+              "id": "req_addevlogbaselineandscaffolderpresetflag5",
+              "revision": 1
+            }
+          ],
+          "depends_on": [],
+          "deliverable": "#3 同 #1 但 `--evlog-preset nuxthub-ai`；NuxtHub D1 binding 後 `evlog_events` table 有 row + `event.ai.cost_usd` 寫入",
+          "verification_policy": "external-nuxthub-evidence-v1",
+          "owner_capability": "human-external"
+        },
+        {
+          "work_spec_id": "wsp_addevlogbaselineandscaffolderpresetflag6",
+          "label": "Revalidate wizard preset parity",
+          "requirement_refs": [
+            {
+              "type": "requirement",
+              "id": "req_addevlogbaselineandscaffolderpresetflag6",
+              "revision": 1
+            }
+          ],
+          "depends_on": [],
+          "deliverable": "#4 wizard mode 跑 `pnpm create nuxt-supabase-starter test-wizard`（不帶 flag），對話階段選「baseline」與「none」結果跟對應 flag 一致",
+          "verification_policy": "scaffold-interactive-evidence-v1",
+          "owner_capability": "human-external"
+        },
+        {
+          "work_spec_id": "wsp_addevlogbaselineandscaffolderpresetflag7",
+          "label": "Revalidate starter evlog adoption audit",
+          "requirement_refs": [
+            {
+              "type": "requirement",
+              "id": "req_addevlogbaselineandscaffolderpresetflag7",
+              "revision": 1
+            }
+          ],
+          "depends_on": [],
+          "deliverable": "#5 starter 自家（不 scaffold）跑 `pnpm dev` + `evlog-adoption-audit`，depth 顯示 5；block signals 全綠",
+          "verification_policy": "starter-audit-evidence-v1",
+          "owner_capability": "starter-maintainer"
+        }
+      ],
+      "supersedes_plan_revision": null
+    }
+  ],
+  "supersedes": [
+    {
+      "ref": {
+        "type": "change",
+        "id": "add-evlog-baseline-and-scaffolder-preset-flag",
+        "revision": 1
+      },
+      "profile": "spectra-v1",
+      "artifact_root": "openspec/changes/add-evlog-baseline-and-scaffolder-preset-flag",
+      "digest": "sha256:6f60f6a08bef2f336a635bc02df903795e7011ea7d690373712c5422fdae7d53"
+    }
+  ]
+}

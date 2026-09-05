@@ -1,0 +1,33 @@
+{
+  "artifact_type": "intent.work_plan",
+  "schema_version": 1,
+  "plan_id": "wpl_replace1",
+  "change_id": "chg_replace1",
+  "intent_revision": 1,
+  "plan_revision": 1,
+  "generated_at": "2000-01-01T00:00:00.000Z",
+  "generated_by": "intent-controller",
+  "source_artifact_ids": [
+    "inb_replace1",
+    "clr_replace1",
+    "imp_replace1"
+  ],
+  "work_specs": [
+    {
+      "work_spec_id": "wsp_replace1",
+      "label": "replace with bounded work",
+      "requirement_refs": [
+        {
+          "type": "requirement",
+          "id": "req_replace1",
+          "revision": 1
+        }
+      ],
+      "depends_on": [],
+      "deliverable": "replace with the required deliverable",
+      "verification_policy": "replace-with-verification-policy",
+      "owner_capability": "replace-with-owner-capability"
+    }
+  ],
+  "supersedes_plan_revision": null
+}

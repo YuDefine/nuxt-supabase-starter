@@ -1,0 +1,25 @@
+[
+  {
+    "artifact_type": "requirement.impact",
+    "schema_version": 1,
+    "impact_id": "imp_replace1",
+    "change_id": "chg_replace1",
+    "requirement_id": "req_replace1",
+    "requirement_revision": 1,
+    "assessment_revision": 1,
+    "source_batch_ids": [
+      "inb_replace1"
+    ],
+    "source_quote": "replace with the requirement source quote",
+    "rationale": "replace with the consistency rationale",
+    "target": {
+      "type": "work_spec",
+      "id": "wsp_replace1",
+      "revision": 1
+    },
+    "consistency": "consistent",
+    "planner_owner": "replace-with-planner-owner",
+    "assessed_at": "2000-01-01T00:00:00.000Z",
+    "supersedes_impact_id": null
+  }
+]

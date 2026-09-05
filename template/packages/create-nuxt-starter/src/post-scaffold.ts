@@ -211,8 +211,8 @@ export function rewriteFirstGlanceDocsForDbHost(
         '### 連不到開發資料庫\n\n跑 `docs/playbooks/01-dev-database.md`。**NEVER** 本機 `supabase start`。',
       )
       .replace(
-        '4. **完整教學**：先看 [DEV_RECIPES.md](DEV_RECIPES.md)，再用 `/spectra-propose` 建立第一個 CRUD change',
-        '4. **完整教學**：先看 [QUICK_START](verify/QUICK_START.md) 與 `docs/playbooks/01-dev-database.md`，再用 `/spectra-propose` 建立第一個 CRUD change',
+        '4. **完整教學**：先看 [QUICK_START](verify/QUICK_START.md)，再用 `/opsx` 建立第一個需求',
+        '4. **完整教學**：先看 [QUICK_START](verify/QUICK_START.md) 與 `docs/playbooks/01-dev-database.md`，再用 `/opsx` 建立第一個需求',
       )
     if (port) {
       after = after.replaceAll('localhost:3000', `localhost:${port}`)
@@ -943,7 +943,7 @@ export async function postScaffold(
   }
 
   // 8. Write .claude/.first-run marker — AI session 第一次進此專案時讀此檔，
-  //    觸發 verify:starter + spectra:roadmap 暖機，跑完自行刪 marker。
+  //    觸發 verify:starter + OPSX list 暖機，跑完自行刪 marker。
   //    詳見 docs/AGENTS.md「第一次進此 session 該做什麼」。
   writeFirstRunMarker(targetDir, projectName, cladeModules)
 
@@ -1332,14 +1332,13 @@ function writeFirstRunMarker(targetDir: string, projectName: string, mods: Clade
     // instructions MUST 自給自足：原本結尾把讀者導到 starter 的 template/docs/ 底下
     // 那份 agent 指南，但 scaffold **不會複製**它（只複製 root AGENTS.md），所以每個
     // scaffold 出去的專案都拿到一個指向不存在檔案的指標。
-    // 步驟本身也 MUST 只列產生出來的 script —— 舊版列了 pnpm spectra:claims，
-    // 而那個 script 當時沒被寫進 package.json。
+    // 步驟本身也 MUST 只列產生出來的 script，且使用 bootstrap 後的 OPSX CLI。
     instructions: [
       'AI agent: 看到此檔代表 scaffold 剛完成，請先跑首輪暖機再開始任何開發。',
       '(1) pnpm verify:starter —— 機械化驗收。exit 0=全過 / 2=有 WARN（環境仍可用）/ 1=有 FAIL。',
-      '(2) pnpm spectra:roadmap —— 重算 ROADMAP（首次跑會建立基礎結構）。',
-      '(3) pnpm spectra:claims —— 確認沒有殘留 claim。',
-      '(4) 依 verify:starter 的 WARN/FAIL 列出 next-step 給使用者（缺的 env var、OAuth console URL 都會印在輸出裡）。',
+      '(2) pnpm opsx:list —— 列出現有需求與可接續項目（需先完成 clade bootstrap）。',
+      '(3) 若已有 change ID，再跑 `pnpm opsx:status -- --change-id <chg_...>` 讀取指定需求狀態。',
+      '(4) 依 verify:starter 與 OPSX list/status 的 WARN/FAIL 列出 next-step 給使用者（缺的 env var、OAuth console URL 都會印在輸出裡）。',
       '(5) 暖機完成後 rm .claude/.first-run。',
     ].join('\n'),
   }

@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.24.0",
-  "engines": {
-    "node": "^24"
-  },
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev --dotenv .env -o",
+    "opsx:history": "node .clade/vendor/scripts/opsx-control.ts history",
+    "opsx:instructions": "node .clade/vendor/scripts/opsx-control.ts instructions",
+    "opsx:list": "node .clade/vendor/scripts/opsx-control.ts list",
+    "opsx:status": "node .clade/vendor/scripts/opsx-control.ts status",
     "prepare": "nuxt prepare",
     "preview": "nuxt preview"
   },
@@ -19,7 +19,12 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@fission-ai/openspec": "1.12.0",
     "typescript": "^5.9.3",
     "vue-tsc": "^3.2.5"
-  }
+  },
+  "engines": {
+    "node": "^24"
+  },
+  "packageManager": "pnpm@11.24.0"
 }

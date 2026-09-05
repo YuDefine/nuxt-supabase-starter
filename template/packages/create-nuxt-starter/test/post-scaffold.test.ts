@@ -301,6 +301,14 @@ describe('first-run marker', () => {
     expect(readMarkerFn()).not.toContain('docs/AGENTS.md')
   })
 
+  it('instructions 使用 OPSX list entrypoint，不在空專案呼叫無 ID 的 status', () => {
+    const marker = readMarkerFn()
+    expect(marker).toContain('pnpm opsx:list')
+    expect(marker).toContain('pnpm opsx:status -- --change-id <chg_...>')
+    expect(marker).not.toMatch(/\(2\) pnpm opsx:status/)
+    expect(marker).not.toMatch(/pnpm spectra:|\/spectra-/)
+  })
+
   it('instructions 列的每一條 pnpm 指令都在 assemble 產生的 script 裡', () => {
     const marker = readMarkerFn()
     const assemble = readFileSync(join(import.meta.dirname, '..', 'src', 'assemble.ts'), 'utf-8')
@@ -468,6 +476,9 @@ describe('rewriteFirstGlanceDocsForDbHost', () => {
     expect(quick).not.toContain('localhost:3000')
     const checklist = readFileSync(join(dir, 'docs', 'NEW_PROJECT_CHECKLIST.md'), 'utf8')
     expect(checklist).not.toContain('supabase stop && supabase start')
+    expect(checklist).toContain(
+      '完整教學**：先看 [QUICK_START](verify/QUICK_START.md) 與 `docs/playbooks/01-dev-database.md`，再用 `/opsx` 建立第一個需求',
+    )
     expect(checklist).toContain('localhost:3090')
     expect(checklist).not.toContain('localhost:3000')
     const envVars = readFileSync(join(dir, 'docs', 'verify', 'ENVIRONMENT_VARIABLES.md'), 'utf8')

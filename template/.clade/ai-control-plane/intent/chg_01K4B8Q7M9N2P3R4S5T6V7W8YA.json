@@ -1,0 +1,104 @@
+{
+  "profile_assignment": {
+    "artifact_type": "workflow_profile.assignment",
+    "schema_version": 1,
+    "assignment_id": "wpa_starterhygiene20260905",
+    "change_id": "chg_01K4B8Q7M9N2P3R4S5T6V7W8YA",
+    "profile": "opsx-v2",
+    "assignment_revision": 1,
+    "assigned_at": "2026-09-05T09:38:24Z",
+    "assigned_by": "legacy-continuation-reader",
+    "source_digest": "sha256:0e48a4b6b6a032e3551168d152f34bf5d681f57b6286d1e251c42d73c9200724",
+    "first_work_created_at": null,
+    "supersedes_assignment_id": null
+  },
+  "native_artifacts": [
+    {
+      "artifact_type": "intent.intake_batch",
+      "schema_version": 1,
+      "batch_id": "inb_starterhygiene20260905",
+      "change_id": "chg_01K4B8Q7M9N2P3R4S5T6V7W8YA",
+      "change_revision": 1,
+      "recorded_at": "2026-09-05T09:38:24Z",
+      "recorded_by": "legacy-continuation-reader",
+      "source": {
+        "kind": "legacy-continuation",
+        "locator": "openspec/changes/starter-public-hygiene-commands",
+        "digest": "sha256:0e48a4b6b6a032e3551168d152f34bf5d681f57b6286d1e251c42d73c9200724",
+        "captured_at": "2026-09-05T09:38:24Z"
+      },
+      "raw_text": "Continuation of the legacy public-hygiene record. Preserve all 28 checked rows as historical facts; because no durable OPSX binding or evidence identity exists, carry one bounded evidence revalidation work item before relay.",
+      "source_quotes": [
+        "Legacy inventory records 28 of 28 task rows checked, but no durable OPSX/control-plane binding or work ID was found."
+      ],
+      "supersedes_batch_id": null
+    },
+    {
+      "artifact_type": "requirement.impact",
+      "schema_version": 1,
+      "impact_id": "imp_starterpublichygienecommands1",
+      "change_id": "chg_01K4B8Q7M9N2P3R4S5T6V7W8YA",
+      "requirement_id": "req_starterpublichygienecommands1",
+      "requirement_revision": 1,
+      "assessment_revision": 1,
+      "source_batch_ids": [
+        "inb_starterhygiene20260905"
+      ],
+      "source_quote": "28 legacy task rows are checked in `openspec/changes/starter-public-hygiene-commands/tasks.md`; revalidate their evidence against the current starter tree and preserve the completed facts without editing the legacy checkbox history.",
+      "rationale": "Carry the recorded legacy row as an explicit evidence revalidation gate; do not alter its historical checkbox or infer completion.",
+      "target": {
+        "type": "work_spec",
+        "id": "wsp_starterpublichygienecommands1",
+        "revision": 1
+      },
+      "consistency": "consistent",
+      "planner_owner": "legacy-continuation-reader",
+      "assessed_at": "2026-09-05T09:38:24Z",
+      "supersedes_impact_id": null
+    },
+    {
+      "artifact_type": "intent.work_plan",
+      "schema_version": 1,
+      "plan_id": "wpl_starterpublichygienecommands20260905",
+      "change_id": "chg_01K4B8Q7M9N2P3R4S5T6V7W8YA",
+      "intent_revision": 1,
+      "plan_revision": 1,
+      "generated_at": "2026-09-05T09:38:24Z",
+      "generated_by": "legacy-continuation-reader",
+      "source_artifact_ids": [
+        "inb_starterhygiene20260905",
+        "imp_starterpublichygienecommands1"
+      ],
+      "work_specs": [
+        {
+          "work_spec_id": "wsp_starterpublichygienecommands1",
+          "label": "Revalidate completed public-hygiene evidence",
+          "requirement_refs": [
+            {
+              "type": "requirement",
+              "id": "req_starterpublichygienecommands1",
+              "revision": 1
+            }
+          ],
+          "depends_on": [],
+          "deliverable": "28 legacy task rows are checked in `openspec/changes/starter-public-hygiene-commands/tasks.md`; revalidate their evidence against the current starter tree and preserve the completed facts without editing the legacy checkbox history.",
+          "verification_policy": "public-hygiene-evidence-revalidation-v1",
+          "owner_capability": "starter-maintainer"
+        }
+      ],
+      "supersedes_plan_revision": null
+    }
+  ],
+  "supersedes": [
+    {
+      "ref": {
+        "type": "change",
+        "id": "starter-public-hygiene-commands",
+        "revision": 1
+      },
+      "profile": "spectra-v1",
+      "artifact_root": "openspec/changes/starter-public-hygiene-commands",
+      "digest": "sha256:0e48a4b6b6a032e3551168d152f34bf5d681f57b6286d1e251c42d73c9200724"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "managed_by": "clade-ai-control-plane",
+  "schema_version": 1,
+  "files": {
+    "schema.yaml": "sha256:08df650746f29ec1a6b89c5a762115c912b2ed40b44c7c1c2dc073b07fa22496",
+    "templates/intake.template": "sha256:929478b633ef4664f3f5a99cdfabf07e902edb93076d7c5ac09e4ccf51b7f692",
+    "templates/clarifications.template": "sha256:92f5c66d8cf24c526b216800cd903a45f2a5678540e147da3a274630f584dd4f",
+    "templates/impacts.template": "sha256:5f6afc5f8befb36ea374ee10f2f862ff87c6c1435cb606f3837170920443b105",
+    "templates/work-plan.template": "sha256:7948c3621ec06f56e62ed02232ff58184a5ae86282dc186f7e75d212b490ef29",
+    "templates/execution.template": "sha256:c7d58405296391e7a73909e7855818143b0d0e78691d1a70490f2ea8b0317a6f"
+  }
+}

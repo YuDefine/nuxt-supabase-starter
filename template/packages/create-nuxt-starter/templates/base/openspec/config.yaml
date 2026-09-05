@@ -1,7 +1,12 @@
-schema: spec-driven
+schema: clade-control-plane-v1
 
 context: |
   Tech stack: Nuxt 4, Vue 3, TypeScript, Supabase (PostgreSQL)
+
+  Control plane:
+  - Native OPSX is the intent and work-plan authority.
+  - Use `node .clade/vendor/scripts/opsx-control.ts` through the `pnpm opsx:*` scripts; `status`, `instructions`, `validate`, and `history` require a specific change ID where documented.
+  - Treat generated tasks and review projections as disposable views of canonical OPSX facts.
 
   Critical constraints:
   - Auth uses useUserSession(), NEVER Supabase Auth APIs
@@ -13,6 +18,7 @@ context: |
 rules:
   proposal:
     - Use Summary > Motivation > Scope > Impact structure
+    - Include stable change identity and requirement IDs when available
     - Identify affected tables, APIs, and UI components
     - Flag if migration is required
   specs:

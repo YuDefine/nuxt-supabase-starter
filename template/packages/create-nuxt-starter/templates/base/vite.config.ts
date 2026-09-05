@@ -23,9 +23,7 @@ import { defineConfig } from 'vite-plus'
 const PROJECTION_AND_VENDOR = [
   '.claude/**',
   '.clade/**',
-  '.spectra/**',
   '.agents/**',
-  '.agent/**',
   '.codex/**',
   '.cursor/**',
   'vendor/**',

@@ -85,7 +85,7 @@ supabase-postgres-best-practices, nuxt-ui, find-skills
 
 ```
 nuxt-better-auth, supabase-rls, supabase-migration,
-server-api, pinia-store, spectra-* (apply/propose/archive/...)
+server-api, pinia-store, OPSX workflow support
 ```
 
 驗證命令：
@@ -126,9 +126,9 @@ ls .claude/skills/ | sort
 全綠後（或 verify-starter 退出碼 = 0/2）：
 
 1. **設計脈絡**（首次必跑）：在 Claude Code session 內執行 `/impeccable teach` 產出 `.impeccable.md`
-2. **第一個功能**：`/spectra-propose` 建立 change → `/spectra-apply` 實作
+2. **第一個需求**：`/opsx` 建立 OPSX change → 依 `pnpm opsx:list` 找到 change ID，再用 `pnpm opsx:status -- --change-id <chg_...>` 讀取 work plan
 3. **OAuth**（如選了 better-auth / nuxt-auth-utils）：去 provider console 申請 credentials → 填 `.env`（**人類執行，AI 不代填**）
-4. **完整教學**：先看 [DEV_RECIPES.md](DEV_RECIPES.md)，再用 `/spectra-propose` 建立第一個 CRUD change
+4. **完整教學**：先看 [QUICK_START](verify/QUICK_START.md)，再用 `/opsx` 建立第一個需求
 
 ## ⚠️ 常見問題
 

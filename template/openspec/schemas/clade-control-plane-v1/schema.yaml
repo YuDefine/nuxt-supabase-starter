@@ -1,0 +1,44 @@
+name: clade-control-plane-v1
+version: 1
+description: Clade canonical intent DAG with execution tracking
+artifacts:
+  - id: intake
+    generates: intent/intake.json
+    description: Canonical intake artifact
+    template: intake.template
+    instruction: |
+      Produce only the intake artifact for this change. Replace every template placeholder, preserve canonical IDs and revisions, include every required field, and validate the completed JSON against the contract published beside this schema (openspec/schemas/clade-control-plane-v1/native-intent.schema.json) before marking it complete.
+    requires: []
+  - id: clarifications
+    generates: intent/clarifications.json
+    description: Canonical clarifications artifact
+    template: clarifications.template
+    instruction: |
+      Produce only the clarifications artifact for this change. Replace every template placeholder, preserve canonical IDs and revisions, include every required field, and validate the completed JSON against the contract published beside this schema (openspec/schemas/clade-control-plane-v1/native-intent.schema.json) before marking it complete.
+    requires: [intake]
+  - id: impacts
+    generates: intent/impacts.json
+    description: Canonical impacts artifact
+    template: impacts.template
+    instruction: |
+      Produce only the impacts artifact for this change. Replace every template placeholder, preserve canonical IDs and revisions, include every required field, and validate the completed JSON against the contract published beside this schema (openspec/schemas/clade-control-plane-v1/native-intent.schema.json) before marking it complete.
+    requires: [intake, clarifications]
+  - id: work-plan
+    generates: intent/work-plan.json
+    description: Canonical work-plan artifact
+    template: work-plan.template
+    instruction: |
+      Produce only the work-plan artifact for this change. Replace every template placeholder, preserve canonical IDs and revisions, include every required field, and validate the completed JSON against the contract published beside this schema (openspec/schemas/clade-control-plane-v1/native-intent.schema.json) before marking it complete.
+    requires: [impacts]
+  - id: execution
+    generates: tasks.md
+    description: Canonical execution artifact
+    template: execution.template
+    instruction: |
+      Derive one generated task for every work spec in the typed intent.work_plan. Preserve work_spec IDs, dependency edges, deliverables, and verification policies. Write Markdown tasks.md only; do not emit or mutate native intent JSON.
+    requires: [work-plan]
+apply:
+  requires: [execution]
+  tracks: tasks.md
+  instruction: |
+    Consume the canonical work plan through the flow controller. OpenSpec never writes work state.

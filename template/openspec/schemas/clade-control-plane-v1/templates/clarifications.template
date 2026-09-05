@@ -1,0 +1,19 @@
+[
+  {
+    "artifact_type": "intent.clarification",
+    "schema_version": 1,
+    "clarification_id": "clr_replace1",
+    "change_id": "chg_replace1",
+    "change_revision": 1,
+    "clarification_revision": 1,
+    "question": "replace with the bounded question",
+    "answer": "replace with the authoritative answer",
+    "decision_id": "dec_replace1",
+    "source_batch_ids": [
+      "inb_replace1"
+    ],
+    "recorded_at": "2000-01-01T00:00:00.000Z",
+    "recorded_by": "intent-controller",
+    "supersedes_clarification_id": null
+  }
+]
