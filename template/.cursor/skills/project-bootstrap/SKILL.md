@@ -192,7 +192,7 @@ Step 4 的 `consumer-meta` 與 `bp-scan` 兩步只**產出建議**，採用與�
 
 不得把未拍板的 business variant 猜成 `compliant`。
 
-**安全憲法（`security-policy` convention）在這一步落地**：starter 的 `template/SECURITY.md` 是 user-owned 實填範例，`new` mode 已經帶進來——逐段核對 intake（攻擊入口是否多了 webhook / 公開表單、授權模型是 user-owned 還是 tenant-scoped、`.env.example` 的 key 名有沒有增減），tenant-scoped 就改用 `$CLADE_HOME/vendor/snippets/security-policy/SECURITY.template.tenant-scoped.md` 重填。`adopt` mode 沒有這份檔時從範本建。五段齊、不變量 ≥ 5 且每條 `enforced by` 是 `audit-new-project-readiness.ts` 與 `audit-security-policy.ts` 的判準；首次 baseline 掃描消耗 ChatGPT 額度，先量地板（`commit/security-scan.md` § 先量地板）再跑，跑不了就在 registry 宣告 `security-policy: scan-only` 並登 TD。
+**安全憲法（`security-policy` convention）在這一步落地**：starter 的 `template/SECURITY.md` 是 user-owned 實填範例，`new` mode 已經帶進來——逐段核對 intake（攻擊入口是否多了 webhook / 公開表單、授權模型是 user-owned 還是 tenant-scoped、`.env.example` 的 key 名有沒有增減），tenant-scoped 就改用 `$CLADE_HOME/vendor/snippets/security-policy/SECURITY.template.tenant-scoped.md` 重填。`adopt` mode 沒有這份檔時從範本建。五段齊、不變量 ≥ 5 且每條 `enforced by` 是 `audit-new-project-readiness.ts` 與 `audit-security-policy.ts` 的判準；首次 baseline 掃描消耗 ChatGPT 額度，先跑官方 input check，再依 `commit/security-scan.md` 指定本次估算停止線執行，跑不了就在 registry 宣告 `security-policy: scan-only` 並登 TD。
 
 ## 6. 跑 completion contract
 

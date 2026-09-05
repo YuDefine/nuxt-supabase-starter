@@ -415,16 +415,17 @@ Tier 3 判定：migration / schema / auth / permission / RLS / raw SQL / billing
 任一類別命中就觸發；純 docs、一般業務邏輯與非敏感重構跳過。本判定涵蓋本次 `/commit` 的
 **每一個** changed path，不只主線 agent 自己改的檔。
 
-觸發時只把命中的 repo-relative path 傳給官方 scanner；若敏感檔已刪除，改傳最近一層仍存在的
-parent directory，讓刪除造成的邊界變化仍有上下文可分析：
+觸發時把本次批次的 repo-relative 檔案寫入 paths file（一行一個，rename 列兩端），
+使用固定 HEAD 加選定內容的私有快照掃描；刪除保留在 diff。選定內容與原 repo 的其他 WIP
+分開，原 index 不變。同檔混有其他工作時使用精確 patch，詳見 [security-scan.md](security-scan.md)。
 
 ```bash
 CLADE_ROOT="${CLADE_HOME:-$HOME/offline/clade}"
-node "$CLADE_ROOT/scripts/security-scan.ts" path \
+node "$CLADE_ROOT/scripts/security-scan.ts" working-tree \
   --target "$(git rev-parse --show-toplevel)" \
   --effort high \
-  --max-cost <該 repo 的 preflight 地板 + 2，見 security-scan.md § 先量地板> \
-  --path <sensitive-path-1> [--path <sensitive-path-2> ...]
+  --max-cost <本次診斷或掃描停止線> \
+  --paths-file <本次批次清單>
 ```
 
 wrapper 在 target 有 `SECURITY.md`（安全憲法，[`security-policy.md`](../../../../rules/core/security-policy.md)）
@@ -434,11 +435,13 @@ wrapper 在 target 有 `SECURITY.md`（安全憲法，[`security-policy.md`](../
 掃完 MUST 重跑 `baseline`（憲法改了、舊 baseline 即過期）。
 
 固定版尚未安裝時，先跑一次 `node "$CLADE_ROOT/scripts/security-scan.ts" setup`，再重跑同一個
-path scan。這個 setup 是 idempotent operator setup，不把 scanner 加進 consumer dependency graph。
+批次掃描。這個 setup 是 idempotent operator setup，不把 scanner 加進 consumer dependency graph。
+掃描結果只涵蓋 ledger 所記的固定快照；commit 前批次內容改變時重掃。
 
 ### Exit 分流
 
-exit 是 fail-closed 判定，`failure_class`（stdout 與 ledger 皆有）說明**為什麼**；兩者一起讀。
+exit 與 `failure_class` 是既有 fail-closed 放行判定；新增的 `failure_reason`、`failure_phase`
+用於診斷，不產生自動放行。三者連同 stderr path 一起讀。
 放行條件與 `--max-cost` 怎麼給，見 [security-scan.md](security-scan.md)。
 
 | exit | failure_class | 處置 |

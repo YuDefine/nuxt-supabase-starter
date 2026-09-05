@@ -7,120 +7,80 @@ Local edits will be reverted by the next sync.
 
 # 0-S Codex Security — 放行條件與額度配置
 
-`gates.md` § 0-S 的延伸檔。**不在 always-load 清單**，觸發 0-S 且拿到非 `0` 的 exit 時才讀。
-
-exit 與 `failure_class` 的對照表在 `gates.md` § 0-S〈Exit 分流〉，本檔不複述。
+`gates.md` § 0-S 的延伸檔。準備 Tier 3 掃描、選定提交批次或判讀掃描失敗時讀取。
+退出碼與 `failure_class` 維持既有放行契約；`failure_reason` 與 `failure_phase` 提供診斷，沒有新增自動放行路徑。
 
 ## 工具故障放行（僅 `tool-failure-no-artifacts` / `tool-timeout`）
 
-工具故障率高時，把它當成對 code 的判決會封鎖**每一個** Tier 3 commit；但沒掃過就是沒掃過。
-兩者都要成立，所以放行是**人的決定**，不是 agent 的判斷。
+工具故障時，未掃描放行是人的決定。MUST 用 `AskUserQuestion` 二選一，**NEVER** 自行決定放行：
 
-MUST 用 `AskUserQuestion` 二選一，**NEVER** 自行決定放行、**NEVER** 靜默通過：
-
-- **`[1] 停下修工具`**（推薦）：釋放 commit-lock，回報 `failure_class` 與 `output_dir`，本批不 commit。
+- **`[1] 停下修工具`**（推薦）：釋放 commit-lock，回報 failure_class、failure_reason、failure_phase、output_dir，本批不 commit。
 - **`[2] 授權未掃描落地`**：user 明確承擔風險。放行時 **MUST 同時**做到兩件事，缺一不可：
-  1. `HANDOFF.md` 追加一條 `0-S UNSCANNED` 條目：日期、`failure_class`、`output_dir`，以及
-     **本批命中 Tier 3 的每一個 path**
-  2. 本批**每一個** commit 的 message 帶 trailer `Security-Scan: unscanned (<failure_class>)`
+  1. `HANDOFF.md` 追加 `0-S UNSCANNED` 條目：日期、failure_class、診斷原因、output_dir，以及本批命中 Tier 3 的**每一個 path**。
+  2. 本批**每一個** commit message 帶 trailer `Security-Scan: unscanned (<failure_class>)`。
 
-兩個記號的用意不同，所以缺一不可：HANDOFF 讓下一個 session 知道有一批未掃描的敏感變更待補，
-commit trailer 讓 `git log` 事後查得出**是哪幾個 commit** 沒過掃描。
+HANDOFF 承載補掃範圍；commit trailer 承載歷史 parent/head 的對帳入口。
 
-### 禁止項
+- **NEVER** 把 `[2]` 讀成掃過；完成報告寫 `0-S 未執行（<failure_class>）`。
+- **NEVER** 把使用者沒有回應讀成 `[2]`，也不得沿用上一批的工具故障授權。
+- **NEVER** 對 `coverage-incomplete` 使用這條放行路徑；部分掃描仍未完成。
 
-- **NEVER** 把 `[2]` 讀成「掃過了」——Step 7 完成報告的 checks 欄位 MUST 寫
-  `0-S 未執行（<failure_class>）`，**NEVER** 寫「0-S 通過」
-- **NEVER** 把「使用者沒有回應」讀成 `[2]`
-- **NEVER** 對 `coverage-incomplete` 用這條放行路徑——那次掃描**部分跑過**，
-  結論是「不完整」而不是「沒發生」，一律停下重跑
-- **NEVER** 因為「上次也是工具故障放行的」就省略這一輪的 `AskUserQuestion`
+## 先檢查輸入，再執行有停止線的掃描
 
-## `--max-cost` 怎麼給（2026-09-02 實測）
-
-preflight 是 **repo 級 inventory**：成本正比於 repo 檔案總數，**與 `--path` 給幾個檔無關，
-也不因 `--working-tree` 限縮成 diff 而變小**。實測進度行是
-`preflight (working-tree changes) | Files: 0/6,042` —— 分母是整個 repo，不是那次要掃的變更。
-
-所以 `--max-cost` 必須**先足以買下整個 repo 的 preflight**，之後才輪得到掃描目標的大小影響
-成本。給不夠的後果不是「掃少一點」，而是**在 preflight 中途 abort、artifacts 一個都不寫**，
-也就是 `tool-failure-no-artifacts`；`--headless` 下沒有互動式加預算，撞上限即 abort。
-
-**NEVER** 用「這次只掃一個檔，$3 一定夠」推論額度——2026-09-01 掃單一 SQL 檔配 `--max-cost 3`
-同樣死在 preflight。**repo 規模才是分母，掃描範圍不是。**
-
-### 先量地板，再配額度
-
-某個 repo 的 preflight 地板未知時，先跑一次**不設 `--max-cost`** 的 `hook` run 量它，再拿那個
-數字當該 repo 所有 path scan 的下限：
-
-```bash
-node "$CLADE_ROOT/scripts/security-scan.ts" hook --target <repo> --timeout-sec 900 --max-cost <本次授權上限> --verbose
-```
-
-`hook` 不寫 ledger，但 wrapper 會把 scanner 的 stderr tee 到 `<output_dir>/scan.stderr.log`——
-地板數字從那裡撈（`Files: N/M` 與 estimated cost 行）。量到之後把數字寫進該 repo 的
-`SECURITY.md` § 核心資產與 secret 末尾一行 `<!-- preflight floor: $N (YYYY-MM-DD) -->`，
-之後每一次 path / baseline 都用「地板 + 餘裕」。baseline 的 `--max-cost` 同樣依這個量測給，
-**NEVER** 沿用別的 repo 的數字。
-
-`--effort` 與 preflight 無關（inventory 不吃 reasoning），只影響掃描段：0-S 的 `path` 預設
-`high`，`baseline` 留 `xhigh`。`--workflow-id <id>` 讓第二次 run 重用已完成的 workflow——
-量地板之後緊接的 path scan 帶同一個 id，觀察 preflight 是否被重用。
-
-## 憲法存在時掃描怎麼變
-
-| target 狀態 | wrapper 行為 | ledger |
+| 入口 | 做什麼 | 能證明什麼 |
 | --- | --- | --- |
-| 有 `SECURITY.md` | 自動 `--knowledge-base <target>/SECURITY.md`；finding 對照憲法的不變量判反面證據 | `security_md_sha` = 當前憲法 sha256 |
-| 沒有 | stderr 印 `target 無 SECURITY.md（安全憲法）` pointer，照掃、不擋 | `security_md_sha: null` |
-| 憲法改了、baseline 沒重跑 | 掃描照跑 | `audit-security-policy.ts` 的 freshness 格報 violation |
+| 原子命令加 `--dry-run` | wrapper invocation preview | 參數將如何傳遞；沒有 scanner 結果 |
+| `preflight` | 官方 `scan --dry-run` 本機 input check | 輸入是否合法；沒有認證、配額或 coverage 證據 |
+| 真實 `working-tree` / `diff` / `baseline` | 啟動 scanner，可能消耗 ChatGPT 配額 | 由 canonical artifacts 與 coverage 判定完成度 |
 
-ledger 落在 **target 自家** `docs/evidence/security-scan-ledger.jsonl`（`CLADE_SECURITY_SCAN_LEDGER` 覆寫），
-row 內只有 repo-relative 資訊；0-S 跑完把它一起 stage。`diff --base <ref>` 補掃一批 commit、
-`verify --finding <id>` 對修完的 finding 做唯讀複驗，兩者各寫一筆 `run_kind: diff` / `verify`。
+`preflight` 的本機 input check 與真實掃描進度中的 preflight phase 是兩件事。
+Files 進度分母隨 scanner 版本、模式與範圍改變；單次分母不能推導整個 repo 的固定成本地板。
 
-### 診斷：掃描死在哪一階段
+每次真實掃描都指定 `--max-cost <本次停止線>`。這是模型成本**估算停止線**，在途請求可能超出；
+它不是實際扣款、完成報價或訂閱剩餘量。選值依同一 repo、模式、版本與範圍的既有結果，
+缺少成功樣本時先給明確的診斷停止線；失敗後保留結果再評估，**NEVER** 用不限額掃描量地板。
 
-`failure_class` 說得出「有沒有產出」，說不出「死在哪」。後者查 Codex 的 state DB
-（`$CODEX_SECURITY_STATE_DIR/workbench.sqlite3`，wrapper 會把它指到 clade 私有目錄）：
+| failure_reason | 當次處置 |
+| --- | --- |
+| `quota-exhausted` | 停止該帳號的後續掃描；保留額度訊息與重設時間原文，不提高美元停止線重試 |
+| `auth-failure` | 修復既有認證；不自動切 API 計費或購買 credits |
+| `output-dir-not-empty` | 使用新的私有 output directory；不刪既有證據 |
+| `cost-limit-reached` | 記錄已完成單位、模型估算成本與剩餘範圍，再決定新一輪停止線 |
+| 其他或 `unknown` | 依 failure_phase、stderr 與 artifacts 查證；不從缺產物推定成本原因 |
 
-```bash
-sqlite3 "$DB" "select id,status,phase,started_at,seal_manifest_digest is null from scans order by rowid desc limit 10;"
-```
+scanner stderr 在 `<output_dir>.stderr.log`，與 output directory 同層；scanner 起跑前 output directory 保持空白。
+`--workflow-id` 的續跑相容性依固定 scanner 版本契約判定，不承諾不同 scope、base/head 或安全上下文可重用。
 
-`phase` 停在 `preflight` 且 `seal_manifest_digest` 為 NULL、`findings` 0 rows
-= 掃描從未進到實際 review，付掉的錢全花在 inventory。這對應上游
-[openai/codex-security#73](https://github.com/openai/codex-security/issues/73)
-（seal step 失敗、output dir 全空，最小重現是單一 1 行檔案的新 repo）與
-[#25](https://github.com/openai/codex-security/issues/25)（預算被 setup 吃光）。
+## 提交內容與歷史覆蓋
 
-`--auth chatgpt` 下額度耗盡會直接印 `You've hit your usage limit`，那與上述缺陷是兩回事——
-前者換時間就能重跑，後者換多少額度都一樣。**NEVER** 把額度耗盡記成 `tool-failure` 的證據。
+日常 0-S 使用 `working-tree --paths-file <批次清單>`：固定 HEAD 後在私有 Git 快照加入選定內容，
+原 repo index、WIP 與未追蹤檔保持原樣。清單是一行一個 repo-relative 檔案；rename 列出兩端。
+同一檔混有其他工作的變更時，使用精確 patch 選定本批 hunks；**NEVER** 擅自把整檔納入本批。
+掃描後、commit 前重新比對批次內容；內容變了即重掃，不能把舊快照結果套到新內容。
+
+歷史補掃使用 `diff --base <parent> --head <commit>`。wrapper 解析完整 SHA，再於固定 head 的
+私有快照執行。每個未掃 commit 保留 parent/head；只有 diff 與安全上下文完全相同才可去重。
+當前 baseline 不覆蓋已被後續 commit 覆寫的歷史內容。
+
+ledger 記錄兩端 SHA、snapshot digest、scanner 版本及 `security_md_sha`，成本值附來源；
+缺成本資料以 null / unknown 表示，不寫成零或實際扣款。舊 row 缺新增欄位時視為未知。
+ledger 在 target 自家 `docs/evidence/security-scan-ledger.jsonl`（可由 `CLADE_SECURITY_SCAN_LEDGER` 覆寫），
+掃描後併入本批 selective commit。
+
+有 `SECURITY.md` 時掃描器使用快照中的憲法並記 hash；没有時 pointer warn 並記 null。
+憲法不變量改動後重跑 deep baseline；`verify --finding <id>` 對 finding 做唯讀複驗。
+
+## 完成證據
+
+成功需要完整 manifest、coverage、findings、report，以及 coverage complete。input check、
+空 output directory、state DB 的 phase 或 seal 欄位都不能單獨證明掃過哪些程式碼。
+診斷若只看到 phase 停在 preflight，就只回報該觀察，不推導全部成本花在 inventory。
 
 ## `baseline --components`（分件，opt-in）
 
-whole-repo baseline 撞成本上限時的另一條路：先讓 CLI 產 component plan，再逐件序列跑
-（`--workers 1`），每批帶的 `--max-cost` 是**剩餘預算**而不是同一個數字。達上限、或某件回報的
-成本解析不出來，就停止排程並回 exit 2 `coverage incomplete`——**NEVER** 讓它繼續排下一件。
+分件模式先建立 component plan，再以 `--workers 1` 序列執行；每批停止線使用剩餘預算。
+達停止線或成本無法解析時停止排程並回 exit 2。它只跑 standard mode，不能充當 deep baseline。
+`scan_strategy: components` / `scan_mode: standard` 與 repository / deep 分開記錄。
 
-```bash
-node "$CLADE_ROOT/scripts/security-scan.ts" baseline --components --target <repo> --max-cost 15
-```
-
-**它 NEVER 是 `baseline` 的預設**，兩個上游語義決定這件事：
-
-| 事實 | 出處 | 後果 |
-| --- | --- | --- |
-| `scan-components` 只跑 **standard** mode，沒有 `--mode` | README § Scan project components | 當預設等於把 baseline 從 deep 靜默降級；ledger 唯一一筆成功的 baseline 正是 deep，兩者不可比 |
-| `--max-cost` 是**每個 component** 判上限，且**不含 planning 與 matching** | README 第 415 行 | wrapper 的全域上限是模擬出來的，實際花費上界高於你給的數字 |
-
-所以分件 row 帶 `scan_strategy: components` ＋ `scan_mode: standard`，whole-repo row 帶
-`repository` ＋ `deep`。**NEVER** 拿兩種 row 的 coverage 或成本互相比較，也 NEVER 拿分件的
-exit 0 當「這個 repo 的季度完整掃描做過了」——它的深度不同。
-
-`cost_limit_semantics` 欄位逐字寫著上限的洞，**NEVER** 把它讀成硬上限。
-
-> README 第 160 行那句「`preflight` 不啟動 Codex、不走網路」講的是 **SDK API 與 CLI `--dry-run`
-> 的本機輸入檢查**，不是上一節那個燒預算的掃描 preflight 階段——同名不同物。
-> **NEVER** 拿它推論「preflight 不花錢」而放寬 `--max-cost`。
+上游 component 成本上限不涵蓋 planning 與 matching；`cost_limit_semantics` 記錄此限制。
+wrapper 的剩餘預算追蹤不構成實際扣款的硬上限。
