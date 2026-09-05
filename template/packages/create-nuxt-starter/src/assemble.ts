@@ -100,7 +100,11 @@ export function assembleProject(
   copyVerifyDocs(targetDir, selectedFeatureIds)
   copyGatePlaybookPack(targetDir)
 
-  // 9. Apply database stack overlay before evlog preset files are layered on top.
+  // 9. Copy Spectra ecosystem files
+  copySpectraWorkflows(targetDir)
+  copySpectraConfig(targetDir)
+
+  // 10. Apply database stack overlay before evlog preset files are layered on top.
   if (dbStack === 'nuxthub-d1') {
     applyOverlay(targetDir, 'db-nuxthub-d1', {
       auth: inferAuthSelection(selectedFeatureIds),
@@ -108,17 +112,17 @@ export function assembleProject(
     })
   }
 
-  // 10. Replace template placeholders
+  // 11. Replace template placeholders
   replacePlaceholders(targetDir, projectName)
 
-  // 11. Apply evlog preset (overlay file set on top of starter template)
+  // 12. Apply evlog preset (overlay file set on top of starter template)
   // 對應 spectra change add-evlog-baseline-and-scaffolder-preset-flag M3b.2.
   // baseline 是 default — starter template 自家已含 baseline wiring (M3b.1)，
   // 所以 baseline 套等於再次覆蓋（idempotent）。如需 d-pattern-audit / nuxthub-ai
   // 則 overlay 額外 file 進 target dir。
   applyEvlogPreset(targetDir, evlogPreset, STARTER_ROOT)
 
-  // 12. Strip starter/scaffolder meta-only artifacts after every file source has landed.
+  // 13. Strip starter/scaffolder meta-only artifacts after every file source has landed.
   applyStripManifest(targetDir, loadStripManifest(options.stripManifestPath), {
     consumer: 'scaffolder',
   })
@@ -406,13 +410,16 @@ export function generatePackageJson(
     delete basePkg.scripts['skills:update']
   }
 
-  // OPSX control-plane entrypoints (always available after clade bootstrap)
+  // Spectra UX completeness (always needed)
   basePkg.scripts['audit:ux-drift'] = 'npx tsx scripts/audit-ux-drift.ts'
-  const opsxCli = 'node .clade/vendor/scripts/opsx-control.ts'
-  basePkg.scripts['opsx:list'] = `${opsxCli} list`
-  basePkg.scripts['opsx:status'] = `${opsxCli} status`
-  basePkg.scripts['opsx:instructions'] = `${opsxCli} instructions`
-  basePkg.scripts['opsx:history'] = `${opsxCli} history`
+  // 這四支的 script 檔都已被 copyScripts 複製進專案，但 package.json 的入口曾經只寫
+  // roadmap 一條 —— 於是 first-run 流程叫使用者跑 `pnpm spectra:claims` 時會拿到
+  // 「Command not found」。有檔沒入口比兩者都缺更難查：檔案明明在。
+  basePkg.scripts['spectra:roadmap'] = 'npx tsx scripts/spectra-advanced/roadmap-sync.ts'
+  basePkg.scripts['spectra:claim'] = 'node scripts/spectra-advanced/claim-work.ts'
+  basePkg.scripts['spectra:claims'] = 'node scripts/spectra-advanced/claims-status.ts'
+  basePkg.scripts['spectra:followups'] = 'node scripts/spectra-advanced/collect-followups.ts'
+  basePkg.scripts['spectra:release'] = 'node scripts/spectra-advanced/release-work.ts'
 
   // Sort dependencies
   basePkg.dependencies = sortObject(basePkg.dependencies)
@@ -745,6 +752,17 @@ function copyClaudeCodeAssets(targetDir: string, selectedFeatureIds: string[]): 
     'test-driven-development',
     'review-rules',
     'review-screenshot',
+
+    // Spectra SDD (Spec-Driven Development)
+    'spectra',
+    'spectra-propose',
+    'spectra-apply',
+    'spectra-ask',
+    'spectra-discuss',
+    'spectra-ingest',
+    'spectra-audit',
+    'spectra-debug',
+    'spectra-archive',
   ]
 
   // Auth
@@ -946,6 +964,14 @@ function copyCommands(targetDir: string, feats: string[]): void {
   const starterCommands = join(STARTER_ROOT, '.claude', 'commands')
   const targetCommands = join(targetDir, '.claude', 'commands')
   copyFilesList(starterCommands, targetCommands, files)
+
+  // Copy all spectra commands as a directory
+  const spectraDir = join(starterCommands, 'spectra')
+  if (existsSync(spectraDir)) {
+    const targetSpectra = join(targetCommands, 'spectra')
+    mkdirSync(targetSpectra, { recursive: true })
+    copyDirectory(spectraDir, targetSpectra)
+  }
 }
 
 // --- Settings (dynamically generated) ---
@@ -1180,14 +1206,17 @@ function copyScripts(targetDir: string, feats: string[], agentTargets: AgentRunt
     copyDirectory(libSrc, libDest)
   }
 
+  // Copy spectra-advanced scripts (always needed for Spectra workflow)
+  const spectraUxSrc = join(STARTER_ROOT, 'scripts', 'spectra-advanced')
+  const spectraUxDest = join(targetDir, 'scripts', 'spectra-advanced')
+  if (existsSync(spectraUxSrc)) {
+    mkdirSync(spectraUxDest, { recursive: true })
+    copyDirectory(spectraUxSrc, spectraUxDest)
+  }
+
   // Finally sync the full template scripts tree so Quick Start always inherits
-  // the latest shared scripts and script templates. Retired Spectra writers are
-  // not part of a fresh consumer; OPSX runtime scripts arrive through clade.
-  copyDirectoryFiltered(
-    join(STARTER_ROOT, 'scripts'),
-    join(targetDir, 'scripts'),
-    new Set(['spectra-advanced']),
-  )
+  // the latest shared scripts, skill installers, and script templates.
+  copyDirectory(join(STARTER_ROOT, 'scripts'), join(targetDir, 'scripts'))
 
   // install-skills.sh MUST 在整棵 scripts/ 複製「之後」才產生：starter 自己的
   // `scripts/install-skills.sh` 是給 starter repo 用的完整清單，會蓋掉這裡依選擇的
@@ -1433,6 +1462,29 @@ function copyGatePlaybookPack(targetDir: string): void {
 // 唯一硬條件：檔案存在且非空 —— clade sync-to-codex 用它當 AGENTS.md 的 source（空檔會 fail）。
 export function generateClaudeMd(targetDir: string): void {
   writeFileSync(join(targetDir, 'CLAUDE.md'), '# CLAUDE.md\n')
+}
+
+// --- Spectra ecosystem ---
+
+function copySpectraWorkflows(targetDir: string): void {
+  const src = join(STARTER_ROOT, '.agent', 'workflows')
+  const dest = join(targetDir, '.agent', 'workflows')
+  if (existsSync(src)) {
+    mkdirSync(dest, { recursive: true })
+    copyDirectory(src, dest)
+  }
+}
+
+function copySpectraConfig(targetDir: string): void {
+  const spectraYaml = join(STARTER_ROOT, '.spectra.yaml')
+  if (existsSync(spectraYaml)) {
+    cpSync(spectraYaml, join(targetDir, '.spectra.yaml'))
+  }
+
+  const skillsLock = join(STARTER_ROOT, 'skills-lock.json')
+  if (existsSync(skillsLock)) {
+    cpSync(skillsLock, join(targetDir, 'skills-lock.json'))
+  }
 }
 
 // --- Placeholder replacement ---
