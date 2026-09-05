@@ -329,8 +329,8 @@ Brief JSON：`/tmp/dep-fleet-brief-<pkg-slug>-<consumer-id>.json`
 3. 跑 dep-upgrade § Outdated mode changelog-aware 子流程：
    - 讀 `~/offline/clade/plugins/hub-ecosystem-node/skills/dep-upgrade/outdated-mode.md`（Outdated mode 步驟）+ `~/offline/clade/plugins/hub-ecosystem-node/skills/dep-upgrade/SKILL.md` § Pi prompt templates
    - 跳過 Step O.1（target / version 由 brief 取）
-   - 跑 Step O.2.1：用 § A medium 模板 + brief 內 BC 渲染 `<changelog-block>` + brief 內 callsites
-   - 跑 Step O.2.2：pi dispatch（medium），繼承Outdated mode唯一的workspace mutation contract：首跳帶`--workspace-access mutation`，每一個fallback照dispatcher payload排除所有`*-cursor`
+   - 跑 Step O.2.1：用 § A first-pass 模板 + brief 內 BC 渲染 `<changelog-block>` + brief 內 callsites
+   - 跑 Step O.2.2：pi dispatch（`dep-upgrade-first-pass`，low），繼承Outdated mode唯一的workspace mutation contract：首跳帶`--workspace-access mutation`，每一個fallback照dispatcher payload排除所有`*-cursor`
    - Watch pi per [[agent-routing.pi-watch-protocol]]
    - 失敗 → 升 high（用 § B 模板）
    - 高失敗 → 不要 AskUserQuestion，直接 STOP + 回報 orchestrator

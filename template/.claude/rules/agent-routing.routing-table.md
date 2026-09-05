@@ -39,6 +39,8 @@ Local edits will be reverted by the next sync.
 
 | 工作類別 | 由誰執行 | 為什麼 |
 | --- | --- | --- |
+| 〔`dep-upgrade-first-pass`〕 **dep-upgrade 首輪升版**（Outdated／Fleet） | **Pi `--model grok-xai --effort low`** | mutation；配額／provider 不可用 → bare `gemini` 同 effort（Gemini 3.8 Flash），再不可用就停止回報 blocker，不接 Sonnet。 |
+| 〔`dep-upgrade-research`〕 **dep-upgrade 失敗後研究重試**（Outdated／Fleet） | **Pi `--model grok-xai --effort high`** | 與首輪共用 mutation fallback：Grok → Gemini → 停止；保留主線複驗與 research 失敗回報。 |
 | 〔`web-search`〕 **External web retrieval**（`WebSearch`／`WebFetch`） | **Pi bare `gemini low` → linked `luna low` → matching receipt 才放行同種 built-in tool** | 兩支工具共用 machine row；查不到就回「查不到」。 **本列另有硬禁令**，見 [[agent-routing]] § Routing 硬禁令。 |
 | 〔`code-review`〕 **Code review（commit 0-A）** | **(1) `simplify` + (2) GPT-5.6-sol via Pi（effort: xhigh，經 codex-review-safe.sh），(3) 0-A.1 出 Critical / Major 時條件升 max** | 跨模型互補盲點。effort 的 SoT 是 `commit/gates.md` § 0-A 與 `codex-review-safe.sh` 的 default；流程見 commit SKILL Step 0-A。 |
 | 〔`spectra`〕 **Spectra `propose` / `apply` 各階段（draft / cross-check / phase 粒度 / UI view phase）** | 見 reference § Spectra Routing Table | spectra 專屬 routing 在 path-scoped reference（碰 `openspec/changes/**` 時載入）。**不變的契約**：UI view phase 與 Design Review **都永不外派**（主線 Opus 自己做）；propose 的 cross-check / final check **一律主線跑**。 |

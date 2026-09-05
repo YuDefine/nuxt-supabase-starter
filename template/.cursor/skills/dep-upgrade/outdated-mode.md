@@ -363,8 +363,11 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
   --label dep-upgrade-<pkg>-low \
   --model grok-xai --effort low \
   --workspace-access mutation \
-  --route manual --tier-basis manual
+  --route routing-table --tier-basis table-row \
+  --table-row dep-upgrade-first-pass
 ```
+
+配額／provider 不可用時，本流程的路徑是 **Grok → Gemini 3.8 Flash（bare `--model gemini`，同 effort）→ 停止並回報 blocker**。Gemini 不可用時不再換模型；不接 Sonnet。此路徑由 `dep-upgrade-first-pass`／`dep-upgrade-research` row 識別，適用 Outdated 與 Fleet 的每一個 package dispatch。
 
 這是workspace mutation dispatch。Runtime quota／provider failure後，**每一個**retry都MUST逐字採用dispatcher payload的`next_step`（含`--retry-of`與`--workspace-access mutation`）；NEVER自行改派`grok-cursor`、`luna-cursor`或`sol-cursor`。Linked worktree visibility與writable sandbox是兩個predicate，擴大cwd不會讓Cursor carrier合法。
 
@@ -387,13 +390,13 @@ node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
 寫 prompt 到 `/tmp/pi-upgrade-<pkg>-research-prompt.md`，用 § Pi prompt templates · § B research 模板（`--effort high`）。**MUST** 內含：
 
 - `[DELEGATED-BY-CLAUDE-CODE]` marker
-- Medium 派工的失敗 tail（≤ 50 行）+ pi 自報的失敗原因
+- First-pass 派工的失敗 tail（≤ 50 行）+ pi 自報的失敗原因
 - 明確指示走研究模式：先 **github** plugin 查 `<pkg>` repo 的 issues / releases / changelog，再 **agent-browser** / web search 查官方 migration guide
 - 研究完才動手改檔
 - 一樣的 Git Baseline / Commit Authorization 硬指令
 - Commit message format `🧹 chore: wt upgrade-<pkg>-<from>→<to> (researched <issue-url-slug>)`
 
-Dispatch（同 O.2.2，保留 `--workspace-access mutation`，只把 `--effort` 改成 `high`）+ watch（high 跑得更久，但節奏不變：notification-only + 單一安全網 fallback，節奏以 [[agent-routing.pi-watch-protocol]] § `ScheduleWakeup` 用法守則 為準）。
+Dispatch（同 O.2.2，保留 `--workspace-access mutation`，把 `--effort` 改成 `high`、`--table-row` 改成 `dep-upgrade-research`）+ watch（high 跑得更久，但節奏不變：notification-only + 單一安全網 fallback，節奏以 [[agent-routing.pi-watch-protocol]] § `ScheduleWakeup` 用法守則 為準）。
 
 ### O.2.5 research 仍失敗 → AskUserQuestion
 

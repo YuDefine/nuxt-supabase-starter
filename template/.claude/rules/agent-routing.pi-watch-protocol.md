@@ -679,6 +679,8 @@ mutation:
   Grok-xai → Claude Sonnet
 ```
 
+**dep-upgrade 專用 mutation 路徑**（`dep-upgrade-first-pass`／`dep-upgrade-research`）：Grok → bare `gemini`（Gemini 3.8 Flash，同 effort）→ 停止並回報 blocker。Gemini quota／provider 不可用／catalog miss 都在此結束，不接 Sonnet、不續走 generic Gemini 鏈。`--retry-of` 繼承 originating row 與 mutation capability，下一步以 dispatcher payload 為準。
+
 `workspace_access` 的來源只有三條：concrete table row 由 `pi-routing-policy.ts` 推導；manual caller 顯式帶 `--workspace-access readonly|mutation`；fallback 以 `--retry-of` 從 ledger 繼承。Dispatcher 把 effective value 寫進 ledger／flow／exit payload，`next_step` 也帶回 capability。**每一個**會修改 working tree、lockfile、Git index 或建立 commit 的 caller都 **MUST** 宣告 `mutation`；無法判定時，Cursor admission與指向 Cursor 的下一跳都 fail closed。
 
 具名mutation override也由同一個policy提供：`commit-0c-fix-verify`的grok-xai quota exit不走generic Sonnet終點，而是跳過grok-cursor進`commit-0c-fix-verify-escalate` sol列；caller仍只讀payload，不自建例外。
@@ -704,7 +706,7 @@ mutation:
 舊鏈的 gemini／luna 耗盡等於**直落 Claude Haiku**，`sol-cursor` 同死則讓 sol exit 4 **直回 Opus 主線**——
 降級鏈的存在意義正是不要在這種時候把工作推回最貴的那一格。
 
-**跨 model 家族的跳只有 luna 鏈有，是具名例外不是通則。** 新增跨家族跳 MUST Charles 逐鏈拍板，
+**跨 model 家族的跳是具名例外，不是通則**：luna 鏈與上述 dep-upgrade 專用鏈各有自己的終點。 新增跨家族跳 MUST Charles 逐鏈拍板，
 准入三條連言是**申請門檻**，**NEVER** 由它自動導出（必要條件不是充分條件）；逐條判準與取證見
 rationale § luna 鏈的跨家族跳。**sol 鏈第 2 條不中**，且 flagship 工作與 `spectra-phase-implementation`
 的 NEVER 轉 grok 是**獨立 veto、不進連言協商**，那條 NEVER **含 fallback 路徑，配額耗盡不是豁免條件**。
