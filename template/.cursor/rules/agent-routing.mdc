@@ -173,12 +173,11 @@ redaction（`vendor/signals/redact.mjs`）只作用在 signal payload、**dispat
 
 ## Routing Table
 
-**查表決定 model／effort 之前 MUST 先 Read [[agent-routing.routing-table]]**——20+ 列的
-（工作類別 → 由誰執行 → 為什麼）對照與 effort 檔位表全文在該檔，本節只留跨列判準與硬禁令。
+**查表決定 model／effort 之前 MUST 先 Read [[agent-routing.routing-table]]**——工作類別與 effort 對照在該檔，本節保留跨列判準與硬禁令。
 **NEVER 憑記憶派**：列上的 model／effort 每隔幾週就改，而派錯的那一次與查過表完全同形，
 事後從 ledger 也分不出來。**NEVER** 因為「這類工作我派過很多次」就跳過那次 Read。
 
-> **Pi 派工是 (model, effort) 二維**，model 維合法值：`sol`、`sol-cursor`、`gemini`、`luna`、`luna-cursor`、`grok-xai`、`grok-cursor`（`grok` 是 `grok-cursor` 的向後相容別名）。同一 tier 的 `-cursor` 變體是**換配額池、不換檔位**，只在配額降級鏈上出現，**NEVER** 拿它當第一手選擇——具名例外只有四個 repo-scan 列。**NEVER** 據此推論其他 tier 或其他列也能提第一手。**Routing Table 已列明檔位的類別照列派**（多數列為 `--model sol`；external-web 列固定 bare `--model gemini`；screenshot-verify 列 2026-08-22 起 Claude-only，見〔`screenshot-review-verify`〕）；**原本會派 Claude subagent 的委派工作**（原判 `sonnet`／`haiku`）依 § Claude 委派的 model 檔位轉派 `--model gemini`（額度耗盡才回 `luna`）。**NEVER 派 `--model terra`**（2026-08-11 拍板）。External-web 第一手的 bare `gemini` 解析到 Gemini CLI provider；**NEVER** 改傳 Cursor catalog 的完整 `gemini-3.8-flash` slug 冒充同一跳。
+> **Pi 派工是 (model, effort) 二維**，model 維合法值：`astra`、`gemini`、`luna`、`luna-cursor`、`grok-xai`、`grok-cursor`（`grok` 是 `grok-cursor` 的向後相容別名）。同一 tier 的 `-cursor` 變體是**換配額池、不換檔位**，只在配額降級鏈上出現，**NEVER** 拿它當第一手選擇——具名例外只有四個 repo-scan 列。**NEVER** 據此推論其他 tier 或其他列也能提第一手。**Routing Table 已列明檔位的類別照列派**；**原本會派 Claude subagent 的委派工作**（原判 `sonnet`／`haiku`）依 § Claude 委派的 model 檔位轉派 `--model gemini`（額度耗盡才回 `luna`）。**NEVER 派 `--model terra`**（2026-08-11 拍板）。External-web 第一手的 bare `gemini` 解析到 Gemini CLI provider；**NEVER** 改傳 Cursor catalog 的完整 `gemini-3.8-flash` slug 冒充同一跳。
 >
 > **`*-cursor` NEVER 接要讀 cwd 以外路徑的任務**（cursor 池的 `$HOME` / `/tmp` 是空 tmpfs，拿到的是**與真結果同形**的全 missing 表）。配額鏈走到那一格時，brief 指涉 cwd 以外路徑就**跳過該格**進終端步驟——判的是**這份 brief**，不是列名。`pi-dispatch.ts` 會掃 brief 拒跑（exit 1），但它只看得到 brief 寫出來的路徑，**NEVER** 拿它當自己不必判的理由。**NEVER** 用 `PI_CURSOR_SANDBOX_BIND` 繞過。
 >
@@ -198,7 +197,7 @@ redaction（`vendor/signals/redact.mjs`）只作用在 signal payload、**dispat
 | `--model gemini`（Routing Table 類別內降檔） | **NEVER** 靜默改用舊 Flash model。 |
 | 〔`web-search`〕 | 查不到就回「查不到」，**NEVER** 拿二手彙整頁充數。 |
 | 〔`spectra-phase-implementation`〕 | **NEVER 轉 grok**（見 reference § Spectra Routing Table）。 |
-| 〔`screenshot-review-verify`〕 | **本列 NEVER 派 Pi 任一 model**——`grok-xai` / `grok-cursor` / `sol` / `gemini` / `luna` 一律不准，`pi-dispatch-screenshot-verify.ts` 已 fail-closed 拒跑。**Cursor runtime 例外**：NEVER 用 Cursor Task 的 `model=claude-*` 假裝本列；改走 § Cursor runtime 主線 residency 的 Herdr create-only `cc`／`ccw`。**NEVER 恢復「subagent 再轉派」**的形狀。 |
+| 〔`screenshot-review-verify`〕 | **本列 NEVER 派 Pi 任一 model**——`grok-xai` / `grok-cursor` / `astra` / `gemini` / `luna` 一律不准，`pi-dispatch-screenshot-verify.ts` 已 fail-closed 拒跑。**Cursor runtime 例外**：NEVER 用 Cursor Task 的 `model=claude-*` 假裝本列；改走 § Cursor runtime 主線 residency 的 Herdr create-only `cc`／`ccw`。**NEVER 恢復「subagent 再轉派」**的形狀。 |
 | 〔`screenshot-match-analysis`〕 | 收集與判定是兩個角色，**NEVER** 併成同一次 dispatch。 |
 | 〔`mechanical-fanout`〕 | **NEVER** 以「我自己順手跑掉比較快」略過本列（成因見 rationale）。 |
 | 〔`copywriting-draft`〕 | 本列 **NEVER** 進全域配額降級鏈（exit 2／3／4 一律直接回主線 Opus 5 自己寫）。**主線 Opus 5 MUST 收斂重寫每一條採用的文案，NEVER 原樣貼進交付物**——Pi 回的是素材不是成稿。本列只涵蓋行銷／產品對外文案，**NEVER** 從本列外推到規約措辭／commit message／技術文件／PR 描述／對外報告。 |
@@ -274,11 +273,11 @@ predicate 走，**NEVER** 把本小節外推成「委派都該指定 model」。
 
 **PreToolUse:Agent 機械 gate**：主線呼叫 `Agent` **一律**立即建立 `claude-agent-dispatch` pending decision 並阻擋，**不分 `subagent_type`、也不分 `model`**——省略 `model`（繼承主線）與明寫 Opus／Fable 同樣計入（判準是 default-deny：繼承主線正是**最貴**的委派形狀，TD-513）。**NEVER** 把例外理由寫進 Agent prompt 當作 bypass——gate 只認 decision receipt，不解析自由文字。
 
-**撞到這道 gate、要決定怎麼結案之前，MUST 先讀 [[agent-routing.pi-watch-protocol]] § Routing threshold 與 Claude Agent dispatch gate**——正常結案的逐字 `pi-dispatch.ts` 指令與 effort 對照、四個具名 waiver、Gemini／Sol exit 2 的升級鏈與 exit 4 的配額鏈，都在那裡，**此處不複述**。
+**撞到這道 gate、要決定怎麼結案之前，MUST 先讀 [[agent-routing.pi-watch-protocol]] § Routing threshold 與 Claude Agent dispatch gate**——正常結案的逐字 `pi-dispatch.ts` 指令與 effort 對照、四個具名 waiver、Gemini／Astra exit 2 的升級鏈與 exit 4 的配額鏈，都在那裡，**此處不複述**。
 
-**本節路徑的 luna 准入（與 § Routing Table 五條連言無關）**：原判 `sonnet` 的委派 MUST 同時滿足兩項——(1) § MUST 指定 `model: 'sonnet'` 的四條 predicate 全中（複核，不是加碼）；(2) 未命中 § NEVER 降檔的形狀任一條。兩項都過 → 派 `--model gemini --effort high`，**NEVER** 因「gemini 較便宜」自行改回 `--model sol` 或退回 Claude `sonnet`。任一項不過 → 照原判派 Claude `sonnet`（顯式帶 `model`），**NEVER** `--model terra`。
+**本節路徑的 luna 准入（與 § Routing Table 五條連言無關）**：原判 `sonnet` 的委派 MUST 同時滿足兩項——(1) § MUST 指定 `model: 'sonnet'` 的四條 predicate 全中（複核，不是加碼）；(2) 未命中 § NEVER 降檔的形狀任一條。兩項都過 → 派 `--model gemini --effort high`，**NEVER** 因「gemini 較便宜」自行改回 `--model astra` 或退回 Claude `sonnet`。任一項不過 → 照原判派 Claude `sonnet`（顯式帶 `model`），**NEVER** `--model terra`。
 
-**gemini 回 exit 2（業務 fail）→ 升 `--model sol` 同 effort 重派一次**；再 fail 才回 Claude `sonnet` subagent。exit 3／4 照 § 配額耗盡時的 fallback 紀律 與 watch-protocol 的 exit code 分流走，**NEVER** 記入品質判斷。
+**gemini 回 exit 2（業務 fail）→ 升 `--model astra` 重派一次：原 low 維持 low，其餘 effort 改 medium**；再 fail 才回 Claude `sonnet` subagent。exit 3／4 照 § 配額耗盡時的 fallback 紀律 與 watch-protocol 的 exit code 分流走，**NEVER** 記入品質判斷。
 
 ### MUST 指定 `model: 'sonnet'` 的 predicate（窮舉）
 
@@ -376,18 +375,18 @@ Claude 檔位由它機械算出。**MUST 照那個 payload 派下一跳，NEVER 
 
 always-load 只留 payload **算不出來**的三條判斷：
 
-- **NEVER** 把 Sol 的活降成 Luna——鏈上每一跳是**換配額池**，不是降檔
+- **NEVER** 把 Astra 的活降成 Luna——鏈上每一跳是**換配額池**，不是降檔
 - **NEVER** 拿 `--effort low` 重試當配額應對——配額按 **model** 記，同一個 model 撞的是同一個 limit
 - **輸出本身就是 gate 的工作，鏈的終點 NEVER 是主線自審**。判準見
   `vendor/scripts/pi-routing-policy.ts` 的 `GATE_OUTPUT_ROWS`（`code-review` /
   `security-review` / `spectra-artifact-review` / `spectra-prehandoff-judge`）——那一組與
   § NEVER 降檔的形狀 第一條同源，**MUST 一起改**。理由是這類工作沒有「誰做都行」這個性質：
-  產出 changeset 的那條主線回頭審自己，gate 形式上補了位、實質是空的。一般 gate row 在 Sol
-  兩池耗盡後由 dispatcher 指向 **Fable subagent**（`--model fable`，effort `max`）；
-  `PI_GATE_UNMET_ON_SOL_EXHAUSTION_ROWS` 是更嚴格的子集：`spectra-artifact-review` 的 reviewed
+  產出 changeset 的那條主線回頭審自己，gate 形式上補了位、實質是空的。一般 gate row 在 Astra
+  配額耗盡後由 dispatcher 指向 **Fable subagent**（`--model fable`，effort `max`）；
+  `PI_GATE_UNMET_ON_ASTRA_EXHAUSTION_ROWS` 是更嚴格的子集：`spectra-artifact-review` 的 reviewed
   draft 本來就由 Fable family 產生，因此 payload 必須回 `gate_met:false` 與
   `durable_follow_up_required:true`，caller 建立 durable follow-up，Fable／Opus／Luna／Grok
-  都不得補位。其餘非 gate row 才維持 Opus 主線。`-cursor` 那一跳照走，它換的是配額池不是家族。
+  都不得補位。其餘非 gate row 才維持 Opus 主線。Astra 目前沒有已驗證的 Cursor model，直接採用上述終點。
   **Cursor runtime 例外**：Fable／Opus subagent 不得改用 Cursor Task 的非 grok-4.6 `model`；改走 § Cursor runtime 主線 residency 的 Herdr create-only `cc`／`ccw`
 - `-cursor` 那一跳先過 workspace capability：`mutation` 一律跳過、`readonly` 才繼續判材料來源與 cwd visibility。材料來源的准入 **MUST 綁在待審材料本身，NEVER 綁在使用者意願**（TD-534）；兩層機械門檻與「NEVER 做成可繞過的形式」全文在下面那條指針指的那一節
 
@@ -407,7 +406,7 @@ MUST 先讀那一節**，本 pointer 不複述。
 4. **Model 與 effort 顯式指定**：**每一個** dispatch 都 MUST 把 model 與 effort 當成兩個獨立決策，不靠靜默繼承——省略 = 繼承主線（通常最貴檔 × 最深推理），機械掃描型 subagent 拿主線的 xhigh 跑就是效能過剩。選檔預設，依序判：
    - **先過 Routing Table**：非 UI 工作命中本檔已 route 給 Pi 的類別 → 依該列的 model / effort 派工（`mechanical-fanout`、`read-heavy-scan` 為 `gemini low`；`notion-ops` 為 `gemini high`），**NEVER** 用 Claude subagent 接；Claude subagent 只留給 Claude 例外（需 claude.ai-connected MCP 且 ntn 做不到、判讀／治理型分析、user 明確指定）
    - **UI view 實作**：**不派**，主線 Opus 自己做（per § 派不派 不外派清單）。**NEVER** 為它挑任何 model —— 這一格沒有合法檔位
-   - **effort 選檔**：機械掃描／純轉錄 → `low`；一般執行 → `medium`；判讀型／高錯誤成本 → `high` 以上。**帶得了 effort 參數的入口**（pi `--effort` / `-c model_reasoning_effort`、Workflow `agent()` 的 `effort`、具名 agent type 的 frontmatter）**MUST** 顯式帶；Agent tool 本身沒有 effort 參數、只能繼承主線——這是機械型工作優先走 Pi 而非 Agent tool 的另一個理由
+   - **effort 選檔**：Astra 依 named row 使用 `low` 或 `medium`；原 Sol 的 `low` 對應 Astra `low`，其餘 effort 對應 Astra `medium`。其他模型：機械掃描／純轉錄 → `low`；一般執行 → `medium`；判讀型／高錯誤成本 → `high` 以上。**帶得了 effort 參數的入口**（pi `--effort` / `-c model_reasoning_effort`、Workflow `agent()` 的 `effort`、具名 agent type 的 frontmatter）**MUST** 顯式帶；Agent tool 本身沒有 effort 參數、只能繼承主線——這是機械型工作優先走 Pi 而非 Agent tool 的另一個理由
    - model 選檔原則「**turn count beats token price**」：brief 內含完整 code 的純轉錄型工作才用最低檔；review 型依 diff 的大小／風險選檔（為什麼見 rationale）。
 5. **中間產物不進主線**：外派出去的 task，主線只讀對方寫回的 report 檔，**NEVER** 為了「確認它做對」把該 task 碰過的原始檔重讀一遍——那把省下來的 context 原封不動加回來，而且重讀的是同一批事實，換不到新判斷。第 2 條的 scope verify 照舊 MUST 跑：看**改了哪些檔**（`git status --short` / `git diff --stat`）跟重讀檔案內容是兩件事。
 
@@ -466,7 +465,7 @@ message 的逐字形狀（虛構 task id 是實測最常見的失敗）、沒有
 | **NEVER** 嘗試`codex:rescue`／`codex:setup`plugin路線 | 已驗證無法使用、已全清（含`/assign`） |
 | **NEVER** 把 UI view phase 派給任何 runtime（Pi 任一 model／Claude subagent 都算） | UI view 實作在不外派清單；非 view phase 的 dispatch prompt 仍 MUST 含「禁止改 view 層檔案」硬指令，缺這條 runtime 容易順手改到 .vue / .tsx |
 | **NEVER** 讓 Claude subagent 當 pi 的**薄中介**——派出 pi 卻不自跑 Pi Watch Protocol，把死活判定留給上一層 | 判準是**誰持有 pi 的生命週期**，不是「有沒有經過 subagent」。薄中介的兩個已驗證失敗模式見 rationale（同 §）。完整持有生命週期的形狀見下一列 |
-| **NEVER** 在 exploration / research 型 session 自己逐檔 Read + scan 多個 source（openspec / HANDOFF / git log / docs）超過 3 個 source file | 先派 Pi `sol low` pre-scan 拿 structured summary，再由主線消費 summary 做判斷。例外：user 明確問特定檔案 / 需要 claude.ai-connected MCP |
+| **NEVER** 在 exploration / research 型 session 自己逐檔 Read + scan 多個 source（openspec / HANDOFF / git log / docs）超過 3 個 source file | 先派 Pi `astra low` pre-scan 拿 structured summary，再由主線消費 summary 做判斷。例外：user 明確問特定檔案 / 需要 claude.ai-connected MCP |
 | **NEVER** 把 Cursor 的 Task / Agent `model` 設成非 grok-4.6 | Cursor 主線 residency。其他 model 只走 Pi CLI；Pi 不能派則 Herdr create-only `cc`／`ccw`。省略 `model`（inherit Grok 4.6）合法 |
 
 **派 pi 寫 code、派 spectra-apply phase、或收 `verify:ui` evidence 之前，MUST 先讀 [[agent-routing.pi-watch-protocol]] § Dispatch 入口禁令（下推四列）**——Commit Authorization 段、Plan-first 硬指令、`verify:ui` 唯一入口與它的機械 backstop、以及「pi MUST 由該層編排者自己派」那條的准入與範圍界線，都在那裡，**此處不複述**。

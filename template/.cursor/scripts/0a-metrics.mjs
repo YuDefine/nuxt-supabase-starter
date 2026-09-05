@@ -37,7 +37,14 @@ const PROJECT_DIR = process.env.PROJECT_DIR || process.cwd()
 const LEDGER = resolve(PROJECT_DIR, '.clade', '0a-metrics.jsonl')
 
 const ANOMALY_KINDS = ['td246-fallback', 'verdict-missing', 'large-change-rerun']
-const CODEX_MODES = ['xhigh', 'xhigh+max+fable', 'fast-path-skip']
+const CODEX_MODES = [
+  'astra-low',
+  'astra-medium',
+  'astra-medium+fable',
+  'xhigh',
+  'xhigh+max+fable',
+  'fast-path-skip',
+]
 
 function parseArgs(argv) {
   const out = {}
@@ -114,7 +121,7 @@ function record(args) {
   // 0-A.2 只在 Critical/Major 出現時觸發（gates.md § 0-A.1）。宣告不一致代表
   // 呼叫端把流程走錯了或參數填錯，兩者都該當場停，不該靜默記一筆假資料。
   const hadCriticalOrMajor = findings.critical > 0 || findings.major > 0
-  if (a2 && !hadCriticalOrMajor && codex !== 'xhigh+max+fable') {
+  if (a2 && !hadCriticalOrMajor && !['xhigh+max+fable', 'astra-medium+fable'].includes(codex)) {
     die('--a2 true 但 critical/major 皆為 0——0-A.2 的觸發條件不成立，檢查參數')
   }
   if (hadCriticalOrMajor && !a2 && codex !== 'fast-path-skip') {
@@ -142,9 +149,10 @@ function record(args) {
   mkdirSync(dirname(LEDGER), { recursive: true })
   appendFileSync(LEDGER, `${JSON.stringify(row)}\n`, 'utf-8')
 
-  const codexLabel =
-    codex === 'fast-path-skip'
-      ? 'GPT-5.6-sol via Pi 跳過（fast-path）'
+  const codexLabel = codex.startsWith('astra-')
+    ? `${codex === 'astra-low' ? 'GPT-6-astra via Pi（effort: low）' : 'GPT-6-astra via Pi（effort: medium）'}${codex.endsWith('+fable') ? ' + Claude Fable 5.1（effort: max）' : ''}`
+    : codex === 'fast-path-skip'
+      ? '獨立 review 跳過（fast-path）'
       : codex === 'xhigh+max+fable'
         ? 'GPT-5.6-sol via Pi（effort: xhigh → max）+ Claude Fable 5.1（effort: max）'
         : 'GPT-5.6-sol via Pi（effort: xhigh）'

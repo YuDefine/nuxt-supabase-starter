@@ -329,7 +329,7 @@ node ~/offline/clade/vendor/scripts/lib/evidence-store.ts \
 收，主線只消費它回的 JSON 摘要。主線 `Read` 截圖是例外路徑，只在下表命中時開放。**
 
 **這個 channel NEVER 外派給 Claude 以外的 carrier。** 逐字包含：**NEVER** 派 Pi 任一 model
-（`grok-xai` / `grok-cursor` / `sol` / `gemini` / `luna` 一律不准）、**NEVER** 走
+（`grok-xai` / `grok-cursor` / `astra` / `gemini` / `luna` 一律不准）、**NEVER** 走
 `pi-dispatch-screenshot-verify.ts`（該檔已 fail-closed，見下）、**NEVER** 因為「配額比較省」
 「seat 剛好有空」「這次只是 ad-hoc 不是 gate」而改派。Charles 2026-08-22 拍板，理由在
 § 為什麼只准 Claude subagent。

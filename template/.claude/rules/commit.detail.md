@@ -20,7 +20,7 @@ Local edits will be reverted by the next sync.
 
 `/commit` 封裝了品質閘門，繞過等於讓壞 code / 壞版本號 / 壞 tag 進 repo。各 gate 一行定性如下，**MUST 全綠才能 commit**；執行細節一律見 `/commit` skill（`.claude/skills/commit/SKILL.md`）：
 
-- **0-A** 程式碼審查：simplify（序跑第一）→ GPT-5.6-sol via Pi（effort: xhigh，經 codex-review-safe.sh）跨模型 review → Critical / Major 條件升 max；修正一律由主線執行。**配額耗盡（exit 4）→ 主線 foreground 自 review，且 MUST 明示「跨模型 gate 未達成」並登記待補**；**NEVER 改派 Claude subagent 充當跨模型 review**（同池同模型，gate 實質為空），**NEVER 靜默當作 0-A.1 通過**。換池到 Cursor 池在 [[agent-routing]] 的 fallback 紀律上是正確形狀，但 TD-520 已確認該池的模型同 UID 且有 unrestricted Shell，**拿到 OS 層隔離前 NEVER 用於 0-A.1**
+- **0-A** 程式碼審查：simplify（序跑第一）→ GPT-6 Astra via Pi（effort: medium，經 codex-review-safe.sh）獨立 review → Critical / Major 條件進入第二輪 medium review；修正一律由主線執行。配額耗盡（exit 4）依 `commit/gates.md` § 0-A 與 dispatcher payload 派 fresh Fable（effort: max）；無有效獨立 review 時 gate 保持未達成並登記待補。**NEVER** 以主線自審算作 0-A.1 通過；未驗證的 Astra Cursor seat 不可重試。
 - **0-B** UI Design Review（條件觸發）：`.vue` 模板 + 頁面/元件/佈局/互動/樣式變更時派 screenshot-review
 - **0-C** format / lint / typecheck / test / doctor 全綠：`scripts.check` 不含 test → 額外跑 `pnpm test`；`scripts.doctor` **必裝**（缺裝 = block commit，要求先安裝 vite-doctor）。oxfmt batched `--check` 報未預期 diff 以單檔重跑為準（[[pitfall-oxfmt-batched-check-false-positive]]）
 - **0-D** Doc Alignment（條件觸發）：diff 觸及 docs / rules / snippets / audit script / 業務碼 / bug fix 時，檢查 cross-ref / 路徑引用 / pitfall status / 三方受眾文件忠實度（含 VitePress sidebar）四面向

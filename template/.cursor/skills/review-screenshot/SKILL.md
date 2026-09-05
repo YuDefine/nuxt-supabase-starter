@@ -18,7 +18,7 @@ permission_tier: read-only
 
 **Cursor runtime**：本 channel 的 Claude subagent 是 AI Agent `Agent` tool，**NEVER** 改用 Cursor Task 的 `model=claude-*`。Pi 已 fail-closed。改走 [[agent-routing]] § Cursor runtime 主線 residency 的 Herdr create-only `--launcher cc`／`ccw`。
 
-**本 channel NEVER 外派給 Pi 任一 model**——`grok-xai` / `grok-cursor` / `sol` / `gemini` / `luna`
+**本 channel NEVER 外派給 Pi 任一 model**——`grok-xai` / `grok-cursor` / `astra` / `gemini` / `luna`
 一律不准，`pi-dispatch-screenshot-verify.ts` 已 fail-closed 拒跑，
 `pi-routing-policy.ts` 對 `--table-row screenshot-review-verify` 直接 throw。
 2026-08-22 Charles 拍板，理由見 [[review-gui-surface]] § 為什麼只准 Claude subagent。

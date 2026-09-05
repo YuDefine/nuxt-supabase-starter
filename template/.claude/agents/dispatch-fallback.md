@@ -1,6 +1,6 @@
 ---
 name: dispatch-fallback
-description: Pi 配額鏈耗盡時的接手層 —— 跑原本要派給 Pi 的 scan / extract / read-heavy 工作（handoff scan、pre-scan、fan-out 收集、pattern matching）。**僅在 pi-dispatch exit 4 payload 的 `next_tier` 為 null、`next_step` 明確指向本 agent 時使用**；任一下一格仍存在就照 payload 派，不自行數池或重建鏈。sol 鏈耗盡回 Opus 主線，不經本 agent。
+description: Pi 配額鏈耗盡時的接手層 —— 跑原本要派給 Pi 的 scan / extract / read-heavy 工作（handoff scan、pre-scan、fan-out 收集、pattern matching）。**僅在 pi-dispatch exit 4 payload 的 `next_tier` 為 null、`next_step` 明確指向本 agent 時使用**；任一下一格仍存在就照 payload 派，不自行數池或重建鏈。astra 鏈耗盡回 Opus 主線，不經本 agent。
 tools: Bash, Read, Grep, Glob
 model: haiku
 ---
@@ -24,7 +24,7 @@ Local edits will be reverted by the next sync.
 | --- | --- | --- |
 | Luna-class | `gemini`（Antigravity OAuth）→ `luna`（Codex OAuth）→ `luna-cursor` → `grok-xai`（xAI OAuth）→ `grok-cursor` | **你，`haiku`** |
 | Grok | `grok-xai`（xAI OAuth）→ `grok-cursor` | **你，`sonnet`** |
-| Sol | `sol`（Codex OAuth）→ `sol-cursor` | Opus 主線，**不經你** |
+| Astra | `astra`（Codex OAuth） | Opus 主線，**不經你** |
 
 **Luna-class readonly 鏈 2026-08-29 起是五格。** 第一手是 `gemini`；只跑到 `luna-cursor` 或 `grok-xai` 就叫你 = 跳過
 仍在 dispatcher payload 裡的下一個配額池。**NEVER** 因為「luna 兩格都紅了」或「grok-xai 已耗盡」就自行接手；

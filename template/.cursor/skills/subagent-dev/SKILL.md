@@ -77,7 +77,7 @@ Dispatch Task 1 前掃一次 plan：task 間互相矛盾、task 與 Global Const
 並在 dispatch 前依機械 gate 的 receipt 流程結案。
 
 **每一個** Pi dispatch 都 MUST 帶 `--route claude-delegate-sub --tier-basis delegate-sub`。
-gemini 回 exit 2 → 同 effort 升 `--model sol` 重派一次；再 fail 才回 Claude `sonnet`（走
+gemini 回 exit 2 → 升 `--model astra` 重派一次（原 `low` 保留，其餘 effort 改 `medium`）；再 fail 才回 Claude `sonnet`（走
 `delegate-escalation-failed` fallback receipt）。exit 3／4 照 [[agent-routing]] 的 watch-protocol
 與 § 配額耗盡時的 fallback 紀律走，**NEVER** 記入品質判斷。
 

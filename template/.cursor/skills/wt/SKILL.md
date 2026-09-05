@@ -11,7 +11,7 @@ permission_tier: action
 
 # /wt — orchestrate worktree task lifecycle
 
-`/wt` is the single entry point for "do work in a worktree". It builds the worktree, auto-routes the executor (Pi sol/luna for non-UI coding/analysis/debug, Claude subagent only for the Form 3/4 cases — see Step 1.8; UI view implementation is never dispatched at all), and reports — without squashing or cleaning up. The worktree branch holds the committed work until the corresponding spectra change is archived; `/spectra-archive` Step 0 (per [[worktree-default]] §5.5) runs `wt-helper merge-back` to atomically absorb the worktree into main, then `/commit` lands the result.
+`/wt` is the single entry point for "do work in a worktree". It builds the worktree, auto-routes the executor (Pi astra/luna for non-UI coding/analysis/debug, Claude subagent only for the Form 3/4 cases — see Step 1.8; UI view implementation is never dispatched at all), and reports — without squashing or cleaning up. The worktree branch holds the committed work until the corresponding spectra change is archived; `/spectra-archive` Step 0 (per [[worktree-default]] §5.5) runs `wt-helper merge-back` to atomically absorb the worktree into main, then `/commit` lands the result.
 
 This deferred-landing model guarantees main never carries half-done features between sessions: only fully-reviewed-and-archived changes touch main. The previous v2.0 behavior — `/wt` return time squash + cleanup — accumulated cross-session WIP in main and made `/commit` impossible whenever the 人工檢查 Gate triggered.
 

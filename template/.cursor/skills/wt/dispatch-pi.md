@@ -77,14 +77,14 @@ When Step 1.8 routes to Pi for coding work, use `Bash run_in_background=true` to
    | Step 1.8 判為 **UI view implementation** | **不派**——回 Step 1.8，主線自己在 worktree 內做 | 本表沒有這一格 |
    | 本次工作**原本會派 Claude subagent**（原判 `sonnet`） | `--model gemini --effort high` | `claude-delegate-sub` / `delegate-sub` |
    | 本次工作**原本會派 Claude subagent**（原判 `haiku`） | `--model gemini --effort low` | `claude-delegate-sub` / `delegate-sub` |
-   | 以上皆非 | `--model sol`，effort 依下表 | `manual` / `manual` |
+   | 以上皆非 | `--model astra`，effort 依下表 | `manual` / `manual` |
 
    ```bash
    node ~/offline/clade/vendor/scripts/pi-dispatch.ts \
      --brief /tmp/wt-pi-<slug>-prompt.md \
      --cwd <worktree-absolute-path> \
      --label wt-<slug> \
-     --model <sol|luna|grok-xai> --effort <effort> \
+     --model <astra|luna|grok-xai> --effort <effort> \
      --route <routing-table|claude-delegate-sub|fallback-chain|manual> \
      --tier-basis <table-row|delegate-sub|quota-fallback|manual> \
      [--table-row <routing-row>]
@@ -168,14 +168,14 @@ When Step 1.8 routes to analysis/debug, use `pi-dispatch.ts` with the appropriat
    followed; `--tier-basis` records what that policy concluded about the model, and the dispatcher
    cross-checks the pair against `--model`. The row already names its tier here, so the basis is
    `table-row`. Dropping to luna on your own judgement instead is `five-conjunct`, and it only
-   holds when all five conjuncts do — the dispatcher then rejects `--model sol` as self-contradictory.
+   holds when all five conjuncts do — the dispatcher then rejects `--model astra` as self-contradictory.
 
    **`--table-row <row>` is required whenever the basis is `table-row`** (exit 1 without it, since
    2026-08-13). The row name is the slug in 〔`backticks`〕 at the head of each Routing Table row,
    and the dispatcher cross-checks the model that row names against `--model`. NEVER skip it:
    `table-row` used to be the one basis with no model constraint, which made declaring it the
    cheapest way to look compliant while ignoring the row (2026-08-13 `v1-annual-leave-scan` hit the
-   `read-heavy-scan` row, which names gemini, and dispatched sol unchallenged). If you cannot name the
+   `read-heavy-scan` row, which names gemini, and dispatched Sol unchallenged). If you cannot name the
    row, you did not consult the table — pick a different basis rather than guessing a row name.
 
    **effort 分級**：依 `rules/core/agent-routing.routing-table.md` § effort 檔位對照（六維判準在 `agent-routing.md` § Routing Table）（`low` 是 Routing Table 類別預設檔；命中任一維即升檔）。

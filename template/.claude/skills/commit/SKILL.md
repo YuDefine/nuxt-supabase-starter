@@ -131,11 +131,11 @@ cross-model code review。完整 repository baseline 保持 operator 明確觸�
 0-A.0 simplify（序跑）
   -> [Fast-path?] YES -> skip 0-A.1/0-A.2，0-B/0-C 並行
                   NO  -> 並行 fan-out:
-                           軸 A: 0-A.1 GPT-5.6-sol via Pi（effort: xhigh），背景
+                           軸 A: 0-A.1 GPT-6-astra via Pi（effort: medium），背景
                            軸 B: 0-B screenshot-review（條件觸發）
                            軸 C: 0-C pnpm check（主線 foreground）
                          -> 匯合 -> 0-D -> 0-E -> 0-F -> 條件觸發 0-A.2
-                         -> [累計修正 >50 行 or >5 檔 -> 重跑 GPT-5.6-sol via Pi（effort: xhigh）]
+                         -> [累計修正 >50 行 or >5 檔 -> 重跑 GPT-6-astra via Pi（effort: medium）]
 ```
 
 **啟動順序（在同一個 assistant 回合內完成）**：
@@ -143,7 +143,7 @@ cross-model code review。完整 repository baseline 保持 operator 明確觸�
 1. simplify 完成後判斷 fast-path：
    - **命中** → 跳過 0-A.1/0-A.2，0-B/0-C 並行（同回合 fan-out）
    - **不命中** → **MUST** 用單一回合的多個 tool call 並行啟動：
-     - Bash `codex-review-safe.sh xhigh`（`run_in_background: true`）→ 拿到 background bash id
+     - Bash `codex-review-safe.sh medium`（`run_in_background: true`）→ 拿到 background bash id
      - `Agent` tool 派 `screenshot-review` Claude subagent（若 0-B 觸發條件成立；model 以 [[agent-routing.routing-table]]〔`screenshot-review-verify`〕列為準（該列的硬禁令在 [[agent-routing]] § Routing 硬禁令））
      - Bash `pnpm check`（foreground，主線同步跑）
 2. 主線 foreground 0-C 完成後 → poll 軸 A、等軸 B 回收
@@ -160,14 +160,14 @@ cross-model code review。完整 repository baseline 保持 operator 明確觸�
 **安全性保證**：
 
 - review prompt 讓 pi 在自己 turn 開頭讀 working tree diff——snapshot 語義不變：啟動後 working tree 變動不影響已啟動的 review
-- 0-A / 0-B / 0-C 修正後若**累計超過 50 行或跨 5 檔以上** → **MUST** 在匯合階段重跑一次 `codex-review-safe.sh xhigh` 確認新引入的程式碼也過 pi 眼睛
+- 0-A / 0-B / 0-C 修正後若**累計超過 50 行或跨 5 檔以上** → **MUST** 在匯合階段重跑一次 `codex-review-safe.sh medium` 確認新引入的程式碼也過 pi 眼睛
 - 0-B / 0-A.1 / 0-C 抓到的問題**全部匯合一次修**，避免反覆 review
 
 ### Gate 執行細節
 
 每個 gate 的完整執行流程（bash scripts、trigger 條件、fix loop、pi offload）見 [gates.md](gates.md)。執行任一 gate 前 **MUST** 先讀對應 §。
 
-- **0-A 程式碼審查**：simplify（0-A.0，序跑）→ GPT-5.6-sol via Pi（effort: xhigh；0-A.1，背景）→ 條件升 GPT-5.6-sol via Pi（effort: max）+ Claude Fable 5.1（effort: max；0-A.2 裁決）。詳見 [gates.md](gates.md) § 0-A。
+- **0-A 程式碼審查**：simplify（0-A.0，序跑）→ GPT-6-astra via Pi（effort: medium；0-A.1，背景）→ 條件升 GPT-6-astra via Pi（effort: medium）+ Claude Fable 5.1（effort: max；0-A.2 裁決）。詳見 [gates.md](gates.md) § 0-A。
 - **0-B UI Design Review**：條件觸發（`.vue` template 變更 + 視覺影響）。詳見 [gates.md](gates.md) § 0-B。
 - **0-C CI 等效檢查**：`pnpm check` + `pnpm test` + `pnpm run doctor`，全綠才過。詳見 [gates.md](gates.md) § 0-C。
 - **0-D Doc Alignment**：條件觸發（diff 觸及 docs / rules / snippets / audit / 業務碼 / pitfall）。詳見 [gates.md](gates.md) § 0-D。

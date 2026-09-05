@@ -441,7 +441,7 @@ if [ -f "$TASKS_FILE" ] && [ "$HAS_UI_SCOPE" = true ]; then
 
 ${MIXED_LIST}
 
-spectra-apply Phase Dispatch 規則仰賴 phase purity：UI view phase（component / page / view / layout / styling）由主線 Claude Code 自己做、非 view phase 派 Pi sol high。混雜 phase 會破壞 dispatch 邊界。
+spectra-apply Phase Dispatch 規則仰賴 phase purity：UI view phase（component / page / view / layout / styling）由主線 Claude Code 自己做、非 view phase 派 GPT-6-astra via Pi（effort: medium）。混雜 phase 會破壞 dispatch 邊界。
 
 **MUST** 把 view 層改動（\`.vue\` / \`.tsx\` / \`.jsx\` / \`pages/\` / \`components/\` / \`views/\` / \`layouts/\` / \`.css\` / \`.scss\`）切成獨立 phase（建議命名 \`## N. UI / View Implementation\`），其他工作（schema / migration / API server / store / hook / API client / type / util）放別的 phase。
 

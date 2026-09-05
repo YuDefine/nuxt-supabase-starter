@@ -6,7 +6,7 @@
 # The caller freezes the working-tree snapshot before model execution. On the
 # default (openai-codex) pool the runtime cannot obtain write/edit/bash/MCP
 # tools, which keeps prompt injection from escaping into mutations or side
-# effects. On `--pool cursor` that allowlist is NOT enforced (TD-520): Cursor
+# effects. Historical Sol Cursor isolation (retired for Astra): on `--pool cursor` that allowlist is NOT enforced (TD-520): Cursor
 # native tools (Shell / Write / MCP / WebFetch / Subagent) stay available and
 # their executions do not enter the pi events log.
 #
@@ -38,13 +38,14 @@
 # this script.
 #
 # Usage:
-#   .cursor/scripts/codex-review-safe.sh [reasoning_effort] [--pool cursor]
+#   .cursor/scripts/codex-review-safe.sh [low|medium]
+# Legacy --pool cursor is rejected: Astra has no verified Cursor model.
 #
-# Default reasoning_effort = xhigh. The commit 0-A flow calls this twice:
-# 0-A.1 with `xhigh` (always, unless fast-path skips), and 0-A.2 Step 1 with
-# `max` (conditional — only when 0-A.1 surfaces Critical/Major; 0-A.2 Step 2
+# Default reasoning_effort = medium. The commit 0-A flow calls this twice:
+# 0-A.1 with `medium` (always, unless fast-path skips), and 0-A.2 Step 1 with
+# `medium` (conditional — only when 0-A.1 surfaces Critical/Major; 0-A.2 Step 2
 # then hands Codex output to Fable code-review agent for final verdict).
-# Other contexts (Spectra propose/apply) use xhigh.
+# Other contexts (Spectra propose/apply) use medium.
 # See .cursor/skills/commit/SKILL.md Step 0-A.
 #
 # TD-320 resolved (2026-08-02): this script now collects the working-tree
@@ -92,10 +93,15 @@
 
 set -uo pipefail
 
-REASONING="${1:-xhigh}"
+REASONING="${1:-medium}"
+case "$REASONING" in
+  low|medium) ;;
+  high|xhigh|max|ultra) REASONING=medium ;; # compatibility with installed Sol recipes
+  *) echo "[codex-review-safe] effort must be low or medium" >&2; exit 2 ;;
+esac
 shift || true  # tolerate no args after reasoning
 
-# --pool cursor：配額耗盡（exit 4）後換到 Cursor 的同檔模型座位重跑。
+# --pool cursor：保留舊參數以明確拒跑；Astra 尚無已驗證 Cursor model。
 #
 # 換池 MUST 走這裡而不是另派一次泛用 codex-dispatch：這支 script 的價值在它自己
 # 凍結 changeset、自己組 prompt（含 `## Review Verdict` 與 Semantic Verdict 表的
@@ -111,14 +117,14 @@ shift || true  # tolerate no args after reasoning
 # tmpfs、憑證只掛 cursor 一把。**read-only 現在是核心拒絕，不再是 exit 6 事後補償。**
 # 未被涵蓋的仍是外洩（sandbox 保留網路），判斷依據是你餵進去的材料敏感度。
 POOL="default"
-PI_POOL_ARGS=(--model gpt-5.6-sol)
+PI_POOL_ARGS=(--model gpt-6-astra)
 if [ "${1:-}" = "--pool" ]; then
   POOL="${2:-}"
   shift 2 || true
   case "$POOL" in
     cursor)
-      PI_POOL_ARGS=(--provider cursor --model 'gpt-5.6-sol@272k')
-      echo "[codex-review-safe] NOTE: --pool cursor 跑在 bwrap 內（TD-524）：受審 repo 唯讀、\$HOME 為 tmpfs、只掛 cursor 憑證，mutation 由核心擋下。出口鎖在 Cursor API（TD-533），材料來源限自家 fleet repo 與自家 commit（TD-534）。任一道未就緒即拒跑，不降級。仍未涵蓋：Cursor 自己看得到你送過去的 prompt。" >&2
+      echo "[codex-review-safe] Astra Cursor model is unavailable; review gate remains unmet (exit 4)." >&2
+      exit 4
       ;;
     default) ;;
     *)
@@ -541,16 +547,7 @@ case "$rc" in
   0) ;;
   4)
     echo "[codex-review-safe] RESULT: quota-blocked — review DID NOT run；NEVER 當作 0-A.1 通過（exit 4）" >&2
-    if [ "$POOL" = "default" ]; then
-      # 消費端拿到的必須是「跑了就滿足 gate 契約」的指令。同一份 prompt 原樣重送到
-      # Cursor 池，Semantic Verdict 表照樣產出。
-      echo "[codex-review-safe] NEXT: 換池重跑同一 review（per rules/core/agent-routing.md § 配額耗盡時的 fallback 紀律）：" >&2
-      echo "[codex-review-safe]   $0 $REASONING --pool cursor" >&2
-      echo "[codex-review-safe] NEVER 改派 Claude subagent 充當跨模型 review —— 那是同池同模型，gate 實質為空。" >&2
-    else
-      # 鏈終點。禁的是「把同池 review 當作跨模型 gate 已過」，不是禁主線接手。
-      echo "[codex-review-safe] NEXT: Sol 兩池皆耗盡 —— 主線 foreground 自 review，且 MUST 明示「跨模型 gate 未達成」並在 HANDOFF 登記待補。NEVER 降檔到 luna/haiku。" >&2
-    fi
+    echo "[codex-review-safe] NEXT: Astra quota exhausted; cross-model gate remains unmet. Use the fresh Fable code-review terminal from commit/gates.md with the same changeset; if unavailable, record the pending review. Sol, Luna and mainline self-review do not satisfy the gate." >&2
     ;;
   5)
     echo "[codex-review-safe] RESULT: workspace binding mismatch — pi session 綁到別的 repo，本次 review 的 repo 探索不可信，NEVER 當作 0-A.1 通過（exit 5）" >&2
