@@ -35,6 +35,10 @@ Astra 派工使用 `gpt-6-astra`，effort 只有 `low` 與 `medium`：原 Sol lo
 | `--model gemini`（Routing Table 類別內降檔） | **本表列明 gemini 的列照列派**（額度耗盡才回 `luna`）；其餘要五條全中：規格完全明確 ∧ 來源已正規化 ∧ 低風險 ∧ 輸出可機械驗證 ∧ 錯誤有獨立 gate 接住。**需裁決一律不降**，回 `astra`；**exit 2 升 `astra` 重派** |
 | `--model gemini`（Claude 委派替代檔） | 原判 Claude `sonnet` 的委派工作 → `--effort high`；原判 `haiku` → `--effort low`。准入判準在 § Claude 委派的 model 檔位——這是同級工作換 runtime，**不是降檔**，不走上一列的五條連言。Gemini hop 不可用／exit 4 → `luna` |
 
+## 互動 session transport
+
+`canonical-clade-publish` 與 `session-continuation` 使用 Claude Code `claude-opus-5`、`medium`，machine policy 在 `pi-routing-policy.ts` 的 `SESSION_TRANSPORT_POLICY`。帳號選擇只選訂閱來源；模型與 effort 由此列給定並傳入 argv。Pi worker 仍依下表選擇。
+
 ## 工作類別對照
 
 列名是每列開頭 〔`如此標示`〕 的 slug，`--tier-basis table-row` 時逐字填進 `--table-row`。

@@ -436,6 +436,12 @@ receipt 送出後，本 session **NEVER** 再開新工作段、輪詢接手 pane
 
 ### Herdr session transport（每一個符合的 handoff 都 MUST）
 
+**Herdr transport 不新增 routing 權限。** 有空 workspace / pane 不是外派條件；當前 session 能在既有授權與 scope 內直接完成目標 cwd 的工作，就直接完成。只有本節已判定要換互動 session、或 [[session-tasks]] 的 session boundary 已成立時，才依 [[session-tasks.operations]] § Herdr session transport 搬運 durable task / thin brief。
+
+**Pane 是 dispatch 的投影，不是 dispatch 的理由。** Transport 預設分割當前 Tab，只改變已決定要派的工作長什麼樣。反方向同樣不承載資訊：**NEVER** 從「Tab 沒有分割」推論沒有工作在跑——in-process subagent 沒有 terminal。要看現況跑 `vendor/scripts/herdr-patrol.ts`。
+
+每一個符合的跨 cwd / 新 AI Agent session handoff 都保留原有 worktree、scope、approval、verification 與 clade / consumer 邊界。Transport 失敗也不改變 routing 結論，且 **NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt。
+
 **每一個**原本會要求 user 切換資料夾、開另一個 AI Agent session、再貼 prompt 或指令的 handoff，
 都由主線自行走 Herdr transport；本節是使用者對這項 transport 的 standing explicit authorization，不必逐次再問。
 
@@ -448,6 +454,28 @@ user 看得到那個 pane，接手 agent 可以用 `AskUserQuestion` 讓 user �
 **不構成**不派的理由，只構成 brief 裡要寫明「你是互動式 session，需要拍板的直接問 user」。逐字反開脫：
 「這項要 attended，所以不能派」「要 user 逐批拍板，留在本 session 比較快」。本段適用**每一項**判為需要
 人拍板的殘工，不是只有其中比較單純的那幾項。
+
+#### 派工生命週期責任（每次啟動與 resume）
+
+**每一個**由 agent 指揮的派工、new／resume、失敗重試，都由該主持者負責啟動、接手、阻塞處置與完成驗證，直到驗收完成或責任已交給具名接手者。**NEVER** 把命令送出、提示消失、輸入框出現或 `idle`／`done` 當成任務已接手或已完成。
+
+| 當下可觀察狀態 | 主持者的必要動作與證據 |
+| --- | --- |
+| 啟動或 resume 命令已送出 | 核對 receipt 的 pane、實際 cwd 與 runtime session，讀取目標畫面；處理啟動提示後再讀回，確認原任務已被接收並開始執行 |
+| 指定專案的目錄信任提示，且已有該專案的信任授權 | 在核對過的目標處理提示，再驗下一畫面；不把信任擴大到其他目錄 |
+| hooks review、登入、權限或其他互動提示 | 查實際內容與既有授權；可自行處理的當下處理並驗結果。缺少人的授權、憑證或判斷時，保留工作，主動提出具體問題與已查明證據；不盲選全部信任或繞過拒絕 |
+| 只有空白輸入框，沒有原任務接手證據 | 查原 session／durable task，恢復既有任務並驗到實際接手；找不到任務內容就回報缺少的具體資訊，不猜新工作 |
+| 工作執行中或等待依賴 | 依該 runtime 的協調／通知機制持續持有責任；阻塞或逾時到達時主動診斷、完成授權內修復並續跑，不讓使用者自己發現卡點 |
+| worker 回報完成 | 核對與本 task 關聯的 outcome 及實際驗收證據，再依既有 lifecycle 規約回收；可輸入或 process 退出不代替驗收 |
+| relay 或主持者將中斷 | 交付 durable task、每個未完成 dispatch 的識別與阻塞狀態，取得具名接手者承接責任的 receipt 後，原主持者停止；後續協調由接手者持有 |
+
+**NEVER** 以「目前啟動提示已消失，進入 Codex 輸入畫面；尚未確認原任務開始執行」作為派工處置的結束點。這個狀態命中上表的空白輸入框列，下一步是確認原任務接手。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | 每次派工／resume、阻塞／逾時通知、完成回報及責任交接；本表是操作契約，沒有新增自動偵測器 |
+| 消費端 | 該派工的主持者；relay 後為 receipt 指定的接手者，逐狀態執行上表 |
+| 載入路徑 | `session-tasks.operations` 的 Herdr session transport；clade 自用 `herdr-session-handoff` 指針於啟動／resume 前讀取 |
 
 ### 派幾個 pane —— 先判這一題
 
@@ -477,13 +505,7 @@ helper（`relay` 用 `--relay`；`fanout` 先對每件工作跑一次裸 dispatc
 由 helper 統一 provision、fresh Claude session identity、prompt delivery、in-flight dispatch 的
 coordinator 身分轉移，以及寫出讓 successor 回收本 pane 的 predecessor record。
 
-**child 的 model 只由 `--model` 決定，NEVER 由 brief 正文決定。** 每一次會開新 Claude pane 的呼叫
-（裸 dispatch、`--relay`、recovery 重派）**MUST** 帶 `--model <slug>` 或 `--model inherit`，缺就
-`usage_error`。Claude session 無法自己換 model，brief 裡寫「worker 維持 Opus 5」對收件的 session 是
-不可執行的句子，pane 會照該 launcher settings.json 的預設起（2026-09-02 實例：brief 全寫 Opus 5、
-沒帶 `--model`，整批 ccw worker 都是 Fable）。派完 **MUST** 對 receipt 的 `claude_model` 核對意圖；
-receipt 出現 `model_prose_conflict` 就是 brief 與 argv 不一致，改帶 `--model <slug>` 重派，
-**NEVER** 靠改 brief 措辭解決。要 successor 與本 session 同款就 `--model inherit`；要換檔位就給 slug。
+**每次新建或恢復 child 都 MUST 按 [[agent-routing]] 選定具體 model 與 effort，並傳入 `--model <slug> --effort <level>`。** 裸 dispatch、relay、recovery 重派與固定 bridge 都適用；`inherit`／缺欄／runtime 不相容在建 pane 前拒絕。帳號設定、主線模型與 brief 正文不能代選。收據的 requested 欄位證明傳入值，observed 才是實跑證據；Herdr 回 `model_verification: unverified` 時 **NEVER** 宣稱已核實模型。
 
 **`fanout` 的順序是硬約束**：`--relay` 轉移的是它**執行那一刻**掃到的 in-flight dispatch。relay 之後
 才派的 worker 不會被任何人繼承，而本 pane 隨即被 successor 回收——那筆 worker 直接變成 orphan。

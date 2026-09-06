@@ -40,6 +40,7 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \
   --new-tab \
   --cwd <absolute-main-checkout> \
+  --model <routing-model> --effort <routing-effort> \
   --label <這件工作的描述性 label> \
   --prompt-file <這份 brief 的絕對路徑>
 ```
@@ -62,6 +63,7 @@ node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \
 node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \
   --new-tab \
   --cwd <absolute-main-checkout> \
+  --model <routing-model> --effort <routing-effort> \
   --label <successor 的描述性 label> \
   --prompt-file <successor brief 的絕對路徑> \
   --relay

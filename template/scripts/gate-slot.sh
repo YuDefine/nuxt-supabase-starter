@@ -153,6 +153,12 @@ print_holder_diag() {
 # 這裡只管**等待階段**。取到 slot 之後走 exec，行程映像被換掉、trap 一併消失，
 # 訊號由 inner command 自己處置 —— 那正是想要的（NEVER 讓閘門攔截 gate 自己的 Ctrl-C）。
 _gate_abort() {
+  # Reap this helper's background lock waiter before closing its inherited fd.
+  # These are our wait commands, not another job holding the lock.
+  for _gate_wait_pid in $(jobs -pr); do
+    kill -TERM "$_gate_wait_pid" 2>/dev/null || true
+  done
+  wait 2>/dev/null || true
   printf '\ngate-slot: 收到 %s，放棄等待 slot（inner command 未執行）\n' "$1" >&2
   exit "$2"
 }
@@ -160,7 +166,10 @@ trap '_gate_abort SIGINT 130' INT
 trap '_gate_abort SIGTERM 143' TERM
 
 if [ "$mode" = wait ]; then
-  if ! flock -w "$WAIT_TIMEOUT" 9; then
+  # Bash defers traps while a foreground flock blocks; its wait builtin is
+  # interruptible, so PID-only cancellation can abort a same-repo wait too.
+  flock -w "$WAIT_TIMEOUT" 9 &
+  if ! wait "$!"; then
     print_holder_diag "$REPO_LOCK" "repo lock wait timed out after ${WAIT_TIMEOUT}s (key=$safe_key)"
     exit "$BUSY"
   fi

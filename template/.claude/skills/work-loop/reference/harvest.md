@@ -17,14 +17,16 @@ Local edits will be reverted by the next sync.
 
 **為什麼一定要收割**：dispatch 是非同步的——agent 完成時會產生**新的 actionable items**（apply 完成 → 可補 evidence / 可 archive），只有 re-scan 才看得到。不收割的 loop 在 dispatch 完就退出，archive / commit 全部懸空。
 
-### 落地 main（hard rule）
+### 驗收後登記批次（hard rule）
 
-驗收確認 worktree 有 commit 之後，產品碼落地 main：
+驗收確認 worktree 有 checkpoint、scope 正確且原執行者已釋出寫入權後，主線讀 commit skill 的 `batch.md` 登記就緒並評估觸發條件：
 
 | 來源 | 何時落地 | 怎麼 commit |
 | --- | --- | --- |
-| OPSX 需求 | 當前驗收／archive gate 通過後，依 checkout workflow 合回 | invoke `/commit` |
-| 非 spectra / Form-1 | harvest 後 `wt-helper merge-back <slug>` | invoke `/commit` |
+| OPSX 需求 | 原實作 wt 的 archive gates／bookkeeping 完成並 checkpoint 後 | 登記就緒；達批次條件才 invoke 一次 `/commit` |
+| 非 OPSX / Form-1 | harvest 驗收後 | 登記就緒；達批次條件才 invoke 一次 `/commit` |
+
+每次收割與 session 接手跑 `wt-helper batch status --trigger auto`：4 件 distinct work id 自動提交；不足時繼續開發。手動 `/commit`／merge back 無最低件數，dependency／drained／stop 提前結批。單純交接不結批。批次在隔離整合區審查，落地後由 commit skill cleanup，**NEVER** 收一個 wt 就重跑一遍完整 `/commit`。
 
 **NEVER** 用 `git commit --only` 把 source / migration / plugin 送上 main。`--only` 只給 [[commit.detail]] 白名單。卡 `/commit` 人工檢查 → packaging，**NEVER** `--only` 繞 0-A。
 
@@ -66,7 +68,7 @@ ledger 移除照做、2h hang 上限照算。8 步 SOP 的 scope-verify / checke
 ### 進 Step 6 停止判定的條件（兩者**同時**成立）
 
 - In-flight ledger = 0（所有派出的 agent 已回報並走完收割 SOP）
-- 最後一次 re-scan 後四組皆空，且 HANDOFF 補件來源也空
+- 最後一次 re-scan 後四組皆空，且 HANDOFF 補件來源也空；此時以 `drained` 評估就緒批次，先完成可執行的整合／提交／清理，真 gate blocker 才 packaging
 
 任一不成立 → 繼續 dispatch / 繼續等下一個 notification。
 
@@ -75,4 +77,4 @@ ledger 移除照做、2h hang 上限照算。8 步 SOP 的 scope-verify / checke
 1. Loop dispatch 4 個 background agent：3 個 `/wt /spectra-apply` worktree（`admin-permission-gate-alignment` / `admin-dashboard-action-center` 等）+ 1 個 Fable dump script
 2. ❌ 不收割的行為：可 dispatch 的 item 都派完 → 主線寫 HANDOFF → 釋放 lock → 結束 loop
 3. Agent 陸續完成（`admin-permission-gate-alignment` Phase 1-6 done、`admin-dashboard-action-center` Phase 1-5 done、v1 migration 14/14）——但 loop 已死，沒人 re-scan，user 被迫手動下指令觸發 archive / commit
-4. ✅ 收割行為：每收到一個 agent notification 就驗收 + re-scan，`applyInProgress` 位移成可 archive → 立即 dispatch archive + `/commit`；期間主線繼續做序列組與非 spectra work；in-flight 歸零且四組皆空後才寫 HANDOFF + 釋放 lock
+4. ✅ 收割行為：每收到一個 agent notification 就驗收 + re-scan，`applyInProgress` 位移成可 archive → 立即 dispatch archive，驗收後進就緒池並評估批次觸發；期間主線繼續做序列組與非 spectra work；in-flight 歸零且四組皆空後才寫 HANDOFF + 釋放 lock

@@ -13,6 +13,8 @@ Local edits will be reverted by the next sync.
 
 # Commit — Trunk Gates（[[commit]] detail）
 
+**批次 integration 同樣適用兩道 gate**：以 helper 登記的 path／base→candidate 判定，不能以 feature branch 名稱跳過。批次 0-MR 不採「來源未 land」SKIP；auto-triage 後仍有 blocker 就保留整批、停止 seal／land。下列 main-only 的歷史存量 pathspec withholding 只用於普通 main 模式。
+
 本檔是 [[commit]] 的 path-scoped 延伸：兩條 main / master 限定 hard gate ＋ multi-session git hazard 交叉索引。**核心紀律（`git commit --only -- <paths>`、§ 禁止事項、Commit 預設位置）留在 [[commit]] 本體 always-load**，因為那些由「跑 commit 這個動作」觸發、不必然伴隨檔案存取；本檔兩條 gate 的觸發條件本身就是 `openspec/changes/**`，故可 path-scoped。
 
 ## Multi-session shared working-tree 的 git hazard 地圖
@@ -76,11 +78,11 @@ Local edits will be reverted by the next sync.
 
 ### 為何加條件 0（worktree 未 land 即 SKIP）
 
-v3 atomic-landing（[[worktree-default.commit-ceremony]] §5）下，實作 code 留在 worktree branch 直到 `/spectra-archive` 觸發 `merge-back`。此期間會出現在 main 的該 change 檔案**只有** `tasks.md` 的 annotation / 勾選更新 —— 那正是人工檢查流程自己的產物。對它擋 commit 擋不到任何未驗收 code，只會把同批 dirty 的無關檔案一起連坐。
+普通 main 的 artifact annotation 可能先於來源落地；條件 0 對這種歷史存量避免連坐無關變更。批次 integration 含來源實作，不能使用此 SKIP。
 
 實證（<consumer-b> 2026-08-21）：main 9 個 dirty 檔中僅 `openspec/changes/shipment-loading-per-box-capacity/tasks.md` 觸發 gate，該 change 的 code 全在 `mergedToMain:false` 的 worktree 內，卻連帶卡住 `docs/tech-debt.md`、`nuxt.config.ts`、`shared/schemas/*` 等 8 個無關檔。
 
-條件 0 **不放寬任何驗收標準**：code 一旦 merge-back 進 main，條件 0 即不成立，條件 1 / 2 的 BLOCK 照舊（該 change 的 `openspec/changes/<X>/**` withheld、auto-triage 照跑）。merge-back 不只由 `/spectra-archive` 觸發——0-MR auto-triage 的 `（fix-requested）` 路徑也會 merge-back，早於 archive；已 land 的 code 本 gate 任何粒度都擋不到它上 production，看 MR 狀態的只有 archive gate（擋 archive）與 `/commit` Step 6-B 的發版提問（`tag-v` / `manual` 拓樸），`push-main` 拓樸下 push 即部署。
+來源的人工驗收與 archive gate 保持；修復在來源內完成並重新 checkpoint／ready，批次通過完整品質鏈後才落地 main。發布仍依既有 Step 6 gates；普通 main 的 pathspec withholding 不改變既有歷史 code。
 
 ### 為何 gate 在這
 

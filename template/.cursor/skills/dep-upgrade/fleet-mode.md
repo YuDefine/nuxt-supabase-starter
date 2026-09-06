@@ -334,8 +334,8 @@ Brief JSON：`/tmp/dep-fleet-brief-<pkg-slug>-<consumer-id>.json`
    - Watch pi per [[agent-routing.pi-watch-protocol]]
    - 失敗 → 升 high（用 § B 模板）
    - 高失敗 → 不要 AskUserQuestion，直接 STOP + 回報 orchestrator
-4. 跑 Step O.3 merge-back + selective stage（`package.json` + lockfile + callsite 改動檔）
-5. **NEVER push、NEVER /commit**：worktree 已 merge-back 後 main 端 staged 狀態保留，回報 orchestrator
+4. 跑 Step O.3 驗收並保存 scoped checkpoint（`package.json` + lockfile + callsite 改動檔）
+5. **NEVER push、NEVER /commit**：來源與 checkpoint 保留，回報 path／work id／HEAD／驗收證據，由 orchestrator 按 F.8 授權結批
 6. **產生 commit msg（commitlint-aware）**：
    - 先 read consumer 的 commitlint 設定（`commitlint.config.{js,ts,mjs,cjs}` / `.commitlintrc.*` / `package.json` 內 `commitlint`）
    - 偵測限制：`type-enum` 允許清單、自定 `subject-has-chinese` plugin、`body-max-line-length` / `header-max-length`
@@ -401,36 +401,18 @@ orchestrator 會用 SendMessage 跟你續跑 phase。請保持 session 狀態、
 [1] 全部 OK 的 consumer 一起 commit + push
 [2] 我要先 review 一兩個 consumer 的 diff
 [3] 只 push 某幾個 consumer（指定 consumer_id）
-[4] 都先停下，我手動 review 後再決定（保留 staged 狀態）
+[4] 都先停下，我手動 review 後再決定（保留來源 checkpoint）
 ```
 
 **MUST 等 user 選**。**NEVER** 主線自決定全部 push。
 
 ### F.8.3 按 user 選擇執行
 
-**Race 警示**：subagent 在 Step F.6 結束時把 upgrade staged-on-main，到 orchestrator 在 Step F.8 跑 commit 之間的時間窗，consumer 端**並行 session** 可能跑 `git add -A` / `git reset` 把 staged 區掃掉、或把 upgrade staged 內容夾帶進別人的 commit。**MUST** 在 commit 前 verify staged 集合：
+每個 consumer 是獨立 repo，不能跨 repo 混一批。依上一步 user 的既有選擇執行，不重問已回答的授權：
 
-```bash
-# 預期 staged：subagent 回報的 STAGED_FILES
-git -C <consumer_path> diff --cached --name-only > /tmp/dep-fleet-actual-staged-<consumer-id>.txt
-diff <expected-staged-list> /tmp/dep-fleet-actual-staged-<consumer-id>.txt
-```
-
-- 若一致 → 正常 commit + push
-- 若 staged 被擴大（多了不是 subagent 動的檔）→ STOP 該 consumer，列入摘要 ⚠️ 區「staged 被並行 session 擴大」+ 不 push
-- 若 staged 被縮小或消失 → 查 `git log -p package.json` 確認升版是否已落地：已落地 → 列入摘要 ✅ Pushed 區，標記「by-other-session race」；未落地 → ❌ Failed 區、需重跑
-
-**選 [1]**：對每個 SUCCESS consumer：
-
-```bash
-cd <consumer_path>
-git status --short                                      # race verify
-git commit -m "<COMMIT_PLAN_MSG>"                        # **MUST** 用 subagent 回報的 msg verbatim
-git push origin <current_branch>                         # trunk-based 都是 push main
-```
-
-- **選 [2]/[4]**：列出 `git diff --staged` 指令給 user，**NEVER** 替 user 跑 commit
-- **選 [3]**：對指定 consumer_id 跑 commit + push，其餘留 staged
+- **[1]／[3]**：只對獲授權 consumer 驗 worker checkpoint 與寫入權交接，依 commit skill `batch.md` 登記 ready、以 `manual` 結批，在隔離 integration 跑一次完整 `/commit`，依該 consumer trunk／PR 與發布 gates 落地、push、cleanup。建議 message 仍需 commitlint 通過。
+- **[2]／[4]**：保留來源並展示 source diff，不提前 staged 到 main；待既有 review 決策後續跑。
+- 來源 HEAD／驗收證據改變或仍有未保存工作時，保留且回報該 consumer blocker，不宣稱 pushed。只有實際確認遠端包含正式 commits 才列 Pushed。
 
 ### F.8.4 摘要彙報
 
@@ -441,7 +423,7 @@ git push origin <current_branch>                         # trunk-based 都是 pu
 **Release**：<release_url>
 **BC clauses**：<N> 條套用、<M> 條無 callsite
 
-### ✅ Pushed (P) / ⏸️ Staged but not pushed (S) / ❌ Failed (F) / ⏭️ Skipped (K)
+### ✅ Pushed (P) / ⏸️ Checkpoint retained (S) / ❌ Failed (F) / ⏭️ Skipped (K)
 
 [tables...]
 ```

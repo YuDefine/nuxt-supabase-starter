@@ -6,6 +6,8 @@ stash audit 的寫入欄位。**`park` / `next` 都會走到 Step 3**，本檔�
 
 主流程（怎麼跑 scan、輸出寫進哪一段）留在 SKILL.md § 3.1 / § 3.3；查表時讀本檔。
 
+下表保留 scanner 的 legacy action token；`merge-back-or-resume` 現行路由是驗收／scoped checkpoint／登記 batch ready，再依 commit skill `batch.md` 收件。`landable` 只表示 Git 前置訊號通過，不是品質、授權或寫入權交接憑證。已登記 batch 的來源與 integration 由 `/commit` 收尾的 `batch cleanup` 統一處理。
+
 #### 3.1a 每條 wt 的 merge-back safety signal（v1.14+ hard rule）
 
 對每條 `mergedToMain: false` worktree，script 已以**純讀**方式蒐集 3 條 signal（不跑 `merge-back --dry-run` — 該入口會清 index.lock 屬寫入；blockers 改用等價唯讀邏輯：branch diff files ∩ main dirty paths，即 wt-helper `detectMergeBlockers` 演算法）：
@@ -18,10 +20,10 @@ stash audit 的寫入欄位。**`park` / `next` 都會走到 Step 3**，本檔�
 
 | 條件 | mergeBackSafety | 對應動作 |
 | --- | --- | --- |
-| `blockers == 0` + `uncommitted == 0` | `landable` | safe to merge-back |
-| `blockers > 0` 或 `uncommitted > 0`，且 `baselineRef` 存在 | `ptb-recoverable` | merge-back / rescue path 都 OK（pinned ref 是救援保險絲） |
+| `blockers == 0` + `uncommitted == 0` | `landable` | 檢查驗收證據、授權與寫入權，再登記就緒 |
+| `blockers > 0` 或 `uncommitted > 0`，且 `baselineRef` 存在 | `ptb-recoverable` | 先保存／處理 WIP，再判就緒；pinned ref 僅提供救援 |
 | `blockers > 0` 或 `uncommitted ≥ 100`，且 `baselineRef` 不存在 | `ptb-unsafe` | **禁止 dispatch OPSX archive**；走 Step 2B.4.5 PTB-unsafe 快速分流 |
-| 表未覆蓋區（`blockers == 0`、`uncommitted` 1–99、無 `baselineRef`） | `unclassified`（check 標 `n/a` needs-judgment） | LLM 看 `raw.worktrees[]` 的 signal 自行判讀（小量 WIP 通常先 commit 進 wt 再 merge-back） |
+| 表未覆蓋區（`blockers == 0`、`uncommitted` 1–99、無 `baselineRef`） | `unclassified`（check 標 `n/a` needs-judgment） | LLM 看 `raw.worktrees[]` 的 signal 自行判讀（小量 WIP 先驗收並 scoped checkpoint，再判就緒） |
 
 #### 3.1b Kind 判定表（與 mergeBackSafety 正交）
 
@@ -32,7 +34,7 @@ stash audit 的寫入欄位。**`park` / `next` 都會走到 Step 3**，本檔�
 | `mergedToMain: true` + `userWip: 0` | `merged` | `cleanup` — `node vendor/scripts/wt-helper.ts cleanup <slug>` |
 | `mergedToMain: true` + `userWip > 0` | `merged-with-wip` | `verify-then-cleanup` — **NEVER 直接 cleanup**。先走 [[wip-orphan-recovery]] 的 SOP（git status 攤平 → 半成品痕跡掃描 → 完成度硬驗 → git log 脈絡 → 危險項識別 → 收尾分流），確認 WIP 去留後才 cleanup |
 | `mergedToMain: false` + `openspec/changes/archive/<slug>/` 存在 | `archived-change` | `verify-then-cleanup` — change 已 archive 但 branch 未 merged-into-main，先 `git log -1 <branch>` 檢視 commits 是否已含在 archive squash；若是 → `wt-helper cleanup <slug>` |
-| `mergedToMain: false` + `openspec/changes/<slug>/` 仍 active + `daysOld > 7` | `active-stale` | `merge-back-or-resume` — 依 mergeBackSafety 分流（`landable` → 直接 merge-back；`ptb-*` → Step 2B.4.5） |
+| `mergedToMain: false` + `openspec/changes/<slug>/` 仍 active + `daysOld > 7` | `active-stale` | `merge-back-or-resume` — 依 mergeBackSafety 分流（`landable` → 驗收後登記就緒；`ptb-*` → Step 2B.4.5） |
 | `mergedToMain: false` + change 仍 active + `daysOld <= 7` | `active-fresh` | `keep` — 在用中；若需 land 仍依 mergeBackSafety 分流 |
 | `mergedToMain: false` + 兩個 change 目錄都不在 + `aheadCount > 0` + `contentLanded: 'no' \| 'unknown'` | `unlanded` | `merge-back-or-resume` — branch 有未進 main 的 commit，`git log --oneline main..<branch>` 檢視後決定 merge-back 或續做 |
 | 同上 + `contentLanded: 'yes'` | `unlanded-content-landed` | `verify-then-cleanup` — ancestry 說未 land，但候選 commit 的**內容已 100% 在 main**（squash-merge 的常態）。**NEVER 對它跑 merge-back** |

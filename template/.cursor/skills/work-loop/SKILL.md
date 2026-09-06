@@ -622,7 +622,7 @@ runner.sh 另有 mechanical fail-closed：起跑前、每次 child launch 前，
 | 殘工 <15 分鐘 | 本輪做完，不落任何檔（turn cap 為此 +0 不 +1） |
 | 需要 Charles 拍板（過不了自主判定七條 AND） | **packaging**——照下方既有 Packaging SOP 全文執行（唯一免費的登記） |
 | 需要 attended / permission gate（publish、`.claude/**`） | attended 佇列（`tasks/` 既有形狀，一檔一條） |
-| 可執行，且 context 可 durable 化成 ≤5K thin brief | **裸 dispatch**（default 出口）：`herdr-session-handoff.ts --cwd <main-checkout> --label <描述性 label> --prompt-file <brief> --model <slug|inherit>`，**不帶 `--relay`、不帶 `--coordinate`**。brief 紀律照 [[session-tasks.operations]] § Herdr session transport |
+| 可執行，且 context 可 durable 化成 ≤5K thin brief | **裸 dispatch**（default 出口）：`herdr-session-handoff.ts --cwd <main-checkout> --label <描述性 label> --prompt-file <brief> --model <slug> --effort <level>`，**不帶 `--relay`、不帶 `--coordinate`**。brief 紀律照 [[session-tasks.operations]] § Herdr session transport |
 | 等具體外部 signal | TD ＋ `wontfix-until-signal` ＋ **可觀察 signal predicate**。寫不出 predicate 就不准用本格——那是等待區，不是掩埋場 |
 | 以上皆非（context 無法 durable 化） | TD 登記，**MUST 同 commit 附 `### Restart brief` 段**：檔案路徑、指令、驗收 predicate、已排除方案。heading 逐字 `### Restart brief`（`####` 亦可），**NEVER** 寫成 `**Restart brief**` 粗體或 `## `（前者不是 heading、後者被 TD parser 當成新 entry 的起點）。缺 = `audit-tech-debt-hygiene` violation（`restart-brief-missing`，紅線 >0） |
 
@@ -671,7 +671,7 @@ attended mode 且真的選不出來 → 依 Step 0 Iron Law **MUST `AskUserQuest
 - **Per-item task 追蹤（MUST）**：每條 dispatch item MUST 先 `TaskCreate`（subject 用 `<item>: <狀態> → <動作>`），dispatch 時標 `in_progress`，完成/skip/blocked 立即標 `completed`。**NEVER** 只建概括性收割 task——user 看 task list 判斷 loop 在幹嘛，概括 task 提供零資訊
 - **Dev server 協調**：evidence collection 需要 dev server 時**主線自行協調**，**NEVER** 把 port 被佔當 user 協調事項跳過。池滿時先跑 `wt-helper reclaim-stale`（三層機械判定見 [[worktree-default]] §6：stale 自動釋放 dev-port record → live 不動 → unknown 才問 user / packaging），reclaim 後仍滿才進人工分流
 - **Workflow model 感知**（archive 後 push 前 MUST）：讀 `~/offline/clade/registry/consumers.json` 的 `workflow_model`——`trunk-based` 直接 push；`pr-merge-based` **NEVER 直推 main**，改 push feature branch + `gh pr create --fill`；查不到當 `pr-merge-based` 保守處理
-- **Commit 紀律**：每個 item 獨立 commit。落地 main 時路徑全在 [[commit.detail]] 白名單 → `git commit --only -- <paths>`；任一不在 → invoke `/commit`（0-A + `Via: /commit` trailer）。**NEVER** 用 work-loop 當跳過 `/commit` 的理由。卡人工檢查 → packaging。worktree 內的 session-branch commit 見 [guardrails.md](reference/guardrails.md) § C
+- **Commit 紀律**：每個 item 保存 scoped checkpoint；主線驗收並登記就緒，4 件 distinct work id 批次跑一次完整 `/commit`（0-A + `Via: /commit`），正式 commits 仍按功能分組。手動要求無最低件數，dependency／drained／stop 提前結批。**NEVER** 用 work-loop 當跳過 `/commit` 的理由。卡人工檢查 → packaging。登記及清理必讀 commit skill 的 `batch.md`；worker checkpoint 見 [guardrails.md](reference/guardrails.md) § C
 - **Error handling**：
   - **Dispatch failure**（skill 報錯 / infra 不可達）→ log + skip + `failStreak` +1，繼續下一個
   - **Fixable issue found during dispatch**（E2E selector bug / guard 漏路徑 / annotation drift / test assertion 要更新）→ **MUST 就地修 → 重跑 → re-scan → 繼續**，**NEVER** 當成 dispatch failure skip。判準：「我能在當前 session 用 Edit + Bash 修好嗎？」是 → 就地修
@@ -697,6 +697,8 @@ attended mode 且真的選不出來 → 依 Step 0 Iron Law **MUST `AskUserQuest
 ---
 
 ## Step 6 — Fingerprint 與停止判定
+
+停止判定前 MUST 跑 `wt-helper batch status` 並依 commit skill `batch.md` 處置：沒有可推進開發時以 `drained` 結批，使用者明示結束本輪用 `stop`；就緒池尚未滿 4 件也可提交。單純換 session 保留池交接。已落地待清理只重試 cleanup；`WORK_LOOP_RUNNER_CHILD` 的 publish／propagate 禁令照常生效。
 
 ### 6.1 算 fingerprint
 

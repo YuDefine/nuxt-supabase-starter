@@ -14,55 +14,43 @@ Local edits will be reverted by the next sync.
 > Path-scoped detail of [[worktree-default]] §5 / §5.5 / §6。核心 always-load 規約在母檔 worktree-default.md。
 
 
-## §5 Commit 階段：subagent commit → archive 吸收 → user `/commit`
+## §5 Commit 階段：checkpoint → 批次整合 → 單次 /commit → 回收
 
-**v3 atomic landing model**（取代 v2 「`/wt` 返回時 squash」）：
+每一個實作 worktree 完成必要測試及行為驗收後，保存 scoped checkpoint，包含實作、進度與證據。Hooks 照跑，新檔逐檔 add，其餘使用 `git commit --only -- <paths>`。Worker 不 push、不各跑完整 `/commit`；正式審查由整批一次執行。Pi phase checkpoint 的命名與 phase 邊界仍依 [[agent-routing.pi-watch-protocol]]。
 
-`/wt` 返回時保留已 commit 的 worktree／branch。OPSX archive 在實作樹驗證並封存目前 revision；主持者提交 bookkeeping 後，序列合回 main 並立即限定路徑 commit。驗收、歸檔、落地與部署各自有證據。
+### 就緒與觸發契約
 
-### 為什麼從 v2 改 v3
+1. 主線收割 terminal outcome、驗 scope／必要驗收並確認寫入權已交接，再用 `wt-helper batch ready` 登記來源 HEAD、work id、證據及落地授權。只有已明確就緒且允許落地的 wt 進池，**NEVER** 從「git status 乾淨」推定已驗收。
+2. 每次就緒、收割、停止開發或 session 接手，跑 `wt-helper batch status --trigger auto`。自動門檻為 4 個 distinct work id，同任務多個 wt 不重複計數；未達門檻繼續開發，不佔 commit lock。
+3. 使用者要求 `/commit` 或 merge back → `manual`，**無最低件數**。下游必須先落地 → `dependency`；已授權開發都完成或受阻 → `drained`；使用者結束本輪 → `stop`。三者皆可提前結批。單純 session handoff 保留佇列。
+4. 觸發後主線進 `/commit`，固定同 repo 當下所有已就緒且允許落地的成員，在隔離整合區合併。**NEVER** 要使用者代打已命中條件的 `/commit`。
+5. 整批跑完整 simplify、review、checks 與適用人工 gate，依功能建立多筆正式 commit。批次開始後的新成員進下一批；未就緒任務不阻擋手動提交。
+6. 正式落地 main 後由 commit skill 呼叫 batch cleanup，逐來源驗落地、HEAD 未變、無 WIP／活寫入者／保留契約才移除 wt／branch，隔離整合區最後回收。PR 制等 PR 合入 main。清理可獨立重試。
 
+進入本流程時 **MUST** 讀 commit skill 的 `batch.md`，包含命令、證據格式、衝突續跑與落地順序。無就緒 wt／待續跑批次時，普通 `/commit` 照常處理當前工作區。
 
-v3 atomic landing 解這些：main 永遠 deployable；多 session 平行不污染 main（每條 worktree 各自保留到 archive）；一個 ceremony land 全部；人工檢查 Gate 與 archive gate 對齊為同一道進 main 關卡。
+### OPSX 與 skill-owned worktree
 
-### Mechanic
+Spectra archive gates 與 bookkeeping 在持有該 change 實作的 worktree 執行，完成後連同成果 checkpoint，再進就緒池。**NEVER** 在看不到實作的 main 跑 archive gates，也不在 archive Step 0 刪來源。人工檢查、spec sync、sidecar 與 evidence 義務保留。
 
-**Codex 派工規約**（細則見 [[agent-routing.pi-watch-protocol]] § Commit Authorization）：codex 可在 worktree 內 commit，但 **MUST** 遵守：一 phase 一 commit、message 強制 `🧹 chore: wt <change>-phase-<N> — <short>`、不繞 hook（**禁止** `--no-verify`）、selective stage（**禁止** `git add -A`）、commit 前自跑 drift + scope check、**仍禁止** `git push` / 中途 `git stash` / `--amend` / `/commit` / `/spectra-commit`。主線收到完工通知後 **MUST** 驗 commit 邊界對齊 phase + format、double-check drift / scope（發現 → `git -C <wt> reset --soft main` 重派）、跑 typecheck / test。
+Ad-hoc Form-1、`/dep-upgrade` 等 skill-owned wt 同樣在完成點登記就緒並評估批次條件。已授權的自動落地由主線執行；使用者明示保留的 wt 不納入自動回收。Worker 不因批次契約取得 push／publish／刪除來源的權限。
 
-本段「Subagent 在 worktree commit」**對 Claude subagent 與 codex 都適用**（規約相同）；差別只在 subject 後綴：Claude subagent 用 `🧹 chore: wt <slug> — <free-form>`，codex 強制 phase 格式以利主線對齊。
+### 安全邊界
 
-1. **Subagent 在 worktree 內 commit**（`/wt` prompt template 強制）：`git add -- <scoped file>` selective stage（**禁止** `git add -A`） + `git commit -m "🧹 chore: wt <slug> — <short>"`，可多 commit，pre-commit / commit-msg hook 必跑。**NEVER**：`git push` / `/commit` / `/spectra-commit`。
-2. **`/wt` 返回時**：**不** squash，**不** cleanup。worktree + branch 保留，主線只報告 status。
-3. **OPSX 驗證與歸檔**：在實作 worktree 依 `/opsx` 的 `references/execution.md` 回讀目前 revision、證據與人工 gate，再執行 archive；未過的 gate 保持阻擋。
-4. **提交封存結果**：在該 worktree 限定路徑 commit 實作與 bookkeeping，檢查 clean、scope 及內容。archive 不自動 merge-back。
-5. **主持者序列落地**：先同步 main、檢查並行 WIP 與 merge-back dry-run；放行後只合一棵樹，立刻依 `/commit` 在 main 限定路徑 commit，驗每個檔的內容與 scope，再處理下一棵樹。既有授權不足時保留 worktree 與可審查結果，等待具體 gate。
+**Iron Law：正式品質流程未通過、成果未落地 main，來源就保留。違反字面就是違反精神。**
 
-### Ad-hoc Form-1 worktree（非 spectra change）
+| 已發生的說法 | 可驗事實 |
+| --- | --- |
+| `absorbed into main` | 舊 merge-back 可能只寫 index；須有正式 commit 與落地證據才可清理 |
+| 「兩條改的檔完全不重疊」 | 共享 index 仍有競態；同 repo 只有一批持有整合權 |
 
-完成既有驗收後，由主持者按相同 dry-run／序列 merge-back／main commit 流程落地。deferred-landing 是 `/wt` 的「通用 primitive」設計；**此例外只屬於 `/wt` 本身**，包裝 `/wt` 的 skill 走下面 Skill-owned 管轄。
+Red flag：正在把「checkpoint 已 commit」「squash exit 0」當成可刪來源的證據時，改查正式落地紀錄。衝突或 gate 失敗保留來源；main／source 前移、審後修改使舊證據失效，不使用 force-discard 解決。
 
-### Skill-owned worktree lifecycle（auto merge-back contract）
+## §5.5 Legacy merge-back 與 stash 救援
 
-Skill 自己 fork worktree、有**清楚 end-of-skill 完成點**、**無下游 skill 接手 landing** → **MUST** 在完成點自主 merge-back + selective stage on main，**NEVER** 把這幾步丟回 user。
+舊單棵 `wt-helper merge-back` 保留供 caller 遷移，**不在正式 commit 前清理來源**。新的主流程使用 batch；使用者的「merge back」意圖走 manual batch。已登記批次的來源不得用 legacy 路徑落地或刪除。
 
-**符合**：`/dep-upgrade` § Outdated mode、機械化 codemod / bulk rename / 批次重構 skill。
-
-**不符合（保留 deferred-landing）**：`/wt` primitive、仍有下游驗證／人工 gate 的 OPSX 實作與需求修訂。
-
-**Auto merge-back 標準流程 6 步**（cd 回 main → `merge-back --auto-stash` → baseline blocker 自清 → 真衝突 STOP + AskUserQuestion，**NEVER** 主線自決 → selective stage on main，**禁止** `git add -A` → **NEVER** 自動 `/commit`）+ 摘要彙報四要素（必印）+ 例外處理，完整命令見 `~/offline/clade/vendor/snippets/worktree-baseline/merge-back-ceremony.md` § Skill-owned auto merge-back 標準流程。**NEVER** 預設主動延遲 landing（user 明確說「先別 land」才 skip auto）。
-
-### 禁止項
-
-- **NEVER** 在 subagent prompt 內叫它跑 `/commit` / `/spectra-commit` — main commit 才是 ceremony
-- **NEVER** 在 `/wt` orchestration 自動跑 `/commit` 收尾 — 剝奪 user 對 commit 時機的控制
-- **NEVER** 在 worktree 內 `git push` session branch — 只會在 origin 留 stale ref
-- **NEVER** 在 `/wt` 返回時 squash（v3 核心改動 — squash 推延到 archive）
-- **NEVER** 先合回 main 才驗 OPSX archive gate；gate 必須讀實作所在 checkout 與目前 revision
-- **NEVER** 用 `wt-helper cleanup <slug> --force --force-discard-unland` 不先跑 `merge-back` — 永久丟失 branch commits
-
-## §5.5 Merge-back ceremony
-
-`wt-helper merge-back <slug>` 是 atomic landing 的核心命令，由主持者在驗收與 bookkeeping commit 後呼叫。完整 flags 表與預設行為 7 步見 `~/offline/clade/vendor/snippets/worktree-baseline/merge-back-ceremony.md`；flags 詳見 `node vendor/scripts/wt-helper.ts merge-back --help`。
+下列 guard 仍約束 legacy stash 路徑與存量救援，不作為 batch 的搬運機制。
 
 ### Claim guard scope ⊇ bulk-stash scope（hard rule）
 

@@ -9,6 +9,15 @@ Local edits will be reverted by the next sync.
 
 > 本檔是 commit skill 品質閘門的完整執行細節。主檔（SKILL.md）含流程概覽與 pointer；觸發特定 gate 時 MUST 先完整讀本檔對應 § 再繼續。
 
+## 受控交付的 evidence binding
+
+受控執行帶有 acceptance contract 時，每個本次適用的 gate receipt MUST 綁定 contract digest、
+受測 artifact digest、producer family、reviewer family／session 與 evidence ID。
+`verifyCommitGateBindings()` 的 requiredGates 與 independentReviewGates 取本 skill 本次實際判定，
+包含既有 fast-path 及重審條件。主線收割只驗 plan 結果；simplify、code／UI review、checks 與
+Critical／Major 裁決仍逐步執行。換 pane 保留同一 model family，不能充當獨立 review。
+內容或契約改變時，舊 receipt 不替新版本背書；依既有 gate 規則補驗後才接受整合。
+
 ## § 0-Coord: Cross-Session Staged Pollution Detection
 
 `commit-lock` 只擋同時兩個 `/commit`；**不**擋「commit 跑時別 session 在跑 publish / propagate / wt-helper add / rescue-consumer」造成 staged 區意外污染（已實證 3 條 incident，見 `docs/pitfalls/2026-05-{14,18,22}-*.md`）。Step 0-Coord 跑 3 個 detection signal **warn-only**，命中再用 `AskUserQuestion` 讓 user 決定等候還是強制繼續。
@@ -131,7 +140,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
    git rev-parse --abbrev-ref HEAD
    ```
 
-   輸出 ∉ {`main`, `master`} → 輸出 `⏭️ 0-MR 跳過（branch=<name>）`，進入 Step 0。
+   輸出 ∉ {`main`, `master`} 且當前 path 不是 helper 登記的 batch integration → 輸出 `⏭️ 0-MR 跳過（branch=<name>）`，進入 Step 0。
 
 2. 萃取本次 commit 觸及的 spectra change（含 staged + unstaged + untracked，排除 `archive/` 子目錄）：
 
@@ -144,9 +153,9 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
    結果為空 → 輸出 `⏭️ 0-MR 跳過（本次變更未觸及任何 in-progress spectra change）`，進入 Step 0。
 
-3. **對每個 change 判「實作 code 是否已 land 進 main」** — worktree 仍未 land 者直接 SKIP：
+3. **批次 integration 直接進 step 4**，不得因來源未 land 而 SKIP；普通 main 模式才依下列規則查來源：
 
-   v3 atomic-landing 模型下（[[worktree-default.commit-ceremony]] §5），實作 code 留在 worktree branch 直到 `/spectra-archive` 跑 `merge-back`。此期間唯一會出現在 main 的該 change 檔案就是 `tasks.md` 的 annotation / 勾選更新 —— **那正是人工檢查流程自己的產物**。此時擋 commit 擋不到任何未驗收 code，只會連坐同批 dirty 的無關檔案。
+   來源尚未正式落地時，普通 main 的 annotation 更新不代表該來源 code 已納入本次提交；本步只用於普通 main。Batch integration 已含固定來源的實作，必須在落地前檢查其驗收狀態。
 
    ```bash
    # 主判定：wt-helper 已算好 mergedToMain
@@ -170,7 +179,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
    印出 `UNLANDED` → 同樣 SKIP。無輸出 → 進 step 4 現行判定。
 
-   > **這一步不放寬任何驗收標準。** code 真的 merge-back 進 main 之後（worktree 已 cleanup 或 `mergedToMain:true`），本步一律判不中，step 4 的 BLOCK 照舊生效 —— 該 change 的 `openspec/changes/<X>/**` 照樣 withheld、auto-triage 照樣跑。archive gate 仍要求人工檢查完成才准 archive；但 merge-back 不只由 archive 觸發（step 5 的 `（fix-requested）` 路徑早於 archive），哪道 gate 在哪個時點看 MR 見 § 判定粒度 第 3 條。
+   > 來源 archive gate 與批次 commit gate 都保留；來源未驗收不進 ready，batch 審查發現驗收失效時保留整批，不以普通 main 的 SKIP 放行。
 
 4. 對每個 change 跑機械判定（「非 `## 人工檢查` 段有 `- [x]`」與「`## 人工檢查` 段有 **leaf** `- [ ]`」同時成立 → BLOCK；parent `#N` 有 scoped `#N.M` 子項時由子項 derive，leaf-only 計，見 `.cursor/rules/manual-review.mdc` 「Parent State Derivation」段）：
 
@@ -190,7 +199,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
       | Item 狀態 | 判斷方式 | Claude 動作 |
       | --- | --- | --- |
-      | `（fix-requested）` | 行內含 `（fix-requested）` | dispatch `/wt` 修 code → `wt-helper merge-back` → 重拍截圖 → strip `（fix-requested）` + `(claude-analyzed:)` → 更新 `(verified-*:)` annotation |
+      | `（fix-requested）` | 行內含 `（fix-requested）` | 在既有來源修 code → 在該來源重拍截圖 → strip `（fix-requested）` + `(claude-analyzed:)` → 更新 `(verified-*:)` annotation |
       | evidence missing | `[verify:ui]` / `[verify:api]` / `[verify:e2e]` 但無對應 `(verified-*:)` annotation | 走 [[agent-self-verification]] fallback chain 收 evidence |
       | `（issue:）` 無 `(claude-analyzed:)` | 行內含 `（issue:）` 但無 `(claude-analyzed:)` | triage issue → 走 (A)-(E) 路由 |
       | 純 `[review:ui]` user 驗收 | 上述都不符，item 是 `[review:ui]` | **只有這類**才引導 user 到 review-gui |
@@ -211,7 +220,7 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
    3. **NEVER** 自動勾任何 `[review:ui]` 的 `- [ ]`、**NEVER** 提議跳過 gate、**NEVER** 提議 stash 走 `tasks.md`
 
-6. auto-triage 跑完後 blocker list 仍非空 → 把每條 BLOCK change 的 `openspec/changes/<X>/**` 記為 **withheld scope**，輸出 `⏸️ 0-MR 保留 <X>（pending=<n>；withheld: openspec/changes/<X>/**）`，**進入 Step 0**（不是停下）。withheld scope 由後面兩步消費：
+6. **批次模式** auto-triage 後仍有 blocker → 保留 integration 與全部來源，停止 seal／land；修復後重驗。需排除未就緒來源時 cancel 後重登記合格來源再 prepare，不能切掉幾個 artifacts 卻帶走該來源 code。**普通 main 模式** auto-triage 跑完後 blocker list 仍非空 → 把每條 BLOCK change 的 `openspec/changes/<X>/**` 記為 **withheld scope**，輸出 `⏸️ 0-MR 保留 <X>（pending=<n>；withheld: openspec/changes/<X>/**）`，**進入 Step 0**（不是停下）。withheld scope 由後面兩步消費：
 
    - **Step 3 分組**：withheld scope 內的路徑不進任何 group（與 parked change deletion 並列為分組的兩個機械排除）。它們留在 working tree，Step 5-A 照「仍有 uncommitted 變更」登記進 HANDOFF，並寫明卡在哪條 change 的哪幾個 leaf。
    - **Step 4 每個 group commit 前**：
@@ -229,15 +238,11 @@ git stash list --format='%gd %ct %gs' 2>/dev/null \
 
 ### 判定粒度：pathspec 交集，不是 repo 級 freeze（TD-897）
 
-0-MR 要擋的是「未驗收 code 進 trunk」。判定粒度改成 pathspec 交集，建立在三件專案內事實上：
-
-1. **v3 atomic-landing 下，實作 code 不經 `/commit` 進 main。** 它由 `wt-helper merge-back` 帶進 main（[[worktree-default.commit-ceremony]] §5），而 merge-back 不跑 0-MR。0-MR 在 `/commit` 這一步看得到的該 change 檔案，只有 `openspec/changes/<X>/**` 底下的 artifact —— 那正是 step 6 的 withheld scope。要擋的東西與擋得到的東西在這裡重合，多擋別的路徑擋不到任何 code。
-2. **`/commit` 的每一筆 commit 本來就是 `git commit --only -- <pathspec>`**（SKILL.md Step 4）。判定單位比 commit 單位粗，就是連坐；pathspec 交集只是把判定單位對齊到 commit 單位。
-3. **已 land 的 code，0-MR 任何粒度都擋不到它上 production。** code 進 main 的路徑是 `wt-helper merge-back`，而 merge-back 不只由 archive 觸發：step 5 auto-triage 表的 `（fix-requested）` 列就是 `/wt` 修 code → `merge-back` → 重拍，早於 archive（<consumer-a> 三條 change 正是「已 land、MR 未完」）。code 一旦在 main 的 history 裡，擋後面無關的 commit 改變不了這件事。實際看 MR 狀態的 gate 只有兩道：**archive gate**（standard archive 要求 `## 人工檢查` 全綠，擋 archive 不擋 push）與 **Step 6-B 的發版提問**（`tag-v` / `manual` 拓樸下 tag 要問人）。**Step 6-Gate 不看 MR**，它判的是 deploy-trigger 拓樸；`confirmed-push-main` 走 6-A，`git push origin main` 即部署，沒有任何一步再問人。所以 repo 級 freeze 買到的不是「production 保護」，只是把同批無關的 commit 一起擋住。
+批次來源已完成必要驗收才入 ready；integration 在 main 落地前再走本 gate。Blocker 會保留整批，不以 pathspec 切除 artifacts 後放行來源 code。普通 main 的歷史存量仍用 pathspec 交集，避免無關 change 的 artifact 狀態連坐其他工作。每筆正式 commit 依 SKILL.md Step 4 使用具名 pathspec。
 
 實證（<consumer-a> 2026-09-03）：三條 change 實作已 land、worktree 已 cleanup，人工檢查各剩 4–6 個 user-bound leaf（LINE LIFF 實機、production APPLY 授權）。repo 級 freeze 下 main 上任何 `/commit` 都落不了地，被連坐的是 `scripts/ai-control-plane/phase-6a-gate5-driver.ts` 這類與三條 change 無關的檔。pathspec 交集下同一個 dirty set：三條 change 的 `openspec/changes/<X>/**` 被 withheld、其餘 group 照常 commit，三條 change 的 auto-triage 一樣跑、archive gate 一條沒少。
 
-scope 只認 `openspec/changes/<X>/**`，**NEVER** 另建「change 對應哪些實作檔」的索引：實作檔對應關係在 worktree cleanup 後就沒有可靠載體（`tasks.md` 的路徑是散文、control-plane `work_records[].paths` 只有 acp 路徑的 change 才有），而依第 1 條，`/commit` 在 v3 下本來就碰不到那些檔。
+普通 main 的 withheld scope 只認 `openspec/changes/<X>/**`，不另建 change→實作檔平行索引。批次來源映射由固定 members 與 source HEAD 承載，未通過不能 seal／land。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
@@ -247,7 +252,7 @@ scope 只認 `openspec/changes/<X>/**`，**NEVER** 另建「change 對應哪些�
 
 ### 禁止項
 
-- **NEVER** 把 `main` / `master` 以外的 branch 判進 gate 範圍（feature branch 上後續有 /ship + PR review 擋）
+- **NEVER** 把普通 feature branch 判進 trunk gate 範圍；helper 登記的 batch integration 明確納入，並保留 PR workflow 的外部審查
 - **NEVER** 接受 `$ARGUMENTS` 任何形式的「skip / ignore / override」旗標 — gate 無 override
 - **NEVER** 自行 `Edit tasks.md` 勾掉 `- [ ]` 來通過 gate — 違反 `.cursor/rules/manual-review.mdc` 核心規則
 - **NEVER** 把 `tasks.md` / change 目錄 stash / mv / rm 走讓 step 2 / 4 抓不到 — 等同繞過 hard rule
@@ -272,7 +277,7 @@ scope 只認 `openspec/changes/<X>/**`，**NEVER** 另建「change 對應哪些�
    git rev-parse --abbrev-ref HEAD
    ```
 
-   輸出 ∉ {`main`, `master`} → 輸出 `⏭️ 0-Archive-Coupling 跳過（branch=<name>）`，進入 Step 0。
+   輸出 ∉ {`main`, `master`} 且當前 path 不是 helper 登記的 batch integration → 輸出 `⏭️ 0-Archive-Coupling 跳過（branch=<name>）`，進入 Step 0。
 
 2. 萃取本次 commit scope 涉及的 spectra change（staged-delete **或** working tree 殘留不完整 change dir，**排除** archive 子目錄）：
 
@@ -367,7 +372,7 @@ scope 只認 `openspec/changes/<X>/**`，**NEVER** 另建「change 對應哪些�
 
    1. **MUST** 立即釋放 lock：
       ```bash
-      node .claude/scripts/commit-lock.mjs release
+      PROJECT_DIR="$COMMIT_TARGET_ROOT" node "$COMMIT_LOCK_SCRIPT" release
       ```
 
    2. 印出 blocker 報告（每條 change 列 `MISSING_ARCHIVE_DIR` / `MISSING_SPEC_DELTA <cap list>`）+ recovery hint：
@@ -863,7 +868,7 @@ vite-doctor 是 commit 品質閘門的必要組件（import graph 健康度：cy
 詳見 .cursor/rules/vite-doctor.mdc
 ```
 
-隨後 **MUST** 釋放 commit-lock（`node .claude/scripts/commit-lock.mjs release`）並 STOP。**NEVER** 跳過此 gate 繼續跑後續步驟。
+隨後 **MUST** 釋放 commit-lock（`PROJECT_DIR="$COMMIT_TARGET_ROOT" node "$COMMIT_LOCK_SCRIPT" release`）並 STOP。**NEVER** 跳過此 gate 繼續跑後續步驟。
 
 若輸出 `has-doctor`，**必須**額外跑（**MUST** `pnpm run doctor`，**NEVER** 裸打 `pnpm doctor` — `doctor` 撞 pnpm 內建子命令，裸打跑的是 pnpm 自家 doctor 並 silent exit 0，`scripts.doctor` 的 vite-doctor scan 永遠不執行）：
 
@@ -1141,7 +1146,7 @@ structured-errors、audit、error-handling 五類 check）。本次 diff 動到 
      與 ~/offline/clade/vendor/snippets/evlog-map/README.md
 ```
 
-隨後 **MUST** 釋放 commit-lock（`node .claude/scripts/commit-lock.mjs release`）並 STOP。**NEVER** 跳過此 gate 繼續跑後續步驟。
+隨後 **MUST** 釋放 commit-lock（`PROJECT_DIR="$COMMIT_TARGET_ROOT" node "$COMMIT_LOCK_SCRIPT" release`）並 STOP。**NEVER** 跳過此 gate 繼續跑後續步驟。
 
 ### Step 3 — 跑 gate（預設 strict）
 

@@ -28,7 +28,7 @@ Local edits will be reverted by the next sync.
 
 **例外：read-only session**。只讀不寫檔（grep / log / audit / git history / 解釋 code），**MAY** 在 main worktree。
 
-**落地 ceremony**：OPSX 驗證、人工 gate 與 archive 在實作所在 worktree 完成；bookkeeping 一起 commit 後，由主持者按 [[worktree-default.commit-ceremony]] 序列 merge-back、立刻在 main 限定路徑 commit 並驗證。archive 成功不等於已合併或已部署。
+**Archive 的執行根目錄**：OPSX archive 先用 `wt-helper resolve` 找持有實作的 worktree，在該處跑 gates 與 bookkeeping；已在 main 完成且無對應 wt 時可直接 archive。Archive 完成只代表可登記就緒，正式 main 落地與回收由批次 `/commit` 執行。
 
 **判定「已在 worktree」**：`git rev-parse --git-dir` 含 `/worktrees/` 子路徑即已在 worktree，**不要**疊建新 worktree。
 
@@ -100,4 +100,3 @@ Dev-port slot 池滿時，**MUST** 跑 `wt-helper reclaim-stale` 釋放 stale sl
 - [[commit]] — main 上的 commit ceremony
 - [[scope-discipline]] — scope 外的工作另開 `/wt` task
 - [[handoff]] — §8 fallback 升級寫入入口；Mode B dispatch 用 `/wt <slug>: /<next-skill>` form
-

@@ -474,171 +474,17 @@ Action 升版不能本機驗（沒有 `typecheck` / `build` 可跑）。本機�
 
 **真驗證推遲到 O.4**（push 後 CI 驗綠）——這是 action items 跟 npm items 的關鍵差異。
 
-## Step O.3 — Auto-merge-back + selective stage（主線自主完成）
+## Step O.3 — 驗收來源與批次收尾
 
-所有 package pi 派工跑完（成功 / 跳過 / 中止皆同）後，**MUST** 自主把 worktree merge-back 進 main，**NEVER** 把這步當「下一步」丟給 user 自己跑（per [[worktree-default]] §5「Skill-owned worktree lifecycle」）。
+所有 package 派工結束後，主線在來源確認必要檢查與各項結果，保存 scoped checkpoint。失敗或驗收未完者不進 ready 池；原始工作、baseline 與證據保留，不藉清 WIP 讓 readiness 過關。
 
-### O.3.1 主線 cd 回 main consumer root
+1. 對成功項驗 scope、受測 HEAD 與 evidence，確認原執行者交出寫入權。
+2. `feature` 分類的適配待辦寫入來源既有 `HANDOFF.md`，附 package／版本／release URL／新增能力，與 checkpoint 一起保存；該檔不存在則沿用 skip。
+3. 依 commit skill `batch.md` 登記該 repo 就緒來源。Fleet worker 到此回報 checkpoint SHA、path、work id、驗收證據與建議 commit message；由 orchestrator 依 F.8 授權協調正式提交。
+4. 單 repo 本輪開發已完成時用 `drained`，仍有可做開發時用 `auto`。達批次條件即由 coordinator 在隔離 integration 跑一次完整 `/commit`，正式落地後依既有發布 gates push、安全 cleanup。使用者明示「不要 land／保留 worktree」時保留並報 owner／下一事件，不登記落地授權。
+5. 正式落地改了 dependency manifests／lockfile 時，在 main 跑對應 package manager install 對齊依賴；action 升級已 push 時走 O.4。
 
-```bash
-MAIN_PATH=$(git worktree list --porcelain | head -1 | awk '{print $2}')
-cd "$MAIN_PATH"
-```
-
-從此往後所有 O.3 命令都在 main 跑。
-
-### O.3.2 Merge-back（含 baseline blocker 自動處理）
-
-```bash
-node scripts/wt-helper.ts merge-back <slug> --auto-stash
-```
-
-| 訊號 | 處理 |
-| --- | --- |
-| `merge-back: <slug> absorbed into main` | 成功 → 進 O.3.3 |
-| `merge-back: <slug> absorbed into main (blockers stashed as wt-merge-block/<slug>/<ISO>)` | 成功 + main 端有 stash 紀錄 → 進 O.3.3，O.3.4 摘要末段提醒 user 收尾。**指令照 merge-back 自己印的那一行照抄**（它由執行檔位置推導，consumer 是 `node scripts/stash-reconcile.ts …`、clade home 是 `node vendor/scripts/stash-reconcile.ts …`）—— **NEVER** 在此硬寫 `scripts/` 前綴，clade home 自己也 symlink 消費本 skill，照抄會拿到 `MODULE_NOT_FOUND`（TD-323 同型） |
-| `merge-back blocked: worktree '<wt-path>' has N uncommitted edit(s)` | Pre-fork baseline 殘留 → 進 O.3.2.a 自動清理 |
-| `merge-back blocked: <N> file(s) in main's working tree would be overwritten` | 上面 `--auto-stash` 應已涵蓋；若仍出現是 race condition → STOP + 報 user |
-| `error: merge conflict in <files>` / `pre-sync` / `squash` conflict | Worktree 保留，wt-helper 內部已 abort + 救 stash → STOP + 報 user（不主線自決） |
-
-#### O.3.2.a Pre-fork baseline blocker 自動清理
-
-```bash
-WT_PATH="$(dirname "$MAIN_PATH")/$(basename "$MAIN_PATH")-wt/<slug>"
-for path in <parsed-blocker-paths>; do
-  git -C "$WT_PATH" checkout HEAD -- "$path"
-done
-node scripts/wt-helper.ts merge-back <slug> --auto-stash
-```
-
-**安全性論證**：IDENTICAL baseline → data 在 main HEAD 還在；DIVERGED baseline → `refs/wt-baseline/<slug>/<ISO>` pinned ref 是安全網（per [[worktree-default]] §1）；merge-back 只搬「branch commits 的 diff」，main 上別 session 的 dirty 完全不會被踩。
-
-**NEVER**：`git stash` 在 worktree 內收 baseline / `git add` baseline 進 worktree branch / 用 `--include-worktree-wip`。
-
-#### O.3.2.b 真衝突（pre-sync / squash conflict）
-
-wt-helper 內部已 abort + 救 stash + 保留 worktree。主線 STOP 整個流程 + AskUserQuestion 三選項：手動解 conflict / 放棄 upgrade / user 自己看狀態。
-
-### O.3.2.c Sync node_modules on main
-
-merge-back 只搬 tracked 檔（`package.json` / lockfile / `pnpm-workspace.yaml`）；`node_modules/` 是 gitignored，main 端仍停留在升版前的舊狀態。**MUST** 跑 `pnpm install`（或對應 PM 的 install）同步，否則後續 `pnpm outdated` / typecheck / test 都看到 stale 版本。
-
-```bash
-<PM> install
-```
-
-這不違反「NEVER 主線自己跑 `pnpm install`」禁令 — 該禁令指的是升版階段（Step O.2）不該由主線做 `pnpm add`；這裡是 post-merge-back setup chore（per [[worktree-default]] §1.x 的 `pnpm install` 自動代勞清單）。
-
-### O.3.3 Selective stage on main
-
-```bash
-git reset HEAD                                        # 清掉 index（並行 session 的 WIP 退回 unstaged）
-git add package.json <lockfile-path>                  # 只 stage upgrade 真的動的檔
-for d in .github/workflows .github/actions; do             # action 升版改的 YAML
-  [ -d "$d" ] && git add "$d"
-done
-```
-
-`<lockfile-path>` 對應 PM：`pnpm-lock.yaml` / `package-lock.json` / `yarn.lock` / `bun.lockb`。若本次無 npm items（純 actions 升級），skip `package.json` + lockfile。若本次無 action items，skip `.github/` 迴圈。
-
-**`.github/actions/` MUST 逐個判存在再 add**：多數 consumer 只有 `.github/workflows/`、沒有 `.github/actions/`（後者是 vendor composite action 才會有）。`git add A B` 對不存在的 pathspec 是**整條命令 fatal**，不是跳過那一個——寫成單行會讓 actions-only 升級在 staging 這一步整批中止。
-
-**NEVER** `git add -A` / `git add .`。
-
-**`adaptation` 額外 stage**：pi 有改 callsite 檔時（import path 重寫 / API rename），那些檔也在 squash 後落在 main working tree。**MUST** 也加進 `git add`，但 stage 前 `git status` 印給 user。
-
-### O.3.5 — Feature HANDOFF entries（`feature` 分類 only）
-
-對每個在 Step O.1.5 分類含 `feature` 標籤的 package，append entry 到 consumer 的 `HANDOFF.md`：
-
-```markdown
-## <pkg> <to> 新 feature 適配
-
-**Discovered**: <YYYY-MM-DD>
-**Source**: <release_url>
-**Upgraded in**: dep-upgrade session <date>
-
-新增功能：
-- <feature description 1>
-- <feature description 2>
-
-建議適配方式：（待規劃）
-```
-
-- **MUST** 把 `HANDOFF.md` 加進 selective stage：`git add HANDOFF.md`
-- 若 consumer 沒有 `HANDOFF.md` → skip（不替 consumer 建檔）
-- O.3.6 摘要的 🔵 區段列出寫了哪些 HANDOFF entries
-
-### O.3.6 摘要彙報
-
-```markdown
-## dep-upgrade · outdated 摘要（<YYYY-MM-DD HH:MM>）
-
-**Worktree**：`<wt-path>` → ✅ absorbed into main + cleaned
-**Branch**：`session/<date>-upgrade-deps-<slug>` → ✅ removed
-**Package manager**：`<PM>`
-**總計**：N items（npm M + actions A）（成功 S、升 high 後成功 K、跳過 P、失敗 F）
-
-## 📦 npm 套件
-
-### 🟢 Bug fix — 一次成功
-
-| Package | <from> | <to> | Commit |
-| --- | --- | --- | --- |
-
-### 🟡 Adaptation — 成功套用 BC
-
-| Package | <from> | <to> | BC 摘要 | callsite 改動 | Commit |
-| --- | --- | --- | --- | --- | --- |
-
-### 🔵 Feature — 已升版 + HANDOFF 已記
-
-| Package | <from> | <to> | Feature 摘要 | HANDOFF entry |
-| --- | --- | --- | --- | --- |
-
-### ⚠️ 升 high research 後成功（K）
-
-| Package | <from> | <to> | BC 摘要 | Commit |
-| --- | --- | --- | --- | --- |
-
-### ⏭️ 跳過（S）
-
-| Package | <from> | <to> | 跳過原因 |
-| --- | --- | --- | --- |
-
-## ⚙️ GitHub Actions
-
-### 🟢 Same-major SHA bump — 成功
-
-| Action | old tag | new SHA (short) | 出現位置數 | Commit |
-| --- | --- | --- | --- | --- |
-
-### 🟡 Major 跳號 — 成功
-
-| Action | from tag → to tag | BC 摘要 | Commit |
-| --- | --- | --- | --- |
-
-### ⏭️ 跳過
-
-| Action | 原因 |
-| --- | --- |
-
-## 📦 Main 端狀態
-
-- Staged：`package.json`、`<lockfile-path>`、`.github/workflows/*`（各項依實際出現）
-- Unstaged：並行 session 原有 WIP 保留
-- 並行 session 的 staged WIP（若有）已退回 unstaged
-
-### 下一步（user 拍板）
-
-走 `/commit` 收尾。**NEVER** 主線自動跑 `/commit` — 留 commit 時機 / message / sign-off 給 user。
-
-若本次含 action 升級 → `/commit` push 後 **MUST** 走 Step O.4 CI 驗綠。
-```
-
-### 例外：user 在 Step O.0 之前明確說「不要 land」/「先看一下」
-
-跳過 O.3.1–O.3.3，只跑 O.3.4 摘要 + 把「下一步」改寫成手動指令。判定詞例：「先別 merge-back」「保留 worktree」。**NEVER** 主動延遲 — 預設一律自動 land。
+摘要依實際 package／action 結果分成功、adaptation、feature、skipped、failed；附來源與 batch 的 ready／blocked／landed／cleaned 狀態。Main 既有 index／WIP 保留，不能先把來源 staged 到 main 等人提交。完成報告前逐來源列 lifecycle 五欄，見 `batch.md`。
 
 ## Step O.4 — CI 驗綠（action 升級限定）
 
@@ -666,6 +512,6 @@ bash .cursor/scripts/gh-ci-watch.sh workflow <primary-ci-workflow>.yml \
 # 禁止事項（Outdated mode 限定）
 
 - **NEVER** 一次派多 package / action 並行（破壞 per-item commit boundary，bisect 失效）
-- **NEVER** 自動跑 `/commit` 收尾 — 留 commit 時機 / message / sign-off 給 user
+- 正式提交依 O.3 的批次觸發與既有授權；worker 本身不啟動完整品質鏈
 - **NEVER** 在含 action 升級的 session 跳過 O.4 CI 驗綠（action 升版沒有本機驗證手段，CI 是唯一真驗證）
 - **NEVER** 用 `actionlint` / `zizmor` 替代 CI 驗綠 — 靜態 lint 抓不到 action runtime breaking change（如新版移除 input、改 output 結構）

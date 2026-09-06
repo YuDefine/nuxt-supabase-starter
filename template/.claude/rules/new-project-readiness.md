@@ -64,6 +64,8 @@ Local edits will be reverted by the next sync.
 | `cloudflare.local-dev-binding-declared` | 同上 TD-003：wrangler ↔ workerd handshake 永久 hang，Nitro 的 cloudflare-dev plugin 把失敗 `.catch()` 成空 stub env——失敗與「這個專案沒有 binding」外觀相同，所有碰 D1／R2 的 route 回 500，22 條人工檢查一格都驗不了 |
 | `hub-vs-meta.database` | 同上：`.claude/hub.json` 宣告 `db-schema: cf-d1`，`consumer-meta` 宣告 `database.kind: none`。同一件事的兩份宣告矛盾時，下游規約讀到哪一份是碰運氣 |
 | `config.parse` | 本 gate 自身第一版：`wrangler.jsonc` 的 trailing comma 讓 `JSON.parse` 失敗回 null，依賴它的兩個 check 直接從輸出消失——長相與「這兩條通過了」完全一樣 |
+| `package.heavy-gate.*` | 2026-09-06 <consumer-e>：typecheck／test／build 有 script，卻沒有對應重型准入；與 `audit-gate-coverage.ts` 共用 label、轉呼與 arg-safe 判定 |
+| `package.doctor.dependency`／`package.doctor.installed`／`package.doctor.adapter` | 同日 <consumer-e>：doctor script 存在，但 vite-doctor binary 缺席；檢查依賴宣告、本地可執行檔與 script 引用的投影入口 |
 
 新增 check 時 MUST 同時在這張表補一列：check 存在的正當性來自它擋掉過什麼，
 **NEVER** 加一條沒有事故對應的 check。

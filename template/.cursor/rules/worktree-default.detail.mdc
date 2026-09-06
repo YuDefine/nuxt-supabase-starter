@@ -21,21 +21,7 @@ Local edits will be reverted by the next sync.
 
 archive-on-main 例外讓未 commit 的 archive batch 躺在 **shared main**；`/commit` 因 gate halt 時這批 dirty 長期留在 main，會被別 session 的 `wt-helper add --baseline-strategy stash` 當 unclaimed dirty 整批捲進 `refs/wt-baseline/*`（實證見 [[pitfall-prefork-baseline-stash-sweeps-unclaimed-main-work]]）。
 
-**MUST**（縮短 / 消除窗口）：
-
-- **archive 收尾的 follow-up fix（修測試 / 補 code / 加 migration）走 `/wt` 進隔離 worktree**，**NEVER** 在 main 累積多步 in-flight 工作等 commit；OPSX archive bookkeeping 同樣在實作 worktree 完成。
-- `/commit` 因可恢復的 gate halt、batch 需進一步 code 改動才能過 gate 時，**SHOULD** 立即把 batch 移進隔離 worktree 修。
-- 跨多步在 main 累積 batch 且無法立刻 commit 時，**SHOULD** 寫 coarse claim 讓別 session 的 `otherSession` guard 看得到這批 dirty，commit 後 `drop`：
-
-  ```bash
-  node scripts/claim-helper.ts add --change-id main-session-wip \
-    --branch main --worktree-path "$(pwd)" \
-    --expected-paths "$(git status --porcelain | awk '{print $2}' | paste -sd, -)"
-  # 完成 / commit 後：
-  node scripts/claim-helper.ts drop <session-id>
-  ```
-
-  claim 檔 schema、誰讀、stale 處理見 [[session-claims]]（path-scoped）。
+**MUST**：有來源 worktree 的每個 archive 在來源內完成 gates 與 bookkeeping；follow-up fix 同樣留在來源。正式批次從一開始就在隔離整合區 review，gate halt 時保留該區繼續修，不把 candidate 搬進 main。已在 main 完成的 solo bookkeeping 沿用原路徑；多步修正先進隔離 worktree。
 
 ### §1 invariant：parent session cwd 不動
 
@@ -89,24 +75,24 @@ OPSX create / revise 會寫 canonical intent、binding 與投影。每次呼叫�
 
 `/wt` 建 worktree 時已由 `wt-helper add` 跑 `git merge --ff-only origin/main` 拉最新投影層，一般不需再手動 sync。
 
-## §5 Commit 階段：subagent commit → archive 吸收 → user `/commit`
+## §5 Commit 階段：checkpoint → 批次整合 → /commit → 回收
 
-`/wt` 返回時保留已 commit 的 worktree／branch。OPSX 在該樹完成目前 revision 的證據與人工 gate、archive 並 commit bookkeeping；主持者再照 [[worktree-default.commit-ceremony]] 序列落地。Skill-owned worktree（`/dep-upgrade` 等有清楚完成點）**MUST** 自主 merge-back，不丟回 user。**NEVER** 在 subagent prompt 叫它跑 `/commit` / 在 worktree `git push` / `/wt` 返回時 squash。
+Worker 完成實作與必要驗收後 checkpoint，主線確認 scope 與寫入權交接後登記就緒。同 repo 累積 4 件 distinct work id 自動進批次；手動 `/commit` / merge back 無最低件數，dependency / drained / stop 提前結批。隔離整合區跑一次完整 `/commit`，正式落地 main 後統一清理。Worker 不各跑完整品質鏈、不 push；所有 skill-owned wt 同樣走就緒池。
 
-> 完整 Codex 派工規約、auto merge-back contract、禁止項詳見 [[worktree-default.commit-ceremony]]（path-scoped：動 `openspec/changes/**` / `HANDOFF.md` / wt-helper 時載入）。
+> 執行 checkpoint／收割／落地前 **MUST** 讀 [[worktree-default.commit-ceremony]] §5 與 commit skill 的 `batch.md`。
 
 
 ## §5.5 Merge-back ceremony
 
-`wt-helper merge-back <slug>` 是 atomic landing 核心命令。`--auto-stash` 實為 **bulk-stash**（捲走 main **全部** dirty，不只 blockers）→ claim guard 檢查範圍 **MUST ⊇** 全部將被捲走的 dirty，撞別 session 認領 → **fail-loud STOP**。`git stash push` 必 verify create（乾淨 tree 不丟 exception）。
+`wt-helper batch` 是新流程入口，來源固定、隔離整合、驗證落地後清理。Legacy `merge-back` 只保留供 caller 遷移，squash 後保留來源；其 `--auto-stash` 仍為 bulk-stash，claim guard 檢查範圍 **MUST ⊇** 全部將被捲走的 dirty。已登記來源不得走 legacy。
 
 > 完整 flags / claim guard scope / stash reconcile 詳見 [[worktree-default.commit-ceremony]] § Merge-back ceremony。
 
 ### §5.5.1 Pre-archive gate 掃的是 change 所在的 worktree，NEVER 是 cwd
 
 四道 pre-archive gate（`pre-archive-ux-gate.sh` / `-evidence-` / `-design-` / `-followup-`）是
-legacy `PreToolUse:Skill` adapter；OPSX archive 由 `opsx-control` 直接呼叫既有 gate。兩條路徑都先驗實作樹，再進落地 ceremony。
-在 merge-back 之前，一個在 worktree 裡實作的 change **完全沒有**任何內容在 main：main 的
+legacy `PreToolUse:Skill` adapter；OPSX archive 由 `opsx-control` 直接呼叫既有 gate。兩條路徑都先驗實作樹，再進批次落地流程。
+來源尚未正式落地時，main 不含 worktree 的最新驗收內容：main 的
 `tasks.md` 還是 propose 當時那份（零 annotation），screenshots 一張都不在。
 
 所以 gate 若掃 cwd（main），對**每一個**走 worktree 的 change 都會報「item 缺 evidence」
@@ -119,10 +105,10 @@ worktree —— 這不是邊角，是**每次第一次 archive 的必然結果**
 
 **NEVER 在別處重寫那個 find。** `wt-helper resolve` 與 `merge-back` 共用
 `findSessionWorktreeForSlug()` —— 同一份 matcher 才保證「gate 驗過的那棵樹」就是
-「要 land 進去的那棵樹」。兩份會漂，而漂開之後的症狀是 **gate 綠、archive 成功、
+「要進行 archive 的那棵實作樹」。兩份會漂，而漂開之後的症狀是 **gate 綠、archive 成功、
 內容不對**，事後從任何紀錄都看不出來。
 
-**每次 OPSX archive 都先在實作樹跑既有 archive、evidence、design、followup gate 與目前 revision predicates，再做 bookkeeping。NEVER 先 merge-back 才收證據**：那會先刪掉唯一的實作 worktree，再被驗收攔下。
+**每次 OPSX archive 都先在實作樹跑既有 archive、evidence、design、followup gate 與目前 revision predicates，再做 bookkeeping。NEVER 先合回 main 才收證據**。通過後 checkpoint／登記就緒，正式批次審查先於 main 落地與來源清理。
 
 **Fail-open by construction**：解析不到 worktree（change 在 main 上做完、worktree 已被
 merge-back 清掉、consumer 尚未散播到 `wt-helper resolve`）一律回退 cwd = 修改前的行為。
@@ -198,4 +184,3 @@ ls ~/offline/<consumer>-wt/<change-slug>/ 2>/dev/null || git worktree list
 Session worktree 攜帶 `WORKTREE-BRIEF.md`（原始任務 + thin brief + Progress checklist）。cwd 在 session worktree 且 brief 存在時 **MUST** 先讀它再做事。`/wt` 派的 subagent **MUST** 更新 Progress + 完成時改 frontmatter `status`。檔不進 git（已在 per-worktree exclude），**NEVER** `git add` 它、**NEVER** 加進 `.gitignore`。
 
 > 詳見 [[worktree-default.troubleshooting]] § WORKTREE-BRIEF。
-

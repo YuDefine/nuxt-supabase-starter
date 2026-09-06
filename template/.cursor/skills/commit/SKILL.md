@@ -1,6 +1,6 @@
 ---
 name: commit
-description: Use when 使用者要求把工作區的變更寫進版本歷史，不論用詞是 commit、提交、送進 git 還是「整理一下」；需要拆成多筆時同樣適用。NOT for 把 clade 改動散播到 consumer（走 /clade-publish），NOT for 建 / 合併 worktree（走 /wt）。
+description: Use when 使用者要求提交工作區變更、merge back 已完成 worktree，或 worktree 就緒佇列達到提交條件；需要拆成多筆時同樣適用。NOT for 把 clade 改動散播到 consumer（走 /clade-publish），NOT for 新建實作 worktree（走 /wt）。
 effort: high
 permission_tier: action
 ---
@@ -22,10 +22,18 @@ $ARGUMENTS
 
 政策與禁止事項見 `.cursor/rules/commit.mdc`。本檔定義執行流程，commit 類型 / emoji 對照表在 Step 3。
 
-## Step 0-Lock: 單一 session 防呆（**必做第一步**）
+## Step 0-Batch: 提交入口與既有批次（取得 commit lock 前）
+
+**每次**進入 `/commit` 先跑 `wt-helper batch status`（consumer：`scripts/wt-helper.ts`；clade：`vendor/scripts/wt-helper.ts`）。使用者主動要求的 trigger 是 `manual`，無最低件數；自動收割用 `auto`，4 個 distinct work id 才啟動，dependency／drained／stop 可提前結批。
+
+有就緒成員或待續跑／待清理批次時 **MUST 讀 [batch.md](batch.md)**，先準備或接續隔離整合區，再在該區跑本 skill 的完整 Step 0–5；Step 5 後 seal／land，正式落地才進 Step 6。已落地只欠 cleanup 的批次直接清理，不重跑品質鏈。沒有就緒成員且沒有 active batch 時走普通 `/commit`，當前 WIP 照常全包。未達自動門檻時返回開發，**不取得 commit lock**。
+
+## Step 0-Lock: 單一 session 防呆（進品質流程必做第一步）
+
+先解析本次鎖腳本的絕對路徑：consumer 用 `.claude/scripts/commit-lock.mjs`，clade checkout 用 `plugins/hub-core/scripts/commit-lock.mjs`。以下以 `COMMIT_LOCK_SCRIPT` 保存該路徑、`COMMIT_TARGET_ROOT` 保存本次品質流程的工作區絕對路徑；整輪 acquire／release 使用同一組值，包含切回 main 或清理 integration 之後。
 
 ```bash
-node .claude/scripts/commit-lock.mjs acquire
+PROJECT_DIR="$COMMIT_TARGET_ROOT" node "$COMMIT_LOCK_SCRIPT" acquire
 ```
 
 失敗（exit 1）時**照它印出的「處置」段做**——那段是依鎖上的持有者身分算出來的、由上往下第一個成立的動作，且每一列都是本 session 自己做得到的：herdr pane 對話 → `SendMessage` → 等 stale 自動清 → 才輪到回報 user。
@@ -34,7 +42,7 @@ node .claude/scripts/commit-lock.mjs acquire
 
 腳本已自動處理的兩格，撞到時不必做任何事：**本 session 的遺留鎖**（session id 相符，`/commit` 被中斷留下的）會自動回收；**stale 鎖**（超過閾值）也會自動清。所以「PID 看起來死了」**NEVER** 是清鎖的理由——每個 Bash tool call 都換 pid，pid 從來就判不出存活，判據是 session id。
 
-成功後此 session 取得獨占權，直到最後一步釋放。**中斷處理**：若 `/commit` 流程中途失敗 / 使用者中斷，仍**必須**在終止前呼叫 `node .claude/scripts/commit-lock.mjs release`；漏釋放的鎖會在 30 分鐘後被下次 acquire 自動清除（可用 `COMMIT_LOCK_STALE_MINUTES` 調整）。
+成功後此 session 取得獨占權，直到最後一步釋放。**中斷處理**：若 `/commit` 流程中途失敗 / 使用者中斷，仍**必須**在終止前呼叫 `PROJECT_DIR="$COMMIT_TARGET_ROOT" node "$COMMIT_LOCK_SCRIPT" release`；漏釋放的鎖會在 30 分鐘後被下次 acquire 自動清除（可用 `COMMIT_LOCK_STALE_MINUTES` 調整）。
 
 ## Step 0-Coord: Cross-Session Staged Pollution Detection
 
@@ -47,6 +55,8 @@ node .claude/scripts/commit-lock.mjs acquire
 主線從 commit SKILL 派 pi 跑 commit 工作時（例如 `/wt` worktree 內派 pi commit phase），**MUST** 走 [`rules/core/agent-routing.pi-watch-protocol.md`](../../../../rules/core/agent-routing.pi-watch-protocol.md) § Pi 派工的標準流程 + Pi Watch Protocol。**禁止** `Agent` tool with `subagent_type: screenshot-review` 派視覺 QA — sonnet wrapper 派工已多次驗證 self-rationalize（per [[pitfall-screenshot-review-sonnet-wrapper-self-rationalize]]）。
 
 ## Step 0-Scope: WIP 預設全部納入（果斷，不徵詢）
+
+批次模式的工作區是 helper 登記的 integration path，全包的是固定成員的完整 base→candidate diff；main 的既有 WIP 保留。以下全 WIP 條款對普通模式與 integration 工作區各自成立。已在本批正式 commit 的內容仍屬 review scope，**NEVER** 因 `git status` 乾淨就省略未完成的批次 gates。
 
 **預設行為**：所有 `git status` 顯示的 uncommitted 變更（含與本次工作無關、其他 session 並行的 WIP、不認得的檔案）**一律無條件**列入本次 `/commit` 流程，照常跑 0-A review、在 Step 3 依功能分組成獨立 commit。
 
@@ -111,7 +121,7 @@ git stash push -u -m "WIP: <簡述為何 stash> — see HANDOFF.md"
 
 ## Step 0-MR / 0-Archive-Coupling: Branch Gates（main / master 限定，硬擋無 override）
 
-僅在 `main` / `master` branch 觸發的兩道 gate，非 main/master → 兩道都 skip 進 Step 0：
+兩道 gate 適用 `main` / `master` 與 helper 登記的 batch integration；其他 feature branch 才 skip。批次 scope 用 base→candidate（已正式 commit 的部分也包含），不能因 branch 名稱或 status 乾淨跳過：
 
 - **0-MR 人工檢查 Gate**：本次 commit 觸及 in-progress spectra change 時觸發。觸發時 **MUST** 先完整讀 [gates.md](gates.md) § 0-MR 的判定流程、auto-triage 路由表與禁止項再繼續。判定粒度是 **pathspec 交集**：BLOCK change 只 withheld 自己的 `openspec/changes/<X>/**`，其餘 group 照常走 Step 3 / Step 4（gates.md § 0-MR step 6）。
 - **0-Archive-Coupling Partial Archive Gate**：本次 commit 有 spectra change staged-delete 時觸發。觸發時 **MUST** 先完整讀 [gates.md](gates.md) § 0-Archive-Coupling 的驗證流程、trailing slash hard rule 與禁止項再繼續。
@@ -607,6 +617,8 @@ node ~/offline/clade/vendor/scripts/notion-sync.ts release \
 
 ## Step 7: 完成報告
 
+**批次先收尾**：正式 landed 的批次 MUST 依 [batch.md](batch.md) §4 呼叫 cleanup，再報各來源 removed／retained 原因；PR 未合併保留。清理失敗可獨立重試，不重跑 Step 0。只有來源保存的 checkpoint 或尚在 index 時，**NEVER** 宣稱 main 落地或刪來源。
+
 **Completion evidence gate**（輸出「✅ Commit 完成」前 MUST 逐格自查；每格附「實跑命令＋輸出摘尾」，貼不出證據＝該格未完成，不准宣告完成）：
 
 - [ ] 每個 commit scope 驗證：貼各 commit 的 `git show --stat <hash> | tail -3` 輸出（changed files 數 vs 預期不符 → 回 Step 4 處置，不出報告）
@@ -644,12 +656,12 @@ Evidence:
 git branch --show-current
 ```
 
-**不在 main / master 分支** 且 consumer 提供 `/ship` skill → **MUST 讀 [`handoff-steps.md`](handoff-steps.md) § Step 8** 走詢問與銜接流程。在 main / master、或 consumer 沒有 `/ship` → 不觸發，直接進 Final Step。
+**不在 main / master 分支** 且 consumer 提供 `/ship` skill → **MUST 讀 [`handoff-steps.md`](handoff-steps.md) § Step 8** 走詢問與銜接流程。批次 trunk 已落地時在 main 接續；批次 PR 依 batch.md 保留並等待合入，不重複建立 PR。在 main / master、或 consumer 沒有 `/ship` → 不觸發，直接進 Final Step。
 
 ## Final Step: 釋放 /commit lock（**必做最後一步**）
 
 ```bash
-node .claude/scripts/commit-lock.mjs release
+PROJECT_DIR="$COMMIT_TARGET_ROOT" node "$COMMIT_LOCK_SCRIPT" release
 ```
 
 **必須執行**，即使前面任何 step 失敗：

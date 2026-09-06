@@ -70,11 +70,11 @@ Contract:
    `subject-empty` rather than naming the emoji. Some repos (clade itself) also
    require the subject to contain Chinese — check `commitlint.config.ts`.
 2. Do NOT run `git push` from the worktree. The session branch is short-lived.
-3. Do NOT run any main-bound ceremony from inside the worktree — **`/commit`,
-   `wt-helper merge-back`, `git merge --squash`, or any command that lands work
-   on main**. The coordinator owns landing. OPSX archive runs in the implementation
-   checkout only when the brief explicitly includes archive and its current-revision
-   gates pass; finishing implementation alone grants no archive authorization.
+3. Do NOT run the full `/commit`, `/spectra-commit`, batch landing, legacy
+   merge-back or any operation outside the assigned source. The coordinator
+   owns formal batch review and landing. Run `OPSX archive` in this source
+   only when the brief explicitly assigns archive and its gates are satisfied;
+   implementation completion alone does not assign archive. Report and stop.
 4. When done, report back with:
    - Success: "done — commits: <SHA-list>, files: <count>". Optionally a one-line
      summary of what changed.

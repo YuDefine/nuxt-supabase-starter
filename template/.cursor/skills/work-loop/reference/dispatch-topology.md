@@ -25,7 +25,7 @@ Step 2 產出的**不是**一條佇列，是**四組**併發特性不同的工�
 | --- | --- | --- | --- |
 | **扇出組** | OPSX 當前 revision 的實作／證據補件、非 OPSX code task（均不需要 dev server） | **同時 in-flight ≤ 4** | 無（各自 worktree） |
 | **dev-port 組** | OPSX 證據補件中**需要起 dev server** 的 item、Design Review 截圖 | **1** | consumer 的 dev port（SoT：`registry/consumers.json` 的 `dev_ports`） |
-| **main 組** | OPSX 歸檔與已驗證改動落地 | **1** | main worktree（archive → merge-back → commit → push） |
+| **main 組** | OPSX 歸檔與已驗證改動落地 | **1** | 批次 coordinator（source archive → ready → integration commit → main landing／push） |
 | **主線即時組** | 3g healthCheckNeeded、3e ready(userActionPending>0) 的 Claude-actionable 檢查、3i applyBlocked 評估、3j awaitingUserDecision 評估、非 spectra investigation | 主線自己做，不 dispatch（read-heavy 者先過 § 主線即時組的 pre-scan 前置判定） | 無 |
 
 **每一個** priority item 在 dispatch 前都要落進上表某一組，不是只對前幾個分類。
@@ -50,7 +50,7 @@ OPSX 實作／補件落哪一組看**這個 item 要不要起頁面**：要截�
 
 **`/wt` 不可用的 repo（產地 clade home 就是）扇出上限是 1，不是 4**：該情況下執行者是主線本身
 （SKILL.md § `/wt` 不可用時的 dispatch 形狀），而主線只有一個。此時「填滿 4」那一節整段不適用——
-主線做完一個 worktree 的 commit → merge-back → 落地，才開下一個。
+主線做完一個 worktree 的 checkpoint／驗收並登記就緒後，即可開下一個；批次依 trigger 落地。
 
 上限變 1 **只改併發，不改工作量**：其餘分組判定、收割 SOP、commit 紀律逐條照舊，
 item 也不會因此變成可跳過（§ Skip 合法理由窮舉只有 3 條，併發不在內）。
@@ -70,7 +70,7 @@ dev port 的互斥**沿用既有機制**，不自建配額：
 
 ## main 組：一次一個
 
-archive → merge-back → commit → push 全部寫同一個 main worktree。兩個並行的 archive 會在 merge-back 撞在一起，這是真依賴，不是保守。
+Archive 在各自來源完成；main 組統一協調就緒登記與批次提交。每個 repo 同時只有一批 integration／landing 持有者，避免兩批爭同一 main 基準。來源數量不等於完整 commit 次數。
 
 同組內依 `pending/total` 排序（完成度高的先 ship）。
 

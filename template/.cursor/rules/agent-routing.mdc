@@ -69,7 +69,7 @@ Local edits will be reverted by the next sync.
 其他 model 的合法載體只有兩條：
 
 1. **Pi CLI 真的能派** → `vendor/scripts/pi-dispatch.ts`。predicate：`command -v pi` 成功，且該次 `--model` 沒被 dispatcher 以 exit 3（runtime）或 exit 4（配額）當場拒絕。
-2. **否則** → Herdr create-only：`node vendor/scripts/herdr-session-handoff.ts --cwd <abs> --label <label> --prompt-file <brief> --model <slug|inherit> --launcher cc` 或 `--launcher ccw`，並加 `--coordinate`。`--model` 必填：要 child 跑特定 model 就給 slug，brief 正文寫「用 Opus 5」child 做不到。**NEVER** `--relay`。clade / YuDefine 工作預設 `ccw`，其餘 `cc`。Cursor 沒有 `CLADE_CLAUDE_LAUNCHER`，缺 `--launcher` 會 `unsupported_launcher`。
+2. **否則** → Herdr create-only：`node vendor/scripts/herdr-session-handoff.ts --cwd <abs> --label <label> --prompt-file <brief> --model <slug> --effort <level> --launcher cc` 或 `--launcher ccw`，並加 `--coordinate`。`--model` 必填：要 child 跑特定 model 就給 slug，brief 正文寫「用 Opus 5」child 做不到。**NEVER** `--relay`。clade / YuDefine 工作預設 `ccw`，其餘 `cc`。Cursor 沒有 `CLADE_CLAUDE_LAUNCHER`，缺 `--launcher` 會 `unsupported_launcher`。**NEVER `--launcher pi`**：create 一律拒（Pi 新工作走 `pi-dispatch.ts`），Cursor 池連 relay 都拒。
 
 Cursor 派出 Herdr 之後 MUST `--coordinate` 或 `--coordinate-resume` 等到 correlated `--complete`，再收回 child pane 並繼續；NEVER `--relay`。切片逾時會回 `coordination_pending`，主線立刻 `--coordinate-resume <dispatch_id>`，**不得**把 idle/done 當完成、也不得直接 `herdr pane close`。這不是 `/handoff`：主線繼續工作，**NEVER** 輸出「目前這裡收工」。
 
@@ -165,11 +165,15 @@ redaction（`vendor/signals/redact.mjs`）只作用在 signal payload、**dispat
 
 ## Session transport boundary
 
-**Herdr transport 不新增 routing 權限。** 有空 workspace / pane 不是外派條件；當前 session 能在既有授權與 scope 內直接完成目標 cwd 的工作，就直接完成。只有本節已判定要換互動 session、或 [[session-tasks]] 的 session boundary 已成立時，才依 [[session-tasks.operations]] § Herdr session transport 搬運 durable task / thin brief。
+每次 dispatch/resume/retry/bridge **MUST** 按 Routing Table 或使用者 override 明傳 model/effort；**NEVER** inherit、取環境/主線預設或偷換模型。Claude 用 AI Agent，GPT/Gemini/Grok 工作用 Pi。requested 與 observed 分記，無 runtime 證據就是 unverified。
 
-**Pane 是 dispatch 的投影，不是 dispatch 的理由。** Transport 預設分割當前 Tab，只改變已決定要派的工作長什麼樣。反方向同樣不承載資訊：**NEVER** 從「Tab 沒有分割」推論沒有工作在跑——in-process subagent 沒有 terminal。要看現況跑 `vendor/scripts/herdr-patrol.ts`。
+使用者指定 Pi Luna/medium 修復時：
 
-每一個符合的跨 cwd / 新 AI Agent session handoff 都保留原有 worktree、scope、approval、verification 與 clade / consumer 邊界。Transport 失敗也不改變 routing 結論，且 **NEVER** 退回要求 user 手動 `cd`、開 session 或貼 prompt。
+```bash
+node vendor/scripts/pi-dispatch.ts --brief /tmp/repair.md --cwd /tmp/repair-repo --label repair-final --model luna --effort medium --route manual --tier-basis manual --workspace-access mutation
+```
+
+Herdr 不增加派工或跨界授權；能原地完成就原地做。**MUST** 在換 session 前讀 [[session-tasks.operations]] § Herdr session transport，保留 scope/approval/verification 邊界；失敗不退回人工操作。Pane 缺席不等於無工作，查 `vendor/scripts/herdr-patrol.ts`。
 
 ## Routing Table
 

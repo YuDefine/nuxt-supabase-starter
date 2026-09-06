@@ -73,33 +73,33 @@ uncommitted 變更
 
 ## Commit 預設位置：main worktree
 
-**`/commit` MUST 在 main worktree 跑、NEVER 在 session worktree 內跑**。
+**批次 `/commit` 在已登記的隔離整合區跑一次完整品質流程**；沒有就緒 wt 或待續跑批次時，普通 `/commit` 照常處理當前工作區。
 
-Worktree 完成驗證後的標準收尾（詳見 [[worktree-default]] §5）：**主線自動執行** selective stash → 跨 worktree pop → cleanup（**不切** session cwd）。diff 留在 main working tree / index，**等 user 觸發** `/commit`（全包）。**NEVER** 自動 invoke `/commit`。**NEVER** 因為 main 已有別 session WIP 就把剛落地的檔從 index 拿掉。**NEVER** 叫 user 開 main session（cwd 已在 main）。若 user 已觸發 `/commit` 且 session boundary 要求換 pane，才依 [[session-tasks.operations]] § Herdr session transport 搬過去。
+**手動 `/commit` 或 merge back 無最低件數**，立即收同 repo 所有已授權、驗收完成且交出寫入權的就緒任務；未就緒工作不阻擋手動提交。自動門檻為 **4 個 distinct work id**，同任務多個 wt 不重複計數。dependency（下游需要落地）、drained（已授權開發都完成或受阻）、stop（使用者結束本輪）提前結批；換 session 只交接佇列。等待累積不佔 commit lock、繼續開發。
 
-- 預檢：pop 前 `git -C <main> status --porcelain` 非空 → 中止 closure、stash entry 保留、提示 user 處理 main 端 WIP
-- Cleanup 安全性依賴 selective stash 列舉完整性（漏列檔永久丟）；pop 失敗 **NEVER** 跑 cleanup（改動還沒進 main）
-- 手動 fallback（user 明確要求自己處理時）：見 `.claude/skills/commit/SKILL.md`
+- 每次就緒、收割、停止開發與 session 接手都 MUST 读 `wt-helper batch status`；命中條件由主線啟動 `/commit`，不請使用者代打。批次開始後的新成員留到下一批。
+- 批次 scope 是固定成員的完整 base→candidate diff，main 的其他 WIP 不自動納入；不得把 main 清空來配合整合。
+- 進入批次流程時 MUST 讀 commit skill 的 `batch.md`，由 helper 保留來源、固定整批範圍並在正式落地後回收。
 
-理由：**單一 ceremony**、**避免雙 hop**、**branch HEAD 乾淨**（worktree 內不 commit）、**0-C 在 main 跑**（跟 CI 一致）。
+同一批只啟動一次完整品質鏈；每個 worktree 仍完成必要的行為驗收與測試。
 
-### 此路徑的 stash 是合法中介
+### 批次使用 checkpoint 保存來源
 
-§ WIP 處置決策樹的 stash 例外**僅限**單一 working tree 內的 WIP 處置；**worktree → main 跨 working tree handoff** 是不同情境——stash 在這裡是規約定義的中介機制、**不**受該禁令限制：
+所有 worker 與主線自走的實作 wt，完成必要驗收後可用 scoped `git commit --only -- <paths>` 保存 substantive change 與 evidence；新檔先逐檔 `git add -- <paths>`。Hooks 照跑，不 push session branch，不各自啟動完整 `/commit`。Checkpoint 只保存來源成果，**NEVER** 當作正式品質流程已通過。
 
-| 情境 | Stash 是 | 替代做法 |
+| 情境 | 保存方式 | 正式品質鏈 |
 | --- | --- | --- |
-| 單一 working tree 多主題 WIP（同一 cwd 內混了主題 A + B） | **last resort**（觸發三條件之一才用） | Step 3 分組納入 |
-| Worktree → main commit handoff | **合法規約中介**（每次收尾都用） | 無——這就是預設路徑 |
+| Worker 實作與驗收完成 | scoped checkpoint + 就緒登記 | 等本批 `/commit` |
+| 隔離整合區 | helper 釘住來源及整合 checkpoint，再對自己的 branch 以固定 base SHA 呈現整批 staged diff | 整批一次完整 `/commit` |
 
 ### 禁止項
 
-- **NEVER** 在 worktree 內跑 `/commit`、`/spectra-commit`，或用 raw `git commit` land 任何 substantive change — 違反「commit 集中在 main」原則。**唯一例外是 artifact-tick**，見下節
-- **NEVER** 在 worktree 跑 /commit 後**又**試圖 stash 剩餘改動到 main — 已經分裂成兩段 commit
+- **NEVER** 在 worker 的實作階段各自跑完整 `/commit` / `/spectra-commit`；品質鏈由登記批次統一執行。
+- **NEVER** 用 checkpoint 直接 push main，或在只進 index、尚未正式落地時刪來源。
 
-### worktree 內唯一合法的 commit：artifact-tick（hard rule）
+### Artifact-tick（hard rule）
 
-上一條的 `git commit` 禁令有且只有一個例外：**把 change artifact 的進度標記落進 worktree branch**，路徑限定**兩條**——`openspec/changes/**/tasks.md` 與該 change 的 verify evidence sidecar `.spectra/evidence/<change-name>.jsonl`：
+只保存 change artifact 進度的 artifact-tick，路徑限定**兩條**——`openspec/changes/**/tasks.md` 與該 change 的 verify evidence sidecar `.spectra/evidence/<change-name>.jsonl`：
 
 ```bash
 git commit --only -m "📝 docs(spectra): phase N done (<change-name>)" -- \
@@ -207,12 +207,12 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 
 ### 隔離 worktree ≠ 繞過 /commit（hard rule）
 
-`/commit` **只在 main**、**只由 user 觸發**、觸發後 **全包**（上節決策樹）。main 髒、index 裡有別 session 的 staged、剛 merge-back 的檔跟別人的 WIP 混在一起——**都不是**「不要跑 `/commit`」或「先把我的檔切出去」的理由。
+普通 `/commit` 的 WIP 全包與登記批次的成員全包，各自以其工作區為範圍。批次流程須在隔離整合區跑完整 0-A/B/C，worker checkpoint 不能直接推上 main。
 
-本節禁的是另一件事：用隔離 worktree + raw `git commit` + `git push origin main` 把 substantive change 繞過 0-A。隔離 worktree 是實作時的多 session 安全手段，**不是** review 豁免，也 **不是** 把 `/commit` 從 main 搬走的理由（`/commit` MUST 在 main，見上節）。
+本節禁的是用隔離 worktree + raw `git commit` + `git push origin main` 把 substantive change 繞過 0-A。隔離本身不是 review 豁免；判準是有沒有跑完登記批次的正式品質流程。
 
 - **NEVER** 以「會吃別人 staged」為由跳過 user 已要的 `/commit`，或自行把檔從 index unstage
-- **NEVER** 以「main 髒」為由改在隔離 worktree 跑 `/commit` 或 raw `git commit`
+- **NEVER** 以「main 髒」為由自行繞過 batch 登記與正式品質流程
 - **NEVER** 用隔離 worktree + raw `git commit` + `git push origin main` 繞過 0-A
 
 判別走下節的路徑白名單，**NEVER** 靠「這批算不算小」自評；`\do-all` / 時間壓力 **NEVER** 是跳 gate 的理由。work-loop / unattended / 「護欄說一律 `--only`」同樣不是。實證：[[pitfall-isolated-worktree-raw-commit-push-bypasses-commit-gate]]
@@ -343,6 +343,8 @@ user 不成立**，結果是 stash 單調遞增、owner 資訊隨時間流失，
 2. **Merge commit / rebase resolution** — `git merge` / `git rebase --continue` 的自動 commit
 3. **`git revert` 既有 commit** — 還原已 push 的 commit，無需重跑品質檢查。**僅**適用於使用者**主動**指明要 revert 哪個 commit（例如 `git revert abc1234`）；**NEVER** 主線自行提議 revert，也**NEVER** 用 `git revert` 處理 uncommitted WIP（一律走「WIP 阻礙處理」的 stash + handoff）
 4. **clade propagate 的投影交付 commit** — `~/offline/clade/scripts/propagate.ts` 在每個 consumer 建的 `🧹 chore: 升級 clade 至 vX.Y.Z` / `🧹 chore: 同步 clade vendor/rules 至 vX.Y.Z`。**這是刻意設計，不是漏網**：內容全部是 clade 端已過 24 道 publish gate 的投影檔，consumer 端再跑一次 `/commit` 的 0-A review / 0-C check 只是對同一份內容重複審查；而 propagate 是一趟跨全 registry 的動作，逐台等人拍板等於這條散播管線不存在。**範圍僅限 propagate 自己寫的那一個 commit**——它的 push 由 `shouldPush()` 把關，branch 上有任何不是本趟建的未推 commit 就 `push-withheld` 並要求人工 `git push`（[[pitfall-fleet-propagate-pushes-deliberately-unpushed-commits]]）。**NEVER** 把本例外讀成「自動化工具都可以直接 commit」：它點名的是這一支 script 的這一種 subject，其他任何自動 commit 都不在內
+
+5. **Worker checkpoint 與 batch helper 的隔離整合 checkpoint** — 只保存未正式落地的來源，遵守上節 § 批次使用 checkpoint 保存來源；不代表 0-A/B/C 通過，不能藉此直推 main。
 
 例外情境外，一律走 `/commit`。
 

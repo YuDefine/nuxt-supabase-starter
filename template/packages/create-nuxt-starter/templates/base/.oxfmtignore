@@ -1,0 +1,10 @@
+.claude/**
+.clade/**
+.agents/**
+.codex/**
+.cursor/**
+vendor/**
+dist/**
+.wrangler/**
+node_modules/**
+**/database.types.ts

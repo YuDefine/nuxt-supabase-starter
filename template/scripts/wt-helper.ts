@@ -23,8 +23,8 @@
  *                    the branch tip) skip both ancestry gates; clade-managed
  *                    projection drift is exempt from the uncommitted gate.
  *   merge-back <slug> [--dry-run] [--auto-stash] [--no-cleanup] [--accept-landed]
- *                    Atomic ceremony: squash session branch into main +
- *                    cleanup worktree. Pre-flight detects main-worktree
+ *                    Legacy squash into main; source retained until formal commit.
+ *                    New workflows use `batch`. Pre-flight detects main-worktree
  *                    blockers (modified or untracked files at branch's
  *                    changeset paths). With --auto-stash, stashes blockers
  *                    as `wt-merge-block/<slug>/<ISO>` for later reconcile
@@ -102,6 +102,7 @@ import {
 import { ensureNoStaleIndexLock } from './_git-lock-detect.ts'
 import { isLockedProjectionPathFor } from './locked-projection.ts'
 import { runWtEnvBootstrap } from './lib/wt-env-bootstrap-runner.ts'
+import { runBatchCommand, assertLegacyAllowed } from './wt-batch.ts'
 
 interface WtOptions {
   json?: boolean
@@ -959,7 +960,12 @@ export function mainWorktreeRoot(cwd) {
   return dirname(common.trim())
 }
 
-export function linkGitignoredRuntimeFiles(consumerRoot, wtPath, names = GITIGNORED_RUNTIME_LINKS) {
+export function linkGitignoredRuntimeFiles(
+  consumerRoot,
+  wtPath,
+  names = GITIGNORED_RUNTIME_LINKS,
+  strict = false,
+) {
   const linked = []
   let mainRoot
   try {
@@ -982,6 +988,7 @@ export function linkGitignoredRuntimeFiles(consumerRoot, wtPath, names = GITIGNO
       symlinkSync(src, dst)
       linked.push(name)
     } catch (e) {
+      if (strict) throw e
       console.error(`note: runtime link ${name} skipped: ${e?.message ?? e}`)
     }
   }
@@ -990,6 +997,175 @@ export function linkGitignoredRuntimeFiles(consumerRoot, wtPath, names = GITIGNO
 
 const ADD_USAGE =
   'Usage: wt-helper add <slug> --task-summary <text> [--expected-paths <comma>] [--precheck-baseline [<change>]] [--baseline-strategy commit|stash|warn] [--baseline-scope-paths <comma>] [--baseline-stash-name <name>] [--skip-prefork-audit] [--include-unrelated-dirty]'
+
+export function bootstrapWorktreeRuntime(
+  consumerRoot: string,
+  wtPath: string,
+  { strict = false } = {},
+) {
+  const log = strict ? console.error : console.log
+  setupBriefExclude(wtPath)
+
+  // `.agents/` 是 Codex 與 Pi 共用的 generated skill projection，但通常不進 git；
+  // `git worktree add` 因此不會帶過去。clade Pi package 本身刻意 extensions-only，
+  // 若這裡漏複製，新 worktree 會在無 collision 的同時也失去 project skills。
+  // 複製 fork 當下 main 的完整 projection，讓兩個 runtime 都只讀同一份來源。
+  try {
+    const agentsSrc = join(consumerRoot, '.agents')
+    const agentsDst = join(wtPath, '.agents')
+    if (existsSync(agentsSrc) && !existsSync(agentsDst)) {
+      cpSync(agentsSrc, agentsDst, { recursive: true })
+      log('  agent-projection: copied .agents from main')
+    }
+  } catch (e) {
+    if (strict) throw e
+    console.error(`note: .agents projection copy skipped: ${e?.message ?? e}`)
+  }
+
+  // TD-321: `.clade/bin/` 整個在 consumer .gitignore 內，而 `git worktree` fork 只帶
+  // tracked 檔案 —— 新 worktree 因此沒有 clade-gate，`pnpm test`（直接呼叫
+  // `.clade/bin/clade-gate`，無 fallback）立刻以 "not found" 失敗，訊息指不到根因。
+  // 寫入者是 propagate.ts，而它只寫 consumer main root，永遠不會碰 worktree，所以在
+  // fork 當下從 main 複製一份（含 exec bit）。Warn-only：consumer 沒有 .clade/bin 就跳過。
+  try {
+    const binSrcDir = join(consumerRoot, '.clade', 'bin')
+    if (existsSync(binSrcDir)) {
+      const binDstDir = join(wtPath, '.clade', 'bin')
+      let copied = 0
+      for (const entry of readdirSync(binSrcDir)) {
+        const src = join(binSrcDir, entry)
+        const dst = join(binDstDir, entry)
+        // 逐檔判 gitignore，不是判整個 `.clade/`：多數 consumer 把 `.clade/bin/*`
+        // **tracked** 進 git（worktree fork 自帶，本來就不缺），只 ignore
+        // `.clade/runtime/` 之類。對非 ignored 的檔照複製會留下使用者從沒寫過的
+        // untracked 檔，接著 merge-back / cleanup 的 uncommitted-files gate 就擋在
+        // 那上面。per-entry try 讓 dangling symlink 只跳過自己，不吃掉其餘檔。
+        try {
+          if (!statSync(src).isFile() || existsSync(dst)) continue
+          const rel = relative(consumerRoot, src)
+          if (spawnSync('git', ['check-ignore', '-q', rel], { cwd: consumerRoot }).status !== 0) {
+            continue
+          }
+          mkdirSync(binDstDir, { recursive: true })
+          copyFileSync(src, dst)
+          chmodSync(dst, statSync(src).mode & 0o777)
+          copied++
+        } catch (entryErr) {
+          if (strict) throw entryErr
+          console.error(`note: .clade/bin/${entry} copy skipped: ${entryErr?.message ?? entryErr}`)
+        }
+      }
+      if (copied > 0) log(`  clade-bin: copied ${copied} executable(s) from main`)
+    }
+  } catch (e) {
+    if (strict) throw e
+    console.error(`note: .clade/bin copy skipped: ${e?.message ?? e}`)
+  }
+
+  // TD-614: link gitignored runtime files (consumers.local …) from main root.
+  {
+    const linked = linkGitignoredRuntimeFiles(consumerRoot, wtPath, undefined, strict)
+    if (linked.length > 0) {
+      log(
+        `  runtime-link: symlinked ${linked.join(', ')} from main (gitignored, fleet audits read it)`,
+      )
+    }
+  }
+
+  // TD-187: auto-invoke wt-env-bootstrap.ts if consumer-meta declares filesToCopy.
+  // Copies gitignored env files (e.g. .env.local) from main into the new worktree
+  // so dev server starts with DB credentials, tunnel keys, etc. Warn-only on failure.
+  const consumerMetaPath = join(wtPath, '.claude', 'consumer-meta.json')
+  if (existsSync(consumerMetaPath)) {
+    try {
+      const meta = JSON.parse(readFileSync(consumerMetaPath, 'utf8'))
+      const filesToCopy = meta?.dev?.envSyncPolicy?.filesToCopy ?? []
+      if (filesToCopy.length > 0) {
+        let copied = 0
+        for (const f of filesToCopy) {
+          const src = join(consumerRoot, f)
+          const dst = join(wtPath, f)
+          if (existsSync(src) && !existsSync(dst)) {
+            mkdirSync(dirname(dst), { recursive: true })
+            copyFileSync(src, dst)
+            copied++
+          }
+        }
+        if (copied > 0) {
+          log(`  env-bootstrap: copied ${copied} file(s) from main (${filesToCopy.join(', ')})`)
+        }
+        // The copy above deliberately carries dev credentials, but tunnel keys
+        // are the one class that cannot be shared — see TUNNEL_ENV_KEYS.
+        const risk = detectSharedTunnelRisk(wtPath)
+        if (risk) {
+          console.error(
+            `note: ${risk.file} carries tunnel keys and this consumer has no dev.perWorktreeTunnel.\n` +
+              `      Starting a tunnel here claims main's hostname. Either opt into\n` +
+              `      dev.perWorktreeTunnel (consumer-meta.json) or keep the tunnel on main only.`,
+          )
+        }
+      }
+    } catch (e) {
+      if (strict) throw e
+      console.error(`note: env-bootstrap skipped: ${e.message ?? e}`)
+    }
+  }
+
+  // Dev-port slot for this worktree (TD-434). Must run before the "ready"
+  // announce so the port shows up alongside the cd hint.
+  const devPortRecord = allocateWorktreeDevPorts(consumerRoot, wtPath)
+  if (devPortRecord) {
+    const shown = devPortRecord.ports.map((p) => `${p.alias}=${p.port}`).join(' ')
+    log(`  dev-port: offset +${devPortRecord.offset} → ${shown} (run 'wt-helper dev')`)
+    // Warn while a slot is still gettable, not once the band is already full:
+    // by then the worktree that needed the warning is the one that cannot get a
+    // slot, and its work stalls at whatever step needed a dev server.
+    const declared = readDeclaredDevPorts(consumerRoot)
+    const capacity = devPortCapacity(declared)
+    const held = devPortHolders(consumerRoot).length
+    if (capacity > 0 && held >= capacity - 1) {
+      console.error(
+        `note: dev-port capacity ${held}/${capacity} after this allocation — the next worktree gets none.\n` +
+          `      Land a finished one ('wt-helper merge-back <slug>') to keep a slot available.`,
+      )
+    }
+  } else if (readDeclaredDevPorts(consumerRoot).length > 0) {
+    if (strict)
+      throw new Error(devPortExhaustedReport(consumerRoot, readDeclaredDevPorts(consumerRoot)))
+    console.error(
+      `note: 'wt-helper dev' will refuse to start in this worktree.\n` +
+        devPortExhaustedReport(consumerRoot, readDeclaredDevPorts(consumerRoot))
+          .split('\n')
+          .map((l) => `      ${l}`)
+          .join('\n'),
+    )
+  }
+
+  // Per-worktree resource provisioning (isolated dev DB clone + sidecar).
+  // Runs after the env-file copy above so the bootstrap script can read the
+  // credentials it needs. No-op for consumers without wt-env-bootstrap.ts.
+  const envBootstrap = runWtEnvBootstrap(wtPath, 'ensure')
+  if (envBootstrap?.dbName) {
+    log(`  env-bootstrap: ${envBootstrap.dbName} → ${envBootstrap.supabaseUrl}`)
+  }
+}
+
+export function destroyWorktreeRuntime(_consumerRoot: string, wtPath: string) {
+  const result = runWtEnvBootstrap(wtPath, 'destroy')
+  if (result?.status === 'orphan-recorded')
+    throw new Error('Worktree backing resources remain; retain and retry cleanup')
+}
+
+export function cleanupRemovedWorktreeRuntime(consumerRoot: string, wtPath: string) {
+  const record = join(devPortStateDir(consumerRoot), `${basename(wtPath)}.json`)
+  if (existsSync(record)) {
+    const value = JSON.parse(readFileSync(record, 'utf8'))
+    if (value.wtPath !== wtPath)
+      throw new Error('Dev-port record belongs to another worktree; retained')
+    unlinkSync(record)
+  }
+  cleanupCodebaseMemoryIndex(wtPath)
+}
 
 async function cmdAdd(slug, opts: WtOptions = {}) {
   if (!slug) {
@@ -1510,146 +1686,7 @@ async function cmdAdd(slug, opts: WtOptions = {}) {
     console.error(`note: claim write skipped: ${e.message ?? e}`)
   }
 
-  setupBriefExclude(wtPath)
-
-  // `.agents/` 是 Codex 與 Pi 共用的 generated skill projection，但通常不進 git；
-  // `git worktree add` 因此不會帶過去。clade Pi package 本身刻意 extensions-only，
-  // 若這裡漏複製，新 worktree 會在無 collision 的同時也失去 project skills。
-  // 複製 fork 當下 main 的完整 projection，讓兩個 runtime 都只讀同一份來源。
-  try {
-    const agentsSrc = join(consumerRoot, '.agents')
-    const agentsDst = join(wtPath, '.agents')
-    if (existsSync(agentsSrc) && !existsSync(agentsDst)) {
-      cpSync(agentsSrc, agentsDst, { recursive: true })
-      console.log('  agent-projection: copied .agents from main')
-    }
-  } catch (e) {
-    console.error(`note: .agents projection copy skipped: ${e?.message ?? e}`)
-  }
-
-  // TD-321: `.clade/bin/` 整個在 consumer .gitignore 內，而 `git worktree` fork 只帶
-  // tracked 檔案 —— 新 worktree 因此沒有 clade-gate，`pnpm test`（直接呼叫
-  // `.clade/bin/clade-gate`，無 fallback）立刻以 "not found" 失敗，訊息指不到根因。
-  // 寫入者是 propagate.ts，而它只寫 consumer main root，永遠不會碰 worktree，所以在
-  // fork 當下從 main 複製一份（含 exec bit）。Warn-only：consumer 沒有 .clade/bin 就跳過。
-  try {
-    const binSrcDir = join(consumerRoot, '.clade', 'bin')
-    if (existsSync(binSrcDir)) {
-      const binDstDir = join(wtPath, '.clade', 'bin')
-      let copied = 0
-      for (const entry of readdirSync(binSrcDir)) {
-        const src = join(binSrcDir, entry)
-        const dst = join(binDstDir, entry)
-        // 逐檔判 gitignore，不是判整個 `.clade/`：多數 consumer 把 `.clade/bin/*`
-        // **tracked** 進 git（worktree fork 自帶，本來就不缺），只 ignore
-        // `.clade/runtime/` 之類。對非 ignored 的檔照複製會留下使用者從沒寫過的
-        // untracked 檔，接著 merge-back / cleanup 的 uncommitted-files gate 就擋在
-        // 那上面。per-entry try 讓 dangling symlink 只跳過自己，不吃掉其餘檔。
-        try {
-          if (!statSync(src).isFile() || existsSync(dst)) continue
-          const rel = relative(consumerRoot, src)
-          if (spawnSync('git', ['check-ignore', '-q', rel], { cwd: consumerRoot }).status !== 0) {
-            continue
-          }
-          mkdirSync(binDstDir, { recursive: true })
-          copyFileSync(src, dst)
-          chmodSync(dst, statSync(src).mode & 0o777)
-          copied++
-        } catch (entryErr) {
-          console.error(`note: .clade/bin/${entry} copy skipped: ${entryErr?.message ?? entryErr}`)
-        }
-      }
-      if (copied > 0) console.log(`  clade-bin: copied ${copied} executable(s) from main`)
-    }
-  } catch (e) {
-    console.error(`note: .clade/bin copy skipped: ${e?.message ?? e}`)
-  }
-
-  // TD-614: link gitignored runtime files (consumers.local …) from main root.
-  {
-    const linked = linkGitignoredRuntimeFiles(consumerRoot, wtPath)
-    if (linked.length > 0) {
-      console.log(
-        `  runtime-link: symlinked ${linked.join(', ')} from main (gitignored, fleet audits read it)`,
-      )
-    }
-  }
-
-  // TD-187: auto-invoke wt-env-bootstrap.ts if consumer-meta declares filesToCopy.
-  // Copies gitignored env files (e.g. .env.local) from main into the new worktree
-  // so dev server starts with DB credentials, tunnel keys, etc. Warn-only on failure.
-  const consumerMetaPath = join(wtPath, '.claude', 'consumer-meta.json')
-  if (existsSync(consumerMetaPath)) {
-    try {
-      const meta = JSON.parse(readFileSync(consumerMetaPath, 'utf8'))
-      const filesToCopy = meta?.dev?.envSyncPolicy?.filesToCopy ?? []
-      if (filesToCopy.length > 0) {
-        let copied = 0
-        for (const f of filesToCopy) {
-          const src = join(consumerRoot, f)
-          const dst = join(wtPath, f)
-          if (existsSync(src) && !existsSync(dst)) {
-            mkdirSync(dirname(dst), { recursive: true })
-            copyFileSync(src, dst)
-            copied++
-          }
-        }
-        if (copied > 0) {
-          console.log(
-            `  env-bootstrap: copied ${copied} file(s) from main (${filesToCopy.join(', ')})`,
-          )
-        }
-        // The copy above deliberately carries dev credentials, but tunnel keys
-        // are the one class that cannot be shared — see TUNNEL_ENV_KEYS.
-        const risk = detectSharedTunnelRisk(wtPath)
-        if (risk) {
-          console.error(
-            `note: ${risk.file} carries tunnel keys and this consumer has no dev.perWorktreeTunnel.\n` +
-              `      Starting a tunnel here claims main's hostname. Either opt into\n` +
-              `      dev.perWorktreeTunnel (consumer-meta.json) or keep the tunnel on main only.`,
-          )
-        }
-      }
-    } catch (e) {
-      console.error(`note: env-bootstrap skipped: ${e.message ?? e}`)
-    }
-  }
-
-  // Dev-port slot for this worktree (TD-434). Must run before the "ready"
-  // announce so the port shows up alongside the cd hint.
-  const devPortRecord = allocateWorktreeDevPorts(consumerRoot, wtPath)
-  if (devPortRecord) {
-    const shown = devPortRecord.ports.map((p) => `${p.alias}=${p.port}`).join(' ')
-    console.log(`  dev-port: offset +${devPortRecord.offset} → ${shown} (run 'wt-helper dev')`)
-    // Warn while a slot is still gettable, not once the band is already full:
-    // by then the worktree that needed the warning is the one that cannot get a
-    // slot, and its work stalls at whatever step needed a dev server.
-    const declared = readDeclaredDevPorts(consumerRoot)
-    const capacity = devPortCapacity(declared)
-    const held = devPortHolders(consumerRoot).length
-    if (capacity > 0 && held >= capacity - 1) {
-      console.error(
-        `note: dev-port capacity ${held}/${capacity} after this allocation — the next worktree gets none.\n` +
-          `      Land a finished one ('wt-helper merge-back <slug>') to keep a slot available.`,
-      )
-    }
-  } else if (readDeclaredDevPorts(consumerRoot).length > 0) {
-    console.error(
-      `note: 'wt-helper dev' will refuse to start in this worktree.\n` +
-        devPortExhaustedReport(consumerRoot, readDeclaredDevPorts(consumerRoot))
-          .split('\n')
-          .map((l) => `      ${l}`)
-          .join('\n'),
-    )
-  }
-
-  // Per-worktree resource provisioning (isolated dev DB clone + sidecar).
-  // Runs after the env-file copy above so the bootstrap script can read the
-  // credentials it needs. No-op for consumers without wt-env-bootstrap.ts.
-  const envBootstrap = runWtEnvBootstrap(wtPath, 'ensure')
-  if (envBootstrap?.dbName) {
-    console.log(`  env-bootstrap: ${envBootstrap.dbName} → ${envBootstrap.supabaseUrl}`)
-  }
+  bootstrapWorktreeRuntime(consumerRoot, wtPath)
 
   // announce only after env files + per-worktree resources are in place —
   // "ready" must not print while the worktree still lacks its database.
@@ -3353,6 +3390,7 @@ async function cmdCleanup(slug, opts) {
   )
   if (!target) throw new Error(`No session worktree found for slug: ${cleanSlug}`)
 
+  assertLegacyAllowed(consumerRoot, target.path)
   const branchName = target.branch.replace('refs/heads/', '')
 
   // Pre-check ALL gates upfront so the error message can recommend the
@@ -3364,6 +3402,22 @@ async function cmdCleanup(slug, opts) {
   // squash-merge 不建立 merge 邊，ancestry 因此對每一條正常 land 完的 branch 都誤報。
   // marker 相符時兩道 ancestry gate 一起放行（見 isSquashLanded 上方的推導與實測）。
   const squashLanded = isSquashLanded(consumerRoot, cleanSlug, branchName)
+  if (squashLanded && !mergedBranches(consumerRoot).has(branchName)) {
+    const base = git(['merge-base', 'main', branchName], { cwd: consumerRoot }).trim()
+    const paths = git(['diff', '--name-only', '-z', base, branchName], { cwd: consumerRoot })
+      .split('\0')
+      .filter(Boolean)
+    try {
+      if (paths.length) {
+        git(['diff', '--quiet', '--cached', '--', ...paths], { cwd: consumerRoot })
+        git(['diff', '--quiet', 'main', branchName, '--', ...paths], { cwd: consumerRoot })
+      }
+    } catch {
+      throw new Error(
+        'cleanup: legacy squash content is staged or differs from main HEAD; retain the source until formal landing is verified',
+      )
+    }
+  }
   const branchMerged = squashLanded || mergedBranches(consumerRoot).has(branchName)
   const unlanded = squashLanded ? [] : detectUnlandedFiles(consumerRoot, branchName)
   if (squashLanded) {
@@ -3594,6 +3648,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
   }
 
   const branchName = target.branch.replace('refs/heads/', '')
+  assertLegacyAllowed(consumerRoot, target.path)
   const blockers = detectMergeBlockers(consumerRoot, branchName)
 
   // Pre-flight: worktree dirty tracked-file check (<consumer-b>-1J 2026-05-18 incident).
@@ -4402,24 +4457,18 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
 
   // Fail-closed: gitignored artifacts have no git object to recover from, so a
   // worktree may only be destroyed once every one of them is accounted for.
-  if (opts.cleanup !== false && (!screenshotSync.ok || !evidenceSync.ok)) {
+  if (!screenshotSync.ok || !evidenceSync.ok) {
     console.error(
-      `merge-back: cleanup skipped; worktree retained at ${target.path}\n` +
+      `merge-back: unpreserved artifacts at ${target.path}; source retained\n` +
         `  Reason: ${screenshotSync.ok ? 'evidence sidecar preserve' : 'screenshot preserve'} did not account for every artifact (see errors above).\n` +
-        `  Resolve the listed paths (copy them out manually if needed), then re-run:\n` +
-        `    node scripts/wt-helper.ts cleanup ${cleanSlug} --force --force-discard-unland`,
+        `  Copy the listed paths out before this source is cleaned up. Removal is owned by\n` +
+        `  \`wt-helper batch cleanup\`, which also retains a source that still holds ignored files.`,
     )
   }
 
-  let cleanupDone = false
-  if (opts.cleanup !== false && screenshotSync.ok && evidenceSync.ok) {
-    try {
-      await cmdCleanup(cleanSlug, { force: true, forceDiscardUnland: true })
-      cleanupDone = true
-    } catch (e) {
-      console.error(`warn: cleanup failed after squash: ${e.message ?? e}`)
-    }
-  }
+  // A squash only stages content. Its sources remain recoverable until /commit
+  // verifies a durable main landing; batch cleanup owns automatic deletion.
+  const cleanupDone = false
 
   const summary =
     `merge-back: ${cleanSlug} ` +
@@ -4427,7 +4476,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
       ? 'already in main via another path (nothing squashed)'
       : 'absorbed into main') +
     (stashRef ? ` (blockers stashed as ${stashRef})` : '') +
-    (cleanupDone ? ' + worktree cleaned' : ' (cleanup skipped/failed)')
+    ' (source retained; formal /commit and verified cleanup required)'
   console.log(summary)
 
   // `git merge --squash` stages the changeset but deliberately does NOT commit:
@@ -4452,10 +4501,12 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
       .join(' ')
     console.log('')
     console.log(
-      `⚠ Staged into main, NOT committed (${stagedPaths.length} file(s)) — the worktree and branch are already removed, so this index is the only copy.`,
+      `⚠ Staged into main, NOT committed (${stagedPaths.length} file(s)) — source worktree and branch retained.`,
     )
     console.log(`  Finish landing now:`)
-    console.log(`  git commit --only -m "<msg>" -- ${shown}${stagedPaths.length > 4 ? ' ...' : ''}`)
+    console.log(
+      `  Run the full /commit workflow for ${shown}${stagedPaths.length > 4 ? ' ...' : ''}`,
+    )
     console.log(
       `  Then verify: git show HEAD:<file> | grep -c '<a plain-text string you just wrote>'`,
     )
@@ -4497,7 +4548,7 @@ async function cmdMergeBack(slug, opts: WtOptions = {}) {
         absorbedByOtherPath
           ? `already in main via another path (nothing squashed)`
           : `squash landed on main`,
-        cleanupDone ? 'worktree cleaned' : 'cleanup skipped/failed',
+        'source retained; removal owned by batch cleanup',
         stagedPaths.length > 0
           ? `${stagedPaths.length} path(s) STAGED, not yet committed`
           : 'nothing left staged',
@@ -4723,6 +4774,16 @@ async function cmdOrphanPrune(opts) {
 async function main() {
   const [, , sub, ...rest] = process.argv
 
+  if (sub === 'batch') {
+    const result = runBatchCommand(process.cwd(), rest, {
+      bootstrap: (root, path) => bootstrapWorktreeRuntime(root, path, { strict: true }),
+      destroy: destroyWorktreeRuntime,
+      removed: cleanupRemovedWorktreeRuntime,
+    })
+    console.log(JSON.stringify(result, null, 2))
+    return
+  }
+
   // Value-taking flags consume the next positional token unless it starts with `--`.
   // Bare `--precheck-baseline` (no value) is allowed — it means "any-change
   // baseline guard, no change context" (ad-hoc /wt path).
@@ -4889,7 +4950,7 @@ async function main() {
       )
       console.error('                            so gates scan exactly the tree Step 0 will land.')
       console.error('    --json                  emit {slug,found,path,branch,consumerRoot}')
-      console.error('  merge-back <slug>         Atomic squash into main + cleanup; flags:')
+      console.error('  merge-back <slug>         Legacy squash into main; retain sources; flags:')
       console.error('    --dry-run               preview blockers + worktree WIP without acting')
       console.error(
         '    --auto-stash            stash main blockers as wt-merge-block/<slug>/<ISO>',

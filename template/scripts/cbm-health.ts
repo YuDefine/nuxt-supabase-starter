@@ -187,11 +187,14 @@ if (id) {
     const receipt = read(receiptPath)
     const current = snapshot(id.repo)
     const session = process.env.CLADE_CBM_SESSION_KEY
+    // Cursor may emit session-start context without delivering it to the model.
+    // Give the post-tool channel its own notice while deduplicating each channel.
+    const noticeScope = process.env.CLADE_RUNTIME === 'cursor' ? `\0${mode}` : ''
     const noticePath = session
       ? join(
           id.cache,
           'provenance',
-          `notice-${createHash('sha256').update(`${id.repo}\0${process.env.CLADE_RUNTIME}\0${session}`).digest('hex')}.json`,
+          `notice-${createHash('sha256').update(`${id.repo}\0${process.env.CLADE_RUNTIME}\0${session}${noticeScope}`).digest('hex')}.json`,
         )
       : null
     const same = receipt?.repo === id.repo && receipt?.project === id.project

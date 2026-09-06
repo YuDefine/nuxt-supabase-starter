@@ -63,6 +63,24 @@ Local edits will be reverted by the next sync.
 
 > sandbox flag 統一使用 `--dangerously-bypass-approvals-and-sandbox`，不再分 `-s read-only` / `-s workspace-write`（在背景 codex 會擋 MCP）。「預期動作」由主線在 prompt 內陳述，靠 pi 自律。
 
+### 版本化結果契約的受控執行
+
+當既有 plan 附 `execution.acceptance_contract` 且採用受控 canary 時，派工主線 MUST 使用
+`vendor/scripts/ai-controlled-execution.ts execute --request <request.json>`；它先原子取得有效
+grant／lease／一次性 permit，再呼叫本文件的既有 Pi 或 Herdr dispatcher。shadow 模式只記錄判定。
+契約、短 plan／report 模板與恢復命令見 `vendor/snippets/ai-outcome-execution/README.md`。
+
+每次受控交付都由原派工主線核對固定 artifact、全部案例及證據；不另派基本收割 reviewer。
+品質失敗由主線安排有界修正；跨執行者使用停止證明、checkpoint 與 fresh grant 交棒，保持原 work。
+execute 的終點是 worker 交付與機械案例收集。主線結果驗收通過後，另依 commit skill 逐步呼叫
+simplify、review、checks 的既有入口；正式 review row 由原本的專用 wrapper 執行。
+
+| REQUIRED 欄位 | 內容 |
+| --- | --- |
+| 觸發條件 | plan 有版本化 acceptance contract 且啟用受控 canary；admission 不成立就不 spawn |
+| 消費端 | 原派工主線、受控 dispatcher 與同一 work 的接手主線 |
+| 載入路徑 | 本節，派 Pi 前既有必讀入口 |
+
 ### Code review 唯一入口
 
 **NEVER** 用 `codex review`、raw `codex exec`或一般 coding dispatcher做跨模型 review。
@@ -169,7 +187,7 @@ hub:bootstrap 自動同步產生（請完全忽略，與本次工作無關）：
 - `git push` / `git push --force`
 - `git stash` / `git stash push` / `git stash pop`（中途 stash 抹掉 working tree 會繞過主線監看）
 - `git commit --amend`（一 phase 一 commit、不要 amend 修飾）
-- `/commit` / `/spectra-commit`（commit ceremony 在 main 跑、不在 worktree）
+- `/commit` / `/spectra-commit`（worker 只做 checkpoint；正式 ceremony 由 coordinator 在登記的 batch integration 跑）
 
 **Commit 前 self-check（MUST，任一條命中即 abort、NEVER commit）**：
 
@@ -194,7 +212,7 @@ hub:bootstrap 自動同步產生（請完全忽略，與本次工作無關）：
 Commit 完直接停手回報，**NEVER** 自己跑下一 phase。主線會在 commit 後做 phase boundary 對齊 + view-layer drift 再驗 + scope cross-check，再決定 [接受 / reset 重派 / 中止]。
 ```
 
-理由：worktree 內的 commit 在 archive merge-back 階段會被 `git merge --squash` squash 進 main 的 working tree、再走 `/commit` 0-A Pi review + 0-B Design Review + 0-C check 才進 main HEAD。所以 worktree 內 pi 自 commit **沒有跳過 review** 的風險（commit 在 squash 時就消失、不會留在 main history）。
+理由：worktree 內的 commit 在批次準備階段會被整合進隔離 integration，再走 `/commit` 0-A Pi review + 0-B Design Review + 0-C check 才進 main HEAD。所以 worktree 內 pi 自 commit **沒有跳過 review** 的風險（commit 在 squash 時就消失、不會留在 main history）。
 
 仍 enforce 的 guardrail 純粹是 phase boundary 對齊（一 phase 一 commit、message format 機械化解析）+ drift 早攔截（pi 自驗比主線事後 reset 便宜）。Win：主線收到完工通知後直接 inspect → 派下一 phase，不必停下來做 staging。
 

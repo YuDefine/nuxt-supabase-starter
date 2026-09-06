@@ -1,6 +1,6 @@
 ---
 name: wt
-description: "Use when 使用者要開 worktree（隔離環境跑 task 不影響主 working tree），或並行做多條 task（/wt A: ... B: ...）。NOT for main-bound 操作（publish / propagate），NOT for 只是要切 branch。"
+description: "Use when 使用者要開 worktree（隔離環境跑 task 不影響主 working tree），或並行做多條 task（/wt A: ... B: ...）。NOT for 發布散播（走 clade-publish）、提交已完成工作（走 commit），NOT for 只是要切 branch。"
 license: MIT
 metadata:
   author: clade
@@ -11,11 +11,11 @@ permission_tier: action
 
 # /wt — orchestrate worktree task lifecycle
 
-`/wt` is the single entry point for "do work in a worktree". It builds the worktree, auto-routes the executor (Pi astra/luna for non-UI coding/analysis/debug, Claude subagent only for the Form 3/4 cases — see Step 1.8; UI view implementation is never dispatched at all), and reports — without squashing or cleaning up. The worktree branch holds committed work through OPSX verification and archive. The coordinator then follows [[worktree-default.commit-ceremony]] to merge one worktree and immediately commit its scoped result on main.
+`/wt` builds an isolated implementation worktree and routes execution per Step 1.8. The worker validates behavior and saves scoped checkpoints. The coordinator verifies the result, registers readiness and evaluates the shared batch queue. Read commit skill `batch.md` before readiness registration or landing. The batch runs one full `/commit` in an isolated integration worktree, lands the reviewed result, then safely removes its sources.
 
-This deferred-landing model guarantees main never carries half-done features between sessions: only fully-reviewed-and-archived changes touch main. The previous v2.0 behavior — `/wt` return time squash + cleanup — accumulated cross-session WIP in main and made `/commit` impossible whenever the 人工檢查 Gate triggered.
+Ready sources remain recoverable while a batch waits or fails review. Main receives formally reviewed commits; worker checkpoint creation is not formal review.
 
-The user's only follow-up action is the actual 人工檢查 decision（GUI 的 OK / Issue / Skip）。After that decision, the coordinator completes OPSX archive in the implementation worktree, commits bookkeeping, then performs merge-back and `/commit` itself. If the landing ceremony requires a separate clean session, use [[session-tasks.operations]] § Herdr session transport and return the dispatch receipt; **NEVER** ask the user to open main or type either invocation.
+The user's only follow-up action is the actual 人工檢查 decision（GUI 的 OK / Issue / Skip）。After that decision, the coordinator invokes `OPSX archive` and `/commit` itself. If either workflow step requires a separate clean session, use [[session-tasks.operations]] § Herdr session transport and return the dispatch receipt; **NEVER** ask the user to open main or type either invocation.
 
 ## When to invoke
 
@@ -27,6 +27,7 @@ Non-UI tasks are automatically routed to Pi (cheaper, doesn't consume Claude con
 
 - The work is read-only AND trivial (quick grep, log inspection, code explanation that writes nothing and doesn't need structured evidence collection).
 - The operation is main-bound by design (clade publish / propagate).
+- OPSX archive already owns an existing implementation checkout; resolve that source instead of creating a second implementation tree.
 - cwd is already inside a session worktree (`git rev-parse --git-dir` contains `/worktrees/`). The current worktree is the workspace; do not nest.
 
 ## Invocation forms
@@ -58,7 +59,7 @@ C: <task C description>
 
 Or single line: `/wt A: task A B: task B`.
 
-Each labeled task becomes its own worktree + subagent. Subagents run concurrently and commit inside their worktrees. There is no squash or cleanup at return — completed worktrees stay parked until archive-time merge-back (see Step 4). A failure in one task does not block the others.
+Each labeled task becomes its own worktree + executor, subject to routing. Workers run concurrently and checkpoint inside their worktrees. The coordinator harvests completed tasks into the batch queue; a failure in one task does not block other eligible members.
 
 Labels are arbitrary identifiers (A/B/C/feat-x/test-y). The skill normalizes them into slugs.
 
@@ -93,7 +94,7 @@ To discover available worktrees for resume, run `node scripts/wt-helper.ts list`
 
 ## Per-task lifecycle
 
-For each task in the invocation, `/wt` SHALL execute the following sequence. With parallel tasks, steps 2–4 run concurrently across tasks; step 1 runs sequentially (one `wt-helper add` at a time). **There is no squash or cleanup at `/wt` return** — those happen at archive time via `wt-helper merge-back` (per [[worktree-default]] §5.5).
+For each task in the invocation, `/wt` SHALL execute the following sequence. With parallel tasks, steps 2–4 run concurrently across tasks; step 1 runs sequentially (one `wt-helper add` at a time). Harvest checkpoints into the ready pool; batch review, landing and cleanup follow commit skill `batch.md`.
 
 ### Step 0 — Resume detection
 
@@ -115,7 +116,7 @@ Before creating a new worktree, check if one already exists at the expected path
 
 **MUST Read [baseline-guard.md](baseline-guard.md) before running `wt-helper add`** — 含 unmerged / clean / dirty 三路策略分流、`--baseline-scope-paths` 的對齊要求、stash strategy 的隱性風險與 `rescue` 救援、`--include-unrelated-dirty` 的 bulk-capture 語意與還原三步驟。四條契約（預設不 capture / 帶 WIP 要顯式 flag / 傳了 flag 不准宣稱 main 沒被動到 / 不准手寫 pathspec stash）在 [[worktree-default]] §1。
 
-`/wt` ad-hoc invocation 沒有 spectra change context，所以**不能**做 scope-aware baseline commit（會撞 cross-session WIP）。預設走 **stash-apply** 策略 — 把 main 的 dirty（modified + untracked）一律 stash 起來、fork 後在新 worktree 內 `git stash apply` 把全部 baseline 帶過去，再 drop stash。Subagent 進 worktree 看 baseline 但收到 Step 2 的 warn 段落知道哪些檔不該動。
+`/wt` 預設從 committed baseline 開乾淨 worktree，main dirty 留在原處。確實需要既有 WIP 時，先依 baseline-guard.md 判定授權範圍，再顯式選擇 scoped capture；不把別 session WIP 當新任務 baseline。
 
 ```bash
 node scripts/wt-helper.ts add <slug> \
@@ -129,13 +130,11 @@ Run from the main worktree's cwd. The helper:
 - Detects main dirty paths（modified / untracked / unmerged）via `git status --porcelain`：
   - **Unmerged 非空** → STOP，refuse to fork. User must resolve conflicts first.
   - **Clean** → fork directly（no stash needed）.
-  - **Dirty 非空** → `git stash push -u -m wt-baseline/<slug>/<ISO>` on main.
+  - **Dirty 非空** → default leaves that WIP on main; capture requires explicit flags under baseline-guard.md.
 - Normalizes the slug.
 - Creates branch `session/<YYYY-MM-DD-HHMM>-<slug>` from `main`.
 - Materializes the worktree at `<consumer-parent>/<consumer-name>-wt/<slug>/`.
 - Merges `origin/main` if present.
-- （stash strategy + has stashed）cd 進 worktree 跑 `git stash apply stash@{0}` + `git stash drop stash@{0}` → worktree 看到 baseline dirty、main 的 stash list 清掉。
-- Stash apply 失敗 → warn user，保留 stash entry 供手動恢復（極罕見：worktree 起步是 main HEAD 副本，理論不該衝突）。
 
 Capture the worktree absolute path (the helper prints `cd <path>` and `Branch: <branch>` — parse them, or derive them from the consumer-root + slug convention).
 
@@ -279,7 +278,7 @@ After all tasks in the invocation have either completed (subagent committed) or 
 ```
 ✅ A (lru-cache) [pi]: committed — 5 files, 2 commits on branch session/<date>-lru-cache
    <one-line summary from pi stdout>
-   pending: coordinator verifies OPSX <change-id>, archives here, then lands via merge-back + main commit
+   pending: archive in source, then register batch readiness
 ✅ B (csv-tests) [claude]: subagent committed — 2 files added on branch session/<date>-csv-tests
 ✅ C (perf-audit) [pi:analyze]: JSON result — 8 findings, status: pass
    findings written to WORKTREE-BRIEF.md # Findings
@@ -287,12 +286,14 @@ After all tasks in the invocation have either completed (subagent committed) or 
    worktree preserved at ~/offline/<consumer>-wt/node-upgrade/
    branch: session/<date>-node-upgrade
 
-Pending worktrees: <N> (retained until required verification and coordinator landing)
+Ready / blocked worktrees: <counts from batch status>; report each retained path and reason
 ```
 
 The `[pi]` / `[claude]` / `[pi:analyze]` / `[pi:debug]` tag indicates which executor was used. This helps the user understand the execution path and cost profile.
 
-`/wt` preserves each branch until the coordinator has verified the actual checkout. OPSX archive runs there and does not merge automatically. For both OPSX and ad-hoc work, the coordinator follows [[worktree-default.commit-ceremony]] within the existing authorization; each merge is immediately followed by its scoped main commit and verification.
+**Batch handover**: after harvesting verified checkpoints, register readiness and run `wt-helper batch status --trigger auto`. At 4 distinct work ids, invoke one full `/commit` for the batch. User `/commit` or merge back has no minimum; dependency/drained/stop can flush early. Archive runs its gates and bookkeeping in the source tree before readiness. Cleanup belongs to the final commit workflow after verified landing.
+
+Non-OPSX Form 1 uses the same queue; the coordinator handles authorized landing without asking the user to type commands.
 
 ## Failure handling
 
@@ -319,17 +320,17 @@ For Pi investigation failures (Step 2-pi-investigate), exit code 2 (business fai
 
 ### Squash conflicts (no longer at `/wt` time)
 
-Squash occurs during coordinator landing after verification and the bookkeeping commit. Conflict handling follows [[worktree-default.commit-ceremony]] §5.5. `/wt` itself never squashes.
+Batch integration conflicts are resolved in the isolated integration worktree, then `wt-helper batch resume` continues. Sources remain intact; see commit skill `batch.md`.
 
 ## After `/wt` completes
 
 Worktree(s) hold committed work on their session branches. Main's working tree is untouched.
 
-The coordinator continues within the authorized goal:
+The coordinator's next actions:
 
-1. For OPSX work, verify current-revision evidence and required human gates, archive in the implementation checkout, then commit bookkeeping.
-2. For each ready worktree, inspect the merge-back dry-run and concurrent ownership, perform the permitted merge, immediately commit its scoped result on main, and verify every changed file.
-3. Keep a worktree with a named owner and concrete blocking gate when verification or authorization is still pending.
+1. For OPSX, complete archive gates and bookkeeping in the source worktree, then checkpoint the result.
+2. Verify scope, evidence and writer handover; register all authorized ready sources via `wt-helper batch ready`.
+3. Evaluate the batch trigger and invoke `/commit` when due; preserve the queue across session handover.
 
 `/wt` does NOT:
 
@@ -338,7 +339,7 @@ The coordinator continues within the authorized goal:
 - Commit on main.
 - Push anywhere.
 
-These remain explicit later actions (archive + commit).
+These are owned by the batch commit coordinator after review and verified landing.
 
 ## Edge cases
 
@@ -357,7 +358,7 @@ If `git rev-parse --git-dir` shows `/worktrees/`, refuse to invoke `/wt`. The cu
 
 ### Subagent commits but you can't tell if the task fully succeeded
 
-The subagent's reported status is the authority. If it says "done", proceed to squash. If the subagent's commits exist but it failed to report cleanly, treat as failure (preserve worktree, report ambiguity).
+A completion report is a claim to verify. Inspect the checkpoint scope and acceptance evidence, confirm terminal outcome and writer release, then register readiness. Missing evidence or ambiguous ownership retains the source outside the ready pool.
 
 ## Related rules
 
@@ -372,7 +373,7 @@ The subagent's reported status is the authority. If it says "done", proceed to s
 
 ```bash
 node scripts/wt-helper.ts list                              # list session worktrees
-node scripts/wt-helper.ts merge-back <slug>                 # atomically land worktree → main
+node scripts/wt-helper.ts merge-back <slug>                 # legacy compatibility; preserves source for review
 node scripts/wt-helper.ts merge-back <slug> --dry-run       # preview blockers
 node scripts/wt-helper.ts merge-back <slug> --auto-stash    # stash main blockers
 node scripts/wt-helper.ts land-pending <slug>               # alias for grandfathered worktrees
@@ -381,6 +382,6 @@ node scripts/wt-helper.ts cleanup <slug> --force --force-discard-unland  # disca
 node scripts/stash-reconcile.ts                             # plan recovery for wt-merge-block/* stashes
 ```
 
-`merge-back` is the primary post-`/wt` action for ad-hoc Form-1 worktrees and for early-landing when needed. OPSX archive does not invoke it; the coordinator owns the verified landing ceremony.
+Use `node scripts/wt-helper.ts batch status --trigger manual` and commit skill `batch.md` for requested merge back. The coordinator runs the full batch commit and cleanup; archive prepares its source first.
 
 `cleanup --force --force-discard-unland` is for discarding unwanted worktrees (subagent fail, abandoned exploration). It permanently loses the branch's commits; use `merge-back` first to preserve the work.
