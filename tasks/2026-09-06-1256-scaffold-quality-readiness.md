@@ -59,9 +59,34 @@ batch would pay that overhead once per batch. A single run with a larger timeout
 Note: this section is appended to `tasks/**`, which `coverage.json` classifies outside the source
 inventory. No reviewed source file changed after the scan snapshot was taken.
 
-### Landing not performed
+### Landing 已完成（2026-09-06）
 
-Landing is deliberately left undone; see the commit-rule conflict recorded with the coordinator.
-`commit.detail.md` forbids landing substantive changes from inside a session worktree, and the
-sanctioned worktree-to-main closure aborts while the main worktree is non-empty. The main worktree
-holds 13 modified files and zero staged; the intersection with these 37 owned paths is empty.
+在 main worktree 落地為 `ef94e035`，已 push 至 `origin/main`（`02c721b2..ef94e035`）。
+worktree 內的 `commit.detail.md` 衝突以「不在 session worktree 內 land」解掉：改動內容
+已在 main worktree 就位，直接在 main 以 `git commit --only -- <34 paths>` 提交，
+34 個檔全數落地，未觸及 `.clade/**` runtime journal 與範圍外檔案。
+
+`session/2026-09-06-1256-scaffold-quality-readiness` 上的 `6d38429e` 與本次落地內容
+等價，未合併進 main；該 branch 與其 worktree 可另行清理。
+
+安全掃描沿用上一節 08:33:53Z 的 PASS：那次掃描的 snapshot digest 覆蓋的就是本次提交
+的 34 個 owned path 內容，這些檔在掃描後未再變動；main 期間新增的 commit
+（`98248766`、`f5882b82`、`4f3ee86f`）不在 owned paths 內。
+
+落地快照重跑的 gates：
+
+- `pnpm test --run`（template）：345 passed / 2 skipped（33 檔 passed / 1 skipped）
+- `pnpm test --run`（create-nuxt-starter）：196 passed / 2 skipped
+- `pnpm format:check`、`pnpm lint`、`pnpm check`、`pnpm doctor`：皆 exit 0
+- `bash scripts/audit-template-hygiene.sh`：full-tree 無 finding
+
+### 生成器 gate 缺口（clade 主線 2026-09-06 回報）
+
+回報內容是 `generatePackageJson` 的 testing-full / testing-vitest 分支把 `test`
+覆寫成未包 gate 的 `vp test --coverage`。那份查證讀的是當時的 HEAD；本批改動新增的
+admission loop 在 feature scripts 組完後才套用，`test` / `build` / `typecheck` /
+`check:tools` / `test:mutation` 五條都會被包成 `clade-gate run <label>` 形狀並保留
+arg-safe 的 fallback 分支。缺口隨 `ef94e035` 一併關閉，不另開登記。
+
+`lint` 維持未包 gate：clade `scripts/audit-gate-coverage.ts` 的 `HEAVY_SCRIPTS`
+不含 lint，它只在 REQUIRED script 存在性那一層被檢查，因此不構成 gate coverage 缺口。
