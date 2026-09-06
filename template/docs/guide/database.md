@@ -35,7 +35,9 @@ After creating a migration, always run: `db reset` → `db lint` → `db:types` 
 Starter 現在直接安裝 `drizzle-orm`、`postgres`、`drizzle-kit`，但它是**選用 query layer**，不是 migration owner。
 
 - `drizzle.config.ts`：Drizzle CLI 設定
-- `server/utils/drizzle.ts`：`createAdminDrizzle()` / `withAdminDrizzle()` helper
+- `server/utils/drizzle.ts`：`useAdminDrizzle()` helper，回傳整個 process 共用的連線池；
+  池大小預設 10，可用 `DATABASE_POOL_MAX` 覆寫
+- `server/plugins/drizzle-pool.ts`：Nitro `close` hook 收池（不在啟動時強制連線）
 - `server/db/schema/`：專案要用 Drizzle schema 時的預留位置
 
 建議使用情境：
