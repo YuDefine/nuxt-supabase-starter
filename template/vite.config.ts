@@ -16,6 +16,7 @@ const lintIgnorePatterns = [...(lintBase.ignorePatterns ?? []), '.agent/']
 const fmtIgnorePatterns = [
   ...fmtBase.ignorePatterns,
   'dist/**',
+  '.wrangler/**',
   'node_modules/**',
   '**/database.types.ts',
   // `.claude/` `.agents/` `.codex/` `.cursor/` 全部由 preset 的 PROJECTION_EXCLUDES

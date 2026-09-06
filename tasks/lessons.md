@@ -27,3 +27,7 @@ spec）時 MUST 二選一：
 
 **同族問題**：拿共用命名空間的快照當歸屬證據（clade 那邊反覆踩到的一類）。
 本則若要升級成跨專案 pitfall，落點是 clade `docs/pitfalls/`，需要 clade session。
+
+## 2026-09-06 — 新專案品質入口的驗收邊界
+
+新工具入口暴露的模板既有診斷屬於新專案驗收範圍，不能只交生成器 checkpoint；依授權修完並走正式落地。Codebase index 使用 repo 的 `vendor/scripts/cbm-index.sh`（或已投影入口）保留 provenance 與資源控制。heavy scripts 驗收必須傳附加參數並觀察實際 argv／exit，包含 type-aware `check`。

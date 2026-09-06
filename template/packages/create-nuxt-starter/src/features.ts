@@ -320,7 +320,7 @@ export const featureModules: FeatureModule[] = [
     default: true,
     group: 'quality',
     devPackages: {
-      'vite-plus': '^0.1.14',
+      'vite-plus': '^0.1.21',
     },
     packages: {},
     templateDir: 'features/quality',

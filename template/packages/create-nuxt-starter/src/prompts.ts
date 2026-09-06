@@ -215,15 +215,18 @@ async function promptUserPreset(
   if (typeof stateChoice === 'symbol') process.exit(0)
 
   // 7. Testing
-  const testingChoice = (await consola.prompt('測試框架？', {
-    type: 'select',
-    options: [
-      { label: 'Vitest + Playwright（推薦）', value: 'full' },
-      { label: '僅 Vitest', value: 'vitest-only' },
-      { label: '不需要', value: 'none' },
-    ],
-    initial: preset.startEmpty ? 'none' : 'full',
-  })) as string as 'full' | 'vitest-only' | 'none'
+  const testingChoice = parsePromptChoice(
+    await consola.prompt('測試框架？', {
+      type: 'select',
+      options: [
+        { label: 'Vitest + Playwright（推薦）', value: 'full' },
+        { label: '僅 Vitest', value: 'vitest-only' },
+        { label: '不需要', value: 'none' },
+      ],
+      initial: preset.startEmpty ? 'none' : 'full',
+    }),
+    ['full', 'vitest-only', 'none'] as const,
+  )
 
   if (typeof testingChoice === 'symbol') process.exit(0)
 
@@ -405,14 +408,17 @@ async function promptUserCustom(defaultProjectName?: string): Promise<UserSelect
   if (typeof stateChoice === 'symbol') process.exit(0)
 
   // 7. Testing
-  const testingChoice = (await consola.prompt('測試框架？', {
-    type: 'select',
-    options: [
-      { label: 'Vitest + Playwright（推薦）', value: 'full' },
-      { label: '僅 Vitest', value: 'vitest-only' },
-      { label: '不需要', value: 'none' },
-    ],
-  })) as string as 'full' | 'vitest-only' | 'none'
+  const testingChoice = parsePromptChoice(
+    await consola.prompt('測試框架？', {
+      type: 'select',
+      options: [
+        { label: 'Vitest + Playwright（推薦）', value: 'full' },
+        { label: '僅 Vitest', value: 'vitest-only' },
+        { label: '不需要', value: 'none' },
+      ],
+    }),
+    ['full', 'vitest-only', 'none'] as const,
+  )
 
   if (typeof testingChoice === 'symbol') process.exit(0)
 
@@ -428,14 +434,17 @@ async function promptUserCustom(defaultProjectName?: string): Promise<UserSelect
   if (typeof monitoringChoice === 'symbol') process.exit(0)
 
   // 9. Deployment
-  const deployChoice = (await consola.prompt('部署目標？', {
-    type: 'select',
-    options: [
-      { label: 'Cloudflare Workers（推薦）', value: 'cloudflare' },
-      { label: 'void.cloud（VoidZero，建在 Cloudflare 上）', value: 'void' },
-      { label: 'Node.js Server', value: 'node' },
-    ],
-  })) as string as 'cloudflare' | 'void' | 'node'
+  const deployChoice = parsePromptChoice(
+    await consola.prompt('部署目標？', {
+      type: 'select',
+      options: [
+        { label: 'Cloudflare Workers（推薦）', value: 'cloudflare' },
+        { label: 'void.cloud（VoidZero，建在 Cloudflare 上）', value: 'void' },
+        { label: 'Node.js Server', value: 'node' },
+      ],
+    }),
+    ['cloudflare', 'void', 'node'] as const,
+  )
 
   if (typeof deployChoice === 'symbol') process.exit(0)
 
@@ -722,4 +731,11 @@ export function getDefaultSelections(projectName: string): UserSelections {
     evlogPreset: 'baseline',
     dbStack: DEFAULT_DB_STACK,
   }
+}
+
+export function parsePromptChoice<T extends string>(value: unknown, choices: readonly T[]): T {
+  if (typeof value === 'symbol') process.exit(0)
+  const choice = choices.find((candidate) => candidate === value)
+  if (choice === undefined) throw new Error('Unexpected prompt selection')
+  return choice
 }

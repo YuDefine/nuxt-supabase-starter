@@ -5,21 +5,15 @@ applies-to: post-scaffold
 
 # Audit Logging
 
-This project provides an audit logging foundation as a template â€” not auto-applied, so you add it when your project needs it.
+The starter includes the audit log migration and a server-side insert utility. Scaffolded projects should confirm the migration is present before applying it.
 
 ## Setup
 
-### 1. Create the migration
+### 1. Check the migration
 
-```bash
-supabase migration new audit_logs
-```
+Use `supabase/migrations/20260804190000_create_audit_logs.sql`. If your scaffold omitted it, copy the audit migration template into a new migration. Do not add a duplicate table migration.
 
-### 2. Copy the template
-
-Copy the content from `scripts/templates/migrations/audit_logs.sql` into the generated migration file.
-
-### 3. Apply
+### 2. Apply to the local development database
 
 ```bash
 supabase db reset
@@ -34,7 +28,7 @@ The `createAuditLog()` function in `server/utils/audit.ts` is fire-and-forget â€
 
 ```typescript
 // In any server API handler
-import { createAuditLog } from '~/server/utils/audit'
+import { createAuditLog } from '~~/server/utils/audit'
 
 export default defineEventHandler(async (event) => {
   const user = requireAuth(event)
@@ -59,9 +53,9 @@ export default defineEventHandler(async (event) => {
 
 | Column        | Type        | Description                                            |
 | ------------- | ----------- | ------------------------------------------------------ |
-| `id`          | uuid        | Primary key                                            |
-| `user_id`     | uuid        | Who performed the action (nullable for system actions) |
-| `action`      | text        | What happened (create, update, delete, etc.)           |
+| `id`          | bigserial   | Primary key                                            |
+| `user_id`     | text        | Who performed the action (nullable for system actions)  |
+| `action`      | text        | What happened (create, update, delete, etc.)             |
 | `entity_type` | text        | What type of entity was affected                       |
 | `entity_id`   | text        | Which entity was affected                              |
 | `changes`     | jsonb       | What changed (optional)                                |
@@ -70,8 +64,7 @@ export default defineEventHandler(async (event) => {
 
 ## RLS Policies
 
-- **INSERT**: `service_role` only (server writes)
-- **SELECT**: `service_role` or own logs (`user_id = auth.uid()`)
+RLS denies all direct client access. The server uses `service_role`; handlers must enforce authentication and authorization before reading or writing audit logs. Better Auth user IDs are text values and are not Supabase Auth identities.
 
 ## Template Location
 

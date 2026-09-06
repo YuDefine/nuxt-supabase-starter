@@ -12,6 +12,7 @@ import {
 import { homedir } from 'node:os'
 import { basename, dirname, join, relative } from 'node:path'
 import { consola } from 'consola'
+import { z } from 'zod'
 import { DEFAULT_DB_STACK, type DbHost, type DbStack } from './types'
 
 export interface CladeModules {
@@ -394,9 +395,12 @@ export function rewriteFirstGlanceDocsForDbHost(
 function stripLocalSupabaseMcpFile(path: string): void {
   if (!existsSync(path)) return
   try {
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as {
-      mcpServers?: Record<string, unknown>
-    }
+    const parsed = z
+      .object({
+        mcpServers: z.record(z.string(), z.unknown()).optional(),
+      })
+      .passthrough()
+      .parse(JSON.parse(readFileSync(path, 'utf8')))
     if (!parsed.mcpServers?.['local-supabase']) return
     delete parsed.mcpServers['local-supabase']
     writeFileSync(path, `${JSON.stringify(parsed, null, 2)}\n`)
@@ -425,11 +429,28 @@ function rewriteSettingsForDbHost(targetDir: string, dbHost: DbHost | undefined)
   const path = join(targetDir, '.claude', 'settings.json')
   if (!existsSync(path)) return
   try {
-    const settings = JSON.parse(readFileSync(path, 'utf8')) as {
-      enabledMcpjsonServers?: string[]
-      permissions?: { allow?: string[] }
-      hooks?: { PostToolUse?: Array<{ matcher?: string; hooks?: unknown }> }
-    }
+    const settings = z
+      .object({
+        enabledMcpjsonServers: z.array(z.string()).optional(),
+        permissions: z
+          .object({ allow: z.array(z.string()).optional() })
+          .passthrough()
+          .optional(),
+        hooks: z
+          .object({
+            PostToolUse: z
+              .array(
+                z
+                  .object({ matcher: z.string().optional(), hooks: z.unknown().optional() })
+                  .passthrough(),
+              )
+              .optional(),
+          })
+          .passthrough()
+          .optional(),
+      })
+      .passthrough()
+      .parse(JSON.parse(readFileSync(path, 'utf8')))
     if (Array.isArray(settings.enabledMcpjsonServers)) {
       settings.enabledMcpjsonServers = settings.enabledMcpjsonServers.filter(
         (name) => name !== 'local-supabase',
@@ -478,9 +499,19 @@ function rewriteAgentProjectionsForDbHost(targetDir: string, dbHost: DbHost | un
   const codexHooks = join(targetDir, '.codex', 'hooks.json')
   if (existsSync(codexHooks)) {
     try {
-      const parsed = JSON.parse(readFileSync(codexHooks, 'utf8')) as {
-        hooks?: { PostToolUse?: Array<{ matcher?: string }> }
-      }
+      const parsed = z
+        .object({
+          hooks: z
+            .object({
+              PostToolUse: z
+                .array(z.object({ matcher: z.string().optional() }).passthrough())
+                .optional(),
+            })
+            .passthrough()
+            .optional(),
+        })
+        .passthrough()
+        .parse(JSON.parse(readFileSync(codexHooks, 'utf8')))
       if (Array.isArray(parsed.hooks?.PostToolUse)) {
         parsed.hooks.PostToolUse = parsed.hooks.PostToolUse.filter(
           (item) => item.matcher !== 'mcp__local-supabase__apply_migration',
@@ -494,9 +525,15 @@ function rewriteAgentProjectionsForDbHost(targetDir: string, dbHost: DbHost | un
   const cursorCli = join(targetDir, '.cursor', 'cli.json')
   if (existsSync(cursorCli)) {
     try {
-      const parsed = JSON.parse(readFileSync(cursorCli, 'utf8')) as {
-        permissions?: { allow?: string[] }
-      }
+      const parsed = z
+        .object({
+          permissions: z
+            .object({ allow: z.array(z.string()).optional() })
+            .passthrough()
+            .optional(),
+        })
+        .passthrough()
+        .parse(JSON.parse(readFileSync(cursorCli, 'utf8')))
       if (Array.isArray(parsed.permissions?.allow)) {
         parsed.permissions.allow = parsed.permissions.allow.filter(
           (item) => !item.includes('local-supabase'),
@@ -532,7 +569,10 @@ export function stripOrphanPostMigrationHook(targetDir: string, dbHost: DbHost |
   const hubPath = join(targetDir, '.claude', 'hub.json')
   if (!existsSync(hubPath)) return
   try {
-    const hub = JSON.parse(readFileSync(hubPath, 'utf8')) as { localHooks?: string[] }
+    const hub = z
+      .object({ localHooks: z.array(z.string()).optional() })
+      .passthrough()
+      .parse(JSON.parse(readFileSync(hubPath, 'utf8')))
     if (!Array.isArray(hub.localHooks)) return
     const next = hub.localHooks.filter((name) => name !== POST_MIGRATION_HOOK)
     if (next.length === hub.localHooks.length) return
@@ -546,9 +586,10 @@ export function stripOrphanPostMigrationHook(targetDir: string, dbHost: DbHost |
 function packageUsesNuxtAuthUtilsOnly(targetDir: string): boolean {
   const pkgPath = join(targetDir, 'package.json')
   if (!existsSync(pkgPath)) return false
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as {
-    dependencies?: Record<string, string>
-  }
+  const pkg = z
+    .object({ dependencies: z.record(z.string(), z.string()).optional() })
+    .passthrough()
+    .parse(JSON.parse(readFileSync(pkgPath, 'utf8')))
   const deps = pkg.dependencies ?? {}
   return Boolean(deps['nuxt-auth-utils'] && !deps['@nuxtjs/better-auth'])
 }
@@ -736,9 +777,10 @@ export function rewriteGeneratedPort(targetDir: string, devPort?: number): void 
   const pkgPath = join(targetDir, 'package.json')
   if (existsSync(pkgPath)) {
     try {
-      const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as {
-        scripts?: Record<string, string>
-      }
+      const pkg = z
+        .object({ scripts: z.record(z.string(), z.string()).optional() })
+        .passthrough()
+        .parse(JSON.parse(readFileSync(pkgPath, 'utf8')))
       const dev = pkg.scripts?.dev
       if (dev) {
         const next = /--port[= ]\d+/.test(dev)
@@ -753,6 +795,14 @@ export function rewriteGeneratedPort(targetDir: string, devPort?: number): void 
       // package.json 壞掉時其他檢查會報
     }
   }
+}
+
+/** Format after bootstrap, agent projection and all generated manifest/doc rewrites. */
+export function formatGeneratedProject(targetDir: string): void {
+  const pkg = JSON.parse(readFileSync(join(targetDir, 'package.json'), 'utf8'))
+  if (!pkg.scripts?.format) return
+  execFileSync('pnpm', ['run', 'format'], { cwd: targetDir, stdio: 'inherit' })
+  execFileSync('pnpm', ['run', 'format:check'], { cwd: targetDir, stdio: 'inherit' })
 }
 
 export async function postScaffold(
@@ -890,14 +940,6 @@ export async function postScaffold(
     preCommitWired = await maybeWirePreCommit(cladeRoot, targetDir, opts.yes)
   }
 
-  if (pnpmInstalled) {
-    try {
-      execFileSync('pnpm', ['exec', 'vp', 'fmt'], { cwd: targetDir, stdio: 'pipe' })
-    } catch {
-      consola.warn('scaffold 收尾 vp fmt 失敗 — 第一次 pnpm check 可能會改寫檔案')
-    }
-  }
-
   writeScaffoldAnswers(targetDir, opts.dbHost)
   rewriteEnvFilesForDbHost(
     targetDir,
@@ -922,6 +964,8 @@ export async function postScaffold(
     // 重投影可能從 leftover 再拷 hook 檔；matcher 已剝就再刪一次。
     stripOrphanPostMigrationHook(targetDir, opts.dbHost)
   }
+
+  if (pnpmInstalled) formatGeneratedProject(targetDir)
 
   consola.start(adoptingRepo ? '正在提交 starter 檔案...' : '正在提交 initial scaffold...')
   try {

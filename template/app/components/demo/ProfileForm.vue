@@ -11,7 +11,7 @@
     profile: Profile
   }>()
 
-  const _emit = defineEmits<{
+  defineEmits<{
     updated: [profile: Profile]
   }>()
 

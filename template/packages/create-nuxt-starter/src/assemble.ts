@@ -350,19 +350,14 @@ export function generatePackageJson(
   }
   if (selectedFeatureIds.includes('quality')) {
     basePkg.scripts.lint = 'vp lint'
-    basePkg.scripts.format = 'vp fmt'
-    basePkg.scripts['format:check'] = 'vp fmt --check'
-    basePkg.scripts.check = 'pnpm format && pnpm lint && pnpm typecheck'
-    if (
-      selectedFeatureIds.includes('testing-full') ||
-      selectedFeatureIds.includes('testing-vitest')
-    ) {
-      basePkg.scripts.check += ' && pnpm test'
-    }
+    basePkg.scripts.format = 'vp fmt --write --ignore-path .oxfmtignore'
+    basePkg.scripts['format:check'] = 'vp fmt --check --ignore-path .oxfmtignore'
+    basePkg.scripts['check:tools'] = 'vp check'
+    basePkg.scripts.check = 'sh -c \'pnpm check:tools "$@" && exec pnpm typecheck "$@"\' --'
   }
   if (selectedFeatureIds.includes('quality') && selectedFeatureIds.includes('git-hooks')) {
     basePkg['lint-staged'] = {
-      '*.{js,ts,vue}': ['vp lint --fix', 'vp fmt'],
+      '*.{js,ts,vue}': ['vp lint --fix', 'vp fmt --write'],
     }
   }
   // Prepare script: vp config (if quality) + husky (if git-hooks) + nuxt prepare
@@ -408,12 +403,28 @@ export function generatePackageJson(
   }
 
   // OPSX control-plane entrypoints (always available after clade bootstrap)
-  basePkg.scripts['audit:ux-drift'] = 'npx tsx scripts/audit-ux-drift.ts'
+  basePkg.scripts['audit:ux-drift'] = 'node scripts/audit-ux-drift.ts'
   const opsxCli = 'node .clade/vendor/scripts/opsx-control.ts'
   basePkg.scripts['opsx:list'] = `${opsxCli} list`
   basePkg.scripts['opsx:status'] = `${opsxCli} status`
   basePkg.scripts['opsx:instructions'] = `${opsxCli} instructions`
   basePkg.scripts['opsx:history'] = `${opsxCli} history`
+
+  // Apply admission after feature scripts have been assembled. Both branches forward
+  // package-manager arguments and preserve the command's exit status.
+  for (const [script, label] of Object.entries({
+    build: 'build',
+    'check:tools': 'typecheck',
+    typecheck: 'typecheck',
+    test: 'test',
+    'test:mutation': 'test-mutation',
+  })) {
+    const command = basePkg.scripts[script]
+    if (command) {
+      basePkg.scripts[script] =
+        `sh -c 'if test -x .clade/bin/clade-gate; then exec .clade/bin/clade-gate run ${label} -- ${command} "$@"; else exec ${command} "$@"; fi' --`
+    }
+  }
 
   // Sort dependencies
   basePkg.dependencies = sortObject(basePkg.dependencies)

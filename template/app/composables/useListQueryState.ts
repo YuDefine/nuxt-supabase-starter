@@ -1,5 +1,3 @@
-import { watchDebounced } from '@vueuse/core'
-
 export interface ListQueryStateConfig<T extends Record<string, string>> {
   filters: T
   sortBy?: string

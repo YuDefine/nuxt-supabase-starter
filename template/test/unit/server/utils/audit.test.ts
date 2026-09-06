@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vite-plus/test'
 
 // Mock @supabase/supabase-js — same approach as supabase.test.ts
 const mockInsert = vi.fn()
-const mockFrom = vi.fn(() => ({ insert: mockInsert }))
+const mockFrom = vi.fn<() => unknown>(() => ({ insert: mockInsert }))
 const mockClient = { from: mockFrom }
 
 vi.mock('@supabase/supabase-js', () => ({
@@ -123,5 +123,52 @@ describe('createAuditLog', () => {
         action: 'system_cleanup',
       }),
     )
+  })
+})
+
+describe('audit SDK boundary validation', () => {
+  const entry = { action: 'create', entityType: 'example', entityId: 'example-id' }
+
+  it.each([undefined, {}, { error: undefined }, { error: { message: 42 } }])(
+    'reports an invalid resolved response: %j',
+    async (response) => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+      mockFrom.mockReturnValue({ insert: mockInsert })
+      mockInsert.mockResolvedValueOnce(response)
+      await expect(createAuditLog(entry)).resolves.toBeUndefined()
+      expect(error).toHaveBeenCalledWith(
+        '[audit] Failed to create audit log:',
+        expect.any(TypeError),
+      )
+      error.mockRestore()
+    },
+  )
+
+  it.each([null, {}, { insert: 42 }])('reports an invalid builder: %j', async (builder) => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockFrom.mockReturnValueOnce(builder)
+    await expect(createAuditLog(entry)).resolves.toBeUndefined()
+    expect(error).toHaveBeenCalledWith('[audit] Failed to create audit log:', expect.any(TypeError))
+    error.mockRestore()
+  })
+
+  it('accepts thenable builders and preserves the insert receiver', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const builder = {
+      insert: vi.fn(function (this: { insert: unknown }) {
+        expect(this).toBe(builder)
+        return {
+          // eslint-disable-next-line unicorn/no-thenable -- PostgREST responses intentionally implement PromiseLike.
+          then(resolve: (result: { error: null }) => void) {
+            resolve({ error: null })
+          },
+        }
+      }),
+    }
+    mockFrom.mockReturnValueOnce(builder)
+    await createAuditLog(entry)
+    expect(builder.insert).toHaveBeenCalledWith(expect.objectContaining({ action: 'create' }))
+    expect(error).not.toHaveBeenCalled()
+    error.mockRestore()
   })
 })

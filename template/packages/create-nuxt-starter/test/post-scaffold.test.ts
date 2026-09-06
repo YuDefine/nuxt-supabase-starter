@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { consola } from 'consola'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  formatGeneratedProject,
   buildMintGatePlaybooksArgs,
   buildRegisterConsumerArgs,
   maybeRegisterConsumer,
@@ -745,5 +746,25 @@ describe('rewriteGeneratedPort', () => {
     }
     expect(pkg.scripts?.dev).toContain('--port 3090')
     expect(pkg.scripts?.dev).toContain('nuxt dev --dotenv .env -o')
+  })
+})
+
+describe('final scaffold formatting', () => {
+  it('does not invoke a formatter when quality was not selected', () => {
+    writeFileSync(join(TEST_DIR, 'package.json'), JSON.stringify({ scripts: {} }))
+    expect(() => formatGeneratedProject(TEST_DIR)).not.toThrow()
+  })
+
+  it('propagates formatting failure rather than committing an unverified scaffold', () => {
+    writeFileSync(
+      join(TEST_DIR, 'package.json'),
+      JSON.stringify({
+        scripts: {
+          format: 'node -e "process.exit(23)"',
+          'format:check': 'node -e "process.exit(0)"',
+        },
+      }),
+    )
+    expect(() => formatGeneratedProject(TEST_DIR)).toThrow()
   })
 })

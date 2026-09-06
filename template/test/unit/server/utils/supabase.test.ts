@@ -13,7 +13,6 @@ vi.mock('@supabase/supabase-js', () => ({
 }))
 
 // Must import after mock
-import { createClient } from '@supabase/supabase-js'
 import { getServerSupabaseClient, getAuthedSupabase } from '../../../../server/utils/supabase'
 
 describe('supabase utils', () => {

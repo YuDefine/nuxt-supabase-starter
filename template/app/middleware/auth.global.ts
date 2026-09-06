@@ -33,7 +33,7 @@ export default defineNuxtRouteMiddleware((to) => {
   // Role-based access check (reserved for future use)
   const requiredRole = to.meta.requiredRole as string | undefined
   if (requiredRole && user.value) {
-    const userRole = (user.value as unknown as Record<string, unknown>)?.role
+    const userRole = 'role' in user.value ? user.value.role : undefined
     if (userRole !== requiredRole) {
       return navigateTo('/')
     }

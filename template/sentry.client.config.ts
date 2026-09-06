@@ -6,6 +6,7 @@ import { browserTracingIntegration, replayIntegration } from '@sentry/nuxt'
 // 參考：https://docs.sentry.io/platforms/javascript/guides/nuxt/
 
 // 宣告 Vite 注入的全域常數
+// eslint-disable-next-line no-underscore-dangle -- Vite injects this build constant.
 declare const __APP_VERSION__: string
 
 const sentryDsn = import.meta.env.NUXT_PUBLIC_SENTRY_DSN

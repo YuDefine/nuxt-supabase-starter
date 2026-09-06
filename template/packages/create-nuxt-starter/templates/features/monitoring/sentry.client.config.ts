@@ -3,6 +3,7 @@ import { browserTracingIntegration, replayIntegration } from '@sentry/nuxt'
 
 // 使用 import.meta.env 讀取 DSN（build time 注入）
 // 因為 sentry.client.config.ts 在 Nuxt 初始化前執行，useRuntimeConfig() 此時還沒有正確的值
+// eslint-disable-next-line no-underscore-dangle -- Vite injects this build constant.
 declare const __APP_VERSION__: string
 
 const sentryDsn = import.meta.env.NUXT_PUBLIC_SENTRY_DSN

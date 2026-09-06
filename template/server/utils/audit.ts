@@ -16,25 +16,29 @@ interface AuditLogEntry {
   metadata?: Record<string, unknown>
 }
 
-/**
- * PostgREST insert 的最小回傳形狀。
- *
- * 為什麼需要這個：`app/types/database.types.ts` 目前是空殼（`Tables: Record<string, never>`），
- * 要跑 `pnpm db:types` 對著實際 schema 才會生成，所以 `client.from('audit_logs')` 拿不到
- * 具名表的 overload。
- *
- * 關鍵是**保留 `{ error }`**：先前這裡的 cast 把 insert 宣告成 `Promise<unknown>`，
- * 於是 `{ error }` 在型別上不存在、忘記檢查也不會被 typecheck 抓到——那正是稽核記錄
- * 無聲丟失的根因。型別生成後這個 interface 與其下的 cast 可以一併刪除。
- */
-interface PostgrestInsertResult {
-  error: { message: string; code?: string } | null
-}
-
-type AuditLogInserter = {
-  from: (table: string) => {
-    insert: (row: Record<string, unknown>) => Promise<PostgrestInsertResult>
+/** Validate the SDK boundary while database.types.ts remains a scaffold placeholder. */
+async function insertAuditRow(row: Record<string, unknown>) {
+  const builder: unknown = getServerSupabaseClient().from('audit_logs')
+  if (
+    typeof builder !== 'object' ||
+    builder === null ||
+    !('insert' in builder) ||
+    typeof builder.insert !== 'function'
+  ) {
+    throw new TypeError('Invalid audit insert builder')
   }
+  const result: unknown = await builder.insert(row)
+  if (typeof result !== 'object' || result === null || !('error' in result)) {
+    throw new TypeError('Invalid audit insert response')
+  }
+  const error = result.error
+  if (
+    error !== null &&
+    (typeof error !== 'object' || !('message' in error) || typeof error.message !== 'string')
+  ) {
+    throw new TypeError('Invalid audit insert error')
+  }
+  return { error }
 }
 
 /**
@@ -44,9 +48,7 @@ type AuditLogInserter = {
  */
 export async function createAuditLog(entry: AuditLogEntry): Promise<void> {
   try {
-    const client = getServerSupabaseClient() as unknown as AuditLogInserter
-
-    const { error } = await client.from('audit_logs').insert({
+    const { error } = await insertAuditRow({
       user_id: entry.userId,
       action: entry.action,
       entity_type: entry.entityType,
@@ -62,7 +64,7 @@ export async function createAuditLog(entry: AuditLogEntry): Promise<void> {
       console.error('[audit] Failed to create audit log:', error)
     }
   } catch (error) {
-    // 這裡只接得到 client 建立失敗與傳輸層 throw。
+    // Report client initialization, boundary validation and transport failures.
     console.error('[audit] Failed to create audit log:', error)
   }
 }

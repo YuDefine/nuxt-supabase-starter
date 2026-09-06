@@ -14,12 +14,15 @@
     sections?: FormSection[]
   }
 
-  withDefaults(defineProps<AppFormLayoutProps>(), {
-    loading: false,
-    submitLabel: 'Save',
-    cancelLabel: 'Cancel',
-    destructive: false,
-  })
+  const {
+    title,
+    description,
+    loading = false,
+    submitLabel = 'Save',
+    cancelLabel = 'Cancel',
+    destructive = false,
+    sections,
+  } = defineProps<AppFormLayoutProps>()
 
   const emit = defineEmits<{
     submit: []

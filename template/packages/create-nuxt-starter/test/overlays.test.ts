@@ -243,3 +243,24 @@ describe('applyOverlay', () => {
     expect(raw).not.toContain('@supabase/supabase-js')
   })
 })
+
+describe('overlay runtime schema', () => {
+  beforeEach(() => {
+    cleanTestDir()
+    mkdirSync(TEST_DIR, { recursive: true })
+  })
+  afterEach(cleanTestDir)
+
+  it.each([
+    { add: [123] },
+    { requires: { auth: 'better-auth' } },
+    { package_json: { add_scripts: { test: 42 } } },
+  ])('rejects malformed manifests before removing project files: %j', (invalid) => {
+    const project = makeProject()
+    makeOverlay('invalid', { remove: ['server/db/schema/index.ts'], ...invalid })
+    expect(() =>
+      applyOverlay(project, 'invalid', {}, { overlaysDir: join(TEST_DIR, 'overlays') }),
+    ).toThrow()
+    expect(existsSync(join(project, 'server/db/schema/index.ts'))).toBe(true)
+  })
+})

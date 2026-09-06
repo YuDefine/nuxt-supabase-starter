@@ -7,9 +7,13 @@
     actionTo?: string
   }
 
-  withDefaults(defineProps<AppEmptyStateProps>(), {
-    icon: 'i-lucide-inbox',
-  })
+  const {
+    icon = 'i-lucide-inbox',
+    message,
+    description,
+    actionLabel,
+    actionTo,
+  } = defineProps<AppEmptyStateProps>()
 
   const emit = defineEmits<{
     action: []

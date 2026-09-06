@@ -6,6 +6,11 @@
 .cache
 dist
 
+# Test outputs
+coverage/
+playwright-report/
+test-results/
+
 # Node dependencies
 node_modules
 

@@ -28,6 +28,7 @@ const PROJECTION_AND_VENDOR = [
   '.cursor/**',
   'vendor/**',
   'dist/**',
+  '.wrangler/**',
   'node_modules/**',
   '**/database.types.ts',
 ]

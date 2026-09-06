@@ -1,6 +1,7 @@
 <script setup lang="ts">
   const colorMode = useColorMode()
-  const currentYear = new Date().getFullYear()
+  const renderedAt = useState('auth-rendered-at', Date.now)
+  const currentYear = computed(() => new Date(renderedAt.value).getUTCFullYear())
 
   function toggleColorMode() {
     colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'

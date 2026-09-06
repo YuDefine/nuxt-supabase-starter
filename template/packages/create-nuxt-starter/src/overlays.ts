@@ -1,5 +1,6 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, normalize, resolve } from 'pathe'
+import { z } from 'zod'
 
 const DEFAULT_OVERLAYS_DIR = resolve(import.meta.dirname, '..', 'templates', 'overlays')
 
@@ -37,6 +38,33 @@ export interface OverlayManifest {
   remove?: OverlayFileSpec[]
   package_json?: OverlayPackageJsonDelta
 }
+
+const stringMap = z.record(z.string(), z.string())
+const conditionMap = z.record(z.string(), z.array(z.string()))
+const fileSpec = z.union([
+  z.string().min(1),
+  z.object({ path: z.string().min(1), when: conditionMap.optional() }),
+])
+const overlayManifestSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().optional(),
+  requires: conditionMap.optional(),
+  conflicts_with: z
+    .array(z.union([z.string(), z.object({ key: z.string(), values: z.array(z.string()) })]))
+    .optional(),
+  add: z.array(fileSpec).optional(),
+  remove: z.array(fileSpec).optional(),
+  package_json: z
+    .object({
+      remove_scripts: z.array(z.string()).optional(),
+      add_scripts: stringMap.optional(),
+      remove_dependencies: z.array(z.string()).optional(),
+      add_dependencies: stringMap.optional(),
+      remove_dev_dependencies: z.array(z.string()).optional(),
+      add_dev_dependencies: stringMap.optional(),
+    })
+    .optional(),
+})
 
 export interface ApplyOverlayOptions {
   overlaysDir?: string
@@ -103,7 +131,7 @@ export function applyOverlay(
     throw new Error(`Overlay ${overlayName} not found at ${manifestPath}`)
   }
 
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as OverlayManifest
+  const manifest = overlayManifestSchema.parse(JSON.parse(readFileSync(manifestPath, 'utf-8')))
   validateOverlayCompatibility(manifest, selections)
 
   let removed = 0
@@ -150,7 +178,7 @@ function applyPackageJsonDelta(
     throw new Error(`Cannot apply package_json delta: ${pkgPath} does not exist`)
   }
 
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as Record<string, unknown>
+  const pkg = z.record(z.string(), z.unknown()).parse(JSON.parse(readFileSync(pkgPath, 'utf-8')))
   const scripts = ensureObject(pkg, 'scripts')
   const dependencies = ensureObject(pkg, 'dependencies')
   const devDependencies = ensureObject(pkg, 'devDependencies')
@@ -181,7 +209,7 @@ function applyPackageJsonDelta(
 function ensureObject(target: Record<string, unknown>, key: string): Record<string, string> {
   const value = target[key]
   if (value && typeof value === 'object' && !Array.isArray(value)) {
-    return value as Record<string, string>
+    return stringMap.parse(value)
   }
 
   const next: Record<string, string> = {}

@@ -33,3 +33,5 @@ peerDependencyRules:
   allowedVersions:
     vite: '*'
     vitest: '*'
+minimumReleaseAgeExclude:
+  - vite-doctor@0.0.10

@@ -20,9 +20,10 @@ process.env.NUXT_SESSION_PASSWORD ??= 'test-only-session-password-00000000000000
  * Vitest config — read by `vp test` in preference to `vite.config.ts`
  * (vite-plus config resolution order: vitest.config.* → vite.config.*).
  *
- * Two-project split mirrors the three-layer testing strategy
+ * Project split mirrors the three-layer testing strategy
  * (`docs/guide/TESTING_STRATEGY.md`):
  *   - `unit`  → plain Vitest (Node), fast logic / composable / util tests.
+ *   - `scaffolder` → package config, including its filesystem/process timeouts.
  *   - `nuxt`  → `@nuxt/test-utils` Nuxt runtime, component tests via
  *               `mountSuspended()`. `defineVitestProject()` loads the real
  *               Nuxt build so `environmentOptions.nuxt` (rootId, runtimeConfig,
@@ -49,14 +50,12 @@ export default defineConfig(async () => ({
         },
         test: {
           name: 'unit',
-          // Default include (`**/*.{test,spec}.*`) catches the starter's
-          // `test/unit/**` plus the scaffolder package tests
-          // (`packages/create-nuxt-starter/test/**`). `*.nuxt.test.ts` is
-          // excluded here and owned by the `nuxt` project below.
+          // Package and Nuxt tests use their own project configuration.
           environment: 'node',
           exclude: [
             'e2e/**',
-            'node_modules/**',
+            '**/node_modules/**',
+            'packages/create-nuxt-starter/**',
             '.nuxt/**',
             '.output/**',
             'temp/**',
@@ -65,11 +64,17 @@ export default defineConfig(async () => ({
           setupFiles: ['./test/setup-env.ts'],
         },
       },
+      {
+        extends: resolve(rootDir, 'packages/create-nuxt-starter/vitest.config.ts'),
+        root: resolve(rootDir, 'packages/create-nuxt-starter'),
+        test: { name: 'scaffolder' },
+      },
       await defineVitestProject({
         test: {
           name: 'nuxt',
           include: ['test/nuxt/**/*.nuxt.test.ts'],
           environment: 'nuxt',
+          hookTimeout: 60_000,
           setupFiles: ['./test/setup-env.ts'],
         },
       }),
