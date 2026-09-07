@@ -1,6 +1,6 @@
 ---
 description: "所有呼叫 review-gui 的外圍 agent surface 統一 SoP——入口 scan、compound item 拆解、multi-screenshot annotation、self-rationalize 禁令、annotation format contract；觸及 screenshots / spectra change / HANDOFF 時 path-scoped 載入"
-globs: ["screenshots/**", "openspec/changes/**", "HANDOFF.md", "scripts/spectra-advanced/**", ".claude/agents/**"]
+globs: ["screenshots/**", "openspec/changes/**", "HANDOFF.md", ".claude/agents/**"]
 alwaysApply: false
 ---
 <!--
@@ -53,7 +53,7 @@ Local edits will be reverted by the next sync.
    - **拆 scoped sub-items**：`#N.M` 各帶獨立 `[verify:ui]` + 獨立 `(verified-ui: ...)` annotation
    - **同 `(itemId, kind)` 多次 `evidence-store.ts --write`**（sidecar append-only），或拆成 scoped sub-items 各自 `--write`。**NEVER** 寫複數 key `screenshots=`——parser 不認，見 § Annotation Format Contract
 
-   單 screenshot 對應多 state 是**反模式**：archive-gate 會把 item 翻 `[x]` 造成 silent miss。
+   單 screenshot 對應多 state 是**反模式**：review-gui 的 `autoCheckCompletedAutomaticItems` 只看 annotation 在不在，會把 item 翻 `[x]` 造成 silent miss。
 3. **Impl gate（已 enforced）**：review-gui detail page mutation handler 已 gate impl 完成率 < `APPLY_COMPLETE_THRESHOLD` (0.90) 時 422 拒收。Surface agent **MUST** 依賴此 gate，**禁止**在 detail page client-side 繞過或重刻 mutation。
 4. **review-gui scan result trust**：對 scan 回傳的 `bucket / pending / userActionPending` 視為 truth source；**不**從 HANDOFF.md 或 tasks.md 重推。兩者對不上 → 跑 `--scan --refresh` 重 build 後更新 HANDOFF.md，**不**手動編輯對齊。
 5. **Performance 實測自動檢測**：review / verify **每一個** web UI change 時，**MUST** 先對該 change 的改動檔機械 grep perf keyword：

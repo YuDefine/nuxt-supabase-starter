@@ -108,8 +108,18 @@ NEVER 讓它成為「變數拿不到值也沒關係」的理由。
 pkill -f "nuxt dev"; sleep 3; pnpm test:bdd > bdd.log 2>&1   # exit 144，bdd.log 連建都沒建
 ```
 
-**症狀是 silent-misdirection**：exit 143 / 144（SIGTERM）＋ 零輸出，看起來像 timeout 或
-工具環境不穩，不像自己寫的指令有問題。agent 情境下最容易原樣重試、再死一次。
+**症狀是 silent-misdirection，而且有兩種，第二種更難回頭**：
+
+| 徵狀 | 讀的人會誤判什麼 | 為什麼 |
+| --- | --- | --- |
+| exit 143 / 144 ＋ **零輸出** | 誤判**成因** —— 看起來像 timeout 或工具環境不穩 | 後續指令根本沒跑，所以沒有任何線索指回這條 |
+| exit 144 ＋ **目標行程照跑** | 誤判**結果** —— 「指令失敗，但至少殺到了東西」 | 非 0 exit 同時是「失敗」與「殺到自己」的訊號，而前者的讀法不需要任何額外假設 |
+
+**NEVER 因為 `pkill` 回非 0 就認為它至少部分生效。** 第二種會讓人帶著「那個 port 應該
+空出來了」往下游查，而真因在上一行。2026-09-08 實測：`pkill -f 'with-scoped-tmp.ts --label
+clade-test'` 回 exit 144，`pgrep` 複查兩支目標行程完全沒動。
+
+agent 情境下兩種都最容易原樣重試、再死一次。
 
 **MUST 依身分定位，NEVER 依字串比對**——三選一：
 
@@ -137,9 +147,52 @@ pgrep -f "nuxt dev" | grep -vx "$$" | grep -vx "$PPID" | xargs -r kill   # 真�
 字元類技巧在殺的場景也管用，但**不夠**——`pkill` 命中的是別人也可能同名的行程，
 按 port 或 pidfile 定位才是「殺對那一個」，字元類只解決「不殺到自己」。
 
+**沒有 port 也沒有 pidfile 時，結構識別是 `/proc/<pid>/cwd`**（上面第三個 recipe 的
+`grep -vx "$$"` 仍是表面形狀，它解決不了這一半）：
+
+```bash
+for p in $(pgrep -f '<pattern>'); do
+  echo "pid=$p cwd=$(readlink /proc/$p/cwd)"      # 先看，不動
+done
+kill -TERM <逐一確認過的 pid>                       # 確認 cwd 屬於自己這棵樹才殺
+```
+
+同名 dev server / test runner 跨 repo 併行時，**cwd 是唯一分得開它們的東西** —— 這與
+[[clade-role-and-todo-discipline]] 用 `/proc/<pid>/environ` 反查 pane 是同一個原則：
+要指認一個行程，用結構識別，NEVER 用它的表面形狀。
+
+### 3.1 同根因的第二條路徑：`kill -- -$pgid` 帶走呼叫端
+
+想殺一整棵子樹而寫 `kill -TERM -- "-$pgid"`（負號 = process group）時，**呼叫端多半就在
+那個 group 裡**，於是它殺掉自己。
+
+**這條完全不依賴字串**，所以「把 pattern 寫精準一點」對它零效果——三個變體放在一起才
+看得出根因不是 pattern 品質，是**識別方式選錯了**。
+
+**危險的是 `set +m`，也就是非互動腳本的預設**（2026-09-08 實測，三組）：
+
+| 條件 | 背景 child 的 pgid | `kill -- -<child 的 pgid>` |
+| --- | --- | --- |
+| `set +m`（**腳本預設**） | **等於呼叫端的** | 呼叫端收到 SIGTERM，後續一行都沒跑 |
+| `set -m`（job control 開） | 自己獨立一個 | 只打到那個 job，呼叫端存活 |
+
+**NEVER 把它記成「`set -m` 才危險」**——方向相反，而記反的人會在最危險的那個預設下
+放心使用。job control 把每個背景 job 隔進自己的 group，那是**唯一**讓這個寫法看起來
+安全的條件，而腳本預設不開它。**也 NEVER 靠 `set -m` 當防護**：它的目的不是隔離殺傷範圍，
+哪天有人拿掉它，這裡就無聲地變成第一列。
+
+正解是遞迴逐層取子行程，與 job control 狀態無關：
+
+```bash
+kill_tree() { for c in $(pgrep -P "$1"); do kill_tree "$c"; done; kill -TERM "$1" 2>/dev/null; }
+```
+
+實作見 `vendor/scripts/scan-scope-watchdog.sh`（clade 既有，2026-09-08 本節作者實跑驗證：
+三層子樹全數終止、呼叫端存活、腳本跑到結尾）。**NEVER** 用 process group 當「這棵樹」的識別。
+
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
-| 觸發條件 | **informational — 不觸發任何東西**。`rg -n 'p(kill\|grep) -f'` 只能列出候選，判準（pattern 會不會出現在呼叫端自己的 cmdline）沒有文字形狀 |
+| 觸發條件 | **informational — 不觸發任何東西**。`rg -n 'p(kill\|grep) -f'` 與 `rg -n 'kill .*-- *"?-\$'` 只能列出候選，兩條判準（pattern 會不會出現在呼叫端自己的 cmdline／呼叫端在不在那個 process group 裡）都沒有文字形狀 |
 | 消費端 | 下複合 shell 指令的 agent；撰寫 dev/test 腳本的人 |
 | 載入路徑 | 本檔 frontmatter 的 paths；agent 直接下的一次性指令由本節正文承接，不經 paths |
 

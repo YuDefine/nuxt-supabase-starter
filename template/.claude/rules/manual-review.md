@@ -407,7 +407,7 @@ Signal 發生後回流：對該條重新走第 2 步分類（signal 通常已 oc
 bash ~/offline/clade/vendor/scripts/manual-review-check.sh <work-slug>
 ```
 
-預期輸出 `✓ post-propose-manual-review-check passed (N items)` 才能 commit。出現 finding 即修，修完重跑直到綠燈。
+預期輸出 `✓ manual-review-check passed (N items ...)` 才能 commit。出現 finding 即修，修完重跑直到綠燈。
 
 ### Stale-hook fallback（worktree drift 場景）
 
@@ -451,4 +451,4 @@ GUI 寫回 user action（OK / Issue / Skip）時 MUST strip `(claude-analyzed: .
 - **NEVER** 把 `@apply-blocked[<reason>]` 當「不想做就標一下」的逃生口 — 只在真正卡外部 blocker 時用
 - **NEVER** dispatch verify channels 前不檢查 per-channel baseline — 主線預先 grep / read 確認，缺則停下回報 user 補齊
 - **NEVER** 在 verify dispatch 當下才問 user「dev-login / seed 準備好了嗎」— baseline 是 codebase 層長期狀態
-- **NEVER** 修完 `## 人工檢查` 區後直接 commit 而沒重跑 `post-propose-manual-review-check.sh` 驗 0 violation — 見「Post-Edit Validation Gate」
+- **NEVER** 修完 `## 人工檢查` 區後直接 commit 而沒重跑 `manual-review-check.sh` 驗 0 violation — 見「Post-Edit Validation Gate」

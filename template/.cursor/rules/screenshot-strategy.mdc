@@ -230,7 +230,7 @@ screenshots/local/
 
 詳見 `ux-completeness.md` 的「必填 Fixtures / Seed Plan」段落。凡 `Affected Entity Matrix` 任一 entity 的 `Surfaces` 欄非空，`tasks.md` **MUST** 包含 `## N. Fixtures / Seed Plan` section（每個 entity 一條 task 列出最少筆數 + 寫入哪個 seed 檔，或明確 `**Existing seed sufficient**` 宣告 + 一行理由）。
 
-`post-propose-check.sh` 的 Check 6 會自動偵測，沒 Fixtures Plan 會被 FINDING flagged。
+**沒有機器替你偵測這一條**——原本的 `post-propose-check.sh` Check 6 隨 spectra 生命週期退場（2026-09-07）。交付前自檢 `## N. Fixtures / Seed Plan` 在不在，**NEVER** 把「沒有 gate 擋我」讀成這條不必做。
 
 ### 2. Review 階段兜底
 

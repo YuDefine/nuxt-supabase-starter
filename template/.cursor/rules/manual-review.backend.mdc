@@ -47,7 +47,7 @@ pnpm test:e2e:verify <change>
 
 **Evidence trail**：spec pass 後，主線跑 `evidence-store.mjs --write --kind verified-e2e --spec <path> --trace <path>`，把印出的 `(verified-e2e: <ISO-8601>)` 貼到 item line 末尾（payload 進 sidecar，per [[review-gui-surface]] § Evidence 寫入路徑）。
 
-**Archive-gate 結果**：`verify:e2e` 是 automatic channel；annotation present 即通過，可由 `autoCheckCompletedAutomaticItems(...)` 自動 flip `[x]`。缺 annotation 時 archive-gate **MUST** block。
+**Gate 結果**：`verify:e2e` 是 automatic channel；annotation present 即通過，可由 review-gui 的 `autoCheckCompletedAutomaticItems(...)` 自動 flip `[x]`。缺 annotation 時 item 留在未勾狀態，**NEVER** 在那個狀態下報完成。
 
 #### `[verify:api]` channel
 
@@ -55,7 +55,7 @@ pnpm test:e2e:verify <change>
 
 **Evidence trail**：request 通過後，主線跑 `evidence-store.mjs --write --kind verified-api --method <M> --url <U> --status <S> [--body <sha256-12chars>]`，把印出的 `(verified-api: <ISO-8601>)` 貼到 item line 末尾。
 
-**Archive-gate 結果**：`verify:api` 是 automatic channel；annotation present 即通過，可由 `autoCheckCompletedAutomaticItems(...)` 自動 flip `[x]`。缺 annotation 時 archive-gate **MUST** block。
+**Gate 結果**：`verify:api` 是 automatic channel；annotation present 即通過，可由 review-gui 的 `autoCheckCompletedAutomaticItems(...)` 自動 flip `[x]`。缺 annotation 時 item 留在未勾狀態，**NEVER** 在那個狀態下報完成。
 
 #### `[verify:ui]` channel
 
@@ -69,7 +69,7 @@ pnpm test:e2e:verify <change>
 - **NEVER** 在 scoped sub-item `#N.M` 的 evidence 引用 parent `#N` 的截圖檔名 — 例：`#4.1` 的 `--screenshot` 路徑 **MUST** 含 `#4.1-` 前綴，**NEVER** 引用 `#4-*.png`。review-gui 按 `#<item-id>-*` pattern 配對截圖到 item；ID 不符 → evidence missing，user 被迫手動排查
 - **MUST** 寫完立即 self-check：`node <clade>/vendor/scripts/lib/evidence-store.ts --repo . --change <change> --item '#N' --kind verified-ui --json` 讀回剛寫的記錄 → 確認 (a) 有這筆 (b) `screenshot` basename 以 `#<this-item-id>-` 開頭 (c) 檔案存在。任一不符 → 立即修正，**NEVER** 帶病 handoff
 
-**Archive-gate 結果**：`verify:ui` 是 semi-automatic channel；annotation present 只是 visual evidence，使用者仍 **MUST** 在 review GUI 點 OK 才能 flip `[x]`。缺 annotation 時 GUI 顯示 evidence missing；未勾 `[x]` 時 archive-gate **MUST** block。
+**Gate 結果**：`verify:ui` 是 semi-automatic channel；annotation present 只是 visual evidence，使用者仍 **MUST** 在 review GUI 點 OK 才能 flip `[x]`。缺 annotation 時 GUI 顯示 evidence missing，item 留在未勾狀態，**NEVER** 在那個狀態下報完成。
 
 #### Multi-marker items
 
@@ -81,7 +81,7 @@ Multi-marker item **MUST** 由主線依 channel order `e2e → api → ui` 逐�
 
 - 若 item 只含 verify channels（`verify:e2e` / `verify:api` / `verify:ui`），最後一個 channel annotation 寫入後 `autoCheckCompletedAutomaticItems(...)` 可自動 flip `[x]`。
 - 若 item 含 `review:ui`，automatic channel 只完成 evidence；checkbox **MUST** 保持 `[ ]`，等使用者在 PWA 確認畫面。
-- Archive-gate **MUST** 對每個 kind 獨立驗證並取 worst-case（block > warn > pass）。
+- 每個 kind **MUST** 獨立驗證，任一 kind 缺 annotation 整條 item 就不勾（review-gui 的 `hasExpectedAutomaticAnnotations` 對 `item.kinds` 走 `every`）。原本再取 worst-case 的 archive-gate 已於 2026-09-07 隨 spectra 生命週期退役，**沒有機器在 archive 那一刻再驗一次**。
 
 #### `[verify:auto]` deprecated alias
 
@@ -91,7 +91,7 @@ Multi-marker item **MUST** 由主線依 channel order `e2e → api → ui` 逐�
 2. 再跑 `verify:ui` channel，寫 `(verified-ui: ...)`
 3. 使用者不需在 PWA 對 UI evidence 再點一次；`(verified-ui:)` 寫入後 auto-check 勾 `[x]`。
 
-Archive-gate / parser **MUST** emit deprecation warning。新 authoring **NEVER** 使用 `[verify:auto]`；新項目必須使用 explicit `[verify:e2e]` / `[verify:api]` / `[verify:ui]` 或 multi-marker。
+Parser **MUST** emit deprecation warning（`review-gui.parser.ts` 的 `warnParser`）。新 authoring **NEVER** 使用 `[verify:auto]`；新項目必須使用 explicit `[verify:e2e]` / `[verify:api]` / `[verify:ui]` 或 multi-marker。
 
 #### Pre-verify baseline 假設（hard rule）
 

@@ -1,6 +1,6 @@
 ---
 description: "Pi 派工的標準流程模板、Pi Watch Protocol、Plan-first / Git baseline declaration、$spectra-apply Runtime Gate、screenshot-review verify mode 派工與監看、配額耗盡的 fallback 鏈全文、Spectra Propose / Apply 的 dispatch 契約、Orchestration Residency 的四步做法、Routing Table 下推列（spectra 三列 + screenshot 兩列）的取證全文；apply 階段 / 觸及 spectra change 時 path-scoped 載入——單純「要派 pi」不會自動載入本檔，MUST 依 [[agent-routing]] 的強制指針主動 Read"
-globs: ["openspec/changes/**/tasks.md", "openspec/changes/**/design.md", "scripts/spectra-advanced/**", ".claude/agents/**", "screenshots/**/progress.json"]
+globs: ["openspec/changes/**/tasks.md", "openspec/changes/**/design.md", ".claude/agents/**", "screenshots/**/progress.json"]
 alwaysApply: false
 ---
 <!--
@@ -458,7 +458,7 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`native wakeu
 | **Spectra `apply` UI view phase（component / page / view / layout / styling）+ Section 7（Design Review）** | **合格視覺 executor，不走 Pi 機械實作列**（資格與 bounded phase transport 見主規則；既有 Claude Opus 5（effort: xhigh） 是已用基準。實作完 carrier 照跑 Step 6c / 6d 與 Design Review gate） | 視覺 / 互動 / a11y 與 Design skill 緊耦合，實作與品質判定分不開。非 view 的 frontend 不在此範圍，仍走 sol（範圍同 § Spectra Apply Phase Dispatch C 類）。 |
 | **spectra-apply Step 8a self-collect (a)(b)**（dev-login allow-list 小 mod + service_role DB query 證 data shape） | **Pi `--model luna --effort low` via 泛用 dispatcher** | PoC 已實證 pi 能跑完整 evidence chain；annotation 寫回 tasks.md 維持主線。詳見 spectra-apply SKILL Step 8a。 |
 
-## Orchestration Residency — 機械 Enforcement（residency-classify + archive-gate Check 8）
+## Orchestration Residency — 機械 Enforcement（residency-classify）
 
 從 [[agent-routing]] § Orchestration Residency 移出（2026-07-31；四步做法於 2026-08-22 一併下推，TD-590）。Residency 的**判定條件**（Codex-primary A/B 進入條件、Claude-primary 五條）留在主檔；本節是它的執行步驟與機械強制點，只在 spectra-apply 開工時用得到。
 
@@ -476,7 +476,7 @@ Pi 一律由該層編排者直接 Bash 派 → notification-only，`native wakeu
 - spectra-apply 開工後、任何 dispatch 決策前，**MUST** 跑 `node ~/offline/clade/vendor/scripts/residency-classify.ts classify --change openspec/changes/<change>` 拿機械 verdict
 - **MUST** 立刻 record decision：`node ~/offline/clade/vendor/scripts/residency-classify.ts record --consumer-path . --change <change> --verdict <v> --executor <codex|claude> [--reason ...]` → 落 `.spectra/residency-ledger.jsonl`
 - verdict=`codex-primary` 而決定 executor=`claude` → `--reason` 必填（record 入口會擋）
-- archive-gate **Check 8** 機械驗 record 存在：缺 record → archive exit 2；正當例外加 `<!-- residency-decision: intentional, reason: ... -->` 到 tasks.md 繞過
+- **沒有機器驗 record 存在**——原本的 archive-gate **Check 8** 隨 spectra 生命週期退役（2026-09-07）。缺 record 現在不會擋下任何東西，唯一的訊號是下一列的 adoption 量測（事後、非阻擋）。**NEVER** 把「沒有 gate 擋我」讀成 record 可以不寫
 - adoption 量測：`node ~/offline/clade/scripts/audit-pi-adoption.ts`（clade home 稽核：verdict × executor 表 + dispatch ledger 分桶）
 
 ## Routing Table 下推列的全文（2026-08-22 從 [[agent-routing]] § Routing Table 下推，TD-590）
@@ -614,10 +614,10 @@ native delegation 端的對應規範（hard budget、checkpoint、fail-fast、pr
 
 ### Dispatcher provenance 機械 backstop（2026-08-11 起）
 
-主線消費完 `screenshot-review` subagent 回的 JSON 摘要後 **MUST** 跑 `node <clade-vendor>/scripts/verify-ui-receipt.ts --change <name> --items <id,id> --consumer-path <consumer>` 落一筆 receipt 到 `<consumer>/.spectra/verify-ui-dispatch-ledger.jsonl`（2026-08-22 起寫入責任在主線；此前由已退役的 dispatcher 寫）（`change` → `itemIds` → `ts` → `exit` → `ok`，**欄位順序固定**，Check 9 靠有序雙 literal grep 比對）。archive-gate Check 9 逐 `[verify:ui]` item 驗，四條 pass 條件擇一即可：對得上 receipt ／ annotation 帶 `UNCERTAIN(dispatcher-error)` ／ tasks.md 有 `<!-- verify-ui-dispatch: intentional, reason: … -->` ／ annotation 的 ISO 日期早於 gate 落地日（存量豁免）。都不中 → block（exit 2）。
+主線消費完 `screenshot-review` subagent 回的 JSON 摘要後 **MUST** 跑 `node <clade-vendor>/scripts/verify-ui-receipt.ts --change <name> --items <id,id> --consumer-path <consumer>` 落一筆 receipt 到 `<consumer>/.spectra/verify-ui-dispatch-ledger.jsonl`（2026-08-22 起寫入責任在主線；此前由已退役的 dispatcher 寫）（`change` → `itemIds` → `ts` → `exit` → `ok`，**欄位順序固定**——ledger 的讀取端靠有序 literal 比對，改順序等於讓既有紀錄解析失敗）。**驗這筆 receipt 的那道 gate 已經不在了**——archive-gate Check 9 隨 spectra 生命週期退役（2026-09-07）。receipt 仍 MUST 寫（理由見下一條：它 fail-closed 在**寫入**當下，不依賴任何 archive 時的複驗）。
 
 - receipt 寫入是 **fail-closed**：寫不進去就吐 `UNCERTAIN(dispatcher-error)` 並 exit 1。**NEVER** 照 `appendDispatchLedger` 那條 telemetry ledger 的 fail-open 寫法——那會產生沒有人知道成因的 false negative
-- **NEVER** 把 Check 9 的 onset 改成「receipt 檔存在才驗」：這個 gate 要抓的失敗模式就是「dispatcher 從未被呼叫」，那個世界裡 receipt 檔永遠不存在，fail-open 等於讓最壞情境永久靜默通過。存量豁免走**日期切點**，不走檔案存在性
+- 這個機制要抓的失敗模式是「dispatcher 從未被呼叫」，而那個世界裡 receipt 檔**永遠不存在**——所以攔截點 MUST 在寫入當下 fail-closed，**NEVER** 改成任何形式的「receipt 檔存在才驗」。Check 9 退役後這是唯一剩下的攔截點，寫不進去就 exit 1 這件事不可放寬
 - **邊界**：receipt 是主線可 append 的明文 jsonl。Check 9 擋的是 **drift**（忘了走 dispatcher），**NEVER** 是對抗性偽造。**NEVER** 拿 gate 通過宣稱 evidence 來源已被證實
 
 ## Codex `$spectra-apply` Runtime Gate
@@ -778,7 +778,7 @@ redaction 只在 signal payload 上強制（`vendor/signals/redact.mjs`），**d
 | **NEVER** 派出 pi 後不啟動 Pi Watch Protocol | 「乾等盲區」是已驗證根因 |
 | **NEVER** 偵測到 `fetch failed` / sandbox 拒絕 / 互動 prompt 還繼續 wakeup | 必須立刻 `structured user-input surface` 介入 |
 | **NEVER** 在 watch loop 中跑與監看無關的工作（grep、Read、subagent） | 監看純粹只看進度 |
-| **NEVER** 派 pi propose 後不跑 cross-check（post-propose-check + design-inject + 主線補 Design Review 7 步 + spectra analyze） | 主線 = quality gate |
+| **NEVER** 派 pi propose 後不跑 cross-check（主線補 Design Review 7 步 + spectra analyze；原本的 `post-propose-check.sh` / `design-inject.sh` 已於 2026-09-07 隨 spectra 生命週期退役，那兩段現在**沒有機器替你跑**） | 主線 = quality gate |
 | **NEVER** 收到 pi 完工通知後跳過 view-layer drift 檢查（`git diff --name-only` 過濾 view 路徑） | 主要的回收 quality gate |
 | **NEVER** 對主線直接 Bash 派的 pi 啟動每 3 分鐘強制 poll | 直接派預設 **notification-only** + 單一 ~1500s 安全網 fallback。subagent 中介 dispatch 已全面禁止（§ Dispatch 入口） |
 | **NEVER** 現場自組 `pgrep` / `ps \| grep` 當進度探針 | 要回報「派出去的長任務做到哪」時，**MUST** 貼 cookbook `~/offline/clade/vendor/snippets/subagent-progress-probe/` 的 artifact 探針（worktree commit 對 **merge-base**、tasks.md tick count 附分母、輸出檔 mtime + size）。process 列表沒有租戶邊界，兩個方向都會給錯答案（成因見 rationale） |
