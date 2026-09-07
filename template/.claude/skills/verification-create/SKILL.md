@@ -22,7 +22,7 @@ Local edits will be reverted by the next sync.
 
 - 已存在 `<skills-root>/verify-*/features/README.md`，需求是更新或重跑 → invoke `/verification-maintain`。
 - 需求只是替目前 change 收集 UI 截圖 → invoke `/review-screenshot`。
-- 需求是 implementation 與 change artifacts 對帳 → invoke `/spectra-verify`〔openspec〕。
+- 需求是 implementation 與規格對帳 → 讀 `specs/truth/**` 與該 work 的 carrier 自行對帳；動到規格回交 truth owner skill。
 - 本 skill 只建立 verification infrastructure；不替某個產品 change 宣告驗收通過。
 
 ## Output contract

@@ -1,6 +1,6 @@
 ---
 description: 多 session 並行下「哪些路徑屬於別 session 還活著的工作」的判定規格——claim 檔 schema、寫 / refresh / drop 時機、誰讀、stale 處理、claim-helper CLI，以及 ownership provenance journal 的寫入時證據與 other-live / orphan / unknown 三分類
-paths: ['.clade/claims/**', 'plugins/hub-core/hooks/pre-bash-ownership-stamp.sh', 'scripts/claim-helper.ts', 'scripts/spectra-advanced/claim*.ts', 'scripts/spectra-advanced/claims-lib.ts', 'scripts/spectra-advanced/release-work.ts', 'vendor/scripts/claim-helper.ts', 'vendor/scripts/ownership-journal.ts', 'vendor/scripts/flow/who.ts', '.clade/ownership/**', 'plugins/hub-core/hooks/post-tool-ownership-journal.sh', 'plugins/hub-core/hooks/pre-edit-claim-conflict.sh', 'vendor/scripts/spectra-advanced/claim*.ts', 'vendor/scripts/spectra-advanced/claims-lib.ts', 'vendor/scripts/spectra-advanced/release-work.ts']
+paths: ['.clade/claims/**', 'HANDOFF.md', 'plugins/hub-core/hooks/pre-bash-ownership-stamp.sh', 'scripts/claim-helper.ts', 'vendor/scripts/claim-helper.ts', 'vendor/scripts/ownership-journal.ts', 'vendor/scripts/flow/who.ts', '.clade/ownership/**', 'plugins/hub-core/hooks/post-tool-ownership-journal.sh', 'plugins/hub-core/hooks/pre-edit-claim-conflict.sh']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -188,7 +188,7 @@ join 回 claim，宣告值與導出值並存，每一列帶 `via: 'declared' | '
 | `scripts/publish.ts` (clade) | 跨 consumer scan，warn 「別 session 還活著」；`ensureCleanOrAutoStash` 在**所有** dirty 分支之前跑 `classifyDirtyPaths`，`otherSession` 非空即 fail-loud |
 | `scripts/propagate.ts` (clade) | per-consumer warn 同上 |
 | `wt-helper.ts merge-back` | Phase 3 audit：偵測「main dirty 屬於別 session 路徑」 |
-| `/commit` skill（走 [[commit]]；spectra-commit 已移除，不是替代路徑） | Phase 4 partition：別 session 路徑 fail-closed |
+| `/commit` skill（走 [[commit]]） | Phase 4 partition：別 session 路徑 fail-closed |
 | `wt-helper.ts` stash namespace | Phase 7：stash slug 帶 session_id |
 | `flow who` / `herdr-patrol` | 人與 agent 查「現在誰持有什麼」的同一份 JSON |
 
@@ -234,6 +234,23 @@ join 回 claim，宣告值與導出值並存，每一列帶 `via: 'declared' | '
 | 觸發條件 | 目標路徑落在別人活 claim 的 `declared` 或 `derived-hook` 範圍內 → 遞一行（最多 3 行）。**warn-only，NEVER block** |
 | 消費端 | 正要 Edit / Write 的那個 agent（本節）；`wt-helper add` 開樹時對宣告範圍做同一查詢 |
 | 載入路徑 | 本節（`rules/core/session-claims.md`，paths-gated 於 `.clade/claims/**`、`vendor/scripts/claim-helper.ts`、`plugins/hub-core/hooks/pre-edit-claim-conflict.sh`） |
+
+## 3.5 接手別人留下的工作之前 MUST 先 claim
+
+`HANDOFF.md` 與 `ROADMAP.md` 都是可讀狀態，但真正避免撞工的是**可機器寫入的 claim**。
+下列**每一種**情況都 MUST 先建立或更新 claim，不是只有「看起來會撞到」的那些：
+
+- 接手 `HANDOFF.md` 裡的項目
+- 新 session 決定繼續某個還在跑的 work item（per [[flow-work-tracking]]）
+- 使用者明確把某件工作指派給你
+- 你要開始修改某個 work item 的 carrier（`tasks/<date>-<slug>.md` 或 `specs/plans/NNN-<slug>/`）或它的實作檔
+
+順序固定：`claim-helper.ts add` 成立 → 才從 `HANDOFF.md` 移除該項目 → 才開始做。
+**不是「讀了就刪」**，而是**「claim 已成立後再刪」**。工作完成、交棒或放棄時 `claim-helper.ts drop`。
+
+- **NEVER** 在沒有 claim 的狀況下開始接手別人留下的工作
+- **NEVER** 看到過期 claim 就直接無聲接管——過期只代表 awareness 訊號失活，處置照 § 3.1 的三分類走
+- **NEVER** 把 `ROADMAP.md` 或 `HANDOFF.md` 當成 claim 的替代品；claim 才是 ownership ground truth
 
 ## 4. 儲存與 gitignore
 

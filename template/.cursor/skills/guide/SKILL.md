@@ -22,7 +22,8 @@ skill 由 consumer manifest 的 `modules` 決定裝哪些（canonical `.clade/ma
 
 | 標記 | 需要 manifest 宣告 | 沒宣告的 repo |
 | --- | --- | --- |
-| 〔openspec〕 | `modules.capabilities` 含 `"openspec"` | 沒有 spectra 家族。待辦走 HANDOFF / tech-debt / ROADMAP，`/work-loop` 照樣能跑 |
+| 〔aixbdd〕 | `modules.capabilities` 含 `"aixbdd"` | 沒有 `/specify`、`/tasks`、`/implement` 這條需求管線。待辦走 `tasks/` + HANDOFF / tech-debt / ROADMAP，`/work-loop` 照樣能跑 |
+| 〔specformula〕 | `modules.capabilities` 含 `"specformula"` | 沒有 `.feature` / `isa.yml` 的 BDD 執行層 |
 | 〔nuxt〕 | `modules.framework` = `"nuxt"` | 沒有 Nuxt 專用的稽核與 dev 工具 |
 | 〔node〕 | `modules.ecosystem` 含 `"node"` | 沒有 `/dep-upgrade`（它綁 npm/pnpm，不是綁 Nuxt） |
 
@@ -34,35 +35,36 @@ skill 由 consumer manifest 的 `modules` 決定裝哪些（canonical `.clade/ma
 
 | 階段 | Skill | 這一站做什麼 |
 | --- | --- | --- |
-| 提案〔openspec〕 | `/opsx`（intent） | 建 canonical 需求、驗收與正式 change/work 身分 |
-| 討論〔openspec〕 | `/opsx`（inquiry） | 對單一 topic 聚焦討論、收斂結論（提案前後皆可插入） |
-| 實作〔openspec〕 | `/opsx`（execution） | 依當前 revision 與 instruction 實作或接續 |
-| 驗證〔openspec〕 | `/opsx`（execution） | 回收目前 revision 的實際驗證證據 |
+| 提案〔aixbdd〕 | `/specify` | 建 `specs/plans/NNN-<slug>/`：驗收標準與 truth-delta |
+| 澄清〔aixbdd〕 | `/clarify-over-specs` | 對 `spec.md` 的模糊處逐項收斂 |
+| 驗收 Gherkin〔aixbdd〕 | `/spec-by-example` → `/ui-plan` | 產 `features/acceptance/**` 與靜態雛形 |
+| 設計〔aixbdd〕 | `/technical-research`、`/system-analysis` | 定 techstack 與系統設計 |
+| 規格落地〔aixbdd〕 | `/dsl-refine` | 把句型寫進 `specs/truth/features/**` 與 `dsl.md` |
+| 拆任務〔aixbdd〕 | `/tasks` | 產 plan package 的 `tasks.md`；開工前 `flow open <slug> --origin tasks:<path>` |
+| 實作〔aixbdd〕 | `/implement`（`[BDD-GREEN]` 委派 `/bdd`） | 依 `tasks.md` 逐 phase 落 code 與測試 |
 | 人工檢查 | `pnpm review:ui`（GUI）；批次前先 `/review-readiness-scan` 看哪些 ready | UI / 資料類 manual review |
-| 歸檔〔openspec〕 | `/opsx`（archive） | 既有 gate 全過後封存需求與證據，落地另走 commit ceremony |
 | 提交 | `/commit` | 依功能分組走品質閘門提交（所有 commit 的唯一入口） |
 
-不確定專案當前該走哪一站：`/opsx`〔openspec〕先讀 list／inspect，再按使用者目標接續。沒宣告 openspec 的 repo 整條主流程不適用——那裡的生命週期是「待辦來源 → `/wt` → `/commit`」。
+不確定專案當前該走哪一站：先讀 `specs/plans/` 最新的 plan package 與它的 `tasks.md`，再按使用者目標接續。沒宣告 aixbdd 的 repo 整條主流程不適用——那裡的生命週期是「待辦來源 → `tasks/<date>-<slug>.md` → `/wt` → `/commit`」。
 
 ## On-ramps（從症狀進入）
 
-- **遇到 bug / 異常行為** →〔openspec〕`/opsx`（inquiry，先調查根因）
+- **遇到 bug / 異常行為** → 先查根因（`/wt` 隔離後調查）；動到規格才回 `/specify`〔aixbdd〕
 - **要看 UI 畫面 / 截圖驗證** → `/review-screenshot`（統一截圖入口；目前只有 Claude 有經驗證的 screenshot-review 載體，見該 skill 的 audience 宣告）
 - **專案還沒有可重跑的 app control／feature map** → `/verification-create`（建立 consumer-owned `verify-<app>` skill）
 - **既有 verification skill／feature map 要對帳 source 與 live behavior** → `/verification-maintain`（`clean` 是零 branch／零 commit／零 PR 的成功結果）
 - **要動 code 而還在 main working tree** → `/wt`（開 worktree 隔離；`/wt A: ... B: ...` 可並行多條 task）
 - **implementation plan 內有多個獨立 task 想並行** → `/subagent-dev`（同 session 派 subagent；跨 change 的並行仍走 `/wt`）
 - **session 要收尾 / 交接** → `/handoff`（有 in-progress 工作寫交接；沒有則整理 HANDOFF.md 推薦 outstanding）
-- **要把待辦無人值守推完**（OPSX change / HANDOFF / tech-debt / ROADMAP）→ `/work-loop`（自主推進 loop；一次性任務不適用）
-- **外部新資訊要更新既有 change** →〔openspec〕`/opsx`（intent，沿原身分 revise）
-- **問 openspec 文件內容** →〔openspec〕`/opsx`（inquiry／history）；**查 change 漂移或 artifacts 一致性** → 同一唯讀調查入口
-- **安全視角掃 changed code** →〔openspec〕`/opsx`（inquiry，安全稽核）
+- **要把待辦無人值守推完**（plan package / tasks 檔 / HANDOFF / tech-debt / ROADMAP）→ `/work-loop`（自主推進 loop；一次性任務不適用）
+- **外部新資訊要改需求** →〔aixbdd〕`/specify` 開新的 `NNN-<slug>`；舊 plan package 是歷史，**NEVER** 回頭覆寫
+- **問規格內容** → 直接讀 `specs/truth/**`（對非 owner skill 唯讀）與該 plan package 的 `spec.md`
+- **安全視角掃 changed code** → `/security-review`
 
-## 歸檔三兄弟的邊界
+## 歸檔兩兄弟的邊界
 
-三個 archive skill 各管一種資產，不互相替代：
+兩個 archive skill 各管一種資產，不互相替代（plan package 本身是歷史，不搬動）：
 
-- `/opsx`（archive）〔openspec〕 — 目前 revision 的既有 gate 全過後封存 change；截圖另由 `/screenshots-archive` 管理
 - `/review-archive` — 歸檔**已結束的人工檢查結果**（manual review → docs/manual-review-archive.md）；完成時同樣自動 sweep 截圖
 - `/screenshots-archive` — 只搬**截圖資料夾**到 `_archive/`；由 `/review-archive` 的既有流程呼叫或依明確清理範圍執行，手動跑用於補救 pending sweep
 
@@ -84,5 +86,5 @@ skill 由 consumer manifest 的 `modules` 決定裝哪些（canonical `.clade/ma
 ## Commit 相關邊界
 
 - 一般 commit 一律 `/commit`（多閘門品質流程）
-- OPSX change 檔案的專屬 commit **同樣走 `/commit`**，在 argument 寫明「只 commit `openspec/changes/<name>/` 與該 change 觸動的實作檔」——`/spectra-commit` 已自 clade 移除（consumer 若由 `spectra init` 帶入上游版，PreToolUse hook 仍 fail-closed），**NEVER** 改派
+- plan package 檔案的專屬 commit **同樣走 `/commit`**，在 argument 寫明「只 commit `specs/plans/<NNN-slug>/` 與該工作觸動的實作檔」——`/spectra-commit` 等 spectra 家族已自 clade 移除（見 [[proactive-skills]] § Sub-skill 禁用清單），**NEVER** 改派
 - 兩者都用 `git commit --only` 隔離別 session 的 staged 內容——不要繞過 skill 手打 `git add + git commit`

@@ -13,9 +13,9 @@ Local edits will be reverted by the next sync.
 
 ## 5-B. 收集下一步資訊
 
-從本次 session 脈絡、`git log`、`docs/tech-debt.md`、`openspec/ROADMAP.md` 的 Next Moves 萃取（涵蓋 spectra change 與自由任務，不限 openspec）：
+從本次 session 脈絡、`git log`、`docs/tech-debt.md`、repo 根目錄 `ROADMAP.md` 的 Next Moves 萃取（涵蓋 plan package 與自由任務）：
 
-- **In Progress**：正在進行但未完結的工作（spectra change / 自由任務皆可，含進度描述）
+- **In Progress**：正在進行但未完結的工作（plan package / tasks 檔 / 自由任務皆可，含進度描述）
 - **Blocked**：被什麼擋住、需要什麼才能繼續（無則省略此區塊）
 - **Next Steps**（不分來源，一律收齊，按優先序排列）：
   - commit 後的驗證動作：人工檢查、截圖 review、deploy smoke test
@@ -33,7 +33,7 @@ Local edits will be reverted by the next sync.
 
 ## In Progress
 
-- [ ] <任務描述（spectra change 名稱 / 自由任務 / WIP）>
+- [ ] <任務描述（work slug / 自由任務 / WIP）>
 - <做到哪、關鍵檔案或決策點>
 
 ## Blocked
@@ -55,11 +55,7 @@ Local edits will be reverted by the next sync.
 
 先依 canonical manifest 與實際 script 判定本 repo 是否使用 Spectra。已選用且有 ROADMAP 時執行下列同步；已選用卻缺命令時回報實際缺口，不宣稱同步完成。未選用 Spectra 的 repo 更新其既有待辦 carrier，記錄本步的 Spectra 分支未觸發。
 
-```bash
-pnpm spectra:roadmap
-```
-
-重算 `openspec/ROADMAP.md` 的 AUTO 區塊（Active Changes / Active Claims / Parallel Tracks / Parked Changes）。AUTO 區塊由此命令生成，手動編輯會被下次 sync 覆寫。
+手動維護 repo 根目錄 `ROADMAP.md` 的 `## Next Moves`：把本次 session 產生的未來工作依 `high/mid/low` 插入，已完成的移除。
 
 若 5-B 收集到的 **Next Steps** 中包含跨 session backlog（不只是「commit 後立刻要做」的驗證動作），依當前 runtime 已投影的 `proactive-skills`「Spectra Roadmap Maintenance」**手動**更新 MANUAL 區塊的 `## Next Moves`，格式：
 

@@ -80,8 +80,8 @@ Local edits will be reverted by the next sync.
 
 以下動作功能上等同破壞性 git 命令，**MUST** 視同 WIP 處置禁令範圍：
 
-- **NEVER** `mv <git-tracked-path> <elsewhere>` / `mv <elsewhere> <git-tracked-path>` 反向 hook 工作（例：把 `openspec/changes/archive/2026-MM-DD-*/` 搬回 `openspec/changes/*/`、把 `screenshots/<env>/_archive/*` 搬回頂層）
-- **NEVER** `rm -rf <openspec/changes/**>` / `rm -rf <screenshots/**>` 等批次刪除含 user-authored / hook-authored 內容的目錄
+- **NEVER** `mv <git-tracked-path> <elsewhere>` / `mv <elsewhere> <git-tracked-path>` 反向 hook 工作（例：把 `screenshots/<env>/_archive/*` 搬回頂層、把 `docs/archives/*` 搬回主檔）
+- **NEVER** `rm -rf <specs/**>` / `rm -rf <tasks/**>` / `rm -rf <screenshots/**>` 等批次刪除含 user-authored / hook-authored 內容的目錄
 - **NEVER** `cp --remove-destination` / `cp -f` 覆蓋 git-tracked 檔案
 - **NEVER** 用 `sed -i` / `awk -i inplace` / `perl -i` 隱藏 git-tracked 檔案的覆寫；授權編輯使用當前 runtime 可審查 diff 的編輯工具，腳本批次編輯同樣先確認範圍、保留原內容並驗 diff
 - **NEVER** `echo > <git-tracked-path>` / `cat > <git-tracked-path>` / `tee` 覆蓋 git-tracked 檔案內容
@@ -109,7 +109,7 @@ Local edits will be reverted by the next sync.
 
 En：`revert` / `undo` / `rollback` / `roll back` / `reset` / `discard` / `drop` / `restore` / `clean up` / `go back` / `undo this` / `fix the state` / `align with` / `move X back to Y` / `restore X to original`
 
-> **本節是關鍵詞表的 SoT**，因為 `commit.md` 是 always-load——破壞性動作在任何 session 都可能發生，這張表必須每一輪都在視窗內。[[scope-discipline]] § 話術關鍵詞 是 conditional-load（`paths:` 只涵蓋 openspec / HANDOFF / tech-debt / decisions），它引用本表而不自帶副本。停手定義四步與「為什麼話術 = 思考表徵」在該檔。
+> **本節是關鍵詞表的 SoT**，因為 `commit.md` 是 always-load——破壞性動作在任何 session 都可能發生，這張表必須每一輪都在視窗內。[[scope-discipline]] § 話術關鍵詞 是 conditional-load（`paths:` 只涵蓋 tasks / specs / HANDOFF / tech-debt / decisions），它引用本表而不自帶副本。停手定義四步與「為什麼話術 = 思考表徵」在該檔。
 
 ### 工作檔丟棄的授權
 

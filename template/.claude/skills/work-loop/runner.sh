@@ -546,12 +546,12 @@ run_preflight() {
   ( : > "$probe" ) 2>/dev/null || preflight_fail "repo 不可寫（${probe}）"
   rm -f "$probe"
 
-  # 待辦源一個都讀不到 = 這輪 scan 必然空手而回。spectra repo 才有 openspec/，缺它屬正常。
+  # 待辦源一個都讀不到 = 這輪 scan 必然空手而回。走 aixbdd 的 repo 才有 specs/plans/，缺它屬正常。
   local has_source=0
-  for f in "$REPO/HANDOFF.md" "$REPO/docs/tech-debt.md" "$REPO/openspec/changes"; do
+  for f in "$REPO/HANDOFF.md" "$REPO/docs/tech-debt.md" "$REPO/tasks" "$REPO/specs/plans"; do
     [ -r "$f" ] && has_source=1
   done
-  [ "$has_source" = 1 ] || preflight_fail "HANDOFF.md / docs/tech-debt.md / openspec/changes 一個都讀不到"
+  [ "$has_source" = 1 ] || preflight_fail "HANDOFF.md / docs/tech-debt.md / tasks/ / specs/plans/ 一個都讀不到"
 
   preflight_headless_probe
   echo "preflight ok（claude / node / repo 可寫 / 待辦源可讀 / headless Bash 可用）"

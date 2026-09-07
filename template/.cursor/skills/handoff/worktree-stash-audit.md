@@ -22,7 +22,7 @@ stash audit 的寫入欄位。**`park` / `next` 都會走到 Step 3**，本檔�
 | --- | --- | --- |
 | `blockers == 0` + `uncommitted == 0` | `landable` | 檢查驗收證據、授權與寫入權，再登記就緒 |
 | `blockers > 0` 或 `uncommitted > 0`，且 `baselineRef` 存在 | `ptb-recoverable` | 先保存／處理 WIP，再判就緒；pinned ref 僅提供救援 |
-| `blockers > 0` 或 `uncommitted ≥ 100`，且 `baselineRef` 不存在 | `ptb-unsafe` | **禁止 dispatch OPSX archive**；走 Step 2B.4.5 PTB-unsafe 快速分流 |
+| `blockers > 0` 或 `uncommitted ≥ 100`，且 `baselineRef` 不存在 | `ptb-unsafe` | **禁止 dispatch merge-back／收尾**；走 Step 2B.4.5 PTB-unsafe 快速分流 |
 | 表未覆蓋區（`blockers == 0`、`uncommitted` 1–99、無 `baselineRef`） | `unclassified`（check 標 `n/a` needs-judgment） | LLM 看 `raw.worktrees[]` 的 signal 自行判讀（小量 WIP 先驗收並 scoped checkpoint，再判就緒） |
 
 #### 3.1b Kind 判定表（與 mergeBackSafety 正交）
@@ -33,8 +33,8 @@ stash audit 的寫入欄位。**`park` / `next` 都會走到 Step 3**，本檔�
 | --- | --- | --- |
 | `mergedToMain: true` + `userWip: 0` | `merged` | `cleanup` — `node vendor/scripts/wt-helper.ts cleanup <slug>` |
 | `mergedToMain: true` + `userWip > 0` | `merged-with-wip` | `verify-then-cleanup` — **NEVER 直接 cleanup**。先走 [[wip-orphan-recovery]] 的 SOP（git status 攤平 → 半成品痕跡掃描 → 完成度硬驗 → git log 脈絡 → 危險項識別 → 收尾分流），確認 WIP 去留後才 cleanup |
-| `mergedToMain: false` + `openspec/changes/archive/<slug>/` 存在 | `archived-change` | `verify-then-cleanup` — change 已 archive 但 branch 未 merged-into-main，先 `git log -1 <branch>` 檢視 commits 是否已含在 archive squash；若是 → `wt-helper cleanup <slug>` |
-| `mergedToMain: false` + `openspec/changes/<slug>/` 仍 active + `daysOld > 7` | `active-stale` | `merge-back-or-resume` — 依 mergeBackSafety 分流（`landable` → 驗收後登記就緒；`ptb-*` → Step 2B.4.5） |
+| `mergedToMain: false` + 該 work 的 flow 卡已 `done` | `done-work` | `verify-then-cleanup` — 工作已收尾但 branch 未 merged-into-main，先 `git log -1 <branch>` 檢視 commits 是否已含在 squash；若是 → `wt-helper cleanup <slug>` |
+| `mergedToMain: false` + 該 work 的 flow 卡仍 active + `daysOld > 7` | `active-stale` | `merge-back-or-resume` — 依 mergeBackSafety 分流（`landable` → 驗收後登記就緒；`ptb-*` → Step 2B.4.5） |
 | `mergedToMain: false` + change 仍 active + `daysOld <= 7` | `active-fresh` | `keep` — 在用中；若需 land 仍依 mergeBackSafety 分流 |
 | `mergedToMain: false` + 兩個 change 目錄都不在 + `aheadCount > 0` + `contentLanded: 'no' \| 'unknown'` | `unlanded` | `merge-back-or-resume` — branch 有未進 main 的 commit，`git log --oneline main..<branch>` 檢視後決定 merge-back 或續做 |
 | 同上 + `contentLanded: 'yes'` | `unlanded-content-landed` | `verify-then-cleanup` — ancestry 說未 land，但候選 commit 的**內容已 100% 在 main**（squash-merge 的常態）。**NEVER 對它跑 merge-back** |
@@ -54,7 +54,7 @@ squash-merge repo，那裡的 branch 在內容進 main 之後 `main..<branch>` �
 
 **粒度是行，NEVER 是 commit。** unmanaged 那半的 `trueUnlandedCommits` 是 per-commit 全稱判定
 （commit 內任一檔命中率 < 0.8 → 整個 commit 判未落地），拿來當 managed worktree 的三分依據會
-塌回兩分：一條 branch 只要有一個本來就不會進 main 的檔（`openspec/changes/<name>/proposal.md`
+塌回兩分：一條 branch 只要有一個本來就不會進 main 的檔（worktree-local 的暫存產物
 這種 change metadata），整條就報 `no`。2026-08-29 perno 實測 `v1-migration-status-fix`：
 per-commit 判 `no`，行粒度判 **87.6%（367/419 行）= `partial`** —— 而 `partial` 是那條唯一正確
 的處置。
@@ -69,7 +69,7 @@ branch 的舊版覆蓋 main 上已經更新過的內容。`unknown`（取不到 
 用一個雜訊換走一個人的十分鐘。高端是 0.98：門檻不對稱地貼近兩端，寧可把「幾乎全落地」丟進
 `partial`，**NEVER** 反過來把 `partial` 讀成 `yes`。
 
-**`openspec/` 不存在的 repo（clade 自己、任何走 plan mode 的 consumer）：上表 `active-*` 與 `archived-change` 三列不適用** —— 那三列的判準是 `openspec/changes/<slug>/` 與 `archive/<slug>/` 的 `existsSync`，目錄整個不在時恆為 false。這不是判定漏了，是 `aheadCount` 那四列接手。TD-297 之前這四種狀態全部塌縮成單一個 `orphan`，而 `orphan` 讀起來是「沒人要的殘骸」，實際可能是別 session 正在做的活躍工作。
+**沒有 flow 卡的 worktree（早於 spine 上線、或開樹時未帶 `--origin`）：上表 `active-*` 與 `done-work` 三列不適用** —— 那三列的判準是該 slug 在 flow spine 上的卡片狀態，查不到卡時恆為 false。這不是判定漏了，是 `aheadCount` 那四列接手。TD-297 之前這四種狀態全部塌縮成單一個 `orphan`，而 `orphan` 讀起來是「沒人要的殘骸」，實際可能是別 session 正在做的活躍工作。
 
 **claim 覆寫優先於上表全部 9 列，且不與 `userWip` 合取（TD-629）。** 兩個量測的時間語意不同：claim 有 TTL、描述一**段區間**；`userWip` 是 scan 那一刻的**瞬時**值。用瞬間去 gate 區間，live session 剛好在兩次寫入之間被掃到就落進 `mergedToMain: true` + `userWip: 0` 那列，拿到 `merged` / `cleanup` —— 對一個正被使用的 worktree 建議**永久刪除**。2026-08-24 實證：`clade-wt/td623-624-pitfalls` 被這樣判過，Charles 依 audit 段拍板回收，接住它的是 `wt-helper cleanup` 自己的 gate（該 wt 當時有 4 個未 commit 檔、475 行 pitfall 全文）。**audit 段的文字本身零保護 —— 人會照它拍板。**
 

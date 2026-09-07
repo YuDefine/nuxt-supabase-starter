@@ -99,23 +99,26 @@ uncommitted 變更
 
 ### 禁止項
 
-- **NEVER** 在 worker 的實作階段各自跑完整 `/commit` / `/spectra-commit`；品質鏈由登記批次統一執行。
+- **NEVER** 在 worker 的實作階段各自跑完整 `/commit`；品質鏈由登記批次統一執行。
 - **NEVER** 用 checkpoint 直接 push main，或在只進 index、尚未正式落地時刪來源。
 
 ### Artifact-tick（hard rule）
 
-只保存 change artifact 進度的 artifact-tick，路徑限定**兩條**——`openspec/changes/**/tasks.md` 與該 change 的 verify evidence sidecar `.spectra/evidence/<change-name>.jsonl`：
+只保存 work item carrier 進度的 artifact-tick，路徑限定**兩條**——該工作的 tasks 檔與它的 verify evidence sidecar `.spectra/evidence/<work-slug>.jsonl`：
 
 ```bash
-git commit --only -m "📝 docs(spectra): phase N done (<change-name>)" -- \
-  openspec/changes/<change-name>/tasks.md .spectra/evidence/<change-name>.jsonl
+git commit --only -m "📝 docs(tasks): phase N done (<work-slug>)" -- \
+  tasks/<date>-<work-slug>.md .spectra/evidence/<work-slug>.jsonl
+# plan package 版本：
+# git commit --only -m "📝 docs(tasks): phase N done (<work-slug>)" -- \
+#   specs/plans/NNN-<work-slug>/tasks.md .spectra/evidence/<work-slug>.jsonl
 ```
 
-**每一個** phase-tick commit 都 **MUST** 同時帶 tasks.md 與該 change 的 evidence sidecar，不是只帶其中一個、也不是只有「有跑 verify 的那一次」才帶——sidecar 檔不存在時（該 change 尚未產生任何 receipt）才可以省略那條路徑。
+**每一個** phase-tick commit 都 **MUST** 同時帶 tasks 檔與該工作的 evidence sidecar，不是只帶其中一個、也不是只有「有跑 verify 的那一次」才帶——sidecar 檔不存在時（該工作尚未產生任何 receipt）才可以省略那條路徑。
 
-`merge-back --squash` 只帶 committed changes 回 main，未 commit 的 checkbox 留在 worktree working tree → main 的 tasks.md 永遠是 `[ ]` → impl-gate 誤判；sidecar 沒一起 commit 則 checkbox 回到 main、receipt 留在 worktree 被 GC，兩者走不同運輸機制就是 [[TD-394]] 的成因。操作細節與時機見 [[worktree-default]] §9.5.1（該節是執行面 SoT，本節是「worktree 內能不能 commit」的契約 SoT）。
+`merge-back --squash` 只帶 committed changes 回 main，未 commit 的 checkbox 留在 worktree working tree → main 的 tasks 檔永遠是 `[ ]` → impl-gate 誤判；sidecar 沒一起 commit 則 checkbox 回到 main、receipt 留在 worktree 被 GC，兩者走不同運輸機制就是 [[TD-394]] 的成因。操作細節與時機見 [[worktree-default]] §9.5.1（該節是執行面 SoT，本節是「worktree 內能不能 commit」的契約 SoT）。
 
-**NEVER** 把上述兩條路徑以外的檔搭這條例外的便車：同一個 commit 混進 `openspec/changes/**/tasks.md` 與 `.spectra/evidence/<change-name>.jsonl` 以外的路徑，就不再是 artifact-tick，回到上一條禁令。**NEVER** 把 `.spectra/` 底下其他子目錄（`snapshots/` / `touched/` / `residency-ledger/` / `spectra.db.bak`）讀成也在白名單內——白名單只有 `.spectra/evidence/`，其餘仍被 `.spectra/*` ignore。
+**NEVER** 把上述兩條路徑以外的檔搭這條例外的便車：同一個 commit 混進 tasks 檔與 `.spectra/evidence/<work-slug>.jsonl` 以外的路徑，就不再是 artifact-tick，回到上一條禁令。**NEVER** 把 `.spectra/` 底下其他子目錄（`snapshots/` / `touched/` / `stash-meta-*.json`）讀成也在白名單內——白名單只有 `.spectra/evidence/`，其餘仍被 `.spectra/*` ignore。
 - **NEVER** 用 `git stash push` 不加 `-u` — 漏掉 untracked 新檔
 - **NEVER** stash pop 撞 conflict 時用 `git checkout --` / `git restore` 「清理」 — 會永久毀掉 main 既有 WIP
 
@@ -153,7 +156,7 @@ working tree / git index 是 **process-wide shared state**——多 session 並�
 
 ### `--only` 限的是路徑，不是內容（hard rule）
 
-`--only` 重建 staged 時，對每個列出的路徑是從 **worktree** 拿該檔**完整**的當前內容——包含別 session 寫在同一個檔案裡、還沒 commit 的部分。共用檔（`docs/tech-debt.md` / `HANDOFF.md` / `openspec/ROADMAP.md` / `AGENTS.md` / i18n locale）正是最常被多 session 同時寫的那幾個。
+`--only` 重建 staged 時，對每個列出的路徑是從 **worktree** 拿該檔**完整**的當前內容——包含別 session 寫在同一個檔案裡、還沒 commit 的部分。共用檔（`docs/tech-debt.md` / `HANDOFF.md` / `ROADMAP.md` / `AGENTS.md` / i18n locale）正是最常被多 session 同時寫的那幾個。
 
 - **MUST** commit 前跑 `git diff -- <paths>` 看實際會帶走什麼；出現不是自己寫的段落 → 依 § Recovery from mixed commit 處置，**NEVER** 直接 commit 下去
 - **NEVER** 用裸 `git commit --amend` 改 message——`--amend` 重新 commit **當前 staged index**，等於把 `--only` 的保護整個放掉（實測：同一情境下 commit 從 1 檔變 26 檔）。要改 message **MUST** 帶 `--only`：
@@ -230,15 +233,15 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 
 | 路徑 | 說明 |
 | --- | --- |
-| `HANDOFF.md`、`openspec/ROADMAP.md`、`docs/tech-debt.md` | 跨 session 狀態檔 |
+| `HANDOFF.md`、`ROADMAP.md`、`docs/tech-debt.md` | 跨 session 狀態檔 |
 | `tasks/**`、`docs/discussions/**`、`docs/digests/**` | session-scoped 與討論紀錄 |
 | `docs/pitfalls/**`、`docs/archives/**` | 事後紀錄與 rotate 產物 |
 | `vendor/snippets/**/*.md` | cookbook / pressure scenario 散文 |
-| `openspec/changes/**/tasks.md`<br>`.spectra/evidence/<change-name>.jsonl` | worktree phase-tick 專用，**兩條一起**（見 § worktree 內唯一合法的 commit：artifact-tick） |
+| `tasks/**/*.md`、`specs/plans/**/tasks.md`<br>`.spectra/evidence/<work-slug>.jsonl` | worktree phase-tick 專用，**兩條一起**（見 § worktree 內唯一合法的 commit：artifact-tick） |
 
 **白名單外的一切改動 MUST 走 `/commit`**，包含但不限於：`rules/**`、`scripts/**`、`vendor/scripts/**`、`plugins/**`、`claude-md/**`、`registry/**`、任何 source code。改動落在白名單內外**混合**時，整批走 `/commit`——**NEVER** 拆成「白名單那半用 `--only` 先送」。
 
-**work-loop 不是例外。** HANDOFF / tech-debt 短更走本表 `--only`；merge-back / archive / 非 spectra 收割後的產品落地走 **user 觸發的** `/commit`（全包，含當時 index 上別人已 staged 的檔）。**NEVER** 對那批跑 ad-hoc `--only` 只收「自己的」幾檔。護欄原文若寫「一律 `--only`」，以本節為準。機械層：`pre-bash-git-commit-only-whitelist.sh` 在 main 上擋白名單外的 `--only`（`/commit` 的 `Via: /commit` trailer 放行）。
+**work-loop 不是例外。** HANDOFF / tech-debt 短更走本表 `--only`；merge-back 與收割後的產品落地走 **user 觸發的** `/commit`（全包，含當時 index 上別人已 staged 的檔）。**NEVER** 對那批跑 ad-hoc `--only` 只收「自己的」幾檔。護欄原文若寫「一律 `--only`」，以本節為準。機械層：`pre-bash-git-commit-only-whitelist.sh` 在 main 上擋白名單外的 `--only`（`/commit` 的 `Via: /commit` trailer 放行）。
 
 **「純 typo」不是跨路徑的例外**。它只在白名單路徑內成立，且僅限散文本身的錯字。**NEVER** 拿它包裝：規約措辭修正（改的是 MUST / NEVER 的語意）、程式識別字重命名、註解以外的任何程式碼改動——這三類即使一個字元也走 `/commit`。
 
@@ -281,9 +284,9 @@ Changed files 數量 / 路徑 vs 預期不符 → **STOP** + 走 § Recovery fro
 
 > 完整危害點 × 規約 × pitfall 交叉索引，見 [[commit.trunk-gates]]。
 
-## main / master 限定的兩條 hard gate
+## main / master 限定的 hard gate
 
-**Partial Archive Gate**（含 `openspec/changes/<X>/**` staged-delete **或** working tree 殘留缺 `tasks.md`/`proposal.md` 的 change dir 時，驗 archive dir + spec delta-sync；parked change 排除）與**人工檢查 Gate**（實作已開始且 `## 人工檢查` 有未勾項時擋 commit）都是 main / master 限定 hard rule，**無 override**。判定條件、fail-fast 位置、完整反開脫 NEVER 清單見 [[commit.trunk-gates]]；執行層在當前 runtime 的 commit skill Step 0-Archive-Coupling / Step 0-MR 與 `check-review-readiness.ts`。
+**人工檢查 Gate**（實作已開始且該 work item carrier 的 `## 人工檢查` 有未勾項時擋 commit）是 main / master 限定 hard rule，**無 override**。判定條件、fail-fast 位置、完整反開脫 NEVER 清單見 [[commit.trunk-gates]]；執行層在當前 runtime 的 commit skill Step 0-MR 與 `check-review-readiness.ts`。
 
 ## 禁止事項
 
@@ -322,7 +325,7 @@ user 不成立**，結果是 stash 單調遞增、owner 資訊隨時間流失，
 
 - `--stat` 含業務碼路徑：`packages/**`、`server/**`、`app/**`、`src/**`、`supabase/migrations/**`、
   `test/**`、`e2e/**`
-- 含 `openspec/changes/**` 且該 change **仍 active**（`openspec/changes/<name>/` 還在，未進 `archive/`）
+- 含 `tasks/**` 或 `specs/plans/**` 且該 work item **仍 active**（flow 卡未標 `done`）
 - 對應 worktree **仍存在**（可能正在用，pre-sync 的 stash 還要 pop 回去）
 - 判準跑不出明確結論（stat 讀不到、slug 歧義）→ **不 drop**，列進 audit 段給 user
 

@@ -6,7 +6,7 @@
 # Adapted from obra/superpowers v6.1.1 (MIT).
 #
 # Usage: task-brief PLAN_FILE TASK_NUMBER [OUTFILE]
-# Default OUTFILE: <repo-root>/.spectra/sdd/task-<N>-brief.md
+# Default OUTFILE: <repo-root>/.clade/sdd/task-<N>-brief.md
 # (per worktree; concurrent runs in the same working tree share it).
 set -euo pipefail
 

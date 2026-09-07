@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Session 交接管理，四個 arg 全部以本 session 收工結束。Use when user types /handoff、/handoff park、/handoff relay、/handoff fanout、/handoff next，要把進度交給下一個 session、要一次把多件可平行的工作各派一個 pane，或本 session context 撐不住需要換人接手。NOT for 單純 commit 收尾（走 /commit），NOT for 歸檔已完成的需求 change（走 /opsx）。
+description: Session 交接管理，四個 arg 全部以本 session 收工結束。Use when user types /handoff、/handoff park、/handoff relay、/handoff fanout、/handoff next，要把進度交給下一個 session、要一次把多件可平行的工作各派一個 pane，或本 session context 撐不住需要換人接手。NOT for 單純 commit 收尾（走 /commit）。
 license: MIT
 metadata:
   author: clade
@@ -91,7 +91,7 @@ Step 1 兩層判定**之前**先判 —— Step 1 只問「有幾件工作、幾
 
 顯式帶了 arg 就**跳過本步**，直接進對應分支（Step 0.5 的 gate 除外，它對顯式 `next` 也生效）。
 
-「Session」=**當前這個 chat session**，不是 working tree / git state / 檔案系統狀態。User 經常並行多開 AI Agent session 工作，所以 `git status` 髒污、`tasks/<date>-*.md` 內 unchecked 項、active spectra change 的 unchecked tasks **都可能來自別的 session**，不能拿來判斷當前 session 是否有未交辦工作。
+「Session」=**當前這個 chat session**，不是 working tree / git state / 檔案系統狀態。User 經常並行多開 AI Agent session 工作，所以 `git status` 髒污、`tasks/<date>-*.md` 內 unchecked 項、plan package `tasks.md` 的 unchecked 項 **都可能來自別的 session**，不能拿來判斷當前 session 是否有未交辦工作。
 
 分兩層判：**先判當前 session 有沒有未交辦工作**，有的話**再判其中幾件派得出去**。
 
@@ -102,12 +102,12 @@ Step 1 兩層判定**之前**先判 —— Step 1 只問「有幾件工作、幾
 - 當前 chat 對話脈絡明顯顯示 user 正在 mid-task（我剛在做某事還沒收尾、user 剛交辦一個多步驟工作做到一半）
 - Stop hook 攔住但 acceptance 未滿足 + 處於 [[worktree-default]] §8 死鎖（cwd 在 main + main 已 dirty）且當前 session 已自評不適合走 §7 分支 A（context 不寬裕 / 剩餘 work 不小 / 無法 selective stash）
 
-**沒有** → `next`：以上皆否（即使 working tree 髒、tasks/ 有別 session 的 unchecked、spectra changes 有別 session 的 active work，都仍走 `next` —— 那些屬於別 session 的責任）。
+**沒有** → `next`：以上皆否（即使 working tree 髒、tasks/ 有別 session 的 unchecked、`specs/plans/**` 有別 session 的 active work，都仍走 `next` —— 那些屬於別 session 的責任）。
 
 **禁止訊號**（這些都不算「當前 session」狀態）：
 - ❌ `git status --short` 有 dirty file
 - ❌ `tasks/<YYYY-MM-DD-HHMM>-*.md` 存在或有 unchecked 項
-- ❌ `openspec/changes/<name>/tasks.md` 有 unchecked 項
+- ❌ `specs/plans/NNN-<slug>/tasks.md` 有 unchecked 項
 - ❌ `HANDOFF.md` 有 In Progress 段落
 
 ### 第二層 — 其中幾件派得出去
@@ -153,7 +153,7 @@ Predicate 綁的是**結果**不是路徑，所以「先自己做掉再 park」�
 
 ## Step 1.5 — 路徑解析 invariant（park / next 共用）
 
-`HANDOFF.md` / `docs/tech-debt.md` / `openspec/ROADMAP.md` 是「跨 change 全局狀態」，**不該** per-worktree 分裂。`/handoff` 若在 linked worktree 內跑、寫到 cwd-相對的 `HANDOFF.md`，得等 squash merge-back 才出現在 main，下一 session 接手會看到舊版。
+`HANDOFF.md` / `docs/tech-debt.md` / `ROADMAP.md` 是「跨工作全局狀態」，**不該** per-worktree 分裂。`/handoff` 若在 linked worktree 內跑、寫到 cwd-相對的 `HANDOFF.md`，得等 squash merge-back 才出現在 main，下一 session 接手會看到舊版。
 
 **MUST** 在進入 park / next 寫入動作前先解析 main worktree absolute path：
 
@@ -169,7 +169,7 @@ else
 fi
 ```
 
-實際操作：所有 `HANDOFF.md` / `docs/tech-debt.md` / `openspec/ROADMAP.md` / `docs/archives/<yyyy-mm>-<topic>.md` 寫入路徑都用 `$MAIN_WT_PATH/<rel>` 絕對路徑（Edit / Write tool 的 `file_path` 參數）；**禁止**用 cwd-相對路徑寫這幾個檔。其餘檔案（`.cursor/rules/local/*.md` 讀取、`tasks/<date>-*.md` 清理）保持 cwd 相對行為。
+實際操作：所有 `HANDOFF.md` / `docs/tech-debt.md` / `ROADMAP.md` / `docs/archives/<yyyy-mm>-<topic>.md` 寫入路徑都用 `$MAIN_WT_PATH/<rel>` 絕對路徑（Edit / Write tool 的 `file_path` 參數）；**禁止**用 cwd-相對路徑寫這幾個檔。其餘檔案（`.cursor/rules/local/*.md` 讀取、`tasks/<date>-*.md` 清理）保持 cwd 相對行為。
 
 ### 當前 session 被隔離、寫不進 main 時（background job / cwd 已在 worktree）
 
@@ -196,10 +196,10 @@ fi
 
    **NEVER** 把以下當「當前 session 未完項」（這些屬於別 session 或檔案系統狀態，不是當前 chat 在做的事）：
    - ❌ `tasks/<date>-*.md` 既有 unchecked 項
-   - ❌ active spectra change 既有 unchecked tasks
+   - ❌ 既有 plan package `tasks.md` 的 unchecked 項
    - ❌ `git status` dirty 檔案
 
-   例外：若當前 chat 對話脈絡明確指向某個 tasks/<date>-*.md / spectra change / dirty file 就是當前 session 在動的，那才算當前 session 工作 —— 由對話脈絡決定歸屬，不是由檔案存在決定。
+   例外：若當前 chat 對話脈絡明確指向某個 tasks/<date>-*.md / plan package / dirty file 就是當前 session 在動的，那才算當前 session 工作 —— 由對話脈絡決定歸屬，不是由檔案存在決定。
 
 2. **逐項分類升級**（依 `rules/core/session-tasks.md` 升級路徑表）：
 
@@ -208,17 +208,17 @@ fi
    | 下一 session 要立刻接手的 in-progress 工作 | `HANDOFF.md` `## In Progress` section |
    | 被 blocker 卡住（缺權限 / 缺決策 / 等外部） | `HANDOFF.md` `## Blocked` |
    | 等待外部 signal（合約 / ramp 日期 / 第三方 API ready） | `docs/tech-debt.md` 建 `TD-NNN` |
-   | 未來才做、可排優先序 | `openspec/ROADMAP.md` `## Next Moves` |
-   | 規模膨脹（要動 spec / design review / 跨多檔） | OPSX 需求（沿已授權來源建立或修訂；新增範圍先拍板） |
+   | 未來才做、可排優先序 | repo 根目錄 `ROADMAP.md` `## Next Moves` |
+   | 規模膨脹（要動 spec / design review / 跨多檔） | 走 `/specify` 開 plan package（新增範圍先拍板） |
    | 純放棄 | 直接刪 |
 
 3. **寫入**：依分類 Edit / Write 對應檔案，path **MUST** 用 Step 1.5 解析出的 `$MAIN_WT_PATH/<rel>` 絕對路徑（即使當前 cwd 在 linked worktree）。格式與落點判準走下方 § HANDOFF 寫回契約（三條，寫入前逐條過）。HANDOFF.md `## In Progress` 條目 MUST 含：
-   - change / task 名稱
+   - work slug / task 名稱
    - **ambient `CLADE_WORK_ID` 非空時：那個 work id**（寫成 `work: W-…` 一行）。park 是四個 arg 裡唯一純 prose 落檔、落完**沒有任何結構化載體存活**的，所以這裡是「prose 端不回指 work id」那條原則的具名例外（見 [[flow-work-tracking]] § 單向指向）。env 是空的就不寫，**NEVER** 為了補這一行去猜或去查一個 id
    - 主要檔案路徑（讓接手者直接跳）
    - 目前做到哪裡 / 還剩什麼
    - 已踩過的坑（避免下一 session 重踩）
-   - **若來自 [[worktree-default]] §8 死鎖**：額外加 Stop hook 攔點摘要、missing acceptance criterion、改過檔案的 selective stash ref（若有，例 `stash@{0}: <slug>-handoff`）、下一 session 接手指引（沿明確 change/work/revision 接續 `/opsx`；實作先隔離 worktree，歸檔先驗當前 evidence 與人的 gate）
+   - **若來自 [[worktree-default]] §8 死鎖**：額外加 Stop hook 攔點摘要、missing acceptance criterion、改過檔案的 selective stash ref（若有，例 `stash@{0}: <slug>-handoff`）、下一 session 接手指引（指名 carrier 路徑與剩下的 phase；實作先隔離 worktree，收尾先驗當前 evidence 與人的 gate）
 3b. **spine 收尾（ambient `CLADE_WORK_ID` 非空時 MUST，空則整步跳過）**：park 是 attended session
    做完事情之後最常見的收尾點，所以「這件事完成了沒」這一問在這裡有答案，別處沒有。二擇一，
    依**步驟 1 盤點出的未完項是否還有要交接的殘工**判：
@@ -417,8 +417,8 @@ https://review-gui.yudefine.com.tw/review/<consumer-id>:<change-name>
             | .open | map(select(.id as $i | $seen | index($i) | not))
             | sort_by(.discovered) | .[] | "\(.id)\t\(.discovered)\t\(.lines)行\t\(.title)"' "$SCAN"
      ```
-- `openspec/ROADMAP.md` `## Next Moves`
-- 任何已 archive 但留下 follow-up 註記的 change
+- repo 根目錄 `ROADMAP.md` `## Next Moves`
+- 任何已收尾但留下 follow-up 註記的工作
 
 每條 outstanding 抓三件資料：
 - 標題（一句話）
@@ -431,8 +431,8 @@ https://review-gui.yudefine.com.tw/review/<consumer-id>:<change-name>
 
 對每條 `applyBlocked` / `awaitingUserDecision` change **MUST** 做三件事：
 
-1. **抽 blocker 原因**：OPSX 以 inspect／instructions 讀當前 work 與 revision 的具體 blocker；legacy 由中立 history 讀原件並保留來源關係。逐條列出每一個原因，**NEVER** 從 bucket 名或 HANDOFF 既有 narrative 推測。
-2. **辨識 startable 子集**（最關鍵）：一條 change 落 `applyBlocked` bucket 只代表它**含**至少一個 `@apply-blocked` phase，**不代表整條無事可做**。**MUST** 由當前 instructions 判斷是否有**未 blocked、可現在開工的 work**（典型：上游條件已解封但整條仍被 blocked marker 拖著）。有 startable 子集 → 依 [[goal-mode]] 規約**提供 dispatch 選項**（`/wt <slug>: /opsx <change-id>` 只做 unblocked phases），**NEVER** 因整條標 applyBlocked 就當 user-bound 擱置。
+1. **抽 blocker 原因**：直接讀該工作的 carrier（`tasks/<date>-<slug>.md` 或 `specs/plans/NNN-<slug>/tasks.md`）的 `@apply-blocked` 註記與未勾項。逐條列出每一個原因，**NEVER** 從 bucket 名或 HANDOFF 既有 narrative 推測。
+2. **辨識 startable 子集**（最關鍵）：一件工作落 `applyBlocked` bucket 只代表它**含**至少一個 `@apply-blocked` phase，**不代表整件無事可做**。**MUST** 由 carrier 內容判斷是否有**未 blocked、可現在開工的 work**（典型：上游條件已解封但整件仍被 blocked marker 拖著）。有 startable 子集 → 依 [[goal-mode]] 規約**提供 dispatch 選項**（`/wt <slug>` 只做 unblocked phases），**NEVER** 因整件標 applyBlocked 就當 user-bound 擱置。
 3. **端出具體 user 決策**：把 blocker reason 中**真正需 user / owner 拍板**的具體題目（例：「work-order grain 二選一：`receiving_scans+process_tracking` vs `work_reports`」）逐條列進 outstanding，讓 user 當場能答，**NEVER** 只寫「等 owner 拍板」這種無法行動的模糊句。同時分辨哪些 blocker 是**外部依賴**（等 A 端 contract / 等別 change 先完成）— 這類才真的擱置，但仍 **MUST** 明列在等什麼。
 
 triage 結果併入 §2B.2 outstanding 清單（與 HANDOFF / tech-debt / ROADMAP 來源並列），進 §2B.3 serial/parallel 評估、§2B.4 推薦。
@@ -441,13 +441,13 @@ triage 結果併入 §2B.2 outstanding 清單（與 HANDOFF / tech-debt / ROADMA
 
 | blocker 類型 | 判定 | outstanding 處置 |
 | --- | --- | --- |
-| **有 startable 子集** | 目前 instructions 有未 blocked work 可現在做 | 列 outstanding + 提供 `/wt <slug>: /opsx <change-id>` dispatch 選項（只做 unblocked phases） |
+| **有 startable 子集** | carrier 有未 blocked work 可現在做 | 列 outstanding + 提供 `/wt <slug>` dispatch 選項（只做 unblocked phases） |
 | **需 user/owner 內部決策** | `@apply-blocked[需 owner 拍板: X]` 類 | 列 outstanding + **端出具體決策題**讓 user 當場答 |
-| **等外部依賴** | 等 A 端 contract / 等別 change 先完成 | 列 outstanding + 明列**在等什麼 signal**（對齊 [[goal-mode]] `@apply-blocked` 僅限真外部 blocker） |
+| **等外部依賴** | 等 A 端 contract / 等別件工作先完成 | 列 outstanding + 明列**在等什麼 signal**（對齊 [[goal-mode]] `@apply-blocked` 僅限真外部 blocker） |
 
 **NEVER**：
-- ❌ scan 抓到 applyBlocked change 卻不讀當前 instructions／歷史原件抽 blocker 原因
-- ❌ 把「含 blocked phase」等同「整條無 startable 工作」→ 漏掉可現在 dispatch 的子集
+- ❌ scan 抓到 applyBlocked 的工作卻不讀 carrier 抽 blocker 原因
+- ❌ 把「含 blocked phase」等同「整件無 startable 工作」→ 漏掉可現在 dispatch 的子集
 - ❌ 只寫「等 owner 拍板 / 卡外部」而不端出**具體**決策題或**具體**等待 signal
 - ❌ 因 master 統計排除就把這兩類 bucket 從 outstanding / AskUserQuestion 選項中省略
 
@@ -475,7 +475,7 @@ Step 3.1 audit **有任一條** wt 判為 `mergeBackSafety: ptb-unsafe` → **MU
 
 **MUST Read [dispatch-steps.md](dispatch-steps.md) § 2B.5 before proceeding**（user 在 `AskUserQuestion` 選定下一步的當下就要讀）— 含 5 列 next-skill dispatch 表、判定條件三條、slug 解析、parent cwd 不動 invariant、review:ui dispatch 的 7 列 bucket 入口表。
 
-摘要：一律透過 Skill tool 內呼對應入口，**不要**輸出「請執行 cd ... && claude ...」oneliner；會寫 tracked file 的 spectra-* skill 包進 `/wt <slug>: /<next-skill> <change-name>`，archive / read-only / propose 類直接內呼。
+摘要：一律透過 Skill tool 內呼對應入口，**不要**輸出「請執行 cd ... && claude ...」oneliner；會寫 tracked file 的實作入口（`/implement`、`/bdd`）包進 `/wt <slug>: /<next-skill>`，read-only 與規格類（`/specify`、`/clarify-over-specs`、`/system-analysis`）直接內呼。
 
 ### 2B.1.8 Tech-debt hygiene scan（hard rule — 防 tech-debt.md 堆積）
 
@@ -521,13 +521,13 @@ jq '[.worktreeStash.raw | .worktrees, .unmanagedWorktrees, .stashes, .orphanSide
 ```
 
 **MUST Read [worktree-stash-audit.md](worktree-stash-audit.md) before proceeding** — 含
-`mergeBackSafety` 三 signal 的推導與處置表、9 列 kind 判定表（含 `openspec/` 不存在的 repo
+`mergeBackSafety` 三 signal 的推導與處置表、9 列 kind 判定表（含 `specs/plans/` 不存在的 repo
 哪三列不適用）、stash audit 每一筆要寫的欄位。**NEVER** 憑 `mergedToMain` 單一欄位推斷可
 cleanup —— `userWip > 0` 時 kind 要降級，而 `cleanup` 對未 commit 內容無 pinned ref 保護。
 
 摘要：每條 `mergedToMain: false` 的 wt 由 `blockers` / `uncommitted` / `baselineRef` 三
 signal 推出 `landable` / `ptb-recoverable` / `ptb-unsafe` / `unclassified`；`ptb-unsafe`
-禁止 dispatch OPSX archive，走 § 2B.4.5 分流。stash 對 `raw.stashes[*]` **每一筆**都
+禁止 dispatch 收尾工作，走 § 2B.4.5 分流。stash 對 `raw.stashes[*]` **每一筆**都
 要寫入，不過濾 archived-only 或 stale>7d。
 
 ### 3.3 寫入 HANDOFF.md
@@ -570,7 +570,7 @@ _Updated: <YYYY-MM-DD>_
 
 ## 與其他 skill 的銜接
 
-- `/commit` — park 升級 spectra change WIP 時，commit 走此 skill 的 selective stage（`/spectra-commit` 已停用，見 [[proactive-skills]] § Sub-skill 禁用清單）
-- `/opsx` — 已授權需求建立／修訂、實作與驗證接續；brief 保留明確 change/work/revision
+- `/commit` — park 升級 WIP 時，commit 走此 skill 的 selective stage
+- `/specify` / `/tasks` / `/implement` — 已授權的需求建立、拆解與實作接續；brief 保留明確 carrier 路徑與剩下的 phase
 - `/oops` — next 2B.0 sweep missed lessons 時的 dispatch 目標（pitfall / memory / lessons.md 三層分流；from `hub-maintenance-full` plugin，不在 starter consumer 內安裝）
 - `subagent-dev` — next `AskUserQuestion` user 選 parallel 後，subagent fan-out 由此 skill 執行

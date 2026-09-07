@@ -599,7 +599,7 @@ Verify Mode **MUST NOT** 執行 mutation、form fill、click sequence、multi-ro
    - final-state screenshot 路徑
    - PASS / FAIL / UNCERTAIN 標記
 2. 更新 `screenshots/<env>/<change-name>/progress.json`（見下方 contract）。
-3. 跑 `node scripts/spectra-advanced/audit-screenshot-quality.ts <change-name> --fail-on-issues`
+3. 跑 `node ${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/audit-screenshot-quality.ts <change-name> --fail-on-issues`
    - 不過 → 整理 `_exploration/`、補拍 final-state，retry；仍不過 → 報告主線
 4. 回傳給主 session 一個結構化清單（每 item 的 result + screenshot + dom observation），主 session 拿來跑 `evidence-store.mjs --write` 寫 sidecar、再把印出的短 marker 貼進行內。
 
@@ -891,12 +891,12 @@ export default defineEventHandler(async (event) => {
 完成 `review.md` 後 **MUST** 執行 screenshot quality audit：
 
 ```bash
-node scripts/spectra-advanced/audit-screenshot-quality.ts <change-name> --fail-on-issues
+node ${CLADE_HOME:-$HOME/offline/clade}/vendor/scripts/audit-screenshot-quality.ts <change-name> --fail-on-issues
 ```
 
 若有 warning / critical，先整理 `_exploration/`、補拍 final-state、或回報主 session 補 `@no-screenshot`，不要把問題留給使用者在 `pnpm review` 裡猜。
 
-> Vendor script 直接呼叫，不依賴 consumer 端 `package.json` 是否有 `spectra:audit-screenshots` npm script — sync-vendor 會把 `audit-screenshot-quality.ts` 散播到每個 consumer 的 `scripts/spectra-advanced/`。
+> 直接跑 clade 中央倉那一份。2026-09-07（TD-976 Wave 1）起 `scripts/spectra-advanced/` 不再投影到 consumer，**NEVER** 改回 consumer-relative 路徑——那個目錄正在被 propagate 清除。
 
 ## 回傳給主 session
 

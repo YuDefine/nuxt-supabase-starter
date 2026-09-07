@@ -1,6 +1,6 @@
 ---
 description: "Manual Review data-readiness 規約——propose 階段準備驗收資料的 hard rule、[review:ui] 純功能驗證 step actionability、`@no-manual-review-check` marker schema、截圖檔名配對；寫 proposal.md / tasks.md 時 path-scoped 載入"
-globs: ["openspec/changes/**/proposal.md", "openspec/changes/**/tasks.md"]
+globs: ["tasks/**", "specs/plans/**", "screenshots/**"]
 alwaysApply: false
 ---
 <!--
@@ -72,7 +72,7 @@ propose / ingest 階段命中即視為違反，**MUST** 改寫。
 
 assertion-bearing `[verify:ui]` item（要驗「某具體內容有出現」而非純主觀視覺）**MUST** 能對應到一個**機械可判的 `ready_signal`**——screenshot agent capture 前 poll 它命中才拍、拍後 cross-check 它仍在才算 PASS（執行細節見 visual verifier agent Verify Mode「必做動作」step 2-4 + `vendor/snippets/verify-channels/ui-final-state-brief*.template.md`）。
 
-`ready_signal` 來源：主線在 `spectra-apply` Step 8a dispatch verify:ui 時，從 item 描述的**具體可斷言短語**建 structured signal（`text` / `text_all` / `text_any` / `selector` / `regex` / `min_rows`）。因此 item 描述本身 **MUST** 含一個具體、唯一、會出現在畫面上的斷言點（例「建議刀位壽命 143 秒」「逾期 badge」「`data-testid=suggested-baseline-row-T990201` 這列」），**NEVER** 只寫「畫面正常」「顯示資料」「狀態正確」這類無法 poll 的模糊語。
+`ready_signal` 來源：主線在 Verify Channel Pass dispatch verify:ui 時，從 item 描述的**具體可斷言短語**建 structured signal（`text` / `text_all` / `text_any` / `selector` / `regex` / `min_rows`）。因此 item 描述本身 **MUST** 含一個具體、唯一、會出現在畫面上的斷言點（例「建議刀位壽命 143 秒」「逾期 badge」「`data-testid=suggested-baseline-row-T990201` 這列」），**NEVER** 只寫「畫面正常」「顯示資料」「狀態正確」這類無法 poll 的模糊語。
 
 **分階段強制**：
 
@@ -297,7 +297,7 @@ node -e "import('~/offline/clade/vendor/snippets/dev-auth/lib/detect-dev-login-r
 
 散文裡的入口是**推導來源**，不是事實來源。GUI 用 regex 從中文句子挖出身分與 URL，寫法變體（`E2E-TRAC-PAYROLL` vs `E2E-TRAC_PAYROLL`、具名員工 vs role fixture、帶不帶 `&email=`）永遠追不完，而每個追不到的變體都是一次驗收者卡在畫面前面。
 
-正規路徑是把入口寫成**結構化 entry**，落在既有的 evidence sidecar（`.spectra/evidence/<change>.jsonl`，`kind: "entry"`）：
+正規路徑是把入口寫成**結構化 entry**，落在既有的 evidence sidecar（`.spectra/evidence/<work-slug>.jsonl`，`kind: "entry"`）：
 
 ```bash
 node ~/offline/clade/scripts/manual-entry.ts --repo <consumer> --change <change> \

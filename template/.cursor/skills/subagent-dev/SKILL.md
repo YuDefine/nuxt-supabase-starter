@@ -13,7 +13,7 @@ Execute plan by dispatching a fresh implementer subagent per task, a task review
 
 **Core principle:** Fresh subagent per task + task review (spec + quality) + broad final review = high quality, fast iteration
 
-**Routing gate:** 先看 [[agent-routing]] — Routing Table / Orchestration Residency 命中 pi 路徑（mechanical sweep、Codex-primary change、非 view phase 的 spectra-apply）時優先走該表；本 skill 用於 **Claude-primary** 場景的 plan 執行。回報契約遵循 [[agent-routing]] § Subagent 回報契約。
+**Routing gate:** 先看 [[agent-routing]] — Routing Table / Orchestration Residency 命中 pi 路徑（mechanical sweep、Codex-primary 工作、非 view phase 的實作）時優先走該表；本 skill 用於 **Claude-primary** 場景的 plan 執行。回報契約遵循 [[agent-routing]] § Subagent 回報契約。
 
 **Narration:** between tool calls, narrate at most one short line — the ledger and the tool results carry the record.
 
@@ -21,7 +21,7 @@ Execute plan by dispatching a fresh implementer subagent per task, a task review
 
 ## When to Use
 
-- Have an implementation plan（Spectra `/spectra-propose` 產出、`docs/phases/`、或 manual plan）？
+- Have an implementation plan（`/tasks` 產出的 `specs/plans/NNN-<slug>/tasks.md`、`docs/phases/`、或 manual plan）？
 - Tasks mostly independent？
 - Claude-primary（非 pi 路徑）且要留在當前 session？
 
@@ -33,7 +33,7 @@ Execute plan by dispatching a fresh implementer subagent per task, a task review
 
 1. Read plan once；note global constraints（plan 的 Global Constraints 段或 spec 的專案級要求）
 2. `TaskCreate` 每個 task
-3. Check ledger：`cat "$(git rev-parse --show-toplevel)/.spectra/sdd/progress.md"`（存在 → 從第一個未標 complete 的 task 續跑，**不重派**已完成的）
+3. Check ledger：`cat "$(git rev-parse --show-toplevel)/.clade/sdd/progress.md"`（存在 → 從第一個未標 complete 的 task 續跑，**不重派**已完成的）
 4. 記錄目前 commit 當第一個 task 的 BASE
 
 ### Pre-Flight Plan Review
@@ -108,7 +108,7 @@ Reviewer 回報「⚠️ Cannot verify from diff」（要求活在未變動 code
 
 Conversation memory 不會活過 compaction。實測最貴失敗：controller 失去位置後**重派整段已完成的 task**。
 
-- Ledger：`.spectra/sdd/progress.md`（`scripts/sdd-workspace` 建立，自帶 self-ignoring .gitignore）
+- Ledger：`.clade/sdd/progress.md`（`scripts/sdd-workspace` 建立，自帶 self-ignoring .gitignore）
 - 每個 task review 過 → 立刻 append 一行（commits 範圍 + review clean）
 - Compaction / resume 後：信 ledger + `git log`，不信自己的記憶
 - `git clean -fdx` 會清掉 ledger（gitignored scratch）；發生時從 `git log` 重建
@@ -125,15 +125,15 @@ Conversation memory 不會活過 compaction。實測最貴失敗：controller �
 [Read plan once；TaskCreate ×5；check ledger（無）；記 BASE]
 
 Task 1: Add new API endpoint
-[scripts/task-brief plan.md 1 → .spectra/sdd/task-1-brief.md]
+[scripts/task-brief plan.md 1 → .clade/sdd/task-1-brief.md]
 [Dispatch implementer：Pi --model luna --effort medium --route routing-table --tier-basis table-row --table-row non-ui-implementation；定位一行 + brief 路徑 + report 路徑]
 
 Implementer: "should this use service_role or authenticated?"
 You: "先用 getSupabaseWithContext(event) 保留 request context；只有 audit、backfill、修復腳本等系統任務才直用 service_role"
 
-Implementer: Status DONE — commits a1b2c3d, "14/14 passing, output pristine", report at .spectra/sdd/task-1-report.md
+Implementer: Status DONE — commits a1b2c3d, "14/14 passing, output pristine", report at .clade/sdd/task-1-report.md
 
-[scripts/review-package <BASE> HEAD → .spectra/sdd/review-a1b2..d4e5.diff]
+[scripts/review-package <BASE> HEAD → .clade/sdd/review-a1b2..d4e5.diff]
 [Dispatch task reviewer：Claude，省略 model；brief + report + diff 檔 + global constraints]
 Reviewer: Spec ✅；Quality Approved；Minor ×1（記 ledger）
 
@@ -162,7 +162,7 @@ Task 2: ...
 
 ## Integration
 
-- **Spectra**：`/spectra-propose` 產 plan → 本 skill 執行（Claude-primary 場景）；spectra-apply 的 phase dispatch 分流見 [[agent-routing]]
+- **aixbdd**：`/tasks` 產 `tasks.md` → 本 skill 執行（Claude-primary 場景）；`/implement` 的 phase dispatch 分流見 [[agent-routing]]
 - **[[agent-routing]] § Subagent 回報契約**：4-status / report-as-claims / file handoffs / model 顯式——brief 必含
 - **[[worktree-default]]**：開工前確保隔離 worktree
 - **[[testing-anti-patterns]]**：implementer 測試紀律

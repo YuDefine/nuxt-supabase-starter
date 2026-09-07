@@ -1,6 +1,6 @@
 ---
 description: 知識沉澱與決策記錄規則——非直覺問題解法要進 docs/solutions，跨任務技術決策要進 docs/decisions
-paths: ['docs/solutions/**', 'docs/decisions/**', 'openspec/**']
+paths: ['docs/solutions/**', 'docs/decisions/**', 'specs/**', 'tasks/**']
 ---
 <!--
 🔒 LOCKED — managed by clade

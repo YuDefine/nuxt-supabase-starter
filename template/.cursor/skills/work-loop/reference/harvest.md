@@ -25,8 +25,8 @@ Local edits will be reverted by the next sync.
 
 | 來源 | 何時落地 | 怎麼 commit |
 | --- | --- | --- |
-| OPSX 需求 | 原實作 wt 的 archive gates／bookkeeping 完成並 checkpoint 後 | 登記就緒；達批次條件才 invoke 一次 `/commit` |
-| 非 OPSX / Form-1 | harvest 驗收後 | 登記就緒；達批次條件才 invoke 一次 `/commit` |
+| plan package 需求 | 原實作 wt 的驗收 gate 完成並 checkpoint 後 | 登記就緒；達批次條件才 invoke 一次 `/commit` |
+| 非 plan / Form-1 | harvest 驗收後 | 登記就緒；達批次條件才 invoke 一次 `/commit` |
 
 每次收割與 session 接手跑 `wt-helper batch status --trigger auto`：4 件 distinct work id 自動提交；不足時繼續開發。手動 `/commit`／merge back 無最低件數，dependency／drained／stop 提前結批。單純交接不結批。批次在隔離整合區審查，落地後由 commit skill cleanup，**NEVER** 收一個 wt 就重跑一遍完整 `/commit`。
 
@@ -76,7 +76,7 @@ ledger 移除照做、2h hang 上限照算。8 步 SOP 的 scope-verify / checke
 
 ### 實例（2026-07 <consumer-a> `/change-loop turbo`，本段落的由來）
 
-1. Loop dispatch 4 個 background agent：3 個 `/wt /spectra-apply` worktree（`admin-permission-gate-alignment` / `admin-dashboard-action-center` 等）+ 1 個 Fable dump script
+1. Loop dispatch 4 個 background agent：3 個 `/wt <slug>: /implement` worktree（`admin-permission-gate-alignment` / `admin-dashboard-action-center` 等）+ 1 個 Fable dump script
 2. ❌ 不收割的行為：可 dispatch 的 item 都派完 → 主線寫 HANDOFF → 釋放 lock → 結束 loop
 3. Agent 陸續完成（`admin-permission-gate-alignment` Phase 1-6 done、`admin-dashboard-action-center` Phase 1-5 done、v1 migration 14/14）——但 loop 已死，沒人 re-scan，user 被迫手動下指令觸發 archive / commit
-4. ✅ 收割行為：每收到一個 agent notification 就驗收 + re-scan，`applyInProgress` 位移成可 archive → 立即 dispatch archive，驗收後進就緒池並評估批次觸發；期間主線繼續做序列組與非 spectra work；in-flight 歸零且四組皆空後才寫 HANDOFF + 釋放 lock
+4. ✅ 收割行為：每收到一個 agent notification 就驗收 + re-scan，`applyInProgress` 位移成可收尾 → 立即 dispatch 收尾，驗收後進就緒池並評估批次觸發；期間主線繼續做序列組與非 plan work；in-flight 歸零且四組皆空後才寫 HANDOFF + 釋放 lock

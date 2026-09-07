@@ -1,6 +1,6 @@
 ---
 description: "Scope discipline 規則——不擴散、必登記、不擅改他人成果，避免 AI 工作流吞掉 WIP 或把範圍外問題靜默遺失"
-globs: ["openspec/**", "docs/tech-debt.md", "docs/decisions/**", "HANDOFF.md"]
+globs: ["tasks/**", "specs/**", "ROADMAP.md", "docs/tech-debt.md", "docs/decisions/**", "HANDOFF.md"]
 alwaysApply: false
 ---
 <!--
@@ -38,8 +38,8 @@ Local edits will be reverted by the next sync.
 | --- | --- | --- |
 | 技術債 / bug / 邊界情況 | `docs/tech-debt.md` | 建 `TD-NNN` entry，並在當前 change `tasks.md` 加 `@followup[TD-NNN]` |
 | session 尚未完成的 WIP / blocker | `HANDOFF.md` | 留下目前狀態、阻擋原因、下一步 |
-| 未來要做但尚未 propose 的工作 | `openspec/ROADMAP.md` `## Next Moves` | 以 `high/mid/low` + 依賴關係記錄 |
-| 當前 change 本身的 scope 漏項 | `spectra-ingest` | 更新 proposal / tasks / design artifact |
+| 未來要做但尚未開工的工作 | repo 根目錄 `ROADMAP.md` `## Next Moves` | 以 `high/mid/low` + 依賴關係記錄 |
+| 當前工作本身的 scope 漏項 | 當前 tasks 檔加一條；動到規格時回交 truth owner skill | **NEVER** 就地改 `specs/truth/**` |
 | 架構層級決策 | `docs/decisions/YYYY-MM-DD-<topic>.md` | 用 ADR 格式記錄 |
 
 **登記後才能回到當前 task。**
@@ -50,11 +50,11 @@ Local edits will be reverted by the next sync.
 
 - `git status` 有你不認得的 modified / untracked 檔案
 - 有不屬於當前 scope 的 active change / worktree / stash
-- `openspec/changes/<name>/` 裡出現你不清楚來源的 artifact
+- `specs/plans/NNN-<slug>/` 或 `tasks/` 裡出現你不清楚來源的 artifact
 - **hook / automation 自動產出的 working tree 變動**：
-  - pre-commit / post-commit / spectra-archive / sync-vendor 等 hook 自動建立 / 刪除 / 移動的檔案或目錄
+  - pre-commit / post-commit / sync-vendor 等 hook 自動建立 / 刪除 / 移動的檔案或目錄
   - hook 自動寫入的 annotation（例：`(claude-discussed: ...)`、`(verified-*: ...)`、`@followup[TD-NNN]`）
-  - hook 自動觸發的 archive directory（`openspec/changes/archive/YYYY-MM-DD-*/`）
+  - hook 自動觸發的 archive directory（`docs/archives/<YYYY-MM>-*.md`、`screenshots/<env>/_archive/`）
   - hook 自動 propagate 到 spec.md / rule 投影層的內容
   - chmod 設定的 LOCKED projection 改動
 
@@ -64,7 +64,7 @@ Local edits will be reverted by the next sync.
 2. 依下方歸屬探測判定本次可操作的精確範圍；需要協調時使用已授權、當前可用的通道
 3. 無法查明或缺少處置授權的內容保持不動，向使用者呈現具體待決事項
 
-**自動產出具有 WIP 的所有權保護**：hook / sync-vendor / spectra-archive 的內容同樣需要查明來源。已驗證為本次 hook 的 index 殘留時，走 [[commit]] 的 `MM` recipe；其他 automation 產物依歸屬與既有授權處理。**禁止**只因「這違反 X rule 應該還原」就處置；無法確認的內容保留，不自行判成可丟棄。
+**自動產出具有 WIP 的所有權保護**：hook / sync-vendor 產生的內容同樣需要查明來源。已驗證為本次 hook 的 index 殘留時，走 [[commit]] 的 `MM` recipe；其他 automation 產物依歸屬與既有授權處理。**禁止**只因「這違反 X rule 應該還原」就處置；無法確認的內容保留，不自行判成可丟棄。
 
 ## Rule 衝突解法（preserve > revert）
 
@@ -125,7 +125,7 @@ Local edits will be reverted by the next sync.
 此時 **MUST** 先跑 [[session-tasks]] § 並行爭用 的 Step 0 判出持有者性質，再依下列**三個固定選項**處置。順序是規約的一部分：**A0 排在 A / B 之前**，A / B 只在 A0 判定不適用、或 A0 已送出而爭用未解時才輪到。查不到持有者時保留 WIP；沒有通道或本次訊息授權時，回報這個具體缺口，不假裝已經協調。
 
 - **A0. 先跟持有者對話**（持有者是**前景 agent session**，且已取得協調授權並有可用通道時 MUST 先走）— 以當前通道送達精確 session；Herdr 通道已驗證可用時使用 `herdr agent prompt <對方 pane_id> "<四項>"`，不把它當所有 runtime 都有的 API。四項內容與逐字範本見 [[concurrent-session-probe]] § 探測之後：協商（negotiate）。依對方回覆分流：對方說它正要 land → 等它落地再重跑當前 flow；對方說那批無主 → 進 A；對方說它要接手 → 進 B，且 TD 內文 MUST 寫明接手者是誰。送出後 MUST 指名等到哪一個可觀察事件（對方回覆、或那幾個檔不再 dirty），上限 5 分鐘，逾時升級路徑同該 cookbook。持有者是 **unattended runner**、判不出持有者、缺通道或缺本次協調授權時，A0 不執行，保留具體原因再看 A / B
-- **A. 馬上修，回 flow 繼續** — 在當前 session 直接編輯該 WIP 檔，原 flow（`/commit` / `/spectra-archive` / 等）繼續走完。前提：A0 已送出且對方不反對（或 A0 不適用），且 user 確認該編輯不會跟別 session 的修改互踩（或別 session 已結束）
+- **A. 馬上修，回 flow 繼續** — 在當前 session 直接編輯該 WIP 檔，原 flow（`/commit` / `/handoff` / 等）繼續走完。前提：A0 已送出且對方不反對（或 A0 不適用），且 user 確認該編輯不會跟別 session 的修改互踩（或別 session 已結束）
 - **B. 登 TD，放棄當前 flow** — 把問題寫進 `docs/tech-debt.md`（編號 `TD-NNN`），當前 flow **立即中止**（commit 不繼續、archive 不繼續），等別 session 結束後由 user 決定何時處理；已成功 commit 的 group 保留不動
 
 **A 與 B 之間的二選一 MUST 交給使用者決定**，透過當前 runtime 的提問介面或對話，已有對該具體處置的答案就沿用。A0 是已授權的協調動作，不能用一個替代問題跳過它。
@@ -155,7 +155,7 @@ Local edits will be reverted by the next sync.
 以下動作**功能上等同破壞性 git 命令**，因此**同樣受本 rule 限制**：
 
 - `mv <git-tracked-path> <elsewhere>` / `mv <elsewhere> <git-tracked-path>` — 把 hook 自動建立的 archive directory 搬回原位（等同 revert hook 工作）；把目錄反向搬等同 `git checkout --` 對 directory layout 操作
-- `rm -rf <openspec/changes/**>` / `rm -rf <openspec/changes/archive/**>` / `rm -rf <screenshots/**>` 等批次刪除 user-authored 或 hook-authored 內容
+- `rm -rf <specs/**>` / `rm -rf <tasks/**>` / `rm -rf <screenshots/**>` 等批次刪除 user-authored 或 hook-authored 內容
 - `cp --remove-destination` / `cp -f <source> <git-tracked-path>` — 覆蓋掉現有 working tree 內容
 - `sed -i` / `awk -i inplace` / `perl -i` 等在 git-tracked 檔案上覆寫未授權內容；合法編輯依 [[commit]] 的範圍、原內容與可審查 diff 契約
 - 用 `echo > <git-tracked-path>` / `cat > <git-tracked-path>` / `tee <git-tracked-path>` 等覆蓋 git-tracked 檔案內容
@@ -179,7 +179,7 @@ Local edits will be reverted by the next sync.
 
 中英全表見 [[commit]] § 話術關鍵詞 = 立即停手訊號——**該表是 SoT，本檔不複製**。
 
-方向不可顛倒：`commit.md` 是 always-load、本檔是 conditional-load（`paths:` 只涵蓋 openspec / HANDOFF / tech-debt / decisions）。**指標一律 conditional → always**；反過來會讓本檔沒載入的 session 完全失去這層保護。
+方向不可顛倒：`commit.md` 是 always-load、本檔是 conditional-load（`paths:` 只涵蓋 tasks / specs / ROADMAP / HANDOFF / tech-debt / decisions）。**指標一律 conditional → always**；反過來會讓本檔沒載入的 session 完全失去這層保護。
 
 ### 停手定義
 
@@ -240,13 +240,13 @@ User 要求報告、分析、比較、盤點等輸出時，交付物 **MUST** �
 
 **為什麼**：chat inline 的分析無法被後續 session 引用、搜尋、或 version control。「聊天摘要不算交付」。
 
-## 開放式策略問題不過早路由到 spectra
+## 開放式策略問題不過早路由到 SDD 流程
 
-User 提出**跨產品、商業模式、系統邊界**的大範圍策略題時，**MUST** 先獨立分析再決定是否進 spectra 流程。
+User 提出**跨產品、商業模式、系統邊界**的大範圍策略題時，**MUST** 先獨立分析再決定是否進 SDD 流程。
 
-**可觀察 predicate**：user 的問題未指名任何具體 module / file / endpoint，而是問「我們能提供什麼」「這兩個產品的關係」「商業模式怎麼切」等探索性問題 → 先做分析（寫成檔案，per § 交付物），分析完 user 明確說「開 spectra change」時才進 spectra。
+**可觀察 predicate**：user 的問題未指名任何具體 module / file / endpoint，而是問「我們能提供什麼」「這兩個產品的關係」「商業模式怎麼切」等探索性問題 → 先做分析（寫成檔案，per § 交付物），分析完 user 明確說「開一個 plan package」時才走 `/specify`。
 
-**NEVER** 對策略題直接跑 `/spectra-propose` 或 `/spectra-discuss` — spectra 是實作工具，不是策略分析框架。
+**NEVER** 對策略題直接跑 `/specify` 或 `/spec-by-example` — aixbdd 是實作工具，不是策略分析框架。
 
 ## 禁止事項
 

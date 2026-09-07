@@ -68,7 +68,7 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 
 三件套的既有範本：[[testing-anti-patterns]]、`~/.claude/skills/receiving-code-review`。
 
-**可選第四件——completion checkbox＋證據 gate**：兩條**同時**成立才加——(1) 完成宣告本身是高違規點的流程型 skill（apply / verify / commit 類），且 (2) 該步驟的完成**有外部可取事實可查**（實跑輸出 / 截圖 / API 回應 / DB 狀態 / exit code）。兩條都中，把 completion criterion 寫成 checkbox 清單，每格綁「貼出實跑 invocation 與 output」——宣告完成前逐格附證據，只宣稱 done 不算完成。這是 § 資訊架構與拆分 sequence-cut 順序裡「先 sharpen criterion」的實作形式（便宜且局部，先於拆步驟）。出處：mattpocock/skills `diagnosing-bugs` completion checklist。落地實例：spectra-apply「Completion evidence gate」、spectra-verify Step 8、commit Step 6。
+**可選第四件——completion checkbox＋證據 gate**：兩條**同時**成立才加——(1) 完成宣告本身是高違規點的流程型 skill（apply / verify / commit 類），且 (2) 該步驟的完成**有外部可取事實可查**（實跑輸出 / 截圖 / API 回應 / DB 狀態 / exit code）。兩條都中，把 completion criterion 寫成 checkbox 清單，每格綁「貼出實跑 invocation 與 output」——宣告完成前逐格附證據，只宣稱 done 不算完成。這是 § 資訊架構與拆分 sequence-cut 順序裡「先 sharpen criterion」的實作形式（便宜且局部，先於拆步驟）。出處：mattpocock/skills `diagnosing-bugs` completion checklist。落地實例：commit Step 6、[[proactive-skills.design-checkpoint]] § Design Gate。
 
 **(2) 不成立就 NEVER 加**：完成與否只能靠重讀自己的推理判定的步驟（判斷寫得對不對、措辭合不合適、方案選得好不好），加 gate 買不到東西——模型會自行捕捉並修正自己的錯誤，gate 只是把同一份判斷跑第二次，燒 token 不提升品質。判別法：寫得出「勾這格要貼哪一條命令的哪一段輸出」才算 (2) 成立，寫不出來就是純推理步驟。同一條界線的另一半見 [[checker-subagent]] § 為什麼——fresh context 買到的是「沒看過實作過程」，不是「更嚴格」。
 
@@ -213,7 +213,7 @@ clade 自家正例：`notion-board` 的「**NOT for** 主動建立一張新的�
 ## Token 紀律
 
 - 對 always-load rule（frontmatter 無 `paths:`）加段落前，先考慮 conditional-load 或併入既有 §；預算 gate：`scripts/audit-always-load-budget.ts`（cap 以該 script 為準）。
-- **always-load 是 zero-sum 面，加段落前 MUST 先答一句「這一段有沒有可判定的觸發條件」（MUST）**：該段的 NEVER / MUST 只在**特定檔案類型或特定 flow** 下才會被違反 → 它屬於 conditional，**MUST** 併進**既存**的 path-scoped 姊妹檔（`rules/core/<topic>.<sub>.md`），always-load 端只留同編號 stub ＋ **具名時機**的 MUST-Read 指針（「開始收截圖 evidence 之前」「派 spectra apply phase 之前」這種，NEVER 是「詳見」）。答案是「每一次派工前都要判」這種無觸發條件的，才留 always-load。
+- **always-load 是 zero-sum 面，加段落前 MUST 先答一句「這一段有沒有可判定的觸發條件」（MUST）**：該段的 NEVER / MUST 只在**特定檔案類型或特定 flow** 下才會被違反 → 它屬於 conditional，**MUST** 併進**既存**的 path-scoped 姊妹檔（`rules/core/<topic>.<sub>.md`），always-load 端只留同編號 stub ＋ **具名時機**的 MUST-Read 指針（「開始收截圖 evidence 之前」「派一個實作 phase 之前」這種，NEVER 是「詳見」）。答案是「每一次派工前都要判」這種無觸發條件的，才留 always-load。
 
   **NEVER 為了騰空間新開一支寬 glob 的 conditional 檔**——`paths:` 的成本是「包」不是「支」（見下一條），把常駐成本從 cached prefix 搬到 nested_memory 是更貴的方向。併進既存姊妹檔不新增注入包。
 
@@ -228,7 +228,7 @@ clade 自家正例：`notion-board` 的「**NOT for** 主動建立一張新的�
   | `data-layer-d1.md` 放在 `rules/core/` + glob `**/*.{ts,vue,sql}` | D1 專用規約卻投影給全部 consumer，`hub.json` 顯示只有 3 個是 `db-schema: cf-d1`；用 supabase 的 consumer 每次改 `.ts` 就吃 8.5k tokens |
   | `nuxt-data-perf.md` 的 `**/*.ts` | 會在編輯 `scripts/` / `test/` / `e2e/` / `vendor/` 時觸發，那些位置沒有對應條文 |
 
-- **`paths:` 的成本是「包」不是「支」（MUST）**：上一條問的是「本規約有沒有對應條文」，那是**單支**的問題。真正付出去的成本是**所有 glob 命中同一條路徑的規約總和**——十幾支各自宣告 `openspec/changes/**`，每一支分開看都站得住，但編輯一次 `tasks.md` 就把它們全部拉進 context。
+- **`paths:` 的成本是「包」不是「支」（MUST）**：上一條問的是「本規約有沒有對應條文」，那是**單支**的問題。真正付出去的成本是**所有 glob 命中同一條路徑的規約總和**——十幾支各自宣告 `tasks/**`，每一支分開看都站得住，但編輯一次 tasks 檔就把它們全部拉進 context。
 
   **這是湧現成本，沒有任何一個規約作者在自己那份檔案裡看得見它。** 2026-08-02 全 fleet 7 天實測：
 
@@ -243,7 +243,7 @@ clade 自家正例：`notion-board` 的「**NOT for** 主動建立一張新的�
 
   所以**新增或放寬 `paths:` 前 MUST 先跑 `node scripts/audit-rule-bundle.ts` 看該路徑現在已經背著多少**，再決定自己這支要不要加進去。**NEVER** 只確認「我這支有對應條文」就放行——那個判準通過的規約疊起來就是上表那 43%。
 
-  命中 ≥15 支**不等於 bug**（`openspec/changes/**` 底下的工作本來就需要多份規約在場），但它是「這個代價你知不知道」的分界線。
+  命中 ≥15 支**不等於 bug**（`tasks/**` 與 `specs/plans/**` 底下的工作本來就需要多份規約在場），但它是「這個代價你知不知道」的分界線。
 
   **模組化優先於收窄 glob**：規約只對某類 stack 成立時，正解是放進 `rules/modules/<group>/<variant>/` 讓 `hub.json` 決定誰拿，不是留在 `core/` 再把 glob 寫窄——後者仍然投影給每個 consumer，只是少觸發幾次。
 - **單條規約的長度校準（MUST）**：長度配問題大小。一條規約的完整形狀是**觸發條件一句 + 該做什麼一句 + 違反成本一句**；需要第四句時先問是不是該拆成兩條。寫完每一段自問「刪掉它，行為會不會變？」——不會變就刪。上一條的預算 gate 是總量閘，這條管每一段自己該多長：**總量沒超標不代表個別段落沒灌水**，而總量一旦逼近 cap，先被犧牲的會是真正需要篇幅的那幾條。
@@ -262,7 +262,7 @@ clade 自家正例：`notion-board` 的「**NOT for** 主動建立一張新的�
 
 ## 稽核
 
-`node scripts/audit-rule-authoring.ts`（warn-only）：偵測 description 流程摘要、NEVER/MUST 行 nuance clause、skill 內 `@` force-load 連結、SKILL.md 行數超標（>400 行拆分候選；spectra fork 豁免）、description 引號觸發詞 ≥4（one-trigger-per-branch 違反跡象）、description 缺 negative boundary（`desc-no-negative-boundary`；spectra fork 豁免）、**NEVER 牆**兩訊號。
+`node scripts/audit-rule-authoring.ts`（warn-only）：偵測 description 流程摘要、NEVER/MUST 行 nuance clause、skill 內 `@` force-load 連結、SKILL.md 行數超標（>400 行拆分候選）、description 引號觸發詞 ≥4（one-trigger-per-branch 違反跡象）、description 缺 negative boundary（`desc-no-negative-boundary`）、**NEVER 牆**兩訊號。
 
 `desc-no-negative-boundary` 是**存在性**訊號，不是品質訊號：它只看得到有沒有 `NOT for` / `Do not use` / `不適用` / `NEVER for` 這類標記，看不到那句話有沒有指名去處。0 命中**不代表**每支的 boundary 都寫得夠好——寫得好不好只有人讀得出來。
 
@@ -279,7 +279,9 @@ NEVER 牆兩訊號對應 § 反開脫要精準嵌逐字的 ❌ 反例：
 <!-- never-density-reviewed: YYYY-MM-DD — <一句話理由> -->
 ```
 
-即豁免 180 天（沿用 `audit-tech-debt-hygiene` 的 `Last reviewed` 慣例：**帶到期，不是永久豁免**；過期後 warn 會回來並附已過天數）。掛之前 MUST 真的逐條讀過——理由要寫得出「哪幾類條目為什麼是載重的」，寫不出來就是該刪。Spectra fork（frontmatter `generatedBy: Spectra`）兩訊號皆豁免，理由同 `skill-oversize`。
+即豁免 180 天（沿用 `audit-tech-debt-hygiene` 的 `Last reviewed` 慣例：**帶到期，不是永久豁免**；過期後 warn 會回來並附已過天數）。掛之前 MUST 真的逐條讀過——理由要寫得出「哪幾類條目為什麼是載重的」，寫不出來就是該刪。
+
+> 2026-09-07 前另有一條「上游 fork（frontmatter `generatedBy: Spectra`）兩訊號皆豁免」。spectra 家族退場後 clade 內零檔案帶那個 frontmatter，三處判定式已隨之移除（audit 輸出前後逐位元相同）。**NEVER** 為新的上游鏡射重建同形豁免而不先問「這份檔到底歸誰改」——豁免的成立條件是改不動它，不是它比較長。
 
 ## Taste Rubric（品質判定的分工與校準）
 
@@ -295,7 +297,7 @@ variance；把需要語境的丟給 regex = 系統性漏判。
 | 準則（pass 條件） | Grader | 現況 |
 | --- | --- | --- |
 | description 不是流程摘要、不含 ≥4 個引號觸發詞 | Code | `desc-flow-summary` / `desc-trigger-dup` / `desc-verbose` / `desc-too-long` |
-| SKILL.md ≤ 400 行 | Code | `skill-oversize`（Spectra fork 豁免） |
+| SKILL.md ≤ 400 行 | Code | `skill-oversize` |
 | 跨 skill 觸發詞無碰撞 | Code | `skill-trigger-collision` |
 | NEVER 未成牆、總量未過載 | Code | `never-wall` / `never-density`（後者有 180 天覆核出口） |
 | 可變事實指 SoT 而非 inline | Code | `fleet-count-inline` |

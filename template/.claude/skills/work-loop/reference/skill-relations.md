@@ -33,7 +33,7 @@ cd ~/offline/<consumer> && \
 | handoff-scan.ts | Step 2 + Step 5 re-scan 的唯一狀態來源；輸出固定落 `.clade/work-loop/scan-latest.json`（覆蓋前 rotate 一份 `scan-prev.json`） |
 | work-loop-summary.ts | 把上面那份 scan 壓成十餘行摘要（只列非 pass 的 check）。**要回頭看 scan 就讀它，NEVER 重跑 scan** |
 | work-loop-state-write.ts | Step 7.3 落 state 的唯一寫入路徑（patch 淺層合併 + 原子換檔 + round 不得倒退）。**NEVER** 每輪自己生成一支 write-state script |
-| /opsx | 需求接續、revision-aware evidence 與 archive；條件依 SKILL.md § 3.1a |
+| /implement | 需求接續與 evidence 收集；條件依 SKILL.md § 3.1a |
 | /wt | worktree 建立 + dispatch subagent |
 | /handoff | 不直接調用（本 skill 自動化 handoff `next` 的「盤點 → 推薦 → 執行」，unattended 下把 AskUserQuestion 換成 packaging） |
 | **/goal** | **attended 版姊妹**：user 在場、要逐項拍板 dispatch 優先序（見 [[goal-mode]]）。想逐項拍板 → 用 /goal 不用本 skill |

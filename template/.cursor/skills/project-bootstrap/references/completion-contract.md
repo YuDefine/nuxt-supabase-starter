@@ -21,7 +21,7 @@
 
 ## 需求交付證據
 
-- 所有新產出的 AI target 指引、package scripts、OpenSpec 設定與 CLI 預設一致指向 OPSX；target 實跑 help/list 成功，舊 writer 拒絕且未寫入。
+- 所有新產出的 AI target 指引與 package scripts 一致指向 aixbdd 入口（`/specify` / `/tasks` / `/implement`）；target 實跑 `flow status --json` 成功。
 - 任務包含首件需求時，提交 source/change/work/revision、驗證 policy 與真實 evidence、archive 回讀、commit／deploy track。沒有部署的 track 明示未部署。
 - CPMS 重建演練另附 playground 外的來源版本／建案答案／證據索引，覆蓋選擇性 BDD、普通測試、修訂失效與重驗；單次 scaffold 或 readiness 不計為完整交付。
 

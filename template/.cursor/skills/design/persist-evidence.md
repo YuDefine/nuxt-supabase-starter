@@ -5,7 +5,7 @@
 
 完成診斷和計劃輸出後，若偵測到 active Spectra change（Step 0.5）：
 
-1. **寫入 `design-review.md`** 到 change 目錄（`openspec/changes/<name>/design-review.md`）：
+1. **寫入 `design-review.md`** 到 carrier 旁（plan package：`specs/plans/NNN-<slug>/design-review.md`；ad-hoc：`docs/design-review/<slug>.md`）：
 
 ```markdown
 # Design Review: <change-name>
@@ -83,8 +83,8 @@ Copy Tone Score: N/6 PASS
 - Chosen World: seed key / optionId / canon? / steer
 - Component set: optionId
 - Skill sequence: optionId（assigned | alt-…）
-- [其他影響 spec 的設計決策，便於 spectra-ingest 回饋]
+- [其他影響 spec 的設計決策，便於回交 truth owner skill]
 ```
 
 2. 此檔案是 `pre-archive-design-gate.sh` hook 的主要檢查依據
-3. 若 Design Decisions 中有影響 spec 的發現，提醒執行 `spectra-ingest` 更新 artifacts
+3. 若 Design Decisions 中有影響 spec 的發現，提醒回交 `/dsl-refine`（truth feature）或在 carrier 加一條 task；**NEVER** 就地改 `specs/truth/**`

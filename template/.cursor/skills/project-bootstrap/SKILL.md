@@ -214,7 +214,7 @@ cd <target-path> && pnpm check
 
 ### 新專案需求入口
 
-每個新產出在所選 AI targets 的指引與可執行投影中都採用 `/opsx`。以 target 的 `.clade/vendor/scripts/opsx-control.ts --help`／list 核對完整入口與歷史讀取；舊 writer 只能回退役錯誤且零寫入。預設指引、package scripts 與 OpenSpec 設定須一致，不能只驗 skill 目錄存在。
+宣告 `aixbdd` capability 的新產出，在所選 AI targets 的指引與可執行投影中都採用 `/specify` → `/tasks` → `/implement` 這條入口。以 target 的 `.cursor/skills/` 實際存在該組 skill、且 `node .clade/vendor/scripts/flow/flow.ts status --json` 跑得起來為準；預設指引與 package scripts 須一致，不能只驗 skill 目錄存在。
 
 使用者任務包含首件需求時，沿同一 source/change/work 完成 create → instructions/materialize → 風險選擇的測試／BDD → evidence/project → archive，另附真實 commit 與 deploy track 狀態。readiness READY 只結案建案檢查，不代替這條需求的交付證據。
 

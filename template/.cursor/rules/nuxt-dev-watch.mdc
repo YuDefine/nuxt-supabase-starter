@@ -14,7 +14,7 @@ Local edits will be reverted by the next sync.
 
 # Nuxt Dev Watch
 
-**核心命題**：clade governance 依 consumer 設定產生治理目錄（`.claude/` / `.agents/` / `.codex/` / `.cursor/` / `.clade/` / `.spectra/`），含大量檔案。chokidar 預設 watch consumer cwd 全部 → nuxt main process fd 用量爆衝 → libuv `uv_spawn` 對 nitropack `handlersMeta` 的 esbuild worker spawn 撞 `EBADF` cascade，dev server 完全 paralyze。clade 必須提供 baseline ignore，consumer 對齊即可。
+**核心命題**：clade governance 依 consumer 設定產生治理目錄（`.claude/` / `.agents/` / `.codex/` / `.cursor/` / `.clade/`），含大量檔案。chokidar 預設 watch consumer cwd 全部 → nuxt main process fd 用量爆衝 → libuv `uv_spawn` 對 nitropack `handlersMeta` 的 esbuild worker spawn 撞 `EBADF` cascade，dev server 完全 paralyze。clade 必須提供 baseline ignore，consumer 對齊即可。
 
 > Cookbook 範本：`vendor/snippets/nuxt-dev-watch/`。
 >
@@ -42,7 +42,7 @@ Local edits will be reverted by the next sync.
 - `.codex/**`
 - `.cursor/**`
 - `.clade/**`
-- `.spectra/**`
+- `.spectra/**`（legacy，spectra 退場前的 consumer 仍有殘留目錄）
 
 **NEVER** 刪上述任何 baseline pattern；尚未產生的目錄也保留排除，後續啟用對應 runtime 時即有保護。Audit 對缺漏回報 `DRIFT`／`MISSING`，維持 diagnostic-only。
 

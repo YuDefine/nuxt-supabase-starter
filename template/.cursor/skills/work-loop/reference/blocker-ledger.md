@@ -116,7 +116,7 @@ predicate 未變講的是**卡點**沒變，`staleEvidenceCount=7` 講的是**�
 合格 / 不合格對照（`<>` 是佔位符，逐字寫進 ledger 就等於沒有 predicate）：
 
 - ✅ `gh pr view <n> --json state 回 MERGED`
-- ✅ `scan JSON 的 spectra entry <name> bucket 不再是 applyBlocked`
+- ✅ `scan JSON 的 plans entry <slug> bucket 不再是 applyBlocked`
 - ✅ `<repo>/supabase/migrations/<file> 存在`
 - ❌ `上游修好了`
 - ❌ `Charles 確認過`

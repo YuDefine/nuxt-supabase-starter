@@ -1,6 +1,6 @@
 ---
 description: Nuxt UI v3/v4 component / composable / theming / icon 必走 nuxt-ui-remote MCP；ban prescriptive synthesis
-paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'app.config.ts', 'nuxt.config.ts', 'openspec/changes/**/proposal.md', 'openspec/changes/**/design.md', 'openspec/changes/**/design-review.md']
+paths: ['app/**/*.{vue,ts}', 'packages/*/app/**/*.{vue,ts}', 'pages/**/*.vue', 'packages/*/pages/**/*.vue', 'components/**/*.vue', 'packages/*/components/**/*.vue', 'layouts/**/*.vue', 'packages/*/layouts/**/*.vue', 'app.config.ts', 'nuxt.config.ts', 'specs/plans/**/spec.md', 'specs/plans/**/plan.md', 'specs/plans/**/design-review.md']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -32,7 +32,7 @@ Local edits will be reverted by the next sync.
 
 ### 設計階段同樣在範圍內
 
-path scope 含 `openspec/changes/**/{proposal,design,design-review}.md`，**不是**只有實作檔。因為這條規則要擋的有兩層，而它們發生在不同階段：
+path scope 含 `specs/plans/**/{spec,plan,design-review}.md`，**不是**只有實作檔。因為這條規則要擋的有兩層，而它們發生在不同階段：
 
 | 層 | 問的問題 | 發生階段 | 寫錯的代價 |
 | --- | --- | --- | --- |

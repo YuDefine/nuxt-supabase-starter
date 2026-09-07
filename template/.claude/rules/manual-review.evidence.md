@@ -1,6 +1,6 @@
 ---
 description: Manual Review evidence 規約——寫 / 審 tasks.md 的 ## 人工檢查 區塊時 path-scoped 載入
-paths: ['openspec/changes/**/tasks.md', 'docs/manual-review-archive.md']
+paths: ['tasks/**', 'specs/plans/**', 'docs/manual-review-archive.md']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -286,7 +286,7 @@ Scoped sub-item 範例：
 | --- | --- |
 | Review GUI (`applyReviewActionToContent`) | 每次寫回 child line 後 **MUST** 重 derive parent state 並寫回 parent line（auto-rollup / un-rollup） |
 | commit Step 0-MR awk gate | **MUST** leaf-only count — parent-with-scoped-children 不計 pending |
-| `spectra-advanced/archive-gate.sh` | **MUST** leaf-only count（已正確 — semantic fully aggregated from scoped children） |
+| 任何計 pending 的 gate / tooling | **MUST** leaf-only count（semantic fully aggregated from scoped children） |
 | 未來新加的 tooling | **MUST** 沿用 leaf-only count；禁止 naive `grep '- \[ \]'` 或同義 awk 計 pending |
 
 ## `(claude-analyzed: ...)` annotation 細節
@@ -307,7 +307,7 @@ User 在 GUI 對該 item 點 **OK / Issue / Skip** 時，`stripAnnotations`（in
 | 維度 | `(claude-discussed:)` | `(claude-analyzed:)` |
 | --- | --- | --- |
 | 適用 kind | `[discuss]` | `[review:ui]` / `[verify:ui]`（帶 `（issue:）` 的 item） |
-| 觸發流程 | `/spectra-archive` Step 2.5 walkthrough | review-gui 「等 orchestrator 接手」prompt 路由 (E) |
+| 觸發流程 | 交付前收尾 walkthrough（[[manual-review]] § `[discuss]` walkthrough） | review-gui 「等 orchestrator 接手」prompt 路由 (E) |
 | Checkbox 行為 | 翻 `[x]` | **不翻**（保 `[ ]`） |
 | Strip on user action | 不 strip（archive evidence trail） | strip（user 點 OK / Issue / Skip 即清） |
 | User 主動性 | user 必須先看 evidence 才允許 orchestrator 寫 | orchestrator 自己分析後寫，user 之後重整 GUI 看到 |
@@ -374,7 +374,7 @@ helper 寫入後用 `listPendingChanges` 重算 bucket，印 `oldBucket → newB
 1. **Root cause 已被 explicit marker enforcement 取代**：`MISSING_KIND_MARKER` pattern（`patterns.json` v1.4.0）在 propose / ingest 階段透過 hook fail-fast 強制每條 sub-item 標 explicit marker。Fallback 只剩 legacy in-flight item 在用，新 case 不會再進。
 2. **任何 default 都猜不對**：`[review:ui]` / `[verify:ui]` / `[verify:api]` 三種 kind 走不同 review flow，default 選哪個都會在某類內容上錯。改 default 從「猜成 review:ui」變「猜成 verify:ui」，PATCH /api/... 這種 backend roundtrip 還是錯（正解是 `[verify:api]`）。只有 explicit marker 是正解，default 永遠是「猜」。
 3. **會 break legacy review-gui flow**：fallback derived item 從「user 在 GUI 點 OK 過」變成「需 final-state screenshot evidence (`verified-ui` annotation) + 點 OK」，可能在 review-gui 觸發 evidence missing red banner、卡住既有 archive flow。
-4. **review-gui chip 已視覺化**：`hasExplicitKind: false` 的 item 顯示 `(fallback)` amber chip，user 看得到、知道要跑 `/spectra-ingest` 補。漸進清 legacy 即可，不需大爆改。
+4. **review-gui chip 已視覺化**：`hasExplicitKind: false` 的 item 顯示 `(fallback)` amber chip，user 看得到、知道那條 tasks 行要補 kind marker。漸進清 legacy 即可，不需大爆改。
 
 **Future agent**：看到 missing marker 問題的反射性建議**不該**是「改 default」，應該是「補 explicit marker（或 hook 已擋）」。本 ADR 防止 default flip 提案反覆出現。
 

@@ -1,6 +1,6 @@
 ---
 description: Optional truth-layers 規則——適用於有明確 persistence / contract / API / UI 分層的專案，定義每一層的真相來源
-paths: ['openspec/**', 'docs/decisions/**', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'shared/**/*.ts', 'packages/*/shared/**/*.ts', 'src/**/*.ts', 'app/**/*.vue', 'packages/*/app/**/*.vue']
+paths: ['specs/**', 'tasks/**', 'ROADMAP.md', 'docs/decisions/**', 'server/**/*.ts', 'packages/*/server/**/*.ts', 'shared/**/*.ts', 'packages/*/shared/**/*.ts', 'src/**/*.ts', 'app/**/*.vue', 'packages/*/app/**/*.vue']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -17,7 +17,7 @@ Local edits will be reverted by the next sync.
 
 ## 核心概念
 
-- **意圖層**：需求、限制、架構方向放在 `openspec/**`、`docs/decisions/**`
+- **意圖層**：需求、限制、架構方向放在 `specs/**`（SpecFormula / aixbdd 產出）、`docs/decisions/**`
 - **持久化層**：schema、constraints、migrations 是資料真相來源
 - **契約層**：request / response schema、shared contract 是跨層介面真相
 - **服務 / API 層**：負責驗證輸入、組裝資料、維持 request-scoped 行為

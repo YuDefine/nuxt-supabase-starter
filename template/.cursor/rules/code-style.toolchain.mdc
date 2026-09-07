@@ -342,7 +342,7 @@ rm -rf node_modules && pnpm install     # 這次才會真的 resolve 並改寫 l
 
 ### `vite.config.ts` 必備欄位（跨 consumer 統一，避免 propagate drift）
 
-clade 散播檔（`vendor/scripts/*.ts`、`scripts/spectra-advanced/*`、`.github/actions/*`）會進到每個 consumer 的 `vp fmt` 掃描範圍。若 clade 與 consumer 的 `vite.config.ts` fmt 設定不一致，consumer 端 `vp fmt --check` 會把 clade 寫出的程式重排成 consumer 風格 → 形成 LOCKED 檔被改動 → CI 紅燈或下次 propagate 出現 drift commit。
+clade 散播檔（`vendor/scripts/*.ts`、`.clade/vendor/**`、`.github/actions/*`）會進到每個 consumer 的 `vp fmt` 掃描範圍。若 clade 與 consumer 的 `vite.config.ts` fmt 設定不一致，consumer 端 `vp fmt --check` 會把 clade 寫出的程式重排成 consumer 風格 → 形成 LOCKED 檔被改動 → CI 紅燈或下次 propagate 出現 drift commit。
 
 **MUST** 從 clade 散播的 `vendor/oxc-shared/preset.ts` import baseline 並 spread merge：
 

@@ -85,7 +85,7 @@ Clade 中央倉 **不**規定 `docs/FIXTURES.md` 內容 schema — per-consumer 
 ⚠ propagate: <consumer-name> missing docs/FIXTURES.md
   Required by clade/rules/core/fixtures-reference.md
   Per-consumer follow-up: create the file with at least a「Test Identities」section
-  before next /spectra-propose containing [review:ui] items with sample references.
+  before writing the next [review:ui] items that carry sample references.
 ```
 
 Consumer owner 收到 warning 後在自家 ROADMAP / HANDOFF / docs/tech-debt.md 排補檔。clade 端不替 consumer 創建該檔（per-consumer 業務差異大）。

@@ -1,6 +1,6 @@
 ---
 name: screenshots-archive
-description: 'Use when sweep 截圖資料夾到 _archive/ — review-archive / spectra-archive 完成時自動觸發，或使用者要求清截圖。NOT for 產生新截圖（走 review-screenshot），NOT for 歸檔 review 結論本身（走 review-archive）。'
+description: 'Use when sweep 截圖資料夾到 _archive/ — review-archive 完成或一件工作收尾時自動觸發，或使用者要求清截圖。NOT for 產生新截圖（走 review-screenshot），NOT for 歸檔 review 結論本身（走 review-archive）。'
 metadata:
   clade:
     permission_tier: read-only
@@ -19,11 +19,11 @@ metadata:
 - 「歸檔截圖」「sweep screenshots」「清掉舊的截圖資料夾」
 - 「change X 的截圖歸檔」（指定）
 - `/review-archive` 完成後**自動**呼叫（指定 change 模式）
-- `/spectra-archive` 完成後**自動**呼叫（指定 change 模式）
+- 一件工作標 `work.done` 後**自動**呼叫（指定 work 模式）
 
 ## 輸入
 
-- 指定 change：`/screenshots-archive change <change-name>` → 只搬該 change 對應的 topic（review-archive / spectra-archive 自動觸發走此模式）
+- 指定 work：`/screenshots-archive change <work-slug>` → 只搬該工作對應的 topic（review-archive 與收尾流程自動觸發走此模式）
 - 指定 topic：`/screenshots-archive <topic-name>` → 直接搬該 topic（跳過對齊檢查，需 user 確認）
 - 未指定：sweep 所有「在 `docs/manual-review-archive.md` 已收錄」且「`screenshots/<env>/<topic>/` 仍存在頂層」的 topic
 
@@ -58,25 +58,26 @@ done
 
 候選有跳過項目時，回報「N 個 topic 已對齊可 sweep / M 個 topic 未對齊跳過」，列出跳過清單，**不**追問是否強制。
 
-#### Mode B — 指定 change（含 review-archive / spectra-archive 自動觸發）
+#### Mode B — 指定 work（含 review-archive 與收尾流程自動觸發）
 
-`/screenshots-archive change <change-name>`：
+`/screenshots-archive change <work-slug>`：
 
-1. 跨所有 environment 掃 `screenshots/<env>/<change-name>/` 是否存在
-2. **找到對應 topic**：直接 sweep（信任 caller — review-archive / spectra-archive 已確認 change 結束；不再對齊 manual-review-archive，避免 spectra-archive 直 archive 路徑被擋）
+1. 跨所有 environment 掃 `screenshots/<env>/<work-slug>/` 是否存在
+2. **找到對應 topic**：直接 sweep（信任 caller — 它已確認該工作結束；不再對齊 manual-review-archive，避免直接收尾的路徑被擋）
 3. **找不到對應 topic** → 先跑 **backend-only 判定**，命中就 noop、**NEVER** 追問：
 
    ```bash
-   # change 目錄可能已被 archive 搬走，兩處都探
-   dir=$(ls -d openspec/changes/<change-name> openspec/changes/archive/*-<change-name> 2>/dev/null | head -1)
-   grep -q 'No user-facing journey (backend-only)' "$dir/proposal.md" 2>/dev/null && echo BACKEND_ONLY
-   grep -q 'pre-handoff-verdict: intentional, reason: backend-only' "$dir/tasks.md" 2>/dev/null && echo BACKEND_ONLY
-   awk '/^## 人工檢查/{mr=1} mr && /\[review:ui\]/{found=1} END{exit found}' "$dir/tasks.md" 2>/dev/null && echo BACKEND_ONLY
+   # carrier 有兩種形狀，兩處都探
+   carrier=$(ls -d specs/plans/*-<work-slug>/tasks.md tasks/*-<work-slug>.md 2>/dev/null | head -1)
+   spec=$(dirname "$carrier")/spec.md
+   grep -q 'No user-facing journey (backend-only)' "$spec" 2>/dev/null && echo BACKEND_ONLY
+   grep -q 'pre-handoff-verdict: intentional, reason: backend-only' "$carrier" 2>/dev/null && echo BACKEND_ONLY
+   awk '/^## 人工檢查/{mr=1} mr && /\[review:ui\]/{found=1} END{exit found}' "$carrier" 2>/dev/null && echo BACKEND_ONLY
    ```
 
-   任一條命中 → **silent noop**，回報一行 `Screenshots: no topic — backend-only change（無 UI 表面，本來就沒截圖）`，流程繼續。
+   任一條命中 → **silent noop**，回報一行 `Screenshots: no topic — backend-only（無 UI 表面，本來就沒截圖）`，流程繼續。
 
-   純 backend change 沒有 UI 表面，**依定義**不會有截圖 —— 對它追問「要不要 sweep 別人的 topic」是把制度缺口變成使用者的決策負擔，且唯一正確答案永遠是「跳過」。**NEVER** 對命中 backend-only 的 change 提問（見下方 § 向使用者提問）。
+   純 backend 的工作沒有 UI 表面，**依定義**不會有截圖 —— 對它追問「要不要 sweep 別人的 topic」是把制度缺口變成使用者的決策負擔，且唯一正確答案永遠是「跳過」。**NEVER** 對命中 backend-only 的工作提問（見下方 § 向使用者提問）。
 
 4. **找不到對應 topic 且非 backend-only**（topic 名與 change 名不一致 / 已 sweep 過 / 該拍卻沒拍）：
    - 列 `screenshots/<env>/` 頂層所有候選 topic（排除 `_archive/`）

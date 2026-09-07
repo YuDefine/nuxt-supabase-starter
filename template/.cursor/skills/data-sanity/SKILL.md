@@ -1,6 +1,6 @@
 ---
 name: data-sanity
-description: "Use when running spectra Design Review, before /spectra-archive, or ad-hoc on changes touching paginated queries. Detects client-server schema mismatch. NOT for 一般 code review（走 review-rules）。"
+description: "Use when running Design Review, before delivering a work item for manual review, or ad-hoc on changes touching paginated queries. Detects client-server schema mismatch. NOT for 一般 code review（走 review-rules）。"
 metadata:
   author: clade
   version: "1.0"
@@ -22,8 +22,8 @@ Born from perno `app-status-badge-extraction`（2026-05-24）: `attendance/amend
 
 ## 何時跑
 
-- **`/spectra-apply` Section 7 Design Review 期間**：對本 change 觸及的 paginated query + lookup-resolved column 跑一次。
-- **`/spectra-archive` Step 0 之前**：archive gate 的 data-shape 防線。
+- **Design Checkpoint 期間**（[[proactive-skills.design-checkpoint]]）：對本次工作觸及的 paginated query + lookup-resolved column 跑一次。
+- **交付人工檢查之前**：data-shape 防線。
 - **Ad-hoc**：任何改到 `useXxxQuery({ <param>: <literal> })` 或 lookup map 的工作。
 
 ## 怎麼跑

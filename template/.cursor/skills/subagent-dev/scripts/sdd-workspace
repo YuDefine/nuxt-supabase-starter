@@ -12,14 +12,14 @@
 # Single source of truth for the workspace location, so task-brief and
 # review-package cannot drift to different directories.
 #
-# Adapted from obra/superpowers v6.1.1 (MIT); clade uses .spectra/sdd to match
+# Adapted from obra/superpowers v6.1.1 (MIT); clade uses .clade/sdd alongside the other
 # the fleet's existing scratch-dir convention.
 #
 # Usage: sdd-workspace
 set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
-dir="$root/.spectra/sdd"
+dir="$root/.clade/sdd"
 mkdir -p "$dir"
 printf '*\n' > "$dir/.gitignore"
 cd "$dir" && pwd
