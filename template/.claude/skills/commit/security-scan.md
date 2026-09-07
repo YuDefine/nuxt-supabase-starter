@@ -46,6 +46,13 @@ refresh 是否成功仍以新一次真實掃描為準。直接執行未帶 state
 
 先依實際 `(exit, failure_class)` 分流；只有 `(2, tool-failure-no-artifacts)` 或 `(2, tool-timeout)` 進入本節。
 
+**`(2, stop-line-refused)` NEVER 進入本節。** 它代表停止線低於本 target 同一範圍已實測不足的
+水位，wrapper 在啟動掃描**之前**就拒絕了（`failure_reason: stop-line-below-observed-floor`、
+`failure_phase: wrapper-preflight`），一次 scanner 都沒跑、零花費。處置照下方停止線那一節：
+提高 `--max-cost` 到建議值以上重跑，或縮小範圍。**NEVER** 對它請求未掃描放行——沒有工具故障，
+只有一個已知不夠的預算。（本值列在這裡是因為未列名的 `failure_class` 會落到「保留原始輸出並
+調查工具契約」，而它不是工具契約問題。）
+
 **`(2, scope-abort)` NEVER 進入本節。** 它代表 watchdog 在第一個分母行判定範圍沒收斂並中止了掃描
 （stderr 有 `[security-scan] scope abort:` 那行）——處置是**修範圍**：改用
 `path --path <relative>`，或縮小批次讓 scanner 推導得出來。**NEVER** 對它請求未掃描放行，
@@ -79,12 +86,51 @@ Files 進度分母隨 scanner 版本、模式與範圍改變；單次分母不�
 它不是實際扣款、完成報價或訂閱剩餘量。選值依同一 repo、模式、版本與範圍的既有結果，
 缺少成功樣本時先給明確的診斷停止線；失敗後保留結果再評估，**NEVER** 用不限額掃描量地板。
 
+**停止線的地板由 ledger 機械決定，不靠記憶猜。** wrapper 在啟動 scanner 之前先讀 target 自家
+ledger，取同 `run_kind` / model / effort / scanner 版本裡**每一筆撞上停止線或被計時器砍掉**的
+`estimated_cost_usd` 最大值當已知不足水位；`--max-cost` 低於或等於它就 fail closed
+（exit 2、`failure_reason: stop-line-below-observed-floor`、`failure_phase: wrapper-preflight`），
+一次 scanner 都不啟動，訊息裡帶建議值。**NEVER** 用「這次應該就夠了」把同一面牆再撞一次——
+<consumer-a> 2026-09-07 一晚 $2 → $8 → $15 三次猜測、每次都低於當時 ledger 已記錄的水位，燒掉 $22.4
+換到零 findings 與零 coverage。
+
+**比對鍵是範圍，不是模式。** `run_kind` 只固定住模式；`working-tree --paths-file`、`path`、
+components / deep baseline 的實際掃描範圍逐次不同。clade 自家
+ledger 的五筆 working-tree row 範圍分別是 39 / 40 / 95 / 95 個檔與 7 個檔，其中 39 檔那批以
+$12.09 撞上停止線——只比對 `run_kind` 的話，之後每一次 ≤$12.09 的 `working-tree` 掃描都會被那筆擋掉，
+含只有一個檔的批次。（**NEVER** 寫成「0-S 掃描」——0-S.1／0-S.2 都不經過本檔，見本檔開頭。）所以 wrapper 另外比對 row 記下的範圍（`snapshot_paths` / `paths` /
+`diff_base`+`diff_head` / `scan_strategy`+`scan_mode`），範圍不同的紀錄不構成地板。
+
+**`working-tree` 的 `snapshot_paths` 是「同一份請求清單」，不是「同一個掃描範圍」**：那個清單只
+用來建私有快照，傳給 scanner 的參數只有 `--working-tree`，實際分母由 scanner 自己去 diff 那個快照
+推導（見 `gates.md` § 0-S.3）。同一份清單在不同日期的快照內容不同，分母可能收斂到完全不同的數字——
+clade ledger 兩筆同為 95 檔清單的 timeout 分別花 $11.55 / $9.07，而 40 檔那筆 $24.58 反而跑完。
+所以對這個模式，「已實測不足」是**啟發式**而非證明；行為仍 fail-closed（同清單擋、不同清單放），
+但 **NEVER** 把它讀成「這個範圍被證明過不夠」。`path` 模式沒有這個落差——它的 `paths` 就是傳給
+scanner 的那組。
+
+`diff` 是唯一沒有地板的模式：它的 row 記的是解析後的 SHA，而地板判定跑在 snapshot 建立**之前**，
+拿不到同一個值。**NEVER** 為了讓它「也有保護」而拿 raw ref 去對 SHA 湊一個看起來會過的鍵——
+證不出範圍相同就不主張地板，也 **NEVER** 把 `diff` 沒被擋下讀成「這個預算夠」。
+
+`--timeout-sec` 的職責是**抓住掛死的 scanner**，不是限制花費——花費由 `--max-cost` 管。沒給時
+wrapper 由**實際生效的**預算推導（180 s/$，下限 900s），因此**提高停止線會自動放大 timeout**；
+顯式給值則完全覆寫。「實際生效」是字面意思：`hook` 在沒有 paths file 也沒有 `--max-cost` 時
+根本不傳 `--max-cost` 給 scanner（量地板用），那一次拿 900s 下限並記
+`timeout_source: 'wrapper-minimum'`。**NEVER** 拿 wrapper 預設值推導、也 **NEVER** 把那一次記成
+`derived-from-budget`——它會與同一列的 `max_cost_source: 'unset'` 互相矛盾，讀的人分不出
+「900s 是下限」還是「900s 是某個預算算出來的」。顯式給一個花不完預算的值時，掃描會被計時器而不是預算結束，那一次的結果讀起來與
+「scanner 在這個 repo 規模下跑不完」逐字相同。
+
 | failure_reason | 當次處置 |
 | --- | --- |
 | `quota-exhausted` | 停止該帳號的後續掃描；保留額度訊息與重設時間原文，不提高美元停止線重試。額度耗盡是**帳號層**狀態，換模式、換 repo、換停止線都不會繞過它（2026-09-07 實測：`You've hit your usage limit… try again at Sep 13th`，六天不可用）|
 | `auth-failure` | 修復既有認證；不自動切 API 計費或購買 credits |
 | `output-dir-not-empty` | 使用新的私有 output directory；不刪既有證據 |
 | `cost-limit-reached` | 記錄已完成單位、模型估算成本與剩餘範圍，再決定新一輪停止線 |
+| `timeout-before-budget` | 計時器在預算用掉 80% 之前結束了掃描：**這不是** scanner 走不下去的證據。放大 `--timeout-sec`（或改讓它由預算推導）後重跑，**NEVER** 據此宣稱 scanner 在本 repo 不可用 |
+| `timeout` | 掃描已接近或用盡預算才被計時器結束；比照 `cost-limit-reached` 重新評估停止線 |
+| `stop-line-below-observed-floor` | 停止線低於本 target 同一掃描範圍已實測不足的水位，未啟動掃描、零花費。依訊息給的建議值提高 `--max-cost` 後重跑 |
 | `scope-abort` | watchdog 判定分母 > 請求檔數並中止。改用 `path` 模式或縮小批次，**NEVER** 提高停止線重試 |
 | 其他或 `unknown` | 依 failure_phase、stderr 與 artifacts 查證；不從缺產物推定成本原因 |
 
