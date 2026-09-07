@@ -340,7 +340,8 @@ tag——判準見 `rules/core/commit.detail.md` § 機械 gate 與它的邊界�
 **tag-only 那趟 push 會讓 pre-push 全套 8 支照跑**：`vendor/scripts/pre-push/runner.sh`
 在只推 tag 時算不出 changed paths，刻意 fail-open 成全跑（該檔 `PATH_FILTER_ACTIVE` 的 `else`
 分支印出「算不出 changed paths（新 branch 首推 / 手動執行 / 只推 tag）→ 全部照跑」）。8 支並行，
-wall time 由最慢的單一 check 決定（該檔自述 <consumer-b> 實測 `nuxt-typecheck` 57.9s）。這是 main-first
+wall time 由最慢的單一 check 決定（<consumer-b> 2026-09-07 實測暖路徑 `nuxt-typecheck` 2m29s、冷路徑 push
+全程 9m22s；該檔註解裡 2026-07-26 的 57.9s 已過期，**NEVER** 直接引用，要用先自己重量）。這是 main-first
 的已知成本，**NEVER** 用 `--no-verify` 省它。
 
 **序列中途失敗的復原**（七格都要會）。**先問一句：這個版本號的 tag 已經推出去了嗎**
