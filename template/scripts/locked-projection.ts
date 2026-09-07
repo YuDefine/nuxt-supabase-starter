@@ -23,8 +23,10 @@
  *   - Vendored scripts at `scripts/` (wt-helper, claim-helper, stash-reconcile,
  *     review-gui, audit-test-scripts, handoff-drift-scan, wip-dirty,
  *     git-merge-clade-regenerate, dev-singleton)
- *   - Recursive vendored script trees: `scripts/spectra-advanced/`,
- *     `scripts/pre-commit/`, `scripts/pre-push/`
+ *   - Recursive vendored script trees: `scripts/pre-commit/`, `scripts/pre-push/`,
+ *     plus the retired `scripts/spectra-advanced/` — that one is kept ON PURPOSE:
+ *     it no longer projects (TD-976 Wave 1) but consumers still carry chmod-444
+ *     leftovers, and unlocking them requires still recognising the path (TD-1000).
  *   - Snippets / shared presets: `vendor/snippets/`, `vendor/oxc-shared/`
  *   - GitHub Composite Actions vendored at `.github/actions/`
  *   - Top-level injected files: `AGENTS.md`, `CLAUDE.md`
@@ -79,12 +81,13 @@ export const LOCKED_PROJECTION_RE = new RegExp(
       // 自家檔——與 `scripts/lib/` 那種混住的目錄不同，可以整目錄匹配。
       String.raw`\.clade/(bin|signals|vendor|scripts|registry)/`,
       // Vendored script entry points (scripts/)
-      String.raw`scripts/(wt-helper|wt-batch|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|audit-risk-path-coverage|audit-clade-leak|deploy-trigger-check|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|dev-singleton|dev-router|dev-session|herdr-visible-identity|db-lease|db-reset-peer-coordination|ownership-journal|shell-safety-check|run-evidence|cbm-health|evidence-hook|install-tool-evidence|control-plane-projection-validate|opsx-legacy-store)\.(mjs|mts|ts)$`,
+      String.raw`scripts/(wt-helper|wt-batch|claim-helper|stash-reconcile|review-gui|audit-test-scripts|audit-ux-drift|audit-risk-path-coverage|audit-clade-leak|deploy-trigger-check|handoff-drift-scan|wip-dirty|git-merge-clade-regenerate|locked-projection|_git-lock-detect|dev-singleton|dev-router|dev-session|herdr-visible-identity|db-lease|db-reset-peer-coordination|ownership-journal|shell-safety-check|run-evidence|cbm-health|evidence-hook|install-tool-evidence|control-plane-projection-validate)\.(mjs|mts|ts)$`,
       // Heavy-gate 併發閘門（bash helper，非 .mjs/.ts 家族，故單列一條）
       String.raw`scripts/gate-slot\.sh$`,
       // codebase-memory index 的 lock + MemoryMax wrapper（同上，bash helper 單列一條）
       String.raw`scripts/cbm-(index|project)\.sh$`,
-      // Recursive vendored script trees
+      // Recursive vendored script trees. `spectra-advanced` retired in TD-976 Wave 1 but
+      // MUST stay listed — consumers still hold locked leftovers to unlock (TD-1000).
       String.raw`scripts/(spectra-advanced|pre-commit|pre-push|checks)/`,
       // Dependencies installed beside the follow-up collector.
       String.raw`scripts/(tech-debt-status|flow/tech-debt-status|flow/nodes/lib/td-parse|flow/nodes/lib/contract)\.ts$`,

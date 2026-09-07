@@ -10,9 +10,12 @@
  * behind: it says "P7 進行中" while the branch HEAD already has the P7
  * commits.
  *
- * This scanner emits stderr warnings (one per worktree) to surface drift
- * at session-start (called by `session-start-roadmap-sync.sh` after follow-up
- * surfacing).
+ * This scanner emits stderr warnings (one per worktree) to surface drift.
+ *
+ * NO LIVE CALLER as of 2026-09-07: its session-start caller
+ * `session-start-roadmap-sync.sh` retired with the spectra lifecycle (TD-976 Wave 1)
+ * and nothing replaced it. `stop-wip-guard.sh` still delegates orphan-WIP detection
+ * here ("Layer 2"), so that chain is currently open — see TD-1007.
  *
  * Worktree drift triggers (any one is enough):
  *   1. Branch HEAD has ≥1 commit past main HEAD AND slug not mentioned in HANDOFF.md

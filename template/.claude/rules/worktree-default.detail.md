@@ -1,6 +1,6 @@
 ---
 description: Worktree 全文規約（§1 pre-fork baseline guard 四條契約與 archive-on-main clobber 窗口、§3 命名與位置、§4 與 propagate 的互動、§5 commit 階段、§5.5 merge-back ceremony 與 claim guard scope、§5.5.1 pre-archive gate 的掃描根目錄、§6–§11 工具與 troubleshooting 索引）；always-load 的薄 pointer 在 [[worktree-default]]，觸發時機是「送出 wt-helper add / merge-back / 任何 worktree 操作之前」，由 [[worktree-default]] 的 MUST-Read 指針叫醒
-paths: ['vendor/scripts/wt-helper.ts', 'scripts/wt-helper.ts', 'vendor/scripts/stash-reconcile.ts', 'scripts/stash-reconcile.ts', '**/WORKTREE-BRIEF.md', '**/hooks/pre-archive-*.sh', '**/spectra-advanced/archive-gate.sh', '**/spectra-advanced/design-gate.sh', '**/spectra-advanced/followup-gate.sh']
+paths: ['vendor/scripts/wt-helper.ts', 'scripts/wt-helper.ts', 'vendor/scripts/stash-reconcile.ts', 'scripts/stash-reconcile.ts', '**/WORKTREE-BRIEF.md', '**/hooks/pre-archive-*.sh']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -94,43 +94,17 @@ Worker 完成實作與必要驗收後 checkpoint，主線確認 scope 與寫入�
 
 > 完整 flags / claim guard scope / stash reconcile 詳見 [[worktree-default.commit-ceremony]] § Merge-back ceremony。
 
-### §5.5.1 Pre-archive gate 掃的是 change 所在的 worktree，NEVER 是 cwd
+### §5.5.1 Pre-archive gate（整節退役，僅存 tombstone）
 
-四道 pre-archive gate（`pre-archive-ux-gate.sh` / `-evidence-` / `-design-` / `-followup-`）是
-legacy archive adapter；OPSX archive 由 `opsx-control` 直接呼叫既有 gate。兩條路徑都先驗實作樹，再進批次落地流程。
-來源尚未正式落地時，main 不含 worktree 的最新驗收內容：main 的
-`tasks.md` 還是 propose 當時那份（零 annotation），screenshots 一張都不在。
+這一節原本規定四道 pre-archive gate（`pre-archive-ux-gate.sh` / `-evidence-` / `-design-` /
+`-followup-`）**MUST** 先解析 change 所在的 worktree 再掃描，而不是掃 cwd。
 
-所以 gate 若掃 cwd（main），對**每一個**走 worktree 的 change 都會報「item 缺 evidence」
-與「Journey URL 沒對應到 git diff」。而 [[worktree-default]] §1 規定要動 code 就 MUST 走
-worktree —— 這不是邊角，是**每次第一次 archive 的必然結果**。
+**它描述的每一個東西現在都不存在**：四支 gate 與共用 helper `_change-source-root.sh` 隨
+TD-976 Wave 1 退役，呼叫它們的 `opsx-control` 隨 TD-977 Wave 2 退役，機械兜底
+`test/pre-archive-gate-scans-change-worktree.test.ts` 一併刪除。
 
-**MUST**：gate 先解析 change 所在的 worktree，把那棵樹當掃描根目錄。實作是共用 helper
-`plugins/hub-core/hooks/_change-source-root.sh`（consumer 端由 target adapter 投影），
-它呼叫 `wt-helper resolve <slug>`。
-
-**NEVER 在別處重寫那個 find。** `wt-helper resolve` 與 `merge-back` 共用
-`findSessionWorktreeForSlug()` —— 同一份 matcher 才保證「gate 驗過的那棵樹」就是
-「要進行 archive 的那棵實作樹」。兩份會漂，而漂開之後的症狀是 **gate 綠、archive 成功、
-內容不對**，事後從任何紀錄都看不出來。
-
-**每次 OPSX archive 都先在實作樹跑既有 archive、evidence、design、followup gate 與目前 revision predicates，再做 bookkeeping。NEVER 先合回 main 才收證據**。通過後 checkpoint／登記就緒，正式批次審查先於 main 落地與來源清理。
-
-**Fail-open by construction**：解析不到 worktree（change 在 main 上做完、worktree 已被
-merge-back 清掉、consumer 尚未散播到 `wt-helper resolve`）一律回退 cwd = 修改前的行為。
-`wt-helper resolve` 的 exit 3 是「沒有 worktree」，**NEVER** 讀成失敗而擋下 archive。
-
-**本節刻意不在 always-load 留 pointer。** 它的義務只在「有人要改 gate / 加第五支 hook」時發作，
-而那一刻本檔已經被 `paths:` 叫醒（四支 gate script 都在裡面）；再加上
-`test/pre-archive-gate-scans-change-worktree.test.ts` 最後一條在漏接時直接紅。
-兩層都綁在會發生的事件上，常駐一行 283 bytes 買不到第三層——那正是 always-load budget
-要擋的那種「看起來是淨改善」的增量。
-
-| REQUIRED 欄位 | 內容 |
-| --- | --- |
-| 觸發條件 | gate 掃到的根目錄 ≠ cwd 時，helper 在 stderr 印一行 `[pre-archive] scanning worktree for '<change>': <path>`。**informational — 不改變任何 gate 的 exit code**；它存在是因為「沒有人報過掃了哪一棵樹」正是這個 bug 隱形的原因 |
-| 消費端 | OPSX archive adapter 與四道 legacy pre-archive hook；讀到那行的 agent 用它確認 gate 看的是對的樹 |
-| 載入路徑 | 本節（`rules/core/worktree-default.detail.md`，paths-gated 於 `wt-helper.ts` 與四支 gate script——改解析器或改 gate 時載入）＋ 上述 regression test 的機械兜底 |
+**原則仍成立**——驗收 MUST 先驗實作樹、再進批次落地流程，**NEVER** 先合回 main 才收證據——
+但**沒有任何 gate 在機械層執行它**，執行者只剩讀到這一節的那個 agent。缺的那層機械兜底見 [[TD-978]]。
 
 對應 pitfall：[[pitfall-pre-archive-gate-scans-main-not-change-worktree]]。
 

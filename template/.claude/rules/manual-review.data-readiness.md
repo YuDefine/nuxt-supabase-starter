@@ -368,13 +368,13 @@ node ~/offline/clade/scripts/manual-entry.ts --repo <consumer> --change <change>
 > `vendor/scripts/review-gui.parser.ts`。改動範例（含標點全半形）等於改動 parser 的驗收條件，
 > 測試紅了就是兩邊真的不一致，**NEVER** 改測試期望值去遷就。
 
-針對 hook regex 誤判（false positive）或合法例外（如真機掃 SMS 驗證碼、實體鎖匙、印表機調整等真的無 dev replay endpoint 的場景），可在該 checkbox line 行尾加上 `@no-manual-review-check[<reason>]` marker，跳過 Pre-Review Data Readiness regex 檢查（post-propose-manual-review-check.sh hook + review-gui pre-flight banner 都 skip）。
+針對 hook regex 誤判（false positive）或合法例外（如真機掃 SMS 驗證碼、實體鎖匙、印表機調整等真的無 dev replay endpoint 的場景），可在該 checkbox line 行尾加上 `@no-manual-review-check[<reason>]` marker，跳過 Pre-Review Data Readiness regex 檢查（manual-review-check.sh + review-gui pre-flight banner 都 skip）。
 
 Bypass marker **MUST NOT** 用來掩蓋其他 hygiene 問題：
 
 - 不影響 Item Kind Marker（`[review:ui]` / `[verify:*]`）分類正確性
 - 不影響 `@no-screenshot` semantic
-- 不影響 archive-gate 對 evidence trail 的檢查（`(verified-e2e: ...)` / `(claude-discussed: ...)` 仍 enforce）
+- 不影響 review-gui 對 evidence trail 的檢查（`(verified-e2e: ...)` / `(claude-discussed: ...)` 仍 enforce；archive-gate 已於 2026-09-07 退役，這一層的執行者現在只剩 review-gui）
 - 只 scope 在 Pre-Review Data Readiness regex 這一層
 
 ### Schema

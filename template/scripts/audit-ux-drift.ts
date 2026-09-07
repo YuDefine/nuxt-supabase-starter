@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 🔒 LOCKED — managed by clade · Source: vendor/scripts/audit-ux-drift.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/audit-ux-drift.ts
 /**
- * UX Drift Auditor (spectra-ux)
+ * UX Drift Auditor
  *
  * Scans typed enum definitions (`as const` arrays, Zod `z.enum(...)`) and
  * reports consumers that appear to handle the enum non-exhaustively.
@@ -144,7 +144,8 @@ const __dirname = dirname(__filename)
 const MAX_WALK_DEPTH = 8
 
 // Prefer the current name; keep legacy name as fallback (matches claims-lib.ts
-// and roadmap-sync.ts dual-name resolution after the spectra-ux → spectra-advanced rename).
+// dual-name resolution kept from the spectra-ux → spectra-advanced rename; both names are
+// legacy read-path values — consumers still hold either file, so NEVER drop one).
 const CONFIG_NAMES = ['spectra-advanced.config.json', 'spectra-ux.config.json']
 
 function resolveConfigPath(dir: string): string | null {

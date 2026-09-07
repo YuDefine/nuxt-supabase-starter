@@ -153,5 +153,5 @@ Ready deep-links 已寫入 HANDOFF.md；需要 fix 的先看 bucket / hitsByCode
 ## 邊界與已知限制
 
 - Scan 只看 carrier（`tasks/<date>-<slug>.md` 或 `specs/plans/NNN-<slug>/tasks.md`）的 `## 人工檢查` section
-- hitsByCode 用的 pattern 規格存在 `vendor/snippets/manual-review-enforcement/patterns.json`，與 review-gui banner、`post-propose-manual-review-check.sh` 共用同一份 source-of-truth
+- hitsByCode 用的 pattern 規格存在 `vendor/snippets/manual-review-enforcement/patterns.json`，與 review-gui banner、`manual-review-check.sh` 共用同一份 source-of-truth
 - 截圖資料夾數（screenshotTopicCount）**不**影響 readiness 判斷 — 截圖缺失屬於 GUI 內 banner（red verify-channel evidence-missing），不在 Pre-Review Data Readiness 範疇

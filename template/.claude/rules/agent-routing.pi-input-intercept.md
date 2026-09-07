@@ -1,6 +1,6 @@
 ---
 description: Codex 模型經 Pi machine dispatch 提出問題時的攔截、評估、代答或升級 protocol；觸及 spectra change / screenshot 情境時 path-scoped 載入
-paths: ['openspec/changes/**/tasks.md', 'openspec/changes/**/design.md', 'scripts/spectra-advanced/**', '.claude/agents/**', 'screenshots/**/progress.json']
+paths: ['openspec/changes/**/tasks.md', 'openspec/changes/**/design.md', '.claude/agents/**', 'screenshots/**/progress.json']
 ---
 <!--
 🔒 LOCKED — managed by clade

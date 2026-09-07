@@ -86,5 +86,5 @@ Copy Tone Score: N/6 PASS
 - [其他影響 spec 的設計決策，便於回交 truth owner skill]
 ```
 
-2. 此檔案是 `pre-archive-design-gate.sh` hook 的主要檢查依據
+2. 此檔案原本是 `pre-archive-design-gate.sh` hook 的主要檢查依據；該 hook 已於 2026-09-07 隨 spectra 生命週期退役，**現在沒有機器讀它**，交付前自檢（判準見 [[proactive-skills.design-checkpoint]]）
 3. 若 Design Decisions 中有影響 spec 的發現，提醒回交 `/dsl-refine`（truth feature）或在 carrier 加一條 task；**NEVER** 就地改 `specs/truth/**`

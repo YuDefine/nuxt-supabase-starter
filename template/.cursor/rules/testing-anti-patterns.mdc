@@ -468,13 +468,13 @@ property-based testing、不需跑 N 輪迴圈 —— 累積狀態是**資料**�
 
 ### 機械訊號（參照完整性，不判語意）
 
-`node ~/offline/clade/scripts/audit-bdd-elicitation-enrollment.ts` —— 分母是各 consumer
-**既有**的 `stryker.config.json` 的 `mutate`（consumer 自己宣告過「這幾個模組算錯會賠錢」），
-查那些模組的 test 檔有沒有 `spec: <change> :: <Example heading>` 標記、標記指不指得到一個
-真的存在的 `##### Example:`。它只查參照完整性，**NEVER** 判斷 spec 內容對不對。
+**這條目前沒有機械訊號。** `audit-bdd-elicitation-enrollment.ts` 隨 TD-977 Wave 2 的自家 BDD
+evaluator 一起退役——它查的是 `spec: <change> :: <Example heading>` 標記，而 `<change>` 這個
+載體已經不存在。SpecFormula 接手後的等價訊號（`.feature` ↔ test 的參照完整性）尚未建立，
+見 [[TD-978]]。
 
-**NEVER 為了讓它變綠而編一個標記** —— spec 沒有對應的 Example 時，那是 spec gap，
-要補的是 spec 不是標記。絕對路徑的理由同上方 mutation testing 兩條。
+**NEVER 因為現在沒有 detector 就把上面那條 spec 契約讀成建議** —— 沒有訊號的規約靠人讀，
+那正是它需要被寫清楚的理由。
 
 ### Red flags
 
