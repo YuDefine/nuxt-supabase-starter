@@ -7,6 +7,8 @@ Local edits will be reverted by the next sync.
 
 # Blocker & Decision Evaluation
 
+<!-- clade-targets: claude -->
+
 > 本檔從 SKILL.md § 3i / § 3j 搬移，原文逐字保留。主檔 pointer：「bucket 為 `applyBlocked` 時 MUST 先完整讀本檔 § 3i；bucket 為 `awaitingUserDecision` 時 MUST 先完整讀本檔 § 3j」。
 
 **進本檔任一條判定之前，該 item MUST 已經過 [blocker-ledger.md](blocker-ledger.md) 的三步查表且沒命中。** 命中查表的 item 本輪不進本檔——它上一輪已經照本檔判過，而解除條件的實測值沒有變。
@@ -69,9 +71,9 @@ HANDOFF：那句話描述的是**沒有量測**，不是量測結果。
 **NEVER** 寫「需 attended」這種形容詞——形容詞每一輪都會被重新「發現」一次，而 predicate 有解除條件、
 可以進 [blocker-ledger.md](blocker-ledger.md) 查表，下一輪不必重判。
 
-#### 2026-08-22 端到端實測（<consumer-j>）——為什麼現在只剩三條
+#### 2026-08-22 端到端實測（<consumer-i>）——為什麼現在只剩三條
 
-首版有 probe 1–3（第 3 條量 dispatcher binary），2026-08-22 在 <consumer-j>
+首版有 probe 1–3（第 3 條量 dispatcher binary），2026-08-22 在 <consumer-i>
 （`shape: canonical`、`emailRequired: false`、`stackHint: libsql-drizzle`）跑完整鏈路：
 
 - **鏈路本身是通的**：dev-session 起 3050 → 手組 items（2 個真 `[verify:ui]` item）→ collector

@@ -10,6 +10,8 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
 
 # Proactive Skills — 人工檢查入口
 
@@ -37,13 +39,13 @@ Local edits will be reverted by the next sync.
    - **exit 1** → 繼續 auto-triage 或如實報告卡住原因
    - **NEVER** 自判 bucket、NEVER 跳過 script
 
-**NEVER** 在 script exit ≠ 0 時引導 user 到 review-gui — Claude 自判已多次證明不可靠（同根因 pitfall 見 [[review-gui-surface]]）。
+**NEVER** 在 script exit ≠ 0 時引導 user 到 review-gui — orchestrator 自判已多次證明不可靠（同根因 pitfall 見 [[review-gui-surface]]）。
 
-**NEVER** 預設用 `AskUserQuestion` 在 chat 內逐項彈對話框走人工檢查——那是 review-gui 不可用時的 fallback，不是 default path。
+**NEVER** 預設用 `native structured user-input surface` 在 chat 內逐項彈對話框走人工檢查——那是 review-gui 不可用時的 fallback，不是 default path。
 
 正確流程：
 
-1. **Auto-triage first**：推進所有 Claude 可處理的 pending items（fix-requested / evidence missing / issue triage）
+1. **Auto-triage first**：推進所有 orchestrator 可處理的 pending items（fix-requested / evidence missing / issue triage）
 2. **首選（DEFAULT）**：auto-triage 後 `bucket=ready` → **先跑 § 交付入口前置查詢的兩條指令**（`review-gui-service.sh status` ＋ `curl /api/changes`）：
    - **第 1 條 exit 0 且第 2 條印出了自己那條 `changeKey`**（常態）→ **NEVER** 叫 user 跑任何啟動指令，
      直接照 § 交付入口前置查詢表格第 1 列給 URL（host ＋ API 回的 `reviewPath`，要指到某條 item 就加
@@ -83,7 +85,7 @@ node ~/offline/clade/vendor/scripts/review-handoff-url.ts resolve \
 
 **NEVER 從 consumer 自己的 config 推論入口不存在。** `nuxt.config.ts` 沒掛 tunnel plugin、`consumer-meta.json` 的 `deploy.prodUrl` 是 null——這兩件事跟 review-gui 有沒有在跑**無關**：它是跨 consumer 共用服務，consumer 清單來自 clade 的 `consumers.local`，不由任何 consumer 的 config 描述。這類 negative search 不成立為 absence 證據（[[agent-self-verification]] MUST 11）。
 
-**NEVER 交付 `cd <path> && <cmd>`。** 逐字實錄：「`cd ~/offline/<consumer-i>-wt/kiosk-google-allowlist && pnpm review:ui`」——那是指令不是位址（要 user 自己執行才生得出畫面）、`127.0.0.1` 只在跑 dev server 的那台機器上有意義、且綁在會過期的 agent lease 上。同理 **NEVER 交付 `https://review-gui.<tailnet>.ts.net/`**：pairing token 已停用（`ops/review-gui-service.sh` 的 `pairing_retired()`），那條會停在配對畫面。
+**NEVER 交付 `cd <path> && <cmd>`。** 逐字實錄：「`cd ~/offline/<consumer-h>-wt/kiosk-google-allowlist && pnpm review:ui`」——那是指令不是位址（要 user 自己執行才生得出畫面）、`127.0.0.1` 只在跑 dev server 的那台機器上有意義、且綁在會過期的 agent lease 上。同理 **NEVER 交付 `https://review-gui.<tailnet>.ts.net/`**：pairing token 已停用（`ops/review-gui-service.sh` 的 `pairing_retired()`），那條會停在配對畫面。
 
 **Iron Law：給人的驗收入口永遠是 `review-handoff-url.ts resolve` exit 0 的 `review_url`。違反字面就是違反精神。**
 
@@ -147,7 +149,7 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 5  http://127.0.0.1:5174/__p
 
 `[discuss]` items（production 授權 / 商業判斷 / production 觀察類）**MUST** 由 `/spectra-archive` Step 2.5 walkthrough 接管，**NEVER** 在 review:ui 引導流程內處理——trigger 是外部 signal，提前分析只會讓 change 永遠卡在 review:ui pending state。
 
-review-gui 對純 D-only pending 的 change 自動歸「🗓 等 archive walkthrough」群（無接手 prompt）→ 告知 user「跑 `/spectra-archive <change>` 觸發 Step 2.5 walkthrough」；落「🤖 等 Claude 接手」群（仍含 I / V）→ 接手 prompt 對 (D) 只列 walkthrough trigger，不分析、不寫 (claude-discussed:) annotation。
+review-gui 對純 D-only pending 的 change 自動歸「🗓 等 archive walkthrough」群（無接手 prompt）→ 告知 user「跑 `/spectra-archive <change>` 觸發 Step 2.5 walkthrough」；落「🤖 等 orchestrator 接手」群（仍含 I / V）→ 接手 prompt 對 (D) 只列 walkthrough trigger，不分析、不寫 (claude-discussed:) annotation。
 
 詳細 scope rule 見 [`manual-review.md`](./manual-review.md) § Item Kind Marker `[discuss]` 段。
 

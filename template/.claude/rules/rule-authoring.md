@@ -1,6 +1,6 @@
 ---
 description: 撰寫或修改 rule / SKILL.md / subagent brief / snippet / 落盤文件（pitfall、HANDOFF、TD、digest）的措辭工程——先分類失敗型態再選形式、觸發條件不寫流程、高違規規約配反開脫三件套、長度配讀者要做的決定、發佈前驗證
-paths: ['.claude/rules/**/*.md', '.claude/skills/**/*.md', 'tasks/lessons.md', 'rules/**/*.md', 'plugins/hub-core/skills/**/*.md', 'claude-md/**/*.md', 'vendor/snippets/**/*.md', 'docs/pitfalls/**/*.md', 'docs/digests/**/*.md', 'docs/tech-debt.md', 'HANDOFF.md']
+paths: ['.clade/rules/**/*.md', '.claude/rules/**/*.md', '.claude/skills/**/*.md', 'tasks/lessons.md', 'rules/**/*.md', 'plugins/hub-core/skills/**/*.md', 'claude-md/**/*.md', 'vendor/snippets/**/*.md', 'docs/pitfalls/**/*.md', 'docs/digests/**/*.md', 'docs/tech-debt.md', 'HANDOFF.md']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -10,7 +10,14 @@ Local edits will be reverted by the next sync.
 -->
 
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
+
 # Rule Authoring（規約措辭工程）
+
+## Canonical source and native delivery boundary
+
+Central rules are authored in `rules/**/*.md`; consumer-local rules are authored in `.clade/rules/**/*.md`. `.claude/rules/**/*.md`, `.codex/rules/**/*.md`, and `.cursor/rules/**/*.md` are runtime delivery surfaces generated or adopted by their respective adapters, so editing one of those paths does not silently change the canonical source. A hook, skill, or native loader is an actual delivery mechanism only when the target adapter and its configured entry provide evidence for that path; a shared rule must keep its obligation in the common source and record target-specific mechanics in the matching adapter fragment.
 
 **核心命題**：規約文字是塑形 agent 行為的 code，不是散文。形式選錯的規約看起來嚴謹、實測反效果——對「輸出形狀」問題用禁止句，違規率比不寫指引還高。本規則對**每一次** rule / SKILL.md / brief / snippet 的撰寫與修改生效，不是只有大改版才適用。
 
@@ -94,30 +101,27 @@ Consumer 主線字面遵守指令、不外推。規約意圖是「對**所有** 
 
 ## paths glob 的 anchor 是 project root（MUST）
 
-`paths:` 的 glob 錨在 **`.claude/` 的所在層**，不是 git repo root。這對**每一支**帶 `paths:` 的 rule 生效，不是只有動到 monorepo 的那幾支。三條硬規約：
+`paths:` 的 glob 錨在 target adapter 的 **projectRoot**（也就是該 runtime instruction root 所在的專案層），不是任意 git repo root。這對**每一支**帶 `paths:` 的 rule 生效，不是只有動到 monorepo 的那幾支。三條硬規約：
 
 1. **NEVER 寫 `template/` 前綴**。template-based consumer（`nuxt-supabase-starter`）的投影落點是 `template/.claude/rules/`，它的 project root 就是 `template/` —— 寫 `server/**` 才命中，`template/server/**` 永不命中。
 2. **MUST 為每一條 source-tree top-level entry 配 `packages/*/<entry>` 變體**。monorepo consumer（<consumer-a> 等）的 `.claude/` 在 repo root，nested package 的檔案只有這個變體抓得到。source-tree top-level 的判定清單是 `scripts/audit-rule-paths-monorepo.ts` 的 `SOURCE_TREE_DIRS`。
 3. **NEVER 靠肉眼判這兩條**。`node scripts/audit-rule-paths-monorepo.ts` 是 SoT，`WARN` = 缺 monorepo 變體、`DEAD` = 寫了 `template/` 前綴。它已是 publish blocking gate。
 
-第 1 條 2026-08-04 用沙箱 + `InstructionsLoaded` hook 實測定案（TD-364）：從 `<repo>/template/` 開 session 讀 `server/api/probe.md`，`['server/**']` 載入、`['template/server/**']` 不載入，flow 與 list 兩種 YAML 語法同結果。**這條規約反轉了先前的做法** —— 2026-06-09 曾依舊版 audit 逐檔補過 33 條 `template/` 變體，那批連同後續長出的共 120 條已於本次全數移除。
+各 target adapter 的 loading receipt 才能證明這條 anchor 在該入口成立；沒有 receipt 時只保留規約，不宣稱已載入。歷史實驗與其 target-specific hook 名稱由 adapter 保存。
 
-**NEVER 拿 grep 回 0 當「規約已生效」**：`rg -c "template/"` 只證明源檔沒有那個字串，對「rule 到底有沒有被載入」零訊號。要驗載入走 `InstructionsLoaded` hook（手法見 [[pitfall-skill-invoke-does-not-trigger-paths-gate]] § Detection）。
+**NEVER 拿 grep 回 0 當「規約已生效」**：`rg -c "template/"` 只證明源檔沒有那個字串，對「rule 到底有沒有被載入」零訊號。要驗載入走 target adapter 的 configured loader／receipt（手法見 [[pitfall-skill-invoke-does-not-trigger-paths-gate]] § Detection）。
 
-## Codex delivery coverage（MUST）
+## Runtime delivery coverage（MUST）
 
-`.claude/rules/**/*.md` 是 Claude 與 Codex 共用 SoT；**每一條** rule 都 MUST 有可執行的 Codex delivery，不以「AGENTS.md 有大意」或「agent 應該會自己搜尋」代替送達。
+共通 source 與 target adapter 是 rule delivery 的 SoT 邊界；**每一條**被宣告給 target 的 rule 都 MUST 有該 target 可執行的 delivery，不以另一個 runtime 的檔案、baseline 摘要或「agent 應該會自己搜尋」代替送達。Native baseline 與 optional enhanced delivery 的差異，必須由 target adapter 的實際 entry／receipt 證明。
 
-`sync-to-codex` 的固定分類只有兩種：沒有 `paths:` → `always-hook`（SessionStart / SubagentStart / compact 回灌）；有合法 `paths:` → `path-hook`（matching PreToolUse 注入，first matching patch 先 deny 一次）。`paths:` 存在但空白或 malformed 必須讓 sync fail closed，**NEVER** 降成 always-load 或靜默略過。
+每個 target adapter MUST 對沒有 `paths:`、有合法 `paths:`、以及空白或 malformed `paths:` 宣告 delivery policy。Malformed scope 必須 fail closed，**NEVER** 降成 always-load 或靜默略過；baseline delivery 與 optional enhanced delivery 都要標明是否具備 hook、native loader、首次 deny、reader 或 receipt。
 
 完成 rule 增修後 MUST 實跑：
 
-```bash
-node scripts/sync-to-codex.ts --no-health-check
-node scripts/audit-codex-rule-coverage.ts --check-manifest
-```
+由 target adapter 指定的 projection 與 coverage command。
 
-第二條須回 `PASS N/N`；coverage manifest 是 `.codex/hooks/scoped-rules.coverage.json` 的 derived evidence，**NEVER** 手改。loader／trust／compact／subagent 的完整契約見 `docs/codex-scoped-rules.md`。
+coverage output 是 derived evidence，**NEVER** 手改；loader／trust／compact／subagent 的完整契約留在 target adapter 的 supporting documentation。
 
 ## 可變事實指 SoT，不 inline（MUST）
 

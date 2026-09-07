@@ -9,6 +9,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # Nuxt UI 專案慣例一致性（實作階段強制）
 
@@ -54,4 +55,4 @@ Local edits will be reverted by the next sync.
 
 四支 wrapper 都由 `.husky/{pre-commit,pre-push}` 的 clade runner 自動呼叫，命中即 blocking。非 Nuxt repo、無 staged `.vue`、或偵測器尚未散播時自動 no-op。
 
-> 本規約是「慣例一致性」baseline，各 consumer 的具體語義角色 × props 對照表是 project-specific 知識，**SHOULD** 在 consumer 自家 `.claude/rules/local/` 維護對照表（clade 只規範「寫前必 grep 既有」這條跨 consumer 通則）。
+> 本規約是「慣例一致性」baseline，各 consumer 的具體語義角色 × props 對照表是 project-specific 知識，**SHOULD** 在 consumer 自家的中立來源 `.clade/rules/` 維護，由各 runtime adapter 交付（clade 只規範「寫前必 grep 既有」這條跨 consumer 通則）。`.claude/rules/local/` 是 Claude 投影位置；既有未接管內容須經 local-source migration 辨識與對帳，原生切換遇到未解 ownership 衝突會拒絕寫入。

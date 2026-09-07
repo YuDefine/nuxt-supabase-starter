@@ -13,6 +13,8 @@ Local edits will be reverted by the next sync.
 
 # Checker Contract
 
+<!-- clade-targets: claude,codex,cursor -->
+
 Mechanical checker 的綠燈是一項可重現的 contract claim：它只證明輸出明寫的 scope 已被完整執行，不能把「沒有執行」包裝成「沒有違規」。本規約對**每一支** mechanical checker、**每一個**安全／contract gate、**每一條** CI check entry 與**每一份**既有債務 allowlist 生效。
 
 ## REQUIRED output contract

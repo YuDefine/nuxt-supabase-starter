@@ -9,10 +9,12 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
 
 # Verification Lease — 機制規格
 
-> 從 [[verification-lease]] 抽出（2026-07-31）。那份是 always-load 的行為契約（核心命題 + Agent 行為契約）；本檔是**實作面規格** —— 動 `dev-session` / `dev-singleton` / consumer manifest 的 lease 設定，或要新寫一個 lease-aware 工具時才需要。
+> 從 [[verification-lease]] 抽出（2026-07-31）。那份是 always-load 的行為契約（核心命題 + Agent 行為契約）；本檔是**實作面規格** —— 動 lease-aware launcher / consumer manifest 的 lease 設定，或要新寫一個 lease-aware 工具時才需要。
 
 ## Lease 的五元組
 
@@ -21,7 +23,7 @@ Local edits will be reverted by the next sync.
 | Slot | 內容 | 為什麼綁進 lease |
 |---|---|---|
 | **dev server** | `{ pid, cwd, port, url }` | port 排他 + cwd 決定 serve 哪 worktree 的 code |
-| **browser profile** | `{ sessionName, userDataDir }` | agent-browser persistent profile（`--session` + profile dir）含登入 cookie，profile 切換 = session 切換 |
+| **browser profile** | `{ sessionName, userDataDir }` | persistent browser profile（session name + profile directory）含登入 cookie，profile 切換 = session 切換 |
 | **cookie namespace** | `string` | localhost cookie 不看 port，跨 port worktree 互相污染 session。三種隔離手法，由弱到強：(1) **用不同 host 名** —— `localhost` 與 `127.0.0.1` 對瀏覽器是不同 host、不同 cookie jar，開發那台走一個、review slot 走另一個，零改 code；(2) cookie name suffix（要改 consumer 的 session 設定）；(3) per-worktree browser profile |
 | **env file** | `{ path, sha256 }` | dev server 啟動時讀取的 `.env.local` 內容指紋；變動 = 應該重啟才生效 |
 | **holder** | `{ kind, sessionId, label }` | 誰拿到這個 lease（claude / codex / human / subagent） |
@@ -40,12 +42,12 @@ Lease identity 是 **(consumer_id, port)**，不是 consumer_id 單獨一個：
 review slot 就有三台。共用一個 lease 檔時第二台一律被判衝突（strict → refuse），而那個衝突是**假的**：
 它們根本沒共用 port。
 
-**為什麼 primary 沿用舊檔名**：規約、`vendor/snippets/dev-session/`、dev-signin template、wt-helper
+**為什麼 primary 沿用舊檔名**：規約、lease resource、dev-signin template、worktree helper (`vendor/snippets/wt-helper/`)
 的殘留清理都寫死那個路徑，而它們讀的正是最常用的那一台。改掉等於一次性讓所有既有讀者對不上。
 
 - 路徑用 consumer_id（見 [`consumer-meta.md`](./consumer-meta.md)），不用任意字串
 - `/tmp` reboot 清空，跨 session 可讀，不被 git track
-- 任何 user / agent 都能讀（沒 ACL）；寫入要走 lease-aware 工具（dev-session / dev-singleton），不要直接 `echo > /tmp/...`
+- 任何 user / agent 都能讀（沒 ACL）；寫入要走 lease-aware launcher，不要直接 `echo > /tmp/...`
 - **consumer_id MUST 解析自 main worktree，不是當前 worktree 的目錄名**。在 linked worktree 內
   `git rev-parse --show-toplevel` 回的是該 worktree 路徑，basename 會變成 slug（`td-279-...`）而非
   consumer 名 → 算出 `/tmp/<slug>-verification-lease.json`，跟 main 用的檔**不是同一個**。後果是
@@ -86,8 +88,8 @@ agent 會讓 user 的 dev server 被自動回收，安全閥就此失效，而�
 TTL；只看 (2) 的話，還活著但早該放手的 agent 永遠不會被回收。舊格式 lease（無這三個欄位）恆
 **不可回收**——升級不會回頭吃掉既有 holder。
 
-回收 **MUST 走既有的 `dev-session.ts` stop / start 路徑**（takeover 分支），**NEVER** 自組
-`lsof + kill`。
+回收 **MUST 走既有的 lease-aware session stop / start 路徑**（takeover 分支），**NEVER** 自組
+process discovery + kill。具體 launcher 與命令由 adapter fragment 宣告。
 
 ### 佇列
 
@@ -99,9 +101,11 @@ TTL；只看 (2) 的話，還活著但早該放手的 agent 永遠不會被回�
                  "enqueuedAt": "2026-08-07T…Z", "polledAt": "2026-08-07T…Z" } ] }
 ```
 
-排隊者自己 poll（`dev-session.ts wait`，預設 5s 一次、`--wait-timeout` 預設 15m）；超過 **180s**
+排隊者自己 poll（lease-aware wait operation，預設 5s 一次、等待上限 15m）；超過 **180s**
 沒 poll 的項自動剔除——**與 lease liveness 同一套判準，NEVER 另發明一套**。撞上**人類租約**時
 `wait` 立刻 refuse 而不排隊：它無界，排了也永遠等不到。
+
+共享 development DB 另有獨立 lease；需要 reset 或 sync 時使用 portable `node vendor/scripts/db-lease.ts claim|release|status`，不把 DB ownership 混入本 verification lease。
 
 ## Lease 檔 schema
 
@@ -161,16 +165,19 @@ dev server，服務的仍然是別的 code，一樣會讓 evidence 拍到錯的�
 
 ## Holder identity
 
-```
-kind      sessionId source                      label
-----------------------------------------------------------------
-claude    process.env.CLAUDE_SESSION_ID 或 cwd hash  --label flag
-codex     process.env.CODEX_SESSION_ID 或 cwd hash   --label flag
-subagent  parent claude session + agent name         Agent tool prompt
-human     固定字串 "human"                           不可缺，至少傳「what for」
-```
+| holder kind | sessionId 來源 |
+| --- | --- |
+| `claude` | `CLAUDE_SESSION_ID` → `CLAUDE_CODE_SESSION_ID` → `CLAUDE_CONVERSATION_ID` |
+| `codex` | `CODEX_SESSION_ID` → `CODEX_THREAD_ID` |
+| `cursor` | `CURSOR_SESSION_ID` → `CURSOR_CONVERSATION_ID` |
+| `opencode` / `copilot` | 依 `vendor/scripts/lib/detect-runtime.ts` 的該 runtime session keys；自動探測仍需對應 runtime 實測 |
+| `human` | verification lease 沿用 `human`；獨立 DB lease 使用 `human:<worktree hash>` |
 
-`sessionId` 拿不到時 fallback 到 cwd-derived hash（不同 worktree 至少能分），但記 warning 到 auditLog。
+有效 `--kind` 決定本次 holder；未指定時走 `detectHolderKind` 的 explicit → strong → weak 優先序。
+無 runtime 訊號才自動判為 human；非法 explicit 或同層矛盾訊號拒絕建立 holder。
+只讀已選 runtime 的 session keys，沒有該 runtime ID 時依各 lease 工具既有 cwd hash fallback，
+不借用父層其他 runtime 的 ID。原生 subagent 記實際 runtime 與它提供的 session identity，
+不組造「parent Claude + agent name」。各工具保留 `--label` 說明用途。
 
 ## 工具行為契約
 
@@ -178,17 +185,17 @@ human     固定字串 "human"                           不可缺，至少傳�
 
 | 工具 | 何時 claim | 何時 release |
 |---|---|---|
-| `vendor/scripts/dev-session.ts`（**durable 主入口**；durability=herdr，取代 dev-singleton 的 spawn 層） | launch 前讀 lease 對 cwd（strict 衝突 refuse）；ready 後寫 lease + `devSession` 欄 | `stop` 時 |
-| `vendor/scripts/dev-singleton.ts`（legacy；spawn 層會被 harness reap，新工作走 dev-session） | spawn 前；reuse 前讀 lease 對 cwd | dev server 被 kill 時 |
-| `dev-auth` cookbook `server-api-dev-signin.ts.template` | endpoint 第一次被打時 | lease 有 holder 才允許簽 cookie（防 CSRF） |
-| `vendor/snippets/wt-helper/`（建立 worktree） | bootstrap .env.local 前 | env file 寫完後 |
-| `agent-browser` daemon wrapper（future） | 開瀏覽器 + load profile 前 | daemon shutdown 時 |
+| `node vendor/scripts/dev-session.ts [opts] -- <cmd...>`（**durable 主入口**；durability=herdr） | launch 前讀 lease 對 cwd（strict 衝突 refuse）；ready 後寫 lease + `devSession` 欄 | `stop` 時 |
+| `node vendor/scripts/dev-singleton.ts --consumer-meta <path> -- <cmd...>`（legacy spawn 層；新工作走 managed session） | spawn 前；reuse 前讀 lease 對 cwd | dev server 被 kill 時 |
+| dev-auth sign-in integration (`server-api-dev-signin.ts.template`) | endpoint 第一次被打時 | lease 有 holder 才允許簽 cookie（防 CSRF） |
+| worktree helper (`vendor/snippets/wt-helper/`) | bootstrap .env.local 前 | env file 寫完後 |
+| browser daemon wrapper（future；`agent-browser` carrier） | 開瀏覽器 + load profile 前 | daemon shutdown 時 |
 
 下列工具**只讀**：
 
-- `vendor/scripts/audit-*.mjs`（稽核）
-- `vendor/scripts/review-gui.ts`（UI 看 lease 狀態）
-- `scripts/sync-consumer-meta.ts`（aggregate snapshot）
+- audit scripts（稽核）
+- review UI（看 lease 狀態）
+- consumer metadata synchronizer（aggregate snapshot）
 
 ## Claim 衝突的標準訊息
 
@@ -199,7 +206,7 @@ human     固定字串 "human"                           不可缺，至少傳�
 Lease 的「該不該強制走 singleton wrapper」由 consumer 自宣告：
 
 ```jsonc
-// .claude/consumer-meta.json 片段
+// consumer metadata 片段
 { "auth": { "provider": "supabase-google", "portPinned": true },   // OAuth pin 到固定 port
   "dev": { "ports": [{ "port": 3000, "alias": "main" }], "leaseMode": "strict" } }  // strict | advisory
 ```

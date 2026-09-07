@@ -1,6 +1,6 @@
 ---
-description: skill 真相層與投影層的版控形態——.claude/skills/ 是 canonical 且內容 MUST 進版控，.agents/ 與 .codex/ 是 sync-to-codex 投影 MUST gitignore，symlink 形態的 skill 其 target 內容也必須 tracked
-paths: ['.gitignore', '.claude/skills/**', 'plugins/hub-core/skills/**', 'scripts/install-skills.sh', 'skills-lock.json']
+description: 新增、安裝或同步 skill 時，辨認 canonical source、runtime projection、版控與 ownership 邊界
+paths: ['.gitignore', '.clade/skills/**', '.claude/skills/**', '.agents/skills/**', '.codex/skills/**', '.cursor/skills/**', 'plugins/*/skills/**', 'scripts/install-skills.sh', 'skills-lock.json']
 ---
 <!--
 🔒 LOCKED — managed by clade
@@ -9,6 +9,8 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
 
 # Skill 管理
 
@@ -16,40 +18,40 @@ Local edits will be reverted by the next sync.
 
 | 層 | 角色 | 版控 |
 | --- | --- | --- |
-| `.claude/skills/**` | **canonical 真相層** | **MUST 進版控**（含第三方 skill） |
-| `.agents/` `.codex/` | `sync-to-codex.ts` 從 `.claude/` 產生的投影 | **MUST gitignore** |
+| canonical skill source | **真相層** | **MUST 進版控**（含第三方 skill） |
+| runtime projection | generator 產生的投影 | **MUST 遵守該 runtime 的 ignore / ownership 契約** |
 | `skills-lock.json` | 各 skill 的 source 與 computedHash | **MUST 進版控** |
 
-`AGENTS.md` 開頭的「AUTO-GENERATED from `.claude/`」不是註解，是這張表的宣告：投影層可由腳本完整重生，重生得出來的東西不進版控。
+生成的 runtime instruction 或 skill projection 必須能由 canonical source 完整重生；重生產物是否 tracked、放在哪個 native 目錄，由目標 runtime adapter 宣告。
 
 ## 為什麼第三方 skill 也要進版控
 
-第三方 skill 用 `npx skills add` 裝得回來，看起來像「可重生 → 不必進版控」。但它與投影層有一個決定性差異：**投影層的來源在本 repo 內，第三方 skill 的來源在別人的 GitHub repo**。
-
-`npx skills add` 拉的是 default branch HEAD，上游一次 force-push 或 refactor，你就再也裝不回當初那一版；repo 被刪或改名則是直接消失。而 skill 內容會實質影響 agent 行為——它不是可有可無的開發工具，是這個 repo 的行為契約的一部分。
-
-進版控的代價是升版時幾萬行 diff，那是可接受的：diff 大但可讀（都是 markdown），且一年也不會升幾次。
+第三方 skill 的來源在別人的 repository。上游 force-push、refactor、刪除或改名都可能讓原版本無法重建，而 skill 內容會實質影響 agent 行為，是行為契約的一部分。
 
 ## 三條 MUST
 
-1. **安裝一律 `--agent claude-code --copy`**。`npx skills add` 不加 `--copy` 的行為不穩定（實測 v4 仍會裝成真實目錄而非 symlink），且 symlink 形態有下面第 3 條的失效模式。
-2. **commit 必須帶上 `skills-lock.json`**。`npx skills add` 會重算 lock 內**所有** entry 的 `computedHash`，不只你剛裝的那一支。漏帶會讓 lock 與實際安裝不一致，下次 `npx skills check` 報 drift。
-3. **NEVER 讓 `.claude/skills/<name>` 是 symlink 指向未 tracked 的 target。** 這是三種失效裡最隱蔽的一種：symlink 本身進了版控，target 內容沒有——clone 下來 symlink 在、skill 載不到，而且**沒有任何錯誤訊息**。agent 只是安靜地少了那個能力。
+1. **安裝一律使用該 runtime adapter 已驗證的 copy/install 方式**，不可把另一端的命令當共通 API。
+2. **commit 必須帶上 `skills-lock.json`**。安裝工具可能重算 lock 內所有 entry 的 `computedHash`；漏帶會讓 lock 與實際安裝不一致。
+3. **NEVER 讓 runtime skill source 是 symlink 指向未 tracked 的 target。** 判準是 target 內容是否進版控；runtime projection 的 symlink 例外必須由 adapter 明列。
 
-> 2026-08-02 實證：<consumer-b> 與 <consumer-d> 各有 22 支第三方 skill 處於此狀態，symlink 指向 `.agents/skills/<name>` 而該路徑從未存在（sync-to-codex 只投影 `.claude/skills/` 的**真實內容**，本身是 symlink 的項目投影不過去）。兩個 repo 因此各少了 22 支 skill，時間長度不明——沒有機制會發現。
+## 來源與安裝邊界
 
-## 例外：node_modules-backed symlink
+Clade-managed skill 的共同來源在選用 plugin 的 `plugins/<plugin>/skills/<name>/`，單端差異在相應 adapter。Consumer 自有與第三方安裝內容先依既有 ownership／安裝紀錄辨認來源；**NEVER** 因它位於 `.claude/skills/` 就把同名內容自動接管為 generator-owned。遷移來源位置需保存原內容、明確 adoption 與可恢復紀錄。
 
-`npx void init --agents` 建的 `void` 與 `migrate-vite-cloudflare-to-void` 指向 `node_modules/`，pnpm virtual store 的 hash 跨機不同，進版控在別台機器必然斷鏈。**這兩支維持 gitignore**，fresh clone 後跑 `void init --agents` 重建。
+node_modules-backed symlink 只有在 adapter 明列、且 fresh setup 能重建時才可例外。Clade capability planner 目前拒絕 plugin source 中的 symlink；legacy installer 的例外不能用來放行此 planner 的拒絕。
 
-判準是「target 在不在 repo 內」：指向 `node_modules/` 的是例外，指向 repo 內任何位置的都不是。
+## 驗證入口與覆蓋邊界
 
-## 機械稽核
+每次新增或更新 skill，MUST 分開驗來源、投影 ownership 與實際 native 載入，不以其中一層通過代替其餘兩層。
 
-`scripts/audit-governance-drift.ts` 的 **check13** 對每個 consumer 驗三件事，任一命中即 fail：
+| 驗證面 | 實際入口與判讀 |
+| --- | --- |
+| Clade plugin source 與 target 計畫 | 在 consumer project root 跑 `node <clade-root>/scripts/project-runtime-capabilities.ts --clade-root <clade-root> --targets claude,codex,cursor --visibility <private或public> --dry-run`；visibility 先查證。此入口同時規劃 skills／commands／agents，以共享 namespace 查碰撞，error 或 ownership 衝突保留 blocked |
+| 本次投影是否仍需變更 | 讀 dry-run 的 `appliedChanges`；名稱雖含 applied，dry-run 只表示預計異動。非零代表尚待 apply／對帳，不是已同步。合法 apply 後重跑應為零；native 載入仍另驗 |
+| 第三方安裝與 lock | 依已安裝 installer 的實際 lock/hash 定義驗 `skills-lock.json` 與來源，將內容和 lock 一起提交。此 capability planner 不驗第三方 lock 的 computedHash；缺少該驗證時明列未驗，不報全綠 |
+| Fleet ownership 與 tracking | `node <clade-root>/scripts/audit-governance-drift.ts` 的 check13 逐 target 讀 capability ownership state，核對產物 hash、canonical source/hash 與來源 tracked 狀態。`native_ownership` 的 `incomplete` 使 check13 失敗；`absent` 只表示尚無 adoption 證據，保留 legacy tracking 檢查，不算 native 已接入。此檢查不驗第三方 lock computedHash，也不取代當前 manifest 的完整 projection plan |
+| Native availability | 在各目標產品入口實際 discovery／呼叫 skill，保留入口版本與 receipt。產生檔案、AGENTS.md 載入或 planner exit 0 都不證明 skill 被原生發現 |
 
-- `.agents/` 或 `.codex/` 有 tracked 檔
-- `.claude/skills/` tracked 檔數為 0（目錄存在卻整個沒進版控）
-- 有 symlink 形態的 skill 其 target 內容未 tracked
+這些檢查由新增／更新 skill 的 session 消費。來源宣告未審、能力未驗或必要入口缺少時，MUST 把受影響 target 列為未完成；不能把不存在的「逐 runtime audit」當成已通過的驗收。
 
-新增第三方 skill 後跑一次 `node scripts/audit-governance-drift.ts`，check13 綠了才算裝完。
+check13 的 native ownership finding 由既有 governance audit／clade-health 消費，讀到漂移就修 canonical source／投影或明確 adoption，不覆寫未知所有權。`absent` 是 informational — 不觸發任何東西；它不能被彙總成三端已驗證。

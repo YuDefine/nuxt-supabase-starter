@@ -9,9 +9,10 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 > **工具鏈治理已拆到 [[code-style.toolchain]]**（動 `vite.config.*` / `package.json` /
-> `tsconfig*.json` / `.github/workflows/**` / `.husky/**` / 任何 `rc` 或 ignore 檔時自動載入）：
+> `tsconfig*.json` / `.github/workflows/**` / `.husky/**` / 任何 `rc` 或 ignore 檔時適用）：
 > preset 是唯一設定入口、eslint / prettier 全面禁令、`vite.config.ts` 必備欄位、CI 與
 > pre-commit 的命令邊界、ignore patterns 雙軌制。
 >

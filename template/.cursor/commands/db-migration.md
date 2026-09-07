@@ -9,6 +9,8 @@ Local edits will be reverted by the next sync.
 -->
 
 
+<!-- clade-targets: claude,codex,cursor -->
+
 ## User Input
 
 ```text
@@ -17,7 +19,7 @@ $ARGUMENTS
 
 ## Outline
 
-建立新的 Supabase migration，確保符合 AGENTS.md 中的所有規範。
+建立新的 Supabase migration，確保符合 `rules/modules/db-schema/supabase/migration.md` 的所有規範（該規約帶 `paths:` gating，三端都投影）。
 
 ### Step 1: 確認需求
 

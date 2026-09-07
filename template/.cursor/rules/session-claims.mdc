@@ -10,6 +10,8 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
 
 # Session Claims
 
@@ -17,12 +19,12 @@ Local edits will be reverted by the next sync.
 
 ## 1. 什麼是 claim
 
-每個活躍的 AI session（AI Agent 或 Codex）在 worktree 開出來時，會在 consumer 的 `.clade/claims/<session-id>.json` 寫一份 claim 檔。Schema：
+每個活躍的 AI session（supported AI runtime）在 worktree 開出來時，會在 consumer 的 `.clade/claims/<session-id>.json` 寫一份 claim 檔。Schema：
 
 ```json
 {
   "session_id": "...",
-  "agent": "claude-code|codex",
+  "agent": "claude-code|codex|cursor",
   "started_at": "<iso>",
   "consumer": "<consumer-b>",
   "worktree_path": "/Users/.../<consumer>-wt/<slug>",
@@ -42,13 +44,15 @@ Local edits will be reverted by the next sync.
 
 ## 2. Claim 寫 / refresh / drop 時機
 
+下表的 CLI lifecycle 與已實作 Claude hook 接線分開判讀；事件名稱、handler 存在與其他產品已接入不是同一件事。各 runtime 的實際寫入證據依 § 6 與對應 adapter，未接入時保持未驗。
+
 | 時機 | 動作 | 由誰 |
 |---|---|---|
 | `wt-helper add <slug> --task-summary <text>` 開 worktree | 寫 claim（`--task-summary` 必填，TD-664 Phase 4） | `wt-helper.ts` |
 | AI session 啟動 in worktree | refresh `last_heartbeat` + `expires_at` | SessionStart hook `session-start-claim-heartbeat.sh` |
 | **每次 Edit / Write 寫檔**（throttle ≥5 分鐘） | refresh `last_heartbeat` + `expires_at` | PostToolUse hook `post-tool-ownership-journal.sh`（TD-664 Phase 2） |
 | `wt-helper cleanup <slug>` | drop claim | `wt-helper.ts` |
-| `wt-helper merge-back <slug>` 成功 | drop claim（透過 cmdCleanup 轉發） | `wt-helper.ts` |
+| merge-back 的來源 lifecycle | 只有實際 cleanup 成功才 drop；squash／staging 成功不證明來源已回收 | `wt-helper.ts` 的 cleanup receipt |
 | 過期超過 24h | prune | `claim-helper.ts prune`（手動 / cron） |
 
 **heartbeat 的寫者 MUST 是 hook，NEVER 是 model。** SessionStart 那列只證明「這個 session 開過」，
@@ -153,7 +157,7 @@ join 回 claim，宣告值與導出值並存，每一列帶 `via: 'declared' | '
 ### 3.2 Provenance journal
 
 `.clade/ownership/journal.jsonl`，每行一次寫入：`{ts, path, worktree, session_id, pane_id, cwd, tool, pid, pid_start, attribution}`。
-唯一寫入者是 PostToolUse hook `post-tool-ownership-journal.sh`（Edit / Write / NotebookEdit / Bash）。
+目前已實作的寫入入口是 Claude PostToolUse hook `post-tool-ownership-journal.sh`（Edit / Write / NotebookEdit / Bash）；其他 runtime 須提供同等真實事件的 adapter 接線與落檔證據，不能用主線自報補成 provenance。
 
 **兩種證據等級，`attribution` 欄分辨**：
 
@@ -192,7 +196,7 @@ join 回 claim，宣告值與導出值並存，每一列帶 `via: 'declared' | '
 ### 3.4 動筆之前的消費端（TD-794 刀 4）
 
 `claim-helper.ts` 的 `claimConflictsForPath()` 回答一個路徑的一題：「別人的活 claim 已經涵蓋這個檔了嗎」。
-消費端是 PreToolUse hook `pre-edit-claim-conflict.sh`（`Edit|Write`），命中才遞**一行**給要動筆的人。
+目前 Claude 消費端是 PreToolUse hook `pre-edit-claim-conflict.sh`（`Edit|Write`），命中才遞**一行**給要動筆的人。其他 runtime 的 edit-time adapter 尚須逐入口證明已接入；本節查詢函式可用不等於每一端都有 edit-time 告警。
 
 在它之前，claim registry 有寫入端、有契約、有 heartbeat、有 journal，而**沒有任何動作在動筆之前讀它**。
 於是持有者只剩兩個選擇：沉默（別人重工），或廣播（N 份 token、N-1 份純浪費）。理性選擇是廣播——
@@ -242,13 +246,19 @@ join 回 claim，宣告值與導出值並存，每一列帶 `via: 'declared' | '
 
 - 過期 claim（`expires_at` < now）視為失活
 - `claim-helper.ts prune` 手動清理
-- 若 worktree 仍存在但 claim 過期 → session 可能跑得太久沒 refresh，下次 SessionStart 會自動補回；不影響 worktree 安全
+- 若 worktree 仍存在但 claim 過期 → 先確認 § 6 的 heartbeat handler 是否有實際寫入；過期只表示 awareness 訊號失活，不構成接管 worktree 或 WIP 的授權。
 
 ## 6. Agent-agnostic
 
-- AI Agent：靠 SessionStart hook 自動 refresh heartbeat
-- Codex：目前**沒有等效 SessionStart hook**；fallback 路徑（未來）走 `bin/vp` PATH shim 或 git pre-commit adapter（per `rules/local/improvement-loop.md` 既有 pattern）
-- 兩種 agent 都共用同一份 `claim-helper.ts` CLI
+所有 supported runtime 共用 `claim-helper.ts` 的 claim 契約；runtime 原生事件支援與 Clade heartbeat handler 的安裝、啟用、實際寫入分開驗證。
+
+| 當前入口的證據 | 可判定的能力與處置 |
+|---|---|
+| `session-start-claim-heartbeat.sh` 已接入啟用的事件，且 claim 的 heartbeat 確實更新 | 該入口有 startup refresh；持續寫入的 refresh 仍須另驗 `post-tool-ownership-journal.sh` |
+| 只驗到原生 SessionStart／PostToolUse 或共同 hook fixture | 只證明事件通道，尚未證明 claim handler 已接入；逐入口觀測範圍見 clade `docs/runtime-hooks.md` |
+| handler 未安裝、未啟用或沒有寫入證據 | heartbeat 覆蓋標為未驗；依既有 Git、worktree 與 ownership 證據判定爭用，缺證據維持 unknown，不因 claim 過期接管他人的工作 |
+
+每個入口的 heartbeat 寫者仍遵守 § 2：由實際 hook 執行，不以 model 手動 refresh 補成活躍證據。新增 adapter 時保留原生 runtime／session identity，不把其他 runtime 的事件改稱 Claude 事件。
 
 ## 7. 失敗模式（fail-open）
 

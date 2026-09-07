@@ -401,9 +401,9 @@ export async function resolvePublicConsumers(
   return { roots, errors }
 }
 
-// 路徑 → consumer：比對**路徑區段**而非 substring。substring 會讓 `<consumer-h>` 命中
-// `<consumer-g>`，而選錯 consumer 就是選錯 repo_id、選錯 visibility。
-// 多個區段都命中時取最長的 id（`<consumer-g>` 勝過 `<consumer-h>`）。
+// 路徑 → consumer：比對**路徑區段**而非 substring。substring 會讓 `<consumer-g>` 命中
+// `<consumer-f>`，而選錯 consumer 就是選錯 repo_id、選錯 visibility。
+// 多個區段都命中時取最長的 id（`<consumer-f>` 勝過 `<consumer-g>`）。
 function matchConsumerEntry(path, entries) {
   const segments = new Set(path.split('/').filter(Boolean))
   let best = null

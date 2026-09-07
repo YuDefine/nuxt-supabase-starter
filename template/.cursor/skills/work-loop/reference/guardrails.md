@@ -7,6 +7,8 @@ Local edits will be reverted by the next sync.
 
 # Guardrails（每輪 re-read，Step 1.5 hard rule）
 
+<!-- clade-targets: claude -->
+
 > 本檔存在的理由：長時間跑的 loop 會被 auto-compaction 壓縮 context，**壓掉的東西裡就包含安全約束，而且壓掉時不會通知你**。所以護欄不能只靠「主線記得」——它必須是每一輪重新讀進最近 context 的檔案。
 >
 > **NEVER** 因為「這輪還記得」「上一輪剛讀過」「這輪只做一個小 item」跳過 re-read。你會覺得自己記得，那正是 decay 的症狀而不是反例。

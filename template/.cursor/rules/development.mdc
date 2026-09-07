@@ -10,6 +10,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # UI Reuse
 
@@ -22,7 +23,7 @@ Local edits will be reverted by the next sync.
 
 # Development
 
-- **ALWAYS** TDD: follow the `test-driven-development` skill (Red → Green → Refactor)
+- **ALWAYS** TDD（Red → Green → Refactor）：實作前透過當前 runtime 的 skill 入口讀取並遵循 `test-driven-development` 全文；缺少該 skill 時回報能力缺口，不能把其他 runtime 的安裝路徑當成已載入。
 - **NEVER** `.skip` or comment out tests
 - **ALWAYS** Tailwind classes, NEVER manual CSS or hardcoded colors
 - **ALWAYS** Nuxt UI 語意色彩（見下方 Nuxt UI Color Mode 約束）

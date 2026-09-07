@@ -65,21 +65,19 @@ Dispatch Task 1 前掃一次 plan：task 間互相矛盾、task 與 Global Const
 
 | 角色 | 檔位 | 判準 |
 | --- | --- | --- |
-| Implementer（brief 內含完整 code，純轉錄＋測試） | Pi `--model gemini --effort low` | 1-2 檔、plan 已寫死 code。原判 `haiku` 的 delegate-sub 轉派 |
-| Implementer（prose spec、多檔整合） | Pi `--model gemini --effort high` | 一般情況的 floor。原判 `sonnet` 的 delegate-sub 轉派 |
-| Implementer（架構判斷、需廣泛理解 codebase） | Claude `opus` | 少數。Opus 不在機械 gate 範圍 |
-| Task reviewer | Claude，**省略 `model`**（繼承主線）；併發／auth／RLS 類顯式 `opus` | 輸出本身是 gate = [[agent-routing]] § NEVER 降檔的形狀。省略與 Opus 都不在機械 gate 範圍 |
-| Final whole-branch review | 最強可用檔 | 唯一一次全域視角 |
+| Implementer（brief 內含完整 code，純轉錄＋測試） | Pi `--model gemini --effort low` | 1-2 檔、plan 已寫死 code；既有 delegate-sub 轉派 |
+| Implementer（一般非 UI prose spec、多檔整合） | Pi `--model luna --effort medium --table-row non-ui-implementation` | ordinary implementation |
+| Implementer（複雜 schema/API/backend、架構落地、repair escalation） | Pi `--model sol --effort high --table-row non-ui-implementation-escalate` | complex non-UI implementation；Astra 不寫 patch |
+| Implementation decision（只有診斷／決策） | Pi `--model astra --effort medium --table-row implementation-decision --workspace-access readonly` | decision output only；patch 回 Sol implementer |
+| Task reviewer | Pi `--model astra --table-row code-review --workspace-access readonly` | 輸出本身是獨立 gate；review 與 producer 分離 |
+| Final whole-branch review | Pi Astra `code-review`（readonly） | 唯一一次全域視角 |
 
 **Implementer 走 Pi 的兩項前置**（[[agent-routing]] § `subagent_type` 是 `general-purpose` 或 `Explore` 時
 的 (b) 機械改寫）：改動有硬 gate（typecheck／test／lint 的 exit code）接住，且可一鍵 `git checkout` 還原。
 本 skill 的 task-brief ＋ task reviewer 流程恰好提供這兩項。兩項缺一 → 照原判派 Claude `sonnet`，
 並在 dispatch 前依機械 gate 的 receipt 流程結案。
 
-**每一個** Pi dispatch 都 MUST 帶 `--route claude-delegate-sub --tier-basis delegate-sub`。
-gemini 回 exit 2 → 升 `--model astra` 重派一次（原 `low` 保留，其餘 effort 改 `medium`）；再 fail 才回 Claude `sonnet`（走
-`delegate-escalation-failed` fallback receipt）。exit 3／4 照 [[agent-routing]] 的 watch-protocol
-與 § 配額耗盡時的 fallback 紀律走，**NEVER** 記入品質判斷。
+具名 implementation／review rows 帶 `--route routing-table --tier-basis table-row --table-row <row>`；只有既有 Claude delegate replacement 才帶 `--route claude-delegate-sub --tier-basis delegate-sub`。delegate-sub 的 Gemini/Luna quality exit 2 → 升 true Sol high 並帶 `--retry-of`；Sol 再 fail → 走 Astra `implementation-decision` readonly 取得 diagnosis/decision，patch 回 Sol。exit 3／4 是 runtime/provider/quota，照 [[agent-routing]] 的 watch-protocol 與 fallback 紀律走，**NEVER** 改派 Astra implementation、Claude-hosted GPT 或 native `cx`。
 
 **Turn count beats token price**：多步驟工作用最低檔常花 2-3× turns 反而總成本更高——prose 型
 implementer 的 floor 是 `--effort high`，不是 `low`。
@@ -128,7 +126,7 @@ Conversation memory 不會活過 compaction。實測最貴失敗：controller �
 
 Task 1: Add new API endpoint
 [scripts/task-brief plan.md 1 → .spectra/sdd/task-1-brief.md]
-[Dispatch implementer：Pi --model gemini --effort high --route claude-delegate-sub --tier-basis delegate-sub；定位一行 + brief 路徑 + report 路徑]
+[Dispatch implementer：Pi --model luna --effort medium --route routing-table --tier-basis table-row --table-row non-ui-implementation；定位一行 + brief 路徑 + report 路徑]
 
 Implementer: "should this use service_role or authenticated?"
 You: "先用 getSupabaseWithContext(event) 保留 request context；只有 audit、backfill、修復腳本等系統任務才直用 service_role"

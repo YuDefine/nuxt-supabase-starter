@@ -29,29 +29,53 @@ export type HolderKind = KnownRuntime | 'human'
  * provider 形式被別的 CLI 消費，未必匯出自己的 session env。所以 `CLADE_RUNTIME`
  * 顯式覆寫才是可靠路徑：包一層 wrapper export 它，不要指望自動偵測。
  */
-const PROBES: ReadonlyArray<readonly [KnownRuntime, readonly string[]]> = [
-  [
-    'claude',
-    ['CLAUDE_PROJECT_DIR', 'CLAUDE_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CONVERSATION_ID'],
-  ],
-  ['codex', ['CODEX_SESSION_ID', 'CODEX_AGENT_NAME', 'CODEX_HOME']],
-  ['opencode', ['OPENCODE_SESSION_ID', 'OPENCODE_AGENT_ID', 'OPENCODE_HOME']],
-  ['copilot', ['COPILOT_AGENT_ID', 'GITHUB_COPILOT_CHAT']],
-  ['cursor', ['CURSOR_SESSION_ID', 'CURSOR_TRACE_ID', 'CURSOR_CONVERSATION_ID', 'CURSOR_AGENT']],
+type EnvKey = keyof NodeJS.ProcessEnv
+
+/** 強訊號是 session/agent identity；弱訊號只能用來保留 runtime 分類相容性。 */
+const SESSION_PROBES: ReadonlyArray<readonly [KnownRuntime, readonly EnvKey[]]> = [
+  ['claude', ['CLAUDE_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CONVERSATION_ID']],
+  ['codex', ['CODEX_SESSION_ID', 'CODEX_THREAD_ID']],
+  ['opencode', ['OPENCODE_SESSION_ID', 'OPENCODE_AGENT_ID']],
+  ['copilot', ['COPILOT_AGENT_ID']],
+  ['cursor', ['CURSOR_SESSION_ID', 'CURSOR_CONVERSATION_ID']],
 ]
 
-/** session id 的取值順序（跨 runtime）。 */
-const SESSION_ID_KEYS = [
-  'CLAUDE_SESSION_ID',
-  'CLAUDE_CODE_SESSION_ID',
-  'CODEX_SESSION_ID',
-  'OPENCODE_SESSION_ID',
-  'CURSOR_CONVERSATION_ID',
-  'CURSOR_SESSION_ID',
-] as const
+const WEAK_PROBES: ReadonlyArray<readonly [KnownRuntime, readonly EnvKey[]]> = [
+  ['claude', ['CLAUDE_PROJECT_DIR']],
+  ['codex', ['CODEX_AGENT_NAME', 'CODEX_HOME']],
+  ['opencode', ['OPENCODE_HOME']],
+  ['copilot', ['GITHUB_COPILOT_CHAT']],
+  ['cursor', ['CURSOR_TRACE_ID', 'CURSOR_AGENT']],
+]
+
+/** Session id 優先序只在已選定 runtime 內生效；禁止跨 runtime fallback。 */
+const SESSION_ID_KEYS: Readonly<Record<KnownRuntime, readonly EnvKey[]>> = {
+  claude: ['CLAUDE_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CONVERSATION_ID'],
+  codex: ['CODEX_SESSION_ID', 'CODEX_THREAD_ID'],
+  opencode: ['OPENCODE_SESSION_ID', 'OPENCODE_AGENT_ID'],
+  copilot: ['COPILOT_AGENT_ID'],
+  cursor: ['CURSOR_SESSION_ID', 'CURSOR_CONVERSATION_ID'],
+}
 
 function isKnown(v: string): v is KnownRuntime {
   return (KNOWN_RUNTIMES as readonly string[]).includes(v)
+}
+
+type RuntimeSignals = {
+  explicit: string | undefined
+  strong: KnownRuntime[]
+  weak: KnownRuntime[]
+}
+
+function runtimeSignals(env: NodeJS.ProcessEnv): RuntimeSignals {
+  const explicit = env.CLADE_RUNTIME?.trim().toLowerCase() || undefined
+  const strong = SESSION_PROBES.filter(([, keys]) =>
+    keys.some((key) => Boolean(env[key]?.trim())),
+  ).map(([runtime]) => runtime)
+  const weak = WEAK_PROBES.filter(([, keys]) => keys.some((key) => Boolean(env[key]?.trim()))).map(
+    ([runtime]) => runtime,
+  )
+  return { explicit, strong, weak }
 }
 
 /**
@@ -59,27 +83,46 @@ function isKnown(v: string): v is KnownRuntime {
  * 判不出來回 `'unknown'`（**NEVER** 預設成 claude —— 誤歸帳比記成 unknown 更難查）。
  */
 export function detectRuntime(env: NodeJS.ProcessEnv = process.env): Runtime {
-  const explicit = env.CLADE_RUNTIME?.trim().toLowerCase()
-  if (explicit && isKnown(explicit)) return explicit
-  for (const [runtime, keys] of PROBES) {
-    if (keys.some((k) => env[k])) return runtime
-  }
+  const signals = runtimeSignals(env)
+  if (signals.explicit) return isKnown(signals.explicit) ? signals.explicit : 'unknown'
+  if (signals.strong.length === 1) return signals.strong[0]
+  if (signals.strong.length > 1) return 'unknown'
+  if (signals.weak.length === 1) return signals.weak[0]
   return 'unknown'
 }
 
 /**
- * lease / claim 用的持有者類型：判不出 runtime 時視為 human 操作，
- * 而不是 unknown —— 這些場景的「非 agent」是有意義的第三態。
+ * lease / claim 沿用 explicit → strong → weak 的辨識優先序。
+ * 只有全部無訊號才是 human；有訊號但無法唯一判定時拒絕建立 holder。
  */
 export function detectHolderKind(env: NodeJS.ProcessEnv = process.env): HolderKind {
-  const r = detectRuntime(env)
-  return r === 'unknown' ? 'human' : r
+  const signals = runtimeSignals(env)
+
+  if (signals.explicit) {
+    if (!isKnown(signals.explicit))
+      throw new Error(
+        `cannot determine holder kind: invalid CLADE_RUNTIME=${JSON.stringify(signals.explicit)}`,
+      )
+    return signals.explicit
+  }
+
+  const runtimes = signals.strong.length ? signals.strong : signals.weak
+  if (runtimes.length === 0) return 'human'
+  if (runtimes.length > 1)
+    throw new Error(
+      `cannot determine holder kind: conflicting runtime identity signals (${runtimes.join(', ')})`,
+    )
+  return runtimes[0]
 }
 
-/** 跨 runtime 取 session id；沒有任何一個命中回 null。 */
-export function detectSessionId(env: NodeJS.ProcessEnv = process.env): string | null {
-  for (const k of SESSION_ID_KEYS) {
-    const v = env[k]
+/** 只讀 selected runtime 的 session id；human/unknown/invalid runtime 一律回 null。 */
+export function detectSessionId(
+  env: NodeJS.ProcessEnv = process.env,
+  runtime: Runtime | string = detectRuntime(env),
+): string | null {
+  if (!isKnown(runtime)) return null
+  for (const key of SESSION_ID_KEYS[runtime]) {
+    const v = env[key]?.trim()
     if (v) return v
   }
   return null

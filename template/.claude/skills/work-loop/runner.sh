@@ -80,6 +80,7 @@ CHILD_ENV=(
   -u ANTHROPIC_BASE_URL
   -u ANTHROPIC_AUTH_TOKEN
   -u ANTHROPIC_API_URL
+  -u ANTHROPIC_MODEL
   -u ANTHROPIC_DEFAULT_OPUS_MODEL
   -u ANTHROPIC_DEFAULT_SONNET_MODEL
   -u ANTHROPIC_DEFAULT_HAIKU_MODEL
@@ -111,7 +112,7 @@ case "$ORIGIN" in
   ccx)
     printf '%s\n' \
       'ERROR: ccx is retired; work-loop will not create a new child.' \
-      'Run GPT/Codex work through the Pi dispatcher (`cx` runtime), or start the loop from cc/ccw when Claude Code is required.' >&2
+      'Run GPT/Codex workers through the Pi dispatcher, or start the loop from cc/ccw when Claude Code is required.' >&2
     exit 2
     ;;
   *)
@@ -121,6 +122,21 @@ case "$ORIGIN" in
     exit 3
     ;;
 esac
+
+# The account router may choose either subscription slot after quota preflight. Refuse before the
+# first Claude process if either eligible settings file or any inherited model env points at GPT.
+# Conservative rejection is intentional: selecting a safe slot is the account router's job, while
+# this runner has no receipt proving which slot it will choose until after launch.
+MODEL_RESIDENCY_HELPER="$HOME/offline/clade/vendor/scripts/lib/claude-model-residency.ts"
+[ -r "$MODEL_RESIDENCY_HELPER" ] || {
+  echo "ERROR: missing Claude model residency helper: $MODEL_RESIDENCY_HELPER" >&2
+  exit 2
+}
+# Which env vars and settings keys carry a model is the helper's own contract; enumerating them
+# again in shell is how the two copies drift. One call covers both eligible profiles and prints
+# its own refusal.
+$NODE_PLAIN "$MODEL_RESIDENCY_HELPER" guard \
+  --config-dir "$HOME/.claude" --config-dir "$HOME/.claude-work" || exit 2
 QUARANTINE_FILE="$REPO/.clade/work-loop/orphan-quarantine.json"
 LOCK_HELPER="$HOME/offline/clade/vendor/scripts/work-loop-lock.ts"
 # 每輪一行的機械紀錄。round 內的敘事全在 $LOG_DIR/round-<ts>.log 裡，成功輪畫面上只剩
@@ -749,3 +765,5 @@ done
 
 print_runner_summary
 exit "$runner_exit_code"
+
+# <!-- clade-targets: claude -->

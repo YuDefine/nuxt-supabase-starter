@@ -227,7 +227,7 @@ function cwdHash() {
 
 function sessionId(kind) {
   if (kind === 'human') return 'human'
-  return detectSessionId() || cwdHash()
+  return detectSessionId(process.env, kind) || cwdHash()
 }
 
 function appendAudit(lease, event, extra = {}) {

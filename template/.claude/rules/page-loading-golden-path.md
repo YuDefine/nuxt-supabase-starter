@@ -9,6 +9,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # Nuxt 導航 Loading Golden Path（實作階段強制）
 
@@ -133,12 +134,12 @@ mutation `status === 'pending'` 當 loading 是**真 functional bug**（永久 s
 
 | 層 | scope | 何時跑 | 行為 |
 | --- | --- | --- | --- |
-| **impl-time rule** | 當次 session 寫的 `.vue`（本檔 path-scoped 自動 load） | 寫 code 當下 | agent 自查（Anti-pattern 表最後一列） |
+| **impl-time rule** | 當次 session 寫的 `.vue`（依當前 runtime 的 scoped delivery 取得本檔全文） | 首次符合範圍的實作之前 | agent 自查（Anti-pattern 表最後一列） |
 | **pre-commit gate** | staged `.vue` | `git commit` | **blocking**（`vendor/scripts/pre-commit/checks/mutation-loading.sh`） |
 | **pre-push gate** | 全 repo `.vue`（回溯型） | `git push` | **warn-only**（fleet 有大量歷史命中，全擋會癱瘓 push；`vendor/scripts/pre-push/checks/mutation-loading.sh`） |
 | **review 層** | PR diff | code-review agent / `/commit` 0-A | `clade-review-rules.md` § Pinia Colada mutation loading |
 
-三層 mechanical gate 共用同一偵測器 `vendor/scripts/checks/mutation-loading-detect.ts`（**支援跨行 destructuring** — 舊 audit heuristic 要求 `status:` 與 `Mutation(` 同行，會漏抓多行寫法，已修）。cross-consumer 盤點另有 `scripts/audit-pinia-mutation-loading.ts`（diagnostic-only，exit 0，import 同一偵測器）。
+pre-commit／pre-push 的機械檢查共用同一偵測器 `vendor/scripts/checks/mutation-loading-detect.ts`（**支援跨行 destructuring** — 舊 audit heuristic 要求 `status:` 與 `Mutation(` 同行，會漏抓多行寫法，已修）。cross-consumer 盤點另有 `scripts/audit-pinia-mutation-loading.ts`（diagnostic-only，exit 0，import 同一偵測器）。
 
 - **pre-commit blocking**：新違規在源頭就擋，`git diff --cached` 的 `.vue` 有命中 → commit 失敗。
 - **pre-push warn-only**：全站掃描回溯提醒既有違規，不阻擋 push。某 consumer 清到 0 後可在自家 `pre-push/runner.sh` 把本 check 改 blocking。
@@ -146,6 +147,6 @@ mutation `status === 'pending'` 當 loading 是**真 functional bug**（永久 s
 
 ## 為什麼這條 rule 存在
 
-- 導航 loading 是每個 Nuxt consumer 都會遇到的 cross-cutting concern，散規範必漂移：盤點顯示 <consumer-b> 有完整 pattern、<consumer-a>/starter 有分歧半套、<consumer-d> / <consumer-c> / <consumer-j> / co-purchase 全缺。
+- 導航 loading 是每個 Nuxt consumer 都會遇到的 cross-cutting concern，散規範必漂移：盤點顯示 <consumer-b> 有完整 pattern、<consumer-a>/starter 有分歧半套、<consumer-d> / <consumer-c> / <consumer-i> / co-purchase 全缺。
 - `await useFetch` 的 blocking 行為是 Nuxt 新手最常踩的 perceived-performance 坑，typecheck / lint 抓不到，只有使用者抱怨「卡」才暴露 → 需要 impl-time 規約在最接近犯錯時點對齊。
 - skeleton 的色彩硬編碼會同時違反本 rule 與 color-mode rule；統一走 `<USkeleton>` 才 theme-safe。

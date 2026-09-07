@@ -38,6 +38,7 @@ Preflight、durable thin brief 紀律、`--label` 要求、runtime cleanup、par
 
 ```bash
 node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \
+  --route <routing-policy> --tier-basis <routing-conclusion> \
   --new-tab \
   --cwd <absolute-main-checkout> \
   --model <routing-model> --effort <routing-effort> \
@@ -61,6 +62,7 @@ node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \
 
 ```bash
 node <clade-central-repo>/vendor/scripts/herdr-session-handoff.ts \
+  --route <routing-policy> --tier-basis <routing-conclusion> \
   --new-tab \
   --cwd <absolute-main-checkout> \
   --model <routing-model> --effort <routing-effort> \

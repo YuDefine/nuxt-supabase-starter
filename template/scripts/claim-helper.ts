@@ -29,6 +29,7 @@ import { fileURLToPath } from 'node:url'
 import { isRecord } from './lib/json-unknown.ts'
 import { isLockedProjectionPathFor } from './locked-projection.ts'
 import {
+  type Attribution,
   lastWriterByPath,
   liveSessionIds,
   readJournal,
@@ -359,7 +360,7 @@ export function derivedClaimPaths(
 
 /** Why one derived path is in a claim's effective range, and how much that reason is worth. */
 export interface DerivedPathEvidence {
-  attribution: 'hook' | 'mtime-diff'
+  attribution: Attribution
   /** ISO timestamp of the write this evidence comes from. */
   ts: string
   pane_id: string | null

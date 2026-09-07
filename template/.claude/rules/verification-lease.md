@@ -5,6 +5,8 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+
 # Verification Lease
 
 **核心命題**：dev server + browser profile + cookie namespace + env file + session identity 是一組**綁定資源**，任意時刻只能由一個 holder 持有。把這組綁定收成一個明確物件叫 **verification lease**，任何要動其中之一的工具/規則都先 claim、衝突就 refuse。
@@ -19,7 +21,7 @@ Lease identity 是 **(consumer_id, port)**：primary port 的檔在 `/tmp/<consu
 
 ## Agent 行為契約
 
-Claude / Codex 在這條規則之下：
+每一個 runtime 的 agent 均遵守以下契約：
 
 - **NEVER** 用 raw `nuxt dev` / `node server.mjs` / `playwright start` 之類 bypass lease 的方式啟動 dev server
 - **NEVER** 直接 `lsof + kill` 別 holder 的 PID（即使它是另一個自己的 session）；要殺一律走 `dev-session.ts stop` / `wait` / `--takeover` 的 op

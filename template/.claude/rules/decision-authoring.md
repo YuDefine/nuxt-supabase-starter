@@ -14,6 +14,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # 待拍板條目的寫法
 
@@ -220,10 +221,12 @@ journal **0 筆不是零失敗**——目錄不存在代表「這一版沒有散
 `work.accept`。逐字只有兩種算送達：
 
 - `bumped` —— commit 建了、push 了、remote 確認過
-- `skipped` **且那台 consumer 的 origin 上那份 `.claude/hub.json` 版本已到達該 tag**——`skipped`
+- `skipped` **且那台 consumer 的 upstream remote-tracking ref 上的 manifest 版本已到達該 tag**——`skipped`
   在 journal 裡分不出五種來源（缺 hub.json / `--resume` 已驗 / unmerged / dirty / 無 drift），
   所以去問那台自己停在哪一版。**全 skipped 而版本沒到 = 無證據**。版本讀的是
-  `git show @{upstream}:.claude/hub.json`，**NEVER** 讀磁碟、**也 NEVER** 讀 HEAD：
+  `landing.ts` 固定的 upstream commit SHA 上的 manifest snapshot：`.clade/manifest.json`
+  是 canonical，`.claude/hub.json` 是遷移期 alias；共用 resolver 驗 schema 與雙檔一致性。
+  **NEVER** 讀磁碟、**也 NEVER** 讀 HEAD：
   - 磁碟：propagate 先寫 hub.json 才跑投影同步，同步失敗時磁碟領先而那台的 origin 什麼都沒收到
   - HEAD：journal 是整檔覆寫，同一版第二趟跑時那一列會從 `push-withheld` 被蓋成 `skipped`；
     此時 HEAD 到版而 origin 從頭到尾沒收到，`push-withheld` 判成無證據、換個 status 名字就放行
@@ -432,7 +435,7 @@ for (const c of await m.listPendingChanges('<repo>'))
 | 消費端 | 寫該條目的 agent（在 `/decisions` 與 `flow pending` 的 `✎` 評語上看到，照上表處置）＋ Charles（看到那一行可以跳過不讀）。**2026-09-03 起不再對它注入任何文字**（TD-904）：該說的話由 `LINT_NOTES['belongs-on-review']` 在兩個渲染端說，NEVER 由 agent 寫一段話進人的佇列 |
 | 載入路徑 | 本節（`rules/core/decision-authoring.md`，paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`——寫那條 bullet 正是在編輯這兩個檔） |
 
-> 2026-08-28 成因：<consumer-i> 的 `product-save-hardening` 四條 `## 人工檢查` 都宣告
+> 2026-08-28 成因：<consumer-h> 的 `product-save-hardening` 四條 `## 人工檢查` 都宣告
 > `[verify:api+ui]`，實際每條只寫了一種 evidence，於是 change 停在 `readyForEvidence`
 > （`changeBelongsOnReviewInbox` 回 false，那是**Claude 球**的桶，刻意不畫進 inbox）。
 > 作者拿不到 `/review` 的票，就把「五條逐項確認」寫成 `## 需要 Charles 執行` 的 bullet——
@@ -450,12 +453,18 @@ Carrier 是**別的 session 也在寫的檔**。人在手機上答題的同時�
 agent 兩小時內三度把同一題當「等你拍板」重報，最後是 Charles 自己去 `/decisions` 看不到
 自己的答案才發現。
 
-現在 `flow status --stalled`（每個 attended session 開頭自動跑）會把這種狀態列成
+現在 `flow status --stalled` 會把這種狀態列成
 `answer-not-filed` 一行，並印出重新歸檔的指令：
 
 ```bash
 node vendor/scripts/flow/flow.ts relend <span_id>
 ```
+
+每個 attended session 開頭都要取得一次 `flow status --stalled` 的實際結果。已接通並驗證
+`session-start-stalled.sh` 的原生 session-start hook 可自動提供；沒有該產品入口的觸發證據時，
+agent 在開始本次工作前，從當前 repo 執行 `node scripts/flow/flow.ts status --stalled`
+（clade checkout 使用 `vendor/scripts/flow/flow.ts`）。只有事件 adapter、設定檔或空白輸出
+不證明 hook 曾執行；工具不可達時回報檢查未完成，不把它當成沒有停滯。
 
 `relend` **不收新答案**——答案在 spine 上一直是對的，壞掉的是檔案；它從 spine 重建那個區塊
 放回去。重跑是 no-op，不會疊出第二份。
@@ -465,7 +474,7 @@ node vendor/scripts/flow/flow.ts relend <span_id>
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | 已答（非 retracted）× 有指定 carrier × repo 內找不到它的決策紀錄區塊 × 超過 10 分鐘寬限 → `flow status --stalled` 列一行、exit 3。**warn-only，不 block** |
-| 消費端 | SessionStart 的 `session-start-stalled.sh`（每個 attended session 開頭）；讀到就照 `relend` 指令處置 |
+| 消費端 | 每個 attended session 的 agent，透過已驗證的 session-start hook 或上段顯式 CLI 取得結果；讀到就照 `relend` 指令處置 |
 | 載入路徑 | 本節；停滯輸出自帶 action 句，不需要先知道要去看 |
 
 **判準是「有沒有決策紀錄區塊」，NEVER 是「有沒有提到那個 span id」**：一條被寫成事故報告的
@@ -474,8 +483,12 @@ span id 到處都是，而那些檔案裡沒有答案。已歸檔（區塊搬進
 
 ## 寫入當下就會提醒你沒帶選項
 
-寫完 `HANDOFF.md` / `docs/tech-debt.md` 的當下，PostToolUse hook 會就地判「這題是 ruling
-但沒有選項」，並把 `OPTIONS_REQUEST_TEXT` 原文印回同一個 session。
+每次寫完 `HANDOFF.md` / `docs/tech-debt.md`，同一個 agent 就地檢查「這題是 ruling
+但沒有選項」。已接通的 Claude `PostToolUse` hook 會執行共同 lint 並把 `OPTIONS_REQUEST_TEXT`
+原文印回；其他入口若沒有同一 handler 的真實 post-tool 觸發證據，寫完立即執行
+`node scripts/flow/decision-lint.ts <repo-root> <edited-file>`（clade checkout 使用
+`vendor/scripts/flow/decision-lint.ts`）。兩個參數都是當次寫入的實際絕對路徑。
+讀 stderr 並修正列出的條目；exit 0 是 warn-only，不是條目完整的證明。
 
 它與佇列端的 lint、ingest 端的拒收**是同一個判準的三個時刻**，而它是唯一**還能補救**的那一個：
 ingest 拒收之後那題不存在，沒有任何畫面會再提醒任何人；而唯一五秒鐘就能修好的人——選項還在
@@ -485,7 +498,7 @@ ingest 拒收之後那題不存在，沒有任何畫面會再提醒任何人；�
 | --- | --- |
 | 觸發條件 | 剛寫入的檔裡有 `no-options-under-ruling` 的條目 → 印到 stderr。**warn-only，一律 exit 0，NEVER 擋下 Edit**——`HANDOFF.md` 是高頻活文件，擋寫入買到的是繞過旗標不是更好的 bullet |
 | 消費端 | 剛寫下那條 bullet 的 agent（本節）；判準與措辭走 `vendor/scripts/flow/decision-lint.ts` → `decision-sources.ts` 的 scanner ＋ `decisions.ts` 的 `OPTIONS_REQUEST_TEXT` |
-| 載入路徑 | 本檔（paths-gated 於 `HANDOFF.md` / `docs/tech-debt.md`，編輯當下載入）＋ hook 自身的輸出 |
+| 載入路徑 | 本檔依上述 paths 由共同 rules planner 交付至各端：Claude 原生 rules、Codex AGENTS.md baseline、Cursor 原生 rules；編輯前取得完整適用正文。Hook 與顯式 CLI 共用 lint 輸出，兩者的觸發證據分開記錄 |
 
 **NEVER 在 hook 裡自己解析 markdown。** 第二份 matcher 遲早與佇列給出不同答案，而不一致的
 那一次會教讀者「這個提示是雜訊」。

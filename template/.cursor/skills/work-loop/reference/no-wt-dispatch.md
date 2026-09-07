@@ -7,6 +7,8 @@ Local edits will be reverted by the next sync.
 
 # `/wt` 不可用時的 dispatch 形狀
 
+<!-- clade-targets: claude -->
+
 > 主檔 pointer：Step 4a 判出「`/wt` 叫不動」時 MUST 先完整讀本檔。判定表在主檔，執行細節在這裡。
 
 ## 這個分支為什麼存在

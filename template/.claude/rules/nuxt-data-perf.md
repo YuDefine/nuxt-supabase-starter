@@ -9,6 +9,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # Nuxt Data Fetching & Performance
 
@@ -20,8 +21,8 @@ Local edits will be reverted by the next sync.
 > 原本的 `**/*.ts` 會在編輯 `scripts/`、`test/`、`e2e/`、`vendor/` 底下的檔時也觸發，而本規約
 > 沒有任何一條在那些位置適用。`**/*.vue` **刻意保留不動** —— .vue 本來就只存在於 app 端。
 >
-> 條件式規約觸發一次就是整份進場（本檔約 7.1k tokens），之後被該 session 每個 request 以
-> cache-read 重讀。改 `paths:` 前 MUST 確認新增的目錄在本規約內真的有對應條文。
+> `paths:` 宣告本規約的適用範圍；實際載入由各 runtime adapter 交付。改 `paths:` 前 MUST
+> 確認新增的目錄在本規約內真的有對應條文。
 
 ## Data Fetching 選用決策樹
 
@@ -303,10 +304,10 @@ Cookbook 範本：`~/offline/clade/vendor/snippets/nuxt-data-perf/query-file-exa
 
 | 層 | scope | 何時跑 | 偵測項 | 行為 |
 | --- | --- | --- | --- | --- |
-| **impl-time rule** | 當次 session 寫的 `.vue`（path-scoped 自動 load） | 寫 code 當下 | Self-check Gate 5 項（下方 § Self-check Gate） | agent 自查 |
+| **impl-time rule** | 當次 session 寫的 `.vue` | 寫 code 當下 | 下方 § Self-check Gate 的全部項目 | agent 自查 |
 | **pre-commit gate** | staged `.vue` | `git commit` | file-level：有 `$fetch` 但無 `use(Lazy)?(Fetch\|AsyncData)`/`useQuery`（HR-1） | **blocking** |
 | **pre-push gate** | **全 repo** `.vue` | `git push` | 同上，回溯型 | **warn-only**（既有 codebase 違規量大，暫不阻擋） |
-| **review 層** | PR diff | code-review agent / `/commit` 0-A | 全 5 條 HR 語意 check ＋ `lazy-hydration-strategy` / `nitro-cache-auth-safety` verdict | agent review |
+| **review 層** | PR diff | code-review agent / `/commit` 0-A | 全部 HR 語意 check ＋ `lazy-hydration-strategy` / `nitro-cache-auth-safety` verdict | agent review |
 
 資源層另有兩條機械 pattern（走 `vendor/review-rules/patterns.json`，pre-commit / pre-push / CI 三層）：
 
@@ -371,7 +372,7 @@ async function handleSubmit() {
 2026-06-23 跨 8 consumer 稽核發現：
 - `dedupe` 全 fleet = 0（MasteringNuxt tip 指出的盲區）
 - `getCachedData` 全 fleet = 0
-- 未安裝 Colada 的 consumer（<consumer-j> / co-purchase / blog）全面 D 級
+- 未安裝 Colada 的 consumer（<consumer-i> / co-purchase / blog）全面 D 級
 - 已安裝 Colada 的 consumer（<consumer-a> / <consumer-b> / <consumer-d> / <consumer-c>）全部 B+ 以上，但 key management 和 dedupe 仍有缺口
 - <consumer-a> 的 pattern（STALE_TIME 三級 + key factory + 100% mutation invalidation）是 gold standard，需推廣
 
@@ -381,6 +382,6 @@ async function handleSubmit() {
 |------|--------|
 | D1 / Drizzle / wrangler / NuxtHub binding | `data-layer-d1.md` |
 | useFetch / useQuery / $fetch 選用 / dedupe / cache / payload | 本 rule |
-| Nuxt UI component props / theming | nuxt-ui-remote MCP（見 `~/.claude/rules/nuxt-ui-mcp.md`） |
-| CSS / Web Platform API（dialog / popover / anchor） | modern-web-guidance skill（見 `~/.claude/rules/modern-web-mcp.md`） |
+| Nuxt UI component props / theming | nuxt-ui-remote MCP 與專案的 Nuxt UI 查詢規約 |
+| CSS / Web Platform API（dialog / popover / anchor） | modern-web-guidance skill 與專案的 Web Platform 查詢規約 |
 | Error handling pattern（server/client） | `error-handling.md` |

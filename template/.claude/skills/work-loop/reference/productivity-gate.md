@@ -7,6 +7,9 @@ Local edits will be reverted by the next sync.
 
 # 准入與生產性：算法、邊界案例、反 Goodhart 防線
 
+<!-- clade-targets: claude -->
+<!-- carrier-independent candidate: 本檔的義務不經任何 runtime 專屬工具契約表達，是 [[TD-445]] 抽共用核心時最先可搬的一批。**這是候選標記，不是 audience**——真正的 audience 是上面那行 `clade-targets`，NEVER 因為看到本行就把 targets 放寬。放寬 reference 而不放寬 SKILL.md 會投出沒有 skill 入口指向的孤兒檔。 -->
+
 > 主檔 pointer：Step 0 § 開場准入判定 與 Step 6.3 § 生產性判定。**判準在主檔，本檔是論證與
 > 邊界案例**——執行時不必讀本檔，**改判準之前 MUST 讀**。
 

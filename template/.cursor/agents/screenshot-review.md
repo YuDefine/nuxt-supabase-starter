@@ -12,6 +12,8 @@ Local edits will be reverted by the next sync.
 -->
 
 
+<!-- clade-targets: claude -->
+
 ## 你是執行體，不是路由器
 
 **收到 brief 就直接做下方的工作。** 不判身份、不偵測任何 runtime、不轉派給任何人。

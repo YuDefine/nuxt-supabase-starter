@@ -1,27 +1,16 @@
 #!/usr/bin/env -S node --experimental-strip-types
 // 🔒 LOCKED — managed by clade · Source: vendor/scripts/spectra-advanced/collect-followups.ts · 改這裡無效，下次 propagate 會覆寫；請改 $CLADE_HOME/vendor/scripts/spectra-advanced/collect-followups.ts
-/**
- * spectra-ux v1.5+: Collect follow-up markers from tasks.md + validate against register.
- *
- * Usage:
- *   node scripts/spectra-advanced/collect-followups.ts                  # human report
- *   node scripts/spectra-advanced/collect-followups.ts --json           # machine-readable
- *   node scripts/spectra-advanced/collect-followups.ts --fail-on-drift  # CI gate
- *   node scripts/spectra-advanced/collect-followups.ts --session-summary  # condensed surfacing
- *
- * Inputs:
- *   - openspec/changes/** /tasks.md  (active + archived; marker scan)
- *   - docs/tech-debt.md              (register)
- *
- * Exit codes:
- *   0 — no drift, or drift present but --fail-on-drift not set
- *   1 — drift present and --fail-on-drift set
- *   2 — unrecoverable error (missing register, IO failure)
+/** Follow-up markers resolve against the live register and terminal closed archives.
+ * Active work and SessionStart candidates always come from the live register.
+ * --fail-on-drift exits 1; --gate <change> preserves the shell gate's exit 2.
+ * --session-summary is fail-open and reports unavailable scans explicitly.
  */
-
-import { readFile, readdir, stat } from 'node:fs/promises'
-import { join } from 'node:path'
-import type { Dirent } from 'node:fs'
+import { readFile, readdir } from 'node:fs/promises'
+import { realpathSync } from 'node:fs'
+import { join, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { parseTechDebtStatus, isTerminalStatus, TD_FIELD_PREFIX } from '../tech-debt-status.ts'
+import { parseTdRegister, closureReceipt, metadataLines } from '../flow/nodes/lib/td-parse.ts'
 
 interface MarkerOccurrence {
   id: string
@@ -29,355 +18,272 @@ interface MarkerOccurrence {
   line: number
   context: string
 }
-
 interface RegisterEntry {
   id: string
   title: string
-  status: 'open' | 'in-progress' | 'done' | 'wontfix' | 'unknown'
-  priority: 'critical' | 'high' | 'mid' | 'low' | 'unknown'
+  status: string
+  priority: string
   discovered: string | null
   hasProblem: boolean
   hasFix: boolean
   hasAcceptance: boolean
   hasReason: boolean
+  hasReceipt: boolean
 }
+const PRIORITY_WEIGHT: Record<string, number> = { critical: 4, high: 3, mid: 2, low: 1 }
+const isMissing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT'
 
-const ROOT = process.cwd()
-const CHANGES_DIR = join(ROOT, 'openspec', 'changes')
-const REGISTER_PATH = join(ROOT, 'docs', 'tech-debt.md')
-
-const args = new Set(process.argv.slice(2))
-const jsonMode = args.has('--json')
-const failOnDrift = args.has('--fail-on-drift')
-const sessionMode = args.has('--session-summary')
-
-const PRIORITY_WEIGHT: Record<string, number> = {
-  critical: 4,
-  high: 3,
-  mid: 2,
-  low: 1,
-  unknown: 0,
-}
-
-async function walkTaskFiles(dir: string): Promise<string[]> {
-  let entries: Dirent<string>[]
+async function optionalRead(path: string): Promise<string> {
   try {
-    entries = await readdir(dir, { withFileTypes: true })
-  } catch {
-    return []
+    return await readFile(path, 'utf8')
+  } catch (error) {
+    if (isMissing(error)) return ''
+    throw error
   }
-  const nested = await Promise.all(
-    entries.map(async (entry) => {
-      const full = join(dir, entry.name)
-      if (entry.isDirectory()) return walkTaskFiles(full)
-      if (entry.isFile() && entry.name === 'tasks.md') return [full]
-      return []
-    }),
-  )
-  return nested.flat()
 }
-
-async function scanMarkers(file: string): Promise<MarkerOccurrence[]> {
-  const content = await readFile(file, 'utf8')
-  const lines = content.split('\n')
-  const pattern = /@followup\[(TD-\d+)\]/g
-  const occurrences: MarkerOccurrence[] = []
-
-  lines.forEach((line, i) => {
-    let m: RegExpExecArray | null
-    while ((m = pattern.exec(line)) !== null) {
-      occurrences.push({
-        id: m[1]!,
-        file: file.replace(ROOT + '/', ''),
-        line: i + 1,
-        context: line.trim().slice(0, 160),
-      })
+async function walkTaskFiles(dir: string): Promise<string[]> {
+  try {
+    const entries = await readdir(dir, { withFileTypes: true })
+    const nested = await Promise.all(
+      entries.map((entry) => {
+        const path = join(dir, entry.name)
+        return entry.isDirectory()
+          ? walkTaskFiles(path)
+          : Promise.resolve(entry.isFile() && entry.name === 'tasks.md' ? [path] : [])
+      }),
+    )
+    return nested.flat()
+  } catch (error) {
+    if (isMissing(error)) return []
+    throw error
+  }
+}
+function field(text: string, name: string): string | null {
+  return (
+    text.match(new RegExp(`^${TD_FIELD_PREFIX}\\*\\*${name}\\*\\*:\\s*(.+)$`, 'mi'))?.[1]?.trim() ??
+    null
+  )
+}
+function section(text: string, names: string): boolean {
+  return new RegExp(
+    `^(?:#{3,6}\\s+(?:${names})\\b|${TD_FIELD_PREFIX}\\*\\*(?:${names})\\*\\*:)`,
+    'mi',
+  ).test(text)
+}
+function parseRegister(content: string): RegisterEntry[] {
+  // `metadataLines` 與 `closureReceipt` 各自重跑一次 fence / comment 遮罩，所以每個 entry
+  // 只算一次。實測 850 個 entry：5×+2× 呼叫 95 ms → 各一次 28 ms。
+  return parseTdRegister(content).map((entry) => {
+    const meta = metadataLines(entry.text).join('\n')
+    const receipt = closureReceipt(entry)
+    return {
+      id: entry.id,
+      title: entry.title.replace(/^TD-\d+\s*[—-]?\s*/, ''),
+      status: parseTechDebtStatus(`**Status**: ${entry.status}`) ?? 'unknown',
+      priority:
+        field(meta, 'Priority')
+          ?.match(/^(critical|high|mid|low)\b/i)?.[1]
+          ?.toLowerCase() ?? 'unknown',
+      discovered: field(meta, 'Discovered'),
+      hasProblem: section(meta, 'Problem'),
+      hasFix: section(meta, 'Fix approach|Fix|Next action'),
+      hasAcceptance: section(meta, 'Acceptance'),
+      hasReason: !!receipt.reason,
+      hasReceipt: receipt.valid,
     }
   })
-
-  return occurrences
 }
-
-async function parseRegister(path: string): Promise<RegisterEntry[]> {
-  let content: string
-  try {
-    content = await readFile(path, 'utf8')
-  } catch {
-    return []
-  }
-
-  const lines = content.split('\n')
-  const entries: RegisterEntry[] = []
-
-  let current: RegisterEntry | null = null
-  let sectionBuffer = ''
-  // Track multi-line HTML comments so `<!-- TD-099 …` buried inside a
-  // comment doesn't become a phantom register entry.
-  let inHtmlComment = false
-
-  const commit = () => {
-    if (!current) return
-    current.hasProblem = /^###\s+Problem\b/m.test(sectionBuffer)
-    current.hasFix = /^###\s+Fix approach\b/m.test(sectionBuffer)
-    current.hasAcceptance = /^###\s+Acceptance\b/m.test(sectionBuffer)
-    current.hasReason =
-      /^###\s+Reason\b/m.test(sectionBuffer) || /^\*\*Reason\*\*/m.test(sectionBuffer)
-    entries.push(current)
-    current = null
-    sectionBuffer = ''
-  }
-
-  for (const line of lines) {
-    if (inHtmlComment) {
-      if (line.includes('-->')) inHtmlComment = false
-      continue
-    }
-    if (line.includes('<!--') && !line.includes('-->')) {
-      inHtmlComment = true
-      continue
-    }
-    if (line.includes('<!--') && line.includes('-->')) {
-      continue
-    }
-
-    const header = line.match(/^##\s+(TD-\d+)\s+—\s+(.+)$/)
-    if (header) {
-      commit()
-      current = {
-        id: header[1]!,
-        title: header[2]!.trim(),
-        status: 'unknown',
-        priority: 'unknown',
-        discovered: null,
-        hasProblem: false,
-        hasFix: false,
-        hasAcceptance: false,
-        hasReason: false,
-      }
-      sectionBuffer = ''
-      continue
-    }
-
-    if (!current) continue
-    sectionBuffer += line + '\n'
-
-    const statusMatch = line.match(/^\*\*Status\*\*:\s+(\w+(?:-\w+)*)/)
-    if (statusMatch) {
-      const s = statusMatch[1]!.toLowerCase()
-      if (s === 'open' || s === 'in-progress' || s === 'done' || s === 'wontfix') {
-        current.status = s
-      }
-    }
-
-    const priorityMatch = line.match(/^\*\*Priority\*\*:\s+(\w+)/)
-    if (priorityMatch) {
-      const p = priorityMatch[1]!.toLowerCase()
-      if (p === 'critical' || p === 'high' || p === 'mid' || p === 'low') {
-        current.priority = p
-      }
-    }
-
-    const discoveredMatch = line.match(/^\*\*Discovered\*\*:\s+(.+?)$/)
-    if (discoveredMatch) {
-      current.discovered = discoveredMatch[1]!.trim()
-    }
-  }
-  commit()
-  return entries
-}
-
-function describeIncomplete(e: RegisterEntry): string[] {
+function incompleteIssues(entry: RegisterEntry): string[] {
   const issues: string[] = []
-  if (e.status === 'unknown') issues.push('Status missing/invalid')
-  if (e.priority === 'unknown') issues.push('Priority missing/invalid')
-  if (e.status === 'wontfix') {
-    if (!e.hasReason) issues.push('wontfix without Reason')
-    if (!e.hasProblem) issues.push('missing Problem')
-  } else if (e.status !== 'done') {
-    if (!e.hasProblem) issues.push('missing Problem')
-    if (!e.hasFix) issues.push('missing Fix approach')
-    if (!e.hasAcceptance) issues.push('missing Acceptance')
+  if (
+    !/^(?:open|pending|in-progress|blocked|deferred|mitigated|workaround|landed)(?:-|$)/.test(
+      entry.status,
+    ) &&
+    !isTerminalStatus(entry.status) &&
+    !/-until(?:-|$)/.test(entry.status)
+  )
+    issues.push('Status missing/invalid')
+  if (isTerminalStatus(entry.status)) {
+    if (!entry.hasReason) issues.push('terminal status without Resolution/Reason')
+    else if (!entry.hasReceipt) issues.push('terminal status without verified closure receipt')
+    return issues
   }
+  if (!entry.hasProblem) issues.push('missing Problem')
+  if (!entry.hasFix) issues.push('missing Fix approach')
+  if (!entry.hasAcceptance) issues.push('missing Acceptance')
   return issues
 }
 
-async function main() {
+export async function collectFollowups(root: string, change?: string) {
+  const changesDir = join(root, 'openspec', 'changes')
+  if (
+    change &&
+    (resolve(changesDir, change) === changesDir ||
+      relative(changesDir, resolve(changesDir, change)).startsWith('..'))
+  ) {
+    throw new Error('--gate change must be inside openspec/changes')
+  }
+  const taskFiles = change
+    ? [join(changesDir, change, 'tasks.md')]
+    : await walkTaskFiles(changesDir)
+  const markers: MarkerOccurrence[] = []
+  for (const path of taskFiles) {
+    const source = change ? await optionalRead(path) : await readFile(path, 'utf8')
+    source.split('\n').forEach((line, index) => {
+      for (const match of line.matchAll(/@followup\[(TD-\d+)\]/g)) {
+        markers.push({
+          id: match[1]!,
+          file: relative(root, path),
+          line: index + 1,
+          context: line.trim().slice(0, 160),
+        })
+      }
+    })
+  }
+  const registered = parseRegister(await optionalRead(join(root, 'docs', 'tech-debt.md')))
+  const archiveDir = join(root, 'docs', 'archives')
+  let names: string[] = []
   try {
-    await stat(CHANGES_DIR)
-  } catch {
-    console.error('[collect-followups] openspec/changes/ not found; nothing to scan')
-    process.exit(0)
+    names = (await readdir(archiveDir))
+      .filter((name) => /^tech-debt-closed-.*\.md$/.test(name))
+      .toSorted()
+  } catch (error) {
+    if (!isMissing(error)) throw error
   }
-
-  const taskFiles = await walkTaskFiles(CHANGES_DIR)
-  const markerBatches = await Promise.all(taskFiles.map(scanMarkers))
-  const allMarkers: MarkerOccurrence[] = markerBatches.flat()
-
-  const register = await parseRegister(REGISTER_PATH)
-  const registerIds = new Set(register.map((e) => e.id))
-  const markerIds = new Set(allMarkers.map((m) => m.id))
-
-  const unregistered = [...markerIds].filter((id) => !registerIds.has(id)).toSorted()
-  const orphaned = [...registerIds].filter((id) => !markerIds.has(id)).toSorted()
-
-  const incomplete = register.filter((e) => {
-    if (e.status === 'wontfix') {
-      return !e.hasReason || !e.hasProblem
-    }
-    if (e.status === 'done') {
-      return false
-    }
-    return !e.hasProblem || !e.hasFix || !e.hasAcceptance
-  })
-
-  const drift = unregistered.length + incomplete.length
+  const archived: RegisterEntry[] = []
+  for (const name of names)
+    archived.push(...parseRegister(await readFile(join(archiveDir, name), 'utf8')))
+  const markerIds = new Set(markers.map((entry) => entry.id))
+  const liveIds = new Set(registered.map((entry) => entry.id))
+  const terminalArchiveIds = new Set(
+    archived.filter((entry) => isTerminalStatus(entry.status)).map((entry) => entry.id),
+  )
+  const counts = new Map<string, number>()
+  for (const entry of [...registered, ...archived])
+    counts.set(entry.id, (counts.get(entry.id) ?? 0) + 1)
+  const relevant = (id: string) => !change || markerIds.has(id)
+  const duplicateIds = [...counts]
+    .filter(([id, count]) => count > 1 && relevant(id))
+    .map(([id]) => id)
+    .toSorted()
+  const archiveNonTerminal = [
+    ...new Set(
+      archived
+        .filter((entry) => !isTerminalStatus(entry.status) && relevant(entry.id))
+        .map((entry) => entry.id),
+    ),
+  ].toSorted()
+  const unregistered = [...markerIds]
+    .filter((id) => !liveIds.has(id) && !terminalArchiveIds.has(id))
+    .toSorted()
+  const orphaned = [...liveIds].filter((id) => !markerIds.has(id)).toSorted()
+  const incomplete = [...registered, ...archived]
+    .filter((entry) => relevant(entry.id))
+    .map((entry) => ({ id: entry.id, issues: incompleteIssues(entry) }))
+    .filter((entry) => entry.issues.length > 0)
   const byStatus: Record<string, number> = {}
-  for (const e of register) {
-    byStatus[e.status] = (byStatus[e.status] ?? 0) + 1
+  for (const entry of registered) byStatus[entry.status] = (byStatus[entry.status] ?? 0) + 1
+  return {
+    summary: {
+      totalMarkerOccurrences: markers.length,
+      uniqueMarkerIds: markerIds.size,
+      registerEntries: registered.length,
+      unregistered: unregistered.length,
+      orphaned: orphaned.length,
+      incomplete: incomplete.length,
+      archiveDuplicates: duplicateIds.length,
+      archiveNonTerminal: archiveNonTerminal.length,
+      byStatus,
+    },
+    registered,
+    markers,
+    drift: { unregistered, orphaned, incomplete, duplicateIds, archiveNonTerminal },
   }
-
-  if (jsonMode) {
-    console.log(
-      JSON.stringify(
-        {
-          summary: {
-            totalMarkerOccurrences: allMarkers.length,
-            uniqueMarkerIds: markerIds.size,
-            registerEntries: register.length,
-            unregistered: unregistered.length,
-            orphaned: orphaned.length,
-            incomplete: incomplete.length,
-            byStatus,
-          },
-          registered: register,
-          markers: allMarkers,
-          drift: {
-            unregistered,
-            orphaned,
-            incomplete: incomplete.map((e) => ({ id: e.id, issues: describeIncomplete(e) })),
-          },
-        },
-        null,
-        2,
-      ),
-    )
-  } else if (sessionMode) {
-    // Condensed form intended for SessionStart hook. Silent if nothing to
-    // report; otherwise ~5-15 lines suitable for stderr surfacing. Always
-    // exits 0 — this is surfacing, not gating.
-    const openCount = byStatus.open ?? 0
-    const inProgressCount = byStatus['in-progress'] ?? 0
-    const activeCount = openCount + inProgressCount
-
-    if (
-      activeCount === 0 &&
-      unregistered.length === 0 &&
-      incomplete.length === 0 &&
-      orphaned.length === 0
-    ) {
-      process.exit(0)
-    }
-
-    console.log(`# Follow-up Status — ${openCount} open, ${inProgressCount} in-progress`)
-
-    const activeEntries = register
-      .filter((e) => e.status === 'open' || e.status === 'in-progress')
-      .toSorted((a, b) => (PRIORITY_WEIGHT[b.priority] ?? 0) - (PRIORITY_WEIGHT[a.priority] ?? 0))
-
-    if (activeEntries.length > 0) {
-      const top = activeEntries.slice(0, 5)
-      console.log(`Top ${top.length} by priority:`)
-      for (const e of top) {
-        console.log(`  - ${e.id} [${e.priority}] ${e.title}`)
-      }
-    }
-
-    if (unregistered.length > 0) {
-      console.log(`⚠ Unregistered markers: ${unregistered.join(', ')}`)
-    }
-    if (incomplete.length > 0) {
-      const summary = incomplete
-        .map((e) => `${e.id} (${describeIncomplete(e).join('; ')})`)
-        .join(', ')
-      console.log(`⚠ Incomplete entries: ${summary}`)
-    }
-    if (orphaned.length > 0) {
-      console.log(
-        `ℹ Orphaned entries: ${orphaned.length} (run \`pnpm spectra:followups\` for list)`,
-      )
-    }
-
-    console.log('Detail: pnpm spectra:followups')
-  } else {
-    console.log('# Follow-up Register Report')
-    console.log('')
-    console.log('## Summary')
-    console.log('')
-    console.log(`- Register entries: ${register.length}`)
-    console.log(`- Unique marker IDs in tasks.md: ${markerIds.size}`)
-    console.log(`- Total marker occurrences: ${allMarkers.length}`)
-    const statusSummary = Object.entries(byStatus)
-      .map(([s, n]) => `${s}=${n}`)
-      .join(', ')
-    console.log(`- By status: ${statusSummary || '(empty)'}`)
-    console.log('')
-
-    if (register.length > 0) {
-      console.log('## Registered')
-      console.log('')
-      console.log('| ID | Title | Priority | Status | Discovered |')
-      console.log('| --- | --- | --- | --- | --- |')
-      for (const e of register) {
-        console.log(
-          `| ${e.id} | ${e.title} | ${e.priority} | ${e.status} | ${e.discovered ?? '—'} |`,
-        )
-      }
-      console.log('')
-    }
-
-    if (unregistered.length > 0) {
-      console.log('## ⚠ Unregistered markers (in tasks.md but missing from register)')
-      console.log('')
-      for (const id of unregistered) {
-        console.log(`- **${id}**`)
-        const occurrences = allMarkers.filter((m) => m.id === id)
-        for (const o of occurrences) {
-          console.log(`  - ${o.file}:${o.line} — ${o.context}`)
-        }
-      }
-      console.log('')
-    }
-
-    if (incomplete.length > 0) {
-      console.log('## ⚠ Incomplete entries (register but missing required sections)')
-      console.log('')
-      for (const e of incomplete) {
-        console.log(`- **${e.id}** — ${describeIncomplete(e).join(', ')}`)
-      }
-      console.log('')
-    }
-
-    if (orphaned.length > 0) {
-      console.log('## ℹ Orphaned entries (register but no tasks.md marker)')
-      console.log('')
-      for (const id of orphaned) {
-        console.log(`- ${id}`)
-      }
-      console.log('')
-    }
-
-    if (drift === 0) {
-      console.log('✅ No drift detected.')
-    }
-  }
-
-  if (failOnDrift && drift > 0) {
-    process.exit(1)
-  }
-  process.exit(0)
 }
 
-main().catch((err) => {
-  console.error('[collect-followups] fatal:', err)
-  process.exit(2)
-})
+async function main() {
+  const args = process.argv.slice(2)
+  const sessionMode = args.includes('--session-summary')
+  const gateIndex = args.indexOf('--gate')
+  try {
+    const change = gateIndex >= 0 ? args[gateIndex + 1] : undefined
+    if (gateIndex >= 0 && (!change || change.startsWith('--')))
+      throw new Error('--gate requires a change name')
+    const result = await collectFollowups(process.cwd(), change)
+    const { registered, drift, summary } = result
+    const failures =
+      drift.unregistered.length +
+      drift.incomplete.length +
+      drift.duplicateIds.length +
+      drift.archiveNonTerminal.length
+    if (args.includes('--json')) console.log(JSON.stringify(result, null, 2))
+    else if (gateIndex >= 0) {
+      if (failures)
+        console.error(
+          `[Follow-up Gate] archive blocked for change: ${change}\n${JSON.stringify(drift, null, 2)}`,
+        )
+    } else if (sessionMode) {
+      const closed = registered.filter((entry) => isTerminalStatus(entry.status))
+      const active = registered.filter(
+        (entry) =>
+          !isTerminalStatus(entry.status) && !/-until(?:-|$)|^blocked|^deferred/.test(entry.status),
+      )
+      if (active.length || closed.length || failures) {
+        console.log(
+          `# Follow-up Status — ${summary.byStatus.open ?? 0} open, ${summary.byStatus['in-progress'] ?? 0} in-progress, ${closed.length} closed in live register`,
+        )
+        const rulePath = (await optionalRead(join(process.cwd(), 'registry', 'consumers.json')))
+          ? 'rules/core/follow-up-register.md'
+          : '.claude/rules/follow-up-register.md'
+        console.log(
+          `主件優先；從本 repo 未被認領的相關舊項取一個小批次（至多 3 項），先驗已落地項並關單。動筆前讀 ${rulePath} § 主動消化；未驗完成不刪。`,
+        )
+        for (const entry of active
+          .toSorted(
+            (a, b) => (PRIORITY_WEIGHT[b.priority] ?? 0) - (PRIORITY_WEIGHT[a.priority] ?? 0),
+          )
+          .slice(0, 5))
+          console.log(`  - ${entry.id} [${entry.priority}] ${entry.title}`)
+        if (failures)
+          console.log(`⚠ Follow-up drift: ${failures}; run pnpm spectra:followups --json`)
+      }
+    } else {
+      console.log('# Follow-up Register Report\n')
+      console.log(
+        `- Register entries: ${registered.length}\n- Unique marker IDs in tasks.md: ${summary.uniqueMarkerIds}\n- Total marker occurrences: ${summary.totalMarkerOccurrences}`,
+      )
+      console.log(
+        `- By status: ${
+          Object.entries(summary.byStatus)
+            .map(([status, count]) => `${status}=${count}`)
+            .join(', ') || '(empty)'
+        }`,
+      )
+      console.log(
+        '\n| ID | Title | Priority | Status | Discovered |\n| --- | --- | --- | --- | --- |',
+      )
+      for (const entry of registered)
+        console.log(
+          `| ${entry.id} | ${entry.title} | ${entry.priority} | ${entry.status} | ${entry.discovered ?? '—'} |`,
+        )
+      if (failures) console.log(`\n## Follow-up drift\n${JSON.stringify(drift, null, 2)}`)
+    }
+    process.exitCode = sessionMode
+      ? 0
+      : failures
+        ? gateIndex >= 0
+          ? 2
+          : args.includes('--fail-on-drift')
+            ? 1
+            : 0
+        : 0
+  } catch (error) {
+    console.error(`[collect-followups] scan unavailable: ${(error as Error).message}`)
+    process.exitCode = sessionMode ? 0 : 2
+  }
+}
+if (
+  process.argv[1] &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+)
+  await main()

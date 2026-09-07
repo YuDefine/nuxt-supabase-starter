@@ -10,18 +10,20 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
 
 # Spectra Change ↔ Notion Ticket 狀態耦合
 
 **核心命題**：consumer 若有 Notion ticket 制度，change 的 Notion ticket 狀態**不能跟 spectra 生命週期脫鉤**。最常見的漏洞是「apply 做完 / 發版了，但對應 ticket 還停在『進行中』甚至『需確認』」——客戶看 board 以為沒人動。本規則把「change 生命週期事件 → ticket 狀態轉移」綁成**明文 workflow 步驟**，由 spectra-apply / spectra-archive 收尾主動推進，**不靠事後想起來**。
 
-此規則優先於個別 skill 的 ad-hoc Notion 描述。狀態轉移授權**一律**沿用全域 `~/.cursor/skills/_notion-<consumer-b>-board/REFERENCE.md §3` 的轉移表（單一真相層），本檔**不**重述 state machine、**不**新增 status 值。
+此規則優先於個別 skill 的 ad-hoc Notion 描述。狀態轉移授權**一律**沿用 consumer 所採用的 Notion reference skill §3 轉移表（單一真相層），本檔**不**重述 state machine、**不**新增 status 值。
 
 ---
 
 ## 觸發條件（兩者皆成立才生效）
 
-1. **Consumer 採用**：consumer 的 `.claude/consumer-meta.json` 宣告 `notion.ticketWorkflow: true`（schema 見 `registry/consumer-meta.schema.json` 的 `notion` block；判讀經 [[consumer-meta]] snapshot，**NEVER** 直接 path-resolve consumer repo）。未宣告 / `false` → 本規則**完全不生效**，spectra 流程照常跑、不碰 Notion。
+1. **Consumer 採用**：consumer metadata 宣告 `notion.ticketWorkflow: true`（schema 見 `registry/consumer-meta.schema.json` 的 `notion` block；判讀經 [[consumer-meta]] snapshot，**NEVER** 直接 path-resolve consumer repo）。未宣告 / `false` → 本規則**完全不生效**，spectra 流程照常跑、不碰 Notion。
 2. **該 change 連結到一張 ticket**：change 的 `proposal.md` 頂部有 ticket 連結（見下方「連結存放」）。沒有連結的 change（典型：來自 ROADMAP / 內部技術債、非客戶 ticket）→ 本規則**不生效**，不要硬湊一張 ticket。
 
 兩條都成立才推進 ticket 狀態。任一不成立 → silent skip，**NEVER** 因為「想更新點什麼」就去碰 board。
@@ -37,7 +39,7 @@ Local edits will be reverted by the next sync.
 ```
 
 - git-tracked + 人可讀，跟著 change 走、不依賴 SQLite blob
-- **由誰寫**：change 若是從 `/notion-ticket`（outbound）或 `/notion-board triage`（inbound）轉成 spectra change 時，**MUST** 在 propose 階段把 page_id 寫進這行。日後反查只認這行。
+- **由誰寫**：change 若是從 outbound ticket flow 或 inbound board triage 轉成 spectra change 時，**MUST** 在 propose 階段把 page_id 寫進這行。日後反查只認這行。
 - **NEVER** 把連結塞進 `.spectra/`（會被 `spectra unpark` 覆蓋）或只留在 `HANDOFF.md`（HANDOFF 是 session-scoped，archive 後會清）。
 
 ---
@@ -68,16 +70,16 @@ Local edits will be reverted by the next sync.
 
 ## 執行機制
 
-- **Runtime**：狀態推進的 ntn 呼叫走 [[agent-routing]] 〔`notion-ops`〕（gemini → luna → 主線），**NEVER** 主線第一手自己跑。
-- **入口**：走 `/notion-board`（inbound 全生命週期 skill）的狀態同步路徑，或依 `_notion-<consumer-b>-board/REFERENCE.md §3/§4` 直接 `ntn api -X PATCH "/v1/pages/<page_id>"` 改單一 `狀態` / `修復版本 >=` 欄位。
-- **寫入前 MUST**：`notion-fetch collection://<dataSourceId>`（consumer-meta `notion.dataSourceId`）重撈 schema，property key（中文 + 全形空格 + `>=`）一字不差 copy-paste，**NEVER** 憑記憶拼 property 名（REFERENCE.md §2 hard rule）。
+- **Runtime**：狀態推進的 Notion operations 走 [[agent-routing]] 〔`notion-ops`〕（gemini → luna → 主線），**NEVER** 主線第一手自己跑。Portable `ntn` CLI 是跨 runtime 的 transport。
+- **入口**：走 runtime 的 Notion board synchronization entrypoint，依 consumer reference §3/§4 改單一 `狀態` / `修復版本 >=` 欄位；portable transport 使用 `ntn api -X PATCH "/v1/pages/<page_id>"`。target-specific skill entrypoint 由 adapter fragment 宣告。
+- **寫入前 MUST**：由 Notion client 依 consumer metadata 的 `notion.dataSourceId` 重撈 schema，property key（中文 + 全形空格 + `>=`）一字不差 copy-paste，**NEVER** 憑記憶拼 property 名（REFERENCE.md §2 hard rule）。
 - **欄位邊界**（REFERENCE.md §2）：只寫 `狀態` 與 `修復版本 >=`（+ 必要時 `備註` 補開發備註）。**NEVER** 動 `名稱`（客戶原始描述）、`發布日期`（客戶提報日，不是發版日）、`驗收日期`（客戶側）、`驗收完成`（系統 readOnly）。
 
 ---
 
 ## Consumer 採用（consumer-meta `notion` block）
 
-consumer 在自家 `.claude/consumer-meta.json` 加（schema 見 `registry/consumer-meta.schema.json`）：
+consumer 在自家 metadata 加（schema 見 `registry/consumer-meta.schema.json`）：
 
 ```jsonc
 "notion": {
@@ -106,7 +108,7 @@ clade / 全域行為準則：對外發訊息 / 改工單屬 outbound，預設要
 ## MUST
 
 - consumer 採用 + change 有連結時，**MUST** 在 spectra-apply 收尾把 ticket 推到 `進行中`、在 archive 收尾 surface pending `驗收中` 並於發版後完成。
-- 寫 Notion 前 **MUST** `notion-fetch` 重撈 data source schema 校對 property key。
+- 寫 Notion 前 **MUST** 重新抓取 data source schema 校對 property key。
 - `驗收中` **MUST** 帶真 git tag 填 `修復版本 >=`。
 - 推任何狀態前 **MUST** 確認該 change 有 active claim（per [[work-claims]] / [[session-claims]]）——無主 WIP 不代表 board 該動。
 
@@ -125,11 +127,11 @@ clade / 全域行為準則：對外發訊息 / 改工單屬 outbound，預設要
 
 **與上面 Issue Ticket 層的預設相反。** Ticket 層「無連結 → silent skip」是對的：客戶工單本來就不是每個 change 都有。專案層不同——**每一個** change 都對應到某個 User Story，所以「找不到對應」不是正常狀態，是需要處理的訊號。
 
-> **本層預設**：判定不了 → **問**（AskUserQuestion）。**NEVER** silent skip，**NEVER** 用猜的值寫入。
+> **本層預設**：判定不了 → **問**（runtime question interface）。**NEVER** silent skip，**NEVER** 用猜的值寫入。
 
 ## 觸發條件
 
-consumer 的 `.claude/consumer-meta.json` 宣告 `notion.projectWorkflow: true` 且 `notion.databases.story.dataSourceId` 有值。未宣告 → 本層完全不生效。
+consumer metadata 宣告 `notion.projectWorkflow: true` 且 `notion.databases.story.dataSourceId` 有值。未宣告 → 本層完全不生效。
 
 座標一律從 consumer-meta 讀（`notion.databases.{milestone,epic,story,task,ticket}`），**NEVER** 寫死在 skill 或 reference doc 裡。
 
@@ -180,7 +182,7 @@ Story 的 idempotent key 是 **(`Change`, `Capability`) 兩個欄位的組合**�
 | archive | `/spectra-archive` Step 8 | Story → `待驗收` |
 | 發版（版本 bump + tag） | `/commit` **Step 6-A**（或 6-B 選「現在發版」後） | Story `上線日`；重算所屬 Milestone 進度；100% 時觸發 Class 3 (a) |
 
-執行一律透過 `vendor/scripts/notion-sync.ts`，**NEVER** 在各 SKILL.md 各寫一份寫入邏輯——四個掛載點呼叫同一支，避免四份實作彼此漂移。
+執行一律透過同一個 consumer Notion synchronization implementation，**NEVER** 在各 skill 各寫一份寫入邏輯——四個掛載點呼叫同一支，避免四份實作彼此漂移。
 
 ## Milestone 進度為什麼由 script 算而不是 rollup
 
@@ -209,9 +211,9 @@ Notion **不支援 rollup of rollup**：`Epic.進度` 已經是 rollup(Story)，
 
 | 主題 | 真相層 |
 | --- | --- |
-| Notion 狀態機 + 轉移授權表 + 欄位邊界 + 版本對照 | `~/.cursor/skills/_notion-<consumer-b>-board/REFERENCE.md` §2–§4（單一真相層） |
-| inbound ticket 全生命週期（scan / triage / sync / report） | `~/.cursor/skills/notion-board/SKILL.md` |
-| outbound 決策題建立 ticket | `~/.cursor/skills/notion-ticket/SKILL.md` |
+| Notion 狀態機 + 轉移授權表 + 欄位邊界 + 版本對照 | consumer 採用的 Notion reference skill §2–§4（單一真相層） |
+| inbound ticket 全生命週期（scan / triage / sync / report） | runtime 的 inbound Notion board skill |
+| outbound 決策題建立 ticket | runtime 的 outbound Notion ticket skill |
 | consumer 能力宣告 / aggregator | [[consumer-meta]] |
 | change ownership / claim | [[work-claims]]、[[session-claims]] |
 | 發版 / git tag 產生點 | [[commit]] Step 5（版本號升級 + tag push） |
@@ -224,10 +226,10 @@ Notion **不支援 rollup of rollup**：`Epic.進度` 已經是 rollup(Story)，
 問題：change <name> 連結 ticket <page_id>，但 <生命週期事件> 後 ticket 狀態未推進
 
 修正：
-  - notion-fetch 重撈 schema → 依 §3 授權表推 <正確轉移>
+  - 重新抓取 schema → 依 §3 授權表推 <正確轉移>
   - 發版類轉移補填 修復版本 >= <git tag>
 
 繞過：
-  - consumer 未採用 → 在 .claude/consumer-meta.json 設 notion.ticketWorkflow=false（或留空）
+  - consumer 未採用 → 在 consumer metadata 設 notion.ticketWorkflow=false（或留空）
   - 該 change 不對應任何客戶 ticket → proposal.md 不放連結即 silent skip
 ```

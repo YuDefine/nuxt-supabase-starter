@@ -5,6 +5,9 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
+
 # Worktree Default
 
 > **無 frontmatter — unconditional always-load**。規約必須在每個會改 code 的 session Read 任何檔之前生效。
@@ -12,9 +15,13 @@ Local edits will be reverted by the next sync.
 
 **核心命題**：multi-session 並行開發共用單一 working tree，staged 區、branch HEAD、partial WIP 都會跨 session 滲漏。
 
-操作層面由 `/wt` 全自動 orchestrate — user 不需手動 add / merge / cleanup，主線 cwd 全程不動。
+操作層面由已授權的 `/wt` workflow orchestrate — user 不需手動 add / merge / cleanup，主線 cwd 全程不動。入口的 native catalog、dispatch transport 與 interactive surface 由 target adapter 證明。
 
-此規則優先於全域 `~/.claude/CLAUDE.md` 的「git workflow」相關段落（若存在）。
+此規則優先於 target runtime 的 global instruction file 中「git workflow」相關段落（若存在）。
+
+## Runtime boundary
+
+Worktree isolation, branch authorization, visibility before landing, and stale-slot safety are common clade contracts. A target adapter MUST identify the actual catalog operation and authorized transport that invokes `/wt`, handles a conflict, or reports a completion receipt; a projected rule or remembered product behavior is not execution evidence.
 
 ---
 
@@ -89,7 +96,7 @@ Dev-port slot 池滿時，**MUST** 跑 `wt-helper reclaim-stale` 釋放 stale sl
 | --- | --- | --- |
 | stale | worktree 已 merged，或 brief status 為 archived/completed/done/landed/merged | `reclaim-stale` 自動刪 dev-port record，釋放 slot |
 | live | brief status 為 active/in-progress/wip/dispatched/pending **且** last commit < 30min | 不動 |
-| unknown | 以上都不是 | attended → `AskUserQuestion`；unattended → packaging（不略過也不殺） |
+| unknown | 以上都不是 | attended → target adapter 的 authorized interactive question surface；unattended → packaging（不略過也不殺） |
 
 `reclaim-stale` 只刪 `~/.cache/clade/dev-port/<consumer>/<slug>.json`，**不刪** worktree 目錄。worktree cleanup 是獨立步驟（`prune` / `cleanup`）。
 

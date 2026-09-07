@@ -11,13 +11,16 @@ Local edits will be reverted by the next sync.
 -->
 
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
+
 # flow work 生命週期契約
 
 ## 一件 work 是什麼
 
 **一件 work = 一個人可指認、可驗收的問題。** 誕生在被指認的當下（Notion ticket triage / 客訊轉述 / 建 `tasks/` 檔 / `wt-helper add` / 開 TD），結束在 `work.accept` 或 `work.drop`。
 
-一次 dispatch 是 **span**，不是 work。relay / fanout 之間**不切分** work——`CLADE_WORK_ID` 走 `dispatchEnv` 繼承，successor 是同一件事的延續。一對多（一張 ticket 三個 PR）**不引入 work 階層**，靠 `origin_ref` 相同在 UI 聚合。
+一次 dispatch 通常是 **span**，不是 work。relay / fanout 預設沿用 `CLADE_WORK_ID`，successor 是同一件事的延續；只有 runtime control-plane 或人明確建立 parent relation 時，才會出現帶 `parent_work_id` 的 child work。不要從 fanout 數量推導 work 階層，也不要把明確的 `work.link` / child-work relation 壓平成同一張卡。一對多（一張 ticket 三個 PR）是否建立 child work，依當前入口的實際 relation receipt 判定；沒有 receipt 就只認同一 work 下的 spans。
 
 `WorkState` 六態，推導優先序 **終態 > done > in-flight > failed > settled**：
 
@@ -77,7 +80,7 @@ Local edits will be reverted by the next sync.
 | --- | --- |
 | 觸發條件 | 有 commit artifact 且一個都驗不出已 push → payload 標 `unverified_artifact`、stderr 印下一步、驗收列不排。**warn-only，不 block**；git 本身問不出來時 fail-open（不標） |
 | 消費端 | 打 `flow done` 的那個人（當下 stderr）；`buildDecisionQueue` 的驗收列（`pendingAcceptItems`）；`flow status --stalled` 與 `/decisions` 的 `done-unverified`（>24h） |
-| 載入路徑 | 本節（散播到 consumer `.cursor/rules/flow-work-tracking.mdc`）；判定器 `vendor/scripts/flow/landing.ts` 的 `unverifiedCommitArtifacts`，與 R1 的出版證據共用同一份「已 push」判準 |
+| 載入路徑 | 本節由各 target adapter 投影；判定器 `vendor/scripts/flow/landing.ts` 的 `unverifiedCommitArtifacts`，與 R1 的出版證據共用同一份「已 push」判準 |
 
 ### dispatch 還沒回報時，驗收列同樣不排
 
@@ -120,8 +123,8 @@ Local edits will be reverted by the next sync.
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | 近 7 天新增事件的 `orphan-` 佔比 > 25% 時 `flow status` 印 warn。**warn-only，不 block** |
-| 消費端 | `session-start-stalled.sh` 已在每個 attended session 開頭跑 `flow status --stalled`，順路帶出 |
-| 載入路徑 | 本節（散播到 consumer `.cursor/rules/flow-work-tracking.mdc`）＋ clade home 的 `clade-role-and-todo-discipline.md` § 停滯訊號 |
+| 消費端 | 各 target adapter 配置的 attended-session status entry；只有有實際 invocation receipt 才能宣稱自動帶出 |
+| 載入路徑 | 本節由各 target adapter 投影，並與 clade home 的 `clade-role-and-todo-discipline.md` § 停滯訊號對接 |
 
 存量 orphan **不追溯**：佔比只看近 7 天新增，改動的效果才看得出來。
 
@@ -177,7 +180,9 @@ spine 是**事件流**：它記錄「某個時刻有人做了什麼、宣稱了�
 
 ## 治理軌跡：`session_summary`
 
-回答「那一次是什麼檔位、走過哪些 skill、外派了誰、是哪一版規約」。採集源是 `~/.claude/projects/<slug>/<session_id>.jsonl`——harness 本來就在寫的檔，**agent 側 0 token、0 spawn、0 自報欄位**。實作在 `vendor/scripts/flow/transcript-summary.ts`，掛在 `session-start-stalled.sh` 內部（`.claude/settings.json` 零改動）。
+回答「那一次是什麼檔位、走過哪些 skill、外派了誰、是哪一版規約」。`session_summary` 是共通的 informational payload；producer、事件來源、版本欄位與掛載入口由 runtime adapter 各自證明。共通來源不因有 `session_summary` schema 就宣稱所有產品入口都會自動採集。
+
+沒有該 adapter 的事件／檔案與 receipt，就維持未知或缺席。**NEVER** 把一個 target 的收集路徑讀成其他 runtime 已自動收集。
 
 **不帶 work_id**（`work_id: null`，validator 雙向強制）。它是 **session 的性質，不是 work 的性質**：一個 session 橫跨多件 work、一件 work 橫跨多個 session，任何硬掛規則都會錯誤歸屬。歸屬在**讀端 join on `session_id`**——每件 work 的 span 本來就帶它，零新欄位。連帶效果是它天然不出卡、不進 R3 orphan 的分子**也不進分母**（進分母等於讓 sweep 跑得越勤、佔比看起來越好）。
 
@@ -189,13 +194,13 @@ spine 是**事件流**：它記錄「某個時刻有人做了什麼、宣稱了�
 
 一個 session 有**兩筆**事件、共用同一個 kind、靠 `payload.source` 分辨：`session-start-stamp`（開場量的環境）與 `transcript-parse`（事後摺的內容）。Idempotency 是**逐 source** last-write-wins——讀端取「最新的 stamp」∪「最新的 summary」，**NEVER 只取該 session 最新的那一筆**：兩者欄位不重疊，取最新會讓後寫的那半把另一半抹掉。spine 是 append-only，重摺一律是新事件、不改寫。
 
-`clade_version` 是 parse 的**補集不是替代**：transcript 沒有它，只有 session 開始那一刻量得到（開場 stamp）。歷史 session **記 null，NEVER 用 parse 時的 git HEAD 或今天的版本推導補**——推出來的與量到的在讀端不可區分。transcript 的 `version` 欄位是 **AI Agent 版本**，順手收，但**它不是 `clade_version`**。
+`clade_version` 是 parse 的**補集不是替代**：producer 沒有它，只有 session 開始那一刻量得到（開場 stamp）。歷史 session **記 null，NEVER 用 parse 時的 git HEAD 或今天的版本推導補**——推出來的與量到的在讀端不可區分。runtime producer 提供的產品版本欄位可順手收，但**它不是 `clade_version`**；沒有等價欄位時保持 null。
 
 | REQUIRED 欄位 | 內容 |
 | --- | --- |
 | 觸發條件 | **informational — 不觸發任何東西** |
 | 消費端 | `flow brief --work-id` 卷宗（successor 判「燒了幾個 session、什麼檔位、走過哪些 skill」）＋ 事後歸因（「那次是 invoke 了 clade-publish 還是憑記憶跑的」）。外派的 `route` / `tier_basis` 另有既有讀者 |
-| 載入路徑 | 本節（散播到 consumer `.cursor/rules/flow-work-tracking.mdc`，paths-gated 於 `vendor/scripts/flow/**`） |
+| 載入路徑 | 本節由各 target adapter 投影（paths-gated 於 `vendor/scripts/flow/**` 的 target projectRoot） |
 
 ### per-decision rule attribution：永久放棄
 

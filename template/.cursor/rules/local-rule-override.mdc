@@ -1,6 +1,6 @@
 ---
-description: "Consumer rules/local/ override clade core rule 時的宣告慣例。"
-globs: [".claude/rules/local/**/*.md"]
+description: "Consumer 自有規約 override clade core rule 時的宣告慣例。"
+globs: [".clade/rules/**/*.md", ".claude/rules/local/**/*.md"]
 alwaysApply: false
 ---
 <!--
@@ -10,11 +10,17 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # Consumer local rule override declaration
 
 
-`.cursor/rules/local/*.md` 是 consumer 自治區（不被 clade sync-rules 覆蓋）。當 local rule **明知**要覆蓋 / 收緊 / 鬆綁 clade 散播下來的 `rules/core/*.md` 規約時，**MUST** 在檔頭前 10 行內加一行 markdown blockquote 宣告：
+Consumer 自有規約的中立來源是 `.clade/rules/`；既有 `.cursor/rules/local/` 是 consumer 自治區，
+在顯式遷移前繼續保留。中立來源依聲明的 targets 產生各端規約，直接修改生成檔會形成
+ownership conflict。遷移走 local rule migration 的預覽、來源 hash 驗證與顯式 adoption，
+不以同名檔存在取得接管權。
+
+當上述任一 local source **明知**要覆蓋 / 收緊 / 鬆綁 clade 散播下來的 `rules/core/*.md` 規約時，**MUST** 在檔頭前 10 行內加一行 markdown blockquote 宣告：
 
 ```markdown
 > Overrides: clade rules/core/<path>.md § <section-name>

@@ -98,7 +98,7 @@ fi
 ### 缺 `db:lint` script → block（比照 0-E 的 `@evlog/cli` 必裝）
 
 `package.json` 沒有 `db:lint` 且 `supabase db lint` 不可用（self-hosted 專案本機不能直連）時，
-印下列訊息、釋放 commit-lock（`node .claude/scripts/commit-lock.mjs release`）並 STOP：
+印下列訊息、釋放 commit-lock（依 [runtime-lifecycle.md](runtime-lifecycle.md)「背景工作與退出」，帶原 tuple 與 owner token）並 STOP：
 
 ```text
 ⛔ Step 1.4 失敗 — db:lint 未接線

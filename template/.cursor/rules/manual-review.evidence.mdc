@@ -10,6 +10,8 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
 
 # Manual Review — Evidence & Authoring Schema
 
@@ -290,7 +292,7 @@ Scoped sub-item 範例：
 
 ## `(claude-analyzed: ...)` annotation 細節
 
-> 自主檔 [[manual-review]] § `(claude-analyzed: ...)` annotation 移入；Schema 與 Claude 可寫條件仍在主檔。典型寫入情境：修法已落地 + 新 evidence 已收集，等 user 重看新截圖決定 OK / Issue。
+> 自主檔 [[manual-review]] § `(claude-analyzed: ...)` annotation 移入；Schema 與 orchestrator 可寫條件仍在主檔。典型寫入情境：修法已落地 + 新 evidence 已收集，等 user 重看新截圖決定 OK / Issue。
 
 ### Strip semantics
 
@@ -306,26 +308,26 @@ User 在 GUI 對該 item 點 **OK / Issue / Skip** 時，`stripAnnotations`（in
 | 維度 | `(claude-discussed:)` | `(claude-analyzed:)` |
 | --- | --- | --- |
 | 適用 kind | `[discuss]` | `[review:ui]` / `[verify:ui]`（帶 `（issue:）` 的 item） |
-| 觸發流程 | `/spectra-archive` Step 2.5 walkthrough | review-gui 「等 Claude 接手」prompt 路由 (E) |
+| 觸發流程 | `/spectra-archive` Step 2.5 walkthrough | review-gui 「等 orchestrator 接手」prompt 路由 (E) |
 | Checkbox 行為 | 翻 `[x]` | **不翻**（保 `[ ]`） |
 | Strip on user action | 不 strip（archive evidence trail） | strip（user 點 OK / Issue / Skip 即清） |
-| User 主動性 | user 必須先看 evidence 才允許 Claude 寫 | Claude 自己分析後寫，user 之後重整 GUI 看到 |
+| User 主動性 | user 必須先看 evidence 才允許 orchestrator 寫 | orchestrator 自己分析後寫，user 之後重整 GUI 看到 |
 
 ### Home page 影響
 
-當 change 的所有 issued items 都已被 Claude 寫 `(claude-analyzed: route=E)`、且 user-actionable / verify pending / evidence missing / readiness hits 都是 0 → change 落入 **「✋ Claude 已分析、等 user 重新評估」** bucket（review-gui home page），不再被 「🤖 等 Claude 接手」群 prompt 抓走重複分析。User 點 card 進 detail，重看 final-state evidence 後在 GUI 點 OK / Issue / Skip 結束流程。
+當 change 的所有 issued items 都已被 orchestrator 寫 `(claude-analyzed: route=E)`、且 user-actionable / verify pending / evidence missing / readiness hits 都是 0 → change 落入 **「✋ orchestrator 已分析、等 user 重新評估」** bucket（review-gui home page），不再被 「🤖 等 orchestrator 接手」群 prompt 抓走重複分析。User 點 card 進 detail，重看 final-state evidence 後在 GUI 點 OK / Issue / Skip 結束流程。
 
 詳見 `vendor/scripts/review-gui.ts` 內 `analyzedIssuedCount` field、`awaitingUserReEval` bucket dispatch、`stripAnnotations` claude-analyzed strip 段。
 
 ### 範例
 
-寫入前（user 點 issue 後 Claude 收到「接手分析」prompt、走完分析路由 (E)）：
+寫入前（user 點 issue 後 orchestrator 收到「接手分析」prompt、走完分析路由 (E)）：
 
 ```markdown
 - [ ] #4.1 [verify:ui] /vending/inventory final-state visual review （issue: 整體 UI 設計難以理解 不好看也不好用 改進方案已實作完成 待重拍新版 screenshot 後 user 重新評估）
 ```
 
-寫入後（Claude 在路由 (E) 結論時加 annotation）：
+寫入後（orchestrator 在路由 (E) 結論時加 annotation）：
 
 ```markdown
 - [ ] #4.1 [verify:ui] /vending/inventory final-state visual review （issue: 整體 UI 設計難以理解 不好看也不好用 改進方案已實作完成 待重拍新版 screenshot 後 user 重新評估） (claude-analyzed: 2026-05-24T13:00:00Z route=E note=Re-Design)
@@ -341,7 +343,7 @@ User 在 GUI 對 #4.1 點「✓ 通過」後：
 
 ## `(awaiting-user-decision: ...)` annotation 細節
 
-> 自主檔 [[manual-review]] § `(awaiting-user-decision: ...)` annotation 移入；Schema 與 Claude 可寫條件仍在主檔。
+> 自主檔 [[manual-review]] § `(awaiting-user-decision: ...)` annotation 移入；Schema 與 orchestrator 可寫條件仍在主檔。
 
 ### Strip semantics
 
@@ -360,7 +362,7 @@ helper 寫入後用 `listPendingChanges` 重算 bucket，印 `oldBucket → newB
 
 ### Home page 影響
 
-帶 `(awaiting-user-decision:)` 的 item 從 Claude-ball 計數（`userActionPending` / `issued` / `verifyPendingCount` / `discussPendingCount`）排除，計入 `awaitingUserDecisionCount`。當 Claude-ball 全清（無 readiness / evidence missing / 未分析 issue / verify pending / D-only walkthrough）、`userActionPending=0` 且 `awaitingUserDecisionCount>0` → change 落 **`awaitingUserDecision`** bucket。詳見 `vendor/scripts/review-gui.ts` 內 `awaitingUserDecisionCount` field + `reviewBucketForChange` 的 awaitingUserDecision 分支。
+帶 `(awaiting-user-decision:)` 的 item 從 orchestrator-ball 計數（`userActionPending` / `issued` / `verifyPendingCount` / `discussPendingCount`）排除，計入 `awaitingUserDecisionCount`。當 orchestrator-ball 全清（無 readiness / evidence missing / 未分析 issue / verify pending / D-only walkthrough）、`userActionPending=0` 且 `awaitingUserDecisionCount>0` → change 落 **`awaitingUserDecision`** bucket。詳見 `vendor/scripts/review-gui.ts` 內 `awaitingUserDecisionCount` field + `reviewBucketForChange` 的 awaitingUserDecision 分支。
 
 ## ADR (2026-05-22) — Default Kind Flip 未採用，勿再提案
 
@@ -457,15 +459,15 @@ Marker bearing task 不寫額外 audit log（與 `@no-manual-review-check` 不�
 - `route=<code>` **required**：目前只支援 `E`。Schema 預留為自由 `string` 給未來擴展，但 hard rule 限 `E`
 - `note=<one-liner>` optional：新寫入走 `evidence-store.mjs --write --note`，值進 sidecar JSON，**不需要** hyphen-join（JSON 保得住空白）。既有**行內** legacy 值仍受 inline 限制：剝半形括號、上限 240 chars、**single hyphen-joined token**（`sanitizeNote` 把 whitespace 折成 `-`，避免解析端 `findKeyValue` whitespace split 只拿到第一個 word）
 - 落點：description 後、所有 trailing markers (`@followup` / `@no-manual-review-check` / `@no-screenshot`) 前
-- 與 `（issue: ...）` co-exist：issue **MUST** 已存在（沒 issue 就不該寫 claude-analyzed）；兩者並存表達「Claude 已分析此 issue，路由結論=等 user 重新評估」
+- 與 `（issue: ...）` co-exist：issue **MUST** 已存在（沒 issue 就不該寫 claude-analyzed）；兩者並存表達「orchestrator 已分析此 issue，路由結論=等 user 重新評估」
 
-### `(claude-analyzed:)` Claude 可寫條件
+### `(claude-analyzed:)` orchestrator 可寫條件
 
 - **MUST** 在路由 **(E)** 結論時寫
 - **MUST** 在 item 已帶 `（issue:）` annotation 時才寫
 - **MUST NOT** 翻 checkbox（保留原 `[ ]`，user 在 GUI 點 OK / Issue / Skip 才翻）
-- **MUST NOT** strip 既有 `（issue:）` annotation（兩者語意正交：issue 是 user 回饋，claude-analyzed 是 Claude 分析證跡）
-- **MUST NOT** 在路由 (A) / (B) / (C) / (D) 結論時寫 — 那些情境 user 仍需要 Claude 動作（改 proposal / 開 TD / 改 code / 切 clade session），不是「等 user 重新評估」
+- **MUST NOT** strip 既有 `（issue:）` annotation（兩者語意正交：issue 是 user 回饋，claude-analyzed 是 orchestrator 分析證跡）
+- **MUST NOT** 在路由 (A) / (B) / (C) / (D) 結論時寫 — 那些情境 user 仍需要 orchestrator 動作（改 proposal / 開 TD / 改 code / 切 clade session），不是「等 user 重新評估」
 
 ### `(awaiting-user-decision: <ISO-8601>[ packet=<path>])` 欄位
 
@@ -475,7 +477,7 @@ Marker bearing task 不寫額外 audit log（與 `@no-manual-review-check` 不�
 - 落點：description 後、所有 trailing markers 前
 - **不**要求 item 已帶 `（issue:）`（D-only / review:ui pending 都可標 — 跟 claude-analyzed 的差別）
 
-### `(awaiting-user-decision:)` Claude 可寫條件
+### `(awaiting-user-decision:)` orchestrator 可寫條件
 
 - **MUST** 在判定該 item 是純 user 商業決策、且已準備 decision packet 後才寫
 - **MUST NOT** 翻 checkbox（保留原 `[ ]`，user 在 GUI 點 OK / Issue / Skip 才翻）

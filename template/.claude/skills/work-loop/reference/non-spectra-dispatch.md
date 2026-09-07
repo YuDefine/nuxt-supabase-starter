@@ -7,6 +7,8 @@ Local edits will be reverted by the next sync.
 
 # 非 spectra candidate 的分類與 dispatch
 
+<!-- clade-targets: claude -->
+
 > 前身是 `change-loop/reference/turbo-dispatch.md`（`--turbo` 專屬）。合併成 `/work-loop` 後
 > `--turbo` flag 消失、非 spectra 待辦成為預設 scope，本檔改為 **Step 3.1b 的分類依據**。
 > 分類表、skip 窮舉、逐字藉口實錄**原樣保留**——它們對應的 pitfall 沒有失效。

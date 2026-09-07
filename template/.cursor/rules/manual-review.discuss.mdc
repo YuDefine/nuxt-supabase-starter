@@ -10,6 +10,8 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
 
 # Manual Review — Discuss Flow
 
@@ -20,12 +22,12 @@ Local edits will be reverted by the next sync.
 
 tasks.md 有未勾 `[discuss]` 項時，**MUST** 走 spectra-archive Step 2.5 「Discuss Items Walkthrough」：
 
-1. archive 階段主線 Claude **主動** Read tasks.md `## 人工檢查` 區塊，識別未勾 `[discuss]` items
-2. 對每條 item，主線 Claude 分類 trigger condition：
+1. archive 階段主線 orchestrator **主動** Read tasks.md `## 人工檢查` 區塊，識別未勾 `[discuss]` items
+2. 對每條 item，主線 orchestrator 分類 trigger condition：
    - **Internal evidence available now** — code / schema / migration / cron 等可立刻 grep / query
    - **External signal already occurred** — staging / production 已 deploy、soak 已過、商業決策已拍板
-   - **External signal pending** — required deploy / soak / authorization **尚未**發生；Claude 無法用分析合成 evidence
-3. 對非 pending 的兩類，主線 Claude 主動準備 evidence（grep 結果、diff、command output、data summary、合理性分析）— **不要**等使用者開口
+   - **External signal pending** — required deploy / soak / authorization **尚未**發生；目前 runtime 無法用分析合成 evidence
+3. 對非 pending 的兩類，主線 orchestrator 主動準備 evidence（grep 結果、diff、command output、data summary、合理性分析）— **不要**等使用者開口
 4. 向使用者展示 evidence + item description，請使用者明確 OK / Issue / Skip / Defer
    - 「Defer」只在 trigger 為 **External signal pending** 時才出現；其他兩類 trigger **NEVER** 顯示 Defer 選項
 5. **OK 路徑**：勾 `[x]` + 在 description 後、trailing markers 前插入 `(claude-discussed: <ISO-8601-timestamp>)` annotation
@@ -73,7 +75,7 @@ archive skill 寫入時用以下格式（每 entry 由 HTML marker 包圍，便�
 
 | 狀態 | Surface |
 | --- | --- |
-| 商業／prod 授權，packet 已備妥（`(awaiting-user-decision:)`） | work-loop `awaiting[]` + AskUserQuestion（attended）／Packaging SOP（unattended）。`\my` 看得到。 |
+| 商業／prod 授權，packet 已備妥（`(awaiting-user-decision:)`） | work-loop `awaiting[]` + runtime-supported input surface 或直接對話（attended）／Packaging SOP（unattended）。未收到回答前保持 pending。`\my` 看得到。 |
 | archive 當下還未勾的 `[discuss]` | spectra-archive Step 2.5 walkthrough（本檔上方） |
 | External signal pending | Defer-to-HANDOFF（本檔上方），不是 inbox |
 
@@ -99,7 +101,7 @@ spectra orchestrator Archive Flow Step 1 已內建這個分流邏輯。
 
 User 在 review:ui round N 留下的 issue 若 triage 路由到 (C) Spec gap → `/spectra-ingest`，會新增 verify items（如預檢 inline alert 對應的新 `[verify:ui]` item），這些 item 需要 `/spectra-apply` 落 code 後才能在 review-gui 看到 evidence。若把流程拆成「fix → user round 2 評估 → commit → ingest → apply → user round 3 評估 → commit → archive」：
 
-1. **User round 2 評估看不到全貌** — ingest 後新增 verify item 尚未出現；user 對 round 2 全 OK 可能誤判「change 全完成」→ Claude 接 archive trigger 提前歸檔
+1. **User round 2 評估看不到全貌** — ingest 後新增 verify item 尚未出現；user 對 round 2 全 OK 可能誤判「change 全完成」→ 主線 orchestrator 接 archive trigger 提前歸檔
 2. **commit ceremony 翻倍** — 兩次 `/commit` 跑兩次 0-A/B/C quality gates（codex review + screenshot review + check + test），時間成本翻倍
 3. **Spec / code 中間態 commit** — 中間 commit spec 跟 code 暫時不同步；reviewer 讀 history 需追兩個 commit 才看到完整 design
 4. **多次 review-gui reload + tasks.md re-parse** — token / 注意力浪費
@@ -109,7 +111,7 @@ User 在 review:ui round N 留下的 issue 若 triage 路由到 (C) Spec gap →
 ```
 review:ui (round N) → user 留 N 條 issue
   ↓
-Claude triage 每條 issue 到 (A) UX/copy / (B) Behavior / (C) Spec gap
+主線 orchestrator triage 每條 issue 到 (A) UX/copy / (B) Behavior / (C) Spec gap
   ↓
 (A)/(B) fix 落 code；(C) Spec gap → /spectra-ingest 補 spec → /spectra-apply 落 code（含新 verify item evidence）
   ↓ ALL DONE

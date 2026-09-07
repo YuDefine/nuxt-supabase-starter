@@ -7,6 +7,8 @@ Local edits will be reverted by the next sync.
 
 # Skill 關係 / Scope 排除
 
+<!-- clade-targets: claude -->
+
 ## 無人值守只有一條路：runner
 
 ```bash

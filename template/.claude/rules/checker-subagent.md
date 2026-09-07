@@ -10,6 +10,9 @@ Local edits will be reverted by the next sync.
 -->
 
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
+
 # Checker Subagent（高擴散半徑改動複核）
 
 **核心命題**：checker 買到的唯一東西是 **fresh context**——一顆沒看過實作過程的眼睛。這對「我剛才有沒有寫錯」幫助有限（模型自己就會抓到並修掉），但對「這個改動對我**沒看過**的地方做了什麼」是不可替代的。所以派不派 checker 的判準是**擴散半徑**：錯了會不會波及沒被改到的檔案、沒被改到的 repo。本規約定義**何時**必須派 checker、checker **收到什麼**、以及主線**拿 finding 怎麼辦**。
@@ -23,9 +26,9 @@ Local edits will be reverted by the next sync.
 寫它的 agent NEVER 是唯一判定它可以散播的人。
 ```
 
-**動跨 consumer 共用 SoT**（`rules/core/` 本體、`vendor/scripts/` 散播層、`plugins/hub-core/` skill、`claude-md/` 注入段落）或**高擴散半徑 consumer 資產**（DB migration、auth 路徑、多處 import 的共用 util、對外 API contract）時，主線在 publish / propagate / commit 之前 **MUST** 派一個 fresh-context checker subagent。checker **MUST** 是新開的 subagent（`Agent` tool，非續跑 maker）。**NEVER** 用**繼承主線對話**的 fork 型 subagent 當 checker——user 打的 `/subtask`、以及 `subagent_type: 'fork'`（該 rollout 開啟時）繼承主線完整 message history，等同把 maker 的實作敘事整份附給 checker，fresh context 當場失效（per § Checker brief 模板）。「它字面上也是新開的 subagent」不構成例外。
+**動跨 consumer 共用 SoT**（`rules/core/` 本體、`vendor/scripts/` 散播層、`plugins/hub-core/` skill、`claude-md/` 注入段落）或**高擴散半徑 consumer 資產**（DB migration、auth 路徑、多處 import 的共用 util、對外 API contract）時，主線在 publish / propagate / commit 之前 **MUST** 派一個 fresh-context checker subagent。checker 使用目前 runtime 可建立的獨立上下文入口；實際工具與參數由該 runtime 的 checker adapter 指定。checker 不繼承 maker 的對話，不續跑 maker。若入口無法建立獨立上下文，回報具體能力缺口，保留未通過狀態。
 
-**Cursor runtime**：本節的 `Agent` tool 是 Claude Code 的 Agent，**NEVER** 改用 Cursor Task 的非 grok-4.6 `model` 充當 checker。改走 [[agent-routing]] § Cursor runtime 主線 residency 的 Herdr create-only `--launcher cc`／`ccw`。
+Fresh context 與跨模型是兩個欄位：同模型的新上下文可以提供獨立複核，但不能據此宣稱已完成跨模型裁決。另有跨模型 gate 時仍依其指定模型與證據要求執行。
 
 **其餘任務 NEVER 派 checker。** 這包含 ≥3 phase 的 change、`effort: high`+ 的單一任務、新 endpoint、新邏輯分支，以及任何「我想確認一下自己有沒有做對」的場景——模型會自行捕捉並修正自己的錯誤，額外派 agent 複驗只是把同一份判斷跑第二次，燒 token 不提升品質。
 
@@ -45,10 +48,7 @@ Local edits will be reverted by the next sync.
 
 gate 紅 → 先修，修完再派。**NEVER** 把 gate output 塞進 checker brief 當判定材料。
 
-**checker 的 `model` 刻意省略、繼承主線**——checker 的輸出**本身**就是品質判定，命中
-[[agent-routing]] § NEVER 降檔的形狀第 1 條。這是聲明不是疏漏：**NEVER** 拿該檔
-§ `subagent_type` 是 `general-purpose` 或 `Explore` 時… 的「MUST 顯式帶檔位」外推到 checker，
-**也 NEVER** 把 checker 轉派 codex `--model luna` 或 `--model gemini`。
+checker 的模型維持既有品質門檻；選擇方式由 runtime adapter 指定。沒有已核准的能力／模型組合時，保持 gate 未完成。
 
 ## Checker brief 模板（REQUIRED 欄位）
 

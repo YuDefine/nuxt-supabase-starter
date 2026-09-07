@@ -11,7 +11,7 @@
 | Onboarding 編排 | `node $CLADE_HOME/scripts/bootstrap-project.ts --consumer <path> --repo-id <owner/repo> --json` | exit 0；`result` 為 `READY`。`READY_PARTIAL` 代表有 step 被跳過，**不算**通過 |
 | Registry schema | `node --test test/register-consumer.test.ts`（Clade 開發時）或 Clade manifest gate | exit 0 |
 | Registry/local parity | `node $CLADE_HOME/scripts/bootstrap-consumers-local.ts --check` | exit 0 |
-| Best-practice plan | `bootstrap-project.ts` 的 `bp-scan` step（**NEVER** 另跑一次充當證據） | required-and-detectable 無 pending；variant-choice 都有 decision |
+| Best-practice / design completion | `bootstrap-project.ts` 的 `semantic-inspection` step | inspector 無 errors，`bp.skip=false`，`requiredPending`、`variantUnadopted`、`designPending` 都為空。`bp-scan` step 是 advisory 建議，exit 0 不證明採用已完成 |
 | Golden paths | `bootstrap-project.ts` 的 `golden-path` step | applicable rows `OK`；`N/A` 有 predicate |
 | Security policy | `node $CLADE_HOME/scripts/audit-security-policy.ts --consumers <path>` | `sections` 與 `invariants` 兩格 `0/n`；`freshness` 格 `1/1` 時 MUST 登 TD（首次 baseline 待跑）並在 registry 宣告 `scan-only`，**NEVER** 讀成通過 |
 | Publish | `/clade-publish` 的 Step 1–9 | publish + target propagate 成功 |

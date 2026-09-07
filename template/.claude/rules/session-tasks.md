@@ -8,6 +8,8 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
 
 # Session Tasks
 
@@ -23,119 +25,39 @@ Local edits will be reverted by the next sync.
 
 本規約適用**所有** consumer。命中上表建 task 檔那列時，`tasks/` 目錄不存在**不代表**本 repo 未採用——直接建立。
 
-拆得開的工作 **NEVER** 用共享單檔（`tasks/todo.md`、`tasks/notes.md`）——multi-session 並行會 lost update。一 session 一檔，只 `Edit` 自己那檔。
+拆得開的工作 **NEVER** 用共享單檔（`tasks/todo.md`、`tasks/notes.md`）——multi-session 並行會 lost update。一 session 一檔，只編輯自己那檔。
 
 **本質共享、拆不開的登記簿是例外，不是違規**——`HANDOFF.md`、`ROADMAP.md`、`docs/tech-debt.md`、`docs/pitfalls/**` 的價值來自所有人讀同一份，分檔等於取消它們存在的理由。那幾個檔的並行寫入紀律見 [[shared-file-concurrent-write]]（`paths:` gated，碰到該檔當下載入）。
 
 已授權實作的 task 檔承載跨 compact 狀態；唯讀或指定文件任務沿用上表的交付載體。
 
-harness 的 `TaskCreate` / `TaskUpdate` 是**進度呈現**。命中上表實作列時，它們**不替代也不免除**建 tasks 檔——收到 "consider using TaskCreate" 提醒、或要呼叫 `TaskCreate` 時，先確認本次實作已有 task 檔。工具提醒不新增文件、實作或提交授權。
+runtime 的原生進度工具是**進度呈現**。命中上表實作列時，它們**不替代也不免除**建 tasks 檔；要呼叫原生進度工具時，先確認本次實作已有 task 檔。工具提醒不新增文件、實作或提交授權。
 
 session 結束時對每個未完項**升級或刪，二擇一**，不留著。
 
-升級路徑、模板、與其他真相層的分工、`lessons.md` 邊界見 [[session-tasks.operations]]（首次觸碰 `tasks/**` 後自動載入）。此規則優先於全域 `~/.claude/CLAUDE.md`「任務管理」段落（若存在）。
+升級路徑、模板、與其他真相層的分工、`lessons.md` 邊界見 [[session-tasks.operations]]（首次觸碰 `tasks/**` 後自動載入）。此規則優先於runtime 全域指令「任務管理」段落（若存在）。
 
 ## Session context 預算（MUST）
 
-**Iron Law：越過收工線就收工，不是「等這件做完再說」。而收工線是該 launcher 的 hard tier，不是第一次響的 soft tier。**（門檻見下表。）
+本節適用每一個 session、所有 consumer。先確認目前 runtime 與 launcher 的實際 context 控制、計量來源及適用的已核准 profile；數值、原生命令、hook 與身分 marker 由對應 adapter 承載。
 
-本節適用**每一個** session、**所有** consumer——不是只有覺得跑很久的那次。
+### 主判準是可觀察 predicate
 
-### 主判準是可觀察 predicate，token 數字是兜底（MUST）
-
-**切點由下表判，NEVER 由 token 數字判。** Anthropic 官方文檔全站**不給任何** token 門檻——
-`/clear` 與 `/compact` 的判準一律是行為型（見下表逐字出處）。官方甚至明寫反向那一半：
-*"Sometimes you **should** let context accumulate because you're deep in one complex problem
-and the history is valuable"*（[best-practices](https://code.claude.com/docs/en/best-practices)
-§ Develop your intuition）。
-
-| 可觀察 predicate | 動作 | 出處 |
-| --- | --- | --- |
-| 換到**不相關**的任務 / 換 repo / 換主題 | `/clear`，或收工開新 session | 官方 best-practices § Manage context aggressively 逐字 `Run /clear between unrelated tasks` |
-| 同一個問題已經糾正 **≥2 次** | `/clear` 重來，把學到的寫進更好的初始 prompt。**NEVER** 在同一段壞掉的 context 上繼續第三次 | 同上 § Course-correct 逐字 |
-| 一個 phase / 工作段做完的自然斷點，**且未越過該 launcher 的 hard tier** | `/compact`——**NEVER** 直接跳到「收工開新 session」，見 § 收工訊息契約。越過該 launcher 的 hard tier 之後 `/compact` 不再是選項（見該節門檻閘） | 官方 [context-window](https://code.claude.com/docs/en/context-window) 逐字 `before a long new task` |
-| 品質退化訊號：開始忘記早前指令、重複犯同一個錯、回答明顯變差 | `/compact` 或收工 | 同上逐字 `when context starts affecting performance` |
-| **深在同一個複雜問題中、history 有價值** | **續跑。NEVER 因為 token 數字切** | 官方 best-practices § Develop your intuition 逐字 |
-
-上表沒有任一條觸發時，才輪到下面的 token 兜底層。
-
-**`/clear` 與「同目錄開新 session」同價，NEVER 假設 `/clear` 比較省。** prompt cache 是
-server-side、以 **prefix bytes + model** 為 key，**process 身份不在 key 裡**——官方
-[prompt-caching § Cache scope](https://code.claude.com/docs/en/prompt-caching) 逐字：
-*"Sessions you run in parallel in the same directory build matching prefixes and **read each
-other's cache**"*，不同 process 互讀就是證明。官方自己也把 `/clear` 定義成開新 session
-（[costs](https://code.claude.com/docs/en/costs) 逐字 `These totals reset when /clear starts a
-new session`）。
-
-> 同一份條文同時支持正解與一個已實際發生的誤讀（實錄見 rationale），所以此處把結論寫死，
-> **NEVER** 要求下一個讀者自己從 cache scope 重新推導。
->
-> 連帶結論：headless `claude --print` 沒有 `/clear`（官方 [headless](https://code.claude.com/docs/en/headless)
-> 頁：terminal-only 命令在 `-p` 模式不可用），但**也不需要**——每次 `claude -p` 本身就是新
-> session，依上述等價性沒有多付任何成本。**NEVER** 把「runner 不能 `/clear`」當成 runner 的缺陷。
-
-**launcher profile 是兜底上限，不是切點建議**（native 300k / 500k 由 Charles 2026-08-06 round 27 拍板；
-ccg profile 由 2026-08-31 的 auto-compact 實測收斂；ccx 同日退役，不再接受新 session）。它們的正當性**不**來自「官方建議這個數字」——
-官方不建議任何數字——而來自「predicate 全沒觸發時仍需要一條 hard stop」。**NEVER** 把 profile 讀成「跑到這裡就該切」，
-那會讓上表第五列（該續跑的那列）永遠輪不到。
-
-> **NEVER** 拿社群單一來源的數字推翻 user 拍板的門檻——一個曾據此提出的 300k→200k 下修提案，
-> 查證後理由整條不成立（實錄見 rationale）。
-
-**兩級語義不同，NEVER 當成同一件事的兩個強度**（Charles 2026-08-06 round 27 拍板）：
-
-| launcher profile | soft tier | hard tier | hard repeat |
-| --- | ---: | ---: | ---: |
-| `cc` / `ccw` | 300k | 500k | +100k |
-| `ccg` | 400k | 450k | +50k |
-| native work-loop runner child | 500k | 600k | +100k |
-
-`ccx` 已退役：新入口與新 successor 都 fail-closed；既有 process 只做 drain，不再套 numeric
-收工線逼它建立另一個 ccx session。GPT／Codex 工作走 `cx`（Pi），需要 Claude Code harness
-才走 `cc`／`ccw`。歷史 transcript 的 `ccx` 歸因仍保留在 audit 層，退役不等於改寫歷史。
-
-| 可觀察 predicate | MUST |
+| 可觀察 predicate | 動作 |
 | --- | --- |
-| session context 越過**該 launcher 的 soft tier** | **NEVER** 開新的**大**工作段（新的 change / 新的多檔重構 / 新的 spectra phase / **invoke 一個本 session 還沒載過的 skill**）；手上這件做完就收。**小 item 照做**——單檔文字修正、補一條 TD、勾一個 checkbox、回答一個問題不受本級限制 |
-| session context 越過**該 launcher 的 hard tier** | **現在**收工，走下面 § 收工三步（先派、後登記、再收工）。手上若是不可分割的驗證迴圈，跑完那一輪就切。**NEVER 用 `/compact` 續跑代替收工**——這一級唯一的出口是 `relay`／`fanout`，判準見 [[session-tasks.operations]] § 收工訊息契約 的門檻閘 |
-| 正在跑不可分割的驗證迴圈（單一 test run / 單一 migration） | 跑完再切。**NEVER** 拿「等一下還有事要做」把它延伸成新工作段 |
-| **本輪是 work-loop runner child**（`WORK_LOOP_RUNNER_CHILD=1`，由 `runner.sh` 設） | 只有 native `cc` / `ccw` 改讀 **500k / 600k**；gateway child 仍走自己的 launcher profile，NEVER 用 runner marker 越過 auto-compact 物理上限 |
+| 換到不相關的任務、repo 或主題 | 先保存本工作狀態，再用該 runtime 支援且當次獲授權的 fresh-context 或 session transport |
+| 同一問題已糾正 ≥2 次 | 把已驗證教訓與未決問題整理成可接手的狀態，使用可用的 fresh-context 機制重新開始該問題 |
+| phase 完成的自然斷點，尚未超過適用 hard tier | 保存狀態並使用實際可用的 context 壓縮／checkpoint；原生壓縮不等於工作已完成 |
+| 忘記早前指令、重複錯誤或品質退化 | 保存目前授權、成果與未完項，依 runtime 可用能力壓縮或交接 |
+| 深在同一個複雜問題，history 仍有價值，且未命中適用 hard tier | 繼續推進，不以其他 runtime 的數值切斷工作 |
 
-**runner child 的 native profile 為什麼不同。** runner child 每輪是 `claude --print` 起的**全新 process**、跨輪不累積——起始載入量是它的**固定成本**，不是累積量，而實測起始就已越過 native soft tier（取證見 rationale）。**NEVER 把 500k / 600k 套到 in-session `/loop` 或 gateway child**——前者 context 真的跨輪累積，後者先受較小 auto-compact window 約束。判別只認 `runner.sh` 設的 env 與 launcher resolver，**NEVER** 從「感覺像無人值守」推斷。
+### 已核准 profile 的兩級語義
 
-**NEVER 把 soft tier 讀成「什麼都不能開」。** 舊版第一級綁「NEVER 開新的工作段」，對 `/work-loop` 這類一個接一個開 item 的 loop 等於硬停（兩輪腰斬實證見 rationale）。**改的不是數字算錯，是那一級的語義訂錯了**；把 300k 讀回「什麼都不能開」等於把這次拍板退回它要修的狀態。
+**Iron Law：適用 hard tier 是收工線；soft tier 是限制新大工作段。** 超過 soft tier 後，MUST 不開新的 change、多檔重構、spectra phase 或尚未載入的 skill；手上驗收與小 item 仍可完成。超過 hard tier 後，MUST 保存狀態並按下節交接；不可分割的單一驗證迴圈先跑完，不延伸成下一段。壓縮不重設該 profile 定義的 hard-tier 義務。
 
-### 身分豁免：三種身分不受本線約束（Charles 2026-09-02 拍板）
+**MUST 用該 profile 定義的量測口徑判門檻**：累計用量、當前 context 佔用與壓縮後剩餘量不是同一個值。缺少 profile 或量測能力時，明列該缺口，使用上述可觀察 predicate 與 harness 的實際限制；**NEVER** 借另一個 runtime 的門檻、hook payload 或 model 名稱宣稱已適用、未超標或取得豁免。
 
-收工線買的是「successor 從 fresh context 起跑」，它的前提是**這個 session 有東西可以交**。
-下面三種身分都不成立 —— 對它們發收工提示，是要求一個交不出東西的收件人去執行收工三步：
-
-| 身分 | 機械 marker（hook 認的就是這個） |
-| --- | --- |
-| in-process subagent（`Agent` tool：Explore / Plan / general-purpose / fable 顧問…） | PostToolUse payload 的 `agent_id` / `agent_type`（2026-09-02 probe 實測：主線 payload 完全沒有這兩個 key） |
-| Herdr 派出去的顧問 pane | `CLADE_ADVISORY_SESSION=1`，由 `herdr-session-handoff.ts --advisory` 注入 |
-| Fable 系列主線 | transcript 尾端的 `"model":"claude-fable*"` |
-
-**NEVER 從工作性質自評身分。** 逐字反開脫：「我這個主線 session 現在做的事很像顧問
-（只是讀 code 給建議）」—— 不算，判別只認上面三個 marker。主線就算整輪只讀不寫，
-它仍然有殘工要派、仍然受兩級門檻約束。
-
-**這三條 NEVER 是下一段那條「門檻 NEVER 可由 env 放寬」的破口**：它們與 runner-child marker
-同型 —— 宣告的是**執行身分**，不是門檻數值。兩組門檻數字仍寫死在 hook 裡，要放寬仍然只有
-改 hook 一途。**NEVER** 反過來拿本節論證「所以門檻也可以由 env 調」。
-
-門檻是 `session-context-budget-warn.sh`（PostToolUse hook）機械報出來的，本節是它引用的 SoT：
-**每個仍可啟動的 launcher在 soft tier 響一次、hard tier 起依 profile 的 repeat 步長再響**；native runner child 才改讀 **500k / 600k / +100k**。提示走 exit 2 —— PostToolUse 的 exit 0 stderr
-只進 debug log，agent 永遠看不到（實錄見 rationale）。
-
-**門檻 NEVER 可由 env / flag 放寬**（曾有的兩個覆寫變數已移除）：門檻是判定 agent 行為合不合格的
-數值，只有 user 能調鬆（per `agent-routing` 的自主判定紀律）。會想調鬆它的，正是已經超標的那個
-session —— 把閂交給它等於沒有閂。
-
-上表的 runner-child 那列**不是**本條的破口：`WORK_LOOP_RUNNER_CHILD` 不是門檻參數，它是
-`runner.sh` 用來宣告**執行身分**的 marker——值由誰設、設成什麼，都不影響任何一組門檻數字。
-兩組數字都寫死在 hook 裡，要放寬仍然只有改 hook 一途。**NEVER** 反過來拿這一列論證
-「所以其他 env 也可以調門檻」。
+門檻只能依已核准政策調整，**NEVER** 自行以 env／flag 放寬。Runner 與顧問身分須由該 runtime 的真實入口／session 證據判定，工作內容像顧問或無人值守不構成身分證據。
 
 ### 收工正文在 [[session-tasks.operations]]（具名時機 MUST-Read）
 
@@ -143,8 +65,7 @@ session —— 把閂交給它等於沒有閂。
 [[session-tasks.operations]] § 收工**——沒讀到就沒有收工三步的順序、沒有收工訊息契約的部件表、
 沒有 Herdr transport 的 canonical helper 與 `fanout` 的 worker-before-relay 硬約束。
 
-`session-context-budget-warn.sh` 在那條線上響，提示訊息逐字帶這個指針——**它是這一段的觸發錨，
-`paths:` 不是**（「收工」不對應任何檔案路徑，glob 表達不出來）。
+適用 runtime 的 context 訊號觸發上述必讀義務；adapter 應列明實際量測入口。`paths:` 不是觸發錨，因為「收工」不對應檔案路徑。
 
 | 搬走的段 | 去 [[session-tasks.operations]] 的 § |
 | --- | --- |
@@ -163,63 +84,48 @@ session —— 把閂交給它等於沒有閂。
 
 ### Step 0（四步，順序不可調換）
 
-**每一次**檔案層探測回報「有另一個 actor 正在寫」都 MUST 跑完這四步再決定動作——不是只有 publish 被擋那次，ad-hoc commit、worktree merge-back、stash 判定、gate 撞紅同樣適用。
+每一次檔案層顯示其他 actor 正在寫時，MUST 完成以下四步再決定動作；ad-hoc commit、merge-back、stash 與 publish 同樣適用。
 
-```bash
-# 0) 誰寫的（零訊息、跨 cwd）：<project-dir> 就是對方 cwd。MUST 再篩「寫入型 tool_use ＋
-#    落在爭用檔 mtime 時間窗」，再用 agent_session.value 對回 pane
-cd ~/.claude-work/projects && grep -l '<檔名或獨特字串>' */*.jsonl
-# 1) 誰在這個 repo 家族上工作（linked worktree 的 cwd 是 <repo>-wt/*，MUST 用前綴比對而非等值）
-herdr agent list | python3 -c '
-import json,sys
-for a in json.load(sys.stdin)["result"]["agents"]:
-    if a["cwd"].startswith("<repo 絕對路徑，不含尾斜線>"):
-        print(a["pane_id"], a["agent_status"], a["terminal_title_stripped"])
-'
-# 2) 命中的 pane 逐一讀，看它正在做什麼
-herdr agent read <pane_id> --source recent-unwrapped --lines 70
-# 3) 無論前兩步結論是什麼都 MUST 跑：背景 runner 沒有自己的 pane，第 1 步對它零訊號
-pgrep -af 'work-loop/[r]unner\.sh'            # runner 本體
-pgrep -af 'claude --print.*[-]-runner-child'  # 它的當輪 child（runner 正在換輪時只剩這個在）
-```
+1. **查寫入歸屬**：在目標 repo 執行 `node vendor/scripts/flow/flow.ts who --json`；已驗證本 session ID 時加 `--session <session-id>`。此 CLI 讀共享 main 的 ownership，linked worktree 的私有 WIP 仍須在該 worktree 另查。逐個爭用 path 對照 claims／journal 與真實寫入時間。`unknown`、空結果、缺 journal 或 exit 0 都不能單獨證明無人寫入；exit 3 表示有非本 session 或不可歸因項。
+2. **定位持有者**：以已確認的 runtime、session ID、pid 與 worktree path 查該 runtime 的 session／process 資料。只有 filename 出現在 transcript 不算寫入證據。Herdr 可用時可查 `herdr agent list` 並讀命中 pane；cwd 家族比對只給候選集，跨 repo 寫入者可能不在其中。
+3. **讀持有者現況**：使用實際可用的 session read／task snapshot／process status，確認它正在做什麼、是否已有同一工作的落地結果。對唯一歸因者使用已授權的協調入口；不因一批候選皆否認就宣稱已排除所有寫入者。
+4. **查外部 writer 是否仍活著**：無論互動 session 是否 idle，都核對與該 session 關聯的背景 process、runner 及 child。以真實 executable、祖先鏈與入口注入的身分判定；具體探測由相應 adapter 承載。缺少跨 runtime 取證能力時保留 unknown。
 
-**第 0 步 MUST 跑在第 1 步之前，命中就直接問那一個 pane，NEVER 問候選集。** 第 1 步的 cwd 前綴給的是**候選**，**NEVER 當成完整母體**——跨 repo 寫入者結構上不在裡面，候選集全回「不是我的」只代表「母體可能不含答案」，**NEVER** 是「已排除完畢」。只 grep 檔名會假陽性（查的人自己也命中）。盲區與實證見 [[concurrent-session-probe]] § 入口 A 第 0 步。
+**`agent_status: idle` NEVER 等於「對方收手了」。** 它只描述互動介面，不證明背景 writer 已退出。原生 subagent 回報完成或 interruption receipt 同樣不能代替外部 process 的停止證據。
 
-**`agent_status: idle` NEVER 等於「對方收手了」。** 它只表示那個 pane 的互動 agent 正在等輸入，對「它掛的背景 process 停了沒」零訊號——2026-08-19 那個 pane 就是 `idle`，背後的 runner 還有 19 輪要跑。**判出 idle 之後 MUST 再跑第 3 步**，不得因為「看起來已經停了」跳過。
-
-第 3 步 **MUST 用 `work-loop/[r]unner\.sh` 這個 pattern**，**NEVER** 用 `runner.sh` / `work-loop` / `--unattended` 這類寬 pattern：2026-08-20 於 `~/offline/clade` 實跑 `pgrep -af "work-loop|runner.sh|--unattended"` 回 9 筆，**全是 false positive**（8 筆 `vendor/scripts/pre-push/runner.sh` git hook ＋ pgrep 自己的 shell），真正的 runner 0 筆。方括號防自我匹配：自己的 command line 含字面 `[r]unner`，不匹配 regex `[r]unner`。
+`flow who --transcripts` 的 transcript fallback 目前只涵蓋 Claude；需要該語料取證時才顯式開啟。MUST 不把此結果當作三個 runtime 與人類編輯者的完整母體。對應 adapter 的取證入口不可用時，保留檔案並繼續可獨立完成的工作。
 
 ### 三種對方性質 → 動作（判出哪一種就直接執行）
 
 | 對方是 | 可觀察判準 | 動作 |
 | --- | --- | --- |
-| **unattended runner** | 第 3 步 `pgrep` 命中，或 pane 輸出含 `--unattended` / `--runner-child` / `max-rounds` | **什麼都不做，不搶。** 它有自己的 commit + publish 循環，dirty 是它當輪的中間狀態。**NEVER** stash（腰斬它當輪產出）、**NEVER** 代 commit、**NEVER** 搶 publish；本輪的 publish 需求登記後讓位 |
-| **前景 agent session** | 第 1 步命中 pane 且 `agent_status` 隨時間變動、第 3 步無命中 | `SendMessage` ／ `herdr agent prompt` 主動協調（請它先 commit、或告知你要 publish）。對方寫入在數十秒內且看得出正要落地 → **等它落地**，等待本身就是動作 |
-| **人類正在編輯** | 第 1、3 步都無命中，但檔案 mtime 持續更新 | 代為分組 commit（`git commit --only -- <paths>`）；半成品訊號命中才 stash |
+| **unattended runner** | 第 4 步查到與持有者關聯的 live runner／child，且其實際入口證據確認 unattended 身分 | **什麼都不做，不搶。** 它有自己的 commit + publish 循環，dirty 是它當輪的中間狀態。**NEVER** stash（腰斬它當輪產出）、**NEVER** 代 commit、**NEVER** 搶 publish；本輪的 publish 需求登記後讓位 |
+| **前景 agent session** | 已確認的 session 身分與現況顯示前景工作，並已查其背景 writer | runtime coordination message ／ `herdr agent prompt` 主動協調（請它先 commit、或告知你要 publish）。對方寫入在數十秒內且看得出正要落地 → **等它落地**，等待本身就是動作 |
+| **人類正在編輯** | 有直接人類編輯證據；不能由 agent 查無結果反推 | 僅在該 repo 的既有明確授權允許代 commit 且對方已停寫時分組提交；仍在編輯則保留。未知或活躍 WIP 不以 stash 處置 |
 
-判出是哪一種之後就**自己執行對應動作**，**NEVER** 把已經判得出來的並行爭用退回給 user。**退回的門有三個，三個都不通**：`AskUserQuestion`、`flow ask`、herdr `--complete blocked --decision`。門長什麼樣不改變它是退回——2026-08-27 <consumer-a> 那題（「兩個 session 在同一個 worktree 跑同一批 dep-upgrade，要留哪一個？」）走的是第三個門，於是它在 `AskUserQuestion` 的 NEVER 底下讀起來像沒被禁。**探測與協商是 agent 的工作，只有「談過了、對方怎麼回」之後仍談不攏的那一題才是人的**，而那題的 `--decision` MUST 寫明已探測、對方怎麼回。
+判出是哪一種之後就**自己執行對應動作**，**NEVER** 把已經判得出來的並行爭用退回給 user。**退回的門有三個，三個都不通**：structured user-input surface、`flow ask`、herdr `--complete blocked --decision`。門長什麼樣不改變它是退回——2026-08-27 <consumer-a> 那題（「兩個 session 在同一個 worktree 跑同一批 dep-upgrade，要留哪一個？」）走的是第三個門，於是它在 structured user-input surface 的 NEVER 底下讀起來像沒被禁。**探測與協商是 agent 的工作，只有「談過了、對方怎麼回」之後仍談不攏的那一題才是人的**，而那題的 `--decision` MUST 寫明已探測、對方怎麼回。
 
 **「等」是上表三個動作之一，NEVER 是「判不出來」的同義詞。** 2026-08-20 於 `~/offline/clade` 實測：merge-back dry-run 報 `docs/tech-debt.md` dirty，第 1 步命中一個前景 session、`git diff` 是別人 16 秒前新增的 TD entry 且缺 `## Restart brief`（半成品訊號命中）——正解是**等它自己 land**（實測 10 秒），代 commit 會把半成品寫進 history、stash 會奪走它正在寫的檔。寫「等」時 **MUST 指名等到哪一個可觀察事件**，**NEVER** 只寫「等對方收手」。
 
-### 非 Herdr 環境的 graceful degrade
+### 原生取證入口缺少時的 graceful degrade
 
-`test "${HERDR_ENV:-}" = 1` 失敗時第 1、2 步不可用，**第 3 步照跑**（`pgrep` 不依賴 Herdr），再回退到檔案層 ＋ `.clade/claims/` 的 `last_heartbeat`。**降級掉的是「對方是誰」，NEVER 是「所以可以 escalate 了」**——降級後仍 MUST 自己選出上表三個動作之一；判不出對方性質時取最保守的那個：**什麼都不做**。
+Herdr 不可用就使用當前 runtime 已提供的 session／process 入口，ownership／claims／journal 與外部 writer 檢查仍保留。**降級掉的是「對方是誰」，NEVER 是「所以可以 escalate 了」**——查不到持有者時保留其 WIP，不代 commit、不 stash、不搶 publish，繼續不依賴該檔的工作。需要人的決策仍依既有授權與衝突仲裁規約，不把缺少取證工具偽裝成已確認的人類編輯。
 
 ### 逐字反開脫
 
 | 開脫 | 實際 |
 | --- | --- |
-| 「探測都跑完了還是判不出來，這題該 user 拍板」 | 跑完的是檔案層。Step 0 三步跑完了嗎？沒跑完就不叫探測完 |
+| 「探測都跑完了還是判不出來，這題該 user 拍板」 | 跑完的是檔案層。Step 0 四步跑完了嗎？沒跑完就不叫探測完 |
 | 「pane 顯示 idle，對方應該收手了」 | `idle` 只描述互動 agent。2026-08-19 那個 idle pane 背後的 runner 還有 19 輪 |
-| 「我問了 N 個 pane，全說不是他們」 | 你問的是 cwd 篩出來的候選集。第 0 步跑了嗎 |
+| 「我問了 N 個 pane，全說不是他們」 | 你問的是 cwd 篩出來的候選集。寫入歸屬那一步跑了嗎 |
 | 「先 stash 起來比較安全，之後再還原」 | 對 unattended runner 是腰斬當輪產出，對前景 session 是奪走它正在寫的檔。stash 只在「對方是人且已停手」時安全 |
-| 「我 SendMessage 問它一下就好」（對方是 runner 時） | runner child 是 `claude --print`，沒有 pane 也不讀訊息；那個 idle pane 收到訊息不會轉達給背景 process |
+| 「我 SendMessage 問它一下就好」（對方是 runner 時） | runner 的外部 child 不必有互動收件入口；pane 收到訊息不證明背景 writer 收到或停止 |
 | 「等對方收手就好」 | 對 unattended runner 是等數小時。「等」MUST 綁一個可觀察事件才算動作 |
 
-**Red Flags（發現自己在寫這幾句就停下來跑 Step 0）**：正要對多個候選 pane 逐一送同一則探測；正要列出「等對方收手／stash 強推／我去問那個 session」這組選項；正要用 `AskUserQuestion` 問並行爭用怎麼辦；正要把「哪個 session／pane／worktree 該留下」寫進 `flow ask --question` 或 `--complete blocked --decision`；正要在「對方是誰」還是未知數的狀態下往下決策。
+**Red Flags（發現自己在寫這幾句就停下來跑 Step 0）**：正要對多個候選 pane 逐一送同一則探測；正要列出「等對方收手／stash 強推／我去問那個 session」這組選項；正要用 structured user-input surface 問並行爭用怎麼辦；正要把「哪個 session／pane／worktree 該留下」寫進 `flow ask --question` 或 `--complete blocked --decision`；正要在「對方是誰」還是未知數的狀態下往下決策。
 
-**爭用訊號帶得出 pid 時（advisory lock、process 訊息）走 pid，NEVER 退回 cwd 過濾**：第 1 步的 cwd 前綴在同一 repo 同時有多個 pane 時過濾不出唯一解，而 pid 經 `ps` 祖先鏈直達 `claude … --session-id`，是精確對映。做法與「持有者正在跑同一條冪等流程時搭它的車」見 [[pitfall-pipeline-lock-contention-raced-instead-of-probed]]。
+**爭用訊號帶得出 pid 時（advisory lock、process 訊息）走 pid，NEVER 退回 cwd 過濾**：session 列表的 cwd 前綴在同一 repo 同時有多個 pane 時過濾不出唯一解，而 pid 須經祖先鏈與該 runtime 的真實 session 身分證據對映，不能以 process 名稱猜持有者。做法與「持有者正在跑同一條冪等流程時搭它的車」見 [[pitfall-pipeline-lock-contention-raced-instead-of-probed]]。
 
-可貼的探測序列（兩個入口、身分兩條、`rg -L | xargs` 回 0 的坑）在 [[concurrent-session-probe]]（`vendor/snippets/concurrent-session-probe/`）——**撞上爭用時 MUST 開它照貼，NEVER 現場重拼指令**。
+可貼的探測序列（兩個入口、身分兩條、`rg -L | xargs` 回 0 的坑）在 [[concurrent-session-probe]]（`vendor/snippets/concurrent-session-probe/`）——撞上爭用時 MUST 先讀對應 runtime adapter 與 cookbook 的適用邊界；只執行當前已驗證可用的入口，不把 Claude 探測套成其他 runtime 的全量證據。
 
 > 第一手實錄：[[pitfall-working-tree-contention-escalated-without-session-layer-probe]]（2026-08-19 <consumer-a>，連問三輪、選項 3/3 錯，user 一句「你去檢查 pane」終結）。同型換 domain：[[pitfall-infra-change-attribution-skips-concurrent-session-check]]。

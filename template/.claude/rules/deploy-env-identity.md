@@ -20,6 +20,7 @@ Edit at: $CLADE_HOME
 Local edits will be reverted by the next sync.
 -->
 
+<!-- clade-targets: claude,codex,cursor -->
 
 # Deploy Env Identity（部署身分取自注入，不取自 build mode）
 

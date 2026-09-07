@@ -18,6 +18,13 @@ Local edits will be reverted by the next sync.
 
 > Path-scoped detail of [[worktree-default]] §5 / §5.5 / §6。核心 always-load 規約在母檔 worktree-default.md。
 
+<!-- clade-targets: claude,codex,cursor -->
+<!-- clade-adapters: claude,codex,cursor -->
+
+## Runtime boundary
+
+The commit, stash, landing, and cleanup predicates below are common Git/worktree contracts. The target adapter supplies the native catalog operation, authorized transport, interactive conflict surface, and completion receipt; product-specific command or model names are not common policy.
+
 
 ## §5 Commit 階段：checkpoint → 批次整合 → 單次 /commit → 回收
 
