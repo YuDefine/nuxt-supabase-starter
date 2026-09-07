@@ -243,6 +243,12 @@ pnpm typecheck
 supabase db push
 ```
 
+> **`--local` 只對 `supabase start` 起的 stack 有效。** docker-compose 自架的 Supabase
+> （不論在本機或遠端 LXC）不在 CLI 的 project state 裡，容器再健康也只會回
+> `supabase start is not running`。那個拓樸請設 `SUPABASE_MODE=compose` +
+> `ADMIN_DATABASE_URL`，走 `pnpm db:lint` / `db:types` / `db:reset` / `db:advisors`
+> （scripts 內部改用 `--db-url`，見 `scripts/lib/common.sh`）。
+
 ### Migration 範本
 
 ```sql
