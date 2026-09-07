@@ -13,9 +13,15 @@ Use RTK (Rust Token Killer) to reduce token-heavy shell output when running comm
 
 ## Sandbox Database
 
-RTK tracking must use a Codex-writable database path:
+RTK tracking must use a Codex-writable database path. Add this to `~/.config/rtk/config.toml`
+(RTK ships without that file — `rtk config` prints the defaults and says `file not created`):
 
 ```toml
 [tracking]
 database_path = "~/.codex/memories/rtk/history.db"
 ```
+
+**Expand `~` yourself when you write that file.** TOML does not expand it: a literal `~`
+makes RTK create a directory actually named `~` and tracking silently records nothing —
+no error, no warning. The path is written portably here because this file is committed into
+each consumer repo and must not carry one machine's home directory.
