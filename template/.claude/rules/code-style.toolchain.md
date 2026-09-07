@@ -457,6 +457,18 @@ export default defineConfig({
 
 > ⚠️ **NEVER** 用 `oxlint --fix` / `oxfmt` 直接呼叫（見上節「禁止在 lint-staged ... 中呼叫 eslint / prettier」的注意事項）。`vp lint` / `vp fmt` 是唯一正確入口。
 
+### Nuxt app 不要照抄官方 `vp migrate` 全文
+
+`vp migrate` 的 README 範例是給純 Vite 專案。Nuxt 4 有三條硬例外，2026-09-07 在 CPMS 升 `vite-plus@0.3.0` 時重驗：
+
+1. **`dev` / `build` / `typecheck` 維持 `nuxt` CLI。** `vp check` 內建的 typecheck 不是 `nuxt typecheck`；`vp dev` / `vp build` 也不走 Nitro / Nuxt module graph。
+2. **測試設定留在 `vitest.config.ts`。** 用 `@nuxt/test-utils` 的 `defineVitestConfig` 或 `defineVitestProject`。`vp test` 優先讀 `vitest.config.*`，這是刻意的第二份設定，不是沒 migrate 完。
+3. **不要把 `vitest` override 成 `npm:@voidzero-dev/vite-plus-test@latest`，除非該版與 `vite-plus` / `vite-plus-core` 同一主線。** 0.3.0 當下 test package 仍停在 0.1.24，會把舊 native binding 跟新 `vite-plus` 的 `exports` 疊在一起，`node_modules/.bin/vp` 直接炸。`vite → vite-plus-core@0.3.0` 可以；`vitest` 維持 Vitest 4.x。
+
+CI `setup-vp` 的 `node-version` **MUST** 跟 `engines.node` 同一主版（預設 24）。
+
+詳見 `docs/conventions/code-quality-tooling.md` Known drift 與 [[pitfall-nuxt-vp-migrate-overrides-mismatch]]。
+
 ### Pre-commit hook 用 `vp staged`
 
 `.husky/pre-commit` / `.vite-hooks/pre-commit`：

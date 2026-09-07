@@ -137,6 +137,78 @@ Cookbook 範本：`~/offline/clade/vendor/snippets/nuxt-data-perf/colada-query-s
 
 Colada 的 `useMutation` 不建 `AbortController`、也不自動取消 in-flight mutation（`useQuery` 兩者都做）。這個不對稱是刻意的，**NEVER** 自己補上。複驗（1.4.2 快照）：mutation cache 區段 `grep -c 'abort' ` 為 0。
 
+### HR-8 拿掉 composable 的 `await` MUST 同時保住呼叫端的渲染時序
+
+`useFetch` **MUST** 在任何 `await` 之前呼叫完（否則失去 Nuxt async context，
+vite-doctor `NUXT0020`）。但 `async function useX()` 裡的那個 `await` 通常**同時**綁著
+第二件事：呼叫端寫 `await useX()`，資料到齊後才渲染。直接拿掉 `async` / `await`
+只解決 context，時序那件事被靜默拆掉。
+
+外顯症狀是**頁面缺一塊**：資料沒列出來、「尚無資料」也沒出現——因為空白狀態的判定
+多半是 `status !== "pending" && length === 0`，而立刻渲染時 `status` 還是 `pending`，
+三個分支都不成立。nav 與 layout 都在，所以它不長得像「頁面沒渲染」。
+
+**MUST** 兩件事分開處理——`useFetch` 全部前置，「資料到齊」用一個 promise 交回呼叫端：
+
+```ts
+export function useMasterCatalog() {
+  const itemsFetch = useFetch("/api/v1/items");
+  const suppliersFetch = useFetch("/api/v1/suppliers");
+  const ready = Promise.all([itemsFetch, suppliersFetch]);  // AsyncData 本身是 thenable
+  return { ready, items, suppliers, isEmpty };
+}
+// 呼叫端：const { ready, items } = useMasterCatalog(); await ready;
+```
+
+**MUST** 改 composable 的 async 簽章前先 `rg -n 'await use[A-Z][A-Za-z]*\(\)' app/`
+查呼叫端；**NEVER** 只憑 typecheck 過 ＋ doctor 綠就判定修好——這兩者都不涵蓋渲染時序。
+唯一會抓到它的是**空白 / loading 狀態的驗收測試**。
+
+診斷這類「缺一塊」時 **NEVER 截斷擷取到的 body text**（`.slice(0, 600)` 之類）——
+截斷後看到的正好是 nav，會把「資料還沒到」誤導成「元件沒渲染 / Suspense 卡住」。
+
+> Pitfall：`docs/pitfalls/2026-09-07-usefetch-after-await-fix-changes-render-timing.md`
+
+### HR-9 CSRF-aware fetch MUST 走 library 官方入口，NEVER 覆寫 `globalThis.$fetch`
+
+SFC 裡的 `$fetch` **不讀 `globalThis`**。unimport 會把它轉成
+`import { $fetch } from '#build/fetch.mjs'`，而該 template 產生的是
+`export const $fetch = globalThis.$fetch` —— **import 當下就凍結 reference**，
+且 `.nuxt/entry.js` 第一行就 import 它，**早於所有 plugin 執行**。
+`useFetch` 抓的是同一個凍結 reference（除非顯式傳 `options.$fetch`）。
+
+所以「寫一支 plugin 統一掛 CSRF header」是**完全的 no-op，且沒有任何錯誤訊息**：
+
+- ❌ `defineNuxtPlugin(() => { globalThis.$fetch = ofetch.create({ ... }) })`
+
+兩條有效路徑，依「要不要動每一個呼叫點」選：
+
+| 做法 | 代價 | 適用 |
+| --- | --- | --- |
+| **A**：`app:templates` hook 覆寫 `fetch.mjs` template，讓被 export 的 const 在 `create()` 當下就掛好 interceptor | 整份覆寫、與 Nuxt 版本耦合——升版 MUST 比對上游 `dollarFetchTemplate` 的 import / `baseURL` / export 形狀，並用單元測試執行產出的字串驗行為 | 既有呼叫點多、不想逐一改（<consumer-a> / <consumer-d> 走這條） |
+| **B**：`export function useApi() { return useNuxtApp().$csrfFetch }`，呼叫端 setup 頂層 `const api = useApi()`，之後一律 `api(...)` | 呼叫點要逐一改，且需要下方的掃描測試擋住「未來忘記用」 | 呼叫點少、不想與 Nuxt 內部 template 耦合（CPMS 走這條） |
+
+走 A 時兩個容易漏的點（兩個 repo 都踩過）：**method 可能只在 Request 物件上**
+（`$fetch(new Request(url, { method }))`，只看 `options.method` 會當成 GET 而漏附
+token）；**same-origin MUST 用 `new URL()` 正規化後比 origin**，NEVER 用字串前綴判斷——
+瀏覽器把反斜線正規化成斜線後，那類路徑同時滿足 `startsWith('/')` 與 `!startsWith('//')`，
+會被誤判成 same-origin 而**把 CSRF token 送去外站**。
+
+走 B 時**擋住「未來忘記用」MUST 用掃描測試而非 lint**（A 不需要）：`$fetch` 在 `.vue` 是 auto-import 的
+identifier，oxlint `no-restricted-globals` 對 `<script setup>` **實測不命中**（2026-09-07）。
+改掃 `app/**/*.{vue,ts}` 的 `/(?<![\w$.])\$fetch\s*[<(]/`，命中即 fail。
+
+同一條線上兩個**只在 production build 才炸**的點：`nuxt-csurf` 在 `NODE_ENV=production`
+改用 `__Host-csrf` 前綴 + `secure: true`（`http://ip:port` 直連全 403；測試 harness
+MUST 同時接受 `csrf=` 與 `__Host-csrf=`），以及 `encryptSecret` 未設時**每次 build 隨機**
+（部署後仍開著的 tab 第一次 POST 就 403，且無 refresh endpoint）——固定
+`NUXT_CSURF_ENCRYPT_SECRET`，或在 `onResponseError` 攔 403 `EBADCSRFTOKEN` → reload。
+
+`ssr: false` **不**影響 CSRF：token 由 Nitro `render:html` hook 注入 SPA shell，SPA 模式下
+照樣觸發。但改成 `nuxt generate` / `routeRules.prerender` 後 shell 變靜態，該機制整個失效。
+
+> Pitfall：`docs/pitfalls/2026-09-07-nuxt-global-fetch-override-is-a-noop.md`
+
 ## Should Rules（非 hard，但稽核會標）
 
 ### SR-1 大 payload SHOULD 用 pick/transform
